@@ -584,6 +584,7 @@ func (c *ACPClient) dispatchEventData(raw json.RawMessage, result *ChatResult) b
 	var ev struct {
 		Type   string          `json:"type"`
 		Update json.RawMessage `json:"update"`
+		Usage  json.RawMessage `json:"usage"`
 	}
 	if err := json.Unmarshal(envelope.Data, &ev); err != nil {
 		c.lg.Warn().Err(err).Msg("malformed event data")
@@ -597,6 +598,13 @@ func (c *ACPClient) dispatchEventData(raw json.RawMessage, result *ChatResult) b
 	}
 
 	if ev.Type == "prompt_done" {
+		// Per-turn usage only — never session CumulativeUsage (cross-node reuse
+		// would otherwise bleed prior nodes into this turn).
+		if result != nil {
+			if u := parsePromptDoneUsage(ev.Usage); u != nil {
+				result.Usage = models.AddTokenUsage(result.Usage, u)
+			}
+		}
 		return true
 	}
 	if ev.Type == "session_update" && len(ev.Update) > 0 {
