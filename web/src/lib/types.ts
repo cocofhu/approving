@@ -351,7 +351,8 @@ export interface ReactOption {
   id: string
   label: string
   // Agent-suggested choice: highlighted in the UI and preferred by auto-select
-  // ("采用推荐" / auto_var). At most one per question; falls back to the first.
+  // (auto_var). Single-select: at most one; multi-select: one or more.
+  // Unmarked falls back to the first option.
   recommended?: boolean
   /** Optional self-contained HTML document for UI/layout visual decisions. */
   demoHtml?: string
