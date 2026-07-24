@@ -1,0 +1,75 @@
+name: ci-sandbox
+
+# Path-filtered suite for the universal sandbox image + its startup/scripts.
+# Full image publish still lives in publish-sandbox (v* tags); PR CI covers
+# scripts, Go packages, and the Dockerfile cli-tools stage (glab/gh).
+on:
+  push:
+    paths:
+      - "sandbox-gateway/sandbox/**"
+      - "sandbox-gateway/scripts/**"
+      - ".github/workflows/ci-sandbox.yml"
+  pull_request:
+    paths:
+      - "sandbox-gateway/sandbox/**"
+      - "sandbox-gateway/scripts/**"
+      - ".github/workflows/ci-sandbox.yml"
+
+jobs:
+  scripts:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sandbox-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell syntax
+        run: |
+          bash -n sandbox/scripts/startup.sh
+          bash -n sandbox/scripts/install-agent.sh
+          bash -n sandbox/scripts/claude-env.sh
+          bash -n sandbox/scripts/vnc-preview.sh
+          bash -n scripts/test-inject.sh
+          bash -n scripts/test-git-auth.sh
+          bash -n scripts/cover-check-sandbox.sh
+      - name: SANDBOX_INJECT smoke
+        run: ./scripts/test-inject.sh
+      - name: Git auth (gh/glab) smoke
+        run: ./scripts/test-git-auth.sh
+
+  sandbox-go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sandbox-gateway
+    env:
+      GOPROXY: https://proxy.golang.org,direct
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+          cache-dependency-path: sandbox-gateway/sandbox/go.sum
+      - name: Sandbox Go coverage gate
+        run: ./scripts/cover-check-sandbox.sh 90
+
+  cli-tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build Dockerfile --target cli-tools
+        uses: docker/build-push-action@v6
+        with:
+          context: ./sandbox-gateway/sandbox
+          file: ./sandbox-gateway/sandbox/Dockerfile
+          target: cli-tools
+          load: true
+          tags: universal-sandbox-cli-tools:ci
+          build-args: |
+            BASE_IMAGE=ubuntu:22.04
+      - name: Verify glab and gh
+        run: |
+          docker run --rm --entrypoint bash universal-sandbox-cli-tools:ci -lc \
+            'command -v glab && glab --version && command -v gh && gh --version'

@@ -16,8 +16,11 @@
 
 # 22.04：glibc ≥ 2.34，满足新版 code-server 内置 argon2 原生模块要求（20.04 会报 GLIBC_2.34 not found）
 # 默认走国内 Docker Hub 镜像；海外可 --build-arg BASE_IMAGE=ubuntu:22.04
+#
+# 多阶段：cli-tools = 系统工具 + glab/gh（CI 可用 --target cli-tools 冒烟，避免拉全量
+# Playwright / Go / agent CLI）；最终阶段从此继续装 Node/后端/agent。
 ARG BASE_IMAGE=docker.m.daocloud.io/library/ubuntu:22.04
-FROM ${BASE_IMAGE}
+FROM ${BASE_IMAGE} AS cli-tools
 
 ENV DEBIAN_FRONTEND=noninteractive
 # code-server 默认端口刻意避开常用的 8080（留给用户自己的应用）
@@ -161,6 +164,9 @@ RUN set -eu; \
     install -m 0755 "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" /usr/local/bin/gh; \
     rm -rf /tmp/gh.tgz "/tmp/gh_${GH_VERSION}_linux_amd64"; \
     gh --version
+
+# 最终镜像：在 cli-tools 之上继续装语言运行时 / IDE / backend / agent
+FROM cli-tools
 
 # Node.js LTS（nodejs.org 官方 CDN 国内常 SSL 中断；改用 npmmirror 镜像 + 强重试）
 ENV NODE_VERSION=24.13.0

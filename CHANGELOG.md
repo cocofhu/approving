@@ -7,6 +7,8 @@ All notable public-release changes are documented here.
 - Preinstall GitHub CLI (`gh`) in the universal sandbox image and auto
   `gh auth login` from `GITHUB_TOKEN` (mirrors existing `glab` + `GITLAB_TOKEN`),
   so Agent `submit_mr` / `gh pr` works out of the box on GitHub remotes.
+- Add path-filtered `ci-sandbox` workflow (startup script smokes, sandbox Go
+  coverage, Dockerfile `--target cli-tools` verifying `glab`/`gh`).
 - Make `./start.sh` default to published GHCR images (`compose.release.yaml`) with
   tag defaults so a clone can `./start.sh -d` without a local image build; keep
   `./start.sh dev` for the source/HMR stack.
