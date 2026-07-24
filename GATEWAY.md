@@ -15,13 +15,20 @@ Source layout:
 From the repo root (Linux host with Docker Compose):
 
 ```bash
-./start.sh -d
-# or: docker compose up --build -d
+./start.sh -d          # default: published GHCR images (compose.release.yaml)
+./start.sh dev -d      # source/HMR stack (docker-compose.yml)
 ```
 
-This starts gateway (`:8899`), Approving server (`:8080`), and the web UI
-(`:5173`). The first run may build `universal-sandbox-cursor:local` from
-`sandbox-gateway/sandbox` (slow).
+Two paths, different UI ports:
+
+| Mode | Command | Gateway | API | UI |
+| --- | --- | --- | --- | --- |
+| Release (default) | `./start.sh -d` | `:8899` | `:8080` | `:8080` (served with the API) |
+| Dev / source | `./start.sh dev -d` | `:8899` | `:8080` | `:5173` (Vite) |
+
+Release mode pulls GHCR images (including the large sandbox runtime). Dev mode may
+build `universal-sandbox-cursor:local` from `sandbox-gateway/sandbox` on first run
+(slow).
 
 ## Minimum compatible API
 
@@ -35,7 +42,7 @@ This starts gateway (`:8899`), Approving server (`:8080`), and the web UI
 | Ready | status `running` with a `session` endpoint |
 | Images | per Agent `acpBackend`: `universal-sandbox-{cursor\|claude_code\|codebuddy\|trae}` |
 | Data plane | SSH / session / cdp / novnc connect to endpoints directly |
-| Auth | optional Bearer token via `APPROVING_SANDBOX_GATEWAY_API_KEY` |
+| Auth | Bearer token: gateway `SBGW_API_KEYS` / client `APPROVING_SANDBOX_GATEWAY_API_KEY` (compose default `approving-local-demo` via `SANDBOX_GATEWAY_API_KEY`) |
 
 `approving doctor --run-demo` verifies health, create, ready, and cleanup after failure.
 

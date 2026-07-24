@@ -8,12 +8,59 @@ Before contributing, read [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) and
 - Backend: `cd server && go test ./...`
 - Web: `cd web && npm ci && npm test && npx vue-tsc --noEmit`
 - Configuration doc: `cd server && go run ./cmd/gen-configdoc -check`
-- Full local development stack: `./start.sh` or `docker compose up --build`
-  (gateway sources live in `sandbox-gateway/`). The digest-pinned release stack
-  remains `compose.release.yaml` + `./release-smoke.sh`.
+- Full local development stack: `./start.sh dev -d` (source/HMR; gateway
+  sources live in `sandbox-gateway/`). Default `./start.sh -d` pulls published
+  GHCR images via `compose.release.yaml`.
 
 Never commit credentials, local configuration, generated databases, or
 organization-only URLs to public examples.
+
+## Repository layout
+
+```
+approving/
+├── server/                 Go backend (FSM + sandbox client + artifact MCP)
+├── web/                    Vue3 + Vue Flow UI
+├── sandbox-gateway/        Vendored gateway + universal sandbox image
+├── docker-compose.yml      Dev/source stack (./start.sh dev)
+├── start.sh                Default: pull GHCR + up; dev/source via ./start.sh dev
+├── compose.release.yaml    Published-image stack (./start.sh default)
+├── release-smoke.sh        Clean-Linux release smoke
+├── GATEWAY.md              Gateway contract
+└── .github/                Issues, PRs, Actions
+```
+
+## Release images and smoke
+
+Pushing a `v*` tag runs:
+
+- `publish-image` → `ghcr.io/cocofhu/approving`
+- `publish-gateway` → `ghcr.io/cocofhu/sandbox-gateway`
+- `publish-sandbox` → `ghcr.io/cocofhu/universal-sandbox-{cursor,claude_code,codebuddy,trae}`
+
+Sandbox builds are large (often 30–90+ minutes). Packages may start private;
+set them Public under GitHub → Packages if anonymous pulls are required.
+
+Default tags used by `./start.sh` (overridable in `.env`):
+
+- `ghcr.io/cocofhu/approving:0.0.1-beta`
+- `ghcr.io/cocofhu/sandbox-gateway:0.0.1-beta`
+- `ghcr.io/cocofhu/universal-sandbox-cursor:0.0.1-beta`
+
+After digest-pinned images exist, run a clean-Linux smoke:
+
+```bash
+export APPROVING_IMAGE='ghcr.io/cocofhu/approving@sha256:...'
+export SANDBOX_GATEWAY_IMAGE='ghcr.io/cocofhu/sandbox-gateway@sha256:...'
+export SANDBOX_IMAGE='ghcr.io/cocofhu/universal-sandbox-cursor@sha256:...'
+./release-smoke.sh
+```
+
+Dev-only local sandbox image:
+
+```bash
+./start.sh sandbox       # build universal-sandbox-cursor:local
+```
 
 ## Changes and pull requests
 
