@@ -128,6 +128,17 @@ glab_auth_login() {
     fi
 }
 
+gh_auth_login() {
+    local hostname="$1"
+    local token="$2"
+    command -v gh >/dev/null 2>&1 || return 0
+    if printf '%s\n' "${token}" | gh auth login --hostname "${hostname}" --with-token; then
+        echo "gh: 已使用 GITHUB_TOKEN 登录 ${hostname}"
+    else
+        echo "gh: 自动登录失败，请检查 GITHUB_TOKEN 或稍后手动登录 ${hostname}" >&2
+    fi
+}
+
 setup_https_credentials() {
     local clone_url="$1"
     local host
@@ -137,16 +148,16 @@ setup_https_credentials() {
         return 1
     fi
 
-    local cred_line="" provider="" glab_host=""
+    local cred_line="" provider="" glab_host="" gh_cli_host=""
 
     if [ "$host" = "github.com" ] && [ -n "$GITHUB_TOKEN" ]; then
-        cred_line="https://x-access-token:${GITHUB_TOKEN}@github.com"; provider="GitHub"
+        cred_line="https://x-access-token:${GITHUB_TOKEN}@github.com"; provider="GitHub"; gh_cli_host="github.com"
     elif [ "$host" = "gitlab.com" ] && [ -n "$GITLAB_TOKEN" ]; then
         cred_line="https://oauth2:${GITLAB_TOKEN}@gitlab.com"; provider="GitLab"; glab_host="gitlab.com"
     elif [ -n "$GITHUB_URL" ] && [ -n "$GITHUB_TOKEN" ]; then
-        local gh_host; gh_host=$(url_host "$GITHUB_URL")
-        if [ "$host" = "$gh_host" ]; then
-            cred_line="https://x-access-token:${GITHUB_TOKEN}@${host}"; provider="GitHub (self-hosted)"
+        local ghe_host; ghe_host=$(url_host "$GITHUB_URL")
+        if [ "$host" = "$ghe_host" ]; then
+            cred_line="https://x-access-token:${GITHUB_TOKEN}@${host}"; provider="GitHub (self-hosted)"; gh_cli_host="$ghe_host"
         fi
     elif [ -n "$GITLAB_TOKEN" ]; then
         local gl_url="${GITLAB_URL:-https://${host}}"
@@ -159,6 +170,7 @@ setup_https_credentials() {
     if [ -n "$cred_line" ]; then
         prepare_git_credentials_file "$cred_line"
         echo "Git ${provider} HTTPS token configured for ${host}"
+        [ -n "$gh_cli_host" ] && gh_auth_login "$gh_cli_host" "$GITHUB_TOKEN"
         [ -n "$glab_host" ] && glab_auth_login "$glab_host" "$GITLAB_TOKEN"
         return 0
     fi
@@ -210,6 +222,18 @@ setup_bare_gitlab_credentials() {
     glab_auth_login "$gitlab_host" "$GITLAB_TOKEN"
 }
 
+# 仅设置了 GITHUB_TOKEN（无 GIT_REPOS / GIT_CLONE_URL）时注入凭据并 gh auth login。
+# 未提供 GITHUB_URL 时默认 github.com（与公开 GitHub 场景对齐）。
+setup_bare_github_credentials() {
+    local github_host="github.com"
+    if [ -n "$GITHUB_URL" ]; then
+        github_host=$(url_host "$GITHUB_URL")
+    fi
+    prepare_git_credentials_file "https://x-access-token:${GITHUB_TOKEN}@${github_host}"
+    echo "GitHub token configured successfully for ${github_host}"
+    gh_auth_login "$github_host" "$GITHUB_TOKEN"
+}
+
 setup_repo_credentials() {
     local url="$1"
     case "$(repo_scheme "$url")" in
@@ -236,8 +260,9 @@ if [ -n "$GIT_REPOS" ]; then
     unset _entries _entry _name _url _branch
 elif [ -n "$GIT_CLONE_URL" ]; then
     setup_repo_credentials "$GIT_CLONE_URL"
-elif [ -n "$GITLAB_TOKEN" ]; then
-    setup_bare_gitlab_credentials
+else
+    [ -n "$GITLAB_TOKEN" ] && setup_bare_gitlab_credentials
+    [ -n "$GITHUB_TOKEN" ] && setup_bare_github_credentials
 fi
 
 # 配置 Git 用户信息（通用中性默认，可由环境变量覆盖）
