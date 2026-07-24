@@ -27,7 +27,9 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import ArtifactLoadingPane from '@/components/run/ArtifactLoadingPane.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import AppDrawer from '@/components/ui/AppDrawer.vue'
+import AppModal from '@/components/ui/AppModal.vue'
 import { api } from '@/lib/api'
+import { useToast } from '@/lib/useToast'
 import {
   REVIEW_CANVAS_MIN,
   REVIEW_SIDEBAR,
@@ -64,6 +66,7 @@ import type { SandboxView } from '@/lib/api'
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const toast = useToast()
 const { isMobile } = useBreakpoint()
 const runId = computed(() => route.params.id as string)
 
@@ -528,6 +531,63 @@ function onClarifyFinish() {
 async function onCancel() {
   try { await api.cancelRun(runId.value) } catch {}
   await loadRun(false)
+}
+
+const canDeleteRun = computed(() => {
+  const s = run.value?.status
+  return s === 'completed' || s === 'failed'
+})
+
+const deleteRunHint = computed(() => {
+  if (canDeleteRun.value) return ''
+  const s = run.value?.status
+  if (s === 'queued' || s === 'running' || s === 'waiting_human') {
+    return t('pages.runDetail.deleteHintActive')
+  }
+  if (s === 'cancelled') return t('pages.runDetail.deleteHintCancelled')
+  return ''
+})
+
+const showDeleteConfirm = ref(false)
+const deletingRun = ref(false)
+const deleteRunError = ref('')
+
+function openDeleteConfirm() {
+  if (!canDeleteRun.value || deletingRun.value) return
+  deleteRunError.value = ''
+  showDeleteConfirm.value = true
+}
+
+function closeDeleteConfirm() {
+  if (deletingRun.value) return
+  showDeleteConfirm.value = false
+  deleteRunError.value = ''
+}
+
+function mapDeleteRunError(e: unknown): string {
+  const status = (e as { status?: number })?.status
+  const msg = e instanceof Error ? e.message : String(e || '')
+  if (status === 404 || /not found/i.test(msg)) return t('pages.runDetail.deleteErrorNotFound')
+  if (status === 409 || /cannot delete run/i.test(msg)) return t('pages.runDetail.deleteErrorNotDeletable')
+  return msg || t('pages.runDetail.deleteErrorGeneric')
+}
+
+async function confirmDeleteRun() {
+  if (!canDeleteRun.value || deletingRun.value) return
+  const wfId = run.value?.workflowId || ''
+  deletingRun.value = true
+  deleteRunError.value = ''
+  try {
+    await api.deleteRun(runId.value)
+    showDeleteConfirm.value = false
+    toast.success(t('pages.runDetail.deleteSuccess'))
+    const qs = wfId ? `?wf=${encodeURIComponent(wfId)}` : ''
+    await router.push('/runs' + qs)
+  } catch (e) {
+    deleteRunError.value = mapDeleteRunError(e)
+  } finally {
+    deletingRun.value = false
+  }
 }
 
 // Download the full logs of this run as a single text file for offline error
@@ -1263,6 +1323,20 @@ function selectExecution(nodeId: string, idx: number) {
               {{ t('common.buttons.refresh') }}
             </button>
             <AppButton v-if="run.status === 'running' || run.status === 'waiting_human'" variant="danger" size="sm" icon="close" @click="onCancel">{{ t('common.buttons.cancelRun') }}</AppButton>
+            <AppButton
+              data-testid="delete-run-btn"
+              variant="danger"
+              size="sm"
+              icon="trash"
+              :disabled="!canDeleteRun || deletingRun"
+              :title="deleteRunHint || t('common.buttons.deleteRun')"
+              @click="openDeleteConfirm"
+            >{{ t('common.buttons.deleteRun') }}</AppButton>
+            <span
+              v-if="deleteRunHint"
+              data-testid="delete-run-hint"
+              class="text-[11px] text-txt3"
+            >{{ deleteRunHint }}</span>
             <AppButton v-if="canResume" variant="primary" size="sm" icon="refresh" :disabled="resuming" @click="onResume('')">
               {{ resuming ? t('common.buttons.resuming') : t('common.buttons.resumeFromFail') }}
             </AppButton>
@@ -1693,5 +1767,40 @@ function selectExecution(nodeId: string, idx: number) {
         </div>
       </div>
     </AppDrawer>
+
+    <AppModal
+      :open="showDeleteConfirm"
+      :title="t('pages.runDetail.deleteTitle')"
+      :width="440"
+      @close="closeDeleteConfirm"
+    >
+      <div class="space-y-3 text-sm text-txt2">
+        <div class="flex items-start gap-2 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-[12px] text-err">
+          <Icon name="alert" :size="14" class="mt-0.5 shrink-0" />
+          {{ t('pages.runDetail.deleteWarning') }}
+        </div>
+        <p>{{ t('pages.runDetail.deleteConfirm') }}</p>
+        <div
+          v-if="deleteRunError"
+          class="flex items-start gap-2 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-[12px] text-err"
+        >
+          <Icon name="alert" :size="14" class="mt-0.5" />{{ deleteRunError }}
+        </div>
+      </div>
+      <template #footer>
+        <AppButton variant="ghost" :disabled="deletingRun" @click="closeDeleteConfirm">
+          {{ t('common.buttons.cancel') }}
+        </AppButton>
+        <AppButton
+          data-testid="confirm-delete-run-btn"
+          variant="danger"
+          icon="trash"
+          :disabled="deletingRun"
+          @click="confirmDeleteRun"
+        >
+          {{ deletingRun ? t('common.buttons.deleting') : t('common.buttons.confirmDelete') }}
+        </AppButton>
+      </template>
+    </AppModal>
   </div>
 </template>
