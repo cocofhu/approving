@@ -103,6 +103,13 @@ type fakeProvider struct {
 	// optionally skips writing products when reviseSkipWrite is true).
 	reviseErr       error
 	reviseSkipWrite bool
+
+	// agentUsage (test-only): when set, RunAgent attaches this Usage so review
+	// enter/saveState paths can assert StateRun.Usage is preserved across pause.
+	agentUsage *models.TokenUsage
+	// reviseUsage (test-only): when set, ReviseInPlace returns this Usage delta
+	// so flushTokenUsage on review/gate-react revise turns can be asserted.
+	reviseUsage *models.TokenUsage
 }
 
 // nextStructuredBody returns the reserved-artifact body to write for nodeID on
@@ -299,7 +306,10 @@ func (f *fakeProvider) RunAgent(ctx context.Context, req runtime.NodeReq) (runti
 		}
 	}
 	f.emitOutcome(req, outcomeOut)
-	return runtime.NodeResult{OutputMd: content, Outputs: out}, nil
+	f.mu.Lock()
+	usage := models.CloneTokenUsage(f.agentUsage)
+	f.mu.Unlock()
+	return runtime.NodeResult{OutputMd: content, Outputs: out, Usage: usage}, nil
 }
 
 // fakePrompt mirrors the provider's conditional_prompt injection so engine
@@ -451,7 +461,10 @@ func (f *fakeProvider) ReviseInPlace(ctx context.Context, req runtime.NodeReq, h
 	if revErr != nil {
 		msg = "就地修改失败: " + revErr.Error()
 	}
-	return runtime.ReactTurn{Msg: msg, Done: false, Err: revErr,
+	f.mu.Lock()
+	usage := models.CloneTokenUsage(f.reviseUsage)
+	f.mu.Unlock()
+	return runtime.ReactTurn{Msg: msg, Done: false, Err: revErr, Usage: usage,
 		Events: []models.AcpEvent{{Kind: "message", Text: "revise-in-place"}}}
 }
 
