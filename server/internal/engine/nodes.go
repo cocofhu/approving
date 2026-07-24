@@ -634,7 +634,13 @@ func (e *Engine) execProposalSelect(c *execCtx, node *models.Node) nodeOutcome {
 		if !ok {
 			return nodeOutcome{status: "failed", err: "方案解析失败", outputMd: "方案确认失败:方案解析失败"}
 		}
-		return e.finalizeProposal(c, node, final, id, outVar)
+		oc := e.finalizeProposal(c, node, final, id, outVar)
+		// Align with ResumeGate: once the choice is final, release the upstream
+		// ProposalAgent park kept alive for potential ReAct reject.
+		if oc.status == "completed" {
+			e.retireGateUpstreamSession(c, node)
+		}
+		return oc
 	}
 	// Human selection: reuse the gate pause/resume machinery (per-visit, so a
 	// loop-back re-opens the choice — see execGate).

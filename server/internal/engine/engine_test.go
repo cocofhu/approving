@@ -209,9 +209,10 @@ func proposalGraph() models.Graph {
 }
 
 // TestProposalSelectAuto: auto_confirm=true selects the recommended proposal
-// (p2) without pausing, writes proposal.json and sets the output variable.
+// (p2) without pausing, writes proposal.json, sets the output variable, and
+// retires the upstream ProposalAgent park session (same as ResumeGate).
 func TestProposalSelectAuto(t *testing.T) {
-	eng, db := setupEngineGraph(t, proposalGraph())
+	eng, db, provider := setupEngineGraphP(t, proposalGraph())
 	run, err := eng.StartRun("wf", nil, "test")
 	if err != nil {
 		t.Fatalf("start: %v", err)
@@ -229,6 +230,9 @@ func TestProposalSelectAuto(t *testing.T) {
 	}
 	if v.Value != "p2" {
 		t.Fatalf("expected recommended p2 selected, got %v", v.Value)
+	}
+	if !provider.retired[provider.parkKey(run.ID, "propose")] {
+		t.Fatalf("expected upstream propose session retired after auto_confirm")
 	}
 }
 
