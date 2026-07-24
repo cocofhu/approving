@@ -62,7 +62,7 @@ func TestOpenWithExistingQueryAndBadPath(t *testing.T) {
 	}
 }
 
-func TestSeedIdempotent(t *testing.T) {
+func TestSeedNoOp(t *testing.T) {
 	db, err := OpenSQLite(filepath.Join(t.TempDir(), "seed.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -70,25 +70,13 @@ func TestSeedIdempotent(t *testing.T) {
 	if err := Seed(db); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	var n1 int64
-	db.Model(&models.WorkflowDef{}).Count(&n1)
-	if n1 == 0 {
-		t.Fatal("seed created no workflow")
+	var n int64
+	db.Model(&models.WorkflowDef{}).Count(&n)
+	if n != 0 {
+		t.Fatalf("seed should not insert workflows, got %d", n)
 	}
-	// Second seed is a no-op (count unchanged).
 	if err := Seed(db); err != nil {
 		t.Fatalf("seed again: %v", err)
-	}
-	var n2 int64
-	db.Model(&models.WorkflowDef{}).Count(&n2)
-	if n1 != n2 {
-		t.Fatalf("seed not idempotent: %d -> %d", n1, n2)
-	}
-	// Published version snapshot exists.
-	var vc int64
-	db.Model(&models.WorkflowVersion{}).Count(&vc)
-	if vc == 0 {
-		t.Fatal("seed created no version snapshot")
 	}
 }
 

@@ -241,10 +241,7 @@ Xvfb+Chromium+x11vnc+websockify）。VNC 栈由 sandbox-gateway 的 `universal-s
 
 ## 种子数据
 
-首次启动(数据库为空)时,`database.Seed` 写入一份可运行的样例,**不含任何凭证**:
-
-- 工作流 `gitlab-feature`:`input → implement(agent: clone+实现+go test+push+建 MR,produces changes_summary.md) → 人工合并确认 → output`。
-  仓库地址来自全局变量 `repo_url`(默认指向样例项目,可留空转纯产物流);push/MR 需在 `go-backend` Agent 元信息里配置 `GITLAB_TOKEN`。
+首次启动不再写入样例流水线；「默认项目」可为空，由用户自行「新建流水线」。
 
 ## 运行(真实沙箱)
 
@@ -258,7 +255,7 @@ go run ./cmd/server
 ```
 
 先在 Agent 元信息里选好 `acpBackend` 并配置鉴权(及 CodeBuddy/Trae 站点),可附带
-GitLab 凭据(可引用全局变量)。Cursor 示例:
+Git 凭据(可引用全局变量)。Cursor 示例:
 
 ```json
 {
@@ -272,17 +269,7 @@ GitLab 凭据(可引用全局变量)。Cursor 示例:
 ```
 
 CodeBuddy 国际站 / Trae 国内站等其它后端的 env 写法见上文「ACP 后端怎么用」。
-
-`GITLAB_URL` 留空时会自动从 `repo_url` 推导(scheme+host)。触发一次真实 run(沙箱内
-clone → 实现+测试 → push → 建 MR):
-
-```bash
-curl -s -X POST localhost:8090/api/workflows/gitlab-feature/runs \
-  -H 'Content-Type: application/json' \
-  -d '{"inputs":{"feature":"新增 /messages/count 接口并补充 Go 测试","repo_url":"https://git.example.com/me/repo.git"},"trigger":"manual"}'
-# 轮询 GET /api/runs/<id>:implement 节点 outputs 含 pushed_sha / mr_url;
-# 之后在 done 节点等待人工合并确认。
-```
+创建并发布流水线后,用 `POST /api/workflows/<id>/runs` 触发 run。
 
 ## 测试
 
