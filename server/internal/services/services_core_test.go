@@ -292,6 +292,101 @@ func TestWorkflowDeleteCascades(t *testing.T) {
 	}
 }
 
+func TestRunDeleteStatusGate(t *testing.T) {
+	db := newTestDB(t)
+	s := NewRunService(db)
+
+	if err := s.Delete("ghost"); !errors.Is(err, ErrRunNotFound) {
+		t.Fatalf("missing run: %v", err)
+	}
+
+	for _, status := range []string{"queued", "running", "waiting_human", "cancelled"} {
+		id := "r-" + status
+		db.Create(&models.Run{ID: id, WorkflowID: "wf", Status: status})
+		err := s.Delete(id)
+		if !errors.Is(err, ErrRunNotDeletable) {
+			t.Fatalf("status %s: want ErrRunNotDeletable, got %v", status, err)
+		}
+		if _, ok := s.Get(id); !ok {
+			t.Fatalf("status %s: run should still exist", status)
+		}
+	}
+
+	for _, status := range []string{"completed", "failed"} {
+		id := "r-ok-" + status
+		db.Create(&models.Run{ID: id, WorkflowID: "wf", Status: status})
+		if err := s.Delete(id); err != nil {
+			t.Fatalf("status %s delete: %v", status, err)
+		}
+		if _, ok := s.Get(id); ok {
+			t.Fatalf("status %s: run should be gone", status)
+		}
+		// Second delete is a safe not-found failure.
+		if err := s.Delete(id); !errors.Is(err, ErrRunNotFound) {
+			t.Fatalf("status %s second delete: %v", status, err)
+		}
+	}
+}
+
+func TestRunDeleteCascadesAndKeepsWorkflow(t *testing.T) {
+	db := newTestDB(t)
+	wfSvc := NewWorkflowService(db)
+	runSvc := NewRunService(db)
+	keySvc := NewAPIKeyService(db)
+
+	wf := &models.WorkflowDef{ID: "wf-del-run", ProjectID: models.DefaultProjectID, Name: "KeepMe", Graph: validGraph()}
+	if err := wfSvc.Save(wf); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := keySvc.Create("wf-del-run", "ops"); err != nil {
+		t.Fatal(err)
+	}
+
+	const runID = "r-cascade"
+	db.Create(&models.Run{ID: runID, WorkflowID: "wf-del-run", Status: "completed"})
+	db.Create(&models.StateRun{RunID: runID, NodeID: "n"})
+	db.Create(&models.RunVariable{RunID: runID, Name: "x"})
+	db.Create(&models.Artifact{ID: "a-cascade", RunID: runID, Name: "doc"})
+	db.Create(&models.Gate{RunID: runID, NodeID: "g"})
+	db.Create(&models.ReactConversation{RunID: runID, NodeID: "c"})
+	db.Create(&models.PreviewIssue{ID: "pi1", RunID: runID, NodeID: "preview", Body: "bug"})
+	db.Create(&models.RunPreviewPort{RunID: runID, NodeID: "preview", Port: 3000, ProxyURL: "http://x"})
+	db.Create(&models.SandboxLog{Name: "sbx-log-1", RunID: runID, NodeID: "n", Content: "log"})
+	db.Create(&models.Sandbox{Name: "sbx-1", Purpose: "run", RunID: runID, Status: "stopped"})
+
+	if err := runSvc.Delete(runID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	var n int64
+	for _, q := range []struct {
+		name string
+		cnt  func() int64
+	}{
+		{"run", func() int64 { db.Model(&models.Run{}).Where("id = ?", runID).Count(&n); return n }},
+		{"state", func() int64 { db.Model(&models.StateRun{}).Where("run_id = ?", runID).Count(&n); return n }},
+		{"var", func() int64 { db.Model(&models.RunVariable{}).Where("run_id = ?", runID).Count(&n); return n }},
+		{"artifact", func() int64 { db.Model(&models.Artifact{}).Where("run_id = ?", runID).Count(&n); return n }},
+		{"gate", func() int64 { db.Model(&models.Gate{}).Where("run_id = ?", runID).Count(&n); return n }},
+		{"react", func() int64 { db.Model(&models.ReactConversation{}).Where("run_id = ?", runID).Count(&n); return n }},
+		{"previewIssue", func() int64 { db.Model(&models.PreviewIssue{}).Where("run_id = ?", runID).Count(&n); return n }},
+		{"previewPort", func() int64 { db.Model(&models.RunPreviewPort{}).Where("run_id = ?", runID).Count(&n); return n }},
+		{"sandboxLog", func() int64 { db.Model(&models.SandboxLog{}).Where("run_id = ?", runID).Count(&n); return n }},
+		{"sandbox", func() int64 { db.Model(&models.Sandbox{}).Where("run_id = ?", runID).Count(&n); return n }},
+	} {
+		if got := q.cnt(); got != 0 {
+			t.Fatalf("%s not cascaded: %d", q.name, got)
+		}
+	}
+
+	if _, ok := wfSvc.Get("wf-del-run"); !ok {
+		t.Fatal("WorkflowDef should remain")
+	}
+	if keys := keySvc.List("wf-del-run"); len(keys) != 1 {
+		t.Fatalf("WorkflowAPIKey should remain: %d", len(keys))
+	}
+}
+
 func TestRunService(t *testing.T) {
 	db := newTestDB(t)
 	s := NewRunService(db)

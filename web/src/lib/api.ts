@@ -468,6 +468,8 @@ export const api = {
       body: JSON.stringify({ priority }),
     }),
   cancelRun: (id: string) => req<{ status: string }>(`/runs/${id}/cancel`, { method: 'POST' }),
+  // Hard-delete a completed/failed run. Missing → 404; non-deletable status → 409.
+  deleteRun: (id: string) => req<{ status: string }>(`/runs/${id}`, { method: 'DELETE' }),
   resumeRun: (id: string, nodeId = '') =>
     req<{ status: string }>(`/runs/${id}/resume`, {
       method: 'POST',

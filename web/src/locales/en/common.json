@@ -68,6 +68,7 @@
       "console": "Console",
       "stop": "Stop",
       "cancelRun": "Cancel run",
+      "deleteRun": "Delete run",
       "resumeFromFail": "Resume from failure",
       "resumeFromNode": "Resume from this node",
       "loading": "Loading…",

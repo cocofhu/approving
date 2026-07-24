@@ -519,6 +519,71 @@ func TestGateAndArtifactEndpoints(t *testing.T) {
 	}
 }
 
+func TestDeleteRun(t *testing.T) {
+	h := newHarness(t)
+	now := time.Now()
+
+	if w := h.do(http.MethodDelete, "/api/runs/ghost", nil); w.Code != http.StatusNotFound {
+		t.Fatalf("missing: %d %s", w.Code, w.Body)
+	}
+
+	for _, status := range []string{"queued", "running", "waiting_human", "cancelled"} {
+		id := "del-blocked-" + status
+		h.db.Create(&models.Run{ID: id, WorkflowID: "wf-del", Status: status, StartedAt: now})
+		w := h.do(http.MethodDelete, "/api/runs/"+id, nil)
+		if w.Code != http.StatusConflict {
+			t.Fatalf("status %s: %d %s", status, w.Code, w.Body)
+		}
+		if w := h.do("GET", "/api/runs/"+id, nil); w.Code != 200 {
+			t.Fatalf("status %s still gettable: %d", status, w.Code)
+		}
+	}
+
+	for _, status := range []string{"completed", "failed"} {
+		id := "del-ok-" + status
+		h.db.Create(&models.Run{ID: id, WorkflowID: "wf-del", Status: status, StartedAt: now})
+		h.db.Create(&models.Artifact{ID: "art-" + id, RunID: id, Name: "doc", Content: "x", CreatedAt: now})
+		h.db.Create(&models.PreviewIssue{ID: "pi-" + id, RunID: id, NodeID: "p", Body: "x"})
+
+		w := h.do(http.MethodDelete, "/api/runs/"+id, nil)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status %s delete: %d %s", status, w.Code, w.Body)
+		}
+		var body map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatalf("status %s body: %v", status, err)
+		}
+		if body["status"] != "deleted" {
+			t.Fatalf("status %s response: %#v", status, body)
+		}
+		if w := h.do("GET", "/api/runs/"+id, nil); w.Code != http.StatusNotFound {
+			t.Fatalf("status %s detail after delete: %d", status, w.Code)
+		}
+		// Second delete is a safe not-found.
+		if w := h.do(http.MethodDelete, "/api/runs/"+id, nil); w.Code != http.StatusNotFound {
+			t.Fatalf("status %s second delete: %d", status, w.Code)
+		}
+		var n int64
+		h.db.Model(&models.Artifact{}).Where("run_id = ?", id).Count(&n)
+		if n != 0 {
+			t.Fatalf("status %s artifacts orphaned: %d", status, n)
+		}
+		h.db.Model(&models.PreviewIssue{}).Where("run_id = ?", id).Count(&n)
+		if n != 0 {
+			t.Fatalf("status %s preview issues orphaned: %d", status, n)
+		}
+	}
+
+	// Deleted run must not appear in the runs list.
+	list := h.do("GET", "/api/runs?wf=wf-del", nil)
+	if list.Code != 200 {
+		t.Fatalf("list: %d", list.Code)
+	}
+	if strings.Contains(list.Body.String(), "del-ok-completed") || strings.Contains(list.Body.String(), "del-ok-failed") {
+		t.Fatalf("deleted runs still listed: %s", list.Body.String())
+	}
+}
+
 func TestDeleteArtifact(t *testing.T) {
 	h := newHarness(t)
 	now := time.Now()
