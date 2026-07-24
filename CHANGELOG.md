@@ -4,6 +4,9 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+- Add GHCR publish workflows for `sandbox-gateway` and
+  `universal-sandbox-{cursor,claude_code,codebuddy,trae}` on `v*` tags.
+
 ## 0.0.1-beta — 2026-07-25
 
 - Initial public beta of Approving (MIT, Copyright 2026 cocofhu).

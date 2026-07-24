@@ -69,6 +69,17 @@ Useful commands:
 ./start.sh gateway    # rebuild gateway image only
 ```
 
+## Published images (GHCR)
+
+Pushing a `v*` tag runs:
+
+- `publish-image` → `ghcr.io/cocofhu/approving`
+- `publish-gateway` → `ghcr.io/cocofhu/sandbox-gateway`
+- `publish-sandbox` → `ghcr.io/cocofhu/universal-sandbox-{cursor,claude_code,codebuddy,trae}`
+
+Sandbox builds are large (often 30–90+ minutes). Packages may start private;
+set them Public under GitHub → Packages if anonymous pulls are required.
+
 ## Public release smoke
 
 After digest-pinned images exist:

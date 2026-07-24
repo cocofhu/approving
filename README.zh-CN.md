@@ -63,6 +63,17 @@ approving/
 ./start.sh gateway    # 仅重建网关镜像
 ```
 
+## 发布镜像（GHCR）
+
+推送 `v*` 标签会触发：
+
+- `publish-image` → `ghcr.io/cocofhu/approving`
+- `publish-gateway` → `ghcr.io/cocofhu/sandbox-gateway`
+- `publish-sandbox` → `ghcr.io/cocofhu/universal-sandbox-{cursor,claude_code,codebuddy,trae}`
+
+沙箱镜像体积大（常需 30–90+ 分钟）。Package 默认可能是 Private；若需匿名拉取，
+在 GitHub → Packages 设为 Public。
+
 ## 公开发布冒烟
 
 在已有 digest 钉死镜像之后：
