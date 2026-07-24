@@ -107,7 +107,6 @@ func (h *Handlers) DeleteProject(c *gin.Context) {
 func writeProjectErr(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, services.ErrEmptyProjectName),
-		errors.Is(err, services.ErrPlatformAuthEnvKey),
 		errors.Is(err, services.ErrSecretPlaceholderOnNewKey):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, services.ErrProjectNameExists):

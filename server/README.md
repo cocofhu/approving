@@ -9,8 +9,9 @@
 对应 Provider。统一沙箱镜像内 `acp-bridge` 按 `ACP_BACKEND` 单活启动 bridge(:8765)。
 兼容期容器内 `acp-gateway` / `cursor-acp` 为指向 `acp-bridge` 的软链(计划 0.2.0 移除)。
 
-**鉴权**:各后端 Key / 站点配置在 **Agent env**(见「ACP 后端怎么用」),平台级
-`APPROVING_CURSOR_API_KEY` / `sandbox.cursor_api_key` 已废弃且不再注入沙箱。
+**鉴权**:各后端 Key / 站点可配置在 **项目沙箱 env**(流水线底噪)或 **Agent env**(同名覆盖;
+见「ACP 后端怎么用」)。平台级 `APPROVING_CURSOR_API_KEY` / `sandbox.cursor_api_key`
+已废弃且不再注入沙箱;Agent Studio 不继承项目 env。
 
 `APPROVING_EXEC_PROVIDER` 已废弃(读取时 WARN,不影响路由);请改用 Agent `acpBackend`。
 
@@ -40,8 +41,9 @@ engine → ProviderRegistry → baseACPProvider → sandbox-gateway REST(创建�
 
 ## ACP 后端怎么用
 
-四个后端共用同一套配置入口:**Agent Studio → Meta 选 `acpBackend` → Env 填鉴权**(及可选站点)。
-平台不提供全局 ACP Key;`MergeAuthEnv` 把 Agent env 别名收成 CLI 认的变量后注入沙箱。
+四个后端共用配置入口:**项目沙箱 env**(流水线默认底噪,官方鉴权键强制 Secret)+
+**Agent Studio → Meta 选 `acpBackend` → Env**(同名覆盖;Studio 调试须在 Agent env 单独配置)。
+平台级不提供全局 ACP Key;`MergeAuthEnv` 把项目/Agent 侧别名收成 CLI 认的变量后注入流水线沙箱。
 
 | acpBackend | 沙箱内 CLI | 默认 configRoot | 容器内鉴权变量 |
 |------------|------------|-----------------|----------------|
@@ -224,9 +226,10 @@ sandbox: { image, env, cursor_auth_path, agent_chat_timeout_seconds, ... }
 `APPROVING_EXEC_PROVIDER`、`APPROVING_MAX_RUNS`、`APPROVING_PROFILES_ROOT`、`APPROVING_MCP_ADVERTISE`、
 `APPROVING_SANDBOX_IMAGE`、`APPROVING_AGENT_MODEL`、`APPROVING_AGENT_TIMEOUT_SEC` 等。
 
-> **ACP 鉴权不在平台配置**:各后端 API Key / 站点仅通过 **Agent 元信息 env** 注入
-> (见「ACP 后端怎么用」)。`sandbox.cursor_api_key` / `APPROVING_CURSOR_API_KEY` 若仍出现在
-> 旧配置中会打 WARN 且**不会**注入沙箱。
+> **ACP 鉴权不在平台级配置**:各后端 API Key / 站点通过 **项目沙箱 env**(流水线底噪)或
+> **Agent 元信息 env**(同名覆盖)注入流水线沙箱(见「ACP 后端怎么用」)。
+> `sandbox.cursor_api_key` / `APPROVING_CURSOR_API_KEY` 若仍出现在旧配置中会打 WARN 且**不会**
+> 注入沙箱。Agent Studio 不继承项目 env。
 > Git 托管凭据（`GITLAB_*` / `GITHUB_*` / SSH）同样配在 Agent env，按 run 注入沙箱，
 > 不进平台配置或镜像。
 

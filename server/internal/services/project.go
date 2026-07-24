@@ -26,8 +26,6 @@ var (
 	ErrProjectNotFound = errors.New("project not found")
 	// ErrProjectHasWorkflows is returned when deleting a project that still owns workflows.
 	ErrProjectHasWorkflows = errors.New("项目下仍有流水线，请先删除全部流水线")
-	// ErrPlatformAuthEnvKey is returned when sandbox env tries to set an ACP auth key.
-	ErrPlatformAuthEnvKey = errors.New("项目沙箱环境变量不能配置 ACP 鉴权键")
 	// ErrSecretPlaceholderOnNewKey is returned when a new/renamed key is saved with only the mask.
 	ErrSecretPlaceholderOnNewKey = errors.New("新密钥或重命名的键不能使用打码占位值，请重新填写明文")
 )
@@ -210,9 +208,6 @@ func sanitizeEnvEntries(in []models.EnvEntry) ([]models.EnvEntry, error) {
 		if k == "" {
 			continue
 		}
-		if runtime.IsPlatformAuthEnvKey(k) {
-			return nil, fmt.Errorf("%w: %s", ErrPlatformAuthEnvKey, k)
-		}
 		if _, ok := seen[k]; ok {
 			continue
 		}
@@ -220,7 +215,9 @@ func sanitizeEnvEntries(in []models.EnvEntry) ([]models.EnvEntry, error) {
 		if e.Value == SecretMask {
 			return nil, ErrSecretPlaceholderOnNewKey
 		}
-		out = append(out, models.EnvEntry{Key: k, Value: e.Value, Secret: e.Secret})
+		// Official ACP auth keys may be stored as project baseline; always force Secret.
+		secret := e.Secret || runtime.IsPlatformAuthEnvKey(k)
+		out = append(out, models.EnvEntry{Key: k, Value: e.Value, Secret: secret})
 	}
 	return out, nil
 }
@@ -264,9 +261,6 @@ func mergeEnvEntries(existing, incoming []models.EnvEntry) ([]models.EnvEntry, e
 		if k == "" {
 			continue
 		}
-		if runtime.IsPlatformAuthEnvKey(k) {
-			return nil, fmt.Errorf("%w: %s", ErrPlatformAuthEnvKey, k)
-		}
 		if _, ok := seen[k]; ok {
 			continue
 		}
@@ -278,7 +272,9 @@ func mergeEnvEntries(existing, incoming []models.EnvEntry) ([]models.EnvEntry, e
 				return nil, ErrSecretPlaceholderOnNewKey
 			}
 		}
-		out = append(out, models.EnvEntry{Key: k, Value: e.Value, Secret: e.Secret})
+		// Official ACP auth keys may be stored as project baseline; always force Secret.
+		secret := e.Secret || runtime.IsPlatformAuthEnvKey(k)
+		out = append(out, models.EnvEntry{Key: k, Value: e.Value, Secret: secret})
 	}
 	return out, nil
 }
