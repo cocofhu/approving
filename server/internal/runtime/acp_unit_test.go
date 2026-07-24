@@ -1,0 +1,651 @@
+package runtime
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/cocofhu/approving/internal/mcp"
+	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/approving/internal/textutil"
+
+	"github.com/gorilla/websocket"
+)
+
+func TestPureHelpers(t *testing.T) {
+	if got := artifactKind("a.json"); got != "json" {
+		t.Errorf("artifactKind json = %q", got)
+	}
+	if got := artifactKind("a.yaml"); got != "yaml" {
+		t.Errorf("artifactKind yaml = %q", got)
+	}
+	if got := artifactKind("a.md"); got != "markdown" {
+		t.Errorf("artifactKind md = %q", got)
+	}
+	if got := gitBaseURL("https://gitlab.com/g/p.git"); got != "https://gitlab.com" {
+		t.Errorf("gitBaseURL = %q", got)
+	}
+	if got := gitBaseURL("git@host:g/p.git"); got != "" {
+		t.Errorf("gitBaseURL ssh should be empty, got %q", got)
+	}
+	if got := gitRepoScheme("https://github.com/o/r.git"); got != "https" {
+		t.Errorf("gitRepoScheme https = %q", got)
+	}
+	if got := gitRepoScheme("git@github.com:o/r.git"); got != "ssh" {
+		t.Errorf("gitRepoScheme scp = %q", got)
+	}
+	if got := gitRepoScheme("ssh://git@gitlab.com/o/r.git"); got != "ssh" {
+		t.Errorf("gitRepoScheme ssh:// = %q", got)
+	}
+	if got := gitRepoHost("https://github.com/o/r.git"); got != "github.com" {
+		t.Errorf("gitRepoHost https = %q", got)
+	}
+	if got := gitRepoHost("git@git.example.com:o/r.git"); got != "git.example.com" {
+		t.Errorf("gitRepoHost scp = %q", got)
+	}
+	if got := gitRepoHost("ssh://git@gitlab.com/o/r.git"); got != "gitlab.com" {
+		t.Errorf("gitRepoHost ssh:// = %q", got)
+	}
+	if !isGitLabRepo("https://gitlab.com/o/r.git", "") {
+		t.Error("gitlab.com should be GitLab")
+	}
+	if !isGitLabRepo("https://git.example.com/o/r.git", "https://git.example.com") {
+		t.Error("self-hosted GitLab should match GITLAB_URL")
+	}
+	if isGitLabRepo("https://github.com/o/r.git", "") {
+		t.Error("github.com should not be GitLab")
+	}
+	if isGitLabRepo("https://github.com/o/r.git", "glpat-xxx") {
+		t.Error("GitHub with GITLAB_TOKEN env should not be GitLab repo")
+	}
+	if got := str2(nil); got != "" {
+		t.Errorf("str2(nil) = %q", got)
+	}
+	if got := str2(42); got != "42" {
+		t.Errorf("str2(int) = %q", got)
+	}
+	if got := firstLine("a\nb"); got != "a" {
+		t.Errorf("firstLine = %q", got)
+	}
+	if got := textutil.TruncateBytes("abcdef", 3, "…(truncated)"); got != "abc…(truncated)" {
+		t.Errorf("TruncateBytes = %q", got)
+	}
+	if _, ok := toInt("nope"); ok {
+		t.Error("toInt(string) should be false")
+	}
+	if n, ok := toInt(float64(7)); !ok || n != 7 {
+		t.Errorf("toInt(float64) = %d,%v", n, ok)
+	}
+	if got := shellArg("a'b"); got != `'a'\''b'` {
+		t.Errorf("shellArg = %q", got)
+	}
+}
+
+func TestStructuredArtifactFor(t *testing.T) {
+	cases := map[string]string{"plan": mcp.PlanArtifactName, "implement": mcp.ImplementationResultArtifactName,
+		"research": mcp.ResearchArtifactName, "test": mcp.TestResultArtifactName, "review": mcp.ReviewArtifactName,
+		"proposal": mcp.ProposalsArtifactName, "agent": ""}
+	for nt, want := range cases {
+		if name, _ := structuredArtifactFor(nt); name != want {
+			t.Errorf("structuredArtifactFor(%q) = %q want %q", nt, name, want)
+		}
+	}
+}
+
+func TestConditionalInjection(t *testing.T) {
+	req := NodeReq{Config: map[string]any{"conditional_prompt": map[string]any{"when_var": "flag", "text": "EXTRA"}}, Vars: map[string]any{}}
+	if got := conditionalInjection(req); got != "" {
+		t.Errorf("no var => empty, got %q", got)
+	}
+	req.Vars["flag"] = "yes"
+	if got := conditionalInjection(req); got != "EXTRA" {
+		t.Errorf("var set => EXTRA, got %q", got)
+	}
+	req.Vars["flag"] = "false"
+	if got := conditionalInjection(req); got != "" {
+		t.Errorf("false => empty, got %q", got)
+	}
+}
+
+func TestConditionalInjectionComposite(t *testing.T) {
+	req := NodeReq{
+		Config: map[string]any{"conditional_prompt": map[string]any{"when_var": "flag", "text": "EXTRA"}},
+		Vars: map[string]any{
+			"flag": map[string]any{
+				"text":   "",
+				"images": []any{map[string]any{"data": "x", "mimeType": "image/png"}},
+			},
+		},
+	}
+	if got := conditionalInjection(req); got != "EXTRA" {
+		t.Errorf("images-only when_var should inject, got %q", got)
+	}
+}
+
+func TestSubstHelpers(t *testing.T) {
+	vars := map[string]string{"A": "x", "B": "y"}
+	if got := substVars("${A}-${B}", vars); got != "x-y" {
+		t.Errorf("substVars = %q", got)
+	}
+	if got := substMap(map[string]string{"k": "${A}"}, vars); got["k"] != "x" {
+		t.Errorf("substMap = %v", got)
+	}
+	if got := substSlice([]string{"${B}"}, vars); got[0] != "y" {
+		t.Errorf("substSlice = %v", got)
+	}
+	if substMap(nil, vars) != nil || substSlice(nil, vars) != nil {
+		t.Error("nil inputs should return nil")
+	}
+}
+
+func TestBuildAgentPromptPerType(t *testing.T) {
+	host := mcp.NewHost(newMemStore())
+	p := newACPProvider(host, Options{}).(*acpProvider)
+	for _, nt := range []string{"plan", "implement", "react", "research", "test", "review", "proposal", "agent"} {
+		req := NodeReq{NodeType: nt, Config: map[string]any{"prompt": "P", "produces": "out.md"}}
+		got := p.buildAgentPrompt(req, []string{"up.md"})
+		if !strings.Contains(got, "P") {
+			t.Errorf("%s: prompt body missing", nt)
+		}
+		if !strings.Contains(got, "up.md") {
+			t.Errorf("%s: upstream seed missing", nt)
+		}
+	}
+}
+
+func TestTestNodePromptExtras(t *testing.T) {
+	host := mcp.NewHost(newMemStore())
+	p := newACPProvider(host, Options{}).(*acpProvider)
+
+	t.Run("no repos no extras", func(t *testing.T) {
+		got := p.buildAgentPrompt(NodeReq{
+			NodeType: "test",
+			Config:   map[string]any{"prompt": "P"},
+			Vars:     map[string]any{},
+		}, nil)
+		if strings.Contains(got, "多仓测试范围") || strings.Contains(got, "工作区仓库布局") {
+			t.Error("no repos should not inject repo layout/scope section")
+		}
+	})
+
+	t.Run("multi repo all scope", func(t *testing.T) {
+		got := p.buildAgentPrompt(NodeReq{
+			NodeType: "test",
+			Config:   map[string]any{"prompt": "P", "repoScope": "all"},
+			Vars: map[string]any{
+				"repos": `[{"name":"primary"},{"name":"frontend"}]`,
+			},
+		}, nil)
+		if !strings.Contains(got, "多仓测试范围") || !strings.Contains(got, "repoScope=all") {
+			t.Errorf("expected multi-repo injection: %q", got)
+		}
+	})
+
+	t.Run("scoped repo", func(t *testing.T) {
+		got := p.buildAgentPrompt(NodeReq{
+			NodeType: "test",
+			Config:   map[string]any{"prompt": "P", "repoScope": "frontend"},
+			Vars: map[string]any{
+				"repos": `[{"name":"primary"},{"name":"frontend"}]`,
+			},
+		}, nil)
+		if !strings.Contains(got, "repoScope=frontend") || !strings.Contains(got, "/root/workspace/frontend/") {
+			t.Errorf("expected scoped repo injection: %q", got)
+		}
+	})
+
+	t.Run("block_on_skipped", func(t *testing.T) {
+		got := p.buildAgentPrompt(NodeReq{
+			NodeType: "test",
+			Config:   map[string]any{"prompt": "P", "block_on_skipped": true},
+			Vars:     map[string]any{},
+		}, nil)
+		if !strings.Contains(got, "block_on_skipped=true") {
+			t.Errorf("expected block_on_skipped injection: %q", got)
+		}
+	})
+}
+
+func TestProviderWiringAndAbort(t *testing.T) {
+	host := mcp.NewHost(newMemStore())
+	p := NewProvider("cursor", host, Options{})
+	if p.Name() != "registry" {
+		t.Errorf("Name = %q", p.Name())
+	}
+	if NewProvider("weird", host, Options{}) == nil {
+		t.Error("NewProvider fallback nil")
+	}
+	reg := p.(*ProviderRegistry)
+	cp := reg.providers[BackendCursor].(*acpProvider)
+	cp.SetEventSink(func(string, string, []models.AcpEvent, bool) {})
+	cp.SetSandboxRegistry(&countingRegistry{})
+
+	// AbortRun tears down a live session (fake sandbox, nil mgr => Destroy no-op).
+	key := "runX|nodeY"
+	cp.mu.Lock()
+	cp.sessions[key] = &reactSession{sb: &sandbox.Sandbox{Name: "fake"}}
+	cp.mu.Unlock()
+	reg.AbortRun("runX")
+	cp.mu.Lock()
+	_, still := cp.sessions[key]
+	cp.mu.Unlock()
+	if still {
+		t.Error("AbortRun should remove the session")
+	}
+}
+
+func TestLiveNodeEvents(t *testing.T) {
+	host := mcp.NewHost(newMemStore())
+	p := newACPProvider(host, Options{}).(*acpProvider)
+	// Not live => ok=false, err=nil (fall back to snapshot).
+	if _, ok, err := p.LiveNodeEvents(context.Background(), "r", "n"); ok || err != nil {
+		t.Errorf("expected ok=false err=nil when node not live, got ok=%v err=%v", ok, err)
+	}
+	// Live but its /api/events is unreachable (dead port) => ok=false with error
+	// so callers can surface a rehydrate failure (not a fake empty live page).
+	p.registerLive(NodeReq{RunID: "r", NodeID: "n"}, &sandbox.Sandbox{Host: "127.0.0.1", Port: 1}, nil)
+	if _, ok, err := p.LiveNodeEvents(context.Background(), "r", "n"); ok || err == nil {
+		t.Errorf("expected ok=false with err when event log fetch fails, got ok=%v err=%v", ok, err)
+	}
+	if _, _, more, ok, err := p.LiveNodeEventsPage(context.Background(), "r", "n", "", 10); ok || more || err == nil {
+		t.Errorf("expected page ok=false with err on fetch failure, got ok=%v more=%v err=%v", ok, more, err)
+	}
+}
+
+// TestLiveNodeEventsPageSuccessPath confirms sticky/same-process REST re-read:
+// when the live sandbox bridge answers, LiveNodeEventsPage returns ok=true with
+// the timeline (supports the ~2s refresh recovery SLA under single-instance).
+func TestLiveNodeEventsPageSuccessPath(t *testing.T) {
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/ws" {
+			http.NotFound(w, r)
+			return
+		}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			return
+		}
+		var m map[string]any
+		if json.Unmarshal(msg, &m) != nil || fmt.Sprint(m["op"]) != "connect" {
+			return
+		}
+		frame, _ := json.Marshal(map[string]any{
+			"type": "session_update",
+			"update": map[string]any{
+				"sessionUpdate": "agent_message_chunk",
+				"content":       map[string]any{"text": "hello-rehydrate"},
+			},
+		})
+		_ = conn.WriteJSON(map[string]any{
+			"op": "connected", "sessionId": "s1",
+			"eventLog":   []json.RawMessage{frame},
+			"totalTurns": 1,
+		})
+	}))
+	t.Cleanup(srv.Close)
+	host, port := "127.0.0.1", srv.Listener.Addr().(*net.TCPAddr).Port
+
+	p := newACPProvider(mcp.NewHost(newMemStore()), Options{}).(*acpProvider)
+	p.registerLive(NodeReq{RunID: "run1", NodeID: "node1"}, &sandbox.Sandbox{Host: host, Port: port}, nil)
+
+	ev, next, more, ok, err := p.LiveNodeEventsPage(context.Background(), "run1", "node1", "", 20)
+	if err != nil || !ok {
+		t.Fatalf("expected live page ok, got ok=%v next=%q more=%v err=%v", ok, next, more, err)
+	}
+	if more {
+		t.Fatalf("expected hasMore=false, got true")
+	}
+	if len(ev) == 0 {
+		t.Fatal("expected re-read events from live bridge")
+	}
+	found := false
+	for _, e := range ev {
+		if strings.Contains(e.Text, "hello-rehydrate") || strings.Contains(e.Title, "hello-rehydrate") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("re-read events missing payload: %+v", ev)
+	}
+}
+
+// profilesRoot writes a minimal agent.json so agentConfig/resolvedMCPSpecs/etc.
+// have something to read.
+func writeAgent(t *testing.T, profile, agentJSON string) string {
+	t.Helper()
+	root := t.TempDir()
+	dir := filepath.Join(root, profile)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "agent.json"), []byte(agentJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func TestAgentConfigAndMCP(t *testing.T) {
+	root := writeAgent(t, "dev", `{"mcp":[{"name":"artifact-store","url":"${APPROVING_ARTIFACT_URL}","headers":{"Authorization":"Bearer ${APPROVING_ARTIFACT_TOKEN}"}}],"env":{"GITLAB_TOKEN":"tok-${APPROVING_RUN_ID}","APPROVING_CURSOR_API_KEY":"test-key"}}`)
+	host := mcp.NewHost(newMemStore())
+	p := newACPProvider(host, Options{ProfilesRoot: root, MCPEndpoint: "http://host.docker.internal:9099"}).(*acpProvider)
+	req := NodeReq{RunID: "run9", NodeID: "n", Token: "tkn", NodeType: "agent",
+		Config: map[string]any{"skill_profile": "dev"}, Vars: map[string]any{"repos": `[{"name":"p","url":"https://gitlab.com/g/p.git"}]`}}
+
+	cfg := p.agentConfig("dev")
+	if len(cfg.MCP) != 1 {
+		t.Fatalf("agentConfig MCP = %d", len(cfg.MCP))
+	}
+	specs := p.resolvedMCPSpecs(req)
+	if len(specs) != 1 || !strings.Contains(specs[0].URL, "9099") {
+		t.Errorf("resolvedMCPSpecs = %+v", specs)
+	}
+	if raw := p.mcpServers(req); len(raw) == 0 {
+		t.Error("mcpServers should be non-empty when artifact-store present")
+	}
+	if tok := p.gitToken(req); tok != "tok-run9" {
+		t.Errorf("gitToken = %q", tok)
+	}
+	if wd := p.workDir("dev"); wd != "" { // no cursor/ dir exists
+		t.Errorf("workDir = %q, want empty", wd)
+	}
+	// spec + buildCursorHome exercise the filesystem layout builder.
+	sp, err := p.spec(req)
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if sp.Env["GITLAB_URL"] != "https://gitlab.com" {
+		t.Errorf("derived GITLAB_URL = %q", sp.Env["GITLAB_URL"])
+	}
+	removeHome(sp.ConfigHome)
+}
+
+func TestWorkspaceWorkDirSrc(t *testing.T) {
+	root := t.TempDir()
+	profile := "dev"
+	agentDir := filepath.Join(root, profile)
+	workDir := filepath.Join(agentDir, "workspace")
+	if err := os.MkdirAll(filepath.Join(workDir, "rules"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, "rules", "custom.md"), []byte("custom rule"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(agentDir, "agent.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	host := mcp.NewHost(newMemStore())
+	p := newACPProvider(host, Options{ProfilesRoot: root}).(*acpProvider)
+	req := NodeReq{NodeID: "n", Config: map[string]any{"skill_profile": profile}}
+
+	if wd := p.workDir(profile); wd != workDir {
+		t.Fatalf("workDir = %q, want %q", wd, workDir)
+	}
+
+	home := p.buildConfigHome(req, nil)
+	defer removeHome(home)
+	if home == "" {
+		t.Fatal("buildConfigHome returned empty home")
+	}
+	if b, err := os.ReadFile(filepath.Join(home, "rules", "custom.md")); err != nil || string(b) != "custom rule" {
+		t.Fatalf("workspace rules not copied to config home: err=%v b=%q", err, b)
+	}
+}
+
+func TestLegacyCursorWorkDirFallback(t *testing.T) {
+	root := t.TempDir()
+	profile := "legacy"
+	agentDir := filepath.Join(root, profile)
+	legacyDir := filepath.Join(agentDir, "cursor")
+	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyDir, "AGENTS.md"), []byte("legacy agents"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(agentDir, "agent.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	host := mcp.NewHost(newMemStore())
+	p := newACPProvider(host, Options{ProfilesRoot: root}).(*acpProvider)
+	if wd := p.workDir(profile); wd != legacyDir {
+		t.Fatalf("workDir = %q, want legacy %q", wd, legacyDir)
+	}
+}
+
+func TestUpstreamArtifacts(t *testing.T) {
+	store := newMemStore()
+	host := mcp.NewHost(store)
+	tok := host.RegisterRun("r")
+	defer host.UnregisterRun("r")
+	host.WriteArtifact("r", tok, "n", "a.md", "x", "markdown")
+	p := newACPProvider(host, Options{}).(*acpProvider)
+	names := p.upstreamArtifacts(NodeReq{RunID: "r", Token: tok})
+	if len(names) != 1 || names[0] != "a.md" {
+		t.Errorf("upstreamArtifacts = %v", names)
+	}
+}
+
+// --- docker-stubbed sandbox paths -----------------------------------------
+
+func TestHarvestReadsFileAndWrites(t *testing.T) {
+	restore := sandbox.SetExecHook(func(_ context.Context, _ string, _ int, command string, _ io.Reader) ([]byte, error) {
+		if strings.Contains(command, "cat") {
+			return []byte("harvested body"), nil
+		}
+		return nil, nil
+	})
+	defer restore()
+
+	store := newMemStore()
+	host := mcp.NewHost(store)
+	tok := host.RegisterRun("r")
+	defer host.UnregisterRun("r")
+	p := newACPProvider(host, Options{}).(*acpProvider)
+	sb := &sandbox.Sandbox{Name: "sb", Host: "127.0.0.1", Port: 1, WorkspaceDir: "/root/workspace"}
+	out := map[string]any{}
+	var events []models.AcpEvent
+	if err := p.harvest(context.Background(), sb, NodeReq{RunID: "r", NodeID: "n", Token: tok}, "report.md", out, &events); err != nil {
+		t.Fatalf("harvest: %v", err)
+	}
+	if c, ok := store.Get("r", "report.md"); !ok || c != "harvested body" {
+		t.Errorf("harvest stored %q ok=%v", c, ok)
+	}
+	if len(events) != 1 || events[0].Kind != "tool_call" {
+		t.Errorf("harvest event = %+v", events)
+	}
+}
+
+func TestEnsurePushedAndDetectPush(t *testing.T) {
+	restore := sandbox.SetExecHook(func(_ context.Context, _ string, _ int, command string, _ io.Reader) ([]byte, error) {
+		switch {
+		case strings.Contains(command, "rev-parse --abbrev-ref"):
+			return []byte("feature-x\n"), nil
+		case strings.Contains(command, "rev-parse HEAD"):
+			return []byte("abc123\n"), nil
+		case strings.Contains(command, "ls-remote"):
+			return []byte("abc123\trefs/heads/feature-x\n"), nil
+		case strings.Contains(command, "glab mr list"):
+			return []byte(`[{"web_url":"https://gitlab.com/g/p/-/merge_requests/1"}]`), nil
+		}
+		return []byte(""), nil
+	})
+	defer restore()
+
+	host := mcp.NewHost(newMemStore())
+	p := newACPProvider(host, Options{Env: map[string]string{"GITLAB_TOKEN": "gl-token"}}).(*acpProvider)
+	sb := &sandbox.Sandbox{Name: "sb", Host: "127.0.0.1", Port: 1, WorkspaceDir: "/root/workspace"}
+
+	req := NodeReq{
+		Config: map[string]any{"create_mr": true},
+		Vars:   map[string]any{"repos": `[{"name":"p","url":"https://gitlab.com/g/p.git"}]`},
+	}
+	p.ensurePushed(context.Background(), sb, req) // best-effort, must not panic
+
+	info := p.detectPush(context.Background(), sb, req)
+	if info == nil || !info.Pushed || info.Branch != "feature-x" {
+		t.Fatalf("detectPush = %+v", info)
+	}
+	if info.MrURL != "https://gitlab.com/g/p/-/merge_requests/1" {
+		t.Errorf("MR url = %q", info.MrURL)
+	}
+}
+
+func TestDetectPushNonGitLabSkipsMR(t *testing.T) {
+	restore := sandbox.SetExecHook(func(_ context.Context, _ string, _ int, command string, _ io.Reader) ([]byte, error) {
+		switch {
+		case strings.Contains(command, "rev-parse --abbrev-ref"):
+			return []byte("feature-x\n"), nil
+		case strings.Contains(command, "rev-parse HEAD"):
+			return []byte("abc123\n"), nil
+		case strings.Contains(command, "ls-remote"):
+			return []byte("abc123\trefs/heads/feature-x\n"), nil
+		case strings.Contains(command, "glab mr list"):
+			t.Error("glab should not be called for non-GitLab repo")
+		}
+		return []byte(""), nil
+	})
+	defer restore()
+
+	host := mcp.NewHost(newMemStore())
+	p := newACPProvider(host, Options{Env: map[string]string{"GITLAB_TOKEN": "tok"}}).(*acpProvider)
+	sb := &sandbox.Sandbox{Name: "sb", Host: "127.0.0.1", Port: 1, WorkspaceDir: "/root/workspace"}
+
+	info := p.detectPush(context.Background(), sb, NodeReq{
+		Config: map[string]any{"create_mr": true},
+		Vars:   map[string]any{"repos": `[{"name":"r","url":"https://github.com/o/r.git"}]`},
+	})
+	if info == nil || info.MrURL != "" {
+		t.Fatalf("non-GitLab detectPush should have empty mr_url, got %+v", info)
+	}
+}
+
+func TestCaptureChanges(t *testing.T) {
+	// The change report is now computed over SSH (git run in-sandbox): the exec
+	// hook returns the tab-separated records sandbox.GitChanges parses. The
+	// workspace root is reported as a git repo → single-repo (vcs:"git") mode.
+	restore := sandbox.SetExecHook(func(_ context.Context, _ string, _ int, _ string, _ io.Reader) ([]byte, error) {
+		return []byte(strings.Join([]string{
+			"VCS\tgit",
+			"HEAD\tdeadbeef",
+			"BRANCH\tfeat",
+			"BASEBRANCH\tmain",
+			"BASE\tcafebabe",
+			"DIRTY\t0",
+			"PUSHED\t1",
+			"REMOTESHA\tdeadbeef",
+			"UNPUSHED\t0",
+			"AHEAD\t1",
+			"COMMIT\tdeadbeef\tAlice\t2024-01-01T00:00:00Z\tinit",
+			"NUM\t1\t0\ta.go",
+			"NAME\tM\ta.go",
+		}, "\n")), nil
+	})
+	defer restore()
+
+	host := mcp.NewHost(newMemStore())
+	p := newACPProvider(host, Options{}).(*acpProvider)
+	sb := &sandbox.Sandbox{Name: "sb", Host: "127.0.0.1", Port: 1, WorkspaceDir: "/root/workspace"}
+	out := map[string]any{}
+	git := p.captureChanges(context.Background(), sb, NodeReq{
+		Vars: map[string]any{"repos": `[{"name":"app","url":"https://h/app.git"}]`},
+	}, out)
+	if git == nil || git.Branch != "feat" || !git.Pushed {
+		t.Fatalf("captureChanges git = %+v", git)
+	}
+	if out["branch"] != "feat" || out["pushed"] != true {
+		t.Errorf("captureChanges out = %+v", out)
+	}
+	if out["branches"] != `{"app":"feat"}` {
+		t.Errorf("captureChanges branches = %v", out["branches"])
+	}
+}
+
+// TestRunAgentImplementNode drives the implement path (ensurePlanComplete +
+// ensureStructured + ensurePushed) via the fake bridge; no plan artifact means
+// plan enforcement is a no-op, and the structured result is written up front.
+func TestRunAgentImplementNode(t *testing.T) {
+	restore := sandbox.SetExecHook(func(context.Context, string, int, string, io.Reader) ([]byte, error) {
+		return []byte(""), nil // ensurePushed git script -> harmless
+	})
+	defer restore()
+
+	store := newMemStore()
+	host := mcp.NewHost(store)
+	runID, nodeID := "impl-run", "impl-node"
+	tok := host.RegisterRun(runID)
+	t.Cleanup(func() { host.UnregisterRun(runID) })
+	mgr := newFakeManager(t, host, runID, nodeID, tok, func(int) chatFunc {
+		return func(int) turnAction {
+			return turnAction{narration: "implemented", produces: map[string]string{
+				mcp.ImplementationResultArtifactName: `{"summary":"done"}`}}
+		}
+	})
+	p, _ := newTestProvider(t, host, testOpts(), mgr)
+	req := reqWithProfile(NodeReq{RunID: runID, NodeID: nodeID, NodeType: "implement", Token: tok,
+		Config: map[string]any{"prompt": "build"}, Vars: map[string]any{}})
+	res, err := p.RunAgent(context.Background(), req)
+	if err != nil {
+		t.Fatalf("implement RunAgent: %v", err)
+	}
+	if res.OutputMd == "" {
+		t.Error("expected narration")
+	}
+	if _, ok := store.Get(runID, mcp.ImplementationResultArtifactName); !ok {
+		t.Error("implementation_result not stored")
+	}
+}
+
+func TestDebugFetchPage(t *testing.T) {
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Logf("path=%s", r.URL.Path)
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Logf("upgrade err: %v", err)
+			return
+		}
+		defer conn.Close()
+		_, msg, err := conn.ReadMessage()
+		t.Logf("read: %s err=%v", msg, err)
+		frame, _ := json.Marshal(map[string]any{
+			"type": "session_update",
+			"update": map[string]any{
+				"sessionUpdate": "agent_message_chunk",
+				"content":       map[string]any{"text": "hello-rehydrate"},
+			},
+		})
+		payload := map[string]any{
+			"op": "connected", "sessionId": "s1",
+			"eventLog":   []json.RawMessage{frame},
+			"totalTurns": 1,
+		}
+		err = conn.WriteJSON(payload)
+		t.Logf("write err=%v frame=%s", err, frame)
+	}))
+	t.Cleanup(srv.Close)
+	host, port := "127.0.0.1", srv.Listener.Addr().(*net.TCPAddr).Port
+	t.Logf("host=%s port=%d", host, port)
+	page, err := sandbox.FetchEventLogPage(context.Background(), host, port, "", 20)
+	t.Logf("page=%+v err=%v", page, err)
+	if page != nil {
+		ev := sandbox.AggregateFrames(page.Events)
+		t.Logf("events=%+v", ev)
+	}
+}

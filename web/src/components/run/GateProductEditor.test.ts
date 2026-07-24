@@ -1,0 +1,465 @@
+// @vitest-environment happy-dom
+import { defineComponent } from 'vue'
+import { createI18n } from 'vue-i18n'
+import { flushPromises, mount } from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import common from '@/locales/zh-CN/common.json'
+import pages from '@/locales/zh-CN/pages.json'
+import GateProductEditor from './GateProductEditor.vue'
+
+const apiMocks = vi.hoisted(() => ({
+  saveGateArtifact: vi.fn(),
+}))
+
+vi.mock('@/lib/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+  return {
+    ...actual,
+    api: {
+      ...actual.api,
+      saveGateArtifact: apiMocks.saveGateArtifact,
+    },
+  }
+})
+
+const StructuredStub = defineComponent({
+  name: 'StructuredArtifactView',
+  props: { name: String, doc: Object },
+  template: '<div data-testid="structured-view">{{ name }}</div>',
+})
+
+const HtmlPreviewStub = defineComponent({
+  name: 'HtmlPreview',
+  props: { html: String, inspectable: Boolean },
+  emits: ['pick'],
+  template:
+    '<div data-testid="html-preview" :data-inspectable="inspectable ? \'1\' : \'0\'" />',
+})
+
+const researchContent = JSON.stringify({ summary: '调研摘要', findings: [{ title: '发现 1' }] }, null, 2)
+
+function mountEditor(
+  canEdit = true,
+  overrides: Record<string, unknown> = {},
+) {
+  const i18n = createI18n({
+    legacy: false,
+    locale: 'zh-CN',
+    messages: { 'zh-CN': { ...common, ...pages } },
+  })
+  return mount(GateProductEditor, {
+    props: {
+      runId: 'run-1',
+      gateNodeId: 'gate-1',
+      products: [{ name: 'research.json', kind: 'json' as const }],
+      savedContent: { 'research.json': researchContent },
+      savedMeta: { 'research.json': { etag: 'W/"1"' } },
+      canEdit,
+      ...overrides,
+    },
+    global: {
+      plugins: [i18n],
+      stubs: {
+        Icon: true,
+        StructuredArtifactView: StructuredStub,
+        HtmlPreview: HtmlPreviewStub,
+      },
+    },
+  })
+}
+
+const sampleHtml = '<!doctype html><html><body><p>hi</p></body></html>'
+
+function mountHtmlEditor(overrides: Record<string, unknown> = {}) {
+  return mountEditor(true, {
+    products: [{ name: 'page.html', kind: 'html' as const }],
+    savedContent: { 'page.html': sampleHtml },
+    savedMeta: { 'page.html': { etag: 'W/"h1"' } },
+    ...overrides,
+  })
+}
+
+describe('GateProductEditor', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    apiMocks.saveGateArtifact.mockResolvedValue({
+      id: 'a1',
+      name: 'research.json',
+      kind: 'json',
+      sizeBytes: 50,
+      updatedAt: '2026-07-18T01:00:00Z',
+      etag: 'W/"2"',
+      content: researchContent,
+    })
+  })
+
+  it('renders preview mode with structured view', async () => {
+    const wrapper = mountEditor()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-product-editor"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="structured-view"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('enters edit mode and saves draft', async () => {
+    const wrapper = mountEditor()
+    await flushPromises()
+    const editBtn = wrapper.findAll('button').find((b) => b.text() === '编辑')
+    expect(editBtn).toBeTruthy()
+    await editBtn!.trigger('click')
+    await flushPromises()
+    const jsonBtn = wrapper.findAll('button').find((b) => b.text().includes('原始 JSON'))
+    if (jsonBtn) await jsonBtn.trigger('click')
+    await flushPromises()
+    const ta = wrapper.find('[data-testid="gate-artifact-textarea"]')
+    if (ta.exists()) {
+      await ta.setValue('{"summary":"改动了","findings":[{"title":"发现 1"}]}')
+      await wrapper.find('[data-testid="gate-artifact-save"]').trigger('click')
+      await flushPromises()
+      expect(apiMocks.saveGateArtifact).toHaveBeenCalled()
+      expect(wrapper.emitted('saved')).toBeTruthy()
+    }
+    wrapper.unmount()
+  })
+
+  it('hides edit controls when canEdit is false', async () => {
+    const wrapper = mountEditor(false)
+    await flushPromises()
+    const editBtn = wrapper.findAll('button').find((b) => b.text() === '编辑')
+    expect(editBtn).toBeTruthy()
+    expect((editBtn!.element as HTMLButtonElement).disabled).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('mounts HtmlPreview only when saved HTML is non-empty', async () => {
+    const wrapper = mountHtmlEditor()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(true)
+    wrapper.unmount()
+
+    const empty = mountHtmlEditor({ savedContent: { 'page.html': '  \n' } })
+    await flushPromises()
+    expect(empty.find('[data-testid="gate-preview-empty"]').exists()).toBe(true)
+    expect(empty.find('[data-testid="html-preview"]').exists()).toBe(false)
+    empty.unmount()
+  })
+
+  it('locks edit tab while contentLoading and shows loading panel', async () => {
+    const wrapper = mountHtmlEditor({ contentLoading: true })
+    await flushPromises()
+    const editBtn = wrapper.find('[data-testid="gate-mode-edit"]')
+    expect((editBtn.element as HTMLButtonElement).disabled).toBe(true)
+    expect(wrapper.find('[data-testid="gate-preview-loading"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(false)
+    await editBtn.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-artifact-textarea"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('shows error panel with retry emit', async () => {
+    const wrapper = mountHtmlEditor({
+      loadError: 'page.html: boom',
+      savedContent: { 'page.html': '' },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-preview-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(false)
+    await wrapper.find('[data-testid="gate-preview-retry"]').trigger('click')
+    expect(wrapper.emitted('retry-load')).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  it('round-trips edit↔preview with non-empty HTML still mounted', async () => {
+    const wrapper = mountHtmlEditor()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="gate-mode-edit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-artifact-textarea"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="gate-mode-preview"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('shows readonly badge and disables edit/save for image products', async () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        blob: async () => new Blob(['img'], { type: 'image/png' }),
+      }),
+    )
+    const wrapper = mount(GateProductEditor, {
+      props: {
+        runId: 'run-1',
+        gateNodeId: 'gate-1',
+        products: [
+          { name: 'research.json', kind: 'json' as const, readonly: false },
+          { name: 'shot.png', kind: 'image' as const, readonly: true },
+        ],
+        savedContent: { 'research.json': researchContent, 'shot.png': '' },
+        savedMeta: {},
+        artifacts: [
+          {
+            id: 'img1',
+            name: 'shot.png',
+            kind: 'image',
+            nodeId: 'test',
+            runId: 'run-1',
+            workflowName: 'w',
+            sizeBytes: 3,
+            createdAt: '',
+          },
+        ],
+        canEdit: true,
+        excludedNames: ['extra.md'],
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          Icon: true,
+          StructuredArtifactView: StructuredStub,
+          HtmlPreview: HtmlPreviewStub,
+        },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-readonly-badge"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-excluded-produces"]').text()).toContain('extra.md')
+
+    const imgTab = wrapper.findAll('[role="tab"]').find((b) => b.text().includes('shot.png'))
+    expect(imgTab).toBeTruthy()
+    await imgTab!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="gate-readonly-image"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-artifact-save"]').exists()).toBe(false)
+    const editBtn = wrapper.find('[data-testid="gate-mode-edit"]')
+    expect((editBtn.element as HTMLButtonElement).disabled).toBe(true)
+    expect(wrapper.find('[data-testid="gate-artifact-textarea"]').exists()).toBe(false)
+
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+  })
+
+  it('allows HTML source edit for page.html', async () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const wrapper = mount(GateProductEditor, {
+      props: {
+        runId: 'run-1',
+        gateNodeId: 'gate-1',
+        products: [{ name: 'page.html', kind: 'html' as const, readonly: false }],
+        savedContent: { 'page.html': '<html><body>v1</body></html>' },
+        savedMeta: { 'page.html': { etag: 'W/"1"' } },
+        canEdit: true,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          Icon: true,
+          StructuredArtifactView: StructuredStub,
+          HtmlPreview: HtmlPreviewStub,
+        },
+      },
+    })
+    await flushPromises()
+    await wrapper.find('[data-testid="gate-mode-edit"]').trigger('click')
+    await flushPromises()
+    const ta = wrapper.find('[data-testid="gate-artifact-textarea"]')
+    expect(ta.exists()).toBe(true)
+    await ta.setValue('<html><body>v2</body></html>')
+    apiMocks.saveGateArtifact.mockResolvedValue({
+      id: 'a1',
+      name: 'page.html',
+      kind: 'html',
+      sizeBytes: 30,
+      updatedAt: '2026-07-18T01:00:00Z',
+      etag: 'W/"2"',
+      content: '<html><body>v2</body></html>',
+    })
+    await wrapper.find('[data-testid="gate-artifact-save"]').trigger('click')
+    await flushPromises()
+    expect(apiMocks.saveGateArtifact).toHaveBeenCalledWith(
+      'run-1',
+      'gate-1',
+      'page.html',
+      '<html><body>v2</body></html>',
+      'W/"1"',
+    )
+    wrapper.unmount()
+  })
+
+  it('forwards HtmlPreview pick when inspectable', async () => {
+    const wrapper = mountHtmlEditor({ inspectable: true })
+    await flushPromises()
+    const preview = wrapper.find('[data-testid="html-preview"]')
+    expect(preview.exists()).toBe(true)
+    expect(preview.attributes('data-inspectable')).toBe('1')
+
+    const htmlComp = wrapper.findComponent({ name: 'HtmlPreview' })
+    await htmlComp.vm.$emit('pick', {
+      selector: '#cta',
+      tagName: 'button',
+      imageDataUrl: 'data:image/png;base64,aaa',
+    })
+    await flushPromises()
+    expect(wrapper.emitted('pick')?.[0]?.[0]).toEqual({
+      selector: '#cta',
+      tagName: 'button',
+      imageDataUrl: 'data:image/png;base64,aaa',
+    })
+    wrapper.unmount()
+  })
+
+  it('does not enable inspect by default', async () => {
+    const wrapper = mountHtmlEditor()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="html-preview"]').attributes('data-inspectable')).toBe('0')
+    wrapper.unmount()
+  })
+
+  const proposalsContent = JSON.stringify(
+    {
+      context: '选择方案上下文',
+      proposals: [
+        { title: '方案 A', summary: '摘要 A', recommended: true },
+        { title: '方案 B', summary: '摘要 B' },
+      ],
+    },
+    null,
+    2,
+  )
+
+  function mountProposalsEditor(overrides: Record<string, unknown> = {}) {
+    return mountEditor(true, {
+      products: [{ name: 'proposals.json', kind: 'json' as const }],
+      savedContent: { 'proposals.json': proposalsContent },
+      savedMeta: { 'proposals.json': { etag: 'W/"p1"' } },
+      ...overrides,
+    })
+  }
+
+  it('defaults proposals.json edit to raw JSON with context/proposals visible', async () => {
+    const wrapper = mountProposalsEditor()
+    await flushPromises()
+    await wrapper.find('[data-testid="gate-mode-edit"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="gate-struct-json"]').classes()).toContain('bg-overlay')
+    expect(wrapper.find('[data-testid="gate-struct-form"]').exists()).toBe(true)
+    const ta = wrapper.find('[data-testid="gate-artifact-textarea"]')
+    expect(ta.exists()).toBe(true)
+    const taEl = ta.element as HTMLTextAreaElement
+    expect(taEl.value).toContain('"context"')
+    expect(taEl.value).toContain('"proposals"')
+    expect(wrapper.find('[data-testid="gate-struct-form-pane"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('shows proposals form unsupported callout with disabled empty controls', async () => {
+    const wrapper = mountProposalsEditor()
+    await flushPromises()
+    await wrapper.find('[data-testid="gate-mode-edit"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="gate-struct-form"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="gate-proposals-form-unsupported"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-proposals-form-unsupported"]').text()).toContain(
+      '无顶层 title',
+    )
+    const title = wrapper.find('[data-testid="gate-form-title"]')
+    const summary = wrapper.find('[data-testid="gate-form-summary"]')
+    expect((title.element as HTMLInputElement).disabled).toBe(true)
+    expect((summary.element as HTMLTextAreaElement).disabled).toBe(true)
+    expect((title.element as HTMLInputElement).value).toBe('')
+    expect((summary.element as HTMLTextAreaElement).value).toBe('')
+    wrapper.unmount()
+  })
+
+  it('hard-blocks proposals.json form-mode save without calling API', async () => {
+    const wrapper = mountProposalsEditor()
+    await flushPromises()
+    await wrapper.find('[data-testid="gate-mode-edit"]').trigger('click')
+    await flushPromises()
+    // Dirty via raw JSON first so Save stays clickable under isDirty rules.
+    const ta = wrapper.find('[data-testid="gate-artifact-textarea"]')
+    await ta.setValue(
+      JSON.stringify(
+        {
+          context: '改过的上下文',
+          proposals: [{ title: '方案 A', summary: '摘要 A', recommended: true }],
+        },
+        null,
+        2,
+      ),
+    )
+    await flushPromises()
+    await wrapper.find('[data-testid="gate-struct-form"]').trigger('click')
+    await flushPromises()
+
+    const saveBtn = wrapper.find('[data-testid="gate-artifact-save"]')
+    expect((saveBtn.element as HTMLButtonElement).disabled).toBe(false)
+    await saveBtn.trigger('click')
+    await flushPromises()
+
+    expect(apiMocks.saveGateArtifact).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="gate-save-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-save-error"]').text()).toContain('原始 JSON')
+    wrapper.unmount()
+  })
+
+  it('keeps research.json default form mode and allows save', async () => {
+    const wrapper = mountEditor()
+    await flushPromises()
+    await wrapper.find('[data-testid="gate-mode-edit"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="gate-struct-form"]').classes()).toContain('bg-overlay')
+    expect(wrapper.find('[data-testid="gate-struct-form-pane"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-proposals-form-unsupported"]').exists()).toBe(false)
+
+    const title = wrapper.find('[data-testid="gate-form-title"]')
+    await title.setValue('调研标题')
+    await flushPromises()
+    await wrapper.find('[data-testid="gate-artifact-save"]').trigger('click')
+    await flushPromises()
+    expect(apiMocks.saveGateArtifact).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('does not inject top-level title/summary when switching proposals form→json', async () => {
+    const wrapper = mountProposalsEditor()
+    await flushPromises()
+    await wrapper.find('[data-testid="gate-mode-edit"]').trigger('click')
+    await flushPromises()
+    const beforeEl = wrapper.find('[data-testid="gate-artifact-textarea"]')
+      .element as HTMLTextAreaElement
+    const before = beforeEl.value
+    await wrapper.find('[data-testid="gate-struct-form"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="gate-struct-json"]').trigger('click')
+    await flushPromises()
+    const afterEl = wrapper.find('[data-testid="gate-artifact-textarea"]')
+      .element as HTMLTextAreaElement
+    const after = afterEl.value
+    expect(after).toBe(before)
+    const doc = JSON.parse(after) as Record<string, unknown>
+    expect(doc).not.toHaveProperty('title')
+    expect(doc).not.toHaveProperty('summary')
+    expect(doc).toHaveProperty('context')
+    expect(Array.isArray(doc.proposals)).toBe(true)
+    wrapper.unmount()
+  })
+})

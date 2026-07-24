@@ -1,0 +1,346 @@
+package models
+
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
+
+func sampleGraph() Graph {
+	return Graph{
+		Nodes: []Node{
+			{ID: "in", Type: "input"},
+			{ID: "a", Type: "agent"},
+			{ID: "out", Type: "output"},
+		},
+		Edges: []Edge{
+			{ID: "e1", Source: "in", Target: "a"},
+			{ID: "e2", Source: "a", Target: "out"},
+		},
+	}
+}
+
+func TestGraphAccessors(t *testing.T) {
+	g := sampleGraph()
+	if n := g.FindNode("a"); n == nil || n.Type != "agent" {
+		t.Fatal("FindNode")
+	}
+	if g.FindNode("ghost") != nil {
+		t.Fatal("FindNode missing")
+	}
+	if out := g.OutEdges("in"); len(out) != 1 || out[0].Target != "a" {
+		t.Fatalf("OutEdges: %+v", out)
+	}
+	if n := g.StartNode(); n == nil || n.ID != "in" {
+		t.Fatalf("StartNode: %+v", n)
+	}
+}
+
+func TestStartNodeFallbacks(t *testing.T) {
+	// No input node -> first node with no incoming edge.
+	g := Graph{
+		Nodes: []Node{{ID: "x", Type: "agent"}, {ID: "y", Type: "agent"}},
+		Edges: []Edge{{Source: "x", Target: "y"}},
+	}
+	if n := g.StartNode(); n == nil || n.ID != "x" {
+		t.Fatalf("no-input start: %+v", n)
+	}
+	// All nodes have incoming edges (cycle) -> falls back to first node.
+	g2 := Graph{
+		Nodes: []Node{{ID: "x"}, {ID: "y"}},
+		Edges: []Edge{{Source: "x", Target: "y"}, {Source: "y", Target: "x"}},
+	}
+	if n := g2.StartNode(); n == nil || n.ID != "x" {
+		t.Fatalf("cycle start: %+v", n)
+	}
+	// Empty graph -> nil.
+	if (Graph{}).StartNode() != nil {
+		t.Fatal("empty start should be nil")
+	}
+}
+
+func TestGraphValidate(t *testing.T) {
+	if err := sampleGraph().Validate(); err != nil {
+		t.Fatalf("valid graph: %v", err)
+	}
+	cases := []Graph{
+		{}, // empty
+		{Nodes: []Node{{ID: "o", Type: "output"}}},                                                                      // no input
+		{Nodes: []Node{{ID: "i", Type: "input"}}},                                                                       // no output
+		{Nodes: []Node{{ID: "i", Type: "input"}, {ID: "i2", Type: "input"}, {ID: "o", Type: "output"}}},                 // two inputs
+		{Nodes: []Node{{ID: "i", Type: "input"}, {ID: "o", Type: "output"}}, Edges: []Edge{{Source: "o", Target: "i"}}}, // input has incoming
+		{Nodes: []Node{{ID: "i", Type: "input"}, {ID: "o", Type: "output"}}, Edges: []Edge{{Source: "o", Target: "x"}}}, // output has outgoing
+	}
+	for i, g := range cases {
+		if err := g.Validate(); err == nil {
+			t.Errorf("case %d: expected validate error", i)
+		}
+	}
+}
+
+func TestValidateSuccessFanout(t *testing.T) {
+	base := func(edges []Edge) Graph {
+		return Graph{
+			Nodes: []Node{
+				{ID: "in", Type: "input"},
+				{ID: "a", Type: "agent"},
+				{ID: "b", Type: "agent"},
+				{ID: "c", Type: "agent"},
+				{ID: "br", Type: "branch"},
+				{ID: "out", Type: "output"},
+			},
+			Edges: edges,
+		}
+	}
+	// Two unconditional success edges from one node -> ambiguous fan-out error.
+	amb := base([]Edge{
+		{Source: "in", Target: "a"},
+		{Source: "a", Target: "b"},
+		{Source: "a", Target: "c"},
+		{Source: "b", Target: "out"},
+		{Source: "c", Target: "out"},
+	})
+	if err := amb.Validate(); err == nil {
+		t.Fatal("expected ambiguous success fan-out error")
+	}
+	// Guarded success edges (conditional routing) are allowed.
+	guarded := base([]Edge{
+		{Source: "in", Target: "a"},
+		{Source: "a", Target: "b", When: "vars.x == 1"},
+		{Source: "a", Target: "c", When: "vars.x == 2"},
+		{Source: "b", Target: "out"},
+		{Source: "c", Target: "out"},
+	})
+	if err := guarded.Validate(); err != nil {
+		t.Fatalf("guarded fan-out should pass: %v", err)
+	}
+	// One unconditional + one guarded (else + conditional) is allowed.
+	mixed := base([]Edge{
+		{Source: "in", Target: "a"},
+		{Source: "a", Target: "b", When: "vars.x == 1"},
+		{Source: "a", Target: "c"},
+		{Source: "b", Target: "out"},
+		{Source: "c", Target: "out"},
+	})
+	if err := mixed.Validate(); err != nil {
+		t.Fatalf("mixed guarded+else fan-out should pass: %v", err)
+	}
+	// A success + a failure edge to two targets is allowed (gate pattern).
+	passFail := base([]Edge{
+		{Source: "in", Target: "a"},
+		{Source: "a", Target: "b"},
+		{Source: "a", Target: "c", Kind: EdgeFailure},
+		{Source: "b", Target: "out"},
+		{Source: "c", Target: "out"},
+	})
+	if err := passFail.Validate(); err != nil {
+		t.Fatalf("success+failure fan-out should pass: %v", err)
+	}
+	// A branch node routes via config, so multiple plain edges are allowed.
+	branch := base([]Edge{
+		{Source: "in", Target: "br"},
+		{Source: "br", Target: "b"},
+		{Source: "br", Target: "c"},
+		{Source: "b", Target: "out"},
+		{Source: "c", Target: "out"},
+	})
+	if err := branch.Validate(); err != nil {
+		t.Fatalf("branch fan-out should pass: %v", err)
+	}
+}
+
+func TestEdgeKindOrDefault(t *testing.T) {
+	if (Edge{}).KindOrDefault() != EdgeSuccess {
+		t.Error("empty kind default")
+	}
+	if (Edge{Kind: EdgeFailure}).KindOrDefault() != EdgeFailure {
+		t.Error("explicit kind")
+	}
+}
+
+func TestAgentPromptsNilSafeDefaults(t *testing.T) {
+	var p *AgentPrompts
+	if p.UpstreamHeader() != DefaultUpstreamArtifactsHeader {
+		t.Error("UpstreamHeader nil")
+	}
+	if p.ReactOpenSuffixText() != DefaultReactOpenSuffix {
+		t.Error("ReactOpenSuffixText nil")
+	}
+	if p.PlanContractText() != DefaultPlanContract {
+		t.Error("PlanContractText nil")
+	}
+	if p.ImplementContractText() != DefaultImplementContract {
+		t.Error("ImplementContractText nil")
+	}
+	if p.ClarifiedRequirementContractText() != DefaultClarifiedRequirementContract {
+		t.Error("ClarifiedRequirementContractText nil")
+	}
+	if p.ImplementResultContractText() != DefaultImplementResultContract {
+		t.Error("ImplementResultContractText nil")
+	}
+	if p.ResearchContractText() != DefaultResearchContract {
+		t.Error("ResearchContractText nil")
+	}
+	if p.TestContractText() != DefaultTestContract {
+		t.Error("TestContractText nil")
+	}
+	if p.ReviewContractText() != DefaultReviewContract {
+		t.Error("ReviewContractText nil")
+	}
+	if p.ProposalContractText() != DefaultProposalContract {
+		t.Error("ProposalContractText nil")
+	}
+}
+
+func TestAgentPromptsContractOverrides(t *testing.T) {
+	p := &AgentPrompts{
+		PlanContract:                 "PLAN",
+		ImplementContract:            "IMPL",
+		ClarifiedRequirementContract: "CLAR",
+		ImplementResultContract:      "IMPLRES",
+		ResearchContract:             "RES",
+		TestContract:                 "TEST",
+		ReviewContract:               "REV",
+		ProposalContract:             "PROP",
+		ProducesRetry:                "RETRY {name}",
+		PlanIncompleteRetry:          "MISS {items}",
+	}
+	checks := map[string]string{
+		p.PlanContractText():                    "PLAN",
+		p.ImplementContractText():               "IMPL",
+		p.ClarifiedRequirementContractText():    "CLAR",
+		p.ImplementResultContractText():         "IMPLRES",
+		p.ResearchContractText():                "RES",
+		p.TestContractText():                    "TEST",
+		p.ReviewContractText():                  "REV",
+		p.ProposalContractText():                "PROP",
+		p.ProducesRetryFor("f.md"):              "RETRY f.md",
+		p.PlanIncompleteRetryFor([]string{"a"}): "MISS - a",
+	}
+	for got, want := range checks {
+		if got != want {
+			t.Errorf("override accessor = %q, want %q", got, want)
+		}
+	}
+
+	// contractText override branch directly.
+	if contractText("X", "def") != "X" {
+		t.Error("contractText override")
+	}
+	if contractText("  ", "def") != "def" {
+		t.Error("contractText blank -> default")
+	}
+}
+
+func TestAgentPromptsTemplatesAndOverrides(t *testing.T) {
+	if got := (&AgentPrompts{}).ProducesContractFor("plan.md"); got == "" {
+		t.Error("ProducesContractFor default")
+	}
+	if got := (&AgentPrompts{ProducesContract: "write {name} now"}).ProducesContractFor("x.md"); got != "write x.md now" {
+		t.Errorf("ProducesContractFor override: %q", got)
+	}
+	if got := (&AgentPrompts{}).ProducesRetryFor("x.md"); got == "" {
+		t.Error("ProducesRetryFor")
+	}
+	items := (&AgentPrompts{}).PlanIncompleteRetryFor([]string{"a", "b"})
+	if items == "" {
+		t.Error("PlanIncompleteRetryFor")
+	}
+	if got := (&AgentPrompts{PlanIncompleteRetry: "left: {items}"}).PlanIncompleteRetryFor([]string{"a", "b"}); got != "left: - a\n- b" {
+		t.Errorf("PlanIncompleteRetryFor override: %q", got)
+	}
+	if got := (&AgentPrompts{StructuredRetry: "{tool}->{name}"}).StructuredRetryFor("r.json", "set_research"); got != "set_research->r.json" {
+		t.Errorf("StructuredRetryFor override: %q", got)
+	}
+	if (&AgentPrompts{}).StructuredRetryFor("r.json", "set_research") == "" {
+		t.Error("StructuredRetryFor default")
+	}
+	// Override branches for the fixed-contract accessors.
+	if (&AgentPrompts{PlanContract: "P"}).PlanContractText() != "P" {
+		t.Error("PlanContract override")
+	}
+	if (&AgentPrompts{ResearchContract: "R"}).ResearchContractText() != "R" {
+		t.Error("ResearchContract override")
+	}
+	if (&AgentPrompts{UpstreamArtifactsHeader: "H"}).UpstreamHeader() != "H" {
+		t.Error("UpstreamHeader override")
+	}
+	if (&AgentPrompts{ReactOpenSuffix: "S"}).ReactOpenSuffixText() != "S" {
+		t.Error("ReactOpenSuffix override")
+	}
+}
+
+func TestSelectRecommendedOption(t *testing.T) {
+	// Recommended option wins over position.
+	q := ReactQuestion{Options: []ReactOption{
+		{ID: "a", Label: "A"},
+		{ID: "b", Label: "B", Recommended: true},
+	}}
+	if o, ok := SelectRecommendedOption(q); !ok || o.ID != "b" {
+		t.Fatalf("recommended pick = %+v ok=%v", o, ok)
+	}
+	// No recommendation -> first option.
+	q2 := ReactQuestion{Options: []ReactOption{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}}}
+	if o, ok := SelectRecommendedOption(q2); !ok || o.ID != "a" {
+		t.Fatalf("fallback pick = %+v ok=%v", o, ok)
+	}
+	// No options -> not ok.
+	if _, ok := SelectRecommendedOption(ReactQuestion{}); ok {
+		t.Fatal("empty options should not be ok")
+	}
+}
+
+func TestReactOptionDemoHtmlJSON(t *testing.T) {
+	opt := ReactOption{ID: "a", Label: "A", DemoHtml: "<!doctype html><html></html>"}
+	b, err := json.Marshal(opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var back ReactOption
+	if err := json.Unmarshal(b, &back); err != nil {
+		t.Fatal(err)
+	}
+	if back.DemoHtml != opt.DemoHtml {
+		t.Fatalf("DemoHtml roundtrip = %q want %q", back.DemoHtml, opt.DemoHtml)
+	}
+}
+
+func TestFormatChoiceReply(t *testing.T) {
+	qs := []ReactQuestion{
+		{Prompt: "登录方式?", Options: []ReactOption{{Label: "密码"}, {Label: "验证码", Recommended: true}}},
+		{Prompt: "有效期?", Options: []ReactOption{{Label: "5 分钟"}, {Label: "10 分钟"}}},
+	}
+	got := FormatChoiceReply(qs)
+	want := "我的选择:\n- 登录方式? → 验证码\n- 有效期? → 5 分钟"
+	if got != want {
+		t.Fatalf("FormatChoiceReply =\n%q\nwant\n%q", got, want)
+	}
+	// No answerable questions -> empty string.
+	if FormatChoiceReply(nil) != "" {
+		t.Error("empty questions should format to empty string")
+	}
+	if FormatChoiceReply([]ReactQuestion{{Prompt: "q"}}) != "" {
+		t.Error("optionless question should format to empty string")
+	}
+}
+
+func TestRenderAnnotations(t *testing.T) {
+	if RenderAnnotations(nil) != "" {
+		t.Fatal("nil annotations should render empty")
+	}
+	got := RenderAnnotations([]ReactAnnotation{
+		{JSONPath: "proposals[p1].title", Label: "方案 A", Note: "更具体"},
+		{Selector: "#hero h1", Note: ""},
+		{JSONPath: "summary", Quote: "划选的一段原文", Label: "概述", Note: "改这句"},
+		{Quote: "未绑定摘录", Truncated: true, Note: ""},
+	})
+	for _, part := range []string{
+		"字段路径", "proposals[p1].title", "(方案 A)", "更具体",
+		"页面元素", "#hero h1", "(见下方文字说明)",
+		"引用原文", "划选的一段原文", "未绑定摘录", "已截断", "段落摘录",
+	} {
+		if !strings.Contains(got, part) {
+			t.Fatalf("missing %q in:\n%s", part, got)
+		}
+	}
+}

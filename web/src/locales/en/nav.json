@@ -1,0 +1,17 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "board": "Board",
+    "projects": "Projects",
+    "workflows": "Workflows",
+    "runs": "Runs",
+    "gates": "Pending gates",
+    "artifacts": "Artifacts",
+    "groupConfig": "Configuration",
+    "agents": "Agent studio",
+    "sandboxes": "Sandboxes",
+    "integrations": "Integrations",
+    "triggers": "Triggers",
+    "settings": "Settings"
+  }
+}

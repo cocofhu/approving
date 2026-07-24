@@ -1,0 +1,225 @@
+// @vitest-environment happy-dom
+import { defineComponent, nextTick } from 'vue'
+import { createI18n } from 'vue-i18n'
+import { mount, flushPromises } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import common from '@/locales/zh-CN/common.json'
+import {
+  HTML_PREVIEW_DEFAULT_TOOLBAR_PX,
+  RESIZE_HEIGHT_EPSILON,
+  RESIZE_MESSAGE_TYPE,
+  contentFitPreviewCapPx,
+} from '@/lib/htmlPreviewSandbox'
+import HtmlPreview from './HtmlPreview.vue'
+
+const FIXED_ID = 'html-preview-test-instance'
+
+const AppModalStub = defineComponent({
+  props: { open: Boolean, title: String },
+  template: '<div v-if="open" data-testid="modal"><slot /></div>',
+})
+
+function mountPreview(props: Record<string, unknown> = {}) {
+  const i18n = createI18n({
+    legacy: false,
+    locale: 'zh-CN',
+    messages: { 'zh-CN': { ...common } },
+  })
+  return mount(HtmlPreview, {
+    props: {
+      html: '<!doctype html><html><body><p>hi</p></body></html>',
+      enlargeable: false,
+      mode: 'default',
+      fitContent: true,
+      maxContentHeightVh: 60,
+      ...props,
+    },
+    global: {
+      plugins: [i18n],
+      stubs: {
+        AppModal: AppModalStub,
+        Icon: { template: '<span />' },
+      },
+    },
+  })
+}
+
+async function sendResize(wrapper: ReturnType<typeof mountPreview>, height: number) {
+  const iframe = wrapper.find('iframe')
+  expect(iframe.exists()).toBe(true)
+  const el = iframe.element as HTMLIFrameElement
+  Object.defineProperty(el, 'contentWindow', {
+    value: window,
+    configurable: true,
+  })
+  window.dispatchEvent(
+    new MessageEvent('message', {
+      data: { type: RESIZE_MESSAGE_TYPE, id: FIXED_ID, height },
+      source: window,
+    }),
+  )
+  await nextTick()
+  await flushPromises()
+  // rAF batching
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  await nextTick()
+}
+
+describe('HtmlPreview content-fit clamp', () => {
+  beforeEach(() => {
+    vi.stubGlobal('crypto', { randomUUID: () => FIXED_ID })
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      writable: true,
+      value: 1000,
+    })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('clamps measured height above cap and enables scrolling=auto (deducts toolbar)', async () => {
+    const wrapper = mountPreview()
+    await flushPromises()
+
+    const expectedCap =
+      contentFitPreviewCapPx(1000, 60) - HTML_PREVIEW_DEFAULT_TOOLBAR_PX
+    await sendResize(wrapper, 2000)
+
+    const iframe = wrapper.find('iframe')
+    expect((iframe.element as HTMLIFrameElement).style.height).toBe(`${expectedCap}px`)
+    expect(iframe.attributes('scrolling')).toBe('auto')
+    wrapper.unmount()
+  })
+
+  it('keeps measured height under cap and scrolling=no', async () => {
+    const wrapper = mountPreview()
+    await flushPromises()
+
+    await sendResize(wrapper, 240)
+
+    const iframe = wrapper.find('iframe')
+    expect((iframe.element as HTMLIFrameElement).style.height).toBe('240px')
+    expect(iframe.attributes('scrolling')).toBe('no')
+    wrapper.unmount()
+  })
+
+  it('subtracts contentHeightOffsetPx from the clamp (reviewing strip)', async () => {
+    const wrapper = mountPreview({ contentHeightOffsetPx: 28 })
+    await flushPromises()
+
+    const expectedCap =
+      contentFitPreviewCapPx(1000, 60) - HTML_PREVIEW_DEFAULT_TOOLBAR_PX - 28
+    await sendResize(wrapper, 2000)
+
+    const iframe = wrapper.find('iframe')
+    expect((iframe.element as HTMLIFrameElement).style.height).toBe(`${expectedCap}px`)
+    expect(iframe.attributes('scrolling')).toBe('auto')
+    wrapper.unmount()
+  })
+
+  it('inline mode clamps to full vh cap without toolbar deduction', async () => {
+    const wrapper = mountPreview({ mode: 'inline', fitContent: false })
+    await flushPromises()
+
+    const expectedCap = contentFitPreviewCapPx(1000, 60)
+    await sendResize(wrapper, 2000)
+
+    const iframe = wrapper.find('iframe')
+    expect((iframe.element as HTMLIFrameElement).style.height).toBe(`${expectedCap}px`)
+    expect(iframe.attributes('scrolling')).toBe('auto')
+    wrapper.unmount()
+  })
+
+  it('keeps iframe mounted when html content changes (silent srcdoc update)', async () => {
+    const wrapper = mountPreview({
+      html: '<!doctype html><html><body><p>a</p></body></html>',
+    })
+    await flushPromises()
+    const first = wrapper.find('iframe').element
+    await wrapper.setProps({
+      html: '<!doctype html><html><body><p>b</p></body></html>',
+    })
+    await flushPromises()
+    const second = wrapper.find('iframe').element
+    expect(second).toBe(first)
+    expect(wrapper.find('iframe').attributes('sandbox')).toBe('allow-scripts allow-forms')
+    wrapper.unmount()
+  })
+
+  it('merges consecutive resize messages in one animation frame', async () => {
+    const wrapper = mountPreview({ mode: 'inline', fitContent: false })
+    await flushPromises()
+    const iframe = wrapper.find('iframe').element as HTMLIFrameElement
+    Object.defineProperty(iframe, 'contentWindow', {
+      value: window,
+      configurable: true,
+    })
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: RESIZE_MESSAGE_TYPE, id: FIXED_ID, height: 168 },
+        source: window,
+      }),
+    )
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: RESIZE_MESSAGE_TYPE, id: FIXED_ID, height: 248 },
+        source: window,
+      }),
+    )
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    await nextTick()
+    expect(iframe.style.height).toBe('248px')
+    wrapper.unmount()
+  })
+
+  it('ignores sub-epsilon height changes in steady state', async () => {
+    const wrapper = mountPreview({ mode: 'inline', fitContent: false })
+    await flushPromises()
+    await sendResize(wrapper, 248)
+    await new Promise((r) => setTimeout(r, 200))
+    await sendResize(wrapper, 248 + RESIZE_HEIGHT_EPSILON - 1)
+    const iframe = wrapper.find('iframe').element as HTMLIFrameElement
+    expect(iframe.style.height).toBe('248px')
+    wrapper.unmount()
+  })
+
+  it('does not reset height when html prop changes but content hash is equal', async () => {
+    const html = '<!doctype html><html><body><p>same</p></body></html>'
+    const wrapper = mountPreview({ mode: 'inline', fitContent: false, html })
+    await flushPromises()
+    await sendResize(wrapper, 240)
+    const iframe = wrapper.find('iframe').element as HTMLIFrameElement
+    expect(iframe.style.height).toBe('240px')
+    await wrapper.setProps({ html: ['<!doctype html><html><body><p>same</p></body></html>'].join('') })
+    await flushPromises()
+    expect(iframe.style.height).toBe('240px')
+    wrapper.unmount()
+  })
+
+  it('fillParent fills shell without scrollHeight sizing and keeps inspect bar', async () => {
+    const wrapper = mountPreview({
+      mode: 'inline',
+      fitContent: false,
+      fillParent: true,
+      maxContentHeightVh: undefined,
+      inspectable: true,
+    })
+    await flushPromises()
+
+    const root = wrapper.find('[data-fill-parent="1"]')
+    expect(root.exists()).toBe(true)
+    expect(root.classes()).toContain('h-full')
+    expect(wrapper.find('[data-testid="html-preview-inspect-bar"]').exists()).toBe(true)
+    const iframe = wrapper.find('iframe')
+    expect(iframe.attributes('scrolling')).toBe('auto')
+    expect((iframe.element as HTMLIFrameElement).style.height).toBe('')
+    expect(iframe.classes()).toContain('h-full')
+
+    // Resize messages must not drive shell height in fillParent mode.
+    await sendResize(wrapper, 2000)
+    expect((iframe.element as HTMLIFrameElement).style.height).toBe('')
+    wrapper.unmount()
+  })
+})

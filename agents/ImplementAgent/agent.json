@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "acpBackend": "cursor",
+  "mcp": [
+    {
+      "name": "artifact-store",
+      "url": "${APPROVING_ARTIFACT_URL}",
+      "headers": {
+        "Authorization": "Bearer ${APPROVING_ARTIFACT_TOKEN}"
+      }
+    }
+  ],
+  "name": "ImplementAgent"
+}

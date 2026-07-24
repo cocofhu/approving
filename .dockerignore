@@ -1,0 +1,25 @@
+# 构建上下文 = 仓库根(server/Dockerfile 需要 server/ + web/)。
+# 只保留构建二进制与前端产物所需内容,其余排除以缩小上下文。
+.git
+.gitignore
+
+# 依赖与构建产物(镜像内会重新拉取/构建)
+**/node_modules/
+web/dist/
+server/.cache/
+**/*_test.go
+
+# 运行期数据 / 二进制
+*.db
+server/data/
+approving-server
+server/approving-server
+
+# 网关与沙箱源码(由 sandbox-gateway/Dockerfile 单独构建)
+sandbox-gateway/
+
+# 本地开发数据
+.devdata/
+.env
+**/*.md
+.github/

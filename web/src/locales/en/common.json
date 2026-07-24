@@ -1,0 +1,279 @@
+{
+  "common": {
+    "status": {
+      "all": "All statuses",
+      "running": "Running",
+      "queued": "Queued",
+      "pending": "Pending",
+      "waiting_human": "Waiting for human",
+      "completed": "Completed",
+      "success": "Success",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "cancelling": "Cancelling",
+      "skipped": "Skipped",
+      "published": "Published",
+      "draft": "Draft"
+    },
+    "priority": {
+      "label": "Priority",
+      "high": "High",
+      "normal": "Normal",
+      "low": "Low"
+    },
+    "statusFilter": {
+      "selectedCount": "{n} selected"
+    },
+    "pagination": {
+      "summary": "{total} items · page {page}/{pages}",
+      "prev": "Previous",
+      "next": "Next",
+      "loadEarlier": "Load earlier events"
+    },
+    "buttons": {
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "confirmDelete": "Delete",
+      "confirmPublish": "Publish",
+      "confirmCopy": "Copy",
+      "confirmDestroy": "Destroy",
+      "confirmCleanup": "Clean up",
+      "save": "Save",
+      "saveDraft": "Save draft",
+      "saveRunDraft": "Save run draft",
+      "reset": "Reset",
+      "refresh": "Refresh",
+      "edit": "Edit",
+      "run": "Run",
+      "copy": "Copy",
+      "export": "Export",
+      "import": "Import",
+      "delete": "Delete",
+      "rollback": "Rollback",
+      "details": "Details",
+      "close": "Close",
+      "viewAll": "View all →",
+      "viewRun": "View run",
+      "stayOnPage": "Stay on this page",
+      "startRun": "Start run",
+      "openRunDetail": "Open run detail →",
+      "applyRefresh": "Refresh now",
+      "later": "Later",
+      "back": "Back",
+      "backToList": "Back to list",
+      "newWorkflow": "New workflow",
+      "create": "Create",
+      "newAgent": "New agent",
+      "cleanupIdle": "Clean up idle",
+      "console": "Console",
+      "stop": "Stop",
+      "cancelRun": "Cancel run",
+      "resumeFromFail": "Resume from failure",
+      "resumeFromNode": "Resume from this node",
+      "loading": "Loading…",
+      "deleting": "Deleting…",
+      "copying": "Copying…",
+      "saving": "Saving…",
+      "publishing": "Publishing…",
+      "starting": "Starting…",
+      "rollingBack": "Rolling back…",
+      "resuming": "Resuming…",
+      "destroying": "Destroying…",
+      "cleaning": "Cleaning…"
+    },
+    "theme": {
+      "switchToLight": "Switch to light mode",
+      "switchToDark": "Switch to dark mode"
+    },
+    "search": {
+      "placeholder": "Search workflows, runs…",
+      "pipelinePlaceholder": "Search pipelines…",
+      "nodePlaceholder": "Search nodes"
+    },
+    "shutdown": {
+      "shuttingDown": "Shutting down",
+      "graceRemaining": "grace remaining {time}",
+      "instanceDraining": "Instance is gracefully shutting down",
+      "notAcceptingRequests": "Service is shutting down; not accepting new requests",
+      "mutationsBlocked": "Service is shutting down; this action is unavailable",
+      "offlineTitle": "Service offline",
+      "offlineDesc": "Cannot reach the instance; it may be restarting or offline",
+      "actionUnavailable": "Action unavailable"
+    },
+    "table": {
+      "run": "Run",
+      "workflow": "Workflow",
+      "trigger": "Trigger",
+      "start": "Started",
+      "startTime": "Start time",
+      "duration": "Duration",
+      "progress": "Progress",
+      "status": "Status",
+      "priority": "Priority",
+      "name": "Name",
+      "version": "Version",
+      "repo": "Repository",
+      "lastRun": "Last run",
+      "actions": "Actions",
+      "sandbox": "Sandbox",
+      "agent": "Agent",
+      "purpose": "Purpose",
+      "source": "Source",
+      "recycleCountdown": "Recycle in",
+      "createdAt": "Created",
+      "artifact": "Artifact",
+      "node": "Node",
+      "created": "Created"
+    },
+    "empty": {
+      "noWorkflows": "No workflows yet",
+      "noRuns": "No runs yet",
+      "noMatchingRuns": "No matching runs",
+      "noMatchingPipelines": "No matching pipelines",
+      "noArtifacts": "No artifacts",
+      "noArtifactsInGroup": "No artifacts in this group",
+      "selectWorkflowGroup": "Select a workflow group on the left",
+      "noMatchingGroups": "No matching groups",
+      "noSandboxes": "No sandboxes yet. Node sandboxes are created when workflows run, or start a test sandbox under Agent Studio → Chat test.",
+      "noAgents": "No agents yet. Click New agent, or the backend seeds a default on first start.",
+      "noPendingGates": "Nothing pending",
+      "noPendingGatesForPipeline": "No pending items for this pipeline",
+      "noPendingGatesDesc": "Items appear here when a workflow reaches a human gate or clarify node",
+      "noPendingGatesPipelineDesc": "Try another pipeline or view all pipelines",
+      "selectNode": "Select a node",
+      "selectNodeDesc": "Click a node on the canvas to view output and logs"
+    },
+    "toast": {
+      "draftSaved": "Draft saved",
+      "draftTooLarge": "Draft too large; reduce text or images",
+      "draftSaveFailed": "Failed to save draft",
+      "saved": "Saved",
+      "noChanges": "No changes",
+      "copyNameFailed": "Could not fetch suggested name; try again",
+      "copiedRedirecting": "Copied as \"{name}\"; opening editor…",
+      "copied": "Copied as \"{name}\"",
+      "pathCopied": "Path copied: {path}",
+      "copyPathFailed": "Copy failed",
+      "importedFiles": "Imported {count} file(s) into {dir}"
+    },
+    "action": "Action",
+    "optional": "Optional",
+    "required": "Required",
+    "minutes": "min",
+    "switchOn": "On",
+    "switchOff": "Off",
+    "structuredExits": {
+      "testPass": "Pass",
+      "testFail": "Fail",
+      "reviewPass": "Pass",
+      "reviewFail": "Reject"
+    },
+    "edgeLabels": {
+      "approve": "Approve",
+      "pass": "Pass",
+      "revise": "Revise",
+      "limit": "Limit"
+    },
+    "gateBodyLabels": {
+      "plan": "Plan",
+      "clarifiedRequirement": "Clarified requirement",
+      "research": "Research",
+      "proposals": "Candidate proposals",
+      "proposal": "Selected proposal",
+      "testResult": "Test result",
+      "review": "Review",
+      "implementationResult": "Implementation result",
+      "pagePreview": "Web preview",
+      "artifact": "Artifact",
+      "textOutput": "Text output",
+      "custom": "Custom · {value}"
+    },
+    "varTypes": {
+      "string": "Text",
+      "paragraph": "Paragraph",
+      "number": "Number",
+      "bool": "Boolean",
+      "select": "Select",
+      "repos": "Repositories"
+    },
+    "edgeKinds": {
+      "success": {
+        "label": "Success transition",
+        "desc": "After node success, route here when the guard is true"
+      },
+      "failure": {
+        "label": "Failure transition",
+        "desc": "Taken when the node fails (error, contract breach, CI failure, etc.)"
+      },
+      "rollback": {
+        "label": "Rollback transition",
+        "desc": "Return to a checkpoint, restore variable snapshot, inject error context"
+      }
+    },
+    "pipelineFilter": {
+      "all": "All pipelines",
+      "noMatch": "No matching pipelines"
+    },
+    "projectFilter": {
+      "all": "All projects",
+      "noMatch": "No matching projects",
+      "searchPlaceholder": "Search projects…"
+    },
+    "bool": {
+      "yes": "Yes",
+      "no": "No",
+      "true": "true",
+      "false": "false"
+    },
+    "relTime": {
+      "justNow": "Just now",
+      "minutesAgo": "{n} min ago",
+      "hoursAgo": "{n} h ago",
+      "daysAgo": "{n} d ago"
+    },
+    "emptyParen": "(empty)",
+    "iterationN": "Run {n}",
+    "uploadFolder": "Upload folder",
+    "foldersOnly": "Folders only",
+    "uploadTo": "→ {path}/",
+    "format": {
+      "empty": "—",
+      "imageCountFull": "{n} image(s)",
+      "imageCountChip": "{n} img",
+      "imageCountBadge": "{n} images",
+      "needsRepo": "Required",
+      "noRepo": "Not required",
+      "queued": "queued",
+      "noRepoFlow": "No repo (artifact-only flow)",
+      "pinnedVersionTitle": "Workflow version pinned for this run",
+      "minutes": "min",
+      "lines": "{n} lines",
+      "chars": "{n} chars",
+      "groups": "{n} groups",
+      "units": ""
+    },
+    "repo": {
+      "needs": "Required",
+      "notNeeded": "Not required"
+    },
+    "saved": {
+      "saved": "Saved",
+      "unsaved": "Unsaved changes"
+    },
+    "htmlPreview": {
+      "title": "Web preview",
+      "desktop": "Desktop",
+      "mobile": "Mobile",
+      "mobileWidth": "Mobile · 390px wide",
+      "adaptiveWidth": "Adaptive width",
+      "enlargeTitle": "Open enlarged preview",
+      "window": "Window",
+      "mobilePreview": "Mobile preview"
+    },
+    "paragraphInput": {
+      "addImage": "Add image",
+      "placeholderTextOnly": "Enter text…",
+      "placeholderWithImages": "Paste images here…"
+    }
+  }
+}

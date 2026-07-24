@@ -1,0 +1,384 @@
+// Command server boots the approving backend: config, logging, database +
+// seed, the artifact-store MCP host, the execution provider, the FSM
+// engine, and the HTTP/WS API.
+package main
+
+import (
+	"context"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/cocofhu/approving/internal/auth"
+	"github.com/cocofhu/approving/internal/browser"
+	"github.com/cocofhu/approving/internal/channels"
+	"github.com/cocofhu/approving/internal/channels/qq"
+	"github.com/cocofhu/approving/internal/config"
+	"github.com/cocofhu/approving/internal/contextmcp"
+	"github.com/cocofhu/approving/internal/crypto"
+	"github.com/cocofhu/approving/internal/database"
+	"github.com/cocofhu/approving/internal/engine"
+	"github.com/cocofhu/approving/internal/handlers"
+	"github.com/cocofhu/approving/internal/logging"
+	"github.com/cocofhu/approving/internal/mcp"
+	"github.com/cocofhu/approving/internal/memorymcp"
+	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/pmmcp"
+	"github.com/cocofhu/approving/internal/router"
+	"github.com/cocofhu/approving/internal/runtime"
+	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/approving/internal/schedulermcp"
+	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/approving/internal/shutdown"
+
+	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
+)
+
+func main() {
+	logging.Setup()
+
+	// Config: single YAML file (CONFIG_PATH, default "config.yaml"); on K8s
+	// it is typically mounted from a ConfigMap at deploy time.
+	cfgPath := os.Getenv("CONFIG_PATH")
+	if cfgPath == "" {
+		cfgPath = "config.yaml"
+	}
+	if len(os.Args) > 1 {
+		cfgPath = os.Args[1]
+	}
+	if err := config.Load(cfgPath); err != nil {
+		log.Fatal().Err(err).Str("path", cfgPath).Msg("load config failed")
+	}
+	cfg := config.GetConfig()
+
+	// At-rest secret encryption reads its key from the live config (security.
+	// secrets_key, with APPROVING_SECRETS_KEY env override) so channel credentials
+	// stay encrypted in the DB and the key is managed like any other config value.
+	crypto.SetKeySource(func() string {
+		c := config.GetConfig()
+		if c == nil {
+			return ""
+		}
+		return c.SecretsKey()
+	})
+
+	// Reload on ConfigMap writes. Values captured below at boot
+	// (port, db, provider options) need a restart; the watcher logs a warning
+	// when those change so ops know to roll the pod.
+	if err := config.WatchAndReload(context.Background(), cfgPath); err != nil {
+		log.Warn().Err(err).Msg("config watcher failed to start (hot-reload disabled)")
+	}
+
+	gin.SetMode(gin.ReleaseMode)
+
+	db, err := database.Open(cfg.Database)
+	if err != nil {
+		log.Fatal().Err(err).Msg("open database failed")
+	}
+	if err := database.Seed(db); err != nil {
+		log.Error().Err(err).Msg("seed failed")
+	}
+
+	artifactSvc := services.NewArtifactService(db)
+	host := mcp.NewHost(artifactSvc)
+	// Outcome validation chain is DefaultThenRPC (see mcp.ChainedOutcomeValidator).
+	// NewHost installs DefaultOutcomeValidator; wire business RPC later via
+	// host.SetRPCOutcomeValidator(...). Default checks always run first.
+	// Expose read-only run history to the list_run_history / get_history_detail
+	// MCP tools so agent nodes can recall past executions and human feedback.
+	runSvc := services.NewRunService(db)
+	host.SetHistoryProvider(runSvc)
+	// Token lifetime tracks sandbox lifetime: when the in-memory registration is
+	// gone (run finished / restart), MCP calls still authorize with the run's
+	// persisted token for as long as the run has a live sandbox row. Once the
+	// last sandbox is torn down (row deleted), the token stops authorizing.
+	host.SetRunTokenSource(func(runID string) (string, bool, bool) {
+		var run models.Run
+		if db.Select("mcp_token").First(&run, "id = ?", runID).Error != nil {
+			return "", false, false
+		}
+		var live int64
+		db.Model(&models.Sandbox{}).Where("run_id = ? AND purpose = ?", runID, "run").Count(&live)
+		return run.McpToken, live > 0, true
+	})
+	// Node-type gate fallback: when the in-memory SetActiveNode registration is
+	// gone (server restarted mid-run, or the MCP call is served by a replica
+	// that never executed the node — e.g. an app_preview sandbox kept alive
+	// during waiting_human), resolve the run's current node + type from the DB
+	// so set_preview / set_plan / set_* keep passing their node-type gate
+	// instead of being wrongly rejected.
+	//
+	// Prefer CurrentNodeIDs (running / waiting_human). When that misses but a
+	// purpose=run sandbox row still exists — matching authorize's sandbox-alive
+	// token window after cancel/finish — fall back to Sandbox.NodeID so an
+	// in-sandbox agent can still call set_preview / set_* while the container
+	// lives (otherwise ActiveNodeType is "" and node-scoped tools are wrongly
+	// rejected after UnregisterRun).
+	host.SetActiveNodeSource(func(runID string) (string, string, bool) {
+		var run models.Run
+		if db.Select("id", "status", "graph").First(&run, "id = ?", runID).Error != nil {
+			return "", "", false
+		}
+		nodeID := runSvc.CurrentNodeIDs([]models.Run{run})[runID]
+		if nodeID == "" {
+			var sb models.Sandbox
+			if db.Where("run_id = ? AND purpose = ?", runID, "run").
+				Order("updated_at desc").First(&sb).Error != nil || strings.TrimSpace(sb.NodeID) == "" {
+				return "", "", false
+			}
+			nodeID = sb.NodeID
+		}
+		nodeType := ""
+		if n := run.Graph.FindNode(nodeID); n != nil {
+			nodeType = n.Type
+		}
+		return nodeID, nodeType, true
+	})
+	// Shared ConfigHome .tgz registry for gateway config.bundleUrl inject
+	// (startup.sh extracts before agent start). Served at /sandbox-inject/:id.
+	injectStore := sandbox.NewBundleStore()
+
+	projectSvc := services.NewProjectService(db)
+	provider := runtime.NewProvider(cfg.Engine.ExecProvider, host, runtime.Options{
+		SandboxImage:         cfg.Sandbox.Image,
+		SandboxImages:        cfg.Sandbox.Images,
+		GatewayURL:           cfg.Sandbox.GatewayURL,
+		GatewayAPIKey:        cfg.Sandbox.GatewayAPIKey,
+		Env:                  cfg.Sandbox.Env,
+		CursorAuthPath:       cfg.Sandbox.CursorAuthPath,
+		ChatTimeout:          cfg.AgentChatTimeout(),
+		ChatIdleTimeout:      cfg.ChatIdleTimeout(),
+		SandboxMaxAttempts:   cfg.Sandbox.MaxAttempts,
+		SandboxRetryBackoff:  cfg.SandboxRetryBackoff(),
+		SandboxCreateTimeout: cfg.SandboxCreateTimeout(),
+		MCPEndpoint:          cfg.Server.MCPAdvertise,
+		InjectStore:          injectStore,
+		ProfilesRoot:         cfg.Engine.ProfilesRoot,
+		PlatformRulesRoot:    cfg.Engine.PlatformRulesRoot,
+		ProjectEnvForWorkflow: func(workflowID string) map[string]string {
+			return services.ProjectEnvMap(projectSvc.SandboxEnvForWorkflow(workflowID))
+		},
+	})
+	eng := engine.New(db, provider, host, artifactSvc, cfg.Engine.MaxConcurrentRuns)
+	eng.SetProjectVarsLookup(func(workflowID string) []models.ProjectVariable {
+		return projectSvc.VariablesForWorkflow(workflowID)
+	})
+
+	// Where per-sandbox ConfigHome trees are staged before gateway bundleUrl /
+	// SSH inject. Empty → OS temp dir (see config.Sandbox.WorkDir).
+	sandbox.HomeBaseDir = cfg.Sandbox.WorkDir
+
+	skillSvc := services.NewSkillService(cfg.Engine.ProfilesRoot)
+	orgSvc := services.NewOrgService(cfg.Engine.ProfilesRoot, skillSvc)
+	platformRuleSvc, err := services.NewPlatformRuleService(cfg.Engine.PlatformRulesRoot, cfg.Engine.ProfilesRoot)
+	if err != nil {
+		log.Fatal().Err(err).Msg("platform rules init failed")
+	}
+	sbxGateway := sandbox.NewGatewayClient(cfg.Sandbox.GatewayURL, cfg.Sandbox.GatewayAPIKey)
+	sbxMgr := sandbox.NewManager(sbxGateway, sandbox.ManagerOptions{
+		Image:           cfg.Sandbox.Image,
+		WorkspaceDir:    "/root/workspace",
+		InstallHelpers:  true,
+		InjectStore:     injectStore,
+		InjectAdvertise: cfg.Server.MCPAdvertise,
+		CreateTimeout:   cfg.SandboxCreateTimeout(),
+	})
+	log.Info().Str("gateway", cfg.Sandbox.GatewayURL).Msg("sandbox control plane: sandbox-gateway")
+	sbxSvc := services.NewSandboxService(db, sbxMgr, skillSvc, host, services.SandboxOptions{
+		ProfilesRoot:      cfg.Engine.ProfilesRoot,
+		PlatformRulesRoot: cfg.Engine.PlatformRulesRoot,
+		MCPEndpoint:       cfg.Server.MCPAdvertise,
+		Env:               cfg.Sandbox.Env,
+		ChatTimeout:       cfg.AgentChatTimeout(),
+		TTL:               cfg.TestSandboxTTL(),
+		RunTTL:            cfg.RunSandboxTTL(),
+		Max:               cfg.Sandbox.MaxTestSandboxes,
+	})
+	// Let the exec provider record per-run node sandboxes in the same store so
+	// they show up in the sandbox UI alongside interactive test sandboxes.
+	if rr, ok := provider.(runtime.SandboxRegistrar); ok {
+		rr.SetSandboxRegistry(sbxSvc)
+	}
+	// Reconcile DB ↔ gateway on boot and start the idle-TTL sweeper. The
+	// gateway owns image lifecycle now, so there is no local image pre-pull.
+	sbxSvc.ReconcileOnStartup(context.Background())
+	sweeperCtx, stopSweeper := context.WithCancel(context.Background())
+	go sbxSvc.RunSweeper(sweeperCtx)
+
+	// In-sandbox VNC preview: dials each app_preview sandbox's CDP/websockify.
+	browserSvc := browser.New(sbxMgr, browser.Config{
+		MaxTabs:             cfg.Browser.MaxTabs,
+		MaxTabsPerContainer: cfg.Browser.MaxTabsPerContainer,
+		TabIdleTTL:          cfg.TabIdleTTL(),
+		ContainerIdleTTL:    cfg.ContainerIdleTTL(),
+	})
+	browserSvc.Start()
+	log.Info().Int("max_tabs", cfg.Browser.MaxTabs).Msg("in-sandbox vnc preview enabled")
+
+	// Platform settings: DB override layer over the read-only config file for
+	// runtime-tunable scheduling params. ApplyOnBoot re-applies persisted UI
+	// values so they survive restarts.
+	settingsSvc := services.NewSettingsService(db, eng, sbxSvc)
+	settingsSvc.ApplyOnBoot()
+
+	previewSvc := services.NewPreviewService(db, sbxMgr)
+	previewSvc.SetBrowser(browserSvc)
+	host.SetPreviewStore(previewSvc)
+	host.SetPreviewSandboxOps(previewSvc)
+	host.SetPreviewBaseURL(cfg.Server.PublicAdvertise)
+
+	// Preview feedback: humans report problems from the app_preview UI (one-way).
+	// The engine snapshots them into the preview_issues run variable at gate
+	// resume so a downstream node consumes them via {{vars.preview_issues}}.
+	issueSvc := services.NewIssueService(db)
+	eng.SetIssueService(issueSvc)
+
+	coord := shutdown.New(cfg.AgentChatTimeout())
+	authSvc := auth.NewService(db, config.GetConfig)
+
+	pmSvc := services.NewPmService(db, skillSvc)
+	pmProgress := services.NewPmProgress(pmSvc, runSvc, artifactSvc)
+	wfSvc := services.NewWorkflowService(db)
+	pmMCP := pmmcp.NewHost(pmSvc, pmProgress, wfSvc, runSvc, eng)
+	memoryMCP := memorymcp.NewHost(pmSvc)
+	contextMCP := contextmcp.NewHost(pmSvc)
+	schedulerMCP := schedulermcp.NewHost(db, pmSvc)
+	mcpWire := &platformMCPWire{
+		pm: pmMCP, memory: memoryMCP, context: contextMCP,
+		scheduler: schedulerMCP, pmSvc: pmSvc, skills: skillSvc,
+	}
+	pmTurns := services.NewPmTurnRunner(pmSvc, sbxSvc)
+	// Raise the per-turn deadline well above the legacy 90s so channel/cron and
+	// interactive PM turns are not truncated (aligns with the sandbox chat cap).
+	pmTurns.SetTurnDeadline(cfg.AgentChatTimeout() + 30*time.Second)
+	sbxSvc.SetAgentSandboxDestroyHook(func(projectID, threadID, token string) {
+		mcpWire.unregister(token)
+		mcpWire.clearSandboxRef(threadID)
+	})
+	sbxSvc.SetTestSchedulerHooks(services.TestSchedulerHooks{
+		Register: func(projectID, profile, runID, token string) {
+			schedulerMCP.Restore(token, projectID, profile, runID, "test", false)
+		},
+		Unregister: schedulerMCP.Unregister,
+	})
+
+	cronSched := services.NewCronScheduler(db, pmSvc, sbxSvc, pmTurns, services.CronTokenHooks{
+		Register:   mcpWire.registerCron,
+		Unregister: mcpWire.unregister,
+	})
+	// External IM channels (QQ today; extensible). One bot binds one project +
+	// its PM Leader. Configs are DB-managed via the admin WebUI and hot-reloaded.
+	// Memory/scheduler writes follow ChannelConfig session caps (default off).
+	// pm-workflow-write is controlled by project EnabledMcps — enable it only
+	// when channel-side mutations are desired.
+	channelHooks := channels.MCPTokenHooks{
+		Register:       mcpWire.registerChannel,
+		RestoreOnReuse: mcpWire.restoreChannel,
+		Unregister:     mcpWire.unregister,
+	}
+	channelBridge := channels.NewChannelBridge(pmSvc, sbxSvc, pmTurns, channelHooks)
+	channelSvc := services.NewChannelConfigService(db)
+	channelMgr := channels.NewManager(channelBridge, map[string]channels.AdapterFactory{
+		models.ChannelTypeQQ: qq.New,
+	}, crypto.Decrypt)
+	channelMgr.SetLoader(channelSvc.ListRaw)
+	channelSvc.SetOnChange(channelMgr.Reload)
+	channelMgr.ApplyOnBoot()
+	cronSched.SetChannelDeliverer(channelMgr)
+	cronSched.Start(sweeperCtx)
+
+	h := &handlers.Handlers{
+		WF:            wfSvc,
+		Projects:      projectSvc,
+		Runs:          runSvc,
+		Arts:          artifactSvc,
+		APIKeys:       services.NewAPIKeyService(db),
+		Skill:         skillSvc,
+		Org:           orgSvc,
+		Dash:          services.NewDashboardService(db),
+		Sbx:           sbxSvc,
+		Preview:       previewSvc,
+		Issues:        issueSvc,
+		Eng:           eng,
+		MCP:           host,
+		Pm:            pmSvc,
+		PmProgress:    pmProgress,
+		PmTurns:       pmTurns,
+		PMMCP:         pmMCP,
+		MemoryMCP:     memoryMCP,
+		ContextMCP:    contextMCP,
+		SchedulerMCP:  schedulerMCP,
+		Settings:      settingsSvc,
+		Shutdown:      coord,
+		Auth:          authSvc,
+		PlatformRules: platformRuleSvc,
+		Channels:      channelSvc,
+		Browser:       browserSvc,
+		InjectBundles: injectStore,
+	}
+
+	r := router.New(h)
+	port := strconv.Itoa(cfg.Server.Port)
+	addr := ":" + port
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatal().Err(err).Str("addr", addr).Msg("listen failed")
+	}
+	srv := &http.Server{Handler: r}
+
+	log.Info().Str("port", port).Str("exec_provider", provider.Name()).
+		Str("config_path", cfgPath).Msg("approving server starting")
+
+	go func() {
+		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+			log.Fatal().Err(err).Msg("server exited")
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+	sig := <-quit
+	log.Info().Str("signal", sig.String()).Msg("signal received")
+
+	coord.BeginDraining()
+	log.Info().Msg("drain started")
+
+	// Stop admitting new work and drop anything still queued. The drain
+	// middleware already 503s new mutating /api requests; halting the scheduler
+	// prevents the dispatcher from promoting queued runs while we drain.
+	eng.Halt()
+	eng.CancelQueuedRuns()
+
+	// Keep the HTTP server up while waiting for active agent/react nodes to
+	// finish: their in-container sandboxes still call back to /mcp/runs/:id on
+	// this same server, and the frontend keeps polling /api/health to render the
+	// draining banner. Waiting first (bounded by the grace deadline) is what
+	// lets rolling updates finish in-flight agent work instead of severing it.
+	timedOut := eng.WaitAgentReact(context.Background(), coord.Deadline())
+
+	// Now tear everything down: idle sweeper, interactive test sandboxes, then
+	// the HTTP server (which closes /api and /mcp for good).
+	stopSweeper()
+	channelMgr.StopAll()
+	browserSvc.Stop()
+	sbxSvc.ShutdownAllTestSandboxes(context.Background(), true)
+
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancelShutdown()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Warn().Err(err).Msg("http server shutdown")
+	}
+
+	if timedOut {
+		log.Info().Msg("exit")
+		os.Exit(1)
+	}
+	log.Info().Msg("exit")
+	os.Exit(0)
+}

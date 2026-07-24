@@ -1,0 +1,127 @@
+// Package channels is a platform-agnostic abstraction for external IM channels
+// (QQ today; Slack/Discord/Feishu later). Concrete transports implement the
+// Adapter interface and normalize their protocol into InboundMessage /
+// OutboundMessage. The ChannelBridge turns an inbound message into a PM Leader
+// turn and returns the reply; the Manager owns adapter lifecycle and routing.
+package channels
+
+import (
+	"context"
+	"time"
+)
+
+// Scene classifies a conversation surface. Adapters map their native scopes
+// onto these so the bridge and thread naming stay platform-neutral.
+type Scene string
+
+const (
+	// SceneC2C is a 1:1 private chat.
+	SceneC2C Scene = "c2c"
+	// SceneGroup is a group chat.
+	SceneGroup Scene = "group"
+	// SceneGuild is a guild/server channel (QQ 频道).
+	SceneGuild Scene = "guild"
+)
+
+// Image is a normalized image attachment. Inbound images carry raw bytes
+// (downloaded by the adapter); outbound images are referenced by URL.
+type Image struct {
+	Data     []byte
+	MimeType string
+	URL      string
+}
+
+// InboundMessage is a normalized user message received from a channel.
+type InboundMessage struct {
+	Scene          Scene
+	ConversationID string // openid / group_openid / channel_id
+	UserID         string // author id (openid/union), for display/attribution
+	Text           string
+	Images         []Image
+	MessageID      string // platform message id (passive reply + dedup)
+	Timestamp      time.Time
+	Raw            map[string]any
+}
+
+// OutboundMessage is a normalized reply/push to a channel conversation.
+type OutboundMessage struct {
+	Scene            Scene
+	ConversationID   string
+	ReplyToMessageID string // passive reply id (empty → active push)
+	Text             string
+	ImageURLs        []string // shareable image URLs to attach
+}
+
+// InboundHandler is invoked by an adapter for each received message.
+type InboundHandler func(ctx context.Context, in InboundMessage)
+
+// Adapter is a transport for one external channel account. Implementations are
+// created per ChannelConfig and are responsible only for receiving/sending;
+// PM orchestration lives in ChannelBridge.
+type Adapter interface {
+	// Type returns the channel type (e.g. "qq").
+	Type() string
+	// Start connects and begins delivering inbound messages to onInbound until
+	// the ctx is cancelled or Stop is called. It should return once the receive
+	// loop is running (non-blocking) or on a fatal startup error.
+	Start(ctx context.Context, onInbound InboundHandler) error
+	// Send delivers an outbound message.
+	Send(ctx context.Context, out OutboundMessage) error
+	// Stop tears down the connection and releases resources.
+	Stop() error
+}
+
+// AdapterConfig is the resolved, decrypted configuration handed to a factory.
+type AdapterConfig struct {
+	ID        string
+	Type      string
+	Name      string
+	ProjectID string
+	AppID     string
+	AppSecret string // decrypted
+	Config    map[string]any
+}
+
+// AdapterFactory builds an Adapter for a resolved config. Registered in the
+// Manager (from main.go) so the channels package never imports concrete
+// adapters, keeping the dependency graph acyclic.
+type AdapterFactory func(cfg AdapterConfig) (Adapter, error)
+
+// StrOpt reads a string option from an adapter Config map.
+func StrOpt(cfg map[string]any, key string) string {
+	if cfg == nil {
+		return ""
+	}
+	if v, ok := cfg[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+// BoolOpt reads a bool option from an adapter Config map.
+func BoolOpt(cfg map[string]any, key string) bool {
+	if cfg == nil {
+		return false
+	}
+	if v, ok := cfg[key].(bool); ok {
+		return v
+	}
+	return false
+}
+
+// SessionCaps are per-channel write gates for platform MCP tools on external
+// Channel turns. Missing keys default to false (compatible with existing
+// channels that never set them).
+type SessionCaps struct {
+	AllowMemoryWrite    bool
+	AllowSchedulerWrite bool
+}
+
+// SessionCapsFromConfig parses allowMemoryWrite / allowSchedulerWrite from a
+// ChannelConfig.Config JSON map. BoolOpt defaults missing keys to false.
+func SessionCapsFromConfig(cfg map[string]any) SessionCaps {
+	return SessionCaps{
+		AllowMemoryWrite:    BoolOpt(cfg, "allowMemoryWrite"),
+		AllowSchedulerWrite: BoolOpt(cfg, "allowSchedulerWrite"),
+	}
+}

@@ -1,0 +1,41 @@
+package engine
+
+import (
+	"testing"
+
+	"github.com/cocofhu/approving/internal/models"
+)
+
+func TestResolveStartVarsProjectSeedAndOverride(t *testing.T) {
+	project := []models.ProjectVariable{
+		{Name: "region", Type: "string", Value: "cn"},
+		{Name: "shared", Type: "string", Value: "from-project"},
+		{Name: "only_project", Type: "string", Value: "keep"},
+	}
+	g := models.Graph{
+		Variables: []models.Variable{
+			{Name: "shared", Type: "string", Value: "from-graph"},
+			{Name: "idea", Type: "string", Ask: true, Required: true},
+		},
+	}
+	out, err := resolveStartVars(g, map[string]any{"idea": "hello"}, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	by := map[string]any{}
+	for _, rv := range out {
+		by[rv.Name] = rv.Value
+	}
+	if by["region"] != "cn" {
+		t.Fatalf("region = %v", by["region"])
+	}
+	if by["shared"] != "from-graph" {
+		t.Fatalf("shared override = %v", by["shared"])
+	}
+	if by["only_project"] != "keep" {
+		t.Fatalf("only_project = %v", by["only_project"])
+	}
+	if by["idea"] != "hello" {
+		t.Fatalf("idea = %v", by["idea"])
+	}
+}

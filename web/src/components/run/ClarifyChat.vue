@@ -1,0 +1,915 @@
+<script setup lang="ts">
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import Icon from '../ui/Icon.vue'
+import ClarifyDemoFrame from './ClarifyDemoFrame.vue'
+import { renderMarkdown } from '@/lib/markdown'
+import { relTime } from '@/lib/format'
+import {
+  demoGridColsClass,
+  demoOptionsOf,
+  selectedDemoOption,
+  useSideBySide,
+} from '@/lib/clarifyDemo'
+import type { ClarifyTurn, ClarifyImage, ReactQuestion, ReactOption, ReactAnnotation } from '@/lib/types'
+import AnnotationChip from './AnnotationChip.vue'
+
+// active: whether the run is still in an interactive state (queued/running/
+// waiting_human). When false (completed/failed/cancelled) the chat input is
+// hidden — a finished run must not accept further replies.
+// reviewMode: post-run ReAct review of a producer node's product (vs. the
+// classic clarify dialogue). Enables annotation chips and relabels the finish
+// action to "确认并流转到下一节点".
+// annotateEnabled: show chip UI without forcing reviewMode finish semantics
+// (inbox clarify binds annotations + review-mode affordances but only「发送澄清回复」).
+// hideFinish: suppress finish / confirmFlow button (clarify send-only).
+// confirmError: review force validation failure shown in the bottom status bar.
+const props = withDefaults(
+  defineProps<{
+    runId: string
+    nodeId: string
+    iteration: number
+    turns: ClarifyTurn[]
+    done: boolean
+    active?: boolean
+    reviewMode?: boolean
+    annotateEnabled?: boolean
+    hideFinish?: boolean
+    /** Override primary send button label (e.g. 发送澄清回复). */
+    sendLabel?: string
+    /** Review confirm failure message (bottom status bar). */
+    confirmError?: string | null
+  }>(),
+  {
+    active: true,
+    iteration: 1,
+    reviewMode: false,
+    annotateEnabled: false,
+    hideFinish: false,
+    confirmError: null,
+  },
+)
+
+const showAnnotationChips = computed(() => props.reviewMode || props.annotateEnabled)
+const emit = defineEmits<{
+  (e: 'send', text: string, images: ClarifyImage[], annotations: ReactAnnotation[]): void
+  (e: 'finish'): void
+}>()
+
+const { t: translate, locale } = useI18n()
+
+const inputPlaceholder = computed(() =>
+  props.reviewMode
+    ? translate('pages.clarify.reviewInputPlaceholder')
+    : translate('pages.clarify.inputPlaceholder'),
+)
+
+const draft = defineModel<string>('draft', { default: '' })
+const attachments = defineModel<ClarifyImage[]>('attachments', { default: () => [] })
+const annotations = defineModel<ReactAnnotation[]>('annotations', { default: () => [] })
+const thinking = ref(false)
+/** Review confirm mid-state: re-validating product (not Agent thinking). */
+const validating = ref(false)
+const scroller = ref<HTMLElement>()
+const fileInput = ref<HTMLInputElement | null>(null)
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const overflowScroll = ref(false)
+
+const AUTO_GROW_MIN = 40
+const AUTO_GROW_MAX = 128
+
+function autoGrow() {
+  const el = textareaRef.value
+  if (!el) return
+  el.style.height = 'auto'
+  const sh = el.scrollHeight
+  const h = Math.min(Math.max(sh, AUTO_GROW_MIN), AUTO_GROW_MAX)
+  el.style.height = `${h}px`
+  overflowScroll.value = sh > AUTO_GROW_MAX
+}
+
+function onTextInput() {
+  autoGrow()
+}
+
+// Optimistically show the just-sent human message (+ its images/annotations)
+// until the backend snapshot (props.turns) catches up. Cleared whenever real
+// turns arrive. Annotations are snapshotted at send so composer clear does not
+// wipe chips from the optimistic bubble.
+const pending = ref<{ text: string; images: ClarifyImage[]; annotations: ReactAnnotation[] } | null>(null)
+
+/** Legacy zh-CN prefix for messages persisted before i18n or in sessionStorage. */
+const LEGACY_CHOICE_PREFIX = '我的选择:'
+const choicePrefix = computed(() => translate('pages.clarify.choicePrefix'))
+
+function textHasChoicePrefix(text: string): boolean {
+  return text.startsWith(choicePrefix.value) || text.startsWith(LEGACY_CHOICE_PREFIX)
+}
+
+function stripChoicePrefix(text: string): string {
+  if (text.startsWith(choicePrefix.value)) return text.slice(choicePrefix.value.length)
+  if (text.startsWith(LEGACY_CHOICE_PREFIX)) return text.slice(LEGACY_CHOICE_PREFIX.length)
+  return text
+}
+
+function questionKey(questions: ReactQuestion[]): string {
+  return questions.map((q) => q.id).join('|')
+}
+
+function sessionStorageKey(questions: ReactQuestion[]): string {
+  return `clarify.submitted.${props.runId}.${props.nodeId}.${props.iteration}.${questionKey(questions)}`
+}
+
+function readSessionChoice(questions: ReactQuestion[]): string | null {
+  if (!questions.length) return null
+  try {
+    const raw = sessionStorage.getItem(sessionStorageKey(questions))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { text?: string }
+    return parsed.text && textHasChoicePrefix(parsed.text) ? parsed.text : null
+  } catch {
+    return null
+  }
+}
+
+function writeSessionChoice(questions: ReactQuestion[], text: string) {
+  if (!questions.length) return
+  try {
+    sessionStorage.setItem(sessionStorageKey(questions), JSON.stringify({ text }))
+  } catch {}
+}
+
+function clearSessionChoice(questions: ReactQuestion[]) {
+  if (!questions.length) return
+  try {
+    sessionStorage.removeItem(sessionStorageKey(questions))
+  } catch {}
+}
+
+function isChoiceReply(text: string): boolean {
+  return !!text && textHasChoicePrefix(text)
+}
+
+/** Index of the latest agent turn that raised structured questions. */
+function latestQuestionTurnIndex(turnList: ClarifyTurn[]): number {
+  for (let i = turnList.length - 1; i >= 0; i--) {
+    const t = turnList[i]
+    if (t.role === 'agent' && t.questions?.length) return i
+  }
+  return -1
+}
+
+function hasHumanReplyAfter(turnList: ClarifyTurn[], qIdx: number): boolean {
+  for (let i = qIdx + 1; i < turnList.length; i++) {
+    if (turnList[i].role === 'human' && isChoiceReply(turnList[i].text)) return true
+  }
+  return false
+}
+
+const latestQuestionIdx = computed(() => latestQuestionTurnIndex(props.turns))
+
+const latestQuestions = computed<ReactQuestion[]>(() => {
+  const idx = latestQuestionIdx.value
+  if (idx < 0) return []
+  return props.turns[idx].questions ?? []
+})
+
+const latestQuestionAnswered = computed(() => {
+  const qs = latestQuestions.value
+  if (!qs.length) return true
+  if (hasHumanReplyAfter(props.turns, latestQuestionIdx.value)) return true
+  return !!readSessionChoice(qs)
+})
+
+const turns = computed<ClarifyTurn[]>(() => {
+  let list = props.turns
+  if (pending.value) {
+    list = [
+      ...list,
+      {
+        role: 'human',
+        text: pending.value.text,
+        at: new Date().toISOString(),
+        images: pending.value.images,
+        annotations: pending.value.annotations,
+      },
+    ]
+  } else {
+    const qIdx = latestQuestionIdx.value
+    const qs = latestQuestions.value
+    if (qIdx >= 0 && qs.length && !hasHumanReplyAfter(props.turns, qIdx)) {
+      const sessionText = readSessionChoice(qs)
+      if (sessionText) {
+        list = [...list, { role: 'human', text: sessionText, at: new Date().toISOString() }]
+      }
+    }
+  }
+  return list
+})
+
+function imgSrc(im: ClarifyImage): string {
+  return `data:${im.mimeType || 'image/png'};base64,${im.data}`
+}
+
+async function scrollDown() {
+  await nextTick()
+  if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight
+}
+
+function turnsSemanticKey(turnList: ClarifyTurn[]): string {
+  if (!turnList.length) return '0'
+  const last = turnList[turnList.length - 1]
+  return `${turnList.length}:${last.at}:${last.role}:${last.text}`
+}
+
+// Real turns streamed back from the run: drop the optimistic bubble + spinner.
+watch(
+  () => turnsSemanticKey(props.turns),
+  (key, prevKey) => {
+    if (prevKey !== undefined && key === prevKey) return
+    const turnList = props.turns
+    pending.value = null
+    thinking.value = false
+    const qIdx = latestQuestionTurnIndex(turnList)
+    if (qIdx >= 0) {
+      const qs = turnList[qIdx].questions ?? []
+      if (qs.length && hasHumanReplyAfter(turnList, qIdx)) clearSessionChoice(qs)
+    }
+    scrollDown()
+  },
+)
+watch(
+  () => props.done,
+  (d) => {
+    if (d) {
+      thinking.value = false
+      validating.value = false
+    }
+  },
+)
+// Parent surfaces review confirm failure → leave validating so the user can retry.
+watch(
+  () => props.confirmError,
+  (err) => {
+    if (err) validating.value = false
+  },
+)
+
+function addFiles(files: FileList | null | undefined) {
+  if (!files) return
+  for (const f of Array.from(files)) {
+    if (!f.type.startsWith('image/')) continue
+    const reader = new FileReader()
+    reader.onload = () => {
+      const res = String(reader.result || '')
+      const comma = res.indexOf(',')
+      attachments.value.push({ data: comma >= 0 ? res.slice(comma + 1) : res, mimeType: f.type })
+    }
+    reader.readAsDataURL(f)
+  }
+}
+function onPickFiles(e: Event) {
+  addFiles((e.target as HTMLInputElement).files)
+  if (fileInput.value) fileInput.value.value = ''
+}
+function onPaste(e: ClipboardEvent) {
+  const items = e.clipboardData?.items
+  if (!items) {
+    nextTick(autoGrow)
+    return
+  }
+  const picked: File[] = []
+  for (const it of Array.from(items)) {
+    if (it.type.startsWith('image/')) {
+      const f = it.getAsFile()
+      if (f) picked.push(f)
+    }
+  }
+  if (picked.length) {
+    e.preventDefault()
+    const dt = new DataTransfer()
+    picked.forEach((f) => dt.items.add(f))
+    addFiles(dt.files)
+  }
+  nextTick(autoGrow)
+}
+
+watch(draft, () => nextTick(autoGrow), { immediate: true })
+onMounted(() => nextTick(autoGrow))
+function removeAttachment(i: number) {
+  attachments.value.splice(i, 1)
+}
+
+function sendMessage(text: string, imgs: ClarifyImage[] = [], anns: ReactAnnotation[] = []) {
+  const t = text.trim()
+  if ((!t && imgs.length === 0 && anns.length === 0) || props.done || !props.active) return
+  // Snapshot annotations (same list as emit) so clearing the composer model
+  // leaves the optimistic bubble's chips intact during the thinking window.
+  pending.value = { text: t, images: imgs, annotations: anns.slice() }
+  thinking.value = true
+  emit('send', t, imgs, anns)
+  scrollDown()
+}
+
+function sendFromComposer() {
+  const t = draft.value.trim()
+  const imgs = attachments.value.slice()
+  const anns = annotations.value.slice()
+  if ((!t && imgs.length === 0 && anns.length === 0) || props.done || !props.active) return
+  draft.value = ''
+  attachments.value = []
+  annotations.value = []
+  sendMessage(t, imgs, anns)
+}
+
+function removeAnnotation(i: number) {
+  annotations.value.splice(i, 1)
+}
+
+// --- structured questions (ask_question) ---------------------------------
+// Selected option ids per question, plus optional "其他" free text.
+const sel = ref<Record<string, string[]>>({})
+const other = ref<Record<string, string>>({})
+
+// The interactive choice card is only shown for the latest unanswered agent
+// question turn while the dialogue is live (not done / not mid-send).
+const activeQuestions = computed<ReactQuestion[]>(() => {
+  if (props.done || !props.active || thinking.value || pending.value) return []
+  if (latestQuestionAnswered.value) return []
+  return latestQuestions.value
+})
+
+function isActiveTurn(i: number): boolean {
+  return activeQuestions.value.length > 0 && i === latestQuestionIdx.value
+}
+function isSelected(qidStr: string, oid: string): boolean {
+  return (sel.value[qidStr] || []).includes(oid)
+}
+function toggle(q: ReactQuestion, oid: string) {
+  const cur = sel.value[q.id] || []
+  if (q.allowMultiple) {
+    sel.value[q.id] = cur.includes(oid) ? cur.filter((x) => x !== oid) : [...cur, oid]
+  } else {
+    sel.value[q.id] = cur.includes(oid) ? [] : [oid]
+  }
+}
+function answered(q: ReactQuestion): boolean {
+  return (sel.value[q.id]?.length ?? 0) > 0 || !!other.value[q.id]?.trim()
+}
+const someAnswered = computed(() => activeQuestions.value.some(answered))
+
+// --- recommended options -------------------------------------------------
+// Auto-pick id for a question: the recommended option, or the first as a
+// fallback (mirrors the backend auto_var / SelectRecommendedOption rule).
+function autoPickId(q: ReactQuestion): string {
+  const rec = q.options.find((o) => o.recommended)
+  return rec ? rec.id : (q.options[0]?.id ?? '')
+}
+// Whether any active question carries an explicit recommendation — gates the
+// "采用推荐" button and auto-recommend affordances.
+const hasRecommended = computed(() => activeQuestions.value.some((q) => q.options.some((o) => o.recommended)))
+
+// Fill sel with the recommended (or first) option for every active question.
+function applyRecommended() {
+  for (const q of activeQuestions.value) {
+    const id = autoPickId(q)
+    sel.value[q.id] = id ? [id] : []
+  }
+}
+function submitRecommended() {
+  if (!activeQuestions.value.length || thinking.value) return
+  applyRecommended()
+  submitChoices()
+}
+
+// --- card deck (one question per card, 上一题 / 下一张) ---------------------
+const step = ref(0)
+// Only a genuinely new question set (different question ids) resets the deck to
+// the first card. Keyed by ids — not array identity — so that background run
+// polling (which rebuilds `turns` into fresh objects each tick) does NOT snap
+// the user back to the first question mid-answer.
+watch(
+  () => activeQuestions.value.map((q) => q.id).join('|'),
+  (key) => {
+    step.value = 0
+    if (!key) return
+    // Preselect the recommended option (if any) so the user only
+    // confirms; never auto-pick the first when nothing was recommended.
+    for (const q of activeQuestions.value) {
+      const rec = q.options.find((o) => o.recommended)
+      if (rec && !(sel.value[q.id]?.length ?? 0)) sel.value[q.id] = [rec.id]
+    }
+  },
+)
+const curQuestion = computed<ReactQuestion | null>(() => activeQuestions.value[step.value] || null)
+const isFirstCard = computed(() => step.value <= 0)
+const isLastCard = computed(() => step.value >= activeQuestions.value.length - 1)
+
+function prevCard() {
+  if (step.value > 0) step.value--
+}
+function nextCard() {
+  if (step.value < activeQuestions.value.length - 1) step.value++
+}
+// Pick an option. Never auto-advances — the user moves on with 下一个.
+function pick(q: ReactQuestion, oid: string) {
+  toggle(q, oid)
+}
+
+function submitChoices() {
+  const qs = activeQuestions.value
+  if (!qs.length || !someAnswered.value || thinking.value) return
+  // Skipped questions are omitted; only answered ones are summarized.
+  const lines = qs.filter(answered).map((q) => {
+    const picked = q.options.filter((o) => (sel.value[q.id] || []).includes(o.id)).map((o) => o.label)
+    const extra = other.value[q.id]?.trim()
+    if (extra) picked.push(extra)
+    return `- ${q.prompt} → ${picked.join('、')}`
+  })
+  const text = choicePrefix.value + '\n' + lines.join('\n')
+  writeSessionChoice(qs, text)
+  sel.value = {}
+  other.value = {}
+  step.value = 0
+  sendMessage(text)
+}
+
+// A submitted "我的选择:" human turn is rendered as structured cards instead of
+// a raw markdown bullet list. Returns null for any other message.
+interface ChoiceRow {
+  q: string
+  answers: string[]
+}
+function parseChoiceSummary(text: string): ChoiceRow[] | null {
+  if (!text || !textHasChoicePrefix(text)) return null
+  const bodyText = stripChoicePrefix(text)
+  const rows: ChoiceRow[] = []
+  for (const raw of bodyText.split('\n')) {
+    const line = raw.trim()
+    if (!line.startsWith('- ')) continue
+    const body = line.slice(2)
+    const idx = body.indexOf('→')
+    if (idx === -1) continue
+    const q = body.slice(0, idx).trim()
+    const answers = body
+      .slice(idx + 1)
+      .split('、')
+      .map((a) => a.trim())
+      .filter(Boolean)
+    if (q) rows.push({ q, answers })
+  }
+  return rows.length ? rows : null
+}
+
+function choiceRowsForAgentTurn(turnIndex: number): ChoiceRow[] | null {
+  for (let j = turnIndex + 1; j < turns.value.length; j++) {
+    const turn = turns.value[j]
+    if (turn.role === 'human') {
+      const parsed = parseChoiceSummary(turn.text)
+      if (parsed) return parsed
+    }
+    if (turn.role === 'agent' && turn.questions?.length) break
+  }
+  return null
+}
+
+function selectedLabelsForQuestion(q: ReactQuestion, rows: ChoiceRow[] | null): string[] {
+  if (!rows) return []
+  return rows.find((r) => r.q === q.prompt)?.answers ?? []
+}
+
+function selectedDemoForInteractive(q: ReactQuestion): ReactOption | null {
+  const demos = demoOptionsOf(q)
+  if (!demos.length || useSideBySide(demos)) return null
+  return q.options.find((o) => isSelected(q.id, o.id) && !!o.demoHtml?.trim()) ?? null
+}
+
+function send() {
+  sendFromComposer()
+}
+// Clarify: force Agent wrap-up (disabled while thinking).
+// Review: accept store snapshot — allowed during Agent thinking; shows validating.
+function finishEarly() {
+  if (props.done || !props.active) return
+  if (props.reviewMode) {
+    if (validating.value) return
+    validating.value = true
+    emit('finish')
+    scrollDown()
+    return
+  }
+  if (thinking.value) return
+  thinking.value = true
+  emit('finish')
+  scrollDown()
+}
+
+const confirmDisabled = computed(() =>
+  props.reviewMode ? validating.value : thinking.value,
+)
+</script>
+
+<template>
+  <div class="flex h-full flex-col" data-review-composer>
+    <div ref="scroller" class="scroll-area flex-1 space-y-3 overflow-y-auto p-4">
+      <div class="flex items-center gap-2 text-[11px] text-txt3">
+        <Icon name="chat" :size="13" />
+        {{ translate('pages.clarify.header', { n: turns.length }) }}
+      </div>
+      <div v-for="(t, i) in turns" :key="i" class="flex gap-2.5" :class="t.role === 'human' ? 'flex-row-reverse' : ''">
+        <div
+          class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
+          :class="t.role === 'agent' ? 'bg-n-clarify/15 text-n-clarify' : 'bg-accent-dim text-accent-2'"
+        >
+          <Icon v-if="t.role === 'agent'" name="robot" :size="15" />
+          <span v-else>{{ translate('pages.clarify.me') }}</span>
+        </div>
+        <div class="min-w-0 max-w-[80%]">
+          <div v-if="t.images && t.images.length" class="mb-1.5 flex flex-wrap gap-1.5" :class="t.role === 'human' ? 'justify-end' : ''">
+            <img
+              v-for="(im, ii) in t.images"
+              :key="ii"
+              :src="imgSrc(im)"
+              class="h-20 w-20 rounded-md border border-line object-cover"
+            />
+          </div>
+          <!-- annotation chips attached to this human review turn -->
+          <div v-if="t.role === 'human' && t.annotations && t.annotations.length" class="mb-1.5 flex flex-wrap gap-1.5 justify-end">
+            <AnnotationChip
+              v-for="(a, ai) in t.annotations"
+              :key="ai"
+              :ann="a"
+            />
+          </div>
+          <!-- submitted choice summary → structured cards -->
+          <div
+            v-if="t.role === 'human' && parseChoiceSummary(t.text)"
+            class="rounded-lg border border-accent/30 bg-accent-dim/60 px-3 py-2"
+          >
+            <div class="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-txt2">
+              <Icon name="check" :size="12" class="text-accent" /> {{ translate('pages.clarify.myChoice') }}
+            </div>
+            <div class="space-y-1.5">
+              <div
+                v-for="(row, ri) in parseChoiceSummary(t.text)!"
+                :key="ri"
+                class="rounded-md border border-line bg-surface/70 px-2.5 py-1.5"
+              >
+                <div class="mb-1 text-[11px] leading-snug text-txt3">{{ row.q }}</div>
+                <div class="flex flex-wrap gap-1">
+                  <span
+                    v-for="(a, ai) in row.answers"
+                    :key="ai"
+                    class="rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[12px] text-txt"
+                  >{{ a }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div
+            v-else-if="t.text"
+            class="md rounded-lg border px-3 py-2 text-[13px] leading-relaxed"
+            :class="t.role === 'agent' ? 'border-line bg-elevated text-txt' : 'border-accent/30 bg-accent-dim/60 text-txt'"
+            v-html="renderMarkdown(t.text)"
+          />
+
+          <!-- Structured choice questions (ask_question). The latest agent turn
+               shows an interactive card deck (one question per card); earlier
+               turns render read-only for context. -->
+          <template v-if="t.role === 'agent' && t.questions && t.questions.length">
+            <!-- interactive card deck -->
+            <div v-if="isActiveTurn(i) && curQuestion" class="mt-2">
+              <div>
+                <div class="relative rounded-xl border border-n-clarify/25 bg-n-clarify/5 p-3">
+                  <!-- progress -->
+                  <div v-if="activeQuestions.length > 1" class="mb-2.5 flex items-center justify-between">
+                    <div class="flex items-center gap-1">
+                      <span
+                        v-for="(q, qi) in activeQuestions"
+                        :key="qi"
+                        class="h-1.5 rounded-full transition-all"
+                        :class="qi === step ? 'w-4 bg-n-clarify' : answered(q) ? 'w-1.5 bg-n-clarify/60' : 'w-1.5 bg-line-strong'"
+                      />
+                    </div>
+                    <span class="text-[11px] text-txt3">{{ step + 1 }} / {{ activeQuestions.length }}</span>
+                  </div>
+
+                  <Transition name="deck" mode="out-in">
+                    <div :key="step">
+                      <div class="mb-2 flex items-center gap-1.5 text-[13px] font-medium text-txt">
+                        <Icon name="chat" :size="13" class="shrink-0 text-n-clarify" />
+                        <span>{{ curQuestion.prompt }}</span>
+                        <span class="ml-auto shrink-0 rounded border border-line px-1.5 py-0.5 text-[10px] font-normal text-txt3">{{ curQuestion.allowMultiple ? translate('pages.clarify.multiple') : translate('pages.clarify.single') }}</span>
+                      </div>
+                      <div class="space-y-1.5">
+                        <button
+                          v-for="o in curQuestion.options"
+                          :key="o.id"
+                          type="button"
+                          class="flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[12px] transition-colors"
+                          :class="isSelected(curQuestion.id, o.id) ? 'border-accent bg-accent-dim/60 text-txt' : 'border-line bg-surface text-txt2 hover:border-line-strong'"
+                          @click="pick(curQuestion, o.id)"
+                        >
+                          <span
+                            class="flex h-4 w-4 shrink-0 items-center justify-center border"
+                            :class="[
+                              curQuestion.allowMultiple ? 'rounded' : 'rounded-full',
+                              isSelected(curQuestion.id, o.id) ? 'border-accent bg-accent text-white' : 'border-line-strong',
+                            ]"
+                          >
+                            <Icon v-if="isSelected(curQuestion.id, o.id)" name="check" :size="10" />
+                          </span>
+                          <span>{{ o.label }}</span>
+                          <span
+                            v-if="o.recommended"
+                            class="ml-auto shrink-0 rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent-2"
+                          >{{ translate('pages.clarify.recommended') }}</span>
+                        </button>
+                      </div>
+                      <input
+                        v-model="other[curQuestion.id]"
+                        type="text"
+                        class="input mt-1.5 h-8 w-full text-[12px]"
+                        :placeholder="translate('pages.clarify.otherPlaceholder')"
+                      />
+
+                      <!-- Demo previews (options with demoHtml) -->
+                      <div v-if="demoOptionsOf(curQuestion).length" class="mt-2.5">
+                        <div
+                          v-if="useSideBySide(demoOptionsOf(curQuestion))"
+                          class="grid gap-2.5"
+                          :class="demoGridColsClass(demoOptionsOf(curQuestion).length)"
+                        >
+                          <ClarifyDemoFrame
+                            v-for="o in demoOptionsOf(curQuestion)"
+                            :key="o.id"
+                            :label="o.label"
+                            :html="o.demoHtml!"
+                            :highlighted="isSelected(curQuestion.id, o.id)"
+                          />
+                        </div>
+                        <ClarifyDemoFrame
+                          v-else-if="selectedDemoForInteractive(curQuestion)"
+                          :label="selectedDemoForInteractive(curQuestion)!.label"
+                          :html="selectedDemoForInteractive(curQuestion)!.demoHtml!"
+                          highlighted
+                        />
+                      </div>
+                    </div>
+                  </Transition>
+
+                  <!-- actions -->
+                  <div class="mt-3 flex items-center justify-between">
+                    <button
+                      v-if="!isFirstCard"
+                      class="inline-flex items-center gap-0.5 rounded-md px-2 py-1 text-[12px] text-txt2 hover:text-txt"
+                      @click="prevCard"
+                    >
+                      <Icon name="arrow-left" :size="13" /> {{ translate('pages.clarify.prev') }}
+                    </button>
+                    <span v-else />
+
+                    <button
+                      v-if="!isLastCard"
+                      class="inline-flex items-center gap-0.5 rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white hover:bg-accent-2"
+                      @click="nextCard"
+                    >
+                      {{ translate('pages.clarify.next') }} <Icon name="chevron-right" :size="13" />
+                    </button>
+                    <div v-else class="flex items-center gap-2">
+                      <button
+                        v-if="hasRecommended"
+                        class="inline-flex items-center gap-1 rounded-md border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-[12px] font-medium text-accent-2 hover:bg-accent/20 disabled:opacity-50"
+                        :disabled="thinking"
+                        :title="translate('pages.clarify.applyRecommendedTitle')"
+                        @click="submitRecommended"
+                      >
+                        <Icon name="check" :size="12" /> {{ translate('pages.clarify.applyRecommended') }}
+                      </button>
+                      <button
+                        class="inline-flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white hover:bg-accent-2 disabled:opacity-50"
+                        :disabled="!someAnswered || thinking"
+                        @click="submitChoices"
+                      >
+                        <Icon name="send" :size="12" /> {{ translate('pages.clarify.submitChoices') }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- read-only history: show demo previews when demoHtml present -->
+            <div v-else class="mt-2 rounded-lg border border-n-clarify/20 bg-n-clarify/5 px-3 py-2">
+              <div class="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-txt3">
+                <Icon name="chat" :size="12" class="text-n-clarify" />
+                {{ translate('pages.clarify.questionsThisRound', { n: t.questions.length }) }}
+                <span class="ml-1 inline-flex items-center gap-1 rounded border border-line px-1.5 py-0.5 text-[10px] font-normal text-txt3">
+                  {{ translate('pages.clarify.readonly') }}
+                </span>
+              </div>
+              <div
+                v-for="(q, qi) in t.questions"
+                :key="qi"
+                class="mb-3 last:mb-0"
+              >
+                <div class="mb-1.5 text-[12px] leading-snug text-txt2">
+                  <span class="text-txt3">{{ qi + 1 }}.</span> {{ q.prompt }}
+                  <span
+                    v-for="o in q.options.filter((op) => op.recommended)"
+                    :key="o.id"
+                    class="ml-1 inline-flex rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent-2"
+                  >{{ translate('pages.clarify.recommendedLabel', { label: o.label }) }}</span>
+                </div>
+                <div v-if="demoOptionsOf(q).length" class="mt-1.5">
+                  <div
+                    v-if="useSideBySide(demoOptionsOf(q))"
+                    class="grid gap-2.5"
+                    :class="demoGridColsClass(demoOptionsOf(q).length)"
+                  >
+                    <ClarifyDemoFrame
+                      v-for="o in demoOptionsOf(q)"
+                      :key="o.id"
+                      :label="o.label"
+                      :html="o.demoHtml!"
+                      :highlighted="selectedLabelsForQuestion(q, choiceRowsForAgentTurn(i)).includes(o.label)"
+                      :selected="selectedLabelsForQuestion(q, choiceRowsForAgentTurn(i)).includes(o.label)"
+                    />
+                  </div>
+                  <ClarifyDemoFrame
+                    v-else-if="selectedDemoOption(q, selectedLabelsForQuestion(q, choiceRowsForAgentTurn(i)))"
+                    :label="selectedDemoOption(q, selectedLabelsForQuestion(q, choiceRowsForAgentTurn(i)))!.label"
+                    :html="selectedDemoOption(q, selectedLabelsForQuestion(q, choiceRowsForAgentTurn(i)))!.demoHtml!"
+                    highlighted
+                    selected
+                  />
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <div class="mt-1 text-[10px] text-txt3" :class="t.role === 'human' ? 'text-right' : ''">{{ locale && relTime(t.at) }}</div>
+        </div>
+      </div>
+      <div v-if="thinking && !validating" class="flex items-center gap-2 pl-9 text-[12px] text-txt3">
+        <span class="typing-dots"><i /><i /><i /></span>
+        {{ translate('pages.clarify.thinking') }}
+      </div>
+    </div>
+
+    <div v-if="done" class="border-t border-line p-3 text-center text-[12px] text-ok">
+      <Icon name="check" :size="13" class="-mt-0.5 mr-1 inline" />{{ translate('pages.clarify.done') }}
+    </div>
+    <div v-else-if="!active" class="border-t border-line p-3 text-center text-[12px] text-txt3">
+      <Icon name="close" :size="13" class="-mt-0.5 mr-1 inline" />{{ translate('pages.clarify.closed') }}
+    </div>
+    <div v-else class="border-t border-line p-3">
+      <div v-if="showAnnotationChips && annotations.length" class="mb-2 flex flex-wrap gap-1.5">
+        <AnnotationChip
+          v-for="(a, ai) in annotations"
+          :key="ai"
+          :ann="a"
+          removable
+          test-id="clarify-annotation-chip"
+          @remove="removeAnnotation(ai)"
+        />
+      </div>
+      <div v-if="attachments.length" class="mb-2 flex flex-wrap gap-1.5">
+        <div v-for="(im, ii) in attachments" :key="ii" class="relative">
+          <img :src="imgSrc(im)" class="h-14 w-14 rounded-md border border-line object-cover" />
+          <button
+            class="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-err text-white"
+            @click="removeAttachment(ii)"
+          ><Icon name="close" :size="9" /></button>
+        </div>
+      </div>
+      <div class="flex items-end gap-2">
+        <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="onPickFiles" />
+        <button
+          class="flex h-10 w-10 items-center justify-center rounded-md border border-line text-txt2 hover:border-line-strong disabled:opacity-50"
+          :title="translate('pages.clarify.addImage')"
+          @click="fileInput?.click()"
+        >
+          <Icon name="paperclip" :size="16" />
+        </button>
+        <textarea
+          ref="textareaRef"
+          v-model="draft"
+          class="input min-h-[40px] flex-1 resize-none"
+          :class="overflowScroll ? 'scroll-area max-h-[128px] overflow-y-auto' : 'overflow-y-hidden'"
+          rows="1"
+          :placeholder="inputPlaceholder"
+          data-testid="clarify-input"
+          @input="onTextInput"
+          @keydown.enter.exact.prevent="send"
+          @paste="onPaste"
+        />
+        <button
+          v-if="sendLabel"
+          class="inline-flex h-10 items-center gap-1 rounded-md bg-accent px-3 text-xs font-semibold text-white hover:bg-accent-2 disabled:opacity-50"
+          data-testid="clarify-send-label"
+          :disabled="!draft.trim() && !attachments.length && !annotations.length"
+          @click="send"
+        >
+          <Icon name="send" :size="14" /> {{ sendLabel }}
+        </button>
+        <button
+          v-else
+          class="flex h-10 w-10 items-center justify-center rounded-md bg-accent text-white hover:bg-accent-2 disabled:opacity-50"
+          data-testid="clarify-send-icon"
+          :disabled="!draft.trim() && !attachments.length && !annotations.length"
+          @click="send"
+        >
+          <Icon name="send" :size="17" />
+        </button>
+      </div>
+      <div v-if="!hideFinish" class="mt-2 flex items-center justify-between gap-2">
+        <p
+          v-if="reviewMode"
+          class="min-w-0 flex-1 text-[11px] leading-snug text-txt3"
+          data-testid="clarify-confirm-hint"
+        >
+          {{ validating ? translate('pages.clarify.validating') : translate('pages.clarify.confirmFlowHint') }}
+        </p>
+        <span v-else class="flex-1" />
+        <button
+          v-if="reviewMode"
+          class="inline-flex shrink-0 items-center gap-1 rounded-md bg-ok px-3 py-1.5 text-xs font-semibold text-white hover:bg-ok/90 disabled:opacity-50"
+          data-testid="clarify-confirm-flow"
+          :disabled="confirmDisabled"
+          :title="translate('pages.clarify.confirmFlowTitle')"
+          @click="finishEarly"
+        >
+          <Icon name="check" :size="13" />
+          {{ validating ? translate('pages.clarify.validating') : translate('pages.clarify.confirmFlow') }}
+        </button>
+        <button
+          v-else
+          class="inline-flex shrink-0 items-center gap-1 rounded-md border border-line bg-elevated px-2.5 py-1 text-xs font-medium text-txt2 hover:border-line-strong disabled:opacity-50"
+          :disabled="confirmDisabled"
+          :title="translate('pages.clarify.finishEarlyTitle')"
+          @click="finishEarly"
+        >
+          <Icon name="check" :size="13" /> {{ translate('pages.clarify.finishEarly') }}
+        </button>
+      </div>
+    </div>
+    <div
+      v-if="reviewMode && confirmError && !done"
+      class="flex items-center gap-1.5 border-t border-err/30 bg-err/10 px-3 py-2 text-[12px] text-err"
+      data-testid="clarify-confirm-error"
+      role="alert"
+    >
+      <Icon name="alert" :size="13" />
+      <span class="min-w-0 flex-1 [overflow-wrap:anywhere]">{{ confirmError }}</span>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+/* Card-deck step transition: subtle slide + fade as one card advances. */
+.deck-enter-active,
+.deck-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.deck-enter-from {
+  opacity: 0;
+  transform: translateX(8px);
+}
+.deck-leave-to {
+  opacity: 0;
+  transform: translateX(-8px);
+}
+
+/* "thinking" typing indicator: three dots bouncing in sequence. */
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.typing-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: #22d3ee;
+  animation: typing-bounce 1.2s infinite ease-in-out both;
+}
+.typing-dots i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.typing-dots i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+@keyframes typing-bounce {
+  0%,
+  70%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  35% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+</style>

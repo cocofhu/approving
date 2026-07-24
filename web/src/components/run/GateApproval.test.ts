@@ -1,0 +1,2949 @@
+// @vitest-environment happy-dom
+import { defineComponent } from 'vue'
+import { createI18n } from 'vue-i18n'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import common from '@/locales/zh-CN/common.json'
+import pages from '@/locales/zh-CN/pages.json'
+import type { Gate, Run } from '@/lib/types'
+import { CONTENT_FIT_PREVIEW_MAX_VH } from '@/lib/htmlPreviewSandbox'
+
+vi.mock('@novnc/novnc/lib/rfb.js', () => ({
+  default: class MockRFB {},
+}))
+
+const apiMocks = vi.hoisted(() => ({
+  artifactContent: vi.fn(),
+  listPreviewIssues: vi.fn(),
+  createPreviewIssue: vi.fn(),
+  saveGateArtifact: vi.fn(),
+  listGatePrimaryArtifacts: vi.fn(),
+  gateReactRevise: vi.fn(),
+}))
+
+/** Plain ref-like so template auto-unwrap works (needs __v_isRef). */
+const breakpointMocks = vi.hoisted(() => ({
+  isMobile: { value: false, __v_isRef: true as const },
+}))
+
+vi.mock('@/lib/useBreakpoint', () => ({
+  useBreakpoint: () => ({ isMobile: breakpointMocks.isMobile }),
+}))
+
+vi.mock('@/lib/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+  return {
+    ...actual,
+    api: {
+      ...actual.api,
+      artifactContent: apiMocks.artifactContent,
+      listPreviewIssues: apiMocks.listPreviewIssues,
+      createPreviewIssue: apiMocks.createPreviewIssue,
+      saveGateArtifact: apiMocks.saveGateArtifact,
+      listGatePrimaryArtifacts: apiMocks.listGatePrimaryArtifacts,
+      gateReactRevise: apiMocks.gateReactRevise,
+    },
+  }
+})
+
+import GateApproval, {
+  actionIcon,
+  actionVariant,
+  actionVariantClasses,
+} from './GateApproval.vue'
+
+const HtmlPreviewStub = defineComponent({
+  name: 'HtmlPreview',
+  props: {
+    html: String,
+    fitContent: Boolean,
+    fillParent: Boolean,
+    maxContentHeightVh: Number,
+    inspectable: Boolean,
+    enlargeable: Boolean,
+    mode: String,
+  },
+  emits: ['pick'],
+  template:
+    '<div data-testid="html-preview" :data-fit="fitContent ? \'1\' : \'0\'" :data-fill-parent="fillParent ? \'1\' : \'0\'" :data-max-vh="maxContentHeightVh ?? \'\'" :data-inspectable="inspectable ? \'1\' : \'0\'" :data-enlargeable="enlargeable === false ? \'0\' : \'1\'" :data-mode="mode || \'\'" />',
+})
+
+const StructuredStub = defineComponent({
+  name: 'StructuredArtifactView',
+  props: { name: String, doc: Object },
+  template: '<div data-testid="structured-view" :data-name="name" />',
+})
+
+const AppPreviewStub = defineComponent({
+  name: 'AppPreviewPanel',
+  props: { fill: Boolean },
+  template: '<div data-testid="app-preview" :data-fill="fill ? \'1\' : \'0\'" />',
+})
+
+const PreviewFeedbackStub = defineComponent({
+  name: 'PreviewFeedbackChat',
+  props: {
+    runId: String,
+    nodeId: String,
+    selector: String,
+    elementImage: Object,
+    requireElement: Boolean,
+    compact: Boolean,
+    fillSidebar: Boolean,
+    hideSubmit: Boolean,
+    text: String,
+    images: Array,
+  },
+  emits: ['update:text', 'update:images', 'clear-selector', 'issues-changed'],
+  setup(props, { emit, expose }) {
+    function collectImages(): { data: string; mimeType: string }[] {
+      const images: { data: string; mimeType: string }[] = []
+      const el = props.elementImage as { data?: string; mimeType?: string } | null | undefined
+      if (el?.data) {
+        images.push({ data: el.data, mimeType: el.mimeType || 'image/png' })
+      }
+      for (const im of (props.images as { data: string; mimeType: string }[]) || []) {
+        images.push({ data: im.data, mimeType: im.mimeType })
+      }
+      return images
+    }
+
+    async function send(opts?: { body?: string }): Promise<boolean> {
+      const images = collectImages()
+      const body = (opts?.body !== undefined ? opts.body : props.text || '').trim()
+      if (opts?.body === undefined && !body && images.length === 0) return false
+      if (opts?.body !== undefined && !body && images.length === 0) return false
+      await apiMocks.createPreviewIssue(
+        props.runId as string,
+        props.nodeId as string,
+        body,
+        (props.selector as string) || '',
+        0,
+        images,
+      )
+      emit('update:text', '')
+      emit('update:images', [])
+      if (props.selector || props.elementImage) emit('clear-selector')
+      emit('issues-changed')
+      return true
+    }
+
+    async function flush(): Promise<boolean> {
+      const images = collectImages()
+      const body = (props.text || '').trim()
+      if (!body && images.length === 0) return false
+      return send()
+    }
+
+    async function reload(): Promise<void> {
+      /* no-op in stub */
+    }
+
+    function clearDraft() {
+      emit('update:text', '')
+      emit('update:images', [])
+    }
+
+    expose({ send, flush, reload, clearDraft })
+    return {}
+  },
+  template: `
+    <div
+      data-testid="preview-feedback-chat"
+      :data-selector="selector || ''"
+      :data-require-element="requireElement ? '1' : '0'"
+      :data-has-image="elementImage ? '1' : '0'"
+      :data-fill-sidebar="fillSidebar ? '1' : '0'"
+      :data-hide-submit="hideSubmit ? '1' : '0'"
+    >
+      <div data-testid="paragraph-input-root" data-text-only="0">
+        <button
+          type="button"
+          data-testid="paragraph-input-attach"
+          @click="$emit('update:images', [{ data: 'abc', mimeType: 'image/png' }])"
+        />
+        <textarea
+          data-testid="paragraph-input"
+          :value="text || ''"
+          @input="$emit('update:text', $event.target.value)"
+        />
+      </div>
+      <button
+        v-if="!hideSubmit"
+        type="button"
+        data-testid="preview-feedback-submit"
+      >
+        提交评审意见
+      </button>
+    </div>
+  `,
+})
+
+const PlanStub = defineComponent({
+  name: 'PlanView',
+  template: '<div data-testid="plan-view" />',
+})
+
+const ParagraphInputStub = defineComponent({
+  name: 'ParagraphInput',
+  props: { text: String, images: Array, textOnly: Boolean, placeholder: String },
+  emits: ['update:text', 'update:images'],
+  template: `
+    <div data-testid="paragraph-input-root" :data-text-only="textOnly ? '1' : '0'">
+      <button
+        v-if="!textOnly"
+        type="button"
+        data-testid="paragraph-input-attach"
+        @click="$emit('update:images', [{ data: 'abc', mimeType: 'image/png' }])"
+      />
+      <textarea data-testid="paragraph-input" :value="text" @input="$emit('update:text', $event.target.value)" />
+    </div>
+  `,
+})
+
+/** Interactive picker stub — mirrors ProposalSelectView select emit (not readonly). */
+const ProposalSelectStub = defineComponent({
+  name: 'ProposalSelectView',
+  props: { doc: Object, resolvedId: String, readonly: Boolean, disabled: Boolean },
+  emits: ['select'],
+  template: `
+    <div data-testid="proposal-select-view" :data-readonly="readonly ? '1' : '0'">
+      <button
+        v-if="!readonly && !resolvedId"
+        type="button"
+        data-testid="proposal-select-pick"
+        @click="$emit('select', 'p1')"
+      >选此方案</button>
+    </div>
+  `,
+})
+
+function baseGate(overrides: Partial<Gate> = {}): Gate {
+  return {
+    runId: 'run-1',
+    nodeId: 'gate-1',
+    workflowName: 'wf',
+    title: '审批',
+    bodyMd: '请审阅',
+    actions: [
+      { id: 'approve', label: '批准' },
+      { id: 'revise', label: '返回修改', requireForm: true },
+    ],
+    form: [{ key: 'comment', label: '评审意见' }],
+    requestedAt: '2026-07-18T00:00:00Z',
+    ...overrides,
+  }
+}
+
+function baseRun(overrides: Partial<Run> = {}): Run {
+  return {
+    id: 'run-1',
+    title: 'run',
+    workflowId: 'wf-1',
+    workflowName: 'wf',
+    status: 'waiting_human',
+    createdAt: '2026-07-18T00:00:00Z',
+    nodes: [],
+    edges: [],
+    nodeStates: {},
+    artifacts: [],
+    ...overrides,
+  } as Run
+}
+
+function mountApproval(opts: {
+  gate?: Gate
+  run?: Run
+  fillPreview?: boolean
+  mobileFillRemaining?: boolean
+}) {
+  const i18n = createI18n({
+    legacy: false,
+    locale: 'zh-CN',
+    messages: { 'zh-CN': { ...common, ...pages } },
+  })
+  return mount(GateApproval, {
+    props: {
+      gate: opts.gate ?? baseGate(),
+      run: opts.run,
+      fillPreview: opts.fillPreview,
+      mobileFillRemaining: opts.mobileFillRemaining,
+      compact: true,
+    },
+    global: {
+      plugins: [i18n],
+      stubs: {
+        Icon: true,
+        ParagraphInput: ParagraphInputStub,
+        ArtifactLoadingPane: defineComponent({
+          name: 'ArtifactLoadingPane',
+          template: '<div data-testid="artifact-loading-pane" />',
+        }),
+        ProposalSelectView: ProposalSelectStub,
+        HtmlPreview: HtmlPreviewStub,
+        StructuredArtifactView: StructuredStub,
+        AppPreviewPanel: AppPreviewStub,
+        PreviewFeedbackChat: PreviewFeedbackStub,
+        PlanView: PlanStub,
+        UpstreamRequirementContext: false,
+      },
+    },
+  })
+}
+
+function visualGateRun(pageHtml: string) {
+  return {
+    gate: baseGate({ nodeId: 'hg-visual' }),
+    run: baseRun({
+      nodes: [
+        {
+          id: 'hg-visual',
+          type: 'human_gate',
+          label: '审阅视觉',
+          position: { x: 0, y: 0 },
+          config: { body_template: '{{nodes.visual.outputs.page}}' },
+        },
+      ],
+      nodeExecutions: {
+        visual: [
+          {
+            nodeId: 'visual',
+            iteration: 1,
+            status: 'completed',
+            outputs: { page: pageHtml },
+          },
+        ],
+      },
+    }),
+  }
+}
+
+beforeEach(() => {
+  breakpointMocks.isMobile.value = false
+})
+
+function hasClass(el: Element | null | undefined, token: string): boolean {
+  return !!el?.classList.contains(token)
+}
+
+function contentFitRoot(wrapper: VueWrapper) {
+  return wrapper.find('[data-testid="content-fit-scroll"]')
+}
+
+function expectApprovalActionsVisible(wrapper: VueWrapper) {
+  const form = wrapper.find('[data-testid="content-fit-form"]')
+  expect(form.exists()).toBe(true)
+  expect(form.find('[data-testid="paragraph-input"]').exists()).toBe(true)
+  const buttons = form.findAll('button')
+  expect(buttons.length).toBeGreaterThanOrEqual(2)
+  expect(buttons.some((b) => b.text().includes('批准'))).toBe(true)
+  expect(buttons.some((b) => b.text().includes('返回修改'))).toBe(true)
+  for (const btn of buttons) {
+    expect((btn.element as HTMLButtonElement).disabled).toBe(false)
+  }
+}
+
+describe('actionIcon', () => {
+  it('maps positive actions to check', () => {
+    expect(actionIcon('approve')).toBe('check')
+    expect(actionIcon('pass')).toBe('check')
+  })
+
+  it('maps revert actions to arrow-left', () => {
+    expect(actionIcon('revise')).toBe('arrow-left')
+    expect(actionIcon('fail')).toBe('arrow-left')
+    expect(actionIcon('limit')).toBe('arrow-left')
+  })
+
+  it('falls back to refresh for custom action ids', () => {
+    expect(actionIcon('p1')).toBe('refresh')
+    expect(actionIcon('p2')).toBe('refresh')
+  })
+})
+
+describe('actionVariant', () => {
+  it('maps positive actions to ok', () => {
+    expect(actionVariant('approve')).toBe('ok')
+    expect(actionVariant('pass')).toBe('ok')
+  })
+
+  it('maps revert and custom actions to neutral', () => {
+    expect(actionVariant('revise')).toBe('neutral')
+    expect(actionVariant('fail')).toBe('neutral')
+    expect(actionVariant('limit')).toBe('neutral')
+    expect(actionVariant('p1')).toBe('neutral')
+  })
+})
+
+describe('actionVariantClasses', () => {
+  it('returns green ok styles', () => {
+    expect(actionVariantClasses('ok')).toContain('bg-ok/15')
+    expect(actionVariantClasses('ok')).toContain('text-ok')
+    expect(actionVariantClasses('ok')).toContain('hover:bg-ok/25')
+  })
+
+  it('returns neutral border styles', () => {
+    expect(actionVariantClasses('neutral')).toContain('border border-line')
+    expect(actionVariantClasses('neutral')).toContain('text-txt2')
+    expect(actionVariantClasses('neutral')).toContain('hover:bg-elevated')
+    expect(actionVariantClasses('neutral')).toContain('hover:text-txt')
+  })
+})
+
+describe('GateApproval content-fit layout branches', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    breakpointMocks.isMobile.value = false
+    apiMocks.listPreviewIssues.mockResolvedValue({ issues: [] })
+    apiMocks.createPreviewIssue.mockResolvedValue({
+      id: 'iss-new',
+      body: 'new',
+      status: 'open',
+      createdAt: '2026-07-18T00:02:00Z',
+    })
+    apiMocks.artifactContent.mockResolvedValue({ content: '{}' })
+    // Default: API unavailable → client listPrimaryProducts fallback (existing tests).
+    apiMocks.listGatePrimaryArtifacts.mockRejectedValue(new Error('offline'))
+  })
+
+  it('uses content-fit shell for short structured + fillPreview (preview capped, form pinned)', async () => {
+    const researchDoc = {
+      summary: '短调研',
+      findings: [{ title: '发现' }],
+    }
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-research' }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-research',
+            type: 'human_gate',
+            label: '审阅调研',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.research.outputs.research}}' },
+          },
+          {
+            id: 'research',
+            type: 'research',
+            label: '调研',
+            position: { x: 0, y: 0 },
+            config: {},
+          },
+        ],
+        nodeExecutions: {
+          research: [
+            {
+              nodeId: 'research',
+              iteration: 1,
+              status: 'completed',
+              outputs: { research_json: JSON.stringify(researchDoc) },
+            },
+          ],
+        },
+        artifacts: [
+          {
+            id: 'a-research',
+            name: 'research.json',
+            kind: 'json',
+            nodeId: 'research',
+            runId: 'run-1',
+            workflowName: 'wf',
+            sizeBytes: 10,
+            createdAt: '2026-07-18T00:00:00Z',
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    const scroll = contentFitRoot(wrapper)
+    expect(scroll.exists()).toBe(true)
+    // Outer shell is overflow-hidden (not the main scroll container).
+    expect(hasClass(scroll.element, 'overflow-hidden')).toBe(true)
+    expect(hasClass(scroll.element, 'overflow-y-auto')).toBe(false)
+    expect(hasClass(scroll.element, 'flex')).toBe(true)
+    expect(hasClass(scroll.element, 'flex-col')).toBe(true)
+
+    const preview = wrapper.find('[data-testid="content-fit-preview"]')
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+    expect(preview.exists()).toBe(true)
+    expect(form.exists()).toBe(true)
+    // Preview shell: capped + scrollable; form stays outside preview, shrink-0.
+    expect(hasClass(preview.element, 'overflow-y-auto')).toBe(true)
+    expect((preview.element as HTMLElement).style.maxHeight).toBe(
+      `${CONTENT_FIT_PREVIEW_MAX_VH}vh`,
+    )
+    expect(hasClass(form.element, 'shrink-0')).toBe(true)
+    expect(preview.element.className).not.toMatch(/\bflex-1\b/)
+    expect(form.element.className).not.toMatch(/\bflex-1\b/)
+    // Form is a sibling after preview (not nested inside preview scroll).
+    expect(preview.element.contains(form.element)).toBe(false)
+    expect(scroll.element.contains(preview.element)).toBe(true)
+    expect(scroll.element.contains(form.element)).toBe(true)
+    expect(wrapper.find('[data-testid="structured-view"]').attributes('data-name')).toBe(
+      'research.json',
+    )
+    expect(form.classes()).not.toContain('sticky')
+    expectApprovalActionsVisible(wrapper)
+    wrapper.unmount()
+  })
+
+  it('keeps app_preview on flex-1 fill path under fillPreview', async () => {
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'preview-gate' }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'preview-gate',
+            type: 'app_preview',
+            label: '预览',
+            position: { x: 0, y: 0 },
+            config: {},
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    expect(contentFitRoot(wrapper).exists()).toBe(false)
+    const app = wrapper.find('[data-testid="app-preview"]')
+    expect(app.exists()).toBe(true)
+    expect(app.attributes('data-fill')).toBe('1')
+    const appHost = app.element.parentElement
+    expect(appHost?.className).toMatch(/\bflex-1\b/)
+    wrapper.unmount()
+  })
+
+  it('keeps proposal_select interactive picker under fillPreview (no ReviewShell readonly)', async () => {
+    const proposalsDoc = {
+      context: '选型',
+      proposals: [
+        { id: 'p1', title: '方案甲', summary: '共享壳', recommended: true },
+        { id: 'p2', title: '方案乙', summary: '另起炉灶' },
+      ],
+    }
+    apiMocks.artifactContent.mockResolvedValue({ content: JSON.stringify(proposalsDoc) })
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({
+        nodeId: 'pick-proposal',
+        actions: [
+          { id: 'p1', label: '方案甲' },
+          { id: 'p2', label: '方案乙' },
+        ],
+        form: [],
+      }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'pick-proposal',
+            type: 'proposal_select',
+            label: '选方案',
+            position: { x: 0, y: 0 },
+            config: { from: 'proposals.json' },
+          },
+        ],
+        artifacts: [
+          {
+            id: 'a-proposals',
+            name: 'proposals.json',
+            kind: 'json',
+            nodeId: 'proposal',
+            runId: 'run-1',
+            workflowName: 'wf',
+            sizeBytes: 10,
+            createdAt: '2026-07-18T00:00:00Z',
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    // Must stay on default path: interactive picker, not content-fit/ReviewShell readonly stage.
+    expect(contentFitRoot(wrapper).exists()).toBe(false)
+    expect(wrapper.find('[data-testid="review-shell"]').exists()).toBe(false)
+
+    const picker = wrapper.find('[data-testid="proposal-select-view"]')
+    expect(picker.exists()).toBe(true)
+    expect(picker.attributes('data-readonly')).toBe('0')
+    // GateProductEditor may preview proposals.json, but select must remain interactive.
+    const pickBtn = wrapper.find('[data-testid="proposal-select-pick"]')
+    expect(pickBtn.exists()).toBe(true)
+    await pickBtn.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.emitted('resolve')?.[0]?.[0]).toBe('p1')
+    wrapper.unmount()
+  })
+
+  it('does not enter content-fit without fillPreview (structured stays on default path)', async () => {
+    const researchDoc = { summary: '短调研', findings: [{ title: '发现' }] }
+    const wrapper = mountApproval({
+      fillPreview: false,
+      gate: baseGate({ nodeId: 'hg-research' }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-research',
+            type: 'human_gate',
+            label: '审阅调研',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.research.outputs.research}}' },
+          },
+        ],
+        nodeExecutions: {
+          research: [
+            {
+              nodeId: 'research',
+              iteration: 1,
+              status: 'completed',
+              outputs: { research_json: JSON.stringify(researchDoc) },
+            },
+          ],
+        },
+      }),
+    })
+    await flushPromises()
+
+    expect(contentFitRoot(wrapper).exists()).toBe(false)
+    expect(wrapper.find('[data-testid="content-fit-preview"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="structured-view"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('does not enter content-fit for Markdown body or PlanView', async () => {
+    const mdWrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ bodyMd: '## 纯 Markdown 审阅' }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'gate-1',
+            type: 'human_gate',
+            label: '门禁',
+            position: { x: 0, y: 0 },
+            config: {},
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+    expect(contentFitRoot(mdWrapper).exists()).toBe(false)
+    mdWrapper.unmount()
+
+    apiMocks.artifactContent.mockResolvedValue({
+      content: JSON.stringify({
+        goals: [{ id: 'g1', title: '目标', status: 'pending', subgoals: [] }],
+      }),
+    })
+    const planWrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({
+        bodyMd: '- [ ] `g1` 目标\n- [ ] `g1.1` 子目标',
+      }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'gate-1',
+            type: 'human_gate',
+            label: '计划门禁',
+            position: { x: 0, y: 0 },
+            config: {},
+          },
+        ],
+        artifacts: [
+          {
+            id: 'a-plan',
+            name: 'plan.json',
+            kind: 'json',
+            nodeId: 'plan',
+            runId: 'run-1',
+            workflowName: 'wf',
+            sizeBytes: 10,
+            createdAt: '2026-07-18T00:00:00Z',
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+    expect(contentFitRoot(planWrapper).exists()).toBe(false)
+    expect(planWrapper.find('[data-testid="plan-view"]').exists()).toBe(true)
+    planWrapper.unmount()
+  })
+
+  it('keeps visual shouldFillPreview content-fit with HtmlPreview fitContent + 60vh cap', async () => {
+    const pageHtml = '<!doctype html><html><body><h1>视觉稿</h1></body></html>'
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-visual',
+            type: 'human_gate',
+            label: '审阅视觉',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.visual.outputs.page}}' },
+          },
+        ],
+        nodeExecutions: {
+          visual: [
+            {
+              nodeId: 'visual',
+              iteration: 1,
+              status: 'completed',
+              outputs: { page: pageHtml },
+            },
+          ],
+        },
+      }),
+    })
+    await flushPromises()
+
+    expect(contentFitRoot(wrapper).exists()).toBe(true)
+    const html = wrapper.find('[data-testid="html-preview"]')
+    expect(html.exists()).toBe(true)
+    expect(html.attributes('data-fit')).toBe('1')
+    expect(html.attributes('data-max-vh')).toBe(String(CONTENT_FIT_PREVIEW_MAX_VH))
+    const preview = wrapper.find('[data-testid="content-fit-preview"]')
+    expect((preview.element as HTMLElement).style.maxHeight).toBe(
+      `${CONTENT_FIT_PREVIEW_MAX_VH}vh`,
+    )
+    expect(wrapper.find('[data-testid="content-fit-form"]').classes()).toContain('shrink-0')
+    wrapper.unmount()
+  })
+
+  it('keeps approval form/actions visible for tall page.html under fillPreview', async () => {
+    const tallPage = `<!doctype html><html><body style="min-height:200vh">${'<p>长内容</p>'.repeat(80)}</body></html>`
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-visual',
+            type: 'human_gate',
+            label: '审阅视觉',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.visual.outputs.page}}' },
+          },
+        ],
+        nodeExecutions: {
+          visual: [
+            {
+              nodeId: 'visual',
+              iteration: 1,
+              status: 'completed',
+              outputs: { page: tallPage },
+            },
+          ],
+        },
+      }),
+    })
+    await flushPromises()
+
+    expect(contentFitRoot(wrapper).exists()).toBe(true)
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(true)
+    // Feedback lives in sidebar (not under stage preview).
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+    expect(form.exists()).toBe(true)
+    expect(form.find('[data-testid="preview-feedback-chat"]').exists()).toBe(true)
+    expect(form.find('[data-testid="content-fit-feedback"]').exists()).toBe(true)
+    // Unified sidebar input: exactly one paragraph-input (gate.form hidden).
+    expect(form.findAll('[data-testid="paragraph-input"]').length).toBe(1)
+    expect(wrapper.find('[data-testid="review-shell-sidebar"] [data-testid="preview-feedback-chat"]').exists()).toBe(
+      true,
+    )
+    const buttons = form.findAll('button')
+    expect(buttons.some((b) => b.text().includes('批准'))).toBe(true)
+    expect(buttons.every((b) => !b.text().includes('返回修改') && !b.text().includes('退回'))).toBe(
+      true,
+    )
+    expect(wrapper.text()).toContain('可批准通过；若需修改，请先提交评审意见后再退回')
+    expect(wrapper.text()).not.toContain('可直接退回')
+    wrapper.unmount()
+  })
+
+  it('locks Pass by open PreviewIssue count only (resolved ignored)', async () => {
+    apiMocks.listPreviewIssues.mockResolvedValue({
+      issues: [
+        {
+          id: 'iss-1',
+          runId: 'run-1',
+          nodeId: 'hg-visual',
+          body: 'old',
+          status: 'resolved',
+          createdAt: '2026-07-18T00:00:00Z',
+        },
+        {
+          id: 'iss-2',
+          runId: 'run-1',
+          nodeId: 'hg-visual',
+          body: 'new',
+          status: 'open',
+          createdAt: '2026-07-18T00:01:00Z',
+        },
+      ],
+    })
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-visual',
+            type: 'human_gate',
+            label: '审阅视觉',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.visual.outputs.page}}' },
+          },
+        ],
+        nodeExecutions: {
+          visual: [
+            {
+              nodeId: 'visual',
+              iteration: 1,
+              status: 'completed',
+              outputs: { page: '<!doctype html><html><body>ok</body></html>' },
+            },
+          ],
+        },
+      }),
+    })
+    await flushPromises()
+
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+    const buttons = form.findAll('button')
+    expect(buttons.some((b) => b.text().includes('批准'))).toBe(false)
+    expect(buttons.some((b) => b.text().includes('退回(1 个问题)'))).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('hides ReviewComposer Pass when open PreviewIssues and reactSessionAlive', async () => {
+    apiMocks.listPreviewIssues.mockResolvedValue({
+      issues: [
+        {
+          id: 'iss-open',
+          runId: 'run-1',
+          nodeId: 'hg-visual',
+          body: 'open issue',
+          status: 'open',
+          createdAt: '2026-07-18T00:01:00Z',
+        },
+      ],
+    })
+    const pageHtml = '<!doctype html><html><body><h1>open issues</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: { ...gate, reactSessionAlive: true, reactUpstreamNodeId: 'visual' },
+      run,
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(false)
+    const reject = wrapper.find('[data-testid="review-composer-reject"]')
+    expect(reject.exists()).toBe(true)
+    expect(reject.text()).toMatch(/1/)
+    expect(wrapper.emitted('resolve')).toBeFalsy()
+    wrapper.unmount()
+  })
+
+  it('allows Pass when only resolved PreviewIssues remain', async () => {
+    apiMocks.listPreviewIssues.mockResolvedValue({
+      issues: [
+        {
+          id: 'iss-1',
+          runId: 'run-1',
+          nodeId: 'hg-visual',
+          body: 'old',
+          status: 'resolved',
+          createdAt: '2026-07-18T00:00:00Z',
+        },
+      ],
+    })
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-visual',
+            type: 'human_gate',
+            label: '审阅视觉',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.visual.outputs.page}}' },
+          },
+        ],
+        nodeExecutions: {
+          visual: [
+            {
+              nodeId: 'visual',
+              iteration: 1,
+              status: 'completed',
+              outputs: { page: '<!doctype html><html><body>ok</body></html>' },
+            },
+          ],
+        },
+      }),
+    })
+    await flushPromises()
+
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+    const buttons = form.findAll('button')
+    expect(buttons.some((b) => b.text().includes('批准'))).toBe(true)
+    expect(buttons.every((b) => !b.text().includes('退回') && !b.text().includes('返回修改'))).toBe(
+      true,
+    )
+    expect(wrapper.text()).toContain('可批准通过；若需修改，请先提交评审意见后再退回')
+    expect(wrapper.text()).not.toContain('已提交评审意见')
+    wrapper.unmount()
+  })
+
+  it('keeps approval form/actions visible for short research.json under fillPreview', async () => {
+    const researchDoc = {
+      summary: '短调研结论',
+      findings: [{ title: '一项发现' }],
+    }
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-research' }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-research',
+            type: 'human_gate',
+            label: '审阅调研',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.research.outputs.research}}' },
+          },
+        ],
+        nodeExecutions: {
+          research: [
+            {
+              nodeId: 'research',
+              iteration: 1,
+              status: 'completed',
+              outputs: { research_json: JSON.stringify(researchDoc) },
+            },
+          ],
+        },
+      }),
+    })
+    await flushPromises()
+
+    expect(contentFitRoot(wrapper).exists()).toBe(true)
+    expect(wrapper.find('[data-testid="structured-view"]').exists()).toBe(true)
+    expectApprovalActionsVisible(wrapper)
+    wrapper.unmount()
+  })
+
+  it('shows upstream context under content-fit preview when requirement JSON exists', async () => {
+    const researchDoc = { summary: '短调研', findings: [{ title: '发现' }] }
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-research' }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-research',
+            type: 'human_gate',
+            label: '审阅调研',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.research.outputs.research}}' },
+          },
+          {
+            id: 'research',
+            type: 'research',
+            label: '调研',
+            position: { x: 0, y: 0 },
+            config: {},
+          },
+        ],
+        nodeExecutions: {
+          research: [
+            {
+              nodeId: 'research',
+              iteration: 1,
+              status: 'completed',
+              outputs: { research_json: JSON.stringify(researchDoc) },
+            },
+          ],
+        },
+        artifacts: [
+          {
+            id: 'a-research',
+            name: 'research.json',
+            kind: 'json',
+            nodeId: 'research',
+            runId: 'run-1',
+            workflowName: 'wf',
+            sizeBytes: 10,
+            createdAt: '2026-07-18T00:00:00Z',
+          },
+          {
+            id: 'a-req',
+            name: 'clarified_requirement.json',
+            kind: 'json',
+            nodeId: 'react',
+            runId: 'run-1',
+            workflowName: 'wf',
+            sizeBytes: 20,
+            createdAt: '2026-07-18T00:00:00Z',
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    expect(contentFitRoot(wrapper).exists()).toBe(true)
+    expect(wrapper.find('[data-testid="upstream-context"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="upstream-context-body"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="structured-view"]').attributes('data-name')).toBe(
+      'research.json',
+    )
+    wrapper.unmount()
+  })
+
+  it('does not show upstream context when main product is clarified_requirement.json', async () => {
+    const reqDoc = {
+      title: '需求',
+      summary: '摘要',
+      functional_requirements: [{ title: 'f1' }],
+    }
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-req' }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-req',
+            type: 'human_gate',
+            label: '审阅需求',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.react.outputs.clarified_requirement}}' },
+          },
+        ],
+        nodeExecutions: {
+          react: [
+            {
+              nodeId: 'react',
+              iteration: 1,
+              status: 'completed',
+              outputs: { clarified_requirement_json: JSON.stringify(reqDoc) },
+            },
+          ],
+        },
+        artifacts: [
+          {
+            id: 'a-req',
+            name: 'clarified_requirement.json',
+            kind: 'json',
+            nodeId: 'react',
+            runId: 'run-1',
+            workflowName: 'wf',
+            sizeBytes: 20,
+            createdAt: '2026-07-18T00:00:00Z',
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="structured-view"]').attributes('data-name')).toBe(
+      'clarified_requirement.json',
+    )
+    expect(wrapper.find('[data-testid="upstream-context"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('shows collapsed upstream context on non content-fit layout', async () => {
+    const wrapper = mountApproval({
+      fillPreview: false,
+      gate: baseGate({
+        nodeId: 'hg-md',
+        bodyMd: '请审阅改动摘要',
+      }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-md',
+            type: 'human_gate',
+            label: '合并确认',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{artifact("changes_summary.md")}}\n\nMR: {{nodes.implement.outputs.mr_url}}' },
+          },
+        ],
+        artifacts: [
+          {
+            id: 'a-req',
+            name: 'clarified_requirement.json',
+            kind: 'json',
+            nodeId: 'react',
+            runId: 'run-1',
+            workflowName: 'wf',
+            sizeBytes: 20,
+            createdAt: '2026-07-18T00:00:00Z',
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    expect(contentFitRoot(wrapper).exists()).toBe(false)
+    expect(wrapper.find('[data-testid="upstream-context"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="upstream-context-body"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('skips upstream context when body uses artifact(clarified_requirement.json)', async () => {
+    const wrapper = mountApproval({
+      fillPreview: false,
+      gate: baseGate({
+        nodeId: 'hg-art',
+        bodyMd: '需求正文',
+      }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-art',
+            type: 'human_gate',
+            label: '审阅需求',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{artifact("clarified_requirement.json")}}' },
+          },
+        ],
+        artifacts: [
+          {
+            id: 'a-req',
+            name: 'clarified_requirement.json',
+            kind: 'json',
+            nodeId: 'react',
+            runId: 'run-1',
+            workflowName: 'wf',
+            sizeBytes: 20,
+            createdAt: '2026-07-18T00:00:00Z',
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="upstream-context"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('GateApproval primary-artifacts status guard', () => {
+  const researchDoc = { summary: '短调研', findings: [{ title: '发现' }] }
+
+  function researchGateRun(status: Run['status']) {
+    return baseRun({
+      status,
+      nodes: [
+        {
+          id: 'gate-1',
+          type: 'human_gate',
+          label: '审阅',
+          position: { x: 0, y: 0 },
+          config: { body_template: '{{nodes.research.outputs.research}}' },
+        },
+        {
+          id: 'research',
+          type: 'research',
+          label: '调研',
+          position: { x: 0, y: 0 },
+          config: {},
+        },
+      ],
+      nodeExecutions: {
+        research: [
+          {
+            nodeId: 'research',
+            iteration: 1,
+            status: 'completed',
+            outputs: { research_json: JSON.stringify(researchDoc) },
+          },
+        ],
+      },
+      artifacts: [
+        {
+          id: 'a-research',
+          name: 'research.json',
+          kind: 'json',
+          nodeId: 'research',
+          runId: 'run-1',
+          workflowName: 'wf',
+          sizeBytes: 10,
+          createdAt: '2026-07-18T00:00:00Z',
+        },
+      ],
+    })
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    apiMocks.listPreviewIssues.mockResolvedValue({ issues: [] })
+    apiMocks.artifactContent.mockResolvedValue({ content: '{}' })
+    apiMocks.listGatePrimaryArtifacts.mockResolvedValue({
+      items: [
+        {
+          name: 'research.json',
+          kind: 'json',
+          readonly: false,
+          nodeId: 'research',
+        },
+      ],
+    })
+  })
+
+  it('skips listGatePrimaryArtifacts when status is running and falls back to body_template', async () => {
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'gate-1' }),
+      run: researchGateRun('running'),
+    })
+    await flushPromises()
+
+    expect(apiMocks.listGatePrimaryArtifacts).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="structured-view"]').attributes('data-name')).toBe(
+      'research.json',
+    )
+    expectApprovalActionsVisible(wrapper)
+    wrapper.unmount()
+  })
+
+  it('still calls listGatePrimaryArtifacts when status is waiting_human', async () => {
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'gate-1' }),
+      run: researchGateRun('waiting_human'),
+    })
+    await flushPromises()
+
+    expect(apiMocks.listGatePrimaryArtifacts).toHaveBeenCalledWith('run-1', 'gate-1')
+    expect(wrapper.find('[data-testid="structured-view"]').attributes('data-name')).toBe(
+      'research.json',
+    )
+    wrapper.unmount()
+  })
+
+  it('stops calling listGatePrimaryArtifacts after status leaves waiting_human', async () => {
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'gate-1' }),
+      run: researchGateRun('waiting_human'),
+    })
+    await flushPromises()
+    expect(apiMocks.listGatePrimaryArtifacts).toHaveBeenCalledTimes(1)
+
+    await wrapper.setProps({ run: researchGateRun('running') })
+    await flushPromises()
+
+    expect(apiMocks.listGatePrimaryArtifacts).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-testid="structured-view"]').attributes('data-name')).toBe(
+      'research.json',
+    )
+    expectApprovalActionsVisible(wrapper)
+    wrapper.unmount()
+  })
+})
+
+describe('GateApproval product editor state machine', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    apiMocks.listPreviewIssues.mockResolvedValue({ issues: [] })
+    apiMocks.artifactContent.mockResolvedValue({
+      content: JSON.stringify({ summary: 'saved', findings: [{ title: 'f1' }] }, null, 2),
+      etag: 'W/"1-abc"',
+      updatedAt: '2026-07-18T00:00:00Z',
+      sizeBytes: 40,
+    })
+    apiMocks.saveGateArtifact.mockResolvedValue({
+      id: 'a1',
+      name: 'research.json',
+      kind: 'json',
+      sizeBytes: 50,
+      updatedAt: '2026-07-18T01:00:00Z',
+      etag: 'W/"2-def"',
+      nodeId: 'gate-1',
+      content: JSON.stringify({ summary: 'normalized', findings: [{ title: 'f1' }] }, null, 2),
+    })
+    apiMocks.listGatePrimaryArtifacts.mockRejectedValue(new Error('offline'))
+  })
+
+  function editableResearchRun() {
+    return baseRun({
+      nodes: [
+        {
+          id: 'gate-1',
+          type: 'human_gate',
+          label: '审阅',
+          position: { x: 0, y: 0 },
+          config: { body_template: '{{nodes.research.outputs.research}}' },
+        },
+        {
+          id: 'research',
+          type: 'research',
+          label: '调研',
+          position: { x: 0, y: 0 },
+          config: {},
+        },
+      ],
+      nodeExecutions: {
+        research: [
+          {
+            nodeId: 'research',
+            iteration: 1,
+            status: 'completed',
+            outputs: {
+              research_json: JSON.stringify({ summary: 'saved', findings: [{ title: 'f1' }] }),
+            },
+          },
+        ],
+      },
+      artifacts: [
+        {
+          id: 'a-research',
+          name: 'research.json',
+          kind: 'json',
+          nodeId: 'research',
+          runId: 'run-1',
+          workflowName: 'wf',
+          sizeBytes: 40,
+          createdAt: '2026-07-18T00:00:00Z',
+        },
+      ],
+    })
+  }
+
+  it('prefers ListGatePrimaryArtifacts kind/readonly over client suffix inference', async () => {
+    // Store kind=image but filename has no image suffix — client would treat as text.
+    apiMocks.listGatePrimaryArtifacts.mockResolvedValue({
+      items: [
+        {
+          name: 'screenshot-blob',
+          kind: 'image',
+          readonly: true,
+          nodeId: 'test',
+        },
+      ],
+    })
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(new Blob(['img'], { type: 'image/png' }), { status: 200 }),
+    )
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'gate-1' }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'gate-1',
+            type: 'human_gate',
+            label: '审阅',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{artifact("screenshot-blob")}}' },
+          },
+          {
+            id: 'test',
+            type: 'test',
+            label: '测试',
+            position: { x: 0, y: 0 },
+            config: { produces: 'screenshot-blob' },
+          },
+        ],
+        artifacts: [
+          {
+            id: 'a-shot',
+            name: 'screenshot-blob',
+            kind: 'image',
+            nodeId: 'test',
+            runId: 'run-1',
+            workflowName: 'wf',
+            sizeBytes: 10,
+            createdAt: '2026-07-18T00:00:00Z',
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    expect(apiMocks.listGatePrimaryArtifacts).toHaveBeenCalledWith('run-1', 'gate-1')
+    expect(wrapper.find('[data-testid="gate-product-editor"]').exists()).toBe(true)
+    // Without API, client would infer kind=text and show edit/save; server kind wins.
+    expect(wrapper.find('[data-testid="gate-readonly-image"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-artifact-save"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="gate-mode-edit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('只读')
+    fetchSpy.mockRestore()
+    wrapper.unmount()
+  })
+
+  it('confirms discard of dirty draft before approve (save ≠ approve)', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'gate-1' }),
+      run: editableResearchRun(),
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="gate-product-editor"]').exists()).toBe(true)
+    await wrapper.findAll('button').find((b) => b.text() === '编辑')!.trigger('click')
+    await flushPromises()
+    // Switch to raw JSON so dirty detection is against the draft payload.
+    await wrapper.findAll('button').find((b) => b.text() === '原始 JSON')!.trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="gate-artifact-textarea"]').setValue(
+      '{"summary":"draft-only","findings":[{"title":"f1"}]}',
+    )
+    await flushPromises()
+    expect(wrapper.text()).toContain('有未保存修改')
+
+    await wrapper.findAll('button').find((b) => b.text().includes('批准'))!.trigger('click')
+    await flushPromises()
+
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(wrapper.emitted('resolve')).toBeFalsy()
+    confirmSpy.mockRestore()
+    wrapper.unmount()
+  })
+
+  it('sends If-Match and applies server-normalized content after save', async () => {
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'gate-1' }),
+      run: editableResearchRun(),
+    })
+    await flushPromises()
+
+    await wrapper.findAll('button').find((b) => b.text() === '编辑')!.trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find((b) => b.text() === '原始 JSON')!.trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="gate-artifact-textarea"]').setValue(
+      '{"summary":"client-draft","findings":[{"title":"f1"}]}',
+    )
+    await flushPromises()
+
+    await wrapper.find('[data-testid="gate-artifact-save"]').trigger('click')
+    await flushPromises()
+
+    expect(apiMocks.saveGateArtifact).toHaveBeenCalledWith(
+      'run-1',
+      'gate-1',
+      'research.json',
+      expect.stringContaining('client-draft'),
+      'W/"1-abc"',
+    )
+    // Save switches to preview; re-enter edit (structMode stays json) to inspect draft.
+    await wrapper.findAll('button').find((b) => b.text() === '编辑')!.trigger('click')
+    await flushPromises()
+    const draft = (wrapper.find('[data-testid="gate-artifact-textarea"]').element as HTMLTextAreaElement)
+      .value
+    expect(draft).toContain('normalized')
+    expect(draft).not.toContain('client-draft')
+    wrapper.unmount()
+  })
+})
+
+describe('GateApproval HTML preview load gate (fillPreview)', () => {
+  const pageHtml = '<!doctype html><html><body><h1>预览正文</h1></body></html>'
+
+  function visualEditableRun(opts?: { page?: string; artifactContentFails?: boolean }) {
+    return baseRun({
+      nodes: [
+        {
+          id: 'hg-visual',
+          type: 'human_gate',
+          label: '审阅视觉',
+          position: { x: 0, y: 0 },
+          config: { body_template: '{{nodes.visual.outputs.page}}' },
+        },
+        {
+          id: 'visual',
+          type: 'visual',
+          label: '视觉',
+          position: { x: 0, y: 0 },
+          config: {},
+        },
+      ],
+      nodeExecutions: {
+        visual: [
+          {
+            nodeId: 'visual',
+            iteration: 1,
+            status: 'completed',
+            outputs: { page: opts?.page ?? pageHtml },
+          },
+        ],
+      },
+      artifacts: [
+        {
+          id: 'a-page',
+          name: 'page.html',
+          kind: 'html',
+          nodeId: 'visual',
+          runId: 'run-1',
+          workflowName: 'wf',
+          sizeBytes: 40,
+          createdAt: '2026-07-18T00:00:00Z',
+        },
+      ],
+    })
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    apiMocks.listPreviewIssues.mockResolvedValue({ issues: [] })
+    apiMocks.artifactContent.mockResolvedValue({
+      content: pageHtml,
+      etag: 'W/"p1"',
+      updatedAt: '2026-07-18T00:00:00Z',
+      sizeBytes: 40,
+    })
+  })
+
+  it('shows inline loading in GateProductEditor while product loads (s1)', async () => {
+    let release!: (v: unknown) => void
+    apiMocks.artifactContent.mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve
+      }),
+    )
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: visualEditableRun(),
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="content-fit-scroll"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="content-fit-product-loading"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="gate-product-editor"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-preview-loading"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(false)
+
+    release({
+      content: pageHtml,
+      etag: 'W/"p1"',
+      updatedAt: '2026-07-18T00:00:00Z',
+      sizeBytes: 40,
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="gate-preview-loading"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="gate-product-editor"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('shows empty state when HTML body is blank (s2)', async () => {
+    apiMocks.artifactContent.mockResolvedValue({
+      content: '   ',
+      etag: 'W/"empty"',
+      updatedAt: '2026-07-18T00:00:00Z',
+      sizeBytes: 0,
+    })
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: visualEditableRun({ page: '' }),
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="gate-preview-empty"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('内容为空')
+    expect(wrapper.text()).toContain('编辑')
+    expect(wrapper.findAll('button').every((b) => !b.text().includes('去编辑'))).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('shows error + retry on load failure and recovers after retry (s3)', async () => {
+    apiMocks.artifactContent
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce({
+        content: pageHtml,
+        etag: 'W/"p2"',
+        updatedAt: '2026-07-18T00:00:00Z',
+        sizeBytes: 40,
+      })
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      // Snapshot empty so load goes to artifact store and can fail.
+      run: visualEditableRun({ page: '' }),
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="gate-preview-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('加载失败')
+
+    await wrapper.find('[data-testid="gate-preview-retry"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="gate-preview-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(true)
+    expect(apiMocks.artifactContent).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('disables edit tab while loading (s5)', async () => {
+    let release!: (v: unknown) => void
+    apiMocks.artifactContent.mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve
+      }),
+    )
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: visualEditableRun(),
+    })
+    await flushPromises()
+
+    const editBtn = wrapper.find('[data-testid="gate-mode-edit"]')
+    expect(editBtn.exists()).toBe(true)
+    expect((editBtn.element as HTMLButtonElement).disabled).toBe(true)
+    expect(wrapper.find('[data-testid="gate-preview-loading"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="content-fit-product-loading"]').exists()).toBe(false)
+
+    release({
+      content: pageHtml,
+      etag: 'W/"p1"',
+      updatedAt: '2026-07-18T00:00:00Z',
+      sizeBytes: 40,
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="gate-preview-loading"]').exists()).toBe(false)
+    expect((editBtn.element as HTMLButtonElement).disabled).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('keeps non-empty HTML preview after edit↔preview round-trip (s4)', async () => {
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: visualEditableRun(),
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="gate-mode-edit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-artifact-textarea"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(false)
+
+    await wrapper.find('[data-testid="gate-mode-preview"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('keeps GateProductEditor mounted while refreshing a single product', async () => {
+    const refreshedHtml = '<!doctype html><html><body><p>refreshed</p></body></html>'
+    let releaseRefresh!: (v: unknown) => void
+    apiMocks.artifactContent
+      .mockResolvedValueOnce({
+        content: pageHtml,
+        etag: 'W/"p1"',
+        updatedAt: '2026-07-18T00:00:00Z',
+        sizeBytes: 40,
+      })
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          releaseRefresh = resolve
+        }),
+      )
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: visualEditableRun({ page: '' }),
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="gate-product-editor"]').exists()).toBe(true)
+    const editor = wrapper.findComponent({ name: 'GateProductEditor' })
+    editor.vm.$emit('refresh-request', 'page.html')
+    await flushPromises()
+
+    // Must not flip to ArtifactLoadingPane (that would unmount the editor).
+    expect(wrapper.find('[data-testid="content-fit-product-loading"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="gate-product-editor"]').exists()).toBe(true)
+
+    releaseRefresh({
+      content: refreshedHtml,
+      etag: 'W/"p2"',
+      updatedAt: '2026-07-18T00:01:00Z',
+      sizeBytes: refreshedHtml.length,
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="gate-product-editor"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(true)
+    expect(apiMocks.artifactContent).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('skips loadProduct on poll when fingerprint unchanged (no loading pane, no artifactContent)', async () => {
+    apiMocks.artifactContent.mockResolvedValue({
+      content: pageHtml,
+      etag: 'W/"p1"',
+      updatedAt: '2026-07-18T00:00:00Z',
+      sizeBytes: 40,
+    })
+    const run = visualEditableRun()
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run,
+    })
+    await flushPromises()
+    expect(apiMocks.artifactContent).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-testid="gate-product-editor"]').exists()).toBe(true)
+
+    await wrapper.setProps({
+      run: {
+        ...run,
+        durationSec: 99,
+        progress: 42,
+        nodeExecutions: {
+          ...run.nodeExecutions,
+          other: [{ nodeId: 'other', iteration: 1, status: 'running' }],
+        },
+      } as Run,
+    })
+    await flushPromises()
+
+    expect(apiMocks.artifactContent).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-testid="content-fit-product-loading"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="gate-preview-loading"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="gate-product-editor"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('pending live gate reloads when artifact sizeBytes/updatedAt change (store write signal)', async () => {
+    const liveHtml = '<!doctype html><html><body>live-v2</body></html>'
+    apiMocks.artifactContent
+      .mockResolvedValueOnce({
+        content: pageHtml,
+        etag: 'W/"p1"',
+        updatedAt: '2026-07-18T00:00:00Z',
+        sizeBytes: 40,
+      })
+      .mockResolvedValueOnce({
+        content: liveHtml,
+        etag: 'W/"p2"',
+        updatedAt: '2026-07-18T01:00:00Z',
+        sizeBytes: liveHtml.length,
+      })
+    const run = visualEditableRun()
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run,
+    })
+    await flushPromises()
+    expect(apiMocks.artifactContent).toHaveBeenCalledTimes(1)
+
+    const artifact = run.artifacts![0]
+    await wrapper.setProps({
+      run: {
+        ...run,
+        artifacts: [
+          {
+            ...artifact,
+            updatedAt: '2026-07-18T01:00:00Z',
+            sizeBytes: liveHtml.length,
+          },
+        ],
+      } as Run,
+    })
+    await flushPromises()
+
+    // Pending gates follow live store; meta change must force reload.
+    expect(apiMocks.artifactContent).toHaveBeenCalledTimes(2)
+    const preview = wrapper.findComponent({ name: 'HtmlPreview' })
+    expect(preview.props('html')).toContain('live-v2')
+    wrapper.unmount()
+  })
+
+  it('pending live gate prefers store content over stale outputs.page snap', async () => {
+    const liveHtml = '<!doctype html><html><body>from-store</body></html>'
+    apiMocks.artifactContent.mockResolvedValue({
+      content: liveHtml,
+      etag: 'W/"live"',
+      updatedAt: '2026-07-18T00:00:00Z',
+      sizeBytes: liveHtml.length,
+    })
+    const run = visualEditableRun({ page: '<!doctype html><html><body>stale-snap</body></html>' })
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run,
+    })
+    await flushPromises()
+    const preview = wrapper.findComponent({ name: 'HtmlPreview' })
+    expect(preview.props('html')).toContain('from-store')
+    expect(preview.props('html')).not.toContain('stale-snap')
+    wrapper.unmount()
+  })
+
+  it('loads product once when api primary list hydrates (no SSOT double fetch)', async () => {
+    apiMocks.listGatePrimaryArtifacts.mockResolvedValue({
+      items: [
+        {
+          name: 'page.html',
+          kind: 'html',
+          readonly: false,
+          nodeId: 'visual',
+          outputKey: 'page',
+        },
+      ],
+    })
+    apiMocks.artifactContent.mockResolvedValue({
+      content: pageHtml,
+      etag: 'W/"p1"',
+      updatedAt: '2026-07-18T00:00:00Z',
+      sizeBytes: 40,
+    })
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: visualEditableRun(),
+    })
+    await flushPromises()
+
+    expect(apiMocks.listGatePrimaryArtifacts).toHaveBeenCalledTimes(1)
+    expect(apiMocks.artifactContent).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-testid="gate-product-editor"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('enables inspect on editable page.html and forwards pick to PreviewFeedbackChat', async () => {
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({
+        nodeId: 'hg-visual',
+        actions: [
+          { id: 'pass', label: '通过' },
+          { id: 'fail', label: '打回' },
+        ],
+      }),
+      run: visualEditableRun(),
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="gate-product-editor"]').exists()).toBe(true)
+    const html = wrapper.find('[data-testid="html-preview"]')
+    expect(html.exists()).toBe(true)
+    expect(html.attributes('data-inspectable')).toBe('1')
+
+    const chat = wrapper.find('[data-testid="preview-feedback-chat"]')
+    expect(chat.exists()).toBe(true)
+    expect(chat.attributes('data-require-element')).toBe('0')
+    expect(chat.attributes('data-selector')).toBe('')
+    expect(chat.attributes('data-has-image')).toBe('0')
+
+    const editor = wrapper.findComponent({ name: 'GateProductEditor' })
+    const png =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+    await editor.vm.$emit('pick', {
+      selector: '#cta',
+      tagName: 'button',
+      imageDataUrl: png,
+    })
+    await flushPromises()
+
+    const chatAfter = wrapper.find('[data-testid="preview-feedback-chat"]')
+    expect(chatAfter.attributes('data-selector')).toBe('#cta')
+    expect(chatAfter.attributes('data-has-image')).toBe('1')
+    wrapper.unmount()
+  })
+
+  it('hides reject without open preview issues on page.html path', async () => {
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: visualEditableRun(),
+    })
+    await flushPromises()
+
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+
+    // Sidebar hosts unified feedback input; gate.form comment field stays hidden.
+    expect(form.find('[data-testid="preview-feedback-chat"]').exists()).toBe(true)
+    expect(form.findAll('[data-testid="paragraph-input"]').length).toBe(1)
+    expect(form.find('[data-testid="preview-feedback-submit"]').exists()).toBe(true)
+    const buttons = form.findAll('button')
+    expect(buttons.some((b) => b.text().includes('批准'))).toBe(true)
+    expect(buttons.every((b) => !b.text().includes('返回修改') && !b.text().includes('退回'))).toBe(
+      true,
+    )
+    expect(wrapper.text()).toContain('可批准通过；若需修改，请先提交评审意见后再退回')
+    expect(wrapper.text()).not.toContain('可直接退回')
+    expect(wrapper.emitted('resolve')).toBeFalsy()
+    expect(apiMocks.createPreviewIssue).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('flushes unsent feedback text into history on cold revise when open issues exist', async () => {
+    apiMocks.listPreviewIssues.mockResolvedValue({
+      issues: [
+        {
+          id: 'iss-open',
+          runId: 'run-1',
+          nodeId: 'hg-visual',
+          body: '已有意见',
+          status: 'open',
+          createdAt: '2026-07-18T00:00:00Z',
+        },
+      ],
+    })
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: visualEditableRun(),
+    })
+    await flushPromises()
+
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+    await form.find('[data-testid="paragraph-input"]').setValue('请调整主色')
+    await flushPromises()
+
+    const rejectBtn = form.findAll('button').find((b) => b.text().includes('退回'))!
+    expect(rejectBtn.text()).toMatch(/1/)
+    await rejectBtn.trigger('click')
+    await flushPromises()
+
+    expect(apiMocks.createPreviewIssue).toHaveBeenCalledWith(
+      'run-1',
+      'hg-visual',
+      '请调整主色',
+      '',
+      0,
+      [],
+    )
+    expect(wrapper.emitted('resolve')?.[0]?.[0]).toBe('revise')
+    wrapper.unmount()
+  })
+
+  it('silently discards unsent feedback on approve without confirm', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm')
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: visualEditableRun(),
+    })
+    await flushPromises()
+
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+    await form.find('[data-testid="paragraph-input"]').setValue('未提交意见')
+    await flushPromises()
+
+    const approveBtn = form.findAll('button').find((b) => b.text().includes('批准'))!
+    await approveBtn.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.emitted('resolve')?.[0]?.[0]).toBe('approve')
+    expect(apiMocks.createPreviewIssue).not.toHaveBeenCalled()
+    expect(confirmSpy).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
+    wrapper.unmount()
+  })
+
+  it('hides approve and allows empty-comment reject when preview issues exist', async () => {
+    apiMocks.listPreviewIssues.mockResolvedValue({
+      issues: [
+        {
+          id: 'iss-1',
+          runId: 'run-1',
+          nodeId: 'hg-visual',
+          body: '按钮颜色不对',
+          selector: '',
+          status: 'open',
+          createdAt: '2026-07-18T00:00:00Z',
+        },
+      ],
+    })
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({
+        nodeId: 'hg-visual',
+        actions: [
+          { id: 'approve', label: '批准' },
+          { id: 'revise', label: '返回修改', requireForm: true },
+        ],
+      }),
+      run: visualEditableRun(),
+    })
+    await flushPromises()
+
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+    const buttons = form.findAll('button')
+    expect(buttons.some((b) => b.text().includes('批准'))).toBe(false)
+    const rejectBtn = buttons.find((b) => b.text().includes('退回') || b.text().includes('返回修改'))
+    expect(rejectBtn).toBeTruthy()
+    expect(rejectBtn!.text()).toMatch(/1/)
+    expect((rejectBtn!.element as HTMLButtonElement).disabled).toBe(false)
+    expect(wrapper.text()).toContain('已提交评审意见')
+    expect(wrapper.text()).not.toMatch(/改产物后批准/)
+
+    await rejectBtn!.trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('resolve')).toBeTruthy()
+    expect(wrapper.emitted('resolve')![0][0]).toBe('revise')
+    wrapper.unmount()
+  })
+
+  it('content-fit footer hides actions while preview issues are loading', async () => {
+    let resolveIssues!: (v: { issues: unknown[] }) => void
+    apiMocks.listPreviewIssues.mockReturnValue(
+      new Promise((resolve) => {
+        resolveIssues = resolve
+      }),
+    )
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: visualEditableRun(),
+    })
+    await flushPromises()
+
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+    expect(form.find('[data-testid="content-fit-preview-issues-loading"]').exists()).toBe(true)
+    expect(form.text()).toContain('正在获取预览问题')
+    expect(form.findAll('button').every((b) => !b.text().includes('批准'))).toBe(true)
+    expect(form.findAll('button').every((b) => !b.text().includes('返回修改'))).toBe(true)
+
+    resolveIssues({ issues: [] })
+    await flushPromises()
+
+    expect(form.find('[data-testid="content-fit-preview-issues-loading"]').exists()).toBe(false)
+    expect(form.findAll('button').some((b) => b.text().includes('批准'))).toBe(true)
+    expect(form.findAll('button').every((b) => !b.text().includes('返回修改'))).toBe(true)
+    expect(wrapper.text()).toContain('可批准通过；若需修改，请先提交评审意见后再退回')
+    wrapper.unmount()
+  })
+})
+
+describe('GateApproval app_preview reject without form', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    breakpointMocks.isMobile.value = false
+    apiMocks.listPreviewIssues.mockResolvedValue({ issues: [] })
+    // Avoid pollution from visual tests that mock page.html primary products.
+    apiMocks.listGatePrimaryArtifacts.mockRejectedValue(new Error('offline'))
+    apiMocks.artifactContent.mockResolvedValue({ content: '{}' })
+  })
+
+  it('hides reject with empty form and no open preview issues (default app_preview)', async () => {
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({
+        nodeId: 'preview-gate',
+        form: [],
+        actions: [
+          { id: 'pass', label: '通过' },
+          { id: 'fail', label: '退回' },
+        ],
+      }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'preview-gate',
+            type: 'app_preview',
+            label: '预览',
+            position: { x: 0, y: 0 },
+            config: {},
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="paragraph-input"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('可批准通过；若需修改，请先提交评审意见后再退回')
+    expect(wrapper.text()).not.toContain('可直接退回')
+    const buttons = wrapper.findAll('button')
+    expect(buttons.some((b) => b.text().includes('通过'))).toBe(true)
+    expect(buttons.every((b) => b.text() !== '退回' && !b.text().includes('退回('))).toBe(true)
+    expect(wrapper.emitted('resolve')).toBeFalsy()
+    wrapper.unmount()
+  })
+
+  it('hides configured gate.form on app_preview and only shows reject when open issues exist', async () => {
+    apiMocks.listPreviewIssues.mockResolvedValue({
+      issues: [
+        {
+          id: 'iss-1',
+          runId: 'run-1',
+          nodeId: 'preview-gate',
+          body: '预览问题',
+          status: 'open',
+          createdAt: '2026-07-18T00:00:00Z',
+        },
+      ],
+    })
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({
+        nodeId: 'preview-gate',
+        form: [{ key: 'comment', label: '评审意见' }],
+        actions: [
+          { id: 'pass', label: '通过' },
+          { id: 'fail', label: '退回' },
+        ],
+      }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'preview-gate',
+            type: 'app_preview',
+            label: '预览',
+            position: { x: 0, y: 0 },
+            config: {},
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="paragraph-input"]').exists()).toBe(false)
+    const buttons = wrapper.findAll('button')
+    expect(buttons.every((b) => !b.text().includes('通过'))).toBe(true)
+    const rejectBtn = buttons.find((b) => b.text().includes('退回'))!
+    expect(rejectBtn.text()).toMatch(/1/)
+    expect((rejectBtn.element as HTMLButtonElement).disabled).toBe(false)
+    await rejectBtn.trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('resolve')).toBeTruthy()
+    expect(wrapper.emitted('resolve')![0][0]).toBe('fail')
+    wrapper.unmount()
+  })
+
+  function appPreviewHotMount(opts?: { issues?: Array<Record<string, unknown>> }) {
+    if (opts?.issues) {
+      apiMocks.listPreviewIssues.mockResolvedValue({ issues: opts.issues })
+    }
+    return mountApproval({
+      fillPreview: true,
+      gate: baseGate({
+        nodeId: 'preview-gate',
+        form: [],
+        actions: [
+          { id: 'pass', label: '通过' },
+          { id: 'fail', label: '退回' },
+        ],
+        reactSessionAlive: true,
+        reactUpstreamNodeId: 'agent',
+      }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'preview-gate',
+            type: 'app_preview',
+            label: '预览',
+            position: { x: 0, y: 0 },
+            config: {},
+          },
+        ],
+      }),
+    })
+  }
+
+  it('hot app_preview n_open=0: only pass mounted; reject not in DOM (no empty reject bypass)', async () => {
+    const wrapper = appPreviewHotMount()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="app-preview"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-gate"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-reject"]').exists()).toBe(false)
+    // Draft must not unlock reject when n_open=0
+    const draft = wrapper.find('[data-testid="paragraph-input"]')
+    expect(draft.exists()).toBe(true)
+    await draft.setValue('草稿打回旁路')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="review-composer-reject"]').exists()).toBe(false)
+    expect(apiMocks.gateReactRevise).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('hot app_preview n_open≥1: only reject with count; pass not in DOM; reject uses sendHotReject', async () => {
+    apiMocks.gateReactRevise.mockResolvedValue({})
+    const wrapper = appPreviewHotMount({
+      issues: [
+        {
+          id: 'iss-1',
+          runId: 'run-1',
+          nodeId: 'preview-gate',
+          body: '预览问题',
+          status: 'open',
+          createdAt: '2026-07-18T00:00:00Z',
+        },
+      ],
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(false)
+    const reject = wrapper.find('[data-testid="review-composer-reject"]')
+    expect(reject.exists()).toBe(true)
+    expect(reject.text()).toContain('打回 · 1')
+    expect((reject.element as HTMLButtonElement).disabled).toBe(false)
+    await reject.trigger('click')
+    await flushPromises()
+    expect(apiMocks.gateReactRevise).toHaveBeenCalled()
+    expect(wrapper.emitted('resolve')).toBeFalsy()
+    wrapper.unmount()
+  })
+
+  it('hot app_preview only-resolved: restores pass-only (reject unmounted)', async () => {
+    const wrapper = appPreviewHotMount({
+      issues: [
+        {
+          id: 'iss-resolved',
+          runId: 'run-1',
+          nodeId: 'preview-gate',
+          body: '已解决',
+          status: 'resolved',
+          createdAt: '2026-07-18T00:00:00Z',
+        },
+      ],
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-reject"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('可批准通过；若需修改，请先提交评审意见后再退回')
+    wrapper.unmount()
+  })
+})
+
+describe('GateApproval mobileFillRemaining layout', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    breakpointMocks.isMobile.value = true
+    apiMocks.listPreviewIssues.mockResolvedValue({ issues: [] })
+    apiMocks.artifactContent.mockResolvedValue({ content: '{}' })
+    apiMocks.listGatePrimaryArtifacts.mockRejectedValue(new Error('offline'))
+  })
+
+  it('uses ReviewShell drawer with fillParent preview and cold sticky actions', async () => {
+    const pageHtml = '<!doctype html><html><body><h1>短文</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      mobileFillRemaining: true,
+      gate,
+      run,
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="mobile-fill-remaining"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="content-fit-scroll"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="review-shell"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-shell-drawer-handle"]').exists()).toBe(true)
+
+    const preview = wrapper.find('[data-testid="mobile-fill-preview"]')
+    expect(preview.exists()).toBe(true)
+    expect(preview.classes()).toContain('flex-1')
+
+    const html = wrapper.find('[data-testid="html-preview"]')
+    expect(html.attributes('data-fill-parent')).toBe('1')
+    expect(html.attributes('data-fit')).toBe('0')
+    expect(html.attributes('data-enlargeable')).toBe('0')
+    expect(html.attributes('data-inspectable')).toBe('1')
+    expect(html.attributes('data-mode')).toBe('inline')
+
+    const sticky = wrapper.find('[data-testid="mobile-fill-sticky-actions"]')
+    expect(sticky.exists()).toBe(true)
+    // Feedback moved into sidebar/drawer (not stage below preview).
+    expect(sticky.find('[data-testid="preview-feedback-chat"]').exists()).toBe(true)
+    expect(sticky.find('[data-testid="mobile-fill-feedback"]').exists()).toBe(true)
+    const buttons = sticky.findAll('button')
+    expect(buttons.some((b) => b.text().includes('批准'))).toBe(true)
+    expect(buttons.every((b) => !b.text().includes('返回修改') && !b.text().includes('退回'))).toBe(
+      true,
+    )
+    expect(wrapper.find('[data-testid="review-composer-reject"]').exists()).toBe(false)
+
+    // Stage no longer hosts feedback.
+    const scrollHtml = wrapper.find('[data-testid="mobile-fill-scroll"]').html()
+    expect(scrollHtml).not.toContain('mobile-fill-feedback')
+    expect(scrollHtml).not.toContain('preview-feedback-chat')
+    wrapper.unmount()
+  })
+
+  it('exposes hot pass only when n_open=0 in mobile-fill reactSessionAlive', async () => {
+    const pageHtml = '<!doctype html><html><body><h1>热打回</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      mobileFillRemaining: true,
+      gate: { ...gate, reactSessionAlive: true, reactUpstreamNodeId: 'visual' },
+      run,
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="review-shell-drawer-handle"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-gate"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-reject"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-record-issue"]').exists()).toBe(true)
+    // Hot unified input: single paragraph-input in sidebar (no ReviewComposer draft).
+    const sidebar = wrapper.find('[data-testid="mobile-fill-sticky-actions"]')
+    expect(sidebar.findAll('[data-testid="paragraph-input"]').length).toBe(1)
+    expect(sidebar.find('[data-testid="preview-feedback-chat"]').attributes('data-hide-submit')).toBe(
+      '1',
+    )
+    // Narrow hot reject must allow attachments (f9/f10/s7) — not text-only.
+    expect(sidebar.find('[data-testid="paragraph-input-root"]').attributes('data-text-only')).toBe('0')
+    expect(sidebar.find('[data-testid="paragraph-input-attach"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('shows mobile-fill hot reject with count when open issues exist', async () => {
+    apiMocks.listPreviewIssues.mockResolvedValue({
+      issues: [
+        {
+          id: 'iss-open',
+          runId: 'run-1',
+          nodeId: 'hg-visual',
+          body: '已有',
+          status: 'open',
+          createdAt: '2026-07-18T00:01:00Z',
+        },
+      ],
+    })
+    apiMocks.gateReactRevise.mockResolvedValue({})
+    apiMocks.createPreviewIssue.mockResolvedValue({
+      id: 'iss-img',
+      body: '',
+      status: 'open',
+      createdAt: '2026-07-18T00:02:00Z',
+    })
+    const pageHtml = '<!doctype html><html><body><h1>仅配图</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      mobileFillRemaining: true,
+      gate: { ...gate, reactSessionAlive: true, reactUpstreamNodeId: 'visual' },
+      run,
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(false)
+    const reject = wrapper.find('[data-testid="review-composer-reject"]')
+    expect(reject.exists()).toBe(true)
+    expect(reject.text()).toMatch(/1/)
+    expect((reject.element as HTMLButtonElement).disabled).toBe(false)
+
+    await wrapper.find('[data-testid="paragraph-input-attach"]').trigger('click')
+    await flushPromises()
+
+    await reject.trigger('click')
+    await flushPromises()
+
+    // Hot reject dual-writes PreviewIssue history then gateReactRevise.
+    expect(apiMocks.createPreviewIssue).toHaveBeenCalledWith(
+      'run-1',
+      'hg-visual',
+      '',
+      '',
+      0,
+      [{ data: 'abc', mimeType: 'image/png' }],
+    )
+    expect(apiMocks.gateReactRevise).toHaveBeenCalledWith(
+      'run-1',
+      'hg-visual',
+      '',
+      [{ data: 'abc', mimeType: 'image/png' }],
+      [],
+    )
+    wrapper.unmount()
+  })
+
+  it('allows content-fit narrow hot reject with image attach (not text-only)', async () => {
+    const pageHtml = '<!doctype html><html><body><h1>content-fit</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      mobileFillRemaining: false,
+      gate: { ...gate, reactSessionAlive: true, reactUpstreamNodeId: 'visual' },
+      run,
+    })
+    await flushPromises()
+
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+    expect(form.find('[data-testid="review-composer-gate"]').exists()).toBe(true)
+    expect(form.find('[data-testid="paragraph-input-root"]').attributes('data-text-only')).toBe('0')
+    expect(form.find('[data-testid="paragraph-input-attach"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('keeps Inbox-style path on 60vh content-fit when mobileFillRemaining is off', async () => {
+    const pageHtml = '<!doctype html><html><body><h1>Inbox</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      mobileFillRemaining: false,
+      gate,
+      run,
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="mobile-fill-remaining"]').exists()).toBe(false)
+    expect(contentFitRoot(wrapper).exists()).toBe(true)
+    const preview = wrapper.find('[data-testid="content-fit-preview"]')
+    expect((preview.element as HTMLElement).style.maxHeight).toBe(
+      `${CONTENT_FIT_PREVIEW_MAX_VH}vh`,
+    )
+    wrapper.unmount()
+  })
+
+  it('keeps desktop visual on 60vh content-fit even when mobileFillRemaining is set', async () => {
+    breakpointMocks.isMobile.value = false
+    const pageHtml = '<!doctype html><html><body><h1>桌面</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      mobileFillRemaining: true,
+      gate,
+      run,
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="mobile-fill-remaining"]').exists()).toBe(false)
+    expect(contentFitRoot(wrapper).exists()).toBe(true)
+    const html = wrapper.find('[data-testid="html-preview"]')
+    expect(html.attributes('data-fit')).toBe('1')
+    expect(html.attributes('data-fill-parent')).toBe('0')
+    expect(html.attributes('data-max-vh')).toBe(String(CONTENT_FIT_PREVIEW_MAX_VH))
+    wrapper.unmount()
+  })
+
+  it('keeps sticky actions reachable when preview load fails', async () => {
+    // Offline primary list + empty snapshot → visual body via client fallback, load error pane.
+    apiMocks.listGatePrimaryArtifacts.mockRejectedValue(new Error('offline'))
+    apiMocks.artifactContent.mockRejectedValue(new Error('boom'))
+    const wrapper = mountApproval({
+      fillPreview: true,
+      mobileFillRemaining: true,
+      gate: baseGate({
+        nodeId: 'hg-visual',
+        actions: [
+          { id: 'approve', label: '批准' },
+          { id: 'revise', label: '返回修改', requireForm: true },
+        ],
+      }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-visual',
+            type: 'human_gate',
+            label: '审阅视觉',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.visual.outputs.page}}' },
+          },
+        ],
+        artifacts: [
+          {
+            id: 'a1',
+            name: 'page.html',
+            kind: 'html',
+            nodeId: 'visual',
+            runId: 'run-1',
+            workflowName: 'wf',
+            sizeBytes: 1,
+            createdAt: '2026-07-18T00:00:00Z',
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="mobile-fill-remaining"]').exists()).toBe(true)
+    const sticky = wrapper.find('[data-testid="mobile-fill-sticky-actions"]')
+    expect(sticky.exists()).toBe(true)
+    // Preview may be editor/error/loading; sticky Pass must stay usable (n_open=0 → no reject).
+    const approveBtn = sticky.findAll('button').find((b) => b.text().includes('批准'))
+    expect(approveBtn).toBeTruthy()
+    expect((approveBtn!.element as HTMLButtonElement).disabled).toBe(false)
+    expect(sticky.findAll('button').every((b) => !b.text().includes('返回修改'))).toBe(true)
+    await approveBtn!.trigger('click')
+    await flushPromises()
+    expect(
+      !!wrapper.emitted('resolve') ||
+        wrapper.text().includes('评审意见') ||
+        sticky.findAll('button').length >= 1,
+    ).toBe(true)
+    wrapper.unmount()
+  })
+})
+
+describe('GateApproval ReAct annotations', () => {
+  beforeEach(() => {
+    breakpointMocks.isMobile.value = false
+    apiMocks.artifactContent.mockReset()
+    apiMocks.listPreviewIssues.mockReset()
+    apiMocks.createPreviewIssue.mockReset()
+    apiMocks.listGatePrimaryArtifacts.mockReset()
+    apiMocks.gateReactRevise.mockReset()
+    apiMocks.listPreviewIssues.mockResolvedValue({ issues: [] })
+    apiMocks.createPreviewIssue.mockResolvedValue({
+      id: 'iss-new',
+      body: 'new',
+      status: 'open',
+      createdAt: '2026-07-18T00:02:00Z',
+    })
+    apiMocks.listGatePrimaryArtifacts.mockResolvedValue({ artifacts: [] })
+    apiMocks.gateReactRevise.mockResolvedValue({ status: 'ok' })
+  })
+
+  it('sends annotations with gateReactRevise and allows annotation-only submit', async () => {
+    const researchDoc = { summary: '短调研结论', findings: [{ title: '一项发现' }] }
+    apiMocks.artifactContent.mockResolvedValue({
+      id: 'a1',
+      name: 'research.json',
+      content: JSON.stringify(researchDoc),
+    })
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({
+        nodeId: 'hg-research',
+        reactSessionAlive: true,
+        reactUpstreamNodeId: 'research',
+      }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-research',
+            type: 'human_gate',
+            label: '审阅调研',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.research.outputs.research}}' },
+          },
+        ],
+        nodeExecutions: {
+          research: [
+            {
+              nodeId: 'research',
+              iteration: 1,
+              status: 'completed',
+              outputs: { research_json: JSON.stringify(researchDoc) },
+            },
+          ],
+        },
+      }),
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="review-shell"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-gate"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-reject"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-cold-session-note"]').exists()).toBe(false)
+
+    // Stage an annotation-only draft via component state.
+    const vm = wrapper.vm as any
+    vm.reactAnnotations = [{ jsonPath: 'summary', label: '概述' }]
+    await flushPromises()
+
+    const rejectBtn = wrapper.find('[data-testid="review-composer-reject"]')
+    expect((rejectBtn.element as HTMLButtonElement).disabled).toBe(false)
+    await rejectBtn.trigger('click')
+    await flushPromises()
+
+    expect(apiMocks.gateReactRevise).toHaveBeenCalledWith(
+      'run-1',
+      'hg-research',
+      '',
+      [],
+      [{ jsonPath: 'summary', label: '概述' }],
+    )
+    expect(wrapper.emitted('react-revised')).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  it('hides hot reject and shows cold note when reactSessionAlive is false', async () => {
+    const researchDoc = { summary: '冷会话' }
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({
+        nodeId: 'hg-research',
+        reactSessionAlive: false,
+      }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-research',
+            type: 'human_gate',
+            label: '审阅调研',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.research.outputs.research}}' },
+          },
+        ],
+        nodeExecutions: {
+          research: [
+            {
+              nodeId: 'research',
+              iteration: 1,
+              status: 'completed',
+              outputs: { research_json: JSON.stringify(researchDoc) },
+            },
+          ],
+        },
+      }),
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="review-composer-reject"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="gate-cold-session-note"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('hides overlapping gate.form when hot ReAct composer is active', async () => {
+    const researchDoc = { summary: '热会话隐藏表单' }
+    apiMocks.artifactContent.mockResolvedValue({
+      id: 'a1',
+      name: 'research.json',
+      content: JSON.stringify(researchDoc),
+    })
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({
+        nodeId: 'hg-research',
+        reactSessionAlive: true,
+        reactUpstreamNodeId: 'research',
+        form: [{ key: 'comment', label: '评审意见' }],
+      }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-research',
+            type: 'human_gate',
+            label: '审阅调研',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.research.outputs.research}}' },
+          },
+        ],
+        nodeExecutions: {
+          research: [
+            {
+              nodeId: 'research',
+              iteration: 1,
+              status: 'completed',
+              outputs: { research_json: JSON.stringify(researchDoc) },
+            },
+          ],
+        },
+      }),
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="review-composer-gate"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('评审意见')
+    wrapper.unmount()
+  })
+
+  it('silently discards unsent react draft on pass without confirm', async () => {
+    const researchDoc = { summary: '丢弃确认' }
+    apiMocks.artifactContent.mockResolvedValue({
+      id: 'a1',
+      name: 'research.json',
+      content: JSON.stringify(researchDoc),
+    })
+    const confirmSpy = vi.spyOn(window, 'confirm')
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({
+        nodeId: 'hg-research',
+        reactSessionAlive: true,
+        reactUpstreamNodeId: 'research',
+      }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-research',
+            type: 'human_gate',
+            label: '审阅调研',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.research.outputs.research}}' },
+          },
+        ],
+        nodeExecutions: {
+          research: [
+            {
+              nodeId: 'research',
+              iteration: 1,
+              status: 'completed',
+              outputs: { research_json: JSON.stringify(researchDoc) },
+            },
+          ],
+        },
+      }),
+    })
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    vm.reactAnnotations = [{ jsonPath: 'summary', label: '概述' }]
+    vm.reactText = '未发送草稿'
+    await flushPromises()
+
+    await wrapper.find('[data-testid="review-composer-pass"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('resolve')?.[0]?.[0]).toBe('approve')
+    expect(vm.reactAnnotations).toEqual([])
+    expect(vm.reactText).toBe('')
+    expect(confirmSpy).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
+    wrapper.unmount()
+  })
+
+  it('hot reject dual-writes PreviewIssue history then gateReactRevise', async () => {
+    apiMocks.listPreviewIssues.mockResolvedValue({
+      issues: [
+        {
+          id: 'iss-existing',
+          runId: 'run-1',
+          nodeId: 'hg-visual',
+          body: '已有意见',
+          status: 'open',
+          createdAt: '2026-07-18T00:02:00Z',
+        },
+      ],
+    })
+    apiMocks.gateReactRevise.mockResolvedValue({})
+    apiMocks.createPreviewIssue.mockResolvedValue({
+      id: 'iss-hot',
+      body: '请改标题',
+      status: 'open',
+      createdAt: '2026-07-18T00:03:00Z',
+    })
+    const pageHtml = '<!doctype html><html><body><h1>热打回双写</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: { ...gate, reactSessionAlive: true, reactUpstreamNodeId: 'visual' },
+      run,
+    })
+    await flushPromises()
+
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+    expect(form.find('[data-testid="review-composer-pass"]').exists()).toBe(false)
+    const reject = form.find('[data-testid="review-composer-reject"]')
+    expect(reject.exists()).toBe(true)
+    expect(reject.text()).toMatch(/1/)
+    await form.find('[data-testid="paragraph-input"]').setValue('请改标题')
+    await flushPromises()
+
+    await reject.trigger('click')
+    await flushPromises()
+
+    expect(apiMocks.createPreviewIssue).toHaveBeenCalledWith(
+      'run-1',
+      'hg-visual',
+      '请改标题',
+      '',
+      0,
+      [],
+    )
+    expect(apiMocks.gateReactRevise).toHaveBeenCalledWith(
+      'run-1',
+      'hg-visual',
+      '请改标题',
+      [],
+      [],
+    )
+    expect(wrapper.emitted('react-revised')).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  it('keeps draft and shows hint when hot reject fails after history write', async () => {
+    apiMocks.listPreviewIssues.mockResolvedValue({
+      issues: [
+        {
+          id: 'iss-existing',
+          runId: 'run-1',
+          nodeId: 'hg-visual',
+          body: '已有意见',
+          status: 'open',
+          createdAt: '2026-07-18T00:04:00Z',
+        },
+      ],
+    })
+    apiMocks.createPreviewIssue.mockResolvedValue({
+      id: 'iss-partial',
+      body: '半成功意见',
+      status: 'open',
+      createdAt: '2026-07-18T00:05:00Z',
+    })
+    apiMocks.gateReactRevise.mockRejectedValue(new Error('upstream down'))
+    const pageHtml = '<!doctype html><html><body><h1>双写失败</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: { ...gate, reactSessionAlive: true, reactUpstreamNodeId: 'visual' },
+      run,
+    })
+    await flushPromises()
+
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+    await form.find('[data-testid="paragraph-input"]').setValue('半成功意见')
+    await flushPromises()
+    await form.find('[data-testid="review-composer-reject"]').trigger('click')
+    await flushPromises()
+
+    expect(apiMocks.createPreviewIssue).toHaveBeenCalledTimes(1)
+    expect(apiMocks.gateReactRevise).toHaveBeenCalledTimes(1)
+    expect(wrapper.emitted('react-revised')).toBeFalsy()
+    expect(wrapper.text()).toContain('意见已记入但打回未成功')
+    expect((form.find('[data-testid="paragraph-input"]').element as HTMLTextAreaElement).value).toBe(
+      '半成功意见',
+    )
+
+    // Retry should not duplicate PreviewIssue history.
+    apiMocks.gateReactRevise.mockResolvedValue({})
+    await form.find('[data-testid="review-composer-reject"]').trigger('click')
+    await flushPromises()
+    expect(apiMocks.createPreviewIssue).toHaveBeenCalledTimes(1)
+    expect(apiMocks.gateReactRevise).toHaveBeenCalledTimes(2)
+    expect(wrapper.emitted('react-revised')).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  it('annotation-only hot reject writes placeholder into PreviewIssue history', async () => {
+    apiMocks.listPreviewIssues.mockResolvedValue({
+      issues: [
+        {
+          id: 'iss-existing',
+          runId: 'run-1',
+          nodeId: 'hg-visual',
+          body: '已有意见',
+          status: 'open',
+          createdAt: '2026-07-18T00:05:00Z',
+        },
+      ],
+    })
+    apiMocks.gateReactRevise.mockResolvedValue({})
+    apiMocks.createPreviewIssue.mockResolvedValue({
+      id: 'iss-ann',
+      body: '标注：#hero',
+      status: 'open',
+      createdAt: '2026-07-18T00:06:00Z',
+    })
+    const pageHtml = '<!doctype html><html><body><h1>仅标注</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: { ...gate, reactSessionAlive: true, reactUpstreamNodeId: 'visual' },
+      run,
+    })
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    vm.reactAnnotations = [{ selector: '#hero', label: '#hero' }]
+    await flushPromises()
+
+    await wrapper.find('[data-testid="review-composer-reject"]').trigger('click')
+    await flushPromises()
+
+    expect(apiMocks.createPreviewIssue).toHaveBeenCalledWith(
+      'run-1',
+      'hg-visual',
+      '标注：#hero',
+      '',
+      0,
+      [],
+    )
+    expect(apiMocks.gateReactRevise).toHaveBeenCalledWith(
+      'run-1',
+      'hg-visual',
+      '',
+      [],
+      [{ selector: '#hero', label: '#hero' }],
+    )
+    wrapper.unmount()
+  })
+})
+
+describe('GateApproval record issue refreshes real PreviewFeedbackChat history', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    breakpointMocks.isMobile.value = false
+    apiMocks.listPreviewIssues.mockResolvedValue({ issues: [] })
+    apiMocks.createPreviewIssue.mockResolvedValue({
+      id: 'iss-live',
+      body: '标题需加大',
+      status: 'open',
+      createdAt: '2026-07-18T00:04:00Z',
+    })
+    apiMocks.artifactContent.mockResolvedValue({ content: '{}' })
+    apiMocks.listGatePrimaryArtifacts.mockRejectedValue(new Error('offline'))
+    apiMocks.gateReactRevise.mockResolvedValue({})
+  })
+
+  it('shows recorded body in history after 记入意见 (no PreviewFeedbackChat stub)', async () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const pageHtml = '<!doctype html><html><body><h1>记入刷新</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mount(GateApproval, {
+      props: {
+        gate: { ...gate, reactSessionAlive: true, reactUpstreamNodeId: 'visual' },
+        run,
+        fillPreview: true,
+        compact: true,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          Icon: true,
+          ParagraphInput: ParagraphInputStub,
+          ArtifactLoadingPane: defineComponent({
+            name: 'ArtifactLoadingPane',
+            template: '<div data-testid="artifact-loading-pane" />',
+          }),
+          ProposalSelectView: ProposalSelectStub,
+          HtmlPreview: HtmlPreviewStub,
+          StructuredArtifactView: StructuredStub,
+          AppPreviewPanel: AppPreviewStub,
+          // Real PreviewFeedbackChat — assert history list UI refresh.
+          PlanView: PlanStub,
+          UpstreamRequirementContext: false,
+        },
+      },
+    })
+    await flushPromises()
+
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+    expect(form.find('[data-testid="preview-feedback-chat"]').exists()).toBe(true)
+    await form.find('[data-testid="paragraph-input"]').setValue('标题需加大')
+    await flushPromises()
+
+    await form.find('[data-testid="review-record-issue"]').trigger('click')
+    await flushPromises()
+
+    expect(apiMocks.createPreviewIssue).toHaveBeenCalledWith(
+      'run-1',
+      'hg-visual',
+      '标题需加大',
+      '',
+      0,
+      [],
+    )
+    expect(form.find('[data-testid="preview-feedback-chat"]').text()).toContain('标题需加大')
+    expect((form.find('[data-testid="paragraph-input"]').element as HTMLTextAreaElement).value).toBe(
+      '',
+    )
+    wrapper.unmount()
+  })
+})

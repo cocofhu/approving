@@ -1,0 +1,563 @@
+<script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { api } from '@/lib/api'
+import { PreviewVncChannel } from '@/lib/previewVncChannel'
+import { createPreviewFpsCounter } from '@/lib/previewFps'
+// @ts-expect-error noVNC ships without bundled types
+// Pinned to exact 1.5.0 (see package.json). Official path is HTTP + x11vnc -nopw
+// (None auth) + PreviewVncChannel demux. noVNC's Secure Context Log.Error is
+// stripped at build time by vite-plugins/stripNovncSecureContext (localhost is
+// already secure; non-localhost http:// would otherwise spam / risk breakage).
+import RFB from '@novnc/novnc/lib/rfb.js'
+
+const props = withDefaults(
+  defineProps<{
+    /** Preview mode: run/node/port triple (app_preview). */
+    runId?: string
+    nodeId?: string
+    port?: number
+    /** Console mode: sandbox-scoped WS (mutually exclusive with preview triple). */
+    sandboxId?: number
+    fill?: boolean
+    compact?: boolean
+  }>(),
+  { fill: false, compact: false },
+)
+
+const emit = defineEmits<{
+  (e: 'pick', payload: { selector: string; tagName: string; outerHTML: string }): void
+}>()
+
+const { t } = useI18n()
+const fpsCounter = createPreviewFpsCounter()
+
+const consoleMode = computed(() => props.sandboxId != null && props.sandboxId > 0)
+
+const canvasHost = ref<HTMLDivElement | null>(null)
+const rootEl = ref<HTMLDivElement | null>(null)
+const isFullscreen = ref(false)
+const status = ref<'connecting' | 'live' | 'closed' | 'error'>('connecting')
+const statusMsg = ref('')
+const inspect = ref(false)
+const picked = ref<{ selector: string; tagName: string; outerHTML: string } | null>(null)
+const address = ref('about:blank')
+
+let rfb: InstanceType<typeof RFB> | null = null
+let channel: PreviewVncChannel | null = null
+let disposed = false
+/** Console mode: fail fast instead of spinning until the 90s server timeout. */
+let connectTimer: ReturnType<typeof setTimeout> | null = null
+const CONSOLE_CONNECT_TIMEOUT_MS = 20_000
+
+function clearConnectTimer() {
+  if (connectTimer != null) {
+    clearTimeout(connectTimer)
+    connectTimer = null
+  }
+}
+
+function sendCtrl(obj: unknown) {
+  if (channel && channel.readyState === WebSocket.OPEN) {
+    channel.send(JSON.stringify(obj))
+  }
+}
+
+function fail(m: string) {
+  clearConnectTimer()
+  status.value = 'error'
+  statusMsg.value = m
+}
+
+function teardown() {
+  disposed = true
+  clearConnectTimer()
+  fpsCounter.detach()
+  if (rfb) {
+    try {
+      rfb.disconnect()
+    } catch {
+      /* ignore */
+    }
+    rfb = null
+  }
+  if (channel) {
+    channel.clearAppHandlers()
+    try {
+      channel.close()
+    } catch {
+      /* ignore */
+    }
+    channel = null
+  }
+}
+
+function handleCtrlText(data: string) {
+  let msg: any
+  try {
+    msg = JSON.parse(data)
+  } catch {
+    return
+  }
+  switch (msg.type) {
+    case 'ready':
+      clearConnectTimer()
+      status.value = 'live'
+      if (typeof msg.url === 'string' && msg.url) address.value = msg.url
+      break
+    case 'picked':
+      picked.value = msg.pick
+      setInspect(false)
+      break
+    case 'closed':
+      status.value = 'closed'
+      statusMsg.value = msg.reason || ''
+      if (rfb) {
+        try {
+          rfb.disconnect()
+        } catch {
+          /* ignore */
+        }
+      }
+      break
+    case 'error':
+      fail(
+        msg.message ||
+          (consoleMode.value
+            ? t('pages.sandboxConsole.novncUnavailable')
+            : t('pages.appPreview.novnc.error')),
+      )
+      break
+  }
+}
+
+function setInspect(on: boolean) {
+  inspect.value = on
+  sendCtrl({ type: 'inspect', on })
+}
+
+function resolveWsUrl(): string | null {
+  if (consoleMode.value) {
+    return api.sandboxVncWsUrl(props.sandboxId!)
+  }
+  if (!props.runId || !props.nodeId || !props.port) return null
+  return api.previewVncWsUrl(props.runId, props.nodeId, props.port)
+}
+
+function connect() {
+  teardown()
+  disposed = false
+  fpsCounter.reset()
+  status.value = 'connecting'
+  statusMsg.value = ''
+  picked.value = null
+  inspect.value = false
+  if (consoleMode.value) address.value = 'about:blank'
+
+  const host = canvasHost.value
+  if (!host) return
+
+  const wsUrl = resolveWsUrl()
+  if (!wsUrl) {
+    fail(
+      consoleMode.value
+        ? t('pages.sandboxConsole.novncUnavailable')
+        : t('pages.appPreview.novnc.error'),
+    )
+    return
+  }
+
+  let ws: WebSocket
+  try {
+    ws = new WebSocket(wsUrl)
+  } catch {
+    fail(
+      consoleMode.value
+        ? t('pages.sandboxConsole.novncUnavailable')
+        : t('pages.appPreview.novnc.error'),
+    )
+    return
+  }
+
+  channel = new PreviewVncChannel(ws)
+  channel.setCtrlHandler(handleCtrlText)
+  channel.setAppErrorHandler(() => {
+    if (status.value === 'connecting') {
+      fail(
+        consoleMode.value
+          ? t('pages.sandboxConsole.novncUnavailable')
+          : t('pages.appPreview.novnc.error'),
+      )
+    }
+  })
+  channel.setAppCloseHandler(() => {
+    if (disposed) return
+    if (status.value === 'connecting') {
+      fail(
+        consoleMode.value
+          ? t('pages.sandboxConsole.novncUnavailable')
+          : t('pages.appPreview.novnc.error'),
+      )
+    } else if (status.value !== 'error') {
+      status.value = 'closed'
+    }
+  })
+
+  if (consoleMode.value) {
+    clearConnectTimer()
+    connectTimer = setTimeout(() => {
+      if (disposed || status.value !== 'connecting') return
+      fail(t('pages.sandboxConsole.novncUnavailable'))
+      try {
+        channel?.close()
+      } catch {
+        /* ignore */
+      }
+    }, CONSOLE_CONNECT_TIMEOUT_MS)
+  }
+
+  // Demux: text JSON → Vue control; binary → noVNC RFB (same physical WebSocket).
+  try {
+    rfb = new RFB(host, channel)
+    rfb.scaleViewport = true
+    rfb.resizeSession = false
+    rfb.viewOnly = false
+    rfb.focusOnClick = true
+    // Xvfb often has no cursor theme → remote cursor is fully transparent; show a
+    // local fallback dot so the viewer always has a pointer.
+    rfb.showDotCursor = true
+    rfb.background = 'rgb(10,10,11)'
+
+    rfb.addEventListener('connect', () => {
+      clearConnectTimer()
+      if (status.value === 'connecting') status.value = 'live'
+      fpsCounter.attach(rfb!)
+    })
+    rfb.addEventListener('disconnect', () => {
+      if (disposed || status.value === 'error' || status.value === 'closed') return
+      status.value = 'closed'
+    })
+    rfb.addEventListener('securityfailure', () => {
+      fail(
+        consoleMode.value
+          ? t('pages.sandboxConsole.novncUnavailable')
+          : t('pages.appPreview.novnc.error'),
+      )
+    })
+  } catch {
+    fail(
+      consoleMode.value
+        ? t('pages.sandboxConsole.novncUnavailable')
+        : t('pages.appPreview.novnc.error'),
+    )
+  }
+}
+
+function reconnect() {
+  connect()
+}
+
+function toggleInspect() {
+  setInspect(!inspect.value)
+}
+
+function clearPick() {
+  picked.value = null
+  if (inspect.value) setInspect(false)
+}
+
+function nav(action: 'reload' | 'back' | 'forward') {
+  sendCtrl({ type: 'navigate', action })
+}
+
+function normalizeAddress(raw: string): string {
+  const u = raw.trim() || 'about:blank'
+  if (u === 'about:blank') return u
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(u)) return u
+  return `http://${u}`
+}
+
+function openAddress() {
+  const url = normalizeAddress(address.value)
+  address.value = url
+  sendCtrl({ type: 'navigate', action: 'goto', url })
+}
+
+function usePick() {
+  if (picked.value) emit('pick', picked.value)
+}
+
+function onFsChange() {
+  isFullscreen.value = !!document.fullscreenElement && document.fullscreenElement === rootEl.value
+}
+
+function onKeydown(ev: KeyboardEvent) {
+  if (ev.key !== 'Escape') return
+  if (inspect.value) {
+    ev.preventDefault()
+    setInspect(false)
+    return
+  }
+  if (picked.value) {
+    ev.preventDefault()
+    clearPick()
+  }
+}
+
+async function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen()
+    else await rootEl.value?.requestFullscreen()
+  } catch {
+    /* ignore */
+  }
+}
+
+watch(
+  () => [props.runId, props.nodeId, props.port, props.sandboxId],
+  () => reconnect(),
+)
+
+onMounted(() => {
+  document.addEventListener('fullscreenchange', onFsChange)
+  window.addEventListener('keydown', onKeydown)
+  connect()
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('fullscreenchange', onFsChange)
+  window.removeEventListener('keydown', onKeydown)
+  teardown()
+})
+</script>
+
+<template>
+  <div ref="rootEl" class="flex min-h-0 flex-col bg-surface" :class="fill ? 'h-full flex-1' : ''">
+    <!-- Preview toolbar: back/forward/reload + Pick + fullscreen + FPS -->
+    <div
+      v-if="!consoleMode"
+      class="flex shrink-0 items-center gap-2 border-b border-line bg-elevated px-3 py-1.5"
+    >
+      <button
+        type="button"
+        class="rounded px-1.5 py-0.5 text-[11px] text-txt2 hover:bg-overlay"
+        :title="t('pages.appPreview.novnc.back')"
+        @click="nav('back')"
+      >
+        ←
+      </button>
+      <button
+        type="button"
+        class="rounded px-1.5 py-0.5 text-[11px] text-txt2 hover:bg-overlay"
+        :title="t('pages.appPreview.novnc.forward')"
+        @click="nav('forward')"
+      >
+        →
+      </button>
+      <button
+        type="button"
+        class="rounded px-1.5 py-0.5 text-[11px] text-txt2 hover:bg-overlay"
+        :title="t('pages.appPreview.novnc.reload')"
+        @click="nav('reload')"
+      >
+        ⟳
+      </button>
+      <button
+        type="button"
+        class="rounded px-2 py-0.5 text-[11px] transition"
+        :class="inspect ? 'bg-ok/20 text-ok' : 'text-txt2 hover:bg-overlay'"
+        :title="inspect ? t('pages.appPreview.novnc.cancelInspect') : t('pages.appPreview.novnc.inspect')"
+        @click="toggleInspect"
+      >
+        {{ inspect ? t('pages.appPreview.novnc.cancelInspect') : t('pages.appPreview.novnc.inspect') }}
+      </button>
+      <button
+        type="button"
+        class="rounded px-1.5 py-0.5 text-[11px] text-txt2 hover:bg-overlay"
+        :title="t(isFullscreen ? 'pages.appPreview.novnc.exitFullscreen' : 'pages.appPreview.novnc.fullscreen')"
+        @click="toggleFullscreen"
+      >
+        {{ isFullscreen ? '⤢' : '⛶' }}
+      </button>
+      <span class="ml-auto flex items-center gap-2.5 text-[10px]">
+        <span
+          v-if="status === 'live'"
+          class="group relative cursor-default tabular-nums"
+          :class="fpsCounter.hasRecentFrames.value ? 'text-txt2' : 'text-txt3'"
+          :title="t('pages.appPreview.novnc.fpsTooltip')"
+        >
+          <template v-if="fpsCounter.hasRecentFrames.value">
+            <span class="font-medium">{{ fpsCounter.fps.value }}</span>
+            {{ t('pages.appPreview.novnc.fps') }}
+          </template>
+          <template v-else>
+            <span class="font-medium">—</span>
+            {{ t('pages.appPreview.novnc.fps') }}
+          </template>
+          <span
+            class="pointer-events-none absolute bottom-full right-0 z-20 mb-2 hidden w-[220px] border border-line-strong bg-overlay px-2.5 py-2 text-[10px] leading-snug text-txt2 shadow-card group-hover:block"
+          >
+            {{ t('pages.appPreview.novnc.fpsTooltip') }}
+          </span>
+        </span>
+        <span class="flex items-center gap-1.5">
+          <span
+            class="inline-block h-1.5 w-1.5 rounded-full"
+            :class="{
+              'bg-ok': status === 'live',
+              'bg-warn animate-pulse': status === 'connecting',
+              'bg-err': status === 'error' || status === 'closed',
+            }"
+          />
+          <span class="text-txt3">{{ t(`pages.appPreview.novnc.status.${status}`) }}</span>
+        </span>
+      </span>
+    </div>
+
+    <!-- Console toolbar: back/forward/reload + address + Open (no Pick/FPS) -->
+    <form
+      v-else
+      class="flex shrink-0 items-center gap-2 border-b border-line bg-elevated px-3 py-1.5"
+      @submit.prevent="openAddress"
+    >
+      <button
+        type="button"
+        class="rounded px-1.5 py-0.5 text-[11px] text-txt2 hover:bg-overlay"
+        :title="t('pages.appPreview.novnc.back')"
+        @click="nav('back')"
+      >
+        ←
+      </button>
+      <button
+        type="button"
+        class="rounded px-1.5 py-0.5 text-[11px] text-txt2 hover:bg-overlay"
+        :title="t('pages.appPreview.novnc.forward')"
+        @click="nav('forward')"
+      >
+        →
+      </button>
+      <button
+        type="button"
+        class="rounded px-1.5 py-0.5 text-[11px] text-txt2 hover:bg-overlay"
+        :title="t('pages.appPreview.novnc.reload')"
+        @click="nav('reload')"
+      >
+        ⟳
+      </button>
+      <input
+        v-model="address"
+        type="text"
+        class="min-w-0 flex-1 rounded border border-line bg-base px-2 py-1 font-mono text-[11px] text-txt outline-none focus:border-accent"
+        :placeholder="t('pages.sandboxConsole.novncAddressPlaceholder')"
+        spellcheck="false"
+        autocomplete="off"
+      />
+      <button
+        type="submit"
+        class="shrink-0 rounded bg-accent-dim px-2.5 py-1 text-[11px] text-txt hover:bg-accent/25"
+      >
+        {{ t('pages.sandboxConsole.novncOpen') }}
+      </button>
+    </form>
+
+    <div
+      v-if="!consoleMode && (status === 'error' || status === 'closed')"
+      class="flex shrink-0 items-center gap-3 border-b border-warn/30 bg-warn/10 px-3 py-2 text-xs text-warn"
+    >
+      <span class="min-w-0 flex-1 truncate">{{ statusMsg || t('pages.appPreview.novnc.error') }}</span>
+      <button type="button" class="rounded bg-overlay px-2 py-0.5 text-txt hover:bg-overlay/80" @click="reconnect">
+        {{ t('pages.appPreview.novnc.reconnect') }}
+      </button>
+    </div>
+
+    <div
+      class="novnc-fs-viewport relative flex min-h-0 items-center justify-center overflow-hidden bg-base"
+      :class="[
+        fill ? 'flex-1' : compact ? 'h-[280px]' : 'h-[420px]',
+        !consoleMode && inspect ? 'cursor-crosshair' : '',
+      ]"
+    >
+      <!-- Console connecting / unavailable overlays (panel-local, no toast loop) -->
+      <div
+        v-if="consoleMode && status === 'connecting'"
+        class="absolute inset-0 z-10 flex items-center justify-center bg-base/90 px-6 text-center text-sm text-txt3"
+      >
+        {{ t('pages.sandboxConsole.novncConnecting') }}
+      </div>
+      <div
+        v-else-if="consoleMode && (status === 'error' || status === 'closed')"
+        class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-base px-6 text-center"
+      >
+        <div class="text-sm font-medium text-txt">{{ t('pages.sandboxConsole.novncUnavailable') }}</div>
+        <div class="max-w-md text-sm text-txt3">
+          {{ t('pages.sandboxConsole.novncUnavailableHint') }}
+        </div>
+        <div
+          v-if="statusMsg && statusMsg !== t('pages.sandboxConsole.novncUnavailable')"
+          class="max-w-md truncate text-[11px] text-txt3/80"
+        >
+          {{ statusMsg }}
+        </div>
+        <button
+          type="button"
+          class="rounded bg-overlay px-3 py-1.5 text-xs text-txt hover:bg-overlay/80"
+          @click="reconnect"
+        >
+          {{ t('pages.appPreview.novnc.reconnect') }}
+        </button>
+      </div>
+      <div ref="canvasHost" class="novnc-canvas-host h-full w-full" />
+
+      <div
+        v-if="!consoleMode && status === 'connecting'"
+        class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center"
+      >
+        <span
+          class="h-6 w-6 animate-spin rounded-full border-2 border-line-strong border-t-txt2"
+          aria-hidden="true"
+        />
+        <span class="text-sm font-medium text-txt2">{{ t('pages.appPreview.novnc.connectingTitle') }}</span>
+        <span class="max-w-[320px] text-xs leading-snug text-txt3">{{
+          t('pages.appPreview.novnc.connectingHint')
+        }}</span>
+      </div>
+    </div>
+
+    <div v-if="!consoleMode && picked" class="shrink-0 border-t border-line bg-elevated px-3 py-2">
+      <div class="flex items-center gap-2">
+        <code class="min-w-0 flex-1 truncate text-[11px] text-ok">{{ picked.selector }}</code>
+        <button
+          type="button"
+          class="shrink-0 rounded bg-ok/15 px-2 py-1 text-[11px] font-medium text-ok hover:bg-ok/25"
+          @click="usePick"
+        >
+          {{ t('pages.appPreview.novnc.usePick') }}
+        </button>
+        <button
+          type="button"
+          class="shrink-0 rounded px-2 py-1 text-[11px] text-txt2 hover:bg-overlay hover:text-txt"
+          :title="t('pages.appPreview.novnc.clearPick')"
+          @click="clearPick"
+        >
+          {{ t('pages.appPreview.novnc.clearPick') }}
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+/*
+ * Chrome/Edge often fail to paint CSS cursor:url(data:…) under Element Fullscreen,
+ * while noVNC still sets canvas { cursor: none | url(...) }. Force a system cursor
+ * so the pointer stays visible; RFB pointer events are unaffected.
+ */
+div:fullscreen .novnc-canvas-host,
+div:fullscreen .novnc-canvas-host :deep(*) {
+  cursor: default !important;
+}
+div:fullscreen .novnc-fs-viewport.cursor-crosshair .novnc-canvas-host,
+div:fullscreen .novnc-fs-viewport.cursor-crosshair .novnc-canvas-host :deep(*) {
+  cursor: crosshair !important;
+}
+</style>

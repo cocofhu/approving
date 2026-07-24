@@ -1,0 +1,17 @@
+{
+  "nav": {
+    "dashboard": "概览",
+    "board": "看板",
+    "projects": "项目",
+    "workflows": "工作流",
+    "runs": "运行",
+    "gates": "待审批",
+    "artifacts": "产物",
+    "groupConfig": "配置",
+    "agents": "Agent 管理",
+    "sandboxes": "沙箱",
+    "integrations": "集成",
+    "triggers": "触发器",
+    "settings": "设置"
+  }
+}

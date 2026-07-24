@@ -1,0 +1,325 @@
+{
+  "mcp": {
+    "integrations": {
+      "title": "Integrations",
+      "subtitle": "Built-in MCPs are injected by scope: run-scoped ones are always available; project/PM-session ones appear in PM Leader. Configure repo/CI credentials (e.g. GITLAB_TOKEN / GITLAB_URL) in agent env vars; reference workflow globals as {'${vars.<name>}'}.",
+      "sectionTitle": "Built-in MCP · scope-based injection",
+      "noConfigNeeded": "No setup required",
+      "noConfigHere": "No setup on this page",
+      "alwaysAvailable": "Always available",
+      "seenInPmLeader": "Seen in PM Leader",
+      "seenInAgentStudio": "Seen in Agent Studio",
+      "addViaAgentStudio": "Add via Agent Studio",
+      "notRunScoped": "Not run-scoped global injection",
+      "scopeRun": "scope: run",
+      "scopeProject": "scope: project / pm-session",
+      "entryPathLabel": "Where to use:",
+      "entryPath": "Project detail → PM Leader → Settings",
+      "entryPathAgent": "Agent Studio → MCP",
+      "toolCount": "{n} tools · Click for details",
+      "openDetail": "Open details",
+      "toolsTitle": "Tools",
+      "io": {
+        "write": "write",
+        "read": "read"
+      },
+      "scopeAgent": "scope: agent"
+    },
+    "artifactStore": {
+      "name": "artifact-store",
+      "desc": "Platform artifact store · injected into every node of the run (including sandbox agents) for reading/writing intermediate and final artifacts",
+      "overview": "Built-in artifact-store MCP. Injected by the orchestrator at run start into all nodes (including sandbox Agents), isolated by run token. Agents read/write artifacts via MCP; the Host persists them.",
+      "convention": "Sandbox rule (mandatory): for every file listed in the node's produces contract, the agent must write it via write_artifact before ending the turn; after deliverables, the agent must also call node_complete. Validation order is fixed: platform default checks must pass, then optional business RPC. Enforced via injected system rules.",
+      "tools": {
+        "write_artifact": {
+          "signature": "write_artifact(name, content, kind=\"markdown\")",
+          "desc": "Write a text artifact to the platform store (scoped by run); returns artifact_id. content is text-only — do not inline image base64. For screenshots, run sandbox artifact-upload then reference the printed name in set_test_result.screenshots"
+        },
+        "read_artifact": {
+          "signature": "read_artifact(name) -> content",
+          "desc": "Read an artifact produced in this run (for downstream nodes)"
+        },
+        "list_artifacts": {
+          "signature": "list_artifacts() -> [{'{name, node, size}'}]",
+          "desc": "List artifacts already stored for this run"
+        },
+        "ask_question": {
+          "signature": "ask_question(questions)",
+          "desc": "Clarify (react) nodes only: ask structured multiple-choice questions (options may be marked recommended)"
+        },
+        "set_plan": {
+          "signature": "set_plan(goals)",
+          "desc": "Plan node only: write a two-level structured plan to plan.json"
+        },
+        "get_plan": {
+          "signature": "get_plan() -> plan.json",
+          "desc": "Read the global plan (including each item's status)"
+        },
+        "update_plan_status": {
+          "signature": "update_plan_status(id, status)",
+          "desc": "Implement node only: update plan item progress"
+        },
+        "set_clarified_requirement": {
+          "signature": "set_clarified_requirement(title, summary, background, goals, in_scope, out_of_scope, functional_requirements, assumptions, dependencies, constraints, …)",
+          "desc": "Clarify (react) node only: write a full requirements spec to clarified_requirement.json (no timeline / tech design)"
+        },
+        "get_clarified_requirement": {
+          "signature": "get_clarified_requirement() -> clarified_requirement.json",
+          "desc": "Read the structured clarified requirement"
+        },
+        "set_research": {
+          "signature": "set_research(summary, questions?, findings?, …)",
+          "desc": "Research node only: write structured research to research.json"
+        },
+        "get_research": {
+          "signature": "get_research() -> research.json",
+          "desc": "Read structured research findings"
+        },
+        "set_proposals": {
+          "signature": "set_proposals(context, proposals)",
+          "desc": "Proposal node only: write candidate proposals to proposals.json"
+        },
+        "get_proposals": {
+          "signature": "get_proposals() -> proposals.json",
+          "desc": "Read the candidate proposal set"
+        },
+        "set_test_result": {
+          "signature": "set_test_result(summary, cases?, defects?, …)",
+          "desc": "Test node only: write test summary to test_result.json"
+        },
+        "get_test_result": {
+          "signature": "get_test_result() -> test_result.json",
+          "desc": "Read the test summary report"
+        },
+        "set_review": {
+          "signature": "set_review(summary, verdict, findings?)",
+          "desc": "Review node only: write review conclusion to review.json"
+        },
+        "get_review": {
+          "signature": "get_review() -> review.json",
+          "desc": "Read review conclusion (including verdict)"
+        },
+        "set_implementation_result": {
+          "signature": "set_implementation_result(summary, …)",
+          "desc": "Implement node only: write implementation result to implementation_result.json"
+        },
+        "get_implementation_result": {
+          "signature": "get_implementation_result() -> implementation_result.json",
+          "desc": "Read the implementation result summary"
+        },
+        "set_preview": {
+          "signature": "set_preview(port, label?)",
+          "desc": "app_preview only: register preview port; returns full proxy URL"
+        },
+        "node_complete": {
+          "signature": "node_complete(status, summary?, error?, outputs?, checks?)",
+          "desc": "All agent nodes: mark success|failed before finishing; default checks run first, then optional business RPC"
+        },
+        "list_run_history": {
+          "signature": "list_run_history(all?, only_feedback?, node_id?)",
+          "desc": "List run execution history (progressive disclosure); scoped to current stage by default"
+        },
+        "get_history_detail": {
+          "signature": "get_history_detail(node_id, iteration?, include_log?)",
+          "desc": "Drill into one execution/gate detail (status, output, vars; gates include human actions)"
+        }
+      },
+      "io": {
+        "write": "write",
+        "read": "read"
+      }
+    },
+    "memoryStore": {
+      "name": "memory-store",
+      "desc": "Shared long-term memory · isolated by project+agent",
+      "overview": "Agent-scoped memory MCP. Progressive list/search then get; upsert conclusions.",
+      "convention": "Add via Agent Studio (${APPROVING_MEMORY_URL/TOKEN}). Auto-injected in PM consult.",
+      "tools": {
+        "list_memories": {
+          "signature": "list_memories()",
+          "desc": "List memory index (summaries)"
+        },
+        "get_memory": {
+          "signature": "get_memory(id)",
+          "desc": "Read full memory"
+        },
+        "search_memories": {
+          "signature": "search_memories(query, limit?)",
+          "desc": "Search memory summaries"
+        },
+        "upsert_memory": {
+          "signature": "upsert_memory(title, content)",
+          "desc": "Upsert memory"
+        },
+        "delete_memory": {
+          "signature": "delete_memory(id? | title?)",
+          "desc": "Delete memory"
+        }
+      }
+    },
+    "contextStore": {
+      "name": "context-store",
+      "desc": "Conversation context · platform auto-stores QA; MCP progressive read",
+      "overview": "Context MCP over ChatThread/ChatMessage. Auto-persisted each chat turn. Agent-isolated.",
+      "convention": "Use list_conversations / get_messages; do not rely on ACP session memory.",
+      "tools": {
+        "list_conversations": {
+          "signature": "list_conversations()",
+          "desc": "List conversations"
+        },
+        "get_messages": {
+          "signature": "get_messages(conversationId?, limit?, offset?)",
+          "desc": "Page messages"
+        },
+        "search_messages": {
+          "signature": "search_messages(query, limit?)",
+          "desc": "Search message snippets"
+        },
+        "get_current_conversation": {
+          "signature": "get_current_conversation()",
+          "desc": "Current conversation meta"
+        },
+        "get_attached_context": {
+          "signature": "get_attached_context()",
+          "desc": "Attached run/workflow"
+        }
+      }
+    },
+    "taskScheduler": {
+      "name": "task-scheduler",
+      "desc": "Agent scheduled tasks · definition MCP; platform executes",
+      "overview": "Agent-level cron. Writes only in PM consult; each fire uses a fresh sandbox.",
+      "convention": "create_job requires PM Leader consult. Platform scheduler runs Chat.",
+      "tools": {
+        "list_jobs": {
+          "signature": "list_jobs()",
+          "desc": "List jobs"
+        },
+        "list_job_runs": {
+          "signature": "list_job_runs(jobId, limit?)",
+          "desc": "Run history"
+        },
+        "create_job": {
+          "signature": "create_job(name, prompt, scheduleKind, scheduleExpr)",
+          "desc": "Create job"
+        },
+        "update_job": {
+          "signature": "update_job(jobId, …)",
+          "desc": "Update job"
+        },
+        "delete_job": {
+          "signature": "delete_job(jobId)",
+          "desc": "Delete job"
+        },
+        "run_job_now": {
+          "signature": "run_job_now(jobId)",
+          "desc": "Queue now"
+        }
+      }
+    },
+    "pmProgress": {
+      "name": "pm-progress",
+      "desc": "PM-only · project progress / blockers (read-only)",
+      "overview": "Project progress MCP injected in PM consult when enabled.",
+      "convention": "Enable under Project → PM settings.",
+      "tools": {
+        "pm_get_progress": {
+          "signature": "pm_get_progress()",
+          "desc": "Overall progress"
+        },
+        "pm_list_blockers": {
+          "signature": "pm_list_blockers()",
+          "desc": "Blockers"
+        },
+        "pm_get_plan_summary": {
+          "signature": "pm_get_plan_summary(runId)",
+          "desc": "Plan summary"
+        },
+        "pm_get_artifact_summary": {
+          "signature": "pm_get_artifact_summary(runId?, limit?)",
+          "desc": "Artifact summary"
+        },
+        "pm_get_risk_trends": {
+          "signature": "pm_get_risk_trends()",
+          "desc": "Risk trends"
+        },
+        "pm_compare_runs": {
+          "signature": "pm_compare_runs(workflowId, limit?)",
+          "desc": "Compare runs"
+        }
+      }
+    },
+    "pmWorkflowRead": {
+      "name": "pm-workflow-read",
+      "desc": "PM-only · read-only workflow queries in the same project",
+      "overview": "List/get/graph/versions/runs plus pending gates, scoped to the current project.",
+      "convention": "Enable under Project → PM settings.",
+      "tools": {
+        "pm_list_workflows": {
+          "signature": "pm_list_workflows()",
+          "desc": "List workflows"
+        },
+        "pm_get_workflow": {
+          "signature": "pm_get_workflow(workflowId)",
+          "desc": "Workflow meta"
+        },
+        "pm_get_workflow_graph": {
+          "signature": "pm_get_workflow_graph(workflowId)",
+          "desc": "Full graph"
+        },
+        "pm_list_versions": {
+          "signature": "pm_list_versions(workflowId)",
+          "desc": "Versions"
+        },
+        "pm_list_runs": {
+          "signature": "pm_list_runs(workflowId, limit?)",
+          "desc": "List recent runs"
+        },
+        "pm_list_pending_gates": {
+          "signature": "pm_list_pending_gates(limit?)",
+          "desc": "Pending gates"
+        }
+      }
+    },
+    "pmWorkflowWrite": {
+      "name": "pm-workflow-write",
+      "desc": "PM-only · workflow write operations in the same project",
+      "overview": "Create/update/copy/delete workflows, publish, start runs, approve gates and cancel runs, scoped to the current project.",
+      "convention": "Enable under Project → PM settings.",
+      "tools": {
+        "pm_create_workflow": {
+          "signature": "pm_create_workflow(name, description?, needsRepo?, nodes?, edges?, variables?)",
+          "desc": "Create draft"
+        },
+        "pm_update_workflow": {
+          "signature": "pm_update_workflow(workflowId, name?, description?, needsRepo?, nodes?, edges?, variables?)",
+          "desc": "Update meta/graph"
+        },
+        "pm_copy_workflow": {
+          "signature": "pm_copy_workflow(workflowId, name)",
+          "desc": "Copy workflow"
+        },
+        "pm_delete_workflow": {
+          "signature": "pm_delete_workflow(workflowId)",
+          "desc": "Delete workflow"
+        },
+        "pm_publish_workflow": {
+          "signature": "pm_publish_workflow(workflowId)",
+          "desc": "Publish draft"
+        },
+        "pm_start_run": {
+          "signature": "pm_start_run(workflowId, trigger?, inputs?, priority?)",
+          "desc": "Start run"
+        },
+        "pm_resume_gate": {
+          "signature": "pm_resume_gate(runId, nodeId, action, form?)",
+          "desc": "Approve gate"
+        },
+        "pm_cancel_run": {
+          "signature": "pm_cancel_run(runId)",
+          "desc": "Cancel run"
+        }
+      }
+    }
+  }
+}

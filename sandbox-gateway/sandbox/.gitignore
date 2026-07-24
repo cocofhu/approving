@@ -1,0 +1,27 @@
+.ref/
+
+# Go 编译与测试产物
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# 本地 / CI 打包目录与辅助文件（勿提交）
+/dist/
+build.env
+
+# go build -o backend 生成的可执行文件（不忽略 cmd/backend/ 源码目录）
+/backend
+/acp-bridge
+/cursor-acp
+
+# 编辑器与系统杂项
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store

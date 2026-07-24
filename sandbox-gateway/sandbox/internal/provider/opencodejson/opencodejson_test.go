@@ -1,0 +1,90 @@
+package opencodejson
+
+import (
+	"testing"
+
+	"backend/internal/provider"
+	"backend/internal/provider/oneshot"
+)
+
+func has(list []string, s string) bool {
+	for _, it := range list {
+		if it == s {
+			return true
+		}
+	}
+	return false
+}
+
+func TestArgsPositionalPrompt(t *testing.T) {
+	c := &codec{c: Config{
+		Bin:           "opencode",
+		BaseArgs:      []string{"run", "--format", "json", "--dangerously-skip-permissions"},
+		WorkspaceFlag: "--dir",
+		ResumeFlag:    "--session",
+		ModelFlag:     "--model",
+	}}
+	args := c.Args(provider.OpenOptions{Cwd: "/w", Model: "m"}, "do it", "S9")
+	// prompt must be last (positional).
+	if args[len(args)-1] != "do it" {
+		t.Fatalf("prompt not last: %v", args)
+	}
+	for _, want := range []string{"opencode", "run", "--format", "json", "--dir", "/w", "--model", "m", "--session", "S9"} {
+		if !has(args, want) {
+			t.Fatalf("missing %q in %v", want, args)
+		}
+	}
+}
+
+func TestParseTextAndSession(t *testing.T) {
+	c := &codec{}
+	pr := c.ParseLine([]byte(`{"type":"text","sessionID":"S1","part":{"type":"text","text":"hello"}}`))
+	if pr.SessionID != "S1" {
+		t.Fatalf("sid=%q", pr.SessionID)
+	}
+	if len(pr.Msgs) != 1 || pr.Msgs[0].Kind != oneshot.KindText || pr.Msgs[0].Text != "hello" {
+		t.Fatalf("msgs=%+v", pr.Msgs)
+	}
+}
+
+func TestParseToolUse(t *testing.T) {
+	c := &codec{}
+	pr := c.ParseLine([]byte(`{"type":"tool_use","part":{"tool":"bash","callID":"c1","state":{"input":{"cmd":"ls"}}}}`))
+	if len(pr.Msgs) != 1 || pr.Msgs[0].Kind != oneshot.KindToolUse {
+		t.Fatalf("msgs=%+v", pr.Msgs)
+	}
+	if pr.Msgs[0].ToolCallID != "c1" || pr.Msgs[0].ToolTitle != "bash" {
+		t.Fatalf("tool=%+v", pr.Msgs[0])
+	}
+	if string(pr.Msgs[0].RawInput) != `{"cmd":"ls"}` {
+		t.Fatalf("input=%s", pr.Msgs[0].RawInput)
+	}
+}
+
+func TestParseStepFinishUsage(t *testing.T) {
+	c := &codec{}
+	pr := c.ParseLine([]byte(`{"type":"step_finish","part":{"reason":"stop","tokens":{"input":10,"output":20,"cache":{"read":3,"write":4}}}}`))
+	if pr.StopReason != "end_turn" {
+		t.Fatalf("stop=%q", pr.StopReason)
+	}
+	u := pr.Usage["default"]
+	if u.InputTokens != 10 || u.OutputTokens != 20 || u.CacheReadTokens != 3 || u.CacheWriteTokens != 4 {
+		t.Fatalf("usage=%+v", u)
+	}
+}
+
+func TestParseStepFinishToolCallsNotTerminal(t *testing.T) {
+	c := &codec{}
+	pr := c.ParseLine([]byte(`{"type":"step_finish","part":{"reason":"tool-calls","tokens":{"input":1,"output":2}}}`))
+	if pr.StopReason != "" {
+		t.Fatalf("tool-calls step must not be terminal: %q", pr.StopReason)
+	}
+}
+
+func TestParseError(t *testing.T) {
+	c := &codec{}
+	pr := c.ParseLine([]byte(`{"type":"error","error":{"name":"X","data":{"message":"boom"}}}`))
+	if pr.StopReason != "failed" || len(pr.Msgs) != 1 || pr.Msgs[0].Text != "boom" {
+		t.Fatalf("pr=%+v", pr)
+	}
+}

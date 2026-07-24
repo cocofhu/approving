@@ -1,0 +1,236 @@
+package models
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+)
+
+// Graph is the workflow definition body (mirrors the frontend WFNode/WFEdge
+// shape). It is stored as a JSON column on WorkflowDef / WorkflowVersion.
+type Graph struct {
+	Nodes     []Node     `json:"nodes"`
+	Edges     []Edge     `json:"edges"`
+	Variables []Variable `json:"variables,omitempty"`
+}
+
+// Node is a single FSM state.
+type Node struct {
+	ID         string         `json:"id"`
+	Type       string         `json:"type"`
+	Label      string         `json:"label"`
+	Position   Position       `json:"position"`
+	Config     map[string]any `json:"config"`
+	Checkpoint bool           `json:"checkpoint,omitempty"`
+}
+
+// Position is the canvas coordinate (carried for round-tripping the UI).
+type Position struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+// EdgeKind enumerates FSM transition semantics.
+type EdgeKind string
+
+const (
+	EdgeSuccess  EdgeKind = "success"
+	EdgeFailure  EdgeKind = "failure"
+	EdgeRollback EdgeKind = "rollback"
+)
+
+// Edge is an FSM transition between two states.
+type Edge struct {
+	ID          string   `json:"id"`
+	Source      string   `json:"source"`
+	Target      string   `json:"target"`
+	When        string   `json:"when,omitempty"`
+	Label       string   `json:"label,omitempty"`
+	Kind        EdgeKind `json:"kind,omitempty"`
+	Carry       []string `json:"carry,omitempty"`
+	MaxAttempts int      `json:"maxAttempts,omitempty"`
+}
+
+// KindOrDefault returns the transition kind, defaulting to success for
+// backward compatibility with edges that predate the FSM model.
+func (e Edge) KindOrDefault() EdgeKind {
+	if e.Kind == "" {
+		return EdgeSuccess
+	}
+	return e.Kind
+}
+
+// Variable is a workflow-level global variable definition. All run state is a
+// global variable: those with Ask=true are collected at run start (the former
+// "input fields"), the rest are engine-seeded working state mutated by set_var.
+type Variable struct {
+	Name     string `json:"name"`
+	Type     string `json:"type"` // string | paragraph | number | bool | select
+	Value    any    `json:"value,omitempty"`
+	Desc     string `json:"desc,omitempty"`     // label shown when collected at start
+	Ask      bool   `json:"ask,omitempty"`      // collect from the launcher at run start
+	Required bool   `json:"required,omitempty"` // ask: must be provided
+	Editable bool   `json:"editable,omitempty"` // ask: launcher may override the default
+	Options  string `json:"options,omitempty"`  // select: comma-separated choices
+}
+
+// AcpEvent is one streamed agent event (mirrors the frontend AcpEvent).
+type AcpEvent struct {
+	T        int           `json:"t"`
+	Kind     string        `json:"kind"` // message|thought|plan|tool_call|commands
+	Title    string        `json:"title,omitempty"`
+	Text     string        `json:"text,omitempty"`
+	Status   string        `json:"status,omitempty"`
+	Artifact *ArtifactMeta `json:"artifact,omitempty"`
+}
+
+// ArtifactMeta marks an event as an artifact-store write.
+type ArtifactMeta struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"`
+}
+
+// TraceEntry is one FSM state-trace event (enter/exit/transition/rollback).
+// Iteration is the per-node execution index at the time of the event (set on
+// enter), letting the UI label repeated visits ("第 N 次执行").
+type TraceEntry struct {
+	At        string   `json:"at"`
+	NodeID    string   `json:"nodeId"`
+	Event     string   `json:"event"`
+	Iteration int      `json:"iteration,omitempty"`
+	Detail    string   `json:"detail,omitempty"`
+	Kind      EdgeKind `json:"kind,omitempty"`
+	To        string   `json:"to,omitempty"`
+}
+
+// FindNode returns the node with the given id, or nil.
+func (g Graph) FindNode(id string) *Node {
+	for i := range g.Nodes {
+		if g.Nodes[i].ID == id {
+			return &g.Nodes[i]
+		}
+	}
+	return nil
+}
+
+// OutEdges returns edges leaving the given node, preserving definition order.
+func (g Graph) OutEdges(nodeID string) []Edge {
+	var out []Edge
+	for _, e := range g.Edges {
+		if e.Source == nodeID {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// StartNode returns the entry state: the input node if present, else the
+// node with no incoming edges, else the first node.
+func (g Graph) StartNode() *Node {
+	if n := g.firstOfType("input"); n != nil {
+		return n
+	}
+	incoming := map[string]bool{}
+	for _, e := range g.Edges {
+		incoming[e.Target] = true
+	}
+	for i := range g.Nodes {
+		if !incoming[g.Nodes[i].ID] {
+			return &g.Nodes[i]
+		}
+	}
+	if len(g.Nodes) > 0 {
+		return &g.Nodes[0]
+	}
+	return nil
+}
+
+// Validate enforces the structural contract for a runnable pipeline: it must
+// have exactly one input node (the start) and at least one output node (the
+// end), with the input having no incoming edges and outputs no outgoing edges,
+// so the pipeline always begins at the input and terminates at an output.
+func (g Graph) Validate() error {
+	if len(g.Nodes) == 0 {
+		return errors.New("工作流为空:至少需要一个输入节点和一个输出节点")
+	}
+	var inputs, outputs []Node
+	for _, n := range g.Nodes {
+		switch n.Type {
+		case "input":
+			inputs = append(inputs, n)
+		case "output":
+			outputs = append(outputs, n)
+		}
+	}
+	if len(inputs) == 0 {
+		return errors.New("缺少输入节点:工作流必须有且仅有一个输入节点作为起点")
+	}
+	if len(inputs) > 1 {
+		return errors.New("输入节点过多:工作流只能有一个输入节点")
+	}
+	if len(outputs) == 0 {
+		return errors.New("缺少输出节点:工作流必须至少有一个输出节点作为终点")
+	}
+	incoming := map[string]bool{}
+	outgoing := map[string]bool{}
+	for _, e := range g.Edges {
+		incoming[e.Target] = true
+		outgoing[e.Source] = true
+	}
+	if incoming[inputs[0].ID] {
+		return errors.New("输入节点不能有入边:流水线必须从输入节点开始")
+	}
+	for _, o := range outputs {
+		if outgoing[o.ID] {
+			return errors.New("输出节点不能有出边:流水线必须在输出节点结束")
+		}
+	}
+	if err := g.validateSuccessFanout(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateSuccessFanout rejects an ambiguous success fan-out: a node with more
+// than one *unconditional* (no `when` guard) success edge. The FSM takes exactly
+// one outgoing edge per node — it never forks — so two guardless success targets
+// mean only the first ever runs and the rest are silently dead. This looks like
+// "run both branches in parallel" but isn't, so it's caught as a config error.
+//
+// Legitimate multi-target patterns are unaffected: guarded success edges
+// (conditional routing, one `when` per target), failure/rollback edges, and
+// branch nodes (which route by their own config.cases[].goto, ignoring edges).
+func (g Graph) validateSuccessFanout() error {
+	counts := map[string]int{}
+	for _, e := range g.Edges {
+		if e.KindOrDefault() != EdgeSuccess {
+			continue
+		}
+		if strings.TrimSpace(e.When) != "" {
+			continue // guarded: conditional routing, not ambiguous
+		}
+		if n := g.FindNode(e.Source); n != nil && n.Type == "branch" {
+			continue // branch routes via config, not real edges
+		}
+		counts[e.Source]++
+	}
+	for _, e := range g.Edges {
+		if counts[e.Source] > 1 {
+			name := e.Source
+			if n := g.FindNode(e.Source); n != nil && strings.TrimSpace(n.Label) != "" {
+				name = n.Label
+			}
+			return fmt.Errorf("节点「%s」有多条无条件的成功出边:流水线一次只会走其中一条,其余永远不会执行(不是并行分叉)。请给需要分流的成功边设置 when 条件、改用分支节点,或删除多余的连线", name)
+		}
+	}
+	return nil
+}
+
+func (g Graph) firstOfType(t string) *Node {
+	for i := range g.Nodes {
+		if g.Nodes[i].Type == t {
+			return &g.Nodes[i]
+		}
+	}
+	return nil
+}

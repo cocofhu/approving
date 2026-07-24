@@ -1,0 +1,914 @@
+import { reactive } from 'vue'
+import type {
+  Workflow,
+  WorkflowVersion,
+  Run,
+  Artifact,
+  InboxItem,
+  AcpEvent,
+  WorkflowGraph,
+  Project,
+  PmLeaderBinding,
+  ProjectMemoryItem,
+  AgentCronJob,
+  ChatThread,
+  ChatMessage,
+  PmDraftResponse,
+  ProgressCitation,
+  AttachedContext,
+  ClarifyImage,
+  ReactAnnotation,
+} from './types'
+import type { InboxContextResponse } from './inboxContext'
+import { i18n } from './i18n'
+import { authRedirectPath } from './useAuth'
+import {
+  isDraining,
+  isMutationMethod,
+  mutationsBlocked,
+  showDrainToast,
+  shutdownState,
+} from './useShutdownState'
+
+// API base: configurable via VITE_API_BASE, defaults to same-origin /api.
+// The app is purely API-driven (no bundled mock data); on error views show
+// an empty/error state.
+const BASE = ((import.meta as any).env?.VITE_API_BASE ?? '/api').replace(/\/$/, '')
+
+const AUTH_WHITELIST = new Set(['/auth/login', '/auth/logout', '/auth/me', '/health', '/live'])
+
+function redirectToLogin() {
+  if (typeof window === 'undefined') return
+  const path = window.location.pathname + window.location.search
+  if (path.startsWith('/login')) return
+  const redirect = encodeURIComponent(path)
+  window.location.assign(`/login?redirect=${redirect}`)
+}
+
+export const apiState = reactive({ online: false, checked: false })
+
+async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? 'GET').toUpperCase()
+  if (mutationsBlocked() && isMutationMethod(method)) {
+    const msg = shutdownState.message || i18n.global.t('common.shutdown.notAcceptingRequests')
+    showDrainToast(msg)
+    throw new Error(msg)
+  }
+
+  const res = await fetch(BASE + path, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+    ...init,
+  })
+  apiState.checked = true
+
+  if (!res.ok) {
+    if (res.status === 401 && !AUTH_WHITELIST.has(path)) {
+      redirectToLogin()
+      throw new Error('unauthorized')
+    }
+    if (res.status === 503) {
+      let body: { status?: string; message?: string; error?: string } | null = null
+      try {
+        body = await res.json()
+      } catch {
+        // non-JSON 503 body
+      }
+      if (body?.status === 'shutting_down') {
+        const msg = body.message || body.error || i18n.global.t('common.shutdown.notAcceptingRequests')
+        if (isMutationMethod(method)) showDrainToast(msg)
+        throw new Error(msg)
+      }
+    }
+    if (!isDraining()) apiState.online = false
+    let msg = `${res.status} ${path}`
+    try {
+      const body = await res.json()
+      if (body?.error) msg = body.error
+    } catch {
+      // non-JSON error body; keep the status line
+    }
+    throw new Error(msg)
+  }
+  apiState.online = true
+  return (await res.json()) as T
+}
+
+export type AgentTestRepo = { name: string; url: string; branch?: string }
+
+export type CreateAgentTestPayload = {
+  repos?: AgentTestRepo[]
+  repoUrl?: string
+  projectId?: string
+}
+
+export interface PaginatedResponse<T> {
+  items: T[]
+  total: number
+  page: number
+  pageSize: number
+  hasMore: boolean
+}
+
+export interface PreviewPort {
+  runId: string
+  nodeId: string
+  port: number
+  label?: string
+  proxyUrl: string
+  healthy: boolean
+  registeredAt?: string
+}
+
+export interface PreviewIssue {
+  id: string
+  runId: string
+  nodeId: string
+  body: string
+  selector?: string
+  port?: number
+  images?: { data: string; mimeType: string }[]
+  status: string
+  createdAt: string
+}
+
+export interface EventPaginatedResponse {
+  events: AcpEvent[]
+  nextCursor: string
+  hasMore: boolean
+  live?: boolean
+}
+
+export function isPaginated<T>(data: T[] | PaginatedResponse<T>): data is PaginatedResponse<T> {
+  return data != null && typeof data === 'object' && !Array.isArray(data) && 'items' in data
+}
+
+export interface MCPServer {
+  name: string
+  url?: string
+  headers?: Record<string, string>
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+}
+
+export interface AgentFile {
+  path: string
+  content: string
+}
+
+export interface AgentLayout {
+  configRoot?: string
+  workspaceDir?: string
+}
+
+// AgentPrompts overrides the platform-injected prompt text and sandbox rule
+// files for one Agent. Every field is optional; an empty field falls back to
+// the platform default. The templated fields use a `{name}` placeholder for the
+// declared produces file name.
+export interface AgentPrompts {
+  upstreamArtifactsHeader?: string
+  producesContract?: string
+  reactOpenSuffix?: string
+  producesRetry?: string
+}
+
+export interface Agent {
+  name: string
+  /** Single home project; empty/undefined = unbound (artifact-store only). */
+  projectId?: string
+  acpBackend?: 'cursor' | 'claude_code' | 'codebuddy' | 'trae'
+  gitCredentialType?: 'github_https' | 'gitlab_https' | 'ssh'
+  files?: AgentFile[]
+  mcp?: MCPServer[]
+  env?: Record<string, string>
+  layout?: AgentLayout
+  prompts?: AgentPrompts
+}
+
+/** Virtual group in the Agent Studio organization tree (not a disk directory). */
+export interface OrgGroup {
+  id: string
+  name: string
+  parentGroupId?: string
+}
+
+/** Per-agent organization membership (orthogonal to skill_profile identity). */
+export interface OrgAgentMembership {
+  groupIds?: string[]
+  parentAgent?: string
+}
+
+/** Central organization index (GET/PUT /agents/org). */
+export interface AgentOrg {
+  revision: number
+  groups: OrgGroup[]
+  agents: Record<string, OrgAgentMembership>
+}
+
+export interface SandboxView {
+  id: number
+  name: string
+  profile: string
+  purpose: string
+  status: string
+  error?: string
+  repoUrl?: string
+  runId?: string
+  workflowId?: string
+  workflowName?: string
+  nodeId?: string
+  destroyAt?: string
+  createdAt: string
+  updatedAt: string
+  containerStatus: string
+  busy: boolean
+  connected: boolean
+  hasCodeServer: boolean
+  hasAcp: boolean
+  /** Same secret as container PASSWORD / CURSOR_ACP_PASSWORD for direct host:port login. */
+  password?: string
+  /** Gateway host:port map; only present on getSandbox (GetView), not list. */
+  endpoints?: Record<string, string>
+}
+
+export interface DashboardStats {
+  running: number
+  waitingHuman: number
+  failed: number
+  completed: number
+  workflows: number
+  artifacts: number
+}
+
+// SettingItem is one platform scheduling knob: its effective value, where it
+// came from (env|db|config) and whether it's pinned by an env var (read-only).
+export interface SettingItem {
+  key: string
+  label: string
+  unit?: string
+  value: number
+  min: number
+  source: 'env' | 'db' | 'config'
+  locked: boolean
+}
+
+export type PlatformRuleSource = 'override' | 'global' | 'embed'
+
+export interface PlatformRuleMeta {
+  file: string
+  source: PlatformRuleSource
+  mtime?: string
+}
+
+export interface PlatformRuleContent extends PlatformRuleMeta {
+  content: string
+}
+
+export interface ChannelConfig {
+  id: string
+  type: string
+  name: string
+  enabled: boolean
+  projectId: string
+  appId: string
+  appSecretSet: boolean
+  turnTimeoutSeconds: number
+  cronDeliver: boolean
+  cronDeliverTarget?: string
+  config?: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+// Per-project channel upsert payload. type is fixed to "qq" server-side and
+// projectId is implied by the request path, so neither is sent by the client.
+export interface ChannelConfigInput {
+  name: string
+  enabled: boolean
+  appId: string
+  appSecret?: string
+  turnTimeoutSeconds: number
+  cronDeliver: boolean
+  cronDeliverTarget?: string
+  config?: Record<string, unknown>
+}
+
+export const api = {
+  // projects
+  listProjects: () => req<Project[]>('/projects'),
+  getProject: (id: string) => req<Project>(`/projects/${id}`),
+  createProject: (body: Partial<Project>) =>
+    req<Project>('/projects', { method: 'POST', body: JSON.stringify(body) }),
+  updateProject: (id: string, body: Partial<Project>) =>
+    req<Project>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteProject: (id: string) => req<{ status: string }>(`/projects/${id}`, { method: 'DELETE' }),
+
+  // PM Leader
+  getPmLeader: (projectId: string) => req<PmLeaderBinding>(`/projects/${projectId}/pm-leader`),
+  updatePmLeader: (projectId: string, body: { enabled?: boolean; agentConfigRef?: string; enabledMcps?: string[] }) =>
+    req<PmLeaderBinding>(`/projects/${projectId}/pm-leader`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  listProjectCronJobs: (projectId: string) =>
+    req<{ items: AgentCronJob[] }>(`/projects/${projectId}/cron-jobs`),
+  patchProjectCronJob: (projectId: string, jobId: string, body: { deliverToChannel: boolean }) =>
+    req<AgentCronJob>(`/projects/${projectId}/cron-jobs/${jobId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  listPmMemories: (projectId: string) =>
+    req<{ items: ProjectMemoryItem[] }>(`/projects/${projectId}/pm/memories`),
+  upsertPmMemory: (projectId: string, body: { title: string; content: string }) =>
+    req<ProjectMemoryItem>(`/projects/${projectId}/pm/memories`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updatePmMemory: (projectId: string, mid: string, body: { title?: string; content?: string }) =>
+    req<ProjectMemoryItem>(`/projects/${projectId}/pm/memories/${mid}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  deletePmMemory: (projectId: string, mid: string) =>
+    req<{ status: string }>(`/projects/${projectId}/pm/memories/${mid}`, { method: 'DELETE' }),
+  clearPmMemories: (projectId: string) =>
+    req<{ status: string; count: number }>(`/projects/${projectId}/pm/memories`, { method: 'DELETE' }),
+  listPmThreads: (projectId: string) =>
+    req<{ items: ChatThread[] }>(`/projects/${projectId}/pm/threads`),
+  createPmThread: (projectId: string, body?: { title?: string }) =>
+    req<ChatThread>(`/projects/${projectId}/pm/threads`, {
+      method: 'POST',
+      body: JSON.stringify(body || {}),
+    }),
+  getPmThread: (projectId: string, tid: string) =>
+    req<ChatThread>(`/projects/${projectId}/pm/threads/${tid}`),
+  deletePmThread: (projectId: string, tid: string) =>
+    req<{ status: string }>(`/projects/${projectId}/pm/threads/${tid}`, { method: 'DELETE' }),
+  listPmMessages: (projectId: string, tid: string) =>
+    req<{ items: ChatMessage[] }>(`/projects/${projectId}/pm/threads/${tid}/messages`),
+  appendPmMessage: (
+    projectId: string,
+    tid: string,
+    body: {
+      role?: string
+      content: string
+      images?: ClarifyImage[]
+      citations?: ProgressCitation[]
+      attachedContext?: AttachedContext
+    },
+  ) =>
+    req<ChatMessage>(`/projects/${projectId}/pm/threads/${tid}/messages`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  patchPmMessage: (
+    projectId: string,
+    tid: string,
+    mid: string,
+    body: { status: 'ok' | 'failed' | string; failKind?: string },
+  ) =>
+    req<ChatMessage>(`/projects/${projectId}/pm/threads/${tid}/messages/${mid}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  ensurePmSandbox: (
+    projectId: string,
+    tid: string,
+    body?: { attachedContext?: AttachedContext; injectHistory?: boolean },
+  ) =>
+    req<{ sandbox: SandboxView; preamble?: string; thread: ChatThread }>(
+      `/projects/${projectId}/pm/threads/${tid}/sandbox`,
+      { method: 'POST', body: JSON.stringify(body || {}) },
+    ),
+  getPmDraft: (projectId: string, tid: string) =>
+    req<PmDraftResponse>(`/projects/${projectId}/pm/threads/${tid}/draft`),
+  /** PM turn-runner WebSocket (decoupled from sandbox request ctx). */
+  pmThreadChatWsUrl: (projectId: string, tid: string) =>
+    wsUrl(`/projects/${projectId}/pm/threads/${tid}/chat`),
+
+  // workflows
+  listWorkflows: (params?: { projectId?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.projectId) qs.set('projectId', params.projectId)
+    const q = qs.toString()
+    return req<Workflow[]>(q ? `/workflows?${q}` : '/workflows')
+  },
+  getWorkflow: (id: string) => req<Workflow>(`/workflows/${id}`),
+  saveWorkflow: (wf: Partial<Workflow>) =>
+    req<Workflow>(wf.id ? `/workflows/${wf.id}` : '/workflows', {
+      method: wf.id ? 'PUT' : 'POST',
+      body: JSON.stringify(wf),
+    }),
+  publishWorkflow: (id: string) => req<Workflow>(`/workflows/${id}/publish`, { method: 'POST' }),
+  listAPIKeys: (workflowId: string) =>
+    req<{ id: string; name: string; key_prefix: string; created_at: string }[]>(`/workflows/${workflowId}/api-keys`),
+  createAPIKey: (workflowId: string, name: string) =>
+    req<{ id: string; name: string; key: string; key_prefix: string; created_at: string }>(`/workflows/${workflowId}/api-keys`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+  revokeAPIKey: (workflowId: string, keyId: string) =>
+    req<{ status: string }>(`/workflows/${workflowId}/api-keys/${keyId}`, { method: 'DELETE' }),
+  deleteWorkflow: (id: string) => req<{ status: string }>(`/workflows/${id}`, { method: 'DELETE' }),
+  listWorkflowVersions: (id: string) => req<WorkflowVersion[]>(`/workflows/${id}/versions`),
+  restoreWorkflowVersion: (id: string, version: number) =>
+    req<Workflow>(`/workflows/${id}/versions/${version}/restore`, { method: 'POST' }),
+  copyPreviewWorkflow: (id: string) =>
+    req<{ suggestedName: string; sourceName: string; sourceId: string }>(`/workflows/${id}/copy-preview`),
+  copyWorkflow: (id: string, name: string) =>
+    req<Workflow>(`/workflows/${id}/copy`, { method: 'POST', body: JSON.stringify({ name }) }),
+  getWorkflowVersionGraph: (id: string, version: number) =>
+    req<WorkflowGraph>(`/workflows/${id}/versions/${version}/graph`),
+  importWorkflow: (json: string, projectId?: string) => {
+    const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''
+    return req<Workflow>(`/workflows/import${qs}`, { method: 'POST', body: json })
+  },
+
+  // runs
+  listRuns: (params?: {
+    status?: string
+    wf?: string
+    projectId?: string
+    page?: number
+    pageSize?: number
+  }) => {
+    const qs = new URLSearchParams()
+    if (params?.status) qs.set('status', params.status)
+    if (params?.wf) qs.set('wf', params.wf)
+    if (params?.projectId) qs.set('projectId', params.projectId)
+    if (params?.page != null) qs.set('page', String(params.page))
+    if (params?.pageSize != null) qs.set('pageSize', String(params.pageSize))
+    const q = qs.toString()
+    const path = q ? `/runs?${q}` : '/runs'
+    if (params?.page != null || params?.pageSize != null) {
+      return req<PaginatedResponse<Run>>(path)
+    }
+    return req<Run[]>(path)
+  },
+  getRun: (id: string) => req<Run>(`/runs/${id}`),
+  inboxContext: (
+    runId: string,
+    nodeId: string,
+    iteration: number,
+    opts?: { signal?: AbortSignal },
+  ) =>
+    req<InboxContextResponse>(
+      `/runs/${runId}/inbox-context?nodeId=${encodeURIComponent(nodeId)}&iteration=${iteration}`,
+      opts?.signal ? { signal: opts.signal } : undefined,
+    ),
+  startRun: (workflowId: string, inputs: Record<string, any>, trigger = '手动触发', priority = 'normal') =>
+    req<{ id: string; status: string; priority?: string }>(`/workflows/${workflowId}/runs`, {
+      method: 'POST',
+      body: JSON.stringify({ inputs, trigger, priority }),
+    }),
+  updateRunPriority: (id: string, priority: string) =>
+    req<{ id: string; status: string; priority: string }>(`/runs/${id}/priority`, {
+      method: 'PATCH',
+      body: JSON.stringify({ priority }),
+    }),
+  cancelRun: (id: string) => req<{ status: string }>(`/runs/${id}/cancel`, { method: 'POST' }),
+  resumeRun: (id: string, nodeId = '') =>
+    req<{ status: string }>(`/runs/${id}/resume`, {
+      method: 'POST',
+      body: JSON.stringify({ nodeId }),
+    }),
+  runEventsWsUrl: (id: string) => wsUrl(`/runs/${id}/events`),
+  resumeGate: (runId: string, nodeId: string, action: string, form: Record<string, any> = {}) =>
+    req<{ status: string }>(`/runs/${runId}/gates/${nodeId}/resume`, {
+      method: 'POST',
+      body: JSON.stringify({ action, form }),
+    }),
+  listGatePrimaryArtifacts: (runId: string, nodeId: string) =>
+    req<{
+      items: {
+        name: string
+        kind: string
+        readonly?: boolean
+        nodeId?: string
+        outputKey?: string
+      }[]
+    }>(`/runs/${runId}/gates/${nodeId}/primary-artifacts`),
+  saveGateArtifact: (
+    runId: string,
+    nodeId: string,
+    name: string,
+    content: string,
+    ifMatch?: string,
+  ) => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (ifMatch) headers['If-Match'] = ifMatch
+    return req<{
+      id: string
+      name: string
+      kind: string
+      sizeBytes: number
+      updatedAt: string
+      etag: string
+      nodeId: string
+      content: string
+    }>(`/runs/${runId}/gates/${nodeId}/artifacts/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ content }),
+    })
+  },
+  reactReply: (
+    runId: string,
+    nodeId: string,
+    text: string,
+    images: { data: string; mimeType: string }[] = [],
+    force = false,
+    annotations: ReactAnnotation[] = [],
+  ) =>
+    req<{ status: string }>(`/runs/${runId}/react/${nodeId}/reply`, {
+      method: 'POST',
+      body: JSON.stringify({ text, images, force, annotations }),
+    }),
+  // Approval-gate ReAct reject: send annotations/text/images to the gate's
+  // upstream producer's still-alive session for an in-place edit; the gate stays
+  // pending. Requires gate.reactSessionAlive.
+  gateReactRevise: (
+    runId: string,
+    nodeId: string,
+    text: string,
+    images: { data: string; mimeType: string }[] = [],
+    annotations: ReactAnnotation[] = [],
+  ) =>
+    req<{ status: string }>(`/runs/${runId}/gates/${nodeId}/react-revise`, {
+      method: 'POST',
+      body: JSON.stringify({ text, images, annotations }),
+    }),
+
+  // agents (reusable, user-defined Agent identities referenced by skill_profile:
+  // skill/rules + MCP servers + environment variables)
+  listAgents: () => req<Agent[]>('/agents'),
+  getAgentsOrg: () => req<AgentOrg>('/agents/org'),
+  saveAgentsOrg: (org: AgentOrg) =>
+    req<AgentOrg>('/agents/org', { method: 'PUT', body: JSON.stringify(org) }),
+  createAgent: (agent: Agent) =>
+    req<Agent>('/agents', { method: 'POST', body: JSON.stringify(agent) }),
+  saveAgent: (agent: Agent) =>
+    req<{ status: string }>(`/agents/${encodeURIComponent(agent.name)}`, {
+      method: 'PUT',
+      body: JSON.stringify(agent),
+    }),
+  renameAgent: (name: string, newName: string) =>
+    req<Agent>(`/agents/${encodeURIComponent(name)}/rename`, {
+      method: 'POST',
+      body: JSON.stringify({ name: newName }),
+    }),
+  deleteAgent: (name: string) =>
+    req<{ status: string }>(`/agents/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+
+  // Agent-scoped data (Studio). Project resolved server-side from agent.projectId.
+  listAgentMemories: (name: string) =>
+    req<{ items: ProjectMemoryItem[] }>(`/agents/${encodeURIComponent(name)}/memories`),
+  upsertAgentMemory: (name: string, body: { title: string; content: string }) =>
+    req<ProjectMemoryItem>(`/agents/${encodeURIComponent(name)}/memories`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateAgentMemory: (name: string, mid: string, body: { title?: string; content?: string }) =>
+    req<ProjectMemoryItem>(`/agents/${encodeURIComponent(name)}/memories/${mid}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  deleteAgentMemory: (name: string, mid: string) =>
+    req<{ status: string }>(`/agents/${encodeURIComponent(name)}/memories/${mid}`, { method: 'DELETE' }),
+  clearAgentMemories: (name: string) =>
+    req<{ status: string; count: number }>(`/agents/${encodeURIComponent(name)}/memories`, { method: 'DELETE' }),
+  listAgentThreads: (name: string) =>
+    req<{ items: ChatThread[]; messageCounts: Record<string, number> }>(
+      `/agents/${encodeURIComponent(name)}/threads`,
+    ),
+  listAgentThreadMessages: (name: string, tid: string) =>
+    req<{ items: ChatMessage[]; total: number }>(
+      `/agents/${encodeURIComponent(name)}/threads/${tid}/messages`,
+    ),
+  deleteAgentThread: (name: string, tid: string) =>
+    req<{ status: string }>(`/agents/${encodeURIComponent(name)}/threads/${tid}`, { method: 'DELETE' }),
+  listAgentCronJobs: (name: string) =>
+    req<{ items: AgentCronJob[] }>(`/agents/${encodeURIComponent(name)}/cron-jobs`),
+  patchAgentCronJob: (name: string, jobId: string, body: { enabled?: boolean; deliverToChannel?: boolean }) =>
+    req<AgentCronJob>(`/agents/${encodeURIComponent(name)}/cron-jobs/${jobId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteAgentCronJob: (name: string, jobId: string) =>
+    req<{ status: string }>(`/agents/${encodeURIComponent(name)}/cron-jobs/${jobId}`, { method: 'DELETE' }),
+
+  exportAgent: async (name: string): Promise<Blob> => {
+    const res = await fetch(`${BASE}/agents/${encodeURIComponent(name)}/export`, {
+      credentials: 'include',
+    })
+    if (!res.ok) {
+      let msg = `${res.status} export failed`
+      try {
+        const body = await res.json()
+        if (body?.error) msg = body.error
+      } catch {
+        // non-JSON
+      }
+      throw new Error(msg)
+    }
+    return res.blob()
+  },
+  importAgent: async (zipFile: File, opts: { targetName: string; mode: 'create' | 'overwrite' }): Promise<Agent> => {
+    const fd = new FormData()
+    fd.append('file', zipFile)
+    fd.append('targetName', opts.targetName)
+    fd.append('mode', opts.mode)
+    const res = await fetch(`${BASE}/agents/import`, {
+      method: 'POST',
+      credentials: 'include',
+      body: fd,
+    })
+    if (!res.ok) {
+      let msg = `${res.status} import failed`
+      try {
+        const body = await res.json()
+        if (body?.error) msg = body.error
+      } catch {
+        // non-JSON
+      }
+      throw new Error(msg)
+    }
+    return (await res.json()) as Agent
+  },
+
+  // sandboxes (interactive Agent chat-test containers)
+  createAgentTest: (profile: string, payload: CreateAgentTestPayload = {}) =>
+    req<SandboxView>(`/agents/${encodeURIComponent(profile)}/test`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  listSandboxes: () => req<SandboxView[]>('/sandboxes'),
+  getSandbox: (id: number) => req<SandboxView>(`/sandboxes/${id}`),
+  stopSandbox: (id: number) => req<{ status: string }>(`/sandboxes/${id}/stop`, { method: 'POST' }),
+  destroySandbox: (id: number) => req<{ status: string }>(`/sandboxes/${id}`, { method: 'DELETE' }),
+  cleanupSandboxes: () => req<{ destroyed: number; skipped: number }>('/sandboxes/cleanup', { method: 'POST' }),
+  sandboxChatWsUrl: (id: number) => wsUrl(`/sandboxes/${id}/chat`),
+  sandboxTerminalWsUrl: (id: number) => wsUrl(`/sandboxes/${id}/terminal`),
+  sandboxIdeUrl: (id: number) => `${origin()}/sandbox/${id}/?folder=/root/workspace`,
+  // Reverse-proxy to the in-container acp-bridge native web UI (8765). The
+  // trailing slash matters so the UI resolves its relative assets/WS against
+  // this subpath (document.baseURI).
+  sandboxBridgeUrl: (id: number) => `${origin()}/sandbox-bridge/${id}/`,
+  /** @deprecated Use sandboxBridgeUrl. Remove in 0.2.0. */
+  sandboxAcpUrl: (id: number) => `${origin()}/sandbox-bridge/${id}/`,
+
+  // misc
+  listArtifacts: (params?: {
+    page?: number
+    pageSize?: number
+    wf?: string
+    projectId?: string
+    q?: string
+  }) => {
+    const qs = new URLSearchParams()
+    if (params?.page != null) qs.set('page', String(params.page))
+    if (params?.pageSize != null) qs.set('pageSize', String(params.pageSize))
+    if (params?.wf) qs.set('wf', params.wf)
+    if (params?.projectId) qs.set('projectId', params.projectId)
+    if (params?.q) qs.set('q', params.q)
+    const q = qs.toString()
+    const path = q ? `/artifacts?${q}` : '/artifacts'
+    if (params?.page != null || params?.pageSize != null) {
+      return req<PaginatedResponse<Artifact>>(path)
+    }
+    return req<Artifact[]>(path)
+  },
+  artifactContent: (id: string) => req<Artifact>(`/artifacts/${id}/content`),
+  artifactDownloadUrl: (id: string) => `${origin()}/api/artifacts/${id}/download`,
+  exportRunLogsUrl: (id: string) => `${origin()}/api/runs/${id}/logs/export`,
+  // DELETE returns 204 No Content — must not go through req()'s unconditional res.json().
+  deleteArtifact: async (id: string): Promise<void> => {
+    const path = `/artifacts/${id}`
+    if (mutationsBlocked()) {
+      const msg = shutdownState.message || i18n.global.t('common.shutdown.notAcceptingRequests')
+      showDrainToast(msg)
+      throw new Error(msg)
+    }
+    const res = await fetch(BASE + path, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+    })
+    apiState.checked = true
+    if (res.status === 204) {
+      apiState.online = true
+      return
+    }
+    if (res.status === 401) {
+      redirectToLogin()
+      throw Object.assign(new Error('unauthorized'), { status: 401 })
+    }
+    if (res.status === 503) {
+      let body: { status?: string; message?: string; error?: string } | null = null
+      try {
+        body = await res.json()
+      } catch {
+        // non-JSON 503 body
+      }
+      if (body?.status === 'shutting_down') {
+        const msg = body.message || body.error || i18n.global.t('common.shutdown.notAcceptingRequests')
+        showDrainToast(msg)
+        throw Object.assign(new Error(msg), { status: 503 })
+      }
+    }
+    if (!isDraining()) apiState.online = false
+    let msg = `${res.status} ${path}`
+    try {
+      const body = await res.json()
+      if (body?.error) msg = body.error
+    } catch {
+      // non-JSON error body; keep the status line
+    }
+    throw Object.assign(new Error(msg), { status: res.status })
+  },
+  // Agent event log, read straight from the node's live sandbox (falls back to
+  // the persisted snapshot once the sandbox is gone).
+  nodeEvents: (
+    runId: string,
+    nodeId: string,
+    params?: { cursor?: string; limit?: number; signal?: AbortSignal },
+  ) => {
+    const qs = new URLSearchParams()
+    if (params?.cursor) qs.set('cursor', params.cursor)
+    if (params?.limit != null) qs.set('limit', String(params.limit))
+    const q = qs.toString()
+    const path = `/runs/${runId}/nodes/${nodeId}/events` + (q ? `?${q}` : '')
+    const init = params?.signal ? { signal: params.signal } : undefined
+    if (params?.cursor || params?.limit != null) {
+      return req<EventPaginatedResponse>(path, init)
+    }
+    return req<{ events: AcpEvent[]; live: boolean }>(path, init)
+  },
+  // Raw agent event frames (unaggregated) — used to rebuild the chat transcript
+  // when reopening a reused sandbox.
+  sandboxEventLog: (id: number, params?: { cursor?: string; limit?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.cursor) qs.set('cursor', params.cursor)
+    if (params?.limit != null) qs.set('limit', String(params.limit))
+    const q = qs.toString()
+    const path = `/sandboxes/${id}/eventlog` + (q ? `?${q}` : '')
+    if (params?.cursor || params?.limit != null) {
+      return req<{ events: any[]; nextCursor: string; hasMore: boolean }>(path)
+    }
+    return req<{ events: any[] }>(path)
+  },
+  // Raw sandbox container logs (docker logs): live if running, else the archived
+  // snapshot captured at teardown. Used for post-mortem troubleshooting.
+  nodeSandboxLog: (runId: string, nodeId: string) =>
+    req<{ content: string; live: boolean; found: boolean }>(`/runs/${runId}/nodes/${nodeId}/sandbox-log`),
+  getRunNodeSandbox: async (runId: string, nodeId: string): Promise<SandboxView | null> => {
+    const res = await fetch(BASE + `/runs/${runId}/nodes/${nodeId}/sandbox`, {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+    })
+    if (res.status === 404) return null
+    if (!res.ok) {
+      let msg = `${res.status} /runs/${runId}/nodes/${nodeId}/sandbox`
+      try {
+        const body = await res.json()
+        if (body?.error) msg = body.error
+      } catch {
+        // non-JSON error body
+      }
+      throw new Error(msg)
+    }
+    apiState.checked = true
+    apiState.online = true
+    return (await res.json()) as SandboxView
+  },
+  sandboxLog: (id: number) =>
+    req<{ content: string; live: boolean; found: boolean }>(`/sandboxes/${id}/log`),
+  nodePreviews: (runId: string, nodeId: string) =>
+    req<{ ports: PreviewPort[] }>(`/runs/${runId}/nodes/${nodeId}/previews`),
+  listPreviewIssues: (runId: string, nodeId: string) =>
+    req<{ issues: PreviewIssue[] }>(`/runs/${runId}/nodes/${nodeId}/preview-issues`),
+  createPreviewIssue: (
+    runId: string,
+    nodeId: string,
+    body: string,
+    selector = '',
+    port = 0,
+    images: { data: string; mimeType: string }[] = [],
+  ) =>
+    req<PreviewIssue>(`/runs/${runId}/nodes/${nodeId}/preview-issues`, {
+      method: 'POST',
+      body: JSON.stringify({ body, selector, port, images }),
+    }),
+  deletePreviewIssue: (runId: string, nodeId: string, issueId: string) =>
+    req<{ status: string }>(`/runs/${runId}/nodes/${nodeId}/preview-issues/${issueId}`, {
+      method: 'DELETE',
+    }),
+  health: () =>
+    req<{ status: string; ready: boolean; vnc_preview?: boolean }>(`/health`),
+  previewVncWsUrl: (runId: string, nodeId: string, port: number) =>
+    rootWsUrl(`/preview-vnc/${runId}/${nodeId}/${port}/ws`),
+  /** Console noVNC: sandbox-scoped WS (not preview runId/nodeId/port). */
+  sandboxVncWsUrl: (sandboxId: number) =>
+    rootWsUrl(`/sandbox-vnc/${sandboxId}/ws`),
+  listGates: (params?: { page?: number; pageSize?: number; wf?: string; projectId?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.page != null) qs.set('page', String(params.page))
+    if (params?.pageSize != null) qs.set('pageSize', String(params.pageSize))
+    if (params?.wf) qs.set('wf', params.wf)
+    if (params?.projectId) qs.set('projectId', params.projectId)
+    const q = qs.toString()
+    const path = q ? `/gates?${q}` : '/gates'
+    if (params?.page != null || params?.pageSize != null) {
+      return req<PaginatedResponse<InboxItem>>(path)
+    }
+    return req<InboxItem[]>(path)
+  },
+  dashboard: () => req<DashboardStats>('/stats/dashboard'),
+  // platform settings (scheduling params)
+  getSettings: () => req<{ items: SettingItem[] }>('/settings'),
+  updateSettings: (patch: Record<string, number>) =>
+    req<{ items: SettingItem[] }>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    }),
+
+  listPlatformRules: () => req<{ items: PlatformRuleMeta[] }>('/platform-rules'),
+  getPlatformRule: (file: string) => req<PlatformRuleContent>(`/platform-rules/${encodeURIComponent(file)}`),
+  savePlatformRule: (file: string, content: string) =>
+    req<PlatformRuleContent>(`/platform-rules/${encodeURIComponent(file)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    }),
+  resetPlatformRule: (file: string) =>
+    req<PlatformRuleContent>(`/platform-rules/${encodeURIComponent(file)}/reset`, { method: 'POST' }),
+  getPlatformRuleEmbed: (file: string) =>
+    req<PlatformRuleContent>(`/platform-rules/${encodeURIComponent(file)}/embed`),
+
+  listAgentPlatformRules: (agent: string) =>
+    req<{ items: PlatformRuleMeta[] }>(`/agents/${encodeURIComponent(agent)}/platform-rules`),
+  getAgentPlatformRule: (agent: string, file: string) =>
+    req<PlatformRuleContent>(`/agents/${encodeURIComponent(agent)}/platform-rules/${encodeURIComponent(file)}`),
+  saveAgentPlatformRule: (agent: string, file: string, content: string) =>
+    req<PlatformRuleContent>(`/agents/${encodeURIComponent(agent)}/platform-rules/${encodeURIComponent(file)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    }),
+  deleteAgentPlatformRule: (agent: string, file: string) =>
+    req<{ status: string }>(`/agents/${encodeURIComponent(agent)}/platform-rules/${encodeURIComponent(file)}`, {
+      method: 'DELETE',
+    }),
+
+  // per-project external IM channel (one QQ channel per project)
+  getProjectChannel: (projectId: string) =>
+    req<{ channel: ChannelConfig | null; secretsKeyConfigured?: boolean }>(
+      `/projects/${encodeURIComponent(projectId)}/channel`,
+    ),
+  putProjectChannel: (projectId: string, body: ChannelConfigInput) =>
+    req<ChannelConfig>(`/projects/${encodeURIComponent(projectId)}/channel`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  deleteProjectChannel: (projectId: string) =>
+    req<{ status: string }>(`/projects/${encodeURIComponent(projectId)}/channel`, { method: 'DELETE' }),
+}
+
+export interface AuthMeResponse {
+  username: string
+  expires_at: string
+  is_admin?: boolean
+}
+
+export interface AuthLoginResponse {
+  username: string
+  expires_at: string
+  redirect?: string
+}
+
+export const authApi = {
+  login: (username: string, password: string, redirect = '/') =>
+    req<AuthLoginResponse>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password, redirect: authRedirectPath(redirect) }),
+    }),
+  logout: () => req<{ status: string }>('/auth/logout', { method: 'POST' }),
+  me: () => req<AuthMeResponse>('/auth/me'),
+}
+
+// origin resolves the API origin (absolute VITE_API_BASE, else same-origin).
+function origin(): string {
+  if (/^https?:\/\//.test(BASE)) return BASE.replace(/\/api$/, '')
+  return window.location.origin
+}
+
+// wsUrl builds a ws(s):// URL for an API path under BASE.
+function wsUrl(path: string): string {
+  let base = BASE
+  if (!/^https?:\/\//.test(base)) base = window.location.origin + base
+  return base.replace(/^http/, 'ws') + path
+}
+
+// rootWsUrl builds a ws(s):// URL for a site-root path (not under the /api base).
+function rootWsUrl(path: string): string {
+  return window.location.origin.replace(/^http/, 'ws') + path
+}

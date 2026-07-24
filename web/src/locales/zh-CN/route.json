@@ -1,0 +1,22 @@
+{
+  "route": {
+    "dashboard": "概览",
+    "board": "看板",
+    "projects": "项目",
+    "projectDetail": "项目详情",
+    "workflows": "工作流",
+    "workflowEditor": "画布编辑",
+    "runs": "运行",
+    "runDetail": "运行详情",
+    "gates": "待审批",
+    "artifacts": "产物",
+    "agents": "Agent 管理",
+    "sandboxes": "沙箱",
+    "sandboxConsole": "沙箱控制台",
+    "integrations": "集成",
+    "triggers": "触发器",
+    "settings": "设置",
+    "platformRules": "平台规则",
+    "login": "登录"
+  }
+}

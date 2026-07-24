@@ -1,0 +1,347 @@
+openapi: 3.0.3
+info:
+  title: approving Platform API (partial)
+  version: 0.1.0
+  description: |
+    Minimal OpenAPI contract for platform list endpoints. This file is introduced
+    to document GET /api/artifacts optional pagination behavior.
+
+    **Pagination pattern (shared):** GET /api/runs and GET /api/gates use the
+    same optional page/pageSize query parameters and paginated envelope as
+    implemented in `internal/handlers/pagination.go` (`parsePagination`,
+    `paginatedResponse`). Constants: `defaultPageSize=20`, `maxPageSize=100`,
+    `hasMore = page × pageSize < total`.
+
+    **Backward compatibility:** When neither `page` nor `pageSize` is present,
+    list handlers return a plain JSON array. When either is present, they return
+    a pagination envelope object instead.
+
+servers:
+  - url: /api
+    description: Platform HTTP API (session cookie or Bearer workflow API key)
+
+tags:
+  - name: artifacts
+    description: Platform-wide artifact catalog
+
+paths:
+  /runs/{id}/gates/{nodeId}/primary-artifacts:
+    get:
+      operationId: listGatePrimaryArtifacts
+      tags: [artifacts]
+      summary: List primary artifacts for a pending gate
+      description: |
+        Returns the whitelist of primary artifacts for a `waiting_human` unresolved
+        gate, derived from body_template `{{nodes.*.outputs.*}}` and `artifact("…")`
+        (plus proposal_select `from`). Each item includes `kind` and `readonly`
+        (true for non-text kinds such as image). Auth matches ResumeGate (session).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: nodeId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Primary artifact list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        kind: { type: string, description: "json|html|markdown|text|image" }
+                        readonly: { type: boolean, description: "true for non-text primaries (e.g. image)" }
+                        nodeId: { type: string }
+                        outputKey: { type: string }
+        '400':
+          description: Gate not pending / run not waiting_human
+  /runs/{id}/gates/{nodeId}/artifacts/{name}:
+    put:
+      operationId: saveGateArtifact
+      tags: [artifacts]
+      summary: Save a gate-scoped primary artifact (human edit)
+      description: |
+        Validates content with the same Parse*/basic rules as Agent `set_*`,
+        upserts the artifact store, syncs the bound upstream iteration outputs
+        snapshot, appends an `artifact_edit` trace event, and returns the
+        normalized `content` plus ETag / updatedAt metadata. Optional `If-Match`
+        enables conflict detection (409). Rejects non-primary names and non-text
+        (e.g. image) primaries. Does not approve/resume the gate.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: nodeId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+        - name: If-Match
+          in: header
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+      responses:
+        '200':
+          description: Saved
+          headers:
+            ETag:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  name: { type: string }
+                  kind: { type: string }
+                  sizeBytes: { type: integer }
+                  updatedAt: { type: string, format: date-time }
+                  etag: { type: string }
+                  nodeId: { type: string }
+                  content:
+                    type: string
+                    description: Normalized content actually stored (may differ from request after Parse*)
+        '400':
+          description: Validation / not primary / not pending
+        '409':
+          description: If-Match conflict (external update)
+  /artifacts:
+    get:
+      operationId: listArtifacts
+      tags: [artifacts]
+      summary: List platform artifacts (optional pagination)
+      description: |
+        Returns artifacts across all runs for the Artifacts view and integrations.
+
+        **Dual response modes (backward compatible):**
+        - No `page` / `pageSize` → `Artifact[]` full array (used by L1 sidebar
+          `listArtifacts()` without pagination params).
+        - Either `page` or `pageSize` present → paginated envelope
+          `{ items, total, page, pageSize, hasMore }` (used by L2 list).
+
+        **Filtering:**
+        - `wf`: restrict to a workflow ID, or `__unnamed__` for artifacts whose
+          `workflow_id` is NULL or empty string.
+        - `q`: case-insensitive substring search across `artifacts.name`,
+          `artifacts.node_id`, and `runs.title` (via LEFT JOIN).
+
+        **List item shape:** `items` omit heavy `content`; `runTitle` is
+        populated from `runs.title` when non-empty. Empty paginated results
+        normalize `items` to `[]` (never JSON `null`).
+
+        Pagination validation matches `/api/runs` and `/api/gates`: invalid
+        `page`/`pageSize` or `pageSize > 100` → HTTP 400.
+      parameters:
+        - $ref: '#/components/parameters/PageQuery'
+        - $ref: '#/components/parameters/PageSizeQuery'
+        - $ref: '#/components/parameters/WfQuery'
+        - $ref: '#/components/parameters/ArtifactSearchQuery'
+      responses:
+        '200':
+          description: Success — response shape depends on pagination params
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/ArtifactListItem'
+                    description: Full array when no pagination query params
+                  - $ref: '#/components/schemas/ArtifactPaginatedResponse'
+                description: |
+                  Use `page` or `pageSize` to receive the paginated envelope;
+                  omit both for the legacy full array.
+              examples:
+                fullArray:
+                  summary: No pagination params (L1 sidebar)
+                  value:
+                    - id: art-abc123
+                      runId: run-1
+                      nodeId: plan
+                      workflowId: wf-product
+                      workflowName: 产品需求流程
+                      name: plan.json
+                      kind: json
+                      sizeBytes: 1024
+                      createdAt: '2026-07-12T00:00:00Z'
+                      runTitle: Sprint Planning
+                paginated:
+                  summary: With page/pageSize (L2 list)
+                  value:
+                    items:
+                      - id: art-abc123
+                        runId: run-1
+                        nodeId: plan
+                        workflowId: wf-product
+                        name: plan.json
+                        kind: json
+                        sizeBytes: 1024
+                        createdAt: '2026-07-12T00:00:00Z'
+                        runTitle: Sprint Planning
+                    total: 47
+                    page: 1
+                    pageSize: 20
+                    hasMore: true
+                emptyPage:
+                  summary: No matches (paginated)
+                  value:
+                    items: []
+                    total: 0
+                    page: 1
+                    pageSize: 20
+                    hasMore: false
+        '400':
+          description: Invalid pagination parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                pageSizeTooLarge:
+                  value:
+                    error: pageSize must be ≤ 100
+        '401':
+          description: Missing or invalid session / API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  parameters:
+    PageQuery:
+      name: page
+      in: query
+      required: false
+      description: |
+        1-based page index. Defaults to `1` when pagination is active.
+        Must be a positive integer (≥ 1).
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSizeQuery:
+      name: pageSize
+      in: query
+      required: false
+      description: |
+        Page size when pagination is active. Defaults to `20`.
+        Maximum `100`; values above 100 return HTTP 400.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    WfQuery:
+      name: wf
+      in: query
+      required: false
+      description: |
+        Filter by workflow ID. Use the sentinel value `__unnamed__` to list
+        artifacts with no workflow (`workflow_id` IS NULL or empty).
+      schema:
+        type: string
+        example: wf-product
+    ArtifactSearchQuery:
+      name: q
+      in: query
+      required: false
+      description: |
+        Case-insensitive substring search against artifact `name`, `nodeId`,
+        and associated run `title` (SQL `LOWER LIKE` with `%` wildcards).
+        Only applied in paginated requests (when `page` or `pageSize` is set).
+      schema:
+        type: string
+        example: plan
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    ArtifactListItem:
+      type: object
+      description: |
+        Lightweight artifact metadata for list endpoints. Does **not** include
+        `content` (use GET /artifacts/{id}/content for full body).
+      properties:
+        id:
+          type: string
+        runId:
+          type: string
+        nodeId:
+          type: string
+        workflowId:
+          type: string
+        workflowName:
+          type: string
+        name:
+          type: string
+        kind:
+          type: string
+        sizeBytes:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        runTitle:
+          type: string
+          description: From LEFT JOIN runs.title; omitted when empty
+      required: [id, runId, nodeId, name, kind, sizeBytes, createdAt]
+
+    PaginatedResponseBase:
+      type: object
+      description: |
+        Shared pagination envelope used by GET /api/artifacts, GET /api/runs,
+        and GET /api/gates (see pagination.go).
+      properties:
+        total:
+          type: integer
+          description: Total matching rows before paging
+        page:
+          type: integer
+          description: Current 1-based page
+        pageSize:
+          type: integer
+          description: Requested page size (default 20, max 100)
+        hasMore:
+          type: boolean
+          description: True when `page × pageSize < total`
+      required: [total, page, pageSize, hasMore]
+
+    ArtifactPaginatedResponse:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponseBase'
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/ArtifactListItem'
+              description: Always an array; empty results are `[]` not `null`
+          required: [items]

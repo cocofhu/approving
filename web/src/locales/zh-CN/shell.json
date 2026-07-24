@@ -1,0 +1,25 @@
+{
+  "shell": {
+    "appName": "Approving",
+    "tagline": "开发工作流编排",
+    "userRole": "管理员",
+    "logout": "登出",
+    "searchPlaceholder": "搜索工作流、运行…",
+    "docs": "文档",
+    "docsTitle": "打开产品文档（新标签页）",
+    "langSelect": "Language / 语言",
+    "theme": {
+      "toLight": "切换到浅色",
+      "toDark": "切换到深色"
+    },
+    "shutdown": {
+      "draining": "正在关闭",
+      "drainingTitle": "实例正在优雅关闭"
+    },
+    "aria": {
+      "openNav": "打开导航菜单",
+      "closeNav": "关闭导航菜单",
+      "backToList": "返回列表"
+    }
+  }
+}

@@ -1,0 +1,56 @@
+// @vitest-environment happy-dom
+import { defineComponent } from 'vue'
+import { createI18n } from 'vue-i18n'
+import { mount } from '@vue/test-utils'
+import { describe, expect, it, vi } from 'vitest'
+import common from '@/locales/zh-CN/common.json'
+import pages from '@/locales/zh-CN/pages.json'
+import BaseNode from './BaseNode.vue'
+
+vi.mock('@vue-flow/core', () => ({
+  Handle: defineComponent({ props: ['type', 'position'], template: '<div data-testid="handle" />' }),
+  Position: { Left: 'left', Right: 'right' },
+}))
+
+function mountNode(data: Record<string, unknown> = {}) {
+  const i18n = createI18n({
+    legacy: false,
+    locale: 'zh-CN',
+    messages: { 'zh-CN': { ...common, ...pages } },
+  })
+  return mount(BaseNode, {
+    props: {
+      id: 'n1',
+      data: {
+        type: 'research',
+        label: '调研',
+        status: 'running',
+        ...data,
+      },
+      selected: false,
+    },
+    global: {
+      plugins: [i18n],
+      stubs: { Icon: true },
+    },
+  })
+}
+
+describe('BaseNode', () => {
+  it('renders node label and status badge for running state', () => {
+    const wrapper = mountNode()
+    expect(wrapper.text()).toContain('调研')
+    expect(wrapper.find('[data-testid="handle"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('renders branch handles when branches are provided', () => {
+    const wrapper = mountNode({
+      type: 'branch',
+      label: '分支',
+      branches: [{ id: 'case-0', label: '默认' }],
+    })
+    expect(wrapper.text()).toContain('分支')
+    wrapper.unmount()
+  })
+})

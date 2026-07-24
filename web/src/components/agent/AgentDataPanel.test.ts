@@ -1,0 +1,236 @@
+// @vitest-environment happy-dom
+import { createI18n } from 'vue-i18n'
+import { flushPromises, mount } from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import common from '@/locales/zh-CN/common.json'
+import pages from '@/locales/zh-CN/pages.json'
+import { useAuth } from '@/lib/useAuth'
+import AgentDataPanel from './AgentDataPanel.vue'
+
+const apiMocks = vi.hoisted(() => ({
+  listAgentMemories: vi.fn(),
+  listAgentThreads: vi.fn(),
+  listAgentThreadMessages: vi.fn(),
+  deleteAgentThread: vi.fn(),
+  listAgentCronJobs: vi.fn(),
+  patchAgentCronJob: vi.fn(),
+  deleteAgentCronJob: vi.fn(),
+}))
+
+vi.mock('@/lib/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+  return {
+    ...actual,
+    api: {
+      ...actual.api,
+      listAgentMemories: apiMocks.listAgentMemories,
+      listAgentThreads: apiMocks.listAgentThreads,
+      listAgentThreadMessages: apiMocks.listAgentThreadMessages,
+      deleteAgentThread: apiMocks.deleteAgentThread,
+      listAgentCronJobs: apiMocks.listAgentCronJobs,
+      patchAgentCronJob: apiMocks.patchAgentCronJob,
+      deleteAgentCronJob: apiMocks.deleteAgentCronJob,
+    },
+  }
+})
+
+const toastError = vi.fn()
+vi.mock('@/lib/useToast', () => ({
+  useToast: () => ({ success: vi.fn(), error: toastError }),
+}))
+
+const SAMPLE_JOB = {
+  id: 'cron-1',
+  agentName: 'demo-agent',
+  projectId: 'proj-1',
+  threadId: 'th-1',
+  name: '每日汇报',
+  prompt: '汇报',
+  scheduleKind: 'cron',
+  scheduleExpr: '0 9 * * *',
+  enabled: true,
+  deliverToChannel: false,
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
+}
+
+const SAMPLE_THREAD = {
+  id: 'th-user-1',
+  projectId: 'proj-1',
+  userId: 'other',
+  agentName: 'demo-agent',
+  kind: 'user',
+  title: '他人会话',
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
+}
+
+function mountPanel(props?: { subTab?: 'memory' | 'context' | 'jobs' }) {
+  const i18n = createI18n({
+    legacy: false,
+    locale: 'zh-CN',
+    messages: { 'zh-CN': { ...common, ...pages } },
+  })
+  return mount(AgentDataPanel, {
+    props: { agentName: 'demo-agent', projectName: 'demo-project', ...props },
+    global: {
+      plugins: [i18n],
+      stubs: { Icon: true },
+    },
+  })
+}
+
+async function openTab(wrapper: ReturnType<typeof mountPanel>, label: RegExp) {
+  const btn = wrapper.findAll('button').find((b) => label.test(b.text()))
+  expect(btn).toBeTruthy()
+  await btn!.trigger('click')
+  await flushPromises()
+}
+
+describe('AgentDataPanel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    apiMocks.listAgentMemories.mockResolvedValue({ items: [] })
+    apiMocks.listAgentThreads.mockResolvedValue({ items: [], messageCounts: {} })
+    apiMocks.listAgentThreadMessages.mockResolvedValue({ items: [], total: 0 })
+    apiMocks.listAgentCronJobs.mockResolvedValue({ items: [{ ...SAMPLE_JOB }] })
+    useAuth().clearUser()
+  })
+
+  it('non-admin: loads memories, threads, and can use job write controls', async () => {
+    useAuth().setUser({ username: 'u', expiresAt: 't', isAdmin: false })
+    apiMocks.listAgentMemories.mockResolvedValue({
+      items: [
+        {
+          id: 'm1',
+          projectId: 'proj-1',
+          agentName: 'demo-agent',
+          title: '部署约定',
+          content: '确认配置',
+          source: 'user',
+          updatedBy: 'u',
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    })
+    apiMocks.listAgentThreads.mockResolvedValue({
+      items: [{ ...SAMPLE_THREAD }],
+      messageCounts: { 'th-user-1': 1 },
+    })
+    apiMocks.listAgentThreadMessages.mockResolvedValue({
+      items: [
+        {
+          id: 'msg-1',
+          threadId: 'th-user-1',
+          role: 'user',
+          content: '你好',
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+      total: 1,
+    })
+    apiMocks.patchAgentCronJob.mockResolvedValue({ ...SAMPLE_JOB, enabled: false })
+    apiMocks.deleteAgentCronJob.mockResolvedValue({ status: 'deleted' })
+
+    const w = mountPanel()
+    await flushPromises()
+
+    expect(apiMocks.listAgentMemories).toHaveBeenCalledWith('demo-agent')
+    expect(w.find('[data-testid="agent-data-lock-banner"]').exists()).toBe(false)
+    expect(w.find('textarea').exists()).toBe(true)
+    expect(w.text()).toContain('部署约定')
+    expect(w.text()).toContain('更新者 u')
+
+    await openTab(w, /上下文/)
+    expect(apiMocks.listAgentThreads).toHaveBeenCalledWith('demo-agent')
+    expect(w.find('[data-testid="agent-data-lock-banner"]').exists()).toBe(false)
+    expect(w.text()).not.toContain('需要平台管理员权限')
+    expect(w.text()).toContain('他人会话')
+
+    const threadBtn = w.findAll('button').find((b) => b.text().includes('他人会话'))
+    expect(threadBtn).toBeTruthy()
+    await threadBtn!.trigger('click')
+    await flushPromises()
+    expect(apiMocks.listAgentThreadMessages).toHaveBeenCalledWith('demo-agent', 'th-user-1')
+    expect(w.text()).toContain('你好')
+
+    await openTab(w, /定时任务/)
+    expect(apiMocks.listAgentCronJobs).toHaveBeenCalledWith('demo-agent')
+    expect(w.text()).toContain('每日汇报')
+    expect(w.text()).toContain('查看与管理')
+    expect(w.text()).not.toContain('需要平台管理员权限')
+
+    const enabled = w.get('[data-testid="agent-cron-enabled"]')
+    const deliver = w.get('[data-testid="agent-cron-deliver"]')
+    const del = w.get('[data-testid="agent-cron-delete"]')
+    expect((enabled.element as HTMLInputElement).disabled).toBe(false)
+    expect((deliver.element as HTMLInputElement).disabled).toBe(false)
+    expect((del.element as HTMLButtonElement).disabled).toBe(false)
+    expect(enabled.attributes('title')).toBeUndefined()
+    expect(deliver.attributes('title')).toBeUndefined()
+    expect(del.attributes('title')).toBeUndefined()
+
+    await enabled.setValue(false)
+    await flushPromises()
+    expect(apiMocks.patchAgentCronJob).toHaveBeenCalledWith('demo-agent', 'cron-1', { enabled: false })
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await del.trigger('click')
+    await flushPromises()
+    expect(apiMocks.deleteAgentCronJob).toHaveBeenCalledWith('demo-agent', 'cron-1')
+    expect(toastError).not.toHaveBeenCalled()
+  })
+
+  it('admin: loads memories and can use job write controls', async () => {
+    useAuth().setUser({ username: 'admin', expiresAt: 't', isAdmin: true })
+    apiMocks.listAgentMemories.mockResolvedValue({
+      items: [
+        {
+          id: 'm1',
+          projectId: 'proj-1',
+          agentName: 'demo-agent',
+          title: '部署约定',
+          content: '确认配置',
+          source: 'user',
+          updatedBy: 'admin',
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    })
+    apiMocks.patchAgentCronJob.mockResolvedValue({ ...SAMPLE_JOB, enabled: false })
+
+    const w = mountPanel()
+    await flushPromises()
+    expect(apiMocks.listAgentMemories).toHaveBeenCalledWith('demo-agent')
+    expect(w.find('[data-testid="agent-data-lock-banner"]').exists()).toBe(false)
+    expect(w.text()).toContain('部署约定')
+    expect(w.find('textarea').exists()).toBe(true)
+
+    await openTab(w, /定时任务/)
+    expect(apiMocks.listAgentCronJobs).toHaveBeenCalledWith('demo-agent')
+    expect(w.text()).toContain('查看与管理')
+    const enabled = w.get('[data-testid="agent-cron-enabled"]')
+    expect((enabled.element as HTMLInputElement).disabled).toBe(false)
+    await enabled.setValue(false)
+    await flushPromises()
+    expect(apiMocks.patchAgentCronJob).toHaveBeenCalledWith('demo-agent', 'cron-1', { enabled: false })
+  })
+
+  it('maps admin required errors to Chinese tip', async () => {
+    useAuth().setUser({ username: 'admin', expiresAt: 't', isAdmin: true })
+    apiMocks.listAgentCronJobs.mockRejectedValue(new Error('admin required'))
+    const w = mountPanel()
+    await openTab(w, /定时任务/)
+    expect(toastError).toHaveBeenCalledWith('需要平台管理员权限')
+  })
+
+  it('honors initial subTab prop', async () => {
+    useAuth().setUser({ username: 'u', expiresAt: 't', isAdmin: false })
+    const w = mountPanel({ subTab: 'jobs' })
+    await flushPromises()
+    expect(apiMocks.listAgentCronJobs).toHaveBeenCalledWith('demo-agent')
+    expect(apiMocks.listAgentMemories).not.toHaveBeenCalled()
+  })
+})

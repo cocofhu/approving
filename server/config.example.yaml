@@ -1,0 +1,110 @@
+# approving 配置示例(对齐 auto-coder 形态)。
+#
+# 上线形态:deploy 阶段由 CI 从部署者选择的配置源获取此 YAML，写入 ConfigMap，
+# 以只读卷挂到 CONFIG_PATH;进程读取它。**不要把真实配置提交进 git / 打进镜像**。
+#
+# 本地开发:`cp config.example.yaml config.yaml` 后改值即可;或完全不写文件,
+# 仅用环境变量(env > 文件 > 默认)。
+#
+# 优先级:显式环境变量 > 本文件(经 ConfigMap 下发)> 代码默认值。
+# 高敏密钥(cursor_api_key)生产走 K8s Secret 注入环境变量,不放本文件。
+#
+# 注意:GitLab/代码托管不是平台级配置。仓库地址由工作流全局变量 repo_url 提供,
+# 凭据(GITLAB_TOKEN / GITLAB_URL 等)在 Agent 元信息的环境变量里配置(可引用
+# ${vars.<全局变量名>}),按 run 注入对应沙箱;平台本身不依赖任何固定的 GitLab 地址或令牌。
+
+server:
+  port: 8080
+  # 本文件仅用于 loopback 本地演示。非本地部署改为 production，并通过
+  # APPROVING_AUTH_USERS 注入自有账号哈希。
+  deployment_mode: local-demo
+  # 沙箱内 agent / MCP 客户端回连宿主 run 级 artifact-store MCP 的 base URL。
+  # 留空默认 http://host.docker.internal:<port>(本地 Docker / DinD 预览可用)。
+  #
+  # 部署时务必设为沙箱容器内可达、且已挂载 /mcp/runs/:runId 的 API 基址。
+  # 禁止把未挂载 MCP 的前端 SPA 入口域名配到这里。
+  #
+  # 生产值请显式写 API 入口(示例):
+  #   mcp_advertise: "https://approving-api.example.com"
+  # 若误配为 SPA 主机,进程会在加载配置时改写为 approving-server(见
+  # RewriteMisconfiguredMCPAdvertise);DinD/本地请留空以使用 host.docker.internal。
+  mcp_advertise: ""
+
+database:
+  # SQLite 路径(":memory:" 用于测试)。容器内通常用 /data/approving.db(挂持久卷)。
+  path: "approving.db"
+
+engine:
+  # exec_provider 默认中性的 "sandbox"(代码内 "cursor" 为兼容别名);只有一个
+  # Docker 沙箱后端,通常无需在此显式设置,留默认即可。
+  max_concurrent_runs: 5
+  profiles_root: "data/profiles"
+
+sandbox:
+  # 留空：按 Agent acpBackend 选用 images / 内置默认
+  # universal-sandbox-{cursor|claude_code|codebuddy|trae}:latest
+  # 非空则强制所有后端用同一镜像（不推荐）。
+  image: ""
+  # 按需覆盖某后端镜像；留空走内置默认。
+  images: {}
+  # 通用环境变量透传(厂商无关):逐条注入沙箱容器。
+  # 默认 SKIP_INNER_DOCKER=0(启用 DinD);设为 "1" 则不启动内层 dockerd。
+  env: {}
+  # ACP 后端密钥与选项(厂商中立入口):合并进沙箱 Env。各键保持后端语义,例如:
+  #   APPROVING_CURSOR_API_KEY — Cursor 后端
+  #   ANTHROPIC_API_KEY       — Claude Code 后端
+  #   CODEBUDDY_API_KEY       — CodeBuddy 后端
+  acp_env: {}
+  # deprecated: 请改用 acp_env.APPROVING_CURSOR_API_KEY;计划 0.2.0 移除。
+  cursor_api_key: ""
+  # deprecated: 参考实现 cursor CLI 登录复用;计划 0.2.0 移除。
+  cursor_auth_path: ""
+  # 单轮 agent/react 回合的硬超时(秒),即回合最多跑多久。单个节点可在其
+  # Agent 卡片上填「超时(分钟)」单独放宽(耗时任务用),不填则用此全局值。
+  agent_chat_timeout_seconds: 600
+  # 回合内多久没有任何事件就判定卡死并中断(秒)。长任务里 agent 可能长时间
+  # 闷头执行,故默认放宽到 600;调小可更快发现真正卡死的沙箱。
+  chat_idle_timeout_seconds: 600
+  # 工作流节点沙箱在回合结束后再保活多少分钟(供终端/IDE/日志事后调试),之后
+  # 被清扫回收。注:回合执行期间沙箱不受此限;MCP token 的有效期跟随沙箱生命
+  # 周期(沙箱在即有效,无需单独配置 token 时长)。
+  run_sandbox_ttl_minutes: 30
+  # Agent 对话测试沙箱:空闲多少分钟后被清扫回收(对话中暂停回收)。
+  test_sandbox_ttl_minutes: 30
+  # 同时存活的交互式(对话测试)沙箱数量上限。
+  max_test_sandboxes: 5
+  # Agent 配置根(config home)在宿主侧的落地基目录,打包后经 gateway
+  # config.bundleUrl / SSH 注入沙箱。留空=系统临时目录(本地开发与 K8s 预览均可)。
+  work_dir: ""
+
+# VNC preview (server-side Chromium + noVNC for app_preview frontend tab).
+# Always enabled; Settings max_preview_tabs overrides max_tabs at runtime.
+browser:
+  enabled: true
+  # Global LRU cap on concurrent preview tabs (one per viewer session).
+  max_tabs: 16
+  # Tabs per Chromium container before spawning another container.
+  max_tabs_per_container: 8
+  # Idle tab / empty container reclamation (seconds).
+  tab_idle_ttl_seconds: 300
+  container_idle_ttl_seconds: 600
+
+# 静态账号登录（鉴权始终启用，无 auth.enabled 开关）。下列账号只允许 loopback
+# 本地 demo；任何共享、远程或生产部署都必须通过 APPROVING_AUTH_USERS 显式替换。
+# username 可放 ConfigMap；password_hash 必须经 K8s Secret 注入环境变量
+# APPROVING_AUTH_USERS（JSON 数组），禁止明文密码进 git / 配置中心。
+# 账号变更后需重启 Pod 生效（config 热加载不刷新内存账号表）。
+auth:
+  session_ttl: 168h
+  max_failures: 5
+  lock_duration: 5m
+  # 用 scripts/gen-auth-hash.sh 生成自有 bcrypt 哈希；公开示例不携带可登录账号。
+  users: []
+
+# 至此静态安全项。secrets_key 是存储加密主密钥(AES-256),用于加密外部渠道
+# (QQ 等)在 DB 里的 app_secret。视作固定盐:设一次后保持不变,轮换会导致已存
+# 密文无法解密。生成:`head -c 32 /dev/urandom | base64`。生产建议经 K8s Secret
+# 注入环境变量 APPROVING_SECRETS_KEY 覆盖本值,不要把真实密钥提交进 git。
+# 留空则无法在 WebUI 保存渠道 app_secret。
+security:
+  secrets_key: ""

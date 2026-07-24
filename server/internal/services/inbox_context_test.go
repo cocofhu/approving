@@ -1,0 +1,142 @@
+package services
+
+import (
+	"testing"
+	"time"
+
+	"github.com/cocofhu/approving/internal/models"
+)
+
+func TestInboxContextKind(t *testing.T) {
+	db := newTestDB(t)
+	s := NewRunService(db)
+	now := time.Now().UTC()
+
+	db.Create(&models.Run{
+		ID: "run-gate", WorkflowID: "wf1", Status: "waiting_human",
+		StartedAt: now, Graph: validGraph(),
+	})
+	db.Create(&models.Gate{
+		RunID: "run-gate", NodeID: "gate-proposal", Iteration: 2,
+		Resolved: false, RequestedAt: now,
+	})
+
+	kind, ok := s.InboxContextKind("run-gate", "gate-proposal", 2)
+	if !ok || kind != "gate" {
+		t.Fatalf("gate pending: got %q %v", kind, ok)
+	}
+	if kind, ok := s.InboxContextKind("run-gate", "gate-proposal", 1); ok {
+		t.Fatalf("wrong iteration should not match: %q", kind)
+	}
+	if _, ok := s.InboxContextKind("run-gate", "missing", 2); ok {
+		t.Fatal("unknown node should not match")
+	}
+}
+
+func TestInboxContextKindClarify(t *testing.T) {
+	db := newTestDB(t)
+	s := NewRunService(db)
+	now := time.Now().UTC()
+
+	db.Create(&models.Run{
+		ID: "run-clarify", WorkflowID: "wf2", Status: "waiting_human",
+		StartedAt: now, Graph: reactGraph(""),
+	})
+	db.Create(&models.ReactConversation{
+		RunID: "run-clarify", NodeID: "react", Iteration: 1, Done: false,
+		Messages: []models.ReactMessage{{Role: "agent", Text: "hi", At: now.Format(time.RFC3339)}},
+	})
+	db.Create(&models.StateRun{RunID: "run-clarify", NodeID: "react", Iteration: 1, Status: "waiting_human"})
+
+	kind, ok := s.InboxContextKind("run-clarify", "react", 1)
+	if !ok || kind != "clarify" {
+		t.Fatalf("clarify pending: got %q %v", kind, ok)
+	}
+}
+
+func TestGateUpstreamNodeIDs(t *testing.T) {
+	gate := &models.Node{
+		ID: "gate", Type: "human_gate",
+		Config: map[string]any{"body_template": "see {{nodes.visual.outputs.page}}"},
+	}
+	ids := GateUpstreamNodeIDs(gate, nil)
+	if len(ids) != 1 || ids[0] != "visual" {
+		t.Fatalf("body_template refs: %v", ids)
+	}
+
+	ps := &models.Node{
+		ID: "sel", Type: "proposal_select",
+		Config: map[string]any{"from": "proposals.json"},
+	}
+	arts := []models.Artifact{{Name: "proposals.json", NodeID: "proposal"}}
+	ids = GateUpstreamNodeIDs(ps, arts)
+	if len(ids) != 1 || ids[0] != "proposal" {
+		t.Fatalf("proposal_select from: %v", ids)
+	}
+}
+
+func TestClarifySlimNodeIDs(t *testing.T) {
+	// research post-run review: no template refs → current node only
+	research := &models.Node{ID: "research_1", Type: "research", Config: map[string]any{}}
+	ids := ClarifySlimNodeIDs(research, "research_1", nil)
+	if len(ids) != 1 || ids[0] != "research_1" {
+		t.Fatalf("research only current: %v", ids)
+	}
+
+	// react with upstream refs in prompt/config
+	react := &models.Node{
+		ID: "react", Type: "react",
+		Config: map[string]any{
+			"prompt": `see {{nodes.research.outputs.research}} and artifact("plan.json")`,
+		},
+	}
+	arts := []models.Artifact{{Name: "plan.json", NodeID: "plan"}}
+	ids = ClarifySlimNodeIDs(react, "react", arts)
+	want := map[string]bool{"react": true, "research": true, "plan": true}
+	if len(ids) != 3 {
+		t.Fatalf("want 3 ids, got %v", ids)
+	}
+	for _, id := range ids {
+		if !want[id] {
+			t.Fatalf("unexpected id %q in %v", id, ids)
+		}
+	}
+
+	// nil node still includes current
+	ids = ClarifySlimNodeIDs(nil, "orphan", nil)
+	if len(ids) != 1 || ids[0] != "orphan" {
+		t.Fatalf("nil node: %v", ids)
+	}
+}
+
+func TestSlimNodeExecutions(t *testing.T) {
+	db := newTestDB(t)
+	s := NewRunService(db)
+	db.Create(&models.StateRun{
+		RunID: "r1", NodeID: "up", Iteration: 1, Status: "completed",
+		Outputs: map[string]any{"page": "<html/>"},
+		Events:  []models.AcpEvent{{Kind: "message", Text: "big"}},
+	})
+	db.Create(&models.StateRun{
+		RunID: "r1", NodeID: "up", Iteration: 2, Status: "failed",
+		Outputs: map[string]any{"page": "<html v2/>"},
+	})
+
+	execs := s.SlimNodeExecutions("r1", []string{"up"})
+	list := execs["up"]
+	if len(list) != 2 {
+		t.Fatalf("want 2 executions, got %d", len(list))
+	}
+	if _, hasEvents := list[0]["events"]; hasEvents {
+		t.Fatal("slim execution must not include events")
+	}
+	if list[0]["status"] != "completed" {
+		t.Fatalf("slim must include status, got %v", list[0]["status"])
+	}
+	if list[1]["status"] != "failed" {
+		t.Fatalf("iter 2 status: %v", list[1]["status"])
+	}
+	if list[1]["outputs"].(map[string]any)["page"] != "<html v2/>" {
+		t.Fatal("iteration 2 outputs missing")
+	}
+}

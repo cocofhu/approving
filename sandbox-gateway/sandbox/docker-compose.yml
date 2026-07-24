@@ -1,0 +1,36 @@
+services:
+  sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: universal-sandbox:local
+    # DinD 需要特权；仅写代码/不跑容器内 docker 时可去掉并设 SKIP_INNER_DOCKER=1
+    privileged: true
+    ports:
+      - "8765:8765"   # backend（ACP 桥接：agent 会话 /ws + /api/*）
+      - "8744:8744"   # code-server
+      - "22:22"       # SSH
+      - "9222:9222"   # Chromium CDP（VNC_PREVIEW=1 时）
+      - "6080:6080"   # noVNC websockify（VNC_PREVIEW=1 时）
+    environment:
+      ROOT_PASSWORD: "toor"
+      WORKSPACE_DIR: "/root/workspace"
+      CODE_SERVER_PORT: "8744"
+      ACP_BACKEND: "cursor"            # cursor | claude_code | codebuddy | trae
+      # VNC_PREVIEW: "1"               # 启动 headed Chromium + noVNC 预览栈
+      # SKIP_INNER_DOCKER: "1"
+      # 单仓：
+      # GIT_CLONE_URL: "https://github.com/owner/repo.git"
+      # 多仓（逗号分隔，name|url|branch，branch/name 可省）：
+      # GIT_REPOS: "api|https://github.com/owner/api.git|main,web|https://github.com/owner/web.git"
+      # 凭据（按 repo host 精确匹配路由）：
+      # GITHUB_TOKEN: ""
+      # GITLAB_TOKEN: ""
+      # GITLAB_URL: "https://gitlab.example.com"
+      # GIT_SSH_PRIVATE_KEY: ""
+      # GIT_SSH_KNOWN_HOSTS: ""
+    volumes:
+      - sandbox-workspace:/root/workspace
+
+volumes:
+  sandbox-workspace:

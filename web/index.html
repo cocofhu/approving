@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <title>Approving · 开发工作流编排</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Brand-critical Inter 600: discover font before CSS/JS (same URL as @font-face) -->
+    <link
+      rel="preload"
+      href="/fonts/inter-latin-600-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <style>
+      /* Critical boot shell: paint brand before Vue mount (replaced on #app mount) */
+      html,
+      body,
+      #app {
+        height: 100%;
+        margin: 0;
+        background: #0a0a0b;
+        color: #ededf0;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      }
+      .boot-shell {
+        display: flex;
+        min-height: 100%;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 1rem;
+        box-sizing: border-box;
+        background:
+          radial-gradient(ellipse 80% 60% at 50% 0%, rgba(123, 97, 255, 0.08), transparent),
+          #0a0a0b;
+      }
+      .boot-shell .brand-logo {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 1px;
+        line-height: 1.2;
+      }
+      .boot-shell .brand-logo__name {
+        font-size: 28px;
+        font-weight: 600;
+        letter-spacing: -0.03em;
+        color: #a5b4fc;
+        background: linear-gradient(90deg, #7b61ff 0%, #818cf8 35%, #6366f1 55%, #7b61ff 75%, #a78bfa 100%);
+        background-size: 200% 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      .boot-shell .brand-logo__tagline {
+        font-size: 12px;
+        color: #6e6e78;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div class="boot-shell" data-boot-shell aria-busy="true">
+        <div class="brand-logo brand-logo--lg">
+          <span class="brand-logo__name">Approving</span>
+          <span class="brand-logo__tagline" id="boot-tagline">开发工作流编排</span>
+        </div>
+      </div>
+    </div>
+    <script>
+      ;(function () {
+        try {
+          var saved = localStorage.getItem('approving-locale')
+          var lang = (saved || navigator.language || 'zh-CN').toLowerCase()
+          var en = lang === 'en' || (lang.startsWith('en') && !lang.startsWith('zh'))
+          if (en) {
+            document.documentElement.lang = 'en'
+            var el = document.getElementById('boot-tagline')
+            if (el) el.textContent = 'Dev workflow orchestration'
+          }
+        } catch (_) {}
+      })()
+    </script>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

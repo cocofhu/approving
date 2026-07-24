@@ -1,0 +1,54 @@
+# --- Node / frontend ---
+web/node_modules/
+web/dist/
+docs/node_modules/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+docs/test-results/
+docs/playwright-report/
+node_modules/
+web/test-results/
+web/playwright-report/
+web/coverage/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Go / backend ---
+# compiled binaries
+server/server
+server/approving
+server/qqsmoke
+/server/cmd/server/server
+*.exe
+*.test
+*.out
+# 覆盖率产物(CI 生成,MR 覆盖率报告)
+coverage.xml
+
+# runtime data: SQLite DB + filesystem-seeded skill profiles
+server/data/
+*.db
+*.db-shm
+*.db-wal
+
+# 本地配置(从 config.example.yaml 拷贝而来,可能填了 cursor_api_key 等密钥)
+server/config.yaml
+
+# --- local docker-compose dev env (see start.sh) ---
+/.env
+/.devdata/
+/release-evidence/
+
+# 本地 Agent profiles（含 API key 等密钥，勿提交）
+data/profiles/
+# 运行时 seed 的平台规则副本(源为 server 内嵌 skills_embed/rules,首启动落地供 UI 覆盖)
+data/platform-rules/
+
+# --- editor / OS ---
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

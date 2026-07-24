@@ -1,0 +1,54 @@
+#!/usr/bin/env sh
+set -eu
+
+COMPOSE_FILE="${COMPOSE_FILE:-compose.release.yaml}"
+EVIDENCE_DIR="${EVIDENCE_DIR:-release-evidence}"
+mkdir -p "$EVIDENCE_DIR"
+LOG="$EVIDENCE_DIR/smoke.log"
+
+require_digest() {
+  name="$1"
+  value="$(eval "printf '%s' \"\${$name:-}\"")"
+  case "$value" in
+    *@sha256:????????????????????????????????????????????????????????????????) ;;
+    *)
+      printf '%s must be an immutable @sha256 image reference\n' "$name" >&2
+      exit 2
+      ;;
+  esac
+}
+
+require_digest APPROVING_IMAGE
+require_digest SANDBOX_GATEWAY_IMAGE
+require_digest SANDBOX_IMAGE
+
+# Internal, short-lived authentication for the loopback doctor control plane.
+# It is generated automatically and deliberately omitted from smoke evidence.
+APPROVING_DOCTOR_TOKEN="${APPROVING_DOCTOR_TOKEN:-$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')}"
+export APPROVING_DOCTOR_TOKEN
+
+cleanup() {
+  docker compose -f "$COMPOSE_FILE" down --volumes --remove-orphans >>"$LOG" 2>&1 || true
+}
+trap cleanup EXIT INT TERM
+
+{
+  printf 'Approving release smoke\n'
+  printf 'started_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf 'kernel=%s\n' "$(uname -srmo)"
+  docker version --format 'docker_client={{.Client.Version}} docker_server={{.Server.Version}}'
+  docker compose version
+  printf 'approving_image=%s\n' "$APPROVING_IMAGE"
+  printf 'gateway_image=%s\n' "$SANDBOX_GATEWAY_IMAGE"
+  printf 'sandbox_image=%s\n' "$SANDBOX_IMAGE"
+} >"$LOG"
+
+docker compose -f "$COMPOSE_FILE" config --quiet >>"$LOG" 2>&1
+docker compose -f "$COMPOSE_FILE" pull >>"$LOG" 2>&1
+docker compose -f "$COMPOSE_FILE" up -d --wait >>"$LOG" 2>&1
+docker compose -f "$COMPOSE_FILE" exec -T approving \
+  /app/approving doctor --run-demo --timeout 5m >>"$LOG" 2>&1
+docker compose -f "$COMPOSE_FILE" ps >>"$LOG" 2>&1
+
+printf 'completed_utc=%s\nresult=passed\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$LOG"
+printf 'release smoke passed; evidence: %s\n' "$LOG"

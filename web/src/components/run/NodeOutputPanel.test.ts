@@ -1,0 +1,125 @@
+// @vitest-environment happy-dom
+import { createI18n } from 'vue-i18n'
+import { flushPromises, mount } from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import common from '@/locales/zh-CN/common.json'
+import pages from '@/locales/zh-CN/pages.json'
+import type { NodeRun, Run, WFNode } from '@/lib/types'
+import NodeOutputPanel from './NodeOutputPanel.vue'
+
+const apiMocks = vi.hoisted(() => ({
+  artifactContent: vi.fn(),
+}))
+
+vi.mock('@/lib/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+  return {
+    ...actual,
+    api: {
+      ...actual.api,
+      artifactContent: apiMocks.artifactContent,
+    },
+  }
+})
+
+function mountPanel(node: WFNode, nodeRun: NodeRun, run: Run) {
+  const i18n = createI18n({
+    legacy: false,
+    locale: 'zh-CN',
+    messages: { 'zh-CN': { ...common, ...pages } },
+  })
+  return mount(NodeOutputPanel, {
+    props: { node, nodeRun, run },
+    global: {
+      plugins: [i18n],
+      stubs: {
+        Icon: true,
+        StatusPill: true,
+        CompositeVarBlock: true,
+        PlanView: true,
+        AppPreviewPanel: true,
+        OutputResultCards: true,
+      },
+    },
+  })
+}
+
+describe('NodeOutputPanel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    apiMocks.artifactContent.mockResolvedValue({ content: '{"goals":[]}' })
+  })
+
+  it('renders input node parameters', async () => {
+    const node: WFNode = {
+      id: 'input-1',
+      type: 'input',
+      label: '输入',
+      position: { x: 0, y: 0 },
+      config: { variables: [{ name: 'topic', desc: '主题' }] },
+    }
+    const nodeRun: NodeRun = {
+      nodeId: 'input-1',
+      iteration: 1,
+      status: 'completed',
+      outputs: { topic: 'hello' },
+    }
+    const run = { id: 'run-1', artifacts: [] } as unknown as Run
+    const wrapper = mountPanel(node, nodeRun, run)
+    await flushPromises()
+    expect(wrapper.text()).toContain('主题')
+    expect(wrapper.text()).toContain('topic')
+    wrapper.unmount()
+  })
+
+  it('renders research agent info and structured markdown', async () => {
+    const node: WFNode = {
+      id: 'research',
+      type: 'research',
+      label: '调研',
+      position: { x: 0, y: 0 },
+      config: { skill_profile: 'researcher' },
+    }
+    const nodeRun: NodeRun = {
+      nodeId: 'research',
+      iteration: 1,
+      status: 'completed',
+      durationSec: 42,
+      outputs: {
+        narration_summary: '完成调研',
+        research: '## 调研结论\n内容',
+      },
+    }
+    const run = { id: 'run-1', artifacts: [] } as unknown as Run
+    const wrapper = mountPanel(node, nodeRun, run)
+    await flushPromises()
+    expect(wrapper.text()).toContain('researcher')
+    expect(wrapper.text()).toContain('完成调研')
+    wrapper.unmount()
+  })
+
+  it('loads plan.json for plan node', async () => {
+    const planDoc = { title: '计划', goals: [{ id: 'g1', title: '目标', status: 'pending' }] }
+    const node: WFNode = {
+      id: 'plan',
+      type: 'plan',
+      label: '计划',
+      position: { x: 0, y: 0 },
+      config: {},
+    }
+    const nodeRun: NodeRun = {
+      nodeId: 'plan',
+      iteration: 1,
+      status: 'completed',
+      outputs: { plan_json: JSON.stringify(planDoc) },
+    }
+    const run = {
+      id: 'run-1',
+      artifacts: [{ id: 'a1', name: 'plan.json', kind: 'json', nodeId: 'plan', runId: 'run-1', workflowName: 'wf', sizeBytes: 10, createdAt: '2026-07-18T00:00:00Z' }],
+    } as unknown as Run
+    const wrapper = mountPanel(node, nodeRun, run)
+    await flushPromises()
+    expect(wrapper.findComponent({ name: 'PlanView' }).exists()).toBe(true)
+    wrapper.unmount()
+  })
+})

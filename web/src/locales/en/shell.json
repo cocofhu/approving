@@ -1,0 +1,25 @@
+{
+  "shell": {
+    "appName": "Approving",
+    "tagline": "Dev workflow orchestration",
+    "userRole": "Administrator",
+    "logout": "Log out",
+    "searchPlaceholder": "Search workflows, runs…",
+    "docs": "Docs",
+    "docsTitle": "Open product docs (new tab)",
+    "langSelect": "Language / 语言",
+    "theme": {
+      "toLight": "Switch to light",
+      "toDark": "Switch to dark"
+    },
+    "shutdown": {
+      "draining": "Shutting down",
+      "drainingTitle": "Instance is gracefully shutting down"
+    },
+    "aria": {
+      "openNav": "Open navigation menu",
+      "closeNav": "Close navigation menu",
+      "backToList": "Back to list"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "route": {
+    "dashboard": "Dashboard",
+    "board": "Board",
+    "projects": "Projects",
+    "projectDetail": "Project detail",
+    "workflows": "Workflows",
+    "workflowEditor": "Canvas editor",
+    "runs": "Runs",
+    "runDetail": "Run detail",
+    "gates": "Pending gates",
+    "artifacts": "Artifacts",
+    "agents": "Agent studio",
+    "sandboxes": "Sandboxes",
+    "sandboxConsole": "Sandbox console",
+    "integrations": "Integrations",
+    "triggers": "Triggers",
+    "settings": "Settings",
+    "platformRules": "Platform rules",
+    "login": "Login"
+  }
+}

@@ -1,0 +1,195 @@
+package handlers
+
+import (
+	"time"
+
+	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/services"
+
+	"github.com/gin-gonic/gin"
+)
+
+// effectiveRunDuration reports a run's elapsed seconds for display. In-flight
+// runs (running / waiting_human) tick live from their start; terminal runs use
+// the duration stamped at finish(). This keeps the 耗时 column honest instead of
+// showing 00:00 for a run that clearly took time.
+func effectiveRunDuration(r models.Run) int {
+	switch r.Status {
+	case "completed", "failed", "cancelled":
+		return r.DurationSec
+	default:
+		if !r.StartedAt.IsZero() {
+			return int(time.Since(r.StartedAt).Seconds())
+		}
+		return r.DurationSec
+	}
+}
+
+// graphNodesDTO shapes a graph's nodes for the frontend canvas. Global
+// variables are injected into the input node config so the inspector / output
+// panels render them. Shared by the workflow editor and the run detail view so
+// a run renders against the exact graph snapshot it executed.
+func graphNodesDTO(g models.Graph) []gin.H {
+	nodes := make([]gin.H, 0, len(g.Nodes))
+	for _, n := range g.Nodes {
+		cfg := map[string]any{}
+		for k, v := range n.Config {
+			cfg[k] = v
+		}
+		if n.Type == "input" && len(g.Variables) > 0 {
+			cfg["variables"] = g.Variables
+		}
+		nodes = append(nodes, gin.H{
+			"id": n.ID, "type": n.Type, "label": n.Label,
+			"position": n.Position, "config": cfg, "checkpoint": n.Checkpoint,
+		})
+	}
+	return nodes
+}
+
+// workflowDTO shapes a workflow for the frontend.
+func workflowDTO(wf models.WorkflowDef) gin.H {
+	return gin.H{
+		"id": wf.ID, "projectId": wf.ProjectID, "name": wf.Name, "description": wf.Description,
+		"status": wf.Status, "version": wf.Version, "needsRepo": wf.NeedsRepo,
+		"updatedAt": wf.UpdatedAt, "lastRunAt": wf.LastRunAt,
+		"nodes": graphNodesDTO(wf.Graph), "edges": wf.Graph.Edges, "variables": wf.Graph.Variables,
+	}
+}
+
+// projectDTO shapes a project for the frontend with secret values masked.
+func projectDTO(p models.Project, workflowCount int64) gin.H {
+	return gin.H{
+		"id": p.ID, "name": p.Name, "description": p.Description,
+		"sandboxEnv":      services.MaskedSandboxEnv(p.SandboxEnv),
+		"variables":       services.MaskedProjectVars(p.Variables),
+		"workflowCount":   workflowCount,
+		"pmLeaderEnabled": p.PmLeaderEnabled,
+		"pmLeaderAgent":   p.PmLeaderAgent,
+		"createdAt":       p.CreatedAt, "updatedAt": p.UpdatedAt,
+	}
+}
+
+func graphDTO(g models.Graph) gin.H {
+	return gin.H{
+		"nodes": graphNodesDTO(g), "edges": g.Edges, "variables": g.Variables,
+	}
+}
+
+// artifactMetaDTO shapes one artifact's metadata for list/run/inbox responses
+// (content is loaded on demand via GET /api/artifacts/:id/content).
+func artifactMetaDTO(a models.Artifact) gin.H {
+	out := gin.H{
+		"id": a.ID, "name": a.Name, "kind": a.Kind, "nodeId": a.NodeID,
+		"runId": a.RunID, "workflowId": a.WorkflowID, "workflowName": a.WorkflowName, "sizeBytes": a.SizeBytes,
+		"createdAt": a.CreatedAt,
+	}
+	if !a.UpdatedAt.IsZero() {
+		out["updatedAt"] = a.UpdatedAt
+	}
+	return out
+}
+
+func runSummaryDTO(r models.Run, currentNodeLabel string) gin.H {
+	out := gin.H{
+		"id": r.ID, "workflowId": r.WorkflowID, "workflowName": r.WorkflowName,
+		"workflowVersion": r.WorkflowVersion,
+		"status":          r.Status, "trigger": r.Trigger, "startedAt": r.StartedAt,
+		"createdAt":   r.CreatedAt,
+		"durationSec": effectiveRunDuration(r), "progress": r.Progress, "branch": r.Branch,
+		"title":    r.Title,
+		"priority": models.PriorityLabel(r.Priority),
+	}
+	if currentNodeLabel != "" {
+		out["currentNodeLabel"] = currentNodeLabel
+	}
+	return out
+}
+
+// runDetailDTO assembles the full run view (nodeRuns, gate, clarify,
+// artifacts, vars, trace, git) in the frontend's Run shape.
+func (h *Handlers) runDetailDTO(r models.Run) gin.H {
+	states := h.Runs.States(r.ID)
+	// nodeRuns holds each node's LATEST execution (canvas status / default view);
+	// nodeExecutions holds the full per-node execution history (oldest→newest)
+	// so the UI can offer a "第 N 次执行" switch and every past run's output,
+	// events, and duration stay traceable after loop-backs / gate revises.
+	nodeRuns := gin.H{}
+	nodeExecutions := map[string][]gin.H{}
+	var git gin.H
+	for _, s := range states {
+		nr := gin.H{
+			"nodeId": s.NodeID, "iteration": s.Iteration, "status": s.Status, "outputMd": s.OutputMd,
+			"outputs": s.Outputs, "varsSnapshot": s.VarsSnapshot, "events": s.Events, "mcpCalls": s.McpCalls, "durationSec": s.DurationSec,
+		}
+		if s.Error != "" {
+			nr["error"] = s.Error
+		}
+		if s.StartedAt != nil {
+			nr["startedAt"] = *s.StartedAt
+		}
+		nodeRuns[s.NodeID] = nr // states are ordered, so the last row wins = latest
+		nodeExecutions[s.NodeID] = append(nodeExecutions[s.NodeID], nr)
+		if s.Outputs != nil {
+			if sha, ok := s.Outputs["pushed_sha"]; ok {
+				git = gin.H{"pushed": true, "pushedSha": sha, "branch": s.Outputs["branch"], "mrUrl": s.Outputs["mr_url"]}
+			}
+		}
+	}
+
+	// vars
+	vars := make([]gin.H, 0)
+	for _, v := range h.Runs.Variables(r.ID) {
+		vars = append(vars, gin.H{"name": v.Name, "type": v.Type, "value": v.Value})
+	}
+
+	// artifacts (metadata only — content via /api/artifacts/:id/content)
+	arts := make([]gin.H, 0)
+	for _, a := range h.Arts.ByRun(r.ID) {
+		arts = append(arts, artifactMetaDTO(a))
+	}
+
+	out := gin.H{
+		"id": r.ID, "workflowId": r.WorkflowID, "workflowName": r.WorkflowName,
+		"workflowVersion": r.WorkflowVersion,
+		"status":          r.Status, "trigger": r.Trigger, "startedAt": r.StartedAt,
+		"durationSec": effectiveRunDuration(r), "progress": r.Progress, "branch": r.Branch,
+		"attempt": r.Attempt, "nodeRuns": nodeRuns, "nodeExecutions": nodeExecutions, "artifacts": arts,
+		"vars": vars, "trace": r.Trace,
+		"priority": models.PriorityLabel(r.Priority),
+		// The graph snapshot this run executed (pinned at start). The run detail
+		// canvas renders against this rather than the live workflow definition,
+		// so details survive the workflow being edited, re-published, or deleted.
+		"nodes": graphNodesDTO(r.Graph), "edges": r.Graph.Edges,
+	}
+	if git != nil {
+		out["git"] = git
+	}
+	if g, ok := h.Runs.PendingGate(r.ID); ok {
+		gateDTO := gin.H{
+			"runId": g.RunID, "nodeId": g.NodeID, "iteration": g.Iteration, "workflowId": g.WorkflowID, "workflowName": g.WorkflowName,
+			"title": g.Title, "bodyMd": g.BodyMd, "actions": g.Actions, "form": g.Form,
+			"upstreamNodeId": g.UpstreamNodeID, "upstreamIteration": g.UpstreamIteration,
+			"requestedAt": g.RequestedAt,
+		}
+		// ReAct reject capability: the gate can push annotations back into the
+		// upstream producer's still-alive sandbox session for an in-place edit.
+		if pid, alive := h.Eng.GateReactInfo(r.ID, g.NodeID); pid != "" {
+			gateDTO["reactUpstreamNodeId"] = pid
+			gateDTO["reactSessionAlive"] = alive
+		}
+		out["gate"] = gateDTO
+	}
+	if conv, ok := h.Runs.Conversation(r.ID); ok {
+		out["clarify"] = gin.H{"nodeId": conv.NodeID, "iteration": conv.Iteration, "turns": conv.Messages, "done": conv.Done}
+	}
+	// Per-node conversations so each react node renders its own dialogue history
+	// (a run may have several react nodes).
+	clarifyByNode := gin.H{}
+	for _, conv := range h.Runs.Conversations(r.ID) {
+		clarifyByNode[conv.NodeID] = gin.H{"nodeId": conv.NodeID, "iteration": conv.Iteration, "turns": conv.Messages, "done": conv.Done}
+	}
+	out["clarifyByNode"] = clarifyByNode
+	h.hydrateNodeExecutions(nodeExecutions, r.ID)
+	return out
+}

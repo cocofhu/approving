@@ -1,0 +1,378 @@
+package runtime
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/cocofhu/approving/internal/mcp"
+	"github.com/cocofhu/approving/internal/models"
+)
+
+// The TestRunAgent* / TestReact* cases below are the fake end-to-end suite: they
+// drive the real acpProvider through an in-memory fakeBridge + fakeManager
+// (no Docker, no Cursor API key) over the full RunAgent / React flow. CI's
+// blocking `server:e2e:fake` job selects them by name via
+// `go test -run 'TestRunAgent|TestReact'`, as the credential-free counterpart to
+// the live `server:e2e` job (TestCursorLive*). Keep new fake-e2e cases under one
+// of those two name prefixes so the job keeps picking them up.
+
+// testOpts is a fast, Docker-free provider config: tiny backoff so retries
+// don't slow the suite, short idle window for the stall test.
+func testOpts() Options {
+	return Options{
+		SandboxImage:        "fake",
+		SandboxMaxAttempts:  3,
+		SandboxRetryBackoff: time.Millisecond,
+		ChatIdleTimeout:     80 * time.Millisecond,
+		ChatTimeout:         5 * time.Second,
+	}
+}
+
+func setupProvider(t *testing.T, chatFor func(attempt int) chatFunc) (*acpProvider, *mcp.Host, *memStore, *fakeManager, *countingRegistry, NodeReq) {
+	return setupProviderBackend(t, BackendCursor, chatFor)
+}
+
+func setupProviderBackend(t *testing.T, backend AcpBackend, chatFor func(attempt int) chatFunc) (*acpProvider, *mcp.Host, *memStore, *fakeManager, *countingRegistry, NodeReq) {
+	t.Helper()
+	store := newMemStore()
+	host := mcp.NewHost(store)
+	runID, nodeID := "run-1", "node-1"
+	tok := host.RegisterRun(runID)
+	t.Cleanup(func() { host.UnregisterRun(runID) })
+	profiles := writeAgent(t, "test-agent", `{"acpBackend":"`+string(backend)+`","env":{"APPROVING_CURSOR_API_KEY":"fake","APPROVING_CLAUDE_API_KEY":"fake","APPROVING_CODEBUDDY_API_KEY":"fake","APPROVING_TRAE_API_KEY":"fake"}}`)
+	mgr := newFakeManager(t, host, runID, nodeID, tok, chatFor)
+	opts := testOpts()
+	opts.ProfilesRoot = profiles
+	p, reg := newTestProviderBackend(t, host, opts, mgr, backend)
+	req := NodeReq{RunID: runID, NodeID: nodeID, NodeType: "agent", Token: tok,
+		Config: map[string]any{"prompt": "do it", "produces": "report.md", "skill_profile": "test-agent"}, Vars: map[string]any{}}
+	return p, host, store, mgr, reg, req
+}
+
+func TestRunAgentHappyPath(t *testing.T) {
+	p, _, store, mgr, reg, req := setupProvider(t, func(int) chatFunc {
+		return func(int) turnAction {
+			return turnAction{narration: "done work", produces: map[string]string{"report.md": "# report\nok"}}
+		}
+	})
+	res, err := p.RunAgent(context.Background(), req)
+	if err != nil {
+		t.Fatalf("RunAgent: %v", err)
+	}
+	if res.OutputMd == "" {
+		t.Error("expected narration output")
+	}
+	if c, ok := store.Get("run-1", "report.md"); !ok || c == "" {
+		t.Errorf("produces not stored: got %q ok=%v", c, ok)
+	}
+	if mgr.createCount() != 1 {
+		t.Errorf("create count = %d, want 1", mgr.createCount())
+	}
+	if !reg.balanced() {
+		t.Errorf("sandbox registry not balanced: %+v", reg)
+	}
+}
+
+func TestRunAgentRetryThenSucceed(t *testing.T) {
+	p, _, store, mgr, reg, req := setupProvider(t, func(attempt int) chatFunc {
+		return func(int) turnAction {
+			if attempt < 2 {
+				return turnAction{dropConn: true} // ErrConnClosed -> retryable
+			}
+			return turnAction{narration: "recovered", produces: map[string]string{"report.md": "ok"}}
+		}
+	})
+	res, err := p.RunAgent(context.Background(), req)
+	if err != nil {
+		t.Fatalf("RunAgent should recover after retries: %v", err)
+	}
+	if res.OutputMd == "" {
+		t.Error("expected narration after recovery")
+	}
+	if _, ok := store.Get("run-1", "report.md"); !ok {
+		t.Error("produces missing after recovery")
+	}
+	if mgr.createCount() != 3 {
+		t.Errorf("create count = %d, want 3 (2 failed + 1 ok)", mgr.createCount())
+	}
+	if !reg.balanced() {
+		t.Errorf("sandbox leaked across retries: %+v", reg)
+	}
+}
+
+func TestRunAgentRetryExhausted(t *testing.T) {
+	p, _, _, mgr, reg, req := setupProvider(t, func(int) chatFunc {
+		return func(int) turnAction { return turnAction{dropConn: true} }
+	})
+	p.opts.SandboxMaxAttempts = 2
+	_, err := p.RunAgent(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected error after exhausting retries")
+	}
+	if !isRetryableSandboxErr(err) {
+		t.Errorf("final error should still classify retryable, got %v", err)
+	}
+	if mgr.createCount() != 2 {
+		t.Errorf("create count = %d, want 2 (== SandboxMaxAttempts)", mgr.createCount())
+	}
+	if !reg.balanced() {
+		t.Errorf("sandbox leaked: %+v", reg)
+	}
+}
+
+func TestRunAgentIdleTimeoutRetries(t *testing.T) {
+	p, _, store, mgr, _, req := setupProvider(t, func(attempt int) chatFunc {
+		return func(int) turnAction {
+			if attempt == 0 {
+				return turnAction{stall: true} // no events -> ErrChatIdle -> retryable
+			}
+			return turnAction{narration: "second try", produces: map[string]string{"report.md": "ok"}}
+		}
+	})
+	p.opts.SandboxMaxAttempts = 2
+	res, err := p.RunAgent(context.Background(), req)
+	if err != nil {
+		t.Fatalf("idle timeout should retry and succeed: %v", err)
+	}
+	if res.OutputMd == "" {
+		t.Error("expected narration on the retry")
+	}
+	if _, ok := store.Get("run-1", "report.md"); !ok {
+		t.Error("produces missing after idle retry")
+	}
+	if mgr.createCount() != 2 {
+		t.Errorf("create count = %d, want 2", mgr.createCount())
+	}
+}
+
+func TestRunAgentNonRetryableError(t *testing.T) {
+	p, _, _, mgr, _, req := setupProvider(t, func(int) chatFunc {
+		return func(int) turnAction { return turnAction{sendError: "model refused"} }
+	})
+	_, err := p.RunAgent(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected an error from the agent-reported failure")
+	}
+	if isRetryableSandboxErr(err) {
+		t.Errorf("agent error must not be retryable: %v", err)
+	}
+	if mgr.createCount() != 1 {
+		t.Errorf("create count = %d, want 1 (no retry on agent error)", mgr.createCount())
+	}
+}
+
+// reactChat scripts a react sandbox: turn 0 (open or prime) and later turns.
+func reactSetup(t *testing.T, chatFor func(attempt int) chatFunc) (*acpProvider, *mcp.Host, *memStore, *fakeManager, NodeReq) {
+	return reactSetupBackend(t, BackendCursor, chatFor)
+}
+
+func reactSetupBackend(t *testing.T, backend AcpBackend, chatFor func(attempt int) chatFunc) (*acpProvider, *mcp.Host, *memStore, *fakeManager, NodeReq) {
+	store := newMemStore()
+	host := mcp.NewHost(store)
+	runID, nodeID := "run-r", "node-r"
+	tok := host.RegisterRun(runID)
+	t.Cleanup(func() { host.UnregisterRun(runID) })
+	profiles := writeAgent(t, "react-agent", `{"acpBackend":"`+string(backend)+`","env":{"APPROVING_CURSOR_API_KEY":"fake","APPROVING_CLAUDE_API_KEY":"fake","APPROVING_CODEBUDDY_API_KEY":"fake","APPROVING_TRAE_API_KEY":"fake"}}`)
+	mgr := newFakeManager(t, host, runID, nodeID, tok, chatFor)
+	opts := testOpts()
+	opts.ProfilesRoot = profiles
+	p, _ := newTestProviderBackend(t, host, opts, mgr, backend)
+	req := NodeReq{RunID: runID, NodeID: nodeID, NodeType: "react", Token: tok,
+		Config: map[string]any{"prompt": "clarify", "max_rounds": 3, "skill_profile": "react-agent"}, Vars: map[string]any{}}
+	return p, host, store, mgr, req
+}
+
+func clarified() map[string]string {
+	return map[string]string{mcp.ClarifiedRequirementArtifactName: mcp.MinimalValidClarifiedRequirementJSON}
+}
+
+func TestReactOpenPausesThenReplyFinishes(t *testing.T) {
+	p, _, store, _, req := reactSetup(t, func(int) chatFunc {
+		return func(turn int) turnAction {
+			if turn == 0 { // opening turn raises a question
+				return turnAction{narration: "need info", questions: []models.ReactQuestion{{ID: "q1", Prompt: "?", Options: []models.ReactOption{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}}}}}
+			}
+			return turnAction{narration: "clarified", produces: clarified()}
+		}
+	})
+	open := p.ReactOpen(context.Background(), req)
+	if open.Done {
+		t.Fatal("opening turn with a question should pause, not finish")
+	}
+	if len(open.Questions) == 0 {
+		t.Fatal("expected questions on the opening turn")
+	}
+	hist := []models.ReactMessage{{Role: "agent", Text: "need info"}, {Role: "human", Text: "answer"}}
+	reply := p.ReactReply(context.Background(), req, hist, "answer", nil, false)
+	if !reply.Done {
+		t.Fatalf("reply should finish the clarification, got %+v", reply)
+	}
+	if _, ok := store.Get("run-r", mcp.ClarifiedRequirementArtifactName); !ok {
+		t.Error("clarified requirement not written on finish")
+	}
+}
+
+func TestReactReplyRehydratesAfterSessionLoss(t *testing.T) {
+	p, _, store, mgr, req := reactSetup(t, func(attempt int) chatFunc {
+		return func(turn int) turnAction {
+			if attempt == 0 { // first sandbox: opening turn asks a question
+				return turnAction{narration: "need info", questions: []models.ReactQuestion{{ID: "q1", Prompt: "?", Options: []models.ReactOption{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}}}}}
+			}
+			// second sandbox: turn 0 is the rehydrate prime, turn 1 is the reply.
+			if turn == 0 {
+				return turnAction{narration: "context restored"}
+			}
+			return turnAction{narration: "clarified", produces: clarified()}
+		}
+	})
+	open := p.ReactOpen(context.Background(), req)
+	if len(open.Questions) == 0 {
+		t.Fatal("expected opening question")
+	}
+	// Simulate a lost live session: close the ACP so IsConnected() is false.
+	key := reactKey(req)
+	p.mu.Lock()
+	sess := p.sessions[key]
+	p.mu.Unlock()
+	if sess == nil {
+		t.Fatal("expected a live react session after open")
+	}
+	sess.acp.Close()
+
+	hist := []models.ReactMessage{{Role: "agent", Text: "need info"}, {Role: "human", Text: "answer"}}
+	reply := p.ReactReply(context.Background(), req, hist, "answer", nil, false)
+	if !reply.Done {
+		t.Fatalf("rehydrated reply should finish, got %+v", reply)
+	}
+	if _, ok := store.Get("run-r", mcp.ClarifiedRequirementArtifactName); !ok {
+		t.Error("clarified requirement not written after rehydrate")
+	}
+	if mgr.createCount() != 2 {
+		t.Errorf("create count = %d, want 2 (open + rehydrate)", mgr.createCount())
+	}
+	// The rebuilt sandbox's first prompt must be the recovery/prime prompt.
+	if prime := mgr.bridge(1).promptAt(0); !strings.Contains(prime, "会话恢复") {
+		t.Errorf("rehydrate prime prompt missing recovery marker: %q", prime)
+	}
+}
+
+func TestReactReplyRehydrateFailureNotDone(t *testing.T) {
+	p, _, _, mgr, req := reactSetup(t, func(int) chatFunc {
+		return func(turn int) turnAction {
+			return turnAction{narration: "need info", questions: []models.ReactQuestion{{ID: "q1", Prompt: "?", Options: []models.ReactOption{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}}}}}
+		}
+	})
+	p.opts.SandboxMaxAttempts = 1
+	// Fail the rehydrate sandbox creation (the 2nd Create).
+	mgr.createErr = func(attempt int) error {
+		if attempt == 1 {
+			return errors.New("no capacity")
+		}
+		return nil
+	}
+	open := p.ReactOpen(context.Background(), req)
+	if len(open.Questions) == 0 {
+		t.Fatal("expected opening question")
+	}
+	key := reactKey(req)
+	p.mu.Lock()
+	sess := p.sessions[key]
+	p.mu.Unlock()
+	sess.acp.Close()
+
+	hist := []models.ReactMessage{{Role: "human", Text: "answer"}}
+	reply := p.ReactReply(context.Background(), req, hist, "answer", nil, false)
+	if reply.Done {
+		t.Error("rehydrate failure must NOT silently finish the node (Done should be false)")
+	}
+	if !strings.Contains(reply.Msg, "重建") {
+		t.Errorf("expected a rebuild-failure message, got %q", reply.Msg)
+	}
+}
+
+func TestRunAgent_ClaudeCode(t *testing.T) {
+	p, _, store, _, _, req := setupProviderBackend(t, BackendClaudeCode, func(int) chatFunc {
+		return func(int) turnAction {
+			return turnAction{narration: "claude ok", produces: map[string]string{"report.md": "cc"}}
+		}
+	})
+	res, err := p.RunAgent(context.Background(), req)
+	if err != nil {
+		t.Fatalf("RunAgent: %v", err)
+	}
+	if res.OutputMd == "" {
+		t.Error("expected narration")
+	}
+	if _, ok := store.Get("run-1", "report.md"); !ok {
+		t.Error("produces missing")
+	}
+	if p.Name() != string(BackendClaudeCode) {
+		t.Errorf("Name = %q", p.Name())
+	}
+}
+
+func TestRunAgent_CodeBuddy(t *testing.T) {
+	p, _, store, _, _, req := setupProviderBackend(t, BackendCodeBuddy, func(int) chatFunc {
+		return func(int) turnAction {
+			return turnAction{narration: "buddy ok", produces: map[string]string{"report.md": "cb"}}
+		}
+	})
+	if _, err := p.RunAgent(context.Background(), req); err != nil {
+		t.Fatalf("RunAgent: %v", err)
+	}
+	if _, ok := store.Get("run-1", "report.md"); !ok {
+		t.Error("produces missing")
+	}
+}
+
+func TestRunAgent_Trae(t *testing.T) {
+	p, _, store, _, _, req := setupProviderBackend(t, BackendTrae, func(int) chatFunc {
+		return func(int) turnAction {
+			return turnAction{narration: "trae ok", produces: map[string]string{"report.md": "tr"}}
+		}
+	})
+	if _, err := p.RunAgent(context.Background(), req); err != nil {
+		t.Fatalf("RunAgent: %v", err)
+	}
+	if _, ok := store.Get("run-1", "report.md"); !ok {
+		t.Error("produces missing")
+	}
+}
+
+func TestReact_ClaudeCode(t *testing.T) {
+	testReactBackend(t, BackendClaudeCode)
+}
+
+func TestReact_CodeBuddy(t *testing.T) {
+	testReactBackend(t, BackendCodeBuddy)
+}
+
+func TestReact_Trae(t *testing.T) {
+	testReactBackend(t, BackendTrae)
+}
+
+func testReactBackend(t *testing.T, backend AcpBackend) {
+	t.Helper()
+	p, _, store, _, req := reactSetupBackend(t, backend, func(int) chatFunc {
+		return func(turn int) turnAction {
+			if turn == 0 {
+				return turnAction{narration: "q", questions: []models.ReactQuestion{{ID: "q1", Prompt: "?", Options: []models.ReactOption{{ID: "a", Label: "A"}}}}}
+			}
+			return turnAction{narration: "done", produces: clarified()}
+		}
+	})
+	open := p.ReactOpen(context.Background(), req)
+	if open.Done {
+		t.Fatal("expected pause")
+	}
+	reply := p.ReactReply(context.Background(), req, []models.ReactMessage{{Role: "human", Text: "a"}}, "a", nil, false)
+	if !reply.Done {
+		t.Fatalf("expected done, got %+v", reply)
+	}
+	if _, ok := store.Get("run-r", mcp.ClarifiedRequirementArtifactName); !ok {
+		t.Error("artifact missing")
+	}
+}

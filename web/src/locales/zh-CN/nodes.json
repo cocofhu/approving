@@ -1,0 +1,578 @@
+{
+  "nodes": {
+    "categories": {
+      "control": "控制",
+      "agent": "Agent",
+      "collaboration": "协作"
+    },
+    "palette": {
+      "control": "控制",
+      "agent": "Agent",
+      "collaboration": "协作",
+      "searchPlaceholder": "搜索节点",
+      "footerHint": "拖拽节点到画布即可编排。仓库(GitLab/通用 git)为可选,纯产物流无需仓库。"
+    },
+    "shared": {
+      "reviewVar": {
+        "label": "复审控制变量",
+        "placeholder": "默认 review；未定义或为假=跳过复审，为真=进入 ReAct 复审"
+      }
+    },
+    "input": {
+      "label": "输入",
+      "desc": "工作流起点,定义并校验输入",
+      "fields": {
+        "variables": {
+          "label": "全局变量(所有节点共享 · 引擎持久化)"
+        }
+      },
+      "outputs": {
+        "validated": {
+          "desc": "校验通过的输入透传"
+        }
+      }
+    },
+    "output": {
+      "label": "输出",
+      "desc": "工作流终点,汇总并产出最终结果(流水线在此结束)",
+      "fields": {
+        "results": {
+          "label": "最终结果来源",
+          "help": "勾选上游产物作为输出卡片来源，拖拽已选项调整展示顺序。同一来源不可重复添加。"
+        }
+      },
+      "outputs": {
+        "outputCards": {
+          "desc": "结构化多卡片展示元数据"
+        },
+        "results": {
+          "desc": "配置的产物来源模板列表"
+        }
+      }
+    },
+    "react": {
+      "label": "需求澄清",
+      "desc": "与人多轮 ReAct 对话澄清需求,经 set_clarified_requirement 写入结构化需求",
+      "fields": {
+        "skill_profile": {
+          "label": "Agent(用户定义 · Agent 管理)"
+        },
+        "prompt": {
+          "label": "Prompt 模板",
+          "placeholder": "针对以下需求提出澄清问题,直到信息充分:\n{'{{vars.feature}}'}"
+        },
+        "max_rounds": {
+          "label": "最大轮次",
+          "placeholder": "6"
+        },
+        "auto_var": {
+          "label": "自动澄清变量(为真则自动选推荐选项)",
+          "placeholder": "auto_clarify"
+        },
+        "timeout": {
+          "label": "超时(分钟)"
+        },
+        "conditional_prompt": {
+          "label": "条件注入(存在某全局变量时追加提示词)"
+        }
+      },
+      "outputs": {
+        "clarified_requirement": {
+          "desc": "结构化需求澄清结论(clarified_requirement.json 渲染)"
+        },
+        "clarified_requirement_json": {
+          "desc": "结构化需求原始 JSON"
+        },
+        "transcript": {
+          "desc": "完整对话记录"
+        }
+      },
+      "help": "### 需求澄清(react)\n\n与人多轮 ReAct 对话,把模糊需求澄清为**结构化需求**。\n\n**唯一交付(强制)**:调用 `set_clarified_requirement` 写入 `clarified_requirement.json`(功能需求、非功能需求、约束、范围外、待定问题)。未写入则节点失败。\n\n**提问**:用 `ask_question` 向人提出选择题;选项可标 `recommended` 推荐(每题最多一个),界面高亮该项、便于一键确认。\n\n**自动澄清**:配置「自动澄清变量」且其为真时,平台不等人工——每轮自动选推荐选项(无推荐则取第一个)回复,直到澄清结束或达到最大轮次。运行页也提供「采用推荐」按钮,可一键按推荐项填选并提交。\n\n**自动产物**:仅自动生成保留 JSON `clarified_requirement.json`,可直接结构化展示,并用 `exists(\"clarified_requirement.json\")` / `json(\"clarified_requirement.json\").字段` 做分支判断。\n\n**条件注入**:配置「条件注入」后,当指定全局变量存在且非空时,把附加提示词追加到 Prompt 末尾(常用于门禁回填后重进本节点)。"
+    },
+    "agent": {
+      "label": "通用",
+      "desc": "自主执行用户定义的 Agent(设计/编码/评审等);沙箱执行、产物",
+      "fields": {
+        "skill_profile": {
+          "label": "Agent(用户定义 · Agent 管理)"
+        },
+        "prompt": {
+          "label": "Prompt 模板",
+          "placeholder": "根据已批准方案实现/产出…"
+        },
+        "timeout": {
+          "label": "超时(分钟)"
+        },
+        "produces": {
+          "label": "产物契约(write_artifact 写入)",
+          "placeholder": "design.md"
+        },
+        "conditional_prompt": {
+          "label": "条件注入(存在某全局变量时追加提示词)"
+        }
+      },
+      "outputs": {
+        "content": {
+          "desc": "文本 / 结构化输出"
+        },
+        "narration_summary": {
+          "desc": "Agent 工作摘要"
+        },
+        "artifact_id": {
+          "desc": "经 artifact-store MCP 写入的产物 id"
+        },
+        "branch": {
+          "desc": "当前分支(沙箱变化上报)"
+        },
+        "base_branch": {
+          "desc": "起始分支(基线)"
+        },
+        "new_branch": {
+          "desc": "是否新建了分支"
+        },
+        "commit_sha": {
+          "desc": "当前 HEAD 提交 SHA"
+        },
+        "pushed": {
+          "desc": "是否已推送到远端(关键:决定 CI/MR 能否进行)"
+        },
+        "changed_files": {
+          "desc": "变更文件列表(path/status/增删行)"
+        },
+        "diff_stat": {
+          "desc": "diff 摘要(文件数 / 增删行)"
+        }
+      },
+      "help": "### 通用 Agent(agent)\n\n自主执行任意用户定义的 Agent(设计 / 编码 / 评审等),在沙箱中运行。\n\n**产物**:自由写入——用 `produces` 声明契约(`write_artifact` 写入指定文件),或让引擎自动捕获文本输出为 `<节点id>.md`。\n\n**与框架卡片的区别**:通用 Agent **不**强制结构化产物、**不**自动二次写固定产物;需要结构化 / 可判存在的产物时,请用调研 / 方案 / 测试 / 评审等专用卡片。\n\n**条件注入**:当指定全局变量存在且非空时,把附加提示词追加到 Prompt 末尾。"
+    },
+    "plan": {
+      "label": "计划",
+      "desc": "制定结构化计划(大目标→小目标),经 set_plan 写入全局计划;唯一交付,不写代码/产物",
+      "fields": {
+        "skill_profile": {
+          "label": "Agent(用户定义 · Agent 管理)"
+        },
+        "prompt": {
+          "label": "Prompt 模板",
+          "placeholder": "基于上游产物制定实施计划(最多两级:大目标→小目标),用 set_plan 写入"
+        },
+        "timeout": {
+          "label": "超时(分钟)"
+        },
+        "conditional_prompt": {
+          "label": "条件注入(存在某全局变量时追加提示词)"
+        }
+      },
+      "outputs": {
+        "plan": {
+          "desc": "结构化计划(plan.json 渲染,含每项 status)"
+        },
+        "plan_json": {
+          "desc": "计划原始 JSON"
+        }
+      },
+      "help": "### 计划(plan)\n\n把上游产物拆解为**结构化计划**(最多两级:大目标→小目标),供后续「实现」节点逐项消费。\n\n**唯一交付(强制)**:调用 `set_plan` 写入 `plan.json`(每项含 status)。未写入则节点失败。不写代码、不产出其它文件。\n\n**自动产物**:仅自动生成保留 JSON `plan.json`,可直接结构化展示并用于分支判断。\n\n**下游**:实现节点用 `get_plan` 读取、`update_plan_status` 标记进度。"
+    },
+    "implement": {
+      "label": "实现",
+      "desc": "消费上游计划(get_plan)逐项实施,用 update_plan_status 标记进度;未完成由系统自动催促",
+      "fields": {
+        "skill_profile": {
+          "label": "Agent(用户定义 · Agent 管理)"
+        },
+        "prompt": {
+          "label": "Prompt 模板",
+          "placeholder": "用 get_plan 读取计划逐项实现,用 update_plan_status 标记进度;预览打回参考 {'{{vars.preview_issues}}'};完成后 set_implementation_result"
+        },
+        "max_rounds": {
+          "label": "未完成催促上限",
+          "placeholder": "3"
+        },
+        "timeout": {
+          "label": "超时(分钟)"
+        },
+        "conditional_prompt": {
+          "label": "条件注入(存在某全局变量时追加提示词)"
+        }
+      },
+      "outputs": {
+        "implementation_result": {
+          "desc": "结构化实现结果(implementation_result.json 渲染)"
+        },
+        "implementation_result_json": {
+          "desc": "实现结果原始 JSON"
+        },
+        "branches": {
+          "desc": "各仓工作分支(仓名→分支);完成后写入全局变量 vars.branches,下游节点按仓自动检出"
+        },
+        "pushed": {
+          "desc": "是否已推送到远端"
+        },
+        "changed_files": {
+          "desc": "变更文件列表"
+        }
+      },
+      "help": "### 实现(implement)\n\n消费上游计划逐项落地实现(通常写代码 / 改仓库)。\n\n**流程**:`get_plan` 读取计划 → 逐项实现 → `update_plan_status` 标记进度。仍有未完成项时,系统会自动催促继续(上限见「未完成催促上限」)。\n\n**收尾交付(强制)**:全部完成后调用 `set_implementation_result` 写入 `implementation_result.json`(变更摘要、变更类型、破坏性变更等)。未写入则节点失败。\n\n**提交推送**:下游节点在全新克隆里运行,只有推送到远端的分支才能被拿到。Agent 应 `git add/commit/push` 工作分支;若遗漏,平台会在收尾时兜底自动提交并推送(需仓库与 git 凭据已配置)。\n\n**分支传递**:完成后引擎把各仓工作分支写入全局变量 `branches`(仓名→分支);下游节点的沙箱按此逐仓自动检出对应工作分支,也可在 Prompt / 配置里用 `{'{{vars.branches}}'}` 引用。\n\n**自动产物**:仅自动生成保留 JSON `implementation_result.json`,可直接结构化展示并用于分支判断。"
+    },
+    "research": {
+      "label": "调研",
+      "desc": "技术调研 / 可行性评估,经 set_research 写入结构化调研结论(问题、发现、建议)",
+      "fields": {
+        "skill_profile": {
+          "label": "Agent(用户定义 · Agent 管理)"
+        },
+        "prompt": {
+          "label": "Prompt 模板",
+          "placeholder": "围绕以下问题做技术调研,用 set_research 写入结论"
+        },
+        "timeout": {
+          "label": "超时(分钟)"
+        },
+        "conditional_prompt": {
+          "label": "条件注入(存在某全局变量时追加提示词)"
+        }
+      },
+      "outputs": {
+        "research": {
+          "desc": "结构化调研结论(research.json 渲染)"
+        },
+        "research_json": {
+          "desc": "调研原始 JSON"
+        }
+      },
+      "help": "### 调研(research)\n\n针对技术问题做调研 / 可行性评估。\n\n**唯一交付(强制)**:调用 `set_research` 写入 `research.json`(调研问题、关键发现、结论与建议、参考)。未写入则节点失败。\n\n**自动产物**:仅自动生成保留 JSON `research.json`,可直接结构化展示,并用 `exists(\"research.json\")` / `json(\"research.json\").字段` 做分支判断。"
+    },
+    "test": {
+      "label": "测试",
+      "desc": "对上游实现执行测试,经 set_test_result 写入结构化测试总结(用例、缺陷、评估)",
+      "fields": {
+        "skill_profile": {
+          "label": "Agent(用户定义 · Agent 管理)"
+        },
+        "reason_var": {
+          "label": "reason 变量名",
+          "placeholder": "reason"
+        },
+        "repoScope": {
+          "label": "测试范围(repoScope)",
+          "placeholder": "all 或仓名(如 frontend)"
+        },
+        "block_on_skipped": {
+          "label": "skipped 阻塞门禁"
+        },
+        "prompt": {
+          "label": "Prompt 模板",
+          "placeholder": "对上游实现执行测试,用 set_test_result 写入测试总结"
+        },
+        "timeout": {
+          "label": "超时(分钟)"
+        },
+        "conditional_prompt": {
+          "label": "条件注入(存在某全局变量时追加提示词)"
+        }
+      },
+      "outputs": {
+        "test_result": {
+          "desc": "结构化测试总结(test_result.json 渲染)"
+        },
+        "test_result_json": {
+          "desc": "测试结果原始 JSON"
+        }
+      },
+      "help": "### 测试(test)\n\n对上游实现执行测试并如实记录结果。\n\n**唯一交付(强制)**:调用 `set_test_result` 写入 `test_result.json`(用例、通过 / 失败统计、缺陷、总体评估)。未写入则节点失败。\n\n**自动产物**:仅自动生成保留 JSON `test_result.json`,可直接结构化展示。分支可用 `exists(\"test_result.json\")` 或 `json(\"test_result.json\").summary.failed == 0` 判断是否全部通过。"
+    },
+    "review": {
+      "label": "评审",
+      "desc": "代码 / 设计评审,经 set_review 写入结构化评审结论(结论 verdict + 按严重度排序意见)",
+      "fields": {
+        "skill_profile": {
+          "label": "Agent(用户定义 · Agent 管理)"
+        },
+        "reason_var": {
+          "label": "reason 变量名",
+          "placeholder": "reason"
+        },
+        "prompt": {
+          "label": "Prompt 模板",
+          "placeholder": "评审上游改动,用 set_review 写入评审结论"
+        },
+        "timeout": {
+          "label": "超时(分钟)"
+        },
+        "conditional_prompt": {
+          "label": "条件注入(存在某全局变量时追加提示词)"
+        }
+      },
+      "outputs": {
+        "review": {
+          "desc": "结构化评审结论(review.json 渲染)"
+        },
+        "review_json": {
+          "desc": "评审原始 JSON(含 verdict)"
+        }
+      },
+      "help": "### 评审(review)\n\n对上游代码 / 设计做评审。\n\n**唯一交付(强制)**:调用 `set_review` 写入 `review.json`(结论 verdict、按严重度排序的评审意见)。未写入则节点失败。\n\n**自动产物**:仅自动生成保留 JSON `review.json`,可直接结构化展示。\n\n**分支路由**:常用 `exists(\"review.json\")` 或 `json(\"review.json\").verdict == \"approve\"` 决定通过 / 退回。"
+    },
+    "proposal": {
+      "label": "方案",
+      "desc": "制定一个或多个候选方案,经 set_proposals 写入结构化方案集(供后续方案确认选择)",
+      "fields": {
+        "skill_profile": {
+          "label": "Agent(用户定义 · Agent 管理)"
+        },
+        "prompt": {
+          "label": "Prompt 模板",
+          "placeholder": "针对问题给出多个候选方案(优缺点/权衡),用 set_proposals 写入"
+        },
+        "timeout": {
+          "label": "超时(分钟)"
+        },
+        "conditional_prompt": {
+          "label": "条件注入(存在某全局变量时追加提示词)"
+        }
+      },
+      "outputs": {
+        "proposals": {
+          "desc": "结构化候选方案集(proposals.json 渲染)"
+        },
+        "proposals_json": {
+          "desc": "方案集原始 JSON"
+        }
+      },
+      "help": "### 方案(proposal)\n\n针对问题给出一个或多个**候选方案**,供后续「方案确认」选择。\n\n**唯一交付(强制)**:调用 `set_proposals` 写入 `proposals.json`(每个方案含优缺点、权衡、工作量 / 风险,并标注推荐项)。未写入则节点失败。\n\n**自动产物**:仅自动生成保留 JSON `proposals.json`,可直接结构化展示并用于分支判断。\n\n**下游**:接「方案确认」节点从中选定唯一方案(自动选推荐 / 人工选择),产出 `proposal.json`。"
+    },
+    "proposal_select": {
+      "label": "方案确认",
+      "desc": "从上游候选方案中确认最终方案:auto_var 为真时自动选推荐方案,否则人工选择;输出 proposal.json",
+      "fields": {
+        "title": {
+          "label": "标题",
+          "placeholder": "选择方案"
+        },
+        "from": {
+          "label": "来源方案产物",
+          "placeholder": "proposals.json"
+        },
+        "auto_var": {
+          "label": "自动确认变量(为真则自动选推荐方案)",
+          "placeholder": "auto_confirm"
+        },
+        "output_var": {
+          "label": "输出变量(所选方案 id)",
+          "placeholder": "selected_proposal"
+        }
+      },
+      "outputs": {
+        "proposal": {
+          "desc": "最终方案(proposal.json 渲染)"
+        },
+        "proposal_json": {
+          "desc": "最终方案原始 JSON"
+        },
+        "selected_proposal": {
+          "desc": "所选方案 id"
+        }
+      },
+      "help": "### 方案确认(proposal_select)\n\n从上游候选方案(`proposals.json`)中确认**唯一最终方案**。\n\n**自动模式**:当「自动确认变量」为真时,自动选择推荐方案(无推荐则取第一个)并继续。\n\n**人工模式**:否则挂起为人工选择,把各候选方案作为动作按钮展示,由人选定。\n\n**产出**:所选方案写入 `proposal.json`,其 id 赋值给「输出变量」(默认 `selected_proposal`)。"
+    },
+    "submit_mr": {
+      "label": "提交 MR",
+      "desc": "沙箱内合入目标分支、推送源分支并按托管商创建合并请求(MR/PR),再通过 node_complete 标记完成",
+      "fields": {
+        "skill_profile": {
+          "label": "Agent(用户定义 · Agent 管理)"
+        },
+        "repo": {
+          "label": "目标仓",
+          "placeholder": "留空 / 仓名 / {'{{vars.repos}}'} / {'{{vars.target_repo}}'}"
+        },
+        "source_branch": {
+          "label": "源分支(缺省取各仓上游工作分支)",
+          "placeholder": "留空或 {'{{vars.feature_branch}}'}"
+        },
+        "target_branch": {
+          "label": "目标分支(缺省取仓库默认分支)",
+          "placeholder": "main 或 {'{{vars.base_branch}}'}"
+        },
+        "prompt": {
+          "label": "Prompt 模板(可选覆盖)",
+          "placeholder": "合入目标分支、解决冲突、推送源分支并按托管商创建合并请求(MR/PR)"
+        },
+        "conditional_prompt": {
+          "label": "条件注入(存在某全局变量时追加提示词)"
+        },
+        "timeout": {
+          "label": "超时(分钟)"
+        }
+      },
+      "outputs": {
+        "mr_url": {
+          "desc": "合并请求(MR/PR)链接"
+        },
+        "mr_has_conflicts": {
+          "desc": "MR 是否存在冲突"
+        },
+        "mr_mergeable": {
+          "desc": "MR 是否可合并"
+        },
+        "pushed": {
+          "desc": "源分支是否已推送到远端"
+        },
+        "pushed_sha": {
+          "desc": "推送的提交 SHA"
+        },
+        "branch": {
+          "desc": "源分支名"
+        }
+      },
+      "help": "### 提交 MR(submit_mr)\n\n支持合并请求（MR/PR）。配置 `GITLAB_URL` / `GITHUB_URL` 且与仓库主机一致即可识别对应托管商（亦识别 gitlab.com / github.com）。\n\n在评审之后提交合并请求。该节点是一个沙箱内的 Agent 节点,按以下四步执行:\n\n1. **解决冲突**:先把目标分支合入源分支(`git fetch` + merge/rebase),由 Agent 逐个解决冲突并提交。\n2. **推送**:`git push` 源分支到远端(与托管商无关)。\n3. **创建/复用合并请求**:按远端主机选型——GitLab（gitlab.com 或与 `GITLAB_URL` 主机一致）用 `glab`;GitHub（github.com 或与 `GITHUB_URL` 主机一致,含 GHE）用 `gh pr`;匹配不上（如 Gitea）则不支持自动建单。\n4. **标记完成**:调用 `node_complete`(成功时 `outputs.mr_url` 为合并请求 Web URL;GitHub PR 写入同一字段)。\n\n**凭据与 CLI 依赖**:`GITLAB_*` / `GITHUB_*`;CLI 需预装 `glab`（GitLab）或 `gh`（GitHub）。缺少对应 CLI、或托管商不支持自动建单时:**仍须先完成冲突解决与推送**,再以 `node_complete(status=failed)` 结束;失败摘要须标明「冲突已解决」「源分支已推送」,并说明建单/CLI/托管商原因。不采用「推送成功即可 success、mr_url 可空」。\n\n**双路径能力差**:Agent 侧可按主机在 glab/gh 间分流创建合并请求;若开启平台自动建单（detect_push/create_mr）,本迭代仍仅对 GitLab 生效——GitHub 依赖 Agent 侧 `gh`,平台不会代建 PR。\n\n平台**不再**用 git/glab/gh 代验推送/MR/冲突;默认只要求 Agent 已 `node_complete`。默认校验通过后,若配置了业务 RPC 校验才会继续调用。\n\n**目标仓三种写法**:\n- **留空**:保持现网默认——多仓时由 Agent 引导逐仓;单仓回落唯一仓。\n- **`{'{{vars.repos}}'}`**:引擎按执行时 `vars.repos` 列表顺序**原生逐仓**提交(遇错即停,无需勾选子集)。与「留空」语义不同。\n- **字面仓名 / 单仓字符串变量**(如 `web` 或 `{'{{vars.target_repo}}'}`):严格插值后钉到该仓,且必须 ∈ `vars.repos`。\n\n**源 / 目标分支**:可填字面名或单分支字符串变量;显式填写时在逐仓模式下**全仓共用**同一插值结果。源分支留空时对各仓分别取默认源分支(`vars.branches[仓名]` / `repo.branch`)。**不要**把整表 `{'{{vars.branches}}'}` 当作源分支值。\n\n**Git 授权来自沙箱**:直接使用沙箱自带的 `git` 与对应 CLI（`glab`/`gh`）凭据,无需在平台外部配置 token。\n\n**输出**:`mr_url` 成功后会导出为全局变量 `mr_url`(逐仓全成功时取末仓),可在 human_gate 正文用 `{'{{vars.mr_url}}'}` 引用。"
+    },
+    "visual": {
+      "label": "视觉网页",
+      "desc": "用 HTML 生成可视化网页/原型 demo:产出自包含单文件 page.html,可在运行内 iframe 预览供人确认",
+      "fields": {
+        "skill_profile": {
+          "label": "Agent(用户定义 · Agent 管理)"
+        },
+        "prompt": {
+          "label": "Prompt 模板",
+          "placeholder": "根据上游需求,做一个简洁美观的可视化网页 demo(原型)"
+        },
+        "timeout": {
+          "label": "超时(分钟)"
+        },
+        "conditional_prompt": {
+          "label": "条件注入(存在某全局变量时追加提示词)"
+        }
+      },
+      "outputs": {
+        "page": {
+          "desc": "生成的网页 HTML(产物 page.html)"
+        },
+        "artifact_id": {
+          "desc": "经 artifact-store MCP 写入的产物 id"
+        }
+      },
+      "help": "### 视觉网页(visual)\n\n用 HTML 把上游需求做成**可直接预览**的可视化网页 / 原型 demo,常接「人工门禁」在开工前给人确认。\n\n**唯一交付(强制)**:一个**单文件、自包含**的 `page.html`(完整 `<!doctype html>` 文档,CSS/JS 全部内联,**不引用任何外部资源**)。你只需在 Prompt 里描述\"做什么页面\"即可——**\"必须产出 page.html、怎么产出、格式要求\"这些平台会自动作为强制契约注入**,无需在 Prompt 里重复。\n\n**怎么产出**:Agent **只通过 `write_artifact` 工具**写入 `page.html`(kind=`html`),**不往项目/工作区写文件**,以免污染仓库改动。缺该产物则节点失败。\n\n**预览**:平台把 `page.html` 存为 `html` 产物——运行详情的「产物」tab、产物列表、以及**人工门禁**都用 iframe 直接渲染网页。门禁的「展示内容」选择本节点的「网页预览」即可让审批人看到页面。\n\n**Issue 打回闭环(推荐)**:human_gate 展示 page.html 时可点选 DOM、自动截图并「提交问题」;Fail/退回会快照 `{'{{vars.preview_issues}}'}`。典型模板应把 fail/revise 指向唯一 implement,implement Prompt 引用 `{'{{vars.preview_issues}}'}`,implement 成功后再入 visual 复审,直至 Pass。"
+    },
+    "human_gate": {
+      "label": "人工门禁",
+      "desc": "单次人工决策(编排器层挂起)",
+      "fields": {
+        "title": {
+          "label": "标题",
+          "placeholder": "设计评审"
+        },
+        "body_template": {
+          "label": "展示内容",
+          "help": "主产物白名单：需人改的产物须用 {'{{nodes.*.outputs.*}}'} 或 artifact(\"name\") 引用；未引用的 produces 不可编辑；图片等非文本为只读"
+        },
+        "actions": {
+          "label": "动作按钮(可选直达目标节点 goto)"
+        },
+        "output_var": {
+          "label": "输出变量(所选动作 id 赋值给该全局变量)",
+          "placeholder": "action"
+        },
+        "form": {
+          "label": "表单字段"
+        },
+        "timeout": {
+          "label": "超时"
+        }
+      },
+      "outputs": {
+        "action": {
+          "desc": "所选动作 id(同时赋值给 output_var 指定的全局变量)"
+        },
+        "form": {
+          "desc": "表单填写值"
+        },
+        "reviewer_id": {
+          "desc": "审批人"
+        }
+      },
+      "help": "### 人工门禁(human_gate)\n\n在编排器层挂起，等待人工做一次决策。\n\n**展示内容 / 主产物白名单**\n\n- `body_template` 决定门禁编辑区可展示、可编辑的主产物\n- 引用方式：`{'{{nodes.*.outputs.*}}'}` 或 `artifact(\"name\")`\n- **需审批人修改的产物，必须写入对应 body_template**；仅出现在上游 `produces`、未写入模板的产物不可编辑\n- 图片等非文本主产物以只读 Tab 展示，不可保存\n\n**动作按钮**\n\n- 每个动作可设「跳转到」直达目标节点（类似分支）\n- 留空则回落到出边 `when` 条件，用 `action == \"id\"` 判断\n\n**输出变量**\n\n- 所选动作 id 会赋值给「输出变量」（默认 `action`），后续节点 / 分支可直接引用"
+    },
+    "app_preview": {
+      "label": "应用预览",
+      "desc": "沙箱内启动应用并通过 set_preview 注册预览,人工 iframe 验收",
+      "fields": {
+        "skill_profile": {
+          "label": "Agent 配置"
+        },
+        "prompt": {
+          "label": "Prompt",
+          "placeholder": "描述如何构建/启动应用并注册预览…"
+        },
+        "max_rounds": {
+          "label": "未完成催促上限",
+          "placeholder": "默认 3"
+        },
+        "timeout": {
+          "label": "超时"
+        },
+        "conditional_prompt": {
+          "label": "条件注入"
+        },
+        "title": {
+          "label": "门禁标题",
+          "placeholder": "应用预览"
+        },
+        "actions": {
+          "label": "动作按钮(pass/fail)"
+        },
+        "output_var": {
+          "label": "输出变量",
+          "placeholder": "action"
+        },
+        "form": {
+          "label": "表单字段"
+        }
+      },
+      "outputs": {
+        "action": {
+          "desc": "所选动作 id(pass/fail)"
+        },
+        "preview_issues": {
+          "desc": "人工在预览里提交的问题快照(含截图);下游节点用 {'{{vars.preview_issues}}'} 引用"
+        },
+        "reviewer_id": {
+          "desc": "审批人"
+        }
+      },
+      "help": "### 应用预览(app_preview)\n\nAgent 在沙箱内构建并启动应用,调用 `set_preview(port, label?)` 注册预览端口;至少成功 1 次后进入 waiting_human,审批人在 noVNC 远程桌面中验收并选择通过/退回。\n\n**应用须监听 `0.0.0.0:<port>`**(不能只绑 127.0.0.1):预览经容器网桥 IP 反向代理,只绑回环会连不上、预览白屏(502)。\n\n「前端」Tab 使用 noVNC 自动连接;「API」Tab 使用 iframe 快速预览。出口为 ACTION 风格 pass/fail(非 test 节点自动判定)。未调用 set_preview 时按 max_rounds 同会话催促。"
+    },
+    "branch": {
+      "label": "条件分支",
+      "desc": "if / else-if / else 多路由:首个为真的分支胜出,可判断产物是否存在、JSON 值、节点输出",
+      "fields": {
+        "cases": {
+          "label": "路由规则(IF / ELSE IF / ELSE)"
+        }
+      },
+      "outputs": {
+        "matched": {
+          "desc": "命中的分支(case 序号 / else)"
+        },
+        "goto": {
+          "desc": "路由到的目标节点"
+        }
+      }
+    },
+    "set_var": {
+      "label": "赋值",
+      "desc": "给全局变量赋值 / 自增等(运行期共享状态)",
+      "fields": {
+        "assignments": {
+          "label": "赋值(变量 = 表达式)"
+        }
+      },
+      "outputs": {
+        "vars": {
+          "desc": "更新后的全局变量快照"
+        }
+      }
+    }
+  }
+}

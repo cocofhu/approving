@@ -1,0 +1,11 @@
+.git
+**/.git
+**/gateway.db
+**/*.db
+**/config.yaml
+!gateway/config.example.yaml
+deploy/
+docs/
+README.md
+**/*_test.go
+sandbox/

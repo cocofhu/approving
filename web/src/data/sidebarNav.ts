@@ -1,0 +1,24 @@
+export type SidebarNavItem = { to: string; icon: string; labelKey: string }
+export type SidebarNavGroup = { titleKey?: string; items: SidebarNavItem[] }
+
+export const sidebarNavGroups: SidebarNavGroup[] = [
+  {
+    items: [
+      { to: '/dashboard', icon: 'dashboard', labelKey: 'nav.dashboard' },
+      { to: '/projects', icon: 'folder', labelKey: 'nav.projects' },
+      { to: '/runs', icon: 'runs', labelKey: 'nav.runs' },
+      { to: '/gates', icon: 'gate', labelKey: 'nav.gates' },
+      { to: '/artifacts', icon: 'artifact', labelKey: 'nav.artifacts' },
+    ],
+  },
+  {
+    titleKey: 'nav.groupConfig',
+    items: [
+      { to: '/agents', icon: 'robot', labelKey: 'nav.agents' },
+      { to: '/sandboxes', icon: 'terminal', labelKey: 'nav.sandboxes' },
+      { to: '/integrations', icon: 'connector', labelKey: 'nav.integrations' },
+      { to: '/triggers', icon: 'trigger', labelKey: 'nav.triggers' },
+      { to: '/settings', icon: 'settings', labelKey: 'nav.settings' },
+    ],
+  },
+]

@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>登录 · AgentChat</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #e8e8e8;
+            color: #333;
+        }
+        .card {
+            width: 100%;
+            max-width: 520px;
+            margin: 1rem;
+            background: #fff;
+            border-radius: 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,.08);
+            overflow: hidden;
+        }
+        .card-head {
+            padding: 2rem 2rem 1.25rem;
+        }
+        h1 {
+            margin: 0 0 0.5rem;
+            font-size: 1.35rem;
+            font-weight: 600;
+            color: #2d2d2d;
+        }
+        .hint {
+            margin: 0;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            color: #6b6b6b;
+        }
+        hr {
+            border: none;
+            border-top: 1px solid #e0e0e0;
+            margin: 0;
+        }
+        .card-body {
+            padding: 1.5rem 2rem 2rem;
+        }
+        .row {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            align-items: stretch;
+        }
+        input[type="password"] {
+            flex: 1 1 200px;
+            min-width: 0;
+            padding: 0.65rem 0.85rem;
+            font-size: 0.95rem;
+            border: 1px solid #2f6feb;
+            border-radius: 0;
+            outline: none;
+        }
+        input[type="password"]:focus {
+            box-shadow: 0 0 0 2px rgba(47, 111, 235, 0.25);
+        }
+        button[type="submit"] {
+            flex: 0 0 auto;
+            padding: 0.65rem 1.4rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #fff;
+            background: #2f6feb;
+            border: none;
+            border-radius: 0;
+            cursor: pointer;
+        }
+        button[type="submit"]:hover { background: #2558c7; }
+        button[type="submit"]:disabled { opacity: 0.6; cursor: not-allowed; }
+        .err {
+            margin-top: 0.85rem;
+            font-size: 0.8125rem;
+            color: #c62828;
+            min-height: 1.25rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="card-head">
+            <h1>欢迎使用 AgentChat</h1>
+            <p class="hint">请在下方输入访问口令。口令由服务端启动参数 <code>-password</code> 或环境变量 <code>ACP_BRIDGE_PASSWORD</code> 配置。</p>
+        </div>
+        <hr />
+        <div class="card-body">
+            <form id="f" class="row" autocomplete="current-password">
+                <input id="pw" type="password" name="password" placeholder="PASSWORD" required autofocus />
+                <button type="submit" id="btn">SUBMIT</button>
+            </form>
+            <div class="err" id="err" aria-live="polite"></div>
+        </div>
+    </div>
+    <script>
+(function () {
+    var params = new URLSearchParams(location.search);
+    var next = params.get("next") || "/";
+    if (next.indexOf("/") !== 0 || next.indexOf("//") === 0) next = "/";
+
+    var f = document.getElementById("f");
+    var pw = document.getElementById("pw");
+    var btn = document.getElementById("btn");
+    var err = document.getElementById("err");
+
+    /**
+     * 去掉末尾 /login 得到应用根路径（如 /sandbox/39/vibe/login → /sandbox/39/vibe/）。
+     * 不用 ../ ，避免 <base href> 或解析差异导致多退一级（误到 /sandbox/39/）。
+     */
+    function appRootPathnameAfterLogin() {
+        var p = location.pathname.replace(/\/login\/?$/i, "");
+        if (p === "" || p === "/") {
+            return "/";
+        }
+        return p.charAt(p.length - 1) === "/" ? p : p + "/";
+    }
+
+    function applyLoginRedirect(serverNext) {
+        var sn = serverNext;
+        var u = new URL(location.href);
+        if (sn == null || sn === "" || typeof sn !== "string" || sn.indexOf("//") === 0) {
+            u.pathname = appRootPathnameAfterLogin();
+            u.search = "";
+            location.href = u.href;
+            return;
+        }
+        if (sn === "/" || sn === "/login") {
+            u.pathname = appRootPathnameAfterLogin();
+            u.search = "";
+            location.href = u.href;
+            return;
+        }
+        if (sn.indexOf("/") === 0) {
+            var qm = sn.indexOf("?");
+            var pathPart = qm >= 0 ? sn.slice(0, qm) : sn;
+            var tail = pathPart.replace(/^\/+/, "");
+            var root = appRootPathnameAfterLogin();
+            if (root === "/") {
+                u.pathname = "/" + tail;
+            } else {
+                u.pathname = root.replace(/\/$/, "") + "/" + tail;
+            }
+            u.search = qm >= 0 ? sn.slice(qm + 1) : "";
+            location.href = u.href;
+            return;
+        }
+        location.href = new URL(sn, location.href).href;
+    }
+
+    f.addEventListener("submit", function (e) {
+        e.preventDefault();
+        err.textContent = "";
+        btn.disabled = true;
+        var q = new URLSearchParams();
+        q.set("next", next);
+        fetch("api/login?" + q.toString(), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password: pw.value }),
+            credentials: "same-origin"
+        })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+            .then(function (x) {
+                if (x.ok && x.j && x.j.ok) {
+                    applyLoginRedirect(x.j.next);
+                    return;
+                }
+                err.textContent = (x.j && x.j.message) || "登录失败";
+            })
+            .catch(function () { err.textContent = "网络错误"; })
+            .finally(function () { btn.disabled = false; });
+    });
+})();
+    </script>
+</body>
+</html>

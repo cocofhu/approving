@@ -1,0 +1,341 @@
+@import './fonts.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------- Theme tokens ---------- */
+:root {
+  color-scheme: dark;
+  /* dark (default) — Linear/Vercel style: deep neutral surfaces, restrained indigo accent */
+  --c-base: 10 10 11;
+  --c-surface: 20 20 23;
+  --c-elevated: 28 28 33;
+  --c-overlay: 38 38 44;
+  --c-line: 38 38 43;
+  --c-line-strong: 54 54 62;
+  --c-txt: 237 237 240;
+  --c-txt2: 161 161 170;
+  --c-txt3: 110 110 120;
+  --c-accent-2: 129 140 248;
+  --c-accent-dim: 31 31 54;
+  --c-ok: 52 211 153;
+  --c-warn: 251 191 36;
+  --c-err: 220 38 38;
+  --c-info: 96 165 250;
+
+  --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.4), 0 1px 3px 0 rgba(0, 0, 0, 0.25);
+  --flow-dot: #1f1f26;
+  --flow-mask: rgba(10, 10, 11, 0.72);
+  --grad-logo: linear-gradient(90deg, #7B61FF 0%, #818CF8 35%, #6366F1 55%, #7B61FF 75%, #A78BFA 100%);
+  --grad-logo-size: 200% 100%;
+}
+
+html.light {
+  color-scheme: light;
+  --c-base: 250 250 251;
+  --c-surface: 255 255 255;
+  --c-elevated: 244 244 245;
+  --c-overlay: 233 233 236;
+  --c-line: 229 229 232;
+  --c-line-strong: 212 212 216;
+  --c-txt: 24 24 27;
+  --c-txt2: 82 82 91;
+  --c-txt3: 161 161 170;
+  --c-accent-2: 79 70 229;
+  --c-accent-dim: 238 240 255;
+  --c-ok: 22 163 74;
+  --c-warn: 217 119 6;
+  --c-err: 220 38 38;
+  --c-info: 37 99 235;
+
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --flow-dot: #d8dce3;
+  --flow-mask: rgba(250, 250, 251, 0.72);
+  --grad-logo: linear-gradient(90deg, #6D28D9 0%, #7B61FF 30%, #6366F1 55%, #4F46E5 75%, #7B61FF 100%);
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  background: rgb(var(--c-base));
+}
+
+body {
+  margin: 0;
+  color: rgb(var(--c-txt));
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+*,
+*::before,
+*::after {
+  border-radius: 0 !important;
+}
+
+/* ghost scrollbar — idle-invisible (align AppModal / approved page.html) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover,
+*.is-scrolling {
+  scrollbar-color: rgb(var(--c-line)) transparent;
+}
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 0;
+  transition: background 0.15s ease;
+}
+*:hover::-webkit-scrollbar-thumb,
+*.is-scrolling::-webkit-scrollbar-thumb {
+  background: rgb(var(--c-line));
+}
+*:hover::-webkit-scrollbar-thumb:hover,
+*.is-scrolling::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--c-line-strong));
+}
+
+@layer components {
+  .card {
+    @apply rounded-lg border border-line bg-surface;
+    box-shadow: var(--shadow-card);
+  }
+  .input {
+    --placeholder: #6e6e78;
+    @apply w-full rounded-md border border-line bg-base px-3 py-2 text-sm text-txt
+      placeholder:text-txt3 outline-none transition
+      focus:border-accent focus:ring-2 focus:ring-accent/30;
+  }
+  .input::placeholder {
+    color: var(--placeholder);
+    opacity: 1;
+  }
+  .input::-webkit-input-placeholder {
+    color: var(--placeholder);
+    opacity: 1;
+  }
+  .input::-moz-placeholder {
+    color: var(--placeholder);
+    opacity: 1;
+  }
+  .input:-ms-input-placeholder {
+    color: var(--placeholder);
+    opacity: 1;
+  }
+  .label {
+    @apply mb-1.5 block text-xs font-medium text-txt2;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-line bg-elevated px-2 py-0.5 text-xs text-txt2;
+  }
+  .nav-item {
+    @apply flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-txt2 transition
+      hover:bg-elevated hover:text-txt;
+  }
+  .nav-item.active {
+    @apply bg-accent-dim text-txt;
+  }
+  /* Utility marker for scroll regions; idle-invisible comes from global rules above. */
+  .scroll-area {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .scroll-area:hover,
+  .scroll-area.is-scrolling {
+    scrollbar-color: rgb(var(--c-line)) transparent;
+  }
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .brand-logo {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    line-height: 1.2;
+  }
+  .brand-logo__name {
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    /* Solid fallback color for LCP paint before gradient clip applies */
+    color: rgb(var(--c-accent-2));
+    background: var(--grad-logo);
+    background-size: var(--grad-logo-size);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 3.5s ease-in-out infinite;
+  }
+  .brand-logo--sm .brand-logo__name {
+    font-size: 16px;
+  }
+  .brand-logo--sm .brand-logo__tagline {
+    font-size: 10px;
+    color: rgb(var(--c-txt3));
+  }
+  .brand-logo--md .brand-logo__name {
+    font-size: 18px;
+  }
+  .brand-logo--md .brand-logo__tagline {
+    font-size: 11px;
+    color: rgb(var(--c-txt3));
+  }
+  .brand-logo--lg .brand-logo__name {
+    font-size: 28px;
+  }
+  .brand-logo--lg .brand-logo__tagline {
+    font-size: 12px;
+    color: rgb(var(--c-txt3));
+  }
+}
+
+@keyframes shimmer {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-logo__name {
+    animation: none;
+    background-position: 0% 50%;
+  }
+}
+
+/* ---------- Vue Flow theme overrides ---------- */
+.vue-flow__background {
+  background-color: rgb(var(--c-base));
+}
+.vue-flow__edge-path {
+  stroke: rgb(var(--c-line-strong));
+  stroke-width: 1.5;
+}
+.vue-flow__edge.selected .vue-flow__edge-path,
+.vue-flow__edge:focus .vue-flow__edge-path {
+  stroke: #7b61ff;
+}
+.vue-flow__edge.animated .vue-flow__edge-path {
+  stroke: #7b61ff;
+  stroke-dasharray: 6 6;
+  animation: dash 0.6s linear infinite;
+}
+.vue-flow__handle {
+  width: 9px;
+  height: 9px;
+  background: rgb(var(--c-base));
+  border: 2px solid rgb(var(--c-line-strong));
+  border-radius: 0;
+}
+.vue-flow__handle:hover {
+  border-color: #7b61ff;
+}
+.vue-flow__minimap {
+  background: rgb(var(--c-surface)) !important;
+  border: 1px solid rgb(var(--c-line));
+  border-radius: 0;
+  overflow: hidden;
+}
+.vue-flow__controls {
+  border: 1px solid rgb(var(--c-line));
+  border-radius: 0;
+  overflow: hidden;
+  box-shadow: none;
+}
+.vue-flow__controls-button {
+  background: rgb(var(--c-surface));
+  border-bottom: 1px solid rgb(var(--c-line));
+  color: rgb(var(--c-txt2));
+  fill: rgb(var(--c-txt2));
+}
+.vue-flow__controls-button:hover {
+  background: rgb(var(--c-elevated));
+  color: rgb(var(--c-txt));
+}
+
+/* markdown */
+.md {
+  @apply text-sm leading-relaxed text-txt2;
+}
+.md h1,
+.md h2,
+.md h3 {
+  @apply mb-2 mt-4 font-semibold text-txt;
+}
+.md h1 {
+  @apply text-lg;
+}
+.md h2 {
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+.md h3 {
+  @apply text-sm;
+}
+.md p {
+  @apply my-2;
+}
+.md ul,
+.md ol {
+  @apply my-2 pl-5;
+}
+.md ul {
+  @apply list-disc;
+}
+.md ol {
+  @apply list-decimal;
+}
+.md code {
+  @apply rounded bg-base px-1.5 py-0.5 font-mono text-[12px] text-accent-2;
+}
+.md pre {
+  @apply my-3 overflow-x-auto rounded-md border border-line bg-base p-3;
+}
+.md pre code {
+  @apply bg-transparent p-0 text-txt2;
+}
+.md table {
+  @apply my-3 w-full border-collapse text-xs;
+}
+.md th,
+.md td {
+  @apply border border-line px-2 py-1 text-left;
+}
+.md a {
+  @apply text-accent-2 underline;
+}
+
+@media (max-width: 768px) {
+  .md {
+    font-size: 13px;
+    line-height: 1.625;
+  }
+  .md pre,
+  .md table {
+    overflow-x: auto;
+  }
+}

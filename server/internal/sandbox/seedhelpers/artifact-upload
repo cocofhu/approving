@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""artifact-upload: 把本地文件上传到本次运行的产物存储 (artifact-store MCP)。
+
+测试节点常用它上传浏览器/UI 截图:CLI 在本地读文件、base64 编码,经 HTTP 调用
+write_artifact 工具写入产物存储,然后把产物名打印到 stdout。Agent 只需把这个短
+产物名填进 set_test_result 的 screenshots[].artifact,无需内联 base64。
+
+环境变量(由平台在沙箱容器内注入):
+  APPROVING_ARTIFACT_URL    运行级 artifact-store MCP 端点 (/mcp/runs/<runId>)
+  APPROVING_ARTIFACT_TOKEN  运行级 Bearer 令牌
+
+用法:
+  artifact-upload <file> [--caption 文本] [--name 名称] [--mime image/png]
+
+成功时:stdout 打印产物名,退出码 0。
+失败时:stderr 打印原因,退出码非 0。
+"""
+import argparse
+import base64
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.request
+import uuid
+
+
+def eprint(*a):
+    print(*a, file=sys.stderr)
+
+
+def guess_mime(path: str) -> str:
+    ext = os.path.splitext(path)[1].lower()
+    return {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+    }.get(ext, "image/png")
+
+
+def default_name(path: str) -> str:
+    ext = os.path.splitext(path)[1].lower() or ".png"
+    return f"screenshot-{int(time.time())}-{uuid.uuid4().hex[:8]}{ext}"
+
+
+# Optional SPA→API host map (empty in public tree).
+_SPA_MCP_HOSTS = {}
+
+
+def rewrite_spa_mcp_url(raw: str) -> str:
+    raw = (raw or "").strip()
+    if not raw:
+        return raw
+    try:
+        from urllib.parse import urlparse, urlunparse
+        u = urlparse(raw)
+    except Exception:
+        return raw
+    host = (u.hostname or "").lower()
+    fixed = _SPA_MCP_HOSTS.get(host)
+    if not fixed:
+        return raw
+    port = u.port
+    new_netloc = f"{fixed}:{port}" if port else fixed
+    if u.username or u.password:
+        auth = u.username or ""
+        if u.password:
+            auth += f":{u.password}"
+        new_netloc = f"{auth}@{new_netloc}"
+    out = urlunparse((u.scheme, new_netloc, u.path, u.params, u.query, u.fragment))
+    if out != raw:
+        eprint(f"artifact-upload: mcp URL SPA host {host} → {fixed}")
+    return out
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        prog="artifact-upload",
+        description="上传文件到本次运行的产物存储,打印产物名。",
+    )
+    ap.add_argument("file", help="要上传的本地文件(如截图 PNG)")
+    ap.add_argument("--caption", default="", help="可选:截图/文件说明(仅提示用途)")
+    ap.add_argument("--name", default="", help="可选:产物名;缺省自动生成唯一名")
+    ap.add_argument("--mime", default="", help="可选:MIME 类型;缺省按扩展名推断")
+    args = ap.parse_args()
+
+    url = rewrite_spa_mcp_url(os.environ.get("APPROVING_ARTIFACT_URL", "").strip())
+    token = os.environ.get("APPROVING_ARTIFACT_TOKEN", "").strip()
+    if not url or not token:
+        eprint("artifact-upload: 缺少 APPROVING_ARTIFACT_URL / APPROVING_ARTIFACT_TOKEN 环境变量,"
+               "无法定位产物存储(仅在平台运行的沙箱内可用)。")
+        return 2
+
+    try:
+        with open(args.file, "rb") as f:
+            raw = f.read()
+    except OSError as e:
+        eprint(f"artifact-upload: 读取文件失败: {e}")
+        return 2
+    if not raw:
+        eprint(f"artifact-upload: 文件为空: {args.file}")
+        return 2
+
+    name = args.name.strip() or default_name(args.file)
+    mime = args.mime.strip() or guess_mime(args.file)
+    b64 = base64.b64encode(raw).decode("ascii")
+
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "write_artifact",
+            "arguments": {"name": name, "content": b64, "kind": "image"},
+        },
+    }
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=body,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            status = resp.getcode()
+            data = resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace") if e.fp else ""
+        eprint(f"artifact-upload: 上传失败 HTTP {e.code}: {detail or e.reason}")
+        return 1
+    except urllib.error.URLError as e:
+        eprint(f"artifact-upload: 连接产物存储失败: {e.reason}")
+        return 1
+
+    try:
+        msg = json.loads(data)
+    except json.JSONDecodeError:
+        eprint(f"artifact-upload: 无法解析响应 (HTTP {status}): {data[:300]}")
+        return 1
+    if "error" in msg:
+        eprint(f"artifact-upload: 服务端错误: {msg['error']}")
+        return 1
+    result = msg.get("result") or {}
+    if result.get("isError"):
+        texts = [c.get("text", "") for c in result.get("content", []) if isinstance(c, dict)]
+        eprint(f"artifact-upload: 写入产物失败: {' '.join(texts) or data[:300]}")
+        return 1
+
+    print(name)
+    if args.caption:
+        eprint(f"artifact-upload: 已上传 {name} (caption: {args.caption})")
+    else:
+        eprint(f"artifact-upload: 已上传 {name}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

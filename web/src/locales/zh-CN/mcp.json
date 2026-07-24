@@ -1,0 +1,325 @@
+{
+  "mcp": {
+    "integrations": {
+      "title": "集成",
+      "subtitle": "内置 MCP 按作用域注入：运行级可全程可用，项目/PM 会话级见于 PM Leader · 仓库 / CI 凭据(如 GITLAB_TOKEN / GITLAB_URL)在 Agent 元信息的环境变量里配置,支持引用全局变量 {'${vars.<名字>}'}",
+      "sectionTitle": "内置 MCP · 按作用域注入",
+      "noConfigNeeded": "无需配置",
+      "noConfigHere": "无需在此配置",
+      "alwaysAvailable": "全程可用",
+      "seenInPmLeader": "见于 PM Leader",
+      "seenInAgentStudio": "见于 Agent Studio",
+      "addViaAgentStudio": "在 Agent Studio 添加",
+      "notRunScoped": "非运行级全局注入",
+      "scopeRun": "scope: run",
+      "scopeProject": "scope: project / pm-session",
+      "entryPathLabel": "使用入口：",
+      "entryPath": "项目详情 → PM Leader → 设置",
+      "entryPathAgent": "Agent Studio → MCP",
+      "toolCount": "{n} 个工具 · 点击查看详细说明",
+      "openDetail": "打开详述",
+      "toolsTitle": "工具列表",
+      "io": {
+        "write": "write",
+        "read": "read"
+      },
+      "scopeAgent": "scope: agent / 通用"
+    },
+    "artifactStore": {
+      "name": "artifact-store",
+      "desc": "平台产物存储 · 全局注入到本次运行的每个节点(含沙箱 Agent),用于读写中间/最终产物",
+      "overview": "平台内置产物存储 MCP。每次运行开始时由编排器注入到本次 run 的全部节点（含沙箱 Agent），凭 run token 隔离作用域。Agent 通过 MCP 读写中间/最终产物，编排器作为 Host 负责持久化。",
+      "convention": "沙箱约定(强制):节点声明的「产物契约 produces」中的文件,Agent 必须在结束当前轮次前通过 write_artifact 全部写入;写完产物后还必须调用 node_complete 标记完成。否则编排器在节点完成时校验失败。校验顺序固定为「平台默认检查必须通过 → 再可选业务 RPC」。该约定由平台注入的 system rules 强制下发到沙箱。",
+      "tools": {
+        "write_artifact": {
+          "signature": "write_artifact(name, content, kind=\"markdown\")",
+          "desc": "把文本产物写入平台产物存储(按 run 隔离),返回 artifact_id。content 仅限文本;禁止内联图片 base64。截图请用沙箱 artifact-upload 后再在 set_test_result.screenshots 引用产物名"
+        },
+        "read_artifact": {
+          "signature": "read_artifact(name) -> content",
+          "desc": "读取本次运行内已生成的产物(供下游节点消费)"
+        },
+        "list_artifacts": {
+          "signature": "list_artifacts() -> [{'{name, node, size}'}]",
+          "desc": "列出本次运行已有产物清单"
+        },
+        "ask_question": {
+          "signature": "ask_question(questions)",
+          "desc": "仅澄清(react)节点:向用户提出结构化选择题(选项可标 recommended 推荐)"
+        },
+        "set_plan": {
+          "signature": "set_plan(goals)",
+          "desc": "仅计划(plan)节点:写入两级结构化计划 plan.json"
+        },
+        "get_plan": {
+          "signature": "get_plan() -> plan.json",
+          "desc": "读取全局计划(含每项 status)"
+        },
+        "update_plan_status": {
+          "signature": "update_plan_status(id, status)",
+          "desc": "仅实现(implement)节点:更新计划项进度"
+        },
+        "set_clarified_requirement": {
+          "signature": "set_clarified_requirement(title, summary, background, goals, in_scope, out_of_scope, functional_requirements, assumptions, dependencies, constraints, …)",
+          "desc": "仅澄清(react)节点:写入完整需求规格 clarified_requirement.json(无排期/技术方案)"
+        },
+        "get_clarified_requirement": {
+          "signature": "get_clarified_requirement() -> clarified_requirement.json",
+          "desc": "读取结构化需求澄清结论"
+        },
+        "set_research": {
+          "signature": "set_research(summary, questions?, findings?, …)",
+          "desc": "仅调研(research)节点:写入结构化调研 research.json"
+        },
+        "get_research": {
+          "signature": "get_research() -> research.json",
+          "desc": "读取结构化调研结论"
+        },
+        "set_proposals": {
+          "signature": "set_proposals(context, proposals)",
+          "desc": "仅方案(proposal)节点:写入候选方案集 proposals.json"
+        },
+        "get_proposals": {
+          "signature": "get_proposals() -> proposals.json",
+          "desc": "读取候选方案集"
+        },
+        "set_test_result": {
+          "signature": "set_test_result(summary, cases?, defects?, …)",
+          "desc": "仅测试(test)节点:写入测试总结 test_result.json"
+        },
+        "get_test_result": {
+          "signature": "get_test_result() -> test_result.json",
+          "desc": "读取测试总结报告"
+        },
+        "set_review": {
+          "signature": "set_review(summary, verdict, findings?)",
+          "desc": "仅评审(review)节点:写入评审结论 review.json"
+        },
+        "get_review": {
+          "signature": "get_review() -> review.json",
+          "desc": "读取评审结论(含 verdict)"
+        },
+        "set_implementation_result": {
+          "signature": "set_implementation_result(summary, …)",
+          "desc": "仅实现(implement)节点:写入实现结果 implementation_result.json"
+        },
+        "get_implementation_result": {
+          "signature": "get_implementation_result() -> implementation_result.json",
+          "desc": "读取实现结果说明"
+        },
+        "set_preview": {
+          "signature": "set_preview(port, label?)",
+          "desc": "仅 app_preview 节点:注册沙箱内预览端口,返回完整代理 URL"
+        },
+        "node_complete": {
+          "signature": "node_complete(status, summary?, error?, outputs?, checks?)",
+          "desc": "所有 Agent 节点:结束前标记 success|failed;平台先跑默认校验,通过后才可能做业务 RPC"
+        },
+        "list_run_history": {
+          "signature": "list_run_history(all?, only_feedback?, node_id?)",
+          "desc": "回看本次运行的执行历史概览(渐进式披露);默认同阶段相关记录 + 门禁反馈"
+        },
+        "get_history_detail": {
+          "signature": "get_history_detail(node_id, iteration?, include_log?)",
+          "desc": "下钻查看某次执行/门禁的完整细节(状态、输出、变量;门禁含人工动作)"
+        }
+      },
+      "io": {
+        "write": "write",
+        "read": "read"
+      }
+    },
+    "memoryStore": {
+      "name": "memory-store",
+      "desc": "通用长期记忆 · 按项目+Agent 隔离，任意 Agent 可在 mcp[] 声明",
+      "overview": "Agent 级长期记忆 MCP。按 (projectId, agentName) 隔离。先 list/search 再 get；重要结论 upsert。",
+      "convention": "在 Agent Studio 添加 memory-store（${APPROVING_MEMORY_URL/TOKEN}）。PM 咨询沙箱会自动注入。",
+      "tools": {
+        "list_memories": {
+          "signature": "list_memories()",
+          "desc": "列出本 Agent 记忆索引（摘要）"
+        },
+        "get_memory": {
+          "signature": "get_memory(id)",
+          "desc": "读取一条记忆全文"
+        },
+        "search_memories": {
+          "signature": "search_memories(query, limit?)",
+          "desc": "关键词搜索记忆摘要"
+        },
+        "upsert_memory": {
+          "signature": "upsert_memory(title, content)",
+          "desc": "写入或更新记忆"
+        },
+        "delete_memory": {
+          "signature": "delete_memory(id? | title?)",
+          "desc": "删除记忆"
+        }
+      }
+    },
+    "contextStore": {
+      "name": "context-store",
+      "desc": "对话上下文 · 平台自动落 QA，Agent 经 MCP 渐进回看",
+      "overview": "对话上下文 MCP。存储为 ChatThread/ChatMessage 单一事实源；每次 Chat 自动落库。按 Agent 隔离。",
+      "convention": "PM 咨询自动注入。请用 list_conversations / get_messages 拉取历史，勿依赖 ACP session 全文。",
+      "tools": {
+        "list_conversations": {
+          "signature": "list_conversations()",
+          "desc": "列出会话索引"
+        },
+        "get_messages": {
+          "signature": "get_messages(conversationId?, limit?, offset?)",
+          "desc": "分页读取消息"
+        },
+        "search_messages": {
+          "signature": "search_messages(query, limit?)",
+          "desc": "搜索历史消息摘要"
+        },
+        "get_current_conversation": {
+          "signature": "get_current_conversation()",
+          "desc": "当前会话元数据"
+        },
+        "get_attached_context": {
+          "signature": "get_attached_context()",
+          "desc": "用户附加的 Run/工作流"
+        }
+      }
+    },
+    "taskScheduler": {
+      "name": "task-scheduler",
+      "desc": "Agent 级定时任务 · 定义面 MCP；平台调度执行",
+      "overview": "Agent 级定时任务。仅 PM 咨询可写；到点新建沙箱 Chat。任务独占 cron 线程。",
+      "convention": "create_job 仅 PM Leader 咨询可用。执行由平台调度器完成，每次新沙箱。",
+      "tools": {
+        "list_jobs": {
+          "signature": "list_jobs()",
+          "desc": "列出本 Agent 任务"
+        },
+        "list_job_runs": {
+          "signature": "list_job_runs(jobId, limit?)",
+          "desc": "执行历史"
+        },
+        "create_job": {
+          "signature": "create_job(name, prompt, scheduleKind, scheduleExpr)",
+          "desc": "创建任务"
+        },
+        "update_job": {
+          "signature": "update_job(jobId, …)",
+          "desc": "更新任务"
+        },
+        "delete_job": {
+          "signature": "delete_job(jobId)",
+          "desc": "删除任务"
+        },
+        "run_job_now": {
+          "signature": "run_job_now(jobId)",
+          "desc": "立即入队"
+        }
+      }
+    },
+    "pmProgress": {
+      "name": "pm-progress",
+      "desc": "PM 专用 · 项目进度/阻塞/风险只读",
+      "overview": "项目级进度 MCP。仅 PM 咨询沙箱按项目配置注入。",
+      "convention": "项目详情 → PM 设置中启用 pm-progress。",
+      "tools": {
+        "pm_get_progress": {
+          "signature": "pm_get_progress()",
+          "desc": "整体进度"
+        },
+        "pm_list_blockers": {
+          "signature": "pm_list_blockers()",
+          "desc": "当前阻塞"
+        },
+        "pm_get_plan_summary": {
+          "signature": "pm_get_plan_summary(runId)",
+          "desc": "计划摘要"
+        },
+        "pm_get_artifact_summary": {
+          "signature": "pm_get_artifact_summary(runId?, limit?)",
+          "desc": "产物摘要"
+        },
+        "pm_get_risk_trends": {
+          "signature": "pm_get_risk_trends()",
+          "desc": "风险趋势"
+        },
+        "pm_compare_runs": {
+          "signature": "pm_compare_runs(workflowId, limit?)",
+          "desc": "Run 对比"
+        }
+      }
+    },
+    "pmWorkflowRead": {
+      "name": "pm-workflow-read",
+      "desc": "PM 专用 · 同项目工作流只读查询",
+      "overview": "工作流 list/get/graph/versions/runs 与待审批门禁查询，仅限当前项目。",
+      "convention": "项目详情 → PM 设置中启用 pm-workflow-read。",
+      "tools": {
+        "pm_list_workflows": {
+          "signature": "pm_list_workflows()",
+          "desc": "列出工作流"
+        },
+        "pm_get_workflow": {
+          "signature": "pm_get_workflow(workflowId)",
+          "desc": "工作流元数据"
+        },
+        "pm_get_workflow_graph": {
+          "signature": "pm_get_workflow_graph(workflowId)",
+          "desc": "完整 Graph"
+        },
+        "pm_list_versions": {
+          "signature": "pm_list_versions(workflowId)",
+          "desc": "版本列表"
+        },
+        "pm_list_runs": {
+          "signature": "pm_list_runs(workflowId, limit?)",
+          "desc": "列出近期 Run"
+        },
+        "pm_list_pending_gates": {
+          "signature": "pm_list_pending_gates(limit?)",
+          "desc": "待审批门禁"
+        }
+      }
+    },
+    "pmWorkflowWrite": {
+      "name": "pm-workflow-write",
+      "desc": "PM 专用 · 同项目工作流写操作",
+      "overview": "创建/更新/复制/删除工作流、发布、启动 Run、审批门禁与取消 Run，仅限当前项目。",
+      "convention": "项目详情 → PM 设置中启用 pm-workflow-write。",
+      "tools": {
+        "pm_create_workflow": {
+          "signature": "pm_create_workflow(name, description?, needsRepo?, nodes?, edges?, variables?)",
+          "desc": "创建草稿"
+        },
+        "pm_update_workflow": {
+          "signature": "pm_update_workflow(workflowId, name?, description?, needsRepo?, nodes?, edges?, variables?)",
+          "desc": "更新元数据/整图"
+        },
+        "pm_copy_workflow": {
+          "signature": "pm_copy_workflow(workflowId, name)",
+          "desc": "复制工作流"
+        },
+        "pm_delete_workflow": {
+          "signature": "pm_delete_workflow(workflowId)",
+          "desc": "删除工作流"
+        },
+        "pm_publish_workflow": {
+          "signature": "pm_publish_workflow(workflowId)",
+          "desc": "发布草稿"
+        },
+        "pm_start_run": {
+          "signature": "pm_start_run(workflowId, trigger?, inputs?, priority?)",
+          "desc": "启动 Run"
+        },
+        "pm_resume_gate": {
+          "signature": "pm_resume_gate(runId, nodeId, action, form?)",
+          "desc": "审批门禁"
+        },
+        "pm_cancel_run": {
+          "signature": "pm_cancel_run(runId)",
+          "desc": "取消 Run"
+        }
+      }
+    }
+  }
+}

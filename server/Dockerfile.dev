@@ -1,0 +1,17 @@
+# 后端本地开发镜像 —— 用 `go run` 直跑 + 源码挂载,改代码重启容器即生效。
+# 生产镜像见 Dockerfile(多阶段构建 + 打进前端产物)。
+#
+# 后端不再直连 Docker:沙箱由 sandbox-gateway 经 REST 创建、数据面走 SSH
+# (server/internal/sandbox/manager.go),因此本镜像不需要 docker CLI / docker.sock。
+FROM golang:1.25-bookworm
+
+# 国内环境直连 proxy.golang.org 经常超时,换成七牛 goproxy.cn;GOSUMDB 换成 Google
+# 中国区镜像,否则校验和查询仍会走回被墙的 sum.golang.org。
+# 可在 docker-compose.yml / .env 里用 GOPROXY 覆盖。
+ENV GOPROXY=https://goproxy.cn,direct \
+    GOSUMDB=sum.golang.google.cn
+
+WORKDIR /app
+EXPOSE 8080
+
+CMD ["go", "run", "./cmd/server"]

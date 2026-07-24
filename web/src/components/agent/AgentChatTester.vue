@@ -1,0 +1,860 @@
+<script setup lang="ts">
+import { ref, reactive, nextTick, onMounted, onBeforeUnmount, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import Icon from '@/components/ui/Icon.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppModal from '@/components/ui/AppModal.vue'
+import ReposEditor, { type RepoRow } from '@/components/ReposEditor.vue'
+import AcpStatusPill from '@/components/run/AcpStatusPill.vue'
+import { renderMarkdown } from '@/lib/markdown'
+import { api, type SandboxView } from '@/lib/api'
+
+// `attachId` attaches to an existing sandbox (skips the create flow) — used by
+// the sandbox console's ACP tab. `embedded` hides the internal header/controls
+// when a host page already provides its own chrome.
+const props = defineProps<{
+  profile: string
+  attachId?: number
+  embedded?: boolean
+  /** Agent home project id from Studio; empty = unbound (no task-scheduler). */
+  homeProjectId?: string
+}>()
+
+const { t, te } = useI18n()
+
+type Tool = { id: string; title: string; status: string }
+type ImageAtt = { data: string; mimeType: string; url: string }
+type QueueItem = { text: string; images: ImageAtt[] }
+type Turn = {
+  role: 'user' | 'agent'
+  text: string
+  thought: string
+  tools: Tool[]
+  plan: { content: string; status: string }[]
+  streaming: boolean
+  images?: ImageAtt[]
+  error?: string
+}
+
+const sandbox = ref<SandboxView | null>(null)
+const turns = ref<Turn[]>([])
+const input = ref('')
+const status = ref<'idle' | 'starting' | 'ready' | 'thinking' | 'closed' | 'error'>('idle')
+const errorMsg = ref('')
+type LaunchMode = 'empty' | 'clone'
+const launchMode = ref<LaunchMode>('empty')
+const repos = ref<RepoRow[]>([{ name: '', url: '', branch: '' }])
+const scroller = ref<HTMLElement | null>(null)
+const attachments = ref<ImageAtt[]>([])
+const fileInput = ref<HTMLInputElement | null>(null)
+// Local FIFO of not-yet-started sends, mirroring the server-side queue (same
+// order). Items live ONLY in the bottom queue panel — no conversation bubble is
+// created until the worker actually starts the turn (turn_begin), at which
+// point we shift the front and render the user + streaming agent bubbles. This
+// avoids showing "queued" bubbles prematurely in the transcript.
+const queued = ref<QueueItem[]>([])
+// True while rebuilding a reused sandbox's prior transcript, so the UI can show
+// a "loading history" indicator instead of a blank (seemingly frozen) panel.
+const restoring = ref(false)
+const loadingEarlier = ref(false)
+const historyHasMore = ref(false)
+const historyCursor = ref('')
+let rawFrames: any[] = []
+let activeIdx = -1
+let ws: WebSocket | null = null
+
+const statusLabel = computed(() => ({
+  idle: t('pages.agentChatTester.status.idle'),
+  starting: t('pages.agentChatTester.status.starting'),
+  ready: t('pages.agentChatTester.status.ready'),
+  thinking: t('pages.agentChatTester.status.thinking'),
+  closed: t('pages.agentChatTester.status.closed'),
+  error: t('pages.agentChatTester.status.error'),
+}))
+
+// ACP busy/idle for the breathing indicator: busy while the agent processes a
+// turn (thinking), connected-but-idle when the session is up and waiting.
+const acpBusy = computed(() => status.value === 'thinking')
+const acpConnected = computed(() => status.value === 'ready' || status.value === 'thinking')
+
+const validRepos = computed(() => repos.value.filter((r) => r.name.trim() && r.url.trim()))
+const isHomeProjectBound = computed(() => !!props.homeProjectId?.trim())
+const canStart = computed(
+  () => launchMode.value === 'empty' || validRepos.value.length > 0,
+)
+
+watch(launchMode, (mode) => {
+  if (mode === 'clone' && repos.value.length === 0) {
+    repos.value = [{ name: '', url: '', branch: '' }]
+  }
+})
+
+// While the sandbox boots we cycle through the real stages (create container →
+// pull image → boot agent → ACP handshake) so the loading panel feels alive and
+// tells the user roughly what's happening instead of a static one-liner.
+const STARTING_STEPS = computed(() => [
+  { title: t('pages.agentChatTester.stepSandbox.title'), hint: t('pages.agentChatTester.stepSandbox.hint') },
+  { title: t('pages.agentChatTester.stepRuntime.title'), hint: t('pages.agentChatTester.stepRuntime.hint') },
+  { title: t('pages.agentChatTester.stepAcp.title'), hint: t('pages.agentChatTester.stepAcp.hint') },
+  { title: t('pages.agentChatTester.stepReady.title'), hint: t('pages.agentChatTester.stepReady.hint') },
+])
+const startStep = ref(0)
+let startTimer: number | undefined
+
+watch(
+  status,
+  (s) => {
+    if (s === 'starting') {
+      startStep.value = 0
+      if (startTimer) clearInterval(startTimer)
+      startTimer = window.setInterval(() => {
+        // Advance but hold on the last step so it doesn't loop back to "准备容器".
+        if (startStep.value < STARTING_STEPS.value.length - 1) startStep.value++
+      }, 2600)
+    } else if (startTimer) {
+      clearInterval(startTimer)
+      startTimer = undefined
+    }
+  },
+)
+
+async function start() {
+  if (status.value === 'starting' || !canStart.value) return
+  status.value = 'starting'
+  errorMsg.value = ''
+  turns.value = []
+  try {
+    const payload =
+      launchMode.value === 'clone'
+        ? {
+            ...(props.homeProjectId?.trim() ? { projectId: props.homeProjectId.trim() } : {}),
+            repos: validRepos.value.map((r) => ({
+              name: r.name.trim(),
+              url: r.url.trim(),
+              ...(r.branch.trim() ? { branch: r.branch.trim() } : {}),
+            })),
+          }
+        : {
+            ...(props.homeProjectId?.trim() ? { projectId: props.homeProjectId.trim() } : {}),
+          }
+    sandbox.value = await api.createAgentTest(props.profile, payload)
+    await waitReady(sandbox.value.id)
+  } catch (e: any) {
+    status.value = 'error'
+    errorMsg.value = String(e?.message || e)
+  }
+}
+
+// Attach to an already-created sandbox (console ACP tab): skip the repo/create
+// step and go straight to waiting for readiness + opening the chat WS.
+async function attach(id: number) {
+  status.value = 'starting'
+  errorMsg.value = ''
+  await waitReady(id)
+}
+
+onMounted(() => {
+  if (props.attachId) void attach(props.attachId)
+})
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+async function waitReady(id: number) {
+  const deadline = Date.now() + 5 * 60 * 1000
+  while (Date.now() < deadline) {
+    // Bail if the user reset/destroyed the session while we were waiting.
+    if (status.value !== 'starting') return
+    let v: SandboxView
+    try {
+      v = await api.getSandbox(id)
+    } catch {
+      await sleep(2000)
+      continue
+    }
+    sandbox.value = v
+    if (v.status === 'running') {
+      openWs(id)
+      return
+    }
+    if (v.status === 'error') {
+      status.value = 'error'
+      errorMsg.value = v.error || t('pages.agentChatTester.sandboxStartFailed')
+      return
+    }
+    await sleep(2000)
+  }
+  status.value = 'error'
+  errorMsg.value = t('pages.agentChatTester.sandboxTimeout')
+}
+
+function openWs(id: number) {
+  ws = new WebSocket(api.sandboxChatWsUrl(id))
+  ws.onopen = () => {
+    status.value = 'ready'
+    // Reused sandbox: rebuild the prior transcript so the context is visible,
+    // like the sandbox console page.
+    void restoreHistory(id)
+  }
+  ws.onmessage = (ev) => onFrame(ev.data)
+  ws.onclose = () => {
+    if (status.value !== 'error') status.value = 'closed'
+  }
+  ws.onerror = () => {
+    status.value = 'error'
+    errorMsg.value = t('pages.agentChatTester.wsFailed')
+  }
+}
+
+// canSend allows firing even while a turn is running — extra messages are
+// queued on the server (single worker drains them serially).
+const canSend = () =>
+  !!ws && ws.readyState === WebSocket.OPEN && (status.value === 'ready' || status.value === 'thinking')
+
+function send() {
+  const text = input.value.trim()
+  if ((!text && attachments.value.length === 0) || !canSend()) return
+  const imgs = attachments.value.slice()
+  // Enqueue only — the bubble is created on turn_begin (see onFrame), so extra
+  // sends show up in the bottom queue panel instead of as premature bubbles.
+  queued.value.push({ text, images: imgs })
+  input.value = ''
+  attachments.value = []
+  status.value = 'thinking'
+  ws!.send(JSON.stringify({ type: 'chat', content: text, images: imgs.map((a) => ({ data: a.data, mimeType: a.mimeType })) }))
+  scrollDown()
+}
+
+function cancel() {
+  ws?.send(JSON.stringify({ type: 'cancel' }))
+  // Drop everything not yet started; the running turn still gets its turn_done.
+  queued.value = []
+  refreshStatus()
+}
+
+function refreshStatus() {
+  status.value = queued.value.length === 0 && activeIdx < 0 ? 'ready' : 'thinking'
+}
+
+function onFrame(data: string) {
+  let frame: any
+  try {
+    frame = JSON.parse(data)
+  } catch {
+    return
+  }
+  switch (frame.type) {
+    case 'queue_state':
+      // Server count is authoritative for reconciliation, but we drive the
+      // panel from the local queue (which carries text/images). No-op here.
+      break
+    case 'turn_begin': {
+      // The worker started the next queued item: materialize its bubbles now.
+      const item = queued.value.shift()
+      turns.value.push({
+        role: 'user',
+        text: item?.text ?? '',
+        thought: '',
+        tools: [],
+        plan: [],
+        streaming: false,
+        images: item && item.images.length ? item.images : undefined,
+      })
+      activeIdx =
+        turns.value.push({ role: 'agent', text: '', thought: '', tools: [], plan: [], streaming: true }) - 1
+      break
+    }
+    case 'acp': {
+      const turn = activeIdx >= 0 ? turns.value[activeIdx] : null
+      if (turn) applyAcp(frame.data, turn)
+      break
+    }
+    case 'turn_done': {
+      const turn = activeIdx >= 0 ? turns.value[activeIdx] : null
+      if (turn) turn.streaming = false
+      activeIdx = -1
+      refreshStatus()
+      break
+    }
+    case 'error': {
+      const turn = activeIdx >= 0 ? turns.value[activeIdx] : null
+      if (turn) {
+        turn.streaming = false
+        turn.error = frame.message || t('pages.agentChatTester.execError')
+      } else {
+        errorMsg.value = frame.message || t('pages.agentChatTester.execError')
+      }
+      activeIdx = -1
+      refreshStatus()
+      break
+    }
+  }
+  scrollDown()
+}
+
+// --- image attachments -----------------------------------------------------
+function addFiles(files: FileList | null | undefined) {
+  if (!files) return
+  for (const f of Array.from(files)) {
+    if (!f.type.startsWith('image/')) continue
+    const reader = new FileReader()
+    reader.onload = () => {
+      const res = String(reader.result || '')
+      const comma = res.indexOf(',')
+      attachments.value.push({ data: comma >= 0 ? res.slice(comma + 1) : res, mimeType: f.type, url: res })
+    }
+    reader.readAsDataURL(f)
+  }
+}
+function onPickFiles(e: Event) {
+  addFiles((e.target as HTMLInputElement).files)
+  if (fileInput.value) fileInput.value.value = ''
+}
+function onPaste(e: ClipboardEvent) {
+  const items = e.clipboardData?.items
+  if (!items) return
+  const picked: File[] = []
+  for (const it of Array.from(items)) {
+    if (it.type.startsWith('image/')) {
+      const f = it.getAsFile()
+      if (f) picked.push(f)
+    }
+  }
+  if (picked.length) {
+    e.preventDefault()
+    const dt = new DataTransfer()
+    picked.forEach((f) => dt.items.add(f))
+    addFiles(dt.files)
+  }
+}
+function removeAttachment(i: number) {
+  attachments.value.splice(i, 1)
+}
+
+// unwrapFrame peels a persisted event frame ({op:"event",data:{…}}) down to the
+// bare event ({type,…}); passes through frames already in bare form.
+function unwrapFrame(f: any): any {
+  return f && typeof f === 'object' && f.op === 'event' && f.data ? f.data : f
+}
+
+function rebuildTurnsFromFrames(events: any[]): Turn[] {
+  const rebuilt: Turn[] = []
+  let agent: Turn | null = null
+  const newAgent = () => {
+    agent = { role: 'agent', text: '', thought: '', tools: [], plan: [], streaming: false }
+    rebuilt.push(agent)
+  }
+  for (const raw of events) {
+    const ev = unwrapFrame(raw)
+    if (!ev || typeof ev !== 'object') continue
+    if (ev.type === 'prompt_begin') {
+      const text = String(ev.promptText ?? ev.text ?? '').trim()
+      const urls: string[] = Array.isArray(ev.imageURLs) ? ev.imageURLs.filter((u: any) => typeof u === 'string' && u) : []
+      if (text || urls.length) {
+        rebuilt.push({
+          role: 'user',
+          text,
+          thought: '',
+          tools: [],
+          plan: [],
+          streaming: false,
+          images: urls.length ? urls.map((u) => ({ url: u, data: '', mimeType: '' })) : undefined,
+        })
+        newAgent()
+      }
+    } else if (ev.type === 'session_update' && ev.update) {
+      if (!agent) newAgent()
+      applyAcp(ev, agent!)
+    }
+  }
+  const last = rebuilt[rebuilt.length - 1]
+  if (last && last.role === 'agent' && !last.text && !last.thought && !last.tools.length && !last.plan.length) {
+    rebuilt.pop()
+  }
+  return rebuilt
+}
+
+// restoreHistory rebuilds the transcript from the sandbox's raw event log so a
+// reopened (reused) sandbox shows its prior conversation. prompt_begin frames
+// carry the original user prompt (+ image data URLs); session_update frames are
+// folded into the following agent turn via the same applyAcp used live.
+async function restoreHistory(id: number) {
+  if (turns.value.length > 0) return
+  restoring.value = true
+  try {
+    const r = await api.sandboxEventLog(id, { limit: 20 })
+    if ('hasMore' in r) {
+      const paged = r as { events: any[]; nextCursor: string; hasMore: boolean }
+      rawFrames = paged.events || []
+      historyHasMore.value = paged.hasMore
+      historyCursor.value = paged.nextCursor || ''
+    } else {
+      rawFrames = r.events || []
+      historyHasMore.value = false
+      historyCursor.value = ''
+    }
+  } catch {
+    return
+  } finally {
+    restoring.value = false
+  }
+  if (!rawFrames.length || turns.value.length > 0) return
+  const rebuilt = rebuildTurnsFromFrames(rawFrames)
+  if (rebuilt.length) {
+    turns.value = rebuilt
+    scrollDown()
+  }
+}
+
+async function loadEarlierHistory() {
+  if (!sandbox.value || !historyHasMore.value || loadingEarlier.value) return
+  loadingEarlier.value = true
+  try {
+    const r = await api.sandboxEventLog(sandbox.value.id, {
+      cursor: historyCursor.value,
+      limit: 20,
+    })
+    if (!('hasMore' in r) || !r.events?.length) return
+    const paged = r as { events: any[]; nextCursor: string; hasMore: boolean }
+    rawFrames = [...paged.events, ...rawFrames]
+    historyHasMore.value = paged.hasMore
+    historyCursor.value = paged.nextCursor || ''
+    turns.value = rebuildTurnsFromFrames(rawFrames)
+  } catch {
+    /* keep current transcript */
+  } finally {
+    loadingEarlier.value = false
+  }
+}
+
+// applyAcp tolerantly parses a cursor-acp event frame ({op:"event",data:{type,update}}).
+function applyAcp(envelope: any, turn: Turn) {
+  const ev = envelope?.data ?? envelope
+  if (!ev || ev.type !== 'session_update' || !ev.update) return
+  const u = flatten(ev.update)
+  const kind = normalizeKind(u.sessionUpdate || u.session_update || u.type || u.kind || '')
+  if (kind === 'agent_message_chunk') turn.text += contentText(u.content)
+  else if (kind === 'agent_thought_chunk') turn.thought += contentText(u.content)
+  else if (kind === 'plan') turn.plan = planEntries(u)
+  else if (isToolKind(kind)) applyTool(u, turn)
+}
+
+function flatten(u: any): any {
+  const out: any = { ...u }
+  const su = out.sessionUpdate ?? out.session_update
+  if (su && typeof su === 'object') {
+    for (const k of Object.keys(su)) if (!(k in out)) out[k] = su[k]
+    delete out.sessionUpdate
+    delete out.session_update
+  }
+  return out
+}
+function normalizeKind(s: any): string {
+  return String(s || '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/-/g, '_')
+    .toLowerCase()
+}
+function isToolKind(k: string): boolean {
+  return k.includes('tool_call') || k.includes('toolcall')
+}
+function contentText(v: any): string {
+  if (v == null) return ''
+  if (typeof v === 'string') return v
+  if (Array.isArray(v)) return v.map(contentText).join('')
+  if (typeof v === 'object') {
+    if (typeof v.text === 'string') return v.text
+    if (Array.isArray(v.parts)) return v.parts.map(contentText).join('')
+  }
+  return ''
+}
+function field(o: any, ...keys: string[]): string {
+  for (const k of keys) if (typeof o[k] === 'string' && o[k]) return o[k]
+  return ''
+}
+function planEntries(u: any): { content: string; status: string }[] {
+  const raw = u.entries || u.steps || []
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((e: any) => ({ content: field(e, 'content', 'title', 'text'), status: field(e, 'status', 'state') || 'pending' }))
+    .filter((e: any) => e.content)
+}
+// Common tool names → localized labels (rest gets Title-Cased).
+function humanizeTool(s: string): string {
+  const raw = String(s || '').trim()
+  if (!raw || /^tool_[0-9a-f-]{8,}$/i.test(raw)) return ''
+  if (/[\u4e00-\u9fff]/.test(raw)) return raw
+  const key = raw.toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_')
+  const i18nKey = `pages.agentChatTester.tools.${key}`
+  if (te(i18nKey)) return t(i18nKey)
+  return raw
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+function applyTool(u: any, turn: Turn) {
+  // Some agents nest the tool details under toolCall/tool/call instead of the
+  // top level — check both so we don't miss the title/kind.
+  const tc = (u.toolCall || u.tool || u.call || {}) as any
+  const id = field(u, 'toolCallId', 'tool_call_id', 'id', 'callId') || field(tc, 'toolCallId', 'id', 'callId')
+  // Prefer an explicit title/name; fall back to the ACP tool "kind" (read/edit/…)
+  // so a call still reads as e.g. "Read" instead of the ugly id.
+  const title = humanizeTool(
+    field(u, 'title', 'name', 'toolName', 'tool_name', 'kind') || field(tc, 'title', 'name', 'toolName', 'kind'),
+  )
+  const stat = field(u, 'status', 'state') || field(tc, 'status', 'state')
+  const existing = turn.tools.find((t) => id && t.id === id)
+  if (existing) {
+    if (title) existing.title = title
+    if (stat) existing.status = stat
+  } else {
+    turn.tools.push({ id, title: title || t('pages.agentChatTester.toolFallback'), status: stat || 'pending' })
+  }
+}
+
+function scrollDown() {
+  nextTick(() => {
+    if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight
+  })
+}
+
+function reset() {
+  ws?.close()
+  ws = null
+  sandbox.value = null
+  turns.value = []
+  attachments.value = []
+  queued.value = []
+  restoring.value = false
+  activeIdx = -1
+  status.value = 'idle'
+}
+
+// Two-step destroy: clicking "结束并销毁" opens a confirm modal first.
+const confirmDestroy = ref(false)
+async function destroy() {
+  confirmDestroy.value = false
+  const id = sandbox.value?.id
+  reset()
+  if (id) {
+    try {
+      await api.destroySandbox(id)
+    } catch {
+      /* sweeper will reclaim */
+    }
+  }
+}
+
+// Tearing down the WS on profile switch / unmount keeps the sandbox alive
+// (the TTL sweeper reclaims it; it's also visible in the 沙箱 page).
+watch(
+  () => props.profile,
+  () => reset(),
+)
+onBeforeUnmount(() => {
+  ws?.close()
+  if (startTimer) clearInterval(startTimer)
+})
+
+const toolIcon: Record<string, string> = { completed: 'check', failed: 'close', in_progress: 'spinner', pending: 'clock' }
+</script>
+
+<template>
+  <div class="flex min-h-0 flex-1 flex-col">
+    <!-- header / controls -->
+    <div v-if="!embedded" class="flex items-center gap-2 border-b border-line px-4 py-2">
+      <AcpStatusPill v-if="acpConnected" :busy="acpBusy" connected />
+      <span
+        v-else
+        class="chip"
+        :class="status === 'error' ? 'border-err/30 text-err' : 'border-line text-txt3'"
+      >{{ statusLabel[status] }}</span>
+      <span v-if="sandbox" class="text-[11px] font-mono text-txt3">{{ sandbox.name }}</span>
+      <div class="ml-auto flex items-center gap-2">
+        <RouterLink
+          v-if="sandbox"
+          :to="`/sandboxes/${sandbox.id}/console`"
+          class="rounded border border-line px-2 py-1 text-[11px] text-txt2 hover:border-line-strong"
+        ><Icon name="terminal" :size="12" class="-mt-0.5 mr-0.5 inline" />{{ t('pages.agentChatTester.console') }}</RouterLink>
+        <AppButton v-if="status === 'idle' || status === 'closed' || status === 'error'" size="sm" variant="primary" icon="play" :disabled="!canStart" @click="start">{{ t('pages.agentChatTester.startTest') }}</AppButton>
+        <AppButton v-else size="sm" variant="danger" icon="trash" @click="confirmDestroy = true">{{ t('pages.agentChatTester.destroy') }}</AppButton>
+      </div>
+    </div>
+
+    <!-- embedded (sandbox console ACP tab): the host hides our header, so surface
+         a slim busy/idle strip here too -->
+    <div v-if="embedded && acpConnected" class="flex items-center gap-2 border-b border-line px-3 py-1.5">
+      <AcpStatusPill :busy="acpBusy" connected />
+      <span class="text-[11px] font-medium text-txt3">{{ t('pages.agentChatTester.acpSession') }}</span>
+    </div>
+
+    <!-- idle: mode cards + repos editor -->
+    <div v-if="status === 'idle'" class="flex flex-1 flex-col items-center justify-center gap-5 p-6">
+      <div
+        v-if="!isHomeProjectBound"
+        class="flex w-full max-w-lg items-start gap-2.5 rounded-md border border-warn/40 bg-warn/10 px-3 py-2.5 text-left"
+        role="alert"
+      >
+        <Icon name="alert" :size="16" class="mt-0.5 shrink-0 text-warn" />
+        <div>
+          <p class="text-[12.5px] font-semibold text-warn">{{ t('pages.agentChatTester.projectRequired.title') }}</p>
+          <p class="mt-0.5 text-[12px] leading-relaxed text-txt2">{{ t('pages.agentChatTester.projectRequired.desc') }}</p>
+        </div>
+      </div>
+
+      <div class="max-w-lg text-center">
+        <Icon name="robot" :size="32" class="mx-auto text-txt3" />
+        <p class="mt-3 text-[13px] text-txt3">
+          {{ t('pages.agentChatTester.idleHint', { profile }) }}
+        </p>
+      </div>
+
+      <div class="w-full max-w-lg">
+        <div class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-txt3">
+          {{ t('pages.agentChatTester.mode.sectionLabel') }}
+        </div>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2" role="radiogroup" :aria-label="t('pages.agentChatTester.mode.sectionLabel')">
+          <button
+            type="button"
+            role="radio"
+            :aria-checked="launchMode === 'empty'"
+            class="relative rounded-md border p-4 text-left transition"
+            :class="launchMode === 'empty' ? 'border-accent bg-accent/10 shadow-[0_0_0_1px_rgba(123,97,255,0.3)]' : 'border-line bg-surface hover:border-line-strong'"
+            @click="launchMode = 'empty'"
+          >
+            <span
+              class="absolute right-3 top-3 flex h-4 w-4 items-center justify-center rounded-full border"
+              :class="launchMode === 'empty' ? 'border-accent bg-accent' : 'border-line-strong'"
+            >
+              <span v-if="launchMode === 'empty'" class="h-1.5 w-1.5 rounded-full bg-white" />
+            </span>
+            <div class="flex items-start gap-2.5 pr-6">
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center border border-line bg-elevated text-txt2" :class="launchMode === 'empty' ? 'border-accent/35 bg-accent/15 text-accent-2' : ''">
+                <Icon name="folder" :size="16" />
+              </span>
+              <div>
+                <div class="text-[13px] font-semibold text-txt">{{ t('pages.agentChatTester.mode.empty.title') }}</div>
+                <div class="mt-0.5 text-[11.5px] leading-relaxed text-txt3">{{ t('pages.agentChatTester.mode.empty.desc') }}</div>
+              </div>
+            </div>
+          </button>
+          <button
+            type="button"
+            role="radio"
+            :aria-checked="launchMode === 'clone'"
+            class="relative rounded-md border p-4 text-left transition"
+            :class="launchMode === 'clone' ? 'border-accent bg-accent/10 shadow-[0_0_0_1px_rgba(123,97,255,0.3)]' : 'border-line bg-surface hover:border-line-strong'"
+            @click="launchMode = 'clone'"
+          >
+            <span
+              class="absolute right-3 top-3 flex h-4 w-4 items-center justify-center rounded-full border"
+              :class="launchMode === 'clone' ? 'border-accent bg-accent' : 'border-line-strong'"
+            >
+              <span v-if="launchMode === 'clone'" class="h-1.5 w-1.5 rounded-full bg-white" />
+            </span>
+            <div class="flex items-start gap-2.5 pr-6">
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center border border-line bg-elevated text-txt2" :class="launchMode === 'clone' ? 'border-accent/35 bg-accent/15 text-accent-2' : ''">
+                <Icon name="git" :size="16" />
+              </span>
+              <div>
+                <div class="text-[13px] font-semibold text-txt">{{ t('pages.agentChatTester.mode.clone.title') }}</div>
+                <div class="mt-0.5 text-[11.5px] leading-relaxed text-txt3">{{ t('pages.agentChatTester.mode.clone.desc') }}</div>
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <div v-if="launchMode === 'clone'" class="w-full max-w-lg space-y-2">
+        <div class="text-[12px] font-medium text-txt2">{{ t('pages.agentChatTester.repos.sectionLabel') }}</div>
+        <p class="text-[11.5px] text-txt3">{{ t('pages.agentChatTester.repos.hint') }}</p>
+        <ReposEditor v-model:repos="repos" :min-rows="1" i18n-prefix="pages.agentChatTester.repos" />
+      </div>
+
+      <AppButton variant="primary" icon="play" :disabled="!canStart" @click="start">{{ t('pages.agentChatTester.startTest') }}</AppButton>
+      <p v-if="errorMsg" class="text-[12px] text-err">{{ errorMsg }}</p>
+    </div>
+
+    <!-- starting: full-panel loader so it never looks frozen -->
+    <div v-else-if="status === 'starting'" class="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+      <Icon name="spinner" :size="30" class="animate-spin text-accent" />
+      <Transition name="startfade" mode="out-in">
+        <p :key="startStep" class="text-[13px] text-txt2">{{ STARTING_STEPS[startStep].title }}</p>
+      </Transition>
+      <Transition name="startfade" mode="out-in">
+        <p :key="startStep" class="max-w-md text-[12px] text-txt3">{{ STARTING_STEPS[startStep].hint }}</p>
+      </Transition>
+      <div class="mt-1 flex items-center gap-1.5">
+        <span
+          v-for="(_, i) in STARTING_STEPS"
+          :key="i"
+          class="h-1.5 rounded-full transition-all duration-300"
+          :class="i === startStep ? 'w-5 bg-accent' : i < startStep ? 'w-1.5 bg-accent/50' : 'w-1.5 bg-line'"
+        />
+      </div>
+      <p v-if="errorMsg" class="text-[12px] text-err">{{ errorMsg }}</p>
+    </div>
+
+    <!-- conversation -->
+    <div v-else ref="scroller" class="scroll-area min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+      <div v-if="historyHasMore" class="text-center">
+        <button
+          type="button"
+          class="text-xs text-accent-2 transition hover:text-accent disabled:opacity-40"
+          :disabled="loadingEarlier"
+          @click="loadEarlierHistory"
+        >
+          {{ t('common.pagination.loadEarlier') }}
+        </button>
+      </div>
+      <div v-if="errorMsg" class="rounded-md border border-err/30 bg-err/10 px-3 py-2 text-[12px] text-err">{{ errorMsg }}</div>
+      <div v-if="restoring" class="flex items-center justify-center gap-2 rounded-md border border-line bg-base/60 px-3 py-2 text-[12px] text-txt3">
+        <Icon name="spinner" :size="13" class="animate-spin text-accent-2" />{{ t('pages.agentChatTester.loadingHistory') }}
+      </div>
+
+      <div v-for="(turn, i) in turns" :key="i" class="flex" :class="turn.role === 'user' ? 'justify-end' : 'justify-start'">
+        <div v-if="turn.role === 'user'" class="max-w-[80%] space-y-1.5">
+          <div v-if="turn.images && turn.images.length" class="flex flex-wrap justify-end gap-1.5">
+            <img
+              v-for="(im, ii) in turn.images"
+              :key="ii"
+              :src="im.url"
+              class="h-20 w-20 rounded-md border border-line object-cover"
+            />
+          </div>
+          <div v-if="turn.text" class="rounded-lg rounded-br-sm bg-accent px-3 py-2 text-[13px] leading-6 text-white">
+            {{ turn.text }}
+          </div>
+        </div>
+        <div v-else class="max-w-[88%] space-y-2">
+          <!-- thought -->
+          <details v-if="turn.thought" class="rounded-md border border-line bg-base/60 text-[11.5px] text-txt3">
+            <summary class="cursor-pointer select-none px-2.5 py-1.5 text-txt3 hover:text-txt2"><Icon name="sparkles" :size="11" class="-mt-0.5 mr-1 inline text-accent-2" />{{ t('pages.agentChatTester.thought') }}</summary>
+            <div class="whitespace-pre-wrap px-2.5 pb-2 font-mono leading-5">{{ turn.thought }}</div>
+          </details>
+          <!-- plan -->
+          <div v-if="turn.plan.length" class="rounded-md border border-line bg-base/60 p-2 text-[11.5px]">
+            <div class="mb-1 text-txt3">{{ t('pages.agentChatTester.plan') }}</div>
+            <div v-for="(p, pi) in turn.plan" :key="pi" class="flex items-center gap-1.5 text-txt2">
+              <Icon :name="p.status === 'completed' ? 'check' : 'clock'" :size="11" :class="p.status === 'completed' ? 'text-ok' : 'text-txt3'" />
+              <span :class="p.status === 'completed' ? 'line-through text-txt3' : ''">{{ p.content }}</span>
+            </div>
+          </div>
+          <!-- tool calls -->
+          <div v-if="turn.tools.length" class="flex flex-wrap gap-1.5">
+            <span
+              v-for="tool in turn.tools"
+              :key="tool.id || tool.title"
+              class="inline-flex items-center gap-1.5 rounded-full border border-line bg-base px-2 py-0.5 text-[11px] text-txt2"
+            >
+              <Icon
+                :name="toolIcon[tool.status] || 'doc'"
+                :size="11"
+                :class="[
+                  tool.status === 'completed' ? 'text-ok' : tool.status === 'failed' ? 'text-err' : 'text-accent-2',
+                  tool.status === 'in_progress' ? 'animate-spin' : '',
+                ]"
+              />
+              {{ tool.title }}
+            </span>
+          </div>
+          <!-- narration -->
+          <div v-if="turn.text" class="md rounded-lg rounded-bl-sm border border-line bg-surface px-3 py-2 text-[13px] leading-6 text-txt" v-html="renderMarkdown(turn.text)" />
+          <div v-else-if="turn.streaming && !turn.thought && !turn.tools.length" class="rounded-lg border border-line bg-surface px-3 py-2 text-[13px] text-txt3">
+            <Icon name="spinner" :size="13" class="mr-1 inline animate-spin" />{{ t('pages.agentChatTester.generating') }}
+          </div>
+          <div v-if="turn.error" class="rounded-md border border-err/30 bg-err/10 px-3 py-2 text-[12px] text-err">{{ turn.error }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- pending-send queue panel (mirrors the sandbox UI: queued items show
+         here at the bottom instead of as premature transcript bubbles) -->
+    <div v-if="status !== 'idle' && queued.length" class="border-t border-line bg-base/40 px-3 py-2">
+      <div class="mb-1 flex items-center gap-1.5 text-[11px] text-txt3">
+        <Icon name="clock" :size="11" />{{ t('pages.agentChatTester.queue', { n: queued.length }) }}
+      </div>
+      <div class="space-y-1">
+        <div
+          v-for="(q, qi) in queued"
+          :key="qi"
+          class="flex items-center gap-2 rounded border border-line bg-surface px-2 py-1 text-[12px] text-txt2"
+        >
+          <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-line text-[9px] text-txt3">{{ qi + 1 }}</span>
+          <span v-if="q.images.length" class="shrink-0 text-[10.5px] text-txt3">{{ t('pages.agentChatTester.imagesCount', { n: q.images.length }) }}</span>
+          <span class="truncate">{{ q.text || (q.images.length ? t('pages.agentChatTester.imagesOnly') : t('pages.agentChatTester.empty')) }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- composer -->
+    <div v-if="status !== 'idle'" class="border-t border-line p-3">
+      <!-- pending attachments -->
+      <div v-if="attachments.length" class="mb-2 flex flex-wrap gap-1.5">
+        <div v-for="(im, ii) in attachments" :key="ii" class="relative">
+          <img :src="im.url" class="h-14 w-14 rounded-md border border-line object-cover" />
+          <button
+            class="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-err text-white"
+            @click="removeAttachment(ii)"
+          ><Icon name="close" :size="9" /></button>
+        </div>
+      </div>
+      <div class="flex items-end gap-2">
+        <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="onPickFiles" />
+        <AppButton
+          size="sm"
+          variant="outline"
+          icon="paperclip"
+          :disabled="status !== 'ready' && status !== 'thinking'"
+          @click="fileInput?.click()"
+        >{{ t('pages.agentChatTester.images') }}</AppButton>
+        <textarea
+          v-model="input"
+          rows="2"
+          :disabled="status !== 'ready' && status !== 'thinking'"
+          :placeholder="t('pages.agentChatTester.inputPlaceholder')"
+          class="scroll-area max-h-32 min-h-[40px] flex-1 resize-none rounded-md border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent disabled:opacity-50"
+          @keydown.enter.exact.prevent="send"
+          @paste="onPaste"
+        />
+        <AppButton v-if="status === 'thinking'" size="sm" variant="outline" icon="close" @click="cancel">{{ t('pages.agentChatTester.cancel') }}</AppButton>
+        <AppButton
+          size="sm"
+          variant="primary"
+          icon="send"
+          :disabled="(!input.trim() && !attachments.length) || (status !== 'ready' && status !== 'thinking')"
+          @click="send"
+        >{{ t('pages.agentChatTester.send') }}</AppButton>
+      </div>
+    </div>
+
+    <AppModal :open="confirmDestroy" :title="t('pages.agentChatTester.destroyTitle')" :width="420" @close="confirmDestroy = false">
+      <div class="space-y-3 text-sm text-txt2">
+        <div class="flex items-start gap-2 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-[12px] text-err">
+          <Icon name="alert" :size="14" class="mt-0.5 shrink-0" />
+          {{ t('pages.agentChatTester.destroyWarning') }}
+        </div>
+        <p>{{ t('pages.agentChatTester.destroyConfirm') }}</p>
+      </div>
+      <template #footer>
+        <AppButton variant="ghost" @click="confirmDestroy = false">{{ t('common.buttons.cancel') }}</AppButton>
+        <AppButton variant="danger" icon="trash" @click="destroy">{{ t('common.buttons.confirmDestroy') }}</AppButton>
+      </template>
+    </AppModal>
+  </div>
+</template>
+
+<style scoped>
+.startfade-enter-active,
+.startfade-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.startfade-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+.startfade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+</style>

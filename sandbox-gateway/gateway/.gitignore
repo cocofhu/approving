@@ -1,0 +1,10 @@
+# Build artifacts
+/server
+/sbgw
+
+# Local runtime config and SQLite database
+/config.yaml
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

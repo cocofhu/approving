@@ -1,0 +1,29 @@
+# 本地无鉴权启动 sandbox-gateway（docker 驱动 + SQLite）
+#
+#   docker compose up --build -d
+#   curl -s localhost:8080/healthz
+#   curl -s -XPOST localhost:8080/api/v1/sandboxes -H 'Content-Type: application/json' -d '{}'
+#
+# 需要本机 Docker；gateway 挂载 docker.sock 拉起沙箱。
+# network_mode: host：端口探测与沙箱 publish 均走宿主机 127.0.0.1。
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sandbox-gateway:local
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./deploy/config/config.local.yaml:/etc/sandbox-gateway/config.yaml:ro
+      - gateway-data:/data
+    environment:
+      SBGW_CONFIG: /etc/sandbox-gateway/config.yaml
+      SBGW_DB_PATH: /data/gateway.db
+      # 覆盖镜像（可选）：SBGW_IMAGE=universal-sandbox:local docker compose up --build
+      SBGW_IMAGE: ${SBGW_IMAGE:-}
+
+volumes:
+  gateway-data:

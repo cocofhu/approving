@@ -1,0 +1,100 @@
+# Sandbox Gateway configuration.
+# A gateway instance runs EXACTLY ONE driver, chosen by `driver`:
+#   - docker      : local testing (publishes container ports on the host)
+#   - kubernetes  : production (Deployment + MetalLB LoadBalancer Service)
+# Docker and Kubernetes are deployed separately; they never run in one instance.
+#
+# Any value can be overridden by SBGW_* environment variables (env wins).
+
+server:
+  listen: ":8080"
+
+# Active driver for this deployment.
+driver: docker
+
+database:
+  # sqlite = local testing; mysql = production / K8s
+  driver: sqlite
+  path: gateway.db
+  # mysql example (used when driver: mysql):
+  # host: mysql.example.com
+  # port: 3306
+  # user: sandbox_gateway
+  # password: "REPLACE"
+  # name: sandbox_gateway
+  # # or full DSN (wins over host/user/...):
+  # # dsn: "user:pass@tcp(host:3306)/sandbox_gateway?charset=utf8mb4&parseTime=True&loc=Local"
+
+# Sandbox image and the container ports the gateway exposes. Defaults align with
+# the Phase 1 universal image (EXPOSE 8744 22 8765 9222 6080).
+image:
+  ref: universal-sandbox-cursor:local
+  # 每 agent 一个薄镜像时，按请求里的 provider 解析镜像。解析顺序：
+  #   请求 image 覆盖 > byProvider[provider] > template(替换 {provider}) > ref(默认)。
+  # 二选一即可：byProvider 精确列举，或 template 走命名约定（无需枚举）。
+  # 也可用环境变量覆盖：SBGW_IMAGE_TEMPLATE、SBGW_IMAGE_MAP="gemini=...,codex=..."。
+  # template: universal-sandbox-{provider}:local
+  # byProvider:
+  #   gemini: universal-sandbox-gemini:local
+  #   codex:  universal-sandbox-codex:local
+  ports:
+    session: 8765     # ACP bridge / WSP session (readiness probe target)
+    codeServer: 8744  # code-server (web IDE)
+    ssh: 22           # sshd
+    cdp: 9222         # Chromium CDP (optional)
+    novnc: 6080       # noVNC websockify (optional)
+    # Extra app ports (aligned with remote-dev sandbox LB expose list).
+    app: [80, 443, 2222, 3000, 3306, 4200, 5000, 5173, 5432, 5500, 6379, 8000, 8080, 8443, 8888, 9090, 9200, 9229]
+
+# --- docker driver (local testing) ---
+docker:
+  # Host IP docker publishes sandbox ports on. MUST be client-reachable; keep
+  # 127.0.0.1 only when clients run on the same host.
+  bindIP: "127.0.0.1"
+  network: ""         # optional docker network
+  namePrefix: "sbx-"  # container name prefix (list/reconcile filter)
+  shmSize: "1g"
+
+# --- kubernetes driver (production) ---
+# Default / max resource limits also apply when creating sandboxes via API
+# (POST /sandboxes resources{}). Per-request zeros fall back to these defaults.
+kubernetes:
+  inCluster: false            # true when the gateway runs inside the cluster
+  kubeconfig: ""              # path; empty => in-cluster or ~/.kube/config
+  namespace: "sandboxes"      # shared namespace for all sandboxes
+  namePrefix: "sbx-"
+  storageClass: "ugreen-iscsi" # SSD (绿联 iSCSI)；冷数据可改 nfs-synology
+  dataDiskGi: 25              # default PVC size (GiB)
+  maxDataDiskGi: 500          # max PVC size per sandbox
+  # Annotations applied to newly created sandbox data PVCs only.
+  # Example: purge NAS data on PVC delete (do not archive).
+  pvcAnnotations:
+    csi.ugreen.com/deletion-policy: "purge"
+  imagePullSecret: ""
+  imagePullPolicy: "IfNotPresent"
+  enableLoadBalancer: true    # MetalLB assigns an external IP per sandbox
+  cpuCores: 2                 # default CPU limit (cores)
+  maxCPUCores: 8
+  memoryMB: 4096              # default memory limit (MiB)
+  maxMemoryMB: 16384
+  # Scheduling requests: fixed values preferred; set to 0 to use ratio × limit
+  cpuRequestCores: 0.25
+  memoryRequestMB: 512
+  cpuRequestRatio: 0.25
+  memoryRequestRatio: 0.25
+
+# Periodically destroy driver workloads with no matching DB record (orphans).
+# Safe defaults: age gate avoids racing in-flight creates / read-replica lag.
+orphanGC:
+  enabled: false
+  intervalSeconds: 300   # sweep every 5m
+  minAgeSeconds: 600     # only delete workloads older than 10m; 0 = no age gate
+
+# Control-plane auth. Requests need `Authorization: Bearer <key>`.
+# Empty list disables auth (local testing only).
+auth:
+  apiKeys: []
+
+# Logging: JSON to stdout with level/msg/ts.
+# Env overlays (not YAML): SBGW_LOG_LEVEL=info|debug|warn|error
+#                          SBGW_LOG_PRETTY=1  (dev console; never in prod)

@@ -1,0 +1,444 @@
+<script setup lang="ts">
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import StatusPill from '@/components/ui/StatusPill.vue'
+import PriorityBadge from '@/components/ui/PriorityBadge.vue'
+import StatusFilter from '@/components/ui/StatusFilter.vue'
+import PipelineFilter from '@/components/ui/PipelineFilter.vue'
+import ProjectFilter from '@/components/ui/ProjectFilter.vue'
+import Pagination from '@/components/ui/Pagination.vue'
+import Icon from '@/components/ui/Icon.vue'
+import { api, isPaginated } from '@/lib/api'
+import { usePipelineFilter } from '@/lib/usePipelineFilter'
+import { useProjectContext } from '@/lib/useProjectContext'
+import {
+  useStatusFilter,
+  parseStatusQuery,
+  serializeStatusQuery,
+  normalizeStatuses,
+  initStatusFilterFromStorage,
+} from '@/lib/useStatusFilter'
+import { useBreakpoint } from '@/lib/useBreakpoint'
+import { fmtTime, fmtDuration, truncateText, formatTrigger } from '@/lib/format'
+import type { Run } from '@/lib/types'
+
+const PAGE_SIZE = 20
+const SKELETON_ROWS = 6
+
+/** Persists across route remounts within the same session. */
+let hasInitialLoaded = false
+
+const router = useRouter()
+const route = useRoute()
+const { t } = useI18n()
+const { isMobile } = useBreakpoint()
+const runs = ref<Run[]>([])
+const total = ref(0)
+const page = ref(1)
+const loading = ref(false)
+const initialLoading = ref(false)
+const initialLoadFailed = ref(false)
+const showTableLoading = computed(() => loading.value && hasInitialLoaded)
+let requestSeq = 0
+let activeLoadingSeq = 0
+const { selected: selectedWf } = usePipelineFilter()
+const { selected: selectedProject, ensureHydrated: hydrateProject } = useProjectContext()
+const { selectedStatuses } = useStatusFilter()
+const statusFilterOpen = ref(false)
+const pipelineFilterOpen = ref(false)
+
+function openRun(r: Run) {
+  router.push('/runs/' + r.id)
+}
+
+watch(statusFilterOpen, (v) => {
+  if (v) pipelineFilterOpen.value = false
+})
+watch(pipelineFilterOpen, (v) => {
+  if (v) statusFilterOpen.value = false
+})
+
+const hasFilter = computed(() => {
+  const statuses = parseStatusQuery(typeof route.query.status === 'string' ? route.query.status : '')
+  return !!(statuses.length || route.query.wf || route.query.projectId)
+})
+
+const emptyMessage = computed(() => {
+  if (runs.value.length) return ''
+  return hasFilter.value ? t('common.empty.noMatchingRuns') : t('common.empty.noRuns')
+})
+
+function runIdShort(id: string) {
+  return id.replace('run-', '')
+}
+
+function showNodeLabel(r: Run) {
+  return (r.status === 'running' || r.status === 'waiting_human') && !!r.currentNodeLabel
+}
+
+function listParams() {
+  const status = typeof route.query.status === 'string' ? route.query.status : undefined
+  const wf = typeof route.query.wf === 'string' ? route.query.wf : undefined
+  const projectId = typeof route.query.projectId === 'string' ? route.query.projectId : undefined
+  return { status, wf, projectId, page: page.value, pageSize: PAGE_SIZE }
+}
+
+async function load({ showLoading = false }: { showLoading?: boolean } = {}) {
+  const localSeq = ++requestSeq
+  const isFirstLoad = !hasInitialLoaded
+
+  if (isFirstLoad) {
+    initialLoading.value = true
+    initialLoadFailed.value = false
+  } else if (showLoading) {
+    activeLoadingSeq = localSeq
+    loading.value = true
+  }
+
+  try {
+    const data = await api.listRuns(listParams())
+    if (localSeq === requestSeq) {
+      if (isPaginated(data)) {
+        runs.value = data.items
+        total.value = data.total
+      } else {
+        runs.value = data
+        total.value = data.length
+      }
+      if (initialLoadFailed.value) initialLoadFailed.value = false
+    }
+  } catch {
+    if (isFirstLoad) {
+      initialLoadFailed.value = true
+    }
+    /* non-first failure: keep previous list silently */
+  } finally {
+    if (isFirstLoad) {
+      hasInitialLoaded = true
+      initialLoading.value = false
+    } else if (showLoading && activeLoadingSeq === localSeq) {
+      loading.value = false
+    }
+  }
+}
+
+async function validateQueryParams(): Promise<boolean> {
+  let changed = false
+  const query = { ...route.query }
+
+  const rawStatus = typeof route.query.status === 'string' ? route.query.status : ''
+  if (rawStatus) {
+    const valid = parseStatusQuery(rawStatus)
+    const normalized = normalizeStatuses(valid)
+    if (!normalized.length) {
+      delete query.status
+      changed = true
+    } else {
+      const serialized = serializeStatusQuery(normalized)
+      if (serialized !== rawStatus) {
+        query.status = serialized
+        changed = true
+      }
+    }
+  }
+
+  const wf = typeof route.query.wf === 'string' ? route.query.wf : ''
+  if (wf) {
+    try {
+      const workflows = await api.listWorkflows()
+      if (!workflows.some((w) => w.id === wf)) {
+        delete query.wf
+        changed = true
+      }
+    } catch {
+      /* if workflows fail to load, keep wf and let backend return empty/filtered */
+    }
+  }
+
+  if (changed) {
+    await router.replace({ query })
+  }
+  return changed
+}
+
+watch(() => ({ ...route.query }), () => {
+  page.value = 1
+  load({ showLoading: true })
+})
+
+watch(page, () => {
+  load({ showLoading: true })
+})
+
+// Poll so statuses stay current; re-sync when the tab regains focus.
+let timer: number | undefined
+function onVisible() {
+  if (document.visibilityState === 'visible') load()
+}
+
+function onFocus() {
+  load()
+}
+
+onMounted(async () => {
+  hydrateProject()
+  const urlChanged = await validateQueryParams()
+  const restored = await initStatusFilterFromStorage(route, router)
+  if (!urlChanged && !restored) load({ showLoading: true })
+  timer = window.setInterval(load, 3000)
+  document.addEventListener('visibilitychange', onVisible)
+  window.addEventListener('focus', onFocus)
+})
+
+onUnmounted(() => {
+  if (timer) window.clearInterval(timer)
+  document.removeEventListener('visibilitychange', onVisible)
+  window.removeEventListener('focus', onFocus)
+})
+</script>
+
+<template>
+  <div>
+    <div class="mb-5 flex flex-col gap-2.5 md:flex-row md:items-start md:justify-between">
+      <div class="min-w-0">
+        <h2 class="text-lg font-semibold text-txt">{{ t('pages.runList.title') }}</h2>
+        <p class="text-sm text-txt3">{{ t('pages.runList.subtitle') }}</p>
+      </div>
+      <div class="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
+        <ProjectFilter v-model="selectedProject" :count="total" />
+        <StatusFilter
+          v-model="selectedStatuses"
+          v-model:open="statusFilterOpen"
+          :count="total"
+        />
+        <PipelineFilter
+          v-model="selectedWf"
+          v-model:open="pipelineFilterOpen"
+          :count="total"
+        />
+      </div>
+    </div>
+
+    <!-- Mobile card list -->
+    <div v-if="isMobile" :class="{ 'table-loading': showTableLoading }">
+      <template v-if="initialLoading">
+        <div class="flex flex-col gap-2">
+          <div
+            v-for="n in SKELETON_ROWS"
+            :key="'skel-card-' + n"
+            class="rounded-lg border border-line bg-surface p-3"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0 flex-1">
+                <div class="h-3.5 w-[75%] rounded bg-elevated animate-pulse" />
+                <div class="mt-1.5 h-2.5 w-20 rounded bg-elevated animate-pulse" />
+              </div>
+              <div class="h-5 w-14 shrink-0 rounded bg-elevated animate-pulse" />
+            </div>
+            <div class="mt-2 flex items-center gap-2">
+              <div class="h-1.5 w-20 shrink-0 rounded-full bg-elevated animate-pulse" />
+              <div class="h-2.5 w-7 rounded bg-elevated animate-pulse" />
+            </div>
+            <div class="mt-2.5 h-2.5 w-[55%] rounded bg-elevated animate-pulse" />
+          </div>
+        </div>
+      </template>
+      <div v-else-if="initialLoadFailed" class="card px-5 py-10 text-center">
+        <div class="mx-auto mb-2.5 inline-flex h-10 w-10 items-center justify-center border border-err/30 bg-err/10 text-err">
+          <Icon name="alert" :size="18" />
+        </div>
+        <div class="text-[13px] font-medium text-txt">{{ t('pages.runList.loadFailedTitle') }}</div>
+        <p class="mx-auto mt-1 max-w-[360px] text-xs text-txt3">{{ t('pages.runList.loadFailedDesc') }}</p>
+      </div>
+      <div v-else-if="!runs.length" class="card px-5 py-10 text-center text-[13px] text-txt3">
+        {{ emptyMessage }}
+      </div>
+      <div v-else class="flex flex-col gap-2">
+        <button
+          v-for="r in runs"
+          :key="r.id"
+          type="button"
+          class="flex w-full flex-col gap-2 rounded-lg border border-line bg-surface p-3 text-left transition hover:border-line-strong hover:bg-elevated"
+          @click="openRun(r)"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <div
+                v-if="r.title"
+                class="truncate text-sm font-semibold text-txt"
+                :title="r.title.length > 60 ? r.title : undefined"
+              >{{ truncateText(r.title, 60) }}</div>
+              <div
+                class="font-mono text-xs text-txt3"
+                :class="r.title ? 'mt-0.5' : 'text-[13px] font-medium'"
+              >#{{ runIdShort(r.id) }}</div>
+            </div>
+            <StatusPill :status="r.status" size="sm" />
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5">
+            <PriorityBadge :priority="r.priority" />
+          </div>
+          <div class="flex min-w-0 flex-col gap-1">
+            <div class="flex items-center gap-2">
+              <div class="h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-elevated">
+                <div class="h-full rounded-full bg-accent" :style="{ width: r.progress * 100 + '%' }" />
+              </div>
+              <span class="text-[11px] tabular-nums text-txt3">{{ Math.round(r.progress * 100) }}%</span>
+            </div>
+            <div
+              v-if="showNodeLabel(r)"
+              :key="`${r.id}-${r.currentNodeLabel}`"
+              class="node-label-fade max-w-full truncate text-[11px]"
+              :class="r.status === 'waiting_human' ? 'text-warn' : 'text-txt3'"
+              :title="r.currentNodeLabel!.length > 60 ? r.currentNodeLabel : undefined"
+            >{{ truncateText(r.currentNodeLabel!, 60) }}</div>
+          </div>
+          <div class="flex min-w-0 items-center gap-1.5 text-[12px] text-txt2">
+            <span class="truncate">{{ r.workflowName }}</span>
+            <span v-if="r.workflowVersion" class="chip shrink-0">v{{ r.workflowVersion }}</span>
+          </div>
+        </button>
+      </div>
+      <Pagination v-if="total > PAGE_SIZE" v-model:page="page" :page-size="PAGE_SIZE" :total="total" />
+    </div>
+
+    <!-- Desktop table -->
+    <div v-else class="card overflow-hidden" :class="{ 'table-loading': showTableLoading }">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-[11px] uppercase tracking-wider text-txt3">
+            <th class="px-5 py-2.5 font-medium">{{ t('common.table.run') }}</th>
+            <th class="px-5 py-2.5 font-medium">{{ t('common.table.workflow') }}</th>
+            <th class="px-5 py-2.5 font-medium">{{ t('common.table.trigger') }}</th>
+            <th class="px-5 py-2.5 font-medium">{{ t('common.table.startTime') }}</th>
+            <th class="px-5 py-2.5 font-medium">{{ t('common.table.duration') }}</th>
+            <th class="px-5 py-2.5 font-medium">{{ t('common.table.progress') }}</th>
+            <th class="px-5 py-2.5 font-medium">{{ t('common.table.status') }}</th>
+            <th class="px-5 py-2.5 font-medium">{{ t('common.table.priority') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-if="initialLoading">
+            <tr v-for="n in SKELETON_ROWS" :key="'skel-' + n" class="border-t border-line">
+              <td class="px-5 py-3">
+                <div class="h-3.5 w-[90%] rounded bg-elevated animate-pulse" />
+                <div class="mt-1 h-2.5 w-[60%] rounded bg-elevated animate-pulse" />
+              </td>
+              <td class="px-5 py-3">
+                <div class="h-3 w-[70%] rounded bg-elevated animate-pulse" />
+              </td>
+              <td class="px-5 py-3">
+                <div class="h-3 w-[50%] rounded bg-elevated animate-pulse" />
+              </td>
+              <td class="px-5 py-3">
+                <div class="h-3 w-[72px] rounded bg-elevated animate-pulse" />
+              </td>
+              <td class="px-5 py-3">
+                <div class="h-3 w-[40%] rounded bg-elevated animate-pulse" />
+              </td>
+              <td class="px-5 py-3">
+                <div class="h-3 w-[80%] rounded bg-elevated animate-pulse" />
+                <div class="mt-1 h-2.5 w-12 rounded bg-elevated animate-pulse" />
+              </td>
+              <td class="px-5 py-3">
+                <div class="h-3 w-14 rounded bg-elevated animate-pulse" />
+              </td>
+              <td class="px-5 py-3">
+                <div class="h-3 w-12 rounded bg-elevated animate-pulse" />
+              </td>
+            </tr>
+          </template>
+          <tr v-else-if="initialLoadFailed">
+            <td colspan="8" class="px-5 py-10 text-center">
+              <div class="mx-auto mb-2.5 inline-flex h-10 w-10 items-center justify-center border border-err/30 bg-err/10 text-err">
+                <Icon name="alert" :size="18" />
+              </div>
+              <div class="text-[13px] font-medium text-txt">{{ t('pages.runList.loadFailedTitle') }}</div>
+              <p class="mx-auto mt-1 max-w-[360px] text-xs text-txt3">{{ t('pages.runList.loadFailedDesc') }}</p>
+            </td>
+          </tr>
+          <tr v-else-if="!runs.length">
+            <td colspan="8" class="px-5 py-10 text-center text-[13px] text-txt3">
+              {{ emptyMessage }}
+            </td>
+          </tr>
+          <template v-else>
+            <tr
+              v-for="r in runs"
+              :key="r.id"
+              class="cursor-pointer border-t border-line transition hover:bg-elevated"
+              @click="openRun(r)"
+            >
+              <td class="max-w-[340px] px-5 py-3">
+                <template v-if="r.title">
+                  <div
+                    class="max-w-[320px] truncate font-semibold text-txt"
+                    :title="r.title.length > 60 ? r.title : undefined"
+                  >{{ truncateText(r.title, 60) }}</div>
+                  <div class="mt-0.5 font-mono text-xs text-txt3">#{{ runIdShort(r.id) }}</div>
+                </template>
+                <span v-else class="font-mono text-[13px] font-medium text-txt3">#{{ runIdShort(r.id) }}</span>
+              </td>
+              <td class="px-5 py-3 text-txt2">
+                {{ r.workflowName }}
+                <span v-if="r.workflowVersion" class="chip ml-1.5">v{{ r.workflowVersion }}</span>
+              </td>
+              <td class="px-5 py-3 text-txt3">{{ formatTrigger(r.trigger) }}</td>
+              <td class="px-5 py-3 text-txt3">
+                <template v-if="r.status === 'queued'">
+                  {{ fmtTime(r.createdAt ?? '') }}
+                  <span class="ml-1 text-[10px] text-[#7B61FF]">{{ t('pages.runList.queued') }}</span>
+                </template>
+                <template v-else>{{ fmtTime(r.startedAt) }}</template>
+              </td>
+              <td class="px-5 py-3 text-txt3">{{ fmtDuration(r.durationSec) }}</td>
+              <td class="px-5 py-3">
+                <div class="min-w-[148px] max-w-[168px]">
+                  <div class="flex items-center gap-2">
+                    <div class="h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-elevated">
+                      <div class="h-full rounded-full bg-accent" :style="{ width: r.progress * 100 + '%' }" />
+                    </div>
+                    <span class="text-[11px] text-txt3">{{ Math.round(r.progress * 100) }}%</span>
+                  </div>
+                  <div
+                    v-if="showNodeLabel(r)"
+                    :key="`${r.id}-${r.currentNodeLabel}`"
+                    class="node-label-fade mt-1 max-w-[148px] truncate text-[11px]"
+                    :class="r.status === 'waiting_human' ? 'text-warn' : 'text-txt3'"
+                    :title="r.currentNodeLabel!.length > 60 ? r.currentNodeLabel : undefined"
+                  >{{ truncateText(r.currentNodeLabel!, 60) }}</div>
+                </div>
+              </td>
+              <td class="px-5 py-3"><StatusPill :status="r.status" size="sm" /></td>
+              <td class="px-5 py-3"><PriorityBadge :priority="r.priority" /></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      <Pagination v-if="total > PAGE_SIZE" v-model:page="page" :page-size="PAGE_SIZE" :total="total" />
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.table-loading {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+@keyframes nodeLabelFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.node-label-fade {
+  animation: nodeLabelFadeIn 0.35s ease;
+}
+</style>

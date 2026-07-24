@@ -1,0 +1,109 @@
+# 本地开发环境:gateway + 后端(go run,源码挂载)+ 前端(Vite dev server,HMR)。
+# 用 `./start.sh` 一键启动(推荐,会设置 HOST_REPO_DIR 并按需构建沙箱镜像),
+# 或 `HOST_REPO_DIR=$PWD docker compose up --build`。
+#
+# 为什么后端用 network_mode: host(仅 Linux 宿主验证过):
+#   1. 沙箱端口(ACP/code-server/ssh)由网关 publish 在宿主 127.0.0.1,后端要连上
+#      这些 loopback 端口(ACP WebSocket、SSH 数据面),必须与宿主共享网络。
+#   2. 前端 vite dev server 默认代理 /api 到 http://localhost:8080,
+#      同样共享 host 网络后无需再配 host.docker.internal / 端口映射。
+# Mac/Windows(Docker Desktop)不支持真正的 host 网络,请改回桥接网络 +
+# 端口映射,并把 APPROVING_SANDBOX_WORK_DIR 等路径相应调整。
+#
+# 后端不再直连 Docker——沙箱全部由 sandbox-gateway 创建/管理(见 server/internal/
+# sandbox/gateway.go)。但 ConfigHome(rules/skills + mcp.json)仍是一个宿主目录,
+# 由网关的 docker 驱动 bind-mount 进沙箱,因此它在后端容器内外必须是*完全相同的
+# 绝对路径*(网关的宿主 dockerd 按该路径在宿主文件系统上解析挂载源)。为此下面把
+# ${HOST_REPO_DIR}/.devdata/sandbox-home(APPROVING_SANDBOX_WORK_DIR)原样挂到自身。
+
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile.dev
+    network_mode: host
+    working_dir: /app
+    environment:
+      APPROVING_PORT: ${APPROVING_PORT:-8080}
+      APPROVING_DB: /data/approving.db
+      APPROVING_PROFILES_ROOT: /app/data/profiles
+      # 沙箱镜像:留空则由网关(SBGW_IMAGE / config.local.yaml)选默认镜像;设了值则
+      # 作为“每次创建”的镜像覆盖随请求发给网关。团队内网镜像等场景可在 .env 里填。
+      APPROVING_SANDBOX_IMAGE: ${APPROVING_SANDBOX_IMAGE:-}
+      APPROVING_SANDBOX_WORK_DIR: ${HOST_REPO_DIR}/.devdata/sandbox-home
+      # 沙箱网关地址:后端通过它创建/管理沙箱(替代直连 docker)。可在 .env 里改成
+      # 任意已有网关的 URL;APPROVING_GATEWAY_MANAGED=1 时 start.sh 会在本地托管一个。
+      APPROVING_SANDBOX_GATEWAY_URL: ${APPROVING_SANDBOX_GATEWAY_URL:-http://127.0.0.1:8899}
+      # 渠道凭据 AES 主密钥(也可写在 server/config.yaml 的 security.secrets_key)。
+      # .env 里设了就会覆盖 YAML;未设则走配置文件。
+      APPROVING_SECRETS_KEY: ${APPROVING_SECRETS_KEY:-}
+      # app_preview noVNC 使用沙箱内置 VNC 栈(VNC_PREVIEW=1)，无需独立 browser 镜像。
+      APPROVING_BROWSER_ENABLED: ${APPROVING_BROWSER_ENABLED:-}
+      # 国内网络默认走 goproxy.cn(Dockerfile.dev 里也设了同样的默认值作为镜像
+      # 内置兜底);在 .env 里设 GOPROXY/GOSUMDB 可覆盖。
+      GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+      GOSUMDB: ${GOSUMDB:-sum.golang.google.cn}
+    volumes:
+      - ./server:/app
+      # data 里放 skill profiles(agent.json 等),UI 保存 Agent 时要写回,故可写。
+      - ./data:/app/data
+      - ./.devdata/db:/data
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+      # ConfigHome 宿主目录,与宿主保持同一绝对路径供网关 bind-mount,见上方说明。
+      - ${HOST_REPO_DIR}/.devdata/sandbox-home:${HOST_REPO_DIR}/.devdata/sandbox-home
+    depends_on:
+      - gateway
+    restart: unless-stopped
+
+  # 沙箱网关(本仓库 sandbox-gateway/)。host 网络:沙箱端口 publish 在宿主
+  # 127.0.0.1,后端与网关同机直连。`docker compose up --build` 即启动全栈。
+  gateway:
+    build:
+      context: ./sandbox-gateway
+      dockerfile: Dockerfile
+    image: sandbox-gateway:local
+    network_mode: host
+    environment:
+      SBGW_CONFIG: /etc/sandbox-gateway/config.yaml
+      SBGW_DB_PATH: /data/gateway.db
+      SBGW_DRIVER: docker
+      # 监听端口与后端错开;config.local.yaml 默认 :8080,这里用 SBGW_LISTEN 覆盖。
+      SBGW_LISTEN: ":${APPROVING_GATEWAY_PORT:-8899}"
+      # 留空则用 config.local.yaml 的 image.ref(universal-sandbox-cursor:local)。
+      SBGW_IMAGE: ${APPROVING_GATEWAY_SANDBOX_IMAGE:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./sandbox-gateway/deploy/config/config.local.yaml:/etc/sandbox-gateway/config.yaml:ro
+      - gateway-data:/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.dev
+    network_mode: host
+    working_dir: /web
+    environment:
+      VITE_API_PROXY: http://localhost:${APPROVING_PORT:-8080}
+      # The host's fs.inotify.max_user_instances is low (e.g. 128) and, under
+      # network_mode: host, the container shares that kernel limit. chokidar
+      # (Vite's watcher) opens one inotify instance per directory and quickly
+      # exhausts it, crashing the dev server with EMFILE. Poll instead of using
+      # inotify so HMR works regardless of the host limit. chokidar reads these
+      # env vars natively; interval kept modest since only src/ is watched.
+      CHOKIDAR_USEPOLLING: "1"
+      CHOKIDAR_INTERVAL: "400"
+    volumes:
+      - ./web:/web
+      - web-node-modules:/web/node_modules
+    depends_on:
+      - server
+      - gateway
+    restart: unless-stopped
+
+volumes:
+  go-mod-cache:
+  go-build-cache:
+  web-node-modules:
+  gateway-data:
