@@ -2,13 +2,16 @@ name: ci-web
 
 on:
   push:
-    paths: ["web/**", ".github/workflows/ci-web.yml"]
+    paths: ["web/**", ".github/workflows/ci-web.yml", ".github/scripts/coverage-badge-color.sh", ".github/scripts/publish-coverage-badge.sh"]
   pull_request:
-    paths: ["web/**", ".github/workflows/ci-web.yml"]
+    paths: ["web/**", ".github/workflows/ci-web.yml", ".github/scripts/coverage-badge-color.sh", ".github/scripts/publish-coverage-badge.sh"]
 
 jobs:
   web:
     runs-on: ubuntu-latest
+    # contents:write only used to update the orphan coverage-badges branch endpoint.
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: web
@@ -23,3 +26,37 @@ jobs:
       - run: npx vue-tsc --noEmit
       - run: npm test -- --coverage
       - run: npm run build
+      - name: Export web Lines coverage
+        id: coverage
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: web
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          summary="coverage/coverage-summary.json"
+          if [[ ! -f "$summary" ]]; then
+            echo "missing $summary; skip badge publish"
+            exit 1
+          fi
+          pct="$(jq -r '.total.lines.pct' "$summary")"
+          if [[ -z "$pct" || "$pct" == "null" ]]; then
+            echo "could not parse total.lines.pct; skip badge publish"
+            exit 1
+          fi
+          color="$(../.github/scripts/coverage-badge-color.sh "$pct")"
+          echo "pct=$pct" >>"$GITHUB_OUTPUT"
+          echo "color=$color" >>"$GITHUB_OUTPUT"
+          echo "ok=true" >>"$GITHUB_OUTPUT"
+          echo "web Lines coverage=${pct}% color=${color}"
+      - name: Publish coverage-web badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.coverage.outputs.ok == 'true'
+        continue-on-error: true
+        working-directory: .
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./.github/scripts/publish-coverage-badge.sh \
+            coverage-web.json \
+            coverage-web \
+            "${{ steps.coverage.outputs.pct }}" \
+            "${{ steps.coverage.outputs.color }}"

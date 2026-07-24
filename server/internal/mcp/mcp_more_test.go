@@ -149,7 +149,7 @@ func TestCallToolErrorBranches(t *testing.T) {
 		t.Error("parseQuestions non-list -> nil")
 	}
 
-	// recommended is parsed; at most one option per question keeps it.
+	// Single-select: at most one recommended kept (first wins).
 	rq := parseQuestions([]any{
 		map[string]any{"prompt": "选一个", "options": []any{
 			map[string]any{"label": "A"},
@@ -161,7 +161,22 @@ func TestCallToolErrorBranches(t *testing.T) {
 		t.Fatalf("recommended parse shape = %+v", rq)
 	}
 	if rq[0].Options[0].Recommended || !rq[0].Options[1].Recommended || rq[0].Options[2].Recommended {
-		t.Fatalf("expected only the first recommended kept, got %+v", rq[0].Options)
+		t.Fatalf("expected only the first recommended kept for single-select, got %+v", rq[0].Options)
+	}
+
+	// Multi-select: keep every recommended mark.
+	mq := parseQuestions([]any{
+		map[string]any{"prompt": "多选", "allowMultiple": true, "options": []any{
+			map[string]any{"label": "A", "recommended": true},
+			map[string]any{"label": "B"},
+			map[string]any{"label": "C", "recommended": true},
+		}},
+	})
+	if len(mq) != 1 || len(mq[0].Options) != 3 || !mq[0].AllowMultiple {
+		t.Fatalf("multi recommended parse shape = %+v", mq)
+	}
+	if !mq[0].Options[0].Recommended || mq[0].Options[1].Recommended || !mq[0].Options[2].Recommended {
+		t.Fatalf("expected all recommended kept for multi-select, got %+v", mq[0].Options)
 	}
 
 	// demoHtml is parsed and preserved; empty values are ignored.

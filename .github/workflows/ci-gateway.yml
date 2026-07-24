@@ -1,0 +1,33 @@
+name: ci-gateway
+
+# Path-filtered suite for sandbox-gateway/gateway (control plane).
+# Keeps PR CI light: go vet + unit tests with a 90% coverage gate.
+# Image publish remains in publish-gateway (v* tags); not merged into ci-sandbox.
+on:
+  push:
+    paths:
+      - "sandbox-gateway/gateway/**"
+      - ".github/workflows/ci-gateway.yml"
+  pull_request:
+    paths:
+      - "sandbox-gateway/gateway/**"
+      - ".github/workflows/ci-gateway.yml"
+
+jobs:
+  gateway:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sandbox-gateway/gateway
+    env:
+      GOPROXY: https://proxy.golang.org,direct
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.25.x"
+          cache-dependency-path: sandbox-gateway/gateway/go.sum
+      - run: go vet ./...
+      - name: Gateway Go coverage gate
+        working-directory: sandbox-gateway
+        run: ./scripts/cover-check.sh gateway 90

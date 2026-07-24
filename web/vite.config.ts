@@ -25,7 +25,7 @@ export default defineConfig(({ command }) => {
       include: ['src/**/*.test.ts'],
       coverage: {
         provider: 'v8',
-        reporter: ['text', 'text-summary', 'cobertura'],
+        reporter: ['text', 'text-summary', 'cobertura', 'json-summary'],
         reportsDirectory: './coverage',
         // Lines 硬门禁：不达标时 vitest 非零退出（ci-web 的 npm test -- --coverage）。
         // 仅约束 lines；branches/functions 不设阈值。

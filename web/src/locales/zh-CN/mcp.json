@@ -45,7 +45,7 @@
         },
         "ask_question": {
           "signature": "ask_question(questions)",
-          "desc": "仅澄清(react)节点:向用户提出结构化选择题(选项可标 recommended 推荐)"
+          "desc": "仅澄清(react)节点:向用户提出结构化选择题(选项可标 recommended;单选最多 1 个,多选应 1 个或多个)"
         },
         "set_plan": {
           "signature": "set_plan(goals)",
