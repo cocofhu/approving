@@ -9,7 +9,10 @@ import PipelineFilter from '@/components/ui/PipelineFilter.vue'
 import ProjectFilter from '@/components/ui/ProjectFilter.vue'
 import Pagination from '@/components/ui/Pagination.vue'
 import Icon from '@/components/ui/Icon.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppModal from '@/components/ui/AppModal.vue'
 import { api, isPaginated } from '@/lib/api'
+import { useToast } from '@/lib/useToast'
 import { usePipelineFilter } from '@/lib/usePipelineFilter'
 import { useProjectContext } from '@/lib/useProjectContext'
 import {
@@ -32,6 +35,7 @@ let hasInitialLoaded = false
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
+const toast = useToast()
 const { isMobile } = useBreakpoint()
 const runs = ref<Run[]>([])
 const total = ref(0)
@@ -48,8 +52,55 @@ const { selectedStatuses } = useStatusFilter()
 const statusFilterOpen = ref(false)
 const pipelineFilterOpen = ref(false)
 
+const cancelTarget = ref<Run | null>(null)
+const cancellingRun = ref(false)
+const cancelRunError = ref('')
+
+function canCancelRun(r: Run) {
+  return r.status === 'queued' || r.status === 'running' || r.status === 'waiting_human'
+}
+
 function openRun(r: Run) {
   router.push('/runs/' + r.id)
+}
+
+function openCancelConfirm(r: Run) {
+  if (!canCancelRun(r) || cancellingRun.value) return
+  cancelRunError.value = ''
+  cancelTarget.value = r
+}
+
+function closeCancelConfirm() {
+  if (cancellingRun.value) return
+  cancelTarget.value = null
+  cancelRunError.value = ''
+}
+
+function mapCancelRunError(e: unknown): string {
+  const status = (e as { status?: number })?.status
+  const msg = e instanceof Error ? e.message : String(e || '')
+  if (status === 404 || /not found/i.test(msg)) return t('pages.runDetail.cancelErrorNotFound')
+  if (status === 400 || /already finished|cannot cancel/i.test(msg)) {
+    return t('pages.runDetail.cancelErrorNotCancellable')
+  }
+  return msg || t('pages.runDetail.cancelErrorGeneric')
+}
+
+async function confirmCancelRun() {
+  const target = cancelTarget.value
+  if (!target || !canCancelRun(target) || cancellingRun.value) return
+  cancellingRun.value = true
+  cancelRunError.value = ''
+  try {
+    await api.cancelRun(target.id)
+    cancelTarget.value = null
+    toast.success(t('pages.runDetail.cancelSuccess'))
+    await load()
+  } catch (e) {
+    cancelRunError.value = mapCancelRunError(e)
+  } finally {
+    cancellingRun.value = false
+  }
 }
 
 watch(statusFilterOpen, (v) => {
@@ -255,12 +306,14 @@ onUnmounted(() => {
         {{ emptyMessage }}
       </div>
       <div v-else class="flex flex-col gap-2">
-        <button
+        <div
           v-for="r in runs"
           :key="r.id"
-          type="button"
-          class="flex w-full flex-col gap-2 rounded-lg border border-line bg-surface p-3 text-left transition hover:border-line-strong hover:bg-elevated"
+          role="button"
+          tabindex="0"
+          class="flex w-full cursor-pointer flex-col gap-2 rounded-lg border border-line bg-surface p-3 text-left transition hover:border-line-strong hover:bg-elevated"
           @click="openRun(r)"
+          @keydown.enter.prevent="openRun(r)"
         >
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
@@ -294,11 +347,23 @@ onUnmounted(() => {
               :title="r.currentNodeLabel!.length > 60 ? r.currentNodeLabel : undefined"
             >{{ truncateText(r.currentNodeLabel!, 60) }}</div>
           </div>
-          <div class="flex min-w-0 items-center gap-1.5 text-[12px] text-txt2">
-            <span class="truncate">{{ r.workflowName }}</span>
-            <span v-if="r.workflowVersion" class="chip shrink-0">v{{ r.workflowVersion }}</span>
+          <div class="flex min-w-0 items-center justify-between gap-2">
+            <div class="flex min-w-0 items-center gap-1.5 text-[12px] text-txt2">
+              <span class="truncate">{{ r.workflowName }}</span>
+              <span v-if="r.workflowVersion" class="chip shrink-0">v{{ r.workflowVersion }}</span>
+            </div>
+            <div v-if="canCancelRun(r)" class="shrink-0" @click.stop @keydown.stop>
+              <AppButton
+                data-testid="cancel-run-btn"
+                variant="danger"
+                size="sm"
+                icon="close"
+                :disabled="cancellingRun && cancelTarget?.id === r.id"
+                @click="openCancelConfirm(r)"
+              >{{ t('common.buttons.cancel') }}</AppButton>
+            </div>
           </div>
-        </button>
+        </div>
       </div>
       <Pagination v-if="total > PAGE_SIZE" v-model:page="page" :page-size="PAGE_SIZE" :total="total" />
     </div>
@@ -316,6 +381,7 @@ onUnmounted(() => {
             <th class="px-5 py-2.5 font-medium">{{ t('common.table.progress') }}</th>
             <th class="px-5 py-2.5 font-medium">{{ t('common.table.status') }}</th>
             <th class="px-5 py-2.5 font-medium">{{ t('common.table.priority') }}</th>
+            <th class="px-5 py-2.5 text-right font-medium">{{ t('common.table.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -347,10 +413,13 @@ onUnmounted(() => {
               <td class="px-5 py-3">
                 <div class="h-3 w-12 rounded bg-elevated animate-pulse" />
               </td>
+              <td class="px-5 py-3">
+                <div class="ml-auto h-3 w-12 rounded bg-elevated animate-pulse" />
+              </td>
             </tr>
           </template>
           <tr v-else-if="initialLoadFailed">
-            <td colspan="8" class="px-5 py-10 text-center">
+            <td colspan="9" class="px-5 py-10 text-center">
               <div class="mx-auto mb-2.5 inline-flex h-10 w-10 items-center justify-center border border-err/30 bg-err/10 text-err">
                 <Icon name="alert" :size="18" />
               </div>
@@ -359,7 +428,7 @@ onUnmounted(() => {
             </td>
           </tr>
           <tr v-else-if="!runs.length">
-            <td colspan="8" class="px-5 py-10 text-center text-[13px] text-txt3">
+            <td colspan="9" class="px-5 py-10 text-center text-[13px] text-txt3">
               {{ emptyMessage }}
             </td>
           </tr>
@@ -412,12 +481,58 @@ onUnmounted(() => {
               </td>
               <td class="px-5 py-3"><StatusPill :status="r.status" size="sm" /></td>
               <td class="px-5 py-3"><PriorityBadge :priority="r.priority" /></td>
+              <td class="px-5 py-3 text-right" @click.stop>
+                <AppButton
+                  v-if="canCancelRun(r)"
+                  data-testid="cancel-run-btn"
+                  variant="danger"
+                  size="sm"
+                  icon="close"
+                  :disabled="cancellingRun && cancelTarget?.id === r.id"
+                  @click="openCancelConfirm(r)"
+                >{{ t('common.buttons.cancel') }}</AppButton>
+              </td>
             </tr>
           </template>
         </tbody>
       </table>
       <Pagination v-if="total > PAGE_SIZE" v-model:page="page" :page-size="PAGE_SIZE" :total="total" />
     </div>
+
+    <AppModal
+      :open="!!cancelTarget"
+      :title="t('pages.runDetail.cancelTitle')"
+      :width="440"
+      @close="closeCancelConfirm"
+    >
+      <div class="space-y-3 text-sm text-txt2">
+        <div class="flex items-start gap-2 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-[12px] text-err">
+          <Icon name="alert" :size="14" class="mt-0.5 shrink-0" />
+          {{ t('pages.runDetail.cancelWarning') }}
+        </div>
+        <p>{{ t('pages.runList.cancelConfirm') }}</p>
+        <div
+          v-if="cancelRunError"
+          class="flex items-start gap-2 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-[12px] text-err"
+        >
+          <Icon name="alert" :size="14" class="mt-0.5" />{{ cancelRunError }}
+        </div>
+      </div>
+      <template #footer>
+        <AppButton variant="ghost" :disabled="cancellingRun" @click="closeCancelConfirm">
+          {{ t('common.buttons.cancel') }}
+        </AppButton>
+        <AppButton
+          data-testid="confirm-cancel-run-btn"
+          variant="danger"
+          icon="close"
+          :disabled="cancellingRun"
+          @click="confirmCancelRun"
+        >
+          {{ cancellingRun ? t('common.buttons.cancelling') : t('common.buttons.confirmCancelRun') }}
+        </AppButton>
+      </template>
+    </AppModal>
   </div>
 </template>
 
