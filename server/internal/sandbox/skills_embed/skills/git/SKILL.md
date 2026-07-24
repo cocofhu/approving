@@ -29,7 +29,7 @@ git push -u origin HEAD
 
 ## 合并请求（MR/PR）— 按托管商分流
 
-`submit_mr` 步骤顺序与 DefaultMRContract 一致:**解决冲突 → 推送源分支 → 按远端主机选型创建/复用合并请求 → `node_complete(outputs.mr_url)`**。
+`submit_mr` 步骤顺序与 DefaultMRContract 一致:**解决冲突 → 推送源分支 → list open → create（仅当无 open）→ 解析幂等错误 → list merged/view → `node_complete(outputs.mr_url)`**。
 
 选型规则（按远端主机与环境变量,不按 Token 有无或 CLI 轮询）:
 
@@ -37,17 +37,33 @@ git push -u origin HEAD
 - **GitHub**（github.com,或与 `GITHUB_URL` 主机一致,含 GHE）→ `gh pr`
 - **匹配不上**（如 Gitea）→ 不支持自动建单:仍须完成冲突解决与 `git push`,再 `node_complete(status=failed)`;摘要须含「冲突已解决」「源分支已推送」及建单/CLI/托管商原因
 
-```bash
-# GitLab
-glab mr list --source-branch "$(git rev-parse --abbrev-ref HEAD)" -F json
-glab mr create --fill --yes --source-branch "$(git rev-parse --abbrev-ref HEAD)" --target-branch <target>
+### 幂等闭环（gh / glab 对称）
 
-# GitHub
-gh pr list --head "$(git rev-parse --abbrev-ref HEAD)"
+1. **先 list open**:命中同源→目标的 open 单 → 复用 Web URL,跳过 create,`node_complete(status=success, outputs.mr_url=该 URL)`。
+2. **无 open 再 create**:`glab mr create` / `gh pr create`。
+3. **create 非零不得直接 failed**:若输出含 `already exists` / `No commits between` / 已无差异等同类文案,转入查 open 或 merged;能复用则 success 并回填 URL。
+4. **已合并无新提交**:优先回填已合并单 URL;查不到 URL 时仍可 success + 空 `mr_url`,summary 说明已合入/无新提交。
+5. **无历史单且已同步**:open/merged 均无单且源相对目标无差异 → 允许 success + 空 `mr_url`,summary 说明原因。
+6. **仍须 failed**:仅 closed 未合并且无法新建;无法 push、鉴权/权限失败、冲突未解决、缺 CLI、不支持托管商、其它非幂等建单错误。
+
+```bash
+# GitLab — list-first, then create; on idempotent error query merged
+glab mr list --source-branch "$(git rev-parse --abbrev-ref HEAD)" --target-branch <target> --state opened
+# if open hit: reuse URL, skip create
+glab mr create --fill --yes --source-branch "$(git rev-parse --abbrev-ref HEAD)" --target-branch <target>
+# if create fails with already exists / No commits between / no diff:
+glab mr list --source-branch "$(git rev-parse --abbrev-ref HEAD)" --target-branch <target> --state merged
+
+# GitHub — same order
+gh pr list --base <target> --head "$(git rev-parse --abbrev-ref HEAD)" --state open
+# if open hit: reuse URL, skip create
 gh pr create --fill --base <target> --head "$(git rev-parse --abbrev-ref HEAD)"
+# if create fails with already exists / No commits between / no diff:
+gh pr list --base <target> --head "$(git rev-parse --abbrev-ref HEAD)" --state merged
+# or: gh pr view <n> --json url,state
 ```
 
-成功时合并请求 Web URL（含 GitHub PR）写入 `outputs.mr_url`（字段名不变）。需预装对应 CLI（`glab` / `gh`）及凭据（`GITLAB_*` / `GITHUB_*`）。
+成功时合并请求 Web URL（含 GitHub PR）写入 `outputs.mr_url`（字段名不变）。幂等成功路径下允许空 `mr_url`(已合入查不到 / 无历史单已同步)。需预装对应 CLI（`glab` / `gh`）及凭据（`GITLAB_*` / `GITHUB_*`）。
 
 > 平台可选路径 `detect_push` + `create_mr` 本迭代仍仅 GitLab；GitHub 依赖 Agent 侧 `gh`，平台不代建 PR。
 
@@ -55,4 +71,4 @@ gh pr create --fill --base <target> --head "$(git rev-parse --abbrev-ref HEAD)"
 
 - 只 push 到 `feature/*`,不要碰 `main` / 受保护分支。
 - 不要修改 `.github/workflows` / `.gitlab-ci.yml` / `Dockerfile`,除非任务明确要求。
-- 命令失败先 surface 错误原因,不要静默重试。
+- 命令失败先 surface 错误原因,不要静默重试;但对 create 的幂等错误须按上方闭环转入查询后再申报。
