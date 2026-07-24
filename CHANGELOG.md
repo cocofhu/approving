@@ -4,10 +4,11 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.0.1-beta — 2026-07-25
+
+- Initial public beta of Approving (MIT, Copyright 2026 cocofhu).
 - Strip private registry, Apollo, and k3s preview hosts; default sandbox images
   to `universal-sandbox-*:local` (keep public `github.com/cocofhu` / `ghcr.io/cocofhu`).
-- Rename the product to Approving (MIT, Copyright 2026 cocofhu) and publish
-  preparation for github.com/cocofhu/approving.
 - Adopt `APPROVING_*` environment variables, `.approving/` workspace paths, and
   matching binary/image names.
 - Remove repository GitLab CI, VitePress docs site, showcases, deploy previews,
@@ -17,3 +18,4 @@ All notable public-release changes are documented here.
   `sandbox-gateway/` so a single clone runs via `./start.sh` / `docker compose up`.
 - Add GitHub Actions CI, release-smoke, and GHCR publish workflows; root
   community policy files; `GATEWAY.md` and generated `server/CONFIGURATION.md`.
+- Chinese README (`README.zh-CN.md`).

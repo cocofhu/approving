@@ -1,9 +1,9 @@
 name: release-smoke
 
+# Digest-pinned clean-Linux smoke. Run manually after GHCR images exist;
+# do not auto-trigger on tags (beta tags would fail without release secrets).
 on:
   workflow_dispatch:
-  push:
-    tags: ["v*"]
 
 jobs:
   smoke:
