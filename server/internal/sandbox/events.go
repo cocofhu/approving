@@ -25,6 +25,11 @@ type ChatResult struct {
 	Commands  []ACPCommand      `json:"commands,omitempty"`
 	RawEvents []json.RawMessage `json:"-"`
 
+	// Usage is the turn's token accounting from prompt_done.usage (components
+	// summed across model buckets). nil = capabilities omitted usage / not
+	// reported; non-nil (incl. all zeros) = explicitly reported for this turn.
+	Usage *models.TokenUsage `json:"usage,omitempty"`
+
 	// Busy carries the latest authoritative queue_state.busy flag from the
 	// cursor-acp bridge (true while a session/prompt is in flight). BusySet
 	// reports whether a queue_state frame has been observed at all, so callers

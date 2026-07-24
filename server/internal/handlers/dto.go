@@ -122,6 +122,10 @@ func (h *Handlers) runDetailDTO(r models.Run) gin.H {
 			"nodeId": s.NodeID, "iteration": s.Iteration, "status": s.Status, "outputMd": s.OutputMd,
 			"outputs": s.Outputs, "varsSnapshot": s.VarsSnapshot, "events": s.Events, "mcpCalls": s.McpCalls, "durationSec": s.DurationSec,
 		}
+		// Nullable usage: omit when nil so clients treat missing as "—" (not 0).
+		if s.Usage != nil {
+			nr["usage"] = s.Usage
+		}
 		if s.Error != "" {
 			nr["error"] = s.Error
 		}

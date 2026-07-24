@@ -8,22 +8,35 @@ import type { Run, WFNode } from '@/lib/types'
 import ExecutionTimeline from './ExecutionTimeline.vue'
 
 const nodes: WFNode[] = [
+  { id: 'start', type: 'input', label: '开始', position: { x: 0, y: 0 }, config: {} },
   { id: 'research', type: 'research', label: '调研', position: { x: 0, y: 0 }, config: {} },
   { id: 'react', type: 'react', label: '澄清', position: { x: 0, y: 0 }, config: {} },
 ]
 
-function baseRun(): Run {
+function baseRun(overrides: Partial<Run> = {}): Run {
   return {
     id: 'run-1',
     workflowId: 'wf-1',
     workflowName: 'wf',
     status: 'completed',
     createdAt: '2026-07-18T00:00:00Z',
+    startedAt: '2026-07-18T00:00:00Z',
+    durationSec: 100,
     nodes: [],
     edges: [],
     nodeStates: {},
     artifacts: [],
     nodeExecutions: {
+      start: [
+        {
+          nodeId: 'start',
+          iteration: 1,
+          status: 'completed',
+          durationSec: 0,
+          startedAt: '2026-07-18T00:00:00Z',
+          outputs: {},
+        },
+      ],
       research: [
         {
           nodeId: 'research',
@@ -32,22 +45,39 @@ function baseRun(): Run {
           durationSec: 30,
           startedAt: '2026-07-18T00:00:00Z',
           outputs: { summary: 'ok' },
+          usage: {
+            inputTokens: 100,
+            outputTokens: 50,
+            cacheReadTokens: 10,
+            cacheWriteTokens: 0,
+          },
         },
       ],
       react: [
         {
           nodeId: 'react',
           iteration: 1,
-          status: 'running',
+          status: 'completed',
+          durationSec: 20,
           startedAt: '2026-07-18T00:01:00Z',
           outputs: {},
+          usage: {
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+          },
         },
       ],
     },
+    ...overrides,
   } as unknown as Run
 }
 
-function mountTimeline(opts: { interactive?: boolean; selectedNodeId?: string | null } = {}) {
+function mountTimeline(
+  run: Run = baseRun(),
+  opts: { interactive?: boolean; selectedNodeId?: string | null; nowMs?: number } = {},
+) {
   const i18n = createI18n({
     legacy: false,
     locale: 'zh-CN',
@@ -55,12 +85,12 @@ function mountTimeline(opts: { interactive?: boolean; selectedNodeId?: string | 
   })
   return mount(ExecutionTimeline, {
     props: {
-      run: baseRun(),
+      run,
       nodes,
       selectedNodeId: opts.selectedNodeId ?? null,
       selectedExecIdx: 0,
       interactive: opts.interactive ?? true,
-      nowMs: Date.parse('2026-07-18T00:02:00Z'),
+      nowMs: opts.nowMs ?? Date.parse('2026-07-18T00:02:00Z'),
     },
     global: {
       plugins: [i18n],
@@ -78,7 +108,7 @@ describe('ExecutionTimeline', () => {
   })
 
   it('emits select when row clicked in interactive mode', async () => {
-    const wrapper = mountTimeline({ interactive: true })
+    const wrapper = mountTimeline(baseRun(), { interactive: true })
     const row = wrapper.find('li .cursor-pointer')
     await row.trigger('click')
     expect(wrapper.emitted('select')).toBeTruthy()
@@ -111,6 +141,118 @@ describe('ExecutionTimeline', () => {
       global: { plugins: [i18n], stubs: { Icon: true } },
     })
     expect(wrapper.text()).toMatch(/暂无|没有/)
+    wrapper.unmount()
+  })
+
+  it('shows tokens — without parts when usage is missing', () => {
+    const wrapper = mountTimeline()
+    const tokens = wrapper.findAll('[data-testid="timeline-tokens"]')
+    expect(tokens.some((el) => el.text().includes('—'))).toBe(true)
+    // start has no usage → no parts row for that card; research has parts
+    const parts = wrapper.findAll('[data-testid="timeline-token-parts"]')
+    expect(parts.length).toBe(2)
+    wrapper.unmount()
+  })
+
+  it('shows tokens 0 and four parts when usage is reported as zero', () => {
+    const wrapper = mountTimeline()
+    const tokens = wrapper.findAll('[data-testid="timeline-tokens"]')
+    expect(tokens.some((el) => /\b0\b/.test(el.text()) && !el.text().includes('—'))).toBe(true)
+    const zeroParts = wrapper
+      .findAll('[data-testid="timeline-token-parts"]')
+      .find((el) => el.text().includes('输入') && el.text().match(/0/))
+    expect(zeroParts).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  it('shows summed tokens and parts for reported usage', () => {
+    const wrapper = mountTimeline()
+    expect(wrapper.text()).toContain('160') // 100+50+10+0
+    const parts = wrapper.findAll('[data-testid="timeline-token-parts"]')
+    expect(parts[0]!.text()).toMatch(/输入/)
+    expect(parts[0]!.text()).toMatch(/输出/)
+    expect(parts[0]!.text()).toMatch(/缓存读/)
+    expect(parts[0]!.text()).toMatch(/缓存写/)
+    wrapper.unmount()
+  })
+
+  it('footer sums usage items and shows token/s + wall clock', () => {
+    const wrapper = mountTimeline()
+    const footer = wrapper.find('[data-testid="timeline-footer"]')
+    expect(footer.exists()).toBe(true)
+    // research 160 + react 0 = 160; wall 100 → 1.60 token/s
+    expect(wrapper.find('[data-testid="timeline-total-tokens"]').text()).toContain('160')
+    expect(wrapper.find('[data-testid="timeline-token-rate"]').text()).toContain('1.60')
+    expect(wrapper.find('[data-testid="timeline-wall-clock"]').text()).toMatch(/\d+:\d+/)
+    wrapper.unmount()
+  })
+
+  it('footer shows — for total and rate when no usage at all', () => {
+    const run = baseRun({
+      nodeExecutions: {
+        start: [
+          {
+            nodeId: 'start',
+            iteration: 1,
+            status: 'completed',
+            durationSec: 0,
+            startedAt: '2026-07-18T00:00:00Z',
+            outputs: {},
+          },
+        ],
+        research: [
+          {
+            nodeId: 'research',
+            iteration: 1,
+            status: 'completed',
+            durationSec: 30,
+            startedAt: '2026-07-18T00:00:10Z',
+            outputs: {},
+          },
+        ],
+      },
+    } as Partial<Run>)
+    const wrapper = mountTimeline(run)
+    expect(wrapper.find('[data-testid="timeline-total-tokens"]').text()).toContain('—')
+    expect(wrapper.find('[data-testid="timeline-token-rate"]').text()).toContain('—')
+    expect(wrapper.find('[data-testid="timeline-wall-clock"]').text()).not.toContain('—')
+    wrapper.unmount()
+  })
+
+  it('footer token/s is — when wall clock is 0 but usage exists', () => {
+    const run = baseRun({ durationSec: 0, status: 'completed' })
+    // Force wall to 0: completed with durationSec 0 and startedAt same instant
+    const wrapper = mountTimeline(run as Run, { nowMs: Date.parse('2026-07-18T00:00:00Z') })
+    expect(wrapper.find('[data-testid="timeline-total-tokens"]').text()).toContain('160')
+    expect(wrapper.find('[data-testid="timeline-token-rate"]').text()).toContain('—')
+    wrapper.unmount()
+  })
+
+  it('footer total is 0 (not —) when only reported-zero usage', () => {
+    const run = baseRun({
+      nodeExecutions: {
+        react: [
+          {
+            nodeId: 'react',
+            iteration: 1,
+            status: 'completed',
+            durationSec: 20,
+            startedAt: '2026-07-18T00:01:00Z',
+            outputs: {},
+            usage: {
+              inputTokens: 0,
+              outputTokens: 0,
+              cacheReadTokens: 0,
+              cacheWriteTokens: 0,
+            },
+          },
+        ],
+      },
+    } as Partial<Run>)
+    const wrapper = mountTimeline(run)
+    const total = wrapper.find('[data-testid="timeline-total-tokens"]').text()
+    expect(total).toContain('0')
+    expect(total).not.toContain('—')
     wrapper.unmount()
   })
 })

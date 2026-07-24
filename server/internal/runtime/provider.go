@@ -113,6 +113,10 @@ type NodeResult struct {
 	Outputs  map[string]any
 	Events   []models.AcpEvent
 	Git      *GitInfo
+	// Usage is token accounting accumulated across chat turns in this provider
+	// call (nil = none reported). Engine merges it into the StateRun by adding
+	// components so multi-turn react visits accumulate without double-counting.
+	Usage *models.TokenUsage
 }
 
 // ReactTurn is the outcome of one react dialogue turn (open or reply). The
@@ -127,6 +131,9 @@ type ReactTurn struct {
 	Done      bool
 	Result    NodeResult        // populated when Done (outputs/git)
 	Events    []models.AcpEvent // this turn's event log (live/persisted timeline)
+	// Usage is this provider call's token delta (open/reply/finish chats).
+	// Engine adds it onto the StateRun so mid-turn pauses still surface usage.
+	Usage *models.TokenUsage
 	// SetupErr is set when the sandbox/ACP session could not be acquired
 	// (container create, image pull, connect handshake). Distinct from a normal
 	// clarify pause where the agent raises Questions via ask_question.
