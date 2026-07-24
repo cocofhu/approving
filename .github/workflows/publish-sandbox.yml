@@ -4,43 +4,19 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
-    inputs:
-      providers:
-        description: "Comma-separated AGENT_PROVIDER values"
-        required: false
-        default: "cursor,claude_code,codebuddy,trae"
 
 permissions:
   contents: read
   packages: write
 
 jobs:
-  providers:
-    runs-on: ubuntu-latest
-    outputs:
-      list: ${{ steps.set.outputs.list }}
-    steps:
-      - id: set
-        run: |
-          raw="${{ github.event.inputs.providers || 'cursor,claude_code,codebuddy,trae' }}"
-          # JSON array for matrix
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import json, os
-          raw = os.environ["RAW"]
-          items = [x.strip() for x in raw.split(",") if x.strip()]
-          print("list=" + json.dumps(items))
-          PY
-        env:
-          RAW: ${{ github.event.inputs.providers || 'cursor,claude_code,codebuddy,trae' }}
-
   publish:
-    needs: providers
     runs-on: ubuntu-latest
     timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
-        provider: ${{ fromJSON(needs.providers.outputs.list) }}
+        provider: [cursor, claude_code, codebuddy, trae]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
