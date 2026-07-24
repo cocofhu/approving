@@ -12,6 +12,40 @@ Before contributing, read [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) and
   sources live in `sandbox-gateway/`). Default `./start.sh -d` pulls published
   GHCR images via `compose.release.yaml`.
 
+### Static checks (lint)
+
+CI appends these gates alongside existing vet/tests/`vue-tsc` (nothing is
+replaced). Use the same commands locally before opening a PR.
+
+**Go** — shared root config [`.golangci.yml`](.golangci.yml) (golangci-lint v2,
+`staticcheck` SA*/S1*, `_test.go` excluded for the first pass). Install a v2.x
+binary (`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.0`
+or the [official releases](https://golangci-lint.run/docs/welcome/install/)),
+then from each module directory:
+
+```bash
+# from repo root
+ROOT="$PWD"
+(cd server && golangci-lint run --config "$ROOT/.golangci.yml" ./...)
+(cd sandbox-gateway/gateway && golangci-lint run --config "$ROOT/.golangci.yml" ./...)
+(cd sandbox-gateway/sandbox && golangci-lint run --config "$ROOT/.golangci.yml" ./...)
+```
+
+Matching workflows: `ci-server`, `ci-gateway`, `ci-sandbox` (sandbox-go job).
+
+**Web** — ESLint (flat config in `web/`) coexists with `vue-tsc` (types stay on
+`vue-tsc`; ESLint is not type-aware in this first pass). CI fails on ESLint
+**errors** only; warnings are allowed:
+
+```bash
+cd web && npm ci && npm run lint && npx vue-tsc --noEmit
+```
+
+Matching workflow: `ci-web`.
+
+Later tightening (more Go linters, stricter ESLint rules, optional type-aware
+ESLint) can ratchet without changing this layout; not required for this pass.
+
 Never commit credentials, local configuration, generated databases, or
 organization-only URLs to public examples.
 

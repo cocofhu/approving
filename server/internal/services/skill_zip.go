@@ -185,7 +185,7 @@ func (s *SkillService) ImportZIP(raw []byte, targetName string, mode ImportZIPMo
 		return Agent{}, fmt.Errorf("ZIP 缺少根目录 agent.json")
 	}
 
-	layout := AgentLayout{}
+	var layout AgentLayout
 	if export.Layout != nil {
 		layout = export.Layout.withDefaults()
 	} else {

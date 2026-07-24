@@ -2,9 +2,9 @@ name: ci-server
 
 on:
   push:
-    paths: ["server/**", ".github/workflows/ci-server.yml"]
+    paths: ["server/**", ".github/workflows/ci-server.yml", ".golangci.yml"]
   pull_request:
-    paths: ["server/**", ".github/workflows/ci-server.yml"]
+    paths: ["server/**", ".github/workflows/ci-server.yml", ".golangci.yml"]
 
 jobs:
   server:
@@ -20,6 +20,12 @@ jobs:
         with:
           go-version: "1.25.x"
           cache-dependency-path: server/go.sum
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12
+          working-directory: server
+          args: --config=${{ github.workspace }}/.golangci.yml
       - run: go vet ./...
       - run: go run ./cmd/gen-configdoc -out CONFIGURATION.md -check
       - run: go test ./...

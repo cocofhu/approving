@@ -8,10 +8,12 @@ on:
     paths:
       - "sandbox-gateway/gateway/**"
       - ".github/workflows/ci-gateway.yml"
+      - ".golangci.yml"
   pull_request:
     paths:
       - "sandbox-gateway/gateway/**"
       - ".github/workflows/ci-gateway.yml"
+      - ".golangci.yml"
 
 jobs:
   gateway:
@@ -27,6 +29,12 @@ jobs:
         with:
           go-version: "1.25.x"
           cache-dependency-path: sandbox-gateway/gateway/go.sum
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12
+          working-directory: sandbox-gateway/gateway
+          args: --config=${{ github.workspace }}/.golangci.yml
       - run: go vet ./...
       - name: Gateway Go coverage gate
         working-directory: sandbox-gateway
