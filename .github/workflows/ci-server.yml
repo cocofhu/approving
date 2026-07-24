@@ -23,5 +23,7 @@ jobs:
       - run: go vet ./...
       - run: go run ./cmd/gen-configdoc -out CONFIGURATION.md -check
       - run: go test ./...
+      - name: Server Go coverage gate
+        run: ./scripts/cover-check-server.sh 90
       - name: e2e fake runtime
         run: go test ./internal/runtime/ -count=1 -run 'TestRunAgent|TestReact'

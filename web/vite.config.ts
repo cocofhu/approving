@@ -25,7 +25,7 @@ export default defineConfig(({ command }) => {
       include: ['src/**/*.test.ts'],
       coverage: {
         provider: 'v8',
-        reporter: ['text', 'text-summary', 'cobertura'],
+        reporter: ['text', 'text-summary', 'cobertura', 'json-summary'],
         reportsDirectory: './coverage',
         // 收窄分母：计入可测业务代码（含全部 components），排除 views/router/e2e/构建样式配置。
         // CI/MR 的 Lines 正则与 web:coverage-gate 均依赖此口径。

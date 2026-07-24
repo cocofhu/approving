@@ -768,8 +768,8 @@ func (e *Engine) execReactEnter(c *execCtx, node *models.Node) nodeOutcome {
 		logDB(e.db.Create(&conv), c.run.ID, "create react conversation")
 		// Auto-clarify: when the node's auto var is truthy, drive the dialogue
 		// without pausing for a human — each round is answered with the
-		// recommended option (or the first) until the agent concludes or the
-		// round cap is hit.
+		// recommended option set (all recommended for multi-select, or the first
+		// option as fallback) until the agent concludes or the round cap is hit.
 		if !t.Done && len(t.Questions) > 0 && e.autoReactEnabled(c, node) {
 			t = e.autoAdvanceReact(c, node, &conv, req, t)
 		}
@@ -798,9 +798,10 @@ func (e *Engine) autoReactEnabled(c *execCtx, node *models.Node) bool {
 }
 
 // autoAdvanceReact drives a react dialogue to completion without human input:
-// every round it replies with FormatChoiceReply (recommended option, or the
-// first as fallback) and appends both turns to conv, stopping when the agent
-// concludes (Done), stops asking questions, or the max_rounds cap is reached.
+// every round it replies with FormatChoiceReply (recommended option set —
+// multi-select may pick several, joined with "、" — or the first as fallback)
+// and appends both turns to conv, stopping when the agent concludes (Done),
+// stops asking questions, or the max_rounds cap is reached.
 // It persists conv as it goes so the transcript reflects every auto round, and
 // returns the final ReactTurn for the caller to finalize (Done) or pause on.
 func (e *Engine) autoAdvanceReact(c *execCtx, node *models.Node, conv *models.ReactConversation, req runtime.NodeReq, t runtime.ReactTurn) runtime.ReactTurn {

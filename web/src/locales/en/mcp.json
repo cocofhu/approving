@@ -45,7 +45,7 @@
         },
         "ask_question": {
           "signature": "ask_question(questions)",
-          "desc": "Clarify (react) nodes only: ask structured multiple-choice questions (options may be marked recommended)"
+          "desc": "Clarify (react) nodes only: ask structured multiple-choice questions (options may be marked recommended; at most one for single-select, one or more for multi-select)"
         },
         "set_plan": {
           "signature": "set_plan(goals)",
