@@ -27,6 +27,11 @@ export default defineConfig(({ command }) => {
         provider: 'v8',
         reporter: ['text', 'text-summary', 'cobertura'],
         reportsDirectory: './coverage',
+        // Lines 硬门禁：不达标时 vitest 非零退出（ci-web 的 npm test -- --coverage）。
+        // 仅约束 lines；branches/functions 不设阈值。
+        thresholds: {
+          lines: 85,
+        },
         // 收窄分母：计入可测业务代码（含全部 components），排除 views/router/e2e/构建样式配置。
         // CI/MR 的 Lines 正则与 web:coverage-gate 均依赖此口径。
         include: [

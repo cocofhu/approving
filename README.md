@@ -8,6 +8,8 @@ Build rollback-capable, human-gated, observable workflows — agents run in real
 [![CI Server](https://github.com/cocofhu/approving/actions/workflows/ci-server.yml/badge.svg)](https://github.com/cocofhu/approving/actions/workflows/ci-server.yml)
 [![CI Web](https://github.com/cocofhu/approving/actions/workflows/ci-web.yml/badge.svg)](https://github.com/cocofhu/approving/actions/workflows/ci-web.yml)
 [![CI Sandbox](https://github.com/cocofhu/approving/actions/workflows/ci-sandbox.yml/badge.svg)](https://github.com/cocofhu/approving/actions/workflows/ci-sandbox.yml)
+![coverage](https://img.shields.io/badge/coverage-web_86%25-0e8a65)
+![coverage](https://img.shields.io/badge/coverage-sandbox_97%25-0e8a65)
 
 [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Support](SUPPORT.md) · [Configuration](server/CONFIGURATION.md) · [Gateway](GATEWAY.md)
 

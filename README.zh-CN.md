@@ -8,6 +8,8 @@
 [![CI Server](https://github.com/cocofhu/approving/actions/workflows/ci-server.yml/badge.svg)](https://github.com/cocofhu/approving/actions/workflows/ci-server.yml)
 [![CI Web](https://github.com/cocofhu/approving/actions/workflows/ci-web.yml/badge.svg)](https://github.com/cocofhu/approving/actions/workflows/ci-web.yml)
 [![CI Sandbox](https://github.com/cocofhu/approving/actions/workflows/ci-sandbox.yml/badge.svg)](https://github.com/cocofhu/approving/actions/workflows/ci-sandbox.yml)
+![coverage](https://img.shields.io/badge/coverage-web_86%25-0e8a65)
+![coverage](https://img.shields.io/badge/coverage-sandbox_97%25-0e8a65)
 
 [贡献指南](CONTRIBUTING.md) · [安全](SECURITY.md) · [支持](SUPPORT.md) · [配置](server/CONFIGURATION.md) · [网关](GATEWAY.md)
 
