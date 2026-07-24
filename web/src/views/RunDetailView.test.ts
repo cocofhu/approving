@@ -6,6 +6,20 @@ import { describe, expect, it } from 'vitest'
 
 const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'RunDetailView.vue'), 'utf8')
 
+describe('RunDetailView delete run', () => {
+  it('exposes delete button, disabled hint, and confirm modal wiring', () => {
+    expect(src).toMatch(/data-testid="delete-run-btn"/)
+    expect(src).toMatch(/data-testid="delete-run-hint"/)
+    expect(src).toMatch(/data-testid="confirm-delete-run-btn"/)
+    expect(src).toMatch(/canDeleteRun/)
+    expect(src).toMatch(/api\.deleteRun/)
+    expect(src).toMatch(/pages\.runDetail\.deleteWarning/)
+    expect(src).toMatch(/pages\.runDetail\.deleteHintCancelled/)
+    expect(src).toMatch(/pages\.runDetail\.deleteHintActive/)
+    expect(src).toMatch(/router\.push\('\/runs' \+ qs\)/)
+  })
+})
+
 describe('RunDetailView GateApproval fill-preview', () => {
   it('always passes fill-preview=true (desktop content-fit), not isMobile', () => {
     expect(src).toMatch(/<GateApproval[\s\S]*?:fill-preview="true"/)

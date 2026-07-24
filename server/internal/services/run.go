@@ -1,9 +1,25 @@
 package services
 
 import (
+	"errors"
+	"fmt"
+
 	"github.com/cocofhu/approving/internal/models"
 
 	"gorm.io/gorm"
+)
+
+// deletableRunStatuses is the allowlist for DeleteRun. Narrower than
+// terminalRunStatuses on purpose: cancelled runs are terminal for inbox/artifact
+// rules but must not be deletable here.
+var deletableRunStatuses = []string{"completed", "failed"}
+
+var (
+	// ErrRunNotFound is returned when Delete targets a missing run id.
+	ErrRunNotFound = errors.New("run not found")
+	// ErrRunNotDeletable is returned when the run status is outside
+	// deletableRunStatuses (queued/running/waiting_human/cancelled, etc.).
+	ErrRunNotDeletable = errors.New("cannot delete run: only completed or failed runs can be deleted")
 )
 
 // RunService assembles run views from the underlying tables.
@@ -141,3 +157,64 @@ func (s *RunService) Conversations(runID string) []models.ReactConversation {
 
 // DB exposes the underlying handle for handlers needing ad-hoc queries.
 func (s *RunService) DB() *gorm.DB { return s.db }
+
+// Delete permanently removes a completed/failed run and its associated rows so
+// the run no longer appears in lists/details or related UI entry points.
+// Active (queued/running/waiting_human) and cancelled runs are rejected with
+// ErrRunNotDeletable. Missing runs return ErrRunNotFound. Does not touch
+// WorkflowDef, WorkflowVersion, or WorkflowAPIKey.
+func (s *RunService) Delete(id string) error {
+	run, ok := s.Get(id)
+	if !ok {
+		return ErrRunNotFound
+	}
+	if err := rejectIfNotDeletable(run.Status); err != nil {
+		return err
+	}
+
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		// Re-check inside the transaction so a status change between the
+		// pre-check and delete is rejected atomically; a concurrent delete
+		// surfaces as not-found.
+		var current models.Run
+		if err := tx.First(&current, "id = ?", id).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrRunNotFound
+			}
+			return err
+		}
+		if err := rejectIfNotDeletable(current.Status); err != nil {
+			return err
+		}
+
+		for _, m := range []any{
+			&models.StateRun{},
+			&models.RunVariable{},
+			&models.Artifact{},
+			&models.Gate{},
+			&models.ReactConversation{},
+			&models.PreviewIssue{},
+			&models.RunPreviewPort{},
+			&models.SandboxLog{},
+			&models.Sandbox{},
+		} {
+			if err := tx.Where("run_id = ?", id).Delete(m).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Delete(&models.Run{}, "id = ?", id).Error
+	})
+}
+
+func rejectIfNotDeletable(status string) error {
+	if containsString(deletableRunStatuses, status) {
+		return nil
+	}
+	switch status {
+	case "queued", "running", "waiting_human":
+		return fmt.Errorf("%w: cancel or wait until the run ends (status %q)", ErrRunNotDeletable, status)
+	default:
+		// cancelled and any unexpected non-deletable status
+		return fmt.Errorf("%w (status %q)", ErrRunNotDeletable, status)
+	}
+}

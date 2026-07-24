@@ -81,6 +81,7 @@ describe('api req helpers', () => {
       .mockResolvedValueOnce(jsonResponse({ id: 'r1', status: 'running' }))
       .mockResolvedValueOnce(jsonResponse({ id: 'r1', status: 'queued', priority: 'high' }))
       .mockResolvedValueOnce(jsonResponse({ status: 'ok' }))
+      .mockResolvedValueOnce(jsonResponse({ status: 'deleted' }))
       .mockResolvedValueOnce(jsonResponse({ status: 'ok' }))
       .mockResolvedValueOnce(jsonResponse({ status: 'ok' }))
       .mockResolvedValueOnce(jsonResponse({ status: 'ok' }))
@@ -132,6 +133,7 @@ describe('api req helpers', () => {
     await expect(api.startRun('w1', { a: 1 })).resolves.toMatchObject({ id: 'r1' })
     await expect(api.updateRunPriority('r1', 'high')).resolves.toMatchObject({ priority: 'high' })
     await expect(api.cancelRun('r1')).resolves.toEqual({ status: 'ok' })
+    await expect(api.deleteRun('r1')).resolves.toEqual({ status: 'deleted' })
     await expect(api.resumeRun('r1')).resolves.toEqual({ status: 'ok' })
     await expect(api.resumeRun('r1', 'n1')).resolves.toEqual({ status: 'ok' })
     await expect(api.resumeGate('r1', 'n1', 'approve', { comment: 'ok' })).resolves.toEqual({

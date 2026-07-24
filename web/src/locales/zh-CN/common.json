@@ -68,6 +68,7 @@
       "console": "控制台",
       "stop": "停止",
       "cancelRun": "取消运行",
+      "deleteRun": "删除运行",
       "resumeFromFail": "从失败位置继续",
       "resumeFromNode": "从此节点继续",
       "loading": "加载中…",
