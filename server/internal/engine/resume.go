@@ -362,8 +362,9 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 		At: time.Now().Format(time.RFC3339), Questions: t.Questions})
 
 	// Auto-clarify: if this node runs in auto mode and the agent asked more
-	// questions, keep answering with the recommended option (or the first)
-	// instead of pausing for another human reply.
+	// questions, keep answering with the recommended option set (all recommended
+	// for multi-select, or the first as fallback) instead of pausing for another
+	// human reply.
 	if !force && !t.Done && len(t.Questions) > 0 && e.autoReactEnabled(c, node) {
 		t = e.autoAdvanceReact(c, node, &conv, req, t)
 	}
