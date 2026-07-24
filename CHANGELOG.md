@@ -4,6 +4,9 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+- Make `./start.sh` default to published GHCR images (`compose.release.yaml`) with
+  tag defaults so a clone can `./start.sh -d` without a local image build; keep
+  `./start.sh dev` for the source/HMR stack.
 - Add GHCR publish workflows for `sandbox-gateway` and
   `universal-sandbox-{cursor,claude_code,codebuddy,trae}` on `v*` tags.
 

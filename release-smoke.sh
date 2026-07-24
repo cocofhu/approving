@@ -26,6 +26,10 @@ require_digest SANDBOX_IMAGE
 # It is generated automatically and deliberately omitted from smoke evidence.
 APPROVING_DOCTOR_TOKEN="${APPROVING_DOCTOR_TOKEN:-$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')}"
 export APPROVING_DOCTOR_TOKEN
+SANDBOX_GATEWAY_API_KEY="${SANDBOX_GATEWAY_API_KEY:-approving-local-demo}"
+export SANDBOX_GATEWAY_API_KEY
+export APPROVING_SANDBOX_GATEWAY_API_KEY="${APPROVING_SANDBOX_GATEWAY_API_KEY:-$SANDBOX_GATEWAY_API_KEY}"
+export SBGW_API_KEYS="${SBGW_API_KEYS:-$SANDBOX_GATEWAY_API_KEY}"
 
 cleanup() {
   docker compose -f "$COMPOSE_FILE" down --volumes --remove-orphans >>"$LOG" 2>&1 || true
