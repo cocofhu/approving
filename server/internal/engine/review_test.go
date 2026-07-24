@@ -444,3 +444,98 @@ func TestRenderReviewHuman(t *testing.T) {
 		}
 	}
 }
+
+// TestReviewEnterPreservesUsage: completed → enterReview → saveState must keep
+// production-phase usage on the paused StateRun (not drop to nil / timeline "—").
+func TestReviewEnterPreservesUsage(t *testing.T) {
+	eng, db, provider := setupReviewEngine(t, true)
+	provider.agentUsage = &models.TokenUsage{
+		InputTokens: 100, OutputTokens: 40, CacheReadTokens: 10, CacheWriteTokens: 2,
+	}
+
+	run, err := eng.StartRun("review-wf", map[string]any{"idea": "登录"}, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "prop")
+	waitRunStatus(t, db, run.ID, "waiting_human")
+
+	var sr models.StateRun
+	if err := db.Where("run_id = ? AND node_id = ?", run.ID, "prop").
+		Order("iteration desc, id desc").First(&sr).Error; err != nil {
+		t.Fatalf("load state_run: %v", err)
+	}
+	if sr.Status != "waiting_human" {
+		t.Fatalf("status=%q want waiting_human", sr.Status)
+	}
+	if sr.Usage == nil {
+		t.Fatal("StateRun.Usage must be preserved across enterReview pause")
+	}
+	if sr.Usage.InputTokens != 100 || sr.Usage.OutputTokens != 40 ||
+		sr.Usage.CacheReadTokens != 10 || sr.Usage.CacheWriteTokens != 2 {
+		t.Fatalf("usage mismatch: %+v", sr.Usage)
+	}
+}
+
+// TestReviewReviseFlushesTokenUsage: ReviseInPlace mid-turn usage is merged onto
+// the same StateRun via flushTokenUsage (aligned with clarify resume path).
+func TestReviewReviseFlushesTokenUsage(t *testing.T) {
+	eng, db, provider := setupReviewEngine(t, true)
+	provider.agentUsage = &models.TokenUsage{InputTokens: 50, OutputTokens: 20}
+	provider.reviseUsage = &models.TokenUsage{InputTokens: 7, OutputTokens: 3, CacheReadTokens: 1}
+
+	run, err := eng.StartRun("review-wf", map[string]any{"idea": "登录"}, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "prop")
+	waitRunStatus(t, db, run.ID, "waiting_human")
+
+	if err := eng.ReactReply(run.ID, "prop", "按标注改一下", nil, nil, false); err != nil {
+		t.Fatalf("revise reply: %v", err)
+	}
+	waitRunStatus(t, db, run.ID, "waiting_human")
+
+	var sr models.StateRun
+	if err := db.Where("run_id = ? AND node_id = ?", run.ID, "prop").
+		Order("iteration desc, id desc").First(&sr).Error; err != nil {
+		t.Fatalf("load state_run: %v", err)
+	}
+	if sr.Usage == nil {
+		t.Fatal("StateRun.Usage nil after revise flush")
+	}
+	if sr.Usage.InputTokens != 57 || sr.Usage.OutputTokens != 23 || sr.Usage.CacheReadTokens != 1 {
+		t.Fatalf("expected agent+revise sum, got %+v", sr.Usage)
+	}
+}
+
+// TestGateReactReviseFlushesTokenUsage: gate-react ReviseInPlace also merges
+// usage onto the producer StateRun.
+func TestGateReactReviseFlushesTokenUsage(t *testing.T) {
+	eng, db, provider := setupGateReactEngine(t)
+	provider.agentUsage = &models.TokenUsage{InputTokens: 30, OutputTokens: 10}
+	provider.reviseUsage = &models.TokenUsage{InputTokens: 5, OutputTokens: 2}
+
+	run, err := eng.StartRun("gate-react-wf", map[string]any{"idea": "登录"}, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitGatePending(t, db, run.ID, "select")
+	waitRunStatus(t, db, run.ID, "waiting_human")
+
+	if err := eng.GateReactRevise(run.ID, "select", "改一下", nil, nil); err != nil {
+		t.Fatalf("GateReactRevise: %v", err)
+	}
+
+	var sr models.StateRun
+	if err := db.Where("run_id = ? AND node_id = ?", run.ID, "prop").
+		Order("iteration desc, id desc").First(&sr).Error; err != nil {
+		t.Fatalf("load state_run: %v", err)
+	}
+	if sr.Usage == nil {
+		t.Fatal("producer StateRun.Usage nil after gate-react revise flush")
+	}
+	if sr.Usage.InputTokens != 35 || sr.Usage.OutputTokens != 12 {
+		t.Fatalf("expected agent+revise sum, got %+v", sr.Usage)
+	}
+}

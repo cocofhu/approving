@@ -160,7 +160,10 @@ func (e *Engine) enterReview(c *execCtx, node *models.Node, completed nodeOutcom
 			return completed
 		}
 		e.host.SetActiveReview(c.run.ID, true)
-		return nodeOutcome{status: "paused", outputMd: "等待人工复审(ReAct)…", outputs: completed.outputs, events: completed.events}
+		// Carry completed.usage so saveState still merges production-phase tokens
+		// onto this StateRun (nil usage would leave the timeline as "—").
+		return nodeOutcome{status: "paused", outputMd: "等待人工复审(ReAct)…",
+			outputs: completed.outputs, events: completed.events, usage: completed.usage}
 	}
 	summary := e.reviewSummaryMarkdown(c, node)
 	conv = models.ReactConversation{RunID: c.run.ID, NodeID: node.ID, Iteration: iter, Done: false,
@@ -168,7 +171,8 @@ func (e *Engine) enterReview(c *execCtx, node *models.Node, completed nodeOutcom
 	logDB(e.db.Create(&conv), c.run.ID, "seed review conversation")
 	e.host.SetActiveReview(c.run.ID, true)
 	log.Info().Str("run_id", c.run.ID).Str("node_id", node.ID).Msg("entered post-run ReAct review phase")
-	return nodeOutcome{status: "paused", outputMd: "等待人工复审(ReAct)…", outputs: completed.outputs, events: completed.events}
+	return nodeOutcome{status: "paused", outputMd: "等待人工复审(ReAct)…",
+		outputs: completed.outputs, events: completed.events, usage: completed.usage}
 }
 
 // reviewSummaryMarkdown renders the node's product as the opening review turn.
@@ -237,6 +241,9 @@ func (e *Engine) reviewReply(c *execCtx, node *models.Node, conv *models.ReactCo
 			At: time.Now().Format(time.RFC3339), Questions: t.Questions})
 		logDB(e.db.Save(conv), runID, "save review revise turn")
 		e.flushMcpCalls(runID, nodeID)
+		// Align with resume.go clarify mid-turns: merge this revise turn's token
+		// delta onto the same StateRun while the node stays paused.
+		e.flushTokenUsage(runID, nodeID, t.Usage)
 		if t.Err != nil {
 			log.Warn().Err(t.Err).Str("run_id", runID).Str("node_id", nodeID).
 				Msg("review revise turn failed (session kept for retry)")
@@ -355,6 +362,7 @@ func (e *Engine) GateReactRevise(runID, gateNodeID, text string, images []models
 		At: time.Now().Format(time.RFC3339), Questions: t.Questions})
 	logDB(e.db.Save(&conv), runID, "save gate-react producer turn")
 	e.flushMcpCalls(runID, producerID)
+	e.flushTokenUsage(runID, producerID, t.Usage)
 	if t.Err != nil {
 		log.Warn().Err(t.Err).Str("run_id", runID).Str("gate", gateNodeID).
 			Str("producer", producerID).Msg("gate-react revise failed")

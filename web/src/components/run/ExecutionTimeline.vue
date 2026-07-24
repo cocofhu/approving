@@ -9,8 +9,13 @@ import { fmtTime, fmtDuration } from '@/lib/format'
 import { formatVarChip, formatVarValue } from '@/lib/compositeText'
 import { NODE_DEFS, nodeColorHex } from '@/data/nodeRegistry'
 import { resolveNodeDisplayLabel } from '@/lib/resolveNodeDisplayLabel'
-import { compareTimelineOrder, resolveProcessDuration } from '@/lib/runStats'
-import type { NodeRun, NodeRunStatus, Run, WFNode } from '@/lib/types'
+import { compareTimelineOrder, resolveProcessDuration, resolveRunWallSec } from '@/lib/runStats'
+import {
+  fmtTokenCount,
+  summarizeTimelineUsage,
+  tokenUsageTotal,
+} from '@/lib/tokenUsage'
+import type { NodeRun, NodeRunStatus, Run, TokenUsage, WFNode } from '@/lib/types'
 
 const props = withDefaults(
   defineProps<{
@@ -74,6 +79,8 @@ interface TimelineItem {
   type: string
   vars: { k: string; v: unknown }[]
   mcp: { tool: string; isError: boolean; tip: string }[]
+  /** null/undefined = not reported; present (incl. zeros) = reported. */
+  usage?: TokenUsage | null
 }
 
 // Kept for chip title tooltips (plain text).
@@ -137,6 +144,7 @@ const items = computed<TimelineItem[]>(() => {
         type: node?.type || 'agent',
         vars: varEntries(ex.varsSnapshot),
         mcp: mcpEntries(ex.mcpCalls),
+        usage: ex.usage,
       })
     })
   }
@@ -153,11 +161,17 @@ let clock: number | undefined
 const hasActiveItems = computed(() =>
   items.value.some((it) => it.status === 'running' || it.status === 'waiting_human'),
 )
+const runLive = computed(
+  () =>
+    props.run.status === 'running' ||
+    props.run.status === 'waiting_human' ||
+    props.run.status === 'queued',
+)
 const tickMs = computed(() => props.nowMs ?? localNowMs.value)
 onMounted(() => {
   clock = window.setInterval(() => {
     if (props.nowMs != null) return
-    if (hasActiveItems.value) localNowMs.value = Date.now()
+    if (hasActiveItems.value || runLive.value) localNowMs.value = Date.now()
   }, 1000)
 })
 onUnmounted(() => {
@@ -174,6 +188,9 @@ function displayDuration(it: TimelineItem): number | null {
   }
   return null
 }
+
+const wallSec = computed(() => resolveRunWallSec(props.run, tickMs.value))
+const usageSummary = computed(() => summarizeTimelineUsage(items.value, wallSec.value))
 
 function iconOf(type: string) {
   return NODE_DEFS[type as keyof typeof NODE_DEFS]?.icon || 'agent'
@@ -207,100 +224,190 @@ const DOT: Record<string, string> = {
     <div v-if="!items.length" class="flex flex-1 items-center justify-center text-[12px] text-txt3">
       {{ t('pages.executionTimeline.empty') }}
     </div>
-    <div v-else class="scroll-area safe-area-bottom min-h-0 min-w-0 w-full max-w-full flex-1 overflow-x-clip overflow-y-auto px-5 py-4">
-      <ol class="relative min-w-0 max-w-full space-y-2.5 border-l border-line pl-6">
-        <li v-for="(it, i) in items" :key="`${it.nodeId}:${it.idxInNode}`" class="relative min-w-0 max-w-full">
-          <span
-            class="absolute -left-[31px] top-4 h-2.5 w-2.5 rounded-full ring-4 ring-base"
-            :class="DOT[it.status] || DOT.pending"
-          />
-          <div
-            class="w-full min-w-0 overflow-hidden rounded-lg border bg-surface px-3 py-2.5 text-left transition-colors"
-            :class="[
-              isSelected(it) ? 'border-accent/60 ring-1 ring-accent/40' : 'border-line',
-              interactive ? 'cursor-pointer hover:bg-elevated' : 'cursor-default',
-            ]"
-            @click="onSelect(it)"
-          >
-            <div class="flex min-w-0 items-center gap-2.5">
-              <span
-                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md"
-                :style="{ background: nodeColorHex(it.type as any) + '22', color: nodeColorHex(it.type as any) }"
-              >
-                <Icon :name="iconOf(it.type)" :size="16" />
-              </span>
-              <div class="min-w-0 flex-1 overflow-hidden">
-                <div class="flex items-center gap-1.5">
-                  <TruncatedTextTooltip
-                    :text="it.label"
-                    class="min-w-0 truncate text-[13px] font-semibold text-txt"
-                    data-testid="timeline-node-label"
-                  />
-                  <span
-                    v-if="it.iteration > 1"
-                    class="shrink-0 rounded-full border border-warn/40 bg-warn/10 px-1.5 py-px text-[10px] text-warn"
-                    :title="t('pages.executionTimeline.iterationTitle')"
-                    >{{ t('common.iterationN', { n: it.iteration }) }}</span
-                  >
-                </div>
-                <div v-if="displayDuration(it) != null" class="mt-0.5 text-[11px] text-txt3">
-                  {{ t('pages.executionTimeline.duration', { time: fmtDuration(displayDuration(it)!) }) }}
-                </div>
-                <div v-if="it.vars.length" class="mt-1.5 min-w-0">
-                  <div class="flex max-w-full flex-wrap gap-1 overflow-hidden">
-                    <button
-                      v-for="e in it.vars"
-                      :key="e.k"
-                      type="button"
-                      data-testid="timeline-variable-chip"
-                      class="inline-flex max-w-full min-w-0 items-center gap-1 overflow-hidden rounded border border-line bg-elevated px-1.5 py-px font-mono text-[10px] leading-4"
-                      :class="
-                        expandedKey === varExpandKey(it, e.k)
-                          ? 'cursor-pointer border-accent/50 ring-1 ring-accent/30'
-                          : 'cursor-pointer active:bg-surface'
-                      "
-                      @click="toggleVarExpand(it, e.k, $event)"
+    <template v-else>
+      <div class="scroll-area safe-area-bottom min-h-0 min-w-0 w-full max-w-full flex-1 overflow-x-clip overflow-y-auto px-5 py-4">
+        <ol class="relative min-w-0 max-w-full space-y-2.5 border-l border-line pl-6">
+          <li v-for="it in items" :key="`${it.nodeId}:${it.idxInNode}`" class="relative min-w-0 max-w-full">
+            <span
+              class="absolute -left-[31px] top-4 h-2.5 w-2.5 rounded-full ring-4 ring-base"
+              :class="DOT[it.status] || DOT.pending"
+            />
+            <div
+              class="w-full min-w-0 overflow-hidden rounded-lg border bg-surface px-3 py-2.5 text-left transition-colors"
+              :class="[
+                isSelected(it) ? 'border-accent/60 ring-1 ring-accent/40' : 'border-line',
+                interactive ? 'cursor-pointer hover:bg-elevated' : 'cursor-default',
+              ]"
+              @click="onSelect(it)"
+            >
+              <div class="flex min-w-0 items-center gap-2.5">
+                <span
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md"
+                  :style="{ background: nodeColorHex(it.type as any) + '22', color: nodeColorHex(it.type as any) }"
+                >
+                  <Icon :name="iconOf(it.type)" :size="16" />
+                </span>
+                <div class="min-w-0 flex-1 overflow-hidden">
+                  <div class="flex items-center gap-1.5">
+                    <TruncatedTextTooltip
+                      :text="it.label"
+                      class="min-w-0 truncate text-[13px] font-semibold text-txt"
+                      data-testid="timeline-node-label"
+                    />
+                    <span
+                      v-if="it.iteration > 1"
+                      class="shrink-0 rounded-full border border-warn/40 bg-warn/10 px-1.5 py-px text-[10px] text-warn"
+                      :title="t('pages.executionTimeline.iterationTitle')"
+                      >{{ t('common.iterationN', { n: it.iteration }) }}</span
                     >
-                      <span class="shrink-0 text-accent-2">{{ e.k }}</span>
-                      <span class="shrink-0 text-txt3">=</span>
-                      <TruncatedTextTooltip
-                        :text="`${e.k} = ${fmtVar(e.v)}`"
-                        :focusable="false"
-                        focus-parent
-                        measure-child
-                        data-testid="timeline-variable-value"
-                        class="min-w-0 flex-1 overflow-hidden truncate text-txt2"
-                      >
-                        <VarValueDisplay :value="e.v" compact class="min-w-0 max-w-full overflow-hidden truncate" />
-                      </TruncatedTextTooltip>
-                    </button>
                   </div>
-                  <pre
-                    v-if="expandedVar(it)"
-                    class="scroll-area mt-1.5 max-h-40 min-w-0 max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border border-line bg-elevated px-2 py-1.5 font-mono text-[10px] leading-4 text-txt2"
-                  >{{ expandedVar(it)!.k }} = {{ fmtVarFull(expandedVar(it)!.v) }}</pre>
-                </div>
-                <div v-if="it.mcp.length" class="mt-1.5 flex max-w-full flex-wrap gap-1 overflow-hidden">
-                  <span
-                    v-for="(m, mi) in it.mcp"
-                    :key="mi"
-                    class="inline-flex max-w-full items-center gap-1 overflow-hidden rounded border px-1.5 py-px font-mono text-[10px] leading-4"
-                    :class="m.isError ? 'border-err/50 bg-err/10 text-err' : 'border-info/40 bg-info/10 text-info'"
+                  <div
+                    class="mt-0.5 flex flex-wrap items-center gap-x-3.5 gap-y-0.5 text-[11px] text-txt3"
+                    data-testid="timeline-meta"
                   >
-                    <Icon name="terminal" :size="10" />
-                    <TruncatedTextTooltip :text="m.tip" class="min-w-0 truncate">{{ m.tool }}</TruncatedTextTooltip>
-                    <span>{{ m.isError ? '✗' : '✓' }}</span>
-                  </span>
+                    <span v-if="displayDuration(it) != null">
+                      {{ t('pages.executionTimeline.duration', { time: fmtDuration(displayDuration(it)!) }) }}
+                    </span>
+                    <span
+                      v-if="it.usage != null"
+                      class="font-mono tabular-nums text-txt2"
+                      data-testid="timeline-tokens"
+                    >
+                      tokens <span class="text-txt">{{ fmtTokenCount(tokenUsageTotal(it.usage)) }}</span>
+                    </span>
+                    <span v-else class="font-mono text-txt3" data-testid="timeline-tokens">
+                      {{ t('pages.executionTimeline.tokensEmpty') }}
+                    </span>
+                  </div>
+                  <div
+                    v-if="it.usage != null"
+                    class="mt-1.5 flex max-w-full flex-wrap gap-1 overflow-hidden"
+                    data-testid="timeline-token-parts"
+                  >
+                    <span
+                      class="inline-flex items-center gap-1 rounded border border-line bg-elevated px-1.5 py-px text-[10px] leading-4 text-txt2"
+                    >
+                      {{ t('pages.executionTimeline.partInput') }}
+                      <b class="font-mono font-semibold text-txt">{{ fmtTokenCount(it.usage.inputTokens || 0) }}</b>
+                    </span>
+                    <span
+                      class="inline-flex items-center gap-1 rounded border border-line bg-elevated px-1.5 py-px text-[10px] leading-4 text-txt2"
+                    >
+                      {{ t('pages.executionTimeline.partOutput') }}
+                      <b class="font-mono font-semibold text-txt">{{ fmtTokenCount(it.usage.outputTokens || 0) }}</b>
+                    </span>
+                    <span
+                      class="inline-flex items-center gap-1 rounded border border-line bg-elevated px-1.5 py-px text-[10px] leading-4 text-txt2"
+                    >
+                      {{ t('pages.executionTimeline.partCacheRead') }}
+                      <b class="font-mono font-semibold text-txt">{{ fmtTokenCount(it.usage.cacheReadTokens || 0) }}</b>
+                    </span>
+                    <span
+                      class="inline-flex items-center gap-1 rounded border border-line bg-elevated px-1.5 py-px text-[10px] leading-4 text-txt2"
+                    >
+                      {{ t('pages.executionTimeline.partCacheWrite') }}
+                      <b class="font-mono font-semibold text-txt">{{ fmtTokenCount(it.usage.cacheWriteTokens || 0) }}</b>
+                    </span>
+                  </div>
+                  <div v-if="it.vars.length" class="mt-1.5 min-w-0">
+                    <div class="flex max-w-full flex-wrap gap-1 overflow-hidden">
+                      <button
+                        v-for="e in it.vars"
+                        :key="e.k"
+                        type="button"
+                        data-testid="timeline-variable-chip"
+                        class="inline-flex max-w-full min-w-0 items-center gap-1 overflow-hidden rounded border border-line bg-elevated px-1.5 py-px font-mono text-[10px] leading-4"
+                        :class="
+                          expandedKey === varExpandKey(it, e.k)
+                            ? 'cursor-pointer border-accent/50 ring-1 ring-accent/30'
+                            : 'cursor-pointer active:bg-surface'
+                        "
+                        @click="toggleVarExpand(it, e.k, $event)"
+                      >
+                        <span class="shrink-0 text-accent-2">{{ e.k }}</span>
+                        <span class="shrink-0 text-txt3">=</span>
+                        <TruncatedTextTooltip
+                          :text="`${e.k} = ${fmtVar(e.v)}`"
+                          :focusable="false"
+                          focus-parent
+                          measure-child
+                          data-testid="timeline-variable-value"
+                          class="min-w-0 flex-1 overflow-hidden truncate text-txt2"
+                        >
+                          <VarValueDisplay :value="e.v" compact class="min-w-0 max-w-full overflow-hidden truncate" />
+                        </TruncatedTextTooltip>
+                      </button>
+                    </div>
+                    <pre
+                      v-if="expandedVar(it)"
+                      class="scroll-area mt-1.5 max-h-40 min-w-0 max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border border-line bg-elevated px-2 py-1.5 font-mono text-[10px] leading-4 text-txt2"
+                    >{{ expandedVar(it)!.k }} = {{ fmtVarFull(expandedVar(it)!.v) }}</pre>
+                  </div>
+                  <div v-if="it.mcp.length" class="mt-1.5 flex max-w-full flex-wrap gap-1 overflow-hidden">
+                    <span
+                      v-for="(m, mi) in it.mcp"
+                      :key="mi"
+                      class="inline-flex max-w-full items-center gap-1 overflow-hidden rounded border px-1.5 py-px font-mono text-[10px] leading-4"
+                      :class="m.isError ? 'border-err/50 bg-err/10 text-err' : 'border-info/40 bg-info/10 text-info'"
+                    >
+                      <Icon name="terminal" :size="10" />
+                      <TruncatedTextTooltip :text="m.tip" class="min-w-0 truncate">{{ m.tool }}</TruncatedTextTooltip>
+                      <span>{{ m.isError ? '✗' : '✓' }}</span>
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <div class="flex shrink-0 flex-col items-end gap-1">
-                <StatusPill :status="it.status" size="sm" />
-                <span v-if="it.startedAt" class="text-[10px] text-txt3">{{ fmtTime(it.startedAt) }}</span>
+                <div class="flex shrink-0 flex-col items-end gap-1">
+                  <StatusPill :status="it.status" size="sm" />
+                  <span v-if="it.startedAt" class="text-[10px] text-txt3">{{ fmtTime(it.startedAt) }}</span>
+                </div>
               </div>
             </div>
+          </li>
+        </ol>
+      </div>
+      <div
+        class="shrink-0 border-t border-line bg-elevated/60 px-4 py-3"
+        data-testid="timeline-footer"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-2.5">
+          <div class="text-[11px] text-txt3">
+            {{ t('pages.executionTimeline.footerLabel') }}
           </div>
-        </li>
-      </ol>
-    </div>
+          <div class="flex flex-wrap items-end gap-x-5 gap-y-1">
+            <div class="grid gap-0.5" data-testid="timeline-total-tokens">
+              <span class="text-[10px] tracking-wide text-txt3">{{ t('pages.executionTimeline.totalTokens') }}</span>
+              <strong
+                class="font-mono text-[15px] font-bold tabular-nums tracking-tight"
+                :class="usageSummary.totalTokens == null ? 'font-semibold text-txt3' : 'text-txt'"
+              >
+                {{
+                  usageSummary.totalTokens == null
+                    ? t('pages.executionTimeline.dash')
+                    : fmtTokenCount(usageSummary.totalTokens)
+                }}
+              </strong>
+            </div>
+            <div class="grid gap-0.5" data-testid="timeline-token-rate">
+              <span class="text-[10px] tracking-wide text-txt3">{{ t('pages.executionTimeline.tokenRate') }}</span>
+              <strong
+                class="font-mono text-[15px] font-bold tabular-nums tracking-tight"
+                :class="usageSummary.tokenRate == null ? 'font-semibold text-txt3' : 'text-txt'"
+              >
+                {{ usageSummary.tokenRate ?? t('pages.executionTimeline.dash') }}
+              </strong>
+            </div>
+            <div class="grid gap-0.5" data-testid="timeline-wall-clock">
+              <span class="text-[10px] tracking-wide text-txt3">{{ t('pages.executionTimeline.wallClock') }}</span>
+              <strong
+                class="font-mono text-[15px] tabular-nums tracking-tight"
+                :class="runLive ? 'font-bold text-txt' : 'font-semibold text-txt3'"
+              >
+                {{ fmtDuration(wallSec) }}
+              </strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
 </template>

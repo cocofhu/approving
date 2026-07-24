@@ -1761,7 +1761,18 @@
       "header": "Execution timeline · {n} runs (chronological, incl. repeats)",
       "empty": "No executions yet",
       "iterationTitle": "Repeated execution of this node (loop-back / gate revise)",
-      "duration": "Duration {time}"
+      "duration": "Duration {time}",
+      "tokens": "tokens {n}",
+      "tokensEmpty": "tokens —",
+      "partInput": "Input",
+      "partOutput": "Output",
+      "partCacheRead": "Cache read",
+      "partCacheWrite": "Cache write",
+      "footerLabel": "Run summary · items with usage only · wall-clock denominator",
+      "totalTokens": "Total tokens",
+      "tokenRate": "token/s",
+      "wallClock": "Wall clock",
+      "dash": "—"
     },
     "executionStats": {
       "tabSingle": "Single run",

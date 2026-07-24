@@ -285,6 +285,14 @@ export interface McpCall {
   isError?: boolean
 }
 
+/** Per-execution LLM token usage. Absent/undefined = not reported (UI —). */
+export interface TokenUsage {
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+}
+
 export interface NodeRun {
   nodeId: string
   // 该节点的第几次执行(1 起)。循环回边/门禁退回会让同一节点执行多次,
@@ -302,6 +310,11 @@ export interface NodeRun {
   events?: AcpEvent[]
   // 该次执行调用的内置 MCP 工具轨迹(工具名+入出参),便于调试。
   mcpCalls?: McpCall[]
+  /**
+   * Token usage for this execution. undefined/null = not reported (show —);
+   * present (incl. all zeros) = explicitly reported.
+   */
+  usage?: TokenUsage | null
 }
 
 export interface Artifact {

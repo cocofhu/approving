@@ -1,8 +1,8 @@
 name: ci
 
 # Always-on gate for branch protection. Path-filtered suites (ci-server /
-# ci-web / ci-sandbox) still run only when their trees change; this job always
-# reports.
+# ci-web / ci-sandbox / ci-gateway) still run only when their trees change;
+# this job always reports.
 on:
   push:
     branches: [main]
@@ -12,8 +12,8 @@ jobs:
   gate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Gate
         run: |
           echo "Branch protection gate OK."
-          echo "server/ → ci-server; web/ → ci-web; sandbox-gateway/sandbox|scripts → ci-sandbox."
+          echo "server/ → ci-server; web/ → ci-web; sandbox-gateway/sandbox|scripts → ci-sandbox; sandbox-gateway/gateway → ci-gateway."

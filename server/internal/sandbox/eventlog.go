@@ -241,8 +241,17 @@ func dispatchFrame(raw json.RawMessage, result *ChatResult) {
 	var ev struct {
 		Type   string          `json:"type"`
 		Update json.RawMessage `json:"update"`
+		Usage  json.RawMessage `json:"usage"`
 	}
 	if json.Unmarshal(data, &ev) != nil {
+		return
+	}
+	if ev.Type == "prompt_done" {
+		if result != nil {
+			if u := parsePromptDoneUsage(ev.Usage); u != nil {
+				result.Usage = models.AddTokenUsage(result.Usage, u)
+			}
+		}
 		return
 	}
 	if ev.Type == "session_update" && len(ev.Update) > 0 {

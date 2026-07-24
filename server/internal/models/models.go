@@ -108,6 +108,47 @@ type Run struct {
 	CreatedAt   time.Time                 `json:"-"`
 }
 
+// TokenUsage is per-node-execution LLM token accounting (input/output/cache).
+// A nil *TokenUsage means "not reported" (UI shows —); a non-nil value — even
+// when every counter is 0 — means the provider explicitly reported usage.
+type TokenUsage struct {
+	InputTokens      int64 `json:"inputTokens"`
+	OutputTokens     int64 `json:"outputTokens"`
+	CacheReadTokens  int64 `json:"cacheReadTokens"`
+	CacheWriteTokens int64 `json:"cacheWriteTokens"`
+}
+
+// Total returns input+output+cacheRead+cacheWrite.
+func (u TokenUsage) Total() int64 {
+	return u.InputTokens + u.OutputTokens + u.CacheReadTokens + u.CacheWriteTokens
+}
+
+// AddTokenUsage returns dst+src component-wise. nil sources are ignored; the
+// first non-nil source establishes presence (including an all-zero report).
+func AddTokenUsage(dst, src *TokenUsage) *TokenUsage {
+	if src == nil {
+		return dst
+	}
+	if dst == nil {
+		cp := *src
+		return &cp
+	}
+	dst.InputTokens += src.InputTokens
+	dst.OutputTokens += src.OutputTokens
+	dst.CacheReadTokens += src.CacheReadTokens
+	dst.CacheWriteTokens += src.CacheWriteTokens
+	return dst
+}
+
+// CloneTokenUsage returns a shallow copy, or nil when src is nil.
+func CloneTokenUsage(src *TokenUsage) *TokenUsage {
+	if src == nil {
+		return nil
+	}
+	cp := *src
+	return &cp
+}
+
 // StateRun is a single node execution record. It is genuinely append-only: the
 // FSM writes a fresh row every time it (re-)enters a node, so a node that runs
 // multiple times (loop-back / gate revise / rollback retry) keeps every past
@@ -135,11 +176,14 @@ type StateRun struct {
 	// McpCalls records the built-in MCP tool invocations made during this
 	// execution (tool name + truncated in/out), so the run timeline can show
 	// what the agent asked the platform to do — for debugging.
-	McpCalls    []McpCall  `gorm:"serializer:json" json:"mcpCalls,omitempty"`
-	Error       string     `json:"error,omitempty"`
-	Attempt     int        `json:"attempt"`
-	StartedAt   *time.Time `json:"startedAt,omitempty"`
-	DurationSec int        `json:"durationSec"`
+	McpCalls []McpCall `gorm:"serializer:json" json:"mcpCalls,omitempty"`
+	// Usage is the per-execution token total accumulated from prompt_done.usage
+	// across chat turns in this StateRun. nil = provider never reported usage.
+	Usage       *TokenUsage `gorm:"serializer:json" json:"usage,omitempty"`
+	Error       string      `json:"error,omitempty"`
+	Attempt     int         `json:"attempt"`
+	StartedAt   *time.Time  `json:"startedAt,omitempty"`
+	DurationSec int         `json:"durationSec"`
 }
 
 // McpCall is one built-in MCP tool invocation captured during a node execution.

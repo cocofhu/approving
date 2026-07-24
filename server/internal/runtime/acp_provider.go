@@ -291,6 +291,21 @@ func (c *acpProvider) streamChat(ctx context.Context, acp *sandbox.ACPClient, re
 	})
 }
 
+// absorbChat folds one turn's prompt_done.usage into the StateRun-scoped
+// accumulator. Only per-turn ChatResult.Usage is used — never session
+// CumulativeUsage — so cross-node session reuse cannot inflate a later node.
+func absorbChat(usage **models.TokenUsage, events *[]models.AcpEvent, res *sandbox.ChatResult) {
+	if res == nil {
+		return
+	}
+	if events != nil {
+		*events = append(*events, chatResultToEvents(res)...)
+	}
+	if usage != nil {
+		*usage = models.AddTokenUsage(*usage, res.Usage)
+	}
+}
+
 // reactSession keeps a sandbox + ACP connection alive across the human
 // think-time of a multi-turn react dialogue (open → reply → … → done).
 type reactSession struct {
@@ -502,32 +517,32 @@ func (c *acpProvider) runAgentOnce(ctx context.Context, req NodeReq) (res NodeRe
 	chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
 	defer cancel()
 	var chatRes *sandbox.ChatResult
+	var usage *models.TokenUsage
 	chatRes, err = c.streamChat(chatCtx, acp, req, c.buildAgentPrompt(req, seeded), req.PromptImages)
 	if err != nil {
 		if isRetryableSandboxErr(err) {
 			keepForDebug = false
 		}
 		events := c.snapshotEvents(ctx, sb, turnEvents)
-		return NodeResult{Events: events}, fmt.Errorf("agent chat: %w", err)
+		return NodeResult{Events: events, Usage: usage}, fmt.Errorf("agent chat: %w", err)
 	}
-
-	turnEvents = chatResultToEvents(chatRes)
+	absorbChat(&usage, &turnEvents, chatRes)
 	out := map[string]any{"content": chatRes.Narration, "narration_summary": firstLine(chatRes.Narration)}
 
 	// Implement nodes must drive the run plan to completion: if items remain,
 	// re-prompt the agent (same session) to finish them, then fail the node if
 	// it still can't. Folds any re-prompt turns into the event log.
 	if req.NodeType == "implement" {
-		if perr := c.ensurePlanComplete(ctx, req, acp, &turnEvents); perr != nil {
+		if perr := c.ensurePlanComplete(ctx, req, acp, &turnEvents, &usage); perr != nil {
 			events := c.snapshotEvents(ctx, sb, turnEvents)
-			return NodeResult{OutputMd: chatRes.Narration, Outputs: out, Events: events}, perr
+			return NodeResult{OutputMd: chatRes.Narration, Outputs: out, Events: events, Usage: usage}, perr
 		}
 	}
 
 	if req.NodeType == "app_preview" {
-		if perr := c.ensurePreviewRegistered(ctx, req, acp, &turnEvents); perr != nil {
+		if perr := c.ensurePreviewRegistered(ctx, req, acp, &turnEvents, &usage); perr != nil {
 			events := c.snapshotEvents(ctx, sb, turnEvents)
-			return NodeResult{OutputMd: chatRes.Narration, Outputs: out, Events: events}, perr
+			return NodeResult{OutputMd: chatRes.Narration, Outputs: out, Events: events, Usage: usage}, perr
 		}
 	}
 
@@ -536,9 +551,9 @@ func (c *acpProvider) runAgentOnce(ctx context.Context, req NodeReq) (res NodeRe
 	// best-effort re-prompt to write it via the naming set_* tool; the engine
 	// still fails the node if it is ultimately absent.
 	if name, tool := structuredArtifactFor(req.NodeType); name != "" {
-		if serr := c.ensureStructured(ctx, req, acp, name, tool, &turnEvents); serr != nil {
+		if serr := c.ensureStructured(ctx, req, acp, name, tool, &turnEvents, &usage); serr != nil {
 			events := c.snapshotEvents(ctx, sb, turnEvents)
-			return NodeResult{OutputMd: chatRes.Narration, Outputs: out, Events: events}, serr
+			return NodeResult{OutputMd: chatRes.Narration, Outputs: out, Events: events, Usage: usage}, serr
 		}
 	}
 
@@ -554,7 +569,7 @@ func (c *acpProvider) runAgentOnce(ctx context.Context, req NodeReq) (res NodeRe
 			if err := c.harvest(ctx, sb, req, produces, out, &events); err != nil {
 				// Surface the partial result but report the contract miss so the
 				// engine can route failure/rollback per the FSM definition.
-				return NodeResult{OutputMd: chatRes.Narration, Outputs: out, Events: events}, err
+				return NodeResult{OutputMd: chatRes.Narration, Outputs: out, Events: events, Usage: usage}, err
 			}
 		}
 	}
@@ -598,8 +613,8 @@ func (c *acpProvider) runAgentOnce(ctx context.Context, req NodeReq) (res NodeRe
 	// completion. Soft re-prompt here; the engine still fails if the mark is
 	// ultimately absent. submit_mr no longer runs verifyMR (git/glab) — the
 	// agent attests via node_complete outputs instead.
-	if oerr := c.ensureOutcome(ctx, req, acp, &events); oerr != nil {
-		return NodeResult{OutputMd: chatRes.Narration, Outputs: out, Events: events, Git: git}, oerr
+	if oerr := c.ensureOutcome(ctx, req, acp, &events, &usage); oerr != nil {
+		return NodeResult{OutputMd: chatRes.Narration, Outputs: out, Events: events, Git: git, Usage: usage}, oerr
 	}
 
 	// Post-run ReAct review handoff: keep the live sandbox + ACP session alive
@@ -619,7 +634,7 @@ func (c *acpProvider) runAgentOnce(ctx context.Context, req NodeReq) (res NodeRe
 			Msg("parked live session for post-run ReAct review")
 	}
 
-	return NodeResult{OutputMd: chatRes.Narration, Outputs: out, Events: events, Git: git}, nil
+	return NodeResult{OutputMd: chatRes.Narration, Outputs: out, Events: events, Git: git, Usage: usage}, nil
 }
 
 // collectChanges builds the VCS-neutral change report over the SSH data plane,
@@ -790,13 +805,15 @@ func (c *acpProvider) ReactOpen(ctx context.Context, req NodeReq) ReactTurn {
 				c.live[key] = sb
 				c.mu.Unlock()
 				qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
-				events := chatResultToEvents(res)
+				var usage *models.TokenUsage
+				var events []models.AcpEvent
+				absorbChat(&usage, &events, res)
 				// Opening turn with questions: pause for the human to choose.
 				if len(qs) > 0 && !reactCapReached(req, nil) {
-					return ReactTurn{Msg: res.Narration, Questions: qs, Events: events}
+					return ReactTurn{Msg: res.Narration, Questions: qs, Events: events, Usage: usage}
 				}
 				// No questions on the opening turn ⇒ clarification is concluded.
-				return c.finishReact(ctx, req, key, sess, res.Narration, nil, events)
+				return c.finishReact(ctx, req, key, sess, res.Narration, nil, events, usage)
 			}
 			// Chat failed. Retryable → discard the broken sandbox and loop;
 			// otherwise retain it (debug TTL) and surface the failure.
@@ -920,7 +937,9 @@ func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []mod
 			}},
 		}
 	}
-	events := chatResultToEvents(res)
+	var usage *models.TokenUsage
+	var events []models.AcpEvent
+	absorbChat(&usage, &events, res)
 
 	qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
 	// Clarification is a gate: unless the user forced a finish or the round cap
@@ -930,17 +949,21 @@ func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []mod
 	// re-surfaced as ask_question so the user resolves every one.
 	if !force && !reactCapReached(req, history) {
 		if len(qs) > 0 {
-			return ReactTurn{Msg: res.Narration, Questions: qs, Events: events}
+			return ReactTurn{Msg: res.Narration, Questions: qs, Events: events, Usage: usage}
 		}
-		if gq, msg, ge, ok := c.enforceOpenQuestionsGate(ctx, req, sess); ok {
+		if gq, msg, ge, gu, ok := c.enforceOpenQuestionsGate(ctx, req, sess); ok {
 			events = append(events, ge...)
+			usage = models.AddTokenUsage(usage, gu)
 			if strings.TrimSpace(msg) == "" {
 				msg = res.Narration
 			}
-			return ReactTurn{Msg: msg, Questions: gq, Events: events}
+			return ReactTurn{Msg: msg, Questions: gq, Events: events, Usage: usage}
+		} else if gu != nil {
+			events = append(events, ge...)
+			usage = models.AddTokenUsage(usage, gu)
 		}
 	}
-	return c.finishReact(ctx, req, key, sess, res.Narration, history, events)
+	return c.finishReact(ctx, req, key, sess, res.Narration, history, events, usage)
 }
 
 // ReviseInPlace sends one review turn to the parked session and keeps it alive.
@@ -982,18 +1005,20 @@ func (c *acpProvider) ReviseInPlace(ctx context.Context, req NodeReq, history []
 		return ReactTurn{Msg: "(复审修改失败:" + err.Error() + ")", Err: err,
 			Events: []models.AcpEvent{{Kind: "message", Text: "review revise chat failed: " + err.Error()}}}
 	}
-	events := chatResultToEvents(res)
+	var usage *models.TokenUsage
+	var events []models.AcpEvent
+	absorbChat(&usage, &events, res)
 	// Drop any questions the agent raised — a review edit is not a clarify gate.
 	c.host.TakePendingQuestions(req.RunID, req.NodeID)
 	// Re-persist the structured product so the store reflects the edit (the
 	// engine re-derives outputs from it). No-op for nodes without a set_* tool.
 	if name, tool := structuredArtifactFor(req.NodeType); name != "" {
-		if serr := c.ensureStructured(ctx, req, sess.acp, name, tool, &events); serr != nil {
+		if serr := c.ensureStructured(ctx, req, sess.acp, name, tool, &events, &usage); serr != nil {
 			log.Warn().Err(serr).Str("node", req.NodeID).Msg("review revise ensure product failed")
 		}
 	}
 	events = c.snapshotEvents(ctx, sess.sb, events)
-	return ReactTurn{Msg: res.Narration, Done: false, Events: events}
+	return ReactTurn{Msg: res.Narration, Done: false, Events: events, Usage: usage}
 }
 
 // HasLiveSession reports whether a parked review session is held for the node.
@@ -1017,19 +1042,19 @@ func (c *acpProvider) RetireSession(runID, nodeID string) {
 // when the gate held (i.e. new questions were raised and the node must keep
 // clarifying). ok=false lets the caller finish normally: no artifact yet, no
 // open questions, or the agent declined to ask again (avoids an infinite loop).
-func (c *acpProvider) enforceOpenQuestionsGate(ctx context.Context, req NodeReq, sess *reactSession) ([]models.ReactQuestion, string, []models.AcpEvent, bool) {
+func (c *acpProvider) enforceOpenQuestionsGate(ctx context.Context, req NodeReq, sess *reactSession) ([]models.ReactQuestion, string, []models.AcpEvent, *models.TokenUsage, bool) {
 	content, err := c.host.ReadArtifact(req.RunID, req.Token, mcp.ClarifiedRequirementArtifactName)
 	if err != nil {
-		return nil, "", nil, false
+		return nil, "", nil, nil, false
 	}
 	if !json.Valid([]byte(content)) {
 		log.Warn().Str("run", req.RunID).Str("node", req.NodeID).
 			Msg("react open-questions gate: clarified requirement unparseable; skipping")
-		return nil, "", nil, false
+		return nil, "", nil, nil, false
 	}
 	open := mcp.ClarifiedOpenQuestions(content)
 	if len(open) == 0 {
-		return nil, "", nil, false
+		return nil, "", nil, nil, false
 	}
 	prompt := c.agentPrompts(str2(req.Config["skill_profile"])).ClarifiedOpenQuestionsRetryFor(open)
 	chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
@@ -1037,9 +1062,11 @@ func (c *acpProvider) enforceOpenQuestionsGate(ctx context.Context, req NodeReq,
 	cancel()
 	if err != nil {
 		log.Warn().Err(err).Str("node", req.NodeID).Msg("react open-questions gate re-prompt failed")
-		return nil, "", nil, false
+		return nil, "", nil, nil, false
 	}
-	events := chatResultToEvents(res)
+	var usage *models.TokenUsage
+	var events []models.AcpEvent
+	absorbChat(&usage, &events, res)
 	qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
 	if len(qs) == 0 {
 		// The agent didn't raise the questions despite the nudge. Let the node
@@ -1047,16 +1074,16 @@ func (c *acpProvider) enforceOpenQuestionsGate(ctx context.Context, req NodeReq,
 		log.Warn().Str("run", req.RunID).Str("node", req.NodeID).
 			Int("open_questions", len(open)).
 			Msg("react open-questions gate: agent declined to ask; finishing with unresolved notes")
-		return nil, "", events, false
+		return nil, "", events, usage, false
 	}
-	return qs, res.Narration, events, true
+	return qs, res.Narration, events, usage, true
 }
 
 // finishReact runs the shared completion path for a react node: ensure the
 // declared produces artifact exists (re-prompting the agent to write it),
 // snapshot the event log, capture any code changes, tear the session down and
 // return a Done ReactTurn.
-func (c *acpProvider) finishReact(ctx context.Context, req NodeReq, key string, sess *reactSession, narration string, history []models.ReactMessage, events []models.AcpEvent) ReactTurn {
+func (c *acpProvider) finishReact(ctx context.Context, req NodeReq, key string, sess *reactSession, narration string, history []models.ReactMessage, events []models.AcpEvent, usage *models.TokenUsage) ReactTurn {
 	// Ensure the node's reserved structured product exists (re-prompting the
 	// agent to write it via its set_* tool). react → clarified requirement;
 	// plan/proposal/research/review/implement → their own product. Visual and
@@ -1064,29 +1091,30 @@ func (c *acpProvider) finishReact(ctx context.Context, req NodeReq, key string, 
 	// their product (page.html / produces) is enforced by the engine's
 	// finalizeProduct on the finish path.
 	if name, tool := structuredArtifactFor(req.NodeType); name != "" {
-		if err := c.ensureStructured(ctx, req, sess.acp, name, tool, &events); err != nil {
+		if err := c.ensureStructured(ctx, req, sess.acp, name, tool, &events, &usage); err != nil {
 			events = c.snapshotEvents(ctx, sess.sb, events)
 			c.closeSession(key)
-			return ReactTurn{Done: true, Err: err, Msg: err.Error(), Events: events,
-				Result: NodeResult{Events: events}}
+			return ReactTurn{Done: true, Err: err, Msg: err.Error(), Events: events, Usage: usage,
+				Result: NodeResult{Events: events, Usage: usage}}
 		}
 	}
-	if err := c.ensureOutcome(ctx, req, sess.acp, &events); err != nil {
+	if err := c.ensureOutcome(ctx, req, sess.acp, &events, &usage); err != nil {
 		events = c.snapshotEvents(ctx, sess.sb, events)
 		c.closeSession(key)
-		return ReactTurn{Done: true, Err: err, Msg: err.Error(), Events: events,
-			Result: NodeResult{Events: events}}
+		return ReactTurn{Done: true, Err: err, Msg: err.Error(), Events: events, Usage: usage,
+			Result: NodeResult{Events: events, Usage: usage}}
 	}
 	events = c.snapshotEvents(ctx, sess.sb, events)
 	out := map[string]any{"clarified_requirement": narration, "content": narration, "transcript": renderTranscript(history)}
 	git := c.captureChanges(ctx, sess.sb, req, out)
 	c.closeSession(key)
-	return ReactTurn{Msg: narration, Done: true, Events: events, Result: NodeResult{OutputMd: narration, Outputs: out, Events: events, Git: git}}
+	return ReactTurn{Msg: narration, Done: true, Events: events, Usage: usage,
+		Result: NodeResult{OutputMd: narration, Outputs: out, Events: events, Git: git, Usage: usage}}
 }
 
 // ensureOutcome re-prompts the agent to call node_complete when the mark is
 // still missing (best-effort; engine fails closed if ultimately absent).
-func (c *acpProvider) ensureOutcome(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, events *[]models.AcpEvent) error {
+func (c *acpProvider) ensureOutcome(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, events *[]models.AcpEvent, usage **models.TokenUsage) error {
 	if c.host.HasOutcome(req.RunID, req.NodeID) {
 		return nil
 	}
@@ -1112,7 +1140,7 @@ func (c *acpProvider) ensureOutcome(ctx context.Context, req NodeReq, acp *sandb
 				Msg("node_complete re-prompt failed")
 			return nil
 		}
-		*events = append(*events, chatResultToEvents(res)...)
+		absorbChat(usage, events, res)
 		c.host.TakePendingQuestions(req.RunID, req.NodeID)
 	}
 	return nil
@@ -1124,7 +1152,7 @@ func (c *acpProvider) ensureOutcome(ctx context.Context, req NodeReq, acp *sandb
 // to producesRetry times. Intermediate turns are folded into events. Unlike the
 // old produces path there is no workspace harvest — structured products are
 // written only through MCP.
-func (c *acpProvider) ensureStructured(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, name, tool string, events *[]models.AcpEvent) error {
+func (c *acpProvider) ensureStructured(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, name, tool string, events *[]models.AcpEvent, usage **models.TokenUsage) error {
 	satisfied := func() bool {
 		_, err := c.host.ReadArtifact(req.RunID, req.Token, name)
 		return err == nil
@@ -1152,7 +1180,7 @@ func (c *acpProvider) ensureStructured(ctx context.Context, req NodeReq, acp *sa
 				Str("artifact", name).Msg("structured product re-prompt failed")
 			return nil
 		}
-		*events = append(*events, chatResultToEvents(res)...)
+		absorbChat(usage, events, res)
 		// Drop any questions raised during the wrap-up turn — the node is
 		// finishing, not reopening a clarification.
 		c.host.TakePendingQuestions(req.RunID, req.NodeID)
@@ -1171,7 +1199,7 @@ func structuredArtifactFor(nodeType string) (name, tool string) {
 // re-prompts the agent (same session) to finish them, up to max_rounds times.
 // A missing/unparseable plan is treated as "nothing to enforce" (nil). If items
 // still remain after the loop it returns an error so the engine fails the node.
-func (c *acpProvider) ensurePlanComplete(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, events *[]models.AcpEvent) error {
+func (c *acpProvider) ensurePlanComplete(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, events *[]models.AcpEvent, usage **models.TokenUsage) error {
 	maxRounds := 3
 	if mr, ok := toInt(req.Config["max_rounds"]); ok && mr > 0 {
 		maxRounds = mr
@@ -1201,7 +1229,7 @@ func (c *acpProvider) ensurePlanComplete(ctx context.Context, req NodeReq, acp *
 				Msg("implement plan-complete re-prompt failed")
 			break
 		}
-		*events = append(*events, chatResultToEvents(res)...)
+		absorbChat(usage, events, res)
 	}
 	inc, err := c.host.PlanIncomplete(req.RunID, req.Token)
 	if err != nil {
@@ -1219,7 +1247,7 @@ func (c *acpProvider) ensurePlanComplete(ctx context.Context, req NodeReq, acp *
 
 // ensurePreviewRegistered drives an app_preview node to register at least one
 // preview port via set_preview, re-prompting up to max_rounds when absent.
-func (c *acpProvider) ensurePreviewRegistered(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, events *[]models.AcpEvent) error {
+func (c *acpProvider) ensurePreviewRegistered(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, events *[]models.AcpEvent, usage **models.TokenUsage) error {
 	maxRounds := 3
 	if mr, ok := toInt(req.Config["max_rounds"]); ok && mr > 0 {
 		maxRounds = mr
@@ -1239,7 +1267,7 @@ func (c *acpProvider) ensurePreviewRegistered(ctx context.Context, req NodeReq, 
 			log.Warn().Err(err).Str("node", req.NodeID).Msg("app_preview set_preview re-prompt failed")
 			break
 		}
-		*events = append(*events, chatResultToEvents(res)...)
+		absorbChat(usage, events, res)
 		c.host.TakePendingQuestions(req.RunID, req.NodeID)
 	}
 	if !c.host.HasPreviewPorts(req.RunID, req.NodeID) {

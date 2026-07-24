@@ -9,7 +9,7 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Require digest-pinned images
         env:
           APPROVING_IMAGE: ${{ secrets.APPROVING_IMAGE }}
@@ -21,7 +21,7 @@ jobs:
           test -n "$SANDBOX_IMAGE"
           export APPROVING_IMAGE SANDBOX_GATEWAY_IMAGE SANDBOX_IMAGE
           ./release-smoke.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: release-evidence

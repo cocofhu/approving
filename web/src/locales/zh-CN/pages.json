@@ -1761,7 +1761,18 @@
       "header": "执行时间线 · {n} 次执行(按时间顺序,含重复执行)",
       "empty": "暂无执行记录",
       "iterationTitle": "该节点的重复执行(循环回边 / 门禁退回)",
-      "duration": "耗时 {time}"
+      "duration": "耗时 {time}",
+      "tokens": "tokens {n}",
+      "tokensEmpty": "tokens —",
+      "partInput": "输入",
+      "partOutput": "输出",
+      "partCacheRead": "缓存读",
+      "partCacheWrite": "缓存写",
+      "footerLabel": "Run 汇总 · 仅合计有用量环节 · 分母为墙钟耗时",
+      "totalTokens": "总 token",
+      "tokenRate": "token/s",
+      "wallClock": "墙钟",
+      "dash": "—"
     },
     "executionStats": {
       "tabSingle": "单次 Run 统计",
