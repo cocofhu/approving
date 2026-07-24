@@ -140,6 +140,28 @@ RUN curl -fsSL --http1.1 --retry 8 --retry-delay 5 --retry-all-errors --connect-
     rm -rf /tmp/glab.tgz /tmp/bin /tmp/CHANGELOG.md /tmp/LICENSE /tmp/README.md && \
     glab --version
 
+# GitHub CLI（与 startup.sh 中 GITHUB_TOKEN 自动执行 gh auth login 配合；Agent 侧 gh pr 建单依赖）
+# github.com 在国内构建易 SSL/超时，官方 release + 镜像回退。
+ENV GH_VERSION=2.96.0
+RUN set -eu; \
+    file="gh_${GH_VERSION}_linux_amd64.tar.gz"; \
+    ok=0; \
+    for url in \
+      "https://github.com/cli/cli/releases/download/v${GH_VERSION}/${file}" \
+      "https://ghfast.top/https://github.com/cli/cli/releases/download/v${GH_VERSION}/${file}"; do \
+      if curl -fsSL --http1.1 --retry 5 --retry-delay 5 --retry-all-errors \
+          --connect-timeout 30 --max-time 300 "$url" -o /tmp/gh.tgz; then \
+        ok=1; \
+        break; \
+      fi; \
+      rm -f /tmp/gh.tgz; \
+    done; \
+    test "$ok" = "1"; \
+    tar -xzf /tmp/gh.tgz -C /tmp; \
+    install -m 0755 "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" /usr/local/bin/gh; \
+    rm -rf /tmp/gh.tgz "/tmp/gh_${GH_VERSION}_linux_amd64"; \
+    gh --version
+
 # Node.js LTS（nodejs.org 官方 CDN 国内常 SSL 中断；改用 npmmirror 镜像 + 强重试）
 ENV NODE_VERSION=24.13.0
 ENV NODE_ARCH=x64

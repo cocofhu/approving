@@ -79,7 +79,8 @@
 - 入参语义:**工作区来源** + **环境变量**。
   - core 语义:`WORKSPACE_DIR`(工作目录),容器进程 cwd 即此目录。
   - 参考实现:`GIT_REPOS`(逗号分隔,每项 `name|url|branch`)触发逐仓 git clone 到
-    `WORKSPACE_DIR/<name>/`(根目录不是仓库);`GITLAB_URL`/`GITLAB_TOKEN` 供 glab。
+    `WORKSPACE_DIR/<name>/`(根目录不是仓库);`GITLAB_URL`/`GITLAB_TOKEN` 供 glab,
+    `GITHUB_URL`/`GITHUB_TOKEN` 供 gh。
     这些都是 reference-only —— 换其它来源/VCS,改对应实现即可。
   - `GIT_REPOS` 与凭据一样用「环境变量 + 引用」在 Agent 元信息里显式接线:
     `"GIT_REPOS": "${vars.repos}"`(引用工作流 `repos` 变量,展开为上述格式)。

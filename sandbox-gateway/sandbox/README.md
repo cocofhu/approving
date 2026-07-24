@@ -2,7 +2,7 @@
 
 一体化远程开发沙箱镜像，作为平台统一使用的标准镜像。由两份现有镜像合并而来：
 
-- **运行环境**（来自 ai-tool/sandbox）：Ubuntu 22.04、多语言工具链、容器内 **Docker（DinD）**、**SSH**、**code-server**（浏览器 IDE）、DB 客户端（mysql/redis/psql/mongosh）、Cursor CLI、Claude Code、glab。
+- **运行环境**（来自 ai-tool/sandbox）：Ubuntu 22.04、多语言工具链、容器内 **Docker（DinD）**、**SSH**、**code-server**（浏览器 IDE）、DB 客户端（mysql/redis/psql/mongosh）、Cursor CLI、Claude Code、glab、gh。
 - **agent 与代码能力**（来自 code-flow/sandbox）：多后端 **backend**（ACP 桥接服务）、**多仓库 PULL**、多托管商 **git 凭据路由**、**Playwright（Chromium）+ noVNC 预览栈**。
 
 四类 agent 后端 CLI 均已预装，`ACP_BACKEND` 单活切换：`cursor`（Cursor CLI）、`claude_code`（`@zed-industries/claude-code-acp`）、`codebuddy`（`@tencent-ai/codebuddy-code`）、`trae`（Trae CLI）。
@@ -108,7 +108,7 @@ docker run --privileged -d \
 
 | 变量 | 默认值 | 作用 |
 | --- | --- | --- |
-| `GITHUB_TOKEN` | 空 | GitHub token（`github.com` 或由 `GITHUB_URL` 匹配的自建实例） |
+| `GITHUB_TOKEN` | 空 | GitHub token（`github.com` 或由 `GITHUB_URL` 匹配的自建实例）；命中时自动 `gh auth login` |
 | `GITHUB_URL` | 空 | 自建 GitHub 的 `scheme+host`，用于匹配 repo host |
 | `GITLAB_TOKEN` | 空 | GitLab token；命中时自动 `glab auth login` |
 | `GITLAB_URL` | 空 | GitLab 实例地址（自建必填；仅设 token 无 URL 时跳过注入） |
