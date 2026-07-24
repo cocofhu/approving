@@ -884,10 +884,10 @@ func TestSandboxMcpVars(t *testing.T) {
 	}
 }
 
-func TestSandboxMcpVarsRewritesSPAFromLiveConfig(t *testing.T) {
+func TestSandboxMcpVarsUsesLiveConfigPassthrough(t *testing.T) {
 	prev := config.GetConfig()
 	t.Cleanup(func() { config.StoreConfig(prev) })
-	config.StoreConfig(&config.Config{Server: config.ServerConfig{MCPAdvertise: "http://spa.example.com"}})
+	config.StoreConfig(&config.Config{Server: config.ServerConfig{MCPAdvertise: "http://api.example.com"}})
 
 	db := newTestDB(t)
 	ds := &dockerState{}
@@ -899,7 +899,7 @@ func TestSandboxMcpVarsRewritesSPAFromLiveConfig(t *testing.T) {
 	}
 }
 
-func TestSandboxMcpVarsRewritesSPAFromOptionsFallback(t *testing.T) {
+func TestSandboxMcpVarsUsesOptionsFallbackPassthrough(t *testing.T) {
 	prev := config.GetConfig()
 	t.Cleanup(func() { config.StoreConfig(prev) })
 	config.StoreConfig(nil) // force Options fallback path
@@ -907,11 +907,11 @@ func TestSandboxMcpVarsRewritesSPAFromOptionsFallback(t *testing.T) {
 	db := newTestDB(t)
 	ds := &dockerState{}
 	s := newSandboxService(t, db, ds)
-	s.mcpEndpoint = "http://spa.example.com"
+	s.mcpEndpoint = "http://api.example.com"
 	vars := s.mcpVars("run-opt", "tok")
 	want := "http://api.example.com/mcp/runs/run-opt"
 	if vars["APPROVING_ARTIFACT_URL"] != want {
-		t.Fatalf("APPROVING_ARTIFACT_URL = %q, want %q (Options SPA must be rewritten)", vars["APPROVING_ARTIFACT_URL"], want)
+		t.Fatalf("APPROVING_ARTIFACT_URL = %q, want %q", vars["APPROVING_ARTIFACT_URL"], want)
 	}
 }
 
