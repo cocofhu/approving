@@ -380,43 +380,74 @@ type ReactQuestion struct {
 type ReactOption struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
-	// Recommended marks this option as the agent's suggested choice. At most one
-	// option per question is recommended; the UI highlights it and auto-select
-	// (auto_var / "采用推荐") prefers it. When no option is recommended, the
-	// first option is chosen as the fallback.
+	// Recommended marks this option as the agent's suggested choice. For
+	// single-select (!AllowMultiple) at most one option should be recommended;
+	// for multi-select, one or more may be recommended. The UI highlights them
+	// and auto-select (auto_var) prefers all recommended options. When none are
+	// recommended, the first option is chosen as the fallback.
 	Recommended bool `json:"recommended,omitempty"`
 	// DemoHtml is an optional self-contained HTML document (<!doctype html>…) for
 	// UI/layout visual decisions. Rendered in the clarify card iframe preview.
 	DemoHtml string `json:"demoHtml,omitempty"`
 }
 
-// SelectRecommendedOption resolves the auto-selected option for a question:
-// the recommended one when present, otherwise the first option. Returns false
-// when the question has no options at all.
-func SelectRecommendedOption(q ReactQuestion) (ReactOption, bool) {
+// SelectRecommendedOptions resolves the auto-selected option set for a question.
+// When AllowMultiple is true, every recommended option is returned; when false,
+// at most the first recommended option is returned. With zero recommendations
+// the first option is the fallback. Returns false when the question has no
+// options at all.
+func SelectRecommendedOptions(q ReactQuestion) ([]ReactOption, bool) {
 	if len(q.Options) == 0 {
-		return ReactOption{}, false
+		return nil, false
+	}
+	if q.AllowMultiple {
+		picked := make([]ReactOption, 0, len(q.Options))
+		for _, o := range q.Options {
+			if o.Recommended {
+				picked = append(picked, o)
+			}
+		}
+		if len(picked) == 0 {
+			return []ReactOption{q.Options[0]}, true
+		}
+		return picked, true
 	}
 	for _, o := range q.Options {
 		if o.Recommended {
-			return o, true
+			return []ReactOption{o}, true
 		}
 	}
-	return q.Options[0], true
+	return []ReactOption{q.Options[0]}, true
+}
+
+// SelectRecommendedOption resolves a single auto-selected option for a
+// question (first of SelectRecommendedOptions). Prefer SelectRecommendedOptions
+// when AllowMultiple may select more than one.
+func SelectRecommendedOption(q ReactQuestion) (ReactOption, bool) {
+	opts, ok := SelectRecommendedOptions(q)
+	if !ok || len(opts) == 0 {
+		return ReactOption{}, false
+	}
+	return opts[0], true
 }
 
 // FormatChoiceReply builds the human reply text an auto-select would submit,
 // matching the UI's "我的选择:\n- 问题 → 选项" format so the transcript reads the
 // same whether the choice came from a human click or an automatic pick. Each
-// question resolves to its recommended option (or the first as fallback).
+// question resolves to its recommended option set (or the first as fallback);
+// multi-select labels are joined with "、", matching ClarifyChat.submitChoices.
 func FormatChoiceReply(questions []ReactQuestion) string {
 	lines := make([]string, 0, len(questions))
 	for _, q := range questions {
-		opt, ok := SelectRecommendedOption(q)
+		opts, ok := SelectRecommendedOptions(q)
 		if !ok {
 			continue
 		}
-		lines = append(lines, "- "+q.Prompt+" → "+opt.Label)
+		labels := make([]string, len(opts))
+		for i, o := range opts {
+			labels[i] = o.Label
+		}
+		lines = append(lines, "- "+q.Prompt+" → "+strings.Join(labels, "、"))
 	}
 	if len(lines) == 0 {
 		return ""

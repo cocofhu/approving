@@ -528,9 +528,51 @@ function onClarifyFinish() {
     : t('pages.runDetail.clarifyFinishPrompt')
   onClarifySend(prompt, [], [], true)
 }
-async function onCancel() {
-  try { await api.cancelRun(runId.value) } catch {}
-  await loadRun(false)
+const canCancelRun = computed(() => {
+  const s = run.value?.status
+  return s === 'queued' || s === 'running' || s === 'waiting_human'
+})
+
+const showCancelConfirm = ref(false)
+const cancellingRun = ref(false)
+const cancelRunError = ref('')
+
+function openCancelConfirm() {
+  if (!canCancelRun.value || cancellingRun.value) return
+  cancelRunError.value = ''
+  showCancelConfirm.value = true
+}
+
+function closeCancelConfirm() {
+  if (cancellingRun.value) return
+  showCancelConfirm.value = false
+  cancelRunError.value = ''
+}
+
+function mapCancelRunError(e: unknown): string {
+  const status = (e as { status?: number })?.status
+  const msg = e instanceof Error ? e.message : String(e || '')
+  if (status === 404 || /not found/i.test(msg)) return t('pages.runDetail.cancelErrorNotFound')
+  if (status === 400 || /already finished|cannot cancel/i.test(msg)) {
+    return t('pages.runDetail.cancelErrorNotCancellable')
+  }
+  return msg || t('pages.runDetail.cancelErrorGeneric')
+}
+
+async function confirmCancelRun() {
+  if (!canCancelRun.value || cancellingRun.value) return
+  cancellingRun.value = true
+  cancelRunError.value = ''
+  try {
+    await api.cancelRun(runId.value)
+    showCancelConfirm.value = false
+    toast.success(t('pages.runDetail.cancelSuccess'))
+    await loadRun(false)
+  } catch (e) {
+    cancelRunError.value = mapCancelRunError(e)
+  } finally {
+    cancellingRun.value = false
+  }
 }
 
 const canDeleteRun = computed(() => {
@@ -1322,7 +1364,15 @@ function selectExecution(nodeId: string, idx: number) {
               <Icon name="refresh" :size="14" :class="{ 'animate-spin': refreshing }" />
               {{ t('common.buttons.refresh') }}
             </button>
-            <AppButton v-if="run.status === 'running' || run.status === 'waiting_human'" variant="danger" size="sm" icon="close" @click="onCancel">{{ t('common.buttons.cancelRun') }}</AppButton>
+            <AppButton
+              v-if="canCancelRun"
+              data-testid="cancel-run-btn"
+              variant="danger"
+              size="sm"
+              icon="close"
+              :disabled="cancellingRun"
+              @click="openCancelConfirm"
+            >{{ t('common.buttons.cancelRun') }}</AppButton>
             <AppButton
               data-testid="delete-run-btn"
               variant="danger"
@@ -1767,6 +1817,41 @@ function selectExecution(nodeId: string, idx: number) {
         </div>
       </div>
     </AppDrawer>
+
+    <AppModal
+      :open="showCancelConfirm"
+      :title="t('pages.runDetail.cancelTitle')"
+      :width="440"
+      @close="closeCancelConfirm"
+    >
+      <div class="space-y-3 text-sm text-txt2">
+        <div class="flex items-start gap-2 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-[12px] text-err">
+          <Icon name="alert" :size="14" class="mt-0.5 shrink-0" />
+          {{ t('pages.runDetail.cancelWarning') }}
+        </div>
+        <p>{{ t('pages.runDetail.cancelConfirm') }}</p>
+        <div
+          v-if="cancelRunError"
+          class="flex items-start gap-2 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-[12px] text-err"
+        >
+          <Icon name="alert" :size="14" class="mt-0.5" />{{ cancelRunError }}
+        </div>
+      </div>
+      <template #footer>
+        <AppButton variant="ghost" :disabled="cancellingRun" @click="closeCancelConfirm">
+          {{ t('common.buttons.cancel') }}
+        </AppButton>
+        <AppButton
+          data-testid="confirm-cancel-run-btn"
+          variant="danger"
+          icon="close"
+          :disabled="cancellingRun"
+          @click="confirmCancelRun"
+        >
+          {{ cancellingRun ? t('common.buttons.cancelling') : t('common.buttons.confirmCancelRun') }}
+        </AppButton>
+      </template>
+    </AppModal>
 
     <AppModal
       :open="showDeleteConfirm"

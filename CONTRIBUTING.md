@@ -62,6 +62,19 @@ Dev-only local sandbox image:
 ./start.sh sandbox       # build universal-sandbox-cursor:local
 ```
 
+## Coverage badges
+
+README shows `coverage-web` / `coverage-sandbox` Lines% via shields.io Endpoint
+Badges. Endpoint JSON lives on the orphan `coverage-badges` branch and is
+updated only when the corresponding workflow succeeds on the default branch
+(`ci-web` / `ci-sandbox`). Failed or skipped coverage runs do not overwrite the
+last successful value. Color bands: ≥85% green, 70–84% yellow, below 70% orange;
+cold start is `n/a` / lightgrey.
+
+Because those workflows are path-filtered, a module badge stays at its last
+successful percent until that module’s paths change again — expected lag, not a
+badge outage. There is no `coverage-server` badge and no coverage SaaS.
+
 ## Changes and pull requests
 
 1. Create a focused branch from the current default branch.

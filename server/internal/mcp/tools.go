@@ -375,9 +375,10 @@ func parseQuestions(v any) []models.ReactQuestion {
 				if opt.ID == "" {
 					opt.ID = "o" + strconv.Itoa(oi+1)
 				}
-				// At most one recommended option per question: keep the first,
-				// drop the rest so auto-select is unambiguous.
-				if opt.Recommended {
+				// Single-select: at most one recommended (keep the first, clear
+				// the rest). Multi-select: keep every recommended mark so auto
+				// can select the full recommended set.
+				if opt.Recommended && !q.AllowMultiple {
 					if recommendedSeen {
 						opt.Recommended = false
 					} else {
@@ -524,7 +525,7 @@ func artifactTools() []map[string]any {
 										"properties": map[string]any{
 											"id":          strProp("可选:选项标识"),
 											"label":       strProp("选项显示文本"),
-											"recommended": map[string]any{"type": "boolean", "description": "可选:是否推荐(每题最多一个);界面高亮该项,自动模式会优先选它"},
+											"recommended": map[string]any{"type": "boolean", "description": "可选:是否推荐;单选每题最多 1 个,多选应标记 1 个或多个;界面高亮,自动模式会选中全部推荐项(未标记则回退该题首项)"},
 											"demoHtml":    strProp("可选:完整 HTML 文档(<!doctype html> 开头),用于 UI/交互/布局类视觉决策的 iframe 预览;运行于 Gates HtmlPreview sandbox(allow-scripts allow-forms,无 allow-same-origin,opaque origin),禁止依赖 localStorage/sessionStorage/cookie;完整 SPA/持久化请改走 app_preview(noVNC),勿引导恢复 allow-same-origin;允许 CDN 外链;缺省时不展示 Demo"),
 										},
 									},
