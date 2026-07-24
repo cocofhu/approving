@@ -21,5 +21,9 @@ sandbox-gateway/
 # 本地开发数据
 .devdata/
 .env
-**/*.md
 .github/
+
+# 文档缩小上下文；但 skills_embed 里的 .md 必须进镜像(go:embed)
+**/*.md
+!server/internal/sandbox/skills_embed/
+!server/internal/sandbox/skills_embed/**/*.md
