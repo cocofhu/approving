@@ -54,6 +54,21 @@ func TestDefaultMRContractHostRoutingAndFailurePhrases(t *testing.T) {
 		"源分支已推送",
 		"推送成功即可 success",
 		"outputs.mr_url",
+		// list-first + idempotent success (Demo s1/s2/s3)
+		"list open",
+		"不得直接判 failed",
+		"already exists",
+		"No commits between",
+		"跳过新建",
+		"已合并无新提交",
+		"无历史单已同步",
+		"无差异且无历史单可复用",
+		// closed + true failures must stay failed (Demo s4 / s5)
+		"closed 未合并",
+		"不得仅因存在 closed URL 而 success",
+		"无法 push",
+		"鉴权/权限失败",
+		"冲突未解决",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(got, want) {
