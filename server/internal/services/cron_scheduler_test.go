@@ -113,12 +113,91 @@ func TestNextScheduleTimeCronAndEvery(t *testing.T) {
 	if !next.Equal(want) {
 		t.Fatalf("cron next=%v want %v", next, want)
 	}
+	if next.Location() != time.UTC {
+		t.Fatalf("cron Location=%v want UTC", next.Location())
+	}
 	every, err := NextScheduleTime("every", "30m", "", from)
 	if err != nil || !every.Equal(from.Add(30*time.Minute)) {
 		t.Fatalf("every=%v err=%v", every, err)
 	}
+	if every.Location() != time.UTC {
+		t.Fatalf("every Location=%v want UTC", every.Location())
+	}
 	if _, err := NextScheduleTime("cron", "0 9 * * *", "Not/AZone", from); err == nil {
 		t.Fatal("bad timezone should fail")
+	}
+}
+
+func TestNextScheduleTimeShanghaiCronReturnsUTC(t *testing.T) {
+	// Shanghai wall-clock 10:00 == 02:00 UTC; must return UTC Location for SQLite due compare.
+	from := time.Date(2026, 7, 24, 23, 15, 0, 0, time.UTC)
+	next, err := NextScheduleTime("cron", "0 10 * * *", "Asia/Shanghai", from)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2026, 7, 25, 2, 0, 0, 0, time.UTC)
+	if !next.Equal(want) {
+		t.Fatalf("next instant=%v want %v", next, want)
+	}
+	if next.Location() != time.UTC {
+		t.Fatalf("Location=%v want UTC (time.Equal alone would miss Location leak)", next.Location())
+	}
+}
+
+func TestCronSchedulerShanghaiNextRunAtDueAt0200Z(t *testing.T) {
+	// Regression: non-UTC Location persisted as "+08:00" wall string made SQLite
+	// text compare next_run_at <= now wait until ~10:00Z. Fixed path must be due at 02:00Z.
+	db := setupPmDB(t)
+	pm := NewPmService(db, nil)
+	ps := NewProjectService(db)
+	p, err := ps.Create("CronShanghaiDue", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	th, err := pm.CreateCronThread(p.ID, "agent-a", "定时")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	from := time.Date(2026, 7, 24, 23, 15, 0, 0, time.UTC)
+	next, err := NextScheduleTime("cron", "0 10 * * *", "Asia/Shanghai", from)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Location() != time.UTC {
+		t.Fatalf("precondition: next must be UTC, got %v", next.Location())
+	}
+
+	created := from
+	job := models.AgentCronJob{
+		ID: "cron-shanghai-due-1", AgentName: "agent-a", ProjectID: p.ID, ThreadID: th.ID,
+		Name: "shanghai-10", Prompt: "p", ScheduleKind: "cron", ScheduleExpr: "0 10 * * *",
+		Timezone: "Asia/Shanghai", Enabled: true, NextRunAt: &next, CreatedAt: created, UpdatedAt: created,
+	}
+	if err := db.Create(&job).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	at0200Z := time.Date(2026, 7, 25, 2, 0, 0, 0, time.UTC)
+	var due []models.AgentCronJob
+	if err := db.Where("enabled = ? AND next_run_at IS NOT NULL AND next_run_at <= ?", true, at0200Z).
+		Find(&due).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(due) != 1 || due[0].ID != job.ID {
+		t.Fatalf("want due at 02:00Z, got %d jobs (pre-fix bug: only due around 10:00Z)", len(due))
+	}
+
+	// Old bug: Shanghai Location stored as "2026-07-25 10:00:00+08:00" is not <= "02:00Z" textually.
+	// Ensure we did not persist a +08:00 wall string that would only become due at ~10:00Z.
+	at0959Z := time.Date(2026, 7, 25, 9, 59, 0, 0, time.UTC)
+	var stillDue []models.AgentCronJob
+	if err := db.Where("enabled = ? AND next_run_at IS NOT NULL AND next_run_at <= ?", true, at0959Z).
+		Find(&stillDue).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(stillDue) != 1 {
+		t.Fatalf("fixed UTC persist must remain due before 10:00Z; got %d (old +08:00 row would not match)", len(stillDue))
 	}
 }
 
