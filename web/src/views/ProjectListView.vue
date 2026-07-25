@@ -11,6 +11,7 @@ import { useToast } from '@/lib/useToast'
 import { fmtTime } from '@/lib/format'
 import { fmtCompactTokenCount } from '@/lib/tokenUsage'
 import type { Project } from '@/lib/types'
+import TokenUsageHoverTip from '@/components/ui/TokenUsageHoverTip.vue'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -117,14 +118,24 @@ onMounted(() => {
           </template>
           <span class="mx-1.5 text-[#d9d9d9]" aria-hidden="true">·</span>
           <span
-            class="tabular-nums"
-            :class="p.totalTokens == null ? 'text-txt3' : 'text-txt2'"
+            class="group relative tabular-nums"
+            :class="[
+              p.totalTokens == null ? 'text-txt3' : 'text-txt2',
+              p.totalTokens != null ? 'cursor-help' : '',
+            ]"
+            data-testid="project-list-token"
+            :aria-describedby="p.totalTokens != null ? `project-list-token-tip-${p.id}` : undefined"
           >
             {{ t('pages.projectList.tokenLabel') }}
             <em
               class="not-italic font-bold"
               :class="p.totalTokens == null ? 'font-semibold text-txt3' : 'text-accent-2'"
             >{{ fmtCompactTokenCount(p.totalTokens) }}</em>
+            <TokenUsageHoverTip
+              v-if="p.totalTokens != null"
+              :tip-id="`project-list-token-tip-${p.id}`"
+              :total-tokens="p.totalTokens"
+            />
           </span>
         </div>
       </button>

@@ -65,6 +65,55 @@ const MOCK_DETAIL = {
   variables: [],
 }
 
+async function stubProjectDetailApis(
+  page: import('@playwright/test').Page,
+  detail: Record<string, unknown>,
+) {
+  await page.route('**/api/projects/proj-1', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ...detail, id: 'proj-1' }),
+      })
+      return
+    }
+    await route.continue()
+  })
+  await page.route('**/api/workflows**', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      })
+      return
+    }
+    await route.continue()
+  })
+  await page.route('**/api/runs**', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      })
+      return
+    }
+    await route.continue()
+  })
+  await page.route('**/api/projects/proj-1/pm-leader', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ enabled: false }),
+    })
+  })
+  await page.route('**/api/projects/proj-1/cron-jobs', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+  })
+}
+
 test.describe('项目 Token 总体消耗 UI', () => {
   test('全部项目列表 meta 展示 Token 合计与 —/0/K/M', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1280, height: 900 })
@@ -100,51 +149,72 @@ test.describe('项目 Token 总体消耗 UI', () => {
     await testInfo.attach('project-list-token', { path: shot, contentType: 'image/png' })
   })
 
+  test('列表悬停有合计时可见精确千分位浮层', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await page.route('**/api/projects', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(MOCK_PROJECTS),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/project-list.html?theme=light')
+    await expect(page.getByRole('heading', { name: '项目' })).toBeVisible({ timeout: 15_000 })
+
+    const approvingToken = page
+      .getByRole('button')
+      .filter({ hasText: 'Approving' })
+      .getByTestId('project-list-token')
+    await approvingToken.hover()
+    const tip = approvingToken.getByTestId('token-detail-tip')
+    await expect(tip).toBeVisible()
+    await expect(tip.getByTestId('token-detail-tip-exact')).toContainText('128,400')
+    // Compact still shown on the card (g3.2 / 常显回归)
+    await expect(approvingToken).toContainText('128.4K')
+
+    const zeroToken = page
+      .getByRole('button')
+      .filter({ hasText: 'Zero Probe' })
+      .getByTestId('project-list-token')
+    await zeroToken.hover()
+    await expect(zeroToken.getByTestId('token-detail-tip')).toBeVisible()
+    await expect(zeroToken.getByTestId('token-detail-tip-exact')).toContainText('0')
+  })
+
+  test('列表空值 — 不挂浮层', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await page.route('**/api/projects', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(MOCK_PROJECTS),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/project-list.html?theme=light')
+    await expect(page.getByRole('heading', { name: '项目' })).toBeVisible({ timeout: 15_000 })
+
+    const emptyToken = page
+      .getByRole('button')
+      .filter({ hasText: 'Empty Draft' })
+      .getByTestId('project-list-token')
+    await emptyToken.hover()
+    await expect(emptyToken.getByTestId('token-detail-tip')).toHaveCount(0)
+    await expect(emptyToken).toContainText('—')
+  })
+
   test('项目详情标题区 Token 消耗统计块各 tab 常驻', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1280, height: 900 })
-    await page.route('**/api/projects/proj-1', async (route) => {
-      if (route.request().method() === 'GET') {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ ...MOCK_DETAIL, id: 'proj-1' }),
-        })
-        return
-      }
-      await route.continue()
-    })
-    await page.route('**/api/workflows**', async (route) => {
-      if (route.request().method() === 'GET') {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify([]),
-        })
-        return
-      }
-      await route.continue()
-    })
-    await page.route('**/api/runs**', async (route) => {
-      if (route.request().method() === 'GET') {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify([]),
-        })
-        return
-      }
-      await route.continue()
-    })
-    await page.route('**/api/projects/proj-1/pm-leader', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ enabled: false }),
-      })
-    })
-    await page.route('**/api/projects/proj-1/cron-jobs', async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
-    })
+    await stubProjectDetailApis(page, MOCK_DETAIL)
 
     await page.goto('/project-detail.html?theme=light&tab=board')
     const stat = page.getByTestId('project-token-stat')
@@ -170,44 +240,41 @@ test.describe('项目 Token 总体消耗 UI', () => {
     await testInfo.attach('project-detail-token-info', { path: infoShot, contentType: 'image/png' })
   })
 
-  test('无 Usage 时详情显示 —', async ({ page }) => {
+  test('详情悬停有合计时可见精确千分位浮层（非 title）', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 })
-    await page.route('**/api/projects/proj-1', async (route) => {
-      if (route.request().method() === 'GET') {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            id: 'proj-1',
-            name: 'Empty Draft',
-            description: '尚未产生 Usage',
-            workflowCount: 0,
-            totalTokens: null,
-            createdAt: '2026-01-01T00:00:00Z',
-            updatedAt: '2026-07-18T00:00:00Z',
-            sandboxEnv: [],
-            variables: [],
-          }),
-        })
-        return
-      }
-      await route.continue()
+    await stubProjectDetailApis(page, {
+      ...MOCK_DETAIL,
+      totalTokens: 152_090_000,
     })
-    await page.route('**/api/workflows**', async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
-    })
-    await page.route('**/api/runs**', async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
-    })
-    await page.route('**/api/projects/proj-1/pm-leader', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ enabled: false }),
-      })
-    })
-    await page.route('**/api/projects/proj-1/cron-jobs', async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+
+    await page.goto('/project-detail.html?theme=light&tab=board')
+    const stat = page.getByTestId('project-token-stat')
+    await expect(stat).toBeVisible({ timeout: 15_000 })
+    // 常显仍为 compact（g1.4 / g3.2）
+    await expect(stat).toContainText('152.09M')
+
+    await stat.hover()
+    const tip = page.getByTestId('token-detail-tip')
+    await expect(tip).toBeVisible()
+    await expect(tip.getByTestId('token-detail-tip-exact')).toContainText('152,090,000')
+    // 首期无分项字段：不捏造 breakdown
+    await expect(tip.getByTestId('token-detail-tip-breakdown')).toHaveCount(0)
+    // 非常显原生 title 唯一通道：页面内 tip 带 role=tooltip
+    await expect(tip).toHaveAttribute('role', 'tooltip')
+  })
+
+  test('无 Usage 时详情显示 — 且悬停无浮层', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await stubProjectDetailApis(page, {
+      id: 'proj-1',
+      name: 'Empty Draft',
+      description: '尚未产生 Usage',
+      workflowCount: 0,
+      totalTokens: null,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-07-18T00:00:00Z',
+      sandboxEnv: [],
+      variables: [],
     })
 
     await page.goto('/project-detail.html?theme=light&tab=board')
@@ -215,5 +282,24 @@ test.describe('项目 Token 总体消耗 UI', () => {
     await expect(stat).toBeVisible({ timeout: 15_000 })
     await expect(stat).toContainText('—')
     await expect(stat).not.toContainText('0')
+    await stat.hover()
+    await expect(stat.getByTestId('token-detail-tip')).toHaveCount(0)
+  })
+
+  test('详情 totalTokens=0 可悬停见精确 0', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await stubProjectDetailApis(page, {
+      ...MOCK_DETAIL,
+      name: 'Zero Probe',
+      totalTokens: 0,
+    })
+
+    await page.goto('/project-detail.html?theme=light&tab=board')
+    const stat = page.getByTestId('project-token-stat')
+    await expect(stat).toBeVisible({ timeout: 15_000 })
+    await expect(stat.getByTestId('project-token-stat-value')).toHaveText('0')
+    await stat.hover()
+    await expect(page.getByTestId('token-detail-tip')).toBeVisible()
+    await expect(page.getByTestId('token-detail-tip-exact')).toContainText('0')
   })
 })
