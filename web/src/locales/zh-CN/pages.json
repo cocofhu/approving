@@ -1329,7 +1329,7 @@
         "hint": "数据归属主项目「{project}」。在此管理记忆、上下文与定时任务。",
         "unsavedBinding": "主项目绑定尚未保存；数据面板与对话测试仍使用已保存的绑定。",
         "emptyTitle": "尚未绑定主项目",
-        "emptyDesc": "先在「元信息」绑定主项目，再管理记忆 / 上下文 / Job。",
+        "emptyDesc": "请在桌面端「元信息」绑定主项目后，再管理记忆 / 上下文 / 定时任务。",
         "goBind": "去绑定主项目",
         "tabs": {
           "memory": "记忆",
@@ -1359,7 +1359,12 @@
           "colName": "名称",
           "colSchedule": "调度",
           "colEnabled": "启用",
-          "colDeliver": "投递"
+          "colDeliver": "推送到渠道",
+          "enabledOn": "已启用定时任务",
+          "enabledOff": "已暂停定时任务",
+          "deliverOn": "已开启推送到渠道",
+          "deliverOff": "已关闭推送到渠道",
+          "deleted": "已删除定时任务"
         }
       }
     },

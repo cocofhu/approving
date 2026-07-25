@@ -2189,9 +2189,9 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <!-- narrow-screen: non-core tabs show desktop-only tip -->
+        <!-- narrow-screen: non-whitelist tabs show desktop-only tip (files+data allowed) -->
         <div
-          v-else-if="isMobile"
+          v-else-if="isMobile && tab !== 'data'"
           class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-5 py-8 text-center"
         >
           <div class="flex h-10 w-10 items-center justify-center border border-info/35 bg-info/10 text-info">
@@ -2462,8 +2462,8 @@ onBeforeUnmount(() => {
           </aside>
         </div>
 
-        <!-- data: Agent-scoped memory / context / cron-job management -->
-        <div v-if="tab === 'data' && draft && !isMobile" class="min-h-0 flex-1 overflow-hidden">
+        <!-- data: Agent-scoped memory / context / cron-job management (whitelist on mobile) -->
+        <div v-if="tab === 'data' && draft" class="min-h-0 flex-1 overflow-hidden">
           <div v-if="draftBindingDirty" class="border-b border-warn/30 bg-warn/10 px-4 py-2 text-[12px] text-warn">
             {{ t('pages.agentStudio.data.unsavedBinding') }}
           </div>
@@ -2478,7 +2478,13 @@ onBeforeUnmount(() => {
             <div class="max-w-lg rounded border border-dashed border-line bg-base p-6 text-center">
               <p class="text-[13px] font-medium text-txt">{{ t('pages.agentStudio.data.emptyTitle') }}</p>
               <p class="mt-1.5 text-[12px] leading-6 text-txt3">{{ t('pages.agentStudio.data.emptyDesc') }}</p>
-              <button class="mt-3 rounded border border-accent/40 px-3 py-1.5 text-[12px] text-accent-2 hover:bg-accent-dim" type="button" @click="tab = 'meta'">
+              <!-- Mobile: meta is desktop-only — avoid dead-link to bind -->
+              <button
+                v-if="!isMobile"
+                class="mt-3 rounded border border-accent/40 px-3 py-1.5 text-[12px] text-accent-2 hover:bg-accent-dim"
+                type="button"
+                @click="tab = 'meta'"
+              >
                 {{ t('pages.agentStudio.data.goBind') }}
               </button>
             </div>
