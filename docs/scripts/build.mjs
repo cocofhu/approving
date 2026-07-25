@@ -4,6 +4,7 @@
  * - copy site/ to public/
  * - convert content markdown files to public/<path>/index.html
  *
+ * Locale: zh-CN at site root; English under en/ (content/en/** → public/en/**).
  * BASE_PATH defaults to / for the custom domain (www.approving-ai.com).
  * Legacy CI may set BASE_PATH=/approving-pages; that is remapped to / unless
  * FORCE_PROJECT_PAGES=1 (project Pages fallback).
@@ -20,6 +21,8 @@ const siteDir = path.join(root, "site");
 const contentDir = path.join(root, "content");
 const outDir = path.join(root, "public");
 
+const SITE_CANONICAL = "https://www.approving-ai.com";
+
 // Custom domain is served from /. Legacy ci-docs set BASE_PATH=/approving-pages;
 // remap that so CI builds root-relative assets (workflow env update needs workflow scope).
 const envBase = process.env.BASE_PATH;
@@ -29,6 +32,35 @@ const basePath = normalizeBase(
   useLegacyProjectPages ? envBase : (envBase === "/approving-pages" ? "/" : (envBase ?? "/")),
 );
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
+
+const SHELL = {
+  "zh-CN": {
+    htmlLang: "zh-CN",
+    navAria: "主导航",
+    docs: "文档",
+    concepts: "概念",
+    eyebrow: "文档",
+    footerAria: "页脚",
+    quickStart: "快速开始",
+    configuration: "配置",
+    gateway: "网关",
+    source: "源码",
+    langAria: "语言",
+  },
+  en: {
+    htmlLang: "en",
+    navAria: "Main navigation",
+    docs: "Docs",
+    concepts: "Concepts",
+    eyebrow: "Docs",
+    footerAria: "Footer",
+    quickStart: "Quick start",
+    configuration: "Configuration",
+    gateway: "Gateway",
+    source: "Source",
+    langAria: "Language",
+  },
+};
 
 function normalizeBase(raw) {
   let b = String(raw || "/").trim();
@@ -43,6 +75,41 @@ function withBase(p) {
   const cleaned = p.startsWith("/") ? p : `/${p}`;
   if (basePath === "/") return cleaned;
   return `${basePath}${cleaned}`;
+}
+
+function localeFromSlug(slug) {
+  return slug === "en" || slug.startsWith("en/") ? "en" : "zh-CN";
+}
+
+/** @returns {{ zh: string, en: string }} site-absolute paths ending with / */
+function dualPaths(slug) {
+  const isEn = slug === "en" || slug.startsWith("en/");
+  const bare = isEn ? (slug === "en" ? "" : slug.slice(3)) : slug;
+  const zh = bare ? `/${bare}/` : "/";
+  const en = bare ? `/en/${bare}/` : "/en/";
+  return { zh, en };
+}
+
+function canonicalHref(sitePath) {
+  return `${SITE_CANONICAL}${sitePath}`;
+}
+
+function langSwitcherHtml(locale, dual) {
+  const zhCurrent = locale === "zh-CN" ? " is-current" : "";
+  const enCurrent = locale === "en" ? " is-current" : "";
+  const zhAria = locale === "zh-CN" ? ' aria-current="page"' : "";
+  const enAria = locale === "en" ? ' aria-current="page"' : "";
+  return `<nav class="lang-switch" aria-label="${escapeHtml(SHELL[locale].langAria)}">
+        <a class="lang-switch__link${zhCurrent}" href="${withBase(dual.zh)}" data-locale-set="zh-CN"${zhAria}>中文</a>
+        <span class="lang-switch__sep" aria-hidden="true">|</span>
+        <a class="lang-switch__link${enCurrent}" href="${withBase(dual.en)}" data-locale-set="en"${enAria}>English</a>
+      </nav>`;
+}
+
+function hreflangLinks(dual) {
+  return `  <link rel="alternate" hreflang="zh-CN" href="${canonicalHref(dual.zh)}">
+  <link rel="alternate" hreflang="en" href="${canonicalHref(dual.en)}">
+  <link rel="alternate" hreflang="x-default" href="${canonicalHref(dual.zh)}">`;
 }
 
 async function rmrf(dir) {
@@ -79,37 +146,52 @@ function rewriteBasePlaceholders(text) {
 }
 
 function docTemplate({ title, description, bodyHtml, relPath }) {
+  const locale = localeFromSlug(relPath);
+  const t = SHELL[locale];
+  const dual = dualPaths(relPath);
+  const prefix = locale === "en" ? "/en" : "";
+  const homeHref = withBase(locale === "en" ? "/en/" : "/");
+  const docsHref = withBase(`${prefix}/guide/quick-start/`);
+  const conceptsHref = withBase(`${prefix}/guide/concepts/`);
+  const quickStartHref = withBase(`${prefix}/guide/quick-start/`);
+  const configHref = withBase(`${prefix}/help/configuration/`);
+  const gatewayHref = withBase(`${prefix}/help/gateway/`);
+  const dataBase = basePath === "/" ? "" : basePath;
   const pageTitle = title ? `${title} · Approving` : "Approving";
-  const desc = description || "Approving help documentation";
+  const desc = description || (locale === "en" ? "Approving help documentation" : "Approving 帮助文档");
+
   return `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="${t.htmlLang}" data-base="${escapeHtml(dataBase)}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(pageTitle)}</title>
   <meta name="description" content="${escapeHtml(desc)}">
+${hreflangLinks(dual)}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="${withBase("/css/tokens.css")}">
   <link rel="stylesheet" href="${withBase("/css/site.css")}">
   <link rel="stylesheet" href="${withBase("/css/page.css")}">
+  <script src="${withBase("/js/locale.js")}"></script>
 </head>
 <body class="page-doc">
   <header class="site-header">
     <div class="site-header__inner">
-      <a class="site-header__brand" href="${withBase("/")}">Approving</a>
-      <nav class="site-header__nav" aria-label="主导航">
-        <a class="site-header__link" href="${withBase("/guide/quick-start/")}">文档</a>
-        <a class="site-header__link" href="${withBase("/guide/concepts/")}">概念</a>
+      <a class="site-header__brand" href="${homeHref}">Approving</a>
+      <nav class="site-header__nav" aria-label="${escapeHtml(t.navAria)}">
+        <a class="site-header__link" href="${docsHref}">${escapeHtml(t.docs)}</a>
+        <a class="site-header__link" href="${conceptsHref}">${escapeHtml(t.concepts)}</a>
         <a class="site-header__link" href="https://github.com/cocofhu/approving" rel="noopener noreferrer" target="_blank">GitHub</a>
+        ${langSwitcherHtml(locale, dual)}
       </nav>
     </div>
   </header>
   <main id="main">
     <article class="doc">
       <header class="doc__header">
-        <p class="doc__eyebrow">文档</p>
+        <p class="doc__eyebrow">${escapeHtml(t.eyebrow)}</p>
         <h1 class="doc__title">${escapeHtml(title || relPath)}</h1>
         ${description ? `<p class="doc__lead">${escapeHtml(description)}</p>` : ""}
       </header>
@@ -121,11 +203,11 @@ function docTemplate({ title, description, bodyHtml, relPath }) {
   <footer class="site-footer">
     <div class="site-footer__inner">
       <p class="site-footer__brand">Approving</p>
-      <nav class="site-footer__nav" aria-label="页脚">
-        <a href="${withBase("/guide/quick-start/")}">快速开始</a>
-        <a href="${withBase("/help/configuration/")}">配置</a>
-        <a href="${withBase("/help/gateway/")}">网关</a>
-        <a href="https://github.com/cocofhu/approving" rel="noopener noreferrer" target="_blank">源码</a>
+      <nav class="site-footer__nav" aria-label="${escapeHtml(t.footerAria)}">
+        <a href="${quickStartHref}">${escapeHtml(t.quickStart)}</a>
+        <a href="${configHref}">${escapeHtml(t.configuration)}</a>
+        <a href="${gatewayHref}">${escapeHtml(t.gateway)}</a>
+        <a href="https://github.com/cocofhu/approving" rel="noopener noreferrer" target="_blank">${escapeHtml(t.source)}</a>
       </nav>
       <p class="site-footer__meta">MIT · <a href="https://github.com/cocofhu/approving" rel="noopener noreferrer" target="_blank">cocofhu/approving</a></p>
     </div>
