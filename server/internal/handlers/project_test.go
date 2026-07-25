@@ -1,6 +1,7 @@
 package handlers_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -63,13 +64,23 @@ func TestProjectCRUDAndErrors(t *testing.T) {
 		t.Fatalf("bad json create: %d", w.Code)
 	}
 
-	// Platform auth env key rejected
+	// Official ACP auth key accepted (forced secret, masked in response)
 	w = hn.do("POST", "/api/projects", map[string]any{
-		"name":       "BadEnv",
+		"name":       "AuthEnv",
 		"sandboxEnv": []map[string]any{{"key": "CURSOR_API_KEY", "value": "x", "secret": true}},
 	})
-	if w.Code != http.StatusBadRequest {
+	if w.Code != http.StatusOK {
 		t.Fatalf("auth env: %d %s", w.Code, w.Body.String())
+	}
+	var authEnvProj models.Project
+	if err := json.Unmarshal(w.Body.Bytes(), &authEnvProj); err != nil {
+		t.Fatalf("auth env decode: %v", err)
+	}
+	if len(authEnvProj.SandboxEnv) != 1 || authEnvProj.SandboxEnv[0].Key != "CURSOR_API_KEY" {
+		t.Fatalf("auth env sandboxEnv: %+v", authEnvProj.SandboxEnv)
+	}
+	if authEnvProj.SandboxEnv[0].Value != services.SecretMask || !authEnvProj.SandboxEnv[0].Secret {
+		t.Fatalf("auth env mask/secret: %+v", authEnvProj.SandboxEnv[0])
 	}
 
 	// Secret placeholder on new key
