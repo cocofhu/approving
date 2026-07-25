@@ -16,6 +16,23 @@ export function fmtTokenCount(n: number): string {
 }
 
 /**
+ * Compact K/M format for project-level totals (Demo-aligned).
+ * null/undefined → "—"; 0 → "0"; under 1000 plain; ≥1000 K (1 decimal); ≥1e6 M (2 decimals).
+ * Do not use for Run detail timeline (keep fmtTokenCount there).
+ */
+export function fmtCompactTokenCount(n: number | null | undefined): string {
+  if (n === null || n === undefined) return '—'
+  const abs = Math.abs(n)
+  if (abs >= 1_000_000) {
+    return `${Math.round((n / 1_000_000) * 100) / 100}M`
+  }
+  if (abs >= 1000) {
+    return `${Math.round((n / 1000) * 10) / 10}K`
+  }
+  return String(n)
+}
+
+/**
  * token/s display aligned with Demo: ≥10 → one decimal, else two.
  * Returns null when rate is not computable (caller shows —).
  */

@@ -287,6 +287,110 @@ func (s *WorkflowService) Restore(id string, version int) (models.WorkflowDef, e
 	return wf, nil
 }
 
+// renameSkillProfileRefsFailHook, when non-nil, is invoked inside
+// RenameSkillProfileRefs before persisting. Tests use it to simulate write
+// failure so RenameAgent can verify Skill/Pm/Org rollback.
+var renameSkillProfileRefsFailHook func() error
+
+// SetRenameSkillProfileRefsFailHookForTest injects a persist failure for tests.
+// The returned function clears the hook; call it from t.Cleanup.
+func SetRenameSkillProfileRefsFailHookForTest(fn func() error) func() {
+	renameSkillProfileRefsFailHook = fn
+	return func() { renameSkillProfileRefsFailHook = nil }
+}
+
+// RenameSkillProfileRefs rewrites nodes[].config.skill_profile from oldName to
+// newName across WorkflowDef and WorkflowVersion graphs. Matching is exact
+// string equality (no substring replace). Persistence keeps Status and Version
+// unchanged — it does not go through Save's graphChanged→draft path.
+// Run.Graph is never touched. Returns the number of distinct WorkflowDef IDs
+// that had at least one Def or Version graph rewritten.
+func (s *WorkflowService) RenameSkillProfileRefs(oldName, newName string) (int, error) {
+	oldName = strings.TrimSpace(oldName)
+	newName = strings.TrimSpace(newName)
+	if oldName == "" || newName == "" || oldName == newName {
+		return 0, nil
+	}
+	var count int
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		n, err := (&WorkflowService{db: tx}).renameSkillProfileRefsTx(oldName, newName)
+		count = n
+		return err
+	})
+	return count, err
+}
+
+func (s *WorkflowService) renameSkillProfileRefsTx(oldName, newName string) (int, error) {
+	if renameSkillProfileRefsFailHook != nil {
+		if err := renameSkillProfileRefsFailHook(); err != nil {
+			return 0, err
+		}
+	}
+
+	pattern := "%" + oldName + "%"
+	affected := map[string]struct{}{}
+
+	var defs []models.WorkflowDef
+	if err := s.db.Where("graph LIKE ?", pattern).Find(&defs).Error; err != nil {
+		return 0, err
+	}
+	now := time.Now()
+	for i := range defs {
+		wf := &defs[i]
+		if !renameSkillProfileInGraph(&wf.Graph, oldName, newName) {
+			continue
+		}
+		wf.UpdatedAt = now
+		// Save the loaded row as-is so Status/Version are preserved.
+		if err := s.db.Save(wf).Error; err != nil {
+			return 0, err
+		}
+		affected[wf.ID] = struct{}{}
+	}
+
+	var versions []models.WorkflowVersion
+	if err := s.db.Where("graph LIKE ?", pattern).Find(&versions).Error; err != nil {
+		return 0, err
+	}
+	for i := range versions {
+		snap := &versions[i]
+		if !renameSkillProfileInGraph(&snap.Graph, oldName, newName) {
+			continue
+		}
+		if err := s.db.Save(snap).Error; err != nil {
+			return 0, err
+		}
+		affected[snap.WorkflowID] = struct{}{}
+	}
+	return len(affected), nil
+}
+
+// renameSkillProfileInGraph replaces config.skill_profile values that exactly
+// equal oldName with newName. Returns whether any node was changed.
+func renameSkillProfileInGraph(g *models.Graph, oldName, newName string) bool {
+	if g == nil {
+		return false
+	}
+	changed := false
+	for i := range g.Nodes {
+		cfg := g.Nodes[i].Config
+		if cfg == nil {
+			continue
+		}
+		v, ok := cfg["skill_profile"]
+		if !ok {
+			continue
+		}
+		s, ok := v.(string)
+		if !ok || s != oldName {
+			continue
+		}
+		cfg["skill_profile"] = newName
+		changed = true
+	}
+	return changed
+}
+
 // Delete removes a workflow definition along with its published version
 // snapshots and every run it spawned (and that run's dependent records). Runs
 // are cascaded because they are meaningless without their workflow.

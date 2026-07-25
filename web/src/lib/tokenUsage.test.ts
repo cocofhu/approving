@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  fmtCompactTokenCount,
   fmtTokenCount,
   fmtTokenRate,
   summarizeTimelineUsage,
@@ -23,6 +24,18 @@ describe('tokenUsage', () => {
     expect(fmtTokenRate(100, 10)).toBe('10.0')
     expect(fmtTokenRate(5, 10)).toBe('0.50')
     expect(fmtTokenRate(100, 0)).toBeNull()
+  })
+
+  it('formats project totals with Demo K/M compact rules', () => {
+    expect(fmtCompactTokenCount(null)).toBe('—')
+    expect(fmtCompactTokenCount(undefined)).toBe('—')
+    expect(fmtCompactTokenCount(0)).toBe('0')
+    expect(fmtCompactTokenCount(42)).toBe('42')
+    expect(fmtCompactTokenCount(999)).toBe('999')
+    expect(fmtCompactTokenCount(1000)).toBe('1K')
+    expect(fmtCompactTokenCount(128400)).toBe('128.4K')
+    expect(fmtCompactTokenCount(1_020_000)).toBe('1.02M')
+    expect(fmtCompactTokenCount(1_000_000)).toBe('1M')
   })
 
   it('summarizes: no usage → —; reported 0 → 0; partial sum', () => {

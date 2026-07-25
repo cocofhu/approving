@@ -197,3 +197,44 @@ func jsonField(body, key string) string {
 	}
 	return rest[:j]
 }
+
+func TestProjectTotalTokensInListAndGet(t *testing.T) {
+	hn := newHarness(t)
+
+	w := hn.do("POST", "/api/projects", map[string]any{"name": "TokProj", "description": "d"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"totalTokens":null`) {
+		t.Fatalf("create should return null totalTokens: %s", w.Body.String())
+	}
+	id := jsonField(w.Body.String(), "id")
+
+	w = hn.do("GET", "/api/projects/"+id, nil)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"totalTokens":null`) {
+		t.Fatalf("get empty: %d %s", w.Code, w.Body.String())
+	}
+
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	must(hn.db.Create(&models.WorkflowDef{ID: "wf-tok", ProjectID: id, Name: "w", Status: "draft", Version: 1}).Error)
+	must(hn.db.Create(&models.Run{ID: "run-tok", WorkflowID: "wf-tok", Status: "completed"}).Error)
+	must(hn.db.Create(&models.StateRun{
+		RunID: "run-tok", NodeID: "n1", Status: "completed",
+		Usage: &models.TokenUsage{InputTokens: 128000, OutputTokens: 400},
+	}).Error)
+
+	w = hn.do("GET", "/api/projects/"+id, nil)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"totalTokens":128400`) {
+		t.Fatalf("get with usage: %d %s", w.Code, w.Body.String())
+	}
+
+	w = hn.do("GET", "/api/projects", nil)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"totalTokens":128400`) {
+		t.Fatalf("list with usage: %d %s", w.Code, w.Body.String())
+	}
+}
