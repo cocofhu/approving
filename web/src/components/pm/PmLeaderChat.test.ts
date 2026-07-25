@@ -1701,7 +1701,8 @@ describe('PmLeaderChat tail window + lazyload', () => {
     expect(wrapper.find('[data-msg-id="m-0"]').exists()).toBe(true)
     expect(wrapper.find('[data-msg-id="m-40"]').exists()).toBe(true)
     expect(wrapper.findAll('[data-msg-id]').length).toBeGreaterThan(20)
-    const mergeCall = apiMocks.listPmMessages.mock.calls.at(-1)
+    const mergeCalls = apiMocks.listPmMessages.mock.calls
+    const mergeCall = mergeCalls[mergeCalls.length - 1]
     expect(mergeCall?.[2]).toEqual({ limit: 20 })
     wrapper.unmount()
   })
