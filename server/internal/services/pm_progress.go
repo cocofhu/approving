@@ -158,12 +158,14 @@ func (p *PmProgress) ArtifactSummary(projectID, runID string, limit int) map[str
 		items, _ = p.arts.AllPage("", projectID, 1, limit, "")
 	}
 	if len(items) == 0 {
-		return map[string]any{"empty": true, "message": "暂无产物"}
+		out := map[string]any{"empty": true, "message": "暂无产物"}
+		p.attachRunFailure(out, runID)
+		return out
 	}
 	if len(items) > limit {
 		items = items[:limit]
 	}
-	out := make([]map[string]any, 0, len(items))
+	arts := make([]map[string]any, 0, len(items))
 	for _, a := range items {
 		entry := map[string]any{
 			"id": a.ID, "name": a.Name, "kind": a.Kind, "runId": a.RunID,
@@ -173,9 +175,32 @@ func (p *PmProgress) ArtifactSummary(projectID, runID string, limit int) map[str
 		if content, ok := p.arts.Get(a.RunID, a.Name); ok && content != "" {
 			entry["preview"] = truncateStr(content, 800)
 		}
-		out = append(out, entry)
+		arts = append(arts, entry)
 	}
-	return map[string]any{"empty": false, "artifacts": out, "count": len(out)}
+	out := map[string]any{"empty": false, "artifacts": arts, "count": len(arts)}
+	p.attachRunFailure(out, runID)
+	return out
+}
+
+// attachRunFailure adds a human-readable error when the scoped run failed, so
+// empty-product failures are not reduced to "暂无产物" alone.
+func (p *PmProgress) attachRunFailure(out map[string]any, runID string) {
+	if out == nil || runID == "" || p.runs == nil {
+		return
+	}
+	r, ok := p.runs.Get(runID)
+	if !ok || r.Status != "failed" {
+		return
+	}
+	info := p.runs.AggregateRunFailure(runID)
+	out["status"] = "failed"
+	out["error"] = info.DisplayReason()
+	if info.FailedNode != "" {
+		out["failedNode"] = info.FailedNode
+	}
+	if info.NoSandboxLog {
+		out["noSandboxLog"] = true
+	}
 }
 
 // RiskTrends scans recent runs for failures, repeated waiting, stagnation.

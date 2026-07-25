@@ -254,6 +254,7 @@ func main() {
 		scheduler: schedulerMCP, pmSvc: pmSvc, skills: skillSvc,
 	}
 	pmTurns := services.NewPmTurnRunner(pmSvc, sbxSvc)
+	pmTurns.SetCitationDeps(runSvc, artifactSvc, wfSvc)
 	// Raise the per-turn deadline well above the legacy 90s so channel/cron and
 	// interactive PM turns are not truncated (aligns with the sandbox chat cap).
 	pmTurns.SetTurnDeadline(cfg.AgentChatTimeout() + 30*time.Second)

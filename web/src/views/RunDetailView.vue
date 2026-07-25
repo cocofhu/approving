@@ -62,6 +62,9 @@ import {
 } from '@/lib/liveLogSnapshotCache'
 import type { AcpEvent, McpCall, NodeRun, NodeRunStatus, Run, Workflow } from '@/lib/types'
 import type { SandboxView } from '@/lib/api'
+import { isClearlyInvalidRunRouteId } from '@/lib/pmCitationShape'
+
+type RunLoadErrorKind = 'not_found' | 'network_or_server'
 
 const route = useRoute()
 const router = useRouter()
@@ -86,6 +89,7 @@ const run = ref<Run>(emptyRun(runId.value))
 const wf = ref<Workflow>(emptyWorkflow())
 const runLoading = ref(false)
 const loadError = ref(false)
+const loadErrorKind = ref<RunLoadErrorKind | null>(null)
 const refreshing = ref(false)
 
 // Event log read on demand with cursor/limit pagination; older history is
@@ -319,9 +323,26 @@ function teardownRealtime() {
   }
 }
 
-async function fetchRunData(): Promise<boolean> {
+function classifyRunLoadError(err: unknown): RunLoadErrorKind {
+  const msg = err instanceof Error ? err.message : String(err ?? '')
+  // Prefer explicit not-found over apiState.online (404 also flips online=false).
+  if (/not found/i.test(msg) || /^404\b/.test(msg) || msg.includes(' 404 ')) {
+    return 'not_found'
+  }
+  if (err instanceof TypeError || /failed to fetch/i.test(msg) || /network/i.test(msg)) {
+    return 'network_or_server'
+  }
+  // Other non-ok HTTP / server errors remain retryable.
+  return 'network_or_server'
+}
+
+async function fetchRunData(): Promise<true | RunLoadErrorKind> {
+  const id = runId.value
+  if (isClearlyInvalidRunRouteId(id)) {
+    return 'not_found'
+  }
   try {
-    const r = await api.getRun(runId.value)
+    const r = await api.getRun(id)
     run.value = r
     // Prefer the run's own pinned graph so the canvas reflects exactly what
     // executed, even if the live workflow was since edited or deleted. Fall
@@ -335,8 +356,8 @@ async function fetchRunData(): Promise<boolean> {
       wf.value = await api.getWorkflow(r.workflowId)
     }
     return true
-  } catch {
-    return false
+  } catch (err) {
+    return classifyRunLoadError(err)
   }
 }
 
@@ -391,6 +412,7 @@ async function loadRun(hard = false) {
   if (hard) {
     runLoading.value = true
     loadError.value = false
+    loadErrorKind.value = null
     resetRunState(id)
     teardownRealtime()
   } else {
@@ -398,13 +420,15 @@ async function loadRun(hard = false) {
   }
 
   try {
-    const ok = await fetchRunData()
+    const result = await fetchRunData()
     if (hard) {
-      if (!ok) {
-        loadError.value = true
-      } else {
+      if (result === true) {
         loadError.value = false
+        loadErrorKind.value = null
         await initAfterLoadSuccess()
+      } else {
+        loadError.value = true
+        loadErrorKind.value = result
       }
     }
   } finally {
@@ -1086,6 +1110,12 @@ const clarifyInputActive = computed(
 const clarifySandboxFailed = computed(
   () => selNode.value?.type === 'react' && selStatus.value === 'failed' && !!selRun.value?.error,
 )
+// Run-level failure banner for any failed run (research/agent early fails included).
+const runFailureReason = computed(() => {
+  if (run.value.status !== 'failed') return ''
+  return (run.value.error || run.value.failedReason || '').trim()
+})
+const showRunFailureBanner = computed(() => !!runFailureReason.value)
 const { draft: clarifyDraft, attachments: clarifyAttachments, annotations: clarifyAnnotations } = useClarifyDraft(() => runId.value, () => selected.value)
 // Every sandbox-backed node (all "Agent" category types: agent/react/plan/
 // implement/research/test/review/proposal/submit_mr/visual) runs the in-container
@@ -1303,7 +1333,15 @@ function selectExecution(nodeId: string, idx: number) {
         </button>
         <h1 class="min-w-0 truncate text-[17px] font-semibold text-txt">Run #{{ runId.replace('run-', '') }}</h1>
         <span v-if="runLoading" class="chip shrink-0 text-txt3">{{ t('pages.runDetail.loadingChip') }}</span>
-        <span v-else class="chip shrink-0 border-err/35 bg-err/8 text-err">{{ t('pages.runDetail.loadFailedChip') }}</span>
+        <span
+          v-else
+          class="chip shrink-0 border-err/35 bg-err/8 text-err"
+          data-testid="run-load-error-chip"
+        >{{
+          loadErrorKind === 'not_found'
+            ? t('pages.runDetail.notFoundChip')
+            : t('pages.runDetail.loadFailedChip')
+        }}</span>
       </div>
       <template v-else>
         <div class="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:gap-3">
@@ -1415,6 +1453,17 @@ function selectExecution(nodeId: string, idx: number) {
             <div class="h-full rounded-full bg-gradient-to-r from-accent to-accent-2 transition-all" :style="{ width: progressFrac * 100 + '%' }" />
           </div>
           <span class="text-[11px] text-txt3">{{ Math.round(progressFrac * 100) }}%</span>
+        </div>
+        <div
+          v-if="showRunFailureBanner"
+          data-testid="run-failure-banner"
+          class="mt-3 ml-11 mr-0 rounded-md border border-err/35 bg-err/8 px-3.5 py-2.5 text-[13px] leading-relaxed text-err"
+          role="alert"
+        >
+          <strong class="mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-err/90">
+            {{ t('pages.runDetail.failureBanner.title') }}
+          </strong>
+          <p class="m-0 whitespace-pre-wrap break-words text-txt">{{ runFailureReason }}</p>
         </div>
       </template>
     </header>
@@ -1825,10 +1874,27 @@ function selectExecution(nodeId: string, idx: number) {
         <EmptyState
           v-else
           icon="alert"
-          :title="t('pages.runDetail.loadFailedTitle')"
-          :desc="t('pages.runDetail.loadFailedDesc')"
+          :title="loadErrorKind === 'not_found' ? t('pages.runDetail.notFoundTitle') : t('pages.runDetail.loadFailedTitle')"
+          :desc="loadErrorKind === 'not_found' ? t('pages.runDetail.notFoundDesc') : t('pages.runDetail.loadFailedDesc')"
+          data-testid="run-load-error"
         >
-          <AppButton variant="primary" size="sm" icon="refresh" @click="loadRun(true)">
+          <AppButton
+            v-if="loadErrorKind === 'not_found'"
+            variant="outline"
+            size="sm"
+            disabled
+            data-testid="run-retry-unavailable"
+          >
+            {{ t('pages.runDetail.retryUnavailable') }}
+          </AppButton>
+          <AppButton
+            v-else
+            variant="primary"
+            size="sm"
+            icon="refresh"
+            data-testid="run-retry"
+            @click="loadRun(true)"
+          >
             {{ t('pages.runDetail.retry') }}
           </AppButton>
         </EmptyState>
