@@ -15,6 +15,7 @@ import { api } from '@/lib/api'
 import { writeStoredProjectId } from '@/lib/useProjectContext'
 import { useToast } from '@/lib/useToast'
 import { fmtTime } from '@/lib/format'
+import { fmtCompactTokenCount } from '@/lib/tokenUsage'
 import { clearRunDraft, mergeRunDraft, saveRunDraft } from '@/lib/runDraft'
 import { useBreakpoint } from '@/lib/useBreakpoint'
 import { useWorkflowImport } from '@/lib/useWorkflowImport'
@@ -654,7 +655,25 @@ onUnmounted(() => {
             <h2 class="text-lg font-semibold text-txt">{{ project.name }}</h2>
             <p v-if="project.description" class="mt-0.5 text-sm text-txt3">{{ project.description }}</p>
           </div>
-          <div class="flex flex-wrap gap-2">
+          <div class="flex flex-wrap items-start gap-2">
+            <div
+              class="min-w-[132px] rounded-[10px] border border-accent/35 bg-gradient-to-b from-accent-dim/90 to-surface px-3 py-2 text-left md:text-right"
+              data-testid="project-token-stat"
+              :aria-label="t('pages.projectDetail.tokenUsage')"
+            >
+              <div class="text-[11px] font-semibold tracking-wide text-accent-2">
+                {{ t('pages.projectDetail.tokenUsage') }}
+              </div>
+              <div
+                class="mt-0.5 text-[22px] font-bold leading-tight tracking-tight tabular-nums"
+                :class="project.totalTokens == null ? 'text-txt3' : 'text-txt'"
+              >
+                {{ fmtCompactTokenCount(project.totalTokens) }}
+              </div>
+              <div class="mt-0.5 text-[11px] text-txt3">
+                {{ t('pages.projectDetail.tokenUsageHint') }}
+              </div>
+            </div>
             <AppButton variant="outline" size="sm" class="text-err" @click="showDelete = true">
               {{ t('common.buttons.delete') }}
             </AppButton>

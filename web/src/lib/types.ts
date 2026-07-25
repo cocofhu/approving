@@ -94,6 +94,11 @@ export interface Project {
   sandboxEnv: ProjectEnvEntry[]
   variables: ProjectVariable[]
   workflowCount?: number
+  /**
+   * Sum of StateRun.Usage.Total across the project's workflow runs.
+   * null/undefined = no reported usage (UI "—"); 0 = reported usage totaling zero.
+   */
+  totalTokens?: number | null
   pmLeaderEnabled?: boolean
   pmLeaderAgent?: string
   createdAt?: string

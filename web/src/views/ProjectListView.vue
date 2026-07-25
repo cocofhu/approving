@@ -9,6 +9,7 @@ import { api } from '@/lib/api'
 import { writeStoredProjectId } from '@/lib/useProjectContext'
 import { useToast } from '@/lib/useToast'
 import { fmtTime } from '@/lib/format'
+import { fmtCompactTokenCount } from '@/lib/tokenUsage'
 import type { Project } from '@/lib/types'
 
 const router = useRouter()
@@ -108,9 +109,23 @@ onMounted(() => {
             </div>
           </div>
         </div>
-        <div class="flex items-center justify-between text-[11px] text-txt3">
+        <div class="flex flex-wrap items-center border-t border-line pt-2.5 text-[11px] text-txt3">
           <span>{{ t('pages.projectList.workflowCount', { n: p.workflowCount ?? 0 }) }}</span>
-          <span v-if="p.updatedAt">{{ fmtTime(p.updatedAt) }}</span>
+          <template v-if="p.updatedAt">
+            <span class="mx-1.5 text-[#d9d9d9]" aria-hidden="true">·</span>
+            <span>{{ fmtTime(p.updatedAt) }}</span>
+          </template>
+          <span class="mx-1.5 text-[#d9d9d9]" aria-hidden="true">·</span>
+          <span
+            class="tabular-nums"
+            :class="p.totalTokens == null ? 'text-txt3' : 'text-txt2'"
+          >
+            {{ t('pages.projectList.tokenLabel') }}
+            <em
+              class="not-italic font-bold"
+              :class="p.totalTokens == null ? 'font-semibold text-txt3' : 'text-accent-2'"
+            >{{ fmtCompactTokenCount(p.totalTokens) }}</em>
+          </span>
         </div>
       </button>
     </div>
