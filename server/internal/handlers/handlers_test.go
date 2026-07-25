@@ -527,7 +527,7 @@ func TestDeleteRun(t *testing.T) {
 		t.Fatalf("missing: %d %s", w.Code, w.Body)
 	}
 
-	for _, status := range []string{"queued", "running", "waiting_human", "cancelled"} {
+	for _, status := range []string{"queued", "running", "waiting_human"} {
 		id := "del-blocked-" + status
 		h.db.Create(&models.Run{ID: id, WorkflowID: "wf-del", Status: status, StartedAt: now})
 		w := h.do(http.MethodDelete, "/api/runs/"+id, nil)
@@ -539,7 +539,7 @@ func TestDeleteRun(t *testing.T) {
 		}
 	}
 
-	for _, status := range []string{"completed", "failed"} {
+	for _, status := range []string{"completed", "failed", "cancelled"} {
 		id := "del-ok-" + status
 		h.db.Create(&models.Run{ID: id, WorkflowID: "wf-del", Status: status, StartedAt: now})
 		h.db.Create(&models.Artifact{ID: "art-" + id, RunID: id, Name: "doc", Content: "x", CreatedAt: now})
@@ -579,7 +579,9 @@ func TestDeleteRun(t *testing.T) {
 	if list.Code != 200 {
 		t.Fatalf("list: %d", list.Code)
 	}
-	if strings.Contains(list.Body.String(), "del-ok-completed") || strings.Contains(list.Body.String(), "del-ok-failed") {
+	if strings.Contains(list.Body.String(), "del-ok-completed") ||
+		strings.Contains(list.Body.String(), "del-ok-failed") ||
+		strings.Contains(list.Body.String(), "del-ok-cancelled") {
 		t.Fatalf("deleted runs still listed: %s", list.Body.String())
 	}
 }

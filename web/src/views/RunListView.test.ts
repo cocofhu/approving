@@ -44,7 +44,9 @@ describe('RunListView cancel run', () => {
 describe('RunListView delete run and ops column', () => {
   it('adds canDeleteRun mutually exclusive with canCancelRun', () => {
     expect(src).toMatch(/function canDeleteRun\(/)
-    expect(src).toMatch(/r\.status === 'completed' \|\| r\.status === 'failed'/)
+    expect(src).toMatch(
+      /r\.status === 'completed' \|\| r\.status === 'failed' \|\| r\.status === 'cancelled'/,
+    )
     expect(src).toMatch(/v-else-if="canDeleteRun\(r\)"/)
     expect(src).toMatch(/data-testid="delete-run-btn"/)
     expect(src).toMatch(/data-testid="run-ops-placeholder"/)

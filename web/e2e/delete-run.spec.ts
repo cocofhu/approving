@@ -22,7 +22,7 @@ function buildRun(status: string) {
     trigger: 'manual',
     startedAt: '2026-07-24T12:00:00Z',
     durationSec: 42,
-    progress: status === 'completed' || status === 'failed' ? 1 : 0.4,
+    progress: status === 'completed' || status === 'failed' || status === 'cancelled' ? 1 : 0.4,
     branch: 'feature/delete-run',
     git: { pushed: false, branch: 'feature/delete-run' },
     nodeRuns: {
@@ -133,12 +133,23 @@ test.describe('DeleteRun UI acceptance', () => {
     await page.screenshot({ path: '/tmp/delete-run-running-disabled.png', fullPage: true })
   })
 
-  test('cancelled: delete visible but disabled with cancelled hint', async ({ page }) => {
-    await openRunDetail(page, 'cancelled')
-    await expect(page.getByTestId('delete-run-btn')).toBeVisible()
-    await expect(page.getByTestId('delete-run-btn')).toBeDisabled()
-    await expect(page.getByTestId('delete-run-hint')).toContainText(/仅已结束|失败/)
-    await page.screenshot({ path: '/tmp/delete-run-cancelled-disabled.png', fullPage: true })
+  test('cancelled: delete enabled, confirm leaves detail view', async ({ page }) => {
+    let deleteCalled = false
+    await openRunDetail(page, 'cancelled', () => {
+      deleteCalled = true
+    })
+    const btn = page.getByTestId('delete-run-btn')
+    await expect(btn).toBeVisible()
+    await expect(btn).toBeEnabled()
+    await expect(page.getByTestId('delete-run-hint')).toHaveCount(0)
+    await page.screenshot({ path: '/tmp/delete-run-cancelled-enabled.png', fullPage: true })
+
+    await btn.click()
+    await expect(page.getByText('确认删除该次运行？')).toBeVisible()
+    await page.getByTestId('confirm-delete-run-btn').click()
+    await expect.poll(() => deleteCalled).toBe(true)
+    await expect(page.getByTestId('run-detail-root')).toHaveCount(0)
+    await page.screenshot({ path: '/tmp/delete-run-cancelled-after.png', fullPage: true })
   })
 
   test('queued: delete disabled with active hint', async ({ page }) => {

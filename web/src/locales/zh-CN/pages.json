@@ -557,7 +557,6 @@
       "deleteConfirm": "仅清理这一次 Run；删除后将返回运行列表。",
       "deleteSuccess": "已删除运行",
       "deleteHintActive": "请先取消或等待运行结束后再删除",
-      "deleteHintCancelled": "仅已结束/失败的运行可删除",
       "deleteErrorNotFound": "运行不存在或已删除",
       "deleteErrorNotDeletable": "当前状态不可删除",
       "deleteErrorGeneric": "删除失败",
