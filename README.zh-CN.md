@@ -13,7 +13,7 @@
 [![coverage-web](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcocofhu%2Fapproving%2Fcoverage-badges%2Fcoverage-web.json)](https://github.com/cocofhu/approving/actions/workflows/ci-web.yml)
 [![coverage-sandbox](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcocofhu%2Fapproving%2Fcoverage-badges%2Fcoverage-sandbox.json)](https://github.com/cocofhu/approving/actions/workflows/ci-sandbox.yml)
 
-[项目站](https://cocofhu.github.io/approving-pages/) · [贡献指南](CONTRIBUTING.md) · [安全](SECURITY.md) · [支持](SUPPORT.md) · [配置](server/CONFIGURATION.md) · [网关](GATEWAY.md)
+[项目站](https://www.approving-ai.com/) · [贡献指南](CONTRIBUTING.md) · [安全](SECURITY.md) · [支持](SUPPORT.md) · [配置](server/CONFIGURATION.md) · [网关](GATEWAY.md)
 
 **[English](README.md) | 简体中文**
 
