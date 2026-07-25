@@ -763,6 +763,78 @@ func TestProgressAccumulatorStreamingChunks(t *testing.T) {
 	}
 }
 
+func TestProgressAccumulatorFeedAfterSnapshotNoDouble(t *testing.T) {
+	// review v1: production order is Status.partial update → ticker FeedSnapshot →
+	// Subscribe Feed(same delta). Must not double-buffer or re-emit milestones.
+	const delta = "[进度] 已打开 PR #12\n"
+	acc := newProgressAccumulator()
+
+	first := acc.FeedSnapshot(delta)
+	if len(first) != 1 || first[0].Kind != ProgressMilestone {
+		t.Fatalf("snapshot emit = %v want 1 milestone", first)
+	}
+	if acc.buf != delta {
+		t.Fatalf("buf after snapshot = %q", acc.buf)
+	}
+
+	second := acc.Feed(delta)
+	if len(second) != 0 {
+		t.Fatalf("Feed after Snapshot re-emitted %v (buf doubled? %q)", second, acc.buf)
+	}
+	if acc.buf != delta {
+		t.Fatalf("buf after duplicate Feed = %q want %q (must not append)", acc.buf, delta)
+	}
+
+	// Legitimate growth after snapshot still works (repeated identical chars too).
+	acc2 := newProgressAccumulator()
+	_ = acc2.Feed("x")
+	_ = acc2.Feed("x")
+	if acc2.buf != "xx" {
+		t.Fatalf("repeated Feed deltas must append, got %q", acc2.buf)
+	}
+
+	// Feed-first then Snapshot of extended partial: catch-up Feed must not re-emit.
+	acc3 := newProgressAccumulator()
+	_ = acc3.Feed("[进度] 已")
+	evSnap := acc3.FeedSnapshot("[进度] 已打开 PR #12\n")
+	if len(evSnap) != 1 || evSnap[0].Kind != ProgressMilestone {
+		t.Fatalf("snapshot after partial feed = %v want 1 milestone", evSnap)
+	}
+	evCatch := acc3.Feed("打开 PR #12\n")
+	if len(evCatch) != 0 {
+		t.Fatalf("Feed catch-up after Snapshot re-emitted %v buf=%q", evCatch, acc3.buf)
+	}
+	if acc3.buf != "[进度] 已打开 PR #12\n" {
+		t.Fatalf("merged buf = %q", acc3.buf)
+	}
+}
+
+func TestProgressAccumulatorBridgeDualChannelOrder(t *testing.T) {
+	// bridge.forwardProgress: ticker FeedSnapshot(partial) interleaved with
+	// Subscribe Feed(delta). Simulate Status-ahead race across several chunks.
+	acc := newProgressAccumulator()
+	var partial string
+	var forwarded []string
+	emit := func(events []ProgressEvent) {
+		for _, pe := range events {
+			forwarded = append(forwarded, string(pe.Kind)+":"+pe.Summary)
+		}
+	}
+	chunks := []string{"[进度] ", "打开 PR", " #12\n", "[阻塞] CI 红了\n"}
+	for _, d := range chunks {
+		partial += d
+		// Production: partial += delta happens before fanout; ticker may win.
+		emit(acc.FeedSnapshot(partial))
+		emit(acc.Feed(d))
+	}
+	if len(forwarded) != 2 {
+		t.Fatalf("dual-channel forwarded %v want exactly 2 (milestone+blocker)", forwarded)
+	}
+	if !strings.HasPrefix(forwarded[0], "milestone:") || !strings.HasPrefix(forwarded[1], "blocker:") {
+		t.Fatalf("kinds order = %v", forwarded)
+	}
+}
+
 func TestClassifyProgressFromACPMultiChunkSequence(t *testing.T) {
 	// Integration-style: multi-chunk ACP agent_message frames → accumulator → QQ kinds.
 	acc := newProgressAccumulator()
@@ -1011,6 +1083,67 @@ func TestFlushPushQueueMidBusyRequeuesRemaining(t *testing.T) {
 	got = sentTexts(fa)
 	if countText(got, "有 2 个新 PR") != 1 || countText(got, "日报有更新") != 1 || countText(got, "PR：PR 拉取失败") != 1 {
 		t.Fatalf("all pushes must eventually send, got %v", got)
+	}
+}
+
+func TestFlushPushQueueMidBusyRespectsDepth(t *testing.T) {
+	// review v2: during flush, new DeliverCron fills queue; mid-busy requeue must
+	// still honor pushQueueDepth + unchanged merge (not blind prepend).
+	fa := &fakeAdapter{}
+	m := NewManager(nil, nil, nil)
+	m.mu.Lock()
+	m.running["c1"] = &runningChannel{
+		cfg: models.ChannelConfig{
+			ID: "c1", Type: "qq", ProjectID: "proj", Enabled: true,
+			CronDeliver: true, CronDeliverTarget: "c2c:user1",
+		},
+		adapter: fa,
+	}
+	m.mu.Unlock()
+
+	key := convKey("proj", SceneC2C, "user1")
+	q := m.convQueueFor(key)
+	q.mu.Lock()
+	q.busy = true
+	q.mu.Unlock()
+
+	// Seed flush batch.
+	for i := 0; i < 3; i++ {
+		_ = m.DeliverCron(cronDelivery("proj", fmt.Sprintf("job-%d", i), "changed", fmt.Sprintf("body-%d", i)))
+	}
+
+	sendCount := 0
+	fa.onSend = func(out OutboundMessage) {
+		sendCount++
+		if sendCount == 1 {
+			// While first item sends, flood push queue + mark busy for requeue.
+			for i := 0; i < pushQueueDepth; i++ {
+				m.enqueuePush(key, CronPushItem{
+					ProjectID: "proj", Scene: SceneC2C, Conv: "user1",
+					Category: fmt.Sprintf("flood-%d", i), Kind: CronResultChanged,
+					Text: fmt.Sprintf("flood-body-%d", i),
+				})
+			}
+			q.mu.Lock()
+			q.busy = true
+			q.mu.Unlock()
+		}
+	}
+
+	q.mu.Lock()
+	q.busy = false
+	q.mu.Unlock()
+	m.flushPushQueue(key)
+
+	pq := m.pushQueueFor(key)
+	pq.mu.Lock()
+	n := len(pq.pending)
+	pq.mu.Unlock()
+	if n > pushQueueDepth {
+		t.Fatalf("requeue exceeded depth: pending=%d want ≤%d", n, pushQueueDepth)
+	}
+	if n == 0 {
+		t.Fatalf("expected remaining items after mid-busy requeue")
 	}
 }
 

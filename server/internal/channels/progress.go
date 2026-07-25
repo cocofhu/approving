@@ -129,8 +129,15 @@ func ClassifyProgressFromACP(raw json.RawMessage, extract func(json.RawMessage) 
 // Marker events are keyed by byte offset in the buffer (not by growing summary),
 // so streaming "[进"+"度] 已打开…" emits once. Keyword heuristics only run on
 // completed lines (newline-terminated) to avoid mid-sentence false positives.
+//
+// Feed (Subscribe deltas) and FeedSnapshot (Status.partial) are dual inputs for
+// the same cumulative stream. PmTurnRunner updates partial before fanout, so a
+// ticker may snapshot the full text before Subscribe delivers the same delta.
+// Both paths merge via adoptStream: only a strict prefix-extension advances
+// buf, so Snapshot→Feed of the same content never double-buffers or re-emits.
 type progressAccumulator struct {
-	buf            string
+	buf            string // merged cumulative stream used for emit
+	feedBuf        string // concatenation of Feed deltas only (may lag snapshot)
 	seen           map[string]bool
 	keywordLineIdx int // next complete line index to scan for keyword heuristics
 }
@@ -144,21 +151,47 @@ func (a *progressAccumulator) Feed(delta string) []ProgressEvent {
 	if a == nil || delta == "" {
 		return nil
 	}
-	a.buf += delta
-	return a.emitNew()
+	a.feedBuf += delta
+	return a.adoptStream(a.feedBuf)
 }
 
-// FeedSnapshot replaces the buffer with an authoritative partial (e.g.
-// PmTurnRunner.Status) and returns newly forwardable events.
+// FeedSnapshot merges an authoritative Status.partial and returns newly
+// forwardable events. Stale/behind snapshots are ignored; only strict
+// extensions of the merged buffer emit.
 func (a *progressAccumulator) FeedSnapshot(partial string) []ProgressEvent {
 	if a == nil {
 		return nil
 	}
 	partial = strings.TrimRight(partial, "\x00")
-	if partial == "" || partial == a.buf {
+	if partial == "" {
 		return nil
 	}
-	a.buf = partial
+	return a.adoptStream(partial)
+}
+
+// adoptStream advances buf only when next strictly extends the current merged
+// view (or replaces on true divergence). Equal / behind inputs are no-ops.
+func (a *progressAccumulator) adoptStream(next string) []ProgressEvent {
+	if next == a.buf {
+		return nil
+	}
+	// Already have this content or more (Feed ahead of Snapshot, or duplicate).
+	if strings.HasPrefix(a.buf, next) {
+		return nil
+	}
+	// Normal growth: next is a prefix-extension of merged buf.
+	if strings.HasPrefix(next, a.buf) {
+		a.buf = next
+		return a.emitNew()
+	}
+	// True divergence (rare encoding glitch). Prefer longer authoritative text
+	// and reset emit state so marker offsets stay consistent with the new buf.
+	if len(next) < len(a.buf) {
+		return nil
+	}
+	a.buf = next
+	a.seen = map[string]bool{}
+	a.keywordLineIdx = 0
 	return a.emitNew()
 }
 

@@ -390,6 +390,7 @@ func (m *Manager) DeliverCron(d services.CronDelivery) error {
 	if err != nil {
 		return err
 	}
+	_ = target
 	kind := CronResultKind(strings.TrimSpace(d.Kind))
 	switch kind {
 	case CronResultChanged, CronResultUnchanged, CronResultFailed:
@@ -397,7 +398,6 @@ func (m *Manager) DeliverCron(d services.CronDelivery) error {
 		kind = ClassifyCronResult(d.Text)
 	}
 	text := FormatCronPush(d.Category, kind, d.Text)
-	stripped, urls := splitImageURLs(text)
 	key := convKey(d.ProjectID, scene, conv)
 	item := CronPushItem{
 		ProjectID: d.ProjectID,
@@ -405,21 +405,18 @@ func (m *Manager) DeliverCron(d services.CronDelivery) error {
 		Conv:      conv,
 		Category:  d.Category,
 		Kind:      kind,
-		Text:      stripped,
-		Enqueued:  time.Now(),
+		// Keep raw formatted text (incl. image URLs); flushPushQueue splits on send.
+		Text:     text,
+		Enqueued: time.Now(),
 	}
 
-	if m.IsConversationBusy(d.ProjectID, scene, conv) {
-		// Silent enqueue — no "已入队"旁白 to the user.
-		m.enqueuePush(key, item)
-		return nil
-	}
-
-	ctx, cancel := context.WithTimeout(m.baseCtx, 60*time.Second)
-	defer cancel()
-	return target.adapter.Send(ctx, OutboundMessage{
-		Scene: scene, ConversationID: conv, Text: stripped, ImageURLs: urls,
-	})
+	// Always enqueue then flush: idle path still goes through flushPushQueue so
+	// a concurrent user ACK between IsConversationBusy and Send cannot insert
+	// cron text ahead of the user turn (TOCTOU). Busy path stays silent — no
+	// "已入队"旁白. flushPushQueue re-checks busy before each Send.
+	m.enqueuePush(key, item)
+	m.flushPushQueue(key)
+	return nil
 }
 
 func (m *Manager) flushPushQueue(key string) {
@@ -450,16 +447,31 @@ func (m *Manager) flushPushQueue(key string) {
 	}
 }
 
-// requeuePushAll puts remaining flush items back in front of anything that
-// arrived while the queue was taken, preserving order and avoiding silent loss.
+// requeuePushAll puts remaining flush items back ahead of anything that arrived
+// while the queue was taken, re-applying merge/depth via enqueuePush so pending
+// never silently exceeds pushQueueDepth.
 func (m *Manager) requeuePushAll(key string, items []CronPushItem) {
 	if len(items) == 0 {
 		return
 	}
+	arrived := m.drainPushQueueRaw(key)
+	combined := append(append([]CronPushItem(nil), items...), arrived...)
+	for _, item := range combined {
+		m.enqueuePush(key, item)
+	}
+}
+
+// drainPushQueueRaw clears pending without priority reordering (used by requeue).
+func (m *Manager) drainPushQueueRaw(key string) []CronPushItem {
 	q := m.pushQueueFor(key)
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.pending = append(append([]CronPushItem(nil), items...), q.pending...)
+	if len(q.pending) == 0 {
+		return nil
+	}
+	out := append([]CronPushItem(nil), q.pending...)
+	q.pending = nil
+	return out
 }
 
 func (m *Manager) lookupDeliveryTarget(projectID string) (*runningChannel, Scene, string, error) {

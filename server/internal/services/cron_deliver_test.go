@@ -128,6 +128,43 @@ func TestMaybeDeliverNoDelivererIsNoop(t *testing.T) {
 	sched.maybeDeliver(job, userMsg)
 }
 
+func TestDeliverCronFailureOnTimeout(t *testing.T) {
+	// review v3: turn timeout / start failure must push Kind=failed via DeliverCron.
+	sched, _, thread, _, pid := setupCronDeliver(t)
+	fd := &fakeDeliverer{}
+	sched.SetChannelDeliverer(fd)
+
+	job := &models.AgentCronJob{
+		ID: "j-timeout", ProjectID: pid, ThreadID: thread.ID,
+		Name: "每小时PR", DeliverToChannel: true,
+	}
+	sched.deliverCronFailure(job, "回合超时")
+	if fd.cronCalls != 1 {
+		t.Fatalf("expected 1 DeliverCron on timeout, got %d", fd.cronCalls)
+	}
+	if fd.lastDelivery.Kind != "failed" {
+		t.Errorf("kind = %q want failed", fd.lastDelivery.Kind)
+	}
+	if fd.lastDelivery.Text != "回合超时" {
+		t.Errorf("text = %q", fd.lastDelivery.Text)
+	}
+	if fd.lastDelivery.Category != "每小时PR" {
+		t.Errorf("category = %q", fd.lastDelivery.Category)
+	}
+	if fd.calls != 0 {
+		t.Fatalf("legacy Deliver must not be used, got %d", fd.calls)
+	}
+
+	// Disabled deliverToChannel → silent.
+	fd2 := &fakeDeliverer{}
+	sched.SetChannelDeliverer(fd2)
+	job.DeliverToChannel = false
+	sched.deliverCronFailure(job, "回合超时")
+	if fd2.cronCalls != 0 {
+		t.Fatalf("disabled job must not deliver, got %d", fd2.cronCalls)
+	}
+}
+
 func TestClassifyCronDeliveryText(t *testing.T) {
 	cases := []struct {
 		in   string

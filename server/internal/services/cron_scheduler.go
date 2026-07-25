@@ -261,6 +261,7 @@ func (s *CronScheduler) execute(ctx context.Context, job *models.AgentCronJob) {
 	if err := s.turns.Start(job.ThreadID, userMsg.ID, row.ID, prompt, nil); err != nil {
 		run.Status = "error"
 		run.Error = err.Error()
+		s.deliverCronFailure(job, "启动失败："+err.Error())
 		s.destroyCronSandbox(ctx, row.ID, job.ID)
 		return
 	}
@@ -277,7 +278,33 @@ func (s *CronScheduler) execute(ctx context.Context, job *models.AgentCronJob) {
 	run.Status = "error"
 	run.Error = "turn timeout"
 	s.turns.Cancel(job.ThreadID)
+	s.deliverCronFailure(job, "回合超时")
 	s.destroyCronSandbox(ctx, row.ID, job.ID)
+}
+
+// deliverCronFailure pushes a structured failed result through the coordinated
+// QQ egress when deliverToChannel is enabled (timeout / start failure).
+func (s *CronScheduler) deliverCronFailure(job *models.AgentCronJob, reason string) {
+	if job == nil || !job.DeliverToChannel || s.deliverer == nil {
+		return
+	}
+	category := strings.TrimSpace(job.Name)
+	if category == "" {
+		category = "cron"
+	}
+	text := strings.TrimSpace(reason)
+	if text == "" {
+		text = "执行失败"
+	}
+	d := CronDelivery{
+		ProjectID: job.ProjectID,
+		Category:  category,
+		Kind:      "failed",
+		Text:      text,
+	}
+	if err := s.deliverer.DeliverCron(d); err != nil {
+		log.Warn().Err(err).Str("job", job.ID).Msg("cron failure delivery failed")
+	}
 }
 
 func (s *CronScheduler) destroyCronSandbox(ctx context.Context, id uint, jobID string) {
