@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cocofhu/approving/internal/services"
+
 	"github.com/rs/zerolog/log"
 )
 
@@ -88,16 +90,60 @@ func (m *Manager) enqueuePush(key string, item CronPushItem) {
 			q.pending = append(q.pending[:idx], q.pending[idx+1:]...)
 		}
 		if len(q.pending) >= pushQueueDepth {
+			// High-priority full: keep latest failed/changed — never silent-drop newest.
 			log.Error().
 				Str("project", item.ProjectID).
 				Str("category", item.Category).
 				Str("kind", string(item.Kind)).
 				Str("text", truncateRunes(item.Text, 80)).
-				Msg("cron push queue full of high-priority items; cannot enqueue changed/failed")
+				Msg("cron push queue full of high-priority items; retaining newest changed/failed")
+			if replaceSameCategoryHigh(q, item) {
+				return
+			}
+			if drop := indexOldestDroppableHigh(q.pending, item); drop >= 0 {
+				q.pending = append(q.pending[:drop], q.pending[drop+1:]...)
+				q.pending = append(q.pending, item)
+				return
+			}
+			// All failed (or equivalent): ring-replace oldest with newest.
+			q.pending = append(q.pending[1:], item)
 			return
 		}
 	}
 	q.pending = append(q.pending, item)
+}
+
+// replaceSameCategoryHigh overwrites an existing high-priority item in the same
+// category so the latest changed/failed wins without growing past depth.
+func replaceSameCategoryHigh(q *pushQueue, item CronPushItem) bool {
+	for i, p := range q.pending {
+		if p.Kind == CronResultUnchanged {
+			continue
+		}
+		if samePushCategory(p.Category, item.Category) {
+			q.pending[i] = item
+			return true
+		}
+	}
+	return false
+}
+
+// indexOldestDroppableHigh prefers dropping an older changed when the incoming
+// item is failed (or any changed when we need a slot), so latest failed is kept.
+func indexOldestDroppableHigh(items []CronPushItem, incoming CronPushItem) int {
+	if incoming.Kind == CronResultFailed {
+		for i, p := range items {
+			if p.Kind == CronResultChanged {
+				return i
+			}
+		}
+	}
+	for i, p := range items {
+		if p.Kind == CronResultChanged {
+			return i
+		}
+	}
+	return -1
 }
 
 func (m *Manager) takePushQueue(key string) []CronPushItem {
@@ -143,18 +189,13 @@ func samePushCategory(a, b string) bool {
 }
 
 // ClassifyCronResult maps assistant cron text into changed/unchanged/failed.
+// Delegates to services.ClassifyCronDeliveryText so maybeDeliver and DeliverCron
+// fallback share one rule set (no dual-copy drift).
 func ClassifyCronResult(text string) CronResultKind {
-	t := strings.TrimSpace(text)
-	if t == "" {
+	switch services.ClassifyCronDeliveryText(text) {
+	case "failed":
 		return CronResultFailed
-	}
-	lower := strings.ToLower(t)
-	switch {
-	case containsAny(t, "失败", "错误：", "错误:") ||
-		containsAny(lower, "failed", "error:", "failure"):
-		return CronResultFailed
-	case containsAny(t, "无变化", "无更新", "无新的", "暂无变化") ||
-		containsAny(lower, "no change", "unchanged", "no updates", "nothing changed"):
+	case "unchanged":
 		return CronResultUnchanged
 	default:
 		return CronResultChanged

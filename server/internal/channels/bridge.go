@@ -3,7 +3,6 @@ package channels
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -166,7 +165,9 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 }
 
 // forwardProgress subscribes to PmTurnRunner events and forwards only the three
-// allowed progress kinds to Reply. Tool-level ACP frames never become QQ text.
+// allowed progress kinds to Reply. ACP agent_message_chunk deltas are coalesced
+// before classification (short streaming fragments alone rarely match). Tool
+// frames never become QQ text. Status().partial is polled as a backup.
 func (b *ChannelBridge) forwardProgress(ctx context.Context, threadID string, onProgress func(ProgressEvent)) {
 	if b.turns == nil || onProgress == nil {
 		return
@@ -191,11 +192,23 @@ func (b *ChannelBridge) forwardProgress(ctx context.Context, threadID string, on
 	}
 	defer unsub()
 
-	seen := map[string]bool{}
+	acc := newProgressAccumulator()
+	emit := func(events []ProgressEvent) {
+		for _, pe := range events {
+			onProgress(pe)
+		}
+	}
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-ticker.C:
+			if _, _, partial, _, _ := b.turns.Status(threadID); partial != "" {
+				emit(acc.FeedSnapshot(partial))
+			}
 		case ev, open := <-ch:
 			if !open {
 				return
@@ -203,18 +216,11 @@ func (b *ChannelBridge) forwardProgress(ctx context.Context, threadID string, on
 			if ev.Type != "acp" || len(ev.Data) == 0 {
 				continue
 			}
-			pe, ok := ClassifyProgressFromACP(ev.Data, func(raw json.RawMessage) string {
-				return services.ExtractAgentMessageText(raw)
-			})
-			if !ok {
-				continue
+			delta := services.ExtractAgentMessageText(ev.Data)
+			if delta == "" {
+				continue // tool / non-message frames suppressed
 			}
-			key := string(pe.Kind) + "|" + pe.Summary
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			onProgress(pe)
+			emit(acc.Feed(delta))
 		}
 	}
 }

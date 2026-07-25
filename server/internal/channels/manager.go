@@ -280,7 +280,7 @@ func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMe
 		q.mu.Unlock()
 		m.sendOutbound(ctx, rc, OutboundMessage{
 			Scene: in.Scene, ConversationID: in.ConversationID,
-			ReplyToMessageID: in.MessageID, Text: queueAckTextFor(ahead),
+			ReplyToMessageID: in.MessageID, Text: queueAckTextFor(ahead, in.Text),
 		})
 		return
 	}
@@ -427,10 +427,11 @@ func (m *Manager) flushPushQueue(key string) {
 	if len(items) == 0 {
 		return
 	}
-	for _, item := range items {
+	for i, item := range items {
 		// Re-check busy: a new user message may have arrived.
+		// Re-queue current AND all remaining — never drop the tail.
 		if m.IsConversationBusy(item.ProjectID, item.Scene, item.Conv) {
-			m.enqueuePush(key, item)
+			m.requeuePushAll(key, items[i:])
 			return
 		}
 		target, _, _, err := m.lookupDeliveryTarget(item.ProjectID)
@@ -447,6 +448,18 @@ func (m *Manager) flushPushQueue(key string) {
 		}
 		cancel()
 	}
+}
+
+// requeuePushAll puts remaining flush items back in front of anything that
+// arrived while the queue was taken, preserving order and avoiding silent loss.
+func (m *Manager) requeuePushAll(key string, items []CronPushItem) {
+	if len(items) == 0 {
+		return
+	}
+	q := m.pushQueueFor(key)
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.pending = append(append([]CronPushItem(nil), items...), q.pending...)
 }
 
 func (m *Manager) lookupDeliveryTarget(projectID string) (*runningChannel, Scene, string, error) {
@@ -485,11 +498,12 @@ func processingAckText(userText string) string {
 	return ackProcessingPrefix + truncateRunes(userText, ackSummaryRunes)
 }
 
-func queueAckTextFor(ahead int) string {
+func queueAckTextFor(ahead int, userText string) string {
+	summary := truncateRunes(userText, ackSummaryRunes)
 	if ahead > 0 {
-		return fmt.Sprintf("%s，前方还有 %d 条", queueAckPrefix, ahead)
+		return fmt.Sprintf("%s（前方 %d 条）：%s", queueAckPrefix, ahead, summary)
 	}
-	return queueAckPrefix
+	return fmt.Sprintf("%s：%s", queueAckPrefix, summary)
 }
 
 func parseTarget(target string) (Scene, string) {

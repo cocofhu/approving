@@ -2,6 +2,7 @@ package channels
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -163,8 +164,9 @@ func TestFingerprintChanges(t *testing.T) {
 
 // fakeAdapter records outbound sends and satisfies the Adapter interface.
 type fakeAdapter struct {
-	mu   sync.Mutex
-	sent []OutboundMessage
+	mu     sync.Mutex
+	sent   []OutboundMessage
+	onSend func(out OutboundMessage) // optional hook (called under mu)
 }
 
 func (f *fakeAdapter) Type() string                                              { return "fake" }
@@ -174,6 +176,9 @@ func (f *fakeAdapter) Send(ctx context.Context, out OutboundMessage) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, out)
+	if f.onSend != nil {
+		f.onSend(out)
+	}
 	return nil
 }
 
@@ -386,11 +391,11 @@ func TestDispatchBusyEnqueuePerMessageAckAndDequeueAck(t *testing.T) {
 	if hasPrefixCount(got, ackProcessingPrefix) < 3 {
 		t.Fatalf("expected processing ACK for idle + each dequeue, got %v", got)
 	}
-	if countText(got, queueAckTextFor(1)) != 1 {
-		t.Fatalf("expected queue ACK ahead=1, got %v", got)
+	if countText(got, queueAckTextFor(1, "hello")) != 1 {
+		t.Fatalf("expected queue ACK ahead=1 with summary, got %v", got)
 	}
-	if countText(got, queueAckTextFor(2)) != 1 {
-		t.Fatalf("expected queue ACK ahead=2, got %v", got)
+	if countText(got, queueAckTextFor(2, "hello")) != 1 {
+		t.Fatalf("expected queue ACK ahead=2 with summary, got %v", got)
 	}
 	if countText(got, "final-m5a") != 1 || countText(got, "final-m5b") != 1 || countText(got, "final-m5c") != 1 {
 		t.Fatalf("missing finals in %v", got)
@@ -714,8 +719,10 @@ func TestClassifyProgressText(t *testing.T) {
 		ok   bool
 	}{
 		{"milestone marker", "[进度] 已打开 PR #12", ProgressMilestone, true},
-		{"blocker keyword", "检查失败：权限不足", ProgressBlocker, true},
+		{"blocker marker", "[阻塞] CI 红了", ProgressBlocker, true},
+		{"blocker strong phrase", "检查失败：权限不足", ProgressBlocker, true},
 		{"confirm keyword", "请确认是否合并", ProgressConfirm, true},
+		{"bare fail not blocker", "如果失败了再试一次吧这个说法", "", false},
 		{"tool noise", "tool_call foo", "", false},
 		{"short noise", "ok", "", false},
 		{"plain chat", "正在想一下怎么做比较好呢这个说法", "", false},
@@ -730,6 +737,49 @@ func TestClassifyProgressText(t *testing.T) {
 				t.Fatalf("kind=%q want %q", ev.Kind, c.kind)
 			}
 		})
+	}
+}
+
+func TestProgressAccumulatorStreamingChunks(t *testing.T) {
+	// plan g2.2 / review v1: short ACP deltas coalesce; markers forward; tool noise skipped.
+	acc := newProgressAccumulator()
+	chunks := []string{
+		"[进", "度] ", "已打", "开 PR #", "12\n",
+		"tool_call foo bar\n",
+		"[阻", "塞] ", "CI ", "红了",
+	}
+	var kinds []ProgressKind
+	for _, c := range chunks {
+		for _, pe := range acc.Feed(c) {
+			kinds = append(kinds, pe.Kind)
+		}
+	}
+	if len(kinds) != 2 || kinds[0] != ProgressMilestone || kinds[1] != ProgressBlocker {
+		t.Fatalf("coalesced kinds = %v want [milestone blocker]", kinds)
+	}
+	// Dedup: feeding snapshot of same buffer must not re-emit.
+	if more := acc.FeedSnapshot(acc.buf); len(more) != 0 {
+		t.Fatalf("snapshot dedup leaked %v", more)
+	}
+}
+
+func TestClassifyProgressFromACPMultiChunkSequence(t *testing.T) {
+	// Integration-style: multi-chunk ACP agent_message frames → accumulator → QQ kinds.
+	acc := newProgressAccumulator()
+	frames := []string{
+		`{"type":"session_update","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"[确认]"}}}`,
+		`{"type":"session_update","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":" 是否合并 PR"}}}`,
+		`{"type":"session_update","update":{"sessionUpdate":"tool_call","content":{"type":"text","text":"gh pr view"}}}`,
+	}
+	var got []ProgressKind
+	for _, raw := range frames {
+		delta := services.ExtractAgentMessageText(json.RawMessage(raw))
+		for _, pe := range acc.Feed(delta) {
+			got = append(got, pe.Kind)
+		}
+	}
+	if len(got) != 1 || got[0] != ProgressConfirm {
+		t.Fatalf("ACP multi-chunk kinds = %v want [confirm]; tool_call must not forward", got)
 	}
 }
 
@@ -897,6 +947,130 @@ func TestFormatCronPushTemplates(t *testing.T) {
 	}
 	if got := FormatCronPush("每小时PR", CronResultChanged, "有 1 个新 PR"); got != "有 1 个新 PR" {
 		t.Fatalf("changed = %q", got)
+	}
+}
+
+func TestFlushPushQueueMidBusyRequeuesRemaining(t *testing.T) {
+	// review v2: ≥2 queued pushes; after first send becomes busy → remaining stay queued and flush later.
+	fa := &fakeAdapter{}
+	m := NewManager(nil, nil, nil)
+	m.mu.Lock()
+	m.running["c1"] = &runningChannel{
+		cfg: models.ChannelConfig{
+			ID: "c1", Type: "qq", ProjectID: "proj", Enabled: true,
+			CronDeliver: true, CronDeliverTarget: "c2c:user1",
+		},
+		adapter: fa,
+	}
+	m.mu.Unlock()
+
+	key := convKey("proj", SceneC2C, "user1")
+	q := m.convQueueFor(key)
+	q.mu.Lock()
+	q.busy = true
+	q.mu.Unlock()
+
+	_ = m.DeliverCron(cronDelivery("proj", "每小时PR", "changed", "有 2 个新 PR"))
+	_ = m.DeliverCron(cronDelivery("proj", "日报", "changed", "日报有更新"))
+	_ = m.DeliverCron(cronDelivery("proj", "每小时PR", "failed", "PR 拉取失败"))
+
+	// During flush of the first item, mark busy again so remaining must requeue.
+	sendCount := 0
+	fa.onSend = func(out OutboundMessage) {
+		sendCount++
+		if sendCount == 1 {
+			q.mu.Lock()
+			q.busy = true
+			q.mu.Unlock()
+		}
+	}
+
+	q.mu.Lock()
+	q.busy = false
+	q.mu.Unlock()
+	m.flushPushQueue(key)
+
+	got := sentTexts(fa)
+	if len(got) != 1 {
+		t.Fatalf("mid-busy flush should send exactly 1 item, got %v", got)
+	}
+	pq := m.pushQueueFor(key)
+	pq.mu.Lock()
+	remaining := len(pq.pending)
+	pq.mu.Unlock()
+	if remaining < 2 {
+		t.Fatalf("expected ≥2 remaining after mid-busy requeue, got %d (sent=%v)", remaining, got)
+	}
+
+	// Idle again → remaining flush completely.
+	q.mu.Lock()
+	q.busy = false
+	q.mu.Unlock()
+	fa.onSend = nil
+	m.flushPushQueue(key)
+	got = sentTexts(fa)
+	if countText(got, "有 2 个新 PR") != 1 || countText(got, "日报有更新") != 1 || countText(got, "PR：PR 拉取失败") != 1 {
+		t.Fatalf("all pushes must eventually send, got %v", got)
+	}
+}
+
+func TestPushQueueFullRetainsNewestFailed(t *testing.T) {
+	// review v4: depth full of high-priority → newest failed/changed retained (not silent drop).
+	m := NewManager(nil, nil, nil)
+	key := convKey("proj", SceneC2C, "user1")
+	for i := 0; i < pushQueueDepth; i++ {
+		m.enqueuePush(key, CronPushItem{
+			ProjectID: "proj", Scene: SceneC2C, Conv: "user1",
+			Category: fmt.Sprintf("cat-%d", i), Kind: CronResultChanged,
+			Text: fmt.Sprintf("changed-%d", i),
+		})
+	}
+	m.enqueuePush(key, CronPushItem{
+		ProjectID: "proj", Scene: SceneC2C, Conv: "user1",
+		Category: "critical", Kind: CronResultFailed, Text: "最新失败不可丢",
+	})
+	pq := m.pushQueueFor(key)
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+	if len(pq.pending) != pushQueueDepth {
+		t.Fatalf("queue len = %d want %d", len(pq.pending), pushQueueDepth)
+	}
+	found := false
+	for _, p := range pq.pending {
+		if p.Kind == CronResultFailed && strings.Contains(p.Text, "最新失败不可丢") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("newest failed missing from full queue: %+v", pq.pending)
+	}
+}
+
+func TestChannelPreambleRequiresProgressMarkers(t *testing.T) {
+	p := ChannelPreamble("qq")
+	for _, marker := range []string{"[进度]", "[阻塞]", "[确认]"} {
+		if !strings.Contains(p, marker) {
+			t.Fatalf("preamble missing %s: %s", marker, p)
+		}
+	}
+}
+
+func TestClassifyCronResultDelegatesToServices(t *testing.T) {
+	// review v5: single shared classification with services.ClassifyCronDeliveryText.
+	cases := []struct {
+		in   string
+		want CronResultKind
+	}{
+		{"PR：无变化", CronResultUnchanged},
+		{"失败：timeout", CronResultFailed},
+		{"opened PR #12", CronResultChanged},
+	}
+	for _, c := range cases {
+		if got := ClassifyCronResult(c.in); got != c.want {
+			t.Errorf("ClassifyCronResult(%q) = %q want %q (services=%q)",
+				c.in, got, c.want, services.ClassifyCronDeliveryText(c.in))
+		}
 	}
 }
 
