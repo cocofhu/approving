@@ -22,6 +22,7 @@ import { useWorkflowImport } from '@/lib/useWorkflowImport'
 import PmLeaderChat from '@/components/pm/PmLeaderChat.vue'
 import PmCronJobsPanel from '@/components/pm/PmCronJobsPanel.vue'
 import PmSettingsPanel from '@/components/pm/PmSettingsPanel.vue'
+import TokenUsageHoverTip from '@/components/ui/TokenUsageHoverTip.vue'
 import type { ClarifyImage, PmLeaderBinding, Project, ProjectEnvEntry, ProjectVariable, Workflow } from '@/lib/types'
 
 const PROJECT_TABS = [
@@ -657,9 +658,16 @@ onUnmounted(() => {
           </div>
           <div class="flex flex-wrap items-start gap-2">
             <div
-              class="min-w-[132px] rounded-[10px] border border-accent/35 bg-gradient-to-b from-accent-dim/90 to-surface px-3 py-2 text-left md:text-right"
+              class="group relative min-w-[132px] rounded-[10px] border border-accent/35 bg-gradient-to-b from-accent-dim/90 to-surface px-3 py-2 text-left transition-[box-shadow,border-color] md:text-right"
+              :class="project.totalTokens != null ? 'cursor-help hover:border-accent hover:shadow-[0_0_0_3px_rgba(123,97,255,0.14)]' : ''"
               data-testid="project-token-stat"
-              :aria-label="t('pages.projectDetail.tokenUsage')"
+              :aria-label="
+                project.totalTokens != null
+                  ? t('pages.projectDetail.tokenTipAria')
+                  : t('pages.projectDetail.tokenUsage')
+              "
+              :aria-describedby="project.totalTokens != null ? 'project-token-detail-tip' : undefined"
+              :tabindex="project.totalTokens != null ? 0 : undefined"
             >
               <div class="text-[11px] font-semibold tracking-wide text-accent-2">
                 {{ t('pages.projectDetail.tokenUsage') }}
@@ -667,12 +675,18 @@ onUnmounted(() => {
               <div
                 class="mt-0.5 text-[22px] font-bold leading-tight tracking-tight tabular-nums"
                 :class="project.totalTokens == null ? 'text-txt3' : 'text-txt'"
+                data-testid="project-token-stat-value"
               >
                 {{ fmtCompactTokenCount(project.totalTokens) }}
               </div>
               <div class="mt-0.5 text-[11px] text-txt3">
                 {{ t('pages.projectDetail.tokenUsageHint') }}
               </div>
+              <TokenUsageHoverTip
+                v-if="project.totalTokens != null"
+                tip-id="project-token-detail-tip"
+                :total-tokens="project.totalTokens"
+              />
             </div>
             <AppButton variant="outline" size="sm" class="text-err" @click="showDelete = true">
               {{ t('common.buttons.delete') }}
