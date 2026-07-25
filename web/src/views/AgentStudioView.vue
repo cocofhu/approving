@@ -2891,10 +2891,6 @@ onBeforeUnmount(() => {
                         class="shrink-0 border border-accent-2/35 bg-accent/15 px-1 text-[9px] font-bold uppercase tracking-wide text-accent-2"
                       >{{ t('pages.agentStudio.org.multiGroup') }}</span>
                     </span>
-                    <span
-                      v-if="row.parentAgent"
-                      class="mt-0.5 block truncate text-[10.5px] leading-tight text-txt3"
-                    >{{ t('pages.agentStudio.org.reportsTo', { name: row.parentAgent }) }}</span>
                   </span>
                 </button>
               </template>
