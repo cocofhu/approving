@@ -56,7 +56,14 @@ const lastPeekAt = ref(0)
 const items = displayedItems
 const count = computed(() => totalCount.value)
 
-let refreshPromise: Promise<void> | null = null
+/** Separate flight slots so force/submit never joins an in-flight peek. */
+let peekPromise: Promise<void> | null = null
+let forcePromise: Promise<void> | null = null
+/**
+ * Monotonic generation: bumping invalidates in-flight peek/force writebacks.
+ * Force always bumps so a slower peek cannot overwrite with setPending.
+ */
+let refreshGeneration = 0
 
 async function fetchPeek(): Promise<{ items: InboxItem[]; total: number }> {
   const data = await api.listGates({ page: 1, pageSize: 20 })
@@ -87,23 +94,59 @@ function applyRemoteToDisplayed(remote: InboxItem[], total: number) {
   pendingMeta.value = null
 }
 
-async function peek(opts?: PeekOptions): Promise<void> {
-  if (refreshPromise) return refreshPromise
+function syncPendingMetaFromDiff() {
+  const meta = diffKeys(displayedItems.value, remoteItems.value)
+  if (meta.added > 0 || meta.removed > 0) {
+    hasPendingUpdate.value = true
+    pendingMeta.value = meta
+  } else {
+    hasPendingUpdate.value = false
+    pendingMeta.value = null
+  }
+}
 
-  refreshPromise = (async () => {
+/**
+ * Optimistic local removal after approve/reject/clarify-force succeeds.
+ * Keeps sidebar totalCount/displayedItems aligned even when force refresh fails
+ * or a stale peek would otherwise linger.
+ */
+function removeItemLocally(key: string): void {
+  const inDisplayed = displayedItems.value.some((it) => itemKey(it) === key)
+  const inRemote = remoteItems.value.some((it) => itemKey(it) === key)
+  if (!inDisplayed && !inRemote) return
+
+  displayedItems.value = displayedItems.value.filter((it) => itemKey(it) !== key)
+  remoteItems.value = remoteItems.value.filter((it) => itemKey(it) !== key)
+  if (inDisplayed || inRemote) {
+    totalCount.value = Math.max(0, totalCount.value - 1)
+  }
+  syncPendingMetaFromDiff()
+}
+
+async function peek(opts?: PeekOptions): Promise<void> {
+  // Prefer awaiting in-flight force: it applies to displayed and is fresher.
+  if (forcePromise) return forcePromise
+  if (peekPromise) return peekPromise
+
+  const gen = ++refreshGeneration
+  // Holder avoids TS2454: const flight = (async () => flight)() is "used before assigned".
+  const holder: { flight: Promise<void> | null } = { flight: null }
+  holder.flight = (async () => {
     try {
       const { items: remote, total } = await fetchPeek()
+      // Discard if a newer peek/force superseded this request.
+      if (gen !== refreshGeneration) return
       lastRefreshSource.value = opts?.source ?? null
       setPending(remote, total)
       lastPeekAt.value = Date.now()
     } catch {
       /* keep last known items on transient errors */
     } finally {
-      refreshPromise = null
+      if (peekPromise === holder.flight) peekPromise = null
     }
   })()
-
-  return refreshPromise
+  peekPromise = holder.flight
+  return holder.flight
 }
 
 function applyPending(): void {
@@ -129,21 +172,27 @@ async function refresh(opts?: RefreshOptions): Promise<void> {
     return peek({ source: opts?.source })
   }
 
-  if (refreshPromise) return refreshPromise
+  // Deduplicate concurrent force calls, but never join an in-flight peek.
+  if (forcePromise) return forcePromise
 
-  refreshPromise = (async () => {
+  // Invalidate any in-flight peek writeback (setPending) before we apply.
+  const gen = ++refreshGeneration
+  // Holder avoids TS2454 on self-referential flight cleanup.
+  const holder: { flight: Promise<void> | null } = { flight: null }
+  holder.flight = (async () => {
     try {
       const { items: remote, total } = await fetchPeek()
+      if (gen !== refreshGeneration) return
       lastRefreshSource.value = opts?.source ?? null
       applyRemoteToDisplayed(remote, total)
     } catch {
       /* keep last known items on transient errors */
     } finally {
-      refreshPromise = null
+      if (forcePromise === holder.flight) forcePromise = null
     }
   })()
-
-  return refreshPromise
+  forcePromise = holder.flight
+  return holder.flight
 }
 
 export function usePendingGates() {
@@ -160,6 +209,7 @@ export function usePendingGates() {
     refresh,
     peek,
     applyPending,
+    removeItemLocally,
     itemKey,
   }
 }
