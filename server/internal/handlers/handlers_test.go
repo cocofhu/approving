@@ -304,7 +304,7 @@ func TestWorkflowEndpoints(t *testing.T) {
 	}
 
 	// Start a run against the published workflow.
-	if w := h.do("POST", "/api/workflows/"+id+"/runs", map[string]any{"trigger": "test"}); w.Code != 200 {
+	if w := h.do("POST", "/api/workflows/"+id+"/runs", map[string]any{"trigger": "manual"}); w.Code != 200 {
 		t.Fatalf("start run: %d %s", w.Code, w.Body)
 	}
 	// Start against missing workflow.
@@ -433,7 +433,7 @@ func TestRunPriorityEndpoints(t *testing.T) {
 	}
 
 	// Start run with high priority via internal API.
-	w = h.do("POST", "/api/workflows/wf-pri/runs", map[string]any{"trigger": "test", "priority": "high"})
+	w = h.do("POST", "/api/workflows/wf-pri/runs", map[string]any{"trigger": "manual", "priority": "high"})
 	if w.Code != 200 {
 		t.Fatalf("start with priority: %d %s", w.Code, w.Body)
 	}
