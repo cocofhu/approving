@@ -443,6 +443,10 @@ export const api = {
     projectId?: string
     page?: number
     pageSize?: number
+    /** Whitelist: started_at | priority. Only sent when paired with a valid order. */
+    sort?: string
+    /** Whitelist: asc | desc. Only sent when paired with a valid sort. */
+    order?: 'asc' | 'desc' | string
   }) => {
     const qs = new URLSearchParams()
     if (params?.status) qs.set('status', params.status)
@@ -450,6 +454,15 @@ export const api = {
     if (params?.projectId) qs.set('projectId', params.projectId)
     if (params?.page != null) qs.set('page', String(params.page))
     if (params?.pageSize != null) qs.set('pageSize', String(params.pageSize))
+    const sort = params?.sort
+    const order = params?.order
+    if (
+      (sort === 'started_at' || sort === 'priority') &&
+      (order === 'asc' || order === 'desc')
+    ) {
+      qs.set('sort', sort)
+      qs.set('order', order)
+    }
     const q = qs.toString()
     const path = q ? `/runs?${q}` : '/runs'
     if (params?.page != null || params?.pageSize != null) {

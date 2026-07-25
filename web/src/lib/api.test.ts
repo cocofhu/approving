@@ -76,6 +76,12 @@ describe('api req helpers', () => {
       .mockResolvedValueOnce(
         jsonResponse({ items: [{ id: 'r1' }], total: 1, page: 1, pageSize: 10, hasMore: false }),
       )
+      .mockResolvedValueOnce(
+        jsonResponse({ items: [], total: 0, page: 1, pageSize: 10, hasMore: false }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ items: [], total: 0, page: 1, pageSize: 10, hasMore: false }),
+      )
       .mockResolvedValueOnce(jsonResponse({ id: 'r1' }))
       .mockResolvedValueOnce(jsonResponse({ items: [] }))
       .mockResolvedValueOnce(jsonResponse({ id: 'r1', status: 'running' }))
@@ -128,6 +134,13 @@ describe('api req helpers', () => {
     await expect(api.listRuns({ status: 'running', wf: 'w1', projectId: 'p1', page: 1, pageSize: 10 })).resolves.toMatchObject({
       total: 1,
     })
+    await api.listRuns({ page: 1, pageSize: 10, sort: 'priority', order: 'desc' })
+    const lastCallUrl = () => String(fetchMock.mock.calls[fetchMock.mock.calls.length - 1]?.[0])
+    expect(lastCallUrl()).toMatch(/sort=priority/)
+    expect(lastCallUrl()).toMatch(/order=desc/)
+    await api.listRuns({ page: 1, pageSize: 10, sort: 'duration', order: 'desc' })
+    expect(lastCallUrl()).not.toMatch(/sort=/)
+    expect(lastCallUrl()).not.toMatch(/order=/)
     await expect(api.getRun('r1')).resolves.toMatchObject({ id: 'r1' })
     await expect(api.inboxContext('r1', 'n1', 1)).resolves.toEqual({ items: [] })
     await expect(api.startRun('w1', { a: 1 })).resolves.toMatchObject({ id: 'r1' })

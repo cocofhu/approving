@@ -113,3 +113,34 @@ describe('RunListView delete run and ops column', () => {
     expect(src).toMatch(/pages\.runDetail\.cancelTitle/)
   })
 })
+
+describe('RunListView sorting', () => {
+  it('exposes desktop sortable headers for start time and priority only', () => {
+    expect(src).toMatch(/applySortClick\('started_at'\)/)
+    expect(src).toMatch(/applySortClick\('priority'\)/)
+    expect(src).toMatch(/role="columnheader"/)
+    expect(src).toMatch(/aria-sort/)
+    expect(src).toMatch(/th\.sortable/)
+    expect(src).toMatch(/sort-icon/)
+    // No product "restore default" control; sort UI is desktop-table only.
+    expect(src).not.toMatch(/恢复默认|restoreDefault|clearSort/)
+    expect(src).toMatch(/<!-- Desktop table -->[\s\S]*applySortClick\('started_at'\)/)
+    expect(src).toMatch(/<!-- Mobile card list -->[\s\S]*?<!-- Desktop table -->/)
+    const mobileBlock = src.slice(
+      src.indexOf('<!-- Mobile card list -->'),
+      src.indexOf('<!-- Desktop table -->'),
+    )
+    expect(mobileBlock).not.toContain('applySortClick')
+    expect(mobileBlock).not.toContain('sort-icon')
+  })
+
+  it('syncs whitelist sort to URL and listParams; strips illegal pairs', () => {
+    expect(src).toMatch(/parseRunSort/)
+    expect(src).toMatch(/sort: sort\.sort, order: sort\.order/)
+    expect(src).toMatch(/delete query\.sort/)
+    expect(src).toMatch(/delete query\.order/)
+    expect(src).toMatch(/router\.replace\(\{ query \}\)/)
+    expect(src).toMatch(/started_at: 'desc'/)
+    expect(src).toMatch(/priority: 'desc'/)
+  })
+})
