@@ -129,7 +129,9 @@ async function peek(opts?: PeekOptions): Promise<void> {
   if (peekPromise) return peekPromise
 
   const gen = ++refreshGeneration
-  const flight = (async () => {
+  // Holder avoids TS2454: const flight = (async () => flight)() is "used before assigned".
+  const holder: { flight: Promise<void> | null } = { flight: null }
+  holder.flight = (async () => {
     try {
       const { items: remote, total } = await fetchPeek()
       // Discard if a newer peek/force superseded this request.
@@ -140,11 +142,11 @@ async function peek(opts?: PeekOptions): Promise<void> {
     } catch {
       /* keep last known items on transient errors */
     } finally {
-      if (peekPromise === flight) peekPromise = null
+      if (peekPromise === holder.flight) peekPromise = null
     }
   })()
-  peekPromise = flight
-  return flight
+  peekPromise = holder.flight
+  return holder.flight
 }
 
 function applyPending(): void {
@@ -175,7 +177,9 @@ async function refresh(opts?: RefreshOptions): Promise<void> {
 
   // Invalidate any in-flight peek writeback (setPending) before we apply.
   const gen = ++refreshGeneration
-  const flight = (async () => {
+  // Holder avoids TS2454 on self-referential flight cleanup.
+  const holder: { flight: Promise<void> | null } = { flight: null }
+  holder.flight = (async () => {
     try {
       const { items: remote, total } = await fetchPeek()
       if (gen !== refreshGeneration) return
@@ -184,11 +188,11 @@ async function refresh(opts?: RefreshOptions): Promise<void> {
     } catch {
       /* keep last known items on transient errors */
     } finally {
-      if (forcePromise === flight) forcePromise = null
+      if (forcePromise === holder.flight) forcePromise = null
     }
   })()
-  forcePromise = flight
-  return flight
+  forcePromise = holder.flight
+  return holder.flight
 }
 
 export function usePendingGates() {
