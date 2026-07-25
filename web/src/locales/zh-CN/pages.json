@@ -569,8 +569,11 @@
       },
       "sandboxLog": {
         "title": "沙箱容器日志 · stdout/stderr",
-        "live": "实时",
-        "archived": "已归档",
+        "live": "live",
+        "archived": "archived",
+        "errorBadge": "error",
+        "errorTitle": "无法读取沙箱日志",
+        "liveEmpty": "（已连接 · 当前无 stdout/stderr 输出）",
         "pending": "节点尚未执行,暂无沙箱日志",
         "empty": "暂无沙箱日志(容器可能尚未创建或已回收且未归档)"
       }

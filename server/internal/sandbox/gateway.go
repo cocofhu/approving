@@ -221,6 +221,26 @@ func (g *GatewayClient) LiveStatus(ctx context.Context, id string) (string, erro
 	return out.Status, nil
 }
 
+// Logs fetches PID1 combined stdout/stderr from the gateway control plane
+// (GET /api/v1/sandboxes/:id/logs?tail=). Non-follow; empty content is a
+// successful read with no output yet.
+func (g *GatewayClient) Logs(ctx context.Context, id string, tail int) (string, error) {
+	if strings.TrimSpace(id) == "" {
+		return "", fmt.Errorf("sandbox id required")
+	}
+	if tail <= 0 {
+		tail = 5000
+	}
+	path := fmt.Sprintf("/api/v1/sandboxes/%s/logs?tail=%d", url.PathEscape(id), tail)
+	var out struct {
+		Content string `json:"content"`
+	}
+	if err := g.do(ctx, http.MethodGet, path, nil, &out); err != nil {
+		return "", err
+	}
+	return out.Content, nil
+}
+
 // WaitRunning polls Get until the record is "running" with a resolved session
 // endpoint, or the timeout/context elapses. An "error" status is returned as an
 // error carrying the gateway's message.

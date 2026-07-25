@@ -433,11 +433,20 @@ func (m *Manager) DestroyByName(ctx context.Context, id string) error {
 	return m.gw.Destroy(ctx, id)
 }
 
-// Logs is a best-effort no-op: the gateway does not expose container logs and
-// the data-plane SSH path cannot recover the container's PID1 stdout. Returns
-// empty so callers (log archive/view) degrade gracefully.
+// Logs fetches PID1 combined stdout/stderr via the gateway control plane.
+// id is the gateway sandbox id (also stored as Sandbox.Name). Empty content
+// with a nil error means a successful read with no output yet.
 func (m *Manager) Logs(ctx context.Context, id string, tail int) (string, error) {
-	return "", nil
+	if m.gw == nil {
+		return "", fmt.Errorf("sandbox manager has no gateway client configured")
+	}
+	if strings.TrimSpace(id) == "" {
+		return "", fmt.Errorf("sandbox id required")
+	}
+	if tail <= 0 {
+		tail = 5000
+	}
+	return m.gw.Logs(ctx, id, tail)
 }
 
 // normalizeGWStatus maps gateway/driver status to the docker-like vocabulary the

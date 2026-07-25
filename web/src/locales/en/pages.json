@@ -569,8 +569,11 @@
       },
       "sandboxLog": {
         "title": "Sandbox container log · stdout/stderr",
-        "live": "Live",
-        "archived": "Archived",
+        "live": "live",
+        "archived": "archived",
+        "errorBadge": "error",
+        "errorTitle": "Unable to read sandbox log",
+        "liveEmpty": "(connected · no stdout/stderr output yet)",
         "pending": "Node not started yet; no sandbox log",
         "empty": "No sandbox log (container not created or recycled without archive)"
       }

@@ -1343,6 +1343,28 @@ func TestSandboxLogFoundBranches(t *testing.T) {
 	}
 }
 
+// TestSandboxLogLiveErrorSurfaced ensures a live logs read failure returns an
+// error field (found=false) rather than the empty "no source" disguise.
+func TestSandboxLogLiveErrorSurfaced(t *testing.T) {
+	h := newHarness(t)
+	row := &models.Sandbox{Name: "approving-sb-logerr", Purpose: "run", Status: "running", RunID: "runE", NodeID: "n1"}
+	h.db.Create(row)
+	h.fg.SetStatus(row.Name, "running")
+	h.fg.FailLogs = true
+
+	w := h.do("GET", "/api/runs/runE/nodes/n1/sandbox-log", nil)
+	if w.Code != 200 {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `"found":false`) || !strings.Contains(body, `"error"`) {
+		t.Fatalf("want found=false with error, got %s", body)
+	}
+	if strings.Contains(body, "暂无沙箱日志") {
+		t.Fatal("error must not use empty-state copy")
+	}
+}
+
 // TestHandlerDBErrorBranches closes the DB connection and exercises the
 // error/500 branches of the read/delete handlers that talk to the database.
 func TestHandlerDBErrorBranches(t *testing.T) {

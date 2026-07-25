@@ -96,6 +96,14 @@ func TestNameAndHelpers(t *testing.T) {
 	}
 }
 
+func TestLogsUnsupported(t *testing.T) {
+	d := testDriver(t, true)
+	_, err := d.Logs(context.Background(), "any", 100)
+	if err == nil || err != driver.ErrLogsUnsupported {
+		t.Fatalf("Logs want ErrLogsUnsupported, got %v", err)
+	}
+}
+
 func TestCreateWithEnableLoadBalancer(t *testing.T) {
 	d := testDriver(t, true)
 	ctx := context.Background()
