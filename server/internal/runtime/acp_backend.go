@@ -151,7 +151,7 @@ func mergeAuthEnv(backend AcpBackend, env map[string]string) (map[string]string,
 		}
 	}
 	if val == "" {
-		return out, fmt.Errorf("鉴权未配置:请在 Agent 环境变量中设置 %s", strings.Join(spec.agentKeys, " 或 "))
+		return out, fmt.Errorf("鉴权未配置:请在项目沙箱 env 或 Agent 环境变量中设置 %s", strings.Join(spec.agentKeys, " 或 "))
 	}
 	out[spec.cliKey] = val
 	mergeRegionEnv(backend, out)
@@ -234,8 +234,9 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-// IsPlatformAuthEnvKey reports CLI auth keys that must not come from platform
-// sandbox.env (Agent env is the sole source after MergeAuthEnv).
+// IsPlatformAuthEnvKey reports official ACP CLI auth keys that must not be
+// injected via platform-level sandbox.env / opts.Env. Project sandbox env may
+// store them as a workflow baseline (forced Secret); Agent env overrides.
 func IsPlatformAuthEnvKey(k string) bool {
 	switch k {
 	case "CURSOR_API_KEY", "ANTHROPIC_API_KEY", "CODEBUDDY_API_KEY",

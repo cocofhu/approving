@@ -1327,8 +1327,8 @@ func (c *acpProvider) spec(req NodeReq) (sandbox.Spec, error) {
 	// Empty repos == a pure artifact flow (empty workspace).
 	repos := resolveRepos(req)
 	env := map[string]string{}
-	// Non-auth platform sandbox env (e.g. optional overrides) — API keys belong
-	// in Agent env only (see mergeAuthEnv).
+	// Non-auth platform sandbox env only — official ACP auth keys must not come
+	// from platform opts.Env (see IsPlatformAuthEnvKey).
 	for k, v := range c.opts.Env {
 		if IsPlatformAuthEnvKey(k) {
 			continue
@@ -1338,13 +1338,11 @@ func (c *acpProvider) spec(req NodeReq) (sandbox.Spec, error) {
 	profile := str2(req.Config["skill_profile"])
 	agentCfg := c.agentConfig(profile)
 	vars := c.mcpVars(req)
-	// Project sandbox env: platform < project < Agent < runtime. Skip ACP auth
-	// keys; substitute ${vars.*}/${APPROVING_*} after run vars are available.
+	// Project sandbox env: platform < project < Agent < runtime. Official ACP
+	// auth keys are allowed as project baseline; Agent overlays same-name keys.
+	// Substitute ${vars.*}/${APPROVING_*} after run vars are available.
 	if c.opts.ProjectEnvForWorkflow != nil && req.WorkflowID != "" {
 		for k, v := range c.opts.ProjectEnvForWorkflow(req.WorkflowID) {
-			if IsPlatformAuthEnvKey(k) {
-				continue
-			}
 			env[k] = substVars(v, vars)
 		}
 	}

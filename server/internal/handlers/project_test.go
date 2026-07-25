@@ -63,13 +63,19 @@ func TestProjectCRUDAndErrors(t *testing.T) {
 		t.Fatalf("bad json create: %d", w.Code)
 	}
 
-	// Platform auth env key rejected
+	// Official ACP auth key allowed (forced secret, response masked)
 	w = hn.do("POST", "/api/projects", map[string]any{
-		"name":       "BadEnv",
+		"name":       "AuthEnv",
 		"sandboxEnv": []map[string]any{{"key": "CURSOR_API_KEY", "value": "x", "secret": true}},
 	})
-	if w.Code != http.StatusBadRequest {
+	if w.Code != http.StatusOK {
 		t.Fatalf("auth env: %d %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `"key":"CURSOR_API_KEY"`) ||
+		!strings.Contains(body, `"value":"`+services.SecretMask+`"`) ||
+		!strings.Contains(body, `"secret":true`) {
+		t.Fatalf("auth env mask/secret: %s", body)
 	}
 
 	// Secret placeholder on new key
