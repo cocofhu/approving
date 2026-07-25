@@ -87,7 +87,7 @@
           "desc": "完整对话记录"
         }
       },
-      "help": "### 需求澄清(react)\n\n与人多轮 ReAct 对话,把模糊需求澄清为**结构化需求**。\n\n**唯一交付(强制)**:调用 `set_clarified_requirement` 写入 `clarified_requirement.json`(功能需求、非功能需求、约束、范围外、待定问题)。未写入则节点失败。\n\n**提问**:用 `ask_question` 向人提出选择题;选项可标 `recommended` 推荐(每题最多一个),界面高亮该项、便于一键确认。\n\n**自动澄清**:配置「自动澄清变量」且其为真时,平台不等人工——每轮自动选推荐选项(无推荐则取第一个)回复,直到澄清结束或达到最大轮次。运行页也提供「采用推荐」按钮,可一键按推荐项填选并提交。\n\n**自动产物**:仅自动生成保留 JSON `clarified_requirement.json`,可直接结构化展示,并用 `exists(\"clarified_requirement.json\")` / `json(\"clarified_requirement.json\").字段` 做分支判断。\n\n**条件注入**:配置「条件注入」后,当指定全局变量存在且非空时,把附加提示词追加到 Prompt 末尾(常用于门禁回填后重进本节点)。"
+      "help": "### 需求澄清(react)\n\n与人多轮 ReAct 对话,把模糊需求澄清为**结构化需求**。\n\n**唯一交付(强制)**:调用 `set_clarified_requirement` 写入 `clarified_requirement.json`(功能需求、非功能需求、约束、范围外、待定问题)。未写入则节点失败。\n\n**提问**:用 `ask_question` 向人提出选择题;选项可标 `recommended` 推荐(单选每题最多 1 个;多选应标记 1 个或多个),界面高亮推荐项、便于确认;未标记时自动模式回退该题首项。\n\n**自动澄清**:配置「自动澄清变量」且其为真时,平台不等人工——每轮自动选推荐选项(无推荐则取第一个)回复,直到澄清结束或达到最大轮次。运行页也提供「采用推荐」按钮,可一键按推荐项填选并提交。\n\n**自动产物**:仅自动生成保留 JSON `clarified_requirement.json`,可直接结构化展示,并用 `exists(\"clarified_requirement.json\")` / `json(\"clarified_requirement.json\").字段` 做分支判断。\n\n**条件注入**:配置「条件注入」后,当指定全局变量存在且非空时,把附加提示词追加到 Prompt 末尾(常用于门禁回填后重进本节点)。"
     },
     "agent": {
       "label": "通用",
