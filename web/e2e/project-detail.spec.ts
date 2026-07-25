@@ -328,10 +328,13 @@ async function gotoProjectDetailWithProject(
 }
 
 test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
-  test('页头无「合并规则」且保留删除', async ({ page }) => {
+  test('页头无「合并规则」且无项目删除', async ({ page }) => {
     await gotoProjectDetailWithProject(page, MOCK_PROJECT)
 
-    await expect(page.getByRole('button', { name: '删除' }).first()).toBeVisible()
+    // 页头右区仅保留 Token；项目级「删除」已迁入「项目信息」底栏（g1.1 / g3.1）
+    const headerActions = page.getByTestId('project-detail-header-actions')
+    await expect(headerActions.getByTestId('project-token-stat')).toBeVisible()
+    await expect(headerActions.getByRole('button', { name: '删除' })).toHaveCount(0)
     // 页头不应再有「合并规则」按钮；Tab hint 旁的「查看合并规则」链接在进入对应 Tab 后才出现
     await expect(page.getByRole('button', { name: '合并规则' })).toHaveCount(0)
   })
@@ -433,7 +436,7 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
 })
 
 test.describe('ProjectDetailView 项目信息面板', () => {
-  test('进入 Tab：近全宽壳 + 壳内顶栏 + primary 保存', async ({ page }) => {
+  test('进入 Tab：近全宽壳 + 壳内顶栏 + 左删右存 + 删除确认可取消', async ({ page }) => {
     await gotoProjectDetailWithProject(page, MOCK_PROJECT)
     await page.getByRole('button', { name: '项目信息' }).click()
 
@@ -448,10 +451,28 @@ test.describe('ProjectDetailView 项目信息面板', () => {
     const box = await panel.boundingBox()
     expect(box?.width).toBeGreaterThan(900)
 
-    const saveBtn = panel.getByRole('button', { name: '保存' })
+    const footer = panel.getByTestId('project-meta-footer')
+    const deleteBtn = footer.getByTestId('project-meta-delete')
+    const saveBtn = footer.getByRole('button', { name: '保存' })
+    await expect(deleteBtn).toBeVisible()
+    await expect(deleteBtn).toHaveClass(/text-err/)
     await expect(saveBtn).toBeVisible()
     await expect(saveBtn).toHaveClass(/bg-accent/)
-    await expect(panel.getByRole('button', { name: '删除' })).toHaveCount(0)
+
+    // 左删右存：删除在保存左侧（g2.1 / g3.2）
+    const deleteBox = await deleteBtn.boundingBox()
+    const saveBox = await saveBtn.boundingBox()
+    expect(deleteBox && saveBox).toBeTruthy()
+    expect(deleteBox!.x).toBeLessThan(saveBox!.x)
+
+    // 点击删除 → 既有确认弹窗 → 取消后仍停留详情且项目未删
+    await deleteBtn.click()
+    await expect(page.getByText('删除项目 · Demo Project')).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByText('仅当项目下已无流水线时可删除')).toBeVisible()
+    await page.getByRole('button', { name: '取消' }).click()
+    await expect(page.getByText('删除项目 · Demo Project')).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Demo Project' })).toBeVisible()
+    await expect(panel.getByTestId('project-meta-delete')).toBeVisible()
   })
 })
 
