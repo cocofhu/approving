@@ -7,7 +7,8 @@ import (
 )
 
 // ErrLogsUnsupported is returned by drivers that do not implement container
-// log retrieval (e.g. kubernetes in this release).
+// log retrieval. Handlers map it to HTTP 501. Docker and kubernetes implement Logs;
+// other/future drivers may still return this error.
 var ErrLogsUnsupported = errors.New("sandbox logs not supported by this driver")
 
 // Sandbox lifecycle statuses reported by drivers.

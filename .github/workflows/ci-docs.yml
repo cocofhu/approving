@@ -1,0 +1,52 @@
+name: ci-docs
+
+# Static project site (HTML) + Markdown help under docs/.
+# PR: build only. Push to main: build then publish to cocofhu/approving-pages.
+on:
+  push:
+    paths:
+      - "docs/**"
+      - ".github/workflows/ci-docs.yml"
+      - ".github/scripts/publish-pages.sh"
+  pull_request:
+    paths:
+      - "docs/**"
+      - ".github/workflows/ci-docs.yml"
+      - ".github/scripts/publish-pages.sh"
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: docs
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Build site
+        run: npm run build
+        env:
+          BASE_PATH: /approving-pages
+      - name: Publish to approving-pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: .
+        env:
+          PAGES_DEPLOY_KEY: ${{ secrets.PAGES_DEPLOY_KEY }}
+          PAGES_REPO: cocofhu/approving-pages
+          PAGES_BRANCH: main
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          if [[ -z "${PAGES_DEPLOY_KEY}" ]]; then
+            echo "PAGES_DEPLOY_KEY secret is not set; skip deploy."
+            echo "Add a write deploy key on cocofhu/approving-pages, then store the"
+            echo "private key as repo secret PAGES_DEPLOY_KEY on cocofhu/approving."
+            exit 0
+          fi
+          ./.github/scripts/publish-pages.sh

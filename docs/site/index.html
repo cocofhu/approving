@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Approving</title>
+  <meta name="description" content="Agent 工作流与人类协同推进，开启多Agent协作新范式 — Approving。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{BASE}}/css/tokens.css">
+  <link rel="stylesheet" href="{{BASE}}/css/site.css">
+  <link rel="stylesheet" href="{{BASE}}/css/home.css">
+</head>
+<body class="page-home">
+  <header class="site-header">
+    <div class="site-header__inner">
+      <a class="site-header__brand" href="{{BASE_SLASH}}">Approving</a>
+      <nav class="site-header__nav" aria-label="主导航">
+        <a class="site-header__link" href="{{BASE}}/guide/quick-start/">文档</a>
+        <a class="site-header__link" href="https://github.com/cocofhu/approving" rel="noopener noreferrer" target="_blank">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-label="Approving 首页">
+      <div class="hero__atmosphere" aria-hidden="true"></div>
+      <div class="hero__shell">
+        <div class="hero__content">
+          <p class="hero__brand" data-reveal>Approving</p>
+          <h1 class="hero__headline" data-reveal>
+            <span>Agent 工作流与人类协同推进，</span>
+            <span>开启多Agent协作新范式。</span>
+          </h1>
+          <p class="hero__support" data-reveal>Approving 把 coding agent 编成可信任的工作流：可视化编排、沙箱执行，关键节点由人 Approve 后再继续。</p>
+          <div class="hero__cta" data-reveal>
+            <a class="btn btn--primary" href="https://github.com/cocofhu/approving" rel="noopener noreferrer" target="_blank">项目仓库</a>
+            <a class="btn btn--ghost" href="{{BASE}}/guide/quick-start/">快速开始</a>
+            <span class="hero__cta-note">此项目由该工作流构建</span>
+          </div>
+          <div class="hero__backends" data-reveal aria-label="支持的 Agent 后端">
+            <span class="hero__backends-label">支持</span>
+            <ul class="hero__backends-list">
+              <li>Cursor</li>
+              <li>Claude Code</li>
+              <li>CodeBuddy</li>
+              <li>Trae</li>
+            </ul>
+          </div>
+        </div>
+        <aside class="hero__visual" data-reveal aria-hidden="true">
+          <div class="hero-flow" data-hero-flow>
+            <div class="hero-flow__chrome">
+              <span class="hero-flow__chip" data-hero-title>需求交付 · 编排</span>
+              <span class="hero-flow__chip hero-flow__chip--live" data-hero-live>● idle</span>
+            </div>
+            <div class="hf-board">
+              <div class="hf-chain">
+                <div class="hf-node" data-hf="research" data-kind="research">
+                  <span class="hf-node__stripe"></span>
+                  <span class="hf-node__icon">研</span>
+                  <span class="hf-node__body">
+                    <span class="hf-node__name">代码调研</span>
+                    <span class="hf-node__meta">调研</span>
+                  </span>
+                  <span class="hf-node__badge"></span>
+                </div>
+                <span class="hf-link" data-hf-e="e1"><i></i></span>
+                <div class="hf-node" data-hf="clarify" data-kind="react">
+                  <span class="hf-node__stripe"></span>
+                  <span class="hf-node__icon">澄</span>
+                  <span class="hf-node__body">
+                    <span class="hf-node__name">需求澄清</span>
+                    <span class="hf-node__meta">需求澄清</span>
+                  </span>
+                  <span class="hf-node__badge"></span>
+                </div>
+                <span class="hf-link" data-hf-e="e2"><i></i></span>
+                <div class="hf-node" data-hf="visual" data-kind="visual">
+                  <span class="hf-node__stripe"></span>
+                  <span class="hf-node__icon">视</span>
+                  <span class="hf-node__body">
+                    <span class="hf-node__name">视觉网页</span>
+                    <span class="hf-node__meta">视觉网页</span>
+                  </span>
+                  <span class="hf-node__badge"></span>
+                </div>
+                <span class="hf-link" data-hf-e="e3"><i></i></span>
+                <div class="hf-node hf-node--gate" data-hf="gate" data-kind="gate">
+                  <span class="hf-node__stripe"></span>
+                  <div class="hf-node__main">
+                    <span class="hf-node__icon">审</span>
+                    <span class="hf-node__body">
+                      <span class="hf-node__name">人工确认</span>
+                      <span class="hf-node__meta">人工门禁</span>
+                    </span>
+                    <span class="hf-node__badge"></span>
+                  </div>
+                  <div class="hf-node__actions">
+                    <span class="hf-action" data-hf-action="approve"><em>动作</em>批准</span>
+                    <span class="hf-action" data-hf-action="revise"><em>动作</em>退回修改</span>
+                  </div>
+                </div>
+                <span class="hf-link" data-hf-e="e4"><i></i></span>
+                <div class="hf-node" data-hf="plan" data-kind="plan">
+                  <span class="hf-node__stripe"></span>
+                  <span class="hf-node__icon">方</span>
+                  <span class="hf-node__body">
+                    <span class="hf-node__name">制定方案</span>
+                    <span class="hf-node__meta">方案</span>
+                  </span>
+                  <span class="hf-node__badge"></span>
+                </div>
+              </div>
+              <div class="hf-loop" data-hf-loop aria-hidden="true">
+                <span class="hf-loop__line"></span>
+                <span class="hf-loop__label">退回修改</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Big page 1: Approve -->
+    <section class="showcase showcase--alt" id="showcase-approve" data-showcase="approve" aria-label="Approve 演示">
+      <div class="showcase__inner showcase__inner--wide">
+        <header class="showcase__intro">
+          <h2 class="showcase__title">人机协作 从未如此简单</h2>
+          <p class="showcase__lead showcase__lead--single">多 Agent 协作最大瓶颈就是审核，我们做了大量的视觉展示审批，审批变得所见即所得。</p>
+        </header>
+        <div class="showcase__stage" data-stage="approve">
+          <div class="panel panel--light">
+            <div class="panel__chrome panel__chrome--light">
+              <span class="panel__dot"></span><span class="panel__dot"></span><span class="panel__dot"></span>
+              <span class="panel__title">Gates · 待审批</span>
+            </div>
+            <div class="panel__body panel__body--approve">
+              <aside class="approve-rail">
+                <p class="approve-rail__label">待审批</p>
+                <div class="approve-rail__item is-active" data-approve-rail="reject">人工评审 · 登录鉴权</div>
+                <div class="approve-rail__item" data-approve-rail="pass">人工评审 · 会话续期</div>
+              </aside>
+              <div class="approve-stage">
+                <div class="approve-window" data-approve-window>
+                  <header class="approve-window__head">
+                    <div>
+                      <p class="approve-window__eyebrow">human_gate · waiting_human</p>
+                      <h3 class="approve-window__title" data-approve-title>登录鉴权 · UI DEMO</h3>
+                    </div>
+                    <span class="approve-window__pill" data-approve-pill>pending</span>
+                  </header>
+                  <div class="approve-window__main">
+                    <div class="approve-window__content">
+                      <div class="preview-board">
+                        <div class="preview-board__meta">
+                          <span class="preview-chip">artifact</span>
+                          <span class="preview-chip">ui-demo</span>
+                          <span class="preview-chip preview-chip--ok">interactive</span>
+                        </div>
+                        <p class="preview-board__desc" data-approve-desc>审阅可交互 Demo — 框选问题区域后可拒绝或批准。</p>
+                        <div class="demo-stage" data-demo-stage>
+                          <div class="demo-ui" data-demo-case="reject">
+                            <div class="demo-ui__brand">Approving</div>
+                            <h4 class="demo-ui__title">欢迎回来</h4>
+                            <p class="demo-ui__hint">使用企业账号继续</p>
+                            <div class="demo-ui__field"><span></span></div>
+                            <div class="demo-ui__field"><span></span></div>
+                            <div class="demo-ui__actions">
+                              <span class="demo-ui__btn">取消</span>
+                              <span class="demo-ui__btn is-bad" data-annotate-target>删除账号</span>
+                            </div>
+                            <div class="demo-marquee" data-marquee aria-hidden="true"></div>
+                          </div>
+                          <div class="demo-ui is-pass" data-demo-case="pass" hidden>
+                            <div class="demo-ui__brand">Approving</div>
+                            <h4 class="demo-ui__title">会话续期</h4>
+                            <p class="demo-ui__hint">保持登录，安全确认</p>
+                            <div class="demo-ui__card">
+                              <div class="demo-ui__avatar"></div>
+                              <div class="demo-ui__meta"><i></i><i></i></div>
+                            </div>
+                            <div class="demo-ui__actions">
+                              <span class="demo-ui__btn">稍后</span>
+                              <span class="demo-ui__btn is-primary">确认续期</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <aside class="approve-window__aside">
+                      <p class="approve-aside__label">审批意见</p>
+                      <div class="approve-aside__comment" data-approve-comment></div>
+                      <div class="approve-aside__actions">
+                        <button type="button" class="approve-btn approve-btn--reject" data-reject-btn tabindex="-1">拒绝</button>
+                        <button type="button" class="approve-btn" data-approve-btn tabindex="-1">批准</button>
+                      </div>
+                    </aside>
+                  </div>
+                </div>
+                <div class="demo-cursor" data-cursor="approve"></div>
+              </div>
+            </div>
+            <p class="panel__caption panel__caption--light" data-caption="approve">打开审批窗口…</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Big page 2: PM — IM manage workflows via ApprovingPM -->
+    <section class="showcase" id="showcase-pm" data-showcase="pm" aria-label="PM 演示">
+      <div class="showcase__inner showcase__inner--wide">
+        <header class="showcase__intro">
+          <h2 class="showcase__title">项目管理正在被重新定义</h2>
+          <p class="showcase__lead">我们为每一个项目定义了一位 PM，你可以接入自己常用的 IM，在手机上管理你的项目、下发任务。<br>未来，我们将支持总监、总经理等更复杂的组织架构——OPC 这一次是真的。</p>
+        </header>
+        <div class="showcase__stage" data-stage="pm">
+          <div class="panel panel--light">
+            <div class="panel__chrome panel__chrome--light">
+              <span class="panel__dot"></span><span class="panel__dot"></span><span class="panel__dot"></span>
+              <span class="panel__title">IM · ApprovingPM</span>
+            </div>
+            <div class="panel__body panel__body--pm">
+              <div class="pm-im">
+                <header class="pm-im__head">
+                  <div class="pm-im__identity">
+                    <span class="pm-im__avatar">PM</span>
+                    <div>
+                      <p class="pm-im__channel">ApprovingPM</p>
+                      <p class="pm-im__sub">工作流项目经理 · 对话即编排</p>
+                    </div>
+                  </div>
+                  <div class="pm-im__stats">
+                    <span class="pm-stat is-run">running <b data-pm-running>0</b></span>
+                    <span class="pm-stat is-wait">waiting <b data-pm-waiting>0</b></span>
+                  </div>
+                </header>
+                <div class="pm-im__thread" data-pm-thread>
+                  <div class="pm-msg pm-msg--you" data-pm-msg="1">
+                    <span class="pm-msg__who">你</span>
+                    <div class="pm-msg__bubble" data-pm-text="有什么办法可以保证质量？调研一下业界的 harness 和软件工程经验，看看怎么保证这个开源项目的质量。"><span data-pm-typeout></span></div>
+                  </div>
+                  <div class="pm-msg" data-pm-msg="2">
+                    <span class="pm-msg__who">ApprovingPM</span>
+                    <div class="pm-msg__bubble" data-pm-text="收到。我先调研 agent harness 实践，再对照经典软件工程质量门禁，整理成可落地的方案给你确认。"><span data-pm-typeout></span></div>
+                  </div>
+                  <div class="pm-msg" data-pm-msg="3">
+                    <span class="pm-msg__who">ApprovingPM</span>
+                    <div class="pm-msg__bubble" data-pm-text="调研结论 → 建议方案：">
+                      <span data-pm-typeout></span>
+                      <ul class="pm-progress" data-pm-extra hidden>
+                        <li data-pm-step="1"><span class="pm-dot"></span>Harness：评测集 + 回归门槛 <b data-pm-step-tag="1">proposed</b></li>
+                        <li data-pm-step="2"><span class="pm-dot"></span>工程：覆盖率 / lint / 安全扫描入 CI <b data-pm-step-tag="2">proposed</b></li>
+                        <li data-pm-step="3"><span class="pm-dot"></span>门禁：关键路径人工 Approve <b data-pm-step-tag="3">proposed</b></li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="pm-msg is-gate" data-pm-msg="4">
+                    <span class="pm-msg__who">ApprovingPM</span>
+                    <div class="pm-msg__bubble" data-pm-text="方案已就绪。确认后我启动「质量保障」工作流：调研落地 → CI 加固 → 门禁接线。"><span data-pm-typeout></span></div>
+                  </div>
+                  <div class="pm-msg pm-msg--you" data-pm-msg="5">
+                    <span class="pm-msg__who">你</span>
+                    <div class="pm-msg__bubble" data-pm-text="确认，按这个方案启动工作流。"><span data-pm-typeout></span></div>
+                  </div>
+                  <div class="pm-msg" data-pm-msg="6">
+                    <span class="pm-msg__who">ApprovingPM</span>
+                    <div class="pm-msg__bubble" data-pm-text="已启动。预计今晚 22:30 前给出第一轮 PR，我会持续跟进执行进度。">
+                      <span data-pm-typeout></span>
+                      <ul class="pm-progress" data-pm-extra hidden>
+                        <li data-pm-step="4"><span class="pm-dot"></span>Harness 评测脚手架 <b data-pm-step-tag="4">queued</b></li>
+                        <li data-pm-step="5"><span class="pm-dot"></span>CI 质量门禁 <b data-pm-step-tag="5">queued</b></li>
+                        <li data-pm-step="6"><span class="pm-dot"></span>人工 Approve 接线 <b data-pm-step-tag="6">queued</b></li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="pm-msg" data-pm-msg="7">
+                    <span class="pm-msg__who">ApprovingPM</span>
+                    <div class="pm-msg__bubble" data-pm-text="执行中：Harness 脚手架已开 PR；CI 扫描跑到 60%；Approve 门禁待合入。有阻塞我再找你。"><span data-pm-typeout></span></div>
+                  </div>
+                </div>
+                <div class="pm-im__composer">
+                  <span class="pm-im__input" data-pm-composer data-placeholder="跟 ApprovingPM 说下一句…"></span>
+                  <span class="pm-im__send" aria-hidden="true">发送</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Big page 3: Parallel (stacked) -->
+    <section class="showcase" id="showcase-parallel" data-showcase="parallel" aria-label="并行演示">
+      <div class="showcase__inner showcase__inner--wide">
+        <header class="showcase__intro">
+          <h2 class="showcase__title">并行调度，加速迭代</h2>
+          <p class="showcase__lead">所有 Agent 在沙箱执行，由 PM 统一管理，迭代速度更进一步。</p>
+        </header>
+        <div class="showcase__stage" data-stage="parallel">
+          <div class="panel">
+            <div class="panel__chrome">
+              <span class="panel__dot"></span><span class="panel__dot"></span><span class="panel__dot"></span>
+              <span class="panel__title">Canvas · checkout / parallel-sprint</span>
+            </div>
+            <div class="canvas-toolbar">
+              <span class="canvas-chip">workflow · release</span>
+              <span class="canvas-chip is-live" data-chip-live>● idle</span>
+              <span class="canvas-chip">∥ 3 requirements</span>
+              <span class="canvas-chip is-gate" data-gates-badge>Gates <b>0</b></span>
+              <span class="canvas-chip is-muted" data-sb-chip>runtime <b>0</b></span>
+            </div>
+            <div class="panel__body panel__body--lanes">
+              <div class="launch-sheet is-open" data-launch-sheet>
+                <div class="launch-im" data-launch-im>
+                  <header class="launch-im__head">
+                    <span class="launch-im__avatar">PM</span>
+                    <div>
+                      <p class="launch-im__title">ApprovingPM</p>
+                      <p class="launch-im__sub">IM · 对话启动工作流</p>
+                    </div>
+                  </header>
+                  <div class="launch-im__thread" data-par-thread>
+                    <div class="pm-msg pm-msg--you" data-par-msg="1">
+                      <span class="pm-msg__who">你</span>
+                      <div class="pm-msg__bubble" data-par-text="并行推进登录鉴权、计费结算、消息通知这三个需求，现在启动。"><span data-par-typeout></span></div>
+                    </div>
+                    <div class="pm-msg" data-par-msg="2">
+                      <span class="pm-msg__who">ApprovingPM</span>
+                      <div class="pm-msg__bubble" data-par-text="收到。已按三条需求拉起并行工作流，开始执行。"><span data-par-typeout></span></div>
+                    </div>
+                  </div>
+                  <div class="launch-im__composer">
+                    <span class="pm-im__input" data-par-composer data-placeholder="跟 ApprovingPM 说下一句…"></span>
+                    <span class="pm-im__send" aria-hidden="true">发送</span>
+                  </div>
+                </div>
+              </div>
+              <div class="demo-cursor" data-cursor="parallel"></div>
+              <div class="canvas-shell">
+                <div class="canvas-lanes">
+                  <div class="demo-lane" data-lane="auth">
+                    <div class="demo-lane__head">
+                      <div>
+                        <span class="demo-lane__id">REQ-12</span>
+                        <span class="demo-lane__label">登录鉴权</span>
+                      </div>
+                      <span class="demo-lane__pill" data-lane-pill="auth">queued</span>
+                    </div>
+                    <div class="demo-lane__flow">
+                      <div class="vf-node" data-node="auth-research" data-type="research">
+                        <span class="vf-node__stripe"></span>
+                        <span class="vf-node__icon">R</span>
+                        <span class="vf-node__text">
+                          <span class="vf-node__name">research</span>
+                          <span class="vf-node__type">Agent · OAuth 方案</span>
+                        </span>
+                        <span class="vf-node__badge"></span>
+                        <span class="vf-node__meta">artifact · brief</span>
+                        <span class="vf-node__bar"><i></i></span>
+                      </div>
+                      <span class="demo-edge" data-edge="auth-1"></span>
+                      <div class="vf-node" data-node="auth-impl" data-type="agent">
+                        <span class="vf-node__stripe"></span>
+                        <span class="vf-node__icon">A</span>
+                        <span class="vf-node__text">
+                          <span class="vf-node__name">implement</span>
+                          <span class="vf-node__type">Agent · middleware</span>
+                        </span>
+                        <span class="vf-node__badge"></span>
+                        <span class="vf-node__meta">exec · run</span>
+                        <span class="vf-node__bar"><i></i></span>
+                      </div>
+                      <span class="demo-edge" data-edge="auth-2"></span>
+                      <div class="vf-node" data-node="auth-test" data-type="test">
+                        <span class="vf-node__stripe"></span>
+                        <span class="vf-node__icon">T</span>
+                        <span class="vf-node__text">
+                          <span class="vf-node__name">e2e check</span>
+                          <span class="vf-node__type">Agent · Playwright</span>
+                        </span>
+                        <span class="vf-node__badge"></span>
+                        <span class="vf-node__meta">tests · green</span>
+                        <span class="vf-node__bar"><i></i></span>
+                      </div>
+                      <span class="demo-edge" data-edge="auth-3"></span>
+                      <div class="vf-node" data-node="auth-ship" data-type="react">
+                        <span class="vf-node__stripe"></span>
+                        <span class="vf-node__icon">S</span>
+                        <span class="vf-node__text">
+                          <span class="vf-node__name">submit MR</span>
+                          <span class="vf-node__type">React · !482</span>
+                        </span>
+                        <span class="vf-node__badge"></span>
+                        <span class="vf-node__meta">gitlab · mr</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="demo-lane" data-lane="billing">
+                    <div class="demo-lane__head">
+                      <div>
+                        <span class="demo-lane__id">REQ-18</span>
+                        <span class="demo-lane__label">计费结算</span>
+                      </div>
+                      <span class="demo-lane__pill" data-lane-pill="billing">queued</span>
+                    </div>
+                    <div class="demo-lane__flow">
+                      <div class="vf-node" data-node="billing-plan" data-type="research">
+                        <span class="vf-node__stripe"></span>
+                        <span class="vf-node__icon">P</span>
+                        <span class="vf-node__text">
+                          <span class="vf-node__name">plan</span>
+                          <span class="vf-node__type">Agent · 计费模型</span>
+                        </span>
+                        <span class="vf-node__badge"></span>
+                        <span class="vf-node__meta">artifact · plan</span>
+                        <span class="vf-node__bar"><i></i></span>
+                      </div>
+                      <span class="demo-edge" data-edge="billing-1"></span>
+                      <div class="vf-node" data-node="billing-impl" data-type="agent">
+                        <span class="vf-node__stripe"></span>
+                        <span class="vf-node__icon">A</span>
+                        <span class="vf-node__text">
+                          <span class="vf-node__name">implement</span>
+                          <span class="vf-node__type">Agent · ledger</span>
+                        </span>
+                        <span class="vf-node__badge"></span>
+                        <span class="vf-node__meta">exec · run</span>
+                        <span class="vf-node__bar"><i></i></span>
+                      </div>
+                      <span class="demo-edge" data-edge="billing-2"></span>
+                      <div class="vf-node" data-node="billing-gate" data-type="gate">
+                        <span class="vf-node__stripe"></span>
+                        <span class="vf-node__icon">G</span>
+                        <span class="vf-node__text">
+                          <span class="vf-node__name">human gate</span>
+                          <span class="vf-node__type">Gate · 方案对照</span>
+                        </span>
+                        <span class="vf-node__badge"></span>
+                        <span class="vf-node__meta">waiting human</span>
+                      </div>
+                      <span class="demo-edge" data-edge="billing-3"></span>
+                      <div class="vf-node" data-node="billing-ship" data-type="react">
+                        <span class="vf-node__stripe"></span>
+                        <span class="vf-node__icon">S</span>
+                        <span class="vf-node__text">
+                          <span class="vf-node__name">submit MR</span>
+                          <span class="vf-node__type">React · pending</span>
+                        </span>
+                        <span class="vf-node__badge"></span>
+                        <span class="vf-node__meta">gitlab · mr</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="demo-lane" data-lane="notify">
+                    <div class="demo-lane__head">
+                      <div>
+                        <span class="demo-lane__id">REQ-21</span>
+                        <span class="demo-lane__label">消息通知</span>
+                      </div>
+                      <span class="demo-lane__pill" data-lane-pill="notify">queued</span>
+                    </div>
+                    <div class="demo-lane__flow">
+                      <div class="vf-node" data-node="notify-research" data-type="research">
+                        <span class="vf-node__stripe"></span>
+                        <span class="vf-node__icon">R</span>
+                        <span class="vf-node__text">
+                          <span class="vf-node__name">research</span>
+                          <span class="vf-node__type">Agent · 通道选型</span>
+                        </span>
+                        <span class="vf-node__badge"></span>
+                        <span class="vf-node__meta">artifact · brief</span>
+                        <span class="vf-node__bar"><i></i></span>
+                      </div>
+                      <span class="demo-edge" data-edge="notify-1"></span>
+                      <div class="vf-node" data-node="notify-impl" data-type="agent">
+                        <span class="vf-node__stripe"></span>
+                        <span class="vf-node__icon">A</span>
+                        <span class="vf-node__text">
+                          <span class="vf-node__name">implement</span>
+                          <span class="vf-node__type">Agent · webhook</span>
+                        </span>
+                        <span class="vf-node__badge"></span>
+                        <span class="vf-node__meta">exec · run</span>
+                        <span class="vf-node__bar"><i></i></span>
+                      </div>
+                      <span class="demo-edge" data-edge="notify-2"></span>
+                      <div class="vf-node" data-node="notify-test" data-type="test">
+                        <span class="vf-node__stripe"></span>
+                        <span class="vf-node__icon">T</span>
+                        <span class="vf-node__text">
+                          <span class="vf-node__name">contract test</span>
+                          <span class="vf-node__type">Agent · retries</span>
+                        </span>
+                        <span class="vf-node__badge"></span>
+                        <span class="vf-node__meta">tests · flaky→ok</span>
+                        <span class="vf-node__bar"><i></i></span>
+                      </div>
+                      <span class="demo-edge" data-edge="notify-3"></span>
+                      <div class="vf-node" data-node="notify-ship" data-type="react">
+                        <span class="vf-node__stripe"></span>
+                        <span class="vf-node__icon">S</span>
+                        <span class="vf-node__text">
+                          <span class="vf-node__name">submit MR</span>
+                          <span class="vf-node__type">React · !491</span>
+                        </span>
+                        <span class="vf-node__badge"></span>
+                        <span class="vf-node__meta">gitlab · mr</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <aside class="side-peek" aria-label="执行环境与门禁">
+                  <div class="sb-peek">
+                    <p class="sb-peek__title">Runtime</p>
+                                        <div class="sb-card" data-sb="auth">
+                      <div class="sb-card__chrome" aria-hidden="true">
+                        <span></span><span></span><span></span>
+                        <i>ctr-auth</i>
+                      </div>
+                      <div class="sb-card__top">
+                        <strong>登录鉴权</strong>
+                        <span class="sb-card__status" data-sb-status>idle</span>
+                      </div>
+                      <div class="sb-term" data-sb-term aria-hidden="true">
+                        <span data-sb-line></span>
+                        <span data-sb-line></span>
+                        <span data-sb-line></span>
+                      </div>
+                      <span class="sb-card__meta" data-sb-meta>待机</span>
+                    </div>
+                    <div class="sb-card" data-sb="billing">
+                      <div class="sb-card__chrome" aria-hidden="true">
+                        <span></span><span></span><span></span>
+                        <i>ctr-billing</i>
+                      </div>
+                      <div class="sb-card__top">
+                        <strong>计费结算</strong>
+                        <span class="sb-card__status" data-sb-status>idle</span>
+                      </div>
+                      <div class="sb-term" data-sb-term aria-hidden="true">
+                        <span data-sb-line></span>
+                        <span data-sb-line></span>
+                        <span data-sb-line></span>
+                      </div>
+                      <span class="sb-card__meta" data-sb-meta>待机</span>
+                    </div>
+                    <div class="sb-card" data-sb="notify">
+                      <div class="sb-card__chrome" aria-hidden="true">
+                        <span></span><span></span><span></span>
+                        <i>ctr-notify</i>
+                      </div>
+                      <div class="sb-card__top">
+                        <strong>消息通知</strong>
+                        <span class="sb-card__status" data-sb-status>idle</span>
+                      </div>
+                      <div class="sb-term" data-sb-term aria-hidden="true">
+                        <span data-sb-line></span>
+                        <span data-sb-line></span>
+                        <span data-sb-line></span>
+                      </div>
+                      <span class="sb-card__meta" data-sb-meta>待机</span>
+                    </div>
+                      <strong>消息通知</strong>
+                      <span class="sb-card__meta" data-sb-meta>等待启动</span>
+                    </div>
+                  </div>
+                  <div class="gates-peek" data-gates-peek>
+                    <p class="gates-peek__title">Gates Inbox</p>
+                    <p class="gates-peek__empty" data-gates-empty>暂无待审批</p>
+                    <div class="gates-peek__item" data-gates-item>
+                      <span class="gates-peek__kind">human_gate</span>
+                      <strong>计费结算 · 方案对照</strong>
+                      <span class="gates-peek__meta">REQ-18 · waiting_human</span>
+                    </div>
+                    <div class="gates-peek__foot">
+                      <span data-run-stat>0 / 3 shipping</span>
+                      <span data-gate-stat>0 waiting</span>
+                    </div>
+                  </div>
+                </aside>
+              </div>
+            </div>
+            <p class="panel__caption" data-caption="parallel">IM 确认启动，并行推进中…</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section capabilities" id="capabilities">
+      <div class="section__inner">
+        <h2 class="section__title">能力</h2>
+        <ul class="capabilities__list">
+          <li class="capabilities__item">
+            <strong class="capabilities__name">可视化编排</strong>
+            <span class="capabilities__body">画布 FSM、运行态高亮；多需求并行泳道，门禁 Inbox 收口审批。</span>
+          </li>
+          <li class="capabilities__item">
+            <strong class="capabilities__name">真实 Docker 沙箱</strong>
+            <span class="capabilities__body">经 ACP 与 sandbox-gateway 在容器中执行，Web UI 走 API。</span>
+          </li>
+          <li class="capabilities__item">
+            <strong class="capabilities__name">多 Agent 后端</strong>
+            <span class="capabilities__body">Cursor、Claude Code、CodeBuddy、Trae；按 Agent 选择 acpBackend。</span>
+          </li>
+          <li class="capabilities__item">
+            <strong class="capabilities__name">产物契约 + MCP</strong>
+            <span class="capabilities__body">write_artifact / set_* / node_complete；按 run token 隔离。</span>
+          </li>
+          <li class="capabilities__item">
+            <strong class="capabilities__name">沙箱内 Git 凭证</strong>
+            <span class="capabilities__body">GITHUB_* / GITLAB_* / SSH；GitLab auto-MR 与 GitHub gh 可用。</span>
+          </li>
+          <li class="capabilities__item">
+            <strong class="capabilities__name">单仓自托管</strong>
+            <span class="capabilities__body">sandbox-gateway 与沙箱镜像源码在本仓库，一次克隆即可。</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <p class="site-footer__brand">Approving</p>
+      <nav class="site-footer__nav" aria-label="页脚">
+        <a href="{{BASE}}/guide/quick-start/">快速开始</a>
+        <a href="{{BASE}}/help/configuration/">配置</a>
+        <a href="{{BASE}}/help/gateway/">网关</a>
+        <a href="https://github.com/cocofhu/approving" rel="noopener noreferrer" target="_blank">源码</a>
+      </nav>
+      <p class="site-footer__meta">MIT · <a href="https://github.com/cocofhu/approving" rel="noopener noreferrer" target="_blank">cocofhu/approving</a></p>
+    </div>
+  </footer>
+
+  <script src="{{BASE}}/js/home.js"></script>
+</body>
+</html>

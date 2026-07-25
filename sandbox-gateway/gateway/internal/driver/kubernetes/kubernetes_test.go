@@ -3,7 +3,9 @@ package kubernetes
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -96,11 +98,187 @@ func TestNameAndHelpers(t *testing.T) {
 	}
 }
 
-func TestLogsUnsupported(t *testing.T) {
+func seedSandboxPod(t *testing.T, d *Driver, id, name string, phase corev1.PodPhase, created time.Time) {
+	t.Helper()
+	_, err := d.cs.CoreV1().Pods(d.opts.Namespace).Create(context.Background(), &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              name,
+			Namespace:         d.opts.Namespace,
+			Labels:            d.selector(id),
+			CreationTimestamp: metav1.NewTime(created),
+		},
+		Status: corev1.PodStatus{Phase: phase},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("seed pod: %v", err)
+	}
+}
+
+func TestLogsContent(t *testing.T) {
 	d := testDriver(t, true)
-	_, err := d.Logs(context.Background(), "any", 100)
-	if err == nil || err != driver.ErrLogsUnsupported {
-		t.Fatalf("Logs want ErrLogsUnsupported, got %v", err)
+	id := "log1"
+	seedSandboxPod(t, d, id, "sbx-log1-pod", corev1.PodRunning, time.Now())
+	want := "[boot] sandbox container started\nhello\n"
+	var gotOpts *corev1.PodLogOptions
+	d.getPodLogs = func(_ context.Context, ns, pod string, opts *corev1.PodLogOptions) (string, error) {
+		if ns != "sandboxes" || pod != "sbx-log1-pod" {
+			t.Fatalf("getPodLogs ns/pod=%s/%s", ns, pod)
+		}
+		gotOpts = opts
+		return want, nil
+	}
+	out, err := d.Logs(context.Background(), id, 100)
+	if err != nil {
+		t.Fatalf("Logs: %v", err)
+	}
+	if out != want {
+		t.Fatalf("content=%q want %q", out, want)
+	}
+	if gotOpts == nil || gotOpts.Container != sandboxContainer || gotOpts.Follow {
+		t.Fatalf("opts=%+v", gotOpts)
+	}
+	if gotOpts.TailLines == nil || *gotOpts.TailLines != 100 {
+		t.Fatalf("TailLines=%v", gotOpts.TailLines)
+	}
+}
+
+func TestLogsEmptySuccess(t *testing.T) {
+	d := testDriver(t, true)
+	id := "empty"
+	seedSandboxPod(t, d, id, "sbx-empty-pod", corev1.PodRunning, time.Now())
+	d.getPodLogs = func(_ context.Context, _, _ string, opts *corev1.PodLogOptions) (string, error) {
+		if opts.TailLines == nil || *opts.TailLines != defaultLogsTail {
+			t.Fatalf("default tail: %v", opts.TailLines)
+		}
+		return "", nil
+	}
+	out, err := d.Logs(context.Background(), id, 0)
+	if err != nil {
+		t.Fatalf("Logs empty success: %v", err)
+	}
+	if out != "" {
+		t.Fatalf("want empty content, got %q", out)
+	}
+}
+
+func TestLogsNotFound(t *testing.T) {
+	d := testDriver(t, true)
+	d.getPodLogs = func(context.Context, string, string, *corev1.PodLogOptions) (string, error) {
+		t.Fatal("getPodLogs must not be called when no pods match")
+		return "", nil
+	}
+	_, err := d.Logs(context.Background(), "missing", 10)
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("want not-found error, got %v", err)
+	}
+}
+
+// TestDefaultGetPodLogsViaFakeClient exercises the real defaultGetPodLogs path
+// (no mock). client-go's fake Pods.GetLogs streams "fake logs".
+func TestDefaultGetPodLogsViaFakeClient(t *testing.T) {
+	d := testDriver(t, true)
+	id := "deflogs"
+	seedSandboxPod(t, d, id, "sbx-deflogs-pod", corev1.PodRunning, time.Now())
+	out, err := d.Logs(context.Background(), id, 50)
+	if err != nil {
+		t.Fatalf("Logs via defaultGetPodLogs: %v", err)
+	}
+	if out != "fake logs" {
+		t.Fatalf("content=%q want %q from fake GetLogs", out, "fake logs")
+	}
+}
+
+func TestDefaultGetPodLogsDirect(t *testing.T) {
+	d := testDriver(t, true)
+	tail := int64(10)
+	out, err := d.defaultGetPodLogs(context.Background(), "sandboxes", "any-pod", &corev1.PodLogOptions{
+		Container: sandboxContainer,
+		Follow:    false,
+		TailLines: &tail,
+	})
+	if err != nil {
+		t.Fatalf("defaultGetPodLogs: %v", err)
+	}
+	if out != "fake logs" {
+		t.Fatalf("content=%q want fake logs", out)
+	}
+}
+
+type errReadCloser struct {
+	err error
+}
+
+func (e errReadCloser) Read([]byte) (int, error) { return 0, e.err }
+func (e errReadCloser) Close() error             { return nil }
+
+func TestDrainLogStream(t *testing.T) {
+	out, err := drainLogStream(io.NopCloser(strings.NewReader("hello\n")))
+	if err != nil || out != "hello\n" {
+		t.Fatalf("drain success: %q err=%v", out, err)
+	}
+	out, err = drainLogStream(io.NopCloser(strings.NewReader("")))
+	if err != nil || out != "" {
+		t.Fatalf("drain empty: %q err=%v", out, err)
+	}
+	_, err = drainLogStream(errReadCloser{err: fmt.Errorf("read boom")})
+	if err == nil || !strings.Contains(err.Error(), "read boom") {
+		t.Fatalf("want read error, got %v", err)
+	}
+}
+
+func TestLogsGetPodLogsError(t *testing.T) {
+	d := testDriver(t, true)
+	id := "logerr"
+	seedSandboxPod(t, d, id, "sbx-logerr-pod", corev1.PodRunning, time.Now())
+	d.getPodLogs = func(context.Context, string, string, *corev1.PodLogOptions) (string, error) {
+		return "", fmt.Errorf("stream refused")
+	}
+	_, err := d.Logs(context.Background(), id, 10)
+	if err == nil || !strings.Contains(err.Error(), "kubernetes logs") || !strings.Contains(err.Error(), "stream refused") {
+		t.Fatalf("want wrapped stream error, got %v", err)
+	}
+}
+
+func TestLogsListPodsError(t *testing.T) {
+	cs := fake.NewSimpleClientset()
+	cs.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, fmt.Errorf("list apiserver down")
+	})
+	d := NewFromClient(cs, Options{Namespace: "sandboxes", NamePrefix: "sbx-"})
+	_, err := d.Logs(context.Background(), "x", 10)
+	if err == nil || !strings.Contains(err.Error(), "list pods") {
+		t.Fatalf("want list pods error, got %v", err)
+	}
+}
+
+func TestPickPodForLogsPrefersRunning(t *testing.T) {
+	older := time.Now().Add(-time.Hour)
+	newer := time.Now()
+	pods := []corev1.Pod{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "pending-new", CreationTimestamp: metav1.NewTime(newer)},
+			Status:     corev1.PodStatus{Phase: corev1.PodPending},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "running-old", CreationTimestamp: metav1.NewTime(older)},
+			Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "succeeded", CreationTimestamp: metav1.NewTime(newer)},
+			Status:     corev1.PodStatus{Phase: corev1.PodSucceeded},
+		},
+	}
+	got := pickPodForLogs(pods)
+	if got == nil || got.Name != "running-old" {
+		t.Fatalf("pick=%v want running-old", got)
+	}
+	if pickPodForLogs(nil) != nil {
+		t.Fatal("empty list must return nil")
+	}
+	onlyPending := []corev1.Pod{pods[0], pods[2]}
+	got = pickPodForLogs(onlyPending)
+	if got == nil || got.Name != "pending-new" {
+		t.Fatalf("fallback newest=%v want pending-new", got)
 	}
 }
 

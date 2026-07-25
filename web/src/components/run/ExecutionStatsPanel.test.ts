@@ -153,14 +153,15 @@ describe('ExecutionStatsPanel', () => {
     wrapper.unmount()
   })
 
-  it('shows token KPIs and ranking when usage is reported', async () => {
+  it('shows compact token KPIs and ranking when usage is reported', async () => {
     const wrapper = mountPanel(baseRun(true))
     await flushPromises()
     const total = wrapper.find('[data-testid="stats-kpi-total-tokens"]')
     const rate = wrapper.find('[data-testid="stats-kpi-token-rate"]')
-    expect(total.text()).toContain('1,360')
+    // plan g2.1 / g4.1: compact main values (not full 1,360 / raw rate)
+    expect(total.find('[data-testid="stats-kpi-total-tokens-value"]').text()).toContain('1.4K token')
     expect(total.text()).toContain('有用量环节合计')
-    expect(rate.text()).toMatch(/11\.3|11\.333/)
+    expect(rate.find('[data-testid="stats-kpi-token-rate-value"]').text()).toBe('11.3/s')
     expect(rate.text()).toContain('÷ 总耗时')
     expect(wrapper.findAll('[data-testid="stats-rank-tokens"]').length).toBeGreaterThan(0)
     expect(wrapper.text()).not.toContain('NEW')
@@ -172,12 +173,117 @@ describe('ExecutionStatsPanel', () => {
     await flushPromises()
     const total = wrapper.find('[data-testid="stats-kpi-total-tokens"]')
     const rate = wrapper.find('[data-testid="stats-kpi-token-rate"]')
-    expect(total.text()).toContain('—')
+    expect(total.find('[data-testid="stats-kpi-total-tokens-value"]').text()).toContain('—')
     expect(total.text()).toContain('全部未上报')
-    expect(rate.text()).toContain('—')
+    expect(rate.find('[data-testid="stats-kpi-token-rate-value"]').text()).toContain('—')
     expect(rate.text()).not.toMatch(/\b0\b/)
     const rankTokens = wrapper.findAll('[data-testid="stats-rank-tokens"]')
     expect(rankTokens.every((el) => el.text().includes('—'))).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('shows compact duration mains and duration tip on hover/focus (g1.1/g3.1/g4.1)', async () => {
+    const wrapper = mountPanel(
+      {
+        ...baseRun(true),
+        durationSec: 3703,
+        nodeExecutions: {
+          research: [
+            {
+              nodeId: 'research',
+              iteration: 1,
+              status: 'completed',
+              durationSec: 3458,
+              startedAt: '2026-07-18T00:00:00Z',
+              outputs: {},
+              usage: {
+                inputTokens: 1245800,
+                outputTokens: 892455,
+                cacheReadTokens: 7201000,
+                cacheWriteTokens: 306000,
+              },
+            },
+          ],
+          react: [
+            {
+              nodeId: 'react',
+              iteration: 1,
+              status: 'completed',
+              durationSec: 0,
+              startedAt: '2026-07-18T00:01:00Z',
+              outputs: {},
+            },
+          ],
+        },
+      } as unknown as Run,
+    )
+    await wrapper.setProps({ wallSec: 3703 })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="stats-kpi-wall-value"]').text()).toBe('1.03h')
+    expect(wrapper.find('[data-testid="stats-kpi-node-sum-value"]').text()).toBe('57.6m')
+    // gap = 3703 - 3458 = 245 → 4.1m
+    expect(wrapper.find('[data-testid="stats-kpi-gap-value"]').text()).toBe('4.1m')
+    expect(wrapper.find('[data-testid="stats-kpi-total-tokens-value"]').text()).toContain('9.65M token')
+    expect(wrapper.find('[data-testid="stats-kpi-token-rate-value"]').text()).toBe('2.60K/s')
+
+    const wallVal = wrapper.find('[data-testid="stats-kpi-wall-value"]')
+    await wallVal.trigger('mouseenter')
+    expect(wrapper.find('[data-testid="stats-kpi-wall-tip"]').text()).toContain('01:01:43')
+    expect(wrapper.find('[data-testid="stats-kpi-wall-tip"]').text()).toContain('3703 秒')
+    await wallVal.trigger('mouseleave')
+    expect(wrapper.find('[data-testid="stats-kpi-wall-tip"]').exists()).toBe(false)
+
+    await wallVal.trigger('focus')
+    expect(wrapper.find('[data-testid="stats-kpi-wall-tip"]').exists()).toBe(true)
+    await wallVal.trigger('blur')
+    expect(wrapper.find('[data-testid="stats-kpi-wall-tip"]').exists()).toBe(false)
+
+    const tokenVal = wrapper.find('[data-testid="stats-kpi-total-tokens-value"]')
+    await tokenVal.trigger('mouseenter')
+    const tip = wrapper.find('[data-testid="stats-kpi-total-tokens-tip"]')
+    expect(tip.text()).toContain('9,645,255 token')
+    expect(wrapper.find('[data-testid="stats-kpi-token-part-input"]').text()).toMatch(/输入/)
+    expect(wrapper.find('[data-testid="stats-kpi-token-part-output"]').text()).toMatch(/输出/)
+    expect(wrapper.find('[data-testid="stats-kpi-token-part-cacheRead"]').text()).toMatch(/缓存读/)
+    expect(wrapper.find('[data-testid="stats-kpi-token-part-cacheWrite"]').text()).toMatch(/缓存写/)
+    expect(wrapper.find('[data-testid="stats-kpi-token-part-cacheRead"]').text()).toContain('7,201,000')
+    expect(wrapper.find('[data-testid="stats-kpi-token-part-cacheRead"]').text()).toContain('7.2M')
+    await tokenVal.trigger('mouseleave')
+
+    const rateVal = wrapper.find('[data-testid="stats-kpi-token-rate-value"]')
+    await rateVal.trigger('mouseenter')
+    expect(wrapper.find('[data-testid="stats-kpi-token-rate-tip"]').text()).toMatch(
+      /9,645,255 ÷ 3703 秒 ≈ 2604\.7/,
+    )
+    wrapper.unmount()
+  })
+
+  it('keeps four zero rows when usage is absent and degrades rate tip when wall=0 (g3.2/g3.4/g4.1)', async () => {
+    const wrapper = mountPanel(baseRun(false))
+    await wrapper.setProps({ wallSec: 0 })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="stats-kpi-wall-value"]').text()).toBe('0s')
+    expect(wrapper.find('[data-testid="stats-kpi-token-rate-value"]').text()).toBe('—')
+
+    await wrapper.find('[data-testid="stats-kpi-wall-value"]').trigger('focus')
+    expect(wrapper.find('[data-testid="stats-kpi-wall-tip"]').text()).toContain('00:00')
+    expect(wrapper.find('[data-testid="stats-kpi-wall-tip"]').text()).toContain('0 秒')
+    await wrapper.find('[data-testid="stats-kpi-wall-value"]').trigger('blur')
+
+    await wrapper.find('[data-testid="stats-kpi-total-tokens-value"]').trigger('mouseenter')
+    expect(wrapper.find('[data-testid="stats-kpi-token-part-input"]').text()).toContain('0')
+    expect(wrapper.find('[data-testid="stats-kpi-token-part-output"]').text()).toContain('0')
+    expect(wrapper.find('[data-testid="stats-kpi-token-part-cacheRead"]').text()).toContain('0')
+    expect(wrapper.find('[data-testid="stats-kpi-token-part-cacheWrite"]').text()).toContain('0')
+    await wrapper.find('[data-testid="stats-kpi-total-tokens-value"]').trigger('mouseleave')
+
+    await wrapper.find('[data-testid="stats-kpi-token-rate-value"]').trigger('mouseenter')
+    expect(wrapper.find('[data-testid="stats-kpi-token-rate-tip"]').text()).toContain(
+      '总时长为 0 秒，无法按耗时计算',
+    )
+    expect(wrapper.find('[data-testid="stats-kpi-token-rate-tip"]').text()).not.toContain('÷')
     wrapper.unmount()
   })
 

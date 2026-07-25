@@ -17,8 +17,61 @@ function buildRun(opts: {
   zeroUsage?: boolean
   durationSec?: number
   id?: string
+  /** Demo-aligned single process usage + durations (wall/nodeSum/gap). */
+  demoAligned?: boolean
 }) {
   const id = opts.id ?? 'run-stats-token-e2e'
+  if (opts.demoAligned) {
+    return {
+      id,
+      workflowId: 'wf-stats-token',
+      workflowName: 'execution-stats-token-usage',
+      workflowVersion: 1,
+      status: 'completed',
+      trigger: 'manual',
+      startedAt: '2026-07-24T00:00:00Z',
+      durationSec: opts.durationSec ?? 3703,
+      progress: 1,
+      nodeRuns: {},
+      nodeExecutions: {
+        research: [
+          {
+            nodeId: 'research',
+            iteration: 1,
+            status: 'completed',
+            startedAt: '2026-07-24T00:00:00Z',
+            durationSec: 3458,
+            outputs: {},
+            usage: {
+              inputTokens: 1_245_800,
+              outputTokens: 892_455,
+              cacheReadTokens: 7_201_000,
+              cacheWriteTokens: 306_000,
+            },
+          },
+        ],
+        react: [
+          {
+            nodeId: 'react',
+            iteration: 1,
+            status: 'completed',
+            startedAt: '2026-07-24T00:57:38Z',
+            durationSec: 0,
+            outputs: {},
+          },
+        ],
+      },
+      artifacts: [],
+      trace: [],
+      vars: [],
+      nodes,
+      edges: [
+        { id: 'e1', source: 'start', target: 'research' },
+        { id: 'e2', source: 'research', target: 'react' },
+      ],
+    }
+  }
+
   const researchUsage = opts.withUsage
     ? opts.zeroUsage
       ? { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
@@ -169,16 +222,16 @@ async function openStats(page: Page, run: ReturnType<typeof buildRun>, secondary
   await expect(page.getByTestId('execution-stats-panel')).toBeVisible()
 }
 
-test('单次有用量：总 token / token/s / 口径说明 / 排行辅列；无 NEW；同源时间线', async ({ page }) => {
+test('单次有用量：紧凑主值 / tip 细节 / 口径说明 / 排行辅列；无 NEW；同源时间线', async ({ page }) => {
   const run = buildRun({ withUsage: true })
   await openStats(page, run)
 
-  // 7080 + 4420 + 3440 = 14940；wall 186 → ~80.3
+  // 7080 + 4420 + 3440 = 14940 → compact 14.9K token；wall 186 → 80.3/s
   const total = page.getByTestId('stats-kpi-total-tokens')
-  await expect(total).toContainText(/14,?940/)
+  await expect(page.getByTestId('stats-kpi-total-tokens-value')).toHaveText(/14\.9K token/)
   await expect(total).toContainText('有用量环节合计')
   const rate = page.getByTestId('stats-kpi-token-rate')
-  await expect(rate).toContainText('80.3')
+  await expect(page.getByTestId('stats-kpi-token-rate-value')).toHaveText('80.3/s')
   await expect(rate).toContainText('÷ 总耗时')
 
   // dual hue: token vs time colors
@@ -191,14 +244,29 @@ test('单次有用量：总 token / token/s / 口径说明 / 排行辅列；无 
   expect(tokenColor).toMatch(/rgb\(11,\s*110,\s*153\)/)
   expect(timeColor).toMatch(/rgb\(180,\s*83,\s*9\)/)
 
+  // hover total tokens → full count + four parts (incl. cache read); tip closes on leave
+  await page.getByTestId('stats-kpi-total-tokens-value').hover()
+  const tip = page.getByTestId('stats-kpi-total-tokens-tip')
+  await expect(tip).toBeVisible()
+  await expect(tip).toContainText(/14,?940 token/)
+  await expect(page.getByTestId('stats-kpi-token-part-input')).toBeVisible()
+  await expect(page.getByTestId('stats-kpi-token-part-output')).toBeVisible()
+  await expect(page.getByTestId('stats-kpi-token-part-cacheRead')).toContainText(/缓存读/)
+  await expect(page.getByTestId('stats-kpi-token-part-cacheWrite')).toBeVisible()
+  await page.screenshot({
+    path: path.join(shotDir, 'stats-token-tip-parts.png'),
+  })
+  await page.getByTestId('stats-kpi-wall-value').hover()
+  await expect(page.getByTestId('stats-kpi-total-tokens-tip')).toHaveCount(0)
+
   const rankTokens = page.getByTestId('stats-rank-tokens')
   expect(await rankTokens.count()).toBeGreaterThan(0)
   // gate has no usage → —
   await expect(page.getByText('人工门禁').first()).toBeVisible()
   const panelText = await page.getByTestId('execution-stats-panel').innerText()
   expect(panelText).not.toContain('NEW')
-  // no four-part breakdown in stats ranking
-  expect(panelText).not.toMatch(/缓存读|缓存写|输入\s*\d/)
+  // no four-part breakdown in stats ranking (only tip); tip closed above
+  expect(panelText).not.toMatch(/缓存读|缓存写/)
 
   // pie/bottleneck still present (duration axis)
   await expect(page.getByTestId('stats-pie-query')).toBeVisible()
@@ -208,7 +276,7 @@ test('单次有用量：总 token / token/s / 口径说明 / 排行辅列；无 
     fullPage: true,
   })
 
-  // homologous with timeline footer
+  // homologous with timeline footer (timeline keeps full count, not compact)
   await page.getByTestId('view-mode-timeline').click()
   await expect(page.getByTestId('timeline-footer')).toBeVisible()
   await expect(page.getByTestId('timeline-total-tokens')).toContainText(/14,?940/)
@@ -307,4 +375,53 @@ test('维度切换：节点/类型排行均有 Tokens 辅列', async ({ page }) 
     path: path.join(shotDir, 'stats-rank-by-type.png'),
     fullPage: true,
   })
+})
+
+test('Demo 对齐：紧凑主值 + 时长/四分量/算式 tip + focus', async ({ page }) => {
+  const run = buildRun({ withUsage: true, demoAligned: true })
+  await openStats(page, run)
+
+  await expect(page.getByTestId('stats-kpi-wall-value')).toHaveText('1.03h')
+  await expect(page.getByTestId('stats-kpi-node-sum-value')).toHaveText('57.6m')
+  await expect(page.getByTestId('stats-kpi-gap-value')).toHaveText('4.1m')
+  await expect(page.getByTestId('stats-kpi-total-tokens-value')).toHaveText(/9\.65M token/)
+  await expect(page.getByTestId('stats-kpi-token-rate-value')).toHaveText('2.60K/s')
+
+  // bottoms:口径副文案 unchanged
+  await expect(page.getByTestId('stats-kpi-wall')).toContainText('占比默认分母')
+  await expect(page.getByTestId('stats-kpi-node-sum')).toContainText('各过程耗时之和')
+  await expect(page.getByTestId('stats-kpi-gap')).toContainText('总耗时')
+  await expect(page.getByTestId('stats-kpi-total-tokens')).toContainText('有用量环节合计')
+  await expect(page.getByTestId('stats-kpi-token-rate')).toContainText('÷ 总耗时')
+
+  await page.screenshot({
+    path: path.join(shotDir, 'demo-compact-mains.png'),
+  })
+
+  await page.getByTestId('stats-kpi-wall-value').hover()
+  await expect(page.getByTestId('stats-kpi-wall-tip')).toContainText('01:01:43')
+  await expect(page.getByTestId('stats-kpi-wall-tip')).toContainText('3703 秒')
+  await page.screenshot({ path: path.join(shotDir, 'demo-wall-tip.png') })
+
+  await page.getByTestId('stats-kpi-total-tokens-value').hover()
+  await expect(page.getByTestId('stats-kpi-total-tokens-tip')).toContainText(/9,?645,?255 token/)
+  await expect(page.getByTestId('stats-kpi-token-part-cacheRead')).toContainText('7,201,000')
+  await expect(page.getByTestId('stats-kpi-token-part-cacheRead')).toContainText(/7\.2M/)
+  await page.screenshot({ path: path.join(shotDir, 'demo-token-parts-tip.png') })
+
+  await page.getByTestId('stats-kpi-token-rate-value').hover()
+  await expect(page.getByTestId('stats-kpi-token-rate-tip')).toContainText(
+    /9,?645,?255 ÷ 3703 秒 ≈ 2604\.7/,
+  )
+  await page.screenshot({ path: path.join(shotDir, 'demo-rate-tip.png') })
+
+  // keyboard focus opens tip; blur closes
+  await page.getByTestId('stats-kpi-gap-value').focus()
+  await expect(page.getByTestId('stats-kpi-gap-tip')).toContainText('04:05')
+  await expect(page.getByTestId('stats-kpi-gap-tip')).toContainText('245 秒')
+  await page.getByTestId('stats-kpi-gap-value').blur()
+  await expect(page.getByTestId('stats-kpi-gap-tip')).toHaveCount(0)
+
+  // no product expand button for tips
+  await expect(page.getByRole('button', { name: /展开/ })).toHaveCount(0)
 })

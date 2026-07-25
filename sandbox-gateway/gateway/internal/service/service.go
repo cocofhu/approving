@@ -25,7 +25,8 @@ const destroyDriverTimeout = 2 * time.Minute
 var ErrEndpointNotFound = errors.New("no endpoint for port")
 
 // ErrLogsUnsupported is returned when the configured driver cannot retrieve
-// container logs (currently kubernetes). Handlers map it to 501.
+// container logs. Handlers map it to 501. Docker and kubernetes implement Logs;
+// the mapping remains for any driver that still returns driver.ErrLogsUnsupported.
 var ErrLogsUnsupported = driver.ErrLogsUnsupported
 
 // lbWaiter is optionally implemented by drivers that expose LoadBalancer-backed
