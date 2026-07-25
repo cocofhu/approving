@@ -687,6 +687,45 @@ func (s *PmService) ListMessages(threadID string) ([]models.ChatMessage, error) 
 	return msgs, nil
 }
 
+// ListMessagesWindow returns a newest-tail or before-cursor page of messages
+// (oldest→newest). Without beforeID it returns the most recent `limit` rows;
+// with beforeID it returns up to `limit` rows strictly older than that message.
+// hasMore is true when older messages remain beyond the returned window.
+// limit is clamped to [1, 100] (default 20). Unknown beforeID yields ErrPmMessageNotFound.
+func (s *PmService) ListMessagesWindow(threadID string, limit int, beforeID string) ([]models.ChatMessage, bool, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	q := s.db.Where("thread_id = ?", threadID)
+	if beforeID != "" {
+		anchor, err := s.GetMessage(threadID, beforeID)
+		if err != nil {
+			return nil, false, err
+		}
+		// Strictly older than the anchor (created_at, then id for same-timestamp ties).
+		q = q.Where(
+			"(created_at < ?) OR (created_at = ? AND id < ?)",
+			anchor.CreatedAt, anchor.CreatedAt, anchor.ID,
+		)
+	}
+	var newestFirst []models.ChatMessage
+	if err := q.Order("created_at desc, id desc").Limit(limit + 1).Find(&newestFirst).Error; err != nil {
+		return nil, false, err
+	}
+	hasMore := len(newestFirst) > limit
+	if hasMore {
+		newestFirst = newestFirst[:limit]
+	}
+	// Reverse to oldest→newest for chat UI consumption.
+	for i, j := 0, len(newestFirst)-1; i < j; i, j = i+1, j-1 {
+		newestFirst[i], newestFirst[j] = newestFirst[j], newestFirst[i]
+	}
+	return newestFirst, hasMore, nil
+}
+
 // AppendMessage persists one chat message and bumps thread updated_at.
 // Optional source tags the turn origin (user | cron); empty keeps legacy rows.
 func (s *PmService) AppendMessage(threadID, role, content string, citations []models.ProgressCitation, attached *models.AttachedContext, images []models.PromptImage) (models.ChatMessage, error) {

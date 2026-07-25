@@ -314,6 +314,11 @@ func (h *Handlers) DeletePmThread(c *gin.Context) {
 }
 
 // ListPmMessages handles GET /api/projects/:id/pm/threads/:tid/messages
+//
+// Query:
+//   - no limit/before: full oldest→newest list (Channel / legacy callers)
+//   - limit[=20]: newest-tail window of that size, oldest→newest, plus hasMore
+//   - before=<messageId>&limit: older page before the anchor, oldest→newest, plus hasMore
 func (h *Handlers) ListPmMessages(c *gin.Context) {
 	if h.Pm == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "pm unavailable"})
@@ -327,12 +332,33 @@ func (h *Handlers) ListPmMessages(c *gin.Context) {
 		writePmErr(c, err)
 		return
 	}
-	msgs, err := h.Pm.ListMessages(c.Param("tid"))
+	limitRaw := strings.TrimSpace(c.Query("limit"))
+	beforeID := strings.TrimSpace(c.Query("before"))
+	// No pagination params → full list (backward compatible).
+	if limitRaw == "" && beforeID == "" {
+		msgs, err := h.Pm.ListMessages(c.Param("tid"))
+		if err != nil {
+			writePmErr(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"items": msgs})
+		return
+	}
+	limit := 20
+	if limitRaw != "" {
+		n, err := strconv.Atoi(limitRaw)
+		if err != nil || n <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit"})
+			return
+		}
+		limit = n
+	}
+	msgs, hasMore, err := h.Pm.ListMessagesWindow(c.Param("tid"), limit, beforeID)
 	if err != nil {
 		writePmErr(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"items": msgs})
+	c.JSON(http.StatusOK, gin.H{"items": msgs, "hasMore": hasMore})
 }
 
 // AppendPmMessage handles POST /api/projects/:id/pm/threads/:tid/messages

@@ -345,8 +345,19 @@ export const api = {
     req<ChatThread>(`/projects/${projectId}/pm/threads/${tid}`),
   deletePmThread: (projectId: string, tid: string) =>
     req<{ status: string }>(`/projects/${projectId}/pm/threads/${tid}`, { method: 'DELETE' }),
-  listPmMessages: (projectId: string, tid: string) =>
-    req<{ items: ChatMessage[] }>(`/projects/${projectId}/pm/threads/${tid}/messages`),
+  listPmMessages: (
+    projectId: string,
+    tid: string,
+    params?: { limit?: number; before?: string },
+  ) => {
+    const qs = new URLSearchParams()
+    if (params?.limit != null) qs.set('limit', String(params.limit))
+    if (params?.before) qs.set('before', params.before)
+    const q = qs.toString()
+    return req<{ items: ChatMessage[]; hasMore?: boolean }>(
+      `/projects/${projectId}/pm/threads/${tid}/messages${q ? `?${q}` : ''}`,
+    )
+  },
   appendPmMessage: (
     projectId: string,
     tid: string,

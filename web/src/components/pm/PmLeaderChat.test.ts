@@ -1459,3 +1459,295 @@ describe('PmLeaderChat stick-to-bottom', () => {
     wrapper.unmount()
   })
 })
+
+describe('PmLeaderChat tail window + lazyload', () => {
+  const originalWS = globalThis.WebSocket
+
+  function mockScrollerMetrics(
+    el: HTMLElement,
+    scrollHeight: number,
+    clientHeight: number,
+    scrollTop?: number,
+  ) {
+    let top = scrollTop ?? scrollHeight - clientHeight
+    let height = scrollHeight
+    Object.defineProperty(el, 'scrollHeight', {
+      configurable: true,
+      get: () => height,
+      set: (v: number) => {
+        height = v
+      },
+    })
+    Object.defineProperty(el, 'clientHeight', { configurable: true, get: () => clientHeight })
+    Object.defineProperty(el, 'scrollTop', {
+      configurable: true,
+      get: () => top,
+      set: (v: number) => {
+        top = v
+      },
+    })
+    return {
+      getScrollTop: () => top,
+      setScrollTop: (v: number) => {
+        top = v
+      },
+      setScrollHeight: (v: number) => {
+        height = v
+      },
+      syncStickFromScroll: () => {
+        el.dispatchEvent(new Event('scroll'))
+      },
+    }
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    // @ts-expect-error test stub
+    globalThis.WebSocket = MockWebSocket
+    apiMocks.getPmDraft.mockResolvedValue({ draft: null, live: false, hasFinal: false })
+    apiMocks.appendPmMessage.mockImplementation(async (_pid: string, _tid: string, body: { content?: string; role?: string }) => ({
+      id: 'msg-u1',
+      role: body.role || 'user',
+      content: body.content || '',
+      status: 'ok',
+    }))
+    apiMocks.ensurePmSandbox.mockResolvedValue({
+      sandbox: { id: 1, status: 'running' },
+      preamble: '',
+    })
+    apiMocks.getSandbox.mockResolvedValue({ id: 1, status: 'running' })
+  })
+
+  afterEach(() => {
+    globalThis.WebSocket = originalWS
+  })
+
+  it('non-Channel first load requests limit=20 tail window and shows scroll-up tip', async () => {
+    const tail = Array.from({ length: 20 }, (_, i) => ({
+      id: `m-${i + 5}`,
+      role: i % 2 === 0 ? 'user' : 'assistant',
+      content: `msg-${i + 5}`,
+      status: 'ok',
+    }))
+    apiMocks.listPmThreads.mockResolvedValue({
+      items: [{ id: 'thr-long', title: '长会话', userId: 'alice' }],
+    })
+    apiMocks.listPmMessages.mockResolvedValue({ items: tail, hasMore: true })
+
+    const wrapper = mountChat()
+    await flushPromises()
+
+    expect(apiMocks.listPmMessages).toHaveBeenCalledWith('proj-1', 'thr-long', { limit: 20 })
+    expect(wrapper.findAll('[data-msg-id]').length).toBe(20)
+    const tip = wrapper.find('[data-testid="pm-history-tip"]')
+    expect(tip.exists()).toBe(true)
+    expect(tip.text()).toContain('上滑加载更早')
+    wrapper.unmount()
+  })
+
+  it('Channel first load keeps full list without limit/lazyload tip', async () => {
+    const items = Array.from({ length: 30 }, (_, i) => ({
+      id: `c-${i}`,
+      role: 'user',
+      content: `qq-${i}`,
+      status: 'ok',
+    }))
+    apiMocks.listPmThreads.mockResolvedValue({
+      items: [
+        {
+          id: 'thr-qq',
+          title: 'QQ会话',
+          userId: 'qq:guild:1',
+          projectId: 'proj-1',
+        },
+      ],
+    })
+    apiMocks.listPmMessages.mockResolvedValue({ items })
+
+    const wrapper = mountChat()
+    await flushPromises()
+
+    expect(apiMocks.listPmMessages).toHaveBeenCalledWith('proj-1', 'thr-qq')
+    expect(apiMocks.listPmMessages.mock.calls[0].length).toBe(2)
+    expect(wrapper.find('[data-testid="pm-history-tip"]').exists()).toBe(false)
+    expect(wrapper.findAll('[data-msg-id]').length).toBe(30)
+    wrapper.unmount()
+  })
+
+  it('scroll near top lazyloads earlier page with before=oldest id', async () => {
+    const tail = Array.from({ length: 20 }, (_, i) => ({
+      id: `m-${i + 20}`,
+      role: 'user',
+      content: `t-${i + 20}`,
+      status: 'ok',
+    }))
+    const earlier = Array.from({ length: 20 }, (_, i) => ({
+      id: `m-${i}`,
+      role: 'user',
+      content: `e-${i}`,
+      status: 'ok',
+    }))
+    apiMocks.listPmThreads.mockResolvedValue({
+      items: [{ id: 'thr-long', title: '长会话', userId: 'alice' }],
+    })
+    apiMocks.listPmMessages
+      .mockResolvedValueOnce({ items: tail, hasMore: true })
+      .mockResolvedValueOnce({ items: earlier, hasMore: false })
+
+    const wrapper = mountChat()
+    await flushPromises()
+
+    const scrollerEl = wrapper.find('[data-testid="pm-message-scroller"]').element as HTMLElement
+    const metrics = mockScrollerMetrics(scrollerEl, 2000, 400, 40)
+    metrics.syncStickFromScroll()
+    await flushPromises()
+
+    expect(apiMocks.listPmMessages).toHaveBeenLastCalledWith('proj-1', 'thr-long', {
+      limit: 20,
+      before: 'm-20',
+    })
+    expect(wrapper.findAll('[data-msg-id]').length).toBe(40)
+    expect(wrapper.find('[data-testid="pm-history-tip"]').text()).toContain('已到最早')
+    wrapper.unmount()
+  })
+
+  it('short session hasMore=false does not request earlier on scroll-top', async () => {
+    const items = Array.from({ length: 8 }, (_, i) => ({
+      id: `s-${i}`,
+      role: 'user',
+      content: `s-${i}`,
+      status: 'ok',
+    }))
+    apiMocks.listPmThreads.mockResolvedValue({
+      items: [{ id: 'thr-short', title: '短会话', userId: 'alice' }],
+    })
+    apiMocks.listPmMessages.mockResolvedValue({ items, hasMore: false })
+
+    const wrapper = mountChat()
+    await flushPromises()
+    expect(apiMocks.listPmMessages).toHaveBeenCalledTimes(1)
+
+    const scrollerEl = wrapper.find('[data-testid="pm-message-scroller"]').element as HTMLElement
+    const metrics = mockScrollerMetrics(scrollerEl, 800, 400, 0)
+    metrics.syncStickFromScroll()
+    await flushPromises()
+
+    expect(apiMocks.listPmMessages).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-testid="pm-history-tip"]').text()).toContain('已到最早')
+    wrapper.unmount()
+  })
+
+  it('refetchAfterTurnDone merges by id and keeps prepended prefix', async () => {
+    let socket: MockWebSocket | null = null
+    class CaptureWS extends MockWebSocket {
+      constructor() {
+        super()
+        socket = this
+      }
+    }
+    // @ts-expect-error test stub
+    globalThis.WebSocket = CaptureWS
+
+    const older = Array.from({ length: 20 }, (_, i) => ({
+      id: `m-${i}`,
+      role: 'user',
+      content: `old-${i}`,
+      status: 'ok',
+    }))
+    const tail = Array.from({ length: 20 }, (_, i) => ({
+      id: `m-${i + 20}`,
+      role: i % 2 === 0 ? 'user' : 'assistant',
+      content: `tail-${i + 20}`,
+      status: 'ok',
+    }))
+    apiMocks.listPmThreads.mockResolvedValue({
+      items: [{ id: 'thr-long', title: '长会话', userId: 'alice' }],
+    })
+    apiMocks.listPmMessages
+      .mockResolvedValueOnce({ items: tail, hasMore: true })
+      .mockResolvedValueOnce({ items: older, hasMore: false })
+      .mockResolvedValueOnce({
+        items: [
+          ...tail.slice(-19),
+          { id: 'm-39', role: 'assistant', content: 'updated-tail', status: 'ok' },
+          { id: 'm-40', role: 'assistant', content: 'turn-result', status: 'ok' },
+        ],
+        hasMore: true,
+      })
+
+    const wrapper = mountChat()
+    await flushPromises()
+
+    const scrollerEl = wrapper.find('[data-testid="pm-message-scroller"]').element as HTMLElement
+    mockScrollerMetrics(scrollerEl, 2000, 400, 30).syncStickFromScroll()
+    await flushPromises()
+    expect(wrapper.findAll('[data-msg-id]').length).toBe(40)
+
+    const textarea = wrapper.find('textarea')
+    await textarea.setValue('继续')
+    const sendBtn = wrapper.findAll('button').find((b) => b.text() === '发送')
+    await sendBtn!.trigger('click')
+    await flushPromises()
+
+    socket!.onmessage?.(
+      new MessageEvent('message', {
+        data: JSON.stringify({ type: 'turn_done', seq: 0 }),
+      }),
+    )
+    await flushPromises()
+
+    // Prefix m-0..m-19 must remain; new turn message appears; no collapse to 20.
+    expect(wrapper.find('[data-msg-id="m-0"]').exists()).toBe(true)
+    expect(wrapper.find('[data-msg-id="m-40"]').exists()).toBe(true)
+    expect(wrapper.findAll('[data-msg-id]').length).toBeGreaterThan(20)
+    const mergeCall = apiMocks.listPmMessages.mock.calls.at(-1)
+    expect(mergeCall?.[2]).toEqual({ limit: 20 })
+    wrapper.unmount()
+  })
+
+  it('lazyload failure keeps messages and retries on next top scroll', async () => {
+    const tail = Array.from({ length: 20 }, (_, i) => ({
+      id: `m-${i + 20}`,
+      role: 'user',
+      content: `t-${i + 20}`,
+      status: 'ok',
+    }))
+    const earlier = Array.from({ length: 10 }, (_, i) => ({
+      id: `m-${i + 10}`,
+      role: 'user',
+      content: `e-${i + 10}`,
+      status: 'ok',
+    }))
+    apiMocks.listPmThreads.mockResolvedValue({
+      items: [{ id: 'thr-long', title: '长会话', userId: 'alice' }],
+    })
+    apiMocks.listPmMessages
+      .mockResolvedValueOnce({ items: tail, hasMore: true })
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce({ items: earlier, hasMore: true })
+
+    const wrapper = mountChat()
+    await flushPromises()
+
+    const scrollerEl = wrapper.find('[data-testid="pm-message-scroller"]').element as HTMLElement
+    const metrics = mockScrollerMetrics(scrollerEl, 2000, 400, 20)
+    metrics.syncStickFromScroll()
+    await flushPromises()
+
+    expect(wrapper.findAll('[data-msg-id]').length).toBe(20)
+    expect(wrapper.find('[data-testid="pm-history-tip"]').text()).toContain('再次滚到顶部可重试')
+
+    // Scroll away then back to top to retry.
+    metrics.setScrollTop(200)
+    metrics.syncStickFromScroll()
+    await flushPromises()
+    metrics.setScrollTop(10)
+    metrics.syncStickFromScroll()
+    await flushPromises()
+
+    expect(wrapper.findAll('[data-msg-id]').length).toBe(30)
+    expect(wrapper.find('[data-msg-id="m-10"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+})

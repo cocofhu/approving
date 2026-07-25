@@ -55,7 +55,15 @@ const lastEventSeq = ref(-1)
 const scroller = ref<HTMLElement | null>(null)
 
 const STICK_THRESHOLD = 48
+/** Align with approved Demo: near-top auto lazyload threshold (px). */
+const TOP_THRESHOLD = 56
+/** Fixed page size for non-Channel PM sessions (message rows). */
+const PAGE_SIZE = 20
 const stickToBottom = ref(true)
+/** True when older messages remain beyond the loaded window (non-Channel only). */
+const hasMoreEarlier = ref(false)
+const historyLoading = ref(false)
+const historyLoadFailed = ref(false)
 
 function isNearBottom(el: HTMLElement) {
   return el.scrollHeight - el.scrollTop - el.clientHeight <= STICK_THRESHOLD
@@ -63,7 +71,11 @@ function isNearBottom(el: HTMLElement) {
 
 function onScrollerScroll() {
   const el = scroller.value
-  if (el) stickToBottom.value = isNearBottom(el)
+  if (!el) return
+  stickToBottom.value = isNearBottom(el)
+  if (el.scrollTop <= TOP_THRESHOLD) {
+    void loadEarlier()
+  }
 }
 
 function scrollBottom(force = false) {
@@ -71,6 +83,31 @@ function scrollBottom(force = false) {
   if (el && (force || stickToBottom.value)) {
     el.scrollTop = el.scrollHeight
   }
+}
+
+/** Keep already-loaded prefix; update/append by message id (never shrink to latest PAGE). */
+function mergeMessagesKeepPrefix(existing: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+  if (!incoming.length) return existing
+  if (!existing.length) return incoming.slice()
+  const byId = new Map(existing.map((m) => [m.id, m]))
+  for (const m of incoming) {
+    byId.set(m.id, m)
+  }
+  const seen = new Set(existing.map((m) => m.id))
+  const out = existing.map((m) => byId.get(m.id)!)
+  for (const m of incoming) {
+    if (!seen.has(m.id)) {
+      out.push(m)
+      seen.add(m.id)
+    }
+  }
+  return out
+}
+
+function resetHistoryWindowState() {
+  hasMoreEarlier.value = false
+  historyLoading.value = false
+  historyLoadFailed.value = false
 }
 
 /** Session-only failed partial bubbles (S2); not persisted as assistant rows. */
@@ -176,6 +213,25 @@ const showEmptyHint = computed(
     !messages.value.length &&
     !showStreamBubble.value,
 )
+/** Top non-button history tip (Demo four-state); Channel never shows it. */
+const showHistoryTip = computed(
+  () =>
+    !activeIsChannel.value &&
+    mainViewState.value === 'content' &&
+    !showEmptyHint.value &&
+    (messages.value.length > 0 || historyLoading.value || historyLoadFailed.value),
+)
+const historyTipText = computed(() => {
+  if (historyLoading.value) return t('pages.projectDetail.pm.historyLoading')
+  if (historyLoadFailed.value) return t('pages.projectDetail.pm.historyLoadFailed')
+  if (!hasMoreEarlier.value) return t('pages.projectDetail.pm.historyReachedStart')
+  return t('pages.projectDetail.pm.historyScrollUp')
+})
+const historyTipClass = computed(() => {
+  if (historyLoading.value) return 'text-accent'
+  if (historyLoadFailed.value) return 'text-err'
+  return 'text-txt3'
+})
 const showIdleSuggestions = computed(() => {
   if (activeIsChannel.value) return false
   const msgs = messages.value
@@ -281,6 +337,7 @@ async function activateThread(id: string, opts?: { preserveTurn?: boolean }) {
   activeId.value = id
   messages.value = []
   messagesLoadFailed.value = false
+  resetHistoryWindowState()
   try {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(pmActiveThreadStorageKey(props.projectId), id)
@@ -320,10 +377,18 @@ async function loadMessages(tid: string) {
   const gen = ++threadLoadGen
   messagesLoadFailed.value = false
   messagesLoading.value = true
+  historyLoadFailed.value = false
+  historyLoading.value = false
   try {
-    const res = await api.listPmMessages(props.projectId, tid)
+    const th = threads.value.find((x) => x.id === tid)
+    const channel = isChannelThread(th)
+    // Channel: keep full-list strategy. Non-Channel: newest-tail window of PAGE_SIZE.
+    const res = channel
+      ? await api.listPmMessages(props.projectId, tid)
+      : await api.listPmMessages(props.projectId, tid, { limit: PAGE_SIZE })
     if (gen !== threadLoadGen || tid !== activeId.value) return
     messages.value = res.items || []
+    hasMoreEarlier.value = channel ? false : !!res.hasMore
     await hydrateDraftAndMaybeResume(tid)
     if (gen !== threadLoadGen || tid !== activeId.value) return
     await nextTick()
@@ -336,6 +401,57 @@ async function loadMessages(tid: string) {
   } finally {
     if (gen === threadLoadGen && tid === activeId.value) {
       messagesLoading.value = false
+    }
+  }
+}
+
+/**
+ * Near-top lazyload: prepend up to PAGE_SIZE older messages.
+ * Uses threadLoadGen so a late response cannot write into another session.
+ */
+async function loadEarlier() {
+  if (
+    historyLoading.value ||
+    !hasMoreEarlier.value ||
+    activeIsChannel.value ||
+    !activeId.value ||
+    messagesLoading.value ||
+    !messages.value.length
+  ) {
+    return
+  }
+  const gen = threadLoadGen
+  const tid = activeId.value
+  const before = messages.value[0]?.id
+  if (!before) return
+
+  historyLoading.value = true
+  historyLoadFailed.value = false
+  const el = scroller.value
+  const prevTop = el?.scrollTop ?? 0
+  const prevHeight = el?.scrollHeight ?? 0
+
+  try {
+    const res = await api.listPmMessages(props.projectId, tid, { limit: PAGE_SIZE, before })
+    if (gen !== threadLoadGen || tid !== activeId.value) return
+    const older = res.items || []
+    if (older.length) {
+      const existing = new Set(messages.value.map((m) => m.id))
+      const prepend = older.filter((m) => !existing.has(m.id))
+      messages.value = [...prepend, ...messages.value]
+    }
+    hasMoreEarlier.value = !!res.hasMore
+    stickToBottom.value = false
+    await nextTick()
+    if (el) {
+      el.scrollTop = prevTop + (el.scrollHeight - prevHeight)
+    }
+  } catch {
+    if (gen !== threadLoadGen || tid !== activeId.value) return
+    historyLoadFailed.value = true
+  } finally {
+    if (gen === threadLoadGen && tid === activeId.value) {
+      historyLoading.value = false
     }
   }
 }
@@ -753,15 +869,31 @@ function clearFinalizingStream() {
 async function refetchAfterTurnDone() {
   if (!activeId.value) return
   finalizingRefetchFailed.value = false
+  const tid = activeId.value
+  const gen = threadLoadGen
   try {
-    const res = await api.listPmMessages(props.projectId, activeId.value)
-    messages.value = res.items || []
+    const channel = isChannelThread(threads.value.find((x) => x.id === tid))
+    // Channel: full list replace. Non-Channel: tail refetch + merge keep prefix.
+    const res = channel
+      ? await api.listPmMessages(props.projectId, tid)
+      : await api.listPmMessages(props.projectId, tid, { limit: PAGE_SIZE })
+    if (gen !== threadLoadGen || tid !== activeId.value) return
+    const incoming = res.items || []
+    messages.value = channel
+      ? incoming
+      : mergeMessagesKeepPrefix(messages.value, incoming)
+    if (!channel && typeof res.hasMore === 'boolean' && messages.value.length <= PAGE_SIZE) {
+      // Only trust hasMore when we have not prepended beyond the tail window.
+      hasMoreEarlier.value = res.hasMore
+    }
     const thr = await api.listPmThreads(props.projectId)
+    if (gen !== threadLoadGen || tid !== activeId.value) return
     threads.value = thr.items || []
     await nextTick()
     scrollBottom()
     clearFinalizingStream()
   } catch {
+    if (gen !== threadLoadGen || tid !== activeId.value) return
     finalizingRefetchFailed.value = true
     toast.error(t('pages.projectDetail.pm.loadFailed'))
   }
@@ -807,9 +939,22 @@ async function onTurnError(kind: FailKind, detail: string) {
   finalizing.value = false
   const mid = activeUserMessageId.value
   if (activeId.value) {
+    const tid = activeId.value
+    const gen = threadLoadGen
     try {
-      const res = await api.listPmMessages(props.projectId, activeId.value)
-      messages.value = res.items || []
+      const channel = isChannelThread(threads.value.find((x) => x.id === tid))
+      const res = channel
+        ? await api.listPmMessages(props.projectId, tid)
+        : await api.listPmMessages(props.projectId, tid, { limit: PAGE_SIZE })
+      if (gen === threadLoadGen && tid === activeId.value) {
+        const incoming = res.items || []
+        messages.value = channel
+          ? incoming
+          : mergeMessagesKeepPrefix(messages.value, incoming)
+        if (!channel && typeof res.hasMore === 'boolean' && messages.value.length <= PAGE_SIZE) {
+          hasMoreEarlier.value = res.hasMore
+        }
+      }
       // If server did not mark failure (edge), persist locally.
       if (mid) {
         const user = messages.value.find((m) => m.id === mid)
@@ -1185,8 +1330,17 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
+        <div
+          v-if="showHistoryTip"
+          data-testid="pm-history-tip"
+          class="min-h-[28px] py-1.5 text-center text-[11.5px]"
+          :class="historyTipClass"
+        >
+          {{ historyTipText }}
+        </div>
+
         <template v-for="m in messages" :key="m.id">
-          <div v-if="m.role === 'user'" class="flex gap-2.5 flex-row-reverse">
+          <div v-if="m.role === 'user'" class="flex gap-2.5 flex-row-reverse" :data-msg-id="m.id">
             <div
               class="flex h-7 w-7 shrink-0 items-center justify-center border border-accent/20 bg-accent-dim text-[11px] font-semibold text-accent-2"
             >
@@ -1217,7 +1371,7 @@ onBeforeUnmount(() => {
               <div class="msg-time mt-1 text-right text-[10px] text-txt3">{{ relTime(m.createdAt) }}</div>
             </div>
           </div>
-          <div v-else-if="m.role === 'assistant'" class="flex gap-2.5">
+          <div v-else-if="m.role === 'assistant'" class="flex gap-2.5" :data-msg-id="m.id">
             <div
               class="flex h-7 w-7 shrink-0 items-center justify-center border border-accent/25 bg-accent/10 text-accent-2"
             >
