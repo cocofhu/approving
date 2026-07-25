@@ -1595,6 +1595,11 @@
   padding: 0.05rem 0.3rem;
 }
 
+/* English docs homepage: Approve annotate badge must not leak Chinese */
+html:lang(en) .demo-marquee::after {
+  content: "Issue";
+}
+
 .approve-aside__label {
   margin: 0;
   font-size: 0.7rem;
