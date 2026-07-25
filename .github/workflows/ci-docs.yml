@@ -38,15 +38,15 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: .
         env:
-          PAGES_DEPLOY_TOKEN: ${{ secrets.PAGES_DEPLOY_TOKEN }}
+          PAGES_DEPLOY_KEY: ${{ secrets.PAGES_DEPLOY_KEY }}
           PAGES_REPO: cocofhu/approving-pages
           PAGES_BRANCH: main
           GITHUB_SHA: ${{ github.sha }}
         run: |
-          if [[ -z "${PAGES_DEPLOY_TOKEN}" ]]; then
-            echo "PAGES_DEPLOY_TOKEN secret is not set; skip deploy."
-            echo "Create public repo cocofhu/approving-pages, enable Pages on main/root,"
-            echo "and add a contents:write token as repo secret PAGES_DEPLOY_TOKEN."
+          if [[ -z "${PAGES_DEPLOY_KEY}" ]]; then
+            echo "PAGES_DEPLOY_KEY secret is not set; skip deploy."
+            echo "Add a write deploy key on cocofhu/approving-pages, then store the"
+            echo "private key as repo secret PAGES_DEPLOY_KEY on cocofhu/approving."
             exit 0
           fi
           ./.github/scripts/publish-pages.sh

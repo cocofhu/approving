@@ -100,15 +100,18 @@ in [`docs/content/`](docs/content/). `npm run build` writes `docs/public/`.
 
 Matching workflow: `ci-docs`. On push to `main`, the job publishes `public/` to
 the standalone Pages repo [`cocofhu/approving-pages`](https://github.com/cocofhu/approving-pages)
-when Secret `PAGES_DEPLOY_TOKEN` is configured.
+when Secret `PAGES_DEPLOY_KEY` is configured.
 
 **One-time GitHub setup (maintainers):**
 
 1. Create public empty repo `cocofhu/approving-pages`.
 2. Settings → Pages → Deploy from branch `main` / root (or `/ (root)`).
-3. In `cocofhu/approving`, add Secret `PAGES_DEPLOY_TOKEN` (PAT or fine-grained
-   token with `contents: write` on `approving-pages`).
-4. Optional: set the Approving repo Homepage to
+3. Generate an ed25519 keypair for publish only, e.g.
+   `ssh-keygen -t ed25519 -C approving-pages-deploy -f approving-pages-deploy -N ""`.
+4. On `cocofhu/approving-pages`, add the **public** key as a Deploy key with
+   **Allow write access**.
+5. On `cocofhu/approving`, add the **private** key as Secret `PAGES_DEPLOY_KEY`.
+6. Optional: set the Approving repo Homepage to
    `https://cocofhu.github.io/approving-pages/`.
 
 ## Release images and smoke

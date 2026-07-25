@@ -85,7 +85,8 @@ npm run build
 ```
 
 On push to `main`, `ci-docs` also runs `.github/scripts/publish-pages.sh` when
-Secret `PAGES_DEPLOY_TOKEN` is set (target repo `cocofhu/approving-pages`).
+Secret `PAGES_DEPLOY_KEY` is set (SSH deploy key with write access on
+`cocofhu/approving-pages`).
 
 ### `sandbox-gateway/sandbox/**` or `sandbox-gateway/scripts/**` → `ci-sandbox`
 

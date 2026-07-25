@@ -3,18 +3,18 @@
 # Only call on default-branch success paths after a clean docs build.
 #
 # Required env:
-#   PAGES_DEPLOY_TOKEN  — PAT/fine-grained token with contents:write on target repo
+#   PAGES_DEPLOY_KEY  — SSH private key (deploy key with write access on target repo)
 # Optional env:
-#   PAGES_REPO          — default cocofhu/approving-pages
-#   PAGES_BRANCH        — default main
-#   PAGES_SOURCE_DIR    — default docs/public (relative to repo root)
+#   PAGES_REPO        — default cocofhu/approving-pages
+#   PAGES_BRANCH      — default main
+#   PAGES_SOURCE_DIR  — default docs/public (relative to repo root)
 set -euo pipefail
 
 PAGES_REPO="${PAGES_REPO:-cocofhu/approving-pages}"
 PAGES_BRANCH="${PAGES_BRANCH:-main}"
 PAGES_SOURCE_DIR="${PAGES_SOURCE_DIR:-docs/public}"
 
-: "${PAGES_DEPLOY_TOKEN:?PAGES_DEPLOY_TOKEN is required}"
+: "${PAGES_DEPLOY_KEY:?PAGES_DEPLOY_KEY is required}"
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 src="${repo_root}/${PAGES_SOURCE_DIR}"
@@ -29,9 +29,19 @@ if [[ ! -f "$src/index.html" ]]; then
 fi
 
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+ssh_dir="$(mktemp -d)"
+trap 'rm -rf "$work" "$ssh_dir"' EXIT
 
-clone_url="https://x-access-token:${PAGES_DEPLOY_TOKEN}@github.com/${PAGES_REPO}.git"
+# Deploy key auth: write key + accept github.com host key for this job only.
+umask 077
+printf '%s\n' "$PAGES_DEPLOY_KEY" >"${ssh_dir}/id_ed25519"
+# GitHub secrets sometimes strip the trailing newline; OpenSSH requires it.
+[[ "$(tail -c1 "${ssh_dir}/id_ed25519")" == $'\n' ]] || printf '\n' >>"${ssh_dir}/id_ed25519"
+chmod 600 "${ssh_dir}/id_ed25519"
+ssh-keyscan -t ed25519,rsa github.com >"${ssh_dir}/known_hosts" 2>/dev/null
+export GIT_SSH_COMMAND="ssh -i ${ssh_dir}/id_ed25519 -o IdentitiesOnly=yes -o UserKnownHostsFile=${ssh_dir}/known_hosts -o StrictHostKeyChecking=yes"
+
+clone_url="git@github.com:${PAGES_REPO}.git"
 
 # Prefer existing branch; if the target repo is empty / branch missing, init orphan.
 if git ls-remote --exit-code --heads "$clone_url" "$PAGES_BRANCH" >/dev/null 2>&1; then
