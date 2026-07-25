@@ -551,7 +551,7 @@ func (c *acpProvider) runAgentOnce(ctx context.Context, req NodeReq) (res NodeRe
 	// best-effort re-prompt to write it via the naming set_* tool; the engine
 	// still fails the node if it is ultimately absent.
 	if name, tool := structuredArtifactFor(req.NodeType); name != "" {
-		if serr := c.ensureStructured(ctx, req, acp, name, tool, &turnEvents, &usage); serr != nil {
+		if _, serr := c.ensureStructured(ctx, req, acp, name, tool, &turnEvents, &usage); serr != nil {
 			events := c.snapshotEvents(ctx, sb, turnEvents)
 			return NodeResult{OutputMd: chatRes.Narration, Outputs: out, Events: events, Usage: usage}, serr
 		}
@@ -613,7 +613,7 @@ func (c *acpProvider) runAgentOnce(ctx context.Context, req NodeReq) (res NodeRe
 	// completion. Soft re-prompt here; the engine still fails if the mark is
 	// ultimately absent. submit_mr no longer runs verifyMR (git/glab) — the
 	// agent attests via node_complete outputs instead.
-	if oerr := c.ensureOutcome(ctx, req, acp, &events, &usage); oerr != nil {
+	if _, oerr := c.ensureOutcome(ctx, req, acp, &events, &usage); oerr != nil {
 		return NodeResult{OutputMd: chatRes.Narration, Outputs: out, Events: events, Git: git, Usage: usage}, oerr
 	}
 
@@ -808,8 +808,10 @@ func (c *acpProvider) ReactOpen(ctx context.Context, req NodeReq) ReactTurn {
 				var usage *models.TokenUsage
 				var events []models.AcpEvent
 				absorbChat(&usage, &events, res)
-				// Opening turn with questions: pause for the human to choose.
-				if len(qs) > 0 && !reactCapReached(req, nil) {
+				// Opening turn with questions: pause for the human (or auto_clarify).
+				// Pending ask_question outranks the max_rounds "must finish" cap —
+				// never discard qs and fall into finishReact/ensure* OutcomeRetry.
+				if len(qs) > 0 {
 					return ReactTurn{Msg: res.Narration, Questions: qs, Events: events, Usage: usage}
 				}
 				// No questions on the opening turn ⇒ clarification is concluded.
@@ -891,9 +893,9 @@ func (c *acpProvider) rehydrateReact(ctx context.Context, req NodeReq, history [
 }
 
 // ReactReply advances the live dialogue. The clarification finishes when the
-// agent raises no further questions, the round cap is hit, or the user forces
-// an early finish; then the produces contract is ensured (with re-prompting)
-// and the sandbox torn down.
+// agent raises no further questions (pending ask_question always pauses, even
+// under force/max_rounds). Only then is the produces contract ensured (with
+// re-prompting) and the sandbox torn down.
 func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []models.ReactMessage, human string, images []models.PromptImage, force bool) ReactTurn {
 	key := reactKey(req)
 	c.mu.Lock()
@@ -942,15 +944,16 @@ func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []mod
 	absorbChat(&usage, &events, res)
 
 	qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
-	// Clarification is a gate: unless the user forced a finish or the round cap
-	// is reached, we cannot complete while questions remain. That includes both
-	// questions the agent raised this turn (ask_question) and unresolved
-	// open_questions it left in the clarified requirement — the latter are
-	// re-surfaced as ask_question so the user resolves every one.
+	// Clarification is a gate: pending ask_question always outranks force /
+	// max_rounds "must finish". Returning Questions lets auto_clarify or
+	// waiting_human proceed; finishing here would enter ensure* and inject
+	// OutcomeRetry ("立即 node_complete，不要再提问"), mis-failing the node.
+	if len(qs) > 0 {
+		return ReactTurn{Msg: res.Narration, Questions: qs, Events: events, Usage: usage}
+	}
+	// No pending ask_question this turn. When not forced/capped, also re-surface
+	// unresolved open_questions from the clarified requirement as ask_question.
 	if !force && !reactCapReached(req, history) {
-		if len(qs) > 0 {
-			return ReactTurn{Msg: res.Narration, Questions: qs, Events: events, Usage: usage}
-		}
 		if gq, msg, ge, gu, ok := c.enforceOpenQuestionsGate(ctx, req, sess); ok {
 			events = append(events, ge...)
 			usage = models.AddTokenUsage(usage, gu)
@@ -1013,7 +1016,7 @@ func (c *acpProvider) ReviseInPlace(ctx context.Context, req NodeReq, history []
 	// Re-persist the structured product so the store reflects the edit (the
 	// engine re-derives outputs from it). No-op for nodes without a set_* tool.
 	if name, tool := structuredArtifactFor(req.NodeType); name != "" {
-		if serr := c.ensureStructured(ctx, req, sess.acp, name, tool, &events, &usage); serr != nil {
+		if _, serr := c.ensureStructured(ctx, req, sess.acp, name, tool, &events, &usage); serr != nil {
 			log.Warn().Err(serr).Str("node", req.NodeID).Msg("review revise ensure product failed")
 		}
 	}
@@ -1082,7 +1085,9 @@ func (c *acpProvider) enforceOpenQuestionsGate(ctx context.Context, req NodeReq,
 // finishReact runs the shared completion path for a react node: ensure the
 // declared produces artifact exists (re-prompting the agent to write it),
 // snapshot the event log, capture any code changes, tear the session down and
-// return a Done ReactTurn.
+// return a Done ReactTurn. If the agent raises ask_question during ensure*,
+// the session stays open and Questions are returned (Done=false) so the
+// engine can auto_clarify or wait for a human — never OutcomeRetry-mis-fail.
 func (c *acpProvider) finishReact(ctx context.Context, req NodeReq, key string, sess *reactSession, narration string, history []models.ReactMessage, events []models.AcpEvent, usage *models.TokenUsage) ReactTurn {
 	// Ensure the node's reserved structured product exists (re-prompting the
 	// agent to write it via its set_* tool). react → clarified requirement;
@@ -1091,14 +1096,23 @@ func (c *acpProvider) finishReact(ctx context.Context, req NodeReq, key string, 
 	// their product (page.html / produces) is enforced by the engine's
 	// finalizeProduct on the finish path.
 	if name, tool := structuredArtifactFor(req.NodeType); name != "" {
-		if err := c.ensureStructured(ctx, req, sess.acp, name, tool, &events, &usage); err != nil {
+		qs, err := c.ensureStructured(ctx, req, sess.acp, name, tool, &events, &usage)
+		if len(qs) > 0 {
+			msg := narration
+			return ReactTurn{Msg: msg, Questions: qs, Done: false, Events: events, Usage: usage}
+		}
+		if err != nil {
 			events = c.snapshotEvents(ctx, sess.sb, events)
 			c.closeSession(key)
 			return ReactTurn{Done: true, Err: err, Msg: err.Error(), Events: events, Usage: usage,
 				Result: NodeResult{Events: events, Usage: usage}}
 		}
 	}
-	if err := c.ensureOutcome(ctx, req, sess.acp, &events, &usage); err != nil {
+	qs, err := c.ensureOutcome(ctx, req, sess.acp, &events, &usage)
+	if len(qs) > 0 {
+		return ReactTurn{Msg: narration, Questions: qs, Done: false, Events: events, Usage: usage}
+	}
+	if err != nil {
 		events = c.snapshotEvents(ctx, sess.sb, events)
 		c.closeSession(key)
 		return ReactTurn{Done: true, Err: err, Msg: err.Error(), Events: events, Usage: usage,
@@ -1114,19 +1128,22 @@ func (c *acpProvider) finishReact(ctx context.Context, req NodeReq, key string, 
 
 // ensureOutcome re-prompts the agent to call node_complete when the mark is
 // still missing (best-effort; engine fails closed if ultimately absent).
-func (c *acpProvider) ensureOutcome(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, events *[]models.AcpEvent, usage **models.TokenUsage) error {
+// For react nodes, a pending ask_question raised during the re-prompt aborts
+// the completion push and returns those questions (caller must not discard).
+// Non-react callers keep the prior discard-and-continue semantics.
+func (c *acpProvider) ensureOutcome(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, events *[]models.AcpEvent, usage **models.TokenUsage) ([]models.ReactQuestion, error) {
 	if c.host.HasOutcome(req.RunID, req.NodeID) {
-		return nil
+		return nil, nil
 	}
 	for i := 0; i <= producesRetry; i++ {
 		if c.host.HasOutcome(req.RunID, req.NodeID) {
-			return nil
+			return nil, nil
 		}
 		if i == producesRetry {
 			log.Warn().Str("run", req.RunID).Str("node", req.NodeID).
 				Int("retries", producesRetry).
 				Msg("node_complete still missing after re-prompt; engine will fail closed")
-			return nil
+			return nil, nil
 		}
 		prompt := c.agentPrompts(str2(req.Config["skill_profile"])).OutcomeRetryText()
 		chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
@@ -1134,16 +1151,19 @@ func (c *acpProvider) ensureOutcome(ctx context.Context, req NodeReq, acp *sandb
 		cancel()
 		if err != nil {
 			if isChatTimeoutErr(err) {
-				return fmt.Errorf("agent chat: %w", err)
+				return nil, fmt.Errorf("agent chat: %w", err)
 			}
 			log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
 				Msg("node_complete re-prompt failed")
-			return nil
+			return nil, nil
 		}
 		absorbChat(usage, events, res)
-		c.host.TakePendingQuestions(req.RunID, req.NodeID)
+		qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
+		if len(qs) > 0 && req.NodeType == "react" {
+			return qs, nil
+		}
 	}
-	return nil
+	return nil, nil
 }
 
 // ensureStructured makes a framework node's reserved structured product exist
@@ -1152,21 +1172,24 @@ func (c *acpProvider) ensureOutcome(ctx context.Context, req NodeReq, acp *sandb
 // to producesRetry times. Intermediate turns are folded into events. Unlike the
 // old produces path there is no workspace harvest — structured products are
 // written only through MCP.
-func (c *acpProvider) ensureStructured(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, name, tool string, events *[]models.AcpEvent, usage **models.TokenUsage) error {
+// For react nodes, a pending ask_question raised during the re-prompt aborts
+// the StructuredRetry push and returns those questions. Non-react callers keep
+// discard-and-continue semantics.
+func (c *acpProvider) ensureStructured(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, name, tool string, events *[]models.AcpEvent, usage **models.TokenUsage) ([]models.ReactQuestion, error) {
 	satisfied := func() bool {
 		_, err := c.host.ReadArtifact(req.RunID, req.Token, name)
 		return err == nil
 	}
 	for i := 0; i <= producesRetry; i++ {
 		if satisfied() {
-			return nil
+			return nil, nil
 		}
 		if i == producesRetry {
 			log.Warn().Str("run", req.RunID).Str("node", req.NodeID).
 				Str("artifact", name).Str("tool", tool).
 				Int("retries", producesRetry).
 				Msg("structured product still missing after re-prompt; engine will fail closed")
-			return nil
+			return nil, nil
 		}
 		prompt := c.agentPrompts(str2(req.Config["skill_profile"])).StructuredRetryFor(name, tool)
 		chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
@@ -1174,18 +1197,20 @@ func (c *acpProvider) ensureStructured(ctx context.Context, req NodeReq, acp *sa
 		cancel()
 		if err != nil {
 			if isChatTimeoutErr(err) {
-				return fmt.Errorf("agent chat: %w", err)
+				return nil, fmt.Errorf("agent chat: %w", err)
 			}
 			log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
 				Str("artifact", name).Msg("structured product re-prompt failed")
-			return nil
+			return nil, nil
 		}
 		absorbChat(usage, events, res)
-		// Drop any questions raised during the wrap-up turn — the node is
-		// finishing, not reopening a clarification.
-		c.host.TakePendingQuestions(req.RunID, req.NodeID)
+		qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
+		if len(qs) > 0 && req.NodeType == "react" {
+			return qs, nil
+		}
+		// Non-react: drop questions raised during wrap-up (finishing, not clarifying).
 	}
-	return nil
+	return nil, nil
 }
 
 // structuredArtifactFor maps a framework node type to its reserved product
@@ -2146,9 +2171,10 @@ func ReactCapReached(req NodeReq, history []models.ReactMessage) bool {
 }
 
 // reactCapReached reports whether the max_rounds safety cap is hit (counting
-// the reply currently being processed). When true the dialogue must finish even
-// if the agent still wants to ask more. Completion is otherwise agent-driven
-// (no questions raised this turn); the old keyword heuristic is gone.
+// the reply currently being processed). When true and there is no pending
+// ask_question, the dialogue finishes. Pending ask_question still outranks the
+// cap (ReactOpen/ReactReply return Questions). Completion is otherwise
+// agent-driven (no questions raised this turn).
 func reactCapReached(req NodeReq, history []models.ReactMessage) bool {
 	humanTurns := 1 // the reply being processed
 	for _, h := range history {
