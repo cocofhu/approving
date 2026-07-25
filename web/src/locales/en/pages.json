@@ -339,6 +339,8 @@
     },
     "workflowEditor": {
       "unnamedWorkflow": "Untitled workflow",
+      "descLabel": "Description (optional)",
+      "descPlaceholder": "List subtitle / brief description",
       "projectRequired": "Pick a project before creating a pipeline",
       "loadFailed": "Failed to load workflow; backend may be offline",
       "publishFailed": "Publish failed:",
