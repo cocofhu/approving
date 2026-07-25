@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/services"
 )
 
 func TestSyntheticUserID(t *testing.T) {
@@ -233,22 +234,6 @@ func TestManagerDeliverSkipsDisabledDelivery(t *testing.T) {
 	}
 }
 
-// failAckAdapter records sends and fails only the delayed-ack message.
-type failAckAdapter struct {
-	fakeAdapter
-}
-
-func (f *failAckAdapter) Send(ctx context.Context, out OutboundMessage) error {
-	f.mu.Lock()
-	f.sent = append(f.sent, out)
-	fail := out.Text == delayedAckText
-	f.mu.Unlock()
-	if fail {
-		return errors.New("ack send failed")
-	}
-	return nil
-}
-
 func testRunningChannel(adapter Adapter) *runningChannel {
 	return &runningChannel{
 		cfg: models.ChannelConfig{
@@ -265,6 +250,22 @@ func testInbound(id string) InboundMessage {
 	}
 }
 
+func testInboundText(id, text string) InboundMessage {
+	in := testInbound(id)
+	in.Text = text
+	return in
+}
+
+func hasPrefixCount(ss []string, prefix string) int {
+	n := 0
+	for _, s := range ss {
+		if strings.HasPrefix(s, prefix) {
+			n++
+		}
+	}
+	return n
+}
+
 func sentTexts(fa *fakeAdapter) []string {
 	fa.mu.Lock()
 	defer fa.mu.Unlock()
@@ -278,7 +279,6 @@ func sentTexts(fa *fakeAdapter) []string {
 func TestDispatchPassesSessionCapsFromConfig(t *testing.T) {
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
-	m.ackDelay = time.Hour // never fire ack
 	var gotCaps SessionCaps
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
 		gotCaps = rc.Caps
@@ -305,79 +305,70 @@ func TestDispatchPassesSessionCapsFromConfig(t *testing.T) {
 	}
 }
 
-func TestDispatchFastPathNoDelayedAck(t *testing.T) {
+func TestDispatchImmediateAckWithSummary(t *testing.T) {
+	// plan g1.1: ≤1s ACK with ~40-rune original summary; short turns still ACK.
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
-	m.ackDelay = 80 * time.Millisecond
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
 		return Reply{Text: "final-ok"}, nil
 	}
-	m.dispatch(context.Background(), testRunningChannel(fa), testInbound("m1"))
-	// Wait past ack threshold to ensure a late ack does not appear.
-	time.Sleep(120 * time.Millisecond)
+	long := strings.Repeat("处理下PR与相关检查项", 5) // >40 runes
+	m.dispatch(context.Background(), testRunningChannel(fa), testInboundText("m1", long))
 	got := sentTexts(fa)
-	if len(got) != 1 || got[0] != "final-ok" {
-		t.Fatalf("fast path sends = %v want [final-ok]", got)
+	if len(got) != 2 {
+		t.Fatalf("sends = %v want [ack, final]", got)
+	}
+	if !strings.HasPrefix(got[0], ackProcessingPrefix) {
+		t.Fatalf("ack = %q want prefix %q", got[0], ackProcessingPrefix)
+	}
+	summary := strings.TrimPrefix(got[0], ackProcessingPrefix)
+	if utf8.RuneCountInString(summary) > ackSummaryRunes+1 { // +1 for ellipsis
+		t.Fatalf("summary rune count = %d want <= %d+ellipsis", utf8.RuneCountInString(summary), ackSummaryRunes)
+	}
+	if got[1] != "final-ok" {
+		t.Fatalf("final = %q", got[1])
 	}
 }
 
-func TestDispatchSlowSuccessAckThenFinal(t *testing.T) {
+func TestDispatchSuccessAckThenFinal(t *testing.T) {
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
-	m.ackDelay = 40 * time.Millisecond
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
-		time.Sleep(80 * time.Millisecond)
+		time.Sleep(30 * time.Millisecond)
 		return Reply{Text: "final-ok"}, nil
 	}
 	m.dispatch(context.Background(), testRunningChannel(fa), testInbound("m2"))
 	got := sentTexts(fa)
-	if len(got) != 2 || got[0] != delayedAckText || got[1] != "final-ok" {
-		t.Fatalf("slow success sends = %v want [%q final-ok]", got, delayedAckText)
+	wantAck := processingAckText("hello")
+	if len(got) != 2 || got[0] != wantAck || got[1] != "final-ok" {
+		t.Fatalf("success sends = %v want [%q final-ok]", got, wantAck)
 	}
 }
 
-func TestDispatchSlowFailureAckThenFailPrefix(t *testing.T) {
+func TestDispatchFailureAckThenFailPrefix(t *testing.T) {
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
-	m.ackDelay = 40 * time.Millisecond
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
-		time.Sleep(80 * time.Millisecond)
 		return Reply{}, errors.New("沙箱未就绪")
 	}
 	m.dispatch(context.Background(), testRunningChannel(fa), testInbound("m3"))
 	got := sentTexts(fa)
+	wantAck := processingAckText("hello")
 	wantFail := failReplyPrefix + "沙箱未就绪"
-	if len(got) != 2 || got[0] != delayedAckText || got[1] != wantFail {
-		t.Fatalf("slow failure sends = %v want [%q %q]", got, delayedAckText, wantFail)
+	if len(got) != 2 || got[0] != wantAck || got[1] != wantFail {
+		t.Fatalf("failure sends = %v want [%q %q]", got, wantAck, wantFail)
 	}
 }
 
-func TestDispatchAckSendFailureDoesNotBlockFinal(t *testing.T) {
-	fa := &failAckAdapter{}
-	m := NewManager(nil, nil, nil)
-	m.ackDelay = 40 * time.Millisecond
-	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
-		time.Sleep(80 * time.Millisecond)
-		return Reply{Text: "final-ok"}, nil
-	}
-	m.dispatch(context.Background(), testRunningChannel(fa), testInbound("m4"))
-	got := sentTexts(&fa.fakeAdapter)
-	if len(got) != 2 || got[0] != delayedAckText || got[1] != "final-ok" {
-		t.Fatalf("ack-fail path sends = %v want [%q final-ok]", got, delayedAckText)
-	}
-}
-
-func TestDispatchBusyEnqueuesNoDelayedAckOnQueued(t *testing.T) {
-	// plan g2.1: rewrite former busy-drop assertions — second message is queued,
-	// processed after the first, with one queue ACK and no delayedAck on dequeue.
+func TestDispatchBusyEnqueuePerMessageAckAndDequeueAck(t *testing.T) {
+	// plan g1.2: every queued msg gets queue ACK with ahead count; dequeue ACK.
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
-	m.ackDelay = 40 * time.Millisecond
 	started := make(chan struct{})
 	var once sync.Once
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
 		once.Do(func() { close(started) })
-		time.Sleep(120 * time.Millisecond)
+		time.Sleep(80 * time.Millisecond)
 		return Reply{Text: "final-" + in.MessageID}, nil
 	}
 	rc := testRunningChannel(fa)
@@ -388,29 +379,22 @@ func TestDispatchBusyEnqueuesNoDelayedAckOnQueued(t *testing.T) {
 	}()
 	<-started
 	m.dispatch(context.Background(), rc, testInbound("m5b"))
+	m.dispatch(context.Background(), rc, testInbound("m5c"))
 	<-done
 
 	got := sentTexts(fa)
-	queueAck, delayedAck, finalA, finalB := 0, 0, 0, 0
-	for _, text := range got {
-		switch text {
-		case queueAckText:
-			queueAck++
-		case delayedAckText:
-			delayedAck++
-		case "final-m5a":
-			finalA++
-		case "final-m5b":
-			finalB++
-		}
+	if hasPrefixCount(got, ackProcessingPrefix) < 3 {
+		t.Fatalf("expected processing ACK for idle + each dequeue, got %v", got)
 	}
-	if queueAck != 1 || finalA != 1 || finalB != 1 {
-		t.Fatalf("busy enqueue sends = %v (queueAck=%d finalA=%d finalB=%d)", got, queueAck, finalA, finalB)
+	if countText(got, queueAckTextFor(1)) != 1 {
+		t.Fatalf("expected queue ACK ahead=1, got %v", got)
 	}
-	if delayedAck != 1 {
-		t.Fatalf("expected exactly 1 delayedAck on idle-first turn, got %d in %v", delayedAck, got)
+	if countText(got, queueAckTextFor(2)) != 1 {
+		t.Fatalf("expected queue ACK ahead=2, got %v", got)
 	}
-	// Queued continuation must not emit a second delayedAck; finals stay ordered.
+	if countText(got, "final-m5a") != 1 || countText(got, "final-m5b") != 1 || countText(got, "final-m5c") != 1 {
+		t.Fatalf("missing finals in %v", got)
+	}
 	idxA, idxB := indexOf(got, "final-m5a"), indexOf(got, "final-m5b")
 	if idxA < 0 || idxB < 0 || idxA > idxB {
 		t.Fatalf("expected final-m5a before final-m5b in %v", got)
@@ -437,10 +421,9 @@ func countText(ss []string, want string) int {
 }
 
 func TestDispatchFIFOOrderMultipleQueued(t *testing.T) {
-	// plan g2.2: N≥3 inbound while busy → independent turns in arrival order.
+	// N≥3 inbound while busy → independent turns in arrival order; each gets queue ACK.
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
-	m.ackDelay = time.Hour
 	started := make(chan struct{})
 	var once sync.Once
 	var orderMu sync.Mutex
@@ -450,7 +433,7 @@ func TestDispatchFIFOOrderMultipleQueued(t *testing.T) {
 		orderMu.Lock()
 		handled = append(handled, in.MessageID)
 		orderMu.Unlock()
-		time.Sleep(40 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 		return Reply{Text: "final-" + in.MessageID}, nil
 	}
 	rc := testRunningChannel(fa)
@@ -473,8 +456,14 @@ func TestDispatchFIFOOrderMultipleQueued(t *testing.T) {
 		t.Fatalf("handle order = %v want %v", gotOrder, wantOrder)
 	}
 	got := sentTexts(fa)
-	if countText(got, queueAckText) != 1 {
-		t.Fatalf("queue ACK count = %d want 1 in %v", countText(got, queueAckText), got)
+	queueAcks := 0
+	for _, s := range got {
+		if strings.HasPrefix(s, queueAckPrefix) {
+			queueAcks++
+		}
+	}
+	if queueAcks != 3 {
+		t.Fatalf("queue ACK count = %d want 3 in %v", queueAcks, got)
 	}
 	for _, id := range wantOrder {
 		if countText(got, "final-"+id) != 1 {
@@ -484,10 +473,9 @@ func TestDispatchFIFOOrderMultipleQueued(t *testing.T) {
 }
 
 func TestDispatchQueueFullVisibleReject(t *testing.T) {
-	// plan g2.2: depth 16 pending; next inbound gets queueFullText, not silent drop.
+	// depth 16 pending; next inbound gets queueFullText, not silent drop.
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
-	m.ackDelay = time.Hour
 	gate := make(chan struct{})
 	started := make(chan struct{})
 	var once sync.Once
@@ -523,11 +511,10 @@ func TestDispatchQueueFullVisibleReject(t *testing.T) {
 	}
 }
 
-func TestDispatchQueueAckOncePerBusyCycle(t *testing.T) {
-	// plan g2.2: first busy enqueue ACKs once; after drain, next busy cycle may ACK again.
+func TestDispatchPerMessageQueueAckAcrossBusyCycles(t *testing.T) {
+	// Each enqueued message gets its own queue ACK (no throttle).
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
-	m.ackDelay = time.Hour
 	rc := testRunningChannel(fa)
 
 	release1 := make(chan struct{})
@@ -552,11 +539,16 @@ func TestDispatchQueueAckOncePerBusyCycle(t *testing.T) {
 	<-done1
 
 	got1 := sentTexts(fa)
-	if countText(got1, queueAckText) != 1 {
-		t.Fatalf("first busy cycle ACK count = %d want 1 in %v", countText(got1, queueAckText), got1)
+	q1 := 0
+	for _, s := range got1 {
+		if strings.HasPrefix(s, queueAckPrefix) {
+			q1++
+		}
+	}
+	if q1 != 2 {
+		t.Fatalf("first busy cycle queue ACK count = %d want 2 in %v", q1, got1)
 	}
 
-	// Idle again: start a new busy cycle and enqueue once more.
 	release2 := make(chan struct{})
 	started2 := make(chan struct{})
 	var once2 sync.Once
@@ -578,16 +570,20 @@ func TestDispatchQueueAckOncePerBusyCycle(t *testing.T) {
 	<-done2
 
 	got2 := sentTexts(fa)
-	if countText(got2, queueAckText) != 2 {
-		t.Fatalf("after second busy cycle ACK total = %d want 2 in %v", countText(got2, queueAckText), got2)
+	q2 := 0
+	for _, s := range got2 {
+		if strings.HasPrefix(s, queueAckPrefix) {
+			q2++
+		}
+	}
+	if q2 != 3 {
+		t.Fatalf("after second busy cycle queue ACK total = %d want 3 in %v", q2, got2)
 	}
 }
 
 func TestDispatchFailureContinuesDrain(t *testing.T) {
-	// plan g2.2: one failed turn still drains the next queued message.
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
-	m.ackDelay = time.Hour
 	started := make(chan struct{})
 	var once sync.Once
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
@@ -622,10 +618,8 @@ func TestDispatchFailureContinuesDrain(t *testing.T) {
 }
 
 func TestDispatchCrossConversationIndependent(t *testing.T) {
-	// plan g2.2: two conversations do not block each other's enqueue/processing.
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
-	m.ackDelay = time.Hour
 	releaseA := make(chan struct{})
 	startedA := make(chan struct{})
 	startedB := make(chan struct{})
@@ -674,22 +668,23 @@ func TestDispatchCrossConversationIndependent(t *testing.T) {
 	}
 }
 
-func TestDispatchIdleSingleKeepsDelayedAck(t *testing.T) {
-	// plan g2.2 / g1.5: idle single-message path still emits delayedAck (no queue ACK).
+func TestDispatchIdleSingleImmediateAckNoQueueAck(t *testing.T) {
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
-	m.ackDelay = 40 * time.Millisecond
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
-		time.Sleep(80 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 		return Reply{Text: "final-ok"}, nil
 	}
 	m.dispatch(context.Background(), testRunningChannel(fa), testInbound("idle-1"))
 	got := sentTexts(fa)
-	if countText(got, queueAckText) != 0 {
-		t.Fatalf("idle path must not send queue ACK, got %v", got)
+	for _, s := range got {
+		if strings.HasPrefix(s, queueAckPrefix) {
+			t.Fatalf("idle path must not send queue ACK, got %v", got)
+		}
 	}
-	if len(got) != 2 || got[0] != delayedAckText || got[1] != "final-ok" {
-		t.Fatalf("idle delayedAck path sends = %v want [%q final-ok]", got, delayedAckText)
+	wantAck := processingAckText("hello")
+	if len(got) != 2 || got[0] != wantAck || got[1] != "final-ok" {
+		t.Fatalf("idle ACK path sends = %v want [%q final-ok]", got, wantAck)
 	}
 }
 
@@ -709,4 +704,202 @@ func TestFriendlyErrRuneTruncation(t *testing.T) {
 	if !strings.HasPrefix(full, failReplyPrefix) || strings.Contains(full, "goroutine") {
 		t.Fatalf("fail reply unexpected: %q", full)
 	}
+}
+
+func TestClassifyProgressText(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		kind ProgressKind
+		ok   bool
+	}{
+		{"milestone marker", "[进度] 已打开 PR #12", ProgressMilestone, true},
+		{"blocker keyword", "检查失败：权限不足", ProgressBlocker, true},
+		{"confirm keyword", "请确认是否合并", ProgressConfirm, true},
+		{"tool noise", "tool_call foo", "", false},
+		{"short noise", "ok", "", false},
+		{"plain chat", "正在想一下怎么做比较好呢这个说法", "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ev, ok := ClassifyProgressText(c.in)
+			if ok != c.ok {
+				t.Fatalf("ok=%v want %v (ev=%+v)", ok, c.ok, ev)
+			}
+			if ok && ev.Kind != c.kind {
+				t.Fatalf("kind=%q want %q", ev.Kind, c.kind)
+			}
+		})
+	}
+}
+
+func TestDispatchForwardsFilteredProgress(t *testing.T) {
+	// plan g2.2: only milestone/blocker/confirm reach QQ; noise suppressed.
+	fa := &fakeAdapter{}
+	m := NewManager(nil, nil, nil)
+	m.handleFuncWithProgress = func(ctx context.Context, rc ResolvedChannel, in InboundMessage, onProgress func(ProgressEvent)) (Reply, error) {
+		onProgress(ProgressEvent{Kind: ProgressMilestone, Summary: "已提交分支"})
+		onProgress(ProgressEvent{Kind: ProgressBlocker, Summary: "CI 红了"})
+		// Caller already classified; Manager formats. Noise never reaches onProgress
+		// in production — assert FormatProgressText prefixes.
+		return Reply{Text: "final-ok"}, nil
+	}
+	m.dispatch(context.Background(), testRunningChannel(fa), testInbound("prog-1"))
+	got := sentTexts(fa)
+	if countText(got, "进度：已提交分支") != 1 {
+		t.Fatalf("missing milestone in %v", got)
+	}
+	if countText(got, "阻塞：CI 红了") != 1 {
+		t.Fatalf("missing blocker in %v", got)
+	}
+	if countText(got, "final-ok") != 1 {
+		t.Fatalf("missing final in %v", got)
+	}
+}
+
+func TestDeliverCronIdleImmediate(t *testing.T) {
+	fa := &fakeAdapter{}
+	m := newTestManager(fa)
+	m.Apply([]models.ChannelConfig{{
+		ID: "c1", Type: "qq", ProjectID: "proj", AppID: "app", Enabled: true,
+		CronDeliver: true, CronDeliverTarget: "c2c:user1",
+	}})
+	defer m.StopAll()
+
+	if err := m.DeliverCron(cronDelivery("proj", "每小时PR", "unchanged", "PR 检查完毕，无变化")); err != nil {
+		t.Fatalf("DeliverCron: %v", err)
+	}
+	got := sentTexts(fa)
+	if len(got) != 1 || got[0] != "PR：无变化" {
+		t.Fatalf("idle unchanged push = %v want [PR：无变化]", got)
+	}
+}
+
+func TestDeliverCronBusySilentEnqueueThenFlush(t *testing.T) {
+	// plan g1.3 / g3.2: busy → silent enqueue (no side-chat); idle flush sends body only.
+	fa := &fakeAdapter{}
+	m := NewManager(nil, nil, nil)
+	m.mu.Lock()
+	m.running["c1"] = &runningChannel{
+		cfg: models.ChannelConfig{
+			ID: "c1", Type: "qq", ProjectID: "proj", Enabled: true,
+			CronDeliver: true, CronDeliverTarget: "c2c:user1",
+		},
+		adapter: fa,
+	}
+	m.mu.Unlock()
+
+	rc := testRunningChannel(fa)
+	rc.cfg.ProjectID = "proj"
+	release := make(chan struct{})
+	started := make(chan struct{})
+	var once sync.Once
+	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
+		once.Do(func() { close(started) })
+		<-release
+		return Reply{Text: "final-user"}, nil
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		m.dispatch(context.Background(), rc, testInbound("u1"))
+	}()
+	<-started
+
+	if !m.IsConversationBusy("proj", SceneC2C, "user1") {
+		t.Fatal("expected busy during turn")
+	}
+
+	if err := m.DeliverCron(cronDelivery("proj", "每小时PR", "changed", "有 2 个新 PR")); err != nil {
+		t.Fatalf("DeliverCron busy: %v", err)
+	}
+	mid := sentTexts(fa)
+	for _, s := range mid {
+		if strings.Contains(s, "入队") || strings.Contains(s, "有 2 个新 PR") {
+			t.Fatalf("busy path must be silent (no side-chat / no body yet), got %v", mid)
+		}
+	}
+
+	close(release)
+	<-done
+
+	got := sentTexts(fa)
+	if countText(got, "有 2 个新 PR") != 1 {
+		t.Fatalf("expected flush of cron body after idle, got %v", got)
+	}
+	if countText(got, "final-user") != 1 {
+		t.Fatalf("expected user final, got %v", got)
+	}
+}
+
+func TestPushQueueMergesUnchangedAndPriority(t *testing.T) {
+	fa := &fakeAdapter{}
+	m := NewManager(nil, nil, nil)
+	m.mu.Lock()
+	m.running["c1"] = &runningChannel{
+		cfg: models.ChannelConfig{
+			ID: "c1", Type: "qq", ProjectID: "proj", Enabled: true,
+			CronDeliver: true, CronDeliverTarget: "c2c:user1",
+		},
+		adapter: fa,
+	}
+	m.mu.Unlock()
+
+	key := convKey("proj", SceneC2C, "user1")
+	// Simulate busy so all enqueue.
+	q := m.convQueueFor(key)
+	q.mu.Lock()
+	q.busy = true
+	q.mu.Unlock()
+
+	_ = m.DeliverCron(cronDelivery("proj", "每小时PR", "unchanged", "a"))
+	_ = m.DeliverCron(cronDelivery("proj", "每小时PR", "unchanged", "b"))
+	_ = m.DeliverCron(cronDelivery("proj", "日报", "changed", "日报有更新"))
+	_ = m.DeliverCron(cronDelivery("proj", "每小时PR", "failed", "PR 拉取失败"))
+
+	q.mu.Lock()
+	q.busy = false
+	q.mu.Unlock()
+	m.flushPushQueue(key)
+
+	got := sentTexts(fa)
+	// Unchanged merged to latest template; changed/failed flushed; unchanged last by priority sort.
+	if countText(got, "PR：无变化") != 1 {
+		t.Fatalf("unchanged should merge to one, got %v", got)
+	}
+	if countText(got, "日报有更新") != 1 {
+		t.Fatalf("expected changed daily push in %v", got)
+	}
+	if countText(got, "PR：PR 拉取失败") != 1 {
+		t.Fatalf("expected failed push in %v", got)
+	}
+	// Priority: high (changed/failed) before unchanged.
+	idxUnchanged := indexOf(got, "PR：无变化")
+	if idxUnchanged < 0 {
+		t.Fatalf("missing unchanged in %v", got)
+	}
+	for i, s := range got {
+		if s == "日报有更新" || s == "PR：PR 拉取失败" {
+			if i > idxUnchanged {
+				t.Fatalf("high-priority item after unchanged: %v", got)
+			}
+		}
+	}
+}
+
+func TestFormatCronPushTemplates(t *testing.T) {
+	if got := FormatCronPush("每小时PR", CronResultUnchanged, "x"); got != "PR：无变化" {
+		t.Fatalf("unchanged pr = %q", got)
+	}
+	if got := FormatCronPush("每日总结", CronResultUnchanged, "x"); got != "日报：无变化" {
+		t.Fatalf("unchanged daily = %q", got)
+	}
+	if got := FormatCronPush("每小时PR", CronResultChanged, "有 1 个新 PR"); got != "有 1 个新 PR" {
+		t.Fatalf("changed = %q", got)
+	}
+}
+
+func cronDelivery(projectID, category, kind, text string) services.CronDelivery {
+	return services.CronDelivery{ProjectID: projectID, Category: category, Kind: kind, Text: text}
 }

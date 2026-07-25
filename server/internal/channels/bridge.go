@@ -3,6 +3,7 @@ package channels
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -47,8 +48,11 @@ type Reply struct {
 	ImageURLs []string
 }
 
-// ChannelBridge turns an inbound channel message into a PM Leader turn and
-// returns the reply. It is transport-agnostic and reused by every adapter.
+// ChannelBridge is the Work-side executor for channel turns: resolve thread,
+// ensure sandbox, run PmTurnRunner, and return a TurnFinalReport-equivalent
+// Reply. It must not call adapter.Send — all QQ egress goes through Manager
+// (Reply). Progress is reported via the optional onProgress callback only for
+// the three allowed kinds (milestone / blocker / confirm).
 type ChannelBridge struct {
 	pm    *services.PmService
 	sbx   *services.SandboxService
@@ -67,9 +71,10 @@ func SyntheticUserID(channelType string, scene Scene, conversationID string) str
 	return channelType + ":" + string(scene) + ":" + conversationID
 }
 
-// Handle runs one full turn: resolve thread, ensure sandbox, append the user
-// message, run the turn to completion, and return the assistant reply.
-func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
+// Handle runs one full Work turn and returns the assistant reply for Reply to
+// send as the terminal report. onProgress may be nil; when set, only classified
+// ProgressEvents are forwarded (tool/token noise suppressed).
+func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in InboundMessage, onProgress func(ProgressEvent)) (Reply, error) {
 	if b.pm == nil || b.sbx == nil || b.turns == nil {
 		return Reply{}, fmt.Errorf("channel bridge unavailable")
 	}
@@ -140,9 +145,17 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 		return Reply{}, err
 	}
 
+	progCtx, progCancel := context.WithCancel(ctx)
+	defer progCancel()
+	if onProgress != nil {
+		go b.forwardProgress(progCtx, thread.ID, onProgress)
+	}
+
 	if err := b.waitTurn(ctx, thread.ID, rc.TurnTimeout); err != nil {
+		progCancel()
 		return Reply{}, err
 	}
+	progCancel()
 
 	text := b.readReply(thread.ID, userMsg.CreatedAt)
 	if strings.TrimSpace(text) == "" {
@@ -150,6 +163,60 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 	}
 	stripped, urls := splitImageURLs(text)
 	return Reply{Text: stripped, ImageURLs: urls}, nil
+}
+
+// forwardProgress subscribes to PmTurnRunner events and forwards only the three
+// allowed progress kinds to Reply. Tool-level ACP frames never become QQ text.
+func (b *ChannelBridge) forwardProgress(ctx context.Context, threadID string, onProgress func(ProgressEvent)) {
+	if b.turns == nil || onProgress == nil {
+		return
+	}
+	// Brief retry: Start registers the turn just before this goroutine runs.
+	var ch <-chan services.PmTurnEvent
+	var unsub func()
+	var ok bool
+	for i := 0; i < 20; i++ {
+		ch, unsub, ok = b.turns.Subscribe(threadID, -1)
+		if ok {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(25 * time.Millisecond):
+		}
+	}
+	if !ok {
+		return
+	}
+	defer unsub()
+
+	seen := map[string]bool{}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case ev, open := <-ch:
+			if !open {
+				return
+			}
+			if ev.Type != "acp" || len(ev.Data) == 0 {
+				continue
+			}
+			pe, ok := ClassifyProgressFromACP(ev.Data, func(raw json.RawMessage) string {
+				return services.ExtractAgentMessageText(raw)
+			})
+			if !ok {
+				continue
+			}
+			key := string(pe.Kind) + "|" + pe.Summary
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			onProgress(pe)
+		}
+	}
 }
 
 func (b *ChannelBridge) ensureThread(projectID, userID, agent string, in InboundMessage) (models.ChatThread, error) {

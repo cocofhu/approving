@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/services"
 
 	"github.com/rs/zerolog/log"
 )
@@ -17,12 +19,21 @@ import (
 // project is configured as the cron delivery target.
 var ErrNoDeliveryChannel = errors.New("项目未配置定时任务推送渠道")
 
+// Reply/Work equivalent orchestration (physical dual sandbox NOT required):
+//
+//   - Manager (= Reply): the unique QQ egress — immediate ACK, queue ACK,
+//     on-demand progress, terminal reports, and cron push coordination.
+//   - ChannelBridge / PmTurnRunner / cron sandbox (= Work): execute turns and
+//     emit internal progress/results; must not bypass Manager to Send on QQ.
+//
+// Speak priority: user ACK/final > on-demand progress > cron push > unchanged.
+
 const (
-	delayedAckText  = "收到，正在确认…"
-	defaultAckDelay = 3 * time.Second
-	failReplyPrefix = "处理失败："
-	queueAckText    = "已收到，排队中"
-	queueFullText   = "队列已满，请稍候"
+	ackProcessingPrefix = "收到，正在处理："
+	ackSummaryRunes     = 40
+	queueAckPrefix      = "已收到，排队中"
+	queueFullText       = "队列已满，请稍候"
+	failReplyPrefix     = "处理失败："
 	// convQueueDepth is the per-conversation pending FIFO capacity (in-flight
 	// turn is not counted). The next inbound after 16 pending is rejected.
 	convQueueDepth = 16
@@ -42,13 +53,12 @@ type convQueue struct {
 	mu      sync.Mutex
 	pending []queuedInbound
 	busy    bool
-	ackSent bool // queue ACK already sent in this busy cycle
 }
 
-// Manager owns the lifecycle of channel adapters. Configs are supplied by a
-// loader (backed by the DB) and applied idempotently: adapters are started,
-// stopped, or restarted based on a config fingerprint so admin edits hot-reload
-// without a server restart.
+// Manager owns the lifecycle of channel adapters and is the Reply-side unique
+// QQ egress. Configs are supplied by a loader (backed by the DB) and applied
+// idempotently: adapters are started, stopped, or restarted based on a config
+// fingerprint so admin edits hot-reload without a server restart.
 type Manager struct {
 	bridge    *ChannelBridge
 	factories map[string]AdapterFactory
@@ -62,13 +72,16 @@ type Manager struct {
 	convMu     sync.Mutex
 	convQueues map[string]*convQueue
 
+	pushMu     sync.Mutex
+	pushQueues map[string]*pushQueue
+
 	baseCtx context.Context
 
 	// Test hooks (production leaves these nil/zero):
-	// handleFunc overrides bridge.Handle when set.
+	// handleFunc overrides bridge.Handle when set (no progress callback).
 	handleFunc func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error)
-	// ackDelay overrides the 3s delayed-ack threshold when > 0.
-	ackDelay time.Duration
+	// handleFuncWithProgress overrides bridge.Handle when set.
+	handleFuncWithProgress func(ctx context.Context, rc ResolvedChannel, in InboundMessage, onProgress func(ProgressEvent)) (Reply, error)
 }
 
 type runningChannel struct {
@@ -87,6 +100,7 @@ func NewManager(bridge *ChannelBridge, factories map[string]AdapterFactory, decr
 		decrypt:    decrypt,
 		running:    map[string]*runningChannel{},
 		convQueues: map[string]*convQueue{},
+		pushQueues: map[string]*pushQueue{},
 		baseCtx:    context.Background(),
 	}
 }
@@ -228,83 +242,83 @@ func (m *Manager) stopChannel(rc *runningChannel) {
 	log.Info().Str("id", rc.cfg.ID).Str("type", rc.cfg.Type).Msg("channel adapter stopped")
 }
 
+// convKey builds the per-conversation queue key.
+func convKey(projectID string, scene Scene, conversationID string) string {
+	return projectID + "|" + string(scene) + "|" + conversationID
+}
+
+// IsConversationBusy reports whether a user turn is in-flight or the user FIFO
+// is non-empty for the conversation. Shared by cron push coordination.
+func (m *Manager) IsConversationBusy(projectID string, scene Scene, conversationID string) bool {
+	q := m.convQueueFor(convKey(projectID, scene, conversationID))
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.busy || len(q.pending) > 0
+}
+
 // dispatch serializes messages per conversation via a bounded in-process FIFO.
-// Idle + empty queue: run immediately (with delayedAck). Busy: enqueue up to
-// convQueueDepth; first enqueue in a busy cycle gets a throttled queue ACK.
+// Idle + empty queue: immediate processing ACK then Work. Busy: enqueue with a
+// per-message queue ACK (ahead count); dequeue sends another processing ACK.
 // Full queue: reject with a visible reply (never silently drop).
 func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMessage) {
-	key := rc.cfg.ProjectID + "|" + string(in.Scene) + "|" + in.ConversationID
+	key := convKey(rc.cfg.ProjectID, in.Scene, in.ConversationID)
 	q := m.convQueueFor(key)
 
 	q.mu.Lock()
 	if q.busy {
 		if len(q.pending) >= convQueueDepth {
 			q.mu.Unlock()
-			if err := rc.adapter.Send(ctx, OutboundMessage{
+			m.sendOutbound(ctx, rc, OutboundMessage{
 				Scene: in.Scene, ConversationID: in.ConversationID,
 				ReplyToMessageID: in.MessageID, Text: queueFullText,
-			}); err != nil {
-				log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel queue-full reply send failed")
-			}
+			})
 			return
 		}
+		// Ahead = in-flight turn + already-queued messages.
+		ahead := 1 + len(q.pending)
 		q.pending = append(q.pending, queuedInbound{ctx: ctx, rc: rc, in: in})
-		sendAck := !q.ackSent
-		if sendAck {
-			q.ackSent = true
-		}
 		q.mu.Unlock()
-		if sendAck {
-			if err := rc.adapter.Send(ctx, OutboundMessage{
-				Scene: in.Scene, ConversationID: in.ConversationID,
-				ReplyToMessageID: in.MessageID, Text: queueAckText,
-			}); err != nil {
-				log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel queue ack send failed")
-			}
-		}
+		m.sendOutbound(ctx, rc, OutboundMessage{
+			Scene: in.Scene, ConversationID: in.ConversationID,
+			ReplyToMessageID: in.MessageID, Text: queueAckTextFor(ahead),
+		})
 		return
 	}
 	q.busy = true
 	q.mu.Unlock()
 
 	// This goroutine owns the busy cycle: run the idle-first turn, then drain.
-	m.runTurn(ctx, rc, in, true /* withDelayedAck */)
-	m.drainConvQueue(q)
+	m.runTurn(ctx, rc, in, true /* withProcessingAck */)
+	m.drainConvQueue(q, key)
 }
 
 // drainConvQueue runs pending messages in arrival order until the queue is
-// empty, then clears the busy-cycle ACK flag. Queued turns never get
-// delayedAck or a fresh queue ACK.
-func (m *Manager) drainConvQueue(q *convQueue) {
+// empty, then flushes any silent cron push queue for this conversation.
+func (m *Manager) drainConvQueue(q *convQueue, key string) {
 	for {
 		q.mu.Lock()
 		if len(q.pending) == 0 {
 			q.busy = false
-			q.ackSent = false
 			q.mu.Unlock()
+			m.flushPushQueue(key)
 			return
 		}
 		next := q.pending[0]
 		q.pending = q.pending[1:]
 		q.mu.Unlock()
-		m.runTurn(next.ctx, next.rc, next.in, false /* withDelayedAck */)
+		// Dequeue: another processing ACK before Work.
+		m.runTurn(next.ctx, next.rc, next.in, true /* withProcessingAck */)
 	}
 }
 
 // runTurn executes one PM turn and sends the final or failure reply.
-// withDelayedAck is true only for the idle-first path (not dequeue continuations).
-func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMessage, withDelayedAck bool) {
-	var cancelAck func()
-	if withDelayedAck {
-		cancelAck = startDelayedAck(m.ackDelayOrDefault(), func() {
-			if err := rc.adapter.Send(ctx, OutboundMessage{
-				Scene: in.Scene, ConversationID: in.ConversationID,
-				ReplyToMessageID: in.MessageID, Text: delayedAckText,
-			}); err != nil {
-				log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel delayed ack send failed")
-			}
+// withProcessingAck emits the required ≤1s ACK before dispatching Work.
+func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMessage, withProcessingAck bool) {
+	if withProcessingAck {
+		m.sendOutbound(ctx, rc, OutboundMessage{
+			Scene: in.Scene, ConversationID: in.ConversationID,
+			ReplyToMessageID: in.MessageID, Text: processingAckText(in.Text),
 		})
-		defer cancelAck()
 	}
 
 	resolved := ResolvedChannel{
@@ -312,68 +326,130 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		TurnTimeout: time.Duration(rc.cfg.TurnTimeoutSeconds) * time.Second,
 		Caps:        SessionCapsFromConfig(rc.cfg.Config),
 	}
-	reply, err := m.handleTurn(ctx, resolved, in)
-	if withDelayedAck {
-		cancelAck()
+	onProgress := func(ev ProgressEvent) {
+		text := FormatProgressText(ev)
+		if text == "" {
+			return
+		}
+		m.sendOutbound(ctx, rc, OutboundMessage{
+			Scene: in.Scene, ConversationID: in.ConversationID,
+			ReplyToMessageID: in.MessageID, Text: text,
+		})
 	}
+	reply, err := m.handleTurn(ctx, resolved, in, onProgress)
 	if err != nil {
 		log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel turn failed")
-		if sendErr := rc.adapter.Send(ctx, OutboundMessage{
+		m.sendOutbound(ctx, rc, OutboundMessage{
 			Scene: in.Scene, ConversationID: in.ConversationID,
 			ReplyToMessageID: in.MessageID, Text: failReplyPrefix + friendlyErr(err),
-		}); sendErr != nil {
-			log.Warn().Err(sendErr).Str("channel", rc.cfg.ID).Msg("channel error reply send failed")
-		}
+		})
 		return
 	}
-	if err := rc.adapter.Send(ctx, OutboundMessage{
+	m.sendOutbound(ctx, rc, OutboundMessage{
 		Scene: in.Scene, ConversationID: in.ConversationID, ReplyToMessageID: in.MessageID,
 		Text: reply.Text, ImageURLs: reply.ImageURLs,
-	}); err != nil {
-		log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel reply send failed")
-	}
+	})
 }
 
-func (m *Manager) handleTurn(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
+func (m *Manager) handleTurn(ctx context.Context, rc ResolvedChannel, in InboundMessage, onProgress func(ProgressEvent)) (Reply, error) {
+	if m.handleFuncWithProgress != nil {
+		return m.handleFuncWithProgress(ctx, rc, in, onProgress)
+	}
 	if m.handleFunc != nil {
 		return m.handleFunc(ctx, rc, in)
 	}
-	return m.bridge.Handle(ctx, rc, in)
+	return m.bridge.Handle(ctx, rc, in, onProgress)
 }
 
-func (m *Manager) ackDelayOrDefault() time.Duration {
-	if m.ackDelay > 0 {
-		return m.ackDelay
+func (m *Manager) sendOutbound(ctx context.Context, rc *runningChannel, out OutboundMessage) {
+	if rc == nil || rc.adapter == nil {
+		return
 	}
-	return defaultAckDelay
-}
-
-// startDelayedAck schedules send once after delay. cancel suppresses the send
-// if the turn finishes first; safe to call multiple times.
-func startDelayedAck(delay time.Duration, send func()) (cancel func()) {
-	var mu sync.Mutex
-	done := false
-	timer := time.AfterFunc(delay, func() {
-		mu.Lock()
-		if done {
-			mu.Unlock()
-			return
-		}
-		done = true
-		mu.Unlock()
-		send()
-	})
-	return func() {
-		mu.Lock()
-		done = true
-		mu.Unlock()
-		timer.Stop()
+	if err := rc.adapter.Send(ctx, out); err != nil {
+		log.Warn().Err(err).Str("channel", rc.cfg.ID).Str("text", truncateRunes(out.Text, 40)).
+			Msg("channel outbound send failed")
 	}
 }
 
 // Deliver pushes cron/proactive text to a project's configured delivery channel.
-// Implements the services.ChannelDeliverer interface.
+// Legacy entry: treats body as "changed" and routes through coordinated egress.
+// Implements services.ChannelDeliverer.
 func (m *Manager) Deliver(projectID, text string) error {
+	return m.DeliverCron(services.CronDelivery{
+		ProjectID: projectID,
+		Category:  "cron",
+		Kind:      string(CronResultChanged),
+		Text:      text,
+	})
+}
+
+// DeliverCron is the coordinated cron→QQ egress: busy conversations silent-enqueue
+// (no enqueue side-chat); idle sends immediately. Implements services.ChannelDeliverer.
+func (m *Manager) DeliverCron(d services.CronDelivery) error {
+	target, scene, conv, err := m.lookupDeliveryTarget(d.ProjectID)
+	if err != nil {
+		return err
+	}
+	kind := CronResultKind(strings.TrimSpace(d.Kind))
+	switch kind {
+	case CronResultChanged, CronResultUnchanged, CronResultFailed:
+	default:
+		kind = ClassifyCronResult(d.Text)
+	}
+	text := FormatCronPush(d.Category, kind, d.Text)
+	stripped, urls := splitImageURLs(text)
+	key := convKey(d.ProjectID, scene, conv)
+	item := CronPushItem{
+		ProjectID: d.ProjectID,
+		Scene:     scene,
+		Conv:      conv,
+		Category:  d.Category,
+		Kind:      kind,
+		Text:      stripped,
+		Enqueued:  time.Now(),
+	}
+
+	if m.IsConversationBusy(d.ProjectID, scene, conv) {
+		// Silent enqueue — no "已入队"旁白 to the user.
+		m.enqueuePush(key, item)
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(m.baseCtx, 60*time.Second)
+	defer cancel()
+	return target.adapter.Send(ctx, OutboundMessage{
+		Scene: scene, ConversationID: conv, Text: stripped, ImageURLs: urls,
+	})
+}
+
+func (m *Manager) flushPushQueue(key string) {
+	items := m.takePushQueue(key)
+	if len(items) == 0 {
+		return
+	}
+	for _, item := range items {
+		// Re-check busy: a new user message may have arrived.
+		if m.IsConversationBusy(item.ProjectID, item.Scene, item.Conv) {
+			m.enqueuePush(key, item)
+			return
+		}
+		target, _, _, err := m.lookupDeliveryTarget(item.ProjectID)
+		if err != nil {
+			log.Warn().Err(err).Str("project", item.ProjectID).Msg("cron push flush: no delivery channel")
+			continue
+		}
+		stripped, urls := splitImageURLs(item.Text)
+		ctx, cancel := context.WithTimeout(m.baseCtx, 60*time.Second)
+		if err := target.adapter.Send(ctx, OutboundMessage{
+			Scene: item.Scene, ConversationID: item.Conv, Text: stripped, ImageURLs: urls,
+		}); err != nil {
+			log.Warn().Err(err).Str("project", item.ProjectID).Msg("cron push flush send failed")
+		}
+		cancel()
+	}
+}
+
+func (m *Manager) lookupDeliveryTarget(projectID string) (*runningChannel, Scene, string, error) {
 	m.mu.Lock()
 	var target *runningChannel
 	for _, rc := range m.running {
@@ -385,18 +461,13 @@ func (m *Manager) Deliver(projectID, text string) error {
 	}
 	m.mu.Unlock()
 	if target == nil {
-		return ErrNoDeliveryChannel
+		return nil, "", "", ErrNoDeliveryChannel
 	}
 	scene, conv := parseTarget(target.cfg.CronDeliverTarget)
 	if conv == "" {
-		return ErrNoDeliveryChannel
+		return nil, "", "", ErrNoDeliveryChannel
 	}
-	stripped, urls := splitImageURLs(text)
-	ctx, cancel := context.WithTimeout(m.baseCtx, 60*time.Second)
-	defer cancel()
-	return target.adapter.Send(ctx, OutboundMessage{
-		Scene: scene, ConversationID: conv, Text: stripped, ImageURLs: urls,
-	})
+	return target, scene, conv, nil
 }
 
 func (m *Manager) convQueueFor(key string) *convQueue {
@@ -408,6 +479,17 @@ func (m *Manager) convQueueFor(key string) *convQueue {
 		m.convQueues[key] = q
 	}
 	return q
+}
+
+func processingAckText(userText string) string {
+	return ackProcessingPrefix + truncateRunes(userText, ackSummaryRunes)
+}
+
+func queueAckTextFor(ahead int) string {
+	if ahead > 0 {
+		return fmt.Sprintf("%s，前方还有 %d 条", queueAckPrefix, ahead)
+	}
+	return queueAckPrefix
 }
 
 func parseTarget(target string) (Scene, string) {
