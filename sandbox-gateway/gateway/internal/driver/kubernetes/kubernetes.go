@@ -90,6 +90,11 @@ func (d *Driver) defaultGetPodLogs(ctx context.Context, namespace, podName strin
 	if err != nil {
 		return "", err
 	}
+	return drainLogStream(stream)
+}
+
+// drainLogStream reads a pod log stream to completion and closes it.
+func drainLogStream(stream io.ReadCloser) (string, error) {
 	defer stream.Close()
 	b, err := io.ReadAll(stream)
 	if err != nil {

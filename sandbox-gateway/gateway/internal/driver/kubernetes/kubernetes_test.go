@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -169,6 +170,84 @@ func TestLogsNotFound(t *testing.T) {
 	_, err := d.Logs(context.Background(), "missing", 10)
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("want not-found error, got %v", err)
+	}
+}
+
+// TestDefaultGetPodLogsViaFakeClient exercises the real defaultGetPodLogs path
+// (no mock). client-go's fake Pods.GetLogs streams "fake logs".
+func TestDefaultGetPodLogsViaFakeClient(t *testing.T) {
+	d := testDriver(t, true)
+	id := "deflogs"
+	seedSandboxPod(t, d, id, "sbx-deflogs-pod", corev1.PodRunning, time.Now())
+	out, err := d.Logs(context.Background(), id, 50)
+	if err != nil {
+		t.Fatalf("Logs via defaultGetPodLogs: %v", err)
+	}
+	if out != "fake logs" {
+		t.Fatalf("content=%q want %q from fake GetLogs", out, "fake logs")
+	}
+}
+
+func TestDefaultGetPodLogsDirect(t *testing.T) {
+	d := testDriver(t, true)
+	tail := int64(10)
+	out, err := d.defaultGetPodLogs(context.Background(), "sandboxes", "any-pod", &corev1.PodLogOptions{
+		Container: sandboxContainer,
+		Follow:    false,
+		TailLines: &tail,
+	})
+	if err != nil {
+		t.Fatalf("defaultGetPodLogs: %v", err)
+	}
+	if out != "fake logs" {
+		t.Fatalf("content=%q want fake logs", out)
+	}
+}
+
+type errReadCloser struct {
+	err error
+}
+
+func (e errReadCloser) Read([]byte) (int, error) { return 0, e.err }
+func (e errReadCloser) Close() error             { return nil }
+
+func TestDrainLogStream(t *testing.T) {
+	out, err := drainLogStream(io.NopCloser(strings.NewReader("hello\n")))
+	if err != nil || out != "hello\n" {
+		t.Fatalf("drain success: %q err=%v", out, err)
+	}
+	out, err = drainLogStream(io.NopCloser(strings.NewReader("")))
+	if err != nil || out != "" {
+		t.Fatalf("drain empty: %q err=%v", out, err)
+	}
+	_, err = drainLogStream(errReadCloser{err: fmt.Errorf("read boom")})
+	if err == nil || !strings.Contains(err.Error(), "read boom") {
+		t.Fatalf("want read error, got %v", err)
+	}
+}
+
+func TestLogsGetPodLogsError(t *testing.T) {
+	d := testDriver(t, true)
+	id := "logerr"
+	seedSandboxPod(t, d, id, "sbx-logerr-pod", corev1.PodRunning, time.Now())
+	d.getPodLogs = func(context.Context, string, string, *corev1.PodLogOptions) (string, error) {
+		return "", fmt.Errorf("stream refused")
+	}
+	_, err := d.Logs(context.Background(), id, 10)
+	if err == nil || !strings.Contains(err.Error(), "kubernetes logs") || !strings.Contains(err.Error(), "stream refused") {
+		t.Fatalf("want wrapped stream error, got %v", err)
+	}
+}
+
+func TestLogsListPodsError(t *testing.T) {
+	cs := fake.NewSimpleClientset()
+	cs.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, fmt.Errorf("list apiserver down")
+	})
+	d := NewFromClient(cs, Options{Namespace: "sandboxes", NamePrefix: "sbx-"})
+	_, err := d.Logs(context.Background(), "x", 10)
+	if err == nil || !strings.Contains(err.Error(), "list pods") {
+		t.Fatalf("want list pods error, got %v", err)
 	}
 }
 
