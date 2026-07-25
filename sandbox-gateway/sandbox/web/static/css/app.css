@@ -454,11 +454,11 @@ body {
     min-height: 0;
 }
 
-/* 排队面板：圆角边框 + summary 条 + 分行（左序号圆、正文、右 chat） */
+/* 排队面板：直角边框 + summary 条 + 分行（左序号圆、正文、右 chat） */
 .cc-queue-panel {
     max-width: 48rem;
     margin: 24px auto 0;
-    border-radius: 8px;
+    border-radius: 0;
     overflow: hidden;
     border: 1px solid var(--border-color);
     font-size: 0.8125rem;
@@ -1275,7 +1275,7 @@ body {
     display: flex;
     align-items: flex-end;
     gap: 8px;
-    border-radius: 12px;
+    border-radius: 0;
     padding: 8px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
