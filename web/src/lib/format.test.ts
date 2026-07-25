@@ -1,5 +1,5 @@
 import { beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { formatTrigger, relTime } from './format'
+import { formatTrigger, fmtCompactDuration, fmtDuration, relTime } from './format'
 import { i18n } from './i18n'
 import { loadLocaleMessages } from './loadLocaleMessages'
 
@@ -10,6 +10,27 @@ beforeAll(async () => {
   ])
   i18n.global.setLocaleMessage('zh-CN', zh)
   i18n.global.setLocaleMessage('en', en)
+})
+
+describe('fmtCompactDuration', () => {
+  it('aligns Demo thresholds: h / m / 0s', () => {
+    expect(fmtCompactDuration(3703)).toBe('1.03h')
+    expect(fmtCompactDuration(3458)).toBe('57.6m')
+    expect(fmtCompactDuration(245)).toBe('4.1m')
+    expect(fmtCompactDuration(0)).toBe('0s')
+  })
+
+  it('handles short durations under one minute as fractional minutes', () => {
+    expect(fmtCompactDuration(30)).toBe('0.5m')
+    expect(fmtCompactDuration(6)).toBe('0.1m')
+  })
+
+  it('keeps clock fmtDuration for tip exactness', () => {
+    expect(fmtDuration(3703)).toBe('01:01:43')
+    expect(fmtDuration(3458)).toBe('57:38')
+    expect(fmtDuration(245)).toBe('04:05')
+    expect(fmtDuration(0)).toBe('00:00')
+  })
 })
 
 describe('relTime', () => {

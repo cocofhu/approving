@@ -1,25 +1,33 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import StatsPieChart from './StatsPieChart.vue'
 import Icon from '../ui/Icon.vue'
 import TruncatedTextTooltip from '../ui/TruncatedTextTooltip.vue'
 import { api, isPaginated } from '@/lib/api'
 import { NODE_DEFS } from '@/data/nodeRegistry'
-import { fmtDuration } from '@/lib/format'
+import { fmtCompactDuration, fmtDuration } from '@/lib/format'
 import { resolveNodeDisplayLabel } from '@/lib/resolveNodeDisplayLabel'
 import {
   aggregateMultiRuns,
   aggregateSingleRun,
   bottleneckDisplayName,
+  flattenProcesses,
   resolveRunWallSec,
   type MultiDimension,
   type SingleDimension,
 } from '@/lib/runStats'
-import { fmtTokenCount } from '@/lib/tokenUsage'
-import type { Run, WFNode } from '@/lib/types'
+import {
+  fmtCompactTokenCount,
+  fmtCompactTokenRate,
+  fmtTokenCount,
+  fmtTokenRate,
+  mergeTokenUsage,
+} from '@/lib/tokenUsage'
+import type { Run, TokenUsage, WFNode } from '@/lib/types'
 
 type StatsTab = 'single' | 'multi'
+type KpiTipId = 'wall' | 'nodeSum' | 'gap' | 'tokens' | 'rate'
 
 const props = withDefaults(
   defineProps<{
@@ -93,6 +101,91 @@ const singleBottleneck = computed(() => {
     }),
   }
 })
+
+/** Panel-side merge of process usage for total-token tip (Timeline-aligned parts). */
+const mergedUsage = computed((): TokenUsage => {
+  const processes = flattenProcesses(props.run, props.nodes, props.nowMs, labelFn)
+  const merged = mergeTokenUsage(...processes.map((p) => p.usage))
+  return (
+    merged ?? {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    }
+  )
+})
+
+const tipUsageParts = computed(() => {
+  const u = mergedUsage.value
+  return [
+    {
+      key: 'input',
+      label: t('pages.executionTimeline.partInput'),
+      full: u.inputTokens || 0,
+      highlight: false,
+    },
+    {
+      key: 'output',
+      label: t('pages.executionTimeline.partOutput'),
+      full: u.outputTokens || 0,
+      highlight: false,
+    },
+    {
+      key: 'cacheRead',
+      label: t('pages.executionTimeline.partCacheRead'),
+      full: u.cacheReadTokens || 0,
+      highlight: true,
+    },
+    {
+      key: 'cacheWrite',
+      label: t('pages.executionTimeline.partCacheWrite'),
+      full: u.cacheWriteTokens || 0,
+      highlight: false,
+    },
+  ]
+})
+
+function durationTipText(sec: number): string {
+  return t('pages.executionStats.tipDuration', {
+    clock: fmtDuration(sec),
+    sec: Math.floor(Math.max(0, sec)),
+  })
+}
+
+function compactTokensMain(n: number | null | undefined): string {
+  if (n == null) return t('pages.executionStats.dash')
+  return `${fmtCompactTokenCount(n)} ${t('pages.executionStats.tokenUnit')}`
+}
+
+function compactRateMain(totalTokens: number | null, wallSec: number): string {
+  if (totalTokens == null) return t('pages.executionStats.dash')
+  return fmtCompactTokenRate(totalTokens, wallSec)
+}
+
+function tokenRateTipText(totalTokens: number | null, wallSec: number): string {
+  if (wallSec <= 0) return t('pages.executionStats.tipTokenRateZeroWall')
+  const tokens = totalTokens ?? 0
+  const rate = fmtTokenRate(tokens, wallSec) ?? '0'
+  return t('pages.executionStats.tipTokenRate', {
+    tokens: fmtTokenCount(tokens),
+    sec: Math.floor(wallSec),
+    rate,
+  })
+}
+
+// LiveLog-style self-managed tip (hover + keyboard focus).
+const openTip = ref<KpiTipId | null>(null)
+const tipUid = useId().replace(/:/g, '')
+function tipDomId(id: KpiTipId): string {
+  return `stats-kpi-tip-${id}-${tipUid}`
+}
+function showTip(id: KpiTipId) {
+  openTip.value = id
+}
+function hideTip(id: KpiTipId) {
+  if (openTip.value === id) openTip.value = null
+}
 
 // —— Multi-run candidate list + cache ——
 interface Candidate {
@@ -355,6 +448,101 @@ const multiRateHint = computed(() =>
 .stats-tok-na {
   color: inherit;
 }
+.stats-kpi-value-wrap {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  align-self: flex-start;
+}
+.stats-kpi-value {
+  cursor: help;
+  border-radius: 2px;
+  border-bottom: 1px dotted color-mix(in srgb, currentColor 35%, transparent);
+  outline: none;
+}
+.stats-kpi-value:hover,
+.stats-kpi-value:focus-visible {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+.stats-kpi-tip {
+  position: absolute;
+  top: calc(100% + 6px);
+  z-index: 30;
+  max-width: min(280px, 70vw);
+  border: 1px solid rgb(var(--c-line-strong, 203 213 225));
+  background: rgb(var(--c-overlay, 15 23 42));
+  color: rgb(var(--c-txt2, 226 232 240));
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+}
+.stats-kpi-tip-left {
+  left: 0;
+}
+.stats-kpi-tip-center {
+  left: 50%;
+  transform: translateX(-50%);
+}
+.stats-kpi-tip-right {
+  right: 0;
+  left: auto;
+}
+.stats-kpi-tip-rich {
+  white-space: normal;
+  width: 248px;
+  max-width: min(248px, 70vw);
+  padding: 10px 11px 9px;
+  text-align: left;
+}
+.stats-kpi-tip-total {
+  margin-bottom: 8px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(248, 250, 252, 0.14);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+.stats-kpi-tip-parts {
+  display: grid;
+  gap: 5px;
+}
+.stats-kpi-tip-part {
+  display: grid;
+  grid-template-columns: 52px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 11.5px;
+}
+.stats-kpi-tip-part-k {
+  color: #94a3b8;
+}
+.stats-kpi-tip-part-k-hl {
+  color: #c4b5fd;
+  font-weight: 650;
+}
+.stats-kpi-tip-part-n {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 650;
+  color: #f8fafc;
+  text-align: right;
+}
+.stats-kpi-tip-part-c {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  color: #64748b;
+  min-width: 42px;
+}
+.stats-kpi-tip-part-hl {
+  margin: 0 -6px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  background: rgba(124, 58, 237, 0.18);
+}
 </style>
 
 <template>
@@ -402,42 +590,162 @@ const multiRateHint = computed(() =>
         <div class="mb-3.5 grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-5">
           <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-wall">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.wallClock') }}</div>
-            <div class="stats-kpi-time text-[16px] font-semibold tabular-nums tracking-tight">
-              {{ fmtDuration(singleSummary.wallSec) }}
+            <div class="stats-kpi-value-wrap">
+              <div
+                class="stats-kpi-value stats-kpi-time text-[16px] font-semibold tabular-nums tracking-tight"
+                tabindex="0"
+                data-testid="stats-kpi-wall-value"
+                :aria-describedby="openTip === 'wall' ? tipDomId('wall') : undefined"
+                @mouseenter="showTip('wall')"
+                @mouseleave="hideTip('wall')"
+                @focus="showTip('wall')"
+                @blur="hideTip('wall')"
+              >
+                {{ fmtCompactDuration(singleSummary.wallSec) }}
+              </div>
+              <span
+                v-if="openTip === 'wall'"
+                :id="tipDomId('wall')"
+                role="tooltip"
+                class="stats-kpi-tip stats-kpi-tip-left"
+                data-testid="stats-kpi-wall-tip"
+              >
+                {{ durationTipText(singleSummary.wallSec) }}
+              </span>
             </div>
             <div class="mt-0.5 text-[10px] text-txt3">{{ t('pages.executionStats.wallHint') }}</div>
           </div>
           <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-node-sum">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.nodeSum') }}</div>
-            <div class="stats-kpi-time text-[16px] font-semibold tabular-nums tracking-tight">
-              {{ fmtDuration(singleSummary.nodeSumSec) }}
+            <div class="stats-kpi-value-wrap">
+              <div
+                class="stats-kpi-value stats-kpi-time text-[16px] font-semibold tabular-nums tracking-tight"
+                tabindex="0"
+                data-testid="stats-kpi-node-sum-value"
+                :aria-describedby="openTip === 'nodeSum' ? tipDomId('nodeSum') : undefined"
+                @mouseenter="showTip('nodeSum')"
+                @mouseleave="hideTip('nodeSum')"
+                @focus="showTip('nodeSum')"
+                @blur="hideTip('nodeSum')"
+              >
+                {{ fmtCompactDuration(singleSummary.nodeSumSec) }}
+              </div>
+              <span
+                v-if="openTip === 'nodeSum'"
+                :id="tipDomId('nodeSum')"
+                role="tooltip"
+                class="stats-kpi-tip stats-kpi-tip-left"
+                data-testid="stats-kpi-node-sum-tip"
+              >
+                {{ durationTipText(singleSummary.nodeSumSec) }}
+              </span>
             </div>
             <div class="mt-0.5 text-[10px] text-txt3">{{ t('pages.executionStats.nodeSumHint') }}</div>
           </div>
           <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-gap">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.gap') }}</div>
-            <div class="stats-kpi-time text-[16px] font-semibold tabular-nums tracking-tight">
-              {{ fmtDuration(singleSummary.gapSec) }}
+            <div class="stats-kpi-value-wrap">
+              <div
+                class="stats-kpi-value stats-kpi-time text-[16px] font-semibold tabular-nums tracking-tight"
+                tabindex="0"
+                data-testid="stats-kpi-gap-value"
+                :aria-describedby="openTip === 'gap' ? tipDomId('gap') : undefined"
+                @mouseenter="showTip('gap')"
+                @mouseleave="hideTip('gap')"
+                @focus="showTip('gap')"
+                @blur="hideTip('gap')"
+              >
+                {{ fmtCompactDuration(singleSummary.gapSec) }}
+              </div>
+              <span
+                v-if="openTip === 'gap'"
+                :id="tipDomId('gap')"
+                role="tooltip"
+                class="stats-kpi-tip stats-kpi-tip-center"
+                data-testid="stats-kpi-gap-tip"
+              >
+                {{ durationTipText(singleSummary.gapSec) }}
+              </span>
             </div>
             <div class="mt-0.5 text-[10px] text-txt3">{{ t('pages.executionStats.gapHint') }}</div>
           </div>
           <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-total-tokens">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.totalTokens') }}</div>
-            <div
-              class="text-[16px] font-semibold tabular-nums tracking-tight"
-              :class="singleSummary.totalTokens == null ? 'text-txt3' : 'stats-kpi-token'"
-            >
-              {{ fmtTokensOrDash(singleSummary.totalTokens) }}
+            <div class="stats-kpi-value-wrap">
+              <div
+                class="stats-kpi-value text-[16px] font-semibold tabular-nums tracking-tight"
+                :class="singleSummary.totalTokens == null ? 'text-txt3' : 'stats-kpi-token'"
+                tabindex="0"
+                data-testid="stats-kpi-total-tokens-value"
+                :aria-describedby="openTip === 'tokens' ? tipDomId('tokens') : undefined"
+                @mouseenter="showTip('tokens')"
+                @mouseleave="hideTip('tokens')"
+                @focus="showTip('tokens')"
+                @blur="hideTip('tokens')"
+              >
+                {{ compactTokensMain(singleSummary.totalTokens) }}
+              </div>
+              <span
+                v-if="openTip === 'tokens'"
+                :id="tipDomId('tokens')"
+                role="tooltip"
+                class="stats-kpi-tip stats-kpi-tip-right stats-kpi-tip-rich"
+                data-testid="stats-kpi-total-tokens-tip"
+              >
+                <div class="stats-kpi-tip-total">
+                  {{
+                    t('pages.executionStats.tipTokenTotal', {
+                      n: fmtTokenCount(singleSummary.totalTokens ?? 0),
+                    })
+                  }}
+                </div>
+                <div class="stats-kpi-tip-parts">
+                  <div
+                    v-for="part in tipUsageParts"
+                    :key="part.key"
+                    class="stats-kpi-tip-part"
+                    :class="{ 'stats-kpi-tip-part-hl': part.highlight }"
+                    :data-testid="`stats-kpi-token-part-${part.key}`"
+                  >
+                    <span
+                      class="stats-kpi-tip-part-k"
+                      :class="{ 'stats-kpi-tip-part-k-hl': part.highlight }"
+                    >
+                      {{ part.label }}
+                    </span>
+                    <span class="stats-kpi-tip-part-n">{{ fmtTokenCount(part.full) }}</span>
+                    <span class="stats-kpi-tip-part-c">{{ fmtCompactTokenCount(part.full) }}</span>
+                  </div>
+                </div>
+              </span>
             </div>
             <div class="mt-0.5 text-[10px] text-txt3">{{ singleTokenHint }}</div>
           </div>
           <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-token-rate">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.tokenRate') }}</div>
-            <div
-              class="text-[16px] font-semibold tabular-nums tracking-tight"
-              :class="singleSummary.tokenRate == null ? 'text-txt3' : 'stats-kpi-token'"
-            >
-              {{ singleSummary.tokenRate ?? t('pages.executionStats.dash') }}
+            <div class="stats-kpi-value-wrap">
+              <div
+                class="stats-kpi-value text-[16px] font-semibold tabular-nums tracking-tight"
+                :class="singleSummary.totalTokens == null ? 'text-txt3' : 'stats-kpi-token'"
+                tabindex="0"
+                data-testid="stats-kpi-token-rate-value"
+                :aria-describedby="openTip === 'rate' ? tipDomId('rate') : undefined"
+                @mouseenter="showTip('rate')"
+                @mouseleave="hideTip('rate')"
+                @focus="showTip('rate')"
+                @blur="hideTip('rate')"
+              >
+                {{ compactRateMain(singleSummary.totalTokens, singleSummary.wallSec) }}
+              </div>
+              <span
+                v-if="openTip === 'rate'"
+                :id="tipDomId('rate')"
+                role="tooltip"
+                class="stats-kpi-tip stats-kpi-tip-right"
+                data-testid="stats-kpi-token-rate-tip"
+              >
+                {{ tokenRateTipText(singleSummary.totalTokens, singleSummary.wallSec) }}
+              </span>
             </div>
             <div class="mt-0.5 text-[10px] text-txt3">{{ singleRateHint }}</div>
           </div>
