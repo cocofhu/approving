@@ -391,18 +391,28 @@ async function loadMessages(tid: string) {
     hasMoreEarlier.value = channel ? false : !!res.hasMore
     await hydrateDraftAndMaybeResume(tid)
     if (gen !== threadLoadGen || tid !== activeId.value) return
-    await nextTick()
-    stickToBottom.value = true
-    scrollBottom(true)
   } catch (e: any) {
     if (gen !== threadLoadGen || tid !== activeId.value) return
     messagesLoadFailed.value = true
     toast.error(t('pages.projectDetail.pm.loadFailed'))
   } finally {
     if (gen === threadLoadGen && tid === activeId.value) {
+      // Clear loading before scrollBottom: while messagesLoading, template shows
+      // ArtifactLoadingPane and scrollHeight is not the message list.
       messagesLoading.value = false
     }
   }
+  // Force stick-to-bottom only after content replaces the loading pane.
+  if (gen !== threadLoadGen || tid !== activeId.value || messagesLoadFailed.value) return
+  stickToBottom.value = true
+  await nextTick()
+  if (gen !== threadLoadGen || tid !== activeId.value) return
+  scrollBottom(true)
+  // Browser layout can lag one frame behind the v-if swap; re-pin after paint.
+  requestAnimationFrame(() => {
+    if (gen !== threadLoadGen || tid !== activeId.value) return
+    scrollBottom(true)
+  })
 }
 
 /**
