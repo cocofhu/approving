@@ -133,7 +133,7 @@
       "tabMeta": "项目信息",
       "cron": {
         "title": "定时任务",
-        "hint": "本项目下全部 Agent 的定时任务。创建与调度编辑请在 PM Leader 咨询中通过 task-scheduler 完成；此处可查看，并由任意已登录用户开关是否推送到项目绑定渠道。",
+        "hint": "本项目下全部 Agent 的定时任务。创建与调度编辑请在 PM Leader 咨询中通过 task-scheduler 完成；此处可查看与删除，并由任意已登录用户开关是否推送到项目绑定渠道。",
         "emptyTitle": "暂无定时任务",
         "emptyDesc": "在 PM Leader 咨询中创建任务后，将显示在此列表。",
         "colName": "名称",
@@ -144,10 +144,13 @@
         "colNextRun": "下次执行",
         "colLastRun": "上次执行",
         "colStatus": "状态",
+        "colActions": "操作",
         "enabledYes": "是",
         "enabledNo": "否",
         "deliverLabel": "推送",
-        "deliverHint": "开启后，任务结果会推送到项目渠道中标记为定时任务推送的目标。需先在渠道设置中配置推送目标。"
+        "deliverHint": "开启后，任务结果会推送到项目渠道中标记为定时任务推送的目标。需先在渠道设置中配置推送目标。",
+        "deleteConfirm": "确认删除该定时任务？",
+        "deleted": "已删除定时任务"
       },
       "pm": {
         "settingsTitle": "PM Leader 设置",

@@ -342,6 +342,8 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
+  deleteProjectCronJob: (projectId: string, jobId: string) =>
+    req<{ status: string }>(`/projects/${projectId}/cron-jobs/${jobId}`, { method: 'DELETE' }),
   listPmMemories: (projectId: string) =>
     req<{ items: ProjectMemoryItem[] }>(`/projects/${projectId}/pm/memories`),
   upsertPmMemory: (projectId: string, body: { title: string; content: string }) =>

@@ -7,9 +7,13 @@ import pages from '@/locales/zh-CN/pages.json'
 import { useAuth } from '@/lib/useAuth'
 import PmCronJobsPanel from './PmCronJobsPanel.vue'
 
+const toastSuccess = vi.fn()
+const toastError = vi.fn()
+
 const apiMocks = vi.hoisted(() => ({
   listProjectCronJobs: vi.fn(),
   patchProjectCronJob: vi.fn(),
+  deleteProjectCronJob: vi.fn(),
 }))
 
 vi.mock('@/lib/api', async () => {
@@ -20,12 +24,13 @@ vi.mock('@/lib/api', async () => {
       ...actual.api,
       listProjectCronJobs: apiMocks.listProjectCronJobs,
       patchProjectCronJob: apiMocks.patchProjectCronJob,
+      deleteProjectCronJob: apiMocks.deleteProjectCronJob,
     },
   }
 })
 
 vi.mock('@/lib/useToast', () => ({
-  useToast: () => ({ success: vi.fn(), error: vi.fn() }),
+  useToast: () => ({ success: toastSuccess, error: toastError }),
 }))
 
 const SAMPLE_JOB = {
@@ -64,6 +69,7 @@ describe('PmCronJobsPanel', () => {
     const job = { ...SAMPLE_JOB, deliverToChannel: false }
     apiMocks.listProjectCronJobs.mockResolvedValue({ items: [job] })
     apiMocks.patchProjectCronJob.mockResolvedValue({ ...job, deliverToChannel: true })
+    apiMocks.deleteProjectCronJob.mockResolvedValue({ status: 'deleted' })
     useAuth().clearUser()
   })
 
@@ -75,6 +81,7 @@ describe('PmCronJobsPanel', () => {
     expect(w.text()).toContain('每日汇报')
     expect(w.text()).toContain('agent-a')
     expect(w.text()).toContain('cron: 0 9 * * *')
+    expect(w.text()).toMatch(/可查看与删除/)
   })
 
   it('allows deliver toggle for non-admin without readonly banner', async () => {
@@ -104,5 +111,36 @@ describe('PmCronJobsPanel', () => {
     expect(apiMocks.patchProjectCronJob).toHaveBeenCalledWith('proj-1', 'cron-1', {
       deliverToChannel: true,
     })
+  })
+
+  it('cancel confirm does not call delete API', async () => {
+    useAuth().setUser({ username: 'u', expiresAt: 't', isAdmin: false })
+    const w = mountPanel()
+    await flushPromises()
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await w.get('[data-testid="project-cron-delete"]').trigger('click')
+    await flushPromises()
+    expect(apiMocks.deleteProjectCronJob).not.toHaveBeenCalled()
+    expect(w.text()).toContain('每日汇报')
+  })
+
+  it('confirm delete calls API, refreshes list, and toasts success', async () => {
+    useAuth().setUser({ username: 'u', expiresAt: 't', isAdmin: false })
+    apiMocks.listProjectCronJobs
+      .mockResolvedValueOnce({ items: [{ ...SAMPLE_JOB }] })
+      .mockResolvedValueOnce({ items: [] })
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.text()).toContain('每日汇报')
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await w.get('[data-testid="project-cron-delete"]').trigger('click')
+    await flushPromises()
+
+    expect(apiMocks.deleteProjectCronJob).toHaveBeenCalledWith('proj-1', 'cron-1')
+    expect(apiMocks.listProjectCronJobs).toHaveBeenCalledTimes(2)
+    expect(toastSuccess).toHaveBeenCalled()
+    expect(toastError).not.toHaveBeenCalled()
+    expect(w.text()).not.toContain('每日汇报')
   })
 })

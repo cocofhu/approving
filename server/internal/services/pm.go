@@ -1046,6 +1046,22 @@ func (s *PmService) PatchCronJobDeliver(projectID, jobID string, deliver bool) (
 	return job, nil
 }
 
+// DeleteCronJob removes a project-scoped cron job with the same cleanup as
+// DeleteCronJobForAgent (runs, job, and exclusive cron thread/messages/drafts).
+func (s *PmService) DeleteCronJob(projectID, jobID string) error {
+	if _, ok := s.project(projectID); !ok {
+		return ErrProjectNotFound
+	}
+	var job models.AgentCronJob
+	if err := s.db.Where("id = ? AND project_id = ?", jobID, projectID).First(&job).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrPmCronJobNotFound
+		}
+		return err
+	}
+	return s.DeleteCronJobForAgent(projectID, job.AgentName, jobID)
+}
+
 // GetThreadForAgent returns one thread when it belongs to project+agent.
 func (s *PmService) GetThreadForAgent(projectID, agentName, threadID string) (models.ChatThread, error) {
 	agentName = strings.TrimSpace(agentName)
