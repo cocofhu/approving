@@ -7,17 +7,26 @@ on:
   push:
     paths:
       - "sandbox-gateway/gateway/**"
+      - "sandbox-gateway/scripts/cover-check.sh"
       - ".github/workflows/ci-gateway.yml"
+      - ".github/scripts/coverage-badge-color.sh"
+      - ".github/scripts/publish-coverage-badge.sh"
       - ".golangci.yml"
   pull_request:
     paths:
       - "sandbox-gateway/gateway/**"
+      - "sandbox-gateway/scripts/cover-check.sh"
       - ".github/workflows/ci-gateway.yml"
+      - ".github/scripts/coverage-badge-color.sh"
+      - ".github/scripts/publish-coverage-badge.sh"
       - ".golangci.yml"
 
 jobs:
   gateway:
     runs-on: ubuntu-latest
+    # contents:write only used to update the orphan coverage-badges branch endpoint.
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: sandbox-gateway/gateway
@@ -37,5 +46,25 @@ jobs:
           args: --config=${{ github.workspace }}/.golangci.yml
       - run: go vet ./...
       - name: Gateway Go coverage gate
+        id: cover
         working-directory: sandbox-gateway
         run: ./scripts/cover-check.sh gateway 90
+      - name: Publish coverage-gateway badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && success()
+        continue-on-error: true
+        working-directory: .
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          pct="${{ steps.cover.outputs.coverage_pct }}"
+          if [[ -z "$pct" ]]; then
+            echo "no coverage_pct from cover-check; skip badge publish"
+            exit 0
+          fi
+          color="$(./.github/scripts/coverage-badge-color.sh "$pct")"
+          ./.github/scripts/publish-coverage-badge.sh \
+            coverage-gateway.json \
+            coverage-gateway \
+            "$pct" \
+            "$color"
