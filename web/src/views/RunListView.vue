@@ -94,7 +94,7 @@ function sortThClass(key: RunSortKey): string[] {
 
 async function applySortClick(key: RunSortKey) {
   const cur = activeSort.value
-  let nextSort: RunSortKey = key
+  const nextSort: RunSortKey = key
   let nextOrder: RunSortOrder = DEFAULT_ORDER[key]
   if (cur?.sort === key) {
     nextOrder = cur.order === 'desc' ? 'asc' : 'desc'
