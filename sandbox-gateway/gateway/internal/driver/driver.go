@@ -2,8 +2,13 @@ package driver
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+// ErrLogsUnsupported is returned by drivers that do not implement container
+// log retrieval (e.g. kubernetes in this release).
+var ErrLogsUnsupported = errors.New("sandbox logs not supported by this driver")
 
 // Sandbox lifecycle statuses reported by drivers.
 type Status string
@@ -106,4 +111,9 @@ type Driver interface {
 
 	// Endpoints returns the client-reachable address for each exposed port.
 	Endpoints(ctx context.Context, id string) (map[int]string, error)
+
+	// Logs returns the sandbox PID1 combined stdout/stderr (non-follow).
+	// tail limits the number of lines from the end; values <= 0 use a driver default.
+	// Drivers that cannot provide logs return ErrLogsUnsupported.
+	Logs(ctx context.Context, id string, tail int) (string, error)
 }

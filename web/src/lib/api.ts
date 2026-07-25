@@ -773,8 +773,12 @@ export const api = {
   },
   // Raw sandbox container logs (docker logs): live if running, else the archived
   // snapshot captured at teardown. Used for post-mortem troubleshooting.
+  // `error` is set when the control plane should have logs but the read failed
+  // (distinct from found=false = no log source).
   nodeSandboxLog: (runId: string, nodeId: string) =>
-    req<{ content: string; live: boolean; found: boolean }>(`/runs/${runId}/nodes/${nodeId}/sandbox-log`),
+    req<{ content: string; live: boolean; found: boolean; error?: string }>(
+      `/runs/${runId}/nodes/${nodeId}/sandbox-log`,
+    ),
   getRunNodeSandbox: async (runId: string, nodeId: string): Promise<SandboxView | null> => {
     const res = await fetch(BASE + `/runs/${runId}/nodes/${nodeId}/sandbox`, {
       credentials: 'include',

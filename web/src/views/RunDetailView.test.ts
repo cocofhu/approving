@@ -165,6 +165,19 @@ describe('RunDetailView live-log boot timeout persistence', () => {
   it('polls sandbox signals for boot while on log or sandbox tab', () => {
     expect(src).toMatch(/nodeTab\.value !== 'log' && nodeTab\.value !== 'sandbox'/)
   })
+
+  it('maps sandbox-log six states (empty / live / live-empty / archived / error)', () => {
+    // Always persist API result (including found=false / empty content / error).
+    expect(src).toMatch(/sbxLogs\[nodeId\] = \{/)
+    expect(src).toMatch(/error: r\.error \|\| undefined/)
+    expect(src).toMatch(/catch \(e\)/)
+    expect(src).toMatch(/data-testid="sandbox-log-error"/)
+    expect(src).toMatch(/data-testid="sandbox-log-live-empty"/)
+    expect(src).toMatch(/sandboxLog\.errorTitle/)
+    expect(src).toMatch(/sandboxLog\.liveEmpty/)
+    // Empty content must not fall through to the "暂无沙箱日志" empty state when found+live.
+    expect(src).toMatch(/sbxLog\?\.found && sbxLog\.live/)
+  })
 })
 
 describe('RunDetailView ACP log rehydrate state machine', () => {

@@ -103,6 +103,14 @@ func (fg *inlineGW) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		enc(map[string]any{"status": rec["status"]})
+	case len(parts) == 2 && parts[1] == "logs" && r.Method == http.MethodGet:
+		rec := fg.recs[parts[0]]
+		if rec == nil {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		content, _ := rec["logs"].(string)
+		enc(map[string]string{"content": content})
 	case len(parts) == 3 && parts[1] == "hosts" && r.Method == http.MethodGet:
 		rec := fg.recs[parts[0]]
 		if rec == nil {
