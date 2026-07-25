@@ -6,18 +6,6 @@
 (() => {
   const STORAGE_KEY = "approving-locale";
 
-  function readBase() {
-    const raw = document.documentElement.getAttribute("data-base");
-    if (raw == null || raw === "") return "";
-    return raw.endsWith("/") ? raw.slice(0, -1) : raw;
-  }
-
-  function withBase(path) {
-    const base = readBase();
-    const cleaned = path.startsWith("/") ? path : `/${path}`;
-    return `${base}${cleaned}`;
-  }
-
   function getSaved() {
     try {
       const v = localStorage.getItem(STORAGE_KEY);
@@ -65,19 +53,28 @@
    * - saved zh-CN on /en/ → /
    * - no saved: en* on / → /en/; zh* or other stay on /
    * - no saved on /en/: stay (do not bounce zh* away)
+   *
+   * Use string-literal destinations only (not DOM-derived data-base).
+   * Avoids CodeQL "DOM text reinterpreted as HTML" on location.replace;
+   * custom-domain docs are served at site root (BASE=/).
    */
   function maybeRedirectHome() {
     if (document.documentElement.getAttribute("data-home-entry") !== "1") return;
 
     const page = pageLocale();
     const saved = getSaved();
-    let dest = null;
 
-    if (saved === "en" && page === "zh-CN") dest = withBase("/en/");
-    else if (saved === "zh-CN" && page === "en") dest = withBase("/");
-    else if (!saved && page === "zh-CN" && fromNavigator() === "en") dest = withBase("/en/");
-
-    if (dest) location.replace(dest);
+    if (saved === "en" && page === "zh-CN") {
+      location.replace("/en/");
+      return;
+    }
+    if (saved === "zh-CN" && page === "en") {
+      location.replace("/");
+      return;
+    }
+    if (!saved && page === "zh-CN" && fromNavigator() === "en") {
+      location.replace("/en/");
+    }
   }
 
   // Script loads in <head>; bind switcher after [data-locale-set] exists in body.
