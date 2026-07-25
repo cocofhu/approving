@@ -2,7 +2,7 @@
 
 Static HTML homepage + Markdown help, built to `public/` and published by
 `ci-docs` to [`cocofhu/approving-pages`](https://github.com/cocofhu/approving-pages)
-(`https://cocofhu.github.io/approving-pages/`).
+(`https://www.approving-ai.com/`).
 
 ## Layout
 
@@ -18,7 +18,7 @@ Static HTML homepage + Markdown help, built to `public/` and published by
 ```bash
 cd docs
 npm ci --no-audit --no-fund
-npm run build                 # BASE_PATH=/approving-pages (Pages URL)
+npm run build                 # BASE_PATH=/ (custom domain root)
 BASE_PATH=/ npm run server    # local preview at http://localhost:4000
 ```
 

@@ -56,11 +56,21 @@ else
   git -C "$work" checkout --orphan "$PAGES_BRANCH" 2>/dev/null || git -C "$work" checkout -B "$PAGES_BRANCH"
 fi
 
+# Keep existing custom-domain CNAME across publishes unless the build provides one.
+preserved_cname=""
+if [[ -f "$work/CNAME" && ! -f "$src/CNAME" ]]; then
+  preserved_cname="$(cat "$work/CNAME")"
+fi
+
 # Replace tree contents but keep .git
 find "$work" -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
 cp -a "$src"/. "$work"/
 
-# Project Pages under /approving-pages/ must not be processed by Jekyll.
+if [[ -n "$preserved_cname" && ! -f "$work/CNAME" ]]; then
+  printf '%s\n' "$preserved_cname" >"$work/CNAME"
+fi
+
+# Avoid Jekyll processing on GitHub Pages.
 if [[ ! -f "$work/.nojekyll" ]]; then
   : >"$work/.nojekyll"
 fi
