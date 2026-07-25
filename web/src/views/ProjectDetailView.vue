@@ -656,7 +656,7 @@ onUnmounted(() => {
             <h2 class="text-lg font-semibold text-txt">{{ project.name }}</h2>
             <p v-if="project.description" class="mt-0.5 text-sm text-txt3">{{ project.description }}</p>
           </div>
-          <div class="flex flex-wrap items-start gap-2">
+          <div class="flex flex-wrap items-start gap-2" data-testid="project-detail-header-actions">
             <div
               class="group relative min-w-[132px] rounded-[10px] border border-accent/35 bg-gradient-to-b from-accent-dim/90 to-surface px-3 py-2 text-left transition-[box-shadow,border-color] md:text-right"
               :class="project.totalTokens != null ? 'cursor-help hover:border-accent hover:shadow-[0_0_0_3px_rgba(123,97,255,0.14)]' : ''"
@@ -688,9 +688,6 @@ onUnmounted(() => {
                 :total-tokens="project.totalTokens"
               />
             </div>
-            <AppButton variant="outline" size="sm" class="text-err" @click="showDelete = true">
-              {{ t('common.buttons.delete') }}
-            </AppButton>
           </div>
         </div>
       </template>
@@ -1316,7 +1313,19 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div class="flex flex-wrap justify-end gap-2 border-t border-line bg-surface p-3">
+          <div
+            class="flex flex-wrap items-center justify-between gap-2 border-t border-line bg-surface p-3"
+            data-testid="project-meta-footer"
+          >
+            <AppButton
+              variant="outline"
+              size="sm"
+              class="text-err"
+              data-testid="project-meta-delete"
+              @click="showDelete = true"
+            >
+              {{ t('common.buttons.delete') }}
+            </AppButton>
             <AppButton variant="primary" :disabled="savingMeta" @click="saveMeta">
               {{ t('common.buttons.save') }}
             </AppButton>
