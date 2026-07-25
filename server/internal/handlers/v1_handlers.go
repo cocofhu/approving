@@ -122,7 +122,9 @@ func (h *Handlers) V1GetRun(c *gin.Context) {
 	nodeIDs := h.Runs.CurrentNodeIDs([]models.Run{run})
 	var errMsg string
 	if run.Status == "failed" {
-		errMsg = h.Runs.RunFailedError(run.ID)
+		// Prefer the aggregated display reason (covers early-exit fallbacks
+		// where StateRun.error was never written).
+		errMsg = h.Runs.AggregateRunFailure(run.ID).DisplayReason()
 	}
 	c.JSON(http.StatusOK, v1RunDTO(run, nodeIDs[run.ID], errMsg))
 }

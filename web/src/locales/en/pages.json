@@ -531,6 +531,9 @@
       "executionN": "Run {n}",
       "historicalReadonly": "Historical (read-only)",
       "nodeFailed": "This node failed",
+      "failureBanner": {
+        "title": "Failure reason"
+      },
       "gateError": "Submit failed; try again",
       "resumeError": "Resume failed; try again",
       "priorityTitle": "Change priority",

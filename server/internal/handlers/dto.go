@@ -197,6 +197,24 @@ func (h *Handlers) runDetailDTO(r models.Run) gin.H {
 		clarifyByNode[conv.NodeID] = gin.H{"nodeId": conv.NodeID, "iteration": conv.Iteration, "turns": conv.Messages, "done": conv.Done}
 	}
 	out["clarifyByNode"] = clarifyByNode
+	// Lift a Run-level failure reason for any failed run so the Web detail banner
+	// (and clients) can read a human message without opening a node. Successful
+	// runs omit these fields entirely.
+	if r.Status == "failed" && h.Runs != nil {
+		info := h.Runs.AggregateRunFailure(r.ID)
+		reason := info.DisplayReason()
+		out["error"] = reason
+		out["failedReason"] = reason
+		if info.FailedNode != "" {
+			out["failedNode"] = info.FailedNode
+		}
+		if info.NoSandboxLog {
+			out["noSandboxLog"] = true
+		}
+		if info.LogSummaryOrRef != "" {
+			out["logSummaryOrRef"] = info.LogSummaryOrRef
+		}
+	}
 	h.hydrateNodeExecutions(nodeExecutions, r.ID)
 	return out
 }

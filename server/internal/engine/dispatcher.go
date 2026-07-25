@@ -97,7 +97,7 @@ func (e *Engine) claimNextQueued() (runID, fromNodeID string, ok bool) {
 	if !hasFrom {
 		start := run.Graph.StartNode()
 		if start == nil {
-			e.finish(run.ID, "failed")
+			e.failRun(run.ID, "工作流没有可执行节点")
 			return "", "", false
 		}
 		fromNodeID = start.ID
