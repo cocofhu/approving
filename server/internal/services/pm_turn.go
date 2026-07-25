@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -63,6 +62,10 @@ type pmActiveTurn struct {
 type PmTurnRunner struct {
 	pm  *PmService
 	sbx *SandboxService
+	// Optional deps for progress-citation existence checks (fail-closed when nil).
+	runs *RunService
+	arts *ArtifactService
+	wf   *WorkflowService
 
 	mu           sync.Mutex
 	turns        map[string]*pmActiveTurn // keyed by threadID
@@ -237,7 +240,7 @@ func (r *PmTurnRunner) run(ctx context.Context, t *pmActiveTurn, prompt string, 
 		return
 	}
 
-	citations := extractPmCitations(text)
+	citations := r.filterAndEnrichCitations(t.threadID, extractPmCitations(text))
 	if _, aerr := r.pm.AppendMessage(t.threadID, "assistant", text, citations, nil, nil); aerr != nil {
 		log.Warn().Err(aerr).Str("thread", t.threadID).Msg("pm turn finalize append failed")
 		r.persistTurnFailure(t.threadID, userMsgID, PmFailUnknown)
@@ -488,28 +491,3 @@ func contentTextAny(v any) string {
 	return ""
 }
 
-var pmCitationRe = regexp.MustCompile(`(?i)\b(run|gate|artifact|workflow|plan)[:\s]+([a-zA-Z0-9_./:-]+)`)
-
-func extractPmCitations(text string) []models.ProgressCitation {
-	seen := map[string]struct{}{}
-	out := make([]models.ProgressCitation, 0, 8)
-	for _, m := range pmCitationRe.FindAllStringSubmatch(text, -1) {
-		if len(m) < 3 {
-			continue
-		}
-		key := strings.ToLower(m[1]) + ":" + m[2]
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, models.ProgressCitation{
-			Type:           strings.ToLower(m[1]),
-			TargetID:       m[2],
-			SummarySnippet: key,
-		})
-		if len(out) >= 8 {
-			break
-		}
-	}
-	return out
-}
