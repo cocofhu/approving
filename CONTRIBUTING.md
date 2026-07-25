@@ -11,6 +11,7 @@ Before contributing, read [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) and
 - Backend: `cd server && go test ./...`
 - Web: `cd web && npm ci && npm test && npx vue-tsc --noEmit`
 - Web critical e2e (same subset as CI `web-e2e`): see [Critical-path Playwright e2e](#critical-path-playwright-e2e)
+- Docs site: `cd docs && npm ci && npm run build` (preview: `BASE_PATH=/ npm run server`)
 - Configuration doc: `cd server && go run ./cmd/gen-configdoc -check`
 - Full local development stack: `./start.sh dev -d` (source/HMR; gateway
   sources live in `sandbox-gateway/`). Default `./start.sh -d` pulls published
@@ -83,6 +84,7 @@ approving/
 ├── server/                 Go backend (FSM + sandbox client + artifact MCP)
 ├── web/                    Vue3 + Vue Flow UI
 ├── sandbox-gateway/        Vendored gateway + universal sandbox image
+├── docs/                   Project site (static HTML) + help (Markdown)
 ├── docker-compose.yml      Dev/source stack (./start.sh dev)
 ├── start.sh                Default: pull GHCR + up; dev/source via ./start.sh dev
 ├── compose.release.yaml    Published-image stack (./start.sh default)
@@ -90,6 +92,24 @@ approving/
 ├── GATEWAY.md              Gateway contract
 └── .github/                Issues, PRs, Actions
 ```
+
+### Project site (`docs/`)
+
+Static HTML homepage in [`docs/site/`](docs/site/); help/guide pages are Markdown
+in [`docs/content/`](docs/content/). `npm run build` writes `docs/public/`.
+
+Matching workflow: `ci-docs`. On push to `main`, the job publishes `public/` to
+the standalone Pages repo [`cocofhu/approving-pages`](https://github.com/cocofhu/approving-pages)
+when Secret `PAGES_DEPLOY_TOKEN` is configured.
+
+**One-time GitHub setup (maintainers):**
+
+1. Create public empty repo `cocofhu/approving-pages`.
+2. Settings → Pages → Deploy from branch `main` / root (or `/ (root)`).
+3. In `cocofhu/approving`, add Secret `PAGES_DEPLOY_TOKEN` (PAT or fine-grained
+   token with `contents: write` on `approving-pages`).
+4. Optional: set the Approving repo Homepage to
+   `https://cocofhu.github.io/approving-pages/`.
 
 ## Release images and smoke
 

@@ -22,6 +22,7 @@ setup and layout.
 | `web/` | Vue 3 + Vue Flow UI |
 | `sandbox-gateway/gateway/` | Gateway control plane |
 | `sandbox-gateway/sandbox/` + `sandbox-gateway/scripts/` | Universal sandbox image, startup/scripts, cover helpers |
+| `docs/` | Project site (static HTML) + help (Markdown → HTML); CI publishes to `cocofhu/approving-pages` |
 
 Always-on branch-protection job: `.github/workflows/ci.yml` (`gate` only —
 does **not** run lint/test). Module suites are path-filtered.
@@ -69,6 +70,22 @@ golangci-lint run --config "$ROOT/.golangci.yml" ./...
 go vet ./...
 cd .. && ./scripts/cover-check.sh gateway 90
 ```
+
+### `docs/**` → `ci-docs`
+
+Working directory: `docs/` (Node 24). Homepage is static HTML under `site/`;
+help pages are Markdown under `content/` (built to `public/`).
+
+```bash
+cd docs
+npm ci --no-audit --no-fund
+npm run build
+# optional local preview (root-relative assets):
+# BASE_PATH=/ npm run server
+```
+
+On push to `main`, `ci-docs` also runs `.github/scripts/publish-pages.sh` when
+Secret `PAGES_DEPLOY_TOKEN` is set (target repo `cocofhu/approving-pages`).
 
 ### `sandbox-gateway/sandbox/**` or `sandbox-gateway/scripts/**` → `ci-sandbox`
 

@@ -1,0 +1,52 @@
+name: ci-docs
+
+# Static project site (HTML) + Markdown help under docs/.
+# PR: build only. Push to main: build then publish to cocofhu/approving-pages.
+on:
+  push:
+    paths:
+      - "docs/**"
+      - ".github/workflows/ci-docs.yml"
+      - ".github/scripts/publish-pages.sh"
+  pull_request:
+    paths:
+      - "docs/**"
+      - ".github/workflows/ci-docs.yml"
+      - ".github/scripts/publish-pages.sh"
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: docs
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Build site
+        run: npm run build
+        env:
+          BASE_PATH: /approving-pages
+      - name: Publish to approving-pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: .
+        env:
+          PAGES_DEPLOY_TOKEN: ${{ secrets.PAGES_DEPLOY_TOKEN }}
+          PAGES_REPO: cocofhu/approving-pages
+          PAGES_BRANCH: main
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          if [[ -z "${PAGES_DEPLOY_TOKEN}" ]]; then
+            echo "PAGES_DEPLOY_TOKEN secret is not set; skip deploy."
+            echo "Create public repo cocofhu/approving-pages, enable Pages on main/root,"
+            echo "and add a contents:write token as repo secret PAGES_DEPLOY_TOKEN."
+            exit 0
+          fi
+          ./.github/scripts/publish-pages.sh

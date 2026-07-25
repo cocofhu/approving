@@ -1,0 +1,139 @@
+.page-doc {
+  background:
+    radial-gradient(800px 400px at 100% 0%, rgba(123, 97, 255, 0.08), transparent 55%),
+    var(--surface);
+}
+
+.doc {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-7) var(--space-5) var(--space-8);
+}
+
+@media (max-width: 640px) {
+  .doc {
+    padding: var(--space-6) var(--space-4) var(--space-7);
+  }
+
+  .doc__title {
+    font-size: clamp(1.75rem, 8vw, 2.2rem);
+  }
+
+  .doc__body pre {
+    padding: var(--space-3);
+    font-size: 0.8125rem;
+  }
+}
+
+.doc__header {
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--line);
+}
+
+.doc__eyebrow {
+  margin: 0 0 var(--space-2);
+  color: var(--accent);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.doc__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4vw, 2.6rem);
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.doc__lead {
+  margin: var(--space-3) 0 0;
+  color: var(--muted);
+  font-size: 1.0625rem;
+}
+
+.doc__body {
+  color: var(--ink);
+}
+
+.doc__body > *:first-child {
+  margin-top: 0;
+}
+
+.doc__body h2 {
+  margin: var(--space-7) 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.doc__body h3 {
+  margin: var(--space-6) 0 var(--space-2);
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.doc__body p,
+.doc__body ul,
+.doc__body ol {
+  margin: 0 0 var(--space-4);
+  color: var(--muted);
+}
+
+.doc__body li + li {
+  margin-top: var(--space-2);
+}
+
+.doc__body code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--accent-soft);
+  padding: 0.1em 0.35em;
+  border-radius: 0;
+  color: var(--accent-strong);
+}
+
+.doc__body pre {
+  margin: 0 0 var(--space-5);
+  padding: var(--space-4);
+  overflow-x: auto;
+  background: #18181b;
+  border: 1px solid var(--line);
+  color: #ededf0;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.doc__body pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+.doc__body a {
+  font-weight: 500;
+}
+
+.doc__body strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.doc__body hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: var(--space-6) 0;
+}
+
+.doc__body blockquote {
+  margin: 0 0 var(--space-4);
+  padding-left: var(--space-4);
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+}
