@@ -2,13 +2,26 @@ name: ci-server
 
 on:
   push:
-    paths: ["server/**", ".github/workflows/ci-server.yml", ".golangci.yml"]
+    paths:
+      - "server/**"
+      - ".github/workflows/ci-server.yml"
+      - ".github/scripts/coverage-badge-color.sh"
+      - ".github/scripts/publish-coverage-badge.sh"
+      - ".golangci.yml"
   pull_request:
-    paths: ["server/**", ".github/workflows/ci-server.yml", ".golangci.yml"]
+    paths:
+      - "server/**"
+      - ".github/workflows/ci-server.yml"
+      - ".github/scripts/coverage-badge-color.sh"
+      - ".github/scripts/publish-coverage-badge.sh"
+      - ".golangci.yml"
 
 jobs:
   server:
     runs-on: ubuntu-latest
+    # contents:write only used to update the orphan coverage-badges branch endpoint.
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: server
@@ -30,6 +43,26 @@ jobs:
       - run: go run ./cmd/gen-configdoc -out CONFIGURATION.md -check
       - run: go test ./...
       - name: Server Go coverage gate
+        id: cover
         run: ./scripts/cover-check-server.sh 90
+      - name: Publish coverage-server badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && success()
+        continue-on-error: true
+        working-directory: .
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          pct="${{ steps.cover.outputs.coverage_pct }}"
+          if [[ -z "$pct" ]]; then
+            echo "no coverage_pct from cover-check; skip badge publish"
+            exit 0
+          fi
+          color="$(./.github/scripts/coverage-badge-color.sh "$pct")"
+          ./.github/scripts/publish-coverage-badge.sh \
+            coverage-server.json \
+            coverage-server \
+            "$pct" \
+            "$color"
       - name: e2e fake runtime
         run: go test ./internal/runtime/ -count=1 -run 'TestRunAgent|TestReact'
