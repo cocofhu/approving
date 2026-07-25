@@ -618,8 +618,7 @@ func TestSandboxEventsAndLog(t *testing.T) {
 	}
 }
 
-// The gateway backend exposes no container logs (mgr.Logs is a no-op), so even
-// a running sandbox falls back to the archived snapshot (live=false).
+// Running sandboxes prefer live gateway logs (including successful empty reads).
 func TestSandboxLogByIDLive(t *testing.T) {
 	db := newTestDB(t)
 	ds := &dockerState{}
@@ -629,20 +628,43 @@ func TestSandboxLogByIDLive(t *testing.T) {
 	row := &models.Sandbox{Name: "approving-sb-livelog", Purpose: "test", Status: "running"}
 	db.Create(row)
 	ds.setStatus(row.Name, "running")
+	ds.fg.SetLogs(row.Name, "live body")
 	db.Create(&models.SandboxLog{Name: row.Name, Content: "archived body"})
 	content, live, err := s.SandboxLogByID(ctx, row.ID)
-	if err != nil || live || content != "archived body" {
-		t.Fatalf("log: %q live=%v err=%v (want archived, live=false)", content, live, err)
+	if err != nil || !live || content != "live body" {
+		t.Fatalf("log: %q live=%v err=%v (want live body, live=true)", content, live, err)
 	}
-	// NodeSandboxLog for a running run sandbox also degrades to the archive.
+
+	// Live empty read must surface as found/live, not fall through to archive.
+	empty := &models.Sandbox{Name: "approving-sb-liveempty", Purpose: "test", Status: "running"}
+	db.Create(empty)
+	ds.setStatus(empty.Name, "running")
+	ds.fg.SetLogs(empty.Name, "")
+	db.Create(&models.SandboxLog{Name: empty.Name, Content: "archived empty-fallback"})
+	cEmpty, liveEmpty, err := s.SandboxLogByID(ctx, empty.ID)
+	if err != nil || !liveEmpty || cEmpty != "" {
+		t.Fatalf("live empty: %q live=%v err=%v", cEmpty, liveEmpty, err)
+	}
+
 	run := &models.Sandbox{Name: "approving-sb-runlive", Purpose: "run", Status: "running", RunID: "rl", NodeID: "n"}
 	db.Create(run)
 	ds.setStatus(run.Name, "running")
+	ds.fg.SetLogs(run.Name, "live run body")
 	db.Create(&models.SandboxLog{Name: run.Name, RunID: "rl", NodeID: "n", Content: "archived run body"})
 	c2, live2, err := s.NodeSandboxLog(ctx, "rl", "n")
-	if err != nil || live2 || c2 != "archived run body" {
-		t.Fatalf("node log: %q live=%v err=%v (want archived, live=false)", c2, live2, err)
+	if err != nil || !live2 || c2 != "live run body" {
+		t.Fatalf("node log: %q live=%v err=%v (want live, live=true)", c2, live2, err)
 	}
+
+	// Live read failure must propagate (not disguise as no-source / archive).
+	fail := &models.Sandbox{Name: "approving-sb-livefail", Purpose: "run", Status: "running", RunID: "rf", NodeID: "n"}
+	db.Create(fail)
+	ds.setStatus(fail.Name, "running")
+	ds.fg.FailLogs = true
+	if _, _, err := s.NodeSandboxLog(ctx, "rf", "n"); err == nil {
+		t.Fatal("live logs failure should error")
+	}
+	ds.fg.FailLogs = false
 }
 
 func TestSandboxFindReusable(t *testing.T) {

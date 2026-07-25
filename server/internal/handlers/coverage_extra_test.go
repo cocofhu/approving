@@ -167,7 +167,7 @@ func TestV1ArtifactsAndListKeys(t *testing.T) {
 	}
 	run := models.Run{
 		ID: "run-art", WorkflowID: "wf-art", WorkflowName: "API WF",
-		Status: "succeeded", Trigger: "API 触发", Graph: minimalGraph(),
+		Status: "succeeded", Trigger: models.TriggerAPI, Graph: minimalGraph(),
 	}
 	if err := hn.db.Create(&run).Error; err != nil {
 		t.Fatal(err)

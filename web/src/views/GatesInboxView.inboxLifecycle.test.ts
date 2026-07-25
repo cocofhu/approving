@@ -12,7 +12,6 @@ const mocks = vi.hoisted(() => ({
   inboxContext: vi.fn(),
   resumeGate: vi.fn(),
   reactReply: vi.fn(),
-  refresh: vi.fn(async () => undefined),
   runEventsWsUrl: vi.fn((id: string) => `ws://test/runs/${id}/events`),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
@@ -53,18 +52,25 @@ vi.mock('@/lib/useToast', () => ({
   }),
 }))
 
+const filterState = vi.hoisted(() => ({
+  pipelineSelected: null as { value: string } | null,
+  projectSelected: null as { value: string } | null,
+}))
+
 vi.mock('@/lib/usePipelineFilter', async () => {
   const { ref } = await import('vue')
+  filterState.pipelineSelected = ref('')
   return {
-    usePipelineFilter: () => ({ selected: ref('') }),
+    usePipelineFilter: () => ({ selected: filterState.pipelineSelected! }),
   }
 })
 
 vi.mock('@/lib/useProjectContext', async () => {
   const { ref } = await import('vue')
+  filterState.projectSelected = ref('')
   return {
     useProjectContext: () => ({
-      selected: ref(''),
+      selected: filterState.projectSelected!,
       ensureHydrated: vi.fn(),
     }),
   }
@@ -81,27 +87,11 @@ vi.mock('@/lib/useClarifyDraft', async () => {
   }
 })
 
-vi.mock('@/lib/usePendingGates', async () => {
-  const { ref } = await import('vue')
-  const actual = await vi.importActual<typeof import('@/lib/usePendingGates')>('@/lib/usePendingGates')
-  return {
-    ...actual,
-    usePendingGates: () => ({
-      displayedItems: ref([]),
-      remoteItems: ref([]),
-      totalCount: ref(0),
-      refresh: mocks.refresh,
-      peek: vi.fn(async () => undefined),
-      applyPending: vi.fn(),
-      hasPendingUpdate: ref(false),
-      pendingMeta: ref(null),
-      lastPeekAt: ref(0),
-      itemKey: actual.itemKey,
-    }),
-  }
-})
+// Use the real usePendingGates singleton (api.listGates is mocked) so peek/force
+// races and sidebar totalCount stay covered — do not stub the composable away.
 
 import GatesInboxView from './GatesInboxView.vue'
+import { usePendingGates } from '@/lib/usePendingGates'
 
 function paged(items: InboxItem[]) {
   return { items, total: items.length, page: 1, pageSize: 20 }
@@ -218,13 +208,17 @@ function inboxCallsFor(runId: string, nodeId: string, iteration = 1) {
   )
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks()
   FakeWebSocket.instances = []
   vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket)
   mocks.resumeGate.mockResolvedValue({ status: 'ok' })
   mocks.reactReply.mockResolvedValue({ status: 'ok' })
-  mocks.refresh.mockResolvedValue(undefined)
+  if (filterState.pipelineSelected) filterState.pipelineSelected.value = ''
+  if (filterState.projectSelected) filterState.projectSelected.value = ''
+  // Reset singleton so each test starts from an empty pending badge/list.
+  mocks.listGates.mockResolvedValue(paged([]))
+  await usePendingGates().refresh({ mode: 'force' })
   mocks.inboxContext.mockImplementation(async (runId: string, nodeId: string) => {
     if (nodeId.startsWith('clarify-')) {
       return {
@@ -745,27 +739,31 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     const b = gateItem('b')
     let list = [a, b]
     mocks.listGates.mockImplementation(async () => paged(list))
-    mocks.refresh.mockRejectedValueOnce(new Error('refresh blew up'))
 
     const wrapper = mountInbox()
     await flushPromises()
     await nextTick()
 
+    // Force refresh + loadList both fail after resume — local converge must still win.
     list = [b]
+    mocks.listGates.mockRejectedValueOnce(new Error('refresh blew up'))
+    mocks.listGates.mockRejectedValueOnce(new Error('loadList blew up'))
     await wrapper.get('[data-testid="resolve-btn"]').trigger('click')
     await flushPromises()
     await nextTick()
     await flushPromises()
 
-    // Local converge + unlock must happen even when submit refresh throws.
+    // Local converge + unlock must happen even when submit refresh soft-fails.
     expect(wrapper.text()).not.toContain('Gate a')
     expect(wrapper.text()).toContain('Gate b')
     expect(inboxCallsFor('run-b', 'gate-b', 1).length).toBeGreaterThan(0)
+    expect(usePendingGates().totalCount.value).toBe(1)
 
     // Lock released: user can select another (re-select b after converge is fine;
     // add a third via list to prove selectItem is not ignored).
     const c = gateItem('c')
     list = [b, c]
+    mocks.listGates.mockImplementation(async () => paged(list))
     const refreshBtn = wrapper.findAll('button').find((btn) => btn.text().includes('刷新'))
     expect(refreshBtn).toBeTruthy()
     await refreshBtn!.trigger('click')
@@ -785,13 +783,14 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     const b = clarifyItem('b')
     let list = [a, b]
     mocks.listGates.mockImplementation(async () => paged(list))
-    mocks.refresh.mockRejectedValueOnce(new Error('refresh blew up'))
 
     const wrapper = mountInbox()
     await flushPromises()
     await nextTick()
 
     list = [b]
+    mocks.listGates.mockRejectedValueOnce(new Error('refresh blew up'))
+    mocks.listGates.mockRejectedValueOnce(new Error('loadList blew up'))
     await wrapper.get('[data-testid="clarify-send"]').trigger('click')
     await flushPromises()
     await nextTick()
@@ -802,9 +801,11 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     expect(wrapper.text()).toContain('Clarify b')
     expect(inboxCallsFor('run-b', 'clarify-b', 1).length).toBeGreaterThan(0)
     expect(mocks.toastSuccess).toHaveBeenCalled()
+    expect(usePendingGates().totalCount.value).toBe(1)
 
     const c = clarifyItem('c')
     list = [b, c]
+    mocks.listGates.mockImplementation(async () => paged(list))
     const refreshBtn = wrapper.findAll('button').find((btn) => btn.text().includes('刷新'))
     expect(refreshBtn).toBeTruthy()
     expect(refreshBtn!.attributes('disabled')).toBeUndefined()
@@ -845,11 +846,11 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     expect(refreshBtn).toBeTruthy()
     expect(refreshBtn!.attributes('disabled')).toBeDefined()
 
-    const refreshCallsBefore = mocks.refresh.mock.calls.length
+    const listCallsBefore = mocks.listGates.mock.calls.length
     // Even if a click is synthesized, processingLock short-circuits onManualRefresh.
     await refreshBtn!.trigger('click')
     await flushPromises()
-    expect(mocks.refresh.mock.calls.length).toBe(refreshCallsBefore)
+    expect(mocks.listGates.mock.calls.length).toBe(listCallsBefore)
 
     // Selection must stay on a while locked.
     expect(wrapper.find('[data-testid="resolve-btn"]').exists()).toBe(true)
@@ -865,6 +866,77 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     expect(wrapper.text()).toContain('Gate b')
     const refreshAfter = wrapper.findAll('button').find((btn) => btn.text().includes('刷新'))
     expect(refreshAfter?.attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('approve success: list removes item, detail is not Run # - shell, counts sync', async () => {
+    const a = gateItem('a')
+    const b = gateItem('b')
+    let list: InboxItem[] = [a, b]
+    mocks.listGates.mockImplementation(async () => paged(list))
+
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+
+    list = [b]
+    await wrapper.get('[data-testid="resolve-btn"]').trigger('click')
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Gate a')
+    expect(wrapper.text()).toContain('Gate b')
+    expect(wrapper.text()).not.toMatch(/Run #\s*-/)
+    expect(wrapper.text()).toContain('Run #b')
+    expect(usePendingGates().totalCount.value).toBe(1)
+    expect(usePendingGates().displayedItems.value.map((it) => it.nodeId)).toEqual(['gate-b'])
+    wrapper.unmount()
+  })
+
+  it('late overlapping listGates after unlock does not restore ghost or Run # - shell', async () => {
+    const only = gateItem('solo')
+    let list: InboxItem[] = [only]
+    mocks.listGates.mockImplementation(async () => paged(list))
+
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+    expect(wrapper.text()).toContain('Gate solo')
+    expect(wrapper.text()).toContain('Run #solo')
+
+    // Start a background loadList via filter watch; keep its snapshot pending.
+    let releaseStale!: (value: ReturnType<typeof paged>) => void
+    mocks.listGates.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseStale = resolve
+        }),
+    )
+    filterState.pipelineSelected!.value = 'wf-stale'
+    await flushPromises()
+
+    // Approve while the stale listGates is still in flight.
+    list = []
+    mocks.listGates.mockImplementation(async () => paged(list))
+    await wrapper.get('[data-testid="resolve-btn"]').trigger('click')
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    // Converged empty inbox — no Run # - shell, no ghost card.
+    expect(wrapper.text()).not.toContain('Gate solo')
+    expect(wrapper.text()).not.toMatch(/Run #\s*-/)
+    expect(wrapper.find('[data-testid="resolve-btn"]').exists()).toBe(false)
+    expect(usePendingGates().totalCount.value).toBe(0)
+
+    // Stale snapshot arrives with the approved item — must be discarded.
+    releaseStale(paged([only]))
+    await flushPromises()
+    await nextTick()
+    expect(wrapper.text()).not.toContain('Gate solo')
+    expect(wrapper.text()).not.toMatch(/Run #\s*-/)
+    expect(usePendingGates().totalCount.value).toBe(0)
     wrapper.unmount()
   })
 })

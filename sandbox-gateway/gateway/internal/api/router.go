@@ -34,6 +34,7 @@ func NewRouter(h *Handler, cfg *config.Config) *gin.Engine {
 		v1.DELETE("/sandboxes/:id", h.Destroy)
 		v1.GET("/sandboxes/:id/status", h.Status)
 		v1.GET("/sandboxes/:id/hosts/:port", h.Host)
+		v1.GET("/sandboxes/:id/logs", h.Logs)
 	}
 	return r
 }

@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"html"
 	"io"
 	"net"
@@ -20,6 +21,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
+	"gorm.io/gorm"
 )
 
 func parseUintParam(c *gin.Context, name string) (uint, bool) {
@@ -135,6 +137,8 @@ func (h *Handlers) SandboxEventLog(c *gin.Context) {
 // SandboxLog returns a sandbox container's raw stdout/stderr (docker logs),
 // preferring live output and falling back to the archived snapshot captured at
 // teardown. Used for post-mortem troubleshooting (e.g. failed git clone).
+// Read failures include an `error` field and must not be confused with
+// found=false (no log source).
 func (h *Handlers) SandboxLog(c *gin.Context) {
 	id, ok := parseUintParam(c, "id")
 	if !ok {
@@ -143,7 +147,7 @@ func (h *Handlers) SandboxLog(c *gin.Context) {
 	}
 	content, live, err := h.Sbx.SandboxLogByID(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"content": "", "live": false, "found": false})
+		writeSandboxLogErr(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"content": content, "live": live, "found": true})
@@ -163,16 +167,45 @@ func (h *Handlers) RunNodeSandbox(c *gin.Context) {
 }
 
 // NodeSandboxLog returns the container logs for a workflow run's node sandbox,
-// live if still running, otherwise the archived snapshot.
+// live if still running, otherwise the archived snapshot. Read failures include
+// an `error` field (found=false) so the UI can show an error state instead of
+// the empty "no source" placeholder.
 func (h *Handlers) NodeSandboxLog(c *gin.Context) {
 	runID := c.Param("id")
 	nodeID := c.Param("nodeId")
 	content, live, err := h.Sbx.NodeSandboxLog(c.Request.Context(), runID, nodeID)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"content": "", "live": false, "found": false})
+		writeSandboxLogErr(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"content": content, "live": live, "found": true})
+}
+
+// writeSandboxLogErr distinguishes "no log source" from control-plane read
+// failures while keeping HTTP 200 so clients can map six UI states without
+// treating a logs read error as a global API outage.
+func writeSandboxLogErr(c *gin.Context, err error) {
+	if isSandboxLogNoSource(err) {
+		c.JSON(http.StatusOK, gin.H{"content": "", "live": false, "found": false})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"content": "",
+		"live":    false,
+		"found":   false,
+		"error":   err.Error(),
+	})
+}
+
+func isSandboxLogNoSource(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return msg == "not found" || strings.Contains(msg, "record not found")
 }
 
 // GetSandbox returns one sandbox with live-derived status. The UI polls this

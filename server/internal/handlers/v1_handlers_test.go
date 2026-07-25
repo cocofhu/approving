@@ -83,13 +83,13 @@ func TestV1APIAuthAndIsolation(t *testing.T) {
 		t.Fatal("missing status")
 	}
 
-	// Verify trigger is API 触发
+	// Verify trigger defaults to api for /v1
 	run, ok := hn.h.Runs.Get(runID)
 	if !ok {
 		t.Fatal("run not found")
 	}
-	if run.Trigger != "API 触发" {
-		t.Fatalf("trigger: want API 触发 got %q", run.Trigger)
+	if run.Trigger != models.TriggerAPI {
+		t.Fatalf("trigger: want %q got %q", models.TriggerAPI, run.Trigger)
 	}
 
 	// Get run with valid key
@@ -167,7 +167,7 @@ func TestV1CancelRun(t *testing.T) {
 	graph := minimalGraph()
 	run := models.Run{
 		ID: "run-cancel-test", WorkflowID: "wf-cancel", WorkflowName: "API WF",
-		Status: "queued", Trigger: "API 触发", Graph: graph,
+		Status: "queued", Trigger: models.TriggerAPI, Graph: graph,
 	}
 	if err := hn.db.Create(&run).Error; err != nil {
 		t.Fatal(err)
@@ -194,7 +194,7 @@ func TestInternalStartRunUsesDraftGraph(t *testing.T) {
 	if err := hn.db.Create(&wf).Error; err != nil {
 		t.Fatal(err)
 	}
-	body, _ := json.Marshal(map[string]any{"inputs": map[string]any{}, "trigger": "手动触发"})
+	body, _ := json.Marshal(map[string]any{"inputs": map[string]any{}, "trigger": "manual"})
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/workflows/wf-internal/runs", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -212,8 +212,8 @@ func TestInternalStartRunUsesDraftGraph(t *testing.T) {
 	if run.Graph.Nodes[0].Label != "draft-head" {
 		t.Fatalf("internal run should use live draft graph")
 	}
-	if run.Trigger != "手动触发" {
-		t.Fatalf("trigger: want 手动触发 got %q", run.Trigger)
+	if run.Trigger != models.TriggerManual {
+		t.Fatalf("trigger: want %q got %q", models.TriggerManual, run.Trigger)
 	}
 }
 

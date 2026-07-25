@@ -53,6 +53,13 @@ func TestManagerNetworkHelpers(t *testing.T) {
 	if err != nil || logs != "" {
 		t.Fatalf("Logs: %q %v", logs, err)
 	}
+	fg.mu.Lock()
+	fg.recs["net-1"]["logs"] = "live-from-gw"
+	fg.mu.Unlock()
+	logs, err = m.Logs(ctx, "net-1", 100)
+	if err != nil || logs != "live-from-gw" {
+		t.Fatalf("Logs content: %q %v", logs, err)
+	}
 
 	m2 := NewManager(nil, ManagerOptions{})
 	if _, err := m2.HostForPort(ctx, "x", 1); err == nil {
@@ -60,6 +67,9 @@ func TestManagerNetworkHelpers(t *testing.T) {
 	}
 	if _, err := m2.EndpointAddr(ctx, "x", "session"); err == nil {
 		t.Fatal("nil gw EndpointAddr")
+	}
+	if _, err := m2.Logs(ctx, "x", 10); err == nil {
+		t.Fatal("nil gw Logs should error")
 	}
 
 	// HostForPort falls back to /hosts/:port when numeric endpoint is absent.

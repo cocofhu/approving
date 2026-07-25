@@ -655,6 +655,88 @@ describe('AgentStudio mobile core path', () => {
     expect(wrapper.text()).not.toContain('ACP 后端')
   })
 
+  it('mounts data panel on mobile instead of desktop-only tip', async () => {
+    mocks.listAgents.mockResolvedValue([agentWithFiles()])
+    const wrapper = await mountMobileStudio()
+    await flushPromises()
+
+    await wrapper.findAll('button').find((b) => b.text() === '数据')!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('请在桌面端完成')
+    expect(wrapper.find('agent-data-panel-stub').exists()).toBe(true)
+  })
+
+  it('keeps mcp/env/prompts desktop-only while data is allowed', async () => {
+    mocks.listAgents.mockResolvedValue([agentWithFiles()])
+    const wrapper = await mountMobileStudio()
+    await flushPromises()
+
+    for (const label of ['MCP', '环境变量', '提示词']) {
+      const btn = wrapper.findAll('button').find((b) => b.text().startsWith(label))
+      expect(btn).toBeTruthy()
+      await btn!.trigger('click')
+      await flushPromises()
+      expect(wrapper.text()).toContain('请在桌面端完成')
+      expect(wrapper.find('agent-data-panel-stub').exists()).toBe(false)
+    }
+  })
+
+  it('deep-links to data sub-tab on mobile without desktop-only tip', async () => {
+    mocks.listAgents.mockResolvedValue([{ ...agentWithFiles(), name: 'alpha' }])
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const router = await createStudioRouter({ agent: 'alpha', tab: 'data', sub: 'jobs' })
+    const wrapper = mount(AgentStudioView, {
+      global: {
+        plugins: [i18n, router],
+        stubs: {
+          AppButton: ButtonStub,
+          Icon: true,
+          AppModal: ModalStub,
+          CodeEditor: CodeEditorStub,
+          MarkdownSplitEditor: MdStub,
+          ExplorerContextMenu: true,
+          AgentChatTester: true,
+          AgentGitGuide: true,
+          AgentCreateWizard: true,
+          AgentOrgSidebar: true,
+          AgentDataPanel: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('请在桌面端完成')
+    const panel = wrapper.find('agent-data-panel-stub')
+    expect(panel.exists()).toBe(true)
+    expect(panel.attributes('sub-tab') || panel.attributes('subtab')).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  it('unbound agent shows desktop-bind empty state without goBind on mobile', async () => {
+    mocks.listAgents.mockResolvedValue([
+      {
+        ...agentWithFiles(),
+        projectId: '',
+      },
+    ])
+    const wrapper = await mountMobileStudio()
+    await flushPromises()
+
+    await wrapper.findAll('button').find((b) => b.text() === '数据')!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('尚未绑定主项目')
+    expect(wrapper.text()).toContain('请在桌面端')
+    expect(wrapper.text()).not.toContain('去绑定主项目')
+    expect(wrapper.find('agent-data-panel-stub').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('请在桌面端完成')
+  })
+
   it('shows switch entry and opens org sheet with groups/ungrouped', async () => {
     mocks.listAgents.mockResolvedValue([
       { ...agentWithFiles(), name: 'alpha' },

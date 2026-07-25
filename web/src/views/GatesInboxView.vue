@@ -52,6 +52,7 @@ const {
   refresh,
   peek,
   applyPending,
+  removeItemLocally,
   hasPendingUpdate,
   pendingMeta,
   lastPeekAt,
@@ -64,6 +65,8 @@ let listSnapshotForNeighbor: InboxItem[] = []
 const listTotal = ref(0)
 const listPage = ref(1)
 const listLoading = ref(false)
+/** Monotonic generation: stale listGates responses must not overwrite local converge. */
+let listLoadGeneration = 0
 const { isMobile } = useBreakpoint()
 const active = ref<InboxItem | null>(null)
 const mobileView = ref<'list' | 'detail'>('list')
@@ -184,12 +187,38 @@ function shouldFetchActiveInboxContext() {
   return true
 }
 
+/** Invalidate in-flight loadList writebacks (e.g. after local approve converge). */
+function invalidateListLoads() {
+  listLoadGeneration++
+}
+
 /** Drop a lagging list row so users cannot re-select a processed ghost. */
 function removeListItemLocally(removedKey: string) {
+  // Any older listGates still in flight must not restore this row after unlock.
+  invalidateListLoads()
   const before = listItems.value.length
   listItems.value = listItems.value.filter((row) => itemKey(row) !== removedKey)
   const removed = before - listItems.value.length
   if (removed > 0) listTotal.value = Math.max(0, listTotal.value - removed)
+  // Keep sidebar badge / singleton in lockstep with the page list.
+  removeItemLocally(removedKey)
+}
+
+/**
+ * List non-empty + invalid/missing active → pick first valid item.
+ * Empty list → clear active (full empty inbox). Never leave a Run # - shell.
+ */
+function ensureValidActive() {
+  if (processingLock.value) return
+  const list = listItems.value
+  if (!list.length) {
+    if (active.value) active.value = null
+    return
+  }
+  if (active.value && list.some((it) => itemKey(it) === itemKey(active.value!))) {
+    return
+  }
+  active.value = list[0]
 }
 
 /**
@@ -235,6 +264,7 @@ function handleLeftInboxContext(it: InboxItem) {
 }
 
 async function loadList({ showLoading = false }: { showLoading?: boolean } = {}) {
+  const gen = ++listLoadGeneration
   if (showLoading) listLoading.value = true
   try {
     const data = await api.listGates({
@@ -243,6 +273,8 @@ async function loadList({ showLoading = false }: { showLoading?: boolean } = {})
       wf: selected.value || undefined,
       projectId: selectedProject.value || undefined,
     })
+    // Discard overdue snapshots so they cannot resurrect a just-removed gate.
+    if (gen !== listLoadGeneration) return
     listSnapshotForNeighbor = listItems.value.slice()
     if (isPaginated(data)) {
       listItems.value = data.items
@@ -252,10 +284,12 @@ async function loadList({ showLoading = false }: { showLoading?: boolean } = {})
       listTotal.value = data.length
     }
     reconcileProcessedWithList(listItems.value)
+    // Independent loadList success path: repair invalid selection (no Run # - shell).
+    if (!processingLock.value) ensureValidActive()
   } catch {
     /* keep previous list on transient failure */
   } finally {
-    listLoading.value = false
+    if (gen === listLoadGeneration) listLoading.value = false
   }
 }
 
@@ -1124,18 +1158,18 @@ function badgeLabel(it: InboxItem) {
         <Pagination v-if="listTotal > PAGE_SIZE" v-model:page="listPage" :page-size="PAGE_SIZE" :total="listTotal" />
       </div>
 
-      <div class="flex h-full max-h-full min-h-0 min-w-0 flex-col">
+      <div v-if="active" class="flex h-full max-h-full min-h-0 min-w-0 flex-col">
         <div class="card flex max-h-full w-full min-h-0 flex-col overflow-hidden">
           <div class="flex shrink-0 items-center justify-between border-b border-line px-4 py-2.5">
-            <span class="text-xs text-txt3">Run #{{ active?.runId.replace('run-', '') }} · {{ active?.nodeId }}</span>
-            <button class="text-xs text-accent-2 hover:underline" @click="router.push('/runs/' + active?.runId)">
+            <span class="text-xs text-txt3">Run #{{ active.runId.replace('run-', '') }} · {{ active.nodeId }}</span>
+            <button class="text-xs text-accent-2 hover:underline" @click="router.push('/runs/' + active.runId)">
               {{ t('common.buttons.openRunDetail') }}
             </button>
           </div>
           <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
             <ArtifactLoadingPane v-if="activeRunLoading" message-key="pages.gatesInbox.loadingRun" />
             <GateApproval
-              v-else-if="active?.type === 'gate'"
+              v-else-if="active.type === 'gate'"
               ref="gateApprovalRef"
               :key="active.runId + active.nodeId"
               :gate="activeGate!"
@@ -1145,7 +1179,7 @@ function badgeLabel(it: InboxItem) {
               @react-revised="onReactRevised"
             />
             <ReviewShell
-              v-else-if="active?.type === 'clarify' && activeClarify"
+              v-else-if="active.type === 'clarify' && activeClarify"
               :key="active.runId + active.nodeId"
               class="min-h-0 flex-1"
               :sidebar-width="400"
@@ -1183,7 +1217,7 @@ function badgeLabel(it: InboxItem) {
               </template>
             </ReviewShell>
             <ClarifyProductStage
-              v-else-if="active?.type === 'clarify'"
+              v-else-if="active.type === 'clarify'"
               :product-nodes="[]"
               :selected-product-id="null"
               stage-kind="loadFailed"

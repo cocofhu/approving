@@ -108,6 +108,14 @@ func (fg *gatewayFake) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		enc(map[string]any{"status": rec["status"]})
+	case len(parts) == 2 && parts[1] == "logs" && r.Method == http.MethodGet:
+		rec := fg.recs[parts[0]]
+		if rec == nil {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		content, _ := rec["logs"].(string)
+		enc(map[string]any{"content": content})
 	default:
 		http.NotFound(w, r)
 	}
@@ -220,6 +228,34 @@ func TestGatewayClientHTTPErrors(t *testing.T) {
 	}
 	if _, err := bad.Get(context.Background(), "missing"); err == nil {
 		t.Fatal("expected get error")
+	}
+}
+
+func TestGatewayClientLogs(t *testing.T) {
+	cli, fg := newGatewayFake(t, "")
+	ctx := context.Background()
+	sb, err := cli.Create(ctx, GWCreateRequest{})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	fg.mu.Lock()
+	fg.recs[sb.ID]["logs"] = "line1\nline2"
+	fg.mu.Unlock()
+
+	out, err := cli.Logs(ctx, sb.ID, 100)
+	if err != nil || out != "line1\nline2" {
+		t.Fatalf("Logs: %q err=%v", out, err)
+	}
+	// Empty content is success.
+	fg.mu.Lock()
+	fg.recs[sb.ID]["logs"] = ""
+	fg.mu.Unlock()
+	out, err = cli.Logs(ctx, sb.ID, 0)
+	if err != nil || out != "" {
+		t.Fatalf("empty Logs: %q err=%v", out, err)
+	}
+	if _, err := cli.Logs(ctx, "missing", 10); err == nil {
+		t.Fatal("missing sandbox logs should error")
 	}
 }
 

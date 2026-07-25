@@ -258,7 +258,7 @@ async function startRun() {
 
   try {
     if (props.beforeStart) await props.beforeStart()
-    const res = await api.startRun(props.workflowId, inputs, '手动触发', priority.value)
+    const res = await api.startRun(props.workflowId, inputs, 'manual', priority.value)
     successRunId.value = res.id
     emit('started', res.id)
     phase.value = 'success'

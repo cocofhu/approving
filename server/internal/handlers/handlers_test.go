@@ -304,7 +304,7 @@ func TestWorkflowEndpoints(t *testing.T) {
 	}
 
 	// Start a run against the published workflow.
-	if w := h.do("POST", "/api/workflows/"+id+"/runs", map[string]any{"trigger": "test"}); w.Code != 200 {
+	if w := h.do("POST", "/api/workflows/"+id+"/runs", map[string]any{"trigger": "manual"}); w.Code != 200 {
 		t.Fatalf("start run: %d %s", w.Code, w.Body)
 	}
 	// Start against missing workflow.
@@ -433,7 +433,7 @@ func TestRunPriorityEndpoints(t *testing.T) {
 	}
 
 	// Start run with high priority via internal API.
-	w = h.do("POST", "/api/workflows/wf-pri/runs", map[string]any{"trigger": "test", "priority": "high"})
+	w = h.do("POST", "/api/workflows/wf-pri/runs", map[string]any{"trigger": "manual", "priority": "high"})
 	if w.Code != 200 {
 		t.Fatalf("start with priority: %d %s", w.Code, w.Body)
 	}
@@ -1340,6 +1340,28 @@ func TestSandboxLogFoundBranches(t *testing.T) {
 	// GetSandbox view + Events (dead port -> error) exercise more branches.
 	if w := h.do("GET", "/api/sandboxes/"+uintToStr(row.ID), nil); w.Code != 200 {
 		t.Fatalf("get sandbox: %d", w.Code)
+	}
+}
+
+// TestSandboxLogLiveErrorSurfaced ensures a live logs read failure returns an
+// error field (found=false) rather than the empty "no source" disguise.
+func TestSandboxLogLiveErrorSurfaced(t *testing.T) {
+	h := newHarness(t)
+	row := &models.Sandbox{Name: "approving-sb-logerr", Purpose: "run", Status: "running", RunID: "runE", NodeID: "n1"}
+	h.db.Create(row)
+	h.fg.SetStatus(row.Name, "running")
+	h.fg.FailLogs = true
+
+	w := h.do("GET", "/api/runs/runE/nodes/n1/sandbox-log", nil)
+	if w.Code != 200 {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `"found":false`) || !strings.Contains(body, `"error"`) {
+		t.Fatalf("want found=false with error, got %s", body)
+	}
+	if strings.Contains(body, "暂无沙箱日志") {
+		t.Fatal("error must not use empty-state copy")
 	}
 }
 
