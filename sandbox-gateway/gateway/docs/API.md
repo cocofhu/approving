@@ -197,11 +197,36 @@ GET /api/v1/sandboxes/:id/hosts/:port  ->  {"port":8744,"address":"10.0.0.21:874
 | `stopped`  | stopped but retained (restartable via `start`)             |
 | `error`    | provisioning or reconcile failed (see `error` field)       |
 
+## Container logs (read-only)
+
+```
+GET /api/v1/sandboxes/:id/logs
+GET /api/v1/sandboxes/:id/logs?tail=5000
+```
+
+Returns the sandbox PID1 combined stdout/stderr as a synchronous JSON body
+(non-follow). Used for infrastructure / boot troubleshooting — not a substitute
+for the agent execution event log.
+
+```json
+{"content": "[boot] sandbox container started\n…"}
+```
+
+| Query | Default | Notes |
+|-------|---------|-------|
+| `tail` | `5000` | Lines from the end of the log stream (`docker logs --tail`) |
+
+- **Docker driver**: implemented via `docker logs --tail` (stdout+stderr).
+- **Kubernetes driver**: returns `501` (`sandbox logs not supported by this driver`).
+- Missing sandbox → `404`. Driver / docker CLI failure → `500` with `error`.
+
 ## What the gateway does NOT do
 
 - No `exec` / file / terminal endpoints. Run commands and move files by
   connecting directly to the sandbox **SSH (`22`)** or the WSP/1 session.
 - No reverse proxy for code-server, session, or preview. Clients connect to the
   returned endpoint addresses directly.
+- No streaming / follow logs (`?follow=1` / SSE). Clients re-fetch on demand.
+- No kubernetes log retrieval in this release (explicit `501`).
 - code-flow's former `/api/changes` is gone from the image; compute "changes"
   by running `git` over a direct SSH/exec connection.

@@ -26,6 +26,7 @@ type record struct {
 	image     string
 	labels    map[string]string
 	endpoints map[string]string
+	logs      string // canned PID1 stdout/stderr for GET …/logs
 }
 
 // FakeGateway is an httptest-backed stand-in for the sandbox-gateway. Zero
@@ -43,6 +44,7 @@ type FakeGateway struct {
 	FailCreate bool // POST /sandboxes returns 500
 	FailList   bool // GET /sandboxes returns 500
 	FailGet    bool // GET /sandboxes/:id returns 500
+	FailLogs   bool // GET /sandboxes/:id/logs returns 500
 
 	ListCalls int // number of GET /sandboxes (list) calls served
 }
@@ -105,6 +107,15 @@ func (fg *FakeGateway) SetStatus(id, status string) {
 // Seed registers a running sandbox by id (convenience for SetStatus(id,"running")).
 func (fg *FakeGateway) Seed(id string) { fg.SetStatus(id, "running") }
 
+// SetLogs sets canned PID1 logs returned by GET /sandboxes/:id/logs.
+func (fg *FakeGateway) SetLogs(id, content string) {
+	fg.mu.Lock()
+	defer fg.mu.Unlock()
+	if rec := fg.recs[id]; rec != nil {
+		rec.logs = content
+	}
+}
+
 // SetEndpoints overrides the published endpoints map for a seeded sandbox.
 // Used by proxy tests to point ide/session at a non-loopback (or test upstream)
 // host:port without changing Create defaults.
@@ -139,6 +150,8 @@ func (fg *FakeGateway) handle(w http.ResponseWriter, r *http.Request) {
 		fg.status(w, parts[0])
 	case len(parts) == 2 && (parts[1] == "stop" || parts[1] == "start") && r.Method == http.MethodPost:
 		fg.stopStart(w, parts[0], parts[1])
+	case len(parts) == 2 && parts[1] == "logs" && r.Method == http.MethodGet:
+		fg.logs(w, parts[0])
 	case len(parts) == 3 && parts[1] == "hosts" && r.Method == http.MethodGet:
 		fg.hostForPort(w, parts[0], parts[2])
 	default:
@@ -242,6 +255,21 @@ func (fg *FakeGateway) hostForPort(w http.ResponseWriter, id, port string) {
 		return
 	}
 	writeJSON(w, map[string]string{"address": "127.0.0.1:" + port})
+}
+
+func (fg *FakeGateway) logs(w http.ResponseWriter, id string) {
+	if fg.FailLogs {
+		http.Error(w, "logs failed", http.StatusInternalServerError)
+		return
+	}
+	fg.mu.Lock()
+	rec := fg.recs[id]
+	fg.mu.Unlock()
+	if rec == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, map[string]string{"content": rec.logs})
 }
 
 func (fg *FakeGateway) dto(rec *record) map[string]any {

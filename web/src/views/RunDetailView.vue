@@ -254,7 +254,8 @@ async function loadEarlierEvents(nodeId: string) {
 // Raw sandbox container logs (docker logs stdout/stderr): live while the node's
 // container runs, then the archived snapshot captured at teardown. Kept for
 // post-mortem troubleshooting (e.g. a failed git clone in startup.sh).
-const sbxLogs = reactive<Record<string, { content: string; live: boolean; found: boolean }>>({})
+type SbxLogState = { content: string; live: boolean; found: boolean; error?: string }
+const sbxLogs = reactive<Record<string, SbxLogState>>({})
 const sandboxLookup = ref<SandboxView | null>(null)
 // Boot dwell/timeout must survive LiveLogPanel remounts (log ↔ sandbox / other tabs).
 const liveLogBootSessions = reactive<Record<string, LiveLogBootSession>>({})
@@ -262,9 +263,17 @@ async function fetchSandboxLog(nodeId: string | null) {
   if (!nodeId) return
   try {
     const r = await api.nodeSandboxLog(runId.value, nodeId)
-    if (r.found) sbxLogs[nodeId] = r
-  } catch {
-    // ignore — keep any prior snapshot
+    // Always write the response so empty live / found=false / error map correctly
+    // (do not treat empty content as "no update").
+    sbxLogs[nodeId] = {
+      content: r.content ?? '',
+      live: !!r.live,
+      found: !!r.found,
+      error: r.error || undefined,
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    sbxLogs[nodeId] = { content: '', live: false, found: false, error: msg || 'sandbox log request failed' }
   }
 }
 
@@ -1756,7 +1765,14 @@ function selectExecution(nodeId: string, idx: number) {
                 <div class="flex items-center gap-2 border-b border-line px-3 py-1.5 text-[11px] text-txt3">
                   <Icon name="terminal" :size="12" />
                   <span>{{ t('pages.runDetail.sandboxLog.title') }}</span>
-                  <span v-if="sbxLog?.live" class="inline-flex items-center rounded-full border border-accent/40 bg-accent-dim px-2 py-0.5 text-[10px] text-accent">{{ t('pages.runDetail.sandboxLog.live') }}</span>
+                  <span
+                    v-if="sbxLog?.error"
+                    class="inline-flex items-center rounded-full border border-err/40 bg-err/10 px-2 py-0.5 text-[10px] text-err"
+                  >{{ t('pages.runDetail.sandboxLog.errorBadge') }}</span>
+                  <span
+                    v-else-if="sbxLog?.live"
+                    class="inline-flex items-center rounded-full border border-accent/40 bg-accent-dim px-2 py-0.5 text-[10px] text-accent"
+                  >{{ t('pages.runDetail.sandboxLog.live') }}</span>
                   <span v-else-if="sbxLog?.found" class="chip">{{ t('pages.runDetail.sandboxLog.archived') }}</span>
                   <div class="flex-1" />
                   <button
@@ -1770,7 +1786,23 @@ function selectExecution(nodeId: string, idx: number) {
                   <button class="text-txt3 hover:text-txt" :title="t('common.buttons.refresh')" @click="fetchSandboxLog(selected)"><Icon name="refresh" :size="12" /></button>
                 </div>
                 <div class="scroll-area min-h-0 flex-1 overflow-auto bg-base p-3">
-                  <pre v-if="sbxLog?.content" class="min-w-max whitespace-pre font-mono text-[11px] leading-relaxed text-txt2">{{ sbxLog.content }}</pre>
+                  <div
+                    v-if="sbxLog?.error"
+                    class="rounded-lg border border-err/30 bg-err/10 px-3 py-2.5 text-[12px] text-err"
+                    data-testid="sandbox-log-error"
+                  >
+                    <strong class="mb-1 block">{{ t('pages.runDetail.sandboxLog.errorTitle') }}</strong>
+                    <span>{{ sbxLog.error }}</span>
+                  </div>
+                  <pre
+                    v-else-if="sbxLog?.found && sbxLog.content"
+                    class="min-w-max whitespace-pre font-mono text-[11px] leading-relaxed text-txt2"
+                  >{{ sbxLog.content }}</pre>
+                  <pre
+                    v-else-if="sbxLog?.found && sbxLog.live"
+                    class="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-txt3"
+                    data-testid="sandbox-log-live-empty"
+                  >{{ t('pages.runDetail.sandboxLog.liveEmpty') }}</pre>
                   <div v-else class="flex h-full items-center justify-center text-center text-[12px] text-txt3">
                     <div>
                       <Icon name="terminal" :size="24" class="mx-auto mb-2 opacity-40" />

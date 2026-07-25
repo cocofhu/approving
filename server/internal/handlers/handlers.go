@@ -365,10 +365,12 @@ func (h *Handlers) StartRun(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
 		return
 	}
-	if b.Trigger == "" {
-		b.Trigger = "手动触发"
+	trigger, err := models.ResolveTrigger(b.Trigger, models.TriggerManual)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
-	run, err := h.Eng.StartRunWithPriority(c.Param("id"), b.Inputs, b.Trigger, b.Priority)
+	run, err := h.Eng.StartRunWithPriority(c.Param("id"), b.Inputs, trigger, b.Priority)
 	if err != nil {
 		_ = c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

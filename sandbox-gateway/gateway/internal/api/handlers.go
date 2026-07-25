@@ -307,6 +307,31 @@ func (h *Handler) Host(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"port": port, "address": addr})
 }
 
+// Logs handles GET /sandboxes/:id/logs?tail= — synchronous PID1 stdout/stderr.
+func (h *Handler) Logs(c *gin.Context) {
+	tail := 5000
+	if raw := strings.TrimSpace(c.Query("tail")); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tail"})
+			return
+		}
+		if n > 0 {
+			tail = n
+		}
+	}
+	content, err := h.svc.Logs(c.Request.Context(), c.Param("id"), tail)
+	if err != nil {
+		if errors.Is(err, service.ErrLogsUnsupported) {
+			c.JSON(http.StatusNotImplemented, gin.H{"error": err.Error()})
+			return
+		}
+		h.notFoundOr500(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"content": content})
+}
+
 func (h *Handler) notFoundOr500(c *gin.Context, err error) {
 	if errors.Is(err, store.ErrNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "sandbox not found"})

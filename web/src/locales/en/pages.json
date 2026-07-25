@@ -495,6 +495,8 @@
       "subtitle": "Run history for all workflows",
       "queued": "queued",
       "cancelConfirm": "Only this run is stopped; the list row status will refresh after success.",
+      "deleteConfirm": "Only this run is removed; the list will refresh after success.",
+      "deleteSuccess": "Run deleted; list refreshed",
       "loadFailedTitle": "Failed to load runs",
       "loadFailedDesc": "Could not fetch run history. Background polling will retry automatically. Filters and pagination remain available."
     },
@@ -569,8 +571,11 @@
       },
       "sandboxLog": {
         "title": "Sandbox container log · stdout/stderr",
-        "live": "Live",
-        "archived": "Archived",
+        "live": "live",
+        "archived": "archived",
+        "errorBadge": "error",
+        "errorTitle": "Unable to read sandbox log",
+        "liveEmpty": "(connected · no stdout/stderr output yet)",
         "pending": "Node not started yet; no sandbox log",
         "empty": "No sandbox log (container not created or recycled without archive)"
       }
@@ -1324,7 +1329,7 @@
         "hint": "Data belongs to home project \"{project}\". Manage memories, threads, and jobs here.",
         "unsavedBinding": "Home project binding is unsaved; data panel and chat test still use the saved binding.",
         "emptyTitle": "No home project",
-        "emptyDesc": "Bind a home project under Metadata first.",
+        "emptyDesc": "Please bind a home project under Metadata on desktop before managing memories, threads, or jobs.",
         "goBind": "Bind home project",
         "tabs": {
           "memory": "Memory",
@@ -1354,7 +1359,12 @@
           "colName": "Name",
           "colSchedule": "Schedule",
           "colEnabled": "Enabled",
-          "colDeliver": "Deliver"
+          "colDeliver": "Deliver to channel",
+          "enabledOn": "Job enabled",
+          "enabledOff": "Job paused",
+          "deliverOn": "Channel delivery enabled",
+          "deliverOff": "Channel delivery disabled",
+          "deleted": "Job deleted"
         }
       }
     },

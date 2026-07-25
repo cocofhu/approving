@@ -322,12 +322,17 @@ func (s *SandboxService) UnregisterRunSandbox(name string) {
 // the sandbox_logs table (keyed by container name), copying run/node/profile
 // attribution from the live sandbox row when present. Best-effort: a container
 // that is already gone (empty output) is skipped so we never clobber a prior
-// good snapshot with an empty one.
+// good snapshot with an empty one. Read failures are logged and skipped — they
+// must not block teardown.
 func (s *SandboxService) archiveLog(ctx context.Context, name string) {
 	if name == "" {
 		return
 	}
-	out, _ := s.mgr.Logs(ctx, name, 5000)
+	out, err := s.mgr.Logs(ctx, name, 5000)
+	if err != nil {
+		log.Warn().Err(err).Str("name", name).Msg("archive sandbox log: read failed")
+		return
+	}
 	if strings.TrimSpace(out) == "" {
 		return
 	}
@@ -377,9 +382,10 @@ func (s *SandboxService) SandboxViewForRunNode(ctx context.Context, runID, nodeI
 }
 
 // NodeSandboxLog returns the container logs for a workflow run's node sandbox.
-// If the sandbox is still live, it fetches fresh logs from the container;
-// otherwise it falls back to the archived snapshot captured at teardown. The
-// returned `live` flag reflects which source was used.
+// If the sandbox is still live, it fetches fresh logs from the container
+// (including a successful empty read → live=true); otherwise it falls back to
+// the archived snapshot captured at teardown. Live read failures are returned
+// to the caller and must not be disguised as "no log source".
 func (s *SandboxService) NodeSandboxLog(ctx context.Context, runID, nodeID string) (content string, live bool, err error) {
 	var row models.Sandbox
 	q := s.db.Where("run_id = ? AND purpose = ?", runID, "run")
@@ -388,9 +394,11 @@ func (s *SandboxService) NodeSandboxLog(ctx context.Context, runID, nodeID strin
 	}
 	if e := q.Order("updated_at desc").First(&row).Error; e == nil {
 		if s.mgr.Status(ctx, row.Name) == "running" {
-			if out, _ := s.mgr.Logs(ctx, row.Name, 5000); strings.TrimSpace(out) != "" {
-				return out, true, nil
+			out, lerr := s.mgr.Logs(ctx, row.Name, 5000)
+			if lerr != nil {
+				return "", false, lerr
 			}
+			return out, true, nil
 		}
 	}
 	var rec models.SandboxLog
@@ -417,16 +425,19 @@ func (s *SandboxService) RunSandboxLogs(runID string) []models.SandboxLog {
 }
 
 // SandboxLogByID returns the container logs for a sandbox by its record id,
-// preferring live logs and falling back to the archived snapshot.
+// preferring live logs (including successful empty reads) and falling back to
+// the archived snapshot. Live read failures are propagated.
 func (s *SandboxService) SandboxLogByID(ctx context.Context, id uint) (content string, live bool, err error) {
 	row, err := s.Get(id)
 	if err != nil {
 		return "", false, err
 	}
 	if s.mgr.Status(ctx, row.Name) == "running" {
-		if out, _ := s.mgr.Logs(ctx, row.Name, 5000); strings.TrimSpace(out) != "" {
-			return out, true, nil
+		out, lerr := s.mgr.Logs(ctx, row.Name, 5000)
+		if lerr != nil {
+			return "", false, lerr
 		}
+		return out, true, nil
 	}
 	var rec models.SandboxLog
 	if e := s.db.Where("name = ?", row.Name).First(&rec).Error; e != nil {

@@ -565,3 +565,34 @@ func TestPackageLevelRunError(t *testing.T) {
 		t.Fatal("expected error from unknown docker subcommand")
 	}
 }
+
+func TestLogsTailAndEmpty(t *testing.T) {
+	m := newMock()
+	m.on("logs", "[boot] ok", nil)
+	d := New(Options{NamePrefix: "sbx-"})
+	d.run = m.run
+
+	out, err := d.Logs(context.Background(), "abc", 100)
+	if err != nil || out != "[boot] ok" {
+		t.Fatalf("Logs: %q err=%v", out, err)
+	}
+	args := m.lastCall()
+	if len(args) < 4 || args[0] != "logs" || args[1] != "--tail" || args[2] != "100" || args[3] != "sbx-abc" {
+		t.Fatalf("logs args=%v", args)
+	}
+
+	// Default tail when <= 0.
+	m.on("logs", "", nil)
+	if _, err := d.Logs(context.Background(), "abc", 0); err != nil {
+		t.Fatalf("empty logs: %v", err)
+	}
+	args = m.lastCall()
+	if !containsPair(args, "--tail", "5000") {
+		t.Fatalf("default tail missing: %v", args)
+	}
+
+	m.on("logs", "", errors.New("Error: No such container: sbx-missing"))
+	if _, err := d.Logs(context.Background(), "missing", 10); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("want not found, got %v", err)
+	}
+}

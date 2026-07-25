@@ -26,7 +26,7 @@ describe('RunListView cancel run', () => {
     expect(openFn).not.toContain('api.cancelRun')
 
     const confirmStart = src.indexOf('async function confirmCancelRun()')
-    const confirmEnd = src.indexOf('\nfunction runIdShort(', confirmStart)
+    const confirmEnd = src.indexOf('\nfunction openDeleteConfirm(', confirmStart)
     const confirmFn = src.slice(confirmStart, confirmEnd > 0 ? confirmEnd : undefined)
     expect(confirmFn).toContain('api.cancelRun(target.id)')
     expect(confirmFn).toContain("toast.success(t('pages.runDetail.cancelSuccess'))")
@@ -38,6 +38,79 @@ describe('RunListView cancel run', () => {
     expect(src).toMatch(/pages\.runList\.cancelConfirm/)
     expect(src).toMatch(/role="button"/)
     expect(src).toMatch(/@click\.stop @keydown\.stop/)
+  })
+})
+
+describe('RunListView delete run and ops column', () => {
+  it('adds canDeleteRun mutually exclusive with canCancelRun', () => {
+    expect(src).toMatch(/function canDeleteRun\(/)
+    expect(src).toMatch(/r\.status === 'completed' \|\| r\.status === 'failed'/)
+    expect(src).toMatch(/v-else-if="canDeleteRun\(r\)"/)
+    expect(src).toMatch(/data-testid="delete-run-btn"/)
+    expect(src).toMatch(/data-testid="run-ops-placeholder"/)
+    // cancel and delete sets must not overlap in predicates
+    const cancelFn = src.slice(
+      src.indexOf('function canCancelRun(r: Run)'),
+      src.indexOf('function canDeleteRun(r: Run)'),
+    )
+    const deleteFn = src.slice(
+      src.indexOf('function canDeleteRun(r: Run)'),
+      src.indexOf('function openRun(r: Run)'),
+    )
+    expect(cancelFn).not.toMatch(/completed|failed/)
+    expect(deleteFn).not.toMatch(/queued|running|waiting_human/)
+  })
+
+  it('renders text danger buttons without icons and grey dash placeholder', () => {
+    // List ops cancel/delete must be text-only; confirm modals may still use icons.
+    const cancelBtnBlocks = [...src.matchAll(/data-testid="cancel-run-btn"[\s\S]*?<\/AppButton>/g)].map((m) => m[0])
+    const deleteBtnBlocks = [...src.matchAll(/data-testid="delete-run-btn"[\s\S]*?<\/AppButton>/g)].map((m) => m[0])
+    expect(cancelBtnBlocks.length).toBeGreaterThanOrEqual(2)
+    expect(deleteBtnBlocks.length).toBeGreaterThanOrEqual(2)
+    for (const block of [...cancelBtnBlocks, ...deleteBtnBlocks]) {
+      expect(block).not.toMatch(/\bicon=/)
+    }
+    expect(src).toMatch(/data-testid="run-ops-placeholder"/)
+    expect(src).toContain('—')
+    expect(src).toMatch(/common\.buttons\.delete/)
+  })
+
+  it('opens delete confirm before DELETE and stays on list after success', () => {
+    expect(src).toMatch(/openDeleteConfirm\(r\)/)
+    expect(src).toMatch(/data-testid="confirm-delete-run-btn"/)
+    expect(src).toMatch(/pages\.runDetail\.deleteWarning/)
+    expect(src).toMatch(/pages\.runList\.deleteConfirm/)
+    expect(src).toMatch(/pages\.runList\.deleteSuccess/)
+
+    const openStart = src.indexOf('function openDeleteConfirm(r: Run)')
+    const openEnd = src.indexOf('\nfunction closeDeleteConfirm(', openStart)
+    const openFn = src.slice(openStart, openEnd)
+    expect(openFn).toContain('deleteTarget.value = r')
+    expect(openFn).not.toContain('api.deleteRun')
+
+    const confirmStart = src.indexOf('async function confirmDeleteRun()')
+    const confirmEnd = src.indexOf('\nwatch(statusFilterOpen', confirmStart)
+    const confirmFn = src.slice(confirmStart, confirmEnd > 0 ? confirmEnd : undefined)
+    expect(confirmFn).toContain('api.deleteRun(target.id)')
+    expect(confirmFn).toContain("toast.success(t('pages.runList.deleteSuccess'))")
+    expect(confirmFn).toContain('await load()')
+    expect(confirmFn).not.toContain('router.push')
+    expect(confirmFn).toContain('deletingRun.value = true')
+    expect(confirmFn).toContain('mapDeleteRunError')
+  })
+
+  it('stops propagation on ops area and placeholder so row does not open detail', () => {
+    expect(src).toMatch(/data-testid="run-ops"/)
+    expect(src).toMatch(/data-testid="run-ops-placeholder"/)
+    // desktop ops cell and mobile ops wrapper both stop click
+    expect(src.match(/data-testid="run-ops"[^>]*@click\.stop/g)?.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('keeps cancel confirm flow and does not drop cancel modal', () => {
+    expect(src).toMatch(/openCancelConfirm\(r\)/)
+    expect(src).toMatch(/confirmCancelRun/)
+    expect(src).toMatch(/data-testid="confirm-cancel-run-btn"/)
+    expect(src).toMatch(/pages\.runDetail\.cancelTitle/)
   })
 })
 
