@@ -16,6 +16,7 @@ import {
   type MultiDimension,
   type SingleDimension,
 } from '@/lib/runStats'
+import { fmtTokenCount } from '@/lib/tokenUsage'
 import type { Run, WFNode } from '@/lib/types'
 
 type StatsTab = 'single' | 'multi'
@@ -300,10 +301,67 @@ const pieCenterSub = computed(() => {
 })
 
 const maxMultiAvg = computed(() => multiItems.value[0]?.avgSec || 1)
+
+function fmtTokensOrDash(n: number | null | undefined): string {
+  if (n == null) return t('pages.executionStats.dash')
+  return fmtTokenCount(n)
+}
+
+const singleTokenHint = computed(() =>
+  singleSummary.value.totalTokens == null
+    ? t('pages.executionStats.hintTotalTokensNone')
+    : t('pages.executionStats.hintTotalTokens'),
+)
+
+const singleRateHint = computed(() =>
+  singleSummary.value.totalTokens == null
+    ? t('pages.executionStats.hintTokenRateNone')
+    : t('pages.executionStats.hintTokenRate'),
+)
+
+const multiSumHint = computed(() =>
+  multiSummary.value.totalTokens == null
+    ? t('pages.executionStats.hintSumTokensNone')
+    : t('pages.executionStats.hintSumTokens'),
+)
+
+const multiAvgHint = computed(() =>
+  multiSummary.value.totalTokens == null
+    ? t('pages.executionStats.hintAvgTokensNone')
+    : t('pages.executionStats.hintAvgTokens', { n: multiSummary.value.usageRunCount }),
+)
+
+const multiRateHint = computed(() =>
+  multiSummary.value.totalTokens == null
+    ? t('pages.executionStats.hintMultiTokenRateNone')
+    : t('pages.executionStats.hintMultiTokenRate'),
+)
 </script>
 
+<style scoped>
+.stats-panel {
+  --stats-token: #0b6e99;
+  --stats-time: #b45309;
+}
+.stats-kpi-time {
+  color: var(--stats-time);
+}
+.stats-kpi-token {
+  color: var(--stats-token);
+}
+.stats-tok-val {
+  color: var(--stats-token);
+}
+.stats-tok-na {
+  color: inherit;
+}
+</style>
+
 <template>
-  <div data-testid="execution-stats-panel" class="flex h-full min-h-0 min-w-0 w-full max-w-full flex-col bg-base">
+  <div
+    data-testid="execution-stats-panel"
+    class="stats-panel flex h-full min-h-0 min-w-0 w-full max-w-full flex-col bg-base"
+  >
     <!-- Tab bar only when parent does not control statsTab (standalone / tests). -->
     <div
       v-if="!tabControlled"
@@ -341,27 +399,47 @@ const maxMultiAvg = computed(() => multiItems.value[0]?.avgSec || 1)
     >
       <!-- Single run -->
       <template v-if="statsTab === 'single'">
-        <div class="mb-3.5 grid grid-cols-1 gap-2 md:grid-cols-3">
-          <div class="border border-line bg-surface px-3 py-2.5">
+        <div class="mb-3.5 grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-5">
+          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-wall">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.wallClock') }}</div>
-            <div class="text-[16px] font-semibold tabular-nums tracking-tight text-accent-2">
+            <div class="stats-kpi-time text-[16px] font-semibold tabular-nums tracking-tight">
               {{ fmtDuration(singleSummary.wallSec) }}
             </div>
             <div class="mt-0.5 text-[10px] text-txt3">{{ t('pages.executionStats.wallHint') }}</div>
           </div>
-          <div class="border border-line bg-surface px-3 py-2.5">
+          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-node-sum">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.nodeSum') }}</div>
-            <div class="text-[16px] font-semibold tabular-nums tracking-tight text-txt">
+            <div class="stats-kpi-time text-[16px] font-semibold tabular-nums tracking-tight">
               {{ fmtDuration(singleSummary.nodeSumSec) }}
             </div>
             <div class="mt-0.5 text-[10px] text-txt3">{{ t('pages.executionStats.nodeSumHint') }}</div>
           </div>
-          <div class="border border-line bg-surface px-3 py-2.5">
+          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-gap">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.gap') }}</div>
-            <div class="text-[16px] font-semibold tabular-nums tracking-tight text-txt2">
+            <div class="stats-kpi-time text-[16px] font-semibold tabular-nums tracking-tight">
               {{ fmtDuration(singleSummary.gapSec) }}
             </div>
             <div class="mt-0.5 text-[10px] text-txt3">{{ t('pages.executionStats.gapHint') }}</div>
+          </div>
+          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-total-tokens">
+            <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.totalTokens') }}</div>
+            <div
+              class="text-[16px] font-semibold tabular-nums tracking-tight"
+              :class="singleSummary.totalTokens == null ? 'text-txt3' : 'stats-kpi-token'"
+            >
+              {{ fmtTokensOrDash(singleSummary.totalTokens) }}
+            </div>
+            <div class="mt-0.5 text-[10px] text-txt3">{{ singleTokenHint }}</div>
+          </div>
+          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-token-rate">
+            <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.tokenRate') }}</div>
+            <div
+              class="text-[16px] font-semibold tabular-nums tracking-tight"
+              :class="singleSummary.tokenRate == null ? 'text-txt3' : 'stats-kpi-token'"
+            >
+              {{ singleSummary.tokenRate ?? t('pages.executionStats.dash') }}
+            </div>
+            <div class="mt-0.5 text-[10px] text-txt3">{{ singleRateHint }}</div>
           </div>
         </div>
 
@@ -471,9 +549,17 @@ const maxMultiAvg = computed(() => multiItems.value[0]?.avgSec || 1)
                 {{ t('pages.executionStats.hasHumanWait') }}
               </span>
               <div class="flex shrink-0 items-baseline gap-2 tabular-nums">
-                <span class="text-[12px] font-medium text-txt2">{{ fmtDuration(it.durationSec) }}</span>
+                <span class="stats-kpi-time text-[12px] font-medium">{{ fmtDuration(it.durationSec) }}</span>
                 <span class="min-w-[36px] text-right text-[12px] font-semibold text-txt">
-                  {{ it.sharePct == null ? '—' : it.sharePct + '%' }}
+                  {{ it.sharePct == null ? t('pages.executionStats.dash') : it.sharePct + '%' }}
+                </span>
+                <span
+                  class="min-w-[72px] text-right text-[12px] font-semibold tabular-nums"
+                  :class="it.totalTokens == null ? 'text-txt3 stats-tok-na' : 'stats-tok-val'"
+                  data-testid="stats-rank-tokens"
+                >
+                  {{ t('pages.executionStats.tokensCol') }}
+                  {{ fmtTokensOrDash(it.totalTokens) }}
                 </span>
               </div>
             </div>
@@ -545,26 +631,60 @@ const maxMultiAvg = computed(() => multiItems.value[0]?.avgSec || 1)
           </p>
         </div>
 
-        <div class="mb-3.5 grid grid-cols-1 gap-2 md:grid-cols-3">
-          <div class="border border-line bg-surface px-3 py-2.5">
+        <div class="mb-3.5 grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-6">
+          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-selected">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.selectedRuns') }}</div>
             <div class="text-[16px] font-semibold tabular-nums text-txt">{{ selectedCountDisplay }}</div>
           </div>
-          <div class="border border-line bg-surface px-3 py-2.5">
+          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-avg-wall">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.avgWall') }}</div>
-            <div class="text-[16px] font-semibold tabular-nums text-accent-2">
+            <div class="stats-kpi-time text-[16px] font-semibold tabular-nums">
               {{
                 multiReady && multiSummary.selectedCount
                   ? fmtDuration(Math.round(multiSummary.wallSumSec / multiSummary.selectedCount))
-                  : '—'
+                  : t('pages.executionStats.dash')
               }}
             </div>
           </div>
-          <div class="border border-line bg-surface px-3 py-2.5">
+          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-process-count">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.processCount') }}</div>
             <div class="text-[16px] font-semibold tabular-nums text-txt">
-              {{ multiReady ? multiSummary.processCount : '—' }}
+              {{ multiReady ? multiSummary.processCount : t('pages.executionStats.dash') }}
             </div>
+          </div>
+          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-sum-tokens">
+            <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.sumTokens') }}</div>
+            <div
+              class="text-[16px] font-semibold tabular-nums tracking-tight"
+              :class="!multiReady || multiSummary.totalTokens == null ? 'text-txt3' : 'stats-kpi-token'"
+            >
+              {{ multiReady ? fmtTokensOrDash(multiSummary.totalTokens) : t('pages.executionStats.dash') }}
+            </div>
+            <div class="mt-0.5 text-[10px] text-txt3">{{ multiSumHint }}</div>
+          </div>
+          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-avg-tokens">
+            <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.avgTokens') }}</div>
+            <div
+              class="text-[16px] font-semibold tabular-nums tracking-tight"
+              :class="!multiReady || multiSummary.avgTokens == null ? 'text-txt3' : 'stats-kpi-token'"
+            >
+              {{ multiReady ? fmtTokensOrDash(multiSummary.avgTokens) : t('pages.executionStats.dash') }}
+            </div>
+            <div class="mt-0.5 text-[10px] text-txt3">{{ multiAvgHint }}</div>
+          </div>
+          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-multi-token-rate">
+            <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.tokenRate') }}</div>
+            <div
+              class="text-[16px] font-semibold tabular-nums tracking-tight"
+              :class="!multiReady || multiSummary.tokenRate == null ? 'text-txt3' : 'stats-kpi-token'"
+            >
+              {{
+                multiReady
+                  ? (multiSummary.tokenRate ?? t('pages.executionStats.dash'))
+                  : t('pages.executionStats.dash')
+              }}
+            </div>
+            <div class="mt-0.5 text-[10px] text-txt3">{{ multiRateHint }}</div>
           </div>
         </div>
 
@@ -650,11 +770,22 @@ const maxMultiAvg = computed(() => multiItems.value[0]?.avgSec || 1)
                 {{ t('pages.executionStats.hasHumanWait') }}
               </span>
             </div>
-            <div class="mb-1.5 pl-7 text-[11px] text-txt2">
-              {{ t('pages.executionStats.avg') }} {{ fmtDuration(it.avgSec) }}
-              · Σ {{ fmtDuration(it.durationSec) }}
-              · {{ it.sharePct == null ? '—' : it.sharePct + '%' }}
-              · {{ t('pages.executionStats.times', { n: it.count }) }}
+            <div class="mb-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 pl-7 text-[11px] text-txt2">
+              <span>
+                {{ t('pages.executionStats.avg') }}
+                <span class="stats-kpi-time font-medium">{{ fmtDuration(it.avgSec) }}</span>
+              </span>
+              <span>· Σ {{ fmtDuration(it.durationSec) }}</span>
+              <span>· {{ it.sharePct == null ? t('pages.executionStats.dash') : it.sharePct + '%' }}</span>
+              <span>· {{ t('pages.executionStats.times', { n: it.count }) }}</span>
+              <span
+                class="font-semibold tabular-nums"
+                :class="it.totalTokens == null ? 'text-txt3' : 'stats-tok-val'"
+                data-testid="stats-rank-tokens"
+              >
+                · {{ t('pages.executionStats.tokensCol') }}
+                {{ fmtTokensOrDash(it.totalTokens) }}
+              </span>
             </div>
             <div class="h-1 overflow-hidden bg-elevated pl-0">
               <div

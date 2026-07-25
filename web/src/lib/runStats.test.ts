@@ -140,6 +140,246 @@ describe('flattenProcesses', () => {
     expect(list.find((p) => p.nodeId === 'skip')?.durationSec).toBe(2)
     expect(list.find((p) => p.nodeId === 'react')?.hasHumanWait).toBe(true)
   })
+
+  it('carries NodeRun.usage onto ProcessAtom', () => {
+    const usage = {
+      inputTokens: 10,
+      outputTokens: 5,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    }
+    const run = baseRun({
+      nodeExecutions: {
+        research: [
+          {
+            nodeId: 'research',
+            iteration: 1,
+            status: 'completed',
+            startedAt: '2026-01-01T00:00:00Z',
+            durationSec: 10,
+            usage,
+          },
+        ],
+        gate: [
+          {
+            nodeId: 'gate',
+            iteration: 1,
+            status: 'completed',
+            startedAt: '2026-01-01T00:00:10Z',
+            durationSec: 5,
+          },
+        ],
+      },
+    })
+    const list = flattenProcesses(run, nodes, Date.now())
+    expect(list.find((p) => p.nodeId === 'research')?.usage).toEqual(usage)
+    expect(list.find((p) => p.nodeId === 'gate')?.usage).toBeUndefined()
+  })
+})
+
+describe('usage aggregation', () => {
+  const usageA = {
+    inputTokens: 100,
+    outputTokens: 50,
+    cacheReadTokens: 10,
+    cacheWriteTokens: 0,
+  }
+  const usageB = {
+    inputTokens: 20,
+    outputTokens: 10,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 5,
+  }
+
+  it('single: totals match timeline semantics; unreported → null not 0', () => {
+    const withUsage = baseRun({
+      durationSec: 100,
+      nodeExecutions: {
+        research: [
+          {
+            nodeId: 'research',
+            iteration: 1,
+            status: 'completed',
+            startedAt: '2026-01-01T00:00:00Z',
+            durationSec: 40,
+            usage: usageA,
+          },
+        ],
+        gate: [
+          {
+            nodeId: 'gate',
+            iteration: 1,
+            status: 'completed',
+            startedAt: '2026-01-01T00:00:40Z',
+            durationSec: 25,
+          },
+        ],
+        react: [
+          {
+            nodeId: 'react',
+            iteration: 1,
+            status: 'completed',
+            startedAt: '2026-01-01T00:01:05Z',
+            durationSec: 30,
+            usage: usageB,
+          },
+        ],
+      },
+    })
+    const s = aggregateSingleRun(withUsage, nodes, 'node', 100, Date.now())
+    expect(s.totalTokens).toBe(195)
+    expect(s.tokenRate).toBe('1.95')
+    expect(s.items.find((i) => i.key === 'research')?.totalTokens).toBe(160)
+    expect(s.items.find((i) => i.key === 'gate')?.totalTokens).toBeNull()
+    expect(s.items.find((i) => i.key === 'react')?.totalTokens).toBe(35)
+
+    const none = baseRun({
+      durationSec: 50,
+      nodeExecutions: {
+        research: [
+          {
+            nodeId: 'research',
+            iteration: 1,
+            status: 'completed',
+            startedAt: '2026-01-01T00:00:00Z',
+            durationSec: 40,
+          },
+        ],
+      },
+    })
+    const empty = aggregateSingleRun(none, nodes, 'process', 50, Date.now())
+    expect(empty.totalTokens).toBeNull()
+    expect(empty.tokenRate).toBeNull()
+    expect(empty.items.every((i) => i.totalTokens == null)).toBe(true)
+
+    const zero = baseRun({
+      durationSec: 10,
+      nodeExecutions: {
+        research: [
+          {
+            nodeId: 'research',
+            iteration: 1,
+            status: 'completed',
+            startedAt: '2026-01-01T00:00:00Z',
+            durationSec: 10,
+            usage: {
+              inputTokens: 0,
+              outputTokens: 0,
+              cacheReadTokens: 0,
+              cacheWriteTokens: 0,
+            },
+          },
+        ],
+      },
+    })
+    const z = aggregateSingleRun(zero, nodes, 'process', 10, Date.now())
+    expect(z.totalTokens).toBe(0)
+    expect(z.tokenRate).toBe('0.00')
+    expect(z.items[0]?.totalTokens).toBe(0)
+
+    const badWall = aggregateSingleRun(withUsage, nodes, 'process', 0, Date.now())
+    expect(badWall.totalTokens).toBe(195)
+    expect(badWall.tokenRate).toBeNull()
+  })
+
+  it('multi: Σ/avg ignore runs without usage; rate uses wall sum', () => {
+    const runA = baseRun({
+      id: 'a',
+      durationSec: 100,
+      nodeExecutions: {
+        research: [
+          {
+            nodeId: 'research',
+            iteration: 1,
+            status: 'completed',
+            startedAt: '2026-01-01T00:00:00Z',
+            durationSec: 40,
+            usage: usageA,
+          },
+        ],
+      },
+      nodes,
+    })
+    const runB = baseRun({
+      id: 'b',
+      durationSec: 80,
+      nodeExecutions: {
+        research: [
+          {
+            nodeId: 'research',
+            iteration: 1,
+            status: 'completed',
+            startedAt: '2026-01-02T00:00:00Z',
+            durationSec: 20,
+          },
+        ],
+      },
+      nodes,
+    })
+    const runC = baseRun({
+      id: 'c',
+      durationSec: 60,
+      nodeExecutions: {
+        research: [
+          {
+            nodeId: 'research',
+            iteration: 1,
+            status: 'completed',
+            startedAt: '2026-01-03T00:00:00Z',
+            durationSec: 30,
+            usage: usageB,
+          },
+        ],
+      },
+      nodes,
+    })
+    const multi = aggregateMultiRuns(
+      [
+        { run: runA, wallSec: 100 },
+        { run: runB, wallSec: 80 },
+        { run: runC, wallSec: 60 },
+      ],
+      'node',
+      Date.now(),
+    )
+    expect(multi.wallSumSec).toBe(240)
+    expect(multi.totalTokens).toBe(195)
+    expect(multi.usageRunCount).toBe(2)
+    expect(multi.avgTokens).toBe(98)
+    expect(multi.tokenRate).toBe('0.81')
+    expect(multi.items.find((i) => i.key === 'research')?.totalTokens).toBe(195)
+
+    const none = aggregateMultiRuns(
+      [
+        { run: runB, wallSec: 80 },
+        {
+          run: baseRun({
+            id: 'd',
+            durationSec: 10,
+            nodeExecutions: {
+              gate: [
+                {
+                  nodeId: 'gate',
+                  iteration: 1,
+                  status: 'completed',
+                  startedAt: '2026-01-04T00:00:00Z',
+                  durationSec: 10,
+                },
+              ],
+            },
+            nodes,
+          }),
+          wallSec: 10,
+        },
+      ],
+      'node',
+      Date.now(),
+    )
+    expect(none.totalTokens).toBeNull()
+    expect(none.avgTokens).toBeNull()
+    expect(none.tokenRate).toBeNull()
+    expect(none.usageRunCount).toBe(0)
+  })
 })
 
 describe('aggregateSingleRun', () => {

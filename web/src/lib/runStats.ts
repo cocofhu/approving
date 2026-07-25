@@ -1,5 +1,12 @@
 import { NODE_DEFS, nodeColorHex } from '@/data/nodeRegistry'
-import type { NodeRun, NodeRunStatus, NodeType, Run, WFNode } from '@/lib/types'
+import {
+  mergeTokenUsage,
+  summarizeMultiRunUsage,
+  summarizeTimelineUsage,
+  totalTokensOrNull,
+  type MultiRunUsageSummary,
+} from '@/lib/tokenUsage'
+import type { NodeRun, NodeRunStatus, NodeType, Run, TokenUsage, WFNode } from '@/lib/types'
 
 /** Node types that typically pause for human input (wait is baked into durationSec). */
 export const HUMAN_WAIT_TYPES: ReadonlySet<NodeType> = new Set([
@@ -22,6 +29,8 @@ export interface ProcessAtom {
   type: NodeType
   hasHumanWait: boolean
   live: boolean
+  /** Unreported when undefined/null (UI —); present incl. zeros = reported. */
+  usage?: TokenUsage | null
 }
 
 export interface StatItem {
@@ -37,6 +46,8 @@ export interface StatItem {
   count: number
   isProcess: boolean
   color: string
+  /** Merged total tokens; null = no reported usage in this bucket. */
+  totalTokens: number | null
 }
 
 export interface SingleRunSummary {
@@ -45,6 +56,9 @@ export interface SingleRunSummary {
   gapSec: number
   items: StatItem[]
   bottleneck: StatItem | null
+  /** Same semantics as timeline footer (summarizeTimelineUsage). */
+  totalTokens: number | null
+  tokenRate: string | null
 }
 
 export interface MultiRunItem extends StatItem {
@@ -60,6 +74,13 @@ export interface MultiRunSummary {
   selectedCount: number
   items: MultiRunItem[]
   bottleneck: MultiRunItem | null
+  /** Σ total tokens across selected runs that reported usage. */
+  totalTokens: number | null
+  /** Runs with at least one process that reported usage. */
+  usageRunCount: number
+  /** Round(Σ / usageRunCount); null when none reported. */
+  avgTokens: number | null
+  tokenRate: string | null
 }
 
 const ACTIVE_NODE: ReadonlySet<string> = new Set(['running', 'waiting_human'])
@@ -218,6 +239,7 @@ export function flattenProcesses(
         type,
         hasHumanWait: hasHumanWait(ex.status, type),
         live,
+        usage: ex.usage,
       })
     })
   }
@@ -226,8 +248,10 @@ export function flattenProcesses(
   return out
 }
 
-export function mergeByNode(processes: ProcessAtom[]): Omit<StatItem, 'sharePct' | 'color'>[] {
-  const map = new Map<string, Omit<StatItem, 'sharePct' | 'color'>>()
+type RawStat = Omit<StatItem, 'sharePct' | 'color'>
+
+export function mergeByNode(processes: ProcessAtom[]): RawStat[] {
+  const map = new Map<string, RawStat & { _usage: TokenUsage | null }>()
   const order: string[] = []
   for (const p of processes) {
     const key = p.nodeId
@@ -242,6 +266,8 @@ export function mergeByNode(processes: ProcessAtom[]): Omit<StatItem, 'sharePct'
         live: false,
         count: 0,
         isProcess: false,
+        totalTokens: null,
+        _usage: null,
       }
       map.set(key, cur)
       order.push(key)
@@ -250,12 +276,17 @@ export function mergeByNode(processes: ProcessAtom[]): Omit<StatItem, 'sharePct'
     cur.count += 1
     if (p.hasHumanWait) cur.hasHumanWait = true
     if (p.live) cur.live = true
+    cur._usage = mergeTokenUsage(cur._usage, p.usage)
+    cur.totalTokens = totalTokensOrNull(cur._usage)
   }
-  return order.map((k) => map.get(k)!)
+  return order.map((k) => {
+    const { _usage: _, ...rest } = map.get(k)!
+    return rest
+  })
 }
 
-export function mergeByType(processes: ProcessAtom[]): Omit<StatItem, 'sharePct' | 'color'>[] {
-  const map = new Map<string, Omit<StatItem, 'sharePct' | 'color'>>()
+export function mergeByType(processes: ProcessAtom[]): RawStat[] {
+  const map = new Map<string, RawStat & { _usage: TokenUsage | null }>()
   const order: string[] = []
   for (const p of processes) {
     const key = p.type
@@ -270,6 +301,8 @@ export function mergeByType(processes: ProcessAtom[]): Omit<StatItem, 'sharePct'
         live: false,
         count: 0,
         isProcess: false,
+        totalTokens: null,
+        _usage: null,
       }
       map.set(key, cur)
       order.push(key)
@@ -278,11 +311,16 @@ export function mergeByType(processes: ProcessAtom[]): Omit<StatItem, 'sharePct'
     cur.count += 1
     if (p.hasHumanWait) cur.hasHumanWait = true
     if (p.live) cur.live = true
+    cur._usage = mergeTokenUsage(cur._usage, p.usage)
+    cur.totalTokens = totalTokensOrNull(cur._usage)
   }
-  return order.map((k) => map.get(k)!)
+  return order.map((k) => {
+    const { _usage: _, ...rest } = map.get(k)!
+    return rest
+  })
 }
 
-function asProcessItems(processes: ProcessAtom[]): Omit<StatItem, 'sharePct' | 'color'>[] {
+function asProcessItems(processes: ProcessAtom[]): RawStat[] {
   return processes.map((p) => ({
     key: `${p.nodeId}#${p.iteration}`,
     label: p.label,
@@ -294,13 +332,11 @@ function asProcessItems(processes: ProcessAtom[]): Omit<StatItem, 'sharePct' | '
     iteration: p.iteration,
     count: 1,
     isProcess: true,
+    totalTokens: totalTokensOrNull(p.usage),
   }))
 }
 
-function attachShareAndColor(
-  items: Omit<StatItem, 'sharePct' | 'color'>[],
-  wallSec: number,
-): StatItem[] {
+function attachShareAndColor(items: RawStat[], wallSec: number): StatItem[] {
   return items.map((it, i) => ({
     ...it,
     sharePct: sharePct(it.durationSec, wallSec),
@@ -329,8 +365,9 @@ export function aggregateSingleRun(
   const processes = flattenProcesses(run, nodes, nowMs, resolveLabel)
   const nodeSumSec = processes.reduce((a, p) => a + p.durationSec, 0)
   const gapSec = Math.max(0, wallSec - nodeSumSec)
+  const usageSummary = summarizeTimelineUsage(processes, wallSec)
 
-  let raw: Omit<StatItem, 'sharePct' | 'color'>[]
+  let raw: RawStat[]
   if (dimension === 'process') raw = asProcessItems(processes)
   else if (dimension === 'node') raw = mergeByNode(processes)
   else raw = mergeByType(processes)
@@ -342,6 +379,8 @@ export function aggregateSingleRun(
     gapSec,
     items,
     bottleneck: pickBottleneck(items),
+    totalTokens: usageSummary.totalTokens,
+    tokenRate: usageSummary.tokenRate,
   }
 }
 
@@ -370,14 +409,17 @@ export function aggregateMultiRuns(
     count: number
     hasHumanWait: boolean
     runIds: Set<string>
+    usage: TokenUsage | null
   }
   const map = new Map<string, Acc>()
   const order: string[] = []
+  const perRunTotals: Array<number | null> = []
 
-  for (const { run, nodes: overrideNodes } of runs) {
+  for (const { run, wallSec, nodes: overrideNodes } of runs) {
     const graph = overrideNodes || run.nodes || []
     const processes = flattenProcesses(run, graph, nowMs, resolveLabel)
     processCount += processes.length
+    perRunTotals.push(summarizeTimelineUsage(processes, wallSec).totalTokens)
     for (const p of processes) {
       const key = dimension === 'node' ? p.nodeId : p.type
       let cur = map.get(key)
@@ -390,6 +432,7 @@ export function aggregateMultiRuns(
           count: 0,
           hasHumanWait: false,
           runIds: new Set(),
+          usage: null,
         }
         map.set(key, cur)
         order.push(key)
@@ -398,8 +441,11 @@ export function aggregateMultiRuns(
       cur.count += 1
       if (p.hasHumanWait) cur.hasHumanWait = true
       cur.runIds.add(run.id)
+      cur.usage = mergeTokenUsage(cur.usage, p.usage)
     }
   }
+
+  const tokenKpi: MultiRunUsageSummary = summarizeMultiRunUsage(perRunTotals, wallSumSec)
 
   const items: MultiRunItem[] = order
     .map((k, i) => {
@@ -417,6 +463,7 @@ export function aggregateMultiRuns(
         count: it.count,
         isProcess: false,
         color: colorForType(it.type, i),
+        totalTokens: totalTokensOrNull(it.usage),
         avgSec,
         runHits,
       }
@@ -429,6 +476,10 @@ export function aggregateMultiRuns(
     selectedCount: runs.length,
     items,
     bottleneck: items[0] || null,
+    totalTokens: tokenKpi.totalTokens,
+    usageRunCount: tokenKpi.usageRunCount,
+    avgTokens: tokenKpi.avgTokens,
+    tokenRate: tokenKpi.tokenRate,
   }
 }
 
