@@ -1,6 +1,6 @@
 /**
  * Docs/site locale: approving-locale (zh-CN | en).
- * Priority: localStorage > navigator (zh*→zh-CN, en*→en, else zh-CN).
+ * Priority: localStorage > navigator (zh* → zh-CN, en* → en, else zh-CN).
  * Home entry (/ and /en/) may redirect once; deep links never auto-rewrite.
  */
 (() => {
@@ -63,7 +63,7 @@
    * Home entry matrix (at most one redirect):
    * - saved en on / → /en/
    * - saved zh-CN on /en/ → /
-   * - no saved: en* on / → /en/; zh*/other stay on /
+   * - no saved: en* on / → /en/; zh* or other stay on /
    * - no saved on /en/: stay (do not bounce zh* away)
    */
   function maybeRedirectHome() {
@@ -80,6 +80,11 @@
     if (dest) location.replace(dest);
   }
 
-  wireSwitcher();
+  // Script loads in <head>; bind switcher after [data-locale-set] exists in body.
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", wireSwitcher);
+  } else {
+    wireSwitcher();
+  }
   maybeRedirectHome();
 })();
