@@ -287,3 +287,18 @@ describe('RunDetailView mobile timeline view contract', () => {
     )
   })
 })
+
+describe('RunDetailView load failure split', () => {
+  it('classifies not_found vs network_or_server and gates retry', () => {
+    expect(src).toMatch(/type RunLoadErrorKind = 'not_found' \| 'network_or_server'/)
+    expect(src).toMatch(/isClearlyInvalidRunRouteId/)
+    expect(src).toMatch(/classifyRunLoadError/)
+    expect(src).toMatch(/pages\.runDetail\.notFoundTitle/)
+    expect(src).toMatch(/pages\.runDetail\.notFoundDesc/)
+    expect(src).toMatch(/pages\.runDetail\.retryUnavailable/)
+    expect(src).toMatch(/data-testid="run-retry-unavailable"/)
+    expect(src).toMatch(/data-testid="run-retry"/)
+    // Must not keep the old single network-leaning copy as the only failure path.
+    expect(src).not.toMatch(/请检查网络或确认 Run 是否存在/)
+  })
+})
