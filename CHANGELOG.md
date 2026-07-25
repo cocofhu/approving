@@ -4,6 +4,15 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+- IM Reply/Work equivalent orchestration on QQ channels: `channels.Manager` is
+  the unique egress (immediate ACK with ~40-rune summary, per-message queue ACK
+  with ahead count + summary, dequeue ACK, on-demand progress, terminal report);
+  Work (`ChannelBridge` / cron sandbox) emits internal progress/results only.
+  Progress coalesces ACP streaming chunks before classify; push flush re-queues
+  all remaining items if the conversation becomes busy mid-flush; full push
+  queue retains newest failed/changed. Cron `deliverToChannel` uses coordinated
+  push (busy → silent queue depth 8, idle flush; unchanged templates like
+  `PR：无变化`).
 - Preinstall GitHub CLI (`gh`) in the universal sandbox image and auto
   `gh auth login` from `GITHUB_TOKEN` (mirrors existing `glab` + `GITLAB_TOKEN`),
   so Agent `submit_mr` / `gh pr` works out of the box on GitHub remotes.
