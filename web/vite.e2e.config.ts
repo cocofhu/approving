@@ -227,6 +227,9 @@ export default defineConfig({
         'clarify-inbox-product': fileURLToPath(
           new URL('./e2e/clarify-inbox-product.html', import.meta.url),
         ),
+        'clarify-unread-fab': fileURLToPath(
+          new URL('./e2e/clarify-unread-fab.html', import.meta.url),
+        ),
         board: fileURLToPath(new URL('./e2e/board.html', import.meta.url)),
         'run-list-trigger': fileURLToPath(new URL('./e2e/run-list-trigger.html', import.meta.url)),
       },
