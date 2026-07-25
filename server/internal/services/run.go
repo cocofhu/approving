@@ -3,11 +3,41 @@ package services
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/cocofhu/approving/internal/models"
 
 	"gorm.io/gorm"
 )
+
+// defaultRunListOrder is the production default: hybrid time DESC + id DESC.
+// Queued runs use created_at; all others use started_at.
+const defaultRunListOrder = "CASE WHEN status = 'queued' THEN created_at ELSE started_at END DESC, id DESC"
+
+// runListOrderBy maps whitelist sort/order to a fixed ORDER BY clause.
+// sort and order must both be valid as a pair; otherwise the default order is used.
+// Never concatenates raw user input into SQL identifiers.
+func runListOrderBy(sort, order string) string {
+	sort = strings.TrimSpace(sort)
+	order = strings.ToLower(strings.TrimSpace(order))
+	var dir string
+	switch order {
+	case "asc":
+		dir = "ASC"
+	case "desc":
+		dir = "DESC"
+	default:
+		return defaultRunListOrder
+	}
+	switch sort {
+	case "started_at":
+		return "CASE WHEN status = 'queued' THEN created_at ELSE started_at END " + dir + ", id DESC"
+	case "priority":
+		return "priority " + dir + ", id DESC"
+	default:
+		return defaultRunListOrder
+	}
+}
 
 // deletableRunStatuses is the allowlist for DeleteRun. Narrower than
 // terminalRunStatuses on purpose: cancelled runs are terminal for inbox/artifact
@@ -41,28 +71,45 @@ func (s *RunService) listQuery(statuses []string, wf, projectID string) *gorm.DB
 	return q
 }
 
-// List returns runs, newest first. Queued runs have zero StartedAt (waiting
-// time is excluded from duration), so they sort by created_at; all other
-// statuses sort by started_at. Optional statuses (OR) and wf/projectId filter
-// with AND semantics (wf wins over projectId when both set).
-func (s *RunService) List(statuses []string, wf, projectID string) []models.Run {
+// List returns runs, newest first by default. Queued runs have zero StartedAt
+// (waiting time is excluded from duration), so they sort by created_at; all
+// other statuses sort by started_at. Optional statuses (OR) and wf/projectId
+// filter with AND semantics (wf wins over projectId when both set).
+//
+// Optional trailing sortOrder is [sort, order]. Allowed sort: started_at|priority;
+// allowed order: asc|desc. Both must be valid as a pair; otherwise the default
+// hybrid-time DESC + id DESC is kept. Omitted args keep the default.
+func (s *RunService) List(statuses []string, wf, projectID string, sortOrder ...string) []models.Run {
+	sort, order := parseSortOrderArgs(sortOrder)
 	var runs []models.Run
 	s.listQuery(statuses, wf, projectID).
-		Order("CASE WHEN status = 'queued' THEN created_at ELSE started_at END DESC, id DESC").
+		Order(runListOrderBy(sort, order)).
 		Find(&runs)
 	return runs
 }
 
 // ListPage returns a page of runs plus the total matching count.
-func (s *RunService) ListPage(statuses []string, wf, projectID string, page, pageSize int) ([]models.Run, int64) {
+// Optional trailing sortOrder is [sort, order]; see List for whitelist rules.
+func (s *RunService) ListPage(statuses []string, wf, projectID string, page, pageSize int, sortOrder ...string) ([]models.Run, int64) {
+	sort, order := parseSortOrderArgs(sortOrder)
 	q := s.listQuery(statuses, wf, projectID)
 	var total int64
 	q.Count(&total)
 	var runs []models.Run
 	offset := (page - 1) * pageSize
-	q.Order("CASE WHEN status = 'queued' THEN created_at ELSE started_at END DESC, id DESC").
+	q.Order(runListOrderBy(sort, order)).
 		Limit(pageSize).Offset(offset).Find(&runs)
 	return runs, total
+}
+
+func parseSortOrderArgs(sortOrder []string) (sort, order string) {
+	if len(sortOrder) >= 1 {
+		sort = sortOrder[0]
+	}
+	if len(sortOrder) >= 2 {
+		order = sortOrder[1]
+	}
+	return sort, order
 }
 
 // Get returns a single run.

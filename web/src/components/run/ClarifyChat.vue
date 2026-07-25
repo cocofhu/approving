@@ -75,6 +75,46 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const overflowScroll = ref(false)
 
+/** Near-bottom threshold (px), aligned with PmLeaderChat / approved Demo. */
+const STICK_THRESHOLD = 48
+const stickToBottom = ref(true)
+/** Unread real turns while off-bottom; never counts thinking placeholder. */
+const unreadCount = ref(0)
+const showUnreadFab = computed(() => unreadCount.value >= 1 && !stickToBottom.value)
+const unreadFabLabel = computed(() =>
+  translate('pages.clarify.unreadFab', { n: unreadCount.value }),
+)
+
+function isNearBottom(el: HTMLElement): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= STICK_THRESHOLD
+}
+
+function onScrollerScroll() {
+  const el = scroller.value
+  if (!el) return
+  if (isNearBottom(el)) {
+    stickToBottom.value = true
+    unreadCount.value = 0
+  } else {
+    stickToBottom.value = false
+  }
+}
+
+async function scrollBottom(force = false) {
+  await nextTick()
+  const el = scroller.value
+  if (!el) return
+  if (force || stickToBottom.value) {
+    el.scrollTop = el.scrollHeight
+    stickToBottom.value = true
+    unreadCount.value = 0
+  }
+}
+
+function onUnreadFabClick() {
+  void scrollBottom(true)
+}
+
 const AUTO_GROW_MIN = 40
 const AUTO_GROW_MAX = 128
 
@@ -211,11 +251,6 @@ function imgSrc(im: ClarifyImage): string {
   return `data:${im.mimeType || 'image/png'};base64,${im.data}`
 }
 
-async function scrollDown() {
-  await nextTick()
-  if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight
-}
-
 function turnsSemanticKey(turnList: ClarifyTurn[]): string {
   if (!turnList.length) return '0'
   const last = turnList[turnList.length - 1]
@@ -223,6 +258,7 @@ function turnsSemanticKey(turnList: ClarifyTurn[]): string {
 }
 
 // Real turns streamed back from the run: drop the optimistic bubble + spinner.
+// Scroll only when stuck to bottom; unread is owned by the length watcher below.
 watch(
   () => turnsSemanticKey(props.turns),
   (key, prevKey) => {
@@ -235,9 +271,45 @@ watch(
       const qs = turnList[qIdx].questions ?? []
       if (qs.length && hasHumanReplyAfter(turnList, qIdx)) clearSessionChoice(qs)
     }
-    scrollDown()
+    void scrollBottom()
   },
 )
+
+// Exact unread from props.turns length deltas (ignores optimistic pending / thinking).
+watch(
+  () => props.turns.length,
+  (len, prevLen) => {
+    if (prevLen === undefined) return
+    const delta = len - prevLen
+    if (delta <= 0) {
+      if (stickToBottom.value) unreadCount.value = 0
+      return
+    }
+    if (stickToBottom.value) {
+      unreadCount.value = 0
+      void scrollBottom()
+    } else {
+      unreadCount.value += delta
+    }
+  },
+)
+
+// Session identity change: reset stick/unread and jump to latest.
+watch(
+  () => `${props.runId}.${props.nodeId}.${props.iteration}`,
+  () => {
+    stickToBottom.value = true
+    unreadCount.value = 0
+    void scrollBottom(true)
+  },
+)
+
+// Thinking / validating placeholders follow only while stuck to bottom; never ++unread.
+watch([thinking, validating], ([th, val], [prevTh, prevVal]) => {
+  if ((th && !prevTh) || (val && !prevVal)) {
+    if (stickToBottom.value) void scrollBottom()
+  }
+})
 watch(
   () => props.done,
   (d) => {
@@ -308,7 +380,10 @@ function sendMessage(text: string, imgs: ClarifyImage[] = [], anns: ReactAnnotat
   pending.value = { text: t, images: imgs, annotations: anns.slice() }
   thinking.value = true
   emit('send', t, imgs, anns)
-  scrollDown()
+  // User send always force-sticks and clears unread (send turn must not linger on FAB).
+  stickToBottom.value = true
+  unreadCount.value = 0
+  void scrollBottom(true)
 }
 
 function sendFromComposer() {
@@ -495,13 +570,13 @@ function finishEarly() {
     if (validating.value) return
     validating.value = true
     emit('finish')
-    scrollDown()
+    void scrollBottom()
     return
   }
   if (thinking.value) return
   thinking.value = true
   emit('finish')
-  scrollDown()
+  void scrollBottom()
 }
 
 const confirmDisabled = computed(() =>
@@ -511,7 +586,13 @@ const confirmDisabled = computed(() =>
 
 <template>
   <div class="flex h-full flex-col" data-review-composer>
-    <div ref="scroller" class="scroll-area flex-1 space-y-3 overflow-y-auto p-4">
+    <div class="relative flex min-h-0 flex-1 flex-col">
+    <div
+      ref="scroller"
+      class="scroll-area flex-1 space-y-3 overflow-y-auto p-4 pb-14"
+      data-testid="clarify-scroller"
+      @scroll.passive="onScrollerScroll"
+    >
       <div class="flex items-center gap-2 text-[11px] text-txt3">
         <Icon name="chat" :size="13" />
         {{ translate('pages.clarify.header', { n: turns.length }) }}
@@ -755,6 +836,19 @@ const confirmDisabled = computed(() =>
         <span class="typing-dots"><i /><i /><i /></span>
         {{ translate('pages.clarify.thinking') }}
       </div>
+    </div>
+    <button
+      v-if="showUnreadFab"
+      type="button"
+      data-testid="clarify-unread-fab"
+      class="absolute bottom-3 left-1/2 z-10 inline-flex h-[34px] -translate-x-1/2 items-center gap-1.5 rounded-full bg-surface px-3.5 pl-3 text-[14px] font-semibold text-info shadow-[0_2px_10px_rgba(26,35,50,0.12)] transition-shadow hover:shadow-[0_4px_14px_rgba(26,35,50,0.16)]"
+      :aria-label="unreadFabLabel"
+      :title="unreadFabLabel"
+      @click="onUnreadFabClick"
+    >
+      <Icon name="chevrons-down" :size="16" class="shrink-0" />
+      <span class="min-w-[0.7em] text-center tabular-nums">{{ unreadCount }}</span>
+    </button>
     </div>
 
     <div v-if="done" class="border-t border-line p-3 text-center text-[12px] text-ok">
