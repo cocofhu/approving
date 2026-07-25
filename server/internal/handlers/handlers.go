@@ -952,6 +952,13 @@ func (h *Handlers) DeleteAgent(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 }
 
+// renameAgentResp is the RenameAgent success payload: agent fields plus the
+// count of WorkflowDef rows whose Def and/or Version graphs were rewritten.
+type renameAgentResp struct {
+	services.Agent
+	UpdatedWorkflowCount int `json:"updatedWorkflowCount"`
+}
+
 // RenameAgent atomically renames an existing Agent to the name in the body.
 func (h *Handlers) RenameAgent(c *gin.Context) {
 	old := c.Param("name")
@@ -1016,8 +1023,37 @@ func (h *Handlers) RenameAgent(c *gin.Context) {
 			return
 		}
 	}
+	updatedWorkflowCount := 0
+	if h.WF != nil && name != old {
+		n, err := h.WF.RenameSkillProfileRefs(old, name)
+		if err != nil {
+			// Roll back Skill/Pm/Org so workflow refs and directory stay aligned.
+			if rbErr := h.Skill.Rename(name, old); rbErr != nil {
+				_ = c.Error(err)
+				_ = c.Error(rbErr)
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": err.Error() + "; rename rollback failed: " + rbErr.Error(),
+				})
+				return
+			}
+			if h.Pm != nil {
+				if rbData := h.Pm.RenameAgentScopedData(name, old); rbData != nil {
+					_ = c.Error(rbData)
+				}
+			}
+			if h.Org != nil {
+				if rbOrg := h.Org.OnRenameAgent(name, old); rbOrg != nil {
+					_ = c.Error(rbOrg)
+				}
+			}
+			_ = c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "重命名工作流引用失败：" + err.Error()})
+			return
+		}
+		updatedWorkflowCount = n
+	}
 	a, _ := h.Skill.Get(name)
-	c.JSON(http.StatusOK, a)
+	c.JSON(http.StatusOK, renameAgentResp{Agent: a, UpdatedWorkflowCount: updatedWorkflowCount})
 }
 
 // GetAgentsOrg returns the central Agent organization index.

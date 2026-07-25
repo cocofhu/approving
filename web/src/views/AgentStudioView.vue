@@ -437,7 +437,8 @@ type PromptCfg = {
   title: string
   label: string
   placeholder?: string
-  warning?: string
+  /** Soft info line (e.g. rename cascade hint); not a warning. */
+  hint?: string
   validate: (v: string) => string
   submit: (v: string) => void | Promise<void>
 }
@@ -1505,7 +1506,7 @@ function openRenameAgent(name: string) {
   promptCfg.value = {
     title: t('pages.agentStudio.dialogs.renameTitle'),
     label: t('pages.agentStudio.dialogs.renameLabel'),
-    warning: t('pages.agentStudio.dialogs.renameWorkflowWarning'),
+    hint: t('pages.agentStudio.dialogs.renameCascadeHint'),
     validate: (v) =>
       !v
         ? t('pages.agentStudio.dialogs.nameRequired')
@@ -1517,13 +1518,17 @@ function openRenameAgent(name: string) {
     submit: async (v) => {
       if (v === name) return
       const updated = await api.renameAgent(name, v)
+      const n = updated.updatedWorkflowCount ?? 0
+      const { updatedWorkflowCount: _count, ...agent } = updated
       agents.value = agents.value.filter((a) => a.name !== name)
-      agents.value.push(updated)
+      agents.value.push(agent)
       agents.value.sort((a, b) => a.name.localeCompare(b.name))
       await reloadOrg()
       // 管理弹窗内改名后同步 focus 到新名（若仍打开）
-      if (manageFocusAgent.value === name) manageFocusAgent.value = updated.name
-      select(updated.name)
+      if (manageFocusAgent.value === name) manageFocusAgent.value = agent.name
+      select(agent.name)
+      if (n > 0) showToast(t('pages.agentStudio.dialogs.renameSuccessWithWorkflows', { n }))
+      else showToast(t('pages.agentStudio.dialogs.renameSuccess'))
     },
   }
 }
@@ -2770,13 +2775,7 @@ onBeforeUnmount(() => {
         @keyup.enter="promptOk"
       />
       <p v-if="promptError" class="mt-2 text-[12px] text-err">{{ promptError }}</p>
-      <div
-        v-if="promptCfg?.warning"
-        class="mt-3.5 border border-warn/35 bg-warn/10 px-3 py-2.5 text-[12px] leading-relaxed text-warn"
-      >
-        <div class="mb-0.5 font-semibold">{{ t('pages.agentStudio.dialogs.renameWorkflowWarningTitle') }}</div>
-        {{ promptCfg.warning }}
-      </div>
+      <p v-if="promptCfg?.hint" class="mt-3 text-[12px] leading-relaxed text-txt2">{{ promptCfg.hint }}</p>
       <template #footer>
         <AppButton size="sm" variant="ghost" @click="promptCfg = null">{{ t('common.buttons.cancel') }}</AppButton>
         <AppButton size="sm" variant="primary" @click="promptOk">{{ t('pages.agentStudio.dialogs.confirm') }}</AppButton>
