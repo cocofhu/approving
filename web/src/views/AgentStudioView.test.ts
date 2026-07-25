@@ -453,7 +453,7 @@ describe('AgentStudio rename entry migration', () => {
     expect(headerName).toBeTruthy()
   })
 
-  it('management Rename opens confirm with workflow warning; cancel does not rename', async () => {
+  it('management Rename opens dialog with cascade hint; cancel does not rename', async () => {
     mocks.listAgents.mockResolvedValue([agent('public')])
     const wrapper = await mountRenameStudio()
     await flushPromises()
@@ -463,11 +463,51 @@ describe('AgentStudio rename entry migration', () => {
     await wrapper.findAll('button').find((b) => b.text() === 'Rename')!.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('工作流引用不会自动更新')
-    expect(wrapper.text()).toContain('skill_profile')
+    expect(wrapper.text()).not.toContain('工作流引用不会自动更新')
+    expect(wrapper.text()).toContain('将同步更新目录、PM、组织关系，以及工作流中的 skill_profile 引用')
     await wrapper.findAll('button').find((b) => b.text() === '取消')!.trigger('click')
     await flushPromises()
     expect(mocks.renameAgent).not.toHaveBeenCalled()
+  })
+
+  it('rename success toast shows workflow count when N>0 and omits count when N=0', async () => {
+    mocks.listAgents.mockResolvedValue([agent('public')])
+    mocks.renameAgent
+      .mockResolvedValueOnce({ ...agent('public'), name: 'legacy2', updatedWorkflowCount: 3 })
+      .mockResolvedValueOnce({ ...agent('public'), name: 'legacy3', updatedWorkflowCount: 0 })
+
+    const wrapper = await mountRenameStudio()
+    await flushPromises()
+
+    const renameInput = () =>
+      wrapper.findAll('input').find((el) => {
+        const node = el.element as HTMLInputElement
+        return node.type !== 'file' && (node.value === 'legacy' || node.value === 'legacy2' || node.value === 'legacy3')
+      })!
+
+    await wrapper.get('[data-test="manage"]').trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find((b) => b.text() === 'Rename')!.trigger('click')
+    await flushPromises()
+    await renameInput().setValue('legacy2')
+    await wrapper.findAll('button').find((b) => b.text() === '确定')!.trigger('click')
+    await flushPromises()
+    expect(mocks.renameAgent).toHaveBeenCalledWith('legacy', 'legacy2')
+    expect(document.body.textContent || '').toContain('改名成功，已更新 3 个工作流')
+    expect(document.body.textContent || '').not.toContain('已更新 0 个工作流')
+
+    await wrapper.get('[data-test="manage"]').trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find((b) => b.text() === 'Rename')!.trigger('click')
+    await flushPromises()
+    await renameInput().setValue('legacy3')
+    await wrapper.findAll('button').find((b) => b.text() === '确定')!.trigger('click')
+    await flushPromises()
+    expect(mocks.renameAgent).toHaveBeenCalledWith('legacy2', 'legacy3')
+    const body = document.body.textContent || ''
+    expect(body).toContain('改名成功')
+    expect(body).not.toContain('已更新 0 个工作流')
+    expect(body).not.toContain('已更新 3 个工作流')
   })
 })
 
