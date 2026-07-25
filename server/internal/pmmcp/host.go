@@ -499,9 +499,9 @@ func (h *Host) callWorkflowWrite(projectID, name string, args map[string]any) (a
 		if !ok {
 			return map[string]any{"error": "workflow not found"}, true
 		}
-		trigger := platformmcp.StrArg(args, "trigger")
-		if trigger == "" {
-			trigger = "PM MCP"
+		trigger, err := models.ResolveTrigger(platformmcp.StrArg(args, "trigger"), models.TriggerPMMCP)
+		if err != nil {
+			return map[string]any{"error": err.Error()}, true
 		}
 		priority := platformmcp.StrArg(args, "priority")
 		if priority == "" {
@@ -599,9 +599,13 @@ func toolSchemas(mcpID string) []map[string]any {
 			}),
 			platformmcp.Tool("pm_start_run", "启动一次工作流 Run。", map[string]any{
 				"workflowId": map[string]any{"type": "string"},
-				"trigger":    map[string]any{"type": "string"},
-				"inputs":     map[string]any{"type": "object"},
-				"priority":   map[string]any{"type": "string", "description": "high|normal|low"},
+				"trigger": map[string]any{
+					"type":        "string",
+					"enum":        []string{models.TriggerManual, models.TriggerAPI, models.TriggerPMMCP},
+					"description": "Run trigger code: manual|api|pm_mcp (default pm_mcp when omitted)",
+				},
+				"inputs":   map[string]any{"type": "object"},
+				"priority": map[string]any{"type": "string", "description": "high|normal|low"},
 			}),
 			platformmcp.Tool("pm_resume_gate", "审批/推进某个待人工门禁。", map[string]any{
 				"runId":  map[string]any{"type": "string"},

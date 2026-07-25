@@ -50,17 +50,36 @@ describe('relTime', () => {
 })
 
 describe('formatTrigger', () => {
-  it('maps 手动触发 to locale-specific label', () => {
+  it('maps whitelist codes to Demo-aligned labels (zh-CN)', () => {
     i18n.global.locale.value = 'zh-CN'
-    expect(formatTrigger('手动触发')).toBe('手动触发')
+    expect(formatTrigger('manual')).toBe('手动')
+    expect(formatTrigger('api')).toBe('API')
+    expect(formatTrigger('pm_mcp')).toBe('PM MCP')
+  })
+
+  it('maps whitelist codes to Demo-aligned labels (en)', () => {
+    i18n.global.locale.value = 'en'
+    expect(formatTrigger('manual')).toBe('Manual')
+    expect(formatTrigger('api')).toBe('API')
+    expect(formatTrigger('pm_mcp')).toBe('PM MCP')
+  })
+
+  it('maps historical aliases to the same standard labels', () => {
+    i18n.global.locale.value = 'zh-CN'
+    expect(formatTrigger('手动触发')).toBe('手动')
+    expect(formatTrigger('API 触发')).toBe('API')
+    expect(formatTrigger('PM MCP')).toBe('PM MCP')
 
     i18n.global.locale.value = 'en'
     expect(formatTrigger('手动触发')).toBe('Manual')
+    expect(formatTrigger('API 触发')).toBe('API')
+    expect(formatTrigger('PM MCP')).toBe('PM MCP')
   })
 
-  it('returns unknown trigger values unchanged', () => {
+  it('returns unmapped free-form values unchanged', () => {
     i18n.global.locale.value = 'en'
-    expect(formatTrigger('test')).toBe('test')
+    expect(formatTrigger('channel')).toBe('channel')
+    expect(formatTrigger('qq:cron-timezone-bug')).toBe('qq:cron-timezone-bug')
     expect(formatTrigger('cron-nightly')).toBe('cron-nightly')
   })
 })

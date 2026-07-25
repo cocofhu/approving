@@ -21,6 +21,11 @@
       "normal": "Normal",
       "low": "Low"
     },
+    "runTrigger": {
+      "manual": "Manual",
+      "api": "API",
+      "pmMcp": "PM MCP"
+    },
     "statusFilter": {
       "selectedCount": "{n} selected"
     },

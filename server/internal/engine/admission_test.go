@@ -556,12 +556,15 @@ func TestStartRunFromPublishedForcesNormal(t *testing.T) {
 	if err := db.Create(&models.WorkflowVersion{WorkflowID: "wf", Version: 1, Graph: slowGraph()}).Error; err != nil {
 		t.Fatalf("version: %v", err)
 	}
-	run, err := eng.StartRunFromPublished("wf", nil)
+	run, err := eng.StartRunFromPublished("wf", nil, "")
 	if err != nil {
 		t.Fatalf("StartRunFromPublished: %v", err)
 	}
 	if run.Priority != models.PriorityNormal {
 		t.Fatalf("priority = %d, want normal", run.Priority)
+	}
+	if run.Trigger != models.TriggerAPI {
+		t.Fatalf("trigger = %q, want api", run.Trigger)
 	}
 	p.ReleaseAll()
 }

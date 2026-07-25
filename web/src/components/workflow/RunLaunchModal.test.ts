@@ -130,7 +130,7 @@ describe('RunLaunchModal', () => {
     const startBtn = findStartButton(wrapper)
     await startBtn!.trigger('click')
     await flushPromises()
-    expect(apiMocks.startRun).toHaveBeenCalledWith('wf-1', expect.objectContaining({ topic: 'hello' }), '手动触发', 'normal')
+    expect(apiMocks.startRun).toHaveBeenCalledWith('wf-1', expect.objectContaining({ topic: 'hello' }), 'manual', 'normal')
     expect(wrapper.emitted('started')?.[0]?.[0]).toBe('run-99')
     wrapper.unmount()
   })

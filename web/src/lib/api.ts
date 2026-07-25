@@ -468,7 +468,7 @@ export const api = {
       `/runs/${runId}/inbox-context?nodeId=${encodeURIComponent(nodeId)}&iteration=${iteration}`,
       opts?.signal ? { signal: opts.signal } : undefined,
     ),
-  startRun: (workflowId: string, inputs: Record<string, any>, trigger = '手动触发', priority = 'normal') =>
+  startRun: (workflowId: string, inputs: Record<string, any>, trigger = 'manual', priority = 'normal') =>
     req<{ id: string; status: string; priority?: string }>(`/workflows/${workflowId}/runs`, {
       method: 'POST',
       body: JSON.stringify({ inputs, trigger, priority }),
