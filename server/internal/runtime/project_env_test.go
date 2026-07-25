@@ -12,7 +12,7 @@ func TestSpecMergesProjectEnvBetweenPlatformAndAgent(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	agentJSON := `{"env":{"APPROVING_CURSOR_API_KEY":"agent-key","SHARED":"from-agent","AGENT_ONLY":"a1"}}`
+	agentJSON := `{"env":{"SHARED":"from-agent","AGENT_ONLY":"a1","CURSOR_API_KEY":"agent-cursor"}}`
 	if err := os.WriteFile(filepath.Join(dir, "agent.json"), []byte(agentJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -31,9 +31,9 @@ func TestSpecMergesProjectEnvBetweenPlatformAndAgent(t *testing.T) {
 				return map[string]string{
 					"SHARED":            "from-project",
 					"PROJECT_ONLY":      "p1",
-					"CURSOR_API_KEY":    "should-skip-project",
+					"CURSOR_API_KEY":    "project-cursor",
 					"TEMPLATED":         "${vars.region}",
-					"ANTHROPIC_API_KEY": "skip-auth",
+					"ANTHROPIC_API_KEY": "project-anthropic",
 				}
 			},
 			ProfilesRoot: root,
@@ -67,8 +67,55 @@ func TestSpecMergesProjectEnvBetweenPlatformAndAgent(t *testing.T) {
 	if spec.Env["TEMPLATED"] != "cn-east" {
 		t.Fatalf("templated = %q", spec.Env["TEMPLATED"])
 	}
-	if spec.Env["ANTHROPIC_API_KEY"] == "skip-auth" {
-		t.Fatal("project must not inject ACP auth keys")
+	// Project injects official ACP auth keys; Agent same-name key wins for Cursor.
+	if spec.Env["ANTHROPIC_API_KEY"] != "project-anthropic" {
+		t.Fatalf("project anthropic = %q", spec.Env["ANTHROPIC_API_KEY"])
+	}
+	if spec.Env["CURSOR_API_KEY"] != "agent-cursor" {
+		t.Fatalf("agent cursor wins = %q", spec.Env["CURSOR_API_KEY"])
+	}
+	// Platform opts.Env auth keys remain skipped.
+	if spec.Env["CURSOR_API_KEY"] == "should-skip-platform" {
+		t.Fatal("platform CURSOR_API_KEY must stay skipped")
+	}
+}
+
+func TestSpecProjectAuthKeyAloneSucceeds(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "demo")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Agent has no Cursor auth key — project baseline must satisfy mergeAuthEnv.
+	if err := os.WriteFile(filepath.Join(dir, "agent.json"), []byte(`{"env":{"AGENT_ONLY":"a1"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &acpProvider{
+		opts: Options{
+			Env: map[string]string{
+				"CURSOR_API_KEY": "platform-must-skip",
+			},
+			ProjectEnvForWorkflow: func(string) map[string]string {
+				return map[string]string{"CURSOR_API_KEY": "project-only-key"}
+			},
+			ProfilesRoot: root,
+		},
+		backend: BackendCursor,
+	}
+	spec, err := c.spec(NodeReq{
+		WorkflowID: "wf-1",
+		NodeType:   "agent",
+		Token:      "tok",
+		Config:     map[string]any{"skill_profile": "demo"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.Env["CURSOR_API_KEY"] != "project-only-key" {
+		t.Fatalf("project-only auth = %q", spec.Env["CURSOR_API_KEY"])
+	}
+	if _, ok := spec.Env["AGENT_ONLY"]; !ok {
+		t.Fatal("expected agent non-auth env")
 	}
 }
 

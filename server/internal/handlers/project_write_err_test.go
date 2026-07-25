@@ -18,7 +18,6 @@ func TestWriteProjectErrBranches(t *testing.T) {
 		code int
 	}{
 		{services.ErrEmptyProjectName, http.StatusBadRequest},
-		{services.ErrPlatformAuthEnvKey, http.StatusBadRequest},
 		{services.ErrSecretPlaceholderOnNewKey, http.StatusBadRequest},
 		{services.ErrProjectNameExists, http.StatusConflict},
 		{services.ErrProjectNotFound, http.StatusNotFound},

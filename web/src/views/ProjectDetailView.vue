@@ -339,10 +339,17 @@ async function saveEnv() {
   if (!project.value) return
   savingEnv.value = true
   try {
-    project.value = await api.updateProject(project.value.id, {
-      sandboxEnv: envRows.value.filter((e) => e.key.trim()),
-    })
-    envRows.value = (project.value.sandboxEnv || []).map((e) => ({ ...e }))
+    const sandboxEnv = envRows.value
+      .filter((e) => e.key.trim())
+      .map((e) => ({
+        ...e,
+        secret: e.secret || isPlatformAuthEnvKey(e.key),
+      }))
+    project.value = await api.updateProject(project.value.id, { sandboxEnv })
+    envRows.value = (project.value.sandboxEnv || []).map((e) => ({
+      ...e,
+      secret: e.secret || isPlatformAuthEnvKey(e.key),
+    }))
     toast.success(t('pages.projectDetail.saved'))
   } catch (e: any) {
     toast.error(String(e?.message || e))
@@ -371,6 +378,19 @@ async function saveVars() {
 
 const SECRET_MASK = '****'
 
+/** Official ACP CLI auth keys — project env baseline; always forced Secret (matches server). */
+const PLATFORM_AUTH_ENV_KEYS = new Set([
+  'CURSOR_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'CODEBUDDY_API_KEY',
+  'TRAE_API_KEY',
+  'TRAECLI_PERSONAL_ACCESS_TOKEN',
+])
+
+function isPlatformAuthEnvKey(key: string): boolean {
+  return PLATFORM_AUTH_ENV_KEYS.has(key.trim())
+}
+
 function addEnvRow() {
   envRows.value.push({ key: '', value: '', secret: false })
 }
@@ -396,6 +416,10 @@ function removeVarRow(i: number) {
 
 /** Clear mask when un-secreting or renaming so **** is never treated as plaintext. */
 function onEnvSecretChange(row: ProjectEnvEntry, secret: boolean) {
+  if (isPlatformAuthEnvKey(row.key)) {
+    row.secret = true
+    return
+  }
   row.secret = secret
   if (!secret && row.value === SECRET_MASK) {
     row.value = ''
@@ -406,6 +430,9 @@ function onEnvKeyChange(row: ProjectEnvEntry, key: string) {
     row.value = ''
   }
   row.key = key
+  if (isPlatformAuthEnvKey(key)) {
+    row.secret = true
+  }
 }
 function onVarSecretChange(row: ProjectVariable, secret: boolean) {
   row.secret = secret
@@ -994,15 +1021,30 @@ onUnmounted(() => {
                 :placeholder="t('pages.projectDetail.envValue')"
                 :type="row.secret ? 'password' : 'text'"
               />
-              <button
-                type="button"
-                class="chip w-full justify-center"
-                :class="row.secret ? 'border-accent/50 text-accent-2' : 'text-txt3'"
-                :title="row.secret ? t('pages.projectDetail.secret') : t('pages.projectDetail.plain')"
-                @click="onEnvSecretChange(row, !row.secret)"
-              >
-                {{ row.secret ? t('pages.projectDetail.secret') : t('pages.projectDetail.plain') }}
-              </button>
+              <div class="flex w-full flex-col items-stretch gap-1">
+                <button
+                  type="button"
+                  class="chip w-full justify-center"
+                  :class="row.secret ? 'border-accent/50 text-accent-2' : 'text-txt3'"
+                  :disabled="isPlatformAuthEnvKey(row.key)"
+                  :title="
+                    isPlatformAuthEnvKey(row.key)
+                      ? t('pages.projectDetail.secretForcedHint')
+                      : row.secret
+                        ? t('pages.projectDetail.secret')
+                        : t('pages.projectDetail.plain')
+                  "
+                  @click="onEnvSecretChange(row, !row.secret)"
+                >
+                  {{ row.secret ? t('pages.projectDetail.secret') : t('pages.projectDetail.plain') }}
+                </button>
+                <span
+                  v-if="isPlatformAuthEnvKey(row.key)"
+                  class="text-center text-[10px] font-semibold tracking-wide text-accent-2"
+                >
+                  {{ t('pages.projectDetail.secretForced') }}
+                </span>
+              </div>
               <button
                 type="button"
                 class="inline-flex h-7 w-7 shrink-0 items-center justify-center text-txt3 hover:text-err sm:justify-self-center"

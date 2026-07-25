@@ -199,25 +199,50 @@ func TestProjectSecretTogglePreservesPlaintext(t *testing.T) {
 	}
 }
 
-func TestProjectRejectsPlatformAuthEnvKey(t *testing.T) {
+func TestProjectAcceptsPlatformAuthEnvKeyForcedSecret(t *testing.T) {
 	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "authenv.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := NewProjectService(db)
-	_, err = s.Create("A", "", []models.EnvEntry{
-		{Key: "CURSOR_API_KEY", Value: "x", Secret: true},
+	// Create with official auth key unmarked as Secret — must force Secret.
+	p, err := s.Create("A", "", []models.EnvEntry{
+		{Key: "CURSOR_API_KEY", Value: "cursor-secret", Secret: false},
 	}, nil)
-	if !errors.Is(err, ErrPlatformAuthEnvKey) {
+	if err != nil {
 		t.Fatalf("create auth key: %v", err)
 	}
-	p, err := s.Create("A", "", nil, nil)
-	if err != nil {
-		t.Fatal(err)
+	if len(p.SandboxEnv) != 1 || !p.SandboxEnv[0].Secret || p.SandboxEnv[0].Value != "cursor-secret" {
+		t.Fatalf("create forced secret = %+v", p.SandboxEnv)
 	}
-	env := []models.EnvEntry{{Key: "ANTHROPIC_API_KEY", Value: "y", Secret: true}}
-	if _, err := s.Update(p.ID, nil, nil, &env, nil); !errors.Is(err, ErrPlatformAuthEnvKey) {
+	masked := MaskedSandboxEnv(p.SandboxEnv)
+	if masked[0].Value != SecretMask {
+		t.Fatalf("masked create = %q", masked[0].Value)
+	}
+
+	// Update another official key without Secret flag; force Secret + keep prior on mask.
+	env := []models.EnvEntry{
+		{Key: "CURSOR_API_KEY", Value: SecretMask, Secret: false},
+		{Key: "ANTHROPIC_API_KEY", Value: "anthropic-secret", Secret: false},
+	}
+	p, err = s.Update(p.ID, nil, nil, &env, nil)
+	if err != nil {
 		t.Fatalf("update auth key: %v", err)
+	}
+	byKey := map[string]models.EnvEntry{}
+	for _, e := range p.SandboxEnv {
+		byKey[e.Key] = e
+	}
+	if e := byKey["CURSOR_API_KEY"]; !e.Secret || e.Value != "cursor-secret" {
+		t.Fatalf("CURSOR after update = %+v", e)
+	}
+	if e := byKey["ANTHROPIC_API_KEY"]; !e.Secret || e.Value != "anthropic-secret" {
+		t.Fatalf("ANTHROPIC after update = %+v", e)
+	}
+	for _, e := range MaskedSandboxEnv(p.SandboxEnv) {
+		if e.Value != SecretMask {
+			t.Fatalf("masked %s = %q", e.Key, e.Value)
+		}
 	}
 }
 
