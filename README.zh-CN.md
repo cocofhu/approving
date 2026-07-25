@@ -124,7 +124,7 @@ Approving 覆盖完整 Agent 工作流：从图设计到沙箱执行，再到产
 
 ## 开发
 
-参与 Approving 代码贡献，请看 [贡献指南](CONTRIBUTING.md)。
+参与 Approving 代码贡献，请看 [贡献指南](CONTRIBUTING.md)。关键路径 Playwright e2e（CI `web-e2e`）见 [贡献指南 — Critical-path Playwright e2e](CONTRIBUTING.md#critical-path-playwright-e2e)。
 
 **前置要求：** Go、Node.js、Docker Compose（沙箱需 Linux 宿主）
 

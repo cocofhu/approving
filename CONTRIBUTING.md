@@ -7,6 +7,7 @@ Before contributing, read [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) and
 
 - Backend: `cd server && go test ./...`
 - Web: `cd web && npm ci && npm test && npx vue-tsc --noEmit`
+- Web critical e2e (same subset as CI `web-e2e`): see [Critical-path Playwright e2e](#critical-path-playwright-e2e)
 - Configuration doc: `cd server && go run ./cmd/gen-configdoc -check`
 - Full local development stack: `./start.sh dev -d` (source/HMR; gateway
   sources live in `sandbox-gateway/`). Default `./start.sh -d` pulls published
@@ -41,7 +42,30 @@ Matching workflows: `ci-server`, `ci-gateway`, `ci-sandbox` (sandbox-go job).
 cd web && npm ci && npm run lint && npx vue-tsc --noEmit
 ```
 
-Matching workflow: `ci-web`.
+Matching workflow: `ci-web` (`web` job).
+
+### Critical-path Playwright e2e
+
+PR `ci-web` also runs a parallel `web-e2e` job for a fixed critical-path subset
+(local vite.e2e mock harness; no real backend). Specs:
+
+- `gate-mobile-fill.spec.ts` — gate mobile approve / reject
+- `clarify-inbox-product.spec.ts` — clarify inbox product surface
+- `delete-run-list.spec.ts` — run list delete / cancel / placeholders
+- `cancel-run.spec.ts` — cancel run across statuses
+
+Reproduce locally (same entry as CI):
+
+```bash
+cd web && npm ci && npx playwright install chromium && npm run test:e2e:ci
+```
+
+Full suite remains `npm run test:e2e` (not run in PR CI). On `web-e2e`
+failure, Actions uploads `playwright-report/` and `test-results/` artifacts.
+
+**Follow-up:** add the `web-e2e` check to main branch protection required
+checks so a red job hard-blocks merge. Until then, failure is a visible red
+signal only.
 
 Later tightening (more Go linters, stricter ESLint rules, optional type-aware
 ESLint) can ratchet without changing this layout; not required for this pass.
