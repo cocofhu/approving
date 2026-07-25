@@ -51,5 +51,8 @@
     "vue-tsc": "^2.2.0",
     "ws": "^8.18.0"
   },
+  "overrides": {
+    "minimatch": "^10.2.5"
+  },
   "license": "MIT"
 }
