@@ -26,7 +26,11 @@ func MaterializeAttachments(files []PromptImage) (dir string, paths []string, er
 			return "", nil, fmt.Errorf("attach: decode #%d: %w", i+1, derr)
 		}
 		name := AttachmentFileName(i, f)
-		p := filepath.Join(dir, name)
+		p, jerr := underRoot(dir, name)
+		if jerr != nil {
+			cleanup()
+			return "", nil, fmt.Errorf("attach: unsafe name %q: %w", name, jerr)
+		}
 		if werr := os.WriteFile(p, raw, 0o600); werr != nil {
 			cleanup()
 			return "", nil, fmt.Errorf("attach: write %s: %w", name, werr)
@@ -49,11 +53,39 @@ func DecodeAttachmentData(s string) ([]byte, error) {
 }
 
 // AttachmentFileName picks a safe basename for an attachment.
+// Explicitly rejects ".." (filepath.Base("..") == "..") to prevent escaping the
+// MkdirTemp root (CodeQL #13).
 func AttachmentFileName(i int, f PromptImage) string {
-	if n := filepath.Base(strings.TrimSpace(f.Name)); n != "" && n != "." && n != string(filepath.Separator) {
+	n := filepath.Base(strings.TrimSpace(f.Name))
+	if n != "" && n != "." && n != ".." && n != string(filepath.Separator) && !strings.Contains(n, "..") {
 		return n
 	}
 	return fmt.Sprintf("attachment-%d%s", i+1, ExtForMIME(f.MimeType))
+}
+
+// underRoot joins root/rel and asserts the result stays within root.
+func underRoot(root, rel string) (string, error) {
+	rel = strings.TrimSpace(rel)
+	if rel == "" || rel == "." || rel == ".." || filepath.IsAbs(rel) || strings.Contains(rel, "..") {
+		return "", fmt.Errorf("invalid path %q", rel)
+	}
+	if !filepath.IsLocal(rel) {
+		return "", fmt.Errorf("non-local path %q", rel)
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	full := filepath.Join(absRoot, rel)
+	absFull, err := filepath.Abs(full)
+	if err != nil {
+		return "", err
+	}
+	sep := string(os.PathSeparator)
+	if absFull != absRoot && !strings.HasPrefix(absFull, absRoot+sep) {
+		return "", fmt.Errorf("path %q escapes root", rel)
+	}
+	return absFull, nil
 }
 
 // ExtForMIME maps a MIME type to a file extension (default .bin).

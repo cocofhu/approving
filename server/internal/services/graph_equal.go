@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/cocofhu/approving/internal/models"
@@ -13,7 +14,12 @@ import (
 // ensure results[], drop legacy result. Used so a client that cleaned on hydrate
 // does not look like a graph change vs a DB head that still stores result.
 func normalizeOutputConfig(cfg map[string]any) map[string]any {
-	out := make(map[string]any, len(cfg)+1)
+	// Saturate capacity hint so len(cfg)+1 cannot overflow (CodeQL #23).
+	hint := len(cfg)
+	if hint < math.MaxInt {
+		hint++
+	}
+	out := make(map[string]any, hint)
 	for k, v := range cfg {
 		out[k] = v
 	}

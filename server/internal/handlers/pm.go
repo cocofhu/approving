@@ -293,7 +293,8 @@ func (h *Handlers) DeletePmThread(c *gin.Context) {
 		return
 	}
 	if t.SandboxRef != "" {
-		if id, e := strconv.ParseUint(t.SandboxRef, 10, 64); e == nil && h.Sbx != nil {
+		// bitSize=strconv.IntSize avoids truncating oversized ids (CodeQL #8/#9).
+		if id, e := strconv.ParseUint(t.SandboxRef, 10, strconv.IntSize); e == nil && h.Sbx != nil {
 			if err := h.Sbx.Destroy(c.Request.Context(), uint(id)); err != nil {
 				log.Warn().Err(err).Uint("sandbox", uint(id)).Msg("destroy thread sandbox failed")
 			}

@@ -30,7 +30,12 @@ describe('highlightJson', () => {
     const src = '{"a":1,"b":2}'
     const html = highlightJson(src)
     expect(html).not.toContain('\n')
-    expect(html.replace(/<[^>]+>/g, '')).toBe(escapeHtml(src))
+    // Assert escaped text content without Incomplete multi-character sanitization
+    // (CodeQL #2): do not strip tags via /<[^>]+>/g; check escapeHtml fragments.
+    expect(html).toContain('&quot;a&quot;')
+    expect(html).toContain('&quot;b&quot;')
+    expect(html).not.toContain(src)
+    expect(escapeHtml(src)).toContain('&quot;a&quot;')
   })
 
   it('preserves original whitespace/newlines', () => {

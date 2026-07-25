@@ -57,7 +57,12 @@ func (m *Manager) seedHelpers(ctx context.Context, sb *Sandbox) {
 		log.Warn().Str("id", sb.ID).Err(err).Msg("seed helpers: ssh not ready; artifact-upload unavailable")
 		return
 	}
-	cmd := "cat > " + shellQuote(artifactUploadPath) + " && chmod +x " + shellQuote(artifactUploadPath)
+	qUpload, err := quoteShellPath(artifactUploadPath)
+	if err != nil {
+		log.Warn().Str("id", sb.ID).Err(err).Msg("seed helpers: invalid artifact-upload path")
+		return
+	}
+	cmd := "cat > " + qUpload + " && chmod +x " + qUpload
 	if out, err := creds.runInput(ctx, 20*time.Second, cmd, strings.NewReader(artifactUploadScript)); err != nil {
 		log.Warn().Str("id", sb.ID).Err(err).Str("out", strings.TrimSpace(string(out))).
 			Msg("seed helpers: install artifact-upload failed")
@@ -72,11 +77,16 @@ func (m *Manager) seedHelpers(ctx context.Context, sb *Sandbox) {
 			Msg("seed helpers: install mcp_advertise profile.d failed")
 	}
 	// Best-effort: optional Host proxy (map empty in public tree → no-op).
-	proxyCmd := "cat > " + shellQuote(mcpSpaProxyPath) + " && chmod +x " + shellQuote(mcpSpaProxyPath)
+	qProxy, err := quoteShellPath(mcpSpaProxyPath)
+	if err != nil {
+		log.Warn().Str("id", sb.ID).Err(err).Msg("seed helpers: invalid mcp host proxy path")
+		return
+	}
+	proxyCmd := "cat > " + qProxy + " && chmod +x " + qProxy
 	if out, err := creds.runInput(ctx, 20*time.Second, proxyCmd, strings.NewReader(mcpSpaProxyScript)); err != nil {
 		log.Warn().Str("id", sb.ID).Err(err).Str("out", strings.TrimSpace(string(out))).
 			Msg("seed helpers: install mcp host proxy failed")
-	} else if out, err := creds.run(ctx, 15*time.Second, shellQuote(mcpSpaProxyPath)+" --ensure"); err != nil {
+	} else if out, err := creds.run(ctx, 15*time.Second, qProxy+" --ensure"); err != nil {
 		log.Warn().Str("id", sb.ID).Err(err).Str("out", strings.TrimSpace(string(out))).
 			Msg("seed helpers: start mcp host proxy failed")
 	}

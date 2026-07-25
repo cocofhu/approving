@@ -25,7 +25,8 @@ import (
 )
 
 func parseUintParam(c *gin.Context, name string) (uint, bool) {
-	v, err := strconv.ParseUint(c.Param(name), 10, 64)
+	// bitSize=strconv.IntSize rejects values that cannot fit platform uint (CodeQL #10).
+	v, err := strconv.ParseUint(c.Param(name), 10, strconv.IntSize)
 	if err != nil {
 		return 0, false
 	}

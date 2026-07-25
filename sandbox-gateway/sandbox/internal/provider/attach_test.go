@@ -8,6 +8,34 @@ import (
 	"testing"
 )
 
+func TestAttachmentFileNameRejectsDotDot(t *testing.T) {
+	name := AttachmentFileName(0, PromptImage{Name: "..", MimeType: "image/png"})
+	if name == ".." || name == "." {
+		t.Fatalf("AttachmentFileName(..) = %q, want fallback", name)
+	}
+	if name != "attachment-1.png" {
+		t.Fatalf("got %q", name)
+	}
+}
+
+func TestMaterializeAttachmentsRejectsDotDotName(t *testing.T) {
+	png := base64.StdEncoding.EncodeToString([]byte{0x89, 0x50, 0x4e, 0x47})
+	dir, paths, err := MaterializeAttachments([]PromptImage{
+		{Data: png, MimeType: "image/png", Name: ".."},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	if len(paths) != 1 {
+		t.Fatalf("paths=%v", paths)
+	}
+	rel, err := filepath.Rel(dir, paths[0])
+	if err != nil || strings.HasPrefix(rel, "..") {
+		t.Fatalf("path escaped temp dir: %q (rel=%q err=%v)", paths[0], rel, err)
+	}
+}
+
 func TestMaterializeAttachmentsImageAndFile(t *testing.T) {
 	png := base64.StdEncoding.EncodeToString([]byte{0x89, 0x50, 0x4e, 0x47})
 	txt := base64.StdEncoding.EncodeToString([]byte("hello"))
