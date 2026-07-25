@@ -1,9 +1,8 @@
 # Approving
 
-**Compose coding agents into workflows you can trust.**
+**Agent workflows that advance with humans — a new paradigm for multi-agent collaboration.**
 
-The open-source Dev Agent orchestration platform.
-Build rollback-capable, human-gated, observable workflows — agents run in real Docker sandboxes.
+Approving turns coding agents into workflows you can trust: visual orchestration, sandboxed execution, and human Approve at critical nodes before continuing. Open-source and self-hostable, with rollback and human gates. See the [Site](https://www.approving-ai.com/) — This project was built with this workflow.
 
 [![CI Server](https://github.com/cocofhu/approving/actions/workflows/ci-server.yml/badge.svg)](https://github.com/cocofhu/approving/actions/workflows/ci-server.yml)
 [![CI Web](https://github.com/cocofhu/approving/actions/workflows/ci-web.yml/badge.svg)](https://github.com/cocofhu/approving/actions/workflows/ci-web.yml)
@@ -23,25 +22,17 @@ Security scans (CodeQL, web npm audit, gitleaks) run via the [security](https://
 
 ## What is Approving?
 
-Approving turns coding agents into steps in a real workflow. You compose agents on a finite-state machine — nodes are states, edges are transitions — with success, failure, and rollback paths. When a step needs a human, the run pauses at a gate until someone approves.
+Approving helps agent workflows move forward with humans: visually orchestrate multi-agent collaboration, run in sandboxes, and pause for human Approve at critical nodes. Backends include Cursor, Claude Code, CodeBuddy, and Trae.
 
-Agents do not run as black-box prompts on your laptop. They execute inside Docker sandboxes through the vendored [sandbox-gateway](sandbox-gateway/), talk to a run-scoped artifact MCP, and leave a paper trail you can inspect. Works with **Cursor**, **Claude Code**, **CodeBuddy**, and **Trae**.
+## Why Approving?
 
-No more one-shot agent runs you cannot undo. Design the path, gate the risky steps, and keep every artifact under contract.
-
-## Why "Approving"?
-
-Because the critical path should require a human to approve.
-
-Autonomous agents are powerful — and opaque. Approving puts the approval moment first-class: checkpoints, human gates, and rollback edges are part of the graph, not afterthoughts. When something fails, the workflow can take a failure path or roll back instead of leaving a half-applied mess.
-
-The name is the product bet: agents move fast; humans still own the decisions that matter.
+Named for Approve: in human–agent collaboration, critical nodes must be approved by a person before the workflow continues — trust is built into the path.
 
 ## Features
 
 Approving manages the full agent workflow: from graph design to sandboxed execution to artifact handoff.
 
-- **FSM orchestration** — nodes are states, edges are transitions. Success / failure / rollback paths, `when` guards, checkpoints, and human gates.
+- **Visual orchestration** — canvas FSM with when guards, checkpoints, and gates; rollback on failure
 - **Real Docker sandboxes** — agent and react nodes run in containers via ACP through the vendored `sandbox-gateway`. The web UI is API-driven.
 - **Multi-agent backends** — one platform for Cursor, Claude Code, CodeBuddy, and Trae. Pick `acpBackend` per agent; keys live on Agent meta env.
 - **Artifact contract + run-scoped MCP** — agents call `write_artifact` / `set_*` / `node_complete`. Each run is isolated by token.
