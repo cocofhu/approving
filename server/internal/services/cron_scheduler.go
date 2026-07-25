@@ -337,7 +337,8 @@ func (s *CronScheduler) finishJob(job *models.AgentCronJob, run *models.AgentCro
 		if n >= 5 {
 			updates["enabled"] = false
 		} else {
-			updates["next_run_at"] = now.Add(cronBackoff(n))
+			// Persist UTC so SQLite text compare with UTC now stays correct (see NextScheduleTime).
+			updates["next_run_at"] = now.Add(cronBackoff(n)).UTC()
 		}
 	}
 	if err := s.db.Model(&models.AgentCronJob{}).Where("id = ?", job.ID).Updates(updates).Error; err != nil {
