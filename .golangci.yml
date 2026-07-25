@@ -1,0 +1,19 @@
+# Shared golangci-lint config for server, sandbox-gateway/gateway, and
+# sandbox-gateway/sandbox. First-pass: low noise, blocking CI gate.
+# Future tightening (errcheck, unused, etc.) can widen checks gradually.
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - staticcheck
+  settings:
+    staticcheck:
+      # Style + correctness subset; keep high-noise families (e.g. errcheck) off.
+      checks:
+        - "SA*"
+        - "S1*"
+  exclusions:
+    # First-pass: do not lint test files.
+    paths:
+      - _test\.go$

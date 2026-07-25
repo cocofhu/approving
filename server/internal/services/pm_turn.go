@@ -371,9 +371,7 @@ func (r *PmTurnRunner) Subscribe(threadID string, afterSeq int) (<-chan PmTurnEv
 
 	unsub := func() {
 		t.mu.Lock()
-		if _, ok := t.subs[sub]; ok {
-			delete(t.subs, sub)
-		}
+		delete(t.subs, sub)
 		t.mu.Unlock()
 		sub.Close()
 	}

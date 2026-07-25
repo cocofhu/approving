@@ -59,7 +59,11 @@ const { t } = useI18n()
 const openCalls = ref<Set<number>>(new Set())
 function toggleCall(i: number) {
   const s = new Set(openCalls.value)
-  s.has(i) ? s.delete(i) : s.add(i)
+  if (s.has(i)) {
+    s.delete(i)
+  } else {
+    s.add(i)
+  }
   openCalls.value = s
 }
 
