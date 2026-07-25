@@ -42,6 +42,7 @@ import {
   switchBackendRegions,
   type BackendId,
 } from '@/lib/regionPolicy'
+import { BACKEND_AUTH_HINTS } from '@/lib/backendAuthGuide'
 
 const { t } = useI18n()
 const { isMobile } = useBreakpoint()
@@ -299,26 +300,6 @@ function cancelProjectChange() {
 const DEFAULT_CONFIG_ROOT = '/root/.cursor'
 const DEFAULT_WORKSPACE_DIR = '/root/workspace'
 
-type AuthHint = {
-  key: string
-  alt?: string
-  note: string
-}
-
-const BACKEND_AUTH_HINTS: Record<BackendId, AuthHint> = {
-  cursor: { key: 'APPROVING_CURSOR_API_KEY', alt: 'CURSOR_API_KEY', note: 'Cursor ACP 鉴权' },
-  claude_code: { key: 'APPROVING_CLAUDE_API_KEY', alt: 'ANTHROPIC_API_KEY', note: 'Claude Code ACP 鉴权' },
-  codebuddy: {
-    key: 'APPROVING_CODEBUDDY_API_KEY',
-    alt: 'CODEBUDDY_API_KEY',
-    note: 'CodeBuddy ACP 鉴权',
-  },
-  trae: {
-    key: 'APPROVING_TRAE_API_KEY',
-    alt: 'TRAECLI_PERSONAL_ACCESS_TOKEN',
-    note: 'Trae ACP 鉴权 (CLI 登录令牌)',
-  },
-}
 let configRootTouched = false
 
 function defaultConfigRootFor(backend: BackendId): string {

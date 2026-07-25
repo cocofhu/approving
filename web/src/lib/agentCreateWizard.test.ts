@@ -163,15 +163,34 @@ describe('hasPathDeps / buildReviewSummary', () => {
     expect(hasPathDeps(d)).toBe(true)
   })
 
-  it('shows default rule and platform prompts on skip', () => {
+  it('builds 5-step review chips without ENV/capability steps and reminds when Key skipped', () => {
     const d = freshDraft()
     d.name = 'n'
-    d.skipped.rules = true
-    d.skipped.prompts = true
+    d.skipped.apiKey = true
     const items = buildReviewSummary(d)
-    expect(items.find((i) => i.key === 'rules')?.kind).toBe('def')
-    expect(items.find((i) => i.key === 'prompts')?.kind).toBe('def')
+    const keys = items.map((i) => i.key)
+    expect(keys).toContain('acp')
+    expect(keys).toContain('apiKey')
+    expect(keys).toContain('git')
+    expect(keys).toContain('authReminder')
+    expect(keys).not.toContain('env')
+    expect(keys).not.toContain('mcp')
+    expect(keys).not.toContain('rules')
+    expect(keys).not.toContain('skills')
+    expect(keys).not.toContain('commands')
+    expect(keys).not.toContain('prompts')
+    expect(items.find((i) => i.key === 'acp')?.labelKey).toBe('pages.agentStudio.wizard.review.acp')
+    expect(items.find((i) => i.key === 'apiKey')?.kind).toBe('empty')
     expect(items.find((i) => i.key === 'git')?.kind).toBe('empty')
+  })
+
+  it('marks API Key configured when auth env is present', () => {
+    const d = freshDraft()
+    d.name = 'n'
+    d.env = [{ k: 'APPROVING_CURSOR_API_KEY', v: 'crsr_demo' }]
+    const items = buildReviewSummary(d)
+    expect(items.find((i) => i.key === 'apiKey')?.kind).toBe('ok')
+    expect(items.find((i) => i.key === 'authReminder')).toBeUndefined()
   })
 
   it('resets regions on backend switches and excludes the managed key from ENV count', () => {
