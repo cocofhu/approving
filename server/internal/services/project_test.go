@@ -365,3 +365,97 @@ func TestProjectListAndWorkflowLookups(t *testing.T) {
 		t.Fatalf("empty projects DefaultProjectID=%q", id)
 	}
 }
+
+func TestTotalTokensByProjectIDs(t *testing.T) {
+	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "proj_tokens.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewProjectService(db)
+
+	noRun, err := s.Create("NoRun", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	noUsage, err := s.Create("NoUsage", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	partial, err := s.Create("Partial", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zero, err := s.Create("Zero", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	large, err := s.Create("Large", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mustCreate := func(v any) {
+		t.Helper()
+		if err := db.Create(v).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustCreate(&models.WorkflowDef{ID: "wf-nousage", ProjectID: noUsage.ID, Name: "w", Status: "draft", Version: 1})
+	mustCreate(&models.Run{ID: "run-nousage", WorkflowID: "wf-nousage", Status: "completed"})
+	mustCreate(&models.StateRun{RunID: "run-nousage", NodeID: "n1", Status: "completed"})
+
+	mustCreate(&models.WorkflowDef{ID: "wf-partial", ProjectID: partial.ID, Name: "w", Status: "draft", Version: 1})
+	mustCreate(&models.Run{ID: "run-partial-a", WorkflowID: "wf-partial", Status: "failed"})
+	mustCreate(&models.Run{ID: "run-partial-b", WorkflowID: "wf-partial", Status: "running"})
+	mustCreate(&models.StateRun{RunID: "run-partial-a", NodeID: "n1", Status: "failed"}) // no usage
+	mustCreate(&models.StateRun{
+		RunID: "run-partial-a", NodeID: "n2", Status: "completed",
+		Usage: &models.TokenUsage{InputTokens: 100, OutputTokens: 20},
+	})
+	mustCreate(&models.StateRun{
+		RunID: "run-partial-b", NodeID: "n1", Status: "running",
+		Usage: &models.TokenUsage{InputTokens: 5, CacheReadTokens: 3},
+	})
+
+	mustCreate(&models.WorkflowDef{ID: "wf-zero", ProjectID: zero.ID, Name: "w", Status: "draft", Version: 1})
+	mustCreate(&models.Run{ID: "run-zero", WorkflowID: "wf-zero", Status: "cancelled"})
+	mustCreate(&models.StateRun{
+		RunID: "run-zero", NodeID: "n1", Status: "cancelled",
+		Usage: &models.TokenUsage{},
+	})
+
+	mustCreate(&models.WorkflowDef{ID: "wf-large", ProjectID: large.ID, Name: "w", Status: "draft", Version: 1})
+	mustCreate(&models.Run{ID: "run-large", WorkflowID: "wf-large", Status: "completed"})
+	mustCreate(&models.StateRun{
+		RunID: "run-large", NodeID: "n1", Status: "completed",
+		Usage: &models.TokenUsage{InputTokens: 1_000_000, OutputTokens: 20_000},
+	})
+	mustCreate(&models.StateRun{
+		RunID: "run-large", NodeID: "n2", Status: "completed",
+		Usage: &models.TokenUsage{CacheWriteTokens: 400},
+	})
+
+	got := s.TotalTokensByProjectIDs([]string{noRun.ID, noUsage.ID, partial.ID, zero.ID, large.ID})
+
+	if _, ok := got[noRun.ID]; ok {
+		t.Fatalf("no-run project should be absent (null): %v", got[noRun.ID])
+	}
+	if _, ok := got[noUsage.ID]; ok {
+		t.Fatalf("all-nil-usage project should be absent (null): %v", got[noUsage.ID])
+	}
+	if got[partial.ID] == nil || *got[partial.ID] != 128 {
+		t.Fatalf("partial = %v want 128", got[partial.ID])
+	}
+	if got[zero.ID] == nil || *got[zero.ID] != 0 {
+		t.Fatalf("zero = %v want 0", got[zero.ID])
+	}
+	if got[large.ID] == nil || *got[large.ID] != 1_020_400 {
+		t.Fatalf("large = %v want 1020400", got[large.ID])
+	}
+	if single := s.TotalTokens(partial.ID); single == nil || *single != 128 {
+		t.Fatalf("TotalTokens(partial) = %v", single)
+	}
+	if s.TotalTokens(noRun.ID) != nil {
+		t.Fatal("TotalTokens(noRun) should be nil")
+	}
+}
