@@ -1066,7 +1066,10 @@
         "chooseHint": "Confirmation updates this draft immediately and is persisted only by Save changes.",
         "confirmApply": "Confirm and apply",
         "boundary": "This only checks field shape. It does not verify referenced values, token validity, network access, or remote clone / push permissions.",
-        "unresolved": "Repositories unresolved",
+        "unresolved": "Runtime resolve",
+        "runtimeResolve": "Runtime resolve",
+        "runtimeResolveHint": "When the repo list uses a recommended variable, this page does not expand per repository; resolution happens at runtime. That is expected, not an error.",
+        "envHint": "Credentials can be set via env vars: GitHub uses GITHUB_TOKEN (plus GITHUB_URL for self-hosted); GitLab uses GITLAB_TOKEN (plus GITLAB_URL); SSH uses a private key and known_hosts. Configure concrete repo URLs in Studio.",
         "done": "Done",
         "varsHint": "Supports {'${vars.*}'} references",
         "schemeHttps": "HTTPS",
@@ -1079,8 +1082,8 @@
         "statusOk": "Configuration shape complete",
         "statusErr": "Credential configuration shape incomplete",
         "types": {
-          "github_https": "GitHub · HTTPS",
-          "gitlab_https": "GitLab · HTTPS",
+          "github_https": "GitHub",
+          "gitlab_https": "GitLab",
           "ssh": "SSH",
           "unknown": "Connection type pending"
         },
@@ -1098,7 +1101,7 @@
         "status": {
           "disabled": {
             "title": "Git not enabled",
-            "description": "GIT_REPOS is not configured; repository access is optional."
+            "description": "GIT_REPOS is not set. Choose a credential type and add recommended vars, or skip this step."
           },
           "complete": {
             "title": "Configuration shape complete",
@@ -1108,9 +1111,13 @@
             "title": "Credentials incomplete",
             "description": "The type was identified, but one or more repositories are missing required fields."
           },
+          "needs_type": {
+            "title": "Choose a credential type",
+            "description": "Select GitHub / GitLab / SSH, add recommended vars, or skip. Runtime repo references are not expanded on this page."
+          },
           "needs_confirmation": {
             "title": "Credential type needs confirmation",
-            "description": "The configuration is ambiguous, runtime references are unresolved, or a saved selection conflicts with repository evidence."
+            "description": "The saved selection conflicts with repository evidence, or the type is invalid. Re-select GitHub / GitLab / SSH."
           },
           "unsupported": {
             "title": "Currently unsupported",
@@ -1291,7 +1298,8 @@
         },
         "steps": {
           "basics": "Basics",
-          "acp": "ACP",
+          "acp": "Agent",
+          "apiKey": "API Key",
           "git": "Git",
           "env": "ENV",
           "mcp": "MCP",
@@ -1308,15 +1316,61 @@
           "descHint": "Optional. When set, it is prepended to the default alwaysApply rule."
         },
         "acp": {
-          "meta": "Pick an ACP Backend. CodeBuddy and Trae also require a China or International site; International is the default.",
+          "meta": "Pick an Agent Backend. CodeBuddy and Trae also require a China or International site; International is the default.",
           "remapTitle": "Switch Backend?",
           "remapBody": "MCP / Skills / Commands / Rules may depend on the current paths. Switching remaps to the new configRoot; cancel keeps the current Backend."
         },
+        "apiKey": {
+          "meta": "Configure the auth key for the current Backend. Skip and finish later in Studio Env.",
+          "backendBanner": "Current Backend: {backend}. Only keys for this backend are shown.",
+          "alias": "Alias (either works)",
+          "inputLabel": "Paste API Key",
+          "inputPlaceholder": "sk-… / token… (optional; you can skip)",
+          "skipHint": "You can leave this empty and click Next or Skip; complete it later in Studio Env before running.",
+          "notes": {
+            "codebuddySite": "Keys are bound to a site; apply in the console that matches the site chosen in the Agent step.",
+            "traeToken": "Official CLI login tokens must start with trae-lt- (Enterprise plan)."
+          },
+          "paths": {
+            "cursor": {
+              "step1": "Open Cursor Dashboard → Settings → API Keys",
+              "step2": "Create an API Key and copy it",
+              "step3": "Paste below (or later set APPROVING_CURSOR_API_KEY / CURSOR_API_KEY in Studio Env)"
+            },
+            "claude": {
+              "step1": "Open Anthropic Console → API Keys (or Claude Platform → Settings → Keys)",
+              "step2": "Create a key and copy it",
+              "step3": "Paste below (or set APPROVING_CLAUDE_API_KEY / ANTHROPIC_API_KEY)"
+            },
+            "codebuddy": {
+              "step1": "Confirm the site selected in the Agent step (International / China / …)",
+              "step2": "Open that site's console Profile / API Keys page and create a key",
+              "step3": "Paste below (APPROVING_CODEBUDDY_API_KEY / CODEBUDDY_API_KEY)"
+            },
+            "trae": {
+              "step1": "In the Trae enterprise console: Profile → Access tokens → CLI login token",
+              "step2": "Generate a trae-lt-… token and copy it",
+              "step3": "Paste below (APPROVING_TRAE_API_KEY / TRAECLI_PERSONAL_ACCESS_TOKEN)"
+            }
+          },
+          "links": {
+            "cursorDashboard": "Open Cursor Dashboard",
+            "cursorDocs": "Cursor docs",
+            "claudeConsole": "Anthropic Console",
+            "claudeKeys": "Claude Platform Keys",
+            "claudeDocs": "Anthropic docs",
+            "codebuddyPublic": "Apply key (International)",
+            "codebuddyInternal": "Apply key (China)",
+            "codebuddyIoa": "Apply key (iOA)",
+            "codebuddyStaging": "Apply key (Staging)",
+            "traeTokenDocs": "Trae CLI login-token docs"
+          }
+        },
         "git": {
-          "meta": "Configure clone credentials via env vars. Skip and finish later in Studio."
+          "meta": "Choose GitHub / GitLab / SSH and optionally add recommended vars. Skip and finish later in Studio."
         },
         "env": {
-          "meta": "Environment variables injected into the sandbox. Region keys are managed by the ACP step; secrets stay in the Agent config."
+          "meta": "Environment variables injected into the sandbox. Region keys are managed by the Agent step; secrets stay in the Agent config."
         },
         "mcp": {
           "meta": "Configure MCP servers. When skipped or the mcp list is empty, the server writes the default artifact-store.",
@@ -1339,9 +1393,13 @@
           "meta": "Override platform prompt fields. Skipping keeps platform defaults (no empty overwrite)."
         },
         "review": {
-          "meta": "Review the summary, then create once. Cancel/close does not persist.",
+          "meta": "Review the summary, then create once. Cancel/close does not persist. Configure MCP / Rules and other capabilities later in Studio.",
           "name": "Name",
-          "acp": "ACP",
+          "acp": "Agent",
+          "apiKeyConfigured": "API Key · configured",
+          "apiKeySkipped": "API Key · not set",
+          "authReminder": "Auth reminder",
+          "authReminderDetail": "Auth is required before runs; you can complete it in Studio Env. This reminder does not block create.",
           "git": "Git",
           "env": "ENV",
           "mcp": "MCP",

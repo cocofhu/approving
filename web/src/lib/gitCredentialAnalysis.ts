@@ -207,6 +207,8 @@ export function analyzeGitCredentials(
     }
   }
   if (unresolvedReference) {
+    // Runtime repo list refs (e.g. ${vars.repos}) are expected deferred resolution —
+    // do not treat them as per-repo parse conflicts / dead-end warnings.
     if (!selectedType) {
       return {
         ...base,
@@ -215,8 +217,8 @@ export function analyzeGitCredentials(
         unresolvedReference: true,
         selectionValid: false,
         conflicts: unknownSelection
-          ? [{ reason: `未知凭据类型 ${input.selectedType}` }, { field: 'GIT_REPOS', reason: '运行时仓库引用无法在此页面逐仓解析' }]
-          : [{ field: 'GIT_REPOS', reason: '运行时仓库引用无法在此页面逐仓解析' }],
+          ? [{ reason: `未知凭据类型 ${input.selectedType}` }]
+          : [],
       }
     }
     const missing = missingCredentials(selectedType, [], env, true)

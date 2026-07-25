@@ -1,6 +1,7 @@
 import type { Agent, AgentFile, AgentPrompts, MCPServer } from '@/lib/api'
 import type { GitCredentialType } from '@/lib/gitCredentialAnalysis'
 import { validateAgentName } from '@/lib/agentIO'
+import { hasAuthKeyConfigured } from '@/lib/backendAuthGuide'
 import {
   ACP_BACKENDS,
   isManagedRegionKey,
@@ -12,9 +13,11 @@ import {
 
 export type WizardBackendId = BackendId
 export { ACP_BACKENDS }
+/** Wizard step ids. Internal `acp` is shown as Agent via i18n; capability/env steps are not in WIZARD_STEPS. */
 export type WizardStepId =
   | 'basics'
   | 'acp'
+  | 'apiKey'
   | 'git'
   | 'env'
   | 'mcp'
@@ -67,16 +70,12 @@ export type WizardStepDef = {
   skip: boolean
 }
 
+/** Demo v4 IA: basics → Agent(acp) → API Key → Git → review. */
 export const WIZARD_STEPS: WizardStepDef[] = [
   { id: 'basics', labelKey: 'pages.agentStudio.wizard.steps.basics', skip: false },
   { id: 'acp', labelKey: 'pages.agentStudio.wizard.steps.acp', skip: true },
+  { id: 'apiKey', labelKey: 'pages.agentStudio.wizard.steps.apiKey', skip: true },
   { id: 'git', labelKey: 'pages.agentStudio.wizard.steps.git', skip: true },
-  { id: 'env', labelKey: 'pages.agentStudio.wizard.steps.env', skip: true },
-  { id: 'mcp', labelKey: 'pages.agentStudio.wizard.steps.mcp', skip: true },
-  { id: 'rules', labelKey: 'pages.agentStudio.wizard.steps.rules', skip: true },
-  { id: 'skills', labelKey: 'pages.agentStudio.wizard.steps.skills', skip: true },
-  { id: 'commands', labelKey: 'pages.agentStudio.wizard.steps.commands', skip: true },
-  { id: 'prompts', labelKey: 'pages.agentStudio.wizard.steps.prompts', skip: true },
   { id: 'review', labelKey: 'pages.agentStudio.wizard.steps.review', skip: false },
 ]
 
@@ -292,22 +291,23 @@ export type ReviewSummaryItem = {
   detail?: string
 }
 
-/** Build confirmation-page summary chips (Rules default vs empty, Prompts platform default, etc.). */
+/** Build confirmation-page summary chips aligned to the 5-step wizard IA. */
 export function buildReviewSummary(draft: WizardDraft): ReviewSummaryItem[] {
   const normalizedEnv = normalizeRegions(kvToRec(draft.env), draft.acpBackend, 'strict').env
   const region = regionSummary(normalizedEnv, draft.acpBackend, 'strict')
   const name = draft.name.trim() || '—'
   const gitN = envConfiguredCount(draft, true)
-  const envN = envConfiguredCount(draft, false)
-  const mcpN = draft.mcp.filter((m) => m.name.trim()).length
-  const skillN = draft.skills.filter((s) => s.name.trim()).length
-  const cmdN = draft.commands.filter((c) => c.name.trim()).length
-  const promptN = promptConfiguredCount(draft)
-  const rulesSkipped = !!draft.skipped.rules && !draft.rulesEdited
-  const promptsSkipped = !!draft.skipped.prompts || promptN === 0
+  const authConfigured = hasAuthKeyConfigured(draft.env, draft.acpBackend)
+  const apiKeySkipped = !!draft.skipped.apiKey || !authConfigured
 
   const items: ReviewSummaryItem[] = [
     { key: 'name', kind: 'ok', labelKey: 'pages.agentStudio.wizard.review.name', detail: name },
+    {
+      key: 'acp',
+      kind: 'ok',
+      labelKey: 'pages.agentStudio.wizard.review.acp',
+      detail: `${draft.acpBackend} · ${draft.configRoot}`,
+    },
     ...(region
       ? [
           {
@@ -319,56 +319,30 @@ export function buildReviewSummary(draft: WizardDraft): ReviewSummaryItem[] {
         ]
       : []),
     {
-      key: 'acp',
-      kind: 'ok',
-      labelKey: 'pages.agentStudio.wizard.review.acp',
-      detail: `${draft.acpBackend} · ${draft.configRoot}`,
+      key: 'apiKey',
+      kind: authConfigured ? 'ok' : 'empty',
+      labelKey: authConfigured
+        ? 'pages.agentStudio.wizard.review.apiKeyConfigured'
+        : 'pages.agentStudio.wizard.review.apiKeySkipped',
     },
     {
       key: 'git',
-      kind: gitN > 0 ? 'ok' : 'empty',
+      kind: gitN > 0 || draft.gitCredentialType ? 'ok' : 'empty',
       labelKey: 'pages.agentStudio.wizard.review.git',
-      detail: gitN > 0 ? String(gitN) : undefined,
-    },
-    {
-      key: 'env',
-      kind: envN > 0 ? 'ok' : 'empty',
-      labelKey: 'pages.agentStudio.wizard.review.env',
-      detail: envN > 0 ? String(envN) : undefined,
-    },
-    {
-      key: 'mcp',
-      kind: mcpN > 0 ? 'ok' : 'empty',
-      labelKey: 'pages.agentStudio.wizard.review.mcp',
-      detail: mcpN > 0 ? String(mcpN) : undefined,
-    },
-    {
-      key: 'rules',
-      kind: rulesSkipped ? 'def' : draft.rulesEdited ? 'ok' : 'def',
-      labelKey: rulesSkipped || !draft.rulesEdited
-        ? 'pages.agentStudio.wizard.review.rulesDefault'
-        : 'pages.agentStudio.wizard.review.rulesCustom',
-    },
-    {
-      key: 'skills',
-      kind: skillN > 0 ? 'ok' : 'empty',
-      labelKey: 'pages.agentStudio.wizard.review.skills',
-      detail: skillN > 0 ? String(skillN) : undefined,
-    },
-    {
-      key: 'commands',
-      kind: cmdN > 0 ? 'ok' : 'empty',
-      labelKey: 'pages.agentStudio.wizard.review.commands',
-      detail: cmdN > 0 ? String(cmdN) : undefined,
-    },
-    {
-      key: 'prompts',
-      kind: promptsSkipped ? 'def' : 'ok',
-      labelKey: promptsSkipped
-        ? 'pages.agentStudio.wizard.review.promptsDefault'
-        : 'pages.agentStudio.wizard.review.promptsCustom',
-      detail: promptsSkipped ? undefined : String(promptN),
+      detail:
+        gitN > 0
+          ? String(gitN)
+          : draft.gitCredentialType
+            ? draft.gitCredentialType
+            : undefined,
     },
   ]
+  if (apiKeySkipped && !authConfigured) {
+    items.push({
+      key: 'authReminder',
+      kind: 'def',
+      labelKey: 'pages.agentStudio.wizard.review.authReminder',
+    })
+  }
   return items
 }

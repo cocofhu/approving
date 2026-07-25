@@ -52,6 +52,16 @@ const typeLabel = computed(() =>
     : t('pages.agentStudio.git.types.unknown'),
 )
 const issues = computed(() => [...analysis.value.conflicts, ...analysis.value.missing])
+/** Runtime refs are informational, not warn badges once a credential type is chosen. */
+const showRuntimeResolveBadge = computed(
+  () => analysis.value.unresolvedReference && analysis.value.status !== 'disabled',
+)
+const showActionableTypeHint = computed(
+  () =>
+    analysis.value.unresolvedReference &&
+    !analysis.value.effectiveType &&
+    analysis.value.status === 'needs_confirmation',
+)
 const sourceLabelKey = computed(() => {
   if (analysis.value.source === 'user' && !analysis.value.selectionValid) {
     return 'pages.agentStudio.git.source.invalid'
@@ -118,10 +128,18 @@ defineExpose({ isGitEnvKey })
           <span class="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" :class="dotClass[analysis.status]" />
           <div class="min-w-0 flex-1">
             <div class="text-[12px] font-semibold text-txt">
-              {{ t(`pages.agentStudio.git.status.${analysis.status}.title`) }}
+              {{
+                showActionableTypeHint
+                  ? t('pages.agentStudio.git.status.needs_type.title')
+                  : t(`pages.agentStudio.git.status.${analysis.status}.title`)
+              }}
             </div>
             <div class="mt-1 text-[11px] leading-5 text-txt2">
-              {{ t(`pages.agentStudio.git.status.${analysis.status}.description`) }}
+              {{
+                showActionableTypeHint
+                  ? t('pages.agentStudio.git.status.needs_type.description')
+                  : t(`pages.agentStudio.git.status.${analysis.status}.description`)
+              }}
             </div>
           </div>
           <span class="rounded bg-surface/70 px-2 py-1 text-[10px] text-txt3">
@@ -130,11 +148,24 @@ defineExpose({ isGitEnvKey })
         </div>
       </div>
 
+      <div
+        v-if="showRuntimeResolveBadge"
+        class="mt-3 rounded-lg border border-line bg-base/40 px-3.5 py-2.5 text-[11px] leading-5 text-txt2"
+      >
+        <span class="mr-2 inline-block rounded bg-elevated px-1.5 py-0.5 text-[10px] text-txt3">
+          {{ t('pages.agentStudio.git.runtimeResolve') }}
+        </span>
+        {{ t('pages.agentStudio.git.runtimeResolveHint') }}
+      </div>
+
       <div v-if="analysis.status !== 'disabled'" class="mt-3 rounded-lg border border-line">
         <div class="flex items-center gap-2 border-b border-line bg-base/40 px-3 py-2.5">
           <span class="font-medium text-txt">{{ typeLabel }}</span>
-          <span v-if="analysis.unresolvedReference" class="rounded bg-warn/10 px-1.5 py-0.5 text-[10px] text-warn">
-            {{ t('pages.agentStudio.git.unresolved') }}
+          <span
+            v-if="analysis.effectiveType && analysis.unresolvedReference"
+            class="rounded bg-elevated px-1.5 py-0.5 text-[10px] text-txt3"
+          >
+            {{ t('pages.agentStudio.git.runtimeResolve') }}
           </span>
         </div>
         <div v-if="analysis.repos.length" class="divide-y divide-line px-3">
@@ -151,7 +182,8 @@ defineExpose({ isGitEnvKey })
         </div>
       </div>
 
-      <p class="mt-3 text-[11px] leading-5 text-txt3">{{ t('pages.agentStudio.git.boundary') }}</p>
+      <p class="mt-3 text-[11px] leading-5 text-txt3">{{ t('pages.agentStudio.git.envHint') }}</p>
+      <p class="mt-1.5 text-[11px] leading-5 text-txt3">{{ t('pages.agentStudio.git.boundary') }}</p>
     </div>
   </section>
 

@@ -7,27 +7,20 @@ import AgentGitGuide from '@/components/agent/AgentGitGuide.vue'
 import { api, type Agent } from '@/lib/api'
 import {
   ACP_BACKENDS,
-  GIT_ENV_KEYS,
   WIZARD_STEPS,
   applyAcpBackend,
   assembleCreatePayload,
-  buildDefaultRule,
   buildReviewSummary,
-  defaultCommandTemplate,
-  defaultSkillTemplate,
   freshDraft,
   hasPathDeps,
   validateBasics,
   type WizardBackendId,
   type WizardDraft,
-  type WizardMCP,
   type WizardStepId,
 } from '@/lib/agentCreateWizard'
-import {
-  getRegionPolicy,
-  isManagedRegionKey,
-  setRegion,
-} from '@/lib/regionPolicy'
+import { authGuideFor, hasAuthKeyConfigured } from '@/lib/backendAuthGuide'
+import type { GitCredentialType } from '@/lib/gitCredentialAnalysis'
+import { getRegionPolicy, setRegion } from '@/lib/regionPolicy'
 
 const props = defineProps<{
   open: boolean
@@ -48,9 +41,7 @@ const createError = ref('')
 const pendingAcp = ref<WizardBackendId | null>(null)
 const showAcpConfirm = ref(false)
 const stepAnimKey = ref(0)
-const newSkillName = ref('')
-const newCmdName = ref('')
-const regionManagedNotice = ref(false)
+const apiKeyInput = ref('')
 
 const currentStep = computed(() => WIZARD_STEPS[draft.value.step])
 const progressPct = computed(() => ((draft.value.step + 1) / WIZARD_STEPS.length) * 100)
@@ -61,35 +52,14 @@ const currentRegion = computed(() => {
   if (!policy) return ''
   return draft.value.env.find((item) => item.k.trim() === policy.regionEnvKey)?.v || ''
 })
-
-const promptFragments = computed(() =>
-  [
-    {
-      key: 'upstreamArtifactsHeader' as const,
-      label: t('pages.agentStudio.promptFields.upstreamHeader.label'),
-      hint: t('pages.agentStudio.promptFields.upstreamHeader.hint'),
-      placeholder: t('pages.agentStudio.promptFields.upstreamHeader.placeholder'),
-    },
-    {
-      key: 'producesContract' as const,
-      label: t('pages.agentStudio.promptFields.producesContract.label'),
-      hint: t('pages.agentStudio.promptFields.producesContract.hint'),
-      placeholder: t('pages.agentStudio.promptFields.producesContract.placeholder'),
-    },
-    {
-      key: 'reactOpenSuffix' as const,
-      label: t('pages.agentStudio.promptFields.reactOpening.label'),
-      hint: t('pages.agentStudio.promptFields.reactOpening.hint'),
-      placeholder: t('pages.agentStudio.promptFields.reactOpening.placeholder'),
-    },
-    {
-      key: 'producesRetry' as const,
-      label: t('pages.agentStudio.promptFields.reactMissingArtifact.label'),
-      hint: t('pages.agentStudio.promptFields.reactMissingArtifact.hint'),
-      placeholder: t('pages.agentStudio.promptFields.reactMissingArtifact.placeholder'),
-    },
-  ],
+const authGuide = computed(() => authGuideFor(draft.value.acpBackend, currentRegion.value))
+const authConfigured = computed(() =>
+  hasAuthKeyConfigured(draft.value.env, draft.value.acpBackend),
 )
+const showAuthReminder = computed(() => !authConfigured.value)
+
+const primaryAuthKey = computed(() => authGuide.value.keys[0]?.key || '')
+const primaryAuthAlt = computed(() => authGuide.value.keys[0]?.alt || '')
 
 const headSub = computed(() => {
   const id = currentStep.value.id
@@ -108,15 +78,21 @@ watch(
       creating.value = false
       pendingAcp.value = null
       showAcpConfirm.value = false
-      newSkillName.value = ''
-      newCmdName.value = ''
-      regionManagedNotice.value = false
+      apiKeyInput.value = ''
       stepAnimKey.value++
       nextTick(() => {
-        const el = document.getElementById('wiz-name-input')
-        el?.focus()
+        document.getElementById('wiz-name-input')?.focus()
       })
     }
+  },
+)
+
+watch(
+  () => [draft.value.acpBackend, currentRegion.value] as const,
+  () => {
+    const key = primaryAuthKey.value
+    const row = draft.value.env.find((e) => e.k === key)
+    apiKeyInput.value = row?.v ?? ''
   },
 )
 
@@ -132,8 +108,12 @@ function upsertEnv(key: string, value: string) {
 }
 
 function selectRegion(region: string) {
-  const env = Object.fromEntries(draft.value.env.filter((item) => item.k.trim()).map((item) => [item.k.trim(), item.v]))
-  draft.value.env = Object.entries(setRegion(env, draft.value.acpBackend, region)).map(([k, v]) => ({ k, v }))
+  const env = Object.fromEntries(
+    draft.value.env.filter((item) => item.k.trim()).map((item) => [item.k.trim(), item.v]),
+  )
+  draft.value.env = Object.entries(setRegion(env, draft.value.acpBackend, region)).map(
+    ([k, v]) => ({ k, v }),
+  )
   markConfigured('acp')
 }
 
@@ -150,12 +130,14 @@ function selectAcp(id: WizardBackendId) {
   }
   applyAcpBackend(draft.value, id)
   markConfigured('acp')
+  syncApiKeyInput()
 }
 
 function confirmAcpSwitch() {
   if (pendingAcp.value) {
     applyAcpBackend(draft.value, pendingAcp.value)
     markConfigured('acp')
+    syncApiKeyInput()
   }
   pendingAcp.value = null
   showAcpConfirm.value = false
@@ -166,29 +148,50 @@ function cancelAcpSwitch() {
   showAcpConfirm.value = false
 }
 
-function ensureRulesContent() {
-  if (!draft.value.rulesContent) {
-    draft.value.rulesContent = buildDefaultRule(draft.value.name, draft.value.description)
+function syncApiKeyInput() {
+  const key = primaryAuthKey.value
+  const row = draft.value.env.find((e) => e.k === key)
+  apiKeyInput.value = row?.v ?? ''
+}
+
+function onApiKeyInput(value: string) {
+  apiKeyInput.value = value
+  const key = primaryAuthKey.value
+  if (!key) return
+  if (value.trim()) {
+    upsertEnv(key, value)
+    markConfigured('apiKey')
+  } else {
+    const idx = draft.value.env.findIndex((e) => e.k === key)
+    if (idx >= 0) draft.value.env.splice(idx, 1)
   }
+}
+
+function onGitCredentialType(value: GitCredentialType) {
+  draft.value.gitCredentialType = value
+  markConfigured('git')
 }
 
 function goPrev() {
   if (draft.value.step === 0 || creating.value) return
   draft.value.step--
   stepAnimKey.value++
-  if (currentStep.value.id === 'rules') ensureRulesContent()
+  if (currentStep.value.id === 'apiKey') syncApiKeyInput()
 }
 
 function goSkip() {
   const step = currentStep.value
   if (!step.skip || creating.value) return
   draft.value.skipped[step.id] = true
-  if (step.id === 'rules' && !draft.value.rulesEdited) {
-    draft.value.rulesContent = ''
+  if (step.id === 'apiKey') {
+    const key = primaryAuthKey.value
+    const idx = draft.value.env.findIndex((e) => e.k === key)
+    if (idx >= 0) draft.value.env.splice(idx, 1)
+    apiKeyInput.value = ''
   }
   draft.value.step++
   stepAnimKey.value++
-  if (currentStep.value.id === 'rules') ensureRulesContent()
+  if (currentStep.value.id === 'apiKey') syncApiKeyInput()
 }
 
 function goNext() {
@@ -214,7 +217,7 @@ function goNext() {
   markConfigured(step.id)
   draft.value.step++
   stepAnimKey.value++
-  if (currentStep.value.id === 'rules') ensureRulesContent()
+  if (currentStep.value.id === 'apiKey') syncApiKeyInput()
 }
 
 async function submitCreate() {
@@ -244,110 +247,10 @@ async function submitCreate() {
   }
 }
 
-function onRulesInput() {
-  draft.value.rulesEdited = true
-  markConfigured('rules')
-}
-
-function addEnvRow() {
-  draft.value.env.push({ k: '', v: '' })
-  markConfigured('env')
-}
-
-function updateEnvKey(i: number, value: string) {
-  if (isManagedRegionKey(value)) {
-    draft.value.env[i].k = ''
-    regionManagedNotice.value = true
-    return
-  }
-  draft.value.env[i].k = value
-  regionManagedNotice.value = false
-  markConfigured('env')
-}
-
-function removeEnv(i: number) {
-  draft.value.env.splice(i, 1)
-  markConfigured('env')
-}
-
-function emptyMcp(): WizardMCP {
-  return {
-    name: '',
-    transport: 'url',
-    url: '',
-    headers: [],
-    command: '',
-    args: '',
-    env: [],
-  }
-}
-
-function addMcp() {
-  draft.value.mcp.push(emptyMcp())
-  markConfigured('mcp')
-}
-
-function removeMcp(i: number) {
-  draft.value.mcp.splice(i, 1)
-  markConfigured('mcp')
-}
-
-function addArtifactStore() {
-  if (draft.value.mcp.some((m) => m.name.trim() === 'artifact-store')) return
-  draft.value.mcp.push({
-    name: 'artifact-store',
-    transport: 'url',
-    url: '${APPROVING_ARTIFACT_URL}',
-    headers: [{ k: 'Authorization', v: 'Bearer ${APPROVING_ARTIFACT_TOKEN}' }],
-    command: '',
-    args: '',
-    env: [],
-  })
-  markConfigured('mcp')
-}
-
-function addSkill() {
-  const n = newSkillName.value.trim().replace(/[^A-Za-z0-9_-]/g, '')
-  if (!n) return
-  if (draft.value.skills.some((s) => s.name === n)) return
-  draft.value.skills.push({ name: n, content: defaultSkillTemplate(n) })
-  newSkillName.value = ''
-  markConfigured('skills')
-}
-
-function removeSkill(i: number) {
-  draft.value.skills.splice(i, 1)
-  markConfigured('skills')
-}
-
-function addCommand() {
-  const n = newCmdName.value.trim().replace(/[^A-Za-z0-9_-]/g, '')
-  if (!n) return
-  if (draft.value.commands.some((c) => c.name === n)) return
-  draft.value.commands.push({ name: n, content: defaultCommandTemplate(n) })
-  newCmdName.value = ''
-  markConfigured('commands')
-}
-
-function removeCommand(i: number) {
-  draft.value.commands.splice(i, 1)
-  markConfigured('commands')
-}
-
-function onPromptInput() {
-  markConfigured('prompts')
-}
-
 function chipClass(kind: string) {
   if (kind === 'ok') return 'border-ok/35 bg-ok/10 text-ok'
   if (kind === 'def') return 'border-accent/35 bg-accent-dim text-accent-2'
   return 'border-line bg-elevated text-txt3'
-}
-
-/** ENV 步不展示 Git 步管理的凭据键（空 key 的新行仍显示）。 */
-function showInEnvStep(key: string) {
-  const k = key.trim()
-  return !k || (!GIT_ENV_KEYS.has(k) && !isManagedRegionKey(k))
 }
 </script>
 
@@ -361,13 +264,14 @@ function showInEnvStep(key: string) {
         role="dialog"
         aria-modal="true"
       >
-        <!-- head -->
         <div class="wiz-head relative flex h-16 shrink-0 items-center gap-3.5 border-b border-line px-5">
           <div class="hero-mark grid h-9 w-9 shrink-0 place-items-center border border-accent/55 text-accent-2">
             <Icon name="robot" :size="20" />
           </div>
           <div class="min-w-0 flex-1">
-            <h2 class="m-0 text-[16px] font-semibold tracking-tight text-txt">{{ t('pages.agentStudio.wizard.title') }}</h2>
+            <h2 class="m-0 text-[16px] font-semibold tracking-tight text-txt">
+              {{ t('pages.agentStudio.wizard.title') }}
+            </h2>
             <span class="mt-0.5 block text-[12px] font-normal text-txt3">{{ headSub }}</span>
           </div>
           <button
@@ -385,7 +289,6 @@ function showInEnvStep(key: string) {
         </div>
 
         <div class="flex min-h-0 flex-1">
-          <!-- rail -->
           <aside class="wiz-rail scroll-area w-[208px] shrink-0 overflow-y-auto border-r border-line bg-elevated px-3 pb-4 pt-5">
             <div class="mb-4 flex items-center gap-2 px-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-txt3">
               <span class="pulse-dot h-1.5 w-1.5 shrink-0 bg-accent" />
@@ -407,7 +310,6 @@ function showInEnvStep(key: string) {
             </div>
           </aside>
 
-          <!-- main -->
           <div class="flex min-w-0 flex-1 flex-col">
             <div class="scroll-area min-h-0 flex-1 overflow-y-auto px-8 py-7">
               <div :key="stepAnimKey" class="step-pane">
@@ -417,7 +319,6 @@ function showInEnvStep(key: string) {
                   </div>
                 </div>
 
-                <!-- basics -->
                 <template v-if="currentStep.id === 'basics'">
                   <p class="sec-meta">{{ t('pages.agentStudio.wizard.basics.meta') }}</p>
                   <label class="mb-4 block">
@@ -435,18 +336,21 @@ function showInEnvStep(key: string) {
                     <p v-if="nameError" class="mt-1.5 text-[12px] text-err">{{ nameError }}</p>
                   </label>
                   <label class="block">
-                    <span class="mb-1.5 block text-[12px] font-medium text-txt2">{{ t('pages.agentStudio.wizard.basics.descLabel') }}</span>
+                    <span class="mb-1.5 block text-[12px] font-medium text-txt2">
+                      {{ t('pages.agentStudio.wizard.basics.descLabel') }}
+                    </span>
                     <textarea
                       v-model="draft.description"
                       rows="3"
                       class="w-full resize-y border border-line bg-base px-3 py-2 font-mono text-[12px] leading-6 text-txt outline-none focus:border-accent"
                       :placeholder="t('pages.agentStudio.wizard.basics.descPlaceholder')"
                     />
-                    <p class="mt-1.5 text-[11px] text-txt3">{{ t('pages.agentStudio.wizard.basics.descHint') }}</p>
+                    <p class="mt-1.5 text-[11px] text-txt3">
+                      {{ t('pages.agentStudio.wizard.basics.descHint') }}
+                    </p>
                   </label>
                 </template>
 
-                <!-- acp -->
                 <template v-else-if="currentStep.id === 'acp'">
                   <p class="sec-meta">{{ t('pages.agentStudio.wizard.acp.meta') }}</p>
                   <div class="grid grid-cols-2 gap-2.5 md:grid-cols-4">
@@ -455,7 +359,11 @@ function showInEnvStep(key: string) {
                       :key="b.id"
                       type="button"
                       class="border px-3 py-3.5 text-center transition"
-                      :class="draft.acpBackend === b.id ? 'border-accent bg-accent-dim' : 'border-line bg-base hover:border-line-strong'"
+                      :class="
+                        draft.acpBackend === b.id
+                          ? 'border-accent bg-accent-dim'
+                          : 'border-line bg-base hover:border-line-strong'
+                      "
                       @click="selectAcp(b.id)"
                     >
                       <strong class="block text-[13px] font-semibold text-txt">{{ b.label }}</strong>
@@ -466,7 +374,11 @@ function showInEnvStep(key: string) {
                     <div class="mb-2 text-[12px] font-medium text-txt2">
                       {{ t('pages.agentStudio.region.title') }}
                     </div>
-                    <div class="grid max-w-lg grid-cols-2 gap-2.5" role="radiogroup" :aria-label="t('pages.agentStudio.region.title')">
+                    <div
+                      class="grid max-w-lg grid-cols-2 gap-2.5"
+                      role="radiogroup"
+                      :aria-label="t('pages.agentStudio.region.title')"
+                    >
                       <button
                         v-for="option in currentRegionPolicy.options"
                         :key="option.id"
@@ -475,10 +387,16 @@ function showInEnvStep(key: string) {
                         :aria-checked="currentRegion === option.id"
                         :aria-label="`${t(option.labelKey)} (${option.id})`"
                         class="border px-3 py-3 text-left transition"
-                        :class="currentRegion === option.id ? 'border-accent bg-accent-dim' : 'border-line bg-base hover:border-line-strong'"
+                        :class="
+                          currentRegion === option.id
+                            ? 'border-accent bg-accent-dim'
+                            : 'border-line bg-base hover:border-line-strong'
+                        "
                         @click="selectRegion(option.id)"
                       >
-                        <strong class="block text-[13px] font-semibold text-txt">{{ t(option.labelKey) }}</strong>
+                        <strong class="block text-[13px] font-semibold text-txt">
+                          {{ t(option.labelKey) }}
+                        </strong>
                         <span class="mt-1 block font-mono text-[10px] text-accent-2">{{ option.id }}</span>
                         <span class="mt-1 block text-[10px] text-txt3">{{ t(option.hintKey) }}</span>
                       </button>
@@ -489,243 +407,77 @@ function showInEnvStep(key: string) {
                   </p>
                 </template>
 
-                <!-- git -->
+                <template v-else-if="currentStep.id === 'apiKey'">
+                  <p class="sec-meta">{{ t('pages.agentStudio.wizard.apiKey.meta') }}</p>
+                  <div class="mb-3 border border-accent/30 bg-accent-dim/40 px-3 py-2.5 text-[12px] leading-5 text-txt2">
+                    {{
+                      t('pages.agentStudio.wizard.apiKey.backendBanner', {
+                        backend: draft.acpBackend,
+                      })
+                    }}
+                  </div>
+                  <div class="mb-4 border border-line bg-base p-3.5">
+                    <div class="text-[13px] font-semibold text-txt">
+                      <code class="text-accent-2">{{ primaryAuthKey }}</code>
+                    </div>
+                    <p v-if="primaryAuthAlt" class="mt-1 text-[11px] text-txt3">
+                      {{ t('pages.agentStudio.wizard.apiKey.alias') }}
+                      <code>{{ primaryAuthAlt }}</code>
+                    </p>
+                    <p v-if="authGuide.noteKey" class="mt-2 text-[11px] leading-5 text-txt2">
+                      {{ t(authGuide.noteKey) }}
+                    </p>
+                    <ol class="mt-3 list-decimal space-y-1.5 pl-5 text-[12px] leading-5 text-txt2">
+                      <li v-for="stepKey in authGuide.pathStepKeys" :key="stepKey">
+                        {{ t(stepKey) }}
+                      </li>
+                    </ol>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                      <a
+                        v-for="link in authGuide.links"
+                        :key="link.url"
+                        :href="link.url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="border border-accent/40 px-2 py-1 text-[11px] text-accent-2 hover:bg-accent-dim"
+                      >
+                        {{ t(link.labelKey) }}
+                      </a>
+                    </div>
+                  </div>
+                  <label class="block">
+                    <span class="mb-1.5 block text-[12px] font-medium text-txt2">
+                      {{ t('pages.agentStudio.wizard.apiKey.inputLabel') }}
+                    </span>
+                    <input
+                      :value="apiKeyInput"
+                      type="password"
+                      autocomplete="off"
+                      class="w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
+                      :placeholder="t('pages.agentStudio.wizard.apiKey.inputPlaceholder')"
+                      @input="onApiKeyInput(($event.target as HTMLInputElement).value)"
+                    />
+                    <p class="mt-1.5 text-[11px] text-txt3">
+                      {{ t('pages.agentStudio.wizard.apiKey.skipHint') }}
+                    </p>
+                  </label>
+                </template>
+
                 <template v-else-if="currentStep.id === 'git'">
                   <p class="sec-meta">{{ t('pages.agentStudio.wizard.git.meta') }}</p>
                   <AgentGitGuide
                     :env="draft.env"
-                    :upsert-env="(k, v) => { upsertEnv(k, v); markConfigured('git') }"
+                    :upsert-env="
+                      (k, v) => {
+                        upsertEnv(k, v)
+                        markConfigured('git')
+                      }
+                    "
                     :credential-type="draft.gitCredentialType"
-                    @update:credential-type="draft.gitCredentialType = $event; markConfigured('git')"
+                    @update:credential-type="onGitCredentialType"
                   />
                 </template>
 
-                <!-- env -->
-                <template v-else-if="currentStep.id === 'env'">
-                  <p class="sec-meta">{{ t('pages.agentStudio.wizard.env.meta') }}</p>
-                  <div v-if="currentRegionPolicy" class="mb-3 border border-accent/30 bg-accent-dim/40 p-3">
-                    <div class="text-[11px] text-txt3">{{ t('pages.agentStudio.region.managedByAcp') }}</div>
-                    <div class="mt-2 flex items-center gap-1.5">
-                      <input
-                        :value="currentRegionPolicy.regionEnvKey"
-                        readonly
-                        :aria-label="t('pages.agentStudio.region.managedKey')"
-                        class="w-1/3 border border-line bg-elevated px-2 py-1.5 font-mono text-[12px] text-txt3"
-                      />
-                      <input
-                        :value="currentRegion"
-                        readonly
-                        :aria-label="t('pages.agentStudio.region.managedValue')"
-                        class="flex-1 border border-line bg-elevated px-2 py-1.5 font-mono text-[12px] text-txt3"
-                      />
-                    </div>
-                  </div>
-                  <p v-if="regionManagedNotice" class="mb-3 text-[11px] text-warn">
-                    {{ t('pages.agentStudio.region.managedConflict') }}
-                  </p>
-                  <div class="space-y-2">
-                    <template v-for="(e, i) in draft.env" :key="i">
-                      <div v-if="showInEnvStep(e.k)" class="flex items-center gap-1.5">
-                        <input
-                          :value="e.k"
-                          placeholder="KEY"
-                          class="w-1/3 border border-line bg-base px-2 py-1.5 font-mono text-[12px] text-txt outline-none focus:border-accent"
-                          @input="updateEnvKey(i, ($event.target as HTMLInputElement).value)"
-                        />
-                        <input
-                          v-model="e.v"
-                          placeholder="value"
-                          class="flex-1 border border-line bg-base px-2 py-1.5 font-mono text-[12px] text-txt2 outline-none focus:border-accent"
-                          @input="markConfigured('env')"
-                        />
-                        <button type="button" class="text-txt3 hover:text-err" @click="removeEnv(i)">
-                          <Icon name="close" :size="14" />
-                        </button>
-                      </div>
-                    </template>
-                    <AppButton size="sm" variant="outline" icon="plus" @click="addEnvRow">{{ t('pages.agentStudio.env.add') }}</AppButton>
-                  </div>
-                </template>
-
-                <!-- mcp -->
-                <template v-else-if="currentStep.id === 'mcp'">
-                  <p class="sec-meta">{{ t('pages.agentStudio.wizard.mcp.meta') }}</p>
-                  <div class="mb-3 border border-accent/30 bg-accent-dim/40 p-2.5 text-[11px] leading-5 text-txt2">
-                    <button
-                      v-if="!draft.mcp.some((m) => m.name.trim() === 'artifact-store')"
-                      type="button"
-                      class="border border-accent/40 px-2 py-1 text-accent-2 hover:bg-accent-dim"
-                      @click="addArtifactStore"
-                    >
-                      {{ t('pages.agentStudio.mcp.addArtifactStore') }}
-                    </button>
-                    <span v-else class="text-txt3">{{ t('pages.agentStudio.wizard.mcp.hasArtifact') }}</span>
-                  </div>
-                  <div class="space-y-3">
-                    <div v-for="(m, i) in draft.mcp" :key="i" class="border border-line bg-base p-3">
-                      <div class="mb-2 flex items-center gap-2">
-                        <input
-                          v-model="m.name"
-                          :placeholder="t('pages.agentStudio.mcp.serviceName')"
-                          class="flex-1 border border-line bg-surface px-2 py-1 text-[12px] text-txt outline-none focus:border-accent"
-                          @input="markConfigured('mcp')"
-                        />
-                        <select v-model="m.transport" class="border border-line bg-surface px-2 py-1 text-[12px] text-txt2" @change="markConfigured('mcp')">
-                          <option value="url">HTTP (url)</option>
-                          <option value="command">{{ t('pages.agentStudio.mcp.transportCommand') }}</option>
-                        </select>
-                        <button type="button" class="text-txt3 hover:text-err" @click="removeMcp(i)"><Icon name="close" :size="14" /></button>
-                      </div>
-                      <template v-if="m.transport === 'url'">
-                        <input
-                          v-model="m.url"
-                          placeholder="https://mcp.example.com/sse"
-                          class="mb-2 w-full border border-line bg-surface px-2 py-1 font-mono text-[11px] outline-none focus:border-accent"
-                          @input="markConfigured('mcp')"
-                        />
-                        <div class="text-[11px] text-txt3">{{ t('pages.agentStudio.mcp.headers') }}</div>
-                        <div v-for="(h, hi) in m.headers" :key="hi" class="mt-1 flex items-center gap-1.5">
-                          <input v-model="h.k" placeholder="Authorization" class="w-1/3 border border-line bg-surface px-2 py-1 font-mono text-[11px] outline-none" @input="markConfigured('mcp')" />
-                          <input v-model="h.v" placeholder="Bearer …" class="flex-1 border border-line bg-surface px-2 py-1 font-mono text-[11px] outline-none" @input="markConfigured('mcp')" />
-                          <button type="button" class="text-txt3 hover:text-err" @click="m.headers.splice(hi, 1)"><Icon name="close" :size="12" /></button>
-                        </div>
-                        <button type="button" class="mt-1.5 text-[11px] text-accent-2 hover:underline" @click="m.headers.push({ k: '', v: '' }); markConfigured('mcp')">
-                          {{ t('pages.agentStudio.mcp.addHeader') }}
-                        </button>
-                      </template>
-                      <template v-else>
-                        <input
-                          v-model="m.command"
-                          placeholder="npx"
-                          class="mb-2 w-full border border-line bg-surface px-2 py-1 font-mono text-[11px] outline-none focus:border-accent"
-                          @input="markConfigured('mcp')"
-                        />
-                        <div class="text-[11px] text-txt3">{{ t('pages.agentStudio.mcp.args') }}</div>
-                        <textarea
-                          v-model="m.args"
-                          rows="2"
-                          placeholder="-y&#10;@upstash/context7-mcp"
-                          class="mt-1 w-full resize-y border border-line bg-surface px-2 py-1 font-mono text-[11px] outline-none"
-                          @input="markConfigured('mcp')"
-                        />
-                        <div class="mt-2 text-[11px] text-txt3">{{ t('pages.agentStudio.mcp.env') }}</div>
-                        <div v-for="(e, ei) in m.env" :key="ei" class="mt-1 flex items-center gap-1.5">
-                          <input
-                            v-model="e.k"
-                            placeholder="KEY"
-                            class="w-1/3 border border-line bg-surface px-2 py-1 font-mono text-[11px] outline-none"
-                            @input="markConfigured('mcp')"
-                          />
-                          <input
-                            v-model="e.v"
-                            placeholder="value"
-                            class="flex-1 border border-line bg-surface px-2 py-1 font-mono text-[11px] outline-none"
-                            @input="markConfigured('mcp')"
-                          />
-                          <button type="button" class="text-txt3 hover:text-err" @click="m.env.splice(ei, 1); markConfigured('mcp')">
-                            <Icon name="close" :size="12" />
-                          </button>
-                        </div>
-                        <button
-                          type="button"
-                          class="mt-1.5 text-[11px] text-accent-2 hover:underline"
-                          @click="m.env.push({ k: '', v: '' }); markConfigured('mcp')"
-                        >
-                          {{ t('pages.agentStudio.mcp.addEnv') }}
-                        </button>
-                      </template>
-                    </div>
-                    <AppButton size="sm" variant="outline" icon="plus" @click="addMcp">{{ t('pages.agentStudio.mcp.addService') }}</AppButton>
-                  </div>
-                </template>
-
-                <!-- rules -->
-                <template v-else-if="currentStep.id === 'rules'">
-                  <p class="sec-meta">{{ t('pages.agentStudio.wizard.rules.meta') }}</p>
-                  <textarea
-                    v-model="draft.rulesContent"
-                    rows="14"
-                    class="w-full resize-y border border-line bg-base px-3 py-2 font-mono text-[12px] leading-6 text-txt outline-none focus:border-accent"
-                    @input="onRulesInput"
-                  />
-                </template>
-
-                <!-- skills -->
-                <template v-else-if="currentStep.id === 'skills'">
-                  <p class="sec-meta">{{ t('pages.agentStudio.wizard.skills.meta') }}</p>
-                  <div class="mb-3 flex gap-2">
-                    <input
-                      v-model="newSkillName"
-                      :placeholder="t('pages.agentStudio.wizard.skills.namePlaceholder')"
-                      class="flex-1 border border-line bg-base px-3 py-2 font-mono text-[12px] outline-none focus:border-accent"
-                      @keydown.enter.prevent="addSkill"
-                    />
-                    <AppButton size="sm" variant="outline" icon="plus" @click="addSkill">{{ t('pages.agentStudio.wizard.skills.add') }}</AppButton>
-                  </div>
-                  <div class="space-y-3">
-                    <div v-for="(s, i) in draft.skills" :key="s.name" class="border border-line bg-base p-3">
-                      <div class="mb-2 flex items-center justify-between">
-                        <code class="font-mono text-[12px] text-accent-2">skills/{{ s.name }}/SKILL.md</code>
-                        <button type="button" class="text-txt3 hover:text-err" @click="removeSkill(i)"><Icon name="close" :size="14" /></button>
-                      </div>
-                      <textarea
-                        v-model="s.content"
-                        rows="6"
-                        class="w-full resize-y border border-line bg-surface px-2 py-1.5 font-mono text-[11px] outline-none focus:border-accent"
-                        @input="markConfigured('skills')"
-                      />
-                    </div>
-                  </div>
-                </template>
-
-                <!-- commands -->
-                <template v-else-if="currentStep.id === 'commands'">
-                  <p class="sec-meta">{{ t('pages.agentStudio.wizard.commands.meta') }}</p>
-                  <div class="mb-3 flex gap-2">
-                    <input
-                      v-model="newCmdName"
-                      :placeholder="t('pages.agentStudio.wizard.commands.namePlaceholder')"
-                      class="flex-1 border border-line bg-base px-3 py-2 font-mono text-[12px] outline-none focus:border-accent"
-                      @keydown.enter.prevent="addCommand"
-                    />
-                    <AppButton size="sm" variant="outline" icon="plus" @click="addCommand">{{ t('pages.agentStudio.wizard.commands.add') }}</AppButton>
-                  </div>
-                  <div class="space-y-3">
-                    <div v-for="(c, i) in draft.commands" :key="c.name" class="border border-line bg-base p-3">
-                      <div class="mb-2 flex items-center justify-between">
-                        <code class="font-mono text-[12px] text-accent-2">commands/{{ c.name }}.md</code>
-                        <button type="button" class="text-txt3 hover:text-err" @click="removeCommand(i)"><Icon name="close" :size="14" /></button>
-                      </div>
-                      <textarea
-                        v-model="c.content"
-                        rows="6"
-                        class="w-full resize-y border border-line bg-surface px-2 py-1.5 font-mono text-[11px] outline-none focus:border-accent"
-                        @input="markConfigured('commands')"
-                      />
-                    </div>
-                  </div>
-                </template>
-
-                <!-- prompts -->
-                <template v-else-if="currentStep.id === 'prompts'">
-                  <p class="sec-meta">{{ t('pages.agentStudio.wizard.prompts.meta') }}</p>
-                  <div class="space-y-4">
-                    <label v-for="f in promptFragments" :key="f.key" class="block">
-                      <span class="text-[12px] font-medium text-txt2">{{ f.label }}</span>
-                      <p class="mb-1.5 text-[11px] text-txt3">{{ f.hint }}</p>
-                      <textarea
-                        v-model="draft.prompts[f.key]"
-                        rows="3"
-                        spellcheck="false"
-                        :placeholder="t('pages.agentStudio.prompts.defaultPrefix') + f.placeholder"
-                        class="w-full resize-y border border-line bg-base px-3 py-2 font-mono text-[12px] leading-6 outline-none focus:border-accent"
-                        @input="onPromptInput"
-                      />
-                    </label>
-                  </div>
-                </template>
-
-                <!-- review -->
                 <template v-else-if="currentStep.id === 'review'">
                   <p class="sec-meta">{{ t('pages.agentStudio.wizard.review.meta') }}</p>
                   <div class="flex flex-wrap gap-2">
@@ -739,12 +491,18 @@ function showInEnvStep(key: string) {
                       <template v-if="item.detail"> · {{ item.detail }}</template>
                     </span>
                   </div>
+                  <div
+                    v-if="showAuthReminder"
+                    class="mt-4 border border-warn/35 bg-warn/10 px-3 py-2.5 text-[12px] leading-5 text-txt2"
+                    role="status"
+                  >
+                    {{ t('pages.agentStudio.wizard.review.authReminderDetail') }}
+                  </div>
                   <p v-if="createError" class="mt-4 text-[12px] text-err">{{ createError }}</p>
                 </template>
               </div>
             </div>
 
-            <!-- foot -->
             <div class="flex shrink-0 items-center justify-between gap-2 border-t border-line bg-surface px-5 py-3.5">
               <AppButton variant="ghost" :disabled="creating" @click="close">
                 {{ t('pages.agentStudio.dialogs.cancel') }}
@@ -777,15 +535,25 @@ function showInEnvStep(key: string) {
         </div>
       </div>
 
-      <!-- ACP remapping confirm -->
       <div v-if="showAcpConfirm" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/60" @click="cancelAcpSwitch" />
-        <div class="relative z-10 w-full max-w-[420px] border border-line bg-surface p-5 shadow-card" style="border-radius: 0">
-          <h3 class="m-0 text-[15px] font-semibold text-txt">{{ t('pages.agentStudio.wizard.acp.remapTitle') }}</h3>
-          <p class="mt-2 text-[13px] leading-6 text-txt2">{{ t('pages.agentStudio.wizard.acp.remapBody') }}</p>
+        <div
+          class="relative z-10 w-full max-w-[420px] border border-line bg-surface p-5 shadow-card"
+          style="border-radius: 0"
+        >
+          <h3 class="m-0 text-[15px] font-semibold text-txt">
+            {{ t('pages.agentStudio.wizard.acp.remapTitle') }}
+          </h3>
+          <p class="mt-2 text-[13px] leading-6 text-txt2">
+            {{ t('pages.agentStudio.wizard.acp.remapBody') }}
+          </p>
           <div class="mt-4 flex justify-end gap-2">
-            <AppButton variant="outline" @click="cancelAcpSwitch">{{ t('pages.agentStudio.dialogs.cancel') }}</AppButton>
-            <AppButton variant="primary" @click="confirmAcpSwitch">{{ t('pages.agentStudio.dialogs.confirm') }}</AppButton>
+            <AppButton variant="outline" @click="cancelAcpSwitch">
+              {{ t('pages.agentStudio.dialogs.cancel') }}
+            </AppButton>
+            <AppButton variant="primary" @click="confirmAcpSwitch">
+              {{ t('pages.agentStudio.dialogs.confirm') }}
+            </AppButton>
           </div>
         </div>
       </div>
@@ -1024,7 +792,6 @@ function showInEnvStep(key: string) {
   }
 }
 
-/* 浅色：降低装饰性 glow / 渐变不透明度（对齐 page.html mode-fixed） */
 html.light .wiz-head {
   background: linear-gradient(90deg, rgba(99, 102, 241, 0.08) 0%, transparent 42%), rgb(var(--c-surface));
 }
@@ -1037,6 +804,6 @@ html.light .wiz-progress span {
   box-shadow: 0 0 10px rgba(99, 102, 241, 0.28);
 }
 html.light .wiz-progress span::before {
-  opacity: 0.32;
+  opacity: 0.35;
 }
 </style>

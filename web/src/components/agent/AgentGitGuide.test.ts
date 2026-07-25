@@ -58,13 +58,25 @@ describe('AgentGitGuide', () => {
     expect(wrapper.text()).not.toContain('可成功 clone')
   })
 
-  it('确认类型只发出草稿更新并可立即按父级值重算', async () => {
+  it('运行时引用未选类型时给出可操作指引，无未逐仓解析告警', () => {
+    const wrapper = mountGuide([
+      { k: 'GIT_REPOS', v: '${vars.repos}' },
+      { k: 'GITLAB_TOKEN', v: '${vars.gitlab_token}' },
+    ])
+    expect(wrapper.text()).toContain('请选择凭据类型')
+    expect(wrapper.text()).toContain('GitHub / GitLab / SSH')
+    expect(wrapper.text()).toContain('运行时解析')
+    expect(wrapper.text()).not.toContain('未逐仓解析')
+    expect(wrapper.text()).not.toContain('无法在此页面逐仓解析')
+  })
+
+  it('确认类型后显示完整态与中性运行时解析，类型文案为 GitLab', async () => {
     const env = [
       { k: 'GIT_REPOS', v: '${vars.repos}' },
       { k: 'GITLAB_TOKEN', v: '${vars.gitlab_token}' },
     ]
     const wrapper = mountGuide(env)
-    expect(wrapper.text()).toContain('需要确认凭据类型')
+    expect(wrapper.text()).toContain('请选择凭据类型')
 
     await wrapper.get('header button').trigger('click')
     const radios = wrapper.findAll('input[type="radio"]')
@@ -76,6 +88,10 @@ describe('AgentGitGuide', () => {
     await wrapper.setProps({ credentialType: 'gitlab_https' })
     expect(wrapper.text()).toContain('配置形态完整')
     expect(wrapper.text()).toContain('已应用/待保存')
+    expect(wrapper.text()).toContain('GitLab')
+    expect(wrapper.text()).not.toContain('GitLab · HTTPS')
+    expect(wrapper.text()).not.toContain('未逐仓解析')
+    expect(wrapper.text()).toContain('运行时解析')
   })
 
   it('选择与仓库证据冲突时显示选择已失效', () => {

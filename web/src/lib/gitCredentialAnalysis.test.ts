@@ -92,7 +92,7 @@ describe('analyzeGitCredentials', () => {
       status: 'unsupported',
     },
     {
-      name: '运行时引用无选择时待确认',
+      name: '运行时引用无选择时待确认类型（非死胡同冲突）',
       env: { GIT_REPOS: '${vars.repos}', GITLAB_TOKEN: '${vars.gitlab_token}' },
       status: 'needs_confirmation',
       unresolved: true,
@@ -123,6 +123,16 @@ describe('analyzeGitCredentials', () => {
     expect(result.status).toBe(status)
     expect(result.effectiveType).toBe(type)
     expect(result.unresolvedReference).toBe(unresolved ?? false)
+  })
+
+  it('运行时引用未选类型时不写入逐仓解析死胡同 conflicts', () => {
+    const result = analyzeGitCredentials({
+      env: { GIT_REPOS: '${vars.repos}', GITLAB_TOKEN: '${vars.gitlab_token}' },
+    })
+    expect(result.status).toBe('needs_confirmation')
+    expect(result.unresolvedReference).toBe(true)
+    expect(result.conflicts).toEqual([])
+    expect(JSON.stringify(result)).not.toContain('逐仓解析')
   })
 
   it('同类型多仓全部校验且不只看首仓', () => {
