@@ -1,0 +1,58 @@
+{
+  "title": "run-c8d54139 / run-80d81ab4 只读诊断冻结基线",
+  "workflowId": "wf-07079fa7",
+  "frozen": true,
+  "categoryRule": "单主分类以引擎落库最终错误文案为准；缺产物与 ACP/sandbox 症状仅入 evidence",
+  "diagnoses": [
+    {
+      "runId": "run-c8d54139",
+      "nodeId": "research_h2my",
+      "nodeType": "research",
+      "error": "未调用 node_complete 标记完成",
+      "category": "agent",
+      "durationSec": 223,
+      "progress": 0.058823529411764705,
+      "traceSummary": "input_d3s1(completed,0ms)→research_h2my(failed,223250ms)",
+      "evidence": [
+        "log-center topic=full @13:28:59: node failed err=未调用 node_complete 标记完成",
+        "structured product re-prompt failed artifact=research.json error=acp connection closed: not connected",
+        "node_complete re-prompt failed error=acp connection closed: not connected",
+        "mcp tool call failed get_clarified_requirement: 尚无 clarified_requirement.json (@13:27:27)",
+        "pm_list_runs status=failed durationSec=223 progress≈0.0588",
+        "pm_get_artifact_summary empty=true",
+        "engine/outcome.go consumeNodeOutcome: 未调用 node_complete 标记完成 → engine.go persistVar(last_error)",
+        "sandbox 已销毁；末次 ACP 错误取自 approving app / log-center 历史记录"
+      ]
+    },
+    {
+      "runId": "run-80d81ab4",
+      "nodeId": "research_h2my",
+      "nodeType": "research",
+      "error": "未调用 node_complete 标记完成",
+      "category": "agent",
+      "durationSec": 317,
+      "progress": 0.058823529411764705,
+      "traceSummary": "input_d3s1→research_h2my(failed,317860ms)",
+      "evidence": [
+        "log-center topic=full @13:51:09: node failed err=未调用 node_complete 标记完成",
+        "structured product re-prompt failed artifact=research.json · acp connection closed: not connected",
+        "node_complete re-prompt failed · acp connection closed: not connected",
+        "mcp get_clarified_requirement failed @13:48:18（尚无 clarified_requirement.json）",
+        "pm_list_runs status=failed durationSec=317 progress≈0.0588",
+        "pm_get_artifact_summary empty=true",
+        "标题标明为 run-c8d54139 同需求重跑，同构失败",
+        "sandbox 已销毁；末次 ACP 错误取自 approving app / log-center 历史记录"
+      ]
+    }
+  ],
+  "follow_ups": [
+    "ResearchAgent 必须 set_research + node_complete（履约修复，另开任务）",
+    "ACP 断连后仍向 Web/PM 暴露 StateRun.error / vars.last_error（可观测性，对照 run-390b451f）",
+    "降低并发高峰下 research 失联概率（ACP 稳定性，另开任务）"
+  ],
+  "alignedWith": [
+    "page.html（已批准 Demo）",
+    "research.json（最终调研复核）",
+    "clarified_requirement.json（冻结基线）"
+  ]
+}
