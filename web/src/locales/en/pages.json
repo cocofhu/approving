@@ -1324,7 +1324,7 @@
         "hint": "Data belongs to home project \"{project}\". Manage memories, threads, and jobs here.",
         "unsavedBinding": "Home project binding is unsaved; data panel and chat test still use the saved binding.",
         "emptyTitle": "No home project",
-        "emptyDesc": "Bind a home project under Metadata first.",
+        "emptyDesc": "Please bind a home project under Metadata on desktop before managing memories, threads, or jobs.",
         "goBind": "Bind home project",
         "tabs": {
           "memory": "Memory",
@@ -1354,7 +1354,12 @@
           "colName": "Name",
           "colSchedule": "Schedule",
           "colEnabled": "Enabled",
-          "colDeliver": "Deliver"
+          "colDeliver": "Deliver to channel",
+          "enabledOn": "Job enabled",
+          "enabledOff": "Job paused",
+          "deliverOn": "Channel delivery enabled",
+          "deliverOff": "Channel delivery disabled",
+          "deleted": "Job deleted"
         }
       }
     },

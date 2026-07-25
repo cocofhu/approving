@@ -17,6 +17,12 @@ const apiMocks = vi.hoisted(() => ({
   deleteAgentCronJob: vi.fn(),
 }))
 
+const breakpointMocks = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const vue = require('vue') as typeof import('vue')
+  return { isMobile: vue.ref(false) }
+})
+
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
@@ -34,9 +40,14 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
+const toastSuccess = vi.fn()
 const toastError = vi.fn()
 vi.mock('@/lib/useToast', () => ({
-  useToast: () => ({ success: vi.fn(), error: toastError }),
+  useToast: () => ({ success: toastSuccess, error: toastError }),
+}))
+
+vi.mock('@/lib/useBreakpoint', () => ({
+  useBreakpoint: () => ({ isMobile: breakpointMocks.isMobile }),
 }))
 
 const SAMPLE_JOB = {
@@ -90,6 +101,7 @@ async function openTab(wrapper: ReturnType<typeof mountPanel>, label: RegExp) {
 describe('AgentDataPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    breakpointMocks.isMobile.value = false
     apiMocks.listAgentMemories.mockResolvedValue({ items: [] })
     apiMocks.listAgentThreads.mockResolvedValue({ items: [], messageCounts: {} })
     apiMocks.listAgentThreadMessages.mockResolvedValue({ items: [], total: 0 })
@@ -232,5 +244,52 @@ describe('AgentDataPanel', () => {
     await flushPromises()
     expect(apiMocks.listAgentCronJobs).toHaveBeenCalledWith('demo-agent')
     expect(apiMocks.listAgentMemories).not.toHaveBeenCalled()
+  })
+
+  it('desktop jobs keep table layout', async () => {
+    useAuth().setUser({ username: 'u', expiresAt: 't', isAdmin: false })
+    const w = mountPanel({ subTab: 'jobs' })
+    await flushPromises()
+    expect(w.find('[data-testid="agent-cron-desktop-table"]').exists()).toBe(true)
+    expect(w.find('[data-testid="agent-cron-mobile-cards"]').exists()).toBe(false)
+  })
+
+  it('mobile jobs use card stack with enable/deliver/delete mapped to API', async () => {
+    useAuth().setUser({ username: 'u', expiresAt: 't', isAdmin: false })
+    breakpointMocks.isMobile.value = true
+    apiMocks.patchAgentCronJob.mockResolvedValue({ ...SAMPLE_JOB, deliverToChannel: true })
+    apiMocks.deleteAgentCronJob.mockResolvedValue({ status: 'deleted' })
+
+    const w = mountPanel({ subTab: 'jobs' })
+    await flushPromises()
+
+    expect(w.find('[data-testid="agent-cron-mobile-cards"]').exists()).toBe(true)
+    expect(w.find('[data-testid="agent-cron-desktop-table"]').exists()).toBe(false)
+    expect(w.findAll('[data-testid="agent-cron-card"]').length).toBe(1)
+    expect(w.text()).toContain('每日汇报')
+    expect(w.text()).toContain('推送到渠道')
+    // No create-job control; hint may still mention creating via MCP
+    expect(w.find('[data-testid="agent-cron-create"]').exists()).toBe(false)
+    expect(w.findAll('button').some((b) => /^新建/.test(b.text()))).toBe(false)
+
+    const deliver = w.get('[data-testid="agent-cron-deliver"]')
+    await deliver.setValue(true)
+    await flushPromises()
+    expect(apiMocks.patchAgentCronJob).toHaveBeenCalledWith('demo-agent', 'cron-1', {
+      deliverToChannel: true,
+    })
+    expect(toastSuccess).toHaveBeenCalled()
+
+    const enabled = w.get('[data-testid="agent-cron-enabled"]')
+    apiMocks.patchAgentCronJob.mockResolvedValueOnce({ ...SAMPLE_JOB, enabled: false })
+    await enabled.setValue(false)
+    await flushPromises()
+    expect(apiMocks.patchAgentCronJob).toHaveBeenCalledWith('demo-agent', 'cron-1', { enabled: false })
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await w.get('[data-testid="agent-cron-delete"]').trigger('click')
+    await flushPromises()
+    expect(apiMocks.deleteAgentCronJob).toHaveBeenCalledWith('demo-agent', 'cron-1')
+    expect(toastError).not.toHaveBeenCalled()
   })
 })

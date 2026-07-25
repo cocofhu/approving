@@ -6,6 +6,7 @@ import { api } from '@/lib/api'
 import type { ProjectMemoryItem, ChatThread, ChatMessage, AgentCronJob } from '@/lib/types'
 import { fmtTime } from '@/lib/format'
 import { useToast } from '@/lib/useToast'
+import { useBreakpoint } from '@/lib/useBreakpoint'
 
 export type DataSubTab = 'memory' | 'context' | 'jobs'
 
@@ -17,6 +18,7 @@ const emit = defineEmits<{ 'update:subTab': [value: DataSubTab] }>()
 
 const { t } = useI18n()
 const toast = useToast()
+const { isMobile } = useBreakpoint()
 
 const adminRequiredTip = computed(() => t('pages.projectDetail.pm.adminRequired'))
 
@@ -178,6 +180,19 @@ async function patchJob(job: AgentCronJob, body: { enabled?: boolean; deliverToC
     const updated = await api.patchAgentCronJob(props.agentName, job.id, body)
     const idx = jobs.value.findIndex((j) => j.id === job.id)
     if (idx >= 0) jobs.value[idx] = { ...jobs.value[idx], ...updated }
+    if (body.enabled !== undefined) {
+      toast.success(
+        body.enabled
+          ? t('pages.agentStudio.data.jobs.enabledOn')
+          : t('pages.agentStudio.data.jobs.enabledOff'),
+      )
+    } else if (body.deliverToChannel !== undefined) {
+      toast.success(
+        body.deliverToChannel
+          ? t('pages.agentStudio.data.jobs.deliverOn')
+          : t('pages.agentStudio.data.jobs.deliverOff'),
+      )
+    }
   } catch (e: any) {
     toast.error(permissionMessage(e))
     await loadJobs()
@@ -190,6 +205,7 @@ async function removeJob(id: string) {
   try {
     await api.deleteAgentCronJob(props.agentName, id)
     await loadJobs()
+    toast.success(t('pages.agentStudio.data.jobs.deleted'))
   } catch (e: any) {
     toast.error(permissionMessage(e))
   }
@@ -213,13 +229,16 @@ onMounted(() => reload())
       <p class="mt-0.5 text-[12px] text-txt3">
         {{ t('pages.agentStudio.data.hint', { project: projectName || '—' }) }}
       </p>
-      <div class="mt-3 flex gap-1">
+      <div class="mt-3 flex gap-1 overflow-x-auto [-webkit-overflow-scrolling:touch]">
         <button
           v-for="k in (['memory', 'context', 'jobs'] as const)"
           :key="k"
           type="button"
-          class="rounded px-2.5 py-1 text-[12px]"
-          :class="sub === k ? 'bg-accent-dim text-accent-2' : 'text-txt3 hover:bg-elevated hover:text-txt'"
+          class="shrink-0 rounded px-2.5 text-[12px]"
+          :class="[
+            isMobile ? 'min-h-11 px-3 py-2.5' : 'py-1',
+            sub === k ? 'bg-accent-dim text-accent-2' : 'text-txt3 hover:bg-elevated hover:text-txt',
+          ]"
           @click="setSub(k)"
         >
           {{ t(`pages.agentStudio.data.tabs.${k}`) }}
@@ -234,12 +253,30 @@ onMounted(() => reload())
           <div class="grid gap-2">
             <input v-model="memTitle" class="rounded border border-line bg-surface px-3 py-2 text-sm" :placeholder="t('pages.agentStudio.data.memory.titlePh')" />
             <textarea v-model="memContent" rows="3" class="rounded border border-line bg-surface px-3 py-2 text-sm" :placeholder="t('pages.agentStudio.data.memory.contentPh')" />
-            <div class="flex gap-2">
-              <button type="button" class="rounded bg-accent px-3 py-1.5 text-[12px] text-white disabled:opacity-50" :disabled="memSaving" @click="saveMemory">
+            <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="rounded bg-accent px-3 text-[12px] text-white disabled:opacity-50"
+                :class="isMobile ? 'min-h-11 px-4' : 'py-1.5'"
+                :disabled="memSaving"
+                @click="saveMemory"
+              >
                 {{ memEditingId ? t('common.buttons.save') : t('pages.agentStudio.data.memory.add') }}
               </button>
-              <button v-if="memEditingId" type="button" class="rounded border border-line px-3 py-1.5 text-[12px]" @click="resetMemForm">{{ t('common.buttons.cancel') }}</button>
-              <button v-if="memories.length" type="button" class="ml-auto text-[12px] text-err" @click="clearMemories">{{ t('pages.agentStudio.data.memory.clear') }}</button>
+              <button
+                v-if="memEditingId"
+                type="button"
+                class="rounded border border-line px-3 text-[12px]"
+                :class="isMobile ? 'min-h-11 px-4' : 'py-1.5'"
+                @click="resetMemForm"
+              >{{ t('common.buttons.cancel') }}</button>
+              <button
+                v-if="memories.length"
+                type="button"
+                class="ml-auto text-[12px] text-err"
+                :class="isMobile ? 'min-h-11 px-2' : ''"
+                @click="clearMemories"
+              >{{ t('pages.agentStudio.data.memory.clear') }}</button>
             </div>
           </div>
         </div>
@@ -247,7 +284,7 @@ onMounted(() => reload())
         <div v-else-if="!memories.length" class="text-sm text-txt3">{{ t('pages.agentStudio.data.memory.empty') }}</div>
         <div v-else class="space-y-2">
           <div v-for="m in memories" :key="m.id" class="rounded border border-line bg-base p-3">
-            <div class="flex items-start justify-between gap-2">
+            <div class="flex items-start justify-between gap-2" :class="isMobile ? 'flex-col' : ''">
               <div class="min-w-0">
                 <div class="truncate text-[13px] font-medium">{{ m.title }}</div>
                 <p class="mt-1 whitespace-pre-wrap text-[12px] text-txt2">{{ m.content }}</p>
@@ -255,9 +292,19 @@ onMounted(() => reload())
                   {{ t('pages.agentStudio.data.memory.updatedBy', { user: m.updatedBy }) }}
                 </p>
               </div>
-              <div class="flex shrink-0 gap-1">
-                <button type="button" class="rounded border border-line px-2 py-1 text-[11px]" @click="editMemory(m)">{{ t('common.buttons.edit') }}</button>
-                <button type="button" class="rounded border border-err/30 px-2 py-1 text-[11px] text-err" @click="removeMemory(m.id)">{{ t('common.buttons.delete') }}</button>
+              <div class="flex shrink-0 gap-1" :class="isMobile ? 'w-full' : ''">
+                <button
+                  type="button"
+                  class="rounded border border-line px-2 text-[11px]"
+                  :class="isMobile ? 'min-h-11 flex-1 px-3' : 'py-1'"
+                  @click="editMemory(m)"
+                >{{ t('common.buttons.edit') }}</button>
+                <button
+                  type="button"
+                  class="rounded border border-err/30 px-2 text-[11px] text-err"
+                  :class="isMobile ? 'min-h-11 flex-1 px-3' : 'py-1'"
+                  @click="removeMemory(m.id)"
+                >{{ t('common.buttons.delete') }}</button>
               </div>
             </div>
           </div>
@@ -271,12 +318,17 @@ onMounted(() => reload())
         <div v-else-if="!threads.length" class="text-sm text-txt3">{{ t('pages.agentStudio.data.context.empty') }}</div>
         <div v-else class="space-y-2">
           <div v-for="th in threads" :key="th.id" class="rounded border border-line bg-base">
-            <div class="flex items-center gap-2 px-3 py-2">
-              <button type="button" class="min-w-0 flex-1 text-left" @click="openThread(th.id)">
+            <div class="flex items-center gap-2 px-3" :class="isMobile ? 'min-h-11 py-2' : 'py-2'">
+              <button type="button" class="min-w-0 flex-1 text-left" :class="isMobile ? 'min-h-11' : ''" @click="openThread(th.id)">
                 <div class="truncate text-[13px] font-medium">{{ th.title || th.id }}</div>
                 <div class="text-[11px] text-txt3">{{ th.kind || 'user' }} · {{ threadCounts[th.id] || 0 }} msgs · {{ fmtTime(th.updatedAt) }}</div>
               </button>
-              <button type="button" class="rounded border border-err/30 px-2 py-1 text-[11px] text-err" @click="removeThread(th.id)">
+              <button
+                type="button"
+                class="rounded border border-err/30 px-2 text-[11px] text-err"
+                :class="isMobile ? 'min-h-11 min-w-11' : 'py-1'"
+                @click="removeThread(th.id)"
+              >
                 <Icon name="trash" :size="12" />
               </button>
             </div>
@@ -300,7 +352,55 @@ onMounted(() => reload())
         </p>
         <div v-if="jobsLoading" class="text-sm text-txt3">{{ t('common.buttons.loading') }}</div>
         <div v-else-if="!jobs.length" class="text-sm text-txt3">{{ t('pages.agentStudio.data.jobs.empty') }}</div>
-        <table v-else class="w-full text-left text-sm">
+
+        <!-- narrow: card stack (no 5-col table) -->
+        <div v-else-if="isMobile" class="space-y-3" data-testid="agent-cron-mobile-cards">
+          <div
+            v-for="job in jobs"
+            :key="job.id"
+            class="rounded border border-line bg-base p-3"
+            data-testid="agent-cron-card"
+          >
+            <div class="text-[13px] font-medium text-txt">{{ job.name }}</div>
+            <div class="mt-1 text-[12px] text-txt2">{{ job.scheduleKind }}: {{ job.scheduleExpr }}</div>
+            <div class="mt-3 space-y-2">
+              <label class="flex min-h-11 items-center justify-between gap-3 text-[12px] text-txt2">
+                <span>{{ t('pages.agentStudio.data.jobs.colEnabled') }}</span>
+                <input
+                  type="checkbox"
+                  class="h-5 w-5"
+                  data-testid="agent-cron-enabled"
+                  :checked="job.enabled"
+                  :disabled="jobBusy === job.id"
+                  @change="patchJob(job, { enabled: ($event.target as HTMLInputElement).checked })"
+                />
+              </label>
+              <label class="flex min-h-11 items-center justify-between gap-3 text-[12px] text-txt2">
+                <span>{{ t('pages.agentStudio.data.jobs.colDeliver') }}</span>
+                <input
+                  type="checkbox"
+                  class="h-5 w-5"
+                  data-testid="agent-cron-deliver"
+                  :checked="job.deliverToChannel"
+                  :disabled="jobBusy === job.id"
+                  @change="patchJob(job, { deliverToChannel: ($event.target as HTMLInputElement).checked })"
+                />
+              </label>
+              <button
+                type="button"
+                class="mt-1 min-h-11 w-full rounded border border-err/30 px-3 text-[12px] text-err disabled:cursor-not-allowed disabled:opacity-40"
+                data-testid="agent-cron-delete"
+                :disabled="jobBusy === job.id"
+                @click="removeJob(job.id)"
+              >
+                {{ t('common.buttons.delete') }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- desktop: table -->
+        <table v-else class="w-full text-left text-sm" data-testid="agent-cron-desktop-table">
           <thead class="text-xs text-txt3">
             <tr>
               <th class="px-2 py-1.5">{{ t('pages.agentStudio.data.jobs.colName') }}</th>
