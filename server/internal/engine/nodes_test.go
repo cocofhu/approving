@@ -8,7 +8,7 @@ import (
 )
 
 func TestStructuredGatesFailClosed(t *testing.T) {
-	if pass, _ := testGate(`{bad`, false); pass {
+	if pass, _ := testGate(`{bad`, false, ""); pass {
 		t.Error("malformed test_result should fail gate")
 	}
 	if pass, _ := reviewGate(`{"verdict":"bogus"}`); pass {
