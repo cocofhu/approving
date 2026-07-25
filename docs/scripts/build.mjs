@@ -5,7 +5,8 @@
  * - convert content markdown files to public/<path>/index.html
  *
  * BASE_PATH defaults to / for the custom domain (www.approving-ai.com).
- * Project Pages fallback: BASE_PATH=/approving-pages npm run build
+ * Legacy CI may set BASE_PATH=/approving-pages; that is remapped to / unless
+ * FORCE_PROJECT_PAGES=1 (project Pages fallback).
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -20,10 +21,12 @@ const contentDir = path.join(root, "content");
 const outDir = path.join(root, "public");
 
 // Custom domain is served from /. Legacy ci-docs set BASE_PATH=/approving-pages;
-// remap that so CI builds root-relative assets until the workflow env is updated.
+// remap that so CI builds root-relative assets (workflow env update needs workflow scope).
 const envBase = process.env.BASE_PATH;
+const useLegacyProjectPages =
+  envBase === "/approving-pages" && process.env.FORCE_PROJECT_PAGES === "1";
 const basePath = normalizeBase(
-  envBase === "/approving-pages" ? "/" : (envBase ?? "/"),
+  useLegacyProjectPages ? envBase : (envBase === "/approving-pages" ? "/" : (envBase ?? "/")),
 );
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
 
