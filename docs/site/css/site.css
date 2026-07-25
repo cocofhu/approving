@@ -83,6 +83,37 @@ img {
   color: var(--ink);
 }
 
+.lang-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.lang-switch__sep {
+  color: var(--muted);
+  opacity: 0.55;
+  user-select: none;
+}
+
+.lang-switch__link {
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.lang-switch__link:hover {
+  color: var(--ink);
+}
+
+.lang-switch__link.is-current {
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .site-footer {
   border-top: 1px solid var(--line);
   background: var(--panel);

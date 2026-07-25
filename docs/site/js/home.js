@@ -1,6 +1,83 @@
 (() => {
   const hero = document.querySelector(".hero");
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const pageLang = (document.documentElement.lang || "zh-CN").toLowerCase();
+  const isEn = pageLang === "en" || pageLang.startsWith("en-");
+
+  const COPY = isEn
+    ? {
+        heroTitles: ["Self-improve · Orchestration", "Delivery · Orchestration", "Visual review · Orchestration"],
+        heroTitleIdle: "Delivery · Orchestration",
+        parAsk: "Run sign-in, billing, and notifications in parallel — start now.",
+        parReply: "Got it. Parallel workflows for the three requirements are up and running.",
+        pmPlaceholder: "Say the next thing to ApprovingPM…",
+        idleMeta: "Idle",
+        bootingMeta: "Booting",
+        readyMeta: "Ready",
+        busyMeta: "Running",
+        waitingGateMeta: "Waiting on gate",
+        doneMeta: "Done",
+        capParStart: "IM confirmed — running in parallel…",
+        capParBoot: "Confirmed — spinning up parallel runtimes",
+        capParRun: "Three requirements running in parallel — research / plan",
+        capParImpl: "Implement writing code in parallel — no interference",
+        capParTest: "Tests keep running; billing waits at a gate — parallel, not blocked",
+        capParShip: "Two MRs submitted; billing still awaiting approval",
+        capParGate: "Gate cleared — billing submits its MR",
+        capParDone: "IM start → parallel run → closed out",
+        approveTitleReject: "Sign-in · UI DEMO",
+        approveDescReject: "Review an interactive demo — annotate issues, then reject or approve.",
+        approveTitlePass: "Session renew · UI DEMO",
+        approveDescPass: "Issues fixed. Review the demo again — approve if it looks good.",
+        capApproveOpen: "Open the approval window — reviewing a UI demo",
+        capApproveAnnotate: "Annotate the issue: primary button label is wrong",
+        approveRejectComment:
+          'Reject: primary button should not be "Delete account" — change it back to "Sign in / Continue".',
+        capApproveReject: "Reject case — send back with annotation feedback",
+        capApproveNext: "Next item: session renew demo — approve if clean",
+        approvePassComment: "LGTM — demo flow and copy match. Approved.",
+        capApproveJust: "Just Approve",
+        capApproveDone: "Annotate reject / demo approve — both paths covered",
+        pmAsk:
+          "How do we guarantee quality? Research industry harness practices and software engineering experience for this open-source project.",
+        pmConfirm: "Confirmed — start the workflow with this plan.",
+      }
+    : {
+        heroTitles: ["自我迭代 · 编排", "需求交付 · 编排", "视觉评审 · 编排"],
+        heroTitleIdle: "需求交付 · 编排",
+        parAsk: "并行推进登录鉴权、计费结算、消息通知这三个需求，现在启动。",
+        parReply: "收到。已按三条需求拉起并行工作流，开始执行。",
+        pmPlaceholder: "跟 ApprovingPM 说下一句…",
+        idleMeta: "待机",
+        bootingMeta: "拉起中",
+        readyMeta: "就绪",
+        busyMeta: "执行中",
+        waitingGateMeta: "等待门禁",
+        doneMeta: "完成",
+        capParStart: "IM 确认启动，并行推进中…",
+        capParBoot: "已确认启动 — 拉起并行执行环境",
+        capParRun: "三条需求并行开跑 — research / plan",
+        capParImpl: "Implement 并行写代码 — 互不干扰",
+        capParTest: "测试继续跑；计费停在门禁 — 并行不互相堵",
+        capParShip: "两条已提交 MR；计费仍等批准",
+        capParGate: "门禁通过 — 计费补交 MR",
+        capParDone: "IM 启动 → 并行执行 → 收口完成",
+        approveTitleReject: "登录鉴权 · UI DEMO",
+        approveDescReject: "审阅可交互 Demo — 框选问题区域后可拒绝或批准。",
+        approveTitlePass: "会话续期 · UI DEMO",
+        approveDescPass: "问题已修。再看一遍 Demo，没问题即可批准。",
+        capApproveOpen: "打开审批窗口 — 审的是 UI Demo",
+        capApproveAnnotate: "框选问题区域：主按钮文案不对",
+        approveRejectComment: "拒绝：主按钮不应是「删除账号」，请改回「登录 / 继续」。",
+        capApproveReject: "拒绝 Case — 带着框选反馈打回",
+        capApproveNext: "下一单：会话续期 Demo — 无问题可批准",
+        approvePassComment: "LGTM — Demo 流程与文案一致，批准。",
+        capApproveJust: "Just Approve",
+        capApproveDone: "框选拒绝 / Demo 批准 — 两种路径都走通",
+        pmAsk:
+          "有什么办法可以保证质量？调研一下业界的 harness 和软件工程经验，看看怎么保证这个开源项目的质量。",
+        pmConfirm: "确认，按这个方案启动工作流。",
+      };
 
   if (hero) {
     requestAnimationFrame(() => {
@@ -11,7 +88,7 @@
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const lanes = ["auth", "billing", "notify"];
 
-  const heroTitles = ["自我迭代 · 编排", "需求交付 · 编排", "视觉评审 · 编排"];
+  const heroTitles = COPY.heroTitles;
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
   const jitter = (base, spread = 0.35) => Math.round(base * (1 - spread + Math.random() * spread * 2));
 
@@ -157,7 +234,7 @@
   } else if (heroFlow && reduceMotion) {
     const titleEl = within(heroFlow, "[data-hero-title]");
     const liveEl = within(heroFlow, "[data-hero-live]");
-    if (titleEl) titleEl.textContent = "需求交付 · 编排";
+    if (titleEl) titleEl.textContent = COPY.heroTitleIdle;
     if (liveEl) liveEl.textContent = "● done";
     ["research", "clarify", "visual", "gate", "plan"].forEach((id) => {
       within(heroFlow, `[data-hf="${id}"]`)?.classList.add("is-done");
@@ -264,8 +341,8 @@
     notify: ["notify-research", "notify-impl", "notify-test", "notify-ship"],
   };
 
-  const PAR_ASK = "并行推进登录鉴权、计费结算、消息通知这三个需求，现在启动。";
-  const PAR_REPLY = "收到。已按三条需求拉起并行工作流，开始执行。";
+  const PAR_ASK = COPY.parAsk;
+  const PAR_REPLY = COPY.parReply;
   const TERM_LINES = {
     auth: ["$ boot runtime", "$ mount workspace", "$ agent research …"],
     billing: ["$ boot runtime", "$ mount workspace", "$ agent plan …"],
@@ -305,7 +382,7 @@
 
   function resetSandboxes(root) {
     for (const id of lanes) {
-      setSandbox(root, id, "", "idle", "待机", ["", "", ""]);
+      setSandbox(root, id, "", "idle", COPY.idleMeta, ["", "", ""]);
     }
     setSbChip(root, 0);
   }
@@ -326,7 +403,7 @@
     if (!composer) return;
     composer.classList.remove("is-typing");
     composer.textContent = "";
-    composer.setAttribute("data-placeholder", "跟 ApprovingPM 说下一句…");
+    composer.setAttribute("data-placeholder", COPY.pmPlaceholder);
   }
 
   async function typeParComposer(root, text, signal) {
@@ -376,7 +453,7 @@
 
     while (!signal.aborted) {
       resetParallel(root);
-      if (caption) caption.textContent = "IM 确认启动，并行推进中…";
+      if (caption) caption.textContent = COPY.capParStart;
       await sleep(300);
       if (signal.aborted) break;
 
@@ -390,12 +467,12 @@
 
       await typeParMsg(root, 2, signal);
       setLiveChip(root, "● starting");
-      if (caption) caption.textContent = "已确认启动 — 拉起并行执行环境";
+      if (caption) caption.textContent = COPY.capParBoot;
       await sleep(500);
       if (signal.aborted) break;
 
       for (const id of lanes) {
-        setSandbox(root, id, "creating", "booting", "拉起中", [
+        setSandbox(root, id, "creating", "booting", COPY.bootingMeta, [
           "$ init runtime",
           "$ allocate cpu/mem",
           "…",
@@ -408,9 +485,9 @@
       sheet?.classList.remove("is-open");
       setLiveChip(root, "● live run");
       for (const id of lanes) {
-        setSandbox(root, id, "running", "ready", "就绪", TERM_LINES[id]);
+        setSandbox(root, id, "running", "ready", COPY.readyMeta, TERM_LINES[id]);
       }
-      if (caption) caption.textContent = "三条需求并行开跑 — research / plan";
+      if (caption) caption.textContent = COPY.capParRun;
       await sleep(400);
       if (signal.aborted) break;
 
@@ -423,9 +500,9 @@
       setLanePill(root, "auth", "running", "running");
       setLanePill(root, "billing", "running", "running");
       setLanePill(root, "notify", "running", "running");
-      setSandbox(root, "auth", "busy", "busy", "执行中", ["$ agent research", "writing brief…", "ok"]);
-      setSandbox(root, "billing", "busy", "busy", "执行中", ["$ agent plan", "draft model…", "ok"]);
-      setSandbox(root, "notify", "busy", "busy", "执行中", ["$ agent research", "channel pick…", "ok"]);
+      setSandbox(root, "auth", "busy", "busy", COPY.busyMeta, ["$ agent research", "writing brief…", "ok"]);
+      setSandbox(root, "billing", "busy", "busy", COPY.busyMeta, ["$ agent plan", "draft model…", "ok"]);
+      setSandbox(root, "notify", "busy", "busy", COPY.busyMeta, ["$ agent research", "channel pick…", "ok"]);
       await sleep(900);
       if (signal.aborted) break;
 
@@ -441,10 +518,10 @@
       setEdge(root, "auth-2", "active");
       setEdge(root, "billing-2", "active");
       setEdge(root, "notify-2", "active");
-      setSandbox(root, "auth", "busy", "busy", "执行中", ["$ implement", "edit middleware…", "tests…"]);
-      setSandbox(root, "billing", "busy", "busy", "执行中", ["$ implement", "edit ledger…", "tests…"]);
-      setSandbox(root, "notify", "busy", "busy", "执行中", ["$ implement", "edit webhook…", "tests…"]);
-      if (caption) caption.textContent = "Implement 并行写代码 — 互不干扰";
+      setSandbox(root, "auth", "busy", "busy", COPY.busyMeta, ["$ implement", "edit middleware…", "tests…"]);
+      setSandbox(root, "billing", "busy", "busy", COPY.busyMeta, ["$ implement", "edit ledger…", "tests…"]);
+      setSandbox(root, "notify", "busy", "busy", COPY.busyMeta, ["$ implement", "edit webhook…", "tests…"]);
+      if (caption) caption.textContent = COPY.capParImpl;
       await sleep(1000);
       if (signal.aborted) break;
 
@@ -463,10 +540,10 @@
       setEdge(root, "billing-3", "wait");
       setLanePill(root, "billing", "waiting", "waiting human");
       setGates(root, 1);
-      setSandbox(root, "auth", "busy", "busy", "执行中", ["$ e2e", "playwright…", "green"]);
-      setSandbox(root, "billing", "running", "paused", "等待门禁", ["$ gate", "waiting human…", ""]);
-      setSandbox(root, "notify", "busy", "busy", "执行中", ["$ contract test", "retries…", "ok"]);
-      if (caption) caption.textContent = "测试继续跑；计费停在门禁 — 并行不互相堵";
+      setSandbox(root, "auth", "busy", "busy", COPY.busyMeta, ["$ e2e", "playwright…", "green"]);
+      setSandbox(root, "billing", "running", "paused", COPY.waitingGateMeta, ["$ gate", "waiting human…", ""]);
+      setSandbox(root, "notify", "busy", "busy", COPY.busyMeta, ["$ contract test", "retries…", "ok"]);
+      if (caption) caption.textContent = COPY.capParTest;
       await sleep(1100);
       if (signal.aborted) break;
 
@@ -477,9 +554,9 @@
       setNode(root, "auth-ship", "running");
       setNode(root, "notify-ship", "running");
       setShipStat(root, 2);
-      setSandbox(root, "auth", "busy", "busy", "执行中", ["$ submit MR", "!482", "done"]);
-      setSandbox(root, "notify", "busy", "busy", "执行中", ["$ submit MR", "!491", "done"]);
-      if (caption) caption.textContent = "两条已提交 MR；计费仍等批准";
+      setSandbox(root, "auth", "busy", "busy", COPY.busyMeta, ["$ submit MR", "!482", "done"]);
+      setSandbox(root, "notify", "busy", "busy", COPY.busyMeta, ["$ submit MR", "!491", "done"]);
+      if (caption) caption.textContent = COPY.capParShip;
       await sleep(900);
       if (signal.aborted) break;
 
@@ -487,23 +564,23 @@
       setNode(root, "notify-ship", "done");
       setLanePill(root, "auth", "done", "shipped");
       setLanePill(root, "notify", "done", "shipped");
-      setSandbox(root, "auth", "done", "done", "完成", ["$ idle", "", ""]);
-      setSandbox(root, "notify", "done", "done", "完成", ["$ idle", "", ""]);
+      setSandbox(root, "auth", "done", "done", COPY.doneMeta, ["$ idle", "", ""]);
+      setSandbox(root, "notify", "done", "done", COPY.doneMeta, ["$ idle", "", ""]);
       setNode(root, "billing-gate", "done");
       setEdge(root, "billing-3", "done");
       setGates(root, 0);
       setNode(root, "billing-ship", "running");
       setLanePill(root, "billing", "running", "shipping");
-      setSandbox(root, "billing", "busy", "busy", "执行中", ["$ submit MR", "push…", "done"]);
+      setSandbox(root, "billing", "busy", "busy", COPY.busyMeta, ["$ submit MR", "push…", "done"]);
       setShipStat(root, 3);
-      if (caption) caption.textContent = "门禁通过 — 计费补交 MR";
+      if (caption) caption.textContent = COPY.capParGate;
       await sleep(700);
       if (signal.aborted) break;
 
       setNode(root, "billing-ship", "done");
       setLanePill(root, "billing", "done", "shipped");
-      setSandbox(root, "billing", "done", "done", "完成", ["$ idle", "", ""]);
-      if (caption) caption.textContent = "IM 启动 → 并行执行 → 收口完成";
+      setSandbox(root, "billing", "done", "done", COPY.doneMeta, ["$ idle", "", ""]);
+      if (caption) caption.textContent = COPY.capParDone;
       await sleep(1500);
     }
   }
@@ -537,8 +614,8 @@
     if (which === "reject") {
       if (rejectUi) rejectUi.hidden = false;
       if (passUi) passUi.hidden = true;
-      if (title) title.textContent = "登录鉴权 · UI DEMO";
-      if (desc) desc.textContent = "审阅可交互 Demo — 框选问题区域后可拒绝或批准。";
+      if (title) title.textContent = COPY.approveTitleReject;
+      if (desc) desc.textContent = COPY.approveDescReject;
       if (pill) {
         pill.textContent = "pending";
         pill.classList.remove("is-rejected", "is-approved");
@@ -549,8 +626,8 @@
     } else {
       if (rejectUi) rejectUi.hidden = true;
       if (passUi) passUi.hidden = false;
-      if (title) title.textContent = "会话续期 · UI DEMO";
-      if (desc) desc.textContent = "问题已修。再看一遍 Demo，没问题即可批准。";
+      if (title) title.textContent = COPY.approveTitlePass;
+      if (desc) desc.textContent = COPY.approveDescPass;
       if (pill) {
         pill.textContent = "pending";
         pill.classList.remove("is-rejected", "is-approved");
@@ -578,7 +655,7 @@
       win?.classList.remove("is-open");
       setApproveCase(root, "reject");
       if (comment) comment.textContent = "";
-      if (caption) caption.textContent = "打开审批窗口 — 审的是 UI Demo";
+      if (caption) caption.textContent = COPY.capApproveOpen;
       await sleep(350);
       if (signal.aborted) break;
 
@@ -586,7 +663,7 @@
       await sleep(reduceMotion ? 300 : 700);
       if (signal.aborted) break;
 
-      if (caption) caption.textContent = "框选问题区域：主按钮文案不对";
+      if (caption) caption.textContent = COPY.capApproveAnnotate;
       const target = within(root, "[data-annotate-target]");
       if (target && cursor && stage) {
         moveCursor(stage, cursor, target);
@@ -603,12 +680,12 @@
       await sleep(400);
       if (signal.aborted) break;
 
-      await typeComment(comment, "拒绝：主按钮不应是「删除账号」，请改回「登录 / 继续」。", signal);
+      await typeComment(comment, COPY.approveRejectComment, signal);
       if (signal.aborted) break;
       await sleep(250);
       if (signal.aborted) break;
 
-      if (caption) caption.textContent = "拒绝 Case — 带着框选反馈打回";
+      if (caption) caption.textContent = COPY.capApproveReject;
       await clickEl(stage, cursor, rejectBtn);
       if (signal.aborted) break;
       if (pill) {
@@ -620,16 +697,16 @@
 
       setApproveCase(root, "pass");
       if (comment) comment.textContent = "";
-      if (caption) caption.textContent = "下一单：会话续期 Demo — 无问题可批准";
+      if (caption) caption.textContent = COPY.capApproveNext;
       await sleep(550);
       if (signal.aborted) break;
 
-      await typeComment(comment, "LGTM — Demo 流程与文案一致，批准。", signal);
+      await typeComment(comment, COPY.approvePassComment, signal);
       if (signal.aborted) break;
       await sleep(250);
       if (signal.aborted) break;
 
-      if (caption) caption.textContent = "Just Approve";
+      if (caption) caption.textContent = COPY.capApproveJust;
       await clickEl(stage, cursor, approveBtn);
       if (signal.aborted) break;
       if (pill) {
@@ -638,13 +715,13 @@
         pill.classList.add("is-approved");
       }
       railPass?.classList.add("is-done");
-      if (caption) caption.textContent = "框选拒绝 / Demo 批准 — 两种路径都走通";
+      if (caption) caption.textContent = COPY.capApproveDone;
       await sleep(1400);
     }
   }
 
   /* PM showcase — typewriter IM, no bottom caption */
-  const PM_PLACEHOLDER = "跟 ApprovingPM 说下一句…";
+  const PM_PLACEHOLDER = COPY.pmPlaceholder;
 
   function scrollPmThread(root, behavior = "smooth") {
     const thread = within(root, "[data-pm-thread]");
@@ -730,9 +807,8 @@
   }
 
   async function playPm(root, signal) {
-    const ask =
-      "有什么办法可以保证质量？调研一下业界的 harness 和软件工程经验，看看怎么保证这个开源项目的质量。";
-    const confirm = "确认，按这个方案启动工作流。";
+    const ask = COPY.pmAsk;
+    const confirm = COPY.pmConfirm;
 
     while (!signal.aborted) {
       hideAllMsgs(root);
@@ -815,7 +891,7 @@
         for (const lane of lanes) {
           for (let i = 1; i <= 3; i += 1) setEdge(el, `${lane}-${i}`, "done");
           setLanePill(el, lane, "done", "shipped");
-          setSandbox(el, lane, "done", "done", "完成", ["$ idle", "", ""]);
+          setSandbox(el, lane, "done", "done", COPY.doneMeta, ["$ idle", "", ""]);
         }
         setShipStat(el, 3);
         setSbChip(el, 3);
@@ -824,7 +900,7 @@
         within(el, "[data-approve-window]")?.classList.add("is-open");
         setApproveCase(el, "pass");
         const c = within(el, "[data-approve-comment]");
-        if (c) c.textContent = "LGTM — Demo 流程与文案一致，批准。";
+        if (c) c.textContent = COPY.approvePassComment;
         const pill = within(el, "[data-approve-pill]");
         if (pill) {
           pill.textContent = "approved";
