@@ -124,7 +124,7 @@ Publish the pipeline if needed, then start a run. Watch sandbox execution, artif
 
 ## Development
 
-For contributors working on the Approving codebase, see the [Contributing Guide](CONTRIBUTING.md).
+For contributors working on the Approving codebase, see the [Contributing Guide](CONTRIBUTING.md). Critical-path Playwright e2e (CI `web-e2e`): see [CONTRIBUTING — Critical-path Playwright e2e](CONTRIBUTING.md#critical-path-playwright-e2e).
 
 **Prerequisites:** Go, Node.js, Docker Compose (Linux host for sandboxes)
 
