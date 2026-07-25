@@ -19,7 +19,12 @@ const siteDir = path.join(root, "site");
 const contentDir = path.join(root, "content");
 const outDir = path.join(root, "public");
 
-const basePath = normalizeBase(process.env.BASE_PATH ?? "/");
+// Custom domain is served from /. Legacy ci-docs set BASE_PATH=/approving-pages;
+// remap that so CI builds root-relative assets until the workflow env is updated.
+const envBase = process.env.BASE_PATH;
+const basePath = normalizeBase(
+  envBase === "/approving-pages" ? "/" : (envBase ?? "/"),
+);
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
 
 function normalizeBase(raw) {
