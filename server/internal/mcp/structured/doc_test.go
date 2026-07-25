@@ -95,6 +95,34 @@ func TestParseAndRenderTestResult(t *testing.T) {
 	}
 }
 
+func TestParseTestResultPlanCoverage(t *testing.T) {
+	doc, err := ParseTestResult(map[string]any{
+		"summary": "s",
+		"plan_coverage": []map[string]any{
+			{"plan_id": " g1.1 ", "title": " 叶子 ", "passed": true, "evidence": " 做了 A "},
+			{"plan_id": "", "passed": true, "evidence": "drop me"},
+			{"plan_id": "g1.2", "passed": false, "evidence": "  "},
+		},
+	})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(doc.PlanCoverage) != 2 {
+		t.Fatalf("plan_coverage len=%d, want 2 (empty plan_id dropped)", len(doc.PlanCoverage))
+	}
+	if doc.PlanCoverage[0].PlanID != "g1.1" || doc.PlanCoverage[0].Title != "叶子" ||
+		!doc.PlanCoverage[0].Passed || doc.PlanCoverage[0].Evidence != "做了 A" {
+		t.Fatalf("first item not normalized: %+v", doc.PlanCoverage[0])
+	}
+	if doc.PlanCoverage[1].PlanID != "g1.2" || doc.PlanCoverage[1].Passed || doc.PlanCoverage[1].Evidence != "" {
+		t.Fatalf("second item not normalized: %+v", doc.PlanCoverage[1])
+	}
+	md := RenderTestResultMarkdown(`{"summary":"s","plan_coverage":[{"plan_id":"g1.1","title":"x","passed":true,"evidence":"ok"}]}`)
+	if !strings.Contains(md, "计划贴合度") || !strings.Contains(md, "g1.1") {
+		t.Fatalf("md missing plan coverage: %s", md)
+	}
+}
+
 func TestParseTestResultScreenshots(t *testing.T) {
 	// Only artifact references are accepted: inline data is ignored/dropped,
 	// entries without an artifact drop, captions are trimmed, count is capped.

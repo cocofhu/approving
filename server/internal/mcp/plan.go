@@ -176,23 +176,49 @@ func rollupStatus(subs []planSub) string {
 	}
 }
 
+// forEachPlanLeaf visits every leaf item: a goal with no subgoals, or each
+// subgoal under a parent. Leaf id rules must stay aligned with ensurePlanComplete
+// / planIncomplete and the plan_coverage gate.
+func forEachPlanLeaf(doc planDoc, fn func(id, title, status string)) {
+	for _, g := range doc.Goals {
+		if len(g.Subgoals) == 0 {
+			fn(g.ID, g.Title, g.Status)
+			continue
+		}
+		for _, s := range g.Subgoals {
+			fn(s.ID, s.Title, s.Status)
+		}
+	}
+}
+
+// planLeafIDs returns leaf item ids in stable plan order.
+func planLeafIDs(doc planDoc) []string {
+	var out []string
+	forEachPlanLeaf(doc, func(id, _, _ string) {
+		out = append(out, id)
+	})
+	return out
+}
+
+// PlanLeafIDs returns leaf ids from a plan.json payload. Empty, malformed, or
+// leaf-less plans yield nil/empty so callers can fail-open (no coverage required).
+func PlanLeafIDs(content string) []string {
+	var doc planDoc
+	if json.Unmarshal([]byte(content), &doc) != nil || len(doc.Goals) == 0 {
+		return nil
+	}
+	return planLeafIDs(doc)
+}
+
 // planIncomplete returns human-readable descriptions of every leaf item not yet
 // done (subgoals, plus big goals that have no subgoals). Empty ⇒ plan complete.
 func planIncomplete(doc planDoc) []string {
 	var out []string
-	for _, g := range doc.Goals {
-		if len(g.Subgoals) == 0 {
-			if g.Status != planStatusDone {
-				out = append(out, fmt.Sprintf("%s %s(%s)", g.ID, g.Title, g.Status))
-			}
-			continue
+	forEachPlanLeaf(doc, func(id, title, status string) {
+		if status != planStatusDone {
+			out = append(out, fmt.Sprintf("%s %s(%s)", id, title, status))
 		}
-		for _, s := range g.Subgoals {
-			if s.Status != planStatusDone {
-				out = append(out, fmt.Sprintf("%s %s(%s)", s.ID, s.Title, s.Status))
-			}
-		}
-	}
+	})
 	return out
 }
 

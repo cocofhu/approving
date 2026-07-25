@@ -77,8 +77,10 @@ func (e *Engine) executeNode(c *execCtx, node *models.Node) nodeOutcome {
 		switch spec.Gate {
 		case nodereg.GateTest:
 			blockOnSkipped := truthy(node.Config["block_on_skipped"])
+			runID := c.run.ID
 			gate = func(content string) (bool, string) {
-				return testGate(content, blockOnSkipped)
+				planJSON, _ := e.store.Get(runID, mcp.PlanArtifactName)
+				return testGate(content, blockOnSkipped, planJSON)
 			}
 		default:
 			gate = gateFor(spec.Gate)
@@ -128,7 +130,8 @@ func (e *Engine) execStructuredFromSpec(c *execCtx, node *models.Node, spec node
 func gateFor(kind nodereg.GateKind) func(string) (bool, string) {
 	switch kind {
 	case nodereg.GateTest:
-		return func(content string) (bool, string) { return testGate(content, false) }
+		// No store access here; plan_coverage fail-opens when planJSON is empty.
+		return func(content string) (bool, string) { return testGate(content, false, "") }
 	case nodereg.GateReview:
 		return reviewGate
 	default:
@@ -424,8 +427,9 @@ func structuredExitGoto(node *models.Node, pass bool) string {
 
 // testGate blocks the flow when any test case failed or test_result.json is
 // malformed. When blockOnSkipped is true, skipped cases also fail the gate.
-// Its conclusion is read from the recorded test_result.json.
-func testGate(content string, blockOnSkipped bool) (bool, string) {
+// When planJSON has leaves, plan_coverage must fully cover them with passed
+// evidence (AND with the cases gate). Empty/leaf-less plan fail-opens.
+func testGate(content string, blockOnSkipped bool, planJSON string) (bool, string) {
 	n := mcp.TestFailedCount(content)
 	if n < 0 {
 		return false, "测试结果解析失败:无法读取 test_result.json"
@@ -441,6 +445,9 @@ func testGate(content string, blockOnSkipped bool) (bool, string) {
 		if skipped > 0 {
 			return false, fmt.Sprintf("测试未通过:%d 个用例被跳过,需修复后重新测试", skipped)
 		}
+	}
+	if ok, reason := mcp.PlanCoverageOK(content, planJSON); !ok {
+		return false, reason
 	}
 	return true, ""
 }

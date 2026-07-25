@@ -23,6 +23,7 @@ alwaysApply: false
 - 开始一项前调用 `update_plan_status(id, "in_progress")`;完成该项后调用 `update_plan_status(id, "done")`。
   - `id` 为计划项标识,如大目标 `g1` 或小目标 `g1.2`。
 - **必须把所有计划项都标记为 `done` 才算完成**;否则平台会自动要求你继续未完成的项。
+- **软提示(计划贴合度)**:实现应按每个 plan 叶子交付,并在 `set_implementation_result` / 提交说明中留下便于测试阶段填写 `plan_coverage.evidence` 的可核对痕迹(改了哪些文件/行为)。implement 节点**不**因缺少 `plan_coverage` 而硬失败——贴合度硬门禁在 test 阶段。
 
 ## 收尾:提交推送 + set_implementation_result
 

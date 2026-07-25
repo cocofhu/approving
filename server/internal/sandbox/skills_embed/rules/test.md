@@ -13,7 +13,8 @@ alwaysApply: false
   - `summary`:总体结论(必填,例如是否达标、覆盖范围);
   - `cases[]`:用例结果(`name` + `status`,`status` 取 `passed|failed|skipped`,可选 `detail`);
   - `defects[]`:发现的缺陷(`title`,可选 `severity` / `detail`);
-  - 视情况补 `variances`(与计划偏差)、`assessment`(综合评估/是否可发布)。
+  - 视情况补 `variances`(与计划偏差)、`assessment`(综合评估/是否可发布);
+  - **`plan_coverage[]`(有 plan 叶子时必填)**:逐叶子对照计划给出通过证据(见下节)。
 - **如实记录**通过与失败,不要粉饰;通过/失败/跳过数量由平台按 `cases` 自动统计。
 - 需运行实际测试时,可在工作区执行相应命令并把结果汇总进上述结构;`set_test_result` 是本节点的交付。
 
@@ -22,6 +23,19 @@ alwaysApply: false
 - **测试是门禁**:只要有任一用例 `status=failed`,平台就判定本节点未通过,并按失败/回滚边把流程打回上游修复,不会带着失败用例继续往下走。
 - 全部通过(无 failed 用例)才放行。若节点配置了 `block_on_skipped=true`,则 skipped 用例同样阻塞门禁;默认 `false` 时 skipped 不阻塞(与单仓现网一致)。
 - 正因如此,更要**据实**标注每个用例的 status,不要为了让流程通过而谎报为 passed。
+
+## 计划贴合度门禁(plan_coverage)
+
+当本次 run 存在 `plan.json` 且其叶子项非空时(叶子 = 无 subgoals 的 goal,或 goal 下的 subgoal),必须在 `set_test_result` 中提交 `plan_coverage`,与 cases 门禁**同时生效**:
+
+- **触发条件**:有至少一个 plan 叶子 → 强制 `plan_coverage`;无 plan / 叶子为空 → 不要求该字段(不会因缺字段失败)。
+- **必填字段**(每一项):
+  - `plan_id`:对应叶子 id(如 `g1` 或 `g1.2`);
+  - `passed`:是否通过(须为 `true`);
+  - `evidence`:非空自证文本(平台只做非空/非空白校验,不核验是否对应真实代码);
+  - `title` 可选,便于阅读。
+- **失败后果**:未覆盖全部叶子、未知/重复 `plan_id`、任一项 `passed≠true`、或 `evidence` 为空/仅空白 → 贴合度门禁失败,流程经 `exits.fail` 回 implement 修复,不得进入 submit_mr。
+- 先用 `get_plan` 读取叶子列表,再逐项填写覆盖证据。
 
 ## 多仓 WORKSPACE 布局与汇总
 
