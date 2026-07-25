@@ -1460,7 +1460,8 @@
       "validating": "Validating…",
       "demoEnlarge": "Enlarge",
       "demoSelected": "Selected",
-      "readonly": "Read-only"
+      "readonly": "Read-only",
+      "unreadFab": "{n} new messages — click to jump to bottom"
     },
     "reviewComposer": {
       "sendClarify": "Send reply",

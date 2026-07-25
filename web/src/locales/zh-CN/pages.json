@@ -1460,7 +1460,8 @@
       "validating": "校验中…",
       "demoEnlarge": "放大",
       "demoSelected": "已选",
-      "readonly": "只读"
+      "readonly": "只读",
+      "unreadFab": "有 {n} 条新消息，点击回到底部"
     },
     "reviewComposer": {
       "sendClarify": "发送回复",

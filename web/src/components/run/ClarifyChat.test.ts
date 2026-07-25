@@ -326,4 +326,228 @@ describe('ClarifyChat', () => {
     wrapper.unmount()
   })
 
+  function scrollerOf(wrapper: ReturnType<typeof mountChat>) {
+    return wrapper.find('[data-testid="clarify-scroller"]').element as HTMLElement
+  }
+
+  /** Mock scroller metrics so near-bottom / leave-bottom can be simulated in happy-dom. */
+  function mockScrollerMetrics(
+    el: HTMLElement,
+    opts: { scrollHeight: number; clientHeight: number; scrollTop: number },
+  ) {
+    let top = opts.scrollTop
+    Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => opts.scrollHeight })
+    Object.defineProperty(el, 'clientHeight', { configurable: true, get: () => opts.clientHeight })
+    Object.defineProperty(el, 'scrollTop', {
+      configurable: true,
+      get: () => top,
+      set: (v: number) => {
+        top = v
+      },
+    })
+  }
+
+  async function leaveBottom(wrapper: ReturnType<typeof mountChat>) {
+    const el = scrollerOf(wrapper)
+    mockScrollerMetrics(el, { scrollHeight: 800, clientHeight: 300, scrollTop: 100 })
+    await wrapper.find('[data-testid="clarify-scroller"]').trigger('scroll')
+    await flushPromises()
+  }
+
+  async function scrollNearBottom(wrapper: ReturnType<typeof mountChat>) {
+    const el = scrollerOf(wrapper)
+    mockScrollerMetrics(el, { scrollHeight: 800, clientHeight: 300, scrollTop: 760 })
+    await wrapper.find('[data-testid="clarify-scroller"]').trigger('scroll')
+    await flushPromises()
+  }
+
+  function agentTurn(text: string, at: string): ClarifyTurn {
+    return { role: 'agent', text, at }
+  }
+
+  it('stick-to-bottom: stays put when off-bottom and new turns arrive', async () => {
+    const wrapper = mountChat({
+      turns: [agentTurn('历史消息', '2026-07-18T00:00:00Z')],
+    })
+    await leaveBottom(wrapper)
+    const el = scrollerOf(wrapper)
+    const before = el.scrollTop
+    await wrapper.setProps({
+      turns: [
+        agentTurn('历史消息', '2026-07-18T00:00:00Z'),
+        agentTurn('新消息', '2026-07-18T00:00:01Z'),
+      ],
+    })
+    await flushPromises()
+    expect(el.scrollTop).toBe(before)
+    wrapper.unmount()
+  })
+
+  it('stick-to-bottom: auto-follows when near bottom', async () => {
+    const wrapper = mountChat({
+      turns: [agentTurn('历史消息', '2026-07-18T00:00:00Z')],
+    })
+    const el = scrollerOf(wrapper)
+    mockScrollerMetrics(el, { scrollHeight: 800, clientHeight: 300, scrollTop: 760 })
+    await wrapper.find('[data-testid="clarify-scroller"]').trigger('scroll')
+    await flushPromises()
+    await wrapper.setProps({
+      turns: [
+        agentTurn('历史消息', '2026-07-18T00:00:00Z'),
+        agentTurn('贴底新消息', '2026-07-18T00:00:01Z'),
+      ],
+    })
+    await flushPromises()
+    // force/stick path sets scrollTop = scrollHeight
+    expect(el.scrollTop).toBe(el.scrollHeight)
+    expect(wrapper.find('[data-testid="clarify-unread-fab"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('unread FAB: accumulates exact count while off-bottom', async () => {
+    const wrapper = mountChat({
+      turns: [agentTurn('seed', '2026-07-18T00:00:00Z')],
+    })
+    await leaveBottom(wrapper)
+    expect(wrapper.find('[data-testid="clarify-unread-fab"]').exists()).toBe(false)
+
+    await wrapper.setProps({
+      turns: [
+        agentTurn('seed', '2026-07-18T00:00:00Z'),
+        agentTurn('a', '2026-07-18T00:00:01Z'),
+      ],
+    })
+    await flushPromises()
+    const fab = wrapper.find('[data-testid="clarify-unread-fab"]')
+    expect(fab.exists()).toBe(true)
+    expect(fab.text()).toContain('1')
+    expect(fab.attributes('aria-label')).toContain('1')
+    expect(fab.attributes('title')).toContain('1')
+
+    await wrapper.setProps({
+      turns: [
+        agentTurn('seed', '2026-07-18T00:00:00Z'),
+        agentTurn('a', '2026-07-18T00:00:01Z'),
+        agentTurn('b', '2026-07-18T00:00:02Z'),
+        agentTurn('c', '2026-07-18T00:00:03Z'),
+      ],
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="clarify-unread-fab"]').text()).toContain('3')
+    wrapper.unmount()
+  })
+
+  it('unread FAB: thinking alone does not show or increment unread', async () => {
+    const wrapper = mountChat({
+      turns: [agentTurn('seed', '2026-07-18T00:00:00Z')],
+    })
+    await leaveBottom(wrapper)
+    // Simulate send-triggered thinking without new props.turns
+    await wrapper.find('textarea').setValue('回复')
+    // Leave bottom again after send force-stick, then re-enter off-bottom with no new turns
+    await wrapper.find('button[class*="bg-accent"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toMatch(/思考/)
+    // After send we force-stick — FAB must be hidden even while thinking
+    expect(wrapper.find('[data-testid="clarify-unread-fab"]').exists()).toBe(false)
+
+    await leaveBottom(wrapper)
+    // Still no new props.turns → still no FAB (thinking does not count)
+    expect(wrapper.find('[data-testid="clarify-unread-fab"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('unread FAB: click clears unread and scrolls to bottom', async () => {
+    const wrapper = mountChat({
+      turns: [agentTurn('seed', '2026-07-18T00:00:00Z')],
+    })
+    await leaveBottom(wrapper)
+    await wrapper.setProps({
+      turns: [
+        agentTurn('seed', '2026-07-18T00:00:00Z'),
+        agentTurn('new', '2026-07-18T00:00:01Z'),
+      ],
+    })
+    await flushPromises()
+    const fab = wrapper.find('[data-testid="clarify-unread-fab"]')
+    expect(fab.exists()).toBe(true)
+    await fab.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="clarify-unread-fab"]').exists()).toBe(false)
+    expect(scrollerOf(wrapper).scrollTop).toBe(scrollerOf(wrapper).scrollHeight)
+    wrapper.unmount()
+  })
+
+  it('unread FAB: manual scroll near bottom clears unread', async () => {
+    const wrapper = mountChat({
+      turns: [agentTurn('seed', '2026-07-18T00:00:00Z')],
+    })
+    await leaveBottom(wrapper)
+    await wrapper.setProps({
+      turns: [
+        agentTurn('seed', '2026-07-18T00:00:00Z'),
+        agentTurn('new', '2026-07-18T00:00:01Z'),
+      ],
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="clarify-unread-fab"]').exists()).toBe(true)
+    await scrollNearBottom(wrapper)
+    expect(wrapper.find('[data-testid="clarify-unread-fab"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('unread FAB: user send force-sticks and clears unread', async () => {
+    const wrapper = mountChat({
+      turns: [agentTurn('seed', '2026-07-18T00:00:00Z')],
+      draft: '我看完了',
+    })
+    await leaveBottom(wrapper)
+    await wrapper.setProps({
+      turns: [
+        agentTurn('seed', '2026-07-18T00:00:00Z'),
+        agentTurn('agent-new', '2026-07-18T00:00:01Z'),
+      ],
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="clarify-unread-fab"]').exists()).toBe(true)
+
+    await clickSend(wrapper)
+    expect(wrapper.find('[data-testid="clarify-unread-fab"]').exists()).toBe(false)
+    expect(scrollerOf(wrapper).scrollTop).toBe(scrollerOf(wrapper).scrollHeight)
+
+    // Backend catch-up with user turn must not re-show FAB while stuck
+    await wrapper.setProps({
+      turns: [
+        agentTurn('seed', '2026-07-18T00:00:00Z'),
+        agentTurn('agent-new', '2026-07-18T00:00:01Z'),
+        { role: 'human', text: '我看完了', at: '2026-07-18T00:00:02Z' },
+      ],
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="clarify-unread-fab"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('unread FAB: shows exact three-digit count without capping', async () => {
+    const seed = Array.from({ length: 5 }, (_, i) =>
+      agentTurn(`t${i}`, `2026-07-18T00:00:0${i}Z`),
+    )
+    const wrapper = mountChat({ turns: seed })
+    await leaveBottom(wrapper)
+    const more = [
+      ...seed,
+      ...Array.from({ length: 128 }, (_, i) =>
+        agentTurn(`n${i}`, `2026-07-18T01:${String(i % 60).padStart(2, '0')}:00Z`),
+      ),
+    ]
+    await wrapper.setProps({ turns: more })
+    await flushPromises()
+    const fab = wrapper.find('[data-testid="clarify-unread-fab"]')
+    expect(fab.exists()).toBe(true)
+    expect(fab.text()).toContain('128')
+    expect(fab.text()).not.toMatch(/\+|99\+/)
+    expect(fab.attributes('aria-label')).toContain('128')
+    wrapper.unmount()
+  })
+
 })
