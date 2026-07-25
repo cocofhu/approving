@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   fmtCompactTokenCount,
+  fmtCompactTokenRate,
   fmtTokenCount,
   fmtTokenRate,
   mergeTokenUsage,
@@ -40,6 +41,15 @@ describe('tokenUsage', () => {
     expect(fmtCompactTokenCount(128400)).toBe('128.4K')
     expect(fmtCompactTokenCount(1_020_000)).toBe('1.02M')
     expect(fmtCompactTokenCount(1_000_000)).toBe('1M')
+    expect(fmtCompactTokenCount(9_645_255)).toBe('9.65M')
+  })
+
+  it('formats compact token/s for KPI main values', () => {
+    expect(fmtCompactTokenRate(9_645_255, 3703)).toBe('2.60K/s')
+    expect(fmtCompactTokenRate(1360, 120)).toBe('11.3/s')
+    expect(fmtCompactTokenRate(5, 10)).toBe('0.50/s')
+    expect(fmtCompactTokenRate(100, 0)).toBe('—')
+    expect(fmtCompactTokenRate(0, 0)).toBe('—')
   })
 
   it('summarizes: no usage → —; reported 0 → 0; partial sum', () => {

@@ -16,9 +16,10 @@ export function fmtTokenCount(n: number): string {
 }
 
 /**
- * Compact K/M format for project-level totals (Demo-aligned).
+ * Compact K/M format (Demo-aligned).
  * null/undefined → "—"; 0 → "0"; under 1000 plain; ≥1000 K (1 decimal); ≥1e6 M (2 decimals).
- * Do not use for Run detail timeline (keep fmtTokenCount there).
+ * Allowed for project totals and single-run stats KPI main values.
+ * Do not use for Run detail timeline / other out-of-scope surfaces (keep fmtTokenCount there).
  */
 export function fmtCompactTokenCount(n: number | null | undefined): string {
   if (n === null || n === undefined) return '—'
@@ -40,6 +41,25 @@ export function fmtTokenRate(totalTokens: number, wallSec: number): string | nul
   if (wallSec <= 0) return null
   const rate = totalTokens / wallSec
   return rate >= 10 ? rate.toFixed(1) : rate.toFixed(2)
+}
+
+/**
+ * Compact token/s for Run stats KPI main values (Demo-aligned).
+ * wallSec ≤ 0 → "—" (no fake rate); ≥1000 → two-decimal K/s (2604.7→2.60K/s);
+ * else precise rate + "/s".
+ */
+export function fmtCompactTokenRate(totalTokens: number, wallSec: number): string {
+  if (wallSec <= 0) return '—'
+  const rate = totalTokens / wallSec
+  if (!Number.isFinite(rate)) return '—'
+  if (Math.abs(rate) >= 1_000_000) {
+    return `${(rate / 1_000_000).toFixed(2)}M/s`
+  }
+  if (Math.abs(rate) >= 1000) {
+    return `${(rate / 1000).toFixed(2)}K/s`
+  }
+  const precise = fmtTokenRate(totalTokens, wallSec)
+  return precise == null ? '—' : `${precise}/s`
 }
 
 export type TimelineUsageSummary = {

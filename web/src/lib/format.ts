@@ -31,6 +31,18 @@ export function fmtDuration(sec: number): string {
   return h > 0 ? `${p(h)}:${p(m)}:${p(s)}` : `${p(m)}:${p(s)}`
 }
 
+/**
+ * Compact duration for Run stats KPI main values (Demo-aligned).
+ * 0 → "0s"; ≥1h → two decimals + "h" (3703→1.03h); else one decimal + "m" (3458→57.6m).
+ */
+export function fmtCompactDuration(sec: number): string {
+  if (sec == null || !Number.isFinite(sec)) return '—'
+  const n = Math.max(0, sec)
+  if (n === 0) return '0s'
+  if (n >= 3600) return `${(n / 3600).toFixed(2)}h`
+  return `${(n / 60).toFixed(1)}m`
+}
+
 export function truncateText(s: string, maxLen: number): string {
   if (!s || s.length <= maxLen) return s
   return s.slice(0, maxLen) + '…'
