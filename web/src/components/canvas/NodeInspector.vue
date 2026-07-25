@@ -3,6 +3,7 @@ import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import AppButton from '../ui/AppButton.vue'
+import AppSwitch from '../ui/AppSwitch.vue'
 import { nodeColorHex, syncHumanGateFormDefaults } from '@/data/nodeRegistry'
 import { useNodeDefs } from '@/lib/useNodeDefs'
 import { buildOutputSourceOptions } from '@/lib/outputSourceOptions'
@@ -406,16 +407,17 @@ function addAssignment() {
 
         <p v-if="f.help" class="mt-1 text-[11px] leading-4 text-txt3">{{ f.help }}</p>
 
-        <button
+        <div
           v-else-if="f.type === 'switch'"
           class="flex items-center gap-2"
-          @click="node.config[f.key] = !node.config[f.key]"
         >
-          <span class="relative h-5 w-9 rounded-full transition" :class="node.config[f.key] ? 'bg-accent' : 'bg-line-strong'">
-            <span class="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all" :class="node.config[f.key] ? 'left-[18px]' : 'left-0.5'" />
-          </span>
+          <AppSwitch
+            :model-value="!!node.config[f.key]"
+            :aria-label="f.label || f.key"
+            @update:model-value="node.config[f.key] = $event"
+          />
           <span class="text-xs text-txt2">{{ node.config[f.key] ? t('common.switchOn') : t('common.switchOff') }}</span>
-        </button>
+        </div>
 
         <template v-else-if="f.type === 'textarea' || f.type === 'prompt'">
           <textarea v-model="node.config[f.key]" class="input min-h-[96px] font-mono text-[12px] leading-relaxed" :placeholder="f.placeholder" />

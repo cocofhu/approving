@@ -187,8 +187,8 @@ test.describe('Agent Studio 窄屏数据 Tab', () => {
     await expect(page.getByTestId('agent-cron-mobile-cards').getByRole('button', { name: /新建/ })).toHaveCount(0)
 
     const deliver = page.getByTestId('agent-cron-deliver')
-    await deliver.check()
-    await expect(deliver).toBeChecked()
+    await deliver.click()
+    await expect(deliver).toHaveAttribute('aria-checked', 'true')
 
     await page.getByRole('button', { name: /^MCP/ }).click()
     await expect(page.getByText('请在桌面端完成')).toBeVisible()

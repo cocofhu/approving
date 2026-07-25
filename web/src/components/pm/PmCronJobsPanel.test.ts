@@ -89,11 +89,12 @@ describe('PmCronJobsPanel', () => {
     const w = mountPanel()
     await flushPromises()
     const toggle = w.get('[data-testid="cron-deliver-toggle"]')
-    expect((toggle.element as HTMLInputElement).disabled).toBe(false)
+    expect((toggle.element as HTMLButtonElement).disabled).toBe(false)
+    expect(toggle.attributes('role')).toBe('switch')
     expect(w.text()).toContain('任意已登录用户')
     expect(w.text()).not.toMatch(/修改需平台管理员|但不能修改渠道推送/)
     expect(w.find('.bg-amber-500\\/10').exists()).toBe(false)
-    await toggle.setValue(true)
+    await toggle.trigger('click')
     await flushPromises()
     expect(apiMocks.patchProjectCronJob).toHaveBeenCalledWith('proj-1', 'cron-1', {
       deliverToChannel: true,
@@ -105,8 +106,8 @@ describe('PmCronJobsPanel', () => {
     const w = mountPanel()
     await flushPromises()
     const toggle = w.get('[data-testid="cron-deliver-toggle"]')
-    expect((toggle.element as HTMLInputElement).disabled).toBe(false)
-    await toggle.setValue(true)
+    expect((toggle.element as HTMLButtonElement).disabled).toBe(false)
+    await toggle.trigger('click')
     await flushPromises()
     expect(apiMocks.patchProjectCronJob).toHaveBeenCalledWith('proj-1', 'cron-1', {
       deliverToChannel: true,
