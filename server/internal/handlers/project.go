@@ -30,9 +30,14 @@ func (h *Handlers) ListProjects(c *gin.Context) {
 		return
 	}
 	ps := h.Projects.List()
+	ids := make([]string, len(ps))
+	for i, p := range ps {
+		ids[i] = p.ID
+	}
+	tokens := h.Projects.TotalTokensByProjectIDs(ids)
 	out := make([]gin.H, 0, len(ps))
 	for _, p := range ps {
-		out = append(out, projectDTO(p, h.Projects.WorkflowCount(p.ID)))
+		out = append(out, projectDTO(p, h.Projects.WorkflowCount(p.ID), tokens[p.ID]))
 	}
 	c.JSON(http.StatusOK, out)
 }
@@ -47,7 +52,7 @@ func (h *Handlers) GetProject(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
-	c.JSON(http.StatusOK, projectDTO(p, h.Projects.WorkflowCount(p.ID)))
+	c.JSON(http.StatusOK, projectDTO(p, h.Projects.WorkflowCount(p.ID), h.Projects.TotalTokens(p.ID)))
 }
 
 func (h *Handlers) CreateProject(c *gin.Context) {
@@ -65,7 +70,7 @@ func (h *Handlers) CreateProject(c *gin.Context) {
 		writeProjectErr(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, projectDTO(p, 0))
+	c.JSON(http.StatusOK, projectDTO(p, 0, nil))
 }
 
 func (h *Handlers) UpdateProject(c *gin.Context) {
@@ -83,7 +88,7 @@ func (h *Handlers) UpdateProject(c *gin.Context) {
 		writeProjectErr(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, projectDTO(p, h.Projects.WorkflowCount(p.ID)))
+	c.JSON(http.StatusOK, projectDTO(p, h.Projects.WorkflowCount(p.ID), h.Projects.TotalTokens(p.ID)))
 }
 
 func (h *Handlers) DeleteProject(c *gin.Context) {

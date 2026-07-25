@@ -161,7 +161,7 @@ describe('ExecutionStatsPanel', () => {
     expect(total.text()).toContain('1,360')
     expect(total.text()).toContain('有用量环节合计')
     expect(rate.text()).toMatch(/11\.3|11\.333/)
-    expect(rate.text()).toContain('÷ 墙钟')
+    expect(rate.text()).toContain('÷ 总耗时')
     expect(wrapper.findAll('[data-testid="stats-rank-tokens"]').length).toBeGreaterThan(0)
     expect(wrapper.text()).not.toContain('NEW')
     wrapper.unmount()

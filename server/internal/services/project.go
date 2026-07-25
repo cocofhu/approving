@@ -70,6 +70,115 @@ func (s *ProjectService) WorkflowCount(projectID string) int64 {
 	return n
 }
 
+// tokenAggChunk caps IN (?) size for SQLite variable limits while keeping
+// TotalTokensByProjectIDs a batched (non N+1) read-path aggregation.
+const tokenAggChunk = 400
+
+// TotalTokens returns the summed StateRun.Usage.Total for one project, or nil
+// when no Usage has been reported (UI "—"). A non-nil 0 means usage was
+// reported and totals to zero.
+func (s *ProjectService) TotalTokens(projectID string) *int64 {
+	return s.TotalTokensByProjectIDs([]string{projectID})[projectID]
+}
+
+// TotalTokensByProjectIDs batch-aggregates Project→WorkflowDef→Run→StateRun
+// Usage.Total for the given project IDs. Only rows with non-nil Usage contribute;
+// projects with no such rows are omitted (caller treats as null / "—").
+// PM Leader dialogue usage is outside this chain and is not counted.
+func (s *ProjectService) TotalTokensByProjectIDs(projectIDs []string) map[string]*int64 {
+	out := make(map[string]*int64, len(projectIDs))
+	if len(projectIDs) == 0 {
+		return out
+	}
+
+	type wfRow struct {
+		ID        string
+		ProjectID string
+	}
+	var wfs []wfRow
+	if err := s.db.Model(&models.WorkflowDef{}).
+		Select("id", "project_id").
+		Where("project_id IN ?", projectIDs).
+		Find(&wfs).Error; err != nil || len(wfs) == 0 {
+		return out
+	}
+
+	wfToProject := make(map[string]string, len(wfs))
+	wfIDs := make([]string, 0, len(wfs))
+	for _, w := range wfs {
+		wfToProject[w.ID] = w.ProjectID
+		wfIDs = append(wfIDs, w.ID)
+	}
+
+	type runRow struct {
+		ID         string
+		WorkflowID string
+	}
+	var runs []runRow
+	for i := 0; i < len(wfIDs); i += tokenAggChunk {
+		end := i + tokenAggChunk
+		if end > len(wfIDs) {
+			end = len(wfIDs)
+		}
+		var chunk []runRow
+		if err := s.db.Model(&models.Run{}).
+			Select("id", "workflow_id").
+			Where("workflow_id IN ?", wfIDs[i:end]).
+			Find(&chunk).Error; err != nil {
+			return out
+		}
+		runs = append(runs, chunk...)
+	}
+	if len(runs) == 0 {
+		return out
+	}
+
+	runToProject := make(map[string]string, len(runs))
+	runIDs := make([]string, 0, len(runs))
+	for _, r := range runs {
+		if pid := wfToProject[r.WorkflowID]; pid != "" {
+			runToProject[r.ID] = pid
+			runIDs = append(runIDs, r.ID)
+		}
+	}
+	if len(runIDs) == 0 {
+		return out
+	}
+
+	sums := make(map[string]int64)
+	has := make(map[string]struct{})
+	for i := 0; i < len(runIDs); i += tokenAggChunk {
+		end := i + tokenAggChunk
+		if end > len(runIDs) {
+			end = len(runIDs)
+		}
+		var srs []models.StateRun
+		if err := s.db.Model(&models.StateRun{}).
+			Select("run_id", "usage").
+			Where("run_id IN ? AND usage IS NOT NULL", runIDs[i:end]).
+			Find(&srs).Error; err != nil {
+			return out
+		}
+		for _, sr := range srs {
+			if sr.Usage == nil {
+				continue
+			}
+			pid := runToProject[sr.RunID]
+			if pid == "" {
+				continue
+			}
+			has[pid] = struct{}{}
+			sums[pid] += sr.Usage.Total()
+		}
+	}
+
+	for pid := range has {
+		v := sums[pid]
+		out[pid] = &v
+	}
+	return out
+}
+
 // Create inserts a new project.
 func (s *ProjectService) Create(name, description string, env []models.EnvEntry, vars []models.ProjectVariable) (models.Project, error) {
 	name = strings.TrimSpace(name)

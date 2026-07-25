@@ -179,7 +179,7 @@ test('单次有用量：总 token / token/s / 口径说明 / 排行辅列；无 
   await expect(total).toContainText('有用量环节合计')
   const rate = page.getByTestId('stats-kpi-token-rate')
   await expect(rate).toContainText('80.3')
-  await expect(rate).toContainText('÷ 墙钟')
+  await expect(rate).toContainText('÷ 总耗时')
 
   // dual hue: token vs time colors
   const tokenColor = await total.locator('.stats-kpi-token').evaluate((el) => getComputedStyle(el).color)
@@ -285,7 +285,7 @@ test('多次：Σ/平均忽略无 usage Run；口径说明可见', async ({ page
   await expect(avg).toContainText(/分母=有用量 Run 数 1/)
 
   const multiRate = page.getByTestId('stats-kpi-multi-token-rate')
-  await expect(multiRate).toContainText('÷ 所选墙钟之和')
+  await expect(multiRate).toContainText('÷ 所选总耗时之和')
 
   await page.screenshot({
     path: path.join(shotDir, 'stats-multi-mixed-usage.png'),

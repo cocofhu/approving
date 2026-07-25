@@ -567,7 +567,7 @@ export const api = {
       body: JSON.stringify(agent),
     }),
   renameAgent: (name: string, newName: string) =>
-    req<Agent>(`/agents/${encodeURIComponent(name)}/rename`, {
+    req<Agent & { updatedWorkflowCount?: number }>(`/agents/${encodeURIComponent(name)}/rename`, {
       method: 'POST',
       body: JSON.stringify({ name: newName }),
     }),
