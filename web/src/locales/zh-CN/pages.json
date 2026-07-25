@@ -495,6 +495,8 @@
       "subtitle": "所有工作流的运行记录",
       "queued": "入队",
       "cancelConfirm": "仅停止这一次 Run；取消成功后列表将刷新该行状态。",
+      "deleteConfirm": "仅清理这一次 Run；删除成功后列表将刷新。",
+      "deleteSuccess": "已删除运行，列表已刷新",
       "loadFailedTitle": "加载失败",
       "loadFailedDesc": "无法加载运行记录，后台轮询将自动重试。筛选与翻页仍可使用。"
     },
