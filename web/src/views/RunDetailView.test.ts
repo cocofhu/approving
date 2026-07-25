@@ -20,6 +20,40 @@ describe('RunDetailView delete run', () => {
   })
 })
 
+describe('RunDetailView cancel run', () => {
+  it('shows cancel for queued, running, and waiting_human with AppModal confirm', () => {
+    expect(src).toMatch(/data-testid="cancel-run-btn"/)
+    expect(src).toMatch(/data-testid="confirm-cancel-run-btn"/)
+    expect(src).toMatch(/canCancelRun/)
+    expect(src).toMatch(/s === 'queued' \|\| s === 'running' \|\| s === 'waiting_human'/)
+    expect(src).toMatch(/openCancelConfirm/)
+    expect(src).toMatch(/confirmCancelRun/)
+    expect(src).toMatch(/api\.cancelRun/)
+    expect(src).toMatch(/pages\.runDetail\.cancelTitle/)
+    expect(src).toMatch(/pages\.runDetail\.cancelWarning/)
+    expect(src).toMatch(/pages\.runDetail\.cancelSuccess/)
+    expect(src).toMatch(/pages\.runDetail\.cancelErrorNotCancellable/)
+  })
+
+  it('confirms before POST and stays on detail after success', () => {
+    // Button opens modal; only confirmCancelRun calls the API.
+    expect(src).toMatch(/@click="openCancelConfirm"/)
+    const openStart = src.indexOf('function openCancelConfirm()')
+    const openEnd = src.indexOf('\nfunction closeCancelConfirm(', openStart)
+    const openFn = src.slice(openStart, openEnd)
+    expect(openFn).toContain("showCancelConfirm.value = true")
+    expect(openFn).not.toContain('api.cancelRun')
+
+    const confirmStart = src.indexOf('async function confirmCancelRun()')
+    const confirmEnd = src.indexOf('\nconst canDeleteRun', confirmStart)
+    const confirmFn = src.slice(confirmStart, confirmEnd)
+    expect(confirmFn).toContain('api.cancelRun(runId.value)')
+    expect(confirmFn).toContain("toast.success(t('pages.runDetail.cancelSuccess'))")
+    expect(confirmFn).toContain('await loadRun(false)')
+    expect(confirmFn).not.toContain('router.push')
+  })
+})
+
 describe('RunDetailView GateApproval fill-preview', () => {
   it('always passes fill-preview=true (desktop content-fit), not isMobile', () => {
     expect(src).toMatch(/<GateApproval[\s\S]*?:fill-preview="true"/)
