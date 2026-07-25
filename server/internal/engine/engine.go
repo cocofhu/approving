@@ -477,7 +477,7 @@ func (e *Engine) startRun(def models.WorkflowDef, graph models.Graph, inputs map
 
 	start := graph.StartNode()
 	if start == nil {
-		e.finish(runID, "failed")
+		e.failRun(runID, "工作流没有可执行节点")
 		return &run, fmt.Errorf("workflow has no nodes")
 	}
 	log.Info().Str("run_id", runID).Str("node_id", start.ID).Int("priority", priority).Msg("run queued")
@@ -851,14 +851,14 @@ func (e *Engine) execute(runID, fromNodeID string) {
 		if r := recover(); r != nil {
 			log.Error().Str("run_id", runID).Interface("panic", r).
 				Bytes("stack", debug.Stack()).Msg("execute goroutine panicked; marking run failed")
-			e.finish(runID, "failed")
+			e.failRun(runID, fmt.Sprintf("执行协程异常: %v", r))
 		}
 	}()
 
 	c, err := e.loadCtx(runID)
 	if err != nil {
 		log.Error().Str("run_id", runID).Err(err).Msg("load run context failed")
-		e.finish(runID, "failed")
+		e.failRun(runID, "加载运行上下文失败: "+err.Error())
 		return
 	}
 	c.execGen = gen
@@ -882,7 +882,7 @@ func (e *Engine) execute(runID, fromNodeID string) {
 		node := c.graph.FindNode(cur)
 		if node == nil {
 			e.appendTrace(c, models.TraceEntry{NodeID: cur, Event: "exit", Detail: "node not found"})
-			e.finish(runID, "failed")
+			e.failRun(runID, "节点不存在: "+cur)
 			return
 		}
 		// Snapshot variables on entering a checkpoint, for rollback restore.
@@ -1254,6 +1254,17 @@ func (e *Engine) pauseStillPending(runID string, node *models.Node) bool {
 	}
 }
 
+// failRun records a human-readable reason (vars.last_error) then finishes the
+// run as failed. Used by early-exit paths (loadCtx / node-not-found / panic /
+// empty graph) that never wrote StateRun.error, so AggregateRunFailure still
+// has a non-empty source before the default fallback.
+func (e *Engine) failRun(runID, reason string) {
+	if strings.TrimSpace(reason) != "" {
+		e.persistVar(runID, "last_error", reason)
+	}
+	e.finish(runID, "failed")
+}
+
 func (e *Engine) finish(runID, status string) {
 	updates := map[string]any{"status": status}
 	if status == "completed" {
@@ -1303,20 +1314,43 @@ func (e *Engine) finish(runID, status string) {
 		e.supersedePendingGates(runID, status)
 	}
 	if status == "completed" || status == "failed" || status == "cancelled" {
-		e.host.UnregisterRun(runID)
 		// Release any live react session (and its sandbox) still held for this
 		// run. For completed runs the session is already closed, so this is a
 		// no-op; for cancel/fail while paused at a react node it prevents the
-		// sandbox from lingering forever as "busy".
+		// sandbox from lingering forever as "busy". Abort before writing
+		// run_error.json so archived sandbox logs (if any) are available.
 		if ab, ok := e.provider.(runtime.RunAborter); ok {
 			ab.AbortRun(runID)
 		}
+		if status == "failed" {
+			e.persistRunErrorArtifact(runID)
+		}
+		e.host.UnregisterRun(runID)
 		e.mu.Lock()
 		delete(e.tokens, runID)
 		e.mu.Unlock()
 	}
 	msg, _ := json.Marshal(map[string]any{"type": "status", "runId": runID, "status": status})
 	e.broker.Publish(runID, msg)
+}
+
+// persistRunErrorArtifact writes run_error.json via the artifact store so empty
+// product failures remain queryable. Best-effort: store failures are logged and
+// do not change finish control flow.
+func (e *Engine) persistRunErrorArtifact(runID string) {
+	if e.store == nil {
+		return
+	}
+	info := services.NewRunService(e.db).AggregateRunFailure(runID)
+	body, err := services.MarshalRunErrorJSON(info)
+	if err != nil {
+		log.Warn().Str("run_id", runID).Err(err).Msg("marshal run_error.json failed")
+		return
+	}
+	nodeID := info.FailedNode
+	if _, err := e.store.Save(runID, nodeID, services.RunErrorArtifactName, "json", body); err != nil {
+		log.Warn().Str("run_id", runID).Err(err).Msg("save run_error.json failed")
+	}
 }
 
 // logDB records a GORM write error on an engine best-effort persistence path.

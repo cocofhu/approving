@@ -506,4 +506,11 @@ export interface Run {
   git?: { pushed: boolean; pushedSha?: string; branch?: string; mrUrl?: string } | null
   trace?: StateTraceEntry[]
   vars?: RunVar[]
+  /** Run-level human failure reason (failed runs only). */
+  error?: string
+  /** Alias of error for API consumers expecting failedReason. */
+  failedReason?: string
+  failedNode?: string
+  noSandboxLog?: boolean
+  logSummaryOrRef?: string
 }

@@ -1086,6 +1086,12 @@ const clarifyInputActive = computed(
 const clarifySandboxFailed = computed(
   () => selNode.value?.type === 'react' && selStatus.value === 'failed' && !!selRun.value?.error,
 )
+// Run-level failure banner for any failed run (research/agent early fails included).
+const runFailureReason = computed(() => {
+  if (run.value.status !== 'failed') return ''
+  return (run.value.error || run.value.failedReason || '').trim()
+})
+const showRunFailureBanner = computed(() => !!runFailureReason.value)
 const { draft: clarifyDraft, attachments: clarifyAttachments, annotations: clarifyAnnotations } = useClarifyDraft(() => runId.value, () => selected.value)
 // Every sandbox-backed node (all "Agent" category types: agent/react/plan/
 // implement/research/test/review/proposal/submit_mr/visual) runs the in-container
@@ -1415,6 +1421,17 @@ function selectExecution(nodeId: string, idx: number) {
             <div class="h-full rounded-full bg-gradient-to-r from-accent to-accent-2 transition-all" :style="{ width: progressFrac * 100 + '%' }" />
           </div>
           <span class="text-[11px] text-txt3">{{ Math.round(progressFrac * 100) }}%</span>
+        </div>
+        <div
+          v-if="showRunFailureBanner"
+          data-testid="run-failure-banner"
+          class="mt-3 ml-11 mr-0 rounded-md border border-err/35 bg-err/8 px-3.5 py-2.5 text-[13px] leading-relaxed text-err"
+          role="alert"
+        >
+          <strong class="mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-err/90">
+            {{ t('pages.runDetail.failureBanner.title') }}
+          </strong>
+          <p class="m-0 whitespace-pre-wrap break-words text-txt">{{ runFailureReason }}</p>
         </div>
       </template>
     </header>

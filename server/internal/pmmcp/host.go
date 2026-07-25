@@ -386,11 +386,18 @@ func (h *Host) callWorkflowRead(projectID, name string, args map[string]any) (an
 		}
 		rows := make([]map[string]any, 0, len(runs))
 		for _, r := range runs {
-			rows = append(rows, map[string]any{
+			row := map[string]any{
 				"id": r.ID, "status": r.Status, "progress": r.Progress,
 				"title": r.Title, "startedAt": r.StartedAt, "durationSec": r.DurationSec,
 				"attempt": r.Attempt, "workflowVersion": r.WorkflowVersion,
-			})
+			}
+			if r.Status == "failed" {
+				info := h.runs.AggregateRunFailure(r.ID)
+				if short := info.ShortDisplayReason(200); short != "" {
+					row["error"] = short
+				}
+			}
+			rows = append(rows, row)
 		}
 		return map[string]any{"workflowId": wfID, "runs": rows, "count": len(rows)}, false
 	case "pm_list_pending_gates":

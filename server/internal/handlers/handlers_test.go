@@ -1319,6 +1319,41 @@ func TestRunDetailRichBranches(t *testing.T) {
 	}
 }
 
+// TestRunDetailFailedExposesRunLevelError ensures failed runs lift a human
+// reason to the detail DTO (banner / API) without requiring a node click.
+func TestRunDetailFailedExposesRunLevelError(t *testing.T) {
+	h := newHarness(t)
+	h.db.Create(&models.Run{ID: "rd-fail", Status: "failed", StartedAt: time.Now().Add(-time.Minute), Graph: models.Graph{
+		Nodes: []models.Node{{ID: "research", Type: "research"}, {ID: "out", Type: "output"}},
+	}})
+	h.db.Create(&models.StateRun{RunID: "rd-fail", NodeID: "research", Iteration: 1, Status: "failed",
+		Error: "sandbox setup failed: create timeout"})
+
+	w := h.do("GET", "/api/runs/rd-fail", nil)
+	if w.Code != 200 {
+		t.Fatalf("get run: %d %s", w.Code, w.Body)
+	}
+	body := w.Body.String()
+	for _, want := range []string{`"error"`, `"failedReason"`, "sandbox setup failed", `"failedNode":"research"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("failed run detail missing %q in %s", want, body)
+		}
+	}
+
+	// Completed runs must not carry misleading failure fields.
+	h.db.Create(&models.Run{ID: "rd-ok", Status: "completed", Progress: 1, StartedAt: time.Now().Add(-time.Minute), Graph: models.Graph{
+		Nodes: []models.Node{{ID: "out", Type: "output"}},
+	}})
+	w = h.do("GET", "/api/runs/rd-ok", nil)
+	if w.Code != 200 {
+		t.Fatalf("get ok run: %d", w.Code)
+	}
+	okBody := w.Body.String()
+	if strings.Contains(okBody, `"failedReason"`) || strings.Contains(okBody, `"noSandboxLog"`) {
+		t.Fatalf("completed run must omit failure fields: %s", okBody)
+	}
+}
+
 // TestSandboxLogFoundBranches drives the "found" path of the sandbox log
 // endpoints by seeding an archived log alongside a stopped sandbox row.
 func TestSandboxLogFoundBranches(t *testing.T) {
