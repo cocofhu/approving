@@ -61,3 +61,36 @@ jobs:
             coverage-web \
             "${{ steps.coverage.outputs.pct }}" \
             "${{ steps.coverage.outputs.color }}"
+
+  # Critical-path Playwright subset (mock vite.e2e harness; no real backend).
+  # Parallel with `web`. Minimal permissions (no coverage-badge write).
+  # Follow-up: add this job to main required checks for hard merge blocking.
+  web-e2e:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run critical-path e2e
+        run: npm run test:e2e:ci
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-e2e-failure
+          path: |
+            web/playwright-report/
+            web/test-results/
+          retention-days: 7
+          if-no-files-found: ignore

@@ -736,6 +736,13 @@ func artifactTools() []map[string]any {
 					}, "title"),
 					"variances":  strProp("可选:与计划的偏差"),
 					"assessment": strProp("可选:综合评估/是否可发布"),
+					"plan_coverage": objList("有 plan 叶子时必填:逐叶子声明是否通过及非空自证 evidence;"+
+						"须覆盖全部叶子且全部 passed=true,否则测试门禁失败并回修。无 plan 叶子时可省略", map[string]any{
+						"plan_id":  strProp("计划叶子 id(如 g1 或 g1.2)"),
+						"title":    strProp("可选:叶子标题,便于阅读"),
+						"passed":   map[string]any{"type": "boolean", "description": "该叶子是否通过"},
+						"evidence": strProp("非空自证证据(平台只做非空校验,不核验代码语义)"),
+					}, "plan_id", "passed", "evidence"),
 					"screenshots": objList("可选:0-10 张浏览器/UI 测试截图,仅在做了浏览器/UI 测试时提供;超过 10 张会被截断。"+
 						"必须先用沙箱内的 `artifact-upload <文件>` CLI 上传截图文件,再用它打印出的产物名填 artifact 字段;不支持内联 base64", map[string]any{
 						"artifact": strProp("引用由 `artifact-upload <文件>` 上传得到的截图产物名"),

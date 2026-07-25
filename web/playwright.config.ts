@@ -8,9 +8,12 @@ export default defineConfig({
   // Shared vite.e2e mock state (vncConnectCount / delay/fail flags) is process-global.
   workers: 1,
   fullyParallel: false,
+  // CI uploads html report + traces on failure (see ci-web web-e2e job).
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     headless: true,
     locale: 'zh-CN',
+    trace: 'retain-on-failure',
   },
   webServer: {
     command: 'npx vite --config vite.e2e.config.ts',

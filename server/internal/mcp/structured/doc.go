@@ -965,16 +965,27 @@ type testScreenshot struct {
 // extras are dropped in ParseTestResult to keep the artifact payload bounded.
 const maxTestScreenshots = 10
 
+// planCoverageItem is one plan-leaf fit check recorded in test_result.json.
+// When the run has plan leaves, the test gate requires full coverage with
+// passed=true and non-empty evidence (Agent self-attestation; no code semantics).
+type planCoverageItem struct {
+	PlanID   string `json:"plan_id"`
+	Title    string `json:"title,omitempty"`
+	Passed   bool   `json:"passed"`
+	Evidence string `json:"evidence,omitempty"`
+}
+
 type testResultDoc struct {
-	Summary     string           `json:"summary"`
-	Cases       []testCase       `json:"cases,omitempty"`
-	Defects     []testDefect     `json:"defects,omitempty"`
-	Variances   string           `json:"variances,omitempty"`
-	Assessment  string           `json:"assessment,omitempty"`
-	Screenshots []testScreenshot `json:"screenshots,omitempty"`
-	Passed      int              `json:"passed"`
-	Failed      int              `json:"failed"`
-	Skipped     int              `json:"skipped"`
+	Summary      string             `json:"summary"`
+	Cases        []testCase         `json:"cases,omitempty"`
+	Defects      []testDefect       `json:"defects,omitempty"`
+	Variances    string             `json:"variances,omitempty"`
+	Assessment   string             `json:"assessment,omitempty"`
+	Screenshots  []testScreenshot   `json:"screenshots,omitempty"`
+	PlanCoverage []planCoverageItem `json:"plan_coverage,omitempty"`
+	Passed       int                `json:"passed"`
+	Failed       int                `json:"failed"`
+	Skipped      int                `json:"skipped"`
 }
 
 func normTestStatus(s string) string {
@@ -1032,7 +1043,34 @@ func ParseTestResult(args map[string]any) (testResultDoc, error) {
 	}
 	doc.Defects = ds
 	doc.Screenshots = normTestScreenshots(doc.Screenshots)
+	doc.PlanCoverage = normPlanCoverage(doc.PlanCoverage)
 	return doc, nil
+}
+
+// normPlanCoverage trims plan_coverage fields. Entries with empty plan_id are
+// dropped. Missing plan_coverage is allowed at parse time (no leaves / fail-open);
+// relative coverage against plan leaves is enforced by the test gate.
+func normPlanCoverage(in []planCoverageItem) []planCoverageItem {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]planCoverageItem, 0, len(in))
+	for _, item := range in {
+		id := strings.TrimSpace(item.PlanID)
+		if id == "" {
+			continue
+		}
+		out = append(out, planCoverageItem{
+			PlanID:   id,
+			Title:    strings.TrimSpace(item.Title),
+			Passed:   item.Passed,
+			Evidence: strings.TrimSpace(item.Evidence),
+		})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // normTestScreenshots sanitizes attached screenshots. Only artifact references
@@ -1263,6 +1301,24 @@ func RenderTestResultMarkdown(content string) string {
 				line += " — " + d.Detail
 			}
 			b.WriteString(line + "\n")
+		}
+	}
+	if len(doc.PlanCoverage) > 0 {
+		b.WriteString("\n#### 计划贴合度\n")
+		for _, item := range doc.PlanCoverage {
+			icon := "❌"
+			if item.Passed {
+				icon = "✅"
+			}
+			label := item.PlanID
+			if item.Title != "" {
+				label += " " + item.Title
+			}
+			b.WriteString(fmt.Sprintf("- %s %s", icon, label))
+			if item.Evidence != "" {
+				b.WriteString(" — " + item.Evidence)
+			}
+			b.WriteString("\n")
 		}
 	}
 	if doc.Variances != "" {
