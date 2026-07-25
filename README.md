@@ -13,6 +13,8 @@ Build rollback-capable, human-gated, observable workflows — agents run in real
 [![coverage-web](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcocofhu%2Fapproving%2Fcoverage-badges%2Fcoverage-web.json)](https://github.com/cocofhu/approving/actions/workflows/ci-web.yml)
 [![coverage-sandbox](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcocofhu%2Fapproving%2Fcoverage-badges%2Fcoverage-sandbox.json)](https://github.com/cocofhu/approving/actions/workflows/ci-sandbox.yml)
 
+Security scans (CodeQL, web npm audit, gitleaks) run via the [security](https://github.com/cocofhu/approving/actions/workflows/security.yml) workflow on push/PR. View CodeQL under Security → Code scanning (or PR Checks); npm audit and gitleaks results are in the corresponding Actions job logs.
+
 [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Support](SUPPORT.md) · [Configuration](server/CONFIGURATION.md) · [Gateway](GATEWAY.md)
 
 **English | [简体中文](README.zh-CN.md)**
