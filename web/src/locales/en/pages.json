@@ -22,6 +22,36 @@
       "loading": "Loading…",
       "loadFailed": "Failed to load board data. Please retry.",
       "retry": "Retry",
+      "tokenStats": {
+        "title": "Token stats",
+        "windowAria": "Time window",
+        "windows": {
+          "7d": "Last 7 days",
+          "30d": "Last 30 days",
+          "90d": "Last 90 days",
+          "all": "All time"
+        },
+        "loading": "Loading Token stats…",
+        "loadFailed": "Failed to load Token stats. Please retry.",
+        "retry": "Retry",
+        "trendTitle": "Usage trend",
+        "compositionTitle": "Four-part composition",
+        "rankTitle": "Workflow usage Top 10",
+        "rankSub": "Remainder merged as Other",
+        "grainDay": "Daily · local timezone",
+        "grainWeek": "Weekly · local timezone",
+        "compTotal": "Total {n}",
+        "donutCenter": "Total",
+        "other": "Other",
+        "value": "Value",
+        "share": "Share",
+        "emptyTrendTitle": "No Token data",
+        "emptyTrendHint": "No reported Usage in this window; unreported usage is not shown as 0",
+        "emptyCompTitle": "No composition data",
+        "emptyCompHint": "Ring chart is not drawn when no components are reported",
+        "emptyRankTitle": "No workflow usage",
+        "emptyRankHint": "Ranking placeholders are not shown without reported Usage"
+      },
       "filters": {
         "label": "Show non-primary statuses"
       },

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/services"
@@ -236,5 +237,63 @@ func TestProjectTotalTokensInListAndGet(t *testing.T) {
 	w = hn.do("GET", "/api/projects", nil)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"totalTokens":128400`) {
 		t.Fatalf("list with usage: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestGetProjectTokenStats(t *testing.T) {
+	hn := newHarness(t)
+
+	w := hn.do("POST", "/api/projects", map[string]any{"name": "StatsProj", "description": "d"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	id := jsonField(w.Body.String(), "id")
+
+	w = hn.do("GET", "/api/projects/"+id+"/token-stats?window=30d&timezone=UTC", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("empty stats: %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"empty":true`) {
+		t.Fatalf("want empty true: %s", w.Body.String())
+	}
+
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	now := time.Now().UTC()
+	must(hn.db.Create(&models.WorkflowDef{ID: "wf-stats", ProjectID: id, Name: "w", Status: "draft", Version: 1}).Error)
+	must(hn.db.Create(&models.Run{
+		ID: "run-stats", WorkflowID: "wf-stats", WorkflowName: "approve-main",
+		Status: "completed", StartedAt: now,
+	}).Error)
+	must(hn.db.Create(&models.StateRun{
+		RunID: "run-stats", NodeID: "n1", Status: "completed",
+		StartedAt: &now,
+		Usage:     &models.TokenUsage{InputTokens: 10, OutputTokens: 5},
+	}).Error)
+
+	w = hn.do("GET", "/api/projects/"+id+"/token-stats?window=all&timezone=UTC", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("stats: %d %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `"empty":false`) || !strings.Contains(body, `"total":15`) {
+		t.Fatalf("unexpected body: %s", body)
+	}
+	if !strings.Contains(body, `"bucketWidth":"week"`) {
+		t.Fatalf("all should be week: %s", body)
+	}
+
+	w = hn.do("GET", "/api/projects/"+id+"/token-stats?window=bad", nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("bad window: %d %s", w.Code, w.Body.String())
+	}
+
+	w = hn.do("GET", "/api/projects/nope/token-stats?window=7d", nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("missing project: %d", w.Code)
 	}
 }

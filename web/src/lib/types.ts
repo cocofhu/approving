@@ -105,6 +105,45 @@ export interface Project {
   updatedAt?: string
 }
 
+/** Preset windows for board TokenStatsPanel (matches GET /token-stats). */
+export type TokenStatsWindow = '7d' | '30d' | '90d' | 'all'
+
+export interface TokenStatsBucket {
+  bucket: string
+  total: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+}
+
+export interface TokenStatsComposition {
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  total: number
+}
+
+export interface TokenStatsWorkflow {
+  workflowId?: string
+  name: string
+  total: number
+  other?: boolean
+}
+
+/** Response of GET /projects/:id/token-stats */
+export interface ProjectTokenStats {
+  window: TokenStatsWindow | string
+  bucketWidth: 'day' | 'week' | string
+  timezone: string
+  /** true when no reported Usage in the window — do not draw forged zero charts */
+  empty: boolean
+  trend: TokenStatsBucket[]
+  composition: TokenStatsComposition
+  workflows: TokenStatsWorkflow[]
+}
+
 export interface PmLeaderBinding {
   enabled: boolean
   agentConfigRef: string
