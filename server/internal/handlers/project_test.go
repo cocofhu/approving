@@ -1,6 +1,7 @@
 package handlers_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -63,7 +64,7 @@ func TestProjectCRUDAndErrors(t *testing.T) {
 		t.Fatalf("bad json create: %d", w.Code)
 	}
 
-	// Official ACP auth key allowed (forced secret, response masked)
+	// Official ACP auth key accepted (forced secret, masked in response)
 	w = hn.do("POST", "/api/projects", map[string]any{
 		"name":       "AuthEnv",
 		"sandboxEnv": []map[string]any{{"key": "CURSOR_API_KEY", "value": "x", "secret": true}},
@@ -71,11 +72,15 @@ func TestProjectCRUDAndErrors(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("auth env: %d %s", w.Code, w.Body.String())
 	}
-	body := w.Body.String()
-	if !strings.Contains(body, `"key":"CURSOR_API_KEY"`) ||
-		!strings.Contains(body, `"value":"`+services.SecretMask+`"`) ||
-		!strings.Contains(body, `"secret":true`) {
-		t.Fatalf("auth env mask/secret: %s", body)
+	var authEnvProj models.Project
+	if err := json.Unmarshal(w.Body.Bytes(), &authEnvProj); err != nil {
+		t.Fatalf("auth env decode: %v", err)
+	}
+	if len(authEnvProj.SandboxEnv) != 1 || authEnvProj.SandboxEnv[0].Key != "CURSOR_API_KEY" {
+		t.Fatalf("auth env sandboxEnv: %+v", authEnvProj.SandboxEnv)
+	}
+	if authEnvProj.SandboxEnv[0].Value != services.SecretMask || !authEnvProj.SandboxEnv[0].Secret {
+		t.Fatalf("auth env mask/secret: %+v", authEnvProj.SandboxEnv[0])
 	}
 
 	// Secret placeholder on new key
