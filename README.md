@@ -15,7 +15,7 @@ Build rollback-capable, human-gated, observable workflows — agents run in real
 
 Security scans (CodeQL, web npm audit, gitleaks) run via the [security](https://github.com/cocofhu/approving/actions/workflows/security.yml) workflow on push/PR. View CodeQL under Security → Code scanning (or PR Checks); npm audit and gitleaks results are in the corresponding Actions job logs.
 
-[Site](https://cocofhu.github.io/approving-pages/) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Support](SUPPORT.md) · [Configuration](server/CONFIGURATION.md) · [Gateway](GATEWAY.md)
+[Site](https://www.approving-ai.com/) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Support](SUPPORT.md) · [Configuration](server/CONFIGURATION.md) · [Gateway](GATEWAY.md)
 
 **English | [简体中文](README.zh-CN.md)**
 

@@ -112,7 +112,7 @@ when Secret `PAGES_DEPLOY_KEY` is configured.
    **Allow write access**.
 5. On `cocofhu/approving`, add the **private** key as Secret `PAGES_DEPLOY_KEY`.
 6. Optional: set the Approving repo Homepage to
-   `https://cocofhu.github.io/approving-pages/`.
+   `https://www.approving-ai.com/`.
 
 ## Release images and smoke
 

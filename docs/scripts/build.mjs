@@ -4,8 +4,8 @@
  * - copy site/ to public/
  * - convert content markdown files to public/<path>/index.html
  *
- * BASE_PATH defaults to /approving-pages for GitHub project Pages.
- * Local preview: BASE_PATH=/ npm run build && npx serve public
+ * BASE_PATH defaults to / for the custom domain (www.approving-ai.com).
+ * Project Pages fallback: BASE_PATH=/approving-pages npm run build
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -19,7 +19,7 @@ const siteDir = path.join(root, "site");
 const contentDir = path.join(root, "content");
 const outDir = path.join(root, "public");
 
-const basePath = normalizeBase(process.env.BASE_PATH ?? "/approving-pages");
+const basePath = normalizeBase(process.env.BASE_PATH ?? "/");
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
 
 function normalizeBase(raw) {
