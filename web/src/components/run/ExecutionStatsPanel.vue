@@ -554,10 +554,11 @@ const multiRateHint = computed(() =>
                   {{ it.sharePct == null ? t('pages.executionStats.dash') : it.sharePct + '%' }}
                 </span>
                 <span
-                  class="min-w-[52px] text-right text-[12px] font-semibold tabular-nums"
+                  class="min-w-[72px] text-right text-[12px] font-semibold tabular-nums"
                   :class="it.totalTokens == null ? 'text-txt3 stats-tok-na' : 'stats-tok-val'"
                   data-testid="stats-rank-tokens"
                 >
+                  {{ t('pages.executionStats.tokensCol') }}
                   {{ fmtTokensOrDash(it.totalTokens) }}
                 </span>
               </div>
