@@ -3,6 +3,7 @@ package channels
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
@@ -366,15 +367,18 @@ func TestDispatchAckSendFailureDoesNotBlockFinal(t *testing.T) {
 	}
 }
 
-func TestDispatchBusyNoDelayedAck(t *testing.T) {
+func TestDispatchBusyEnqueuesNoDelayedAckOnQueued(t *testing.T) {
+	// plan g2.1: rewrite former busy-drop assertions — second message is queued,
+	// processed after the first, with one queue ACK and no delayedAck on dequeue.
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
 	m.ackDelay = 40 * time.Millisecond
 	started := make(chan struct{})
+	var once sync.Once
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
-		close(started)
-		time.Sleep(150 * time.Millisecond)
-		return Reply{Text: "final-ok"}, nil
+		once.Do(func() { close(started) })
+		time.Sleep(120 * time.Millisecond)
+		return Reply{Text: "final-" + in.MessageID}, nil
 	}
 	rc := testRunningChannel(fa)
 	done := make(chan struct{})
@@ -387,25 +391,305 @@ func TestDispatchBusyNoDelayedAck(t *testing.T) {
 	<-done
 
 	got := sentTexts(fa)
-	busyCount, ackCount, finalCount := 0, 0, 0
+	queueAck, delayedAck, finalA, finalB := 0, 0, 0, 0
 	for _, text := range got {
 		switch text {
-		case busyReplyText:
-			busyCount++
+		case queueAckText:
+			queueAck++
 		case delayedAckText:
-			ackCount++
-		case "final-ok":
-			finalCount++
+			delayedAck++
+		case "final-m5a":
+			finalA++
+		case "final-m5b":
+			finalB++
 		}
 	}
-	if busyCount != 1 || finalCount != 1 || ackCount != 1 {
-		// Busy path must not start its own delayed ack; only the in-flight turn may ack once.
-		t.Fatalf("busy path sends = %v (busy=%d ack=%d final=%d)", got, busyCount, ackCount, finalCount)
+	if queueAck != 1 || finalA != 1 || finalB != 1 {
+		t.Fatalf("busy enqueue sends = %v (queueAck=%d finalA=%d finalB=%d)", got, queueAck, finalA, finalB)
 	}
-	// Second inbound must be busy-only: ensure busy appears and no second ack from busy path.
-	if got[0] != busyReplyText && got[1] != busyReplyText {
-		// Order: busy may arrive before or after the first turn's ack; just require exactly one busy.
-		t.Fatalf("expected busy reply among sends, got %v", got)
+	if delayedAck != 1 {
+		t.Fatalf("expected exactly 1 delayedAck on idle-first turn, got %d in %v", delayedAck, got)
+	}
+	// Queued continuation must not emit a second delayedAck; finals stay ordered.
+	idxA, idxB := indexOf(got, "final-m5a"), indexOf(got, "final-m5b")
+	if idxA < 0 || idxB < 0 || idxA > idxB {
+		t.Fatalf("expected final-m5a before final-m5b in %v", got)
+	}
+}
+
+func indexOf(ss []string, want string) int {
+	for i, s := range ss {
+		if s == want {
+			return i
+		}
+	}
+	return -1
+}
+
+func countText(ss []string, want string) int {
+	n := 0
+	for _, s := range ss {
+		if s == want {
+			n++
+		}
+	}
+	return n
+}
+
+func TestDispatchFIFOOrderMultipleQueued(t *testing.T) {
+	// plan g2.2: N≥3 inbound while busy → independent turns in arrival order.
+	fa := &fakeAdapter{}
+	m := NewManager(nil, nil, nil)
+	m.ackDelay = time.Hour
+	started := make(chan struct{})
+	var once sync.Once
+	var orderMu sync.Mutex
+	var handled []string
+	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
+		once.Do(func() { close(started) })
+		orderMu.Lock()
+		handled = append(handled, in.MessageID)
+		orderMu.Unlock()
+		time.Sleep(40 * time.Millisecond)
+		return Reply{Text: "final-" + in.MessageID}, nil
+	}
+	rc := testRunningChannel(fa)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		m.dispatch(context.Background(), rc, testInbound("a"))
+	}()
+	<-started
+	m.dispatch(context.Background(), rc, testInbound("b"))
+	m.dispatch(context.Background(), rc, testInbound("c"))
+	m.dispatch(context.Background(), rc, testInbound("d"))
+	<-done
+
+	orderMu.Lock()
+	gotOrder := append([]string(nil), handled...)
+	orderMu.Unlock()
+	wantOrder := []string{"a", "b", "c", "d"}
+	if !reflect.DeepEqual(gotOrder, wantOrder) {
+		t.Fatalf("handle order = %v want %v", gotOrder, wantOrder)
+	}
+	got := sentTexts(fa)
+	if countText(got, queueAckText) != 1 {
+		t.Fatalf("queue ACK count = %d want 1 in %v", countText(got, queueAckText), got)
+	}
+	for _, id := range wantOrder {
+		if countText(got, "final-"+id) != 1 {
+			t.Fatalf("missing final for %s in %v", id, got)
+		}
+	}
+}
+
+func TestDispatchQueueFullVisibleReject(t *testing.T) {
+	// plan g2.2: depth 16 pending; next inbound gets queueFullText, not silent drop.
+	fa := &fakeAdapter{}
+	m := NewManager(nil, nil, nil)
+	m.ackDelay = time.Hour
+	gate := make(chan struct{})
+	started := make(chan struct{})
+	var once sync.Once
+	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
+		once.Do(func() { close(started) })
+		<-gate
+		return Reply{Text: "final-" + in.MessageID}, nil
+	}
+	rc := testRunningChannel(fa)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		m.dispatch(context.Background(), rc, testInbound("inflight"))
+	}()
+	<-started
+	for i := 0; i < convQueueDepth; i++ {
+		m.dispatch(context.Background(), rc, testInbound(fmt.Sprintf("q%d", i)))
+	}
+	// 17th pending attempt (after 16 queued) must be visibly rejected.
+	m.dispatch(context.Background(), rc, testInbound("overflow"))
+	close(gate)
+	<-done
+
+	got := sentTexts(fa)
+	if countText(got, queueFullText) != 1 {
+		t.Fatalf("full-queue sends = %v want exactly one %q", got, queueFullText)
+	}
+	if countText(got, "final-overflow") != 0 {
+		t.Fatalf("overflow message must not be processed, got %v", got)
+	}
+	if countText(got, "final-inflight") != 1 {
+		t.Fatalf("inflight turn missing in %v", got)
+	}
+}
+
+func TestDispatchQueueAckOncePerBusyCycle(t *testing.T) {
+	// plan g2.2: first busy enqueue ACKs once; after drain, next busy cycle may ACK again.
+	fa := &fakeAdapter{}
+	m := NewManager(nil, nil, nil)
+	m.ackDelay = time.Hour
+	rc := testRunningChannel(fa)
+
+	release1 := make(chan struct{})
+	started1 := make(chan struct{})
+	var once1 sync.Once
+	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
+		once1.Do(func() { close(started1) })
+		if in.MessageID == "p0" {
+			<-release1
+		}
+		return Reply{Text: "final-" + in.MessageID}, nil
+	}
+	done1 := make(chan struct{})
+	go func() {
+		defer close(done1)
+		m.dispatch(context.Background(), rc, testInbound("p0"))
+	}()
+	<-started1
+	m.dispatch(context.Background(), rc, testInbound("p1"))
+	m.dispatch(context.Background(), rc, testInbound("p2"))
+	close(release1)
+	<-done1
+
+	got1 := sentTexts(fa)
+	if countText(got1, queueAckText) != 1 {
+		t.Fatalf("first busy cycle ACK count = %d want 1 in %v", countText(got1, queueAckText), got1)
+	}
+
+	// Idle again: start a new busy cycle and enqueue once more.
+	release2 := make(chan struct{})
+	started2 := make(chan struct{})
+	var once2 sync.Once
+	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
+		once2.Do(func() { close(started2) })
+		if in.MessageID == "p3" {
+			<-release2
+		}
+		return Reply{Text: "final-" + in.MessageID}, nil
+	}
+	done2 := make(chan struct{})
+	go func() {
+		defer close(done2)
+		m.dispatch(context.Background(), rc, testInbound("p3"))
+	}()
+	<-started2
+	m.dispatch(context.Background(), rc, testInbound("p4"))
+	close(release2)
+	<-done2
+
+	got2 := sentTexts(fa)
+	if countText(got2, queueAckText) != 2 {
+		t.Fatalf("after second busy cycle ACK total = %d want 2 in %v", countText(got2, queueAckText), got2)
+	}
+}
+
+func TestDispatchFailureContinuesDrain(t *testing.T) {
+	// plan g2.2: one failed turn still drains the next queued message.
+	fa := &fakeAdapter{}
+	m := NewManager(nil, nil, nil)
+	m.ackDelay = time.Hour
+	started := make(chan struct{})
+	var once sync.Once
+	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
+		once.Do(func() { close(started) })
+		time.Sleep(20 * time.Millisecond)
+		if in.MessageID == "fail-me" {
+			return Reply{}, errors.New("boom")
+		}
+		return Reply{Text: "final-" + in.MessageID}, nil
+	}
+	rc := testRunningChannel(fa)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		m.dispatch(context.Background(), rc, testInbound("first"))
+	}()
+	<-started
+	m.dispatch(context.Background(), rc, testInbound("fail-me"))
+	m.dispatch(context.Background(), rc, testInbound("after-fail"))
+	<-done
+
+	got := sentTexts(fa)
+	if countText(got, failReplyPrefix+"boom") != 1 {
+		t.Fatalf("expected failure reply in %v", got)
+	}
+	if countText(got, "final-after-fail") != 1 {
+		t.Fatalf("expected continuation after failure in %v", got)
+	}
+	if countText(got, "final-first") != 1 {
+		t.Fatalf("expected first final in %v", got)
+	}
+}
+
+func TestDispatchCrossConversationIndependent(t *testing.T) {
+	// plan g2.2: two conversations do not block each other's enqueue/processing.
+	fa := &fakeAdapter{}
+	m := NewManager(nil, nil, nil)
+	m.ackDelay = time.Hour
+	releaseA := make(chan struct{})
+	startedA := make(chan struct{})
+	startedB := make(chan struct{})
+	var onceA, onceB sync.Once
+	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
+		if in.ConversationID == "userA" {
+			onceA.Do(func() { close(startedA) })
+			<-releaseA
+		} else {
+			onceB.Do(func() { close(startedB) })
+		}
+		return Reply{Text: "final-" + in.MessageID}, nil
+	}
+	rc := testRunningChannel(fa)
+	inA := func(id string) InboundMessage {
+		return InboundMessage{Scene: SceneC2C, ConversationID: "userA", UserID: "userA", MessageID: id, Text: "hello"}
+	}
+	inB := func(id string) InboundMessage {
+		return InboundMessage{Scene: SceneC2C, ConversationID: "userB", UserID: "userB", MessageID: id, Text: "hello"}
+	}
+
+	doneA := make(chan struct{})
+	go func() {
+		defer close(doneA)
+		m.dispatch(context.Background(), rc, inA("a1"))
+	}()
+	<-startedA
+
+	doneB := make(chan struct{})
+	go func() {
+		defer close(doneB)
+		m.dispatch(context.Background(), rc, inB("b1"))
+	}()
+	select {
+	case <-startedB:
+	case <-time.After(2 * time.Second):
+		t.Fatal("conversation B blocked by A")
+	}
+	close(releaseA)
+	<-doneA
+	<-doneB
+
+	got := sentTexts(fa)
+	if countText(got, "final-a1") != 1 || countText(got, "final-b1") != 1 {
+		t.Fatalf("cross-conversation finals missing in %v", got)
+	}
+}
+
+func TestDispatchIdleSingleKeepsDelayedAck(t *testing.T) {
+	// plan g2.2 / g1.5: idle single-message path still emits delayedAck (no queue ACK).
+	fa := &fakeAdapter{}
+	m := NewManager(nil, nil, nil)
+	m.ackDelay = 40 * time.Millisecond
+	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
+		time.Sleep(80 * time.Millisecond)
+		return Reply{Text: "final-ok"}, nil
+	}
+	m.dispatch(context.Background(), testRunningChannel(fa), testInbound("idle-1"))
+	got := sentTexts(fa)
+	if countText(got, queueAckText) != 0 {
+		t.Fatalf("idle path must not send queue ACK, got %v", got)
+	}
+	if len(got) != 2 || got[0] != delayedAckText || got[1] != "final-ok" {
+		t.Fatalf("idle delayedAck path sends = %v want [%q final-ok]", got, delayedAckText)
 	}
 }
 

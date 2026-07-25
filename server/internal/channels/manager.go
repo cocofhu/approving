@@ -21,8 +21,29 @@ const (
 	delayedAckText  = "收到，正在确认…"
 	defaultAckDelay = 3 * time.Second
 	failReplyPrefix = "处理失败："
-	busyReplyText   = "上一条消息还在处理中，请稍候…"
+	queueAckText    = "已收到，排队中"
+	queueFullText   = "队列已满，请稍候"
+	// convQueueDepth is the per-conversation pending FIFO capacity (in-flight
+	// turn is not counted). The next inbound after 16 pending is rejected.
+	convQueueDepth = 16
 )
+
+// queuedInbound is a message waiting behind an in-flight turn for the same
+// conversation key (project|scene|conversationID).
+type queuedInbound struct {
+	ctx context.Context
+	rc  *runningChannel
+	in  InboundMessage
+}
+
+// convQueue serializes turns for one conversation: at most one in-flight
+// handler plus a bounded FIFO of pending inbound messages.
+type convQueue struct {
+	mu      sync.Mutex
+	pending []queuedInbound
+	busy    bool
+	ackSent bool // queue ACK already sent in this busy cycle
+}
 
 // Manager owns the lifecycle of channel adapters. Configs are supplied by a
 // loader (backed by the DB) and applied idempotently: adapters are started,
@@ -38,8 +59,8 @@ type Manager struct {
 	mu      sync.Mutex
 	running map[string]*runningChannel // keyed by config ID
 
-	convMu    sync.Mutex
-	convLocks map[string]*sync.Mutex
+	convMu     sync.Mutex
+	convQueues map[string]*convQueue
 
 	baseCtx context.Context
 
@@ -61,12 +82,12 @@ type runningChannel struct {
 // decrypt reverses the stored app secret.
 func NewManager(bridge *ChannelBridge, factories map[string]AdapterFactory, decrypt func(string) (string, error)) *Manager {
 	return &Manager{
-		bridge:    bridge,
-		factories: factories,
-		decrypt:   decrypt,
-		running:   map[string]*runningChannel{},
-		convLocks: map[string]*sync.Mutex{},
-		baseCtx:   context.Background(),
+		bridge:     bridge,
+		factories:  factories,
+		decrypt:    decrypt,
+		running:    map[string]*runningChannel{},
+		convQueues: map[string]*convQueue{},
+		baseCtx:    context.Background(),
 	}
 }
 
@@ -207,31 +228,84 @@ func (m *Manager) stopChannel(rc *runningChannel) {
 	log.Info().Str("id", rc.cfg.ID).Str("type", rc.cfg.Type).Msg("channel adapter stopped")
 }
 
-// dispatch serializes messages per conversation and runs the PM turn.
+// dispatch serializes messages per conversation via a bounded in-process FIFO.
+// Idle + empty queue: run immediately (with delayedAck). Busy: enqueue up to
+// convQueueDepth; first enqueue in a busy cycle gets a throttled queue ACK.
+// Full queue: reject with a visible reply (never silently drop).
 func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMessage) {
 	key := rc.cfg.ProjectID + "|" + string(in.Scene) + "|" + in.ConversationID
-	lock := m.convLock(key)
-	if !lock.TryLock() {
-		if err := rc.adapter.Send(ctx, OutboundMessage{
-			Scene: in.Scene, ConversationID: in.ConversationID,
-			ReplyToMessageID: in.MessageID, Text: busyReplyText,
-		}); err != nil {
-			log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel busy reply send failed")
+	q := m.convQueueFor(key)
+
+	q.mu.Lock()
+	if q.busy {
+		if len(q.pending) >= convQueueDepth {
+			q.mu.Unlock()
+			if err := rc.adapter.Send(ctx, OutboundMessage{
+				Scene: in.Scene, ConversationID: in.ConversationID,
+				ReplyToMessageID: in.MessageID, Text: queueFullText,
+			}); err != nil {
+				log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel queue-full reply send failed")
+			}
+			return
+		}
+		q.pending = append(q.pending, queuedInbound{ctx: ctx, rc: rc, in: in})
+		sendAck := !q.ackSent
+		if sendAck {
+			q.ackSent = true
+		}
+		q.mu.Unlock()
+		if sendAck {
+			if err := rc.adapter.Send(ctx, OutboundMessage{
+				Scene: in.Scene, ConversationID: in.ConversationID,
+				ReplyToMessageID: in.MessageID, Text: queueAckText,
+			}); err != nil {
+				log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel queue ack send failed")
+			}
 		}
 		return
 	}
-	defer lock.Unlock()
+	q.busy = true
+	q.mu.Unlock()
 
-	// One-shot delayed ack while Handle runs; cancelled if the turn finishes first.
-	cancelAck := startDelayedAck(m.ackDelayOrDefault(), func() {
-		if err := rc.adapter.Send(ctx, OutboundMessage{
-			Scene: in.Scene, ConversationID: in.ConversationID,
-			ReplyToMessageID: in.MessageID, Text: delayedAckText,
-		}); err != nil {
-			log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel delayed ack send failed")
+	// This goroutine owns the busy cycle: run the idle-first turn, then drain.
+	m.runTurn(ctx, rc, in, true /* withDelayedAck */)
+	m.drainConvQueue(q)
+}
+
+// drainConvQueue runs pending messages in arrival order until the queue is
+// empty, then clears the busy-cycle ACK flag. Queued turns never get
+// delayedAck or a fresh queue ACK.
+func (m *Manager) drainConvQueue(q *convQueue) {
+	for {
+		q.mu.Lock()
+		if len(q.pending) == 0 {
+			q.busy = false
+			q.ackSent = false
+			q.mu.Unlock()
+			return
 		}
-	})
-	defer cancelAck()
+		next := q.pending[0]
+		q.pending = q.pending[1:]
+		q.mu.Unlock()
+		m.runTurn(next.ctx, next.rc, next.in, false /* withDelayedAck */)
+	}
+}
+
+// runTurn executes one PM turn and sends the final or failure reply.
+// withDelayedAck is true only for the idle-first path (not dequeue continuations).
+func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMessage, withDelayedAck bool) {
+	var cancelAck func()
+	if withDelayedAck {
+		cancelAck = startDelayedAck(m.ackDelayOrDefault(), func() {
+			if err := rc.adapter.Send(ctx, OutboundMessage{
+				Scene: in.Scene, ConversationID: in.ConversationID,
+				ReplyToMessageID: in.MessageID, Text: delayedAckText,
+			}); err != nil {
+				log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel delayed ack send failed")
+			}
+		})
+		defer cancelAck()
+	}
 
 	resolved := ResolvedChannel{
 		ID: rc.cfg.ID, Type: rc.cfg.Type, ProjectID: rc.cfg.ProjectID,
@@ -239,7 +313,9 @@ func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMe
 		Caps:        SessionCapsFromConfig(rc.cfg.Config),
 	}
 	reply, err := m.handleTurn(ctx, resolved, in)
-	cancelAck()
+	if withDelayedAck {
+		cancelAck()
+	}
 	if err != nil {
 		log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel turn failed")
 		if sendErr := rc.adapter.Send(ctx, OutboundMessage{
@@ -323,15 +399,15 @@ func (m *Manager) Deliver(projectID, text string) error {
 	})
 }
 
-func (m *Manager) convLock(key string) *sync.Mutex {
+func (m *Manager) convQueueFor(key string) *convQueue {
 	m.convMu.Lock()
 	defer m.convMu.Unlock()
-	l, ok := m.convLocks[key]
+	q, ok := m.convQueues[key]
 	if !ok {
-		l = &sync.Mutex{}
-		m.convLocks[key] = l
+		q = &convQueue{}
+		m.convQueues[key] = q
 	}
-	return l
+	return q
 }
 
 func parseTarget(target string) (Scene, string) {
