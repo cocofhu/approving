@@ -27,7 +27,7 @@ npm run build
 BASE_PATH=/ npm run server
 ```
 
-产物在 `docs/public/`。推送到 `main` 且改动 `docs/**` 时，`ci-docs` 会构建并部署到独立 Pages 仓库 `cocofhu/approving-pages`（需配置 Secret `PAGES_DEPLOY_TOKEN`）。
+产物在 `docs/public/`。推送到 `main` 且改动 `docs/**` 时，`ci-docs` 会构建并部署到独立 Pages 仓库 `cocofhu/approving-pages`（需配置 Secret `PAGES_DEPLOY_KEY`）。
 
 ## 相关模块门禁
 

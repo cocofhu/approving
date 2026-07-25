@@ -4,6 +4,9 @@ web/dist/
 docs/node_modules/
 docs/public/
 docs/.deploy_git/
+# local Pages deploy key material (never commit)
+/approving-pages-deploy
+/approving-pages-deploy.pub
 node_modules/
 web/test-results/
 web/playwright-report/
