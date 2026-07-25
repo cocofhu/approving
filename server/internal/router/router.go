@@ -76,6 +76,7 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.PUT("/projects/:id/pm-leader", h.UpdatePmLeader)
 		api.GET("/projects/:id/cron-jobs", h.ListProjectCronJobs)
 		api.PATCH("/projects/:id/cron-jobs/:jobId", h.PatchProjectCronJob)
+		api.DELETE("/projects/:id/cron-jobs/:jobId", h.DeleteProjectCronJob)
 		api.GET("/projects/:id/channel", h.GetProjectChannel)
 		api.PUT("/projects/:id/channel", h.PutProjectChannel)
 		api.DELETE("/projects/:id/channel", h.DeleteProjectChannel)

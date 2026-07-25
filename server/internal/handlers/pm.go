@@ -987,6 +987,24 @@ func (h *Handlers) PatchProjectCronJob(c *gin.Context) {
 	c.JSON(http.StatusOK, job)
 }
 
+// DeleteProjectCronJob handles DELETE /api/projects/:id/cron-jobs/:jobId.
+// Any authenticated user may delete (aligned with PatchProjectCronJob / sessionUser).
+// Cross-project jobId returns 404. Cleanup matches Agent/MCP delete (runs + thread).
+func (h *Handlers) DeleteProjectCronJob(c *gin.Context) {
+	if h.Pm == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "pm unavailable"})
+		return
+	}
+	if _, ok := h.sessionUser(c); !ok {
+		return
+	}
+	if err := h.Pm.DeleteCronJob(c.Param("id"), c.Param("jobId")); err != nil {
+		writePmErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
 func writePmErr(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, services.ErrProjectNotFound),

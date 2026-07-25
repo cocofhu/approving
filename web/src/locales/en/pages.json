@@ -133,7 +133,7 @@
       "tabMeta": "Project info",
       "cron": {
         "title": "Scheduled tasks",
-        "hint": "All Agent cron jobs in this project. Create and edit schedules via task-scheduler in PM Leader consult; here you can review them, and any authenticated user can toggle channel delivery.",
+        "hint": "All Agent cron jobs in this project. Create and edit schedules via task-scheduler in PM Leader consult; here you can review and delete them, and any authenticated user can toggle channel delivery.",
         "emptyTitle": "No scheduled tasks yet",
         "emptyDesc": "Jobs created in PM Leader consult will appear in this list.",
         "colName": "Name",
@@ -144,10 +144,13 @@
         "colNextRun": "Next run",
         "colLastRun": "Last run",
         "colStatus": "Status",
+        "colActions": "Actions",
         "enabledYes": "Yes",
         "enabledNo": "No",
         "deliverLabel": "Deliver",
-        "deliverHint": "When on, results push to the project channel marked for cron delivery. Configure the delivery target in channel settings first."
+        "deliverHint": "When on, results push to the project channel marked for cron delivery. Configure the delivery target in channel settings first.",
+        "deleteConfirm": "Delete this cron job?",
+        "deleted": "Job deleted"
       },
       "pm": {
         "settingsTitle": "PM Leader settings",
