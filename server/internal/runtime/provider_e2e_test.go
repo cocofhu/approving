@@ -376,3 +376,136 @@ func testReactBackend(t *testing.T, backend AcpBackend) {
 		t.Error("artifact missing")
 	}
 }
+
+func samplePendingQuestion() []models.ReactQuestion {
+	return []models.ReactQuestion{{
+		ID: "q1", Prompt: "scope?",
+		Options: []models.ReactOption{
+			{ID: "a", Label: "A", Recommended: true},
+			{ID: "b", Label: "B"},
+		},
+	}}
+}
+
+// promptsContainOutcomeRetry reports whether any chat prompt on the first
+// sandbox looks like DefaultOutcomeRetry (the mis-kill injection).
+func promptsContainOutcomeRetry(mgr *fakeManager) bool {
+	b := mgr.bridge(0)
+	if b == nil {
+		return false
+	}
+	for i := 0; ; i++ {
+		p := b.promptAt(i)
+		if p == "" {
+			return false
+		}
+		if strings.Contains(p, "立即调用 `node_complete`") || strings.Contains(p, models.DefaultOutcomeRetry) {
+			return true
+		}
+	}
+}
+
+// TestReactAskQuestionNotKilledByForceOutcomeRetry locks the run-ac25c705
+// regression: after ask_question (with recommended), force must return
+// Questions/Done=false and must not inject DefaultOutcomeRetry.
+func TestReactAskQuestionNotKilledByForceOutcomeRetry(t *testing.T) {
+	qs := samplePendingQuestion()
+	p, _, _, mgr, req := reactSetup(t, func(int) chatFunc {
+		return func(turn int) turnAction {
+			if turn == 0 {
+				return turnAction{narration: "need info", questions: qs}
+			}
+			// Reply turn still raises ask_question — previously force discarded
+			// qs and finishReact→ensureOutcome injected OutcomeRetry.
+			return turnAction{narration: "still clarifying", questions: qs}
+		}
+	})
+	open := p.ReactOpen(context.Background(), req)
+	if open.Done || len(open.Questions) == 0 {
+		t.Fatalf("expected opening pause with questions, got Done=%v qs=%d", open.Done, len(open.Questions))
+	}
+	hist := []models.ReactMessage{{Role: "agent", Text: "need info"}, {Role: "human", Text: "force finish"}}
+	reply := p.ReactReply(context.Background(), req, hist, "force finish", nil, true)
+	if reply.Done {
+		t.Fatal("pending ask_question must not finish under force (OutcomeRetry mis-kill)")
+	}
+	if len(reply.Questions) == 0 {
+		t.Fatal("expected Questions returned for auto_clarify / waiting_human")
+	}
+	if promptsContainOutcomeRetry(mgr) {
+		t.Error("DefaultOutcomeRetry must not be injected while ask_question is pending")
+	}
+	// Session must stay parked for the next human/auto turn.
+	key := reactKey(req)
+	p.mu.Lock()
+	sess := p.sessions[key]
+	p.mu.Unlock()
+	if sess == nil {
+		t.Fatal("react session must remain open when returning pending Questions")
+	}
+}
+
+// TestReactAskQuestionSurvivesMaxRoundsCap: max_rounds touch with pending
+// ask_question must return Questions, not discard then finishReact/ensure*.
+func TestReactAskQuestionSurvivesMaxRoundsCap(t *testing.T) {
+	qs := samplePendingQuestion()
+	p, _, _, mgr, req := reactSetup(t, func(int) chatFunc {
+		return func(turn int) turnAction {
+			if turn == 0 {
+				return turnAction{narration: "need info", questions: qs}
+			}
+			return turnAction{narration: "one more question", questions: qs}
+		}
+	})
+	req.Config["max_rounds"] = 1
+	open := p.ReactOpen(context.Background(), req)
+	if open.Done || len(open.Questions) == 0 {
+		t.Fatalf("expected opening pause, got Done=%v qs=%d", open.Done, len(open.Questions))
+	}
+	// history has 1 human → humanTurns=2 >= max_rounds=1 ⇒ cap reached.
+	hist := []models.ReactMessage{{Role: "agent", Text: "need info"}, {Role: "human", Text: "answer"}}
+	reply := p.ReactReply(context.Background(), req, hist, "answer", nil, false)
+	if reply.Done {
+		t.Fatal("pending ask_question must outrank max_rounds finish")
+	}
+	if len(reply.Questions) == 0 {
+		t.Fatal("expected Questions returned at cap")
+	}
+	if promptsContainOutcomeRetry(mgr) {
+		t.Error("OutcomeRetry must not run when pending questions survive the cap")
+	}
+}
+
+// TestReactPendingDuringEnsureStructuredReturnsQuestions: finish path with no
+// initial qs enters ensureStructured; if the agent then ask_question, abort
+// StructuredRetry/OutcomeRetry and return Questions (Done=false).
+func TestReactPendingDuringEnsureStructuredReturnsQuestions(t *testing.T) {
+	qs := samplePendingQuestion()
+	p, _, _, mgr, req := reactSetup(t, func(int) chatFunc {
+		return func(turn int) turnAction {
+			if turn == 0 {
+				// No questions → finishReact → ensureStructured re-prompt.
+				return turnAction{narration: "wrapping up"}
+			}
+			// StructuredRetry turn raises ask_question instead of set_*.
+			return turnAction{narration: "need a decision first", questions: qs}
+		}
+	})
+	open := p.ReactOpen(context.Background(), req)
+	if open.Done {
+		t.Fatal("pending raised during ensureStructured must not Done-finish")
+	}
+	if len(open.Questions) == 0 {
+		t.Fatal("expected Questions from ensureStructured abort")
+	}
+	if promptsContainOutcomeRetry(mgr) {
+		t.Error("must stop before OutcomeRetry when pending appears in ensureStructured")
+	}
+	key := reactKey(req)
+	p.mu.Lock()
+	sess := p.sessions[key]
+	p.mu.Unlock()
+	if sess == nil {
+		t.Fatal("session must stay open after ensure* pending abort")
+	}
+}
