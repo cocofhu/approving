@@ -362,11 +362,52 @@ func TestLifecycleNotFound(t *testing.T) {
 		{http.MethodPost, "/api/v1/sandboxes/nope/stop"},
 		{http.MethodDelete, "/api/v1/sandboxes/nope"},
 		{http.MethodGet, "/api/v1/sandboxes/nope/status"},
+		{http.MethodGet, "/api/v1/sandboxes/nope/logs"},
 	} {
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, httptest.NewRequest(tc.method, tc.path, nil))
 		if w.Code != 404 {
 			t.Fatalf("%s %s want 404 got %d %s", tc.method, tc.path, w.Code, w.Body.String())
 		}
+	}
+}
+
+func TestSandboxLogsEndpoint(t *testing.T) {
+	r, drv, svc := testRouter(t, nil)
+	id := createSandbox(t, r)
+	waitRunning(t, svc, id)
+	drv.SetLogs(id, "[boot] sandbox started\n")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/sandboxes/"+id+"/logs?tail=100", nil))
+	if w.Code != 200 {
+		t.Fatalf("logs=%d %s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["content"] != "[boot] sandbox started\n" {
+		t.Fatalf("content=%v", body["content"])
+	}
+
+	// Successful empty content.
+	drv.SetLogs(id, "")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/sandboxes/"+id+"/logs", nil))
+	if w.Code != 200 {
+		t.Fatalf("empty logs=%d %s", w.Code, w.Body.String())
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["content"] != "" {
+		t.Fatalf("want empty content, got %v", body["content"])
+	}
+
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/sandboxes/"+id+"/logs?tail=abc", nil))
+	if w.Code != 400 {
+		t.Fatalf("bad tail want 400 got %d", w.Code)
 	}
 }

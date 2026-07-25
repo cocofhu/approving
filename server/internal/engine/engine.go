@@ -382,12 +382,17 @@ func (e *Engine) StartRunWithPriority(workflowID string, inputs map[string]any, 
 }
 
 // StartRunFromPublished creates a run using the published WorkflowVersion
-// snapshot. Only workflows with status=published are accepted; trigger is
-// fixed to「API 触发」. Used exclusively by /v1 external API.
+// snapshot. Only workflows with status=published are accepted. Empty trigger
+// defaults to api; explicit values must be whitelist codes (manual|api|pm_mcp).
+// Used exclusively by /v1 external API.
 // Priority is always normal (non-UI paths cannot set priority this period).
-func (e *Engine) StartRunFromPublished(workflowID string, inputs map[string]any) (*models.Run, error) {
+func (e *Engine) StartRunFromPublished(workflowID string, inputs map[string]any, trigger string) (*models.Run, error) {
 	if e.IsHalted() {
 		return nil, fmt.Errorf("server is shutting down")
+	}
+	resolved, err := models.ResolveTrigger(trigger, models.TriggerAPI)
+	if err != nil {
+		return nil, err
 	}
 	var def models.WorkflowDef
 	if err := e.db.First(&def, "id = ?", workflowID).Error; err != nil {
@@ -400,7 +405,7 @@ func (e *Engine) StartRunFromPublished(workflowID string, inputs map[string]any)
 	if err := e.db.Where("workflow_id = ? AND version = ?", def.ID, def.Version).First(&snap).Error; err != nil {
 		return nil, fmt.Errorf("published version not found: %w", err)
 	}
-	return e.startRun(def, snap.Graph, inputs, "API 触发", models.PriorityNormal)
+	return e.startRun(def, snap.Graph, inputs, resolved, models.PriorityNormal)
 }
 
 func (e *Engine) startRun(def models.WorkflowDef, graph models.Graph, inputs map[string]any, trigger string, priority int) (*models.Run, error) {

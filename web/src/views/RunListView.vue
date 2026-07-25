@@ -55,9 +55,16 @@ const pipelineFilterOpen = ref(false)
 const cancelTarget = ref<Run | null>(null)
 const cancellingRun = ref(false)
 const cancelRunError = ref('')
+const deleteTarget = ref<Run | null>(null)
+const deletingRun = ref(false)
+const deleteRunError = ref('')
 
 function canCancelRun(r: Run) {
   return r.status === 'queued' || r.status === 'running' || r.status === 'waiting_human'
+}
+
+function canDeleteRun(r: Run) {
+  return r.status === 'completed' || r.status === 'failed'
 }
 
 function openRun(r: Run) {
@@ -65,7 +72,7 @@ function openRun(r: Run) {
 }
 
 function openCancelConfirm(r: Run) {
-  if (!canCancelRun(r) || cancellingRun.value) return
+  if (!canCancelRun(r) || cancellingRun.value || deletingRun.value) return
   cancelRunError.value = ''
   cancelTarget.value = r
 }
@@ -100,6 +107,43 @@ async function confirmCancelRun() {
     cancelRunError.value = mapCancelRunError(e)
   } finally {
     cancellingRun.value = false
+  }
+}
+
+function openDeleteConfirm(r: Run) {
+  if (!canDeleteRun(r) || deletingRun.value || cancellingRun.value) return
+  deleteRunError.value = ''
+  deleteTarget.value = r
+}
+
+function closeDeleteConfirm() {
+  if (deletingRun.value) return
+  deleteTarget.value = null
+  deleteRunError.value = ''
+}
+
+function mapDeleteRunError(e: unknown): string {
+  const status = (e as { status?: number })?.status
+  const msg = e instanceof Error ? e.message : String(e || '')
+  if (status === 404 || /not found/i.test(msg)) return t('pages.runDetail.deleteErrorNotFound')
+  if (status === 409 || /cannot delete run/i.test(msg)) return t('pages.runDetail.deleteErrorNotDeletable')
+  return msg || t('pages.runDetail.deleteErrorGeneric')
+}
+
+async function confirmDeleteRun() {
+  const target = deleteTarget.value
+  if (!target || !canDeleteRun(target) || deletingRun.value) return
+  deletingRun.value = true
+  deleteRunError.value = ''
+  try {
+    await api.deleteRun(target.id)
+    deleteTarget.value = null
+    toast.success(t('pages.runList.deleteSuccess'))
+    await load()
+  } catch (e) {
+    deleteRunError.value = mapDeleteRunError(e)
+  } finally {
+    deletingRun.value = false
   }
 }
 
@@ -352,15 +396,29 @@ onUnmounted(() => {
               <span class="truncate">{{ r.workflowName }}</span>
               <span v-if="r.workflowVersion" class="chip shrink-0">v{{ r.workflowVersion }}</span>
             </div>
-            <div v-if="canCancelRun(r)" class="shrink-0" @click.stop @keydown.stop>
+            <div class="shrink-0" data-testid="run-ops" @click.stop @keydown.stop>
               <AppButton
+                v-if="canCancelRun(r)"
                 data-testid="cancel-run-btn"
                 variant="danger"
                 size="sm"
-                icon="close"
                 :disabled="cancellingRun && cancelTarget?.id === r.id"
                 @click="openCancelConfirm(r)"
               >{{ t('common.buttons.cancel') }}</AppButton>
+              <AppButton
+                v-else-if="canDeleteRun(r)"
+                data-testid="delete-run-btn"
+                variant="danger"
+                size="sm"
+                :disabled="deletingRun && deleteTarget?.id === r.id"
+                @click="openDeleteConfirm(r)"
+              >{{ t('common.buttons.delete') }}</AppButton>
+              <span
+                v-else
+                data-testid="run-ops-placeholder"
+                class="select-none px-1 text-sm text-txt3/50"
+                aria-hidden="true"
+              >—</span>
             </div>
           </div>
         </div>
@@ -481,16 +539,29 @@ onUnmounted(() => {
               </td>
               <td class="px-5 py-3"><StatusPill :status="r.status" size="sm" /></td>
               <td class="px-5 py-3"><PriorityBadge :priority="r.priority" /></td>
-              <td class="px-5 py-3 text-right" @click.stop>
+              <td class="px-5 py-3 text-right" data-testid="run-ops" @click.stop>
                 <AppButton
                   v-if="canCancelRun(r)"
                   data-testid="cancel-run-btn"
                   variant="danger"
                   size="sm"
-                  icon="close"
                   :disabled="cancellingRun && cancelTarget?.id === r.id"
                   @click="openCancelConfirm(r)"
                 >{{ t('common.buttons.cancel') }}</AppButton>
+                <AppButton
+                  v-else-if="canDeleteRun(r)"
+                  data-testid="delete-run-btn"
+                  variant="danger"
+                  size="sm"
+                  :disabled="deletingRun && deleteTarget?.id === r.id"
+                  @click="openDeleteConfirm(r)"
+                >{{ t('common.buttons.delete') }}</AppButton>
+                <span
+                  v-else
+                  data-testid="run-ops-placeholder"
+                  class="select-none px-1 text-sm text-txt3/50"
+                  aria-hidden="true"
+                >—</span>
               </td>
             </tr>
           </template>
@@ -530,6 +601,41 @@ onUnmounted(() => {
           @click="confirmCancelRun"
         >
           {{ cancellingRun ? t('common.buttons.cancelling') : t('common.buttons.confirmCancelRun') }}
+        </AppButton>
+      </template>
+    </AppModal>
+
+    <AppModal
+      :open="!!deleteTarget"
+      :title="t('pages.runDetail.deleteTitle')"
+      :width="440"
+      @close="closeDeleteConfirm"
+    >
+      <div class="space-y-3 text-sm text-txt2">
+        <div class="flex items-start gap-2 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-[12px] text-err">
+          <Icon name="alert" :size="14" class="mt-0.5 shrink-0" />
+          {{ t('pages.runDetail.deleteWarning') }}
+        </div>
+        <p>{{ t('pages.runList.deleteConfirm') }}</p>
+        <div
+          v-if="deleteRunError"
+          class="flex items-start gap-2 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-[12px] text-err"
+        >
+          <Icon name="alert" :size="14" class="mt-0.5" />{{ deleteRunError }}
+        </div>
+      </div>
+      <template #footer>
+        <AppButton variant="ghost" :disabled="deletingRun" @click="closeDeleteConfirm">
+          {{ t('common.buttons.cancel') }}
+        </AppButton>
+        <AppButton
+          data-testid="confirm-delete-run-btn"
+          variant="danger"
+          icon="trash"
+          :disabled="deletingRun"
+          @click="confirmDeleteRun"
+        >
+          {{ deletingRun ? t('common.buttons.deleting') : t('common.buttons.confirmDelete') }}
         </AppButton>
       </template>
     </AppModal>

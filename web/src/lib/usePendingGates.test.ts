@@ -176,4 +176,71 @@ describe('usePendingGates', () => {
     resolve(paged([gate('1')], 1))
     await Promise.all([first, second])
   })
+
+  it('force/submit during in-flight peek does not join peek or get stolen by setPending', async () => {
+    vi.mocked(api.listGates).mockResolvedValueOnce(paged([gate('1'), gate('2')], 2))
+    const pg = usePendingGates()
+    await pg.refresh({ mode: 'force' })
+    expect(pg.displayedItems.value).toHaveLength(2)
+    expect(pg.totalCount.value).toBe(2)
+
+    let resolvePeek!: (value: ReturnType<typeof paged>) => void
+    const peekPending = new Promise<ReturnType<typeof paged>>((r) => {
+      resolvePeek = r
+    })
+    vi.mocked(api.listGates).mockClear()
+    vi.mocked(api.listGates).mockReturnValueOnce(peekPending)
+
+    const peekFlight = pg.peek({ source: 'sidebar-poll' })
+    expect(api.listGates).toHaveBeenCalledTimes(1)
+
+    // Submit force must start its own request — never await the peek promise.
+    vi.mocked(api.listGates).mockResolvedValueOnce(paged([gate('2')], 1))
+    const forceFlight = pg.refresh({ source: 'submit', mode: 'force' })
+    expect(api.listGates).toHaveBeenCalledTimes(2)
+
+    await forceFlight
+    expect(pg.displayedItems.value.map((it) => it.nodeId)).toEqual(['node-2'])
+    expect(pg.totalCount.value).toBe(1)
+    expect(pg.hasPendingUpdate.value).toBe(false)
+    expect(pg.lastRefreshSource.value).toBe('submit')
+
+    // Stale peek resolves with the pre-approve snapshot — must not overwrite force.
+    resolvePeek(paged([gate('1'), gate('2')], 2))
+    await peekFlight
+    expect(pg.displayedItems.value.map((it) => it.nodeId)).toEqual(['node-2'])
+    expect(pg.totalCount.value).toBe(1)
+    expect(pg.hasPendingUpdate.value).toBe(false)
+  })
+
+  it('removeItemLocally drops displayed/remote and decrements totalCount', async () => {
+    vi.mocked(api.listGates).mockResolvedValueOnce(paged([gate('1'), gate('2')], 2))
+    const pg = usePendingGates()
+    await pg.refresh({ mode: 'force' })
+
+    pg.removeItemLocally('run-1:node-1')
+    expect(pg.displayedItems.value).toHaveLength(1)
+    expect(pg.remoteItems.value).toHaveLength(1)
+    expect(pg.totalCount.value).toBe(1)
+    expect(pg.displayedItems.value[0].nodeId).toBe('node-2')
+  })
+
+  it('peek awaits in-flight force instead of starting a parallel peek', async () => {
+    let resolveForce!: (value: ReturnType<typeof paged>) => void
+    const forcePending = new Promise<ReturnType<typeof paged>>((r) => {
+      resolveForce = r
+    })
+    vi.mocked(api.listGates).mockReturnValueOnce(forcePending)
+    vi.mocked(api.listGates).mockClear()
+
+    const pg = usePendingGates()
+    const forceFlight = pg.refresh({ mode: 'force' })
+    const peekFlight = pg.peek({ source: 'focus' })
+    expect(api.listGates).toHaveBeenCalledTimes(1)
+
+    resolveForce(paged([gate('1')], 1))
+    await Promise.all([forceFlight, peekFlight])
+    expect(pg.displayedItems.value).toHaveLength(1)
+    expect(pg.totalCount.value).toBe(1)
+  })
 })

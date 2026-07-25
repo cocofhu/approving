@@ -24,6 +24,10 @@ const destroyDriverTimeout = 2 * time.Minute
 // requested port is not exposed. Handlers map it to 404 (not 500).
 var ErrEndpointNotFound = errors.New("no endpoint for port")
 
+// ErrLogsUnsupported is returned when the configured driver cannot retrieve
+// container logs (currently kubernetes). Handlers map it to 501.
+var ErrLogsUnsupported = driver.ErrLogsUnsupported
+
 // lbWaiter is optionally implemented by drivers that expose LoadBalancer-backed
 // endpoints (kubernetes + MetalLB). The service waits for the IP before probing.
 type lbWaiter interface {
@@ -396,6 +400,27 @@ func (s *SandboxService) Status(ctx context.Context, id string) (driver.Status, 
 		return "", err
 	}
 	return s.drv.Status(ctx, id)
+}
+
+// Logs returns combined PID1 stdout/stderr for a sandbox (non-follow, tailed).
+// The sandbox must exist in the control-plane store; drivers that do not
+// support logs return ErrLogsUnsupported.
+func (s *SandboxService) Logs(ctx context.Context, id string, tail int) (string, error) {
+	sb, err := s.lookup(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if tail <= 0 {
+		tail = 5000
+	}
+	out, err := s.drv.Logs(ctx, sb.ID, tail)
+	if err != nil {
+		if errors.Is(err, driver.ErrLogsUnsupported) {
+			return "", ErrLogsUnsupported
+		}
+		return "", err
+	}
+	return out, nil
 }
 
 // Host returns the client-reachable address for a single port.

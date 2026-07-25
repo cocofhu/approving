@@ -31,6 +31,7 @@ type entry struct {
 	status    driver.Status
 	eps       map[int]string
 	createdAt time.Time
+	logs      string
 }
 
 // New returns an empty fake Driver.
@@ -199,6 +200,26 @@ func (d *Driver) Endpoints(_ context.Context, id string) (map[int]string, error)
 		return nil, fmt.Errorf("not found")
 	}
 	return e.eps, nil
+}
+
+// SetLogs sets canned PID1 logs for a seeded/created sandbox (unit tests).
+func (d *Driver) SetLogs(id, content string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if e, ok := d.sandboxes[id]; ok {
+		e.logs = content
+	}
+}
+
+// Logs returns canned container logs for tests (empty when unset).
+func (d *Driver) Logs(_ context.Context, id string, _ int) (string, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	e, ok := d.sandboxes[id]
+	if !ok {
+		return "", fmt.Errorf("not found")
+	}
+	return e.logs, nil
 }
 
 // SpecOf returns the last stored Spec for id (for assertions).

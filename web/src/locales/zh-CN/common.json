@@ -21,6 +21,11 @@
       "normal": "普通",
       "low": "低"
     },
+    "runTrigger": {
+      "manual": "手动",
+      "api": "API",
+      "pmMcp": "PM MCP"
+    },
     "statusFilter": {
       "selectedCount": "已选 {n} 项"
     },
