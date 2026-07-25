@@ -46,7 +46,7 @@ describe('CitationCard', () => {
       targetId: 'trigger',
       summarySnippet: 'run:trigger',
     })
-    expect(w.get('[data-testid="citation-card-invalid"]').exists()).toBe(true)
+    expect(w.find('[data-testid="citation-card-invalid"]').exists()).toBe(true)
     expect(w.text()).toContain('run:trigger')
     expect(w.get('[data-testid="citation-invalid-note"]').text()).toBe('引用无效或目标不存在')
     const jump = w.get('[data-testid="citation-open-source"]')
