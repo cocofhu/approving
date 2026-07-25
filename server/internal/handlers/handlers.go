@@ -409,12 +409,13 @@ func (h *Handlers) ListRuns(c *gin.Context) {
 	statuses := parseRunStatuses(c.Query("status"))
 	wf := c.Query("wf")
 	projectID := c.Query("projectId")
+	sort, order := parseRunListSort(c.Query("sort"), c.Query("order"))
 	pg, ok := parsePagination(c)
 	if !ok {
 		return
 	}
 	if !pg.Active {
-		runs := h.Runs.List(statuses, wf, projectID)
+		runs := h.Runs.List(statuses, wf, projectID, sort, order)
 		labels := h.Runs.CurrentNodeLabels(runs)
 		out := make([]gin.H, 0, len(runs))
 		for _, r := range runs {
@@ -423,13 +424,31 @@ func (h *Handlers) ListRuns(c *gin.Context) {
 		c.JSON(http.StatusOK, out)
 		return
 	}
-	runs, total := h.Runs.ListPage(statuses, wf, projectID, pg.Page, pg.PageSize)
+	runs, total := h.Runs.ListPage(statuses, wf, projectID, pg.Page, pg.PageSize, sort, order)
 	labels := h.Runs.CurrentNodeLabels(runs)
 	items := make([]gin.H, 0, len(runs))
 	for _, r := range runs {
 		items = append(items, runSummaryDTO(r, labels[r.ID]))
 	}
 	c.JSON(http.StatusOK, paginatedResponse(items, int(total), pg.Page, pg.PageSize))
+}
+
+// parseRunListSort returns whitelist sort/order for ListRuns.
+// Both must be valid as a pair; otherwise empty strings signal default order.
+func parseRunListSort(sort, order string) (string, string) {
+	sort = strings.TrimSpace(sort)
+	order = strings.ToLower(strings.TrimSpace(order))
+	switch sort {
+	case "started_at", "priority":
+	default:
+		return "", ""
+	}
+	switch order {
+	case "asc", "desc":
+		return sort, order
+	default:
+		return "", ""
+	}
 }
 
 func (h *Handlers) GetRun(c *gin.Context) {

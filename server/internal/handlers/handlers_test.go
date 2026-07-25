@@ -1442,6 +1442,46 @@ func TestListRunsPagination(t *testing.T) {
 	}
 }
 
+func TestListRunsSortParams(t *testing.T) {
+	h := newHarness(t)
+	base := time.Date(2026, 7, 9, 10, 0, 0, 0, time.UTC)
+	h.db.Create(&models.Run{
+		ID: "run-hi", Status: "completed", WorkflowID: "wf-1",
+		Priority: models.PriorityHigh, StartedAt: base, CreatedAt: base,
+	})
+	h.db.Create(&models.Run{
+		ID: "run-lo", Status: "completed", WorkflowID: "wf-1",
+		Priority: models.PriorityLow, StartedAt: base.Add(time.Second), CreatedAt: base,
+	})
+
+	w := h.do("GET", "/api/runs?page=1&pageSize=10&sort=priority&order=desc", nil)
+	if w.Code != 200 {
+		t.Fatalf("priority desc: %d %s", w.Code, w.Body)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	items := body["items"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("want 2 items, got %d", len(items))
+	}
+	if items[0].(map[string]any)["id"] != "run-hi" {
+		t.Fatalf("priority desc first want run-hi, got %v", items[0])
+	}
+
+	// Illegal sort falls back to default hybrid-time DESC (run-lo started later).
+	w = h.do("GET", "/api/runs?page=1&pageSize=10&sort=duration&order=desc", nil)
+	if w.Code != 200 {
+		t.Fatalf("illegal sort: %d %s", w.Code, w.Body)
+	}
+	json.Unmarshal(w.Body.Bytes(), &body)
+	items = body["items"].([]any)
+	if items[0].(map[string]any)["id"] != "run-lo" {
+		t.Fatalf("illegal sort fallback first want run-lo, got %v", items[0])
+	}
+}
+
 func TestListArtifactsPaginationAndWf(t *testing.T) {
 	h := newHarness(t)
 	now := time.Now()

@@ -29,6 +29,17 @@ import type { Run } from '@/lib/types'
 const PAGE_SIZE = 20
 const SKELETON_ROWS = 6
 
+/** Allowed run-list sort fields (must match API whitelist). */
+type RunSortKey = 'started_at' | 'priority'
+type RunSortOrder = 'asc' | 'desc'
+
+const ALLOWED_SORT: Record<RunSortKey, true> = { started_at: true, priority: true }
+/** First click on a column uses desc for both started_at and priority. */
+const DEFAULT_ORDER: Record<RunSortKey, RunSortOrder> = {
+  started_at: 'desc',
+  priority: 'desc',
+}
+
 /** Persists across route remounts within the same session. */
 let hasInitialLoaded = false
 
@@ -51,6 +62,46 @@ const { selected: selectedProject, ensureHydrated: hydrateProject } = useProject
 const { selectedStatuses } = useStatusFilter()
 const statusFilterOpen = ref(false)
 const pipelineFilterOpen = ref(false)
+
+function parseRunSort(
+  sortRaw: unknown,
+  orderRaw: unknown,
+): { sort: RunSortKey; order: RunSortOrder } | null {
+  const sort = typeof sortRaw === 'string' ? sortRaw.trim() : ''
+  const order = typeof orderRaw === 'string' ? orderRaw.trim().toLowerCase() : ''
+  if (!(sort in ALLOWED_SORT)) return null
+  if (order !== 'asc' && order !== 'desc') return null
+  return { sort: sort as RunSortKey, order }
+}
+
+/** Active user sort from URL; null means default hybrid-time order (headers inactive). */
+const activeSort = computed(() => parseRunSort(route.query.sort, route.query.order))
+
+function ariaSortFor(key: RunSortKey): 'none' | 'ascending' | 'descending' {
+  const cur = activeSort.value
+  if (!cur || cur.sort !== key) return 'none'
+  return cur.order === 'asc' ? 'ascending' : 'descending'
+}
+
+function sortThClass(key: RunSortKey): string[] {
+  const cur = activeSort.value
+  const classes = ['sortable']
+  if (cur?.sort === key) {
+    classes.push('active', cur.order)
+  }
+  return classes
+}
+
+async function applySortClick(key: RunSortKey) {
+  const cur = activeSort.value
+  let nextSort: RunSortKey = key
+  let nextOrder: RunSortOrder = DEFAULT_ORDER[key]
+  if (cur?.sort === key) {
+    nextOrder = cur.order === 'desc' ? 'asc' : 'desc'
+  }
+  const query = { ...route.query, sort: nextSort, order: nextOrder }
+  await router.replace({ query })
+}
 
 const cancelTarget = ref<Run | null>(null)
 const cancellingRun = ref(false)
@@ -132,7 +183,15 @@ function listParams() {
   const status = typeof route.query.status === 'string' ? route.query.status : undefined
   const wf = typeof route.query.wf === 'string' ? route.query.wf : undefined
   const projectId = typeof route.query.projectId === 'string' ? route.query.projectId : undefined
-  return { status, wf, projectId, page: page.value, pageSize: PAGE_SIZE }
+  const sort = activeSort.value
+  return {
+    status,
+    wf,
+    projectId,
+    page: page.value,
+    pageSize: PAGE_SIZE,
+    ...(sort ? { sort: sort.sort, order: sort.order } : {}),
+  }
 }
 
 async function load({ showLoading = false }: { showLoading?: boolean } = {}) {
@@ -204,6 +263,27 @@ async function validateQueryParams(): Promise<boolean> {
       }
     } catch {
       /* if workflows fail to load, keep wf and let backend return empty/filtered */
+    }
+  }
+
+  // Strip unpaired / unknown sort+order; keep other filters.
+  const hasSortKey = route.query.sort != null && route.query.sort !== ''
+  const hasOrderKey = route.query.order != null && route.query.order !== ''
+  if (hasSortKey || hasOrderKey) {
+    const parsed = parseRunSort(route.query.sort, route.query.order)
+    if (!parsed) {
+      delete query.sort
+      delete query.order
+      changed = true
+    } else {
+      if (route.query.sort !== parsed.sort) {
+        query.sort = parsed.sort
+        changed = true
+      }
+      if (route.query.order !== parsed.order) {
+        query.order = parsed.order
+        changed = true
+      }
     }
   }
 
@@ -376,11 +456,45 @@ onUnmounted(() => {
             <th class="px-5 py-2.5 font-medium">{{ t('common.table.run') }}</th>
             <th class="px-5 py-2.5 font-medium">{{ t('common.table.workflow') }}</th>
             <th class="px-5 py-2.5 font-medium">{{ t('common.table.trigger') }}</th>
-            <th class="px-5 py-2.5 font-medium">{{ t('common.table.startTime') }}</th>
+            <th
+              class="px-5 py-2.5 font-medium"
+              :class="sortThClass('started_at')"
+              role="columnheader"
+              tabindex="0"
+              :aria-sort="ariaSortFor('started_at')"
+              @click="applySortClick('started_at')"
+              @keydown.enter.prevent="applySortClick('started_at')"
+              @keydown.space.prevent="applySortClick('started_at')"
+            >
+              <span class="th-inner">
+                {{ t('common.table.startTime') }}
+                <span class="sort-icon" aria-hidden="true">
+                  <svg class="up" viewBox="0 0 10 10"><path fill="currentColor" d="M5 2 L9 7 H1 Z" /></svg>
+                  <svg class="down" viewBox="0 0 10 10"><path fill="currentColor" d="M5 8 L1 3 H9 Z" /></svg>
+                </span>
+              </span>
+            </th>
             <th class="px-5 py-2.5 font-medium">{{ t('common.table.duration') }}</th>
             <th class="px-5 py-2.5 font-medium">{{ t('common.table.progress') }}</th>
             <th class="px-5 py-2.5 font-medium">{{ t('common.table.status') }}</th>
-            <th class="px-5 py-2.5 font-medium">{{ t('common.table.priority') }}</th>
+            <th
+              class="px-5 py-2.5 font-medium"
+              :class="sortThClass('priority')"
+              role="columnheader"
+              tabindex="0"
+              :aria-sort="ariaSortFor('priority')"
+              @click="applySortClick('priority')"
+              @keydown.enter.prevent="applySortClick('priority')"
+              @keydown.space.prevent="applySortClick('priority')"
+            >
+              <span class="th-inner">
+                {{ t('common.table.priority') }}
+                <span class="sort-icon" aria-hidden="true">
+                  <svg class="up" viewBox="0 0 10 10"><path fill="currentColor" d="M5 2 L9 7 H1 Z" /></svg>
+                  <svg class="down" viewBox="0 0 10 10"><path fill="currentColor" d="M5 8 L1 3 H9 Z" /></svg>
+                </span>
+              </span>
+            </th>
             <th class="px-5 py-2.5 text-right font-medium">{{ t('common.table.actions') }}</th>
           </tr>
         </thead>
@@ -555,5 +669,57 @@ onUnmounted(() => {
 
 .node-label-fade {
   animation: nodeLabelFadeIn 0.35s ease;
+}
+
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+  color: rgb(var(--c-txt2));
+}
+th.sortable:hover {
+  background: rgb(var(--c-elevated));
+  color: rgb(var(--c-txt));
+}
+th.sortable:focus-visible {
+  outline: 2px solid #7b61ff;
+  outline-offset: -2px;
+}
+th .th-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+th .sort-icon {
+  display: inline-flex;
+  flex-direction: column;
+  width: 10px;
+  height: 14px;
+  opacity: 0.35;
+  position: relative;
+}
+th.sortable:hover .sort-icon {
+  opacity: 0.55;
+}
+th.active .sort-icon {
+  opacity: 1;
+  color: #7b61ff;
+}
+th .sort-icon svg {
+  width: 10px;
+  height: 10px;
+  display: block;
+}
+th .sort-icon .up {
+  margin-bottom: -3px;
+}
+th.asc .sort-icon .down {
+  opacity: 0.25;
+}
+th.desc .sort-icon .up {
+  opacity: 0.25;
+}
+th:not(.active) .sort-icon .up,
+th:not(.active) .sort-icon .down {
+  opacity: 1;
 }
 </style>

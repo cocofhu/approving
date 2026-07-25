@@ -505,6 +505,95 @@ func TestRunServiceListMixedSort(t *testing.T) {
 	}
 }
 
+func TestRunServiceListSortWhitelist(t *testing.T) {
+	db := newTestDB(t)
+	s := NewRunService(db)
+	base := time.Date(2026, 7, 4, 18, 30, 0, 0, time.UTC)
+
+	db.Create(&models.Run{ID: "run-high", Status: "running", Priority: models.PriorityHigh, StartedAt: base.Add(5 * time.Second), CreatedAt: base})
+	db.Create(&models.Run{ID: "run-low", Status: "running", Priority: models.PriorityLow, StartedAt: base.Add(10 * time.Second), CreatedAt: base})
+	db.Create(&models.Run{ID: "run-normal", Status: "completed", Priority: models.PriorityNormal, StartedAt: base.Add(8 * time.Second), CreatedAt: base})
+	db.Create(&models.Run{ID: "run-queued", Status: "queued", Priority: models.PriorityNormal, CreatedAt: base.Add(12 * time.Second)})
+
+	// Default / empty args: same hybrid-time DESC as TestRunServiceListMixedSort.
+	defaultWant := []string{"run-queued", "run-low", "run-normal", "run-high"}
+	for _, args := range [][]string{nil, {"", ""}, {"duration", "desc"}, {"priority", "up"}, {"started_at", ""}, {"", "desc"}} {
+		got := s.List(nil, "", "", args...)
+		if idsOf(got) == nil {
+			t.Fatalf("args %#v: empty result", args)
+		}
+		for i, id := range defaultWant {
+			if got[i].ID != id {
+				t.Fatalf("default/illegal args %#v index %d: got %s, want %s (full: %v)", args, i, got[i].ID, id, idsOf(got))
+			}
+		}
+	}
+
+	prioDesc := s.List(nil, "", "", "priority", "desc")
+	// Same priority: id DESC → run-queued before run-normal.
+	wantPrioDesc := []string{"run-high", "run-queued", "run-normal", "run-low"}
+	for i, id := range wantPrioDesc {
+		if prioDesc[i].ID != id {
+			t.Fatalf("priority desc index %d: got %s, want %s (full: %v)", i, prioDesc[i].ID, id, idsOf(prioDesc))
+		}
+	}
+
+	prioAsc := s.List(nil, "", "", "priority", "asc")
+	wantPrioAsc := []string{"run-low", "run-queued", "run-normal", "run-high"}
+	for i, id := range wantPrioAsc {
+		if prioAsc[i].ID != id {
+			t.Fatalf("priority asc index %d: got %s, want %s (full: %v)", i, prioAsc[i].ID, id, idsOf(prioAsc))
+		}
+	}
+
+	// started_at ASC: hybrid key ascending (oldest first).
+	startedAsc := s.List(nil, "", "", "started_at", "asc")
+	wantStartedAsc := []string{"run-high", "run-normal", "run-low", "run-queued"}
+	for i, id := range wantStartedAsc {
+		if startedAsc[i].ID != id {
+			t.Fatalf("started_at asc index %d: got %s, want %s (full: %v)", i, startedAsc[i].ID, id, idsOf(startedAsc))
+		}
+	}
+
+	startedDesc := s.List(nil, "", "", "started_at", "desc")
+	for i, id := range defaultWant {
+		if startedDesc[i].ID != id {
+			t.Fatalf("started_at desc index %d: got %s, want %s (full: %v)", i, startedDesc[i].ID, id, idsOf(startedDesc))
+		}
+	}
+}
+
+func TestRunServiceListPageSortGlobalOrder(t *testing.T) {
+	db := newTestDB(t)
+	s := NewRunService(db)
+	base := time.Date(2026, 7, 4, 18, 30, 0, 0, time.UTC)
+
+	// Priorities 3,2,1 with two of each → global priority DESC across pages.
+	ids := []string{"p3a", "p3b", "p2a", "p2b", "p1a", "p1b"}
+	prios := []int{models.PriorityHigh, models.PriorityHigh, models.PriorityNormal, models.PriorityNormal, models.PriorityLow, models.PriorityLow}
+	for i, id := range ids {
+		db.Create(&models.Run{
+			ID: id, Status: "completed", Priority: prios[i],
+			StartedAt: base.Add(time.Duration(i) * time.Second), CreatedAt: base,
+		})
+	}
+
+	page1, total := s.ListPage(nil, "", "", 1, 2, "priority", "desc")
+	page2, _ := s.ListPage(nil, "", "", 2, 2, "priority", "desc")
+	page3, _ := s.ListPage(nil, "", "", 3, 2, "priority", "desc")
+	if total != 6 {
+		t.Fatalf("total=%d, want 6", total)
+	}
+	got := append(append(idsOf(page1), idsOf(page2)...), idsOf(page3)...)
+	// Within same priority, id DESC tie-break.
+	want := []string{"p3b", "p3a", "p2b", "p2a", "p1b", "p1a"}
+	for i, id := range want {
+		if got[i] != id {
+			t.Fatalf("global order index %d: got %s, want %s (full: %v)", i, got[i], id, got)
+		}
+	}
+}
+
 func TestRunServiceListFilters(t *testing.T) {
 	db := newTestDB(t)
 	s := NewRunService(db)
