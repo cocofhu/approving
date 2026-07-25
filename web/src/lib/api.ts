@@ -468,7 +468,7 @@ export const api = {
       `/runs/${runId}/inbox-context?nodeId=${encodeURIComponent(nodeId)}&iteration=${iteration}`,
       opts?.signal ? { signal: opts.signal } : undefined,
     ),
-  startRun: (workflowId: string, inputs: Record<string, any>, trigger = '手动触发', priority = 'normal') =>
+  startRun: (workflowId: string, inputs: Record<string, any>, trigger = 'manual', priority = 'normal') =>
     req<{ id: string; status: string; priority?: string }>(`/workflows/${workflowId}/runs`, {
       method: 'POST',
       body: JSON.stringify({ inputs, trigger, priority }),
@@ -773,8 +773,12 @@ export const api = {
   },
   // Raw sandbox container logs (docker logs): live if running, else the archived
   // snapshot captured at teardown. Used for post-mortem troubleshooting.
+  // `error` is set when the control plane should have logs but the read failed
+  // (distinct from found=false = no log source).
   nodeSandboxLog: (runId: string, nodeId: string) =>
-    req<{ content: string; live: boolean; found: boolean }>(`/runs/${runId}/nodes/${nodeId}/sandbox-log`),
+    req<{ content: string; live: boolean; found: boolean; error?: string }>(
+      `/runs/${runId}/nodes/${nodeId}/sandbox-log`,
+    ),
   getRunNodeSandbox: async (runId: string, nodeId: string): Promise<SandboxView | null> => {
     const res = await fetch(BASE + `/runs/${runId}/nodes/${nodeId}/sandbox`, {
       credentials: 'include',

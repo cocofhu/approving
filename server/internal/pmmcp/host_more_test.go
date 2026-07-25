@@ -162,10 +162,14 @@ type fakePmEngine struct {
 	resumed struct {
 		runID, nodeID, action string
 	}
-	cancelled string
+	cancelled   string
+	lastTrigger string
+	startCalls  int
 }
 
-func (*fakePmEngine) StartRunWithPriority(workflowID string, inputs map[string]any, trigger, priority string) (*models.Run, error) {
+func (f *fakePmEngine) StartRunWithPriority(workflowID string, inputs map[string]any, trigger, priority string) (*models.Run, error) {
+	f.lastTrigger = trigger
+	f.startCalls++
 	return &models.Run{ID: "run-pm-mcp", WorkflowID: workflowID, Status: "queued", Trigger: trigger}, nil
 }
 
@@ -258,6 +262,22 @@ func TestPmMCPWorkflowToolsWithEngine(t *testing.T) {
 
 	okCall(MCPWorkflowWrite, "pm_publish_workflow", map[string]any{"workflowId": wfDef.ID})
 	okCall(MCPWorkflowWrite, "pm_start_run", map[string]any{"workflowId": wfDef.ID, "inputs": map[string]any{"k": "v"}})
+	if eng.lastTrigger != models.TriggerPMMCP {
+		t.Fatalf("pm_start_run empty trigger: got %q want pm_mcp", eng.lastTrigger)
+	}
+	okCall(MCPWorkflowWrite, "pm_start_run", map[string]any{"workflowId": wfDef.ID, "trigger": "manual"})
+	if eng.lastTrigger != models.TriggerManual {
+		t.Fatalf("pm_start_run explicit manual: got %q", eng.lastTrigger)
+	}
+	beforeIllegal := eng.startCalls
+	if st, resp := call(MCPWorkflowWrite, "pm_start_run", map[string]any{
+		"workflowId": wfDef.ID, "trigger": "channel",
+	}); st != 200 || !strings.Contains(string(resp), `"isError":true`) || !strings.Contains(string(resp), "manual|api|pm_mcp") {
+		t.Fatalf("illegal trigger should error: %d %s", st, resp)
+	}
+	if eng.startCalls != beforeIllegal {
+		t.Fatalf("illegal trigger must not call engine (calls %d → %d)", beforeIllegal, eng.startCalls)
+	}
 
 	// --- resume_gate / cancel_run go through a real run so project check passes ---
 	if err := rs.DB().Create(&models.Run{ID: "run-1", WorkflowID: wfDef.ID, Status: "waiting_human"}).Error; err != nil {

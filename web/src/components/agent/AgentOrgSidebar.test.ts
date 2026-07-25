@@ -362,7 +362,7 @@ describe('AgentOrgSidebar agent name text color', () => {
     expect(unselectedName).not.toContain('text-txt3')
   })
 
-  it('分组名保持 text-txt2，有 parentAgent 时 reportsTo 保持 text-txt3', () => {
+  it('分组名保持 text-txt2，有 parentAgent 时树内不渲染 reportsTo', () => {
     const wrapper = mountSidebar()
 
     const group = wrapper
@@ -374,10 +374,10 @@ describe('AgentOrgSidebar agent name text color', () => {
     expect(groupName.classes()).not.toContain('text-txt')
 
     const bob = findAgentRow(wrapper, 'bob')!
+    expect(bob.text()).not.toMatch(/上级|reportsTo|Reports to/i)
     const reportsTo = bob
       .findAll('span')
       .find((s) => s.classes().includes('text-txt3') && s.text().includes('alice'))
-    expect(reportsTo).toBeTruthy()
-    expect(reportsTo!.classes()).toContain('text-txt3')
+    expect(reportsTo).toBeFalsy()
   })
 })

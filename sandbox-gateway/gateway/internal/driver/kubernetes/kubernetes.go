@@ -762,6 +762,11 @@ func (d *Driver) Endpoints(ctx context.Context, id string) (map[int]string, erro
 	return out, nil
 }
 
+// Logs is unsupported for the kubernetes driver in this release (OOS).
+func (d *Driver) Logs(_ context.Context, _ string, _ int) (string, error) {
+	return "", driver.ErrLogsUnsupported
+}
+
 // WaitLoadBalancerIP polls the LB Service until an ingress IP is assigned.
 func (d *Driver) WaitLoadBalancerIP(ctx context.Context, id string, timeout time.Duration) (string, error) {
 	deadline := time.Now().Add(timeout)

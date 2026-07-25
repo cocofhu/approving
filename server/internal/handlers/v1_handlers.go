@@ -75,7 +75,8 @@ func (h *Handlers) RevokeAPIKey(c *gin.Context) {
 // --- /v1 external API (Bearer API Key auth) --------------------------------
 
 type v1StartRunBody struct {
-	Inputs map[string]any `json:"inputs"`
+	Inputs  map[string]any `json:"inputs"`
+	Trigger string         `json:"trigger"` // optional; empty → api; must be manual|api|pm_mcp
 }
 
 func (h *Handlers) V1StartRun(c *gin.Context) {
@@ -94,7 +95,7 @@ func (h *Handlers) V1StartRun(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
 		return
 	}
-	run, err := h.Eng.StartRunFromPublished(wfID, b.Inputs)
+	run, err := h.Eng.StartRunFromPublished(wfID, b.Inputs, b.Trigger)
 	if err != nil {
 		msg := err.Error()
 		if strings.Contains(msg, "not published") {

@@ -265,6 +265,22 @@ func (d *Driver) Endpoints(ctx context.Context, id string) (map[int]string, erro
 	return d.endpoints(ctx, d.containerName(id), nil)
 }
 
+// Logs returns combined PID1 stdout/stderr via `docker logs --tail` (non-follow).
+func (d *Driver) Logs(ctx context.Context, id string, tail int) (string, error) {
+	if tail <= 0 {
+		tail = 5000
+	}
+	name := d.containerName(id)
+	out, err := d.run(ctx, 30*time.Second, "logs", "--tail", fmt.Sprintf("%d", tail), name)
+	if err != nil {
+		if isNoSuchContainer(err) {
+			return "", fmt.Errorf("sandbox %s not found", id)
+		}
+		return "", fmt.Errorf("docker logs: %w", err)
+	}
+	return out, nil
+}
+
 // endpoints returns container-port -> "bindIP:hostPort". When ports is nil it
 // discovers all published tcp ports from docker inspect.
 func (d *Driver) endpoints(ctx context.Context, name string, ports []int) (map[int]string, error) {
