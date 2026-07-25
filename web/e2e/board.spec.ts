@@ -57,6 +57,32 @@ async function mockBoardApis(page: import('@playwright/test').Page) {
     await route.continue()
   })
 
+  await page.route('**/api/projects/*/token-stats**', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          window: '30d',
+          bucketWidth: 'day',
+          timezone: 'UTC',
+          empty: true,
+          trend: [],
+          composition: {
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            total: 0,
+          },
+          workflows: [],
+        }),
+      })
+      return
+    }
+    await route.continue()
+  })
+
   await page.route('**/api/runs**', async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue()
@@ -212,6 +238,28 @@ test.describe('需求进度看板（项目级）', () => {
         return
       }
       await route.continue()
+    })
+
+    await page.route('**/api/projects/*/token-stats**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          window: '30d',
+          bucketWidth: 'day',
+          timezone: 'UTC',
+          empty: true,
+          trend: [],
+          composition: {
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            total: 0,
+          },
+          workflows: [],
+        }),
+      })
     })
 
     await page.route('**/api/runs**', async (route) => {

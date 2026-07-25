@@ -8,6 +8,8 @@ import type {
   AcpEvent,
   WorkflowGraph,
   Project,
+  ProjectTokenStats,
+  TokenStatsWindow,
   PmLeaderBinding,
   ProjectMemoryItem,
   AgentCronJob,
@@ -303,6 +305,28 @@ export const api = {
   updateProject: (id: string, body: Partial<Project>) =>
     req<Project>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteProject: (id: string) => req<{ status: string }>(`/projects/${id}`, { method: 'DELETE' }),
+
+  /** Board Token stats: trend / composition / workflows Top10+other. */
+  getProjectTokenStats: (
+    id: string,
+    params: {
+      window?: TokenStatsWindow | string
+      timezone?: string
+      utcOffsetMinutes?: number
+    },
+    opts?: { signal?: AbortSignal },
+  ) => {
+    const q = new URLSearchParams()
+    q.set('window', params.window || '30d')
+    if (params.timezone) q.set('timezone', params.timezone)
+    if (params.utcOffsetMinutes != null && Number.isFinite(params.utcOffsetMinutes)) {
+      q.set('utcOffsetMinutes', String(Math.round(params.utcOffsetMinutes)))
+    }
+    return req<ProjectTokenStats>(
+      `/projects/${encodeURIComponent(id)}/token-stats?${q}`,
+      opts?.signal ? { signal: opts.signal } : undefined,
+    )
+  },
 
   // PM Leader
   getPmLeader: (projectId: string) => req<PmLeaderBinding>(`/projects/${projectId}/pm-leader`),

@@ -3,6 +3,8 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/services"
@@ -107,6 +109,53 @@ func (h *Handlers) DeleteProject(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
+// GetProjectTokenStats returns trend/composition/workflows for board Token charts.
+// Query: window=7d|30d|90d|all (default 30d), timezone=IANA (preferred),
+// utcOffsetMinutes=int (fallback fixed offset, east of UTC positive).
+func (h *Handlers) GetProjectTokenStats(c *gin.Context) {
+	if h.Projects == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "projects unavailable"})
+		return
+	}
+	id := c.Param("id")
+	if _, ok := h.Projects.Get(id); !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+
+	q := services.TokenStatsQuery{
+		Window:   c.DefaultQuery("window", services.TokenStatsWindow30d),
+		Timezone: c.Query("timezone"),
+	}
+	if raw := strings.TrimSpace(c.Query("utcOffsetMinutes")); raw != "" {
+		mins, err := strconv.Atoi(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid utcOffsetMinutes"})
+			return
+		}
+		q.UTCOffsetMinutes = &mins
+	}
+
+	result, err := h.Projects.TokenStats(c.Request.Context(), id, q)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrInvalidTokenStatsWindow),
+			errors.Is(err, services.ErrInvalidTokenStatsTimezone):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, services.ErrTokenStatsTimeout):
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error":     err.Error(),
+				"retryable": true,
+			})
+		default:
+			_ = c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, result)
 }
 
 func writeProjectErr(c *gin.Context, err error) {

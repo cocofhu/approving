@@ -145,6 +145,27 @@ test.describe('项目 Token 总体消耗 UI', () => {
     await page.route('**/api/projects/proj-1/cron-jobs', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
     })
+    await page.route('**/api/projects/*/token-stats**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          window: '30d',
+          bucketWidth: 'day',
+          timezone: 'UTC',
+          empty: true,
+          trend: [],
+          composition: {
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            total: 0,
+          },
+          workflows: [],
+        }),
+      })
+    })
 
     await page.goto('/project-detail.html?theme=light&tab=board')
     const stat = page.getByTestId('project-token-stat')
@@ -208,6 +229,27 @@ test.describe('项目 Token 总体消耗 UI', () => {
     })
     await page.route('**/api/projects/proj-1/cron-jobs', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
+    await page.route('**/api/projects/*/token-stats**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          window: '30d',
+          bucketWidth: 'day',
+          timezone: 'UTC',
+          empty: true,
+          trend: [],
+          composition: {
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            total: 0,
+          },
+          workflows: [],
+        }),
+      })
     })
 
     await page.goto('/project-detail.html?theme=light&tab=board')

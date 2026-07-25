@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import RunBoardColumn from '@/components/board/RunBoardColumn.vue'
 import RunBoardPreviewDrawer from '@/components/board/RunBoardPreviewDrawer.vue'
+import TokenStatsPanel from '@/components/board/token-stats/TokenStatsPanel.vue'
 import { serializeStatusQuery } from '@/lib/useStatusFilter'
 import { useRunBoard, type BoardColumnKey } from '@/lib/useRunBoard'
 import type { Run } from '@/lib/types'
@@ -142,6 +143,8 @@ onUnmounted(() => {
         {{ t('pages.board.retry') }}
       </button>
     </div>
+
+    <TokenStatsPanel :project-id="projectId" />
 
     <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
       <div class="flex flex-wrap items-center gap-2">

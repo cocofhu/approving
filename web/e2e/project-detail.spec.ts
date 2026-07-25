@@ -120,6 +120,31 @@ async function gotoProjectDetail(
       body: JSON.stringify({ enabled: false }),
     })
   })
+  await page.route('**/api/projects/*/token-stats**', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          window: '30d',
+          bucketWidth: 'day',
+          timezone: 'UTC',
+          empty: true,
+          trend: [],
+          composition: {
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            total: 0,
+          },
+          workflows: [],
+        }),
+      })
+      return
+    }
+    await route.continue()
+  })
   const qs = opts.tab ? `?tab=${encodeURIComponent(opts.tab)}` : ''
   await page.goto(`/project-detail.html${qs}`)
   await expect(page.getByRole('heading', { name: 'Demo Project' })).toBeVisible({ timeout: 10_000 })
@@ -275,6 +300,27 @@ async function gotoProjectDetailWithProject(
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ enabled: false }),
+    })
+  })
+  await page.route('**/api/projects/*/token-stats**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        window: '30d',
+        bucketWidth: 'day',
+        timezone: 'UTC',
+        empty: true,
+        trend: [],
+        composition: {
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          total: 0,
+        },
+        workflows: [],
+      }),
     })
   })
   await page.goto('/project-detail.html')
