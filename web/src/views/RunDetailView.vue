@@ -610,7 +610,7 @@ async function confirmCancelRun() {
 
 const canDeleteRun = computed(() => {
   const s = run.value?.status
-  return s === 'completed' || s === 'failed'
+  return s === 'completed' || s === 'failed' || s === 'cancelled'
 })
 
 const deleteRunHint = computed(() => {
@@ -619,7 +619,6 @@ const deleteRunHint = computed(() => {
   if (s === 'queued' || s === 'running' || s === 'waiting_human') {
     return t('pages.runDetail.deleteHintActive')
   }
-  if (s === 'cancelled') return t('pages.runDetail.deleteHintCancelled')
   return ''
 })
 

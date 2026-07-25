@@ -557,7 +557,6 @@
       "deleteConfirm": "Only this run is removed; you will return to the run list.",
       "deleteSuccess": "Run deleted",
       "deleteHintActive": "Cancel or wait until the run ends before deleting",
-      "deleteHintCancelled": "Only completed or failed runs can be deleted",
       "deleteErrorNotFound": "Run not found or already deleted",
       "deleteErrorNotDeletable": "This run status cannot be deleted",
       "deleteErrorGeneric": "Failed to delete run",

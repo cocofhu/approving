@@ -115,7 +115,7 @@ function canCancelRun(r: Run) {
 }
 
 function canDeleteRun(r: Run) {
-  return r.status === 'completed' || r.status === 'failed'
+  return r.status === 'completed' || r.status === 'failed' || r.status === 'cancelled'
 }
 
 function openRun(r: Run) {

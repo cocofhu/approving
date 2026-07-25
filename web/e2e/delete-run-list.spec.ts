@@ -18,7 +18,7 @@ function buildRun(id: string, status: RunStatus, name: string) {
     startedAt: '2026-07-24T12:00:00Z',
     createdAt: '2026-07-24T11:59:00Z',
     durationSec: 42,
-    progress: status === 'completed' || status === 'failed' ? 1 : 0.4,
+    progress: status === 'completed' || status === 'failed' || status === 'cancelled' ? 1 : 0.4,
     priority: 'normal',
     currentNodeLabel: status === 'running' || status === 'waiting_human' ? '执行中' : undefined,
   }
@@ -124,7 +124,7 @@ test.describe('RunListView delete run acceptance', () => {
     await expect(page.getByTestId('run-detail-page')).toHaveCount(0)
   })
 
-  test('running: only cancel; cancelled: dash placeholder; no delete entry', async ({ page }) => {
+  test('running: only cancel; cancelled: delete enabled like completed', async ({ page }) => {
     await openRunList(page)
 
     const runningRow = page.locator('tr', { hasText: '运行中流水线' })
@@ -132,13 +132,27 @@ test.describe('RunListView delete run acceptance', () => {
     await expect(runningRow.getByTestId('delete-run-btn')).toHaveCount(0)
 
     const cancelledRow = page.locator('tr', { hasText: '已取消流水线' })
-    await expect(cancelledRow.getByTestId('run-ops-placeholder')).toBeVisible()
-    await expect(cancelledRow.getByTestId('delete-run-btn')).toHaveCount(0)
+    await expect(cancelledRow.getByTestId('delete-run-btn')).toBeVisible()
     await expect(cancelledRow.getByTestId('cancel-run-btn')).toHaveCount(0)
+    await expect(cancelledRow.getByTestId('run-ops-placeholder')).toHaveCount(0)
+  })
 
-    // Placeholder click must not navigate to detail
-    await cancelledRow.getByTestId('run-ops-placeholder').click()
-    await expect(page.getByTestId('run-detail-page')).toHaveCount(0)
+  test('cancelled: confirm delete removes row from list', async ({ page }) => {
+    let deletedId = ''
+    await openRunList(page, {
+      onDelete: (id) => {
+        deletedId = id
+      },
+    })
+
+    const cancelledRow = page.locator('tr', { hasText: '已取消流水线' })
+    await cancelledRow.getByTestId('delete-run-btn').click()
+    await expect(page.getByText('确认删除该次运行？')).toBeVisible()
+    await page.getByTestId('confirm-delete-run-btn').click()
+    await expect.poll(() => deletedId).toBe('run-cancelled')
+    await expect(page.getByText('已取消流水线', { exact: true })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: '运行' })).toBeVisible()
+    await expect(page.getByText(/已删除运行/)).toBeVisible()
   })
 
   test('delete failure keeps row and shows error', async ({ page }) => {
@@ -150,7 +164,7 @@ test.describe('RunListView delete run acceptance', () => {
     await expect(page.getByText('失败流水线', { exact: true })).toBeVisible()
   })
 
-  test('mobile cards: delete / cancel / dash parity', async ({ page }) => {
+  test('mobile cards: delete / cancel / cancelled parity', async ({ page }) => {
     await openRunList(page, { width: 390, height: 844 })
     await expect(page.locator('table')).toHaveCount(0)
 
@@ -163,7 +177,8 @@ test.describe('RunListView delete run acceptance', () => {
     await expect(runningCard.getByTestId('delete-run-btn')).toHaveCount(0)
 
     const cancelledCard = page.locator('[role="button"]', { hasText: '已取消流水线' })
-    await expect(cancelledCard.getByTestId('run-ops-placeholder')).toBeVisible()
+    await expect(cancelledCard.getByTestId('delete-run-btn')).toBeVisible()
+    await expect(cancelledCard.getByTestId('run-ops-placeholder')).toHaveCount(0)
 
     await completedCard.getByTestId('delete-run-btn').click()
     await expect(page.getByText('确认删除该次运行？')).toBeVisible()

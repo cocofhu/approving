@@ -300,7 +300,7 @@ func TestRunDeleteStatusGate(t *testing.T) {
 		t.Fatalf("missing run: %v", err)
 	}
 
-	for _, status := range []string{"queued", "running", "waiting_human", "cancelled"} {
+	for _, status := range []string{"queued", "running", "waiting_human"} {
 		id := "r-" + status
 		db.Create(&models.Run{ID: id, WorkflowID: "wf", Status: status})
 		err := s.Delete(id)
@@ -312,7 +312,7 @@ func TestRunDeleteStatusGate(t *testing.T) {
 		}
 	}
 
-	for _, status := range []string{"completed", "failed"} {
+	for _, status := range []string{"completed", "failed", "cancelled"} {
 		id := "r-ok-" + status
 		db.Create(&models.Run{ID: id, WorkflowID: "wf", Status: status})
 		if err := s.Delete(id); err != nil {
