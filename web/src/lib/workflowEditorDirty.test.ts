@@ -58,6 +58,16 @@ describe('workflowEditorDirty snapshots', () => {
     expect(isMetaDirty(graphOnly, base)).toBe(false)
   })
 
+  it('changing only description marks meta dirty (not graph dirty)', () => {
+    const live = wf({ description: '' })
+    const metaBase = snapshotMeta(live)
+    const graphBase = snapshotGraph(live)
+    live.description = 'list subtitle'
+    expect(isMetaDirty(live, metaBase)).toBe(true)
+    expect(isGraphDirty(live, graphBase)).toBe(false)
+    expect(saveDraftBranch(false, true)).toBe('meta')
+  })
+
   it('baseline is a deep clone (mutating live wf does not rewrite baseline)', () => {
     const live = wf()
     const base = snapshotGraph(live)

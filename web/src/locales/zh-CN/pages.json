@@ -336,6 +336,8 @@
     },
     "workflowEditor": {
       "unnamedWorkflow": "未命名工作流",
+      "descLabel": "描述（可选）",
+      "descPlaceholder": "列表副文案 / 简要说明",
       "projectRequired": "请先选择所属项目后再新建流水线",
       "loadFailed": "加载工作流失败,后端可能未连接",
       "publishFailed": "发布失败:",
