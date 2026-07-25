@@ -1,9 +1,8 @@
 # Approving
 
-**把 coding agent 编成可信任的工作流。**
+**Agent 工作流与人类协同推进，开启多Agent协作新范式。**
 
-开源 Dev Agent 编排平台。
-构建可回滚、可人工门禁、可观测的工作流 — Agent 在真实 Docker 沙箱中执行。
+Approving 把 coding agent 编成可信任的工作流：可视化编排、沙箱执行，关键节点由人 Approve 后再继续。开源、可自托管，支持可回滚与人工门禁。了解更多见 [Site](https://www.approving-ai.com/)，此项目由该工作流构建。
 
 [![CI Server](https://github.com/cocofhu/approving/actions/workflows/ci-server.yml/badge.svg)](https://github.com/cocofhu/approving/actions/workflows/ci-server.yml)
 [![CI Web](https://github.com/cocofhu/approving/actions/workflows/ci-web.yml/badge.svg)](https://github.com/cocofhu/approving/actions/workflows/ci-web.yml)
@@ -21,25 +20,17 @@
 
 ## Approving 是什么？
 
-Approving 把 coding agent 变成工作流里的真实步骤。你在有限状态机上编排 Agent — 节点即状态、边即转移 — 支持成功、失败与回滚路径。当某一步需要人做决定时，运行会停在门禁上，直到有人批准。
+Approving 让 Agent 工作流与人类协同推进：在可视化画布上编排多 Agent 协作，于沙箱中执行，并在关键节点等待人工 Approve。支持 Cursor、Claude Code、CodeBuddy、Trae 等后端。
 
-Agent 不是在你笔记本上跑的黑盒 prompt。它们通过仓库内嵌的 [sandbox-gateway](sandbox-gateway/) 在 Docker 沙箱中执行，调用按 run 隔离的产物 MCP，并留下可检查的轨迹。支持 **Cursor**、**Claude Code**、**CodeBuddy**、**Trae**。
+## 为什么叫 Approving？
 
-告别无法撤销的一次性 Agent 跑法。设计路径、把关风险步骤、让每份产物都落在契约之下。
-
-## 为什么叫 "Approving"？
-
-因为关键路径应当需要人点头批准（approve）。
-
-自治 Agent 很强 — 也往往不透明。Approving 把「批准」做成一等公民：检查点、人工门禁、回滚边都是图的一部分，而不是事后补丁。失败时，工作流可以走失败路径或回滚，而不是留下半成品。
-
-名字即产品赌注：Agent 负责加速；人仍拥有真正重要的决策。
+Approving 取自 Approve（批准）：人机协同下，关键节点须经人工批准后再继续，把「可信任」写进工作流本身。
 
 ## 特性
 
 Approving 覆盖完整 Agent 工作流：从图设计到沙箱执行，再到产物交接。
 
-- **FSM 编排** — 节点即状态、边即转移。成功 / 失败 / 回滚路径、`when` 守卫、检查点与人工门禁。
+- **可视化编排** — 画布 FSM，含 when 守卫、checkpoints、gates，支持失败回滚
 - **真实 Docker 沙箱** — agent / react 节点经 ACP、通过内嵌 `sandbox-gateway` 在容器中运行；Web UI 走 API。
 - **多 Agent 后端** — 同一平台支持 Cursor、Claude Code、CodeBuddy、Trae。按 Agent 选择 `acpBackend`；密钥放在 Agent 元信息 env。
 - **产物契约 + 按 run 隔离的 MCP** — Agent 调用 `write_artifact` / `set_*` / `node_complete`；每个 run 用 token 隔离。
