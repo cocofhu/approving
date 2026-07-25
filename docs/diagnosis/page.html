@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run 失败诊断 · 门禁 Demo</title>
+<style>
+  :root {
+    --bg0: #0f1419;
+    --bg1: #1a2332;
+    --bg2: #243044;
+    --panel: rgba(232, 238, 245, 0.96);
+    --ink: #1a2332;
+    --muted: #5a6a7e;
+    --line: #d0dae6;
+    --accent: #0d9488;
+    --accent-dim: #ccfbf1;
+    --fail: #c2410c;
+    --fail-bg: #fff7ed;
+    --agent: #0369a1;
+    --agent-bg: #e0f2fe;
+    --ok: #15803d;
+    --shadow: 0 18px 50px rgba(15, 20, 25, 0.28);
+    --radius: 14px;
+    --font-display: "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --font-body: "Segoe UI", "Helvetica Neue", sans-serif;
+    --font-mono: "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    font-family: var(--font-body);
+    color: var(--ink);
+    background:
+      radial-gradient(1200px 600px at 10% -10%, #134e4a 0%, transparent 55%),
+      radial-gradient(900px 500px at 100% 0%, #1e3a5f 0%, transparent 50%),
+      linear-gradient(165deg, var(--bg0), var(--bg1) 45%, var(--bg2));
+    background-attachment: fixed;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.07;
+    background-image:
+      linear-gradient(rgba(255,255,255,.35) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.35) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  .wrap {
+    position: relative;
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 28px 20px 48px;
+  }
+
+  .hero {
+    color: #e8eef5;
+    margin-bottom: 22px;
+    animation: rise 0.55s ease both;
+  }
+  .brand {
+    font-family: var(--font-display);
+    font-size: clamp(1.85rem, 4vw, 2.4rem);
+    letter-spacing: 0.02em;
+    margin: 0 0 8px;
+    line-height: 1.15;
+  }
+  .brand span {
+    color: #5eead4;
+    font-style: italic;
+  }
+  .lede {
+    margin: 0;
+    max-width: 46rem;
+    color: #b8c7d9;
+    font-size: 0.98rem;
+    line-height: 1.55;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .chip {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    padding: 5px 10px;
+    border: 1px solid rgba(94, 234, 212, 0.35);
+    border-radius: 999px;
+    color: #99f6e4;
+    background: rgba(13, 148, 136, 0.15);
+  }
+
+  .panel {
+    background: var(--panel);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px 22px;
+    margin-bottom: 16px;
+    animation: rise 0.6s ease both;
+  }
+  .panel:nth-child(3) { animation-delay: 0.06s; }
+  .panel:nth-child(4) { animation-delay: 0.12s; }
+  .panel:nth-child(5) { animation-delay: 0.18s; }
+
+  .sec-title {
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    margin: 0 0 4px;
+  }
+  .sec-sub {
+    margin: 0 0 14px;
+    color: var(--muted);
+    font-size: 0.88rem;
+  }
+
+  .changes { display: grid; gap: 10px; }
+  .change {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 10px 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+  }
+  .tag {
+    align-self: start;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 6px;
+  }
+  .tag.add { background: #dcfce7; color: var(--ok); }
+  .tag.keep { background: #e0f2fe; color: var(--agent); }
+  .tag.out { background: #fee2e2; color: #b91c1c; }
+  .change h3 {
+    margin: 0;
+    font-size: 0.95rem;
+  }
+  .change p {
+    grid-column: 2;
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+  .ac {
+    grid-column: 2;
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--ink);
+  }
+  .ac strong { color: var(--accent); font-weight: 600; }
+
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .tab {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, transform 0.15s;
+  }
+  .tab:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .tab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--line); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    font-size: 0.84rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 11px 12px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  th {
+    background: #f1f5f9;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  tbody tr {
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  tbody tr:hover { background: #f8fafc; }
+  tbody tr.selected { background: var(--accent-dim); }
+  .mono { font-family: var(--font-mono); font-size: 0.78rem; }
+  .err {
+    color: var(--fail);
+    font-weight: 600;
+    max-width: 220px;
+  }
+  .badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--agent-bg);
+    color: var(--agent);
+    font-weight: 700;
+  }
+  .badge.fail {
+    background: var(--fail-bg);
+    color: var(--fail);
+  }
+
+  .detail {
+    margin-top: 14px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    border: 1px solid #99f6e4;
+    background: linear-gradient(135deg, #f0fdfa, #fff);
+    display: none;
+  }
+  .detail.show {
+    display: block;
+    animation: fadeSlide 0.28s ease both;
+  }
+  .detail h3 {
+    margin: 0 0 8px;
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+  }
+  .kv {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 6px 10px;
+    font-size: 0.84rem;
+    margin-bottom: 10px;
+  }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; }
+  .trace {
+    margin: 0;
+    padding: 10px 12px;
+    background: #0f1419;
+    color: #a7f3d0;
+    border-radius: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    line-height: 1.55;
+    overflow-x: auto;
+    white-space: pre-wrap;
+  }
+  .ev-list {
+    margin: 8px 0 0;
+    padding-left: 1.1rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .ev-list li { margin-bottom: 4px; }
+  .hint {
+    margin: 10px 0 0;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  .checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .checks li {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    font-size: 0.86rem;
+  }
+  .box {
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+    margin-top: 1px;
+    border: 2px solid var(--accent);
+    border-radius: 4px;
+    position: relative;
+  }
+  .box::after {
+    content: "?";
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: 0.7rem;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .footer {
+    color: #93a4b8;
+    font-size: 0.75rem;
+    text-align: center;
+    margin-top: 8px;
+    line-height: 1.5;
+    animation: rise 0.7s ease both;
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @media (max-width: 640px) {
+    .kv { grid-template-columns: 1fr; }
+    .change { grid-template-columns: 1fr; }
+    .change p, .ac { grid-column: 1; }
+    th:nth-child(5), td:nth-child(5) { display: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <h1 class="brand">Diagnosis <span>Console</span></h1>
+      <p class="lede">只读诊断结论：run-c8d54139 与 run-80d81ab4 均在 research_h2my 因「未调用 node_complete」失败；主分类 <strong style="color:#5eead4;font-weight:600">agent</strong>。本期无业务代码改动。</p>
+      <div class="meta">
+        <span class="chip">wf-07079fa7</span>
+        <span class="chip">readonly</span>
+        <span class="chip">category=agent</span>
+        <span class="chip">2 runs · same root cause</span>
+      </div>
+    </header>
+
+    <section class="panel" aria-labelledby="chg">
+      <h2 class="sec-title" id="chg">变更点</h2>
+      <p class="sec-sub">相对「仅看到 status=failed」：新增可验收的诊断交付，不改产品功能。</p>
+      <div class="changes">
+        <article class="change">
+          <span class="tag add">新增</span>
+          <h3>双 Run 诊断表（diagnosis）</h3>
+          <p>每条含 runId / nodeId / error 全文 / category / evidence。</p>
+          <p class="ac"><strong>验收：</strong>两行齐全，error 为「未调用 node_complete 标记完成」，category 均为 agent。</p>
+        </article>
+        <article class="change">
+          <span class="tag add">新增</span>
+          <h3>因果链与 ACP 证据</h3>
+          <p>Trace：input_d3s1 → research_h2my；re-prompt 时 acp connection closed。</p>
+          <p class="ac"><strong>验收：</strong>详情区可见 Trace 与 evidence，并存症状不改写主分类。</p>
+        </article>
+        <article class="change">
+          <span class="tag keep">保持</span>
+          <h3>只读范围</h3>
+          <p>不改业务代码、不开功能 PR；修复仅作 follow-up。</p>
+          <p class="ac"><strong>验收：</strong>Demo 无实现/PR 内容，页脚标明 readonly。</p>
+        </article>
+        <article class="change">
+          <span class="tag out">移除</span>
+          <h3>「安全扫描业务失败」误判</h3>
+          <p>从未进入 plan/代码；根因是 ResearchAgent 未履约 + ACP 断连。</p>
+          <p class="ac"><strong>验收：</strong>结论区明确非业务需求写错。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="demo">
+      <h2 class="sec-title" id="demo">UI DEMO · 诊断结论</h2>
+      <p class="sec-sub">点击 Run 行或上方页签切换详情（主路径可点）。</p>
+
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab active" role="tab" aria-selected="true" data-run="c8d" id="tab-c8d">run-c8d54139</button>
+        <button type="button" class="tab" role="tab" aria-selected="false" data-run="80d" id="tab-80d">run-80d81ab4</button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>runId</th>
+              <th>nodeId / type</th>
+              <th>error</th>
+              <th>category</th>
+              <th>progress</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="selected" data-run="c8d" tabindex="0">
+              <td class="mono">run-c8d54139</td>
+              <td class="mono">research_h2my<br><span class="badge">research</span></td>
+              <td class="err">未调用 node_complete 标记完成</td>
+              <td><span class="badge">agent</span></td>
+              <td class="mono">~1/17 · 223s</td>
+            </tr>
+            <tr data-run="80d" tabindex="0">
+              <td class="mono">run-80d81ab4</td>
+              <td class="mono">research_h2my<br><span class="badge">research</span></td>
+              <td class="err">未调用 node_complete 标记完成</td>
+              <td><span class="badge">agent</span></td>
+              <td class="mono">~1/17 · 317s</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="detail show" id="detail" aria-live="polite"></div>
+      <p class="hint">提示：同构失败 — run-80d81ab4 为 run-c8d54139 同需求重跑，仍在同一节点以同一契约错误失败。</p>
+    </section>
+
+    <section class="panel" aria-labelledby="todo">
+      <h2 class="sec-title" id="todo">待确认</h2>
+      <p class="sec-sub">人工门禁勾选前请核对下列项。</p>
+      <ul class="checks">
+        <li><span class="box" aria-hidden="true"></span><span>是否同意主分类均为 <strong>agent</strong>（引擎落库文案优先；缺产物 / ACP 断连仅作 evidence）？</span></li>
+        <li><span class="box" aria-hidden="true"></span><span>是否接受以服务端 <code>node failed err=…</code> 作为 StateRun.error / last_error 充分证据（Web/PM 不暴露该字段）？</span></li>
+        <li><span class="box" aria-hidden="true"></span><span>是否确认本期仅诊断交付、修复实现不纳入本期开工范围？</span></li>
+      </ul>
+    </section>
+
+    <footer class="footer">
+      Approving 只读诊断 Demo · 数据来自 research.json · 无外链 · 无 Web Storage<br>
+      沙箱日志：失败时 ACP 已不可连；证据取自 approving app / log-center 历史记录
+    </footer>
+  </div>
+
+<script>
+(function () {
+  /* Keys must be quoted: bare 80d is an illegal JS identifier (digit-leading). */
+  var DATA = {
+    "c8d": {
+      runId: "run-c8d54139",
+      nodeId: "research_h2my",
+      nodeType: "research",
+      error: "未调用 node_complete 标记完成",
+      category: "agent",
+      durationSec: 223,
+      progress: "0.0588 (~1/17)",
+      trace: "input_d3s1 (completed, 0ms)\n  → research_h2my (failed, cost_ms=223250)\n\n13:27:27  get_clarified_requirement 失败（尚无产物）\n         未 set_research / 未 node_complete\n13:28:59  research.json re-prompt → acp connection closed\n         node_complete re-prompt → acp connection closed\n         → node failed",
+      evidence: [
+        "approving app: node failed err=未调用 node_complete 标记完成",
+        "structured product re-prompt failed artifact=research.json · acp connection closed",
+        "node_complete re-prompt failed · acp connection closed",
+        "mcp get_clarified_requirement: 尚无 clarified_requirement.json",
+        "pm_get_artifact_summary empty=true · status=failed"
+      ]
+    },
+    "80d": {
+      runId: "run-80d81ab4",
+      nodeId: "research_h2my",
+      nodeType: "research",
+      error: "未调用 node_complete 标记完成",
+      category: "agent",
+      durationSec: 317,
+      progress: "0.0588 (~1/17)",
+      trace: "input_d3s1 → research_h2my (failed, cost_ms=317860)\n\n13:48:18  get_clarified_requirement 失败（尚无产物）\n13:51:09  research.json / node_complete re-prompt\n         → acp connection closed: not connected\n         → node failed\n\n（为 run-c8d54139 同需求重跑，同构失败）",
+      evidence: [
+        "同构日志链 13:45:51 → 13:51:09",
+        "error 全文同为「未调用 node_complete 标记完成」",
+        "pm_get_artifact_summary empty=true",
+        "并存：contract_missing_research + sandbox/ACP 症状（非主分类）"
+      ]
+    }
+  };
+
+  var detail = document.getElementById("detail");
+  var tabs = document.querySelectorAll(".tab");
+  var rows = document.querySelectorAll("tbody tr");
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function render(key) {
+    var d = DATA[key];
+    if (!d) return;
+    var ev = d.evidence.map(function (e) {
+      return "<li>" + escapeHtml(e) + "</li>";
+    }).join("");
+    detail.innerHTML =
+      "<h3>" + escapeHtml(d.runId) + " · 详情</h3>" +
+      "<dl class=\"kv\">" +
+      "<dt>nodeId</dt><dd class=\"mono\">" + escapeHtml(d.nodeId) + " <span class=\"badge\">" + escapeHtml(d.nodeType) + "</span></dd>" +
+      "<dt>error</dt><dd><span class=\"badge fail\">" + escapeHtml(d.error) + "</span></dd>" +
+      "<dt>category</dt><dd><span class=\"badge\">" + escapeHtml(d.category) + "</span> · duration " + d.durationSec + "s · progress " + escapeHtml(d.progress) + "</dd>" +
+      "</dl>" +
+      "<pre class=\"trace\" aria-label=\"Trace\">" + escapeHtml(d.trace) + "</pre>" +
+      "<ul class=\"ev-list\">" + ev + "</ul>";
+    detail.classList.remove("show");
+    void detail.offsetWidth;
+    detail.classList.add("show");
+
+    tabs.forEach(function (t) {
+      var on = t.getAttribute("data-run") === key;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    rows.forEach(function (r) {
+      r.classList.toggle("selected", r.getAttribute("data-run") === key);
+    });
+  }
+
+  tabs.forEach(function (t) {
+    t.addEventListener("click", function () {
+      render(t.getAttribute("data-run"));
+    });
+  });
+  rows.forEach(function (r) {
+    r.addEventListener("click", function () {
+      render(r.getAttribute("data-run"));
+    });
+    r.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        render(r.getAttribute("data-run"));
+      }
+    });
+  });
+
+  render("c8d");
+})();
+</script>
+</body>
+</html>

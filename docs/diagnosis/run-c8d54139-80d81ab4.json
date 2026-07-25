@@ -51,8 +51,13 @@
     "降低并发高峰下 research 失联概率（ACP 稳定性，另开任务）"
   ],
   "alignedWith": [
-    "page.html（已批准 Demo）",
+    "page.html（已批准 Demo；修复非法标识符 80d→\"80d\" 后交互可用）",
+    "docs/diagnosis/page.html（同源 Demo，供下游复核）",
     "research.json（最终调研复核）",
     "clarified_requirement.json（冻结基线）"
-  ]
+  ],
+  "demoFix": {
+    "issue": "page.html 内联脚本对象键 80d 未加引号导致 SyntaxError，#detail 空白且页签/行切换失效",
+    "fix": "将 DATA 键改为带引号的 \"c8d\" / \"80d\"；node --check 与页签切换已复核通过"
+  }
 }
