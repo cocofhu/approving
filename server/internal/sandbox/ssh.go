@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -20,6 +21,37 @@ import (
 // SSH_KEY env at create time and authenticates with the matching private key,
 // so no password ever crosses the wire.
 
+// hostKeyCache stores TOFU host keys keyed by "host:port" for ephemeral sandboxes.
+type hostKeyCache struct {
+	mu   sync.Mutex
+	keys map[string]ssh.PublicKey
+}
+
+func newHostKeyCache() *hostKeyCache {
+	return &hostKeyCache{keys: make(map[string]ssh.PublicKey)}
+}
+
+func (c *hostKeyCache) get(addr string) ssh.PublicKey {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.keys[addr]
+}
+
+func (c *hostKeyCache) set(addr string, key ssh.PublicKey) {
+	if c == nil || key == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.keys == nil {
+		c.keys = make(map[string]ssh.PublicKey)
+	}
+	c.keys[addr] = key
+}
+
 // sshCreds is the SSH connection material for one sandbox: its reachable
 // host:port plus the shared signer (and an optional password fallback).
 type sshCreds struct {
@@ -28,6 +60,7 @@ type sshCreds struct {
 	signer   ssh.Signer
 	password string
 	user     string
+	hostKeys *hostKeyCache
 }
 
 // execHook is a test seam for the sandbox data plane. When non-nil it answers
@@ -65,6 +98,33 @@ func generateSSHKey() (ssh.Signer, string, error) {
 	return signer, authorized, nil
 }
 
+func (c sshCreds) addrKey() string {
+	return fmt.Sprintf("%s:%d", c.host, c.port)
+}
+
+// hostKeyCallback implements TOFU: first successful handshake records the key;
+// later dials use ssh.FixedHostKey and reject mismatches.
+func (c sshCreds) hostKeyCallback() ssh.HostKeyCallback {
+	if c.hostKeys == nil {
+		return nil
+	}
+	addr := c.addrKey()
+	if known := c.hostKeys.get(addr); known != nil {
+		return ssh.FixedHostKey(known)
+	}
+	return func(_ string, _ net.Addr, key ssh.PublicKey) error {
+		if key == nil {
+			return fmt.Errorf("ssh: empty host key from %s", addr)
+		}
+		// Race-safe: if another dial already pinned a key, require a match.
+		if known := c.hostKeys.get(addr); known != nil {
+			return ssh.FixedHostKey(known)("", nil, key)
+		}
+		c.hostKeys.set(addr, key)
+		return nil
+	}
+}
+
 func (c sshCreds) clientConfig() *ssh.ClientConfig {
 	user := c.user
 	if user == "" {
@@ -77,10 +137,18 @@ func (c sshCreds) clientConfig() *ssh.ClientConfig {
 	if c.password != "" {
 		auths = append(auths, ssh.Password(c.password))
 	}
+	cb := c.hostKeyCallback()
+	if cb == nil {
+		// No shared cache (should not happen in production): refuse rather than
+		// fall back to InsecureIgnoreHostKey.
+		cb = func(_ string, _ net.Addr, _ ssh.PublicKey) error {
+			return fmt.Errorf("ssh: host key cache not configured")
+		}
+	}
 	return &ssh.ClientConfig{
 		User:            user,
 		Auth:            auths,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), //nolint:gosec // sandboxes are ephemeral, host key rotates each launch
+		HostKeyCallback: cb,
 		Timeout:         15 * time.Second,
 	}
 }

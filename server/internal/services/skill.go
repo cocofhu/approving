@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -394,11 +395,40 @@ func safeRel(p string) string {
 	if p == "" {
 		return ""
 	}
+	if filepath.IsAbs(p) || strings.HasPrefix(p, "/") {
+		return ""
+	}
 	p = strings.TrimPrefix(path.Clean("/"+p), "/")
-	if p == "" || p == ".." || strings.HasPrefix(p, "../") {
+	if p == "" || p == ".." || strings.HasPrefix(p, "../") || strings.Contains(p, "..") {
 		return ""
 	}
 	return p
+}
+
+// underRoot joins root/rel and asserts the result stays within root (Zip Slip /
+// path-traversal barrier for CodeQL #17/#18/#19).
+func underRoot(root, rel string) (string, error) {
+	rel = strings.TrimSpace(rel)
+	if rel == "" || filepath.IsAbs(rel) || strings.Contains(rel, "..") {
+		return "", fmt.Errorf("invalid path %q", rel)
+	}
+	if !filepath.IsLocal(rel) {
+		return "", fmt.Errorf("non-local path %q", rel)
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	full := filepath.Join(absRoot, rel)
+	absFull, err := filepath.Abs(full)
+	if err != nil {
+		return "", err
+	}
+	sep := string(os.PathSeparator)
+	if absFull != absRoot && !strings.HasPrefix(absFull, absRoot+sep) {
+		return "", fmt.Errorf("path %q escapes root", rel)
+	}
+	return absFull, nil
 }
 
 func (s *SkillService) readConfig(name string) agentConfig {
@@ -415,8 +445,12 @@ func (s *SkillService) readConfig(name string) agentConfig {
 // workspace/ tree is fully rewritten so removed files disappear from disk; the
 // legacy rules.md / skills/ / cursor/ are dropped on save.
 func (s *SkillService) Save(a Agent) error {
-	s.migrateCursorWorkDir(a.Name)
-	dir := filepath.Join(s.root, sanitize(a.Name))
+	name := sanitize(a.Name)
+	if name == "" {
+		return fmt.Errorf("invalid agent name")
+	}
+	s.migrateCursorWorkDir(name)
+	dir := filepath.Join(s.root, name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -453,7 +487,10 @@ func (s *SkillService) Save(a Agent) error {
 		if rel == "" {
 			continue
 		}
-		full := filepath.Join(work, rel)
+		full, err := underRoot(work, rel)
+		if err != nil {
+			return fmt.Errorf("file %q: %w", f.Path, err)
+		}
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			return err
 		}
@@ -470,7 +507,11 @@ func (s *SkillService) Save(a Agent) error {
 
 // Delete removes an agent and all its files.
 func (s *SkillService) Delete(name string) error {
-	return os.RemoveAll(filepath.Join(s.root, sanitize(name)))
+	n := sanitize(name)
+	if n == "" {
+		return fmt.Errorf("invalid agent name")
+	}
+	return os.RemoveAll(filepath.Join(s.root, n))
 }
 
 // Rename atomically renames an agent directory (old -> newName) via os.Rename,
@@ -495,7 +536,11 @@ func (s *SkillService) Rename(old, newName string) error {
 
 // Exists reports whether an agent directory is present.
 func (s *SkillService) Exists(name string) bool {
-	_, err := os.Stat(filepath.Join(s.root, sanitize(name)))
+	n := sanitize(name)
+	if n == "" {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(s.root, n))
 	return err == nil
 }
 
@@ -512,9 +557,18 @@ func (s *SkillService) WorkDir(name string) string {
 	return ""
 }
 
-// sanitize prevents path traversal in agent names.
+// sanitizeAgentNamePattern allows only safe single-segment agent directory names.
+var sanitizeAgentNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
+// sanitize prevents path traversal in agent names (no ReplaceAll("..","") incomplete sanitization).
 func sanitize(name string) string {
-	name = strings.ReplaceAll(name, "..", "")
 	name = strings.Trim(name, "/\\ ")
-	return filepath.Base(name)
+	base := filepath.Base(name)
+	if base == "" || base == "." || base == ".." {
+		return ""
+	}
+	if !sanitizeAgentNamePattern.MatchString(base) {
+		return ""
+	}
+	return base
 }

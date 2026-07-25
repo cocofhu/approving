@@ -1,0 +1,58 @@
+package runtime
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+)
+
+// profileNamePattern restricts skill_profile directory names to a single safe segment.
+var profileNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
+// safeProfileName returns a single-segment profile directory name or "".
+func safeProfileName(profile string) string {
+	base := filepath.Base(strings.TrimSpace(profile))
+	if base == "" || base == "." || base == ".." {
+		return ""
+	}
+	if !profileNamePattern.MatchString(base) {
+		return ""
+	}
+	return base
+}
+
+// underRoot joins root/rel and asserts the result stays within root.
+func underRoot(root, rel string) (string, error) {
+	rel = strings.TrimSpace(rel)
+	if rel == "" || filepath.IsAbs(rel) || strings.Contains(rel, "..") {
+		return "", fmt.Errorf("invalid path %q", rel)
+	}
+	if !filepath.IsLocal(rel) {
+		return "", fmt.Errorf("non-local path %q", rel)
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	full := filepath.Join(absRoot, rel)
+	absFull, err := filepath.Abs(full)
+	if err != nil {
+		return "", err
+	}
+	sep := string(os.PathSeparator)
+	if absFull != absRoot && !strings.HasPrefix(absFull, absRoot+sep) {
+		return "", fmt.Errorf("path %q escapes root", rel)
+	}
+	return absFull, nil
+}
+
+// profileDir resolves <profilesRoot>/<safeProfile> under-root (CodeQL #14–#16).
+func profileDir(profilesRoot, profile string) (string, error) {
+	name := safeProfileName(profile)
+	if name == "" || strings.TrimSpace(profilesRoot) == "" {
+		return "", fmt.Errorf("invalid skill_profile")
+	}
+	return underRoot(profilesRoot, name)
+}

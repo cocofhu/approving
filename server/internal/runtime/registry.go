@@ -50,7 +50,11 @@ func (r *ProviderRegistry) backendFor(req NodeReq) AcpBackend {
 	if profile == "" || r.profilesRoot == "" {
 		return BackendCursor
 	}
-	b, err := os.ReadFile(filepath.Join(r.profilesRoot, filepath.Base(profile), "agent.json"))
+	dir, err := profileDir(r.profilesRoot, profile)
+	if err != nil {
+		return BackendCursor
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "agent.json"))
 	if err != nil {
 		return BackendCursor
 	}

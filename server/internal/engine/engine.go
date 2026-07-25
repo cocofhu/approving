@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -154,6 +155,9 @@ func (e *Engine) issueService() *services.IssueService {
 func (e *Engine) SetAutoRetryMax(n int) {
 	if n < 0 {
 		n = 0
+	}
+	if n > math.MaxInt32 {
+		n = math.MaxInt32
 	}
 	e.autoRetryMax.Store(int32(n))
 }

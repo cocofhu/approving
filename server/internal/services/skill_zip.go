@@ -132,6 +132,12 @@ func (s *SkillService) ImportZIP(raw []byte, targetName string, mode ImportZIPMo
 		return Agent{}, fmt.Errorf("ZIP 格式非法：%v", err)
 	}
 
+	safeName := sanitize(targetName)
+	if safeName == "" {
+		return Agent{}, fmt.Errorf("invalid agent name")
+	}
+	workRoot := filepath.Join(s.root, safeName, WorkDirName)
+
 	var export agentExportJSON
 	var files []AgentFile
 	foundMeta := false
@@ -166,7 +172,11 @@ func (s *SkillService) ImportZIP(raw []byte, targetName string, mode ImportZIPMo
 		}
 
 		rel := safeRel(name)
-		if rel == "" || strings.Contains(name, "..") || strings.HasPrefix(name, "/") {
+		if rel == "" || strings.Contains(name, "..") || strings.HasPrefix(name, "/") || filepath.IsAbs(name) {
+			return Agent{}, fmt.Errorf("ZIP 包含非法路径：%s", f.Name)
+		}
+		// Zip Slip under-root barrier (CodeQL #19): reject before accepting content.
+		if _, err := underRoot(workRoot, rel); err != nil {
 			return Agent{}, fmt.Errorf("ZIP 包含非法路径：%s", f.Name)
 		}
 		rc, err := f.Open()

@@ -3,6 +3,7 @@ package sandbox
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -73,6 +74,9 @@ type Manager struct {
 	// createTimeout bounds how long Create waits for the gateway to report a
 	// running sandbox with a resolved session endpoint.
 	createTimeout time.Duration
+
+	// hostKeys holds per-endpoint TOFU SSH host keys for data-plane dials.
+	hostKeys *hostKeyCache
 }
 
 // ManagerOptions configures a gateway-backed Manager.
@@ -194,6 +198,9 @@ type Sandbox struct {
 	// before dialing /ws. Empty when the bridge is unauthenticated.
 	Password string
 	mgr      *Manager
+	// hostKeys is used when mgr is nil (detached test handles) so TOFU state
+	// survives across dials on the same Sandbox.
+	hostKeys *hostKeyCache
 }
 
 // NewManager builds a gateway-backed manager.
@@ -219,6 +226,7 @@ func NewManager(gw *GatewayClient, opts ManagerOptions) *Manager {
 		bundles:                 opts.InjectStore,
 		injectAdvertiseFallback: strings.TrimSpace(opts.InjectAdvertise),
 		createTimeout:           createTimeout,
+		hostKeys:                newHostKeyCache(),
 	}
 }
 
@@ -231,7 +239,12 @@ func (m *Manager) creds(host string, port int) sshCreds {
 	if user == "" {
 		user = "root"
 	}
-	return sshCreds{host: host, port: port, signer: signer, password: m.SSHPassword, user: user}
+	keys := m.hostKeys
+	if keys == nil {
+		keys = newHostKeyCache()
+		m.hostKeys = keys
+	}
+	return sshCreds{host: host, port: port, signer: signer, password: m.SSHPassword, user: user, hostKeys: keys}
 }
 
 // sandboxFromGW maps a gateway record's endpoints onto a Sandbox handle.
@@ -368,7 +381,11 @@ func (m *Manager) configHomePresent(ctx context.Context, sb *Sandbox, configRoot
 		// Unit tests without InstallHelpers skip the SSH probe.
 		return m == nil || !m.installHelpers
 	}
-	_, err := sb.creds().run(ctx, 15*time.Second, "test -f "+shellQuote(configRoot+"/mcp.json"))
+	q, err := quoteShellPath(configRoot + "/mcp.json")
+	if err != nil {
+		return false
+	}
+	_, err = sb.creds().run(ctx, 15*time.Second, "test -f "+q)
 	return err == nil
 }
 
@@ -612,7 +629,10 @@ func (s *Sandbox) creds() sshCreds {
 	// Detached handle (e.g. a test-injected sandbox): fall back to the shared
 	// key and the default login user. The signer is unused when execHook is set.
 	signer, _, _ := sharedSSHKey()
-	return sshCreds{host: s.SSHHost, port: s.SSHPort, signer: signer, user: "root"}
+	if s.hostKeys == nil {
+		s.hostKeys = newHostKeyCache()
+	}
+	return sshCreds{host: s.SSHHost, port: s.SSHPort, signer: signer, user: "root", hostKeys: s.hostKeys}
 }
 
 func (s *Sandbox) resolvePath(path string) string {
@@ -625,8 +645,11 @@ func (s *Sandbox) resolvePath(path string) string {
 // ReadFile reads a file from inside the sandbox (relative paths resolve against
 // WORKSPACE_DIR).
 func (s *Sandbox) ReadFile(ctx context.Context, path string) ([]byte, error) {
-	full := s.resolvePath(path)
-	out, err := s.creds().run(ctx, 20*time.Second, "cat -- "+shellQuote(full))
+	full, err := quoteShellPath(s.resolvePath(path))
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	out, err := s.creds().run(ctx, 20*time.Second, "cat -- "+full)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
@@ -635,12 +658,20 @@ func (s *Sandbox) ReadFile(ctx context.Context, path string) ([]byte, error) {
 
 // WriteFile writes content to a path inside the sandbox, creating parent dirs.
 func (s *Sandbox) WriteFile(ctx context.Context, path string, content []byte) error {
-	full := s.resolvePath(path)
-	dir := full
-	if i := strings.LastIndex(full, "/"); i > 0 {
-		dir = full[:i]
+	resolved := s.resolvePath(path)
+	full, err := quoteShellPath(resolved)
+	if err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
 	}
-	cmd := "mkdir -p " + shellQuote(dir) + " && cat > " + shellQuote(full)
+	dir := resolved
+	if i := strings.LastIndex(resolved, "/"); i > 0 {
+		dir = resolved[:i]
+	}
+	qdir, err := quoteShellPath(dir)
+	if err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	cmd := "mkdir -p " + qdir + " && cat > " + full
 	out, err := s.creds().runInput(ctx, 20*time.Second, cmd, strings.NewReader(string(content)))
 	if err != nil {
 		return fmt.Errorf("write %s: %w: %s", path, err, strings.TrimSpace(string(out)))
@@ -650,8 +681,11 @@ func (s *Sandbox) WriteFile(ctx context.Context, path string, content []byte) er
 
 // FileExists reports whether a path exists inside the sandbox.
 func (s *Sandbox) FileExists(ctx context.Context, path string) bool {
-	full := s.resolvePath(path)
-	_, err := s.creds().run(ctx, 10*time.Second, "test -e "+shellQuote(full))
+	full, err := quoteShellPath(s.resolvePath(path))
+	if err != nil {
+		return false
+	}
+	_, err = s.creds().run(ctx, 10*time.Second, "test -e "+full)
 	return err == nil
 }
 
@@ -677,6 +711,36 @@ func (s *Sandbox) ACP() *ACPClient {
 	return NewACPClient(s.Host, s.Port).WithPassword(s.Password)
 }
 
+// shellArgPattern is the allowlist for remote shell path fragments (CodeQL #11).
+// Values outside this set never reach sess.Start via quoteShellPath.
+var shellArgPattern = regexp.MustCompile(`^[A-Za-z0-9_./:@%+=,-]+$`)
+
+func validateShellArg(s string) error {
+	if s == "" {
+		return fmt.Errorf("empty shell argument")
+	}
+	if strings.ContainsRune(s, 0) {
+		return fmt.Errorf("shell argument contains NUL")
+	}
+	if strings.Contains(s, "..") {
+		return fmt.Errorf("shell argument must not contain '..'")
+	}
+	if !shellArgPattern.MatchString(s) {
+		return fmt.Errorf("shell argument contains disallowed characters")
+	}
+	return nil
+}
+
+// shellQuote POSIX-single-quotes a trusted fragment. For user-influenced paths
+// use quoteShellPath so disallowed characters are rejected before quoting.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// quoteShellPath validates then POSIX-quotes a remote filesystem path.
+func quoteShellPath(path string) (string, error) {
+	if err := validateShellArg(path); err != nil {
+		return "", err
+	}
+	return shellQuote(path), nil
 }

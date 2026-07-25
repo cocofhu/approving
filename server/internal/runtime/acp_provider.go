@@ -1476,7 +1476,10 @@ func (c *acpProvider) workDir(profile string) string {
 	if profile == "" || c.opts.ProfilesRoot == "" {
 		return ""
 	}
-	base := filepath.Join(c.opts.ProfilesRoot, filepath.Base(profile))
+	base, err := profileDir(c.opts.ProfilesRoot, profile)
+	if err != nil {
+		return ""
+	}
 	for _, sub := range []string{agentWorkDirName, legacyAgentWorkDirName} {
 		d := filepath.Join(base, sub)
 		if fi, err := os.Stat(d); err == nil && fi.IsDir() {
@@ -1519,7 +1522,11 @@ func (c *acpProvider) agentConfig(profile string) agentFile {
 	if profile == "" || c.opts.ProfilesRoot == "" {
 		return f
 	}
-	b, err := os.ReadFile(filepath.Join(c.opts.ProfilesRoot, filepath.Base(profile), "agent.json"))
+	dir, err := profileDir(c.opts.ProfilesRoot, profile)
+	if err != nil {
+		return f
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "agent.json"))
 	if err != nil {
 		return f
 	}

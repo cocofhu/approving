@@ -20,6 +20,9 @@ import (
 // baseline files, so "changes" means "commits + working-tree edits since this
 // branch diverged from the default branch".
 func (s *Sandbox) GitChanges(ctx context.Context, dir string) (*Changes, bool) {
+	if err := validateShellArg(dir); err != nil {
+		return nil, false
+	}
 	out, err := s.Exec(ctx, 40*time.Second, "bash", "-lc", gitChangesScript(dir))
 	if strings.TrimSpace(out) == "" {
 		if err != nil {
@@ -32,6 +35,7 @@ func (s *Sandbox) GitChanges(ctx context.Context, dir string) (*Changes, bool) {
 
 // gitChangesScript builds the one-shot shell script (run over SSH) that emits
 // tab-separated records describing dir's git state. It never exits non-zero.
+// dir must already pass validateShellArg.
 func gitChangesScript(dir string) string {
 	return `d=` + shellQuote(dir) + `
 cd "$d" 2>/dev/null || { echo NONE; exit 0; }
