@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,39 +18,49 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-const managedByLabel = "sandbox-gateway"
+const (
+	managedByLabel   = "sandbox-gateway"
+	sandboxContainer = "sandbox"
+	defaultLogsTail  = 5000
+)
+
+// podLogReader reads a pod container log stream (overridable in unit tests).
+// The default implementation uses client-go GetLogs().Stream.
+type podLogReader func(ctx context.Context, namespace, podName string, opts *corev1.PodLogOptions) (string, error)
 
 // Options configures the kubernetes driver.
 type Options struct {
-	InCluster            bool
-	Kubeconfig           string
-	Namespace            string
-	NamePrefix           string
-	StorageClass         string
-	DataDiskGi           int64 // default PVC size fallback
-	PVCAnnotations       map[string]string
-	ImagePullSecret      string
-	ImagePullPolicy      string
-	EnableLoadBalancer   bool
-	CPUCores             float64 // default CPU limit fallback
-	MemoryMB             int64   // default memory limit fallback
-	CPURequestCores      float64 // fixed request; >0 preferred over ratio
-	MemoryRequestMB      int64
-	CPURequestRatio      float64
-	MemoryRequestRatio   float64
+	InCluster          bool
+	Kubeconfig         string
+	Namespace          string
+	NamePrefix         string
+	StorageClass       string
+	DataDiskGi         int64 // default PVC size fallback
+	PVCAnnotations     map[string]string
+	ImagePullSecret    string
+	ImagePullPolicy    string
+	EnableLoadBalancer bool
+	CPUCores           float64 // default CPU limit fallback
+	MemoryMB           int64   // default memory limit fallback
+	CPURequestCores    float64 // fixed request; >0 preferred over ratio
+	MemoryRequestMB    int64
+	CPURequestRatio    float64
+	MemoryRequestRatio float64
 }
 
 // Driver provisions sandboxes as Deployments in Kubernetes and exposes them via
 // a MetalLB LoadBalancer Service so clients connect directly to the LB IP.
 type Driver struct {
-	cs   kubernetes.Interface
-	opts Options
+	cs         kubernetes.Interface
+	opts       Options
+	getPodLogs podLogReader
 }
 
 // New builds a kubernetes driver from a kubeconfig or in-cluster config.
@@ -69,7 +80,22 @@ func New(o Options) (*Driver, error) {
 // NewFromClient builds a Driver over an existing client (used by unit tests
 // with client-go's fake clientset).
 func NewFromClient(cs kubernetes.Interface, o Options) *Driver {
-	return &Driver{cs: cs, opts: withDefaults(o)}
+	d := &Driver{cs: cs, opts: withDefaults(o)}
+	d.getPodLogs = d.defaultGetPodLogs
+	return d
+}
+
+func (d *Driver) defaultGetPodLogs(ctx context.Context, namespace, podName string, opts *corev1.PodLogOptions) (string, error) {
+	stream, err := d.cs.CoreV1().Pods(namespace).GetLogs(podName, opts).Stream(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer stream.Close()
+	b, err := io.ReadAll(stream)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 func withDefaults(o Options) Options {
@@ -762,9 +788,64 @@ func (d *Driver) Endpoints(ctx context.Context, id string) (map[int]string, erro
 	return out, nil
 }
 
-// Logs is unsupported for the kubernetes driver in this release (OOS).
-func (d *Driver) Logs(_ context.Context, _ string, _ int) (string, error) {
-	return "", driver.ErrLogsUnsupported
+// Logs returns combined sandbox-container stdout/stderr via client-go GetLogs
+// (non-follow). Semantics align with the docker driver: merge streams, honor
+// tail (≤0 → 5000), empty success vs not-found/API failure are distinguishable.
+func (d *Driver) Logs(ctx context.Context, id string, tail int) (string, error) {
+	if tail <= 0 {
+		tail = defaultLogsTail
+	}
+	ns := d.opts.Namespace
+	list, err := d.cs.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{
+		LabelSelector: labels.Set(d.selector(id)).String(),
+	})
+	if err != nil {
+		return "", fmt.Errorf("list pods for sandbox %s: %w", id, err)
+	}
+	pod := pickPodForLogs(list.Items)
+	if pod == nil {
+		return "", fmt.Errorf("sandbox %s not found", id)
+	}
+	tailLines := int64(tail)
+	opts := &corev1.PodLogOptions{
+		Container: sandboxContainer,
+		Follow:    false,
+		TailLines: &tailLines,
+	}
+	out, err := d.getPodLogs(ctx, ns, pod.Name, opts)
+	if err != nil {
+		return "", fmt.Errorf("kubernetes logs: %w", err)
+	}
+	return out, nil
+}
+
+// pickPodForLogs prefers a Running pod; otherwise picks the newest by
+// CreationTimestamp. Returns nil when the list is empty.
+func pickPodForLogs(pods []corev1.Pod) *corev1.Pod {
+	if len(pods) == 0 {
+		return nil
+	}
+	var best *corev1.Pod
+	for i := range pods {
+		p := &pods[i]
+		if p.Status.Phase != corev1.PodRunning {
+			continue
+		}
+		if best == nil || p.CreationTimestamp.After(best.CreationTimestamp.Time) {
+			best = p
+		}
+	}
+	if best != nil {
+		return best
+	}
+	best = &pods[0]
+	for i := 1; i < len(pods); i++ {
+		p := &pods[i]
+		if p.CreationTimestamp.After(best.CreationTimestamp.Time) {
+			best = p
+		}
+	}
+	return best
 }
 
 // WaitLoadBalancerIP polls the LB Service until an ingress IP is assigned.
