@@ -1,5 +1,8 @@
 # Contributing to Approving
 
+Short, hard Agent/contribution rules (path→commands, gates, pitfalls, do-not-touch):
+see [`AGENTS.md`](AGENTS.md).
+
 Before contributing, read [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) and
 [`SECURITY.md`](SECURITY.md).
 
