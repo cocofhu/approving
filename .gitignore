@@ -2,10 +2,8 @@
 web/node_modules/
 web/dist/
 docs/node_modules/
-docs/.vitepress/dist/
-docs/.vitepress/cache/
-docs/test-results/
-docs/playwright-report/
+docs/public/
+docs/.deploy_git/
 node_modules/
 web/test-results/
 web/playwright-report/
