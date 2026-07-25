@@ -214,11 +214,20 @@ for the agent execution event log.
 
 | Query | Default | Notes |
 |-------|---------|-------|
-| `tail` | `5000` | Lines from the end of the log stream (`docker logs --tail`) |
+| `tail` | `5000` | Lines from the end of the log stream |
 
-- **Docker driver**: implemented via `docker logs --tail` (stdout+stderr).
-- **Kubernetes driver**: returns `501` (`sandbox logs not supported by this driver`).
-- Missing sandbox → `404`. Driver / docker CLI failure → `500` with `error`.
+- **Docker driver**: `docker logs --tail` (combined stdout+stderr).
+- **Kubernetes driver**: client-go `Pods.GetLogs` on the sandbox pod's
+  `sandbox` container (combined stdout+stderr, non-follow). Pods are located by
+  labels `sandbox-gateway.io/id` + `app.kubernetes.io/managed-by=sandbox-gateway`;
+  when multiple pods match, prefer `Running`, else the newest by creation time.
+- Missing sandbox (store / no matching workload) → `404` or driver not-found
+  mapped by handlers. Driver / API / CLI failure → `500` with `error`.
+- Drivers that do not implement Logs still return `501`
+  (`sandbox logs not supported by this driver`).
+- **Ops prerequisite**: the gateway ServiceAccount needs `pods/log` (or
+  equivalent) in the sandbox namespace. This release does not ship RBAC
+  manifests; missing permission surfaces as a non-2xx error (not empty success).
 
 ## What the gateway does NOT do
 
@@ -227,6 +236,6 @@ for the agent execution event log.
 - No reverse proxy for code-server, session, or preview. Clients connect to the
   returned endpoint addresses directly.
 - No streaming / follow logs (`?follow=1` / SSE). Clients re-fetch on demand.
-- No kubernetes log retrieval in this release (explicit `501`).
+- No previous-container / multi-container log fan-out (single `sandbox` container).
 - code-flow's former `/api/changes` is gone from the image; compute "changes"
   by running `git` over a direct SSH/exec connection.
