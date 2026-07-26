@@ -100,10 +100,13 @@ onUnmounted(() => {
 <template>
   <section
     data-testid="token-stats-panel"
-    class="token-stats-panel mb-4"
+    class="token-stats-panel mb-4 min-w-0 overflow-x-clip"
     aria-labelledby="token-stats-heading"
   >
-    <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+    <div
+      data-testid="token-stats-head"
+      class="mb-3 flex flex-col items-stretch gap-3 md:flex-row md:flex-wrap md:items-center md:justify-between"
+    >
       <h3 id="token-stats-heading" class="m-0 flex items-center gap-2 text-sm font-semibold text-txt">
         {{ t('pages.board.tokenStats.title') }}
         <span
@@ -114,7 +117,7 @@ onUnmounted(() => {
         </span>
       </h3>
       <div
-        class="flex flex-wrap gap-1.5 rounded-[10px] bg-elevated p-0.5"
+        class="flex flex-wrap gap-2 rounded-[10px] bg-elevated p-0.5"
         role="tablist"
         :aria-label="t('pages.board.tokenStats.windowAria')"
         data-testid="token-stats-windows"
@@ -124,7 +127,7 @@ onUnmounted(() => {
           :key="w"
           type="button"
           role="tab"
-          class="rounded-lg border-0 px-2.5 py-1.5 text-xs transition"
+          class="min-h-11 rounded-lg border-0 px-3 py-2.5 text-sm transition md:min-h-0 md:px-2.5 md:py-1.5 md:text-xs"
           :class="
             windowSel === w
               ? 'bg-surface font-semibold text-txt shadow-sm'
@@ -171,7 +174,7 @@ onUnmounted(() => {
       data-testid="token-stats-empty"
       class="grid gap-3"
     >
-      <div class="relative min-h-[200px] rounded-xl border border-line bg-surface p-3.5">
+      <div class="relative min-h-[200px] min-w-0 overflow-x-clip rounded-xl border border-line bg-surface p-3.5">
         <div class="mb-2 flex items-baseline justify-between gap-2">
           <h4 class="m-0 text-[13px] font-semibold text-txt">{{ t('pages.board.tokenStats.trendTitle') }}</h4>
           <span class="text-[11px] text-txt3">{{ grainLabel }}</span>
@@ -181,8 +184,8 @@ onUnmounted(() => {
           <span class="max-w-[28ch] text-xs text-txt3">{{ t('pages.board.tokenStats.emptyTrendHint') }}</span>
         </div>
       </div>
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div class="relative min-h-[200px] rounded-xl border border-line bg-surface p-3.5">
+      <div class="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+        <div class="relative min-h-[200px] min-w-0 rounded-xl border border-line bg-surface p-3.5">
           <div class="mb-2 flex items-baseline justify-between gap-2">
             <h4 class="m-0 text-[13px] font-semibold text-txt">{{ t('pages.board.tokenStats.compositionTitle') }}</h4>
           </div>
@@ -191,7 +194,7 @@ onUnmounted(() => {
             <span class="max-w-[28ch] text-xs text-txt3">{{ t('pages.board.tokenStats.emptyCompHint') }}</span>
           </div>
         </div>
-        <div class="relative min-h-[200px] rounded-xl border border-line bg-surface p-3.5">
+        <div class="relative min-h-[200px] min-w-0 rounded-xl border border-line bg-surface p-3.5">
           <div class="mb-2 flex items-baseline justify-between gap-2">
             <h4 class="m-0 text-[13px] font-semibold text-txt">{{ t('pages.board.tokenStats.rankTitle') }}</h4>
             <span class="text-[11px] text-txt3">{{ t('pages.board.tokenStats.rankSub') }}</span>
@@ -206,15 +209,18 @@ onUnmounted(() => {
 
     <!-- Ready charts -->
     <div v-else-if="data" data-testid="token-stats-charts" class="grid gap-3">
-      <div class="rounded-xl border border-line bg-surface p-3.5" data-testid="token-stats-trend-card">
+      <div
+        class="min-w-0 overflow-x-clip rounded-xl border border-line bg-surface p-3.5"
+        data-testid="token-stats-trend-card"
+      >
         <div class="mb-2 flex items-baseline justify-between gap-2">
           <h4 class="m-0 text-[13px] font-semibold text-txt">{{ t('pages.board.tokenStats.trendTitle') }}</h4>
           <span class="text-[11px] text-txt3">{{ grainLabel }}</span>
         </div>
         <TokenTrendChart :trend="data.trend" :bucket-width="data.bucketWidth" />
       </div>
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div class="rounded-xl border border-line bg-surface p-3.5" data-testid="token-stats-comp-card">
+      <div class="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+        <div class="min-w-0 rounded-xl border border-line bg-surface p-3.5" data-testid="token-stats-comp-card">
           <div class="mb-2 flex items-baseline justify-between gap-2">
             <h4 class="m-0 text-[13px] font-semibold text-txt">{{ t('pages.board.tokenStats.compositionTitle') }}</h4>
             <span class="text-[11px] text-txt3">
@@ -223,7 +229,7 @@ onUnmounted(() => {
           </div>
           <TokenDonutChart :composition="data.composition" />
         </div>
-        <div class="rounded-xl border border-line bg-surface p-3.5" data-testid="token-stats-rank-card">
+        <div class="min-w-0 rounded-xl border border-line bg-surface p-3.5" data-testid="token-stats-rank-card">
           <div class="mb-2 flex items-baseline justify-between gap-2">
             <h4 class="m-0 text-[13px] font-semibold text-txt">{{ t('pages.board.tokenStats.rankTitle') }}</h4>
             <span class="text-[11px] text-txt3">{{ t('pages.board.tokenStats.rankSub') }}</span>

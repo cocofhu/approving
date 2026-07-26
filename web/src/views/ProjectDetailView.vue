@@ -695,12 +695,15 @@ onUnmounted(() => {
     </div>
 
     <template v-if="project">
-      <div class="mb-4 flex shrink-0 flex-wrap gap-1 border-b border-line" data-testid="project-detail-tabs">
+      <div
+        class="scroll-area mb-4 flex shrink-0 flex-nowrap gap-1 overflow-x-auto overflow-y-hidden border-b border-line [-webkit-overflow-scrolling:touch]"
+        data-testid="project-detail-tabs"
+      >
         <button
           v-for="tb in tabs"
           :key="tb.id"
           type="button"
-          class="border-b-2 px-3 py-2 text-sm transition"
+          class="min-h-11 shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm transition"
           :class="
             tab === tb.id
               ? 'border-accent text-accent-2'
@@ -737,7 +740,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div v-if="tab === 'board'" data-testid="project-board-panel">
+      <div v-if="tab === 'board'" class="min-w-0" data-testid="project-board-panel">
         <BoardView :project-id="projectId" embedded />
       </div>
 

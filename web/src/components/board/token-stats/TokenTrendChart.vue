@@ -151,7 +151,7 @@ defineExpose({ chartOptions, chartData })
 <template>
   <div
     data-testid="token-trend-wrap"
-    class="token-trend-wrap relative w-full"
+    class="token-trend-wrap relative w-full min-w-0 overflow-x-clip"
     :style="{ height: `${CHART_HEIGHT_PX}px` }"
     role="img"
     :aria-label="t('pages.board.tokenStats.trendTitle')"

@@ -148,6 +148,24 @@ describe('ProjectDetailView PM Leader settings inline', () => {
     vi.clearAllMocks()
   })
 
+  it('tabs use single-row horizontal scroll with ~44px touch targets (g1.1/g1.2/g1.3)', async () => {
+    const { wrapper } = await mountDetail('board')
+    const tabs = wrapper.find('[data-testid="project-detail-tabs"]')
+    expect(tabs.exists()).toBe(true)
+    expect(tabs.classes()).toEqual(
+      expect.arrayContaining(['flex-nowrap', 'overflow-x-auto', 'overflow-y-hidden']),
+    )
+    expect(tabs.classes()).not.toContain('flex-wrap')
+
+    const boardTab = wrapper.find('[data-testid="project-tab-board"]')
+    expect(boardTab.classes()).toEqual(
+      expect.arrayContaining(['min-h-11', 'shrink-0', 'whitespace-nowrap', 'border-b-2']),
+    )
+    // Desktop selected underline style preserved
+    expect(boardTab.classes()).toEqual(expect.arrayContaining(['border-accent']))
+    expect(wrapper.find('[data-testid="project-board-panel"]').classes()).toContain('min-w-0')
+  })
+
   it('hides top-bar pmSettings and pmMemory tabs while keeping cron', async () => {
     const { wrapper } = await mountDetail('pmLeader')
     const tabIds = wrapper

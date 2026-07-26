@@ -84,6 +84,20 @@ describe('Token charts (g2.3/g2.4)', () => {
     wrapper.unmount()
   })
 
+  it('trend wrap uses min-w-0 + overflow-x-clip to prevent Chart.js flex overflow (g3.1)', () => {
+    const wrapper = mount(TokenTrendChart, {
+      props: {
+        bucketWidth: 'day',
+        trend: sampleTrend(7),
+      },
+      global: { plugins: [i18n()] },
+    })
+    const wrap = wrapper.find('[data-testid="token-trend-wrap"]')
+    expect(wrap.classes()).toEqual(expect.arrayContaining(['min-w-0', 'overflow-x-clip', 'w-full']))
+    expect((wrap.element as HTMLElement).style.height).toBe('200px')
+    wrapper.unmount()
+  })
+
   it('maps 30-day labels with tick thinning options (maxTicksLimit≈8) (g2.2)', () => {
     const wrapper = mount(TokenTrendChart, {
       props: {
@@ -127,6 +141,28 @@ describe('Token charts (g2.3/g2.4)', () => {
     expect(wrapper.find('[data-testid="token-donut-svg"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('input')
     expect(wrapper.text()).toContain('总量')
+    wrapper.unmount()
+  })
+
+  it('narrow donut stacks ring above legend and shrinks ring (~120px) (g4.1/g4.2)', () => {
+    const wrapper = mount(TokenDonutChart, {
+      props: {
+        composition: {
+          inputTokens: 70,
+          outputTokens: 55,
+          cacheReadTokens: 35,
+          cacheWriteTokens: 20,
+          total: 180,
+        },
+      },
+      global: { plugins: [i18n()] },
+    })
+    const row = wrapper.find('[data-testid="token-donut-row"]')
+    expect(row.classes()).toEqual(expect.arrayContaining(['flex-col', 'sm:flex-row']))
+    const svg = wrapper.find('[data-testid="token-donut-svg"]')
+    expect(svg.classes()).toEqual(expect.arrayContaining(['h-[120px]', 'w-[120px]', 'sm:h-[150px]', 'sm:w-[150px]']))
+    const legend = wrapper.find('[data-testid="token-donut-legend"]')
+    expect(legend.classes()).toEqual(expect.arrayContaining(['w-full']))
     wrapper.unmount()
   })
 
