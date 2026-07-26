@@ -472,16 +472,30 @@ func TestHarvestReadsFileAndWrites(t *testing.T) {
 	}
 }
 
+// execHookBody joins SSH argv with ExecScript stdin so tests can match
+// script content after the safeCmd migration (command is only `bash -s`).
+func execHookBody(command string, stdin io.Reader) string {
+	if stdin == nil {
+		return command
+	}
+	b, _ := io.ReadAll(stdin)
+	if len(b) == 0 {
+		return command
+	}
+	return command + "\n" + string(b)
+}
+
 func TestEnsurePushedAndDetectPush(t *testing.T) {
-	restore := sandbox.SetExecHook(func(_ context.Context, _ string, _ int, command string, _ io.Reader) ([]byte, error) {
+	restore := sandbox.SetExecHook(func(_ context.Context, _ string, _ int, command string, stdin io.Reader) ([]byte, error) {
+		body := execHookBody(command, stdin)
 		switch {
-		case strings.Contains(command, "rev-parse --abbrev-ref"):
+		case strings.Contains(body, "rev-parse --abbrev-ref"):
 			return []byte("feature-x\n"), nil
-		case strings.Contains(command, "rev-parse HEAD"):
+		case strings.Contains(body, "rev-parse HEAD"):
 			return []byte("abc123\n"), nil
-		case strings.Contains(command, "ls-remote"):
+		case strings.Contains(body, "ls-remote"):
 			return []byte("abc123\trefs/heads/feature-x\n"), nil
-		case strings.Contains(command, "glab mr list"):
+		case strings.Contains(body, "glab mr list"):
 			return []byte(`[{"web_url":"https://gitlab.com/g/p/-/merge_requests/1"}]`), nil
 		}
 		return []byte(""), nil
@@ -508,15 +522,16 @@ func TestEnsurePushedAndDetectPush(t *testing.T) {
 }
 
 func TestDetectPushNonGitLabSkipsMR(t *testing.T) {
-	restore := sandbox.SetExecHook(func(_ context.Context, _ string, _ int, command string, _ io.Reader) ([]byte, error) {
+	restore := sandbox.SetExecHook(func(_ context.Context, _ string, _ int, command string, stdin io.Reader) ([]byte, error) {
+		body := execHookBody(command, stdin)
 		switch {
-		case strings.Contains(command, "rev-parse --abbrev-ref"):
+		case strings.Contains(body, "rev-parse --abbrev-ref"):
 			return []byte("feature-x\n"), nil
-		case strings.Contains(command, "rev-parse HEAD"):
+		case strings.Contains(body, "rev-parse HEAD"):
 			return []byte("abc123\n"), nil
-		case strings.Contains(command, "ls-remote"):
+		case strings.Contains(body, "ls-remote"):
 			return []byte("abc123\trefs/heads/feature-x\n"), nil
-		case strings.Contains(command, "glab mr list"):
+		case strings.Contains(body, "glab mr list"):
 			t.Error("glab should not be called for non-GitLab repo")
 		}
 		return []byte(""), nil

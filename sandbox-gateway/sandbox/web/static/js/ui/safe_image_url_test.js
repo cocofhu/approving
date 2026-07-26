@@ -3,7 +3,7 @@ import {describe, it} from 'node:test';
 import {sanitizeImageURL} from './safe_image_url.js';
 
 describe('sanitizeImageURL', () => {
-    it('allows whitelisted data:image and returns the safe string', () => {
+    it('allows whitelisted data:image and returns a rebuilt safe string', () => {
         assert.equal(
             sanitizeImageURL('data:image/png;base64,AAA'),
             'data:image/png;base64,AAA',
@@ -24,6 +24,9 @@ describe('sanitizeImageURL', () => {
             sanitizeImageURL('data:image/jpg;base64,AAAA'),
             'data:image/jpeg;base64,AAAA',
         );
+        // Payload must be charset-copied; illegal base64 chars are rejected.
+        assert.equal(sanitizeImageURL('data:image/png;base64,BBB='), 'data:image/png;base64,BBB=');
+        assert.equal(sanitizeImageURL('data:image/png;base64,AA<>'), '');
     });
 
     it('allows http(s) and returns URL.href', () => {

@@ -2,17 +2,67 @@
  * Protocol allowlist for user-supplied image URLs assigned to img.src
  * (CodeQL #1 XSS / #3 open redirect).
  *
- * Returns a canonical safe string (data:image whitelist or URL.href for http(s)),
+ * Returns a freshly built safe string (never the original tainted input):
+ * - data: rebuilt from canonical MIME literal + charset-copied payload
+ * - http(s): URL.href after protocol check
  * or empty string when the input must not be assigned to img.src.
  */
 
-const ALLOWED_DATA_MIME = new Set([
-    'image/png',
-    'image/jpeg',
-    'image/jpg',
-    'image/gif',
-    'image/webp',
-]);
+/** Canonical MIME literals only — keys after normalizing image/jpg → image/jpeg. */
+const CANONICAL_DATA_MIME = {
+    'image/png': 'image/png',
+    'image/jpeg': 'image/jpeg',
+    'image/gif': 'image/gif',
+    'image/webp': 'image/webp',
+};
+
+/**
+ * Copy payload through an allowlist char-by-char so the result is not the
+ * original tainted string (CodeQL taint barrier for img.src assignment).
+ * @param {string} payload
+ * @param {boolean} isBase64
+ * @returns {string|null}
+ */
+function copySafeDataPayload(payload, isBase64) {
+    let out = '';
+    for (let i = 0; i < payload.length; i++) {
+        const c = payload.charCodeAt(i);
+        if (isBase64) {
+            // A-Z a-z 0-9 + / =
+            if (
+                (c >= 65 && c <= 90) ||
+                (c >= 97 && c <= 122) ||
+                (c >= 48 && c <= 57) ||
+                c === 43 ||
+                c === 47 ||
+                c === 61
+            ) {
+                out += String.fromCharCode(c);
+            } else {
+                return null;
+            }
+            continue;
+        }
+        // Non-base64 data: percent-encoding and common image-payload bytes.
+        if (
+            (c >= 65 && c <= 90) ||
+            (c >= 97 && c <= 122) ||
+            (c >= 48 && c <= 57) ||
+            c === 37 || // %
+            c === 43 || // +
+            c === 47 || // /
+            c === 61 || // =
+            c === 46 || // .
+            c === 95 || // _
+            c === 45 // -
+        ) {
+            out += String.fromCharCode(c);
+        } else {
+            return null;
+        }
+    }
+    return out;
+}
 
 /**
  * @param {unknown} url
@@ -24,14 +74,17 @@ export function sanitizeImageURL(url) {
     if (!t) return '';
 
     if (/^data:/i.test(t)) {
-        const m = /^data:(image\/([a-z0-9.+-]+))(;base64)?,/i.exec(t);
+        const m = /^data:(image\/[a-z0-9.+-]+)(;base64)?,(.*)$/is.exec(t);
         if (!m) return '';
-        let mime = m[1].toLowerCase();
-        if (!ALLOWED_DATA_MIME.has(mime)) return '';
-        if (mime === 'image/jpg') {
-            return t.replace(/^data:image\/jpg/i, 'data:image/jpeg');
-        }
-        return t;
+        let mimeKey = m[1].toLowerCase();
+        if (mimeKey === 'image/jpg') mimeKey = 'image/jpeg';
+        const mime = CANONICAL_DATA_MIME[mimeKey];
+        if (!mime) return '';
+        const isBase64 = Boolean(m[2]);
+        const payload = copySafeDataPayload(m[3] ?? '', isBase64);
+        if (payload === null) return '';
+        // Rebuild from literal MIME + copied payload — never return original t.
+        return 'data:' + mime + (isBase64 ? ';base64' : '') + ',' + payload;
     }
 
     try {

@@ -817,10 +817,12 @@ export class ChatView {
             const imgWrap = document.createElement('div');
             imgWrap.className = 'cc-user-images';
             for (const url of imageURLs) {
-                const safe = sanitizeImageURL(url);
-                if (!safe) continue;
+                // Only the rebuilt string from sanitizeImageURL may reach img.src
+                // (never assign the original url — CodeQL #1/#3 taint cut).
+                const safeSrc = sanitizeImageURL(url);
+                if (safeSrc === '') continue;
                 const img = document.createElement('img');
-                img.src = safe;
+                img.src = safeSrc;
                 img.className = 'cc-user-img';
                 img.alt = '附件图片';
                 img.loading = 'lazy';

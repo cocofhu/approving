@@ -173,11 +173,17 @@ func TestSnapshotEvents(t *testing.T) {
 }
 
 func TestFindOrCreateMRCreatePath(t *testing.T) {
-	restore := sandbox.SetExecHook(func(_ context.Context, _ string, _ int, command string, _ io.Reader) ([]byte, error) {
+	restore := sandbox.SetExecHook(func(_ context.Context, _ string, _ int, command string, stdin io.Reader) ([]byte, error) {
+		var script string
+		if stdin != nil {
+			b, _ := io.ReadAll(stdin)
+			script = string(b)
+		}
+		body := command + "\n" + script
 		switch {
-		case strings.Contains(command, "glab mr list"):
+		case strings.Contains(body, "glab mr list"):
 			return []byte("[]"), nil // no existing MR -> take create path
-		case strings.Contains(command, "glab mr create"):
+		case strings.Contains(body, "glab mr create"):
 			return []byte("Creating merge request\nhttps://gitlab.com/g/p/-/merge_requests/9\n"), nil
 		}
 		return []byte(""), nil
