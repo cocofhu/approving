@@ -23,7 +23,8 @@ func (s *Sandbox) GitChanges(ctx context.Context, dir string) (*Changes, bool) {
 	if err := validateShellArg(dir); err != nil {
 		return nil, false
 	}
-	out, err := s.Exec(ctx, 40*time.Second, "bash", "-lc", gitChangesScript(dir))
+	// Script body travels on stdin; only `bash -s` reaches Session.Start/Run.
+	out, err := s.ExecScript(ctx, 40*time.Second, "bash", gitChangesScript(dir))
 	if strings.TrimSpace(out) == "" {
 		if err != nil {
 			return nil, false

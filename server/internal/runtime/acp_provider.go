@@ -1792,7 +1792,7 @@ esac
 git add -A 2>/dev/null || true
 git diff --cached --quiet 2>/dev/null || git commit -m "chore(approving): implement 收尾自动提交" >/dev/null 2>&1 || true
 git push -u origin "$branch" 2>&1 || true`
-		if out, err := sb.Exec(ctx, 90*time.Second, "bash", "-lc", script); err != nil {
+		if out, err := sb.ExecScript(ctx, 90*time.Second, "bash", script); err != nil {
 			log.Debug().Err(err).Str("repo", r.Name).Str("out", strings.TrimSpace(out)).Msg("implement ensurePushed (best-effort)")
 		}
 	}
@@ -1804,15 +1804,15 @@ git push -u origin "$branch" 2>&1 || true`
 func (c *acpProvider) detectPush(ctx context.Context, sb *sandbox.Sandbox, req NodeReq) *GitInfo {
 	dir, repo := c.nodeRepo(req)
 	cd := "cd " + shellArg(dir) + " && "
-	branch, _ := sb.Exec(ctx, 10*time.Second, "bash", "-lc", cd+"git rev-parse --abbrev-ref HEAD 2>/dev/null || true")
-	sha, _ := sb.Exec(ctx, 10*time.Second, "bash", "-lc", cd+"git rev-parse HEAD 2>/dev/null || true")
+	branch, _ := sb.ExecScript(ctx, 10*time.Second, "bash", cd+"git rev-parse --abbrev-ref HEAD 2>/dev/null || true")
+	sha, _ := sb.ExecScript(ctx, 10*time.Second, "bash", cd+"git rev-parse HEAD 2>/dev/null || true")
 	branch, sha = strings.TrimSpace(branch), strings.TrimSpace(sha)
 	if sha == "" {
 		return nil
 	}
 	info := &GitInfo{Branch: branch, PushedSHA: sha}
 	// Branch present on remote => the agent pushed it.
-	remote, _ := sb.Exec(ctx, 15*time.Second, "bash", "-lc",
+	remote, _ := sb.ExecScript(ctx, 15*time.Second, "bash",
 		cd+"git ls-remote --heads origin "+shellArg(branch)+" 2>/dev/null || true")
 	info.Pushed = strings.TrimSpace(remote) != ""
 
@@ -1827,14 +1827,14 @@ func (c *acpProvider) detectPush(ctx context.Context, sb *sandbox.Sandbox, req N
 
 func (c *acpProvider) findOrCreateMR(ctx context.Context, sb *sandbox.Sandbox, dir, branch string) string {
 	cd := "cd " + shellArg(dir) + " && "
-	view, err := sb.Exec(ctx, 25*time.Second, "bash", "-lc",
+	view, err := sb.ExecScript(ctx, 25*time.Second, "bash",
 		cd+"glab mr list --source-branch "+shellArg(branch)+" -F json 2>/dev/null || true")
 	if err == nil {
 		if url := firstMRURL(view); url != "" {
 			return url
 		}
 	}
-	create, _ := sb.Exec(ctx, 40*time.Second, "bash", "-lc",
+	create, _ := sb.ExecScript(ctx, 40*time.Second, "bash",
 		cd+"glab mr create --fill --yes --source-branch "+shellArg(branch)+" 2>&1 || true")
 	for _, line := range strings.Split(create, "\n") {
 		line = strings.TrimSpace(line)

@@ -236,9 +236,9 @@ func TestManagerDataPlaneViaHook(t *testing.T) {
 	restore := SetExecHook(func(_ context.Context, host string, port int, command string, stdin io.Reader) ([]byte, error) {
 		gotCmds = append(gotCmds, command)
 		switch {
-		case strings.Contains(command, "cat -- "):
+		case strings.Contains(command, "cat") && strings.Contains(command, "--"):
 			return []byte("file contents"), nil
-		case strings.Contains(command, "test -e"):
+		case strings.Contains(command, "test") && strings.Contains(command, "-e"):
 			return []byte(""), nil
 		case stdin != nil:
 			b, _ := io.ReadAll(stdin)
