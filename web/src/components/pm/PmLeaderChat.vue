@@ -8,6 +8,7 @@ import ArtifactLoadingPane from '@/components/run/ArtifactLoadingPane.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import { relTime } from '@/lib/format'
 import { renderMarkdown } from '@/lib/markdown'
+import { createStreamMarkdownPreview } from '@/lib/streamMarkdownPreview'
 import { api } from '@/lib/api'
 import { imgSrc } from '@/lib/compositeText'
 import { useImageAttachments } from '@/lib/useImageAttachments'
@@ -50,6 +51,27 @@ const finalizing = ref(false)
 const sending = ref(false)
 const streaming = ref(false)
 const streamText = ref('')
+/** HTML for the live bubble — updated at most once per animation frame. */
+const streamHtml = ref('')
+const streamPreview = createStreamMarkdownPreview({ render: renderMarkdown })
+const unsubStreamHtml = streamPreview.subscribe((html) => {
+  streamHtml.value = html
+})
+function syncStreamText(next: string) {
+  streamText.value = next
+  streamPreview.setText(next)
+  // Absolute snapshots (resume / seed) paint immediately; deltas stay rAF-batched.
+  streamPreview.flush()
+}
+function appendStreamText(delta: string) {
+  streamText.value += delta
+  streamPreview.append(delta)
+}
+function clearStreamText() {
+  streamText.value = ''
+  streamPreview.reset()
+  streamHtml.value = ''
+}
 const resuming = ref(false)
 const lastEventSeq = ref(-1)
 const scroller = ref<HTMLElement | null>(null)
@@ -552,7 +574,7 @@ async function beginResume(tid: string, partial: string, afterSeq: number, userM
   sending.value = true
   streaming.value = true
   resuming.value = true
-  streamText.value = partial
+  syncStreamText(partial)
   lastEventSeq.value = afterSeq
   startTurnDeadline(gen)
   readyAbort = new AbortController()
@@ -682,7 +704,7 @@ function resetTurnLocal() {
     readyAbort.abort()
     readyAbort = null
   }
-  streamText.value = ''
+  clearStreamText()
   streaming.value = false
   sending.value = false
   resuming.value = false
@@ -735,7 +757,7 @@ async function failTurn(kind: FailKind) {
     readyAbort.abort()
     readyAbort = null
   }
-  streamText.value = ''
+  clearStreamText()
   streaming.value = false
   sending.value = false
   resuming.value = false
@@ -834,7 +856,7 @@ async function openWs(_id: number) {
     } else if (msg.type === 'resume_hint') {
       // Absolute snapshot from server draft — never append onto stale streamText.
       if (typeof msg.partialText === 'string') {
-        streamText.value = msg.partialText
+        syncStreamText(msg.partialText)
       }
       if (typeof msg.eventSeq === 'number') {
         lastEventSeq.value = msg.eventSeq
@@ -864,14 +886,14 @@ function handleAcp(raw: any) {
   if (streamCancelled) return
   const delta = extractAgentMessageDelta(raw)
   if (!delta?.text) return
-  streamText.value += delta.text
+  appendStreamText(delta.text)
   void nextTick().then(() => scrollBottom())
 }
 
 function clearFinalizingStream() {
   finalizing.value = false
   finalizingRefetchFailed.value = false
-  streamText.value = ''
+  clearStreamText()
   activeUserMessageId.value = ''
   resuming.value = false
 }
@@ -914,7 +936,7 @@ async function refetchAfterTurnDone() {
  */
 async function onTurnDone() {
   if (streamCancelled || turnClosed) {
-    streamText.value = ''
+    clearStreamText()
     streaming.value = false
     sending.value = false
     resuming.value = false
@@ -928,6 +950,7 @@ async function onTurnDone() {
   streaming.value = false
   sending.value = false
   resuming.value = false
+      streamPreview.flush()
   finalizing.value = true
   if (!activeId.value) {
     clearFinalizingStream()
@@ -942,7 +965,7 @@ async function onTurnError(kind: FailKind, detail: string) {
   turnClosed = true
   streamCancelled = true
   clearTurnDeadline()
-  streamText.value = ''
+  clearStreamText()
   streaming.value = false
   sending.value = false
   resuming.value = false
@@ -1000,7 +1023,7 @@ async function runTurn(
   activeUserMessageId.value = userMsg.id
   sending.value = true
   streaming.value = true
-  streamText.value = ''
+  clearStreamText()
   // Ready-phase deadline (~90s); refreshed after sandbox is ready for stream phase.
   startTurnDeadline(gen)
   readyAbort = new AbortController()
@@ -1063,7 +1086,7 @@ async function send(text?: string, explicitImages?: ClarifyImage[]) {
   turnClosed = false
   sending.value = true
   streaming.value = true
-  streamText.value = ''
+  clearStreamText()
   startTurnDeadline(gen)
   if (fromInput) input.value = ''
   try {
@@ -1124,7 +1147,7 @@ function stop() {
       /* ignore */
     }
   }
-  streamText.value = ''
+  clearStreamText()
   resuming.value = false
   void failTurn('stopped')
 }
@@ -1140,7 +1163,7 @@ async function retryTurn(userMessageId: string) {
   turnClosed = false
   sending.value = true
   streaming.value = true
-  streamText.value = ''
+  clearStreamText()
   clearFailedPartial(userMessageId)
   startTurnDeadline(gen)
   try {
@@ -1183,6 +1206,8 @@ onMounted(() => {
   void loadThreads().then(() => applyRestoreMobileChat())
 })
 onBeforeUnmount(() => {
+  unsubStreamHtml()
+  streamPreview.reset()
   resetTurnLocal()
   closeWs()
 })
@@ -1489,7 +1514,7 @@ onBeforeUnmount(() => {
                 <Icon name="spinner" :size="13" class="animate-spin text-accent-2" />
                 {{ t('pages.projectDetail.pm.resuming') }}
               </div>
-              <div v-else-if="streamText" class="md" v-html="renderMarkdown(streamText)" />
+              <div v-else-if="streamText" class="md" v-html="streamHtml" />
               <div v-else-if="showStreamTypingDots" class="typing-dots py-1">
                 <i /><i /><i />
               </div>

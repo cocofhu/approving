@@ -1077,11 +1077,42 @@ watch(
 
 const sbxLog = computed(() => (selected.value ? sbxLogs[selected.value] : null) || null)
 
-// Pull the node's event + container logs whenever the selection changes (covers
-// refresh / re-entry: the running node's logs are read back from its container).
-watch(selected, (id) => {
+// Paint-then-work: commit selection + brief right-panel loading first, then
+// rehydrate/sandbox after a frame so pointer INP is not blocked by heavy work.
+const panelSwitching = ref(false)
+let selectionWorkGen = 0
+
+function afterNextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve())
+  })
+}
+
+async function runSelectionSideEffects(id: string | null) {
+  const gen = ++selectionWorkGen
+  if (!id) {
+    panelSwitching.value = false
+    void rehydrateNodeEvents(null)
+    fetchSandboxLog(null)
+    return
+  }
+  panelSwitching.value = true
+  await nextTick()
+  await afterNextPaint()
+  if (gen !== selectionWorkGen) return
   void rehydrateNodeEvents(id)
   fetchSandboxLog(id)
+  // Yield once more so heavy tab mounts land after the loading frame paints.
+  await afterNextPaint()
+  if (gen !== selectionWorkGen) return
+  panelSwitching.value = false
+}
+
+// Pull the node's event + container logs whenever the selection changes (covers
+// refresh / re-entry: the running node's logs are read back from its container).
+// Deferred via paint-then-work so selected highlight paints before rehydrate.
+watch(selected, (id) => {
+  void runSelectionSideEffects(id)
 })
 
 // The right panel is scoped to the selected node with node-relevant tabs.
@@ -1704,6 +1735,12 @@ function selectExecution(nodeId: string, idx: number) {
             <AppTabs :tabs="nodeTabs" v-model="nodeTab" />
           </div>
           <div class="min-h-0 flex-1">
+            <ArtifactLoadingPane
+              v-if="panelSwitching"
+              data-testid="run-detail-panel-switching"
+              message-key="pages.runDetail.switchingNode"
+            />
+            <template v-else>
             <GateApproval
               v-if="nodeTab === 'gate' && run.gate"
               :gate="run.gate"
@@ -1861,6 +1898,7 @@ function selectExecution(nodeId: string, idx: number) {
               </div>
             </div>
             <NodeOutputPanel v-else :node="selNode" :node-run="selRunView" :run="run" />
+            </template>
           </div>
         </template>
         <EmptyState v-else :title="t('common.empty.selectNode')" :desc="t('common.empty.selectNodeDesc')" />

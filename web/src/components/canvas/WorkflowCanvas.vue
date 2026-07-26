@@ -10,6 +10,12 @@ import ConditionEdge from './ConditionEdge.vue'
 import { getEdgeStroke, type EdgeTone } from './edgeColors'
 import { nodeColorHex } from '@/data/nodeRegistry'
 import { computeSessionLayout, isInvalidPosition } from '@/lib/canvasLayout'
+import {
+  flowFingerprint,
+  pruneFlowCache,
+  reuseFlowElement,
+  type FlowNodeCacheEntry,
+} from '@/lib/workflowCanvasFlow'
 import { theme } from '@/lib/theme'
 import type { WFNode, WFEdge, NodeType, NodeRunStatus } from '@/lib/types'
 
@@ -137,24 +143,61 @@ function structuredExitHandles(n: WFNode) {
   return []
 }
 
-const flowNodes = computed(() =>
-  props.nodes.map((n) => ({
-    id: n.id,
-    type: 'custom',
-    position: resolvePosition(n),
-    draggable: props.mode !== 'run',
-    selected: props.selectedNode === n.id,
-    data: {
-      type: n.type as NodeType,
+// Cache flow node objects so a selection-only change rebuilds only the
+// previously/newly selected nodes — Vue Flow skips reconcile for stable refs.
+type FlowNodeObj = {
+  id: string
+  type: string
+  position: { x: number; y: number }
+  draggable: boolean
+  selected: boolean
+  data: Record<string, unknown>
+}
+const flowNodeCache = new Map<string, FlowNodeCacheEntry<FlowNodeObj>>()
+
+const flowNodes = computed(() => {
+  const selectedId = props.selectedNode
+  const modeRun = props.mode === 'run'
+  const out = props.nodes.map((n) => {
+    const position = resolvePosition(n)
+    const status = props.statusMap?.[n.id]
+    const branches = n.type === 'branch' ? branchHandles(n) : undefined
+    const gateActions =
+      n.type === 'human_gate' || n.type === 'app_preview' ? actionHandles(n) : undefined
+    const structuredExits =
+      n.type === 'test' || n.type === 'review' ? structuredExitHandles(n) : undefined
+    const selected = selectedId === n.id
+    const fingerprint = flowFingerprint({
+      type: n.type,
       label: n.label,
-      status: props.statusMap?.[n.id],
+      status,
       checkpoint: n.checkpoint,
-      branches: n.type === 'branch' ? branchHandles(n) : undefined,
-      gateActions: n.type === 'human_gate' || n.type === 'app_preview' ? actionHandles(n) : undefined,
-      structuredExits: n.type === 'test' || n.type === 'review' ? structuredExitHandles(n) : undefined,
-    },
-  }))
-)
+      position,
+      draggable: !modeRun,
+      branches,
+      gateActions,
+      structuredExits,
+    })
+    return reuseFlowElement(flowNodeCache, n.id, fingerprint, selected, () => ({
+      id: n.id,
+      type: 'custom',
+      position,
+      draggable: !modeRun,
+      selected,
+      data: {
+        type: n.type as NodeType,
+        label: n.label,
+        status,
+        checkpoint: n.checkpoint,
+        branches,
+        gateActions,
+        structuredExits,
+      },
+    }))
+  })
+  pruneFlowCache(flowNodeCache, props.nodes.map((n) => n.id))
+  return out
+})
 
 const BRANCH_COLOR = '#E879F9'
 
@@ -317,16 +360,31 @@ const structuredGateEdges = computed(() => {
   return out
 })
 
+type FlowEdgeObj = {
+  id: string
+  source: string
+  target: string
+  type: string
+  animated: boolean
+  selected: boolean
+  data: Record<string, unknown>
+  markerEnd: any
+  style: Record<string, unknown>
+  sourceHandle?: string
+  selectable?: boolean
+}
+const flowEdgeCache = new Map<string, FlowNodeCacheEntry<FlowEdgeObj>>()
+
 const flowEdges = computed(() => {
   const nodeById = new Map(props.nodes.map((n) => [n.id, n]))
-  return [
-  ...props.edges.map((e) => {
+  const selectedEdge = props.selectedEdge
+  const strokes = edgeStrokes.value
+  const realEdges = props.edges.map((e) => {
     const kind = e.kind || 'success'
-    const active = props.activePath?.includes(e.id)
+    const active = !!props.activePath?.includes(e.id)
     const sourceNode = nodeById.get(e.source)
     const isStructuredGate = isStructuredGateNode(sourceNode)
     const tone = inferEdgeTone(e, sourceNode)
-    const strokes = edgeStrokes.value
     const stroke = active
       ? '#7B61FF'
       : isStructuredGate && (tone === 'ok' || tone === 'err') && kind === 'success'
@@ -336,13 +394,28 @@ const flowEdges = computed(() => {
           : kind === 'rollback'
             ? strokes.warn
             : undefined
-    return {
+    const selected = selectedEdge === e.id
+    const fingerprint = flowFingerprint({
+      source: e.source,
+      target: e.target,
+      kind,
+      label: e.label,
+      carry: e.carry,
+      tone,
+      active,
+      stroke,
+      strokeWidth: kind !== 'success' ? 1.6 : undefined,
+      dash: kind === 'rollback' ? '6 4' : undefined,
+      edgeType: e.label || kind !== 'success' ? 'condition' : 'default',
+      animated: active || kind === 'rollback',
+    })
+    return reuseFlowElement(flowEdgeCache, e.id, fingerprint, selected, () => ({
       id: e.id,
       source: e.source,
       target: e.target,
       type: e.label || kind !== 'success' ? 'condition' : 'default',
       animated: !!active || kind === 'rollback',
-      selected: props.selectedEdge === e.id,
+      selected,
       data: { label: e.label, tone, kind, carry: e.carry },
       markerEnd: MarkerType.ArrowClosed,
       style: {
@@ -350,12 +423,16 @@ const flowEdges = computed(() => {
         strokeWidth: kind !== 'success' ? 1.6 : undefined,
         strokeDasharray: kind === 'rollback' ? '6 4' : undefined,
       },
-    }
-  }),
-  ...branchEdges.value,
-  ...gateEdges.value,
-  ...structuredGateEdges.value,
-]
+    }))
+  })
+  // Derived edges (branch/gate/structured) are rebuild-cheap and not selection-driven;
+  // keep them as-is. Only real edges participate in selected-edge identity reuse.
+  const derived = [...branchEdges.value, ...gateEdges.value, ...structuredGateEdges.value]
+  pruneFlowCache(
+    flowEdgeCache,
+    props.edges.map((e) => e.id),
+  )
+  return [...realEdges, ...derived]
 })
 
 function onNodeClick(e: any) {
