@@ -113,10 +113,13 @@ const tipPart = computed(() => parts.value.find((p) => p.key === tip.value.key) 
 </script>
 
 <template>
-  <div data-testid="token-donut-row" class="token-donut-row relative flex min-h-[180px] items-center gap-4">
+  <div
+    data-testid="token-donut-row"
+    class="token-donut-row relative flex min-h-[180px] flex-col items-center gap-4 sm:flex-row sm:items-center"
+  >
     <svg
       data-testid="token-donut-svg"
-      class="h-[150px] w-[150px] shrink-0"
+      class="h-[120px] w-[120px] shrink-0 sm:h-[150px] sm:w-[150px]"
       viewBox="0 0 120 120"
       role="img"
       :aria-label="t('pages.board.tokenStats.compositionTitle')"
@@ -140,7 +143,7 @@ const tipPart = computed(() => parts.value.find((p) => p.key === tip.value.key) 
         {{ fmtCompactTokenCount(composition.total) }}
       </text>
     </svg>
-    <ul data-testid="token-donut-legend" class="m-0 grid min-w-0 flex-1 list-none gap-2 p-0">
+    <ul data-testid="token-donut-legend" class="m-0 grid w-full min-w-0 list-none gap-2 p-0 sm:flex-1">
       <li
         v-for="p in parts"
         :key="p.key"

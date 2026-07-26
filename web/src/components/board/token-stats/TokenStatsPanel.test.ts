@@ -99,6 +99,34 @@ describe('TokenStatsPanel', () => {
     wrapper.unmount()
   })
 
+  it('narrow layout: head stacks, windows ~44px touch, panel clips overflow (g2.1/g2.2/g3.2)', async () => {
+    getProjectTokenStats.mockResolvedValue(sampleStats())
+    const wrapper = mountPanel()
+    await flushPromises()
+
+    const panel = wrapper.find('[data-testid="token-stats-panel"]')
+    expect(panel.classes()).toEqual(expect.arrayContaining(['min-w-0', 'overflow-x-clip']))
+
+    const head = wrapper.find('[data-testid="token-stats-head"]')
+    expect(head.classes()).toEqual(expect.arrayContaining(['flex-col']))
+    expect(head.classes()).toEqual(expect.arrayContaining(['md:flex-row']))
+
+    const winBtn = wrapper.find('[data-testid="token-stats-window-7d"]')
+    expect(winBtn.classes()).toEqual(expect.arrayContaining(['min-h-11']))
+
+    const trendCard = wrapper.find('[data-testid="token-stats-trend-card"]')
+    expect(trendCard.classes()).toEqual(expect.arrayContaining(['min-w-0', 'overflow-x-clip']))
+
+    // Stack order: trend → composition → rank (g4.2)
+    const trendEl = trendCard.element as HTMLElement
+    const compEl = wrapper.find('[data-testid="token-stats-comp-card"]').element as HTMLElement
+    const rankEl = wrapper.find('[data-testid="token-stats-rank-card"]').element as HTMLElement
+    expect(trendEl.compareDocumentPosition(compEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(compEl.compareDocumentPosition(rankEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    wrapper.unmount()
+  })
+
   it('shows empty state when API reports empty (g2.5 null≠0)', async () => {
     getProjectTokenStats.mockResolvedValue(sampleStats({ empty: true, trend: [], workflows: [] }))
     const wrapper = mountPanel()

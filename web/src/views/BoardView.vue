@@ -120,7 +120,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div data-testid="board-view">
+  <div data-testid="board-view" class="min-w-0">
     <div v-if="!embedded" class="mb-5 flex flex-wrap items-start justify-between gap-4">
       <div>
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.board.title') }}</h2>
