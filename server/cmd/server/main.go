@@ -146,6 +146,7 @@ func main() {
 
 	projectSvc := services.NewProjectService(db)
 	auditSvc := services.NewProjectAuditService(db)
+	services.BackfillAuditElevatedFields(db)
 	provider := runtime.NewProvider(cfg.Engine.ExecProvider, host, runtime.Options{
 		SandboxImage:         cfg.Sandbox.Image,
 		SandboxImages:        cfg.Sandbox.Images,
@@ -173,7 +174,7 @@ func main() {
 	eng.SetAuditRecorder(func(rec services.AuditRecord) {
 		auditSvc.Record(rec)
 	})
-	host.SetProjectAuditHook(func(runID, tool string, args map[string]any, resultText string, isError bool) {
+	host.SetProjectAuditHook(func(runID, nodeID, tool string, args map[string]any, resultText string, isError bool) {
 		projectID := services.ResolveProjectIDForRun(db, runID)
 		if projectID == "" {
 			return
@@ -187,17 +188,25 @@ func main() {
 		if len(resultText) > 2000 {
 			resultPayload = resultText[:2000] + "…"
 		}
+		node := strings.TrimSpace(nodeID)
+		if node == "mcp" {
+			node = ""
+		}
 		auditSvc.Record(services.AuditRecord{
 			ProjectID:      projectID,
 			Actor:          services.SystemActor(), // MCP host has no Session
+			CallerKind:     models.CallerKindSystem,
 			Action:         models.AuditActionMCPCall,
 			ResourceType:   "mcp",
 			ResourceID:     tool,
+			RunID:          runID,
+			NodeID:         node,
 			Outcome:        outcome,
 			Summary:        "mcp " + tool,
 			Payload: map[string]any{
 				"tool":      tool,
 				"runId":     runID,
+				"nodeId":    node,
 				"arguments": args,
 				"result":    resultPayload,
 				"isError":   isError,

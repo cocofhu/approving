@@ -77,6 +77,9 @@ func parseAuditTimeWindow(raw string) (from *time.Time, to *time.Time) {
 	case "7d":
 		t := now.Add(-7 * 24 * time.Hour)
 		return &t, nil
+	case "30d":
+		t := now.Add(-30 * 24 * time.Hour)
+		return &t, nil
 	case "all":
 		return nil, nil
 	default:
@@ -113,14 +116,18 @@ func (h *Handlers) parseAuditListFilter(c *gin.Context, projectID string) (servi
 		page, pageSize = pg.Page, pg.PageSize
 	}
 	return services.AuditListFilter{
-		ProjectID: projectID,
-		From:      from,
-		To:        to,
-		Actor:     c.Query("actor"),
-		Action:    c.Query("action"),
-		Resource:  c.Query("resource"),
-		Page:      page,
-		PageSize:  pageSize,
+		ProjectID:  projectID,
+		From:       from,
+		To:         to,
+		Actor:      c.Query("actor"),
+		CallerKind: c.Query("callerKind"),
+		Action:     c.Query("action"),
+		Resource:   c.Query("resource"),
+		RunID:      c.Query("runId"),
+		NodeID:     c.Query("nodeId"),
+		Search:     c.Query("search"),
+		Page:       page,
+		PageSize:   pageSize,
 	}, true
 }
 
@@ -139,18 +146,21 @@ func auditEventDTO(ev models.ProjectAuditEvent) gin.H {
 		"occurredAt":     ev.OccurredAt,
 		"actor":          ev.Actor,
 		"unattributable": ev.Unattributable,
+		"callerKind":     ev.CallerKind,
 		"action":         ev.Action,
 		"resourceType":   ev.ResourceType,
 		"resourceId":     ev.ResourceID,
 		"resource":       resource,
+		"runId":          ev.RunID,
+		"nodeId":         ev.NodeID,
 		"outcome":        ev.Outcome,
 		"summary":        ev.Summary,
 		"payload":        ev.Payload,
 	}
 }
 
-// parseAuditFacetsFilter parses time/action (and optional from/to) for facets.
-// Intentionally omits actor/resource so dropdown options cover the full window.
+// parseAuditFacetsFilter parses time (+ optional runId / from / to) for facets.
+// Action-namespace cascade is no longer used.
 func (h *Handlers) parseAuditFacetsFilter(c *gin.Context, projectID string) (services.AuditListFilter, bool) {
 	from, to := parseAuditTimeWindow(c.DefaultQuery("time", "24h"))
 	if raw := strings.TrimSpace(c.Query("from")); raw != "" {
@@ -173,11 +183,11 @@ func (h *Handlers) parseAuditFacetsFilter(c *gin.Context, projectID string) (ser
 		ProjectID: projectID,
 		From:      from,
 		To:        to,
-		Action:    c.Query("action"),
+		RunID:     c.Query("runId"),
 	}, true
 }
 
-// ListProjectAuditFacets returns distinct actors/resources for cascade dropdowns.
+// ListProjectAuditFacets returns Run / node / resource options for dual-mode filters.
 // GET /api/projects/:id/audit/facets
 func (h *Handlers) ListProjectAuditFacets(c *gin.Context) {
 	if h.Audit == nil {
@@ -222,11 +232,23 @@ func (h *Handlers) ListProjectAudit(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	stats, err := h.Audit.CountStats(f)
+	if err != nil {
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	out := make([]gin.H, 0, len(items))
 	for _, ev := range items {
 		out = append(out, auditEventDTO(ev))
 	}
-	c.JSON(http.StatusOK, paginatedResponse(out, int(total), f.Page, f.PageSize))
+	resp := paginatedResponse(out, int(total), f.Page, f.PageSize)
+	resp["stats"] = gin.H{
+		"total": stats.Total,
+		"mcp":   stats.MCP,
+		"fail":  stats.Fail,
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // ExportProjectAudit exports matching audit events as JSON or plain text and
@@ -284,12 +306,16 @@ func (h *Handlers) ExportProjectAudit(c *gin.Context) {
 	// Meta-audit only after export bytes are successfully generated.
 	actor := h.auditActorFromContext(c)
 	filterSummary := map[string]any{
-		"time":     c.DefaultQuery("time", "24h"),
-		"actor":    f.Actor,
-		"action":   f.Action,
-		"resource": f.Resource,
-		"from":     f.From,
-		"to":       f.To,
+		"time":       c.DefaultQuery("time", "24h"),
+		"actor":      f.Actor,
+		"callerKind": f.CallerKind,
+		"action":     f.Action,
+		"resource":   f.Resource,
+		"runId":      f.RunID,
+		"nodeId":     f.NodeID,
+		"search":     f.Search,
+		"from":       f.From,
+		"to":         f.To,
 	}
 	h.Audit.Record(services.AuditRecord{
 		ProjectID:    projectID,

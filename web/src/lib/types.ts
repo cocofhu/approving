@@ -112,13 +112,47 @@ export interface ProjectAuditEvent {
   occurredAt: string
   actor: string
   unattributable: boolean
+  /** Product attribution class: pm | apikey | system */
+  callerKind?: string
   action: string
   resourceType: string
   resourceId: string
   resource?: string
+  runId?: string
+  nodeId?: string
   outcome: string
   summary: string
   payload?: Record<string, unknown>
+}
+
+export interface ProjectAuditFacetRun {
+  runId: string
+  label: string
+  sub?: string
+}
+
+export interface ProjectAuditFacetNode {
+  nodeId: string
+  label: string
+}
+
+export interface ProjectAuditFacetResource {
+  resourceType: string
+  resourceId: string
+  resource: string
+}
+
+export interface ProjectAuditFacets {
+  runs: ProjectAuditFacetRun[]
+  nodes: ProjectAuditFacetNode[]
+  resources: ProjectAuditFacetResource[]
+  actors?: string[]
+}
+
+export interface ProjectAuditStats {
+  total: number
+  mcp: number
+  fail: number
 }
 
 /** Preset windows for board TokenStatsPanel (matches GET /token-stats). */

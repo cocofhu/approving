@@ -1368,12 +1368,14 @@ func (e *Engine) finish(runID, status string) {
 			e.recordAudit(services.AuditRecord{
 				ProjectID:      projectID,
 				Actor:          services.SystemActor(),
+				CallerKind:     models.CallerKindSystem,
 				Action:         action,
 				ResourceType:   "run",
 				ResourceID:     runID,
+				RunID:          runID,
 				Outcome:        models.AuditOutcomeOK,
 				Summary:        "run " + status,
-				Payload:        map[string]any{"status": status, "trigger": "engine"},
+				Payload:        map[string]any{"status": status, "trigger": "engine", "runId": runID},
 			})
 		}
 	}

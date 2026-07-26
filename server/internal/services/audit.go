@@ -34,6 +34,8 @@ type AuditActor struct {
 
 // ActorFromUsername returns a real user when username is non-empty; otherwise
 // system + unattributable. Never fabricates a person name.
+// Call sites that intend PM attribution leave CallerKind empty so Record maps
+// attributable users to CallerKindPM.
 func ActorFromUsername(username string) AuditActor {
 	u := strings.TrimSpace(username)
 	if u == "" {
@@ -49,15 +51,18 @@ func SystemActor() AuditActor {
 
 // AuditRecord is the input for a single append-only event.
 type AuditRecord struct {
-	ProjectID      string
-	Actor          AuditActor
-	Action         string
-	ResourceType   string
-	ResourceID     string
-	Outcome        string
-	Summary        string
-	Payload        map[string]any
-	OccurredAt     time.Time // zero → now
+	ProjectID    string
+	Actor        AuditActor
+	CallerKind   string // pm | apikey | system; empty → inferred from Actor
+	Action       string
+	ResourceType string
+	ResourceID   string
+	RunID        string // first-class; empty → inferred from resource/payload
+	NodeID       string // first-class; empty → inferred from payload
+	Outcome      string
+	Summary      string
+	Payload      map[string]any
+	OccurredAt   time.Time // zero → now
 }
 
 // Record appends a masked audit event. Fail-open on DB errors.
@@ -78,15 +83,19 @@ func (s *ProjectAuditService) Record(rec AuditRecord) {
 		at = time.Now()
 	}
 	payload := MaskAuditPayload(rec.Payload)
+	runID, nodeID := elevateRunNode(rec.RunID, rec.NodeID, rec.ResourceType, rec.ResourceID, payload)
 	ev := models.ProjectAuditEvent{
 		ID:             "aud-" + uuid.NewString()[:12],
 		ProjectID:      rec.ProjectID,
 		OccurredAt:     at,
 		Actor:          actor.Username,
 		Unattributable: actor.Unattributable,
+		CallerKind:     resolveCallerKind(rec.CallerKind, actor),
 		Action:         rec.Action,
 		ResourceType:   rec.ResourceType,
 		ResourceID:     rec.ResourceID,
+		RunID:          runID,
+		NodeID:         nodeID,
 		Outcome:        outcome,
 		Summary:        rec.Summary,
 		Payload:        payload,
@@ -100,14 +109,61 @@ func (s *ProjectAuditService) Record(rec AuditRecord) {
 	}
 }
 
+func resolveCallerKind(explicit string, actor AuditActor) string {
+	switch strings.TrimSpace(explicit) {
+	case models.CallerKindPM, models.CallerKindAPIKey, models.CallerKindSystem:
+		return strings.TrimSpace(explicit)
+	}
+	if actor.Unattributable || actor.Username == "" || actor.Username == "system" {
+		return models.CallerKindSystem
+	}
+	return models.CallerKindPM
+}
+
+func elevateRunNode(runID, nodeID, resourceType, resourceID string, payload map[string]any) (string, string) {
+	runID = strings.TrimSpace(runID)
+	nodeID = strings.TrimSpace(nodeID)
+	if runID == "" && strings.EqualFold(strings.TrimSpace(resourceType), "run") {
+		runID = strings.TrimSpace(resourceID)
+	}
+	if runID == "" {
+		runID = payloadString(payload, "runId", "run_id", "RunID")
+	}
+	if nodeID == "" {
+		nodeID = payloadString(payload, "nodeId", "node_id", "NodeID")
+	}
+	return runID, nodeID
+}
+
+func payloadString(p map[string]any, keys ...string) string {
+	if p == nil {
+		return ""
+	}
+	for _, k := range keys {
+		if v, ok := p[k]; ok {
+			switch t := v.(type) {
+			case string:
+				if s := strings.TrimSpace(t); s != "" {
+					return s
+				}
+			}
+		}
+	}
+	return ""
+}
+
 // AuditListFilter holds query filters for project audit listing/export.
 type AuditListFilter struct {
 	ProjectID  string
 	From       *time.Time
 	To         *time.Time
-	Actor      string
+	Actor      string // legacy exact actor username
+	CallerKind string // pm | apikey | system
 	Action     string // exact or prefix (e.g. "workflow" matches workflow.*)
 	Resource   string // substring match on resource_type, resource_id, or summary
+	RunID      string // first-class run association
+	NodeID     string // first-class node association
+	Search     string // substring on summary / resource / action
 	Page       int
 	PageSize   int
 }
@@ -148,6 +204,39 @@ func (s *ProjectAuditService) ListPage(f AuditListFilter) ([]models.ProjectAudit
 	return items, total, nil
 }
 
+// AuditListStats holds aggregate counts for the current filter (not just the page).
+type AuditListStats struct {
+	Total int64 `json:"total"`
+	MCP   int64 `json:"mcp"`
+	Fail  int64 `json:"fail"`
+}
+
+// CountStats returns total / MCP / fail counts for the filter.
+func (s *ProjectAuditService) CountStats(f AuditListFilter) (AuditListStats, error) {
+	empty := AuditListStats{}
+	if s == nil || s.db == nil {
+		return empty, fmt.Errorf("audit unavailable")
+	}
+	base := s.applyFilter(s.db.Model(&models.ProjectAuditEvent{}), f)
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
+		return empty, err
+	}
+	var mcp int64
+	if err := s.applyFilter(s.db.Model(&models.ProjectAuditEvent{}), f).
+		Where("action = ? OR action LIKE ?", models.AuditActionMCPCall, "mcp.%").
+		Count(&mcp).Error; err != nil {
+		return empty, err
+	}
+	var fail int64
+	if err := s.applyFilter(s.db.Model(&models.ProjectAuditEvent{}), f).
+		Where("outcome = ?", models.AuditOutcomeFail).
+		Count(&fail).Error; err != nil {
+		return empty, err
+	}
+	return AuditListStats{Total: total, MCP: mcp, Fail: fail}, nil
+}
+
 // ListAllMatching returns all events matching the filter (capped) for export.
 func (s *ProjectAuditService) ListAllMatching(f AuditListFilter, limit int) ([]models.ProjectAuditEvent, error) {
 	if s == nil || s.db == nil {
@@ -170,23 +259,43 @@ func (s *ProjectAuditService) ListAllMatching(f AuditListFilter, limit int) ([]m
 	return items, nil
 }
 
-// AuditFacetResource is one distinct resource option for cascade dropdowns.
+// AuditFacetResource is one distinct resource option for dropdowns.
 type AuditFacetResource struct {
 	ResourceType string `json:"resourceType"`
 	ResourceID   string `json:"resourceId"`
 	Resource     string `json:"resource"`
 }
 
-// AuditFacets holds distinct actors and resources for filter dropdowns.
-type AuditFacets struct {
-	Actors    []string             `json:"actors"`
-	Resources []AuditFacetResource `json:"resources"`
+// AuditFacetRun is a readable Run option for "按 Run 查看".
+type AuditFacetRun struct {
+	RunID string `json:"runId"`
+	Label string `json:"label"`
+	Sub   string `json:"sub,omitempty"`
 }
 
-// ListFacets returns distinct actors (time window) and resources (time window + optional action).
-// Actor/resource list filters are ignored so dropdown coverage stays aligned with the window.
+// AuditFacetNode is a node option scoped to a selected Run.
+type AuditFacetNode struct {
+	NodeID string `json:"nodeId"`
+	Label  string `json:"label"`
+}
+
+// AuditFacets holds Run / node / resource options for the dual-mode audit UI.
+// Action-namespace cascade is intentionally removed.
+type AuditFacets struct {
+	Runs      []AuditFacetRun      `json:"runs"`
+	Nodes     []AuditFacetNode     `json:"nodes"`
+	Resources []AuditFacetResource `json:"resources"`
+	// Actors kept for backward compatibility; dual-mode UI uses callerKind instead.
+	Actors []string `json:"actors"`
+}
+
+// ListFacets returns Run list (time window), nodes/resources for an optional Run,
+// and distinct actors. Action cascade narrowing is no longer applied.
 func (s *ProjectAuditService) ListFacets(f AuditListFilter) (AuditFacets, error) {
-	empty := AuditFacets{Actors: []string{}, Resources: []AuditFacetResource{}}
+	empty := AuditFacets{
+		Runs: []AuditFacetRun{}, Nodes: []AuditFacetNode{},
+		Resources: []AuditFacetResource{}, Actors: []string{},
+	}
 	if s == nil || s.db == nil {
 		return empty, fmt.Errorf("audit unavailable")
 	}
@@ -209,20 +318,123 @@ func (s *ProjectAuditService) ListFacets(f AuditListFilter) (AuditFacets, error)
 		actors = []string{}
 	}
 
-	resFilter := base
-	resFilter.Action = f.Action
+	runs, err := s.listFacetRuns(base)
+	if err != nil {
+		return empty, err
+	}
+
+	scope := base
+	scope.RunID = strings.TrimSpace(f.RunID)
+	nodes, err := s.listFacetNodes(scope)
+	if err != nil {
+		return empty, err
+	}
+	resources, err := s.listFacetResources(scope)
+	if err != nil {
+		return empty, err
+	}
+
+	return AuditFacets{
+		Runs: runs, Nodes: nodes, Resources: resources, Actors: actors,
+	}, nil
+}
+
+func (s *ProjectAuditService) listFacetRuns(base AuditListFilter) ([]AuditFacetRun, error) {
+	var events []models.ProjectAuditEvent
+	// Newest-first scan then de-dupe: avoids dialect issues with MAX()+Scan into time.Time.
+	err := s.applyFilter(s.db.Model(&models.ProjectAuditEvent{}), base).
+		Where("run_id <> ''").
+		Select("run_id, occurred_at").
+		Order("occurred_at desc").
+		Limit(3000).
+		Find(&events).Error
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	out := make([]AuditFacetRun, 0)
+	for _, ev := range events {
+		id := strings.TrimSpace(ev.RunID)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, AuditFacetRun{
+			RunID: id,
+			Label: ev.OccurredAt.Local().Format("2006-01-02 15:04") + " · " + shortRunID(id),
+			Sub:   s.runFacetSub(base, id),
+		})
+	}
+	return out, nil
+}
+
+func shortRunID(id string) string {
+	short := id
+	if strings.HasPrefix(short, "run-") && len(short) > 4 {
+		short = short[4:]
+	}
+	if len(short) > 8 {
+		short = short[:8]
+	}
+	return short
+}
+
+func (s *ProjectAuditService) runFacetSub(base AuditListFilter, runID string) string {
+	f := base
+	f.RunID = runID
+	var mcp, fail int64
+	_ = s.applyFilter(s.db.Model(&models.ProjectAuditEvent{}), f).
+		Where("action = ? OR action LIKE ?", models.AuditActionMCPCall, "mcp.%").
+		Count(&mcp).Error
+	_ = s.applyFilter(s.db.Model(&models.ProjectAuditEvent{}), f).
+		Where("outcome = ?", models.AuditOutcomeFail).
+		Count(&fail).Error
+	parts := []string{}
+	if fail > 0 {
+		parts = append(parts, "失败")
+	} else {
+		parts = append(parts, "成功")
+	}
+	if mcp > 0 {
+		parts = append(parts, "含 MCP")
+	}
+	return strings.Join(parts, " · ")
+}
+
+func (s *ProjectAuditService) listFacetNodes(f AuditListFilter) ([]AuditFacetNode, error) {
+	if strings.TrimSpace(f.RunID) == "" {
+		return []AuditFacetNode{}, nil
+	}
+	var ids []string
+	err := s.applyFilter(s.db.Model(&models.ProjectAuditEvent{}), f).
+		Where("node_id <> '' AND node_id <> ?", "run").
+		Select("node_id").
+		Group("node_id").
+		Order("node_id asc").
+		Pluck("node_id", &ids).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]AuditFacetNode, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, AuditFacetNode{NodeID: id, Label: id})
+	}
+	return out, nil
+}
+
+func (s *ProjectAuditService) listFacetResources(f AuditListFilter) ([]AuditFacetResource, error) {
 	type resRow struct {
 		ResourceType string
 		ResourceID   string
 	}
 	var rows []resRow
-	resQ := s.applyFilter(s.db.Model(&models.ProjectAuditEvent{}), resFilter).
+	resQ := s.applyFilter(s.db.Model(&models.ProjectAuditEvent{}), f).
 		Where("resource_type <> '' OR resource_id <> ''").
 		Select("resource_type, resource_id").
 		Group("resource_type, resource_id").
 		Order("resource_type asc, resource_id asc")
 	if err := resQ.Find(&rows).Error; err != nil {
-		return empty, err
+		return nil, err
 	}
 	resources := make([]AuditFacetResource, 0, len(rows))
 	for _, r := range rows {
@@ -240,7 +452,7 @@ func (s *ProjectAuditService) ListFacets(f AuditListFilter) (AuditFacets, error)
 			Resource:     label,
 		})
 	}
-	return AuditFacets{Actors: actors, Resources: resources}, nil
+	return resources, nil
 }
 
 func (s *ProjectAuditService) applyFilter(q *gorm.DB, f AuditListFilter) *gorm.DB {
@@ -254,6 +466,9 @@ func (s *ProjectAuditService) applyFilter(q *gorm.DB, f AuditListFilter) *gorm.D
 	if a := strings.TrimSpace(f.Actor); a != "" {
 		q = q.Where("actor = ?", a)
 	}
+	if ck := strings.TrimSpace(f.CallerKind); ck != "" {
+		q = q.Where("caller_kind = ?", ck)
+	}
 	if act := strings.TrimSpace(f.Action); act != "" {
 		if strings.Contains(act, ".") {
 			q = q.Where("action = ?", act)
@@ -261,14 +476,83 @@ func (s *ProjectAuditService) applyFilter(q *gorm.DB, f AuditListFilter) *gorm.D
 			q = q.Where("action = ? OR action LIKE ?", act, act+".%")
 		}
 	}
+	if runID := strings.TrimSpace(f.RunID); runID != "" {
+		q = q.Where("run_id = ?", runID)
+	}
+	if nodeID := strings.TrimSpace(f.NodeID); nodeID != "" {
+		q = q.Where("node_id = ?", nodeID)
+	}
 	if res := strings.TrimSpace(f.Resource); res != "" {
-		like := "%" + res + "%"
+		if i := strings.Index(res, "/"); i > 0 {
+			typ, id := res[:i], res[i+1:]
+			like := "%" + res + "%"
+			q = q.Where(
+				"(resource_type = ? AND resource_id = ?) OR resource_type LIKE ? OR resource_id LIKE ? OR summary LIKE ?",
+				typ, id, like, like, like,
+			)
+		} else {
+			like := "%" + res + "%"
+			q = q.Where(
+				"resource_type LIKE ? OR resource_id LIKE ? OR summary LIKE ?",
+				like, like, like,
+			)
+		}
+	}
+	if search := strings.TrimSpace(f.Search); search != "" {
+		like := "%" + search + "%"
 		q = q.Where(
-			"resource_type LIKE ? OR resource_id LIKE ? OR summary LIKE ?",
-			like, like, like,
+			"summary LIKE ? OR resource_type LIKE ? OR resource_id LIKE ? OR action LIKE ?",
+			like, like, like, like,
 		)
 	}
 	return q
+}
+
+// BackfillAuditElevatedFields lifts runId/nodeId/callerKind from legacy rows.
+// Safe to call repeatedly; only fills empty first-class columns. Never fabricates
+// run association when payload/resource lack it.
+func BackfillAuditElevatedFields(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+	var events []models.ProjectAuditEvent
+	// Cap per boot to avoid long startup on huge histories.
+	if err := db.Where("run_id = '' OR run_id IS NULL OR node_id = '' OR node_id IS NULL OR caller_kind = '' OR caller_kind IS NULL").
+		Order("occurred_at desc").
+		Limit(5000).
+		Find(&events).Error; err != nil {
+		log.Warn().Err(err).Msg("audit elevated-field backfill query failed")
+		return
+	}
+	updated := 0
+	for _, ev := range events {
+		runID, nodeID := elevateRunNode(ev.RunID, ev.NodeID, ev.ResourceType, ev.ResourceID, ev.Payload)
+		caller := strings.TrimSpace(ev.CallerKind)
+		if caller == "" {
+			caller = resolveCallerKind("", AuditActor{Username: ev.Actor, Unattributable: ev.Unattributable})
+		}
+		changes := map[string]any{}
+		if strings.TrimSpace(ev.RunID) == "" && runID != "" {
+			changes["run_id"] = runID
+		}
+		if strings.TrimSpace(ev.NodeID) == "" && nodeID != "" {
+			changes["node_id"] = nodeID
+		}
+		if strings.TrimSpace(ev.CallerKind) == "" && caller != "" {
+			changes["caller_kind"] = caller
+		}
+		if len(changes) == 0 {
+			continue
+		}
+		if err := db.Model(&models.ProjectAuditEvent{}).Where("id = ?", ev.ID).Updates(changes).Error; err != nil {
+			log.Warn().Err(err).Str("id", ev.ID).Msg("audit elevated-field backfill update failed")
+			continue
+		}
+		updated++
+	}
+	if updated > 0 {
+		log.Info().Int("updated", updated).Msg("audit elevated-field backfill complete")
+	}
 }
 
 // FormatAuditText renders events as human-readable plain text.

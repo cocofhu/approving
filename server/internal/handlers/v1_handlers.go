@@ -114,15 +114,18 @@ func (h *Handlers) V1StartRun(c *gin.Context) {
 			h.recordAudit(services.AuditRecord{
 				ProjectID:    wf.ProjectID,
 				Actor:        services.SystemActor(), // V1 API Key path has no Session
+				CallerKind:   models.CallerKindAPIKey,
 				Action:       models.AuditActionRunStart,
 				ResourceType: "run",
 				ResourceID:   run.ID,
+				RunID:        run.ID,
 				Outcome:      models.AuditOutcomeOK,
 				Summary:      "start run (v1 api)",
 				Payload: map[string]any{
 					"workflowId": wfID,
 					"trigger":    trigger,
 					"source":     "v1_api",
+					"runId":      run.ID,
 				},
 			})
 		}
@@ -213,12 +216,14 @@ func (h *Handlers) V1CancelRun(c *gin.Context) {
 		h.recordAudit(services.AuditRecord{
 			ProjectID:    projectID,
 			Actor:        services.SystemActor(), // V1 API Key path has no Session
+			CallerKind:   models.CallerKindAPIKey,
 			Action:       models.AuditActionRunCancel,
 			ResourceType: "run",
 			ResourceID:   runID,
+			RunID:        runID,
 			Outcome:      models.AuditOutcomeOK,
 			Summary:      "cancel run (v1 api)",
-			Payload:      map[string]any{"workflowId": run.WorkflowID, "source": "v1_api"},
+			Payload:      map[string]any{"workflowId": run.WorkflowID, "source": "v1_api", "runId": runID},
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "cancelled"})

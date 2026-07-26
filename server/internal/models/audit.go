@@ -6,18 +6,31 @@ import "time"
 // Managers must not Update/Delete via public API; only List/Export are exposed.
 type ProjectAuditEvent struct {
 	ID             string         `gorm:"primaryKey" json:"id"`
-	ProjectID      string         `gorm:"index:idx_audit_proj_occurred,priority:1;index" json:"projectId"`
-	OccurredAt     time.Time      `gorm:"index:idx_audit_proj_occurred,priority:2;index" json:"occurredAt"`
-	Actor          string         `gorm:"index" json:"actor"`
-	Unattributable bool           `json:"unattributable"`
-	Action         string         `gorm:"index" json:"action"`
-	ResourceType   string         `gorm:"index" json:"resourceType"`
-	ResourceID     string         `gorm:"index" json:"resourceId"`
-	Outcome        string         `json:"outcome"` // ok | fail
-	Summary        string         `json:"summary"`
-	Payload        map[string]any `gorm:"serializer:json" json:"payload"`
-	CreatedAt      time.Time      `json:"createdAt"`
+	ProjectID      string    `gorm:"index:idx_audit_proj_occurred,priority:1;index:idx_audit_proj_run,priority:1;index" json:"projectId"`
+	OccurredAt     time.Time `gorm:"index:idx_audit_proj_occurred,priority:2;index" json:"occurredAt"`
+	Actor          string    `gorm:"index" json:"actor"`
+	Unattributable bool      `json:"unattributable"`
+	// CallerKind is the product-facing attribution class: pm | apikey | system.
+	CallerKind   string `gorm:"index" json:"callerKind"`
+	Action       string `gorm:"index" json:"action"`
+	ResourceType string `gorm:"index" json:"resourceType"`
+	ResourceID   string `gorm:"index" json:"resourceId"`
+	// RunID / NodeID are first-class filter fields (elevated from payload).
+	// Empty means the event is not associated with a run/node — never fabricate.
+	RunID     string         `gorm:"index:idx_audit_proj_run,priority:2;index" json:"runId"`
+	NodeID    string         `gorm:"index" json:"nodeId"`
+	Outcome   string         `json:"outcome"` // ok | fail
+	Summary   string         `json:"summary"`
+	Payload   map[string]any `gorm:"serializer:json" json:"payload"`
+	CreatedAt time.Time      `json:"createdAt"`
 }
+
+// CallerKind values for audit attribution filters.
+const (
+	CallerKindPM     = "pm"
+	CallerKindAPIKey = "apikey"
+	CallerKindSystem = "system"
+)
 
 // Audit action namespaces (aligned with Demo filters).
 const (

@@ -126,22 +126,22 @@ func TestListFacetsDistinctActorsAndResources(t *testing.T) {
 	s.Record(AuditRecord{
 		ProjectID: "proj-f", Actor: ActorFromUsername("alice"),
 		Action: models.AuditActionRunStart, ResourceType: "run", ResourceID: "run-1",
-		Outcome: models.AuditOutcomeOK, Summary: "start",
+		RunID: "run-1", Outcome: models.AuditOutcomeOK, Summary: "start",
 	})
 	s.Record(AuditRecord{
 		ProjectID: "proj-f", Actor: ActorFromUsername("alice"),
 		Action: models.AuditActionRunCancel, ResourceType: "run", ResourceID: "run-1",
-		Outcome: models.AuditOutcomeOK, Summary: "cancel",
+		RunID: "run-1", Outcome: models.AuditOutcomeOK, Summary: "cancel",
 	})
 	s.Record(AuditRecord{
 		ProjectID: "proj-f", Actor: ActorFromUsername("bob"),
 		Action: models.AuditActionMCPCall, ResourceType: "mcp", ResourceID: "tool.a",
-		Outcome: models.AuditOutcomeOK, Summary: "mcp",
+		RunID: "run-1", NodeID: "research", Outcome: models.AuditOutcomeOK, Summary: "mcp",
 	})
 	s.Record(AuditRecord{
 		ProjectID: "proj-other", Actor: ActorFromUsername("carol"),
 		Action: models.AuditActionRunStart, ResourceType: "run", ResourceID: "run-x",
-		Outcome: models.AuditOutcomeOK, Summary: "other",
+		RunID: "run-x", Outcome: models.AuditOutcomeOK, Summary: "other",
 	})
 
 	facets, err := s.ListFacets(AuditListFilter{ProjectID: "proj-f"})
@@ -151,23 +151,120 @@ func TestListFacetsDistinctActorsAndResources(t *testing.T) {
 	if len(facets.Actors) != 2 {
 		t.Fatalf("actors want 2 got %v", facets.Actors)
 	}
+	if len(facets.Runs) != 1 || facets.Runs[0].RunID != "run-1" {
+		t.Fatalf("runs: %#v", facets.Runs)
+	}
+	// Without runId scope, resources cover the whole window.
 	if len(facets.Resources) != 2 {
 		t.Fatalf("resources want 2 got %#v", facets.Resources)
 	}
 
-	runOnly, err := s.ListFacets(AuditListFilter{ProjectID: "proj-f", Action: "run"})
+	scoped, err := s.ListFacets(AuditListFilter{ProjectID: "proj-f", RunID: "run-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Actors still cover the full time window (not narrowed by action).
-	if len(runOnly.Actors) != 2 {
-		t.Fatalf("actors should ignore action filter: %v", runOnly.Actors)
+	if len(scoped.Nodes) != 1 || scoped.Nodes[0].NodeID != "research" {
+		t.Fatalf("nodes: %#v", scoped.Nodes)
 	}
-	if len(runOnly.Resources) != 1 || runOnly.Resources[0].ResourceID != "run-1" {
-		t.Fatalf("run resources: %#v", runOnly.Resources)
+	if len(scoped.Resources) != 2 {
+		t.Fatalf("scoped resources: %#v", scoped.Resources)
 	}
-	if runOnly.Resources[0].Resource != "run/run-1" {
-		t.Fatalf("resource label: %#v", runOnly.Resources[0])
+}
+
+func TestListFilterByRunIDIncludesMCP(t *testing.T) {
+	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "audit-run.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewProjectAuditService(db)
+
+	s.Record(AuditRecord{
+		ProjectID: "p", Actor: SystemActor(),
+		Action: models.AuditActionRunStart, ResourceType: "run", ResourceID: "run-a",
+		RunID: "run-a", Outcome: models.AuditOutcomeOK, Summary: "start",
+	})
+	s.Record(AuditRecord{
+		ProjectID: "p", Actor: SystemActor(),
+		Action: models.AuditActionMCPCall, ResourceType: "mcp", ResourceID: "read_artifact",
+		RunID: "run-a", NodeID: "research", Outcome: models.AuditOutcomeOK, Summary: "mcp read",
+	})
+	s.Record(AuditRecord{
+		ProjectID: "p", Actor: SystemActor(),
+		Action: models.AuditActionMCPCall, ResourceType: "mcp", ResourceID: "other",
+		RunID: "run-b", Outcome: models.AuditOutcomeOK, Summary: "other run mcp",
+	})
+	// Project-level MCP without runId must not appear under selected run.
+	s.Record(AuditRecord{
+		ProjectID: "p", Actor: SystemActor(),
+		Action: models.AuditActionMCPCall, ResourceType: "mcp", ResourceID: "list_artifacts",
+		Outcome: models.AuditOutcomeOK, Summary: "project mcp",
+	})
+
+	items, total, err := s.ListPage(AuditListFilter{ProjectID: "p", RunID: "run-a", Page: 1, PageSize: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 2 {
+		t.Fatalf("run-a total=%d want 2 items=%#v", total, items)
+	}
+	var sawMCP bool
+	for _, ev := range items {
+		if ev.RunID != "run-a" {
+			t.Fatalf("leaked run %s", ev.RunID)
+		}
+		if ev.Action == models.AuditActionMCPCall {
+			sawMCP = true
+			if ev.CallerKind != models.CallerKindSystem {
+				t.Fatalf("callerKind: %s", ev.CallerKind)
+			}
+		}
+	}
+	if !sawMCP {
+		t.Fatal("expected mcp.call in run-a list")
+	}
+
+	stats, err := s.CountStats(AuditListFilter{ProjectID: "p", RunID: "run-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Total != 2 || stats.MCP != 1 {
+		t.Fatalf("stats=%#v", stats)
+	}
+
+	narrowed, nTotal, err := s.ListPage(AuditListFilter{
+		ProjectID: "p", RunID: "run-a", Resource: "mcp/read_artifact", Page: 1, PageSize: 20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nTotal != 1 || len(narrowed) != 1 || narrowed[0].ResourceID != "read_artifact" {
+		t.Fatalf("resource narrow: total=%d %#v", nTotal, narrowed)
+	}
+}
+
+func TestBackfillAuditElevatedFields(t *testing.T) {
+	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "audit-backfill.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Insert legacy-shaped row bypassing Record elevation.
+	legacy := models.ProjectAuditEvent{
+		ID: "aud-legacy1", ProjectID: "p", OccurredAt: time.Now(),
+		Actor: "system", Unattributable: true, Action: models.AuditActionMCPCall,
+		ResourceType: "mcp", ResourceID: "tool.x", Outcome: models.AuditOutcomeOK,
+		Summary: "legacy mcp", Payload: map[string]any{"runId": "run-legacy", "nodeId": "react"},
+		CreatedAt: time.Now(),
+	}
+	if err := db.Create(&legacy).Error; err != nil {
+		t.Fatal(err)
+	}
+	BackfillAuditElevatedFields(db)
+	var got models.ProjectAuditEvent
+	if err := db.First(&got, "id = ?", "aud-legacy1").Error; err != nil {
+		t.Fatal(err)
+	}
+	if got.RunID != "run-legacy" || got.NodeID != "react" || got.CallerKind != models.CallerKindSystem {
+		t.Fatalf("backfill incomplete: %#v", got)
 	}
 }
 

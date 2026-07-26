@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import AppButton from '@/components/ui/AppButton.vue'
+import AuditFilterDropdown, { type AuditDdOption } from '@/components/project/AuditFilterDropdown.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import { api, isPaginated, type PaginatedResponse } from '@/lib/api'
 import { prettyAuditPayload } from '@/lib/auditPayload'
 import { useToast } from '@/lib/useToast'
 import { fmtTime } from '@/lib/format'
-import type { ProjectAuditEvent } from '@/lib/types'
-
-type FacetResource = { resourceType: string; resourceId: string; resource: string }
+import type {
+  ProjectAuditEvent,
+  ProjectAuditFacetResource,
+  ProjectAuditFacetRun,
+  ProjectAuditStats,
+} from '@/lib/types'
 
 const props = defineProps<{
   projectId: string
@@ -20,139 +23,304 @@ const props = defineProps<{
 const { t } = useI18n()
 const toast = useToast()
 
+type Mode = 'run' | 'all'
+
 const loading = ref(false)
 const denied = ref(false)
 const events = ref<ProjectAuditEvent[]>([])
 const total = ref(0)
+const stats = ref<ProjectAuditStats>({ total: 0, mcp: 0, fail: 0 })
 const page = ref(1)
-const pageSize = 20
+const pageSize = ref(10)
 const openId = ref<string | null>(null)
+const mode = ref<Mode>('run')
+const initialized = ref(false)
 
-const timeWindow = ref<'24h' | '7d' | 'all'>('24h')
-const actor = ref('')
-const action = ref('')
+const timeWindow = ref<'24h' | '7d' | '30d'>('24h')
+const runId = ref('')
+const nodeId = ref('')
+const callerKind = ref('')
 const resource = ref('')
+const search = ref('')
 
-const actorOptions = ref<string[]>([])
-const resourceOptions = ref<FacetResource[]>([])
+const runOptions = ref<ProjectAuditFacetRun[]>([])
+const nodeOptions = ref<{ nodeId: string; label: string }[]>([])
+const resourceOptions = ref<ProjectAuditFacetResource[]>([])
 
-const hasMore = computed(() => page.value * pageSize < total.value)
-const resourceDisabled = computed(() => !action.value)
+const ACTION_CLASS: Record<string, string> = {
+  'mcp.call': 'mcp',
+  'run.start': 'run',
+  'run.cancel': 'run',
+  'run.completed': 'run',
+  'run.failed': 'run',
+  'run.cancelled': 'run',
+  'gate.decide': 'gate',
+  'workflow.create': 'cfg',
+  'workflow.update': 'cfg',
+  'workflow.delete': 'cfg',
+  'workflow.publish': 'cfg',
+  'project.config': 'cfg',
+  'audit.export': 'exp',
+}
 
-const actionLabelMap = computed<Record<string, string>>(() => ({
-  'project.config': t('pages.projectDetail.audit.actionProjectConfig'),
-  workflow: t('pages.projectDetail.audit.actionWorkflow'),
-  run: t('pages.projectDetail.audit.actionRun'),
-  gate: t('pages.projectDetail.audit.actionGate'),
-  mcp: t('pages.projectDetail.audit.actionMcp'),
-  'audit.export': t('pages.projectDetail.audit.actionExport'),
-}))
+const NODE_LABEL: Record<string, string> = {
+  research: '代码调研',
+  react: '需求澄清',
+  visual: '视觉网页',
+  gate: '门禁',
+  plan: '计划',
+  proposal: '方案',
+  implement: '实现',
+  test: '测试',
+  review: '评审',
+  app_preview: '预览',
+}
 
-const tipTypeText = computed(() =>
-  action.value
-    ? t('pages.projectDetail.audit.tipTypeReady')
-    : t('pages.projectDetail.audit.tipTypeIdle'),
+const CALLER_LABEL_KEYS: Record<string, string> = {
+  pm: 'pages.projectDetail.audit.callerPm',
+  apikey: 'pages.projectDetail.audit.callerApiKey',
+  system: 'pages.projectDetail.audit.callerSystem',
+}
+
+const hasMore = computed(() => page.value * pageSize.value < total.value)
+const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value) || 1))
+
+const runDdOptions = computed<AuditDdOption[]>(() =>
+  runOptions.value.map((r) => ({
+    value: r.runId,
+    label: r.label,
+    sub: r.sub,
+    short: r.runId.replace(/^run-/, '').slice(0, 8),
+    dot: 'run',
+  })),
 )
 
-const tipResText = computed(() => {
-  if (!action.value) return t('pages.projectDetail.audit.tipResLocked')
-  if (resource.value) return t('pages.projectDetail.audit.tipResPicked')
-  return t('pages.projectDetail.audit.tipResReady')
-})
+const nodeDdOptions = computed<AuditDdOption[]>(() => [
+  { value: '', label: t('pages.projectDetail.audit.filterAll') },
+  ...nodeOptions.value.map((n) => ({
+    value: n.nodeId,
+    label: NODE_LABEL[n.nodeId] || n.label || n.nodeId,
+    sub: n.nodeId,
+  })),
+])
 
-const tipTypeClass = computed(() =>
-  action.value ? 'text-emerald-700 font-semibold' : 'text-txt3 font-medium',
-)
+const callerDdOptions = computed<AuditDdOption[]>(() => [
+  { value: '', label: t('pages.projectDetail.audit.filterAll') },
+  { value: 'pm', label: t('pages.projectDetail.audit.callerPm'), sub: t('pages.projectDetail.audit.callerPmSub') },
+  { value: 'apikey', label: t('pages.projectDetail.audit.callerApiKey'), sub: t('pages.projectDetail.audit.callerApiKeySub') },
+  { value: 'system', label: t('pages.projectDetail.audit.callerSystem'), sub: t('pages.projectDetail.audit.callerSystemSub') },
+])
 
-const tipResClass = computed(() => {
-  if (resource.value) return 'text-emerald-700 font-semibold'
-  if (action.value) return 'text-accent-2 font-semibold'
-  return 'text-txt3 font-medium'
-})
+const resourceDdOptions = computed<AuditDdOption[]>(() => [
+  { value: '', label: t('pages.projectDetail.audit.filterAll'), dot: '' },
+  ...resourceOptions.value.map((r) => {
+    const value = r.resource || [r.resourceType, r.resourceId].filter(Boolean).join('/')
+    return {
+      value,
+      label: value,
+      sub: r.resourceType || '',
+      short: value,
+      dot: resDot(value),
+    }
+  }),
+])
 
-const chipParts = computed(() => {
-  const parts: string[] = []
-  if (action.value) {
-    parts.push(actionLabelMap.value[action.value] || action.value)
+const timeDdOptions = computed<AuditDdOption[]>(() => [
+  { value: '24h', label: t('pages.projectDetail.audit.time24h') },
+  { value: '7d', label: t('pages.projectDetail.audit.time7d') },
+  { value: '30d', label: t('pages.projectDetail.audit.time30d') },
+])
+
+const pageSizeOptions = computed<AuditDdOption[]>(() => [
+  { value: '5', label: '5' },
+  { value: '10', label: '10' },
+  { value: '20', label: '20' },
+])
+
+type Chip = { key: string; label: string; value: string; clearable: boolean }
+
+const chips = computed<Chip[]>(() => {
+  const list: Chip[] = []
+  if (mode.value === 'run') {
+    if (runId.value) {
+      const hit = runOptions.value.find((r) => r.runId === runId.value)
+      list.push({
+        key: 'run',
+        label: 'Run',
+        value: hit?.label || shortRun(runId.value),
+        clearable: false,
+      })
+    }
+    if (nodeId.value) {
+      list.push({
+        key: 'node',
+        label: t('pages.projectDetail.audit.colNode'),
+        value: NODE_LABEL[nodeId.value] || nodeId.value,
+        clearable: true,
+      })
+    }
+  } else if (callerKind.value) {
+    list.push({
+      key: 'caller',
+      label: t('pages.projectDetail.audit.colCaller'),
+      value: t(CALLER_LABEL_KEYS[callerKind.value] || '') || callerKind.value,
+      clearable: true,
+    })
   }
   if (resource.value) {
-    const hit = resourceOptions.value.find((r) => resourceValue(r) === resource.value)
-    parts.push(hit ? formatResourceOption(hit) : resource.value)
+    list.push({
+      key: 'resource',
+      label: t('pages.projectDetail.audit.colResource'),
+      value: resource.value,
+      clearable: true,
+    })
   }
-  if (actor.value) {
-    parts.push(actor.value === 'system' ? t('pages.projectDetail.audit.actorSystem') : actor.value)
+  if (search.value.trim()) {
+    list.push({
+      key: 'search',
+      label: t('pages.projectDetail.audit.filterSearch'),
+      value: search.value.trim(),
+      clearable: true,
+    })
   }
-  return parts
+  if (timeWindow.value !== '24h') {
+    const lab =
+      timeWindow.value === '7d'
+        ? t('pages.projectDetail.audit.time7d')
+        : t('pages.projectDetail.audit.time30d')
+    list.push({
+      key: 'time',
+      label: t('pages.projectDetail.audit.filterTime'),
+      value: lab,
+      clearable: true,
+    })
+  }
+  return list
 })
 
-const showChip = computed(() => chipParts.value.length > 0)
+const clearableChips = computed(() => chips.value.filter((c) => c.clearable))
+const noRuns = computed(() => mode.value === 'run' && initialized.value && runOptions.value.length === 0)
 
-function resourceValue(r: FacetResource) {
-  return r.resourceId || r.resource || r.resourceType
+function resDot(v: string) {
+  if (!v) return ''
+  if (v.startsWith('mcp/') || v === 'mcp') return 'mcp'
+  if (v.startsWith('run/')) return 'run'
+  if (v.startsWith('gate/')) return 'gate'
+  if (v.startsWith('workflow/')) return 'wf'
+  if (v.startsWith('project/')) return 'prj'
+  if (v.startsWith('audit/')) return 'aud'
+  return ''
 }
 
-function resourceTypeLabel(type: string) {
-  const keyMap: Record<string, string> = {
-    run: 'resourceLabelRun',
-    mcp: 'resourceLabelMcp',
-    workflow: 'resourceLabelWorkflow',
-    gate: 'resourceLabelGate',
-    project: 'resourceLabelProject',
-    audit: 'resourceLabelAudit',
-    cron: 'resourceLabelCron',
-    channel: 'resourceLabelChannel',
-    pm: 'resourceLabelPm',
+function resGroup(o: AuditDdOption) {
+  if (!o.value) return t('pages.projectDetail.audit.filterAll')
+  const i = o.value.indexOf('/')
+  return i > 0 ? o.value.slice(0, i) : 'other'
+}
+
+function shortRun(id: string) {
+  const s = id.replace(/^run-/, '')
+  return s.length > 8 ? s.slice(0, 8) : s
+}
+
+function actionLabel(action: string) {
+  const known: Record<string, string> = {
+    'mcp.call': t('pages.projectDetail.audit.actionMcp'),
+    'run.start': t('pages.projectDetail.audit.actionRun'),
+    'run.cancel': t('pages.projectDetail.audit.actionRun'),
+    'run.completed': t('pages.projectDetail.audit.actionRun'),
+    'run.failed': t('pages.projectDetail.audit.actionRun'),
+    'run.cancelled': t('pages.projectDetail.audit.actionRun'),
+    'gate.decide': t('pages.projectDetail.audit.actionGate'),
+    'workflow.create': t('pages.projectDetail.audit.actionWorkflow'),
+    'workflow.update': t('pages.projectDetail.audit.actionWorkflow'),
+    'workflow.delete': t('pages.projectDetail.audit.actionWorkflow'),
+    'workflow.publish': t('pages.projectDetail.audit.actionWorkflow'),
+    'project.config': t('pages.projectDetail.audit.actionProjectConfig'),
+    'audit.export': t('pages.projectDetail.audit.actionExport'),
   }
-  const key = keyMap[type]
-  return key
-    ? t(`pages.projectDetail.audit.${key}`)
-    : t('pages.projectDetail.audit.resourceLabelGeneric')
+  if (known[action]) return known[action]
+  const prefix = action.split('.')[0]
+  const byPrefix: Record<string, string> = {
+    mcp: t('pages.projectDetail.audit.actionMcp'),
+    run: t('pages.projectDetail.audit.actionRun'),
+    gate: t('pages.projectDetail.audit.actionGate'),
+    workflow: t('pages.projectDetail.audit.actionWorkflow'),
+    project: t('pages.projectDetail.audit.actionProjectConfig'),
+    audit: t('pages.projectDetail.audit.actionExport'),
+  }
+  return byPrefix[prefix || ''] || action
 }
 
-function formatResourceOption(r: FacetResource) {
-  const id = r.resourceId || r.resource
-  const prefix = resourceTypeLabel(r.resourceType)
-  return id ? `${prefix} · ${id}` : prefix
+function actionClass(action: string) {
+  return ACTION_CLASS[action] || 'run'
+}
+
+function callerLabel(ev: ProjectAuditEvent) {
+  const kind = ev.callerKind || (ev.unattributable || ev.actor === 'system' ? 'system' : 'pm')
+  const key = CALLER_LABEL_KEYS[kind]
+  return key ? t(key) : kind
+}
+
+function nodeLabel(id?: string) {
+  if (!id) return '—'
+  return NODE_LABEL[id] || id
+}
+
+function outcomeLabel(ev: ProjectAuditEvent) {
+  return ev.outcome === 'fail'
+    ? t('pages.projectDetail.audit.outcomeFail')
+    : t('pages.projectDetail.audit.outcomeOk')
+}
+
+function resourceText(ev: ProjectAuditEvent) {
+  return ev.resource || [ev.resourceType, ev.resourceId].filter(Boolean).join('/') || '—'
+}
+
+function prettyPayload(payload: Record<string, unknown> | undefined) {
+  return prettyAuditPayload(payload)
 }
 
 function buildParams(extra?: { page?: number }) {
-  return {
+  const params: Record<string, string | number | undefined> = {
     time: timeWindow.value,
-    actor: actor.value || undefined,
-    action: action.value || undefined,
-    resource: resource.value.trim() || undefined,
+    resource: resource.value || undefined,
+    search: search.value.trim() || undefined,
     page: extra?.page ?? page.value,
-    pageSize,
+    pageSize: pageSize.value,
   }
+  if (mode.value === 'run') {
+    params.runId = runId.value || undefined
+    params.nodeId = nodeId.value || undefined
+  } else {
+    params.callerKind = callerKind.value || undefined
+  }
+  return params
 }
 
-async function loadFacets() {
+async function loadFacets(selectedRun?: string) {
   if (props.forceDenied || denied.value) {
-    actorOptions.value = []
+    runOptions.value = []
+    nodeOptions.value = []
     resourceOptions.value = []
     return
   }
   try {
     const res = await api.listProjectAuditFacets(props.projectId, {
       time: timeWindow.value,
-      action: action.value || undefined,
+      runId: selectedRun || (mode.value === 'run' ? runId.value || undefined : undefined),
     })
-    actorOptions.value = Array.isArray(res.actors) ? res.actors : []
+    runOptions.value = Array.isArray(res.runs) ? res.runs : []
+    nodeOptions.value = Array.isArray(res.nodes) ? res.nodes : []
     resourceOptions.value = Array.isArray(res.resources) ? res.resources : []
-    if (actor.value && !actorOptions.value.includes(actor.value)) {
-      actor.value = ''
-    }
-    if (resource.value && !resourceOptions.value.some((r) => resourceValue(r) === resource.value)) {
-      resource.value = ''
-    }
   } catch (e: any) {
     if (e?.status === 403) {
       denied.value = true
-      actorOptions.value = []
+      runOptions.value = []
+      nodeOptions.value = []
       resourceOptions.value = []
       return
     }
-    // Keep prior options on soft failure; list load will surface hard errors.
   }
 }
 
@@ -161,6 +329,14 @@ async function load(resetPage = false) {
     denied.value = true
     events.value = []
     total.value = 0
+    stats.value = { total: 0, mcp: 0, fail: 0 }
+    return
+  }
+  if (mode.value === 'run' && !runId.value) {
+    events.value = []
+    total.value = 0
+    stats.value = { total: 0, mcp: 0, fail: 0 }
+    loading.value = false
     return
   }
   if (resetPage) page.value = 1
@@ -168,12 +344,23 @@ async function load(resetPage = false) {
   denied.value = false
   try {
     const res = await api.listProjectAudit(props.projectId, buildParams())
-    const pageData: PaginatedResponse<ProjectAuditEvent> = isPaginated(res)
+    const pageData: PaginatedResponse<ProjectAuditEvent> & { stats?: ProjectAuditStats } = isPaginated(res)
       ? res
-      : { items: res as ProjectAuditEvent[], total: (res as ProjectAuditEvent[]).length, page: 1, pageSize, hasMore: false }
+      : {
+          items: res as ProjectAuditEvent[],
+          total: (res as ProjectAuditEvent[]).length,
+          page: 1,
+          pageSize: pageSize.value,
+          hasMore: false,
+        }
     events.value = pageData.items || []
     total.value = pageData.total
     page.value = pageData.page
+    stats.value = pageData.stats || {
+      total: pageData.total,
+      mcp: events.value.filter((e) => e.action.startsWith('mcp')).length,
+      fail: events.value.filter((e) => e.outcome === 'fail').length,
+    }
   } catch (e: any) {
     if (e?.status === 403) {
       denied.value = true
@@ -187,66 +374,112 @@ async function load(resetPage = false) {
   }
 }
 
-function applyFilters() {
-  openId.value = null
-  void loadFacets().then(() => load(true))
-}
-
-async function onActionChange() {
-  resource.value = ''
-  openId.value = null
+async function bootstrap() {
+  if (props.forceDenied) {
+    denied.value = true
+    initialized.value = true
+    return
+  }
+  loading.value = true
   await loadFacets()
-  void load(true)
+  if (runOptions.value.length > 0) {
+    mode.value = 'run'
+    runId.value = runOptions.value[0]!.runId
+    await loadFacets(runId.value)
+  } else {
+    // No runs in window — stay in run mode with empty state; user can switch to all.
+    mode.value = 'run'
+    runId.value = ''
+  }
+  initialized.value = true
+  await load(true)
 }
 
-function onResourceChange() {
+async function setMode(next: Mode) {
+  if (mode.value === next) return
+  mode.value = next
   openId.value = null
-  void load(true)
+  page.value = 1
+  nodeId.value = ''
+  callerKind.value = ''
+  resource.value = ''
+  if (next === 'run') {
+    await loadFacets()
+    if (!runId.value && runOptions.value.length) {
+      runId.value = runOptions.value[0]!.runId
+    }
+    if (runId.value) await loadFacets(runId.value)
+  } else {
+    await loadFacets()
+  }
+  await load(true)
 }
 
-function resetFilters() {
-  timeWindow.value = '24h'
-  actor.value = ''
-  action.value = ''
+async function onRunChange(v: string) {
+  runId.value = v
+  nodeId.value = ''
   resource.value = ''
   openId.value = null
-  void loadFacets().then(() => load(true))
+  await loadFacets(v)
+  await load(true)
+}
+
+function onFilterChange() {
+  openId.value = null
+  void load(true)
+}
+
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+function onSearchInput() {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    openId.value = null
+    void load(true)
+  }, 200)
+}
+
+function clearChip(key: string) {
+  if (key === 'node') nodeId.value = ''
+  if (key === 'caller') callerKind.value = ''
+  if (key === 'resource') resource.value = ''
+  if (key === 'search') search.value = ''
+  if (key === 'time') timeWindow.value = '24h'
+  void (async () => {
+    await loadFacets(mode.value === 'run' ? runId.value : undefined)
+    await load(true)
+  })()
+}
+
+function clearOptional() {
+  nodeId.value = ''
+  callerKind.value = ''
+  resource.value = ''
+  search.value = ''
+  timeWindow.value = '24h'
+  void (async () => {
+    await loadFacets(mode.value === 'run' ? runId.value : undefined)
+    await load(true)
+  })()
 }
 
 function toggleOpen(id: string) {
   openId.value = openId.value === id ? null : id
 }
 
-function actorLabel(ev: ProjectAuditEvent) {
-  if (ev.unattributable || ev.actor === 'system') {
-    return t('pages.projectDetail.audit.actorSystem')
-  }
-  return ev.actor
-}
-
-function outcomeLabel(ev: ProjectAuditEvent) {
-  return ev.outcome === 'fail'
-    ? t('pages.projectDetail.audit.outcomeFail')
-    : t('pages.projectDetail.audit.outcomeOk')
-}
-
-function prettyPayload(payload: Record<string, unknown> | undefined) {
-  // Escape + highlight via shared helper (never inject raw JSON into v-html).
-  return prettyAuditPayload(payload)
-}
-
-async function exportAudit(format: 'json' | 'text') {
+async function exportAudit() {
   if (denied.value || props.forceDenied) {
     toast.error(t('pages.projectDetail.audit.exportDenied'))
     return
   }
   try {
     const url = api.exportProjectAuditUrl(props.projectId, {
-      format,
+      format: 'json',
       time: timeWindow.value,
-      actor: actor.value || undefined,
-      action: action.value || undefined,
-      resource: resource.value.trim() || undefined,
+      callerKind: mode.value === 'all' ? callerKind.value || undefined : undefined,
+      resource: resource.value || undefined,
+      runId: mode.value === 'run' ? runId.value || undefined : undefined,
+      nodeId: mode.value === 'run' ? nodeId.value || undefined : undefined,
+      search: search.value.trim() || undefined,
     })
     const a = document.createElement('a')
     a.href = url
@@ -255,40 +488,52 @@ async function exportAudit(format: 'json' | 'text') {
     document.body.appendChild(a)
     a.click()
     a.remove()
-    toast.success(t('pages.projectDetail.audit.exportStarted', { format: format.toUpperCase() }))
-    // Refresh so meta-audit export event appears.
+    toast.success(t('pages.projectDetail.audit.exportStarted', { format: 'JSON' }))
     setTimeout(() => void load(true), 400)
   } catch (e: any) {
     toast.error(e?.message || t('pages.projectDetail.audit.exportFailed'))
   }
 }
 
-function prevPage() {
-  if (page.value <= 1) return
-  page.value -= 1
+function goPage(p: number) {
+  const max = pageCount.value
+  page.value = Math.max(1, Math.min(max, p))
+  openId.value = null
   void load()
 }
 
-function nextPage() {
-  if (!hasMore.value) return
-  page.value += 1
-  void load()
+function onPageSizeChange(v: string) {
+  pageSize.value = Number(v) || 10
+  openId.value = null
+  void load(true)
+}
+
+async function onTimeChange(v: string) {
+  timeWindow.value = v as '24h' | '7d' | '30d'
+  openId.value = null
+  await loadFacets(mode.value === 'run' ? runId.value : undefined)
+  if (mode.value === 'run' && runId.value && !runOptions.value.some((r) => r.runId === runId.value)) {
+    runId.value = runOptions.value[0]?.runId || ''
+    if (runId.value) await loadFacets(runId.value)
+  }
+  await load(true)
 }
 
 watch(
   () => [props.projectId, props.forceDenied],
   () => {
-    void loadFacets().then(() => load(true))
+    initialized.value = false
+    void bootstrap()
   },
 )
 
 onMounted(() => {
-  void loadFacets().then(() => load(true))
+  void bootstrap()
 })
 </script>
 
 <template>
-  <div class="flex min-h-[420px] flex-col" data-testid="project-audit-panel">
+  <div class="audit-panel" data-testid="project-audit-panel">
     <div
       v-if="denied || forceDenied"
       class="flex flex-1 flex-col items-center justify-center gap-2 border border-dashed border-line bg-surface px-6 py-16 text-center"
@@ -299,208 +544,250 @@ onMounted(() => {
     </div>
 
     <template v-else>
-      <div
-        class="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-accent/25 bg-accent/10 px-2.5 py-2 text-[12px] text-accent-2"
-        data-testid="project-audit-cascade-banner"
-      >
-        <strong>{{ t('pages.projectDetail.audit.cascadeBanner1') }}</strong>
-        <span class="opacity-55">→</span>
-        <strong>{{ t('pages.projectDetail.audit.cascadeBanner2') }}</strong>
-        <span class="opacity-55">→</span>
-        <span>{{ t('pages.projectDetail.audit.cascadeBanner3') }}</span>
-      </div>
-
-      <div
-        class="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[repeat(4,minmax(0,1fr))_auto]"
-        data-testid="project-audit-filters"
-      >
-        <label class="grid gap-1 text-[11px] font-semibold text-txt3">
-          {{ t('pages.projectDetail.audit.filterTime') }}
-          <select v-model="timeWindow" class="rounded border border-line bg-card px-2.5 py-2 text-[13px] text-txt">
-            <option value="24h">{{ t('pages.projectDetail.audit.time24h') }}</option>
-            <option value="7d">{{ t('pages.projectDetail.audit.time7d') }}</option>
-            <option value="all">{{ t('pages.projectDetail.audit.timeAll') }}</option>
-          </select>
-        </label>
-
-        <label class="grid gap-1 text-[11px] font-semibold text-txt3">
-          {{ t('pages.projectDetail.audit.filterActor') }}
-          <select
-            v-model="actor"
-            class="rounded border border-line bg-card px-2.5 py-2 text-[13px] text-txt"
-            data-testid="project-audit-actor"
+      <div class="panel-hd">
+        <h4>{{ t('pages.projectDetail.audit.title') }}</h4>
+        <div class="seg" role="tablist" data-testid="project-audit-mode">
+          <button
+            type="button"
+            :class="{ on: mode === 'run' }"
+            data-testid="project-audit-mode-run"
+            @click="setMode('run')"
           >
-            <option value="">{{ t('pages.projectDetail.audit.actorPlaceholder') }}</option>
-            <option v-for="a in actorOptions" :key="a" :value="a">
-              {{ a === 'system' ? t('pages.projectDetail.audit.actorSystem') : a }}
-            </option>
-          </select>
-        </label>
-
-        <label class="grid gap-1 text-[11px] font-semibold text-txt3" data-testid="project-audit-action-field">
-          <span class="inline-flex items-center gap-1">
-            <span
-              class="inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold"
-              :class="action ? 'bg-accent text-white' : 'bg-accent/20 text-accent-2'"
-            >1</span>
-            {{ t('pages.projectDetail.audit.filterAction') }}
-          </span>
-          <select
-            v-model="action"
-            class="rounded border border-line bg-card px-2.5 py-2 text-[13px] text-txt"
-            data-testid="project-audit-action"
-            @change="onActionChange"
+            {{ t('pages.projectDetail.audit.modeRun') }}
+          </button>
+          <button
+            type="button"
+            :class="{ on: mode === 'all' }"
+            data-testid="project-audit-mode-all"
+            @click="setMode('all')"
           >
-            <option value="">{{ t('pages.projectDetail.audit.actionAll') }}</option>
-            <option value="project.config">{{ t('pages.projectDetail.audit.actionProjectConfig') }}</option>
-            <option value="workflow">{{ t('pages.projectDetail.audit.actionWorkflow') }}</option>
-            <option value="run">{{ t('pages.projectDetail.audit.actionRun') }}</option>
-            <option value="gate">{{ t('pages.projectDetail.audit.actionGate') }}</option>
-            <option value="mcp">{{ t('pages.projectDetail.audit.actionMcp') }}</option>
-            <option value="audit.export">{{ t('pages.projectDetail.audit.actionExport') }}</option>
-          </select>
-          <span class="min-h-4 text-[11px]" :class="tipTypeClass">{{ tipTypeText }}</span>
-        </label>
-
-        <label class="grid gap-1 text-[11px] font-semibold text-txt3" data-testid="project-audit-resource-field">
-          <span class="inline-flex items-center gap-1">
-            <span
-              class="inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold"
-              :class="action ? 'bg-accent text-white' : 'bg-accent/20 text-accent-2'"
-            >2</span>
-            {{ t('pages.projectDetail.audit.filterResource') }}
-          </span>
-          <select
-            v-model="resource"
-            class="rounded border bg-card px-2.5 py-2 text-[13px] text-txt disabled:cursor-not-allowed disabled:border-dashed disabled:bg-surface disabled:text-txt3"
-            :class="resourceDisabled ? 'border-line' : 'border-line'"
-            data-testid="project-audit-resource"
-            :disabled="resourceDisabled"
-            @change="onResourceChange"
-          >
-            <option value="">{{ t('pages.projectDetail.audit.resourcePlaceholder') }}</option>
-            <option v-for="r in resourceOptions" :key="resourceValue(r)" :value="resourceValue(r)">
-              {{ formatResourceOption(r) }}
-            </option>
-          </select>
-          <span class="min-h-4 text-[11px]" :class="tipResClass">{{ tipResText }}</span>
-        </label>
-
-        <div class="flex flex-wrap items-end gap-2">
-          <AppButton size="sm" variant="primary" data-testid="project-audit-apply" @click="applyFilters">
-            {{ t('pages.projectDetail.audit.applyFilters') }}
-          </AppButton>
-          <AppButton size="sm" data-testid="project-audit-reset" @click="resetFilters">
-            {{ t('pages.projectDetail.audit.resetFilters') }}
-          </AppButton>
-          <AppButton size="sm" data-testid="project-audit-export-json" @click="exportAudit('json')">
-            {{ t('pages.projectDetail.audit.exportJson') }}
-          </AppButton>
-          <AppButton size="sm" data-testid="project-audit-export-text" @click="exportAudit('text')">
-            {{ t('pages.projectDetail.audit.exportText') }}
-          </AppButton>
+            {{ t('pages.projectDetail.audit.modeAll') }}
+          </button>
         </div>
       </div>
 
-      <div
-        v-if="showChip"
-        class="mb-2 inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[12px] text-emerald-800"
-        data-testid="project-audit-filter-chip"
-        role="status"
-      >
-        <span>{{ t('pages.projectDetail.audit.chipPrefix') }}</span>
-        <strong class="font-semibold">{{ chipParts.join(' · ') }}</strong>
+      <div class="filters" data-testid="project-audit-filters">
+        <div class="search">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-3-3" />
+          </svg>
+          <input
+            v-model="search"
+            type="search"
+            :placeholder="t('pages.projectDetail.audit.searchPlaceholder')"
+            autocomplete="off"
+            data-testid="project-audit-search"
+            @input="onSearchInput"
+          />
+        </div>
+
+        <AuditFilterDropdown
+          v-if="mode === 'run'"
+          :model-value="runId"
+          :label-key="'Run'"
+          :options="runDdOptions"
+          :searchable="true"
+          :width="280"
+          :empty-label="t('pages.projectDetail.audit.noRun')"
+          test-id="project-audit-run"
+          @update:model-value="onRunChange"
+        />
+        <AuditFilterDropdown
+          v-if="mode === 'run'"
+          :model-value="nodeId"
+          :label-key="t('pages.projectDetail.audit.colNode')"
+          :options="nodeDdOptions"
+          :searchable="true"
+          :empty-label="t('pages.projectDetail.audit.filterAll')"
+          test-id="project-audit-node"
+          @update:model-value="(v) => { nodeId = v; onFilterChange() }"
+        />
+        <AuditFilterDropdown
+          v-if="mode === 'all'"
+          :model-value="callerKind"
+          :label-key="t('pages.projectDetail.audit.colCaller')"
+          :options="callerDdOptions"
+          :empty-label="t('pages.projectDetail.audit.filterAll')"
+          test-id="project-audit-caller"
+          @update:model-value="(v) => { callerKind = v; onFilterChange() }"
+        />
+        <AuditFilterDropdown
+          :model-value="resource"
+          :label-key="t('pages.projectDetail.audit.colResource')"
+          :options="resourceDdOptions"
+          :searchable="true"
+          :width="280"
+          :empty-label="t('pages.projectDetail.audit.filterAll')"
+          :group-by="resGroup"
+          test-id="project-audit-resource"
+          @update:model-value="(v) => { resource = v; onFilterChange() }"
+        />
+        <AuditFilterDropdown
+          :model-value="timeWindow"
+          :label-key="t('pages.projectDetail.audit.filterTime')"
+          :options="timeDdOptions"
+          test-id="project-audit-time"
+          @update:model-value="onTimeChange"
+        />
+
+        <div class="filters-actions">
+          <button type="button" class="btn" data-testid="project-audit-export" @click="exportAudit">
+            {{ t('pages.projectDetail.audit.export') }}
+          </button>
+        </div>
       </div>
 
-      <div class="mb-2 flex items-center justify-between text-[12px] text-txt3">
-        <span data-testid="project-audit-count">
-          {{ t('pages.projectDetail.audit.resultCount', { n: total }) }}
+      <div v-if="chips.length" class="chips" data-testid="project-audit-chips">
+        <span v-for="ch in chips" :key="ch.key" class="chip">
+          <em>{{ ch.label }}</em>
+          <b>{{ ch.value }}</b>
+          <button
+            v-if="ch.clearable"
+            type="button"
+            class="x"
+            :data-testid="`project-audit-chip-clear-${ch.key}`"
+            @click="clearChip(ch.key)"
+          >
+            ×
+          </button>
         </span>
-        <span data-testid="project-audit-expand-hint">{{ t('pages.projectDetail.audit.expandHint') }}</span>
+        <button
+          v-if="clearableChips.length"
+          type="button"
+          class="linkish"
+          data-testid="project-audit-clear"
+          @click="clearOptional"
+        >
+          {{ t('pages.projectDetail.audit.clearFilters') }}
+        </button>
       </div>
 
-      <div v-if="loading" class="py-10 text-center text-[13px] text-txt3">{{ t('pages.projectDetail.audit.loading') }}</div>
+      <div class="meta">
+        <div class="meta-l" data-testid="project-audit-stats">
+          <span>{{ t('pages.projectDetail.audit.statTotal') }} <b>{{ stats.total }}</b></span>
+          <span>MCP <b>{{ stats.mcp }}</b></span>
+          <span>{{ t('pages.projectDetail.audit.statFail') }} <b>{{ stats.fail }}</b></span>
+          <span v-if="mode === 'run' && runId">Run <b>{{ shortRun(runId) }}</b></span>
+        </div>
+        <div>{{ t('pages.projectDetail.audit.expandHint') }}</div>
+      </div>
+
+      <div v-if="loading" class="py-10 text-center text-[13px] text-txt3">
+        {{ t('pages.projectDetail.audit.loading') }}
+      </div>
+      <div
+        v-else-if="noRuns"
+        class="empty"
+        data-testid="project-audit-empty-runs"
+      >
+        <div class="big">{{ t('pages.projectDetail.audit.emptyRunsTitle') }}</div>
+        <div>
+          {{ t('pages.projectDetail.audit.emptyRunsDesc') }}
+          <button type="button" class="linkish" @click="setMode('all')">
+            {{ t('pages.projectDetail.audit.modeAll') }}
+          </button>
+        </div>
+      </div>
       <EmptyState
         v-else-if="!events.length"
         data-testid="project-audit-empty"
         :title="t('pages.projectDetail.audit.emptyTitle')"
         :desc="t('pages.projectDetail.audit.emptyDesc')"
       />
-      <div v-else class="grid gap-2" data-testid="project-audit-list">
-        <article
-          v-for="ev in events"
-          :key="ev.id"
-          class="cursor-pointer overflow-hidden rounded-lg border border-line bg-card transition hover:border-accent/40"
-          :class="openId === ev.id ? 'border-accent shadow-[0_0_0_3px_rgba(13,122,111,.12)]' : ''"
-          :data-testid="`project-audit-event-${ev.id}`"
-          @click="toggleOpen(ev.id)"
-        >
-          <div class="grid gap-2 px-3.5 py-3 sm:grid-cols-[150px_1fr_auto] sm:items-start">
-            <div class="font-mono text-[12px] text-txt3">{{ fmtTime(ev.occurredAt) }}</div>
-            <div>
-              <p class="m-0 text-[13.5px] font-semibold text-txt">{{ ev.summary || ev.action }}</p>
-              <div class="mt-1 flex flex-wrap gap-1.5 text-[12px] text-txt2">
-                <span
-                  class="inline-flex rounded-full border px-2 py-0.5"
-                  :class="
-                    ev.unattributable
-                      ? 'border-line bg-surface text-txt3'
-                      : 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                  "
-                >
-                  {{ actorLabel(ev) }}
-                </span>
-                <span class="inline-flex rounded-full border border-line bg-surface px-2 py-0.5">{{ ev.action }}</span>
-                <span
-                  class="inline-flex rounded-full border border-line bg-surface px-2 py-0.5"
-                  :class="ev.outcome === 'fail' ? 'text-red-700' : 'text-emerald-700'"
-                >
-                  {{ outcomeLabel(ev) }}
-                </span>
-                <span class="inline-flex rounded-full border border-line bg-surface px-2 py-0.5">
-                  {{ ev.resource || `${ev.resourceType}/${ev.resourceId}` }}
-                </span>
-              </div>
-            </div>
-            <div class="text-right text-[12px] text-txt3">{{ ev.summary }}</div>
-          </div>
-          <div v-if="openId === ev.id" class="border-t border-line bg-surface px-3.5 pb-3.5 pt-3" @click.stop>
-            <div class="grid gap-3 sm:grid-cols-2">
-              <dl class="text-[12.5px]">
-                <dt class="font-semibold text-txt3">{{ t('pages.projectDetail.audit.fieldTime') }}</dt>
-                <dd class="mb-2 text-txt">{{ fmtTime(ev.occurredAt) }}</dd>
-                <dt class="font-semibold text-txt3">{{ t('pages.projectDetail.audit.fieldActor') }}</dt>
-                <dd class="mb-2 text-txt">{{ actorLabel(ev) }}</dd>
-                <dt class="font-semibold text-txt3">{{ t('pages.projectDetail.audit.fieldAction') }}</dt>
-                <dd class="mb-2 text-txt">{{ ev.action }}</dd>
-              </dl>
-              <dl class="text-[12.5px]">
-                <dt class="font-semibold text-txt3">{{ t('pages.projectDetail.audit.fieldResource') }}</dt>
-                <dd class="mb-2 break-all text-txt">{{ ev.resource || `${ev.resourceType}/${ev.resourceId}` }}</dd>
-                <dt class="font-semibold text-txt3">{{ t('pages.projectDetail.audit.fieldOutcome') }}</dt>
-                <dd class="mb-2 text-txt">{{ outcomeLabel(ev) }}</dd>
-                <dt class="font-semibold text-txt3">{{ t('pages.projectDetail.audit.fieldSummary') }}</dt>
-                <dd class="mb-2 text-txt">{{ ev.summary }}</dd>
-              </dl>
-            </div>
-            <pre
-              class="mt-2 overflow-x-auto rounded-lg bg-[#1a2332] p-3 font-mono text-[11.5px] leading-relaxed text-[#d7e2f0]"
-              data-testid="project-audit-payload"
-              v-html="prettyPayload(ev.payload)"
-            />
-          </div>
-        </article>
+      <div
+        v-else
+        class="table-wrap"
+        :class="{ 'col-run-hide': mode === 'run', 'col-node-hide': mode !== 'run' }"
+        data-testid="project-audit-list"
+      >
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 148px">{{ t('pages.projectDetail.audit.colTime') }}</th>
+              <th class="col-node" style="width: 88px">{{ t('pages.projectDetail.audit.colNode') }}</th>
+              <th style="width: 100px">{{ t('pages.projectDetail.audit.colCaller') }}</th>
+              <th style="width: 88px">{{ t('pages.projectDetail.audit.colAction') }}</th>
+              <th style="width: 180px">{{ t('pages.projectDetail.audit.colResource') }}</th>
+              <th class="col-run" style="width: 88px">{{ t('pages.projectDetail.audit.colRun') }}</th>
+              <th style="width: 56px">{{ t('pages.projectDetail.audit.colOutcome') }}</th>
+              <th>{{ t('pages.projectDetail.audit.colSummary') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="ev in events" :key="ev.id">
+              <tr
+                class="row"
+                :class="{ open: openId === ev.id, fail: ev.outcome === 'fail' }"
+                :data-testid="`project-audit-event-${ev.id}`"
+                @click="toggleOpen(ev.id)"
+              >
+                <td>
+                  <div class="time-main mono">{{ fmtTime(ev.occurredAt) }}</div>
+                </td>
+                <td class="col-node">
+                  <span class="node">{{ nodeLabel(ev.nodeId) }}</span>
+                </td>
+                <td><span class="who">{{ callerLabel(ev) }}</span></td>
+                <td>
+                  <span class="act" :class="actionClass(ev.action)">{{ actionLabel(ev.action) }}</span>
+                </td>
+                <td><span class="res">{{ resourceText(ev) }}</span></td>
+                <td class="col-run mono">{{ ev.runId ? shortRun(ev.runId) : '—' }}</td>
+                <td>
+                  <span :class="ev.outcome === 'fail' ? 'bad' : 'ok'">{{ outcomeLabel(ev) }}</span>
+                </td>
+                <td class="summary">{{ ev.summary }}</td>
+              </tr>
+              <tr v-if="openId === ev.id" class="detail">
+                <td colspan="8">
+                  <div class="detail-inner" @click.stop>
+                    <div class="detail-meta">
+                      <span>action <code>{{ ev.action }}</code></span>
+                      <span v-if="ev.nodeId">{{ t('pages.projectDetail.audit.colNode') }} <code>{{ ev.nodeId }}</code></span>
+                      <span>{{ t('pages.projectDetail.audit.colResource') }} <code>{{ resourceText(ev) }}</code></span>
+                      <span v-if="ev.runId">Run <code>{{ ev.runId }}</code></span>
+                    </div>
+                    <pre
+                      class="payload"
+                      data-testid="project-audit-payload"
+                      v-html="prettyPayload(ev.payload)"
+                    />
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
       </div>
 
-      <div class="mt-3 flex items-center justify-between text-[12.5px] text-txt3">
-        <span>{{ t('pages.projectDetail.audit.pager', { page, pageSize }) }}</span>
-        <div class="flex gap-1.5">
-          <AppButton size="sm" variant="ghost" :disabled="page <= 1 || loading" @click="prevPage">
+      <div v-if="!noRuns" class="pager">
+        <span data-testid="project-audit-pager-info">
+          <template v-if="total">
+            <b>{{ (page - 1) * pageSize + 1 }}-{{ Math.min(page * pageSize, total) }}</b>
+            /
+            <b>{{ total }}</b>
+          </template>
+          <template v-else>{{ t('pages.projectDetail.audit.statTotal') }} <b>0</b></template>
+        </span>
+        <div class="pager-btns">
+          <button type="button" class="btn" :disabled="page <= 1 || loading" @click="goPage(page - 1)">
             {{ t('common.pagination.prev') }}
-          </AppButton>
-          <AppButton size="sm" variant="ghost" :disabled="!hasMore || loading" @click="nextPage">
+          </button>
+          <button type="button" class="btn" :disabled="!hasMore || loading" @click="goPage(page + 1)">
             {{ t('common.pagination.next') }}
-          </AppButton>
+          </button>
+        </div>
+        <div class="pager-size">
+          <span>{{ t('pages.projectDetail.audit.perPage') }}</span>
+          <AuditFilterDropdown
+            :model-value="String(pageSize)"
+            :options="pageSizeOptions"
+            :width="80"
+            :right="true"
+            test-id="project-audit-page-size"
+            @update:model-value="onPageSizeChange"
+          />
         </div>
       </div>
     </template>
@@ -508,10 +795,406 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.audit-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+  border: 1px solid var(--line, #ececef);
+  background: var(--card, #fff);
+  overflow: hidden;
+}
+.panel-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--line, #ececef);
+}
+.panel-hd h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--txt, #18181b);
+}
+.seg {
+  display: inline-flex;
+  background: #f4f4f5;
+  padding: 3px;
+  gap: 2px;
+}
+.seg button {
+  border: 0;
+  background: transparent;
+  height: 28px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--txt3, #71717a);
+  cursor: pointer;
+  font-weight: 500;
+}
+.seg button:hover {
+  color: var(--txt, #18181b);
+}
+.seg button.on {
+  background: #fff;
+  color: var(--txt, #18181b);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line, #ececef);
+}
+.search {
+  flex: 1 1 180px;
+  min-width: 140px;
+  max-width: 280px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e4e4e7;
+  background: #fff;
+  padding: 0 10px;
+}
+.search:focus-within {
+  border-color: #c4b5fd;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+}
+.search svg {
+  opacity: 0.4;
+  flex: 0 0 auto;
+}
+.search input {
+  flex: 1;
+  border: 0;
+  outline: none;
+  font: inherit;
+  background: transparent;
+  min-width: 0;
+  height: 30px;
+  font-size: 12px;
+}
+.search input::placeholder {
+  color: #a1a1aa;
+}
+.filters-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.btn {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #e4e4e7;
+  background: #fff;
+  color: var(--txt, #18181b);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) {
+  background: #fafafa;
+  border-color: #d4d4d8;
+}
+.btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 0 16px 12px;
+  border-bottom: 1px solid var(--line, #ececef);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 4px 0 8px;
+  background: #f4f4f5;
+  border: 1px solid #e4e4e7;
+  font-size: 11px;
+  color: var(--txt, #18181b);
+}
+.chip em {
+  font-style: normal;
+  color: var(--txt3, #71717a);
+  font-weight: 500;
+}
+.chip b {
+  font-weight: 600;
+}
+.chip .x {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  background: transparent;
+  color: var(--txt3, #71717a);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+.chip .x:hover {
+  color: var(--txt, #18181b);
+  background: #e4e4e7;
+}
+.linkish {
+  border: 0;
+  background: transparent;
+  color: var(--txt3, #71717a);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.linkish:hover {
+  color: var(--accent, #7c3aed);
+}
+.meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--txt3, #71717a);
+  border-bottom: 1px solid var(--line, #ececef);
+}
+.meta b {
+  color: var(--txt, #18181b);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.meta-l {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.table-wrap {
+  overflow: auto;
+  max-height: 520px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 820px;
+}
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  padding: 9px 14px;
+  background: #fafafa;
+  color: var(--txt3, #71717a);
+  font-size: 11px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--line, #ececef);
+}
+td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line, #ececef);
+  vertical-align: middle;
+  font-size: 13px;
+}
+tr.row {
+  cursor: pointer;
+}
+tr.row:hover td {
+  background: #fafafa;
+}
+tr.row.open td {
+  background: #f5f3ff;
+}
+tr.row.fail td:first-child {
+  box-shadow: inset 2px 0 0 #dc2626;
+}
+tr.detail td {
+  padding: 0;
+  background: #fafafa;
+  border-bottom: 1px solid var(--line, #ececef);
+}
+.detail-inner {
+  padding: 12px 14px 14px;
+  margin-left: 2px;
+  border-left: 2px solid var(--accent, #7c3aed);
+}
+.detail-meta {
+  font-size: 12px;
+  color: var(--txt3, #71717a);
+  margin-bottom: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.detail-meta code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--txt, #18181b);
+  background: #fff;
+  border: 1px solid var(--line, #ececef);
+  padding: 1px 5px;
+}
+.payload {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line, #ececef);
+  background: #fff;
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #3f3f46;
+  overflow-x: auto;
+}
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: #52525b;
+}
+.time-main {
+  font-variant-numeric: tabular-nums;
+  color: #3f3f46;
+  font-size: 12px;
+}
+.who {
+  color: var(--txt, #18181b);
+  font-weight: 500;
+}
+.act {
+  font-size: 12px;
+  font-weight: 500;
+}
+.act.mcp {
+  color: #7c3aed;
+}
+.act.run {
+  color: #52525b;
+}
+.act.gate {
+  color: #b45309;
+}
+.act.cfg {
+  color: #2563eb;
+}
+.act.exp {
+  color: #db2777;
+}
+.res {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: #71717a;
+}
+.node {
+  color: #52525b;
+  font-size: 12px;
+}
+.ok {
+  color: #16a34a;
+  font-size: 12px;
+  font-weight: 500;
+}
+.bad {
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 500;
+}
+.summary {
+  color: #3f3f46;
+}
+.empty {
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--txt3, #71717a);
+}
+.empty .big {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--txt, #18181b);
+  margin-bottom: 4px;
+}
+.col-run-hide :deep(.col-run),
+.col-node-hide :deep(.col-node) {
+  display: none;
+}
+.col-run-hide .col-run,
+.col-node-hide .col-node {
+  display: none;
+}
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line, #ececef);
+  font-size: 12px;
+  color: var(--txt3, #71717a);
+}
+.pager b {
+  color: var(--txt, #18181b);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.pager-btns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.pager-btns .btn {
+  height: 28px;
+  min-width: 28px;
+  padding: 0 9px;
+  border-color: transparent;
+  background: transparent;
+}
+.pager-btns .btn:hover:not(:disabled) {
+  background: #f4f4f5;
+}
+.pager-size {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+@media (max-width: 767px) {
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .search {
+    max-width: none;
+    width: 100%;
+  }
+  .filters-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+  .filters-actions .btn {
+    flex: 1;
+    width: 100%;
+  }
+}
 :deep(.tok-key) {
   color: #7dd3c7;
 }
 :deep(.audit-mask) {
-  color: #fbbf24;
+  color: #b45309;
 }
 </style>

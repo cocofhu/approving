@@ -100,8 +100,8 @@ type Host struct {
 type AfterWriteFunc func(runID, nodeID, name, content, kind string)
 
 // ProjectAuditHook records a project-scoped MCP tool invocation (already
-// intended for redaction by the implementation).
-type ProjectAuditHook func(runID, tool string, args map[string]any, resultText string, isError bool)
+// intended for redaction by the implementation). nodeID is ActiveNode at call time.
+type ProjectAuditHook func(runID, nodeID, tool string, args map[string]any, resultText string, isError bool)
 
 // RunTokenSource resolves a run's persisted MCP token and whether the run still
 // has a live sandbox. ok is false when the run is unknown.

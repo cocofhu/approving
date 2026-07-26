@@ -438,12 +438,14 @@ func (h *Handlers) StartRun(c *gin.Context) {
 			Action:         models.AuditActionRunStart,
 			ResourceType:   "run",
 			ResourceID:     run.ID,
+			RunID:          run.ID,
 			Outcome:        models.AuditOutcomeOK,
 			Summary:        "start run",
 			Payload: map[string]any{
 				"workflowId": c.Param("id"),
 				"trigger":    trigger,
 				"priority":   models.PriorityLabel(run.Priority),
+				"runId":      run.ID,
 			},
 		})
 	}
@@ -558,9 +560,10 @@ func (h *Handlers) CancelRun(c *gin.Context) {
 			Action:         models.AuditActionRunCancel,
 			ResourceType:   "run",
 			ResourceID:     runID,
+			RunID:          runID,
 			Outcome:        models.AuditOutcomeOK,
 			Summary:        "cancel run",
-			Payload:        map[string]any{"workflowId": run.WorkflowID},
+			Payload:        map[string]any{"workflowId": run.WorkflowID, "runId": runID},
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "cancelled"})
