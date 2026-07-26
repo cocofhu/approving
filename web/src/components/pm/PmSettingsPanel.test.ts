@@ -576,3 +576,35 @@ describe('PmSettingsPanel cron deliver target Combobox', () => {
     expect(w.find('#ch-cron-target-listbox-opt-0').exists()).toBe(true)
   })
 })
+
+describe('PmSettingsPanel gate-auto config', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    apiMocks.listPmThreads.mockResolvedValue({ items: [] })
+  })
+
+  it('loads and saves gateAutoVar + gateAutoPrompt as text fields', async () => {
+    const binding: PmLeaderBinding = {
+      ...BINDING,
+      gateAutoVar: 'pm_auto_gate',
+      gateAutoPrompt: '优先批准低风险',
+    }
+    const w = await mountPanel(binding)
+    const varInput = w.get('[data-testid="pm-gate-auto-var"]')
+    const promptInput = w.get('[data-testid="pm-gate-auto-prompt"]')
+    expect((varInput.element as HTMLInputElement).value).toBe('pm_auto_gate')
+    expect((promptInput.element as HTMLTextAreaElement).value).toBe('优先批准低风险')
+
+    await varInput.setValue('other_switch')
+    await promptInput.setValue('')
+    await w.get('[data-testid="pm-leader-save"]').trigger('click')
+    await flushPromises()
+
+    const body = apiMocks.updatePmLeader.mock.calls.at(-1)?.[1] as {
+      gateAutoVar: string
+      gateAutoPrompt: string
+    }
+    expect(body.gateAutoVar).toBe('other_switch')
+    expect(body.gateAutoPrompt).toBe('')
+  })
+})

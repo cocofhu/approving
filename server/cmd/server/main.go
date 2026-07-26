@@ -273,6 +273,11 @@ func main() {
 		Register:   mcpWire.registerCron,
 		Unregister: mcpWire.unregister,
 	})
+	gateAutoSvc := services.NewGateAutoInvokeService(db, pmSvc, sbxSvc, pmTurns, services.CronTokenHooks{
+		Register:   mcpWire.registerCron,
+		Unregister: mcpWire.unregister,
+	})
+	eng.SetGateAutoInvoker(gateAutoEngineAdapter{svc: gateAutoSvc})
 	// External IM channels (QQ today; extensible). One bot binds one project +
 	// its PM Leader. Configs are DB-managed via the admin WebUI and hot-reloaded.
 	// Memory/scheduler writes follow ChannelConfig session caps (default off).

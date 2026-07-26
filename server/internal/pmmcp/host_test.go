@@ -119,7 +119,7 @@ func TestPmWorkflowWriteWhenEnabled(t *testing.T) {
 	pm := services.NewPmService(db, nil)
 	en := true
 	agent := "agent"
-	if _, err := pm.UpdateBinding(p.ID, &en, &agent, []string{"pm-workflow-write"}); err != nil {
+	if _, err := pm.UpdateBinding(p.ID, &en, &agent, []string{"pm-workflow-write"}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	wf := services.NewWorkflowService(db)
@@ -167,7 +167,7 @@ func TestPmWorkflowWriteRejectedWhenDisabled(t *testing.T) {
 	pm := services.NewPmService(db, nil)
 	en := true
 	agent := "agent"
-	if _, err := pm.UpdateBinding(p.ID, &en, &agent, []string{"pm-progress"}); err != nil {
+	if _, err := pm.UpdateBinding(p.ID, &en, &agent, []string{"pm-progress"}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	h := NewHost(pm, services.NewPmProgress(pm, nil, nil), services.NewWorkflowService(db), nil, nil)

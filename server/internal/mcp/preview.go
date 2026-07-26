@@ -173,6 +173,25 @@ func (h *Host) setPreviewPort(runID, nodeID string, port int, label string) (str
 	return proxyURL, nil
 }
 
+// PutPreviewPortForTest seeds a memory-only preview port without sandbox ops.
+// Used by engine unit tests that exercise app_preview pause paths offline.
+func (h *Host) PutPreviewPortForTest(runID, nodeID string, port int, label string) {
+	if h == nil || port <= 0 {
+		return
+	}
+	rec := PreviewPort{
+		RunID: runID, NodeID: nodeID, Port: port, Label: strings.TrimSpace(label),
+		ProxyURL: h.previewProxyURL(runID, nodeID, port), Healthy: true, RegisteredAt: time.Now(),
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	key := previewKey(runID, nodeID)
+	if h.previewMem == nil {
+		h.previewMem = map[string][]PreviewPort{}
+	}
+	h.previewMem[key] = append(h.previewMem[key], rec)
+}
+
 func parsePreviewPort(v any) (int, error) {
 	switch t := v.(type) {
 	case float64:

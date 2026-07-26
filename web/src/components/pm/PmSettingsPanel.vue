@@ -31,6 +31,8 @@ const agents = ref<Agent[]>([])
 const selectedAgent = ref('')
 const enabled = ref(false)
 const enabledMcps = ref<string[]>(['pm-progress', 'pm-workflow-read', 'pm-workflow-write'])
+const gateAutoVar = ref('')
+const gateAutoPrompt = ref('')
 const loading = ref(true)
 const saving = ref(false)
 
@@ -259,6 +261,8 @@ async function load() {
     enabledMcps.value = Array.isArray(b.enabledMcps)
       ? [...b.enabledMcps]
       : ['pm-progress', 'pm-workflow-read', 'pm-workflow-write']
+    gateAutoVar.value = b.gateAutoVar || ''
+    gateAutoPrompt.value = b.gateAutoPrompt || ''
     applyChannel(ch.channel)
     secretsKeyConfigured.value = ch.secretsKeyConfigured
     // Project switch may keep chCronDeliver===true (watch won't re-fire); fetch if needed.
@@ -329,12 +333,16 @@ async function save() {
       enabled: enabled.value,
       agentConfigRef: selectedAgent.value,
       enabledMcps: [...enabledMcps.value],
+      gateAutoVar: gateAutoVar.value.trim(),
+      gateAutoPrompt: gateAutoPrompt.value,
     })
     enabled.value = binding.value.enabled
     selectedAgent.value = binding.value.agentConfigRef || ''
     enabledMcps.value = Array.isArray(binding.value.enabledMcps)
       ? [...binding.value.enabledMcps]
       : ['pm-progress', 'pm-workflow-read', 'pm-workflow-write']
+    gateAutoVar.value = binding.value.gateAutoVar || ''
+    gateAutoPrompt.value = binding.value.gateAutoPrompt || ''
     emit('changed', binding.value)
     toast.success(t('pages.projectDetail.saved'))
   } catch (e: any) {
@@ -509,6 +517,43 @@ onUnmounted(() => {
               </span>
             </label>
           </div>
+        </div>
+
+        <div>
+          <label class="label" for="pm-gate-auto-var">
+            {{ t('pages.projectDetail.pm.gateAutoVar') }}
+          </label>
+          <input
+            id="pm-gate-auto-var"
+            v-model="gateAutoVar"
+            class="input max-w-md font-mono text-[13px] disabled:cursor-not-allowed disabled:opacity-55"
+            data-testid="pm-gate-auto-var"
+            :disabled="controlsDisabled"
+            :placeholder="t('pages.projectDetail.pm.gateAutoVarPlaceholder')"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <p class="m-0 mt-1 text-xs leading-snug text-txt3">
+            {{ t('pages.projectDetail.pm.gateAutoVarHint') }}
+          </p>
+        </div>
+
+        <div>
+          <label class="label" for="pm-gate-auto-prompt">
+            {{ t('pages.projectDetail.pm.gateAutoPrompt') }}
+          </label>
+          <textarea
+            id="pm-gate-auto-prompt"
+            v-model="gateAutoPrompt"
+            class="input min-h-[88px] max-w-xl font-mono text-[12px] leading-snug disabled:cursor-not-allowed disabled:opacity-55"
+            data-testid="pm-gate-auto-prompt"
+            :disabled="controlsDisabled"
+            :placeholder="t('pages.projectDetail.pm.gateAutoPromptPlaceholder')"
+            rows="4"
+          />
+          <p class="m-0 mt-1 text-xs leading-snug text-txt3">
+            {{ t('pages.projectDetail.pm.gateAutoPromptHint') }}
+          </p>
         </div>
 
         <div class="border-t border-line pt-4">

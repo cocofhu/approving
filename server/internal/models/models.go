@@ -44,9 +44,17 @@ type Project struct {
 	PmLeaderAgent string `json:"pmLeaderAgent,omitempty"`
 	// PmEnabledMcps lists enabled PM-only MCP ids (pm-progress, pm-workflow-read, pm-workflow-write).
 	// nil/unset means both enabled by default; explicit empty disables all.
-	PmEnabledMcps []string  `gorm:"serializer:json" json:"pmEnabledMcps,omitempty"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	PmEnabledMcps []string `gorm:"serializer:json" json:"pmEnabledMcps,omitempty"`
+	// PmGateAutoVar is the project variable name that gates "auto-invoke PM on
+	// human gates". Empty disables the capability. Runtime requires the named
+	// var to exist in the run and be truthy; save-time existence/type checks
+	// are intentionally not enforced.
+	PmGateAutoVar string `json:"gateAutoVar,omitempty"`
+	// PmGateAutoPrompt is an optional prompt appended after the system default
+	// gate-auto guidance when invoking the PM Leader.
+	PmGateAutoPrompt string    `json:"gateAutoPrompt,omitempty"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
 }
 
 // WorkflowDef is the editable workflow (draft or published head).
