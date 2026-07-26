@@ -26,6 +26,8 @@
     "@xterm/xterm": "^6.0.0",
     "chart.js": "^4.5.1",
     "dompurify": "^3.2.3",
+    "html-to-image": "^1.11.13",
+    "jspdf": "^4.2.1",
     "marked": "^15.0.6",
     "monaco-editor": "^0.52.2",
     "pinia": "^2.3.0",
