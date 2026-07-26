@@ -19,6 +19,7 @@ const apiMocks = vi.hoisted(() => ({
   saveGateArtifact: vi.fn(),
   listGatePrimaryArtifacts: vi.fn(),
   gateReactRevise: vi.fn(),
+  gateReactCancel: vi.fn(),
 }))
 
 /** Plain ref-like so template auto-unwrap works (needs __v_isRef). */
@@ -42,6 +43,7 @@ vi.mock('@/lib/api', async () => {
       saveGateArtifact: apiMocks.saveGateArtifact,
       listGatePrimaryArtifacts: apiMocks.listGatePrimaryArtifacts,
       gateReactRevise: apiMocks.gateReactRevise,
+      gateReactCancel: apiMocks.gateReactCancel,
     },
   }
 })
@@ -2384,6 +2386,133 @@ describe('GateApproval mobileFillRemaining layout', () => {
     expect(form.find('[data-testid="review-composer-gate"]').exists()).toBe(true)
     expect(form.find('[data-testid="paragraph-input-root"]').attributes('data-text-only')).toBe('0')
     expect(form.find('[data-testid="paragraph-input-attach"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('exposes gate-react queue/stream/Cancel on desktop content-fit (g4.4)', async () => {
+    breakpointMocks.isMobile.value = false
+    apiMocks.listPreviewIssues.mockResolvedValue({
+      issues: [
+        {
+          id: 'iss-1',
+          runId: 'run-1',
+          nodeId: 'hg-visual',
+          body: '标题需改',
+          status: 'open',
+          createdAt: '2026-07-18T00:00:00Z',
+        },
+      ],
+    })
+    apiMocks.gateReactRevise.mockResolvedValue({ status: 'accepted', waiting: 1 })
+    apiMocks.gateReactCancel.mockResolvedValue({})
+    apiMocks.createPreviewIssue.mockResolvedValue({
+      id: 'iss-new',
+      body: '改标题',
+      status: 'open',
+      createdAt: '2026-07-18T00:02:00Z',
+    })
+    const pageHtml = '<!doctype html><html><body><h1>desktop queue</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      mobileFillRemaining: false,
+      gate: { ...gate, reactSessionAlive: true, reactUpstreamNodeId: 'visual' },
+      run,
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="content-fit-scroll"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="mobile-fill-remaining"]').exists()).toBe(false)
+
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+    expect(form.find('[data-testid="review-composer-reject"]').exists()).toBe(true)
+    await form.find('[data-testid="paragraph-input"]').setValue('改标题')
+    await flushPromises()
+    await form.find('[data-testid="review-composer-reject"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="gate-react-queue"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-react-cancel"]').exists()).toBe(true)
+
+    const vm = wrapper.vm as any
+    vm.applyAcpEvents?.([{ kind: 'message', text: 'streaming…' }])
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-react-stream"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-react-stream"]').text()).toContain('streaming')
+
+    await wrapper.find('[data-testid="gate-react-cancel"]').trigger('click')
+    await flushPromises()
+    expect(apiMocks.gateReactCancel).toHaveBeenCalledWith('run-1', 'hg-visual')
+    expect(wrapper.find('[data-testid="gate-react-queue"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('exposes gate-react queue/Cancel on proposal_select ReviewComposer(gate)', async () => {
+    breakpointMocks.isMobile.value = false
+    apiMocks.gateReactRevise.mockResolvedValue({ status: 'accepted', waiting: 1 })
+    apiMocks.gateReactCancel.mockResolvedValue({})
+    const proposalsDoc = {
+      context: '选型',
+      proposals: [
+        { id: 'p1', title: '方案甲', summary: '共享壳', recommended: true },
+        { id: 'p2', title: '方案乙', summary: '另起炉灶' },
+      ],
+    }
+    apiMocks.artifactContent.mockResolvedValue({ content: JSON.stringify(proposalsDoc) })
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({
+        nodeId: 'pick-proposal',
+        reactSessionAlive: true,
+        reactUpstreamNodeId: 'proposal',
+        actions: [
+          { id: 'p1', label: '方案甲' },
+          { id: 'p2', label: '方案乙' },
+        ],
+        form: [],
+      }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'pick-proposal',
+            type: 'proposal_select',
+            label: '选方案',
+            position: { x: 0, y: 0 },
+            config: { from: 'proposals.json' },
+          },
+        ],
+        artifacts: [
+          {
+            id: 'a-proposals',
+            name: 'proposals.json',
+            kind: 'json',
+            nodeId: 'proposal',
+            runId: 'run-1',
+            workflowName: 'wf',
+            sizeBytes: 10,
+            createdAt: '2026-07-18T00:00:00Z',
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="content-fit-scroll"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="review-composer-gate"]').exists()).toBe(true)
+
+    await wrapper.find('[data-testid="paragraph-input"]').setValue('换推荐方案')
+    await flushPromises()
+    await wrapper.find('[data-testid="review-composer-reject"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="gate-react-queue"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-react-cancel"]').exists()).toBe(true)
+    expect(apiMocks.gateReactRevise).toHaveBeenCalled()
+
+    await wrapper.find('[data-testid="gate-react-cancel"]').trigger('click')
+    await flushPromises()
+    expect(apiMocks.gateReactCancel).toHaveBeenCalledWith('run-1', 'pick-proposal')
+    expect(wrapper.find('[data-testid="gate-react-queue"]').exists()).toBe(false)
     wrapper.unmount()
   })
 

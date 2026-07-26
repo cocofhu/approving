@@ -44,6 +44,14 @@ const props = withDefaults(
     rejectLabel?: string
     /** Review confirm failure (bottom status bar via ClarifyChat). */
     confirmError?: string | null
+    /**
+     * Gate sandbox-aligned session UX (same surface as GateApproval mobile-fill /
+     * content-fit): pending-send queue, streaming agent text, Cancel.
+     */
+    queued?: { text: string }[]
+    thinking?: boolean
+    streamText?: string
+    interrupted?: boolean
   }>(),
   {
     iteration: 1,
@@ -61,6 +69,10 @@ const props = withDefaults(
     passLabel: '',
     rejectLabel: '',
     confirmError: null,
+    queued: () => [],
+    thinking: false,
+    streamText: '',
+    interrupted: false,
   },
 )
 
@@ -99,6 +111,12 @@ const canSubmitGate = computed(() => {
     annotations.value.length > 0
   )
 })
+
+const showGateCancel = computed(
+  () => props.thinking || (props.queued?.length ?? 0) > 0,
+)
+
+const gateQueued = computed(() => props.queued ?? [])
 
 /**
  * Footer hint must follow n_open mutex / cold-session state:
@@ -191,7 +209,7 @@ function onPass() {
         :placeholder="t('pages.gateApproval.reactRevise.placeholder')"
       />
       <div v-if="rejectError" class="mt-1.5 text-[11px] text-err">{{ rejectError }}</div>
-      <div class="mt-2 flex gap-2">
+      <div class="mt-2 flex flex-wrap gap-2">
         <button
           v-if="canReject"
           type="button"
@@ -215,6 +233,40 @@ function onPass() {
           <Icon name="check" :size="14" />
           {{ passLabel || t('pages.reviewComposer.pass') }}
         </button>
+        <button
+          v-if="showGateCancel"
+          type="button"
+          class="inline-flex items-center justify-center gap-1.5 border border-line bg-elevated px-3 py-2 text-sm font-medium text-txt2"
+          data-testid="gate-react-cancel"
+          title="Cancel"
+          @click="emit('cancel')"
+        >
+          Cancel
+        </button>
+      </div>
+      <div
+        v-if="gateQueued.length"
+        class="mt-2 rounded border border-line bg-base/40 px-2 py-1.5"
+        data-testid="gate-react-queue"
+      >
+        <div class="mb-1 text-[11px] text-txt3">
+          {{ t('pages.agentChatTester.queue', { n: gateQueued.length }) }}
+        </div>
+        <div
+          v-for="(q, qi) in gateQueued"
+          :key="qi"
+          class="truncate text-[12px] text-txt2"
+        >
+          {{ qi + 1 }}. {{ q.text }}
+        </div>
+      </div>
+      <div
+        v-if="thinking && streamText"
+        class="mt-2 max-h-28 overflow-y-auto rounded border border-line bg-surface px-2 py-1.5 text-[12px] text-txt2"
+        data-testid="gate-react-stream"
+      >
+        {{ streamText }}
+        <span v-if="interrupted" class="ml-1 text-[10px] text-warn">interrupted</span>
       </div>
       <p class="mt-2 text-[11px] leading-relaxed text-txt3" data-testid="review-composer-footer-hint">
         {{ gateFooterHint }}

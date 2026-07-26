@@ -1243,12 +1243,15 @@ const useReviewShellLayout = computed(
 
 const passAction = computed(() => footerActions.value.find((a) => POSITIVE_ACTION_IDS.has(a.id)))
 
-/** Align with visibleActions: no Pass when approve is filtered out (open PreviewIssues) or proposal_select. */
+/** Align with visibleActions: no Pass when approve is filtered out (open PreviewIssues) or proposal_select.
+ * Also FR4: busy (thinking / queued) disables confirm/pass — Cancel first or wait ready. */
 const composerPassDisabled = computed(
   () =>
     !passAction.value ||
     isProposalSelect.value ||
-    isActionDisabled(passAction.value.id),
+    isActionDisabled(passAction.value.id) ||
+    reactThinking.value ||
+    reactQueued.value.length > 0,
 )
 
 function onComposerPass() {
@@ -1817,6 +1820,41 @@ function onComposerReject() {
                     <Icon name="arrow-left" :size="14" />
                     {{ reactSending ? t('pages.gateApproval.reactRevise.sending') : composerRejectLabel }}
                   </button>
+                  <button
+                    v-if="canReactRevise && (reactThinking || reactQueued.length)"
+                    type="button"
+                    class="inline-flex items-center justify-center gap-1.5 border border-line bg-elevated px-3 py-2 text-sm font-medium text-txt2"
+                    :class="isMobile ? 'min-h-[44px]' : ''"
+                    data-testid="gate-react-cancel"
+                    title="Cancel"
+                    @click="cancelReactRevise"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <div
+                  v-if="reactQueued.length"
+                  class="mt-2 rounded border border-line bg-base/40 px-2 py-1.5"
+                  data-testid="gate-react-queue"
+                >
+                  <div class="mb-1 text-[11px] text-txt3">
+                    {{ t('pages.agentChatTester.queue', { n: reactQueued.length }) }}
+                  </div>
+                  <div
+                    v-for="(q, qi) in reactQueued"
+                    :key="qi"
+                    class="truncate text-[12px] text-txt2"
+                  >
+                    {{ qi + 1 }}. {{ q.text }}
+                  </div>
+                </div>
+                <div
+                  v-if="reactThinking && reactStreamText"
+                  class="mt-2 max-h-28 overflow-y-auto rounded border border-line bg-surface px-2 py-1.5 text-[12px] text-txt2"
+                  data-testid="gate-react-stream"
+                >
+                  {{ reactStreamText }}
+                  <span v-if="reactInterrupted" class="ml-1 text-[10px] text-warn">interrupted</span>
                 </div>
               </div>
               <!-- Non-preview hot (structured etc.): keep ReviewComposer. -->
@@ -1836,8 +1874,13 @@ function onComposerReject() {
                 :pass-title="passAction ? actionButtonTitle(passAction.id) : ''"
                 :pass-label="t('pages.reviewComposer.pass')"
                 :reject-label="composerRejectLabel"
+                :queued="reactQueued"
+                :thinking="reactThinking"
+                :stream-text="reactStreamText"
+                :interrupted="reactInterrupted"
                 @reject="onComposerReject"
                 @pass="onComposerPass"
+                @cancel="cancelReactRevise"
               />
               <div
                 v-else
@@ -1925,8 +1968,13 @@ function onComposerReject() {
               :pass-title="passAction ? actionButtonTitle(passAction.id) : ''"
               :pass-label="t('pages.reviewComposer.pass')"
               :reject-label="composerRejectLabel"
+              :queued="reactQueued"
+              :thinking="reactThinking"
+              :stream-text="reactStreamText"
+              :interrupted="reactInterrupted"
               @reject="onComposerReject"
               @pass="onComposerPass"
+              @cancel="cancelReactRevise"
             />
           </div>
         </div>
@@ -2139,8 +2187,13 @@ function onComposerReject() {
             :pass-title="passAction ? actionButtonTitle(passAction.id) : ''"
             :pass-label="t('pages.reviewComposer.pass')"
             :reject-label="composerRejectLabel"
+            :queued="reactQueued"
+            :thinking="reactThinking"
+            :stream-text="reactStreamText"
+            :interrupted="reactInterrupted"
             @reject="onComposerReject"
             @pass="onComposerPass"
+            @cancel="cancelReactRevise"
           />
           <div v-else class="flex flex-wrap gap-2" :class="isMobile ? 'gap-3' : ''">
             <button
