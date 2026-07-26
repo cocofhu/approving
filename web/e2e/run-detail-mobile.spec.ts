@@ -21,6 +21,9 @@ async function noHorizontalOverflow(page: import('@playwright/test').Page) {
   expect(overflow).toBe(false)
 }
 
+/** KPI grid: grid-cols-1 → md:grid-cols-3 → xl:grid-cols-5 (wall/node/gap/tokens/rate). */
+const KPI_CARD_COUNT = 5
+
 test.describe('Run 详情移动端适配', () => {
   test('390px：页头两行、状态全文、操作外露（f1/f2）', async ({ page }) => {
     await gotoRunDetail(page, { width: 390 })
@@ -63,17 +66,18 @@ test.describe('Run 详情移动端适配', () => {
     await expect(scroll).toHaveCount(1)
 
     const cards = panel.locator('.mb-3\\.5.grid > div')
-    await expect(cards).toHaveCount(3)
+    await expect(cards).toHaveCount(KPI_CARD_COUNT)
     const tops: number[] = []
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < KPI_CARD_COUNT; i++) {
       const box = await cards.nth(i).boundingBox()
       expect(box).toBeTruthy()
       expect(box!.x + box!.width).toBeLessThanOrEqual(390 + 1)
       tops.push(box!.y)
     }
     // 单列堆叠
-    expect(tops[1]).toBeGreaterThan(tops[0])
-    expect(tops[2]).toBeGreaterThan(tops[1])
+    for (let i = 1; i < tops.length; i++) {
+      expect(tops[i]).toBeGreaterThan(tops[i - 1])
+    }
 
     await page.getByRole('button', { name: '时间线' }).click()
     await expect(page.getByTestId('timeline-panel')).toBeVisible()
@@ -104,12 +108,15 @@ test.describe('Run 详情移动端适配', () => {
     // 单行：状态与操作近似同行
     expect(Math.abs(row1!.y - actions!.y)).toBeLessThan(12)
 
+    // md:grid-cols-3 → first three KPIs share a row; 4th wraps
     const cards = page.getByTestId('stats-panel').locator('.mb-3\\.5.grid > div')
-    await expect(cards).toHaveCount(3)
+    await expect(cards).toHaveCount(KPI_CARD_COUNT)
     const y0 = (await cards.nth(0).boundingBox())!.y
     const y1 = (await cards.nth(1).boundingBox())!.y
     const y2 = (await cards.nth(2).boundingBox())!.y
+    const y3 = (await cards.nth(3).boundingBox())!.y
     expect(Math.abs(y0 - y1)).toBeLessThan(8)
     expect(Math.abs(y1 - y2)).toBeLessThan(8)
+    expect(y3).toBeGreaterThan(y0 + 8)
   })
 })

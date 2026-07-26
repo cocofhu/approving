@@ -8,10 +8,13 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { api, type SandboxView } from '@/lib/api'
+import { copyToClipboard } from '@/lib/copyToClipboard'
+import { useToast } from '@/lib/useToast'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const toast = useToast()
 const id = Number(route.params.id)
 
 const CONSOLE_TABS = ['terminal', 'ide', 'acp', 'novnc', 'log'] as const
@@ -51,13 +54,13 @@ const passwordCopied = ref(false)
 async function copyPassword() {
   const pw = sandbox.value?.password
   if (!pw) return
-  try {
-    await navigator.clipboard.writeText(pw)
-    passwordCopied.value = true
-    window.setTimeout(() => { passwordCopied.value = false }, 1500)
-  } catch {
-    /* ignore */
+  const ok = await copyToClipboard(pw)
+  if (!ok) {
+    toast.error(t('common.toast.copyFailed'))
+    return
   }
+  passwordCopied.value = true
+  window.setTimeout(() => { passwordCopied.value = false }, 1500)
 }
 
 // Raw container logs (docker logs): live while running, else archived snapshot.

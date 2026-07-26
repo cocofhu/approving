@@ -11,6 +11,7 @@ import { renderMarkdown } from '@/lib/markdown'
 import { isJsonArtifact, parseJsonState } from '@/lib/highlightJson'
 import { fmtTime } from '@/lib/format'
 import { api } from '@/lib/api'
+import { copyToClipboard } from '@/lib/copyToClipboard'
 import { useToast } from '@/lib/useToast'
 import type { Artifact } from '@/lib/types'
 
@@ -141,10 +142,9 @@ async function loadContent(a: Artifact) {
 }
 
 async function copyContent() {
-  try {
-    await navigator.clipboard.writeText(activeContent.value)
-  } catch {
-    /* clipboard unavailable */
+  const ok = await copyToClipboard(activeContent.value)
+  if (!ok) {
+    toast.error(t('common.toast.copyFailed'))
   }
 }
 

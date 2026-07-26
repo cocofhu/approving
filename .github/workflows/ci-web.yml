@@ -64,7 +64,8 @@ jobs:
 
   # Critical-path Playwright subset (mock vite.e2e harness; no real backend).
   # Parallel with `web`. Minimal permissions (no coverage-badge write).
-  # Follow-up: add this job to main required checks for hard merge blocking.
+  # Merge blocking: require `web`, `web-e2e`, and `web-gate` on protected branches
+  # when this workflow runs (path-filtered; non-web PRs do not trigger ci-web).
   web-e2e:
     runs-on: ubuntu-latest
     permissions:
@@ -94,3 +95,30 @@ jobs:
             web/test-results/
           retention-days: 7
           if-no-files-found: ignore
+
+  # Fan-in gate so a red web or web-e2e cannot leave a skipped "required" check
+  # treated as success. Always runs; fails when any needed job failed/cancelled.
+  web-gate:
+    name: web-gate
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [web, web-e2e]
+    permissions:
+      contents: read
+    steps:
+      - name: Require web + web-e2e success
+        run: |
+          set -euo pipefail
+          web_result='${{ needs.web.result }}'
+          e2e_result='${{ needs.web-e2e.result }}'
+          echo "web=${web_result} web-e2e=${e2e_result}"
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" \
+             || "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "::error::web-gate failed (web=${web_result}, web-e2e=${e2e_result})"
+            exit 1
+          fi
+          if [[ "$web_result" != "success" || "$e2e_result" != "success" ]]; then
+            echo "::error::web-gate expected success (web=${web_result}, web-e2e=${e2e_result})"
+            exit 1
+          fi
+          echo "web-gate OK"

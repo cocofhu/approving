@@ -50,13 +50,31 @@ Matching workflow: `ci-web` (`web` job).
 
 ### Critical-path Playwright e2e
 
-PR `ci-web` also runs a parallel `web-e2e` job for a fixed critical-path subset
-(local vite.e2e mock harness; no real backend). Specs:
+When `web/**` (or `ci-web.yml` / coverage badge scripts) change, `ci-web` runs
+three checks in parallel / fan-in:
+
+| Check (job name) | Role |
+|------------------|------|
+| `web` | lint, vue-tsc, unit+coverage, build |
+| `web-e2e` | critical-path Playwright subset (mock vite.e2e harness; no real backend) |
+| `web-gate` | always-on fan-in of `web` + `web-e2e`; fails if either failed/cancelled |
+
+**Required for merge when this workflow runs:** `web`, `web-e2e`, and `web-gate`.
+Non-web path changes do not trigger `ci-web`, so these three are not in play;
+the always-on `ci` / `gate` job is **not** a substitute for `web-e2e`.
+
+`test:e2e:ci` specs (target wall time usually under 5–8 minutes with
+`workers: 1`; not the full suite):
 
 - `gate-mobile-fill.spec.ts` — gate mobile approve / reject
 - `clarify-inbox-product.spec.ts` — clarify inbox product surface
 - `delete-run-list.spec.ts` — run list delete / cancel / placeholders
 - `cancel-run.spec.ts` — cancel run across statuses
+- `agent-create-wizard.spec.ts` — agent create wizard happy path
+- `board-token-stats.spec.ts` — board / token stats incl. narrow viewport
+- `run-detail-mobile.spec.ts` — run detail mobile layout (assertions aligned to
+  5 KPI cards: wall / node-sum / gap / total-tokens / token-rate; trim further
+  if CI flake appears)
 
 Reproduce locally (same entry as CI):
 
@@ -66,10 +84,13 @@ cd web && npm ci && npx playwright install chromium && npm run test:e2e:ci
 
 Full suite remains `npm run test:e2e` (not run in PR CI). On `web-e2e`
 failure, Actions uploads `playwright-report/` and `test-results/` artifacts.
+Do **not** put the full suite or whole `project-detail.spec.ts` into
+`test:e2e:ci`.
 
-**Follow-up:** add the `web-e2e` check to main branch protection required
-checks so a red job hard-blocks merge. Until then, failure is a visible red
-signal only.
+**Branch protection (maintainers):** mark `web`, `web-e2e`, and `web-gate` as
+required status checks for PRs into `main` (rulesets / classic protection).
+Code-side `web-gate` still fails the workflow when e2e fails even if protection
+is not updated yet.
 
 Later tightening (more Go linters, stricter ESLint rules, optional type-aware
 ESLint) can ratchet without changing this layout; not required for this pass.
@@ -131,7 +152,23 @@ Default tags used by `./start.sh` (overridable in `.env`):
 - `ghcr.io/cocofhu/sandbox-gateway:0.0.2-beta`
 - `ghcr.io/cocofhu/universal-sandbox-cursor:0.0.2-beta`
 
-After digest-pinned images exist, run a clean-Linux smoke:
+### release-smoke (manual; not a PR required check)
+
+Workflow: `.github/workflows/release-smoke.yml`.
+
+| Trigger | Behavior |
+|---------|----------|
+| `workflow_dispatch` | Intended entry: run after digest-pinned GHCR images exist |
+| `v*` / other tags | **Not** wired on purpose — beta tags without release secrets would fail red noise |
+| Pull requests | **Not** triggered — do not add as a per-PR required check |
+
+The job needs repository secrets `APPROVING_IMAGE`, `SANDBOX_GATEWAY_IMAGE`,
+and `SANDBOX_IMAGE` (each a digest-pinned reference such as
+`ghcr.io/...@sha256:...`). It pulls multi-GB images, runs `./release-smoke.sh`,
+and uploads `release-evidence/`. That cost is why smoke stays manual: do **not**
+run full image pulls on every PR unless a future lightweight mode exists.
+
+Local equivalent after images are available:
 
 ```bash
 export APPROVING_IMAGE='ghcr.io/cocofhu/approving@sha256:...'
@@ -140,11 +177,33 @@ export SANDBOX_IMAGE='ghcr.io/cocofhu/universal-sandbox-cursor@sha256:...'
 ./release-smoke.sh
 ```
 
+Optional future: a weekly/nightly `schedule` for maintainers — not required for
+merge quality gates today.
+
 Dev-only local sandbox image:
 
 ```bash
 ./start.sh sandbox       # build universal-sandbox-cursor:local
 ```
+
+## Security scans (CodeQL and friends)
+
+Workflow: `.github/workflows/security.yml` (push to `main`, every PR, weekly
+schedule). Jobs: CodeQL (go + javascript-typescript), `npm audit` (web, high+),
+gitleaks.
+
+- A failing CodeQL **analyze** job turns the corresponding PR check red.
+- **Job green ≠ default branch has zero open alerts.** Historical / residual
+  findings can remain under Security → Code scanning after analyze succeeds.
+  After merging security-sensitive changes, spot-check that UI (acceptance item
+  for maintainers).
+- Easy residual patterns: incomplete multi-character sanitization (e.g. strip
+  tags with `/<[^>]+>/g` then re-interpret HTML — see
+  `web/src/lib/highlightJson.test.ts`); boolean / flag “sanitizers” that do not
+  break taint for CodeQL; DOM reinterpret after encode. Prefer sink hardening
+  and fixture tests over dismissing alerts.
+- CodeQL is **not** currently a branch-protection required check; treat
+  post-merge scanning review as complementary to CI green.
 
 ## Coverage badges
 
