@@ -225,9 +225,12 @@ for the agent execution event log.
   mapped by handlers. Driver / API / CLI failure → `500` with `error`.
 - Drivers that do not implement Logs still return `501`
   (`sandbox logs not supported by this driver`).
-- **Ops prerequisite**: the gateway ServiceAccount needs `pods/log` (or
-  equivalent) in the sandbox namespace. This release does not ship RBAC
-  manifests; missing permission surfaces as a non-2xx error (not empty success).
+- **Required RBAC (shipped)**: the gateway ServiceAccount needs `get` on
+  `pods/log` in the sandbox namespace. Incremental manifests are provided at
+  `sandbox-gateway/deploy/k8s/` (`role-pods-log.yaml` +
+  `rolebinding-pods-log.yaml`); apply them alongside existing Roles (do not
+  replace a full production Role). Missing permission surfaces as a non-2xx
+  error (not empty success).
 
 ## What the gateway does NOT do
 

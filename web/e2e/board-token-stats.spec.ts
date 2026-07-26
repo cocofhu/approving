@@ -205,7 +205,12 @@ test.describe('看板 Token 统计图', () => {
     await expect(page.getByTestId('token-stats-trend-card')).toBeVisible()
     await expect(page.getByTestId('token-stats-comp-card')).toBeVisible()
     await expect(page.getByTestId('token-stats-rank-card')).toBeVisible()
-    await expect(page.getByTestId('token-trend-svg')).toBeVisible()
+    await expect(page.getByTestId('token-trend-wrap')).toBeVisible()
+    await expect(page.getByTestId('token-trend-chart')).toBeVisible()
+    await expect(page.getByTestId('token-trend-chart').locator('canvas')).toBeVisible()
+    // Regression: no non-uniform SVG stretch path for the trend chart
+    await expect(page.getByTestId('token-trend-svg')).toHaveCount(0)
+    await expect(page.locator('[data-testid="token-trend-wrap"] svg[preserveAspectRatio="none"]')).toHaveCount(0)
     await expect(page.getByTestId('token-donut-svg')).toBeVisible()
     await expect(page.getByTestId('token-donut-legend')).toContainText('input')
     await expect(panel).toContainText('approve-main')
@@ -243,6 +248,13 @@ test.describe('看板 Token 统计图', () => {
     await expect(page.getByTestId('token-stats-charts')).toBeVisible({ timeout: 10_000 })
     await expect(page.getByTestId('token-stats-window-badge')).toContainText('近 7 天')
     await expect(page.getByTestId('token-stats-window-7d')).toHaveAttribute('aria-selected', 'true')
+    // After window switch: Chart.js canvas still hosts trend; no SVG none stretch
+    await expect(page.getByTestId('token-trend-chart').locator('canvas')).toBeVisible()
+    await expect(page.locator('[data-testid="token-trend-wrap"] svg[preserveAspectRatio="none"]')).toHaveCount(0)
+    const wrapBox = await page.getByTestId('token-trend-wrap').boundingBox()
+    expect(wrapBox).toBeTruthy()
+    expect(wrapBox!.height).toBeGreaterThanOrEqual(180)
+    expect(wrapBox!.height).toBeLessThanOrEqual(240)
 
     // Failure + retry
     failNext = true
@@ -289,6 +301,7 @@ test.describe('看板 Token 统计图', () => {
     await expect(page.getByTestId('token-stats-panel')).toBeVisible({ timeout: 15_000 })
     await expect(page.getByTestId('token-stats-empty')).toBeVisible()
     await expect(page.getByTestId('token-stats-charts')).toHaveCount(0)
+    await expect(page.getByTestId('token-trend-chart')).toHaveCount(0)
     await expect(page.getByTestId('token-trend-svg')).toHaveCount(0)
     await expect(page.getByTestId('token-donut-svg')).toHaveCount(0)
     await expect(page.getByTestId('token-stats-empty')).toContainText('未上报不会显示为 0')

@@ -435,6 +435,15 @@ const multiRateHint = computed(() =>
 .stats-panel {
   --stats-token: #0b6e99;
   --stats-time: #b45309;
+  /* Rich tip highlight pair: dark defaults, light overrides below (Demo「修复后」). */
+  --stats-tip-hl-bg: rgba(139, 92, 246, 0.28);
+  --stats-tip-hl-txt: #e9d5ff;
+  --stats-tip-line: rgba(248, 250, 252, 0.14);
+}
+html.light .stats-panel {
+  --stats-tip-hl-bg: #ede9fe;
+  --stats-tip-hl-txt: #4c1d95;
+  --stats-tip-line: rgba(17, 24, 39, 0.12);
 }
 .stats-kpi-time {
   color: var(--stats-time);
@@ -501,11 +510,11 @@ const multiRateHint = computed(() =>
 .stats-kpi-tip-total {
   margin-bottom: 8px;
   padding-bottom: 7px;
-  border-bottom: 1px solid rgba(248, 250, 252, 0.14);
+  border-bottom: 1px solid var(--stats-tip-line);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
   font-weight: 700;
-  color: #f8fafc;
+  color: rgb(var(--c-txt));
 }
 .stats-kpi-tip-parts {
   display: grid;
@@ -519,29 +528,35 @@ const multiRateHint = computed(() =>
   font-size: 11.5px;
 }
 .stats-kpi-tip-part-k {
-  color: #94a3b8;
+  /* Prefer --c-txt2 over --c-txt3: latter is too light on overlay in light theme. */
+  color: rgb(var(--c-txt2));
 }
 .stats-kpi-tip-part-k-hl {
-  color: #c4b5fd;
+  color: var(--stats-tip-hl-txt);
   font-weight: 650;
 }
 .stats-kpi-tip-part-n {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-weight: 650;
-  color: #f8fafc;
+  color: rgb(var(--c-txt));
   text-align: right;
 }
 .stats-kpi-tip-part-c {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 10.5px;
-  color: #64748b;
+  color: rgb(var(--c-txt2));
   min-width: 42px;
 }
 .stats-kpi-tip-part-hl {
   margin: 0 -6px;
   padding: 4px 6px;
   border-radius: 5px;
-  background: rgba(124, 58, 237, 0.18);
+  background: var(--stats-tip-hl-bg);
+}
+.stats-kpi-tip-part-hl .stats-kpi-tip-part-n,
+.stats-kpi-tip-part-hl .stats-kpi-tip-part-c {
+  color: var(--stats-tip-hl-txt);
+  font-weight: 650;
 }
 </style>
 

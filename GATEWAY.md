@@ -39,7 +39,7 @@ build `universal-sandbox-cursor:local` from `sandbox-gateway/sandbox` on first r
 | Get | `GET /api/v1/sandboxes/{id}` returns status and endpoints (session/ide/ssh/cdp/novnc) |
 | List | `GET /api/v1/sandboxes?label=key:value` (AND) |
 | Delete | `DELETE /api/v1/sandboxes/{id}` returns 2xx |
-| Logs | `GET /api/v1/sandboxes/{id}/logs?tail=` returns `{content}` (PID1 stdout/stderr, non-follow). Docker (`docker logs --tail`) and kubernetes (pod `sandbox` container via client-go GetLogs) both supported. Cluster RBAC must allow `pods/log` (ops prerequisite). Drivers that still omit Logs → `501` |
+| Logs | `GET /api/v1/sandboxes/{id}/logs?tail=` returns `{content}` (PID1 stdout/stderr, non-follow). Docker (`docker logs --tail`) and kubernetes (pod `sandbox` container via client-go GetLogs) both supported. Cluster RBAC must allow `get` on `pods/log` in the sandbox namespace; the incremental Role+RoleBinding is shipped in `sandbox-gateway/deploy/k8s/` (apply alongside existing Roles — do not replace a full production Role). Drivers that still omit Logs → `501` |
 | Ready | status `running` with a `session` endpoint |
 | Images | per Agent `acpBackend`: `universal-sandbox-{cursor\|claude_code\|codebuddy\|trae}` |
 | Data plane | SSH / session / cdp / novnc connect to endpoints directly |
