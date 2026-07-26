@@ -548,6 +548,7 @@
       "loadingWorkflow": "Loading…",
       "loadingRun": "Loading run details…",
       "loadingChip": "Loading…",
+      "switchingNode": "Switching node…",
       "loadFailedTitle": "Unable to load run details right now",
       "loadFailedDesc": "A network or service error occurred. Please retry shortly. Contact an admin if it persists.",
       "loadFailedChip": "Load failed",

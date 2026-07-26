@@ -548,6 +548,7 @@
       "loadingWorkflow": "加载中…",
       "loadingRun": "加载运行详情…",
       "loadingChip": "加载中…",
+      "switchingNode": "切换节点…",
       "loadFailedTitle": "暂时无法加载运行详情",
       "loadFailedDesc": "网络或服务异常，请稍后重试。若持续失败请联系管理员。",
       "loadFailedChip": "加载失败",

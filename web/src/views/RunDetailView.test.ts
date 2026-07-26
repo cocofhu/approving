@@ -188,8 +188,12 @@ describe('RunDetailView ACP log rehydrate state machine', () => {
     expect(src).toMatch(/function retryRehydrate/)
     expect(src).toMatch(/:rehydrate-status="selRehydrateStatus"/)
     expect(src).toMatch(/@retry-rehydrate="retryRehydrate"/)
-    // Rehydrate runs on enter regardless of active tab; default tab logic unchanged.
+    // Rehydrate runs on enter (init + paint-then-work selection path); default tab logic unchanged.
     expect(src).toMatch(/void rehydrateNodeEvents\(selected\.value\)/)
+    expect(src).toMatch(/async function runSelectionSideEffects/)
+    expect(src).toMatch(/panelSwitching/)
+    expect(src).toMatch(/afterNextPaint/)
+    expect(src).toMatch(/data-testid="run-detail-panel-switching"/)
     expect(src).toMatch(/else if \(hasLog\.value\) nodeTab\.value = 'log'/)
     // Failed rehydrate must not auto-recover via the 2s poll.
     expect(src).toMatch(/if \(rh === 'error' \|\| rh === 'loading'\)/)
