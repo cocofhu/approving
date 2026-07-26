@@ -49,9 +49,9 @@ set +a
 : "${APPROVING_GATEWAY_PORT:=8899}"
 : "${APPROVING_SANDBOX_GATEWAY_URL:=http://127.0.0.1:${APPROVING_GATEWAY_PORT}}"
 : "${APPROVING_DEPLOYMENT_MODE:=local-demo}"
-: "${APPROVING_IMAGE:=ghcr.io/cocofhu/approving:0.0.1-beta}"
-: "${SANDBOX_GATEWAY_IMAGE:=ghcr.io/cocofhu/sandbox-gateway:0.0.1-beta}"
-: "${SANDBOX_IMAGE:=ghcr.io/cocofhu/universal-sandbox-cursor:0.0.1-beta}"
+: "${APPROVING_IMAGE:=ghcr.io/cocofhu/approving:0.0.2-beta}"
+: "${SANDBOX_GATEWAY_IMAGE:=ghcr.io/cocofhu/sandbox-gateway:0.0.2-beta}"
+: "${SANDBOX_IMAGE:=ghcr.io/cocofhu/universal-sandbox-cursor:0.0.2-beta}"
 : "${SANDBOX_GATEWAY_API_KEY:=approving-local-demo}"
 # Demo account (admin / demo1234). Set outside the .env file so `$` in the
 # bcrypt hash is not eaten by shell/compose env parsing.

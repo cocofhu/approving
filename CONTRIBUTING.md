@@ -127,9 +127,9 @@ set them Public under GitHub → Packages if anonymous pulls are required.
 
 Default tags used by `./start.sh` (overridable in `.env`):
 
-- `ghcr.io/cocofhu/approving:0.0.1-beta`
-- `ghcr.io/cocofhu/sandbox-gateway:0.0.1-beta`
-- `ghcr.io/cocofhu/universal-sandbox-cursor:0.0.1-beta`
+- `ghcr.io/cocofhu/approving:0.0.2-beta`
+- `ghcr.io/cocofhu/sandbox-gateway:0.0.2-beta`
+- `ghcr.io/cocofhu/universal-sandbox-cursor:0.0.2-beta`
 
 After digest-pinned images exist, run a clean-Linux smoke:
 

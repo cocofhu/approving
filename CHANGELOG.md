@@ -4,25 +4,15 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
-- IM Reply/Work equivalent orchestration on QQ channels: `channels.Manager` is
-  the unique egress (immediate ACK with ~40-rune summary, per-message queue ACK
-  with ahead count + summary, dequeue ACK, on-demand progress, terminal report);
-  Work (`ChannelBridge` / cron sandbox) emits internal progress/results only.
-  Progress coalesces ACP streaming chunks before classify; push flush re-queues
-  all remaining items if the conversation becomes busy mid-flush; full push
-  queue retains newest failed/changed. Cron `deliverToChannel` uses coordinated
-  push (busy → silent queue depth 8, idle flush; unchanged templates like
-  `PR：无变化`).
-- Preinstall GitHub CLI (`gh`) in the universal sandbox image and auto
-  `gh auth login` from `GITHUB_TOKEN` (mirrors existing `glab` + `GITLAB_TOKEN`),
-  so Agent `submit_mr` / `gh pr` works out of the box on GitHub remotes.
-- Add path-filtered `ci-sandbox` workflow (startup script smokes, sandbox Go
-  coverage, Dockerfile `--target cli-tools` verifying `glab`/`gh`).
-- Make `./start.sh` default to published GHCR images (`compose.release.yaml`) with
-  tag defaults so a clone can `./start.sh -d` without a local image build; keep
-  `./start.sh dev` for the source/HMR stack.
-- Add GHCR publish workflows for `sandbox-gateway` and
-  `universal-sandbox-{cursor,claude_code,codebuddy,trae}` on `v*` tags.
+## 0.0.2-beta — 2026-07-26
+
+- Public beta follow-up on [`v0.0.2-beta`](https://github.com/cocofhu/approving/releases/tag/v0.0.2-beta)
+  (relative to `v0.0.1-beta`: ~161 commits, PRs #1–#61). Full notes on the GitHub Release.
+- Pin `./start.sh`, `.env.example`, and `compose.release.yaml` defaults to GHCR
+  `*:0.0.2-beta` (tag publish does not rewrite these files).
+- Highlights: Run delete/cancel/sort + Token KPIs; Board/project Token stats;
+  Agent 5-step wizard; PM IM QQ egress + cron UTC fix; Docker/K8s sandbox logs;
+  docs `/en` + marketing site; CI coverage gates, e2e, CodeQL/security cleanup.
 
 ## 0.0.1-beta — 2026-07-25
 
