@@ -1,8 +1,15 @@
 // Package channels is a platform-agnostic abstraction for external IM channels
 // (QQ today; Slack/Discord/Feishu later). Concrete transports implement the
 // Adapter interface and normalize their protocol into InboundMessage /
-// OutboundMessage. The ChannelBridge turns an inbound message into a PM Leader
-// turn and returns the reply; the Manager owns adapter lifecycle and routing.
+// OutboundMessage.
+//
+// Reply/Work equivalent orchestration (验收口径，不强制物理双容器):
+//
+//   - Manager = Reply：唯一对 QQ 的发言出口（即时 ACK、排队 ACK、按需进度、
+//     终态、定时推送队列与优先级）。
+//   - ChannelBridge / PmTurnRunner / cron 沙箱 = Work：执行用户回合与定时任务，
+//     只产出内部 ProgressEvent / TurnFinalReport / CronDelivery，不得旁路
+//     adapter.Send 抢发 IM。ACK 在派发 Work 之前由 Manager 发出。
 package channels
 
 import (

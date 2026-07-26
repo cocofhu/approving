@@ -330,3 +330,28 @@ describe('api req helpers', () => {
     await expect(api.deleteArtifact('x')).rejects.toThrow('gone')
   })
 })
+
+describe('api.saveWorkflow description payload', () => {
+  it('includes description in PUT/POST body (including empty string)', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'w1', name: 'n', description: 'list subtitle' }))
+    await api.saveWorkflow({ id: 'w1', name: 'n', description: 'list subtitle' })
+    const putCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]
+    expect(String(putCall?.[0])).toMatch(/\/workflows\/w1$/)
+    expect(putCall?.[1]).toMatchObject({ method: 'PUT' })
+    expect(JSON.parse(String(putCall?.[1]?.body))).toMatchObject({
+      id: 'w1',
+      name: 'n',
+      description: 'list subtitle',
+    })
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'w2', name: 'n', description: '' }))
+    await api.saveWorkflow({ name: 'n', description: '' })
+    const postCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]
+    expect(String(postCall?.[0])).toMatch(/\/workflows$/)
+    expect(postCall?.[1]).toMatchObject({ method: 'POST' })
+    expect(JSON.parse(String(postCall?.[1]?.body))).toMatchObject({
+      name: 'n',
+      description: '',
+    })
+  })
+})

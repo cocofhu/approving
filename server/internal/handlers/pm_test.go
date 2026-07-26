@@ -666,6 +666,175 @@ func TestProjectCronJobsPatchAllowedForNonAdmin(t *testing.T) {
 	}
 }
 
+func TestProjectCronJobsDeleteCleansRunsAndThread(t *testing.T) {
+	hn := newHarness(t)
+	enableAdmin(t)
+
+	pm := services.NewPmService(hn.db, hn.h.Skill)
+	hn.h.Pm = pm
+
+	w := hn.do(http.MethodPost, "/api/projects", map[string]any{"name": "CronDelA"})
+	if w.Code != 200 {
+		t.Fatalf("create a: %d %s", w.Code, w.Body.String())
+	}
+	var projA map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &projA)
+	pidA := projA["id"].(string)
+
+	w = hn.do(http.MethodPost, "/api/projects", map[string]any{"name": "CronDelB"})
+	if w.Code != 200 {
+		t.Fatalf("create b: %d", w.Code)
+	}
+	var projB map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &projB)
+	pidB := projB["id"].(string)
+
+	now := time.Now().UTC()
+	thread := models.ChatThread{
+		ID: "th-del-1", ProjectID: pidA, UserID: "system", AgentName: "agent-a",
+		Kind: "cron", Title: "cron thread", CreatedAt: now, UpdatedAt: now,
+	}
+	if err := hn.db.Create(&thread).Error; err != nil {
+		t.Fatalf("seed thread: %v", err)
+	}
+	msg := models.ChatMessage{
+		ID: "msg-del-1", ThreadID: thread.ID, Role: "user", Content: "hello", CreatedAt: now,
+	}
+	if err := hn.db.Create(&msg).Error; err != nil {
+		t.Fatalf("seed message: %v", err)
+	}
+	draft := models.ChatTurnDraft{
+		ID: "draft-del-1", ThreadID: thread.ID, Status: "done", CreatedAt: now, UpdatedAt: now,
+	}
+	if err := hn.db.Create(&draft).Error; err != nil {
+		t.Fatalf("seed draft: %v", err)
+	}
+	job := models.AgentCronJob{
+		ID: "cron-del-1", AgentName: "agent-a", ProjectID: pidA, ThreadID: thread.ID,
+		Name: "待删任务", Prompt: "p", ScheduleKind: "every", ScheduleExpr: "1h",
+		Enabled: true, DeliverToChannel: false, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := hn.db.Create(&job).Error; err != nil {
+		t.Fatalf("seed job: %v", err)
+	}
+	run := models.AgentCronRun{
+		ID: "run-del-1", JobID: job.ID, Status: "ok", StartedAt: now,
+	}
+	if err := hn.db.Create(&run).Error; err != nil {
+		t.Fatalf("seed run: %v", err)
+	}
+	other := models.AgentCronJob{
+		ID: "cron-del-other", AgentName: "agent-a", ProjectID: pidB, ThreadID: "th-other",
+		Name: "其他项目", Prompt: "x", ScheduleKind: "every", ScheduleExpr: "1h",
+		Enabled: true, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := hn.db.Create(&other).Error; err != nil {
+		t.Fatalf("seed other: %v", err)
+	}
+
+	w = hn.do(http.MethodDelete, "/api/projects/"+pidA+"/cron-jobs/cron-del-other", nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("cross-project delete want 404 got %d %s", w.Code, w.Body.String())
+	}
+	var stillOther models.AgentCronJob
+	if err := hn.db.Where("id = ?", "cron-del-other").First(&stillOther).Error; err != nil {
+		t.Fatalf("cross-project delete must not remove other job: %v", err)
+	}
+
+	w = hn.do(http.MethodDelete, "/api/projects/"+pidA+"/cron-jobs/cron-del-1", nil)
+	if w.Code != 200 {
+		t.Fatalf("delete: %d %s", w.Code, w.Body.String())
+	}
+	var delResp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &delResp)
+	if delResp["status"] != "deleted" {
+		t.Fatalf("want status deleted, got %+v", delResp)
+	}
+
+	if err := hn.db.Where("id = ?", "cron-del-1").First(&models.AgentCronJob{}).Error; err == nil {
+		t.Fatal("job should be deleted")
+	}
+	var runCount int64
+	if err := hn.db.Model(&models.AgentCronRun{}).Where("job_id = ?", "cron-del-1").Count(&runCount).Error; err != nil {
+		t.Fatalf("count runs: %v", err)
+	}
+	if runCount != 0 {
+		t.Fatalf("want runs cleaned, got %d", runCount)
+	}
+	if err := hn.db.Where("id = ?", thread.ID).First(&models.ChatThread{}).Error; err == nil {
+		t.Fatal("thread should be deleted")
+	}
+	var msgCount int64
+	if err := hn.db.Model(&models.ChatMessage{}).Where("thread_id = ?", thread.ID).Count(&msgCount).Error; err != nil {
+		t.Fatalf("count messages: %v", err)
+	}
+	if msgCount != 0 {
+		t.Fatalf("want messages cleaned, got %d", msgCount)
+	}
+	var draftCount int64
+	if err := hn.db.Model(&models.ChatTurnDraft{}).Where("thread_id = ?", thread.ID).Count(&draftCount).Error; err != nil {
+		t.Fatalf("count drafts: %v", err)
+	}
+	if draftCount != 0 {
+		t.Fatalf("want drafts cleaned, got %d", draftCount)
+	}
+
+	w = hn.do(http.MethodGet, "/api/projects/"+pidA+"/cron-jobs", nil)
+	if w.Code != 200 {
+		t.Fatalf("list after delete: %d", w.Code)
+	}
+	var list struct {
+		Items []models.AgentCronJob `json:"items"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &list)
+	if len(list.Items) != 0 {
+		t.Fatalf("want empty list after delete, got %+v", list.Items)
+	}
+}
+
+func TestProjectCronJobsDeleteAllowedForNonAdmin(t *testing.T) {
+	hn := newHarness(t)
+	enableAdmin(t)
+
+	pm := services.NewPmService(hn.db, hn.h.Skill)
+	hn.h.Pm = pm
+
+	w := hn.do(http.MethodPost, "/api/projects", map[string]any{"name": "CronDelNoAdmin"})
+	if w.Code != 200 {
+		t.Fatalf("create: %d", w.Code)
+	}
+	var proj map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &proj)
+	pid := proj["id"].(string)
+
+	now := time.Now().UTC()
+	job := models.AgentCronJob{
+		ID: "cron-del-na1", AgentName: "agent-a", ProjectID: pid, ThreadID: "",
+		Name: "任务", Prompt: "p", ScheduleKind: "every", ScheduleExpr: "1h",
+		Enabled: true, DeliverToChannel: false, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := hn.db.Create(&job).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	cfg := config.GetConfig()
+	users := make([]config.AuthUser, len(cfg.Auth.Users))
+	copy(users, cfg.Auth.Users)
+	for i := range users {
+		users[i].IsAdmin = false
+	}
+	cfg.Auth.Users = users
+	config.StoreConfig(cfg)
+
+	w = hn.do(http.MethodDelete, "/api/projects/"+pid+"/cron-jobs/cron-del-na1", nil)
+	if w.Code != 200 {
+		t.Fatalf("non-admin delete want 200 got %d %s", w.Code, w.Body.String())
+	}
+	if err := hn.db.Where("id = ?", "cron-del-na1").First(&models.AgentCronJob{}).Error; err == nil {
+		t.Fatal("job should be deleted for non-admin")
+	}
+}
+
 func setupPmEnabledHarness(t *testing.T) (*harness, string, string) {
 	t.Helper()
 	hn := newHarness(t)

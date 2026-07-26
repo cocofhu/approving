@@ -13,20 +13,25 @@ const defaultSessionTTL = 7 * 24 * time.Hour
 
 // Guard 封装口令保护与会话 Cookie。
 type Guard struct {
-	password string
-	store    *Store
-	ttl      time.Duration
+	passwordHash []byte
+	store        *Store
+	ttl          time.Duration
 }
 
-// NewGuard 在 password 非空时启用；password 已 trim。
+// NewGuard 在 password 非空时启用；password 已 trim，启动时哈希为 bcrypt。
 func NewGuard(password string) *Guard {
-	if strings.TrimSpace(password) == "" {
+	password = strings.TrimSpace(password)
+	if password == "" {
+		return nil
+	}
+	hash, err := HashPassword(password)
+	if err != nil {
 		return nil
 	}
 	return &Guard{
-		password: password,
-		store:    NewStore(defaultSessionTTL),
-		ttl:      defaultSessionTTL,
+		passwordHash: hash,
+		store:        NewStore(defaultSessionTTL),
+		ttl:          defaultSessionTTL,
 	}
 }
 
@@ -137,7 +142,7 @@ func (g *Guard) LoginPOST() gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "invalid json"})
 			return
 		}
-		if !PasswordMatch(g.password, body.Password) {
+		if !PasswordMatch(g.passwordHash, body.Password) {
 			c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "message": "wrong password"})
 			return
 		}

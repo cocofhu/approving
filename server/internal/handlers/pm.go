@@ -293,7 +293,8 @@ func (h *Handlers) DeletePmThread(c *gin.Context) {
 		return
 	}
 	if t.SandboxRef != "" {
-		if id, e := strconv.ParseUint(t.SandboxRef, 10, 64); e == nil && h.Sbx != nil {
+		// bitSize=strconv.IntSize avoids truncating oversized ids (CodeQL #8/#9).
+		if id, e := strconv.ParseUint(t.SandboxRef, 10, strconv.IntSize); e == nil && h.Sbx != nil {
 			if err := h.Sbx.Destroy(c.Request.Context(), uint(id)); err != nil {
 				log.Warn().Err(err).Uint("sandbox", uint(id)).Msg("destroy thread sandbox failed")
 			}
@@ -984,6 +985,24 @@ func (h *Handlers) PatchProjectCronJob(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, job)
+}
+
+// DeleteProjectCronJob handles DELETE /api/projects/:id/cron-jobs/:jobId.
+// Any authenticated user may delete (aligned with PatchProjectCronJob / sessionUser).
+// Cross-project jobId returns 404. Cleanup matches Agent/MCP delete (runs + thread).
+func (h *Handlers) DeleteProjectCronJob(c *gin.Context) {
+	if h.Pm == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "pm unavailable"})
+		return
+	}
+	if _, ok := h.sessionUser(c); !ok {
+		return
+	}
+	if err := h.Pm.DeleteCronJob(c.Param("id"), c.Param("jobId")); err != nil {
+		writePmErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 }
 
 func writePmErr(c *gin.Context, err error) {

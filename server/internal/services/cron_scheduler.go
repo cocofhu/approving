@@ -20,10 +20,22 @@ type CronTokenHooks struct {
 	Unregister func(token string)
 }
 
+// CronDelivery is a structured deliverToChannel result for the unified QQ
+// egress (changed / unchanged / failed).
+type CronDelivery struct {
+	ProjectID string
+	Category  string // job name / pr / daily — used for minimal templates
+	Kind      string // changed | unchanged | failed (empty → classify from Text)
+	Text      string
+}
+
 // ChannelDeliverer pushes a cron result to a project's configured channel.
 // Implemented by channels.Manager and injected via SetChannelDeliverer.
+// Deliver is the legacy plain-text path; DeliverCron is the coordinated egress
+// (busy → silent push queue, idle → immediate).
 type ChannelDeliverer interface {
 	Deliver(projectID, text string) error
+	DeliverCron(d CronDelivery) error
 }
 
 // CronScheduler polls due AgentCronJob rows and executes them via fresh PM sandboxes.
@@ -249,6 +261,7 @@ func (s *CronScheduler) execute(ctx context.Context, job *models.AgentCronJob) {
 	if err := s.turns.Start(job.ThreadID, userMsg.ID, row.ID, prompt, nil); err != nil {
 		run.Status = "error"
 		run.Error = err.Error()
+		s.deliverCronFailure(job, "启动失败："+err.Error())
 		s.destroyCronSandbox(ctx, row.ID, job.ID)
 		return
 	}
@@ -265,7 +278,33 @@ func (s *CronScheduler) execute(ctx context.Context, job *models.AgentCronJob) {
 	run.Status = "error"
 	run.Error = "turn timeout"
 	s.turns.Cancel(job.ThreadID)
+	s.deliverCronFailure(job, "回合超时")
 	s.destroyCronSandbox(ctx, row.ID, job.ID)
+}
+
+// deliverCronFailure pushes a structured failed result through the coordinated
+// QQ egress when deliverToChannel is enabled (timeout / start failure).
+func (s *CronScheduler) deliverCronFailure(job *models.AgentCronJob, reason string) {
+	if job == nil || !job.DeliverToChannel || s.deliverer == nil {
+		return
+	}
+	category := strings.TrimSpace(job.Name)
+	if category == "" {
+		category = "cron"
+	}
+	text := strings.TrimSpace(reason)
+	if text == "" {
+		text = "执行失败"
+	}
+	d := CronDelivery{
+		ProjectID: job.ProjectID,
+		Category:  category,
+		Kind:      "failed",
+		Text:      text,
+	}
+	if err := s.deliverer.DeliverCron(d); err != nil {
+		log.Warn().Err(err).Str("job", job.ID).Msg("cron failure delivery failed")
+	}
 }
 
 func (s *CronScheduler) destroyCronSandbox(ctx context.Context, id uint, jobID string) {
@@ -277,8 +316,9 @@ func (s *CronScheduler) destroyCronSandbox(ctx context.Context, id uint, jobID s
 	}
 }
 
-// maybeDeliver pushes the turn's assistant reply to the project's channel when
-// the job opted in and an assistant reply exists.
+// maybeDeliver classifies the turn's assistant reply and routes it through the
+// coordinated channel egress (DeliverCron). Cron Work must not auto-merge PRs
+// or start workflows; this path only pushes a short status report.
 func (s *CronScheduler) maybeDeliver(job *models.AgentCronJob, userMsg models.ChatMessage) {
 	if !job.DeliverToChannel || s.deliverer == nil {
 		return
@@ -291,8 +331,40 @@ func (s *CronScheduler) maybeDeliver(job *models.AgentCronJob, userMsg models.Ch
 	if strings.TrimSpace(text) == "" {
 		return
 	}
-	if err := s.deliverer.Deliver(job.ProjectID, text); err != nil {
-		log.Warn().Err(err).Str("job", job.ID).Msg("cron channel delivery failed")
+	kind := ClassifyCronDeliveryText(text)
+	category := strings.TrimSpace(job.Name)
+	if category == "" {
+		category = "cron"
+	}
+	d := CronDelivery{
+		ProjectID: job.ProjectID,
+		Category:  category,
+		Kind:      kind,
+		Text:      text,
+	}
+	if err := s.deliverer.DeliverCron(d); err != nil {
+		log.Warn().Err(err).Str("job", job.ID).Str("kind", kind).Msg("cron channel delivery failed")
+	}
+}
+
+// ClassifyCronDeliveryText maps assistant cron text into changed/unchanged/failed.
+func ClassifyCronDeliveryText(text string) string {
+	t := strings.TrimSpace(text)
+	if t == "" {
+		return "failed"
+	}
+	lower := strings.ToLower(t)
+	switch {
+	case strings.Contains(t, "失败") || strings.Contains(t, "错误：") || strings.Contains(t, "错误:") ||
+		strings.Contains(lower, "failed") || strings.Contains(lower, "error:") || strings.Contains(lower, "failure"):
+		return "failed"
+	case strings.Contains(t, "无变化") || strings.Contains(t, "无更新") || strings.Contains(t, "无新的") ||
+		strings.Contains(t, "暂无变化") || strings.Contains(lower, "no change") ||
+		strings.Contains(lower, "unchanged") || strings.Contains(lower, "no updates") ||
+		strings.Contains(lower, "nothing changed"):
+		return "unchanged"
+	default:
+		return "changed"
 	}
 }
 

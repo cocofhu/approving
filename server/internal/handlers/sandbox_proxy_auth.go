@@ -64,6 +64,9 @@ func mountedCookie(c *http.Cookie, mountPrefix string) *http.Cookie {
 	out := *c
 	out.Path = strings.TrimRight(mountPrefix, "/") + "/"
 	out.Domain = ""
+	// Always Secure (CodeQL #12). Local HTTP debugging requires HTTPS or a
+	// trusted local TLS terminator; browsers will not store the cookie on plain HTTP.
+	out.Secure = true
 	return &out
 }
 

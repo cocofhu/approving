@@ -411,6 +411,9 @@ func (d *Driver) ensureDeployment(ctx context.Context, spec driver.Spec, resLimi
 
 	containerPorts := make([]corev1.ContainerPort, 0, len(spec.Ports))
 	for _, p := range spec.Ports {
+		if p < 1 || p > 65535 {
+			continue
+		}
 		containerPorts = append(containerPorts, corev1.ContainerPort{ContainerPort: int32(p)})
 	}
 
@@ -484,6 +487,9 @@ func (d *Driver) ensureDeployment(ctx context.Context, spec driver.Spec, resLimi
 func servicePorts(ports []int) []corev1.ServicePort {
 	out := make([]corev1.ServicePort, 0, len(ports))
 	for _, p := range ports {
+		if p < 1 || p > 65535 {
+			continue
+		}
 		out = append(out, corev1.ServicePort{
 			Name:       fmt.Sprintf("p-%d", p),
 			Port:       int32(p),

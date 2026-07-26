@@ -460,12 +460,24 @@ function deleteEdge() {
 <template>
   <div class="flex h-full flex-col bg-base">
     <!-- toolbar -->
-    <header class="flex h-14 shrink-0 items-center gap-3 border-b border-line bg-surface px-4">
-      <button class="flex h-8 w-8 items-center justify-center rounded-md text-txt2 hover:bg-elevated hover:text-txt" @click="router.push(wf.projectId ? '/projects/' + wf.projectId : '/projects')">
+    <header class="flex min-h-14 shrink-0 items-center gap-3 border-b border-line bg-surface px-4 py-2">
+      <button class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-txt2 hover:bg-elevated hover:text-txt" @click="router.push(wf.projectId ? '/projects/' + wf.projectId : '/projects')">
         <Icon name="arrow-left" :size="18" />
       </button>
-      <Icon name="workflow" :size="18" class="text-accent-2" />
-      <input v-model="wf.name" class="rounded-md bg-transparent px-1.5 py-1 text-[15px] font-semibold text-txt outline-none hover:bg-elevated focus:bg-elevated" />
+      <Icon name="workflow" :size="18" class="shrink-0 text-accent-2" />
+      <div class="flex min-w-0 max-w-md flex-col gap-0.5">
+        <input
+          v-model="wf.name"
+          class="min-w-0 rounded-md bg-transparent px-1.5 py-1 text-[15px] font-semibold text-txt outline-none hover:bg-elevated focus:bg-elevated"
+        />
+        <textarea
+          v-model="wf.description"
+          rows="2"
+          class="max-h-16 w-full resize-none rounded-md bg-transparent px-1.5 py-0.5 text-[12px] leading-snug text-txt2 outline-none hover:bg-elevated focus:bg-elevated"
+          :aria-label="t('pages.workflowEditor.descLabel')"
+          :placeholder="t('pages.workflowEditor.descPlaceholder')"
+        />
+      </div>
       <StatusPill :status="wf.status" size="sm" />
       <span class="chip">v{{ wf.version }}</span>
       <span v-if="graphDirty" class="text-[11px] text-warn">{{ t('common.saved.unsaved') }}</span>

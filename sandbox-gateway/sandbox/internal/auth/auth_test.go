@@ -6,14 +6,21 @@ import (
 )
 
 func TestPasswordMatch(t *testing.T) {
-	if !PasswordMatch("toor", "toor") {
+	hash, err := HashPassword("toor")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !PasswordMatch(hash, "toor") {
 		t.Fatal("equal should match")
 	}
-	if PasswordMatch("toor", "root") {
+	if PasswordMatch(hash, "root") {
 		t.Fatal("different should not match")
 	}
-	if PasswordMatch("", "x") {
-		t.Fatal("empty expected vs non-empty")
+	if PasswordMatch(nil, "x") {
+		t.Fatal("empty hash vs non-empty")
+	}
+	if PasswordMatch([]byte(""), "x") {
+		t.Fatal("empty hash vs non-empty")
 	}
 }
 

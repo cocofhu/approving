@@ -105,9 +105,10 @@ func TestSafeRel(t *testing.T) {
 		"./a.md":    "a.md",
 		"":          "",
 		"   ":       "",
-		"../x":      "x", // confined to the working dir, not rejected
-		"/abs/p":    "abs/p",
+		"../x":      "x", // Clean confines to working dir; no leftover ".."
+		"/abs/p":    "",  // absolute paths rejected (CodeQL #17/#18)
 		"a/../b.md": "b.md",
+		"..":        "",
 	}
 	for in, want := range cases {
 		if got := safeRel(in); got != want {

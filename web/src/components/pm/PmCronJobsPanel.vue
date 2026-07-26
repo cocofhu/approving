@@ -15,6 +15,7 @@ const toast = useToast()
 const items = ref<AgentCronJob[]>([])
 const loading = ref(true)
 const togglingId = ref<string | null>(null)
+const deletingId = ref<string | null>(null)
 
 async function load() {
   loading.value = true
@@ -54,6 +55,20 @@ async function onDeliverToggle(job: AgentCronJob, checked: boolean) {
   }
 }
 
+async function removeJob(id: string) {
+  if (!confirm(t('pages.projectDetail.cron.deleteConfirm'))) return
+  deletingId.value = id
+  try {
+    await api.deleteProjectCronJob(props.projectId, id)
+    await load()
+    toast.success(t('pages.projectDetail.cron.deleted'))
+  } catch (e: any) {
+    toast.error(String(e?.message || e))
+  } finally {
+    deletingId.value = null
+  }
+}
+
 watch(
   () => props.projectId,
   () => void load(),
@@ -87,6 +102,7 @@ onMounted(() => void load())
               <th class="px-3 py-2 font-medium">{{ t('pages.projectDetail.cron.colNextRun') }}</th>
               <th class="px-3 py-2 font-medium">{{ t('pages.projectDetail.cron.colLastRun') }}</th>
               <th class="px-3 py-2 font-medium">{{ t('pages.projectDetail.cron.colStatus') }}</th>
+              <th class="px-3 py-2 font-medium">{{ t('pages.projectDetail.cron.colActions') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -111,7 +127,7 @@ onMounted(() => void load())
                     class="h-4 w-4"
                     data-testid="cron-deliver-toggle"
                     :checked="job.deliverToChannel"
-                    :disabled="togglingId === job.id"
+                    :disabled="togglingId === job.id || deletingId === job.id"
                     @change="onDeliverToggle(job, ($event.target as HTMLInputElement).checked)"
                   />
                   <span class="text-xs text-txt3">{{ t('pages.projectDetail.cron.deliverLabel') }}</span>
@@ -122,6 +138,17 @@ onMounted(() => void load())
               <td class="px-3 py-2.5">
                 <StatusPill v-if="job.lastStatus" :status="job.lastStatus" size="sm" />
                 <span v-else class="text-txt3">—</span>
+              </td>
+              <td class="px-3 py-2.5 text-right">
+                <button
+                  type="button"
+                  class="text-[11px] text-err disabled:cursor-not-allowed disabled:opacity-40"
+                  data-testid="project-cron-delete"
+                  :disabled="deletingId === job.id || togglingId === job.id"
+                  @click="removeJob(job.id)"
+                >
+                  {{ t('common.buttons.delete') }}
+                </button>
               </td>
             </tr>
           </tbody>

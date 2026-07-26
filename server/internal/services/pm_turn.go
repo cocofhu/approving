@@ -401,6 +401,12 @@ func (r *PmTurnRunner) Status(threadID string) (active bool, userMsgID string, p
 	return true, t.userMsgID, t.partial, t.chunkIndex, seq
 }
 
+// ExtractAgentMessageText pulls agent_message_chunk text from a raw ACP frame.
+// Non-message / tool frames return empty so channel Reply can suppress noise.
+func ExtractAgentMessageText(raw json.RawMessage) string {
+	return extractPmAgentText(raw)
+}
+
 // extractPmAgentText pulls agent_message_chunk text from a raw ACP frame.
 func extractPmAgentText(raw json.RawMessage) string {
 	var envelope map[string]any

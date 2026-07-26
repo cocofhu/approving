@@ -1,0 +1,83 @@
+import { test, expect } from '@playwright/test'
+import path from 'node:path'
+import fs from 'node:fs'
+
+const OUT = path.join('/tmp', 'wizard-e2e-shots')
+
+test.beforeAll(() => {
+  fs.mkdirSync(OUT, { recursive: true })
+})
+
+test('新建 Agent 五步向导浏览器验收', async ({ page }) => {
+  await page.route('**/api/**', async (route) => {
+    const url = new URL(route.request().url())
+    if (url.pathname === '/api/agents' && route.request().method() === 'POST') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ name: 'e2e-wizard-agent' }),
+      })
+      return
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+  })
+
+  await page.goto('/agent-create-wizard.html', { waitUntil: 'networkidle' })
+  await expect(page.getByTestId('agent-create-wizard-root')).toBeVisible()
+
+  const rail = page.locator('.rail-item .lbl strong')
+  await expect(rail).toHaveText(['基础信息', 'Agent', 'API Key', 'Git', '确认创建'])
+  const railText = await rail.allTextContents()
+  expect(railText.join(' ')).not.toContain('ACP')
+  expect(railText.join(' ')).not.toContain('ENV')
+  expect(railText.join(' ')).not.toMatch(/MCP|Rules|Skills|Commands|Prompts/)
+
+  await page.screenshot({ path: path.join(OUT, '01-basics.png'), fullPage: true })
+
+  await page.locator('#wiz-name-input').fill('e2e-wizard-agent')
+  await page.getByRole('button', { name: /^下一步/ }).click()
+  await expect(page.locator('.sec-head h3')).toHaveText('Agent')
+  await page.screenshot({ path: path.join(OUT, '02-agent.png'), fullPage: true })
+
+  await page.getByRole('button', { name: /Cursor/ }).click()
+  await page.getByRole('button', { name: /^下一步/ }).click()
+  await expect(page.locator('.sec-head h3')).toHaveText('API Key')
+  await expect(page.getByText('APPROVING_CURSOR_API_KEY', { exact: true })).toBeVisible()
+  await expect(page.locator('a[href*="cursor.com/dashboard"]')).toBeVisible()
+  await page.screenshot({ path: path.join(OUT, '03-api-key.png'), fullPage: true })
+
+  await page.getByRole('button', { name: /^跳过/ }).click()
+  await expect(page.locator('.sec-head h3')).toHaveText('Git')
+  const gitBody = await page.locator('.step-pane').innerText()
+  expect(gitBody).not.toContain('未逐仓解析')
+  expect(gitBody).not.toContain('无法在此页面逐仓解析')
+  await expect(page.getByText(/GitHub|GitLab|SSH/).first()).toBeVisible()
+  await page.screenshot({ path: path.join(OUT, '04-git.png'), fullPage: true })
+
+  // Select GitLab + add recommended vars (runtime ${vars.repos}) and assert no dead-end badge.
+  await page.getByRole('button', { name: /调整类型/ }).click()
+  await page.locator('input[type="radio"]').nth(1).check()
+  await page.getByRole('button', { name: /确认|应用|保存|确定|使用/ }).last().click()
+  const addRec = page.getByRole('button', { name: /添加推荐|推荐变量|一键添加/ })
+  if (await addRec.count()) {
+    await addRec.first().click()
+  }
+  const gitAfter = await page.locator('.step-pane').innerText()
+  expect(gitAfter).not.toContain('未逐仓解析')
+  expect(gitAfter).not.toContain('无法在此页面逐仓解析')
+  expect(gitAfter).toMatch(/GitLab|运行时解析|配置形态完整|推荐/)
+  await page.screenshot({ path: path.join(OUT, '06-git-typed.png'), fullPage: true })
+
+  await page.getByRole('button', { name: /^下一步|^跳过/ }).last().click()
+  await expect(page.locator('.sec-head h3')).toHaveText('确认创建')
+  await expect(page.getByText('鉴权提醒', { exact: true })).toBeVisible()
+  await expect(page.getByRole('status')).toContainText('Studio Env')
+  const reviewText = await page.locator('.step-pane').innerText()
+  expect(reviewText).not.toMatch(/(^|\s)ENV(\s|$)/)
+  expect(reviewText).not.toMatch(/(^|\s)ACP(\s|$)/)
+  await page.screenshot({ path: path.join(OUT, '05-review.png'), fullPage: true })
+
+  await page.getByRole('button', { name: /创建并进入 Studio/ }).click()
+  await expect(page.getByTestId('created-name')).toHaveText('e2e-wizard-agent', { timeout: 10_000 })
+  await expect(page.locator('.wiz-rail')).toHaveCount(0)
+})

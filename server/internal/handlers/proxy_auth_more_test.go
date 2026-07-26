@@ -100,6 +100,9 @@ func TestSandboxMountPrefixAndCookieHelpers(t *testing.T) {
 	if c.Path != "/sandbox/1/" {
 		t.Fatalf("path=%q", c.Path)
 	}
+	if !c.Secure {
+		t.Fatal("mountedCookie must set Secure=true")
+	}
 	if !shouldAutoLoginCodeServer(httptest.NewRequest(http.MethodGet, "/sandbox/1/", nil), 1) {
 		t.Fatal("should auto login when no upstream cookie")
 	}

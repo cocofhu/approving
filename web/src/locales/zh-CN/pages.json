@@ -133,7 +133,7 @@
       "tabMeta": "项目信息",
       "cron": {
         "title": "定时任务",
-        "hint": "本项目下全部 Agent 的定时任务。创建与调度编辑请在 PM Leader 咨询中通过 task-scheduler 完成；此处可查看，并由任意已登录用户开关是否推送到项目绑定渠道。",
+        "hint": "本项目下全部 Agent 的定时任务。创建与调度编辑请在 PM Leader 咨询中通过 task-scheduler 完成；此处可查看与删除，并由任意已登录用户开关是否推送到项目绑定渠道。",
         "emptyTitle": "暂无定时任务",
         "emptyDesc": "在 PM Leader 咨询中创建任务后，将显示在此列表。",
         "colName": "名称",
@@ -144,10 +144,13 @@
         "colNextRun": "下次执行",
         "colLastRun": "上次执行",
         "colStatus": "状态",
+        "colActions": "操作",
         "enabledYes": "是",
         "enabledNo": "否",
         "deliverLabel": "推送",
-        "deliverHint": "开启后，任务结果会推送到项目渠道中标记为定时任务推送的目标。需先在渠道设置中配置推送目标。"
+        "deliverHint": "开启后，任务结果会推送到项目渠道中标记为定时任务推送的目标。需先在渠道设置中配置推送目标。",
+        "deleteConfirm": "确认删除该定时任务？",
+        "deleted": "已删除定时任务"
       },
       "pm": {
         "settingsTitle": "PM Leader 设置",
@@ -336,6 +339,8 @@
     },
     "workflowEditor": {
       "unnamedWorkflow": "未命名工作流",
+      "descLabel": "描述（可选）",
+      "descPlaceholder": "列表副文案 / 简要说明",
       "projectRequired": "请先选择所属项目后再新建流水线",
       "loadFailed": "加载工作流失败,后端可能未连接",
       "publishFailed": "发布失败:",
@@ -1066,7 +1071,10 @@
         "chooseHint": "确认后立即应用到当前草稿，点击页面“保存更改”后才会持久化。",
         "confirmApply": "确认并应用",
         "boundary": "此处仅检查字段形态，不会验证变量引用的实际值、Token 有效性、网络连通性或远端 clone / push 权限。",
-        "unresolved": "未逐仓解析",
+        "unresolved": "运行时解析",
+        "runtimeResolve": "运行时解析",
+        "runtimeResolveHint": "仓库列表使用推荐变量时，本页不逐仓展开，将在运行时再解析。这是预期行为，不是错误。",
+        "envHint": "凭据可通过环境变量配置：GitHub 用 GITHUB_TOKEN（自建可加 GITHUB_URL）；GitLab 用 GITLAB_TOKEN（自建可加 GITLAB_URL）；SSH 用私钥与 known_hosts。具体仓库地址请在 Studio 配置。",
         "done": "完成",
         "varsHint": "支持 {'${vars.*}'} 引用",
         "schemeHttps": "HTTPS",
@@ -1079,8 +1087,8 @@
         "statusOk": "配置形态完整",
         "statusErr": "凭据配置形态不完整",
         "types": {
-          "github_https": "GitHub · HTTPS",
-          "gitlab_https": "GitLab · HTTPS",
+          "github_https": "GitHub",
+          "gitlab_https": "GitLab",
           "ssh": "SSH",
           "unknown": "待确认连接方式"
         },
@@ -1098,7 +1106,7 @@
         "status": {
           "disabled": {
             "title": "Git 未启用",
-            "description": "尚未配置 GIT_REPOS；Git 仓库是可选能力。"
+            "description": "尚未配置 GIT_REPOS；可选择凭据类型并添加推荐变量，或跳过本步。"
           },
           "complete": {
             "title": "配置形态完整",
@@ -1108,9 +1116,13 @@
             "title": "凭据不完整",
             "description": "已识别凭据类型，但一个或多个仓库缺少必需字段。"
           },
+          "needs_type": {
+            "title": "请选择凭据类型",
+            "description": "请选择 GitHub / GitLab / SSH，添加推荐变量，或跳过本步。运行时仓库引用不会在此页逐仓展开。"
+          },
           "needs_confirmation": {
             "title": "需要确认凭据类型",
-            "description": "配置存在歧义、运行时引用未解析，或已保存选择与仓库证据冲突。"
+            "description": "已保存的选择与仓库证据冲突，或凭据类型无效。请重新选择 GitHub / GitLab / SSH。"
           },
           "unsupported": {
             "title": "当前不支持",
@@ -1291,7 +1303,8 @@
         },
         "steps": {
           "basics": "基础信息",
-          "acp": "ACP",
+          "acp": "Agent",
+          "apiKey": "API Key",
           "git": "Git",
           "env": "ENV",
           "mcp": "MCP",
@@ -1308,15 +1321,61 @@
           "descHint": "可留空。有值时写入自动生成的默认 alwaysApply 规则前言。"
         },
         "acp": {
-          "meta": "选择 ACP Backend；CodeBuddy 与 Trae 还需选择国内站或国际站，默认国际站。",
+          "meta": "选择 Agent Backend；CodeBuddy 与 Trae 还需选择国内站或国际站，默认国际站。",
           "remapTitle": "确认更换 Backend？",
           "remapBody": "已配置的 MCP / Skills / Commands / Rules 可能依赖当前路径。更换 Backend 将按新的 configRoot 重映射；取消则保持原 Backend。"
         },
+        "apiKey": {
+          "meta": "按当前 Backend 配置鉴权 Key；可跳过，稍后在 Studio Env 补全。",
+          "backendBanner": "当前 Backend：{backend}。仅展示该后端所需 Key。",
+          "alias": "别名（任选其一）",
+          "inputLabel": "粘贴 API Key",
+          "inputPlaceholder": "sk-… / token…（可留空并跳过）",
+          "skipHint": "未填写也可点「下一步」或「跳过」；运行前可在 Studio Env 补全。",
+          "notes": {
+            "codebuddySite": "Key 与站点绑定；请到与 Agent 步所选站点一致的控制台申请。",
+            "traeToken": "官方 CLI 登录令牌须含 trae-lt- 前缀（旗舰版）。"
+          },
+          "paths": {
+            "cursor": {
+              "step1": "打开 Cursor Dashboard → Settings → API Keys",
+              "step2": "创建 API Key 并复制",
+              "step3": "将 Key 粘贴到下方（或稍后在 Studio Env 填写 APPROVING_CURSOR_API_KEY / CURSOR_API_KEY）"
+            },
+            "claude": {
+              "step1": "打开 Anthropic Console → API Keys（或 Claude Platform → Settings → Keys）",
+              "step2": "Create Key 并复制",
+              "step3": "将 Key 粘贴到下方（或填写 APPROVING_CLAUDE_API_KEY / ANTHROPIC_API_KEY）"
+            },
+            "codebuddy": {
+              "step1": "确认 Agent 步所选站点（国际站 / 国内站等）",
+              "step2": "打开对应站点控制台的 API Key / Profile Keys 页面并创建 Key",
+              "step3": "将 Key 粘贴到下方（APPROVING_CODEBUDDY_API_KEY / CODEBUDDY_API_KEY）"
+            },
+            "trae": {
+              "step1": "打开 Trae 企业控制台：个人信息 → 访问令牌 → CLI 登录令牌",
+              "step2": "生成含 trae-lt- 前缀的登录令牌并复制",
+              "step3": "将令牌粘贴到下方（APPROVING_TRAE_API_KEY / TRAECLI_PERSONAL_ACCESS_TOKEN）"
+            }
+          },
+          "links": {
+            "cursorDashboard": "打开 Cursor Dashboard",
+            "cursorDocs": "Cursor 文档",
+            "claudeConsole": "Anthropic Console",
+            "claudeKeys": "Claude Platform Keys",
+            "claudeDocs": "Anthropic 文档",
+            "codebuddyPublic": "国际站申请 Key",
+            "codebuddyInternal": "国内站申请 Key",
+            "codebuddyIoa": "iOA 申请 Key",
+            "codebuddyStaging": "Staging 申请 Key",
+            "traeTokenDocs": "Trae CLI 登录令牌文档"
+          }
+        },
         "git": {
-          "meta": "通过环境变量配置仓库克隆凭据；可跳过，之后在 Studio 再配。"
+          "meta": "选择 GitHub / GitLab / SSH 并按需添加推荐变量；可跳过，之后在 Studio 再配。"
         },
         "env": {
-          "meta": "注入沙箱的环境变量。区域保留键由 ACP 步骤统一管理，密钥仅保存在 Agent 配置中。"
+          "meta": "注入沙箱的环境变量。区域保留键由 Agent 步骤统一管理，密钥仅保存在 Agent 配置中。"
         },
         "mcp": {
           "meta": "配置 MCP 服务。跳过或提交空 mcp 列表时，由服务端写入默认 artifact-store。",
@@ -1339,9 +1398,13 @@
           "meta": "覆盖平台注入的提示字段。跳过则使用平台默认，不会用空对象覆盖。"
         },
         "review": {
-          "meta": "确认摘要后一次性创建。取消或关闭不会落库。",
+          "meta": "确认摘要后一次性创建。取消或关闭不会落库。MCP / Rules 等能力可在创建后于 Studio 配置。",
           "name": "名称",
-          "acp": "ACP",
+          "acp": "Agent",
+          "apiKeyConfigured": "API Key · 已配置",
+          "apiKeySkipped": "API Key · 未配置",
+          "authReminder": "鉴权提醒",
+          "authReminderDetail": "运行前需配置鉴权，可在 Studio Env 补全。此提醒不阻止创建。",
           "git": "Git",
           "env": "ENV",
           "mcp": "MCP",
