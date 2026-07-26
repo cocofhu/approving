@@ -13,6 +13,10 @@ import { fmtTime } from '@/lib/format'
 import { api } from '@/lib/api'
 import { copyToClipboard } from '@/lib/copyToClipboard'
 import { useToast } from '@/lib/useToast'
+import {
+  exportStructuredArtifact,
+  type StructuredExportFormat,
+} from '@/lib/exportStructuredArtifact'
 import type { Artifact } from '@/lib/types'
 
 const props = withDefaults(
@@ -53,6 +57,11 @@ const showDeleteConfirm = ref(false)
 const deleting = ref(false)
 const deleteError = ref('')
 
+/** Export roots for structured preview (inline + zoom); prefer zoom when open. */
+const structuredExportRootInline = ref<HTMLElement | null>(null)
+const structuredExportRootZoom = ref<HTMLElement | null>(null)
+const exporting = ref(false)
+
 const activeContent = computed(() => (props.artifact ? contentCache.value[props.artifact.id] ?? '' : ''))
 const activeIsHtml = computed(() => props.artifact?.kind === 'html')
 const activeIsJson = computed(() => isJsonArtifact(props.artifact))
@@ -73,11 +82,23 @@ const previewBranch = computed(() => {
   })
 })
 
+const isStructuredPreview = computed(() => previewBranch.value.kind === 'structured')
+
 const structuredDoc = computed(() =>
   previewBranch.value.kind === 'structured' ? previewBranch.value.doc : null,
 )
 
 const isImageBranch = computed(() => previewBranch.value.kind === 'image')
+
+/** Disable style export while content is loading, errored, or already exporting. */
+const exportDisabled = computed(
+  () =>
+    exporting.value ||
+    loading.value ||
+    !!loadErr.value ||
+    !isStructuredPreview.value ||
+    !props.artifact,
+)
 
 function revokeImageBlob() {
   if (imageBlobUrl) {
@@ -152,6 +173,41 @@ function download() {
   if (props.artifact) window.open(api.artifactDownloadUrl(props.artifact.id), '_blank')
 }
 
+function resolveExportRoot(): HTMLElement | null {
+  if (zoom.value && structuredExportRootZoom.value) return structuredExportRootZoom.value
+  return structuredExportRootInline.value
+}
+
+async function runStructuredExport(format: StructuredExportFormat) {
+  if (exportDisabled.value || !props.artifact) return
+  const root = resolveExportRoot()
+  if (!root) {
+    toast.error(t('pages.artifactPreview.exportFailed'))
+    return
+  }
+  exporting.value = true
+  try {
+    const result = await exportStructuredArtifact(root, props.artifact.name, format)
+    if (result.incomplete) {
+      toast.warn(t('pages.artifactPreview.exportIncomplete', { filename: result.filename }))
+    } else {
+      toast.success(t('pages.artifactPreview.exportSuccess', { filename: result.filename }))
+    }
+  } catch {
+    toast.error(t('pages.artifactPreview.exportFailed'))
+  } finally {
+    exporting.value = false
+  }
+}
+
+function downloadPng() {
+  void runStructuredExport('png')
+}
+
+function downloadPdf() {
+  void runStructuredExport('pdf')
+}
+
 function openDeleteConfirm() {
   deleteError.value = ''
   showDeleteConfirm.value = true
@@ -206,6 +262,7 @@ watch(
     if (!id) zoom.value = false
     showDeleteConfirm.value = false
     deleteError.value = ''
+    exporting.value = false
   },
   { immediate: true },
 )
@@ -224,8 +281,37 @@ onBeforeUnmount(() => {
       <button v-if="!activeIsHtml" class="text-txt3 hover:text-txt" :title="t('pages.artifactPreview.enlarge')" @click="zoom = true">
         <Icon name="expand" :size="15" />
       </button>
-      <button class="text-txt3 hover:text-txt" :title="t('pages.artifactPreview.copy')" @click="copyContent"><Icon name="copy" :size="15" /></button>
-      <button class="text-txt3 hover:text-txt" :title="t('pages.artifactPreview.download')" @click="download"><Icon name="download" :size="15" /></button>
+      <button class="text-txt3 hover:text-txt" :title="t('pages.artifactPreview.copy')" data-testid="artifact-preview-copy" @click="copyContent">
+        <Icon name="copy" :size="15" />
+      </button>
+      <button
+        class="text-txt3 hover:text-txt"
+        :title="t('pages.artifactPreview.downloadRawTitle')"
+        data-testid="artifact-preview-download-raw"
+        @click="download"
+      >
+        <Icon name="download" :size="15" />
+      </button>
+      <button
+        v-if="isStructuredPreview"
+        type="button"
+        class="chip text-[11px] hover:text-txt disabled:cursor-not-allowed disabled:opacity-45"
+        data-testid="artifact-preview-download-png"
+        :disabled="exportDisabled"
+        @click="downloadPng"
+      >
+        {{ exporting ? t('pages.artifactPreview.exporting') : t('pages.artifactPreview.downloadPng') }}
+      </button>
+      <button
+        v-if="isStructuredPreview"
+        type="button"
+        class="chip text-[11px] hover:text-txt disabled:cursor-not-allowed disabled:opacity-45"
+        data-testid="artifact-preview-download-pdf"
+        :disabled="exportDisabled"
+        @click="downloadPdf"
+      >
+        {{ exporting ? t('pages.artifactPreview.exporting') : t('pages.artifactPreview.downloadPdf') }}
+      </button>
       <button class="text-txt3 hover:text-err" :title="t('pages.artifactPreview.delete')" @click="openDeleteConfirm">
         <Icon name="trash" :size="15" />
       </button>
@@ -275,13 +361,19 @@ onBeforeUnmount(() => {
         {{ t('pages.artifactPreview.loadFailed') }}{{ loadErr }}
       </div>
       <HtmlPreview v-else-if="artifact && previewBranch.kind === 'html'" :html="activeContent" />
-      <StructuredArtifactView
+      <div
         v-else-if="artifact && previewBranch.kind === 'structured'"
-        :name="artifact.name"
-        :doc="structuredDoc"
-        :artifacts="artifacts"
-        :run-id="runId || artifact.runId"
-      />
+        ref="structuredExportRootInline"
+        data-testid="structured-artifact-export-root"
+        class="structured-artifact-export-root"
+      >
+        <StructuredArtifactView
+          :name="artifact.name"
+          :doc="structuredDoc"
+          :artifacts="artifacts"
+          :run-id="runId || artifact.runId"
+        />
+      </div>
       <div
         v-else-if="artifact && previewBranch.kind === 'json' && jsonState"
         class="json-code-view scroll-area cursor-zoom-in"
@@ -306,13 +398,19 @@ onBeforeUnmount(() => {
   </div>
 
   <AppModal :open="zoom" :title="artifact?.name" :width="960" @close="zoom = false">
-    <StructuredArtifactView
+    <div
       v-if="artifact && previewBranch.kind === 'structured'"
-      :name="artifact.name"
-      :doc="structuredDoc"
-      :artifacts="artifacts"
-      :run-id="runId || artifact.runId"
-    />
+      ref="structuredExportRootZoom"
+      data-testid="structured-artifact-export-root-zoom"
+      class="structured-artifact-export-root"
+    >
+      <StructuredArtifactView
+        :name="artifact.name"
+        :doc="structuredDoc"
+        :artifacts="artifacts"
+        :run-id="runId || artifact.runId"
+      />
+    </div>
     <div
       v-else-if="artifact && previewBranch.kind === 'json'"
       class="json-code-view json-code-view--modal scroll-area -m-5 min-h-[280px] p-5"
@@ -363,8 +461,37 @@ onBeforeUnmount(() => {
         <template v-if="scope === 'platform' && artifact?.workflowName">{{ artifact.workflowName }} · </template>
         {{ artifact?.nodeId }} · {{ artifact ? fmtTime(artifact.createdAt) : '' }} · {{ t('pages.artifactPreview.platformStorage') }}
       </span>
-      <button class="chip hover:text-txt" @click="copyContent"><Icon name="copy" :size="13" />{{ t('pages.artifactPreview.copy') }}</button>
-      <button class="chip hover:text-txt" @click="download"><Icon name="download" :size="13" />{{ t('pages.artifactPreview.download') }}</button>
+      <button class="chip hover:text-txt" data-testid="artifact-preview-zoom-copy" @click="copyContent">
+        <Icon name="copy" :size="13" />{{ t('pages.artifactPreview.copy') }}
+      </button>
+      <button
+        class="chip hover:text-txt"
+        :title="t('pages.artifactPreview.downloadRawTitle')"
+        data-testid="artifact-preview-zoom-download-raw"
+        @click="download"
+      >
+        <Icon name="download" :size="13" />{{ t('pages.artifactPreview.download') }}
+      </button>
+      <button
+        v-if="isStructuredPreview"
+        type="button"
+        class="chip hover:text-txt disabled:cursor-not-allowed disabled:opacity-45"
+        data-testid="artifact-preview-zoom-download-png"
+        :disabled="exportDisabled"
+        @click="downloadPng"
+      >
+        {{ exporting ? t('pages.artifactPreview.exporting') : t('pages.artifactPreview.downloadPng') }}
+      </button>
+      <button
+        v-if="isStructuredPreview"
+        type="button"
+        class="chip hover:text-txt disabled:cursor-not-allowed disabled:opacity-45"
+        data-testid="artifact-preview-zoom-download-pdf"
+        :disabled="exportDisabled"
+        @click="downloadPdf"
+      >
+        {{ exporting ? t('pages.artifactPreview.exporting') : t('pages.artifactPreview.downloadPdf') }}
+      </button>
     </template>
   </AppModal>
 

@@ -232,6 +232,9 @@ export default defineConfig({
         ),
         board: fileURLToPath(new URL('./e2e/board.html', import.meta.url)),
         'run-list-trigger': fileURLToPath(new URL('./e2e/run-list-trigger.html', import.meta.url)),
+        'structured-export-harness': fileURLToPath(
+          new URL('./e2e/structured-export-harness.html', import.meta.url),
+        ),
       },
     },
   },
