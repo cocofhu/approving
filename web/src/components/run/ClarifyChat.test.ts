@@ -53,6 +53,7 @@ async function clickSend(wrapper: ReturnType<typeof mountChat>) {
 describe('ClarifyChat', () => {
   beforeEach(() => {
     sessionStorage.clear()
+    vi.unstubAllGlobals()
   })
 
   it('renders turns and composer on active dialogue', () => {
@@ -347,7 +348,17 @@ describe('ClarifyChat', () => {
     })
   }
 
+  /** Drain mount enterStickSequence (nextTick + rAF second pin) before leave-bottom assertions. */
+  async function settleEnterStick() {
+    await flushPromises()
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve())
+    })
+    await flushPromises()
+  }
+
   async function leaveBottom(wrapper: ReturnType<typeof mountChat>) {
+    await settleEnterStick()
     const el = scrollerOf(wrapper)
     mockScrollerMetrics(el, { scrollHeight: 800, clientHeight: 300, scrollTop: 100 })
     await wrapper.find('[data-testid="clarify-scroller"]').trigger('scroll')
@@ -548,6 +559,108 @@ describe('ClarifyChat', () => {
     expect(fab.text()).not.toMatch(/\+|99\+/)
     expect(fab.attributes('aria-label')).toContain('128')
     wrapper.unmount()
+  })
+
+  /** Historical turns long enough that an unpinned scroller would leave latest off-screen. */
+  function historyTurns(n = 12): ClarifyTurn[] {
+    return Array.from({ length: n }, (_, i) =>
+      agentTurn(`历史消息-${i}`, `2026-07-18T00:${String(i).padStart(2, '0')}:00Z`),
+    )
+  }
+
+  /**
+   * Install scroller metrics before enterStickSequence's nextTick flush, then
+   * flush nextTick + sync rAF second pin (plan g2.1 / g2.2 enter evidence).
+   */
+  async function flushEnterStick(wrapper: ReturnType<typeof mountChat>, scrollHeight = 2000) {
+    const el = scrollerOf(wrapper)
+    mockScrollerMetrics(el, { scrollHeight, clientHeight: 300, scrollTop: 0 })
+    await flushPromises()
+    await flushPromises()
+    return el
+  }
+
+  it('enter stick: mounts with history and pins latest to bottom (g2.1)', async () => {
+    const rAF = vi.fn((cb: FrameRequestCallback) => {
+      cb(0)
+      return 0
+    })
+    vi.stubGlobal('requestAnimationFrame', rAF)
+
+    const turns = historyTurns()
+    const wrapper = mountChat({ turns })
+    const el = await flushEnterStick(wrapper)
+    expect(el.scrollTop).toBe(el.scrollHeight)
+    expect(rAF).toHaveBeenCalled()
+    expect(wrapper.text()).toContain('历史消息-11')
+    expect(wrapper.find('[data-testid="clarify-unread-fab"]').exists()).toBe(false)
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+  })
+
+  it('enter stick: unmount then remount with history still pins bottom (g2.1 leave/re-enter)', async () => {
+    const rAF = vi.fn((cb: FrameRequestCallback) => {
+      cb(0)
+      return 0
+    })
+    vi.stubGlobal('requestAnimationFrame', rAF)
+
+    const turns = historyTurns()
+    const first = mountChat({ turns })
+    await flushEnterStick(first)
+    first.unmount()
+
+    const second = mountChat({ turns })
+    const el = await flushEnterStick(second)
+    expect(el.scrollTop).toBe(el.scrollHeight)
+    expect(second.text()).toContain('历史消息-11')
+    second.unmount()
+    vi.unstubAllGlobals()
+  })
+
+  it('enter stick: session identity change force-pins twice via rAF (g2.2)', async () => {
+    let height = 2000
+    const rAF = vi.fn((cb: FrameRequestCallback) => {
+      // Browser layout lag: scrollHeight grows before the second force pin paints.
+      height = 2400
+      cb(0)
+      return 0
+    })
+    vi.stubGlobal('requestAnimationFrame', rAF)
+
+    const turns = historyTurns()
+    const wrapper = mountChat({ turns })
+    const el = scrollerOf(wrapper)
+    Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => height })
+    Object.defineProperty(el, 'clientHeight', { configurable: true, get: () => 300 })
+    let top = 0
+    Object.defineProperty(el, 'scrollTop', {
+      configurable: true,
+      get: () => top,
+      set: (v: number) => {
+        top = v
+      },
+    })
+    await flushPromises()
+    await flushPromises()
+    expect(el.scrollTop).toBe(2400)
+    const mountRafCalls = rAF.mock.calls.length
+    expect(mountRafCalls).toBeGreaterThanOrEqual(1)
+
+    // Leave bottom, then same-panel identity switch must force-pin again (g2.2).
+    height = 1800
+    top = 100
+    await wrapper.find('[data-testid="clarify-scroller"]').trigger('scroll')
+    await flushPromises()
+
+    await wrapper.setProps({ runId: 'run-2', nodeId: 'react-2', iteration: 2 })
+    await flushPromises()
+    await flushPromises()
+    expect(el.scrollTop).toBe(2400)
+    expect(rAF.mock.calls.length).toBeGreaterThan(mountRafCalls)
+    expect(wrapper.find('[data-testid="clarify-unread-fab"]').exists()).toBe(false)
+    wrapper.unmount()
+    vi.unstubAllGlobals()
   })
 
 })
