@@ -931,6 +931,8 @@ const reactSending = ref(false)
 /** Sandbox-aligned: pending-send queue + in-flight turn (HTTP returns on enqueue). */
 const reactQueued = ref<{ text: string }[]>([])
 const reactThinking = ref(false)
+/** True between turn_begin and turn_done/error (mirrors ClarifyChat liveAgentIdx). */
+const reactInFlight = ref(false)
 const reactStreamText = ref('')
 const reactInterrupted = ref(false)
 const reactError = ref<string | null>(null)
@@ -963,6 +965,8 @@ function applyReviewFrame(frame: {
   item?: { text?: string }
   interrupted?: boolean
   message?: string
+  waiting?: number
+  items?: { text?: string }[]
 }) {
   const producer = props.gate.reactUpstreamNodeId
   if (producer && frame.nodeId && frame.nodeId !== producer) return
@@ -970,18 +974,48 @@ function applyReviewFrame(frame: {
     case 'turn_begin':
       reactQueued.value.shift()
       reactThinking.value = true
+      reactInFlight.value = true
       reactStreamText.value = ''
       reactInterrupted.value = false
       break
     case 'turn_done':
+      reactInFlight.value = false
       reactThinking.value = reactQueued.value.length > 0
       if (frame.interrupted) reactInterrupted.value = true
       break
     case 'error':
+      reactInFlight.value = false
       reactThinking.value = reactQueued.value.length > 0
       reactError.value = frame.message || reactError.value
       if (frame.interrupted) reactInterrupted.value = true
       break
+    case 'queue_state': {
+      // Platform-authoritative: remote Cancel / cross-entry must clear ghost rows.
+      const waiting = typeof frame.waiting === 'number' ? frame.waiting : 0
+      const items = Array.isArray(frame.items) ? frame.items : null
+      if (waiting === 0) {
+        reactQueued.value = []
+        if (!reactInFlight.value) reactThinking.value = false
+        break
+      }
+      if (items) {
+        const rebuilt = items.map((it) => ({ text: it.text ?? '' }))
+        const maxLocal = reactInFlight.value ? rebuilt.length : rebuilt.length + 1
+        if (reactQueued.value.length > maxLocal) {
+          const optimistic = reactQueued.value
+            .slice(rebuilt.length)
+            .slice(0, Math.max(0, maxLocal - rebuilt.length))
+          reactQueued.value = [...rebuilt, ...optimistic]
+        } else if (reactQueued.value.length < rebuilt.length) {
+          reactQueued.value = rebuilt
+        } else {
+          const optimistic = reactQueued.value.slice(rebuilt.length)
+          reactQueued.value = [...rebuilt, ...optimistic]
+        }
+      }
+      reactThinking.value = reactInFlight.value || reactQueued.value.length > 0
+      break
+    }
   }
 }
 
@@ -996,6 +1030,7 @@ async function cancelReactRevise() {
   if (!props.run?.id || !canReactRevise.value) return
   reactQueued.value = []
   reactThinking.value = false
+  reactInFlight.value = false
   reactInterrupted.value = true
   try {
     await api.gateReactCancel(props.run.id, props.gate.nodeId)

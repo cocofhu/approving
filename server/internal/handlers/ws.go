@@ -105,7 +105,9 @@ func (h *Handlers) handleRunWSControl(runID string, data []byte) {
 		if nodeID == "" {
 			return
 		}
-		_ = h.Eng.CancelReviewSession(runID, nodeID)
+		if err := h.Eng.CancelReviewSession(runID, nodeID); err != nil {
+			h.publishReviewWSError(runID, nodeID, err.Error())
+		}
 	case "review_chat", "chat":
 		nodeID := strings.TrimSpace(m.NodeID)
 		if nodeID == "" {
@@ -113,9 +115,26 @@ func (h *Handlers) handleRunWSControl(runID string, data []byte) {
 		}
 		gateID := strings.TrimSpace(m.GateNodeID)
 		if gateID != "" {
-			_ = h.Eng.GateReactRevise(runID, gateID, m.Content, m.Images, m.Annotations)
+			if err := h.Eng.GateReactRevise(runID, gateID, m.Content, m.Images, m.Annotations); err != nil {
+				h.publishReviewWSError(runID, nodeID, err.Error())
+			}
 			return
 		}
-		_, _ = h.Eng.EnqueueReviewTurn(runID, nodeID, m.Content, m.Images, m.Annotations, "node", "")
+		if _, err := h.Eng.EnqueueReviewTurn(runID, nodeID, m.Content, m.Images, m.Annotations, "node", ""); err != nil {
+			h.publishReviewWSError(runID, nodeID, err.Error())
+		}
 	}
+}
+
+// publishReviewWSError pushes a type:"review" event:"error" frame so WS clients
+// see enqueue/cancel failures (aligned with SandboxChat error frames).
+func (h *Handlers) publishReviewWSError(runID, nodeID, message string) {
+	msg, err := json.Marshal(map[string]any{
+		"type": "review", "runId": runID, "nodeId": nodeID,
+		"event": "error", "message": message,
+	})
+	if err != nil {
+		return
+	}
+	h.Eng.Broker().Publish(runID, msg)
 }

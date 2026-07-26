@@ -639,14 +639,71 @@ function cancelReview() {
   void scrollBottom()
 }
 
+/**
+ * Parent calls this when reactReply(force=false) fails after optimistic enqueue,
+ * so the pending-send panel and FR4 confirm gate do not stick forever.
+ */
+function discardLastQueued() {
+  if (!props.reviewMode || queued.value.length === 0) return
+  queued.value.pop()
+  if (queued.value.length === 0 && liveAgentIdx.value < 0) {
+    thinking.value = false
+  }
+}
+
+/**
+ * Reconcile local pending-send panel with platform-authoritative queue_state.
+ * waiting===0 clears ghost rows after remote Cancel; items[] rebuilds/trims
+ * while allowing at most one local-ahead item when no live turn (HTTP ack /
+ * turn_begin in flight).
+ */
+function applyQueueState(waiting: number, items: { text?: string }[] | null) {
+  if (waiting === 0) {
+    queued.value = []
+    if (liveAgentIdx.value < 0) thinking.value = false
+    return
+  }
+  if (!items) {
+    thinking.value = liveAgentIdx.value >= 0 || queued.value.length > 0
+    return
+  }
+  const rebuilt: QueueItem[] = items.map((it) => {
+    const text = it.text ?? ''
+    const local = queued.value.find((q) => q.text === text)
+    return {
+      text,
+      images: local?.images ?? [],
+      annotations: local?.annotations ?? [],
+    }
+  })
+  const maxLocal = liveAgentIdx.value >= 0 ? rebuilt.length : rebuilt.length + 1
+  if (queued.value.length > maxLocal) {
+    // Keep trailing optimistic-only rows that still fit the maxLocal budget.
+    const optimistic = queued.value.slice(rebuilt.length).slice(0, Math.max(0, maxLocal - rebuilt.length))
+    queued.value = [...rebuilt, ...optimistic]
+  } else if (queued.value.length < rebuilt.length) {
+    queued.value = rebuilt
+  } else {
+    // Same length or one ahead: refresh texts from server, keep local extras.
+    const optimistic = queued.value.slice(rebuilt.length)
+    queued.value = [...rebuilt, ...optimistic]
+  }
+  thinking.value = liveAgentIdx.value >= 0 || queued.value.length > 0
+}
+
 /** Parent (RunDetailView) feeds review WS frames here. */
 function applyReviewFrame(frame: {
   event?: string
+  nodeId?: string
   item?: { text?: string; images?: ClarifyImage[]; annotations?: ReactAnnotation[] }
   message?: string
   interrupted?: boolean
+  waiting?: number
+  items?: { text?: string }[]
 }) {
   if (!props.reviewMode) return
+  // Defense: ignore frames for other producer sessions on the same run.
+  if (frame.nodeId && frame.nodeId !== props.nodeId) return
   switch (frame.event) {
     case 'turn_begin': {
       const item = queued.value.shift()
@@ -691,15 +748,19 @@ function applyReviewFrame(frame: {
       break
     }
     case 'queue_state':
-      // Local queued list is authoritative for panel text; server waiting is informational.
+      applyQueueState(
+        typeof frame.waiting === 'number' ? frame.waiting : 0,
+        Array.isArray(frame.items) ? frame.items : null,
+      )
       break
   }
   void scrollBottom()
 }
 
 /** Consume publishAcp events for the streaming agent bubble (dialogue surface). */
-function applyAcpEvents(events: AcpEvent[] | undefined) {
+function applyAcpEvents(events: AcpEvent[] | undefined, nodeId?: string) {
   if (!props.reviewMode || liveAgentIdx.value < 0 || !events?.length) return
+  if (nodeId && nodeId !== props.nodeId) return
   const agent = liveTurns.value[liveAgentIdx.value]
   if (!agent) return
   let msg = agent.text
@@ -713,7 +774,7 @@ function applyAcpEvents(events: AcpEvent[] | undefined) {
   void scrollBottom()
 }
 
-defineExpose({ applyReviewFrame, applyAcpEvents, cancelReview })
+defineExpose({ applyReviewFrame, applyAcpEvents, cancelReview, discardLastQueued })
 </script>
 
 <template>

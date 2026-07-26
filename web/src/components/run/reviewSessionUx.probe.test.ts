@@ -71,7 +71,7 @@ describe('[approving] ClarifyChat reviewMode UX (visual/proposal shared)', () =>
       applyReviewFrame: (f: Record<string, unknown>) => void
       applyAcpEvents: (e: { kind: string; text: string }[]) => void
     }
-    vm.applyReviewFrame({ event: 'turn_begin', item: { text: '视觉意见1' } })
+    vm.applyReviewFrame({ event: 'turn_begin', item: { text: '视觉意见1' }, nodeId: 'visual' })
     await nextTick()
     expect(w.find('[data-testid="clarify-review-queue"]').text()).toContain('视觉意见2')
     expect(w.text()).toContain('视觉意见1')
@@ -87,6 +87,60 @@ describe('[approving] ClarifyChat reviewMode UX (visual/proposal shared)', () =>
     expect(w.find('[data-testid="clarify-interrupted"]').exists()).toBe(true)
     const confirm = w.find('[data-testid="clarify-confirm-flow"]')
     expect((confirm.element as HTMLButtonElement).disabled).toBe(false)
+    w.unmount()
+  })
+
+  it('enqueue failure: discardLastQueued restores confirm gate (v1)', async () => {
+    const w = mountReview('proposal')
+    await sendText(w, '将失败的意见')
+    expect(w.find('[data-testid="clarify-review-queue"]').exists()).toBe(true)
+    expect((w.find('[data-testid="clarify-confirm-flow"]').element as HTMLButtonElement).disabled).toBe(
+      true,
+    )
+    const vm = w.vm as unknown as { discardLastQueued: () => void }
+    vm.discardLastQueued()
+    await nextTick()
+    expect(w.find('[data-testid="clarify-review-queue"]').exists()).toBe(false)
+    expect((w.find('[data-testid="clarify-confirm-flow"]').element as HTMLButtonElement).disabled).toBe(
+      false,
+    )
+    w.unmount()
+  })
+
+  it('remote Cancel via queue_state waiting=0 clears ghost queue (v2 FR5)', async () => {
+    const w = mountReview('visual')
+    await sendText(w, '页A意见1')
+    await sendText(w, '页A意见2')
+    expect(w.find('[data-testid="clarify-review-queue"]').text()).toContain('页A意见1')
+    const vm = w.vm as unknown as { applyReviewFrame: (f: Record<string, unknown>) => void }
+    // Simulate another entry CancelReviewSession → queue_state waiting=0.
+    vm.applyReviewFrame({
+      event: 'queue_state',
+      nodeId: 'visual',
+      waiting: 0,
+      items: [],
+    })
+    await nextTick()
+    expect(w.find('[data-testid="clarify-review-queue"]').exists()).toBe(false)
+    expect((w.find('[data-testid="clarify-confirm-flow"]').element as HTMLButtonElement).disabled).toBe(
+      false,
+    )
+    w.unmount()
+  })
+
+  it('ignores review frames for other nodeId (v3)', async () => {
+    const w = mountReview('proposal')
+    await sendText(w, '本节点意见')
+    const vm = w.vm as unknown as { applyReviewFrame: (f: Record<string, unknown>) => void }
+    vm.applyReviewFrame({
+      event: 'queue_state',
+      nodeId: 'other-node',
+      waiting: 0,
+      items: [],
+    })
+    await nextTick()
+    // Wrong nodeId must not clear this session's queue.
+    expect(w.find('[data-testid="clarify-review-queue"]').text()).toContain('本节点意见')
     w.unmount()
   })
 })

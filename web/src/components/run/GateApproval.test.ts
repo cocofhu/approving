@@ -2516,6 +2516,71 @@ describe('GateApproval mobileFillRemaining layout', () => {
     wrapper.unmount()
   })
 
+  it('clears gate-react ghost queue on remote queue_state waiting=0 (FR5)', async () => {
+    breakpointMocks.isMobile.value = false
+    apiMocks.gateReactRevise.mockResolvedValue({ status: 'accepted', waiting: 1 })
+    const proposalsDoc = {
+      context: '选型',
+      proposals: [
+        { id: 'p1', title: '方案甲', summary: '共享壳', recommended: true },
+        { id: 'p2', title: '方案乙', summary: '另起炉灶' },
+      ],
+    }
+    apiMocks.artifactContent.mockResolvedValue({ content: JSON.stringify(proposalsDoc) })
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({
+        nodeId: 'pick-proposal',
+        reactSessionAlive: true,
+        reactUpstreamNodeId: 'proposal',
+        actions: [
+          { id: 'p1', label: '方案甲' },
+          { id: 'p2', label: '方案乙' },
+        ],
+        form: [],
+      }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'pick-proposal',
+            type: 'proposal_select',
+            label: '选方案',
+            position: { x: 0, y: 0 },
+            config: { from: 'proposals.json' },
+          },
+        ],
+        artifacts: [
+          {
+            id: 'a-proposals',
+            name: 'proposals.json',
+            kind: 'json',
+            nodeId: 'proposal',
+            runId: 'run-1',
+            workflowName: 'wf',
+            sizeBytes: 10,
+            createdAt: '2026-07-18T00:00:00Z',
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+    await wrapper.find('[data-testid="paragraph-input"]').setValue('跨入口幽灵')
+    await flushPromises()
+    await wrapper.find('[data-testid="review-composer-reject"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-react-queue"]').exists()).toBe(true)
+    const vm = wrapper.vm as any
+    vm.applyReviewFrame?.({
+      event: 'queue_state',
+      nodeId: 'proposal',
+      waiting: 0,
+      items: [],
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-react-queue"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('keeps Inbox-style path on 60vh content-fit when mobileFillRemaining is off', async () => {
     const pageHtml = '<!doctype html><html><body><h1>Inbox</h1></body></html>'
     const { gate, run } = visualGateRun(pageHtml)

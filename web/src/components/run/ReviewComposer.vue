@@ -86,14 +86,17 @@ const emit = defineEmits<{
 
 const chatRef = ref<{
   applyReviewFrame: (frame: any) => void
-  applyAcpEvents: (events: AcpEvent[] | undefined) => void
+  applyAcpEvents: (events: AcpEvent[] | undefined, nodeId?: string) => void
   cancelReview: () => void
+  discardLastQueued: () => void
 } | null>(null)
 
 defineExpose({
   applyReviewFrame: (frame: any) => chatRef.value?.applyReviewFrame(frame),
-  applyAcpEvents: (events: AcpEvent[] | undefined) => chatRef.value?.applyAcpEvents(events),
+  applyAcpEvents: (events: AcpEvent[] | undefined, nodeId?: string) =>
+    chatRef.value?.applyAcpEvents(events, nodeId),
   cancelReview: () => chatRef.value?.cancelReview(),
+  discardLastQueued: () => chatRef.value?.discardLastQueued(),
 })
 
 const { t } = useI18n()

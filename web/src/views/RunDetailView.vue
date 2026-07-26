@@ -109,7 +109,8 @@ const liveNode = ref<string | null>(null)
 /** ClarifyChat / ReviewComposer surface for review WS frames (queue/stream/Cancel). */
 const reviewChatRef = ref<{
   applyReviewFrame?: (frame: any) => void
-  applyAcpEvents?: (events: AcpEvent[] | undefined) => void
+  applyAcpEvents?: (events: AcpEvent[] | undefined, nodeId?: string) => void
+  discardLastQueued?: () => void
 } | null>(null)
 const gateApprovalRef = ref<{
   applyReviewFrame?: (frame: any) => void
@@ -481,13 +482,16 @@ function connectWs() {
       if (!manual.value) selected.value = m.nodeId
       // Dialogue-surface stream (ClarifyChat / GateApproval), not only LiveLog.
       if (selClarify.value?.nodeId === m.nodeId) {
-        reviewChatRef.value?.applyAcpEvents?.(wsEvents)
+        reviewChatRef.value?.applyAcpEvents?.(wsEvents, m.nodeId)
       }
       if (run.value.gate?.reactUpstreamNodeId === m.nodeId) {
         gateApprovalRef.value?.applyAcpEvents?.(wsEvents)
       }
     } else if (m.type === 'review' && m.nodeId) {
-      reviewChatRef.value?.applyReviewFrame?.(m)
+      // Prefer matching producer; components also filter by nodeId defensively.
+      if (!selClarify.value || selClarify.value.nodeId === m.nodeId) {
+        reviewChatRef.value?.applyReviewFrame?.(m)
+      }
       gateApprovalRef.value?.applyReviewFrame?.(m)
       if (m.event === 'turn_done' || m.event === 'error') {
         loadRun(false)
@@ -563,15 +567,18 @@ async function onClarifySend(
   const conv = selClarify.value
   if (!conv || conv.done) return
   const nodeId = conv.nodeId
-  if (force) clarifyConfirmError.value = null
+  clarifyConfirmError.value = null
   try {
     await api.reactReply(runId.value, nodeId, text, images, force, annotations)
   } catch (e: any) {
     // Re-sync below so the UI reflects the real state (e.g. the dialogue has
     // already completed) instead of leaving the input enabled to re-click.
     console.warn('reactReply failed', e?.message || e)
-    if (force && reviewActive.value) {
-      clarifyConfirmError.value = e?.message || t('pages.runDetail.gateError')
+    const msg = e?.message || t('pages.runDetail.gateError')
+    if (reviewActive.value) {
+      // Non-force: roll back optimistic pending-send row so FR4 confirm is not stuck.
+      if (!force) reviewChatRef.value?.discardLastQueued?.()
+      clarifyConfirmError.value = msg
     }
   }
   // Review enqueue returns before the turn finishes — avoid wiping live bubbles.
