@@ -14,7 +14,11 @@ describe('prettyAuditPayload', () => {
     const html = prettyAuditPayload({ msg: 'a & b "c"' })
     expect(html).toContain('&amp;')
     expect(html).toContain('&quot;')
-    expect(html).not.toMatch(/[^;]">/) // no raw closing quote that could break out of attribute/tag
+    // JSON encodes value quotes as \"; after escapeHtml they become \&quot; entities.
+    // Do not use /[^;]">/ — it false-positives on legitimate class="tok-*"> spans.
+    expect(html).toContain('a &amp; b \\&quot;c\\&quot;')
+    const contentOnly = html.replace(/<span class="[^"]*">/g, '').replace(/<\/span>/g, '')
+    expect(contentOnly).not.toContain('"')
   })
 
   it('highlights **** mask values', () => {
