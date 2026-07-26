@@ -86,6 +86,10 @@ type Engine struct {
 	// and launch inputs overlay. Optional (nil = no project seed).
 	projectVarsLookup func(workflowID string) []models.ProjectVariable
 
+	// auditRecorder, when set, receives project-scoped lifecycle events
+	// (run terminal states, gate decisions). Fail-open is the recorder's job.
+	auditRecorder func(rec services.AuditRecord)
+
 	// issues resolves preview-issue lifecycle on gate resume. Optional in tests
 	// (nil falls back to a short-lived IssueService on e.db).
 	issues *services.IssueService
@@ -135,6 +139,18 @@ func (e *Engine) MaxConcurrent() int { return e.sem.Limit() }
 // workflow variables into the run's vars.* namespace.
 func (e *Engine) SetProjectVarsLookup(fn func(workflowID string) []models.ProjectVariable) {
 	e.projectVarsLookup = fn
+}
+
+// SetAuditRecorder wires project audit recording for run lifecycle / gate events.
+func (e *Engine) SetAuditRecorder(fn func(rec services.AuditRecord)) {
+	e.auditRecorder = fn
+}
+
+func (e *Engine) recordAudit(rec services.AuditRecord) {
+	if e == nil || e.auditRecorder == nil {
+		return
+	}
+	e.auditRecorder(rec)
 }
 
 // SetIssueService wires the preview-issue service used on gate resume.
@@ -1331,6 +1347,28 @@ func (e *Engine) finish(runID, status string) {
 		e.mu.Lock()
 		delete(e.tokens, runID)
 		e.mu.Unlock()
+
+		// Project audit: terminal lifecycle (actor is system — engine has no Session).
+		action := models.AuditActionRunCompleted
+		switch status {
+		case "failed":
+			action = models.AuditActionRunFailed
+		case "cancelled":
+			action = models.AuditActionRunCancelled
+		}
+		projectID := services.ResolveProjectIDForRun(e.db, runID)
+		if projectID != "" {
+			e.recordAudit(services.AuditRecord{
+				ProjectID:      projectID,
+				Actor:          services.SystemActor(),
+				Action:         action,
+				ResourceType:   "run",
+				ResourceID:     runID,
+				Outcome:        models.AuditOutcomeOK,
+				Summary:        "run " + status,
+				Payload:        map[string]any{"status": status, "trigger": "engine"},
+			})
+		}
 	}
 	msg, _ := json.Marshal(map[string]any{"type": "status", "runId": runID, "status": status})
 	e.broker.Publish(runID, msg)

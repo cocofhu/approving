@@ -5,6 +5,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -57,6 +58,11 @@ type Handlers struct {
 	PlatformRules *services.PlatformRuleService
 	Channels      *services.ChannelConfigService
 	Browser       *browser.Service
+	Audit         *services.ProjectAuditService
+	// CanViewProjectAudit optionally overrides the default audit ACL
+	// (is_admin OR authenticated user who can UpdateProject). Tests use this
+	// to simulate a read-only member denial while production keeps the hook nil.
+	CanViewProjectAudit func(username, projectID string) bool
 	// InjectBundles serves ConfigHome .tgz for gateway SANDBOX_INJECT (no session auth).
 	InjectBundles  *sandbox.BundleStore
 	doctorMu       sync.Mutex
@@ -235,6 +241,27 @@ func (h *Handlers) SaveWorkflow(c *gin.Context) {
 		}
 		return
 	}
+	action := models.AuditActionWorkflowUpdate
+	summary := "update workflow"
+	if isCreate {
+		action = models.AuditActionWorkflowCreate
+		summary = "create workflow"
+	}
+	h.recordAudit(services.AuditRecord{
+		ProjectID:      wf.ProjectID,
+		Actor:          h.auditActorFromContext(c),
+		Action:         action,
+		ResourceType:   "workflow",
+		ResourceID:     wf.ID,
+		Outcome:        models.AuditOutcomeOK,
+		Summary:        summary,
+		Payload: map[string]any{
+			"name":    wf.Name,
+			"status":  wf.Status,
+			"version": wf.Version,
+			"nodes":   len(wf.Graph.Nodes),
+		},
+	})
 	c.JSON(http.StatusOK, workflowDTO(wf))
 }
 
@@ -244,6 +271,16 @@ func (h *Handlers) PublishWorkflow(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	h.recordAudit(services.AuditRecord{
+		ProjectID:      wf.ProjectID,
+		Actor:          h.auditActorFromContext(c),
+		Action:         models.AuditActionWorkflowPublish,
+		ResourceType:   "workflow",
+		ResourceID:     wf.ID,
+		Outcome:        models.AuditOutcomeOK,
+		Summary:        fmt.Sprintf("publish workflow v%d", wf.Version),
+		Payload:        map[string]any{"name": wf.Name, "version": wf.Version},
+	})
 	c.JSON(http.StatusOK, workflowDTO(wf))
 }
 
@@ -294,10 +331,28 @@ func (h *Handlers) RestoreWorkflowVersion(c *gin.Context) {
 }
 
 func (h *Handlers) DeleteWorkflow(c *gin.Context) {
-	if err := h.WF.Delete(c.Param("id")); err != nil {
+	id := c.Param("id")
+	projectID := ""
+	if wf, ok := h.WF.Get(id); ok {
+		projectID = wf.ProjectID
+	}
+	actor := h.auditActorFromContext(c)
+	if err := h.WF.Delete(id); err != nil {
 		_ = c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	if projectID != "" {
+		h.recordAudit(services.AuditRecord{
+			ProjectID:      projectID,
+			Actor:          actor,
+			Action:         models.AuditActionWorkflowDelete,
+			ResourceType:   "workflow",
+			ResourceID:     id,
+			Outcome:        models.AuditOutcomeOK,
+			Summary:        "delete workflow",
+			Payload:        map[string]any{"deleted": true},
+		})
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 }
@@ -375,6 +430,22 @@ func (h *Handlers) StartRun(c *gin.Context) {
 		_ = c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	if wf, ok := h.WF.Get(c.Param("id")); ok && wf.ProjectID != "" {
+		h.recordAudit(services.AuditRecord{
+			ProjectID:      wf.ProjectID,
+			Actor:          h.auditActorFromContext(c),
+			Action:         models.AuditActionRunStart,
+			ResourceType:   "run",
+			ResourceID:     run.ID,
+			Outcome:        models.AuditOutcomeOK,
+			Summary:        "start run",
+			Payload: map[string]any{
+				"workflowId": c.Param("id"),
+				"trigger":    trigger,
+				"priority":   models.PriorityLabel(run.Priority),
+			},
+		})
 	}
 	c.JSON(http.StatusOK, gin.H{"id": run.ID, "status": run.Status, "priority": models.PriorityLabel(run.Priority)})
 }
@@ -464,13 +535,33 @@ func (h *Handlers) GetRun(c *gin.Context) {
 
 func (h *Handlers) CancelRun(c *gin.Context) {
 	runID := c.Param("id")
-	if _, ok := h.Runs.Get(runID); !ok {
+	run, ok := h.Runs.Get(runID)
+	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
+	actor := h.auditActorFromContext(c)
 	if err := h.Eng.Cancel(runID); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	projectID := ""
+	if h.WF != nil {
+		if wf, wOk := h.WF.Get(run.WorkflowID); wOk {
+			projectID = wf.ProjectID
+		}
+	}
+	if projectID != "" {
+		h.recordAudit(services.AuditRecord{
+			ProjectID:      projectID,
+			Actor:          actor,
+			Action:         models.AuditActionRunCancel,
+			ResourceType:   "run",
+			ResourceID:     runID,
+			Outcome:        models.AuditOutcomeOK,
+			Summary:        "cancel run",
+			Payload:        map[string]any{"workflowId": run.WorkflowID},
+		})
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "cancelled"})
 }
@@ -619,7 +710,12 @@ func (h *Handlers) ResumeGate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := h.Eng.ResumeGate(c.Param("id"), c.Param("nodeId"), b.Action, b.Form); err != nil {
+	actor := h.auditActorFromContext(c)
+	reviewer := ""
+	if !actor.Unattributable {
+		reviewer = actor.Username
+	}
+	if err := h.Eng.ResumeGateAs(c.Param("id"), c.Param("nodeId"), b.Action, b.Form, reviewer); err != nil {
 		_ = c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

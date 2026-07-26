@@ -105,6 +105,22 @@ export interface Project {
   updatedAt?: string
 }
 
+/** One project-scoped append-only audit event (masked payload). */
+export interface ProjectAuditEvent {
+  id: string
+  projectId: string
+  occurredAt: string
+  actor: string
+  unattributable: boolean
+  action: string
+  resourceType: string
+  resourceId: string
+  resource?: string
+  outcome: string
+  summary: string
+  payload?: Record<string, unknown>
+}
+
 /** Preset windows for board TokenStatsPanel (matches GET /token-stats). */
 export type TokenStatsWindow = '7d' | '30d' | '90d' | 'all'
 

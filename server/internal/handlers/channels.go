@@ -69,6 +69,20 @@ func (h *Handlers) PutProjectChannel(c *gin.Context) {
 		writeChannelErr(c, err)
 		return
 	}
+	h.recordAudit(services.AuditRecord{
+		ProjectID:      c.Param("id"),
+		Actor:          h.auditActorFromContext(c),
+		Action:         models.AuditActionChannel,
+		ResourceType:   "channel",
+		ResourceID:     c.Param("id"),
+		Outcome:        models.AuditOutcomeOK,
+		Summary:        "upsert project channel",
+		Payload: map[string]any{
+			"type":    dto.Type,
+			"enabled": dto.Enabled,
+			"appId":   dto.AppID,
+		},
+	})
 	c.JSON(http.StatusOK, dto)
 }
 
@@ -82,6 +96,16 @@ func (h *Handlers) DeleteProjectChannel(c *gin.Context) {
 		writeChannelErr(c, err)
 		return
 	}
+	h.recordAudit(services.AuditRecord{
+		ProjectID:      c.Param("id"),
+		Actor:          h.auditActorFromContext(c),
+		Action:         models.AuditActionChannel,
+		ResourceType:   "channel",
+		ResourceID:     c.Param("id"),
+		Outcome:        models.AuditOutcomeOK,
+		Summary:        "delete project channel",
+		Payload:        map[string]any{"deleted": true},
+	})
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 }
 

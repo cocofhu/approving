@@ -596,6 +596,7 @@ func AllModels() []any {
 		&RunPreviewPort{}, &PreviewIssue{},
 		&ProjectMemoryItem{}, &ChatThread{}, &ChatMessage{}, &ChatTurnDraft{},
 		&AgentCronJob{}, &AgentCronRun{}, &ChannelConfig{},
+		&ProjectAuditEvent{},
 	}
 }
 

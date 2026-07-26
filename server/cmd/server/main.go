@@ -145,6 +145,7 @@ func main() {
 	injectStore := sandbox.NewBundleStore()
 
 	projectSvc := services.NewProjectService(db)
+	auditSvc := services.NewProjectAuditService(db)
 	provider := runtime.NewProvider(cfg.Engine.ExecProvider, host, runtime.Options{
 		SandboxImage:         cfg.Sandbox.Image,
 		SandboxImages:        cfg.Sandbox.Images,
@@ -168,6 +169,40 @@ func main() {
 	eng := engine.New(db, provider, host, artifactSvc, cfg.Engine.MaxConcurrentRuns)
 	eng.SetProjectVarsLookup(func(workflowID string) []models.ProjectVariable {
 		return projectSvc.VariablesForWorkflow(workflowID)
+	})
+	eng.SetAuditRecorder(func(rec services.AuditRecord) {
+		auditSvc.Record(rec)
+	})
+	host.SetProjectAuditHook(func(runID, tool string, args map[string]any, resultText string, isError bool) {
+		projectID := services.ResolveProjectIDForRun(db, runID)
+		if projectID == "" {
+			return
+		}
+		outcome := models.AuditOutcomeOK
+		if isError {
+			outcome = models.AuditOutcomeFail
+		}
+		// Structured payload; SecretMask applied inside Record.
+		resultPayload := any(resultText)
+		if len(resultText) > 2000 {
+			resultPayload = resultText[:2000] + "…"
+		}
+		auditSvc.Record(services.AuditRecord{
+			ProjectID:      projectID,
+			Actor:          services.SystemActor(), // MCP host has no Session
+			Action:         models.AuditActionMCPCall,
+			ResourceType:   "mcp",
+			ResourceID:     tool,
+			Outcome:        outcome,
+			Summary:        "mcp " + tool,
+			Payload: map[string]any{
+				"tool":      tool,
+				"runId":     runID,
+				"arguments": args,
+				"result":    resultPayload,
+				"isError":   isError,
+			},
+		})
 	})
 
 	// Where per-sandbox ConfigHome trees are staged before gateway bundleUrl /
@@ -321,6 +356,7 @@ func main() {
 		PlatformRules: platformRuleSvc,
 		Channels:      channelSvc,
 		Browser:       browserSvc,
+		Audit:         auditSvc,
 		InjectBundles: injectStore,
 	}
 

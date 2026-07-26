@@ -72,6 +72,21 @@ func (h *Handlers) CreateProject(c *gin.Context) {
 		writeProjectErr(c, err)
 		return
 	}
+	h.recordAudit(services.AuditRecord{
+		ProjectID:      p.ID,
+		Actor:          h.auditActorFromContext(c),
+		Action:         models.AuditActionProjectConfig,
+		ResourceType:   "project",
+		ResourceID:     p.ID,
+		Outcome:        models.AuditOutcomeOK,
+		Summary:        "create project",
+		Payload: map[string]any{
+			"name":        p.Name,
+			"description": p.Description,
+			"sandboxEnv":  services.MaskSandboxEnvForAudit(p.SandboxEnv),
+			"variables":   services.MaskProjectVarsForAudit(p.Variables),
+		},
+	})
 	c.JSON(http.StatusOK, projectDTO(p, 0, nil))
 }
 
@@ -85,11 +100,42 @@ func (h *Handlers) UpdateProject(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	p, err := h.Projects.Update(c.Param("id"), b.Name, b.Description, b.SandboxEnv, b.Variables)
+	id := c.Param("id")
+	p, err := h.Projects.Update(id, b.Name, b.Description, b.SandboxEnv, b.Variables)
 	if err != nil {
 		writeProjectErr(c, err)
 		return
 	}
+	changed := []string{}
+	if b.Name != nil {
+		changed = append(changed, "name")
+	}
+	if b.Description != nil {
+		changed = append(changed, "description")
+	}
+	if b.SandboxEnv != nil {
+		changed = append(changed, "sandboxEnv")
+	}
+	if b.Variables != nil {
+		changed = append(changed, "variables")
+	}
+	payload := map[string]any{"changed": changed, "name": p.Name}
+	if b.SandboxEnv != nil {
+		payload["sandboxEnv"] = services.MaskSandboxEnvForAudit(p.SandboxEnv)
+	}
+	if b.Variables != nil {
+		payload["variables"] = services.MaskProjectVarsForAudit(p.Variables)
+	}
+	h.recordAudit(services.AuditRecord{
+		ProjectID:      p.ID,
+		Actor:          h.auditActorFromContext(c),
+		Action:         models.AuditActionProjectConfig,
+		ResourceType:   "project",
+		ResourceID:     p.ID,
+		Outcome:        models.AuditOutcomeOK,
+		Summary:        "update project config",
+		Payload:        payload,
+	})
 	c.JSON(http.StatusOK, projectDTO(p, h.Projects.WorkflowCount(p.ID), h.Projects.TotalTokens(p.ID)))
 }
 
@@ -99,6 +145,7 @@ func (h *Handlers) DeleteProject(c *gin.Context) {
 		return
 	}
 	id := c.Param("id")
+	actor := h.auditActorFromContext(c)
 	if err := h.Projects.Delete(id); err != nil {
 		if errors.Is(err, services.ErrProjectHasWorkflows) {
 			n := h.Projects.WorkflowCount(id)
@@ -108,6 +155,16 @@ func (h *Handlers) DeleteProject(c *gin.Context) {
 		writeProjectErr(c, err)
 		return
 	}
+	h.recordAudit(services.AuditRecord{
+		ProjectID:      id,
+		Actor:          actor,
+		Action:         models.AuditActionProjectConfig,
+		ResourceType:   "project",
+		ResourceID:     id,
+		Outcome:        models.AuditOutcomeOK,
+		Summary:        "delete project",
+		Payload:        map[string]any{"deleted": true},
+	})
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 }
 

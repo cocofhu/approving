@@ -8,6 +8,7 @@ import type {
   AcpEvent,
   WorkflowGraph,
   Project,
+  ProjectAuditEvent,
   ProjectTokenStats,
   TokenStatsWindow,
   PmLeaderBinding,
@@ -90,7 +91,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // non-JSON error body; keep the status line
     }
-    throw new Error(msg)
+    throw Object.assign(new Error(msg), { status: res.status })
   }
   apiState.online = true
   return (await res.json()) as T
@@ -305,6 +306,54 @@ export const api = {
   updateProject: (id: string, body: Partial<Project>) =>
     req<Project>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteProject: (id: string) => req<{ status: string }>(`/projects/${id}`, { method: 'DELETE' }),
+
+  /** Project audit timeline (paginated). Default time window: 24h. */
+  listProjectAudit: (
+    id: string,
+    params?: {
+      time?: string
+      actor?: string
+      action?: string
+      resource?: string
+      from?: string
+      to?: string
+      page?: number
+      pageSize?: number
+    },
+  ) => {
+    const q = new URLSearchParams()
+    q.set('time', params?.time || '24h')
+    if (params?.actor) q.set('actor', params.actor)
+    if (params?.action) q.set('action', params.action)
+    if (params?.resource) q.set('resource', params.resource)
+    if (params?.from) q.set('from', params.from)
+    if (params?.to) q.set('to', params.to)
+    q.set('page', String(params?.page ?? 1))
+    q.set('pageSize', String(params?.pageSize ?? 20))
+    return req<PaginatedResponse<ProjectAuditEvent>>(
+      `/projects/${encodeURIComponent(id)}/audit?${q}`,
+    )
+  },
+
+  /** Download URL for audit export (JSON or text); triggers meta-audit on server. */
+  exportProjectAuditUrl: (
+    id: string,
+    params?: {
+      format?: 'json' | 'text'
+      time?: string
+      actor?: string
+      action?: string
+      resource?: string
+    },
+  ) => {
+    const q = new URLSearchParams()
+    q.set('format', params?.format || 'json')
+    q.set('time', params?.time || '24h')
+    if (params?.actor) q.set('actor', params.actor)
+    if (params?.action) q.set('action', params.action)
+    if (params?.resource) q.set('resource', params.resource)
+    return `${origin()}/api/projects/${encodeURIComponent(id)}/audit/export?${q}`
+  },
 
   /** Board Token stats: trend / composition / workflows Top10+other. */
   getProjectTokenStats: (
