@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/cocofhu/approving/internal/models"
