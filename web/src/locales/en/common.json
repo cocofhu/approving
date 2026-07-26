@@ -162,6 +162,7 @@
       "copied": "Copied as \"{name}\"",
       "pathCopied": "Path copied: {path}",
       "copyPathFailed": "Copy failed",
+      "copyFailed": "Copy failed",
       "importedFiles": "Imported {count} file(s) into {dir}"
     },
     "action": "Action",

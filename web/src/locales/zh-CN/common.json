@@ -162,6 +162,7 @@
       "copied": "已复制为「{name}」",
       "pathCopied": "已复制路径：{path}",
       "copyPathFailed": "复制失败",
+      "copyFailed": "复制失败",
       "importedFiles": "已从文件夹导入 {count} 个文件到 {dir}"
     },
     "action": "动作",
