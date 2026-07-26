@@ -1,0 +1,17 @@
+# Incremental RBAC: grant get on pods/log only.
+# Apply alongside existing Roles; do NOT kubectl replace a full production Role
+# with this file — that would drop Deployment/PVC/etc. permissions.
+#
+# Namespace MUST match the sandbox workload namespace (SBGW_K8S_NAMESPACE /
+# kubernetes.namespace). Default below matches the live error namespace
+# "sandbox-gateway"; adjust before apply if your cluster uses another ns
+# (e.g. config.example.yaml default "sandboxes").
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sandbox-gateway-pods-log
+  namespace: sandbox-gateway
+rules:
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
