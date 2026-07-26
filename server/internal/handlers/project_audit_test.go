@@ -168,4 +168,30 @@ func TestProjectAuditWorkflowAndRunCoverage(t *testing.T) {
 	if page.Total < 2 {
 		t.Fatalf("expected workflow create+publish audits, got %d %s", page.Total, w.Body.String())
 	}
+
+	// Facets: distinct actors/resources for cascade dropdowns
+	w = hn.do(http.MethodGet, "/api/projects/"+pid+"/audit/facets?time=all", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("facets: %d %s", w.Code, w.Body.String())
+	}
+	var facets struct {
+		Actors    []string `json:"actors"`
+		Resources []struct {
+			ResourceType string `json:"resourceType"`
+			ResourceID   string `json:"resourceId"`
+			Resource     string `json:"resource"`
+		} `json:"resources"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &facets)
+	if len(facets.Actors) < 1 {
+		t.Fatalf("expected at least one actor facet, got %#v", facets.Actors)
+	}
+	if len(facets.Resources) < 1 {
+		t.Fatalf("expected at least one resource facet, got %#v", facets.Resources)
+	}
+
+	w = hn.do(http.MethodGet, "/api/projects/"+pid+"/audit/facets?time=all&action=workflow", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("facets action=workflow: %d %s", w.Code, w.Body.String())
+	}
 }

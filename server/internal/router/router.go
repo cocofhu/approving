@@ -69,6 +69,7 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.GET("/projects/:id", h.GetProject)
 		api.GET("/projects/:id/token-stats", h.GetProjectTokenStats)
 		api.GET("/projects/:id/audit", h.ListProjectAudit)
+		api.GET("/projects/:id/audit/facets", h.ListProjectAuditFacets)
 		api.GET("/projects/:id/audit/export", h.ExportProjectAudit)
 		api.PUT("/projects/:id", h.UpdateProject)
 		api.PATCH("/projects/:id", h.UpdateProject)

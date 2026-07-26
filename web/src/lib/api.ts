@@ -335,6 +335,27 @@ export const api = {
     )
   },
 
+  /** Distinct actors/resources for audit cascade dropdowns. */
+  listProjectAuditFacets: (
+    id: string,
+    params?: {
+      time?: string
+      action?: string
+      from?: string
+      to?: string
+    },
+  ) => {
+    const q = new URLSearchParams()
+    q.set('time', params?.time || '24h')
+    if (params?.action) q.set('action', params.action)
+    if (params?.from) q.set('from', params.from)
+    if (params?.to) q.set('to', params.to)
+    return req<{
+      actors: string[]
+      resources: Array<{ resourceType: string; resourceId: string; resource: string }>
+    }>(`/projects/${encodeURIComponent(id)}/audit/facets?${q}`)
+  },
+
   /** Download URL for audit export (JSON or text); triggers meta-audit on server. */
   exportProjectAuditUrl: (
     id: string,

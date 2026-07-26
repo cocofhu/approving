@@ -116,6 +116,61 @@ func TestFormatAuditText(t *testing.T) {
 	}
 }
 
+func TestListFacetsDistinctActorsAndResources(t *testing.T) {
+	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "audit-facets.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewProjectAuditService(db)
+
+	s.Record(AuditRecord{
+		ProjectID: "proj-f", Actor: ActorFromUsername("alice"),
+		Action: models.AuditActionRunStart, ResourceType: "run", ResourceID: "run-1",
+		Outcome: models.AuditOutcomeOK, Summary: "start",
+	})
+	s.Record(AuditRecord{
+		ProjectID: "proj-f", Actor: ActorFromUsername("alice"),
+		Action: models.AuditActionRunCancel, ResourceType: "run", ResourceID: "run-1",
+		Outcome: models.AuditOutcomeOK, Summary: "cancel",
+	})
+	s.Record(AuditRecord{
+		ProjectID: "proj-f", Actor: ActorFromUsername("bob"),
+		Action: models.AuditActionMCPCall, ResourceType: "mcp", ResourceID: "tool.a",
+		Outcome: models.AuditOutcomeOK, Summary: "mcp",
+	})
+	s.Record(AuditRecord{
+		ProjectID: "proj-other", Actor: ActorFromUsername("carol"),
+		Action: models.AuditActionRunStart, ResourceType: "run", ResourceID: "run-x",
+		Outcome: models.AuditOutcomeOK, Summary: "other",
+	})
+
+	facets, err := s.ListFacets(AuditListFilter{ProjectID: "proj-f"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(facets.Actors) != 2 {
+		t.Fatalf("actors want 2 got %v", facets.Actors)
+	}
+	if len(facets.Resources) != 2 {
+		t.Fatalf("resources want 2 got %#v", facets.Resources)
+	}
+
+	runOnly, err := s.ListFacets(AuditListFilter{ProjectID: "proj-f", Action: "run"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Actors still cover the full time window (not narrowed by action).
+	if len(runOnly.Actors) != 2 {
+		t.Fatalf("actors should ignore action filter: %v", runOnly.Actors)
+	}
+	if len(runOnly.Resources) != 1 || runOnly.Resources[0].ResourceID != "run-1" {
+		t.Fatalf("run resources: %#v", runOnly.Resources)
+	}
+	if runOnly.Resources[0].Resource != "run/run-1" {
+		t.Fatalf("resource label: %#v", runOnly.Resources[0])
+	}
+}
+
 func TestMaskAuditPayloadValueHeuristics(t *testing.T) {
 	masked := MaskAuditPayload(map[string]any{
 		"form": map[string]any{

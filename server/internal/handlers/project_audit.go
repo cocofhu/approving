@@ -149,6 +149,58 @@ func auditEventDTO(ev models.ProjectAuditEvent) gin.H {
 	}
 }
 
+// parseAuditFacetsFilter parses time/action (and optional from/to) for facets.
+// Intentionally omits actor/resource so dropdown options cover the full window.
+func (h *Handlers) parseAuditFacetsFilter(c *gin.Context, projectID string) (services.AuditListFilter, bool) {
+	from, to := parseAuditTimeWindow(c.DefaultQuery("time", "24h"))
+	if raw := strings.TrimSpace(c.Query("from")); raw != "" {
+		t, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid from (RFC3339)"})
+			return services.AuditListFilter{}, false
+		}
+		from = &t
+	}
+	if raw := strings.TrimSpace(c.Query("to")); raw != "" {
+		t, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid to (RFC3339)"})
+			return services.AuditListFilter{}, false
+		}
+		to = &t
+	}
+	return services.AuditListFilter{
+		ProjectID: projectID,
+		From:      from,
+		To:        to,
+		Action:    c.Query("action"),
+	}, true
+}
+
+// ListProjectAuditFacets returns distinct actors/resources for cascade dropdowns.
+// GET /api/projects/:id/audit/facets
+func (h *Handlers) ListProjectAuditFacets(c *gin.Context) {
+	if h.Audit == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "audit unavailable"})
+		return
+	}
+	projectID := c.Param("id")
+	if !h.requireProjectAuditAccess(c, projectID) {
+		return
+	}
+	f, ok := h.parseAuditFacetsFilter(c, projectID)
+	if !ok {
+		return
+	}
+	facets, err := h.Audit.ListFacets(f)
+	if err != nil {
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, facets)
+}
+
 // ListProjectAudit returns a paginated project audit timeline.
 // GET /api/projects/:id/audit
 func (h *Handlers) ListProjectAudit(c *gin.Context) {
