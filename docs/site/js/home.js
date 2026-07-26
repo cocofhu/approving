@@ -304,6 +304,51 @@
     cursor.classList.add("is-visible");
   }
 
+  function placeCursorAt(stage, cursor, x, y) {
+    if (!cursor || !stage) return;
+    cursor.style.left = `${x}px`;
+    cursor.style.top = `${y}px`;
+    cursor.classList.add("is-visible");
+  }
+
+  /** Marquee final box in stage coords: left 52% / top 70% / w 42% / h 18% of .demo-ui */
+  function marqueeBoxInStage(stage, ui) {
+    const sr = stage.getBoundingClientRect();
+    const ur = ui.getBoundingClientRect();
+    const left = ur.left - sr.left;
+    const top = ur.top - sr.top;
+    return {
+      x0: left + ur.width * 0.52,
+      y0: top + ur.height * 0.7,
+      x1: left + ur.width * (0.52 + 0.42),
+      y1: top + ur.height * (0.7 + 0.18),
+    };
+  }
+
+  function animateCursorTo(cursor, x1, y1, duration) {
+    return new Promise((resolve) => {
+      const x0 = parseFloat(cursor.style.left) || 0;
+      const y0 = parseFloat(cursor.style.top) || 0;
+      const prev = cursor.style.transition;
+      cursor.style.transition = "none";
+      let start = null;
+      function frame(t) {
+        if (start === null) start = t;
+        const p = Math.min(1, (t - start) / duration);
+        const e = 1 - Math.pow(1 - p, 3);
+        cursor.style.left = `${x0 + (x1 - x0) * e}px`;
+        cursor.style.top = `${y0 + (y1 - y0) * e}px`;
+        if (p < 1) {
+          requestAnimationFrame(frame);
+        } else {
+          cursor.style.transition = prev;
+          resolve();
+        }
+      }
+      requestAnimationFrame(frame);
+    });
+  }
+
   function hideCursor(cursor) {
     cursor?.classList.remove("is-visible", "is-click");
   }
@@ -665,14 +710,22 @@
 
       if (caption) caption.textContent = COPY.capApproveAnnotate;
       const target = within(root, "[data-annotate-target]");
-      if (target && cursor && stage) {
-        moveCursor(stage, cursor, target);
-        await sleep(450);
+      const demoUi = target?.closest(".demo-ui") || within(root, '[data-demo-case="reject"]');
+      if (target && cursor && stage && demoUi) {
+        /* Frame-select path: NW tip at marquee top-left → drag to bottom-right with is-show (no is-click) */
+        const box = marqueeBoxInStage(stage, demoUi);
+        const prevTransition = cursor.style.transition;
+        cursor.style.transition = "none";
+        placeCursorAt(stage, cursor, box.x0 - 28, box.y0 - 24);
+        void cursor.offsetWidth;
+        cursor.style.transition = prevTransition;
+        await animateCursorTo(cursor, box.x0, box.y0, 380);
+        await sleep(120);
         if (signal.aborted) break;
         marquee?.classList.add("is-show");
-        cursor.classList.add("is-click");
-        await sleep(180);
-        cursor.classList.remove("is-click");
+        await animateCursorTo(cursor, box.x1, box.y1, 550);
+        await sleep(280);
+        if (signal.aborted) break;
         hideCursor(cursor);
       } else {
         marquee?.classList.add("is-show");
