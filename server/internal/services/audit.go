@@ -170,6 +170,79 @@ func (s *ProjectAuditService) ListAllMatching(f AuditListFilter, limit int) ([]m
 	return items, nil
 }
 
+// AuditFacetResource is one distinct resource option for cascade dropdowns.
+type AuditFacetResource struct {
+	ResourceType string `json:"resourceType"`
+	ResourceID   string `json:"resourceId"`
+	Resource     string `json:"resource"`
+}
+
+// AuditFacets holds distinct actors and resources for filter dropdowns.
+type AuditFacets struct {
+	Actors    []string             `json:"actors"`
+	Resources []AuditFacetResource `json:"resources"`
+}
+
+// ListFacets returns distinct actors (time window) and resources (time window + optional action).
+// Actor/resource list filters are ignored so dropdown coverage stays aligned with the window.
+func (s *ProjectAuditService) ListFacets(f AuditListFilter) (AuditFacets, error) {
+	empty := AuditFacets{Actors: []string{}, Resources: []AuditFacetResource{}}
+	if s == nil || s.db == nil {
+		return empty, fmt.Errorf("audit unavailable")
+	}
+	base := AuditListFilter{
+		ProjectID: f.ProjectID,
+		From:      f.From,
+		To:        f.To,
+	}
+
+	var actors []string
+	actorQ := s.applyFilter(s.db.Model(&models.ProjectAuditEvent{}), base).
+		Where("actor <> ''").
+		Select("actor").
+		Group("actor").
+		Order("actor asc")
+	if err := actorQ.Pluck("actor", &actors).Error; err != nil {
+		return empty, err
+	}
+	if actors == nil {
+		actors = []string{}
+	}
+
+	resFilter := base
+	resFilter.Action = f.Action
+	type resRow struct {
+		ResourceType string
+		ResourceID   string
+	}
+	var rows []resRow
+	resQ := s.applyFilter(s.db.Model(&models.ProjectAuditEvent{}), resFilter).
+		Where("resource_type <> '' OR resource_id <> ''").
+		Select("resource_type, resource_id").
+		Group("resource_type, resource_id").
+		Order("resource_type asc, resource_id asc")
+	if err := resQ.Find(&rows).Error; err != nil {
+		return empty, err
+	}
+	resources := make([]AuditFacetResource, 0, len(rows))
+	for _, r := range rows {
+		label := r.ResourceType
+		if r.ResourceID != "" {
+			if label != "" {
+				label += "/" + r.ResourceID
+			} else {
+				label = r.ResourceID
+			}
+		}
+		resources = append(resources, AuditFacetResource{
+			ResourceType: r.ResourceType,
+			ResourceID:   r.ResourceID,
+			Resource:     label,
+		})
+	}
+	return AuditFacets{Actors: actors, Resources: resources}, nil
+}
+
 func (s *ProjectAuditService) applyFilter(q *gorm.DB, f AuditListFilter) *gorm.DB {
 	q = q.Where("project_id = ?", f.ProjectID)
 	if f.From != nil {

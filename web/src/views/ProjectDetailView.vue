@@ -201,14 +201,14 @@ const { fileInput, triggerImport, handleFileChange } = useWorkflowImport({
   },
 })
 
-const tabs: { id: Tab; labelKey: string; badge?: string }[] = [
+const tabs: { id: Tab; labelKey: string }[] = [
   { id: 'board', labelKey: 'pages.projectDetail.tabBoard' },
   { id: 'workflows', labelKey: 'pages.projectDetail.tabWorkflows' },
   { id: 'pmLeader', labelKey: 'pages.projectDetail.tabPmLeader' },
   { id: 'cronJobs', labelKey: 'pages.projectDetail.tabCronJobs' },
   { id: 'sandboxEnv', labelKey: 'pages.projectDetail.tabSandboxEnv' },
   { id: 'variables', labelKey: 'pages.projectDetail.tabVariables' },
-  { id: 'audit', labelKey: 'pages.projectDetail.tabAudit', badge: 'new' },
+  { id: 'audit', labelKey: 'pages.projectDetail.tabAudit' },
   { id: 'meta', labelKey: 'pages.projectDetail.tabMeta' },
 ]
 
@@ -719,10 +719,6 @@ onUnmounted(() => {
           @click="setTab(tb.id)"
         >
           {{ t(tb.labelKey) }}
-          <span
-            v-if="tb.badge === 'new'"
-            class="ml-1 inline-block rounded-full bg-accent px-1.5 py-px text-[10px] font-bold text-white align-top"
-          >{{ t('pages.projectDetail.tabAuditNew') }}</span>
         </button>
       </div>
 
