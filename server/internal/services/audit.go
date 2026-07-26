@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -235,12 +236,30 @@ var sensitiveKeyHints = []string{
 	"sandboxenv", "app_secret", "appsecret",
 }
 
+// valueScanParentKeys trigger extra string-value heuristics under high-risk parents
+// (gate form / MCP arguments/result / free-text fields).
+var valueScanParentKeys = map[string]bool{
+	"form": true, "arguments": true, "args": true, "result": true,
+	"content": true, "prompt": true, "text": true, "body": true,
+	"message": true, "messages": true, "input": true, "inputs": true,
+}
+
+// sensitiveValueREs redact common embedded secret shapes inside free-text values.
+var sensitiveValueREs = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)\b(sk-[A-Za-z0-9_\-]{16,})\b`),
+	regexp.MustCompile(`(?i)\b(ghp_[A-Za-z0-9]{20,})\b`),
+	regexp.MustCompile(`(?i)\b(github_pat_[A-Za-z0-9_]{20,})\b`),
+	regexp.MustCompile(`(?i)\b(xox[baprs]-[A-Za-z0-9\-]{10,})\b`),
+	regexp.MustCompile(`(?i)\b(Bearer\s+[A-Za-z0-9\-_\.=]{16,})\b`),
+	regexp.MustCompile(`(?i)\b((?:api[_-]?key|password|passwd|secret|token)\s*[:=]\s*)([^\s"'\\]{6,})`),
+}
+
 // MaskAuditPayload deeply redacts sensitive fields and truncates oversized trees.
 func MaskAuditPayload(in map[string]any) map[string]any {
 	if in == nil {
 		return nil
 	}
-	out := maskValue(in, 0).(map[string]any)
+	out := maskValue(in, 0, false).(map[string]any)
 	raw, err := json.Marshal(out)
 	if err != nil {
 		return map[string]any{"_error": "payload marshal failed"}
@@ -264,7 +283,7 @@ func mapKeys(m map[string]any) []string {
 	return keys
 }
 
-func maskValue(v any, depth int) any {
+func maskValue(v any, depth int, scanValues bool) any {
 	if depth > 12 {
 		return "[max-depth]"
 	}
@@ -276,23 +295,40 @@ func maskValue(v any, depth int) any {
 				out[k] = SecretMask
 				continue
 			}
-			out[k] = maskValue(val, depth+1)
+			childScan := scanValues || valueScanParentKeys[strings.ToLower(k)]
+			out[k] = maskValue(val, depth+1, childScan)
 		}
 		return out
 	case []any:
 		out := make([]any, len(t))
 		for i, val := range t {
-			out[i] = maskValue(val, depth+1)
+			out[i] = maskValue(val, depth+1, scanValues)
 		}
 		return out
 	case string:
-		if len(t) > 4000 {
-			return t[:4000] + "…"
+		s := t
+		if scanValues {
+			s = redactSensitiveString(s)
 		}
-		return t
+		if len(s) > 4000 {
+			return s[:4000] + "…"
+		}
+		return s
 	default:
 		return v
 	}
+}
+
+func redactSensitiveString(s string) string {
+	out := s
+	for _, re := range sensitiveValueREs {
+		if re.NumSubexp() >= 2 {
+			out = re.ReplaceAllString(out, "${1}"+SecretMask)
+		} else {
+			out = re.ReplaceAllString(out, SecretMask)
+		}
+	}
+	return out
 }
 
 func isSensitiveKey(key string) bool {

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/platformmcp"
 	"github.com/cocofhu/approving/internal/services"
 
@@ -28,11 +29,19 @@ type Host struct {
 	mu       sync.RWMutex
 	sessions map[string]*Session
 	pm       *services.PmService
+	audit    func(services.AuditRecord)
 }
 
 // NewHost builds a memory-store host.
 func NewHost(pm *services.PmService) *Host {
 	return &Host{sessions: map[string]*Session{}, pm: pm}
+}
+
+// SetAuditRecorder wires project-scoped audit recording for memory-store tools.
+func (h *Host) SetAuditRecorder(fn func(services.AuditRecord)) {
+	h.mu.Lock()
+	h.audit = fn
+	h.mu.Unlock()
 }
 
 // Register creates a session token.
@@ -116,6 +125,7 @@ func (h *Host) ServeRPC(projectID, token string, body []byte) (int, []byte) {
 			return platformmcp.Fail(req, -32602, "invalid tools/call params")
 		}
 		result, isErr := h.callTool(sess, p.Name, p.Arguments)
+		h.auditToolCall(sess, p.Name, p.Arguments, result, isErr)
 		return platformmcp.Ok(req, platformmcp.ToolResult(result, isErr))
 	default:
 		if platformmcp.IsNotification(req) {
@@ -123,6 +133,32 @@ func (h *Host) ServeRPC(projectID, token string, body []byte) (int, []byte) {
 		}
 		return platformmcp.Fail(req, -32601, "method not found: "+req.Method)
 	}
+}
+
+func (h *Host) auditToolCall(sess *Session, tool string, args map[string]any, result any, isErr bool) {
+	h.mu.RLock()
+	fn := h.audit
+	h.mu.RUnlock()
+	if fn == nil || sess == nil || sess.ProjectID == "" || tool == "" {
+		return
+	}
+	outcome := models.AuditOutcomeOK
+	if isErr {
+		outcome = models.AuditOutcomeFail
+	}
+	fn(services.AuditRecord{
+		ProjectID:    sess.ProjectID,
+		Actor:        services.ActorFromUsername(sess.UserID),
+		Action:       models.AuditActionMCPCall,
+		ResourceType: "mcp",
+		ResourceID:   tool,
+		Outcome:      outcome,
+		Summary:      "mcp memory-store/" + tool,
+		Payload: map[string]any{
+			"mcp": "memory-store", "tool": tool,
+			"arguments": args, "result": result, "isError": isErr,
+		},
+	})
 }
 
 func (h *Host) callTool(sess *Session, name string, args map[string]any) (any, bool) {

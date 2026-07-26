@@ -115,3 +115,31 @@ func TestFormatAuditText(t *testing.T) {
 		t.Fatalf("text export missing fields: %s", txt)
 	}
 }
+
+func TestMaskAuditPayloadValueHeuristics(t *testing.T) {
+	masked := MaskAuditPayload(map[string]any{
+		"form": map[string]any{
+			"note": "use sk-abcdefghijklmnopqrstuvwxyz012345 and Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig",
+		},
+		"arguments": map[string]any{
+			"prompt": "password=SuperSecret99 please",
+		},
+		"safe": "hello",
+	})
+	form := masked["form"].(map[string]any)
+	note, _ := form["note"].(string)
+	if strings.Contains(note, "sk-abcdefghijklmnopqrstuvwxyz012345") {
+		t.Fatalf("sk token not redacted in form: %s", note)
+	}
+	if !strings.Contains(note, SecretMask) {
+		t.Fatalf("expected mask in form note: %s", note)
+	}
+	args := masked["arguments"].(map[string]any)
+	prompt, _ := args["prompt"].(string)
+	if strings.Contains(prompt, "SuperSecret99") {
+		t.Fatalf("password value not redacted: %s", prompt)
+	}
+	if masked["safe"] != "hello" {
+		t.Fatalf("safe field changed: %#v", masked["safe"])
+	}
+}

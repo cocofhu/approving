@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/ui/AppButton.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import { api, isPaginated, type PaginatedResponse } from '@/lib/api'
+import { prettyAuditPayload } from '@/lib/auditPayload'
 import { useToast } from '@/lib/useToast'
 import { fmtTime } from '@/lib/format'
 import type { ProjectAuditEvent } from '@/lib/types'
@@ -97,10 +98,8 @@ function outcomeLabel(ev: ProjectAuditEvent) {
 }
 
 function prettyPayload(payload: Record<string, unknown> | undefined) {
-  const json = JSON.stringify(payload ?? {}, null, 2)
-  return json
-    .replace(/"([^"\\]+)":/g, '<span class="audit-key">"$1"</span>:')
-    .replace(/"(\*{4})"/g, '"<span class="audit-mask">$1</span>"')
+  // Escape + highlight via shared helper (never inject raw JSON into v-html).
+  return prettyAuditPayload(payload)
 }
 
 async function exportAudit(format: 'json' | 'text') {
@@ -314,7 +313,7 @@ onMounted(() => void load(true))
 </template>
 
 <style scoped>
-:deep(.audit-key) {
+:deep(.tok-key) {
   color: #7dd3c7;
 }
 :deep(.audit-mask) {

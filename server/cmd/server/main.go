@@ -284,6 +284,11 @@ func main() {
 	memoryMCP := memorymcp.NewHost(pmSvc)
 	contextMCP := contextmcp.NewHost(pmSvc)
 	schedulerMCP := schedulermcp.NewHost(db, pmSvc)
+	recordMCPAudit := func(rec services.AuditRecord) { auditSvc.Record(rec) }
+	pmMCP.SetAuditRecorder(recordMCPAudit)
+	memoryMCP.SetAuditRecorder(recordMCPAudit)
+	contextMCP.SetAuditRecorder(recordMCPAudit)
+	schedulerMCP.SetAuditRecorder(recordMCPAudit)
 	mcpWire := &platformMCPWire{
 		pm: pmMCP, memory: memoryMCP, context: contextMCP,
 		scheduler: schedulerMCP, pmSvc: pmSvc, skills: skillSvc,

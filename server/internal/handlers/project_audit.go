@@ -208,6 +208,28 @@ func (h *Handlers) ExportProjectAudit(c *gin.Context) {
 		return
 	}
 
+	filename := fmt.Sprintf("project-%s-audit.%s", sanitizeFilename(projectID), map[string]string{"json": "json", "text": "txt"}[format])
+	var body []byte
+	var contentType string
+	if format == "json" {
+		dtos := make([]gin.H, 0, len(items))
+		for _, ev := range items {
+			dtos = append(dtos, auditEventDTO(ev))
+		}
+		raw, err := json.MarshalIndent(dtos, "", "  ")
+		if err != nil {
+			_ = c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "export marshal failed"})
+			return
+		}
+		body = raw
+		contentType = "application/json; charset=utf-8"
+	} else {
+		body = []byte(services.FormatAuditText(items))
+		contentType = "text/plain; charset=utf-8"
+	}
+
+	// Meta-audit only after export bytes are successfully generated.
 	actor := h.auditActorFromContext(c)
 	filterSummary := map[string]any{
 		"time":     c.DefaultQuery("time", "24h"),
@@ -232,18 +254,8 @@ func (h *Handlers) ExportProjectAudit(c *gin.Context) {
 		},
 	})
 
-	filename := fmt.Sprintf("project-%s-audit.%s", sanitizeFilename(projectID), map[string]string{"json": "json", "text": "txt"}[format])
 	c.Header("Content-Disposition", "attachment; filename=\""+filename+"\"")
-	if format == "json" {
-		dtos := make([]gin.H, 0, len(items))
-		for _, ev := range items {
-			dtos = append(dtos, auditEventDTO(ev))
-		}
-		raw, _ := json.MarshalIndent(dtos, "", "  ")
-		c.Data(http.StatusOK, "application/json; charset=utf-8", raw)
-		return
-	}
-	c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(services.FormatAuditText(items)))
+	c.Data(http.StatusOK, contentType, body)
 }
 
 // recordAudit is a nil-safe helper for write-path instrumentation.

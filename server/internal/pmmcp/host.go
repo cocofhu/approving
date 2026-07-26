@@ -46,6 +46,7 @@ type Host struct {
 	wf       *services.WorkflowService
 	runs     *services.RunService
 	eng      engineOps
+	audit    func(services.AuditRecord)
 }
 
 // engineOps covers the run operations exposed through pm-workflow-write
@@ -66,6 +67,22 @@ func NewHost(pm *services.PmService, progress *services.PmProgress, wf *services
 		wf:       wf,
 		runs:     runs,
 		eng:      eng,
+	}
+}
+
+// SetAuditRecorder wires project-scoped audit recording for PM MCP tools.
+func (h *Host) SetAuditRecorder(fn func(services.AuditRecord)) {
+	h.mu.Lock()
+	h.audit = fn
+	h.mu.Unlock()
+}
+
+func (h *Host) recordAudit(rec services.AuditRecord) {
+	h.mu.RLock()
+	fn := h.audit
+	h.mu.RUnlock()
+	if fn != nil {
+		fn(rec)
 	}
 }
 
@@ -225,6 +242,7 @@ func (h *Host) ServeRPC(projectID, mcpID, token string, body []byte) (status int
 			return platformmcp.Fail(req, -32602, "invalid tools/call params")
 		}
 		result, isErr := h.callTool(projectID, token, mcpID, p.Name, p.Arguments)
+		h.auditToolCall(projectID, token, mcpID, p.Name, p.Arguments, result, isErr)
 		return platformmcp.Ok(req, platformmcp.ToolResult(result, isErr))
 	default:
 		if platformmcp.IsNotification(req) {
@@ -247,10 +265,44 @@ func (h *Host) callTool(projectID, token, mcpID, name string, args map[string]an
 	case MCPWorkflowRead:
 		return h.callWorkflowRead(projectID, name, args)
 	case MCPWorkflowWrite:
-		return h.callWorkflowWrite(projectID, name, args)
+		return h.callWorkflowWrite(projectID, token, name, args)
 	default:
 		return map[string]any{"error": "unknown mcp"}, true
 	}
+}
+
+func (h *Host) auditToolCall(projectID, token, mcpID, tool string, args map[string]any, result any, isErr bool) {
+	if strings.TrimSpace(projectID) == "" || tool == "" {
+		return
+	}
+	actor := services.SystemActor()
+	if sess, ok := h.SessionFor(projectID, token); ok {
+		actor = services.ActorFromUsername(sess.UserID)
+	}
+	outcome := models.AuditOutcomeOK
+	if isErr {
+		outcome = models.AuditOutcomeFail
+	}
+	resultPayload := any(result)
+	if s, ok := result.(string); ok && len(s) > 2000 {
+		resultPayload = s[:2000] + "…"
+	}
+	h.recordAudit(services.AuditRecord{
+		ProjectID:    projectID,
+		Actor:        actor,
+		Action:       models.AuditActionMCPCall,
+		ResourceType: "mcp",
+		ResourceID:   tool,
+		Outcome:      outcome,
+		Summary:      "mcp " + mcpID + "/" + tool,
+		Payload: map[string]any{
+			"mcp":       mcpID,
+			"tool":      tool,
+			"arguments": args,
+			"result":    resultPayload,
+			"isError":   isErr,
+		},
+	})
 }
 
 // workflowInProject loads a workflow and enforces it belongs to projectID.
@@ -416,7 +468,7 @@ func (h *Host) callWorkflowRead(projectID, name string, args map[string]any) (an
 // are enforced to belong to the session's project. Access is gated by whether
 // pm-workflow-write is enabled for the project (see ServeRPC), not by session
 // trust level.
-func (h *Host) callWorkflowWrite(projectID, name string, args map[string]any) (any, bool) {
+func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]any) (any, bool) {
 	if h.wf == nil {
 		return map[string]any{"error": "workflow service unavailable"}, true
 	}
@@ -518,6 +570,25 @@ func (h *Host) callWorkflowWrite(projectID, name string, args map[string]any) (a
 		if err != nil {
 			return map[string]any{"error": err.Error()}, true
 		}
+		actor := services.SystemActor()
+		if sess, ok := h.SessionFor(projectID, token); ok {
+			actor = services.ActorFromUsername(sess.UserID)
+		}
+		h.recordAudit(services.AuditRecord{
+			ProjectID:    projectID,
+			Actor:        actor,
+			Action:       models.AuditActionRunStart,
+			ResourceType: "run",
+			ResourceID:   run.ID,
+			Outcome:      models.AuditOutcomeOK,
+			Summary:      "start run (pm_mcp)",
+			Payload: map[string]any{
+				"workflowId": w.ID,
+				"trigger":    trigger,
+				"priority":   priority,
+				"source":     "pm_mcp",
+			},
+		})
 		return map[string]any{"id": run.ID, "status": run.Status}, false
 	case "pm_resume_gate":
 		if h.eng == nil {
@@ -541,12 +612,27 @@ func (h *Host) callWorkflowWrite(projectID, name string, args map[string]any) (a
 			return map[string]any{"error": "engine unavailable"}, true
 		}
 		runID := platformmcp.StrArg(args, "runId")
-		if _, ok := h.runInProject(projectID, runID); !ok {
+		run, ok := h.runInProject(projectID, runID)
+		if !ok {
 			return map[string]any{"error": "run not found"}, true
 		}
 		if err := h.eng.Cancel(runID); err != nil {
 			return map[string]any{"error": err.Error()}, true
 		}
+		actor := services.SystemActor()
+		if sess, sOk := h.SessionFor(projectID, token); sOk {
+			actor = services.ActorFromUsername(sess.UserID)
+		}
+		h.recordAudit(services.AuditRecord{
+			ProjectID:    projectID,
+			Actor:        actor,
+			Action:       models.AuditActionRunCancel,
+			ResourceType: "run",
+			ResourceID:   runID,
+			Outcome:      models.AuditOutcomeOK,
+			Summary:      "cancel run (pm_mcp)",
+			Payload:      map[string]any{"workflowId": run.WorkflowID, "source": "pm_mcp"},
+		})
 		return map[string]any{"status": "cancelled"}, false
 	default:
 		return map[string]any{"error": "unknown tool: " + name}, true
