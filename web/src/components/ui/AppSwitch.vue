@@ -3,6 +3,7 @@
  * Square accent switch (role=switch) — shared boolean control.
  * On: bg-accent track + white square thumb on the right (attachment style).
  * Off: border-line-strong / bg-base + thumb on the left (Pm enable semantics).
+ * Callers pass aria-label / class / data-testid via attribute fallthrough.
  */
 const props = withDefaults(
   defineProps<{
@@ -33,7 +34,7 @@ function onKeydown(e: KeyboardEvent) {
   <button
     type="button"
     role="switch"
-    class="relative h-[22px] w-10 shrink-0 border transition disabled:cursor-not-allowed disabled:opacity-45"
+    class="relative h-[22px] w-10 shrink-0 rounded-none border transition disabled:cursor-not-allowed disabled:opacity-45"
     :class="modelValue ? 'border-accent bg-accent' : 'border-line-strong bg-base'"
     :aria-checked="modelValue"
     :aria-disabled="disabled ? 'true' : undefined"
@@ -43,7 +44,7 @@ function onKeydown(e: KeyboardEvent) {
     @keydown="onKeydown"
   >
     <span
-      class="pointer-events-none absolute top-0.5 h-4 w-4 transition-all"
+      class="pointer-events-none absolute top-0.5 h-4 w-4 rounded-none transition-all"
       :class="modelValue ? 'left-[18px] bg-white' : 'left-0.5 bg-txt2'"
     />
   </button>

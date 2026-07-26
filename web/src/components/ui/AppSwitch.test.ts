@@ -5,10 +5,15 @@ import AppSwitch from './AppSwitch.vue'
 
 describe('AppSwitch', () => {
   it('renders square accent track when on', () => {
-    const w = mount(AppSwitch, { props: { modelValue: true } })
+    const w = mount(AppSwitch, {
+      props: { modelValue: true },
+      attrs: { 'aria-label': 'Enable feature' },
+    })
     const btn = w.get('button[role="switch"]')
     expect(btn.attributes('aria-checked')).toBe('true')
+    expect(btn.attributes('aria-label')).toBe('Enable feature')
     expect(btn.classes().join(' ')).toContain('bg-accent')
+    expect(btn.classes().join(' ')).toContain('rounded-none')
     expect(btn.classes().join(' ')).not.toContain('rounded-full')
     w.unmount()
   })
