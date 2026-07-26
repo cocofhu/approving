@@ -1,7 +1,13 @@
 name: release-smoke
 
-# Digest-pinned clean-Linux smoke. Run manually after GHCR images exist;
-# do not auto-trigger on tags (beta tags would fail without release secrets).
+# Digest-pinned clean-Linux smoke.
+# Trigger: workflow_dispatch only (Actions → release-smoke → Run workflow).
+# Intentionally NOT on push tags: beta/v* tags without release secrets would fail.
+# Intentionally NOT on pull_request: pulls multi-GB digest images via secrets
+# APPROVING_IMAGE / SANDBOX_GATEWAY_IMAGE / SANDBOX_IMAGE — do not make this a
+# per-PR required check. Optional weekly/nightly schedule is a future maintainer
+# choice, not a merge gate.
+# Local: export the three digest refs, then ./release-smoke.sh (see CONTRIBUTING).
 on:
   workflow_dispatch:
 

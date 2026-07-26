@@ -32,6 +32,8 @@ describe('highlightJson', () => {
     expect(html).not.toContain('\n')
     // Assert escaped text content without Incomplete multi-character sanitization
     // (CodeQL #2): do not strip tags via /<[^>]+>/g; check escapeHtml fragments.
+    // Related residual trap: boolean / flag "sanitizers" that do not break taint —
+    // prefer sink hardening + fixture asserts over assuming analyze-job green cleared alerts.
     expect(html).toContain('&quot;a&quot;')
     expect(html).toContain('&quot;b&quot;')
     expect(html).not.toContain(src)

@@ -1,5 +1,9 @@
 # Minimal security scan baseline (bypass path — does not modify ci-*).
 # CodeQL: results in Security → Code scanning / PR Checks (not branch-protection required).
+# analyze job green ≠ default branch has zero open alerts — spot-check after merge.
+# Residual-prone patterns (do not "boolean-sanitize" and assume taint is cleared):
+#   incomplete multi-char HTML strip, DOM reinterpret after encode — see
+#   web/src/lib/highlightJson.test.ts and CONTRIBUTING.md "Security scans".
 # npm audit: high+ fails the job (web highs cleared via audit fix + overrides.minimatch).
 # gitleaks: fail-on-leak after .gitleaks.toml allowlist for documented placeholders.
 name: security

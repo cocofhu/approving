@@ -61,6 +61,14 @@ npm test -- --coverage
 npm run build
 ```
 
+Parallel job `web-e2e` runs `npm run test:e2e:ci` (critical-path Playwright
+subset; install Chromium first). Fan-in job `web-gate` (`needs: [web, web-e2e]`,
+`if: always()`) fails the workflow if either job failed or was cancelled.
+
+**When this workflow runs, treat these three check names as merge-required:**
+`web`, `web-e2e`, `web-gate`. Path filters mean non-web PRs skip `ci-web`; the
+always-on `ci` / `gate` job does **not** replace `web-e2e`.
+
 ### `sandbox-gateway/gateway/**` → `ci-gateway`
 
 ```bash
