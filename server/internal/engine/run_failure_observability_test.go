@@ -115,7 +115,7 @@ func TestResearchEarlyFailureThreeChannelsNonEmpty(t *testing.T) {
 	pm := services.NewPmService(db, nil)
 	en := true
 	agent := "agent-a"
-	if _, err := pm.UpdateBinding(proj.ID, &en, &agent, []string{pmmcp.MCPProgress, pmmcp.MCPWorkflowRead}); err != nil {
+	if _, err := pm.UpdateBinding(proj.ID, &en, &agent, []string{pmmcp.MCPProgress, pmmcp.MCPWorkflowRead}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	progress := services.NewPmProgress(pm, rs, arts)

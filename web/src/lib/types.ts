@@ -150,6 +150,10 @@ export interface PmLeaderBinding {
   agentAvailable: boolean
   agentError?: string
   enabledMcps?: string[]
+  /** Run variable name that enables gate-auto PM invoke when present+truthy. Empty = off. */
+  gateAutoVar?: string
+  /** Optional prompt appended after system default gate-auto guidance. */
+  gateAutoPrompt?: string
   aclNote: string
 }
 

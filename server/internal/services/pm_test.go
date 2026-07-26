@@ -33,12 +33,12 @@ func TestPmBindingEnableRequiresAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 	en := true
-	if _, err := pm.UpdateBinding(p.ID, &en, nil, nil); !errors.Is(err, ErrPmLeaderNoAgent) {
+	if _, err := pm.UpdateBinding(p.ID, &en, nil, nil, nil, nil); !errors.Is(err, ErrPmLeaderNoAgent) {
 		t.Fatalf("want ErrPmLeaderNoAgent, got %v", err)
 	}
 	agent := "demo-agent"
 	// without agent on disk still fails
-	if _, err := pm.UpdateBinding(p.ID, &en, &agent, nil); !errors.Is(err, ErrPmLeaderNoAgent) {
+	if _, err := pm.UpdateBinding(p.ID, &en, &agent, nil, nil, nil); !errors.Is(err, ErrPmLeaderNoAgent) {
 		t.Fatalf("want ErrPmLeaderNoAgent for missing agent, got %v", err)
 	}
 }
@@ -120,14 +120,14 @@ func TestPmRequireEnabled(t *testing.T) {
 	agent := "x"
 	en := true
 	// skills nil → agent existence skipped
-	if _, err := pm.UpdateBinding(p.ID, &en, &agent, nil); err != nil {
+	if _, err := pm.UpdateBinding(p.ID, &en, &agent, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pm.RequireEnabled(p.ID); err != nil {
 		t.Fatal(err)
 	}
 	dis := false
-	if _, err := pm.UpdateBinding(p.ID, &dis, nil, nil); err != nil {
+	if _, err := pm.UpdateBinding(p.ID, &dis, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pm.RequireEnabled(p.ID); !errors.Is(err, ErrPmLeaderDisabled) {
@@ -307,7 +307,7 @@ func TestPmMemoryAgentIsolation(t *testing.T) {
 	}
 	en := true
 	pmAgent := "agent-a"
-	if _, err := pm.UpdateBinding(p.ID, &en, &pmAgent, nil); err != nil {
+	if _, err := pm.UpdateBinding(p.ID, &en, &pmAgent, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.First(&still, "id = ?", "legacy-1").Error; err != nil || still.AgentName != "agent-a" {
@@ -351,7 +351,7 @@ func TestUpdateBindingEmptyEnabledMcpsPersists(t *testing.T) {
 	}
 	en := true
 	agent := "agent-a"
-	b, err := pm.UpdateBinding(p.ID, &en, &agent, []string{})
+	b, err := pm.UpdateBinding(p.ID, &en, &agent, []string{}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -405,7 +405,7 @@ func TestPmMemorySearchAndBackfillLegacy(t *testing.T) {
 	}
 	en := true
 	agent := "agent-a"
-	if _, err := pm.UpdateBinding(p.ID, &en, &agent, nil); err != nil {
+	if _, err := pm.UpdateBinding(p.ID, &en, &agent, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := pm.BackfillLegacyMemoriesToPMAgent(p.ID); err != nil {
