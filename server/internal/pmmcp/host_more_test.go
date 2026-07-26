@@ -311,3 +311,74 @@ func TestPmMCPWorkflowToolsWithEngine(t *testing.T) {
 		t.Fatalf("cross-project delete should be rejected: %d %s", st, resp)
 	}
 }
+
+func TestPmMCPStartCancelWritesRunAudit(t *testing.T) {
+	db, pm, _, p := setupPmMCPHost(t)
+	auditSvc := services.NewProjectAuditService(db)
+	wf := services.NewWorkflowService(db)
+	g := models.Graph{Nodes: []models.Node{{ID: "in", Type: "input"}, {ID: "out", Type: "output"}}}
+	wfDef := &models.WorkflowDef{
+		ID: "wf-pm-audit", ProjectID: p.ID, Name: "PM Audit WF", Graph: g,
+	}
+	if err := wf.Save(wfDef); err != nil {
+		t.Fatal(err)
+	}
+	eng := &fakePmEngine{}
+	rs := services.NewRunService(db)
+	h := NewHost(pm, services.NewPmProgress(pm, rs, nil), wf, rs, eng)
+	h.SetAuditRecorder(auditSvc.Record)
+	tok := h.Register(p.ID, "thr-audit", "alice", "agent-a")
+
+	call := func(name string, args map[string]any) {
+		t.Helper()
+		b, _ := json.Marshal(map[string]any{
+			"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+			"params": map[string]any{"name": name, "arguments": args},
+		})
+		st, resp := h.ServeRPC(p.ID, MCPWorkflowWrite, tok, b)
+		if st != 200 || strings.Contains(string(resp), `"isError":true`) {
+			t.Fatalf("%s: %d %s", name, st, resp)
+		}
+	}
+
+	call("pm_start_run", map[string]any{"workflowId": wfDef.ID, "inputs": map[string]any{}})
+	if err := rs.DB().Create(&models.Run{ID: "run-cancel-audit", WorkflowID: wfDef.ID, Status: "queued"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	call("pm_cancel_run", map[string]any{"runId": "run-cancel-audit"})
+
+	items, total, err := auditSvc.ListPage(services.AuditListFilter{ProjectID: p.ID, Page: 1, PageSize: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total < 2 {
+		t.Fatalf("expected audit events, total=%d", total)
+	}
+	var sawStart, sawCancel, sawMCP bool
+	for _, ev := range items {
+		switch ev.Action {
+		case models.AuditActionRunStart:
+			if ev.ResourceID == "run-pm-mcp" {
+				sawStart = true
+				if ev.Actor != "alice" || ev.Unattributable {
+					t.Fatalf("start actor: %#v", ev)
+				}
+			}
+		case models.AuditActionRunCancel:
+			if ev.ResourceID == "run-cancel-audit" {
+				sawCancel = true
+				if ev.Actor != "alice" || ev.Unattributable {
+					t.Fatalf("cancel actor: %#v", ev)
+				}
+			}
+		case models.AuditActionMCPCall:
+			sawMCP = true
+		}
+	}
+	if !sawStart || !sawCancel {
+		t.Fatalf("missing run start/cancel audit: start=%v cancel=%v total=%d", sawStart, sawCancel, total)
+	}
+	if !sawMCP {
+		t.Fatalf("expected mcp.call events from pm tools/call")
+	}
+}

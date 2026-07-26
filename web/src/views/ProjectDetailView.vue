@@ -23,6 +23,7 @@ import PmLeaderChat from '@/components/pm/PmLeaderChat.vue'
 import PmCronJobsPanel from '@/components/pm/PmCronJobsPanel.vue'
 import PmSettingsPanel from '@/components/pm/PmSettingsPanel.vue'
 import TokenUsageHoverTip from '@/components/ui/TokenUsageHoverTip.vue'
+import ProjectAuditPanel from '@/components/project/ProjectAuditPanel.vue'
 import type { ClarifyImage, PmLeaderBinding, Project, ProjectEnvEntry, ProjectVariable, Workflow } from '@/lib/types'
 
 const PROJECT_TABS = [
@@ -32,6 +33,7 @@ const PROJECT_TABS = [
   'cronJobs',
   'sandboxEnv',
   'variables',
+  'audit',
   'meta',
 ] as const
 type Tab = (typeof PROJECT_TABS)[number]
@@ -199,15 +201,19 @@ const { fileInput, triggerImport, handleFileChange } = useWorkflowImport({
   },
 })
 
-const tabs: { id: Tab; labelKey: string }[] = [
+const tabs: { id: Tab; labelKey: string; badge?: string }[] = [
   { id: 'board', labelKey: 'pages.projectDetail.tabBoard' },
   { id: 'workflows', labelKey: 'pages.projectDetail.tabWorkflows' },
   { id: 'pmLeader', labelKey: 'pages.projectDetail.tabPmLeader' },
   { id: 'cronJobs', labelKey: 'pages.projectDetail.tabCronJobs' },
   { id: 'sandboxEnv', labelKey: 'pages.projectDetail.tabSandboxEnv' },
   { id: 'variables', labelKey: 'pages.projectDetail.tabVariables' },
+  { id: 'audit', labelKey: 'pages.projectDetail.tabAudit', badge: 'new' },
   { id: 'meta', labelKey: 'pages.projectDetail.tabMeta' },
 ]
+
+/** Demo/test hook: ?auditDenied=1 forces the read-only denial UI. */
+const auditForceDenied = computed(() => route.query.auditDenied === '1')
 
 const pmBinding = ref<PmLeaderBinding | null>(null)
 const pmStudioAgent = computed(() => (pmBinding.value?.agentConfigRef || '').trim())
@@ -713,6 +719,10 @@ onUnmounted(() => {
           @click="setTab(tb.id)"
         >
           {{ t(tb.labelKey) }}
+          <span
+            v-if="tb.badge === 'new'"
+            class="ml-1 inline-block rounded-full bg-accent px-1.5 py-px text-[10px] font-bold text-white align-top"
+          >{{ t('pages.projectDetail.tabAuditNew') }}</span>
         </button>
       </div>
 
@@ -1103,6 +1113,7 @@ onUnmounted(() => {
 
       <!-- Variables tab -->
       <div v-else-if="tab === 'variables'" class="flex min-h-[420px] flex-col">
+
         <div class="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
           <p class="m-0 text-[13px] text-txt3">
             {{ t('pages.projectDetail.varsHint') }}
@@ -1278,6 +1289,10 @@ onUnmounted(() => {
             </AppButton>
           </div>
         </div>
+      </div>
+
+      <div v-else-if="tab === 'audit'" class="flex min-h-[420px] flex-col" data-testid="project-audit-tab">
+        <ProjectAuditPanel :project-id="projectId" :force-denied="auditForceDenied" />
       </div>
 
       <!-- Project info (meta) tab: near-full-width panel (shell / head / fields / primary save) -->

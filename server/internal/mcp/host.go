@@ -90,11 +90,18 @@ type Host struct {
 	// WriteArtifact (e.g. engine syncs mapped primary outputs + pending BodyMd).
 	// Nil ⇒ no-op. Must not call back into WriteArtifact.
 	afterWrite AfterWriteFunc
+	// projectAudit records structured, redacted MCP tool calls into project audit.
+	// Nil ⇒ no project audit (debug McpCalls still recorded separately).
+	projectAudit ProjectAuditHook
 }
 
 // AfterWriteFunc is called after WriteArtifact successfully persists content.
 // runID/nodeID/name/content/kind mirror the Save arguments.
 type AfterWriteFunc func(runID, nodeID, name, content, kind string)
+
+// ProjectAuditHook records a project-scoped MCP tool invocation (already
+// intended for redaction by the implementation).
+type ProjectAuditHook func(runID, tool string, args map[string]any, resultText string, isError bool)
 
 // RunTokenSource resolves a run's persisted MCP token and whether the run still
 // has a live sandbox. ok is false when the run is unknown.
@@ -138,6 +145,13 @@ func (h *Host) SetActiveNodeSource(src ActiveNodeSource) { h.activeSrc = src }
 func (h *Host) SetAfterWriteArtifact(fn AfterWriteFunc) {
 	h.mu.Lock()
 	h.afterWrite = fn
+	h.mu.Unlock()
+}
+
+// SetProjectAuditHook wires project-scoped MCP audit recording.
+func (h *Host) SetProjectAuditHook(fn ProjectAuditHook) {
+	h.mu.Lock()
+	h.projectAudit = fn
 	h.mu.Unlock()
 }
 

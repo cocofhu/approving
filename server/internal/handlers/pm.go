@@ -78,6 +78,20 @@ func (h *Handlers) UpdatePmLeader(c *gin.Context) {
 		writePmErr(c, err)
 		return
 	}
+	h.recordAudit(services.AuditRecord{
+		ProjectID:      c.Param("id"),
+		Actor:          h.auditActorFromContext(c),
+		Action:         models.AuditActionProjectConfig,
+		ResourceType:   "pm",
+		ResourceID:     c.Param("id"),
+		Outcome:        models.AuditOutcomeOK,
+		Summary:        "update PM Leader",
+		Payload: map[string]any{
+			"enabled":        b.Enabled,
+			"agentConfigRef": b.AgentConfigRef,
+			"enabledMcps":    b.EnabledMcps,
+		},
+	})
 	c.JSON(http.StatusOK, b)
 }
 
@@ -986,6 +1000,16 @@ func (h *Handlers) PatchProjectCronJob(c *gin.Context) {
 		writePmErr(c, err)
 		return
 	}
+	h.recordAudit(services.AuditRecord{
+		ProjectID:      c.Param("id"),
+		Actor:          h.auditActorFromContext(c),
+		Action:         models.AuditActionCron,
+		ResourceType:   "cron",
+		ResourceID:     c.Param("jobId"),
+		Outcome:        models.AuditOutcomeOK,
+		Summary:        "patch cron job",
+		Payload:        map[string]any{"deliverToChannel": *body.DeliverToChannel},
+	})
 	c.JSON(http.StatusOK, job)
 }
 
@@ -1004,6 +1028,16 @@ func (h *Handlers) DeleteProjectCronJob(c *gin.Context) {
 		writePmErr(c, err)
 		return
 	}
+	h.recordAudit(services.AuditRecord{
+		ProjectID:      c.Param("id"),
+		Actor:          h.auditActorFromContext(c),
+		Action:         models.AuditActionCron,
+		ResourceType:   "cron",
+		ResourceID:     c.Param("jobId"),
+		Outcome:        models.AuditOutcomeOK,
+		Summary:        "delete cron job",
+		Payload:        map[string]any{"deleted": true},
+	})
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 }
 

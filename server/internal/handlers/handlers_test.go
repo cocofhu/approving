@@ -75,6 +75,10 @@ func newHarness(t *testing.T) *harness {
 	mgr := sandbox.NewManager(fg.Client(), sandbox.ManagerOptions{WorkspaceDir: "/root/workspace"})
 	sbx := services.NewSandboxService(db, mgr, skills, host, services.SandboxOptions{Max: 2, TTL: time.Minute})
 	eng := engine.New(db, fakeProvider{}, host, arts, 5)
+	auditSvc := services.NewProjectAuditService(db)
+	eng.SetAuditRecorder(func(rec services.AuditRecord) {
+		auditSvc.Record(rec)
+	})
 	t.Cleanup(func() {
 		eng.Close()
 		if sqlDB, err := db.DB(); err == nil {
@@ -108,6 +112,7 @@ func newHarness(t *testing.T) *harness {
 		Auth:          authSvc,
 		PlatformRules: platformRules,
 		Issues:        services.NewIssueService(db),
+		Audit:         auditSvc,
 	}
 	hn := &harness{r: router.New(h), h: h, db: db, host: host, auth: authSvc, fg: fg}
 	hn.cookie = hn.login(t)

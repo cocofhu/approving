@@ -184,6 +184,70 @@ func TestV1CancelRun(t *testing.T) {
 	if run.Status != "cancelled" {
 		t.Fatalf("status: want cancelled got %s", run.Status)
 	}
+
+	// V1 cancel must write run.cancel with system+unattributable (no Session).
+	aw := hn.do(http.MethodGet, "/api/projects/"+models.DefaultProjectID+"/audit?time=all&action=run.cancel&page=1&pageSize=20", nil)
+	if aw.Code != http.StatusOK {
+		t.Fatalf("list audit: %d %s", aw.Code, aw.Body.String())
+	}
+	var page struct {
+		Items []map[string]any `json:"items"`
+		Total int              `json:"total"`
+	}
+	_ = json.Unmarshal(aw.Body.Bytes(), &page)
+	found := false
+	for _, it := range page.Items {
+		if it["resourceId"] == "run-cancel-test" && it["action"] == "run.cancel" {
+			found = true
+			if it["actor"] != "system" || it["unattributable"] != true {
+				t.Fatalf("v1 cancel actor want system+unattributable: %#v", it)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected run.cancel audit for v1 cancel, body=%s", aw.Body.String())
+	}
+}
+
+func TestV1StartRunWritesAudit(t *testing.T) {
+	hn := newHarness(t)
+	seedPublishedWorkflow(t, hn, "wf-v1-audit")
+	key := createAPIKey(t, hn, "wf-v1-audit", "k")
+
+	body, _ := json.Marshal(map[string]any{"inputs": map[string]any{}})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/workflows/wf-v1-audit/runs", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+key)
+	hn.r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("start run: %d %s", w.Code, w.Body.String())
+	}
+	var startRes map[string]string
+	_ = json.Unmarshal(w.Body.Bytes(), &startRes)
+	runID := startRes["run_id"]
+	if runID == "" {
+		t.Fatalf("no run id: %s", w.Body.String())
+	}
+
+	aw := hn.do(http.MethodGet, "/api/projects/"+models.DefaultProjectID+"/audit?time=all&action=run.start&page=1&pageSize=50", nil)
+	var page struct {
+		Items []map[string]any `json:"items"`
+		Total int              `json:"total"`
+	}
+	_ = json.Unmarshal(aw.Body.Bytes(), &page)
+	found := false
+	for _, it := range page.Items {
+		if it["resourceId"] == runID && it["action"] == "run.start" {
+			found = true
+			if it["actor"] != "system" || it["unattributable"] != true {
+				t.Fatalf("v1 start actor want system+unattributable: %#v", it)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected run.start audit for v1 start, body=%s", aw.Body.String())
+	}
 }
 
 func TestInternalStartRunUsesDraftGraph(t *testing.T) {

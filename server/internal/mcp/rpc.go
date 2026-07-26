@@ -131,5 +131,11 @@ func (h *Host) callTool(runID, token string, req rpcRequest) (int, []byte) {
 		Result:  trunc(text, 2000),
 		IsError: isErr,
 	})
+	h.mu.RLock()
+	auditFn := h.projectAudit
+	h.mu.RUnlock()
+	if auditFn != nil {
+		auditFn(runID, p.Name, args, text, isErr)
+	}
 	return h.ok(req, toolResult(text, isErr))
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/cocofhu/approving/internal/models"
 	gatenode "github.com/cocofhu/approving/internal/models/nodereg"
 	"github.com/cocofhu/approving/internal/runtime"
+	"github.com/cocofhu/approving/internal/services"
 
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
@@ -46,6 +47,12 @@ func validateGateForm(gate models.Gate, action string, form map[string]any) erro
 
 // ResumeGate resolves a paused human_gate and continues the FSM.
 func (e *Engine) ResumeGate(runID, nodeID, action string, form map[string]any) error {
+	return e.ResumeGateAs(runID, nodeID, action, form, "")
+}
+
+// ResumeGateAs is like ResumeGate but records the reviewer username on outputs
+// and audit. Empty reviewer → system + unattributable (no fabricated names).
+func (e *Engine) ResumeGateAs(runID, nodeID, action string, form map[string]any, reviewer string) error {
 	if e.IsHalted() {
 		return errors.New("server is shutting down")
 	}
@@ -140,7 +147,11 @@ func (e *Engine) ResumeGate(runID, nodeID, action string, form map[string]any) e
 				return lifeErr
 			}
 		}
-		outputs := map[string]any{"action": action, "form": form, "reviewer_id": "operator", outVar: action}
+		reviewerActor := services.ActorFromUsername(reviewer)
+		outputs := map[string]any{"action": action, "form": form, "reviewer_id": reviewerActor.Username, outVar: action}
+		if reviewerActor.Unattributable {
+			outputs["reviewer_unattributable"] = true
+		}
 		outcome = nodeOutcome{status: "completed", outputs: outputs, outputMd: "审批:" + action}
 		for _, a := range parseActions(node.Config["actions"]) {
 			if a.ID == action && a.Goto != "" {
@@ -157,6 +168,25 @@ func (e *Engine) ResumeGate(runID, nodeID, action string, form map[string]any) e
 	e.appendTrace(c, models.TraceEntry{NodeID: nodeID, Event: "resume", Detail: "action=" + action})
 	e.appendTrace(c, models.TraceEntry{NodeID: nodeID, Event: "exit"})
 	log.Info().Str("run_id", runID).Str("node_id", nodeID).Str("transition", "resume").Msg("gate resumed")
+
+	// Project audit: gate decision with real Session actor when provided.
+	if projectID := services.ResolveProjectIDForRun(e.db, runID); projectID != "" {
+		e.recordAudit(services.AuditRecord{
+			ProjectID:      projectID,
+			Actor:          services.ActorFromUsername(reviewer),
+			Action:         models.AuditActionGateDecide,
+			ResourceType:   "gate",
+			ResourceID:     nodeID,
+			Outcome:        models.AuditOutcomeOK,
+			Summary:        "gate " + action,
+			Payload: map[string]any{
+				"runId":  runID,
+				"action": action,
+				"nodeId": nodeID,
+				"form":   form,
+			},
+		})
+	}
 
 	next := e.routeSuccess(c, node, outcome)
 	if next == "" {
