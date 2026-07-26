@@ -649,10 +649,13 @@ export const api = {
     force = false,
     annotations: ReactAnnotation[] = [],
   ) =>
-    req<{ status: string }>(`/runs/${runId}/react/${nodeId}/reply`, {
+    req<{ status: string; waiting?: number }>(`/runs/${runId}/react/${nodeId}/reply`, {
       method: 'POST',
       body: JSON.stringify({ text, images, force, annotations }),
     }),
+  /** 轮级 Cancel for node-inline review (clears FIFO + aborts active ACP turn). */
+  reactCancel: (runId: string, nodeId: string) =>
+    req<{ status: string }>(`/runs/${runId}/react/${nodeId}/cancel`, { method: 'POST' }),
   // Approval-gate ReAct reject: send annotations/text/images to the gate's
   // upstream producer's still-alive session for an in-place edit; the gate stays
   // pending. Requires gate.reactSessionAlive.
@@ -663,10 +666,19 @@ export const api = {
     images: { data: string; mimeType: string }[] = [],
     annotations: ReactAnnotation[] = [],
   ) =>
-    req<{ status: string }>(`/runs/${runId}/gates/${nodeId}/react-revise`, {
-      method: 'POST',
-      body: JSON.stringify({ text, images, annotations }),
-    }),
+    req<{ status: string; waiting?: number; producerNodeId?: string }>(
+      `/runs/${runId}/gates/${nodeId}/react-revise`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ text, images, annotations }),
+      },
+    ),
+  /** 轮级 Cancel for gate hot-revise (upstream producer session). */
+  gateReactCancel: (runId: string, nodeId: string) =>
+    req<{ status: string; producerNodeId?: string }>(
+      `/runs/${runId}/gates/${nodeId}/react-cancel`,
+      { method: 'POST' },
+    ),
 
   // agents (reusable, user-defined Agent identities referenced by skill_profile:
   // skill/rules + MCP servers + environment variables)

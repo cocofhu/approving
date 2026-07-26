@@ -177,6 +177,13 @@ type ReviewProvider interface {
 	RetireSession(runID, nodeID string)
 }
 
+// ReviewTurnCanceller is an optional provider capability: abort the in-flight
+// ACP turn on a parked review session without retiring the session (轮级 Cancel).
+// Bridge session/cancel also clears the sandbox PromptQueue.
+type ReviewTurnCanceller interface {
+	CancelSessionTurn(runID, nodeID string)
+}
+
 // LiveEventSource is an optional provider capability: read a running node's
 // full event log straight from its live sandbox. The engine type-asserts for
 // it so non-sandbox providers (tests) simply have no live source.

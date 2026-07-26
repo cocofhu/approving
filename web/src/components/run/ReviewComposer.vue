@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import ClarifyChat from './ClarifyChat.vue'
 import ParagraphInput from '../ui/ParagraphInput.vue'
-import type { ClarifyTurn, ClarifyImage, ReactAnnotation } from '@/lib/types'
+import type { ClarifyTurn, ClarifyImage, ReactAnnotation, AcpEvent } from '@/lib/types'
 import AnnotationChip from './AnnotationChip.vue'
 
 /**
@@ -67,9 +67,22 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: 'send', text: string, images: ClarifyImage[], annotations: ReactAnnotation[]): void
   (e: 'finish'): void
+  (e: 'cancel'): void
   (e: 'reject'): void
   (e: 'pass'): void
 }>()
+
+const chatRef = ref<{
+  applyReviewFrame: (frame: any) => void
+  applyAcpEvents: (events: AcpEvent[] | undefined) => void
+  cancelReview: () => void
+} | null>(null)
+
+defineExpose({
+  applyReviewFrame: (frame: any) => chatRef.value?.applyReviewFrame(frame),
+  applyAcpEvents: (events: AcpEvent[] | undefined) => chatRef.value?.applyAcpEvents(events),
+  cancelReview: () => chatRef.value?.cancelReview(),
+})
 
 const { t } = useI18n()
 
@@ -119,6 +132,7 @@ function onPass() {
   <!-- Clarify / review: reuse ClarifyChat (chip + image + threshold already wired). -->
   <ClarifyChat
     v-if="mode === 'clarify' || mode === 'review'"
+    ref="chatRef"
     class="h-full min-h-0"
     :run-id="runId || ''"
     :node-id="nodeId || ''"
@@ -136,6 +150,7 @@ function onPass() {
     :confirm-error="confirmError"
     @send="(text, images, anns) => emit('send', text, images, anns)"
     @finish="emit('finish')"
+    @cancel="emit('cancel')"
   />
 
   <!-- Gate: local composer with dual sticky actions (no ClarifyChat turns required). -->

@@ -106,6 +106,15 @@ const liveEvents = reactive<Record<string, AcpEvent[]>>({})
 // processing the turn), pushed alongside the acp events over the WebSocket.
 const liveBusy = reactive<Record<string, boolean>>({})
 const liveNode = ref<string | null>(null)
+/** ClarifyChat / ReviewComposer surface for review WS frames (queue/stream/Cancel). */
+const reviewChatRef = ref<{
+  applyReviewFrame?: (frame: any) => void
+  applyAcpEvents?: (events: AcpEvent[] | undefined) => void
+} | null>(null)
+const gateApprovalRef = ref<{
+  applyReviewFrame?: (frame: any) => void
+  applyAcpEvents?: (events: AcpEvent[] | undefined) => void
+} | null>(null)
 const manual = ref(false)
 // Per-node fetch generation: discard stale REST responses so a slow empty
 // reply cannot overwrite a newer non-empty write-back.
@@ -470,6 +479,19 @@ function connectWs() {
       if (typeof m.busy === 'boolean') liveBusy[m.nodeId] = m.busy
       liveNode.value = m.nodeId
       if (!manual.value) selected.value = m.nodeId
+      // Dialogue-surface stream (ClarifyChat / GateApproval), not only LiveLog.
+      if (selClarify.value?.nodeId === m.nodeId) {
+        reviewChatRef.value?.applyAcpEvents?.(wsEvents)
+      }
+      if (run.value.gate?.reactUpstreamNodeId === m.nodeId) {
+        gateApprovalRef.value?.applyAcpEvents?.(wsEvents)
+      }
+    } else if (m.type === 'review' && m.nodeId) {
+      reviewChatRef.value?.applyReviewFrame?.(m)
+      gateApprovalRef.value?.applyReviewFrame?.(m)
+      if (m.event === 'turn_done' || m.event === 'error') {
+        loadRun(false)
+      }
     } else if (
       m.type === 'trace' ||
       m.type === 'status' ||
@@ -552,7 +574,19 @@ async function onClarifySend(
       clarifyConfirmError.value = e?.message || t('pages.runDetail.gateError')
     }
   }
-  await loadRun(false)
+  // Review enqueue returns before the turn finishes — avoid wiping live bubbles.
+  if (force || !reviewActive.value) {
+    await loadRun(false)
+  }
+}
+async function onClarifyCancel() {
+  const conv = selClarify.value
+  if (!conv || conv.done) return
+  try {
+    await api.reactCancel(runId.value, conv.nodeId)
+  } catch (e: any) {
+    console.warn('reactCancel failed', e?.message || e)
+  }
 }
 // Clarify: finish early. Review: confirm product & advance (different prompt).
 function onClarifyFinish() {
@@ -1743,6 +1777,7 @@ function selectExecution(nodeId: string, idx: number) {
             <template v-else>
             <GateApproval
               v-if="nodeTab === 'gate' && run.gate"
+              ref="gateApprovalRef"
               :gate="run.gate"
               :run="run"
               :fill-preview="true"
@@ -1774,6 +1809,7 @@ function selectExecution(nodeId: string, idx: number) {
               </div>
               <ClarifyChat
                 v-else-if="selClarify"
+                ref="reviewChatRef"
                 :run-id="run.id"
                 :node-id="selClarify.nodeId"
                 :iteration="selClarify.iteration ?? 1"
@@ -1784,6 +1820,7 @@ function selectExecution(nodeId: string, idx: number) {
                 :active="clarifyInputActive"
                 @send="onClarifySend"
                 @finish="onClarifyFinish"
+                @cancel="onClarifyCancel"
               />
               <ClarifyBootLoader v-else :phase="selStatus === 'pending' ? 'pending' : 'starting'" />
             </template>
@@ -1801,6 +1838,7 @@ function selectExecution(nodeId: string, idx: number) {
                 <template #sidebar>
                   <ReviewComposer
                     v-if="selClarify"
+                    ref="reviewChatRef"
                     mode="review"
                     :run-id="run.id"
                     :node-id="selClarify.nodeId"
@@ -1814,6 +1852,7 @@ function selectExecution(nodeId: string, idx: number) {
                     :confirm-error="clarifyConfirmError"
                     @send="onClarifySend"
                     @finish="onClarifyFinish"
+                    @cancel="onClarifyCancel"
                   />
                   <ClarifyBootLoader v-else :phase="selStatus === 'pending' ? 'pending' : 'starting'" />
                 </template>

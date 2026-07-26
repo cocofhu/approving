@@ -920,8 +920,6 @@ const isEditing = computed(() => {
   return false
 })
 
-defineExpose({ isEditing })
-
 // --- ReAct 打回修改 (in-place edit of the upstream producer's live session) ---
 // Only offered when the DTO reports the upstream producer's review session is
 // still alive; otherwise the reviewer uses the normal approve/reject buttons
@@ -930,6 +928,11 @@ const canReactRevise = computed(() => !!props.gate.reactSessionAlive && resolved
 const reactText = ref('')
 const reactImages = ref<ClarifyImage[]>([])
 const reactSending = ref(false)
+/** Sandbox-aligned: pending-send queue + in-flight turn (HTTP returns on enqueue). */
+const reactQueued = ref<{ text: string }[]>([])
+const reactThinking = ref(false)
+const reactStreamText = ref('')
+const reactInterrupted = ref(false)
 const reactError = ref<string | null>(null)
 const feedbackChatRef = ref<{
   send: (opts?: { body?: string }) => Promise<boolean>
@@ -953,6 +956,55 @@ const canSubmitReact = computed(
       reactAnnotations.value.length > 0 ||
       !!pickedElementImage.value?.data),
 )
+
+function applyReviewFrame(frame: {
+  event?: string
+  nodeId?: string
+  item?: { text?: string }
+  interrupted?: boolean
+  message?: string
+}) {
+  const producer = props.gate.reactUpstreamNodeId
+  if (producer && frame.nodeId && frame.nodeId !== producer) return
+  switch (frame.event) {
+    case 'turn_begin':
+      reactQueued.value.shift()
+      reactThinking.value = true
+      reactStreamText.value = ''
+      reactInterrupted.value = false
+      break
+    case 'turn_done':
+      reactThinking.value = reactQueued.value.length > 0
+      if (frame.interrupted) reactInterrupted.value = true
+      break
+    case 'error':
+      reactThinking.value = reactQueued.value.length > 0
+      reactError.value = frame.message || reactError.value
+      if (frame.interrupted) reactInterrupted.value = true
+      break
+  }
+}
+
+function applyAcpEvents(events: { kind?: string; text?: string }[] | undefined) {
+  if (!reactThinking.value || !events?.length) return
+  for (const ev of events) {
+    if (ev.kind === 'message' && ev.text) reactStreamText.value = ev.text
+  }
+}
+
+async function cancelReactRevise() {
+  if (!props.run?.id || !canReactRevise.value) return
+  reactQueued.value = []
+  reactThinking.value = false
+  reactInterrupted.value = true
+  try {
+    await api.gateReactCancel(props.run.id, props.gate.nodeId)
+  } catch (e: any) {
+    reactError.value = e?.message || t('pages.gateApproval.reactRevise.failed')
+  }
+}
+
+defineExpose({ isEditing, applyReviewFrame, applyAcpEvents, cancelReactRevise })
 
 /** 记入意见 requires PreviewIssue-capable content (API: body or images). */
 const canRecordIssue = computed(
@@ -1043,19 +1095,24 @@ async function recordFeedbackIssue() {
 /** Non-preview ReviewComposer path: gateReactRevise only. */
 async function sendReactRevise() {
   if (!props.run?.id || !canSubmitReact.value) return
+  const body = reactText.value.trim()
+  reactQueued.value.push({ text: body })
+  reactThinking.value = true
   reactSending.value = true
   reactError.value = null
   try {
     await api.gateReactRevise(
       props.run.id,
       props.gate.nodeId,
-      reactText.value.trim(),
+      body,
       reactImages.value.map((im) => ({ data: im.data, mimeType: im.mimeType })),
       reactAnnotations.value.slice(),
     )
     clearUnifiedDraft()
     emit('react-revised')
   } catch (e: any) {
+    reactQueued.value.pop()
+    reactThinking.value = reactQueued.value.length > 0 || reactStreamText.value.length > 0
     reactError.value = e?.message || t('pages.gateApproval.reactRevise.failed')
   } finally {
     reactSending.value = false
@@ -1131,14 +1188,21 @@ async function sendHotReject() {
     selector: pickedSelector.value,
     elementImage: pickedElementImage.value,
   }
+  reactQueued.value.push({ text: body || '(annotate)' })
+  reactThinking.value = true
   try {
     const synced = await syncHotRejectHistory(anns)
-    if (!synced) return
+    if (!synced) {
+      reactQueued.value.pop()
+      return
+    }
 
     await api.gateReactRevise(props.run.id, props.gate.nodeId, body, reviseImages, anns)
     clearUnifiedDraft()
     emit('react-revised')
   } catch (e: any) {
+    reactQueued.value.pop()
+    reactThinking.value = reactQueued.value.length > 0
     if (hotRejectHistorySynced.value) {
       reactError.value = t('pages.gateApproval.reactRevise.issueSavedReviseFailed')
       reactText.value = draftSnap.text
@@ -1450,6 +1514,40 @@ function onComposerReject() {
                     <Icon name="arrow-left" :size="14" />
                     {{ reactSending ? t('pages.gateApproval.reactRevise.sending') : composerRejectLabel }}
                   </button>
+                  <button
+                    v-if="canReactRevise && (reactThinking || reactQueued.length)"
+                    type="button"
+                    class="inline-flex min-h-[44px] items-center justify-center gap-1.5 border border-line bg-elevated px-3 text-sm font-medium text-txt2"
+                    data-testid="gate-react-cancel"
+                    title="Cancel"
+                    @click="cancelReactRevise"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <div
+                  v-if="reactQueued.length"
+                  class="mt-2 rounded border border-line bg-base/40 px-2 py-1.5"
+                  data-testid="gate-react-queue"
+                >
+                  <div class="mb-1 text-[11px] text-txt3">
+                    {{ t('pages.agentChatTester.queue', { n: reactQueued.length }) }}
+                  </div>
+                  <div
+                    v-for="(q, qi) in reactQueued"
+                    :key="qi"
+                    class="truncate text-[12px] text-txt2"
+                  >
+                    {{ qi + 1 }}. {{ q.text }}
+                  </div>
+                </div>
+                <div
+                  v-if="reactThinking && reactStreamText"
+                  class="mt-2 max-h-28 overflow-y-auto rounded border border-line bg-surface px-2 py-1.5 text-[12px] text-txt2"
+                  data-testid="gate-react-stream"
+                >
+                  {{ reactStreamText }}
+                  <span v-if="reactInterrupted" class="ml-1 text-[10px] text-warn">interrupted</span>
                 </div>
               </div>
               <div v-else class="mt-2 flex shrink-0 flex-wrap gap-3">

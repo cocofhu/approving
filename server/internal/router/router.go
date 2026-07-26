@@ -135,9 +135,11 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.DELETE("/runs/:id/nodes/:nodeId/preview-issues/:issueId", h.DeletePreviewIssue)
 		api.POST("/runs/:id/gates/:nodeId/resume", h.ResumeGate)
 		api.POST("/runs/:id/gates/:nodeId/react-revise", h.GateReactRevise)
+		api.POST("/runs/:id/gates/:nodeId/react-cancel", h.GateReactCancel)
 		api.GET("/runs/:id/gates/:nodeId/primary-artifacts", h.ListGatePrimaryArtifacts)
 		api.PUT("/runs/:id/gates/:nodeId/artifacts/:name", h.SaveGateArtifact)
 		api.POST("/runs/:id/react/:nodeId/reply", h.ReactReply)
+		api.POST("/runs/:id/react/:nodeId/cancel", h.ReactCancel)
 		api.GET("/runs/:id/events", h.RunEvents)
 
 		api.GET("/gates", h.ListGates)

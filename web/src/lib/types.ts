@@ -455,6 +455,10 @@ export interface ClarifyTurn {
   questions?: ReactQuestion[]
   // Precise field/element annotations the human attached this review turn.
   annotations?: ReactAnnotation[]
+  /** Agent turn stopped mid-stream by 轮级 Cancel; partial text retained. */
+  interrupted?: boolean
+  /** Live streaming agent bubble (not yet persisted). */
+  streaming?: boolean
 }
 
 export interface Gate {

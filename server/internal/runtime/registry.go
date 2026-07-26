@@ -124,6 +124,16 @@ func (r *ProviderRegistry) RetireSession(runID, nodeID string) {
 	}
 }
 
+// CancelSessionTurn aborts an in-flight review turn on every backend that
+// supports ReviewTurnCanceller (keeps the session parked).
+func (r *ProviderRegistry) CancelSessionTurn(runID, nodeID string) {
+	for _, p := range r.providers {
+		if cp, ok := p.(ReviewTurnCanceller); ok {
+			cp.CancelSessionTurn(runID, nodeID)
+		}
+	}
+}
+
 func (r *ProviderRegistry) LiveNodeEvents(ctx context.Context, runID, nodeID string) ([]models.AcpEvent, bool, error) {
 	for _, p := range r.providers {
 		if src, ok := p.(LiveEventSource); ok {

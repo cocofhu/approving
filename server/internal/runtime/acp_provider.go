@@ -1037,6 +1037,18 @@ func (c *acpProvider) RetireSession(runID, nodeID string) {
 	c.closeSession(runID + "|" + nodeID)
 }
 
+// CancelSessionTurn aborts the in-flight ACP turn on a parked review session
+// without retiring it. Bridge {op:cancel} also clears the sandbox PromptQueue
+// (dual-layer sync with the platform review FIFO).
+func (c *acpProvider) CancelSessionTurn(runID, nodeID string) {
+	c.mu.Lock()
+	sess := c.sessions[runID+"|"+nodeID]
+	c.mu.Unlock()
+	if sess != nil && sess.acp != nil {
+		_ = sess.acp.Cancel()
+	}
+}
+
 // enforceOpenQuestionsGate implements the clarification gate: when the agent
 // tries to finish (raised no ask_question this turn) but its clarified
 // requirement still lists unresolved open_questions, re-prompt it (same session)

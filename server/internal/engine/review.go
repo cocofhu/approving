@@ -1,9 +1,7 @@
 package engine
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -220,53 +218,28 @@ func isReviewNode(nodeType string) bool {
 	return nodeType != "react" && nodereg.ReviewCapable(nodeType)
 }
 
-// reviewReply drives one turn of a post-run review dialogue. force=false does a
-// single in-place edit against the parked session and stays paused; force=true
-// accepts the current store snapshot without Agent wrap-up: re-validate the
-// product contract, then Done+RetireSession+routeSuccess (or keep paused on
-// failure). The caller (ReactReply) already appended the human turn to conv and
-// holds the per-conversation lock.
+// reviewReply finalizes a post-run review dialogue when force=true: accepts the
+// current store snapshot without Agent wrap-up, re-validates the product
+// contract, then Done+RetireSession+routeSuccess (or keep paused on failure).
+// Non-force revise turns are handled by EnqueueReviewTurn / pumpReviewSession
+// (platform FIFO + turn_begin materialization). The caller (ReactReply) already
+// appended the human turn to conv and holds the per-conversation lock.
 func (e *Engine) reviewReply(c *execCtx, node *models.Node, conv *models.ReactConversation, human string, images []models.PromptImage, force bool) error {
 	runID, nodeID := c.run.ID, node.ID
-	req := e.nodeReq(c, node) // SetActiveNode + KeepAliveForReview + ClearOutcome
+	_ = human
+	_ = images
+	_ = e.nodeReq(c, node) // SetActiveNode + KeepAliveForReview + ClearOutcome
 	e.host.SetActiveReview(runID, true)
 
 	if !force {
-		rp, ok := e.provider.(runtime.ReviewProvider)
-		if !ok {
-			return errors.New("当前执行后端不支持 ReAct 复审")
-		}
-		t := rp.ReviseInPlace(context.Background(), req, conv.Messages, human, images)
-		conv.Messages = append(conv.Messages, models.ReactMessage{Role: "agent", Text: t.Msg,
-			At: time.Now().Format(time.RFC3339), Questions: t.Questions})
-		logDB(e.db.Save(conv), runID, "save review revise turn")
-		e.flushMcpCalls(runID, nodeID)
-		// Align with resume.go clarify mid-turns: merge this revise turn's token
-		// delta onto the same StateRun while the node stays paused.
-		e.flushTokenUsage(runID, nodeID, t.Usage)
-		if t.Err != nil {
-			log.Warn().Err(t.Err).Str("run_id", runID).Str("node_id", nodeID).
-				Msg("review revise turn failed (session kept for retry)")
-			// Surface the failure to the chat UI via the agent turn above; do not
-			// fail the HTTP call so the human can retry without losing history.
-			// Do not sync outputs/BodyMd on failure — keep the last successful preview.
-			e.broker.Publish(runID, jsonMsg("react", runID, nodeID))
-			return nil
-		}
-		// Align with GateReactRevise: sync producer outputs + pending gate BodyMd
-		// so GateApproval / Clarify / BodyMd follow the live product without a
-		// full-node re-run.
-		e.refreshProducerOutputs(c, node)
-		e.refreshPendingGatesForProducer(c, nodeID)
-		e.broker.Publish(runID, jsonMsg("react", runID, nodeID))
-		e.broker.Publish(runID, jsonMsg("artifact_edit", runID, nodeID))
-		return nil
+		return errors.New("internal: review non-force must use EnqueueReviewTurn")
 	}
 
-	// Force finish (no Agent): discard in-flight revise session, finalize from
-	// the store snapshot, run afterDefaultChecks, then Done only on success.
+	// Force finish (no Agent): retire parked session, finalize from the store
+	// snapshot, run afterDefaultChecks, then Done only on success.
 	// Must not call ReactReply / finishAgentOutcome / TakeOutcome / routeFailure.
 	// Human turn is already persisted by ReactReply; no Agent prompt is sent.
+	// Ready-gate is enforced by ReactReply before taking the lock.
 	if rp, ok := e.provider.(runtime.ReviewProvider); ok {
 		rp.RetireSession(runID, nodeID)
 	}
@@ -306,19 +279,17 @@ func (e *Engine) reviewReply(c *execCtx, node *models.Node, conv *models.ReactCo
 	return nil
 }
 
-// GateReactRevise sends a ReAct reject-and-annotate from a pending approval gate
-// to the upstream producer's still-alive sandbox session: the producer edits its
-// product in place, the gate body is refreshed, and the gate stays pending for
-// further rounds. Requires the upstream session to be alive (KeepAliveForReview
-// parked it); otherwise the caller should fall back to a normal reject.
+// GateReactRevise enqueues a ReAct reject-and-annotate from a pending approval
+// gate onto the upstream producer's review session controller (same FIFO /
+// Cancel surface as node-inline ReactReply). Returns immediately after enqueue;
+// the pump persists turns, refreshes gate BodyMd, and keeps the gate pending.
+// Requires the upstream session to be alive; otherwise the caller should fall
+// back to a normal reject.
 func (e *Engine) GateReactRevise(runID, gateNodeID, text string, images []models.PromptImage, annotations []models.ReactAnnotation) error {
 	if e.IsHalted() {
 		return errors.New("server is shutting down")
 	}
-	unlock := e.lockResume(runID + ":" + gateNodeID)
-	defer unlock()
-
-	c, gate, gateNode, err := e.loadPendingGate(runID, gateNodeID)
+	c, _, gateNode, err := e.loadPendingGate(runID, gateNodeID)
 	if err != nil {
 		return err
 	}
@@ -326,75 +297,15 @@ func (e *Engine) GateReactRevise(runID, gateNodeID, text string, images []models
 	if producerID == "" {
 		return errors.New("无法定位上游生产节点,无法就地修改")
 	}
-	producer := c.graph.FindNode(producerID)
-	if producer == nil {
+	if c.graph.FindNode(producerID) == nil {
 		return errors.New("上游生产节点不存在")
 	}
 	rp, ok := e.provider.(runtime.ReviewProvider)
 	if !ok || !rp.HasLiveSession(runID, producerID) {
 		return errors.New("上游会话已不存在,请改用普通打回(冷启动)")
 	}
-
-	// Find/create the producer's review conversation at its latest iteration.
-	iter := c.iter[producerID]
-	if iter < 1 {
-		iter = 1
-	}
-	var conv models.ReactConversation
-	cerr := e.db.Where("run_id = ? AND node_id = ? AND iteration = ?", runID, producerID, iter).First(&conv).Error
-	if cerr != nil {
-		conv = models.ReactConversation{RunID: runID, NodeID: producerID, Iteration: iter, Done: false,
-			Messages: []models.ReactMessage{{Role: "agent", Text: e.reviewSummaryMarkdown(c, producer),
-				At: time.Now().Format(time.RFC3339)}}}
-		logDB(e.db.Create(&conv), runID, "seed gate-react producer conversation")
-	}
-	if conv.Done {
-		return errors.New("上游复审会话已结束")
-	}
-	effective := renderReviewHuman(text, annotations)
-	conv.Messages = append(conv.Messages, models.ReactMessage{Role: "human", Text: text,
-		At: time.Now().Format(time.RFC3339), Images: images, Annotations: annotations})
-
-	req := e.nodeReq(c, producer) // SetActiveNode(producer) so set_*/get_* authorize
-	e.host.SetActiveReview(runID, true)
-	t := rp.ReviseInPlace(context.Background(), req, conv.Messages, effective, images)
-	conv.Messages = append(conv.Messages, models.ReactMessage{Role: "agent", Text: t.Msg,
-		At: time.Now().Format(time.RFC3339), Questions: t.Questions})
-	logDB(e.db.Save(&conv), runID, "save gate-react producer turn")
-	e.flushMcpCalls(runID, producerID)
-	e.flushTokenUsage(runID, producerID, t.Usage)
-	if t.Err != nil {
-		log.Warn().Err(t.Err).Str("run_id", runID).Str("gate", gateNodeID).
-			Str("producer", producerID).Msg("gate-react revise failed")
-		e.broker.Publish(runID, jsonMsg("react", runID, producerID))
-		return fmt.Errorf("上游就地修改失败: %w", t.Err)
-	}
-
-	// Re-derive the producer's outputs from the edited product and refresh the
-	// gate body so its {{nodes.<producer>.outputs.*}} previews the new content.
-	e.refreshProducerOutputs(c, producer)
-	if c2, err2 := e.loadCtx(runID); err2 == nil {
-		if bt, _ := gateNode.Config["body_template"].(string); strings.TrimSpace(bt) != "" {
-			gate.BodyMd = e.interpolate(c2, bt)
-			logDB(e.db.Save(&gate), runID, "refresh gate body after gate-react revise")
-		} else if gateNode.Type == "proposal_select" {
-			from := firstNonEmptyStr(str(gateNode.Config["from"]), mcp.ProposalsArtifactName)
-			if s, ok := e.store.Get(runID, from); ok {
-				gate.BodyMd = mcp.RenderProposalsMarkdown(s)
-				logDB(e.db.Save(&gate), runID, "refresh proposal_select body after gate-react revise")
-			}
-		}
-	} else {
-		log.Warn().Err(err2).Str("run_id", runID).Str("gate", gateNodeID).
-			Msg("reload ctx after gate-react revise failed; gate body not refreshed")
-	}
-	e.appendTrace(c, models.TraceEntry{NodeID: gateNodeID, Event: "resume",
-		Detail: "ReAct 打回 → 上游 " + producerID + " 就地修改"})
-	e.broker.Publish(runID, jsonMsg("react", runID, producerID))
-	e.broker.Publish(runID, jsonMsg("artifact_edit", runID, gateNodeID))
-	log.Info().Str("run_id", runID).Str("gate", gateNodeID).Str("producer", producerID).
-		Msg("gate-react revise completed")
-	return nil
+	_, err = e.EnqueueReviewTurn(runID, producerID, text, images, annotations, "gate", gateNodeID)
+	return err
 }
 
 // GateReactInfo resolves a gate's upstream producer node and whether its review

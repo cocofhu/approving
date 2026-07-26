@@ -110,6 +110,9 @@ type fakeProvider struct {
 	// reviseUsage (test-only): when set, ReviseInPlace returns this Usage delta
 	// so flushTokenUsage on review/gate-react revise turns can be asserted.
 	reviseUsage *models.TokenUsage
+	// reviseHold (test-only): when non-nil, ReviseInPlace blocks until the
+	// channel is closed (simulates a long in-flight turn for Cancel/ready tests).
+	reviseHold <-chan struct{}
 }
 
 // nextStructuredBody returns the reserved-artifact body to write for nodeID on
@@ -444,11 +447,21 @@ func (f *fakeProvider) ReviseInPlace(ctx context.Context, req runtime.NodeReq, h
 	f.mu.Lock()
 	skipWrite := f.reviseSkipWrite
 	revErr := f.reviseErr
+	hold := f.reviseHold
 	if f.reviseCalls == nil {
 		f.reviseCalls = map[string]int{}
 	}
 	f.reviseCalls[req.NodeID]++
 	f.mu.Unlock()
+
+	if hold != nil {
+		select {
+		case <-hold:
+		case <-ctx.Done():
+			return runtime.ReactTurn{Msg: "(已中断)", Done: false, Err: ctx.Err(),
+				Events: []models.AcpEvent{{Kind: "message", Text: "revise-cancelled"}}}
+		}
+	}
 
 	if !skipWrite {
 		if name, body := fakeStructured(req.NodeType); name != "" {
@@ -490,6 +503,9 @@ func (f *fakeProvider) RetireSession(runID, nodeID string) {
 	f.retired[f.parkKey(runID, nodeID)] = true
 	f.mu.Unlock()
 }
+
+// CancelSessionTurn is a no-op for the fake (no live ACP); optional interface.
+func (f *fakeProvider) CancelSessionTurn(runID, nodeID string) {}
 
 func kindOf(name string) string {
 	switch {
