@@ -600,7 +600,8 @@ describe('PmSettingsPanel gate-auto config', () => {
     await w.get('[data-testid="pm-leader-save"]').trigger('click')
     await flushPromises()
 
-    const body = apiMocks.updatePmLeader.mock.calls.at(-1)?.[1] as {
+    const updateCalls = apiMocks.updatePmLeader.mock.calls
+    const body = updateCalls[updateCalls.length - 1]?.[1] as {
       gateAutoVar: string
       gateAutoPrompt: string
     }
