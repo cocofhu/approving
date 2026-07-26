@@ -6,7 +6,9 @@ import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import { api, type SandboxView } from '@/lib/api'
+import { copyToClipboard } from '@/lib/copyToClipboard'
 import { useBreakpoint } from '@/lib/useBreakpoint'
+import { useToast } from '@/lib/useToast'
 
 const SKELETON_ROWS = 6
 const SKELETON_CARDS = 4
@@ -17,6 +19,7 @@ let hasInitialLoaded = false
 
 const router = useRouter()
 const { t } = useI18n()
+const toast = useToast()
 const { isMobile } = useBreakpoint()
 const rows = ref<SandboxView[]>([])
 const loading = ref(false)
@@ -205,29 +208,29 @@ function closeDetail() {
 }
 
 async function copyText(key: string, text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-    copiedKey.value = key
-    if (detailCopiedTimer) window.clearTimeout(detailCopiedTimer)
-    detailCopiedTimer = window.setTimeout(() => {
-      if (copiedKey.value === key) copiedKey.value = ''
-    }, 1200)
-  } catch {
-    /* clipboard unavailable */
+  const ok = await copyToClipboard(text)
+  if (!ok) {
+    toast.error(t('common.toast.copyFailed'))
+    return
   }
+  copiedKey.value = key
+  if (detailCopiedTimer) window.clearTimeout(detailCopiedTimer)
+  detailCopiedTimer = window.setTimeout(() => {
+    if (copiedKey.value === key) copiedKey.value = ''
+  }, 1200)
 }
 
 async function copySandboxId(s: SandboxView) {
-  try {
-    await navigator.clipboard.writeText(String(s.id))
-    copiedId.value = s.id
-    if (copiedTimer) window.clearTimeout(copiedTimer)
-    copiedTimer = window.setTimeout(() => {
-      if (copiedId.value === s.id) copiedId.value = null
-    }, 1500)
-  } catch {
-    /* clipboard unavailable */
+  const ok = await copyToClipboard(String(s.id))
+  if (!ok) {
+    toast.error(t('common.toast.copyFailed'))
+    return
   }
+  copiedId.value = s.id
+  if (copiedTimer) window.clearTimeout(copiedTimer)
+  copiedTimer = window.setTimeout(() => {
+    if (copiedId.value === s.id) copiedId.value = null
+  }, 1500)
 }
 
 async function stop(s: SandboxView) {
