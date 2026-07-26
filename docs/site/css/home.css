@@ -1565,7 +1565,7 @@
 .demo-marquee {
   position: absolute;
   left: 52%;
-  bottom: 12%;
+  top: 70%; /* ≈ 100% − 12% − 18%: grow top-left → bottom-right (was bottom:12%) */
   width: 0;
   height: 0;
   border: 2px solid #ef4444;
@@ -2012,8 +2012,8 @@ html:lang(en) .demo-marquee::after {
 
 .demo-cursor {
   position: absolute;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 20px;
   left: 0;
   top: 0;
   z-index: 9;
@@ -2022,18 +2022,21 @@ html:lang(en) .demo-marquee::after {
   transition: left 0.5s cubic-bezier(0.22, 0.8, 0.28, 1), top 0.5s cubic-bezier(0.22, 0.8, 0.28, 1), opacity 0.2s ease;
 }
 
+/* Standard OS-style NW arrow (hotspot = tip at left/top); pure CSS, no extra DOM */
 .demo-cursor::before {
   content: "";
   position: absolute;
-  border-style: solid;
-  border-width: 0 0 16px 12px;
-  border-color: transparent transparent transparent currentColor;
-  color: #18181b;
+  left: 0;
+  top: 0;
+  width: 16px;
+  height: 20px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 20'%3E%3Cpath d='M1 1 L1 16 L5.2 12.4 L8.2 19 L10.4 18 L7.4 11.4 L13 11.4 Z' fill='%23111' stroke='%23fff' stroke-width='1.2' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat 0 0 / 16px 20px;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
 }
 
+/* Dark panels: light fill + dark stroke for contrast */
 .panel:not(.panel--light) .demo-cursor::before {
-  color: #ededf0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 20'%3E%3Cpath d='M1 1 L1 16 L5.2 12.4 L8.2 19 L10.4 18 L7.4 11.4 L13 11.4 Z' fill='%23ededf0' stroke='%23181b1f' stroke-width='1.2' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
 .demo-cursor.is-visible { opacity: 1; }
