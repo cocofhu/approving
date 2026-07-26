@@ -62,6 +62,8 @@ func (h *Handlers) UpdatePmLeader(c *gin.Context) {
 		Enabled        *bool    `json:"enabled"`
 		AgentConfigRef *string  `json:"agentConfigRef"`
 		EnabledMcps    []string `json:"enabledMcps"`
+		GateAutoVar    *string  `json:"gateAutoVar"`
+		GateAutoPrompt *string  `json:"gateAutoPrompt"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -71,7 +73,7 @@ func (h *Handlers) UpdatePmLeader(c *gin.Context) {
 	if body.EnabledMcps != nil {
 		mcps = body.EnabledMcps
 	}
-	b, err := h.Pm.UpdateBinding(c.Param("id"), body.Enabled, body.AgentConfigRef, mcps)
+	b, err := h.Pm.UpdateBinding(c.Param("id"), body.Enabled, body.AgentConfigRef, mcps, body.GateAutoVar, body.GateAutoPrompt)
 	if err != nil {
 		writePmErr(c, err)
 		return

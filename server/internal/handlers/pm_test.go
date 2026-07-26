@@ -370,7 +370,7 @@ func TestListPmMemoriesScopedByRole(t *testing.T) {
 	}
 	en := true
 	agentA := "agent-a"
-	if _, err := pm.UpdateBinding(pid, &en, &agentA, nil); err != nil {
+	if _, err := pm.UpdateBinding(pid, &en, &agentA, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -421,7 +421,7 @@ func TestListPmMemoriesScopedByRole(t *testing.T) {
 
 	empty := ""
 	dis := false
-	if _, err := pm.UpdateBinding(pid, &dis, &empty, nil); err != nil {
+	if _, err := pm.UpdateBinding(pid, &dis, &empty, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	w = hn.do(http.MethodGet, "/api/projects/"+pid+"/pm/memories", nil)

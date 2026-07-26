@@ -60,7 +60,7 @@ func TestPurgeAgentProjectData(t *testing.T) {
 	}
 	en := true
 	agent := "agent-x"
-	if _, err := pm.UpdateBinding(pA.ID, &en, &agent, nil); err != nil {
+	if _, err := pm.UpdateBinding(pA.ID, &en, &agent, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pm.UpsertMemory(pB.ID, "agent-x", "XB", "keep", "agent", "x"); err != nil {
@@ -123,14 +123,14 @@ func TestUpdateBindingRequiresAgentHomeProject(t *testing.T) {
 	}
 	en := true
 	agent := "home-b"
-	if _, err := pm.UpdateBinding(pA.ID, &en, &agent, nil); !errors.Is(err, ErrPmLeaderProjectMismatch) {
+	if _, err := pm.UpdateBinding(pA.ID, &en, &agent, nil, nil, nil); !errors.Is(err, ErrPmLeaderProjectMismatch) {
 		t.Fatalf("want ErrPmLeaderProjectMismatch, got %v", err)
 	}
 	if err := skills.Save(Agent{Name: "home-a", ProjectID: pA.ID}); err != nil {
 		t.Fatal(err)
 	}
 	agent = "home-a"
-	if _, err := pm.UpdateBinding(pA.ID, &en, &agent, nil); err != nil {
+	if _, err := pm.UpdateBinding(pA.ID, &en, &agent, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 }

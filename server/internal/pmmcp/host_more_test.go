@@ -29,7 +29,7 @@ func setupPmMCPHost(t *testing.T) (*gorm.DB, *services.PmService, *Host, models.
 	pm := services.NewPmService(db, nil)
 	en := true
 	agent := "agent-a"
-	if _, err := pm.UpdateBinding(p.ID, &en, &agent, []string{MCPProgress, MCPWorkflowRead, MCPWorkflowWrite}); err != nil {
+	if _, err := pm.UpdateBinding(p.ID, &en, &agent, []string{MCPProgress, MCPWorkflowRead, MCPWorkflowWrite}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	wf := services.NewWorkflowService(db)
@@ -76,7 +76,7 @@ func TestPmMCPServeRPCBranches(t *testing.T) {
 		t.Fatal(err)
 	}
 	empty := []string{}
-	if _, err := pm.UpdateBinding(disabled.ID, nil, nil, empty); err != nil {
+	if _, err := pm.UpdateBinding(disabled.ID, nil, nil, empty, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	tok2 := h.Register(disabled.ID, "t", "u", "agent-a")

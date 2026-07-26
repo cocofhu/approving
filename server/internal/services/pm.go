@@ -91,6 +91,12 @@ type PmLeaderBinding struct {
 	// EnabledMcps lists PM-only MCP ids (pm-progress, pm-workflow-read,
 	// pm-workflow-write). nil/omitted on disk means defaults; explicit empty means none.
 	EnabledMcps []string `json:"enabledMcps"`
+	// GateAutoVar is the run variable name that enables auto-invoking PM on
+	// gate pauses when present and truthy. Empty = capability off.
+	GateAutoVar string `json:"gateAutoVar"`
+	// GateAutoPrompt is optional text appended after the system default
+	// gate-auto guidance (may be empty).
+	GateAutoPrompt string `json:"gateAutoPrompt"`
 	// AclNote points users to Agent Studio for memory management.
 	AclNote string `json:"aclNote"`
 }
@@ -142,6 +148,8 @@ func (s *PmService) GetBinding(projectID string) (PmLeaderBinding, error) {
 		Enabled:        p.PmLeaderEnabled,
 		AgentConfigRef: p.PmLeaderAgent,
 		EnabledMcps:    EffectivePmEnabledMcps(p.PmEnabledMcps),
+		GateAutoVar:    p.PmGateAutoVar,
+		GateAutoPrompt: p.PmGateAutoPrompt,
 		AclNote:        pmLeaderAclNote,
 	}
 	if p.PmLeaderAgent == "" {
@@ -168,8 +176,11 @@ func (s *PmService) GetBinding(projectID string) (PmLeaderBinding, error) {
 	return b, nil
 }
 
-// UpdateBinding patches enable/agent/enabledMcps. Enabling requires a resolvable agent.
-func (s *PmService) UpdateBinding(projectID string, enabled *bool, agent *string, enabledMcps []string) (PmLeaderBinding, error) {
+// UpdateBinding patches enable/agent/enabledMcps/gate-auto fields.
+// Enabling requires a resolvable agent. gateAutoVar/gateAutoPrompt are optional
+// patches (nil = leave unchanged); empty string clears. Variable existence/type
+// is not validated at save time.
+func (s *PmService) UpdateBinding(projectID string, enabled *bool, agent *string, enabledMcps []string, gateAutoVar, gateAutoPrompt *string) (PmLeaderBinding, error) {
 	var p models.Project
 	if err := s.db.First(&p, "id = ?", projectID).Error; err != nil {
 		return PmLeaderBinding{}, ErrProjectNotFound
@@ -192,6 +203,12 @@ func (s *PmService) UpdateBinding(projectID string, enabled *bool, agent *string
 	if enabledMcps != nil {
 		// Explicit empty list disables all PM-only MCPs (do not expand to defaults).
 		p.PmEnabledMcps = FilterPmEnabledMcps(enabledMcps)
+	}
+	if gateAutoVar != nil {
+		p.PmGateAutoVar = strings.TrimSpace(*gateAutoVar)
+	}
+	if gateAutoPrompt != nil {
+		p.PmGateAutoPrompt = *gateAutoPrompt
 	}
 	if enabled != nil {
 		if *enabled {

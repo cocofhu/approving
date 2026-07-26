@@ -93,6 +93,10 @@ type Engine struct {
 	// issues resolves preview-issue lifecycle on gate resume. Optional in tests
 	// (nil falls back to a short-lived IssueService on e.db).
 	issues *services.IssueService
+
+	// gateAuto is an optional async observer for human_gate / proposal_select /
+	// app_preview pauses (PM auto-invoke). Engine never blocks on it.
+	gateAuto GateAutoInvoker
 }
 
 // New builds an engine.
@@ -946,6 +950,9 @@ func (e *Engine) execute(runID, fromNodeID string) {
 			// re-admitted / completed run and strand it with no driver.
 			if e.pauseStillPending(runID, node) {
 				e.finish(runID, "waiting_human")
+				// Async side-effect after Gate is visible / still pending.
+				// Must not block the FSM driver; failures are the invoker's concern.
+				e.fireGateAutoInvoke(c, node)
 			}
 			return
 		case "failed":

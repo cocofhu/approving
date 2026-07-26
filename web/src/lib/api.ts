@@ -379,7 +379,13 @@ export const api = {
 
   // PM Leader
   getPmLeader: (projectId: string) => req<PmLeaderBinding>(`/projects/${projectId}/pm-leader`),
-  updatePmLeader: (projectId: string, body: { enabled?: boolean; agentConfigRef?: string; enabledMcps?: string[] }) =>
+  updatePmLeader: (projectId: string, body: {
+    enabled?: boolean
+    agentConfigRef?: string
+    enabledMcps?: string[]
+    gateAutoVar?: string
+    gateAutoPrompt?: string
+  }) =>
     req<PmLeaderBinding>(`/projects/${projectId}/pm-leader`, {
       method: 'PUT',
       body: JSON.stringify(body),

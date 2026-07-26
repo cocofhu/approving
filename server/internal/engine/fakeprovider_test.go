@@ -285,6 +285,11 @@ func (f *fakeProvider) RunAgent(ctx context.Context, req runtime.NodeReq) (runti
 		}
 		out["artifact_id"] = id
 	}
+	// app_preview requires at least one set_preview registration before the
+	// engine will open the human approval gate.
+	if req.NodeType == "app_preview" && f.host != nil {
+		f.host.PutPreviewPortForTest(req.RunID, req.NodeID, 5173, "前端")
+	}
 	// visual nodes produce page.html only through write_artifact (no workspace
 	// file), mirroring the real contract; visualSkipProduces omits it to exercise
 	// the contract-miss path.
