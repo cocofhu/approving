@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
+import AppSwitch from '@/components/ui/AppSwitch.vue'
 import ParagraphInput from '@/components/ui/ParagraphInput.vue'
 import ArtifactLoadingPane from '@/components/run/ArtifactLoadingPane.vue'
 import ReposEditor, { type RepoRow } from '@/components/ReposEditor.vue'
@@ -215,17 +216,9 @@ function boolDisplayValue(key: string): 'true' | 'false' {
   return boolIsOn(key) ? 'true' : 'false'
 }
 
-function toggleBoolField(f: InputField) {
+function setBoolField(f: InputField, on: boolean) {
   if (f.editable === false) return
-  props.runInputs[f.key] = boolIsOn(f.key) ? 'false' : 'true'
-}
-
-function onBoolKeydown(e: KeyboardEvent, f: InputField) {
-  if (f.editable === false) return
-  if (e.key === ' ' || e.key === 'Enter') {
-    e.preventDefault()
-    toggleBoolField(f)
-  }
+  props.runInputs[f.key] = on ? 'true' : 'false'
 }
 
 async function startRun() {
@@ -326,24 +319,15 @@ async function startRun() {
           </select>
           <div
             v-else-if="f.type === 'bool'"
-            role="switch"
-            :aria-checked="boolIsOn(f.key)"
-            :aria-disabled="f.editable === false ? 'true' : undefined"
-            :tabindex="f.editable === false ? undefined : 0"
-            class="flex w-fit cursor-pointer select-none items-center gap-2.5"
-            :class="{ 'pointer-events-none opacity-60': f.editable === false }"
-            @click="toggleBoolField(f)"
-            @keydown="onBoolKeydown($event, f)"
+            class="flex w-fit select-none items-center gap-2.5"
+            :class="{ 'opacity-60': f.editable === false }"
           >
-            <span
-              class="relative h-5 w-9 shrink-0 transition"
-              :class="boolIsOn(f.key) ? 'bg-accent' : 'bg-line-strong'"
-            >
-              <span
-                class="absolute top-0.5 h-4 w-4 bg-white transition-all"
-                :class="boolIsOn(f.key) ? 'left-[18px]' : 'left-0.5'"
-              />
-            </span>
+            <AppSwitch
+              :model-value="boolIsOn(f.key)"
+              :disabled="f.editable === false"
+              :aria-label="f.desc || f.key"
+              @update:model-value="setBoolField(f, $event)"
+            />
             <span class="font-mono text-[12px] text-txt2">{{ boolDisplayValue(f.key) }}</span>
           </div>
           <input

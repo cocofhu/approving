@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AppSwitch from '@/components/ui/AppSwitch.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { api } from '@/lib/api'
 import type { ProjectMemoryItem, ChatThread, ChatMessage, AgentCronJob } from '@/lib/types'
@@ -366,24 +367,22 @@ onMounted(() => reload())
             <div class="mt-3 space-y-2">
               <label class="flex min-h-11 items-center justify-between gap-3 text-[12px] text-txt2">
                 <span>{{ t('pages.agentStudio.data.jobs.colEnabled') }}</span>
-                <input
-                  type="checkbox"
-                  class="h-5 w-5"
+                <AppSwitch
                   data-testid="agent-cron-enabled"
-                  :checked="job.enabled"
+                  :model-value="job.enabled"
                   :disabled="jobBusy === job.id"
-                  @change="patchJob(job, { enabled: ($event.target as HTMLInputElement).checked })"
+                  :aria-label="t('pages.agentStudio.data.jobs.colEnabled')"
+                  @update:model-value="patchJob(job, { enabled: $event })"
                 />
               </label>
               <label class="flex min-h-11 items-center justify-between gap-3 text-[12px] text-txt2">
                 <span>{{ t('pages.agentStudio.data.jobs.colDeliver') }}</span>
-                <input
-                  type="checkbox"
-                  class="h-5 w-5"
+                <AppSwitch
                   data-testid="agent-cron-deliver"
-                  :checked="job.deliverToChannel"
+                  :model-value="job.deliverToChannel"
                   :disabled="jobBusy === job.id"
-                  @change="patchJob(job, { deliverToChannel: ($event.target as HTMLInputElement).checked })"
+                  :aria-label="t('pages.agentStudio.data.jobs.colDeliver')"
+                  @update:model-value="patchJob(job, { deliverToChannel: $event })"
                 />
               </label>
               <button
@@ -415,21 +414,21 @@ onMounted(() => reload())
               <td class="px-2 py-2">{{ job.name }}</td>
               <td class="px-2 py-2 text-txt2">{{ job.scheduleKind }}: {{ job.scheduleExpr }}</td>
               <td class="px-2 py-2">
-                <input
-                  type="checkbox"
+                <AppSwitch
                   data-testid="agent-cron-enabled"
-                  :checked="job.enabled"
+                  :model-value="job.enabled"
                   :disabled="jobBusy === job.id"
-                  @change="patchJob(job, { enabled: ($event.target as HTMLInputElement).checked })"
+                  :aria-label="t('pages.agentStudio.data.jobs.colEnabled')"
+                  @update:model-value="patchJob(job, { enabled: $event })"
                 />
               </td>
               <td class="px-2 py-2">
-                <input
-                  type="checkbox"
+                <AppSwitch
                   data-testid="agent-cron-deliver"
-                  :checked="job.deliverToChannel"
+                  :model-value="job.deliverToChannel"
                   :disabled="jobBusy === job.id"
-                  @change="patchJob(job, { deliverToChannel: ($event.target as HTMLInputElement).checked })"
+                  :aria-label="t('pages.agentStudio.data.jobs.colDeliver')"
+                  @update:model-value="patchJob(job, { deliverToChannel: $event })"
                 />
               </td>
               <td class="px-2 py-2 text-right">

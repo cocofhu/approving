@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AppSwitch from '@/components/ui/AppSwitch.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import { api } from '@/lib/api'
@@ -122,13 +123,12 @@ onMounted(() => void load())
                   class="inline-flex items-center gap-2"
                   :title="t('pages.projectDetail.cron.deliverHint')"
                 >
-                  <input
-                    type="checkbox"
-                    class="h-4 w-4"
+                  <AppSwitch
                     data-testid="cron-deliver-toggle"
-                    :checked="job.deliverToChannel"
+                    :model-value="job.deliverToChannel"
                     :disabled="togglingId === job.id || deletingId === job.id"
-                    @change="onDeliverToggle(job, ($event.target as HTMLInputElement).checked)"
+                    :aria-label="t('pages.projectDetail.cron.deliverLabel')"
+                    @update:model-value="onDeliverToggle(job, $event)"
                   />
                   <span class="text-xs text-txt3">{{ t('pages.projectDetail.cron.deliverLabel') }}</span>
                 </label>

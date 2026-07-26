@@ -176,14 +176,16 @@ describe('AgentDataPanel', () => {
     const enabled = w.get('[data-testid="agent-cron-enabled"]')
     const deliver = w.get('[data-testid="agent-cron-deliver"]')
     const del = w.get('[data-testid="agent-cron-delete"]')
-    expect((enabled.element as HTMLInputElement).disabled).toBe(false)
-    expect((deliver.element as HTMLInputElement).disabled).toBe(false)
+    expect((enabled.element as HTMLButtonElement).disabled).toBe(false)
+    expect((deliver.element as HTMLButtonElement).disabled).toBe(false)
     expect((del.element as HTMLButtonElement).disabled).toBe(false)
+    expect(enabled.attributes('role')).toBe('switch')
+    expect(deliver.attributes('role')).toBe('switch')
     expect(enabled.attributes('title')).toBeUndefined()
     expect(deliver.attributes('title')).toBeUndefined()
     expect(del.attributes('title')).toBeUndefined()
 
-    await enabled.setValue(false)
+    await enabled.trigger('click')
     await flushPromises()
     expect(apiMocks.patchAgentCronJob).toHaveBeenCalledWith('demo-agent', 'cron-1', { enabled: false })
 
@@ -224,8 +226,8 @@ describe('AgentDataPanel', () => {
     expect(apiMocks.listAgentCronJobs).toHaveBeenCalledWith('demo-agent')
     expect(w.text()).toContain('查看与管理')
     const enabled = w.get('[data-testid="agent-cron-enabled"]')
-    expect((enabled.element as HTMLInputElement).disabled).toBe(false)
-    await enabled.setValue(false)
+    expect((enabled.element as HTMLButtonElement).disabled).toBe(false)
+    await enabled.trigger('click')
     await flushPromises()
     expect(apiMocks.patchAgentCronJob).toHaveBeenCalledWith('demo-agent', 'cron-1', { enabled: false })
   })
@@ -273,7 +275,7 @@ describe('AgentDataPanel', () => {
     expect(w.findAll('button').some((b) => /^新建/.test(b.text()))).toBe(false)
 
     const deliver = w.get('[data-testid="agent-cron-deliver"]')
-    await deliver.setValue(true)
+    await deliver.trigger('click')
     await flushPromises()
     expect(apiMocks.patchAgentCronJob).toHaveBeenCalledWith('demo-agent', 'cron-1', {
       deliverToChannel: true,
@@ -282,7 +284,7 @@ describe('AgentDataPanel', () => {
 
     const enabled = w.get('[data-testid="agent-cron-enabled"]')
     apiMocks.patchAgentCronJob.mockResolvedValueOnce({ ...SAMPLE_JOB, enabled: false })
-    await enabled.setValue(false)
+    await enabled.trigger('click')
     await flushPromises()
     expect(apiMocks.patchAgentCronJob).toHaveBeenCalledWith('demo-agent', 'cron-1', { enabled: false })
 

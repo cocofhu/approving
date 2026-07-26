@@ -2,6 +2,7 @@
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppSwitch from '@/components/ui/AppSwitch.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { api } from '@/lib/api'
 import {
@@ -205,18 +206,6 @@ const agentOptions = computed((): { name: string; stale: boolean }[] => {
 const aclText = computed(
   () => binding.value?.aclNote || t('pages.projectDetail.pm.aclMemoryNote'),
 )
-
-function toggleEnabled() {
-  if (controlsDisabled.value) return
-  enabled.value = !enabled.value
-}
-
-function onEnableKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' || e.key === ' ') {
-    e.preventDefault()
-    toggleEnabled()
-  }
-}
 
 function toggleMcp(id: string) {
   if (controlsDisabled.value) return
@@ -455,28 +444,12 @@ onUnmounted(() => {
               {{ t('pages.projectDetail.pm.enablePermissionHint') }}
             </p>
           </div>
-          <button
-            type="button"
-            role="switch"
-            class="relative h-[22px] w-10 shrink-0 border transition max-sm:self-end disabled:cursor-not-allowed disabled:opacity-45"
-            :class="
-              enabled
-                ? 'border-accent bg-accent'
-                : 'border-line-strong bg-base'
-            "
-            :aria-checked="enabled"
-            :aria-disabled="controlsDisabled ? 'true' : undefined"
-            :aria-label="t('pages.projectDetail.pm.enable')"
+          <AppSwitch
+            v-model="enabled"
+            class="max-sm:self-end"
             :disabled="controlsDisabled"
-            :tabindex="controlsDisabled ? -1 : 0"
-            @click="toggleEnabled"
-            @keydown="onEnableKeydown"
-          >
-            <span
-              class="absolute top-0.5 h-4 w-4 transition-all"
-              :class="enabled ? 'left-[18px] bg-white' : 'left-0.5 bg-txt2'"
-            />
-          </button>
+            :aria-label="t('pages.projectDetail.pm.enable')"
+          />
         </div>
 
         <div>
@@ -523,12 +496,12 @@ onUnmounted(() => {
               class="flex cursor-pointer items-start gap-2.5 text-[13px] text-txt"
               :class="controlsDisabled ? 'cursor-not-allowed opacity-55' : ''"
             >
-              <input
-                type="checkbox"
+              <AppSwitch
                 class="mt-0.5"
-                :checked="enabledMcps.includes(opt.id)"
+                :model-value="enabledMcps.includes(opt.id)"
                 :disabled="controlsDisabled"
-                @change="toggleMcp(opt.id)"
+                :aria-label="opt.id"
+                @update:model-value="toggleMcp(opt.id)"
               />
               <span>
                 <code class="font-mono text-[12px] text-accent-2">{{ opt.id }}</code>
@@ -549,7 +522,10 @@ onUnmounted(() => {
           </div>
 
           <label class="mt-3 flex cursor-pointer items-center gap-2.5 text-[13px] text-txt">
-            <input v-model="chEnabled" type="checkbox" />
+            <AppSwitch
+              v-model="chEnabled"
+              :aria-label="t('pages.projectDetail.pm.channel.enable')"
+            />
             <span>{{ t('pages.projectDetail.pm.channel.enable') }}</span>
           </label>
 
@@ -594,16 +570,19 @@ onUnmounted(() => {
           </div>
 
           <label class="mt-3 flex cursor-pointer items-center gap-2.5 text-[13px] text-txt">
-            <input v-model="chSandbox" type="checkbox" />
+            <AppSwitch
+              v-model="chSandbox"
+              :aria-label="t('pages.projectDetail.pm.channel.sandbox')"
+            />
             <span>{{ t('pages.projectDetail.pm.channel.sandbox') }}</span>
           </label>
 
           <div class="mt-3 border border-line p-3">
             <label class="flex cursor-pointer items-center gap-2.5 text-[13px] text-txt">
-              <input
+              <AppSwitch
                 v-model="chCronDeliver"
-                type="checkbox"
                 data-testid="cron-deliver-enable"
+                :aria-label="t('pages.projectDetail.pm.channel.cronDeliver')"
               />
               <span>{{ t('pages.projectDetail.pm.channel.cronDeliver') }}</span>
             </label>
@@ -700,11 +679,11 @@ onUnmounted(() => {
             <label
               class="mt-2.5 flex cursor-pointer items-start gap-2.5 text-[13px] text-txt select-none"
             >
-              <input
+              <AppSwitch
                 v-model="chAllowMemoryWrite"
-                type="checkbox"
                 class="mt-0.5"
                 data-testid="channel-allow-memory-write"
+                :aria-label="t('pages.projectDetail.pm.channel.allowMemoryWrite')"
               />
               <span>
                 <span class="block text-[13px] text-txt">
@@ -719,11 +698,11 @@ onUnmounted(() => {
             <label
               class="mt-2.5 flex cursor-pointer items-start gap-2.5 text-[13px] text-txt select-none"
             >
-              <input
+              <AppSwitch
                 v-model="chAllowSchedulerWrite"
-                type="checkbox"
                 class="mt-0.5"
                 data-testid="channel-allow-scheduler-write"
+                :aria-label="t('pages.projectDetail.pm.channel.allowSchedulerWrite')"
               />
               <span>
                 <span class="block text-[13px] text-txt">

@@ -90,8 +90,22 @@ async function mountPanel(
   return w
 }
 
-function cronDeliverCheckbox(w: Awaited<ReturnType<typeof mountPanel>>) {
+function cronDeliverSwitch(w: Awaited<ReturnType<typeof mountPanel>>) {
   return w.find('[data-testid="cron-deliver-enable"]')
+}
+
+async function setSwitch(
+  el: ReturnType<Awaited<ReturnType<typeof mountPanel>>['find']>,
+  on: boolean,
+) {
+  const checked = el.attributes('aria-checked') === 'true'
+  if (checked !== on) await el.trigger('click')
+}
+
+function mcpSwitches(w: Awaited<ReturnType<typeof mountPanel>>) {
+  return ['pm-progress', 'pm-workflow-read', 'pm-workflow-write'].map((id) =>
+    w.get(`[aria-label="${id}"]`),
+  )
 }
 
 describe('PmSettingsPanel enabledMcps', () => {
@@ -108,15 +122,14 @@ describe('PmSettingsPanel enabledMcps', () => {
     const mcpCodes = w.findAll('code').map((c) => c.text())
     expect(mcpCodes).toEqual(['pm-progress', 'pm-workflow-read', 'pm-workflow-write'])
 
-    // The first three checkboxes are the PM MCP toggles; the channel section
-    // renders additional checkboxes after them.
-    const boxes = w.findAll('input[type="checkbox"]')
-    expect(boxes.length).toBeGreaterThanOrEqual(3)
-    expect((boxes[0].element as HTMLInputElement).checked).toBe(true)
-    expect((boxes[1].element as HTMLInputElement).checked).toBe(false)
-    expect((boxes[2].element as HTMLInputElement).checked).toBe(false)
+    // PM MCP toggles are AppSwitch (role=switch); channel section has more switches after them.
+    const boxes = mcpSwitches(w)
+    expect(boxes).toHaveLength(3)
+    expect(boxes[0].attributes('aria-checked')).toBe('true')
+    expect(boxes[1].attributes('aria-checked')).toBe('false')
+    expect(boxes[2].attributes('aria-checked')).toBe('false')
 
-    await boxes[1].trigger('change')
+    await boxes[1].trigger('click')
     const saveBtn = w.find('[data-testid="pm-leader-save"]')
     expect(saveBtn).toBeTruthy()
     await saveBtn!.trigger('click')
@@ -129,20 +142,20 @@ describe('PmSettingsPanel enabledMcps', () => {
   it('defaults all PM mcps when binding omits enabledMcps', async () => {
     const { enabledMcps: _drop, ...rest } = BINDING
     const w = await mountPanel(rest as PmLeaderBinding)
-    const boxes = w.findAll('input[type="checkbox"]')
-    expect((boxes[0].element as HTMLInputElement).checked).toBe(true)
-    expect((boxes[1].element as HTMLInputElement).checked).toBe(true)
-    expect((boxes[2].element as HTMLInputElement).checked).toBe(true)
+    const boxes = mcpSwitches(w)
+    expect(boxes[0].attributes('aria-checked')).toBe('true')
+    expect(boxes[1].attributes('aria-checked')).toBe('true')
+    expect(boxes[2].attributes('aria-checked')).toBe('true')
   })
 
   it('can toggle off a PM mcp and persist only the remaining ids', async () => {
     const w = await mountPanel()
-    const boxes = w.findAll('input[type="checkbox"]')
-    expect((boxes[0].element as HTMLInputElement).checked).toBe(true)
-    expect((boxes[1].element as HTMLInputElement).checked).toBe(true)
-    expect((boxes[2].element as HTMLInputElement).checked).toBe(true)
+    const boxes = mcpSwitches(w)
+    expect(boxes[0].attributes('aria-checked')).toBe('true')
+    expect(boxes[1].attributes('aria-checked')).toBe('true')
+    expect(boxes[2].attributes('aria-checked')).toBe('true')
 
-    await boxes[0].trigger('change') // uncheck pm-progress
+    await boxes[0].trigger('click') // uncheck pm-progress
     const saveBtn = w.find('[data-testid="pm-leader-save"]')
     await saveBtn!.trigger('click')
     await flushPromises()
@@ -156,10 +169,10 @@ describe('PmSettingsPanel enabledMcps', () => {
       ...BINDING,
       enabledMcps: [],
     })
-    const boxes = w.findAll('input[type="checkbox"]')
-    expect((boxes[0].element as HTMLInputElement).checked).toBe(false)
-    expect((boxes[1].element as HTMLInputElement).checked).toBe(false)
-    expect((boxes[2].element as HTMLInputElement).checked).toBe(false)
+    const boxes = mcpSwitches(w)
+    expect(boxes[0].attributes('aria-checked')).toBe('false')
+    expect(boxes[1].attributes('aria-checked')).toBe('false')
+    expect(boxes[2].attributes('aria-checked')).toBe('false')
 
     const saveBtn = w.find('[data-testid="pm-leader-save"]')
     await saveBtn!.trigger('click')
@@ -284,10 +297,10 @@ describe('PmSettingsPanel session capabilities', () => {
     expect(w.text()).toContain('风险提示')
     const mem = w.find('[data-testid="channel-allow-memory-write"]')
     const sch = w.find('[data-testid="channel-allow-scheduler-write"]')
-    expect((mem.element as HTMLInputElement).checked).toBe(false)
-    expect((sch.element as HTMLInputElement).checked).toBe(false)
+    expect(mem.attributes('aria-checked')).toBe('false')
+    expect(sch.attributes('aria-checked')).toBe('false')
 
-    await mem.setValue(true)
+    await setSwitch(mem, true)
     const saveBtns = w.findAll('button').filter((b) => b.text().includes('保存渠道配置'))
     await saveBtns[0].trigger('click')
     await flushPromises()
@@ -300,8 +313,8 @@ describe('PmSettingsPanel session capabilities', () => {
       allowMemoryWrite: true,
       allowSchedulerWrite: false,
     })
-    expect((mem.element as HTMLInputElement).checked).toBe(true)
-    expect((sch.element as HTMLInputElement).checked).toBe(false)
+    expect(mem.attributes('aria-checked')).toBe('true')
+    expect(sch.attributes('aria-checked')).toBe('false')
   })
 
   it('loads saved session caps and keeps sandbox when toggling scheduler write', async () => {
@@ -338,10 +351,10 @@ describe('PmSettingsPanel session capabilities', () => {
 
     const mem = w.find('[data-testid="channel-allow-memory-write"]')
     const sch = w.find('[data-testid="channel-allow-scheduler-write"]')
-    expect((mem.element as HTMLInputElement).checked).toBe(true)
-    expect((sch.element as HTMLInputElement).checked).toBe(false)
+    expect(mem.attributes('aria-checked')).toBe('true')
+    expect(sch.attributes('aria-checked')).toBe('false')
 
-    await sch.setValue(true)
+    await setSwitch(sch, true)
     const saveBtns = w.findAll('button').filter((b) => b.text().includes('保存渠道配置'))
     await saveBtns[0].trigger('click')
     await flushPromises()
@@ -391,7 +404,7 @@ describe('PmSettingsPanel cron deliver target Combobox', () => {
         },
       ],
     })
-    await cronDeliverCheckbox(w).setValue(true)
+    await setSwitch(cronDeliverSwitch(w), true)
     await flushPromises()
     expect(apiMocks.listPmThreads).toHaveBeenCalledTimes(1)
 
@@ -411,9 +424,9 @@ describe('PmSettingsPanel cron deliver target Combobox', () => {
     await flushPromises()
     expect(apiMocks.listPmThreads).toHaveBeenCalledTimes(1)
 
-    await cronDeliverCheckbox(w).setValue(false)
+    await setSwitch(cronDeliverSwitch(w), false)
     await flushPromises()
-    await cronDeliverCheckbox(w).setValue(true)
+    await setSwitch(cronDeliverSwitch(w), true)
     await flushPromises()
     expect(apiMocks.listPmThreads).toHaveBeenCalledTimes(2)
   })
@@ -446,7 +459,7 @@ describe('PmSettingsPanel cron deliver target Combobox', () => {
         },
       ],
     })
-    await cronDeliverCheckbox(w).setValue(true)
+    await setSwitch(cronDeliverSwitch(w), true)
     await flushPromises()
     await w.find('[data-testid="cron-deliver-target-toggle"]').trigger('click')
     await flushPromises()
@@ -514,7 +527,7 @@ describe('PmSettingsPanel cron deliver target Combobox', () => {
     })
     const w = await mountPanel()
     apiMocks.listPmThreads.mockRejectedValue(new Error('network down'))
-    await cronDeliverCheckbox(w).setValue(true)
+    await setSwitch(cronDeliverSwitch(w), true)
     await flushPromises()
     expect(toastMocks.error).toHaveBeenCalled()
     const toastMsg = String(toastMocks.error.mock.calls[0]?.[0] ?? '')
@@ -543,7 +556,7 @@ describe('PmSettingsPanel cron deliver target Combobox', () => {
         },
       ],
     })
-    await cronDeliverCheckbox(w).setValue(true)
+    await setSwitch(cronDeliverSwitch(w), true)
     await flushPromises()
     const input = w.find('[data-testid="cron-deliver-target-input"]')
     const toggle = w.find('[data-testid="cron-deliver-target-toggle"]')

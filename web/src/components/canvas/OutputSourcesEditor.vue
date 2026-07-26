@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AppSwitch from '@/components/ui/AppSwitch.vue'
 import { buildOutputSourceOptions, labelForOutputTemplate } from '@/lib/outputSourceOptions'
 import { useToast } from '@/lib/useToast'
 import type { WFEdge, WFNode } from '@/lib/types'
@@ -100,7 +101,11 @@ function onDrop(target: string) {
         >
           <span class="cursor-grab text-[12px] text-txt3">⠿</span>
           <span class="min-w-[18px] bg-accent-dim px-1.5 py-0.5 text-center text-[10px] text-accent-2">{{ i + 1 }}</span>
-          <input type="checkbox" checked class="accent-accent-2" @change="remove(template)" />
+          <AppSwitch
+            :model-value="true"
+            :aria-label="labelFor(template)"
+            @update:model-value="(on) => { if (!on) remove(template) }"
+          />
           <div class="min-w-0 flex-1">
             <div class="truncate text-[12px] text-txt">{{ labelFor(template) }}</div>
             <div class="truncate font-mono text-[10px] text-txt3">{{ template }}</div>
