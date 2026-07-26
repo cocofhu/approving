@@ -133,24 +133,20 @@ describe('ClarifyChat', () => {
     wrapper.unmount()
   })
 
-  it('review mode: confirm stays enabled while thinking and shows no-agent hint', async () => {
+  it('review mode: confirm disabled while thinking/queued (FR4 ready gate)', async () => {
     const wrapper = mountChat({ reviewMode: true })
-    // Simulate an in-flight revise (thinking) without blocking confirm.
+    // Enqueue a revise: thinking/queue must block 确认并流转 until ready.
     await wrapper.find('textarea').setValue('补充修订')
     await wrapper.find('button[class*="bg-accent"]').trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toMatch(/Agent 正在思考/)
+    expect(wrapper.find('[data-testid="clarify-review-queue"]').exists()).toBe(true)
     const confirmBtn = wrapper.find('[data-testid="clarify-confirm-flow"]')
     expect(confirmBtn.exists()).toBe(true)
-    expect((confirmBtn.element as HTMLButtonElement).disabled).toBe(false)
+    expect((confirmBtn.element as HTMLButtonElement).disabled).toBe(true)
     expect(wrapper.find('[data-testid="clarify-confirm-hint"]').text()).toContain(
       '接受当前已落盘产物并流转（不触发 Agent）',
     )
-    await confirmBtn.trigger('click')
-    await flushPromises()
-    expect(wrapper.emitted('finish')).toBeTruthy()
-    expect(confirmBtn.text()).toContain('校验中')
-    expect((confirmBtn.element as HTMLButtonElement).disabled).toBe(true)
+    expect(wrapper.find('[data-testid="clarify-review-cancel"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
