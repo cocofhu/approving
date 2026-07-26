@@ -333,10 +333,8 @@ func redactSensitiveString(s string) string {
 
 func isSensitiveKey(key string) bool {
 	k := strings.ToLower(strings.ReplaceAll(key, "-", "_"))
-	if k == "value" {
-		// Project variables often nest {name,value,secret}; handled by callers
-		// when they pass already-masked structures. Still treat common aliases.
-	}
+	// Bare "value" is not treated as sensitive: project vars nest {name,value,secret}
+	// and are masked via MaskProjectVarsForAudit before entering the payload tree.
 	for _, h := range sensitiveKeyHints {
 		if strings.Contains(k, h) {
 			return true
