@@ -1,12 +1,15 @@
 package sandbox
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"io"
 	"net"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -36,6 +39,50 @@ func TestQuoteShellPathRejectsMetacharacters(t *testing.T) {
 	}
 	if ok != `'/root/workspace/a.txt'` {
 		t.Fatalf("got %q", ok)
+	}
+}
+
+func TestNewSafeCmdRejectsMetacharacters(t *testing.T) {
+	t.Parallel()
+	if _, err := newSafeCmd(); err == nil {
+		t.Fatal("empty argv should fail")
+	}
+	bad := []string{"foo;id", "foo`id`", "foo$(id)", "a&&b", "a|b", "../x", "a b", "a'b"}
+	for _, a := range bad {
+		if _, err := newSafeCmd("echo", a); err == nil {
+			t.Fatalf("newSafeCmd echo %q want error", a)
+		}
+	}
+	cmd, err := newSafeCmd("cat", "--", "/root/workspace/a.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := cmd.render()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `'cat' '--' '/root/workspace/a.txt'`
+	if got != want {
+		t.Fatalf("render = %q, want %q", got, want)
+	}
+}
+
+func TestExecRejectsUnvalidatedArgv(t *testing.T) {
+	t.Parallel()
+	gw, fg := newInlineGW(t)
+	fg.seed("gw-safe", "running")
+	m := NewManager(gw, ManagerOptions{WorkspaceDir: "/root/workspace"})
+	restore := SetExecHook(func(context.Context, string, int, string, io.Reader) ([]byte, error) {
+		t.Fatal("exec hook must not run for rejected argv")
+		return nil, nil
+	})
+	defer restore()
+	sb, err := m.Attach(context.Background(), "gw-safe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sb.Exec(context.Background(), time.Second, "echo", "hi;id"); err == nil {
+		t.Fatal("Exec with metacharacters should fail before Start")
 	}
 }
 

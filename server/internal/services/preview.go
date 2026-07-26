@@ -184,7 +184,7 @@ func (s *PreviewService) KeepalivePort(ctx context.Context, sandboxName string, 
 		return nil
 	}
 	script := fmt.Sprintf(`pid=$(ss -tlnp 2>/dev/null | grep ':%d ' | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -1); if [ -n "$pid" ]; then nohup sh -c "while kill -0 $pid 2>/dev/null; do sleep 30; done" >/dev/null 2>&1 & fi`, port)
-	_, err := s.mgr.Exec(ctx, sandboxName, 8*time.Second, "sh", "-c", script)
+	_, err := s.mgr.ExecScript(ctx, sandboxName, 8*time.Second, "sh", script)
 	return err
 }
 

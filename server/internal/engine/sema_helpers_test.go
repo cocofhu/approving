@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"math"
 	"testing"
 
 	"github.com/cocofhu/approving/internal/models"
@@ -40,6 +41,28 @@ func TestMaxConcurrentAndSema(t *testing.T) {
 	s.SetLimit(2)
 	if s.Limit() != 2 {
 		t.Fatal("set limit")
+	}
+}
+
+// TestSetAutoRetryMaxInt64Bounds covers CodeQL #7: negative→0, MaxInt32 and
+// MaxInt32+1 are stored without MaxInt32 product clamping (atomic.Int64).
+func TestSetAutoRetryMaxInt64Bounds(t *testing.T) {
+	e := &Engine{}
+	e.SetAutoRetryMax(-5)
+	if e.AutoRetryMax() != 0 {
+		t.Fatalf("negative: got %d", e.AutoRetryMax())
+	}
+	e.SetAutoRetryMax(math.MaxInt32)
+	if e.AutoRetryMax() != math.MaxInt32 {
+		t.Fatalf("MaxInt32: got %d", e.AutoRetryMax())
+	}
+	e.SetAutoRetryMax(math.MaxInt32 + 1)
+	if e.AutoRetryMax() != math.MaxInt32+1 {
+		t.Fatalf("MaxInt32+1: got %d want %d", e.AutoRetryMax(), math.MaxInt32+1)
+	}
+	e.SetAutoRetryMax(math.MaxInt)
+	if e.AutoRetryMax() != math.MaxInt {
+		t.Fatalf("MaxInt: got %d", e.AutoRetryMax())
 	}
 }
 

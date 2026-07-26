@@ -87,22 +87,39 @@ func TestLiveGatewayConfigHomeInject(t *testing.T) {
 		_ = m.DestroyByName(context.Background(), sb.ID)
 	})
 
-	listing, _ := sb.creds().run(ctx, 30*time.Second, "ls -la /root/.cursor /root/.cursor/rules 2>&1 || true")
-	raw, err := sb.creds().run(ctx, 30*time.Second, "cat -- /root/.cursor/mcp.json")
+	lsCmd, _ := newSafeCmd("ls", "-la", "/root/.cursor", "/root/.cursor/rules")
+	listing, _ := sb.creds().run(ctx, 30*time.Second, lsCmd)
+	catMCP, err := newSafeCmd("cat", "--", "/root/.cursor/mcp.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := sb.creds().run(ctx, 30*time.Second, catMCP)
 	if err != nil {
 		t.Fatalf("read mcp.json: %v\nls:\n%s\ncat:\n%s", err, listing, raw)
 	}
 	if !strings.Contains(string(raw), "api.example.com/mcp/runs/live-inject-test") {
 		t.Fatalf("mcp.json missing expected URL (inject before start failed?)\nls:\n%s\nbody:\n%s", listing, raw)
 	}
-	rule, err := sb.creds().run(ctx, 30*time.Second, "cat -- /root/.cursor/rules/base.md")
+	catRule, err := newSafeCmd("cat", "--", "/root/.cursor/rules/base.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rule, err := sb.creds().run(ctx, 30*time.Second, catRule)
 	if err != nil || !strings.Contains(string(rule), "live inject rule") {
 		t.Fatalf("rules/base.md missing: %v\n%s\nls:\n%s", err, rule, listing)
 	}
 	// Confirm inject marker if image records it (best-effort).
-	envInj, _ := sb.creds().run(ctx, 15*time.Second,
-		`tr '\0' '\n' < /proc/1/environ | grep -E '^SANDBOX_INJECT=' || true`)
-	t.Logf("SANDBOX_INJECT=%s", strings.TrimSpace(string(envInj)))
+	envCmd, _ := newSafeCmd("cat", "/proc/1/environ")
+	envInj, _ := sb.creds().run(ctx, 15*time.Second, envCmd)
+	envText := strings.ReplaceAll(string(envInj), "\x00", "\n")
+	injLine := ""
+	for _, line := range strings.Split(envText, "\n") {
+		if strings.HasPrefix(line, "SANDBOX_INJECT=") {
+			injLine = line
+			break
+		}
+	}
+	t.Logf("SANDBOX_INJECT=%s", strings.TrimSpace(injLine))
 	t.Logf("live inject OK id=%s ssh=%s:%d", sb.ID, sb.SSHHost, sb.SSHPort)
 }
 

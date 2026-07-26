@@ -81,12 +81,15 @@ func TestLiveStartWithPasswordsAndInject(t *testing.T) {
 	}
 	t.Log("authenticated /ws dial accepted (acp ready)")
 
-	out, err := sb.creds().run(ctx, 20*time.Second,
-		`tr '\0' '\n' < /proc/1/environ | grep -E '^(PASSWORD|ROOT_PASSWORD|ACP_BRIDGE_PASSWORD|CURSOR_ACP_PASSWORD|SANDBOX_INJECT)=' | sort`)
+	envCmd, err := newSafeCmd("cat", "/proc/1/environ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := sb.creds().run(ctx, 20*time.Second, envCmd)
 	if err != nil {
 		t.Fatalf("environ: %v", err)
 	}
-	envOut := string(out)
+	envOut := strings.ReplaceAll(string(out), "\x00", "\n")
 	t.Log(envOut)
 	for _, k := range []string{"PASSWORD=probe-token-xyz", "ROOT_PASSWORD=probe-token-xyz", "ACP_BRIDGE_PASSWORD=probe-token-xyz", "CURSOR_ACP_PASSWORD=probe-token-xyz"} {
 		if !strings.Contains(envOut, k) {
@@ -96,8 +99,11 @@ func TestLiveStartWithPasswordsAndInject(t *testing.T) {
 	if !strings.Contains(envOut, "SANDBOX_INJECT=") {
 		t.Fatalf("missing SANDBOX_INJECT:\n%s", envOut)
 	}
-	raw, err := sb.creds().run(ctx, 20*time.Second, "test -f /root/.cursor/mcp.json && echo OK")
-	if err != nil || !strings.Contains(string(raw), "OK") {
-		t.Fatalf("mcp.json missing after inject: %v %s", err, raw)
+	testCmd, err := newSafeCmd("test", "-f", "/root/.cursor/mcp.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sb.creds().run(ctx, 20*time.Second, testCmd); err != nil {
+		t.Fatalf("mcp.json missing after inject: %v", err)
 	}
 }

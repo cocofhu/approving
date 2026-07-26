@@ -1,22 +1,49 @@
 import {strict as assert} from 'node:assert';
 import {describe, it} from 'node:test';
-import {isSafeImageURL} from './safe_image_url.js';
+import {sanitizeImageURL} from './safe_image_url.js';
 
-describe('isSafeImageURL', () => {
-    it('allows data:image and http(s)', () => {
-        assert.equal(isSafeImageURL('data:image/png;base64,AAA'), true);
-        assert.equal(isSafeImageURL('data:image/jpeg,AAAA'), true);
-        assert.equal(isSafeImageURL('https://example.com/a.png'), true);
-        assert.equal(isSafeImageURL('http://example.com/a.png'), true);
+describe('sanitizeImageURL', () => {
+    it('allows whitelisted data:image and returns the safe string', () => {
+        assert.equal(
+            sanitizeImageURL('data:image/png;base64,AAA'),
+            'data:image/png;base64,AAA',
+        );
+        assert.equal(
+            sanitizeImageURL('data:image/jpeg,AAAA'),
+            'data:image/jpeg,AAAA',
+        );
+        assert.equal(
+            sanitizeImageURL('data:image/gif;base64,AAAA'),
+            'data:image/gif;base64,AAAA',
+        );
+        assert.equal(
+            sanitizeImageURL('data:image/webp;base64,AAAA'),
+            'data:image/webp;base64,AAAA',
+        );
+        assert.equal(
+            sanitizeImageURL('data:image/jpg;base64,AAAA'),
+            'data:image/jpeg;base64,AAAA',
+        );
     });
 
-    it('rejects javascript and non-image data URLs', () => {
-        assert.equal(isSafeImageURL('javascript:alert(1)'), false);
-        assert.equal(isSafeImageURL('data:text/html,<script>'), false);
-        assert.equal(isSafeImageURL('data:image/svg+xml;base64,PHN2Zy'), true);
-        assert.equal(isSafeImageURL('//evil.example/x'), false);
-        assert.equal(isSafeImageURL('/relative.png'), false);
-        assert.equal(isSafeImageURL(''), false);
-        assert.equal(isSafeImageURL(null), false);
+    it('allows http(s) and returns URL.href', () => {
+        assert.equal(
+            sanitizeImageURL('https://example.com/a.png'),
+            'https://example.com/a.png',
+        );
+        assert.equal(
+            sanitizeImageURL('http://example.com/a.png'),
+            'http://example.com/a.png',
+        );
+    });
+
+    it('rejects javascript, svg+xml, relative, and non-image data', () => {
+        assert.equal(sanitizeImageURL('javascript:alert(1)'), '');
+        assert.equal(sanitizeImageURL('data:text/html,<script>'), '');
+        assert.equal(sanitizeImageURL('data:image/svg+xml;base64,PHN2Zy'), '');
+        assert.equal(sanitizeImageURL('//evil.example/x'), '');
+        assert.equal(sanitizeImageURL('/relative.png'), '');
+        assert.equal(sanitizeImageURL(''), '');
+        assert.equal(sanitizeImageURL(null), '');
     });
 });

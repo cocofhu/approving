@@ -75,13 +75,13 @@ func TestManagerCreateSSHFallbackWhenNoInject(t *testing.T) {
 	var extractTar []byte
 	hasMCP := false
 	restore := SetExecHook(func(_ context.Context, _ string, _ int, command string, stdin io.Reader) ([]byte, error) {
-		if strings.Contains(command, "test -f") && strings.Contains(command, "mcp.json") {
+		if strings.Contains(command, "test") && strings.Contains(command, "mcp.json") {
 			if hasMCP {
 				return nil, nil
 			}
 			return nil, context.DeadlineExceeded
 		}
-		if strings.Contains(command, "tar -C") && strings.Contains(command, "-xf -") {
+		if strings.Contains(command, "tar") && strings.Contains(command, "-C") && strings.Contains(command, "-xf") {
 			extractCmd = command
 			if stdin != nil {
 				extractTar, _ = io.ReadAll(stdin)

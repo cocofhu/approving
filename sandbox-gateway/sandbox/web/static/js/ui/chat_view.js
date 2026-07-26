@@ -23,7 +23,7 @@ import {
     getSnapshot,
     putSnapshot,
 } from './chat_persist_db.js';
-import {isSafeImageURL} from './safe_image_url.js';
+import {sanitizeImageURL} from './safe_image_url.js';
 
 const PERSIST_BANNER_TEXT =
     '本地聊天快照过大，无法写入本地缓存；刷新后可能无法恢复，当前会话仍可通过 eventLog 重放。';
@@ -817,9 +817,10 @@ export class ChatView {
             const imgWrap = document.createElement('div');
             imgWrap.className = 'cc-user-images';
             for (const url of imageURLs) {
-                if (!isSafeImageURL(url)) continue;
+                const safe = sanitizeImageURL(url);
+                if (!safe) continue;
                 const img = document.createElement('img');
-                img.src = url;
+                img.src = safe;
                 img.className = 'cc-user-img';
                 img.alt = '附件图片';
                 img.loading = 'lazy';

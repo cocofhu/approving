@@ -9,7 +9,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -51,8 +50,9 @@ type Engine struct {
 	// Live-tunable from the settings page via SetAutoRetryMax; the raw engine
 	// defaults to disabled so tests that don't wire settings keep the old
 	// fail-fast behavior (production enables it via SettingsService.ApplyOnBoot,
-	// whose config default is 3).
-	autoRetryMax atomic.Int32
+	// whose config default is 3). Stored as Int64 to avoid int→int32 narrowing
+	// (CodeQL #7); only negative inputs are clamped to 0.
+	autoRetryMax atomic.Int64
 
 	mu     sync.Mutex
 	tokens map[string]string // runID -> MCP token (in-memory; same process)
@@ -151,15 +151,13 @@ func (e *Engine) issueService() *services.IssueService {
 
 // SetAutoRetryMax changes the live cap on how many times a failed node is
 // auto-retried from its failure position (see autoRetryMax). Negative clamps to
-// 0 (disabled). Driven by the settings page / config.
+// 0 (disabled). Non-negative values are stored as int64 with no MaxInt32 product
+// clamp (CodeQL #7). Driven by the settings page / config.
 func (e *Engine) SetAutoRetryMax(n int) {
 	if n < 0 {
 		n = 0
 	}
-	if n > math.MaxInt32 {
-		n = math.MaxInt32
-	}
-	e.autoRetryMax.Store(int32(n))
+	e.autoRetryMax.Store(int64(n))
 }
 
 // AutoRetryMax returns the current per-node auto-retry cap (0 = disabled).
