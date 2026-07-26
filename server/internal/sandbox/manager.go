@@ -381,11 +381,11 @@ func (m *Manager) configHomePresent(ctx context.Context, sb *Sandbox, configRoot
 		// Unit tests without InstallHelpers skip the SSH probe.
 		return m == nil || !m.installHelpers
 	}
-	q, err := quoteShellPath(configRoot + "/mcp.json")
+	cmd, err := newSafeCmd("test", "-f", configRoot+"/mcp.json")
 	if err != nil {
 		return false
 	}
-	_, err = sb.creds().run(ctx, 15*time.Second, "test -f "+q)
+	_, err = sb.creds().run(ctx, 15*time.Second, cmd)
 	return err == nil
 }
 
@@ -601,13 +601,24 @@ func (m *Manager) EndpointAddr(ctx context.Context, id, key string) (string, err
 }
 
 // Exec runs a command on a named sandbox over SSH and returns combined output.
+// Each argv fragment must pass validateShellArg (via newSafeCmd).
 func (m *Manager) Exec(ctx context.Context, id string, timeout time.Duration, cmd ...string) (string, error) {
 	sb, err := m.Attach(ctx, id)
 	if err != nil {
 		return "", err
 	}
-	out, err := sb.mgr.creds(sb.SSHHost, sb.SSHPort).run(ctx, timeout, joinArgs(cmd))
-	return strings.TrimSpace(string(out)), err
+	return sb.Exec(ctx, timeout, cmd...)
+}
+
+// ExecScript runs interpreter with script on stdin (argv is only the
+// interpreter and "-s"). Use this instead of embedding shell scripts in Exec
+// argv so metacharacters never reach Session.Start/Run.
+func (m *Manager) ExecScript(ctx context.Context, id string, timeout time.Duration, interpreter, script string) (string, error) {
+	sb, err := m.Attach(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	return sb.ExecScript(ctx, timeout, interpreter, script)
 }
 
 // --- Sandbox data-plane (over SSH) -------------------------------------------
@@ -645,11 +656,11 @@ func (s *Sandbox) resolvePath(path string) string {
 // ReadFile reads a file from inside the sandbox (relative paths resolve against
 // WORKSPACE_DIR).
 func (s *Sandbox) ReadFile(ctx context.Context, path string) ([]byte, error) {
-	full, err := quoteShellPath(s.resolvePath(path))
+	cmd, err := newSafeCmd("cat", "--", s.resolvePath(path))
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
-	out, err := s.creds().run(ctx, 20*time.Second, "cat -- "+full)
+	out, err := s.creds().run(ctx, 20*time.Second, cmd)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
@@ -659,20 +670,22 @@ func (s *Sandbox) ReadFile(ctx context.Context, path string) ([]byte, error) {
 // WriteFile writes content to a path inside the sandbox, creating parent dirs.
 func (s *Sandbox) WriteFile(ctx context.Context, path string, content []byte) error {
 	resolved := s.resolvePath(path)
-	full, err := quoteShellPath(resolved)
-	if err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
-	}
 	dir := resolved
 	if i := strings.LastIndex(resolved, "/"); i > 0 {
 		dir = resolved[:i]
 	}
-	qdir, err := quoteShellPath(dir)
+	mkdirCmd, err := newSafeCmd("mkdir", "-p", dir)
 	if err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
-	cmd := "mkdir -p " + qdir + " && cat > " + full
-	out, err := s.creds().runInput(ctx, 20*time.Second, cmd, strings.NewReader(string(content)))
+	if out, err := s.creds().run(ctx, 20*time.Second, mkdirCmd); err != nil {
+		return fmt.Errorf("write %s: mkdir: %w: %s", path, err, strings.TrimSpace(string(out)))
+	}
+	teeCmd, err := newSafeCmd("tee", resolved)
+	if err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	out, err := s.creds().runInput(ctx, 20*time.Second, teeCmd, strings.NewReader(string(content)))
 	if err != nil {
 		return fmt.Errorf("write %s: %w: %s", path, err, strings.TrimSpace(string(out)))
 	}
@@ -681,17 +694,33 @@ func (s *Sandbox) WriteFile(ctx context.Context, path string, content []byte) er
 
 // FileExists reports whether a path exists inside the sandbox.
 func (s *Sandbox) FileExists(ctx context.Context, path string) bool {
-	full, err := quoteShellPath(s.resolvePath(path))
+	cmd, err := newSafeCmd("test", "-e", s.resolvePath(path))
 	if err != nil {
 		return false
 	}
-	_, err = s.creds().run(ctx, 10*time.Second, "test -e "+full)
+	_, err = s.creds().run(ctx, 10*time.Second, cmd)
 	return err == nil
 }
 
 // Exec runs an arbitrary command inside the sandbox over SSH.
+// Each argv fragment must pass validateShellArg; shell scripts belong in ExecScript.
 func (s *Sandbox) Exec(ctx context.Context, timeout time.Duration, cmd ...string) (string, error) {
-	out, err := s.creds().run(ctx, timeout, joinArgs(cmd))
+	sc, err := newSafeCmd(cmd...)
+	if err != nil {
+		return "", err
+	}
+	out, err := s.creds().run(ctx, timeout, sc)
+	return strings.TrimSpace(string(out)), err
+}
+
+// ExecScript runs interpreter -s with script on stdin so script body never
+// appears on the Session.Start/Run command line (CodeQL #11).
+func (s *Sandbox) ExecScript(ctx context.Context, timeout time.Duration, interpreter, script string) (string, error) {
+	sc, err := newSafeCmd(interpreter, "-s")
+	if err != nil {
+		return "", err
+	}
+	out, err := s.creds().runInput(ctx, timeout, sc, strings.NewReader(script))
 	return strings.TrimSpace(string(out)), err
 }
 
@@ -711,8 +740,8 @@ func (s *Sandbox) ACP() *ACPClient {
 	return NewACPClient(s.Host, s.Port).WithPassword(s.Password)
 }
 
-// shellArgPattern is the allowlist for remote shell path fragments (CodeQL #11).
-// Values outside this set never reach sess.Start via quoteShellPath.
+// shellArgPattern is the allowlist for remote shell argv fragments (CodeQL #11).
+// Values outside this set never reach sess.Start/Run via safeCmd.render.
 var shellArgPattern = regexp.MustCompile(`^[A-Za-z0-9_./:@%+=,-]+$`)
 
 func validateShellArg(s string) error {

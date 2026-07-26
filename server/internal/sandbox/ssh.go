@@ -199,9 +199,13 @@ func (c sshCreds) waitReady(ctx context.Context, maxWait time.Duration) error {
 	}
 }
 
-// run executes a shell command string on the sandbox and returns combined
+// run executes a validated safeCmd on the sandbox and returns combined
 // stdout+stderr. A non-zero exit is returned as an error carrying the output.
-func (c sshCreds) run(ctx context.Context, timeout time.Duration, command string) ([]byte, error) {
+func (c sshCreds) run(ctx context.Context, timeout time.Duration, cmd safeCmd) ([]byte, error) {
+	command, err := cmd.render()
+	if err != nil {
+		return nil, err
+	}
 	if execHook != nil {
 		return execHook(ctx, c.host, c.port, command, nil)
 	}
@@ -243,8 +247,12 @@ func (c sshCreds) run(ctx context.Context, timeout time.Duration, command string
 	}
 }
 
-// runInput executes a command feeding stdin from r (used for file writes).
-func (c sshCreds) runInput(ctx context.Context, timeout time.Duration, command string, r io.Reader) ([]byte, error) {
+// runInput executes a validated safeCmd feeding stdin from r (used for file writes).
+func (c sshCreds) runInput(ctx context.Context, timeout time.Duration, cmd safeCmd, r io.Reader) ([]byte, error) {
+	command, err := cmd.render()
+	if err != nil {
+		return nil, err
+	}
 	if execHook != nil {
 		return execHook(ctx, c.host, c.port, command, r)
 	}
@@ -326,7 +334,8 @@ func (t *SSHTerminal) Close() error {
 }
 
 // openTerminal starts an interactive login shell with a PTY over SSH.
-func (c sshCreds) openTerminal(ctx context.Context, command []string) (*SSHTerminal, error) {
+// Non-empty argv is validated via newSafeCmd before Session.Start.
+func (c sshCreds) openTerminal(ctx context.Context, argv []string) (*SSHTerminal, error) {
 	cli, err := c.dial(ctx)
 	if err != nil {
 		return nil, err
@@ -356,8 +365,18 @@ func (c sshCreds) openTerminal(ctx context.Context, command []string) (*SSHTermi
 	}
 	sess.Stderr = nil // merged into the PTY stdout
 	t := &SSHTerminal{client: cli, sess: sess, stdin: stdin, stdout: stdout}
-	if len(command) > 0 {
-		if err := sess.Start(joinArgs(command)); err != nil {
+	if len(argv) > 0 {
+		cmd, err := newSafeCmd(argv...)
+		if err != nil {
+			_ = t.Close()
+			return nil, fmt.Errorf("start shell: %w", err)
+		}
+		command, err := cmd.render()
+		if err != nil {
+			_ = t.Close()
+			return nil, fmt.Errorf("start shell: %w", err)
+		}
+		if err := sess.Start(command); err != nil {
 			_ = t.Close()
 			return nil, fmt.Errorf("start shell: %w", err)
 		}
@@ -368,14 +387,4 @@ func (c sshCreds) openTerminal(ctx context.Context, command []string) (*SSHTermi
 		}
 	}
 	return t, nil
-}
-
-// joinArgs shell-quotes and joins argv into a single command string for the
-// remote shell (ssh runs commands via the login shell).
-func joinArgs(args []string) string {
-	parts := make([]string, len(args))
-	for i, a := range args {
-		parts[i] = shellQuote(a)
-	}
-	return strings.Join(parts, " ")
 }

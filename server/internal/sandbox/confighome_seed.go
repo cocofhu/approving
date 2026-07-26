@@ -53,14 +53,24 @@ func (m *Manager) seedConfigHome(ctx context.Context, sb *Sandbox, hostDir, conf
 			Msg("seed config home: pack tar failed")
 		return
 	}
-	qroot, err := quoteShellPath(configRoot)
+	mkdirCmd, err := newSafeCmd("mkdir", "-p", configRoot)
 	if err != nil {
 		log.Warn().Str("id", sb.ID).Err(err).Str("root", configRoot).
 			Msg("seed config home: invalid config root")
 		return
 	}
-	cmd := "mkdir -p " + qroot + " && tar -C " + qroot + " -xf -"
-	if out, err := creds.runInput(ctx, 60*time.Second, cmd, bytes.NewReader(payload)); err != nil {
+	if out, err := creds.run(ctx, 30*time.Second, mkdirCmd); err != nil {
+		log.Warn().Str("id", sb.ID).Err(err).Str("out", strings.TrimSpace(string(out))).
+			Str("root", configRoot).Msg("seed config home: mkdir failed")
+		return
+	}
+	tarCmd, err := newSafeCmd("tar", "-C", configRoot, "-xf", "-")
+	if err != nil {
+		log.Warn().Str("id", sb.ID).Err(err).Str("root", configRoot).
+			Msg("seed config home: invalid config root")
+		return
+	}
+	if out, err := creds.runInput(ctx, 60*time.Second, tarCmd, bytes.NewReader(payload)); err != nil {
 		log.Warn().Str("id", sb.ID).Err(err).Str("out", strings.TrimSpace(string(out))).
 			Str("root", configRoot).Msg("seed config home: extract failed")
 		return
