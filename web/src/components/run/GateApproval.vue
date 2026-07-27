@@ -577,13 +577,16 @@ function buildProductLoadFingerprint(): string {
   ]
   for (const p of products) {
     const a = props.run?.artifacts.find((x) => x.name === p.name)
-    // Resolved/history: ignore updatedAt/sizeBytes poll noise — content changes are
-    // detected via snap hash. Pending/live: also include sizeBytes/updatedAt so a
-    // store-only write (before outputs sync lands) still forces a reload; etag is
-    // usually empty on the list DTO poll path.
+    // Resolved/history: ignore sizeBytes poll noise — content changes are
+    // detected via snap hash. Pending/live: include sizeBytes (not updatedAt)
+    // so a store-only write still forces a reload; etag is usually empty on the
+    // list DTO poll path. Pure updatedAt bumps from Artifact.Save must not reload.
     parts.push(`${p.name}:${a?.etag ?? ''}`)
+    // Pending/live: sizeBytes alone (not updatedAt) — Artifact.Save bumps UpdatedAt on
+    // every upsert, so timestamp noise would force page.html reload → srcdoc flicker.
+    // Content/snap hash below still catch same-size rewrites after fetch.
     if (pending && a) {
-      parts.push(`meta:${a.sizeBytes ?? 0}:${a.updatedAt ?? ''}`)
+      parts.push(`meta:${a.sizeBytes ?? 0}`)
     }
     if (p.name === 'page.html' || p.outputKey === 'page') {
       const ref =
@@ -743,7 +746,8 @@ async function loadProduct(opts?: { force?: boolean }) {
     const primary = products[0]
     const text = next[primary.name] || ''
     if (primary.name === 'page.html') {
-      productHtml.value = text
+      // Avoid HtmlPreview srcdoc reassignment when body is unchanged (no iframe flicker).
+      if (productHtml.value !== text) productHtml.value = text
       productDoc.value = null
     } else if (isStructuredArtifactName(primary.name)) {
       try {
