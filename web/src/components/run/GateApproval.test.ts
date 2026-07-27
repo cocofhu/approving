@@ -2741,6 +2741,41 @@ describe('GateApproval mobileFillRemaining layout', () => {
     wrapper.unmount()
   })
 
+  it('refresh resume: busy+activeItem (waiting=0) keeps thinking and consumes ACP (g2.1/g4.4)', async () => {
+    breakpointMocks.isMobile.value = false
+    const pageHtml = '<!doctype html><html><body><h1>gate resume</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      mobileFillRemaining: false,
+      gate: { ...gate, reactSessionAlive: true, reactUpstreamNodeId: 'visual' },
+      run,
+    })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // Hard refresh snapshot: only busy+activeItem, waiting already drained.
+    vm.applyReviewFrame?.({
+      event: 'queue_state',
+      nodeId: 'visual',
+      waiting: 0,
+      items: [],
+      busy: true,
+      activeItem: { text: '热修刷新续流' },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-busy-placeholder"]').exists()).toBe(true)
+
+    vm.applyAcpEvents?.([
+      { kind: 'thought', text: '续上的思考' },
+      { kind: 'message', text: '续上的正文' },
+    ])
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-react-stream"]').text()).toContain('续上的思考')
+    expect(wrapper.find('[data-testid="gate-react-stream"]').text()).toContain('续上的正文')
+    expect(wrapper.find('[data-testid="gate-busy-status"]').text()).toContain('输出中')
+    wrapper.unmount()
+  })
+
   it('keeps Inbox-style path on 60vh content-fit when mobileFillRemaining is off', async () => {
     const pageHtml = '<!doctype html><html><body><h1>Inbox</h1></body></html>'
     const { gate, run } = visualGateRun(pageHtml)

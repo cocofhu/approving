@@ -1655,6 +1655,7 @@
       "thinkingBusy": "Thinking…",
       "outputting": "Writing",
       "thought": "Thought process",
+      "turnCompleted": "Done",
       "done": "Interaction complete — continuing",
       "closed": "Run ended — interaction closed",
       "addImage": "Add image",

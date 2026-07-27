@@ -41,8 +41,9 @@ import {
   pickNextActiveAfterRemove,
 } from '@/lib/inboxActiveSelection'
 import { isAbortError } from '@/lib/liveLogRehydrate'
+import { createPendingAcpBuffer } from '@/lib/pendingAcpBuffer'
 import { useToast } from '@/lib/useToast'
-import type { Gate, InboxItem, Run } from '@/lib/types'
+import type { AcpEvent, Gate, InboxItem, Run } from '@/lib/types'
 
 const router = useRouter()
 const route = useRoute()
@@ -87,6 +88,11 @@ const reviewChatRef = ref<{
  * (hard loadActiveRun nulls activeRun → ReviewComposer gone). Flushed after mount.
  */
 let pendingReviewFrames: Record<string, unknown>[] = []
+/**
+ * ACP frames during the same hard-load window (parity with review buffer).
+ * Latest cumulative events per nodeId; flushed after busy slot rebuild.
+ */
+const pendingAcpFrames = createPendingAcpBuffer()
 /** Snapshot reactSessions stashed when activeRun is still null during hard load. */
 let pendingSnapshotSessions: Run['reactSessions'] | null = null
 const { selected } = usePipelineFilter()
@@ -484,7 +490,55 @@ function closeActiveRunWs() {
   activeRunWsRunId = ''
   clarifyLiveBusy.value = false
   pendingReviewFrames = []
+  pendingAcpFrames.clear()
   pendingSnapshotSessions = null
+}
+
+/** Deliver ACP to chat/gate, or buffer until ClarifyChat remounts after hard load. */
+function applyOrBufferAcpFrame(m: {
+  nodeId?: string
+  events?: AcpEvent[]
+  busy?: boolean
+}) {
+  const events = m.events
+  const nodeId = m.nodeId
+  gateApprovalRef.value?.applyAcpEvents?.(events)
+  if (reviewChatRef.value?.applyAcpEvents) {
+    reviewChatRef.value.applyAcpEvents(events, nodeId)
+    return
+  }
+  // Hard-load race: chat unmounted — keep latest cumulative ACP for seed-then-live.
+  if (active.value?.type === 'clarify' || active.value?.type === 'gate') {
+    pendingAcpFrames.push({
+      nodeId,
+      events: Array.isArray(events) ? events : [],
+      busy: m.busy,
+    })
+  }
+}
+
+function flushPendingAcpFrames() {
+  if (!pendingAcpFrames.size) return
+  const frames = pendingAcpFrames.takeAll()
+  for (const frame of frames) {
+    gateApprovalRef.value?.applyAcpEvents?.(frame.events)
+    reviewChatRef.value?.applyAcpEvents?.(frame.events, frame.nodeId)
+  }
+}
+
+/**
+ * Best-effort REST seed from LiveNodeEvents / persisted snapshot after busy
+ * slot rebuild (authoritative when WS chunks were dropped mid hard-load).
+ */
+async function seedClarifyAcpFromNodeEvents(runId: string, nodeId: string) {
+  try {
+    const r = await api.nodeEvents(runId, nodeId, { limit: 50 })
+    if (!r.events?.length) return
+    gateApprovalRef.value?.applyAcpEvents?.(r.events)
+    reviewChatRef.value?.applyAcpEvents?.(r.events, nodeId)
+  } catch {
+    /* seed is best-effort; live WS continues */
+  }
 }
 
 /** Project authoritative busy/queue onto ClarifyChat (RunDetail.restoreReactSessions parity). */
@@ -536,12 +590,21 @@ function applyOrBufferReviewFrame(m: Record<string, unknown>) {
 /**
  * After hard load / soft refresh: project reactSessions + flush frames buffered
  * while ReviewComposer was unmounted (WS Broadcast race).
+ * Order: queue_state rebuilds streaming slot → seed REST/buffered ACP → live.
  */
 async function projectClarifySessionAfterLoad(r: Run) {
   await nextTick()
   restoreReactSessions(r)
   await nextTick()
   flushPendingReviewFrames()
+  await nextTick()
+  const nodeId = active.value?.type === 'clarify' ? active.value.nodeId : null
+  const snap = nodeId ? r.reactSessions?.[nodeId] : null
+  if (nodeId && snap?.busy && active.value?.runId) {
+    await seedClarifyAcpFromNodeEvents(active.value.runId, nodeId)
+    await nextTick()
+  }
+  flushPendingAcpFrames()
 }
 
 function connectActiveRunWs(runId: string) {
@@ -601,12 +664,7 @@ function connectActiveRunWs(runId: string) {
     }
     if (m.type === 'acp') {
       if (typeof m.busy === 'boolean') clarifyLiveBusy.value = !!m.busy
-      const nodeId = (m as { nodeId?: string }).nodeId
-      gateApprovalRef.value?.applyAcpEvents?.(m.events)
-      if (reviewChatRef.value?.applyAcpEvents) {
-        reviewChatRef.value.applyAcpEvents(m.events, nodeId)
-      }
-      // ACP chunks need a live bubble; no buffer — restore+queue_state recreates it.
+      applyOrBufferAcpFrame(m as { nodeId?: string; events?: AcpEvent[]; busy?: boolean })
       return
     }
     if (m.type === 'artifact_edit' || m.type === 'react' || m.type === 'trace' || m.type === 'status') {
@@ -696,6 +754,7 @@ async function loadActiveRun(hard = true) {
     activeRunLoading.value = true
     // Chat unmounts — clear stale buffer for this load cycle (WS may refill).
     pendingReviewFrames = []
+    pendingAcpFrames.clear()
   }
   let projectAfterLoad = false
   try {

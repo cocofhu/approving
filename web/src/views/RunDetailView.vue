@@ -46,6 +46,7 @@ import { pickDefaultTimelineNodeId } from '@/lib/runStats'
 import { PRODUCT_NODE_TYPES } from '@/lib/productNodeArtifacts'
 import { applyLiveWsAcpPage } from '@/lib/applyLiveWsAcpPage'
 import { mergeAcpEvents, type MergedAcpEvent } from '@/lib/mergeAcpEvents'
+import { createPendingAcpBuffer } from '@/lib/pendingAcpBuffer'
 import type { LiveLogBootSession } from '@/lib/liveLogBootPhase'
 import {
   isAbortError,
@@ -127,6 +128,11 @@ const gateApprovalRef = ref<{
   applyReviewFrame?: (frame: any) => void
   applyAcpEvents?: (events: AcpEvent[] | undefined) => void
 } | null>(null)
+/**
+ * ACP frames that arrived while ClarifyChat / GateApproval was unmounted
+ * during hard load. Flushed after queue_state rebuilds the streaming slot.
+ */
+const pendingDialogueAcp = createPendingAcpBuffer()
 const manual = ref(false)
 // Per-node fetch generation: discard stale REST responses so a slow empty
 // reply cannot overwrite a newer non-empty write-back.
@@ -331,6 +337,7 @@ function resetRunState(id: string) {
   clearReactiveRecord(liveLogBootSessions as Record<string, unknown>)
   clearReactiveRecord(rehydrateByNode as Record<string, unknown>)
   sandboxLookup.value = null
+  pendingDialogueAcp.clear()
   // Prefer cached timeline so re-entry is not blanked by loading/error UI.
   restoreEventPagesFromCache(id)
 }
@@ -387,19 +394,85 @@ async function fetchRunData(): Promise<true | RunLoadErrorKind> {
 function restoreReactSessions(r: { reactSessions?: Record<string, any> }) {
   const sessions = r.reactSessions
   if (!sessions) return
+  const busyNodes: string[] = []
   for (const [nodeId, snap] of Object.entries(sessions)) {
     if (!snap || typeof snap !== 'object') continue
     liveBusy[nodeId] = !!snap.busy
-    if (selClarify.value?.nodeId === nodeId) {
-      reviewChatRef.value?.applyReviewFrame?.({
-        event: 'queue_state',
-        nodeId,
-        waiting: snap.waiting ?? 0,
-        items: snap.items ?? [],
-        busy: !!snap.busy,
-        activeItem: snap.activeItem,
-      })
+    if (snap.busy) busyNodes.push(nodeId)
+    const frame = {
+      event: 'queue_state',
+      nodeId,
+      waiting: snap.waiting ?? 0,
+      items: snap.items ?? [],
+      busy: !!snap.busy,
+      activeItem: snap.activeItem,
     }
+    if (selClarify.value?.nodeId === nodeId) {
+      reviewChatRef.value?.applyReviewFrame?.(frame)
+    }
+    // Gate hot-revise shares the producer reactSessions key.
+    if (run.value.gate?.reactUpstreamNodeId === nodeId) {
+      gateApprovalRef.value?.applyReviewFrame?.(frame)
+    }
+  }
+  if (busyNodes.length) {
+    void seedDialogueAcpAfterRestore(busyNodes)
+  }
+}
+
+/**
+ * Seed-then-live: after busy slot rebuild, replay eventPages / nodeEvents into
+ * the dialogue surface, then flush any ACP buffered during hard-load remount.
+ */
+async function seedDialogueAcpAfterRestore(nodeIds: string[]) {
+  await nextTick()
+  for (const nodeId of nodeIds) {
+    let events = eventPages[nodeId]?.events as AcpEvent[] | undefined
+    if (!events?.length) {
+      await fetchNodeEvents(nodeId)
+      events = eventPages[nodeId]?.events as AcpEvent[] | undefined
+    }
+    if (events?.length) {
+      if (selClarify.value?.nodeId === nodeId) {
+        reviewChatRef.value?.applyAcpEvents?.(events, nodeId)
+      }
+      if (run.value.gate?.reactUpstreamNodeId === nodeId) {
+        gateApprovalRef.value?.applyAcpEvents?.(events)
+      }
+    }
+  }
+  await nextTick()
+  flushPendingDialogueAcp()
+}
+
+function flushPendingDialogueAcp() {
+  if (!pendingDialogueAcp.size) return
+  for (const frame of pendingDialogueAcp.takeAll()) {
+    reviewChatRef.value?.applyAcpEvents?.(frame.events, frame.nodeId)
+    gateApprovalRef.value?.applyAcpEvents?.(frame.events)
+  }
+}
+
+/** Deliver ACP to dialogue surfaces or buffer until they remount. */
+function applyOrBufferDialogueAcp(
+  nodeId: string,
+  events: AcpEvent[],
+  busy?: boolean,
+) {
+  const forClarify = selClarify.value?.nodeId === nodeId
+  const forGate = run.value.gate?.reactUpstreamNodeId === nodeId
+  if (!forClarify && !forGate) return
+  let applied = false
+  if (forClarify && reviewChatRef.value?.applyAcpEvents) {
+    reviewChatRef.value.applyAcpEvents(events, nodeId)
+    applied = true
+  }
+  if (forGate && gateApprovalRef.value?.applyAcpEvents) {
+    gateApprovalRef.value.applyAcpEvents(events)
+    applied = true
+  }
+  if (!applied) {
+    pendingDialogueAcp.push({ nodeId, events, busy })
   }
 }
 
@@ -517,12 +590,7 @@ function connectWs() {
       liveNode.value = m.nodeId
       if (!manual.value) selected.value = m.nodeId
       // Dialogue-surface stream (ClarifyChat / GateApproval), not only LiveLog.
-      if (selClarify.value?.nodeId === m.nodeId) {
-        reviewChatRef.value?.applyAcpEvents?.(wsEvents, m.nodeId)
-      }
-      if (run.value.gate?.reactUpstreamNodeId === m.nodeId) {
-        gateApprovalRef.value?.applyAcpEvents?.(wsEvents)
-      }
+      applyOrBufferDialogueAcp(m.nodeId, wsEvents, m.busy)
     } else if (m.type === 'review' && m.nodeId) {
       // Prefer matching producer; components also filter by nodeId defensively.
       if (m.event === 'turn_begin') liveBusy[m.nodeId] = true

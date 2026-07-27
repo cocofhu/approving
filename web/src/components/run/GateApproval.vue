@@ -973,6 +973,8 @@ function applyReviewFrame(frame: {
   message?: string
   waiting?: number
   items?: { text?: string }[]
+  busy?: boolean
+  activeItem?: { text?: string } | null
 }) {
   const producer = props.gate.reactUpstreamNodeId
   if (producer && frame.nodeId && frame.nodeId !== producer) return
@@ -998,16 +1000,29 @@ function applyReviewFrame(frame: {
       break
     case 'queue_state': {
       // Platform-authoritative: remote Cancel / cross-entry must clear ghost rows.
+      // Refresh resume: busy+activeItem must keep thinking/inFlight even when waiting=0.
       const waiting = typeof frame.waiting === 'number' ? frame.waiting : 0
       const items = Array.isArray(frame.items) ? frame.items : null
+      const busy = !!frame.busy
+      const activeItem = frame.activeItem
+      if (busy && activeItem && !reactInFlight.value) {
+        reactInFlight.value = true
+        reactThinking.value = true
+        // Empty rails — host seeds ACP (pending buffer / nodeEvents) next.
+        if (!reactStreamText.value && !reactStreamThought.value) {
+          reactStreamText.value = ''
+          reactStreamThought.value = ''
+        }
+      }
       if (waiting === 0) {
         reactQueued.value = []
-        if (!reactInFlight.value) reactThinking.value = false
+        if (!reactInFlight.value && !busy) reactThinking.value = false
+        else reactThinking.value = reactInFlight.value || busy
         break
       }
       if (items) {
         const rebuilt = items.map((it) => ({ text: it.text ?? '' }))
-        const maxLocal = reactInFlight.value ? rebuilt.length : rebuilt.length + 1
+        const maxLocal = reactInFlight.value || busy ? rebuilt.length : rebuilt.length + 1
         if (reactQueued.value.length > maxLocal) {
           const optimistic = reactQueued.value
             .slice(rebuilt.length)
@@ -1020,14 +1035,16 @@ function applyReviewFrame(frame: {
           reactQueued.value = [...rebuilt, ...optimistic]
         }
       }
-      reactThinking.value = reactInFlight.value || reactQueued.value.length > 0
+      reactThinking.value = reactInFlight.value || reactQueued.value.length > 0 || busy
       break
     }
   }
 }
 
 function applyAcpEvents(events: { kind?: string; text?: string }[] | undefined) {
-  if (!reactThinking.value || !events?.length) return
+  // Accept ACP while busy/inFlight even if waiting=0 cleared the queue panel.
+  if ((!reactThinking.value && !reactInFlight.value) || !events?.length) return
+  if (!reactThinking.value) reactThinking.value = true
   for (const ev of events) {
     // Ignore tool_call / plan UI; keep rails separate so thought is never overwritten.
     if (ev.kind === 'message' && ev.text) reactStreamText.value = ev.text

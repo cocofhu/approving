@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   inboxContext: vi.fn(),
   resumeGate: vi.fn(),
   reactReply: vi.fn(),
+  nodeEvents: vi.fn(),
   runEventsWsUrl: vi.fn((id: string) => `ws://test/runs/${id}/events`),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock('@/lib/api', async () => {
       inboxContext: mocks.inboxContext,
       resumeGate: mocks.resumeGate,
       reactReply: mocks.reactReply,
+      nodeEvents: mocks.nodeEvents,
       runEventsWsUrl: mocks.runEventsWsUrl,
     },
   }
@@ -152,9 +154,10 @@ const GateApprovalStub = defineComponent({
   template: '<button data-testid="resolve-btn" @click="$emit(\'resolve\', \'approve\', {})">resolve</button>',
 })
 
-/** Captures applyReviewFrame for hard-load / early-WS restore assertions (review v1). */
+/** Captures applyReviewFrame / applyAcpEvents for hard-load restore assertions. */
 const composerFrames = vi.hoisted(() => ({
   applied: [] as Record<string, unknown>[],
+  acp: [] as { events: unknown; nodeId?: string }[],
   busy: false,
 }))
 
@@ -169,7 +172,9 @@ const ReviewComposerStub = defineComponent({
         if (f.event === 'turn_done' || f.event === 'error') composerFrames.busy = false
         if (f.event === 'queue_state' && typeof f.busy === 'boolean') composerFrames.busy = !!f.busy
       },
-      applyAcpEvents: () => {},
+      applyAcpEvents: (events: unknown, nodeId?: string) => {
+        composerFrames.acp.push({ events, nodeId })
+      },
       discardLastQueued: () => {},
       isSessionBusy: () => composerFrames.busy,
     })
@@ -232,11 +237,13 @@ function inboxCallsFor(runId: string, nodeId: string, iteration = 1) {
 beforeEach(async () => {
   vi.clearAllMocks()
   composerFrames.applied = []
+  composerFrames.acp = []
   composerFrames.busy = false
   FakeWebSocket.instances = []
   vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket)
   mocks.resumeGate.mockResolvedValue({ status: 'ok' })
   mocks.reactReply.mockResolvedValue({ status: 'ok' })
+  mocks.nodeEvents.mockResolvedValue({ events: [], live: false })
   if (filterState.pipelineSelected) filterState.pipelineSelected.value = ''
   if (filterState.projectSelected) filterState.projectSelected.value = ''
   // Reset singleton so each test starts from an empty pending badge/list.
@@ -1112,6 +1119,86 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     expect(last.busy).toBe(true)
     expect(last.activeItem?.text).toBe('甲')
     expect(last.items?.some((it) => it.text === '乙')).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('clarify hard load: early ACP is buffered and seeded after mount (g4.2 hard gate)', async () => {
+    const item = clarifyItem('acp-race')
+    mocks.listGates.mockResolvedValue(paged([item]))
+    mocks.nodeEvents.mockResolvedValue({
+      events: [{ kind: 'thought', text: 'REST seed thought', t: 1 }],
+      live: true,
+    })
+
+    let releaseContext!: (v: unknown) => void
+    const hung = new Promise((resolve) => {
+      releaseContext = resolve
+    })
+    mocks.inboxContext.mockImplementationOnce(() => hung as Promise<unknown>)
+
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+
+    const ws = FakeWebSocket.instances.find((w) => w.url.includes('run-acp-race'))
+    expect(ws).toBeTruthy()
+    expect(wrapper.find('[data-testid="review-composer-stub"]').exists()).toBe(false)
+
+    // ACP arrives while chat unmounted — must buffer (not drop).
+    ws!.emit('acp', {
+      nodeId: 'clarify-acp-race',
+      busy: true,
+      events: [
+        { kind: 'thought', text: 'buffered thought', t: 1 },
+        { kind: 'message', text: 'buffered message', t: 2 },
+      ],
+    })
+    await flushPromises()
+    expect(composerFrames.acp.length).toBe(0)
+
+    releaseContext({
+      type: 'clarify',
+      status: 'waiting_human',
+      nodes: [{ id: 'clarify-acp-race', type: 'react', label: '澄清' }],
+      artifacts: [],
+      nodeExecutions: {},
+      reactSessions: {
+        'clarify-acp-race': {
+          kind: 'clarify',
+          waiting: 0,
+          busy: true,
+          items: [],
+          activeItem: { id: 'q-a', text: '硬刷新提问' },
+        },
+      },
+      clarify: {
+        nodeId: 'clarify-acp-race',
+        iteration: 1,
+        turns: [],
+        done: false,
+        label: '澄清',
+      },
+    })
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="review-composer-stub"]').exists()).toBe(true)
+    // REST seed and/or buffered WS ACP applied after busy slot rebuild.
+    expect(composerFrames.acp.length).toBeGreaterThanOrEqual(1)
+    const seeded = composerFrames.acp.some((a) => {
+      const ev = a.events as { kind?: string; text?: string }[] | undefined
+      if (!Array.isArray(ev)) return false
+      return ev.some(
+        (e) =>
+          (e.kind === 'thought' && (e.text === 'buffered thought' || e.text === 'REST seed thought')) ||
+          (e.kind === 'message' && e.text === 'buffered message'),
+      )
+    })
+    expect(seeded).toBe(true)
+    expect(mocks.nodeEvents).toHaveBeenCalledWith('run-acp-race', 'clarify-acp-race', expect.anything())
     wrapper.unmount()
   })
 })

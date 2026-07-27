@@ -205,6 +205,7 @@ describe('RunDetailView ACP log rehydrate state machine', () => {
   it('keeps session snapshot cache across hard remount and WS does not clear error', () => {
     expect(src).toMatch(/from '@\/lib\/liveLogSnapshotCache'/)
     expect(src).toMatch(/from '@\/lib\/applyLiveWsAcpPage'/)
+    expect(src).toMatch(/from '@\/lib\/pendingAcpBuffer'/)
     expect(src).toMatch(/restoreEventPagesFromCache/)
     expect(src).toMatch(/clearLiveLogSnapshotsExceptRun/)
     expect(src).toMatch(/syncEventPageToCache/)
@@ -217,6 +218,10 @@ describe('RunDetailView ACP log rehydrate state machine', () => {
     // WS merge must not promote rehydrate / clear soft warn.
     expect(src).toMatch(/WS only merges into the snapshot/)
     expect(src).not.toMatch(/rehydrateByNode\[m\.nodeId\]\s*=\s*['"]ready['"]/)
+    // Seed-then-live: busy restore seeds dialogue ACP; hard-load buffers when chat gone.
+    expect(src).toMatch(/seedDialogueAcpAfterRestore/)
+    expect(src).toMatch(/applyOrBufferDialogueAcp/)
+    expect(src).toMatch(/pendingDialogueAcp/)
   })
 })
 

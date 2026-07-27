@@ -133,6 +133,42 @@ describe('[approving] ClarifyChat clarify-path UX (non-reviewMode)', () => {
     w.unmount()
   })
 
+  it('hard-refresh seed: thought-only then message after remount (g4.1)', async () => {
+    // Simulate host seed-then-live: rebuild slot → seed ACP after (re)mount.
+    const w = mountClarify()
+    const vm = w.vm as unknown as {
+      applyReviewFrame: (f: Record<string, unknown>) => void
+      applyAcpEvents: (e: { kind: string; text: string }[]) => void
+    }
+    vm.applyReviewFrame({
+      event: 'queue_state',
+      nodeId: 'clarify',
+      waiting: 0,
+      items: [],
+      busy: true,
+      activeItem: { text: '硬刷新前的提问' },
+    })
+    await nextTick()
+    expect(w.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(true)
+
+    // Seed thought recovered from LiveNodeEvents / pending ACP buffer.
+    vm.applyAcpEvents([{ kind: 'thought', text: '已恢复的思考增量' }])
+    await nextTick()
+    expect(w.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(false)
+    expect(w.find('[data-testid="clarify-thought"]').text()).toContain('已恢复的思考增量')
+    expect(w.find('[data-testid="clarify-busy-status"]').text()).toContain('思考中')
+
+    vm.applyAcpEvents([
+      { kind: 'thought', text: '已恢复的思考增量' },
+      { kind: 'message', text: '续流正文' },
+    ])
+    await nextTick()
+    expect(w.text()).toContain('续流正文')
+    expect(w.find('[data-testid="clarify-busy-status"]').text()).toContain('输出中')
+    expect(w.find('[data-testid="clarify-stream-caret"]').exists()).toBe(true)
+    w.unmount()
+  })
+
   it('IME composing Enter does not send', async () => {
     const w = mountClarify()
     const ta = w.find('[data-testid="clarify-input"]')
