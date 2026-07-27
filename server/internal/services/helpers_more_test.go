@@ -34,13 +34,29 @@ func TestEscapeLikeAndInboxHelpers(t *testing.T) {
 func TestArtifactAllPage(t *testing.T) {
 	db := newTestDB(t)
 	arts := NewArtifactService(db)
-	db.Create(&models.Run{ID: "r-art", WorkflowID: "wf", WorkflowName: "W", Status: "succeeded"})
-	if _, err := arts.Save("r-art", "n", "a.md", "markdown", "hi"); err != nil {
+	db.Create(&models.Run{ID: "r-art", WorkflowID: "wf", WorkflowName: "W", Title: "Run Title", Status: "succeeded"})
+	id, err := arts.Save("r-art", "n", "a.md", "markdown", "hi")
+	if err != nil {
 		t.Fatal(err)
 	}
 	page, total := arts.AllPage("wf", "", 1, 10, "")
 	if total < 1 || len(page) < 1 {
 		t.Fatalf("AllPage: total=%d n=%d", total, len(page))
+	}
+	for _, a := range page {
+		if a.Content != "" {
+			t.Fatalf("AllPage should omit Content, got %q for %s", a.Content, a.Name)
+		}
+		if a.Name == "" || a.SizeBytes == 0 {
+			t.Fatalf("AllPage meta incomplete: %+v", a)
+		}
+		if a.RunTitle != "Run Title" {
+			t.Fatalf("AllPage run_title: got %q", a.RunTitle)
+		}
+	}
+	rec, ok := arts.GetByID(id)
+	if !ok || rec.Content != "hi" {
+		t.Fatalf("GetByID should include Content: %+v ok=%v", rec, ok)
 	}
 	page, total = arts.AllPage("wf", "", 1, 10, "a_")
 	_ = page

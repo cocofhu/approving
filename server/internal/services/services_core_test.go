@@ -698,12 +698,31 @@ func TestArtifactService(t *testing.T) {
 	if len(s.ByRun("r1")) != 2 {
 		t.Fatal("byrun")
 	}
+	for _, a := range s.ByRun("r1") {
+		if a.Content != "" {
+			t.Fatalf("ByRun should omit Content, got %q for %s", a.Content, a.Name)
+		}
+		if a.Name == "" || a.SizeBytes == 0 {
+			t.Fatalf("ByRun meta incomplete: %+v", a)
+		}
+	}
 	if len(s.All()) != 2 {
 		t.Fatal("all")
+	}
+	for _, a := range s.All() {
+		if a.Content != "" {
+			t.Fatalf("All should omit Content, got %q for %s", a.Content, a.Name)
+		}
+		if a.Name == "" || a.SizeBytes == 0 {
+			t.Fatalf("All meta incomplete: %+v", a)
+		}
 	}
 	rec, ok := s.GetByID(id)
 	if !ok || rec.WorkflowName != "WF" {
 		t.Fatalf("getbyid: %+v %v", rec, ok)
+	}
+	if rec.Content != "updated" {
+		t.Fatalf("GetByID should include Content, got %q", rec.Content)
 	}
 	if _, ok := s.GetByID("ghost"); ok {
 		t.Fatal("missing id")
