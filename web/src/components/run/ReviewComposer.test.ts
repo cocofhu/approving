@@ -11,6 +11,7 @@ function mountGate(opts: {
   streamText?: string
   streamThought?: string
   interrupted?: boolean
+  streamCompletedAt?: string | null
 } = {}) {
   const i18n = createI18n({
     legacy: false,
@@ -24,6 +25,7 @@ function mountGate(opts: {
       streamText: opts.streamText ?? '',
       streamThought: opts.streamThought ?? '',
       interrupted: opts.interrupted ?? false,
+      streamCompletedAt: opts.streamCompletedAt ?? null,
       canReject: true,
       canPass: true,
     },
@@ -60,7 +62,7 @@ describe('ReviewComposer gate busy status (C-tier)', () => {
     wrapper.unmount()
   })
 
-  it('message switches status to 输出中 and keeps thought', async () => {
+  it('message switches status to 输出中, collapses thought, shows caret', async () => {
     const wrapper = mountGate({
       thinking: true,
       streamThought: '旁路思考',
@@ -69,6 +71,8 @@ describe('ReviewComposer gate busy status (C-tier)', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="gate-busy-status"]').text()).toContain('输出中')
     expect(wrapper.find('[data-testid="gate-react-thought"]').text()).toContain('旁路思考')
+    expect(wrapper.find('[data-testid="gate-react-thought"]').attributes('open')).toBeUndefined()
+    expect(wrapper.find('[data-testid="gate-stream-caret"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="gate-react-stream"]').text()).toContain('旁路正文流')
     wrapper.unmount()
   })
@@ -81,7 +85,32 @@ describe('ReviewComposer gate busy status (C-tier)', () => {
     wrapper.unmount()
   })
 
-  it('idle (not thinking) hides stream panel', async () => {
+  it('completed footnote shows without caret; interrupted never shows 已完成', async () => {
+    const done = mountGate({
+      thinking: false,
+      streamThought: '思考',
+      streamText: '正文',
+      streamCompletedAt: new Date().toISOString(),
+    })
+    await flushPromises()
+    expect(done.find('[data-testid="gate-turn-completed"]').exists()).toBe(true)
+    expect(done.find('[data-testid="gate-turn-completed"]').text()).toContain('已完成')
+    expect(done.find('[data-testid="gate-stream-caret"]').exists()).toBe(false)
+    done.unmount()
+
+    const bad = mountGate({
+      thinking: false,
+      streamText: '半截',
+      interrupted: true,
+      streamCompletedAt: null,
+    })
+    await flushPromises()
+    expect(bad.find('[data-testid="gate-turn-completed"]').exists()).toBe(false)
+    expect(bad.text()).toContain('interrupted')
+    bad.unmount()
+  })
+
+  it('idle (not thinking, no completed) hides stream panel', async () => {
     const wrapper = mountGate({
       thinking: false,
       streamText: '残留',
@@ -89,6 +118,17 @@ describe('ReviewComposer gate busy status (C-tier)', () => {
     })
     await flushPromises()
     expect(wrapper.find('[data-testid="gate-react-stream"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('ReviewComposer nested ClarifyChat delivery', () => {
+  it('applyAcpEvents returns false when ClarifyChat not mounted (gate mode)', async () => {
+    const wrapper = mountGate({ thinking: true })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.applyAcpEvents?.([{ kind: 'message', text: 'x' }])).toBe(false)
+    expect(vm.isChatReady?.()).toBe(false)
     wrapper.unmount()
   })
 })

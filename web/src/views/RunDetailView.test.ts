@@ -222,6 +222,10 @@ describe('RunDetailView ACP log rehydrate state machine', () => {
     expect(src).toMatch(/seedDialogueAcpAfterRestore/)
     expect(src).toMatch(/applyOrBufferDialogueAcp/)
     expect(src).toMatch(/pendingDialogueAcp/)
+    expect(src).toMatch(/projectDialogueAfterLoad/)
+    expect(src).toMatch(/deliverOrBufferDialogueAcp/)
+    // Real delivery: applyAcpEvents returning false must buffer (ReviewComposer nest).
+    expect(src).toMatch(/if \(!reviewChatRef\.value\?\.applyAcpEvents\) return false/)
   })
 })
 

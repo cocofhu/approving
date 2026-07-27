@@ -44,6 +44,7 @@ import ArtifactLoadingPane from './ArtifactLoadingPane.vue'
 import UpstreamRequirementContext from './UpstreamRequirementContext.vue'
 import ReviewShell from './ReviewShell.vue'
 import ReviewComposer from './ReviewComposer.vue'
+import GateReactStreamPanel from './GateReactStreamPanel.vue'
 import { REVIEW_SHELL_WIDTH_KEY_APPROVAL } from '@/lib/reviewLayoutBudget'
 import { OUTPUT_KEY_TO_ARTIFACT } from '@/lib/structuredArtifacts'
 import {
@@ -941,6 +942,8 @@ const reactStreamText = ref('')
 /** ACP thought rail (separate from message — Demo: thought must not be dropped). */
 const reactStreamThought = ref('')
 const reactInterrupted = ref(false)
+/** Normal completion timestamp for restrained「已完成」footnote (Demo phase 4). */
+const reactStreamCompletedAt = ref<string | null>(null)
 const reactError = ref<string | null>(null)
 const feedbackChatRef = ref<{
   send: (opts?: { body?: string }) => Promise<boolean>
@@ -986,16 +989,23 @@ function applyReviewFrame(frame: {
       reactStreamText.value = ''
       reactStreamThought.value = ''
       reactInterrupted.value = false
+      reactStreamCompletedAt.value = null
       break
     case 'turn_done':
       reactInFlight.value = false
       reactThinking.value = reactQueued.value.length > 0
-      if (frame.interrupted) reactInterrupted.value = true
+      if (frame.interrupted) {
+        reactInterrupted.value = true
+        reactStreamCompletedAt.value = null
+      } else if (reactStreamText.value || reactStreamThought.value) {
+        reactStreamCompletedAt.value = new Date().toISOString()
+      }
       break
     case 'error':
       reactInFlight.value = false
       reactThinking.value = reactQueued.value.length > 0
       reactError.value = frame.message || reactError.value
+      reactStreamCompletedAt.value = null
       if (frame.interrupted) reactInterrupted.value = true
       break
     case 'queue_state': {
@@ -1008,6 +1018,7 @@ function applyReviewFrame(frame: {
       if (busy && activeItem && !reactInFlight.value) {
         reactInFlight.value = true
         reactThinking.value = true
+        reactStreamCompletedAt.value = null
         // Empty rails — host seeds ACP (pending buffer / nodeEvents) next.
         if (!reactStreamText.value && !reactStreamThought.value) {
           reactStreamText.value = ''
@@ -1058,6 +1069,7 @@ async function cancelReactRevise() {
   reactThinking.value = false
   reactInFlight.value = false
   reactInterrupted.value = true
+  reactStreamCompletedAt.value = null
   try {
     await api.gateReactCancel(props.run.id, props.gate.nodeId)
   } catch (e: any) {
@@ -1605,50 +1617,13 @@ function onComposerReject() {
                     {{ qi + 1 }}. {{ q.text }}
                   </div>
                 </div>
-                <div
-                  v-if="reactThinking"
-                  class="mt-2 max-h-40 space-y-1.5 overflow-y-auto rounded border border-line bg-surface px-2 py-1.5 text-[12px] text-txt2"
-                  data-testid="gate-react-stream"
-                >
-                  <div
-                    v-if="!reactStreamText && !reactStreamThought"
-                    class="inline-flex items-center gap-2 text-txt3"
-                    data-testid="gate-busy-placeholder"
-                  >
-                    <span class="typing-dots" aria-hidden="true"><i /><i /><i /></span>
-                    <span>{{ t('pages.clarify.thinkingBusy') }}</span>
-                  </div>
-                  <div
-                    v-else-if="!reactStreamText && reactStreamThought"
-                    class="text-txt3"
-                    data-testid="gate-busy-status"
-                  >
-                    {{ t('pages.clarify.thinkingBusy') }}
-                  </div>
-                  <div
-                    v-else-if="reactStreamText"
-                    class="gate-outputting"
-                    data-testid="gate-busy-status"
-                  >
-                    {{ t('pages.clarify.outputting') }}
-                  </div>
-                  <details
-                    v-if="reactStreamThought"
-                    open
-                    class="rounded border border-line bg-base/60 text-[11.5px] text-txt3"
-                    data-testid="gate-react-thought"
-                  >
-                    <summary class="flex cursor-pointer select-none items-center gap-1 px-2 py-1 hover:text-txt2">
-                      <Icon name="sparkles" :size="11" class="text-accent-2" />
-                      {{ t('pages.clarify.thought') }}
-                    </summary>
-                    <div class="whitespace-pre-wrap border-t border-dashed border-line px-2 pb-1.5 pt-1 font-mono leading-5">{{ reactStreamThought }}</div>
-                  </details>
-                  <div v-if="reactStreamText">
-                    {{ reactStreamText }}
-                    <span v-if="reactInterrupted" class="ml-1 text-[10px] text-warn">interrupted</span>
-                  </div>
-                </div>
+                <GateReactStreamPanel
+                  :thinking="reactThinking"
+                  :stream-text="reactStreamText"
+                  :stream-thought="reactStreamThought"
+                  :interrupted="reactInterrupted"
+                  :completed-at="reactStreamCompletedAt"
+                />
               </div>
               <div v-else class="mt-2 flex shrink-0 flex-wrap gap-3">
                 <button
@@ -1945,50 +1920,13 @@ function onComposerReject() {
                     {{ qi + 1 }}. {{ q.text }}
                   </div>
                 </div>
-                <div
-                  v-if="reactThinking"
-                  class="mt-2 max-h-40 space-y-1.5 overflow-y-auto rounded border border-line bg-surface px-2 py-1.5 text-[12px] text-txt2"
-                  data-testid="gate-react-stream"
-                >
-                  <div
-                    v-if="!reactStreamText && !reactStreamThought"
-                    class="inline-flex items-center gap-2 text-txt3"
-                    data-testid="gate-busy-placeholder"
-                  >
-                    <span class="typing-dots" aria-hidden="true"><i /><i /><i /></span>
-                    <span>{{ t('pages.clarify.thinkingBusy') }}</span>
-                  </div>
-                  <div
-                    v-else-if="!reactStreamText && reactStreamThought"
-                    class="text-txt3"
-                    data-testid="gate-busy-status"
-                  >
-                    {{ t('pages.clarify.thinkingBusy') }}
-                  </div>
-                  <div
-                    v-else-if="reactStreamText"
-                    class="gate-outputting"
-                    data-testid="gate-busy-status"
-                  >
-                    {{ t('pages.clarify.outputting') }}
-                  </div>
-                  <details
-                    v-if="reactStreamThought"
-                    open
-                    class="rounded border border-line bg-base/60 text-[11.5px] text-txt3"
-                    data-testid="gate-react-thought"
-                  >
-                    <summary class="flex cursor-pointer select-none items-center gap-1 px-2 py-1 hover:text-txt2">
-                      <Icon name="sparkles" :size="11" class="text-accent-2" />
-                      {{ t('pages.clarify.thought') }}
-                    </summary>
-                    <div class="whitespace-pre-wrap border-t border-dashed border-line px-2 pb-1.5 pt-1 font-mono leading-5">{{ reactStreamThought }}</div>
-                  </details>
-                  <div v-if="reactStreamText">
-                    {{ reactStreamText }}
-                    <span v-if="reactInterrupted" class="ml-1 text-[10px] text-warn">interrupted</span>
-                  </div>
-                </div>
+                <GateReactStreamPanel
+                  :thinking="reactThinking"
+                  :stream-text="reactStreamText"
+                  :stream-thought="reactStreamThought"
+                  :interrupted="reactInterrupted"
+                  :completed-at="reactStreamCompletedAt"
+                />
               </div>
               <!-- Non-preview hot (structured etc.): keep ReviewComposer. -->
               <ReviewComposer
@@ -2012,6 +1950,7 @@ function onComposerReject() {
                 :stream-text="reactStreamText"
                 :stream-thought="reactStreamThought"
                 :interrupted="reactInterrupted"
+                :stream-completed-at="reactStreamCompletedAt"
                 @reject="onComposerReject"
                 @pass="onComposerPass"
                 @cancel="cancelReactRevise"
@@ -2107,6 +2046,7 @@ function onComposerReject() {
               :stream-text="reactStreamText"
               :stream-thought="reactStreamThought"
               :interrupted="reactInterrupted"
+              :stream-completed-at="reactStreamCompletedAt"
               @reject="onComposerReject"
               @pass="onComposerPass"
               @cancel="cancelReactRevise"
@@ -2327,6 +2267,7 @@ function onComposerReject() {
             :stream-text="reactStreamText"
             :stream-thought="reactStreamThought"
             :interrupted="reactInterrupted"
+            :stream-completed-at="reactStreamCompletedAt"
             @reject="onComposerReject"
             @pass="onComposerPass"
             @cancel="cancelReactRevise"
@@ -2362,43 +2303,5 @@ function onComposerReject() {
 </template>
 
 <style scoped>
-.typing-dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-.typing-dots i {
-  width: 5px;
-  height: 5px;
-  border-radius: 9999px;
-  background: #22d3ee;
-  animation: typing-bounce 1.2s infinite ease-in-out both;
-}
-.typing-dots i:nth-child(2) {
-  animation-delay: 0.16s;
-}
-.typing-dots i:nth-child(3) {
-  animation-delay: 0.32s;
-}
-@keyframes typing-bounce {
-  0%,
-  70%,
-  100% {
-    transform: translateY(0);
-    opacity: 0.35;
-  }
-  35% {
-    transform: translateY(-4px);
-    opacity: 1;
-  }
-}
-.gate-outputting {
-  color: rgb(var(--c-accent-2));
-  background: var(--grad-logo);
-  background-size: var(--grad-logo-size);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: shimmer 3.5s ease-in-out infinite;
-}
+/* Stream four-phase UI styles live in GateReactStreamPanel. */
 </style>

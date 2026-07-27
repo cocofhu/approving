@@ -2773,6 +2773,51 @@ describe('GateApproval mobileFillRemaining layout', () => {
     expect(wrapper.find('[data-testid="gate-react-stream"]').text()).toContain('续上的思考')
     expect(wrapper.find('[data-testid="gate-react-stream"]').text()).toContain('续上的正文')
     expect(wrapper.find('[data-testid="gate-busy-status"]').text()).toContain('输出中')
+    expect(wrapper.find('[data-testid="gate-react-thought"]').attributes('open')).toBeUndefined()
+    expect(wrapper.find('[data-testid="gate-stream-caret"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('four-phase complete: turn_done shows 已完成 footnote; interrupted does not (g3/g2.1)', async () => {
+    breakpointMocks.isMobile.value = false
+    const pageHtml = '<!doctype html><html><body><h1>gate done</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      mobileFillRemaining: false,
+      gate: { ...gate, reactSessionAlive: true, reactUpstreamNodeId: 'visual' },
+      run,
+    })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.applyReviewFrame?.({
+      event: 'queue_state',
+      nodeId: 'visual',
+      waiting: 0,
+      items: [],
+      busy: true,
+      activeItem: { text: '完成态' },
+    })
+    vm.applyAcpEvents?.([
+      { kind: 'thought', text: '完成前思考' },
+      { kind: 'message', text: '完成前正文' },
+    ])
+    await flushPromises()
+    vm.applyReviewFrame?.({ event: 'turn_done', nodeId: 'visual' })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-turn-completed"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-turn-completed"]').text()).toContain('已完成')
+    expect(wrapper.find('[data-testid="gate-stream-caret"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="gate-busy-status"]').exists()).toBe(false)
+
+    vm.applyReviewFrame?.({
+      event: 'turn_begin',
+      nodeId: 'visual',
+    })
+    vm.applyAcpEvents?.([{ kind: 'message', text: '半截' }])
+    vm.applyReviewFrame?.({ event: 'turn_done', nodeId: 'visual', interrupted: true })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-turn-completed"]').exists()).toBe(false)
     wrapper.unmount()
   })
 

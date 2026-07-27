@@ -151,6 +151,22 @@ class FakeWebSocket {
 const GateApprovalStub = defineComponent({
   name: 'GateApproval',
   emits: ['resolve', 'react-revised'],
+  setup(_, { expose }) {
+    expose({
+      isEditing: false,
+      applyReviewFrame: (f: Record<string, unknown>) => {
+        composerFrames.applied.push(f)
+        if (f.event === 'turn_begin') composerFrames.busy = true
+        if (f.event === 'turn_done' || f.event === 'error') composerFrames.busy = false
+        if (f.event === 'queue_state' && typeof f.busy === 'boolean') composerFrames.busy = !!f.busy
+      },
+      applyAcpEvents: (events: unknown) => {
+        composerFrames.acp.push({ events })
+      },
+      cancelReactRevise: () => {},
+    })
+    return {}
+  },
   template: '<button data-testid="resolve-btn" @click="$emit(\'resolve\', \'approve\', {})">resolve</button>',
 })
 
@@ -1199,6 +1215,97 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     })
     expect(seeded).toBe(true)
     expect(mocks.nodeEvents).toHaveBeenCalledWith('run-acp-race', 'clarify-acp-race', expect.anything())
+    wrapper.unmount()
+  })
+
+  it('gate hard load: early ACP is buffered and seeded after mount (g4.2 gate parity)', async () => {
+    const item = gateItem('acp-gate')
+    mocks.listGates.mockResolvedValue(paged([item]))
+    mocks.nodeEvents.mockResolvedValue({
+      events: [{ kind: 'thought', text: 'REST gate thought', t: 1 }],
+      live: true,
+    })
+
+    let releaseContext!: (v: unknown) => void
+    const hung = new Promise((resolve) => {
+      releaseContext = resolve
+    })
+    mocks.inboxContext.mockImplementationOnce(() => hung as Promise<unknown>)
+
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+
+    const ws = FakeWebSocket.instances.find((w) => w.url.includes('run-acp-gate'))
+    expect(ws).toBeTruthy()
+    expect(wrapper.find('[data-testid="resolve-btn"]').exists()).toBe(false)
+
+    ws!.emit('acp', {
+      nodeId: 'visual-producer',
+      busy: true,
+      events: [
+        { kind: 'thought', text: 'buffered gate thought', t: 1 },
+        { kind: 'message', text: 'buffered gate message', t: 2 },
+      ],
+    })
+    await flushPromises()
+    expect(composerFrames.acp.length).toBe(0)
+
+    releaseContext({
+      type: 'gate',
+      nodes: [
+        { id: 'visual-producer', type: 'visual', label: '视觉' },
+        { id: 'gate-acp-gate', type: 'human_gate', label: '审批' },
+      ],
+      artifacts: [],
+      nodeExecutions: {},
+      reactSessions: {
+        'visual-producer': {
+          kind: 'review',
+          waiting: 0,
+          busy: true,
+          items: [],
+          activeItem: { id: 'q-a', text: '热修提问' },
+        },
+      },
+      gate: {
+        runId: 'run-acp-gate',
+        nodeId: 'gate-acp-gate',
+        iteration: 1,
+        title: 'Gate acp-gate',
+        bodyMd: '',
+        actions: [{ id: 'approve', label: 'Approve' }],
+        reactUpstreamNodeId: 'visual-producer',
+        reactSessionAlive: true,
+        requestedAt: new Date().toISOString(),
+      },
+    })
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="resolve-btn"]').exists()).toBe(true)
+    expect(composerFrames.acp.length).toBeGreaterThanOrEqual(1)
+    const seeded = composerFrames.acp.some((a) => {
+      const ev = a.events as { kind?: string; text?: string }[] | undefined
+      if (!Array.isArray(ev)) return false
+      return ev.some(
+        (e) =>
+          (e.kind === 'thought' &&
+            (e.text === 'buffered gate thought' || e.text === 'REST gate thought')) ||
+          (e.kind === 'message' && e.text === 'buffered gate message'),
+      )
+    })
+    expect(seeded).toBe(true)
+    expect(mocks.nodeEvents).toHaveBeenCalledWith(
+      'run-acp-gate',
+      'visual-producer',
+      expect.anything(),
+    )
+    const queueFrames = composerFrames.applied.filter((f) => f.event === 'queue_state')
+    expect(queueFrames.length).toBeGreaterThanOrEqual(1)
     wrapper.unmount()
   })
 })

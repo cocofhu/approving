@@ -78,8 +78,8 @@ const listScrollTop = ref(0)
 const listEl = ref<HTMLElement | null>(null)
 const gateApprovalRef = ref<InstanceType<typeof GateApproval> | null>(null)
 const reviewChatRef = ref<{
-  applyReviewFrame?: (frame: any) => void
-  applyAcpEvents?: (events: any[] | undefined, nodeId?: string) => void
+  applyReviewFrame?: (frame: any) => boolean | void
+  applyAcpEvents?: (events: any[] | undefined, nodeId?: string) => boolean | void
   discardLastQueued?: () => void
   isSessionBusy?: () => boolean
 } | null>(null)
@@ -494,7 +494,21 @@ function closeActiveRunWs() {
   pendingSnapshotSessions = null
 }
 
-/** Deliver ACP to chat/gate, or buffer until ClarifyChat remounts after hard load. */
+/** Producer nodeId for busy session restore (clarify node or gate react upstream). */
+function activeDialogueNodeId(r?: Run | null): string | null {
+  if (active.value?.type === 'clarify') return active.value.nodeId
+  if (active.value?.type === 'gate') {
+    return (
+      r?.gate?.reactUpstreamNodeId ||
+      activeRun.value?.gate?.reactUpstreamNodeId ||
+      (active.value as Gate).reactUpstreamNodeId ||
+      null
+    )
+  }
+  return null
+}
+
+/** Deliver ACP to chat/gate, or buffer until surface remounts after hard load. */
 function applyOrBufferAcpFrame(m: {
   nodeId?: string
   events?: AcpEvent[]
@@ -502,13 +516,17 @@ function applyOrBufferAcpFrame(m: {
 }) {
   const events = m.events
   const nodeId = m.nodeId
-  gateApprovalRef.value?.applyAcpEvents?.(events)
-  if (reviewChatRef.value?.applyAcpEvents) {
-    reviewChatRef.value.applyAcpEvents(events, nodeId)
-    return
+  let applied = false
+  if (gateApprovalRef.value?.applyAcpEvents) {
+    gateApprovalRef.value.applyAcpEvents(events)
+    applied = true
   }
-  // Hard-load race: chat unmounted — keep latest cumulative ACP for seed-then-live.
-  if (active.value?.type === 'clarify' || active.value?.type === 'gate') {
+  if (reviewChatRef.value?.applyAcpEvents) {
+    const ok = reviewChatRef.value.applyAcpEvents(events, nodeId)
+    if (ok !== false) applied = true
+  }
+  // Hard-load race: surface unmounted — keep latest cumulative ACP for seed-then-live.
+  if (!applied && (active.value?.type === 'clarify' || active.value?.type === 'gate')) {
     pendingAcpFrames.push({
       nodeId,
       events: Array.isArray(events) ? events : [],
@@ -541,9 +559,9 @@ async function seedClarifyAcpFromNodeEvents(runId: string, nodeId: string) {
   }
 }
 
-/** Project authoritative busy/queue onto ClarifyChat (RunDetail.restoreReactSessions parity). */
-function restoreReactSessions(r: { reactSessions?: Run['reactSessions'] } | null) {
-  const nodeId = active.value?.type === 'clarify' ? active.value.nodeId : null
+/** Project authoritative busy/queue onto ClarifyChat / GateApproval. */
+function restoreReactSessions(r: { reactSessions?: Run['reactSessions']; gate?: Run['gate'] } | null) {
+  const nodeId = activeDialogueNodeId(r as Run | null)
   if (!nodeId) return
   const sessions = r?.reactSessions ?? pendingSnapshotSessions
   if (!sessions) return
@@ -558,11 +576,16 @@ function restoreReactSessions(r: { reactSessions?: Run['reactSessions'] } | null
     busy: !!snap.busy,
     activeItem: snap.activeItem,
   }
-  if (reviewChatRef.value?.applyReviewFrame) {
-    reviewChatRef.value.applyReviewFrame(frame)
-  } else {
-    pendingReviewFrames.push(frame)
+  let delivered = false
+  if (active.value?.type === 'gate' && gateApprovalRef.value?.applyReviewFrame) {
+    gateApprovalRef.value.applyReviewFrame(frame)
+    delivered = true
   }
+  if (reviewChatRef.value?.applyReviewFrame) {
+    const ok = reviewChatRef.value.applyReviewFrame(frame)
+    if (ok !== false) delivered = true
+  }
+  if (!delivered) pendingReviewFrames.push(frame)
   pendingSnapshotSessions = null
 }
 
@@ -571,26 +594,32 @@ function flushPendingReviewFrames() {
   const frames = pendingReviewFrames
   pendingReviewFrames = []
   for (const frame of frames) {
+    gateApprovalRef.value?.applyReviewFrame?.(frame)
     reviewChatRef.value?.applyReviewFrame?.(frame)
   }
 }
 
-/** Deliver review frame to chat, or buffer until ClarifyChat remounts after hard load. */
+/** Deliver review frame to chat/gate, or buffer until surface remounts after hard load. */
 function applyOrBufferReviewFrame(m: Record<string, unknown>) {
-  gateApprovalRef.value?.applyReviewFrame?.(m)
-  if (reviewChatRef.value?.applyReviewFrame) {
-    reviewChatRef.value.applyReviewFrame(m)
-    return
+  let applied = false
+  if (gateApprovalRef.value?.applyReviewFrame) {
+    gateApprovalRef.value.applyReviewFrame(m)
+    applied = true
   }
-  if (active.value?.type === 'clarify') {
+  if (reviewChatRef.value?.applyReviewFrame) {
+    const ok = reviewChatRef.value.applyReviewFrame(m)
+    if (ok !== false) applied = true
+  }
+  if (!applied && (active.value?.type === 'clarify' || active.value?.type === 'gate')) {
     pendingReviewFrames.push(m)
   }
 }
 
 /**
- * After hard load / soft refresh: project reactSessions + flush frames buffered
- * while ReviewComposer was unmounted (WS Broadcast race).
+ * After hard load: project reactSessions + flush frames buffered while
+ * ReviewComposer / GateApproval was unmounted (WS Broadcast race).
  * Order: queue_state rebuilds streaming slot → seed REST/buffered ACP → live.
+ * Covers clarify and gate (review v1 / g2).
  */
 async function projectClarifySessionAfterLoad(r: Run) {
   await nextTick()
@@ -598,7 +627,7 @@ async function projectClarifySessionAfterLoad(r: Run) {
   await nextTick()
   flushPendingReviewFrames()
   await nextTick()
-  const nodeId = active.value?.type === 'clarify' ? active.value.nodeId : null
+  const nodeId = activeDialogueNodeId(r)
   const snap = nodeId ? r.reactSessions?.[nodeId] : null
   if (nodeId && snap?.busy && active.value?.runId) {
     await seedClarifyAcpFromNodeEvents(active.value.runId, nodeId)
@@ -639,7 +668,11 @@ function connectActiveRunWs(runId: string) {
     // WS connect snapshot may carry reactSessions before BroadcastReviewSessions.
     if (m.type === 'snapshot') {
       const sessions = m.run?.reactSessions
-      if (sessions && active.value?.type === 'clarify' && active.value.runId === runId) {
+      const dialogueActive =
+        active.value &&
+        (active.value.type === 'clarify' || active.value.type === 'gate') &&
+        active.value.runId === runId
+      if (sessions && dialogueActive) {
         if (activeRun.value) {
           activeRun.value = { ...activeRun.value, reactSessions: sessions }
           void nextTick(() => {
@@ -763,8 +796,8 @@ async function loadActiveRun(hard = true) {
     if (isProcessedTriple(target)) return
     activeRun.value = adaptInboxContextToRun(ctx, target.runId)
     activeRunLoadError.value = false
-    // Must project AFTER loading flag clears so ReviewComposer can mount.
-    projectAfterLoad = hard && target.type === 'clarify'
+    // Must project AFTER loading flag clears so ReviewComposer / GateApproval can mount.
+    projectAfterLoad = hard && (target.type === 'clarify' || target.type === 'gate')
   } catch (e) {
     if (isAbortError(e) || signal.aborted) return
     if (

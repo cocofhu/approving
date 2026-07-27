@@ -67,12 +67,36 @@ func (h *Handlers) inboxContextGate(c *gin.Context, runID, gateNodeID string, it
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	out := gin.H{
 		"type":           "gate",
 		"nodes":          graphNodesDTO(run.Graph),
 		"artifacts":      artsDTO,
 		"nodeExecutions": slimExecs,
-	})
+	}
+	// Gate DTO subset + reactSessions for Inbox hard-refresh seed-then-live
+	// (parity with runDetailDTO / clarify inbox-context).
+	if g, ok := h.Runs.PendingGate(runID); ok && g.NodeID == gateNodeID {
+		gateDTO := gin.H{
+			"runId": g.RunID, "nodeId": g.NodeID, "iteration": g.Iteration,
+			"workflowId": g.WorkflowID, "workflowName": g.WorkflowName,
+			"title": g.Title, "bodyMd": g.BodyMd, "actions": g.Actions, "form": g.Form,
+			"upstreamNodeId": g.UpstreamNodeID, "upstreamIteration": g.UpstreamIteration,
+			"requestedAt": g.RequestedAt,
+		}
+		if h.Eng != nil {
+			if pid, alive := h.Eng.GateReactInfo(runID, g.NodeID); pid != "" {
+				gateDTO["reactUpstreamNodeId"] = pid
+				gateDTO["reactSessionAlive"] = alive
+			}
+		}
+		out["gate"] = gateDTO
+	}
+	if h.Eng != nil {
+		if byNode := reactSessionsDTO(h.Eng.ReviewSessionsForRun(runID)); byNode != nil {
+			out["reactSessions"] = byNode
+		}
+	}
+	c.JSON(http.StatusOK, out)
 }
 
 func (h *Handlers) inboxContextClarify(c *gin.Context, runID, nodeID string, iteration int) {
