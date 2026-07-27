@@ -476,12 +476,9 @@ func (e *Engine) executeClarifyTurn(ctx context.Context, s *reviewSession, item 
 	}
 
 	// Auto-clarify: recommended options while auto_var is on.
+	// autoAdvanceReact already appends human/agent turns to conv.
 	if !force && !t.Done && len(t.Questions) > 0 && e.autoReactEnabled(c, node) {
 		t = e.autoAdvanceReact(c, node, &conv, req, t)
-		// Refresh last agent message after auto-advance.
-		if n := len(conv.Messages); n > 0 && conv.Messages[n-1].Role == "agent" {
-			// autoAdvance already appended; nothing to replace
-		}
 	}
 
 	if !t.Done {
