@@ -331,9 +331,12 @@ describe('RunDetailView load failure split', () => {
 })
 
 describe('RunDetailView clarify session narrow update (g3.2)', () => {
-  it('skips react/focus loadRun while clarify session busy', () => {
+  it('skips react/status/trace/artifact_edit/focus loadRun while clarify session busy', () => {
     expect(src).toMatch(/function isClarifySessionBusy\(/)
-    expect(src).toMatch(/if \(m\.type === 'react' && isClarifySessionBusy\(\)\) return/)
+    // All four event types share one busy gate (review v3) — not react-only.
+    expect(src).toMatch(
+      /m\.type === 'trace'[\s\S]*?m\.type === 'status'[\s\S]*?m\.type === 'react'[\s\S]*?m\.type === 'artifact_edit'[\s\S]*?if \(isClarifySessionBusy\(\)\) return/,
+    )
     expect(src).toMatch(/if \(isClarifySessionBusy\(\)\) return/)
     expect(src).toMatch(/liveBusy\[m\.nodeId\] = true/)
     expect(src).toMatch(/m\.event === 'turn_begin'/)

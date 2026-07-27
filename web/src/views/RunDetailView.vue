@@ -542,8 +542,9 @@ function connectWs() {
       m.type === 'artifact_edit'
     ) {
       // Node finished / transitioned / human artifact edit: pull authoritative snapshot.
-      // Mid-clarify: react is projected via review/acp frames — do not full-page rebind.
-      if (m.type === 'react' && isClarifySessionBusy()) return
+      // Mid-clarify: review/acp frames project the session — skip full-page rebind for
+      // react/status/trace/artifact_edit alike (g3.2 / review v3).
+      if (isClarifySessionBusy()) return
       if (m.type === 'status') liveNode.value = null
       loadRun(false)
     }

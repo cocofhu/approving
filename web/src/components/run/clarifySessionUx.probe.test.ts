@@ -78,6 +78,38 @@ describe('[approving] ClarifyChat clarify-path UX (non-reviewMode)', () => {
     w.unmount()
   })
 
+  it('real pump order: queue_state(remaining) then turn_begin(active) binds 甲 not 乙', async () => {
+    // Server pump: queue_state items=剩余(不含 active) → turn_begin item=当前轮.
+    // Blind shift after trim would wrongly show 乙 as live human (review v1).
+    const w = mountClarify()
+    await sendText(w, '澄清意见甲')
+    await sendText(w, '澄清意见乙')
+    const vm = w.vm as unknown as {
+      applyReviewFrame: (f: Record<string, unknown>) => void
+    }
+    vm.applyReviewFrame({
+      event: 'queue_state',
+      nodeId: 'clarify',
+      waiting: 1,
+      items: [{ text: '澄清意见乙' }],
+      busy: true,
+    })
+    await nextTick()
+    vm.applyReviewFrame({
+      event: 'turn_begin',
+      nodeId: 'clarify',
+      item: { text: '澄清意见甲' },
+    })
+    await nextTick()
+    const scroller = w.find('[data-testid="clarify-scroller"]').text()
+    const humanMatches = scroller.match(/澄清意见甲/g) || []
+    expect(humanMatches.length).toBe(1)
+    expect(scroller).not.toMatch(/澄清意见乙/)
+    expect(w.find('[data-testid="clarify-review-queue"]').text()).toContain('澄清意见乙')
+    expect(w.find('[data-testid="clarify-review-queue"]').text()).not.toContain('澄清意见甲')
+    w.unmount()
+  })
+
   it('refresh resume via queue_state busy+activeItem recreates live stream bubble', async () => {
     const w = mountClarify()
     const vm = w.vm as unknown as {

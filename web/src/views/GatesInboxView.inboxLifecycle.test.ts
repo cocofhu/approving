@@ -733,6 +733,10 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     ws!.emit('react')
     await flushPromises()
     expect(inboxCallsFor('run-a', 'clarify-a', 1).length).toBe(afterBegin)
+    // artifact_edit mid-busy must also skip softRefresh (review v4).
+    ws!.emit('artifact_edit')
+    await flushPromises()
+    expect(inboxCallsFor('run-a', 'clarify-a', 1).length).toBe(afterBegin)
 
     // Idle react (no busy) may softRefresh.
     ws!.emit('review', { event: 'turn_done', nodeId: 'clarify-a' })

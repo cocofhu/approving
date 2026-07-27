@@ -506,11 +506,10 @@ function connectActiveRunWs(runId: string) {
         if (m.type === 'artifact_edit') void softRefreshActiveRun()
         return
       }
-      // Clarify: allow artifact_edit; react mid-turn is projected via review/acp
-      // frames — skip softRefresh so we do not wipe busy/queue/stream.
+      // Clarify: react/artifact_edit mid-turn projected via review/acp — skip
+      // softRefresh while busy so we do not wipe busy/queue/stream (g3.2 / review v4).
       if (active.value.type === 'clarify') {
-        if (m.type === 'artifact_edit') void softRefreshActiveRun()
-        if (m.type === 'react') {
+        if (m.type === 'artifact_edit' || m.type === 'react') {
           // Gate on live WS busy / sessionBusy — not stale reactSessions snapshot.
           if (!isClarifySoftRefreshBlocked()) void softRefreshActiveRun()
         }

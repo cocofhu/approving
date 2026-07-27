@@ -45,6 +45,16 @@ const App = defineComponent({
     async function simTurnBeginStream() {
       const c = chatRef.value
       if (!c?.applyReviewFrame) return
+      // Real pump order: queue_state(remaining, busy) then turn_begin(active).
+      // Dual-send harness leaves 甲+乙 in local queue; trim to 乙 before begin.
+      c.applyReviewFrame({
+        event: 'queue_state',
+        nodeId: 'clarify',
+        waiting: 1,
+        items: [{ text: '澄清意见乙（仍在队列）' }],
+        busy: true,
+      })
+      await nextTick()
       c.applyReviewFrame({
         event: 'turn_begin',
         item: { text: '澄清意见甲（队列首条）' },
@@ -56,6 +66,27 @@ const App = defineComponent({
       c.applyAcpEvents?.([{ kind: 'thought', text: '思考增量…' }])
       await nextTick()
       c.applyAcpEvents?.([{ kind: 'message', text: '流式产出正文（非整轮一次性）。' }])
+    }
+
+    /** Dual-message pump frame order probe (review v2): assert 甲 live, 乙 queued. */
+    async function simPumpOrderDual() {
+      const c = chatRef.value
+      if (!c?.applyReviewFrame) return
+      c.applyReviewFrame({
+        event: 'queue_state',
+        nodeId: 'clarify',
+        waiting: 1,
+        items: [{ text: '澄清意见乙（仍在队列）' }],
+        busy: true,
+      })
+      await nextTick()
+      c.applyReviewFrame({
+        event: 'turn_begin',
+        item: { text: '澄清意见甲（队列首条）' },
+        nodeId: 'clarify',
+      })
+      await nextTick()
+      maybeHostRefresh('react')
     }
 
     /** Mid-stream: inject persisted human (softRefresh/loadRun catch-up) — must not double. */
@@ -109,6 +140,16 @@ const App = defineComponent({
               onClick: () => void simTurnBeginStream(),
             },
             '模拟 turn_begin+流式',
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              'data-testid': 'sim-pump-order-dual',
+              class: 'px-3 py-1.5 rounded border text-sm',
+              onClick: () => void simPumpOrderDual(),
+            },
+            '模拟真实泵帧序',
           ),
           h(
             'button',

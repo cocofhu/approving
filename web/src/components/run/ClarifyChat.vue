@@ -762,13 +762,22 @@ function applyReviewFrame(frame: {
   if (frame.nodeId && frame.nodeId !== props.nodeId) return
   switch (frame.event) {
     case 'turn_begin': {
-      const item = queued.value.shift()
-      const text = item?.text ?? frame.item?.text ?? ''
-      const images = item?.images ?? frame.item?.images
-      const annotations = item?.annotations ?? frame.item?.annotations
+      // Pump order: queue_state(remaining, no active) → turn_begin(item=active).
+      // frame.item is server-authoritative; match-remove from local queue — never
+      // blind-shift (that would bind live human to the next waiter after trim).
+      const auth = frame.item
+      const text = auth?.text ?? ''
+      const matchIdx = text ? queued.value.findIndex((q) => q.text === text) : -1
+      const local = matchIdx >= 0 ? queued.value.splice(matchIdx, 1)[0] : undefined
+      const images =
+        auth?.images && auth.images.length > 0 ? auth.images : local?.images
+      const annotations =
+        auth?.annotations && auth.annotations.length > 0
+          ? auth.annotations
+          : local?.annotations
       liveTurns.value.push({
         role: 'human',
-        text,
+        text: text || local?.text || '',
         at: new Date().toISOString(),
         images,
         annotations,
