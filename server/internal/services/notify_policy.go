@@ -64,6 +64,8 @@ func filterP0NotifyEvents(in []string) []string {
 // at resolve time; we still allow it in DefaultEvents for UI grey-state roundtrip
 // only when explicitly present — P0 UI never writes it as selectable, so strip
 // unknown kinds except the known three for forward-compat storage foresight.
+// Template fields: whitespace-only is trimmed to ""; empty is NOT rewritten to
+// the default QQ body (empty must trigger FormatRunNotifyMessage fallback).
 func NormalizeProjectNotifyPolicy(p models.ProjectNotifyPolicy) models.ProjectNotifyPolicy {
 	if p.Enabled == nil {
 		on := true
@@ -73,6 +75,12 @@ func NormalizeProjectNotifyPolicy(p models.ProjectNotifyPolicy) models.ProjectNo
 		p.DefaultEvents = []string{models.NotifyKindWaitingHuman, models.NotifyKindFailed}
 	} else {
 		p.DefaultEvents = normalizeStoredEvents(p.DefaultEvents)
+	}
+	if strings.TrimSpace(p.WaitingHumanTemplate) == "" {
+		p.WaitingHumanTemplate = ""
+	}
+	if strings.TrimSpace(p.FailedTemplate) == "" {
+		p.FailedTemplate = ""
 	}
 	return p
 }
@@ -114,13 +122,18 @@ func normalizeStoredEvents(in []string) []string {
 }
 
 // NotifyPoliciesEqual compares two project policies for change detection.
+// Template fields are included so "only change message body" still persists.
 func NotifyPoliciesEqual(a, b models.ProjectNotifyPolicy) bool {
 	a = NormalizeProjectNotifyPolicy(a)
 	b = NormalizeProjectNotifyPolicy(b)
 	if a.IsEnabled() != b.IsEnabled() {
 		return false
 	}
-	return stringSlicesEqual(a.DefaultEvents, b.DefaultEvents)
+	if !stringSlicesEqual(a.DefaultEvents, b.DefaultEvents) {
+		return false
+	}
+	return a.WaitingHumanTemplate == b.WaitingHumanTemplate &&
+		a.FailedTemplate == b.FailedTemplate
 }
 
 // WorkflowNotifyPoliciesEqual compares workflow overrides.

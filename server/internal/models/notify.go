@@ -21,9 +21,13 @@ const (
 // Enabled=nil means default ON (hard-close only when explicitly false).
 // DefaultEvents=nil means the product default [waiting_human, failed]; an
 // explicit empty slice means "no default events".
+// WaitingHumanTemplate / FailedTemplate are optional full message bodies;
+// trim-empty means fall back to FormatRunNotifyMessage (zero regression).
 type ProjectNotifyPolicy struct {
-	Enabled       *bool    `json:"enabled"`
-	DefaultEvents []string `json:"defaultEvents"`
+	Enabled              *bool    `json:"enabled"`
+	DefaultEvents        []string `json:"defaultEvents"`
+	WaitingHumanTemplate string   `json:"waitingHumanTemplate,omitempty"`
+	FailedTemplate       string   `json:"failedTemplate,omitempty"`
 }
 
 // WorkflowNotifyPolicy is the per-workflow override. Empty Mode ≡ inherit.

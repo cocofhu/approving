@@ -1,9 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/lib/api'
 import { useToast } from '@/lib/useToast'
 import type { Project, ProjectNotifyPolicy } from '@/lib/types'
+import {
+  RUN_NOTIFY_PLACEHOLDERS,
+  defaultEditableRunNotifyTemplate,
+  renderRunNotifyMessage,
+  type RunNotifyKind,
+} from '@/lib/runNotifyTemplate'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppSwitch from '@/components/ui/AppSwitch.vue'
 
@@ -23,9 +29,13 @@ const toast = useToast()
 const enabled = ref(true)
 const waitingHuman = ref(true)
 const failed = ref(true)
+const waitingHumanTemplate = ref('')
+const failedTemplate = ref('')
+const templateKind = ref<RunNotifyKind>('waiting_human')
 const hasChannel = ref(false)
 const loadingChannel = ref(true)
 const saving = ref(false)
+const tplInput = ref<HTMLTextAreaElement | null>(null)
 
 function policyFromProject(p: Project): ProjectNotifyPolicy {
   const raw = p.notifyPolicy
@@ -34,6 +44,8 @@ function policyFromProject(p: Project): ProjectNotifyPolicy {
     defaultEvents: Array.isArray(raw?.defaultEvents)
       ? [...raw!.defaultEvents!]
       : ['waiting_human', 'failed'],
+    waitingHumanTemplate: raw?.waitingHumanTemplate ?? '',
+    failedTemplate: raw?.failedTemplate ?? '',
   }
 }
 
@@ -43,6 +55,8 @@ function syncFromProject() {
   const ev = new Set(p.defaultEvents || [])
   waitingHuman.value = ev.has('waiting_human')
   failed.value = ev.has('failed')
+  waitingHumanTemplate.value = p.waitingHumanTemplate || ''
+  failedTemplate.value = p.failedTemplate || ''
 }
 
 async function loadChannel() {
@@ -78,15 +92,46 @@ const statusLabel = computed(() => {
   return t('pages.projectDetail.notify.statusOn')
 })
 
+const currentTemplate = computed({
+  get() {
+    return templateKind.value === 'waiting_human'
+      ? waitingHumanTemplate.value
+      : failedTemplate.value
+  },
+  set(v: string) {
+    if (templateKind.value === 'waiting_human') {
+      waitingHumanTemplate.value = v
+    } else {
+      failedTemplate.value = v
+    }
+  },
+})
+
+const previewText = computed(() =>
+  renderRunNotifyMessage(templateKind.value, currentTemplate.value),
+)
+
+const previewModeLabel = computed(() => {
+  const empty = !String(currentTemplate.value || '').trim()
+  return empty
+    ? t('pages.projectDetail.notify.previewDefault')
+    : t('pages.projectDetail.notify.previewCustom')
+})
+
+const previewIsDefault = computed(() => !String(currentTemplate.value || '').trim())
+
 async function save() {
   saving.value = true
   try {
     const defaultEvents: string[] = []
     if (waitingHuman.value) defaultEvents.push('waiting_human')
     if (failed.value) defaultEvents.push('failed')
+    // Always round-trip both templates so enabled/events-only saves cannot wipe them.
     const notifyPolicy: ProjectNotifyPolicy = {
       enabled: enabled.value,
       defaultEvents,
+      waitingHumanTemplate: waitingHumanTemplate.value,
+      failedTemplate: failedTemplate.value,
     }
     const updated = await api.updateProject(props.projectId, { notifyPolicy })
     emit('updated', updated)
@@ -96,6 +141,31 @@ async function save() {
   } finally {
     saving.value = false
   }
+}
+
+function fillDefaultTemplate() {
+  currentTemplate.value = defaultEditableRunNotifyTemplate(templateKind.value)
+}
+
+function clearTemplate() {
+  currentTemplate.value = ''
+}
+
+async function insertPlaceholder(ph: string) {
+  const el = tplInput.value
+  if (!el) {
+    currentTemplate.value = `${currentTemplate.value || ''}${ph}`
+    return
+  }
+  const start = el.selectionStart ?? el.value.length
+  const end = el.selectionEnd ?? start
+  const v = el.value
+  const next = v.slice(0, start) + ph + v.slice(end)
+  currentTemplate.value = next
+  await nextTick()
+  el.focus()
+  const pos = start + ph.length
+  el.setSelectionRange(pos, pos)
 }
 
 function goChannelSettings() {
@@ -196,6 +266,109 @@ function goChannelSettings() {
             </span>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Message templates (project-level only; no workflow override) -->
+    <div
+      class="mt-4 space-y-3 rounded-lg border border-line bg-surface p-4"
+      data-testid="notify-template-section"
+    >
+      <div>
+        <div class="text-sm font-medium text-txt">{{ t('pages.projectDetail.notify.templatesTitle') }}</div>
+        <p class="mt-0.5 text-[12px] text-txt3">{{ t('pages.projectDetail.notify.templatesHint') }}</p>
+      </div>
+
+      <div class="flex gap-2" role="tablist" data-testid="notify-template-seg">
+        <button
+          type="button"
+          class="flex-1 rounded-md border px-3 py-2 text-[12px] transition"
+          :class="
+            templateKind === 'waiting_human'
+              ? 'border-accent/45 bg-accent-dim text-accent-2'
+              : 'border-line bg-elevated text-txt3 hover:text-txt'
+          "
+          data-testid="notify-tpl-seg-waiting"
+          @click="templateKind = 'waiting_human'"
+        >
+          {{ t('pages.projectDetail.notify.segWaitingHuman') }}
+        </button>
+        <button
+          type="button"
+          class="flex-1 rounded-md border px-3 py-2 text-[12px] transition"
+          :class="
+            templateKind === 'failed'
+              ? 'border-accent/45 bg-accent-dim text-accent-2'
+              : 'border-line bg-elevated text-txt3 hover:text-txt'
+          "
+          data-testid="notify-tpl-seg-failed"
+          @click="templateKind = 'failed'"
+        >
+          {{ t('pages.projectDetail.notify.segFailed') }}
+        </button>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-1.5" data-testid="notify-placeholder-chips">
+        <span class="mr-1 text-[11px] text-txt3">{{ t('pages.projectDetail.notify.placeholders') }}</span>
+        <button
+          v-for="ph in RUN_NOTIFY_PLACEHOLDERS"
+          :key="ph"
+          type="button"
+          class="rounded border border-line bg-elevated px-1.5 py-0.5 font-mono text-[11px] text-accent-2 transition hover:border-accent/50"
+          :data-testid="`notify-ph-${ph.replace(/[{}]/g, '')}`"
+          @click="insertPlaceholder(ph)"
+        >
+          {{ ph }}
+        </button>
+      </div>
+
+      <div class="flex flex-wrap gap-2">
+        <AppButton
+          variant="outline"
+          data-testid="notify-tpl-fill-default"
+          @click="fillDefaultTemplate"
+        >
+          {{ t('pages.projectDetail.notify.fillDefault') }}
+        </AppButton>
+        <AppButton
+          variant="outline"
+          data-testid="notify-tpl-clear"
+          @click="clearTemplate"
+        >
+          {{ t('pages.projectDetail.notify.clearDefault') }}
+        </AppButton>
+      </div>
+
+      <textarea
+        ref="tplInput"
+        v-model="currentTemplate"
+        class="min-h-[160px] w-full resize-y rounded-md border border-line bg-elevated px-3 py-2 font-mono text-[12.5px] leading-relaxed text-txt placeholder:text-txt3 focus:border-accent/55 focus:outline-none"
+        data-testid="notify-tpl-input"
+        :placeholder="t('pages.projectDetail.notify.templatePlaceholder')"
+        spellcheck="false"
+      />
+
+      <div data-testid="notify-preview">
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <span class="text-[11px] uppercase tracking-wide text-txt3">
+            {{ t('pages.projectDetail.notify.previewTitle') }}
+          </span>
+          <span
+            class="rounded px-2 py-0.5 text-[11px]"
+            :class="
+              previewIsDefault
+                ? 'bg-accent-dim/40 text-accent-2'
+                : 'bg-ok/10 text-ok'
+            "
+            data-testid="notify-preview-mode"
+          >
+            {{ previewModeLabel }}
+          </span>
+        </div>
+        <pre
+          class="whitespace-pre-wrap break-all rounded-md border border-line bg-elevated px-3 py-2.5 font-mono text-[12.5px] leading-relaxed text-txt2"
+          data-testid="notify-preview-body"
+        >{{ previewText }}</pre>
       </div>
     </div>
 

@@ -15,7 +15,12 @@ const MOCK_PROJECT = {
   description: 'Notify UI e2e',
   sandboxEnv: [],
   variables: [],
-  notifyPolicy: { enabled: true, defaultEvents: ['waiting_human', 'failed'] },
+  notifyPolicy: {
+    enabled: true,
+    defaultEvents: ['waiting_human', 'failed'],
+    waitingHumanTemplate: '',
+    failedTemplate: '',
+  },
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
 }
@@ -266,10 +271,79 @@ test.describe('Run NotifyPolicy UI (P0)', () => {
     await expect.poll(() => harness.getSavedProjectPolicy()).toEqual({
       enabled: false,
       defaultEvents: ['waiting_human', 'failed'],
+      waitingHumanTemplate: '',
+      failedTemplate: '',
     })
 
     await page.screenshot({
       path: path.join(shotDir, '02-notify-tab-master-off.png'),
+      fullPage: true,
+    })
+  })
+
+  test('通知 Tab：模板可改可存可预览；只改开关不丢模板；行内无模板入口', async ({ page }) => {
+    const harness = await setupNotifyHarness(page, { hasChannel: true })
+
+    await expect(page.getByTestId('notify-template-section')).toBeVisible()
+    await expect(page.getByTestId('notify-preview-mode')).toContainText('使用现网默认')
+    await expect(page.getByTestId('notify-preview-body')).toContainText('【Approving】等待人工处理')
+
+    // Fill default skeleton → preview stays equivalent but mode becomes custom
+    await page.getByTestId('notify-tpl-fill-default').click()
+    await expect(page.getByTestId('notify-tpl-input')).toHaveValue(/\{project\}/)
+    await expect(page.getByTestId('notify-preview-mode')).toContainText('自定义模板渲染')
+
+    // Custom shorter template + save
+    await page.getByTestId('notify-tpl-input').fill(
+      '【Approving】{title}\n📦 {project} / {workflow}\nRun {run_id} · {node}\n👉 {link}',
+    )
+    await expect(page.getByTestId('notify-preview-body')).toContainText('📦 approving-demo / gate-main')
+    await page.getByTestId('notify-ph-run_id').click()
+    await expect(page.getByTestId('notify-tpl-input')).toHaveValue(/\{run_id\}/)
+
+    await page.getByTestId('notify-save').click()
+    await expect.poll(() => {
+      const p = harness.getSavedProjectPolicy() as {
+        waitingHumanTemplate?: string
+        failedTemplate?: string
+      } | null
+      return p?.waitingHumanTemplate?.includes('📦') && p?.failedTemplate === ''
+        ? 'ok'
+        : null
+    }).toBe('ok')
+
+    // Switch segment: failed still empty → default preview
+    await page.getByTestId('notify-tpl-seg-failed').click()
+    await expect(page.getByTestId('notify-preview-mode')).toContainText('使用现网默认')
+    await expect(page.getByTestId('notify-preview-body')).toContainText('【Approving】运行失败')
+
+    // Only toggle master off and save — waiting template must round-trip
+    await page.getByTestId('notify-master-toggle').click()
+    await page.getByTestId('notify-save').click()
+    await expect.poll(() => {
+      const p = harness.getSavedProjectPolicy() as {
+        enabled?: boolean
+        waitingHumanTemplate?: string
+        failedTemplate?: string
+      } | null
+      return p?.enabled === false && p?.waitingHumanTemplate?.includes('📦') && p?.failedTemplate === ''
+        ? 'roundtrip'
+        : JSON.stringify(p)
+    }).toBe('roundtrip')
+
+    // Clear current (failed) segment → empty
+    await page.getByTestId('notify-tpl-clear').click()
+    await expect(page.getByTestId('notify-tpl-input')).toHaveValue('')
+
+    // Workflow inline: mode/events only — no template controls
+    await page.getByRole('button', { name: '流水线' }).click()
+    await expect(page.getByTestId('wf-notify-cell').first()).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByTestId('notify-template-section')).toHaveCount(0)
+    await expect(page.getByTestId('notify-tpl-input')).toHaveCount(0)
+    await expect(page.getByTestId('notify-placeholder-chips')).toHaveCount(0)
+
+    await page.screenshot({
+      path: path.join(shotDir, '05-notify-template-preview.png'),
       fullPage: true,
     })
   })
