@@ -11,6 +11,7 @@ import ReposEditor, { type RepoRow } from '@/components/ReposEditor.vue'
 import PrioritySegmented, { type RunPriority } from '@/components/ui/PrioritySegmented.vue'
 import { api } from '@/lib/api'
 import { isCompositeFilled, normalizeCompositeSubmit } from '@/lib/compositeText'
+import { MAX_RUN_TAGS, MAX_TAG_RUNES, validateRunTag } from '@/lib/runTags'
 import type { ClarifyImage } from '@/lib/types'
 
 export type InputField = {
@@ -66,9 +67,8 @@ const scrollAreaMinHeight = ref<number | undefined>(undefined)
 const tags = ref<string[]>([])
 const tagInput = ref('')
 const tagSuggestions = ref<string[]>([])
-const tagPattern = /^[\p{L}\p{N}_./-]+$/u
-const maxTags = 8
-const maxTagRunes = 32
+const maxTags = MAX_RUN_TAGS
+const maxTagRunes = MAX_TAG_RUNES
 const reposDraft = ref<Record<string, RepoRow[]>>({})
 /** loading 可见层显式高度：≥ max(捕获高度, 200)，捕获为空也至少 200px */
 const loadingLayerMinHeight = computed(() =>
@@ -239,16 +239,11 @@ function setBoolField(f: InputField, on: boolean) {
   props.runInputs[f.key] = on ? 'true' : 'false'
 }
 
-function runeCount(value: string): number {
-  return Array.from(value).length
-}
-
 function validateTag(value: string): string {
-  const trimmed = value.trim()
-  if (!trimmed) return ''
-  if (runeCount(trimmed) > maxTagRunes) return t('pages.runLaunch.tagTooLong', { max: maxTagRunes })
-  if (!tagPattern.test(trimmed)) return t('pages.runLaunch.tagInvalid')
-  return ''
+  const code = validateRunTag(value)
+  if (!code || code === 'empty') return ''
+  if (code === 'too_long') return t('common.tagFilter.tagTooLong', { max: maxTagRunes })
+  return t('common.tagFilter.tagInvalid')
 }
 
 const tagError = computed(() => validateTag(tagInput.value))

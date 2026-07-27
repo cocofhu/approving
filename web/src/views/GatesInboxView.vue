@@ -6,6 +6,7 @@ import Icon from '@/components/ui/Icon.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import PipelineFilter from '@/components/ui/PipelineFilter.vue'
 import ProjectFilter from '@/components/ui/ProjectFilter.vue'
+import TagFilter from '@/components/ui/TagFilter.vue'
 import GateApproval from '@/components/run/GateApproval.vue'
 import ReviewShell from '@/components/run/ReviewShell.vue'
 import { REVIEW_SHELL_WIDTH_KEY_APPROVAL } from '@/lib/reviewLayoutBudget'
@@ -22,6 +23,7 @@ import {
   resolveClarifyProductStage,
 } from '@/lib/clarifyInboxStage'
 import { usePipelineFilter } from '@/lib/usePipelineFilter'
+import { useTagFilter } from '@/lib/useTagFilter'
 import { useProjectContext } from '@/lib/useProjectContext'
 import { usePendingGates } from '@/lib/usePendingGates'
 import { useClarifyDraft } from '@/lib/useClarifyDraft'
@@ -89,42 +91,29 @@ let pendingReviewFrames: Record<string, unknown>[] = []
 let pendingSnapshotSessions: Run['reactSessions'] | null = null
 const { selected } = usePipelineFilter()
 const { selected: selectedProject, ensureHydrated: hydrateProject } = useProjectContext()
-const tagDraft = ref('')
+const { selectedTags } = useTagFilter()
+const projectFilterOpen = ref(false)
+const pipelineFilterOpen = ref(false)
+const tagFilterOpen = ref(false)
 
-function parseTagQuery(raw: string): string[] {
-  if (!raw) return []
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const part of raw.split(',')) {
-    const tag = part.trim()
-    if (!tag || seen.has(tag)) continue
-    seen.add(tag)
-    out.push(tag)
+watch(projectFilterOpen, (v) => {
+  if (v) {
+    pipelineFilterOpen.value = false
+    tagFilterOpen.value = false
   }
-  return out
-}
-
-const selectedTags = computed<string[]>({
-  get: () => parseTagQuery(typeof route.query.tag === 'string' ? route.query.tag : ''),
-  set: (value) => {
-    const query = { ...route.query }
-    const next = parseTagQuery(value.join(',')).join(',')
-    if (next) query.tag = next
-    else delete query.tag
-    router.replace({ query })
-  },
 })
-
-function addTagFilter() {
-  const tag = tagDraft.value.trim()
-  if (!tag) return
-  selectedTags.value = [...selectedTags.value, tag]
-  tagDraft.value = ''
-}
-
-function removeTagFilter(tag: string) {
-  selectedTags.value = selectedTags.value.filter((item) => item !== tag)
-}
+watch(pipelineFilterOpen, (v) => {
+  if (v) {
+    projectFilterOpen.value = false
+    tagFilterOpen.value = false
+  }
+})
+watch(tagFilterOpen, (v) => {
+  if (v) {
+    projectFilterOpen.value = false
+    pipelineFilterOpen.value = false
+  }
+})
 
 const showUpdateBanner = ref(false)
 const showProcessedBanner = ref(false)
@@ -1108,47 +1097,51 @@ function badgeLabel(it: InboxItem) {
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.gatesInbox.title') }}</h2>
         <p class="text-sm text-txt3" v-html="t('pages.gatesInbox.subtitleHtml')" />
       </div>
-      <div class="flex shrink-0 flex-wrap items-center gap-2">
-        <div class="min-w-[220px] rounded-md border border-line bg-surface px-2.5 py-2">
-          <div v-if="selectedTags.length" class="mb-1.5 flex flex-wrap gap-1.5">
-            <button v-for="tag in selectedTags" :key="tag" class="chip" @click="removeTagFilter(tag)">{{ tag }}</button>
-          </div>
-          <input
-            v-model="tagDraft"
-            class="w-full bg-transparent text-sm outline-none"
-            :placeholder="t('pages.gatesInbox.tagPlaceholder')"
-            @keydown.enter.prevent="addTagFilter"
+      <div class="flex w-full shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center md:w-auto">
+        <TagFilter
+          v-model="selectedTags"
+          v-model:open="tagFilterOpen"
+          :project-id="selectedProject"
+        />
+        <div class="flex flex-wrap items-center gap-2">
+          <span
+            class="inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-[11px] font-medium"
+            :class="{
+              'border-info/40 bg-info/10 text-info': statusPillClass === 'pending',
+              'border-accent/40 bg-accent-dim/50 text-accent-2': statusPillClass === 'editing',
+              'border-ok/35 bg-ok/10 text-ok': statusPillClass === 'idle',
+            }"
+          >
+            <span
+              class="h-1.5 w-1.5 rounded-full"
+              :class="{
+                'bg-info animate-pulse': statusPillClass === 'pending',
+                'bg-accent': statusPillClass === 'editing',
+                'bg-ok': statusPillClass === 'idle',
+              }"
+            />
+            {{ statusPillText }}
+          </span>
+          <button
+            class="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-txt transition hover:border-line-strong hover:bg-elevated disabled:opacity-45"
+            :disabled="manualRefreshing || processingLock"
+            :aria-busy="processingLock || undefined"
+            @click="onManualRefresh"
+          >
+            <Icon name="refresh" :size="14" :class="{ 'animate-spin': manualRefreshing }" />
+            {{ t('common.buttons.refresh') }}
+          </button>
+          <ProjectFilter
+            v-model="selectedProject"
+            v-model:open="projectFilterOpen"
+            :count="listTotal"
+          />
+          <PipelineFilter
+            v-model="selected"
+            v-model:open="pipelineFilterOpen"
+            :count="listTotal"
           />
         </div>
-        <span
-          class="inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-[11px] font-medium"
-          :class="{
-            'border-info/40 bg-info/10 text-info': statusPillClass === 'pending',
-            'border-accent/40 bg-accent-dim/50 text-accent-2': statusPillClass === 'editing',
-            'border-ok/35 bg-ok/10 text-ok': statusPillClass === 'idle',
-          }"
-        >
-          <span
-            class="h-1.5 w-1.5 rounded-full"
-            :class="{
-              'bg-info animate-pulse': statusPillClass === 'pending',
-              'bg-accent': statusPillClass === 'editing',
-              'bg-ok': statusPillClass === 'idle',
-            }"
-          />
-          {{ statusPillText }}
-        </span>
-        <button
-          class="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-txt transition hover:border-line-strong hover:bg-elevated disabled:opacity-45"
-          :disabled="manualRefreshing || processingLock"
-          :aria-busy="processingLock || undefined"
-          @click="onManualRefresh"
-        >
-          <Icon name="refresh" :size="14" :class="{ 'animate-spin': manualRefreshing }" />
-          {{ t('common.buttons.refresh') }}
-        </button>
-        <ProjectFilter v-model="selectedProject" :count="listTotal" />
-        <PipelineFilter v-model="selected" :count="listTotal" />
       </div>
     </div>
 

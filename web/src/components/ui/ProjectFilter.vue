@@ -5,16 +5,32 @@ import Icon from './Icon.vue'
 import { api } from '@/lib/api'
 import type { Project } from '@/lib/types'
 
-const props = withDefaults(defineProps<{ modelValue: string; count?: number }>(), {
-  modelValue: '',
-})
-const emit = defineEmits<{ (e: 'update:modelValue', v: string): void }>()
+const props = withDefaults(
+  defineProps<{ modelValue: string; count?: number; open?: boolean }>(),
+  {
+    modelValue: '',
+    open: undefined,
+  },
+)
+const emit = defineEmits<{
+  (e: 'update:modelValue', v: string): void
+  (e: 'update:open', v: boolean): void
+}>()
 
 const { t } = useI18n()
 const projects = ref<Project[]>([])
-const open = ref(false)
+const internalOpen = ref(false)
 const search = ref('')
 const root = ref<HTMLElement | null>(null)
+
+const isControlled = computed(() => props.open !== undefined)
+const open = computed({
+  get: () => (isControlled.value ? props.open! : internalOpen.value),
+  set: (v: boolean) => {
+    if (isControlled.value) emit('update:open', v)
+    else internalOpen.value = v
+  },
+})
 
 const selectedName = computed(() => {
   if (!props.modelValue) return t('common.projectFilter.all')
@@ -58,7 +74,8 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
     <button
       type="button"
       class="flex w-full min-h-[44px] items-center gap-2 border border-line bg-surface px-3 py-1.5 text-sm text-txt2 transition hover:bg-elevated md:min-h-0 md:w-auto"
-      @click="toggle"
+      :class="{ 'border-accent/60 text-txt': modelValue || open }"
+      @click.stop="toggle"
     >
       <Icon name="folder" :size="14" />
       <span class="min-w-0 flex-1 truncate text-left">{{ selectedName }}</span>
@@ -68,6 +85,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
     <div
       v-if="open"
       class="scroll-area absolute left-0 right-0 z-40 mt-1 max-h-72 overflow-auto rounded-md border border-line-strong bg-surface p-1 shadow-lg md:left-auto md:right-0 md:w-64"
+      @click.stop
     >
       <input
         v-model="search"
