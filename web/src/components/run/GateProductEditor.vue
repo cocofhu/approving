@@ -199,8 +199,23 @@ watch(
   { immediate: true },
 )
 
+/** Stable identity for softRefresh: ignore array ref / updatedAt noise. */
+function artifactsIdentityFingerprint(arts: Artifact[] | undefined): string {
+  return (arts || [])
+    .map((a) => `${a.name}:${a.id}:${a.etag ?? ''}:${a.sizeBytes ?? 0}`)
+    .join('|')
+}
+
 watch(
-  () => [activeName.value, activeProduct.value?.kind, activeProduct.value?.readonly, props.artifacts] as const,
+  // Join to a string so array-ref churn from softRefresh does not re-fire when
+  // the identity fingerprint is unchanged (Object.is on a fresh tuple always differs).
+  () =>
+    [
+      activeName.value,
+      activeProduct.value?.kind ?? '',
+      String(activeProduct.value?.readonly ?? ''),
+      artifactsIdentityFingerprint(props.artifacts),
+    ].join('\0'),
   () => {
     draft.value = savedText.value
     saveError.value = null

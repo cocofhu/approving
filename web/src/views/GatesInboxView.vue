@@ -473,7 +473,19 @@ function connectActiveRunWs(runId: string) {
       // Ignore events for runs that no longer match the current pending active item.
       if (!active.value || active.value.runId !== runId) return
       if (isProcessedTriple(active.value) || !isActiveStillInList()) return
-      void softRefreshActiveRun()
+      // status/trace are noisy (run transitions / appendTrace) and must not softRefresh
+      // while reviewing — peek/list cover "left pending" awareness instead.
+      if (m.type === 'status' || m.type === 'trace') return
+      // Visual gates: only artifact_edit here; review turn_done/error already refresh above.
+      // Ignore react (e.g. turn_begin) — no product change yet.
+      if (active.value.type === 'gate') {
+        if (m.type === 'artifact_edit') void softRefreshActiveRun()
+        return
+      }
+      // Clarify: allow react (turns) and artifact_edit; still ignore status/trace.
+      if (active.value.type === 'clarify') {
+        if (m.type === 'artifact_edit' || m.type === 'react') void softRefreshActiveRun()
+      }
     }
   }
   activeRunWs.onclose = () => {
