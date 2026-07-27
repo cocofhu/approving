@@ -22,6 +22,15 @@ const (
 
 const pushQueueDepth = 8
 
+// runNotifyCategory is the push-queue Category for Engine Run lifecycle
+// notifications. These items are already receipt-claimed (at-most-once), so
+// the queue must not silently drop them when full (review v3).
+const runNotifyCategory = "run_notify"
+
+func isProtectedPush(p CronPushItem) bool {
+	return strings.TrimSpace(p.Category) == runNotifyCategory
+}
+
 // CronPushItem is a timed push waiting for a conversation idle slot.
 type CronPushItem struct {
 	ProjectID string
@@ -105,8 +114,28 @@ func (m *Manager) enqueuePush(key string, item CronPushItem) {
 				q.pending = append(q.pending, item)
 				return
 			}
-			// All failed (or equivalent): ring-replace oldest with newest.
-			q.pending = append(q.pending[1:], item)
+			// No droppable slot without losing a protected run_notify: soft-overflow
+			// when the incoming item is itself a run notification (at-most-once claim).
+			if isProtectedPush(item) {
+				log.Warn().
+					Str("project", item.ProjectID).
+					Str("category", item.Category).
+					Int("depth", len(q.pending)).
+					Msg("push queue over depth to retain run_notify (non-droppable)")
+				q.pending = append(q.pending, item)
+				return
+			}
+			// Ring-replace oldest non-protected high-priority item.
+			if drop := indexOldestNonProtected(q.pending); drop >= 0 {
+				q.pending = append(q.pending[:drop], q.pending[drop+1:]...)
+				q.pending = append(q.pending, item)
+				return
+			}
+			log.Error().
+				Str("project", item.ProjectID).
+				Str("category", item.Category).
+				Msg("push queue full of protected run_notify; soft-overflow for incoming cron item")
+			q.pending = append(q.pending, item)
 			return
 		}
 	}
@@ -115,9 +144,14 @@ func (m *Manager) enqueuePush(key string, item CronPushItem) {
 
 // replaceSameCategoryHigh overwrites an existing high-priority item in the same
 // category so the latest changed/failed wins without growing past depth.
+// Protected run_notify items are never coalesced — each gate alert is distinct
+// and already receipt-claimed (review v3).
 func replaceSameCategoryHigh(q *pushQueue, item CronPushItem) bool {
 	for i, p := range q.pending {
 		if p.Kind == CronResultUnchanged {
+			continue
+		}
+		if isProtectedPush(p) || isProtectedPush(item) {
 			continue
 		}
 		if samePushCategory(p.Category, item.Category) {
@@ -130,16 +164,27 @@ func replaceSameCategoryHigh(q *pushQueue, item CronPushItem) bool {
 
 // indexOldestDroppableHigh prefers dropping an older changed when the incoming
 // item is failed (or any changed when we need a slot), so latest failed is kept.
+// Protected run_notify items are skipped so receipt-claimed gate alerts are not
+// silently lost under queue pressure (review v3).
 func indexOldestDroppableHigh(items []CronPushItem, incoming CronPushItem) int {
 	if incoming.Kind == CronResultFailed {
 		for i, p := range items {
-			if p.Kind == CronResultChanged {
+			if p.Kind == CronResultChanged && !isProtectedPush(p) {
 				return i
 			}
 		}
 	}
 	for i, p := range items {
-		if p.Kind == CronResultChanged {
+		if p.Kind == CronResultChanged && !isProtectedPush(p) {
+			return i
+		}
+	}
+	return -1
+}
+
+func indexOldestNonProtected(items []CronPushItem) int {
+	for i, p := range items {
+		if !isProtectedPush(p) {
 			return i
 		}
 	}

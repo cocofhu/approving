@@ -104,6 +104,7 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.POST("/workflows/import", h.ImportWorkflow)
 		api.GET("/workflows/:id", h.GetWorkflow)
 		api.PUT("/workflows/:id", h.SaveWorkflow)
+		api.PATCH("/workflows/:id/notify-policy", h.PatchWorkflowNotifyPolicy)
 		api.DELETE("/workflows/:id", h.DeleteWorkflow)
 		api.GET("/workflows/:id/copy-preview", h.CopyWorkflowPreview)
 		api.POST("/workflows/:id/copy", h.CopyWorkflow)

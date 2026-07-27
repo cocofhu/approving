@@ -63,11 +63,24 @@ export interface Workflow {
   updatedAt: string
   lastRunAt?: string
   needsRepo: boolean
+  notifyPolicy?: WorkflowNotifyPolicy
   nodes: WFNode[]
   edges: WFEdge[]
 }
 
-/** One project sandbox OS env entry (secret values masked as **** on read). */
+/** Project-level Run→IM notification defaults. */
+export interface ProjectNotifyPolicy {
+  enabled?: boolean
+  defaultEvents?: string[]
+}
+
+/** Workflow-level notify override: off | inherit | custom. */
+export interface WorkflowNotifyPolicy {
+  mode?: 'off' | 'inherit' | 'custom' | string
+  events?: string[]
+}
+
+/** One project sandbox OS environment variable (secret values masked as **** on read). */
 export interface ProjectEnvEntry {
   key: string
   value: string
@@ -101,6 +114,7 @@ export interface Project {
   totalTokens?: number | null
   pmLeaderEnabled?: boolean
   pmLeaderAgent?: string
+  notifyPolicy?: ProjectNotifyPolicy
   createdAt?: string
   updatedAt?: string
 }

@@ -52,9 +52,12 @@ type Project struct {
 	PmGateAutoVar string `json:"gateAutoVar,omitempty"`
 	// PmGateAutoPrompt is an optional prompt appended after the system default
 	// gate-auto guidance when invoking the PM Leader.
-	PmGateAutoPrompt string    `json:"gateAutoPrompt,omitempty"`
-	CreatedAt        time.Time `json:"createdAt"`
-	UpdatedAt        time.Time `json:"updatedAt"`
+	PmGateAutoPrompt string `json:"gateAutoPrompt,omitempty"`
+	// NotifyPolicy is the project-level Run→IM notification default
+	// (enabled kill-switch + defaultEvents). See ProjectNotifyPolicy.
+	NotifyPolicy ProjectNotifyPolicy `gorm:"serializer:json" json:"notifyPolicy"`
+	CreatedAt    time.Time           `json:"createdAt"`
+	UpdatedAt    time.Time           `json:"updatedAt"`
 }
 
 // WorkflowDef is the editable workflow (draft or published head).
@@ -64,16 +67,19 @@ type WorkflowDef struct {
 	// tagged not null: SQLite rejects ALTER TABLE … ADD COLUMN … NOT NULL with
 	// no non-NULL default when the table already has rows (preview PVC upgrade).
 	// database.ensureDefaultProject backfills legacy rows after AutoMigrate.
-	ProjectID   string     `gorm:"index;uniqueIndex:idx_wf_proj_name" json:"projectId"`
-	Name        string     `gorm:"uniqueIndex:idx_wf_proj_name" json:"name"`
-	Description string     `json:"description"`
-	Status      string     `json:"status"` // draft | published
-	Version     int        `json:"version"`
-	NeedsRepo   bool       `json:"needsRepo"`
-	Graph       Graph      `gorm:"serializer:json" json:"-"`
-	CreatedAt   time.Time  `json:"-"`
-	UpdatedAt   time.Time  `json:"updatedAt"`
-	LastRunAt   *time.Time `json:"lastRunAt,omitempty"`
+	ProjectID   string `gorm:"index;uniqueIndex:idx_wf_proj_name" json:"projectId"`
+	Name        string `gorm:"uniqueIndex:idx_wf_proj_name" json:"name"`
+	Description string `json:"description"`
+	Status      string `json:"status"` // draft | published
+	Version     int    `json:"version"`
+	NeedsRepo   bool   `json:"needsRepo"`
+	// NotifyPolicy is the workflow-level override (off|inherit|custom + events).
+	// Zero value (empty mode) is treated as inherit at resolve time.
+	NotifyPolicy WorkflowNotifyPolicy `gorm:"serializer:json" json:"notifyPolicy"`
+	Graph        Graph                `gorm:"serializer:json" json:"-"`
+	CreatedAt    time.Time            `json:"-"`
+	UpdatedAt    time.Time            `json:"updatedAt"`
+	LastRunAt    *time.Time           `json:"lastRunAt,omitempty"`
 }
 
 // WorkflowVersion is an immutable published snapshot pinned by in-flight runs.
@@ -608,6 +614,7 @@ func AllModels() []any {
 		&ProjectMemoryItem{}, &ChatThread{}, &ChatMessage{}, &ChatTurnDraft{},
 		&AgentCronJob{}, &AgentCronRun{}, &ChannelConfig{},
 		&ProjectAuditEvent{},
+		&NotifyDeliveryReceipt{},
 	}
 }
 

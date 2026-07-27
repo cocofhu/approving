@@ -122,8 +122,9 @@ type ServerConfig struct {
 	// the run-scoped artifact-store MCP. Empty defaults to
 	// http://host.docker.internal:<port>.
 	MCPAdvertise string `yaml:"mcp_advertise"`
-	// PublicAdvertise is the browser-facing base URL for preview proxy links.
-	// Empty defaults to http://localhost:<port>.
+	// PublicAdvertise is the browser-facing base URL for preview proxy links
+	// and Run→QQ notification deep links (/runs/{id}). Empty defaults to
+	// http://localhost:<port>; QQ clients cannot open relative /runs paths.
 	PublicAdvertise string `yaml:"public_advertise"`
 }
 
