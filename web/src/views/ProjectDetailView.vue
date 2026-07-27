@@ -227,8 +227,6 @@ const tabs: { id: Tab; labelKey: string }[] = [
 const auditForceDenied = computed(() => route.query.auditDenied === '1')
 
 const pmBinding = ref<PmLeaderBinding | null>(null)
-const pmStudioAgent = computed(() => (pmBinding.value?.agentConfigRef || '').trim())
-const canOpenStudioMemory = computed(() => !!pmStudioAgent.value)
 
 async function loadPmBinding() {
   try {
@@ -823,31 +821,6 @@ onUnmounted(() => {
         class="flex min-h-0 flex-1 flex-col"
         data-testid="project-pm-leader-panel"
       >
-        <div
-          class="mb-2 flex flex-col gap-2 border border-line bg-surface px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-          data-testid="pm-studio-memory-guide"
-        >
-          <div class="min-w-0">
-            <div class="text-[12px] font-medium text-txt">{{ t('pages.projectDetail.pm.openStudioMemoryTitle') }}</div>
-            <p class="mt-0.5 text-[11px] text-txt3">
-              {{
-                canOpenStudioMemory
-                  ? t('pages.projectDetail.pm.openStudioMemoryHint', { agent: pmStudioAgent })
-                  : t('pages.projectDetail.pm.openStudioMemoryDisabledHint')
-              }}
-            </p>
-          </div>
-          <AppButton
-            size="sm"
-            variant="primary"
-            data-testid="pm-open-studio-memory"
-            :disabled="!canOpenStudioMemory"
-            :title="canOpenStudioMemory ? undefined : t('pages.projectDetail.pm.openStudioMemoryDisabledHint')"
-            @click="goStudioMemory(pmStudioAgent)"
-          >
-            {{ t('pages.projectDetail.pm.openStudioMemory') }}
-          </AppButton>
-        </div>
         <PmLeaderChat
           v-if="pmView === 'chat'"
           :project-id="projectId"
