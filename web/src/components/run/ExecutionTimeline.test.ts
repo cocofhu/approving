@@ -76,7 +76,12 @@ function baseRun(overrides: Partial<Run> = {}): Run {
 
 function mountTimeline(
   run: Run = baseRun(),
-  opts: { interactive?: boolean; selectedNodeId?: string | null; nowMs?: number } = {},
+  opts: {
+    interactive?: boolean
+    selectedNodeId?: string | null
+    selectedExecIdx?: number
+    nowMs?: number
+  } = {},
 ) {
   const i18n = createI18n({
     legacy: false,
@@ -88,7 +93,7 @@ function mountTimeline(
       run,
       nodes,
       selectedNodeId: opts.selectedNodeId ?? null,
-      selectedExecIdx: 0,
+      selectedExecIdx: opts.selectedExecIdx ?? 0,
       interactive: opts.interactive ?? true,
       nowMs: opts.nowMs ?? Date.parse('2026-07-18T00:02:00Z'),
     },
@@ -253,6 +258,31 @@ describe('ExecutionTimeline', () => {
     const total = wrapper.find('[data-testid="timeline-total-tokens"]').text()
     expect(total).toContain('0')
     expect(total).not.toContain('—')
+    wrapper.unmount()
+  })
+
+  it('keeps Run 汇总 inside the scroll document flow (not shrink-0 sticky)', () => {
+    const wrapper = mountTimeline()
+    const footer = wrapper.find('[data-testid="timeline-footer"]')
+    expect(footer.exists()).toBe(true)
+    expect(footer.classes()).not.toContain('shrink-0')
+    // Opaque elevated bg — not translucent /60 which looked like a floating cut.
+    expect(footer.classes()).toContain('bg-elevated')
+    expect(footer.classes().some((c) => c.includes('/60'))).toBe(false)
+    const scroll = wrapper.find('.scroll-area')
+    expect(scroll.exists()).toBe(true)
+    expect(scroll.element.contains(footer.element)).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('marks selected timeline-item for scrollIntoView targeting', () => {
+    const wrapper = mountTimeline(undefined, {
+      selectedNodeId: 'research',
+      selectedExecIdx: 0,
+    })
+    const selected = wrapper.find('[data-testid="timeline-item"][data-selected="true"]')
+    expect(selected.exists()).toBe(true)
+    expect(selected.attributes('data-item-key')).toBe('research:0')
     wrapper.unmount()
   })
 })

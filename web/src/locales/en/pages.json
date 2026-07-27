@@ -651,6 +651,7 @@
       "canvas": "Canvas",
       "timeline": "Timeline",
       "stats": "Stats",
+      "backToTimeline": "Back to timeline",
       "canvasHint": "Execution canvas · click a node for output/logs",
       "detailTitle": "Run details",
       "executionHistory": "Executions",

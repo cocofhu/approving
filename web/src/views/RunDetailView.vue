@@ -1225,6 +1225,35 @@ const nodeTabs = computed(() => {
 })
 const nodeTab = ref('output')
 
+/**
+ * Mobile (≤768) list-detail: mutually exclusive timeline vs node detail.
+ * Desktop keeps side-by-side panes; this state is ignored when !isMobile.
+ * Defaults: completed → timeline; waiting_human → detail; else timeline.
+ */
+const mobileMainPanel = ref<'timeline' | 'detail'>(
+  isMobile.value && run.value.status === 'waiting_human' ? 'detail' : 'timeline',
+)
+/** Bumped to re-scroll selected timeline item (e.g. back from detail). */
+const timelineScrollToken = ref(0)
+
+const mobileDetailPanelLabel = computed(() => {
+  const tab = nodeTabs.value.find((t) => t.id === nodeTab.value)
+  return tab?.label || t('pages.runDetail.tabs.output')
+})
+
+function showMobileTimelinePanel() {
+  mobileMainPanel.value = 'timeline'
+  timelineScrollToken.value += 1
+}
+
+function showMobileDetailPanel() {
+  mobileMainPanel.value = 'detail'
+}
+
+function backToMobileTimeline() {
+  showMobileTimelinePanel()
+}
+
 /** Desktop「复审」Tab: widen right panel + canvas floor (see reviewLayoutBudget). */
 const desktopReviewLayout = computed(() => !isMobile.value && nodeTab.value === 'review')
 const reviewRightPanelStyle = computed(() =>
@@ -1259,6 +1288,11 @@ watch(
     manual.value = false
     selected.value = id
     nodeTab.value = 'output'
+    // Completed: first land on timeline with last item selected (scroll via token).
+    if (isMobile.value) {
+      mobileMainPanel.value = 'timeline'
+      timelineScrollToken.value += 1
+    }
   },
 )
 
@@ -1269,9 +1303,21 @@ watch(
       manual.value = false
       selected.value = gateNodeId
       nodeTab.value = 'gate'
+      mobileMainPanel.value = 'detail'
     }
   },
   { immediate: true },
+)
+
+// waiting_human without a gate (e.g. review/clarify): still prefer detail panel once.
+watch(
+  () => run.value.status,
+  (st, prev) => {
+    if (!isMobile.value) return
+    if (st === 'waiting_human' && prev !== 'waiting_human' && !run.value.gate?.nodeId) {
+      mobileMainPanel.value = 'detail'
+    }
+  },
 )
 // If the current tab disappears (e.g. clarify resolved), fall back gracefully.
 watch(nodeTabs, (tabs) => {
@@ -1355,6 +1401,7 @@ const detailTabs = computed(() => {
 function selectNode(id: string) {
   manual.value = true
   selected.value = id
+  if (isMobile.value) mobileMainPanel.value = 'detail'
 }
 
 // Main-area view: canvas / timeline (+ node detail) or execution-stats split.
@@ -1391,6 +1438,7 @@ function selectExecution(nodeId: string, idx: number) {
     pendingIter.value = idx
     selected.value = nodeId
   }
+  if (isMobile.value) mobileMainPanel.value = 'detail'
 }
 </script>
 
@@ -1713,11 +1761,47 @@ function selectExecution(nodeId: string, idx: number) {
         </div>
       </div>
 
-      <!-- Timeline: mobile stacks above detail (align min-heights with stats·single). -->
+      <!-- Mobile ≤768: page-level timeline / detail tabs (Demo single-panel). -->
       <div
-        v-else
+        v-if="isMobile && viewMode === 'timeline'"
+        data-testid="mobile-main-panel-tabs"
+        class="flex shrink-0 border-b border-line bg-surface"
+      >
+        <button
+          type="button"
+          data-testid="mobile-panel-timeline"
+          class="flex-1 border-b-2 px-3 py-2.5 text-[12px] font-semibold transition-colors"
+          :class="
+            mobileMainPanel === 'timeline'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-txt3'
+          "
+          @click="showMobileTimelinePanel"
+        >
+          {{ t('pages.runDetail.timeline') }}
+        </button>
+        <button
+          type="button"
+          data-testid="mobile-panel-detail"
+          class="flex-1 border-b-2 px-3 py-2.5 text-[12px] font-semibold transition-colors"
+          :class="
+            mobileMainPanel === 'detail'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-txt3'
+          "
+          @click="showMobileDetailPanel"
+        >
+          {{ mobileDetailPanelLabel }}
+        </button>
+      </div>
+
+      <!-- Timeline: mobile single-panel (min-h-0 flex-1); desktop side pane. -->
+      <div
+        v-if="viewMode === 'timeline'"
+        v-show="!isMobile || mobileMainPanel === 'timeline'"
         data-testid="run-timeline-pane"
-        class="relative min-h-[240px] min-w-0 flex-1 border-b border-line md:min-h-0 md:border-b-0 md:border-r md:pt-12"
+        class="relative min-h-0 min-w-0 flex-1 border-b border-line md:border-b-0 md:border-r md:pt-12"
+        :class="isMobile ? 'border-b-0' : ''"
       >
         <ExecutionTimeline
           :run="run"
@@ -1725,27 +1809,40 @@ function selectExecution(nodeId: string, idx: number) {
           :selected-node-id="selected"
           :selected-exec-idx="selExecIdx"
           :now-ms="nowMs"
+          :ensure-visible-token="timelineScrollToken"
           @select="selectExecution"
         />
       </div>
 
-      <!-- right panel: scoped to the selected node; mobile gate fills remaining height -->
+      <!-- right panel: scoped to the selected node; mobile fills main area when active -->
       <div
+        v-show="!isMobile || mobileMainPanel === 'detail' || viewMode !== 'timeline'"
         data-testid="run-detail-right-panel"
-        class="flex min-w-0 w-full max-w-full flex-col bg-surface md:shrink-0"
+        class="flex min-h-0 min-w-0 w-full max-w-full flex-col bg-surface"
         :class="[
           desktopReviewLayout ? '' : 'md:w-[520px]',
-          // Avoid stacking min-h-[320px] against mobile gate's min-h-0 flex-1.
-          viewMode === 'timeline' &&
-          !(isMobile && run.status === 'waiting_human' && nodeTab === 'gate')
-            ? 'min-h-[320px] md:min-h-0'
-            : '',
-          isMobile && run.status === 'waiting_human' && nodeTab === 'gate'
-            ? 'min-h-0 flex-1'
-            : 'shrink-0',
+          isMobile && viewMode === 'timeline' ? 'flex-1' : 'shrink-0 md:shrink-0',
         ]"
         :style="reviewRightPanelStyle"
       >
+        <!-- Mobile detail chrome: back to timeline -->
+        <div
+          v-if="isMobile && viewMode === 'timeline'"
+          data-testid="mobile-detail-back-bar"
+          class="flex shrink-0 items-center gap-2 border-b border-line bg-surface px-3 py-2"
+        >
+          <button
+            type="button"
+            data-testid="mobile-back-to-timeline"
+            class="inline-flex items-center gap-1 rounded-md border border-line bg-elevated px-2 py-1 text-[11px] font-semibold text-txt2 hover:bg-surface"
+            @click="backToMobileTimeline"
+          >
+            <Icon name="arrow-left" :size="12" />
+            {{ t('pages.runDetail.backToTimeline') }}
+          </button>
+          <StatusPill v-if="selStatus" :status="selStatus" size="sm" class="shrink-0" />
+          <span v-if="selNode" class="min-w-0 truncate text-[11px] text-txt3">{{ selNodeDisplayLabel }}</span>
+        </div>
         <template v-if="selNode && selRunView">
           <!-- Per-node execution history: a node re-run by a loop-back / gate
                revise / rollback keeps every past execution. Switch between them

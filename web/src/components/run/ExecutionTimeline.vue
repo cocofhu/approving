@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import StatusPill from '../ui/StatusPill.vue'
@@ -29,10 +29,36 @@ const props = withDefaults(
     interactive?: boolean
     /** Optional shared clock from parent (stats mode); falls back to local 1s tick. */
     nowMs?: number
+    /**
+     * Bumped by parent (e.g. return-to-timeline) to re-scroll the selected
+     * item into view even when selection itself did not change.
+     */
+    ensureVisibleToken?: number
   }>(),
-  { interactive: true },
+  { interactive: true, ensureVisibleToken: 0 },
 )
 const emit = defineEmits<{ (e: 'select', nodeId: string, idx: number): void }>()
+
+const rootEl = ref<HTMLElement | null>(null)
+
+function scrollSelectedIntoView() {
+  if (!props.interactive || !props.selectedNodeId || props.selectedExecIdx < 0) return
+  const key = `${props.selectedNodeId}:${props.selectedExecIdx}`
+  const nodes = rootEl.value?.querySelectorAll('[data-testid="timeline-item"]')
+  if (!nodes?.length) return
+  const el = Array.from(nodes).find((n) => n.getAttribute('data-item-key') === key) as
+    | HTMLElement
+    | undefined
+  el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+}
+
+watch(
+  () => [props.selectedNodeId, props.selectedExecIdx, props.ensureVisibleToken] as const,
+  async () => {
+    await nextTick()
+    scrollSelectedIntoView()
+  },
+)
 
 const { t, locale } = useI18n()
 
@@ -217,7 +243,7 @@ const DOT: Record<string, string> = {
 </script>
 
 <template>
-  <div class="flex h-full min-w-0 w-full max-w-full flex-col bg-base">
+  <div ref="rootEl" class="flex h-full min-w-0 w-full max-w-full flex-col bg-base">
     <div class="shrink-0 border-b border-line px-4 py-2.5 text-[12px] text-txt3">
       {{ t('pages.executionTimeline.header', { n: items.length }) }}
     </div>
@@ -225,9 +251,17 @@ const DOT: Record<string, string> = {
       {{ t('pages.executionTimeline.empty') }}
     </div>
     <template v-else>
+      <!-- Footer lives in scroll flow (no shrink-0 sticky) so Run 汇总 cannot cut cards. -->
       <div class="scroll-area safe-area-bottom min-h-0 min-w-0 w-full max-w-full flex-1 overflow-x-clip overflow-y-auto px-5 py-4">
         <ol class="relative min-w-0 max-w-full space-y-2.5 border-l border-line pl-6">
-          <li v-for="it in items" :key="`${it.nodeId}:${it.idxInNode}`" class="relative min-w-0 max-w-full">
+          <li
+            v-for="it in items"
+            :key="`${it.nodeId}:${it.idxInNode}`"
+            class="relative min-w-0 max-w-full"
+            data-testid="timeline-item"
+            :data-item-key="`${it.nodeId}:${it.idxInNode}`"
+            :data-selected="isSelected(it) ? 'true' : 'false'"
+          >
             <span
               class="absolute -left-[31px] top-4 h-2.5 w-2.5 rounded-full ring-4 ring-base"
               :class="DOT[it.status] || DOT.pending"
@@ -364,46 +398,46 @@ const DOT: Record<string, string> = {
             </div>
           </li>
         </ol>
-      </div>
-      <div
-        class="shrink-0 border-t border-line bg-elevated/60 px-4 py-3"
-        data-testid="timeline-footer"
-      >
-        <div class="flex flex-wrap items-center justify-between gap-2.5">
-          <div class="text-[11px] text-txt3">
-            {{ t('pages.executionTimeline.footerLabel') }}
-          </div>
-          <div class="flex flex-wrap items-end gap-x-5 gap-y-1">
-            <div class="grid gap-0.5" data-testid="timeline-total-tokens">
-              <span class="text-[10px] tracking-wide text-txt3">{{ t('pages.executionTimeline.totalTokens') }}</span>
-              <strong
-                class="font-mono text-[15px] font-bold tabular-nums tracking-tight"
-                :class="usageSummary.totalTokens == null ? 'font-semibold text-txt3' : 'text-txt'"
-              >
-                {{
-                  usageSummary.totalTokens == null
-                    ? t('pages.executionTimeline.dash')
-                    : fmtTokenCount(usageSummary.totalTokens)
-                }}
-              </strong>
+        <div
+          class="mt-3 border border-line bg-elevated px-4 py-3"
+          data-testid="timeline-footer"
+        >
+          <div class="flex flex-wrap items-center justify-between gap-2.5">
+            <div class="text-[11px] text-txt3">
+              {{ t('pages.executionTimeline.footerLabel') }}
             </div>
-            <div class="grid gap-0.5" data-testid="timeline-token-rate">
-              <span class="text-[10px] tracking-wide text-txt3">{{ t('pages.executionTimeline.tokenRate') }}</span>
-              <strong
-                class="font-mono text-[15px] font-bold tabular-nums tracking-tight"
-                :class="usageSummary.tokenRate == null ? 'font-semibold text-txt3' : 'text-txt'"
-              >
-                {{ usageSummary.tokenRate ?? t('pages.executionTimeline.dash') }}
-              </strong>
-            </div>
-            <div class="grid gap-0.5" data-testid="timeline-wall-clock">
-              <span class="text-[10px] tracking-wide text-txt3">{{ t('pages.executionTimeline.wallClock') }}</span>
-              <strong
-                class="font-mono text-[15px] tabular-nums tracking-tight"
-                :class="runLive ? 'font-bold text-txt' : 'font-semibold text-txt3'"
-              >
-                {{ fmtDuration(wallSec) }}
-              </strong>
+            <div class="flex flex-wrap items-end gap-x-5 gap-y-1">
+              <div class="grid gap-0.5" data-testid="timeline-total-tokens">
+                <span class="text-[10px] tracking-wide text-txt3">{{ t('pages.executionTimeline.totalTokens') }}</span>
+                <strong
+                  class="font-mono text-[15px] font-bold tabular-nums tracking-tight"
+                  :class="usageSummary.totalTokens == null ? 'font-semibold text-txt3' : 'text-txt'"
+                >
+                  {{
+                    usageSummary.totalTokens == null
+                      ? t('pages.executionTimeline.dash')
+                      : fmtTokenCount(usageSummary.totalTokens)
+                  }}
+                </strong>
+              </div>
+              <div class="grid gap-0.5" data-testid="timeline-token-rate">
+                <span class="text-[10px] tracking-wide text-txt3">{{ t('pages.executionTimeline.tokenRate') }}</span>
+                <strong
+                  class="font-mono text-[15px] font-bold tabular-nums tracking-tight"
+                  :class="usageSummary.tokenRate == null ? 'font-semibold text-txt3' : 'text-txt'"
+                >
+                  {{ usageSummary.tokenRate ?? t('pages.executionTimeline.dash') }}
+                </strong>
+              </div>
+              <div class="grid gap-0.5" data-testid="timeline-wall-clock">
+                <span class="text-[10px] tracking-wide text-txt3">{{ t('pages.executionTimeline.wallClock') }}</span>
+                <strong
+                  class="font-mono text-[15px] tabular-nums tracking-tight"
+                  :class="runLive ? 'font-bold text-txt' : 'font-semibold text-txt3'"
+                >
+                  {{ fmtDuration(wallSec) }}
+                </strong>
+              </div>
             </div>
           </div>
         </div>
