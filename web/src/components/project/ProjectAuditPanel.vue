@@ -1418,9 +1418,11 @@ tr.detail td {
   flex-direction: column;
   gap: 8px;
   width: 100%;
-  padding: 8px 0;
-  border: 0;
-  background: transparent;
+  /* 与搜索同宽（f1/g2.3）：仅纵向内边距，避免左右 inset 缩窄触发器 */
+  padding: 10px 0;
+  border-top: 1px solid #eee;
+  border-bottom: 1px solid #eee;
+  background: #fcfcfc;
 }
 .filters-mobile {
   flex-direction: column;
