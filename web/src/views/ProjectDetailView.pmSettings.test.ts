@@ -176,7 +176,9 @@ describe('ProjectDetailView PM Leader settings inline', () => {
     expect(tabIds).not.toContain('project-tab-pmSettings')
     expect(tabIds).not.toContain('project-tab-pmMemory')
     expect(wrapper.text()).toContain('定时任务')
-    expect(wrapper.find('[data-testid="pm-open-studio-memory"]').exists()).toBe(true)
+    // Permanently removed: PM Leader no longer shows the Studio memory migration guide.
+    expect(wrapper.find('[data-testid="pm-studio-memory-guide"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="pm-open-studio-memory"]').exists()).toBe(false)
   })
 
   it('opens cron jobs panel from tab', async () => {
