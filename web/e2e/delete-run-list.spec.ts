@@ -168,20 +168,35 @@ test.describe('RunListView delete run acceptance', () => {
     await openRunList(page, { width: 390, height: 844 })
     await expect(page.locator('table')).toHaveCount(0)
 
-    const completedCard = page.locator('[role="button"]', { hasText: '已结束流水线' })
+    // Cards use RouterLink custom → role=link (not role=button / bare <a>)
+    const completedCard = page.locator('[role="link"]', { hasText: '已结束流水线' })
     await expect(completedCard.getByTestId('delete-run-btn')).toBeVisible()
     await expect(completedCard.getByTestId('cancel-run-btn')).toHaveCount(0)
 
-    const runningCard = page.locator('[role="button"]', { hasText: '运行中流水线' })
+    const runningCard = page.locator('[role="link"]', { hasText: '运行中流水线' })
     await expect(runningCard.getByTestId('cancel-run-btn')).toBeVisible()
     await expect(runningCard.getByTestId('delete-run-btn')).toHaveCount(0)
 
-    const cancelledCard = page.locator('[role="button"]', { hasText: '已取消流水线' })
+    const cancelledCard = page.locator('[role="link"]', { hasText: '已取消流水线' })
     await expect(cancelledCard.getByTestId('delete-run-btn')).toBeVisible()
     await expect(cancelledCard.getByTestId('run-ops-placeholder')).toHaveCount(0)
 
     await completedCard.getByTestId('delete-run-btn').click()
     await expect(page.getByText('确认删除该次运行？')).toBeVisible()
     await expect(page.getByTestId('run-detail-page')).toHaveCount(0)
+    // Ops stop must not navigate away from the list
+    await expect(page.getByRole('heading', { name: '运行' })).toBeVisible()
+
+    // Cancel on running card: confirm only, no jump to /runs/:id
+    await page
+      .locator('.fixed.inset-0')
+      .filter({ hasText: '确认删除该次运行？' })
+      .getByRole('button', { name: '取消' })
+      .click()
+    await runningCard.getByTestId('cancel-run-btn').click()
+    await expect(page.getByText('取消运行？')).toBeVisible()
+    await expect(page.getByTestId('run-detail-page')).toHaveCount(0)
+    await expect(page).toHaveURL(/run-list\.html/)
+    await expect(page.getByRole('heading', { name: '运行' })).toBeVisible()
   })
 })

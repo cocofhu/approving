@@ -12,6 +12,7 @@ import (
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/platformmcp"
 	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/approving/internal/textutil"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -23,6 +24,11 @@ const (
 	MCPProgress      = "pm-progress"
 	MCPWorkflowRead  = "pm-workflow-read"
 	MCPWorkflowWrite = "pm-workflow-write"
+
+	// pm_get_artifact paging: default page size is also the hard ceiling so a
+	// caller cannot pull an unbounded artifact in one MCP response.
+	pmGetArtifactDefaultLimit = 65536
+	pmGetArtifactMaxLimit     = 65536
 )
 
 // Session binds a PM MCP token to a project consult context.
@@ -45,6 +51,7 @@ type Host struct {
 	progress *services.PmProgress
 	wf       *services.WorkflowService
 	runs     *services.RunService
+	arts     *services.ArtifactService
 	eng      engineOps
 	audit    func(services.AuditRecord)
 }
@@ -54,11 +61,13 @@ type Host struct {
 type engineOps interface {
 	StartRunWithPriority(workflowID string, inputs map[string]any, trigger, priority string, tags ...[]string) (*models.Run, error)
 	ResumeGate(runID, nodeID, action string, form map[string]any) error
+	ReactReply(runID, nodeID, humanText string, images []models.PromptImage, annotations []models.ReactAnnotation, force bool) error
+	ReviewSessionState(runID, nodeID string) (waiting int, thinking bool)
 	Cancel(runID string) error
 }
 
 // NewHost builds a PM MCP host. eng/wf/runs may be nil until wired (workflow tools disabled).
-func NewHost(pm *services.PmService, progress *services.PmProgress, wf *services.WorkflowService, runs *services.RunService, eng engineOps) *Host {
+func NewHost(pm *services.PmService, progress *services.PmProgress, wf *services.WorkflowService, runs *services.RunService, arts *services.ArtifactService, eng engineOps) *Host {
 	return &Host{
 		sessions: map[string]*Session{},
 		byKey:    map[string]string{},
@@ -66,6 +75,7 @@ func NewHost(pm *services.PmService, progress *services.PmProgress, wf *services
 		progress: progress,
 		wf:       wf,
 		runs:     runs,
+		arts:     arts,
 		eng:      eng,
 	}
 }
@@ -332,6 +342,45 @@ func (h *Host) runInProject(projectID, runID string) (models.Run, bool) {
 	return r, true
 }
 
+func (h *Host) artifactInProject(projectID, artifactID string) (models.Artifact, bool) {
+	if h.arts == nil {
+		return models.Artifact{}, false
+	}
+	art, ok := h.arts.GetByID(artifactID)
+	if !ok {
+		return models.Artifact{}, false
+	}
+	if strings.TrimSpace(art.RunID) != "" {
+		if _, ok := h.runInProject(projectID, art.RunID); !ok {
+			return models.Artifact{}, false
+		}
+		return art, true
+	}
+	if strings.TrimSpace(art.WorkflowID) != "" {
+		if _, ok := h.workflowInProject(projectID, art.WorkflowID); !ok {
+			return models.Artifact{}, false
+		}
+		return art, true
+	}
+	return models.Artifact{}, false
+}
+
+func parseReactAnnotations(args map[string]any, key string) ([]models.ReactAnnotation, error) {
+	raw, ok := args[key]
+	if !ok || raw == nil {
+		return nil, nil
+	}
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return nil, fmt.Errorf("invalid %s: %w", key, err)
+	}
+	var anns []models.ReactAnnotation
+	if err := json.Unmarshal(b, &anns); err != nil {
+		return nil, fmt.Errorf("invalid %s: %w", key, err)
+	}
+	return anns, nil
+}
+
 // parseGraphArgs extracts a Graph from tool args. present reports whether any
 // of nodes/edges/variables keys were supplied (so callers can distinguish a
 // graph replacement from a metadata-only update). Malformed graph payloads
@@ -459,6 +508,69 @@ func (h *Host) callWorkflowRead(projectID, name string, args map[string]any) (an
 		limit := platformmcp.IntArg(args, "limit", 50)
 		items, total := h.runs.PendingInboxItems("", projectID, nil, 0, limit)
 		return map[string]any{"items": items, "count": len(items), "total": total}, false
+	case "pm_get_artifact":
+		if h.arts == nil {
+			return map[string]any{"error": "artifact service unavailable"}, true
+		}
+		offset := platformmcp.IntArg(args, "offset", 0)
+		limit := platformmcp.IntArg(args, "limit", pmGetArtifactDefaultLimit)
+		if offset < 0 {
+			offset = 0
+		}
+		if limit <= 0 {
+			limit = pmGetArtifactDefaultLimit
+		}
+		if limit > pmGetArtifactMaxLimit {
+			limit = pmGetArtifactMaxLimit
+		}
+		artifactID := strings.TrimSpace(platformmcp.StrArg(args, "artifactId"))
+		runID := strings.TrimSpace(platformmcp.StrArg(args, "runId"))
+		nameArg := strings.TrimSpace(platformmcp.StrArg(args, "name"))
+		var art models.Artifact
+		var ok bool
+		if artifactID != "" {
+			art, ok = h.artifactInProject(projectID, artifactID)
+		} else {
+			if runID == "" || nameArg == "" {
+				return map[string]any{"error": "artifactId or runId+name required"}, true
+			}
+			if _, runOK := h.runInProject(projectID, runID); !runOK {
+				return map[string]any{"error": "run not found"}, true
+			}
+			art, ok = h.arts.GetRecord(runID, nameArg)
+		}
+		if !ok {
+			return map[string]any{"error": "artifact not found"}, true
+		}
+		total := len(art.Content)
+		if offset > total {
+			offset = total
+		}
+		end := offset + limit
+		truncated := end < total
+		content := art.Content[offset:]
+		if truncated {
+			content = textutil.TruncateBytes(content, limit, "")
+			end = offset + len(content)
+		} else {
+			end = total
+		}
+		return map[string]any{
+			"artifactId": art.ID,
+			"runId":      art.RunID,
+			"workflowId": art.WorkflowID,
+			"name":       art.Name,
+			"kind":       art.Kind,
+			"nodeId":     art.NodeID,
+			"content":    content,
+			"offset":     offset,
+			"limit":      limit,
+			"returned":   len(content),
+			"totalBytes": total,
+			"nextOffset": end,
+			"remaining":  total - end,
+			"truncated":  truncated,
+		}, false
 	default:
 		return map[string]any{"error": "unknown tool: " + name}, true
 	}
@@ -613,6 +725,33 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 			return map[string]any{"error": err.Error()}, true
 		}
 		return map[string]any{"status": "resumed"}, false
+	case "pm_react_reply":
+		if h.eng == nil {
+			return map[string]any{"error": "engine unavailable"}, true
+		}
+		runID := platformmcp.StrArg(args, "runId")
+		if _, ok := h.runInProject(projectID, runID); !ok {
+			return map[string]any{"error": "run not found"}, true
+		}
+		nodeID := strings.TrimSpace(platformmcp.StrArg(args, "nodeId"))
+		if nodeID == "" {
+			return map[string]any{"error": "nodeId required"}, true
+		}
+		text := platformmcp.StrArg(args, "text")
+		annotations, err := parseReactAnnotations(args, "annotations")
+		if err != nil {
+			return map[string]any{"error": err.Error()}, true
+		}
+		force := platformmcp.BoolArg(args, "force")
+		if err := h.eng.ReactReply(runID, nodeID, text, nil, annotations, force); err != nil {
+			return map[string]any{"error": err.Error()}, true
+		}
+		if !force {
+			if waiting, thinking := h.eng.ReviewSessionState(runID, nodeID); thinking || waiting > 0 {
+				return map[string]any{"status": "accepted", "waiting": waiting}, false
+			}
+		}
+		return map[string]any{"status": "ok"}, false
 	case "pm_cancel_run":
 		if h.eng == nil {
 			return map[string]any{"error": "engine unavailable"}, true
@@ -667,6 +806,13 @@ func toolSchemas(mcpID string) []map[string]any {
 			platformmcp.Tool("pm_list_pending_gates", "列出当前项目待审批的门禁/澄清项。", map[string]any{
 				"limit": map[string]any{"type": "number"},
 			}),
+			platformmcp.Tool("pm_get_artifact", "按 artifactId 或 runId+name 读取当前项目产物全文片段；支持 offset/limit 分页并返回截断信息。", map[string]any{
+				"artifactId": map[string]any{"type": "string", "description": "优先使用；与 runId+name 同时提供时以 artifactId 为准"},
+				"runId":      map[string]any{"type": "string"},
+				"name":       map[string]any{"type": "string"},
+				"offset":     map[string]any{"type": "number", "description": "从第几个字节开始读取，默认 0"},
+				"limit":      map[string]any{"type": "number", "description": "本次最多返回多少字节，默认 65536，硬上限 65536"},
+			}),
 		}
 	case MCPWorkflowWrite:
 		return []map[string]any{
@@ -713,6 +859,16 @@ func toolSchemas(mcpID string) []map[string]any {
 				"nodeId": map[string]any{"type": "string"},
 				"action": map[string]any{"type": "string", "description": "如 approve|revise"},
 				"form":   map[string]any{"type": "object"},
+			}),
+			platformmcp.Tool("pm_react_reply", "向节点复审 ReAct 会话提交一轮 reply；默认 force=false 继续会话，force=true 才确认并流转。非 human_gate 审批。", map[string]any{
+				"runId":  map[string]any{"type": "string"},
+				"nodeId": map[string]any{"type": "string", "description": "复审生产者节点 id（如 visual），不是 human_gate 节点"},
+				"text":   map[string]any{"type": "string"},
+				"force":  map[string]any{"type": "boolean", "description": "默认 false；true 时结束复审并推进流程"},
+				"annotations": map[string]any{
+					"type":        "array",
+					"description": "可选：精确字段/页面元素标注；首版不支持 images",
+				},
 			}),
 			platformmcp.Tool("pm_cancel_run", "取消一次运行中的 Run。", map[string]any{
 				"runId": map[string]any{"type": "string"},

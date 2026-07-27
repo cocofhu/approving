@@ -129,12 +129,12 @@ func TestResearchEarlyFailureThreeChannelsNonEmpty(t *testing.T) {
 		t.Fatalf("expected run_error.json in artifacts: %+v", summary)
 	}
 
-	host := pmmcp.NewHost(pm, progress, services.NewWorkflowService(db), rs, eng)
+	host := pmmcp.NewHost(pm, progress, services.NewWorkflowService(db), rs, arts, eng)
 	tok := host.Register(proj.ID, "thr-obs", "tester", "agent-a")
 	req, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
 		"params": map[string]any{
-			"name": "pm_list_runs",
+			"name":      "pm_list_runs",
 			"arguments": map[string]any{"workflowId": "wf", "limit": 5},
 		},
 	})

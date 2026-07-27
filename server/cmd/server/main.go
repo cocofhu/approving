@@ -193,16 +193,16 @@ func main() {
 			node = ""
 		}
 		auditSvc.Record(services.AuditRecord{
-			ProjectID:      projectID,
-			Actor:          services.SystemActor(), // MCP host has no Session
-			CallerKind:     models.CallerKindSystem,
-			Action:         models.AuditActionMCPCall,
-			ResourceType:   "mcp",
-			ResourceID:     tool,
-			RunID:          runID,
-			NodeID:         node,
-			Outcome:        outcome,
-			Summary:        "mcp " + tool,
+			ProjectID:    projectID,
+			Actor:        services.SystemActor(), // MCP host has no Session
+			CallerKind:   models.CallerKindSystem,
+			Action:       models.AuditActionMCPCall,
+			ResourceType: "mcp",
+			ResourceID:   tool,
+			RunID:        runID,
+			NodeID:       node,
+			Outcome:      outcome,
+			Summary:      "mcp " + tool,
 			Payload: map[string]any{
 				"tool":      tool,
 				"runId":     runID,
@@ -289,7 +289,7 @@ func main() {
 	pmSvc := services.NewPmService(db, skillSvc)
 	pmProgress := services.NewPmProgress(pmSvc, runSvc, artifactSvc)
 	wfSvc := services.NewWorkflowService(db)
-	pmMCP := pmmcp.NewHost(pmSvc, pmProgress, wfSvc, runSvc, eng)
+	pmMCP := pmmcp.NewHost(pmSvc, pmProgress, wfSvc, runSvc, artifactSvc, eng)
 	memoryMCP := memorymcp.NewHost(pmSvc)
 	contextMCP := contextmcp.NewHost(pmSvc)
 	schedulerMCP := schedulermcp.NewHost(db, pmSvc)

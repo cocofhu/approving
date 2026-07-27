@@ -17,7 +17,7 @@ func attachPm(t *testing.T, hn *harness) *services.PmService {
 	pm := services.NewPmService(hn.db, hn.h.Skill)
 	hn.h.Pm = pm
 	hn.h.PmProgress = services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts)
-	hn.h.PMMCP = pmmcp.NewHost(pm, hn.h.PmProgress, nil, hn.h.Runs, nil)
+	hn.h.PMMCP = pmmcp.NewHost(pm, hn.h.PmProgress, nil, hn.h.Runs, hn.h.Arts, nil)
 	return pm
 }
 
