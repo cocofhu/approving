@@ -18,6 +18,8 @@ const props = withDefaults(
     emptyLabel?: string
     width?: number
     right?: boolean
+    /** Full-width trigger (mobile filter editor); lifts max-width:220px. */
+    block?: boolean
     groupBy?: (o: AuditDdOption) => string
     disabled?: boolean
     testId?: string
@@ -28,6 +30,7 @@ const props = withDefaults(
     emptyLabel: '',
     width: 260,
     right: false,
+    block: false,
     disabled: false,
   },
 )
@@ -66,7 +69,10 @@ function place() {
   const trig = trigEl.value
   if (!trig) return
   const r = trig.getBoundingClientRect()
-  const pw = props.width
+  const maxW = Math.max(120, window.innerWidth - 16)
+  const pw = props.block
+    ? Math.min(Math.max(r.width, 160), maxW)
+    : Math.min(props.width, maxW)
   let left = props.right ? r.right - pw : r.left
   left = Math.max(8, Math.min(left, window.innerWidth - pw - 8))
   const top = r.bottom + 6
@@ -141,7 +147,7 @@ defineExpose({ close })
 </script>
 
 <template>
-  <div class="audit-dd" :class="{ open, 'is-hide': false }" :data-testid="testId">
+  <div class="audit-dd" :class="{ open, block, 'is-hide': false }" :data-testid="testId">
     <button
       ref="trigEl"
       type="button"
@@ -204,6 +210,11 @@ defineExpose({ close })
   flex: 0 0 auto;
   vertical-align: middle;
 }
+.audit-dd.block {
+  display: block;
+  width: 100%;
+  flex: 1 1 auto;
+}
 .audit-dd-trig {
   height: 32px;
   display: inline-flex;
@@ -221,6 +232,15 @@ defineExpose({ close })
   white-space: nowrap;
   border-radius: 0;
 }
+.audit-dd.block .audit-dd-trig {
+  display: flex;
+  width: 100%;
+  max-width: none;
+  min-height: 44px;
+  height: auto;
+  padding: 10px 12px;
+  white-space: normal;
+}
 .audit-dd-trig:hover:not(:disabled) {
   border-color: #d4d4d8;
   background: #fafafa;
@@ -236,12 +256,18 @@ defineExpose({ close })
 .audit-dd-trig .k {
   color: var(--txt3, #71717a);
   font-weight: 500;
+  flex: 0 0 auto;
 }
 .audit-dd-trig .v {
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 500;
   max-width: 140px;
+}
+.audit-dd.block .audit-dd-trig .v {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
 }
 .audit-dd-trig .v.muted {
   color: var(--txt3, #a1a1aa);
@@ -252,6 +278,7 @@ defineExpose({ close })
   height: 12px;
   color: var(--txt3, #a1a1aa);
   flex: 0 0 auto;
+  margin-left: auto;
   transition: transform 0.12s;
 }
 .audit-dd.open .caret {

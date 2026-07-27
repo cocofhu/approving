@@ -5,6 +5,7 @@ import AuditFilterDropdown, { type AuditDdOption } from '@/components/project/Au
 import EmptyState from '@/components/ui/EmptyState.vue'
 import { api, isPaginated, type PaginatedResponse } from '@/lib/api'
 import { prettyAuditPayload } from '@/lib/auditPayload'
+import { useBreakpoint } from '@/lib/useBreakpoint'
 import { useToast } from '@/lib/useToast'
 import { fmtTime } from '@/lib/format'
 import type {
@@ -22,6 +23,7 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const toast = useToast()
+const { isMobile } = useBreakpoint()
 
 type Mode = 'run' | 'all'
 
@@ -35,6 +37,8 @@ const pageSize = ref(10)
 const openId = ref<string | null>(null)
 const mode = ref<Mode>('run')
 const initialized = ref(false)
+/** Mobile filter editor: default collapsed (plan g2 / Demo). */
+const filtersExpanded = ref(false)
 
 const timeWindow = ref<'24h' | '7d' | '30d'>('24h')
 const runId = ref('')
@@ -200,6 +204,34 @@ const chips = computed<Chip[]>(() => {
 
 const clearableChips = computed(() => chips.value.filter((c) => c.clearable))
 const noRuns = computed(() => mode.value === 'run' && initialized.value && runOptions.value.length === 0)
+
+const timeWindowLabel = computed(() => {
+  if (timeWindow.value === '7d') return t('pages.projectDetail.audit.time7d')
+  if (timeWindow.value === '30d') return t('pages.projectDetail.audit.time30d')
+  return t('pages.projectDetail.audit.time24h')
+})
+
+/** One-line mobile filter summary (plan g2.1/g2.2); not the chips row. */
+const filterSummaryText = computed(() => {
+  const all = t('pages.projectDetail.audit.filterAll')
+  const resLab = resource.value || all
+  const timeLab = timeWindowLabel.value
+  if (mode.value === 'run') {
+    const runLab = runId.value
+      ? runOptions.value.find((r) => r.runId === runId.value)?.label || shortRun(runId.value)
+      : t('pages.projectDetail.audit.noRun')
+    const nodeLab = nodeId.value ? NODE_LABEL[nodeId.value] || nodeId.value : all
+    return `Run · ${runLab} · ${timeLab} · ${t('pages.projectDetail.audit.colNode')} ${nodeLab} / ${t('pages.projectDetail.audit.colResource')} ${resLab}`
+  }
+  const callerLab = callerKind.value
+    ? t(CALLER_LABEL_KEYS[callerKind.value] || '') || callerKind.value
+    : all
+  return `${t('pages.projectDetail.audit.colCaller')} · ${callerLab} · ${timeLab} · ${t('pages.projectDetail.audit.colResource')} ${resLab}`
+})
+
+function toggleFiltersExpanded() {
+  filtersExpanded.value = !filtersExpanded.value
+}
 
 function resDot(v: string) {
   if (!v) return ''
@@ -566,79 +598,180 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="filters" data-testid="project-audit-filters">
-        <div class="search">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="7" />
-            <path d="M20 20l-3-3" />
-          </svg>
-          <input
-            v-model="search"
-            type="search"
-            :placeholder="t('pages.projectDetail.audit.searchPlaceholder')"
-            autocomplete="off"
-            data-testid="project-audit-search"
-            @input="onSearchInput"
-          />
-        </div>
-
-        <AuditFilterDropdown
-          v-if="mode === 'run'"
-          :model-value="runId"
-          :label-key="'Run'"
-          :options="runDdOptions"
-          :searchable="true"
-          :width="280"
-          :empty-label="t('pages.projectDetail.audit.noRun')"
-          test-id="project-audit-run"
-          @update:model-value="onRunChange"
-        />
-        <AuditFilterDropdown
-          v-if="mode === 'run'"
-          :model-value="nodeId"
-          :label-key="t('pages.projectDetail.audit.colNode')"
-          :options="nodeDdOptions"
-          :searchable="true"
-          :empty-label="t('pages.projectDetail.audit.filterAll')"
-          test-id="project-audit-node"
-          @update:model-value="(v) => { nodeId = v; onFilterChange() }"
-        />
-        <AuditFilterDropdown
-          v-if="mode === 'all'"
-          :model-value="callerKind"
-          :label-key="t('pages.projectDetail.audit.colCaller')"
-          :options="callerDdOptions"
-          :empty-label="t('pages.projectDetail.audit.filterAll')"
-          test-id="project-audit-caller"
-          @update:model-value="(v) => { callerKind = v; onFilterChange() }"
-        />
-        <AuditFilterDropdown
-          :model-value="resource"
-          :label-key="t('pages.projectDetail.audit.colResource')"
-          :options="resourceDdOptions"
-          :searchable="true"
-          :width="280"
-          :empty-label="t('pages.projectDetail.audit.filterAll')"
-          :group-by="resGroup"
-          test-id="project-audit-resource"
-          @update:model-value="(v) => { resource = v; onFilterChange() }"
-        />
-        <AuditFilterDropdown
-          :model-value="timeWindow"
-          :label-key="t('pages.projectDetail.audit.filterTime')"
-          :options="timeDdOptions"
-          test-id="project-audit-time"
-          @update:model-value="onTimeChange"
-        />
-
-        <div class="filters-actions">
-          <button type="button" class="btn" data-testid="project-audit-export" @click="exportAudit">
-            {{ t('pages.projectDetail.audit.export') }}
+      <div class="filters" :class="{ 'filters-mobile': isMobile }" data-testid="project-audit-filters">
+        <!-- Mobile: collapsible filter summary (plan g2); search/export stay outside fold -->
+        <template v-if="isMobile">
+          <button
+            type="button"
+            class="filter-summary"
+            data-testid="project-audit-filter-summary"
+            :aria-expanded="filtersExpanded ? 'true' : 'false'"
+            @click="toggleFiltersExpanded"
+          >
+            <span class="sum-text">{{ filterSummaryText }}</span>
+            <span class="sum-action">
+              {{
+                filtersExpanded
+                  ? t('pages.projectDetail.audit.filterCollapse')
+                  : t('pages.projectDetail.audit.filterExpand')
+              }}
+            </span>
           </button>
-        </div>
+
+          <div
+            v-show="filtersExpanded"
+            class="filters-editor"
+            data-testid="project-audit-filters-editor"
+          >
+            <AuditFilterDropdown
+              v-if="mode === 'run'"
+              :model-value="runId"
+              :label-key="'Run'"
+              :options="runDdOptions"
+              :searchable="true"
+              :block="true"
+              :empty-label="t('pages.projectDetail.audit.noRun')"
+              test-id="project-audit-run"
+              @update:model-value="onRunChange"
+            />
+            <AuditFilterDropdown
+              v-if="mode === 'run'"
+              :model-value="nodeId"
+              :label-key="t('pages.projectDetail.audit.colNode')"
+              :options="nodeDdOptions"
+              :searchable="true"
+              :block="true"
+              :empty-label="t('pages.projectDetail.audit.filterAll')"
+              test-id="project-audit-node"
+              @update:model-value="(v) => { nodeId = v; onFilterChange() }"
+            />
+            <AuditFilterDropdown
+              v-if="mode === 'all'"
+              :model-value="callerKind"
+              :label-key="t('pages.projectDetail.audit.colCaller')"
+              :options="callerDdOptions"
+              :block="true"
+              :empty-label="t('pages.projectDetail.audit.filterAll')"
+              test-id="project-audit-caller"
+              @update:model-value="(v) => { callerKind = v; onFilterChange() }"
+            />
+            <AuditFilterDropdown
+              :model-value="resource"
+              :label-key="t('pages.projectDetail.audit.colResource')"
+              :options="resourceDdOptions"
+              :searchable="true"
+              :block="true"
+              :empty-label="t('pages.projectDetail.audit.filterAll')"
+              :group-by="resGroup"
+              test-id="project-audit-resource"
+              @update:model-value="(v) => { resource = v; onFilterChange() }"
+            />
+            <AuditFilterDropdown
+              :model-value="timeWindow"
+              :label-key="t('pages.projectDetail.audit.filterTime')"
+              :options="timeDdOptions"
+              :block="true"
+              test-id="project-audit-time"
+              @update:model-value="onTimeChange"
+            />
+          </div>
+
+          <div class="search">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3-3" />
+            </svg>
+            <input
+              v-model="search"
+              type="search"
+              :placeholder="t('pages.projectDetail.audit.searchPlaceholder')"
+              autocomplete="off"
+              data-testid="project-audit-search"
+              @input="onSearchInput"
+            />
+          </div>
+          <div class="filters-actions">
+            <button type="button" class="btn" data-testid="project-audit-export" @click="exportAudit">
+              {{ t('pages.projectDetail.audit.export') }}
+            </button>
+          </div>
+        </template>
+
+        <!-- Desktop: horizontal filters + wide table (plan g4.1) -->
+        <template v-else>
+          <div class="search">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3-3" />
+            </svg>
+            <input
+              v-model="search"
+              type="search"
+              :placeholder="t('pages.projectDetail.audit.searchPlaceholder')"
+              autocomplete="off"
+              data-testid="project-audit-search"
+              @input="onSearchInput"
+            />
+          </div>
+
+          <AuditFilterDropdown
+            v-if="mode === 'run'"
+            :model-value="runId"
+            :label-key="'Run'"
+            :options="runDdOptions"
+            :searchable="true"
+            :width="280"
+            :empty-label="t('pages.projectDetail.audit.noRun')"
+            test-id="project-audit-run"
+            @update:model-value="onRunChange"
+          />
+          <AuditFilterDropdown
+            v-if="mode === 'run'"
+            :model-value="nodeId"
+            :label-key="t('pages.projectDetail.audit.colNode')"
+            :options="nodeDdOptions"
+            :searchable="true"
+            :empty-label="t('pages.projectDetail.audit.filterAll')"
+            test-id="project-audit-node"
+            @update:model-value="(v) => { nodeId = v; onFilterChange() }"
+          />
+          <AuditFilterDropdown
+            v-if="mode === 'all'"
+            :model-value="callerKind"
+            :label-key="t('pages.projectDetail.audit.colCaller')"
+            :options="callerDdOptions"
+            :empty-label="t('pages.projectDetail.audit.filterAll')"
+            test-id="project-audit-caller"
+            @update:model-value="(v) => { callerKind = v; onFilterChange() }"
+          />
+          <AuditFilterDropdown
+            :model-value="resource"
+            :label-key="t('pages.projectDetail.audit.colResource')"
+            :options="resourceDdOptions"
+            :searchable="true"
+            :width="280"
+            :empty-label="t('pages.projectDetail.audit.filterAll')"
+            :group-by="resGroup"
+            test-id="project-audit-resource"
+            @update:model-value="(v) => { resource = v; onFilterChange() }"
+          />
+          <AuditFilterDropdown
+            :model-value="timeWindow"
+            :label-key="t('pages.projectDetail.audit.filterTime')"
+            :options="timeDdOptions"
+            test-id="project-audit-time"
+            @update:model-value="onTimeChange"
+          />
+
+          <div class="filters-actions">
+            <button type="button" class="btn" data-testid="project-audit-export" @click="exportAudit">
+              {{ t('pages.projectDetail.audit.export') }}
+            </button>
+          </div>
+        </template>
       </div>
 
-      <div v-if="chips.length" class="chips" data-testid="project-audit-chips">
+      <div v-if="!isMobile && chips.length" class="chips" data-testid="project-audit-chips">
         <span v-for="ch in chips" :key="ch.key" class="chip">
           <em>{{ ch.label }}</em>
           <b>{{ ch.value }}</b>
@@ -663,7 +796,7 @@ onMounted(() => {
         </button>
       </div>
 
-      <div class="meta">
+      <div v-if="!isMobile" class="meta">
         <div class="meta-l" data-testid="project-audit-stats">
           <span>{{ t('pages.projectDetail.audit.statTotal') }} <b>{{ stats.total }}</b></span>
           <span>MCP <b>{{ stats.mcp }}</b></span>
@@ -671,6 +804,12 @@ onMounted(() => {
           <span v-if="mode === 'run' && runId">Run <b>{{ shortRun(runId) }}</b></span>
         </div>
         <div>{{ t('pages.projectDetail.audit.expandHint') }}</div>
+      </div>
+      <div v-else class="meta meta-mobile" data-testid="project-audit-stats">
+        <span>{{ t('pages.projectDetail.audit.statTotal') }} <b>{{ stats.total }}</b></span>
+        <span>MCP <b>{{ stats.mcp }}</b></span>
+        <span>{{ t('pages.projectDetail.audit.statFail') }} <b>{{ stats.fail }}</b></span>
+        <span v-if="mode === 'run' && runId">Run <b>{{ shortRun(runId) }}</b></span>
       </div>
 
       <div v-if="loading" class="py-10 text-center text-[13px] text-txt3">
@@ -695,11 +834,73 @@ onMounted(() => {
         :title="t('pages.projectDetail.audit.emptyTitle')"
         :desc="t('pages.projectDetail.audit.emptyDesc')"
       />
+      <!-- Mobile event cards (plan g3); shared by run + all modes -->
+      <div
+        v-else-if="isMobile"
+        class="event-cards"
+        data-testid="project-audit-list"
+        data-layout="cards"
+      >
+        <button
+          v-for="ev in events"
+          :key="ev.id"
+          type="button"
+          class="event-card"
+          :class="{ open: openId === ev.id, fail: ev.outcome === 'fail' }"
+          :data-testid="`project-audit-event-${ev.id}`"
+          @click="toggleOpen(ev.id)"
+        >
+          <div class="ec-top">
+            <span class="ec-time mono">{{ fmtTime(ev.occurredAt) }}</span>
+            <span :class="ev.outcome === 'fail' ? 'bad' : 'ok'">{{ outcomeLabel(ev) }}</span>
+          </div>
+          <div class="ec-row">
+            <span class="k">{{ t('pages.projectDetail.audit.colNode') }}</span>
+            {{ nodeLabel(ev.nodeId) }}
+            ·
+            <span class="k">{{ t('pages.projectDetail.audit.colAction') }}</span>
+            <span class="act" :class="actionClass(ev.action)">{{ actionLabel(ev.action) }}</span>
+          </div>
+          <div class="ec-sum" :class="{ open: openId === ev.id }">{{ ev.summary }}</div>
+          <div v-if="openId === ev.id" class="ec-detail" @click.stop>
+            <div>
+              <span class="k">{{ t('pages.projectDetail.audit.colCaller') }}</span>
+              {{ callerLabel(ev) }}
+            </div>
+            <div>
+              <span class="k">{{ t('pages.projectDetail.audit.colResource') }}</span>
+              {{ resourceText(ev) }}
+            </div>
+            <div v-if="mode === 'all' && ev.runId">
+              <span class="k">{{ t('pages.projectDetail.audit.colRun') }}</span>
+              <code>{{ ev.runId }}</code>
+            </div>
+            <div>
+              <span class="k">action</span>
+              <code>{{ ev.action }}</code>
+            </div>
+            <pre
+              class="payload"
+              data-testid="project-audit-payload"
+              v-html="prettyPayload(ev.payload)"
+            />
+          </div>
+          <div class="ec-hint">
+            {{
+              openId === ev.id
+                ? t('pages.projectDetail.audit.cardCollapseHint')
+                : t('pages.projectDetail.audit.cardExpandHint')
+            }}
+          </div>
+        </button>
+      </div>
+      <!-- Desktop wide table (plan g4.1) -->
       <div
         v-else
         class="table-wrap"
         :class="{ 'col-run-hide': mode === 'run', 'col-node-hide': mode !== 'run' }"
         data-testid="project-audit-list"
+        data-layout="table"
       >
         <table>
           <thead>
@@ -987,6 +1188,15 @@ onMounted(() => {
   flex-wrap: wrap;
   align-items: center;
 }
+.meta-mobile {
+  gap: 10px;
+  padding: 6px 16px;
+}
+.meta-mobile b {
+  color: var(--txt, #18181b);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
 .table-wrap {
   overflow: auto;
   max-height: 520px;
@@ -1173,20 +1383,175 @@ tr.detail td {
   align-items: center;
   gap: 6px;
 }
-@media (max-width: 767px) {
-  .filters {
+.filter-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #e4e4e7;
+  background: #fafafa;
+  padding: 10px 12px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+.filter-summary .sum-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--txt, #18181b);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.filter-summary .sum-action {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent, #7c3aed);
+  white-space: nowrap;
+}
+.filters-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+}
+.filters-mobile {
+  flex-direction: column;
+  align-items: stretch;
+}
+.filters-mobile .search {
+  max-width: none;
+  width: 100%;
+  flex: 0 0 auto;
+  height: 44px;
+  min-height: 44px;
+}
+.filters-mobile .search input {
+  height: 42px;
+}
+.filters-mobile .filters-actions {
+  margin-left: 0;
+  width: 100%;
+  flex: 0 0 auto;
+}
+.filters-mobile .filters-actions .btn {
+  flex: 1;
+  width: 100%;
+  min-height: 44px;
+  height: auto;
+}
+.filters-mobile .filter-summary {
+  flex: 0 0 auto;
+}
+.event-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+}
+.event-card {
+  display: block;
+  width: 100%;
+  border: 1px solid #e5e5e5;
+  background: #fff;
+  padding: 10px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.event-card:hover {
+  border-color: #c4b5fd;
+}
+.event-card.open {
+  border-color: var(--accent, #7c3aed);
+  background: #faf8ff;
+}
+.event-card.fail {
+  box-shadow: inset 2px 0 0 #dc2626;
+}
+.ec-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.ec-time {
+  font-size: 11px;
+  color: #888;
+  font-variant-numeric: tabular-nums;
+}
+.ec-row {
+  font-size: 12px;
+  color: #333;
+  margin-top: 2px;
+}
+.ec-row .k,
+.ec-detail .k {
+  color: #888;
+}
+.ec-sum {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #444;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ec-sum.open {
+  display: block;
+  -webkit-line-clamp: unset;
+}
+.ec-detail {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e5e5e5;
+  font-size: 12px;
+  color: #444;
+}
+.ec-detail div {
+  margin-top: 3px;
+}
+.ec-detail code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--txt, #18181b);
+  background: #fff;
+  border: 1px solid var(--line, #ececef);
+  padding: 1px 5px;
+}
+.ec-detail .payload {
+  margin-top: 8px;
+}
+.ec-hint {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--accent, #7c3aed);
+}
+@media (max-width: 768px) {
+  .filters:not(.filters-mobile) {
     flex-direction: column;
     align-items: stretch;
   }
-  .search {
+  .filters:not(.filters-mobile) .search {
     max-width: none;
     width: 100%;
   }
-  .filters-actions {
+  .filters:not(.filters-mobile) .filters-actions {
     margin-left: 0;
     width: 100%;
   }
-  .filters-actions .btn {
+  .filters:not(.filters-mobile) .filters-actions .btn {
     flex: 1;
     width: 100%;
   }
