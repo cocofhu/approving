@@ -182,13 +182,14 @@ describe('Token charts (g2.3/g2.4)', () => {
     wrapper.unmount()
   })
 
-  it('renders consumption rank with PM same-purple row (not amber) and other as non-PM (g3.1/g1)', () => {
+  it('renders consumption rank with continuous numeric badges for workflow+PM (no 12PM34)', () => {
     const wrapper = mount(TokenWorkflowRank, {
       props: {
+        // Fixed API order: Top workflows → PM → other
         workflows: [
           { workflowId: 'a', name: 'approve-main', total: 1_020_000, kind: 'workflow' },
-          { name: 'PM', total: 80_000, kind: 'pm' },
           { workflowId: 'b', name: 'doc-review', total: 40_000, kind: 'workflow' },
+          { name: 'PM', total: 80_000, kind: 'pm' },
           { name: 'other', total: 20_000, other: true, kind: 'other' },
         ],
       },
@@ -202,13 +203,21 @@ describe('Token charts (g2.3/g2.4)', () => {
     expect(wrapper.text()).toContain('PM')
     expect(wrapper.text()).toContain('其他')
 
-    // PM badge text is "PM" (not a numeric rank); workflow ranks remain 1, 2
+    // Continuous numeric badges for workflow+PM; other stays "·" (Demo: 1→2→3→·)
     const pmRow = wrapper.find('[data-kind="pm"]')
-    expect(pmRow.text()).toMatch(/^PM/)
     const badges = wrapper.findAll('li').map((li) => li.find('span').text())
-    expect(badges).toEqual(['1', 'PM', '2', '·'])
+    expect(badges).toEqual(['1', '2', '3', '·'])
+    expect(pmRow.find('span').text()).toBe('3')
+    // PM badge style matches workflow numeric badge (accent for rank ≤3); no special w-auto/min-w
+    const pmBadge = pmRow.find('span')
+    expect(pmBadge.classes()).toEqual(
+      expect.arrayContaining(['w-[22px]', 'bg-accent-dim', 'text-accent-2']),
+    )
+    expect(pmBadge.classes()).not.toEqual(expect.arrayContaining(['w-auto', 'min-w-[22px]', 'px-1.5']))
+    const wfBadge = items[0]!.find('span')
+    expect(wfBadge.classes()).toEqual(pmBadge.classes())
 
-    // Same purple as workflow — no amber (#f59e0b / #d97706 / #fbbf24)
+    // Same purple bar as workflow — no amber (#f59e0b / #d97706 / #fbbf24)
     const pmHtml = pmRow.html()
     expect(pmHtml).toContain('#6d5cff')
     expect(pmHtml).toContain('#9b8cff')
@@ -216,9 +225,61 @@ describe('Token charts (g2.3/g2.4)', () => {
 
     // Compact K/M main values remain visible on the right
     const values = wrapper.findAll('[data-testid="token-rank-value"]').map((v) => v.text())
-    expect(values).toEqual(['1.02M', '80K', '40K', '20K'])
+    expect(values).toEqual(['1.02M', '40K', '80K', '20K'])
     expect(wrapper.find('[data-testid="token-rank-value"]').attributes('title')).toBeTruthy()
     wrapper.unmount()
+  })
+
+  it('Demo sample: 4 workflows + PM + other → badges 1→2→3→4→5→· (g3.3)', () => {
+    const wrapper = mount(TokenWorkflowRank, {
+      props: {
+        workflows: [
+          { workflowId: '1', name: '自我迭代', total: 1200, kind: 'workflow' },
+          { workflowId: '2', name: '自我迭代·轻量', total: 240, kind: 'workflow' },
+          { workflowId: '3', name: '调研', total: 140, kind: 'workflow' },
+          { workflowId: '4', name: '产品宣传文章', total: 70, kind: 'workflow' },
+          { name: 'PM', total: 180, kind: 'pm' },
+          { name: 'other', total: 55, other: true, kind: 'other' },
+        ],
+      },
+      global: { plugins: [i18n()] },
+    })
+    const badges = wrapper.findAll('li').map((li) => li.find('span').text())
+    expect(badges).toEqual(['1', '2', '3', '4', '5', '·'])
+    expect(wrapper.find('[data-kind="pm"]').find('span').text()).toBe('5')
+    // rank 5 uses dim elevated style same as a workflow at #5 would
+    expect(wrapper.find('[data-kind="pm"]').find('span').classes()).toEqual(
+      expect.arrayContaining(['w-[22px]', 'bg-elevated', 'text-txt3']),
+    )
+    wrapper.unmount()
+  })
+
+  it('hides PM row when absent; no-other still continuous (g3.3)', () => {
+    const noPm = mount(TokenWorkflowRank, {
+      props: {
+        workflows: [
+          { workflowId: 'a', name: 'approve-main', total: 100, kind: 'workflow' },
+          { name: 'other', total: 20, other: true, kind: 'other' },
+        ],
+      },
+      global: { plugins: [i18n()] },
+    })
+    expect(noPm.find('[data-kind="pm"]').exists()).toBe(false)
+    expect(noPm.findAll('li').map((li) => li.find('span').text())).toEqual(['1', '·'])
+    noPm.unmount()
+
+    const noOther = mount(TokenWorkflowRank, {
+      props: {
+        workflows: [
+          { workflowId: 'a', name: 'approve-main', total: 100, kind: 'workflow' },
+          { name: 'PM', total: 50, kind: 'pm' },
+        ],
+      },
+      global: { plugins: [i18n()] },
+    })
+    expect(noOther.find('[data-kind="other"]').exists()).toBe(false)
+    expect(noOther.findAll('li').map((li) => li.find('span').text())).toEqual(['1', '2'])
+    noOther.unmount()
   })
 
   it('trend PM dataset shares workflow purple and uses borderDash (g2.2/g3.1)', () => {

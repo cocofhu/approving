@@ -57,9 +57,10 @@ const STATS_30D = {
     total: 2000,
   },
   workflows: [
+    // Fixed order: Top workflows (desc) → PM → other (no mid-insert PM / 12PM34)
     { workflowId: 'wf-a', name: 'approve-main', total: 1200, kind: 'workflow' },
-    { name: 'PM', total: 500, kind: 'pm' },
     { workflowId: 'wf-b', name: 'doc-review', total: 300, kind: 'workflow' },
+    { name: 'PM', total: 500, kind: 'pm' },
     { name: '其他', total: 200, other: true, kind: 'other' },
   ],
 }
@@ -226,6 +227,20 @@ test.describe('看板 Token 统计图', () => {
     await expect(panel).toContainText('消耗排行')
     await expect(panel).toContainText('按来源堆叠')
     await expect(page.getByTestId('token-rank-list').locator('[data-kind="pm"]')).toBeVisible()
+
+    // Continuous numeric badges: Top→PM→其他 → 1,2,3,· (no 12PM34 / no "PM" text badge)
+    const rankList = page.getByTestId('token-rank-list')
+    const kinds = await rankList.locator('li').evaluateAll((lis) =>
+      lis.map((li) => li.getAttribute('data-kind')),
+    )
+    expect(kinds).toEqual(['workflow', 'workflow', 'pm', 'other'])
+    const badges = await rankList.locator('li').evaluateAll((lis) =>
+      lis.map((li) => {
+        const badge = li.querySelector('span')
+        return (badge?.textContent || '').trim()
+      }),
+    )
+    expect(badges).toEqual(['1', '2', '3', '·'])
 
     // Panel sits above Run columns
     const panelBox = await panel.boundingBox()
