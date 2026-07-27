@@ -24,11 +24,21 @@ import PmCronJobsPanel from '@/components/pm/PmCronJobsPanel.vue'
 import PmSettingsPanel from '@/components/pm/PmSettingsPanel.vue'
 import TokenUsageHoverTip from '@/components/ui/TokenUsageHoverTip.vue'
 import ProjectAuditPanel from '@/components/project/ProjectAuditPanel.vue'
-import type { ClarifyImage, PmLeaderBinding, Project, ProjectEnvEntry, ProjectVariable, Workflow } from '@/lib/types'
+import ProjectNotifyPanel from '@/components/project/ProjectNotifyPanel.vue'
+import type {
+  ClarifyImage,
+  PmLeaderBinding,
+  Project,
+  ProjectEnvEntry,
+  ProjectVariable,
+  Workflow,
+  WorkflowNotifyPolicy,
+} from '@/lib/types'
 
 const PROJECT_TABS = [
   'board',
   'workflows',
+  'notify',
   'pmLeader',
   'cronJobs',
   'sandboxEnv',
@@ -204,6 +214,7 @@ const { fileInput, triggerImport, handleFileChange } = useWorkflowImport({
 const tabs: { id: Tab; labelKey: string }[] = [
   { id: 'board', labelKey: 'pages.projectDetail.tabBoard' },
   { id: 'workflows', labelKey: 'pages.projectDetail.tabWorkflows' },
+  { id: 'notify', labelKey: 'pages.projectDetail.tabNotify' },
   { id: 'pmLeader', labelKey: 'pages.projectDetail.tabPmLeader' },
   { id: 'cronJobs', labelKey: 'pages.projectDetail.tabCronJobs' },
   { id: 'sandboxEnv', labelKey: 'pages.projectDetail.tabSandboxEnv' },
@@ -231,6 +242,61 @@ function onPmBindingChanged(b: PmLeaderBinding) {
   pmBinding.value = b
   // Save succeeded → return to chat / empty state with refreshed binding.
   pmView.value = 'chat'
+}
+
+function onNotifyProjectUpdated(p: Project) {
+  project.value = p
+}
+
+function openNotifyChannelSettings() {
+  pmView.value = 'settings'
+  setTab('pmLeader')
+}
+
+const savingNotifyWfId = ref<string | null>(null)
+
+function wfNotifyMode(w: Workflow): 'off' | 'inherit' | 'custom' {
+  const m = w.notifyPolicy?.mode
+  if (m === 'off' || m === 'custom') return m
+  return 'inherit'
+}
+
+function wfNotifyHas(w: Workflow, ev: string): boolean {
+  return (w.notifyPolicy?.events || []).includes(ev)
+}
+
+async function persistWorkflowNotify(w: Workflow, policy: WorkflowNotifyPolicy) {
+  savingNotifyWfId.value = w.id
+  try {
+    // Notify-only PATCH: never send cached nodes/edges (review v1).
+    const saved = await api.patchWorkflowNotifyPolicy(w.id, policy)
+    workflows.value = workflows.value.map((x) => (x.id === w.id ? { ...x, ...saved } : x))
+    toast.success(t('pages.projectDetail.notify.wfUpdated'))
+  } catch (e: any) {
+    toast.error(String(e?.message || e))
+  } finally {
+    savingNotifyWfId.value = null
+  }
+}
+
+async function setWorkflowNotifyMode(w: Workflow, mode: 'off' | 'inherit' | 'custom') {
+  const events =
+    mode === 'custom'
+      ? w.notifyPolicy?.events?.length
+        ? [...(w.notifyPolicy.events || [])]
+        : ['waiting_human', 'failed']
+      : [...(w.notifyPolicy?.events || [])]
+  await persistWorkflowNotify(w, { mode, events })
+}
+
+async function toggleWorkflowNotifyEvent(w: Workflow, ev: 'waiting_human' | 'failed') {
+  const cur = new Set(w.notifyPolicy?.events || [])
+  if (cur.has(ev)) cur.delete(ev)
+  else cur.add(ev)
+  await persistWorkflowNotify(w, {
+    mode: 'custom',
+    events: ['waiting_human', 'failed'].filter((k) => cur.has(k)),
+  })
 }
 
 const VAR_TYPES = computed(() => [
@@ -824,6 +890,15 @@ onUnmounted(() => {
         <PmCronJobsPanel :project-id="projectId" />
       </div>
 
+      <div v-else-if="tab === 'notify' && project" class="min-h-[420px]">
+        <ProjectNotifyPanel
+          :project-id="projectId"
+          :project="project"
+          @updated="onNotifyProjectUpdated"
+          @open-channel-settings="openNotifyChannelSettings"
+        />
+      </div>
+
       <!-- Workflows tab -->
       <div v-else-if="tab === 'workflows'">
         <div class="mb-3 flex justify-end gap-2">
@@ -860,6 +935,71 @@ onUnmounted(() => {
             </button>
 
             <div class="relative flex items-center gap-2" data-wf-menu @click.stop>
+              <div class="flex min-w-0 flex-1 flex-col gap-1.5" data-testid="wf-notify-inline">
+                <div class="inline-flex overflow-hidden rounded-md border border-line text-[11px]">
+                  <button
+                    type="button"
+                    class="px-2 py-1 transition"
+                    :class="
+                      wfNotifyMode(w) === 'off'
+                        ? 'bg-err/15 text-err'
+                        : 'bg-surface text-txt3 hover:bg-elevated hover:text-txt'
+                    "
+                    :disabled="savingNotifyWfId === w.id"
+                    @click="setWorkflowNotifyMode(w, 'off')"
+                  >
+                    {{ t('pages.projectDetail.notify.modeOff') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="border-l border-line px-2 py-1 transition"
+                    :class="
+                      wfNotifyMode(w) === 'inherit'
+                        ? 'bg-accent-dim text-accent-2'
+                        : 'bg-surface text-txt3 hover:bg-elevated hover:text-txt'
+                    "
+                    :disabled="savingNotifyWfId === w.id"
+                    @click="setWorkflowNotifyMode(w, 'inherit')"
+                  >
+                    {{ t('pages.projectDetail.notify.modeInherit') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="border-l border-line px-2 py-1 transition"
+                    :class="
+                      wfNotifyMode(w) === 'custom'
+                        ? 'bg-accent-dim text-accent-2'
+                        : 'bg-surface text-txt3 hover:bg-elevated hover:text-txt'
+                    "
+                    :disabled="savingNotifyWfId === w.id"
+                    @click="setWorkflowNotifyMode(w, 'custom')"
+                  >
+                    {{ t('pages.projectDetail.notify.modeCustom') }}
+                  </button>
+                </div>
+                <div v-if="wfNotifyMode(w) === 'custom'" class="flex flex-wrap gap-2 text-[11px] text-txt2">
+                  <label class="inline-flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      class="accent-accent"
+                      :checked="wfNotifyHas(w, 'waiting_human')"
+                      :disabled="savingNotifyWfId === w.id"
+                      @change="toggleWorkflowNotifyEvent(w, 'waiting_human')"
+                    />
+                    <code class="font-mono">waiting_human</code>
+                  </label>
+                  <label class="inline-flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      class="accent-accent"
+                      :checked="wfNotifyHas(w, 'failed')"
+                      :disabled="savingNotifyWfId === w.id"
+                      @change="toggleWorkflowNotifyEvent(w, 'failed')"
+                    />
+                    <code class="font-mono">failed</code>
+                  </label>
+                </div>
+              </div>
               <button
                 type="button"
                 class="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-md bg-accent-dim px-3.5 text-sm font-medium text-accent-2 transition hover:brightness-110"
@@ -933,6 +1073,7 @@ onUnmounted(() => {
                 <tr>
                   <th class="px-3 py-2 font-medium">{{ t('pages.projectDetail.colName') }}</th>
                   <th class="px-3 py-2 font-medium">{{ t('pages.projectDetail.colStatus') }}</th>
+                  <th class="px-3 py-2 font-medium">{{ t('pages.projectDetail.notify.colPolicy') }}</th>
                   <th class="px-3 py-2 font-medium">{{ t('pages.projectDetail.colUpdated') }}</th>
                   <th class="px-3 py-2 text-right font-medium whitespace-nowrap">{{ t('common.table.actions') }}</th>
                 </tr>
@@ -949,6 +1090,74 @@ onUnmounted(() => {
                     <div v-if="w.description" class="truncate text-xs text-txt3">{{ w.description }}</div>
                   </td>
                   <td class="px-3 py-2.5"><StatusPill :status="w.status" size="sm" /></td>
+                  <td class="px-3 py-2.5" @click.stop data-testid="wf-notify-cell">
+                    <div class="inline-flex overflow-hidden rounded-md border border-line text-[11px]">
+                      <button
+                        type="button"
+                        class="px-2 py-1 transition"
+                        :class="
+                          wfNotifyMode(w) === 'off'
+                            ? 'bg-err/15 text-err'
+                            : 'bg-surface text-txt3 hover:bg-elevated hover:text-txt'
+                        "
+                        :disabled="savingNotifyWfId === w.id"
+                        @click="setWorkflowNotifyMode(w, 'off')"
+                      >
+                        {{ t('pages.projectDetail.notify.modeOff') }}
+                      </button>
+                      <button
+                        type="button"
+                        class="border-l border-line px-2 py-1 transition"
+                        :class="
+                          wfNotifyMode(w) === 'inherit'
+                            ? 'bg-accent-dim text-accent-2'
+                            : 'bg-surface text-txt3 hover:bg-elevated hover:text-txt'
+                        "
+                        :disabled="savingNotifyWfId === w.id"
+                        @click="setWorkflowNotifyMode(w, 'inherit')"
+                      >
+                        {{ t('pages.projectDetail.notify.modeInherit') }}
+                      </button>
+                      <button
+                        type="button"
+                        class="border-l border-line px-2 py-1 transition"
+                        :class="
+                          wfNotifyMode(w) === 'custom'
+                            ? 'bg-accent-dim text-accent-2'
+                            : 'bg-surface text-txt3 hover:bg-elevated hover:text-txt'
+                        "
+                        :disabled="savingNotifyWfId === w.id"
+                        @click="setWorkflowNotifyMode(w, 'custom')"
+                      >
+                        {{ t('pages.projectDetail.notify.modeCustom') }}
+                      </button>
+                    </div>
+                    <div
+                      v-if="wfNotifyMode(w) === 'custom'"
+                      class="mt-1.5 flex flex-wrap gap-2 text-[11px] text-txt2"
+                    >
+                      <label class="inline-flex items-center gap-1">
+                        <input
+                          type="checkbox"
+                          class="accent-accent"
+                          :checked="wfNotifyHas(w, 'waiting_human')"
+                          :disabled="savingNotifyWfId === w.id"
+                          @change="toggleWorkflowNotifyEvent(w, 'waiting_human')"
+                        />
+                        <code class="font-mono">waiting_human</code>
+                      </label>
+                      <label class="inline-flex items-center gap-1">
+                        <input
+                          type="checkbox"
+                          class="accent-accent"
+                          :checked="wfNotifyHas(w, 'failed')"
+                          :disabled="savingNotifyWfId === w.id"
+                          @change="toggleWorkflowNotifyEvent(w, 'failed')"
+                        />
+                        <code class="font-mono">failed</code>
+                      </label>
+                    </div>
+                  </td>
                   <td class="px-3 py-2.5 text-txt3">{{ fmtTime(w.updatedAt) }}</td>
                   <td class="px-3 py-2.5" @click.stop>
                     <div class="flex flex-wrap items-center justify-end gap-1">

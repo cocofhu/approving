@@ -183,6 +183,46 @@ describe('GateProductEditor', () => {
     wrapper.unmount()
   })
 
+  it('keeps edit draft/mode when artifacts array reference changes without identity change', async () => {
+    const art = {
+      id: 'a-html',
+      name: 'page.html',
+      kind: 'html' as const,
+      nodeId: 'visual',
+      runId: 'run-1',
+      workflowName: 'w',
+      sizeBytes: sampleHtml.length,
+      createdAt: '2026-07-18T00:00:00Z',
+      updatedAt: '2026-07-18T00:00:00Z',
+      etag: 'W/"h1"',
+    }
+    const wrapper = mountHtmlEditor({ artifacts: [art] })
+    await flushPromises()
+    await wrapper.find('[data-testid="gate-mode-edit"]').trigger('click')
+    await flushPromises()
+    const ta = wrapper.find('[data-testid="gate-artifact-textarea"]')
+    expect(ta.exists()).toBe(true)
+    await ta.setValue('<!doctype html><html><body><p>drafting</p></body></html>')
+    await flushPromises()
+
+    // softRefresh-style: new array / bumped updatedAt, same id/etag/size
+    await wrapper.setProps({
+      artifacts: [
+        {
+          ...art,
+          updatedAt: '2026-07-18T01:00:00Z',
+        },
+      ],
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="gate-artifact-textarea"]').exists()).toBe(true)
+    expect(
+      (wrapper.find('[data-testid="gate-artifact-textarea"]').element as HTMLTextAreaElement).value,
+    ).toContain('drafting')
+    wrapper.unmount()
+  })
+
   it('shows readonly badge and disables edit/save for image products', async () => {
     const i18n = createI18n({
       legacy: false,

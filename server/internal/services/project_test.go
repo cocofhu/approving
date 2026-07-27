@@ -31,7 +31,7 @@ func TestProjectCRUDAndDeleteConstraint(t *testing.T) {
 
 	name := "Alpha2"
 	desc := "d2"
-	p, err = s.Update(p.ID, &name, &desc, nil, nil)
+	p, err = s.Update(p.ID, &name, &desc, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestProjectSecretMergeAndMask(t *testing.T) {
 		{Name: "api_key", Type: "string", Value: "", Secret: true},
 		{Name: "region", Type: "string", Value: "us", Secret: true}, // become secret with new value
 	}
-	p, err = s.Update(p.ID, nil, nil, &env, &vars)
+	p, err = s.Update(p.ID, nil, nil, &env, &vars, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestProjectSecretMergeAndMask(t *testing.T) {
 
 	// Explicit new secret value.
 	env2 := []models.EnvEntry{{Key: "TOKEN", Value: "rotated", Secret: true}}
-	p, err = s.Update(p.ID, nil, nil, &env2, nil)
+	p, err = s.Update(p.ID, nil, nil, &env2, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestProjectSecretTogglePreservesPlaintext(t *testing.T) {
 	// secret → non-secret with masked value must keep plaintext (not store ****).
 	env := []models.EnvEntry{{Key: "TOKEN", Value: SecretMask, Secret: false}}
 	vars := []models.ProjectVariable{{Name: "api_key", Type: "string", Value: SecretMask, Secret: false}}
-	p, err = s.Update(p.ID, nil, nil, &env, &vars)
+	p, err = s.Update(p.ID, nil, nil, &env, &vars, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestProjectSecretTogglePreservesPlaintext(t *testing.T) {
 	// non-secret → secret with mask/empty keeps plaintext and flips flag.
 	env2 := []models.EnvEntry{{Key: "TOKEN", Value: "", Secret: true}}
 	vars2 := []models.ProjectVariable{{Name: "api_key", Type: "string", Value: SecretMask, Secret: true}}
-	p, err = s.Update(p.ID, nil, nil, &env2, &vars2)
+	p, err = s.Update(p.ID, nil, nil, &env2, &vars2, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +226,7 @@ func TestProjectAcceptsPlatformAuthEnvKeyForcedSecret(t *testing.T) {
 		{Key: "CURSOR_API_KEY", Value: SecretMask, Secret: false},
 		{Key: "ANTHROPIC_API_KEY", Value: "anthropic-secret", Secret: false},
 	}
-	p, err = s.Update(p.ID, nil, nil, &env, nil)
+	p, err = s.Update(p.ID, nil, nil, &env, nil, nil)
 	if err != nil {
 		t.Fatalf("update auth key: %v", err)
 	}
@@ -260,7 +260,7 @@ func TestProjectRejectsMaskOnRenamedKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	env := []models.EnvEntry{{Key: "TOKEN2", Value: SecretMask, Secret: true}}
-	if _, err := s.Update(p.ID, nil, nil, &env, nil); !errors.Is(err, ErrSecretPlaceholderOnNewKey) {
+	if _, err := s.Update(p.ID, nil, nil, &env, nil, nil); !errors.Is(err, ErrSecretPlaceholderOnNewKey) {
 		t.Fatalf("rename with mask: %v", err)
 	}
 }

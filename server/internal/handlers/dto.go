@@ -49,10 +49,12 @@ func graphNodesDTO(g models.Graph) []gin.H {
 
 // workflowDTO shapes a workflow for the frontend.
 func workflowDTO(wf models.WorkflowDef) gin.H {
+	policy := services.NormalizeWorkflowNotifyPolicy(wf.NotifyPolicy)
 	return gin.H{
 		"id": wf.ID, "projectId": wf.ProjectID, "name": wf.Name, "description": wf.Description,
 		"status": wf.Status, "version": wf.Version, "needsRepo": wf.NeedsRepo,
-		"updatedAt": wf.UpdatedAt, "lastRunAt": wf.LastRunAt,
+		"notifyPolicy": policy,
+		"updatedAt":    wf.UpdatedAt, "lastRunAt": wf.LastRunAt,
 		"nodes": graphNodesDTO(wf.Graph), "edges": wf.Graph.Edges, "variables": wf.Graph.Variables,
 	}
 }
@@ -62,6 +64,7 @@ func workflowDTO(wf models.WorkflowDef) gin.H {
 // a non-nil 0 means usage was reported and sums to zero.
 // workflowTokens / pmTokens expose the source split for the project Token tip.
 func projectDTO(p models.Project, workflowCount int64, tokens services.ProjectTokenBreakdown) gin.H {
+	policy := services.NormalizeProjectNotifyPolicy(p.NotifyPolicy)
 	return gin.H{
 		"id": p.ID, "name": p.Name, "description": p.Description,
 		"sandboxEnv":      services.MaskedSandboxEnv(p.SandboxEnv),
@@ -72,6 +75,7 @@ func projectDTO(p models.Project, workflowCount int64, tokens services.ProjectTo
 		"pmTokens":        tokens.PM,
 		"pmLeaderEnabled": p.PmLeaderEnabled,
 		"pmLeaderAgent":   p.PmLeaderAgent,
+		"notifyPolicy":    policy,
 		"createdAt":       p.CreatedAt, "updatedAt": p.UpdatedAt,
 	}
 }

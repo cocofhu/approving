@@ -19,6 +19,10 @@ import (
 // project is configured as the cron delivery target.
 var ErrNoDeliveryChannel = errors.New("项目未配置定时任务推送渠道")
 
+// ErrNoRunNotifyTarget is returned by DeliverRunNotify when no enabled channel
+// has a usable QQ target session for the project (CronDeliver flag not required).
+var ErrNoRunNotifyTarget = errors.New("项目未配置可用的 QQ 推送目标")
+
 // Reply/Work equivalent orchestration (physical dual sandbox NOT required):
 //
 //   - Manager (= Reply): the unique QQ egress — immediate ACK, queue ACK,
@@ -419,6 +423,41 @@ func (m *Manager) DeliverCron(d services.CronDelivery) error {
 	return nil
 }
 
+// DeliverRunNotify pushes a Run lifecycle notification to the project's bound
+// QQ target session. Unlike DeliverCron it does NOT require CronDeliver=true —
+// any Enabled channel with a non-empty CronDeliverTarget (session address) works.
+// Text is sent as-is (no FormatCronPush). Implements services.RunNotifyDeliverer.
+// Missing target returns services.ErrRunNotifyNoTarget (caller treats as no-op).
+func (m *Manager) DeliverRunNotify(projectID, text string) error {
+	_, scene, conv, err := m.lookupRunNotifyTarget(projectID)
+	if err != nil {
+		if errors.Is(err, ErrNoRunNotifyTarget) || errors.Is(err, ErrNoDeliveryChannel) {
+			return services.ErrRunNotifyNoTarget
+		}
+		return err
+	}
+	key := convKey(projectID, scene, conv)
+	item := CronPushItem{
+		ProjectID: projectID,
+		Scene:     scene,
+		Conv:      conv,
+		Category:  "run_notify",
+		Kind:      CronResultChanged, // priority: treat actionable Run alerts like "changed"
+		Text:      text,
+		Enqueued:  time.Now(),
+	}
+	m.enqueuePush(key, item)
+	m.flushPushQueue(key)
+	return nil
+}
+
+// HasRunNotifyTarget reports whether an Enabled channel exposes a usable QQ
+// session address for the project (independent of CronDeliver).
+func (m *Manager) HasRunNotifyTarget(projectID string) bool {
+	_, _, _, err := m.lookupRunNotifyTarget(projectID)
+	return err == nil
+}
+
 func (m *Manager) flushPushQueue(key string) {
 	items := m.takePushQueue(key)
 	if len(items) == 0 {
@@ -431,9 +470,16 @@ func (m *Manager) flushPushQueue(key string) {
 			m.requeuePushAll(key, items[i:])
 			return
 		}
-		target, _, _, err := m.lookupDeliveryTarget(item.ProjectID)
+		var target *runningChannel
+		var err error
+		if item.Category == "run_notify" {
+			target, _, _, err = m.lookupRunNotifyTarget(item.ProjectID)
+		} else {
+			target, _, _, err = m.lookupDeliveryTarget(item.ProjectID)
+		}
 		if err != nil {
-			log.Warn().Err(err).Str("project", item.ProjectID).Msg("cron push flush: no delivery channel")
+			log.Warn().Err(err).Str("project", item.ProjectID).Str("category", item.Category).
+				Msg("push flush: no delivery channel")
 			continue
 		}
 		stripped, urls := splitImageURLs(item.Text)
@@ -491,6 +537,32 @@ func (m *Manager) lookupDeliveryTarget(projectID string) (*runningChannel, Scene
 	scene, conv := parseTarget(target.cfg.CronDeliverTarget)
 	if conv == "" {
 		return nil, "", "", ErrNoDeliveryChannel
+	}
+	return target, scene, conv, nil
+}
+
+// lookupRunNotifyTarget finds an Enabled channel with a usable session address
+// (CronDeliverTarget), without requiring CronDeliver=true.
+func (m *Manager) lookupRunNotifyTarget(projectID string) (*runningChannel, Scene, string, error) {
+	m.mu.Lock()
+	var target *runningChannel
+	for _, rc := range m.running {
+		if !rc.cfg.Enabled {
+			continue
+		}
+		if rc.cfg.ProjectID == projectID && strings.TrimSpace(rc.cfg.CronDeliverTarget) != "" {
+			if target == nil || rc.cfg.UpdatedAt.After(target.cfg.UpdatedAt) {
+				target = rc
+			}
+		}
+	}
+	m.mu.Unlock()
+	if target == nil {
+		return nil, "", "", ErrNoRunNotifyTarget
+	}
+	scene, conv := parseTarget(target.cfg.CronDeliverTarget)
+	if conv == "" {
+		return nil, "", "", ErrNoRunNotifyTarget
 	}
 	return target, scene, conv, nil
 }

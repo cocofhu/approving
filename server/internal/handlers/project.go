@@ -20,10 +20,11 @@ type projectCreateBody struct {
 }
 
 type projectUpdateBody struct {
-	Name        *string                   `json:"name"`
-	Description *string                   `json:"description"`
-	SandboxEnv  *[]models.EnvEntry        `json:"sandboxEnv"`
-	Variables   *[]models.ProjectVariable `json:"variables"`
+	Name         *string                     `json:"name"`
+	Description  *string                     `json:"description"`
+	SandboxEnv   *[]models.EnvEntry          `json:"sandboxEnv"`
+	Variables    *[]models.ProjectVariable   `json:"variables"`
+	NotifyPolicy *models.ProjectNotifyPolicy `json:"notifyPolicy"`
 }
 
 func (h *Handlers) ListProjects(c *gin.Context) {
@@ -73,13 +74,13 @@ func (h *Handlers) CreateProject(c *gin.Context) {
 		return
 	}
 	h.recordAudit(services.AuditRecord{
-		ProjectID:      p.ID,
-		Actor:          h.auditActorFromContext(c),
-		Action:         models.AuditActionProjectConfig,
-		ResourceType:   "project",
-		ResourceID:     p.ID,
-		Outcome:        models.AuditOutcomeOK,
-		Summary:        "create project",
+		ProjectID:    p.ID,
+		Actor:        h.auditActorFromContext(c),
+		Action:       models.AuditActionProjectConfig,
+		ResourceType: "project",
+		ResourceID:   p.ID,
+		Outcome:      models.AuditOutcomeOK,
+		Summary:      "create project",
 		Payload: map[string]any{
 			"name":        p.Name,
 			"description": p.Description,
@@ -101,7 +102,7 @@ func (h *Handlers) UpdateProject(c *gin.Context) {
 		return
 	}
 	id := c.Param("id")
-	p, err := h.Projects.Update(id, b.Name, b.Description, b.SandboxEnv, b.Variables)
+	p, err := h.Projects.Update(id, b.Name, b.Description, b.SandboxEnv, b.Variables, b.NotifyPolicy)
 	if err != nil {
 		writeProjectErr(c, err)
 		return
@@ -119,6 +120,9 @@ func (h *Handlers) UpdateProject(c *gin.Context) {
 	if b.Variables != nil {
 		changed = append(changed, "variables")
 	}
+	if b.NotifyPolicy != nil {
+		changed = append(changed, "notifyPolicy")
+	}
 	payload := map[string]any{"changed": changed, "name": p.Name}
 	if b.SandboxEnv != nil {
 		payload["sandboxEnv"] = services.MaskSandboxEnvForAudit(p.SandboxEnv)
@@ -127,14 +131,14 @@ func (h *Handlers) UpdateProject(c *gin.Context) {
 		payload["variables"] = services.MaskProjectVarsForAudit(p.Variables)
 	}
 	h.recordAudit(services.AuditRecord{
-		ProjectID:      p.ID,
-		Actor:          h.auditActorFromContext(c),
-		Action:         models.AuditActionProjectConfig,
-		ResourceType:   "project",
-		ResourceID:     p.ID,
-		Outcome:        models.AuditOutcomeOK,
-		Summary:        "update project config",
-		Payload:        payload,
+		ProjectID:    p.ID,
+		Actor:        h.auditActorFromContext(c),
+		Action:       models.AuditActionProjectConfig,
+		ResourceType: "project",
+		ResourceID:   p.ID,
+		Outcome:      models.AuditOutcomeOK,
+		Summary:      "update project config",
+		Payload:      payload,
 	})
 	c.JSON(http.StatusOK, projectDTO(p, h.Projects.WorkflowCount(p.ID), h.Projects.TokenBreakdown(p.ID)))
 }
@@ -156,14 +160,14 @@ func (h *Handlers) DeleteProject(c *gin.Context) {
 		return
 	}
 	h.recordAudit(services.AuditRecord{
-		ProjectID:      id,
-		Actor:          actor,
-		Action:         models.AuditActionProjectConfig,
-		ResourceType:   "project",
-		ResourceID:     id,
-		Outcome:        models.AuditOutcomeOK,
-		Summary:        "delete project",
-		Payload:        map[string]any{"deleted": true},
+		ProjectID:    id,
+		Actor:        actor,
+		Action:       models.AuditActionProjectConfig,
+		ResourceType: "project",
+		ResourceID:   id,
+		Outcome:      models.AuditOutcomeOK,
+		Summary:      "delete project",
+		Payload:      map[string]any{"deleted": true},
 	})
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 }

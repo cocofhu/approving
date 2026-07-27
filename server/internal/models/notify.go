@@ -1,0 +1,83 @@
+package models
+
+import "time"
+
+// Notify event kinds delivered in P0. completed may appear in schema/UI as a
+// greyed preview but is never delivered by the P0 engine hook.
+const (
+	NotifyKindWaitingHuman = "waiting_human"
+	NotifyKindFailed       = "failed"
+	NotifyKindCompleted    = "completed" // P1 reserved; not delivered in P0
+)
+
+// Workflow notify override modes.
+const (
+	NotifyModeOff     = "off"
+	NotifyModeInherit = "inherit"
+	NotifyModeCustom  = "custom"
+)
+
+// ProjectNotifyPolicy is the project-level Run→IM notification default.
+// Enabled=nil means default ON (hard-close only when explicitly false).
+// DefaultEvents=nil means the product default [waiting_human, failed]; an
+// explicit empty slice means "no default events".
+type ProjectNotifyPolicy struct {
+	Enabled       *bool    `json:"enabled"`
+	DefaultEvents []string `json:"defaultEvents"`
+}
+
+// WorkflowNotifyPolicy is the per-workflow override. Empty Mode ≡ inherit.
+type WorkflowNotifyPolicy struct {
+	Mode   string   `json:"mode"`
+	Events []string `json:"events,omitempty"`
+}
+
+// DefaultProjectNotifyPolicy returns the product default used for new projects
+// and for legacy rows whose NotifyPolicy JSON is zero/unset.
+func DefaultProjectNotifyPolicy() ProjectNotifyPolicy {
+	on := true
+	return ProjectNotifyPolicy{
+		Enabled:       &on,
+		DefaultEvents: []string{NotifyKindWaitingHuman, NotifyKindFailed},
+	}
+}
+
+// IsEnabled reports whether the project kill-switch allows delivery.
+// Missing Enabled (nil) defaults to true so upgrades stay opt-out, not silent.
+func (p ProjectNotifyPolicy) IsEnabled() bool {
+	if p.Enabled == nil {
+		return true
+	}
+	return *p.Enabled
+}
+
+// EffectiveDefaultEvents returns the project default event set.
+// nil DefaultEvents → product default; non-nil (incl. empty) is respected.
+func (p ProjectNotifyPolicy) EffectiveDefaultEvents() []string {
+	if p.DefaultEvents == nil {
+		return []string{NotifyKindWaitingHuman, NotifyKindFailed}
+	}
+	return append([]string(nil), p.DefaultEvents...)
+}
+
+// EffectiveMode normalizes workflow mode; empty → inherit.
+func (w WorkflowNotifyPolicy) EffectiveMode() string {
+	switch w.Mode {
+	case NotifyModeOff, NotifyModeInherit, NotifyModeCustom:
+		return w.Mode
+	default:
+		return NotifyModeInherit
+	}
+}
+
+// NotifyDeliveryReceipt is the at-most-once claim key for Run IM pushes.
+// Insert success means the (run, node, iteration, kind) tuple is consumed —
+// including no-op (no channel) and send failure (P0 does not retry).
+type NotifyDeliveryReceipt struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	RunID     string    `gorm:"size:64;uniqueIndex:idx_notify_receipt" json:"runId"`
+	NodeID    string    `gorm:"size:128;uniqueIndex:idx_notify_receipt" json:"nodeId"`
+	Iteration int       `gorm:"uniqueIndex:idx_notify_receipt" json:"iteration"`
+	Kind      string    `gorm:"size:32;uniqueIndex:idx_notify_receipt" json:"kind"`
+	CreatedAt time.Time `json:"createdAt"`
+}

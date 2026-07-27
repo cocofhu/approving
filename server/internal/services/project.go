@@ -309,13 +309,14 @@ func (s *ProjectService) Create(name, description string, env []models.EnvEntry,
 	}
 	now := time.Now()
 	p := models.Project{
-		ID:          "proj-" + uuid.NewString()[:8],
-		Name:        name,
-		Description: description,
-		SandboxEnv:  sanitizedEnv,
-		Variables:   sanitizedVars,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:           "proj-" + uuid.NewString()[:8],
+		Name:         name,
+		Description:  description,
+		SandboxEnv:   sanitizedEnv,
+		Variables:    sanitizedVars,
+		NotifyPolicy: models.DefaultProjectNotifyPolicy(),
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 	if err := s.db.Create(&p).Error; err != nil {
 		return models.Project{}, err
@@ -323,9 +324,10 @@ func (s *ProjectService) Create(name, description string, env []models.EnvEntry,
 	return p, nil
 }
 
-// Update patches name/description/sandboxEnv/variables. Nil slices mean "leave
-// unchanged"; non-nil slices replace the whole list with secret-preserving merge.
-func (s *ProjectService) Update(id string, name *string, description *string, env *[]models.EnvEntry, vars *[]models.ProjectVariable) (models.Project, error) {
+// Update patches name/description/sandboxEnv/variables/notifyPolicy. Nil
+// pointers mean "leave unchanged"; non-nil slices replace the whole list with
+// secret-preserving merge. Non-nil notifyPolicy replaces the whole policy.
+func (s *ProjectService) Update(id string, name *string, description *string, env *[]models.EnvEntry, vars *[]models.ProjectVariable, notify *models.ProjectNotifyPolicy) (models.Project, error) {
 	var p models.Project
 	if err := s.db.First(&p, "id = ?", id).Error; err != nil {
 		return models.Project{}, ErrProjectNotFound
@@ -356,6 +358,9 @@ func (s *ProjectService) Update(id string, name *string, description *string, en
 			return models.Project{}, err
 		}
 		p.Variables = merged
+	}
+	if notify != nil {
+		p.NotifyPolicy = NormalizeProjectNotifyPolicy(*notify)
 	}
 	p.UpdatedAt = time.Now()
 	if err := s.db.Save(&p).Error; err != nil {

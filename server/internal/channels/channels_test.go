@@ -239,6 +239,46 @@ func TestManagerDeliverSkipsDisabledDelivery(t *testing.T) {
 	}
 }
 
+func TestManagerDeliverRunNotifyWithoutCronDeliver(t *testing.T) {
+	fa := &fakeAdapter{}
+	m := newTestManager(fa)
+	// Bound QQ target without CronDeliver — Run notify must still work.
+	m.Apply([]models.ChannelConfig{{
+		ID: "c1", Type: "qq", ProjectID: "proj", AppID: "app", Enabled: true,
+		CronDeliver: false, CronDeliverTarget: "c2c:user1",
+	}})
+	defer m.StopAll()
+	if !m.HasRunNotifyTarget("proj") {
+		t.Fatal("expected HasRunNotifyTarget")
+	}
+	if err := m.DeliverRunNotify("proj", "【Approving】等待人工处理\n打开：/runs/r1"); err != nil {
+		t.Fatalf("DeliverRunNotify: %v", err)
+	}
+	fa.mu.Lock()
+	defer fa.mu.Unlock()
+	if len(fa.sent) != 1 {
+		t.Fatalf("sent=%d want 1", len(fa.sent))
+	}
+	if fa.sent[0].ConversationID != "user1" {
+		t.Errorf("conv=%q", fa.sent[0].ConversationID)
+	}
+	if !strings.Contains(fa.sent[0].Text, "等待人工处理") {
+		t.Errorf("text=%q", fa.sent[0].Text)
+	}
+	// Cron path still blocked.
+	if err := m.Deliver("proj", "cron"); err != ErrNoDeliveryChannel {
+		t.Fatalf("Deliver cron still requires CronDeliver: %v", err)
+	}
+}
+
+func TestManagerDeliverRunNotifyNoTarget(t *testing.T) {
+	m := newTestManager(&fakeAdapter{})
+	err := m.DeliverRunNotify("proj", "x")
+	if !errors.Is(err, services.ErrRunNotifyNoTarget) {
+		t.Fatalf("got %v want ErrRunNotifyNoTarget", err)
+	}
+}
+
 func testRunningChannel(adapter Adapter) *runningChannel {
 	return &runningChannel{
 		cfg: models.ChannelConfig{
@@ -1177,6 +1217,79 @@ func TestPushQueueFullRetainsNewestFailed(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("newest failed missing from full queue: %+v", pq.pending)
+	}
+}
+
+// TestPushQueueProtectsRunNotify covers review v3: when the high-priority ring
+// is full, run_notify (already receipt-claimed) must not be silently dropped.
+func TestPushQueueProtectsRunNotify(t *testing.T) {
+	m := NewManager(nil, nil, nil)
+	key := convKey("proj", SceneC2C, "user1")
+
+	// Fill with cron changed items + one protected run_notify.
+	for i := 0; i < pushQueueDepth-1; i++ {
+		m.enqueuePush(key, CronPushItem{
+			ProjectID: "proj", Scene: SceneC2C, Conv: "user1",
+			Category: fmt.Sprintf("cron-%d", i), Kind: CronResultChanged,
+			Text: fmt.Sprintf("cron-%d", i),
+		})
+	}
+	m.enqueuePush(key, CronPushItem{
+		ProjectID: "proj", Scene: SceneC2C, Conv: "user1",
+		Category: runNotifyCategory, Kind: CronResultChanged,
+		Text: "gate waiting_human",
+	})
+
+	// Incoming cron failed should drop an unprotected cron changed, not run_notify.
+	m.enqueuePush(key, CronPushItem{
+		ProjectID: "proj", Scene: SceneC2C, Conv: "user1",
+		Category: "cron-new", Kind: CronResultFailed, Text: "cron failed",
+	})
+
+	pq := m.pushQueueFor(key)
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+	foundRunNotify := false
+	for _, p := range pq.pending {
+		if p.Category == runNotifyCategory && strings.Contains(p.Text, "gate waiting_human") {
+			foundRunNotify = true
+			break
+		}
+	}
+	if !foundRunNotify {
+		t.Fatalf("run_notify was dropped under pressure: %+v", pq.pending)
+	}
+
+	// When queue is all run_notify, a new run_notify soft-overflows past depth.
+	m2 := NewManager(nil, nil, nil)
+	key2 := convKey("proj2", SceneC2C, "user2")
+	for i := 0; i < pushQueueDepth; i++ {
+		m2.enqueuePush(key2, CronPushItem{
+			ProjectID: "proj2", Scene: SceneC2C, Conv: "user2",
+			Category: runNotifyCategory, Kind: CronResultChanged,
+			Text: fmt.Sprintf("rn-%d", i),
+		})
+	}
+	m2.enqueuePush(key2, CronPushItem{
+		ProjectID: "proj2", Scene: SceneC2C, Conv: "user2",
+		Category: runNotifyCategory, Kind: CronResultChanged,
+		Text: "rn-overflow",
+	})
+	pq2 := m2.pushQueueFor(key2)
+	pq2.mu.Lock()
+	defer pq2.mu.Unlock()
+	if len(pq2.pending) < pushQueueDepth+1 {
+		t.Fatalf("expected soft-overflow len>=%d got %d", pushQueueDepth+1, len(pq2.pending))
+	}
+	foundOverflow := false
+	for _, p := range pq2.pending {
+		if p.Text == "rn-overflow" {
+			foundOverflow = true
+			break
+		}
+	}
+	if !foundOverflow {
+		t.Fatalf("soft-overflow run_notify missing: %+v", pq2.pending)
 	}
 }
 
