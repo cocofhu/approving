@@ -91,8 +91,9 @@ const chartData = computed(() => {
         label: 'pm',
         data: pm,
         borderColor: PM_COLOR,
-        backgroundColor: 'rgba(245, 158, 11, 0.35)',
+        backgroundColor: 'rgba(109, 92, 255, 0.14)',
         borderWidth: 1.8,
+        borderDash: [5, 4],
         fill: true,
         tension: 0.15,
         pointRadius: 3.5,
@@ -175,7 +176,11 @@ defineExpose({ chartOptions, chartData })
         workflow
       </span>
       <span class="inline-flex items-center gap-1.5">
-        <i class="inline-block h-2 w-2 rounded-sm" :style="{ background: PM_COLOR }" />
+        <i
+          class="inline-block h-0 w-3 border-t-2 border-dashed"
+          :style="{ borderColor: PM_COLOR }"
+          aria-hidden="true"
+        />
         pm
       </span>
     </div>
@@ -201,7 +206,11 @@ defineExpose({ chartOptions, chartData })
       </div>
       <div class="flex justify-between gap-3 text-[#c7cbd4]">
         <span class="inline-flex items-center gap-1.5">
-          <i class="inline-block h-2 w-2 rounded-sm" :style="{ background: PM_COLOR }" />
+          <i
+            class="inline-block h-0 w-3 border-t-2 border-dashed"
+            :style="{ borderColor: PM_COLOR }"
+            aria-hidden="true"
+          />
           pm
         </span>
         <b class="font-normal tabular-nums text-white">{{ fmtTokenCount(tipBucket.pmTotal || 0) }}</b>

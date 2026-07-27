@@ -7,6 +7,7 @@ import pages from '@/locales/zh-CN/pages.json'
 import TokenTrendChart from './TokenTrendChart.vue'
 import TokenDonutChart from './TokenDonutChart.vue'
 import TokenWorkflowRank from './TokenWorkflowRank.vue'
+import { TOKEN_SOURCE_COLORS } from './tokenStatsShared'
 
 const i18n = () =>
   createI18n({
@@ -181,14 +182,14 @@ describe('Token charts (g2.3/g2.4)', () => {
     wrapper.unmount()
   })
 
-  it('renders consumption rank with PM amber row and other as non-PM (g3.2)', () => {
+  it('renders consumption rank with PM same-purple row (not amber) and other as non-PM (g3.1/g1)', () => {
     const wrapper = mount(TokenWorkflowRank, {
       props: {
         workflows: [
-          { workflowId: 'a', name: 'approve-main', total: 100, kind: 'workflow' },
-          { name: 'PM', total: 80, kind: 'pm' },
-          { workflowId: 'b', name: 'doc-review', total: 40, kind: 'workflow' },
-          { name: 'other', total: 20, other: true, kind: 'other' },
+          { workflowId: 'a', name: 'approve-main', total: 1_020_000, kind: 'workflow' },
+          { name: 'PM', total: 80_000, kind: 'pm' },
+          { workflowId: 'b', name: 'doc-review', total: 40_000, kind: 'workflow' },
+          { name: 'other', total: 20_000, other: true, kind: 'other' },
         ],
       },
       global: { plugins: [i18n()] },
@@ -200,6 +201,57 @@ describe('Token charts (g2.3/g2.4)', () => {
     expect(wrapper.find('[data-kind="pm"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('PM')
     expect(wrapper.text()).toContain('其他')
+
+    // PM badge text is "PM" (not a numeric rank); workflow ranks remain 1, 2
+    const pmRow = wrapper.find('[data-kind="pm"]')
+    expect(pmRow.text()).toMatch(/^PM/)
+    const badges = wrapper.findAll('li').map((li) => li.find('span').text())
+    expect(badges).toEqual(['1', 'PM', '2', '·'])
+
+    // Same purple as workflow — no amber (#f59e0b / #d97706 / #fbbf24)
+    const pmHtml = pmRow.html()
+    expect(pmHtml).toContain('#6d5cff')
+    expect(pmHtml).toContain('#9b8cff')
+    expect(pmHtml).not.toMatch(/#f59e0b|#d97706|#fbbf24|245,\s*158,\s*11/)
+
+    // Compact K/M main values remain visible on the right
+    const values = wrapper.findAll('[data-testid="token-rank-value"]').map((v) => v.text())
+    expect(values).toEqual(['1.02M', '80K', '40K', '20K'])
+    expect(wrapper.find('[data-testid="token-rank-value"]').attributes('title')).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  it('trend PM dataset shares workflow purple and uses borderDash (g2.2/g3.1)', () => {
+    expect(TOKEN_SOURCE_COLORS.pm).toBe(TOKEN_SOURCE_COLORS.workflow)
+    expect(TOKEN_SOURCE_COLORS.pm).toBe('#6d5cff')
+    expect(TOKEN_SOURCE_COLORS.pm).not.toBe('#f59e0b')
+
+    const wrapper = mount(TokenTrendChart, {
+      props: {
+        bucketWidth: 'day',
+        trend: sampleTrend(7),
+      },
+      global: { plugins: [i18n()] },
+    })
+    const exposed = wrapper.vm as unknown as {
+      chartData: {
+        datasets: {
+          label: string
+          borderColor: string
+          backgroundColor: string
+          borderDash?: number[]
+        }[]
+      }
+    }
+    const pmDs = exposed.chartData.datasets.find((d) => d.label === 'pm')
+    const wfDs = exposed.chartData.datasets.find((d) => d.label === 'workflow')
+    expect(pmDs).toBeTruthy()
+    expect(wfDs).toBeTruthy()
+    expect(pmDs!.borderColor).toBe(wfDs!.borderColor)
+    expect(pmDs!.borderColor).toBe('#6d5cff')
+    expect(pmDs!.borderDash).toEqual([5, 4])
+    expect(wfDs!.borderDash).toBeUndefined()
+    expect(String(pmDs!.backgroundColor)).not.toMatch(/245,\s*158,\s*11/)
     wrapper.unmount()
   })
 })
