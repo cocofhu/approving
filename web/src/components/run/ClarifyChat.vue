@@ -1010,10 +1010,10 @@ defineExpose({
               v-html="t.streaming && liveStreamHtml ? liveStreamHtml : renderMarkdown(t.text)"
             />
           </template>
+          <!-- Human free-text bubble (agent branch handled above; role narrowed to human) -->
           <div
             v-else-if="t.text"
-            class="md rounded-lg border px-3 py-2 text-[13px] leading-relaxed"
-            :class="t.role === 'agent' ? 'border-line bg-elevated text-txt' : 'border-accent/30 bg-accent-dim/60 text-txt'"
+            class="md rounded-lg border border-accent/30 bg-accent-dim/60 px-3 py-2 text-[13px] leading-relaxed text-txt"
             v-html="renderMarkdown(t.text)"
           />
 
