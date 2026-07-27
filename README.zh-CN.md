@@ -4,9 +4,7 @@
 
 Approving 是一个开源、可自托管的多 Agent 工作流平台。它把 coding agent 编排成可视化、可审查、可回滚的交付流程：Agent 在真实 Docker 沙箱中执行，关键节点由人 **Approve** 后再继续。
 
-![从 Vibe Coding 到 Harness：多 Agent 时代的人机协作新范式](docs/assets/approving-harness-article-cover.png)
-
-[项目站](https://www.approving-ai.com/) · [快速开始](https://www.approving-ai.com/guide/quick-start/) · [技术文章](docs/approving-harness-workflow.md) · [贡献指南](CONTRIBUTING.md) · [配置](server/CONFIGURATION.md)
+[项目站](https://www.approving-ai.com/) · [快速开始](https://www.approving-ai.com/guide/quick-start/) · [贡献指南](CONTRIBUTING.md) · [配置](server/CONFIGURATION.md)
 
 **[English](README.md) | 简体中文**
 
@@ -34,8 +32,6 @@ Approving 是一个开源、可自托管的多 Agent 工作流平台。它把 co
 
 Approving 在 Agent 之上提供一层 Harness：用 FSM 设计路径，用沙箱隔离执行，用 MCP 交接产物，并把人工审批变成工作流中的一等节点。
 
-![Approving 多 Agent 研发链路](docs/assets/approving-02-multi-agent-workflow.png)
-
 ## 核心能力
 
 ### 可视化 FSM 编排
@@ -45,8 +41,6 @@ Approving 在 Agent 之上提供一层 Harness：用 FSM 设计路径，用沙�
 ### Human-in-the-loop 门禁
 
 工作流可以在方案选择、视觉验收、发布确认等节点暂停。审批者查看结构化产物后，可批准、拒绝或退回修改，而不必持续跟踪 Agent 的每一步执行。
-
-![Agent 产出、契约校验、人工审批与继续执行](docs/assets/approving-04-human-approval-comic.png)
 
 ### 真实 Docker 沙箱
 
@@ -136,8 +130,6 @@ cd approving
 
 ## 系统架构
 
-![Approving 系统架构](docs/assets/approving-05-system-architecture.png)
-
 - `web/`：Vue 3 + Vue Flow，负责画布、运行详情、审批与 Agent Studio。
 - `server/`：Go 后端，负责 FSM 引擎、API、SQLite、artifact MCP、调度与审计。
 - `sandbox-gateway/gateway/`：沙箱生命周期控制面。
@@ -173,7 +165,6 @@ cd approving
 - [贡献指南](CONTRIBUTING.md)
 - [安全策略](SECURITY.md)
 - [支持渠道](SUPPORT.md)
-- [从 Vibe Coding 到 Harness](docs/approving-harness-workflow.md)
 
 ## 参与贡献
 

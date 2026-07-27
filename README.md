@@ -190,7 +190,6 @@ Module-specific lint, test, coverage, and E2E commands are documented in [`AGENT
 - [Contributing guide](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 - [Support](SUPPORT.md)
-- [Chinese technical article: From Vibe Coding to Harness](docs/approving-harness-workflow.md)
 
 ## Contributing
 
