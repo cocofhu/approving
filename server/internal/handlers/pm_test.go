@@ -21,7 +21,7 @@ func TestPmLeaderBindingMemoryAndThreadGate(t *testing.T) {
 	progress := services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts)
 	hn.h.Pm = pm
 	hn.h.PmProgress = progress
-	hn.h.PMMCP = pmmcp.NewHost(pm, progress, nil, hn.h.Runs, nil)
+	hn.h.PMMCP = pmmcp.NewHost(pm, progress, nil, hn.h.Runs, hn.h.Arts, nil)
 
 	w := hn.do(http.MethodPost, "/api/projects", map[string]any{"name": "PMProj"})
 	if w.Code != 200 {
@@ -146,7 +146,7 @@ func TestGetPmDraftReconcilesStaleStreamingWhenNotActive(t *testing.T) {
 	pm := services.NewPmService(hn.db, hn.h.Skill)
 	hn.h.Pm = pm
 	hn.h.PmProgress = services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts)
-	hn.h.PMMCP = pmmcp.NewHost(pm, hn.h.PmProgress, nil, hn.h.Runs, nil)
+	hn.h.PMMCP = pmmcp.NewHost(pm, hn.h.PmProgress, nil, hn.h.Runs, hn.h.Arts, nil)
 	hn.h.PmTurns = services.NewPmTurnRunner(pm, nil)
 
 	w := hn.do(http.MethodPost, "/api/projects", map[string]any{"name": "DraftReconcile"})
@@ -240,7 +240,7 @@ func TestGetPmDraftKeepsStreamingWhenActive(t *testing.T) {
 	pm := services.NewPmService(hn.db, hn.h.Skill)
 	hn.h.Pm = pm
 	hn.h.PmProgress = services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts)
-	hn.h.PMMCP = pmmcp.NewHost(pm, hn.h.PmProgress, nil, hn.h.Runs, nil)
+	hn.h.PMMCP = pmmcp.NewHost(pm, hn.h.PmProgress, nil, hn.h.Runs, hn.h.Arts, nil)
 	runner := services.NewPmTurnRunner(pm, nil)
 	hn.h.PmTurns = runner
 
@@ -319,7 +319,7 @@ func TestPmLeaderNonAdminForbidden(t *testing.T) {
 
 	pm := services.NewPmService(hn.db, hn.h.Skill)
 	hn.h.Pm = pm
-	hn.h.PMMCP = pmmcp.NewHost(pm, services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts), nil, hn.h.Runs, nil)
+	hn.h.PMMCP = pmmcp.NewHost(pm, services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts), nil, hn.h.Runs, hn.h.Arts, nil)
 
 	w := hn.do(http.MethodPost, "/api/projects", map[string]any{"name": "NoAdminProj"})
 	if w.Code != 200 {
@@ -352,7 +352,7 @@ func TestListPmMemoriesScopedByRole(t *testing.T) {
 
 	pm := services.NewPmService(hn.db, nil)
 	hn.h.Pm = pm
-	hn.h.PMMCP = pmmcp.NewHost(pm, services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts), nil, hn.h.Runs, nil)
+	hn.h.PMMCP = pmmcp.NewHost(pm, services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts), nil, hn.h.Runs, hn.h.Arts, nil)
 
 	w := hn.do(http.MethodPost, "/api/projects", map[string]any{"name": "MemScopeProj"})
 	if w.Code != 200 {
@@ -843,7 +843,7 @@ func setupPmEnabledHarness(t *testing.T) (*harness, string, string) {
 	pm := services.NewPmService(hn.db, hn.h.Skill)
 	hn.h.Pm = pm
 	hn.h.PmProgress = services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts)
-	hn.h.PMMCP = pmmcp.NewHost(pm, hn.h.PmProgress, nil, hn.h.Runs, nil)
+	hn.h.PMMCP = pmmcp.NewHost(pm, hn.h.PmProgress, nil, hn.h.Runs, hn.h.Arts, nil)
 	w := hn.do(http.MethodPost, "/api/projects", map[string]any{"name": "PmHTTP"})
 	if w.Code != 200 {
 		t.Fatalf("create project: %d %s", w.Code, w.Body.String())

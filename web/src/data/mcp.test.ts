@@ -34,13 +34,13 @@ const CATALOG = [
   {
     id: 'pm-workflow-read',
     scope: 'project' as const,
-    toolCount: 6,
+    toolCount: 7,
     writeTools: [] as string[],
   },
   {
     id: 'pm-workflow-write',
     scope: 'project' as const,
-    toolCount: 8,
+    toolCount: 9,
     writeTools: [
       'pm_create_workflow',
       'pm_update_workflow',
@@ -49,6 +49,7 @@ const CATALOG = [
       'pm_publish_workflow',
       'pm_start_run',
       'pm_resume_gate',
+      'pm_react_reply',
       'pm_cancel_run',
     ],
   },

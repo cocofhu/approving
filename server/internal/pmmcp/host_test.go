@@ -26,7 +26,7 @@ func TestPmMCPToolsAndAuth(t *testing.T) {
 	}
 	pm := services.NewPmService(db, nil)
 	progress := services.NewPmProgress(pm, services.NewRunService(db), services.NewArtifactService(db))
-	h := NewHost(pm, progress, nil, nil, nil)
+	h := NewHost(pm, progress, nil, nil, services.NewArtifactService(db), nil)
 	tok := h.Register(p.ID, "thr-1", "alice", "agent")
 	if !h.Authorize(p.ID, tok) {
 		t.Fatal("authorize")
@@ -124,7 +124,7 @@ func TestPmWorkflowWriteWhenEnabled(t *testing.T) {
 	}
 	wf := services.NewWorkflowService(db)
 	rs := services.NewRunService(db)
-	h := NewHost(pm, services.NewPmProgress(pm, rs, nil), wf, rs, nil)
+	h := NewHost(pm, services.NewPmProgress(pm, rs, nil), wf, rs, services.NewArtifactService(db), nil)
 
 	for _, tc := range []struct {
 		name   string
@@ -170,7 +170,7 @@ func TestPmWorkflowWriteRejectedWhenDisabled(t *testing.T) {
 	if _, err := pm.UpdateBinding(p.ID, &en, &agent, []string{"pm-progress"}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	h := NewHost(pm, services.NewPmProgress(pm, nil, nil), services.NewWorkflowService(db), nil, nil)
+	h := NewHost(pm, services.NewPmProgress(pm, nil, nil), services.NewWorkflowService(db), nil, services.NewArtifactService(db), nil)
 	tok := h.Register(p.ID, "thr", "alice", agent)
 	body, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
@@ -194,7 +194,7 @@ func TestFilterSafeToolUnknown(t *testing.T) {
 	ps := services.NewProjectService(db)
 	p, _ := ps.Create("X", "", nil, nil)
 	pm := services.NewPmService(db, nil)
-	h := NewHost(pm, services.NewPmProgress(pm, nil, nil), nil, nil, nil)
+	h := NewHost(pm, services.NewPmProgress(pm, nil, nil), nil, nil, services.NewArtifactService(db), nil)
 	tok := h.Register(p.ID, "t", "u", "agent")
 	body, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
