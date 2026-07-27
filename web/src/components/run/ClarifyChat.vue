@@ -23,7 +23,12 @@ import type {
 } from '@/lib/types'
 import AnnotationChip from './AnnotationChip.vue'
 
-type QueueItem = { text: string; images: ClarifyImage[]; annotations: ReactAnnotation[] }
+type QueueItem = {
+  id?: string
+  text: string
+  images: ClarifyImage[]
+  annotations: ReactAnnotation[]
+}
 
 // active: whether the run is still in an interactive state (queued/running/
 // waiting_human). When false (completed/failed/cancelled) the chat input is
@@ -694,9 +699,14 @@ function discardLastQueued() {
  */
 function applyQueueState(
   waiting: number,
-  items: { text?: string }[] | null,
+  items: { id?: string; text?: string }[] | null,
   busy?: boolean,
-  activeItem?: { text?: string; images?: ClarifyImage[]; annotations?: ReactAnnotation[] } | null,
+  activeItem?: {
+    id?: string
+    text?: string
+    images?: ClarifyImage[]
+    annotations?: ReactAnnotation[]
+  } | null,
 ) {
   if (waiting === 0 && !busy) {
     queued.value = []
@@ -704,8 +714,13 @@ function applyQueueState(
   } else if (items) {
     const rebuilt: QueueItem[] = items.map((it) => {
       const text = it.text ?? ''
-      const local = queued.value.find((q) => q.text === text)
+      const id = typeof it.id === 'string' && it.id ? it.id : undefined
+      // Prefer server id match; text fallback for optimistic rows not yet reconciled.
+      const local = id
+        ? queued.value.find((q) => q.id === id) ?? queued.value.find((q) => !q.id && q.text === text)
+        : queued.value.find((q) => q.text === text)
       return {
+        id: id ?? local?.id,
         text,
         images: local?.images ?? [],
         annotations: local?.annotations ?? [],
@@ -750,24 +765,43 @@ function applyQueueState(
 function applyReviewFrame(frame: {
   event?: string
   nodeId?: string
-  item?: { text?: string; images?: ClarifyImage[]; annotations?: ReactAnnotation[] }
+  item?: {
+    id?: string
+    text?: string
+    images?: ClarifyImage[]
+    annotations?: ReactAnnotation[]
+  }
   message?: string
   interrupted?: boolean
   waiting?: number
-  items?: { text?: string }[]
+  items?: { id?: string; text?: string }[]
   busy?: boolean
-  activeItem?: { text?: string; images?: ClarifyImage[]; annotations?: ReactAnnotation[] }
+  activeItem?: {
+    id?: string
+    text?: string
+    images?: ClarifyImage[]
+    annotations?: ReactAnnotation[]
+  }
 }) {
   // Defense: ignore frames for other producer sessions on the same run.
   if (frame.nodeId && frame.nodeId !== props.nodeId) return
   switch (frame.event) {
     case 'turn_begin': {
       // Pump order: queue_state(remaining, no active) → turn_begin(item=active).
-      // frame.item is server-authoritative; match-remove from local queue — never
-      // blind-shift (that would bind live human to the next waiter after trim).
+      // frame.item is server-authoritative; match-remove by id first, text fallback —
+      // never blind-shift (that would bind live human to the next waiter after trim).
       const auth = frame.item
+      const id = typeof auth?.id === 'string' && auth.id ? auth.id : undefined
       const text = auth?.text ?? ''
-      const matchIdx = text ? queued.value.findIndex((q) => q.text === text) : -1
+      let matchIdx = -1
+      if (id) {
+        matchIdx = queued.value.findIndex((q) => q.id === id)
+      } else if (text) {
+        // No server id: text match for optimistic rows only.
+        matchIdx = queued.value.findIndex((q) => q.text === text)
+      }
+      // If auth carried an id but it is already absent (queue_state trimmed it),
+      // do NOT fall back to text — that would steal a different same-text waiter.
       const local = matchIdx >= 0 ? queued.value.splice(matchIdx, 1)[0] : undefined
       const images =
         auth?.images && auth.images.length > 0 ? auth.images : local?.images
@@ -1150,7 +1184,8 @@ defineExpose({
         <div class="space-y-1">
           <div
             v-for="(q, qi) in queued"
-            :key="qi"
+            :key="q.id || qi"
+            data-testid="clarify-queue-item"
             class="flex items-center gap-2 rounded border border-line bg-surface px-2 py-1 text-[12px] text-txt2"
           >
             <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-line text-[9px] text-txt3">{{ qi + 1 }}</span>

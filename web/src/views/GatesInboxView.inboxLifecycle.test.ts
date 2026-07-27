@@ -151,11 +151,31 @@ const GateApprovalStub = defineComponent({
   template: '<button data-testid="resolve-btn" @click="$emit(\'resolve\', \'approve\', {})">resolve</button>',
 })
 
+/** Captures applyReviewFrame for hard-load / early-WS restore assertions (review v1). */
+const composerFrames = vi.hoisted(() => ({
+  applied: [] as Record<string, unknown>[],
+  busy: false,
+}))
+
 const ReviewComposerStub = defineComponent({
   name: 'ReviewComposer',
-  emits: ['send', 'finish'],
+  emits: ['send', 'finish', 'cancel'],
+  setup(_, { expose }) {
+    expose({
+      applyReviewFrame: (f: Record<string, unknown>) => {
+        composerFrames.applied.push(f)
+        if (f.event === 'turn_begin') composerFrames.busy = true
+        if (f.event === 'turn_done' || f.event === 'error') composerFrames.busy = false
+        if (f.event === 'queue_state' && typeof f.busy === 'boolean') composerFrames.busy = !!f.busy
+      },
+      applyAcpEvents: () => {},
+      discardLastQueued: () => {},
+      isSessionBusy: () => composerFrames.busy,
+    })
+    return {}
+  },
   template:
-    `<div>
+    `<div data-testid="review-composer-stub">
       <button data-testid="clarify-send" @click="$emit('send', 'hi', [], [], true)">finish</button>
       <button data-testid="clarify-turn" @click="$emit('send', 'hi', [], [], false)">turn</button>
     </div>`,
@@ -210,6 +230,8 @@ function inboxCallsFor(runId: string, nodeId: string, iteration = 1) {
 
 beforeEach(async () => {
   vi.clearAllMocks()
+  composerFrames.applied = []
+  composerFrames.busy = false
   FakeWebSocket.instances = []
   vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket)
   mocks.resumeGate.mockResolvedValue({ status: 'ok' })
@@ -1002,6 +1024,93 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     expect(wrapper.text()).not.toContain('Gate solo')
     expect(wrapper.text()).not.toMatch(/Run #\s*-/)
     expect(usePendingGates().totalCount.value).toBe(0)
+    wrapper.unmount()
+  })
+
+  it('clarify hard load: early queue_state/snapshot still restores live+queue after mount (review v1)', async () => {
+    const item = clarifyItem('resume')
+    mocks.listGates.mockResolvedValue(paged([item]))
+
+    let releaseContext!: (v: unknown) => void
+    const hung = new Promise((resolve) => {
+      releaseContext = resolve
+    })
+    mocks.inboxContext.mockImplementationOnce(() => hung as Promise<unknown>)
+
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+
+    // Hard load in flight: composer unmounted (loading pane). WS already connected.
+    const ws = FakeWebSocket.instances.find((w) => w.url.includes('run-resume'))
+    expect(ws).toBeTruthy()
+    expect(wrapper.find('[data-testid="review-composer-stub"]').exists()).toBe(false)
+
+    // Broadcast / snapshot arrive before chat mounts — must not be dropped.
+    ws!.emit('snapshot', {
+      run: {
+        reactSessions: {
+          'clarify-resume': {
+            kind: 'clarify',
+            waiting: 1,
+            busy: true,
+            items: [{ id: 'q-b', text: '乙' }],
+            activeItem: { id: 'q-a', text: '甲' },
+          },
+        },
+      },
+    })
+    ws!.emit('review', {
+      event: 'queue_state',
+      nodeId: 'clarify-resume',
+      waiting: 1,
+      items: [{ id: 'q-b', text: '乙' }],
+      busy: true,
+      activeItem: { id: 'q-a', text: '甲' },
+    })
+    await flushPromises()
+    expect(composerFrames.applied.length).toBe(0)
+
+    releaseContext({
+      type: 'clarify',
+      status: 'waiting_human',
+      nodes: [{ id: 'clarify-resume', type: 'react', label: '澄清' }],
+      artifacts: [],
+      nodeExecutions: {},
+      reactSessions: {
+        'clarify-resume': {
+          kind: 'clarify',
+          waiting: 1,
+          busy: true,
+          items: [{ id: 'q-b', text: '乙' }],
+          activeItem: { id: 'q-a', text: '甲' },
+        },
+      },
+      clarify: {
+        nodeId: 'clarify-resume',
+        iteration: 1,
+        turns: [],
+        done: false,
+        label: '澄清',
+      },
+    })
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="review-composer-stub"]').exists()).toBe(true)
+    // REST restore and/or buffered WS frames projected after mount.
+    const queueFrames = composerFrames.applied.filter((f) => f.event === 'queue_state')
+    expect(queueFrames.length).toBeGreaterThanOrEqual(1)
+    const last = queueFrames[queueFrames.length - 1] as {
+      busy?: boolean
+      activeItem?: { text?: string }
+      items?: { text?: string }[]
+    }
+    expect(last.busy).toBe(true)
+    expect(last.activeItem?.text).toBe('甲')
+    expect(last.items?.some((it) => it.text === '乙')).toBe(true)
     wrapper.unmount()
   })
 })

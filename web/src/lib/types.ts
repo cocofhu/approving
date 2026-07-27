@@ -634,7 +634,12 @@ export interface Run {
       waiting?: number
       busy?: boolean
       items?: { id?: string; text?: string }[]
-      activeItem?: { text?: string; images?: ClarifyImage[]; annotations?: ReactAnnotation[] }
+      activeItem?: {
+        id?: string
+        text?: string
+        images?: ClarifyImage[]
+        annotations?: ReactAnnotation[]
+      }
     }
   >
   git?: { pushed: boolean; pushedSha?: string; branch?: string; mrUrl?: string } | null

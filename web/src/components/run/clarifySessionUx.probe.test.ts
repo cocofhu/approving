@@ -148,6 +148,78 @@ describe('[approving] ClarifyChat clarify-path UX (non-reviewMode)', () => {
     w.unmount()
   })
 
+  it('turn_begin prefers queue item id over duplicate text', async () => {
+    const w = mountClarify()
+    // Two identical texts — text-only match would be ambiguous.
+    await sendText(w, '同一文案')
+    await sendText(w, '同一文案')
+    const vm = w.vm as unknown as {
+      applyReviewFrame: (f: Record<string, unknown>) => void
+    }
+    // Authoritative reconcile assigns server ids before turn_begin.
+    vm.applyReviewFrame({
+      event: 'queue_state',
+      nodeId: 'clarify',
+      waiting: 2,
+      items: [
+        { id: 'id-a', text: '同一文案' },
+        { id: 'id-b', text: '同一文案' },
+      ],
+      busy: false,
+    })
+    await nextTick()
+    // Pump: remaining = id-b only, then turn_begin starts id-a (not in queue).
+    vm.applyReviewFrame({
+      event: 'queue_state',
+      nodeId: 'clarify',
+      waiting: 1,
+      items: [{ id: 'id-b', text: '同一文案' }],
+      busy: true,
+    })
+    await nextTick()
+    vm.applyReviewFrame({
+      event: 'turn_begin',
+      nodeId: 'clarify',
+      item: { id: 'id-a', text: '同一文案' },
+    })
+    await nextTick()
+    const queue = w.find('[data-testid="clarify-review-queue"]')
+    expect(queue.exists()).toBe(true)
+    // id-a was already trimmed; must NOT steal id-b via text fallback.
+    expect(queue.findAll('[data-testid="clarify-queue-item"]').length).toBe(1)
+    expect(queue.text()).toContain('同一文案')
+    w.unmount()
+  })
+
+  it('turn_begin removes matching id from local queue when still present', async () => {
+    const w = mountClarify()
+    await sendText(w, '同一文案')
+    await sendText(w, '同一文案')
+    const vm = w.vm as unknown as {
+      applyReviewFrame: (f: Record<string, unknown>) => void
+    }
+    vm.applyReviewFrame({
+      event: 'queue_state',
+      nodeId: 'clarify',
+      waiting: 2,
+      items: [
+        { id: 'id-a', text: '同一文案' },
+        { id: 'id-b', text: '同一文案' },
+      ],
+      busy: false,
+    })
+    await nextTick()
+    // turn_begin before trim (id still in local queue) — remove by id.
+    vm.applyReviewFrame({
+      event: 'turn_begin',
+      nodeId: 'clarify',
+      item: { id: 'id-a', text: '同一文案' },
+    })
+    await nextTick()
+    expect(w.findAll('[data-testid="clarify-queue-item"]').length).toBe(1)
+    w.unmount()
+  })
+
   it('AnnotationChip path===label shows once', () => {
     const i18n = createI18n({
       legacy: false,

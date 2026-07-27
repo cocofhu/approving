@@ -79,6 +79,13 @@ const reviewChatRef = ref<{
   discardLastQueued?: () => void
   isSessionBusy?: () => boolean
 } | null>(null)
+/**
+ * Review/clarify WS frames that arrived while ClarifyChat was unmounted
+ * (hard loadActiveRun nulls activeRun → ReviewComposer gone). Flushed after mount.
+ */
+let pendingReviewFrames: Record<string, unknown>[] = []
+/** Snapshot reactSessions stashed when activeRun is still null during hard load. */
+let pendingSnapshotSessions: Run['reactSessions'] | null = null
 const { selected } = usePipelineFilter()
 const { selected: selectedProject, ensureHydrated: hydrateProject } = useProjectContext()
 
@@ -445,6 +452,65 @@ function closeActiveRunWs() {
   activeRunWs = undefined
   activeRunWsRunId = ''
   clarifyLiveBusy.value = false
+  pendingReviewFrames = []
+  pendingSnapshotSessions = null
+}
+
+/** Project authoritative busy/queue onto ClarifyChat (RunDetail.restoreReactSessions parity). */
+function restoreReactSessions(r: { reactSessions?: Run['reactSessions'] } | null) {
+  const nodeId = active.value?.type === 'clarify' ? active.value.nodeId : null
+  if (!nodeId) return
+  const sessions = r?.reactSessions ?? pendingSnapshotSessions
+  if (!sessions) return
+  const snap = sessions[nodeId]
+  if (!snap || typeof snap !== 'object') return
+  clarifyLiveBusy.value = !!snap.busy
+  const frame = {
+    event: 'queue_state',
+    nodeId,
+    waiting: snap.waiting ?? 0,
+    items: snap.items ?? [],
+    busy: !!snap.busy,
+    activeItem: snap.activeItem,
+  }
+  if (reviewChatRef.value?.applyReviewFrame) {
+    reviewChatRef.value.applyReviewFrame(frame)
+  } else {
+    pendingReviewFrames.push(frame)
+  }
+  pendingSnapshotSessions = null
+}
+
+function flushPendingReviewFrames() {
+  if (!pendingReviewFrames.length) return
+  const frames = pendingReviewFrames
+  pendingReviewFrames = []
+  for (const frame of frames) {
+    reviewChatRef.value?.applyReviewFrame?.(frame)
+  }
+}
+
+/** Deliver review frame to chat, or buffer until ClarifyChat remounts after hard load. */
+function applyOrBufferReviewFrame(m: Record<string, unknown>) {
+  gateApprovalRef.value?.applyReviewFrame?.(m)
+  if (reviewChatRef.value?.applyReviewFrame) {
+    reviewChatRef.value.applyReviewFrame(m)
+    return
+  }
+  if (active.value?.type === 'clarify') {
+    pendingReviewFrames.push(m)
+  }
+}
+
+/**
+ * After hard load / soft refresh: project reactSessions + flush frames buffered
+ * while ReviewComposer was unmounted (WS Broadcast race).
+ */
+async function projectClarifySessionAfterLoad(r: Run) {
+  await nextTick()
+  restoreReactSessions(r)
+  await nextTick()
+  flushPendingReviewFrames()
 }
 
 function connectActiveRunWs(runId: string) {
@@ -469,17 +535,33 @@ function connectActiveRunWs(runId: string) {
       nodeId?: string
       events?: any[]
       busy?: boolean
+      run?: { reactSessions?: Run['reactSessions'] }
     }
     try {
       m = JSON.parse(String(ev.data))
     } catch {
       return
     }
+    // WS connect snapshot may carry reactSessions before BroadcastReviewSessions.
+    if (m.type === 'snapshot') {
+      const sessions = m.run?.reactSessions
+      if (sessions && active.value?.type === 'clarify' && active.value.runId === runId) {
+        if (activeRun.value) {
+          activeRun.value = { ...activeRun.value, reactSessions: sessions }
+          void nextTick(() => {
+            restoreReactSessions(activeRun.value)
+            flushPendingReviewFrames()
+          })
+        } else {
+          pendingSnapshotSessions = sessions
+        }
+      }
+      return
+    }
     if (m.type === 'review') {
       if (m.event === 'turn_begin') clarifyLiveBusy.value = true
       if (m.event === 'queue_state' && typeof m.busy === 'boolean') clarifyLiveBusy.value = !!m.busy
-      gateApprovalRef.value?.applyReviewFrame?.(m)
-      reviewChatRef.value?.applyReviewFrame?.(m)
+      applyOrBufferReviewFrame(m as Record<string, unknown>)
       if (m.event === 'turn_done' || m.event === 'error') {
         clarifyLiveBusy.value = false
         if (active.value && active.value.runId === runId) void softRefreshActiveRun()
@@ -490,7 +572,10 @@ function connectActiveRunWs(runId: string) {
       if (typeof m.busy === 'boolean') clarifyLiveBusy.value = !!m.busy
       const nodeId = (m as { nodeId?: string }).nodeId
       gateApprovalRef.value?.applyAcpEvents?.(m.events)
-      reviewChatRef.value?.applyAcpEvents?.(m.events, nodeId)
+      if (reviewChatRef.value?.applyAcpEvents) {
+        reviewChatRef.value.applyAcpEvents(m.events, nodeId)
+      }
+      // ACP chunks need a live bubble; no buffer — restore+queue_state recreates it.
       return
     }
     if (m.type === 'artifact_edit' || m.type === 'react' || m.type === 'trace' || m.type === 'status') {
@@ -537,6 +622,8 @@ async function softRefreshActiveRun() {
     if (isProcessedTriple(target)) return
     activeRun.value = adaptInboxContextToRun(ctx, target.runId)
     activeRunLoadError.value = false
+    // Soft refresh keeps chat mounted — only merge reactSessions onto run; do not
+    // re-project live bubbles (would reset stream). Hard-load path restores below.
   } catch (e) {
     if (isAbortError(e) || signal.aborted) return
     if (
@@ -576,13 +663,18 @@ async function loadActiveRun(hard = true) {
     activeRun.value = null
     activeRunLoadError.value = false
     activeRunLoading.value = true
+    // Chat unmounts — clear stale buffer for this load cycle (WS may refill).
+    pendingReviewFrames = []
   }
+  let projectAfterLoad = false
   try {
     const ctx = await api.inboxContext(target.runId, target.nodeId, target.iteration ?? 1, { signal })
     if (!active.value || inboxTripleKey(active.value) !== triple) return
     if (isProcessedTriple(target)) return
     activeRun.value = adaptInboxContextToRun(ctx, target.runId)
     activeRunLoadError.value = false
+    // Must project AFTER loading flag clears so ReviewComposer can mount.
+    projectAfterLoad = hard && target.type === 'clarify'
   } catch (e) {
     if (isAbortError(e) || signal.aborted) return
     if (
@@ -600,6 +692,9 @@ async function loadActiveRun(hard = true) {
   } finally {
     releaseInboxContextSignal(triple, signal)
     if (hard) activeRunLoading.value = false
+  }
+  if (projectAfterLoad && activeRun.value) {
+    await projectClarifySessionAfterLoad(activeRun.value)
   }
 }
 watch(

@@ -206,14 +206,7 @@ func (h *Handlers) runDetailDTO(r models.Run) gin.H {
 	out["clarifyByNode"] = clarifyByNode
 	// Authoritative busy/queue for refresh resume (clarify + review sessions).
 	if h.Eng != nil {
-		if snaps := h.Eng.ReviewSessionsForRun(r.ID); len(snaps) > 0 {
-			byNode := gin.H{}
-			for _, s := range snaps {
-				byNode[s.NodeID] = gin.H{
-					"kind": s.Kind, "waiting": s.Waiting, "busy": s.Busy,
-					"items": s.Items, "activeItem": s.ActiveItem,
-				}
-			}
+		if byNode := reactSessionsDTO(h.Eng.ReviewSessionsForRun(r.ID)); byNode != nil {
 			out["reactSessions"] = byNode
 		}
 	}

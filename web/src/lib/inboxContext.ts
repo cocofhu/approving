@@ -16,6 +16,8 @@ export type ClarifyInboxContext = {
   artifacts?: Artifact[]
   /** Slim executions for current node ∪ parseable upstream refs. */
   nodeExecutions?: Record<string, NodeRun[]>
+  /** Authoritative busy/queue for refresh-resume (parity with Run detail). */
+  reactSessions?: Run['reactSessions']
   clarify: {
     nodeId: string
     iteration?: number
@@ -57,6 +59,7 @@ export function adaptInboxContextToRun(ctx: InboxContextResponse, runId: string)
     nodes: ctx.nodes,
     artifacts: ctx.artifacts ?? [],
     nodeExecutions: ctx.nodeExecutions,
+    reactSessions: ctx.reactSessions,
     clarifyByNode: {
       [ctx.clarify.nodeId]: {
         nodeId: ctx.clarify.nodeId,
