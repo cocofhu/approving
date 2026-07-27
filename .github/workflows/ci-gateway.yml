@@ -1,12 +1,14 @@
 name: ci-gateway
 
 # Path-filtered suite for sandbox-gateway/gateway (control plane).
-# Keeps PR CI light: go vet + unit tests with a 90% coverage gate.
+# Keeps PR CI light: go vet + unit tests with a 90% coverage gate,
+# plus a Dockerfile smoke build so go.mod / image Go baseline drift fails the PR.
 # Image publish remains in publish-gateway (v* tags); not merged into ci-sandbox.
 on:
   push:
     paths:
       - "sandbox-gateway/gateway/**"
+      - "sandbox-gateway/Dockerfile"
       - "sandbox-gateway/scripts/cover-check.sh"
       - ".github/workflows/ci-gateway.yml"
       - ".github/scripts/coverage-badge-color.sh"
@@ -15,6 +17,7 @@ on:
   pull_request:
     paths:
       - "sandbox-gateway/gateway/**"
+      - "sandbox-gateway/Dockerfile"
       - "sandbox-gateway/scripts/cover-check.sh"
       - ".github/workflows/ci-gateway.yml"
       - ".github/scripts/coverage-badge-color.sh"
@@ -68,3 +71,18 @@ jobs:
             coverage-gateway \
             "$pct" \
             "$color"
+
+  # Smoke-build sandbox-gateway/Dockerfile (same context/file as publish-gateway).
+  # push:false — PR gate only; catches go.mod vs image Go baseline drift before merge.
+  gateway-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build sandbox-gateway Dockerfile
+        uses: docker/build-push-action@v7
+        with:
+          context: ./sandbox-gateway
+          file: ./sandbox-gateway/Dockerfile
+          push: false
