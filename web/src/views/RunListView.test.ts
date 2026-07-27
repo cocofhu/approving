@@ -23,9 +23,10 @@ describe('RunListView click UX (loading / nav / prefetch)', () => {
     expect(src).toMatch(/:to="runHref\(r\.id\)"/)
     expect(src).toMatch(/function runHref\(id: string\)/)
     expect(src).toMatch(/return '\/runs\/' \+ id/)
-    // Mobile card is a real link; desktop uses custom slot + navigate on tr
-    expect(src).toMatch(/custom\s*\n\s*v-slot="\{ navigate, href \}"/)
-    expect(src).toMatch(/@click="navigate"/)
+    // Both mobile cards and desktop rows use custom + navigate (no bare <a> wrapping ops)
+    expect(src.match(/custom\s*\n\s*v-slot="\{ navigate, href \}"/g)?.length).toBeGreaterThanOrEqual(2)
+    expect(src.match(/@click="navigate"/g)?.length).toBeGreaterThanOrEqual(2)
+    expect(src).toMatch(/role="link"/)
   })
 
   it('prefetches RunDetail chunk on hover / touchstart / pointerdown', () => {
@@ -74,9 +75,14 @@ describe('RunListView cancel run', () => {
   it('keeps cancel confirm copy distinct from delete and supports mobile cards', () => {
     expect(src).toMatch(/pages\.runDetail\.cancelWarning/)
     expect(src).toMatch(/pages\.runList\.cancelConfirm/)
-    // Mobile cards navigate via RouterLink (not role=button + openRun)
+    // Mobile cards: RouterLink custom + role=link (not bare <a> / role=button + openRun)
     expect(src).toMatch(/<!-- Mobile card list -->[\s\S]*?<RouterLink/)
-    expect(src).toMatch(/@click\.stop @keydown\.stop/)
+    const mobileBlock = src.slice(src.indexOf('<!-- Mobile card list -->'), src.indexOf('<!-- Desktop table -->'))
+    expect(mobileBlock).toMatch(/custom/)
+    expect(mobileBlock).toMatch(/v-slot="\{ navigate, href \}"/)
+    expect(mobileBlock).toMatch(/role="link"/)
+    expect(mobileBlock).not.toMatch(/<RouterLink[^>]*\n[^>]*class="/)
+    expect(mobileBlock).toMatch(/@click\.stop @keydown\.stop/)
   })
 })
 
@@ -145,6 +151,11 @@ describe('RunListView delete run and ops column', () => {
     expect(src).toMatch(/data-testid="run-ops-placeholder"/)
     // desktop ops cell and mobile ops wrapper both stop click
     expect(src.match(/data-testid="run-ops"[^>]*@click\.stop/g)?.length).toBeGreaterThanOrEqual(2)
+    // Regression: mobile must use custom+navigate so ops @click.stop does not enable native <a> href
+    const mobileBlock = src.slice(src.indexOf('<!-- Mobile card list -->'), src.indexOf('<!-- Desktop table -->'))
+    expect(mobileBlock).toMatch(/custom/)
+    expect(mobileBlock).toMatch(/@click="navigate"/)
+    expect(mobileBlock).toMatch(/role="link"/)
   })
 
   it('keeps cancel confirm flow and does not drop cancel modal', () => {

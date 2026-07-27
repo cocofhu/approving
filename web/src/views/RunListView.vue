@@ -468,75 +468,90 @@ onUnmounted(() => {
         {{ emptyMessage }}
       </div>
       <div v-else class="flex flex-col gap-2">
+        <!--
+          custom + navigate (not a real <a>): ops @click.stop must not sit inside
+          a native link, or stopPropagation blocks Vue Router's preventDefault and
+          the browser follows href (cancel/delete → whole-page jump to /runs/:id).
+        -->
         <RouterLink
           v-for="r in runs"
           :key="r.id"
           :to="runHref(r.id)"
-          class="flex w-full cursor-pointer flex-col gap-2 rounded-lg border border-line bg-surface p-3 text-left no-underline transition hover:border-line-strong hover:bg-elevated"
-          @mouseenter="prefetchRunDetail"
-          @touchstart.passive="prefetchRunDetail"
-          @pointerdown="prefetchRunDetail"
+          custom
+          v-slot="{ navigate, href }"
         >
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0 flex-1">
-              <div
-                v-if="r.title"
-                class="truncate text-sm font-semibold text-txt"
-                :title="r.title.length > 60 ? r.title : undefined"
-              >{{ truncateText(r.title, 60) }}</div>
-              <div
-                class="font-mono text-xs text-txt3"
-                :class="r.title ? 'mt-0.5' : 'text-[13px] font-medium'"
-              >#{{ runIdShort(r.id) }}</div>
-            </div>
-            <StatusPill :status="r.status" size="sm" />
-          </div>
-          <div class="flex flex-wrap items-center gap-1.5">
-            <PriorityBadge :priority="r.priority" />
-          </div>
-          <div class="flex min-w-0 flex-col gap-1">
-            <div class="flex items-center gap-2">
-              <div class="h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-elevated">
-                <div class="h-full rounded-full bg-accent" :style="{ width: r.progress * 100 + '%' }" />
+          <div
+            role="link"
+            :data-href="href"
+            tabindex="0"
+            class="flex w-full cursor-pointer flex-col gap-2 rounded-lg border border-line bg-surface p-3 text-left no-underline transition hover:border-line-strong hover:bg-elevated"
+            @click="navigate"
+            @keydown.enter.prevent="() => navigate()"
+            @mouseenter="prefetchRunDetail"
+            @touchstart.passive="prefetchRunDetail"
+            @pointerdown="prefetchRunDetail"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0 flex-1">
+                <div
+                  v-if="r.title"
+                  class="truncate text-sm font-semibold text-txt"
+                  :title="r.title.length > 60 ? r.title : undefined"
+                >{{ truncateText(r.title, 60) }}</div>
+                <div
+                  class="font-mono text-xs text-txt3"
+                  :class="r.title ? 'mt-0.5' : 'text-[13px] font-medium'"
+                >#{{ runIdShort(r.id) }}</div>
               </div>
-              <span class="text-[11px] tabular-nums text-txt3">{{ Math.round(r.progress * 100) }}%</span>
+              <StatusPill :status="r.status" size="sm" />
             </div>
-            <div
-              v-if="showNodeLabel(r)"
-              :key="`${r.id}-${r.currentNodeLabel}`"
-              class="node-label-fade max-w-full truncate text-[11px]"
-              :class="r.status === 'waiting_human' ? 'text-warn' : 'text-txt3'"
-              :title="r.currentNodeLabel!.length > 60 ? r.currentNodeLabel : undefined"
-            >{{ truncateText(r.currentNodeLabel!, 60) }}</div>
-          </div>
-          <div class="flex min-w-0 items-center justify-between gap-2">
-            <div class="flex min-w-0 items-center gap-1.5 text-[12px] text-txt2">
-              <span class="truncate">{{ r.workflowName }}</span>
-              <span v-if="r.workflowVersion" class="chip shrink-0">v{{ r.workflowVersion }}</span>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <PriorityBadge :priority="r.priority" />
             </div>
-            <div class="shrink-0" data-testid="run-ops" @click.stop @keydown.stop>
-              <AppButton
-                v-if="canCancelRun(r)"
-                data-testid="cancel-run-btn"
-                variant="danger"
-                size="sm"
-                :disabled="cancellingRun && cancelTarget?.id === r.id"
-                @click="openCancelConfirm(r)"
-              >{{ t('common.buttons.cancel') }}</AppButton>
-              <AppButton
-                v-else-if="canDeleteRun(r)"
-                data-testid="delete-run-btn"
-                variant="danger"
-                size="sm"
-                :disabled="deletingRun && deleteTarget?.id === r.id"
-                @click="openDeleteConfirm(r)"
-              >{{ t('common.buttons.delete') }}</AppButton>
-              <span
-                v-else
-                data-testid="run-ops-placeholder"
-                class="select-none px-1 text-sm text-txt3/50"
-                aria-hidden="true"
-              >—</span>
+            <div class="flex min-w-0 flex-col gap-1">
+              <div class="flex items-center gap-2">
+                <div class="h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-elevated">
+                  <div class="h-full rounded-full bg-accent" :style="{ width: r.progress * 100 + '%' }" />
+                </div>
+                <span class="text-[11px] tabular-nums text-txt3">{{ Math.round(r.progress * 100) }}%</span>
+              </div>
+              <div
+                v-if="showNodeLabel(r)"
+                :key="`${r.id}-${r.currentNodeLabel}`"
+                class="node-label-fade max-w-full truncate text-[11px]"
+                :class="r.status === 'waiting_human' ? 'text-warn' : 'text-txt3'"
+                :title="r.currentNodeLabel!.length > 60 ? r.currentNodeLabel : undefined"
+              >{{ truncateText(r.currentNodeLabel!, 60) }}</div>
+            </div>
+            <div class="flex min-w-0 items-center justify-between gap-2">
+              <div class="flex min-w-0 items-center gap-1.5 text-[12px] text-txt2">
+                <span class="truncate">{{ r.workflowName }}</span>
+                <span v-if="r.workflowVersion" class="chip shrink-0">v{{ r.workflowVersion }}</span>
+              </div>
+              <div class="shrink-0" data-testid="run-ops" @click.stop @keydown.stop>
+                <AppButton
+                  v-if="canCancelRun(r)"
+                  data-testid="cancel-run-btn"
+                  variant="danger"
+                  size="sm"
+                  :disabled="cancellingRun && cancelTarget?.id === r.id"
+                  @click="openCancelConfirm(r)"
+                >{{ t('common.buttons.cancel') }}</AppButton>
+                <AppButton
+                  v-else-if="canDeleteRun(r)"
+                  data-testid="delete-run-btn"
+                  variant="danger"
+                  size="sm"
+                  :disabled="deletingRun && deleteTarget?.id === r.id"
+                  @click="openDeleteConfirm(r)"
+                >{{ t('common.buttons.delete') }}</AppButton>
+                <span
+                  v-else
+                  data-testid="run-ops-placeholder"
+                  class="select-none px-1 text-sm text-txt3/50"
+                  aria-hidden="true"
+                >—</span>
+              </div>
             </div>
           </div>
         </RouterLink>
