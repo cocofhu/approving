@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -43,6 +43,7 @@ import { useToast } from '@/lib/useToast'
 import type { Gate, InboxItem, Run } from '@/lib/types'
 
 const router = useRouter()
+const route = useRoute()
 const { t, locale } = useI18n()
 const toast = useToast()
 const {
@@ -80,6 +81,42 @@ const reviewChatRef = ref<{
 } | null>(null)
 const { selected } = usePipelineFilter()
 const { selected: selectedProject, ensureHydrated: hydrateProject } = useProjectContext()
+const tagDraft = ref('')
+
+function parseTagQuery(raw: string): string[] {
+  if (!raw) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const part of raw.split(',')) {
+    const tag = part.trim()
+    if (!tag || seen.has(tag)) continue
+    seen.add(tag)
+    out.push(tag)
+  }
+  return out
+}
+
+const selectedTags = computed<string[]>({
+  get: () => parseTagQuery(typeof route.query.tag === 'string' ? route.query.tag : ''),
+  set: (value) => {
+    const query = { ...route.query }
+    const next = parseTagQuery(value.join(',')).join(',')
+    if (next) query.tag = next
+    else delete query.tag
+    router.replace({ query })
+  },
+})
+
+function addTagFilter() {
+  const tag = tagDraft.value.trim()
+  if (!tag) return
+  selectedTags.value = [...selectedTags.value, tag]
+  tagDraft.value = ''
+}
+
+function removeTagFilter(tag: string) {
+  selectedTags.value = selectedTags.value.filter((item) => item !== tag)
+}
 
 const showUpdateBanner = ref(false)
 const showProcessedBanner = ref(false)
@@ -277,6 +314,7 @@ async function loadList({ showLoading = false }: { showLoading?: boolean } = {})
       pageSize: PAGE_SIZE,
       wf: selected.value || undefined,
       projectId: selectedProject.value || undefined,
+      tag: selectedTags.value.join(',') || undefined,
     })
     // Discard overdue snapshots so they cannot resurrect a just-removed gate.
     if (gen !== listLoadGeneration) return
@@ -309,6 +347,10 @@ watch(selectedProject, () => {
 })
 
 watch(listPage, () => {
+  loadList({ showLoading: true })
+})
+watch(() => route.query.tag, () => {
+  listPage.value = 1
   loadList({ showLoading: true })
 })
 
@@ -969,6 +1011,17 @@ function badgeLabel(it: InboxItem) {
         <p class="text-sm text-txt3" v-html="t('pages.gatesInbox.subtitleHtml')" />
       </div>
       <div class="flex shrink-0 flex-wrap items-center gap-2">
+        <div class="min-w-[220px] rounded-md border border-line bg-surface px-2.5 py-2">
+          <div v-if="selectedTags.length" class="mb-1.5 flex flex-wrap gap-1.5">
+            <button v-for="tag in selectedTags" :key="tag" class="chip" @click="removeTagFilter(tag)">{{ tag }}</button>
+          </div>
+          <input
+            v-model="tagDraft"
+            class="w-full bg-transparent text-sm outline-none"
+            :placeholder="t('pages.gatesInbox.tagPlaceholder')"
+            @keydown.enter.prevent="addTagFilter"
+          />
+        </div>
         <span
           class="inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-[11px] font-medium"
           :class="{
@@ -1074,6 +1127,9 @@ function badgeLabel(it: InboxItem) {
                 {{ badgeLabel(it) }}
               </span>
               <span class="text-[10px] text-txt3">{{ locale && itemTime(it) }}</span>
+            </div>
+            <div v-if="it.tags?.length" class="mt-1 flex flex-wrap gap-1.5">
+              <span v-for="tag in it.tags" :key="tag" class="chip text-txt2">{{ tag }}</span>
             </div>
           </div>
           <Icon name="chevron-right" :size="16" class="mt-2 shrink-0 text-txt3" />
@@ -1203,6 +1259,9 @@ function badgeLabel(it: InboxItem) {
                   {{ badgeLabel(it) }}
                 </span>
                 <span class="text-[10px] text-txt3">{{ locale && itemTime(it) }}</span>
+              </div>
+              <div v-if="it.tags?.length" class="mt-1 flex flex-wrap gap-1.5">
+                <span v-for="tag in it.tags" :key="tag" class="chip text-txt2">{{ tag }}</span>
               </div>
             </div>
           </button>

@@ -84,6 +84,7 @@ describe('api req helpers', () => {
       )
       .mockResolvedValueOnce(jsonResponse({ id: 'r1' }))
       .mockResolvedValueOnce(jsonResponse({ items: [] }))
+      .mockResolvedValueOnce(jsonResponse({ tags: ['bugfix'] }))
       .mockResolvedValueOnce(jsonResponse({ id: 'r1', status: 'running' }))
       .mockResolvedValueOnce(jsonResponse({ id: 'r1', status: 'queued', priority: 'high' }))
       .mockResolvedValueOnce(jsonResponse({ status: 'ok' }))
@@ -131,7 +132,7 @@ describe('api req helpers', () => {
     await expect(api.importWorkflow('{}', 'p1')).resolves.toMatchObject({ id: 'imp2' })
 
     await expect(api.listRuns()).resolves.toEqual([{ id: 'r1' }])
-    await expect(api.listRuns({ status: 'running', wf: 'w1', projectId: 'p1', page: 1, pageSize: 10 })).resolves.toMatchObject({
+    await expect(api.listRuns({ status: 'running', tag: 'bugfix', wf: 'w1', projectId: 'p1', page: 1, pageSize: 10 })).resolves.toMatchObject({
       total: 1,
     })
     await api.listRuns({ page: 1, pageSize: 10, sort: 'priority', order: 'desc' })
@@ -143,6 +144,7 @@ describe('api req helpers', () => {
     expect(lastCallUrl()).not.toMatch(/order=/)
     await expect(api.getRun('r1')).resolves.toMatchObject({ id: 'r1' })
     await expect(api.inboxContext('r1', 'n1', 1)).resolves.toEqual({ items: [] })
+    await expect(api.listProjectRunTags('p1')).resolves.toEqual({ tags: ['bugfix'] })
     await expect(api.startRun('w1', { a: 1 })).resolves.toMatchObject({ id: 'r1' })
     await expect(api.updateRunPriority('r1', 'high')).resolves.toMatchObject({ priority: 'high' })
     await expect(api.cancelRun('r1')).resolves.toEqual({ status: 'ok' })
@@ -269,7 +271,7 @@ describe('api req helpers', () => {
     expect(api.sandboxVncWsUrl(3)).toMatch(/\/sandbox-vnc\/3\/ws$/)
 
     await expect(api.listGates()).resolves.toEqual([])
-    await expect(api.listGates({ page: 1, pageSize: 10, wf: 'w', projectId: 'p' })).resolves.toMatchObject({
+    await expect(api.listGates({ page: 1, pageSize: 10, wf: 'w', projectId: 'p', tag: 'bugfix' })).resolves.toMatchObject({
       total: 0,
     })
     await expect(api.dashboard()).resolves.toMatchObject({ running: 0 })

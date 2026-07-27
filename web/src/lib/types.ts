@@ -543,6 +543,7 @@ export interface Gate {
   reactUpstreamNodeId?: string
   reactSessionAlive?: boolean
   requestedAt: string
+  tags?: string[]
 }
 
 export interface GateInboxItem extends Gate {
@@ -568,6 +569,7 @@ export interface ClarifyInboxItem {
   done: boolean
   requestedAt: string
   updatedAt: string
+  tags?: string[]
 }
 
 export type InboxItem = GateInboxItem | ClarifyInboxItem
@@ -610,6 +612,7 @@ export interface Run {
   currentNodeLabel?: string
   /** Admission priority: high | normal | low (default normal). */
   priority?: 'high' | 'normal' | 'low'
+  tags?: string[]
   attempt?: number
   // The graph snapshot this run executed (pinned at start). Lets the run detail
   // canvas render against exactly what ran, independent of later edits/deletion

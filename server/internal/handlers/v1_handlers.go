@@ -77,6 +77,7 @@ func (h *Handlers) RevokeAPIKey(c *gin.Context) {
 type v1StartRunBody struct {
 	Inputs  map[string]any `json:"inputs"`
 	Trigger string         `json:"trigger"` // optional; empty → api; must be manual|api|pm_mcp
+	Tags    []string       `json:"tags"`
 }
 
 func (h *Handlers) V1StartRun(c *gin.Context) {
@@ -95,7 +96,12 @@ func (h *Handlers) V1StartRun(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
 		return
 	}
-	run, err := h.Eng.StartRunFromPublished(wfID, b.Inputs, b.Trigger)
+	tags, err := models.NormalizeRunTags(b.Tags)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	run, err := h.Eng.StartRunFromPublished(wfID, b.Inputs, b.Trigger, tags)
 	if err != nil {
 		msg := err.Error()
 		if strings.Contains(msg, "not published") {

@@ -166,6 +166,33 @@ func MapArg(args map[string]any, key string) map[string]any {
 	return nil
 }
 
+// StringSliceArg reads a []string-like argument, accepting decoded []any payloads.
+func StringSliceArg(args map[string]any, key string) []string {
+	if args == nil {
+		return nil
+	}
+	v, ok := args[key]
+	if !ok || v == nil {
+		return nil
+	}
+	if ss, ok := v.([]string); ok {
+		return ss
+	}
+	arr, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(arr))
+	for _, item := range arr {
+		s, ok := item.(string)
+		if !ok {
+			return nil
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
 // NewToken returns a random hex token.
 func NewToken() string {
 	var b [16]byte

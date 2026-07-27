@@ -64,7 +64,7 @@ func (p *PmProgress) ListBlockers(projectID string) map[string]any {
 		return map[string]any{"empty": true, "blockers": []any{}, "message": "进度服务不可用"}
 	}
 	runs := p.runs.List([]string{"waiting_human"}, "", projectID)
-	gates, _ := p.runs.PendingInboxItems("", projectID, 0, 100)
+	gates, _ := p.runs.PendingInboxItems("", projectID, nil, 0, 100)
 	blockers := make([]map[string]any, 0)
 	now := time.Now()
 	for _, r := range runs {

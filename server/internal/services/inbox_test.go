@@ -207,6 +207,41 @@ func TestPendingClarificationsKind(t *testing.T) {
 	}
 }
 
+func TestPendingInboxItemsFilterByTags(t *testing.T) {
+	db := newTestDB(t)
+	s := NewRunService(db)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	db.Create(&models.Run{
+		ID: "run-gate-both", WorkflowID: "wf1", WorkflowName: "API 重构",
+		Title: "双标签", Status: "waiting_human", StartedAt: now, Graph: validGraph(), Tags: []string{"bugfix", "spike"},
+	})
+	db.Create(&models.Gate{
+		RunID: "run-gate-both", NodeID: "gate", WorkflowID: "wf1", WorkflowName: "API 重构",
+		Title: "评审", Resolved: false, RequestedAt: now,
+	})
+	db.Create(&models.Run{
+		ID: "run-gate-one", WorkflowID: "wf1", WorkflowName: "API 重构",
+		Title: "单标签", Status: "waiting_human", StartedAt: now.Add(-time.Minute), Graph: validGraph(), Tags: []string{"bugfix"},
+	})
+	db.Create(&models.Gate{
+		RunID: "run-gate-one", NodeID: "gate", WorkflowID: "wf1", WorkflowName: "API 重构",
+		Title: "评审", Resolved: false, RequestedAt: now.Add(-time.Minute),
+	})
+
+	items, total := s.PendingInboxItems("", "", []string{"bugfix", "spike"}, 0, 0)
+	if total != 1 || len(items) != 1 {
+		t.Fatalf("items=%d total=%d", len(items), total)
+	}
+	gate, ok := items[0].(GateInboxItem)
+	if !ok || gate.RunID != "run-gate-both" {
+		t.Fatalf("unexpected inbox item: %#v", items[0])
+	}
+	if len(gate.Tags) != 2 {
+		t.Fatalf("gate tags = %v", gate.Tags)
+	}
+}
+
 func TestClarifyInboxKind(t *testing.T) {
 	if got := clarifyInboxKind(&models.Node{Type: "react"}); got != "clarify" {
 		t.Fatalf("react → %q", got)

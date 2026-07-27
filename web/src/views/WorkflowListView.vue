@@ -502,6 +502,7 @@ function onViewRun(runId: string) {
       v-if="runTarget"
       :open="!!runTarget"
       :workflow-id="runTarget.id"
+      :project-id="runTarget.projectId"
       :workflow-name="runTarget.name"
       :fields="runFields"
       :run-inputs="runInputs"

@@ -1,9 +1,12 @@
 package models
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // EnvEntry is one project sandbox OS environment variable (key/value + secret flag).
@@ -100,6 +103,7 @@ type Run struct {
 	Status          string         `json:"status"` // queued|running|waiting_human|completed|failed|cancelled
 	Trigger         string         `json:"trigger"`
 	Inputs          map[string]any `gorm:"serializer:json" json:"inputs"`
+	Tags            []string       `gorm:"serializer:json" json:"tags"`
 	// Priority is the admission weight: high=3, normal=2, low=1 (default 2).
 	// API/frontend expose string labels; claim sorts by Priority DESC then FIFO.
 	Priority int `gorm:"not null;default:2;index" json:"-"`
@@ -120,6 +124,50 @@ type Run struct {
 	StartedAt   time.Time                 `json:"startedAt"`
 	DurationSec int                       `json:"durationSec"`
 	CreatedAt   time.Time                 `json:"-"`
+}
+
+const (
+	MaxRunTags       = 8
+	MaxRunTagRunes   = 32
+)
+
+var ErrInvalidRunTag = errors.New("invalid run tag")
+
+func NormalizeRunTags(tags []string) ([]string, error) {
+	if len(tags) == 0 {
+		return []string{}, nil
+	}
+	out := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, raw := range tags {
+		tag := strings.TrimSpace(raw)
+		if tag == "" {
+			continue
+		}
+		if utf8.RuneCountInString(tag) > MaxRunTagRunes {
+			return nil, fmt.Errorf("%w %q: exceeds %d characters", ErrInvalidRunTag, tag, MaxRunTagRunes)
+		}
+		for _, r := range tag {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) {
+				continue
+			}
+			switch r {
+			case '_', '-', '.', '/':
+				continue
+			default:
+				return nil, fmt.Errorf("%w %q: unsupported character %q", ErrInvalidRunTag, tag, r)
+			}
+		}
+		if _, ok := seen[tag]; ok {
+			continue
+		}
+		seen[tag] = struct{}{}
+		out = append(out, tag)
+		if len(out) > MaxRunTags {
+			return nil, fmt.Errorf("too many run tags: max %d", MaxRunTags)
+		}
+	}
+	return out, nil
 }
 
 // TokenUsage is per-node-execution LLM token accounting (input/output/cache).

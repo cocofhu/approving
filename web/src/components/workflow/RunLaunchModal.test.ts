@@ -12,6 +12,7 @@ function findStartButton(wrapper: ReturnType<typeof mount>) {
 const apiMocks = vi.hoisted(() => ({
   startRun: vi.fn(),
   listRepos: vi.fn(),
+  listProjectRunTags: vi.fn(),
 }))
 
 vi.mock('@/lib/api', async () => {
@@ -22,6 +23,7 @@ vi.mock('@/lib/api', async () => {
       ...actual.api,
       startRun: apiMocks.startRun,
       listRepos: apiMocks.listRepos,
+      listProjectRunTags: apiMocks.listProjectRunTags,
     },
   }
 })
@@ -68,6 +70,7 @@ function mountModal(open = true) {
 beforeEach(() => {
   vi.clearAllMocks()
   apiMocks.listRepos.mockResolvedValue([])
+  apiMocks.listProjectRunTags.mockResolvedValue({ tags: [] })
 })
 
 describe('RunLaunchModal', () => {
@@ -130,7 +133,7 @@ describe('RunLaunchModal', () => {
     const startBtn = findStartButton(wrapper)
     await startBtn!.trigger('click')
     await flushPromises()
-    expect(apiMocks.startRun).toHaveBeenCalledWith('wf-1', expect.objectContaining({ topic: 'hello' }), 'manual', 'normal')
+    expect(apiMocks.startRun).toHaveBeenCalledWith('wf-1', expect.objectContaining({ topic: 'hello' }), 'manual', 'normal', [])
     expect(wrapper.emitted('started')?.[0]?.[0]).toBe('run-99')
     wrapper.unmount()
   })

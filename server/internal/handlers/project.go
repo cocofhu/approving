@@ -58,6 +58,18 @@ func (h *Handlers) GetProject(c *gin.Context) {
 	c.JSON(http.StatusOK, projectDTO(p, h.Projects.WorkflowCount(p.ID), h.Projects.TokenBreakdown(p.ID)))
 }
 
+func (h *Handlers) ListProjectRunTags(c *gin.Context) {
+	if h.Projects == nil || h.Runs == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	if _, ok := h.Projects.Get(c.Param("id")); !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"tags": h.Runs.ProjectRunTags(c.Param("id"))})
+}
+
 func (h *Handlers) CreateProject(c *gin.Context) {
 	if h.Projects == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "projects unavailable"})

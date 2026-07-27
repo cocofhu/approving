@@ -463,6 +463,7 @@ type startRunBody struct {
 	Inputs   map[string]any `json:"inputs"`
 	Trigger  string         `json:"trigger"`
 	Priority string         `json:"priority"` // high|normal|low; empty → normal
+	Tags     []string       `json:"tags"`
 }
 
 func (h *Handlers) StartRun(c *gin.Context) {
@@ -476,7 +477,12 @@ func (h *Handlers) StartRun(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	run, err := h.Eng.StartRunWithPriority(c.Param("id"), b.Inputs, trigger, b.Priority)
+	tags, err := models.NormalizeRunTags(b.Tags)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	run, err := h.Eng.StartRunWithPriority(c.Param("id"), b.Inputs, trigger, b.Priority, tags)
 	if err != nil {
 		_ = c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -531,8 +537,31 @@ func parseRunStatuses(raw string) []string {
 	return out
 }
 
+func parseRunTags(values ...string) []string {
+	seen := make(map[string]struct{})
+	out := make([]string, 0)
+	for _, raw := range values {
+		for _, part := range strings.Split(raw, ",") {
+			tag, err := models.NormalizeRunTags([]string{part})
+			if err != nil || len(tag) == 0 {
+				continue
+			}
+			if _, ok := seen[tag[0]]; ok {
+				continue
+			}
+			seen[tag[0]] = struct{}{}
+			out = append(out, tag[0])
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func (h *Handlers) ListRuns(c *gin.Context) {
 	statuses := parseRunStatuses(c.Query("status"))
+	tags := parseRunTags(append(c.QueryArray("tag"), c.Query("tag"))...)
 	wf := c.Query("wf")
 	projectID := c.Query("projectId")
 	sort, order := parseRunListSort(c.Query("sort"), c.Query("order"))
@@ -541,7 +570,7 @@ func (h *Handlers) ListRuns(c *gin.Context) {
 		return
 	}
 	if !pg.Active {
-		runs := h.Runs.List(statuses, wf, projectID, sort, order)
+		runs := h.Runs.ListByTags(statuses, wf, projectID, tags, sort, order)
 		labels := h.Runs.CurrentNodeLabels(runs)
 		out := make([]gin.H, 0, len(runs))
 		for _, r := range runs {
@@ -550,7 +579,7 @@ func (h *Handlers) ListRuns(c *gin.Context) {
 		c.JSON(http.StatusOK, out)
 		return
 	}
-	runs, total := h.Runs.ListPage(statuses, wf, projectID, pg.Page, pg.PageSize, sort, order)
+	runs, total := h.Runs.ListPageByTags(statuses, wf, projectID, tags, pg.Page, pg.PageSize, sort, order)
 	labels := h.Runs.CurrentNodeLabels(runs)
 	items := make([]gin.H, 0, len(runs))
 	for _, r := range runs {
@@ -922,16 +951,18 @@ func (h *Handlers) GateReactCancel(c *gin.Context) {
 func (h *Handlers) ListGates(c *gin.Context) {
 	wf := c.Query("wf")
 	projectID := c.Query("projectId")
+	tags := parseRunTags(append(c.QueryArray("tag"), c.Query("tag"))...)
 	pg, ok := parsePagination(c)
 	if !ok {
 		return
 	}
 	if !pg.Active {
-		c.JSON(http.StatusOK, h.Runs.AllPendingInboxItems())
+		items, _ := h.Runs.PendingInboxItems(wf, projectID, tags, 0, 0)
+		c.JSON(http.StatusOK, items)
 		return
 	}
 	offset := (pg.Page - 1) * pg.PageSize
-	items, total := h.Runs.PendingInboxItems(wf, projectID, offset, pg.PageSize)
+	items, total := h.Runs.PendingInboxItems(wf, projectID, tags, offset, pg.PageSize)
 	c.JSON(http.StatusOK, paginatedResponse(items, total, pg.Page, pg.PageSize))
 }
 

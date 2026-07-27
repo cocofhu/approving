@@ -28,6 +28,7 @@ type Phase = 'form' | 'loading' | 'success' | 'error'
 const props = defineProps<{
   open: boolean
   workflowId: string
+  projectId?: string
   workflowName: string
   fields: InputField[]
   runInputs: Record<string, string>
@@ -62,6 +63,12 @@ const bodyOverflow = computed<'auto' | 'hidden'>(() =>
   phase.value === 'loading' || phase.value === 'success' ? 'hidden' : 'auto',
 )
 const scrollAreaMinHeight = ref<number | undefined>(undefined)
+const tags = ref<string[]>([])
+const tagInput = ref('')
+const tagSuggestions = ref<string[]>([])
+const tagPattern = /^[\p{L}\p{N}_./-]+$/u
+const maxTags = 8
+const maxTagRunes = 32
 /** loading 可见层显式高度：≥ max(捕获高度, 200)，捕获为空也至少 200px */
 const loadingLayerMinHeight = computed(() =>
   isLoading.value ? Math.max(scrollAreaMinHeight.value ?? 0, 200) : undefined,
@@ -94,8 +101,18 @@ watch(
       priority.value = 'normal'
       scrollAreaMinHeight.value = undefined
       reposDraft.value = {}
+      tags.value = []
+      tagInput.value = ''
+      tagSuggestions.value = []
       emit('update:loading', false)
       resetScrollTop()
+      if (props.projectId) {
+        void api.listProjectRunTags(props.projectId).then((res) => {
+          tagSuggestions.value = Array.isArray(res.tags) ? res.tags : []
+        }).catch(() => {
+          tagSuggestions.value = []
+        })
+      }
     }
   },
 )
@@ -221,6 +238,47 @@ function setBoolField(f: InputField, on: boolean) {
   props.runInputs[f.key] = on ? 'true' : 'false'
 }
 
+function runeCount(value: string): number {
+  return Array.from(value).length
+}
+
+function validateTag(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  if (runeCount(trimmed) > maxTagRunes) return t('pages.runLaunch.tagTooLong', { max: maxTagRunes })
+  if (!tagPattern.test(trimmed)) return t('pages.runLaunch.tagInvalid')
+  return ''
+}
+
+const tagError = computed(() => validateTag(tagInput.value))
+const filteredTagSuggestions = computed(() => {
+  if (!props.projectId || !tagInput.value.trim()) return []
+  return tagSuggestions.value
+    .filter((tag) => tag.includes(tagInput.value.trim()) && !tags.value.includes(tag))
+    .slice(0, 8)
+})
+
+function addTag(raw: string) {
+  const trimmed = raw.trim()
+  const err = validateTag(trimmed)
+  if (!trimmed || err || tags.value.includes(trimmed) || tags.value.length >= maxTags) return
+  tags.value = [...tags.value, trimmed]
+  tagInput.value = ''
+}
+
+function removeTag(tag: string) {
+  tags.value = tags.value.filter((item) => item !== tag)
+}
+
+function onTagKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault()
+    addTag(tagInput.value)
+  } else if (e.key === 'Backspace' && !tagInput.value && tags.value.length) {
+    tags.value = tags.value.slice(0, -1)
+  }
+}
+
 async function startRun() {
   const missing = props.fields.find((f) => {
     if (!f.required) return false
@@ -251,7 +309,7 @@ async function startRun() {
 
   try {
     if (props.beforeStart) await props.beforeStart()
-    const res = await api.startRun(props.workflowId, inputs, 'manual', priority.value)
+    const res = await api.startRun(props.workflowId, inputs, 'manual', priority.value, tags.value)
     successRunId.value = res.id
     emit('started', res.id)
     phase.value = 'success'
@@ -374,6 +432,45 @@ async function startRun() {
           <label class="block text-[12px] font-medium text-txt2">{{ t('pages.runLaunch.priorityLabel') }}</label>
           <PrioritySegmented v-model="priority" />
           <p class="text-[11px] leading-relaxed text-txt3">{{ t('pages.runLaunch.priorityHint') }}</p>
+        </div>
+        <div class="space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <label class="block text-[12px] font-medium text-txt2">{{ t('pages.runLaunch.tagsLabel') }}</label>
+            <span class="text-[11px] text-txt3">{{ tags.length }}/{{ maxTags }}</span>
+          </div>
+          <p class="text-[11px] leading-relaxed text-txt3">{{ t('pages.runLaunch.tagsHint') }}</p>
+          <div class="rounded-md border border-line bg-base px-2 py-2">
+            <div v-if="tags.length" class="mb-2 flex flex-wrap gap-1.5">
+              <button
+                v-for="tag in tags"
+                :key="tag"
+                type="button"
+                class="chip inline-flex items-center gap-1"
+                @click="removeTag(tag)"
+              >
+                <span>{{ tag }}</span>
+                <Icon name="close" :size="11" />
+              </button>
+            </div>
+            <input
+              v-model="tagInput"
+              class="w-full bg-transparent text-sm outline-none"
+              :placeholder="t('pages.runLaunch.tagsPlaceholder')"
+              :disabled="tags.length >= maxTags"
+              @keydown="onTagKeydown"
+            />
+          </div>
+          <div v-if="tagError" class="text-[11px] text-err">{{ tagError }}</div>
+          <div v-else-if="tags.length >= maxTags" class="text-[11px] text-txt3">{{ t('pages.runLaunch.tagsLimit', { max: maxTags }) }}</div>
+          <div v-if="filteredTagSuggestions.length" class="flex flex-wrap gap-1.5">
+            <button
+              v-for="tag in filteredTagSuggestions"
+              :key="tag"
+              type="button"
+              class="chip text-txt2 hover:text-txt"
+              @click="addTag(tag)"
+            >{{ tag }}</button>
+          </div>
         </div>
         <div class="flex items-center gap-2 text-[12px] text-txt3">
           <Icon name="trigger" :size="13" />{{ t('pages.runLaunch.triggerManual') }}{{ hintExtra || '' }}

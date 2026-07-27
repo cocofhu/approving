@@ -9,6 +9,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func runTagsDTO(tags []string) []string {
+	if len(tags) == 0 {
+		return []string{}
+	}
+	out := make([]string, len(tags))
+	copy(out, tags)
+	return out
+}
+
 // effectiveRunDuration reports a run's elapsed seconds for display. In-flight
 // runs (running / waiting_human) tick live from their start; terminal runs use
 // the duration stamped at finish(). This keeps the 耗时 column honest instead of
@@ -109,6 +118,7 @@ func runSummaryDTO(r models.Run, currentNodeLabel string) gin.H {
 		"durationSec": effectiveRunDuration(r), "progress": r.Progress, "branch": r.Branch,
 		"title":    r.Title,
 		"priority": models.PriorityLabel(r.Priority),
+		"tags":     runTagsDTO(r.Tags),
 	}
 	if currentNodeLabel != "" {
 		out["currentNodeLabel"] = currentNodeLabel
@@ -171,6 +181,7 @@ func (h *Handlers) runDetailDTO(r models.Run) gin.H {
 		"attempt": r.Attempt, "nodeRuns": nodeRuns, "nodeExecutions": nodeExecutions, "artifacts": arts,
 		"vars": vars, "trace": r.Trace,
 		"priority": models.PriorityLabel(r.Priority),
+		"tags":     runTagsDTO(r.Tags),
 		// The graph snapshot this run executed (pinned at start). The run detail
 		// canvas renders against this rather than the live workflow definition,
 		// so details survive the workflow being edited, re-published, or deleted.

@@ -308,7 +308,7 @@
           "desc": "Publish draft"
         },
         "pm_start_run": {
-          "signature": "pm_start_run(workflowId, trigger?, inputs?, priority?)",
+          "signature": "pm_start_run(workflowId, trigger?, inputs?, priority?, tags?)",
           "desc": "Start run"
         },
         "pm_resume_gate": {

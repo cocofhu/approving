@@ -386,7 +386,7 @@ func (e *Engine) StartRun(workflowID string, inputs map[string]any, trigger stri
 
 // StartRunWithPriority is like StartRun but accepts a priority label
 // (high|normal|low). Empty string defaults to normal; invalid values error.
-func (e *Engine) StartRunWithPriority(workflowID string, inputs map[string]any, trigger, priorityLabel string) (*models.Run, error) {
+func (e *Engine) StartRunWithPriority(workflowID string, inputs map[string]any, trigger, priorityLabel string, tagsArg ...[]string) (*models.Run, error) {
 	if e.IsHalted() {
 		return nil, fmt.Errorf("server is shutting down")
 	}
@@ -409,7 +409,11 @@ func (e *Engine) StartRunWithPriority(workflowID string, inputs map[string]any, 
 	// stale graph — the "改了之后历史流水线对不上" bug. def.Graph is always the
 	// graph the user just saved; for an unedited published head it equals the
 	// published snapshot anyway.
-	return e.startRun(def, def.Graph, inputs, trigger, pri)
+	var tags []string
+	if len(tagsArg) > 0 {
+		tags = tagsArg[0]
+	}
+	return e.startRun(def, def.Graph, inputs, trigger, pri, tags)
 }
 
 // StartRunFromPublished creates a run using the published WorkflowVersion
@@ -417,7 +421,7 @@ func (e *Engine) StartRunWithPriority(workflowID string, inputs map[string]any, 
 // defaults to api; explicit values must be whitelist codes (manual|api|pm_mcp).
 // Used exclusively by /v1 external API.
 // Priority is always normal (non-UI paths cannot set priority this period).
-func (e *Engine) StartRunFromPublished(workflowID string, inputs map[string]any, trigger string) (*models.Run, error) {
+func (e *Engine) StartRunFromPublished(workflowID string, inputs map[string]any, trigger string, tagsArg ...[]string) (*models.Run, error) {
 	if e.IsHalted() {
 		return nil, fmt.Errorf("server is shutting down")
 	}
@@ -436,10 +440,14 @@ func (e *Engine) StartRunFromPublished(workflowID string, inputs map[string]any,
 	if err := e.db.Where("workflow_id = ? AND version = ?", def.ID, def.Version).First(&snap).Error; err != nil {
 		return nil, fmt.Errorf("published version not found: %w", err)
 	}
-	return e.startRun(def, snap.Graph, inputs, resolved, models.PriorityNormal)
+	var tags []string
+	if len(tagsArg) > 0 {
+		tags = tagsArg[0]
+	}
+	return e.startRun(def, snap.Graph, inputs, resolved, models.PriorityNormal, tags)
 }
 
-func (e *Engine) startRun(def models.WorkflowDef, graph models.Graph, inputs map[string]any, trigger string, priority int) (*models.Run, error) {
+func (e *Engine) startRun(def models.WorkflowDef, graph models.Graph, inputs map[string]any, trigger string, priority int, tags []string) (*models.Run, error) {
 	// The pipeline must start at an input and end at an output.
 	if err := graph.Validate(); err != nil {
 		return nil, err
@@ -471,6 +479,7 @@ func (e *Engine) startRun(def models.WorkflowDef, graph models.Graph, inputs map
 	run := models.Run{
 		ID: runID, WorkflowID: def.ID, WorkflowName: def.Name, WorkflowVersion: def.Version,
 		Status: "queued", Trigger: trigger, Inputs: inputs, Graph: graph, Title: title,
+		Tags:     append([]string{}, tags...),
 		Priority: priority,
 		Trace:    []models.TraceEntry{}, Checkpoints: map[string]map[string]any{},
 	}
