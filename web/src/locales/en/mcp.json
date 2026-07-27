@@ -328,6 +328,42 @@
           "desc": "Cancel run"
         }
       }
+    },
+    "pmAgentFs": {
+      "name": "pm-agent-fs",
+      "desc": "PM-only · read org and edit report Agent workspaces",
+      "overview": "Read the reporting tree (self/direct/indirect/other) and list/read/write/delete/mkdir/rename host-side workspace/ for self and reporting-closure agents. Does not touch Run sandboxes or agent.json metadata.",
+      "convention": "Enable under Project → PM settings (on by default for new projects; older projects with an explicit EnabledMcps list must opt in). Changes appear in Agent Studio「Agent workspace」after refresh/reopen (not live hot-reload). Warning: if Studio has an unsaved dirty draft for the same Agent, a later Save may overwrite MCP writes — refresh and avoid concurrent dirty edits.",
+      "tools": {
+        "pm_get_org": {
+          "signature": "pm_get_org()",
+          "desc": "Read org and reporting relations"
+        },
+        "pm_fs_list": {
+          "signature": "pm_fs_list(agentName, path?)",
+          "desc": "List workspace directory"
+        },
+        "pm_fs_read": {
+          "signature": "pm_fs_read(agentName, path)",
+          "desc": "Read workspace file (≤1MiB)"
+        },
+        "pm_fs_write": {
+          "signature": "pm_fs_write(agentName, path, content)",
+          "desc": "Write/create file (auto parent dirs, ≤1MiB)"
+        },
+        "pm_fs_delete": {
+          "signature": "pm_fs_delete(agentName, path)",
+          "desc": "Delete file or recursively delete directory"
+        },
+        "pm_fs_mkdir": {
+          "signature": "pm_fs_mkdir(agentName, path)",
+          "desc": "Create directory"
+        },
+        "pm_fs_rename": {
+          "signature": "pm_fs_rename(agentName, path, toPath)",
+          "desc": "Rename/move within the same workspace"
+        }
+      }
     }
   }
 }
