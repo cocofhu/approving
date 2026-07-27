@@ -239,6 +239,46 @@ func TestManagerDeliverSkipsDisabledDelivery(t *testing.T) {
 	}
 }
 
+func TestManagerDeliverRunNotifyWithoutCronDeliver(t *testing.T) {
+	fa := &fakeAdapter{}
+	m := newTestManager(fa)
+	// Bound QQ target without CronDeliver — Run notify must still work.
+	m.Apply([]models.ChannelConfig{{
+		ID: "c1", Type: "qq", ProjectID: "proj", AppID: "app", Enabled: true,
+		CronDeliver: false, CronDeliverTarget: "c2c:user1",
+	}})
+	defer m.StopAll()
+	if !m.HasRunNotifyTarget("proj") {
+		t.Fatal("expected HasRunNotifyTarget")
+	}
+	if err := m.DeliverRunNotify("proj", "【Approving】等待人工处理\n打开：/runs/r1"); err != nil {
+		t.Fatalf("DeliverRunNotify: %v", err)
+	}
+	fa.mu.Lock()
+	defer fa.mu.Unlock()
+	if len(fa.sent) != 1 {
+		t.Fatalf("sent=%d want 1", len(fa.sent))
+	}
+	if fa.sent[0].ConversationID != "user1" {
+		t.Errorf("conv=%q", fa.sent[0].ConversationID)
+	}
+	if !strings.Contains(fa.sent[0].Text, "等待人工处理") {
+		t.Errorf("text=%q", fa.sent[0].Text)
+	}
+	// Cron path still blocked.
+	if err := m.Deliver("proj", "cron"); err != ErrNoDeliveryChannel {
+		t.Fatalf("Deliver cron still requires CronDeliver: %v", err)
+	}
+}
+
+func TestManagerDeliverRunNotifyNoTarget(t *testing.T) {
+	m := newTestManager(&fakeAdapter{})
+	err := m.DeliverRunNotify("proj", "x")
+	if !errors.Is(err, services.ErrRunNotifyNoTarget) {
+		t.Fatalf("got %v want ErrRunNotifyNoTarget", err)
+	}
+}
+
 func testRunningChannel(adapter Adapter) *runningChannel {
 	return &runningChannel{
 		cfg: models.ChannelConfig{

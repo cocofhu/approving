@@ -98,6 +98,10 @@ type Engine struct {
 	// app_preview pauses (PM auto-invoke). Engine never blocks on it.
 	gateAuto GateAutoInvoker
 
+	// runNotify is an optional async observer for confirmed waiting_human /
+	// node-scoped failed transitions (QQ Run notify). Engine never blocks on it.
+	runNotify RunNotifier
+
 	// reviewMu guards reviewSess: per parked producer session FIFO + single
 	// worker for node-inline review and gate hot-revise (SandboxChat-aligned).
 	reviewMu   sync.Mutex
@@ -954,10 +958,12 @@ func (e *Engine) execute(runID, fromNodeID string) {
 			// pause, skip waiting_human — otherwise we can clobber a queued /
 			// re-admitted / completed run and strand it with no driver.
 			if e.pauseStillPending(runID, node) {
-				e.finish(runID, "waiting_human")
-				// Async side-effect after Gate is visible / still pending.
-				// Must not block the FSM driver; failures are the invoker's concern.
-				e.fireGateAutoInvoke(c, node)
+				if e.finish(runID, "waiting_human") {
+					// Async side-effect after Gate is visible / still pending.
+					// Must not block the FSM driver; failures are the invoker's concern.
+					e.fireGateAutoInvoke(c, node)
+					e.fireRunNotify(c, node, models.NotifyKindWaitingHuman)
+				}
 			}
 			return
 		case "failed":
@@ -991,7 +997,9 @@ func (e *Engine) execute(runID, fromNodeID string) {
 					break // leave the switch; loop re-enters node.ID as a fresh visit
 				}
 				e.appendTrace(c, models.TraceEntry{NodeID: node.ID, Event: "exit", Detail: "no failure transition; run failed"})
-				e.finish(runID, "failed")
+				if e.finish(runID, "failed") {
+					e.fireRunNotify(c, node, models.NotifyKindFailed)
+				}
 				return
 			}
 			cur = next
@@ -1295,7 +1303,7 @@ func (e *Engine) failRun(runID, reason string) {
 	e.finish(runID, "failed")
 }
 
-func (e *Engine) finish(runID, status string) {
+func (e *Engine) finish(runID, status string) bool {
 	updates := map[string]any{"status": status}
 	if status == "completed" {
 		updates["progress"] = 1.0
@@ -1329,7 +1337,7 @@ func (e *Engine) finish(runID, status string) {
 			_ = e.db.Model(&models.ReactConversation{}).
 				Where("run_id = ? AND done = ?", runID, false).Count(&pendingReact).Error
 			if pendingGates == 0 && pendingReact == 0 {
-				return
+				return false
 			}
 		}
 		q = q.Where("status = ?", "running")
@@ -1337,7 +1345,10 @@ func (e *Engine) finish(runID, status string) {
 	res := q.Updates(updates)
 	logDB(res, runID, "finish run")
 	if status == "waiting_human" && (res.Error != nil || res.RowsAffected == 0) {
-		return
+		return false
+	}
+	if res.Error != nil {
+		return false
 	}
 	if status == "failed" || status == "cancelled" {
 		e.finalizeActiveStateRuns(runID, status)
@@ -1371,21 +1382,22 @@ func (e *Engine) finish(runID, status string) {
 		projectID := services.ResolveProjectIDForRun(e.db, runID)
 		if projectID != "" {
 			e.recordAudit(services.AuditRecord{
-				ProjectID:      projectID,
-				Actor:          services.SystemActor(),
-				CallerKind:     models.CallerKindSystem,
-				Action:         action,
-				ResourceType:   "run",
-				ResourceID:     runID,
-				RunID:          runID,
-				Outcome:        models.AuditOutcomeOK,
-				Summary:        "run " + status,
-				Payload:        map[string]any{"status": status, "trigger": "engine", "runId": runID},
+				ProjectID:    projectID,
+				Actor:        services.SystemActor(),
+				CallerKind:   models.CallerKindSystem,
+				Action:       action,
+				ResourceType: "run",
+				ResourceID:   runID,
+				RunID:        runID,
+				Outcome:      models.AuditOutcomeOK,
+				Summary:      "run " + status,
+				Payload:      map[string]any{"status": status, "trigger": "engine", "runId": runID},
 			})
 		}
 	}
 	msg, _ := json.Marshal(map[string]any{"type": "status", "runId": runID, "status": status})
 	e.broker.Publish(runID, msg)
+	return true
 }
 
 // persistRunErrorArtifact writes run_error.json via the artifact store so empty

@@ -192,6 +192,10 @@ func (s *WorkflowService) Save(wf *models.WorkflowDef) error {
 		if wf.Version == 0 {
 			wf.Version = 1
 		}
+		wf.NotifyPolicy = NormalizeWorkflowNotifyPolicy(wf.NotifyPolicy)
+		if wf.NotifyPolicy.Mode == "" {
+			wf.NotifyPolicy.Mode = models.NotifyModeInherit
+		}
 		return s.db.Create(wf).Error
 	}
 	if wf.ProjectID != "" && wf.ProjectID != existing.ProjectID {
@@ -209,7 +213,8 @@ func (s *WorkflowService) Save(wf *models.WorkflowDef) error {
 	graphChanged := !GraphsEqual(wf.Graph, existing.Graph)
 	metaChanged := wf.Name != existing.Name ||
 		wf.Description != existing.Description ||
-		wf.NeedsRepo != existing.NeedsRepo
+		wf.NeedsRepo != existing.NeedsRepo ||
+		!WorkflowNotifyPoliciesEqual(wf.NotifyPolicy, existing.NotifyPolicy)
 	if graphChanged {
 		wf.Status = "draft"
 	} else {
@@ -220,8 +225,10 @@ func (s *WorkflowService) Save(wf *models.WorkflowDef) error {
 		// True no-op: skip DB write so GORM does not bump UpdatedAt.
 		wf.UpdatedAt = existing.UpdatedAt
 		wf.LastRunAt = existing.LastRunAt
+		wf.NotifyPolicy = existing.NotifyPolicy
 		return nil
 	}
+	wf.NotifyPolicy = NormalizeWorkflowNotifyPolicy(wf.NotifyPolicy)
 	wf.UpdatedAt = time.Now()
 	return s.db.Save(wf).Error
 }

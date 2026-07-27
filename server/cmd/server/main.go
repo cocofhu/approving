@@ -327,6 +327,8 @@ func main() {
 		Unregister: mcpWire.unregister,
 	})
 	eng.SetGateAutoInvoker(gateAutoEngineAdapter{svc: gateAutoSvc})
+	runNotifySvc := services.NewRunNotifyService(db, nil, cfg.Server.PublicAdvertise)
+	eng.SetRunNotifier(runNotifyEngineAdapter{svc: runNotifySvc})
 	// External IM channels (QQ today; extensible). One bot binds one project +
 	// its PM Leader. Configs are DB-managed via the admin WebUI and hot-reloaded.
 	// Memory/scheduler writes follow ChannelConfig session caps (default off).
@@ -346,6 +348,7 @@ func main() {
 	channelSvc.SetOnChange(channelMgr.Reload)
 	channelMgr.ApplyOnBoot()
 	cronSched.SetChannelDeliverer(channelMgr)
+	runNotifySvc.SetDeliverer(channelMgr)
 	cronSched.Start(sweeperCtx)
 
 	h := &handlers.Handlers{
