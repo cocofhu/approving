@@ -111,6 +111,21 @@ async function scrollBottom(force = false) {
   }
 }
 
+/**
+ * Enter / remount / session-switch stick sequence (aligned with PmLeaderChat + Demo):
+ * force pin immediately (scrollBottom already awaits nextTick), then re-pin after paint
+ * so tall ReAct / high content blocks that lag one frame still land at the latest message.
+ * Must not be used for incremental turn updates — those stay stick-gated.
+ */
+async function enterStickSequence() {
+  stickToBottom.value = true
+  unreadCount.value = 0
+  await scrollBottom(true)
+  requestAnimationFrame(() => {
+    void scrollBottom(true)
+  })
+}
+
 function onUnreadFabClick() {
   void scrollBottom(true)
 }
@@ -294,13 +309,11 @@ watch(
   },
 )
 
-// Session identity change: reset stick/unread and jump to latest.
+// Session identity change: treat as enter — force pin + rAF second pin.
 watch(
   () => `${props.runId}.${props.nodeId}.${props.iteration}`,
   () => {
-    stickToBottom.value = true
-    unreadCount.value = 0
-    void scrollBottom(true)
+    void enterStickSequence()
   },
 )
 
@@ -367,7 +380,11 @@ function onPaste(e: ClipboardEvent) {
 }
 
 watch(draft, () => nextTick(autoGrow), { immediate: true })
-onMounted(() => nextTick(autoGrow))
+onMounted(() => {
+  nextTick(autoGrow)
+  // Mount with historical turns: force enter stick (parent v-if remounts on leave/re-enter).
+  void enterStickSequence()
+})
 function removeAttachment(i: number) {
   attachments.value.splice(i, 1)
 }
