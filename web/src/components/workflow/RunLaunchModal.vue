@@ -69,6 +69,7 @@ const tagSuggestions = ref<string[]>([])
 const tagPattern = /^[\p{L}\p{N}_./-]+$/u
 const maxTags = 8
 const maxTagRunes = 32
+const reposDraft = ref<Record<string, RepoRow[]>>({})
 /** loading 可见层显式高度：≥ max(捕获高度, 200)，捕获为空也至少 200px */
 const loadingLayerMinHeight = computed(() =>
   isLoading.value ? Math.max(scrollAreaMinHeight.value ?? 0, 200) : undefined,
@@ -115,6 +116,8 @@ watch(
       }
     }
   },
+  // immediate: v-if + open=true 挂载时（ProjectDetail/WorkflowList）也要拉取存量 tags
+  { immediate: true },
 )
 
 watch(loading, (v) => emit('update:loading', v))
@@ -191,8 +194,6 @@ function fieldPlaceholder(f: InputField, paragraph = false): string {
   if (paragraph) return t('pages.runLaunch.inputParagraph', { key: f.key })
   return t('pages.runLaunch.inputPlaceholder', { key: f.key })
 }
-
-const reposDraft = ref<Record<string, RepoRow[]>>({})
 
 // reposFor lazily parses a repos field's JSON string value into editable rows,
 // caching the array so v-model edits stay reactive. syncRepos writes it back.
