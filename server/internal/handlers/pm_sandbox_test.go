@@ -21,7 +21,7 @@ import (
 
 func TestEnsurePmSandboxOpensAndBuildsPreamble(t *testing.T) {
 	hn, pid, _ := setupPmEnabledHarness(t)
-	hn.h.PMMCP = pmmcp.NewHost(hn.h.Pm, hn.h.PmProgress, hn.h.WF, hn.h.Runs, nil)
+	hn.h.PMMCP = pmmcp.NewHost(hn.h.Pm, hn.h.PmProgress, hn.h.WF, hn.h.Runs, hn.h.Arts, nil)
 
 	w := hn.do(http.MethodPost, "/api/projects/"+pid+"/pm/threads", map[string]any{"title": "沙箱"})
 	if w.Code != 200 {
@@ -66,7 +66,7 @@ func TestPmMCPRPCPostInitialize(t *testing.T) {
 	hn, pid, _ := setupPmEnabledHarness(t)
 	progress := services.NewPmProgress(hn.h.Pm, hn.h.Runs, hn.h.Arts)
 	hn.h.PmProgress = progress
-	hn.h.PMMCP = pmmcp.NewHost(hn.h.Pm, progress, hn.h.WF, hn.h.Runs, nil)
+	hn.h.PMMCP = pmmcp.NewHost(hn.h.Pm, progress, hn.h.WF, hn.h.Runs, hn.h.Arts, nil)
 	tok := hn.h.PMMCP.Register(pid, "thr-rpc", "admin", "pm-agent")
 	body, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "initialize",
@@ -127,7 +127,7 @@ func TestPmMCPRPCEndpoints(t *testing.T) {
 	progress := services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts)
 	hn.h.Pm = pm
 	hn.h.PmProgress = progress
-	hn.h.PMMCP = pmmcp.NewHost(pm, progress, hn.h.WF, hn.h.Runs, nil)
+	hn.h.PMMCP = pmmcp.NewHost(pm, progress, hn.h.WF, hn.h.Runs, hn.h.Arts, nil)
 
 	w := hn.do(http.MethodGet, "/mcp/pm/proj-1", nil)
 	if w.Code != http.StatusOK {

@@ -278,6 +278,10 @@
         "pm_list_pending_gates": {
           "signature": "pm_list_pending_gates(limit?)",
           "desc": "Pending gates"
+        },
+        "pm_get_artifact": {
+          "signature": "pm_get_artifact(artifactId? | runId+name, offset?, limit?)",
+          "desc": "Read full artifact content in pages"
         }
       }
     },
@@ -314,6 +318,10 @@
         "pm_resume_gate": {
           "signature": "pm_resume_gate(runId, nodeId, action, form?)",
           "desc": "Approve gate"
+        },
+        "pm_react_reply": {
+          "signature": "pm_react_reply(runId, nodeId, text, force?, annotations?)",
+          "desc": "Submit one review ReAct turn without forcing completion by default"
         },
         "pm_cancel_run": {
           "signature": "pm_cancel_run(runId)",

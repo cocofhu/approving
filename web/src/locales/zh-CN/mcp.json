@@ -278,6 +278,10 @@
         "pm_list_pending_gates": {
           "signature": "pm_list_pending_gates(limit?)",
           "desc": "待审批门禁"
+        },
+        "pm_get_artifact": {
+          "signature": "pm_get_artifact(artifactId? | runId+name, offset?, limit?)",
+          "desc": "读取当前项目产物全文片段"
         }
       }
     },
@@ -314,6 +318,10 @@
         "pm_resume_gate": {
           "signature": "pm_resume_gate(runId, nodeId, action, form?)",
           "desc": "审批门禁"
+        },
+        "pm_react_reply": {
+          "signature": "pm_react_reply(runId, nodeId, text, force?, annotations?)",
+          "desc": "提交节点复审 ReAct 回合（默认不结束会话）"
         },
         "pm_cancel_run": {
           "signature": "pm_cancel_run(runId)",

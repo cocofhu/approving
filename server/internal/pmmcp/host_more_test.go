@@ -2,6 +2,7 @@ package pmmcp
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -34,7 +35,7 @@ func setupPmMCPHost(t *testing.T) (*gorm.DB, *services.PmService, *Host, models.
 	}
 	wf := services.NewWorkflowService(db)
 	rs := services.NewRunService(db)
-	h := NewHost(pm, services.NewPmProgress(pm, rs, nil), wf, rs, nil)
+	h := NewHost(pm, services.NewPmProgress(pm, rs, nil), wf, rs, services.NewArtifactService(db), nil)
 	return db, pm, h, p
 }
 
@@ -162,9 +163,16 @@ type fakePmEngine struct {
 	resumed struct {
 		runID, nodeID, action string
 	}
+	replied struct {
+		runID, nodeID, text string
+		force               bool
+		annotations         []models.ReactAnnotation
+	}
 	cancelled   string
 	lastTrigger string
 	startCalls  int
+	waiting     int
+	thinking    bool
 }
 
 func (f *fakePmEngine) StartRunWithPriority(workflowID string, inputs map[string]any, trigger, priority string) (*models.Run, error) {
@@ -176,6 +184,17 @@ func (f *fakePmEngine) StartRunWithPriority(workflowID string, inputs map[string
 func (f *fakePmEngine) ResumeGate(runID, nodeID, action string, form map[string]any) error {
 	f.resumed.runID, f.resumed.nodeID, f.resumed.action = runID, nodeID, action
 	return nil
+}
+
+func (f *fakePmEngine) ReactReply(runID, nodeID, humanText string, images []models.PromptImage, annotations []models.ReactAnnotation, force bool) error {
+	f.replied.runID, f.replied.nodeID, f.replied.text = runID, nodeID, humanText
+	f.replied.force = force
+	f.replied.annotations = annotations
+	return nil
+}
+
+func (f *fakePmEngine) ReviewSessionState(runID, nodeID string) (waiting int, thinking bool) {
+	return f.waiting, f.thinking
 }
 
 func (f *fakePmEngine) Cancel(runID string) error {
@@ -195,7 +214,7 @@ func TestPmMCPWorkflowToolsWithEngine(t *testing.T) {
 	}
 	eng := &fakePmEngine{}
 	rs := services.NewRunService(db)
-	h := NewHost(pm, services.NewPmProgress(pm, rs, nil), wf, rs, eng)
+	h := NewHost(pm, services.NewPmProgress(pm, rs, nil), wf, rs, services.NewArtifactService(db), eng)
 	tok := h.Register(p.ID, "thr-wf2", "alice", "agent-a")
 	call := func(mcpID, name string, args map[string]any) (int, []byte) {
 		b, _ := json.Marshal(map[string]any{
@@ -312,6 +331,162 @@ func TestPmMCPWorkflowToolsWithEngine(t *testing.T) {
 	}
 }
 
+func TestPmMCPGetArtifactAndReactReply(t *testing.T) {
+	db, pm, _, p := setupPmMCPHost(t)
+	wf := services.NewWorkflowService(db)
+	rs := services.NewRunService(db)
+	arts := services.NewArtifactService(db)
+	wfDef := &models.WorkflowDef{
+		ID: "wf-pm-art", ProjectID: p.ID, Name: "PM Artifact WF",
+		Graph: models.Graph{Nodes: []models.Node{{ID: "visual", Type: "visual"}, {ID: "out", Type: "output"}}},
+	}
+	if err := wf.Save(wfDef); err != nil {
+		t.Fatal(err)
+	}
+	if err := rs.DB().Create(&models.Run{ID: "run-own", WorkflowID: wfDef.ID, Status: "waiting_human"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	content := "0123456789abcdef"
+	artifactID, err := arts.Save("run-own", "visual", "page.html", "html", content)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	eng := &fakePmEngine{waiting: 2}
+	h := NewHost(pm, services.NewPmProgress(pm, rs, arts), wf, rs, arts, eng)
+	tok := h.Register(p.ID, "thr-react", "alice", "agent-a")
+	call := func(mcpID, name string, args map[string]any) (int, []byte) {
+		b, _ := json.Marshal(map[string]any{
+			"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+			"params": map[string]any{"name": name, "arguments": args},
+		})
+		return h.ServeRPC(p.ID, mcpID, tok, b)
+	}
+	readToolJSON := func(resp []byte) string {
+		t.Helper()
+		var toolResp struct {
+			Result struct {
+				Content []struct {
+					Text string `json:"text"`
+				} `json:"content"`
+			} `json:"result"`
+		}
+		if err := json.Unmarshal(resp, &toolResp); err != nil {
+			t.Fatalf("unmarshal tool response: %v (%s)", err, resp)
+		}
+		if len(toolResp.Result.Content) == 0 {
+			t.Fatalf("tool response missing content: %s", resp)
+		}
+		return toolResp.Result.Content[0].Text
+	}
+
+	st, resp := call(MCPWorkflowRead, "pm_get_artifact", map[string]any{
+		"artifactId": artifactID,
+		"offset":     2,
+		"limit":      5,
+	})
+	if st != 200 || strings.Contains(string(resp), `"isError":true`) {
+		t.Fatalf("pm_get_artifact by id: %d %s", st, resp)
+	}
+	artifactJSON := readToolJSON(resp)
+	for _, want := range []string{`"content": "23456"`, `"truncated": true`, `"remaining": 9`} {
+		if !strings.Contains(artifactJSON, want) {
+			t.Fatalf("unexpected artifact page: missing %s in %s", want, artifactJSON)
+		}
+	}
+
+	st, resp = call(MCPWorkflowRead, "pm_get_artifact", map[string]any{
+		"runId":  "run-own",
+		"name":   "page.html",
+		"offset": 14,
+		"limit":  10,
+	})
+	if st != 200 || strings.Contains(string(resp), `"isError":true`) {
+		t.Fatalf("pm_get_artifact by run+name: %d %s", st, resp)
+	}
+	artifactJSON = readToolJSON(resp)
+	for _, want := range []string{`"content": "ef"`, `"truncated": false`} {
+		if !strings.Contains(artifactJSON, want) {
+			t.Fatalf("unexpected artifact tail: missing %s in %s", want, artifactJSON)
+		}
+	}
+
+	otherProj, err := services.NewProjectService(db).Create("OtherProjArtifact", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherWF := &models.WorkflowDef{
+		ID: "wf-other-art", ProjectID: otherProj.ID, Name: "Other Artifact WF",
+		Graph: models.Graph{Nodes: []models.Node{{ID: "visual", Type: "visual"}}},
+	}
+	if err := wf.Save(otherWF); err != nil {
+		t.Fatal(err)
+	}
+	if err := rs.DB().Create(&models.Run{ID: "run-other", WorkflowID: otherWF.ID, Status: "waiting_human"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	otherArtifactID, err := arts.Save("run-other", "visual", "page.html", "html", "secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, resp = call(MCPWorkflowRead, "pm_get_artifact", map[string]any{"artifactId": otherArtifactID})
+	if st != 200 || !strings.Contains(string(resp), `"isError":true`) || !strings.Contains(string(resp), "artifact not found") {
+		t.Fatalf("cross-project artifact should be rejected: %d %s", st, resp)
+	}
+
+	st, resp = call(MCPWorkflowWrite, "pm_react_reply", map[string]any{
+		"runId":  "run-own",
+		"nodeId": "visual",
+		"text":   "please fix title",
+		"annotations": []map[string]any{
+			{"selector": "#hero", "note": "update heading"},
+		},
+	})
+	if st != 200 || strings.Contains(string(resp), `"isError":true`) {
+		t.Fatalf("pm_react_reply normal: %d %s", st, resp)
+	}
+	if eng.replied.runID != "run-own" || eng.replied.nodeID != "visual" || eng.replied.text != "please fix title" || eng.replied.force {
+		t.Fatalf("reply not forwarded: %+v", eng.replied)
+	}
+	if len(eng.replied.annotations) != 1 || eng.replied.annotations[0].Selector != "#hero" {
+		t.Fatalf("annotations not forwarded: %+v", eng.replied.annotations)
+	}
+	replyJSON := readToolJSON(resp)
+	if !strings.Contains(replyJSON, `"status": "accepted"`) || !strings.Contains(replyJSON, `"waiting": 2`) {
+		t.Fatalf("normal reply should stay accepted: %s", replyJSON)
+	}
+
+	eng.waiting = 0
+	st, resp = call(MCPWorkflowWrite, "pm_react_reply", map[string]any{
+		"runId":  "run-own",
+		"nodeId": "visual",
+		"text":   "confirm flow",
+		"force":  true,
+	})
+	if st != 200 || strings.Contains(string(resp), `"isError":true`) {
+		t.Fatalf("pm_react_reply force: %d %s", st, resp)
+	}
+	replyJSON = readToolJSON(resp)
+	if !eng.replied.force || !strings.Contains(replyJSON, `"status": "ok"`) {
+		t.Fatalf("force reply should finish: replied=%+v resp=%s", eng.replied, replyJSON)
+	}
+}
+
+func TestParseReactAnnotations(t *testing.T) {
+	anns, err := parseReactAnnotations(map[string]any{
+		"annotations": []map[string]any{{"jsonPath": "f1.title", "note": "fix"}},
+	}, "annotations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(anns) != 1 || anns[0].JSONPath != "f1.title" || anns[0].Note != "fix" {
+		t.Fatalf("unexpected annotations: %+v", anns)
+	}
+	if _, err := parseReactAnnotations(map[string]any{"annotations": fmt.Errorf("bad")}, "annotations"); err == nil {
+		t.Fatal("expected invalid annotations error")
+	}
+}
+
 func TestPmMCPStartCancelWritesRunAudit(t *testing.T) {
 	db, pm, _, p := setupPmMCPHost(t)
 	auditSvc := services.NewProjectAuditService(db)
@@ -325,7 +500,7 @@ func TestPmMCPStartCancelWritesRunAudit(t *testing.T) {
 	}
 	eng := &fakePmEngine{}
 	rs := services.NewRunService(db)
-	h := NewHost(pm, services.NewPmProgress(pm, rs, nil), wf, rs, eng)
+	h := NewHost(pm, services.NewPmProgress(pm, rs, nil), wf, rs, services.NewArtifactService(db), eng)
 	h.SetAuditRecorder(auditSvc.Record)
 	tok := h.Register(p.ID, "thr-audit", "alice", "agent-a")
 
