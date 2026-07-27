@@ -222,6 +222,9 @@ export default defineConfig({
         'workflow-list': fileURLToPath(new URL('./e2e/workflow-list.html', import.meta.url)),
         'project-detail': fileURLToPath(new URL('./e2e/project-detail.html', import.meta.url)),
         'run-detail-mobile': fileURLToPath(new URL('./e2e/run-detail-mobile.html', import.meta.url)),
+        'run-detail-mobile-panel': fileURLToPath(
+          new URL('./e2e/run-detail-mobile-panel.html', import.meta.url),
+        ),
         'run-detail-real': fileURLToPath(new URL('./e2e/run-detail-real.html', import.meta.url)),
         'gate-mobile-fill': fileURLToPath(new URL('./e2e/gate-mobile-fill.html', import.meta.url)),
         'clarify-inbox-product': fileURLToPath(

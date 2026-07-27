@@ -258,20 +258,34 @@ describe('RunDetailView desktop review layout budget', () => {
 describe('RunDetailView mobile timeline view contract', () => {
   it('does not hide the main-path timeline pane behind hidden md:block', () => {
     expect(src).toMatch(/data-testid="run-timeline-pane"/)
-    expect(src).toMatch(/min-h-\[240px\].*run-timeline-pane|data-testid="run-timeline-pane"[\s\S]*?min-h-\[240px]/)
     // Timeline pane itself must not use desktop-only hidden.
-    const pane = src.match(/data-testid="run-timeline-pane"[\s\S]{0,200}class="[^"]*"/)
+    const pane = src.match(/data-testid="run-timeline-pane"[\s\S]{0,280}class="[^"]*"/)
     expect(pane?.[0]).toBeTruthy()
     expect(pane?.[0]).not.toMatch(/\bhidden\b/)
   })
 
-  it('aligns mobile timeline stack min-heights with stats·single', () => {
-    expect(src).toMatch(/min-h-\[240px\]/)
-    expect(src).toMatch(/min-h-\[320px\] md:min-h-0/)
-    // Gate path keeps min-h-0 flex-1 without competing timeline stack min-height.
-    expect(src).toMatch(
+  it('uses mobile single-panel mutual exclusion instead of dual-stack min-h', () => {
+    // Page-level tabs + back bar for ≤768 list-detail.
+    expect(src).toMatch(/data-testid="mobile-main-panel-tabs"/)
+    expect(src).toMatch(/data-testid="mobile-panel-timeline"/)
+    expect(src).toMatch(/data-testid="mobile-panel-detail"/)
+    expect(src).toMatch(/data-testid="mobile-back-to-timeline"/)
+    expect(src).toMatch(/mobileMainPanel/)
+    expect(src).toMatch(/v-show="!isMobile \|\| mobileMainPanel === 'timeline'"/)
+    expect(src).toMatch(/ensure-visible-token="timelineScrollToken"/)
+    // Timeline main path must not keep the dual rigid min-heights.
+    const timelinePane = src.match(
+      /data-testid="run-timeline-pane"[\s\S]{0,320}class="[^"]*"/,
+    )
+    expect(timelinePane?.[0]).toBeTruthy()
+    expect(timelinePane?.[0]).not.toMatch(/min-h-\[240px\]/)
+    // Detail panel mobile path uses min-h-0 flex-1, not stacked min-h-[320px].
+    expect(src).not.toMatch(
       /viewMode === 'timeline' &&\s*!\(isMobile && run\.status === 'waiting_human' && nodeTab === 'gate'\)/,
     )
+    const detailPanelBlock = src.slice(src.indexOf('data-testid="run-detail-right-panel"'))
+    const detailClass = detailPanelBlock.match(/class="[^"]*"[\s\S]{0,200}:class="\[[\s\S]*?\]"/)
+    expect(detailClass?.[0] || detailPanelBlock.slice(0, 500)).not.toMatch(/min-h-\[320px\] md:min-h-0/)
   })
 
   it('hides canvas entry on mobile and silently normalizes canvas → timeline', () => {
@@ -290,6 +304,14 @@ describe('RunDetailView mobile timeline view contract', () => {
     expect(src).not.toMatch(
       /Object\.values\(run\.value\.nodeRuns\)\s*\n\s*return \(entries\.find/,
     )
+  })
+
+  it('defaults completed→timeline and waiting_human→detail on mobile', () => {
+    expect(src).toMatch(/mobileMainPanel\.value = 'timeline'/)
+    expect(src).toMatch(/mobileMainPanel\.value = 'detail'/)
+    expect(src).toMatch(/timelineScrollToken\.value \+= 1/)
+    expect(src).toMatch(/hasProduct\.value && nodeCompleted\.value\) nodeTab\.value = 'product'/)
+    expect(src).toMatch(/:mobile-fill-remaining="true"/)
   })
 })
 

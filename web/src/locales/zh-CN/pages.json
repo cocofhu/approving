@@ -624,6 +624,7 @@
       "canvas": "画布",
       "timeline": "时间线",
       "stats": "执行统计",
+      "backToTimeline": "返回时间线",
       "canvasHint": "执行态画布 · 状态投影到节点(点选查看输出/日志)",
       "detailTitle": "运行详情",
       "executionHistory": "执行记录",
