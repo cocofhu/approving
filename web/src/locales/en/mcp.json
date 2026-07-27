@@ -280,7 +280,7 @@
           "desc": "Pending gates"
         },
         "pm_get_artifact": {
-          "signature": "pm_get_artifact(artifactId? | runId+name, offset?, limit?)",
+          "signature": "pm_get_artifact(artifactId? | runId+name, offset?, limit<=65536?)",
           "desc": "Read full artifact content in pages"
         }
       }

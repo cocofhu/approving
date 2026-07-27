@@ -405,10 +405,28 @@ func TestPmMCPGetArtifactAndReactReply(t *testing.T) {
 		t.Fatalf("pm_get_artifact by run+name: %d %s", st, resp)
 	}
 	artifactJSON = readToolJSON(resp)
-	for _, want := range []string{`"content": "ef"`, `"truncated": false`} {
+	for _, want := range []string{
+		`"content": "ef"`,
+		`"truncated": false`,
+		`"artifactId": "` + artifactID + `"`,
+		`"kind": "html"`,
+		`"nodeId": "visual"`,
+	} {
 		if !strings.Contains(artifactJSON, want) {
 			t.Fatalf("unexpected artifact tail: missing %s in %s", want, artifactJSON)
 		}
+	}
+
+	st, resp = call(MCPWorkflowRead, "pm_get_artifact", map[string]any{
+		"artifactId": artifactID,
+		"limit":      pmGetArtifactMaxLimit + 1,
+	})
+	if st != 200 || strings.Contains(string(resp), `"isError":true`) {
+		t.Fatalf("pm_get_artifact oversized limit: %d %s", st, resp)
+	}
+	artifactJSON = readToolJSON(resp)
+	if !strings.Contains(artifactJSON, fmt.Sprintf(`"limit": %d`, pmGetArtifactMaxLimit)) {
+		t.Fatalf("oversized limit should clamp to %d: %s", pmGetArtifactMaxLimit, artifactJSON)
 	}
 
 	otherProj, err := services.NewProjectService(db).Create("OtherProjArtifact", "", nil, nil)

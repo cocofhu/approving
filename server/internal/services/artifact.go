@@ -70,10 +70,19 @@ func (s *ArtifactService) Save(runID, nodeID, name, kind, content string) (strin
 	return a.ID, nil
 }
 
-// Get returns an artifact's content within a run.
-func (s *ArtifactService) Get(runID, name string) (string, bool) {
+// GetRecord returns the full artifact row for a run+name lookup.
+func (s *ArtifactService) GetRecord(runID, name string) (models.Artifact, bool) {
 	var a models.Artifact
 	if err := s.db.Where("run_id = ? AND name = ?", runID, name).First(&a).Error; err != nil {
+		return models.Artifact{}, false
+	}
+	return a, true
+}
+
+// Get returns an artifact's content within a run.
+func (s *ArtifactService) Get(runID, name string) (string, bool) {
+	a, ok := s.GetRecord(runID, name)
+	if !ok {
 		return "", false
 	}
 	return a.Content, true

@@ -24,6 +24,11 @@ const (
 	MCPProgress      = "pm-progress"
 	MCPWorkflowRead  = "pm-workflow-read"
 	MCPWorkflowWrite = "pm-workflow-write"
+
+	// pm_get_artifact paging: default page size is also the hard ceiling so a
+	// caller cannot pull an unbounded artifact in one MCP response.
+	pmGetArtifactDefaultLimit = 65536
+	pmGetArtifactMaxLimit     = 65536
 )
 
 // Session binds a PM MCP token to a project consult context.
@@ -508,12 +513,15 @@ func (h *Host) callWorkflowRead(projectID, name string, args map[string]any) (an
 			return map[string]any{"error": "artifact service unavailable"}, true
 		}
 		offset := platformmcp.IntArg(args, "offset", 0)
-		limit := platformmcp.IntArg(args, "limit", 65536)
+		limit := platformmcp.IntArg(args, "limit", pmGetArtifactDefaultLimit)
 		if offset < 0 {
 			offset = 0
 		}
 		if limit <= 0 {
-			limit = 65536
+			limit = pmGetArtifactDefaultLimit
+		}
+		if limit > pmGetArtifactMaxLimit {
+			limit = pmGetArtifactMaxLimit
 		}
 		artifactID := strings.TrimSpace(platformmcp.StrArg(args, "artifactId"))
 		runID := strings.TrimSpace(platformmcp.StrArg(args, "runId"))
@@ -526,16 +534,10 @@ func (h *Host) callWorkflowRead(projectID, name string, args map[string]any) (an
 			if runID == "" || nameArg == "" {
 				return map[string]any{"error": "artifactId or runId+name required"}, true
 			}
-			run, runOK := h.runInProject(projectID, runID)
-			if !runOK {
+			if _, runOK := h.runInProject(projectID, runID); !runOK {
 				return map[string]any{"error": "run not found"}, true
 			}
-			content, found := h.arts.Get(runID, nameArg)
-			if !found {
-				return map[string]any{"error": "artifact not found"}, true
-			}
-			art = models.Artifact{RunID: run.ID, WorkflowID: run.WorkflowID, Name: nameArg, Content: content, SizeBytes: len(content)}
-			ok = true
+			art, ok = h.arts.GetRecord(runID, nameArg)
 		}
 		if !ok {
 			return map[string]any{"error": "artifact not found"}, true
@@ -805,7 +807,7 @@ func toolSchemas(mcpID string) []map[string]any {
 				"runId":      map[string]any{"type": "string"},
 				"name":       map[string]any{"type": "string"},
 				"offset":     map[string]any{"type": "number", "description": "从第几个字节开始读取，默认 0"},
-				"limit":      map[string]any{"type": "number", "description": "本次最多返回多少字节，默认 65536"},
+				"limit":      map[string]any{"type": "number", "description": "本次最多返回多少字节，默认 65536，硬上限 65536"},
 			}),
 		}
 	case MCPWorkflowWrite:
