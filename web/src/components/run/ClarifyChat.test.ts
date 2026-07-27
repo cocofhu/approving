@@ -166,7 +166,7 @@ describe('ClarifyChat', () => {
     wrapper.unmount()
   })
 
-  it('shows optimistic annotation chips with text after send', async () => {
+  it('enqueue shows queue panel (not optimistic transcript bubble)', async () => {
     const anns: ReactAnnotation[] = [{ label: '提案标题', jsonPath: 'proposals[0].title' }]
     const wrapper = mountChat({
       annotateEnabled: true,
@@ -180,14 +180,16 @@ describe('ClarifyChat', () => {
     expect(payload[0]).toBe('请看这里')
     expect(payload[2]).toEqual(anns)
 
-    // Thinking window: body text + chip both visible
-    expect(wrapper.text()).toContain('请看这里')
-    expect(wrapper.text()).toContain('提案标题')
+    // Session UX: message lives in queue panel until turn_begin
+    const queue = wrapper.find('[data-testid="clarify-review-queue"]')
+    expect(queue.exists()).toBe(true)
+    expect(queue.text()).toContain('请看这里')
+    expect(wrapper.find('[data-testid="clarify-review-cancel"]').exists()).toBe(true)
     expect(wrapper.text()).toMatch(/思考/)
     wrapper.unmount()
   })
 
-  it('shows only annotation chips without empty body bubble when text is empty', async () => {
+  it('enqueue annotation-only shows queue row without transcript bubble', async () => {
     const anns: ReactAnnotation[] = [{ label: 'Hero', selector: '#hero' }]
     const wrapper = mountChat({
       annotateEnabled: true,
@@ -200,14 +202,13 @@ describe('ClarifyChat', () => {
     expect(payload[0]).toBe('')
     expect(payload[2]).toEqual(anns)
 
-    // Chip is the visual subject; no markdown body bubble for empty text
-    expect(wrapper.text()).toContain('Hero')
+    expect(wrapper.find('[data-testid="clarify-review-queue"]').exists()).toBe(true)
     expect(wrapper.findAll('.md.rounded-lg').length).toBe(0)
     expect(wrapper.text()).toMatch(/思考/)
     wrapper.unmount()
   })
 
-  it('keeps optimistic annotation chips after composer annotations are cleared', async () => {
+  it('keeps queued text after composer annotations are cleared', async () => {
     const anns: ReactAnnotation[] = [{ label: '字段路径', jsonPath: 'summary' }]
     const wrapper = mountChat({
       annotateEnabled: true,
@@ -223,10 +224,9 @@ describe('ClarifyChat', () => {
     await wrapper.setProps({ annotations: cleared, draft: '' })
     await flushPromises()
 
-    // Composer staging cleared, but optimistic bubble still shows the snapshot chip
+    // Composer staging cleared; queue panel still shows the enqueued text
     expect(wrapper.props('annotations')).toEqual([])
-    expect(wrapper.text()).toContain('字段路径')
-    expect(wrapper.text()).toContain('核对引用')
+    expect(wrapper.find('[data-testid="clarify-review-queue"]').text()).toContain('核对引用')
     expect(wrapper.text()).toMatch(/思考/)
     wrapper.unmount()
   })

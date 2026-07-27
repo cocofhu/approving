@@ -335,6 +335,9 @@ func (e *Engine) snapshotPreviewIssues(c *execCtx, runID, nodeID string) error {
 // without Agent wrap-up, re-validates, and advances the FSM ("确认并流转").
 // Annotations are folded into the human instruction so the agent edits the
 // exact cited spots on revise turns.
+//
+// Non-force clarify and review turns enqueue onto the platform FIFO and return
+// immediately (SandboxChat-aligned); human/agent bubbles materialize on turn_begin.
 func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.PromptImage, annotations []models.ReactAnnotation, force bool) error {
 	if e.IsHalted() {
 		return errors.New("server is shutting down")
@@ -342,10 +345,29 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 
 	cPeek, peekErr := e.loadCtx(runID)
 	if peekErr == nil {
-		if n := cPeek.graph.FindNode(nodeID); n != nil && isReviewNode(n.Type) {
-			// Review !force: enqueue onto the platform FIFO (SandboxChat-aligned)
-			// and return immediately — human/agent bubbles materialize on turn_begin.
-			if !force {
+		if n := cPeek.graph.FindNode(nodeID); n != nil {
+			if isReviewNode(n.Type) {
+				// Review !force: enqueue onto the platform FIFO (SandboxChat-aligned)
+				// and return immediately — human/agent bubbles materialize on turn_begin.
+				if !force {
+					var convPeek models.ReactConversation
+					if err := e.db.Where("run_id = ? AND node_id = ?", runID, nodeID).
+						Order("iteration desc, id desc").First(&convPeek).Error; err != nil {
+						return errors.New("no react conversation")
+					}
+					if convPeek.Done {
+						return errors.New("react already done")
+					}
+					_, err := e.EnqueueReviewTurn(runID, nodeID, humanText, images, annotations, "node", "")
+					return err
+				}
+				// Review force (确认并流转): only when ready (no active turn, empty queue).
+				// Cancel ≠ confirm — do not preempt via RetireSession while busy.
+				if !e.ReviewSessionReady(runID, nodeID) {
+					return errors.New("复审进行中或待发送队列非空,请先 Cancel 或等待完成后再确认")
+				}
+			} else if n.Type == "react" && !force {
+				// Classic clarify !force: same FIFO / WS / refresh-resume as review.
 				var convPeek models.ReactConversation
 				if err := e.db.Where("run_id = ? AND node_id = ?", runID, nodeID).
 					Order("iteration desc, id desc").First(&convPeek).Error; err != nil {
@@ -354,13 +376,13 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 				if convPeek.Done {
 					return errors.New("react already done")
 				}
-				_, err := e.EnqueueReviewTurn(runID, nodeID, humanText, images, annotations, "node", "")
+				_, err := e.EnqueueClarifyTurn(runID, nodeID, humanText, images, annotations)
 				return err
-			}
-			// Review force (确认并流转): only when ready (no active turn, empty queue).
-			// Cancel ≠ confirm — do not preempt via RetireSession while busy.
-			if !e.ReviewSessionReady(runID, nodeID) {
-				return errors.New("复审进行中或待发送队列非空,请先 Cancel 或等待完成后再确认")
+			} else if n.Type == "react" && force {
+				// Clarify force finish: only when session idle (no in-flight / queue).
+				if !e.ReviewSessionReady(runID, nodeID) {
+					return errors.New("澄清进行中或待发送队列非空,请先 Cancel 或等待完成后再结束")
+				}
 			}
 		}
 	}
@@ -402,6 +424,12 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 			Images: images, Annotations: annotations})
 		logDB(e.db.Save(&conv), runID, "save react human turn")
 		return e.reviewReply(c, node, &conv, renderReviewHuman(humanText, annotations), images, true)
+	}
+
+	// Classic clarify !force already returned via EnqueueClarifyTurn above.
+	// Only force wrap-up remains on the synchronous path.
+	if !force {
+		return errors.New("internal: clarify non-force must enqueue")
 	}
 
 	now := time.Now().Format(time.RFC3339)

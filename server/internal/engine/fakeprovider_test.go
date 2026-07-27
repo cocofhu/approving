@@ -113,6 +113,8 @@ type fakeProvider struct {
 	// reviseHold (test-only): when non-nil, ReviseInPlace blocks until the
 	// channel is closed (simulates a long in-flight turn for Cancel/ready tests).
 	reviseHold <-chan struct{}
+	// reactHold (test-only): same for ReactReply / clarify session Cancel.
+	reactHold <-chan struct{}
 }
 
 // nextStructuredBody returns the reserved-artifact body to write for nodeID on
@@ -396,7 +398,16 @@ func (f *fakeProvider) ReactReply(ctx context.Context, req runtime.NodeReq, hist
 		f.reactPending--
 	}
 	skip := f.reactSkipProduces
+	hold := f.reactHold
 	f.mu.Unlock()
+	if hold != nil {
+		select {
+		case <-hold:
+		case <-ctx.Done():
+			return runtime.ReactTurn{Msg: "(已中断)", Done: false, Err: ctx.Err(),
+				Events: []models.AcpEvent{{Kind: "message", Text: "clarify-cancelled"}}}
+		}
+	}
 	// Still gathering info: keep the dialogue open with another question.
 	if pending > 0 && !force {
 		if f.recordCalls {

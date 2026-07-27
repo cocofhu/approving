@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import ClarifyDemoFrame from './ClarifyDemoFrame.vue'
 import { renderMarkdown } from '@/lib/markdown'
+import { createStreamMarkdownPreview } from '@/lib/streamMarkdownPreview'
 import { relTime } from '@/lib/format'
 import {
   demoGridColsClass,
@@ -27,8 +28,8 @@ type QueueItem = { text: string; images: ClarifyImage[]; annotations: ReactAnnot
 // waiting_human). When false (completed/failed/cancelled) the chat input is
 // hidden — a finished run must not accept further replies.
 // reviewMode: post-run ReAct review of a producer node's product (vs. the
-// classic clarify dialogue). Enables annotation chips and relabels the finish
-// action to "确认并流转到下一节点".
+// classic clarify dialogue). Relabels the finish action to "确认并流转";
+// session UX (queue/stream/Cancel/refresh) is shared with clarify.
 // annotateEnabled: show chip UI without forcing reviewMode finish semantics
 // (inbox clarify binds annotations + review-mode affordances but only「发送澄清回复」).
 // hideFinish: suppress finish / confirmFlow button (clarify send-only).
@@ -63,7 +64,7 @@ const showAnnotationChips = computed(() => props.reviewMode || props.annotateEna
 const emit = defineEmits<{
   (e: 'send', text: string, images: ClarifyImage[], annotations: ReactAnnotation[]): void
   (e: 'finish'): void
-  /** Review 轮级 Cancel (≠ confirm ≠ AbortRun). */
+  /** 轮级 Cancel (≠ confirm ≠ AbortRun). Review clears queue; clarify keeps it. */
   (e: 'cancel'): void
 }>()
 
@@ -81,16 +82,23 @@ const annotations = defineModel<ReactAnnotation[]>('annotations', { default: () 
 const thinking = ref(false)
 /** Review confirm mid-state: re-validating product (not Agent thinking). */
 const validating = ref(false)
-// Review mode: SandboxChat/AgentChatTester-aligned pending-send queue. Items live
-// ONLY in the bottom panel until turn_begin materializes transcript bubbles.
+// SandboxChat-aligned pending-send queue (clarify + review). Items live ONLY in
+// the bottom panel until turn_begin materializes transcript bubbles.
 const queued = ref<QueueItem[]>([])
-/** In-flight review turn bubbles (human + streaming agent) before props.turns catch up. */
+/** In-flight turn bubbles (human + streaming agent) before props.turns catch up. */
 const liveTurns = ref<ClarifyTurn[]>([])
 const liveAgentIdx = ref(-1)
+/** Coalesced markdown HTML for the live streaming agent bubble. */
+const liveStreamHtml = ref('')
+const streamPreview = createStreamMarkdownPreview({ render: renderMarkdown })
+const unsubStream = streamPreview.subscribe((html) => {
+  liveStreamHtml.value = html
+})
 const scroller = ref<HTMLElement>()
 const fileInput = ref<HTMLInputElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const overflowScroll = ref(false)
+const composing = ref(false)
 
 /** Near-bottom threshold (px), aligned with PmLeaderChat / approved Demo. */
 const STICK_THRESHOLD = 48
@@ -100,6 +108,10 @@ const unreadCount = ref(0)
 const showUnreadFab = computed(() => unreadCount.value >= 1 && !stickToBottom.value)
 const unreadFabLabel = computed(() =>
   translate('pages.clarify.unreadFab', { n: unreadCount.value }),
+)
+
+const sessionBusy = computed(
+  () => thinking.value || queued.value.length > 0 || liveAgentIdx.value >= 0,
 )
 
 function isNearBottom(el: HTMLElement): boolean {
@@ -164,11 +176,14 @@ function onTextInput() {
   autoGrow()
 }
 
-// Optimistically show the just-sent human message (+ its images/annotations)
-// until the backend snapshot (props.turns) catches up. Cleared whenever real
-// turns arrive. Annotations are snapshotted at send so composer clear does not
-// wipe chips from the optimistic bubble.
+// Optimistically show choice-card session replies until backend catches up.
+// Authoritative send path uses queue + liveTurns (no pending human bubble).
 const pending = ref<{ text: string; images: ClarifyImage[]; annotations: ReactAnnotation[] } | null>(null)
+
+onBeforeUnmount(() => {
+  unsubStream()
+  streamPreview.reset()
+})
 
 /** Legacy zh-CN prefix for messages persisted before i18n or in sessionStorage. */
 const LEGACY_CHOICE_PREFIX = '我的选择:'
@@ -255,11 +270,12 @@ const latestQuestionAnswered = computed(() => {
 
 const turns = computed<ClarifyTurn[]>(() => {
   let list = props.turns
-  // Review: never inject optimistic pending into transcript (queue panel only).
-  if (props.reviewMode) {
-    if (liveTurns.value.length) list = [...list, ...liveTurns.value]
+  // Session UX: live in-flight bubbles until persisted transcript catches up.
+  if (liveTurns.value.length) {
+    list = [...list, ...liveTurns.value]
     return list
   }
+  // Choice-card sessionStorage echo only (not used for free-text send).
   if (pending.value) {
     list = [
       ...list,
@@ -294,19 +310,19 @@ function turnsSemanticKey(turnList: ClarifyTurn[]): string {
   return `${turnList.length}:${last.at}:${last.role}:${last.text}`
 }
 
-// Real turns streamed back from the run: drop the optimistic bubble + spinner.
-// Scroll only when stuck to bottom; unread is owned by the length watcher below.
+// Real turns streamed back from the run: drop optimistic choice echo + clear
+// settled live bubbles. Scroll only when stuck to bottom.
 watch(
   () => turnsSemanticKey(props.turns),
   (key, prevKey) => {
     if (prevKey !== undefined && key === prevKey) return
     const turnList = props.turns
     pending.value = null
-    if (!props.reviewMode) thinking.value = false
-    // Review: clear live bubbles once persisted transcript includes them.
-    if (props.reviewMode && liveTurns.value.length && !liveTurns.value.some((t) => t.streaming)) {
+    // Clear live bubbles once persisted transcript includes them (not while streaming).
+    if (liveTurns.value.length && !liveTurns.value.some((t) => t.streaming)) {
       liveTurns.value = []
       liveAgentIdx.value = -1
+      streamPreview.reset()
       if (queued.value.length === 0) thinking.value = false
     }
     const qIdx = latestQuestionTurnIndex(turnList)
@@ -420,22 +436,11 @@ function removeAttachment(i: number) {
 function sendMessage(text: string, imgs: ClarifyImage[] = [], anns: ReactAnnotation[] = []) {
   const t = text.trim()
   if ((!t && imgs.length === 0 && anns.length === 0) || props.done || !props.active) return
-  if (props.reviewMode) {
-    // Enqueue only — bubbles materialize on turn_begin (AgentChatTester / Demo).
-    queued.value.push({ text: t, images: imgs, annotations: anns.slice() })
-    thinking.value = true
-    emit('send', t, imgs, anns)
-    stickToBottom.value = true
-    unreadCount.value = 0
-    void scrollBottom(true)
-    return
-  }
-  // Snapshot annotations (same list as emit) so clearing the composer model
-  // leaves the optimistic bubble's chips intact during the thinking window.
-  pending.value = { text: t, images: imgs, annotations: anns.slice() }
+  // Enqueue only — bubbles materialize on turn_begin (AgentChatTester / Demo).
+  // Busy may still enqueue; never open a concurrent turn via optimistic pending.
+  queued.value.push({ text: t, images: imgs, annotations: anns.slice() })
   thinking.value = true
   emit('send', t, imgs, anns)
-  // User send always force-sticks and clears unread (send turn must not linger on FAB).
   stickToBottom.value = true
   unreadCount.value = 0
   void scrollBottom(true)
@@ -450,6 +455,14 @@ function sendFromComposer() {
   attachments.value = []
   annotations.value = []
   sendMessage(t, imgs, anns)
+}
+
+function onComposerKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Enter' || e.shiftKey) return
+  // IME: composition Enter / keyCode 229 must not send (prevents double-fire).
+  if (composing.value || e.isComposing || e.keyCode === 229) return
+  e.preventDefault()
+  send()
 }
 
 function removeAnnotation(i: number) {
@@ -635,14 +648,17 @@ function finishEarly() {
 }
 
 const confirmDisabled = computed(() => {
-  if (!props.reviewMode) return thinking.value
-  // FR4: thinking or pending-send queue non-empty → disable 确认并流转.
+  // Force finish / 确认并流转: only when session idle (no in-flight / queue).
   return validating.value || thinking.value || queued.value.length > 0 || liveAgentIdx.value >= 0
 })
 
 function cancelReview() {
-  if (!props.reviewMode || props.done) return
-  queued.value = []
+  if (props.done || !sessionBusy.value) return
+  // Review: clear local queue (matches CancelReviewSession clear-queue).
+  // Clarify: keep local queue; authoritative queue_state will reconcile (Demo).
+  if (props.reviewMode) {
+    queued.value = []
+  }
   if (liveAgentIdx.value >= 0 && liveTurns.value[liveAgentIdx.value]) {
     liveTurns.value[liveAgentIdx.value].streaming = false
     liveTurns.value[liveAgentIdx.value].interrupted = true
@@ -651,7 +667,8 @@ function cancelReview() {
     }
   }
   liveAgentIdx.value = -1
-  thinking.value = false
+  streamPreview.reset()
+  thinking.value = queued.value.length > 0
   emit('cancel')
   void scrollBottom()
 }
@@ -661,7 +678,7 @@ function cancelReview() {
  * so the pending-send panel and FR4 confirm gate do not stick forever.
  */
 function discardLastQueued() {
-  if (!props.reviewMode || queued.value.length === 0) return
+  if (queued.value.length === 0) return
   queued.value.pop()
   if (queued.value.length === 0 && liveAgentIdx.value < 0) {
     thinking.value = false
@@ -672,43 +689,63 @@ function discardLastQueued() {
  * Reconcile local pending-send panel with platform-authoritative queue_state.
  * waiting===0 clears ghost rows after remote Cancel; items[] rebuilds/trims
  * while allowing at most one local-ahead item when no live turn (HTTP ack /
- * turn_begin in flight).
+ * turn_begin in flight). busy+activeItem restores live bubble after refresh.
  */
-function applyQueueState(waiting: number, items: { text?: string }[] | null) {
-  if (waiting === 0) {
+function applyQueueState(
+  waiting: number,
+  items: { text?: string }[] | null,
+  busy?: boolean,
+  activeItem?: { text?: string; images?: ClarifyImage[]; annotations?: ReactAnnotation[] } | null,
+) {
+  if (waiting === 0 && !busy) {
     queued.value = []
     if (liveAgentIdx.value < 0) thinking.value = false
-    return
-  }
-  if (!items) {
-    thinking.value = liveAgentIdx.value >= 0 || queued.value.length > 0
-    return
-  }
-  const rebuilt: QueueItem[] = items.map((it) => {
-    const text = it.text ?? ''
-    const local = queued.value.find((q) => q.text === text)
-    return {
-      text,
-      images: local?.images ?? [],
-      annotations: local?.annotations ?? [],
+  } else if (items) {
+    const rebuilt: QueueItem[] = items.map((it) => {
+      const text = it.text ?? ''
+      const local = queued.value.find((q) => q.text === text)
+      return {
+        text,
+        images: local?.images ?? [],
+        annotations: local?.annotations ?? [],
+      }
+    })
+    const maxLocal = liveAgentIdx.value >= 0 || busy ? rebuilt.length : rebuilt.length + 1
+    if (queued.value.length > maxLocal) {
+      const optimistic = queued.value.slice(rebuilt.length).slice(0, Math.max(0, maxLocal - rebuilt.length))
+      queued.value = [...rebuilt, ...optimistic]
+    } else if (queued.value.length < rebuilt.length) {
+      queued.value = rebuilt
+    } else {
+      const optimistic = queued.value.slice(rebuilt.length)
+      queued.value = [...rebuilt, ...optimistic]
     }
-  })
-  const maxLocal = liveAgentIdx.value >= 0 ? rebuilt.length : rebuilt.length + 1
-  if (queued.value.length > maxLocal) {
-    // Keep trailing optimistic-only rows that still fit the maxLocal budget.
-    const optimistic = queued.value.slice(rebuilt.length).slice(0, Math.max(0, maxLocal - rebuilt.length))
-    queued.value = [...rebuilt, ...optimistic]
-  } else if (queued.value.length < rebuilt.length) {
-    queued.value = rebuilt
-  } else {
-    // Same length or one ahead: refresh texts from server, keep local extras.
-    const optimistic = queued.value.slice(rebuilt.length)
-    queued.value = [...rebuilt, ...optimistic]
   }
-  thinking.value = liveAgentIdx.value >= 0 || queued.value.length > 0
+  // Refresh resume: recreate streaming agent bubble from activeItem when busy.
+  if (busy && activeItem && liveAgentIdx.value < 0) {
+    const text = activeItem.text ?? ''
+    liveTurns.value = [
+      {
+        role: 'human',
+        text,
+        at: new Date().toISOString(),
+        images: activeItem.images,
+        annotations: activeItem.annotations,
+      },
+      {
+        role: 'agent',
+        text: '',
+        at: new Date().toISOString(),
+        streaming: true,
+      },
+    ]
+    liveAgentIdx.value = 1
+    streamPreview.reset()
+  }
+  thinking.value = liveAgentIdx.value >= 0 || queued.value.length > 0 || !!busy
 }
 
-/** Parent (RunDetailView) feeds review WS frames here. */
+/** Parent feeds review/clarify WS frames here (shared session protocol). */
 function applyReviewFrame(frame: {
   event?: string
   nodeId?: string
@@ -717,8 +754,9 @@ function applyReviewFrame(frame: {
   interrupted?: boolean
   waiting?: number
   items?: { text?: string }[]
+  busy?: boolean
+  activeItem?: { text?: string; images?: ClarifyImage[]; annotations?: ReactAnnotation[] }
 }) {
-  if (!props.reviewMode) return
   // Defense: ignore frames for other producer sessions on the same run.
   if (frame.nodeId && frame.nodeId !== props.nodeId) return
   switch (frame.event) {
@@ -741,6 +779,7 @@ function applyReviewFrame(frame: {
           at: new Date().toISOString(),
           streaming: true,
         }) - 1
+      streamPreview.reset()
       thinking.value = true
       break
     }
@@ -748,6 +787,7 @@ function applyReviewFrame(frame: {
       if (liveAgentIdx.value >= 0 && liveTurns.value[liveAgentIdx.value]) {
         liveTurns.value[liveAgentIdx.value].streaming = false
         if (frame.interrupted) liveTurns.value[liveAgentIdx.value].interrupted = true
+        streamPreview.flush()
       }
       liveAgentIdx.value = -1
       thinking.value = queued.value.length > 0
@@ -759,6 +799,7 @@ function applyReviewFrame(frame: {
         liveTurns.value[liveAgentIdx.value].text =
           liveTurns.value[liveAgentIdx.value].text || frame.message || 'error'
         if (frame.interrupted) liveTurns.value[liveAgentIdx.value].interrupted = true
+        streamPreview.flush()
       }
       liveAgentIdx.value = -1
       thinking.value = queued.value.length > 0
@@ -768,6 +809,8 @@ function applyReviewFrame(frame: {
       applyQueueState(
         typeof frame.waiting === 'number' ? frame.waiting : 0,
         Array.isArray(frame.items) ? frame.items : null,
+        frame.busy,
+        frame.activeItem ?? null,
       )
       break
   }
@@ -776,7 +819,7 @@ function applyReviewFrame(frame: {
 
 /** Consume publishAcp events for the streaming agent bubble (dialogue surface). */
 function applyAcpEvents(events: AcpEvent[] | undefined, nodeId?: string) {
-  if (!props.reviewMode || liveAgentIdx.value < 0 || !events?.length) return
+  if (liveAgentIdx.value < 0 || !events?.length) return
   if (nodeId && nodeId !== props.nodeId) return
   const agent = liveTurns.value[liveAgentIdx.value]
   if (!agent) return
@@ -786,8 +829,10 @@ function applyAcpEvents(events: AcpEvent[] | undefined, nodeId?: string) {
     if (ev.kind === 'message' && ev.text) msg = ev.text
     if (ev.kind === 'thought' && ev.text) thought = ev.text
   }
-  agent.text = msg
-  if (thought && !msg) agent.text = thought
+  const next = msg || thought
+  agent.text = next
+  streamPreview.setText(next)
+  // Stick-gated only — never force-drag while user scrolled up.
   void scrollBottom()
 }
 
@@ -858,10 +903,10 @@ defineExpose({ applyReviewFrame, applyAcpEvents, cancelReview, discardLastQueued
             </div>
           </div>
           <div
-            v-else-if="t.text"
+            v-else-if="t.text || (t.streaming && liveStreamHtml)"
             class="md rounded-lg border px-3 py-2 text-[13px] leading-relaxed"
             :class="t.role === 'agent' ? 'border-line bg-elevated text-txt' : 'border-accent/30 bg-accent-dim/60 text-txt'"
-            v-html="renderMarkdown(t.text)"
+            v-html="t.streaming && liveStreamHtml ? liveStreamHtml : renderMarkdown(t.text)"
           />
 
           <!-- Structured choice questions (ask_question). The latest agent turn
@@ -1049,7 +1094,7 @@ defineExpose({ applyReviewFrame, applyAcpEvents, cancelReview, discardLastQueued
           <div class="mt-1 text-[10px] text-txt3" :class="t.role === 'human' ? 'text-right' : ''">{{ locale && relTime(t.at) }}</div>
         </div>
       </div>
-      <div v-if="thinking && !validating && !(reviewMode && liveAgentIdx >= 0)" class="flex items-center gap-2 pl-9 text-[12px] text-txt3">
+      <div v-if="thinking && !validating && liveAgentIdx < 0" class="flex items-center gap-2 pl-9 text-[12px] text-txt3">
         <span class="typing-dots"><i /><i /><i /></span>
         {{ translate('pages.clarify.thinking') }}
       </div>
@@ -1075,9 +1120,9 @@ defineExpose({ applyReviewFrame, applyAcpEvents, cancelReview, discardLastQueued
       <Icon name="close" :size="13" class="-mt-0.5 mr-1 inline" />{{ translate('pages.clarify.closed') }}
     </div>
     <div v-else class="border-t border-line p-3">
-      <!-- pending-send queue panel (Demo / AgentChatTester): review mode only -->
+      <!-- pending-send queue panel (Demo / AgentChatTester): clarify + review -->
       <div
-        v-if="reviewMode && queued.length"
+        v-if="queued.length"
         class="mb-2 rounded-md border border-line bg-base/40 px-2.5 py-2"
         data-testid="clarify-review-queue"
       >
@@ -1133,7 +1178,9 @@ defineExpose({ applyReviewFrame, applyAcpEvents, cancelReview, discardLastQueued
           :placeholder="inputPlaceholder"
           data-testid="clarify-input"
           @input="onTextInput"
-          @keydown.enter.exact.prevent="send"
+          @keydown="onComposerKeydown"
+          @compositionstart="composing = true"
+          @compositionend="composing = false"
           @paste="onPaste"
         />
         <button
@@ -1154,6 +1201,16 @@ defineExpose({ applyReviewFrame, applyAcpEvents, cancelReview, discardLastQueued
         >
           <Icon name="send" :size="17" />
         </button>
+        <button
+          v-if="sessionBusy"
+          type="button"
+          class="inline-flex h-10 shrink-0 items-center gap-1 rounded-md border border-line bg-elevated px-3 text-xs font-semibold text-txt2 hover:border-line-strong"
+          data-testid="clarify-review-cancel"
+          title="Cancel"
+          @click="cancelReview"
+        >
+          Cancel
+        </button>
       </div>
       <div v-if="!hideFinish" class="mt-2 flex items-center justify-between gap-2">
         <p
@@ -1164,16 +1221,6 @@ defineExpose({ applyReviewFrame, applyAcpEvents, cancelReview, discardLastQueued
           {{ validating ? translate('pages.clarify.validating') : translate('pages.clarify.confirmFlowHint') }}
         </p>
         <span v-else class="flex-1" />
-        <button
-          v-if="reviewMode && (thinking || queued.length > 0 || liveAgentIdx >= 0)"
-          type="button"
-          class="inline-flex shrink-0 items-center gap-1 rounded-md border border-line bg-elevated px-3 py-1.5 text-xs font-semibold text-txt2 hover:border-line-strong"
-          data-testid="clarify-review-cancel"
-          title="Cancel"
-          @click="cancelReview"
-        >
-          Cancel
-        </button>
         <button
           v-if="reviewMode"
           class="inline-flex shrink-0 items-center gap-1 rounded-md bg-ok px-3 py-1.5 text-xs font-semibold text-white hover:bg-ok/90 disabled:opacity-50"

@@ -626,6 +626,17 @@ export interface Run {
   // Per-node react conversations, keyed by node id (a run may have several
   // react nodes). Lets each react node show its own dialogue immediately.
   clarifyByNode?: Record<string, { nodeId: string; iteration?: number; turns: ClarifyTurn[]; done: boolean }>
+  /** Authoritative busy/queue snapshots for refresh-resume (clarify + review). */
+  reactSessions?: Record<
+    string,
+    {
+      kind?: string
+      waiting?: number
+      busy?: boolean
+      items?: { id?: string; text?: string }[]
+      activeItem?: { text?: string; images?: ClarifyImage[]; annotations?: ReactAnnotation[] }
+    }
+  >
   git?: { pushed: boolean; pushedSha?: string; branch?: string; mrUrl?: string } | null
   trace?: StateTraceEntry[]
   vars?: RunVar[]

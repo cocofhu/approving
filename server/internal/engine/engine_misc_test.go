@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cocofhu/approving/internal/database"
 	"github.com/cocofhu/approving/internal/mcp"
@@ -366,6 +367,9 @@ func TestReactMultiRound(t *testing.T) {
 	if err := eng.ReactReply(run.ID, "clarify", "第一轮", nil, nil, false); err != nil {
 		t.Fatalf("reply 1: %v", err)
 	}
+	if err := eng.waitReviewReadyForTest(run.ID, "clarify", 5*time.Second); err != nil {
+		t.Fatalf("wait after reply 1: %v", err)
+	}
 	var conv models.ReactConversation
 	db.Where("run_id = ? AND node_id = ?", run.ID, "clarify").Order("iteration desc").First(&conv)
 	if conv.Done {
@@ -378,6 +382,9 @@ func TestReactMultiRound(t *testing.T) {
 	// Second reply -> agent finishes; run completes.
 	if err := eng.ReactReply(run.ID, "clarify", "第二轮", nil, nil, false); err != nil {
 		t.Fatalf("reply 2: %v", err)
+	}
+	if err := eng.waitReviewReadyForTest(run.ID, "clarify", 5*time.Second); err != nil {
+		t.Fatalf("wait after reply 2: %v", err)
 	}
 	waitRunStatus(t, db, run.ID, "completed")
 

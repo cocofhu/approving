@@ -54,6 +54,8 @@ func (h *Handlers) RunEvents(c *gin.Context) {
 	if run, ok := h.Runs.Get(runID); ok {
 		_ = conn.WriteJSON(gin.H{"type": "snapshot", "run": h.runDetailDTO(run)})
 	}
+	// Re-emit authoritative queue/busy so refresh can resume mid-stream.
+	h.Eng.BroadcastReviewSessions(runID)
 
 	ping := time.NewTicker(25 * time.Second)
 	defer ping.Stop()
@@ -105,7 +107,19 @@ func (h *Handlers) handleRunWSControl(runID string, data []byte) {
 		if nodeID == "" {
 			return
 		}
-		if err := h.Eng.CancelReviewSession(runID, nodeID); err != nil {
+		clearQueue := true
+		if run, ok := h.Runs.Get(runID); ok {
+			if n := run.Graph.FindNode(nodeID); n != nil && n.Type == "react" {
+				clearQueue = false
+			}
+		}
+		var err error
+		if clearQueue {
+			err = h.Eng.CancelReviewSession(runID, nodeID)
+		} else {
+			err = h.Eng.CancelClarifyTurn(runID, nodeID)
+		}
+		if err != nil {
 			h.publishReviewWSError(runID, nodeID, err.Error())
 		}
 	case "review_chat", "chat":
@@ -119,6 +133,15 @@ func (h *Handlers) handleRunWSControl(runID string, data []byte) {
 				h.publishReviewWSError(runID, nodeID, err.Error())
 			}
 			return
+		}
+		// Classic react → clarify FIFO; review-capable nodes → review FIFO.
+		if run, ok := h.Runs.Get(runID); ok {
+			if n := run.Graph.FindNode(nodeID); n != nil && n.Type == "react" {
+				if _, err := h.Eng.EnqueueClarifyTurn(runID, nodeID, m.Content, m.Images, m.Annotations); err != nil {
+					h.publishReviewWSError(runID, nodeID, err.Error())
+				}
+				return
+			}
 		}
 		if _, err := h.Eng.EnqueueReviewTurn(runID, nodeID, m.Content, m.Images, m.Annotations, "node", ""); err != nil {
 			h.publishReviewWSError(runID, nodeID, err.Error())

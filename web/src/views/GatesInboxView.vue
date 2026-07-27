@@ -482,9 +482,14 @@ function connectActiveRunWs(runId: string) {
         if (m.type === 'artifact_edit') void softRefreshActiveRun()
         return
       }
-      // Clarify: allow react (turns) and artifact_edit; still ignore status/trace.
+      // Clarify: allow artifact_edit; react mid-turn is projected via review/acp
+      // frames — skip softRefresh so we do not wipe busy/queue/stream.
       if (active.value.type === 'clarify') {
-        if (m.type === 'artifact_edit' || m.type === 'react') void softRefreshActiveRun()
+        if (m.type === 'artifact_edit') void softRefreshActiveRun()
+        if (m.type === 'react') {
+          const sess = (activeRun.value as any)?.reactSessions?.[active.value.nodeId]
+          if (!sess?.busy) void softRefreshActiveRun()
+        }
       }
     }
   }
@@ -815,18 +820,16 @@ async function onClarifySend(
       rollbackProcessingIntent(it)
       return
     }
-    // Non-force review enqueue failed: roll back optimistic queue + surface error.
-    if (reviewActive.value) {
-      reviewChatRef.value?.discardLastQueued?.()
-      clarifyConfirmError.value = msg
-    }
+    // Non-force enqueue failed: roll back optimistic queue + surface error.
+    reviewChatRef.value?.discardLastQueued?.()
+    clarifyConfirmError.value = msg
   }
-  const submittedKey = itemKey(it)
-  const prevList = listItems.value.slice()
   const finished = force && ok
 
   // Force-finish: mirror onResolve — local converge + unlock in finally even if refresh throws.
   if (force) {
+    const submittedKey = itemKey(it)
+    const prevList = listItems.value.slice()
     let stillThere = true
     try {
       showProcessedBanner.value = false
@@ -855,31 +858,8 @@ async function onClarifySend(
     return
   }
 
-  // Review enqueue returns before the turn finishes — keep live queue/stream bubbles.
-  if (reviewActive.value) return
-
-  // Ordinary turn: conversation stays pending — no processingLock / markProcessed.
-  showProcessedBanner.value = false
-  try {
-    await refresh({ source: 'submit', mode: 'force' })
-    await loadList()
-  } catch {
-    /* soft-fail; apply list binding below from whatever we have */
-  }
-  const stillThere = listItems.value.some((k) => itemKey(k) === submittedKey)
-  if (stillThere) {
-    active.value = listItems.value.find((k) => itemKey(k) === submittedKey) || listItems.value[0] || null
-  } else {
-    // Left pending unexpectedly (e.g. concurrent finish): drop ghost and pick neighbor.
-    markProcessed(it)
-    closeActiveRunWs()
-    removeListItemLocally(submittedKey)
-    selectActiveAfterRemove(prevList, submittedKey)
-  }
-  if (!active.value) {
-    activeRun.value = null
-    activeRunLoadError.value = false
-  }
+  // Ordinary turn enqueue returns before the turn finishes — keep live
+  // queue/stream bubbles (clarify + review shared session UX). No force refresh.
 }
 
 // Review: confirm product & advance (same contract as RunDetailView.onClarifyFinish).
