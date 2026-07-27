@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { TokenStatsWorkflow } from '@/lib/types'
-import { fmtTokenCount } from '@/lib/tokenUsage'
+import { fmtCompactTokenCount, fmtTokenCount } from '@/lib/tokenUsage'
 
 const props = defineProps<{
   workflows: TokenStatsWorkflow[]
@@ -43,14 +43,17 @@ function badgeLabel(w: TokenStatsWorkflow, i: number): string {
 }
 
 function badgeClass(w: TokenStatsWorkflow, i: number): string {
-  if (isPM(w)) return 'bg-[rgba(245,158,11,0.18)] text-[#d97706]'
-  if (isOther(w)) return 'bg-elevated text-txt3'
+  // PM uses the same purple badge palette as workflow (no amber); identity via "PM" label.
+  if (isPM(w)) return 'w-auto min-w-[22px] px-1.5 bg-[rgba(109,92,255,0.18)] text-[#6d5cff]'
+  if (isOther(w)) return 'w-[22px] bg-elevated text-txt3'
   const n = Number(badgeLabel(w, i))
-  return n <= 3 ? 'bg-accent-dim text-accent-2' : 'bg-elevated text-txt3'
+  return n <= 3
+    ? 'w-[22px] bg-accent-dim text-accent-2'
+    : 'w-[22px] bg-elevated text-txt3'
 }
 
 function barClass(w: TokenStatsWorkflow): string {
-  if (isPM(w)) return 'bg-gradient-to-r from-[#f59e0b] to-[#fbbf24]'
+  // PM bar matches workflow purple gradient (#6d5cff → #9b8cff); other stays neutral grey.
   if (isOther(w)) return 'bg-gradient-to-r from-slate-400 to-slate-300'
   return 'bg-gradient-to-r from-[#6d5cff] to-[#9b8cff]'
 }
@@ -96,7 +99,7 @@ const tipRow = computed(() => (tip.value.idx >= 0 ? props.workflows[tip.value.id
       @click="showTip(i, $event)"
     >
       <span
-        class="grid h-[22px] w-[22px] place-items-center rounded-md text-[11px] font-bold"
+        class="grid h-[22px] place-items-center rounded-md text-[11px] font-bold"
         :class="badgeClass(w, i)"
       >
         {{ badgeLabel(w, i) }}
@@ -111,7 +114,11 @@ const tipRow = computed(() => (tip.value.idx >= 0 ? props.workflows[tip.value.id
           />
         </div>
       </div>
-      <span class="whitespace-nowrap text-xs tabular-nums text-txt3">{{ fmtTokenCount(w.total) }}</span>
+      <span
+        class="whitespace-nowrap text-xs tabular-nums text-txt3"
+        :title="fmtTokenCount(w.total)"
+        data-testid="token-rank-value"
+      >{{ fmtCompactTokenCount(w.total) }}</span>
     </li>
     <div
       v-if="tip.show && tipRow"
