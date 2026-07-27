@@ -5,6 +5,7 @@ import { api } from '@/lib/api'
 import { useToast } from '@/lib/useToast'
 import type { Project, ProjectNotifyPolicy } from '@/lib/types'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppSwitch from '@/components/ui/AppSwitch.vue'
 
 const props = defineProps<{
   projectId: string
@@ -142,20 +143,12 @@ function goChannelSettings() {
 
     <div class="space-y-4 rounded-lg border border-line bg-surface p-4">
       <label class="flex items-start gap-3">
-        <button
-          type="button"
-          role="switch"
-          class="relative mt-0.5 h-5 w-9 shrink-0 rounded-full border border-line transition"
-          :class="enabled ? 'bg-accent-dim border-accent/50' : 'bg-elevated'"
-          :aria-checked="enabled"
+        <AppSwitch
+          v-model="enabled"
+          class="mt-0.5"
           data-testid="notify-master-toggle"
-          @click="enabled = !enabled"
-        >
-          <span
-            class="absolute top-0.5 left-0.5 h-3.5 w-3.5 rounded-full bg-txt2 transition"
-            :class="enabled ? 'translate-x-4 bg-accent-2' : ''"
-          />
-        </button>
+          :aria-label="t('pages.projectDetail.notify.master')"
+        />
         <span>
           <span class="block text-sm font-medium text-txt">{{ t('pages.projectDetail.notify.master') }}</span>
           <span class="mt-0.5 block text-[12px] text-txt3">{{ t('pages.projectDetail.notify.masterHint') }}</span>
@@ -167,40 +160,22 @@ function goChannelSettings() {
         <p class="mt-0.5 text-[12px] text-txt3">{{ t('pages.projectDetail.notify.defaultEventsHint') }}</p>
         <div class="mt-2 space-y-2">
           <label class="flex items-center gap-3">
-            <button
-              type="button"
-              role="switch"
-              class="relative h-5 w-9 shrink-0 rounded-full border border-line transition"
-              :class="waitingHuman ? 'bg-accent-dim border-accent/50' : 'bg-elevated'"
-              :aria-checked="waitingHuman"
+            <AppSwitch
+              v-model="waitingHuman"
               data-testid="notify-ev-waiting-human"
-              @click="waitingHuman = !waitingHuman"
-            >
-              <span
-                class="absolute top-0.5 left-0.5 h-3.5 w-3.5 rounded-full bg-txt2 transition"
-                :class="waitingHuman ? 'translate-x-4 bg-accent-2' : ''"
-              />
-            </button>
+              :aria-label="'waiting_human'"
+            />
             <span class="text-[13px] text-txt">
               <code class="font-mono text-accent-2">waiting_human</code>
               <span class="ml-2 text-txt3">{{ t('pages.projectDetail.notify.evWaitingHuman') }}</span>
             </span>
           </label>
           <label class="flex items-center gap-3">
-            <button
-              type="button"
-              role="switch"
-              class="relative h-5 w-9 shrink-0 rounded-full border border-line transition"
-              :class="failed ? 'bg-accent-dim border-accent/50' : 'bg-elevated'"
-              :aria-checked="failed"
+            <AppSwitch
+              v-model="failed"
               data-testid="notify-ev-failed"
-              @click="failed = !failed"
-            >
-              <span
-                class="absolute top-0.5 left-0.5 h-3.5 w-3.5 rounded-full bg-txt2 transition"
-                :class="failed ? 'translate-x-4 bg-accent-2' : ''"
-              />
-            </button>
+              :aria-label="'failed'"
+            />
             <span class="text-[13px] text-txt">
               <code class="font-mono text-accent-2">failed</code>
               <span class="ml-2 text-txt3">{{ t('pages.projectDetail.notify.evFailed') }}</span>
@@ -210,15 +185,11 @@ function goChannelSettings() {
             class="flex items-center gap-3 opacity-50"
             data-testid="notify-ev-completed-disabled"
           >
-            <button
-              type="button"
-              role="switch"
-              class="relative h-5 w-9 shrink-0 cursor-not-allowed rounded-full border border-line bg-elevated"
-              aria-checked="false"
+            <AppSwitch
+              :model-value="false"
               disabled
-            >
-              <span class="absolute top-0.5 left-0.5 h-3.5 w-3.5 rounded-full bg-txt3" />
-            </button>
+              :aria-label="'completed'"
+            />
             <span class="text-[13px] text-txt3">
               <code class="font-mono">completed</code>
               <span class="ml-2">{{ t('pages.projectDetail.notify.evCompleted') }}</span>

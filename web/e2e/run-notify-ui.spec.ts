@@ -127,6 +127,7 @@ async function setupNotifyHarness(
 
   await page.route(/\/api\/workflows(\/|$|\?)/, async (route) => {
     const method = route.request().method()
+    const url = route.request().url()
     if (method === 'GET') {
       await route.fulfill({
         status: 200,
@@ -135,12 +136,38 @@ async function setupNotifyHarness(
       })
       return
     }
+    // Notify-only PATCH (preferred) — no nodes/edges in payload.
+    if (method === 'PATCH' && url.includes('/notify-policy')) {
+      const payload = route.request().postDataJSON() as {
+        notifyPolicy?: { mode: string; events?: string[] }
+      }
+      const idMatch = url.match(/\/workflows\/([^/]+)\/notify-policy/)
+      const id = idMatch?.[1]
+      lastWorkflowSave = { id, notifyPolicy: payload?.notifyPolicy, via: 'patch-notify-policy' }
+      const idx = workflows.findIndex((w) => w.id === id)
+      if (idx >= 0 && payload.notifyPolicy) {
+        workflows[idx] = {
+          ...workflows[idx],
+          notifyPolicy: {
+            mode: payload.notifyPolicy.mode,
+            events: payload.notifyPolicy.events || [],
+          },
+        }
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(idx >= 0 ? workflows[idx] : { id, status: 'published', version: 1, ...payload }),
+      })
+      return
+    }
     if (method === 'PUT' || method === 'POST') {
       const payload = route.request().postDataJSON() as {
         id?: string
         notifyPolicy?: { mode: string; events?: string[] }
+        nodes?: unknown
       }
-      lastWorkflowSave = payload
+      lastWorkflowSave = { ...payload, via: 'save-workflow' }
       const idx = workflows.findIndex((w) => w.id === payload.id)
       if (idx >= 0 && payload.notifyPolicy) {
         workflows[idx] = {
@@ -262,9 +289,14 @@ test.describe('Run NotifyPolicy UI (P0)', () => {
     const inheritRow = page.locator('tbody tr', { hasText: '继承默认' })
     await inheritRow.getByRole('button', { name: '自定义' }).click()
     await expect.poll(() => {
-      const s = harness.getLastWorkflowSave() as { id?: string; notifyPolicy?: { mode: string } } | null
-      return s?.id === 'wf-inherit' ? s.notifyPolicy?.mode : null
-    }).toBe('custom')
+      const s = harness.getLastWorkflowSave() as {
+        id?: string
+        notifyPolicy?: { mode: string }
+        via?: string
+        nodes?: unknown
+      } | null
+      return s?.id === 'wf-inherit' ? `${s.via}:${s.notifyPolicy?.mode}:nodes=${Array.isArray(s.nodes)}` : null
+    }).toBe('patch-notify-policy:custom:nodes=false')
 
     // 自我迭代已是 custom：取消 waiting_human，仅留 failed
     const customRow = page.locator('tbody tr', { hasText: '自我迭代' })
@@ -275,9 +307,10 @@ test.describe('Run NotifyPolicy UI (P0)', () => {
       const s = harness.getLastWorkflowSave() as {
         id?: string
         notifyPolicy?: { events?: string[] }
+        via?: string
       } | null
-      return s?.id === 'wf-self' ? (s.notifyPolicy?.events || []).join(',') : ''
-    }).toBe('failed')
+      return s?.id === 'wf-self' ? `${s.via}:${(s.notifyPolicy?.events || []).join(',')}` : ''
+    }).toBe('patch-notify-policy:failed')
 
     await page.screenshot({
       path: path.join(shotDir, '04-workflow-custom-events.png'),

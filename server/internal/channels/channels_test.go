@@ -1220,6 +1220,79 @@ func TestPushQueueFullRetainsNewestFailed(t *testing.T) {
 	}
 }
 
+// TestPushQueueProtectsRunNotify covers review v3: when the high-priority ring
+// is full, run_notify (already receipt-claimed) must not be silently dropped.
+func TestPushQueueProtectsRunNotify(t *testing.T) {
+	m := NewManager(nil, nil, nil)
+	key := convKey("proj", SceneC2C, "user1")
+
+	// Fill with cron changed items + one protected run_notify.
+	for i := 0; i < pushQueueDepth-1; i++ {
+		m.enqueuePush(key, CronPushItem{
+			ProjectID: "proj", Scene: SceneC2C, Conv: "user1",
+			Category: fmt.Sprintf("cron-%d", i), Kind: CronResultChanged,
+			Text: fmt.Sprintf("cron-%d", i),
+		})
+	}
+	m.enqueuePush(key, CronPushItem{
+		ProjectID: "proj", Scene: SceneC2C, Conv: "user1",
+		Category: runNotifyCategory, Kind: CronResultChanged,
+		Text: "gate waiting_human",
+	})
+
+	// Incoming cron failed should drop an unprotected cron changed, not run_notify.
+	m.enqueuePush(key, CronPushItem{
+		ProjectID: "proj", Scene: SceneC2C, Conv: "user1",
+		Category: "cron-new", Kind: CronResultFailed, Text: "cron failed",
+	})
+
+	pq := m.pushQueueFor(key)
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+	foundRunNotify := false
+	for _, p := range pq.pending {
+		if p.Category == runNotifyCategory && strings.Contains(p.Text, "gate waiting_human") {
+			foundRunNotify = true
+			break
+		}
+	}
+	if !foundRunNotify {
+		t.Fatalf("run_notify was dropped under pressure: %+v", pq.pending)
+	}
+
+	// When queue is all run_notify, a new run_notify soft-overflows past depth.
+	m2 := NewManager(nil, nil, nil)
+	key2 := convKey("proj2", SceneC2C, "user2")
+	for i := 0; i < pushQueueDepth; i++ {
+		m2.enqueuePush(key2, CronPushItem{
+			ProjectID: "proj2", Scene: SceneC2C, Conv: "user2",
+			Category: runNotifyCategory, Kind: CronResultChanged,
+			Text: fmt.Sprintf("rn-%d", i),
+		})
+	}
+	m2.enqueuePush(key2, CronPushItem{
+		ProjectID: "proj2", Scene: SceneC2C, Conv: "user2",
+		Category: runNotifyCategory, Kind: CronResultChanged,
+		Text: "rn-overflow",
+	})
+	pq2 := m2.pushQueueFor(key2)
+	pq2.mu.Lock()
+	defer pq2.mu.Unlock()
+	if len(pq2.pending) < pushQueueDepth+1 {
+		t.Fatalf("expected soft-overflow len>=%d got %d", pushQueueDepth+1, len(pq2.pending))
+	}
+	foundOverflow := false
+	for _, p := range pq2.pending {
+		if p.Text == "rn-overflow" {
+			foundOverflow = true
+			break
+		}
+	}
+	if !foundOverflow {
+		t.Fatalf("soft-overflow run_notify missing: %+v", pq2.pending)
+	}
+}
+
 func TestChannelPreambleRequiresProgressMarkers(t *testing.T) {
 	p := ChannelPreamble("qq")
 	for _, marker := range []string{"[进度]", "[阻塞]", "[确认]"} {

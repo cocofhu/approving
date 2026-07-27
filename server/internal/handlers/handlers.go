@@ -275,6 +275,47 @@ func (h *Handlers) SaveWorkflow(c *gin.Context) {
 	c.JSON(http.StatusOK, workflowDTO(wf))
 }
 
+type workflowNotifyPolicyBody struct {
+	NotifyPolicy models.WorkflowNotifyPolicy `json:"notifyPolicy"`
+}
+
+// PatchWorkflowNotifyPolicy handles PATCH /api/workflows/:id/notify-policy.
+// Notify-only write path: does not accept or rewrite Graph (review v1).
+func (h *Handlers) PatchWorkflowNotifyPolicy(c *gin.Context) {
+	var b workflowNotifyPolicyBody
+	if err := c.ShouldBindJSON(&b); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	id := c.Param("id")
+	wf, err := h.WF.UpdateNotifyPolicy(id, b.NotifyPolicy)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrWorkflowNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		default:
+			_ = c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	h.recordAudit(services.AuditRecord{
+		ProjectID:    wf.ProjectID,
+		Actor:        h.auditActorFromContext(c),
+		Action:       models.AuditActionWorkflowUpdate,
+		ResourceType: "workflow",
+		ResourceID:   wf.ID,
+		Outcome:      models.AuditOutcomeOK,
+		Summary:      "update workflow notify policy",
+		Payload: map[string]any{
+			"notifyPolicy": wf.NotifyPolicy,
+			"status":       wf.Status,
+			"version":      wf.Version,
+		},
+	})
+	c.JSON(http.StatusOK, workflowDTO(wf))
+}
+
 func (h *Handlers) PublishWorkflow(c *gin.Context) {
 	wf, err := h.WF.Publish(c.Param("id"))
 	if err != nil {

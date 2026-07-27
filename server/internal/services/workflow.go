@@ -233,6 +233,27 @@ func (s *WorkflowService) Save(wf *models.WorkflowDef) error {
 	return s.db.Save(wf).Error
 }
 
+// UpdateNotifyPolicy persists only the workflow-level NotifyPolicy override.
+// It loads the current row and never touches Graph / Status / Version, so a
+// list-row inline edit cannot roll back a newer editor graph or demote
+// published → draft (review v1 / plan g1.3 notify-only path).
+func (s *WorkflowService) UpdateNotifyPolicy(id string, policy models.WorkflowNotifyPolicy) (models.WorkflowDef, error) {
+	var wf models.WorkflowDef
+	if err := s.db.First(&wf, "id = ?", id).Error; err != nil {
+		return wf, ErrWorkflowNotFound
+	}
+	policy = NormalizeWorkflowNotifyPolicy(policy)
+	if WorkflowNotifyPoliciesEqual(policy, wf.NotifyPolicy) {
+		return wf, nil
+	}
+	wf.NotifyPolicy = policy
+	wf.UpdatedAt = time.Now()
+	if err := s.db.Save(&wf).Error; err != nil {
+		return wf, err
+	}
+	return wf, nil
+}
+
 // Publish freezes the current graph as an immutable version snapshot and
 // marks the definition published. In-flight runs pin to a version.
 func (s *WorkflowService) Publish(id string) (models.WorkflowDef, error) {

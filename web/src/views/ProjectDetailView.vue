@@ -268,16 +268,8 @@ function wfNotifyHas(w: Workflow, ev: string): boolean {
 async function persistWorkflowNotify(w: Workflow, policy: WorkflowNotifyPolicy) {
   savingNotifyWfId.value = w.id
   try {
-    const saved = await api.saveWorkflow({
-      id: w.id,
-      projectId: w.projectId || projectId.value,
-      name: w.name,
-      description: w.description,
-      needsRepo: w.needsRepo,
-      nodes: w.nodes,
-      edges: w.edges,
-      notifyPolicy: policy,
-    })
+    // Notify-only PATCH: never send cached nodes/edges (review v1).
+    const saved = await api.patchWorkflowNotifyPolicy(w.id, policy)
     workflows.value = workflows.value.map((x) => (x.id === w.id ? { ...x, ...saved } : x))
     toast.success(t('pages.projectDetail.notify.wfUpdated'))
   } catch (e: any) {

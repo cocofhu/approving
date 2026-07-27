@@ -107,7 +107,15 @@ func (s *RunNotifyService) AttemptDeliver(ev RunNotifyEvent) {
 	if ev.WorkflowName == "" {
 		ev.WorkflowName = workflow.Name
 	}
-	text := FormatRunNotifyMessage(ev, s.deepLinkBase(ev))
+	base := s.deepLinkBase(ev)
+	if strings.TrimSpace(base) == "" {
+		// QQ clients cannot open relative /runs/{id}; ops must set PublicAdvertise.
+		log.Warn().
+			Str("run_id", ev.RunID).
+			Str("project", project.ID).
+			Msg("run-notify: PublicAdvertise empty — deep link will be relative /runs/{id}")
+	}
+	text := FormatRunNotifyMessage(ev, base)
 	if s.deliver == nil {
 		log.Info().Str("run_id", ev.RunID).Str("kind", kind).
 			Msg("run-notify: no deliverer — no-op after claim")
@@ -238,6 +246,11 @@ func runDeepLink(base, runID string) string {
 		return path
 	}
 	return base + path
+}
+
+// FormatRunDeepLinkForTest exposes runDeepLink for unit tests.
+func FormatRunDeepLinkForTest(base, runID string) string {
+	return runDeepLink(base, runID)
 }
 
 // ClaimReceiptForTest exposes claimReceipt for unit tests.
