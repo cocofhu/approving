@@ -94,6 +94,11 @@ func TestRunInboxContextClarify(t *testing.T) {
 	if strings.Contains(body, "should-not-appear") {
 		t.Error("nodeExecutions must be slim (no events)")
 	}
+	// Idle (no in-memory session): reactSessions omitted — presence when busy is
+	// covered by TestReactSessionsDTO + GatesInbox hard-load restore vitest.
+	if strings.Contains(body, `"reactSessions"`) {
+		t.Error("idle clarify inbox-context should omit empty reactSessions")
+	}
 }
 
 func TestRunInboxContextClarifyResearchReview(t *testing.T) {

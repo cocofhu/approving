@@ -887,11 +887,23 @@ func (h *Handlers) ReactReply(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-// ReactCancel aborts the current review turn and clears the pending FIFO for
-// the producer node (轮级 Cancel). Does not cancel the whole run.
+// ReactCancel aborts the current turn. Review clears the pending FIFO (#77);
+// classic clarify keeps the queue and lets the pump start the next item (Demo).
 func (h *Handlers) ReactCancel(c *gin.Context) {
 	runID, nodeID := c.Param("id"), c.Param("nodeId")
-	if err := h.Eng.CancelReviewSession(runID, nodeID); err != nil {
+	clearQueue := true
+	if run, ok := h.Runs.Get(runID); ok {
+		if n := run.Graph.FindNode(nodeID); n != nil && n.Type == "react" {
+			clearQueue = false
+		}
+	}
+	var err error
+	if clearQueue {
+		err = h.Eng.CancelReviewSession(runID, nodeID)
+	} else {
+		err = h.Eng.CancelClarifyTurn(runID, nodeID)
+	}
+	if err != nil {
 		_ = c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

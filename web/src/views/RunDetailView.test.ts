@@ -329,3 +329,16 @@ describe('RunDetailView load failure split', () => {
     expect(src).not.toMatch(/请检查网络或确认 Run 是否存在/)
   })
 })
+
+describe('RunDetailView clarify session narrow update (g3.2)', () => {
+  it('skips react/status/trace/artifact_edit/focus loadRun while clarify session busy', () => {
+    expect(src).toMatch(/function isClarifySessionBusy\(/)
+    // All four event types share one busy gate (review v3) — not react-only.
+    expect(src).toMatch(
+      /m\.type === 'trace'[\s\S]*?m\.type === 'status'[\s\S]*?m\.type === 'react'[\s\S]*?m\.type === 'artifact_edit'[\s\S]*?if \(isClarifySessionBusy\(\)\) return/,
+    )
+    expect(src).toMatch(/if \(isClarifySessionBusy\(\)\) return/)
+    expect(src).toMatch(/liveBusy\[m\.nodeId\] = true/)
+    expect(src).toMatch(/m\.event === 'turn_begin'/)
+  })
+})

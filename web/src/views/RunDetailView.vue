@@ -111,7 +111,18 @@ const reviewChatRef = ref<{
   applyReviewFrame?: (frame: any) => void
   applyAcpEvents?: (events: AcpEvent[] | undefined, nodeId?: string) => void
   discardLastQueued?: () => void
+  isSessionBusy?: () => boolean
 } | null>(null)
+
+/** Clarify/review session in-flight: skip full-page loadRun (g3.2 / review v1). */
+function isClarifySessionBusy(): boolean {
+  const nodeId = selClarify.value?.nodeId
+  if (!nodeId) return false
+  if (liveBusy[nodeId] === true) return true
+  if (!!(run.value as any)?.reactSessions?.[nodeId]?.busy) return true
+  if (reviewChatRef.value?.isSessionBusy?.()) return true
+  return false
+}
 const gateApprovalRef = ref<{
   applyReviewFrame?: (frame: any) => void
   applyAcpEvents?: (events: AcpEvent[] | undefined) => void
@@ -365,9 +376,30 @@ async function fetchRunData(): Promise<true | RunLoadErrorKind> {
     } else if (r.workflowId) {
       wf.value = await api.getWorkflow(r.workflowId)
     }
+    // Refresh-resume: project authoritative busy/queue into ClarifyChat.
+    nextTick(() => restoreReactSessions(r))
     return true
   } catch (err) {
     return classifyRunLoadError(err)
+  }
+}
+
+function restoreReactSessions(r: { reactSessions?: Record<string, any> }) {
+  const sessions = r.reactSessions
+  if (!sessions) return
+  for (const [nodeId, snap] of Object.entries(sessions)) {
+    if (!snap || typeof snap !== 'object') continue
+    liveBusy[nodeId] = !!snap.busy
+    if (selClarify.value?.nodeId === nodeId) {
+      reviewChatRef.value?.applyReviewFrame?.({
+        event: 'queue_state',
+        nodeId,
+        waiting: snap.waiting ?? 0,
+        items: snap.items ?? [],
+        busy: !!snap.busy,
+        activeItem: snap.activeItem,
+      })
+    }
   }
 }
 
@@ -388,7 +420,11 @@ async function initAfterLoadSuccess() {
   if (!timer) {
     timer = window.setInterval(() => {
       if (run.value.status === 'running' || run.value.status === 'waiting_human') {
-        loadRun(false)
+        // Clarify/review session busy: skip full loadRun so we do not wipe
+        // live stream / send lock / input focus (narrow updates via WS frames).
+        if (!isClarifySessionBusy()) {
+          loadRun(false)
+        }
         const sel = selected.value
         // Only skip REST once we already have displayable live events;
         // busy-only / empty live frames must keep the 2s poll fallback.
@@ -489,11 +525,14 @@ function connectWs() {
       }
     } else if (m.type === 'review' && m.nodeId) {
       // Prefer matching producer; components also filter by nodeId defensively.
+      if (m.event === 'turn_begin') liveBusy[m.nodeId] = true
+      if (m.event === 'queue_state' && typeof m.busy === 'boolean') liveBusy[m.nodeId] = !!m.busy
       if (!selClarify.value || selClarify.value.nodeId === m.nodeId) {
         reviewChatRef.value?.applyReviewFrame?.(m)
       }
       gateApprovalRef.value?.applyReviewFrame?.(m)
       if (m.event === 'turn_done' || m.event === 'error') {
+        liveBusy[m.nodeId] = false
         loadRun(false)
       }
     } else if (
@@ -503,6 +542,9 @@ function connectWs() {
       m.type === 'artifact_edit'
     ) {
       // Node finished / transitioned / human artifact edit: pull authoritative snapshot.
+      // Mid-clarify: review/acp frames project the session — skip full-page rebind for
+      // react/status/trace/artifact_edit alike (g3.2 / review v3).
+      if (isClarifySessionBusy()) return
       if (m.type === 'status') liveNode.value = null
       loadRun(false)
     }
@@ -518,6 +560,8 @@ onMounted(async () => {
   window.addEventListener('focus', onFocusRefresh)
 })
 function onFocusRefresh() {
+  // Clarify/review mid-turn: skip focus/visibility full reload (keeps stream + input focus).
+  if (isClarifySessionBusy()) return
   if (!runLoading.value && !loadError.value) loadRun(false)
 }
 function onVisible() {
@@ -575,14 +619,13 @@ async function onClarifySend(
     // already completed) instead of leaving the input enabled to re-click.
     console.warn('reactReply failed', e?.message || e)
     const msg = e?.message || t('pages.runDetail.gateError')
-    if (reviewActive.value) {
-      // Non-force: roll back optimistic pending-send row so FR4 confirm is not stuck.
-      if (!force) reviewChatRef.value?.discardLastQueued?.()
-      clarifyConfirmError.value = msg
-    }
+    // Non-force: roll back optimistic pending-send row so FR4 / send lock is not stuck.
+    if (!force) reviewChatRef.value?.discardLastQueued?.()
+    clarifyConfirmError.value = msg
   }
-  // Review enqueue returns before the turn finishes — avoid wiping live bubbles.
-  if (force || !reviewActive.value) {
+  // Enqueue returns before the turn finishes — avoid wiping live bubbles.
+  // Force finish still needs a snapshot refresh.
+  if (force) {
     await loadRun(false)
   }
 }

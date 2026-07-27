@@ -36,6 +36,15 @@ const kindLabel = computed(() => {
 })
 
 const path = computed(() => props.ann.jsonPath || props.ann.selector || '')
+/** Whole-field chips often set label === path (e.g. #launchInput); show once. */
+const fieldLabel = computed(() => {
+  const label = (props.ann.label || '').trim()
+  const p = path.value
+  if (!label || label === p) return ''
+  return label
+})
+const showFieldPath = computed(() => !!path.value)
+const showFieldLabel = computed(() => kind.value === 'field' && !!fieldLabel.value)
 </script>
 
 <template>
@@ -50,7 +59,7 @@ const path = computed(() => props.ann.jsonPath || props.ann.selector || '')
     <span v-else class="mt-0.5 shrink-0 text-[12px] leading-none" aria-hidden="true">❝</span>
     <span class="flex min-w-0 flex-col gap-0.5">
       <span class="text-[9px] font-semibold uppercase tracking-wide opacity-75">{{ kindLabel }}</span>
-      <span v-if="path" class="truncate font-mono text-[9px] text-txt3" :title="path">{{ path }}</span>
+      <span v-if="showFieldPath" class="truncate font-mono text-[9px] text-txt3" :title="path">{{ path }}</span>
       <span v-if="kind !== 'field'" class="break-words [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] overflow-hidden">
         {{ ann.quote }}
         <span
@@ -58,7 +67,8 @@ const path = computed(() => props.ann.jsonPath || props.ann.selector || '')
           class="ml-1 inline-block border border-current px-0.5 text-[9px] opacity-80"
         >{{ t('pages.reviewComposer.chipTruncated') }}</span>
       </span>
-      <span v-else class="truncate">{{ ann.label || path }}</span>
+      <span v-else-if="showFieldLabel" class="truncate">{{ fieldLabel }}</span>
+      <span v-else-if="kind === 'field' && !showFieldPath" class="truncate">{{ ann.label || path }}</span>
     </span>
     <button
       v-if="removable"

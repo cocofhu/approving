@@ -97,7 +97,7 @@ func (h *Handlers) inboxContextClarify(c *gin.Context, runID, nodeID string, ite
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	out := gin.H{
 		"type":           "clarify",
 		"status":         run.Status,
 		"nodes":          graphNodesDTO(run.Graph),
@@ -110,5 +110,12 @@ func (h *Handlers) inboxContextClarify(c *gin.Context, runID, nodeID string, ite
 			"done":      conv.Done,
 			"label":     services.ClarifyLabel(run.Graph, conv.NodeID),
 		},
-	})
+	}
+	// Authoritative busy/queue for GatesInbox refresh-resume (parity with runDetailDTO).
+	if h.Eng != nil {
+		if byNode := reactSessionsDTO(h.Eng.ReviewSessionsForRun(runID)); byNode != nil {
+			out["reactSessions"] = byNode
+		}
+	}
+	c.JSON(http.StatusOK, out)
 }

@@ -78,7 +78,15 @@ const reviewChatRef = ref<{
   applyReviewFrame?: (frame: any) => void
   applyAcpEvents?: (events: any[] | undefined, nodeId?: string) => void
   discardLastQueued?: () => void
+  isSessionBusy?: () => boolean
 } | null>(null)
+/**
+ * Review/clarify WS frames that arrived while ClarifyChat was unmounted
+ * (hard loadActiveRun nulls activeRun → ReviewComposer gone). Flushed after mount.
+ */
+let pendingReviewFrames: Record<string, unknown>[] = []
+/** Snapshot reactSessions stashed when activeRun is still null during hard load. */
+let pendingSnapshotSessions: Run['reactSessions'] | null = null
 const { selected } = usePipelineFilter()
 const { selected: selectedProject, ensureHydrated: hydrateProject } = useProjectContext()
 const tagDraft = ref('')
@@ -468,11 +476,83 @@ const activeRunLoadError = ref(false)
 /** Active-run event socket — mirrors RunDetailView artifact_edit/react → reload. */
 let activeRunWs: WebSocket | undefined
 let activeRunWsRunId = ''
+/**
+ * Live busy from review/acp WS frames (not stale activeRun.reactSessions snapshot).
+ * Used to gate softRefresh while clarify session is mid-turn (g3.2 / review v3).
+ */
+const clarifyLiveBusy = ref(false)
+
+function isClarifySoftRefreshBlocked(): boolean {
+  if (active.value?.type !== 'clarify') return false
+  if (clarifyLiveBusy.value) return true
+  if (reviewChatRef.value?.isSessionBusy?.()) return true
+  return false
+}
 
 function closeActiveRunWs() {
   activeRunWs?.close()
   activeRunWs = undefined
   activeRunWsRunId = ''
+  clarifyLiveBusy.value = false
+  pendingReviewFrames = []
+  pendingSnapshotSessions = null
+}
+
+/** Project authoritative busy/queue onto ClarifyChat (RunDetail.restoreReactSessions parity). */
+function restoreReactSessions(r: { reactSessions?: Run['reactSessions'] } | null) {
+  const nodeId = active.value?.type === 'clarify' ? active.value.nodeId : null
+  if (!nodeId) return
+  const sessions = r?.reactSessions ?? pendingSnapshotSessions
+  if (!sessions) return
+  const snap = sessions[nodeId]
+  if (!snap || typeof snap !== 'object') return
+  clarifyLiveBusy.value = !!snap.busy
+  const frame = {
+    event: 'queue_state',
+    nodeId,
+    waiting: snap.waiting ?? 0,
+    items: snap.items ?? [],
+    busy: !!snap.busy,
+    activeItem: snap.activeItem,
+  }
+  if (reviewChatRef.value?.applyReviewFrame) {
+    reviewChatRef.value.applyReviewFrame(frame)
+  } else {
+    pendingReviewFrames.push(frame)
+  }
+  pendingSnapshotSessions = null
+}
+
+function flushPendingReviewFrames() {
+  if (!pendingReviewFrames.length) return
+  const frames = pendingReviewFrames
+  pendingReviewFrames = []
+  for (const frame of frames) {
+    reviewChatRef.value?.applyReviewFrame?.(frame)
+  }
+}
+
+/** Deliver review frame to chat, or buffer until ClarifyChat remounts after hard load. */
+function applyOrBufferReviewFrame(m: Record<string, unknown>) {
+  gateApprovalRef.value?.applyReviewFrame?.(m)
+  if (reviewChatRef.value?.applyReviewFrame) {
+    reviewChatRef.value.applyReviewFrame(m)
+    return
+  }
+  if (active.value?.type === 'clarify') {
+    pendingReviewFrames.push(m)
+  }
+}
+
+/**
+ * After hard load / soft refresh: project reactSessions + flush frames buffered
+ * while ReviewComposer was unmounted (WS Broadcast race).
+ */
+async function projectClarifySessionAfterLoad(r: Run) {
+  await nextTick()
+  restoreReactSessions(r)
+  await nextTick()
+  flushPendingReviewFrames()
 }
 
 function connectActiveRunWs(runId: string) {
@@ -491,24 +571,53 @@ function connectActiveRunWs(runId: string) {
     return
   }
   activeRunWs.onmessage = (ev) => {
-    let m: { type?: string; event?: string; nodeId?: string; events?: any[] }
+    let m: {
+      type?: string
+      event?: string
+      nodeId?: string
+      events?: any[]
+      busy?: boolean
+      run?: { reactSessions?: Run['reactSessions'] }
+    }
     try {
       m = JSON.parse(String(ev.data))
     } catch {
       return
     }
+    // WS connect snapshot may carry reactSessions before BroadcastReviewSessions.
+    if (m.type === 'snapshot') {
+      const sessions = m.run?.reactSessions
+      if (sessions && active.value?.type === 'clarify' && active.value.runId === runId) {
+        if (activeRun.value) {
+          activeRun.value = { ...activeRun.value, reactSessions: sessions }
+          void nextTick(() => {
+            restoreReactSessions(activeRun.value)
+            flushPendingReviewFrames()
+          })
+        } else {
+          pendingSnapshotSessions = sessions
+        }
+      }
+      return
+    }
     if (m.type === 'review') {
-      gateApprovalRef.value?.applyReviewFrame?.(m)
-      reviewChatRef.value?.applyReviewFrame?.(m)
+      if (m.event === 'turn_begin') clarifyLiveBusy.value = true
+      if (m.event === 'queue_state' && typeof m.busy === 'boolean') clarifyLiveBusy.value = !!m.busy
+      applyOrBufferReviewFrame(m as Record<string, unknown>)
       if (m.event === 'turn_done' || m.event === 'error') {
+        clarifyLiveBusy.value = false
         if (active.value && active.value.runId === runId) void softRefreshActiveRun()
       }
       return
     }
     if (m.type === 'acp') {
+      if (typeof m.busy === 'boolean') clarifyLiveBusy.value = !!m.busy
       const nodeId = (m as { nodeId?: string }).nodeId
       gateApprovalRef.value?.applyAcpEvents?.(m.events)
-      reviewChatRef.value?.applyAcpEvents?.(m.events, nodeId)
+      if (reviewChatRef.value?.applyAcpEvents) {
+        reviewChatRef.value.applyAcpEvents(m.events, nodeId)
+      }
+      // ACP chunks need a live bubble; no buffer — restore+queue_state recreates it.
       return
     }
     if (m.type === 'artifact_edit' || m.type === 'react' || m.type === 'trace' || m.type === 'status') {
@@ -524,9 +633,13 @@ function connectActiveRunWs(runId: string) {
         if (m.type === 'artifact_edit') void softRefreshActiveRun()
         return
       }
-      // Clarify: allow react (turns) and artifact_edit; still ignore status/trace.
+      // Clarify: react/artifact_edit mid-turn projected via review/acp — skip
+      // softRefresh while busy so we do not wipe busy/queue/stream (g3.2 / review v4).
       if (active.value.type === 'clarify') {
-        if (m.type === 'artifact_edit' || m.type === 'react') void softRefreshActiveRun()
+        if (m.type === 'artifact_edit' || m.type === 'react') {
+          // Gate on live WS busy / sessionBusy — not stale reactSessions snapshot.
+          if (!isClarifySoftRefreshBlocked()) void softRefreshActiveRun()
+        }
       }
     }
   }
@@ -551,6 +664,8 @@ async function softRefreshActiveRun() {
     if (isProcessedTriple(target)) return
     activeRun.value = adaptInboxContextToRun(ctx, target.runId)
     activeRunLoadError.value = false
+    // Soft refresh keeps chat mounted — only merge reactSessions onto run; do not
+    // re-project live bubbles (would reset stream). Hard-load path restores below.
   } catch (e) {
     if (isAbortError(e) || signal.aborted) return
     if (
@@ -590,13 +705,18 @@ async function loadActiveRun(hard = true) {
     activeRun.value = null
     activeRunLoadError.value = false
     activeRunLoading.value = true
+    // Chat unmounts — clear stale buffer for this load cycle (WS may refill).
+    pendingReviewFrames = []
   }
+  let projectAfterLoad = false
   try {
     const ctx = await api.inboxContext(target.runId, target.nodeId, target.iteration ?? 1, { signal })
     if (!active.value || inboxTripleKey(active.value) !== triple) return
     if (isProcessedTriple(target)) return
     activeRun.value = adaptInboxContextToRun(ctx, target.runId)
     activeRunLoadError.value = false
+    // Must project AFTER loading flag clears so ReviewComposer can mount.
+    projectAfterLoad = hard && target.type === 'clarify'
   } catch (e) {
     if (isAbortError(e) || signal.aborted) return
     if (
@@ -614,6 +734,9 @@ async function loadActiveRun(hard = true) {
   } finally {
     releaseInboxContextSignal(triple, signal)
     if (hard) activeRunLoading.value = false
+  }
+  if (projectAfterLoad && activeRun.value) {
+    await projectClarifySessionAfterLoad(activeRun.value)
   }
 }
 watch(
@@ -857,18 +980,16 @@ async function onClarifySend(
       rollbackProcessingIntent(it)
       return
     }
-    // Non-force review enqueue failed: roll back optimistic queue + surface error.
-    if (reviewActive.value) {
-      reviewChatRef.value?.discardLastQueued?.()
-      clarifyConfirmError.value = msg
-    }
+    // Non-force enqueue failed: roll back optimistic queue + surface error.
+    reviewChatRef.value?.discardLastQueued?.()
+    clarifyConfirmError.value = msg
   }
-  const submittedKey = itemKey(it)
-  const prevList = listItems.value.slice()
   const finished = force && ok
 
   // Force-finish: mirror onResolve — local converge + unlock in finally even if refresh throws.
   if (force) {
+    const submittedKey = itemKey(it)
+    const prevList = listItems.value.slice()
     let stillThere = true
     try {
       showProcessedBanner.value = false
@@ -897,31 +1018,8 @@ async function onClarifySend(
     return
   }
 
-  // Review enqueue returns before the turn finishes — keep live queue/stream bubbles.
-  if (reviewActive.value) return
-
-  // Ordinary turn: conversation stays pending — no processingLock / markProcessed.
-  showProcessedBanner.value = false
-  try {
-    await refresh({ source: 'submit', mode: 'force' })
-    await loadList()
-  } catch {
-    /* soft-fail; apply list binding below from whatever we have */
-  }
-  const stillThere = listItems.value.some((k) => itemKey(k) === submittedKey)
-  if (stillThere) {
-    active.value = listItems.value.find((k) => itemKey(k) === submittedKey) || listItems.value[0] || null
-  } else {
-    // Left pending unexpectedly (e.g. concurrent finish): drop ghost and pick neighbor.
-    markProcessed(it)
-    closeActiveRunWs()
-    removeListItemLocally(submittedKey)
-    selectActiveAfterRemove(prevList, submittedKey)
-  }
-  if (!active.value) {
-    activeRun.value = null
-    activeRunLoadError.value = false
-  }
+  // Ordinary turn enqueue returns before the turn finishes — keep live
+  // queue/stream bubbles (clarify + review shared session UX). No force refresh.
 }
 
 // Review: confirm product & advance (same contract as RunDetailView.onClarifyFinish).

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/services"
@@ -145,6 +146,9 @@ func TestPlanSandboxFailureStillFinishesRun(t *testing.T) {
 	waitReactPause(t, db, run.ID, "clarify")
 	if err := eng.ReactReply(run.ID, "clarify", "ok", nil, nil, false); err != nil {
 		t.Fatalf("clarify reply: %v", err)
+	}
+	if err := eng.waitReviewReadyForTest(run.ID, "clarify", 5*time.Second); err != nil {
+		t.Fatalf("wait clarify: %v", err)
 	}
 
 	waitRunStatus(t, db, run.ID, "failed")

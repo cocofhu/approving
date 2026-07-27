@@ -84,4 +84,33 @@ describe('adaptInboxContextToRun', () => {
     expect(run.nodeExecutions?.research_1[0].outputs?.research).toContain('ok')
     expect(run.clarifyByNode?.research_1.done).toBe(false)
   })
+
+  it('maps clarify reactSessions for refresh-resume', () => {
+    const run = adaptInboxContextToRun(
+      {
+        type: 'clarify',
+        status: 'waiting_human',
+        reactSessions: {
+          react: {
+            kind: 'clarify',
+            waiting: 1,
+            busy: true,
+            items: [{ id: 'q2', text: '乙' }],
+            activeItem: { id: 'q1', text: '甲' },
+          },
+        },
+        clarify: {
+          nodeId: 'react',
+          iteration: 1,
+          turns: [],
+          done: false,
+          label: '澄清',
+        },
+      },
+      'r-sess',
+    )
+    expect(run.reactSessions?.react?.busy).toBe(true)
+    expect(run.reactSessions?.react?.items?.[0]?.id).toBe('q2')
+    expect(run.reactSessions?.react?.activeItem?.text).toBe('甲')
+  })
 })

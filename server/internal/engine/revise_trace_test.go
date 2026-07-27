@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cocofhu/approving/internal/database"
 	"github.com/cocofhu/approving/internal/mcp"
@@ -170,6 +171,9 @@ func TestReactMultiTurnTraceAccumulates(t *testing.T) {
 	for _, msg := range []string{"答复1", "答复2", "答复3"} {
 		if err := eng.ReactReply(run.ID, "clarify", msg, nil, nil, false); err != nil {
 			t.Fatalf("reply %q: %v", msg, err)
+		}
+		if err := eng.waitReviewReadyForTest(run.ID, "clarify", 5*time.Second); err != nil {
+			t.Fatalf("wait after %q: %v", msg, err)
 		}
 	}
 	waitRunStatus(t, db, run.ID, "completed")

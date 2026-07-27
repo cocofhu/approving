@@ -144,6 +144,9 @@ func TestClarifyToDesignRun(t *testing.T) {
 	if err := eng.ReactReply(run.ID, "clarify", "邮箱验证码,5 分钟有效", nil, nil, false); err != nil {
 		t.Fatalf("clarify reply: %v", err)
 	}
+	if err := eng.waitReviewReadyForTest(run.ID, "clarify", 5*time.Second); err != nil {
+		t.Fatalf("wait clarify turn: %v", err)
+	}
 
 	// design (agent) and review_design (review) run automatically, then the
 	// human gate pauses.
