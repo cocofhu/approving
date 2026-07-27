@@ -519,6 +519,11 @@ export interface ClarifyTurn {
   interrupted?: boolean
   /** Live streaming agent bubble (not yet persisted). */
   streaming?: boolean
+  /**
+   * Streaming / persisted agent thought (ACP kind=thought). Kept separate from
+   * `text` so message arrival does not erase the thought block.
+   */
+  thought?: string
 }
 
 export interface Gate {

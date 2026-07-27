@@ -51,6 +51,8 @@ const props = withDefaults(
     queued?: { text: string }[]
     thinking?: boolean
     streamText?: string
+    /** ACP thought rail (separate from streamText). */
+    streamThought?: string
     interrupted?: boolean
   }>(),
   {
@@ -72,6 +74,7 @@ const props = withDefaults(
     queued: () => [],
     thinking: false,
     streamText: '',
+    streamThought: '',
     interrupted: false,
   },
 )
@@ -264,12 +267,48 @@ function onPass() {
         </div>
       </div>
       <div
-        v-if="thinking && streamText"
-        class="mt-2 max-h-28 overflow-y-auto rounded border border-line bg-surface px-2 py-1.5 text-[12px] text-txt2"
+        v-if="thinking"
+        class="mt-2 max-h-40 space-y-1.5 overflow-y-auto rounded border border-line bg-surface px-2 py-1.5 text-[12px] text-txt2"
         data-testid="gate-react-stream"
       >
-        {{ streamText }}
-        <span v-if="interrupted" class="ml-1 text-[10px] text-warn">interrupted</span>
+        <div
+          v-if="!streamText && !streamThought"
+          class="inline-flex items-center gap-2 text-txt3"
+          data-testid="gate-busy-placeholder"
+        >
+          <span class="typing-dots" aria-hidden="true"><i /><i /><i /></span>
+          <span>{{ t('pages.clarify.thinkingBusy') }}</span>
+        </div>
+        <div
+          v-else-if="!streamText && streamThought"
+          class="text-txt3"
+          data-testid="gate-busy-status"
+        >
+          {{ t('pages.clarify.thinkingBusy') }}
+        </div>
+        <div
+          v-else-if="streamText"
+          class="composer-outputting"
+          data-testid="gate-busy-status"
+        >
+          {{ t('pages.clarify.outputting') }}
+        </div>
+        <details
+          v-if="streamThought"
+          open
+          class="rounded border border-line bg-base/60 text-[11.5px] text-txt3"
+          data-testid="gate-react-thought"
+        >
+          <summary class="flex cursor-pointer select-none items-center gap-1 px-2 py-1 hover:text-txt2">
+            <Icon name="sparkles" :size="11" class="text-accent-2" />
+            {{ t('pages.clarify.thought') }}
+          </summary>
+          <div class="whitespace-pre-wrap border-t border-dashed border-line px-2 pb-1.5 pt-1 font-mono leading-5">{{ streamThought }}</div>
+        </details>
+        <div v-if="streamText">
+          {{ streamText }}
+          <span v-if="interrupted" class="ml-1 text-[10px] text-warn">interrupted</span>
+        </div>
       </div>
       <p class="mt-2 text-[11px] leading-relaxed text-txt3" data-testid="review-composer-footer-hint">
         {{ gateFooterHint }}
@@ -277,3 +316,45 @@ function onPass() {
     </div>
   </div>
 </template>
+
+<style scoped>
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.typing-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: #22d3ee;
+  animation: typing-bounce 1.2s infinite ease-in-out both;
+}
+.typing-dots i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.typing-dots i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+@keyframes typing-bounce {
+  0%,
+  70%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  35% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+.composer-outputting {
+  color: rgb(var(--c-accent-2));
+  background: var(--grad-logo);
+  background-size: var(--grad-logo-size);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 3.5s ease-in-out infinite;
+}
+</style>

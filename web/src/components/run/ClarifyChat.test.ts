@@ -659,4 +659,118 @@ describe('ClarifyChat', () => {
     vi.unstubAllGlobals()
   })
 
+  describe('busy status C-tier (no air bubble)', () => {
+    it('turn_begin shows 思考中… + typing-dots placeholder (no air bubble)', async () => {
+      const wrapper = mountChat({ draft: '请复审' })
+      await clickSend(wrapper)
+      const vm = wrapper.vm as unknown as {
+        applyReviewFrame: (f: Record<string, unknown>) => void
+      }
+      vm.applyReviewFrame({
+        event: 'turn_begin',
+        nodeId: 'react-1',
+        item: { text: '请复审' },
+      })
+      await flushPromises()
+
+      const placeholder = wrapper.find('[data-testid="clarify-busy-placeholder"]')
+      expect(placeholder.exists()).toBe(true)
+      expect(placeholder.text()).toContain('思考中')
+      expect(placeholder.find('.typing-dots').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="clarify-agent-message"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="clarify-thought"]').exists()).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('thought is visible and default-open; message does not erase thought', async () => {
+      const wrapper = mountChat({ draft: '请复审' })
+      await clickSend(wrapper)
+      const vm = wrapper.vm as unknown as {
+        applyReviewFrame: (f: Record<string, unknown>) => void
+        applyAcpEvents: (e: { kind: string; text: string }[], nodeId?: string) => void
+      }
+      vm.applyReviewFrame({
+        event: 'turn_begin',
+        nodeId: 'react-1',
+        item: { text: '请复审' },
+      })
+      await flushPromises()
+      vm.applyAcpEvents([{ kind: 'thought', text: '先核对边界与分轨' }], 'react-1')
+      await flushPromises()
+
+      const thought = wrapper.find('[data-testid="clarify-thought"]')
+      expect(thought.exists()).toBe(true)
+      expect(thought.attributes('open')).toBeDefined()
+      expect(thought.text()).toContain('先核对边界与分轨')
+      expect(wrapper.find('[data-testid="clarify-busy-status"]').text()).toContain('思考中')
+      expect(wrapper.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(false)
+
+      vm.applyAcpEvents(
+        [
+          { kind: 'thought', text: '先核对边界与分轨' },
+          { kind: 'message', text: '已核对完成' },
+        ],
+        'react-1',
+      )
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="clarify-thought"]').text()).toContain('先核对边界与分轨')
+      expect(wrapper.find('[data-testid="clarify-agent-message"]').text()).toContain('已核对完成')
+      expect(wrapper.find('[data-testid="clarify-busy-status"]').text()).toContain('输出中')
+      wrapper.unmount()
+    })
+
+    it('turn_done removes 输出中 status while keeping thought+message', async () => {
+      const wrapper = mountChat({ draft: '请复审' })
+      await clickSend(wrapper)
+      const vm = wrapper.vm as unknown as {
+        applyReviewFrame: (f: Record<string, unknown>) => void
+        applyAcpEvents: (e: { kind: string; text: string }[], nodeId?: string) => void
+      }
+      vm.applyReviewFrame({
+        event: 'turn_begin',
+        nodeId: 'react-1',
+        item: { text: '请复审' },
+      })
+      vm.applyAcpEvents(
+        [
+          { kind: 'thought', text: '思考内容' },
+          { kind: 'message', text: '正文内容' },
+        ],
+        'react-1',
+      )
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-busy-status"]').text()).toContain('输出中')
+
+      vm.applyReviewFrame({ event: 'turn_done', nodeId: 'react-1' })
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-busy-status"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="clarify-thought"]').text()).toContain('思考内容')
+      expect(wrapper.find('[data-testid="clarify-agent-message"]').text()).toContain('正文内容')
+      wrapper.unmount()
+    })
+
+    it('tool_call alone keeps 思考中… placeholder (no tool UI, no air bubble)', async () => {
+      const wrapper = mountChat({ draft: '请复审' })
+      await clickSend(wrapper)
+      const vm = wrapper.vm as unknown as {
+        applyReviewFrame: (f: Record<string, unknown>) => void
+        applyAcpEvents: (e: { kind: string; text?: string }[], nodeId?: string) => void
+      }
+      vm.applyReviewFrame({
+        event: 'turn_begin',
+        nodeId: 'react-1',
+        item: { text: '请复审' },
+      })
+      await flushPromises()
+      vm.applyAcpEvents([{ kind: 'tool_call', text: 'read_file' }], 'react-1')
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="clarify-busy-placeholder"]').text()).toContain('思考中')
+      expect(wrapper.text()).not.toMatch(/正在调用工具|读文件/)
+      expect(wrapper.find('[data-testid="clarify-agent-message"]').exists()).toBe(false)
+      wrapper.unmount()
+    })
+  })
 })

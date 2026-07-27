@@ -2527,6 +2527,86 @@ describe('GateApproval mobileFillRemaining layout', () => {
     wrapper.unmount()
   })
 
+  it('busy C-tier: turn_begin placeholder, thought visible, message→输出中, tool keeps placeholder', async () => {
+    breakpointMocks.isMobile.value = false
+    apiMocks.listPreviewIssues.mockResolvedValue({
+      issues: [
+        {
+          id: 'iss-busy',
+          runId: 'run-1',
+          nodeId: 'hg-visual',
+          body: '标题需改',
+          status: 'open',
+          createdAt: '2026-07-18T00:00:00Z',
+        },
+      ],
+    })
+    apiMocks.gateReactRevise.mockResolvedValue({ status: 'accepted', waiting: 1 })
+    apiMocks.createPreviewIssue.mockResolvedValue({
+      id: 'iss-new',
+      body: '改一下',
+      status: 'open',
+      createdAt: '2026-07-18T00:02:00Z',
+    })
+    const pageHtml = '<!doctype html><html><body><h1>busy status</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      mobileFillRemaining: false,
+      gate: { ...gate, reactSessionAlive: true, reactUpstreamNodeId: 'visual' },
+      run,
+    })
+    await flushPromises()
+
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+    expect(form.find('[data-testid="review-composer-reject"]').exists()).toBe(true)
+    await form.find('[data-testid="paragraph-input"]').setValue('改一下')
+    await flushPromises()
+    await form.find('[data-testid="review-composer-reject"]').trigger('click')
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    vm.applyReviewFrame?.({
+      event: 'turn_begin',
+      nodeId: 'visual',
+      item: { text: '改一下' },
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="gate-react-stream"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-busy-placeholder"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-busy-placeholder"]').text()).toContain('思考中')
+
+    vm.applyAcpEvents?.([{ kind: 'thought', text: '旁路思考内容' }])
+    await flushPromises()
+    const thought = wrapper.find('[data-testid="gate-react-thought"]')
+    expect(thought.exists()).toBe(true)
+    expect(thought.attributes('open')).toBeDefined()
+    expect(thought.text()).toContain('旁路思考内容')
+    expect(wrapper.find('[data-testid="gate-busy-status"]').text()).toContain('思考中')
+
+    vm.applyAcpEvents?.([
+      { kind: 'thought', text: '旁路思考内容' },
+      { kind: 'message', text: '旁路正文' },
+    ])
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-busy-status"]').text()).toContain('输出中')
+    expect(wrapper.find('[data-testid="gate-react-stream"]').text()).toContain('旁路正文')
+    expect(wrapper.find('[data-testid="gate-react-thought"]').text()).toContain('旁路思考内容')
+
+    vm.applyReviewFrame?.({
+      event: 'turn_begin',
+      nodeId: 'visual',
+      item: { text: '下一轮' },
+    })
+    await flushPromises()
+    vm.applyAcpEvents?.([{ kind: 'tool_call', text: 'read_file' }])
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-busy-placeholder"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toMatch(/正在调用工具/)
+    wrapper.unmount()
+  })
+
   it('exposes gate-react queue/Cancel on proposal_select ReviewComposer(gate)', async () => {
     breakpointMocks.isMobile.value = false
     apiMocks.gateReactRevise.mockResolvedValue({ status: 'accepted', waiting: 1 })

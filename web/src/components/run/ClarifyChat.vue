@@ -751,6 +751,7 @@ function applyQueueState(
       {
         role: 'agent',
         text: '',
+        thought: '',
         at: new Date().toISOString(),
         streaming: true,
       },
@@ -820,6 +821,7 @@ function applyReviewFrame(frame: {
         liveTurns.value.push({
           role: 'agent',
           text: '',
+          thought: '',
           at: new Date().toISOString(),
           streaming: true,
         }) - 1
@@ -868,16 +870,23 @@ function applyAcpEvents(events: AcpEvent[] | undefined, nodeId?: string) {
   const agent = liveTurns.value[liveAgentIdx.value]
   if (!agent) return
   let msg = agent.text
-  let thought = ''
+  let thought = agent.thought || ''
   for (const ev of events) {
+    // Ignore tool_call / plan for UI (Demo: no tool chips); placeholder stays via streaming.
     if (ev.kind === 'message' && ev.text) msg = ev.text
     if (ev.kind === 'thought' && ev.text) thought = ev.text
   }
-  const next = msg || thought
-  agent.text = next
-  streamPreview.setText(next)
+  // Keep thought / message on separate rails — never msg||thought overwrite.
+  agent.thought = thought
+  agent.text = msg
+  streamPreview.setText(msg)
   // Stick-gated only — never force-drag while user scrolled up.
   void scrollBottom()
+}
+
+/** Live agent bubble has visible message body (text or coalesced markdown). */
+function agentHasMessage(t: ClarifyTurn): boolean {
+  return !!(t.text || (t.streaming && liveStreamHtml.value))
 }
 
 defineExpose({
@@ -953,11 +962,59 @@ defineExpose({
               </div>
             </div>
           </div>
+          <!-- Agent busy / thought / message (Demo C: no air bubble) -->
+          <template v-else-if="t.role === 'agent'">
+            <!-- Waiting first token: dots + 思考中… inside bubble -->
+            <div
+              v-if="t.streaming && !t.thought && !agentHasMessage(t)"
+              class="inline-flex items-center gap-2.5 rounded-lg border border-line bg-elevated px-3 py-2 text-[13px] text-txt3"
+              data-testid="clarify-busy-placeholder"
+            >
+              <span class="typing-dots" aria-hidden="true"><i /><i /><i /></span>
+              <span>{{ translate('pages.clarify.thinkingBusy') }}</span>
+            </div>
+            <!-- Status: 思考中… (has thought, no message yet) -->
+            <div
+              v-else-if="t.streaming && t.thought && !agentHasMessage(t)"
+              class="mb-1.5 text-[12px] font-normal text-txt3"
+              data-testid="clarify-busy-status"
+            >
+              {{ translate('pages.clarify.thinkingBusy') }}
+            </div>
+            <!-- Status: 输出中 (shimmer) while streaming message -->
+            <div
+              v-else-if="t.streaming && agentHasMessage(t)"
+              class="clarify-outputting mb-1.5 text-[12px] font-normal"
+              data-testid="clarify-busy-status"
+            >
+              {{ translate('pages.clarify.outputting') }}
+            </div>
+            <!-- Thought block: default open; not auto-collapsed when message arrives -->
+            <details
+              v-if="t.thought"
+              open
+              class="mb-2 w-full rounded-md border border-line bg-base/60 text-[11.5px] text-txt3"
+              data-testid="clarify-thought"
+            >
+              <summary class="flex cursor-pointer select-none items-center gap-1.5 px-2.5 py-1.5 text-txt3 hover:text-txt2">
+                <Icon name="sparkles" :size="11" class="text-accent-2" />
+                {{ translate('pages.clarify.thought') }}
+              </summary>
+              <div class="whitespace-pre-wrap border-t border-dashed border-line px-2.5 pb-2 pt-1.5 font-mono leading-5">{{ t.thought }}</div>
+            </details>
+            <!-- Message body -->
+            <div
+              v-if="agentHasMessage(t)"
+              class="md rounded-lg border border-line bg-elevated px-3 py-2 text-[13px] leading-relaxed text-txt"
+              data-testid="clarify-agent-message"
+              v-html="t.streaming && liveStreamHtml ? liveStreamHtml : renderMarkdown(t.text)"
+            />
+          </template>
+          <!-- Human free-text bubble (agent branch handled above; role narrowed to human) -->
           <div
-            v-else-if="t.text || (t.streaming && liveStreamHtml)"
-            class="md rounded-lg border px-3 py-2 text-[13px] leading-relaxed"
-            :class="t.role === 'agent' ? 'border-line bg-elevated text-txt' : 'border-accent/30 bg-accent-dim/60 text-txt'"
-            v-html="t.streaming && liveStreamHtml ? liveStreamHtml : renderMarkdown(t.text)"
+            v-else-if="t.text"
+            class="md rounded-lg border border-accent/30 bg-accent-dim/60 px-3 py-2 text-[13px] leading-relaxed text-txt"
+            v-html="renderMarkdown(t.text)"
           />
 
           <!-- Structured choice questions (ask_question). The latest agent turn
@@ -1352,5 +1409,16 @@ defineExpose({
     transform: translateY(-4px);
     opacity: 1;
   }
+}
+
+/* 「输出中」: same --grad-logo shimmer as .brand-logo__name */
+.clarify-outputting {
+  color: rgb(var(--c-accent-2));
+  background: var(--grad-logo);
+  background-size: var(--grad-logo-size);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 3.5s ease-in-out infinite;
 }
 </style>
