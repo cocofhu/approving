@@ -201,3 +201,165 @@ func containsAll(s string, parts ...string) bool {
 	}
 	return true
 }
+
+func TestFormatRunNotifyMessage_defaultWaitingHuman(t *testing.T) {
+	got := FormatRunNotifyMessage(RunNotifyEvent{
+		ProjectName: "Demo", WorkflowName: "自我迭代", RunID: "run-1",
+		NodeID: "gate", NodeLabel: "门禁", Kind: "waiting_human",
+	}, "https://app.example")
+	want := "【Approving】等待人工处理\n项目：Demo\n工作流：自我迭代\nRun：run-1\n节点：门禁\n打开：https://app.example/runs/run-1"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestFormatRunNotifyMessage_omitsNodeLineWhenEmpty(t *testing.T) {
+	got := FormatRunNotifyMessage(RunNotifyEvent{
+		ProjectName: "P", WorkflowName: "W", RunID: "r", Kind: "failed",
+	}, "")
+	want := "【Approving】运行失败\n项目：P\n工作流：W\nRun：r\n打开：/runs/r"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestRenderRunNotifyMessage_emptyAndWhitespaceFallback(t *testing.T) {
+	ev := RunNotifyEvent{
+		ProjectName: "Demo", WorkflowName: "WF", RunID: "run-x",
+		NodeID: "n1", NodeLabel: "节点A", Kind: "waiting_human",
+	}
+	base := "https://app.example"
+	want := FormatRunNotifyMessage(ev, base)
+	for _, tmpl := range []string{"", "   ", "\n\t"} {
+		got := RenderRunNotifyMessage(ev, base, tmpl)
+		if got != want {
+			t.Fatalf("tmpl=%q got %q want %q", tmpl, got, want)
+		}
+	}
+}
+
+func TestRenderRunNotifyMessage_customSixKeys(t *testing.T) {
+	ev := RunNotifyEvent{
+		ProjectName: "Demo", WorkflowName: "WF", RunID: "run-x",
+		NodeID: "n1", NodeLabel: "节点A", Kind: "failed",
+	}
+	tmpl := "【Approving】{title}\n{project}/{workflow}\n{run_id} · {node}\n{link}"
+	got := RenderRunNotifyMessage(ev, "https://app.example", tmpl)
+	want := "【Approving】运行失败\nDemo/WF\nrun-x · 节点A\nhttps://app.example/runs/run-x"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestRenderRunNotifyMessage_customEmptyNodeKeepsLine(t *testing.T) {
+	ev := RunNotifyEvent{
+		ProjectName: "P", WorkflowName: "W", RunID: "r", Kind: "waiting_human",
+	}
+	tmpl := "节点：{node}\n打开：{link}"
+	got := RenderRunNotifyMessage(ev, "", tmpl)
+	want := "节点：\n打开：/runs/r"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestReplaceRunNotifyPlaceholders_unknownKept(t *testing.T) {
+	got := ReplaceRunNotifyPlaceholders(
+		"hi {project} {unknown} {title}",
+		"P", "W", "r", "n", "L", "T",
+	)
+	want := "hi P {unknown} T"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestAttemptDeliver_usesCustomTemplate(t *testing.T) {
+	db := setupRunNotifyDB(t)
+	p := models.Project{
+		ID: "proj-n1", Name: "Demo",
+		NotifyPolicy: models.ProjectNotifyPolicy{
+			Enabled:              boolPtr(true),
+			DefaultEvents:        []string{"waiting_human", "failed"},
+			WaitingHumanTemplate: "WAIT {project} {run_id} {title}",
+			FailedTemplate:       "FAIL {workflow} {node}",
+		},
+	}
+	if err := db.Create(&p).Error; err != nil {
+		t.Fatal(err)
+	}
+	wf := models.WorkflowDef{
+		ID: "wf-n1", ProjectID: p.ID, Name: "自我迭代", Status: "published", Version: 1,
+		NotifyPolicy: models.WorkflowNotifyPolicy{Mode: "inherit"},
+	}
+	if err := db.Create(&wf).Error; err != nil {
+		t.Fatal(err)
+	}
+	d := &fakeRunDeliverer{}
+	svc := NewRunNotifyService(db, d, "https://app.example")
+
+	svc.AttemptDeliver(RunNotifyEvent{
+		ProjectID: "proj-n1", RunID: "run-tpl", WorkflowID: "wf-n1",
+		NodeID: "gate", NodeLabel: "门禁", Iteration: 1, Kind: "waiting_human",
+	})
+	if d.count() != 1 {
+		t.Fatalf("calls=%d", d.count())
+	}
+	if d.calls[0] != "proj-n1|WAIT Demo run-tpl 等待人工处理" {
+		t.Fatalf("unexpected waiting text: %s", d.calls[0])
+	}
+
+	svc.AttemptDeliver(RunNotifyEvent{
+		ProjectID: "proj-n1", RunID: "run-tpl2", WorkflowID: "wf-n1",
+		NodeID: "impl", NodeLabel: "实现", Iteration: 1, Kind: "failed",
+	})
+	if d.count() != 2 {
+		t.Fatalf("calls=%d", d.count())
+	}
+	if d.calls[1] != "proj-n1|FAIL 自我迭代 实现" {
+		t.Fatalf("unexpected failed text: %s", d.calls[1])
+	}
+}
+
+func TestAttemptDeliver_kindsIndependent(t *testing.T) {
+	db := setupRunNotifyDB(t)
+	p := models.Project{
+		ID: "proj-n1", Name: "Demo",
+		NotifyPolicy: models.ProjectNotifyPolicy{
+			Enabled:              boolPtr(true),
+			DefaultEvents:        []string{"waiting_human", "failed"},
+			WaitingHumanTemplate: "CUSTOM_WAIT {run_id}",
+			// failed empty → default formatter
+		},
+	}
+	if err := db.Create(&p).Error; err != nil {
+		t.Fatal(err)
+	}
+	wf := models.WorkflowDef{
+		ID: "wf-n1", ProjectID: p.ID, Name: "WF", Status: "published", Version: 1,
+		NotifyPolicy: models.WorkflowNotifyPolicy{Mode: "inherit"},
+	}
+	if err := db.Create(&wf).Error; err != nil {
+		t.Fatal(err)
+	}
+	d := &fakeRunDeliverer{}
+	svc := NewRunNotifyService(db, d, "")
+
+	svc.AttemptDeliver(RunNotifyEvent{
+		ProjectID: "proj-n1", RunID: "r1", WorkflowID: "wf-n1",
+		NodeID: "a", NodeLabel: "A", Iteration: 1, Kind: "waiting_human",
+	})
+	svc.AttemptDeliver(RunNotifyEvent{
+		ProjectID: "proj-n1", RunID: "r2", WorkflowID: "wf-n1",
+		NodeID: "b", NodeLabel: "B", Iteration: 1, Kind: "failed",
+	})
+	if d.count() != 2 {
+		t.Fatalf("calls=%d", d.count())
+	}
+	if d.calls[0] != "proj-n1|CUSTOM_WAIT r1" {
+		t.Fatalf("waiting should use custom: %s", d.calls[0])
+	}
+	if !strings.Contains(d.calls[1], "【Approving】运行失败") || !strings.Contains(d.calls[1], "节点：B") {
+		t.Fatalf("failed should use default: %s", d.calls[1])
+	}
+}

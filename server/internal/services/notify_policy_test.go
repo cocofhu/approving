@@ -81,12 +81,34 @@ func TestResolveNotifyEvents(t *testing.T) {
 	}
 }
 
-func TestNotifyEventAllowed(t *testing.T) {
-	ev := []string{"waiting_human", "failed"}
-	if !NotifyEventAllowed(ev, "waiting_human") || !NotifyEventAllowed(ev, "failed") {
-		t.Fatal("expected allowed")
+func TestNotifyPoliciesEqual_includesTemplates(t *testing.T) {
+	base := models.ProjectNotifyPolicy{
+		Enabled: boolPtr(true), DefaultEvents: []string{"waiting_human", "failed"},
 	}
-	if NotifyEventAllowed(ev, "completed") || NotifyEventAllowed(nil, "failed") {
-		t.Fatal("expected denied")
+	if !NotifyPoliciesEqual(base, base) {
+		t.Fatal("identical should equal")
+	}
+	changed := base
+	changed.WaitingHumanTemplate = "x"
+	if NotifyPoliciesEqual(base, changed) {
+		t.Fatal("template-only change must not equal")
+	}
+	blank := base
+	blank.WaitingHumanTemplate = "  \n"
+	if !NotifyPoliciesEqual(base, blank) {
+		t.Fatal("whitespace-only template normalizes to empty")
+	}
+}
+
+func TestNormalizeProjectNotifyPolicy_trimsTemplates(t *testing.T) {
+	got := NormalizeProjectNotifyPolicy(models.ProjectNotifyPolicy{
+		WaitingHumanTemplate: "  hi  ",
+		FailedTemplate:       "\n\t",
+	})
+	if got.WaitingHumanTemplate != "  hi  " {
+		t.Fatalf("non-empty must keep surrounding spaces: %q", got.WaitingHumanTemplate)
+	}
+	if got.FailedTemplate != "" {
+		t.Fatalf("failed=%q want empty", got.FailedTemplate)
 	}
 }

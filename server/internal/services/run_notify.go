@@ -115,7 +115,7 @@ func (s *RunNotifyService) AttemptDeliver(ev RunNotifyEvent) {
 			Str("project", project.ID).
 			Msg("run-notify: PublicAdvertise empty — deep link will be relative /runs/{id}")
 	}
-	text := FormatRunNotifyMessage(ev, base)
+	text := RenderRunNotifyMessage(ev, base, templateForKind(project.NotifyPolicy, kind))
 	if s.deliver == nil {
 		log.Info().Str("run_id", ev.RunID).Str("kind", kind).
 			Msg("run-notify: no deliverer — no-op after claim")
@@ -197,11 +197,62 @@ func isUniqueViolation(err error) bool {
 	return strings.Contains(msg, "unique") || strings.Contains(msg, "duplicate")
 }
 
-// FormatRunNotifyMessage builds the QQ body (independent of FormatCronPush).
-func FormatRunNotifyMessage(ev RunNotifyEvent, base string) string {
-	title := "运行失败"
-	if ev.Kind == models.NotifyKindWaitingHuman {
-		title = "等待人工处理"
+// Run notify template placeholders (locked; UI chips + frontend preview share this set).
+const (
+	NotifyPlaceholderProject  = "{project}"
+	NotifyPlaceholderWorkflow = "{workflow}"
+	NotifyPlaceholderRunID    = "{run_id}"
+	NotifyPlaceholderNode     = "{node}"
+	NotifyPlaceholderLink     = "{link}"
+	NotifyPlaceholderTitle    = "{title}"
+)
+
+func templateForKind(p models.ProjectNotifyPolicy, kind string) string {
+	switch kind {
+	case models.NotifyKindWaitingHuman:
+		return p.WaitingHumanTemplate
+	case models.NotifyKindFailed:
+		return p.FailedTemplate
+	default:
+		return ""
+	}
+}
+
+// RunNotifyTitle returns the event title used by {title} and the default formatter.
+func RunNotifyTitle(kind string) string {
+	if kind == models.NotifyKindWaitingHuman {
+		return "等待人工处理"
+	}
+	return "运行失败"
+}
+
+// RunNotifyNodeDisplay returns Label if set, otherwise NodeID (may be empty).
+func RunNotifyNodeDisplay(ev RunNotifyEvent) string {
+	if n := strings.TrimSpace(ev.NodeLabel); n != "" {
+		return n
+	}
+	return strings.TrimSpace(ev.NodeID)
+}
+
+// ReplaceRunNotifyPlaceholders performs literal six-key replacement.
+// Unknown placeholders are left as-is; never panics.
+func ReplaceRunNotifyPlaceholders(tmpl string, project, workflow, runID, node, link, title string) string {
+	replacer := strings.NewReplacer(
+		NotifyPlaceholderProject, project,
+		NotifyPlaceholderWorkflow, workflow,
+		NotifyPlaceholderRunID, runID,
+		NotifyPlaceholderNode, node,
+		NotifyPlaceholderLink, link,
+		NotifyPlaceholderTitle, title,
+	)
+	return replacer.Replace(tmpl)
+}
+
+// RenderRunNotifyMessage uses a custom template when trim-non-empty; otherwise
+// falls back to FormatRunNotifyMessage (byte-compatible with legacy hardcode).
+func RenderRunNotifyMessage(ev RunNotifyEvent, base, template string) string {
+	if strings.TrimSpace(template) == "" {
+		return FormatRunNotifyMessage(ev, base)
 	}
 	projectName := strings.TrimSpace(ev.ProjectName)
 	if projectName == "" {
@@ -211,10 +262,26 @@ func FormatRunNotifyMessage(ev RunNotifyEvent, base string) string {
 	if wfName == "" {
 		wfName = "—"
 	}
-	node := strings.TrimSpace(ev.NodeLabel)
-	if node == "" {
-		node = strings.TrimSpace(ev.NodeID)
+	node := RunNotifyNodeDisplay(ev) // custom path: empty stays empty (no line delete)
+	link := runDeepLink(base, ev.RunID)
+	title := RunNotifyTitle(ev.Kind)
+	return ReplaceRunNotifyPlaceholders(template, projectName, wfName, ev.RunID, node, link, title)
+}
+
+// FormatRunNotifyMessage builds the QQ body (independent of FormatCronPush).
+// Empty/missing project templates must call this path for zero regression
+// (including omitting the whole「节点：」line when node display is empty).
+func FormatRunNotifyMessage(ev RunNotifyEvent, base string) string {
+	title := RunNotifyTitle(ev.Kind)
+	projectName := strings.TrimSpace(ev.ProjectName)
+	if projectName == "" {
+		projectName = "—"
 	}
+	wfName := strings.TrimSpace(ev.WorkflowName)
+	if wfName == "" {
+		wfName = "—"
+	}
+	node := RunNotifyNodeDisplay(ev)
 	link := runDeepLink(base, ev.RunID)
 	var b strings.Builder
 	b.WriteString("【Approving】")

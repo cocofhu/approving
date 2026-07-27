@@ -72,6 +72,10 @@ export interface Workflow {
 export interface ProjectNotifyPolicy {
   enabled?: boolean
   defaultEvents?: string[]
+  /** Full QQ body for waiting_human; trim-empty → legacy FormatRunNotifyMessage. */
+  waitingHumanTemplate?: string
+  /** Full QQ body for failed; trim-empty → legacy FormatRunNotifyMessage. */
+  failedTemplate?: string
 }
 
 /** Workflow-level notify override: off | inherit | custom. */
