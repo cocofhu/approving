@@ -118,8 +118,44 @@ function canDeleteRun(r: Run) {
   return r.status === 'completed' || r.status === 'failed' || r.status === 'cancelled'
 }
 
-function openRun(r: Run) {
-  router.push('/runs/' + r.id)
+/** Prefetch RunDetail chunk once so list → detail navigation feels snappy. */
+let runDetailPrefetch: Promise<unknown> | null = null
+function prefetchRunDetail() {
+  if (!runDetailPrefetch) {
+    runDetailPrefetch = import('@/views/RunDetailView.vue')
+  }
+}
+
+function runHref(id: string) {
+  return '/runs/' + id
+}
+
+/** Display fields compared before poll/list assignment to skip no-op re-renders. */
+function runListFingerprint(r: Run): string {
+  return [
+    r.id,
+    r.status,
+    r.title ?? '',
+    r.priority ?? '',
+    r.progress,
+    r.durationSec,
+    r.currentNodeLabel ?? '',
+    r.workflowName,
+    r.workflowVersion ?? '',
+    r.trigger,
+    r.startedAt,
+    r.createdAt ?? '',
+  ].join('\0')
+}
+
+function runsListUnchanged(next: Run[], nextTotal: number): boolean {
+  if (nextTotal !== total.value) return false
+  const prev = runs.value
+  if (prev.length !== next.length) return false
+  for (let i = 0; i < next.length; i++) {
+    if (runListFingerprint(prev[i]) !== runListFingerprint(next[i])) return false
+  }
+  return true
 }
 
 function openCancelConfirm(r: Run) {
@@ -254,9 +290,11 @@ async function load({ showLoading = false }: { showLoading?: boolean } = {}) {
     const data = await api.listRuns(listParams())
     if (localSeq === requestSeq) {
       if (isPaginated(data)) {
-        runs.value = data.items
-        total.value = data.total
-      } else {
+        if (!runsListUnchanged(data.items, data.total)) {
+          runs.value = data.items
+          total.value = data.total
+        }
+      } else if (!runsListUnchanged(data, data.length)) {
         runs.value = data
         total.value = data.length
       }
@@ -430,78 +468,93 @@ onUnmounted(() => {
         {{ emptyMessage }}
       </div>
       <div v-else class="flex flex-col gap-2">
-        <div
+        <!--
+          custom + navigate (not a real <a>): ops @click.stop must not sit inside
+          a native link, or stopPropagation blocks Vue Router's preventDefault and
+          the browser follows href (cancel/delete → whole-page jump to /runs/:id).
+        -->
+        <RouterLink
           v-for="r in runs"
           :key="r.id"
-          role="button"
-          tabindex="0"
-          class="flex w-full cursor-pointer flex-col gap-2 rounded-lg border border-line bg-surface p-3 text-left transition hover:border-line-strong hover:bg-elevated"
-          @click="openRun(r)"
-          @keydown.enter.prevent="openRun(r)"
+          :to="runHref(r.id)"
+          custom
+          v-slot="{ navigate, href }"
         >
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0 flex-1">
-              <div
-                v-if="r.title"
-                class="truncate text-sm font-semibold text-txt"
-                :title="r.title.length > 60 ? r.title : undefined"
-              >{{ truncateText(r.title, 60) }}</div>
-              <div
-                class="font-mono text-xs text-txt3"
-                :class="r.title ? 'mt-0.5' : 'text-[13px] font-medium'"
-              >#{{ runIdShort(r.id) }}</div>
-            </div>
-            <StatusPill :status="r.status" size="sm" />
-          </div>
-          <div class="flex flex-wrap items-center gap-1.5">
-            <PriorityBadge :priority="r.priority" />
-          </div>
-          <div class="flex min-w-0 flex-col gap-1">
-            <div class="flex items-center gap-2">
-              <div class="h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-elevated">
-                <div class="h-full rounded-full bg-accent" :style="{ width: r.progress * 100 + '%' }" />
+          <div
+            role="link"
+            :data-href="href"
+            tabindex="0"
+            class="flex w-full cursor-pointer flex-col gap-2 rounded-lg border border-line bg-surface p-3 text-left no-underline transition hover:border-line-strong hover:bg-elevated"
+            @click="navigate"
+            @keydown.enter.prevent="() => navigate()"
+            @mouseenter="prefetchRunDetail"
+            @touchstart.passive="prefetchRunDetail"
+            @pointerdown="prefetchRunDetail"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0 flex-1">
+                <div
+                  v-if="r.title"
+                  class="truncate text-sm font-semibold text-txt"
+                  :title="r.title.length > 60 ? r.title : undefined"
+                >{{ truncateText(r.title, 60) }}</div>
+                <div
+                  class="font-mono text-xs text-txt3"
+                  :class="r.title ? 'mt-0.5' : 'text-[13px] font-medium'"
+                >#{{ runIdShort(r.id) }}</div>
               </div>
-              <span class="text-[11px] tabular-nums text-txt3">{{ Math.round(r.progress * 100) }}%</span>
+              <StatusPill :status="r.status" size="sm" />
             </div>
-            <div
-              v-if="showNodeLabel(r)"
-              :key="`${r.id}-${r.currentNodeLabel}`"
-              class="node-label-fade max-w-full truncate text-[11px]"
-              :class="r.status === 'waiting_human' ? 'text-warn' : 'text-txt3'"
-              :title="r.currentNodeLabel!.length > 60 ? r.currentNodeLabel : undefined"
-            >{{ truncateText(r.currentNodeLabel!, 60) }}</div>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <PriorityBadge :priority="r.priority" />
+            </div>
+            <div class="flex min-w-0 flex-col gap-1">
+              <div class="flex items-center gap-2">
+                <div class="h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-elevated">
+                  <div class="h-full rounded-full bg-accent" :style="{ width: r.progress * 100 + '%' }" />
+                </div>
+                <span class="text-[11px] tabular-nums text-txt3">{{ Math.round(r.progress * 100) }}%</span>
+              </div>
+              <div
+                v-if="showNodeLabel(r)"
+                :key="`${r.id}-${r.currentNodeLabel}`"
+                class="node-label-fade max-w-full truncate text-[11px]"
+                :class="r.status === 'waiting_human' ? 'text-warn' : 'text-txt3'"
+                :title="r.currentNodeLabel!.length > 60 ? r.currentNodeLabel : undefined"
+              >{{ truncateText(r.currentNodeLabel!, 60) }}</div>
+            </div>
+            <div class="flex min-w-0 items-center justify-between gap-2">
+              <div class="flex min-w-0 items-center gap-1.5 text-[12px] text-txt2">
+                <span class="truncate">{{ r.workflowName }}</span>
+                <span v-if="r.workflowVersion" class="chip shrink-0">v{{ r.workflowVersion }}</span>
+              </div>
+              <div class="shrink-0" data-testid="run-ops" @click.stop @keydown.stop>
+                <AppButton
+                  v-if="canCancelRun(r)"
+                  data-testid="cancel-run-btn"
+                  variant="danger"
+                  size="sm"
+                  :disabled="cancellingRun && cancelTarget?.id === r.id"
+                  @click="openCancelConfirm(r)"
+                >{{ t('common.buttons.cancel') }}</AppButton>
+                <AppButton
+                  v-else-if="canDeleteRun(r)"
+                  data-testid="delete-run-btn"
+                  variant="danger"
+                  size="sm"
+                  :disabled="deletingRun && deleteTarget?.id === r.id"
+                  @click="openDeleteConfirm(r)"
+                >{{ t('common.buttons.delete') }}</AppButton>
+                <span
+                  v-else
+                  data-testid="run-ops-placeholder"
+                  class="select-none px-1 text-sm text-txt3/50"
+                  aria-hidden="true"
+                >—</span>
+              </div>
+            </div>
           </div>
-          <div class="flex min-w-0 items-center justify-between gap-2">
-            <div class="flex min-w-0 items-center gap-1.5 text-[12px] text-txt2">
-              <span class="truncate">{{ r.workflowName }}</span>
-              <span v-if="r.workflowVersion" class="chip shrink-0">v{{ r.workflowVersion }}</span>
-            </div>
-            <div class="shrink-0" data-testid="run-ops" @click.stop @keydown.stop>
-              <AppButton
-                v-if="canCancelRun(r)"
-                data-testid="cancel-run-btn"
-                variant="danger"
-                size="sm"
-                :disabled="cancellingRun && cancelTarget?.id === r.id"
-                @click="openCancelConfirm(r)"
-              >{{ t('common.buttons.cancel') }}</AppButton>
-              <AppButton
-                v-else-if="canDeleteRun(r)"
-                data-testid="delete-run-btn"
-                variant="danger"
-                size="sm"
-                :disabled="deletingRun && deleteTarget?.id === r.id"
-                @click="openDeleteConfirm(r)"
-              >{{ t('common.buttons.delete') }}</AppButton>
-              <span
-                v-else
-                data-testid="run-ops-placeholder"
-                class="select-none px-1 text-sm text-txt3/50"
-                aria-hidden="true"
-              >—</span>
-            </div>
-          </div>
-        </div>
+        </RouterLink>
       </div>
       <Pagination v-if="total > PAGE_SIZE" v-model:page="page" :page-size="PAGE_SIZE" :total="total" />
     </div>
@@ -605,79 +658,92 @@ onUnmounted(() => {
             </td>
           </tr>
           <template v-else>
-            <tr
+            <RouterLink
               v-for="r in runs"
               :key="r.id"
-              class="cursor-pointer border-t border-line transition hover:bg-elevated"
-              @click="openRun(r)"
+              :to="runHref(r.id)"
+              custom
+              v-slot="{ navigate, href }"
             >
-              <td class="max-w-[340px] px-5 py-3">
-                <template v-if="r.title">
-                  <div
-                    class="max-w-[320px] truncate font-semibold text-txt"
-                    :title="r.title.length > 60 ? r.title : undefined"
-                  >{{ truncateText(r.title, 60) }}</div>
-                  <div class="mt-0.5 font-mono text-xs text-txt3">#{{ runIdShort(r.id) }}</div>
-                </template>
-                <span v-else class="font-mono text-[13px] font-medium text-txt3">#{{ runIdShort(r.id) }}</span>
-              </td>
-              <td class="px-5 py-3 text-txt2">
-                {{ r.workflowName }}
-                <span v-if="r.workflowVersion" class="chip ml-1.5">v{{ r.workflowVersion }}</span>
-              </td>
-              <td class="px-5 py-3 text-txt3">{{ formatTrigger(r.trigger) }}</td>
-              <td class="px-5 py-3 text-txt3">
-                <template v-if="r.status === 'queued'">
-                  {{ fmtTime(r.createdAt ?? '') }}
-                  <span class="ml-1 text-[10px] text-[#7B61FF]">{{ t('pages.runList.queued') }}</span>
-                </template>
-                <template v-else>{{ fmtTime(r.startedAt) }}</template>
-              </td>
-              <td class="px-5 py-3 text-txt3">{{ fmtDuration(r.durationSec) }}</td>
-              <td class="px-5 py-3">
-                <div class="min-w-[148px] max-w-[168px]">
-                  <div class="flex items-center gap-2">
-                    <div class="h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-elevated">
-                      <div class="h-full rounded-full bg-accent" :style="{ width: r.progress * 100 + '%' }" />
+              <tr
+                role="link"
+                :data-href="href"
+                tabindex="0"
+                class="cursor-pointer border-t border-line transition hover:bg-elevated"
+                @click="navigate"
+                @keydown.enter.prevent="() => navigate()"
+                @mouseenter="prefetchRunDetail"
+                @touchstart.passive="prefetchRunDetail"
+                @pointerdown="prefetchRunDetail"
+              >
+                <td class="max-w-[340px] px-5 py-3">
+                  <template v-if="r.title">
+                    <div
+                      class="max-w-[320px] truncate font-semibold text-txt"
+                      :title="r.title.length > 60 ? r.title : undefined"
+                    >{{ truncateText(r.title, 60) }}</div>
+                    <div class="mt-0.5 font-mono text-xs text-txt3">#{{ runIdShort(r.id) }}</div>
+                  </template>
+                  <span v-else class="font-mono text-[13px] font-medium text-txt3">#{{ runIdShort(r.id) }}</span>
+                </td>
+                <td class="px-5 py-3 text-txt2">
+                  {{ r.workflowName }}
+                  <span v-if="r.workflowVersion" class="chip ml-1.5">v{{ r.workflowVersion }}</span>
+                </td>
+                <td class="px-5 py-3 text-txt3">{{ formatTrigger(r.trigger) }}</td>
+                <td class="px-5 py-3 text-txt3">
+                  <template v-if="r.status === 'queued'">
+                    {{ fmtTime(r.createdAt ?? '') }}
+                    <span class="ml-1 text-[10px] text-[#7B61FF]">{{ t('pages.runList.queued') }}</span>
+                  </template>
+                  <template v-else>{{ fmtTime(r.startedAt) }}</template>
+                </td>
+                <td class="px-5 py-3 text-txt3">{{ fmtDuration(r.durationSec) }}</td>
+                <td class="px-5 py-3">
+                  <div class="min-w-[148px] max-w-[168px]">
+                    <div class="flex items-center gap-2">
+                      <div class="h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-elevated">
+                        <div class="h-full rounded-full bg-accent" :style="{ width: r.progress * 100 + '%' }" />
+                      </div>
+                      <span class="text-[11px] text-txt3">{{ Math.round(r.progress * 100) }}%</span>
                     </div>
-                    <span class="text-[11px] text-txt3">{{ Math.round(r.progress * 100) }}%</span>
+                    <div
+                      v-if="showNodeLabel(r)"
+                      :key="`${r.id}-${r.currentNodeLabel}`"
+                      class="node-label-fade mt-1 max-w-[148px] truncate text-[11px]"
+                      :class="r.status === 'waiting_human' ? 'text-warn' : 'text-txt3'"
+                      :title="r.currentNodeLabel!.length > 60 ? r.currentNodeLabel : undefined"
+                    >{{ truncateText(r.currentNodeLabel!, 60) }}</div>
                   </div>
-                  <div
-                    v-if="showNodeLabel(r)"
-                    :key="`${r.id}-${r.currentNodeLabel}`"
-                    class="node-label-fade mt-1 max-w-[148px] truncate text-[11px]"
-                    :class="r.status === 'waiting_human' ? 'text-warn' : 'text-txt3'"
-                    :title="r.currentNodeLabel!.length > 60 ? r.currentNodeLabel : undefined"
-                  >{{ truncateText(r.currentNodeLabel!, 60) }}</div>
-                </div>
-              </td>
-              <td class="px-5 py-3"><StatusPill :status="r.status" size="sm" /></td>
-              <td class="px-5 py-3"><PriorityBadge :priority="r.priority" /></td>
-              <td class="px-5 py-3 text-right" data-testid="run-ops" @click.stop>
-                <AppButton
-                  v-if="canCancelRun(r)"
-                  data-testid="cancel-run-btn"
-                  variant="danger"
-                  size="sm"
-                  :disabled="cancellingRun && cancelTarget?.id === r.id"
-                  @click="openCancelConfirm(r)"
-                >{{ t('common.buttons.cancel') }}</AppButton>
-                <AppButton
-                  v-else-if="canDeleteRun(r)"
-                  data-testid="delete-run-btn"
-                  variant="danger"
-                  size="sm"
-                  :disabled="deletingRun && deleteTarget?.id === r.id"
-                  @click="openDeleteConfirm(r)"
-                >{{ t('common.buttons.delete') }}</AppButton>
-                <span
-                  v-else
-                  data-testid="run-ops-placeholder"
-                  class="select-none px-1 text-sm text-txt3/50"
-                  aria-hidden="true"
-                >—</span>
-              </td>
-            </tr>
+                </td>
+                <td class="px-5 py-3"><StatusPill :status="r.status" size="sm" /></td>
+                <td class="px-5 py-3"><PriorityBadge :priority="r.priority" /></td>
+                <td class="px-5 py-3 text-right" data-testid="run-ops" @click.stop>
+                  <AppButton
+                    v-if="canCancelRun(r)"
+                    data-testid="cancel-run-btn"
+                    variant="danger"
+                    size="sm"
+                    :disabled="cancellingRun && cancelTarget?.id === r.id"
+                    @click="openCancelConfirm(r)"
+                  >{{ t('common.buttons.cancel') }}</AppButton>
+                  <AppButton
+                    v-else-if="canDeleteRun(r)"
+                    data-testid="delete-run-btn"
+                    variant="danger"
+                    size="sm"
+                    :disabled="deletingRun && deleteTarget?.id === r.id"
+                    @click="openDeleteConfirm(r)"
+                  >{{ t('common.buttons.delete') }}</AppButton>
+                  <span
+                    v-else
+                    data-testid="run-ops-placeholder"
+                    class="select-none px-1 text-sm text-txt3/50"
+                    aria-hidden="true"
+                  >—</span>
+                </td>
+              </tr>
+            </RouterLink>
           </template>
         </tbody>
       </table>
@@ -759,7 +825,6 @@ onUnmounted(() => {
 <style scoped>
 .table-loading {
   opacity: 0.55;
-  pointer-events: none;
 }
 
 @keyframes nodeLabelFadeIn {

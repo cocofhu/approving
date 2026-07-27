@@ -6,6 +6,45 @@ import { describe, expect, it } from 'vitest'
 
 const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'RunListView.vue'), 'utf8')
 
+describe('RunListView click UX (loading / nav / prefetch)', () => {
+  it('keeps table-loading opacity without pointer-events:none blocking the list', () => {
+    const blockStart = src.indexOf('.table-loading {')
+    expect(blockStart).toBeGreaterThanOrEqual(0)
+    const blockEnd = src.indexOf('}', blockStart)
+    const block = src.slice(blockStart, blockEnd + 1)
+    expect(block).toMatch(/opacity:\s*0\.55/)
+    expect(block).not.toMatch(/pointer-events:\s*none/)
+    // Entire source must not reintroduce list-level pointer-events:none under table-loading
+    expect(src).not.toMatch(/\.table-loading\s*\{[^}]*pointer-events:\s*none/)
+  })
+
+  it('uses RouterLink / to for run rows and cards', () => {
+    expect(src).toMatch(/<RouterLink/)
+    expect(src).toMatch(/:to="runHref\(r\.id\)"/)
+    expect(src).toMatch(/function runHref\(id: string\)/)
+    expect(src).toMatch(/return '\/runs\/' \+ id/)
+    // Both mobile cards and desktop rows use custom + navigate (no bare <a> wrapping ops)
+    expect(src.match(/custom\s*\n\s*v-slot="\{ navigate, href \}"/g)?.length).toBeGreaterThanOrEqual(2)
+    expect(src.match(/@click="navigate"/g)?.length).toBeGreaterThanOrEqual(2)
+    expect(src).toMatch(/role="link"/)
+  })
+
+  it('prefetches RunDetail chunk on hover / touchstart / pointerdown', () => {
+    expect(src).toMatch(/function prefetchRunDetail\(/)
+    expect(src).toMatch(/import\('@\/views\/RunDetailView\.vue'\)/)
+    expect(src).toMatch(/@mouseenter="prefetchRunDetail"/)
+    expect(src).toMatch(/@touchstart\.passive="prefetchRunDetail"/)
+    expect(src).toMatch(/@pointerdown="prefetchRunDetail"/)
+  })
+
+  it('skips poll assignment when list fingerprint is unchanged', () => {
+    expect(src).toMatch(/function runsListUnchanged\(/)
+    expect(src).toMatch(/function runListFingerprint\(/)
+    expect(src).toMatch(/if \(!runsListUnchanged\(/)
+    expect(src).toMatch(/setInterval\(load, 3000\)/)
+  })
+})
+
 describe('RunListView cancel run', () => {
   it('exposes inline cancel for queued, running, and waiting_human', () => {
     expect(src).toMatch(/data-testid="cancel-run-btn"/)
@@ -36,8 +75,14 @@ describe('RunListView cancel run', () => {
   it('keeps cancel confirm copy distinct from delete and supports mobile cards', () => {
     expect(src).toMatch(/pages\.runDetail\.cancelWarning/)
     expect(src).toMatch(/pages\.runList\.cancelConfirm/)
-    expect(src).toMatch(/role="button"/)
-    expect(src).toMatch(/@click\.stop @keydown\.stop/)
+    // Mobile cards: RouterLink custom + role=link (not bare <a> / role=button + openRun)
+    expect(src).toMatch(/<!-- Mobile card list -->[\s\S]*?<RouterLink/)
+    const mobileBlock = src.slice(src.indexOf('<!-- Mobile card list -->'), src.indexOf('<!-- Desktop table -->'))
+    expect(mobileBlock).toMatch(/custom/)
+    expect(mobileBlock).toMatch(/v-slot="\{ navigate, href \}"/)
+    expect(mobileBlock).toMatch(/role="link"/)
+    expect(mobileBlock).not.toMatch(/<RouterLink[^>]*\n[^>]*class="/)
+    expect(mobileBlock).toMatch(/@click\.stop @keydown\.stop/)
   })
 })
 
@@ -57,7 +102,7 @@ describe('RunListView delete run and ops column', () => {
     )
     const deleteFn = src.slice(
       src.indexOf('function canDeleteRun(r: Run)'),
-      src.indexOf('function openRun(r: Run)'),
+      src.indexOf('function prefetchRunDetail('),
     )
     expect(cancelFn).not.toMatch(/completed|failed/)
     expect(deleteFn).not.toMatch(/queued|running|waiting_human/)
@@ -106,6 +151,11 @@ describe('RunListView delete run and ops column', () => {
     expect(src).toMatch(/data-testid="run-ops-placeholder"/)
     // desktop ops cell and mobile ops wrapper both stop click
     expect(src.match(/data-testid="run-ops"[^>]*@click\.stop/g)?.length).toBeGreaterThanOrEqual(2)
+    // Regression: mobile must use custom+navigate so ops @click.stop does not enable native <a> href
+    const mobileBlock = src.slice(src.indexOf('<!-- Mobile card list -->'), src.indexOf('<!-- Desktop table -->'))
+    expect(mobileBlock).toMatch(/custom/)
+    expect(mobileBlock).toMatch(/@click="navigate"/)
+    expect(mobileBlock).toMatch(/role="link"/)
   })
 
   it('keeps cancel confirm flow and does not drop cancel modal', () => {
