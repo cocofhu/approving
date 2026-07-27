@@ -7,6 +7,7 @@ import PriorityBadge from '@/components/ui/PriorityBadge.vue'
 import StatusFilter from '@/components/ui/StatusFilter.vue'
 import PipelineFilter from '@/components/ui/PipelineFilter.vue'
 import ProjectFilter from '@/components/ui/ProjectFilter.vue'
+import TagFilter from '@/components/ui/TagFilter.vue'
 import Pagination from '@/components/ui/Pagination.vue'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -14,6 +15,7 @@ import AppModal from '@/components/ui/AppModal.vue'
 import { api, isPaginated } from '@/lib/api'
 import { useToast } from '@/lib/useToast'
 import { usePipelineFilter } from '@/lib/usePipelineFilter'
+import { useTagFilter } from '@/lib/useTagFilter'
 import { useProjectContext } from '@/lib/useProjectContext'
 import {
   useStatusFilter,
@@ -62,7 +64,9 @@ const { selected: selectedProject, ensureHydrated: hydrateProject } = useProject
 const { selectedStatuses } = useStatusFilter()
 const statusFilterOpen = ref(false)
 const pipelineFilterOpen = ref(false)
-const tagDraft = ref('')
+const projectFilterOpen = ref(false)
+const tagFilterOpen = ref(false)
+const { selectedTags } = useTagFilter()
 
 function parseRunSort(
   sortRaw: unknown,
@@ -237,10 +241,32 @@ async function confirmDeleteRun() {
 }
 
 watch(statusFilterOpen, (v) => {
-  if (v) pipelineFilterOpen.value = false
+  if (v) {
+    pipelineFilterOpen.value = false
+    projectFilterOpen.value = false
+    tagFilterOpen.value = false
+  }
 })
 watch(pipelineFilterOpen, (v) => {
-  if (v) statusFilterOpen.value = false
+  if (v) {
+    statusFilterOpen.value = false
+    projectFilterOpen.value = false
+    tagFilterOpen.value = false
+  }
+})
+watch(projectFilterOpen, (v) => {
+  if (v) {
+    statusFilterOpen.value = false
+    pipelineFilterOpen.value = false
+    tagFilterOpen.value = false
+  }
+})
+watch(tagFilterOpen, (v) => {
+  if (v) {
+    statusFilterOpen.value = false
+    pipelineFilterOpen.value = false
+    projectFilterOpen.value = false
+  }
 })
 
 const hasFilter = computed(() => {
@@ -259,41 +285,6 @@ function runIdShort(id: string) {
 
 function showNodeLabel(r: Run) {
   return (r.status === 'running' || r.status === 'waiting_human') && !!r.currentNodeLabel
-}
-
-function parseTagQuery(raw: string): string[] {
-  if (!raw) return []
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const part of raw.split(',')) {
-    const tag = part.trim()
-    if (!tag || seen.has(tag)) continue
-    seen.add(tag)
-    out.push(tag)
-  }
-  return out
-}
-
-const selectedTags = computed<string[]>({
-  get: () => parseTagQuery(typeof route.query.tag === 'string' ? route.query.tag : ''),
-  set: (value) => {
-    const query = { ...route.query }
-    const next = parseTagQuery(value.join(',')).join(',')
-    if (next) query.tag = next
-    else delete query.tag
-    router.replace({ query })
-  },
-})
-
-function addTagFilter() {
-  const tag = tagDraft.value.trim()
-  if (!tag) return
-  selectedTags.value = [...selectedTags.value, tag]
-  tagDraft.value = ''
-}
-
-function removeTagFilter(tag: string) {
-  selectedTags.value = selectedTags.value.filter((item) => item !== tag)
 }
 
 function listParams() {
@@ -458,18 +449,16 @@ onUnmounted(() => {
         <p class="text-sm text-txt3">{{ t('pages.runList.subtitle') }}</p>
       </div>
       <div class="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
-        <div class="min-w-[220px] rounded-md border border-line bg-surface px-2.5 py-2">
-          <div v-if="selectedTags.length" class="mb-1.5 flex flex-wrap gap-1.5">
-            <button v-for="tag in selectedTags" :key="tag" class="chip" @click="removeTagFilter(tag)">{{ tag }}</button>
-          </div>
-          <input
-            v-model="tagDraft"
-            class="w-full bg-transparent text-sm outline-none"
-            :placeholder="t('pages.runList.tagPlaceholder')"
-            @keydown.enter.prevent="addTagFilter"
-          />
-        </div>
-        <ProjectFilter v-model="selectedProject" :count="total" />
+        <TagFilter
+          v-model="selectedTags"
+          v-model:open="tagFilterOpen"
+          :project-id="selectedProject"
+        />
+        <ProjectFilter
+          v-model="selectedProject"
+          v-model:open="projectFilterOpen"
+          :count="total"
+        />
         <StatusFilter
           v-model="selectedStatuses"
           v-model:open="statusFilterOpen"

@@ -228,6 +228,19 @@
       "noMatch": "No matching projects",
       "searchPlaceholder": "Search projects…"
     },
+    "tagFilter": {
+      "label": "Tags",
+      "searchPlaceholder": "Search or type a tag, Enter to add",
+      "selectedLabel": "Selected (AND)",
+      "suggestionsLabel": "Suggestions",
+      "selectedMark": "Selected",
+      "needProject": "Select a project to pick existing tags; you can still type a valid tag and press Enter",
+      "noStock": "No existing tags yet — type one and press Enter to add",
+      "noMatchHint": "No matching suggestions; press Enter to add “{tag}” if valid",
+      "tagInvalid": "Tags allow letters, numbers, _ - . /, including Chinese",
+      "tagTooLong": "Each tag can be at most {max} characters",
+      "removeTag": "Remove tag {tag}"
+    },
     "bool": {
       "yes": "Yes",
       "no": "No",

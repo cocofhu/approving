@@ -41,4 +41,20 @@ describe('ProjectFilter', () => {
     expect(apiMocks.listProjects).toHaveBeenCalled()
     wrapper.unmount()
   })
+
+  it('emits update:open when controlled open toggles', async () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common } },
+    })
+    const wrapper = mount(ProjectFilter, {
+      props: { modelValue: '', open: false },
+      global: { plugins: [i18n], stubs: { Icon: true } },
+    })
+    await flushPromises()
+    await wrapper.find('button').trigger('click')
+    expect(wrapper.emitted('update:open')?.[0]?.[0]).toBe(true)
+    wrapper.unmount()
+  })
 })
