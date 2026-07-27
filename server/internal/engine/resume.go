@@ -177,6 +177,8 @@ func (e *Engine) ResumeGateAs(runID, nodeID, action string, form map[string]any,
 			Action:         models.AuditActionGateDecide,
 			ResourceType:   "gate",
 			ResourceID:     nodeID,
+			RunID:          runID,
+			NodeID:         nodeID,
 			Outcome:        models.AuditOutcomeOK,
 			Summary:        "gate " + action,
 			Payload: map[string]any{

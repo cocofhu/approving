@@ -9,6 +9,8 @@ import type {
   WorkflowGraph,
   Project,
   ProjectAuditEvent,
+  ProjectAuditFacets,
+  ProjectAuditStats,
   ProjectTokenStats,
   TokenStatsWindow,
   PmLeaderBinding,
@@ -313,8 +315,12 @@ export const api = {
     params?: {
       time?: string
       actor?: string
+      callerKind?: string
       action?: string
       resource?: string
+      runId?: string
+      nodeId?: string
+      search?: string
       from?: string
       to?: string
       page?: number
@@ -324,55 +330,64 @@ export const api = {
     const q = new URLSearchParams()
     q.set('time', params?.time || '24h')
     if (params?.actor) q.set('actor', params.actor)
+    if (params?.callerKind) q.set('callerKind', params.callerKind)
     if (params?.action) q.set('action', params.action)
     if (params?.resource) q.set('resource', params.resource)
+    if (params?.runId) q.set('runId', params.runId)
+    if (params?.nodeId) q.set('nodeId', params.nodeId)
+    if (params?.search) q.set('search', params.search)
     if (params?.from) q.set('from', params.from)
     if (params?.to) q.set('to', params.to)
     q.set('page', String(params?.page ?? 1))
     q.set('pageSize', String(params?.pageSize ?? 20))
-    return req<PaginatedResponse<ProjectAuditEvent>>(
+    return req<PaginatedResponse<ProjectAuditEvent> & { stats?: ProjectAuditStats }>(
       `/projects/${encodeURIComponent(id)}/audit?${q}`,
     )
   },
 
-  /** Distinct actors/resources for audit cascade dropdowns. */
+  /** Run / node / resource options for dual-mode audit filters. */
   listProjectAuditFacets: (
     id: string,
     params?: {
       time?: string
-      action?: string
+      runId?: string
       from?: string
       to?: string
     },
   ) => {
     const q = new URLSearchParams()
     q.set('time', params?.time || '24h')
-    if (params?.action) q.set('action', params.action)
+    if (params?.runId) q.set('runId', params.runId)
     if (params?.from) q.set('from', params.from)
     if (params?.to) q.set('to', params.to)
-    return req<{
-      actors: string[]
-      resources: Array<{ resourceType: string; resourceId: string; resource: string }>
-    }>(`/projects/${encodeURIComponent(id)}/audit/facets?${q}`)
+    return req<ProjectAuditFacets>(`/projects/${encodeURIComponent(id)}/audit/facets?${q}`)
   },
 
-  /** Download URL for audit export (JSON or text); triggers meta-audit on server. */
+  /** Download URL for audit export (JSON); triggers meta-audit on server. */
   exportProjectAuditUrl: (
     id: string,
     params?: {
       format?: 'json' | 'text'
       time?: string
       actor?: string
+      callerKind?: string
       action?: string
       resource?: string
+      runId?: string
+      nodeId?: string
+      search?: string
     },
   ) => {
     const q = new URLSearchParams()
     q.set('format', params?.format || 'json')
     q.set('time', params?.time || '24h')
     if (params?.actor) q.set('actor', params.actor)
+    if (params?.callerKind) q.set('callerKind', params.callerKind)
     if (params?.action) q.set('action', params.action)
     if (params?.resource) q.set('resource', params.resource)
+    if (params?.runId) q.set('runId', params.runId)
+    if (params?.nodeId) q.set('nodeId', params.nodeId)
+    if (params?.search) q.set('search', params.search)
     return `${origin()}/api/projects/${encodeURIComponent(id)}/audit/export?${q}`
   },
 

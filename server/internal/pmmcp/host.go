@@ -580,6 +580,7 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 			Action:       models.AuditActionRunStart,
 			ResourceType: "run",
 			ResourceID:   run.ID,
+			RunID:        run.ID,
 			Outcome:      models.AuditOutcomeOK,
 			Summary:      "start run (pm_mcp)",
 			Payload: map[string]any{
@@ -587,6 +588,7 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 				"trigger":    trigger,
 				"priority":   priority,
 				"source":     "pm_mcp",
+				"runId":      run.ID,
 			},
 		})
 		return map[string]any{"id": run.ID, "status": run.Status}, false
@@ -629,9 +631,10 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 			Action:       models.AuditActionRunCancel,
 			ResourceType: "run",
 			ResourceID:   runID,
+			RunID:        runID,
 			Outcome:      models.AuditOutcomeOK,
 			Summary:      "cancel run (pm_mcp)",
-			Payload:      map[string]any{"workflowId": run.WorkflowID, "source": "pm_mcp"},
+			Payload:      map[string]any{"workflowId": run.WorkflowID, "source": "pm_mcp", "runId": runID},
 		})
 		return map[string]any{"status": "cancelled"}, false
 	default:
