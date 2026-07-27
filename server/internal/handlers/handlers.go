@@ -189,14 +189,15 @@ func (h *Handlers) GetWorkflow(c *gin.Context) {
 }
 
 type workflowBody struct {
-	ID          string            `json:"id"`
-	ProjectID   string            `json:"projectId"`
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	NeedsRepo   bool              `json:"needsRepo"`
-	Nodes       []models.Node     `json:"nodes"`
-	Edges       []models.Edge     `json:"edges"`
-	Variables   []models.Variable `json:"variables"`
+	ID           string                       `json:"id"`
+	ProjectID    string                       `json:"projectId"`
+	Name         string                       `json:"name"`
+	Description  string                       `json:"description"`
+	NeedsRepo    bool                         `json:"needsRepo"`
+	NotifyPolicy *models.WorkflowNotifyPolicy `json:"notifyPolicy"`
+	Nodes        []models.Node                `json:"nodes"`
+	Edges        []models.Edge                `json:"edges"`
+	Variables    []models.Variable            `json:"variables"`
 }
 
 func (h *Handlers) SaveWorkflow(c *gin.Context) {
@@ -226,6 +227,15 @@ func (h *Handlers) SaveWorkflow(c *gin.Context) {
 		ID: b.ID, ProjectID: b.ProjectID, Name: b.Name, Description: b.Description, NeedsRepo: b.NeedsRepo,
 		Graph: graph,
 	}
+	if b.NotifyPolicy != nil {
+		wf.NotifyPolicy = *b.NotifyPolicy
+	} else if !isCreate {
+		// Preserve existing notify policy when the client omits the field
+		// (editor saves that only touch graph/meta).
+		if existing, ok := h.WF.Get(b.ID); ok {
+			wf.NotifyPolicy = existing.NotifyPolicy
+		}
+	}
 	if err := h.WF.Save(&wf); err != nil {
 		switch {
 		case errors.Is(err, services.ErrEmptyWorkflowName),
@@ -248,18 +258,59 @@ func (h *Handlers) SaveWorkflow(c *gin.Context) {
 		summary = "create workflow"
 	}
 	h.recordAudit(services.AuditRecord{
-		ProjectID:      wf.ProjectID,
-		Actor:          h.auditActorFromContext(c),
-		Action:         action,
-		ResourceType:   "workflow",
-		ResourceID:     wf.ID,
-		Outcome:        models.AuditOutcomeOK,
-		Summary:        summary,
+		ProjectID:    wf.ProjectID,
+		Actor:        h.auditActorFromContext(c),
+		Action:       action,
+		ResourceType: "workflow",
+		ResourceID:   wf.ID,
+		Outcome:      models.AuditOutcomeOK,
+		Summary:      summary,
 		Payload: map[string]any{
 			"name":    wf.Name,
 			"status":  wf.Status,
 			"version": wf.Version,
 			"nodes":   len(wf.Graph.Nodes),
+		},
+	})
+	c.JSON(http.StatusOK, workflowDTO(wf))
+}
+
+type workflowNotifyPolicyBody struct {
+	NotifyPolicy models.WorkflowNotifyPolicy `json:"notifyPolicy"`
+}
+
+// PatchWorkflowNotifyPolicy handles PATCH /api/workflows/:id/notify-policy.
+// Notify-only write path: does not accept or rewrite Graph (review v1).
+func (h *Handlers) PatchWorkflowNotifyPolicy(c *gin.Context) {
+	var b workflowNotifyPolicyBody
+	if err := c.ShouldBindJSON(&b); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	id := c.Param("id")
+	wf, err := h.WF.UpdateNotifyPolicy(id, b.NotifyPolicy)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrWorkflowNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		default:
+			_ = c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	h.recordAudit(services.AuditRecord{
+		ProjectID:    wf.ProjectID,
+		Actor:        h.auditActorFromContext(c),
+		Action:       models.AuditActionWorkflowUpdate,
+		ResourceType: "workflow",
+		ResourceID:   wf.ID,
+		Outcome:      models.AuditOutcomeOK,
+		Summary:      "update workflow notify policy",
+		Payload: map[string]any{
+			"notifyPolicy": wf.NotifyPolicy,
+			"status":       wf.Status,
+			"version":      wf.Version,
 		},
 	})
 	c.JSON(http.StatusOK, workflowDTO(wf))
@@ -272,14 +323,14 @@ func (h *Handlers) PublishWorkflow(c *gin.Context) {
 		return
 	}
 	h.recordAudit(services.AuditRecord{
-		ProjectID:      wf.ProjectID,
-		Actor:          h.auditActorFromContext(c),
-		Action:         models.AuditActionWorkflowPublish,
-		ResourceType:   "workflow",
-		ResourceID:     wf.ID,
-		Outcome:        models.AuditOutcomeOK,
-		Summary:        fmt.Sprintf("publish workflow v%d", wf.Version),
-		Payload:        map[string]any{"name": wf.Name, "version": wf.Version},
+		ProjectID:    wf.ProjectID,
+		Actor:        h.auditActorFromContext(c),
+		Action:       models.AuditActionWorkflowPublish,
+		ResourceType: "workflow",
+		ResourceID:   wf.ID,
+		Outcome:      models.AuditOutcomeOK,
+		Summary:      fmt.Sprintf("publish workflow v%d", wf.Version),
+		Payload:      map[string]any{"name": wf.Name, "version": wf.Version},
 	})
 	c.JSON(http.StatusOK, workflowDTO(wf))
 }
@@ -344,14 +395,14 @@ func (h *Handlers) DeleteWorkflow(c *gin.Context) {
 	}
 	if projectID != "" {
 		h.recordAudit(services.AuditRecord{
-			ProjectID:      projectID,
-			Actor:          actor,
-			Action:         models.AuditActionWorkflowDelete,
-			ResourceType:   "workflow",
-			ResourceID:     id,
-			Outcome:        models.AuditOutcomeOK,
-			Summary:        "delete workflow",
-			Payload:        map[string]any{"deleted": true},
+			ProjectID:    projectID,
+			Actor:        actor,
+			Action:       models.AuditActionWorkflowDelete,
+			ResourceType: "workflow",
+			ResourceID:   id,
+			Outcome:      models.AuditOutcomeOK,
+			Summary:      "delete workflow",
+			Payload:      map[string]any{"deleted": true},
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
@@ -433,14 +484,14 @@ func (h *Handlers) StartRun(c *gin.Context) {
 	}
 	if wf, ok := h.WF.Get(c.Param("id")); ok && wf.ProjectID != "" {
 		h.recordAudit(services.AuditRecord{
-			ProjectID:      wf.ProjectID,
-			Actor:          h.auditActorFromContext(c),
-			Action:         models.AuditActionRunStart,
-			ResourceType:   "run",
-			ResourceID:     run.ID,
-			RunID:          run.ID,
-			Outcome:        models.AuditOutcomeOK,
-			Summary:        "start run",
+			ProjectID:    wf.ProjectID,
+			Actor:        h.auditActorFromContext(c),
+			Action:       models.AuditActionRunStart,
+			ResourceType: "run",
+			ResourceID:   run.ID,
+			RunID:        run.ID,
+			Outcome:      models.AuditOutcomeOK,
+			Summary:      "start run",
 			Payload: map[string]any{
 				"workflowId": c.Param("id"),
 				"trigger":    trigger,
@@ -555,15 +606,15 @@ func (h *Handlers) CancelRun(c *gin.Context) {
 	}
 	if projectID != "" {
 		h.recordAudit(services.AuditRecord{
-			ProjectID:      projectID,
-			Actor:          actor,
-			Action:         models.AuditActionRunCancel,
-			ResourceType:   "run",
-			ResourceID:     runID,
-			RunID:          runID,
-			Outcome:        models.AuditOutcomeOK,
-			Summary:        "cancel run",
-			Payload:        map[string]any{"workflowId": run.WorkflowID, "runId": runID},
+			ProjectID:    projectID,
+			Actor:        actor,
+			Action:       models.AuditActionRunCancel,
+			ResourceType: "run",
+			ResourceID:   runID,
+			RunID:        runID,
+			Outcome:      models.AuditOutcomeOK,
+			Summary:      "cancel run",
+			Payload:      map[string]any{"workflowId": run.WorkflowID, "runId": runID},
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "cancelled"})

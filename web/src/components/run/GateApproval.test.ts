@@ -1729,7 +1729,41 @@ describe('GateApproval HTML preview load gate (fillPreview)', () => {
     wrapper.unmount()
   })
 
-  it('pending live gate reloads when artifact sizeBytes/updatedAt change (store write signal)', async () => {
+  it('pending live gate ignores pure updatedAt noise (no reload)', async () => {
+    apiMocks.artifactContent.mockResolvedValue({
+      content: pageHtml,
+      etag: 'W/"p1"',
+      updatedAt: '2026-07-18T00:00:00Z',
+      sizeBytes: 40,
+    })
+    const run = visualEditableRun()
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run,
+    })
+    await flushPromises()
+    expect(apiMocks.artifactContent).toHaveBeenCalledTimes(1)
+
+    const artifact = run.artifacts![0]
+    await wrapper.setProps({
+      run: {
+        ...run,
+        artifacts: [
+          {
+            ...artifact,
+            updatedAt: '2026-07-18T01:00:00Z',
+          },
+        ],
+      } as Run,
+    })
+    await flushPromises()
+
+    expect(apiMocks.artifactContent).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('pending live gate reloads when artifact sizeBytes or etag change (store write signal)', async () => {
     const liveHtml = '<!doctype html><html><body>live-v2</body></html>'
     apiMocks.artifactContent
       .mockResolvedValueOnce({
@@ -1760,6 +1794,7 @@ describe('GateApproval HTML preview load gate (fillPreview)', () => {
         artifacts: [
           {
             ...artifact,
+            etag: 'W/"p2"',
             updatedAt: '2026-07-18T01:00:00Z',
             sizeBytes: liveHtml.length,
           },
@@ -1768,10 +1803,55 @@ describe('GateApproval HTML preview load gate (fillPreview)', () => {
     })
     await flushPromises()
 
-    // Pending gates follow live store; meta change must force reload.
+    // Pending gates follow live store; size/etag change must force reload.
     expect(apiMocks.artifactContent).toHaveBeenCalledTimes(2)
     const preview = wrapper.findComponent({ name: 'HtmlPreview' })
     expect(preview.props('html')).toContain('live-v2')
+    wrapper.unmount()
+  })
+
+  it('pending live gate does not reassign productHtml when fetched body is unchanged', async () => {
+    const sameHtml = pageHtml
+    apiMocks.artifactContent
+      .mockResolvedValueOnce({
+        content: sameHtml,
+        etag: 'W/"p1"',
+        updatedAt: '2026-07-18T00:00:00Z',
+        sizeBytes: 40,
+      })
+      .mockResolvedValueOnce({
+        content: sameHtml,
+        etag: 'W/"p1"',
+        updatedAt: '2026-07-18T01:00:00Z',
+        sizeBytes: 99,
+      })
+    const run = visualEditableRun()
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run,
+    })
+    await flushPromises()
+    const preview = wrapper.findComponent({ name: 'HtmlPreview' })
+    const htmlBefore = preview.props('html')
+
+    const artifact = run.artifacts![0]
+    await wrapper.setProps({
+      run: {
+        ...run,
+        artifacts: [
+          {
+            ...artifact,
+            sizeBytes: 99,
+            updatedAt: '2026-07-18T01:00:00Z',
+          },
+        ],
+      } as Run,
+    })
+    await flushPromises()
+
+    expect(apiMocks.artifactContent).toHaveBeenCalledTimes(2)
+    expect(preview.props('html')).toBe(htmlBefore)
     wrapper.unmount()
   })
 

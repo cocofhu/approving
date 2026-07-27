@@ -90,10 +90,10 @@ func (s *ArtifactService) List(runID string) []mcp.ArtifactInfo {
 	return out
 }
 
-// ByRun returns full artifact records for a run (for the API).
+// ByRun returns artifact records for a run (for the API). Content is omitted.
 func (s *ArtifactService) ByRun(runID string) []models.Artifact {
 	var arts []models.Artifact
-	s.db.Where("run_id = ?", runID).Order("created_at").Find(&arts)
+	s.db.Where("run_id = ?", runID).Omit("Content").Order("created_at").Find(&arts)
 	return arts
 }
 
@@ -108,7 +108,9 @@ func (s *ArtifactService) DeleteForRuns(runIDs ...string) error {
 
 func (s *ArtifactService) allQuery(wf, projectID, q string) *gorm.DB {
 	query := s.db.Table("artifacts").
-		Select("artifacts.*, runs.title as run_title").
+		Select(`artifacts.id, artifacts.run_id, artifacts.node_id, artifacts.workflow_id, artifacts.workflow_name,
+			artifacts.name, artifacts.kind, artifacts.size_bytes, artifacts.created_at, artifacts.updated_at,
+			runs.title as run_title`).
 		Joins("LEFT JOIN runs ON runs.id = artifacts.run_id")
 	if wf == unnamedGroupKey {
 		query = query.Where("(artifacts.workflow_id IS NULL OR artifacts.workflow_id = '')")

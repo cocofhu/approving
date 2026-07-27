@@ -140,8 +140,8 @@ class FakeWebSocket {
     this.readyState = 3
     this.onclose?.()
   }
-  emit(type: string) {
-    this.onmessage?.({ data: JSON.stringify({ type }) })
+  emit(type: string, extra?: Record<string, unknown>) {
+    this.onmessage?.({ data: JSON.stringify({ type, ...extra }) })
   }
 }
 
@@ -383,10 +383,10 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     await flushPromises()
     await nextTick()
 
-    // Trigger soft refresh via WS after initial load
+    // Trigger soft refresh via artifact_edit after initial load
     const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]
     expect(ws).toBeTruthy()
-    ws.emit('status')
+    ws.emit('artifact_edit')
     await flushPromises()
     await nextTick()
     await flushPromises()
@@ -396,6 +396,7 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     expect(wrapper.text()).not.toContain('Gate a')
     expect(wrapper.text()).toContain('Gate b')
     const callsForA = inboxCallsFor('run-a', 'gate-a', 1).length
+    // Irrelevant status must not re-fetch the processed triple
     ws.emit('status')
     await flushPromises()
     expect(inboxCallsFor('run-a', 'gate-a', 1).length).toBe(callsForA)
@@ -534,7 +535,7 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     expect(wrapper.find('[data-testid="resolve-btn"]').exists()).toBe(true)
     const ws = FakeWebSocket.instances.find((w) => w.url.includes('run-a'))
     expect(ws).toBeTruthy()
-    ws!.emit('status')
+    ws!.emit('artifact_edit')
     await flushPromises()
 
     expect(loadCount).toBeGreaterThanOrEqual(2)
@@ -558,7 +559,7 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     wrapper.unmount()
   })
 
-  it('softRefresh single-flight: concurrent WS status does not fan out requests', async () => {
+  it('softRefresh single-flight: concurrent artifact_edit does not fan out requests', async () => {
     const a = gateItem('a')
     mocks.listGates.mockResolvedValue(paged([a]))
 
@@ -588,9 +589,15 @@ describe('GatesInboxView inbox-context lifecycle', () => {
 
     const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]
     expect(ws).toBeTruthy()
-    ws.emit('status')
+    // status/trace must not softRefresh; only artifact_edit starts the in-flight refresh.
     ws.emit('status')
     ws.emit('trace')
+    await flushPromises()
+    expect(calls).toBe(1)
+
+    ws.emit('artifact_edit')
+    ws.emit('artifact_edit')
+    ws.emit('status')
     await flushPromises()
 
     // Single-flight drops duplicates while the first request is in flight.
@@ -603,6 +610,40 @@ describe('GatesInboxView inbox-context lifecycle', () => {
       nodeExecutions: {},
     })
     await flushPromises()
+    wrapper.unmount()
+  })
+
+  it('gate: irrelevant status/trace/react do not softRefresh; artifact_edit and turn_done do', async () => {
+    const a = gateItem('a')
+    mocks.listGates.mockResolvedValue(paged([a]))
+
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+
+    const before = inboxCallsFor('run-a', 'gate-a', 1).length
+    expect(before).toBeGreaterThan(0)
+    const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]
+    expect(ws).toBeTruthy()
+
+    ws.emit('status')
+    ws.emit('trace')
+    ws.emit('react')
+    await flushPromises()
+    expect(inboxCallsFor('run-a', 'gate-a', 1).length).toBe(before)
+
+    ws.emit('artifact_edit')
+    await flushPromises()
+    expect(inboxCallsFor('run-a', 'gate-a', 1).length).toBe(before + 1)
+
+    ws.emit('review', { event: 'turn_done' })
+    await flushPromises()
+    expect(inboxCallsFor('run-a', 'gate-a', 1).length).toBe(before + 2)
+
+    ws.emit('review', { event: 'error' })
+    await flushPromises()
+    expect(inboxCallsFor('run-a', 'gate-a', 1).length).toBe(before + 3)
+
     wrapper.unmount()
   })
 
@@ -661,7 +702,7 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     const before = inboxCallsFor('run-a', 'clarify-a', 1).length
     expect(before).toBeGreaterThan(0)
 
-    // Ordinary turn: stay pending, may softRefresh.
+    // Ordinary turn: stay pending; status must not softRefresh, react may.
     await wrapper.get('[data-testid="clarify-turn"]').trigger('click')
     await flushPromises()
     await nextTick()
@@ -678,12 +719,18 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     const ws = FakeWebSocket.instances.find((w) => w.url.includes('run-a'))
     expect(ws).toBeTruthy()
     expect(ws!.readyState).toBe(1)
+    const afterTurn = inboxCallsFor('run-a', 'clarify-a', 1).length
     ws!.emit('status')
+    ws!.emit('trace')
     await flushPromises()
-    expect(inboxCallsFor('run-a', 'clarify-a', 1).length).toBeGreaterThan(before)
+    expect(inboxCallsFor('run-a', 'clarify-a', 1).length).toBe(afterTurn)
+
+    ws!.emit('react')
+    await flushPromises()
+    expect(inboxCallsFor('run-a', 'clarify-a', 1).length).toBe(afterTurn + 1)
 
     // Force finish: short-circuit symmetric with gate resolve.
-    const afterTurn = inboxCallsFor('run-a', 'clarify-a', 1).length
+    const afterReact = inboxCallsFor('run-a', 'clarify-a', 1).length
     list = [b]
     await wrapper.get('[data-testid="clarify-send"]').trigger('click')
     await flushPromises()
@@ -698,7 +745,7 @@ describe('GatesInboxView inbox-context lifecycle', () => {
       true,
       [],
     )
-    expect(inboxCallsFor('run-a', 'clarify-a', 1).length).toBe(afterTurn)
+    expect(inboxCallsFor('run-a', 'clarify-a', 1).length).toBe(afterReact)
     expect(wrapper.text()).toContain('Clarify b')
     wrapper.unmount()
   })

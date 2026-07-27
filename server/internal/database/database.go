@@ -246,12 +246,13 @@ func ensureDefaultProject(db *gorm.DB) {
 	if count == 0 {
 		now := time.Now()
 		_ = db.Create(&models.Project{
-			ID:         models.DefaultProjectID,
-			Name:       models.DefaultProjectName,
-			SandboxEnv: []models.EnvEntry{},
-			Variables:  []models.ProjectVariable{},
-			CreatedAt:  now,
-			UpdatedAt:  now,
+			ID:           models.DefaultProjectID,
+			Name:         models.DefaultProjectName,
+			SandboxEnv:   []models.EnvEntry{},
+			Variables:    []models.ProjectVariable{},
+			NotifyPolicy: models.DefaultProjectNotifyPolicy(),
+			CreatedAt:    now,
+			UpdatedAt:    now,
 		}).Error
 	}
 	var defaultID string

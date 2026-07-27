@@ -192,6 +192,10 @@ func (s *WorkflowService) Save(wf *models.WorkflowDef) error {
 		if wf.Version == 0 {
 			wf.Version = 1
 		}
+		wf.NotifyPolicy = NormalizeWorkflowNotifyPolicy(wf.NotifyPolicy)
+		if wf.NotifyPolicy.Mode == "" {
+			wf.NotifyPolicy.Mode = models.NotifyModeInherit
+		}
 		return s.db.Create(wf).Error
 	}
 	if wf.ProjectID != "" && wf.ProjectID != existing.ProjectID {
@@ -209,7 +213,8 @@ func (s *WorkflowService) Save(wf *models.WorkflowDef) error {
 	graphChanged := !GraphsEqual(wf.Graph, existing.Graph)
 	metaChanged := wf.Name != existing.Name ||
 		wf.Description != existing.Description ||
-		wf.NeedsRepo != existing.NeedsRepo
+		wf.NeedsRepo != existing.NeedsRepo ||
+		!WorkflowNotifyPoliciesEqual(wf.NotifyPolicy, existing.NotifyPolicy)
 	if graphChanged {
 		wf.Status = "draft"
 	} else {
@@ -220,10 +225,33 @@ func (s *WorkflowService) Save(wf *models.WorkflowDef) error {
 		// True no-op: skip DB write so GORM does not bump UpdatedAt.
 		wf.UpdatedAt = existing.UpdatedAt
 		wf.LastRunAt = existing.LastRunAt
+		wf.NotifyPolicy = existing.NotifyPolicy
 		return nil
 	}
+	wf.NotifyPolicy = NormalizeWorkflowNotifyPolicy(wf.NotifyPolicy)
 	wf.UpdatedAt = time.Now()
 	return s.db.Save(wf).Error
+}
+
+// UpdateNotifyPolicy persists only the workflow-level NotifyPolicy override.
+// It loads the current row and never touches Graph / Status / Version, so a
+// list-row inline edit cannot roll back a newer editor graph or demote
+// published → draft (review v1 / plan g1.3 notify-only path).
+func (s *WorkflowService) UpdateNotifyPolicy(id string, policy models.WorkflowNotifyPolicy) (models.WorkflowDef, error) {
+	var wf models.WorkflowDef
+	if err := s.db.First(&wf, "id = ?", id).Error; err != nil {
+		return wf, ErrWorkflowNotFound
+	}
+	policy = NormalizeWorkflowNotifyPolicy(policy)
+	if WorkflowNotifyPoliciesEqual(policy, wf.NotifyPolicy) {
+		return wf, nil
+	}
+	wf.NotifyPolicy = policy
+	wf.UpdatedAt = time.Now()
+	if err := s.db.Save(&wf).Error; err != nil {
+		return wf, err
+	}
+	return wf, nil
 }
 
 // Publish freezes the current graph as an immutable version snapshot and

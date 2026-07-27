@@ -2,6 +2,7 @@ import { reactive } from 'vue'
 import type {
   Workflow,
   WorkflowVersion,
+  WorkflowNotifyPolicy,
   Run,
   Artifact,
   InboxItem,
@@ -527,6 +528,12 @@ export const api = {
     req<Workflow>(wf.id ? `/workflows/${wf.id}` : '/workflows', {
       method: wf.id ? 'PUT' : 'POST',
       body: JSON.stringify(wf),
+    }),
+  /** Notify-only: never sends nodes/edges (avoids stale list-cache graph rollback). */
+  patchWorkflowNotifyPolicy: (id: string, notifyPolicy: WorkflowNotifyPolicy) =>
+    req<Workflow>(`/workflows/${id}/notify-policy`, {
+      method: 'PATCH',
+      body: JSON.stringify({ notifyPolicy }),
     }),
   publishWorkflow: (id: string) => req<Workflow>(`/workflows/${id}/publish`, { method: 'POST' }),
   listAPIKeys: (workflowId: string) =>
