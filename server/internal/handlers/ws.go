@@ -1,8 +1,12 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
+
+	"github.com/cocofhu/approving/internal/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -15,8 +19,18 @@ var upgrader = websocket.Upgrader{
 
 // RunEvents streams a run's live updates over WebSocket. On connect it sends a
 // "snapshot" frame, then relays broker messages: "trace" (state-trace entries),
-// "status" (run status changes), "react" (react-dialogue turns), and "acp"
-// (a running node's in-progress agent events, pushed via publishAcp).
+// "status" (run status changes), "react" (react-dialogue turns), "acp"
+// (a running node's in-progress agent events, pushed via publishAcp), and
+// "review" (queue_state / turn_begin / turn_done / error for the platform
+// review session controller).
+//
+// Client → server control frames (SandboxChat-aligned):
+//
+//	{"type":"review_chat","nodeId":"<producer>","content":"…","images":[],"annotations":[],"gateNodeId":""}
+//	{"type":"review_cancel","nodeId":"<producer>"}
+//
+// review_chat with gateNodeId set enqueues via GateReactRevise semantics;
+// otherwise via node-inline EnqueueReviewTurn.
 func (h *Handlers) RunEvents(c *gin.Context) {
 	if h.Auth != nil {
 		if _, ok := h.Auth.RequireSession(c); !ok {
@@ -44,13 +58,15 @@ func (h *Handlers) RunEvents(c *gin.Context) {
 	ping := time.NewTicker(25 * time.Second)
 	defer ping.Stop()
 
-	// Reader pump to detect client disconnects.
+	// Reader pump: detect disconnect + handle review control frames.
 	go func() {
 		for {
-			if _, _, err := conn.ReadMessage(); err != nil {
+			_, data, err := conn.ReadMessage()
+			if err != nil {
 				_ = conn.Close()
 				return
 			}
+			h.handleRunWSControl(runID, data)
 		}
 	}()
 
@@ -69,4 +85,56 @@ func (h *Handlers) RunEvents(c *gin.Context) {
 			}
 		}
 	}
+}
+
+func (h *Handlers) handleRunWSControl(runID string, data []byte) {
+	var m struct {
+		Type        string                   `json:"type"`
+		NodeID      string                   `json:"nodeId"`
+		Content     string                   `json:"content"`
+		Images      []models.PromptImage     `json:"images"`
+		Annotations []models.ReactAnnotation `json:"annotations"`
+		GateNodeID  string                   `json:"gateNodeId"`
+	}
+	if json.Unmarshal(data, &m) != nil {
+		return
+	}
+	switch m.Type {
+	case "review_cancel":
+		nodeID := strings.TrimSpace(m.NodeID)
+		if nodeID == "" {
+			return
+		}
+		if err := h.Eng.CancelReviewSession(runID, nodeID); err != nil {
+			h.publishReviewWSError(runID, nodeID, err.Error())
+		}
+	case "review_chat", "chat":
+		nodeID := strings.TrimSpace(m.NodeID)
+		if nodeID == "" {
+			return
+		}
+		gateID := strings.TrimSpace(m.GateNodeID)
+		if gateID != "" {
+			if err := h.Eng.GateReactRevise(runID, gateID, m.Content, m.Images, m.Annotations); err != nil {
+				h.publishReviewWSError(runID, nodeID, err.Error())
+			}
+			return
+		}
+		if _, err := h.Eng.EnqueueReviewTurn(runID, nodeID, m.Content, m.Images, m.Annotations, "node", ""); err != nil {
+			h.publishReviewWSError(runID, nodeID, err.Error())
+		}
+	}
+}
+
+// publishReviewWSError pushes a type:"review" event:"error" frame so WS clients
+// see enqueue/cancel failures (aligned with SandboxChat error frames).
+func (h *Handlers) publishReviewWSError(runID, nodeID, message string) {
+	msg, err := json.Marshal(map[string]any{
+		"type": "review", "runId": runID, "nodeId": nodeID,
+		"event": "error", "message": message,
+	})
+	if err != nil {
+		return
+	}
+	h.Eng.Broker().Publish(runID, msg)
 }

@@ -43,6 +43,49 @@ func TestRunEventsWS(t *testing.T) {
 	}
 }
 
+// TestRunEventsWSReviewEnqueueError ensures review_chat failures surface as
+// type:"review" event:"error" (not silently dropped).
+func TestRunEventsWSReviewEnqueueError(t *testing.T) {
+	h := newHarness(t)
+	h.db.Create(&models.Run{ID: "rw-rev", Status: "running", StartedAt: time.Now(), Graph: models.Graph{
+		Nodes: []models.Node{{ID: "proposal", Type: "agent"}},
+	}})
+	srv := httptest.NewServer(h.r)
+	defer srv.Close()
+
+	c, _, err := websocket.DefaultDialer.Dial(wsURL(srv.URL, "/api/runs/rw-rev/events"), h.wsHeader())
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.Close()
+	c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	_, _, err = c.ReadMessage() // snapshot
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	// Empty content → EnqueueReviewTurn error → review/error frame.
+	if err := c.WriteJSON(map[string]any{
+		"type": "review_chat", "nodeId": "proposal", "content": "",
+	}); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	saw := false
+	for i := 0; i < 5; i++ {
+		_, msg, err := c.ReadMessage()
+		if err != nil {
+			break
+		}
+		s := string(msg)
+		if strings.Contains(s, `"type":"review"`) && strings.Contains(s, `"event":"error"`) {
+			saw = true
+			break
+		}
+	}
+	if !saw {
+		t.Fatal("expected review error frame for empty enqueue")
+	}
+}
+
 func TestSandboxChatWS(t *testing.T) {
 	h := newHarness(t)
 	h.db.Create(&models.Sandbox{Name: "approving-sb-cw", Purpose: "test", Status: "stopped"})

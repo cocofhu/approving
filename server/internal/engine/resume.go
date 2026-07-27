@@ -339,18 +339,32 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 	if e.IsHalted() {
 		return errors.New("server is shutting down")
 	}
-	// Review force: best-effort preempt in-flight ReviseInPlace before waiting on
-	// the per-conversation lock (RetireSession/closeSession aborts the parked ACP
-	// turn). Classic clarify force must not touch this path.
-	if force {
-		if cPeek, peekErr := e.loadCtx(runID); peekErr == nil {
-			if n := cPeek.graph.FindNode(nodeID); n != nil && isReviewNode(n.Type) {
-				if rp, ok := e.provider.(runtime.ReviewProvider); ok {
-					rp.RetireSession(runID, nodeID)
+
+	cPeek, peekErr := e.loadCtx(runID)
+	if peekErr == nil {
+		if n := cPeek.graph.FindNode(nodeID); n != nil && isReviewNode(n.Type) {
+			// Review !force: enqueue onto the platform FIFO (SandboxChat-aligned)
+			// and return immediately — human/agent bubbles materialize on turn_begin.
+			if !force {
+				var convPeek models.ReactConversation
+				if err := e.db.Where("run_id = ? AND node_id = ?", runID, nodeID).
+					Order("iteration desc, id desc").First(&convPeek).Error; err != nil {
+					return errors.New("no react conversation")
 				}
+				if convPeek.Done {
+					return errors.New("react already done")
+				}
+				_, err := e.EnqueueReviewTurn(runID, nodeID, humanText, images, annotations, "node", "")
+				return err
+			}
+			// Review force (确认并流转): only when ready (no active turn, empty queue).
+			// Cancel ≠ confirm — do not preempt via RetireSession while busy.
+			if !e.ReviewSessionReady(runID, nodeID) {
+				return errors.New("复审进行中或待发送队列非空,请先 Cancel 或等待完成后再确认")
 			}
 		}
 	}
+
 	// Hold the per-conversation lock across the whole reply (including the slow
 	// provider call) so a duplicate submit — e.g. after a page refresh re-enables
 	// the "确认完成" button while this request is still in flight — waits here,
@@ -376,17 +390,25 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 	if conv.Done {
 		return errors.New("react already done")
 	}
+
+	// Review force: human turn is recorded, then finalize without Agent wrap-up.
+	// Review !force already returned via EnqueueReviewTurn above.
+	if isReviewNode(node.Type) {
+		if !force {
+			return errors.New("internal: review non-force must enqueue")
+		}
+		now := time.Now().Format(time.RFC3339)
+		conv.Messages = append(conv.Messages, models.ReactMessage{Role: "human", Text: humanText, At: now,
+			Images: images, Annotations: annotations})
+		logDB(e.db.Save(&conv), runID, "save react human turn")
+		return e.reviewReply(c, node, &conv, renderReviewHuman(humanText, annotations), images, true)
+	}
+
 	now := time.Now().Format(time.RFC3339)
 	effective := renderReviewHuman(humanText, annotations)
 	conv.Messages = append(conv.Messages, models.ReactMessage{Role: "human", Text: humanText, At: now,
 		Images: images, Annotations: annotations})
 	logDB(e.db.Save(&conv), runID, "save react human turn")
-
-	// Review nodes: keep the run's review phase active so set_*/get_*/ask_question
-	// stay authorized across turns (nodeReq re-SetActiveNode; this sets the flag).
-	if isReviewNode(node.Type) {
-		return e.reviewReply(c, node, &conv, effective, images, force)
-	}
 
 	req := e.nodeReq(c, node)
 	t := e.provider.ReactReply(context.Background(), req, conv.Messages, effective, images, force)

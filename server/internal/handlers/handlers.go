@@ -791,7 +791,27 @@ func (h *Handlers) ReactReply(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := h.Eng.ReactReply(c.Param("id"), c.Param("nodeId"), b.Text, b.Images, b.Annotations, b.Force); err != nil {
+	runID, nodeID := c.Param("id"), c.Param("nodeId")
+	if err := h.Eng.ReactReply(runID, nodeID, b.Text, b.Images, b.Annotations, b.Force); err != nil {
+		_ = c.Error(err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	// Review !force enqueues and returns before the turn finishes.
+	if !b.Force {
+		if w, thinking := h.Eng.ReviewSessionState(runID, nodeID); thinking || w > 0 {
+			c.JSON(http.StatusOK, gin.H{"status": "accepted", "waiting": w})
+			return
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// ReactCancel aborts the current review turn and clears the pending FIFO for
+// the producer node (轮级 Cancel). Does not cancel the whole run.
+func (h *Handlers) ReactCancel(c *gin.Context) {
+	runID, nodeID := c.Param("id"), c.Param("nodeId")
+	if err := h.Eng.CancelReviewSession(runID, nodeID); err != nil {
 		_ = c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -819,12 +839,31 @@ func (h *Handlers) GateReactRevise(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "text, images, or annotations required"})
 		return
 	}
-	if err := h.Eng.GateReactRevise(c.Param("id"), c.Param("nodeId"), b.Text, b.Images, b.Annotations); err != nil {
+	runID, gateNodeID := c.Param("id"), c.Param("nodeId")
+	if err := h.Eng.GateReactRevise(runID, gateNodeID, b.Text, b.Images, b.Annotations); err != nil {
 		_ = c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	producerID, _ := h.Eng.GateReactInfo(runID, gateNodeID)
+	waiting, _ := h.Eng.ReviewSessionState(runID, producerID)
+	c.JSON(http.StatusOK, gin.H{"status": "accepted", "waiting": waiting, "producerNodeId": producerID})
+}
+
+// GateReactCancel cancels the upstream producer's review turn/queue from a gate.
+func (h *Handlers) GateReactCancel(c *gin.Context) {
+	runID, gateNodeID := c.Param("id"), c.Param("nodeId")
+	producerID, alive := h.Eng.GateReactInfo(runID, gateNodeID)
+	if producerID == "" || !alive {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "上游复审会话不可用"})
+		return
+	}
+	if err := h.Eng.CancelReviewSession(runID, producerID); err != nil {
+		_ = c.Error(err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "producerNodeId": producerID})
 }
 
 // --- gates / artifacts / profiles ----------------------------

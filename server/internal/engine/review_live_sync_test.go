@@ -85,6 +85,9 @@ func TestReviewReplySyncsOutputsAndBodyMd(t *testing.T) {
 	if err := eng.ReactReply(run.ID, "page", "改标题", nil, nil, false); err != nil {
 		t.Fatalf("revise: %v", err)
 	}
+	if err := eng.waitReviewReadyForTest(run.ID, "page", 5*time.Second); err != nil {
+		t.Fatalf("wait revise: %v", err)
+	}
 	waitRunStatus(t, db, run.ID, "waiting_human")
 	if provider.reviseCalls["page"] != 1 {
 		t.Fatalf("reviseCalls=%d", provider.reviseCalls["page"])
@@ -362,6 +365,9 @@ func TestReviewReplyFailureDoesNotSyncOutputs(t *testing.T) {
 
 	if err := eng.ReactReply(run.ID, "page", "改", nil, nil, false); err != nil {
 		t.Fatalf("revise reply should not fail HTTP: %v", err)
+	}
+	if err := eng.waitReviewReadyForTest(run.ID, "page", 5*time.Second); err != nil {
+		t.Fatalf("wait revise: %v", err)
 	}
 
 	var sr models.StateRun

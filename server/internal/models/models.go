@@ -308,6 +308,9 @@ type ReactMessage struct {
 	// visual page, each with an optional note. Rendered into the review prompt
 	// so the agent edits exactly the cited spot. Persisted for re-render.
 	Annotations []ReactAnnotation `json:"annotations,omitempty"`
+	// Interrupted marks an agent turn that was stopped mid-stream by 轮级 Cancel.
+	// Partial narration is retained; the session stays parked for further edits.
+	Interrupted bool `json:"interrupted,omitempty"`
 }
 
 // ReactAnnotation is one precise reference a human attached to a review turn.

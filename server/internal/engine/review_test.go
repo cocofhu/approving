@@ -3,6 +3,7 @@ package engine
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cocofhu/approving/internal/database"
 	"github.com/cocofhu/approving/internal/mcp"
@@ -124,6 +125,9 @@ func TestReviewEnterReviseFinish(t *testing.T) {
 	if err := eng.ReactReply(run.ID, "prop", "按标注改一下", nil, anns, false); err != nil {
 		t.Fatalf("revise reply: %v", err)
 	}
+	if err := eng.waitReviewReadyForTest(run.ID, "prop", 5*time.Second); err != nil {
+		t.Fatalf("wait revise: %v", err)
+	}
 	waitRunStatus(t, db, run.ID, "waiting_human") // still paused after a revise
 	if provider.reviseCalls["prop"] != 1 {
 		t.Fatalf("expected one ReviseInPlace call, got %d", provider.reviseCalls["prop"])
@@ -210,9 +214,10 @@ func TestReviewForceValidationFailureKeepsPaused(t *testing.T) {
 	waitRunStatus(t, db, run.ID, "completed")
 }
 
-// TestReviewForcePreemptsInFlightSession: force retires the parked session so
-// a subsequent revise cannot keep editing after confirm has started.
-func TestReviewForcePreemptsInFlightSession(t *testing.T) {
+// TestReviewForceRequiresReadyAndRejectsLateRevise: force confirm retires the
+// parked session when ready; a subsequent revise is rejected (conv Done).
+// Busy-state reject is covered by TestReviewForceRejectedWhileQueued.
+func TestReviewForceRequiresReadyAndRejectsLateRevise(t *testing.T) {
 	eng, db, provider := setupReviewEngine(t, true)
 
 	run, err := eng.StartRun("review-wf", map[string]any{"idea": "登录"}, "test")
@@ -236,6 +241,45 @@ func TestReviewForcePreemptsInFlightSession(t *testing.T) {
 	if err := eng.ReactReply(run.ID, "prop", "迟到修订", nil, nil, false); err == nil {
 		t.Fatal("expected react already done after force")
 	}
+}
+
+// TestReviewForceRejectedWhileQueued: force confirm is refused while the
+// platform FIFO has pending/active work (FR4 ready gate).
+func TestReviewForceRejectedWhileQueued(t *testing.T) {
+	eng, db, provider := setupReviewEngine(t, true)
+	hold := make(chan struct{})
+	provider.reviseHold = hold
+
+	run, err := eng.StartRun("review-wf", map[string]any{"idea": "登录"}, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "prop")
+	waitRunStatus(t, db, run.ID, "waiting_human")
+
+	if err := eng.ReactReply(run.ID, "prop", "改一下", nil, nil, false); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	// Wait until the pump has started the held turn.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, thinking := eng.ReviewSessionState(run.ID, "prop"); thinking {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	err = eng.ReactReply(run.ID, "prop", "确认", nil, nil, true)
+	if err == nil || !strings.Contains(err.Error(), "Cancel") {
+		t.Fatalf("expected ready-gate error, got %v", err)
+	}
+	close(hold)
+	if err := eng.waitReviewReadyForTest(run.ID, "prop", 5*time.Second); err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+	if err := eng.ReactReply(run.ID, "prop", "确认", nil, nil, true); err != nil {
+		t.Fatalf("force after ready: %v", err)
+	}
+	waitRunStatus(t, db, run.ID, "completed")
 }
 
 // TestClarifyForceStillUsesAgentWrapUp: classic clarify「结束交互」must keep
@@ -354,6 +398,9 @@ func TestGateReactReviseInPlace(t *testing.T) {
 	anns := []models.ReactAnnotation{{JSONPath: "proposals[p1]", Note: "标题更具体"}}
 	if err := eng.GateReactRevise(run.ID, "select", "按标注改", nil, anns); err != nil {
 		t.Fatalf("GateReactRevise: %v", err)
+	}
+	if err := eng.waitReviewReadyForTest(run.ID, "prop", 5*time.Second); err != nil {
+		t.Fatalf("wait gate revise: %v", err)
 	}
 	if provider.reviseCalls["prop"] != 1 {
 		t.Fatalf("expected one ReviseInPlace on prop, got %d", provider.reviseCalls["prop"])
@@ -494,6 +541,9 @@ func TestReviewReviseFlushesTokenUsage(t *testing.T) {
 	if err := eng.ReactReply(run.ID, "prop", "按标注改一下", nil, nil, false); err != nil {
 		t.Fatalf("revise reply: %v", err)
 	}
+	if err := eng.waitReviewReadyForTest(run.ID, "prop", 5*time.Second); err != nil {
+		t.Fatalf("wait revise: %v", err)
+	}
 	waitRunStatus(t, db, run.ID, "waiting_human")
 
 	var sr models.StateRun
@@ -525,6 +575,9 @@ func TestGateReactReviseFlushesTokenUsage(t *testing.T) {
 
 	if err := eng.GateReactRevise(run.ID, "select", "改一下", nil, nil); err != nil {
 		t.Fatalf("GateReactRevise: %v", err)
+	}
+	if err := eng.waitReviewReadyForTest(run.ID, "prop", 5*time.Second); err != nil {
+		t.Fatalf("wait gate revise: %v", err)
 	}
 
 	var sr models.StateRun

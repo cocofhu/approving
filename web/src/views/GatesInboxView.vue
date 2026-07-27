@@ -73,6 +73,11 @@ const mobileView = ref<'list' | 'detail'>('list')
 const listScrollTop = ref(0)
 const listEl = ref<HTMLElement | null>(null)
 const gateApprovalRef = ref<InstanceType<typeof GateApproval> | null>(null)
+const reviewChatRef = ref<{
+  applyReviewFrame?: (frame: any) => void
+  applyAcpEvents?: (events: any[] | undefined, nodeId?: string) => void
+  discardLastQueued?: () => void
+} | null>(null)
 const { selected } = usePipelineFilter()
 const { selected: selectedProject, ensureHydrated: hydrateProject } = useProjectContext()
 
@@ -444,10 +449,24 @@ function connectActiveRunWs(runId: string) {
     return
   }
   activeRunWs.onmessage = (ev) => {
-    let m: { type?: string }
+    let m: { type?: string; event?: string; nodeId?: string; events?: any[] }
     try {
       m = JSON.parse(String(ev.data))
     } catch {
+      return
+    }
+    if (m.type === 'review') {
+      gateApprovalRef.value?.applyReviewFrame?.(m)
+      reviewChatRef.value?.applyReviewFrame?.(m)
+      if (m.event === 'turn_done' || m.event === 'error') {
+        if (active.value && active.value.runId === runId) void softRefreshActiveRun()
+      }
+      return
+    }
+    if (m.type === 'acp') {
+      const nodeId = (m as { nodeId?: string }).nodeId
+      gateApprovalRef.value?.applyAcpEvents?.(m.events)
+      reviewChatRef.value?.applyAcpEvents?.(m.events, nodeId)
       return
     }
     if (m.type === 'artifact_edit' || m.type === 'react' || m.type === 'trace' || m.type === 'status') {
@@ -768,8 +787,8 @@ async function onClarifySend(
   // Ordinary turn replies stay pending and must not markProcessed.
   if (force) {
     beginProcessingIntent(it)
-    clarifyConfirmError.value = null
   }
+  clarifyConfirmError.value = null
   let ok = true
   try {
     await api.reactReply(it.runId, it.nodeId, text, images, force, annotations)
@@ -777,11 +796,17 @@ async function onClarifySend(
     ok = false
     /* refresh below to reflect real state */
     console.warn('reactReply failed', e?.message || e)
+    const msg = e?.message || t('pages.gatesInbox.reviewFinishFailed')
     if (force) {
       // Align with RunDetail: bottom status bar, not toast.
-      clarifyConfirmError.value = e?.message || t('pages.gatesInbox.reviewFinishFailed')
+      clarifyConfirmError.value = msg
       rollbackProcessingIntent(it)
       return
+    }
+    // Non-force review enqueue failed: roll back optimistic queue + surface error.
+    if (reviewActive.value) {
+      reviewChatRef.value?.discardLastQueued?.()
+      clarifyConfirmError.value = msg
     }
   }
   const submittedKey = itemKey(it)
@@ -818,6 +843,9 @@ async function onClarifySend(
     return
   }
 
+  // Review enqueue returns before the turn finishes — keep live queue/stream bubbles.
+  if (reviewActive.value) return
+
   // Ordinary turn: conversation stays pending — no processingLock / markProcessed.
   showProcessedBanner.value = false
   try {
@@ -849,6 +877,16 @@ function onClarifyFinish() {
     ? t('pages.clarify.confirmFlowPrompt')
     : t('pages.runDetail.clarifyFinishPrompt')
   onClarifySend(prompt, [], [], true)
+}
+
+async function onClarifyCancel() {
+  const it = active.value
+  if (!it || it.type !== 'clarify' || it.done) return
+  try {
+    await api.reactCancel(it.runId, it.nodeId)
+  } catch (e: any) {
+    console.warn('reactCancel failed', e?.message || e)
+  }
 }
 
 
@@ -1086,6 +1124,7 @@ function badgeLabel(it: InboxItem) {
           </template>
           <template #sidebar>
             <ReviewComposer
+              ref="reviewChatRef"
               :mode="composerMode"
               :run-id="active.runId"
               :node-id="activeClarify.nodeId"
@@ -1099,6 +1138,7 @@ function badgeLabel(it: InboxItem) {
               :confirm-error="clarifyConfirmError"
               @send="onClarifySend"
               @finish="onClarifyFinish"
+              @cancel="onClarifyCancel"
             />
           </template>
         </ReviewShell>
@@ -1200,6 +1240,7 @@ function badgeLabel(it: InboxItem) {
               </template>
               <template #sidebar>
                 <ReviewComposer
+                  ref="reviewChatRef"
                   :mode="composerMode"
                   :run-id="active.runId"
                   :node-id="activeClarify.nodeId"
@@ -1213,6 +1254,7 @@ function badgeLabel(it: InboxItem) {
                   :confirm-error="clarifyConfirmError"
                   @send="onClarifySend"
                   @finish="onClarifyFinish"
+                  @cancel="onClarifyCancel"
                 />
               </template>
             </ReviewShell>

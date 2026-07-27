@@ -97,6 +97,11 @@ type Engine struct {
 	// gateAuto is an optional async observer for human_gate / proposal_select /
 	// app_preview pauses (PM auto-invoke). Engine never blocks on it.
 	gateAuto GateAutoInvoker
+
+	// reviewMu guards reviewSess: per parked producer session FIFO + single
+	// worker for node-inline review and gate hot-revise (SandboxChat-aligned).
+	reviewMu   sync.Mutex
+	reviewSess map[string]*reviewSession // key: runID|producerNodeID
 }
 
 // New builds an engine.

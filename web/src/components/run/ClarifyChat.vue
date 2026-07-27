@@ -11,8 +11,17 @@ import {
   selectedDemoOption,
   useSideBySide,
 } from '@/lib/clarifyDemo'
-import type { ClarifyTurn, ClarifyImage, ReactQuestion, ReactOption, ReactAnnotation } from '@/lib/types'
+import type {
+  ClarifyTurn,
+  ClarifyImage,
+  ReactQuestion,
+  ReactOption,
+  ReactAnnotation,
+  AcpEvent,
+} from '@/lib/types'
 import AnnotationChip from './AnnotationChip.vue'
+
+type QueueItem = { text: string; images: ClarifyImage[]; annotations: ReactAnnotation[] }
 
 // active: whether the run is still in an interactive state (queued/running/
 // waiting_human). When false (completed/failed/cancelled) the chat input is
@@ -54,6 +63,8 @@ const showAnnotationChips = computed(() => props.reviewMode || props.annotateEna
 const emit = defineEmits<{
   (e: 'send', text: string, images: ClarifyImage[], annotations: ReactAnnotation[]): void
   (e: 'finish'): void
+  /** Review 轮级 Cancel (≠ confirm ≠ AbortRun). */
+  (e: 'cancel'): void
 }>()
 
 const { t: translate, locale } = useI18n()
@@ -70,6 +81,12 @@ const annotations = defineModel<ReactAnnotation[]>('annotations', { default: () 
 const thinking = ref(false)
 /** Review confirm mid-state: re-validating product (not Agent thinking). */
 const validating = ref(false)
+// Review mode: SandboxChat/AgentChatTester-aligned pending-send queue. Items live
+// ONLY in the bottom panel until turn_begin materializes transcript bubbles.
+const queued = ref<QueueItem[]>([])
+/** In-flight review turn bubbles (human + streaming agent) before props.turns catch up. */
+const liveTurns = ref<ClarifyTurn[]>([])
+const liveAgentIdx = ref(-1)
 const scroller = ref<HTMLElement>()
 const fileInput = ref<HTMLInputElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
@@ -238,6 +255,11 @@ const latestQuestionAnswered = computed(() => {
 
 const turns = computed<ClarifyTurn[]>(() => {
   let list = props.turns
+  // Review: never inject optimistic pending into transcript (queue panel only).
+  if (props.reviewMode) {
+    if (liveTurns.value.length) list = [...list, ...liveTurns.value]
+    return list
+  }
   if (pending.value) {
     list = [
       ...list,
@@ -280,7 +302,13 @@ watch(
     if (prevKey !== undefined && key === prevKey) return
     const turnList = props.turns
     pending.value = null
-    thinking.value = false
+    if (!props.reviewMode) thinking.value = false
+    // Review: clear live bubbles once persisted transcript includes them.
+    if (props.reviewMode && liveTurns.value.length && !liveTurns.value.some((t) => t.streaming)) {
+      liveTurns.value = []
+      liveAgentIdx.value = -1
+      if (queued.value.length === 0) thinking.value = false
+    }
     const qIdx = latestQuestionTurnIndex(turnList)
     if (qIdx >= 0) {
       const qs = turnList[qIdx].questions ?? []
@@ -392,6 +420,16 @@ function removeAttachment(i: number) {
 function sendMessage(text: string, imgs: ClarifyImage[] = [], anns: ReactAnnotation[] = []) {
   const t = text.trim()
   if ((!t && imgs.length === 0 && anns.length === 0) || props.done || !props.active) return
+  if (props.reviewMode) {
+    // Enqueue only — bubbles materialize on turn_begin (AgentChatTester / Demo).
+    queued.value.push({ text: t, images: imgs, annotations: anns.slice() })
+    thinking.value = true
+    emit('send', t, imgs, anns)
+    stickToBottom.value = true
+    unreadCount.value = 0
+    void scrollBottom(true)
+    return
+  }
   // Snapshot annotations (same list as emit) so clearing the composer model
   // leaves the optimistic bubble's chips intact during the thinking window.
   pending.value = { text: t, images: imgs, annotations: anns.slice() }
@@ -580,11 +618,11 @@ function send() {
   sendFromComposer()
 }
 // Clarify: force Agent wrap-up (disabled while thinking).
-// Review: accept store snapshot — allowed during Agent thinking; shows validating.
+// Review: accept store snapshot only when ready (not thinking / queue empty).
 function finishEarly() {
   if (props.done || !props.active) return
   if (props.reviewMode) {
-    if (validating.value) return
+    if (validating.value || confirmDisabled.value) return
     validating.value = true
     emit('finish')
     void scrollBottom()
@@ -596,9 +634,164 @@ function finishEarly() {
   void scrollBottom()
 }
 
-const confirmDisabled = computed(() =>
-  props.reviewMode ? validating.value : thinking.value,
-)
+const confirmDisabled = computed(() => {
+  if (!props.reviewMode) return thinking.value
+  // FR4: thinking or pending-send queue non-empty → disable 确认并流转.
+  return validating.value || thinking.value || queued.value.length > 0 || liveAgentIdx.value >= 0
+})
+
+function cancelReview() {
+  if (!props.reviewMode || props.done) return
+  queued.value = []
+  if (liveAgentIdx.value >= 0 && liveTurns.value[liveAgentIdx.value]) {
+    liveTurns.value[liveAgentIdx.value].streaming = false
+    liveTurns.value[liveAgentIdx.value].interrupted = true
+    if (!liveTurns.value[liveAgentIdx.value].text) {
+      liveTurns.value[liveAgentIdx.value].text = '(已中断)'
+    }
+  }
+  liveAgentIdx.value = -1
+  thinking.value = false
+  emit('cancel')
+  void scrollBottom()
+}
+
+/**
+ * Parent calls this when reactReply(force=false) fails after optimistic enqueue,
+ * so the pending-send panel and FR4 confirm gate do not stick forever.
+ */
+function discardLastQueued() {
+  if (!props.reviewMode || queued.value.length === 0) return
+  queued.value.pop()
+  if (queued.value.length === 0 && liveAgentIdx.value < 0) {
+    thinking.value = false
+  }
+}
+
+/**
+ * Reconcile local pending-send panel with platform-authoritative queue_state.
+ * waiting===0 clears ghost rows after remote Cancel; items[] rebuilds/trims
+ * while allowing at most one local-ahead item when no live turn (HTTP ack /
+ * turn_begin in flight).
+ */
+function applyQueueState(waiting: number, items: { text?: string }[] | null) {
+  if (waiting === 0) {
+    queued.value = []
+    if (liveAgentIdx.value < 0) thinking.value = false
+    return
+  }
+  if (!items) {
+    thinking.value = liveAgentIdx.value >= 0 || queued.value.length > 0
+    return
+  }
+  const rebuilt: QueueItem[] = items.map((it) => {
+    const text = it.text ?? ''
+    const local = queued.value.find((q) => q.text === text)
+    return {
+      text,
+      images: local?.images ?? [],
+      annotations: local?.annotations ?? [],
+    }
+  })
+  const maxLocal = liveAgentIdx.value >= 0 ? rebuilt.length : rebuilt.length + 1
+  if (queued.value.length > maxLocal) {
+    // Keep trailing optimistic-only rows that still fit the maxLocal budget.
+    const optimistic = queued.value.slice(rebuilt.length).slice(0, Math.max(0, maxLocal - rebuilt.length))
+    queued.value = [...rebuilt, ...optimistic]
+  } else if (queued.value.length < rebuilt.length) {
+    queued.value = rebuilt
+  } else {
+    // Same length or one ahead: refresh texts from server, keep local extras.
+    const optimistic = queued.value.slice(rebuilt.length)
+    queued.value = [...rebuilt, ...optimistic]
+  }
+  thinking.value = liveAgentIdx.value >= 0 || queued.value.length > 0
+}
+
+/** Parent (RunDetailView) feeds review WS frames here. */
+function applyReviewFrame(frame: {
+  event?: string
+  nodeId?: string
+  item?: { text?: string; images?: ClarifyImage[]; annotations?: ReactAnnotation[] }
+  message?: string
+  interrupted?: boolean
+  waiting?: number
+  items?: { text?: string }[]
+}) {
+  if (!props.reviewMode) return
+  // Defense: ignore frames for other producer sessions on the same run.
+  if (frame.nodeId && frame.nodeId !== props.nodeId) return
+  switch (frame.event) {
+    case 'turn_begin': {
+      const item = queued.value.shift()
+      const text = item?.text ?? frame.item?.text ?? ''
+      const images = item?.images ?? frame.item?.images
+      const annotations = item?.annotations ?? frame.item?.annotations
+      liveTurns.value.push({
+        role: 'human',
+        text,
+        at: new Date().toISOString(),
+        images,
+        annotations,
+      })
+      liveAgentIdx.value =
+        liveTurns.value.push({
+          role: 'agent',
+          text: '',
+          at: new Date().toISOString(),
+          streaming: true,
+        }) - 1
+      thinking.value = true
+      break
+    }
+    case 'turn_done': {
+      if (liveAgentIdx.value >= 0 && liveTurns.value[liveAgentIdx.value]) {
+        liveTurns.value[liveAgentIdx.value].streaming = false
+        if (frame.interrupted) liveTurns.value[liveAgentIdx.value].interrupted = true
+      }
+      liveAgentIdx.value = -1
+      thinking.value = queued.value.length > 0
+      break
+    }
+    case 'error': {
+      if (liveAgentIdx.value >= 0 && liveTurns.value[liveAgentIdx.value]) {
+        liveTurns.value[liveAgentIdx.value].streaming = false
+        liveTurns.value[liveAgentIdx.value].text =
+          liveTurns.value[liveAgentIdx.value].text || frame.message || 'error'
+        if (frame.interrupted) liveTurns.value[liveAgentIdx.value].interrupted = true
+      }
+      liveAgentIdx.value = -1
+      thinking.value = queued.value.length > 0
+      break
+    }
+    case 'queue_state':
+      applyQueueState(
+        typeof frame.waiting === 'number' ? frame.waiting : 0,
+        Array.isArray(frame.items) ? frame.items : null,
+      )
+      break
+  }
+  void scrollBottom()
+}
+
+/** Consume publishAcp events for the streaming agent bubble (dialogue surface). */
+function applyAcpEvents(events: AcpEvent[] | undefined, nodeId?: string) {
+  if (!props.reviewMode || liveAgentIdx.value < 0 || !events?.length) return
+  if (nodeId && nodeId !== props.nodeId) return
+  const agent = liveTurns.value[liveAgentIdx.value]
+  if (!agent) return
+  let msg = agent.text
+  let thought = ''
+  for (const ev of events) {
+    if (ev.kind === 'message' && ev.text) msg = ev.text
+    if (ev.kind === 'thought' && ev.text) thought = ev.text
+  }
+  agent.text = msg
+  if (thought && !msg) agent.text = thought
+  void scrollBottom()
+}
+
+defineExpose({ applyReviewFrame, applyAcpEvents, cancelReview, discardLastQueued })
 </script>
 
 <template>
@@ -846,10 +1039,17 @@ const confirmDisabled = computed(() =>
             </div>
           </template>
 
+          <div
+            v-if="t.interrupted"
+            class="mt-1 inline-flex items-center gap-1 rounded border border-warn/40 bg-warn/10 px-1.5 py-0.5 text-[10px] text-warn"
+            data-testid="clarify-interrupted"
+          >
+            interrupted
+          </div>
           <div class="mt-1 text-[10px] text-txt3" :class="t.role === 'human' ? 'text-right' : ''">{{ locale && relTime(t.at) }}</div>
         </div>
       </div>
-      <div v-if="thinking && !validating" class="flex items-center gap-2 pl-9 text-[12px] text-txt3">
+      <div v-if="thinking && !validating && !(reviewMode && liveAgentIdx >= 0)" class="flex items-center gap-2 pl-9 text-[12px] text-txt3">
         <span class="typing-dots"><i /><i /><i /></span>
         {{ translate('pages.clarify.thinking') }}
       </div>
@@ -875,6 +1075,27 @@ const confirmDisabled = computed(() =>
       <Icon name="close" :size="13" class="-mt-0.5 mr-1 inline" />{{ translate('pages.clarify.closed') }}
     </div>
     <div v-else class="border-t border-line p-3">
+      <!-- pending-send queue panel (Demo / AgentChatTester): review mode only -->
+      <div
+        v-if="reviewMode && queued.length"
+        class="mb-2 rounded-md border border-line bg-base/40 px-2.5 py-2"
+        data-testid="clarify-review-queue"
+      >
+        <div class="mb-1 flex items-center gap-1.5 text-[11px] text-txt3">
+          <Icon name="clock" :size="11" />
+          {{ translate('pages.agentChatTester.queue', { n: queued.length }) }}
+        </div>
+        <div class="space-y-1">
+          <div
+            v-for="(q, qi) in queued"
+            :key="qi"
+            class="flex items-center gap-2 rounded border border-line bg-surface px-2 py-1 text-[12px] text-txt2"
+          >
+            <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-line text-[9px] text-txt3">{{ qi + 1 }}</span>
+            <span class="truncate">{{ q.text || (q.images.length || q.annotations.length ? '…' : '') }}</span>
+          </div>
+        </div>
+      </div>
       <div v-if="showAnnotationChips && annotations.length" class="mb-2 flex flex-wrap gap-1.5">
         <AnnotationChip
           v-for="(a, ai) in annotations"
@@ -943,6 +1164,16 @@ const confirmDisabled = computed(() =>
           {{ validating ? translate('pages.clarify.validating') : translate('pages.clarify.confirmFlowHint') }}
         </p>
         <span v-else class="flex-1" />
+        <button
+          v-if="reviewMode && (thinking || queued.length > 0 || liveAgentIdx >= 0)"
+          type="button"
+          class="inline-flex shrink-0 items-center gap-1 rounded-md border border-line bg-elevated px-3 py-1.5 text-xs font-semibold text-txt2 hover:border-line-strong"
+          data-testid="clarify-review-cancel"
+          title="Cancel"
+          @click="cancelReview"
+        >
+          Cancel
+        </button>
         <button
           v-if="reviewMode"
           class="inline-flex shrink-0 items-center gap-1 rounded-md bg-ok px-3 py-1.5 text-xs font-semibold text-white hover:bg-ok/90 disabled:opacity-50"
