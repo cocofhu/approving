@@ -290,6 +290,7 @@ func main() {
 	pmProgress := services.NewPmProgress(pmSvc, runSvc, artifactSvc)
 	wfSvc := services.NewWorkflowService(db)
 	pmMCP := pmmcp.NewHost(pmSvc, pmProgress, wfSvc, runSvc, artifactSvc, eng)
+	pmMCP.SetOrgAndSkill(orgSvc, skillSvc)
 	memoryMCP := memorymcp.NewHost(pmSvc)
 	contextMCP := contextmcp.NewHost(pmSvc)
 	schedulerMCP := schedulermcp.NewHost(db, pmSvc)

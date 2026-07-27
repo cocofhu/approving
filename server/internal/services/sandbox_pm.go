@@ -16,6 +16,7 @@ const (
 	PmProgressMCP      = "pm-progress"
 	PmWorkflowReadMCP  = "pm-workflow-read"
 	PmWorkflowWriteMCP = "pm-workflow-write"
+	PmAgentFSMCP       = "pm-agent-fs"
 )
 
 // OpenForPM opens (or reuses) a consult sandbox for the project PM Leader agent.

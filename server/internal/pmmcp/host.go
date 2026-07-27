@@ -1,6 +1,6 @@
-// Package pmmcp implements PM-only MCP hosts: pm-progress, pm-workflow-read and
-// pm-workflow-write. Memory and conversation context live in memory-store /
-// context-store.
+// Package pmmcp implements PM-only MCP hosts: pm-progress, pm-workflow-read,
+// pm-workflow-write and pm-agent-fs. Memory and conversation context live in
+// memory-store / context-store.
 package pmmcp
 
 import (
@@ -19,11 +19,13 @@ import (
 )
 
 // MCP ids. Workflow tools are split into a read-only surface and a write
-// surface so a project can grant one without the other.
+// surface so a project can grant one without the other. pm-agent-fs exposes
+// org read + host-side agent workspace FS (not Run sandbox).
 const (
 	MCPProgress      = "pm-progress"
 	MCPWorkflowRead  = "pm-workflow-read"
 	MCPWorkflowWrite = "pm-workflow-write"
+	MCPAgentFS       = "pm-agent-fs"
 
 	// pm_get_artifact paging: default page size is also the hard ceiling so a
 	// caller cannot pull an unbounded artifact in one MCP response.
@@ -52,6 +54,8 @@ type Host struct {
 	wf       *services.WorkflowService
 	runs     *services.RunService
 	arts     *services.ArtifactService
+	org      *services.OrgService
+	skill    *services.SkillService
 	eng      engineOps
 	audit    func(services.AuditRecord)
 }
@@ -78,6 +82,15 @@ func NewHost(pm *services.PmService, progress *services.PmProgress, wf *services
 		arts:     arts,
 		eng:      eng,
 	}
+}
+
+// SetOrgAndSkill wires OrgService + SkillService for pm-agent-fs tools.
+// Safe to call after NewHost (main wiring); nil leaves org/FS tools unavailable.
+func (h *Host) SetOrgAndSkill(org *services.OrgService, skill *services.SkillService) {
+	h.mu.Lock()
+	h.org = org
+	h.skill = skill
+	h.mu.Unlock()
 }
 
 // SetAuditRecorder wires project-scoped audit recording for PM MCP tools.
@@ -182,7 +195,7 @@ func (h *Host) SessionFor(projectID, token string) (*Session, bool) {
 }
 
 // ServeRPC handles one JSON-RPC message for mcpId
-// (pm-progress | pm-workflow-read | pm-workflow-write).
+// (pm-progress | pm-workflow-read | pm-workflow-write | pm-agent-fs).
 func (h *Host) ServeRPC(projectID, mcpID, token string, body []byte) (status int, resp []byte) {
 	if !h.Authorize(projectID, token) {
 		return platformmcp.Unauthorized()
@@ -191,7 +204,7 @@ func (h *Host) ServeRPC(projectID, mcpID, token string, body []byte) (status int
 	if mcpID == "" {
 		mcpID = MCPProgress // legacy /mcp/pm/:projectId
 	}
-	if mcpID != MCPProgress && mcpID != MCPWorkflowRead && mcpID != MCPWorkflowWrite {
+	if mcpID != MCPProgress && mcpID != MCPWorkflowRead && mcpID != MCPWorkflowWrite && mcpID != MCPAgentFS {
 		return 404, platformmcp.MustJSON(platformmcp.RPCResponse{
 			JSONRPC: "2.0",
 			Error:   &platformmcp.RPCError{Code: -32004, Message: "unknown mcp: " + mcpID},
@@ -276,6 +289,8 @@ func (h *Host) callTool(projectID, token, mcpID, name string, args map[string]an
 		return h.callWorkflowRead(projectID, name, args)
 	case MCPWorkflowWrite:
 		return h.callWorkflowWrite(projectID, token, name, args)
+	case MCPAgentFS:
+		return h.callAgentFS(projectID, token, name, args)
 	default:
 		return map[string]any{"error": "unknown mcp"}, true
 	}
@@ -787,6 +802,36 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 
 func toolSchemas(mcpID string) []map[string]any {
 	switch mcpID {
+	case MCPAgentFS:
+		return []map[string]any{
+			platformmcp.Tool("pm_get_org", "读取组织架构：全量 groups/agents（含相对当前 Leader 的 self/direct/indirect/other 标注）以及以 Leader 为根的下属树与直接/间接列表。只读，不可改 parent/groups。", nil),
+			platformmcp.Tool("pm_fs_list", "列出授权 Agent 的 host 侧 workspace 目录（非 Run 沙箱）。", map[string]any{
+				"agentName": map[string]any{"type": "string", "description": "目标 Agent 名（自身或汇报闭包内下属）"},
+				"path":      map[string]any{"type": "string", "description": "workspace 相对目录，空或省略表示根"},
+			}),
+			platformmcp.Tool("pm_fs_read", "读取授权 Agent workspace 内文件（单文件硬上限 1MiB）。", map[string]any{
+				"agentName": map[string]any{"type": "string"},
+				"path":      map[string]any{"type": "string"},
+			}),
+			platformmcp.Tool("pm_fs_write", "写入/创建授权 Agent workspace 内文件（覆盖已存在；自动创建父目录；单文件硬上限 1MiB）。不改 agent.json / Run 沙箱。Studio 刷新或重开后可见；若 Studio 有未保存草稿再 Save 可能覆盖 MCP 写入。", map[string]any{
+				"agentName": map[string]any{"type": "string"},
+				"path":      map[string]any{"type": "string"},
+				"content":   map[string]any{"type": "string"},
+			}),
+			platformmcp.Tool("pm_fs_delete", "删除授权 Agent workspace 内文件，或递归删除目录。", map[string]any{
+				"agentName": map[string]any{"type": "string"},
+				"path":      map[string]any{"type": "string"},
+			}),
+			platformmcp.Tool("pm_fs_mkdir", "在授权 Agent workspace 内创建目录（含缺失父目录）。空目录可能不在 Studio 树显示；写入文件后刷新可见。", map[string]any{
+				"agentName": map[string]any{"type": "string"},
+				"path":      map[string]any{"type": "string"},
+			}),
+			platformmcp.Tool("pm_fs_rename", "在同一 Agent workspace 内重命名/移动路径。", map[string]any{
+				"agentName": map[string]any{"type": "string"},
+				"path":      map[string]any{"type": "string", "description": "源相对路径"},
+				"toPath":    map[string]any{"type": "string", "description": "目标相对路径"},
+			}),
+		}
 	case MCPWorkflowRead:
 		return []map[string]any{
 			platformmcp.Tool("pm_list_workflows", "列出当前项目下的工作流。", nil),

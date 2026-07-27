@@ -159,4 +159,22 @@ export const BUILTIN_MCPS: McpServer[] = [
     ],
     conventionKey: 'mcp.pmWorkflowWrite.convention',
   },
+  {
+    id: 'pm-agent-fs',
+    name: 'pm-agent-fs',
+    builtin: true,
+    scope: 'project',
+    descKey: 'mcp.pmAgentFs.desc',
+    overviewKey: 'mcp.pmAgentFs.overview',
+    tools: [
+      { name: 'pm_get_org', signatureKey: 'mcp.pmAgentFs.tools.pm_get_org.signature', descKey: 'mcp.pmAgentFs.tools.pm_get_org.desc', io: 'read' },
+      { name: 'pm_fs_list', signatureKey: 'mcp.pmAgentFs.tools.pm_fs_list.signature', descKey: 'mcp.pmAgentFs.tools.pm_fs_list.desc', io: 'read' },
+      { name: 'pm_fs_read', signatureKey: 'mcp.pmAgentFs.tools.pm_fs_read.signature', descKey: 'mcp.pmAgentFs.tools.pm_fs_read.desc', io: 'read' },
+      { name: 'pm_fs_write', signatureKey: 'mcp.pmAgentFs.tools.pm_fs_write.signature', descKey: 'mcp.pmAgentFs.tools.pm_fs_write.desc', io: 'write' },
+      { name: 'pm_fs_delete', signatureKey: 'mcp.pmAgentFs.tools.pm_fs_delete.signature', descKey: 'mcp.pmAgentFs.tools.pm_fs_delete.desc', io: 'write' },
+      { name: 'pm_fs_mkdir', signatureKey: 'mcp.pmAgentFs.tools.pm_fs_mkdir.signature', descKey: 'mcp.pmAgentFs.tools.pm_fs_mkdir.desc', io: 'write' },
+      { name: 'pm_fs_rename', signatureKey: 'mcp.pmAgentFs.tools.pm_fs_rename.signature', descKey: 'mcp.pmAgentFs.tools.pm_fs_rename.desc', io: 'write' },
+    ],
+    conventionKey: 'mcp.pmAgentFs.convention',
+  },
 ]

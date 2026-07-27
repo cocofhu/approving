@@ -324,11 +324,11 @@ func TestPmMemoryAgentIsolation(t *testing.T) {
 }
 
 func TestNormalizePmEnabledMcps(t *testing.T) {
-	if got := EffectivePmEnabledMcps(nil); len(got) != 3 {
+	if got := EffectivePmEnabledMcps(nil); len(got) != 4 {
 		t.Fatalf("nil default=%v", got)
 	}
-	got := FilterPmEnabledMcps([]string{"pm-workflow-read", "memory-store", "pm-workflow-read", "pm-progress"})
-	if len(got) != 2 || got[0] != "pm-workflow-read" || got[1] != "pm-progress" {
+	got := FilterPmEnabledMcps([]string{"pm-workflow-read", "memory-store", "pm-workflow-read", "pm-progress", "pm-agent-fs"})
+	if len(got) != 3 || got[0] != "pm-workflow-read" || got[1] != "pm-progress" || got[2] != "pm-agent-fs" {
 		t.Fatalf("filtered=%v", got)
 	}
 	got = EffectivePmEnabledMcps([]string{"memory-store", "task-scheduler"})

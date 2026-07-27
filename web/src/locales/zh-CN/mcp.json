@@ -328,6 +328,42 @@
           "desc": "取消 Run"
         }
       }
+    },
+    "pmAgentFs": {
+      "name": "pm-agent-fs",
+      "desc": "PM 专用 · 读组织架构与编辑下属 Agent 工作目录",
+      "overview": "读取 _org.json 汇报树（self/direct/indirect/other），并对自身与汇报闭包内 Agent 的 host 侧 workspace/ 做 list/read/write/delete/mkdir/rename。不触及 Run 沙箱，不改 agent.json 元配置。",
+      "convention": "项目详情 → PM 设置中启用 pm-agent-fs（新项目默认启用；旧项目若已显式保存 EnabledMcps 需手动勾选）。变更在 Agent Studio「Agent 工作目录」刷新或重开后可见（非热更新）。注意：若 Studio 打开同一 Agent 且存在未保存草稿，随后 Save 可能覆盖 MCP 已写入内容——Demo/使用时请刷新并避免并行脏写。",
+      "tools": {
+        "pm_get_org": {
+          "signature": "pm_get_org()",
+          "desc": "读组织架构与下属关系"
+        },
+        "pm_fs_list": {
+          "signature": "pm_fs_list(agentName, path?)",
+          "desc": "列出 workspace 目录"
+        },
+        "pm_fs_read": {
+          "signature": "pm_fs_read(agentName, path)",
+          "desc": "读取 workspace 文件（≤1MiB）"
+        },
+        "pm_fs_write": {
+          "signature": "pm_fs_write(agentName, path, content)",
+          "desc": "写入/创建文件（自动建父目录，≤1MiB）"
+        },
+        "pm_fs_delete": {
+          "signature": "pm_fs_delete(agentName, path)",
+          "desc": "删除文件或递归删目录"
+        },
+        "pm_fs_mkdir": {
+          "signature": "pm_fs_mkdir(agentName, path)",
+          "desc": "创建目录"
+        },
+        "pm_fs_rename": {
+          "signature": "pm_fs_rename(agentName, path, toPath)",
+          "desc": "同 workspace 内重命名/移动"
+        }
+      }
     }
   }
 }
