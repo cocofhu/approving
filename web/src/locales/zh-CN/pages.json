@@ -154,7 +154,7 @@
         "evCompleted": "P1 · 不投递（预留）",
         "saved": "通知设置已保存",
         "colPolicy": "通知策略",
-        "modeOff": "off",
+        "modeOff": "关闭",
         "modeInherit": "继承",
         "modeCustom": "自定义",
         "wfUpdated": "已更新"
