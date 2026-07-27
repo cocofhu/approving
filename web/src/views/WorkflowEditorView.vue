@@ -614,6 +614,7 @@ function deleteEdge() {
     <RunLaunchModal
       :open="showRun"
       :workflow-id="wf.id"
+      :project-id="wf.projectId"
       :workflow-name="wf.name"
       :fields="runFields"
       :run-inputs="runInputs"

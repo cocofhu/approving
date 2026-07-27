@@ -59,7 +59,7 @@ type Host struct {
 // engineOps covers the run operations exposed through pm-workflow-write
 // (narrow interface to avoid handler coupling).
 type engineOps interface {
-	StartRunWithPriority(workflowID string, inputs map[string]any, trigger, priority string) (*models.Run, error)
+	StartRunWithPriority(workflowID string, inputs map[string]any, trigger, priority string, tags ...[]string) (*models.Run, error)
 	ResumeGate(runID, nodeID, action string, form map[string]any) error
 	ReactReply(runID, nodeID, humanText string, images []models.PromptImage, annotations []models.ReactAnnotation, force bool) error
 	ReviewSessionState(runID, nodeID string) (waiting int, thinking bool)
@@ -506,7 +506,7 @@ func (h *Host) callWorkflowRead(projectID, name string, args map[string]any) (an
 			return map[string]any{"error": "run service unavailable"}, true
 		}
 		limit := platformmcp.IntArg(args, "limit", 50)
-		items, total := h.runs.PendingInboxItems("", projectID, 0, limit)
+		items, total := h.runs.PendingInboxItems("", projectID, nil, 0, limit)
 		return map[string]any{"items": items, "count": len(items), "total": total}, false
 	case "pm_get_artifact":
 		if h.arts == nil {
@@ -678,7 +678,11 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		if priority == "" {
 			priority = "normal"
 		}
-		run, err := h.eng.StartRunWithPriority(w.ID, platformmcp.MapArg(args, "inputs"), trigger, priority)
+		tags, err := models.NormalizeRunTags(platformmcp.StringSliceArg(args, "tags"))
+		if err != nil {
+			return map[string]any{"error": err.Error()}, true
+		}
+		run, err := h.eng.StartRunWithPriority(w.ID, platformmcp.MapArg(args, "inputs"), trigger, priority, tags)
 		if err != nil {
 			return map[string]any{"error": err.Error()}, true
 		}
@@ -848,6 +852,7 @@ func toolSchemas(mcpID string) []map[string]any {
 				},
 				"inputs":   map[string]any{"type": "object"},
 				"priority": map[string]any{"type": "string", "description": "high|normal|low"},
+				"tags":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 			}),
 			platformmcp.Tool("pm_resume_gate", "审批/推进某个待人工门禁。", map[string]any{
 				"runId":  map[string]any{"type": "string"},

@@ -622,6 +622,8 @@
     "runList": {
       "title": "Runs",
       "subtitle": "Run history for all workflows",
+      "tagsLabel": "Tags",
+      "tagPlaceholder": "Enter a tag and press Enter; matches all tags (AND)",
       "queued": "queued",
       "cancelConfirm": "Only this run is stopped; the list row status will refresh after success.",
       "deleteConfirm": "Only this run is removed; the list will refresh after success.",
@@ -631,6 +633,7 @@
     },
     "runDetail": {
       "title": "Run #{id}",
+      "tagsLabel": "Tags",
       "exportLogs": "Export logs",
       "loadingWorkflow": "Loading…",
       "loadingRun": "Loading run details…",
@@ -719,6 +722,7 @@
     },
     "gatesInbox": {
       "title": "Pending gates",
+      "tagPlaceholder": "Enter a tag and press Enter; filters linked Run tags (AND)",
       "subtitleHtml": "<strong class=\"font-medium text-warn\">Human gates</strong> + <em class=\"not-italic text-n-clarify\">Clarify</em> inbox · workflows paused for human action",
       "statusPending": "Updates available · refresh",
       "statusEditing": "Editing · syncing in background",
@@ -1566,6 +1570,12 @@
     },
     "runLaunch": {
       "title": "Start run · {name}",
+      "tagsLabel": "Tags",
+      "tagsHint": "Optional tags. They cannot be changed after start. Press Enter to add, up to 8 tags.",
+      "tagsPlaceholder": "Enter a tag and press Enter",
+      "tagsLimit": "Up to {max} tags",
+      "tagInvalid": "Tags allow letters, numbers, _ - . /, including Chinese",
+      "tagTooLong": "Each tag can be at most {max} characters",
       "started": "Workflow started",
       "startedLabel": "Started workflow",
       "enterHint": "Press Enter to view run details",

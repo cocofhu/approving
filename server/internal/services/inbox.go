@@ -8,6 +8,7 @@ import (
 
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/nodereg"
+	"gorm.io/gorm"
 )
 
 var terminalRunStatuses = []string{"completed", "failed", "cancelled"}
@@ -85,15 +86,16 @@ type GateInboxItem struct {
 	UpstreamNodeID    string              `json:"upstreamNodeId,omitempty"`
 	UpstreamIteration int                 `json:"upstreamIteration,omitempty"`
 	RequestedAt       time.Time           `json:"requestedAt"`
+	Tags              []string            `json:"tags"`
 }
 
-func gateInboxItem(g models.Gate, runTitle string) GateInboxItem {
+func gateInboxItem(g models.Gate, runTitle string, tags []string) GateInboxItem {
 	return GateInboxItem{
 		Type: "gate", RunID: g.RunID, NodeID: g.NodeID, Iteration: g.Iteration,
 		WorkflowID: g.WorkflowID, WorkflowName: g.WorkflowName, RunTitle: runTitle,
 		Title: g.Title, BodyMd: g.BodyMd, Actions: g.Actions, Form: g.Form,
 		UpstreamNodeID: g.UpstreamNodeID, UpstreamIteration: g.UpstreamIteration,
-		RequestedAt: g.RequestedAt,
+		RequestedAt: g.RequestedAt, Tags: append([]string{}, tags...),
 	}
 }
 
@@ -113,6 +115,7 @@ type ClarifyInboxItem struct {
 	Done         bool      `json:"done"`
 	RequestedAt  time.Time `json:"requestedAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
+	Tags         []string  `json:"tags"`
 }
 
 // clarifyInboxKind returns badge semantic for a waiting_human conversation.
@@ -132,14 +135,14 @@ type inboxEntry struct {
 // AllPendingInboxItems merges unresolved gates and pending (non-auto) react
 // clarifications on alive runs, sorted newest-first by sortAt.
 func (s *RunService) AllPendingInboxItems() []any {
-	items, _ := s.PendingInboxItems("", "", 0, 0)
+	items, _ := s.PendingInboxItems("", "", nil, 0, 0)
 	return items
 }
 
 // PendingInboxItems returns merged inbox items sorted newest-first. When limit > 0
 // the result is sliced to [offset:offset+limit]; total is always the full count.
-func (s *RunService) PendingInboxItems(wf, projectID string, offset, limit int) ([]any, int) {
-	entries := s.pendingInboxEntries(wf, projectID)
+func (s *RunService) PendingInboxItems(wf, projectID string, tags []string, offset, limit int) ([]any, int) {
+	entries := s.pendingInboxEntries(wf, projectID, tags)
 	total := len(entries)
 	if limit > 0 {
 		end := offset + limit
@@ -158,9 +161,9 @@ func (s *RunService) PendingInboxItems(wf, projectID string, offset, limit int) 
 	return out, total
 }
 
-func (s *RunService) pendingInboxEntries(wf, projectID string) []inboxEntry {
-	gates := s.pendingGatesFiltered(wf, projectID)
-	clarifies := s.pendingClarificationsFiltered(wf, projectID)
+func (s *RunService) pendingInboxEntries(wf, projectID string, tags []string) []inboxEntry {
+	gates := s.pendingGatesFiltered(wf, projectID, tags)
+	clarifies := s.pendingClarificationsFiltered(wf, projectID, tags)
 
 	runIDs := make([]string, 0, len(gates)+len(clarifies))
 	seen := map[string]bool{}
@@ -176,16 +179,19 @@ func (s *RunService) pendingInboxEntries(wf, projectID string) []inboxEntry {
 			runIDs = append(runIDs, c.RunID)
 		}
 	}
-	titles := s.runTitlesByIDs(runIDs)
+	runMeta := s.runMetaByIDs(runIDs)
 
 	entries := make([]inboxEntry, 0, len(gates)+len(clarifies))
 	for _, g := range gates {
-		entries = append(entries, inboxEntry{sortAt: g.RequestedAt, item: gateInboxItem(g, titles[g.RunID])})
+		meta := runMeta[g.RunID]
+		entries = append(entries, inboxEntry{sortAt: g.RequestedAt, item: gateInboxItem(g, meta.Title, meta.Tags)})
 	}
 	for _, c := range clarifies {
-		if t := titles[c.RunID]; t != "" {
-			c.RunTitle = t
+		meta := runMeta[c.RunID]
+		if meta.Title != "" {
+			c.RunTitle = meta.Title
 		}
+		c.Tags = append([]string{}, meta.Tags...)
 		entries = append(entries, inboxEntry{sortAt: c.UpdatedAt, item: c})
 	}
 	sort.Slice(entries, func(i, j int) bool {
@@ -194,26 +200,26 @@ func (s *RunService) pendingInboxEntries(wf, projectID string) []inboxEntry {
 	return entries
 }
 
-// runTitlesByIDs returns Run.Title keyed by run id (empty titles omitted).
-func (s *RunService) runTitlesByIDs(runIDs []string) map[string]string {
-	out := make(map[string]string, len(runIDs))
+type runInboxMeta struct {
+	Title string
+	Tags  []string
+}
+
+// runMetaByIDs returns Run.Title/Tags keyed by run id.
+func (s *RunService) runMetaByIDs(runIDs []string) map[string]runInboxMeta {
+	out := make(map[string]runInboxMeta, len(runIDs))
 	if len(runIDs) == 0 {
 		return out
 	}
-	var rows []struct {
-		ID    string
-		Title string
-	}
-	s.db.Model(&models.Run{}).Select("id, title").Where("id IN ?", runIDs).Find(&rows)
+	var rows []models.Run
+	s.db.Model(&models.Run{}).Where("id IN ?", runIDs).Find(&rows)
 	for _, r := range rows {
-		if t := strings.TrimSpace(r.Title); t != "" {
-			out[r.ID] = t
-		}
+		out[r.ID] = runInboxMeta{Title: strings.TrimSpace(r.Title), Tags: append([]string{}, r.Tags...)}
 	}
 	return out
 }
 
-func (s *RunService) pendingGatesFiltered(wf, projectID string) []models.Gate {
+func (s *RunService) pendingGatesFiltered(wf, projectID string, tags []string) []models.Gate {
 	q := s.db.Joins("JOIN runs ON runs.id = gates.run_id").
 		Where("gates.resolved = ? AND runs.status NOT IN ?", false, terminalRunStatuses)
 	if wf != "" {
@@ -221,13 +227,14 @@ func (s *RunService) pendingGatesFiltered(wf, projectID string) []models.Gate {
 	} else if projectID != "" {
 		q = q.Where("runs.workflow_id IN (?)", s.db.Model(&models.WorkflowDef{}).Select("id").Where("project_id = ?", projectID))
 	}
+	q = applyRunTagsFilter(q, "runs.tags", tags)
 	var gates []models.Gate
 	q.Order("gates.requested_at desc").Find(&gates)
 	return gates
 }
 
-func (s *RunService) pendingClarificationsFiltered(wf, projectID string) []ClarifyInboxItem {
-	clarifies := s.pendingClarifications()
+func (s *RunService) pendingClarificationsFiltered(wf, projectID string, tags []string) []ClarifyInboxItem {
+	clarifies := s.pendingClarifications(tags)
 	if wf == "" && projectID == "" {
 		return clarifies
 	}
@@ -255,10 +262,11 @@ func (s *RunService) pendingClarificationsFiltered(wf, projectID string) []Clari
 	return out
 }
 
-func (s *RunService) pendingClarifications() []ClarifyInboxItem {
+func (s *RunService) pendingClarifications(tags []string) []ClarifyInboxItem {
 	var convs []models.ReactConversation
 	s.db.Joins("JOIN runs ON runs.id = react_conversations.run_id").
 		Where("react_conversations.done = ? AND runs.status NOT IN ?", false, terminalRunStatuses).
+		Scopes(func(db *gorm.DB) *gorm.DB { return applyRunTagsFilter(db, "runs.tags", tags) }).
 		Order("react_conversations.id asc").
 		Find(&convs)
 	if len(convs) == 0 {
@@ -315,7 +323,7 @@ func (s *RunService) pendingClarifications() []ClarifyInboxItem {
 			RunID: conv.RunID, NodeID: conv.NodeID, Iteration: conv.Iteration,
 			WorkflowID: run.WorkflowID, WorkflowName: run.WorkflowName,
 			RunTitle: strings.TrimSpace(run.Title),
-			Label:    nodeLabel(run.Graph, conv.NodeID), Done: conv.Done,
+			Label:    nodeLabel(run.Graph, conv.NodeID), Done: conv.Done, Tags: append([]string{}, run.Tags...),
 			RequestedAt: run.StartedAt, UpdatedAt: sortAt,
 		})
 	}

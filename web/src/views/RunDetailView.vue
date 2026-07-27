@@ -1567,6 +1567,10 @@ function selectExecution(nodeId: string, idx: number) {
           <span v-if="run.git?.pushedSha" class="min-w-0 max-w-full">{{ t('pages.runDetail.sha') }} <code class="inline-block max-w-full overflow-x-auto whitespace-nowrap align-bottom font-mono text-accent-2">{{ run.git.pushedSha }}</code></span>
           <span v-else class="text-txt3">{{ t('pages.runDetail.noRepo') }}</span>
         </div>
+        <div v-if="run.tags?.length" class="mt-2 flex flex-wrap items-center gap-1.5 pl-11">
+          <span class="text-[12px] text-txt3">{{ t('pages.runDetail.tagsLabel') }}</span>
+          <span v-for="tag in run.tags" :key="tag" class="chip text-txt2">{{ tag }}</span>
+        </div>
         <div class="mt-2.5 flex items-center gap-3 pl-11">
           <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-elevated">
             <div class="h-full rounded-full bg-gradient-to-r from-accent to-accent-2 transition-all" :style="{ width: progressFrac * 100 + '%' }" />

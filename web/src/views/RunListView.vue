@@ -62,6 +62,7 @@ const { selected: selectedProject, ensureHydrated: hydrateProject } = useProject
 const { selectedStatuses } = useStatusFilter()
 const statusFilterOpen = ref(false)
 const pipelineFilterOpen = ref(false)
+const tagDraft = ref('')
 
 function parseRunSort(
   sortRaw: unknown,
@@ -145,6 +146,7 @@ function runListFingerprint(r: Run): string {
     r.trigger,
     r.startedAt,
     r.createdAt ?? '',
+    (r.tags || []).join(','),
   ].join('\0')
 }
 
@@ -243,7 +245,7 @@ watch(pipelineFilterOpen, (v) => {
 
 const hasFilter = computed(() => {
   const statuses = parseStatusQuery(typeof route.query.status === 'string' ? route.query.status : '')
-  return !!(statuses.length || route.query.wf || route.query.projectId)
+  return !!(statuses.length || route.query.wf || route.query.projectId || selectedTags.value.length)
 })
 
 const emptyMessage = computed(() => {
@@ -259,13 +261,50 @@ function showNodeLabel(r: Run) {
   return (r.status === 'running' || r.status === 'waiting_human') && !!r.currentNodeLabel
 }
 
+function parseTagQuery(raw: string): string[] {
+  if (!raw) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const part of raw.split(',')) {
+    const tag = part.trim()
+    if (!tag || seen.has(tag)) continue
+    seen.add(tag)
+    out.push(tag)
+  }
+  return out
+}
+
+const selectedTags = computed<string[]>({
+  get: () => parseTagQuery(typeof route.query.tag === 'string' ? route.query.tag : ''),
+  set: (value) => {
+    const query = { ...route.query }
+    const next = parseTagQuery(value.join(',')).join(',')
+    if (next) query.tag = next
+    else delete query.tag
+    router.replace({ query })
+  },
+})
+
+function addTagFilter() {
+  const tag = tagDraft.value.trim()
+  if (!tag) return
+  selectedTags.value = [...selectedTags.value, tag]
+  tagDraft.value = ''
+}
+
+function removeTagFilter(tag: string) {
+  selectedTags.value = selectedTags.value.filter((item) => item !== tag)
+}
+
 function listParams() {
   const status = typeof route.query.status === 'string' ? route.query.status : undefined
+  const tag = typeof route.query.tag === 'string' ? route.query.tag : undefined
   const wf = typeof route.query.wf === 'string' ? route.query.wf : undefined
   const projectId = typeof route.query.projectId === 'string' ? route.query.projectId : undefined
   const sort = activeSort.value
   return {
     status,
+    tag,
     wf,
     projectId,
     page: page.value,
@@ -419,6 +458,17 @@ onUnmounted(() => {
         <p class="text-sm text-txt3">{{ t('pages.runList.subtitle') }}</p>
       </div>
       <div class="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
+        <div class="min-w-[220px] rounded-md border border-line bg-surface px-2.5 py-2">
+          <div v-if="selectedTags.length" class="mb-1.5 flex flex-wrap gap-1.5">
+            <button v-for="tag in selectedTags" :key="tag" class="chip" @click="removeTagFilter(tag)">{{ tag }}</button>
+          </div>
+          <input
+            v-model="tagDraft"
+            class="w-full bg-transparent text-sm outline-none"
+            :placeholder="t('pages.runList.tagPlaceholder')"
+            @keydown.enter.prevent="addTagFilter"
+          />
+        </div>
         <ProjectFilter v-model="selectedProject" :count="total" />
         <StatusFilter
           v-model="selectedStatuses"
@@ -507,6 +557,7 @@ onUnmounted(() => {
             </div>
             <div class="flex flex-wrap items-center gap-1.5">
               <PriorityBadge :priority="r.priority" />
+              <span v-for="tag in r.tags || []" :key="tag" class="chip text-txt2">{{ tag }}</span>
             </div>
             <div class="flex min-w-0 flex-col gap-1">
               <div class="flex items-center gap-2">
@@ -606,6 +657,7 @@ onUnmounted(() => {
                 </span>
               </span>
             </th>
+            <th class="px-5 py-2.5 font-medium">{{ t('pages.runList.tagsLabel') }}</th>
             <th class="px-5 py-2.5 text-right font-medium">{{ t('common.table.actions') }}</th>
           </tr>
         </thead>
@@ -639,12 +691,15 @@ onUnmounted(() => {
                 <div class="h-3 w-12 rounded bg-elevated animate-pulse" />
               </td>
               <td class="px-5 py-3">
+                <div class="h-3 w-[70%] rounded bg-elevated animate-pulse" />
+              </td>
+              <td class="px-5 py-3">
                 <div class="ml-auto h-3 w-12 rounded bg-elevated animate-pulse" />
               </td>
             </tr>
           </template>
           <tr v-else-if="initialLoadFailed">
-            <td colspan="9" class="px-5 py-10 text-center">
+            <td colspan="10" class="px-5 py-10 text-center">
               <div class="mx-auto mb-2.5 inline-flex h-10 w-10 items-center justify-center border border-err/30 bg-err/10 text-err">
                 <Icon name="alert" :size="18" />
               </div>
@@ -653,7 +708,7 @@ onUnmounted(() => {
             </td>
           </tr>
           <tr v-else-if="!runs.length">
-            <td colspan="9" class="px-5 py-10 text-center text-[13px] text-txt3">
+            <td colspan="10" class="px-5 py-10 text-center text-[13px] text-txt3">
               {{ emptyMessage }}
             </td>
           </tr>
@@ -718,6 +773,11 @@ onUnmounted(() => {
                 </td>
                 <td class="px-5 py-3"><StatusPill :status="r.status" size="sm" /></td>
                 <td class="px-5 py-3"><PriorityBadge :priority="r.priority" /></td>
+                <td class="px-5 py-3">
+                  <div class="flex flex-wrap gap-1.5">
+                    <span v-for="tag in r.tags || []" :key="tag" class="chip text-txt2">{{ tag }}</span>
+                  </div>
+                </td>
                 <td class="px-5 py-3 text-right" data-testid="run-ops" @click.stop>
                   <AppButton
                     v-if="canCancelRun(r)"

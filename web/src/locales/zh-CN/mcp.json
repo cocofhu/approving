@@ -312,7 +312,7 @@
           "desc": "发布草稿"
         },
         "pm_start_run": {
-          "signature": "pm_start_run(workflowId, trigger?, inputs?, priority?)",
+          "signature": "pm_start_run(workflowId, trigger?, inputs?, priority?, tags?)",
           "desc": "启动 Run"
         },
         "pm_resume_gate": {

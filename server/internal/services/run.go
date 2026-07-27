@@ -1,8 +1,10 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/cocofhu/approving/internal/models"
@@ -57,7 +59,20 @@ type RunService struct{ db *gorm.DB }
 // NewRunService builds the service.
 func NewRunService(db *gorm.DB) *RunService { return &RunService{db: db} }
 
-func (s *RunService) listQuery(statuses []string, wf, projectID string) *gorm.DB {
+func applyRunTagsFilter(q *gorm.DB, column string, tags []string) *gorm.DB {
+	for _, tag := range tags {
+		switch q.Dialector.Name() {
+		case "mysql":
+			candidate, _ := json.Marshal(tag)
+			q = q.Where("JSON_CONTAINS(COALESCE("+column+", JSON_ARRAY()), ?, '$')", string(candidate))
+		default:
+			q = q.Where("EXISTS (SELECT 1 FROM json_each(COALESCE("+column+", '[]')) WHERE value = ?)", tag)
+		}
+	}
+	return q
+}
+
+func (s *RunService) listQuery(statuses []string, wf, projectID string, tags []string) *gorm.DB {
 	q := s.db.Model(&models.Run{})
 	if len(statuses) > 0 {
 		q = q.Where("status IN ?", statuses)
@@ -67,6 +82,7 @@ func (s *RunService) listQuery(statuses []string, wf, projectID string) *gorm.DB
 	} else if projectID != "" {
 		q = q.Where("workflow_id IN (?)", s.db.Model(&models.WorkflowDef{}).Select("id").Where("project_id = ?", projectID))
 	}
+	q = applyRunTagsFilter(q, "runs.tags", tags)
 	return q
 }
 
@@ -79,9 +95,13 @@ func (s *RunService) listQuery(statuses []string, wf, projectID string) *gorm.DB
 // allowed order: asc|desc. Both must be valid as a pair; otherwise the default
 // hybrid-time DESC + id DESC is kept. Omitted args keep the default.
 func (s *RunService) List(statuses []string, wf, projectID string, sortOrder ...string) []models.Run {
+	return s.ListByTags(statuses, wf, projectID, nil, sortOrder...)
+}
+
+func (s *RunService) ListByTags(statuses []string, wf, projectID string, tags []string, sortOrder ...string) []models.Run {
 	sort, order := parseSortOrderArgs(sortOrder)
 	var runs []models.Run
-	s.listQuery(statuses, wf, projectID).
+	s.listQuery(statuses, wf, projectID, tags).
 		Order(runListOrderBy(sort, order)).
 		Find(&runs)
 	return runs
@@ -90,8 +110,12 @@ func (s *RunService) List(statuses []string, wf, projectID string, sortOrder ...
 // ListPage returns a page of runs plus the total matching count.
 // Optional trailing sortOrder is [sort, order]; see List for whitelist rules.
 func (s *RunService) ListPage(statuses []string, wf, projectID string, page, pageSize int, sortOrder ...string) ([]models.Run, int64) {
+	return s.ListPageByTags(statuses, wf, projectID, nil, page, pageSize, sortOrder...)
+}
+
+func (s *RunService) ListPageByTags(statuses []string, wf, projectID string, tags []string, page, pageSize int, sortOrder ...string) ([]models.Run, int64) {
 	sort, order := parseSortOrderArgs(sortOrder)
-	q := s.listQuery(statuses, wf, projectID)
+	q := s.listQuery(statuses, wf, projectID, tags)
 	var total int64
 	q.Count(&total)
 	var runs []models.Run
@@ -203,6 +227,33 @@ func (s *RunService) Conversations(runID string) []models.ReactConversation {
 
 // DB exposes the underlying handle for handlers needing ad-hoc queries.
 func (s *RunService) DB() *gorm.DB { return s.db }
+
+func (s *RunService) ProjectRunTags(projectID string) []string {
+	projectID = strings.TrimSpace(projectID)
+	if projectID == "" {
+		return []string{}
+	}
+	var rows []models.Run
+	s.db.Model(&models.Run{}).
+		Where("workflow_id IN (?)", s.db.Model(&models.WorkflowDef{}).Select("id").Where("project_id = ?", projectID)).
+		Find(&rows)
+	seen := make(map[string]struct{})
+	out := make([]string, 0)
+	for _, row := range rows {
+		for _, tag := range row.Tags {
+			if tag == "" {
+				continue
+			}
+			if _, ok := seen[tag]; ok {
+				continue
+			}
+			seen[tag] = struct{}{}
+			out = append(out, tag)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
 
 // Delete permanently removes a completed/failed/cancelled run and its
 // associated rows so the run no longer appears in lists/details or related UI

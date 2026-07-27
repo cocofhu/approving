@@ -34,6 +34,7 @@ vi.mock('@/lib/api', async () => {
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
+  useRoute: () => ({ query: {} }),
 }))
 
 vi.mock('@/lib/useBreakpoint', async () => {

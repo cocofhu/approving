@@ -563,6 +563,7 @@ export const api = {
   // runs
   listRuns: (params?: {
     status?: string
+    tag?: string
     wf?: string
     projectId?: string
     page?: number
@@ -574,6 +575,7 @@ export const api = {
   }) => {
     const qs = new URLSearchParams()
     if (params?.status) qs.set('status', params.status)
+    if (params?.tag) qs.set('tag', params.tag)
     if (params?.wf) qs.set('wf', params.wf)
     if (params?.projectId) qs.set('projectId', params.projectId)
     if (params?.page != null) qs.set('page', String(params.page))
@@ -605,10 +607,12 @@ export const api = {
       `/runs/${runId}/inbox-context?nodeId=${encodeURIComponent(nodeId)}&iteration=${iteration}`,
       opts?.signal ? { signal: opts.signal } : undefined,
     ),
-  startRun: (workflowId: string, inputs: Record<string, any>, trigger = 'manual', priority = 'normal') =>
+  listProjectRunTags: (projectId: string) =>
+    req<{ tags: string[] }>(`/projects/${encodeURIComponent(projectId)}/run-tags`),
+  startRun: (workflowId: string, inputs: Record<string, any>, trigger = 'manual', priority = 'normal', tags: string[] = []) =>
     req<{ id: string; status: string; priority?: string }>(`/workflows/${workflowId}/runs`, {
       method: 'POST',
-      body: JSON.stringify({ inputs, trigger, priority }),
+      body: JSON.stringify({ inputs, trigger, priority, tags }),
     }),
   updateRunPriority: (id: string, priority: string) =>
     req<{ id: string; status: string; priority: string }>(`/runs/${id}/priority`, {
@@ -977,12 +981,13 @@ export const api = {
   /** Console noVNC: sandbox-scoped WS (not preview runId/nodeId/port). */
   sandboxVncWsUrl: (sandboxId: number) =>
     rootWsUrl(`/sandbox-vnc/${sandboxId}/ws`),
-  listGates: (params?: { page?: number; pageSize?: number; wf?: string; projectId?: string }) => {
+  listGates: (params?: { page?: number; pageSize?: number; wf?: string; projectId?: string; tag?: string }) => {
     const qs = new URLSearchParams()
     if (params?.page != null) qs.set('page', String(params.page))
     if (params?.pageSize != null) qs.set('pageSize', String(params.pageSize))
     if (params?.wf) qs.set('wf', params.wf)
     if (params?.projectId) qs.set('projectId', params.projectId)
+    if (params?.tag) qs.set('tag', params.tag)
     const q = qs.toString()
     const path = q ? `/gates?${q}` : '/gates'
     if (params?.page != null || params?.pageSize != null) {

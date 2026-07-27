@@ -12,6 +12,7 @@ function findStartButton(wrapper: ReturnType<typeof mount>) {
 const apiMocks = vi.hoisted(() => ({
   startRun: vi.fn(),
   listRepos: vi.fn(),
+  listProjectRunTags: vi.fn(),
 }))
 
 vi.mock('@/lib/api', async () => {
@@ -22,13 +23,14 @@ vi.mock('@/lib/api', async () => {
       ...actual.api,
       startRun: apiMocks.startRun,
       listRepos: apiMocks.listRepos,
+      listProjectRunTags: apiMocks.listProjectRunTags,
     },
   }
 })
 
 import RunLaunchModal from './RunLaunchModal.vue'
 
-function mountModal(open = true) {
+function mountModal(open = true, extraProps: Record<string, unknown> = {}) {
   const i18n = createI18n({
     legacy: false,
     locale: 'zh-CN',
@@ -42,6 +44,7 @@ function mountModal(open = true) {
       fields: [{ key: 'topic', desc: '主题', required: true }],
       runInputs: { topic: 'hello' },
       runImages: {},
+      ...extraProps,
     },
     global: {
       plugins: [i18n],
@@ -68,6 +71,7 @@ function mountModal(open = true) {
 beforeEach(() => {
   vi.clearAllMocks()
   apiMocks.listRepos.mockResolvedValue([])
+  apiMocks.listProjectRunTags.mockResolvedValue({ tags: [] })
 })
 
 describe('RunLaunchModal', () => {
@@ -130,7 +134,7 @@ describe('RunLaunchModal', () => {
     const startBtn = findStartButton(wrapper)
     await startBtn!.trigger('click')
     await flushPromises()
-    expect(apiMocks.startRun).toHaveBeenCalledWith('wf-1', expect.objectContaining({ topic: 'hello' }), 'manual', 'normal')
+    expect(apiMocks.startRun).toHaveBeenCalledWith('wf-1', expect.objectContaining({ topic: 'hello' }), 'manual', 'normal', [])
     expect(wrapper.emitted('started')?.[0]?.[0]).toBe('run-99')
     wrapper.unmount()
   })
@@ -144,6 +148,35 @@ describe('RunLaunchModal', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('network down')
     expect(apiMocks.startRun).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  // g5.2: ProjectDetail/WorkflowList 用 v-if + open=true 挂载，须立即拉取项目存量 tags
+  it('fetches project run-tags when mounted with open=true and projectId (v-if path)', async () => {
+    apiMocks.listProjectRunTags.mockResolvedValue({ tags: ['bugfix-login', 'spike'] })
+    const wrapper = mountModal(true, { projectId: 'proj-1' })
+    await flushPromises()
+    expect(apiMocks.listProjectRunTags).toHaveBeenCalledTimes(1)
+    expect(apiMocks.listProjectRunTags).toHaveBeenCalledWith('proj-1')
+    wrapper.unmount()
+  })
+
+  it('fetches project run-tags when open flips false→true (editor path)', async () => {
+    apiMocks.listProjectRunTags.mockResolvedValue({ tags: ['bugfix'] })
+    const wrapper = mountModal(false, { projectId: 'proj-2' })
+    await flushPromises()
+    expect(apiMocks.listProjectRunTags).not.toHaveBeenCalled()
+    await wrapper.setProps({ open: true })
+    await flushPromises()
+    expect(apiMocks.listProjectRunTags).toHaveBeenCalledTimes(1)
+    expect(apiMocks.listProjectRunTags).toHaveBeenCalledWith('proj-2')
+    wrapper.unmount()
+  })
+
+  it('does not fetch run-tags when open without projectId', async () => {
+    const wrapper = mountModal(true)
+    await flushPromises()
+    expect(apiMocks.listProjectRunTags).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 })
