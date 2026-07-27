@@ -282,8 +282,13 @@ test.describe('项目 Token 总体消耗 UI', () => {
     const tip = page.getByTestId('token-detail-tip')
     await expect(tip).toBeVisible()
     await expect(tip.getByTestId('token-detail-tip-exact')).toContainText('152,090,000')
-    // 首期无分项字段：不捏造 breakdown
-    await expect(tip.getByTestId('token-detail-tip-breakdown')).toHaveCount(0)
+    // 来源拆分：workflow / pm / 合计（与看板 tip 及 Demo「改后」一致）
+    await expect(tip.getByTestId('token-detail-tip-breakdown')).toBeVisible()
+    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('workflow')
+    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('pm')
+    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('合计')
+    await expect(tip.locator('[data-tip-row="workflow"]')).toContainText('140,000,000')
+    await expect(tip.locator('[data-tip-row="pm"]')).toContainText('12,090,000')
     // 非常显原生 title 唯一通道：页面内 tip 带 role=tooltip
     await expect(tip).toHaveAttribute('role', 'tooltip')
   })
