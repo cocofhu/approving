@@ -77,6 +77,7 @@ const reviewChatRef = ref<{
   applyReviewFrame?: (frame: any) => void
   applyAcpEvents?: (events: any[] | undefined, nodeId?: string) => void
   discardLastQueued?: () => void
+  isSessionBusy?: () => boolean
 } | null>(null)
 const { selected } = usePipelineFilter()
 const { selected: selectedProject, ensureHydrated: hydrateProject } = useProjectContext()
@@ -426,11 +427,24 @@ const activeRunLoadError = ref(false)
 /** Active-run event socket — mirrors RunDetailView artifact_edit/react → reload. */
 let activeRunWs: WebSocket | undefined
 let activeRunWsRunId = ''
+/**
+ * Live busy from review/acp WS frames (not stale activeRun.reactSessions snapshot).
+ * Used to gate softRefresh while clarify session is mid-turn (g3.2 / review v3).
+ */
+const clarifyLiveBusy = ref(false)
+
+function isClarifySoftRefreshBlocked(): boolean {
+  if (active.value?.type !== 'clarify') return false
+  if (clarifyLiveBusy.value) return true
+  if (reviewChatRef.value?.isSessionBusy?.()) return true
+  return false
+}
 
 function closeActiveRunWs() {
   activeRunWs?.close()
   activeRunWs = undefined
   activeRunWsRunId = ''
+  clarifyLiveBusy.value = false
 }
 
 function connectActiveRunWs(runId: string) {
@@ -449,21 +463,31 @@ function connectActiveRunWs(runId: string) {
     return
   }
   activeRunWs.onmessage = (ev) => {
-    let m: { type?: string; event?: string; nodeId?: string; events?: any[] }
+    let m: {
+      type?: string
+      event?: string
+      nodeId?: string
+      events?: any[]
+      busy?: boolean
+    }
     try {
       m = JSON.parse(String(ev.data))
     } catch {
       return
     }
     if (m.type === 'review') {
+      if (m.event === 'turn_begin') clarifyLiveBusy.value = true
+      if (m.event === 'queue_state' && typeof m.busy === 'boolean') clarifyLiveBusy.value = !!m.busy
       gateApprovalRef.value?.applyReviewFrame?.(m)
       reviewChatRef.value?.applyReviewFrame?.(m)
       if (m.event === 'turn_done' || m.event === 'error') {
+        clarifyLiveBusy.value = false
         if (active.value && active.value.runId === runId) void softRefreshActiveRun()
       }
       return
     }
     if (m.type === 'acp') {
+      if (typeof m.busy === 'boolean') clarifyLiveBusy.value = !!m.busy
       const nodeId = (m as { nodeId?: string }).nodeId
       gateApprovalRef.value?.applyAcpEvents?.(m.events)
       reviewChatRef.value?.applyAcpEvents?.(m.events, nodeId)
@@ -487,8 +511,8 @@ function connectActiveRunWs(runId: string) {
       if (active.value.type === 'clarify') {
         if (m.type === 'artifact_edit') void softRefreshActiveRun()
         if (m.type === 'react') {
-          const sess = (activeRun.value as any)?.reactSessions?.[active.value.nodeId]
-          if (!sess?.busy) void softRefreshActiveRun()
+          // Gate on live WS busy / sessionBusy — not stale reactSessions snapshot.
+          if (!isClarifySoftRefreshBlocked()) void softRefreshActiveRun()
         }
       }
     }

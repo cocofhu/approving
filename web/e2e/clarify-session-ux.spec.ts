@@ -28,6 +28,8 @@ test.describe('ClarifyChat 非 reviewMode 澄清会话', () => {
     await page.getByTestId('sim-turn-stream').click()
     await expect(page.getByText('流式产出正文（非整轮一次性）。')).toBeVisible()
     await expect(queue).toContainText('澄清意见乙')
+    // Host busy gate: react mid-turn must skip full refresh.
+    await expect(page.getByTestId('host-skip-refresh')).toContainText('hostSkip=1')
     await page.screenshot({ path: path.join(shotDir, '02-clarify-stream.png'), fullPage: true })
 
     // Demo Cancel: keep queue (乙 remains), mark interrupted.
@@ -41,5 +43,20 @@ test.describe('ClarifyChat 非 reviewMode 澄清会话', () => {
     await expect(page.getByText('刷新后续上的流式正文。')).toBeVisible()
     await expect(page.getByTestId('clarify-review-queue')).toContainText('澄清意见乙')
     await page.screenshot({ path: path.join(shotDir, '04-clarify-refresh-resume.png'), fullPage: true })
+  })
+
+  test('transcript 追上 + live streaming 不双显 human', async ({ page }) => {
+    await page.setViewportSize({ width: 1100, height: 900 })
+    await page.goto('/clarify-session-ux.html')
+    await expect(page.getByTestId('clarify-ux-root')).toBeVisible({ timeout: 15_000 })
+
+    await page.getByTestId('sim-transcript-catchup').click()
+    await expect(page.getByText('流式产出正文（非整轮一次性）。')).toBeVisible()
+    const scroller = page.getByTestId('clarify-scroller')
+    const text = await scroller.innerText()
+    const matches = text.match(/澄清意见甲（队列首条）/g) || []
+    expect(matches.length).toBe(1)
+    await expect(page.getByTestId('host-skip-refresh')).toContainText(/hostSkip=[1-9]/)
+    await page.screenshot({ path: path.join(shotDir, '05-clarify-no-dup-human.png'), fullPage: true })
   })
 })

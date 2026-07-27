@@ -148,4 +148,52 @@ describe('[approving] ClarifyChat clarify-path UX (non-reviewMode)', () => {
     expect(w.text()).toContain('启动输入')
     w.unmount()
   })
+
+  it('props.turns catching human while live streaming does not double human bubble', async () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const w = mount(ClarifyChat, {
+      props: {
+        runId: 'run-1',
+        nodeId: 'clarify',
+        iteration: 1,
+        turns: [],
+        done: false,
+        active: true,
+        reviewMode: false,
+        annotateEnabled: true,
+        hideFinish: true,
+        sendLabel: '发送澄清回复',
+      },
+      global: {
+        plugins: [i18n],
+        stubs: { Icon: true, ClarifyDemoFrame: true },
+      },
+    })
+    const vm = w.vm as unknown as {
+      applyReviewFrame: (f: Record<string, unknown>) => void
+      applyAcpEvents: (e: { kind: string; text: string }[]) => void
+    }
+    vm.applyReviewFrame({
+      event: 'turn_begin',
+      item: { text: '澄清意见甲' },
+      nodeId: 'clarify',
+    })
+    await nextTick()
+    vm.applyAcpEvents([{ kind: 'message', text: '流式正文' }])
+    await nextTick()
+    // Host softRefresh/loadRun caught up with persisted human mid-stream.
+    await w.setProps({
+      turns: [{ role: 'human', text: '澄清意见甲', at: '2026-07-27T00:00:00Z' }],
+    })
+    await nextTick()
+    const body = w.find('[data-testid="clarify-scroller"]').text()
+    const matches = body.match(/澄清意见甲/g) || []
+    expect(matches.length).toBe(1)
+    expect(body).toContain('流式正文')
+    w.unmount()
+  })
 })

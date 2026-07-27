@@ -702,7 +702,8 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     const before = inboxCallsFor('run-a', 'clarify-a', 1).length
     expect(before).toBeGreaterThan(0)
 
-    // Ordinary turn: stay pending; status must not softRefresh, react may.
+    // Ordinary turn: stay pending; status must not softRefresh.
+    // Mid-turn react is gated by liveBusy (turn_begin) — must not softRefresh.
     await wrapper.get('[data-testid="clarify-turn"]').trigger('click')
     await flushPromises()
     await nextTick()
@@ -725,9 +726,22 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     await flushPromises()
     expect(inboxCallsFor('run-a', 'clarify-a', 1).length).toBe(afterTurn)
 
+    // turn_begin marks live busy → react must not softRefresh (stale reactSessions gate was the bug).
+    ws!.emit('review', { event: 'turn_begin', nodeId: 'clarify-a' })
+    await flushPromises()
+    const afterBegin = inboxCallsFor('run-a', 'clarify-a', 1).length
     ws!.emit('react')
     await flushPromises()
-    expect(inboxCallsFor('run-a', 'clarify-a', 1).length).toBe(afterTurn + 1)
+    expect(inboxCallsFor('run-a', 'clarify-a', 1).length).toBe(afterBegin)
+
+    // Idle react (no busy) may softRefresh.
+    ws!.emit('review', { event: 'turn_done', nodeId: 'clarify-a' })
+    await flushPromises()
+    const afterDone = inboxCallsFor('run-a', 'clarify-a', 1).length
+    expect(afterDone).toBeGreaterThan(afterBegin)
+    ws!.emit('react')
+    await flushPromises()
+    expect(inboxCallsFor('run-a', 'clarify-a', 1).length).toBe(afterDone + 1)
 
     // Force finish: short-circuit symmetric with gate resolve.
     const afterReact = inboxCallsFor('run-a', 'clarify-a', 1).length

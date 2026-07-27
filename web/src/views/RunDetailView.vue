@@ -111,7 +111,18 @@ const reviewChatRef = ref<{
   applyReviewFrame?: (frame: any) => void
   applyAcpEvents?: (events: AcpEvent[] | undefined, nodeId?: string) => void
   discardLastQueued?: () => void
+  isSessionBusy?: () => boolean
 } | null>(null)
+
+/** Clarify/review session in-flight: skip full-page loadRun (g3.2 / review v1). */
+function isClarifySessionBusy(): boolean {
+  const nodeId = selClarify.value?.nodeId
+  if (!nodeId) return false
+  if (liveBusy[nodeId] === true) return true
+  if (!!(run.value as any)?.reactSessions?.[nodeId]?.busy) return true
+  if (reviewChatRef.value?.isSessionBusy?.()) return true
+  return false
+}
 const gateApprovalRef = ref<{
   applyReviewFrame?: (frame: any) => void
   applyAcpEvents?: (events: AcpEvent[] | undefined) => void
@@ -411,11 +422,7 @@ async function initAfterLoadSuccess() {
       if (run.value.status === 'running' || run.value.status === 'waiting_human') {
         // Clarify/review session busy: skip full loadRun so we do not wipe
         // live stream / send lock / input focus (narrow updates via WS frames).
-        const clarifyBusy =
-          !!selClarify.value &&
-          (liveBusy[selClarify.value.nodeId] === true ||
-            !!(run.value as any).reactSessions?.[selClarify.value.nodeId]?.busy)
-        if (!clarifyBusy) {
+        if (!isClarifySessionBusy()) {
           loadRun(false)
         }
         const sel = selected.value
@@ -518,11 +525,14 @@ function connectWs() {
       }
     } else if (m.type === 'review' && m.nodeId) {
       // Prefer matching producer; components also filter by nodeId defensively.
+      if (m.event === 'turn_begin') liveBusy[m.nodeId] = true
+      if (m.event === 'queue_state' && typeof m.busy === 'boolean') liveBusy[m.nodeId] = !!m.busy
       if (!selClarify.value || selClarify.value.nodeId === m.nodeId) {
         reviewChatRef.value?.applyReviewFrame?.(m)
       }
       gateApprovalRef.value?.applyReviewFrame?.(m)
       if (m.event === 'turn_done' || m.event === 'error') {
+        liveBusy[m.nodeId] = false
         loadRun(false)
       }
     } else if (
@@ -532,6 +542,8 @@ function connectWs() {
       m.type === 'artifact_edit'
     ) {
       // Node finished / transitioned / human artifact edit: pull authoritative snapshot.
+      // Mid-clarify: react is projected via review/acp frames — do not full-page rebind.
+      if (m.type === 'react' && isClarifySessionBusy()) return
       if (m.type === 'status') liveNode.value = null
       loadRun(false)
     }
@@ -547,6 +559,8 @@ onMounted(async () => {
   window.addEventListener('focus', onFocusRefresh)
 })
 function onFocusRefresh() {
+  // Clarify/review mid-turn: skip focus/visibility full reload (keeps stream + input focus).
+  if (isClarifySessionBusy()) return
   if (!runLoading.value && !loadError.value) loadRun(false)
 }
 function onVisible() {

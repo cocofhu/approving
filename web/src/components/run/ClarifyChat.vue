@@ -5,6 +5,7 @@ import Icon from '../ui/Icon.vue'
 import ClarifyDemoFrame from './ClarifyDemoFrame.vue'
 import { renderMarkdown } from '@/lib/markdown'
 import { createStreamMarkdownPreview } from '@/lib/streamMarkdownPreview'
+import { mergePersistedAndLiveTurns } from '@/lib/mergeClarifyLiveTurns'
 import { relTime } from '@/lib/format'
 import {
   demoGridColsClass,
@@ -271,9 +272,9 @@ const latestQuestionAnswered = computed(() => {
 const turns = computed<ClarifyTurn[]>(() => {
   let list = props.turns
   // Session UX: live in-flight bubbles until persisted transcript catches up.
+  // Dedupe against props.turns so mid-stream softRefresh/loadRun human does not double-render.
   if (liveTurns.value.length) {
-    list = [...list, ...liveTurns.value]
-    return list
+    return mergePersistedAndLiveTurns(list, liveTurns.value)
   }
   // Choice-card sessionStorage echo only (not used for free-text send).
   if (pending.value) {
@@ -836,7 +837,14 @@ function applyAcpEvents(events: AcpEvent[] | undefined, nodeId?: string) {
   void scrollBottom()
 }
 
-defineExpose({ applyReviewFrame, applyAcpEvents, cancelReview, discardLastQueued })
+defineExpose({
+  applyReviewFrame,
+  applyAcpEvents,
+  cancelReview,
+  discardLastQueued,
+  /** Host narrow-update gate: skip loadRun/softRefresh while true. */
+  isSessionBusy: () => sessionBusy.value,
+})
 </script>
 
 <template>

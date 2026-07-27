@@ -329,3 +329,13 @@ describe('RunDetailView load failure split', () => {
     expect(src).not.toMatch(/请检查网络或确认 Run 是否存在/)
   })
 })
+
+describe('RunDetailView clarify session narrow update (g3.2)', () => {
+  it('skips react/focus loadRun while clarify session busy', () => {
+    expect(src).toMatch(/function isClarifySessionBusy\(/)
+    expect(src).toMatch(/if \(m\.type === 'react' && isClarifySessionBusy\(\)\) return/)
+    expect(src).toMatch(/if \(isClarifySessionBusy\(\)\) return/)
+    expect(src).toMatch(/liveBusy\[m\.nodeId\] = true/)
+    expect(src).toMatch(/m\.event === 'turn_begin'/)
+  })
+})
