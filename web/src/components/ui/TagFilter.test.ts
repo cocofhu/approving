@@ -70,7 +70,8 @@ describe('TagFilter', () => {
 
     await wrapper.setProps({ modelValue: ['prod'] })
     await suggestions[0]!.trigger('click')
-    expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toEqual([])
+    const emitted = wrapper.emitted('update:modelValue') ?? []
+    expect(emitted[emitted.length - 1]?.[0]).toEqual([])
     wrapper.unmount()
   })
 
