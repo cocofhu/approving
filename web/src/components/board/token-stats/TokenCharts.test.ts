@@ -18,9 +18,13 @@ const i18n = () =>
 function sampleTrend(n: number) {
   return Array.from({ length: n }, (_, i) => {
     const day = String(i + 1).padStart(2, '0')
+    const total = i === n - 1 ? 1_500_000 : i * 100
+    const pm = Math.floor(total * 0.2)
     return {
       bucket: `2026-07-${day}`,
-      total: i === n - 1 ? 1_500_000 : i * 100,
+      total,
+      workflowTotal: total - pm,
+      pmTotal: pm,
       inputTokens: 40,
       outputTokens: 30,
       cacheReadTokens: 20,
@@ -38,6 +42,8 @@ describe('Token charts (g2.3/g2.4)', () => {
           {
             bucket: '2026-07-24',
             total: 100,
+            workflowTotal: 70,
+            pmTotal: 30,
             inputTokens: 40,
             outputTokens: 30,
             cacheReadTokens: 20,
@@ -46,6 +52,8 @@ describe('Token charts (g2.3/g2.4)', () => {
           {
             bucket: '2026-07-25',
             total: 0,
+            workflowTotal: 0,
+            pmTotal: 0,
             inputTokens: 0,
             outputTokens: 0,
             cacheReadTokens: 0,
@@ -57,10 +65,17 @@ describe('Token charts (g2.3/g2.4)', () => {
     })
     expect(wrapper.find('[data-testid="token-trend-wrap"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="token-trend-chart"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="token-trend-legend"]').text()).toContain('workflow')
+    expect(wrapper.find('[data-testid="token-trend-legend"]').text()).toContain('pm')
     expect(wrapper.find('canvas').exists()).toBe(true)
     // Chart.js Canvas path — no legacy non-uniform SVG stretch host
     expect(wrapper.find('[data-testid="token-trend-svg"]').exists()).toBe(false)
     expect(wrapper.html()).not.toMatch(/preserveAspectRatio\s*=\s*["']none["']/)
+    const exposed = wrapper.vm as unknown as {
+      chartData: { datasets: { label: string; data: number[] }[] }
+    }
+    expect(exposed.chartData.datasets).toHaveLength(2)
+    expect(exposed.chartData.datasets.map((d) => d.label)).toEqual(['workflow', 'pm'])
     wrapper.unmount()
   })
 
@@ -166,20 +181,24 @@ describe('Token charts (g2.3/g2.4)', () => {
     wrapper.unmount()
   })
 
-  it('renders Top10 rank bars and styles other distinctly without padding placeholders', () => {
+  it('renders consumption rank with PM amber row and other as non-PM (g3.2)', () => {
     const wrapper = mount(TokenWorkflowRank, {
       props: {
         workflows: [
-          { workflowId: 'a', name: 'approve-main', total: 100 },
-          { workflowId: 'b', name: 'doc-review', total: 40 },
-          { name: 'other', total: 20, other: true },
+          { workflowId: 'a', name: 'approve-main', total: 100, kind: 'workflow' },
+          { name: 'PM', total: 80, kind: 'pm' },
+          { workflowId: 'b', name: 'doc-review', total: 40, kind: 'workflow' },
+          { name: 'other', total: 20, other: true, kind: 'other' },
         ],
       },
       global: { plugins: [i18n()] },
     })
     const items = wrapper.findAll('li')
-    expect(items).toHaveLength(3)
+    expect(items).toHaveLength(4)
+    expect(wrapper.find('.token-rank-pm').exists()).toBe(true)
     expect(wrapper.find('.token-rank-other').exists()).toBe(true)
+    expect(wrapper.find('[data-kind="pm"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('PM')
     expect(wrapper.text()).toContain('其他')
     wrapper.unmount()
   })

@@ -31,6 +31,8 @@ const STATS_30D = {
     {
       bucket: '2026-07-24',
       total: 1200,
+      workflowTotal: 900,
+      pmTotal: 300,
       inputTokens: 500,
       outputTokens: 400,
       cacheReadTokens: 200,
@@ -39,6 +41,8 @@ const STATS_30D = {
     {
       bucket: '2026-07-25',
       total: 800,
+      workflowTotal: 600,
+      pmTotal: 200,
       inputTokens: 300,
       outputTokens: 250,
       cacheReadTokens: 150,
@@ -53,9 +57,10 @@ const STATS_30D = {
     total: 2000,
   },
   workflows: [
-    { workflowId: 'wf-a', name: 'approve-main', total: 1200 },
-    { workflowId: 'wf-b', name: 'doc-review', total: 500 },
-    { name: '其他', total: 300, other: true },
+    { workflowId: 'wf-a', name: 'approve-main', total: 1200, kind: 'workflow' },
+    { name: 'PM', total: 500, kind: 'pm' },
+    { workflowId: 'wf-b', name: 'doc-review', total: 300, kind: 'workflow' },
+    { name: '其他', total: 200, other: true, kind: 'other' },
   ],
 }
 
@@ -214,7 +219,13 @@ test.describe('看板 Token 统计图', () => {
     await expect(page.getByTestId('token-donut-svg')).toBeVisible()
     await expect(page.getByTestId('token-donut-legend')).toContainText('input')
     await expect(panel).toContainText('approve-main')
+    await expect(panel).toContainText('PM')
     await expect(panel).toContainText('其他')
+    await expect(page.getByTestId('token-trend-legend')).toContainText('workflow')
+    await expect(page.getByTestId('token-trend-legend')).toContainText('pm')
+    await expect(panel).toContainText('消耗排行')
+    await expect(panel).toContainText('按来源堆叠')
+    await expect(page.getByTestId('token-rank-list').locator('[data-kind="pm"]')).toBeVisible()
 
     // Panel sits above Run columns
     const panelBox = await panel.boundingBox()
@@ -347,6 +358,8 @@ test.describe('看板 Token 统计图', () => {
             description: 'Approving Project',
             workflowCount: 3,
             totalTokens: 128400,
+            workflowTokens: 100000,
+            pmTokens: 28400,
             createdAt: '2026-01-01T00:00:00Z',
             updatedAt: '2026-07-25T03:42:00Z',
             sandboxEnv: [],
@@ -391,7 +404,7 @@ test.describe('看板 Token 统计图', () => {
     const headerStat = page.getByTestId('project-token-stat')
     await expect(headerStat).toBeVisible({ timeout: 15_000 })
     await expect(headerStat).toContainText('128.4K')
-    await expect(headerStat).toContainText('全部历史 · 工作流合计')
+    await expect(headerStat).toContainText('全部历史 · 含工作流与 PM（上线后）')
 
     await expect(page.getByTestId('token-stats-panel')).toBeVisible()
     await expect(page.getByTestId('token-stats-charts')).toBeVisible()
@@ -399,7 +412,14 @@ test.describe('看板 Token 统计图', () => {
     await page.getByTestId('token-stats-window-all').click()
     await expect(page.getByTestId('token-stats-window-badge')).toContainText('全部历史')
     await expect(headerStat).toContainText('128.4K')
-    await expect(headerStat).toContainText('全部历史 · 工作流合计')
+    await expect(headerStat).toContainText('全部历史 · 含工作流与 PM（上线后）')
+
+    await headerStat.hover()
+    const tip = page.getByTestId('token-detail-tip')
+    await expect(tip).toBeVisible()
+    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('workflow')
+    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('pm')
+    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('合计')
 
     const detailShot = path.join(testInfo.outputDir, 'project-detail-token-stats.png')
     await page.screenshot({ path: detailShot, fullPage: true })

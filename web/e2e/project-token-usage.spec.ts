@@ -8,6 +8,8 @@ const MOCK_PROJECTS = [
     description: 'Approving Project',
     workflowCount: 3,
     totalTokens: 128400,
+    workflowTokens: 100000,
+    pmTokens: 28400,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-07-25T03:42:00Z',
     sandboxEnv: [],
@@ -242,7 +244,7 @@ test.describe('项目 Token 总体消耗 UI', () => {
     await expect(stat).toBeVisible({ timeout: 15_000 })
     await expect(stat).toContainText('Token 消耗')
     await expect(stat).toContainText('128.4K')
-    await expect(stat).toContainText('全部历史 · 工作流合计')
+    await expect(stat).toContainText('全部历史 · 含工作流与 PM（上线后）')
 
     const boardShot = path.join(testInfo.outputDir, 'project-detail-token-board.png')
     await page.screenshot({ path: boardShot, fullPage: true })
@@ -266,6 +268,8 @@ test.describe('项目 Token 总体消耗 UI', () => {
     await stubProjectDetailApis(page, {
       ...MOCK_DETAIL,
       totalTokens: 152_090_000,
+      workflowTokens: 140_000_000,
+      pmTokens: 12_090_000,
     })
 
     await page.goto('/project-detail.html?theme=light&tab=board')

@@ -126,7 +126,7 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 
 	images := toPromptImages(in.Images)
 	userText := formatChannelUserText(in, len(images) > 0)
-	userMsg, err := b.pm.AppendMessageSource(thread.ID, "user", userText, "channel", nil, nil, images)
+	userMsg, err := b.pm.AppendMessageSource(thread.ID, "user", userText, "channel", nil, nil, images, nil)
 	if err != nil {
 		return Reply{}, err
 	}

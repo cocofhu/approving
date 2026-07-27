@@ -250,7 +250,7 @@ func (s *CronScheduler) execute(ctx context.Context, job *models.AgentCronJob) {
 	}
 
 	prompt := "请先用 context-store / memory-store 拉取所需历史与记忆，再执行任务。\n\n" + job.Prompt
-	userMsg, err := s.pm.AppendMessageSource(job.ThreadID, "user", prompt, "cron", nil, nil, nil)
+	userMsg, err := s.pm.AppendMessageSource(job.ThreadID, "user", prompt, "cron", nil, nil, nil, nil)
 	if err != nil {
 		run.Status = "error"
 		run.Error = err.Error()

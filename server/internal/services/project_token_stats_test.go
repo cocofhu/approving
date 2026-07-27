@@ -299,6 +299,96 @@ func TestTokenStatsAggregation(t *testing.T) {
 			t.Fatalf("err=%v", err)
 		}
 	})
+
+	t.Run("pm_usage_in_trend_composition_rank", func(t *testing.T) {
+		// g2.1–g2.4: PM ChatMessage.Usage merges into total/trend/composition/rank.
+		p, err := s.Create("WithPM", "", nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ts := time.Date(2026, 7, 24, 12, 0, 0, 0, loc).UTC()
+		must(&models.WorkflowDef{ID: "wf-pm", ProjectID: p.ID, Name: "wf-pm", Status: "draft", Version: 1})
+		must(&models.Run{
+			ID: "run-pm-wf", WorkflowID: "wf-pm", WorkflowName: "wf-pm",
+			Status: "completed", StartedAt: ts,
+		})
+		must(&models.StateRun{
+			RunID: "run-pm-wf", NodeID: "n1", Status: "completed",
+			StartedAt: ptr(ts),
+			Usage:     &models.TokenUsage{InputTokens: 100, OutputTokens: 20},
+		})
+		must(&models.ChatThread{ID: "th-pm", ProjectID: p.ID, UserID: "u1", Title: "t"})
+		// Historical assistant without Usage — must NOT backfill.
+		must(&models.ChatMessage{
+			ID: "msg-old", ThreadID: "th-pm", Role: "assistant", Content: "old",
+			Status: "ok", CreatedAt: ts,
+		})
+		must(&models.ChatMessage{
+			ID: "msg-pm", ThreadID: "th-pm", Role: "assistant", Content: "hi",
+			Status: "ok", CreatedAt: ts,
+			Usage: &models.TokenUsage{InputTokens: 40, OutputTokens: 10},
+		})
+		// Nil usage (unreported) assistant — not counted.
+		must(&models.ChatMessage{
+			ID: "msg-nil", ThreadID: "th-pm", Role: "assistant", Content: "nil",
+			Status: "ok", CreatedAt: ts,
+		})
+
+		res, err := s.TokenStats(context.Background(), p.ID, TokenStatsQuery{
+			Window: TokenStatsWindow7d, Timezone: "Asia/Shanghai", Now: now,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Empty {
+			t.Fatal("expected non-empty with PM+workflow")
+		}
+		// 120 workflow + 50 PM = 170
+		if res.Composition.Total != 170 {
+			t.Fatalf("composition.total=%d want 170", res.Composition.Total)
+		}
+		var day24 *TokenStatsBucket
+		for i := range res.Trend {
+			if res.Trend[i].Bucket == "2026-07-24" {
+				day24 = &res.Trend[i]
+				break
+			}
+		}
+		if day24 == nil {
+			t.Fatal("missing 2026-07-24 bucket")
+		}
+		if day24.WorkflowTotal != 120 || day24.PmTotal != 50 || day24.Total != 170 {
+			t.Fatalf("day24=%+v want wf=120 pm=50 total=170", day24)
+		}
+		var sawPM, sawWF bool
+		for _, w := range res.Workflows {
+			switch w.Kind {
+			case TokenStatsKindPM:
+				sawPM = true
+				if w.Total != 50 || w.Other {
+					t.Fatalf("pm row=%+v", w)
+				}
+			case TokenStatsKindWorkflow:
+				sawWF = true
+			case TokenStatsKindOther:
+				t.Fatalf("other must not absorb PM: %+v", w)
+			}
+		}
+		if !sawPM || !sawWF {
+			t.Fatalf("rank missing pm/workflow: %+v", res.Workflows)
+		}
+
+		bd := s.TokenBreakdown(p.ID)
+		if bd.Total == nil || *bd.Total != 170 {
+			t.Fatalf("breakdown.total=%v want 170", bd.Total)
+		}
+		if bd.Workflow == nil || *bd.Workflow != 120 {
+			t.Fatalf("breakdown.workflow=%v want 120", bd.Workflow)
+		}
+		if bd.PM == nil || *bd.PM != 50 {
+			t.Fatalf("breakdown.pm=%v want 50", bd.PM)
+		}
+	})
 }
 
 func itoa(n int) string {

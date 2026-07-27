@@ -289,7 +289,7 @@ func (s *GateAutoInvokeService) process(task GateAutoTask) {
 		return
 	}
 
-	userMsg, err := s.pm.AppendMessageSource(thread.ID, "user", prompt, gateAutoSource, nil, nil, nil)
+	userMsg, err := s.pm.AppendMessageSource(thread.ID, "user", prompt, gateAutoSource, nil, nil, nil, nil)
 	if err != nil {
 		log.Warn().Err(err).Str("thread", thread.ID).
 			Msg("gate-auto: append message failed; degrade to human")

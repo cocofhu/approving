@@ -692,6 +692,8 @@ onUnmounted(() => {
                 v-if="project.totalTokens != null"
                 tip-id="project-token-detail-tip"
                 :total-tokens="project.totalTokens"
+                :workflow-tokens="project.workflowTokens"
+                :pm-tokens="project.pmTokens"
               />
             </div>
           </div>

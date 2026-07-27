@@ -13,13 +13,46 @@ const activeIdx = ref<number | null>(null)
 
 const maxTotal = computed(() => Math.max(1, ...props.workflows.map((w) => w.total || 0)))
 
+function isPM(w: TokenStatsWorkflow): boolean {
+  return w.kind === 'pm' || (!w.other && w.name === 'PM' && !w.workflowId)
+}
+
+function isOther(w: TokenStatsWorkflow): boolean {
+  return !!w.other || w.kind === 'other'
+}
+
 function displayName(w: TokenStatsWorkflow): string {
-  if (w.other) return t('pages.board.tokenStats.other')
+  if (isOther(w)) return t('pages.board.tokenStats.other')
+  if (isPM(w)) return t('pages.board.tokenStats.pm')
   return w.name || w.workflowId || '—'
 }
 
 function barWidth(total: number): string {
   return `${Math.max(2, Math.round((total / maxTotal.value) * 100))}%`
+}
+
+function badgeLabel(w: TokenStatsWorkflow, i: number): string {
+  if (isPM(w)) return 'PM'
+  if (isOther(w)) return '·'
+  let n = 0
+  for (let j = 0; j <= i; j++) {
+    const row = props.workflows[j]
+    if (row && !isPM(row) && !isOther(row)) n += 1
+  }
+  return String(n)
+}
+
+function badgeClass(w: TokenStatsWorkflow, i: number): string {
+  if (isPM(w)) return 'bg-[rgba(245,158,11,0.18)] text-[#d97706]'
+  if (isOther(w)) return 'bg-elevated text-txt3'
+  const n = Number(badgeLabel(w, i))
+  return n <= 3 ? 'bg-accent-dim text-accent-2' : 'bg-elevated text-txt3'
+}
+
+function barClass(w: TokenStatsWorkflow): string {
+  if (isPM(w)) return 'bg-gradient-to-r from-[#f59e0b] to-[#fbbf24]'
+  if (isOther(w)) return 'bg-gradient-to-r from-slate-400 to-slate-300'
+  return 'bg-gradient-to-r from-[#6d5cff] to-[#9b8cff]'
 }
 
 const tip = ref({ show: false, x: 0, y: 0, idx: -1 })
@@ -49,12 +82,14 @@ const tipRow = computed(() => (tip.value.idx >= 0 ? props.workflows[tip.value.id
   <ul data-testid="token-rank-list" class="token-rank relative m-0 grid list-none gap-2 p-0">
     <li
       v-for="(w, i) in workflows"
-      :key="(w.workflowId || w.name) + '-' + i"
+      :key="(w.kind || '') + '-' + (w.workflowId || w.name) + '-' + i"
       class="grid cursor-pointer grid-cols-[22px_1fr_auto] items-center gap-2 rounded-md px-0.5 py-1"
       :class="[
-        w.other ? 'token-rank-other' : '',
+        isOther(w) ? 'token-rank-other' : '',
+        isPM(w) ? 'token-rank-pm' : '',
         activeIdx === i ? 'bg-elevated' : 'hover:bg-elevated/80',
       ]"
+      :data-kind="w.kind || (isPM(w) ? 'pm' : isOther(w) ? 'other' : 'workflow')"
       @mouseenter="showTip(i, $event)"
       @mousemove="showTip(i, $event)"
       @mouseleave="hideTip"
@@ -62,16 +97,16 @@ const tipRow = computed(() => (tip.value.idx >= 0 ? props.workflows[tip.value.id
     >
       <span
         class="grid h-[22px] w-[22px] place-items-center rounded-md text-[11px] font-bold"
-        :class="i < 3 && !w.other ? 'bg-accent-dim text-accent-2' : 'bg-elevated text-txt3'"
+        :class="badgeClass(w, i)"
       >
-        {{ w.other ? '·' : i + 1 }}
+        {{ badgeLabel(w, i) }}
       </span>
       <div class="min-w-0">
         <div class="truncate text-xs font-medium text-txt">{{ displayName(w) }}</div>
         <div class="mt-1 h-2 overflow-hidden rounded-full bg-[#f1f3f6]">
           <div
             class="h-full rounded-full transition-[width] duration-300"
-            :class="w.other ? 'bg-gradient-to-r from-slate-400 to-slate-300' : 'bg-gradient-to-r from-[#6d5cff] to-[#9b8cff]'"
+            :class="barClass(w)"
             :style="{ width: barWidth(w.total) }"
           />
         </div>

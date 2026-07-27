@@ -45,17 +45,20 @@ type TokenStatsQuery struct {
 	Now              time.Time
 }
 
-// TokenStatsBucket is one day or week bucket with totals and four components.
+// TokenStatsBucket is one day or week bucket with totals, source split, and
+// four components (sum of all reported sources in the bucket).
 type TokenStatsBucket struct {
 	Bucket           string `json:"bucket"`
 	Total            int64  `json:"total"`
+	WorkflowTotal    int64  `json:"workflowTotal"`
+	PmTotal          int64  `json:"pmTotal"`
 	InputTokens      int64  `json:"inputTokens"`
 	OutputTokens     int64  `json:"outputTokens"`
 	CacheReadTokens  int64  `json:"cacheReadTokens"`
 	CacheWriteTokens int64  `json:"cacheWriteTokens"`
 }
 
-// TokenStatsComposition is the four-component sum for the window.
+// TokenStatsComposition is the four-component sum for the window (workflow+PM).
 type TokenStatsComposition struct {
 	InputTokens      int64 `json:"inputTokens"`
 	OutputTokens     int64 `json:"outputTokens"`
@@ -64,12 +67,20 @@ type TokenStatsComposition struct {
 	Total            int64 `json:"total"`
 }
 
-// TokenStatsWorkflow is one Top-N (or "other") workflow row.
+// Token-stats rank kinds.
+const (
+	TokenStatsKindWorkflow = "workflow"
+	TokenStatsKindPM       = "pm"
+	TokenStatsKindOther    = "other"
+)
+
+// TokenStatsWorkflow is one consumption-rank row (workflow Top-N, PM, or other).
 type TokenStatsWorkflow struct {
 	WorkflowID string `json:"workflowId,omitempty"`
 	Name       string `json:"name"`
 	Total      int64  `json:"total"`
 	Other      bool   `json:"other,omitempty"`
+	Kind       string `json:"kind,omitempty"` // workflow | pm | other
 }
 
 // TokenStatsResult is the single-response payload for trend/composition/workflows.
@@ -88,11 +99,13 @@ type tokenUsageRow struct {
 	usage        models.TokenUsage
 	workflowID   string
 	workflowName string
+	source       string // workflow | pm
 }
 
-// TokenStats aggregates non-nil StateRun.Usage for one project into trend,
-// composition, and workflow Top10+other. PM Leader usage is outside this chain.
-// Timestamp prefers StateRun.StartedAt, falling back to Run.StartedAt.
+// TokenStats aggregates non-nil StateRun.Usage + assistant ChatMessage.Usage for
+// one project into trend (workflow/pm split), composition (four parts), and
+// consumption rank (workflow Top10 + PM + other). Stdio is never counted.
+// Timestamp prefers StateRun.StartedAt / message CreatedAt.
 func (s *ProjectService) TokenStats(ctx context.Context, projectID string, q TokenStatsQuery) (TokenStatsResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -136,11 +149,14 @@ func (s *ProjectService) TokenStats(ctx context.Context, projectID string, q Tok
 
 	type agg struct {
 		input, output, cacheRead, cacheWrite int64
+		workflow, pm                         int64
 	}
 	buckets := map[string]*agg{}
 	wfTotals := map[string]int64{}
 	wfNames := map[string]string{}
 	wfLatest := map[string]time.Time{}
+	var pmTotal int64
+	var hasPM bool
 	var composition agg
 	var hasAny bool
 
@@ -169,11 +185,19 @@ func (s *ProjectService) TokenStats(ctx context.Context, projectID string, q Tok
 		composition.cacheRead += row.usage.CacheReadTokens
 		composition.cacheWrite += row.usage.CacheWriteTokens
 
+		total := row.usage.Total()
+		if row.source == TokenStatsKindPM {
+			b.pm += total
+			pmTotal += total
+			hasPM = true
+			continue
+		}
+		b.workflow += total
+
 		wfID := row.workflowID
 		if wfID == "" {
 			wfID = "_unknown"
 		}
-		total := row.usage.Total()
 		wfTotals[wfID] += total
 		if prev, ok := wfLatest[wfID]; !ok || !local.Before(prev) {
 			wfLatest[wfID] = local
@@ -222,7 +246,9 @@ func (s *ProjectService) TokenStats(ctx context.Context, projectID string, q Tok
 		}
 		out.Trend = append(out.Trend, TokenStatsBucket{
 			Bucket:           k,
-			Total:            b.input + b.output + b.cacheRead + b.cacheWrite,
+			Total:            b.workflow + b.pm,
+			WorkflowTotal:    b.workflow,
+			PmTotal:          b.pm,
 			InputTokens:      b.input,
 			OutputTokens:     b.output,
 			CacheReadTokens:  b.cacheRead,
@@ -230,7 +256,7 @@ func (s *ProjectService) TokenStats(ctx context.Context, projectID string, q Tok
 		})
 	}
 
-	out.Workflows = buildWorkflowTop10(wfTotals, wfNames)
+	out.Workflows = buildConsumptionRank(wfTotals, wfNames, pmTotal, hasPM)
 	return out, nil
 }
 
@@ -362,7 +388,7 @@ func parseWeekKey(key string, loc *time.Location) (time.Time, bool) {
 	return start, true
 }
 
-func buildWorkflowTop10(totals map[string]int64, names map[string]string) []TokenStatsWorkflow {
+func buildConsumptionRank(totals map[string]int64, names map[string]string, pmTotal int64, hasPM bool) []TokenStatsWorkflow {
 	type item struct {
 		id    string
 		name  string
@@ -384,7 +410,7 @@ func buildWorkflowTop10(totals map[string]int64, names map[string]string) []Toke
 	})
 
 	const topN = 10
-	out := make([]TokenStatsWorkflow, 0, topN+1)
+	out := make([]TokenStatsWorkflow, 0, topN+2)
 	var other int64
 	for i, it := range list {
 		if i < topN {
@@ -396,22 +422,57 @@ func buildWorkflowTop10(totals map[string]int64, names map[string]string) []Toke
 				WorkflowID: id,
 				Name:       it.name,
 				Total:      it.total,
+				Kind:       TokenStatsKindWorkflow,
 			})
 			continue
 		}
 		other += it.total
+	}
+	if hasPM {
+		out = append(out, TokenStatsWorkflow{
+			Name:  "PM",
+			Total: pmTotal,
+			Kind:  TokenStatsKindPM,
+		})
 	}
 	if other > 0 {
 		out = append(out, TokenStatsWorkflow{
 			Name:  "other",
 			Total: other,
 			Other: true,
+			Kind:  TokenStatsKindOther,
 		})
 	}
+	// Sort all rank rows by total desc so PM sits at its natural position.
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Total != out[j].Total {
+			return out[i].Total > out[j].Total
+		}
+		// Keep "other" at the end on ties.
+		if out[i].Other != out[j].Other {
+			return !out[i].Other
+		}
+		return out[i].Name < out[j].Name
+	})
 	return out
 }
 
 func (s *ProjectService) loadTokenUsageRows(ctx context.Context, projectID string) ([]tokenUsageRow, error) {
+	wfRows, err := s.loadWorkflowTokenUsageRows(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	pmRows, err := s.loadPMTokenUsageRows(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]tokenUsageRow, 0, len(wfRows)+len(pmRows))
+	out = append(out, wfRows...)
+	out = append(out, pmRows...)
+	return out, nil
+}
+
+func (s *ProjectService) loadWorkflowTokenUsageRows(ctx context.Context, projectID string) ([]tokenUsageRow, error) {
 	var wfIDs []string
 	if err := s.db.WithContext(ctx).Model(&models.WorkflowDef{}).
 		Select("id").
@@ -503,6 +564,55 @@ func (s *ProjectService) loadTokenUsageRows(ctx context.Context, projectID strin
 				usage:        *sr.Usage,
 				workflowID:   meta.WorkflowID,
 				workflowName: meta.WorkflowName,
+				source:       TokenStatsKindWorkflow,
+			})
+		}
+	}
+	return out, nil
+}
+
+func (s *ProjectService) loadPMTokenUsageRows(ctx context.Context, projectID string) ([]tokenUsageRow, error) {
+	var threadIDs []string
+	if err := s.db.WithContext(ctx).Model(&models.ChatThread{}).
+		Select("id").
+		Where("project_id = ?", projectID).
+		Pluck("id", &threadIDs).Error; err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return nil, ErrTokenStatsTimeout
+		}
+		return nil, err
+	}
+	if len(threadIDs) == 0 {
+		return nil, nil
+	}
+
+	var out []tokenUsageRow
+	for i := 0; i < len(threadIDs); i += tokenAggChunk {
+		if err := ctx.Err(); err != nil {
+			return nil, ErrTokenStatsTimeout
+		}
+		end := i + tokenAggChunk
+		if end > len(threadIDs) {
+			end = len(threadIDs)
+		}
+		var msgs []models.ChatMessage
+		if err := s.db.WithContext(ctx).Model(&models.ChatMessage{}).
+			Select("usage", "created_at").
+			Where("thread_id IN ? AND role = ? AND usage IS NOT NULL", threadIDs[i:end], "assistant").
+			Find(&msgs).Error; err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				return nil, ErrTokenStatsTimeout
+			}
+			return nil, err
+		}
+		for _, m := range msgs {
+			if m.Usage == nil || m.CreatedAt.IsZero() {
+				continue
+			}
+			out = append(out, tokenUsageRow{
+				ts:     m.CreatedAt,
+				usage:  *m.Usage,
+				source: TokenStatsKindPM,
 			})
 		}
 	}

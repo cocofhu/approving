@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cocofhu/approving/internal/database"
 	"github.com/cocofhu/approving/internal/models"
@@ -457,5 +458,48 @@ func TestTotalTokensByProjectIDs(t *testing.T) {
 	}
 	if s.TotalTokens(noRun.ID) != nil {
 		t.Fatal("TotalTokens(noRun) should be nil")
+	}
+
+	// g2.1 / g2.5: PM Usage merges into totals with source split; no Usage = no backfill.
+	pmOnly, err := s.Create("PMOnly", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustCreate(&models.ChatThread{ID: "th-pm-only", ProjectID: pmOnly.ID, UserID: "u1", Title: "t"})
+	mustCreate(&models.ChatMessage{
+		ID: "msg-hist", ThreadID: "th-pm-only", Role: "assistant", Content: "old",
+		Status: "ok", CreatedAt: time.Now(),
+	})
+	mustCreate(&models.ChatMessage{
+		ID: "msg-pm-only", ThreadID: "th-pm-only", Role: "assistant", Content: "hi",
+		Status: "ok", CreatedAt: time.Now(),
+		Usage: &models.TokenUsage{InputTokens: 7, OutputTokens: 3},
+	})
+	bd := s.TokenBreakdown(pmOnly.ID)
+	if bd.Workflow != nil {
+		t.Fatalf("pm-only should have nil workflow: %v", bd.Workflow)
+	}
+	if bd.PM == nil || *bd.PM != 10 {
+		t.Fatalf("pm-only pm=%v want 10", bd.PM)
+	}
+	if bd.Total == nil || *bd.Total != 10 {
+		t.Fatalf("pm-only total=%v want 10", bd.Total)
+	}
+	// Merged with workflow project
+	mustCreate(&models.ChatThread{ID: "th-partial", ProjectID: partial.ID, UserID: "u1", Title: "t"})
+	mustCreate(&models.ChatMessage{
+		ID: "msg-partial-pm", ThreadID: "th-partial", Role: "assistant", Content: "x",
+		Status: "ok", CreatedAt: time.Now(),
+		Usage: &models.TokenUsage{InputTokens: 2},
+	})
+	merged := s.TokenBreakdown(partial.ID)
+	if merged.Total == nil || *merged.Total != 130 {
+		t.Fatalf("partial+pm total=%v want 130", merged.Total)
+	}
+	if merged.Workflow == nil || *merged.Workflow != 128 {
+		t.Fatalf("partial workflow=%v want 128", merged.Workflow)
+	}
+	if merged.PM == nil || *merged.PM != 2 {
+		t.Fatalf("partial pm=%v want 2", merged.PM)
 	}
 }

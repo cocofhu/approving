@@ -95,10 +95,14 @@ export interface Project {
   variables: ProjectVariable[]
   workflowCount?: number
   /**
-   * Sum of StateRun.Usage.Total across the project's workflow runs.
+   * Sum of workflow StateRun.Usage + post-feature PM ChatMessage.Usage.
    * null/undefined = no reported usage (UI "—"); 0 = reported usage totaling zero.
    */
   totalTokens?: number | null
+  /** Workflow-only portion of totalTokens (null = no reported workflow usage). */
+  workflowTokens?: number | null
+  /** PM-only portion of totalTokens (null = no reported PM usage). */
+  pmTokens?: number | null
   pmLeaderEnabled?: boolean
   pmLeaderAgent?: string
   createdAt?: string
@@ -161,6 +165,10 @@ export type TokenStatsWindow = '7d' | '30d' | '90d' | 'all'
 export interface TokenStatsBucket {
   bucket: string
   total: number
+  /** Workflow portion of the bucket (for stacked trend). */
+  workflowTotal?: number
+  /** PM portion of the bucket (for stacked trend). */
+  pmTotal?: number
   inputTokens: number
   outputTokens: number
   cacheReadTokens: number
@@ -175,11 +183,15 @@ export interface TokenStatsComposition {
   total: number
 }
 
+export type TokenStatsRankKind = 'workflow' | 'pm' | 'other'
+
 export interface TokenStatsWorkflow {
   workflowId?: string
   name: string
   total: number
   other?: boolean
+  /** Rank row kind: workflow | pm | other (other = non-top workflows only). */
+  kind?: TokenStatsRankKind
 }
 
 /** Response of GET /projects/:id/token-stats */

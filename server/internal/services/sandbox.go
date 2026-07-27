@@ -681,21 +681,25 @@ func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID
 // guard stays as a safety net; serial ordering of multiple messages is handled
 // by the caller's single-worker queue (see handlers.SandboxChat).
 func (s *SandboxService) Chat(ctx context.Context, id uint, text string, images []models.PromptImage, onEvent func(json.RawMessage)) error {
-	return s.ChatWithTimeout(ctx, id, text, images, 0, onEvent)
+	_, err := s.ChatWithTimeout(ctx, id, text, images, 0, onEvent)
+	return err
 }
 
 // ChatWithTimeout is Chat with a per-call turn timeout override. timeout<=0
 // uses the service default (s.chatTimeout). Used by channel/cron turns that may
 // legitimately run longer than an interactive UI turn.
-func (s *SandboxService) ChatWithTimeout(ctx context.Context, id uint, text string, images []models.PromptImage, timeout time.Duration, onEvent func(json.RawMessage)) error {
+//
+// Returns the turn's TokenUsage from prompt_done (nil = not reported). Callers
+// that account usage (PmTurnRunner) must persist only after a successful turn.
+func (s *SandboxService) ChatWithTimeout(ctx context.Context, id uint, text string, images []models.PromptImage, timeout time.Duration, onEvent func(json.RawMessage)) (*models.TokenUsage, error) {
 	ls, row, err := s.ensureConnected(ctx, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	s.mu.Lock()
 	if ls.busy {
 		s.mu.Unlock()
-		return fmt.Errorf("sandbox busy")
+		return nil, fmt.Errorf("sandbox busy")
 	}
 	ls.busy = true
 	s.mu.Unlock()
@@ -715,9 +719,12 @@ func (s *SandboxService) ChatWithTimeout(ctx context.Context, id uint, text stri
 	}
 	chatCtx, cancel := context.WithTimeout(ctx, turnTimeout)
 	defer cancel()
-	_, err = ls.acp.ChatStream(chatCtx, text, images, onEvent)
+	result, err := ls.acp.ChatStream(chatCtx, text, images, onEvent)
 	_ = row
-	return err
+	if result == nil {
+		return nil, err
+	}
+	return models.CloneTokenUsage(result.Usage), err
 }
 
 // acpHostPort resolves the live ACP host/port for a sandbox, preferring the
