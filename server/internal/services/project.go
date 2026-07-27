@@ -74,22 +74,84 @@ func (s *ProjectService) WorkflowCount(projectID string) int64 {
 // TotalTokensByProjectIDs a batched (non N+1) read-path aggregation.
 const tokenAggChunk = 400
 
-// TotalTokens returns the summed StateRun.Usage.Total for one project, or nil
+// ProjectTokenBreakdown is the project-level Token card summary: workflow
+// history + post-feature PM usage. Any nil field means that source has never
+// reported usage (UI "—"); a non-nil 0 means reported and totals to zero.
+type ProjectTokenBreakdown struct {
+	Total    *int64 // workflow + pm (nil when neither source reported)
+	Workflow *int64
+	PM       *int64
+}
+
+// TotalTokens returns the summed project Token total (workflow + PM), or nil
 // when no Usage has been reported (UI "—"). A non-nil 0 means usage was
 // reported and totals to zero.
 func (s *ProjectService) TotalTokens(projectID string) *int64 {
-	return s.TotalTokensByProjectIDs([]string{projectID})[projectID]
+	return s.TokenBreakdownByProjectIDs([]string{projectID})[projectID].Total
 }
 
-// TotalTokensByProjectIDs batch-aggregates Project→WorkflowDef→Run→StateRun
-// Usage.Total for the given project IDs. Only rows with non-nil Usage contribute;
-// projects with no such rows are omitted (caller treats as null / "—").
-// PM Leader dialogue usage is outside this chain and is not counted.
+// TokenBreakdown returns workflow/pm/total split for one project.
+func (s *ProjectService) TokenBreakdown(projectID string) ProjectTokenBreakdown {
+	return s.TokenBreakdownByProjectIDs([]string{projectID})[projectID]
+}
+
+// TotalTokensByProjectIDs batch-aggregates project Token totals (workflow
+// StateRun.Usage + assistant ChatMessage.Usage). Projects with no reported
+// usage are omitted (caller treats as null / "—"). Stdio is never counted.
 func (s *ProjectService) TotalTokensByProjectIDs(projectIDs []string) map[string]*int64 {
-	out := make(map[string]*int64, len(projectIDs))
+	bd := s.TokenBreakdownByProjectIDs(projectIDs)
+	out := make(map[string]*int64, len(bd))
+	for pid, b := range bd {
+		if b.Total != nil {
+			out[pid] = b.Total
+		}
+	}
+	return out
+}
+
+// TokenBreakdownByProjectIDs batch-aggregates Project→WorkflowDef→Run→StateRun
+// Usage plus PM ChatMessage.Usage (assistant, non-nil). Historical PM messages
+// without Usage are skipped (no backfill). Stdio is outside this chain.
+func (s *ProjectService) TokenBreakdownByProjectIDs(projectIDs []string) map[string]ProjectTokenBreakdown {
+	out := make(map[string]ProjectTokenBreakdown, len(projectIDs))
 	if len(projectIDs) == 0 {
 		return out
 	}
+	for _, id := range projectIDs {
+		out[id] = ProjectTokenBreakdown{}
+	}
+
+	wfSums, wfHas := s.sumWorkflowTokensByProjectIDs(projectIDs)
+	pmSums, pmHas := s.sumPMTokensByProjectIDs(projectIDs)
+
+	for _, pid := range projectIDs {
+		b := ProjectTokenBreakdown{}
+		if _, ok := wfHas[pid]; ok {
+			v := wfSums[pid]
+			b.Workflow = &v
+		}
+		if _, ok := pmHas[pid]; ok {
+			v := pmSums[pid]
+			b.PM = &v
+		}
+		if b.Workflow != nil || b.PM != nil {
+			var total int64
+			if b.Workflow != nil {
+				total += *b.Workflow
+			}
+			if b.PM != nil {
+				total += *b.PM
+			}
+			b.Total = &total
+		}
+		out[pid] = b
+	}
+	return out
+}
+
+func (s *ProjectService) sumWorkflowTokensByProjectIDs(projectIDs []string) (sums map[string]int64, has map[string]struct{}) {
+	sums = make(map[string]int64)
+	has = make(map[string]struct{})
 
 	type wfRow struct {
 		ID        string
@@ -100,7 +162,7 @@ func (s *ProjectService) TotalTokensByProjectIDs(projectIDs []string) map[string
 		Select("id", "project_id").
 		Where("project_id IN ?", projectIDs).
 		Find(&wfs).Error; err != nil || len(wfs) == 0 {
-		return out
+		return sums, has
 	}
 
 	wfToProject := make(map[string]string, len(wfs))
@@ -125,12 +187,12 @@ func (s *ProjectService) TotalTokensByProjectIDs(projectIDs []string) map[string
 			Select("id", "workflow_id").
 			Where("workflow_id IN ?", wfIDs[i:end]).
 			Find(&chunk).Error; err != nil {
-			return out
+			return sums, has
 		}
 		runs = append(runs, chunk...)
 	}
 	if len(runs) == 0 {
-		return out
+		return sums, has
 	}
 
 	runToProject := make(map[string]string, len(runs))
@@ -142,11 +204,9 @@ func (s *ProjectService) TotalTokensByProjectIDs(projectIDs []string) map[string
 		}
 	}
 	if len(runIDs) == 0 {
-		return out
+		return sums, has
 	}
 
-	sums := make(map[string]int64)
-	has := make(map[string]struct{})
 	for i := 0; i < len(runIDs); i += tokenAggChunk {
 		end := i + tokenAggChunk
 		if end > len(runIDs) {
@@ -157,7 +217,7 @@ func (s *ProjectService) TotalTokensByProjectIDs(projectIDs []string) map[string
 			Select("run_id", "usage").
 			Where("run_id IN ? AND usage IS NOT NULL", runIDs[i:end]).
 			Find(&srs).Error; err != nil {
-			return out
+			return sums, has
 		}
 		for _, sr := range srs {
 			if sr.Usage == nil {
@@ -171,12 +231,57 @@ func (s *ProjectService) TotalTokensByProjectIDs(projectIDs []string) map[string
 			sums[pid] += sr.Usage.Total()
 		}
 	}
+	return sums, has
+}
 
-	for pid := range has {
-		v := sums[pid]
-		out[pid] = &v
+func (s *ProjectService) sumPMTokensByProjectIDs(projectIDs []string) (sums map[string]int64, has map[string]struct{}) {
+	sums = make(map[string]int64)
+	has = make(map[string]struct{})
+
+	type threadRow struct {
+		ID        string
+		ProjectID string
 	}
-	return out
+	var threads []threadRow
+	if err := s.db.Model(&models.ChatThread{}).
+		Select("id", "project_id").
+		Where("project_id IN ?", projectIDs).
+		Find(&threads).Error; err != nil || len(threads) == 0 {
+		return sums, has
+	}
+
+	threadToProject := make(map[string]string, len(threads))
+	threadIDs := make([]string, 0, len(threads))
+	for _, th := range threads {
+		threadToProject[th.ID] = th.ProjectID
+		threadIDs = append(threadIDs, th.ID)
+	}
+
+	for i := 0; i < len(threadIDs); i += tokenAggChunk {
+		end := i + tokenAggChunk
+		if end > len(threadIDs) {
+			end = len(threadIDs)
+		}
+		var msgs []models.ChatMessage
+		if err := s.db.Model(&models.ChatMessage{}).
+			Select("thread_id", "usage").
+			Where("thread_id IN ? AND role = ? AND usage IS NOT NULL", threadIDs[i:end], "assistant").
+			Find(&msgs).Error; err != nil {
+			return sums, has
+		}
+		for _, m := range msgs {
+			if m.Usage == nil {
+				continue
+			}
+			pid := threadToProject[m.ThreadID]
+			if pid == "" {
+				continue
+			}
+			has[pid] = struct{}{}
+			sums[pid] += m.Usage.Total()
+		}
+	}
+	return sums, has
 }
 
 // Create inserts a new project.

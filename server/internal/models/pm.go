@@ -63,7 +63,13 @@ type ChatMessage struct {
 	Images          []PromptImage      `gorm:"serializer:json" json:"images,omitempty"`
 	Citations       []ProgressCitation `gorm:"serializer:json" json:"citations,omitempty"`
 	AttachedContext *AttachedContext   `gorm:"serializer:json" json:"attachedContext,omitempty"`
-	CreatedAt       time.Time          `json:"createdAt"`
+	// Usage is the assistant turn's token accounting from prompt_done (components
+	// summed across model buckets). nil / absent = not reported / pre-feature
+	// history (not backfilled); non-nil (incl. all zeros) = explicitly reported.
+	// Only assistant messages from successful PM turns carry this; Stdio never
+	// writes here.
+	Usage     *TokenUsage `gorm:"serializer:json" json:"usage,omitempty"`
+	CreatedAt time.Time   `json:"createdAt"`
 }
 
 // ProgressCitation references a progress object embedded in an assistant reply.

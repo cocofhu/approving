@@ -16,7 +16,7 @@ import {
 import { Line } from 'vue-chartjs'
 import type { TokenStatsBucket } from '@/lib/types'
 import { fmtTokenCount } from '@/lib/tokenUsage'
-import { TOKEN_PART_COLORS, TOKEN_PART_KEYS, formatBucketLabel } from './tokenStatsShared'
+import { TOKEN_SOURCE_COLORS, formatBucketLabel } from './tokenStatsShared'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip)
 
@@ -27,8 +27,9 @@ const props = defineProps<{
 
 const { t } = useI18n()
 
-const LINE_COLOR = '#6d5cff'
 const CHART_HEIGHT_PX = 200
+const WF_COLOR = TOKEN_SOURCE_COLORS.workflow
+const PM_COLOR = TOKEN_SOURCE_COLORS.pm
 
 const tip = ref({ show: false, x: 0, y: 0, idx: -1 })
 const tipBucket = computed(() => (tip.value.idx >= 0 ? props.trend[tip.value.idx] : null))
@@ -37,13 +38,6 @@ function fmtCompact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
   return String(n)
-}
-
-function partValue(bucket: TokenStatsBucket, key: (typeof TOKEN_PART_KEYS)[number]): number {
-  if (key === 'input') return bucket.inputTokens
-  if (key === 'output') return bucket.outputTokens
-  if (key === 'cacheRead') return bucket.cacheReadTokens
-  return bucket.cacheWriteTokens
 }
 
 function hideTip() {
@@ -76,26 +70,40 @@ function externalTooltip(context: { chart: Chart; tooltip: TooltipModel<'line'> 
 
 const chartData = computed(() => {
   const labels = props.trend.map((b) => formatBucketLabel(b.bucket, props.bucketWidth))
-  const totals = props.trend.map((b) => b.total || 0)
+  const workflow = props.trend.map((b) => b.workflowTotal || 0)
+  const pm = props.trend.map((b) => b.pmTotal || 0)
   return {
     labels,
     datasets: [
       {
-        label: t('pages.board.tokenStats.trendTitle'),
-        data: totals,
-        borderColor: LINE_COLOR,
-        backgroundColor: 'rgba(109, 92, 255, 0.18)',
-        borderWidth: 2.2,
+        label: 'workflow',
+        data: workflow,
+        borderColor: WF_COLOR,
+        backgroundColor: 'rgba(109, 92, 255, 0.28)',
+        borderWidth: 1.8,
+        fill: true,
+        tension: 0.15,
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        stack: 'source',
+      },
+      {
+        label: 'pm',
+        data: pm,
+        borderColor: PM_COLOR,
+        backgroundColor: 'rgba(245, 158, 11, 0.35)',
+        borderWidth: 1.8,
         fill: true,
         tension: 0.15,
         pointRadius: 3.5,
         pointHoverRadius: 5,
         pointBackgroundColor: '#fff',
-        pointBorderColor: LINE_COLOR,
+        pointBorderColor: PM_COLOR,
         pointBorderWidth: 2,
         pointHoverBackgroundColor: '#fff',
-        pointHoverBorderColor: LINE_COLOR,
+        pointHoverBorderColor: PM_COLOR,
         pointHoverBorderWidth: 2,
+        stack: 'source',
       },
     ],
   }
@@ -114,6 +122,7 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
   },
   scales: {
     x: {
+      stacked: true,
       grid: { display: false },
       ticks: {
         maxTicksLimit: 8,
@@ -126,6 +135,7 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
       border: { display: false },
     },
     y: {
+      stacked: true,
       beginAtZero: true,
       grid: { color: '#eef0f3' },
       ticks: {
@@ -156,7 +166,20 @@ defineExpose({ chartOptions, chartData })
     role="img"
     :aria-label="t('pages.board.tokenStats.trendTitle')"
   >
-    <div data-testid="token-trend-chart" class="h-full w-full">
+    <div
+      data-testid="token-trend-legend"
+      class="mb-1 flex flex-wrap items-center gap-3 text-[11px] text-txt3"
+    >
+      <span class="inline-flex items-center gap-1.5">
+        <i class="inline-block h-2 w-2 rounded-sm" :style="{ background: WF_COLOR }" />
+        workflow
+      </span>
+      <span class="inline-flex items-center gap-1.5">
+        <i class="inline-block h-2 w-2 rounded-sm" :style="{ background: PM_COLOR }" />
+        pm
+      </span>
+    </div>
+    <div data-testid="token-trend-chart" class="h-[calc(100%-22px)] w-full">
       <Line :data="chartData" :options="chartOptions" />
     </div>
     <div
@@ -169,16 +192,19 @@ defineExpose({ chartOptions, chartData })
         {{ formatBucketLabel(tipBucket.bucket, bucketWidth) }}
         · {{ fmtTokenCount(tipBucket.total) }}
       </div>
-      <div
-        v-for="key in TOKEN_PART_KEYS"
-        :key="key"
-        class="flex justify-between gap-3 text-[#c7cbd4]"
-      >
+      <div class="flex justify-between gap-3 text-[#c7cbd4]">
         <span class="inline-flex items-center gap-1.5">
-          <i class="inline-block h-2 w-2 rounded-sm" :style="{ background: TOKEN_PART_COLORS[key] }" />
-          {{ key }}
+          <i class="inline-block h-2 w-2 rounded-sm" :style="{ background: WF_COLOR }" />
+          workflow
         </span>
-        <b class="font-normal tabular-nums text-white">{{ fmtTokenCount(partValue(tipBucket, key)) }}</b>
+        <b class="font-normal tabular-nums text-white">{{ fmtTokenCount(tipBucket.workflowTotal || 0) }}</b>
+      </div>
+      <div class="flex justify-between gap-3 text-[#c7cbd4]">
+        <span class="inline-flex items-center gap-1.5">
+          <i class="inline-block h-2 w-2 rounded-sm" :style="{ background: PM_COLOR }" />
+          pm
+        </span>
+        <b class="font-normal tabular-nums text-white">{{ fmtTokenCount(tipBucket.pmTotal || 0) }}</b>
       </div>
     </div>
   </div>

@@ -8,6 +8,8 @@ const MOCK_PROJECTS = [
     description: 'Approving Project',
     workflowCount: 3,
     totalTokens: 128400,
+    workflowTokens: 100000,
+    pmTokens: 28400,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-07-25T03:42:00Z',
     sandboxEnv: [],
@@ -242,7 +244,7 @@ test.describe('项目 Token 总体消耗 UI', () => {
     await expect(stat).toBeVisible({ timeout: 15_000 })
     await expect(stat).toContainText('Token 消耗')
     await expect(stat).toContainText('128.4K')
-    await expect(stat).toContainText('全部历史 · 工作流合计')
+    await expect(stat).toContainText('全部历史 · 含工作流与 PM（上线后）')
 
     const boardShot = path.join(testInfo.outputDir, 'project-detail-token-board.png')
     await page.screenshot({ path: boardShot, fullPage: true })
@@ -266,6 +268,8 @@ test.describe('项目 Token 总体消耗 UI', () => {
     await stubProjectDetailApis(page, {
       ...MOCK_DETAIL,
       totalTokens: 152_090_000,
+      workflowTokens: 140_000_000,
+      pmTokens: 12_090_000,
     })
 
     await page.goto('/project-detail.html?theme=light&tab=board')
@@ -278,8 +282,13 @@ test.describe('项目 Token 总体消耗 UI', () => {
     const tip = page.getByTestId('token-detail-tip')
     await expect(tip).toBeVisible()
     await expect(tip.getByTestId('token-detail-tip-exact')).toContainText('152,090,000')
-    // 首期无分项字段：不捏造 breakdown
-    await expect(tip.getByTestId('token-detail-tip-breakdown')).toHaveCount(0)
+    // 来源拆分：workflow / pm / 合计（与看板 tip 及 Demo「改后」一致）
+    await expect(tip.getByTestId('token-detail-tip-breakdown')).toBeVisible()
+    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('workflow')
+    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('pm')
+    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('合计')
+    await expect(tip.locator('[data-tip-row="workflow"]')).toContainText('140,000,000')
+    await expect(tip.locator('[data-tip-row="pm"]')).toContainText('12,090,000')
     // 非常显原生 title 唯一通道：页面内 tip 带 role=tooltip
     await expect(tip).toHaveAttribute('role', 'tooltip')
   })

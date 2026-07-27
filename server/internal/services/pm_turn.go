@@ -187,7 +187,7 @@ func (r *PmTurnRunner) StartWithTimeout(threadID, userMsgID string, sandboxID ui
 func (r *PmTurnRunner) run(ctx context.Context, t *pmActiveTurn, prompt string, images []models.PromptImage) {
 	defer t.cancel()
 
-	err := r.sbx.ChatWithTimeout(ctx, t.sandboxID, prompt, images, t.chatTimeout, func(raw json.RawMessage) {
+	usage, err := r.sbx.ChatWithTimeout(ctx, t.sandboxID, prompt, images, t.chatTimeout, func(raw json.RawMessage) {
 		delta := extractPmAgentText(raw)
 		t.mu.Lock()
 		if delta != "" {
@@ -241,7 +241,9 @@ func (r *PmTurnRunner) run(ctx context.Context, t *pmActiveTurn, prompt string, 
 	}
 
 	citations := r.filterAndEnrichCitations(t.threadID, extractPmCitations(text))
-	if _, aerr := r.pm.AppendMessage(t.threadID, "assistant", text, citations, nil, nil); aerr != nil {
+	// Persist Usage only on successful finalize. Append failure must not silently
+	// count toward project totals (usage stays off the message).
+	if _, aerr := r.pm.AppendMessageSource(t.threadID, "assistant", text, "", citations, nil, nil, usage); aerr != nil {
 		log.Warn().Err(aerr).Str("thread", t.threadID).Msg("pm turn finalize append failed")
 		r.persistTurnFailure(t.threadID, userMsgID, PmFailUnknown)
 		r.emitTerminal(t, "error", aerr.Error(), PmFailUnknown)

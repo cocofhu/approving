@@ -195,9 +195,11 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="relative min-h-[200px] min-w-0 rounded-xl border border-line bg-surface p-3.5">
-          <div class="mb-2 flex items-baseline justify-between gap-2">
-            <h4 class="m-0 text-[13px] font-semibold text-txt">{{ t('pages.board.tokenStats.rankTitle') }}</h4>
-            <span class="text-[11px] text-txt3">{{ t('pages.board.tokenStats.rankSub') }}</span>
+          <div class="mb-2 flex flex-col gap-1">
+            <div class="flex items-baseline justify-between gap-2">
+              <h4 class="m-0 text-[13px] font-semibold text-txt">{{ t('pages.board.tokenStats.rankTitle') }}</h4>
+              <span class="text-[11px] text-txt3">{{ t('pages.board.tokenStats.rankSub') }}</span>
+            </div>
           </div>
           <div class="flex min-h-[160px] flex-col items-center justify-center gap-1.5 text-center">
             <strong class="text-[13px] text-txt">{{ t('pages.board.tokenStats.emptyRankTitle') }}</strong>
@@ -230,9 +232,12 @@ onUnmounted(() => {
           <TokenDonutChart :composition="data.composition" />
         </div>
         <div class="min-w-0 rounded-xl border border-line bg-surface p-3.5" data-testid="token-stats-rank-card">
-          <div class="mb-2 flex items-baseline justify-between gap-2">
-            <h4 class="m-0 text-[13px] font-semibold text-txt">{{ t('pages.board.tokenStats.rankTitle') }}</h4>
-            <span class="text-[11px] text-txt3">{{ t('pages.board.tokenStats.rankSub') }}</span>
+          <div class="mb-2 flex flex-col gap-1">
+            <div class="flex items-baseline justify-between gap-2">
+              <h4 class="m-0 text-[13px] font-semibold text-txt">{{ t('pages.board.tokenStats.rankTitle') }}</h4>
+              <span class="text-[11px] text-txt3">{{ t('pages.board.tokenStats.rankSub') }}</span>
+            </div>
+            <p class="m-0 text-[11px] leading-snug text-txt3">{{ t('pages.board.tokenStats.rankHint') }}</p>
           </div>
           <TokenWorkflowRank :workflows="data.workflows" />
         </div>

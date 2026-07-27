@@ -6,6 +6,12 @@ export const TOKEN_PART_COLORS = {
   cacheWrite: '#f59e0b',
 } as const
 
+/** Trend/rank source colors (workflow / pm). Distinct from composition parts. */
+export const TOKEN_SOURCE_COLORS = {
+  workflow: '#6d5cff',
+  pm: '#f59e0b',
+} as const
+
 export type TokenPartKey = keyof typeof TOKEN_PART_COLORS
 
 export const TOKEN_PART_KEYS: TokenPartKey[] = ['input', 'output', 'cacheRead', 'cacheWrite']

@@ -60,16 +60,19 @@ func workflowDTO(wf models.WorkflowDef) gin.H {
 }
 
 // projectDTO shapes a project for the frontend with secret values masked.
-// totalTokens is nil when no StateRun.Usage has been reported (UI "—");
+// totalTokens is nil when no Usage has been reported (UI "—");
 // a non-nil 0 means usage was reported and sums to zero.
-func projectDTO(p models.Project, workflowCount int64, totalTokens *int64) gin.H {
+// workflowTokens / pmTokens expose the source split for the project Token tip.
+func projectDTO(p models.Project, workflowCount int64, tokens services.ProjectTokenBreakdown) gin.H {
 	policy := services.NormalizeProjectNotifyPolicy(p.NotifyPolicy)
 	return gin.H{
 		"id": p.ID, "name": p.Name, "description": p.Description,
 		"sandboxEnv":      services.MaskedSandboxEnv(p.SandboxEnv),
 		"variables":       services.MaskedProjectVars(p.Variables),
 		"workflowCount":   workflowCount,
-		"totalTokens":     totalTokens,
+		"totalTokens":     tokens.Total,
+		"workflowTokens":  tokens.Workflow,
+		"pmTokens":        tokens.PM,
 		"pmLeaderEnabled": p.PmLeaderEnabled,
 		"pmLeaderAgent":   p.PmLeaderAgent,
 		"notifyPolicy":    policy,

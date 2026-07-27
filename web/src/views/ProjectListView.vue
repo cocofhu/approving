@@ -135,6 +135,8 @@ onMounted(() => {
               v-if="p.totalTokens != null"
               :tip-id="`project-list-token-tip-${p.id}`"
               :total-tokens="p.totalTokens"
+              :workflow-tokens="p.workflowTokens"
+              :pm-tokens="p.pmTokens"
             />
           </span>
         </div>
