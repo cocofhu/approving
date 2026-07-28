@@ -15,6 +15,7 @@ vi.mock('@/lib/agentIO', () => ({
   peekAgentZipName: vi.fn(async () => ({ name: 'agent-a' })),
   resolveImportName: (name: string) => name,
   suggestRename: (name: string) => `${name}-2`,
+  normalizeAgentName: (name: string) => name,
   validateAgentName: () => null,
 }))
 
