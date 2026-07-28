@@ -111,6 +111,80 @@
       "descPlaceholder": "Briefly describe this project",
       "created": "Created project {name}"
     },
+    "onboarding": {
+      "title": "Project quick start",
+      "railCap": "Steps",
+      "prev": "Back",
+      "next": "Next",
+      "skip": "Skip",
+      "later": "Maybe later",
+      "generate": "Generate setup",
+      "generating": "Generating…",
+      "close": "Close",
+      "startRun": "Start sample Run",
+      "cta": "Start onboarding",
+      "emptyTitle": "Empty project — start onboarding",
+      "emptyDesc": "Configure backend + API Key to create 5 Agents and the published「快速上手·轻量」workflow. Default git is the public Heroku sample.",
+      "head": {
+        "overview": "What you will get",
+        "acp": "Choose ACP backend",
+        "apiKey": "Enter API Key",
+        "git": "Confirm sample repo",
+        "review": "Confirm and generate",
+        "success": "Done · start a sample Run"
+      },
+      "steps": {
+        "overview": "Overview",
+        "acp": "Backend",
+        "apiKey": "API Key",
+        "git": "Repo",
+        "review": "Review"
+      },
+      "overview": {
+        "meta": "This writes project auth, creates 5 Agents, and publishes the light quick-start workflow. It will not start a Run automatically.",
+        "agents": "Agents",
+        "agentsList": "Clarify / Visual / Implement / Test / Preview",
+        "repo": "Repo",
+        "banner": "Default repo is Heroku’s official Node Getting Started (Express + EJS, public clone)."
+      },
+      "acp": {
+        "meta": "Pick an ACP backend. The key is stored in this project’s env and shared by all Agents."
+      },
+      "apiKey": {
+        "meta": "API Key is required for the selected backend.",
+        "required": "Please enter an API Key.",
+        "hint": "Stored only in project secret env — not in logs or artifacts."
+      },
+      "git": {
+        "meta": "The light workflow clones this public sample. No PAT required by default.",
+        "panelTitle": "Sample repository",
+        "panelSub": "Public HTTPS, anonymous clone",
+        "adv": "Advanced: custom repo",
+        "name": "Name",
+        "url": "URL",
+        "branch": "Branch",
+        "advHint": "Used as the workflow default repos value. Prefer a public HTTPS URL. Do not use a self-hosted demo repo.",
+        "foot": "Host {host} · branch {branch}"
+      },
+      "review": {
+        "meta": "Confirm below. Existing same-named resources are reused/updated (idempotent).",
+        "needKey": "API Key is missing — go back and fill it in.",
+        "featureHint": "Sample feature (no input needed): make the homepage welcome copy and primary button clearer.",
+        "agentsChip": "Agents · 5",
+        "wfChip": "Workflow · 快速上手·轻量"
+      },
+      "success": {
+        "title": "Setup ready",
+        "desc": "Project auth written; 5 Agents and the published light workflow are ready.",
+        "repo": "Sample repository",
+        "limit": "Public repos usually cannot be pushed; Preview may not show Implement changes. Success means Agents/workflow were created.",
+        "runStarted": "Sample Run started"
+      },
+      "toastOk": "Generated — Run not started automatically",
+      "toastNeedKey": "Please enter an API Key",
+      "toastRun": "Sample Run started",
+      "toastErr": "Bootstrap failed"
+    },
     "projectDetail": {
       "back": "All projects",
       "notFound": "Project not found or deleted",

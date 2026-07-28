@@ -111,6 +111,80 @@
       "descPlaceholder": "简要说明项目用途",
       "created": "已创建项目 {name}"
     },
+    "onboarding": {
+      "title": "首次上手引导",
+      "railCap": "配置步骤",
+      "prev": "上一步",
+      "next": "下一步",
+      "skip": "跳过",
+      "later": "稍后再说",
+      "generate": "生成配置",
+      "generating": "正在生成…",
+      "close": "关闭",
+      "startRun": "启动示例 Run",
+      "cta": "开始上手引导",
+      "emptyTitle": "空项目，开始上手引导",
+      "emptyDesc": "配置后端与 API Key，一键生成 5 个 Agent 与「快速上手·轻量」工作流。默认使用 Heroku 公开示例仓。",
+      "head": {
+        "overview": "看看这次会生成什么",
+        "acp": "选择运行后端",
+        "apiKey": "填写 API Key",
+        "git": "确认示例代码仓",
+        "review": "确认并生成",
+        "success": "已完成 · 可启动示例 Run"
+      },
+      "steps": {
+        "overview": "概览",
+        "acp": "后端",
+        "apiKey": "API Key",
+        "git": "代码仓",
+        "review": "确认"
+      },
+      "overview": {
+        "meta": "完成以下步骤后，将写入项目鉴权、创建 5 个 Agent，并发布「快速上手·轻量」工作流。不会自动开跑。",
+        "agents": "Agent",
+        "agentsList": "Clarify / Visual / Implement / Test / Preview",
+        "repo": "代码仓",
+        "banner": "默认使用 Heroku 官方 Node Getting Started 示例（Express + EJS，公开可 clone）。"
+      },
+      "acp": {
+        "meta": "选择 ACP 后端。密钥将写入本项目环境，供全部 Agent 共用。"
+      },
+      "apiKey": {
+        "meta": "按所选后端填写 API Key。此项必填，未填写将无法生成配置。",
+        "required": "请先填写 API Key。",
+        "hint": "仅保存在项目密钥环境中，不会写入日志或产物。"
+      },
+      "git": {
+        "meta": "轻量工作流将 clone 下列公开示例仓。默认无需个人访问令牌。",
+        "panelTitle": "示例代码仓",
+        "panelSub": "公开 HTTPS，可匿名 clone",
+        "adv": "高级：自定义仓库",
+        "name": "仓库名",
+        "url": "URL",
+        "branch": "分支",
+        "advHint": "将作为工作流默认仓库；请填写可公开访问的 HTTPS 地址。请勿改为自建 demo 仓。",
+        "foot": "来源 {host} · 分支 {branch}"
+      },
+      "review": {
+        "meta": "确认下列信息。若项目中已有同名资源，将复用并更新，不会重复创建。",
+        "needKey": "尚未配置 API Key，请返回上一步填写后再生成。",
+        "featureHint": "示例需求（无需填写）：把首页欢迎文案与主按钮改得更清晰友好。",
+        "agentsChip": "Agents · 5",
+        "wfChip": "工作流 · 快速上手·轻量"
+      },
+      "success": {
+        "title": "配置已生成",
+        "desc": "已写入项目鉴权，并生成 5 个 Agent 与已发布的「快速上手·轻量」工作流。",
+        "repo": "示例代码仓",
+        "limit": "公开仓通常无法 push；Preview 未必看到 Implement 改动。引导成败以 Agent/工作流是否生成为准。",
+        "runStarted": "已启动示例 Run"
+      },
+      "toastOk": "生成成功，未自动开跑",
+      "toastNeedKey": "请先填写 API Key",
+      "toastRun": "已启动示例 Run",
+      "toastErr": "生成失败"
+    },
     "projectDetail": {
       "back": "全部项目",
       "notFound": "项目不存在或已删除",

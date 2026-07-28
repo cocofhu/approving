@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { dismissOnboardingIfOpen, seedOnboardingDismissed } from './helpers/onboarding'
 
 const MOCK_PROJECT = {
   id: 'proj-1',
@@ -17,6 +18,7 @@ const MOCK_WORKFLOWS: unknown[] = []
 
 async function gotoProjectDetail(page: import('@playwright/test').Page) {
   await page.setViewportSize({ width: 1280, height: 800 })
+  await seedOnboardingDismissed(page, 'proj-1')
   await page.route('**/api/projects/proj-1', async (route) => {
     if (route.request().method() === 'GET' || route.request().method() === 'PUT') {
       await route.fulfill({
@@ -58,6 +60,7 @@ async function gotoProjectDetail(page: import('@playwright/test').Page) {
     })
   })
   await page.goto('/project-detail.html')
+  await dismissOnboardingIfOpen(page)
   await expect(page.getByRole('heading', { name: 'Demo Project' })).toBeVisible({ timeout: 10_000 })
 }
 

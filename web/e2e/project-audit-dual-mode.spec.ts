@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import path from 'node:path'
 import fs from 'node:fs'
+import { dismissOnboardingIfOpen, seedOnboardingDismissed } from './helpers/onboarding'
 
 const MOCK_PROJECT = {
   id: 'proj-1',
@@ -223,6 +224,7 @@ function filterEvents(url: URL) {
 }
 
 async function stubProjectApis(page: Page) {
+  await seedOnboardingDismissed(page, 'proj-1')
   await page.route('**/api/projects/proj-1', async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({
@@ -313,6 +315,7 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
     await page.setViewportSize({ width: 1280, height: 900 })
     await stubProjectApis(page)
     await page.goto('/project-detail.html?tab=audit&theme=light')
+    await dismissOnboardingIfOpen(page)
 
     const panel = page.getByTestId('project-audit-panel')
     await expect(panel).toBeVisible({ timeout: 15_000 })
@@ -368,6 +371,7 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
     await page.setViewportSize({ width: 1280, height: 900 })
     await stubProjectApis(page)
     await page.goto('/project-detail.html?tab=audit&theme=light')
+    await dismissOnboardingIfOpen(page)
     await expect(page.getByTestId('project-audit-panel')).toBeVisible({ timeout: 15_000 })
 
     await page.getByTestId('project-audit-mode-all').click()
@@ -404,6 +408,7 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
       })
     })
     await page.goto('/project-detail.html?tab=audit&theme=light')
+    await dismissOnboardingIfOpen(page)
     await expect(page.getByTestId('project-audit-empty-runs')).toBeVisible({ timeout: 15_000 })
     await page.getByTestId('project-audit-empty-runs').getByRole('button', { name: '全部日志' }).click()
     await expect(page.getByTestId('project-audit-mode-all')).toHaveClass(/on/)
@@ -414,6 +419,7 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
     await page.setViewportSize({ width: 390, height: 844 })
     await stubProjectApis(page)
     await page.goto('/project-detail.html?tab=audit&theme=light')
+    await dismissOnboardingIfOpen(page)
 
     const panel = page.getByTestId('project-audit-panel')
     await expect(panel).toBeVisible({ timeout: 15_000 })
@@ -495,6 +501,7 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
     await page.setViewportSize({ width: 1280, height: 900 })
     await stubProjectApis(page)
     await page.goto('/project-detail.html?tab=audit&theme=light')
+    await dismissOnboardingIfOpen(page)
     await expect(page.getByTestId('project-audit-panel')).toBeVisible({ timeout: 15_000 })
 
     await expect(page.getByTestId('project-audit-filter-summary')).toHaveCount(0)

@@ -79,7 +79,7 @@ GitHub、GitLab 或 SSH 凭据可按 Agent 注入沙箱，值支持 `${vars.<nam
         → 人工确认 → PR / MR
 ```
 
-仓库内提供 Clarify、Research、Proposal、Plan、Implement、Test、Review 等角色 Agent 包，可通过 `agents/pack.sh` 打包后导入 Agent Studio。
+仓库内提供 Clarify、Visual、Research、Proposal、Plan、Implement、Test、Preview、Review 等角色 Agent 包，可通过 `agents/pack.sh` 打包后导入 Agent Studio。
 
 ## 快速开始
 

@@ -48,6 +48,7 @@ Image tags / digests can be overridden in `.env` — see [`.env.example`](https:
 
 ## Next steps
 
+- After login, an empty project can use **Project quick start** to configure backend + API Key and generate 5 Agents plus the published light workflow (default git: public Heroku nodejs-getting-started).
 - [Core concepts](../concepts/) — FSM, gates, sandbox, artifacts
 - [Configuration summary](../../help/configuration/) — points to full `CONFIGURATION.md`
 - [Gateway summary](../../help/gateway/) — points to `GATEWAY.md`

@@ -59,6 +59,7 @@ type Handlers struct {
 	Channels      *services.ChannelConfigService
 	Browser       *browser.Service
 	Audit         *services.ProjectAuditService
+	Onboarding    *services.OnboardingService
 	// CanViewProjectAudit optionally overrides the default audit ACL
 	// (is_admin OR authenticated user who can UpdateProject). Tests use this
 	// to simulate a read-only member denial while production keeps the hook nil.
