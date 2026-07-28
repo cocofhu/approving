@@ -764,7 +764,7 @@ describe('GateApproval content-fit layout branches', () => {
     expect(buttons.every((b) => !b.text().includes('返回修改') && !b.text().includes('退回'))).toBe(
       true,
     )
-    expect(wrapper.text()).toContain('可批准通过；若需修改，请先提交评审意见后再退回')
+    expect(wrapper.text()).toContain('可确认并流转；若需修改，请先发送评审意见就地改')
     expect(wrapper.text()).not.toContain('可直接退回')
     wrapper.unmount()
   })
@@ -905,7 +905,7 @@ describe('GateApproval content-fit layout branches', () => {
     expect(buttons.every((b) => !b.text().includes('退回') && !b.text().includes('返回修改'))).toBe(
       true,
     )
-    expect(wrapper.text()).toContain('可批准通过；若需修改，请先提交评审意见后再退回')
+    expect(wrapper.text()).toContain('可确认并流转；若需修改，请先发送评审意见就地改')
     expect(wrapper.text()).not.toContain('已提交评审意见')
     wrapper.unmount()
   })
@@ -1973,7 +1973,7 @@ describe('GateApproval HTML preview load gate (fillPreview)', () => {
     expect(buttons.every((b) => !b.text().includes('返回修改') && !b.text().includes('退回'))).toBe(
       true,
     )
-    expect(wrapper.text()).toContain('可批准通过；若需修改，请先提交评审意见后再退回')
+    expect(wrapper.text()).toContain('可确认并流转；若需修改，请先发送评审意见就地改')
     expect(wrapper.text()).not.toContain('可直接退回')
     expect(wrapper.emitted('resolve')).toBeFalsy()
     expect(apiMocks.createPreviewIssue).not.toHaveBeenCalled()
