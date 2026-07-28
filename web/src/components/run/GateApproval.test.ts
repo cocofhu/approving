@@ -78,8 +78,10 @@ const StructuredStub = defineComponent({
 
 const AppPreviewStub = defineComponent({
   name: 'AppPreviewPanel',
-  props: { fill: Boolean },
-  template: '<div data-testid="app-preview" :data-fill="fill ? \'1\' : \'0\'" />',
+  props: { fill: Boolean, showFeedback: { type: Boolean, default: true } },
+  emits: ['pick', 'issues-changed'],
+  template:
+    '<div data-testid="app-preview" :data-fill="fill ? \'1\' : \'0\'" :data-show-feedback="showFeedback ? \'1\' : \'0\'" />',
 })
 
 const PreviewFeedbackStub = defineComponent({
@@ -2254,6 +2256,22 @@ describe('GateApproval app_preview reject without form', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="review-composer-reject"]').exists()).toBe(false)
     expect(apiMocks.gateReactRevise).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('hot app_preview VNC pick (outerHTML) stages ReAct selector annotation', async () => {
+    const wrapper = appPreviewHotMount()
+    await flushPromises()
+    const panel = wrapper.findComponent({ name: 'AppPreviewPanel' })
+    expect(panel.exists()).toBe(true)
+    await panel.vm.$emit('pick', {
+      selector: '#hero',
+      tagName: 'DIV',
+      outerHTML: '<div id="hero">x</div>',
+    })
+    await flushPromises()
+    // Annotation chip appears in review composer (selector label).
+    expect(wrapper.text()).toContain('#hero')
     wrapper.unmount()
   })
 

@@ -56,8 +56,8 @@ type fakePreviewOps struct {
 
 func (f *fakePreviewOps) SandboxForRunNode(string, string) (string, bool) { return f.name, f.ok }
 func (f *fakePreviewOps) ProbeHTTPPort(context.Context, string, int) bool { return f.healthy }
-func (f *fakePreviewOps) KeepalivePort(context.Context, string, int) error {
-	return nil
+func (f *fakePreviewOps) KeepalivePort(context.Context, string, int) (int, error) {
+	return 4242, nil
 }
 func (f *fakePreviewOps) PreviewUpstream(context.Context, string, int) (string, bool) {
 	if f.up == "" {
@@ -129,4 +129,33 @@ func TestListPreviewPortsMergeStore(t *testing.T) {
 		t.Fatal("port high")
 	}
 	_ = time.Second
+}
+
+func TestPreviewReadySignalAndKeepalivePID(t *testing.T) {
+	h := NewHost(&memStore{})
+	h.SetPreviewSandboxOps(&fakePreviewOps{name: "sb", ok: true, healthy: true, up: "http://10.0.0.1:3000"})
+	ch := h.PreviewReadyChan("r", "n")
+	select {
+	case <-ch:
+		t.Fatal("should not be ready yet")
+	default:
+	}
+	if _, err := h.setPreviewPort("r", "n", 3000, "web"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-ch:
+	default:
+		t.Fatal("expected PreviewReady after healthy set_preview")
+	}
+	pids := h.ListPreviewKeepalivePIDs("r", "n")
+	if len(pids) != 1 || pids[0] != 4242 {
+		t.Fatalf("keepalive pids=%v", pids)
+	}
+	if !h.IsPreviewKeepalivePID("r", 4242) {
+		t.Fatal("expected whitelist hit")
+	}
+	if h.IsPreviewKeepalivePID("r", 1) {
+		t.Fatal("unexpected whitelist hit")
+	}
 }

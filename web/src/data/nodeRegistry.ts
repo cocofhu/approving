@@ -342,6 +342,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
       { key: 'max_rounds', label: 'nodes.app_preview.fields.max_rounds.label', type: 'number', placeholder: 'nodes.app_preview.fields.max_rounds.placeholder' },
       { key: 'timeout', label: 'nodes.app_preview.fields.timeout.label', type: 'duration', optional: true },
       { key: 'conditional_prompt', label: 'nodes.app_preview.fields.conditional_prompt.label', type: 'conditional', optional: true },
+      { key: 'review_var', label: 'nodes.shared.reviewVar.label', type: 'text', placeholder: 'nodes.shared.reviewVar.placeholder', optional: true },
       { key: 'title', label: 'nodes.app_preview.fields.title.label', type: 'text', placeholder: 'nodes.app_preview.fields.title.placeholder', optional: true },
       { key: 'actions', label: 'nodes.app_preview.fields.actions.label', type: 'actions' },
       { key: 'output_var', label: 'nodes.app_preview.fields.output_var.label', type: 'text', placeholder: 'nodes.app_preview.fields.output_var.placeholder', optional: true },

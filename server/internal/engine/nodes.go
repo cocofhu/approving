@@ -854,37 +854,64 @@ func defaultAppPreviewForm(cfg map[string]any) []models.GateField {
 	return parseForm(cfg["form"])
 }
 
-// execAppPreview runs an agent to build/start the app and register preview ports,
-// then pauses on a human gate for pass/fail approval (like human_gate).
+// execAppPreview runs an agent to build/start the app and register preview ports.
+// A healthy set_preview ends the production phase (no node_complete required),
+// parks the session for ReAct review, and pauses on a Gate shell for pass/fail.
 func (e *Engine) execAppPreview(c *execCtx, node *models.Node) nodeOutcome {
 	req := e.nodeReq(c, node)
+	e.host.ResetPreviewReady(c.run.ID, node.ID)
 	res, err := e.provider.RunAgent(context.Background(), req)
-	if err != nil {
+	// ACP/WS 断连兜底:已有可达预览则仍进入复审,禁止无限 busy。
+	if err != nil && !e.host.HasHealthyPreviewPorts(c.run.ID, node.ID) {
 		return nodeOutcome{status: "failed", err: err.Error(), outputMd: "应用预览执行失败:" + err.Error(), events: res.Events, usage: res.Usage}
 	}
-	return e.withOutcome(c, node, res, func(r runtime.NodeResult) nodeOutcome {
-		if !e.host.HasPreviewPorts(c.run.ID, node.ID) {
-			return nodeOutcome{status: "failed", err: "预览契约未满足:未调用 set_preview",
-				outputMd: "应用预览失败:未调用 set_preview 注册预览端口", events: r.Events}
+	if c.execGen != 0 && !e.isExecOwner(c.run.ID, c.execGen) {
+		return nodeOutcome{
+			status:   "cancelled",
+			err:      "lost exec ownership",
+			outputMd: "dropped late outcome: lost exec ownership",
+			events:   res.Events,
+			usage:    res.Usage,
 		}
-		iter := c.iter[node.ID]
-		var gate models.Gate
-		err := e.db.Where("run_id = ? AND node_id = ? AND iteration = ?", c.run.ID, node.ID, iter).First(&gate).Error
-		if err == nil && gate.Resolved {
-			return nodeOutcome{status: "completed", outputMd: "预览审批已完成", outputs: map[string]any{"resolved": true}, events: r.Events}
+	}
+	if !e.host.HasHealthyPreviewPorts(c.run.ID, node.ID) {
+		return nodeOutcome{status: "failed", err: "预览契约未满足:未成功 set_preview(可达)",
+			outputMd: "应用预览失败:未成功注册可达预览端口", events: res.Events, usage: res.Usage}
+	}
+	// Soft-consume node_complete when present; never fail closed on its absence.
+	if o, ok := e.host.TakeOutcome(c.run.ID, node.ID); ok {
+		res.Outputs = mcp.MergeOutcomeOutputs(res.Outputs, o)
+		if o.Status == mcp.OutcomeFailed {
+			errMsg := strings.TrimSpace(o.Error)
+			if errMsg == "" {
+				errMsg = strings.TrimSpace(o.Summary)
+			}
+			if errMsg == "" {
+				errMsg = "agent reported failure"
+			}
+			return nodeOutcome{status: "failed", err: errMsg, outputMd: "节点失败:" + errMsg,
+				outputs: res.Outputs, events: res.Events, usage: res.Usage}
 		}
-		if err != nil {
-			title := firstNonEmptyStr(str(node.Config["title"]), firstNonEmptyStr(node.Label, "应用预览"))
-			gate = models.Gate{RunID: c.run.ID, NodeID: node.ID, Iteration: iter, WorkflowID: c.run.WorkflowID, WorkflowName: c.run.WorkflowName,
-				Title:       title,
-				BodyMd:      "",
-				Actions:     defaultAppPreviewActions(node.Config),
-				Form:        defaultAppPreviewForm(node.Config),
-				RequestedAt: time.Now()}
-			logDB(e.db.Create(&gate), c.run.ID, "create app_preview gate")
-		}
-		return nodeOutcome{status: "paused", outputMd: "等待人工预览审批…", events: r.Events, outputs: r.Outputs}
-	})
+	}
+	iter := c.iter[node.ID]
+	var gate models.Gate
+	gerr := e.db.Where("run_id = ? AND node_id = ? AND iteration = ?", c.run.ID, node.ID, iter).First(&gate).Error
+	if gerr == nil && gate.Resolved {
+		return nodeOutcome{status: "completed", outputMd: "预览审批已完成",
+			outputs: map[string]any{"resolved": true}, events: res.Events, usage: res.Usage}
+	}
+	if gerr != nil {
+		title := firstNonEmptyStr(str(node.Config["title"]), firstNonEmptyStr(node.Label, "应用预览"))
+		gate = models.Gate{RunID: c.run.ID, NodeID: node.ID, Iteration: iter, WorkflowID: c.run.WorkflowID, WorkflowName: c.run.WorkflowName,
+			Title:       title,
+			BodyMd:      "",
+			Actions:     defaultAppPreviewActions(node.Config),
+			Form:        defaultAppPreviewForm(node.Config),
+			RequestedAt: time.Now()}
+		logDB(e.db.Create(&gate), c.run.ID, "create app_preview gate")
+	}
+	paused := nodeOutcome{status: "paused", outputMd: "等待人工预览复审…", events: res.Events, outputs: res.Outputs, usage: res.Usage}
+	return e.enterReview(c, node, paused)
 }
 
 func (e *Engine) execGate(c *execCtx, node *models.Node) nodeOutcome {
@@ -996,6 +1023,9 @@ func (e *Engine) nodeReq(c *execCtx, node *models.Node) runtime.NodeReq {
 	// before withOutcome/TakeOutcome). Auto-retry and ResumeFrom must require a
 	// fresh attestation for this visit.
 	e.host.ClearOutcome(c.run.ID, node.ID)
+	if node.Type == "app_preview" {
+		e.host.ResetPreviewReady(c.run.ID, node.ID)
+	}
 	promptImages := collectPromptVarImages(c, promptScanTemplates(node.Config)...)
 	req := runtime.NodeReq{RunID: c.run.ID, WorkflowID: c.run.WorkflowID, WorkflowName: c.run.WorkflowName,
 		Token: c.token, NodeID: node.ID, NodeType: node.Type, Config: cfg, Vars: c.vars,
@@ -1003,6 +1033,7 @@ func (e *Engine) nodeReq(c *execCtx, node *models.Node) runtime.NodeReq {
 	// Park the live session after a successful run when this node will enter an
 	// inline ReAct review, or a downstream approval gate referencing its product
 	// may issue a ReAct reject — either needs the same sandbox kept alive.
+	// app_preview always parks (reviewEnabled always true).
 	req.KeepAliveForReview = e.reviewEnabled(c, node) || e.hasDownstreamReactGate(c, node)
 	return req
 }

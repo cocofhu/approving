@@ -32,8 +32,13 @@ func reviewVarName(node *models.Node) string {
 //	DEFINED and FALSY  ⇒ skip
 //	DEFINED and TRUTHY ⇒ enter interactive review
 //
+// app_preview always enters review after a healthy set_preview (product gate is
+// the waiting_human shell; main interaction is parked ReAct + VNC).
 // A node type with no review variable is never review-capable.
 func (e *Engine) reviewEnabled(c *execCtx, node *models.Node) bool {
+	if node != nil && node.Type == "app_preview" {
+		return true
+	}
 	name := reviewVarName(node)
 	if name == "" {
 		return false
@@ -184,6 +189,8 @@ func (e *Engine) reviewSummaryMarkdown(c *execCtx, node *models.Node) string {
 			}
 		case node.Type == "visual":
 			body = "已生成可视化网页 " + visualPageName + "。请在预览中取点标注要调整的元素,或直接描述修改点。"
+		case node.Type == "app_preview":
+			body = "应用预览已就绪(set_preview 可达)。请在 VNC 预览中取点标注,或直接对话说明要改哪里;通过/退回在复审与门禁内完成。结束/Cancel 会话不会拆掉预览服务。"
 		case spec.Render != nodereg.RenderNone:
 			if render := nodereg.Renderer(spec.Render); render != nil {
 				if s, ok := e.store.Get(c.run.ID, spec.ArtifactName); ok {
@@ -207,9 +214,26 @@ func (e *Engine) finalizeProduct(c *execCtx, node *models.Node, res runtime.Node
 		return e.finalizeVisual(c, node, res)
 	case "plan":
 		return e.finalizePlan(c, node, res)
+	case "app_preview":
+		return e.finalizeAppPreview(c, node, res)
 	default:
 		return e.completeProduces(c, node, res)
 	}
+}
+
+// finalizeAppPreview accepts a healthy set_preview registration as the product
+// contract (no structured artifact / node_complete required).
+func (e *Engine) finalizeAppPreview(c *execCtx, node *models.Node, res runtime.NodeResult) nodeOutcome {
+	if !e.host.HasHealthyPreviewPorts(c.run.ID, node.ID) {
+		return nodeOutcome{status: "failed", err: "预览契约未满足:无可达 set_preview",
+			outputMd: "应用预览失败:无可达预览端口", events: res.Events, usage: res.Usage}
+	}
+	out := res.Outputs
+	if out == nil {
+		out = map[string]any{}
+	}
+	out["preview_ready"] = true
+	return nodeOutcome{status: "completed", outputMd: "应用预览已就绪", outputs: out, events: res.Events, usage: res.Usage}
 }
 
 // isReviewNode reports whether a node type uses the post-run ReAct review path
@@ -242,6 +266,24 @@ func (e *Engine) reviewReply(c *execCtx, node *models.Node, conv *models.ReactCo
 	// Ready-gate is enforced by ReactReply before taking the lock.
 	if rp, ok := e.provider.(runtime.ReviewProvider); ok {
 		rp.RetireSession(runID, nodeID)
+	}
+
+	// app_preview: Gate 承载完结语义。复审「确认并流转」≡ 门禁通过。
+	if node.Type == "app_preview" {
+		outcome := e.finalizeAppPreview(c, node, runtime.NodeResult{})
+		if outcome.status == "failed" {
+			e.host.SetActiveReview(runID, true)
+			e.broker.Publish(runID, jsonMsg("react", runID, nodeID))
+			errMsg := strings.TrimSpace(outcome.err)
+			if errMsg == "" {
+				errMsg = "复审确认校验失败"
+			}
+			return errors.New(errMsg)
+		}
+		conv.Done = true
+		logDB(e.db.Save(conv), runID, "finish app_preview review conversation")
+		e.host.SetActiveReview(runID, false)
+		return e.ResumeGateAs(runID, nodeID, "pass", nil, "")
 	}
 
 	outcome := e.finalizeProduct(c, node, runtime.NodeResult{})

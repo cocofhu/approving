@@ -202,6 +202,18 @@ function onHtmlPreviewPick(payload: { selector: string; tagName: string; imageDa
   }
 }
 
+/** VNC/app_preview pick payload uses outerHTML (no imageDataUrl). */
+function onAppPreviewPick(payload: { selector: string; tagName: string; outerHTML: string }) {
+  pickedSelector.value = payload.selector
+  pickedElementImage.value = null
+  if (canReactRevise.value) {
+    pushReactAnnotation({
+      selector: payload.selector,
+      label: payload.selector || payload.tagName,
+    })
+  }
+}
+
 function clearHtmlPreviewPick() {
   pickedSelector.value = ''
   pickedElementImage.value = null
@@ -2139,12 +2151,15 @@ function onComposerReject() {
         <div
           v-else-if="isAppPreview && run"
           :class="shouldFillAppPreview ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-4' : 'p-4'"
+          data-testid="app-preview-host"
         >
           <AppPreviewPanel
             :run-id="run.id"
             :node-id="gate.nodeId"
             :fill="shouldFillAppPreview"
+            :show-feedback="!canReactRevise"
             @issues-changed="loadPreviewIssues()"
+            @pick="onAppPreviewPick"
           />
         </div>
         <ArtifactLoadingPane

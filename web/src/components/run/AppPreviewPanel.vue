@@ -11,8 +11,10 @@ const props = withDefaults(
     nodeId: string
     compact?: boolean
     fill?: boolean
+    /** When false, hide PreviewFeedbackChat (review ReAct is the primary dialogue). */
+    showFeedback?: boolean
   }>(),
-  { compact: false, fill: false },
+  { compact: false, fill: false, showFeedback: true },
 )
 
 const emit = defineEmits<{
@@ -69,7 +71,11 @@ function selectPort(port: number) {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-col" :class="fill ? 'h-full flex-1' : ''">
+  <div
+    data-testid="app-preview"
+    class="flex min-h-0 flex-col"
+    :class="fill ? 'h-full flex-1' : ''"
+  >
     <div v-if="loading" class="p-4 text-xs text-txt3">{{ t('pages.appPreview.loading') }}</div>
     <div v-else-if="loadError" class="rounded-md border border-err/30 bg-err/10 p-4 text-xs text-err">
       {{ loadError }}
@@ -121,7 +127,7 @@ function selectPort(port: number) {
         />
       </div>
       <PreviewFeedbackChat
-        v-if="!compact"
+        v-if="!compact && showFeedback"
         :run-id="runId"
         :node-id="nodeId"
         :port="activePort ?? 0"

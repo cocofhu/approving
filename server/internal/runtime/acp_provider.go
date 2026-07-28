@@ -518,13 +518,41 @@ func (c *acpProvider) runAgentOnce(ctx context.Context, req NodeReq) (res NodeRe
 	defer cancel()
 	var chatRes *sandbox.ChatResult
 	var usage *models.TokenUsage
+
+	// app_preview: set_preview(可达) 即早期收工——打断 streamChat，不再死等会话自然结束。
+	if req.NodeType == "app_preview" {
+		ready := c.host.PreviewReadyChan(req.RunID, req.NodeID)
+		go func() {
+			select {
+			case <-ready:
+				cancel()
+				if acp != nil {
+					_ = acp.Cancel()
+				}
+				log.Info().Str("run", req.RunID).Str("node", req.NodeID).
+					Msg("app_preview early finish: healthy set_preview signaled")
+			case <-chatCtx.Done():
+			}
+		}()
+	}
+
 	chatRes, err = c.streamChat(chatCtx, acp, req, c.buildAgentPrompt(req, seeded), req.PromptImages)
 	if err != nil {
-		if isRetryableSandboxErr(err) {
-			keepForDebug = false
+		// 已有可达预览：视作生产相成功（超时/Cancel/ACP 断连兜底）。
+		if req.NodeType == "app_preview" && c.host.HasHealthyPreviewPorts(req.RunID, req.NodeID) {
+			log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
+				Msg("app_preview chat ended after healthy preview; continuing to park/review")
+			err = nil
+			if chatRes == nil {
+				chatRes = &sandbox.ChatResult{Narration: "预览已就绪(生产相提前结束)"}
+			}
+		} else {
+			if isRetryableSandboxErr(err) {
+				keepForDebug = false
+			}
+			events := c.snapshotEvents(ctx, sb, turnEvents)
+			return NodeResult{Events: events, Usage: usage}, fmt.Errorf("agent chat: %w", err)
 		}
-		events := c.snapshotEvents(ctx, sb, turnEvents)
-		return NodeResult{Events: events, Usage: usage}, fmt.Errorf("agent chat: %w", err)
 	}
 	absorbChat(&usage, &turnEvents, chatRes)
 	out := map[string]any{"content": chatRes.Narration, "narration_summary": firstLine(chatRes.Narration)}
@@ -613,8 +641,13 @@ func (c *acpProvider) runAgentOnce(ctx context.Context, req NodeReq) (res NodeRe
 	// completion. Soft re-prompt here; the engine still fails if the mark is
 	// ultimately absent. submit_mr no longer runs verifyMR (git/glab) — the
 	// agent attests via node_complete outputs instead.
-	if _, oerr := c.ensureOutcome(ctx, req, acp, &events, &usage); oerr != nil {
-		return NodeResult{OutputMd: chatRes.Narration, Outputs: out, Events: events, Git: git, Usage: usage}, oerr
+	// app_preview: 可达 set_preview 即生产相完成判据，豁免末尾 node_complete。
+	if req.NodeType != "app_preview" || !c.host.HasHealthyPreviewPorts(req.RunID, req.NodeID) {
+		if _, oerr := c.ensureOutcome(ctx, req, acp, &events, &usage); oerr != nil {
+			return NodeResult{OutputMd: chatRes.Narration, Outputs: out, Events: events, Git: git, Usage: usage}, oerr
+		}
+	} else if c.host.HasHealthyPreviewPorts(req.RunID, req.NodeID) {
+		out["preview_ready"] = true
 	}
 
 	// Post-run ReAct review handoff: keep the live sandbox + ACP session alive
@@ -1920,6 +1953,11 @@ func mrTargetDisplay(target string) string {
 // AbortRun tears down live react sessions and in-flight agent ACP connections
 // for a run. Called on cancel/fail so Cancel-during-agent unblocks RunAgent
 // (and react sandboxes are not left busy forever).
+//
+// When an app_preview node already has a healthy keepalive registration, the
+// sandbox is retired (ACP closed, container kept) instead of Destroy'd so the
+// setsid-detached preview survives Cancel of the production turn. Full Run /
+// gate / sandbox reclaim still Destroy via the normal lifecycle.
 func (c *acpProvider) AbortRun(runID string) {
 	prefix := runID + "|"
 	c.mu.Lock()
@@ -1932,6 +1970,7 @@ func (c *acpProvider) AbortRun(runID string) {
 	var agentKeys []string
 	var agentACPs []*sandbox.ACPClient
 	var agentSBs []*sandbox.Sandbox
+	var agentKeepPreview []bool
 	for k, acp := range c.inflightACP {
 		if !strings.HasPrefix(k, prefix) {
 			continue
@@ -1943,6 +1982,18 @@ func (c *acpProvider) AbortRun(runID string) {
 		agentKeys = append(agentKeys, k)
 		agentACPs = append(agentACPs, acp)
 		agentSBs = append(agentSBs, c.live[k])
+		nodeID := k
+		if i := strings.IndexByte(k, '|'); i >= 0 {
+			nodeID = k[i+1:]
+		}
+		// Whitelist: healthy registration OR setsid keepalive pid list — Cancel
+		// must retire (keep container) instead of Destroy so preview survives.
+		keep := false
+		if c.host != nil {
+			pids := c.host.ListPreviewKeepalivePIDs(runID, nodeID)
+			keep = c.host.HasHealthyPreviewPorts(runID, nodeID) || len(pids) > 0
+		}
+		agentKeepPreview = append(agentKeepPreview, keep)
 	}
 	for _, k := range agentKeys {
 		delete(c.inflightACP, k)
@@ -1953,10 +2004,17 @@ func (c *acpProvider) AbortRun(runID string) {
 		c.closeSession(k)
 	}
 	for i, acp := range agentACPs {
+		sb := agentSBs[i]
+		if agentKeepPreview[i] && sb != nil {
+			// Keep container so setsid preview survives session Cancel.
+			home := ""
+			c.retireRunSandbox(sb, acp, home)
+			continue
+		}
 		if acp != nil {
 			acp.Close()
 		}
-		if sb := agentSBs[i]; sb != nil {
+		if sb != nil {
 			// Hard-destroy so a stuck bridge cannot hold the agent goroutine.
 			c.deregisterRunSandbox(sb.Name)
 			sb.Destroy(context.Background())
@@ -2103,8 +2161,9 @@ func reactKey(req NodeReq) string { return req.RunID + "|" + req.NodeID }
 func nodeNeedsOutcome(nodeType string) bool {
 	switch nodeType {
 	case "agent", "plan", "implement", "react", "research", "proposal",
-		"test", "review", "submit_mr", "visual", "app_preview":
+		"test", "review", "submit_mr", "visual":
 		return true
+	// app_preview: 可达 set_preview 即完成生产相，不硬依赖 node_complete。
 	default:
 		return false
 	}

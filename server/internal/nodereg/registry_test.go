@@ -105,7 +105,7 @@ func TestPromptContractText(t *testing.T) {
 func TestReviewCapableDefaults(t *testing.T) {
 	// test is intentionally excluded: it already has a structured gate verdict
 	// path and is not part of the post-run ReAct review surface.
-	for _, typ := range []string{"plan", "implement", "research", "review", "proposal", "visual"} {
+	for _, typ := range []string{"plan", "implement", "research", "review", "proposal", "visual", "app_preview"} {
 		if !ReviewCapable(typ) {
 			t.Fatalf("%s should be review-capable", typ)
 		}

@@ -80,6 +80,9 @@ type Host struct {
 	previewBase  string
 	previewStore PreviewStore
 	previewOps   PreviewSandboxOps
+	// previewReady signals healthy set_preview completion (keyed runID|nodeID).
+	// Closed channel = ready; absent entry = not yet signaled.
+	previewReady map[string]chan struct{}
 	// outcomes buffers node_complete marks keyed runID -> nodeID. The engine
 	// drains them via TakeOutcome after the agent turn (destructive).
 	outcomes map[string]map[string]NodeOutcome

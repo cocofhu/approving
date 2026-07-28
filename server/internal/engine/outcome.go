@@ -138,9 +138,9 @@ func (e *Engine) finishAgentOutcome(c *execCtx, node *models.Node, res runtime.N
 func agentExecNeedsOutcome(k nodereg.ExecKind) bool {
 	switch k {
 	case nodereg.ExecAgent, nodereg.ExecPlan, nodereg.ExecStructured,
-		nodereg.ExecStructuredGated, nodereg.ExecSubmitMR, nodereg.ExecVisual,
-		nodereg.ExecAppPreview:
+		nodereg.ExecStructuredGated, nodereg.ExecSubmitMR, nodereg.ExecVisual:
 		return true
+	// ExecAppPreview: 可达 set_preview 即生产相完成，豁免 node_complete 硬门禁。
 	default:
 		return false
 	}

@@ -37,7 +37,7 @@ import {
   reviewRightPanelCssWidth,
 } from '@/lib/reviewLayoutBudget'
 import { useBreakpoint } from '@/lib/useBreakpoint'
-import { useClarifyDraft } from '@/lib/useClarifyDraft'
+import { addClarifyAnnotation, useClarifyDraft } from '@/lib/useClarifyDraft'
 import { NODE_DEFS } from '@/data/nodeRegistry'
 import { resolveNodeDisplayLabelFromNode } from '@/lib/resolveNodeDisplayLabel'
 import { fmtTime, fmtDuration, formatTrigger } from '@/lib/format'
@@ -1337,6 +1337,18 @@ const runFailureReason = computed(() => {
 })
 const showRunFailureBanner = computed(() => !!runFailureReason.value)
 const { draft: clarifyDraft, attachments: clarifyAttachments, annotations: clarifyAnnotations } = useClarifyDraft(() => runId.value, () => selected.value)
+
+/** VNC pick on app_preview review stage → same ReAct annotation chips as structured ⤴. */
+function onAppPreviewReviewPick(payload: { selector: string; tagName: string; outerHTML: string }) {
+  const rid = run.value?.id
+  const nid = selNode.value?.id
+  if (!rid || !nid) return
+  const result = addClarifyAnnotation(rid, nid, {
+    selector: payload.selector,
+    label: payload.selector || payload.tagName,
+  })
+  if (result === 'duplicate') toast.warn(t('pages.reviewComposer.alreadyAdded'))
+}
 // Every sandbox-backed node (all "Agent" category types: agent/react/plan/
 // implement/research/test/review/proposal/submit_mr/visual) runs the in-container
 // cursor-agent, so it gets both the ACP 执行日志 and 沙箱日志 tabs. Derive this
@@ -1418,7 +1430,9 @@ const canvasPaneStyle = computed(() =>
 watch(
   selected,
   () => {
-    if (gateActive.value) nodeTab.value = 'gate'
+    // app_preview: Gate 仅壳，主交互为复审对话 + VNC
+    if (hasAppPreview.value && reviewActive.value) nodeTab.value = 'review'
+    else if (gateActive.value) nodeTab.value = 'gate'
     else if (clarifyActive.value && !run.value.clarify?.done) nodeTab.value = 'clarify'
     else if (reviewActive.value) nodeTab.value = 'review'
     else if (hasProduct.value && nodeCompleted.value) nodeTab.value = 'product'
@@ -2082,7 +2096,7 @@ function selectExecution(nodeId: string, idx: number) {
               <ClarifyBootLoader v-else :phase="selStatus === 'pending' ? 'pending' : 'starting'" />
             </template>
             <template v-else-if="nodeTab === 'review' && selNode && selRunView">
-              <!-- Left product stage + right review sidebar (page.html RUN 复审) -->
+              <!-- Left product stage + right review sidebar (page.html RUN 复审 / app_preview VNC) -->
               <ReviewShell
                 class="h-full min-h-0"
                 :mobile="isMobile"
@@ -2090,7 +2104,16 @@ function selectExecution(nodeId: string, idx: number) {
                 :storage-key="REVIEW_SHELL_WIDTH_KEY_REVIEW"
               >
                 <template #stage>
-                  <StructuredProductPanel :node="selNode" :node-run="selRunView" :run="run" annotatable />
+                  <div v-if="selNode.type === 'app_preview'" class="flex h-full min-h-0 flex-col p-3">
+                    <AppPreviewPanel
+                      :run-id="run.id"
+                      :node-id="selNode.id"
+                      fill
+                      :show-feedback="false"
+                      @pick="onAppPreviewReviewPick"
+                    />
+                  </div>
+                  <StructuredProductPanel v-else :node="selNode" :node-run="selRunView" :run="run" annotatable />
                 </template>
                 <template #sidebar>
                   <ReviewComposer
