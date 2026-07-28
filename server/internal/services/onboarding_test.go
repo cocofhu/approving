@@ -94,6 +94,62 @@ func TestOnboardingBootstrapCreatesAgentsAndPublishedWorkflow(t *testing.T) {
 		t.Fatalf("workflow meta: name=%s status=%s needsRepo=%v", wf.Name, wf.Status, wf.NeedsRepo)
 	}
 	assertOnboardingGraph(t, wf.Graph)
+	assertOnboardingReposVar(t, wf.Graph)
+}
+
+func TestOnboardingBootstrapWritesCodeBuddyRegionToAgents(t *testing.T) {
+	svc, projectID := newOnboardingHarness(t)
+	res, err := svc.Bootstrap(projectID, services.OnboardingBootstrapRequest{
+		AcpBackend: "codebuddy",
+		APIKey:     "cb-key",
+		Region:     "internal",
+	})
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	for _, name := range res.AgentIDs {
+		a, ok := svc.Skills.Get(name)
+		if !ok {
+			t.Fatalf("agent %s missing", name)
+		}
+		if a.AcpBackend != "codebuddy" {
+			t.Fatalf("agent %s backend = %q", name, a.AcpBackend)
+		}
+		if got := a.Env["APPROVING_CODEBUDDY_REGION"]; got != "internal" {
+			t.Fatalf("agent %s region = %q, want internal", name, got)
+		}
+		if a.Layout.ConfigRoot != "/root/.codebuddy" {
+			t.Fatalf("agent %s configRoot = %q", name, a.Layout.ConfigRoot)
+		}
+	}
+	p, _ := svc.Projects.Get(projectID)
+	foundRegion := false
+	for _, e := range p.SandboxEnv {
+		if e.Key == "APPROVING_CODEBUDDY_REGION" && e.Value == "internal" {
+			foundRegion = true
+		}
+	}
+	if !foundRegion {
+		t.Fatalf("project sandboxEnv missing region: %+v", p.SandboxEnv)
+	}
+}
+
+func TestOnboardingBootstrapDefaultsPublicRegionForCodeBuddy(t *testing.T) {
+	svc, projectID := newOnboardingHarness(t)
+	_, err := svc.Bootstrap(projectID, services.OnboardingBootstrapRequest{
+		AcpBackend: "codebuddy",
+		APIKey:     "cb-key",
+	})
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	a, ok := svc.Skills.Get("ImplementAgent")
+	if !ok {
+		t.Fatal("ImplementAgent missing")
+	}
+	if got := a.Env["APPROVING_CODEBUDDY_REGION"]; got != "public" {
+		t.Fatalf("default region = %q, want public", got)
+	}
 }
 
 func TestOnboardingBootstrapIdempotent(t *testing.T) {
@@ -200,6 +256,35 @@ func TestOnboardingLightGraphValidate(t *testing.T) {
 	)
 	if err := g.Validate(); err != nil {
 		t.Fatalf("graph invalid: %v", err)
+	}
+}
+
+func assertOnboardingReposVar(t *testing.T, g models.Graph) {
+	t.Helper()
+	var reposVar *models.Variable
+	for i := range g.Variables {
+		if g.Variables[i].Name == "repos" {
+			reposVar = &g.Variables[i]
+			break
+		}
+	}
+	if reposVar == nil {
+		t.Fatal("missing repos variable")
+	}
+	if reposVar.Type != "repos" {
+		t.Fatalf("repos type = %q, want repos", reposVar.Type)
+	}
+	list, ok := reposVar.Value.([]any)
+	if !ok || len(list) == 0 {
+		t.Fatalf("repos value want non-empty []any, got %T %#v", reposVar.Value, reposVar.Value)
+	}
+	first, ok := list[0].(map[string]any)
+	if !ok {
+		t.Fatalf("repos[0] = %T", list[0])
+	}
+	url, _ := first["url"].(string)
+	if !strings.Contains(url, "heroku/nodejs-getting-started") {
+		t.Fatalf("repos[0].url = %q", url)
 	}
 }
 

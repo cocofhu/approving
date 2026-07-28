@@ -19,6 +19,7 @@ import {
   freshOnboardingDraft,
   hostLabelFromUrl,
   parseReposLiteral,
+  reposInputFromFields,
   type OnboardingBootstrapResult,
   type OnboardingDraft,
 } from '@/lib/onboardingWizard'
@@ -161,7 +162,11 @@ async function startSampleRun() {
       result.value.workflowId,
       {
         feature: result.value.feature || DEFAULT_ONBOARDING_FEATURE,
-        repos: result.value.repos || encodeReposLiteral(draft.value.repo),
+        // Structured repos (Type "repos"); wire literals also work server-side
+        // via parseReposVar, but prefer the array form used by the engine.
+        repos: reposInputFromFields(
+          parseReposLiteral(result.value.repos || encodeReposLiteral(draft.value.repo)),
+        ),
       },
       'manual',
     )
