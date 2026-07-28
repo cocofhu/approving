@@ -65,6 +65,75 @@ func TestCodeBuddyKeepsStrictMcpIsolation(t *testing.T) {
 	}
 }
 
+// TestCodeBuddyArgsGoldenStrictPlusMcpConfig (CAPA A2): registry[CodeBuddy]
+// Args must simultaneously contain --strict-mcp-config and
+// --mcp-config /root/.codebuddy/mcp.json.
+func TestCodeBuddyArgsGoldenStrictPlusMcpConfig(t *testing.T) {
+	args := mustArgsForTest(t, registry[provider.CodeBuddy])
+	if !containsArg(args, "--strict-mcp-config") {
+		t.Fatalf("missing --strict-mcp-config in %v", args)
+	}
+	wantPath := "/root/.codebuddy/mcp.json"
+	if i := indexOfArg(args, "--mcp-config"); i < 0 || i+1 >= len(args) || args[i+1] != wantPath {
+		t.Fatalf("want --mcp-config %s in %v", wantPath, args)
+	}
+}
+
+// TestCursorBaseArgsIncludeApproveMcps (CAPA A3): Cursor Args must include
+// --approve-mcps so headless -p auto-approves seeded ~/.cursor/mcp.json.
+func TestCursorBaseArgsIncludeApproveMcps(t *testing.T) {
+	args := mustArgsForTest(t, registry[provider.Cursor])
+	if !containsArg(args, "--approve-mcps") {
+		t.Fatalf("missing --approve-mcps in %v", args)
+	}
+}
+
+// TestE2E_CodeBuddyOneshotToolsListNonEmpty (CAPA A5, degraded): without a real
+// codebuddy binary/image this locks the production BaseArgs argv surface that
+// makes MCP loadable. Full tools/list non-empty proof needs a sandbox image
+// with codebuddy (not in this Run; see docs/postmortems/2026-07-28-capa-from-run-94650e47.md).
+func TestE2E_CodeBuddyOneshotToolsListNonEmpty(t *testing.T) {
+	args := mustArgsForTest(t, registry[provider.CodeBuddy])
+	if !containsArg(args, "--strict-mcp-config") {
+		t.Fatalf("A5 argv lock: missing --strict-mcp-config: %v", args)
+	}
+	if i := indexOfArg(args, "--mcp-config"); i < 0 || i+1 >= len(args) || args[i+1] != "/root/.codebuddy/mcp.json" {
+		t.Fatalf("A5 argv lock: want --mcp-config /root/.codebuddy/mcp.json in %v", args)
+	}
+	t.Log("A5 degraded: argv golden lock only; real CLI tools/list requires codebuddy sandbox image")
+}
+
+type argsForTester interface {
+	ArgsForTest(opts provider.OpenOptions, prompt, resumeID string) []string
+}
+
+func mustArgsForTest(t *testing.T, p provider.Provider) []string {
+	t.Helper()
+	a, ok := p.(argsForTester)
+	if !ok {
+		t.Fatalf("provider %s does not expose ArgsForTest (oneshot stream-json expected)", p.Name())
+	}
+	return a.ArgsForTest(provider.OpenOptions{}, "", "")
+}
+
+func containsArg(args []string, want string) bool {
+	for _, a := range args {
+		if a == want {
+			return true
+		}
+	}
+	return false
+}
+
+func indexOfArg(args []string, want string) int {
+	for i, a := range args {
+		if a == want {
+			return i
+		}
+	}
+	return -1
+}
+
 func TestClaudeFamilyDoesNotUseBareStrictMcp(t *testing.T) {
 	// Only codebuddy opts into --strict-mcp-config (with streamjson auto --mcp-config).
 	// Claude loads ~/.claude/mcp.json by default — do not add bare strict here.

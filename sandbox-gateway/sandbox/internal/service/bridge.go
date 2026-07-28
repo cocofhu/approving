@@ -49,6 +49,9 @@ type Bridge struct {
 	// 最近一次 session/new 使用的 MCP 列表（JSON），重启 Agent 时复用
 	lastMCP json.RawMessage
 
+	// testConnect, when non-nil, replaces Connect inside EnsureAgent (unit tests only).
+	testConnect func(cwd, fsRoot string, mcp json.RawMessage, auto *bool) (provider.Session, error)
+
 	// 当前 session/prompt 一轮：取消时结束 Conn.Call 等待，并配合 session/cancel 通知 Agent
 	turnMu     sync.Mutex
 	activeTurn *promptTurn

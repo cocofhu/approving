@@ -182,6 +182,24 @@ func (h *Host) TakeMcpCalls(runID, nodeID string) []models.McpCall {
 	return cs
 }
 
+// PeekMcpCalls returns the buffered tool-call trace for (runID, nodeID) without
+// clearing (CAPA A7: distinguish empty MCP tool surface vs missing node_complete).
+func (h *Host) PeekMcpCalls(runID, nodeID string) []models.McpCall {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	byNode := h.calls[runID]
+	if byNode == nil {
+		return nil
+	}
+	cs := byNode[nodeID]
+	if len(cs) == 0 {
+		return nil
+	}
+	out := make([]models.McpCall, len(cs))
+	copy(out, cs)
+	return out
+}
+
 // SetActiveNode records which node (and its type) a run is currently executing
 // so MCP writes (write_artifact) can be attributed to the producing node and
 // clarify-only tools (ask_question) can be gated to react nodes. Runs execute

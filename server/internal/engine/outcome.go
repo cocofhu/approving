@@ -12,13 +12,18 @@ import (
 
 // consumeNodeOutcome drains the agent's node_complete mark and merges its
 // outputs into res. Missing mark or status=failed yields a failed nodeOutcome.
+//
+// CAPA A7: when the mark is missing, distinguish "MCP tool surface empty /
+// unreachable" (expected MCP traffic but zero host calls) from "tools were
+// reachable but agent never called node_complete".
 func (e *Engine) consumeNodeOutcome(c *execCtx, node *models.Node, res *runtime.NodeResult) (nodeOutcome, bool) {
 	o, ok := e.host.TakeOutcome(c.run.ID, node.ID)
 	if !ok {
+		errMsg := missingOutcomeErr(e.host.PeekMcpCalls(c.run.ID, node.ID))
 		return nodeOutcome{
 			status:   "failed",
-			err:      "未调用 node_complete 标记完成",
-			outputMd: "节点失败:未调用 node_complete 标记完成",
+			err:      errMsg,
+			outputMd: "节点失败:" + errMsg,
 			outputs:  res.Outputs,
 			events:   res.Events,
 			usage:    res.Usage,
@@ -144,4 +149,13 @@ func agentExecNeedsOutcome(k nodereg.ExecKind) bool {
 	default:
 		return false
 	}
+}
+
+// missingOutcomeErr (CAPA A7) picks the failure reason when node_complete is absent.
+// Zero MCP host calls ⇒ tool surface empty/unreachable; any traffic ⇒ agent forgot mark.
+func missingOutcomeErr(calls []models.McpCall) string {
+	if len(calls) == 0 {
+		return "MCP 工具面为空/不可达，无法完成 node_complete"
+	}
+	return "未调用 node_complete 标记完成"
 }

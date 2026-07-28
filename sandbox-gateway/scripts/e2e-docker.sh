@@ -118,9 +118,9 @@ wait_http() {
 wait_http "http://$SESS/" '^(200)$'
 wait_http "http://$IDE/" '^(200|302)$'
 
-echo "==> inject files"
+echo "==> inject files (CAPA A8: content smoke, not only test -f)"
 docker exec "sbx-$ID" bash -c 'test -f /root/.cursor/mcp.json && test -f /root/.cursor/rules/e2e.md'
-docker exec "sbx-$ID" bash -c 'grep -q e2e /root/.cursor/mcp.json'
+docker exec "sbx-$ID" bash -c 'grep -q mcpServers /root/.cursor/mcp.json && grep -q e2e /root/.cursor/mcp.json'
 
 echo "==> hosts/:port"
 curl -sS -m10 -o /dev/null -w "%{http_code}" "$GW/api/v1/sandboxes/$ID/hosts/8765" | grep -q 200
@@ -137,7 +137,8 @@ for i in $(seq 1 30); do
   sleep 2
 done
 docker exec "sbx-$ID" bash -c '! test -f /root/.cursor/MARKER'
-docker exec "sbx-$ID" bash -c 'test -f /root/.cursor/mcp.json'
+# CAPA A8: re-inject restores mcpServers content (not file-existence alone).
+docker exec "sbx-$ID" bash -c 'test -f /root/.cursor/mcp.json && grep -q mcpServers /root/.cursor/mcp.json && grep -q e2e /root/.cursor/mcp.json'
 
 echo "==> stop/start/delete"
 curl -sS -m20 -X POST "$GW/api/v1/sandboxes/$ID/stop" | grep -q stopped
