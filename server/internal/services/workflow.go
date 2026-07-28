@@ -29,10 +29,16 @@ var (
 )
 
 // WorkflowService manages workflow definitions, versions, and publishing.
-type WorkflowService struct{ db *gorm.DB }
+type WorkflowService struct {
+	db     *gorm.DB
+	skills AgentGetter
+}
 
 // NewWorkflowService builds the service.
 func NewWorkflowService(db *gorm.DB) *WorkflowService { return &WorkflowService{db: db} }
+
+// SetSkills wires the Agent catalog used by skill_profile project validation.
+func (s *WorkflowService) SetSkills(skills AgentGetter) { s.skills = skills }
 
 // List returns all workflow definitions (without heavy graph bodies).
 // When projectID is non-empty, results are scoped to that project.
@@ -189,6 +195,9 @@ func (s *WorkflowService) Save(wf *models.WorkflowDef) error {
 		if err := s.validateWorkflowName(wf.Name, wf.ID, wf.ProjectID); err != nil {
 			return err
 		}
+		if err := s.validateSkillProfiles(wf); err != nil {
+			return err
+		}
 		if wf.Version == 0 {
 			wf.Version = 1
 		}
@@ -228,6 +237,9 @@ func (s *WorkflowService) Save(wf *models.WorkflowDef) error {
 		wf.NotifyPolicy = existing.NotifyPolicy
 		return nil
 	}
+	if err := s.validateSkillProfiles(wf); err != nil {
+		return err
+	}
 	wf.NotifyPolicy = NormalizeWorkflowNotifyPolicy(wf.NotifyPolicy)
 	wf.UpdatedAt = time.Now()
 	return s.db.Save(wf).Error
@@ -263,6 +275,9 @@ func (s *WorkflowService) Publish(id string) (models.WorkflowDef, error) {
 	}
 	// A published version must be a structurally valid, runnable pipeline.
 	if err := wf.Graph.Validate(); err != nil {
+		return wf, err
+	}
+	if err := s.validateSkillProfiles(&wf); err != nil {
 		return wf, err
 	}
 	wf.Version++
@@ -443,4 +458,59 @@ func (s *WorkflowService) Delete(id string) error {
 		}
 		return tx.Delete(&models.WorkflowDef{}, "id = ?", id).Error
 	})
+}
+
+func (s *WorkflowService) validateSkillProfiles(wf *models.WorkflowDef) error {
+	if s == nil || wf == nil || s.skills == nil {
+		return nil
+	}
+	return ValidateSkillProfilesProject(s.skills, wf.ProjectID, wf.Graph)
+}
+
+// AgentGetter looks up an Agent by name (SkillService.Get).
+type AgentGetter interface {
+	Get(name string) (Agent, bool)
+}
+
+// ValidateSkillProfilesProject rejects non-empty skill_profile refs that are
+// missing, unbound, or not bound to projectID. Empty skill_profile is skipped.
+// Covers every node carrying a non-empty skill_profile (not only type=agent).
+func ValidateSkillProfilesProject(skills AgentGetter, projectID string, g models.Graph) error {
+	if skills == nil {
+		return nil
+	}
+	pid := strings.TrimSpace(projectID)
+	var bad []string
+	for _, n := range g.Nodes {
+		if n.Config == nil {
+			continue
+		}
+		raw, _ := n.Config["skill_profile"].(string)
+		profile := strings.TrimSpace(raw)
+		if profile == "" {
+			continue
+		}
+		ag, ok := skills.Get(profile)
+		reason := ""
+		switch {
+		case !ok:
+			reason = "已删除"
+		case strings.TrimSpace(ag.ProjectID) == "":
+			reason = "未绑定"
+		case !AgentProjectMatches(ag, pid):
+			reason = "非本项目"
+		}
+		if reason == "" {
+			continue
+		}
+		label := strings.TrimSpace(n.Label)
+		if label == "" {
+			label = n.ID
+		}
+		bad = append(bad, fmt.Sprintf("%s → %s（%s）", label, profile, reason))
+	}
+	if len(bad) == 0 {
+		return nil
+	}
+	return fmt.Errorf("存在非法 skill_profile，请改选同项目 Agent 后再保存：%s", strings.Join(bad, "；"))
 }

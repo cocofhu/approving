@@ -106,6 +106,9 @@ type Engine struct {
 	// worker for node-inline review and gate hot-revise (SandboxChat-aligned).
 	reviewMu   sync.Mutex
 	reviewSess map[string]*reviewSession // key: runID|producerNodeID
+
+	// skills looks up Agents for same-project skill_profile runtime gate.
+	skills *services.SkillService
 }
 
 // New builds an engine.
@@ -144,6 +147,9 @@ func (e *Engine) SetMaxConcurrent(n int) {
 	e.sem.SetLimit(n)
 	e.signalDispatch()
 }
+
+// SetSkills wires the Agent catalog used by the skill_profile project gate.
+func (e *Engine) SetSkills(skills *services.SkillService) { e.skills = skills }
 
 // MaxConcurrent returns the current concurrency cap.
 func (e *Engine) MaxConcurrent() int { return e.sem.Limit() }

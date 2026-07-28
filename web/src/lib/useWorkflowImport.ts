@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/lib/api'
-import { missingSkillProfiles } from '@/lib/workflowIO'
+import { skillProfileIssues } from '@/lib/workflowIO'
 import { readStoredProjectId } from '@/lib/useProjectContext'
 import { useToast } from '@/lib/useToast'
 import type { Workflow } from '@/lib/types'
@@ -64,9 +64,18 @@ export function useWorkflowImport(opts?: {
   async function warnMissingAgents(wf: Workflow) {
     try {
       const agents = await api.listAgents()
-      const missing = missingSkillProfiles(wf.nodes, agents.map((a) => a.name))
-      if (missing.length) {
-        toast.warn(t('pages.workflowIO.import.missingSkillProfiles', { list: missing.join('、') }))
+      const issues = skillProfileIssues(wf.nodes, agents, wf.projectId)
+      if (issues.length) {
+        const list = issues
+          .map((i) => {
+            const short =
+              i.reason === 'missing'
+                ? t('pages.workflowIO.import.issueMissing')
+                : t('pages.workflowIO.import.issueForeign')
+            return `${i.name}（${short}）`
+          })
+          .join('、')
+        toast.warn(t('pages.workflowIO.import.missingSkillProfiles', { list }))
       }
     } catch {
       // non-blocking

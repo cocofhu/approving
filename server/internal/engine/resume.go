@@ -403,6 +403,9 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 	if node == nil || (node.Type != "react" && !isReviewNode(node.Type)) {
 		return errors.New("react node not found")
 	}
+	if err := e.checkSkillProfileProject(c, node); err != nil {
+		return err
+	}
 	// Reply to the LATEST conversation for this node (highest iteration): a
 	// loop-back opens a fresh dialogue per visit; older done ones are history.
 	var conv models.ReactConversation
