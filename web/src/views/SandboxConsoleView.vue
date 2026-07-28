@@ -35,9 +35,11 @@ function initialConsoleTab(): ConsoleTab {
 
 const sandbox = ref<SandboxView | null>(null)
 const tab = ref<ConsoleTab>(initialConsoleTab())
-// Lazily mount noVNC on first open, then keep alive (v-show) so the RFB
-// session survives tab switches — same pattern as the terminal pane.
+// Lazily mount heavy panes on first open, then keep alive (v-show) so
+// sessions survive tab switches — same pattern as the terminal pane.
 const novncMounted = ref(false)
+const ideMounted = ref(false)
+const acpMounted = ref(false)
 
 const tabItems = computed(() => [
   { k: 'terminal', l: t('pages.sandboxConsole.tabs.terminal'), i: 'terminal' },
@@ -177,12 +179,16 @@ function sendResize() {
 
 watch(tab, (t) => {
   if (t === 'terminal') nextTick(() => { initTerminal(); doFit() })
+  if (t === 'ide') ideMounted.value = true
+  if (t === 'acp') acpMounted.value = true
   if (t === 'novnc') novncMounted.value = true
   if (t === 'log') fetchLog()
 })
 
 onMounted(async () => {
   tab.value = initialConsoleTab()
+  if (tab.value === 'ide') ideMounted.value = true
+  if (tab.value === 'acp') acpMounted.value = true
   if (tab.value === 'novnc') novncMounted.value = true
   await loadMeta()
   nextTick(() => {
@@ -250,12 +256,15 @@ onBeforeUnmount(() => {
 
       <div v-show="tab === 'ide'" class="h-full">
         <iframe
-          v-if="sandbox?.hasCodeServer"
+          v-if="ideMounted && sandbox?.hasCodeServer"
           :src="api.sandboxIdeUrl(id)"
           class="h-full w-full border-0 bg-white"
           title="code-server"
         />
-        <div v-else class="flex h-full items-center justify-center px-6 text-center text-sm text-txt3">
+        <div
+          v-else-if="ideMounted"
+          class="flex h-full items-center justify-center px-6 text-center text-sm text-txt3"
+        >
           {{ t('pages.sandboxConsole.ideUnavailable') }}
         </div>
       </div>
@@ -263,12 +272,15 @@ onBeforeUnmount(() => {
       <!-- ACP: in-container acp-bridge web UI (8765); was acp-native -->
       <div v-show="tab === 'acp'" class="h-full">
         <iframe
-          v-if="sandbox?.hasAcp"
+          v-if="acpMounted && sandbox?.hasAcp"
           :src="api.sandboxBridgeUrl(id)"
           class="h-full w-full border-0 bg-white"
           title="ACP bridge"
         />
-        <div v-else class="flex h-full items-center justify-center px-6 text-center text-sm text-txt3">
+        <div
+          v-else-if="acpMounted"
+          class="flex h-full items-center justify-center px-6 text-center text-sm text-txt3"
+        >
           {{ t('pages.sandboxConsole.acpNativeUnavailable') }}
         </div>
       </div>
@@ -293,8 +305,8 @@ onBeforeUnmount(() => {
           <button class="text-txt3 hover:text-txt" :title="t('common.buttons.refresh')" @click="fetchLog"><Icon name="refresh" :size="12" /></button>
         </div>
         <div class="scroll-area min-h-0 flex-1 overflow-auto bg-[#0b0e14] p-3">
-          <pre v-if="log?.content" class="whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed text-txt2">{{ log.content }}</pre>
-          <div v-else class="flex h-full items-center justify-center text-center text-[12px] text-txt3">
+          <pre v-if="log?.content" class="whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed text-[#cdd6f4]">{{ log.content }}</pre>
+          <div v-else class="flex h-full items-center justify-center text-center text-[12px] text-[#cdd6f4]">
             {{ logLoading ? t('common.buttons.loading') : t('pages.sandboxConsole.logEmpty') }}
           </div>
         </div>
