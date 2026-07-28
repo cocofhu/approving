@@ -23,7 +23,9 @@ sandbox-gateway/
 .env
 .github/
 
-# 文档缩小上下文；但 skills_embed 里的 .md 必须进镜像(go:embed)
+# 文档缩小上下文；但 go:embed 依赖的 .md 必须进镜像
 **/*.md
 !server/internal/sandbox/skills_embed/
 !server/internal/sandbox/skills_embed/**/*.md
+!server/internal/services/onboarding_embed/
+!server/internal/services/onboarding_embed/**/*.md
