@@ -629,6 +629,10 @@ type RunPreviewPort struct {
 	// a standalone service that only reads the DB (or a control-plane API).
 	Host         string    `json:"-"`
 	Healthy      bool      `json:"healthy"`
+	// KeepalivePID is the setsid-detached listener pid recorded by KeepalivePort
+	// so Cancel/Abort session cleanup can whitelist it (sandbox Destroy still
+	// reclaims the whole container with the Run/gate lifecycle).
+	KeepalivePID int       `json:"keepalivePid,omitempty"`
 	RegisteredAt time.Time `json:"registeredAt"`
 }
 

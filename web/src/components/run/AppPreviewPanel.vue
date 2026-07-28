@@ -11,8 +11,10 @@ const props = withDefaults(
     nodeId: string
     compact?: boolean
     fill?: boolean
+    /** When false, hide PreviewFeedbackChat (review ReAct is the primary dialogue). */
+    showFeedback?: boolean
   }>(),
-  { compact: false, fill: false },
+  { compact: false, fill: false, showFeedback: true },
 )
 
 const emit = defineEmits<{
@@ -121,7 +123,7 @@ function selectPort(port: number) {
         />
       </div>
       <PreviewFeedbackChat
-        v-if="!compact"
+        v-if="!compact && showFeedback"
         :run-id="runId"
         :node-id="nodeId"
         :port="activePort ?? 0"

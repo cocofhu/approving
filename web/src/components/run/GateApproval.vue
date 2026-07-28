@@ -2182,12 +2182,15 @@ function onComposerReject() {
         <div
           v-else-if="isAppPreview && run"
           :class="shouldFillAppPreview ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-4' : 'p-4'"
+          data-testid="app-preview"
         >
           <AppPreviewPanel
             :run-id="run.id"
             :node-id="gate.nodeId"
             :fill="shouldFillAppPreview"
+            :show-feedback="!canReactRevise"
             @issues-changed="loadPreviewIssues()"
+            @pick="onHtmlPreviewPick"
           />
         </div>
         <ArtifactLoadingPane

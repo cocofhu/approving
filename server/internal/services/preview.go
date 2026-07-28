@@ -48,7 +48,7 @@ func (s *PreviewService) UpsertPreviewPort(rec mcp.PreviewPort) error {
 	row := models.RunPreviewPort{
 		RunID: rec.RunID, NodeID: rec.NodeID, Port: rec.Port, Label: rec.Label,
 		ProxyURL: rec.ProxyURL, SandboxName: rec.SandboxName, Host: rec.Host, Healthy: rec.Healthy,
-		RegisteredAt: rec.RegisteredAt,
+		KeepalivePID: rec.KeepalivePID, RegisteredAt: rec.RegisteredAt,
 	}
 	var existing models.RunPreviewPort
 	err := s.db.Where("run_id = ? AND node_id = ? AND port = ?", rec.RunID, rec.NodeID, rec.Port).First(&existing).Error
@@ -72,7 +72,7 @@ func (s *PreviewService) ListPreviewPorts(runID, nodeID string) ([]mcp.PreviewPo
 		out = append(out, mcp.PreviewPort{
 			RunID: r.RunID, NodeID: r.NodeID, Port: r.Port, Label: r.Label,
 			ProxyURL: r.ProxyURL, SandboxName: r.SandboxName, Host: r.Host, Healthy: r.Healthy,
-			RegisteredAt: r.RegisteredAt,
+			KeepalivePID: r.KeepalivePID, RegisteredAt: r.RegisteredAt,
 		})
 	}
 	return out, nil
@@ -86,7 +86,7 @@ func (s *PreviewService) GetPreviewPort(runID, nodeID string, port int) (*mcp.Pr
 	rec := mcp.PreviewPort{
 		RunID: row.RunID, NodeID: row.NodeID, Port: row.Port, Label: row.Label,
 		ProxyURL: row.ProxyURL, SandboxName: row.SandboxName, Host: row.Host, Healthy: row.Healthy,
-		RegisteredAt: row.RegisteredAt,
+		KeepalivePID: row.KeepalivePID, RegisteredAt: row.RegisteredAt,
 	}
 	return &rec, true
 }
@@ -176,16 +176,6 @@ func (s *PreviewService) ProbeHTTPPort(ctx context.Context, sandboxName string, 
 	// non-2xx through unchanged (only a failed dial becomes 502), so a reachable
 	// server — whatever its status — counts as healthy.
 	return true
-}
-
-// KeepalivePort best-effort re-parents a listening process so it survives ACP session end.
-func (s *PreviewService) KeepalivePort(ctx context.Context, sandboxName string, port int) error {
-	if s.mgr == nil || sandboxName == "" || port <= 0 {
-		return nil
-	}
-	script := fmt.Sprintf(`pid=$(ss -tlnp 2>/dev/null | grep ':%d ' | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -1); if [ -n "$pid" ]; then nohup sh -c "while kill -0 $pid 2>/dev/null; do sleep 30; done" >/dev/null 2>&1 & fi`, port)
-	_, err := s.mgr.ExecScript(ctx, sandboxName, 8*time.Second, "sh", script)
-	return err
 }
 
 // WarmPreviewVNC starts in-sandbox VNC asynchronously after set_preview so the

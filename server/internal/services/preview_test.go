@@ -78,8 +78,8 @@ func TestPreviewServiceNilManagerPaths(t *testing.T) {
 	if svc.ProbeHTTPPort(context.Background(), "x", 80) {
 		t.Fatal("nil mgr probe should be false")
 	}
-	if err := svc.KeepalivePort(context.Background(), "x", 80); err != nil {
-		t.Fatalf("keepalive nil mgr: %v", err)
+	if pid, err := svc.KeepalivePort(context.Background(), "x", 80); err != nil || pid != 0 {
+		t.Fatalf("keepalive nil mgr: pid=%d err=%v", pid, err)
 	}
 	if name, ok := svc.SandboxForRunNode("r", "n"); ok || name != "" {
 		t.Fatalf("no sandbox row: %q ok=%v", name, ok)
@@ -121,7 +121,7 @@ func TestPreviewServiceWithFakeGateway(t *testing.T) {
 	if svc.ProbeHTTPPort(context.Background(), "missing", 3000) {
 		t.Fatal("missing sandbox probe should fail")
 	}
-	if err := svc.KeepalivePort(context.Background(), "sb-prev", 3000); err != nil {
+	if _, err := svc.KeepalivePort(context.Background(), "sb-prev", 3000); err != nil {
 		t.Logf("keepalive (may need exec hook): %v", err)
 	}
 

@@ -21,8 +21,13 @@ type PreviewPort struct {
 	// Host is the resolved upstream base the proxy dials (e.g.
 	// "http://172.17.0.5:9090"), persisted so the proxy needn't re-resolve the
 	// container IP through the sandbox manager on every request.
-	Host         string    `json:"-"`
-	Healthy      bool      `json:"healthy"`
+	Host string `json:"-"`
+	// Healthy is true when ProbeHTTPPort succeeded at registration time.
+	// set_preview only succeeds when Healthy; HasHealthyPreviewPorts gates
+	// production-phase completion / early park into review.
+	Healthy bool `json:"healthy"`
+	// KeepalivePID is the setsid-detached listener pid (0 when unknown).
+	KeepalivePID int       `json:"keepalivePid,omitempty"`
 	RegisteredAt time.Time `json:"registeredAt"`
 }
 
@@ -38,7 +43,9 @@ type PreviewStore interface {
 type PreviewSandboxOps interface {
 	SandboxForRunNode(runID, nodeID string) (name string, ok bool)
 	ProbeHTTPPort(ctx context.Context, sandboxName string, port int) bool
-	KeepalivePort(ctx context.Context, sandboxName string, port int) error
+	// KeepalivePort detaches the listener (setsid + pidfile + log) and returns
+	// the keepalive pid (0 when unknown / no-op).
+	KeepalivePort(ctx context.Context, sandboxName string, port int) (pid int, err error)
 	// PreviewUpstream resolves the reachable base URL (http://host:port) for an
 	// in-sandbox app port via the gateway, so the registration can persist an
 	// upstream host for the proxy to dial.
@@ -69,9 +76,120 @@ func (h *Host) previewProxyURL(runID, nodeID string, port int) string {
 	return fmt.Sprintf("/preview/%s/%s/%d/", runID, nodeID, port)
 }
 
-// HasPreviewPorts reports whether at least one preview port is registered.
+// HasPreviewPorts reports whether at least one healthy preview port is registered.
+// Unreachable registrations do not count (set_preview fails closed on probe).
 func (h *Host) HasPreviewPorts(runID, nodeID string) bool {
-	return len(h.ListPreviewPorts(runID, nodeID)) > 0
+	return h.HasHealthyPreviewPorts(runID, nodeID)
+}
+
+// HasHealthyPreviewPorts reports whether at least one registered port is Healthy.
+func (h *Host) HasHealthyPreviewPorts(runID, nodeID string) bool {
+	for _, p := range h.ListPreviewPorts(runID, nodeID) {
+		if p.Healthy {
+			return true
+		}
+	}
+	return false
+}
+
+// ListPreviewKeepalivePIDs returns setsid-detached preview pids for whitelist
+// during Cancel/Abort session cleanup (sandbox Destroy still reclaims all).
+func (h *Host) ListPreviewKeepalivePIDs(runID, nodeID string) []int {
+	ports := h.ListPreviewPorts(runID, nodeID)
+	out := make([]int, 0, len(ports))
+	seen := map[int]bool{}
+	for _, p := range ports {
+		if p.KeepalivePID > 0 && !seen[p.KeepalivePID] {
+			seen[p.KeepalivePID] = true
+			out = append(out, p.KeepalivePID)
+		}
+	}
+	return out
+}
+
+// IsPreviewKeepalivePID reports whether pid is a registered preview keepalive
+// pid for this run (any node). Used to skip killing preview processes when
+// ending an Agent/ACP session without destroying the sandbox.
+func (h *Host) IsPreviewKeepalivePID(runID string, pid int) bool {
+	if h == nil || pid <= 0 || runID == "" {
+		return false
+	}
+	h.mu.RLock()
+	mem := h.previewMem
+	h.mu.RUnlock()
+	for key, ports := range mem {
+		if !strings.HasPrefix(key, runID+"|") {
+			continue
+		}
+		for _, p := range ports {
+			if p.KeepalivePID == pid {
+				return true
+			}
+		}
+	}
+	// Also check DB-backed ports for this run (best-effort via store list is
+	// per-node; callers with nodeID should use ListPreviewKeepalivePIDs).
+	_ = mem
+	return false
+}
+
+// SignalPreviewReady marks that a healthy set_preview completed for run/node
+// and wakes any WaitPreviewReady / early-finish watchers in the provider.
+func (h *Host) SignalPreviewReady(runID, nodeID string) {
+	if h == nil || runID == "" || nodeID == "" {
+		return
+	}
+	key := previewKey(runID, nodeID)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.previewReady == nil {
+		h.previewReady = map[string]chan struct{}{}
+	}
+	ch, ok := h.previewReady[key]
+	if !ok {
+		ch = make(chan struct{})
+		h.previewReady[key] = ch
+		close(ch)
+		return
+	}
+	select {
+	case <-ch:
+		// already signaled
+	default:
+		close(ch)
+	}
+}
+
+// PreviewReadyChan returns a channel closed when a healthy set_preview lands
+// for this run/node. The channel may already be closed.
+func (h *Host) PreviewReadyChan(runID, nodeID string) <-chan struct{} {
+	key := previewKey(runID, nodeID)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.previewReady == nil {
+		h.previewReady = map[string]chan struct{}{}
+	}
+	ch, ok := h.previewReady[key]
+	if !ok {
+		ch = make(chan struct{})
+		h.previewReady[key] = ch
+	}
+	return ch
+}
+
+// ResetPreviewReady clears the ready signal for a fresh production attempt
+// (e.g. nodeReq / ClearOutcome path). Idempotent.
+func (h *Host) ResetPreviewReady(runID, nodeID string) {
+	if h == nil {
+		return
+	}
+	key := previewKey(runID, nodeID)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.previewReady == nil {
+		return
+	}
+	delete(h.previewReady, key)
 }
 
 // ListPreviewPorts returns all preview ports for a run/node (memory + DB).
@@ -123,24 +241,30 @@ func (h *Host) setPreviewPort(runID, nodeID string, port int, label string) (str
 			sandboxName = name
 		}
 	}
-	healthy := false
+	if ops == nil || sandboxName == "" {
+		return "", fmt.Errorf("无法探测预览端口:沙箱未就绪")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	keepalivePID, err := ops.KeepalivePort(ctx, sandboxName, port)
+	if err != nil {
+		log.Warn().Err(err).Str("run_id", runID).Str("node_id", nodeID).
+			Int("port", port).Msg("preview keepalive failed")
+		return "", fmt.Errorf("预览保活脱钩失败: %w", err)
+	}
+	healthy := ops.ProbeHTTPPort(ctx, sandboxName, port)
+	if !healthy {
+		return "", fmt.Errorf("预览端口 %d 不可达(须监听 0.0.0.0 且服务已启动);修复后可重试 set_preview", port)
+	}
 	host := ""
-	if ops != nil && sandboxName != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		if err := ops.KeepalivePort(ctx, sandboxName, port); err != nil {
-			log.Warn().Err(err).Str("run_id", runID).Str("node_id", nodeID).
-				Int("port", port).Msg("preview keepalive failed")
-		}
-		healthy = ops.ProbeHTTPPort(ctx, sandboxName, port)
-		if base, ok := ops.PreviewUpstream(ctx, sandboxName, port); ok && base != "" {
-			host = base
-		}
-		cancel()
+	if base, ok := ops.PreviewUpstream(ctx, sandboxName, port); ok && base != "" {
+		host = base
 	}
 	proxyURL := h.previewProxyURL(runID, nodeID, port)
 	rec := PreviewPort{
 		RunID: runID, NodeID: nodeID, Port: port, Label: strings.TrimSpace(label),
-		ProxyURL: proxyURL, SandboxName: sandboxName, Host: host, Healthy: healthy, RegisteredAt: time.Now(),
+		ProxyURL: proxyURL, SandboxName: sandboxName, Host: host, Healthy: true,
+		KeepalivePID: keepalivePID, RegisteredAt: time.Now(),
 	}
 	h.mu.Lock()
 	key := previewKey(runID, nodeID)
@@ -170,10 +294,11 @@ func (h *Host) setPreviewPort(runID, nodeID string, port int, label string) (str
 	if warmer, ok := ops.(PreviewVNCWarmer); ok && sandboxName != "" {
 		warmer.WarmPreviewVNC(sandboxName)
 	}
+	h.SignalPreviewReady(runID, nodeID)
 	return proxyURL, nil
 }
 
-// PutPreviewPortForTest seeds a memory-only preview port without sandbox ops.
+// PutPreviewPortForTest seeds a memory-only healthy preview port without sandbox ops.
 // Used by engine unit tests that exercise app_preview pause paths offline.
 func (h *Host) PutPreviewPortForTest(runID, nodeID string, port int, label string) {
 	if h == nil || port <= 0 {
@@ -184,12 +309,13 @@ func (h *Host) PutPreviewPortForTest(runID, nodeID string, port int, label strin
 		ProxyURL: h.previewProxyURL(runID, nodeID, port), Healthy: true, RegisteredAt: time.Now(),
 	}
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	key := previewKey(runID, nodeID)
 	if h.previewMem == nil {
 		h.previewMem = map[string][]PreviewPort{}
 	}
 	h.previewMem[key] = append(h.previewMem[key], rec)
+	h.mu.Unlock()
+	h.SignalPreviewReady(runID, nodeID)
 }
 
 func parsePreviewPort(v any) (int, error) {

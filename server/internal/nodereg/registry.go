@@ -202,7 +202,8 @@ var registry = map[string]Spec{
 	},
 	"app_preview": {
 		Type: "app_preview", Label: "应用预览", Category: "Agent", Exec: ExecAppPreview,
-		Prompt: PromptAppPreview,
+		Prompt:    PromptAppPreview,
+		ReviewVar: defaultReviewVar,
 	},
 }
 
