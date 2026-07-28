@@ -170,7 +170,7 @@ func (e *Engine) loadPendingGate(runID, gateNodeID string) (*execCtx, models.Gat
 		return nil, models.Gate{}, nil, fmt.Errorf("run 状态 %q 不允许编辑产物（需要 waiting_human）", c.run.Status)
 	}
 	node := c.graph.FindNode(gateNodeID)
-	if node == nil || (node.Type != "human_gate" && node.Type != "proposal_select" && node.Type != "app_preview") {
+	if node == nil || (node.Type != "human_gate" && node.Type != "proposal_select") {
 		return nil, models.Gate{}, nil, errors.New("gate node not found")
 	}
 	var gate models.Gate

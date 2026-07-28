@@ -66,26 +66,13 @@ func TestSetAutoRetryMaxInt64Bounds(t *testing.T) {
 	}
 }
 
-func TestDefaultAppPreviewHelpers(t *testing.T) {
-	acts := defaultAppPreviewActions(map[string]any{})
-	if len(acts) != 2 {
-		t.Fatalf("default actions: %+v", acts)
+func TestDefaultAppPreviewHelpersRemoved(t *testing.T) {
+	// app_preview no longer creates Gate actions/form; helpers were retired with
+	// the Gate shell. Keep a compile-time reminder that parseActions still works
+	// for human_gate.
+	acts := parseActions(nil)
+	if len(acts) != 0 {
+		t.Fatalf("empty actions: %+v", acts)
 	}
-	acts = defaultAppPreviewActions(map[string]any{
-		"actions": []any{map[string]any{"id": "ok", "label": "OK"}},
-	})
-	if len(acts) != 1 || acts[0].ID != "ok" {
-		t.Fatalf("custom actions: %+v", acts)
-	}
-	form := defaultAppPreviewForm(map[string]any{})
-	if form == nil {
-		form = []models.GateField{}
-	}
-	_ = form
-	form = defaultAppPreviewForm(map[string]any{
-		"form": []any{map[string]any{"id": "c", "label": "Comment", "type": "textarea"}},
-	})
-	if len(form) != 1 {
-		t.Fatalf("form: %+v", form)
-	}
+	_ = models.GateField{}
 }

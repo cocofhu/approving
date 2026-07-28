@@ -71,7 +71,7 @@ function layoutStructureKey() {
       pos: isInvalidPosition(n.position) ? null : n.position,
       cases: n.type === 'branch' ? (n.config?.cases as { goto?: string }[])?.map((c) => c?.goto) : undefined,
       actions:
-        n.type === 'human_gate' || n.type === 'app_preview'
+        n.type === 'human_gate'
           ? (n.config?.actions as { id?: string; goto?: string }[])?.map((a) => ({ id: a?.id, goto: a?.goto }))
           : undefined,
       exits:
@@ -162,8 +162,8 @@ const flowNodes = computed(() => {
     const position = resolvePosition(n)
     const status = props.statusMap?.[n.id]
     const branches = n.type === 'branch' ? branchHandles(n) : undefined
-    const gateActions =
-      n.type === 'human_gate' || n.type === 'app_preview' ? actionHandles(n) : undefined
+    const gateActions = n.type === 'human_gate' ? actionHandles(n) : undefined
+    const appPreviewReview = n.type === 'app_preview'
     const structuredExits =
       n.type === 'test' || n.type === 'review' ? structuredExitHandles(n) : undefined
     const selected = selectedId === n.id
@@ -176,6 +176,7 @@ const flowNodes = computed(() => {
       draggable: !modeRun,
       branches,
       gateActions,
+      appPreviewReview,
       structuredExits,
     })
     return reuseFlowElement(flowNodeCache, n.id, fingerprint, selected, () => ({
@@ -191,6 +192,7 @@ const flowNodes = computed(() => {
         checkpoint: n.checkpoint,
         branches,
         gateActions,
+        appPreviewReview,
         structuredExits,
       },
     }))
@@ -207,6 +209,14 @@ function isStructuredGateNode(n: WFNode | undefined): n is WFNode {
 
 function whenHasAction(when: string, action: string): boolean {
   return new RegExp(`action\\s*==\\s*["']${action}["']`).test(when)
+}
+
+function whenHasFailAction(when: string): boolean {
+  return (
+    whenHasAction(when, 'fail') ||
+    whenHasAction(when, 'reject') ||
+    whenHasAction(when, 'revise')
+  )
 }
 
 function inferEdgeTone(e: WFEdge, sourceNode: WFNode | undefined): 'ok' | 'err' | 'warn' | 'default' {
@@ -299,7 +309,7 @@ const gateEdges = computed(() => {
   const ids = new Set(props.nodes.map((n) => n.id))
   const out: any[] = []
   for (const n of props.nodes) {
-    if (n.type !== 'human_gate' && n.type !== 'app_preview') continue
+    if (n.type !== 'human_gate') continue
     const actions = (n.config?.actions as any[]) || []
     for (const a of actions) {
       const aid = String(a?.id ?? '')
@@ -384,39 +394,55 @@ const flowEdges = computed(() => {
     const active = !!props.activePath?.includes(e.id)
     const sourceNode = nodeById.get(e.source)
     const isStructuredGate = isStructuredGateNode(sourceNode)
+    const isAppPreview = sourceNode?.type === 'app_preview'
+    // Legacy app_preview fail/reject when-edges stay in the graph for silent
+    // compat but are not drawn (confirm injects action=pass; fail never routes).
+    if (isAppPreview && whenHasFailAction(e.when || '')) {
+      return null
+    }
     const tone = inferEdgeTone(e, sourceNode)
+    // Legacy pass when-edges from app_preview render as the default success exit.
+    const treatAsDefaultSuccess =
+      isAppPreview && (whenHasAction(e.when || '', 'pass') || whenHasAction(e.when || '', 'approve'))
     const stroke = active
       ? '#7B61FF'
       : isStructuredGate && (tone === 'ok' || tone === 'err') && kind === 'success'
         ? strokes[tone as EdgeTone]
-        : kind === 'failure'
-          ? strokes.err
-          : kind === 'rollback'
-            ? strokes.warn
-            : undefined
+        : treatAsDefaultSuccess
+          ? strokes.ok
+          : kind === 'failure'
+            ? strokes.err
+            : kind === 'rollback'
+              ? strokes.warn
+              : undefined
     const selected = selectedEdge === e.id
     const fingerprint = flowFingerprint({
       source: e.source,
       target: e.target,
       kind,
-      label: e.label,
+      label: treatAsDefaultSuccess ? '' : e.label,
       carry: e.carry,
-      tone,
+      tone: treatAsDefaultSuccess ? 'ok' : tone,
       active,
       stroke,
       strokeWidth: kind !== 'success' ? 1.6 : undefined,
       dash: kind === 'rollback' ? '6 4' : undefined,
-      edgeType: e.label || kind !== 'success' ? 'condition' : 'default',
+      edgeType: treatAsDefaultSuccess ? 'default' : e.label || kind !== 'success' ? 'condition' : 'default',
       animated: active || kind === 'rollback',
     })
     return reuseFlowElement(flowEdgeCache, e.id, fingerprint, selected, () => ({
       id: e.id,
       source: e.source,
       target: e.target,
-      type: e.label || kind !== 'success' ? 'condition' : 'default',
+      type: treatAsDefaultSuccess ? 'default' : e.label || kind !== 'success' ? 'condition' : 'default',
       animated: !!active || kind === 'rollback',
       selected,
-      data: { label: e.label, tone, kind, carry: e.carry },
+      data: {
+        label: treatAsDefaultSuccess ? undefined : e.label,
+        tone: treatAsDefaultSuccess ? 'ok' : tone,
+        kind,
+        carry: e.carry,
+      },
       markerEnd: MarkerType.ArrowClosed,
       style: {
         stroke,
@@ -424,7 +450,7 @@ const flowEdges = computed(() => {
         strokeDasharray: kind === 'rollback' ? '6 4' : undefined,
       },
     }))
-  })
+  }).filter(Boolean) as FlowEdgeObj[]
   // Derived edges (branch/gate/structured) are rebuild-cheap and not selection-driven;
   // keep them as-is. Only real edges participate in selected-edge identity reuse.
   const derived = [...branchEdges.value, ...gateEdges.value, ...structuredGateEdges.value]

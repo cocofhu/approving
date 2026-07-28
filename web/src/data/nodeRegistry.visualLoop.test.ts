@@ -41,4 +41,14 @@ describe('visual HtmlPreview Issue loop defaults (g4)', () => {
       { key: 'comment', label: '评审意见', required: false },
     ])
   })
+
+  it('app_preview hides gate fields and has no default actions', () => {
+    const fieldKeys = (NODE_DEFS.app_preview.fields || []).map((f) => f.key)
+    expect(fieldKeys).not.toContain('actions')
+    expect(fieldKeys).not.toContain('output_var')
+    expect(fieldKeys).not.toContain('form')
+    const defaults = NODE_DEFS.app_preview.defaults as Record<string, unknown>
+    expect(defaults.actions).toBeUndefined()
+    expect(defaults.output_var).toBeUndefined()
+  })
 })

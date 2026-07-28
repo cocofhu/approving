@@ -1047,6 +1047,21 @@ func (e *Engine) execute(runID, fromNodeID string) {
 	}
 }
 
+// whenLooksLikeFailAction reports whether an edge when-guard is a fail/reject
+// action match (used to keep app_preview firstSuccess fallback off fail edges).
+func whenLooksLikeFailAction(when string) bool {
+	when = strings.TrimSpace(when)
+	if when == "" {
+		return false
+	}
+	for _, id := range []string{"fail", "reject", "revise"} {
+		if strings.Contains(when, "action") && (strings.Contains(when, "'"+id+"'") || strings.Contains(when, `"`+id+`"`)) {
+			return true
+		}
+	}
+	return false
+}
+
 // routeSuccess selects the next state after a node succeeds.
 func (e *Engine) routeSuccess(c *execCtx, node *models.Node, outcome nodeOutcome) string {
 	if e.IsHalted() {
@@ -1080,7 +1095,13 @@ func (e *Engine) routeSuccess(c *execCtx, node *models.Node, outcome nodeOutcome
 	for i := range edges {
 		ed := edges[i]
 		if ed.KindOrDefault() == models.EdgeSuccess && firstSuccess == nil {
-			firstSuccess = &edges[i]
+			// app_preview: never fall back onto a fail/reject when-edge — confirm
+			// injects action=pass; leftover fail edges must stay inert.
+			if node.Type == "app_preview" && whenLooksLikeFailAction(ed.When) {
+				// skip as firstSuccess candidate
+			} else {
+				firstSuccess = &edges[i]
+			}
 		}
 		if !guardPasses(ed.When, ec) {
 			continue
@@ -1278,7 +1299,7 @@ func (e *Engine) runStatus(runID string) string {
 // pause unwind, the waiting_human transition must not apply.
 func (e *Engine) pauseStillPending(runID string, node *models.Node) bool {
 	switch node.Type {
-	case "human_gate", "app_preview", "proposal_select":
+	case "human_gate", "proposal_select":
 		var gate models.Gate
 		if err := e.db.Where("run_id = ? AND node_id = ?", runID, node.ID).
 			Order("iteration desc, id desc").First(&gate).Error; err != nil {
@@ -1294,7 +1315,7 @@ func (e *Engine) pauseStillPending(runID string, node *models.Node) bool {
 		return !conv.Done
 	default:
 		// A review-capable producer paused in its post-run ReAct review phase
-		// is pending until its review conversation is done.
+		// is pending until its review conversation is done (includes app_preview).
 		if isReviewNode(node.Type) {
 			var conv models.ReactConversation
 			if err := e.db.Where("run_id = ? AND node_id = ?", runID, node.ID).

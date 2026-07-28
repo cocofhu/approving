@@ -19,6 +19,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'pick', payload: { selector: string; tagName: string; outerHTML: string }): void
+  (e: 'staged-pick', payload: { selector: string; tagName: string; outerHTML: string } | null): void
   (e: 'issues-changed'): void
 }>()
 
@@ -38,6 +39,11 @@ function isApiPort(p: PreviewPort): boolean {
 function onPick(payload: { selector: string; tagName: string; outerHTML: string }) {
   pickedSelector.value = payload.selector
   emit('pick', payload)
+}
+
+function onStagedPick(payload: { selector: string; tagName: string; outerHTML: string } | null) {
+  if (payload) pickedSelector.value = payload.selector
+  emit('staged-pick', payload)
 }
 
 async function loadPorts() {
@@ -115,6 +121,7 @@ function selectPort(port: number) {
             fill
             :compact="compact"
             @pick="onPick"
+            @staged-pick="onStagedPick"
           />
         </keep-alive>
         <iframe

@@ -845,24 +845,10 @@ func (e *Engine) autoAdvanceReact(c *execCtx, node *models.Node, conv *models.Re
 	return t
 }
 
-func defaultAppPreviewActions(cfg map[string]any) []models.GateAction {
-	actions := parseActions(cfg["actions"])
-	if len(actions) > 0 {
-		return actions
-	}
-	return []models.GateAction{{ID: "pass", Label: "通过"}, {ID: "fail", Label: "退回"}}
-}
-
-func defaultAppPreviewForm(cfg map[string]any) []models.GateField {
-	// No default review form: problems are captured through the preview feedback
-	// chat (persisted as issues) instead of a gate comment field. An explicitly
-	// configured form is still honored.
-	return parseForm(cfg["form"])
-}
-
 // execAppPreview runs an agent to build/start the app and register preview ports.
-// A healthy set_preview ends the production phase (no node_complete required),
-// parks the session for ReAct review, and pauses on a Gate shell for pass/fail.
+// A healthy set_preview ends the production phase (no node_complete required) and
+// enters pure ReAct review (no Gate / Inbox row). Confirm finishes via
+// finalizeAppPreview + routeSuccess with an internal action=pass for legacy edges.
 func (e *Engine) execAppPreview(c *execCtx, node *models.Node) nodeOutcome {
 	req := e.nodeReq(c, node)
 	e.host.ResetPreviewReady(c.run.ID, node.ID)
@@ -899,22 +885,13 @@ func (e *Engine) execAppPreview(c *execCtx, node *models.Node) nodeOutcome {
 				outputs: res.Outputs, events: res.Events, usage: res.Usage}
 		}
 	}
+	// Idempotent re-entry: if this visit's review conversation already concluded,
+	// treat the node as completed (e.g. late RunAgent after confirm).
 	iter := c.iter[node.ID]
-	var gate models.Gate
-	gerr := e.db.Where("run_id = ? AND node_id = ? AND iteration = ?", c.run.ID, node.ID, iter).First(&gate).Error
-	if gerr == nil && gate.Resolved {
-		return nodeOutcome{status: "completed", outputMd: "预览审批已完成",
-			outputs: map[string]any{"resolved": true}, events: res.Events, usage: res.Usage}
-	}
-	if gerr != nil {
-		title := firstNonEmptyStr(str(node.Config["title"]), firstNonEmptyStr(node.Label, "应用预览"))
-		gate = models.Gate{RunID: c.run.ID, NodeID: node.ID, Iteration: iter, WorkflowID: c.run.WorkflowID, WorkflowName: c.run.WorkflowName,
-			Title:       title,
-			BodyMd:      "",
-			Actions:     defaultAppPreviewActions(node.Config),
-			Form:        defaultAppPreviewForm(node.Config),
-			RequestedAt: time.Now()}
-		logDB(e.db.Create(&gate), c.run.ID, "create app_preview gate")
+	var conv models.ReactConversation
+	if err := e.db.Where("run_id = ? AND node_id = ? AND iteration = ?", c.run.ID, node.ID, iter).First(&conv).Error; err == nil && conv.Done {
+		return nodeOutcome{status: "completed", outputMd: "预览复审已完成",
+			outputs: map[string]any{"resolved": true, "preview_ready": true}, events: res.Events, usage: res.Usage}
 	}
 	paused := nodeOutcome{status: "paused", outputMd: "等待人工预览复审…", events: res.Events, outputs: res.Outputs, usage: res.Usage}
 	return e.enterReview(c, node, paused)

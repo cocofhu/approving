@@ -32,8 +32,8 @@ func reviewVarName(node *models.Node) string {
 //	DEFINED and FALSY  ⇒ skip
 //	DEFINED and TRUTHY ⇒ enter interactive review
 //
-// app_preview always enters review after a healthy set_preview (product gate is
-// the waiting_human shell; main interaction is parked ReAct + VNC).
+// app_preview always enters review after a healthy set_preview (pure ReAct
+// waiting_human; no Gate shell — main interaction is parked ReAct + VNC).
 // A node type with no review variable is never review-capable.
 func (e *Engine) reviewEnabled(c *execCtx, node *models.Node) bool {
 	if node != nil && node.Type == "app_preview" {
@@ -116,13 +116,13 @@ func (e *Engine) nodeProducesArtifact(node *models.Node, name string) bool {
 // approval gate reviews (and whose parked session a ReAct reject edits):
 //   - human_gate: the primary upstream node bound by its body template.
 //   - proposal_select: the node that wrote the upstream proposals.json.
-//   - app_preview: itself (its own parked session).
+//
+// app_preview no longer creates a Gate; its parked session is finished via
+// reviewReply (force) rather than GateReactRevise / GateReactInfo.
 //
 // Returns "" when it cannot be resolved.
 func (e *Engine) gateProducerNodeID(c *execCtx, gate *models.Node) string {
 	switch gate.Type {
-	case "app_preview":
-		return gate.ID
 	case "human_gate":
 		return gatenode.GatePrimaryUpstreamNodeID(gate)
 	case "proposal_select":
@@ -190,7 +190,7 @@ func (e *Engine) reviewSummaryMarkdown(c *execCtx, node *models.Node) string {
 		case node.Type == "visual":
 			body = "已生成可视化网页 " + visualPageName + "。请在预览中取点标注要调整的元素,或直接描述修改点。"
 		case node.Type == "app_preview":
-			body = "应用预览已就绪(set_preview 可达)。请在 VNC 预览中取点标注,或直接对话说明要改哪里;通过/退回在复审与门禁内完成。结束/Cancel 会话不会拆掉预览服务。"
+			body = "应用预览已就绪(set_preview 可达)。请先开启「取点标注」再点选问题元素,或直接对话说明要改哪里;确认无误后点「确认并流转」。结束/Cancel 会话不会拆掉预览服务。"
 		case spec.Render != nodereg.RenderNone:
 			if render := nodereg.Renderer(spec.Render); render != nil {
 				if s, ok := e.store.Get(c.run.ID, spec.ArtifactName); ok {
@@ -268,24 +268,6 @@ func (e *Engine) reviewReply(c *execCtx, node *models.Node, conv *models.ReactCo
 		rp.RetireSession(runID, nodeID)
 	}
 
-	// app_preview: Gate 承载完结语义。复审「确认并流转」≡ 门禁通过。
-	if node.Type == "app_preview" {
-		outcome := e.finalizeAppPreview(c, node, runtime.NodeResult{})
-		if outcome.status == "failed" {
-			e.host.SetActiveReview(runID, true)
-			e.broker.Publish(runID, jsonMsg("react", runID, nodeID))
-			errMsg := strings.TrimSpace(outcome.err)
-			if errMsg == "" {
-				errMsg = "复审确认校验失败"
-			}
-			return errors.New(errMsg)
-		}
-		conv.Done = true
-		logDB(e.db.Save(conv), runID, "finish app_preview review conversation")
-		e.host.SetActiveReview(runID, false)
-		return e.ResumeGateAs(runID, nodeID, "pass", nil, "")
-	}
-
 	outcome := e.finalizeProduct(c, node, runtime.NodeResult{})
 	outcome = e.afterDefaultChecks(c, node, outcome)
 	if outcome.status == "failed" {
@@ -301,6 +283,25 @@ func (e *Engine) reviewReply(c *execCtx, node *models.Node, conv *models.ReactCo
 		return errors.New(errMsg)
 	}
 
+	// app_preview: inject action=pass so legacy when/action edges still match;
+	// fail edges see no fail action and do not route. Always clear preview_issues.
+	if node.Type == "app_preview" {
+		if outcome.outputs == nil {
+			outcome.outputs = map[string]any{}
+		}
+		outcome.outputs["action"] = "pass"
+		outVar := firstNonEmptyStr(str(node.Config["output_var"]), "action")
+		outcome.outputs[outVar] = "pass"
+		c.setVar(outVar, "pass")
+		e.persistVar(runID, outVar, "pass")
+		e.forceClearPreviewIssueVars(c, runID)
+		if lifeErr := e.markPreviewIssuesResolvedByNode(runID, nodeID); lifeErr != nil {
+			e.host.SetActiveReview(runID, true)
+			e.broker.Publish(runID, jsonMsg("react", runID, nodeID))
+			return lifeErr
+		}
+	}
+
 	conv.Done = true
 	logDB(e.db.Save(conv), runID, "finish review conversation")
 	e.host.SetActiveReview(runID, false)
@@ -309,7 +310,11 @@ func (e *Engine) reviewReply(c *execCtx, node *models.Node, conv *models.ReactCo
 	}
 
 	e.saveState(c, node, outcome)
-	e.appendTrace(c, models.TraceEntry{NodeID: nodeID, Event: "resume", Detail: "复审完成"})
+	detail := "复审完成"
+	if node.Type == "app_preview" {
+		detail = "复审完成 action=pass"
+	}
+	e.appendTrace(c, models.TraceEntry{NodeID: nodeID, Event: "resume", Detail: detail})
 	c.nodeOutputs[nodeID] = outcome.outputs
 	e.appendTrace(c, models.TraceEntry{NodeID: nodeID, Event: "exit"})
 	next := e.routeSuccess(c, node, outcome)

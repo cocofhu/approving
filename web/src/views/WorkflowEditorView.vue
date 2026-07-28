@@ -268,11 +268,22 @@ function onConnect({ source, target, sourceHandle }: { source: string; target: s
     if (cases[idx]) cases[idx].goto = target
     return
   }
-  // A connection dragged from a human_gate action handle (`action-<id>`) is
-  // stored as that action's `goto` (branch-style routing), not a real edge.
+  // A connection dragged from a human_gate / structured-exit action handle
+  // (`action-<id>`) is stored as that action's `goto` (branch-style routing),
+  // not a real edge. app_preview no longer exposes action handles.
   const am = sourceHandle?.match(/^action-(.+)$/)
   if (am) {
     const node = wf.nodes.find((n) => n.id === source)
+    if (node?.type === 'app_preview') {
+      // Fold into a normal success edge (single-exit semantics).
+      if (hasUnconditionalSuccessEdge(source)) {
+        errorMsg.value = t('pages.workflowEditor.duplicateSuccessEdge')
+        return
+      }
+      const id = `e_${Math.random().toString(36).slice(2, 7)}`
+      wf.edges.push({ id, source, target, kind: 'success' })
+      return
+    }
     if (node?.type === 'test' || node?.type === 'review') {
       if (!node.config.exits) node.config.exits = { pass: { goto: '' }, fail: { goto: '' } }
       const exit = am[1]
@@ -281,6 +292,7 @@ function onConnect({ source, target, sourceHandle }: { source: string; target: s
       }
       return
     }
+    if (node?.type !== 'human_gate') return
     const actions = (node?.config?.actions as any[]) || []
     const act = actions.find((a) => String(a?.id ?? '') === am[1])
     if (act) act.goto = target

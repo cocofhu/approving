@@ -496,7 +496,7 @@
     },
     "app_preview": {
       "label": "App preview",
-      "desc": "Start app in sandbox, register preview via set_preview, human iframe review",
+      "desc": "Start app in sandbox via set_preview; wait state is pick-annotate · ReAct review (single exit)",
       "fields": {
         "skill_profile": {
           "label": "Agent profile"
@@ -516,32 +516,22 @@
           "label": "Conditional prompt"
         },
         "title": {
-          "label": "Gate title",
+          "label": "Title",
           "placeholder": "App preview"
-        },
-        "actions": {
-          "label": "Actions (pass/fail)"
-        },
-        "output_var": {
-          "label": "Output variable",
-          "placeholder": "action"
-        },
-        "form": {
-          "label": "Form fields"
         }
       },
       "outputs": {
         "action": {
-          "desc": "Selected action id (pass/fail)"
+          "desc": "Internal pass injected on confirm (legacy when-edge compat; no canvas action branches)"
         },
         "preview_issues": {
-          "desc": "Snapshot of issues users reported in the preview (with screenshots); reference via {'{{vars.preview_issues}}'} in downstream nodes"
+          "desc": "In-session review issues; cleared on confirm — not snapshotted via fail edges"
         },
-        "reviewer_id": {
-          "desc": "Reviewer"
+        "preview_ready": {
+          "desc": "true when set_preview is healthy"
         }
       },
-      "help": "### App preview (app_preview)\n\nAgent builds/starts the app in sandbox and calls `set_preview(port, label?)`. After at least one successful registration the node enters waiting_human; reviewers approve in noVNC remote desktop (pass/fail ACTION exits, not test auto PASS/FAIL).\n\n**The app must listen on `0.0.0.0:<port>`** (not just 127.0.0.1): the preview is reverse-proxied via the container's bridge IP, so a loopback-only bind is unreachable and the preview goes blank (502).\n\nThe frontend tab uses noVNC (auto-connect); the API tab uses iframe quick preview."
+      "help": "### App preview (app_preview)\n\nAgent builds/starts the app in sandbox and calls `set_preview(port, label?)`. After at least one successful registration the node enters pure ReAct review (no Gate). In noVNC: pick annotate → add to chat → ReAct in-session edits, then Confirm to advance on a single success exit.\n\n**The app must listen on `0.0.0.0:<port>`** (not just 127.0.0.1): the preview is reverse-proxied via the container's bridge IP, so a loopback-only bind is unreachable and the preview goes blank (502).\n\nCanvas has no pass/fail action handles; legacy pass/fail edges are silently compatible (confirm injects action=pass)."
     },
     "branch": {
       "label": "Branch",
