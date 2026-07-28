@@ -5,8 +5,10 @@ import Icon from '../ui/Icon.vue'
 import ClarifyDemoFrame from './ClarifyDemoFrame.vue'
 import { renderMarkdown } from '@/lib/markdown'
 import { createStreamMarkdownPreview } from '@/lib/streamMarkdownPreview'
+import { createStreamTextReveal } from '@/lib/streamTextReveal'
 import { mergePersistedAndLiveTurns } from '@/lib/mergeClarifyLiveTurns'
 import { relTime } from '@/lib/format'
+import ThoughtSummaryStatus from './ThoughtSummaryStatus.vue'
 import {
   demoGridColsClass,
   demoOptionsOf,
@@ -107,6 +109,26 @@ const unsubThought = thoughtPreview.subscribe((text) => {
   liveThoughtText.value = text
 })
 /**
+ * Smooth catch-up reveal (Demo) → then markdown/text coalesce.
+ * Vitest uses sync so existing mid-stream assertions stay stable.
+ */
+const syncReveal = Boolean(import.meta.env.VITEST)
+const messageReveal = createStreamTextReveal({
+  sync: syncReveal,
+  onReveal: (text) => {
+    streamPreview.setText(text)
+    // Vitest: flush markdown coalesce so mid-stream assertions see text without waiting rAF.
+    if (syncReveal) streamPreview.flush()
+  },
+})
+const thoughtReveal = createStreamTextReveal({
+  sync: syncReveal,
+  onReveal: (text) => {
+    thoughtPreview.setText(text)
+    if (syncReveal) thoughtPreview.flush()
+  },
+})
+/**
  * Manual thought expand/collapse overrides (index → open).
  * Default: open while thought-only streaming; collapsed once message starts / done.
  */
@@ -200,6 +222,8 @@ const pending = ref<{ text: string; images: ClarifyImage[]; annotations: ReactAn
 onBeforeUnmount(() => {
   unsubStream()
   unsubThought()
+  messageReveal.reset()
+  thoughtReveal.reset()
   streamPreview.reset()
   thoughtPreview.reset()
 })
@@ -341,7 +365,10 @@ watch(
     if (liveTurns.value.length && !liveTurns.value.some((t) => t.streaming)) {
       liveTurns.value = []
       liveAgentIdx.value = -1
+      messageReveal.reset()
+      thoughtReveal.reset()
       streamPreview.reset()
+      thoughtPreview.reset()
       if (queued.value.length === 0) thinking.value = false
     }
     const qIdx = latestQuestionTurnIndex(turnList)
@@ -686,7 +713,10 @@ function cancelReview() {
     }
   }
   liveAgentIdx.value = -1
+  messageReveal.reset()
+  thoughtReveal.reset()
   streamPreview.reset()
+  thoughtPreview.reset()
   thinking.value = queued.value.length > 0
   emit('cancel')
   void scrollBottom()
@@ -771,6 +801,8 @@ function applyQueueState(
     ]
     liveAgentIdx.value = 1
     thoughtOpenOverride.value = {}
+    messageReveal.reset()
+    thoughtReveal.reset()
     streamPreview.reset()
     thoughtPreview.reset()
   }
@@ -841,6 +873,8 @@ function applyReviewFrame(frame: {
           streaming: true,
         }) - 1
       thoughtOpenOverride.value = {}
+      messageReveal.reset()
+      thoughtReveal.reset()
       streamPreview.reset()
       thoughtPreview.reset()
       thinking.value = true
@@ -852,6 +886,9 @@ function applyReviewFrame(frame: {
         agent.streaming = false
         agent.at = new Date().toISOString()
         if (frame.interrupted) agent.interrupted = true
+        // Reveal flush before markdown flush (plan g1.2).
+        messageReveal.flush()
+        thoughtReveal.flush()
         streamPreview.flush()
         thoughtPreview.flush()
       }
@@ -866,6 +903,8 @@ function applyReviewFrame(frame: {
           liveTurns.value[liveAgentIdx.value].text || frame.message || 'error'
         liveTurns.value[liveAgentIdx.value].at = new Date().toISOString()
         if (frame.interrupted) liveTurns.value[liveAgentIdx.value].interrupted = true
+        messageReveal.flush()
+        thoughtReveal.flush()
         streamPreview.flush()
         thoughtPreview.flush()
       }
@@ -901,8 +940,9 @@ function applyAcpEvents(events: AcpEvent[] | undefined, nodeId?: string) {
   // Keep thought / message on separate rails — never msg||thought overwrite.
   agent.thought = thought
   agent.text = msg
-  streamPreview.setText(msg)
-  thoughtPreview.setText(thought)
+  // Authority → reveal → markdown/text coalesce (not absolute snapshot → DOM).
+  messageReveal.setTarget(msg)
+  thoughtReveal.setTarget(thought)
   // Stick-gated only — never force-drag while user scrolled up.
   void scrollBottom()
 }
@@ -912,9 +952,9 @@ function agentHasMessage(t: ClarifyTurn): boolean {
   return !!(t.text || (t.streaming && liveStreamHtml.value))
 }
 
-/** Display thought (coalesced while this live agent is streaming). */
+/** Display thought (revealed while this live agent is streaming). */
 function agentThoughtDisplay(t: ClarifyTurn, idx: number): string {
-  if (t.streaming && idx === liveAgentIdx.value && liveThoughtText.value) {
+  if (t.streaming && idx === liveAgentIdx.value) {
     return liveThoughtText.value
   }
   return t.thought || ''
@@ -1051,9 +1091,15 @@ defineExpose({
               :open="isThoughtOpen(i, t)"
               @toggle="onThoughtToggle(i, $event)"
             >
-              <summary class="flex cursor-pointer select-none items-center gap-1.5 px-2.5 py-1.5 text-txt3 hover:text-txt2">
-                <Icon name="sparkles" :size="11" class="text-accent-2" />
-                {{ translate('pages.clarify.thought') }}
+              <summary
+                class="flex cursor-pointer select-none items-center gap-1.5 px-2.5 py-1.5 text-txt3 hover:text-txt2"
+                data-testid="clarify-thought-summary"
+              >
+                <ThoughtSummaryStatus
+                  :busy="!!t.streaming"
+                  :completed="showTurnCompleted(t)"
+                  :interrupted="!!t.interrupted"
+                />
               </summary>
               <div class="whitespace-pre-wrap border-t border-dashed border-line px-2.5 pb-2 pt-1.5 font-mono leading-5">{{ agentThoughtDisplay(t, i) }}</div>
             </details>
@@ -1064,7 +1110,7 @@ defineExpose({
               data-testid="clarify-agent-message"
             >
               <span
-                v-html="t.streaming && liveStreamHtml ? liveStreamHtml : renderMarkdown(t.text)"
+                v-html="t.streaming ? liveStreamHtml : renderMarkdown(t.text)"
               /><span
                 v-if="t.streaming"
                 class="clarify-stream-caret"
@@ -1507,6 +1553,20 @@ defineExpose({
 @keyframes clarify-caret-blink {
   50% {
     opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .typing-dots i,
+  .clarify-outputting,
+  .clarify-stream-caret {
+    animation: none !important;
+  }
+  .clarify-outputting {
+    color: rgb(var(--c-accent-2));
+    background: none;
+    -webkit-background-clip: unset;
+    background-clip: unset;
+    -webkit-text-fill-color: unset;
   }
 }
 </style>
