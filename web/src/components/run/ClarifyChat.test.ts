@@ -1,11 +1,20 @@
 // @vitest-environment happy-dom
 import { createI18n } from 'vue-i18n'
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
+import { i18n } from '@/lib/i18n'
+import { loadLocaleMessages } from '@/lib/loadLocaleMessages'
 import type { ClarifyTurn, ReactAnnotation } from '@/lib/types'
 import ClarifyChat from './ClarifyChat.vue'
+
+beforeAll(async () => {
+  // relTime() reads global i18n; load zh-CN so completion footer shows「刚刚」
+  const zh = await loadLocaleMessages('zh-CN')
+  i18n.global.setLocaleMessage('zh-CN', zh)
+  i18n.global.locale.value = 'zh-CN'
+})
 
 function mountChat(opts: {
   turns?: ClarifyTurn[]
@@ -751,8 +760,50 @@ describe('ClarifyChat', () => {
       expect(wrapper.find('[data-testid="clarify-stream-caret"]').exists()).toBe(false)
       expect(wrapper.find('[data-testid="clarify-thought"]').text()).toContain('思考内容')
       expect(wrapper.find('[data-testid="clarify-agent-message"]').text()).toContain('正文内容')
-      expect(wrapper.find('[data-testid="clarify-turn-completed"]').exists()).toBe(true)
-      expect(wrapper.find('[data-testid="clarify-turn-completed"]').text()).toContain('已完成')
+      const completed = wrapper.find('[data-testid="clarify-turn-completed"]')
+      expect(completed.exists()).toBe(true)
+      expect(completed.text()).toContain('已完成')
+      // keep_footer_hide_bottom: footer keeps one relTime; completed agent has no bottom time row
+      expect(completed.text()).toContain('刚刚')
+      expect(completed.text().match(/刚刚/g)?.length).toBe(1)
+      // human turn still has bottom time; completed agent turn must not
+      expect(wrapper.findAll('[data-testid="clarify-turn-bottom-time"]').length).toBe(1)
+      wrapper.unmount()
+    })
+
+    it('historical completed turn keeps single relTime channel (no bottom time)', () => {
+      const wrapper = mountChat({
+        turns: [{ role: 'agent', text: '历史已完成正文', at: new Date().toISOString() }],
+      })
+      const completed = wrapper.find('[data-testid="clarify-turn-completed"]')
+      expect(completed.exists()).toBe(true)
+      expect(completed.text()).toContain('已完成')
+      expect(completed.text()).toContain('刚刚')
+      expect(completed.text().match(/刚刚/g)?.length).toBe(1)
+      expect(wrapper.find('[data-testid="clarify-turn-bottom-time"]').exists()).toBe(false)
+      expect(wrapper.text().match(/刚刚/g)?.length).toBe(1)
+      wrapper.unmount()
+    })
+
+    it('streaming agent keeps bottom time without 已完成 footnote', async () => {
+      const wrapper = mountChat({ draft: '请复审' })
+      await clickSend(wrapper)
+      const vm = wrapper.vm as unknown as {
+        applyReviewFrame: (f: Record<string, unknown>) => void
+        applyAcpEvents: (e: { kind: string; text: string }[], nodeId?: string) => void
+      }
+      vm.applyReviewFrame({
+        event: 'turn_begin',
+        nodeId: 'react-1',
+        item: { text: '请复审' },
+      })
+      vm.applyAcpEvents([{ kind: 'message', text: '流式中正文' }], 'react-1')
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="clarify-turn-completed"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="clarify-stream-caret"]').exists()).toBe(true)
+      // human + streaming agent both keep bottom time channel
+      expect(wrapper.findAll('[data-testid="clarify-turn-bottom-time"]').length).toBe(2)
       wrapper.unmount()
     })
 
@@ -772,6 +823,9 @@ describe('ClarifyChat', () => {
       vm.applyReviewFrame({ event: 'turn_done', nodeId: 'react-1', interrupted: true })
       await flushPromises()
       expect(wrapper.find('[data-testid="clarify-turn-completed"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="clarify-interrupted"]').exists()).toBe(true)
+      // interrupted is non-completed: keep bottom time (human + interrupted agent)
+      expect(wrapper.findAll('[data-testid="clarify-turn-bottom-time"]').length).toBe(2)
       wrapper.unmount()
     })
 
