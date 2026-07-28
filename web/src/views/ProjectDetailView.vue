@@ -1021,7 +1021,7 @@ onUnmounted(() => {
                       :disabled="savingNotifyWfId === w.id"
                       @change="toggleWorkflowNotifyEvent(w, 'waiting_human')"
                     />
-                    <code class="font-mono">waiting_human</code>
+                    <span>{{ t('pages.projectDetail.notify.segWaitingHuman') }}</span>
                   </label>
                   <label class="inline-flex items-center gap-1">
                     <input
@@ -1031,7 +1031,7 @@ onUnmounted(() => {
                       :disabled="savingNotifyWfId === w.id"
                       @change="toggleWorkflowNotifyEvent(w, 'failed')"
                     />
-                    <code class="font-mono">failed</code>
+                    <span>{{ t('pages.projectDetail.notify.segFailed') }}</span>
                   </label>
                 </div>
               </div>
@@ -1179,7 +1179,7 @@ onUnmounted(() => {
                           :disabled="savingNotifyWfId === w.id"
                           @change="toggleWorkflowNotifyEvent(w, 'waiting_human')"
                         />
-                        <code class="font-mono">waiting_human</code>
+                        <span>{{ t('pages.projectDetail.notify.segWaitingHuman') }}</span>
                       </label>
                       <label class="inline-flex items-center gap-1">
                         <input
@@ -1189,7 +1189,7 @@ onUnmounted(() => {
                           :disabled="savingNotifyWfId === w.id"
                           @change="toggleWorkflowNotifyEvent(w, 'failed')"
                         />
-                        <code class="font-mono">failed</code>
+                        <span>{{ t('pages.projectDetail.notify.segFailed') }}</span>
                       </label>
                     </div>
                   </td>
