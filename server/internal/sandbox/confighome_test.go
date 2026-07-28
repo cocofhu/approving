@@ -69,6 +69,53 @@ func TestBuildConfigHome(t *testing.T) {
 	if len(doc.MCPServers) != 2 {
 		t.Errorf("mcp servers = %d, want 2", len(doc.MCPServers))
 	}
+	// HTTP MCP entries must carry type:http (Claude Code / CodeBuddy skip url-only).
+	for name, raw := range doc.MCPServers {
+		var entry map[string]any
+		if err := json.Unmarshal(raw, &entry); err != nil {
+			t.Fatalf("server %s: %v", name, err)
+		}
+		if _, hasURL := entry["url"]; !hasURL {
+			continue
+		}
+		if entry["type"] != "http" {
+			t.Errorf("server %s: type=%v, want http (url-only is skipped by codebuddy)", name, entry["type"])
+		}
+	}
+}
+
+func TestBuildConfigHomeHTTPTypeRequired(t *testing.T) {
+	HomeBaseDir = ""
+	dir, err := BuildConfigHome(ConfigHomeSpec{
+		MCP: []MCPServerSpec{{
+			Name: "artifact-store",
+			URL:  "http://host.docker.internal:8080/mcp/runs/r1",
+			Headers: map[string]string{
+				"Authorization": "Bearer tok",
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("BuildConfigHome: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	b, err := os.ReadFile(filepath.Join(dir, "mcp.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		MCPServers map[string]map[string]any `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(b, &doc); err != nil {
+		t.Fatal(err)
+	}
+	got := doc.MCPServers["artifact-store"]
+	if got["type"] != "http" {
+		t.Fatalf("mcp.json missing type:http: %s", b)
+	}
+	if got["url"] == nil || got["headers"] == nil {
+		t.Fatalf("mcp.json incomplete: %s", b)
+	}
 }
 
 func TestBuildConfigHomeMinimal(t *testing.T) {

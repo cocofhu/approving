@@ -123,6 +123,9 @@ func TestMcpServersFromAgentConfig(t *testing.T) {
 	if !strings.Contains(s, "artifact-store") || !strings.Contains(s, "\"command\":\"run\"") {
 		t.Fatalf("mcpServers json missing url/command entries: %s", s)
 	}
+	if !strings.Contains(s, `"type":"http"`) {
+		t.Fatalf("mcpServers HTTP entry missing type:http (codebuddy skips url-only): %s", s)
+	}
 	// gitToken resolves from the agent env.
 	if tok := p.gitToken(req); tok != "tok" {
 		t.Errorf("gitToken = %q, want tok", tok)
