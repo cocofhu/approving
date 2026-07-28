@@ -165,7 +165,7 @@
         "previewCustom": "Custom template",
         "saved": "Notify settings saved",
         "colPolicy": "Notify policy",
-        "modeOff": "off",
+        "modeOff": "Off",
         "modeInherit": "Inherit",
         "modeCustom": "Custom",
         "wfUpdated": "Updated"
