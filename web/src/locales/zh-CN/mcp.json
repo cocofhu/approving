@@ -2,19 +2,19 @@
   "mcp": {
     "integrations": {
       "title": "集成",
-      "subtitle": "内置 MCP 按作用域注入：运行级可全程可用，项目/PM 会话级见于 PM Leader · 仓库 / CI 凭据(如 GITLAB_TOKEN / GITLAB_URL)在 Agent 元信息的环境变量里配置,支持引用全局变量 {'${vars.<名字>}'}",
+      "subtitle": "内置 MCP 按作用域注入：运行级可全程可用，项目/PM 会话级见于项目管理 · 仓库 / CI 凭据(如 GITLAB_TOKEN / GITLAB_URL)在 Agent 元信息的环境变量里配置,支持引用全局变量 {'${vars.<名字>}'}",
       "sectionTitle": "内置 MCP · 按作用域注入",
       "noConfigNeeded": "无需配置",
       "noConfigHere": "无需在此配置",
       "alwaysAvailable": "全程可用",
-      "seenInPmLeader": "见于 PM Leader",
+      "seenInPmLeader": "见于项目管理",
       "seenInAgentStudio": "见于 Agent Studio",
       "addViaAgentStudio": "在 Agent Studio 添加",
       "notRunScoped": "非运行级全局注入",
       "scopeRun": "scope: run",
       "scopeProject": "scope: project / pm-session",
       "entryPathLabel": "使用入口：",
-      "entryPath": "项目详情 → PM Leader → 设置",
+      "entryPath": "项目详情 → 项目管理 → 设置",
       "entryPathAgent": "Agent Studio → MCP",
       "toolCount": "{n} 个工具 · 点击查看详细说明",
       "openDetail": "打开详述",
@@ -189,7 +189,7 @@
       "name": "task-scheduler",
       "desc": "Agent 级定时任务 · 定义面 MCP；平台调度执行",
       "overview": "Agent 级定时任务。仅 PM 咨询可写；到点新建沙箱 Chat。任务独占 cron 线程。",
-      "convention": "create_job 仅 PM Leader 咨询可用。执行由平台调度器完成，每次新沙箱。",
+      "convention": "create_job 仅项目管理咨询可用。执行由平台调度器完成，每次新沙箱。",
       "tools": {
         "list_jobs": {
           "signature": "list_jobs()",
