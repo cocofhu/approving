@@ -51,8 +51,22 @@ set +a
 : "${APPROVING_DEPLOYMENT_MODE:=local-demo}"
 : "${APPROVING_IMAGE:=ghcr.io/cocofhu/approving:0.0.2-beta}"
 : "${SANDBOX_GATEWAY_IMAGE:=ghcr.io/cocofhu/sandbox-gateway:0.0.2-beta}"
-: "${SANDBOX_IMAGE:=ghcr.io/cocofhu/universal-sandbox-cursor:0.0.2-beta}"
 : "${SANDBOX_GATEWAY_API_KEY:=approving-local-demo}"
+
+# Optional global force: capture user-set SANDBOX_IMAGE BEFORE applying the
+# cursor fallback default, so a bare default does not re-force all backends.
+_user_sandbox_image="${SANDBOX_IMAGE-}"
+: "${SANDBOX_IMAGE:=ghcr.io/cocofhu/universal-sandbox-cursor:0.0.2-beta}"
+: "${APPROVING_SANDBOX_IMAGE_CURSOR:=ghcr.io/cocofhu/universal-sandbox-cursor:0.0.2-beta}"
+: "${APPROVING_SANDBOX_IMAGE_CLAUDE_CODE:=ghcr.io/cocofhu/universal-sandbox-claude_code:0.0.2-beta}"
+: "${APPROVING_SANDBOX_IMAGE_CODEBUDDY:=ghcr.io/cocofhu/universal-sandbox-codebuddy:0.0.2-beta}"
+: "${APPROVING_SANDBOX_IMAGE_TRAE:=ghcr.io/cocofhu/universal-sandbox-trae:0.0.2-beta}"
+: "${SBGW_IMAGE_TEMPLATE:=ghcr.io/cocofhu/universal-sandbox-{provider}:0.0.2-beta}"
+# Explicit SANDBOX_IMAGE (or APPROVING_SANDBOX_IMAGE) → global force; default path leaves it empty.
+if [[ -z "${APPROVING_SANDBOX_IMAGE:-}" && -n "${_user_sandbox_image}" ]]; then
+  APPROVING_SANDBOX_IMAGE="${_user_sandbox_image}"
+fi
+
 # Demo account (admin / demo1234). Set outside the .env file so `$` in the
 # bcrypt hash is not eaten by shell/compose env parsing.
 if [[ -z "${APPROVING_AUTH_USERS:-}" ]]; then
@@ -66,6 +80,11 @@ fi
 export APPROVING_PORT APPROVING_GATEWAY_PORT APPROVING_SANDBOX_GATEWAY_URL
 export APPROVING_DEPLOYMENT_MODE APPROVING_IMAGE SANDBOX_GATEWAY_IMAGE
 export SANDBOX_IMAGE SANDBOX_GATEWAY_API_KEY APPROVING_AUTH_USERS APPROVING_DOCTOR_TOKEN
+export APPROVING_SANDBOX_IMAGE_CURSOR APPROVING_SANDBOX_IMAGE_CLAUDE_CODE
+export APPROVING_SANDBOX_IMAGE_CODEBUDDY APPROVING_SANDBOX_IMAGE_TRAE
+export SBGW_IMAGE_TEMPLATE
+# May be empty (no global force). Export so compose substitutes ${APPROVING_SANDBOX_IMAGE:-}.
+export APPROVING_SANDBOX_IMAGE="${APPROVING_SANDBOX_IMAGE:-}"
 # Approving client uses the dedicated env name; keep it in sync with the gateway.
 export APPROVING_SANDBOX_GATEWAY_API_KEY="${APPROVING_SANDBOX_GATEWAY_API_KEY:-$SANDBOX_GATEWAY_API_KEY}"
 export SBGW_API_KEYS="${SBGW_API_KEYS:-$SANDBOX_GATEWAY_API_KEY}"
@@ -107,14 +126,40 @@ print_release_endpoints() {
   echo "—— gateway token  ${SANDBOX_GATEWAY_API_KEY}"
   echo "—— images  ${APPROVING_IMAGE}"
   echo "           ${SANDBOX_GATEWAY_IMAGE}"
-  echo "           ${SANDBOX_IMAGE}"
+  echo "—— sandbox (per backend)"
+  echo "           cursor     ${APPROVING_SANDBOX_IMAGE_CURSOR}"
+  echo "           claude_code ${APPROVING_SANDBOX_IMAGE_CLAUDE_CODE}"
+  echo "           codebuddy  ${APPROVING_SANDBOX_IMAGE_CODEBUDDY}"
+  echo "           trae       ${APPROVING_SANDBOX_IMAGE_TRAE}"
+  if [[ -n "${APPROVING_SANDBOX_IMAGE:-}" ]]; then
+    echo "—— sandbox GLOBAL FORCE  ${APPROVING_SANDBOX_IMAGE}"
+  fi
+  echo "—— gateway template  ${SBGW_IMAGE_TEMPLATE}"
+  echo "—— gateway fallback  ${SANDBOX_IMAGE}"
 }
 
-# Sandbox runtime image is NOT a compose service — compose pull never fetches it.
-# Always pull from GHCR (no local :local retag) so 对话测试 uses the published build.
+# Sandbox runtime images are NOT compose services — compose pull never fetches them.
+# Pull all four GHCR runtimes so per-backend Agents can create sandboxes.
 ensure_sandbox_runtime_image() {
-  echo "pulling sandbox runtime image ${SANDBOX_IMAGE} (GHCR, several GB)..."
-  docker pull "$SANDBOX_IMAGE"
+  local images=(
+    "${APPROVING_SANDBOX_IMAGE_CURSOR}"
+    "${APPROVING_SANDBOX_IMAGE_CLAUDE_CODE}"
+    "${APPROVING_SANDBOX_IMAGE_CODEBUDDY}"
+    "${APPROVING_SANDBOX_IMAGE_TRAE}"
+  )
+  # Deduplicate while preserving order (global force may equal one backend).
+  if [[ -n "${APPROVING_SANDBOX_IMAGE:-}" ]]; then
+    images+=("${APPROVING_SANDBOX_IMAGE}")
+  fi
+  local -A seen=()
+  local img
+  for img in "${images[@]}"; do
+    [[ -n "$img" ]] || continue
+    [[ -n "${seen[$img]:-}" ]] && continue
+    seen[$img]=1
+    echo "pulling sandbox runtime image ${img} (GHCR, several GB)..."
+    docker pull "$img"
+  done
 }
 
 up_release() {

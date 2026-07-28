@@ -22,6 +22,9 @@ require_digest APPROVING_IMAGE
 require_digest SANDBOX_GATEWAY_IMAGE
 require_digest SANDBOX_IMAGE
 
+# Smoke keeps digest-pinned global force (doctor demo uses a single sandbox image).
+export APPROVING_SANDBOX_IMAGE="${APPROVING_SANDBOX_IMAGE:-$SANDBOX_IMAGE}"
+
 # Internal, short-lived authentication for the loopback doctor control plane.
 # It is generated automatically and deliberately omitted from smoke evidence.
 APPROVING_DOCTOR_TOKEN="${APPROVING_DOCTOR_TOKEN:-$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')}"
