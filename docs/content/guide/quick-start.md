@@ -32,7 +32,7 @@ cd approving
 
 `./start.sh` 还会从 GHCR 拉取 **四个 sandbox runtime** 镜像（按 acpBackend：cursor / claude_code / codebuddy / trae，体积较大）。完成前，沙箱对话可能停留在 “starting sandbox…”。
 
-Agent / workspace / platform-rules 持久在命名卷（`/app/data`）；`./start.sh restart` 与 `./start.sh down`（无 `-v`）会保留。**勿用 `docker compose down -v`**，否则会清空 Agent 配置与 SQLite。
+Agent / workspace / platform-rules 与 SQLite 持久在仓库根 `.localdata` 宿主机目录（bind mount：`gateway` / `db` / `app-data`）。`./start.sh restart` 与 `./start.sh down` 会保留该目录。清空数据：`./start.sh down && rm -rf .localdata`。
 
 ## 常用命令
 
@@ -40,7 +40,7 @@ Agent / workspace / platform-rules 持久在命名卷（`/app/data`）；`./star
 ./start.sh logs
 ./start.sh down
 ./start.sh pull          # 刷新 GHCR 镜像（含四个 sandbox runtime）
-./start.sh restart       # down + up -d（保留命名卷）
+./start.sh restart       # down + up -d（保留 .localdata）
 ./start.sh dev -d        # 源码栈：go run + Vite HMR
 ```
 
