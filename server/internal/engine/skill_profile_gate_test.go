@@ -79,4 +79,12 @@ func TestCheckSkillProfileProject(t *testing.T) {
 			t.Fatalf("got %v", err)
 		}
 	})
+
+	t.Run("nil skills skipped", func(t *testing.T) {
+		eng2 := &Engine{db: db, skills: nil}
+		n := &models.Node{ID: "n", Label: "N", Config: map[string]any{"skill_profile": "ghost"}}
+		if err := eng2.checkSkillProfileProject(c, n); err != nil {
+			t.Fatalf("unexpected: %v", err)
+		}
+	})
 }

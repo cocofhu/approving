@@ -1017,8 +1017,9 @@ func (e *Engine) checkSkillProfileProject(c *execCtx, node *models.Node) error {
 	if label == "" {
 		label = node.ID
 	}
+	// Gate is opt-in: unit tests and hosts without SkillService skip.
 	if e.skills == nil {
-		return fmt.Errorf("节点「%s」的 Agent「%s」不可用：已删除", label, profile)
+		return nil
 	}
 	ag, ok := e.skills.Get(profile)
 	if !ok {
