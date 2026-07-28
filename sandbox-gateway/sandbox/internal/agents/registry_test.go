@@ -52,6 +52,29 @@ func TestTransportSplit(t *testing.T) {
 	}
 }
 
+func TestCodeBuddyKeepsStrictMcpIsolation(t *testing.T) {
+	// Regression lock: codebuddy must keep --strict-mcp-config (isolation) and
+	// a ConfigRoot so streamjson can attach --mcp-config <root>/mcp.json.
+	// Without that pair, artifact-store from seeded mcp.json never reaches -p.
+	p := registry[provider.CodeBuddy]
+	if p.DefaultConfigRoot() != "/root/.codebuddy" {
+		t.Fatalf("codebuddy ConfigRoot=%q", p.DefaultConfigRoot())
+	}
+	if p.Transport() != provider.OneShot {
+		t.Fatalf("codebuddy transport=%v want oneshot", p.Transport())
+	}
+}
+
+func TestClaudeFamilyDoesNotUseBareStrictMcp(t *testing.T) {
+	// Only codebuddy opts into --strict-mcp-config (with streamjson auto --mcp-config).
+	// Claude loads ~/.claude/mcp.json by default — do not add bare strict here.
+	for _, n := range []provider.Name{provider.ClaudeCode, provider.ClaudeStream} {
+		if registry[n].DefaultConfigRoot() == "" {
+			t.Fatalf("%s missing ConfigRoot", n)
+		}
+	}
+}
+
 func TestFromEnvSelection(t *testing.T) {
 	t.Setenv("AGENT_PROVIDER", "gemini")
 	t.Setenv("ACP_BACKEND", "")

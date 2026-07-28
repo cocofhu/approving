@@ -50,13 +50,15 @@ var registry = map[Name]provider.Provider{
 	// --- stream-json family (one-shot; primary) ----------------------------
 	// cursor-agent: `-p --output-format stream-json --yolo --workspace <cwd>`,
 	// prompt fed raw on stdin (keeps user text off every command line).
+	// --approve-mcps: headless -p must auto-approve seeded ~/.cursor/mcp.json
+	// or artifact-store tools stay connected-but-not-injected.
 	provider.Cursor: streamjson.New(streamjson.Config{
 		AgentName:     provider.Cursor,
 		Bin:           "cursor-agent",
 		Runtime:       "cursor-agent-stream-json",
 		ConfigRoot:    "/root/.cursor",
 		PromptMode:    streamjson.PromptStdinRaw,
-		BaseArgs:      []string{"--yolo"},
+		BaseArgs:      []string{"--yolo", "--approve-mcps"},
 		WorkspaceFlag: "--workspace",
 		ResumeFlag:    "--resume",
 		ModelFlag:     "--model",
@@ -76,7 +78,10 @@ var registry = map[Name]provider.Provider{
 		ModelFlag:  "--model",
 		AuthEnvFn:  streamjson.ClaudeAuthEnv,
 	}),
-	// codebuddy: Claude-compatible stream-json fork; adds --strict-mcp-config.
+	// codebuddy: Claude-compatible stream-json fork. --strict-mcp-config
+	// isolates MCP to --mcp-config only (ignores user/project mcp.json).
+	// streamjson.Args auto-adds --mcp-config <ConfigRoot>/mcp.json so the
+	// Approving-seeded artifact-store is not wiped to "zero MCP servers".
 	provider.CodeBuddy: streamjson.New(streamjson.Config{
 		AgentName:  provider.CodeBuddy,
 		Bin:        "codebuddy",

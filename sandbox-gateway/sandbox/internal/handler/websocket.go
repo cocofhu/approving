@@ -138,14 +138,7 @@ func handleConnect(cid string, conn *websocket.Conn, bridge *service.Bridge, pay
 		return err
 	}
 	// 全局单例：由 agents.Current() 决定 provider/argv，不使用浏览器 JSON 里的 argv。
-	if p := bridge.Session(); p != nil {
-		log.Printf("ws cid=%s %s: connect 复用已有会话，仅同步本连接", cid, bridge.AgentLogPrefix())
-		if err := bridge.WriteJSONWS(conn, bridge.ConnectedPayload(p)); err != nil {
-			return err
-		}
-		bridge.BroadcastQueueState()
-		return nil
-	}
+	// 始终走 EnsureAgent：已有会话且 MCP 无需升级时复用；空 MCP→非空时重建。
 	log.Printf("ws cid=%s: connect 将 EnsureAgent cwd=%q fsRoot=%q", cid, cwd, fsRoot)
 	sess, err := bridge.EnsureAgent(cwd, fsRoot, mcp, auto)
 	if err != nil {

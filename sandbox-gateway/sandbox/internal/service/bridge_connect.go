@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"backend/internal/agents"
@@ -108,23 +109,44 @@ func (b *Bridge) StartDefaultAgent() {
 }
 
 // EnsureAgent 若已有会话则直接返回；否则用 agents.Current() 建连（忽略浏览器传入的 argv）。
+// 特例：启动时 StartDefaultAgent 常以空 MCP 建连，平台随后 connect 会带上
+// artifact-store 等 mcpServers——若仍复用空会话，ACP session/new 永远看不到工具。
+// 因此「空 → 非空」MCP 升级会重建会话。
 func (b *Bridge) EnsureAgent(cwd, fsRoot string, mcp json.RawMessage, auto *bool) (provider.Session, error) {
 	b.ensureMu.Lock()
 	defer b.ensureMu.Unlock()
-
-	b.mu.Lock()
-	if b.sess != nil {
-		p := b.sess
-		b.mu.Unlock()
-		return p, nil
-	}
-	b.mu.Unlock()
 
 	if auto == nil {
 		t := true
 		auto = &t
 	}
+
+	b.mu.Lock()
+	if b.sess != nil {
+		if !mcpUpgradeNeeded(b.lastMCP, mcp) {
+			p := b.sess
+			b.mu.Unlock()
+			return p, nil
+		}
+		log.Printf("acp: connect 带来非空 MCP，重建此前空 MCP 会话")
+		b.mu.Unlock()
+		return b.Connect(cwd, fsRoot, mcp, auto)
+	}
+	b.mu.Unlock()
+
 	return b.Connect(cwd, fsRoot, mcp, auto)
+}
+
+// mcpEmpty reports whether the MCP payload is absent / null / empty list.
+func mcpEmpty(m json.RawMessage) bool {
+	s := strings.TrimSpace(string(m))
+	return s == "" || s == "null" || s == "[]" || s == "{}"
+}
+
+// mcpUpgradeNeeded is true when an existing empty MCP session should be rebuilt
+// to pick up a non-empty connect-time mcpServers list.
+func mcpUpgradeNeeded(current, incoming json.RawMessage) bool {
+	return mcpEmpty(current) && !mcpEmpty(incoming)
 }
 
 // Connect 启动或替换 Agent 会话（由 AGENT_PROVIDER 选定的 provider 负责拉起对应 transport）。
