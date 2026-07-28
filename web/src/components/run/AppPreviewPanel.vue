@@ -71,7 +71,11 @@ function selectPort(port: number) {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-col" :class="fill ? 'h-full flex-1' : ''">
+  <div
+    data-testid="app-preview"
+    class="flex min-h-0 flex-col"
+    :class="fill ? 'h-full flex-1' : ''"
+  >
     <div v-if="loading" class="p-4 text-xs text-txt3">{{ t('pages.appPreview.loading') }}</div>
     <div v-else-if="loadError" class="rounded-md border border-err/30 bg-err/10 p-4 text-xs text-err">
       {{ loadError }}

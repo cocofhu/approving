@@ -2194,7 +2194,7 @@ function onComposerReject() {
         <div
           v-else-if="isAppPreview && run"
           :class="shouldFillAppPreview ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-4' : 'p-4'"
-          data-testid="app-preview"
+          data-testid="app-preview-host"
         >
           <AppPreviewPanel
             :run-id="run.id"
