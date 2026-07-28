@@ -25,6 +25,7 @@ import PmSettingsPanel from '@/components/pm/PmSettingsPanel.vue'
 import TokenUsageHoverTip from '@/components/ui/TokenUsageHoverTip.vue'
 import ProjectAuditPanel from '@/components/project/ProjectAuditPanel.vue'
 import ProjectNotifyPanel from '@/components/project/ProjectNotifyPanel.vue'
+import OnboardingWizard from '@/components/onboarding/OnboardingWizard.vue'
 import type {
   ClarifyImage,
   PmLeaderBinding,
@@ -34,6 +35,10 @@ import type {
   Workflow,
   WorkflowNotifyPolicy,
 } from '@/lib/types'
+import {
+  shouldAutoOpenOnboarding,
+  type OnboardingBootstrapResult,
+} from '@/lib/onboardingWizard'
 
 const PROJECT_TABS = [
   'board',
@@ -203,6 +208,8 @@ const deleteWfError = ref('')
 const copyPreviewLoading = ref<string | null>(null)
 const copyModal = ref<{ sourceId: string; sourceName: string; suggestedName: string } | null>(null)
 const exportTarget = ref<Workflow | null>(null)
+const onboardingOpen = ref(false)
+const projectAgents = ref<{ name: string; projectId?: string }[]>([])
 
 const { fileInput, triggerImport, handleFileChange } = useWorkflowImport({
   projectId: () => projectId.value,
@@ -362,9 +369,10 @@ async function load() {
   resetPmViewForProjectContext()
   loading.value = true
   try {
-    const [p, wfs] = await Promise.all([
+    const [p, wfs, agents] = await Promise.all([
       api.getProject(projectId.value),
       api.listWorkflows({ projectId: projectId.value }),
+      api.listAgents().catch(() => [] as { name: string; projectId?: string }[]),
     ])
     project.value = p
     void loadPmBinding()
@@ -375,12 +383,35 @@ async function load() {
     // Spread-copy preserves server-side ask/required/editable (and options/desc).
     varRows.value = (p.variables || []).map((v) => ({ ...v }))
     workflows.value = wfs
+    projectAgents.value = agents.map((a) => ({ name: a.name, projectId: a.projectId }))
+    if (shouldAutoOpenOnboarding(p.id, wfs.length, projectAgents.value)) {
+      onboardingOpen.value = true
+    }
   } catch {
     project.value = null
     workflows.value = []
   } finally {
     loading.value = false
   }
+}
+
+function openOnboarding() {
+  onboardingOpen.value = true
+}
+
+async function onOnboardingCompleted(_res: OnboardingBootstrapResult) {
+  await reloadWorkflows()
+  try {
+    const agents = await api.listAgents()
+    projectAgents.value = agents.map((a) => ({ name: a.name, projectId: a.projectId }))
+  } catch {
+    /* ignore */
+  }
+}
+
+function onOnboardingRunStarted(runId: string) {
+  onboardingOpen.value = false
+  router.push(`/runs/${runId}`)
 }
 
 async function reloadWorkflows() {
@@ -875,6 +906,15 @@ onUnmounted(() => {
       <!-- Workflows tab -->
       <div v-else-if="tab === 'workflows'">
         <div class="mb-3 flex justify-end gap-2">
+          <AppButton
+            v-if="!workflows.length"
+            variant="outline"
+            icon="sparkles"
+            data-testid="onboarding-cta"
+            @click="openOnboarding"
+          >
+            {{ t('pages.onboarding.cta') }}
+          </AppButton>
           <AppButton variant="outline" icon="input" @click="triggerImport">
             {{ t('common.buttons.import') }}
           </AppButton>
@@ -883,7 +923,13 @@ onUnmounted(() => {
           </AppButton>
         </div>
         <div v-if="!workflows.length" class="card px-5 py-10 text-center text-[13px] text-txt3">
-          {{ t('common.empty.noWorkflows') }}
+          <p class="text-[15px] font-medium text-txt">{{ t('pages.onboarding.emptyTitle') }}</p>
+          <p class="mt-2 text-txt2">{{ t('pages.onboarding.emptyDesc') }}</p>
+          <div class="mt-4 flex justify-center gap-2">
+            <AppButton variant="primary" icon="sparkles" @click="openOnboarding">
+              {{ t('pages.onboarding.cta') }}
+            </AppButton>
+          </div>
         </div>
         <!-- Mobile card list: avoids table overflow clipping the more menu -->
         <div v-else-if="isMobile" class="flex flex-col gap-2">
@@ -1598,6 +1644,14 @@ onUnmounted(() => {
         </AppButton>
       </template>
     </AppModal>
+
+    <OnboardingWizard
+      :open="onboardingOpen"
+      :project-id="projectId"
+      @close="onboardingOpen = false"
+      @completed="onOnboardingCompleted"
+      @run-started="onOnboardingRunStarted"
+    />
 
     <AppModal
       :open="showDelete"

@@ -709,6 +709,26 @@ export const api = {
   // agents (reusable, user-defined Agent identities referenced by skill_profile:
   // skill/rules + MCP servers + environment variables)
   listAgents: () => req<Agent[]>('/agents'),
+  bootstrapProjectOnboarding: (
+    projectId: string,
+    body: {
+      acpBackend: string
+      apiKey: string
+      region?: string
+      repos?: string
+      featureHint?: string
+    },
+  ) =>
+    req<{
+      agentIds: string[]
+      workflowId: string
+      repos: string
+      feature: string
+      published: boolean
+    }>(`/projects/${encodeURIComponent(projectId)}/bootstrap-onboarding`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   getAgentsOrg: () => req<AgentOrg>('/agents/org'),
   saveAgentsOrg: (org: AgentOrg) =>
     req<AgentOrg>('/agents/org', { method: 'PUT', body: JSON.stringify(org) }),

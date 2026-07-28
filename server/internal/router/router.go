@@ -75,6 +75,7 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.PUT("/projects/:id", h.UpdateProject)
 		api.PATCH("/projects/:id", h.UpdateProject)
 		api.DELETE("/projects/:id", h.DeleteProject)
+		api.POST("/projects/:id/bootstrap-onboarding", h.BootstrapProjectOnboarding)
 
 		api.GET("/projects/:id/pm-leader", h.GetPmLeader)
 		api.PUT("/projects/:id/pm-leader", h.UpdatePmLeader)

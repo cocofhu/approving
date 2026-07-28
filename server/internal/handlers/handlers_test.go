@@ -98,8 +98,9 @@ func newHarness(t *testing.T) *harness {
 	config.StoreConfig(cfg)
 	authSvc := auth.NewService(db, config.GetConfig)
 	projectSvc := services.NewProjectService(db)
+	wfSvc := services.NewWorkflowService(db)
 	h := &handlers.Handlers{
-		WF:            services.NewWorkflowService(db),
+		WF:            wfSvc,
 		Projects:      projectSvc,
 		Runs:          services.NewRunService(db),
 		Arts:          arts,
@@ -113,6 +114,7 @@ func newHarness(t *testing.T) *harness {
 		PlatformRules: platformRules,
 		Issues:        services.NewIssueService(db),
 		Audit:         auditSvc,
+		Onboarding:    services.NewOnboardingService(projectSvc, skills, wfSvc),
 	}
 	hn := &harness{r: router.New(h), h: h, db: db, host: host, auth: authSvc, fg: fg}
 	hn.cookie = hn.login(t)

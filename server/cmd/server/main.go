@@ -381,6 +381,7 @@ func main() {
 		Browser:       browserSvc,
 		Audit:         auditSvc,
 		InjectBundles: injectStore,
+		Onboarding:    services.NewOnboardingService(projectSvc, skillSvc, wfSvc),
 	}
 
 	r := router.New(h)

@@ -1,0 +1,331 @@
+package services
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/runtime"
+
+	"github.com/google/uuid"
+)
+
+const (
+	// OnboardingWorkflowName is the fixed published example workflow.
+	OnboardingWorkflowName = "快速上手·轻量"
+	// DefaultOnboardingRepos is the well-known public Heroku Node getting-started repo.
+	DefaultOnboardingRepos = "demo|https://github.com/heroku/nodejs-getting-started.git|main"
+	// DefaultOnboardingFeature is a one-line sample feature for the Heroku demo homepage.
+	DefaultOnboardingFeature = "把首页欢迎文案与主按钮文案改得更清晰友好"
+)
+
+var (
+	// ErrOnboardingAPIKeyRequired is returned when bootstrap is called without an API key.
+	ErrOnboardingAPIKeyRequired = errors.New("apiKey is required")
+	// ErrOnboardingProjectNotFound is returned when the project id does not exist.
+	ErrOnboardingProjectNotFound = errors.New("project not found")
+)
+
+// OnboardingBootstrapRequest is the body for POST .../bootstrap-onboarding.
+type OnboardingBootstrapRequest struct {
+	AcpBackend  string `json:"acpBackend"`
+	APIKey      string `json:"apiKey"`
+	Region      string `json:"region,omitempty"`
+	Repos       string `json:"repos,omitempty"`
+	FeatureHint string `json:"featureHint,omitempty"`
+}
+
+// OnboardingBootstrapResult is returned after a successful (idempotent) bootstrap.
+type OnboardingBootstrapResult struct {
+	AgentIDs   []string `json:"agentIds"`
+	WorkflowID string   `json:"workflowId"`
+	Repos       string   `json:"repos"`
+	Feature    string   `json:"feature"`
+	Published  bool     `json:"published"`
+}
+
+// OnboardingService atomically bootstraps project auth + 5 agents + light workflow.
+type OnboardingService struct {
+	Projects *ProjectService
+	Skills   *SkillService
+	WF       *WorkflowService
+}
+
+// NewOnboardingService wires dependencies.
+func NewOnboardingService(projects *ProjectService, skills *SkillService, wf *WorkflowService) *OnboardingService {
+	return &OnboardingService{Projects: projects, Skills: skills, WF: wf}
+}
+
+// Bootstrap writes project sandboxEnv auth, saves five agents from embed templates,
+// and publishes the light onboarding workflow. It is idempotent for the fixed names.
+// It never starts a Run. Missing apiKey rejects without creating resources.
+func (s *OnboardingService) Bootstrap(projectID string, req OnboardingBootstrapRequest) (OnboardingBootstrapResult, error) {
+	projectID = strings.TrimSpace(projectID)
+	if projectID == "" {
+		return OnboardingBootstrapResult{}, ErrOnboardingProjectNotFound
+	}
+	apiKey := strings.TrimSpace(req.APIKey)
+	if apiKey == "" {
+		return OnboardingBootstrapResult{}, ErrOnboardingAPIKeyRequired
+	}
+	if _, ok := s.Projects.Get(projectID); !ok {
+		return OnboardingBootstrapResult{}, ErrOnboardingProjectNotFound
+	}
+
+	backend := NormalizeAcpBackend(req.AcpBackend)
+	repos := strings.TrimSpace(req.Repos)
+	if repos == "" {
+		repos = DefaultOnboardingRepos
+	}
+	feature := strings.TrimSpace(req.FeatureHint)
+	if feature == "" {
+		feature = DefaultOnboardingFeature
+	}
+
+	if err := s.writeProjectAuth(projectID, backend, apiKey, strings.TrimSpace(req.Region)); err != nil {
+		return OnboardingBootstrapResult{}, err
+	}
+
+	agentIDs := make([]string, 0, len(OnboardingAgentNames))
+	for _, name := range OnboardingAgentNames {
+		tmpl, err := loadOnboardingAgentTemplate(name)
+		if err != nil {
+			return OnboardingBootstrapResult{}, err
+		}
+		tmpl.Name = name
+		tmpl.ProjectID = projectID
+		tmpl.AcpBackend = backend
+		if tmpl.Env == nil {
+			tmpl.Env = map[string]string{}
+		}
+		tmpl.Env["GIT_REPOS"] = "${vars.repos}"
+		if err := s.Skills.Save(tmpl); err != nil {
+			return OnboardingBootstrapResult{}, fmt.Errorf("save agent %s: %w", name, err)
+		}
+		agentIDs = append(agentIDs, name)
+	}
+
+	wf, err := s.upsertLightWorkflow(projectID, repos, feature)
+	if err != nil {
+		return OnboardingBootstrapResult{}, err
+	}
+	published, err := s.WF.Publish(wf.ID)
+	if err != nil {
+		return OnboardingBootstrapResult{}, fmt.Errorf("publish workflow: %w", err)
+	}
+
+	return OnboardingBootstrapResult{
+		AgentIDs:   agentIDs,
+		WorkflowID: published.ID,
+		Repos:       repos,
+		Feature:    feature,
+		Published:  published.Status == "published",
+	}, nil
+}
+
+func (s *OnboardingService) writeProjectAuth(projectID, backend, apiKey, region string) error {
+	p, ok := s.Projects.Get(projectID)
+	if !ok {
+		return ErrOnboardingProjectNotFound
+	}
+	byKey := make(map[string]models.EnvEntry, len(p.SandboxEnv))
+	order := make([]string, 0, len(p.SandboxEnv)+2)
+	for _, e := range p.SandboxEnv {
+		k := strings.TrimSpace(e.Key)
+		if k == "" {
+			continue
+		}
+		if _, seen := byKey[k]; !seen {
+			order = append(order, k)
+		}
+		byKey[k] = e
+	}
+	upsert := func(key, value string, secret bool) {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			return
+		}
+		if _, seen := byKey[key]; !seen {
+			order = append(order, key)
+		}
+		byKey[key] = models.EnvEntry{Key: key, Value: value, Secret: secret || runtime.IsPlatformAuthEnvKey(key)}
+	}
+	upsert(primaryAuthEnvKey(backend), apiKey, true)
+	switch backend {
+	case AcpBackendCodeBuddy:
+		if region == "" {
+			region = "public"
+		}
+		upsert(runtime.EnvCodeBuddyRegion, region, false)
+	case AcpBackendTrae:
+		if region == "" {
+			region = "intl"
+		}
+		upsert(runtime.EnvTraeRegion, region, false)
+	}
+	out := make([]models.EnvEntry, 0, len(order))
+	for _, k := range order {
+		out = append(out, byKey[k])
+	}
+	_, err := s.Projects.Update(projectID, nil, nil, &out, nil, nil)
+	return err
+}
+
+func primaryAuthEnvKey(backend string) string {
+	switch NormalizeAcpBackend(backend) {
+	case AcpBackendClaudeCode:
+		return "APPROVING_CLAUDE_API_KEY"
+	case AcpBackendCodeBuddy:
+		return "APPROVING_CODEBUDDY_API_KEY"
+	case AcpBackendTrae:
+		return "APPROVING_TRAE_API_KEY"
+	default:
+		return "APPROVING_CURSOR_API_KEY"
+	}
+}
+
+func (s *OnboardingService) upsertLightWorkflow(projectID, repos, feature string) (models.WorkflowDef, error) {
+	graph := buildOnboardingLightGraph(repos, feature)
+	var existing *models.WorkflowDef
+	for _, wf := range s.WF.List(projectID) {
+		if wf.Name == OnboardingWorkflowName {
+			full, ok := s.WF.Get(wf.ID)
+			if !ok {
+				continue
+			}
+			existing = &full
+			break
+		}
+	}
+	if existing != nil {
+		existing.Description = "空项目快速上手轻量示例（clarify→visual→gate→implement→test→preview）"
+		existing.NeedsRepo = true
+		existing.Graph = graph
+		if err := s.WF.Save(existing); err != nil {
+			return models.WorkflowDef{}, err
+		}
+		return *existing, nil
+	}
+	wf := models.WorkflowDef{
+		ID:          uuid.NewString(),
+		ProjectID:   projectID,
+		Name:        OnboardingWorkflowName,
+		Description: "空项目快速上手轻量示例（clarify→visual→gate→implement→test→preview）",
+		Status:      "draft",
+		Version:     1,
+		NeedsRepo:   true,
+		Graph:       graph,
+	}
+	if err := s.WF.Save(&wf); err != nil {
+		return models.WorkflowDef{}, err
+	}
+	return wf, nil
+}
+
+// BuildOnboardingLightGraphForTest exposes the light graph builder for unit tests.
+func BuildOnboardingLightGraphForTest(repos, feature string) models.Graph {
+	return buildOnboardingLightGraph(repos, feature)
+}
+
+func buildOnboardingLightGraph(repos, feature string) models.Graph {
+	implementPrompt := "轻量链路：用 get_clarified_requirement 读取澄清结论，并结合视觉产物 page.html 与 {{vars.preview_issues}}（如有）实现改动。" +
+		"勿依赖实施计划。在仓库中完成需求后提交推送，并调用 set_implementation_result。"
+	visualPrompt := "根据澄清后的需求做一个简洁美观的可视化网页 demo（原型），用 write_artifact 写入 page.html。勿依赖 plan。"
+	previewPrompt := "在沙箱内启动 Heroku Node Getting Started 示例（或工作流 repos 指向的公开仓）：PORT=5006，监听 0.0.0.0，调用 set_preview(5006)。"
+
+	return models.Graph{
+		Variables: []models.Variable{
+			{
+				Name: "feature", Type: "paragraph", Value: feature,
+				Desc: "示例需求", Ask: true, Required: true, Editable: true,
+			},
+			{
+				Name: "repos", Type: "string", Value: repos,
+				Desc: "代码仓（name|url|branch）", Ask: true, Required: true, Editable: true,
+			},
+		},
+		Nodes: []models.Node{
+			{ID: "input", Type: "input", Label: "输入", Position: models.Position{X: 0, Y: 0}, Config: map[string]any{}},
+			{
+				ID: "clarify", Type: "react", Label: "澄清", Position: models.Position{X: 220, Y: 0},
+				Config: map[string]any{
+					"skill_profile": "ClarifyAgent",
+					"max_rounds":    6,
+					"prompt":        "针对以下需求提出澄清问题,直到信息充分,再调用 set_clarified_requirement 写入结构化需求:\n{{vars.feature}}",
+				},
+			},
+			{
+				ID: "visual", Type: "visual", Label: "视觉", Position: models.Position{X: 440, Y: 0},
+				Config: map[string]any{
+					"skill_profile": "VisualAgent",
+					"prompt":        visualPrompt,
+				},
+			},
+			{
+				ID: "gate", Type: "human_gate", Label: "视觉确认", Position: models.Position{X: 660, Y: 0},
+				Config: map[string]any{
+					"title":         "确认视觉原型",
+					"body_template": "{{nodes.visual.outputs.page}}",
+					"output_var":    "action",
+					"form":          []any{},
+					"actions": []any{
+						map[string]any{"id": "approve", "label": "批准"},
+						map[string]any{"id": "revise", "label": "退回修改"},
+					},
+				},
+			},
+			{
+				ID: "implement", Type: "implement", Label: "实现", Position: models.Position{X: 880, Y: 0},
+				Config: map[string]any{
+					"skill_profile": "ImplementAgent",
+					"max_rounds":    3,
+					"prompt":        implementPrompt,
+				},
+			},
+			{
+				ID: "test", Type: "test", Label: "测试", Position: models.Position{X: 1100, Y: 0},
+				Config: map[string]any{
+					"skill_profile":    "TestAgent",
+					"reason_var":       "reason",
+					"repoScope":        "all",
+					"block_on_skipped": false,
+					"prompt":           "对上游实现执行测试并如实记录结果,用 set_test_result 写入测试总结。无 plan 叶子时可省略 plan_coverage。",
+					"exits": map[string]any{
+						"pass": map[string]any{"goto": "preview"},
+						"fail": map[string]any{"goto": "implement"},
+					},
+				},
+			},
+			{
+				ID: "preview", Type: "app_preview", Label: "预览", Position: models.Position{X: 1320, Y: 0},
+				Config: map[string]any{
+					"skill_profile": "PreviewAgent",
+					"max_rounds":    3,
+					"title":         "应用预览",
+					"output_var":    "action",
+					"prompt":        previewPrompt,
+					"form":          []any{},
+					"actions": []any{
+						map[string]any{"id": "pass", "label": "通过"},
+						map[string]any{"id": "fail", "label": "退回"},
+					},
+				},
+			},
+			{ID: "output", Type: "output", Label: "输出", Position: models.Position{X: 1540, Y: 0}, Config: map[string]any{}},
+		},
+		Edges: []models.Edge{
+			{ID: "e1", Source: "input", Target: "clarify"},
+			{ID: "e2", Source: "clarify", Target: "visual"},
+			{ID: "e3", Source: "visual", Target: "gate"},
+			{ID: "e4", Source: "gate", Target: "implement", When: "action == 'approve'", Kind: models.EdgeSuccess},
+			{ID: "e5", Source: "gate", Target: "visual", When: "action == 'revise'", Kind: models.EdgeSuccess},
+			{ID: "e6", Source: "implement", Target: "test"},
+			{ID: "e7", Source: "test", Target: "preview", Kind: models.EdgeSuccess},
+			{ID: "e8", Source: "test", Target: "implement", Kind: models.EdgeFailure},
+			{ID: "e9", Source: "preview", Target: "output", When: "action == 'pass'", Kind: models.EdgeSuccess},
+			{ID: "e10", Source: "preview", Target: "implement", When: "action == 'fail'", Kind: models.EdgeSuccess},
+			{ID: "e11", Source: "preview", Target: "implement", Kind: models.EdgeFailure},
+		},
+	}
+}

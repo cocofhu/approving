@@ -91,7 +91,7 @@ Clarify → Research → Proposal → Human approval
         → Human confirmation → PR / MR
 ```
 
-The repository includes Clarify, Research, Proposal, Plan, Implement, Test, and Review role packs. Run `agents/pack.sh` to package them for import through Agent Studio.
+The repository includes Clarify, Visual, Research, Proposal, Plan, Implement, Test, Preview, and Review role packs. Run `agents/pack.sh` to package them for import through Agent Studio.
 
 ## Quick start
 
