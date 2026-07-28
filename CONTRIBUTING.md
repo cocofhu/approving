@@ -148,9 +148,9 @@ set them Public under GitHub → Packages if anonymous pulls are required.
 
 Default tags used by `./start.sh` (overridable in `.env`):
 
-- `ghcr.io/cocofhu/approving:0.0.2-beta`
-- `ghcr.io/cocofhu/sandbox-gateway:0.0.2-beta`
-- `ghcr.io/cocofhu/universal-sandbox-{cursor,claude_code,codebuddy,trae}:0.0.2-beta`
+- `ghcr.io/cocofhu/approving:0.0.3-beta`
+- `ghcr.io/cocofhu/sandbox-gateway:0.0.3-beta`
+- `ghcr.io/cocofhu/universal-sandbox-{cursor,claude_code,codebuddy,trae}:0.0.3-beta`
   (per `acpBackend`; optional `SANDBOX_IMAGE` / `APPROVING_SANDBOX_IMAGE` forces one image for all backends — used by release-smoke)
 
 ### release-smoke (manual; not a PR required check)
