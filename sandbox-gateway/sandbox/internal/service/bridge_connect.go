@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -130,10 +131,17 @@ func (b *Bridge) EnsureAgent(cwd, fsRoot string, mcp json.RawMessage, auto *bool
 		}
 		log.Printf("acp: connect 带来非空 MCP，重建此前空 MCP 会话")
 		b.mu.Unlock()
-		return b.Connect(cwd, fsRoot, mcp, auto)
+		return b.connectOrTest(cwd, fsRoot, mcp, auto)
 	}
 	b.mu.Unlock()
 
+	return b.connectOrTest(cwd, fsRoot, mcp, auto)
+}
+
+func (b *Bridge) connectOrTest(cwd, fsRoot string, mcp json.RawMessage, auto *bool) (provider.Session, error) {
+	if b.testConnect != nil {
+		return b.testConnect(cwd, fsRoot, mcp, auto)
+	}
 	return b.Connect(cwd, fsRoot, mcp, auto)
 }
 
@@ -149,6 +157,33 @@ func mcpUpgradeNeeded(current, incoming json.RawMessage) bool {
 	return mcpEmpty(current) && !mcpEmpty(incoming)
 }
 
+// mcpServerSummary returns count + names for CAPA A6 connect logs (no headers/URLs).
+func mcpServerSummary(mcp json.RawMessage) (count int, names []string) {
+	if mcpEmpty(mcp) {
+		return 0, nil
+	}
+	var arr []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(mcp, &arr); err == nil && (len(arr) > 0 || string(mcp) == "[]") {
+		for _, s := range arr {
+			if n := strings.TrimSpace(s.Name); n != "" {
+				names = append(names, n)
+			}
+		}
+		return len(arr), names
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(mcp, &obj); err == nil {
+		for k := range obj {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		return len(names), names
+	}
+	return 0, nil
+}
+
 // Connect 启动或替换 Agent 会话（由 AGENT_PROVIDER 选定的 provider 负责拉起对应 transport）。
 func (b *Bridge) Connect(cwd, fsRoot string, mcp json.RawMessage, auto *bool) (provider.Session, error) {
 	if cwd == "" {
@@ -162,7 +197,8 @@ func (b *Bridge) Connect(cwd, fsRoot string, mcp json.RawMessage, auto *bool) (p
 	if fsEff == "" {
 		fsEff = cwd
 	}
-	log.Printf("acp: 实际使用目录 cwd=%q fsRoot=%q（前端留空时已用服务端当前目录或默认与 cwd 相同）", cwd, fsEff)
+	count, names := mcpServerSummary(mcp)
+	log.Printf("acp: 实际使用目录 cwd=%q fsRoot=%q（前端留空时已用服务端当前目录或默认与 cwd 相同） mcp_servers_count=%d names=%v", cwd, fsEff, count, names)
 
 	b.mu.Lock()
 	if b.sess != nil {

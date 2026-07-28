@@ -141,6 +141,12 @@ func (p *Provider) DefaultConfigRoot() string         { return p.c.ConfigRoot() 
 func (p *Provider) Transport() provider.TransportKind { return provider.OneShot }
 func (p *Provider) AuthEnv(env []string) []string     { return p.c.AuthEnv(env) }
 
+// ArgsForTest exposes codec.Args for registry golden locks (CAPA A2/A3).
+// Not part of provider.Provider; callers type-assert the concrete oneshot.Provider.
+func (p *Provider) ArgsForTest(opts provider.OpenOptions, prompt, resumeID string) []string {
+	return p.c.Args(opts, prompt, resumeID)
+}
+
 func (p *Provider) ListModels(ctx context.Context) ([]provider.Model, error) {
 	return p.c.Models(ctx)
 }
@@ -318,6 +324,8 @@ func (e *engine) runOnce(ctx context.Context, text string, images []provider.Pro
 	if len(args) == 0 {
 		return turnOutcome{stopReason: "failed"}, errors.New("oneshot: codec produced empty argv")
 	}
+	// CAPA A6: greppable redacted argv (MCP flags+paths retained; no prompt/Authorization).
+	log.Printf("oneshot: spawn agent=%s argv_redacted=%v", e.c.AgentName(), redactArgv(args))
 	// Use plain Command (not CommandContext) so we can kill the whole process
 	// group on cancel — many CLIs spawn children that would otherwise orphan.
 	cmd := exec.Command(e.binPath, args[1:]...)
@@ -613,4 +621,26 @@ func (s *stderrTail) String() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return strings.TrimSpace(string(s.buf))
+}
+
+// redactArgv returns a greppable argv snapshot for logs: keeps MCP-related
+// flags and config paths, redacts prompt text and Authorization-like values.
+func redactArgv(args []string) []string {
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		lower := strings.ToLower(a)
+		if strings.Contains(lower, "authorization") || strings.HasPrefix(a, "Bearer ") || strings.HasPrefix(a, "bearer ") {
+			out = append(out, "[redacted]")
+			continue
+		}
+		// -p <prompt> (PromptArg CLIs): redact the following non-flag value.
+		if (a == "-p" || a == "--message") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			out = append(out, a, "[prompt-redacted]")
+			i++
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
 }
