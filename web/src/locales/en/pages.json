@@ -1769,7 +1769,12 @@
       "demoEnlarge": "Enlarge",
       "demoSelected": "Selected",
       "readonly": "Read-only",
-      "unreadFab": "{n} new messages — click to jump to bottom"
+      "unreadFab": "{n} new messages — click to jump to bottom",
+      "clickToEnlarge": "Click to enlarge",
+      "imagePreviewTitle": "Image preview · {label}",
+      "imageFallback": "Image",
+      "imageFallbackN": "Image {n}",
+      "imagePreviewAria": "Preview {label}"
     },
     "reviewComposer": {
       "sendClarify": "Send reply",

@@ -1769,7 +1769,12 @@
       "demoEnlarge": "放大",
       "demoSelected": "已选",
       "readonly": "只读",
-      "unreadFab": "有 {n} 条新消息，点击回到底部"
+      "unreadFab": "有 {n} 条新消息，点击回到底部",
+      "clickToEnlarge": "点击放大",
+      "imagePreviewTitle": "图片预览 · {label}",
+      "imageFallback": "图片",
+      "imageFallbackN": "图片 {n}",
+      "imagePreviewAria": "预览{label}"
     },
     "reviewComposer": {
       "sendClarify": "发送回复",
