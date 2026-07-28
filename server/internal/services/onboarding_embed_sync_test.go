@@ -11,7 +11,7 @@ import (
 )
 
 // TestOnboardingEmbedMatchesAgentsSource guards against agents/ vs onboarding_embed/ drift
-// for the five bootstrap packages (review v6).
+// for bootstrap packages (includes ReviewAgent).
 func TestOnboardingEmbedMatchesAgentsSource(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {

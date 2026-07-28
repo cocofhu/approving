@@ -32,7 +32,7 @@ cd approving
 
 `./start.sh` 还会从 GHCR 拉取 **四个 sandbox runtime** 镜像（按 acpBackend：cursor / claude_code / codebuddy / trae，体积较大）。完成前，沙箱对话可能停留在 “starting sandbox…”。
 
-Agent / workspace / platform-rules 持久在命名卷（`/app/data`）；`./start.sh restart` 与 `./start.sh down`（无 `-v`）会保留。**勿用 `docker compose down -v`**，否则会清空 Agent 配置与 SQLite。
+Agent / workspace / platform-rules 与 SQLite 持久在宿主机目录 `./.localdata/`（bind mount，非命名卷）。`./start.sh restart` / `down` 会保留；清空数据：`./start.sh down && rm -rf .localdata`。
 
 ## 常用命令
 
@@ -48,7 +48,7 @@ Agent / workspace / platform-rules 持久在命名卷（`/app/data`）；`./star
 
 ## 下一步
 
-- 登录后进入空项目时，可按「首次上手引导」配置后端与 API Key，一键生成 5 个 Agent 与「快速上手·轻量」工作流（默认 clone Heroku 官方 nodejs-getting-started 公开仓）。引导使用固定 Agent 名（Clarify/Visual/Implement/Test/Preview），同一 Approving 实例内仅一个项目可完成该引导。
+- 登录后进入空项目时，可按「首次上手引导」配置后端与 API Key，一键生成 6 个 Agent 与「快速上手·轻量」工作流（默认 clone Heroku 官方 nodejs-getting-started 公开仓）。引导使用固定 Agent 名（Clarify/Visual/Implement/Test/Review/Preview），同一 Approving 实例内仅一个项目可完成该引导。
 - [核心概念](../concepts/) — FSM、gate、sandbox、artifact
 - [配置摘要](../../help/configuration/) — 指向完整 `CONFIGURATION.md`
 - [网关摘要](../../help/gateway/) — 指向 `GATEWAY.md`

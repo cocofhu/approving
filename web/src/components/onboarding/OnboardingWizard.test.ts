@@ -12,7 +12,7 @@ import {
 vi.mock('@/lib/api', () => ({
   api: {
     bootstrapProjectOnboarding: vi.fn(async () => ({
-      agentIds: ['ClarifyAgent', 'VisualAgent', 'ImplementAgent', 'TestAgent', 'PreviewAgent'],
+      agentIds: ['ClarifyAgent', 'VisualAgent', 'ImplementAgent', 'TestAgent', 'ReviewAgent', 'PreviewAgent'],
       workflowId: 'wf-1',
       repos: 'demo|https://github.com/heroku/nodejs-getting-started.git|main',
       feature: '把首页欢迎文案与主按钮文案改得更清晰友好',

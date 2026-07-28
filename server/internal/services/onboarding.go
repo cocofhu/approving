@@ -48,7 +48,7 @@ type OnboardingBootstrapResult struct {
 	Published  bool     `json:"published"`
 }
 
-// OnboardingService atomically bootstraps project auth + 5 agents + light workflow.
+// OnboardingService atomically bootstraps project auth + onboarding agents + light workflow.
 type OnboardingService struct {
 	Projects *ProjectService
 	Skills   *SkillService
@@ -60,13 +60,13 @@ func NewOnboardingService(projects *ProjectService, skills *SkillService, wf *Wo
 	return &OnboardingService{Projects: projects, Skills: skills, WF: wf}
 }
 
-// Bootstrap writes project sandboxEnv auth, saves five agents from embed templates,
-// and publishes the light onboarding workflow. It is idempotent for the fixed names
-// within the same project. Cross-project name conflicts are rejected with
-// ErrOnboardingAgentConflict (no overwrite of another project's agents).
-// It never starts a Run. Missing apiKey rejects without creating resources.
-// Templates and the light graph are validated before any auth/agent writes to
-// reduce mid-flight partial state.
+// Bootstrap writes project sandboxEnv auth, saves onboarding agents from embed
+// templates, and publishes the light onboarding workflow. It is idempotent for
+// the fixed names within the same project. Cross-project name conflicts are
+// rejected with ErrOnboardingAgentConflict (no overwrite of another project's
+// agents). It never starts a Run. Missing apiKey rejects without creating
+// resources. Templates and the light graph are validated before any auth/agent
+// writes to reduce mid-flight partial state.
 func (s *OnboardingService) Bootstrap(projectID string, req OnboardingBootstrapRequest) (OnboardingBootstrapResult, error) {
 	projectID = strings.TrimSpace(projectID)
 	if projectID == "" {
@@ -287,7 +287,7 @@ func (s *OnboardingService) upsertLightWorkflow(projectID, repos, feature string
 		}
 	}
 	if existing != nil {
-		existing.Description = "空项目快速上手轻量示例（clarify→visual→gate→implement→test→preview）"
+		existing.Description = "空项目快速上手轻量示例（clarify→visual→gate→implement→test→review→preview）"
 		existing.NeedsRepo = true
 		existing.Graph = graph
 		if err := s.WF.Save(existing); err != nil {
@@ -299,7 +299,7 @@ func (s *OnboardingService) upsertLightWorkflow(projectID, repos, feature string
 		ID:          uuid.NewString(),
 		ProjectID:   projectID,
 		Name:        OnboardingWorkflowName,
-		Description: "空项目快速上手轻量示例（clarify→visual→gate→implement→test→preview）",
+		Description: "空项目快速上手轻量示例（clarify→visual→gate→implement→test→review→preview）",
 		Status:      "draft",
 		Version:     1,
 		NeedsRepo:   true,
@@ -317,10 +317,17 @@ func BuildOnboardingLightGraphForTest(repos, feature string) models.Graph {
 }
 
 func buildOnboardingLightGraph(repos, feature string) models.Graph {
-	implementPrompt := "轻量链路：用 get_clarified_requirement 读取澄清结论，并结合视觉产物 page.html 与 {{vars.preview_issues}}（如有）实现改动。" +
+	implementPrompt := "轻量链路：用 get_clarified_requirement 读取澄清结论，并结合视觉产物 page.html 与 {{vars.preview_issues}} / {{vars.reason}}（如有）实现改动。" +
 		"勿依赖实施计划。在仓库中完成需求后提交推送，并调用 set_implementation_result。"
 	visualPrompt := "根据澄清后的需求做一个简洁美观的可视化网页 demo（原型），用 write_artifact 写入 page.html。勿依赖 plan。"
 	previewPrompt := "在沙箱内启动 Heroku Node Getting Started 示例（或工作流 repos 指向的公开仓）：PORT=5006，监听 0.0.0.0，调用 set_preview(5006)。"
+	reviewPrompt := "轻量评审上游实现：只拦正确性/回归/明显安全问题；文案与风格非阻塞。用 set_review 写入结论。无 plan 时可省略计划覆盖。"
+
+	// Positions: never use (0,0) — the canvas treats that as "invalid" and
+	// session-layouts the node to the right of all others (input appeared last).
+	const y = 200
+	step := 220
+	x := func(i int) float64 { return float64(40 + i*step) }
 
 	return models.Graph{
 		Variables: []models.Variable{
@@ -337,9 +344,9 @@ func buildOnboardingLightGraph(repos, feature string) models.Graph {
 			},
 		},
 		Nodes: []models.Node{
-			{ID: "input", Type: "input", Label: "输入", Position: models.Position{X: 0, Y: 0}, Config: map[string]any{}},
+			{ID: "input", Type: "input", Label: "输入", Position: models.Position{X: x(0), Y: y}, Config: map[string]any{}},
 			{
-				ID: "clarify", Type: "react", Label: "澄清", Position: models.Position{X: 220, Y: 0},
+				ID: "clarify", Type: "react", Label: "澄清", Position: models.Position{X: x(1), Y: y},
 				Config: map[string]any{
 					"skill_profile": "ClarifyAgent",
 					"max_rounds":    6,
@@ -347,35 +354,41 @@ func buildOnboardingLightGraph(repos, feature string) models.Graph {
 				},
 			},
 			{
-				ID: "visual", Type: "visual", Label: "视觉", Position: models.Position{X: 440, Y: 0},
+				ID: "visual", Type: "visual", Label: "视觉", Position: models.Position{X: x(2), Y: y},
 				Config: map[string]any{
 					"skill_profile": "VisualAgent",
 					"prompt":        visualPrompt,
 				},
 			},
 			{
-				ID: "gate", Type: "human_gate", Label: "视觉确认", Position: models.Position{X: 660, Y: 0},
+				ID: "gate", Type: "human_gate", Label: "视觉确认", Position: models.Position{X: x(3), Y: y},
 				Config: map[string]any{
 					"title":         "确认视觉原型",
 					"body_template": "{{nodes.visual.outputs.page}}",
 					"output_var":    "action",
 					"form":          []any{},
+					// goto on actions is the primary canvas/engine route; When
+					// edges below remain as fallback for older clients.
 					"actions": []any{
-						map[string]any{"id": "approve", "label": "批准"},
-						map[string]any{"id": "revise", "label": "退回修改"},
+						map[string]any{"id": "approve", "label": "批准", "goto": "implement"},
+						map[string]any{"id": "revise", "label": "退回修改", "goto": "visual"},
 					},
 				},
 			},
 			{
-				ID: "implement", Type: "implement", Label: "实现", Position: models.Position{X: 880, Y: 0},
+				ID: "implement", Type: "implement", Label: "实现", Position: models.Position{X: x(4), Y: y},
 				Config: map[string]any{
 					"skill_profile": "ImplementAgent",
 					"max_rounds":    3,
 					"prompt":        implementPrompt,
+					"conditional_prompt": map[string]any{
+						"when_var": "reason",
+						"text":     "测试/评审/预览未通过：{{vars.reason}}\n按反馈最小修复后重新 PUSH。",
+					},
 				},
 			},
 			{
-				ID: "test", Type: "test", Label: "测试", Position: models.Position{X: 1100, Y: 0},
+				ID: "test", Type: "test", Label: "测试", Position: models.Position{X: x(5), Y: y},
 				Config: map[string]any{
 					"skill_profile":    "TestAgent",
 					"reason_var":       "reason",
@@ -383,13 +396,25 @@ func buildOnboardingLightGraph(repos, feature string) models.Graph {
 					"block_on_skipped": false,
 					"prompt":           "对上游实现执行测试并如实记录结果,用 set_test_result 写入测试总结。无 plan 叶子时可省略 plan_coverage。",
 					"exits": map[string]any{
+						"pass": map[string]any{"goto": "review"},
+						"fail": map[string]any{"goto": "implement"},
+					},
+				},
+			},
+			{
+				ID: "review", Type: "review", Label: "复审", Position: models.Position{X: x(6), Y: y},
+				Config: map[string]any{
+					"skill_profile": "ReviewAgent",
+					"reason_var":    "reason",
+					"prompt":        reviewPrompt,
+					"exits": map[string]any{
 						"pass": map[string]any{"goto": "preview"},
 						"fail": map[string]any{"goto": "implement"},
 					},
 				},
 			},
 			{
-				ID: "preview", Type: "app_preview", Label: "预览", Position: models.Position{X: 1320, Y: 0},
+				ID: "preview", Type: "app_preview", Label: "预览", Position: models.Position{X: x(7), Y: y},
 				Config: map[string]any{
 					"skill_profile": "PreviewAgent",
 					"max_rounds":    3,
@@ -398,12 +423,12 @@ func buildOnboardingLightGraph(repos, feature string) models.Graph {
 					"prompt":        previewPrompt,
 					"form":          []any{},
 					"actions": []any{
-						map[string]any{"id": "pass", "label": "通过"},
-						map[string]any{"id": "fail", "label": "退回"},
+						map[string]any{"id": "pass", "label": "通过", "goto": "output"},
+						map[string]any{"id": "fail", "label": "退回", "goto": "implement"},
 					},
 				},
 			},
-			{ID: "output", Type: "output", Label: "输出", Position: models.Position{X: 1540, Y: 0}, Config: map[string]any{}},
+			{ID: "output", Type: "output", Label: "输出", Position: models.Position{X: x(8), Y: y}, Config: map[string]any{}},
 		},
 		Edges: []models.Edge{
 			{ID: "e1", Source: "input", Target: "clarify"},
@@ -412,11 +437,13 @@ func buildOnboardingLightGraph(repos, feature string) models.Graph {
 			{ID: "e4", Source: "gate", Target: "implement", When: "action == 'approve'", Kind: models.EdgeSuccess},
 			{ID: "e5", Source: "gate", Target: "visual", When: "action == 'revise'", Kind: models.EdgeSuccess},
 			{ID: "e6", Source: "implement", Target: "test"},
-			{ID: "e7", Source: "test", Target: "preview", Kind: models.EdgeSuccess},
+			{ID: "e7", Source: "test", Target: "review", Kind: models.EdgeSuccess},
 			{ID: "e8", Source: "test", Target: "implement", Kind: models.EdgeFailure},
-			{ID: "e9", Source: "preview", Target: "output", When: "action == 'pass'", Kind: models.EdgeSuccess},
-			{ID: "e10", Source: "preview", Target: "implement", When: "action == 'fail'", Kind: models.EdgeSuccess},
-			{ID: "e11", Source: "preview", Target: "implement", Kind: models.EdgeFailure},
+			{ID: "e9", Source: "review", Target: "preview", Kind: models.EdgeSuccess},
+			{ID: "e10", Source: "review", Target: "implement", Kind: models.EdgeFailure},
+			{ID: "e11", Source: "preview", Target: "output", When: "action == 'pass'", Kind: models.EdgeSuccess},
+			{ID: "e12", Source: "preview", Target: "implement", When: "action == 'fail'", Kind: models.EdgeSuccess},
+			{ID: "e13", Source: "preview", Target: "implement", Kind: models.EdgeFailure},
 		},
 	}
 }

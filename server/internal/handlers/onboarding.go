@@ -11,7 +11,7 @@ import (
 )
 
 // BootstrapProjectOnboarding handles POST /api/projects/:id/bootstrap-onboarding.
-// It writes project auth, creates/reuses 5 agents, and publishes the light workflow.
+// It writes project auth, creates/reuses onboarding agents, and publishes the light workflow.
 // It never starts a Run. Missing apiKey → 400 with no partial resources created
 // (auth/agents/workflow are only written after the key check).
 func (h *Handlers) BootstrapProjectOnboarding(c *gin.Context) {

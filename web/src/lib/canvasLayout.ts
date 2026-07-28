@@ -35,7 +35,8 @@ function buildAdjacency(nodes: WFNode[], edges: WFEdge[]) {
         if (c?.goto) addEdge(adj, inDeg, n.id, c.goto)
       }
     }
-    if (n.type === 'human_gate') {
+    // human_gate and app_preview both route via actions[].goto (engine resume).
+    if (n.type === 'human_gate' || n.type === 'app_preview') {
       for (const a of (n.config?.actions as { id?: string; goto?: string }[]) || []) {
         if (a?.goto) addEdge(adj, inDeg, n.id, a.goto)
       }

@@ -43,8 +43,8 @@ func TestOnboardingBootstrapCreatesAgentsAndPublishedWorkflow(t *testing.T) {
 	if res.WorkflowID == "" {
 		t.Fatal("missing workflowId")
 	}
-	if len(res.AgentIDs) != 5 {
-		t.Fatalf("want 5 agents, got %v", res.AgentIDs)
+	if len(res.AgentIDs) != len(services.OnboardingAgentNames) {
+		t.Fatalf("want %d agents, got %v", len(services.OnboardingAgentNames), res.AgentIDs)
 	}
 	if res.Repos != services.DefaultOnboardingRepos {
 		t.Fatalf("repos = %q", res.Repos)
@@ -167,7 +167,7 @@ func TestOnboardingBootstrapIdempotent(t *testing.T) {
 	if r1.WorkflowID != r2.WorkflowID {
 		t.Fatalf("workflow id changed: %s vs %s", r1.WorkflowID, r2.WorkflowID)
 	}
-	if len(svc.Skills.List()) != 5 {
+	if len(svc.Skills.List()) != len(services.OnboardingAgentNames) {
 		t.Fatalf("agents doubled: %d", len(svc.Skills.List()))
 	}
 	if n := len(svc.WF.List(projectID)); n != 1 {
@@ -240,8 +240,8 @@ func TestOnboardingBootstrapAllowsClaimingUnboundAgents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bootstrap should claim unbound: %v", err)
 	}
-	if len(res.AgentIDs) != 5 {
-		t.Fatalf("want 5 agents, got %v", res.AgentIDs)
+	if len(res.AgentIDs) != len(services.OnboardingAgentNames) {
+		t.Fatalf("want %d agents, got %v", len(services.OnboardingAgentNames), res.AgentIDs)
 	}
 	a, ok := svc.Skills.Get("ClarifyAgent")
 	if !ok || a.ProjectID != projectID {
@@ -294,33 +294,80 @@ func assertOnboardingGraph(t *testing.T, g models.Graph) {
 	for _, n := range g.Nodes {
 		byID[n.ID] = n
 	}
-	for _, id := range []string{"input", "clarify", "visual", "gate", "implement", "test", "preview", "output"} {
+	for _, id := range []string{"input", "clarify", "visual", "gate", "implement", "test", "review", "preview", "output"} {
 		if _, ok := byID[id]; !ok {
 			t.Fatalf("missing node %s", id)
 		}
 	}
-	for _, banned := range []string{"research", "proposal", "plan", "review"} {
+	for _, banned := range []string{"research", "proposal", "plan"} {
 		for _, n := range g.Nodes {
 			if n.Type == banned {
 				t.Fatalf("unexpected node type %s", banned)
 			}
 		}
 	}
+	if byID["review"].Type != "review" {
+		t.Fatalf("review node type = %s", byID["review"].Type)
+	}
+	// (0,0) is invalid for the canvas session layout (node gets shoved right).
+	for _, n := range g.Nodes {
+		if n.Position.X == 0 && n.Position.Y == 0 {
+			t.Fatalf("node %s has invalid position (0,0)", n.ID)
+		}
+	}
 	gate := byID["gate"]
 	if bt, _ := gate.Config["body_template"].(string); bt != "{{nodes.visual.outputs.page}}" {
 		t.Fatalf("gate body_template = %v", gate.Config["body_template"])
 	}
+	gateActions, _ := gate.Config["actions"].([]any)
+	var approveGoto, reviseGoto string
+	for _, raw := range gateActions {
+		a, _ := raw.(map[string]any)
+		switch a["id"] {
+		case "approve":
+			approveGoto, _ = a["goto"].(string)
+		case "revise":
+			reviseGoto, _ = a["goto"].(string)
+		}
+	}
+	if approveGoto != "implement" || reviseGoto != "visual" {
+		t.Fatalf("gate action goto approve=%q revise=%q", approveGoto, reviseGoto)
+	}
 	testCfg := byID["test"].Config
 	exits, _ := testCfg["exits"].(map[string]any)
 	fail, _ := exits["fail"].(map[string]any)
+	pass, _ := exits["pass"].(map[string]any)
 	if fail["goto"] != "implement" {
 		t.Fatalf("test fail goto = %v", fail["goto"])
+	}
+	if pass["goto"] != "review" {
+		t.Fatalf("test pass goto = %v want review", pass["goto"])
+	}
+	revExits, _ := byID["review"].Config["exits"].(map[string]any)
+	revPass, _ := revExits["pass"].(map[string]any)
+	revFail, _ := revExits["fail"].(map[string]any)
+	if revPass["goto"] != "preview" || revFail["goto"] != "implement" {
+		t.Fatalf("review exits pass=%v fail=%v", revPass["goto"], revFail["goto"])
+	}
+	previewActions, _ := byID["preview"].Config["actions"].([]any)
+	var previewPassGoto, previewFailGoto string
+	for _, raw := range previewActions {
+		a, _ := raw.(map[string]any)
+		switch a["id"] {
+		case "pass":
+			previewPassGoto, _ = a["goto"].(string)
+		case "fail":
+			previewFailGoto, _ = a["goto"].(string)
+		}
+	}
+	if previewPassGoto != "output" || previewFailGoto != "implement" {
+		t.Fatalf("preview action goto pass=%q fail=%q", previewPassGoto, previewFailGoto)
 	}
 	implPrompt, _ := byID["implement"].Config["prompt"].(string)
 	if strings.Contains(implPrompt, "get_plan") {
 		t.Fatal("light implement prompt must not require get_plan")
 	}
-	var hasRevise, hasApprove, hasPreviewFail bool
+	var hasRevise, hasApprove, hasPreviewFail, hasReviewEdge bool
 	for _, e := range g.Edges {
 		if e.Source == "gate" && e.Target == "visual" && strings.Contains(e.When, "revise") {
 			hasRevise = true
@@ -331,9 +378,12 @@ func assertOnboardingGraph(t *testing.T, g models.Graph) {
 		if e.Source == "preview" && e.Target == "implement" {
 			hasPreviewFail = true
 		}
+		if e.Source == "test" && e.Target == "review" {
+			hasReviewEdge = true
+		}
 	}
-	if !hasRevise || !hasApprove || !hasPreviewFail {
-		t.Fatalf("missing revise/fail loops: revise=%v approve=%v previewFail=%v", hasRevise, hasApprove, hasPreviewFail)
+	if !hasRevise || !hasApprove || !hasPreviewFail || !hasReviewEdge {
+		t.Fatalf("missing loops/edges: revise=%v approve=%v previewFail=%v reviewEdge=%v", hasRevise, hasApprove, hasPreviewFail, hasReviewEdge)
 	}
 	if err := g.Validate(); err != nil {
 		t.Fatalf("graph validate: %v", err)

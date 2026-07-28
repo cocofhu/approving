@@ -124,7 +124,7 @@
       "startRun": "Start sample Run",
       "cta": "Start onboarding",
       "emptyTitle": "Empty project — start onboarding",
-      "emptyDesc": "Configure backend + API Key to create 5 Agents and the published「快速上手·轻量」workflow. Default git is the public Heroku sample.",
+      "emptyDesc": "Configure backend + API Key to create 6 Agents and the published light quick-start workflow. Default git is the public Heroku sample.",
       "head": {
         "overview": "What you will get",
         "acp": "Choose ACP backend",
@@ -141,7 +141,7 @@
         "review": "Review"
       },
       "overview": {
-        "meta": "This writes project auth, creates 5 Agents, and publishes the light quick-start workflow. It will not start a Run automatically.",
+        "meta": "This writes project auth, creates 6 Agents, and publishes the light quick-start workflow. It will not start a Run automatically.",
         "agents": "Agents",
         "agentsList": "Clarify / Visual / Implement / Test / Preview",
         "repo": "Repo",
@@ -175,7 +175,7 @@
       },
       "success": {
         "title": "Setup ready",
-        "desc": "Project auth written; 5 Agents and the published light workflow are ready.",
+        "desc": "Project auth written; 6 Agents and the published light workflow are ready.",
         "repo": "Sample repository",
         "limit": "Public repos usually cannot be pushed; Preview may not show Implement changes. Success means Agents/workflow were created.",
         "runStarted": "Sample Run started"

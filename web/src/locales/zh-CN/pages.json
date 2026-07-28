@@ -124,7 +124,7 @@
       "startRun": "启动示例 Run",
       "cta": "开始上手引导",
       "emptyTitle": "空项目，开始上手引导",
-      "emptyDesc": "配置后端与 API Key，一键生成 5 个 Agent 与「快速上手·轻量」工作流。默认使用 Heroku 公开示例仓。",
+      "emptyDesc": "配置后端与 API Key，一键生成 6 个 Agent 与「快速上手·轻量」工作流。默认使用 Heroku 公开示例仓。",
       "head": {
         "overview": "看看这次会生成什么",
         "acp": "选择运行后端",
@@ -141,7 +141,7 @@
         "review": "确认"
       },
       "overview": {
-        "meta": "完成以下步骤后，将写入项目鉴权、创建 5 个 Agent，并发布「快速上手·轻量」工作流。不会自动开跑。",
+        "meta": "完成以下步骤后，将写入项目鉴权、创建 6 个 Agent，并发布「快速上手·轻量」工作流。不会自动开跑。",
         "agents": "Agent",
         "agentsList": "Clarify / Visual / Implement / Test / Preview",
         "repo": "代码仓",
@@ -175,7 +175,7 @@
       },
       "success": {
         "title": "配置已生成",
-        "desc": "已写入项目鉴权，并生成 5 个 Agent 与已发布的「快速上手·轻量」工作流。",
+        "desc": "已写入项目鉴权，并生成 6 个 Agent 与已发布的「快速上手·轻量」工作流。",
         "repo": "示例代码仓",
         "limit": "公开仓通常无法 push；Preview 未必看到 Implement 改动。引导成败以 Agent/工作流是否生成为准。",
         "runStarted": "已启动示例 Run"

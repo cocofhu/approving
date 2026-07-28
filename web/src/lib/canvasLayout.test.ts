@@ -53,4 +53,19 @@ describe('computeSessionLayout', () => {
     expect(layout.has('anchor')).toBe(false)
     expect(layout.get('bad')!.x).toBeGreaterThan(400)
   })
+
+  it('uses app_preview action goto for adjacency like human_gate', () => {
+    const nodes = [
+      node('input', 'input', { x: 0, y: 0 }),
+      node('preview', 'app_preview', { x: 0, y: 0 }, {
+        actions: [{ id: 'pass', goto: 'out' }, { id: 'fail', goto: 'input' }],
+      }),
+      node('out', 'output', { x: 0, y: 0 }),
+    ]
+    const edges: WFEdge[] = [{ id: 'e1', source: 'input', target: 'preview' }]
+    const layout = computeSessionLayout(nodes, edges)
+    expect(layout.size).toBe(3)
+    // out should be layered after preview via action goto, not stuck at layer 0.
+    expect(layout.get('out')!.x).toBeGreaterThan(layout.get('preview')!.x)
+  })
 })

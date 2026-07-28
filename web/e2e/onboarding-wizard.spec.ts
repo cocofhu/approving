@@ -21,7 +21,7 @@ test('空项目上手引导五步向导浏览器验收', async ({ page }) => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          agentIds: ['ClarifyAgent', 'VisualAgent', 'ImplementAgent', 'TestAgent', 'PreviewAgent'],
+          agentIds: ['ClarifyAgent', 'VisualAgent', 'ImplementAgent', 'TestAgent', 'ReviewAgent', 'PreviewAgent'],
           workflowId: 'wf-onboard-1',
           repos: body.repos || 'demo|https://github.com/heroku/nodejs-getting-started.git|main',
           feature: '把首页欢迎文案与主按钮文案改得更清晰友好',

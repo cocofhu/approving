@@ -20,6 +20,7 @@ var OnboardingAgentNames = []string{
 	"VisualAgent",
 	"ImplementAgent",
 	"TestAgent",
+	"ReviewAgent",
 	"PreviewAgent",
 }
 
