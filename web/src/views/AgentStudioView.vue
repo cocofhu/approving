@@ -31,7 +31,7 @@ import {
   UNGROUPED_ID,
 } from '@/lib/agentOrg'
 import type { GitCredentialType } from '@/lib/gitCredentialAnalysis'
-import { downloadZip } from '@/lib/agentIO'
+import { downloadZip, validateAgentName, normalizeAgentName } from '@/lib/agentIO'
 import { useAgentImport } from '@/lib/useAgentImport'
 import {
   ACP_BACKENDS,
@@ -108,7 +108,6 @@ const AGENT_PLATFORM_MCPS = [
     token: '${APPROVING_SCHEDULER_TOKEN}',
   },
 ] as const
-const NAME_RE = /^[A-Za-z0-9_-]+$/
 const AGENT_LIST_COLLAPSED_KEY = 'agent-studio-agent-list-collapsed'
 const EXPLORER_COLLAPSED_KEY = 'agent-studio-explorer-collapsed'
 const SIDEBAR_EXPANDED_W = '240px'
@@ -420,12 +419,44 @@ type PromptCfg = {
   placeholder?: string
   /** Soft info line (e.g. rename cascade hint); not a warning. */
   hint?: string
+  /** When true, show green "valid" feedback after write-rule checks pass. */
+  showValidHint?: boolean
   validate: (v: string) => string
   submit: (v: string) => void | Promise<void>
 }
 const promptCfg = ref<PromptCfg | null>(null)
 const promptValue = ref('')
 const promptError = ref('')
+const promptOkMsg = ref('')
+const promptCanSubmit = computed(() => {
+  if (!promptCfg.value) return false
+  const v = promptValue.value
+  if (!v.trim()) return false
+  return !promptCfg.value.validate(v)
+})
+
+function refreshPromptFeedback() {
+  const c = promptCfg.value
+  if (!c) {
+    promptError.value = ''
+    promptOkMsg.value = ''
+    return
+  }
+  const v = promptValue.value
+  if (!v.trim()) {
+    promptError.value = ''
+    promptOkMsg.value = ''
+    return
+  }
+  const err = c.validate(v)
+  if (err) {
+    promptError.value = err
+    promptOkMsg.value = ''
+  } else {
+    promptError.value = ''
+    promptOkMsg.value = c.showValidHint ? t('pages.agentStudio.dialogs.nameValid') : ''
+  }
+}
 type ConfirmCfg = { title: string; message: string; confirmText?: string; danger?: boolean; ok: () => void | Promise<void> }
 const confirmCfg = ref<ConfirmCfg | null>(null)
 const showAgentManage = ref(false)
@@ -693,6 +724,7 @@ async function reloadOrg() {
 function openCreateRootGroup() {
   promptValue.value = ''
   promptError.value = ''
+  promptOkMsg.value = ''
   promptCfg.value = {
     title: t('pages.agentStudio.org.newRootGroup'),
     label: t('pages.agentStudio.org.groupNameLabel'),
@@ -711,6 +743,7 @@ function openCreateRootGroup() {
 function openCreateChildGroup(parentId: string) {
   promptValue.value = ''
   promptError.value = ''
+  promptOkMsg.value = ''
   promptCfg.value = {
     title: t('pages.agentStudio.org.newChildGroup'),
     label: t('pages.agentStudio.org.groupNameLabel'),
@@ -731,6 +764,7 @@ function openRenameGroup(groupId: string) {
   if (!g) return
   promptValue.value = g.name
   promptError.value = ''
+  promptOkMsg.value = ''
   promptCfg.value = {
     title: t('pages.agentStudio.org.renameGroup'),
     label: t('pages.agentStudio.org.groupNameLabel'),
@@ -1484,21 +1518,26 @@ function gotoManageFromBlocked() {
 function openRenameAgent(name: string) {
   promptValue.value = name
   promptError.value = ''
+  promptOkMsg.value = ''
   promptCfg.value = {
     title: t('pages.agentStudio.dialogs.renameTitle'),
     label: t('pages.agentStudio.dialogs.renameLabel'),
     hint: t('pages.agentStudio.dialogs.renameCascadeHint'),
-    validate: (v) =>
-      !v
-        ? t('pages.agentStudio.dialogs.nameRequired')
-        : !NAME_RE.test(v)
-          ? t('pages.agentStudio.dialogs.nameInvalid')
-          : v !== name && agents.value.some((a) => a.name === v)
-            ? t('pages.agentStudio.dialogs.nameExists')
-            : '',
+    showValidHint: true,
+    validate: (v) => {
+      const code = validateAgentName(v)
+      if (code === 'required') return t('pages.agentStudio.dialogs.nameRequired')
+      if (code === 'invalid') return t('pages.agentStudio.dialogs.nameInvalid')
+      const normalized = normalizeAgentName(v)
+      if (normalized !== name && agents.value.some((a) => a.name === normalized)) {
+        return t('pages.agentStudio.dialogs.nameExists')
+      }
+      return ''
+    },
     submit: async (v) => {
-      if (v === name) return
-      const updated = await api.renameAgent(name, v)
+      const normalized = normalizeAgentName(v)
+      if (normalized === name) return
+      const updated = await api.renameAgent(name, normalized)
       const n = updated.updatedWorkflowCount ?? 0
       const { updatedWorkflowCount: _count, ...agent } = updated
       agents.value = agents.value.filter((a) => a.name !== name)
@@ -1512,6 +1551,7 @@ function openRenameAgent(name: string) {
       else showToast(t('pages.agentStudio.dialogs.renameSuccess'))
     },
   }
+  refreshPromptFeedback()
 }
 
 function confirmDeleteAgent(name: string) {
@@ -1537,10 +1577,11 @@ function confirmDeleteAgent(name: string) {
 async function promptOk() {
   const c = promptCfg.value
   if (!c) return
-  const v = promptValue.value.trim()
-  const err = c.validate(v)
+  const v = normalizeAgentName(promptValue.value)
+  const err = c.validate(promptValue.value)
   if (err) {
     promptError.value = err
+    promptOkMsg.value = ''
     return
   }
   try {
@@ -1548,8 +1589,10 @@ async function promptOk() {
     promptCfg.value = null
   } catch (e: any) {
     promptError.value = String(e?.message || e)
+    promptOkMsg.value = ''
   }
 }
+
 async function confirmOk() {
   const c = confirmCfg.value
   if (!c) return
@@ -2759,13 +2802,19 @@ onBeforeUnmount(() => {
         v-model="promptValue"
         :placeholder="promptCfg?.placeholder"
         class="w-full rounded-md border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent"
+        :class="{
+          'border-err': !!promptError,
+          'border-ok/55': !!promptOkMsg && !promptError,
+        }"
+        @input="refreshPromptFeedback"
         @keyup.enter="promptOk"
       />
       <p v-if="promptError" class="mt-2 text-[12px] text-err">{{ promptError }}</p>
+      <p v-else-if="promptOkMsg" class="mt-2 text-[12px] text-ok">{{ promptOkMsg }}</p>
       <p v-if="promptCfg?.hint" class="mt-3 text-[12px] leading-relaxed text-txt2">{{ promptCfg.hint }}</p>
       <template #footer>
         <AppButton size="sm" variant="ghost" @click="promptCfg = null">{{ t('common.buttons.cancel') }}</AppButton>
-        <AppButton size="sm" variant="primary" @click="promptOk">{{ t('pages.agentStudio.dialogs.confirm') }}</AppButton>
+        <AppButton size="sm" variant="primary" :disabled="!promptCanSubmit" @click="promptOk">{{ t('pages.agentStudio.dialogs.confirm') }}</AppButton>
       </template>
     </AppModal>
 

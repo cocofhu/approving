@@ -6,6 +6,7 @@ import {
   resolveImportName,
   suggestRename,
   validateAgentName,
+  normalizeAgentName,
 } from '@/lib/agentIO'
 import { useToast } from '@/lib/useToast'
 import type { Agent } from '@/lib/api'
@@ -75,7 +76,7 @@ export function useAgentImport(opts: {
       return
     }
 
-    const targetName = resolveImportName(peek.name, file.name)
+    const targetName = normalizeAgentName(resolveImportName(peek.name, file.name))
     const nameErr = validateAgentName(targetName)
     if (nameErr === 'required' || nameErr === 'invalid') {
       importError.value = t('pages.agentStudio.exportImport.importError.invalidName')
@@ -125,7 +126,7 @@ export function useAgentImport(opts: {
       return
     }
 
-    const newName = renameValue.value.trim()
+    const newName = normalizeAgentName(renameValue.value)
     const err = validateAgentName(newName)
     if (err === 'required' || err === 'invalid') {
       renameError.value = t('pages.agentStudio.exportImport.conflict.nameInvalid')

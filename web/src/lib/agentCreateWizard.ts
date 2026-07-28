@@ -1,6 +1,6 @@
 import type { Agent, AgentFile, AgentPrompts, MCPServer } from '@/lib/api'
 import type { GitCredentialType } from '@/lib/gitCredentialAnalysis'
-import { validateAgentName } from '@/lib/agentIO'
+import { validateAgentName, normalizeAgentName } from '@/lib/agentIO'
 import { hasAuthKeyConfigured } from '@/lib/backendAuthGuide'
 import {
   ACP_BACKENDS,
@@ -244,7 +244,7 @@ function collectFiles(draft: WizardDraft): AgentFile[] {
 
 /** Assemble POST /agents payload. Skip Rules still writes default rule; Skip Prompts omits prompts. */
 export function assembleCreatePayload(draft: WizardDraft): Agent {
-  const name = draft.name.trim()
+  const name = normalizeAgentName(draft.name)
   const prompts = draftPromptsToApi(draft.prompts, !!draft.skipped.prompts)
   const env = normalizeWizardRegions(draft)
   return {
@@ -266,7 +266,8 @@ export function validateBasics(draft: WizardDraft, existingNames: string[]): str
   const code = validateAgentName(draft.name)
   if (code === 'required') return 'required'
   if (code === 'invalid') return 'invalid'
-  if (existingNames.includes(draft.name.trim())) return 'exists'
+  const normalized = normalizeAgentName(draft.name)
+  if (existingNames.includes(normalized)) return 'exists'
   return ''
 }
 

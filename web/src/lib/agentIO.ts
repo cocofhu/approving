@@ -7,11 +7,35 @@ export function downloadZip(blob: Blob, filename: string) {
   URL.revokeObjectURL(a.href)
 }
 
-const NAME_RE = /^[A-Za-z0-9_-]+$/
+/** Write-identity charset: Unicode letters/digits plus ASCII _/- (Demo「改后」). */
+const NAME_RE = /^[\p{L}\p{N}_-]+$/u
+const MAX_AGENT_NAME_RUNES = 64
+const FULLWIDTH_PUNCT_RE = /[－＿．／＼、，。！？：；（）【】]/
 
+/** NFC-normalize and trim an Agent name (identity key). */
+export function normalizeAgentName(name: string): string {
+  try {
+    return name.normalize('NFC').trim()
+  } catch {
+    return name.trim()
+  }
+}
+
+export function agentNameRuneCount(name: string): number {
+  return Array.from(name).length
+}
+
+/**
+ * Validate a write-path Agent name (create / rename / import conflict rename).
+ * Returns '' when valid, or a stable code: required | invalid.
+ */
 export function validateAgentName(name: string): string {
-  const v = name.trim()
+  const v = normalizeAgentName(name)
   if (!v) return 'required'
+  if (agentNameRuneCount(v) > MAX_AGENT_NAME_RUNES) return 'invalid'
+  if (/[\s\u3000]/.test(v)) return 'invalid'
+  if (/[./\\]/.test(v) || v === '.' || v === '..') return 'invalid'
+  if (FULLWIDTH_PUNCT_RE.test(v)) return 'invalid'
   if (!NAME_RE.test(v)) return 'invalid'
   return ''
 }
