@@ -1762,7 +1762,8 @@ func (c *acpProvider) mcpServers(req NodeReq) json.RawMessage {
 	for _, m := range specs {
 		switch {
 		case m.URL != "":
-			entry := map[string]any{"name": m.Name, "url": m.URL}
+			// type:http required by Claude Code / CodeBuddy; url-only is skipped.
+			entry := map[string]any{"name": m.Name, "type": "http", "url": m.URL}
 			if len(m.Headers) > 0 {
 				hs := make([]map[string]string, 0, len(m.Headers))
 				for k, v := range m.Headers {

@@ -117,6 +117,10 @@ func BuildConfigHome(spec ConfigHomeSpec) (string, error) {
 		}
 		entry := map[string]any{}
 		if m.URL != "" {
+			// Claude Code / CodeBuddy (--strict-mcp-config): a url without type is
+			// treated as a broken stdio server and skipped. Cursor accepts url-only;
+			// type:http is required for Claude-family HTTP/streamable-http MCP.
+			entry["type"] = "http"
 			entry["url"] = m.URL
 			if len(m.Headers) > 0 {
 				entry["headers"] = m.Headers
