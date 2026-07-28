@@ -64,7 +64,7 @@ func (e *Engine) ResumeGateAs(runID, nodeID, action string, form map[string]any,
 		return err
 	}
 	node := c.graph.FindNode(nodeID)
-	if node == nil || (node.Type != "human_gate" && node.Type != "proposal_select" && node.Type != "app_preview") {
+	if node == nil || (node.Type != "human_gate" && node.Type != "proposal_select") {
 		return errors.New("gate node not found")
 	}
 	// A gate on a terminated run is no longer actionable (the run was cancelled
@@ -86,7 +86,7 @@ func (e *Engine) ResumeGateAs(runID, nodeID, action string, form map[string]any,
 	// Validate the form before locking the gate as resolved: a field marked
 	// required, or any field when the chosen action requires the form (e.g. a
 	// "reject" action that mandates a comment), must be non-blank.
-	if node.Type == "human_gate" || node.Type == "app_preview" {
+	if node.Type == "human_gate" {
 		if !shouldSnapshotPreviewIssues(node) {
 			if err := validateGateForm(gate, action, form); err != nil {
 				return err
@@ -110,8 +110,8 @@ func (e *Engine) ResumeGateAs(runID, nodeID, action string, form map[string]any,
 		}
 		outVar := firstNonEmptyStr(str(node.Config["output_var"]), "selected_proposal")
 		outcome = e.finalizeProposal(c, node, final, id, outVar)
-	} else if node.Type == "human_gate" || node.Type == "app_preview" {
-		// human_gate / app_preview: expose action, assign it to the configured global var,
+	} else if node.Type == "human_gate" {
+		// human_gate: expose action, assign it to the configured global var,
 		// and carry any per-action goto target for direct routing.
 		outVar := firstNonEmptyStr(str(node.Config["output_var"]), "action")
 		c.setVar(outVar, action)
@@ -126,8 +126,8 @@ func (e *Engine) ResumeGateAs(runID, nodeID, action string, form map[string]any,
 			c.setVar(k, v)
 			e.persistVar(runID, k, v)
 		}
-		// app_preview always; human_gate only when body is page.html (HtmlPreview
-		// Issue path). Avoid wiping vars.preview_issues on comment-only gates.
+		// human_gate only when body is page.html (HtmlPreview Issue path).
+		// Avoid wiping vars.preview_issues on comment-only gates.
 		if shouldSnapshotPreviewIssues(node) {
 			var lifeErr error
 			if isPassGateAction(action) {
@@ -200,14 +200,12 @@ func (e *Engine) ResumeGateAs(runID, nodeID, action string, form map[string]any,
 }
 
 // shouldSnapshotPreviewIssues reports whether resume should write
-// vars.preview_issues for this gate. app_preview always; human_gate only when
-// body_template binds page.html (HtmlPreview Issue path).
+// vars.preview_issues for this gate. human_gate only when body_template binds
+// page.html (HtmlPreview Issue path). app_preview clears preview_issues on
+// review confirm (reviewReply) and no longer resumes via Gate.
 func shouldSnapshotPreviewIssues(node *models.Node) bool {
 	if node == nil {
 		return false
-	}
-	if node.Type == "app_preview" {
-		return true
 	}
 	if node.Type != "human_gate" {
 		return false

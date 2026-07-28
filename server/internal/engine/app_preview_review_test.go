@@ -5,12 +5,12 @@ import (
 
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/runtime"
 )
 
-// TestAppPreviewSetPreviewEntersReviewAndGate: healthy set_preview (fake
-// PutPreviewPortForTest) must pause waiting_human with BOTH a Gate shell and a
-// seeded ReAct review conversation — without requiring node_complete.
-func TestAppPreviewSetPreviewEntersReviewAndGate(t *testing.T) {
+// TestAppPreviewSetPreviewEntersReviewNoGate: healthy set_preview must pause
+// waiting_human with a seeded ReAct review conversation and NO Gate row.
+func TestAppPreviewSetPreviewEntersReviewNoGate(t *testing.T) {
 	g := models.Graph{
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
@@ -38,11 +38,8 @@ func TestAppPreviewSetPreviewEntersReviewAndGate(t *testing.T) {
 	}
 
 	var gate models.Gate
-	if err := db.Where("run_id = ? AND node_id = ?", run.ID, "preview").First(&gate).Error; err != nil {
-		t.Fatalf("expected app_preview gate: %v", err)
-	}
-	if gate.Resolved {
-		t.Fatal("gate should be unresolved while in review")
+	if err := db.Where("run_id = ? AND node_id = ?", run.ID, "preview").First(&gate).Error; err == nil {
+		t.Fatal("app_preview must not create a Gate")
 	}
 
 	var conv models.ReactConversation
@@ -53,17 +50,97 @@ func TestAppPreviewSetPreviewEntersReviewAndGate(t *testing.T) {
 		t.Fatalf("review conv should be open with agent summary: %+v", conv)
 	}
 
-	pid, alive := eng.GateReactInfo(run.ID, "preview")
-	if pid != "preview" {
-		t.Fatalf("GateReactInfo producer=%q want preview", pid)
+	// GateReactInfo no longer resolves app_preview as a gate producer.
+	if pid, _ := eng.GateReactInfo(run.ID, "preview"); pid != "" {
+		t.Fatalf("GateReactInfo producer=%q want empty (no Gate)", pid)
 	}
-	if !alive {
-		t.Fatal("expected parked review session alive (fakeProvider)")
+
+	if rp, ok := eng.provider.(runtime.ReviewProvider); ok {
+		if !rp.HasLiveSession(run.ID, "preview") {
+			t.Fatal("expected parked review session alive (fakeProvider)")
+		}
 	}
 
 	// node_complete must not be required on the success path.
 	if _, ok := eng.host.TakeOutcome(run.ID, "preview"); ok {
 		t.Fatal("node_complete should not be required for app_preview success")
+	}
+}
+
+// TestAppPreviewReviewConfirmInjectsPassAndClearsIssues: force confirm finishes
+// via finalize + routeSuccess with action=pass and cleared preview_issues.
+func TestAppPreviewReviewConfirmInjectsPassAndClearsIssues(t *testing.T) {
+	g := models.Graph{
+		Nodes: []models.Node{
+			{ID: "input", Type: "input"},
+			{ID: "preview", Type: "app_preview", Label: "预览", Config: map[string]any{
+				"title": "应用预览",
+			}},
+			{ID: "output", Type: "output"},
+			{ID: "fix", Type: "output"},
+		},
+		Edges: []models.Edge{
+			{ID: "e1", Source: "input", Target: "preview"},
+			{ID: "e2", Source: "preview", Target: "output", When: "action == 'pass'"},
+			{ID: "e3", Source: "preview", Target: "fix", When: "action == 'fail'"},
+		},
+	}
+	eng, db, provider := setupEngineGraphP(t, g)
+	provider.skipOutcome = true
+
+	run, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitRunStatus(t, db, run.ID, "waiting_human")
+
+	iss := models.PreviewIssue{
+		ID: "iss-ap-confirm", RunID: run.ID, NodeID: "preview", Body: "btn too wide", Status: "open",
+	}
+	if err := db.Create(&iss).Error; err != nil {
+		t.Fatal(err)
+	}
+	c, err := eng.loadCtx(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.setVar("preview_issues", "stale")
+	eng.persistVar(run.ID, "preview_issues", "stale")
+
+	if err := eng.ReactReply(run.ID, "preview", "确认", nil, nil, true); err != nil {
+		t.Fatalf("force confirm: %v", err)
+	}
+	waitRunStatus(t, db, run.ID, "completed")
+
+	var sr models.StateRun
+	if err := db.Where("run_id = ? AND node_id = ?", run.ID, "preview").
+		Order("iteration desc").First(&sr).Error; err != nil {
+		t.Fatal(err)
+	}
+	if sr.Status != "completed" {
+		t.Fatalf("preview status=%s", sr.Status)
+	}
+	if a, _ := sr.Outputs["action"].(string); a != "pass" {
+		t.Fatalf("outputs.action=%v want pass", sr.Outputs["action"])
+	}
+
+	var outSR models.StateRun
+	if err := db.Where("run_id = ? AND node_id = ?", run.ID, "output").First(&outSR).Error; err != nil {
+		t.Fatalf("expected pass→output visit: %v", err)
+	}
+	var failSR models.StateRun
+	if err := db.Where("run_id = ? AND node_id = ?", run.ID, "fix").First(&failSR).Error; err == nil {
+		t.Fatal("fail edge must not run")
+	}
+
+	var open int64
+	db.Model(&models.PreviewIssue{}).Where("run_id = ? AND node_id = ? AND status = ?", run.ID, "preview", "open").Count(&open)
+	if open != 0 {
+		t.Fatalf("open preview issues after confirm: %d", open)
+	}
+	c2, _ := eng.loadCtx(run.ID)
+	if previewIssuesVarNonEmpty(c2.vars["preview_issues"]) {
+		t.Fatalf("preview_issues still set: %v", c2.vars["preview_issues"])
 	}
 }
 

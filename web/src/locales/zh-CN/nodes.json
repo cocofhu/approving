@@ -496,7 +496,7 @@
     },
     "app_preview": {
       "label": "应用预览",
-      "desc": "沙箱内启动应用并通过 set_preview 注册预览,人工 iframe 验收",
+      "desc": "沙箱内启动应用并通过 set_preview 注册预览;等待态为取点标注 · ReAct 复审(单出口)",
       "fields": {
         "skill_profile": {
           "label": "Agent 配置"
@@ -516,32 +516,22 @@
           "label": "条件注入"
         },
         "title": {
-          "label": "门禁标题",
+          "label": "标题",
           "placeholder": "应用预览"
-        },
-        "actions": {
-          "label": "动作按钮(pass/fail)"
-        },
-        "output_var": {
-          "label": "输出变量",
-          "placeholder": "action"
-        },
-        "form": {
-          "label": "表单字段"
         }
       },
       "outputs": {
         "action": {
-          "desc": "所选动作 id(pass/fail)"
+          "desc": "确认并流转时内部注入的 pass(兼容旧 when 边;画布无动作分支)"
         },
         "preview_issues": {
-          "desc": "人工在预览里提交的问题快照(含截图);下游节点用 {'{{vars.preview_issues}}'} 引用"
+          "desc": "复审会话内问题;确认并流转时清空,不再经 fail 快照下游"
         },
-        "reviewer_id": {
-          "desc": "审批人"
+        "preview_ready": {
+          "desc": "set_preview 可达时为 true"
         }
       },
-      "help": "### 应用预览(app_preview)\n\nAgent 在沙箱内构建并启动应用,调用 `set_preview(port, label?)` 注册预览端口;至少成功 1 次后进入 waiting_human,审批人在 noVNC 远程桌面中验收并选择通过/退回。\n\n**应用须监听 `0.0.0.0:<port>`**(不能只绑 127.0.0.1):预览经容器网桥 IP 反向代理,只绑回环会连不上、预览白屏(502)。\n\n「前端」Tab 使用 noVNC 自动连接;「API」Tab 使用 iframe 快速预览。出口为 ACTION 风格 pass/fail(非 test 节点自动判定)。未调用 set_preview 时按 max_rounds 同会话催促。"
+      "help": "### 应用预览(app_preview)\n\nAgent 在沙箱内构建并启动应用,调用 `set_preview(port, label?)` 注册预览端口;至少成功 1 次后进入纯 ReAct 复审(不创建 Gate)。在 noVNC 中「取点标注 → 添加到聊天 → ReAct」同会话修改,满意后「确认并流转」沿单 success 出口前进。\n\n**应用须监听 `0.0.0.0:<port>`**(不能只绑 127.0.0.1):预览经容器网桥 IP 反向代理,只绑回环会连不上、预览白屏(502)。\n\n画布无通过/退回动作 Handle;存量 pass/fail 边静默兼容(确认注入 action=pass)。未调用 set_preview 时按 max_rounds 同会话催促。"
     },
     "branch": {
       "label": "条件分支",

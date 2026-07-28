@@ -18,4 +18,22 @@ describe('AppTabs', () => {
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['b'])
     wrapper.unmount()
   })
+
+  it('ghosted tab does not switch model and emits disabled-click', async () => {
+    const wrapper = mount(AppTabs, {
+      props: {
+        tabs: [
+          { id: 'review', label: '复审' },
+          { id: 'gate', label: 'Gate', ghosted: true, disabled: true },
+        ],
+        modelValue: 'review',
+      },
+    })
+    const gateBtn = wrapper.findAll('button')[1]!
+    expect(gateBtn.classes().join(' ')).toMatch(/line-through/)
+    await gateBtn.trigger('click')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(wrapper.emitted('disabled-click')?.[0]).toEqual(['gate'])
+    wrapper.unmount()
+  })
 })

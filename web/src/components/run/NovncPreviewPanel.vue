@@ -27,6 +27,8 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'pick', payload: { selector: string; tagName: string; outerHTML: string }): void
+  /** Element picked in inspect mode but not yet added to chat (last staged). */
+  (e: 'staged-pick', payload: { selector: string; tagName: string; outerHTML: string } | null): void
 }>()
 
 const { t } = useI18n()
@@ -108,6 +110,7 @@ function handleCtrlText(data: string) {
     case 'picked':
       picked.value = msg.pick
       setInspect(false)
+      if (msg.pick) emit('staged-pick', msg.pick)
       break
     case 'closed':
       status.value = 'closed'
@@ -263,6 +266,7 @@ function toggleInspect() {
 
 function clearPick() {
   picked.value = null
+  emit('staged-pick', null)
   if (inspect.value) setInspect(false)
 }
 

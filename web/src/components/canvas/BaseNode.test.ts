@@ -53,4 +53,20 @@ describe('BaseNode', () => {
     expect(wrapper.text()).toContain('分支')
     wrapper.unmount()
   })
+
+  it('app_preview review: badge + subtitle + body, no action handles', () => {
+    const wrapper = mountNode({
+      type: 'app_preview',
+      label: '应用预览',
+      appPreviewReview: true,
+      status: undefined,
+    })
+    expect(wrapper.text()).toContain('复审')
+    expect(wrapper.text()).toContain('取点标注 · ReAct')
+    expect(wrapper.text()).toContain('无通过/退回 · Run 内取点')
+    expect(wrapper.text()).not.toContain('未设 goto')
+    // No gate action rows
+    expect(wrapper.findAll('[data-testid="handle"]').length).toBeGreaterThanOrEqual(2) // target + single source
+    wrapper.unmount()
+  })
 })

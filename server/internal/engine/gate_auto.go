@@ -43,7 +43,7 @@ func (e *Engine) fireGateAutoInvoke(c *execCtx, node *models.Node) {
 		return
 	}
 	switch node.Type {
-	case "human_gate", "app_preview", "proposal_select":
+	case "human_gate", "proposal_select":
 	default:
 		return
 	}

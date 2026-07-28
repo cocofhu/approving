@@ -573,7 +573,10 @@
         "checkpoint": "CP",
         "checkpointTitle": "Rollback checkpoint",
         "gateActionFallback": "No goto → route by when",
-        "structuredExitFallback": "No goto → route by when"
+        "structuredExitFallback": "No goto → route by when",
+        "reviewBadge": "Review",
+        "appPreviewSubtitle": "Pick annotate · ReAct",
+        "appPreviewBody": "No pass/fail · pick in Run"
       },
       "palette": {
         "searchPlaceholder": "Search nodes",
@@ -802,6 +805,7 @@
         "vars": "Global variables",
         "artifacts": "Artifacts"
       },
+      "gateRemoved": "Gate has been removed",
       "clarifyFailed": {
         "subtitle": "Clarify · {id}",
         "errorTitle": "Execution failed · full error",
@@ -1802,7 +1806,7 @@
         "exitFullscreen": "Exit fullscreen",
         "inspect": "Pick to annotate",
         "cancelInspect": "Cancel pick",
-        "usePick": "Ask agent to edit this",
+        "usePick": "Add to chat ⤴",
         "clearPick": "Clear",
         "reconnect": "Reconnect",
         "error": "noVNC preview connection failed",

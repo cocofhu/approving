@@ -463,7 +463,9 @@ func TestPreviewPathSkipsRequireFormValidation(t *testing.T) {
 
 func TestShouldSnapshotPreviewIssues(t *testing.T) {
 	if !shouldSnapshotPreviewIssues(&models.Node{Type: "app_preview"}) {
-		t.Fatal("app_preview should snapshot")
+		// app_preview no longer snapshots via Gate resume
+	} else {
+		t.Fatal("app_preview should not snapshot via Gate resume")
 	}
 	if !shouldSnapshotPreviewIssues(&models.Node{
 		Type:   "human_gate",

@@ -20,6 +20,8 @@ const props = defineProps<{
     checkpoint?: boolean
     branches?: { id: string; label: string; isDefault?: boolean }[]
     gateActions?: { id: string; label: string }[]
+    /** app_preview pure ReAct review: badge + single success exit (no action handles). */
+    appPreviewReview?: boolean
     structuredExits?: { id: string; label: string; tone: 'ok' | 'bad' }[]
   }
   selected?: boolean
@@ -27,6 +29,7 @@ const props = defineProps<{
 
 const isBranch = computed(() => !!props.data.branches?.length)
 const isGate = computed(() => !!props.data.gateActions?.length)
+const isAppPreviewReview = computed(() => !!props.data.appPreviewReview)
 const isStructuredGate = computed(() => !!props.data.structuredExits?.length)
 const def = computed(() => NODE_DEFS.value[props.data.type])
 const displayLabel = computed(() => {
@@ -87,7 +90,9 @@ const statusBadge = computed(() => {
       </div>
       <div class="min-w-0 flex-1">
         <div class="truncate text-[13px] font-semibold text-txt">{{ displayLabel }}</div>
-        <div class="truncate text-[11px] text-txt3">{{ def?.label || data.type }}</div>
+        <div class="truncate text-[11px] text-txt3">
+          {{ isAppPreviewReview ? t('pages.workflowEditor.canvas.appPreviewSubtitle') : def?.label || data.type }}
+        </div>
       </div>
       <div
         v-if="data.checkpoint"
@@ -96,6 +101,13 @@ const statusBadge = computed(() => {
       >
         <Icon name="flag" :size="9" />{{ t('pages.workflowEditor.canvas.checkpoint') }}
       </div>
+    </div>
+
+    <div
+      v-if="isAppPreviewReview"
+      class="border-t border-line/60 px-3 py-1.5 pl-4 text-[11px] text-txt3"
+    >
+      {{ t('pages.workflowEditor.canvas.appPreviewBody') }}
     </div>
 
     <div v-if="isBranch" class="border-t border-line/60">
@@ -143,7 +155,13 @@ const statusBadge = computed(() => {
     </div>
 
     <div
-      v-if="statusBadge"
+      v-if="isAppPreviewReview"
+      class="absolute -right-2 -top-2 z-10 border border-base bg-ok px-1.5 py-0.5 text-[10px] font-bold text-base"
+    >
+      {{ t('pages.workflowEditor.canvas.reviewBadge') }}
+    </div>
+    <div
+      v-else-if="statusBadge"
       class="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full border-2 border-base"
       :class="statusBadge.cls"
     >

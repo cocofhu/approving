@@ -308,8 +308,8 @@ func (s *RunService) pendingClarifications(tags []string) []ClarifyInboxItem {
 		if reactAutoEnabled(node, varsByRun[conv.RunID]) {
 			continue
 		}
-		// app_preview: Gate 已在 inbox 中承载 waiting_human；复审对话挂在门禁内，
-		// 不再单独冒出一条 clarify/review inbox，避免双入口。
+		// app_preview: pure ReAct review — no Gate row in inbox; skip clarify
+		// inbox too so the node does not double-surface.
 		if node != nil && node.Type == "app_preview" {
 			continue
 		}

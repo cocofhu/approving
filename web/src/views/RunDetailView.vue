@@ -718,8 +718,12 @@ async function onClarifySend(
   if (!conv || conv.done) return
   const nodeId = conv.nodeId
   clarifyConfirmError.value = null
+  // Demo: send may attach the latest staged pick even if user skipped「添加到聊天」.
+  const anns =
+    hasAppPreview.value && !force ? mergeStagedAppPreviewPick(annotations) : annotations
+  if (anns !== annotations) lastStagedAppPreviewPick.value = null
   try {
-    await api.reactReply(runId.value, nodeId, text, images, force, annotations)
+    await api.reactReply(runId.value, nodeId, text, images, force, anns)
   } catch (e: any) {
     // Re-sync below so the UI reflects the real state (e.g. the dialogue has
     // already completed) instead of leaving the input enabled to re-click.
@@ -732,6 +736,7 @@ async function onClarifySend(
   // Enqueue returns before the turn finishes — avoid wiping live bubbles.
   // Force finish still needs a snapshot refresh.
   if (force) {
+    lastStagedAppPreviewPick.value = null
     await loadRun(false)
   }
 }
@@ -1339,6 +1344,18 @@ const showRunFailureBanner = computed(() => !!runFailureReason.value)
 const { draft: clarifyDraft, attachments: clarifyAttachments, annotations: clarifyAnnotations } = useClarifyDraft(() => runId.value, () => selected.value)
 
 /** VNC pick on app_preview review stage → same ReAct annotation chips as structured ⤴. */
+const lastStagedAppPreviewPick = ref<{
+  selector: string
+  tagName: string
+  outerHTML: string
+} | null>(null)
+
+function onAppPreviewStagedPick(
+  payload: { selector: string; tagName: string; outerHTML: string } | null,
+) {
+  lastStagedAppPreviewPick.value = payload
+}
+
 function onAppPreviewReviewPick(payload: { selector: string; tagName: string; outerHTML: string }) {
   const rid = run.value?.id
   const nid = selNode.value?.id
@@ -1348,6 +1365,20 @@ function onAppPreviewReviewPick(payload: { selector: string; tagName: string; ou
     label: payload.selector || payload.tagName,
   })
   if (result === 'duplicate') toast.warn(t('pages.reviewComposer.alreadyAdded'))
+  // Added to pending chips — clear staged so send won't double-attach.
+  lastStagedAppPreviewPick.value = null
+}
+
+function mergeStagedAppPreviewPick(
+  annotations: import('@/lib/types').ReactAnnotation[],
+): import('@/lib/types').ReactAnnotation[] {
+  const staged = lastStagedAppPreviewPick.value
+  if (!staged?.selector) return annotations
+  if (annotations.some((a) => a.selector === staged.selector)) return annotations
+  return [
+    ...annotations,
+    { selector: staged.selector, label: staged.selector || staged.tagName },
+  ]
 }
 // Every sandbox-backed node (all "Agent" category types: agent/react/plan/
 // implement/research/test/review/proposal/submit_mr/visual) runs the in-container
@@ -1373,8 +1404,12 @@ const reviewActive = computed(() => {
 })
 
 const nodeTabs = computed(() => {
-  const tabs: { id: string; label: string }[] = []
+  const tabs: { id: string; label: string; ghosted?: boolean; disabled?: boolean }[] = []
   if (gateActive.value) tabs.push({ id: 'gate', label: t('pages.runDetail.tabs.gate') })
+  // app_preview: Gate shell removed — keep a ghosted Gate tab (Demo) that cannot enter.
+  else if (hasAppPreview.value && (reviewActive.value || selStatus.value === 'waiting_human')) {
+    tabs.push({ id: 'gate', label: t('pages.runDetail.tabs.gate'), ghosted: true, disabled: true })
+  }
   if (clarifyActive.value) tabs.push({ id: 'clarify', label: t('pages.runDetail.tabs.clarify') })
   if (reviewActive.value) tabs.push({ id: 'review', label: t('pages.runDetail.tabs.review') })
   if (hasAppPreview.value) tabs.push({ id: 'preview', label: t('pages.runDetail.tabs.appPreview') })
@@ -1384,6 +1419,10 @@ const nodeTabs = computed(() => {
   if (hasLog.value) tabs.push({ id: 'sandbox', label: t('pages.runDetail.tabs.sandbox') })
   return tabs
 })
+
+function onNodeTabDisabledClick(id: string) {
+  if (id === 'gate') toast.warn(t('pages.runDetail.gateRemoved'))
+}
 const nodeTab = ref('output')
 
 /**
@@ -1483,8 +1522,12 @@ watch(
   },
 )
 // If the current tab disappears (e.g. clarify resolved), fall back gracefully.
+// Ghosted/disabled tabs (app_preview Gate) are never a valid active selection.
 watch(nodeTabs, (tabs) => {
-  if (!tabs.some((t) => t.id === nodeTab.value)) nodeTab.value = tabs[0]?.id || 'output'
+  const cur = tabs.find((t) => t.id === nodeTab.value)
+  if (!cur || cur.ghosted || cur.disabled) {
+    nodeTab.value = tabs.find((t) => !t.ghosted && !t.disabled)?.id || 'output'
+  }
 })
 
 // Lazy lookup of the run/node sandbox for the console button. Only fetched when
@@ -2037,7 +2080,7 @@ function selectExecution(nodeId: string, idx: number) {
             </AppButton>
           </div>
           <div class="shrink-0 px-3 pt-2">
-            <AppTabs :tabs="nodeTabs" v-model="nodeTab" />
+            <AppTabs :tabs="nodeTabs" v-model="nodeTab" @disabled-click="onNodeTabDisabledClick" />
           </div>
           <div class="min-h-0 flex-1">
             <ArtifactLoadingPane
@@ -2111,6 +2154,7 @@ function selectExecution(nodeId: string, idx: number) {
                       fill
                       :show-feedback="false"
                       @pick="onAppPreviewReviewPick"
+                      @staged-pick="onAppPreviewStagedPick"
                     />
                   </div>
                   <StructuredProductPanel v-else :node="selNode" :node-run="selRunView" :run="run" annotatable />

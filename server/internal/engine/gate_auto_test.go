@@ -210,7 +210,7 @@ func TestGatePathSummary(t *testing.T) {
 	}
 }
 
-func TestGateAutoInvokeOnAppPreview(t *testing.T) {
+func TestGateAutoInvokeSkipsAppPreview(t *testing.T) {
 	g := models.Graph{
 		Variables: []models.Variable{
 			{Name: "pm_auto_gate", Type: "boolean", Value: true},
@@ -224,10 +224,11 @@ func TestGateAutoInvokeOnAppPreview(t *testing.T) {
 		},
 		Edges: []models.Edge{
 			{ID: "e1", Source: "input", Target: "preview"},
-			{ID: "e2", Source: "preview", Target: "output", When: "action == 'approve'"},
+			{ID: "e2", Source: "preview", Target: "output", When: "action == 'pass'"},
 		},
 	}
-	eng, db, _ := setupEngineGraphP(t, g)
+	eng, db, provider := setupEngineGraphP(t, g)
+	provider.skipOutcome = true
 	proj := models.Project{ID: "proj-app-preview", Name: "AppPrev", CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	if err := db.Create(&proj).Error; err != nil {
 		t.Fatal(err)
@@ -241,9 +242,9 @@ func TestGateAutoInvokeOnAppPreview(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitRunStatus(t, db, run.ID, "waiting_human")
-	evs := rec.wait(t, 1)
-	if evs[0].NodeType != "app_preview" || evs[0].NodeID != "preview" {
-		t.Fatalf("event=%+v", evs[0])
+	time.Sleep(200 * time.Millisecond)
+	if n := int(rec.n.Load()); n != 0 {
+		t.Fatalf("app_preview must not fire gate-auto; got %d events", n)
 	}
 }
 
