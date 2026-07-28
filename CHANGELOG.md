@@ -4,6 +4,14 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.0.4-beta — 2026-07-28
+
+- Public beta follow-up on [`v0.0.4-beta`](https://github.com/cocofhu/approving/releases/tag/v0.0.4-beta)
+  (relative to `v0.0.3-beta`: onboarding bootstrap #109 + pin). Full notes on the GitHub Release.
+- Pin `./start.sh`, `.env.example`, and `compose.release.yaml` defaults to GHCR
+  `*:0.0.4-beta` (tag publish does not rewrite these files).
+- Highlights: 空项目首次上手引导（五步向导 + bootstrap 五 Agent +「快速上手·轻量」；默认 well-known Heroku git）。
+
 ## 0.0.3-beta — 2026-07-28
 
 - Public beta follow-up on [`v0.0.3-beta`](https://github.com/cocofhu/approving/releases/tag/v0.0.3-beta)
