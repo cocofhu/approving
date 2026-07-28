@@ -164,6 +164,7 @@ ensure_sandbox_runtime_image() {
 
 up_release() {
   local detach="${1:-}"
+  mkdir -p .localdata/gateway .localdata/db .localdata/app-data
   echo "pulling GHCR images (approving + gateway + sandbox)..."
   "${COMPOSE[@]}" -f "$RELEASE_COMPOSE_FILE" pull
   ensure_sandbox_runtime_image
@@ -173,6 +174,8 @@ up_release() {
     wait_for_url "http://127.0.0.1:${APPROVING_PORT}/api/health" "api"
     echo "started (GHCR)"
     print_release_endpoints
+    echo "data: .localdata/{gateway,db,app-data} (bind mounts)"
+    echo "wipe: ./start.sh down && rm -rf .localdata"
     echo "logs: ./start.sh logs   stop: ./start.sh down"
   else
     echo "starting (foreground) — UI http://localhost:${APPROVING_PORT}"

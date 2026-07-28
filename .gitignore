@@ -40,6 +40,7 @@ server/config.yaml
 # --- local docker-compose dev env (see start.sh) ---
 /.env
 /.devdata/
+/.localdata/
 /release-evidence/
 
 # 本地 Agent profiles（含 API key 等密钥，勿提交）

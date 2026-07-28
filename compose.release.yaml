@@ -15,7 +15,7 @@ services:
       SBGW_API_KEYS: ${SANDBOX_GATEWAY_API_KEY:-approving-local-demo}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - gateway-data:/data
+      - ./.localdata/gateway:/data
     # Image is debian-slim + binary only (no wget/curl). Probe TCP listen.
     healthcheck:
       test:
@@ -48,9 +48,9 @@ services:
       APPROVING_DEPLOYMENT_MODE: ${APPROVING_DEPLOYMENT_MODE:-local-demo}
       APPROVING_AUTH_USERS: ${APPROVING_AUTH_USERS:-}
     volumes:
-      - approving-data:/data
+      - ./.localdata/db:/data
       # Agent profiles / org / platform-rules (WORKDIR-relative data/*). Keep separate from SQLite /data.
-      - approving-app-data:/app/data
+      - ./.localdata/app-data:/app/data
     depends_on:
       gateway:
         condition: service_healthy
@@ -68,8 +68,3 @@ services:
       retries: 24
       start_period: 10s
     restart: unless-stopped
-
-volumes:
-  approving-data:
-  approving-app-data:
-  gateway-data:
