@@ -1,8 +1,8 @@
 name: ci-sandbox
 
 # Path-filtered suite for the universal sandbox image + its startup/scripts.
-# Full image publish still lives in publish-sandbox (v* tags); PR CI covers
-# scripts, Go packages, and the Dockerfile cli-tools stage (glab/gh).
+# PR CI: scripts/Go + cli-tools fast check + full final sandbox image build
+# for all four AGENT_PROVIDER values (aligned with publish-sandbox; push:false).
 on:
   push:
     paths:
@@ -120,3 +120,27 @@ jobs:
         run: |
           docker run --rm --entrypoint bash universal-sandbox-cli-tools:ci -lc \
             'command -v glab && glab --version && command -v gh && gh --version'
+
+  # Full final sandbox image for every provider (same context/file/build-args as
+  # publish-sandbox). No --target: must catch gopls + AGENT_PROVIDER layers.
+  # fail-fast:false shows all failures; any matrix failure still fails the job.
+  sandbox-images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [cursor, claude_code, codebuddy, trae]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build final sandbox image (${{ matrix.provider }})
+        uses: docker/build-push-action@v7
+        with:
+          context: ./sandbox-gateway/sandbox
+          file: ./sandbox-gateway/sandbox/Dockerfile
+          push: false
+          tags: universal-sandbox-${{ matrix.provider }}:ci
+          build-args: |
+            AGENT_PROVIDER=${{ matrix.provider }}
+            BASE_IMAGE=ubuntu:22.04

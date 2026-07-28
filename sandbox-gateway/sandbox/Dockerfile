@@ -223,8 +223,9 @@ RUN set -eux; \
 ENV PATH=$PATH:/usr/local/go/bin
 ENV GOPATH=/root/go
 ENV GOPROXY=https://goproxy.cn,direct
-# 预装 gopls
-RUN mkdir -p /root/go/bin && go install golang.org/x/tools/gopls@latest
+# 预装 gopls：钉 v0.21.1（go 1.25）对齐镜像 GO_VERSION；GOTOOLCHAIN=local 禁止 @latest 自动拉新 toolchain
+ENV GOTOOLCHAIN=local
+RUN mkdir -p /root/go/bin && go install golang.org/x/tools/gopls@v0.21.1
 ENV PATH=$PATH:/root/go/bin
 
 # Java

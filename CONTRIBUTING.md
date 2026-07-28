@@ -143,6 +143,12 @@ Pushing a `v*` tag runs:
 - `publish-gateway` → `ghcr.io/cocofhu/sandbox-gateway`
 - `publish-sandbox` → `ghcr.io/cocofhu/universal-sandbox-{cursor,claude_code,codebuddy,trae}`
 
+A release is complete only when all three workflows succeed, and
+`publish-sandbox` is green for every matrix provider
+(`cursor`, `claude_code`, `codebuddy`, `trae`). If any job fails, re-run the
+failed workflow via **Actions → workflow_dispatch** (e.g. re-run
+`publish-sandbox` for an existing `v*` tag such as `v0.0.3-beta`).
+
 Sandbox builds are large (often 30–90+ minutes). Packages may start private;
 set them Public under GitHub → Packages if anonymous pulls are required.
 
