@@ -564,6 +564,7 @@ function deleteEdge() {
             :node="curNode"
             :all-nodes="wf.nodes"
             :edges="wf.edges"
+            :project-id="wf.projectId"
             :output-migration="outputMigrated && curNode.type === 'output'"
             @delete="deleteNode"
           />

@@ -614,6 +614,15 @@
         "tabHelp": "Help",
         "nodeName": "Node name",
         "noAgents": "No agents yet — create one in Agent Studio",
+        "emptyAgent": "(empty · no Agent)",
+        "skillProfileHint": "List is filtered to this workflow's project; unbound and other-project Agents are hidden. Empty is allowed.",
+        "staleBannerTitle": "stale reference",
+        "staleBannerBody": "Current skill_profile \"{name}\" is {reason}. Pick a same-project Agent before saving.",
+        "staleReasons": {
+          "foreign": "not this project",
+          "unbound": "unbound",
+          "deleted": "deleted"
+        },
         "selectBody": "— Select content to show —",
         "connectUpstreamForBody": "Connect upstream plan/artifact nodes first",
         "selectResult": "— Select final result source —",
@@ -1702,7 +1711,9 @@
       },
       "import": {
         "success": "Imported \"{name}\"; opening editor…",
-        "missingSkillProfiles": "Imported, but these skill_profile values are missing here: {list}. Fix them in the editor.",
+        "missingSkillProfiles": "Imported, but missing or non-project Agent refs were found: {list}. Fix them in the editor before saving.",
+        "issueMissing": "missing",
+        "issueForeign": "not this project",
         "discardTitle": "Unsaved changes will be lost",
         "discardBody": "The editor has unsaved changes. Importing will discard them. Continue?",
         "discardConfirm": "Continue import"

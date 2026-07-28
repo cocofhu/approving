@@ -19,6 +19,8 @@ const props = defineProps<{
   node: WFNode
   allNodes: WFNode[]
   edges: WFEdge[]
+  /** Workflow home project; required for same-project Agent filtering. */
+  projectId?: string
   outputMigration?: boolean
 }>()
 const emit = defineEmits<{ (e: 'delete'): void }>()
@@ -40,17 +42,45 @@ watch(
 const tab = ref<'config' | 'help'>('config')
 const helpHtml = computed(() => (def.value?.help ? renderMarkdown(def.value.help) : ''))
 
-const agentNames = ref<string[]>([])
+type AgentRow = { name: string; projectId?: string }
+const agents = ref<AgentRow[]>([])
+
+/** Classify a configured skill_profile against the workflow project. */
+function classifySkillProfile(name: string): { ok: boolean; label: string } {
+  const cur = String(name || '').trim()
+  if (!cur) return { ok: true, label: '' }
+  const a = agents.value.find((x) => x.name === cur)
+  if (!a) return { ok: false, label: t('pages.workflowEditor.inspector.staleReasons.deleted') }
+  const home = String(a.projectId || '').trim()
+  if (!home) return { ok: false, label: t('pages.workflowEditor.inspector.staleReasons.unbound') }
+  const pid = String(props.projectId || '').trim()
+  // No workflow projectId must not widen to global selectable — treat as foreign.
+  if (!pid || home !== pid) {
+    return { ok: false, label: t('pages.workflowEditor.inspector.staleReasons.foreign') }
+  }
+  return { ok: true, label: '' }
+}
+
+const skillProfileStale = computed(() => {
+  const hasField = def.value?.fields?.some((f) => f.key === 'skill_profile')
+  if (!hasField) return null
+  const cur = String(props.node.config?.skill_profile || '').trim()
+  if (!cur) return null
+  const st = classifySkillProfile(cur)
+  if (st.ok) return null
+  return { name: cur, reason: st.label }
+})
+
 onMounted(async () => {
   try {
-    agentNames.value = ((await api.listAgents()) || []).map((a) => a.name)
+    agents.value = ((await api.listAgents()) || []).map((a) => ({
+      name: a.name,
+      projectId: a.projectId,
+    }))
   } catch {
-    agentNames.value = []
+    agents.value = []
   }
-  const hasAgentField = def.value.fields.some((f) => f.key === 'skill_profile')
-  if (hasAgentField && !props.node.config?.skill_profile && agentNames.value.length) {
-    props.node.config.skill_profile = agentNames.value[0]
-  }
+  // Empty skill_profile must remain allowed — do not auto-fill the first agent.
 })
 
 const gateBodyOptions = computed(() =>
@@ -59,11 +89,30 @@ const gateBodyOptions = computed(() =>
 
 function fieldOptions(f: FieldSchema): { value: string; label: string }[] {
   if (f.key === 'skill_profile') {
-    const names = new Set(agentNames.value)
-    const cur = props.node.config?.skill_profile
-    if (cur) names.add(cur)
-    if (names.size) return [...names].map((n) => ({ value: n, label: n }))
-    return [{ value: '', label: t('pages.workflowEditor.inspector.noAgents') }]
+    const pid = String(props.projectId || '').trim()
+    // Only same-project, non-empty projectId agents are selectable.
+    const same = pid
+      ? agents.value.filter((a) => String(a.projectId || '').trim() === pid)
+      : []
+    const opts: { value: string; label: string }[] = [
+      { value: '', label: t('pages.workflowEditor.inspector.emptyAgent') },
+    ]
+    for (const a of same) {
+      opts.push({ value: a.name, label: a.name })
+    }
+    const cur = String(props.node.config?.skill_profile || '').trim()
+    if (cur && !same.some((a) => a.name === cur)) {
+      const st = classifySkillProfile(cur)
+      opts.push({
+        value: cur,
+        label: st.ok ? cur : `${cur} · ${st.label}`,
+      })
+    }
+    if (opts.length === 1 && !same.length) {
+      // Keep empty option; hint via noAgents when nothing selectable.
+      opts[0] = { value: '', label: t('pages.workflowEditor.inspector.noAgents') }
+    }
+    return opts
   }
   if (f.key === 'body_template') {
     const opts = [...gateBodyOptions.value]
@@ -393,9 +442,24 @@ function addAssignment() {
           <span class="chip">{{ t('common.minutes') }}</span>
         </div>
 
-        <select v-else-if="f.type === 'select'" v-model="node.config[f.key]" class="input">
-          <option v-for="o in fieldOptions(f)" :key="o.value" :value="o.value">{{ o.label }}</option>
-        </select>
+        <template v-else-if="f.type === 'select'">
+          <select v-model="node.config[f.key]" class="input">
+            <option v-for="o in fieldOptions(f)" :key="o.value" :value="o.value">{{ o.label }}</option>
+          </select>
+          <div
+            v-if="f.key === 'skill_profile' && skillProfileStale"
+            class="mt-2 border border-warn/40 bg-warn/10 px-2.5 py-2 text-[12px] leading-5 text-warn"
+            data-testid="skill-profile-stale-banner"
+          >
+            <strong class="font-semibold">{{ t('pages.workflowEditor.inspector.staleBannerTitle') }}</strong>
+            —
+            {{ t('pages.workflowEditor.inspector.staleBannerBody', { name: skillProfileStale.name, reason: skillProfileStale.reason }) }}
+          </div>
+          <p
+            v-else-if="f.key === 'skill_profile'"
+            class="mt-1 text-[11px] leading-4 text-txt3"
+          >{{ t('pages.workflowEditor.inspector.skillProfileHint') }}</p>
+        </template>
 
         <OutputSourcesEditor
           v-else-if="f.type === 'output_sources'"

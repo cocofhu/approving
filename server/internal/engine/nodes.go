@@ -12,6 +12,7 @@ import (
 	gatenode "github.com/cocofhu/approving/internal/models/nodereg"
 	"github.com/cocofhu/approving/internal/nodereg"
 	"github.com/cocofhu/approving/internal/runtime"
+	"github.com/cocofhu/approving/internal/services"
 
 	"github.com/rs/zerolog/log"
 )
@@ -44,6 +45,11 @@ func (e *Engine) executeNode(c *execCtx, node *models.Node) nodeOutcome {
 			Str("node_type", node.Type).Int("cost_ms", int(time.Since(start).Milliseconds())).
 			Msg("node executed")
 	}()
+
+	if err := e.checkSkillProfileProject(c, node); err != nil {
+		msg := err.Error()
+		return nodeOutcome{status: "failed", err: msg, outputMd: msg}
+	}
 
 	spec, ok := nodereg.Get(node.Type)
 	if !ok {
@@ -994,6 +1000,38 @@ func pickDeliverable(res runtime.NodeResult) string {
 		}
 	}
 	return res.OutputMd
+}
+
+// checkSkillProfileProject enforces same-project Agent usage before any
+// agent-class execution. Empty skill_profile is allowed and skipped.
+func (e *Engine) checkSkillProfileProject(c *execCtx, node *models.Node) error {
+	if e == nil || node == nil || node.Config == nil {
+		return nil
+	}
+	raw, _ := node.Config["skill_profile"].(string)
+	profile := strings.TrimSpace(raw)
+	if profile == "" {
+		return nil
+	}
+	label := strings.TrimSpace(node.Label)
+	if label == "" {
+		label = node.ID
+	}
+	if e.skills == nil {
+		return fmt.Errorf("节点「%s」的 Agent「%s」不可用：已删除", label, profile)
+	}
+	ag, ok := e.skills.Get(profile)
+	if !ok {
+		return fmt.Errorf("节点「%s」的 Agent「%s」不可用：已删除", label, profile)
+	}
+	projectID := services.ResolveProjectIDForRun(e.db, c.run.ID)
+	if strings.TrimSpace(ag.ProjectID) == "" {
+		return fmt.Errorf("节点「%s」的 Agent「%s」不可用：未绑定", label, profile)
+	}
+	if !services.AgentProjectMatches(ag, projectID) {
+		return fmt.Errorf("节点「%s」的 Agent「%s」不可用：非本项目", label, profile)
+	}
+	return nil
 }
 
 func (e *Engine) nodeReq(c *execCtx, node *models.Node) runtime.NodeReq {

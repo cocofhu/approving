@@ -161,7 +161,7 @@ describe('NodeInspector', () => {
     wrapper.unmount()
   })
 
-  it('loads agent list for agent node config', async () => {
+  it('loads agent list for agent node config without auto-filling empty skill_profile', async () => {
     const agentNode: WFNode = {
       id: 'agent',
       type: 'agent',
@@ -169,9 +169,80 @@ describe('NodeInspector', () => {
       position: { x: 0, y: 0 },
       config: { skill_profile: '' },
     }
-    const wrapper = mountInspector(agentNode)
+    apiMocks.listAgents.mockResolvedValue([
+      { name: 'agent-a', projectId: 'proj-1' },
+      { name: 'other', projectId: 'proj-2' },
+      { name: 'unbound', projectId: '' },
+    ])
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages, ...nodes } },
+    })
+    const wrapper = mount(NodeInspector, {
+      props: {
+        node: agentNode,
+        allNodes: [agentNode],
+        edges: [] as WFEdge[],
+        projectId: 'proj-1',
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          Icon: true,
+          AppButton: { template: '<button><slot /></button>' },
+          OutputSourcesEditor: { template: '<div data-testid="output-sources" />' },
+        },
+      },
+    })
     await flushPromises()
     expect(apiMocks.listAgents).toHaveBeenCalled()
+    // Empty config must stay empty (g1.4) — no auto-fill of agentNames[0].
+    expect(agentNode.config.skill_profile).toBe('')
+    const opts = wrapper.findAll('select option').map((o) => o.text())
+    expect(opts.some((t) => t.includes('agent-a'))).toBe(true)
+    expect(opts.some((t) => t.includes('other'))).toBe(false)
+    expect(opts.some((t) => t.includes('unbound'))).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('keeps stale cross-project skill_profile with banner', async () => {
+    const agentNode: WFNode = {
+      id: 'agent',
+      type: 'agent',
+      label: 'Agent',
+      position: { x: 0, y: 0 },
+      config: { skill_profile: 'beta-runner' },
+    }
+    apiMocks.listAgents.mockResolvedValue([
+      { name: 'agent-a', projectId: 'proj-1' },
+      { name: 'beta-runner', projectId: 'proj-2' },
+    ])
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages, ...nodes } },
+    })
+    const wrapper = mount(NodeInspector, {
+      props: {
+        node: agentNode,
+        allNodes: [agentNode],
+        edges: [] as WFEdge[],
+        projectId: 'proj-1',
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          Icon: true,
+          AppButton: { template: '<button><slot /></button>' },
+          OutputSourcesEditor: { template: '<div data-testid="output-sources" />' },
+        },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="skill-profile-stale-banner"]').exists()).toBe(true)
+    expect(wrapper.text()).toMatch(/非本项目|stale/)
+    expect(agentNode.config.skill_profile).toBe('beta-runner')
     wrapper.unmount()
   })
 

@@ -22,7 +22,7 @@ vi.mock('vue-router', () => ({
 }))
 
 vi.mock('@/lib/workflowIO', () => ({
-  missingSkillProfiles: () => ['missing-agent'],
+  skillProfileIssues: () => [{ name: 'missing-agent', reason: 'missing' }],
 }))
 
 vi.mock('@/lib/useProjectContext', () => ({

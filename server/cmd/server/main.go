@@ -219,6 +219,7 @@ func main() {
 	sandbox.HomeBaseDir = cfg.Sandbox.WorkDir
 
 	skillSvc := services.NewSkillService(cfg.Engine.ProfilesRoot)
+	eng.SetSkills(skillSvc)
 	orgSvc := services.NewOrgService(cfg.Engine.ProfilesRoot, skillSvc)
 	platformRuleSvc, err := services.NewPlatformRuleService(cfg.Engine.PlatformRulesRoot, cfg.Engine.ProfilesRoot)
 	if err != nil {
@@ -289,6 +290,7 @@ func main() {
 	pmSvc := services.NewPmService(db, skillSvc)
 	pmProgress := services.NewPmProgress(pmSvc, runSvc, artifactSvc)
 	wfSvc := services.NewWorkflowService(db)
+	wfSvc.SetSkills(skillSvc)
 	pmMCP := pmmcp.NewHost(pmSvc, pmProgress, wfSvc, runSvc, artifactSvc, eng)
 	pmMCP.SetOrgAndSkill(orgSvc, skillSvc)
 	memoryMCP := memorymcp.NewHost(pmSvc)
