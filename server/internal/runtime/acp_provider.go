@@ -1986,7 +1986,13 @@ func (c *acpProvider) AbortRun(runID string) {
 		if i := strings.IndexByte(k, '|'); i >= 0 {
 			nodeID = k[i+1:]
 		}
-		keep := c.host != nil && c.host.HasHealthyPreviewPorts(runID, nodeID)
+		// Whitelist: healthy registration OR setsid keepalive pid list — Cancel
+		// must retire (keep container) instead of Destroy so preview survives.
+		keep := false
+		if c.host != nil {
+			pids := c.host.ListPreviewKeepalivePIDs(runID, nodeID)
+			keep = c.host.HasHealthyPreviewPorts(runID, nodeID) || len(pids) > 0
+		}
 		agentKeepPreview = append(agentKeepPreview, keep)
 	}
 	for _, k := range agentKeys {

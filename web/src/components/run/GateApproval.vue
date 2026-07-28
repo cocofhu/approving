@@ -201,6 +201,18 @@ function onHtmlPreviewPick(payload: { selector: string; tagName: string; imageDa
   }
 }
 
+/** VNC/app_preview pick payload uses outerHTML (no imageDataUrl). */
+function onAppPreviewPick(payload: { selector: string; tagName: string; outerHTML: string }) {
+  pickedSelector.value = payload.selector
+  pickedElementImage.value = null
+  if (canReactRevise.value) {
+    pushReactAnnotation({
+      selector: payload.selector,
+      label: payload.selector || payload.tagName,
+    })
+  }
+}
+
 function clearHtmlPreviewPick() {
   pickedSelector.value = ''
   pickedElementImage.value = null
@@ -2190,7 +2202,7 @@ function onComposerReject() {
             :fill="shouldFillAppPreview"
             :show-feedback="!canReactRevise"
             @issues-changed="loadPreviewIssues()"
-            @pick="onHtmlPreviewPick"
+            @pick="onAppPreviewPick"
           />
         </div>
         <ArtifactLoadingPane

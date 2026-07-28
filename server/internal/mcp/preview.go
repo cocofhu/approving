@@ -306,7 +306,10 @@ func (h *Host) PutPreviewPortForTest(runID, nodeID string, port int, label strin
 	}
 	rec := PreviewPort{
 		RunID: runID, NodeID: nodeID, Port: port, Label: strings.TrimSpace(label),
-		ProxyURL: h.previewProxyURL(runID, nodeID, port), Healthy: true, RegisteredAt: time.Now(),
+		ProxyURL: h.previewProxyURL(runID, nodeID, port), Healthy: true,
+		// Non-zero sentinel so ListPreviewKeepalivePIDs / AbortRun whitelist
+		// paths exercise the same registration shape as real set_preview.
+		KeepalivePID: 1, RegisteredAt: time.Now(),
 	}
 	h.mu.Lock()
 	key := previewKey(runID, nodeID)

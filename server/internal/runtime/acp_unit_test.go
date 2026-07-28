@@ -243,6 +243,44 @@ func TestProviderWiringAndAbort(t *testing.T) {
 	}
 }
 
+// TestAbortRunRetiresWhenPreviewKeepalivePID ensures Cancel of the production
+// agent turn consults ListPreviewKeepalivePIDs and retires (keeps container)
+// instead of Destroy — so setsid-detached preview survives session end.
+func TestAbortRunRetiresWhenPreviewKeepalivePID(t *testing.T) {
+	host := mcp.NewHost(newMemStore())
+	host.PutPreviewPortForTest("runKeep", "nodeP", 8080, "web")
+	if pids := host.ListPreviewKeepalivePIDs("runKeep", "nodeP"); len(pids) == 0 {
+		t.Fatal("PutPreviewPortForTest must register keepalive pid for whitelist")
+	}
+
+	cp := newACPProvider(host, Options{}).(*acpProvider)
+	reg := &retiringRegistry{}
+	cp.registry = reg
+
+	key := "runKeep|nodeP"
+	sb := &sandbox.Sandbox{Name: "preview-sb"}
+	cp.mu.Lock()
+	cp.inflightACP[key] = nil
+	cp.live[key] = sb
+	cp.mu.Unlock()
+
+	cp.AbortRun("runKeep")
+
+	cp.mu.Lock()
+	_, stillACP := cp.inflightACP[key]
+	_, stillLive := cp.live[key]
+	cp.mu.Unlock()
+	if stillACP || stillLive {
+		t.Fatal("AbortRun should clear inflight agent maps")
+	}
+	reg.mu.Lock()
+	retired := reg.retired
+	reg.mu.Unlock()
+	if retired != 1 {
+		t.Fatalf("expected retireRunSandbox (keep preview container), retired=%d", retired)
+	}
+}
+
 func TestLiveNodeEvents(t *testing.T) {
 	host := mcp.NewHost(newMemStore())
 	p := newACPProvider(host, Options{}).(*acpProvider)
