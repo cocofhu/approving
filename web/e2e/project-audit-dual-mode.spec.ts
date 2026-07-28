@@ -329,6 +329,7 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
 
     // Preselect latest run + MCP rows in table
     await expect(page.getByTestId('project-audit-list')).toBeVisible()
+    await expect(page.getByTestId('project-audit-list')).toHaveAttribute('data-layout', 'table')
     await expect(page.getByText('MCP 调用').first()).toBeVisible()
     await expect(page.getByText('mcp.call')).toHaveCount(0)
     await expect(page.getByText('mcp/read_artifact').first()).toBeVisible()
@@ -407,5 +408,99 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
     await page.getByTestId('project-audit-empty-runs').getByRole('button', { name: '全部日志' }).click()
     await expect(page.getByTestId('project-audit-mode-all')).toHaveClass(/on/)
     await page.screenshot({ path: path.join(SHOT_DIR, '03-empty-runs.png'), fullPage: true })
+  })
+
+  test('移动视口 ~390px：筛选摘要默认收起 + 事件卡片（plan g5.2）', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await stubProjectApis(page)
+    await page.goto('/project-detail.html?tab=audit&theme=light')
+
+    const panel = page.getByTestId('project-audit-panel')
+    await expect(panel).toBeVisible({ timeout: 15_000 })
+
+    // Default: one-line summary, not four stacked dropdowns
+    const summary = page.getByTestId('project-audit-filter-summary')
+    await expect(summary).toBeVisible()
+    await expect(summary).toContainText('Run')
+    await expect(page.getByTestId('project-audit-filters-editor')).toBeHidden()
+    await expect(page.getByTestId('project-audit-search')).toBeVisible()
+    await expect(page.getByTestId('project-audit-export')).toBeVisible()
+    await expect(page.getByTestId('project-audit-mode-run')).toBeVisible()
+
+    // Event cards (no wide table)
+    const list = page.getByTestId('project-audit-list')
+    await expect(list).toHaveAttribute('data-layout', 'cards')
+    await expect(list.locator('table')).toHaveCount(0)
+    await expect(page.getByTestId('project-audit-event-e1')).toBeVisible()
+    await expect(page.getByTestId('project-audit-event-e2')).toBeVisible()
+
+    // Collapsed filters keep panel chrome compact (search/export/meta only — not 4 stacked dropdowns).
+    // Measure gap from summary to the first event card (newest), not a specific id.
+    const layoutGap = await page.evaluate(() => {
+      const s = document.querySelector('[data-testid="project-audit-filter-summary"]')
+      const c = document.querySelector('[data-testid="project-audit-list"] .event-card')
+      if (!s || !c) return -1
+      return c.getBoundingClientRect().top - s.getBoundingClientRect().top
+    })
+    expect(layoutGap).toBeGreaterThan(0)
+    expect(layoutGap).toBeLessThan(280)
+
+    await page.screenshot({ path: path.join(SHOT_DIR, '04-mobile-collapsed.png'), fullPage: true })
+
+    // Expand filters → full-width triggers align with search
+    await summary.click()
+    const editor = page.getByTestId('project-audit-filters-editor')
+    await expect(editor).toBeVisible()
+    await expect(page.getByTestId('project-audit-run')).toBeVisible()
+    await expect(page.getByTestId('project-audit-node')).toBeVisible()
+    await expect(page.getByTestId('project-audit-resource')).toBeVisible()
+    await expect(page.getByTestId('project-audit-time')).toBeVisible()
+
+    const searchBox = page.getByTestId('project-audit-search')
+    const runTrig = page.getByTestId('project-audit-run').locator('button.audit-dd-trig')
+    const searchW = await searchBox.evaluate((el) => {
+      const wrap = el.closest('.search') || el
+      return wrap.getBoundingClientRect().width
+    })
+    const runW = await runTrig.evaluate((el) => el.getBoundingClientRect().width)
+    expect(Math.abs(searchW - runW)).toBeLessThan(12)
+
+    // Dropdown panel stays within viewport
+    await runTrig.click()
+    const ddPanel = page.locator('.audit-dd-panel').filter({ visible: true })
+    await expect(ddPanel).toBeVisible()
+    const panelBox = await ddPanel.boundingBox()
+    expect(panelBox).toBeTruthy()
+    expect(panelBox!.x).toBeGreaterThanOrEqual(0)
+    expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(390 + 2)
+    await page.keyboard.press('Escape')
+
+    await page.screenshot({ path: path.join(SHOT_DIR, '04b-mobile-filters-open.png'), fullPage: true })
+
+    // Card inline expand
+    await page.getByTestId('project-audit-event-e2').click()
+    await expect(page.getByTestId('project-audit-payload')).toBeVisible()
+    await expect(page.getByTestId('project-audit-event-e2')).toContainText('调用者')
+
+    // All-logs mode shares card layout
+    await page.getByTestId('project-audit-mode-all').click()
+    await expect(page.getByTestId('project-audit-mode-all')).toHaveClass(/on/)
+    await expect(page.getByTestId('project-audit-list')).toHaveAttribute('data-layout', 'cards')
+    await expect(page.getByTestId('project-audit-filter-summary')).toContainText('调用者')
+
+    await page.screenshot({ path: path.join(SHOT_DIR, '04c-mobile-all-mode.png'), fullPage: true })
+  })
+
+  test('宽屏仍为表 + 横向筛选（plan g4.1 / g5.2）', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await stubProjectApis(page)
+    await page.goto('/project-detail.html?tab=audit&theme=light')
+    await expect(page.getByTestId('project-audit-panel')).toBeVisible({ timeout: 15_000 })
+
+    await expect(page.getByTestId('project-audit-filter-summary')).toHaveCount(0)
+    await expect(page.getByTestId('project-audit-list')).toHaveAttribute('data-layout', 'table')
+    await expect(page.getByTestId('project-audit-list').locator('table')).toBeVisible()
+    await expect(page.getByTestId('project-audit-run')).toBeVisible()
+    await expect(page.getByTestId('project-audit-search')).toBeVisible()
   })
 })
