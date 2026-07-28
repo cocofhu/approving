@@ -45,3 +45,6 @@ jobs:
           build-args: |
             AGENT_PROVIDER=${{ matrix.provider }}
             BASE_IMAGE=ubuntu:22.04
+            USE_CN_MIRROR=false
+          cache-from: type=gha,scope=sandbox-image-${{ matrix.provider }}
+          cache-to: type=gha,mode=max,scope=sandbox-image-${{ matrix.provider }}

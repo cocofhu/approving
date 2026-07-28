@@ -22,13 +22,18 @@
 ARG BASE_IMAGE=docker.m.daocloud.io/library/ubuntu:22.04
 FROM ${BASE_IMAGE} AS cli-tools
 
+# 国内 apt 镜像开关（默认 true：本地不传 build-arg 仍走清华源；CI/publish 传 false）
+ARG USE_CN_MIRROR=true
+
 ENV DEBIAN_FRONTEND=noninteractive
 # code-server 默认端口刻意避开常用的 8080（留给用户自己的应用）
 ENV CODE_SERVER_PORT=8744
 
-# 使用清华源 (HTTP)
-RUN sed -i 's@http://.*archive.ubuntu.com@http://mirrors.tuna.tsinghua.edu.cn@g' /etc/apt/sources.list && \
-    sed -i 's@http://.*security.ubuntu.com@http://mirrors.tuna.tsinghua.edu.cn@g' /etc/apt/sources.list
+# Ubuntu apt：true → 清华源；false → 保留官方 archive/security
+RUN if [ "$USE_CN_MIRROR" = "true" ]; then \
+      sed -i 's@http://.*archive.ubuntu.com@http://mirrors.tuna.tsinghua.edu.cn@g' /etc/apt/sources.list && \
+      sed -i 's@http://.*security.ubuntu.com@http://mirrors.tuna.tsinghua.edu.cn@g' /etc/apt/sources.list; \
+    fi
 
 # 最小依赖（Docker 安装前置条件），尽早安装以便快速发现源问题
 RUN set -eu; \
@@ -46,10 +51,15 @@ RUN set -eu; \
     [ "$ok" = 1 ]; \
     rm -rf /var/lib/apt/lists/*
 
-# Docker Engine + CLI + Buildx + Compose 插件（清华 apt 源，提前安装以便尽早发现源问题）
+# Docker Engine + CLI + Buildx + Compose 插件（true → 清华；false → download.docker.com）
 RUN set -eu; \
-    curl -fsSL https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg; \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list; \
+    if [ "$USE_CN_MIRROR" = "true" ]; then \
+      curl -fsSL https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg; \
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list; \
+    else \
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg; \
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list; \
+    fi; \
     ok=0; \
     for i in 1 2 3 4 5; do \
       if apt-get update && apt-get install -y \
@@ -104,13 +114,21 @@ RUN set -eu; \
     rm -rf /var/lib/apt/lists/*
 
 # MongoDB 客户端（必须装上，不允许 best-effort 跳过）
-#   - mongosh / mongodb-database-tools：清华 MongoDB apt 镜像（稳定可达，规避官方 CDN 的 SSL 中断）
-#       [trusted=yes] 免去从 pgp.mongodb.com 拉 GPG key（该域名在国内同样易 SSL 失败）。
+#   - mongosh / mongodb-database-tools：
+#       true → 清华 MongoDB apt + [trusted=yes]（国内规避官方 CDN / pgp SSL）
+#       false → repo.mongodb.org + server-8.0.asc signed-by（海外 CI 可达）
 #   - mongocli：apt 源里没有，走 fastdl 强重试下载（github 在国内会挂，fastdl 可达）。
 ENV MONGOCLI_VERSION=1.30.0
 RUN set -eu; \
-    echo "deb [trusted=yes] https://mirrors.tuna.tsinghua.edu.cn/mongodb/apt/ubuntu jammy/mongodb-org/8.0 multiverse" \
-      > /etc/apt/sources.list.d/mongodb-org.list; \
+    if [ "$USE_CN_MIRROR" = "true" ]; then \
+      echo "deb [trusted=yes] https://mirrors.tuna.tsinghua.edu.cn/mongodb/apt/ubuntu jammy/mongodb-org/8.0 multiverse" \
+        > /etc/apt/sources.list.d/mongodb-org.list; \
+    else \
+      curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | \
+        gpg --dearmor -o /usr/share/keyrings/mongodb-server-8.0.gpg; \
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/8.0 multiverse" \
+        > /etc/apt/sources.list.d/mongodb-org.list; \
+    fi; \
     ok=0; \
     for i in 1 2 3 4 5; do \
       if apt-get update && apt-get install -y mongodb-mongosh mongodb-database-tools; then ok=1; break; fi; \
