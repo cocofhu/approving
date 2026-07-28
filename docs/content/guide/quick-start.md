@@ -48,7 +48,7 @@ Agent / workspace / platform-rules 持久在命名卷（`/app/data`）；`./star
 
 ## 下一步
 
-- 登录后进入空项目时，可按「首次上手引导」配置后端与 API Key，一键生成 5 个 Agent 与「快速上手·轻量」工作流（默认 clone Heroku 官方 nodejs-getting-started 公开仓）。
+- 登录后进入空项目时，可按「首次上手引导」配置后端与 API Key，一键生成 5 个 Agent 与「快速上手·轻量」工作流（默认 clone Heroku 官方 nodejs-getting-started 公开仓）。引导使用固定 Agent 名（Clarify/Visual/Implement/Test/Preview），同一 Approving 实例内仅一个项目可完成该引导。
 - [核心概念](../concepts/) — FSM、gate、sandbox、artifact
 - [配置摘要](../../help/configuration/) — 指向完整 `CONFIGURATION.md`
 - [网关摘要](../../help/gateway/) — 指向 `GATEWAY.md`

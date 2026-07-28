@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import path from 'node:path'
+import { dismissOnboardingIfOpen, seedOnboardingDismissed } from './helpers/onboarding'
 
 const MOCK_PROJECTS = [
   {
@@ -71,6 +72,7 @@ async function stubProjectDetailApis(
   page: import('@playwright/test').Page,
   detail: Record<string, unknown>,
 ) {
+  await seedOnboardingDismissed(page, 'proj-1')
   await page.route('**/api/projects/proj-1', async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({
@@ -240,6 +242,7 @@ test.describe('项目 Token 总体消耗 UI', () => {
     })
 
     await page.goto('/project-detail.html?theme=light&tab=board')
+    await dismissOnboardingIfOpen(page)
     const stat = page.getByTestId('project-token-stat')
     await expect(stat).toBeVisible({ timeout: 15_000 })
     await expect(stat).toContainText('Token 消耗')
@@ -273,6 +276,7 @@ test.describe('项目 Token 总体消耗 UI', () => {
     })
 
     await page.goto('/project-detail.html?theme=light&tab=board')
+    await dismissOnboardingIfOpen(page)
     const stat = page.getByTestId('project-token-stat')
     await expect(stat).toBeVisible({ timeout: 15_000 })
     // 常显仍为 compact（g1.4 / g3.2）
@@ -329,6 +333,7 @@ test.describe('项目 Token 总体消耗 UI', () => {
     })
 
     await page.goto('/project-detail.html?theme=light&tab=board')
+    await dismissOnboardingIfOpen(page)
     const stat = page.getByTestId('project-token-stat')
     await expect(stat).toBeVisible({ timeout: 15_000 })
     await expect(stat).toContainText('—')
@@ -346,6 +351,7 @@ test.describe('项目 Token 总体消耗 UI', () => {
     })
 
     await page.goto('/project-detail.html?theme=light&tab=board')
+    await dismissOnboardingIfOpen(page)
     const stat = page.getByTestId('project-token-stat')
     await expect(stat).toBeVisible({ timeout: 15_000 })
     await expect(stat.getByTestId('project-token-stat-value')).toHaveText('0')

@@ -1,6 +1,7 @@
 import { test, expect, type Page, type Route } from '@playwright/test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { dismissOnboardingIfOpen, seedOnboardingDismissed } from './helpers/onboarding'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SHOT_DIR = path.join(__dirname, '..', 'test-results', 'pm-tail-window')
@@ -98,8 +99,10 @@ async function stubCommonApis(page: Page) {
 
 async function gotoPmLeader(page: Page) {
   await page.setViewportSize({ width: 1280, height: 800 })
+  await seedOnboardingDismissed(page, 'proj-1')
   await stubCommonApis(page)
   await page.goto('/project-detail.html?tab=pmLeader')
+  await dismissOnboardingIfOpen(page)
   await expect(page.getByRole('heading', { name: 'Demo Project' })).toBeVisible({ timeout: 15_000 })
   await expect(page.getByTestId('pm-message-scroller')).toBeVisible({ timeout: 15_000 })
 }

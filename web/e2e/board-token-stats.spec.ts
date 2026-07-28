@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import path from 'node:path'
+import { dismissOnboardingIfOpen, seedOnboardingDismissed } from './helpers/onboarding'
 
 function stubRun(partial: {
   id: string
@@ -362,6 +363,8 @@ test.describe('看板 Token 统计图', () => {
 
   test('项目详情看板 Tab 展示 Token 统计区且页头 totalTokens 不变', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1280, height: 900 })
+    // Empty workflows stub would otherwise auto-open onboarding and intercept clicks.
+    await seedOnboardingDismissed(page, 'proj-1')
     await page.route('**/api/projects/proj-1', async (route) => {
       if (route.request().method() === 'GET') {
         await route.fulfill({
@@ -387,6 +390,18 @@ test.describe('看板 Token 统计图', () => {
     })
     await page.route('**/api/workflows**', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
+    // Non-empty agents also keep shouldAutoOpenOnboarding false if dismiss seed fails.
+    await page.route('**/api/agents**', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([{ id: 'agent-stub', name: 'StubAgent', projectId: 'proj-1' }]),
+        })
+        return
+      }
+      await route.continue()
     })
     await page.route('**/api/runs**', async (route) => {
       await route.fulfill({
@@ -416,6 +431,7 @@ test.describe('看板 Token 统计图', () => {
     })
 
     await page.goto('/project-detail.html?theme=light&tab=board')
+    await dismissOnboardingIfOpen(page)
     const headerStat = page.getByTestId('project-token-stat')
     await expect(headerStat).toBeVisible({ timeout: 15_000 })
     await expect(headerStat).toContainText('128.4K')
