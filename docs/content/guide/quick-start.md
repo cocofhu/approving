@@ -30,18 +30,21 @@ cd approving
 - Gateway health：http://localhost:8899/healthz
 - 默认登录：`admin` / `demo1234`（local-demo）
 
-`./start.sh` 还会从 GHCR 拉取 **sandbox runtime** 镜像（体积较大）。完成前，沙箱对话可能停留在 “starting sandbox…”。
+`./start.sh` 还会从 GHCR 拉取 **四个 sandbox runtime** 镜像（按 acpBackend：cursor / claude_code / codebuddy / trae，体积较大）。完成前，沙箱对话可能停留在 “starting sandbox…”。
+
+Agent / workspace / platform-rules 持久在命名卷（`/app/data`）；`./start.sh restart` 与 `./start.sh down`（无 `-v`）会保留。**勿用 `docker compose down -v`**，否则会清空 Agent 配置与 SQLite。
 
 ## 常用命令
 
 ```bash
 ./start.sh logs
 ./start.sh down
-./start.sh pull          # 刷新 GHCR 镜像
+./start.sh pull          # 刷新 GHCR 镜像（含四个 sandbox runtime）
+./start.sh restart       # down + up -d（保留命名卷）
 ./start.sh dev -d        # 源码栈：go run + Vite HMR
 ```
 
-镜像 tag / digest 可在 `.env` 覆盖 — 见仓库根目录 [`.env.example`](https://github.com/cocofhu/approving/blob/main/.env.example)。发布与 smoke 见 [Contributing](https://github.com/cocofhu/approving/blob/main/CONTRIBUTING.md)。
+镜像 tag / digest 可在 `.env` 覆盖 — 见仓库根目录 [`.env.example`](https://github.com/cocofhu/approving/blob/main/.env.example)。默认按 backend 分流沙箱镜像；仅当显式设置 `SANDBOX_IMAGE` / `APPROVING_SANDBOX_IMAGE` 时才全局强制。发布与 smoke 见 [Contributing](https://github.com/cocofhu/approving/blob/main/CONTRIBUTING.md)。
 
 ## 下一步
 

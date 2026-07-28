@@ -150,7 +150,8 @@ Default tags used by `./start.sh` (overridable in `.env`):
 
 - `ghcr.io/cocofhu/approving:0.0.2-beta`
 - `ghcr.io/cocofhu/sandbox-gateway:0.0.2-beta`
-- `ghcr.io/cocofhu/universal-sandbox-cursor:0.0.2-beta`
+- `ghcr.io/cocofhu/universal-sandbox-{cursor,claude_code,codebuddy,trae}:0.0.2-beta`
+  (per `acpBackend`; optional `SANDBOX_IMAGE` / `APPROVING_SANDBOX_IMAGE` forces one image for all backends — used by release-smoke)
 
 ### release-smoke (manual; not a PR required check)
 
@@ -174,6 +175,7 @@ Local equivalent after images are available:
 export APPROVING_IMAGE='ghcr.io/cocofhu/approving@sha256:...'
 export SANDBOX_GATEWAY_IMAGE='ghcr.io/cocofhu/sandbox-gateway@sha256:...'
 export SANDBOX_IMAGE='ghcr.io/cocofhu/universal-sandbox-cursor@sha256:...'
+# release-smoke.sh exports APPROVING_SANDBOX_IMAGE=$SANDBOX_IMAGE for global force.
 ./release-smoke.sh
 ```
 
