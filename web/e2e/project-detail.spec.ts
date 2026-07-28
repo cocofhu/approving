@@ -548,7 +548,7 @@ test.describe('ProjectDetailView PM Leader 设置内收', () => {
 
   test('未启用空态进入设置；切离顶栏再回不保留设置', async ({ page }) => {
     await gotoProjectDetail(page, { width: 1280, height: 800, tab: 'pmLeader', keepDefaultTab: true })
-    await expect(page.getByText('PM Leader 未启用')).toBeVisible()
+    await expect(page.getByText('项目管理未启用')).toBeVisible()
     // Permanently removed: no Studio memory migration guide on PM Leader.
     await expect(page.getByTestId('pm-studio-memory-guide')).toHaveCount(0)
     await expect(page.getByTestId('pm-open-studio-memory')).toHaveCount(0)
@@ -558,7 +558,7 @@ test.describe('ProjectDetailView PM Leader 设置内收', () => {
     await page.getByTestId('project-tab-cronJobs').click()
     await expect(page.getByTestId('project-pm-settings-view')).toHaveCount(0)
     await page.getByTestId('project-tab-pmLeader').click()
-    await expect(page.getByText('PM Leader 未启用')).toBeVisible()
+    await expect(page.getByText('项目管理未启用')).toBeVisible()
     await expect(page.getByTestId('project-pm-settings-view')).toHaveCount(0)
   })
 

@@ -193,13 +193,13 @@ describe('ProjectDetailView PM Leader settings inline', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="project-pm-settings-view"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('返回咨询')
-    expect(wrapper.text()).toContain('PM Leader 设置')
+    expect(wrapper.text()).toContain('项目管理设置')
     expect(router.currentRoute.value.query.tab).toBe('pmLeader')
   })
 
   it('opens inline settings from disabled empty state without top-bar tab', async () => {
     const { wrapper } = await mountDetail('pmLeader')
-    expect(wrapper.text()).toContain('PM Leader 未启用')
+    expect(wrapper.text()).toContain('项目管理未启用')
     expect(wrapper.find('[data-testid="project-pm-settings-view"]').exists()).toBe(false)
     const go = wrapper.findAll('button').find((b) => b.text().includes('前往设置'))
     expect(go).toBeTruthy()
@@ -221,7 +221,7 @@ describe('ProjectDetailView PM Leader settings inline', () => {
     await wrapper.get('[data-testid="project-tab-pmLeader"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="project-pm-settings-view"]').exists()).toBe(false)
-    expect(wrapper.text()).toContain('PM Leader 未启用')
+    expect(wrapper.text()).toContain('项目管理未启用')
   })
 
   it('maps legacy ?tab=pmMemory to board with migration banner', async () => {
@@ -276,7 +276,7 @@ describe('ProjectDetailView PM Leader settings inline', () => {
     await wrapper.get('[data-testid="pm-settings-back"]').trigger('click')
     await nextTick()
     expect(wrapper.find('[data-testid="project-pm-settings-view"]').exists()).toBe(false)
-    expect(wrapper.text()).toContain('PM Leader 未启用')
+    expect(wrapper.text()).toContain('项目管理未启用')
     expect(apiMocks.updatePmLeader).not.toHaveBeenCalled()
   })
 
@@ -300,7 +300,7 @@ describe('ProjectDetailView PM Leader settings inline', () => {
     await flushPromises()
 
     expect(wrapper.find('[data-testid="project-pm-settings-view"]').exists()).toBe(false)
-    expect(wrapper.text()).toContain('PM Leader 未启用')
+    expect(wrapper.text()).toContain('项目管理未启用')
   })
 
   it('opens settings on cross-project navigation when target has legacy deep-link', async () => {
@@ -329,6 +329,6 @@ describe('ProjectDetailView PM Leader settings inline', () => {
     const { wrapper: reloaded } = await mountDetail('pmLeader')
     await flushPromises()
     expect(reloaded.find('[data-testid="project-pm-settings-view"]').exists()).toBe(false)
-    expect(reloaded.text()).toContain('PM Leader 未启用')
+    expect(reloaded.text()).toContain('项目管理未启用')
   })
 })
