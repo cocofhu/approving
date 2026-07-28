@@ -1,10 +1,14 @@
-import type { Artifact, ClarifyTurn, NodeRun, Run, WFNode } from './types'
+import type { Artifact, ClarifyTurn, Gate, NodeRun, Run, WFNode } from './types'
 
 export type GateInboxContext = {
   type: 'gate'
   nodes: WFNode[]
   artifacts: Artifact[]
   nodeExecutions: Record<string, NodeRun[]>
+  /** Authoritative busy/queue for Inbox gate hard-refresh resume. */
+  reactSessions?: Run['reactSessions']
+  /** Gate DTO subset (reactUpstream / sessionAlive) for hot-revise seed. */
+  gate?: Gate
 }
 
 export type ClarifyInboxContext = {
@@ -50,6 +54,8 @@ export function adaptInboxContextToRun(ctx: InboxContextResponse, runId: string)
       nodes: ctx.nodes,
       artifacts: ctx.artifacts,
       nodeExecutions: ctx.nodeExecutions,
+      reactSessions: ctx.reactSessions,
+      gate: ctx.gate,
     }
   }
 

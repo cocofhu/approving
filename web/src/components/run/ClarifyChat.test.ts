@@ -682,7 +682,7 @@ describe('ClarifyChat', () => {
       wrapper.unmount()
     })
 
-    it('thought is visible and default-open; message does not erase thought', async () => {
+    it('thought is visible and default-open; collapses when message starts', async () => {
       const wrapper = mountChat({ draft: '请复审' })
       await clickSend(wrapper)
       const vm = wrapper.vm as unknown as {
@@ -715,8 +715,11 @@ describe('ClarifyChat', () => {
       await flushPromises()
 
       expect(wrapper.find('[data-testid="clarify-thought"]').text()).toContain('先核对边界与分轨')
+      // Demo: collapse thought once message streaming starts.
+      expect(wrapper.find('[data-testid="clarify-thought"]').attributes('open')).toBeUndefined()
       expect(wrapper.find('[data-testid="clarify-agent-message"]').text()).toContain('已核对完成')
       expect(wrapper.find('[data-testid="clarify-busy-status"]').text()).toContain('输出中')
+      expect(wrapper.find('[data-testid="clarify-stream-caret"]').exists()).toBe(true)
       wrapper.unmount()
     })
 
@@ -745,8 +748,30 @@ describe('ClarifyChat', () => {
       vm.applyReviewFrame({ event: 'turn_done', nodeId: 'react-1' })
       await flushPromises()
       expect(wrapper.find('[data-testid="clarify-busy-status"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="clarify-stream-caret"]').exists()).toBe(false)
       expect(wrapper.find('[data-testid="clarify-thought"]').text()).toContain('思考内容')
       expect(wrapper.find('[data-testid="clarify-agent-message"]').text()).toContain('正文内容')
+      expect(wrapper.find('[data-testid="clarify-turn-completed"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="clarify-turn-completed"]').text()).toContain('已完成')
+      wrapper.unmount()
+    })
+
+    it('interrupted turn_done does not show 已完成 footnote', async () => {
+      const wrapper = mountChat({ draft: '请复审' })
+      await clickSend(wrapper)
+      const vm = wrapper.vm as unknown as {
+        applyReviewFrame: (f: Record<string, unknown>) => void
+        applyAcpEvents: (e: { kind: string; text: string }[], nodeId?: string) => void
+      }
+      vm.applyReviewFrame({
+        event: 'turn_begin',
+        nodeId: 'react-1',
+        item: { text: '请复审' },
+      })
+      vm.applyAcpEvents([{ kind: 'message', text: '半截正文' }], 'react-1')
+      vm.applyReviewFrame({ event: 'turn_done', nodeId: 'react-1', interrupted: true })
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-turn-completed"]').exists()).toBe(false)
       wrapper.unmount()
     })
 

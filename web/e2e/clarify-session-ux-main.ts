@@ -128,6 +128,55 @@ const App = defineComponent({
       c.applyAcpEvents?.([{ kind: 'message', text: '刷新后续上的流式正文。' }])
     }
 
+    /**
+     * Hard-load ACP race (g4.2): slot rebuild first, then delayed seed of prior
+     * thought/message — mirrors Inbox pending buffer flush after remount.
+     */
+    async function simHardRefreshAcpRace() {
+      const c = chatRef.value
+      if (!c?.applyReviewFrame) return
+      c.applyReviewFrame({
+        event: 'queue_state',
+        nodeId: 'clarify',
+        waiting: 0,
+        items: [],
+        busy: true,
+        activeItem: { text: '硬刷新竞态提问' },
+      })
+      await nextTick()
+      // Delayed seed (buffered ACP / nodeEvents), not same-tick apply.
+      await new Promise((r) => setTimeout(r, 30))
+      c.applyAcpEvents?.([
+        { kind: 'thought', text: '竞态恢复的思考…' },
+        { kind: 'message', text: '竞态恢复的正文续流。' },
+      ])
+      await nextTick()
+      c.applyAcpEvents?.([
+        { kind: 'thought', text: '竞态恢复的思考…' },
+        { kind: 'message', text: '竞态恢复的正文续流。继续追加。' },
+      ])
+    }
+
+    /** Full four-phase path ending in restrained completion footnote. */
+    async function simFourPhaseComplete() {
+      const c = chatRef.value
+      if (!c?.applyReviewFrame) return
+      c.applyReviewFrame({
+        event: 'turn_begin',
+        item: { text: '四阶段提问' },
+        nodeId: 'clarify',
+      })
+      await nextTick()
+      c.applyAcpEvents?.([{ kind: 'thought', text: '四阶段思考内容' }])
+      await nextTick()
+      c.applyAcpEvents?.([
+        { kind: 'thought', text: '四阶段思考内容' },
+        { kind: 'message', text: '四阶段正文输出。' },
+      ])
+      await nextTick()
+      c.applyReviewFrame({ event: 'turn_done', nodeId: 'clarify' })
+    }
+
     return () =>
       h('div', { class: 'min-h-screen p-4 max-w-3xl mx-auto', 'data-testid': 'clarify-ux-root' }, [
         h('div', { class: 'flex gap-2 mb-3 flex-wrap' }, [
@@ -170,6 +219,26 @@ const App = defineComponent({
               onClick: () => void simRefreshResume(),
             },
             '模拟刷新续传',
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              'data-testid': 'sim-hard-refresh-acp-race',
+              class: 'px-3 py-1.5 rounded border text-sm',
+              onClick: () => void simHardRefreshAcpRace(),
+            },
+            '模拟硬刷新ACP竞态',
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              'data-testid': 'sim-four-phase-complete',
+              class: 'px-3 py-1.5 rounded border text-sm',
+              onClick: () => void simFourPhaseComplete(),
+            },
+            '模拟四阶段完成',
           ),
           h(
             'span',

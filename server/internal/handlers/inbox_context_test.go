@@ -46,6 +46,13 @@ func TestRunInboxContextGate(t *testing.T) {
 	if strings.Contains(body, "should-not-appear") {
 		t.Error("nodeExecutions must be slim (no events)")
 	}
+	// Idle (no in-memory hot session): reactSessions omitted; gate DTO present.
+	if !strings.Contains(body, `"gate"`) {
+		t.Error("gate inbox-context should include gate DTO subset")
+	}
+	if strings.Contains(body, `"reactSessions"`) {
+		t.Error("idle gate inbox-context should omit empty reactSessions")
+	}
 }
 
 func TestRunInboxContextClarify(t *testing.T) {

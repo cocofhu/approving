@@ -86,4 +86,34 @@ test.describe('ClarifyChat 非 reviewMode 澄清会话', () => {
     await expect(page.getByTestId('host-skip-refresh')).toContainText(/hostSkip=[1-9]/)
     await page.screenshot({ path: path.join(shotDir, '05-clarify-no-dup-human.png'), fullPage: true })
   })
+
+  test('硬刷新 ACP 竞态：延迟 seed 恢复 thought/message 并续流', async ({ page }) => {
+    await page.setViewportSize({ width: 1100, height: 900 })
+    await page.goto('/clarify-session-ux.html')
+    await expect(page.getByTestId('clarify-ux-root')).toBeVisible({ timeout: 15_000 })
+
+    await page.getByTestId('sim-hard-refresh-acp-race').click()
+    await expect(page.getByTestId('clarify-thought')).toContainText('竞态恢复的思考', {
+      timeout: 5_000,
+    })
+    await expect(page.getByText('竞态恢复的正文续流。继续追加。')).toBeVisible()
+    await expect(page.getByTestId('clarify-busy-status')).toContainText('输出中')
+    await expect(page.getByTestId('clarify-stream-caret')).toBeVisible()
+    await page.screenshot({ path: path.join(shotDir, '07-clarify-hard-refresh-acp-race.png'), fullPage: true })
+  })
+
+  test('四阶段完成态：输出中三件套消失 + 已完成脚注', async ({ page }) => {
+    await page.setViewportSize({ width: 1100, height: 900 })
+    await page.goto('/clarify-session-ux.html')
+    await expect(page.getByTestId('clarify-ux-root')).toBeVisible({ timeout: 15_000 })
+
+    await page.getByTestId('sim-four-phase-complete').click()
+    await expect(page.getByText('四阶段正文输出。')).toBeVisible()
+    await expect(page.getByTestId('clarify-busy-status')).toHaveCount(0)
+    await expect(page.getByTestId('clarify-stream-caret')).toHaveCount(0)
+    await expect(page.getByTestId('clarify-turn-completed')).toContainText('已完成')
+    // Thought default-collapsed after message / done.
+    await expect(page.getByTestId('clarify-thought')).not.toHaveAttribute('open')
+    await page.screenshot({ path: path.join(shotDir, '08-clarify-four-phase-done.png'), fullPage: true })
+  })
 })

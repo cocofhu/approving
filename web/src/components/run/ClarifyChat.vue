@@ -100,6 +100,17 @@ const streamPreview = createStreamMarkdownPreview({ render: renderMarkdown })
 const unsubStream = streamPreview.subscribe((html) => {
   liveStreamHtml.value = html
 })
+/** Coalesced thought text (rAF) — same cadence as message preview. */
+const liveThoughtText = ref('')
+const thoughtPreview = createStreamMarkdownPreview({ render: (s) => s })
+const unsubThought = thoughtPreview.subscribe((text) => {
+  liveThoughtText.value = text
+})
+/**
+ * Manual thought expand/collapse overrides (index → open).
+ * Default: open while thought-only streaming; collapsed once message starts / done.
+ */
+const thoughtOpenOverride = ref<Record<number, boolean>>({})
 const scroller = ref<HTMLElement>()
 const fileInput = ref<HTMLInputElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
@@ -188,7 +199,9 @@ const pending = ref<{ text: string; images: ClarifyImage[]; annotations: ReactAn
 
 onBeforeUnmount(() => {
   unsubStream()
+  unsubThought()
   streamPreview.reset()
+  thoughtPreview.reset()
 })
 
 /** Legacy zh-CN prefix for messages persisted before i18n or in sessionStorage. */
@@ -757,7 +770,9 @@ function applyQueueState(
       },
     ]
     liveAgentIdx.value = 1
+    thoughtOpenOverride.value = {}
     streamPreview.reset()
+    thoughtPreview.reset()
   }
   thinking.value = liveAgentIdx.value >= 0 || queued.value.length > 0 || !!busy
 }
@@ -825,15 +840,20 @@ function applyReviewFrame(frame: {
           at: new Date().toISOString(),
           streaming: true,
         }) - 1
+      thoughtOpenOverride.value = {}
       streamPreview.reset()
+      thoughtPreview.reset()
       thinking.value = true
       break
     }
     case 'turn_done': {
       if (liveAgentIdx.value >= 0 && liveTurns.value[liveAgentIdx.value]) {
-        liveTurns.value[liveAgentIdx.value].streaming = false
-        if (frame.interrupted) liveTurns.value[liveAgentIdx.value].interrupted = true
+        const agent = liveTurns.value[liveAgentIdx.value]
+        agent.streaming = false
+        agent.at = new Date().toISOString()
+        if (frame.interrupted) agent.interrupted = true
         streamPreview.flush()
+        thoughtPreview.flush()
       }
       liveAgentIdx.value = -1
       thinking.value = queued.value.length > 0
@@ -844,8 +864,10 @@ function applyReviewFrame(frame: {
         liveTurns.value[liveAgentIdx.value].streaming = false
         liveTurns.value[liveAgentIdx.value].text =
           liveTurns.value[liveAgentIdx.value].text || frame.message || 'error'
+        liveTurns.value[liveAgentIdx.value].at = new Date().toISOString()
         if (frame.interrupted) liveTurns.value[liveAgentIdx.value].interrupted = true
         streamPreview.flush()
+        thoughtPreview.flush()
       }
       liveAgentIdx.value = -1
       thinking.value = queued.value.length > 0
@@ -880,6 +902,7 @@ function applyAcpEvents(events: AcpEvent[] | undefined, nodeId?: string) {
   agent.thought = thought
   agent.text = msg
   streamPreview.setText(msg)
+  thoughtPreview.setText(thought)
   // Stick-gated only — never force-drag while user scrolled up.
   void scrollBottom()
 }
@@ -887,6 +910,37 @@ function applyAcpEvents(events: AcpEvent[] | undefined, nodeId?: string) {
 /** Live agent bubble has visible message body (text or coalesced markdown). */
 function agentHasMessage(t: ClarifyTurn): boolean {
   return !!(t.text || (t.streaming && liveStreamHtml.value))
+}
+
+/** Display thought (coalesced while this live agent is streaming). */
+function agentThoughtDisplay(t: ClarifyTurn, idx: number): string {
+  if (t.streaming && idx === liveAgentIdx.value && liveThoughtText.value) {
+    return liveThoughtText.value
+  }
+  return t.thought || ''
+}
+
+/** Default open while thought-only; collapse once message exists (Demo). */
+function isThoughtOpen(idx: number, t: ClarifyTurn): boolean {
+  if (thoughtOpenOverride.value[idx] !== undefined) {
+    return thoughtOpenOverride.value[idx]!
+  }
+  return !!(t.streaming && t.thought && !agentHasMessage(t))
+}
+
+function onThoughtToggle(idx: number, e: Event) {
+  const el = e.target as HTMLDetailsElement
+  thoughtOpenOverride.value = { ...thoughtOpenOverride.value, [idx]: el.open }
+}
+
+/** Normal completion footnote (not interrupted / error). */
+function showTurnCompleted(t: ClarifyTurn): boolean {
+  return (
+    t.role === 'agent' &&
+    !t.streaming &&
+    !t.interrupted &&
+    !!(t.text || t.thought)
+  )
 }
 
 defineExpose({
@@ -962,7 +1016,7 @@ defineExpose({
               </div>
             </div>
           </div>
-          <!-- Agent busy / thought / message (Demo C: no air bubble) -->
+          <!-- Agent busy / thought / message (Demo: four-phase + restrained done) -->
           <template v-else-if="t.role === 'agent'">
             <!-- Waiting first token: dots + 思考中… inside bubble -->
             <div
@@ -989,26 +1043,44 @@ defineExpose({
             >
               {{ translate('pages.clarify.outputting') }}
             </div>
-            <!-- Thought block: default open; not auto-collapsed when message arrives -->
+            <!-- Thought: open while thought-only; default collapsed once message starts -->
             <details
               v-if="t.thought"
-              open
               class="mb-2 w-full rounded-md border border-line bg-base/60 text-[11.5px] text-txt3"
               data-testid="clarify-thought"
+              :open="isThoughtOpen(i, t)"
+              @toggle="onThoughtToggle(i, $event)"
             >
               <summary class="flex cursor-pointer select-none items-center gap-1.5 px-2.5 py-1.5 text-txt3 hover:text-txt2">
                 <Icon name="sparkles" :size="11" class="text-accent-2" />
                 {{ translate('pages.clarify.thought') }}
               </summary>
-              <div class="whitespace-pre-wrap border-t border-dashed border-line px-2.5 pb-2 pt-1.5 font-mono leading-5">{{ t.thought }}</div>
+              <div class="whitespace-pre-wrap border-t border-dashed border-line px-2.5 pb-2 pt-1.5 font-mono leading-5">{{ agentThoughtDisplay(t, i) }}</div>
             </details>
-            <!-- Message body -->
+            <!-- Message body + streaming caret -->
             <div
               v-if="agentHasMessage(t)"
               class="md rounded-lg border border-line bg-elevated px-3 py-2 text-[13px] leading-relaxed text-txt"
               data-testid="clarify-agent-message"
-              v-html="t.streaming && liveStreamHtml ? liveStreamHtml : renderMarkdown(t.text)"
-            />
+            >
+              <span
+                v-html="t.streaming && liveStreamHtml ? liveStreamHtml : renderMarkdown(t.text)"
+              /><span
+                v-if="t.streaming"
+                class="clarify-stream-caret"
+                data-testid="clarify-stream-caret"
+                aria-hidden="true"
+              />
+            </div>
+            <!-- Restrained completion footnote (Demo); never for interrupted/error -->
+            <div
+              v-if="showTurnCompleted(t)"
+              class="mt-1.5 flex items-center justify-between gap-2 text-[11px] text-txt3"
+              data-testid="clarify-turn-completed"
+            >
+              <span class="text-txt2">{{ translate('pages.clarify.turnCompleted') }}</span>
+              <span>{{ relTime(t.at) }}</span>
+            </div>
           </template>
           <!-- Human free-text bubble (agent branch handled above; role narrowed to human) -->
           <div
@@ -1420,5 +1492,21 @@ defineExpose({
   background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: shimmer 3.5s ease-in-out infinite;
+}
+
+/* Streaming caret at message tail (Demo phase 3) */
+.clarify-stream-caret {
+  display: inline-block;
+  width: 7px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: rgb(var(--c-accent));
+  animation: clarify-caret-blink 0.9s step-end infinite;
+}
+@keyframes clarify-caret-blink {
+  50% {
+    opacity: 0;
+  }
 }
 </style>
