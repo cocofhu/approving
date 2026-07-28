@@ -32,20 +32,19 @@ function barWidth(total: number): string {
 }
 
 function badgeLabel(w: TokenStatsWorkflow, i: number): string {
-  if (isPM(w)) return 'PM'
   if (isOther(w)) return '·'
+  // Workflow + PM share one continuous numeric sequence (no "PM" text badge / no 12PM34).
   let n = 0
   for (let j = 0; j <= i; j++) {
     const row = props.workflows[j]
-    if (row && !isPM(row) && !isOther(row)) n += 1
+    if (row && !isOther(row)) n += 1
   }
   return String(n)
 }
 
 function badgeClass(w: TokenStatsWorkflow, i: number): string {
-  // PM uses the same purple badge palette as workflow (no amber); identity via "PM" label.
-  if (isPM(w)) return 'w-auto min-w-[22px] px-1.5 bg-[rgba(109,92,255,0.18)] text-[#6d5cff]'
   if (isOther(w)) return 'w-[22px] bg-elevated text-txt3'
+  // PM uses the same numeric badge classes as workflow rows (Demo-aligned).
   const n = Number(badgeLabel(w, i))
   return n <= 3
     ? 'w-[22px] bg-accent-dim text-accent-2'

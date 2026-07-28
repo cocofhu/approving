@@ -443,17 +443,8 @@ func buildConsumptionRank(totals map[string]int64, names map[string]string, pmTo
 			Kind:  TokenStatsKindOther,
 		})
 	}
-	// Sort all rank rows by total desc so PM sits at its natural position.
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].Total != out[j].Total {
-			return out[i].Total > out[j].Total
-		}
-		// Keep "other" at the end on ties.
-		if out[i].Other != out[j].Other {
-			return !out[i].Other
-		}
-		return out[i].Name < out[j].Name
-	})
+	// Fixed slot order: Top workflows (already desc) → PM (if any) → other (if any).
+	// Do not re-sort by Total — that would insert PM between workflow rows (12PM34).
 	return out
 }
 
