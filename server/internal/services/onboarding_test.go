@@ -294,46 +294,59 @@ func assertOnboardingGraph(t *testing.T, g models.Graph) {
 	for _, n := range g.Nodes {
 		byID[n.ID] = n
 	}
-	for _, id := range []string{"input", "clarify", "visual", "gate", "implement", "test", "preview", "output"} {
+	for _, id := range []string{"input", "clarify", "visual", "implement", "output"} {
 		if _, ok := byID[id]; !ok {
 			t.Fatalf("missing node %s", id)
 		}
 	}
-	for _, banned := range []string{"research", "proposal", "plan", "review"} {
+	for _, banned := range []string{"research", "proposal", "plan", "review", "human_gate", "test", "app_preview"} {
 		for _, n := range g.Nodes {
-			if n.Type == banned {
-				t.Fatalf("unexpected node type %s", banned)
+			if n.Type == banned || n.ID == banned {
+				t.Fatalf("unexpected node %s type=%s", n.ID, n.Type)
 			}
 		}
 	}
-	gate := byID["gate"]
-	if bt, _ := gate.Config["body_template"].(string); bt != "{{nodes.visual.outputs.page}}" {
-		t.Fatalf("gate body_template = %v", gate.Config["body_template"])
+	for _, n := range g.Nodes {
+		if n.Position.X == 0 && n.Position.Y == 0 {
+			t.Fatalf("node %s has invalid position (0,0)", n.ID)
+		}
 	}
-	testCfg := byID["test"].Config
-	exits, _ := testCfg["exits"].(map[string]any)
-	fail, _ := exits["fail"].(map[string]any)
-	if fail["goto"] != "implement" {
-		t.Fatalf("test fail goto = %v", fail["goto"])
+	var hasReviewVar bool
+	for _, v := range g.Variables {
+		if v.Name == "review" {
+			hasReviewVar = true
+			if v.Value != true {
+				t.Fatalf("review var value = %v want true", v.Value)
+			}
+		}
+	}
+	if !hasReviewVar {
+		t.Fatal("missing review variable")
+	}
+	if byID["clarify"].Config["review_var"] != "review" {
+		t.Fatalf("clarify review_var = %v", byID["clarify"].Config["review_var"])
+	}
+	if byID["visual"].Config["review_var"] != "review" {
+		t.Fatalf("visual review_var = %v", byID["visual"].Config["review_var"])
 	}
 	implPrompt, _ := byID["implement"].Config["prompt"].(string)
 	if strings.Contains(implPrompt, "get_plan") {
 		t.Fatal("light implement prompt must not require get_plan")
 	}
-	var hasRevise, hasApprove, hasPreviewFail bool
+	wantEdges := map[string]string{
+		"input": "clarify", "clarify": "visual", "visual": "implement", "implement": "output",
+	}
 	for _, e := range g.Edges {
-		if e.Source == "gate" && e.Target == "visual" && strings.Contains(e.When, "revise") {
-			hasRevise = true
+		if wantEdges[e.Source] != e.Target {
+			t.Fatalf("unexpected edge %s→%s", e.Source, e.Target)
 		}
-		if e.Source == "gate" && e.Target == "implement" && strings.Contains(e.When, "approve") {
-			hasApprove = true
-		}
-		if e.Source == "preview" && e.Target == "implement" {
-			hasPreviewFail = true
+		delete(wantEdges, e.Source)
+		if strings.TrimSpace(e.When) != "" {
+			t.Fatalf("main-chain edge must not use when: %s→%s when=%q", e.Source, e.Target, e.When)
 		}
 	}
-	if !hasRevise || !hasApprove || !hasPreviewFail {
-		t.Fatalf("missing revise/fail loops: revise=%v approve=%v previewFail=%v", hasRevise, hasApprove, hasPreviewFail)
+	if len(wantEdges) != 0 {
+		t.Fatalf("missing edges from %v", wantEdges)
 	}
 	if err := g.Validate(); err != nil {
 		t.Fatalf("graph validate: %v", err)

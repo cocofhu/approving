@@ -287,7 +287,7 @@ func (s *OnboardingService) upsertLightWorkflow(projectID, repos, feature string
 		}
 	}
 	if existing != nil {
-		existing.Description = "空项目快速上手轻量示例（clarify→visual→gate→implement→test→preview）"
+		existing.Description = "空项目快速上手轻量示例（clarify→visual→implement→output；澄清/视觉开复审）"
 		existing.NeedsRepo = true
 		existing.Graph = graph
 		if err := s.WF.Save(existing); err != nil {
@@ -299,7 +299,7 @@ func (s *OnboardingService) upsertLightWorkflow(projectID, repos, feature string
 		ID:          uuid.NewString(),
 		ProjectID:   projectID,
 		Name:        OnboardingWorkflowName,
-		Description: "空项目快速上手轻量示例（clarify→visual→gate→implement→test→preview）",
+		Description: "空项目快速上手轻量示例（clarify→visual→implement→output；澄清/视觉开复审）",
 		Status:      "draft",
 		Version:     1,
 		NeedsRepo:   true,
@@ -317,10 +317,12 @@ func BuildOnboardingLightGraphForTest(repos, feature string) models.Graph {
 }
 
 func buildOnboardingLightGraph(repos, feature string) models.Graph {
-	implementPrompt := "轻量链路：用 get_clarified_requirement 读取澄清结论，并结合视觉产物 page.html 与 {{vars.preview_issues}}（如有）实现改动。" +
-		"勿依赖实施计划。在仓库中完成需求后提交推送，并调用 set_implementation_result。"
+	// Matches project draft「快速上手·轻量（连线草案）」: linear main chain only;
+	// clarify/visual enter ReAct review via vars.review; no human_gate / test /
+	// preview (avoids when+goto double-drawn edges and (0,0) layout shove).
+	implementPrompt := "轻量链路：用 get_clarified_requirement 读取澄清结论，并结合视觉产物 page.html（如有）实现改动。" +
+		"勿依赖实施计划。完成后 set_implementation_result 并 PUSH。"
 	visualPrompt := "根据澄清后的需求做一个简洁美观的可视化网页 demo（原型），用 write_artifact 写入 page.html。勿依赖 plan。"
-	previewPrompt := "在沙箱内启动 Heroku Node Getting Started 示例（或工作流 repos 指向的公开仓）：PORT=5006，监听 0.0.0.0，调用 set_preview(5006)。"
 
 	return models.Graph{
 		Variables: []models.Variable{
@@ -335,88 +337,45 @@ func buildOnboardingLightGraph(repos, feature string) models.Graph {
 				Name: "repos", Type: "repos", Value: onboardingReposVarValue(repos),
 				Desc: "仓库列表(平级,每个 clone 到 /root/workspace/<name>/)", Ask: true, Required: true, Editable: true,
 			},
+			{
+				Name: "review", Type: "bool", Value: true,
+				Desc: "澄清/视觉节点完成后进入 ReAct 复审", Ask: true, Editable: true,
+			},
 		},
 		Nodes: []models.Node{
-			{ID: "input", Type: "input", Label: "输入", Position: models.Position{X: 0, Y: 0}, Config: map[string]any{}},
+			{ID: "input", Type: "input", Label: "输入", Position: models.Position{X: 40, Y: 200}, Config: map[string]any{}},
 			{
-				ID: "clarify", Type: "react", Label: "澄清", Position: models.Position{X: 220, Y: 0},
+				ID: "clarify", Type: "react", Label: "澄清", Position: models.Position{X: 280, Y: 200},
 				Config: map[string]any{
 					"skill_profile": "ClarifyAgent",
 					"max_rounds":    6,
+					"review_var":    "review",
 					"prompt":        "针对以下需求提出澄清问题,直到信息充分,再调用 set_clarified_requirement 写入结构化需求:\n{{vars.feature}}",
 				},
 			},
 			{
-				ID: "visual", Type: "visual", Label: "视觉", Position: models.Position{X: 440, Y: 0},
+				ID: "visual", Type: "visual", Label: "视觉", Position: models.Position{X: 520, Y: 200},
 				Config: map[string]any{
 					"skill_profile": "VisualAgent",
+					"review_var":    "review",
 					"prompt":        visualPrompt,
 				},
 			},
 			{
-				ID: "gate", Type: "human_gate", Label: "视觉确认", Position: models.Position{X: 660, Y: 0},
-				Config: map[string]any{
-					"title":         "确认视觉原型",
-					"body_template": "{{nodes.visual.outputs.page}}",
-					"output_var":    "action",
-					"form":          []any{},
-					"actions": []any{
-						map[string]any{"id": "approve", "label": "批准"},
-						map[string]any{"id": "revise", "label": "退回修改"},
-					},
-				},
-			},
-			{
-				ID: "implement", Type: "implement", Label: "实现", Position: models.Position{X: 880, Y: 0},
+				ID: "implement", Type: "implement", Label: "实现", Position: models.Position{X: 760, Y: 200},
 				Config: map[string]any{
 					"skill_profile": "ImplementAgent",
 					"max_rounds":    3,
 					"prompt":        implementPrompt,
 				},
 			},
-			{
-				ID: "test", Type: "test", Label: "测试", Position: models.Position{X: 1100, Y: 0},
-				Config: map[string]any{
-					"skill_profile":    "TestAgent",
-					"reason_var":       "reason",
-					"repoScope":        "all",
-					"block_on_skipped": false,
-					"prompt":           "对上游实现执行测试并如实记录结果,用 set_test_result 写入测试总结。无 plan 叶子时可省略 plan_coverage。",
-					"exits": map[string]any{
-						"pass": map[string]any{"goto": "preview"},
-						"fail": map[string]any{"goto": "implement"},
-					},
-				},
-			},
-			{
-				ID: "preview", Type: "app_preview", Label: "预览", Position: models.Position{X: 1320, Y: 0},
-				Config: map[string]any{
-					"skill_profile": "PreviewAgent",
-					"max_rounds":    3,
-					"title":         "应用预览",
-					"output_var":    "action",
-					"prompt":        previewPrompt,
-					"form":          []any{},
-					"actions": []any{
-						map[string]any{"id": "pass", "label": "通过"},
-						map[string]any{"id": "fail", "label": "退回"},
-					},
-				},
-			},
-			{ID: "output", Type: "output", Label: "输出", Position: models.Position{X: 1540, Y: 0}, Config: map[string]any{}},
+			{ID: "output", Type: "output", Label: "输出", Position: models.Position{X: 1000, Y: 200}, Config: map[string]any{"results": []any{}}},
 		},
 		Edges: []models.Edge{
-			{ID: "e1", Source: "input", Target: "clarify"},
-			{ID: "e2", Source: "clarify", Target: "visual"},
-			{ID: "e3", Source: "visual", Target: "gate"},
-			{ID: "e4", Source: "gate", Target: "implement", When: "action == 'approve'", Kind: models.EdgeSuccess},
-			{ID: "e5", Source: "gate", Target: "visual", When: "action == 'revise'", Kind: models.EdgeSuccess},
-			{ID: "e6", Source: "implement", Target: "test"},
-			{ID: "e7", Source: "test", Target: "preview", Kind: models.EdgeSuccess},
-			{ID: "e8", Source: "test", Target: "implement", Kind: models.EdgeFailure},
-			{ID: "e9", Source: "preview", Target: "output", When: "action == 'pass'", Kind: models.EdgeSuccess},
-			{ID: "e10", Source: "preview", Target: "implement", When: "action == 'fail'", Kind: models.EdgeSuccess},
-			{ID: "e11", Source: "preview", Target: "implement", Kind: models.EdgeFailure},
+			{ID: "e1", Source: "input", Target: "clarify", Kind: models.EdgeSuccess},
+			{ID: "e2", Source: "clarify", Target: "visual", Kind: models.EdgeSuccess},
+			{ID: "e3", Source: "visual", Target: "implement", Kind: models.EdgeSuccess},
+			{ID: "e4", Source: "implement", Target: "output", Kind: models.EdgeSuccess},
 		},
 	}
 }
