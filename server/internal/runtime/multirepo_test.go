@@ -32,6 +32,12 @@ func TestParseReposVar(t *testing.T) {
 		t.Errorf("anyForm = %+v", got2)
 	}
 
+	// Wire format (GIT_REPOS / onboarding literal) is accepted alongside JSON.
+	wire := parseReposVar("demo|https://github.com/heroku/nodejs-getting-started.git|main")
+	if len(wire) != 1 || wire[0].Name != "demo" || wire[0].Branch != "main" {
+		t.Errorf("wire form = %+v", wire)
+	}
+
 	// Blank / invalid -> nil (single-repo mode).
 	if parseReposVar("") != nil || parseReposVar(nil) != nil || parseReposVar("not json") != nil {
 		t.Errorf("blank/invalid should be nil")

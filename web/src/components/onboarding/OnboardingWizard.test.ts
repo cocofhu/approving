@@ -117,5 +117,22 @@ describe('OnboardingWizard', () => {
     expect(repoBox.text()).toContain('main')
     expect(repoBox.text()).not.toContain('demo|https://')
     expect(isOnboardingDismissed('p5')).toBe(true)
+
+    await wrapper.find('[data-testid="onboarding-start-run"]').trigger('click')
+    await flushPromises()
+    expect(api.startRun).toHaveBeenCalledWith(
+      'wf-1',
+      {
+        feature: '把首页欢迎文案与主按钮文案改得更清晰友好',
+        repos: [
+          {
+            name: 'demo',
+            url: 'https://github.com/heroku/nodejs-getting-started.git',
+            branch: 'main',
+          },
+        ],
+      },
+      'manual',
+    )
   })
 })

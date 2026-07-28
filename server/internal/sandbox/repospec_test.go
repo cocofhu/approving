@@ -64,3 +64,32 @@ func TestEncodeRepos(t *testing.T) {
 		t.Errorf("nil repos should encode to empty, got %q", got3)
 	}
 }
+
+func TestDecodeRepos(t *testing.T) {
+	got := DecodeRepos("web|https://h/w.git|dev,api|https://h/a.git")
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2 (%+v)", len(got), got)
+	}
+	if got[0] != (RepoSpec{Name: "web", URL: "https://h/w.git", Branch: "dev"}) {
+		t.Errorf("entry0 = %+v", got[0])
+	}
+	if got[1] != (RepoSpec{Name: "api", URL: "https://h/a.git"}) {
+		t.Errorf("entry1 = %+v", got[1])
+	}
+
+	// Blank name derives from URL; unsafe / duplicate names dropped.
+	got2 := DecodeRepos("|https://h/org/demo.git|main,../etc|https://h/x.git,demo|https://h/org/demo.git|main")
+	if len(got2) != 1 || got2[0].Name != "demo" || got2[0].Branch != "main" {
+		t.Errorf("derive/dedupe/unsafe = %+v", got2)
+	}
+
+	if DecodeRepos("") != nil || DecodeRepos("   ") != nil || DecodeRepos("not-a-wire") != nil {
+		t.Errorf("blank/invalid wire should be nil")
+	}
+
+	// Round-trip with EncodeRepos.
+	wire := "demo|https://github.com/heroku/nodejs-getting-started.git|main"
+	if enc := EncodeRepos(DecodeRepos(wire)); enc != wire {
+		t.Errorf("round-trip = %q, want %q", enc, wire)
+	}
+}

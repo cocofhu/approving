@@ -162,6 +162,16 @@ export function parseReposLiteral(literal: string): OnboardingRepoFields {
   }
 }
 
+/** Structured repos value accepted by StartRun / workflow Type "repos". */
+export function reposInputFromFields(repo: OnboardingRepoFields): Array<{ name: string; url: string; branch: string }> {
+  const fields = {
+    name: (repo.name || '').trim() || DEFAULT_ONBOARDING_REPO.name,
+    url: (repo.url || '').trim() || DEFAULT_ONBOARDING_REPO.url,
+    branch: (repo.branch || '').trim() || DEFAULT_ONBOARDING_REPO.branch,
+  }
+  return [fields]
+}
+
 export function assembleBootstrapBody(draft: OnboardingDraft): OnboardingBootstrapBody {
   const body: OnboardingBootstrapBody = {
     acpBackend: draft.acpBackend,

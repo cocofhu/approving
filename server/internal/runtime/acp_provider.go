@@ -2291,22 +2291,35 @@ func parseReposVar(v any) []repoEntry {
 			return nil
 		}
 		var repos []repoEntry
-		if json.Unmarshal([]byte(s), &repos) != nil {
+		if json.Unmarshal([]byte(s), &repos) == nil {
+			out := make([]repoEntry, 0, len(repos))
+			for _, r := range repos {
+				r.Name = strings.TrimSpace(r.Name)
+				r.URL = strings.TrimSpace(r.URL)
+				r.Branch = strings.TrimSpace(r.Branch)
+				// A blank name defaults to the repo derived from its clone URL.
+				if r.Name == "" {
+					r.Name = repoNameFromURL(r.URL)
+				}
+				if !safeRepoName(r.Name) {
+					continue
+				}
+				out = append(out, r)
+			}
+			return out
+		}
+		// Wire format used by GIT_REPOS / onboarding bootstrap literals:
+		// comma-separated name|url|branch.
+		wire := sandbox.DecodeRepos(s)
+		if len(wire) == 0 {
 			return nil
 		}
-		out := make([]repoEntry, 0, len(repos))
-		for _, r := range repos {
-			r.Name = strings.TrimSpace(r.Name)
-			r.URL = strings.TrimSpace(r.URL)
-			r.Branch = strings.TrimSpace(r.Branch)
-			// A blank name defaults to the repo derived from its clone URL.
-			if r.Name == "" {
-				r.Name = repoNameFromURL(r.URL)
-			}
+		out := make([]repoEntry, 0, len(wire))
+		for _, r := range wire {
 			if !safeRepoName(r.Name) {
 				continue
 			}
-			out = append(out, r)
+			out = append(out, repoEntry{Name: r.Name, URL: r.URL, Branch: r.Branch})
 		}
 		return out
 	case []any:

@@ -10,6 +10,7 @@ import {
   isOnboardingDismissed,
   onboardingDismissKey,
   parseReposLiteral,
+  reposInputFromFields,
   shouldAutoOpenOnboarding,
 } from './onboardingWizard'
 
@@ -28,6 +29,16 @@ describe('onboardingWizard', () => {
   it('round-trips repos literal', () => {
     const lit = 'demo|https://github.com/heroku/nodejs-getting-started.git|main'
     expect(encodeReposLiteral(parseReposLiteral(lit))).toBe(lit)
+  })
+
+  it('builds structured repos input for StartRun', () => {
+    expect(reposInputFromFields(parseReposLiteral(DEFAULT_ONBOARDING_REPOS_LITERAL))).toEqual([
+      {
+        name: 'demo',
+        url: 'https://github.com/heroku/nodejs-getting-started.git',
+        branch: 'main',
+      },
+    ])
   })
 
   it('assembles bootstrap body with optional region', () => {

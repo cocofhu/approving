@@ -180,6 +180,52 @@ func EncodeRepos(repos []RepoSpec) string {
 	return strings.Join(parts, ",")
 }
 
+// DecodeRepos parses the GIT_REPOS wire format (comma-separated
+// "name|url|branch" entries) produced by EncodeRepos. Entries missing a URL,
+// with an unsafe name, or with fewer than two '|' fields are skipped. A blank
+// name is derived from the URL when possible.
+func DecodeRepos(s string) []RepoSpec {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]RepoSpec, 0, len(parts))
+	seen := map[string]bool{}
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		fields := strings.SplitN(part, "|", 3)
+		if len(fields) < 2 {
+			continue
+		}
+		name := strings.TrimSpace(fields[0])
+		url := strings.TrimSpace(fields[1])
+		branch := ""
+		if len(fields) >= 3 {
+			branch = strings.TrimSpace(fields[2])
+		}
+		if name == "" {
+			name = RepoNameFromURL(url)
+		}
+		if name == "" || url == "" || seen[name] {
+			continue
+		}
+		// Same escape guard as runtime.safeRepoName / startup.sh.
+		if name == "." || name == ".." || strings.ContainsAny(name, "/\\") {
+			continue
+		}
+		seen[name] = true
+		out = append(out, RepoSpec{Name: name, URL: url, Branch: branch})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // Sandbox is a running sandbox handle. Host/Port point at the ACP session
 // endpoint (8765) the gateway published; SSHHost/SSHPort at the sshd endpoint
 // (22) used for the data plane.

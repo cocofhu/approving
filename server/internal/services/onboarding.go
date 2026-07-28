@@ -7,6 +7,7 @@ import (
 
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/runtime"
+	"github.com/cocofhu/approving/internal/sandbox"
 
 	"github.com/google/uuid"
 )
@@ -93,6 +94,8 @@ func (s *OnboardingService) Bootstrap(projectID string, req OnboardingBootstrapR
 		return OnboardingBootstrapResult{}, err
 	}
 
+	region := strings.TrimSpace(req.Region)
+
 	// Preload templates + validate graph before mutating project auth / agents.
 	templates := make([]Agent, 0, len(OnboardingAgentNames))
 	for _, name := range OnboardingAgentNames {
@@ -103,10 +106,19 @@ func (s *OnboardingService) Bootstrap(projectID string, req OnboardingBootstrapR
 		tmpl.Name = name
 		tmpl.ProjectID = projectID
 		tmpl.AcpBackend = backend
+		// Persist backend-specific layout so Studio opens clean (no dirty from
+		// client-side defaultConfigRoot fill).
+		tmpl.Layout.ConfigRoot = DefaultConfigRootForBackend(backend)
+		if strings.TrimSpace(tmpl.Layout.WorkspaceDir) == "" {
+			tmpl.Layout.WorkspaceDir = DefaultWorkspaceDir
+		}
 		if tmpl.Env == nil {
 			tmpl.Env = map[string]string{}
 		}
 		tmpl.Env["GIT_REPOS"] = "${vars.repos}"
+		// Mirror project auth region into Agent.env so Agent Studio's
+		// normalizeDraftRegions does not mark every bootstrap agent dirty.
+		applyOnboardingAgentRegion(tmpl.Env, backend, region)
 		templates = append(templates, tmpl)
 	}
 	graph := buildOnboardingLightGraph(repos, feature)
@@ -114,7 +126,7 @@ func (s *OnboardingService) Bootstrap(projectID string, req OnboardingBootstrapR
 		return OnboardingBootstrapResult{}, fmt.Errorf("onboarding graph invalid: %w", err)
 	}
 
-	if err := s.writeProjectAuth(projectID, backend, apiKey, strings.TrimSpace(req.Region)); err != nil {
+	if err := s.writeProjectAuth(projectID, backend, apiKey, region); err != nil {
 		return OnboardingBootstrapResult{}, err
 	}
 
@@ -222,6 +234,45 @@ func primaryAuthEnvKey(backend string) string {
 	}
 }
 
+// applyOnboardingAgentRegion writes the Studio-managed region env key into an
+// Agent env map for backends that require it (CodeBuddy / Trae). Empty region
+// falls back to the same defaults as writeProjectAuth / web regionPolicy.
+func applyOnboardingAgentRegion(env map[string]string, backend, region string) {
+	if env == nil {
+		return
+	}
+	switch NormalizeAcpBackend(backend) {
+	case AcpBackendCodeBuddy:
+		if region == "" {
+			region = "public"
+		}
+		env[runtime.EnvCodeBuddyRegion] = region
+	case AcpBackendTrae:
+		if region == "" {
+			region = "intl"
+		}
+		env[runtime.EnvTraeRegion] = region
+	}
+}
+
+// onboardingReposVarValue converts a GIT_REPOS wire literal into the structured
+// []any form expected by workflow variables of Type "repos" (and by parseReposVar).
+func onboardingReposVarValue(wire string) any {
+	specs := sandbox.DecodeRepos(wire)
+	if len(specs) == 0 {
+		specs = sandbox.DecodeRepos(DefaultOnboardingRepos)
+	}
+	out := make([]any, 0, len(specs))
+	for _, r := range specs {
+		m := map[string]any{"name": r.Name, "url": r.URL}
+		if r.Branch != "" {
+			m["branch"] = r.Branch
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
 func (s *OnboardingService) upsertLightWorkflow(projectID, repos, feature string) (models.WorkflowDef, error) {
 	graph := buildOnboardingLightGraph(repos, feature)
 	var existing *models.WorkflowDef
@@ -278,8 +329,11 @@ func buildOnboardingLightGraph(repos, feature string) models.Graph {
 				Desc: "示例需求", Ask: true, Required: true, Editable: true,
 			},
 			{
-				Name: "repos", Type: "string", Value: repos,
-				Desc: "代码仓（name|url|branch）", Ask: true, Required: true, Editable: true,
+				// Must be Type "repos" (structured [{name,url,branch}]) — not a
+				// string wire literal. Wire form does not render the repos editor
+				// and previously left GIT_REPOS empty after parseReposVar.
+				Name: "repos", Type: "repos", Value: onboardingReposVarValue(repos),
+				Desc: "仓库列表(平级,每个 clone 到 /root/workspace/<name>/)", Ask: true, Required: true, Editable: true,
 			},
 		},
 		Nodes: []models.Node{
