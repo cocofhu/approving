@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"path/filepath"
 	"strings"
 
 	"backend/internal/backend/common"
@@ -102,6 +103,10 @@ func (d *codec) Args(opts provider.OpenOptions, prompt, resumeID string) []strin
 		args = append(args, "--input-format", "stream-json")
 	}
 	args = append(args, d.c.BaseArgs...)
+	// --strict-mcp-config means "only MCP from --mcp-config". Without a path,
+	// Claude/CodeBuddy load zero servers and ignore ConfigRoot/mcp.json — which
+	// is exactly how Approving's seeded artifact-store was being wiped.
+	args = appendStrictMcpConfigPath(args, d.c.ConfigRoot, opts.CustomArgs)
 	if d.c.WorkspaceFlag != "" && opts.Cwd != "" {
 		args = append(args, d.c.WorkspaceFlag, opts.Cwd)
 	}
@@ -116,6 +121,32 @@ func (d *codec) Args(opts provider.OpenOptions, prompt, resumeID string) []strin
 	}
 	args = append(args, opts.CustomArgs...)
 	return args
+}
+
+// appendStrictMcpConfigPath adds `--mcp-config <ConfigRoot>/mcp.json` when
+// BaseArgs enabled --strict-mcp-config but neither BaseArgs nor CustomArgs
+// already supply --mcp-config.
+func appendStrictMcpConfigPath(args []string, configRoot string, custom []string) []string {
+	if !containsFlag(args, "--strict-mcp-config") {
+		return args
+	}
+	if containsFlag(args, "--mcp-config") || containsFlag(custom, "--mcp-config") {
+		return args
+	}
+	configRoot = strings.TrimSpace(configRoot)
+	if configRoot == "" {
+		return args
+	}
+	return append(args, "--mcp-config", filepath.Join(configRoot, "mcp.json"))
+}
+
+func containsFlag(args []string, flag string) bool {
+	for _, a := range args {
+		if a == flag {
+			return true
+		}
+	}
+	return false
 }
 
 // userEnvelope builds the single-line stream-json user message an

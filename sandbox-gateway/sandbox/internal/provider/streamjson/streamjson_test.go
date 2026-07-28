@@ -159,7 +159,7 @@ func TestArgs(t *testing.T) {
 
 func TestArgsStdinRawMode(t *testing.T) {
 	// cursor: -p is standalone (prompt on stdin), workspace pinned, no --input-format.
-	c := &codec{c: Config{Bin: "cursor-agent", PromptMode: PromptStdinRaw, BaseArgs: []string{"--yolo"}, WorkspaceFlag: "--workspace", ResumeFlag: "--resume"}}
+	c := &codec{c: Config{Bin: "cursor-agent", PromptMode: PromptStdinRaw, BaseArgs: []string{"--yolo", "--approve-mcps"}, WorkspaceFlag: "--workspace", ResumeFlag: "--resume"}}
 	if !c.PromptViaStdin() {
 		t.Fatal("stdin-raw mode must feed prompt via stdin")
 	}
@@ -170,7 +170,7 @@ func TestArgsStdinRawMode(t *testing.T) {
 	if containsStr(args, "--input-format") {
 		t.Fatalf("stdin-raw must not add --input-format: %v", args)
 	}
-	for _, want := range []string{"-p", "--output-format", "stream-json", "--yolo", "--workspace", "/w"} {
+	for _, want := range []string{"-p", "--output-format", "stream-json", "--yolo", "--approve-mcps", "--workspace", "/w"} {
 		if !containsStr(args, want) {
 			t.Fatalf("missing %q in %v", want, args)
 		}
@@ -205,6 +205,71 @@ func TestArgsStdinJSONMode(t *testing.T) {
 	if !containsSub(withImg, `"type":"image"`) || !containsSub(withImg, `"media_type":"image/jpeg"`) || !containsSub(withImg, `"data":"abc123"`) {
 		t.Fatalf("image envelope malformed: %s", withImg)
 	}
+}
+
+func TestArgsStrictMcpConfigAddsMcpConfigPath(t *testing.T) {
+	// Mirrors Approving's codebuddy BaseArgs: strict without --mcp-config used
+	// to load zero MCP servers (official CLI semantics).
+	c := &codec{c: Config{
+		Bin:        "codebuddy",
+		ConfigRoot: "/root/.codebuddy",
+		PromptMode: PromptStdinJSON,
+		BaseArgs:   []string{"--verbose", "--strict-mcp-config", "--permission-mode", "bypassPermissions"},
+	}}
+	args := c.Args(provider.OpenOptions{}, "hi", "")
+	if !containsStr(args, "--strict-mcp-config") {
+		t.Fatalf("missing --strict-mcp-config: %v", args)
+	}
+	wantPath := "/root/.codebuddy/mcp.json"
+	if i := indexOfSlice(args, "--mcp-config"); i < 0 || i+1 >= len(args) || args[i+1] != wantPath {
+		t.Fatalf("want --mcp-config %s in %v", wantPath, args)
+	}
+}
+
+func TestArgsStrictMcpConfigSkipsWhenAlreadySet(t *testing.T) {
+	c := &codec{c: Config{
+		Bin:        "codebuddy",
+		ConfigRoot: "/root/.codebuddy",
+		BaseArgs:   []string{"--strict-mcp-config", "--mcp-config", "/custom/mcp.json"},
+	}}
+	args := c.Args(provider.OpenOptions{}, "hi", "")
+	if n := countFlag(args, "--mcp-config"); n != 1 {
+		t.Fatalf("want exactly one --mcp-config, got %d in %v", n, args)
+	}
+	if i := indexOfSlice(args, "--mcp-config"); args[i+1] != "/custom/mcp.json" {
+		t.Fatalf("explicit --mcp-config overridden: %v", args)
+	}
+}
+
+func TestArgsNoStrictSkipsMcpConfigPath(t *testing.T) {
+	c := &codec{c: Config{
+		Bin:        "claude",
+		ConfigRoot: "/root/.claude",
+		BaseArgs:   []string{"--verbose"},
+	}}
+	args := c.Args(provider.OpenOptions{}, "hi", "")
+	if containsStr(args, "--mcp-config") {
+		t.Fatalf("must not inject --mcp-config without --strict-mcp-config: %v", args)
+	}
+}
+
+func indexOfSlice(ss []string, want string) int {
+	for i, s := range ss {
+		if s == want {
+			return i
+		}
+	}
+	return -1
+}
+
+func countFlag(args []string, flag string) int {
+	n := 0
+	for _, a := range args {
+		if a == flag {
+			n++
+		}
+	}
+	return n
 }
 
 func containsSub(s, sub string) bool { return len(s) >= len(sub) && (indexOf(s, sub) >= 0) }
