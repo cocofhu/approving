@@ -285,7 +285,7 @@ test.describe('Run NotifyPolicy UI (P0)', () => {
     const harness = await setupNotifyHarness(page, { hasChannel: true })
 
     await expect(page.getByTestId('notify-template-section')).toBeVisible()
-    await expect(page.getByTestId('notify-preview-mode')).toContainText('使用现网默认')
+    await expect(page.getByTestId('notify-preview-mode')).toContainText('使用系统默认')
     await expect(page.getByTestId('notify-preview-body')).toContainText('【Approving】等待人工处理')
 
     // Fill default skeleton → preview stays equivalent but mode becomes custom
@@ -314,7 +314,7 @@ test.describe('Run NotifyPolicy UI (P0)', () => {
 
     // Switch segment: failed still empty → default preview
     await page.getByTestId('notify-tpl-seg-failed').click()
-    await expect(page.getByTestId('notify-preview-mode')).toContainText('使用现网默认')
+    await expect(page.getByTestId('notify-preview-mode')).toContainText('使用系统默认')
     await expect(page.getByTestId('notify-preview-body')).toContainText('【Approving】运行失败')
 
     // Only toggle master off and save — waiting template must round-trip
@@ -372,9 +372,9 @@ test.describe('Run NotifyPolicy UI (P0)', () => {
       return s?.id === 'wf-inherit' ? `${s.via}:${s.notifyPolicy?.mode}:nodes=${Array.isArray(s.nodes)}` : null
     }).toBe('patch-notify-policy:custom:nodes=false')
 
-    // 自我迭代已是 custom：取消 waiting_human，仅留 failed
+    // 自我迭代已是 custom：取消「等待人工」，仅留「运行失败」（payload events 仍为内部 key）
     const customRow = page.locator('tbody tr', { hasText: '自我迭代' })
-    const waitingCb = customRow.locator('label', { hasText: 'waiting_human' }).locator('input[type="checkbox"]')
+    const waitingCb = customRow.locator('label', { hasText: '等待人工' }).locator('input[type="checkbox"]')
     await expect(waitingCb).toBeChecked()
     await waitingCb.click()
     await expect.poll(() => {

@@ -229,40 +229,55 @@ function goChannelSettings() {
         <div class="text-sm font-medium text-txt">{{ t('pages.projectDetail.notify.defaultEvents') }}</div>
         <p class="mt-0.5 text-[12px] text-txt3">{{ t('pages.projectDetail.notify.defaultEventsHint') }}</p>
         <div class="mt-2 space-y-2">
-          <label class="flex items-center gap-3">
+          <label class="flex items-start gap-3">
             <AppSwitch
               v-model="waitingHuman"
+              class="mt-0.5"
               data-testid="notify-ev-waiting-human"
-              :aria-label="'waiting_human'"
+              :aria-label="t('pages.projectDetail.notify.evWaitingHumanLabel')"
             />
-            <span class="text-[13px] text-txt">
-              <code class="font-mono text-accent-2">waiting_human</code>
-              <span class="ml-2 text-txt3">{{ t('pages.projectDetail.notify.evWaitingHuman') }}</span>
+            <span>
+              <span class="block text-[13px] font-medium text-txt">{{
+                t('pages.projectDetail.notify.evWaitingHumanLabel')
+              }}</span>
+              <span class="mt-0.5 block text-[12px] text-txt3">{{
+                t('pages.projectDetail.notify.evWaitingHuman')
+              }}</span>
             </span>
           </label>
-          <label class="flex items-center gap-3">
+          <label class="flex items-start gap-3">
             <AppSwitch
               v-model="failed"
+              class="mt-0.5"
               data-testid="notify-ev-failed"
-              :aria-label="'failed'"
+              :aria-label="t('pages.projectDetail.notify.evFailedLabel')"
             />
-            <span class="text-[13px] text-txt">
-              <code class="font-mono text-accent-2">failed</code>
-              <span class="ml-2 text-txt3">{{ t('pages.projectDetail.notify.evFailed') }}</span>
+            <span>
+              <span class="block text-[13px] font-medium text-txt">{{
+                t('pages.projectDetail.notify.evFailedLabel')
+              }}</span>
+              <span class="mt-0.5 block text-[12px] text-txt3">{{
+                t('pages.projectDetail.notify.evFailed')
+              }}</span>
             </span>
           </label>
           <div
-            class="flex items-center gap-3 opacity-50"
+            class="flex items-start gap-3 opacity-50"
             data-testid="notify-ev-completed-disabled"
           >
             <AppSwitch
+              class="mt-0.5"
               :model-value="false"
               disabled
-              :aria-label="'completed'"
+              :aria-label="t('pages.projectDetail.notify.evCompletedLabel')"
             />
-            <span class="text-[13px] text-txt3">
-              <code class="font-mono">completed</code>
-              <span class="ml-2">{{ t('pages.projectDetail.notify.evCompleted') }}</span>
+            <span>
+              <span class="block text-[13px] font-medium text-txt3">{{
+                t('pages.projectDetail.notify.evCompletedLabel')
+              }}</span>
+              <span class="mt-0.5 block text-[12px] text-txt3">{{
+                t('pages.projectDetail.notify.evCompleted')
+              }}</span>
             </span>
           </div>
         </div>
