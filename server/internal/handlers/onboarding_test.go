@@ -59,6 +59,20 @@ func TestBootstrapOnboardingAPI(t *testing.T) {
 		t.Fatalf("workflow id changed")
 	}
 
+	// Cross-project conflict → 409
+	w = hn.do("POST", "/api/projects", map[string]any{"name": "BootProj2"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("create project2: %d %s", w.Code, w.Body.String())
+	}
+	pid2 := jsonField(w.Body.String(), "id")
+	w = hn.do("POST", "/api/projects/"+pid2+"/bootstrap-onboarding", map[string]any{
+		"acpBackend": "cursor",
+		"apiKey":     "crsr_other",
+	})
+	if w.Code != http.StatusConflict {
+		t.Fatalf("cross-project conflict: %d %s", w.Code, w.Body.String())
+	}
+
 	w = hn.do("GET", "/api/workflows?projectId="+pid, nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("list wf: %d", w.Code)

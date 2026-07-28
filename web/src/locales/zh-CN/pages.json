@@ -176,6 +176,7 @@
       "success": {
         "title": "配置已生成",
         "desc": "已写入项目鉴权，并生成 5 个 Agent 与已发布的「快速上手·轻量」工作流。",
+        "repo": "示例代码仓",
         "limit": "公开仓通常无法 push；Preview 未必看到 Implement 改动。引导成败以 Agent/工作流是否生成为准。",
         "runStarted": "已启动示例 Run"
       },

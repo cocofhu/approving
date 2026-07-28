@@ -1,6 +1,7 @@
 package services_test
 
 import (
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -121,6 +122,74 @@ func TestOnboardingBootstrapIdempotent(t *testing.T) {
 		if e.Key == "APPROVING_CURSOR_API_KEY" && e.Value != "k2-rotated" {
 			t.Fatalf("auth not updated: %q", e.Value)
 		}
+	}
+}
+
+func TestOnboardingBootstrapRejectsCrossProjectAgentConflict(t *testing.T) {
+	svc, projectA := newOnboardingHarness(t)
+	_, err := svc.Bootstrap(projectA, services.OnboardingBootstrapRequest{
+		AcpBackend: "cursor",
+		APIKey:     "key-a",
+	})
+	if err != nil {
+		t.Fatalf("bootstrap A: %v", err)
+	}
+	projectB, err := svc.Projects.Create("Other", "", nil, nil)
+	if err != nil {
+		t.Fatalf("create B: %v", err)
+	}
+	_, err = svc.Bootstrap(projectB.ID, services.OnboardingBootstrapRequest{
+		AcpBackend: "cursor",
+		APIKey:     "key-b",
+	})
+	if !errors.Is(err, services.ErrOnboardingAgentConflict) {
+		t.Fatalf("want ErrOnboardingAgentConflict, got %v", err)
+	}
+	if n := len(svc.WF.List(projectB.ID)); n != 0 {
+		t.Fatalf("project B must not get workflow on conflict, got %d", n)
+	}
+	pB, _ := svc.Projects.Get(projectB.ID)
+	for _, e := range pB.SandboxEnv {
+		if e.Key == "APPROVING_CURSOR_API_KEY" {
+			t.Fatal("project B auth must not be written on agent conflict")
+		}
+	}
+	for _, name := range services.OnboardingAgentNames {
+		a, ok := svc.Skills.Get(name)
+		if !ok {
+			t.Fatalf("agent %s missing", name)
+		}
+		if a.ProjectID != projectA {
+			t.Fatalf("agent %s rebound to %q", name, a.ProjectID)
+		}
+	}
+}
+
+func TestOnboardingBootstrapAllowsClaimingUnboundAgents(t *testing.T) {
+	svc, projectID := newOnboardingHarness(t)
+	unbound := services.Agent{
+		Name:       "ClarifyAgent",
+		AcpBackend: "cursor",
+		ProjectID:  "",
+		Files:      []services.AgentFile{{Path: "AGENTS.md", Content: "# unbound\n"}},
+		Env:        map[string]string{},
+	}
+	if err := svc.Skills.Save(unbound); err != nil {
+		t.Fatalf("seed unbound: %v", err)
+	}
+	res, err := svc.Bootstrap(projectID, services.OnboardingBootstrapRequest{
+		AcpBackend: "cursor",
+		APIKey:     "claim-key",
+	})
+	if err != nil {
+		t.Fatalf("bootstrap should claim unbound: %v", err)
+	}
+	if len(res.AgentIDs) != 5 {
+		t.Fatalf("want 5 agents, got %v", res.AgentIDs)
+	}
+	a, ok := svc.Skills.Get("ClarifyAgent")
+	if !ok || a.ProjectID != projectID {
+		t.Fatalf("ClarifyAgent not claimed: ok=%v projectId=%q", ok, a.ProjectID)
 	}
 }
 

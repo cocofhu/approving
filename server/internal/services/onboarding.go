@@ -25,6 +25,8 @@ var (
 	ErrOnboardingAPIKeyRequired = errors.New("apiKey is required")
 	// ErrOnboardingProjectNotFound is returned when the project id does not exist.
 	ErrOnboardingProjectNotFound = errors.New("project not found")
+	// ErrOnboardingAgentConflict is returned when a fixed-name agent already belongs to another project.
+	ErrOnboardingAgentConflict = errors.New("onboarding agent already bound to another project")
 )
 
 // OnboardingBootstrapRequest is the body for POST .../bootstrap-onboarding.
@@ -58,8 +60,12 @@ func NewOnboardingService(projects *ProjectService, skills *SkillService, wf *Wo
 }
 
 // Bootstrap writes project sandboxEnv auth, saves five agents from embed templates,
-// and publishes the light onboarding workflow. It is idempotent for the fixed names.
+// and publishes the light onboarding workflow. It is idempotent for the fixed names
+// within the same project. Cross-project name conflicts are rejected with
+// ErrOnboardingAgentConflict (no overwrite of another project's agents).
 // It never starts a Run. Missing apiKey rejects without creating resources.
+// Templates and the light graph are validated before any auth/agent writes to
+// reduce mid-flight partial state.
 func (s *OnboardingService) Bootstrap(projectID string, req OnboardingBootstrapRequest) (OnboardingBootstrapResult, error) {
 	projectID = strings.TrimSpace(projectID)
 	if projectID == "" {
@@ -83,11 +89,12 @@ func (s *OnboardingService) Bootstrap(projectID string, req OnboardingBootstrapR
 		feature = DefaultOnboardingFeature
 	}
 
-	if err := s.writeProjectAuth(projectID, backend, apiKey, strings.TrimSpace(req.Region)); err != nil {
+	if err := s.checkOnboardingAgentConflicts(projectID); err != nil {
 		return OnboardingBootstrapResult{}, err
 	}
 
-	agentIDs := make([]string, 0, len(OnboardingAgentNames))
+	// Preload templates + validate graph before mutating project auth / agents.
+	templates := make([]Agent, 0, len(OnboardingAgentNames))
 	for _, name := range OnboardingAgentNames {
 		tmpl, err := loadOnboardingAgentTemplate(name)
 		if err != nil {
@@ -100,10 +107,23 @@ func (s *OnboardingService) Bootstrap(projectID string, req OnboardingBootstrapR
 			tmpl.Env = map[string]string{}
 		}
 		tmpl.Env["GIT_REPOS"] = "${vars.repos}"
+		templates = append(templates, tmpl)
+	}
+	graph := buildOnboardingLightGraph(repos, feature)
+	if err := graph.Validate(); err != nil {
+		return OnboardingBootstrapResult{}, fmt.Errorf("onboarding graph invalid: %w", err)
+	}
+
+	if err := s.writeProjectAuth(projectID, backend, apiKey, strings.TrimSpace(req.Region)); err != nil {
+		return OnboardingBootstrapResult{}, err
+	}
+
+	agentIDs := make([]string, 0, len(templates))
+	for _, tmpl := range templates {
 		if err := s.Skills.Save(tmpl); err != nil {
-			return OnboardingBootstrapResult{}, fmt.Errorf("save agent %s: %w", name, err)
+			return OnboardingBootstrapResult{}, fmt.Errorf("save agent %s: %w", tmpl.Name, err)
 		}
-		agentIDs = append(agentIDs, name)
+		agentIDs = append(agentIDs, tmpl.Name)
 	}
 
 	wf, err := s.upsertLightWorkflow(projectID, repos, feature)
@@ -122,6 +142,23 @@ func (s *OnboardingService) Bootstrap(projectID string, req OnboardingBootstrapR
 		Feature:    feature,
 		Published:  published.Status == "published",
 	}, nil
+}
+
+// checkOnboardingAgentConflicts refuses to overwrite a fixed-name agent that is
+// already bound to a different project. Same-project overwrite (idempotent
+// re-bootstrap) and unbound agents (empty projectId) are allowed.
+func (s *OnboardingService) checkOnboardingAgentConflicts(projectID string) error {
+	for _, name := range OnboardingAgentNames {
+		existing, ok := s.Skills.Get(name)
+		if !ok {
+			continue
+		}
+		owner := strings.TrimSpace(existing.ProjectID)
+		if owner != "" && owner != projectID {
+			return fmt.Errorf("%w: %s owned by project %s", ErrOnboardingAgentConflict, name, owner)
+		}
+	}
+	return nil
 }
 
 func (s *OnboardingService) writeProjectAuth(projectID, backend, apiKey, region string) error {

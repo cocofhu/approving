@@ -101,22 +101,30 @@ export function clearOnboardingDismiss(projectId: string): void {
   }
 }
 
-/** Empty project: 0 workflows and 0 agents bound to this projectId. */
+/** Empty project for onboarding: 0 workflows, 0 agents bound to this project,
+ * and none of the fixed onboarding agent names are owned by another project. */
 export function isEmptyProjectForOnboarding(
   workflowCount: number,
-  agents: { projectId?: string }[],
+  agents: { name?: string; projectId?: string }[],
   projectId: string,
 ): boolean {
   if (!projectId) return false
   if (workflowCount > 0) return false
   const bound = agents.filter((a) => (a.projectId || '') === projectId)
-  return bound.length === 0
+  if (bound.length > 0) return false
+  const conflict = agents.some((a) => {
+    const name = (a.name || '').trim()
+    if (!name || !(ONBOARDING_AGENT_NAMES as readonly string[]).includes(name)) return false
+    const owner = (a.projectId || '').trim()
+    return owner !== '' && owner !== projectId
+  })
+  return !conflict
 }
 
 export function shouldAutoOpenOnboarding(
   projectId: string,
   workflowCount: number,
-  agents: { projectId?: string }[],
+  agents: { name?: string; projectId?: string }[],
 ): boolean {
   if (!projectId) return false
   if (isOnboardingDismissed(projectId)) return false

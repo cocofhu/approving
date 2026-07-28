@@ -44,8 +44,19 @@ describe('onboardingWizard', () => {
   it('detects empty project by 0 workflows and 0 bound agents', () => {
     expect(isEmptyProjectForOnboarding(0, [], 'p1')).toBe(true)
     expect(isEmptyProjectForOnboarding(1, [], 'p1')).toBe(false)
-    expect(isEmptyProjectForOnboarding(0, [{ projectId: 'p1' }], 'p1')).toBe(false)
-    expect(isEmptyProjectForOnboarding(0, [{ projectId: 'other' }], 'p1')).toBe(true)
+    expect(isEmptyProjectForOnboarding(0, [{ name: 'ClarifyAgent', projectId: 'p1' }], 'p1')).toBe(false)
+    expect(isEmptyProjectForOnboarding(0, [{ name: 'OtherAgent', projectId: 'other' }], 'p1')).toBe(true)
+  })
+
+  it('treats cross-project onboarding agent names as non-empty (would 409)', () => {
+    expect(
+      isEmptyProjectForOnboarding(0, [{ name: 'ClarifyAgent', projectId: 'other' }], 'p1'),
+    ).toBe(false)
+    expect(
+      isEmptyProjectForOnboarding(0, [{ name: 'VisualAgent', projectId: 'other' }], 'p1'),
+    ).toBe(false)
+    // unbound fixed-name agents can still be claimed
+    expect(isEmptyProjectForOnboarding(0, [{ name: 'ClarifyAgent', projectId: '' }], 'p1')).toBe(true)
   })
 
   it('auto-open respects dismiss and emptiness', () => {

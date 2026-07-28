@@ -18,6 +18,7 @@ import {
   encodeReposLiteral,
   freshOnboardingDraft,
   hostLabelFromUrl,
+  parseReposLiteral,
   type OnboardingBootstrapResult,
   type OnboardingDraft,
 } from '@/lib/onboardingWizard'
@@ -57,6 +58,9 @@ const headSub = computed(() => {
   return t(`pages.onboarding.head.${currentStep.value.id}`)
 })
 const repoHost = computed(() => hostLabelFromUrl(draft.value.repo.url))
+const successRepo = computed(() =>
+  parseReposLiteral(result.value?.repos || encodeReposLiteral(draft.value.repo)),
+)
 
 watch(
   () => props.open,
@@ -211,8 +215,29 @@ async function startSampleRun() {
           <ul class="mt-4 space-y-1.5 text-[13px] text-txt2">
             <li v-for="n in ONBOARDING_AGENT_NAMES" :key="n">· {{ n }}</li>
             <li>· {{ ONBOARDING_WORKFLOW_NAME }}（published）</li>
-            <li class="font-mono text-[12px]">· {{ result?.repos || encodeReposLiteral(draft.repo) }}</li>
           </ul>
+          <div
+            class="mt-4 border border-line bg-elevated px-3 py-3 text-[13px] text-txt2"
+            data-testid="onboarding-success-repo"
+          >
+            <div class="text-[11px] uppercase tracking-wide text-txt3">
+              {{ t('pages.onboarding.success.repo') }}
+            </div>
+            <div class="mt-2 space-y-1">
+              <div>
+                <span class="text-txt3">{{ t('pages.onboarding.git.name') }}：</span>
+                <span class="text-txt">{{ successRepo.name }}</span>
+              </div>
+              <div class="break-all">
+                <span class="text-txt3">{{ t('pages.onboarding.git.url') }}：</span>
+                <span class="text-txt">{{ successRepo.url }}</span>
+              </div>
+              <div>
+                <span class="text-txt3">{{ t('pages.onboarding.git.branch') }}：</span>
+                <span class="text-txt">{{ successRepo.branch }}</span>
+              </div>
+            </div>
+          </div>
           <p class="mt-4 border border-warn/35 bg-warn/10 px-3 py-2 text-[12px] text-warn">
             {{ t('pages.onboarding.success.limit') }}
           </p>

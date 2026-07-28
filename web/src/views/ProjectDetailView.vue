@@ -36,6 +36,7 @@ import type {
   WorkflowNotifyPolicy,
 } from '@/lib/types'
 import {
+  isEmptyProjectForOnboarding,
   shouldAutoOpenOnboarding,
   type OnboardingBootstrapResult,
 } from '@/lib/onboardingWizard'
@@ -210,6 +211,10 @@ const copyModal = ref<{ sourceId: string; sourceName: string; suggestedName: str
 const exportTarget = ref<Workflow | null>(null)
 const onboardingOpen = ref(false)
 const projectAgents = ref<{ name: string; projectId?: string }[]>([])
+
+const isOnboardingEmpty = computed(() =>
+  isEmptyProjectForOnboarding(workflows.value.length, projectAgents.value, projectId.value),
+)
 
 const { fileInput, triggerImport, handleFileChange } = useWorkflowImport({
   projectId: () => projectId.value,
@@ -907,7 +912,7 @@ onUnmounted(() => {
       <div v-else-if="tab === 'workflows'">
         <div class="mb-3 flex justify-end gap-2">
           <AppButton
-            v-if="!workflows.length"
+            v-if="isOnboardingEmpty"
             variant="outline"
             icon="sparkles"
             data-testid="onboarding-cta"
@@ -922,7 +927,11 @@ onUnmounted(() => {
             {{ t('common.buttons.newWorkflow') }}
           </AppButton>
         </div>
-        <div v-if="!workflows.length" class="card px-5 py-10 text-center text-[13px] text-txt3">
+        <div
+          v-if="isOnboardingEmpty"
+          class="card px-5 py-10 text-center text-[13px] text-txt3"
+          data-testid="onboarding-empty"
+        >
           <p class="text-[15px] font-medium text-txt">{{ t('pages.onboarding.emptyTitle') }}</p>
           <p class="mt-2 text-txt2">{{ t('pages.onboarding.emptyDesc') }}</p>
           <div class="mt-4 flex justify-center gap-2">
@@ -930,6 +939,13 @@ onUnmounted(() => {
               {{ t('pages.onboarding.cta') }}
             </AppButton>
           </div>
+        </div>
+        <div
+          v-else-if="!workflows.length"
+          class="card px-5 py-10 text-center text-[13px] text-txt3"
+          data-testid="workflows-empty"
+        >
+          <p class="text-[15px] font-medium text-txt">{{ t('common.empty.noWorkflows') }}</p>
         </div>
         <!-- Mobile card list: avoids table overflow clipping the more menu -->
         <div v-else-if="isMobile" class="flex flex-col gap-2">

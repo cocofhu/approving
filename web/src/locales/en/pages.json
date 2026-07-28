@@ -176,6 +176,7 @@
       "success": {
         "title": "Setup ready",
         "desc": "Project auth written; 5 Agents and the published light workflow are ready.",
+        "repo": "Sample repository",
         "limit": "Public repos usually cannot be pushed; Preview may not show Implement changes. Success means Agents/workflow were created.",
         "runStarted": "Sample Run started"
       },
