@@ -36,6 +36,12 @@ func TestSanitizeRejectsDotDotAndSeparators(t *testing.T) {
 	if sanitize("good_name") != "good_name" {
 		t.Fatalf("got %q", sanitize("good_name"))
 	}
+	if sanitize("Approve需求澄清视觉研发") != "Approve需求澄清视觉研发" {
+		t.Fatalf("unicode sanitize: got %q", sanitize("Approve需求澄清视觉研发"))
+	}
+	if sanitize("clarify.v1") != "clarify.v1" {
+		t.Fatalf("legacy dotted sanitize: got %q", sanitize("clarify.v1"))
+	}
 	if sanitize("a/b") != "b" && sanitize("a/b") != "" {
 		// Base("a/b") == "b" which is allowlisted — acceptable.
 		if sanitize("a/b") != "b" {

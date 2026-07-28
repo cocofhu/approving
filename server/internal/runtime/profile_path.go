@@ -8,8 +8,10 @@ import (
 	"strings"
 )
 
-// profileNamePattern restricts skill_profile directory names to a single safe segment.
-var profileNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+// profileNamePattern restricts skill_profile directory names to a single safe
+// segment. Allows Unicode letters/digits plus `._-` so Chinese names and legacy
+// dotted profiles (e.g. clarify.v1) resolve at runtime.
+var profileNamePattern = regexp.MustCompile(`^[\p{L}\p{N}._-]+$`)
 
 // safeProfileName returns a single-segment profile directory name or "".
 func safeProfileName(profile string) string {

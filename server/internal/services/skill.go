@@ -7,7 +7,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -557,18 +556,9 @@ func (s *SkillService) WorkDir(name string) string {
 	return ""
 }
 
-// sanitizeAgentNamePattern allows only safe single-segment agent directory names.
-var sanitizeAgentNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
-
 // sanitize prevents path traversal in agent names (no ReplaceAll("..","") incomplete sanitization).
+// Path layer accepts Unicode L/N + `._-` so legacy dotted names (e.g. clarify.v1) still resolve.
+// Write-identity rules (Create/Rename targets) live in NormalizeAndValidateAgentName.
 func sanitize(name string) string {
-	name = strings.Trim(name, "/\\ ")
-	base := filepath.Base(name)
-	if base == "" || base == "." || base == ".." {
-		return ""
-	}
-	if !sanitizeAgentNamePattern.MatchString(base) {
-		return ""
-	}
-	return base
+	return sanitizeAgentPath(name)
 }

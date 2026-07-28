@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -183,13 +184,29 @@ func ReadEmbeddedRule(relPath string) ([]byte, error) {
 	return skillAssets.ReadFile("skills_embed/" + relPath)
 }
 
+// platformRuleAgentPattern mirrors services path-layer agent names (Unicode L/N + `._-`).
+var platformRuleAgentPattern = regexp.MustCompile(`^[\p{L}\p{N}._-]+$`)
+
+func safePlatformRuleAgent(agentName string) string {
+	base := filepath.Base(strings.TrimSpace(agentName))
+	if base == "" || base == "." || base == ".." {
+		return ""
+	}
+	if !platformRuleAgentPattern.MatchString(base) {
+		return ""
+	}
+	return base
+}
+
 func resolvePlatformRule(relPath, agentName, profilesRoot, globalRulesDir string) ([]byte, error) {
 	base := filepath.Base(relPath)
 	if agentName != "" && profilesRoot != "" {
-		agent := filepath.Base(strings.ReplaceAll(agentName, "..", ""))
-		p := filepath.Join(profilesRoot, agent, "platform-rules", base)
-		if b, err := os.ReadFile(p); err == nil {
-			return b, nil
+		agent := safePlatformRuleAgent(agentName)
+		if agent != "" {
+			p := filepath.Join(profilesRoot, agent, "platform-rules", base)
+			if b, err := os.ReadFile(p); err == nil {
+				return b, nil
+			}
 		}
 	}
 	if globalRulesDir != "" {

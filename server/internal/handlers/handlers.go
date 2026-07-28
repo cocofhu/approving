@@ -1115,9 +1115,9 @@ func (h *Handlers) CreateAgent(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	name := strings.TrimSpace(b.Name)
-	if name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+	name, err := services.NormalizeAndValidateAgentName(b.Name)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	if h.Skill.Exists(name) {
@@ -1223,9 +1223,9 @@ func (h *Handlers) RenameAgent(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	name := strings.TrimSpace(b.Name)
-	if name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+	name, err := services.NormalizeAndValidateAgentName(b.Name)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	if !h.Skill.Exists(old) {
@@ -1395,6 +1395,17 @@ func (h *Handlers) ImportAgent(c *gin.Context) {
 	mode := services.ImportZIPMode(strings.TrimSpace(c.PostForm("mode")))
 	if mode == "" {
 		mode = services.ImportZIPCreate
+	}
+	// Create / conflict-rename targets use strict write identity rules.
+	// Overwrite of an existing agent keeps the path layer so legacy dotted
+	// names (e.g. clarify.v1) remain importable.
+	if mode == services.ImportZIPCreate {
+		normalized, err := services.NormalizeAndValidateAgentName(targetName)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		targetName = normalized
 	}
 
 	f, err := file.Open()

@@ -1388,7 +1388,8 @@
         "delete": "Delete",
         "cancel": "Cancel",
         "nameRequired": "Name is required",
-        "nameInvalid": "Only letters, digits, - and _",
+        "nameInvalid": "Only Unicode letters/digits (including Chinese) plus _ and -, max 64",
+        "nameValid": "Valid · can be saved as identity key",
         "nameExists": "Name already exists",
         "pathExists": "\"{path}\" already exists",
         "importNoText": "No readable text files (binary or >512KB skipped)",
@@ -1444,7 +1445,7 @@
           "cancelDesc": "Abort import without changes",
           "newName": "New agent name",
           "confirm": "Confirm import",
-          "nameInvalid": "Name may only contain letters, digits, underscores and hyphens",
+          "nameInvalid": "Only Unicode letters/digits (including Chinese) plus _ and -, max 64",
           "nameExists": "Name already exists"
         },
         "importError": {

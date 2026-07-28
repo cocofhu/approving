@@ -1388,7 +1388,8 @@
         "delete": "删除",
         "cancel": "取消",
         "nameRequired": "名称必填",
-        "nameInvalid": "仅允许字母、数字、- 和 _",
+        "nameInvalid": "仅允许 Unicode 字母/数字（含中文）及半角 _、-，最长 64",
+        "nameValid": "校验通过 · 可保存为身份键",
         "nameExists": "该名称已存在",
         "pathExists": "「{path}」 已存在",
         "importNoText": "未读取到可用文本文件(可能都是二进制或超过 512KB)",
@@ -1444,7 +1445,7 @@
           "cancelDesc": "中止导入，不创建或修改任何 Agent",
           "newName": "新 Agent 名称",
           "confirm": "确认导入",
-          "nameInvalid": "名称仅允许字母、数字、下划线与连字符",
+          "nameInvalid": "仅允许 Unicode 字母/数字（含中文）及半角 _、-，最长 64",
           "nameExists": "名称已存在，请换一个"
         },
         "importError": {

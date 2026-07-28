@@ -4,6 +4,7 @@ import {
   resolveImportName,
   suggestRename,
   validateAgentName,
+  normalizeAgentName,
 } from './agentIO'
 
 /** ZIP produced by Go archive/zip (agent.json stored; rules/*.md may be deflate). */
@@ -16,13 +17,38 @@ function goExportFile(): File {
 }
 
 describe('validateAgentName', () => {
-  it('accepts platform names', () => {
+  it('accepts platform ASCII names', () => {
     expect(validateAgentName('Agent_1-test')).toBe('')
   })
 
-  it('rejects invalid names', () => {
+  it('accepts Demo screenshot Chinese mix sample', () => {
+    expect(validateAgentName('Approve需求澄清视觉研发')).toBe('')
+  })
+
+  it('accepts mixed hyphen Chinese', () => {
+    expect(validateAgentName('Approve-需求澄清')).toBe('')
+  })
+
+  it('rejects invalid names (Demo illegal samples)', () => {
     expect(validateAgentName('bad name')).toBe('invalid')
+    expect(validateAgentName('Approve 需求')).toBe('invalid')
+    expect(validateAgentName('clarify.v1')).toBe('invalid')
+    expect(validateAgentName('需求－澄清')).toBe('invalid')
+    expect(validateAgentName('a/b')).toBe('invalid')
     expect(validateAgentName('')).toBe('required')
+    expect(validateAgentName('   ')).toBe('required')
+  })
+
+  it('rejects over 64 runes', () => {
+    expect(validateAgentName('中'.repeat(65))).toBe('invalid')
+    expect(validateAgentName('中'.repeat(64))).toBe('')
+  })
+
+  it('NFC-normalizes before validate and normalizeAgentName', () => {
+    const decomposed = 'A\u0301gent'
+    expect(validateAgentName(decomposed)).toBe('')
+    expect(normalizeAgentName(decomposed)).toBe('Ágent')
+    expect(normalizeAgentName(decomposed)).toBe(normalizeAgentName('Ágent'))
   })
 })
 
@@ -34,11 +60,21 @@ describe('resolveImportName', () => {
   it('falls back to zip filename', () => {
     expect(resolveImportName(undefined, 'fallback.zip')).toBe('fallback')
   })
+
+  it('supports Chinese names from agent.json', () => {
+    expect(resolveImportName('视觉研发助手', 'x.zip')).toBe('视觉研发助手')
+    expect(validateAgentName('视觉研发助手')).toBe('')
+  })
 })
 
 describe('suggestRename', () => {
   it('picks first free _vN suffix', () => {
     expect(suggestRename('agent', ['agent', 'agent_v2'])).toBe('agent_v3')
+  })
+
+  it('works with Chinese base names', () => {
+    expect(suggestRename('视觉研发', ['视觉研发'])).toBe('视觉研发_v2')
+    expect(validateAgentName(suggestRename('视觉研发', ['视觉研发']))).toBe('')
   })
 })
 
