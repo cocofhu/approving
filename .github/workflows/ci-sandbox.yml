@@ -49,9 +49,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "24"
       - name: safe_image_url unit tests
         run: node --test sandbox-gateway/sandbox/web/static/js/ui/safe_image_url_test.js
 
