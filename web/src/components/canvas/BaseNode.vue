@@ -19,17 +19,24 @@ const props = defineProps<{
     status?: NodeRunStatus
     checkpoint?: boolean
     branches?: { id: string; label: string; isDefault?: boolean }[]
+    /** Legacy: action handles. human_gate no longer renders these rows (Demo footnote). */
     gateActions?: { id: string; label: string }[]
     /** app_preview pure ReAct review: badge + single success exit (no action handles). */
     appPreviewReview?: boolean
+    /** human_gate: Demo footnote instead of action Handle rows. */
+    humanGateReview?: boolean
     structuredExits?: { id: string; label: string; tone: 'ok' | 'bad' }[]
   }
   selected?: boolean
 }>()
 
 const isBranch = computed(() => !!props.data.branches?.length)
-const isGate = computed(() => !!props.data.gateActions?.length)
+/** Action-row gate UI — excluded for human_gate (uses Demo footnote). */
+const isGate = computed(
+  () => !!props.data.gateActions?.length && !props.data.humanGateReview,
+)
 const isAppPreviewReview = computed(() => !!props.data.appPreviewReview)
+const isHumanGateReview = computed(() => !!props.data.humanGateReview)
 const isStructuredGate = computed(() => !!props.data.structuredExits?.length)
 const def = computed(() => NODE_DEFS.value[props.data.type])
 const displayLabel = computed(() => {
@@ -71,6 +78,12 @@ const statusBadge = computed(() => {
       return null
   }
 })
+
+const subtitle = computed(() => {
+  if (isAppPreviewReview.value) return t('pages.workflowEditor.canvas.appPreviewSubtitle')
+  if (isHumanGateReview.value) return t('pages.workflowEditor.canvas.humanGateSubtitle')
+  return def.value?.label || props.data.type
+})
 </script>
 
 <template>
@@ -91,7 +104,7 @@ const statusBadge = computed(() => {
       <div class="min-w-0 flex-1">
         <div class="truncate text-[13px] font-semibold text-txt">{{ displayLabel }}</div>
         <div class="truncate text-[11px] text-txt3">
-          {{ isAppPreviewReview ? t('pages.workflowEditor.canvas.appPreviewSubtitle') : def?.label || data.type }}
+          {{ subtitle }}
         </div>
       </div>
       <div
@@ -106,8 +119,17 @@ const statusBadge = computed(() => {
     <div
       v-if="isAppPreviewReview"
       class="border-t border-line/60 px-3 py-1.5 pl-4 text-[11px] text-txt3"
+      data-testid="app-preview-body"
     >
       {{ t('pages.workflowEditor.canvas.appPreviewBody') }}
+    </div>
+
+    <div
+      v-if="isHumanGateReview"
+      class="border-t border-line/60 px-3 py-1.5 pl-4 text-[11px] text-txt3"
+      data-testid="human-gate-body"
+    >
+      {{ t('pages.workflowEditor.canvas.humanGateBody') }}
     </div>
 
     <div v-if="isBranch" class="border-t border-line/60">

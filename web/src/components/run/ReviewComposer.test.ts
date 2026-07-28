@@ -132,3 +132,43 @@ describe('ReviewComposer nested ClarifyChat delivery', () => {
     wrapper.unmount()
   })
 })
+
+describe('ReviewComposer gate review semantics (send + confirm)', () => {
+  it('shows 发送 + 确认并流转, not 打回/通过', async () => {
+    const wrapper = mountGate()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="review-composer-send"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-send"]').text()).toContain('发送')
+    expect(wrapper.find('[data-testid="review-composer-pass"]').text()).toContain('确认并流转')
+    expect(wrapper.text()).not.toContain('打回修改')
+    expect(wrapper.text()).not.toContain('通过并流转')
+    wrapper.unmount()
+  })
+
+  it('cold session hides send and shows cold note; confirm remains', async () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const wrapper = mount(ReviewComposer, {
+      props: {
+        mode: 'gate',
+        canReject: false,
+        canPass: true,
+        coldSession: true,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: { Icon: true, ParagraphInput: true, AnnotationChip: true, ClarifyChat: true },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="review-composer-send"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-cold-note"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-cold-note"]').text()).toContain('无法继续就地改码')
+    wrapper.unmount()
+  })
+})
