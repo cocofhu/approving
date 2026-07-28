@@ -133,7 +133,7 @@
       "name": "memory-store",
       "desc": "通用长期记忆 · 按项目+Agent 隔离，任意 Agent 可在 mcp[] 声明",
       "overview": "Agent 级长期记忆 MCP。按 (projectId, agentName) 隔离。先 list/search 再 get；重要结论 upsert。",
-      "convention": "在 Agent Studio 添加 memory-store（${APPROVING_MEMORY_URL/TOKEN}）。PM 咨询沙箱会自动注入。",
+      "convention": "在 Agent Studio 添加 memory-store（{'${APPROVING_MEMORY_URL/TOKEN}'}）。PM 咨询沙箱会自动注入。",
       "tools": {
         "list_memories": {
           "signature": "list_memories()",

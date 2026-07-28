@@ -133,7 +133,7 @@
       "name": "memory-store",
       "desc": "Shared long-term memory · isolated by project+agent",
       "overview": "Agent-scoped memory MCP. Progressive list/search then get; upsert conclusions.",
-      "convention": "Add via Agent Studio (${APPROVING_MEMORY_URL/TOKEN}). Auto-injected in PM consult.",
+      "convention": "Add via Agent Studio ({'${APPROVING_MEMORY_URL/TOKEN}'}). Auto-injected in PM consult.",
       "tools": {
         "list_memories": {
           "signature": "list_memories()",
