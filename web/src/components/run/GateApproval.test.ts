@@ -915,11 +915,12 @@ describe('GateApproval content-fit layout branches', () => {
 
     const form = wrapper.find('[data-testid="content-fit-form"]')
     const buttons = form.findAll('button')
-    // Standard UI: only 确认并流转 (disabled while open issues), never 退回
-    expect(buttons.some((b) => b.text().includes('确认并流转'))).toBe(true)
-    expect(buttons.every((b) => !b.text().includes('退回') && !b.text().includes('打回'))).toBe(true)
-    const confirm = buttons.find((b) => b.text().includes('确认并流转'))!
-    expect((confirm.element as HTMLButtonElement).disabled).toBe(true)
+    // With ≥1 open issue (resolved ones don't count): only the negative exit
+    // (退回/返回修改) is offered, enabled — no 确认并流转, no disabled dead end.
+    expect(buttons.some((b) => b.text().includes('确认并流转'))).toBe(false)
+    const revise = buttons.find((b) => b.text().includes('返回修改'))!
+    expect(revise).toBeTruthy()
+    expect((revise.element as HTMLButtonElement).disabled).toBe(false)
     wrapper.unmount()
   })
 
@@ -2133,6 +2134,14 @@ describe('GateApproval HTML preview load gate (fillPreview)', () => {
         },
       ],
     })
+    apiMocks.createPreviewIssue.mockResolvedValue({
+      id: 'iss-new',
+      runId: 'run-1',
+      nodeId: 'hg-visual',
+      body: '请调整主色',
+      status: 'open',
+      createdAt: '2026-07-18T00:02:00Z',
+    })
     const wrapper = mountApproval({
       fillPreview: true,
       gate: baseGate({ nodeId: 'hg-visual' }),
@@ -2144,13 +2153,26 @@ describe('GateApproval HTML preview load gate (fillPreview)', () => {
     await form.find('[data-testid="paragraph-input"]').setValue('请调整主色')
     await flushPromises()
 
-    // Cold / standard UI: no 退回 — only 确认并流转 (disabled while open issues)
+    // With ≥1 open issue: only 退回/返回修改 is offered (enabled), no 确认并流转.
     const buttons = form.findAll('button')
-    expect(buttons.every((b) => !b.text().includes('退回') && !b.text().includes('打回'))).toBe(true)
-    const confirm = buttons.find((b) => b.text().includes('确认并流转'))!
-    expect(confirm).toBeTruthy()
-    expect((confirm.element as HTMLButtonElement).disabled).toBe(true)
-    expect(wrapper.emitted('resolve')).toBeFalsy()
+    expect(buttons.some((b) => b.text().includes('确认并流转'))).toBe(false)
+    const revise = buttons.find((b) => b.text().includes('返回修改'))!
+    expect(revise).toBeTruthy()
+    expect((revise.element as HTMLButtonElement).disabled).toBe(false)
+
+    await revise.trigger('click')
+    await flushPromises()
+
+    // Unsent draft text is flushed into PreviewIssue history before the gate resolves.
+    expect(apiMocks.createPreviewIssue).toHaveBeenCalledWith(
+      'run-1',
+      'hg-visual',
+      '请调整主色',
+      expect.any(String),
+      0,
+      expect.any(Array),
+    )
+    expect(wrapper.emitted('resolve')?.[0]?.[0]).toBe('revise')
     wrapper.unmount()
   })
 
@@ -2207,12 +2229,17 @@ describe('GateApproval HTML preview load gate (fillPreview)', () => {
 
     const form = wrapper.find('[data-testid="content-fit-form"]')
     const buttons = form.findAll('button')
-    expect(buttons.some((b) => b.text().includes('确认并流转'))).toBe(true)
-    expect(buttons.every((b) => !b.text().includes('退回') && !b.text().includes('返回修改'))).toBe(true)
-    const confirm = buttons.find((b) => b.text().includes('确认并流转'))!
-    expect((confirm.element as HTMLButtonElement).disabled).toBe(true)
-    expect(wrapper.text()).toMatch(/待处理意见|仅可退回|不可确认/)
-    expect(wrapper.emitted('resolve')).toBeFalsy()
+    // ≥1 open issue: 确认并流转 is hidden entirely; 返回修改 is enabled and
+    // does not require the (now-hidden) form comment to be filled.
+    expect(buttons.some((b) => b.text().includes('确认并流转'))).toBe(false)
+    const revise = buttons.find((b) => b.text().includes('返回修改'))!
+    expect(revise).toBeTruthy()
+    expect((revise.element as HTMLButtonElement).disabled).toBe(false)
+
+    await revise.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.emitted('resolve')?.[0]?.[0]).toBe('revise')
     wrapper.unmount()
   })
 
@@ -2331,11 +2358,16 @@ describe('GateApproval app_preview reject without form', () => {
 
     expect(wrapper.find('[data-testid="paragraph-input"]').exists()).toBe(false)
     const buttons = wrapper.findAll('button')
-    expect(buttons.every((b) => !b.text().includes('退回'))).toBe(true)
-    const confirm = buttons.find((b) => b.text().includes('确认并流转'))!
-    expect(confirm).toBeTruthy()
-    expect((confirm.element as HTMLButtonElement).disabled).toBe(true)
-    expect(wrapper.emitted('resolve')).toBeFalsy()
+    // ≥1 open issue: 确认并流转 is hidden; the gate's own 退回 exit is offered, enabled.
+    expect(buttons.some((b) => b.text().includes('确认并流转'))).toBe(false)
+    const reject = buttons.find((b) => b.text().includes('退回'))!
+    expect(reject).toBeTruthy()
+    expect((reject.element as HTMLButtonElement).disabled).toBe(false)
+
+    await reject.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.emitted('resolve')?.[0]?.[0]).toBe('fail')
     wrapper.unmount()
   })
 
