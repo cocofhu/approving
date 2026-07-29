@@ -4,6 +4,15 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.1.0-beta — 2026-07-29
+
+- Public beta on [`v0.1.0-beta`](https://github.com/cocofhu/approving/releases/tag/v0.1.0-beta)
+  (relative to `v0.0.4-beta`: PRs #113–#134). Full notes on the GitHub Release.
+- Pin `./start.sh`, `.env.example`, and `compose.release.yaml` defaults to GHCR
+  `*:0.1.0-beta` (tag publish does not rewrite these files).
+- Highlights: 评审统一「确认并流转」；澄清/预览流式与刷新续传；桌面 HTML 预览 fillParent；
+  项目管理文案；app_preview 纯 ReAct；同项目 skill_profile 约束。
+
 ## 0.0.4-beta — 2026-07-28
 
 - Public beta follow-up on [`v0.0.4-beta`](https://github.com/cocofhu/approving/releases/tag/v0.0.4-beta)
