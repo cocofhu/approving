@@ -4,6 +4,15 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.1.1-beta — 2026-07-29
+
+- Public beta follow-up on [`v0.1.1-beta`](https://github.com/cocofhu/approving/releases/tag/v0.1.1-beta)
+  (relative to `v0.1.0-beta`: PRs #136–#141). Full notes on the GitHub Release.
+- Pin `./start.sh`, `.env.example`, and `compose.release.yaml` defaults to GHCR
+  `*:0.1.1-beta` (tag publish does not rewrite these files).
+- Highlights: Token 按模型统计；审计分页升级；HTML 主产物放大；沙箱环境变量单行启用开关；
+  human_gate 冷会话静默；Run 筛选触发文案左对齐。
+
 ## 0.1.0-beta — 2026-07-29
 
 - Public beta on [`v0.1.0-beta`](https://github.com/cocofhu/approving/releases/tag/v0.1.0-beta)
