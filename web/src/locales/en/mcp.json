@@ -2,19 +2,19 @@
   "mcp": {
     "integrations": {
       "title": "Integrations",
-      "subtitle": "Built-in MCPs are injected by scope: run-scoped ones are always available; project/PM-session ones appear in PM Leader. Configure repo/CI credentials (e.g. GITLAB_TOKEN / GITLAB_URL) in agent env vars; reference workflow globals as {'${vars.<name>}'}.",
+      "subtitle": "Built-in MCPs are injected by scope: run-scoped ones are always available; project/PM-session ones appear in Project Management. Configure repo/CI credentials (e.g. GITLAB_TOKEN / GITLAB_URL) in agent env vars; reference workflow globals as {'${vars.<name>}'}.",
       "sectionTitle": "Built-in MCP · scope-based injection",
       "noConfigNeeded": "No setup required",
       "noConfigHere": "No setup on this page",
       "alwaysAvailable": "Always available",
-      "seenInPmLeader": "Seen in PM Leader",
+      "seenInPmLeader": "Seen in Project Management",
       "seenInAgentStudio": "Seen in Agent Studio",
       "addViaAgentStudio": "Add via Agent Studio",
       "notRunScoped": "Not run-scoped global injection",
       "scopeRun": "scope: run",
       "scopeProject": "scope: project / pm-session",
       "entryPathLabel": "Where to use:",
-      "entryPath": "Project detail → PM Leader → Settings",
+      "entryPath": "Project detail → Project Management → Settings",
       "entryPathAgent": "Agent Studio → MCP",
       "toolCount": "{n} tools · Click for details",
       "openDetail": "Open details",
@@ -189,7 +189,7 @@
       "name": "task-scheduler",
       "desc": "Agent scheduled tasks · definition MCP; platform executes",
       "overview": "Agent-level cron. Writes only in PM consult; each fire uses a fresh sandbox.",
-      "convention": "create_job requires PM Leader consult. Platform scheduler runs Chat.",
+      "convention": "create_job requires Project Management consult. Platform scheduler runs Chat.",
       "tools": {
         "list_jobs": {
           "signature": "list_jobs()",
