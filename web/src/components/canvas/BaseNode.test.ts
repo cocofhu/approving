@@ -54,7 +54,7 @@ describe('BaseNode', () => {
     wrapper.unmount()
   })
 
-  it('app_preview review: badge + subtitle + body, no action handles', () => {
+  it('app_preview review: badge + subtitle + Demo body, no action handles', () => {
     const wrapper = mountNode({
       type: 'app_preview',
       label: '应用预览',
@@ -63,10 +63,32 @@ describe('BaseNode', () => {
     })
     expect(wrapper.text()).toContain('复审')
     expect(wrapper.text()).toContain('取点标注 · ReAct')
-    expect(wrapper.text()).toContain('无通过/退回 · Run 内取点')
+    expect(wrapper.text()).toContain('确认并流转 · Run 内')
+    expect(wrapper.text()).not.toContain('无通过/退回')
     expect(wrapper.text()).not.toContain('未设 goto')
+    expect(wrapper.find('[data-testid="app-preview-body"]').exists()).toBe(true)
     // No gate action rows
     expect(wrapper.findAll('[data-testid="handle"]').length).toBeGreaterThanOrEqual(2) // target + single source
+    wrapper.unmount()
+  })
+
+  it('human_gate review: Demo footnote instead of action Handle rows', () => {
+    const wrapper = mountNode({
+      type: 'human_gate',
+      label: '人工门禁',
+      humanGateReview: true,
+      gateActions: [
+        { id: 'approve', label: '批准' },
+        { id: 'revise', label: '退回修改' },
+      ],
+      status: undefined,
+    })
+    expect(wrapper.text()).toContain('同一套 ReAct')
+    expect(wrapper.text()).toContain('确认并流转 · 待审批')
+    expect(wrapper.text()).not.toContain('批准')
+    expect(wrapper.text()).not.toContain('退回修改')
+    expect(wrapper.text()).not.toContain('未设 goto')
+    expect(wrapper.find('[data-testid="human-gate-body"]').exists()).toBe(true)
     wrapper.unmount()
   })
 })

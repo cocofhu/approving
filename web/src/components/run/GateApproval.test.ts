@@ -339,12 +339,11 @@ function expectApprovalActionsVisible(wrapper: VueWrapper) {
   expect(form.exists()).toBe(true)
   expect(form.find('[data-testid="paragraph-input"]').exists()).toBe(true)
   const buttons = form.findAll('button')
-  expect(buttons.length).toBeGreaterThanOrEqual(2)
-  expect(buttons.some((b) => b.text().includes('批准'))).toBe(true)
-  expect(buttons.some((b) => b.text().includes('返回修改'))).toBe(true)
-  for (const btn of buttons) {
-    expect((btn.element as HTMLButtonElement).disabled).toBe(false)
-  }
+  // Review semantics: always 确认并流转; never restore 返回修改 / 打回 dual buttons
+  expect(buttons.some((b) => b.text().includes('确认并流转'))).toBe(true)
+  expect(buttons.every((b) => !b.text().includes('返回修改') && !b.text().includes('打回修改'))).toBe(
+    true,
+  )
 }
 
 describe('actionIcon', () => {
@@ -857,11 +856,11 @@ describe('GateApproval content-fit layout branches', () => {
       true,
     )
     const buttons = form.findAll('button')
-    expect(buttons.some((b) => b.text().includes('批准'))).toBe(true)
+    expect(buttons.some((b) => b.text().includes('确认并流转'))).toBe(true)
     expect(buttons.every((b) => !b.text().includes('返回修改') && !b.text().includes('退回'))).toBe(
       true,
     )
-    expect(wrapper.text()).toContain('可批准通过；若需修改，请先提交评审意见后再退回')
+    expect(wrapper.text()).toContain('可确认并流转；若需修改，请先发送评审意见就地改')
     expect(wrapper.text()).not.toContain('可直接退回')
     wrapper.unmount()
   })
@@ -916,12 +915,15 @@ describe('GateApproval content-fit layout branches', () => {
 
     const form = wrapper.find('[data-testid="content-fit-form"]')
     const buttons = form.findAll('button')
-    expect(buttons.some((b) => b.text().includes('批准'))).toBe(false)
-    expect(buttons.some((b) => b.text().includes('退回(1 个问题)'))).toBe(true)
+    // Standard UI: only 确认并流转 (disabled while open issues), never 退回
+    expect(buttons.some((b) => b.text().includes('确认并流转'))).toBe(true)
+    expect(buttons.every((b) => !b.text().includes('退回') && !b.text().includes('打回'))).toBe(true)
+    const confirm = buttons.find((b) => b.text().includes('确认并流转'))!
+    expect((confirm.element as HTMLButtonElement).disabled).toBe(true)
     wrapper.unmount()
   })
 
-  it('hides ReviewComposer Pass when open PreviewIssues and reactSessionAlive', async () => {
+  it('keeps confirm disabled when open PreviewIssues and reactSessionAlive; send remains', async () => {
     apiMocks.listPreviewIssues.mockResolvedValue({
       issues: [
         {
@@ -943,10 +945,12 @@ describe('GateApproval content-fit layout branches', () => {
     })
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(false)
-    const reject = wrapper.find('[data-testid="review-composer-reject"]')
-    expect(reject.exists()).toBe(true)
-    expect(reject.text()).toMatch(/1/)
+    const pass = wrapper.find('[data-testid="review-composer-pass"]')
+    expect(pass.exists()).toBe(true)
+    expect((pass.element as HTMLButtonElement).disabled).toBe(true)
+    const send = wrapper.find('[data-testid="review-composer-send"]')
+    expect(send.exists()).toBe(true)
+    expect(send.text()).toContain('发送')
     expect(wrapper.emitted('resolve')).toBeFalsy()
     wrapper.unmount()
   })
@@ -993,11 +997,11 @@ describe('GateApproval content-fit layout branches', () => {
 
     const form = wrapper.find('[data-testid="content-fit-form"]')
     const buttons = form.findAll('button')
-    expect(buttons.some((b) => b.text().includes('批准'))).toBe(true)
+    expect(buttons.some((b) => b.text().includes('确认并流转'))).toBe(true)
     expect(buttons.every((b) => !b.text().includes('退回') && !b.text().includes('返回修改'))).toBe(
       true,
     )
-    expect(wrapper.text()).toContain('可批准通过；若需修改，请先提交评审意见后再退回')
+    expect(wrapper.text()).toContain('可确认并流转；若需修改，请先发送评审意见就地改')
     expect(wrapper.text()).not.toContain('已提交评审意见')
     wrapper.unmount()
   })
@@ -1510,7 +1514,7 @@ describe('GateApproval product editor state machine', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('有未保存修改')
 
-    await wrapper.findAll('button').find((b) => b.text().includes('批准'))!.trigger('click')
+    await wrapper.findAll('button').find((b) => b.text().includes('确认并流转'))!.trigger('click')
     await flushPromises()
 
     expect(confirmSpy).toHaveBeenCalled()
@@ -2105,11 +2109,11 @@ describe('GateApproval HTML preview load gate (fillPreview)', () => {
     expect(form.findAll('[data-testid="paragraph-input"]').length).toBe(1)
     expect(form.find('[data-testid="preview-feedback-submit"]').exists()).toBe(true)
     const buttons = form.findAll('button')
-    expect(buttons.some((b) => b.text().includes('批准'))).toBe(true)
+    expect(buttons.some((b) => b.text().includes('确认并流转'))).toBe(true)
     expect(buttons.every((b) => !b.text().includes('返回修改') && !b.text().includes('退回'))).toBe(
       true,
     )
-    expect(wrapper.text()).toContain('可批准通过；若需修改，请先提交评审意见后再退回')
+    expect(wrapper.text()).toContain('可确认并流转；若需修改，请先发送评审意见就地改')
     expect(wrapper.text()).not.toContain('可直接退回')
     expect(wrapper.emitted('resolve')).toBeFalsy()
     expect(apiMocks.createPreviewIssue).not.toHaveBeenCalled()
@@ -2140,20 +2144,13 @@ describe('GateApproval HTML preview load gate (fillPreview)', () => {
     await form.find('[data-testid="paragraph-input"]').setValue('请调整主色')
     await flushPromises()
 
-    const rejectBtn = form.findAll('button').find((b) => b.text().includes('退回'))!
-    expect(rejectBtn.text()).toMatch(/1/)
-    await rejectBtn.trigger('click')
-    await flushPromises()
-
-    expect(apiMocks.createPreviewIssue).toHaveBeenCalledWith(
-      'run-1',
-      'hg-visual',
-      '请调整主色',
-      '',
-      0,
-      [],
-    )
-    expect(wrapper.emitted('resolve')?.[0]?.[0]).toBe('revise')
+    // Cold / standard UI: no 退回 — only 确认并流转 (disabled while open issues)
+    const buttons = form.findAll('button')
+    expect(buttons.every((b) => !b.text().includes('退回') && !b.text().includes('打回'))).toBe(true)
+    const confirm = buttons.find((b) => b.text().includes('确认并流转'))!
+    expect(confirm).toBeTruthy()
+    expect((confirm.element as HTMLButtonElement).disabled).toBe(true)
+    expect(wrapper.emitted('resolve')).toBeFalsy()
     wrapper.unmount()
   })
 
@@ -2170,7 +2167,7 @@ describe('GateApproval HTML preview load gate (fillPreview)', () => {
     await form.find('[data-testid="paragraph-input"]').setValue('未提交意见')
     await flushPromises()
 
-    const approveBtn = form.findAll('button').find((b) => b.text().includes('批准'))!
+    const approveBtn = form.findAll('button').find((b) => b.text().includes('确认并流转'))!
     await approveBtn.trigger('click')
     await flushPromises()
 
@@ -2210,18 +2207,12 @@ describe('GateApproval HTML preview load gate (fillPreview)', () => {
 
     const form = wrapper.find('[data-testid="content-fit-form"]')
     const buttons = form.findAll('button')
-    expect(buttons.some((b) => b.text().includes('批准'))).toBe(false)
-    const rejectBtn = buttons.find((b) => b.text().includes('退回') || b.text().includes('返回修改'))
-    expect(rejectBtn).toBeTruthy()
-    expect(rejectBtn!.text()).toMatch(/1/)
-    expect((rejectBtn!.element as HTMLButtonElement).disabled).toBe(false)
-    expect(wrapper.text()).toContain('已提交评审意见')
-    expect(wrapper.text()).not.toMatch(/改产物后批准/)
-
-    await rejectBtn!.trigger('click')
-    await flushPromises()
-    expect(wrapper.emitted('resolve')).toBeTruthy()
-    expect(wrapper.emitted('resolve')![0][0]).toBe('revise')
+    expect(buttons.some((b) => b.text().includes('确认并流转'))).toBe(true)
+    expect(buttons.every((b) => !b.text().includes('退回') && !b.text().includes('返回修改'))).toBe(true)
+    const confirm = buttons.find((b) => b.text().includes('确认并流转'))!
+    expect((confirm.element as HTMLButtonElement).disabled).toBe(true)
+    expect(wrapper.text()).toMatch(/待处理意见|仅可退回|不可确认/)
+    expect(wrapper.emitted('resolve')).toBeFalsy()
     wrapper.unmount()
   })
 
@@ -2249,9 +2240,9 @@ describe('GateApproval HTML preview load gate (fillPreview)', () => {
     await flushPromises()
 
     expect(form.find('[data-testid="content-fit-preview-issues-loading"]').exists()).toBe(false)
-    expect(form.findAll('button').some((b) => b.text().includes('批准'))).toBe(true)
+    expect(form.findAll('button').some((b) => b.text().includes('确认并流转'))).toBe(true)
     expect(form.findAll('button').every((b) => !b.text().includes('返回修改'))).toBe(true)
-    expect(wrapper.text()).toContain('可批准通过；若需修改，请先提交评审意见后再退回')
+    expect(wrapper.text()).toContain('确认并流转')
     wrapper.unmount()
   })
 })
@@ -2292,16 +2283,16 @@ describe('GateApproval app_preview reject without form', () => {
     await flushPromises()
 
     expect(wrapper.find('[data-testid="paragraph-input"]').exists()).toBe(false)
-    expect(wrapper.text()).toContain('可批准通过；若需修改，请先提交评审意见后再退回')
+    expect(wrapper.text()).toContain('确认并流转')
     expect(wrapper.text()).not.toContain('可直接退回')
     const buttons = wrapper.findAll('button')
-    expect(buttons.some((b) => b.text().includes('通过'))).toBe(true)
+    expect(buttons.some((b) => b.text().includes('确认并流转'))).toBe(true)
     expect(buttons.every((b) => b.text() !== '退回' && !b.text().includes('退回('))).toBe(true)
     expect(wrapper.emitted('resolve')).toBeFalsy()
     wrapper.unmount()
   })
 
-  it('hides configured gate.form on app_preview and only shows reject when open issues exist', async () => {
+  it('hides configured gate.form on app_preview and disables confirm when open issues exist', async () => {
     apiMocks.listPreviewIssues.mockResolvedValue({
       issues: [
         {
@@ -2340,14 +2331,11 @@ describe('GateApproval app_preview reject without form', () => {
 
     expect(wrapper.find('[data-testid="paragraph-input"]').exists()).toBe(false)
     const buttons = wrapper.findAll('button')
-    expect(buttons.every((b) => !b.text().includes('通过'))).toBe(true)
-    const rejectBtn = buttons.find((b) => b.text().includes('退回'))!
-    expect(rejectBtn.text()).toMatch(/1/)
-    expect((rejectBtn.element as HTMLButtonElement).disabled).toBe(false)
-    await rejectBtn.trigger('click')
-    await flushPromises()
-    expect(wrapper.emitted('resolve')).toBeTruthy()
-    expect(wrapper.emitted('resolve')![0][0]).toBe('fail')
+    expect(buttons.every((b) => !b.text().includes('退回'))).toBe(true)
+    const confirm = buttons.find((b) => b.text().includes('确认并流转'))!
+    expect(confirm).toBeTruthy()
+    expect((confirm.element as HTMLButtonElement).disabled).toBe(true)
+    expect(wrapper.emitted('resolve')).toBeFalsy()
     wrapper.unmount()
   })
 
@@ -2381,20 +2369,16 @@ describe('GateApproval app_preview reject without form', () => {
     })
   }
 
-  it('hot app_preview n_open=0: only pass mounted; reject not in DOM (no empty reject bypass)', async () => {
+  it('hot app_preview n_open=0: send + confirm mounted; empty send disabled until draft', async () => {
     const wrapper = appPreviewHotMount()
     await flushPromises()
 
     expect(wrapper.find('[data-testid="app-preview"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="review-composer-gate"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="review-composer-reject"]').exists()).toBe(false)
-    // Draft must not unlock reject when n_open=0
-    const draft = wrapper.find('[data-testid="paragraph-input"]')
-    expect(draft.exists()).toBe(true)
-    await draft.setValue('草稿打回旁路')
-    await flushPromises()
-    expect(wrapper.find('[data-testid="review-composer-reject"]').exists()).toBe(false)
+    const send = wrapper.find('[data-testid="review-composer-send"]')
+    expect(send.exists()).toBe(true)
+    expect((send.element as HTMLButtonElement).disabled).toBe(true)
     expect(apiMocks.gateReactRevise).not.toHaveBeenCalled()
     wrapper.unmount()
   })
@@ -2415,7 +2399,7 @@ describe('GateApproval app_preview reject without form', () => {
     wrapper.unmount()
   })
 
-  it('hot app_preview n_open≥1: only reject with count; pass not in DOM; reject uses sendHotReject', async () => {
+  it('hot app_preview n_open≥1: send enabled and confirm disabled; send uses gateReactRevise', async () => {
     apiMocks.gateReactRevise.mockResolvedValue({})
     const wrapper = appPreviewHotMount({
       issues: [
@@ -2431,19 +2415,21 @@ describe('GateApproval app_preview reject without form', () => {
     })
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(false)
-    const reject = wrapper.find('[data-testid="review-composer-reject"]')
-    expect(reject.exists()).toBe(true)
-    expect(reject.text()).toContain('打回 · 1')
-    expect((reject.element as HTMLButtonElement).disabled).toBe(false)
-    await reject.trigger('click')
+    const pass = wrapper.find('[data-testid="review-composer-pass"]')
+    expect(pass.exists()).toBe(true)
+    expect((pass.element as HTMLButtonElement).disabled).toBe(true)
+    const send = wrapper.find('[data-testid="review-composer-send"]')
+    expect(send.exists()).toBe(true)
+    expect(send.text()).toContain('发送')
+    expect((send.element as HTMLButtonElement).disabled).toBe(false)
+    await send.trigger('click')
     await flushPromises()
     expect(apiMocks.gateReactRevise).toHaveBeenCalled()
     expect(wrapper.emitted('resolve')).toBeFalsy()
     wrapper.unmount()
   })
 
-  it('hot app_preview only-resolved: restores pass-only (reject unmounted)', async () => {
+  it('hot app_preview only-resolved: confirm enabled and send present', async () => {
     const wrapper = appPreviewHotMount({
       issues: [
         {
@@ -2458,9 +2444,11 @@ describe('GateApproval app_preview reject without form', () => {
     })
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="review-composer-reject"]').exists()).toBe(false)
-    expect(wrapper.text()).toContain('可批准通过；若需修改，请先提交评审意见后再退回')
+    const pass = wrapper.find('[data-testid="review-composer-pass"]')
+    expect(pass.exists()).toBe(true)
+    expect((pass.element as HTMLButtonElement).disabled).toBe(false)
+    expect(wrapper.find('[data-testid="review-composer-send"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('确认并流转')
     wrapper.unmount()
   })
 })
@@ -2507,11 +2495,11 @@ describe('GateApproval mobileFillRemaining layout', () => {
     expect(sticky.find('[data-testid="preview-feedback-chat"]').exists()).toBe(true)
     expect(sticky.find('[data-testid="mobile-fill-feedback"]').exists()).toBe(true)
     const buttons = sticky.findAll('button')
-    expect(buttons.some((b) => b.text().includes('批准'))).toBe(true)
+    expect(buttons.some((b) => b.text().includes('确认并流转'))).toBe(true)
     expect(buttons.every((b) => !b.text().includes('返回修改') && !b.text().includes('退回'))).toBe(
       true,
     )
-    expect(wrapper.find('[data-testid="review-composer-reject"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="review-composer-send"]').exists()).toBe(false)
 
     // Stage no longer hosts feedback.
     const scrollHtml = wrapper.find('[data-testid="mobile-fill-scroll"]').html()
@@ -2520,8 +2508,8 @@ describe('GateApproval mobileFillRemaining layout', () => {
     wrapper.unmount()
   })
 
-  it('exposes hot pass only when n_open=0 in mobile-fill reactSessionAlive', async () => {
-    const pageHtml = '<!doctype html><html><body><h1>热打回</h1></body></html>'
+  it('exposes hot send + confirm when n_open=0 in mobile-fill reactSessionAlive', async () => {
+    const pageHtml = '<!doctype html><html><body><h1>热发送</h1></body></html>'
     const { gate, run } = visualGateRun(pageHtml)
     const wrapper = mountApproval({
       fillPreview: true,
@@ -2533,7 +2521,7 @@ describe('GateApproval mobileFillRemaining layout', () => {
 
     expect(wrapper.find('[data-testid="review-shell-drawer-handle"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="review-composer-gate"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="review-composer-reject"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="review-composer-send"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="review-record-issue"]').exists()).toBe(true)
     // Hot unified input: single paragraph-input in sidebar (no ReviewComposer draft).
@@ -2578,10 +2566,12 @@ describe('GateApproval mobileFillRemaining layout', () => {
     })
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(false)
-    const reject = wrapper.find('[data-testid="review-composer-reject"]')
+    const pass = wrapper.find('[data-testid="review-composer-pass"]')
+    expect(pass.exists()).toBe(true)
+    expect((pass.element as HTMLButtonElement).disabled).toBe(true)
+    const reject = wrapper.find('[data-testid="review-composer-send"]')
     expect(reject.exists()).toBe(true)
-    expect(reject.text()).toMatch(/1/)
+    expect(reject.text()).toContain('发送')
     expect((reject.element as HTMLButtonElement).disabled).toBe(false)
 
     await wrapper.find('[data-testid="paragraph-input-attach"]').trigger('click')
@@ -2663,10 +2653,10 @@ describe('GateApproval mobileFillRemaining layout', () => {
     expect(wrapper.find('[data-testid="mobile-fill-remaining"]').exists()).toBe(false)
 
     const form = wrapper.find('[data-testid="content-fit-form"]')
-    expect(form.find('[data-testid="review-composer-reject"]').exists()).toBe(true)
+    expect(form.find('[data-testid="review-composer-send"]').exists()).toBe(true)
     await form.find('[data-testid="paragraph-input"]').setValue('改标题')
     await flushPromises()
-    await form.find('[data-testid="review-composer-reject"]').trigger('click')
+    await form.find('[data-testid="review-composer-send"]').trigger('click')
     await flushPromises()
 
     expect(wrapper.find('[data-testid="gate-react-queue"]').exists()).toBe(true)
@@ -2717,10 +2707,10 @@ describe('GateApproval mobileFillRemaining layout', () => {
     await flushPromises()
 
     const form = wrapper.find('[data-testid="content-fit-form"]')
-    expect(form.find('[data-testid="review-composer-reject"]').exists()).toBe(true)
+    expect(form.find('[data-testid="review-composer-send"]').exists()).toBe(true)
     await form.find('[data-testid="paragraph-input"]').setValue('改一下')
     await flushPromises()
-    await form.find('[data-testid="review-composer-reject"]').trigger('click')
+    await form.find('[data-testid="review-composer-send"]').trigger('click')
     await flushPromises()
 
     const vm = wrapper.vm as any
@@ -2820,7 +2810,7 @@ describe('GateApproval mobileFillRemaining layout', () => {
 
     await wrapper.find('[data-testid="paragraph-input"]').setValue('换推荐方案')
     await flushPromises()
-    await wrapper.find('[data-testid="review-composer-reject"]').trigger('click')
+    await wrapper.find('[data-testid="review-composer-send"]').trigger('click')
     await flushPromises()
 
     expect(wrapper.find('[data-testid="gate-react-queue"]').exists()).toBe(true)
@@ -2884,7 +2874,7 @@ describe('GateApproval mobileFillRemaining layout', () => {
     await flushPromises()
     await wrapper.find('[data-testid="paragraph-input"]').setValue('跨入口幽灵')
     await flushPromises()
-    await wrapper.find('[data-testid="review-composer-reject"]').trigger('click')
+    await wrapper.find('[data-testid="review-composer-send"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="gate-react-queue"]').exists()).toBe(true)
     const vm = wrapper.vm as any
@@ -3072,7 +3062,7 @@ describe('GateApproval mobileFillRemaining layout', () => {
     const sticky = wrapper.find('[data-testid="mobile-fill-sticky-actions"]')
     expect(sticky.exists()).toBe(true)
     // Preview may be editor/error/loading; sticky Pass must stay usable (n_open=0 → no reject).
-    const approveBtn = sticky.findAll('button').find((b) => b.text().includes('批准'))
+    const approveBtn = sticky.findAll('button').find((b) => b.text().includes('确认并流转'))
     expect(approveBtn).toBeTruthy()
     expect((approveBtn!.element as HTMLButtonElement).disabled).toBe(false)
     expect(sticky.findAll('button').every((b) => !b.text().includes('返回修改'))).toBe(true)
@@ -3146,7 +3136,7 @@ describe('GateApproval ReAct annotations', () => {
 
     expect(wrapper.find('[data-testid="review-shell"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="review-composer-gate"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="review-composer-reject"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-send"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="gate-cold-session-note"]').exists()).toBe(false)
 
     // Stage an annotation-only draft via component state.
@@ -3154,7 +3144,7 @@ describe('GateApproval ReAct annotations', () => {
     vm.reactAnnotations = [{ jsonPath: 'summary', label: '概述' }]
     await flushPromises()
 
-    const rejectBtn = wrapper.find('[data-testid="review-composer-reject"]')
+    const rejectBtn = wrapper.find('[data-testid="review-composer-send"]')
     expect((rejectBtn.element as HTMLButtonElement).disabled).toBe(false)
     await rejectBtn.trigger('click')
     await flushPromises()
@@ -3202,7 +3192,7 @@ describe('GateApproval ReAct annotations', () => {
     })
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="review-composer-reject"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="review-composer-send"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="gate-cold-session-note"]').exists()).toBe(true)
     wrapper.unmount()
   })
@@ -3335,10 +3325,12 @@ describe('GateApproval ReAct annotations', () => {
     await flushPromises()
 
     const form = wrapper.find('[data-testid="content-fit-form"]')
-    expect(form.find('[data-testid="review-composer-pass"]').exists()).toBe(false)
-    const reject = form.find('[data-testid="review-composer-reject"]')
+    const pass = form.find('[data-testid="review-composer-pass"]')
+    expect(pass.exists()).toBe(true)
+    expect((pass.element as HTMLButtonElement).disabled).toBe(true)
+    const reject = form.find('[data-testid="review-composer-send"]')
     expect(reject.exists()).toBe(true)
-    expect(reject.text()).toMatch(/1/)
+    expect(reject.text()).toContain('发送')
     await form.find('[data-testid="paragraph-input"]').setValue('请改标题')
     await flushPromises()
 
@@ -3396,7 +3388,7 @@ describe('GateApproval ReAct annotations', () => {
     const form = wrapper.find('[data-testid="content-fit-form"]')
     await form.find('[data-testid="paragraph-input"]').setValue('半成功意见')
     await flushPromises()
-    await form.find('[data-testid="review-composer-reject"]').trigger('click')
+    await form.find('[data-testid="review-composer-send"]').trigger('click')
     await flushPromises()
 
     expect(apiMocks.createPreviewIssue).toHaveBeenCalledTimes(1)
@@ -3409,7 +3401,7 @@ describe('GateApproval ReAct annotations', () => {
 
     // Retry should not duplicate PreviewIssue history.
     apiMocks.gateReactRevise.mockResolvedValue({})
-    await form.find('[data-testid="review-composer-reject"]').trigger('click')
+    await form.find('[data-testid="review-composer-send"]').trigger('click')
     await flushPromises()
     expect(apiMocks.createPreviewIssue).toHaveBeenCalledTimes(1)
     expect(apiMocks.gateReactRevise).toHaveBeenCalledTimes(2)
@@ -3450,7 +3442,7 @@ describe('GateApproval ReAct annotations', () => {
     vm.reactAnnotations = [{ selector: '#hero', label: '#hero' }]
     await flushPromises()
 
-    await wrapper.find('[data-testid="review-composer-reject"]').trigger('click')
+    await wrapper.find('[data-testid="review-composer-send"]').trigger('click')
     await flushPromises()
 
     expect(apiMocks.createPreviewIssue).toHaveBeenCalledWith(
