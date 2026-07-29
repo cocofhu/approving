@@ -179,7 +179,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
       @click.stop="toggle"
     >
       <Icon name="tag" :size="15" class="text-txt3" />
-      <span class="min-w-0 flex-1 truncate md:flex-none">{{ t('common.tagFilter.label') }}</span>
+      <span class="min-w-0 flex-1 truncate text-left md:flex-none">{{ t('common.tagFilter.label') }}</span>
       <span v-if="hasFilter" class="chip" data-testid="tag-filter-count">{{ modelValue.length }}</span>
       <Icon name="chevron-down" :size="14" class="shrink-0 text-txt3" />
     </button>
