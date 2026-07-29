@@ -597,10 +597,11 @@ export interface ClarifyInboxItem {
   type: 'clarify'
   /**
    * Badge semantic for list rendering. Channel remains `type: 'clarify'`.
-   * `clarify` = react needs clarify; `review` = ReviewCapable product review.
+   * `clarify` = react needs clarify; `review` = ReviewCapable product review;
+   * `app_preview` = application preview waiting for confirm & continue.
    * Older backends may omit this; UI falls back to clarify.
    */
-  kind?: 'clarify' | 'review'
+  kind?: 'clarify' | 'review' | 'app_preview'
   runId: string
   nodeId: string
   iteration?: number

@@ -101,10 +101,11 @@ func gateInboxItem(g models.Gate, runTitle string, tags []string) GateInboxItem 
 
 // ClarifyInboxItem is a pending react clarification or product review in the
 // unified inbox. Type is the inbox channel (always "clarify" for this path);
-// Kind is the list-badge semantic: "clarify" (react) or "review" (ReviewCapable).
+// Kind is the list-badge semantic: "clarify" (react), "review" (ReviewCapable),
+// or "app_preview" (application preview waiting for confirm & continue).
 type ClarifyInboxItem struct {
 	Type         string    `json:"type"`
-	Kind         string    `json:"kind"` // clarify | review
+	Kind         string    `json:"kind"` // clarify | review | app_preview
 	RunID        string    `json:"runId"`
 	NodeID       string    `json:"nodeId"`
 	Iteration    int       `json:"iteration"`
@@ -119,9 +120,16 @@ type ClarifyInboxItem struct {
 }
 
 // clarifyInboxKind returns badge semantic for a waiting_human conversation.
-// react → clarify; ReviewCapable product nodes → review; default clarify.
+// react → clarify; app_preview → app_preview (distinct from generic review);
+// other ReviewCapable product nodes → review; default clarify.
 func clarifyInboxKind(node *models.Node) string {
-	if node != nil && node.Type != "react" && nodereg.ReviewCapable(node.Type) {
+	if node == nil {
+		return "clarify"
+	}
+	if node.Type == "app_preview" {
+		return "app_preview"
+	}
+	if node.Type != "react" && nodereg.ReviewCapable(node.Type) {
 		return "review"
 	}
 	return "clarify"
@@ -308,11 +316,9 @@ func (s *RunService) pendingClarifications(tags []string) []ClarifyInboxItem {
 		if reactAutoEnabled(node, varsByRun[conv.RunID]) {
 			continue
 		}
-		// app_preview: pure ReAct review — no Gate row in inbox; skip clarify
-		// inbox too so the node does not double-surface.
-		if node != nil && node.Type == "app_preview" {
-			continue
-		}
+		// app_preview waits via pure ReAct (no Gate row). Surface it on the
+		// clarify inbox channel with kind=app_preview so Gates Inbox / MCP /
+		// badge counts stay aligned with Run review.
 		// Only surface clarifications where the node is genuinely waiting for
 		// human input — exclude failed sandbox-setup paths (even if a stale
 		// conversation row exists from before the fix).

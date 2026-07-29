@@ -599,7 +599,7 @@
         "structuredExitFallback": "No goto → route by when",
         "reviewBadge": "Review",
         "appPreviewSubtitle": "Pick annotate · ReAct",
-        "appPreviewBody": "Confirm & continue · in Run",
+        "appPreviewBody": "Confirm & continue · inbox",
         "humanGateSubtitle": "Same ReAct shell",
         "humanGateBody": "Confirm & continue · inbox"
       },
@@ -862,6 +862,7 @@
       "gateType": "Human gate",
       "clarifyType": "Needs clarify",
       "reviewType": "Needs review",
+      "previewType": "App Preview",
       "loadingRun": "Loading run details…",
       "reviewFinished": "Confirmed and advanced",
       "reviewFinishedPending": "Confirmed and advanced; list not updated yet — refresh shortly",

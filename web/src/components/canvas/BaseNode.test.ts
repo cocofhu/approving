@@ -63,7 +63,7 @@ describe('BaseNode', () => {
     })
     expect(wrapper.text()).toContain('复审')
     expect(wrapper.text()).toContain('取点标注 · ReAct')
-    expect(wrapper.text()).toContain('确认并流转 · Run 内')
+    expect(wrapper.text()).toContain('确认并流转 · 待审批')
     expect(wrapper.text()).not.toContain('无通过/退回')
     expect(wrapper.text()).not.toContain('未设 goto')
     expect(wrapper.find('[data-testid="app-preview-body"]').exists()).toBe(true)
