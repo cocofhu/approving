@@ -198,7 +198,7 @@ describe('ReviewComposer gate review semantics (send + confirm)', () => {
     wrapper.unmount()
   })
 
-  it('cold session hides send and shows cold note; confirm remains', async () => {
+  it('cold session unmounts input/send and omits cold note/hint; confirm remains', async () => {
     const i18n = createI18n({
       legacy: false,
       locale: 'zh-CN',
@@ -217,10 +217,26 @@ describe('ReviewComposer gate review semantics (send + confirm)', () => {
       },
     })
     await flushPromises()
+    // plan g4.2: cold silent — no note/hint, no ParagraphInput/send (incl. disabled)
     expect(wrapper.find('[data-testid="review-composer-send"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="review-composer-cold-note"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="review-composer-cold-note"]').text()).toContain('无法继续就地改码')
+    expect(wrapper.find('[data-testid="review-composer-pass"]').text()).toContain('确认并流转')
+    expect(wrapper.find('[data-testid="review-composer-cold-note"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="review-composer-footer-hint"]').exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'ParagraphInput' }).exists()).toBe(false)
+    expect(wrapper.text()).not.toMatch(/ReAct|热会话|就地改|恢复热会话|无法继续就地改码/)
+    wrapper.unmount()
+  })
+
+  it('hot session keeps send and has no cold note', async () => {
+    const wrapper = mountGate()
+    await flushPromises()
+    // plan g4.2: hot path — send present, no cold note
+    expect(wrapper.find('[data-testid="review-composer-send"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-cold-note"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="review-composer-footer-hint"]').exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'ParagraphInput' }).exists()).toBe(true)
     wrapper.unmount()
   })
 })
