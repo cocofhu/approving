@@ -1532,8 +1532,9 @@ function badgeLabel(it: InboxItem) {
       </div>
     </div>
 
-    <!-- Desktop three-zone: list | product stage + review sidebar (via GateApproval/ReviewShell) -->
-    <div v-else-if="!isMobile && listItems.length" class="grid min-h-0 flex-1 grid-cols-[320px_1fr] items-start gap-4">
+    <!-- Desktop three-zone: list | product stage + review sidebar (via GateApproval/ReviewShell).
+         items-stretch so detail card + review sidebar fill remaining viewport height (no page void under card). -->
+    <div v-else-if="!isMobile && listItems.length" class="grid min-h-0 flex-1 grid-cols-[320px_1fr] items-stretch gap-4">
       <div class="flex h-full min-h-0 flex-col overflow-hidden">
         <div class="scroll-area flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
           <button
@@ -1577,8 +1578,8 @@ function badgeLabel(it: InboxItem) {
         <Pagination v-if="listTotal > PAGE_SIZE" v-model:page="listPage" :page-size="PAGE_SIZE" :total="listTotal" />
       </div>
 
-      <div v-if="active" class="flex h-full max-h-full min-h-0 min-w-0 flex-col">
-        <div class="card flex max-h-full w-full min-h-0 flex-col overflow-hidden">
+      <div v-if="active" class="flex h-full min-h-0 min-w-0 flex-col">
+        <div class="card flex h-full min-h-0 w-full flex-col overflow-hidden">
           <div class="flex shrink-0 items-center justify-between border-b border-line px-4 py-2.5">
             <span class="text-xs text-txt3">Run #{{ active.runId.replace('run-', '') }} · {{ active.nodeId }}</span>
             <button class="text-xs text-accent-2 hover:underline" @click="router.push('/runs/' + active.runId)">
@@ -1594,6 +1595,8 @@ function badgeLabel(it: InboxItem) {
               :gate="activeGate!"
               :run="activeRun || undefined"
               :fill-preview="true"
+              :unified-preview-budget="true"
+              class="min-h-0 flex-1"
               @resolve="onResolve"
               @react-revised="onReactRevised"
             />

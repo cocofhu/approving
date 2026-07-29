@@ -13,6 +13,17 @@ describe('GatesInboxView GateApproval isolation', () => {
     expect(src).not.toMatch(/mobileFillRemaining/)
   })
 
+  it('desktop Inbox enables unified-preview-budget; mobile detail does not', () => {
+    // plan g2.1: Inbox desktop fill-preview path only
+    expect(src).toMatch(/:unified-preview-budget="true"/)
+    // Desktop grid stretch (g1.1) — not items-start
+    expect(src).toMatch(/items-stretch/)
+    expect(src).not.toMatch(/grid-cols-\[320px_1fr\] items-start/)
+    // Mobile GateApproval block omits unified budget (only one binding, on desktop).
+    const unifiedBindings = src.match(/:unified-preview-budget="true"/g) || []
+    expect(unifiedBindings.length).toBe(1)
+  })
+
   it('clarify stage uses loading pane, product panel, and load-failed retry', () => {
     expect(src).toMatch(/ArtifactLoadingPane/)
     expect(src).toMatch(/ClarifyProductStage/)
