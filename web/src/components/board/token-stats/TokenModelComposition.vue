@@ -38,13 +38,11 @@ const pieStops = computed(() => {
 
 <template>
   <div data-testid="token-model-composition" class="grid gap-3 sm:grid-cols-[120px_1fr] sm:items-center">
+    <!-- Solid pie (Demo-aligned): no inset hole / donut ring -->
     <div
       class="mx-auto h-[110px] w-[110px] rounded-full"
       data-testid="token-model-pie"
-      :style="{
-        background: `conic-gradient(${pieStops})`,
-        boxShadow: 'inset 0 0 0 28px rgb(var(--c-surface))',
-      }"
+      :style="{ background: `conic-gradient(${pieStops})` }"
       role="img"
       :aria-label="t('pages.board.tokenStats.modelCompositionTitle')"
     />
