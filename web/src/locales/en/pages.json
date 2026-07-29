@@ -1882,7 +1882,7 @@
       "reviewingUpstream": "Reviewing upstream attempt {n}",
       "reviewingUpstreamFallback": "Snapshot miss; showing run artifact store",
       "upstreamContext": "Upstream context",
-      "upstreamEnlarge": "Open enlarged preview",
+      "upstreamEnlarge": "Enlarge upstream context",
       "upstreamEnlargeHint": " — In-app modal with a larger viewport than the ~40vh inline area; closing returns to approval without changing the review target or form.",
       "upstreamReadonlyFooter": "Read-only reference · does not change the approval target",
       "upstreamLoadFailed": "Failed to load upstream context: {error}",

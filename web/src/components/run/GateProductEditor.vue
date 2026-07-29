@@ -43,6 +43,11 @@ const props = withDefaults(
      * Used by page.html human_gate Issue feedback; parent forwards `pick`.
      */
     inspectable?: boolean
+    /**
+     * Desktop: allow HTML main-product enlarge modal (inline/fillParent included).
+     * Mobile approval keeps false so enlarge stays desktop-only.
+     */
+    enlargeable?: boolean
   }>(),
   {
     fitContent: false,
@@ -53,6 +58,7 @@ const props = withDefaults(
     contentLoading: false,
     loadError: null,
     inspectable: false,
+    enlargeable: true,
   },
 )
 
@@ -736,6 +742,8 @@ defineExpose({
             :max-content-height-vh="fillParent ? undefined : maxContentHeightVh"
             :content-height-offset-px="contentHeightOffsetPx"
             :inspectable="inspectable"
+            :enlargeable="enlargeable"
+            :modal-title="activeProduct?.name || ''"
             @pick="emit('pick', $event)"
           />
         </template>

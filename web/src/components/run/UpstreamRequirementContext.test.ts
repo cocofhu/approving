@@ -150,7 +150,10 @@ describe('UpstreamRequirementContext', () => {
     expect(root.exists()).toBe(true)
     expect(wrapper.find('[data-testid="upstream-enlarge"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="upstream-enlarge"]').attributes('title')).toBe(
-      '窗口放大查看',
+      '放大上游上下文',
+    )
+    expect(wrapper.find('[data-testid="upstream-enlarge"]').text()).toContain(
+      '放大上游上下文',
     )
     expect(wrapper.find('[data-testid="upstream-context-body"]').exists()).toBe(false)
     expect(apiMocks.artifactContent).not.toHaveBeenCalled()
@@ -174,9 +177,14 @@ describe('UpstreamRequirementContext', () => {
     await flushPromises()
 
     expect(wrapper.find('[data-testid="upstream-enlarge-modal"]').exists()).toBe(true)
+    // Modal title stays 「上游上下文」; only the trigger button uses the new enlarge label.
+    expect(wrapper.find('[data-testid="upstream-enlarge-modal"]').text()).toContain('上游上下文')
     expect(wrapper.find('[data-testid="upstream-context-body"]').exists()).toBe(false)
     expect(apiMocks.artifactContent).toHaveBeenCalledWith('a-req')
     expect(wrapper.find('[data-testid="upstream-modal-callout"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="upstream-modal-callout"]').text()).toContain(
+      '放大上游上下文',
+    )
     expect(wrapper.find('[data-testid="upstream-modal-readonly-footer"]').text()).toContain(
       '只读对照',
     )

@@ -61,4 +61,18 @@ describe('AppModal', () => {
     expect(wrapper.emitted('close')).toHaveLength(1)
     wrapper.unmount()
   })
+
+  it('does not emit close on Escape by default', async () => {
+    const wrapper = mountModal({ open: true })
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(wrapper.emitted('close')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('emits close on Escape when closeOnEsc is true', async () => {
+    const wrapper = mountModal({ open: true, closeOnEsc: true })
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    wrapper.unmount()
+  })
 })
