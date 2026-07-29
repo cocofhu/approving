@@ -14,6 +14,7 @@ import AnnotationChip from './AnnotationChip.vue'
  * - review: ClarifyChat chips + attachments + send +「确认并流转」
  * - gate: local composer with the same review semantics —「发送」+「确认并流转」
  *   (no 打回修改 / 通过并流转). Send → GateReactRevise; confirm → ResumeGate(approve/pass).
+ *   Cold session (coldSession=true): no ReAct/hot hints; input/send unmounted; confirm only.
  */
 const props = withDefaults(
   defineProps<{
@@ -31,7 +32,7 @@ const props = withDefaults(
     /** Gate: send/revise in flight. */
     rejecting?: boolean
     rejectError?: string | null
-    /** Gate: cold-session notice (send degraded; confirm remains). */
+    /** Gate: cold session — hide in-place edit UI; confirm remains. */
     coldSession?: boolean
     textOnly?: boolean
     /** Gate: disable confirm (e.g. open PreviewIssues). */
@@ -144,16 +145,14 @@ const showGateCancel = computed(
 const gateQueued = computed(() => props.queued ?? [])
 
 /**
- * Footer hint must follow open-issue / cold-session state:
+ * Footer hint (hot path only — cold path unmounts input/send and omits this hint):
  * - rejectAllowEmpty (n_open≥1): open issues already recorded; draft optional for send
  * - canReject (hot send): normal draft threshold
- * - coldSession: send degraded — confirm only
- * - else (confirm-only): submit feedback before send
+ * - else (confirm-only hot): submit feedback before send
  */
 const gateFooterHint = computed(() => {
   if (props.rejectAllowEmpty) return t('pages.reviewComposer.openIssuesSendHint')
   if (props.canReject) return t('pages.reviewComposer.thresholdHint')
-  if (props.coldSession) return t('pages.reviewComposer.coldHint')
   return t('pages.gateApproval.helpReviseDetailNoIssuesNoForm')
 })
 
@@ -212,40 +211,38 @@ function onConfirm() {
     data-testid="review-composer-gate"
     data-review-composer
   >
-    <div
-      v-if="coldSession"
-      class="shrink-0 border-b border-line bg-warn/10 px-3 py-2 text-[11.5px] leading-relaxed text-warn"
-      data-testid="review-composer-cold-note"
-    >
-      {{ t('pages.reviewComposer.coldNote') }}
-    </div>
     <div class="min-h-0 flex-1 overflow-y-auto px-3 py-2 text-[12px] text-txt3">
       <slot name="gate-body">
-        {{ t('pages.reviewComposer.gateHint') }}
+        <template v-if="!coldSession">
+          {{ t('pages.reviewComposer.gateHint') }}
+        </template>
       </slot>
     </div>
     <div class="shrink-0 border-t border-line p-3" data-testid="review-composer-actions">
-      <div v-if="annotations.length" class="mb-2 flex flex-wrap gap-1.5">
-        <AnnotationChip
-          v-for="(a, ai) in annotations"
-          :key="ai"
-          :ann="a"
-          removable
-          test-id="review-annotation-chip"
-          @remove="removeAnnotation(ai)"
+      <!-- Hot path: in-place edit input + send. Cold: unmount entirely (no disabled hint). -->
+      <template v-if="!coldSession">
+        <div v-if="annotations.length" class="mb-2 flex flex-wrap gap-1.5">
+          <AnnotationChip
+            v-for="(a, ai) in annotations"
+            :key="ai"
+            :ann="a"
+            removable
+            test-id="review-annotation-chip"
+            @remove="removeAnnotation(ai)"
+          />
+        </div>
+        <ParagraphInput
+          v-model:text="draft"
+          v-model:images="attachments"
+          :text-only="textOnly"
+          :disabled="rejecting || !canReject"
+          :placeholder="t('pages.gateApproval.reactRevise.placeholder')"
         />
-      </div>
-      <ParagraphInput
-        v-model:text="draft"
-        v-model:images="attachments"
-        :text-only="textOnly"
-        :disabled="rejecting || !canReject"
-        :placeholder="t('pages.gateApproval.reactRevise.placeholder')"
-      />
-      <div v-if="rejectError" class="mt-1.5 text-[11px] text-err">{{ rejectError }}</div>
+        <div v-if="rejectError" class="mt-1.5 text-[11px] text-err">{{ rejectError }}</div>
+      </template>
       <div class="mt-2 flex flex-wrap gap-2">
         <button
-          v-if="canReject"
+          v-if="!coldSession && canReject"
           type="button"
           class="inline-flex flex-1 items-center justify-center gap-1.5 bg-accent/15 px-3 py-2 text-sm font-medium text-accent-2 transition hover:bg-accent/25 disabled:cursor-not-allowed disabled:opacity-50"
           data-testid="review-composer-send"
@@ -268,7 +265,7 @@ function onConfirm() {
           {{ confirmButtonLabel }}
         </button>
         <button
-          v-if="showGateCancel"
+          v-if="!coldSession && showGateCancel"
           type="button"
           class="inline-flex items-center justify-center gap-1.5 border border-line bg-elevated px-3 py-2 text-sm font-medium text-txt2"
           data-testid="gate-react-cancel"
@@ -278,32 +275,34 @@ function onConfirm() {
           Cancel
         </button>
       </div>
-      <div
-        v-if="gateQueued.length"
-        class="mt-2 rounded border border-line bg-base/40 px-2 py-1.5"
-        data-testid="gate-react-queue"
-      >
-        <div class="mb-1 text-[11px] text-txt3">
-          {{ t('pages.agentChatTester.queue', { n: gateQueued.length }) }}
-        </div>
+      <template v-if="!coldSession">
         <div
-          v-for="(q, qi) in gateQueued"
-          :key="qi"
-          class="truncate text-[12px] text-txt2"
+          v-if="gateQueued.length"
+          class="mt-2 rounded border border-line bg-base/40 px-2 py-1.5"
+          data-testid="gate-react-queue"
         >
-          {{ qi + 1 }}. {{ q.text }}
+          <div class="mb-1 text-[11px] text-txt3">
+            {{ t('pages.agentChatTester.queue', { n: gateQueued.length }) }}
+          </div>
+          <div
+            v-for="(q, qi) in gateQueued"
+            :key="qi"
+            class="truncate text-[12px] text-txt2"
+          >
+            {{ qi + 1 }}. {{ q.text }}
+          </div>
         </div>
-      </div>
-      <GateReactStreamPanel
-        :thinking="thinking"
-        :stream-text="streamText"
-        :stream-thought="streamThought"
-        :interrupted="interrupted"
-        :completed-at="streamCompletedAt"
-      />
-      <p class="mt-2 text-[11px] leading-relaxed text-txt3" data-testid="review-composer-footer-hint">
-        {{ gateFooterHint }}
-      </p>
+        <GateReactStreamPanel
+          :thinking="thinking"
+          :stream-text="streamText"
+          :stream-thought="streamThought"
+          :interrupted="interrupted"
+          :completed-at="streamCompletedAt"
+        />
+        <p class="mt-2 text-[11px] leading-relaxed text-txt3" data-testid="review-composer-footer-hint">
+          {{ gateFooterHint }}
+        </p>
+      </template>
     </div>
   </div>
 </template>
