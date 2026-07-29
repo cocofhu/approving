@@ -932,6 +932,65 @@ describe('ClarifyChat', () => {
       wrapper.unmount()
     })
 
+    // g2.1: revise failure body must not look like success (live stream + history).
+    it('revise failure text + interrupted turn_done does not show 已完成/Done', async () => {
+      const failText = '(复审修改失败:acp chat idle timeout after 10m0s)'
+      const wrapper = mountChat({ draft: '请复审', reviewMode: true })
+      await clickSend(wrapper)
+      const vm = wrapper.vm as unknown as {
+        applyReviewFrame: (f: Record<string, unknown>) => void
+        applyAcpEvents: (e: { kind: string; text: string }[], nodeId?: string) => void
+      }
+      vm.applyReviewFrame({
+        event: 'turn_begin',
+        nodeId: 'react-1',
+        item: { text: '请复审' },
+      })
+      vm.applyAcpEvents(
+        [
+          { kind: 'thought', text: '半截思考' },
+          { kind: 'message', text: failText },
+        ],
+        'react-1',
+      )
+      vm.applyReviewFrame({ event: 'turn_done', nodeId: 'react-1', interrupted: true })
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-agent-message"]').text()).toContain('复审修改失败')
+      expect(wrapper.find('[data-testid="clarify-turn-completed"]').exists()).toBe(false)
+      expect(wrapper.text()).not.toMatch(/\bDone\b/)
+      expect(wrapper.find('[data-testid="clarify-interrupted"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="thought-summary-state"]').attributes('data-state')).toBe(
+        'interrupted',
+      )
+      expect(wrapper.find('[data-testid="thought-summary-state"]').text()).toContain('已中断')
+      expect(wrapper.find('[data-testid="thought-summary-state"]').text()).not.toContain('已完成')
+      wrapper.unmount()
+    })
+
+    it('historical Interrupted failure message does not show 已完成/Done', () => {
+      const wrapper = mountChat({
+        reviewMode: true,
+        turns: [
+          {
+            role: 'agent',
+            text: '(复审修改失败:acp chat idle timeout after 10m0s)',
+            at: new Date().toISOString(),
+            interrupted: true,
+          },
+        ],
+      })
+      expect(wrapper.text()).toContain('复审修改失败')
+      expect(wrapper.find('[data-testid="clarify-turn-completed"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="clarify-interrupted"]').exists()).toBe(true)
+      expect(wrapper.text()).not.toMatch(/\bDone\b/)
+      const summary = wrapper.find('[data-testid="thought-summary-state"]')
+      if (summary.exists()) {
+        expect(summary.attributes('data-state')).toBe('interrupted')
+        expect(summary.text()).not.toContain('已完成')
+      }
+      wrapper.unmount()
+    })
+
     it('tool_call alone keeps 思考中… placeholder (no tool UI, no air bubble)', async () => {
       const wrapper = mountChat({ draft: '请复审' })
       await clickSend(wrapper)

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -318,7 +319,8 @@ func TestStructuredRenderForArtifactCoversKnownNames(t *testing.T) {
 }
 
 // TestReviewReplyFailureDoesNotSyncOutputs: ReviseInPlace error must not refresh
-// outputs when the turn skipped writing a new product.
+// outputs when the turn skipped writing a new product. Failure is surfaced as
+// Interrupted=true + turn_done{interrupted:true} so UI never shows Done/已完成.
 func TestReviewReplyFailureDoesNotSyncOutputs(t *testing.T) {
 	db, err := database.OpenSQLiteTest(t.TempDir() + "/review-fail.db")
 	if err != nil {
@@ -363,11 +365,68 @@ func TestReviewReplyFailureDoesNotSyncOutputs(t *testing.T) {
 		t.Fatalf("expected initial demo page in outputs, got %q", before)
 	}
 
+	ch, unsub := eng.Broker().Subscribe(run.ID)
+	defer unsub()
+	gotTurnDone := make(chan bool, 1)
+	go func() {
+		deadline := time.After(5 * time.Second)
+		for {
+			select {
+			case <-deadline:
+				gotTurnDone <- false
+				return
+			case raw, ok := <-ch:
+				if !ok {
+					gotTurnDone <- false
+					return
+				}
+				var frame map[string]any
+				if json.Unmarshal(raw, &frame) != nil {
+					continue
+				}
+				if frame["type"] != "review" || frame["event"] != "turn_done" {
+					continue
+				}
+				interrupted, _ := frame["interrupted"].(bool)
+				gotTurnDone <- interrupted
+				return
+			}
+		}
+	}()
+
 	if err := eng.ReactReply(run.ID, "page", "改", nil, nil, false); err != nil {
 		t.Fatalf("revise reply should not fail HTTP: %v", err)
 	}
 	if err := eng.waitReviewReadyForTest(run.ID, "page", 5*time.Second); err != nil {
 		t.Fatalf("wait revise: %v", err)
+	}
+
+	select {
+	case interrupted := <-gotTurnDone:
+		if !interrupted {
+			t.Fatal("expected turn_done with interrupted:true on revise failure")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for turn_done on revise failure")
+	}
+
+	var conv models.ReactConversation
+	if err := db.Where("run_id = ? AND node_id = ?", run.ID, "page").
+		Order("id desc").First(&conv).Error; err != nil {
+		t.Fatalf("load conversation: %v", err)
+	}
+	var sawFailedAgent bool
+	for _, m := range conv.Messages {
+		if m.Role != "agent" || !strings.Contains(m.Text, "就地修改失败") {
+			continue
+		}
+		sawFailedAgent = true
+		if !m.Interrupted {
+			t.Fatalf("failed revise agent message must be Interrupted=true, got %+v", m)
+		}
+	}
+	if !sawFailedAgent {
+		t.Fatalf("expected agent failure message in conversation, got %+v", conv.Messages)
 	}
 
 	var sr models.StateRun
@@ -377,5 +436,10 @@ func TestReviewReplyFailureDoesNotSyncOutputs(t *testing.T) {
 	after, _ := sr.Outputs["page"].(string)
 	if after != before {
 		t.Fatalf("outputs.page changed on revise failure: before=%q after=%q", before, after)
+	}
+
+	// Session stays parked/retryable: enqueue again must still succeed.
+	if err := eng.ReactReply(run.ID, "page", "再试", nil, nil, false); err != nil {
+		t.Fatalf("retry after revise failure should still enqueue: %v", err)
 	}
 }

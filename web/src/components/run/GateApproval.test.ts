@@ -3021,6 +3021,43 @@ describe('GateApproval mobileFillRemaining layout', () => {
     wrapper.unmount()
   })
 
+  // g2.1: revise failure body + interrupted must never show Done/已完成.
+  it('revise failure text + interrupted turn_done does not show 已完成/Done', async () => {
+    breakpointMocks.isMobile.value = false
+    const pageHtml = '<!doctype html><html><body><h1>gate fail</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      mobileFillRemaining: false,
+      gate: { ...gate, reactSessionAlive: true, reactUpstreamNodeId: 'visual' },
+      run,
+    })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.applyReviewFrame?.({
+      event: 'turn_begin',
+      nodeId: 'visual',
+    })
+    vm.applyAcpEvents?.([
+      { kind: 'thought', text: '半截思考' },
+      {
+        kind: 'message',
+        text: '(复审修改失败:acp chat idle timeout after 10m0s)',
+      },
+    ])
+    vm.applyReviewFrame?.({ event: 'turn_done', nodeId: 'visual', interrupted: true })
+    await flushPromises()
+    expect(wrapper.text()).toContain('复审修改失败')
+    expect(wrapper.find('[data-testid="gate-turn-completed"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toMatch(/\bDone\b/)
+    const summary = wrapper.find('[data-testid="thought-summary-state"]')
+    expect(summary.exists()).toBe(true)
+    expect(summary.attributes('data-state')).toBe('interrupted')
+    expect(summary.text()).toContain('已中断')
+    expect(summary.text()).not.toContain('已完成')
+    wrapper.unmount()
+  })
+
   it('keeps Inbox-style path on 60vh content-fit when mobileFillRemaining is off', async () => {
     // Mobile content-fit path unchanged (no desktop flex-1 / fillParent).
     const pageHtml = '<!doctype html><html><body><h1>Inbox</h1></body></html>'
