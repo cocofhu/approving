@@ -1,11 +1,20 @@
 // @vitest-environment happy-dom
 import { createI18n } from 'vue-i18n'
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
+import { i18n } from '@/lib/i18n'
+import { loadLocaleMessages } from '@/lib/loadLocaleMessages'
 import type { ClarifyTurn, ReactAnnotation } from '@/lib/types'
 import ClarifyChat from './ClarifyChat.vue'
+
+beforeAll(async () => {
+  // relTime() reads global i18n; load zh-CN so completion footer shows「刚刚」
+  const zh = await loadLocaleMessages('zh-CN')
+  i18n.global.setLocaleMessage('zh-CN', zh)
+  i18n.global.locale.value = 'zh-CN'
+})
 
 function mountChat(opts: {
   turns?: ClarifyTurn[]
@@ -16,6 +25,7 @@ function mountChat(opts: {
   confirmError?: string | null
   annotateEnabled?: boolean
   annotations?: ReactAnnotation[]
+  attachments?: { data: string; mimeType: string }[]
 } = {}) {
   const i18n = createI18n({
     legacy: false,
@@ -35,10 +45,26 @@ function mountChat(opts: {
       confirmError: opts.confirmError ?? null,
       annotateEnabled: opts.annotateEnabled ?? false,
       annotations: opts.annotations ?? [],
+      attachments: opts.attachments ?? [],
     },
     global: {
       plugins: [i18n],
-      stubs: { Icon: true, ClarifyDemoFrame: true },
+      stubs: {
+        Icon: true,
+        ClarifyDemoFrame: true,
+        AppModal: {
+          props: ['open', 'title', 'width'],
+          emits: ['close'],
+          template: `
+            <div v-if="open" data-testid="clarify-image-preview-modal">
+              <div data-testid="clarify-image-preview-title">{{ title }}</div>
+              <button type="button" data-testid="clarify-image-preview-close" @click="$emit('close')">×</button>
+              <button type="button" data-testid="clarify-image-preview-backdrop" @click="$emit('close')">backdrop</button>
+              <slot />
+            </div>
+          `,
+        },
+      },
     },
   })
 }
@@ -702,6 +728,10 @@ describe('ClarifyChat', () => {
       expect(thought.exists()).toBe(true)
       expect(thought.attributes('open')).toBeDefined()
       expect(thought.text()).toContain('先核对边界与分轨')
+      expect(wrapper.find('[data-testid="thought-summary-state"]').attributes('data-state')).toBe(
+        'streaming',
+      )
+      expect(wrapper.find('[data-testid="thought-summary-state"]').text()).toContain('生成中')
       expect(wrapper.find('[data-testid="clarify-busy-status"]').text()).toContain('思考中')
       expect(wrapper.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(false)
 
@@ -717,6 +747,11 @@ describe('ClarifyChat', () => {
       expect(wrapper.find('[data-testid="clarify-thought"]').text()).toContain('先核对边界与分轨')
       // Demo: collapse thought once message streaming starts.
       expect(wrapper.find('[data-testid="clarify-thought"]').attributes('open')).toBeUndefined()
+      // Message outputting — summary stays generating (not done).
+      expect(wrapper.find('[data-testid="thought-summary-state"]').attributes('data-state')).toBe(
+        'streaming',
+      )
+      expect(wrapper.find('[data-testid="thought-summary-state"]').text()).toContain('生成中')
       expect(wrapper.find('[data-testid="clarify-agent-message"]').text()).toContain('已核对完成')
       expect(wrapper.find('[data-testid="clarify-busy-status"]').text()).toContain('输出中')
       expect(wrapper.find('[data-testid="clarify-stream-caret"]').exists()).toBe(true)
@@ -751,8 +786,54 @@ describe('ClarifyChat', () => {
       expect(wrapper.find('[data-testid="clarify-stream-caret"]').exists()).toBe(false)
       expect(wrapper.find('[data-testid="clarify-thought"]').text()).toContain('思考内容')
       expect(wrapper.find('[data-testid="clarify-agent-message"]').text()).toContain('正文内容')
-      expect(wrapper.find('[data-testid="clarify-turn-completed"]').exists()).toBe(true)
-      expect(wrapper.find('[data-testid="clarify-turn-completed"]').text()).toContain('已完成')
+      const completed = wrapper.find('[data-testid="clarify-turn-completed"]')
+      expect(completed.exists()).toBe(true)
+      expect(completed.text()).toContain('已完成')
+      // keep_footer_hide_bottom: footer keeps one relTime; completed agent has no bottom time row
+      expect(completed.text()).toContain('刚刚')
+      expect(completed.text().match(/刚刚/g)?.length).toBe(1)
+      // human turn still has bottom time; completed agent turn must not
+      expect(wrapper.findAll('[data-testid="clarify-turn-bottom-time"]').length).toBe(1)
+      expect(wrapper.find('[data-testid="thought-summary-state"]').attributes('data-state')).toBe(
+        'done',
+      )
+      expect(wrapper.find('[data-testid="thought-summary-state"]').text()).toContain('已完成')
+      wrapper.unmount()
+    })
+
+    it('historical completed turn keeps single relTime channel (no bottom time)', () => {
+      const wrapper = mountChat({
+        turns: [{ role: 'agent', text: '历史已完成正文', at: new Date().toISOString() }],
+      })
+      const completed = wrapper.find('[data-testid="clarify-turn-completed"]')
+      expect(completed.exists()).toBe(true)
+      expect(completed.text()).toContain('已完成')
+      expect(completed.text()).toContain('刚刚')
+      expect(completed.text().match(/刚刚/g)?.length).toBe(1)
+      expect(wrapper.find('[data-testid="clarify-turn-bottom-time"]').exists()).toBe(false)
+      expect(wrapper.text().match(/刚刚/g)?.length).toBe(1)
+      wrapper.unmount()
+    })
+
+    it('streaming agent keeps bottom time without 已完成 footnote', async () => {
+      const wrapper = mountChat({ draft: '请复审' })
+      await clickSend(wrapper)
+      const vm = wrapper.vm as unknown as {
+        applyReviewFrame: (f: Record<string, unknown>) => void
+        applyAcpEvents: (e: { kind: string; text: string }[], nodeId?: string) => void
+      }
+      vm.applyReviewFrame({
+        event: 'turn_begin',
+        nodeId: 'react-1',
+        item: { text: '请复审' },
+      })
+      vm.applyAcpEvents([{ kind: 'message', text: '流式中正文' }], 'react-1')
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="clarify-turn-completed"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="clarify-stream-caret"]').exists()).toBe(true)
+      // human + streaming agent both keep bottom time channel
+      expect(wrapper.findAll('[data-testid="clarify-turn-bottom-time"]').length).toBe(2)
       wrapper.unmount()
     })
 
@@ -768,10 +849,24 @@ describe('ClarifyChat', () => {
         nodeId: 'react-1',
         item: { text: '请复审' },
       })
-      vm.applyAcpEvents([{ kind: 'message', text: '半截正文' }], 'react-1')
+      vm.applyAcpEvents(
+        [
+          { kind: 'thought', text: '半截思考' },
+          { kind: 'message', text: '半截正文' },
+        ],
+        'react-1',
+      )
       vm.applyReviewFrame({ event: 'turn_done', nodeId: 'react-1', interrupted: true })
       await flushPromises()
       expect(wrapper.find('[data-testid="clarify-turn-completed"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="clarify-interrupted"]').exists()).toBe(true)
+      // interrupted is non-completed: keep bottom time (human + interrupted agent)
+      expect(wrapper.findAll('[data-testid="clarify-turn-bottom-time"]').length).toBe(2)
+      expect(wrapper.find('[data-testid="thought-summary-state"]').attributes('data-state')).toBe(
+        'interrupted',
+      )
+      expect(wrapper.find('[data-testid="thought-summary-state"]').text()).toContain('已中断')
+      expect(wrapper.find('[data-testid="thought-summary-state"]').text()).not.toContain('已完成')
       wrapper.unmount()
     })
 
@@ -795,6 +890,116 @@ describe('ClarifyChat', () => {
       expect(wrapper.find('[data-testid="clarify-busy-placeholder"]').text()).toContain('思考中')
       expect(wrapper.text()).not.toMatch(/正在调用工具|读文件/)
       expect(wrapper.find('[data-testid="clarify-agent-message"]').exists()).toBe(false)
+      wrapper.unmount()
+    })
+  })
+
+  describe('human history image AppModal preview (g4)', () => {
+    const PNG_A = 'AAAApreviewA'
+    const PNG_B = 'BBBBpreviewB'
+
+    it('opens AppModal with title fallback「图片」and closes via × / backdrop (g4.1)', async () => {
+      const wrapper = mountChat({
+        turns: [
+          {
+            role: 'human',
+            text: '修改 你到底看了项目吗',
+            at: '2026-07-28T00:00:00Z',
+            images: [{ data: PNG_A, mimeType: 'image/png' }],
+          },
+        ],
+      })
+      expect(wrapper.find('[data-testid="clarify-image-preview-modal"]').exists()).toBe(false)
+      const thumb = wrapper.find('[data-testid="clarify-history-image-thumb"]')
+      expect(thumb.exists()).toBe(true)
+      expect(thumb.classes().join(' ')).toMatch(/hover:border-accent/)
+      expect(thumb.text()).toContain('点击放大')
+      await thumb.trigger('click')
+      await flushPromises()
+
+      const modal = wrapper.find('[data-testid="clarify-image-preview-modal"]')
+      expect(modal.exists()).toBe(true)
+      expect(wrapper.find('[data-testid="clarify-image-preview-title"]').text()).toBe('图片预览 · 图片')
+      const previewImg = wrapper.find('[data-testid="clarify-image-preview-img"]')
+      expect(previewImg.exists()).toBe(true)
+      expect(previewImg.attributes('src')).toBe(`data:image/png;base64,${PNG_A}`)
+
+      await wrapper.find('[data-testid="clarify-image-preview-close"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-image-preview-modal"]').exists()).toBe(false)
+
+      await thumb.trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-image-preview-modal"]').exists()).toBe(true)
+      await wrapper.find('[data-testid="clarify-image-preview-backdrop"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-image-preview-modal"]').exists()).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('multi-image opens only the clicked index label「图片 N」(g4.2)', async () => {
+      const wrapper = mountChat({
+        turns: [
+          {
+            role: 'human',
+            text: '两张附图',
+            at: '2026-07-28T00:00:00Z',
+            images: [
+              { data: PNG_A, mimeType: 'image/png' },
+              { data: PNG_B, mimeType: 'image/png' },
+            ],
+          },
+        ],
+      })
+      const thumbs = wrapper.findAll('[data-testid="clarify-history-image-thumb"]')
+      expect(thumbs).toHaveLength(2)
+      await thumbs[1].trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-image-preview-title"]').text()).toBe('图片预览 · 图片 2')
+      expect(wrapper.find('[data-testid="clarify-image-preview-img"]').attributes('src')).toBe(
+        `data:image/png;base64,${PNG_B}`,
+      )
+      expect(wrapper.find('[data-testid="clarify-image-preview-prev"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="clarify-image-preview-next"]').exists()).toBe(false)
+
+      await wrapper.find('[data-testid="clarify-image-preview-close"]').trigger('click')
+      await flushPromises()
+      await thumbs[0].trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-image-preview-title"]').text()).toBe('图片预览 · 图片 1')
+      expect(wrapper.find('[data-testid="clarify-image-preview-img"]').attributes('src')).toBe(
+        `data:image/png;base64,${PNG_A}`,
+      )
+      wrapper.unmount()
+    })
+
+    it('agent history thumbs and composer drafts do not open preview (g4.2)', async () => {
+      const wrapper = mountChat({
+        turns: [
+          {
+            role: 'agent',
+            text: '请附图',
+            at: '2026-07-28T00:00:00Z',
+            images: [{ data: PNG_A, mimeType: 'image/png' }],
+          },
+        ],
+        attachments: [{ data: PNG_B, mimeType: 'image/png' }],
+      })
+      expect(wrapper.find('[data-testid="clarify-history-image-thumb"]').exists()).toBe(false)
+      const agentThumb = wrapper.find('[data-testid="clarify-agent-image-thumb"]')
+      expect(agentThumb.exists()).toBe(true)
+      await agentThumb.trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-image-preview-modal"]').exists()).toBe(false)
+
+      // composer draft thumbs have no preview click handler
+      const draftImgs = wrapper.findAll('img').filter((img) =>
+        (img.attributes('src') || '').includes(PNG_B),
+      )
+      expect(draftImgs.length).toBeGreaterThan(0)
+      await draftImgs[0].trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-image-preview-modal"]').exists()).toBe(false)
       wrapper.unmount()
     })
   })

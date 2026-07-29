@@ -423,20 +423,20 @@ const openPreviewIssueCount = computed(
   () => previewIssues.value.filter((i) => i.status === 'open').length,
 )
 
+/**
+ * Standard review UI only exposes the positive exit (approve/pass → 确认并流转).
+ * Config-layer fail/revise actions remain on the gate DTO for silent edge compat
+ * but are never rendered as dual buttons.
+ */
 const visibleActions = computed(() => {
-  if (!usesPreviewIssues.value) return props.gate.actions
-  const n = openPreviewIssueCount.value
-  if (n === 0) {
-    // No open issues → only pass/approve (reject fully unmounted)
-    return props.gate.actions.filter((a) => PASS_ACTION_IDS.has(a.id))
-  }
-  // Has open issues → only reject with count (approve fully unmounted)
-  return props.gate.actions
-    .filter((a) => FAIL_ACTION_IDS.has(a.id))
-    .map((a) => ({ ...a, label: t('pages.gateApproval.failWithCount', { n }) }))
+  const positive = props.gate.actions.filter((a) => PASS_ACTION_IDS.has(a.id))
+  return positive.map((a) => ({
+    ...a,
+    label: t('pages.clarify.confirmFlow'),
+  }))
 })
 
-const footerActions = computed(() => (usesPreviewIssues.value ? visibleActions.value : props.gate.actions))
+const footerActions = computed(() => visibleActions.value)
 
 /** True when the gate exposes at least one form field (comment channel). */
 const hasFormFields = computed(() => (props.gate.form?.length ?? 0) > 0)
@@ -467,27 +467,25 @@ const helpReviseDetailNoIssuesText = computed(() =>
     : t('pages.gateApproval.helpReviseDetailNoIssues'),
 )
 
-/** Hot reject label: keep「打回」verb + open count (cold footer still uses failWithCount). */
-const composerRejectLabel = computed(() => {
-  const n = openPreviewIssueCount.value
-  if (n >= 1) return t('pages.gateApproval.rejectWithCount', { n })
-  return t('pages.reviewComposer.reject')
-})
+/** Hot send label (review semantics — no「打回」verb). */
+const composerRejectLabel = computed(() => t('pages.reviewComposer.send'))
 
 /**
- * Shared hot-path visibility (cold footer uses visibleActions).
- * PreviewIssues: n_open===0 → pass only; n_open≥1 → reject only.
- * Non-preview: both actions remain available.
+ * Shared hot-path visibility (cold footer uses positive-only visibleActions).
+ * Review semantics: always offer send + confirm when hot; open issues disable confirm.
+ * send visibility uses reactSessionAlive directly (canReactRevise is defined later).
  */
-const showHotPass = computed(
-  () => !usesPreviewIssues.value || openPreviewIssueCount.value === 0,
-)
+const showHotPass = computed(() => props.gate.actions.some((a) => PASS_ACTION_IDS.has(a.id)))
 const showHotReject = computed(
-  () => !usesPreviewIssues.value || openPreviewIssueCount.value >= 1,
+  () => !!props.gate.reactSessionAlive && resolved.value == null && !!props.run?.id,
 )
-/** PreviewIssues with open issues: reject without extra composer draft. */
+/** PreviewIssues with open issues: send without extra composer draft. */
 const hotRejectAllowEmpty = computed(
   () => usesPreviewIssues.value && openPreviewIssueCount.value >= 1,
+)
+/** Cold session: send unavailable — show note, confirm only. */
+const isColdSession = computed(
+  () => props.gate.reactSessionAlive === false && resolved.value == null,
 )
 
 const useFillLayout = computed(() => !!props.fillPreview)
@@ -1244,21 +1242,18 @@ async function syncHotRejectHistory(anns: ReactAnnotation[]): Promise<boolean> {
 }
 
 /**
- * Hot preview path: sync PreviewIssue history then gateReactRevise.
- * When n_open≥1, allow reject without extra draft (same as cold F5).
- * Empty reject with n_open===0 is blocked (button unmounted). On revise failure
- * after history write, keep the draft and show a clear retry hint.
+ * Hot preview path: sync PreviewIssue history then gateReactRevise (send).
+ * When n_open≥1, allow send without extra draft. Empty send with n_open===0
+ * still needs payload. On revise failure after history write, keep the draft.
  */
 async function sendHotReject() {
   if (!props.run?.id || reactSending.value) return
-  // Defense in depth: PreviewIssues n_open===0 must never revise (UI also unmounts reject).
-  if (usesPreviewIssues.value && openPreviewIssueCount.value === 0) return
   const hasPayload =
     reactText.value.trim().length > 0 ||
     reactImages.value.length > 0 ||
     reactAnnotations.value.length > 0 ||
     !!pickedElementImage.value?.data
-  // n_open≥1 may reject without extra draft; non-preview still needs payload.
+  // n_open≥1 may send without extra draft; otherwise need payload.
   if (!hasPayload && openPreviewIssueCount.value === 0) return
   reactSending.value = true
   reactError.value = null
@@ -1326,17 +1321,24 @@ const useReviewShellLayout = computed(
     !useMobileFillRemaining.value,
 )
 
-const passAction = computed(() => footerActions.value.find((a) => POSITIVE_ACTION_IDS.has(a.id)))
+const passAction = computed(() => {
+  // Prefer configured positive action; fall back to first approve/pass id for confirm.
+  return (
+    props.gate.actions.find((a) => POSITIVE_ACTION_IDS.has(a.id)) ||
+    footerActions.value.find((a) => POSITIVE_ACTION_IDS.has(a.id))
+  )
+})
 
-/** Align with visibleActions: no Pass when approve is filtered out (open PreviewIssues) or proposal_select.
- * Also FR4: busy (thinking / queued) disables confirm/pass — Cancel first or wait ready. */
+/** Align with review semantics: confirm disabled when open PreviewIssues or busy.
+ * Also FR4: busy (thinking / queued) disables confirm — Cancel first or wait ready. */
 const composerPassDisabled = computed(
   () =>
     !passAction.value ||
     isProposalSelect.value ||
     isActionDisabled(passAction.value.id) ||
     reactThinking.value ||
-    reactQueued.value.length > 0,
+    reactQueued.value.length > 0 ||
+    (usesPreviewIssues.value && openPreviewIssueCount.value >= 1),
 )
 
 function onComposerPass() {
@@ -1504,18 +1506,20 @@ function onComposerReject() {
                 v-if="usesPreviewIssues && openPreviewIssueCount === 0"
                 class="mb-2 shrink-0 text-[11px] leading-relaxed text-txt3"
               >
-                <b class="font-medium text-txt2">{{ t('pages.gateApproval.helpApprove') }}</b>
+                <b class="font-medium text-txt2">{{ t('pages.clarify.confirmFlow') }}</b>
                 {{ t('pages.gateApproval.helpApproveDetail') }}
                 <span class="mx-1">·</span>
-                <b class="font-medium text-txt2">{{ t('pages.gateApproval.helpRevise') }}</b>
+                <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
                 {{ helpReviseDetailNoIssuesText }}
               </p>
               <p
                 v-else-if="usesPreviewIssues && openPreviewIssueCount >= 1"
                 class="mb-2 shrink-0 text-[11px] leading-relaxed text-txt3"
               >
-                <b class="font-medium text-txt2">{{ t('pages.gateApproval.helpReviseWithIssues') }}</b>
+                <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
                 {{ t('pages.gateApproval.helpReviseWithIssuesDetail') }}
+                <span class="mx-1">·</span>
+                {{ t('pages.reviewComposer.openIssuesConfirmHint') }}
               </p>
               <div
                 v-if="previewIssuesError"
@@ -1532,7 +1536,7 @@ function onComposerReject() {
                 </button>
               </div>
               <div
-                v-if="!canReactRevise && gate.reactSessionAlive === false"
+                v-if="isColdSession"
                 class="mb-2 shrink-0 border border-warn/30 bg-warn/10 px-2.5 py-2 text-[11.5px] leading-relaxed text-warn"
                 data-testid="gate-cold-session-note"
               >
@@ -1566,7 +1570,7 @@ function onComposerReject() {
                 data-testid="review-composer-gate"
               >
                 <div v-if="reactError" class="mb-1.5 text-[11px] text-err">{{ reactError }}</div>
-                <!-- page.html: 记入 next to input row; pass/reject as decision row -->
+                <!-- review semantics: 记入 + 发送 + 确认并流转 -->
                 <div class="mb-2 flex justify-end">
                   <button
                     type="button"
@@ -1580,6 +1584,17 @@ function onComposerReject() {
                 </div>
                 <div class="flex flex-wrap gap-2" data-testid="review-composer-actions">
                   <button
+                    v-if="showHotReject"
+                    type="button"
+                    class="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 bg-accent/15 px-3 text-sm font-medium text-accent-2 transition hover:bg-accent/25 disabled:cursor-not-allowed disabled:opacity-50"
+                    data-testid="review-composer-send"
+                    :disabled="reactSending || (!hotRejectAllowEmpty && !canSubmitReact)"
+                    @click="sendHotReject"
+                  >
+                    <Icon name="arrow-left" :size="14" />
+                    {{ reactSending ? t('pages.gateApproval.reactRevise.sending') : composerRejectLabel }}
+                  </button>
+                  <button
                     v-if="showHotPass"
                     type="button"
                     class="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 bg-ok/15 px-3 text-sm font-medium text-ok transition hover:bg-ok/25 disabled:cursor-not-allowed disabled:opacity-50"
@@ -1589,18 +1604,7 @@ function onComposerReject() {
                     @click="onComposerPass"
                   >
                     <Icon name="check" :size="14" />
-                    {{ t('pages.reviewComposer.pass') }}
-                  </button>
-                  <button
-                    v-if="showHotReject"
-                    type="button"
-                    class="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 bg-warn/15 px-3 text-sm font-medium text-warn transition hover:bg-warn/25 disabled:cursor-not-allowed disabled:opacity-50"
-                    data-testid="review-composer-reject"
-                    :disabled="reactSending"
-                    @click="sendHotReject"
-                  >
-                    <Icon name="arrow-left" :size="14" />
-                    {{ reactSending ? t('pages.gateApproval.reactRevise.sending') : composerRejectLabel }}
+                    {{ t('pages.clarify.confirmFlow') }}
                   </button>
                   <button
                     v-if="canReactRevise && (reactThinking || reactQueued.length)"
@@ -1637,19 +1641,29 @@ function onComposerReject() {
                   :completed-at="reactStreamCompletedAt"
                 />
               </div>
-              <div v-else class="mt-2 flex shrink-0 flex-wrap gap-3">
-                <button
-                  v-for="a in footerActions"
-                  :key="a.id"
-                  class="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-md px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50"
-                  :class="actionVariantClasses(actionVariant(a.id))"
-                  :disabled="isActionDisabled(a.id) || reactSending"
-                  :title="actionButtonTitle(a.id)"
-                  @click="onSidebarAction(a.id)"
+              <div v-else class="mt-2 flex shrink-0 flex-col gap-2">
+                <p
+                  v-if="isColdSession"
+                  class="text-[11px] leading-relaxed text-warn"
+                  data-testid="review-composer-cold-note"
                 >
-                  <Icon :name="actionIcon(a.id)" :size="14" />
-                  {{ a.label }}
-                </button>
+                  {{ t('pages.reviewComposer.coldNote') }}
+                </p>
+                <div class="flex flex-wrap gap-3">
+                  <button
+                    v-for="a in footerActions"
+                    :key="a.id"
+                    class="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-md px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50"
+                    :class="actionVariantClasses(actionVariant(a.id))"
+                    :disabled="isActionDisabled(a.id) || reactSending || (usesPreviewIssues && openPreviewIssueCount >= 1)"
+                    :title="actionButtonTitle(a.id)"
+                    data-testid="review-composer-pass"
+                    @click="onSidebarAction(a.id)"
+                  >
+                    <Icon :name="actionIcon(a.id)" :size="14" />
+                    {{ a.label }}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1796,24 +1810,26 @@ function onComposerReject() {
                 v-if="usesPreviewIssues && openPreviewIssueCount === 0"
                 class="mb-2 shrink-0 text-[11px] leading-relaxed text-txt3"
               >
-                <b class="font-medium text-txt2">{{ t('pages.gateApproval.helpApprove') }}</b>
+                <b class="font-medium text-txt2">{{ t('pages.clarify.confirmFlow') }}</b>
                 {{ t('pages.gateApproval.helpApproveDetail') }}
                 <span class="mx-1">·</span>
-                <b class="font-medium text-txt2">{{ t('pages.gateApproval.helpRevise') }}</b>
+                <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
                 {{ helpReviseDetailNoIssuesText }}
               </p>
               <p
                 v-else-if="usesPreviewIssues && openPreviewIssueCount >= 1"
                 class="mb-2 shrink-0 text-[11px] leading-relaxed text-txt3"
               >
-                <b class="font-medium text-txt2">{{ t('pages.gateApproval.helpReviseWithIssues') }}</b>
+                <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
                 {{ t('pages.gateApproval.helpReviseWithIssuesDetail') }}
+                <span class="mx-1">·</span>
+                {{ t('pages.reviewComposer.openIssuesConfirmHint') }}
               </p>
               <p v-else-if="canEditProducts" class="mb-2 shrink-0 text-[11px] leading-relaxed text-txt3">
-                <b class="font-medium text-txt2">{{ t('pages.gateApproval.helpApprove') }}</b>
+                <b class="font-medium text-txt2">{{ t('pages.clarify.confirmFlow') }}</b>
                 {{ t('pages.gateApproval.helpApproveDetail') }}
                 <span class="mx-1">·</span>
-                <b class="font-medium text-txt2">{{ t('pages.gateApproval.helpRevise') }}</b>
+                <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
                 {{ t('pages.gateApproval.helpReviseDetail') }}
               </p>
               <div
@@ -1831,7 +1847,7 @@ function onComposerReject() {
                 </button>
               </div>
               <div
-                v-if="!canReactRevise && gate.reactSessionAlive === false"
+                v-if="isColdSession"
                 class="mb-2 shrink-0 border border-warn/30 bg-warn/10 px-2.5 py-2 text-[11.5px] leading-relaxed text-warn"
                 data-testid="gate-cold-session-note"
               >
@@ -1859,7 +1875,7 @@ function onComposerReject() {
                   @issues-changed="loadPreviewIssues()"
                 />
               </div>
-              <!-- Hot unified actions (no ReviewComposer input): 记入 + pass/reject. -->
+              <!-- Hot unified actions (no ReviewComposer input): 记入 + 发送 + 确认并流转. -->
               <div
                 v-if="canReactRevise && usesPreviewIssues"
                 class="mt-2 shrink-0"
@@ -1880,6 +1896,18 @@ function onComposerReject() {
                 </div>
                 <div class="flex flex-wrap gap-2" data-testid="review-composer-actions">
                   <button
+                    v-if="showHotReject"
+                    type="button"
+                    class="inline-flex flex-1 items-center justify-center gap-1.5 bg-accent/15 px-3 py-2 text-sm font-medium text-accent-2 transition hover:bg-accent/25 disabled:cursor-not-allowed disabled:opacity-50"
+                    :class="isMobile ? 'min-h-[44px]' : ''"
+                    data-testid="review-composer-send"
+                    :disabled="reactSending || (!hotRejectAllowEmpty && !canSubmitReact)"
+                    @click="sendHotReject"
+                  >
+                    <Icon name="arrow-left" :size="14" />
+                    {{ reactSending ? t('pages.gateApproval.reactRevise.sending') : composerRejectLabel }}
+                  </button>
+                  <button
                     v-if="showHotPass"
                     type="button"
                     class="inline-flex flex-1 items-center justify-center gap-1.5 bg-ok/15 px-3 py-2 text-sm font-medium text-ok transition hover:bg-ok/25 disabled:cursor-not-allowed disabled:opacity-50"
@@ -1890,19 +1918,7 @@ function onComposerReject() {
                     @click="onComposerPass"
                   >
                     <Icon name="check" :size="14" />
-                    {{ t('pages.reviewComposer.pass') }}
-                  </button>
-                  <button
-                    v-if="showHotReject"
-                    type="button"
-                    class="inline-flex flex-1 items-center justify-center gap-1.5 bg-warn/15 px-3 py-2 text-sm font-medium text-warn transition hover:bg-warn/25 disabled:cursor-not-allowed disabled:opacity-50"
-                    :class="isMobile ? 'min-h-[44px]' : ''"
-                    data-testid="review-composer-reject"
-                    :disabled="reactSending"
-                    @click="sendHotReject"
-                  >
-                    <Icon name="arrow-left" :size="14" />
-                    {{ reactSending ? t('pages.gateApproval.reactRevise.sending') : composerRejectLabel }}
+                    {{ t('pages.clarify.confirmFlow') }}
                   </button>
                   <button
                     v-if="canReactRevise && (reactThinking || reactQueued.length)"
@@ -1940,7 +1956,7 @@ function onComposerReject() {
                   :completed-at="reactStreamCompletedAt"
                 />
               </div>
-              <!-- Non-preview hot (structured etc.): keep ReviewComposer. -->
+              <!-- Non-preview hot (structured etc.): ReviewComposer review semantics. -->
               <ReviewComposer
                 v-else-if="canReactRevise"
                 class="min-h-0 flex-1"
@@ -1955,7 +1971,7 @@ function onComposerReject() {
                 :reject-error="reactError"
                 :pass-disabled="composerPassDisabled"
                 :pass-title="passAction ? actionButtonTitle(passAction.id) : ''"
-                :pass-label="t('pages.reviewComposer.pass')"
+                :pass-label="t('pages.clarify.confirmFlow')"
                 :reject-label="composerRejectLabel"
                 :queued="reactQueued"
                 :thinking="reactThinking"
@@ -1969,24 +1985,33 @@ function onComposerReject() {
               />
               <div
                 v-else
-                class="mt-2 flex shrink-0 flex-wrap gap-2"
-                :class="isMobile ? 'gap-3' : ''"
+                class="mt-2 flex shrink-0 flex-col gap-2"
               >
-                <button
-                  v-for="a in footerActions"
-                  :key="a.id"
-                  class="inline-flex items-center justify-center gap-1.5 rounded-md px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50"
-                  :class="[
-                    actionVariantClasses(actionVariant(a.id)),
-                    isMobile ? 'min-h-[44px] flex-1' : 'py-2',
-                  ]"
-                  :disabled="isActionDisabled(a.id) || reactSending"
-                  :title="actionButtonTitle(a.id)"
-                  @click="onSidebarAction(a.id)"
+                <p
+                  v-if="isColdSession"
+                  class="text-[11px] leading-relaxed text-warn"
+                  data-testid="review-composer-cold-note"
                 >
-                  <Icon :name="actionIcon(a.id)" :size="14" />
-                  {{ a.label }}
-                </button>
+                  {{ t('pages.reviewComposer.coldNote') }}
+                </p>
+                <div class="flex flex-wrap gap-2" :class="isMobile ? 'gap-3' : ''">
+                  <button
+                    v-for="a in footerActions"
+                    :key="a.id"
+                    class="inline-flex items-center justify-center gap-1.5 rounded-md px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50"
+                    :class="[
+                      actionVariantClasses(actionVariant(a.id)),
+                      isMobile ? 'min-h-[44px] flex-1' : 'py-2',
+                    ]"
+                    :disabled="isActionDisabled(a.id) || reactSending || (usesPreviewIssues && openPreviewIssueCount >= 1)"
+                    :title="actionButtonTitle(a.id)"
+                    data-testid="review-composer-pass"
+                    @click="onSidebarAction(a.id)"
+                  >
+                    <Icon :name="actionIcon(a.id)" :size="14" />
+                    {{ a.label }}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -2051,7 +2076,7 @@ function onComposerReject() {
               :reject-error="reactError"
               :pass-disabled="composerPassDisabled"
               :pass-title="passAction ? actionButtonTitle(passAction.id) : ''"
-              :pass-label="t('pages.reviewComposer.pass')"
+              :pass-label="t('pages.clarify.confirmFlow')"
               :reject-label="composerRejectLabel"
               :queued="reactQueued"
               :thinking="reactThinking"
@@ -2241,25 +2266,34 @@ function onComposerReject() {
             v-if="usesPreviewIssues && openPreviewIssueCount === 0"
             class="mb-2 text-[11px] leading-relaxed text-txt3"
           >
-            <b class="font-medium text-txt2">{{ t('pages.gateApproval.helpApprove') }}</b>
+            <b class="font-medium text-txt2">{{ t('pages.clarify.confirmFlow') }}</b>
             {{ t('pages.gateApproval.helpApproveDetail') }}
             <span class="mx-1">·</span>
-            <b class="font-medium text-txt2">{{ t('pages.gateApproval.helpRevise') }}</b>
+            <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
             {{ helpReviseDetailNoIssuesText }}
           </p>
           <p
             v-else-if="usesPreviewIssues && openPreviewIssueCount >= 1"
             class="mb-2 text-[11px] leading-relaxed text-txt3"
           >
-            <b class="font-medium text-txt2">{{ t('pages.gateApproval.helpReviseWithIssues') }}</b>
+            <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
             {{ t('pages.gateApproval.helpReviseWithIssuesDetail') }}
+            <span class="mx-1">·</span>
+            {{ t('pages.reviewComposer.openIssuesConfirmHint') }}
           </p>
           <p v-else-if="canEditProducts" class="mb-2 text-[11px] leading-relaxed text-txt3">
-            <b class="font-medium text-txt2">{{ t('pages.gateApproval.helpApprove') }}</b>
+            <b class="font-medium text-txt2">{{ t('pages.clarify.confirmFlow') }}</b>
             {{ t('pages.gateApproval.helpApproveDetail') }}
             <span class="mx-1">·</span>
-            <b class="font-medium text-txt2">{{ t('pages.gateApproval.helpRevise') }}</b>
+            <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
             {{ t('pages.gateApproval.helpReviseDetail') }}
+          </p>
+          <p
+            v-if="isColdSession && !canReactRevise"
+            class="mb-2 text-[11px] leading-relaxed text-warn"
+            data-testid="review-composer-cold-note"
+          >
+            {{ t('pages.reviewComposer.coldNote') }}
           </p>
           <ReviewComposer
             v-if="canReactRevise"
@@ -2275,7 +2309,7 @@ function onComposerReject() {
             :reject-error="reactError"
             :pass-disabled="composerPassDisabled"
             :pass-title="passAction ? actionButtonTitle(passAction.id) : ''"
-            :pass-label="t('pages.reviewComposer.pass')"
+            :pass-label="t('pages.clarify.confirmFlow')"
             :reject-label="composerRejectLabel"
             :queued="reactQueued"
             :thinking="reactThinking"
@@ -2296,8 +2330,9 @@ function onComposerReject() {
                 actionVariantClasses(actionVariant(a.id)),
                 isMobile ? 'min-h-[44px] flex-1' : 'py-2',
               ]"
-              :disabled="isActionDisabled(a.id)"
+              :disabled="isActionDisabled(a.id) || (usesPreviewIssues && openPreviewIssueCount >= 1)"
               :title="actionButtonTitle(a.id)"
+              data-testid="review-composer-pass"
               @click="choose(a.id)"
             >
               <Icon :name="actionIcon(a.id)" :size="14" />

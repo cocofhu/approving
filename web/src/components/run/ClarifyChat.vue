@@ -2,11 +2,14 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
+import AppModal from '../ui/AppModal.vue'
 import ClarifyDemoFrame from './ClarifyDemoFrame.vue'
 import { renderMarkdown } from '@/lib/markdown'
 import { createStreamMarkdownPreview } from '@/lib/streamMarkdownPreview'
+import { createStreamTextReveal } from '@/lib/streamTextReveal'
 import { mergePersistedAndLiveTurns } from '@/lib/mergeClarifyLiveTurns'
 import { relTime } from '@/lib/format'
+import ThoughtSummaryStatus from './ThoughtSummaryStatus.vue'
 import {
   demoGridColsClass,
   demoOptionsOf,
@@ -107,6 +110,26 @@ const unsubThought = thoughtPreview.subscribe((text) => {
   liveThoughtText.value = text
 })
 /**
+ * Smooth catch-up reveal (Demo) → then markdown/text coalesce.
+ * Vitest uses sync so existing mid-stream assertions stay stable.
+ */
+const syncReveal = Boolean(import.meta.env.VITEST)
+const messageReveal = createStreamTextReveal({
+  sync: syncReveal,
+  onReveal: (text) => {
+    streamPreview.setText(text)
+    // Vitest: flush markdown coalesce so mid-stream assertions see text without waiting rAF.
+    if (syncReveal) streamPreview.flush()
+  },
+})
+const thoughtReveal = createStreamTextReveal({
+  sync: syncReveal,
+  onReveal: (text) => {
+    thoughtPreview.setText(text)
+    if (syncReveal) thoughtPreview.flush()
+  },
+})
+/**
  * Manual thought expand/collapse overrides (index → open).
  * Default: open while thought-only streaming; collapsed once message starts / done.
  */
@@ -200,6 +223,8 @@ const pending = ref<{ text: string; images: ClarifyImage[]; annotations: ReactAn
 onBeforeUnmount(() => {
   unsubStream()
   unsubThought()
+  messageReveal.reset()
+  thoughtReveal.reset()
   streamPreview.reset()
   thoughtPreview.reset()
 })
@@ -323,6 +348,37 @@ function imgSrc(im: ClarifyImage): string {
   return `data:${im.mimeType || 'image/png'};base64,${im.data}`
 }
 
+/** Single-image lightbox for human history attachments (no gallery / Esc). */
+type ImagePreview = { src: string; label: string }
+const imagePreview = ref<ImagePreview | null>(null)
+
+function imagePreviewLabel(images: ClarifyImage[], index: number): string {
+  const named = (images[index] as ClarifyImage & { name?: string; filename?: string })?.name
+    || (images[index] as ClarifyImage & { name?: string; filename?: string })?.filename
+  if (named?.trim()) return named.trim()
+  if (images.length <= 1) return translate('pages.clarify.imageFallback')
+  return translate('pages.clarify.imageFallbackN', { n: index + 1 })
+}
+
+function openImagePreview(images: ClarifyImage[], index: number) {
+  const im = images[index]
+  if (!im) return
+  imagePreview.value = {
+    src: imgSrc(im),
+    label: imagePreviewLabel(images, index),
+  }
+}
+
+function closeImagePreview() {
+  imagePreview.value = null
+}
+
+const imagePreviewTitle = computed(() =>
+  imagePreview.value
+    ? translate('pages.clarify.imagePreviewTitle', { label: imagePreview.value.label })
+    : '',
+)
+
 function turnsSemanticKey(turnList: ClarifyTurn[]): string {
   if (!turnList.length) return '0'
   const last = turnList[turnList.length - 1]
@@ -341,7 +397,10 @@ watch(
     if (liveTurns.value.length && !liveTurns.value.some((t) => t.streaming)) {
       liveTurns.value = []
       liveAgentIdx.value = -1
+      messageReveal.reset()
+      thoughtReveal.reset()
       streamPreview.reset()
+      thoughtPreview.reset()
       if (queued.value.length === 0) thinking.value = false
     }
     const qIdx = latestQuestionTurnIndex(turnList)
@@ -686,7 +745,10 @@ function cancelReview() {
     }
   }
   liveAgentIdx.value = -1
+  messageReveal.reset()
+  thoughtReveal.reset()
   streamPreview.reset()
+  thoughtPreview.reset()
   thinking.value = queued.value.length > 0
   emit('cancel')
   void scrollBottom()
@@ -771,6 +833,8 @@ function applyQueueState(
     ]
     liveAgentIdx.value = 1
     thoughtOpenOverride.value = {}
+    messageReveal.reset()
+    thoughtReveal.reset()
     streamPreview.reset()
     thoughtPreview.reset()
   }
@@ -841,6 +905,8 @@ function applyReviewFrame(frame: {
           streaming: true,
         }) - 1
       thoughtOpenOverride.value = {}
+      messageReveal.reset()
+      thoughtReveal.reset()
       streamPreview.reset()
       thoughtPreview.reset()
       thinking.value = true
@@ -852,6 +918,9 @@ function applyReviewFrame(frame: {
         agent.streaming = false
         agent.at = new Date().toISOString()
         if (frame.interrupted) agent.interrupted = true
+        // Reveal flush before markdown flush (plan g1.2).
+        messageReveal.flush()
+        thoughtReveal.flush()
         streamPreview.flush()
         thoughtPreview.flush()
       }
@@ -866,6 +935,8 @@ function applyReviewFrame(frame: {
           liveTurns.value[liveAgentIdx.value].text || frame.message || 'error'
         liveTurns.value[liveAgentIdx.value].at = new Date().toISOString()
         if (frame.interrupted) liveTurns.value[liveAgentIdx.value].interrupted = true
+        messageReveal.flush()
+        thoughtReveal.flush()
         streamPreview.flush()
         thoughtPreview.flush()
       }
@@ -901,8 +972,9 @@ function applyAcpEvents(events: AcpEvent[] | undefined, nodeId?: string) {
   // Keep thought / message on separate rails — never msg||thought overwrite.
   agent.thought = thought
   agent.text = msg
-  streamPreview.setText(msg)
-  thoughtPreview.setText(thought)
+  // Authority → reveal → markdown/text coalesce (not absolute snapshot → DOM).
+  messageReveal.setTarget(msg)
+  thoughtReveal.setTarget(thought)
   // Stick-gated only — never force-drag while user scrolled up.
   void scrollBottom()
 }
@@ -912,9 +984,9 @@ function agentHasMessage(t: ClarifyTurn): boolean {
   return !!(t.text || (t.streaming && liveStreamHtml.value))
 }
 
-/** Display thought (coalesced while this live agent is streaming). */
+/** Display thought (revealed while this live agent is streaming). */
 function agentThoughtDisplay(t: ClarifyTurn, idx: number): string {
-  if (t.streaming && idx === liveAgentIdx.value && liveThoughtText.value) {
+  if (t.streaming && idx === liveAgentIdx.value) {
     return liveThoughtText.value
   }
   return t.thought || ''
@@ -976,12 +1048,37 @@ defineExpose({
         </div>
         <div class="min-w-0 max-w-[80%]">
           <div v-if="t.images && t.images.length" class="mb-1.5 flex flex-wrap gap-1.5" :class="t.role === 'human' ? 'justify-end' : ''">
-            <img
-              v-for="(im, ii) in t.images"
-              :key="ii"
-              :src="imgSrc(im)"
-              class="h-20 w-20 rounded-md border border-line object-cover"
-            />
+            <!-- human history: clickable thumbs → AppModal single-image preview -->
+            <template v-if="t.role === 'human'">
+              <button
+                v-for="(im, ii) in t.images"
+                :key="ii"
+                type="button"
+                class="group relative h-20 w-20 cursor-pointer overflow-hidden rounded-md border border-line transition hover:border-accent"
+                data-testid="clarify-history-image-thumb"
+                :aria-label="translate('pages.clarify.imagePreviewAria', { label: imagePreviewLabel(t.images, ii) })"
+                @click="openImagePreview(t.images!, ii)"
+              >
+                <img
+                  :src="imgSrc(im)"
+                  class="h-full w-full cursor-pointer object-cover"
+                  alt=""
+                />
+                <span
+                  class="pointer-events-none absolute inset-x-0 bottom-0 bg-black/55 px-1 py-0.5 text-center text-[10px] leading-tight text-white opacity-0 transition-opacity group-hover:opacity-100"
+                >{{ translate('pages.clarify.clickToEnlarge') }}</span>
+              </button>
+            </template>
+            <!-- agent history: static thumbs (out of scope) -->
+            <template v-else>
+              <img
+                v-for="(im, ii) in t.images"
+                :key="ii"
+                :src="imgSrc(im)"
+                class="h-20 w-20 rounded-md border border-line object-cover"
+                data-testid="clarify-agent-image-thumb"
+              />
+            </template>
           </div>
           <!-- annotation chips attached to this human review turn -->
           <div v-if="t.role === 'human' && t.annotations && t.annotations.length" class="mb-1.5 flex flex-wrap gap-1.5 justify-end">
@@ -1051,9 +1148,15 @@ defineExpose({
               :open="isThoughtOpen(i, t)"
               @toggle="onThoughtToggle(i, $event)"
             >
-              <summary class="flex cursor-pointer select-none items-center gap-1.5 px-2.5 py-1.5 text-txt3 hover:text-txt2">
-                <Icon name="sparkles" :size="11" class="text-accent-2" />
-                {{ translate('pages.clarify.thought') }}
+              <summary
+                class="flex cursor-pointer select-none items-center gap-1.5 px-2.5 py-1.5 text-txt3 hover:text-txt2"
+                data-testid="clarify-thought-summary"
+              >
+                <ThoughtSummaryStatus
+                  :busy="!!t.streaming"
+                  :completed="showTurnCompleted(t)"
+                  :interrupted="!!t.interrupted"
+                />
               </summary>
               <div class="whitespace-pre-wrap border-t border-dashed border-line px-2.5 pb-2 pt-1.5 font-mono leading-5">{{ agentThoughtDisplay(t, i) }}</div>
             </details>
@@ -1064,7 +1167,7 @@ defineExpose({
               data-testid="clarify-agent-message"
             >
               <span
-                v-html="t.streaming && liveStreamHtml ? liveStreamHtml : renderMarkdown(t.text)"
+                v-html="t.streaming ? liveStreamHtml : renderMarkdown(t.text)"
               /><span
                 v-if="t.streaming"
                 class="clarify-stream-caret"
@@ -1271,7 +1374,13 @@ defineExpose({
           >
             interrupted
           </div>
-          <div class="mt-1 text-[10px] text-txt3" :class="t.role === 'human' ? 'text-right' : ''">{{ locale && relTime(t.at) }}</div>
+          <!-- Keep footer time; hide bottom time when completion footnote is shown (keep_footer_hide_bottom) -->
+          <div
+            v-if="!showTurnCompleted(t)"
+            class="mt-1 text-[10px] text-txt3"
+            :class="t.role === 'human' ? 'text-right' : ''"
+            data-testid="clarify-turn-bottom-time"
+          >{{ locale && relTime(t.at) }}</div>
         </div>
       </div>
       <div v-if="thinking && !validating && liveAgentIdx < 0" class="flex items-center gap-2 pl-9 text-[12px] text-txt3">
@@ -1434,6 +1543,27 @@ defineExpose({
       <span class="min-w-0 flex-1 [overflow-wrap:anywhere]">{{ confirmError }}</span>
     </div>
   </div>
+
+  <!-- Human history attachment image preview (single slot; no gallery / Esc) -->
+  <AppModal
+    :open="!!imagePreview"
+    :title="imagePreviewTitle"
+    :width="960"
+    @close="closeImagePreview"
+  >
+    <div
+      v-if="imagePreview"
+      class="flex min-h-[280px] items-center justify-center"
+      data-testid="clarify-image-preview-body"
+    >
+      <img
+        :src="imagePreview.src"
+        :alt="imagePreview.label"
+        class="max-h-[74vh] max-w-full object-contain"
+        data-testid="clarify-image-preview-img"
+      />
+    </div>
+  </AppModal>
 </template>
 
 <style scoped>
@@ -1507,6 +1637,20 @@ defineExpose({
 @keyframes clarify-caret-blink {
   50% {
     opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .typing-dots i,
+  .clarify-outputting,
+  .clarify-stream-caret {
+    animation: none !important;
+  }
+  .clarify-outputting {
+    color: rgb(var(--c-accent-2));
+    background: none;
+    -webkit-background-clip: unset;
+    background-clip: unset;
+    -webkit-text-fill-color: unset;
   }
 }
 </style>

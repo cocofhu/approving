@@ -2,11 +2,13 @@
 /**
  * Shared four-phase busy stream for GateApproval / ReviewComposer(gate):
  * placeholder → collapsible thought → outputting (shimmer+caret) → restrained done.
+ * Smooth catch-up reveal + ThoughtSummaryStatus aligned with ClarifyChat / Demo.
  */
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Icon from '../ui/Icon.vue'
 import { relTime } from '@/lib/format'
+import { createStreamTextReveal } from '@/lib/streamTextReveal'
+import ThoughtSummaryStatus from './ThoughtSummaryStatus.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -29,6 +31,23 @@ const props = withDefaults(
 const { t, locale } = useI18n()
 
 const thoughtOpenOverride = ref<boolean | undefined>(undefined)
+/** Revealed display texts (catch-up); authority stays on props. */
+const revealedThought = ref('')
+const revealedMessage = ref('')
+
+const syncReveal = Boolean(import.meta.env.VITEST)
+const thoughtReveal = createStreamTextReveal({
+  sync: syncReveal,
+  onReveal: (text) => {
+    revealedThought.value = text
+  },
+})
+const messageReveal = createStreamTextReveal({
+  sync: syncReveal,
+  onReveal: (text) => {
+    revealedMessage.value = text
+  },
+})
 
 watch(
   () => [props.streamText, props.streamThought, props.thinking, props.completedAt] as const,
@@ -37,6 +56,39 @@ watch(
     thoughtOpenOverride.value = undefined
   },
 )
+
+watch(
+  () => props.streamThought ?? '',
+  (text) => {
+    thoughtReveal.setTarget(text)
+  },
+  { immediate: true },
+)
+
+watch(
+  () => props.streamText ?? '',
+  (text) => {
+    messageReveal.setTarget(text)
+  },
+  { immediate: true },
+)
+
+/** End of turn: flush reveal so UI matches authority (done / interrupt). */
+watch(
+  () => [props.thinking, props.completedAt, props.interrupted] as const,
+  ([thinking, completedAt, interrupted]) => {
+    if (!thinking || completedAt || interrupted) {
+      thoughtReveal.flush()
+      messageReveal.flush()
+    }
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  thoughtReveal.reset()
+  messageReveal.reset()
+})
 
 const hasThought = computed(() => !!props.streamThought)
 const hasMessage = computed(() => !!props.streamText)
@@ -103,17 +155,23 @@ function onThoughtToggle(e: Event) {
       :open="thoughtOpen"
       @toggle="onThoughtToggle"
     >
-      <summary class="flex cursor-pointer select-none items-center gap-1 px-2 py-1 hover:text-txt2">
-        <Icon name="sparkles" :size="11" class="text-accent-2" />
-        {{ t('pages.clarify.thought') }}
+      <summary
+        class="flex cursor-pointer select-none items-center gap-1 px-2 py-1 hover:text-txt2"
+        data-testid="gate-thought-summary"
+      >
+        <ThoughtSummaryStatus
+          :busy="streaming"
+          :completed="showCompleted"
+          :interrupted="!!interrupted && !streaming"
+        />
       </summary>
       <div class="whitespace-pre-wrap border-t border-dashed border-line px-2 pb-1.5 pt-1 font-mono leading-5">
-        {{ streamThought }}
+        {{ revealedThought }}
       </div>
     </details>
 
     <div v-if="hasMessage" data-testid="gate-react-message">
-      {{ streamText }}
+      {{ revealedMessage }}
       <span
         v-if="streaming"
         class="gate-stream-caret"
@@ -186,6 +244,20 @@ function onThoughtToggle(e: Event) {
 @keyframes gate-caret-blink {
   50% {
     opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .typing-dots i,
+  .gate-stream-outputting,
+  .gate-stream-caret {
+    animation: none !important;
+  }
+  .gate-stream-outputting {
+    color: rgb(var(--c-accent-2));
+    background: none;
+    -webkit-background-clip: unset;
+    background-clip: unset;
+    -webkit-text-fill-color: unset;
   }
 }
 </style>

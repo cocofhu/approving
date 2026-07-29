@@ -33,7 +33,7 @@ async function mockApi(
 }
 
 test.describe('Run 详情移动端 visual 定高预览', () => {
-  test('390×844：n_open=0 仅通过，预览占满 stage，取点可用', async ({ page }) => {
+  test('390×844：n_open=0 确认并流转 + 取点，预览占满 stage', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await mockApi(page, [])
 
@@ -69,20 +69,23 @@ test.describe('Run 详情移动端 visual 定高预览', () => {
     expect(feedbackBox!.y).toBeGreaterThanOrEqual(drawerBox!.y - 1)
     expect(feedbackBox!.y).toBeLessThan(drawerBox!.y + drawerBox!.height)
 
-    // Hot mutex: n_open=0 → only pass; reject fully unmounted (not disabled).
+    // Review semantics: 确认并流转 visible; no 通过/打回 dual buttons.
     await expect(page.getByTestId('review-composer-pass')).toBeVisible()
-    await expect(page.getByTestId('review-composer-reject')).toHaveCount(0)
-    await expect(page.getByTestId('review-record-issue')).toBeVisible()
-    await expect(page.getByRole('button', { name: '通过并流转' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '确认并流转' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '通过并流转' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: '打回修改' })).toHaveCount(0)
+    await expect(page.getByTestId('review-record-issue')).toBeVisible()
     await expect(page.getByRole('button', { name: '记入意见' })).toBeVisible()
+    // Hot session: send remains available for in-place revise.
+    await expect(page.getByTestId('review-composer-send')).toBeVisible()
+    await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
     // Single main text input in the drawer.
     await expect(drawer.getByTestId('paragraph-input')).toHaveCount(1)
     // Narrow drawer must expose image attach — not text-only.
     const attach = drawer.getByTestId('paragraph-input-attach')
     await expect(attach).toBeVisible()
 
-    // Unsubmitted draft must not surface reject when n_open=0.
+    // Unsubmitted draft alone must not restore 打回 wording.
     const fileInput = drawer.locator('input[type="file"]')
     await fileInput.setInputFiles({
       name: 'reject-only.png',
@@ -92,7 +95,7 @@ test.describe('Run 详情移动端 visual 定高预览', () => {
         'base64',
       ),
     })
-    await expect(page.getByTestId('review-composer-reject')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '打回修改' })).toHaveCount(0)
     await expect(page.getByTestId('review-composer-pass')).toBeVisible()
 
     // Inspect toggle remains available inside the preview shell.
@@ -100,7 +103,7 @@ test.describe('Run 详情移动端 visual 定高预览', () => {
     await expect(page.getByRole('button', { name: '取点标注' })).toBeVisible()
   })
 
-  test('390×844：n_open≥1 仅打回带数量，批准不渲染', async ({ page }) => {
+  test('390×844：n_open≥1 可继续发送，确认并流转禁用', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await mockApi(page, [
       {
@@ -116,13 +119,16 @@ test.describe('Run 详情移动端 visual 定高预览', () => {
     await page.goto('/gate-mobile-fill.html')
     await expect(page.getByTestId('gate-mobile-fill-root')).toBeVisible({ timeout: 10_000 })
 
-    await expect(page.getByTestId('review-composer-reject')).toBeVisible()
-    await expect(page.getByTestId('review-composer-pass')).toHaveCount(0)
-    // Hot reject uses rejectWithCount: 「打回 · n」
-    await expect(page.getByRole('button', { name: /打回.*1/ })).toBeVisible()
-    await expect(page.getByTestId('review-composer-reject')).toContainText('1')
+    // Open issues: keep send (no 打回) + confirm disabled (not unmounted).
+    const send = page.getByTestId('review-composer-send')
+    const pass = page.getByTestId('review-composer-pass')
+    await expect(send).toBeVisible()
+    await expect(pass).toBeVisible()
+    await expect(send).toContainText('发送')
+    await expect(pass).toContainText('确认并流转')
+    await expect(pass).toBeDisabled()
+    await expect(send).toBeEnabled()
+    await expect(page.getByRole('button', { name: /打回/ })).toHaveCount(0)
     await expect(page.getByRole('button', { name: '通过并流转' })).toHaveCount(0)
-    // With open issues, reject is available without extra draft.
-    await expect(page.getByTestId('review-composer-reject')).toBeEnabled()
   })
 })
