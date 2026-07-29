@@ -82,7 +82,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
       @click.stop="toggle"
     >
       <Icon name="branch" :size="15" class="text-txt3" />
-      <span class="min-w-0 flex-1 truncate md:max-w-[160px] md:flex-none">{{ selectedName }}</span>
+      <span class="min-w-0 flex-1 truncate text-left md:max-w-[160px] md:flex-none">{{ selectedName }}</span>
       <span v-if="typeof count === 'number'" class="chip">{{ count }}</span>
       <Icon name="chevron-down" :size="14" class="shrink-0 text-txt3" />
     </button>
