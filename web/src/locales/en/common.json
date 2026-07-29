@@ -31,6 +31,9 @@
     },
     "pagination": {
       "summary": "{total} items · page {page}/{pages}",
+      "rangeSummary": "{from}–{to} / {total}",
+      "emptySummary": "0 items",
+      "perPage": "Per page",
       "prev": "Previous",
       "next": "Next",
       "loadEarlier": "Load earlier events"
