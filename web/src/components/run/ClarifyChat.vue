@@ -1328,7 +1328,13 @@ defineExpose({
           >
             interrupted
           </div>
-          <div class="mt-1 text-[10px] text-txt3" :class="t.role === 'human' ? 'text-right' : ''">{{ locale && relTime(t.at) }}</div>
+          <!-- Keep footer time; hide bottom time when completion footnote is shown (keep_footer_hide_bottom) -->
+          <div
+            v-if="!showTurnCompleted(t)"
+            class="mt-1 text-[10px] text-txt3"
+            :class="t.role === 'human' ? 'text-right' : ''"
+            data-testid="clarify-turn-bottom-time"
+          >{{ locale && relTime(t.at) }}</div>
         </div>
       </div>
       <div v-if="thinking && !validating && liveAgentIdx < 0" class="flex items-center gap-2 pl-9 text-[12px] text-txt3">
