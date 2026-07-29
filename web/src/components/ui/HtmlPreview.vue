@@ -186,6 +186,15 @@ const deviceHint = computed(() =>
 
 const demoModalTitle = computed(() => props.modalTitle || t('common.htmlPreview.title'))
 
+/** Enlarge modal title:「窗口放大查看 · {file}」or enlargeTitle fallback. */
+const enlargeModalTitle = computed(() => {
+  const base = t('common.htmlPreview.enlargeTitle')
+  const name = (props.modalTitle || '').trim()
+  return name ? `${base} · ${name}` : base
+})
+
+const showInlineChrome = computed(() => props.enlargeable || props.inspectable)
+
 const demoSrcdoc = computed(() => injectDemoScrollbarStyles(props.html))
 
 const previewSrcdoc = computed(() =>
@@ -227,7 +236,7 @@ function toggleInspect() {
   setInspecting(!inspecting.value)
 }
 
-defineExpose({ openEnlarge, setInspecting })
+defineExpose({ openEnlarge, closeEnlarge, setInspecting })
 
 function clearResizeTimeout() {
   if (resizeTimeout !== undefined) {
@@ -372,13 +381,15 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
     class="w-full overflow-x-hidden"
     :class="fillParent ? 'flex h-full min-h-0 flex-col' : ''"
     :data-fill-parent="fillParent ? '1' : '0'"
+    data-testid="html-preview-inline"
   >
     <div
-      v-if="inspectable"
+      v-if="showInlineChrome"
       class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2"
       data-testid="html-preview-inspect-bar"
     >
       <button
+        v-if="inspectable"
         type="button"
         class="flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition-colors"
         :class="
@@ -395,6 +406,16 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
             ? t('pages.appPreview.novnc.cancelInspect')
             : t('pages.appPreview.novnc.inspect')
         }}
+      </button>
+      <button
+        v-if="enlargeable"
+        type="button"
+        class="ml-auto flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-txt2 transition-colors hover:text-txt"
+        :title="t('common.htmlPreview.enlargeTitle')"
+        data-testid="html-preview-enlarge"
+        @click="openEnlarge"
+      >
+        <Icon name="expand" :size="13" />{{ t('common.htmlPreview.enlargeTitle') }}
       </button>
     </div>
     <div :class="fillParent ? 'min-h-0 flex-1' : ''">
@@ -493,11 +514,13 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
       </button>
       <button
         v-if="enlargeable"
+        type="button"
         class="ml-auto flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-txt2 transition-colors hover:text-txt"
         :title="t('common.htmlPreview.enlargeTitle')"
-        @click="big = true"
+        data-testid="html-preview-enlarge"
+        @click="openEnlarge"
       >
-        <Icon name="expand" :size="13" />{{ t('common.htmlPreview.window') }}
+        <Icon name="expand" :size="13" />{{ t('common.htmlPreview.enlargeTitle') }}
       </button>
     </div>
     <div
@@ -540,10 +563,18 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
     </div>
   </div>
 
-  <!-- Enlarge uses fixed viewport height; nested preview keeps default fill (no fitContent). -->
-  <AppModal v-if="enlargeable && mode === 'default'" :open="big" :title="t('common.htmlPreview.title')" :width="1120" @close="big = false">
-    <div class="h-[80vh]">
-      <HtmlPreview :html="html" :enlargeable="false" :inspectable="inspectable" @pick="emit('pick', $event)" />
+  <!-- Enlarge: default + inline (fillParent); nested is read-only, no inspect. -->
+  <AppModal
+    v-if="enlargeable && (mode === 'default' || mode === 'inline')"
+    :open="big"
+    :title="enlargeModalTitle"
+    :width="1120"
+    :close-on-esc="true"
+    data-testid="html-preview-enlarge-modal"
+    @close="closeEnlarge"
+  >
+    <div class="h-[80vh]" data-testid="html-preview-enlarge-body">
+      <HtmlPreview :html="html" :enlargeable="false" :inspectable="false" />
     </div>
   </AppModal>
 </template>

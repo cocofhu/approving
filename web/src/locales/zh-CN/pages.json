@@ -1882,7 +1882,7 @@
       "reviewingUpstream": "审阅上游第 {n} 次",
       "reviewingUpstreamFallback": "快照未命中，已回落产物库",
       "upstreamContext": "上游上下文",
-      "upstreamEnlarge": "窗口放大查看",
+      "upstreamEnlarge": "放大上游上下文",
       "upstreamEnlargeHint": " — 应用内模态大视口，视口显著大于内联约 40vh 限高区；关闭后回到审批页，主产物与表单状态不变。",
       "upstreamReadonlyFooter": "只读对照 · 不改变审批对象",
       "upstreamLoadFailed": "上游上下文读取失败：{error}",

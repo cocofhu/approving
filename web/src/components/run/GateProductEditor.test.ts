@@ -30,10 +30,17 @@ const StructuredStub = defineComponent({
 
 const HtmlPreviewStub = defineComponent({
   name: 'HtmlPreview',
-  props: { html: String, inspectable: Boolean },
+  props: {
+    html: String,
+    inspectable: Boolean,
+    enlargeable: { type: Boolean, default: true },
+    fillParent: Boolean,
+    mode: String,
+    modalTitle: String,
+  },
   emits: ['pick'],
   template:
-    '<div data-testid="html-preview" :data-inspectable="inspectable ? \'1\' : \'0\'" />',
+    '<div data-testid="html-preview" :data-inspectable="inspectable ? \'1\' : \'0\'" :data-enlargeable="enlargeable === false ? \'0\' : \'1\'" :data-fill-parent="fillParent ? \'1\' : \'0\'" :data-mode="mode || \'\'" :data-modal-title="modalTitle || \'\'" />',
 })
 
 const researchContent = JSON.stringify({ summary: '调研摘要', findings: [{ title: '发现 1' }] }, null, 2)
@@ -142,6 +149,35 @@ describe('GateProductEditor', () => {
     expect(empty.find('[data-testid="gate-preview-empty"]').exists()).toBe(true)
     expect(empty.find('[data-testid="html-preview"]').exists()).toBe(false)
     empty.unmount()
+  })
+
+  it('desktop fillParent preview path forwards enlargeable + modalTitle (main product enlarge)', async () => {
+    const wrapper = mountHtmlEditor({ fillParent: true, enlargeable: true })
+    await flushPromises()
+    const preview = wrapper.find('[data-testid="html-preview"]')
+    expect(preview.exists()).toBe(true)
+    expect(preview.attributes('data-fill-parent')).toBe('1')
+    expect(preview.attributes('data-mode')).toBe('inline')
+    expect(preview.attributes('data-enlargeable')).toBe('1')
+    expect(preview.attributes('data-modal-title')).toBe('page.html')
+
+    // Edit branch must hide HtmlPreview (and thus the main enlarge entry).
+    await wrapper.find('[data-testid="gate-mode-edit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="gate-artifact-textarea"]').exists()).toBe(true)
+
+    await wrapper.find('[data-testid="gate-mode-preview"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="html-preview"]').attributes('data-enlargeable')).toBe('1')
+    wrapper.unmount()
+  })
+
+  it('forwards enlargeable=false for mobile strategy', async () => {
+    const wrapper = mountHtmlEditor({ fillParent: true, enlargeable: false })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="html-preview"]').attributes('data-enlargeable')).toBe('0')
+    wrapper.unmount()
   })
 
   it('locks edit tab while contentLoading and shows loading panel', async () => {

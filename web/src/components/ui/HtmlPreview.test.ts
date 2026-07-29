@@ -15,8 +15,12 @@ import HtmlPreview from './HtmlPreview.vue'
 const FIXED_ID = 'html-preview-test-instance'
 
 const AppModalStub = defineComponent({
-  props: { open: Boolean, title: String },
-  template: '<div v-if="open" data-testid="modal"><slot /></div>',
+  name: 'AppModal',
+  props: { open: Boolean, title: String, closeOnEsc: Boolean },
+  emits: ['close'],
+  // Parent may pass data-testid (fallthrough); expose title via data-title for assertions.
+  template:
+    '<div v-if="open" data-enlarge-modal="1" :data-title="title || \'\'"><slot /></div>',
 })
 
 function mountPreview(props: Record<string, unknown> = {}) {
@@ -245,6 +249,89 @@ describe('HtmlPreview content-fit clamp', () => {
 
     await sendResize(wrapper, 1800)
     expect((iframe.element as HTMLIFrameElement).style.height).toBe('')
+    wrapper.unmount()
+  })
+})
+
+describe('HtmlPreview inline/fillParent enlarge', () => {
+  beforeEach(() => {
+    vi.stubGlobal('crypto', { randomUUID: () => FIXED_ID })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('opens enlarge modal for mode=inline + fillParent + enlargeable with filename title', async () => {
+    const wrapper = mountPreview({
+      mode: 'inline',
+      fitContent: false,
+      fillParent: true,
+      maxContentHeightVh: undefined,
+      enlargeable: true,
+      inspectable: true,
+      modalTitle: 'page.html',
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="html-preview-inline"]').exists()).toBe(true)
+    expect(wrapper.find('[data-fill-parent="1"]').exists()).toBe(true)
+    const enlargeBtn = wrapper.find('[data-testid="html-preview-enlarge"]')
+    expect(enlargeBtn.exists()).toBe(true)
+    expect(enlargeBtn.text()).toContain('窗口放大查看')
+
+    await enlargeBtn.trigger('click')
+    await nextTick()
+
+    // AppModal is a second root (fragment); assert via findComponent.
+    const modal = wrapper.findComponent(AppModalStub)
+    expect(modal.exists()).toBe(true)
+    expect(modal.props('open')).toBe(true)
+    expect(modal.props('title')).toBe('窗口放大查看 · page.html')
+    expect(modal.props('closeOnEsc')).toBe(true)
+    expect(modal.find('[data-testid="html-preview-enlarge-body"]').exists()).toBe(true)
+    // Nested enlarge preview is read-only: no inspect toggle inside modal body.
+    expect(
+      modal.find('[data-testid="html-preview-inspect-toggle"]').exists(),
+    ).toBe(false)
+
+    // Closing enlarge must keep the outer inline shell mounted (no layout mode flip).
+    ;(wrapper.vm as { closeEnlarge: () => void }).closeEnlarge()
+    await nextTick()
+    expect(wrapper.findComponent(AppModalStub).props('open')).toBe(false)
+    expect(wrapper.find('[data-testid="html-preview-inline"]').exists()).toBe(true)
+    expect(wrapper.find('[data-fill-parent="1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="html-preview-inspect-bar"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('does not show enlarge entry when enlargeable is false (mobile strategy)', async () => {
+    const wrapper = mountPreview({
+      mode: 'inline',
+      fitContent: false,
+      fillParent: true,
+      enlargeable: false,
+      inspectable: true,
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="html-preview-enlarge"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="html-preview-inspect-bar"]').exists()).toBe(true)
+    expect(wrapper.findComponent(AppModalStub).exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('falls back to enlargeTitle when modalTitle is empty', async () => {
+    const wrapper = mountPreview({
+      mode: 'inline',
+      fitContent: false,
+      fillParent: true,
+      enlargeable: true,
+      modalTitle: '',
+    })
+    await flushPromises()
+    await wrapper.find('[data-testid="html-preview-enlarge"]').trigger('click')
+    await nextTick()
+    expect(wrapper.findComponent(AppModalStub).props('title')).toBe('窗口放大查看')
     wrapper.unmount()
   })
 })

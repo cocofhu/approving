@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch, onBeforeUnmount } from 'vue'
 import Icon from './Icon.vue'
 
 const props = withDefaults(
@@ -12,18 +12,44 @@ const props = withDefaults(
     bodyMinHeight?: number
     /**
      * When false, clicking the backdrop does not emit close (default true).
-     * Esc-to-close is intentionally out of scope (no keydown listener). If closeOnEsc is
-     * added later, default it to false / opt-in so closeOnBackdrop=false callers stay safe.
      */
     closeOnBackdrop?: boolean
+    /**
+     * Opt-in Escape-to-close. Default false so existing closeOnBackdrop=false
+     * callers (and other modals) are not surprised by a new Esc path.
+     */
+    closeOnEsc?: boolean
   }>(),
-  { bodyOverflow: 'auto', closeOnBackdrop: true },
+  { bodyOverflow: 'auto', closeOnBackdrop: true, closeOnEsc: false },
 )
 const emit = defineEmits<{ (e: 'close'): void }>()
 
 function onBackdropClick() {
   if (props.closeOnBackdrop) emit('close')
 }
+
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    emit('close')
+  }
+}
+
+watch(
+  () => props.open && props.closeOnEsc,
+  (listen) => {
+    if (listen) {
+      window.addEventListener('keydown', onKeydown)
+    } else {
+      window.removeEventListener('keydown', onKeydown)
+    }
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+})
 
 const scrollAreaEl = ref<HTMLElement | null>(null)
 
