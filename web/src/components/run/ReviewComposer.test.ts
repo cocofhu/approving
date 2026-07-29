@@ -58,6 +58,10 @@ describe('ReviewComposer gate busy status (C-tier)', () => {
     expect(thought.exists()).toBe(true)
     expect(thought.attributes('open')).toBeDefined()
     expect(thought.text()).toContain('旁路思考过程')
+    expect(wrapper.find('[data-testid="thought-summary-state"]').attributes('data-state')).toBe(
+      'streaming',
+    )
+    expect(wrapper.find('[data-testid="thought-summary-state"]').text()).toContain('生成中')
     expect(wrapper.find('[data-testid="gate-busy-status"]').text()).toContain('思考中')
     wrapper.unmount()
   })
@@ -72,6 +76,11 @@ describe('ReviewComposer gate busy status (C-tier)', () => {
     expect(wrapper.find('[data-testid="gate-busy-status"]').text()).toContain('输出中')
     expect(wrapper.find('[data-testid="gate-react-thought"]').text()).toContain('旁路思考')
     expect(wrapper.find('[data-testid="gate-react-thought"]').attributes('open')).toBeUndefined()
+    // Message outputting — summary stays generating (not done).
+    expect(wrapper.find('[data-testid="thought-summary-state"]').attributes('data-state')).toBe(
+      'streaming',
+    )
+    expect(wrapper.find('[data-testid="thought-summary-state"]').text()).toContain('生成中')
     expect(wrapper.find('[data-testid="gate-stream-caret"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="gate-react-stream"]').text()).toContain('旁路正文流')
     wrapper.unmount()
@@ -96,10 +105,13 @@ describe('ReviewComposer gate busy status (C-tier)', () => {
     expect(done.find('[data-testid="gate-turn-completed"]').exists()).toBe(true)
     expect(done.find('[data-testid="gate-turn-completed"]').text()).toContain('已完成')
     expect(done.find('[data-testid="gate-stream-caret"]').exists()).toBe(false)
+    expect(done.find('[data-testid="thought-summary-state"]').attributes('data-state')).toBe('done')
+    expect(done.find('[data-testid="thought-summary-state"]').text()).toContain('已完成')
     done.unmount()
 
     const bad = mountGate({
       thinking: false,
+      streamThought: '半截思考',
       streamText: '半截',
       interrupted: true,
       streamCompletedAt: null,
@@ -107,6 +119,11 @@ describe('ReviewComposer gate busy status (C-tier)', () => {
     await flushPromises()
     expect(bad.find('[data-testid="gate-turn-completed"]').exists()).toBe(false)
     expect(bad.text()).toContain('interrupted')
+    expect(bad.find('[data-testid="thought-summary-state"]').attributes('data-state')).toBe(
+      'interrupted',
+    )
+    expect(bad.find('[data-testid="thought-summary-state"]').text()).toContain('已中断')
+    expect(bad.find('[data-testid="thought-summary-state"]').text()).not.toContain('已完成')
     bad.unmount()
   })
 

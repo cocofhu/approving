@@ -728,6 +728,10 @@ describe('ClarifyChat', () => {
       expect(thought.exists()).toBe(true)
       expect(thought.attributes('open')).toBeDefined()
       expect(thought.text()).toContain('先核对边界与分轨')
+      expect(wrapper.find('[data-testid="thought-summary-state"]').attributes('data-state')).toBe(
+        'streaming',
+      )
+      expect(wrapper.find('[data-testid="thought-summary-state"]').text()).toContain('生成中')
       expect(wrapper.find('[data-testid="clarify-busy-status"]').text()).toContain('思考中')
       expect(wrapper.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(false)
 
@@ -743,6 +747,11 @@ describe('ClarifyChat', () => {
       expect(wrapper.find('[data-testid="clarify-thought"]').text()).toContain('先核对边界与分轨')
       // Demo: collapse thought once message streaming starts.
       expect(wrapper.find('[data-testid="clarify-thought"]').attributes('open')).toBeUndefined()
+      // Message outputting — summary stays generating (not done).
+      expect(wrapper.find('[data-testid="thought-summary-state"]').attributes('data-state')).toBe(
+        'streaming',
+      )
+      expect(wrapper.find('[data-testid="thought-summary-state"]').text()).toContain('生成中')
       expect(wrapper.find('[data-testid="clarify-agent-message"]').text()).toContain('已核对完成')
       expect(wrapper.find('[data-testid="clarify-busy-status"]').text()).toContain('输出中')
       expect(wrapper.find('[data-testid="clarify-stream-caret"]').exists()).toBe(true)
@@ -785,6 +794,10 @@ describe('ClarifyChat', () => {
       expect(completed.text().match(/刚刚/g)?.length).toBe(1)
       // human turn still has bottom time; completed agent turn must not
       expect(wrapper.findAll('[data-testid="clarify-turn-bottom-time"]').length).toBe(1)
+      expect(wrapper.find('[data-testid="thought-summary-state"]').attributes('data-state')).toBe(
+        'done',
+      )
+      expect(wrapper.find('[data-testid="thought-summary-state"]').text()).toContain('已完成')
       wrapper.unmount()
     })
 
@@ -836,13 +849,24 @@ describe('ClarifyChat', () => {
         nodeId: 'react-1',
         item: { text: '请复审' },
       })
-      vm.applyAcpEvents([{ kind: 'message', text: '半截正文' }], 'react-1')
+      vm.applyAcpEvents(
+        [
+          { kind: 'thought', text: '半截思考' },
+          { kind: 'message', text: '半截正文' },
+        ],
+        'react-1',
+      )
       vm.applyReviewFrame({ event: 'turn_done', nodeId: 'react-1', interrupted: true })
       await flushPromises()
       expect(wrapper.find('[data-testid="clarify-turn-completed"]').exists()).toBe(false)
       expect(wrapper.find('[data-testid="clarify-interrupted"]').exists()).toBe(true)
       // interrupted is non-completed: keep bottom time (human + interrupted agent)
       expect(wrapper.findAll('[data-testid="clarify-turn-bottom-time"]').length).toBe(2)
+      expect(wrapper.find('[data-testid="thought-summary-state"]').attributes('data-state')).toBe(
+        'interrupted',
+      )
+      expect(wrapper.find('[data-testid="thought-summary-state"]').text()).toContain('已中断')
+      expect(wrapper.find('[data-testid="thought-summary-state"]').text()).not.toContain('已完成')
       wrapper.unmount()
     })
 

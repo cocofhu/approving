@@ -1755,6 +1755,8 @@
       "thinkingBusy": "思考中…",
       "outputting": "输出中",
       "thought": "思考过程",
+      "thoughtGenerating": "生成中…",
+      "thoughtInterrupted": "已中断",
       "turnCompleted": "已完成",
       "done": "交互已完成，进入下一步",
       "closed": "该运行已结束，交互已关闭",
