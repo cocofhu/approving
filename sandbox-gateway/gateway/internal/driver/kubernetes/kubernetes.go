@@ -442,7 +442,9 @@ func (d *Driver) ensureDeployment(ctx context.Context, spec driver.Spec, resLimi
 		Ports:           containerPorts,
 		Resources:       res,
 		SecurityContext: &corev1.SecurityContext{Privileged: &privileged},
-		// Persist workspace + tool caches on the sandbox PVC (subPaths).
+		// Persist workspace + tool caches + /tmp on the sandbox PVC (subPaths).
+		// /tmp must sit on the PVC: the container rootfs is often overlay with
+		// multi-hundred-ms fsync, which makes sqlite/go test / mktemp workloads crawl.
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "data", MountPath: "/root/workspace", SubPath: "workspace"},
 			{Name: "data", MountPath: "/root/.cache", SubPath: "cache"},
@@ -451,6 +453,7 @@ func (d *Driver) ensureDeployment(ctx context.Context, spec driver.Spec, resLimi
 			{Name: "data", MountPath: "/root/go/pkg/mod", SubPath: "go-mod"},
 			{Name: "data", MountPath: "/var/lib/docker", SubPath: "docker"},
 			{Name: "data", MountPath: "/var/lib/buildkit", SubPath: "buildkit"},
+			{Name: "data", MountPath: "/tmp", SubPath: "tmp"},
 		},
 	}
 	if spec.WorkspaceDir != "" {

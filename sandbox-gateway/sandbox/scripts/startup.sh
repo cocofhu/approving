@@ -14,6 +14,9 @@ set -e
 #   GITHUB_TOKEN, GITHUB_URL, GITLAB_TOKEN, GITLAB_URL, GIT_SSH_PRIVATE_KEY, GIT_SSH_KNOWN_HOSTS,
 #   ACP_BACKEND, ACP_BRIDGE_PORT, ACP_BRIDGE_PASSWORD, ACP_BRIDGE_MODEL
 
+# PVC subPath 挂上来的 /tmp 目录默认不是 1777；补 sticky bit，避免 mktemp/多用户写入失败。
+chmod 1777 /tmp 2>/dev/null || true
+
 # DinD：在容器内启动 Docker 守护进程（宿主机需 --privileged；SKIP_INNER_DOCKER=1 可跳过）
 if command -v dockerd >/dev/null 2>&1 && [ "${SKIP_INNER_DOCKER:-0}" != "1" ]; then
   if ! docker info >/dev/null 2>&1; then
