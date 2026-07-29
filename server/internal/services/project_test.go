@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -501,5 +502,124 @@ func TestTotalTokensByProjectIDs(t *testing.T) {
 	}
 	if merged.PM == nil || *merged.PM != 2 {
 		t.Fatalf("partial pm=%v want 2", merged.PM)
+	}
+}
+
+func TestEnvEntryIsEnabledLegacyCompat(t *testing.T) {
+	var legacy models.EnvEntry
+	if err := json.Unmarshal([]byte(`{"key":"LEGACY","value":"1"}`), &legacy); err != nil {
+		t.Fatal(err)
+	}
+	if !legacy.IsEnabled() {
+		t.Fatal("legacy JSON without enabled must IsEnabled()==true")
+	}
+	if legacy.Enabled != nil {
+		t.Fatalf("legacy Enabled pointer = %v, want nil", legacy.Enabled)
+	}
+
+	on := models.EnvEntry{Key: "ON", Value: "1", Enabled: boolPtr(true)}
+	off := models.EnvEntry{Key: "OFF", Value: "0", Enabled: boolPtr(false)}
+	if !on.IsEnabled() || off.IsEnabled() {
+		t.Fatalf("explicit true/false: on=%v off=%v", on.IsEnabled(), off.IsEnabled())
+	}
+}
+
+func TestProjectEnvMapSkipsDisabled(t *testing.T) {
+	env := []models.EnvEntry{
+		{Key: "KEEP", Value: "yes"},
+		{Key: "NIL_ON", Value: "n", Enabled: nil},
+		{Key: "EXPLICIT_ON", Value: "e", Enabled: boolPtr(true)},
+		{Key: "OFF", Value: "no", Enabled: boolPtr(false)},
+		{Key: "", Value: "empty-key", Enabled: boolPtr(true)},
+	}
+	m := ProjectEnvMap(env)
+	if len(m) != 3 {
+		t.Fatalf("map size=%d want 3: %+v", len(m), m)
+	}
+	if m["KEEP"] != "yes" || m["NIL_ON"] != "n" || m["EXPLICIT_ON"] != "e" {
+		t.Fatalf("enabled keys = %+v", m)
+	}
+	if _, ok := m["OFF"]; ok {
+		t.Fatal("disabled OFF must be skipped")
+	}
+}
+
+func TestProjectEnvEnabledRoundTrip(t *testing.T) {
+	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "env-enabled.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewProjectService(db)
+	p, err := s.Create("EnvEn", "", []models.EnvEntry{
+		{Key: "A", Value: "1", Secret: false, Enabled: boolPtr(true)},
+		{Key: "B", Value: "2", Secret: true, Enabled: boolPtr(false)},
+		{Key: "C", Value: "3", Secret: false}, // nil Enabled
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byKey := map[string]models.EnvEntry{}
+	for _, e := range p.SandboxEnv {
+		byKey[e.Key] = e
+	}
+	if !byKey["A"].IsEnabled() || byKey["B"].IsEnabled() || !byKey["C"].IsEnabled() {
+		t.Fatalf("after create: %+v", p.SandboxEnv)
+	}
+	m := ProjectEnvMap(p.SandboxEnv)
+	if _, ok := m["B"]; ok {
+		t.Fatal("B disabled must not inject after create")
+	}
+	if m["A"] != "1" || m["C"] != "3" {
+		t.Fatalf("inject map after create = %+v", m)
+	}
+
+	// Settings / SandboxEnvForWorkflow still return disabled rows (full list).
+	if len(p.SandboxEnv) != 3 {
+		t.Fatalf("settings list len=%d want 3", len(p.SandboxEnv))
+	}
+	if err := db.Create(&models.WorkflowDef{
+		ID: "wf-env-en", ProjectID: p.ID, Name: "w", Status: "draft", Version: 1,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	full := s.SandboxEnvForWorkflow("wf-env-en")
+	if len(full) != 3 {
+		t.Fatalf("SandboxEnvForWorkflow len=%d want 3 (incl. disabled)", len(full))
+	}
+	masked := MaskedSandboxEnv(p.SandboxEnv)
+	for _, e := range masked {
+		if e.Key == "B" {
+			if e.IsEnabled() || e.Value != SecretMask || e.Enabled == nil || *e.Enabled {
+				t.Fatalf("masked disabled B = %+v", e)
+			}
+		}
+	}
+
+	// Update round-trip: keep B disabled with mask; flip A off; leave C nil→submit false then true.
+	env := []models.EnvEntry{
+		{Key: "A", Value: "1", Secret: false, Enabled: boolPtr(false)},
+		{Key: "B", Value: SecretMask, Secret: true, Enabled: boolPtr(false)},
+		{Key: "C", Value: "3", Secret: false, Enabled: boolPtr(true)},
+	}
+	p, err = s.Update(p.ID, nil, nil, &env, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byKey = map[string]models.EnvEntry{}
+	for _, e := range p.SandboxEnv {
+		byKey[e.Key] = e
+	}
+	if byKey["A"].IsEnabled() {
+		t.Fatal("A should stay disabled after update")
+	}
+	if byKey["B"].IsEnabled() || byKey["B"].Value != "2" {
+		t.Fatalf("B disabled+secret preserve = %+v", byKey["B"])
+	}
+	if !byKey["C"].IsEnabled() {
+		t.Fatal("C should be enabled")
+	}
+	m = ProjectEnvMap(p.SandboxEnv)
+	if len(m) != 1 || m["C"] != "3" {
+		t.Fatalf("inject after disable A = %+v", m)
 	}
 }
