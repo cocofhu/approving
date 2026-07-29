@@ -489,7 +489,10 @@ const isColdSession = computed(
 )
 
 const useFillLayout = computed(() => !!props.fillPreview)
-/** Visual + fillPreview: content-fit shell (preview capped, form pinned). */
+/**
+ * Visual + fillPreview: desktop shell fills stage remainder (capped ≈60vh) with
+ * fillParent iframe; form stays pinned in the ReviewShell sidebar.
+ */
 const shouldFillPreview = computed(
   () => useFillLayout.value && isVisualBody.value && !!productHtml.value,
 )
@@ -1671,7 +1674,7 @@ function onComposerReject() {
       </ReviewShell>
     </div>
 
-    <!-- Content-fit + fillPreview: ReviewShell (stage | sidebar); keep content-fit-* testids. -->
+    <!-- fillPreview ReviewShell (stage | sidebar); desktop visual uses fillParent + 60vh shell. -->
     <div
       v-else-if="useReviewShellLayout"
       class="flex min-h-0 flex-1 flex-col overflow-hidden"
@@ -1687,7 +1690,12 @@ function onComposerReject() {
           <div class="flex h-full min-h-0 flex-col overflow-hidden">
             <div
               ref="gateStageEl"
-              class="scroll-area min-h-0 overflow-x-hidden overflow-y-auto border border-line"
+              class="border border-line"
+              :class="
+                isMobile
+                  ? 'scroll-area min-h-0 overflow-x-hidden overflow-y-auto'
+                  : 'flex min-h-0 flex-1 flex-col overflow-hidden'
+              "
               data-testid="content-fit-preview"
               data-review-annotate-stage
               :style="{ maxHeight: `${CONTENT_FIT_PREVIEW_MAX_VH}vh` }"
@@ -1704,6 +1712,7 @@ function onComposerReject() {
               <GateProductEditor
                 v-if="canEditProducts && run"
                 ref="productEditorRef"
+                :class="isMobile ? undefined : 'min-h-0 flex-1'"
                 :run-id="run.id"
                 :gate-node-id="gate.nodeId"
                 :products="primaryProducts"
@@ -1715,9 +1724,10 @@ function onComposerReject() {
                 :content-loading="productLoading"
                 :load-error="productLoadError"
                 :excluded-names="excludedProduces"
-                :fit-content="!isMobile"
-                :max-content-height-vh="CONTENT_FIT_PREVIEW_MAX_VH"
-                :content-height-offset-px="contentFitChromeOffsetPx"
+                :fill-parent="!isMobile"
+                :fit-content="false"
+                :max-content-height-vh="isMobile ? undefined : CONTENT_FIT_PREVIEW_MAX_VH"
+                :content-height-offset-px="isMobile ? 0 : contentFitChromeOffsetPx"
                 :inspectable="isVisualBody"
                 @saved="onProductSaved"
                 @dirty-change="productDirty = $event"
@@ -1727,7 +1737,8 @@ function onComposerReject() {
               />
               <div
                 v-else-if="productLoadError"
-                class="flex min-h-[200px] flex-col items-center justify-center gap-2.5 px-6 py-8 text-center"
+                class="flex flex-col items-center justify-center gap-2.5 px-6 py-8 text-center"
+                :class="isMobile ? 'min-h-[200px]' : 'min-h-0 flex-1'"
                 data-testid="content-fit-product-error"
                 role="alert"
               >
@@ -1747,16 +1758,20 @@ function onComposerReject() {
               </div>
               <HtmlPreview
                 v-else-if="shouldFillPreview"
+                :class="isMobile ? undefined : 'min-h-0 flex-1'"
                 :html="productHtml"
                 :mode="isMobile ? 'inline' : 'default'"
                 :enlargeable="!isMobile"
-                :fit-content="!isMobile"
-                :max-content-height-vh="CONTENT_FIT_PREVIEW_MAX_VH"
-                :content-height-offset-px="contentFitChromeOffsetPx"
+                :fill-parent="!isMobile"
+                :fit-content="false"
                 inspectable
                 @pick="onHtmlPreviewPick"
               />
-              <div v-else-if="shouldFitStructured && productName" class="p-4">
+              <div
+                v-else-if="shouldFitStructured && productName"
+                class="p-4"
+                :class="isMobile ? undefined : 'min-h-0 flex-1 overflow-y-auto'"
+              >
                 <StructuredArtifactView
                   :name="productName"
                   :doc="productDoc"
