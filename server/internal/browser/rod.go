@@ -65,8 +65,9 @@ type rodPage struct {
 	page   *rod.Page
 	ctxID  proto.BrowserBrowserContextID
 
-	mu     sync.Mutex
-	onPick func(Pick)
+	mu                sync.Mutex
+	onPick            func(Pick)
+	onInspectCanceled func()
 }
 
 func (rp *rodPage) OnPick(cb func(Pick)) {
@@ -79,6 +80,18 @@ func (rp *rodPage) getPick() func(Pick) {
 	rp.mu.Lock()
 	defer rp.mu.Unlock()
 	return rp.onPick
+}
+
+func (rp *rodPage) OnInspectCanceled(cb func()) {
+	rp.mu.Lock()
+	rp.onInspectCanceled = cb
+	rp.mu.Unlock()
+}
+
+func (rp *rodPage) getInspectCanceled() func() {
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+	return rp.onInspectCanceled
 }
 
 func (rp *rodPage) StartScreencast(onFrame func(Frame)) error {
@@ -205,19 +218,27 @@ func (rp *rodPage) Close() error {
 	return err
 }
 
-// installPickListener wires OverlayInspectNodeRequested → Pick callback.
+// installPickListener wires Overlay pick + cancel events to page callbacks.
 func (rp *rodPage) installPickListener() {
-	go rp.page.EachEvent(func(e *proto.OverlayInspectNodeRequested) {
-		cb := rp.getPick()
-		if cb == nil {
-			return
-		}
-		if pick, err := rp.describeBackendNode(e.BackendNodeID); err == nil {
-			cb(pick)
-		}
-		// One-shot: leave inspect mode after a pick.
-		_ = rp.SetInspect(false)
-	})()
+	go rp.page.EachEvent(
+		func(e *proto.OverlayInspectNodeRequested) {
+			cb := rp.getPick()
+			if cb == nil {
+				return
+			}
+			if pick, err := rp.describeBackendNode(e.BackendNodeID); err == nil {
+				cb(pick)
+			}
+			// One-shot: leave inspect mode after a pick.
+			_ = rp.SetInspect(false)
+		},
+		func(_ *proto.OverlayInspectModeCanceled) {
+			// User Esc (or equivalent) canceled SearchForNode — notify UI to clear sticky toggle.
+			if cb := rp.getInspectCanceled(); cb != nil {
+				cb()
+			}
+		},
+	)()
 }
 
 // pickScript computes a stable-ish CSS selector, tag, outerHTML and box for the

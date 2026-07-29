@@ -13,13 +13,21 @@ class MockWebSocket {
   onmessage: ((ev: { data: string }) => void) | null = null
   onclose: (() => void) | null = null
   onerror: (() => void) | null = null
+  sent: string[] = []
   constructor(_url: string) {
+    MockWebSocket.instances.push(this)
     queueMicrotask(() => {
       this.onopen?.()
       this.onmessage?.({ data: JSON.stringify({ type: 'ready', url: 'http://localhost:5173' }) })
     })
   }
-  send() {}
+  static instances: MockWebSocket[] = []
+  static reset() {
+    MockWebSocket.instances = []
+  }
+  send(data: string) {
+    this.sent.push(data)
+  }
   close() {}
 }
 
@@ -76,8 +84,27 @@ function mountNovnc(props: Record<string, unknown> = {}) {
   })
 }
 
+function inspectButton(wrapper: ReturnType<typeof mountNovnc>) {
+  return wrapper.find('[data-testid="novnc-inspect-toggle"]')
+}
+
+function lastInspectCtrl(): { type: string; on: boolean } | null {
+  const ws = MockWebSocket.instances[0]
+  if (!ws) return null
+  for (let i = ws.sent.length - 1; i >= 0; i--) {
+    try {
+      const msg = JSON.parse(ws.sent[i]) as { type?: string; on?: boolean }
+      if (msg.type === 'inspect') return msg as { type: string; on: boolean }
+    } catch {
+      /* ignore */
+    }
+  }
+  return null
+}
+
 describe('NovncPreviewPanel', () => {
   beforeEach(() => {
+    MockWebSocket.reset()
     vi.stubGlobal('WebSocket', MockWebSocket)
   })
 
@@ -91,8 +118,8 @@ describe('NovncPreviewPanel', () => {
     await flushPromises()
     expect(apiMocks.previewVncWsUrl).toHaveBeenCalledWith('run-1', 'node-1', 5173)
     expect(wrapper.text()).toMatch(/已连接|连接中/)
-    const inspectBtn = wrapper.findAll('button').find((b) => b.text().includes('取点标注'))
-    expect(inspectBtn).toBeTruthy()
+    expect(inspectButton(wrapper).exists()).toBe(true)
+    expect(inspectButton(wrapper).text()).toContain('取点标注')
     wrapper.unmount()
   })
 
@@ -104,14 +131,87 @@ describe('NovncPreviewPanel', () => {
     wrapper.unmount()
   })
 
-  it('toggles inspect mode in preview toolbar', async () => {
+  it('toggles inspect with stable label and aria-pressed; second click sends on:false', async () => {
     const wrapper = mountNovnc()
     await flushPromises()
-    const inspectBtn = wrapper.findAll('button').find((b) => b.text().includes('取点标注'))
-    expect(inspectBtn).toBeTruthy()
-    await inspectBtn!.trigger('click')
+    const btn = inspectButton(wrapper)
+    expect(btn.attributes('aria-pressed')).toBe('false')
+    expect(btn.text()).toContain('取点标注')
+    expect(wrapper.text()).not.toContain('取消取点')
+
+    await btn.trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('取消取点')
+    expect(btn.attributes('aria-pressed')).toBe('true')
+    expect(btn.text()).toContain('取点标注')
+    expect(wrapper.text()).not.toContain('取消取点')
+    expect(lastInspectCtrl()).toEqual({ type: 'inspect', on: true })
+
+    await btn.trigger('click')
+    await flushPromises()
+    expect(btn.attributes('aria-pressed')).toBe('false')
+    expect(btn.text()).toContain('取点标注')
+    expect(lastInspectCtrl()).toEqual({ type: 'inspect', on: false })
+    wrapper.unmount()
+  })
+
+  it('Esc while inspecting clears pressed state but keeps staged pick', async () => {
+    const wrapper = mountNovnc()
+    await flushPromises()
+    const ws = MockWebSocket.instances[0]
+    expect(ws).toBeTruthy()
+
+    await inspectButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(inspectButton(wrapper).attributes('aria-pressed')).toBe('true')
+
+    ws!.onmessage?.({
+      data: JSON.stringify({
+        type: 'picked',
+        pick: { selector: '#x', tagName: 'div', outerHTML: '<div id="x"></div>' },
+      }),
+    })
+    await flushPromises()
+    // pick auto-exits inspect; re-enter then Esc must keep staged
+    expect(inspectButton(wrapper).attributes('aria-pressed')).toBe('false')
+    expect(wrapper.text()).toContain('#x')
+
+    await inspectButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(inspectButton(wrapper).attributes('aria-pressed')).toBe('true')
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(inspectButton(wrapper).attributes('aria-pressed')).toBe('false')
+    expect(wrapper.text()).toContain('#x')
+    expect(lastInspectCtrl()).toEqual({ type: 'inspect', on: false })
+    wrapper.unmount()
+  })
+
+  it('remote inspect-canceled clears button without clearing staged pick', async () => {
+    const wrapper = mountNovnc()
+    await flushPromises()
+    const ws = MockWebSocket.instances[0]!
+
+    await inspectButton(wrapper).trigger('click')
+    await flushPromises()
+    ws.onmessage?.({
+      data: JSON.stringify({
+        type: 'picked',
+        pick: { selector: '#keep', tagName: 'span', outerHTML: '<span id="keep"></span>' },
+      }),
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('#keep')
+
+    await inspectButton(wrapper).trigger('click')
+    await flushPromises()
+    const beforeLen = ws.sent.length
+    ws.onmessage?.({ data: JSON.stringify({ type: 'inspect-canceled' }) })
+    await flushPromises()
+    expect(inspectButton(wrapper).attributes('aria-pressed')).toBe('false')
+    expect(wrapper.text()).toContain('#keep')
+    // Remote already off — do not echo another inspect on:false
+    expect(ws.sent.slice(beforeLen)).toEqual([])
     wrapper.unmount()
   })
 })

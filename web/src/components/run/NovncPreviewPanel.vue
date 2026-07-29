@@ -109,8 +109,13 @@ function handleCtrlText(data: string) {
       break
     case 'picked':
       picked.value = msg.pick
-      setInspect(false)
+      // Server already left inspect mode after one-shot pick.
+      clearInspect('picked', { syncRemote: false })
       if (msg.pick) emit('staged-pick', msg.pick)
+      break
+    case 'inspect-canceled':
+      // Remote Esc (Overlay.inspectModeCanceled) — keep staged pick.
+      clearInspect('remote-esc', { syncRemote: false })
       break
     case 'closed':
       status.value = 'closed'
@@ -134,9 +139,27 @@ function handleCtrlText(data: string) {
   }
 }
 
+/**
+ * Single exit for inspect mode (toolbar off / Esc / pick / remote cancel).
+ * Never clears staged pick — Esc must keep temporarily picked annotations.
+ */
+function clearInspect(_reason: string, opts?: { syncRemote?: boolean }) {
+  const syncRemote = opts?.syncRemote !== false
+  if (!inspect.value) {
+    if (syncRemote) sendCtrl({ type: 'inspect', on: false })
+    return
+  }
+  inspect.value = false
+  if (syncRemote) sendCtrl({ type: 'inspect', on: false })
+}
+
 function setInspect(on: boolean) {
-  inspect.value = on
-  sendCtrl({ type: 'inspect', on })
+  if (on) {
+    inspect.value = true
+    sendCtrl({ type: 'inspect', on: true })
+    return
+  }
+  clearInspect('setInspect')
 }
 
 function resolveWsUrl(): string | null {
@@ -261,13 +284,14 @@ function reconnect() {
 }
 
 function toggleInspect() {
-  setInspect(!inspect.value)
+  if (inspect.value) clearInspect('toolbar-toggle')
+  else setInspect(true)
 }
 
 function clearPick() {
   picked.value = null
   emit('staged-pick', null)
-  if (inspect.value) setInspect(false)
+  if (inspect.value) clearInspect('clearPick')
 }
 
 function nav(action: 'reload' | 'back' | 'forward') {
@@ -297,9 +321,10 @@ function onFsChange() {
 
 function onKeydown(ev: KeyboardEvent) {
   if (ev.key !== 'Escape') return
+  // Inspect Esc: exit mode only (keep staged). Non-inspect Esc clears staged pick.
   if (inspect.value) {
     ev.preventDefault()
-    setInspect(false)
+    clearInspect('host-esc')
     return
   }
   if (picked.value) {
@@ -370,10 +395,12 @@ onBeforeUnmount(() => {
         type="button"
         class="rounded px-2 py-0.5 text-[11px] transition"
         :class="inspect ? 'bg-ok/20 text-ok' : 'text-txt2 hover:bg-overlay'"
-        :title="inspect ? t('pages.appPreview.novnc.cancelInspect') : t('pages.appPreview.novnc.inspect')"
+        :title="t('pages.appPreview.novnc.inspect')"
+        :aria-pressed="inspect ? 'true' : 'false'"
+        data-testid="novnc-inspect-toggle"
         @click="toggleInspect"
       >
-        {{ inspect ? t('pages.appPreview.novnc.cancelInspect') : t('pages.appPreview.novnc.inspect') }}
+        {{ t('pages.appPreview.novnc.inspect') }}
       </button>
       <button
         type="button"

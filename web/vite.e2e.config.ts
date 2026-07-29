@@ -61,14 +61,25 @@ function handleMockVncUpgrade(
     const sendReady = () => ws.send(JSON.stringify({ type: 'ready', url: 'http://mock-app:3000/' }))
     if (connectDelayMs > 0) setTimeout(sendReady, connectDelayMs)
     else sendReady()
+    /** Deferred pick so on:false can cancel before forced pick masks toggle-off. */
+    let pendingPick: ReturnType<typeof setTimeout> | null = null
     ws.on('message', (data, isBinary) => {
       if (isBinary) return
       const text = typeof data === 'string' ? data : data.toString()
       try {
         const msg = JSON.parse(text) as { type?: string; on?: boolean }
-        if (msg.type === 'inspect' && msg.on) {
-          ws.send(JSON.stringify({ type: 'picked', pick: mockPick }))
+        if (msg.type !== 'inspect') return
+        if (pendingPick != null) {
+          clearTimeout(pendingPick)
+          pendingPick = null
         }
+        if (msg.on) {
+          pendingPick = setTimeout(() => {
+            pendingPick = null
+            ws.send(JSON.stringify({ type: 'picked', pick: mockPick }))
+          }, 300)
+        }
+        // on:false: cancel pending pick; do not force inspect-canceled (client already cleared)
       } catch {
         // ignore non-JSON client frames
       }

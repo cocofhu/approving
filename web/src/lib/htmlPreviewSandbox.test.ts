@@ -6,6 +6,7 @@ import {
   RESIZE_MESSAGE_TYPE,
   INSPECT_MESSAGE_TYPE,
   INSPECT_COMMAND_TYPE,
+  INSPECT_CANCELED_TYPE,
   SANDBOX_ATTR,
   CONTENT_FIT_PREVIEW_MAX_VH,
   CONTENT_FIT_REVIEWING_STRIP_PX,
@@ -19,6 +20,7 @@ import {
   parseResizeMessage,
   isValidInspectPickMessage,
   parseInspectPickMessage,
+  isValidInspectCanceledMessage,
   dataUrlToImageParts,
   buildInspectCommand,
 } from './htmlPreviewSandbox'
@@ -180,11 +182,14 @@ describe('parseResizeMessage', () => {
 })
 
 describe('injectInlineInspectScript', () => {
-  it('injects inspect message types and pickScript-style path helpers', () => {
+  it('injects inspect message types, Esc cancel, and pickScript-style path helpers', () => {
     const html = '<!doctype html><html><body><p id="x">hi</p></body></html>'
     const result = injectInlineInspectScript(html, TEST_ID)
     expect(result).toContain(INSPECT_MESSAGE_TYPE)
     expect(result).toContain(INSPECT_COMMAND_TYPE)
+    expect(result).toContain(INSPECT_CANCELED_TYPE)
+    expect(result).toContain("ev.key!=='Escape'")
+    expect(result).toContain('keydown')
     expect(result).toContain(TEST_ID)
     expect(result).toContain('nth-of-type')
     expect(result).toContain('foreignObject')
@@ -255,5 +260,16 @@ describe('buildInspectCommand', () => {
       id: TEST_ID,
       enabled: true,
     })
+  })
+})
+
+describe('isValidInspectCanceledMessage', () => {
+  it('accepts iframe Esc cancel messages', () => {
+    expect(isValidInspectCanceledMessage({ type: INSPECT_CANCELED_TYPE, id: TEST_ID })).toBe(true)
+  })
+
+  it('rejects missing id or wrong type', () => {
+    expect(isValidInspectCanceledMessage({ type: INSPECT_CANCELED_TYPE, id: '' })).toBe(false)
+    expect(isValidInspectCanceledMessage({ type: INSPECT_MESSAGE_TYPE, id: TEST_ID })).toBe(false)
   })
 })
