@@ -762,10 +762,10 @@ describe('GateApproval content-fit layout branches', () => {
     const html = wrapper.find('[data-testid="html-preview"]')
     expect(html.attributes('data-fill-parent')).toBe('1')
     expect(html.attributes('data-fit')).toBe('0')
-    // Shell eats stage remainder (flex-1); sidebar approve stays reachable.
+    // Shell eats stage remainder (flex-1); sidebar confirm stays reachable.
     const form = wrapper.find('[data-testid="content-fit-form"]')
     expect(form.exists()).toBe(true)
-    expect(form.findAll('button').some((b) => b.text().includes('批准'))).toBe(true)
+    expect(form.findAll('button').some((b) => b.text().includes('确认并流转'))).toBe(true)
     wrapper.unmount()
   })
 
@@ -810,7 +810,7 @@ describe('GateApproval content-fit layout branches', () => {
     expect(html.attributes('data-fit')).toBe('0')
     const form = wrapper.find('[data-testid="content-fit-form"]')
     expect(form.exists()).toBe(true)
-    expect(form.findAll('button').some((b) => b.text().includes('批准'))).toBe(true)
+    expect(form.findAll('button').some((b) => b.text().includes('确认并流转'))).toBe(true)
     wrapper.unmount()
   })
 
