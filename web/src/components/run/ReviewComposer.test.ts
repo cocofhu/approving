@@ -36,6 +36,30 @@ function mountGate(opts: {
   })
 }
 
+/** Clarify mode with real ClarifyChat — for pass-through applyAcpEvents contract. */
+function mountClarify() {
+  const i18n = createI18n({
+    legacy: false,
+    locale: 'zh-CN',
+    messages: { 'zh-CN': { ...common, ...pages } },
+  })
+  return mount(ReviewComposer, {
+    props: {
+      mode: 'clarify',
+      runId: 'run-1',
+      nodeId: 'react-1',
+      iteration: 1,
+      turns: [],
+      done: false,
+      active: true,
+    },
+    global: {
+      plugins: [i18n],
+      stubs: { Icon: true, ParagraphInput: true, AnnotationChip: true, ClarifyDemoFrame: true },
+    },
+  })
+}
+
 describe('ReviewComposer gate busy status (C-tier)', () => {
   it('thinking with empty stream shows 思考中… placeholder (no air bubble)', async () => {
     const wrapper = mountGate({ thinking: true })
@@ -146,6 +170,17 @@ describe('ReviewComposer nested ClarifyChat delivery', () => {
     const vm = wrapper.vm as any
     expect(vm.applyAcpEvents?.([{ kind: 'message', text: 'x' }])).toBe(false)
     expect(vm.isChatReady?.()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('applyAcpEvents passes through false when inner slot not ready (g1.3)', async () => {
+    // Clarify mode mounts ClarifyChat; without queue_state/turn_begin, slot missing.
+    const wrapper = mountClarify()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.isChatReady?.()).toBe(true)
+    // chatRef exists but liveAgentIdx < 0 → must not fake true.
+    expect(vm.applyAcpEvents?.([{ kind: 'thought', text: 'buffer me' }], 'react-1')).toBe(false)
     wrapper.unmount()
   })
 })

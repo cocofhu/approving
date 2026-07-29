@@ -2889,6 +2889,58 @@ describe('GateApproval mobileFillRemaining layout', () => {
     wrapper.unmount()
   })
 
+  it('applyAcpEvents returns false when not thinking/inFlight (g1.2 false applied)', async () => {
+    breakpointMocks.isMobile.value = false
+    const pageHtml = '<!doctype html><html><body><h1>gate</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      mobileFillRemaining: false,
+      gate: { ...gate, reactSessionAlive: true, reactUpstreamNodeId: 'visual' },
+      run,
+    })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // Idle — slot not ready; must return false so host buffers (not silent noop).
+    expect(vm.applyAcpEvents?.([{ kind: 'thought', text: 'should buffer' }])).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('authority idle tears down empty gate streaming placeholder (g2.2/f3)', async () => {
+    breakpointMocks.isMobile.value = false
+    const pageHtml = '<!doctype html><html><body><h1>gate idle</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      mobileFillRemaining: false,
+      gate: { ...gate, reactSessionAlive: true, reactUpstreamNodeId: 'visual' },
+      run,
+    })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.applyReviewFrame?.({
+      event: 'queue_state',
+      nodeId: 'visual',
+      waiting: 0,
+      items: [],
+      busy: true,
+      activeItem: { text: '热修中' },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-busy-placeholder"]').exists()).toBe(true)
+    vm.applyReviewFrame?.({
+      event: 'queue_state',
+      nodeId: 'visual',
+      waiting: 0,
+      items: [],
+      busy: false,
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-busy-placeholder"]').exists()).toBe(false)
+    expect(vm.applyAcpEvents?.([{ kind: 'message', text: 'late' }])).toBe(false)
+    wrapper.unmount()
+  })
+
   it('refresh resume: busy+activeItem (waiting=0) keeps thinking and consumes ACP (g2.1/g4.4)', async () => {
     breakpointMocks.isMobile.value = false
     const pageHtml = '<!doctype html><html><body><h1>gate resume</h1></body></html>'

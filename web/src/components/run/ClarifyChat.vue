@@ -838,6 +838,22 @@ function applyQueueState(
     streamPreview.reset()
     thoughtPreview.reset()
   }
+  // Authority idle (f3): tear down empty streaming placeholder — do not keep「思考中…」.
+  if (!busy && liveAgentIdx.value >= 0) {
+    const agent = liveTurns.value[liveAgentIdx.value]
+    const empty = !!agent && !agent.text && !agent.thought
+    if (empty) {
+      liveTurns.value = []
+      liveAgentIdx.value = -1
+      streamPreview.reset()
+      thoughtPreview.reset()
+    } else if (agent?.streaming) {
+      agent.streaming = false
+      liveAgentIdx.value = -1
+      streamPreview.flush()
+      thoughtPreview.flush()
+    }
+  }
   thinking.value = liveAgentIdx.value >= 0 || queued.value.length > 0 || !!busy
 }
 
@@ -956,12 +972,19 @@ function applyReviewFrame(frame: {
   void scrollBottom()
 }
 
-/** Consume publishAcp events for the streaming agent bubble (dialogue surface). */
-function applyAcpEvents(events: AcpEvent[] | undefined, nodeId?: string) {
-  if (liveAgentIdx.value < 0 || !events?.length) return
-  if (nodeId && nodeId !== props.nodeId) return
+/**
+ * Consume publishAcp events for the streaming agent bubble (dialogue surface).
+ * Returns false when mounted but streaming slot is not ready — host must buffer
+ * (hard-load / remount race; never silent-noop as applied).
+ */
+function applyAcpEvents(events: AcpEvent[] | undefined, nodeId?: string): boolean {
+  if (!events?.length) return true
+  // Wrong node: not a readiness failure — do not buffer for another surface.
+  if (nodeId && nodeId !== props.nodeId) return true
+  // Slot not rebuilt yet (queue_state pending) — buffer at host.
+  if (liveAgentIdx.value < 0) return false
   const agent = liveTurns.value[liveAgentIdx.value]
-  if (!agent) return
+  if (!agent) return false
   let msg = agent.text
   let thought = agent.thought || ''
   for (const ev of events) {
@@ -977,6 +1000,7 @@ function applyAcpEvents(events: AcpEvent[] | undefined, nodeId?: string) {
   thoughtReveal.setTarget(thought)
   // Stick-gated only — never force-drag while user scrolled up.
   void scrollBottom()
+  return true
 }
 
 /** Live agent bubble has visible message body (text or coalesced markdown). */

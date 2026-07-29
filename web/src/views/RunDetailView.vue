@@ -46,8 +46,13 @@ import { pickDefaultTimelineNodeId } from '@/lib/runStats'
 import { PRODUCT_NODE_TYPES } from '@/lib/productNodeArtifacts'
 import { applyLiveWsAcpPage } from '@/lib/applyLiveWsAcpPage'
 import { mergeAcpEvents, type MergedAcpEvent } from '@/lib/mergeAcpEvents'
-import { createPendingAcpBuffer } from '@/lib/pendingAcpBuffer'
+import { createPendingAcpBuffer, pickAcpRails } from '@/lib/pendingAcpBuffer'
 import { deliverOrBufferDialogueAcp } from '@/lib/dialogueAcpDelivery'
+import {
+  createBusySeedRetryController,
+  runBusySeedRetry,
+} from '@/lib/busySeedRetry'
+import { createWsReconnectController } from '@/lib/wsReconnect'
 import type { LiveLogBootSession } from '@/lib/liveLogBootPhase'
 import {
   isAbortError,
@@ -128,13 +133,24 @@ function isClarifySessionBusy(): boolean {
 }
 const gateApprovalRef = ref<{
   applyReviewFrame?: (frame: any) => void
-  applyAcpEvents?: (events: AcpEvent[] | undefined) => void
+  applyAcpEvents?: (events: AcpEvent[] | undefined) => boolean | void
 } | null>(null)
 /**
  * ACP frames that arrived while ClarifyChat / GateApproval was unmounted
  * during hard load. Flushed after queue_state rebuilds the streaming slot.
  */
 const pendingDialogueAcp = createPendingAcpBuffer()
+/** Rails applied via seed or live — stops busy seed retry (g3). */
+let dialogueRailsFilled = false
+let dialogueLiveIncremental = false
+const busySeedRetry = createBusySeedRetryController()
+let wsReconnectRunId = ''
+const wsReconnect = createWsReconnectController({
+  connect: () => connectWs({ fromReconnect: true }),
+  shouldReconnect: () =>
+    !!runId.value &&
+    (run.value.status === 'running' || run.value.status === 'waiting_human'),
+})
 const manual = ref(false)
 // Per-node fetch generation: discard stale REST responses so a slow empty
 // reply cannot overwrite a newer non-empty write-back.
@@ -340,13 +356,19 @@ function resetRunState(id: string) {
   clearReactiveRecord(rehydrateByNode as Record<string, unknown>)
   sandboxLookup.value = null
   pendingDialogueAcp.clear()
+  dialogueRailsFilled = false
+  dialogueLiveIncremental = false
+  busySeedRetry.stop()
   // Prefer cached timeline so re-entry is not blanked by loading/error UI.
   restoreEventPagesFromCache(id)
 }
 
 function teardownRealtime() {
+  busySeedRetry.stop()
+  wsReconnect.markIntentionalClose()
   ws?.close()
   ws = undefined
+  wsConnected = false
   if (timer) {
     window.clearInterval(timer)
     timer = undefined
@@ -395,9 +417,11 @@ async function fetchRunData(): Promise<true | RunLoadErrorKind> {
 
 /**
  * Align Inbox hard-load: multi nextTick so ReviewComposer/GateApproval mount
- * before queue_state → seed → flush (avoids false-applied empty forward).
+ * before queue_state → seed → flush → live (g2.1).
  */
 async function projectDialogueAfterLoad(r: { reactSessions?: Record<string, any> }) {
+  dialogueRailsFilled = false
+  dialogueLiveIncremental = false
   await nextTick()
   await nextTick()
   restoreReactSessions(r)
@@ -433,6 +457,8 @@ function restoreReactSessions(r: { reactSessions?: Record<string, any> }) {
   if (busyNodes.length) {
     void seedDialogueAcpAfterRestore(busyNodes)
   } else {
+    // Authority not busy (f3): surfaces already tore down empty placeholders.
+    busySeedRetry.stop()
     void nextTick(() => flushPendingDialogueAcp())
   }
 }
@@ -440,21 +466,78 @@ function restoreReactSessions(r: { reactSessions?: Record<string, any> }) {
 /**
  * Seed-then-live: after busy slot rebuild, replay eventPages / nodeEvents into
  * the dialogue surface, then flush any ACP buffered during hard-load remount.
+ * Busy + empty rails → periodic retry (g3).
  */
 async function seedDialogueAcpAfterRestore(nodeIds: string[]) {
   await nextTick()
   for (const nodeId of nodeIds) {
-    let events = eventPages[nodeId]?.events as AcpEvent[] | undefined
-    if (!events?.length) {
-      await fetchNodeEvents(nodeId)
-      events = eventPages[nodeId]?.events as AcpEvent[] | undefined
-    }
-    if (events?.length) {
-      applyOrBufferDialogueAcp(nodeId, events, true)
-    }
+    await seedDialogueNodeOnce(nodeId)
   }
   await nextTick()
   flushPendingDialogueAcp()
+  const stillEmptyBusy = nodeIds.filter(
+    (nid) => liveBusy[nid] && !dialogueRailsFilled && !dialogueLiveIncremental,
+  )
+  if (stillEmptyBusy.length) {
+    startDialogueBusySeedRetry(stillEmptyBusy)
+  }
+}
+
+async function seedDialogueNodeOnce(nodeId: string): Promise<boolean> {
+  let events = eventPages[nodeId]?.events as AcpEvent[] | undefined
+  if (!events?.length) {
+    try {
+      await fetchNodeEvents(nodeId)
+    } catch {
+      return false
+    }
+    events = eventPages[nodeId]?.events as AcpEvent[] | undefined
+  }
+  if (!events?.length) return false
+  const rails = pickAcpRails(events)
+  if (!rails.thought && !rails.message) return false
+  const forClarify = selClarify.value?.nodeId === nodeId
+  const forGate = run.value.gate?.reactUpstreamNodeId === nodeId
+  const result = deliverOrBufferDialogueAcp({
+    forClarify,
+    forGate,
+    events,
+    nodeId,
+    applyClarify: (evs, nid) => {
+      if (!reviewChatRef.value?.applyAcpEvents) return false
+      return reviewChatRef.value.applyAcpEvents(evs, nid)
+    },
+    applyGate: (evs) => {
+      if (!gateApprovalRef.value?.applyAcpEvents) return false
+      return gateApprovalRef.value.applyAcpEvents(evs) !== false
+    },
+  })
+  if (result === 'buffer') {
+    pendingDialogueAcp.push({ nodeId, events, busy: true })
+    return false
+  }
+  dialogueRailsFilled = true
+  return true
+}
+
+function startDialogueBusySeedRetry(nodeIds: string[]) {
+  busySeedRetry.start(async (signal) => {
+    await runBusySeedRetry({
+      signal,
+      isBusy: () => nodeIds.some((nid) => !!liveBusy[nid]),
+      hasContent: () => dialogueRailsFilled,
+      liveIncrementalReceived: () => dialogueLiveIncremental,
+      seed: async () => {
+        let any = false
+        for (const nid of nodeIds) {
+          if (!liveBusy[nid]) continue
+          if (await seedDialogueNodeOnce(nid)) any = true
+        }
+        flushPendingDialogueAcp()
+        return any || dialogueRailsFilled
+      },
+    })
+  })
 }
 
 function flushPendingDialogueAcp() {
@@ -477,10 +560,13 @@ function flushPendingDialogueAcp() {
       },
       applyGate: (events) => {
         if (!gateApprovalRef.value?.applyAcpEvents) return false
-        gateApprovalRef.value.applyAcpEvents(events)
-        return true
+        return gateApprovalRef.value.applyAcpEvents(events) !== false
       },
     })
+    if (result === 'applied') {
+      const rails = pickAcpRails(frame.events)
+      if (rails.thought || rails.message) dialogueRailsFilled = true
+    }
     if (result === 'buffer') leftover.push(frame)
   }
   for (const frame of leftover) pendingDialogueAcp.push(frame)
@@ -505,10 +591,16 @@ function applyOrBufferDialogueAcp(
     },
     applyGate: (evs) => {
       if (!gateApprovalRef.value?.applyAcpEvents) return false
-      gateApprovalRef.value.applyAcpEvents(evs)
-      return true
+      return gateApprovalRef.value.applyAcpEvents(evs) !== false
     },
   })
+  if (result === 'applied') {
+    const rails = pickAcpRails(events)
+    if (rails.thought || rails.message) {
+      dialogueRailsFilled = true
+      dialogueLiveIncremental = true
+    }
+  }
   if (result === 'buffer') {
     pendingDialogueAcp.push({ nodeId, events, busy })
   }
@@ -594,23 +686,51 @@ async function loadRun(hard = false) {
   }
 }
 
-function connectWs() {
-  try {
-    ws = new WebSocket(api.runEventsWsUrl(runId.value))
-  } catch {
-    return
-  }
-  ws.onopen = () => {
-    wsConnected = true
-  }
-  ws.onclose = () => {
+function connectWs(opts?: { fromReconnect?: boolean }) {
+  const id = runId.value
+  if (!id) return
+  wsReconnectRunId = id
+  if (opts?.fromReconnect) {
+    wsReconnect.markIntentionalClose()
+    ws?.close()
+    ws = undefined
     wsConnected = false
   }
-  ws.onmessage = (ev) => {
+  let socket: WebSocket
+  try {
+    socket = new WebSocket(api.runEventsWsUrl(id))
+    ws = socket
+  } catch {
+    wsReconnect.onClose()
+    return
+  }
+  socket.onopen = () => {
+    if (ws !== socket) return
+    wsConnected = true
+    wsReconnect.markOpened()
+    // Reconnect: force same-depth re-seed as hard refresh (g4.2).
+    if (opts?.fromReconnect && run.value.reactSessions) {
+      void projectDialogueAfterLoad(run.value)
+    }
+  }
+  socket.onclose = () => {
+    if (ws !== socket) return
+    wsConnected = false
+    ws = undefined
+    wsReconnect.onClose()
+  }
+  socket.onmessage = (ev) => {
+    if (ws !== socket) return
     let m: any
     try {
       m = JSON.parse(ev.data)
     } catch {
+      return
+    }
+    if (m.type === 'snapshot' && m.run?.reactSessions) {
+      run.value = { ...run.value, reactSessions: m.run.reactSessions }
+      // queue_state → seed → flush → live (parity with Inbox g4.2).
+      void projectDialogueAfterLoad(run.value)
       return
     }
     if (m.type === 'acp' && m.nodeId) {
@@ -624,7 +744,10 @@ function connectWs() {
         // WS only merges into the snapshot — never clears rehydrate error / soft warn.
         syncEventPageToCache(m.nodeId)
       }
-      if (typeof m.busy === 'boolean') liveBusy[m.nodeId] = m.busy
+      if (typeof m.busy === 'boolean') {
+        liveBusy[m.nodeId] = m.busy
+        if (!m.busy) busySeedRetry.stop()
+      }
       liveNode.value = m.nodeId
       if (!manual.value) selected.value = m.nodeId
       // Dialogue-surface stream (ClarifyChat / GateApproval), not only LiveLog.
@@ -632,13 +755,17 @@ function connectWs() {
     } else if (m.type === 'review' && m.nodeId) {
       // Prefer matching producer; components also filter by nodeId defensively.
       if (m.event === 'turn_begin') liveBusy[m.nodeId] = true
-      if (m.event === 'queue_state' && typeof m.busy === 'boolean') liveBusy[m.nodeId] = !!m.busy
+      if (m.event === 'queue_state' && typeof m.busy === 'boolean') {
+        liveBusy[m.nodeId] = !!m.busy
+        if (!m.busy) busySeedRetry.stop()
+      }
       if (!selClarify.value || selClarify.value.nodeId === m.nodeId) {
         reviewChatRef.value?.applyReviewFrame?.(m)
       }
       gateApprovalRef.value?.applyReviewFrame?.(m)
       if (m.event === 'turn_done' || m.event === 'error') {
         liveBusy[m.nodeId] = false
+        busySeedRetry.stop()
         loadRun(false)
       }
     } else if (
@@ -650,6 +777,7 @@ function connectWs() {
       // Node finished / transitioned / human artifact edit: pull authoritative snapshot.
       // Mid-clarify: review/acp frames project the session — skip full-page rebind for
       // react/status/trace/artifact_edit alike (g3.2 / review v3).
+      // Soft-refresh path unchanged (g2.3).
       if (isClarifySessionBusy()) return
       if (m.type === 'status') liveNode.value = null
       loadRun(false)
@@ -686,7 +814,7 @@ onUnmounted(() => {
   disposeAllRehydrateOrchs()
   document.removeEventListener('visibilitychange', onVisible)
   window.removeEventListener('focus', onFocusRefresh)
-  ws?.close()
+  teardownRealtime()
 })
 
 function onArtifactDeleted(id: string) {
