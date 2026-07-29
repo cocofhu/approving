@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{vue,ts,js}'],
+  content: ['./index.html', './src/**/*.{vue,ts,js}', './e2e/**/*.{html,ts,vue,js}'],
   theme: {
     borderRadius: {
       none: '0px',

@@ -260,6 +260,7 @@ function mountApproval(opts: {
   run?: Run
   fillPreview?: boolean
   mobileFillRemaining?: boolean
+  unifiedPreviewBudget?: boolean
 }) {
   const i18n = createI18n({
     legacy: false,
@@ -272,6 +273,7 @@ function mountApproval(opts: {
       run: opts.run,
       fillPreview: opts.fillPreview,
       mobileFillRemaining: opts.mobileFillRemaining,
+      unifiedPreviewBudget: opts.unifiedPreviewBudget,
       compact: true,
     },
     global: {
@@ -478,7 +480,9 @@ describe('GateApproval content-fit layout branches', () => {
     expect((preview.element as HTMLElement).style.maxHeight).toBe(
       `${CONTENT_FIT_PREVIEW_MAX_VH}vh`,
     )
-    expect(hasClass(form.element, 'shrink-0')).toBe(true)
+    // Run Detail default: no unified budget wrapper; form fills sidebar height.
+    expect(wrapper.find('[data-testid="content-fit-budget"]').exists()).toBe(false)
+    expect(hasClass(form.element, 'h-full')).toBe(true)
     expect(form.element.className).not.toMatch(/\bflex-1\b/)
     // Form is a sibling after preview (not nested inside preview scroll).
     expect(preview.element.contains(form.element)).toBe(false)
@@ -719,7 +723,7 @@ describe('GateApproval content-fit layout branches', () => {
     expect((preview.element as HTMLElement).style.maxHeight).toBe(
       `${CONTENT_FIT_PREVIEW_MAX_VH}vh`,
     )
-    expect(wrapper.find('[data-testid="content-fit-form"]').classes()).toContain('shrink-0')
+    expect(wrapper.find('[data-testid="content-fit-form"]').classes()).toContain('h-full')
     wrapper.unmount()
   })
 
@@ -1106,9 +1110,11 @@ describe('GateApproval content-fit layout branches', () => {
     expect(contentFitRoot(wrapper).exists()).toBe(true)
     const preview = wrapper.find('[data-testid="content-fit-preview"]')
     expect(hasClass(preview.element, 'flex-1')).toBe(true)
+    // Run Detail default: 60vh remains on preview alone (unified budget off).
     expect((preview.element as HTMLElement).style.maxHeight).toBe(
       `${CONTENT_FIT_PREVIEW_MAX_VH}vh`,
     )
+    expect(wrapper.find('[data-testid="content-fit-budget"]').exists()).toBe(false)
     const upstream = wrapper.find('[data-testid="upstream-context"]')
     expect(upstream.exists()).toBe(true)
     expect(wrapper.find('[data-testid="upstream-context-body"]').exists()).toBe(false)
@@ -1116,6 +1122,196 @@ describe('GateApproval content-fit layout branches', () => {
     expect(preview.element.contains(upstream.element)).toBe(false)
     expect(wrapper.find('[data-testid="structured-view"]').attributes('data-name')).toBe(
       'research.json',
+    )
+    wrapper.unmount()
+  })
+
+  it('Inbox unified budget: stage-fill wraps preview+upstream; no 60vh void under upstream', async () => {
+    // plan g2.2 / g2.3 / f2 / review v1: budget fills stage (no maxHeight:60vh);
+    // preview alone has no maxHeight; 60vh remains Run Detail preview-only.
+    const pageHtml = '<!doctype html><html><body><h1>Inbox</h1></body></html>'
+    const wrapper = mountApproval({
+      fillPreview: true,
+      unifiedPreviewBudget: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-visual',
+            type: 'human_gate',
+            label: '审阅视觉',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.visual.outputs.page}}' },
+          },
+        ],
+        nodeExecutions: {
+          visual: [
+            {
+              nodeId: 'visual',
+              iteration: 1,
+              status: 'completed',
+              outputs: { page: pageHtml },
+            },
+          ],
+        },
+        artifacts: [
+          {
+            id: 'a-req',
+            name: 'clarified_requirement.json',
+            kind: 'json',
+            nodeId: 'react',
+            runId: 'run-1',
+            workflowName: 'wf',
+            sizeBytes: 20,
+            createdAt: '2026-07-18T00:00:00Z',
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    const budget = wrapper.find('[data-testid="content-fit-budget"]')
+    const preview = wrapper.find('[data-testid="content-fit-preview"]')
+    const upstream = wrapper.find('[data-testid="upstream-context"]')
+    expect(budget.exists()).toBe(true)
+    expect(preview.exists()).toBe(true)
+    expect(upstream.exists()).toBe(true)
+    // Inbox path: no 60vh cap on budget (would leave void under upstream in tall stage)
+    expect((budget.element as HTMLElement).style.maxHeight).toBe('')
+    // g2.3: preview no longer owns the 60vh sibling budget alone
+    expect((preview.element as HTMLElement).style.maxHeight).toBe('')
+    expect(hasClass(preview.element, 'flex-1')).toBe(true)
+    expect(hasClass(budget.element, 'flex-1')).toBe(true)
+    expect(hasClass(budget.element, 'min-h-0')).toBe(true)
+    // Upstream is inside budget, sibling of preview (not nested in preview).
+    expect(budget.element.contains(preview.element)).toBe(true)
+    expect(budget.element.contains(upstream.element)).toBe(true)
+    expect(preview.element.contains(upstream.element)).toBe(false)
+    // fillParent short-HTML semantics retained (g3.1)
+    const html = wrapper.find('[data-testid="html-preview"]')
+    expect(html.attributes('data-fill-parent')).toBe('1')
+    expect(html.attributes('data-fit')).toBe('0')
+    // Confirm reachable in sidebar (g1.2)
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+    expect(form.findAll('button').some((b) => b.text().includes('确认并流转'))).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('Inbox unified budget without upstream: budget fills stage, preview has no maxHeight', async () => {
+    // plan g1.2 / s3: no upstream strip; card still uses unified budget wrapper
+    const pageHtml = '<!doctype html><html><body><p>短</p></body></html>'
+    const wrapper = mountApproval({
+      fillPreview: true,
+      unifiedPreviewBudget: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-visual',
+            type: 'human_gate',
+            label: '审阅视觉',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.visual.outputs.page}}' },
+          },
+        ],
+        nodeExecutions: {
+          visual: [
+            {
+              nodeId: 'visual',
+              iteration: 1,
+              status: 'completed',
+              outputs: { page: pageHtml },
+            },
+          ],
+        },
+      }),
+    })
+    await flushPromises()
+
+    const budget = wrapper.find('[data-testid="content-fit-budget"]')
+    expect(budget.exists()).toBe(true)
+    expect((budget.element as HTMLElement).style.maxHeight).toBe('')
+    expect(hasClass(budget.element, 'flex-1')).toBe(true)
+    expect(wrapper.find('[data-testid="upstream-context"]').exists()).toBe(false)
+    const preview = wrapper.find('[data-testid="content-fit-preview"]')
+    expect((preview.element as HTMLElement).style.maxHeight).toBe('')
+    expect(wrapper.find('[data-testid="html-preview"]').attributes('data-fill-parent')).toBe('1')
+    wrapper.unmount()
+  })
+
+  it('unified budget off by default so Run Detail keeps preview-only 60vh', async () => {
+    // plan g2.1 / n2: Run Detail must not enable unified wrapper
+    const pageHtml = '<!doctype html><html><body><h1>Run Detail</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({ fillPreview: true, gate, run })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="content-fit-budget"]').exists()).toBe(false)
+    expect((wrapper.find('[data-testid="content-fit-preview"]').element as HTMLElement).style.maxHeight).toBe(
+      `${CONTENT_FIT_PREVIEW_MAX_VH}vh`,
+    )
+    wrapper.unmount()
+  })
+
+  it('unified budget expands upstream under budget without preview maxHeight', async () => {
+    // plan g3.2 / f4: expand upstream body; budget still fills stage (no 60vh void)
+    const pageHtml = '<!doctype html><html><body><h1>预览</h1></body></html>'
+    const wrapper = mountApproval({
+      fillPreview: true,
+      unifiedPreviewBudget: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-visual',
+            type: 'human_gate',
+            label: '审阅视觉',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.visual.outputs.page}}' },
+          },
+        ],
+        nodeExecutions: {
+          visual: [
+            {
+              nodeId: 'visual',
+              iteration: 1,
+              status: 'completed',
+              outputs: { page: pageHtml },
+            },
+          ],
+        },
+        artifacts: [
+          {
+            id: 'a-req',
+            name: 'clarified_requirement.json',
+            kind: 'json',
+            nodeId: 'react',
+            runId: 'run-1',
+            workflowName: 'wf',
+            sizeBytes: 20,
+            createdAt: '2026-07-18T00:00:00Z',
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    apiMocks.artifactContent.mockResolvedValue({
+      content: JSON.stringify({ title: '需求', summary: '展开正文' }),
+    })
+    await wrapper.find('[data-testid="upstream-context-toggle"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="upstream-context-body"]').exists()).toBe(true)
+    const budget = wrapper.find('[data-testid="content-fit-budget"]')
+    expect((budget.element as HTMLElement).style.maxHeight).toBe('')
+    expect(hasClass(budget.element, 'flex-1')).toBe(true)
+    expect((wrapper.find('[data-testid="content-fit-preview"]').element as HTMLElement).style.maxHeight).toBe(
+      '',
+    )
+    // Preview still flex-1 so it yields height when upstream expands.
+    expect(hasClass(wrapper.find('[data-testid="content-fit-preview"]').element, 'flex-1')).toBe(
+      true,
     )
     wrapper.unmount()
   })

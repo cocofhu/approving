@@ -79,6 +79,13 @@ const props = defineProps<{
    */
   fillPreview?: boolean
   /**
+   * Inbox desktop only: wrap content-fit-preview + UpstreamRequirementContext in a
+   * flex-1/min-h-0 budget that fills the stretched stage (no 60vh cap — that would
+   * leave a void under the upstream strip when stage > 60vh). When off (Run Detail
+   * default), 60vh stays on the preview shell alone.
+   */
+  unifiedPreviewBudget?: boolean
+  /**
    * Run-detail only: on mobile visual gates, use ReviewShell drawer (stage
    * fills remaining height above the composable sidebar). Inbox must omit.
    */
@@ -1371,6 +1378,14 @@ const useReviewShellLayout = computed(
     !useMobileFillRemaining.value,
 )
 
+/**
+ * Inbox desktop: one budget wraps preview + upstream and fills the stage.
+ * Desktop-only so mobile content-fit keeps per-preview maxHeight.
+ */
+const useUnifiedPreviewBudget = computed(
+  () => !!props.unifiedPreviewBudget && !isMobile.value && useReviewShellLayout.value,
+)
+
 const passAction = computed(() => {
   // Prefer configured positive action; fall back to first approve/pass id for confirm.
   return (
@@ -1732,112 +1747,128 @@ function onComposerReject() {
       >
         <template #stage>
           <div class="flex h-full min-h-0 flex-col overflow-hidden">
+            <!-- Inbox: budget fills stage so upstream sits on card bottom (no 60vh free-space void). -->
             <div
-              ref="gateStageEl"
-              class="border border-line"
               :class="
-                isMobile
-                  ? 'scroll-area min-h-0 overflow-x-hidden overflow-y-auto'
-                  : 'flex min-h-0 flex-1 flex-col overflow-hidden'
+                useUnifiedPreviewBudget
+                  ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
+                  : 'contents'
               "
-              data-testid="content-fit-preview"
-              data-review-annotate-stage
-              :style="{ maxHeight: `${CONTENT_FIT_PREVIEW_MAX_VH}vh` }"
+              :data-testid="useUnifiedPreviewBudget ? 'content-fit-budget' : undefined"
             >
               <div
-                v-if="reviewingIteration != null"
-                class="shrink-0 border-b border-line bg-elevated/60 px-3 py-1.5 text-[11px] text-txt3"
+                ref="gateStageEl"
+                class="border border-line"
+                :class="
+                  isMobile
+                    ? 'scroll-area min-h-0 overflow-x-hidden overflow-y-auto'
+                    : 'flex min-h-0 flex-1 flex-col overflow-hidden'
+                "
+                data-testid="content-fit-preview"
+                data-review-annotate-stage
+                :style="
+                  useUnifiedPreviewBudget
+                    ? undefined
+                    : { maxHeight: `${CONTENT_FIT_PREVIEW_MAX_VH}vh` }
+                "
               >
-                {{ t('pages.gateApproval.reviewingUpstream', { n: reviewingIteration }) }}
-                <span v-if="previewFromArtifactFallback" class="ml-2 text-warn">
-                  {{ t('pages.gateApproval.reviewingUpstreamFallback') }}
-                </span>
-              </div>
-              <GateProductEditor
-                v-if="canEditProducts && run"
-                ref="productEditorRef"
-                :class="isMobile ? undefined : 'min-h-0 flex-1'"
-                :run-id="run.id"
-                :gate-node-id="gate.nodeId"
-                :products="primaryProducts"
-                :saved-content="savedProductContent"
-                :saved-meta="savedProductMeta"
-                :artifacts="run.artifacts"
-                :run-status="run.status"
-                :can-edit="canEditProducts"
-                :content-loading="productLoading"
-                :load-error="productLoadError"
-                :excluded-names="excludedProduces"
-                :fill-parent="!isMobile"
-                :fit-content="false"
-                :max-content-height-vh="isMobile ? undefined : CONTENT_FIT_PREVIEW_MAX_VH"
-                :content-height-offset-px="isMobile ? 0 : contentFitChromeOffsetPx"
-                :enlargeable="!isMobile"
-                :inspectable="isVisualBody"
-                @saved="onProductSaved"
-                @dirty-change="productDirty = $event"
-                @refresh-request="onProductRefresh"
-                @retry-load="retryLoadProduct"
-                @pick="onHtmlPreviewPick"
-              />
-              <div
-                v-else-if="productLoadError"
-                class="flex flex-col items-center justify-center gap-2.5 px-6 py-8 text-center"
-                :class="isMobile ? 'min-h-[200px]' : 'min-h-0 flex-1'"
-                data-testid="content-fit-product-error"
-                role="alert"
-              >
-                <p class="text-[13px] font-medium text-txt">{{ t('pages.gateApproval.previewLoadFailedTitle') }}</p>
-                <p class="max-w-[36ch] text-[12px] text-txt3">
-                  {{ t('pages.gateApproval.previewLoadFailedBody') }}
-                </p>
-                <p class="max-w-[42ch] text-[11px] text-err">{{ productLoadError }}</p>
-                <button
-                  type="button"
-                  class="mt-1 bg-accent px-3.5 py-1.5 text-xs font-medium text-white hover:bg-accent-2"
-                  data-testid="content-fit-product-retry"
-                  @click="retryLoadProduct"
+                <div
+                  v-if="reviewingIteration != null"
+                  class="shrink-0 border-b border-line bg-elevated/60 px-3 py-1.5 text-[11px] text-txt3"
                 >
-                  {{ t('pages.gateApproval.previewRetry') }}
-                </button>
-              </div>
-              <HtmlPreview
-                v-else-if="shouldFillPreview"
-                :class="isMobile ? undefined : 'min-h-0 flex-1'"
-                :html="productHtml"
-                :mode="isMobile ? 'inline' : 'default'"
-                :enlargeable="!isMobile"
-                :fill-parent="!isMobile"
-                :fit-content="false"
-                inspectable
-                @pick="onHtmlPreviewPick"
-              />
-              <div
-                v-else-if="shouldFitStructured && productName"
-                class="p-4"
-                :class="isMobile ? undefined : 'min-h-0 flex-1 overflow-y-auto'"
-              >
-                <StructuredArtifactView
-                  :name="productName"
-                  :doc="productDoc"
-                  :artifacts="run?.artifacts"
-                  :run-id="run?.id"
-                  :run-status="run?.status"
+                  {{ t('pages.gateApproval.reviewingUpstream', { n: reviewingIteration }) }}
+                  <span v-if="previewFromArtifactFallback" class="ml-2 text-warn">
+                    {{ t('pages.gateApproval.reviewingUpstreamFallback') }}
+                  </span>
+                </div>
+                <GateProductEditor
+                  v-if="canEditProducts && run"
+                  ref="productEditorRef"
+                  :class="isMobile ? undefined : 'min-h-0 flex-1'"
+                  :run-id="run.id"
+                  :gate-node-id="gate.nodeId"
+                  :products="primaryProducts"
+                  :saved-content="savedProductContent"
+                  :saved-meta="savedProductMeta"
+                  :artifacts="run.artifacts"
+                  :run-status="run.status"
+                  :can-edit="canEditProducts"
+                  :content-loading="productLoading"
+                  :load-error="productLoadError"
+                  :excluded-names="excludedProduces"
+                  :fill-parent="!isMobile"
+                  :fit-content="false"
+                  :max-content-height-vh="
+                    isMobile || useUnifiedPreviewBudget ? undefined : CONTENT_FIT_PREVIEW_MAX_VH
+                  "
+                  :content-height-offset-px="isMobile ? 0 : contentFitChromeOffsetPx"
+                  :enlargeable="!isMobile"
+                  :inspectable="isVisualBody"
+                  @saved="onProductSaved"
+                  @dirty-change="productDirty = $event"
+                  @refresh-request="onProductRefresh"
+                  @retry-load="retryLoadProduct"
+                  @pick="onHtmlPreviewPick"
                 />
+                <div
+                  v-else-if="productLoadError"
+                  class="flex flex-col items-center justify-center gap-2.5 px-6 py-8 text-center"
+                  :class="isMobile ? 'min-h-[200px]' : 'min-h-0 flex-1'"
+                  data-testid="content-fit-product-error"
+                  role="alert"
+                >
+                  <p class="text-[13px] font-medium text-txt">{{ t('pages.gateApproval.previewLoadFailedTitle') }}</p>
+                  <p class="max-w-[36ch] text-[12px] text-txt3">
+                    {{ t('pages.gateApproval.previewLoadFailedBody') }}
+                  </p>
+                  <p class="max-w-[42ch] text-[11px] text-err">{{ productLoadError }}</p>
+                  <button
+                    type="button"
+                    class="mt-1 bg-accent px-3.5 py-1.5 text-xs font-medium text-white hover:bg-accent-2"
+                    data-testid="content-fit-product-retry"
+                    @click="retryLoadProduct"
+                  >
+                    {{ t('pages.gateApproval.previewRetry') }}
+                  </button>
+                </div>
+                <HtmlPreview
+                  v-else-if="shouldFillPreview"
+                  :class="isMobile ? undefined : 'min-h-0 flex-1'"
+                  :html="productHtml"
+                  :mode="isMobile ? 'inline' : 'default'"
+                  :enlargeable="!isMobile"
+                  :fill-parent="!isMobile"
+                  :fit-content="false"
+                  inspectable
+                  @pick="onHtmlPreviewPick"
+                />
+                <div
+                  v-else-if="shouldFitStructured && productName"
+                  class="p-4"
+                  :class="isMobile ? undefined : 'min-h-0 flex-1 overflow-y-auto'"
+                >
+                  <StructuredArtifactView
+                    :name="productName"
+                    :doc="productDoc"
+                    :artifacts="run?.artifacts"
+                    :run-id="run?.id"
+                    :run-status="run?.status"
+                  />
+                </div>
               </div>
+              <UpstreamRequirementContext
+                :artifacts="run?.artifacts"
+                :run-id="run?.id"
+                :run-status="run?.status"
+                :product-name="productName"
+                :body-template="bodyTemplate"
+              />
             </div>
-            <UpstreamRequirementContext
-              :artifacts="run?.artifacts"
-              :run-id="run?.id"
-              :run-status="run?.status"
-              :product-name="productName"
-              :body-template="bodyTemplate"
-            />
           </div>
         </template>
         <template #sidebar>
           <div
-            class="flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-t border-line p-3 safe-area-bottom"
+            class="flex h-full min-h-0 flex-col overflow-hidden border-t border-line p-3 safe-area-bottom"
             data-testid="content-fit-form"
           >
             <div v-if="gate.form?.length && !shouldHideGateForm" class="mb-3 shrink-0 space-y-3">
@@ -1941,7 +1972,7 @@ function onComposerReject() {
               <!-- Hot unified actions (no ReviewComposer input): 记入 + 发送 + 确认并流转. -->
               <div
                 v-if="canReactRevise && usesPreviewIssues"
-                class="mt-2 shrink-0"
+                class="mt-auto shrink-0 pt-2"
                 data-testid="review-composer-gate"
               >
                 <div v-if="reactError" class="mb-1.5 text-[11px] text-err">{{ reactError }}</div>
@@ -2048,7 +2079,7 @@ function onComposerReject() {
               />
               <div
                 v-else
-                class="mt-2 flex shrink-0 flex-col gap-2"
+                class="mt-auto flex shrink-0 flex-col gap-2 pt-2"
               >
                 <div class="flex flex-wrap gap-2" :class="isMobile ? 'gap-3' : ''">
                   <button
