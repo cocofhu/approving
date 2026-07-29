@@ -2,6 +2,7 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
+import AppModal from '../ui/AppModal.vue'
 import ClarifyDemoFrame from './ClarifyDemoFrame.vue'
 import { renderMarkdown } from '@/lib/markdown'
 import { createStreamMarkdownPreview } from '@/lib/streamMarkdownPreview'
@@ -322,6 +323,37 @@ const turns = computed<ClarifyTurn[]>(() => {
 function imgSrc(im: ClarifyImage): string {
   return `data:${im.mimeType || 'image/png'};base64,${im.data}`
 }
+
+/** Single-image lightbox for human history attachments (no gallery / Esc). */
+type ImagePreview = { src: string; label: string }
+const imagePreview = ref<ImagePreview | null>(null)
+
+function imagePreviewLabel(images: ClarifyImage[], index: number): string {
+  const named = (images[index] as ClarifyImage & { name?: string; filename?: string })?.name
+    || (images[index] as ClarifyImage & { name?: string; filename?: string })?.filename
+  if (named?.trim()) return named.trim()
+  if (images.length <= 1) return translate('pages.clarify.imageFallback')
+  return translate('pages.clarify.imageFallbackN', { n: index + 1 })
+}
+
+function openImagePreview(images: ClarifyImage[], index: number) {
+  const im = images[index]
+  if (!im) return
+  imagePreview.value = {
+    src: imgSrc(im),
+    label: imagePreviewLabel(images, index),
+  }
+}
+
+function closeImagePreview() {
+  imagePreview.value = null
+}
+
+const imagePreviewTitle = computed(() =>
+  imagePreview.value
+    ? translate('pages.clarify.imagePreviewTitle', { label: imagePreview.value.label })
+    : '',
+)
 
 function turnsSemanticKey(turnList: ClarifyTurn[]): string {
   if (!turnList.length) return '0'
@@ -976,12 +1008,37 @@ defineExpose({
         </div>
         <div class="min-w-0 max-w-[80%]">
           <div v-if="t.images && t.images.length" class="mb-1.5 flex flex-wrap gap-1.5" :class="t.role === 'human' ? 'justify-end' : ''">
-            <img
-              v-for="(im, ii) in t.images"
-              :key="ii"
-              :src="imgSrc(im)"
-              class="h-20 w-20 rounded-md border border-line object-cover"
-            />
+            <!-- human history: clickable thumbs → AppModal single-image preview -->
+            <template v-if="t.role === 'human'">
+              <button
+                v-for="(im, ii) in t.images"
+                :key="ii"
+                type="button"
+                class="group relative h-20 w-20 cursor-pointer overflow-hidden rounded-md border border-line transition hover:border-accent"
+                data-testid="clarify-history-image-thumb"
+                :aria-label="translate('pages.clarify.imagePreviewAria', { label: imagePreviewLabel(t.images, ii) })"
+                @click="openImagePreview(t.images!, ii)"
+              >
+                <img
+                  :src="imgSrc(im)"
+                  class="h-full w-full cursor-pointer object-cover"
+                  alt=""
+                />
+                <span
+                  class="pointer-events-none absolute inset-x-0 bottom-0 bg-black/55 px-1 py-0.5 text-center text-[10px] leading-tight text-white opacity-0 transition-opacity group-hover:opacity-100"
+                >{{ translate('pages.clarify.clickToEnlarge') }}</span>
+              </button>
+            </template>
+            <!-- agent history: static thumbs (out of scope) -->
+            <template v-else>
+              <img
+                v-for="(im, ii) in t.images"
+                :key="ii"
+                :src="imgSrc(im)"
+                class="h-20 w-20 rounded-md border border-line object-cover"
+                data-testid="clarify-agent-image-thumb"
+              />
+            </template>
           </div>
           <!-- annotation chips attached to this human review turn -->
           <div v-if="t.role === 'human' && t.annotations && t.annotations.length" class="mb-1.5 flex flex-wrap gap-1.5 justify-end">
@@ -1434,6 +1491,27 @@ defineExpose({
       <span class="min-w-0 flex-1 [overflow-wrap:anywhere]">{{ confirmError }}</span>
     </div>
   </div>
+
+  <!-- Human history attachment image preview (single slot; no gallery / Esc) -->
+  <AppModal
+    :open="!!imagePreview"
+    :title="imagePreviewTitle"
+    :width="960"
+    @close="closeImagePreview"
+  >
+    <div
+      v-if="imagePreview"
+      class="flex min-h-[280px] items-center justify-center"
+      data-testid="clarify-image-preview-body"
+    >
+      <img
+        :src="imagePreview.src"
+        :alt="imagePreview.label"
+        class="max-h-[74vh] max-w-full object-contain"
+        data-testid="clarify-image-preview-img"
+      />
+    </div>
+  </AppModal>
 </template>
 
 <style scoped>

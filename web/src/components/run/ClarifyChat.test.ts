@@ -16,6 +16,7 @@ function mountChat(opts: {
   confirmError?: string | null
   annotateEnabled?: boolean
   annotations?: ReactAnnotation[]
+  attachments?: { data: string; mimeType: string }[]
 } = {}) {
   const i18n = createI18n({
     legacy: false,
@@ -35,10 +36,26 @@ function mountChat(opts: {
       confirmError: opts.confirmError ?? null,
       annotateEnabled: opts.annotateEnabled ?? false,
       annotations: opts.annotations ?? [],
+      attachments: opts.attachments ?? [],
     },
     global: {
       plugins: [i18n],
-      stubs: { Icon: true, ClarifyDemoFrame: true },
+      stubs: {
+        Icon: true,
+        ClarifyDemoFrame: true,
+        AppModal: {
+          props: ['open', 'title', 'width'],
+          emits: ['close'],
+          template: `
+            <div v-if="open" data-testid="clarify-image-preview-modal">
+              <div data-testid="clarify-image-preview-title">{{ title }}</div>
+              <button type="button" data-testid="clarify-image-preview-close" @click="$emit('close')">×</button>
+              <button type="button" data-testid="clarify-image-preview-backdrop" @click="$emit('close')">backdrop</button>
+              <slot />
+            </div>
+          `,
+        },
+      },
     },
   })
 }
@@ -795,6 +812,116 @@ describe('ClarifyChat', () => {
       expect(wrapper.find('[data-testid="clarify-busy-placeholder"]').text()).toContain('思考中')
       expect(wrapper.text()).not.toMatch(/正在调用工具|读文件/)
       expect(wrapper.find('[data-testid="clarify-agent-message"]').exists()).toBe(false)
+      wrapper.unmount()
+    })
+  })
+
+  describe('human history image AppModal preview (g4)', () => {
+    const PNG_A = 'AAAApreviewA'
+    const PNG_B = 'BBBBpreviewB'
+
+    it('opens AppModal with title fallback「图片」and closes via × / backdrop (g4.1)', async () => {
+      const wrapper = mountChat({
+        turns: [
+          {
+            role: 'human',
+            text: '修改 你到底看了项目吗',
+            at: '2026-07-28T00:00:00Z',
+            images: [{ data: PNG_A, mimeType: 'image/png' }],
+          },
+        ],
+      })
+      expect(wrapper.find('[data-testid="clarify-image-preview-modal"]').exists()).toBe(false)
+      const thumb = wrapper.find('[data-testid="clarify-history-image-thumb"]')
+      expect(thumb.exists()).toBe(true)
+      expect(thumb.classes().join(' ')).toMatch(/hover:border-accent/)
+      expect(thumb.text()).toContain('点击放大')
+      await thumb.trigger('click')
+      await flushPromises()
+
+      const modal = wrapper.find('[data-testid="clarify-image-preview-modal"]')
+      expect(modal.exists()).toBe(true)
+      expect(wrapper.find('[data-testid="clarify-image-preview-title"]').text()).toBe('图片预览 · 图片')
+      const previewImg = wrapper.find('[data-testid="clarify-image-preview-img"]')
+      expect(previewImg.exists()).toBe(true)
+      expect(previewImg.attributes('src')).toBe(`data:image/png;base64,${PNG_A}`)
+
+      await wrapper.find('[data-testid="clarify-image-preview-close"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-image-preview-modal"]').exists()).toBe(false)
+
+      await thumb.trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-image-preview-modal"]').exists()).toBe(true)
+      await wrapper.find('[data-testid="clarify-image-preview-backdrop"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-image-preview-modal"]').exists()).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('multi-image opens only the clicked index label「图片 N」(g4.2)', async () => {
+      const wrapper = mountChat({
+        turns: [
+          {
+            role: 'human',
+            text: '两张附图',
+            at: '2026-07-28T00:00:00Z',
+            images: [
+              { data: PNG_A, mimeType: 'image/png' },
+              { data: PNG_B, mimeType: 'image/png' },
+            ],
+          },
+        ],
+      })
+      const thumbs = wrapper.findAll('[data-testid="clarify-history-image-thumb"]')
+      expect(thumbs).toHaveLength(2)
+      await thumbs[1].trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-image-preview-title"]').text()).toBe('图片预览 · 图片 2')
+      expect(wrapper.find('[data-testid="clarify-image-preview-img"]').attributes('src')).toBe(
+        `data:image/png;base64,${PNG_B}`,
+      )
+      expect(wrapper.find('[data-testid="clarify-image-preview-prev"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="clarify-image-preview-next"]').exists()).toBe(false)
+
+      await wrapper.find('[data-testid="clarify-image-preview-close"]').trigger('click')
+      await flushPromises()
+      await thumbs[0].trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-image-preview-title"]').text()).toBe('图片预览 · 图片 1')
+      expect(wrapper.find('[data-testid="clarify-image-preview-img"]').attributes('src')).toBe(
+        `data:image/png;base64,${PNG_A}`,
+      )
+      wrapper.unmount()
+    })
+
+    it('agent history thumbs and composer drafts do not open preview (g4.2)', async () => {
+      const wrapper = mountChat({
+        turns: [
+          {
+            role: 'agent',
+            text: '请附图',
+            at: '2026-07-28T00:00:00Z',
+            images: [{ data: PNG_A, mimeType: 'image/png' }],
+          },
+        ],
+        attachments: [{ data: PNG_B, mimeType: 'image/png' }],
+      })
+      expect(wrapper.find('[data-testid="clarify-history-image-thumb"]').exists()).toBe(false)
+      const agentThumb = wrapper.find('[data-testid="clarify-agent-image-thumb"]')
+      expect(agentThumb.exists()).toBe(true)
+      await agentThumb.trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-image-preview-modal"]').exists()).toBe(false)
+
+      // composer draft thumbs have no preview click handler
+      const draftImgs = wrapper.findAll('img').filter((img) =>
+        (img.attributes('src') || '').includes(PNG_B),
+      )
+      expect(draftImgs.length).toBeGreaterThan(0)
+      await draftImgs[0].trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-image-preview-modal"]').exists()).toBe(false)
       wrapper.unmount()
     })
   })
