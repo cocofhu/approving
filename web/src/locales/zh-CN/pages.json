@@ -1956,6 +1956,7 @@
       "helpReviseDetailNoIssuesNoForm": "可确认并流转；若需修改，请先发送评审意见就地改。",
       "helpReviseWithIssues": "已提交评审意见：",
       "helpReviseWithIssuesDetail": "可继续发送就地改；确认并流转已禁用，直至意见处理完毕。",
+      "helpReviseWithIssuesColdDetail": "已记录待处理意见，可点击下方按钮一并退回处理；意见清空后再确认并流转。",
       "reviewFeedback": {
         "title": "评审意见",
         "placeholder": "请输入评审意见…",

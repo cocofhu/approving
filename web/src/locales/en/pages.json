@@ -1956,6 +1956,7 @@
       "helpReviseDetailNoIssuesNoForm": "You can Confirm & continue; to request changes, send review feedback first.",
       "helpReviseWithIssues": "Review feedback submitted:",
       "helpReviseWithIssuesDetail": "keep sending to revise in place; Confirm & continue stays disabled until open feedback is cleared.",
+      "helpReviseWithIssuesColdDetail": "Feedback has been recorded — use the button below to send it back together with the recorded issues; once cleared you can Confirm & continue.",
       "reviewFeedback": {
         "title": "Review feedback",
         "placeholder": "Enter review feedback…",
