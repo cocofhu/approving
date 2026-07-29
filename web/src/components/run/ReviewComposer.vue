@@ -93,7 +93,7 @@ const emit = defineEmits<{
 
 const chatRef = ref<{
   applyReviewFrame: (frame: any) => void
-  applyAcpEvents: (events: AcpEvent[] | undefined, nodeId?: string) => void
+  applyAcpEvents: (events: AcpEvent[] | undefined, nodeId?: string) => boolean | void
   cancelReview: () => void
   discardLastQueued: () => void
 } | null>(null)
@@ -105,10 +105,13 @@ defineExpose({
     chatRef.value.applyReviewFrame(frame)
     return true
   },
+  /**
+   * Pass through ClarifyChat apply result — false when slot not ready
+   * (must not return true merely because chatRef exists).
+   */
   applyAcpEvents: (events: AcpEvent[] | undefined, nodeId?: string): boolean => {
     if (!chatRef.value?.applyAcpEvents) return false
-    chatRef.value.applyAcpEvents(events, nodeId)
-    return true
+    return chatRef.value.applyAcpEvents(events, nodeId) !== false
   },
   cancelReview: () => chatRef.value?.cancelReview(),
   discardLastQueued: () => chatRef.value?.discardLastQueued(),

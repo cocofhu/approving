@@ -41,7 +41,13 @@ import {
   pickNextActiveAfterRemove,
 } from '@/lib/inboxActiveSelection'
 import { isAbortError } from '@/lib/liveLogRehydrate'
-import { createPendingAcpBuffer } from '@/lib/pendingAcpBuffer'
+import { createPendingAcpBuffer, pickAcpRails } from '@/lib/pendingAcpBuffer'
+import { deliverOrBufferDialogueAcp } from '@/lib/dialogueAcpDelivery'
+import {
+  createBusySeedRetryController,
+  runBusySeedRetry,
+} from '@/lib/busySeedRetry'
+import { createWsReconnectController } from '@/lib/wsReconnect'
 import { useToast } from '@/lib/useToast'
 import type { AcpEvent, Gate, InboxItem, Run } from '@/lib/types'
 
@@ -476,6 +482,22 @@ let activeRunWsRunId = ''
  * Used to gate softRefresh while clarify session is mid-turn (g3.2 / review v3).
  */
 const clarifyLiveBusy = ref(false)
+/** True once thought/message rails were applied to a dialogue surface (seed or live). */
+let dialogueRailsFilled = false
+/** True once a live WS ACP frame applied content (stops seed retry per f2). */
+let dialogueLiveIncremental = false
+const busySeedRetry = createBusySeedRetryController()
+const activeRunWsReconnect = createWsReconnectController({
+  connect: () => {
+    const id = active.value?.runId
+    if (id) connectActiveRunWs(id, { fromReconnect: true })
+  },
+  shouldReconnect: () =>
+    !!active.value?.runId &&
+    (active.value.type === 'clarify' || active.value.type === 'gate') &&
+    !isProcessedTriple(active.value) &&
+    isActiveStillInList(active.value),
+})
 
 function isClarifySoftRefreshBlocked(): boolean {
   if (active.value?.type !== 'clarify') return false
@@ -485,10 +507,14 @@ function isClarifySoftRefreshBlocked(): boolean {
 }
 
 function closeActiveRunWs() {
+  busySeedRetry.stop()
+  activeRunWsReconnect.markIntentionalClose()
   activeRunWs?.close()
   activeRunWs = undefined
   activeRunWsRunId = ''
   clarifyLiveBusy.value = false
+  dialogueRailsFilled = false
+  dialogueLiveIncremental = false
   pendingReviewFrames = []
   pendingAcpFrames.clear()
   pendingSnapshotSessions = null
@@ -514,22 +540,36 @@ function applyOrBufferAcpFrame(m: {
   events?: AcpEvent[]
   busy?: boolean
 }) {
-  const events = m.events
-  const nodeId = m.nodeId
-  let applied = false
-  if (gateApprovalRef.value?.applyAcpEvents) {
-    gateApprovalRef.value.applyAcpEvents(events)
-    applied = true
+  const events = Array.isArray(m.events) ? m.events : []
+  const nodeId = m.nodeId || ''
+  const forClarify = active.value?.type === 'clarify'
+  const forGate = active.value?.type === 'gate'
+  const result = deliverOrBufferDialogueAcp({
+    forClarify,
+    forGate,
+    events,
+    nodeId,
+    applyClarify: (evs, nid) => {
+      if (!reviewChatRef.value?.applyAcpEvents) return false
+      return reviewChatRef.value.applyAcpEvents(evs, nid)
+    },
+    applyGate: (evs) => {
+      if (!gateApprovalRef.value?.applyAcpEvents) return false
+      return gateApprovalRef.value.applyAcpEvents(evs) !== false
+    },
+  })
+  if (result === 'applied') {
+    const rails = pickAcpRails(events)
+    if (rails.thought || rails.message) {
+      dialogueRailsFilled = true
+      dialogueLiveIncremental = true
+    }
   }
-  if (reviewChatRef.value?.applyAcpEvents) {
-    const ok = reviewChatRef.value.applyAcpEvents(events, nodeId)
-    if (ok !== false) applied = true
-  }
-  // Hard-load race: surface unmounted — keep latest cumulative ACP for seed-then-live.
-  if (!applied && (active.value?.type === 'clarify' || active.value?.type === 'gate')) {
+  // Hard-load / slot-not-ready: keep latest cumulative ACP for seed-then-live.
+  if (result === 'buffer' && (forClarify || forGate)) {
     pendingAcpFrames.push({
-      nodeId,
-      events: Array.isArray(events) ? events : [],
+      nodeId: m.nodeId,
+      events,
       busy: m.busy,
     })
   }
@@ -539,24 +579,66 @@ function flushPendingAcpFrames() {
   if (!pendingAcpFrames.size) return
   const frames = pendingAcpFrames.takeAll()
   for (const frame of frames) {
-    gateApprovalRef.value?.applyAcpEvents?.(frame.events)
-    reviewChatRef.value?.applyAcpEvents?.(frame.events, frame.nodeId)
+    applyOrBufferAcpFrame(frame)
   }
 }
 
 /**
- * Best-effort REST seed from LiveNodeEvents / persisted snapshot after busy
- * slot rebuild (authoritative when WS chunks were dropped mid hard-load).
+ * One-shot REST seed from LiveNodeEvents / persisted snapshot.
+ * Returns true only when non-empty rails were actually applied (not merely buffered).
  */
-async function seedClarifyAcpFromNodeEvents(runId: string, nodeId: string) {
+async function seedClarifyAcpFromNodeEventsOnce(
+  runId: string,
+  nodeId: string,
+): Promise<boolean> {
   try {
     const r = await api.nodeEvents(runId, nodeId, { limit: 50 })
-    if (!r.events?.length) return
-    gateApprovalRef.value?.applyAcpEvents?.(r.events)
-    reviewChatRef.value?.applyAcpEvents?.(r.events, nodeId)
+    if (!r.events?.length) return false
+    const rails = pickAcpRails(r.events)
+    if (!rails.thought && !rails.message) return false
+    const forClarify = active.value?.type === 'clarify'
+    const forGate = active.value?.type === 'gate'
+    const result = deliverOrBufferDialogueAcp({
+      forClarify,
+      forGate,
+      events: r.events,
+      nodeId,
+      applyClarify: (evs, nid) => {
+        if (!reviewChatRef.value?.applyAcpEvents) return false
+        return reviewChatRef.value.applyAcpEvents(evs, nid)
+      },
+      applyGate: (evs) => {
+        if (!gateApprovalRef.value?.applyAcpEvents) return false
+        return gateApprovalRef.value.applyAcpEvents(evs) !== false
+      },
+    })
+    if (result === 'buffer') {
+      pendingAcpFrames.push({ nodeId, events: r.events, busy: true })
+      return false
+    }
+    dialogueRailsFilled = true
+    return true
   } catch {
-    /* seed is best-effort; live WS continues */
+    /* 502 / empty — caller retries while busy */
+    return false
   }
+}
+
+/** Busy-guarded seed with periodic retry until content / live / idle (f2). */
+function startBusySeedRetry(runId: string, nodeId: string) {
+  busySeedRetry.start(async (signal) => {
+    await runBusySeedRetry({
+      signal,
+      isBusy: () => {
+        if (clarifyLiveBusy.value) return true
+        const snap = activeRun.value?.reactSessions?.[nodeId]
+        return !!snap?.busy
+      },
+      hasContent: () => dialogueRailsFilled,
+      liveIncrementalReceived: () => dialogueLiveIncremental,
+      seed: async () => seedClarifyAcpFromNodeEventsOnce(runId, nodeId),
+    })
+  })
 }
 
 /** Project authoritative busy/queue onto ClarifyChat / GateApproval. */
@@ -616,12 +698,14 @@ function applyOrBufferReviewFrame(m: Record<string, unknown>) {
 }
 
 /**
- * After hard load: project reactSessions + flush frames buffered while
- * ReviewComposer / GateApproval was unmounted (WS Broadcast race).
- * Order: queue_state rebuilds streaming slot → seed REST/buffered ACP → live.
- * Covers clarify and gate (review v1 / g2).
+ * After hard load / WS reconnect: project reactSessions + flush frames buffered
+ * while ReviewComposer / GateApproval was unmounted (WS Broadcast race).
+ * Order: queue_state → seed nodeEvents → flush pendingAcpBuffer → live (g2.1).
+ * Covers clarify and gate.
  */
 async function projectClarifySessionAfterLoad(r: Run) {
+  dialogueRailsFilled = false
+  dialogueLiveIncremental = false
   await nextTick()
   restoreReactSessions(r)
   await nextTick()
@@ -630,28 +714,62 @@ async function projectClarifySessionAfterLoad(r: Run) {
   const nodeId = activeDialogueNodeId(r)
   const snap = nodeId ? r.reactSessions?.[nodeId] : null
   if (nodeId && snap?.busy && active.value?.runId) {
-    await seedClarifyAcpFromNodeEvents(active.value.runId, nodeId)
+    // First attempt immediately, then busy-guarded retry (g3).
+    await seedClarifyAcpFromNodeEventsOnce(active.value.runId, nodeId)
     await nextTick()
+    flushPendingAcpFrames()
+    if (!dialogueRailsFilled && !dialogueLiveIncremental) {
+      startBusySeedRetry(active.value.runId, nodeId)
+    }
+  } else {
+    // Authority not busy (f3): queue_state already tore down empty placeholder.
+    busySeedRetry.stop()
+    flushPendingAcpFrames()
   }
-  flushPendingAcpFrames()
 }
 
-function connectActiveRunWs(runId: string) {
+/** Re-seed after WS reconnect / snapshot — same depth as hard refresh (g4.2). */
+async function reseedAfterWsReconnect(runId: string) {
+  if (!active.value || active.value.runId !== runId) return
+  if (!activeRun.value) return
+  await projectClarifySessionAfterLoad(activeRun.value)
+}
+
+function connectActiveRunWs(runId: string, opts?: { fromReconnect?: boolean }) {
   if (!runId) {
     closeActiveRunWs()
     return
   }
-  if (activeRunWs && activeRunWsRunId === runId) return
-  closeActiveRunWs()
+  if (activeRunWs && activeRunWsRunId === runId && !opts?.fromReconnect) return
+  // Soft close for reconnect: keep buffers; only mark intentional when switching away.
+  if (opts?.fromReconnect) {
+    activeRunWsReconnect.markIntentionalClose()
+    activeRunWs?.close()
+    activeRunWs = undefined
+    activeRunWsRunId = ''
+  } else {
+    closeActiveRunWs()
+  }
   activeRunWsRunId = runId
+  let socket: WebSocket
   try {
-    activeRunWs = new WebSocket(api.runEventsWsUrl(runId))
+    socket = new WebSocket(api.runEventsWsUrl(runId))
+    activeRunWs = socket
   } catch {
     activeRunWs = undefined
     activeRunWsRunId = ''
+    activeRunWsReconnect.onClose()
     return
   }
-  activeRunWs.onmessage = (ev) => {
+  socket.onopen = () => {
+    if (activeRunWs !== socket) return
+    activeRunWsReconnect.markOpened()
+    if (opts?.fromReconnect) {
+      void reseedAfterWsReconnect(runId)
+    }
+  }
+  socket.onmessage = (ev) => {
+    if (activeRunWs !== socket) return
     let m: {
       type?: string
       event?: string
@@ -675,10 +793,8 @@ function connectActiveRunWs(runId: string) {
       if (sessions && dialogueActive) {
         if (activeRun.value) {
           activeRun.value = { ...activeRun.value, reactSessions: sessions }
-          void nextTick(() => {
-            restoreReactSessions(activeRun.value)
-            flushPendingReviewFrames()
-          })
+          // Same depth as hard refresh: queue_state → seed → flush → live (g4.2).
+          void projectClarifySessionAfterLoad(activeRun.value)
         } else {
           pendingSnapshotSessions = sessions
         }
@@ -687,16 +803,23 @@ function connectActiveRunWs(runId: string) {
     }
     if (m.type === 'review') {
       if (m.event === 'turn_begin') clarifyLiveBusy.value = true
-      if (m.event === 'queue_state' && typeof m.busy === 'boolean') clarifyLiveBusy.value = !!m.busy
+      if (m.event === 'queue_state' && typeof m.busy === 'boolean') {
+        clarifyLiveBusy.value = !!m.busy
+        if (!m.busy) busySeedRetry.stop()
+      }
       applyOrBufferReviewFrame(m as Record<string, unknown>)
       if (m.event === 'turn_done' || m.event === 'error') {
         clarifyLiveBusy.value = false
+        busySeedRetry.stop()
         if (active.value && active.value.runId === runId) void softRefreshActiveRun()
       }
       return
     }
     if (m.type === 'acp') {
-      if (typeof m.busy === 'boolean') clarifyLiveBusy.value = !!m.busy
+      if (typeof m.busy === 'boolean') {
+        clarifyLiveBusy.value = !!m.busy
+        if (!m.busy) busySeedRetry.stop()
+      }
       applyOrBufferAcpFrame(m as { nodeId?: string; events?: AcpEvent[]; busy?: boolean })
       return
     }
@@ -715,6 +838,7 @@ function connectActiveRunWs(runId: string) {
       }
       // Clarify: react/artifact_edit mid-turn projected via review/acp — skip
       // softRefresh while busy so we do not wipe busy/queue/stream (g3.2 / review v4).
+      // Soft-refresh semantics unchanged (g2.3).
       if (active.value.type === 'clarify') {
         if (m.type === 'artifact_edit' || m.type === 'react') {
           // Gate on live WS busy / sessionBusy — not stale reactSessions snapshot.
@@ -723,11 +847,12 @@ function connectActiveRunWs(runId: string) {
       }
     }
   }
-  activeRunWs.onclose = () => {
-    if (activeRunWsRunId === runId) {
-      activeRunWs = undefined
-      activeRunWsRunId = ''
-    }
+  socket.onclose = () => {
+    // Ignore stale close from a superseded socket (reconnect race).
+    if (activeRunWs !== socket) return
+    activeRunWs = undefined
+    activeRunWsRunId = ''
+    activeRunWsReconnect.onClose()
   }
 }
 

@@ -676,6 +676,68 @@ describe('ClarifyChat', () => {
     vi.unstubAllGlobals()
   })
 
+  describe('ACP delivery contract (false applied / hard-refresh resume)', () => {
+    it('applyAcpEvents returns false when streaming slot not ready (g1.1)', async () => {
+      const wrapper = mountChat()
+      const vm = wrapper.vm as unknown as {
+        applyAcpEvents: (e: { kind: string; text: string }[], nodeId?: string) => boolean
+      }
+      // Mounted but no turn_begin / queue_state busy slot yet.
+      expect(vm.applyAcpEvents([{ kind: 'thought', text: 'should buffer' }], 'react-1')).toBe(false)
+      expect(wrapper.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('applyAcpEvents returns true after queue_state rebuilds slot (g1.1 flush path)', async () => {
+      const wrapper = mountChat()
+      const vm = wrapper.vm as unknown as {
+        applyReviewFrame: (f: Record<string, unknown>) => void
+        applyAcpEvents: (e: { kind: string; text: string }[], nodeId?: string) => boolean
+      }
+      vm.applyReviewFrame({
+        event: 'queue_state',
+        nodeId: 'react-1',
+        waiting: 0,
+        items: [],
+        busy: true,
+        activeItem: { text: '硬刷新前的提问' },
+      })
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(true)
+      expect(vm.applyAcpEvents([{ kind: 'thought', text: '已恢复的思考' }], 'react-1')).toBe(true)
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-thought"]').text()).toContain('已恢复的思考')
+      wrapper.unmount()
+    })
+
+    it('authority idle tears down empty streaming placeholder (g2.2/f3)', async () => {
+      const wrapper = mountChat()
+      const vm = wrapper.vm as unknown as {
+        applyReviewFrame: (f: Record<string, unknown>) => void
+      }
+      vm.applyReviewFrame({
+        event: 'queue_state',
+        nodeId: 'react-1',
+        waiting: 0,
+        items: [],
+        busy: true,
+        activeItem: { text: '进行中' },
+      })
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(true)
+      vm.applyReviewFrame({
+        event: 'queue_state',
+        nodeId: 'react-1',
+        waiting: 0,
+        items: [],
+        busy: false,
+      })
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(false)
+      wrapper.unmount()
+    })
+  })
+
   describe('busy status C-tier (no air bubble)', () => {
     it('turn_begin shows 思考中… + typing-dots placeholder (no air bubble)', async () => {
       const wrapper = mountChat({ draft: '请复审' })

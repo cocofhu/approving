@@ -226,6 +226,13 @@ describe('RunDetailView ACP log rehydrate state machine', () => {
     expect(src).toMatch(/deliverOrBufferDialogueAcp/)
     // Real delivery: applyAcpEvents returning false must buffer (ReviewComposer nest).
     expect(src).toMatch(/if \(!reviewChatRef\.value\?\.applyAcpEvents\) return false/)
+    // Gate apply must honor boolean return (not constant true) — g1.4.
+    expect(src).toMatch(/return gateApprovalRef\.value\.applyAcpEvents\(evs\) !== false/)
+    // Busy seed retry + WS reconnect re-seed (g3/g4).
+    expect(src).toMatch(/runBusySeedRetry/)
+    expect(src).toMatch(/createWsReconnectController/)
+    expect(src).toMatch(/fromReconnect/)
+    expect(src).toMatch(/projectDialogueAfterLoad/)
   })
 })
 

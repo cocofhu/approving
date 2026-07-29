@@ -1037,6 +1037,19 @@ function applyReviewFrame(frame: {
           reactStreamThought.value = ''
         }
       }
+      // Authority idle (f3): tear down empty streaming placeholder.
+      if (!busy) {
+        const emptyRails = !reactStreamText.value && !reactStreamThought.value
+        if (emptyRails) {
+          reactInFlight.value = false
+          reactStreamCompletedAt.value = null
+        } else if (reactInFlight.value) {
+          reactInFlight.value = false
+          if (!reactStreamCompletedAt.value) {
+            reactStreamCompletedAt.value = new Date().toISOString()
+          }
+        }
+      }
       if (waiting === 0) {
         reactQueued.value = []
         if (!reactInFlight.value && !busy) reactThinking.value = false
@@ -1064,15 +1077,22 @@ function applyReviewFrame(frame: {
   }
 }
 
-function applyAcpEvents(events: { kind?: string; text?: string }[] | undefined) {
+/**
+ * Apply cumulative ACP to gate hot-revise rails.
+ * Returns false when not ready (!thinking && !inFlight) so host buffers —
+ * never silent-noop as applied (mounted-but-no-slot race).
+ */
+function applyAcpEvents(events: { kind?: string; text?: string }[] | undefined): boolean {
+  if (!events?.length) return true
   // Accept ACP while busy/inFlight even if waiting=0 cleared the queue panel.
-  if ((!reactThinking.value && !reactInFlight.value) || !events?.length) return
+  if (!reactThinking.value && !reactInFlight.value) return false
   if (!reactThinking.value) reactThinking.value = true
   for (const ev of events) {
     // Ignore tool_call / plan UI; keep rails separate so thought is never overwritten.
     if (ev.kind === 'message' && ev.text) reactStreamText.value = ev.text
     if (ev.kind === 'thought' && ev.text) reactStreamThought.value = ev.text
   }
+  return true
 }
 
 async function cancelReactRevise() {
