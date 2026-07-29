@@ -60,7 +60,7 @@ const pageNumbers = computed(() => {
   const tp = totalPages.value
   const p = props.page
   let start = Math.max(1, p - 2)
-  let end = Math.min(tp, start + 4)
+  const end = Math.min(tp, start + 4)
   start = Math.max(1, end - 4)
   const nums: number[] = []
   for (let i = start; i <= end; i++) nums.push(i)
