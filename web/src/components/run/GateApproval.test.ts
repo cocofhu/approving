@@ -473,13 +473,13 @@ describe('GateApproval content-fit layout branches', () => {
     const form = wrapper.find('[data-testid="content-fit-form"]')
     expect(preview.exists()).toBe(true)
     expect(form.exists()).toBe(true)
-    // Preview shell: capped + scrollable; form stays outside preview, shrink-0.
-    expect(hasClass(preview.element, 'overflow-y-auto')).toBe(true)
+    // Desktop preview shell: flex-1 fills stage remainder, capped at ≈60vh.
+    expect(hasClass(preview.element, 'flex-1')).toBe(true)
+    expect(hasClass(preview.element, 'overflow-hidden')).toBe(true)
     expect((preview.element as HTMLElement).style.maxHeight).toBe(
       `${CONTENT_FIT_PREVIEW_MAX_VH}vh`,
     )
     expect(hasClass(form.element, 'shrink-0')).toBe(true)
-    expect(preview.element.className).not.toMatch(/\bflex-1\b/)
     expect(form.element.className).not.toMatch(/\bflex-1\b/)
     // Form is a sibling after preview (not nested inside preview scroll).
     expect(preview.element.contains(form.element)).toBe(false)
@@ -677,7 +677,7 @@ describe('GateApproval content-fit layout branches', () => {
     planWrapper.unmount()
   })
 
-  it('keeps visual shouldFillPreview content-fit with HtmlPreview fitContent + 60vh cap', async () => {
+  it('keeps visual shouldFillPreview on desktop fillParent + 60vh shell cap', async () => {
     const pageHtml = '<!doctype html><html><body><h1>视觉稿</h1></body></html>'
     const wrapper = mountApproval({
       fillPreview: true,
@@ -709,13 +709,109 @@ describe('GateApproval content-fit layout branches', () => {
     expect(contentFitRoot(wrapper).exists()).toBe(true)
     const html = wrapper.find('[data-testid="html-preview"]')
     expect(html.exists()).toBe(true)
-    expect(html.attributes('data-fit')).toBe('1')
-    expect(html.attributes('data-max-vh')).toBe(String(CONTENT_FIT_PREVIEW_MAX_VH))
+    // Desktop visual: fillParent (no scrollHeight-driven shell); 60vh on outer shell.
+    // Editable page.html uses GateProductEditor → HtmlPreview mode=inline + fillParent.
+    expect(html.attributes('data-fit')).toBe('0')
+    expect(html.attributes('data-fill-parent')).toBe('1')
+    expect(html.attributes('data-mode')).toBe('inline')
     const preview = wrapper.find('[data-testid="content-fit-preview"]')
+    expect(hasClass(preview.element, 'flex-1')).toBe(true)
+    expect(hasClass(preview.element, 'overflow-hidden')).toBe(true)
     expect((preview.element as HTMLElement).style.maxHeight).toBe(
       `${CONTENT_FIT_PREVIEW_MAX_VH}vh`,
     )
     expect(wrapper.find('[data-testid="content-fit-form"]').classes()).toContain('shrink-0')
+    wrapper.unmount()
+  })
+
+  it('short visual HTML: shell flex-1 + fillParent (blank stays in-frame, not content-fit shrink)', async () => {
+    // plan g3.2 / f1+f3: short page must not collapse shell via scrollHeight/120px fallback
+    const shortPage = '<!doctype html><html><body><p>短</p></body></html>'
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-visual',
+            type: 'human_gate',
+            label: '审阅视觉',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.visual.outputs.page}}' },
+          },
+        ],
+        nodeExecutions: {
+          visual: [
+            {
+              nodeId: 'visual',
+              iteration: 1,
+              status: 'completed',
+              outputs: { page: shortPage },
+            },
+          ],
+        },
+      }),
+    })
+    await flushPromises()
+
+    const preview = wrapper.find('[data-testid="content-fit-preview"]')
+    expect(hasClass(preview.element, 'flex-1')).toBe(true)
+    expect(hasClass(preview.element, 'overflow-hidden')).toBe(true)
+    expect((preview.element as HTMLElement).style.maxHeight).toBe(
+      `${CONTENT_FIT_PREVIEW_MAX_VH}vh`,
+    )
+    const html = wrapper.find('[data-testid="html-preview"]')
+    expect(html.attributes('data-fill-parent')).toBe('1')
+    expect(html.attributes('data-fit')).toBe('0')
+    // Shell eats stage remainder (flex-1); sidebar approve stays reachable.
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+    expect(form.exists()).toBe(true)
+    expect(form.findAll('button').some((b) => b.text().includes('批准'))).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('100vh-style visual HTML still uses fillParent shell (no fitContent narrow fallback)', async () => {
+    // plan g3.2 / f6: 100vh / measure deadlock must not drive outer shell to ~120px
+    const vhPage =
+      '<!doctype html><html><body style="height:100vh;margin:0"><div style="height:100%">满屏</div></body></html>'
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-visual',
+            type: 'human_gate',
+            label: '审阅视觉',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.visual.outputs.page}}' },
+          },
+        ],
+        nodeExecutions: {
+          visual: [
+            {
+              nodeId: 'visual',
+              iteration: 1,
+              status: 'completed',
+              outputs: { page: vhPage },
+            },
+          ],
+        },
+      }),
+    })
+    await flushPromises()
+
+    const preview = wrapper.find('[data-testid="content-fit-preview"]')
+    expect(hasClass(preview.element, 'flex-1')).toBe(true)
+    expect((preview.element as HTMLElement).style.maxHeight).toBe(
+      `${CONTENT_FIT_PREVIEW_MAX_VH}vh`,
+    )
+    const html = wrapper.find('[data-testid="html-preview"]')
+    expect(html.attributes('data-fill-parent')).toBe('1')
+    expect(html.attributes('data-fit')).toBe('0')
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+    expect(form.exists()).toBe(true)
+    expect(form.findAll('button').some((b) => b.text().includes('批准'))).toBe(true)
     wrapper.unmount()
   })
 
@@ -1003,8 +1099,16 @@ describe('GateApproval content-fit layout branches', () => {
     await flushPromises()
 
     expect(contentFitRoot(wrapper).exists()).toBe(true)
-    expect(wrapper.find('[data-testid="upstream-context"]').exists()).toBe(true)
+    const preview = wrapper.find('[data-testid="content-fit-preview"]')
+    expect(hasClass(preview.element, 'flex-1')).toBe(true)
+    expect((preview.element as HTMLElement).style.maxHeight).toBe(
+      `${CONTENT_FIT_PREVIEW_MAX_VH}vh`,
+    )
+    const upstream = wrapper.find('[data-testid="upstream-context"]')
+    expect(upstream.exists()).toBe(true)
     expect(wrapper.find('[data-testid="upstream-context-body"]').exists()).toBe(false)
+    // Upstream is a stage sibling under the preview shell (g3.3).
+    expect(preview.element.contains(upstream.element)).toBe(false)
     expect(wrapper.find('[data-testid="structured-view"]').attributes('data-name')).toBe(
       'research.json',
     )
@@ -1906,6 +2010,42 @@ describe('GateApproval HTML preview load gate (fillPreview)', () => {
     expect(apiMocks.listGatePrimaryArtifacts).toHaveBeenCalledTimes(1)
     expect(apiMocks.artifactContent).toHaveBeenCalledTimes(1)
     expect(wrapper.find('[data-testid="gate-product-editor"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('editable page.html desktop uses fillParent for edit and preview tabs (g2.2/g3.2)', async () => {
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({ nodeId: 'hg-visual' }),
+      run: visualEditableRun(),
+    })
+    await flushPromises()
+
+    const editor = wrapper.findComponent({ name: 'GateProductEditor' })
+    expect(editor.exists()).toBe(true)
+    expect(editor.props('fillParent')).toBe(true)
+    expect(editor.props('fitContent')).toBe(false)
+    expect(editor.classes()).toContain('flex-1')
+
+    const previewShell = wrapper.find('[data-testid="content-fit-preview"]')
+    expect(hasClass(previewShell.element, 'flex-1')).toBe(true)
+    expect((previewShell.element as HTMLElement).style.maxHeight).toBe(
+      `${CONTENT_FIT_PREVIEW_MAX_VH}vh`,
+    )
+
+    const htmlPreview = wrapper.find('[data-testid="html-preview"]')
+    expect(htmlPreview.attributes('data-fill-parent')).toBe('1')
+    expect(htmlPreview.attributes('data-fit')).toBe('0')
+
+    await wrapper.find('[data-testid="gate-mode-edit"]').trigger('click')
+    await flushPromises()
+    expect(editor.props('fillParent')).toBe(true)
+    expect(wrapper.find('[data-testid="gate-artifact-textarea"]').exists()).toBe(true)
+    expect(hasClass(previewShell.element, 'flex-1')).toBe(true)
+
+    await wrapper.find('[data-testid="gate-mode-preview"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="html-preview"]').attributes('data-fill-parent')).toBe('1')
     wrapper.unmount()
   })
 
@@ -2840,6 +2980,7 @@ describe('GateApproval mobileFillRemaining layout', () => {
   })
 
   it('keeps Inbox-style path on 60vh content-fit when mobileFillRemaining is off', async () => {
+    // Mobile content-fit path unchanged (no desktop flex-1 / fillParent).
     const pageHtml = '<!doctype html><html><body><h1>Inbox</h1></body></html>'
     const { gate, run } = visualGateRun(pageHtml)
     const wrapper = mountApproval({
@@ -2853,13 +2994,17 @@ describe('GateApproval mobileFillRemaining layout', () => {
     expect(wrapper.find('[data-testid="mobile-fill-remaining"]').exists()).toBe(false)
     expect(contentFitRoot(wrapper).exists()).toBe(true)
     const preview = wrapper.find('[data-testid="content-fit-preview"]')
+    expect(hasClass(preview.element, 'flex-1')).toBe(false)
     expect((preview.element as HTMLElement).style.maxHeight).toBe(
       `${CONTENT_FIT_PREVIEW_MAX_VH}vh`,
     )
+    const html = wrapper.find('[data-testid="html-preview"]')
+    expect(html.attributes('data-fill-parent')).toBe('0')
+    expect(html.attributes('data-fit')).toBe('0')
     wrapper.unmount()
   })
 
-  it('keeps desktop visual on 60vh content-fit even when mobileFillRemaining is set', async () => {
+  it('keeps desktop visual on fillParent + 60vh shell even when mobileFillRemaining is set', async () => {
     breakpointMocks.isMobile.value = false
     const pageHtml = '<!doctype html><html><body><h1>桌面</h1></body></html>'
     const { gate, run } = visualGateRun(pageHtml)
@@ -2874,9 +3019,12 @@ describe('GateApproval mobileFillRemaining layout', () => {
     expect(wrapper.find('[data-testid="mobile-fill-remaining"]').exists()).toBe(false)
     expect(contentFitRoot(wrapper).exists()).toBe(true)
     const html = wrapper.find('[data-testid="html-preview"]')
-    expect(html.attributes('data-fit')).toBe('1')
-    expect(html.attributes('data-fill-parent')).toBe('0')
-    expect(html.attributes('data-max-vh')).toBe(String(CONTENT_FIT_PREVIEW_MAX_VH))
+    expect(html.attributes('data-fit')).toBe('0')
+    expect(html.attributes('data-fill-parent')).toBe('1')
+    const preview = wrapper.find('[data-testid="content-fit-preview"]')
+    expect((preview.element as HTMLElement).style.maxHeight).toBe(
+      `${CONTENT_FIT_PREVIEW_MAX_VH}vh`,
+    )
     wrapper.unmount()
   })
 

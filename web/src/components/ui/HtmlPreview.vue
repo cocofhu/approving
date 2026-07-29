@@ -50,8 +50,9 @@ const props = withDefaults(
     inspectable?: boolean
     /**
      * Fill the parent box instead of sizing from document scrollHeight.
-     * Used by Run-detail mobile visual gates: shell height comes from flex
-     * remaining space; iframe scrolls internally (short docs leave blank space).
+     * Used by Run-detail mobile visual gates and desktop Inbox/Run-detail
+     * visual HTML (shell = flex remainder ∩ ≈60vh): iframe scrolls internally;
+     * short docs leave blank space inside the frame (top-aligned).
      */
     fillParent?: boolean
   }>(),
@@ -442,11 +443,12 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
     </AppModal>
   </template>
 
-  <!-- Default desktop preview with device toggle -->
+  <!-- Default desktop preview with device toggle (fillParent: h-full + iframe scroll). -->
   <div
     v-else
     class="flex flex-col"
-    :class="fitContent ? '' : 'h-full min-h-0'"
+    :class="fitContent && !fillParent ? '' : 'h-full min-h-0'"
+    :data-fill-parent="fillParent ? '1' : '0'"
   >
     <div
       ref="toolbarRef"
@@ -501,7 +503,7 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
     <div
       class="bg-elevated"
       :class="[
-        fitContent ? 'shrink-0' : 'min-h-0 flex-1 overflow-hidden',
+        fitContent && !fillParent ? 'shrink-0' : 'min-h-0 flex-1 overflow-hidden',
         device === 'mobile' ? 'flex justify-center p-4' : '',
       ]"
     >
@@ -511,25 +513,25 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
         ref="iframeRef"
         :srcdoc="inspectable || fitContent ? previewSrcdoc : html"
         :sandbox="sandboxAttr"
-        :scrolling="fitContent ? iframeScrolling : undefined"
+        :scrolling="fitContent || fillParent ? iframeScrolling : undefined"
         class="w-full border-0 bg-white"
-        :class="fitContent ? '' : 'h-full'"
-        :style="fitContent ? { height: contentHeight + 'px' } : undefined"
+        :class="fitContent && !fillParent ? '' : 'h-full'"
+        :style="fitContent && !fillParent ? { height: contentHeight + 'px' } : undefined"
         :title="t('common.htmlPreview.title')"
         @load="onPreviewLoad"
       />
       <div
         v-else
         class="w-[390px] shrink-0 overflow-hidden border border-line bg-white shadow-lg"
-        :class="fitContent ? '' : 'h-full'"
-        :style="fitContent ? { height: contentHeight + 'px' } : undefined"
+        :class="fitContent && !fillParent ? '' : 'h-full'"
+        :style="fitContent && !fillParent ? { height: contentHeight + 'px' } : undefined"
       >
         <iframe
           :key="iframeMountKey + '-mobile'"
           ref="iframeRef"
           :srcdoc="inspectable || fitContent ? previewSrcdoc : html"
           :sandbox="sandboxAttr"
-          :scrolling="fitContent ? iframeScrolling : undefined"
+          :scrolling="fitContent || fillParent ? iframeScrolling : undefined"
           class="h-full w-full border-0 bg-white"
           :title="t('common.htmlPreview.mobilePreview')"
           @load="onPreviewLoad"

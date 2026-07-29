@@ -222,4 +222,29 @@ describe('HtmlPreview content-fit clamp', () => {
     expect((iframe.element as HTMLIFrameElement).style.height).toBe('')
     wrapper.unmount()
   })
+
+  it('default-mode fillParent keeps toolbar and does not size from scrollHeight', async () => {
+    const wrapper = mountPreview({
+      mode: 'default',
+      fitContent: false,
+      fillParent: true,
+      maxContentHeightVh: undefined,
+      enlargeable: true,
+      inspectable: true,
+    })
+    await flushPromises()
+
+    const root = wrapper.find('[data-fill-parent="1"]')
+    expect(root.exists()).toBe(true)
+    expect(root.classes()).toContain('h-full')
+    expect(wrapper.find('[data-testid="html-preview-toolbar"]').exists()).toBe(true)
+    const iframe = wrapper.find('iframe')
+    expect(iframe.attributes('scrolling')).toBe('auto')
+    expect((iframe.element as HTMLIFrameElement).style.height).toBe('')
+    expect(iframe.classes()).toContain('h-full')
+
+    await sendResize(wrapper, 1800)
+    expect((iframe.element as HTMLIFrameElement).style.height).toBe('')
+    wrapper.unmount()
+  })
 })

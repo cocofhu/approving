@@ -29,8 +29,9 @@ const props = withDefaults(
     maxContentHeightVh?: number
     contentHeightOffsetPx?: number
     /**
-     * Fill parent height (Run-detail mobile visual). Disables content-height
-     * sizing; iframe scrolls inside a flex-filled shell.
+     * Fill parent height (Run-detail mobile + desktop Inbox/Run-detail visual).
+     * Disables content-height sizing; iframe/editor scrolls inside a flex-filled
+     * shell (desktop shell also caps at ≈60vh via GateApproval).
      */
     fillParent?: boolean
     /** Parent product load in progress (first load or retry). */
@@ -607,7 +608,10 @@ defineExpose({
       </div>
 
       <!-- Edit -->
-      <div v-else-if="mode === 'edit' && canEditActive" class="min-h-[220px] flex-1">
+      <div
+        v-else-if="mode === 'edit' && canEditActive"
+        :class="fillParent ? 'min-h-0 flex-1 overflow-auto' : 'min-h-[220px] flex-1'"
+      >
         <div
           v-if="
             activeProduct &&
