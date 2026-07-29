@@ -248,6 +248,20 @@ const MOCK_PROJECT_WITH_VARS = {
   ],
 }
 
+/** Legacy mock: no `enabled` field — UI must treat as On. */
+const MOCK_PROJECT_LEGACY_ENV = {
+  ...MOCK_PROJECT,
+  sandboxEnv: [{ key: 'LEGACY_FLAG', value: '1', secret: false }],
+}
+
+const MOCK_PROJECT_DISABLED_ENV = {
+  ...MOCK_PROJECT,
+  sandboxEnv: [
+    { key: 'API_URL', value: 'https://example.com', secret: false, enabled: true },
+    { key: 'DEBUG_TRACE', value: '1', secret: false, enabled: false },
+  ],
+}
+
 async function gotoProjectDetailWithProject(
   page: import('@playwright/test').Page,
   project: typeof MOCK_PROJECT,
@@ -362,7 +376,7 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
     await expect(addBtn).toHaveClass(/bg-accent/)
   })
 
-  test('沙箱有数据：四列表头 + 底栏 outline/primary + 明文/密钥文案', async ({ page }) => {
+  test('沙箱有数据：五列表头 + 底栏 outline/primary + 明文/密钥文案', async ({ page }) => {
     await gotoProjectDetailWithProject(page, MOCK_PROJECT_WITH_VARS)
     await page.getByRole('button', { name: '沙箱环境变量' }).click()
 
@@ -370,9 +384,12 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
     await expect(panel.getByText('KEY', { exact: true })).toBeVisible()
     await expect(panel.getByText('VALUE', { exact: true })).toBeVisible()
     await expect(panel.getByText('类型', { exact: true })).toBeVisible()
+    await expect(panel.getByText('启用', { exact: true })).toBeVisible()
     await expect(panel.getByText('操作', { exact: true })).toBeVisible()
 
     await expect(panel.getByRole('button', { name: '明文' })).toBeVisible()
+    await expect(panel.getByTestId('sandbox-env-enabled')).toBeVisible()
+    await expect(panel.getByText('开', { exact: true })).toBeVisible()
 
     const foot = panel.locator('.border-t.border-line').last()
     const addBtn = foot.getByRole('button', { name: '添加一行' })
@@ -381,6 +398,123 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
     await expect(addBtn).toHaveClass(/border/)
     await expect(saveBtn).toBeVisible()
     await expect(saveBtn).toHaveClass(/bg-accent/)
+  })
+
+  test('沙箱启用开关：旧 mock 无 enabled 时行显示为开', async ({ page }) => {
+    await gotoProjectDetailWithProject(page, MOCK_PROJECT_LEGACY_ENV)
+    await page.getByRole('button', { name: '沙箱环境变量' }).click()
+
+    const legacyRow = page.getByTestId('sandbox-env-row').first()
+    await expect(legacyRow).toHaveAttribute('data-env-enabled', 'true')
+    await expect(legacyRow.getByText('开', { exact: true })).toBeVisible()
+    await expect(legacyRow.getByText('· 旧')).toHaveCount(0)
+    await expect(page.getByText(/可临时停用|须保存后才影响/)).toBeVisible()
+  })
+
+  test('沙箱启用开关：停用弱化 + 保存 payload 含 enabled:false', async ({ page }) => {
+    let saveBody: { sandboxEnv?: Array<{ key: string; enabled?: boolean }> } | null = null
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.route('**/api/projects/proj-1', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(MOCK_PROJECT_DISABLED_ENV),
+        })
+        return
+      }
+      if (route.request().method() === 'PUT' || route.request().method() === 'PATCH') {
+        saveBody = route.request().postDataJSON()
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ...MOCK_PROJECT_DISABLED_ENV,
+            sandboxEnv: saveBody?.sandboxEnv ?? MOCK_PROJECT_DISABLED_ENV.sandboxEnv,
+          }),
+        })
+        return
+      }
+      await route.continue()
+    })
+    await page.route('**/api/workflows**', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(MOCK_WORKFLOWS),
+        })
+        return
+      }
+      await route.continue()
+    })
+    await page.route('**/api/runs**', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20, hasMore: false }),
+        })
+        return
+      }
+      await route.continue()
+    })
+    await page.route('**/api/projects/proj-1/pm-leader', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ enabled: false }),
+      })
+    })
+    await page.route('**/api/projects/*/token-stats**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          window: '30d',
+          bucketWidth: 'day',
+          timezone: 'UTC',
+          empty: true,
+          trend: [],
+          composition: {
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            total: 0,
+          },
+          workflows: [],
+        }),
+      })
+    })
+    await page.goto('/project-detail.html')
+    await expect(page.getByRole('heading', { name: 'Demo Project' })).toBeVisible({ timeout: 10_000 })
+    await page.getByRole('button', { name: '沙箱环境变量' }).click()
+
+    const rows = page.getByTestId('sandbox-env-row')
+    await expect(rows).toHaveCount(2)
+    // Row order matches mock: API_URL (enabled), DEBUG_TRACE (disabled)
+    const onRow = rows.nth(0)
+    const disabledRow = rows.nth(1)
+    await expect(onRow.locator('input').first()).toHaveValue('API_URL')
+    await expect(disabledRow.locator('input').first()).toHaveValue('DEBUG_TRACE')
+    await expect(disabledRow).toHaveAttribute('data-env-enabled', 'false')
+    await expect(disabledRow.getByText('关', { exact: true })).toBeVisible()
+    await expect(disabledRow.locator('input').first()).toHaveClass(/opacity-45/)
+    await expect(disabledRow.getByTestId('sandbox-env-enabled')).toBeVisible()
+    await expect(disabledRow.getByRole('switch')).toBeEnabled()
+
+    await onRow.getByRole('switch').click()
+    await expect(onRow).toHaveAttribute('data-env-enabled', 'false')
+    await expect(onRow.getByText('关', { exact: true })).toBeVisible()
+
+    const panel = page.locator('.border.border-line.bg-surface').filter({ hasText: 'KEY' }).first()
+    await panel.getByRole('button', { name: '保存' }).click()
+    await expect.poll(() => saveBody).not.toBeNull()
+    const apiUrl = saveBody!.sandboxEnv?.find((e) => e.key === 'API_URL')
+    const debug = saveBody!.sandboxEnv?.find((e) => e.key === 'DEBUG_TRACE')
+    expect(apiUrl?.enabled).toBe(false)
+    expect(debug?.enabled).toBe(false)
   })
 
   test('工作流变量空态同构面板', async ({ page }) => {

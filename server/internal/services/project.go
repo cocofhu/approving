@@ -436,7 +436,7 @@ func sanitizeEnvEntries(in []models.EnvEntry) ([]models.EnvEntry, error) {
 		}
 		// Official ACP auth keys may be stored as project baseline; always force Secret.
 		secret := e.Secret || runtime.IsPlatformAuthEnvKey(k)
-		out = append(out, models.EnvEntry{Key: k, Value: e.Value, Secret: secret})
+		out = append(out, models.EnvEntry{Key: k, Value: e.Value, Secret: secret, Enabled: e.Enabled})
 	}
 	return out, nil
 }
@@ -493,7 +493,7 @@ func mergeEnvEntries(existing, incoming []models.EnvEntry) ([]models.EnvEntry, e
 		}
 		// Official ACP auth keys may be stored as project baseline; always force Secret.
 		secret := e.Secret || runtime.IsPlatformAuthEnvKey(k)
-		out = append(out, models.EnvEntry{Key: k, Value: e.Value, Secret: secret})
+		out = append(out, models.EnvEntry{Key: k, Value: e.Value, Secret: secret, Enabled: e.Enabled})
 	}
 	return out, nil
 }
@@ -570,10 +570,11 @@ func MaskedProjectVars(vars []models.ProjectVariable) []models.ProjectVariable {
 }
 
 // ProjectEnvMap converts sandbox env entries to a key→value map for Spec.Env merge.
+// Disabled entries (Enabled=false) are skipped; nil/missing Enabled counts as enabled.
 func ProjectEnvMap(env []models.EnvEntry) map[string]string {
 	out := make(map[string]string, len(env))
 	for _, e := range env {
-		if e.Key == "" {
+		if e.Key == "" || !e.IsEnabled() {
 			continue
 		}
 		out[e.Key] = e.Value

@@ -3212,7 +3212,7 @@ describe('GateApproval ReAct annotations', () => {
     wrapper.unmount()
   })
 
-  it('hides hot reject and shows cold note when reactSessionAlive is false', async () => {
+  it('cold session is silent: no ReAct/hot hints, no send; confirm & ordinary help remain', async () => {
     const researchDoc = { summary: '冷会话' }
     const wrapper = mountApproval({
       fillPreview: true,
@@ -3244,8 +3244,63 @@ describe('GateApproval ReAct annotations', () => {
     })
     await flushPromises()
 
+    // plan g4.1: cold silent — no cold note / ReAct / hot-session / in-place-edit guidance
     expect(wrapper.find('[data-testid="review-composer-send"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="gate-cold-session-note"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-cold-session-note"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="review-composer-cold-note"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toMatch(/ReAct|热会话|就地改|恢复热会话/)
+    expect(wrapper.find('[data-testid="gate-cold-help"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-cold-help"]').text()).toContain('确认并流转')
+    expect(wrapper.find('[data-testid="gate-cold-help"]').text()).toContain('手动编辑产物')
+    expect(
+      wrapper.findAll('[data-testid="review-composer-pass"]').some((b) => b.text().includes('确认并流转')) ||
+        wrapper.findAll('button').some((b) => b.text().includes('确认并流转')),
+    ).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('hot session keeps send and has no cold note when reactSessionAlive is true', async () => {
+    const researchDoc = { summary: '热会话' }
+    apiMocks.artifactContent.mockResolvedValue({
+      id: 'a1',
+      name: 'research.json',
+      content: JSON.stringify(researchDoc),
+    })
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({
+        nodeId: 'hg-research',
+        reactSessionAlive: true,
+        reactUpstreamNodeId: 'research',
+      }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'hg-research',
+            type: 'human_gate',
+            label: '审阅调研',
+            position: { x: 0, y: 0 },
+            config: { body_template: '{{nodes.research.outputs.research}}' },
+          },
+        ],
+        nodeExecutions: {
+          research: [
+            {
+              nodeId: 'research',
+              iteration: 1,
+              status: 'completed',
+              outputs: { research_json: JSON.stringify(researchDoc) },
+            },
+          ],
+        },
+      }),
+    })
+    await flushPromises()
+
+    // plan g4.1: hot unchanged — send present, no cold note / cold help
+    expect(wrapper.find('[data-testid="review-composer-send"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-cold-session-note"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="gate-cold-help"]').exists()).toBe(false)
     wrapper.unmount()
   })
 

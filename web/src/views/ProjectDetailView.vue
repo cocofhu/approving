@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
+import AppSwitch from '@/components/ui/AppSwitch.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import RunLaunchModal, { type InputField } from '@/components/workflow/RunLaunchModal.vue'
@@ -451,11 +452,13 @@ async function saveEnv() {
       .filter((e) => e.key.trim())
       .map((e) => ({
         ...e,
+        enabled: e.enabled !== false,
         secret: e.secret || isPlatformAuthEnvKey(e.key),
       }))
     project.value = await api.updateProject(project.value.id, { sandboxEnv })
     envRows.value = (project.value.sandboxEnv || []).map((e) => ({
       ...e,
+      enabled: e.enabled !== false,
       secret: e.secret || isPlatformAuthEnvKey(e.key),
     }))
     toast.success(t('pages.projectDetail.saved'))
@@ -499,8 +502,14 @@ function isPlatformAuthEnvKey(key: string): boolean {
   return PLATFORM_AUTH_ENV_KEYS.has(key.trim())
 }
 
+function isEnvEnabled(row: ProjectEnvEntry): boolean {
+  return row.enabled !== false
+}
+function setEnvEnabled(row: ProjectEnvEntry, on: boolean) {
+  row.enabled = on
+}
 function addEnvRow() {
-  envRows.value.push({ key: '', value: '', secret: false })
+  envRows.value.push({ key: '', value: '', secret: false, enabled: true })
 }
 function removeEnvRow(i: number) {
   envRows.value.splice(i, 1)
@@ -1280,11 +1289,12 @@ onUnmounted(() => {
           class="flex flex-1 flex-col overflow-hidden border border-line bg-surface shadow-[var(--shadow-card)]"
         >
           <div
-            class="hidden gap-2 border-b border-line bg-elevated/55 px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-txt3 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_88px_40px]"
+            class="hidden gap-2 border-b border-line bg-elevated/55 px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-txt3 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_88px_96px_40px]"
           >
             <span>{{ t('pages.projectDetail.envKey') }}</span>
             <span>{{ t('pages.projectDetail.colValue') }}</span>
             <span>{{ t('pages.projectDetail.colType') }}</span>
+            <span>{{ t('pages.projectDetail.envEnabled') }}</span>
             <span>{{ t('common.table.actions') }}</span>
           </div>
 
@@ -1292,21 +1302,28 @@ onUnmounted(() => {
             <div
               v-for="(row, i) in envRows"
               :key="i"
-              class="grid grid-cols-1 gap-2 border-b border-line bg-base/40 px-3 py-2 last:border-b-0 hover:bg-elevated/35 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_88px_40px] sm:items-center"
+              class="grid grid-cols-1 gap-2 border-b border-line bg-base/40 px-3 py-2 last:border-b-0 hover:bg-elevated/35 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_88px_96px_40px] sm:items-center"
+              data-testid="sandbox-env-row"
+              :data-env-enabled="isEnvEnabled(row) ? 'true' : 'false'"
             >
               <input
                 :value="row.key"
                 class="input px-2.5 py-1.5 font-mono text-xs"
+                :class="!isEnvEnabled(row) ? 'opacity-45' : ''"
                 :placeholder="t('pages.projectDetail.envKey')"
                 @input="onEnvKeyChange(row, ($event.target as HTMLInputElement).value)"
               />
               <input
                 v-model="row.value"
                 class="input min-w-0 px-2.5 py-1.5 text-xs"
+                :class="!isEnvEnabled(row) ? 'opacity-45' : ''"
                 :placeholder="t('pages.projectDetail.envValue')"
                 :type="row.secret ? 'password' : 'text'"
               />
-              <div class="flex w-full flex-col items-stretch gap-1">
+              <div
+                class="flex w-full flex-col items-stretch gap-1"
+                :class="!isEnvEnabled(row) ? 'opacity-45' : ''"
+              >
                 <button
                   type="button"
                   class="chip w-full justify-center"
@@ -1328,6 +1345,21 @@ onUnmounted(() => {
                   class="text-center text-[10px] font-semibold tracking-wide text-accent-2"
                 >
                   {{ t('pages.projectDetail.secretForced') }}
+                </span>
+              </div>
+              <div
+                class="flex items-center gap-2"
+                data-testid="sandbox-env-enabled"
+              >
+                <AppSwitch
+                  :model-value="isEnvEnabled(row)"
+                  :aria-label="
+                    t('pages.projectDetail.envEnabledAria', { key: row.key || t('pages.projectDetail.envKey') })
+                  "
+                  @update:model-value="setEnvEnabled(row, $event)"
+                />
+                <span class="text-xs text-txt2">
+                  {{ isEnvEnabled(row) ? t('pages.projectDetail.envOn') : t('pages.projectDetail.envOff') }}
                 </span>
               </div>
               <button

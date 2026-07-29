@@ -11,10 +11,21 @@ import (
 
 // EnvEntry is one project sandbox OS environment variable (key/value + secret flag).
 // Secret only affects API/UI read masking; the DB stores plaintext for runtime injection.
+// Enabled=nil means default ON (legacy JSON without the field stays injectable).
 type EnvEntry struct {
-	Key    string `json:"key"`
-	Value  string `json:"value"`
-	Secret bool   `json:"secret,omitempty"`
+	Key     string `json:"key"`
+	Value   string `json:"value"`
+	Secret  bool   `json:"secret,omitempty"`
+	Enabled *bool  `json:"enabled,omitempty"`
+}
+
+// IsEnabled reports whether this entry should be injected into the sandbox.
+// Missing Enabled (nil) defaults to true so upgrades stay opt-out, not silent.
+func (e EnvEntry) IsEnabled() bool {
+	if e.Enabled == nil {
+		return true
+	}
+	return *e.Enabled
 }
 
 // ProjectVariable is a project-level workflow variable definition (vars.* namespace).

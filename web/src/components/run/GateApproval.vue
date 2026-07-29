@@ -483,9 +483,16 @@ const showHotReject = computed(
 const hotRejectAllowEmpty = computed(
   () => usesPreviewIssues.value && openPreviewIssueCount.value >= 1,
 )
-/** Cold session: send unavailable — show note, confirm only. */
+/** Cold session: send unavailable — ordinary confirm-only approval (no ReAct/hot hints). */
 const isColdSession = computed(
   () => props.gate.reactSessionAlive === false && resolved.value == null,
+)
+
+/** Cold-path help: confirm & continue; mention manual edit only when canEditProducts. */
+const helpColdText = computed(() =>
+  canEditProducts.value
+    ? t('pages.gateApproval.helpColdWithEdit')
+    : t('pages.gateApproval.helpCold'),
 )
 
 const useFillLayout = computed(() => !!props.fillPreview)
@@ -1526,7 +1533,14 @@ function onComposerReject() {
             </div>
             <div v-else class="flex min-h-0 flex-1 flex-col">
               <p
-                v-if="usesPreviewIssues && openPreviewIssueCount === 0"
+                v-if="isColdSession"
+                class="mb-2 shrink-0 text-[11px] leading-relaxed text-txt3"
+                data-testid="gate-cold-help"
+              >
+                {{ helpColdText }}
+              </p>
+              <p
+                v-else-if="usesPreviewIssues && openPreviewIssueCount === 0"
                 class="mb-2 shrink-0 text-[11px] leading-relaxed text-txt3"
               >
                 <b class="font-medium text-txt2">{{ t('pages.clarify.confirmFlow') }}</b>
@@ -1557,13 +1571,6 @@ function onComposerReject() {
                 >
                   {{ t('pages.gateApproval.previewRetry') }}
                 </button>
-              </div>
-              <div
-                v-if="isColdSession"
-                class="mb-2 shrink-0 border border-warn/30 bg-warn/10 px-2.5 py-2 text-[11.5px] leading-relaxed text-warn"
-                data-testid="gate-cold-session-note"
-              >
-                {{ t('pages.reviewComposer.coldNote') }}
               </div>
               <!-- Help → scrollable feedback → sticky decisions -->
               <div
@@ -1665,13 +1672,6 @@ function onComposerReject() {
                 />
               </div>
               <div v-else class="mt-2 flex shrink-0 flex-col gap-2">
-                <p
-                  v-if="isColdSession"
-                  class="text-[11px] leading-relaxed text-warn"
-                  data-testid="review-composer-cold-note"
-                >
-                  {{ t('pages.reviewComposer.coldNote') }}
-                </p>
                 <div class="flex flex-wrap gap-3">
                   <button
                     v-for="a in footerActions"
@@ -1842,7 +1842,14 @@ function onComposerReject() {
             </div>
             <div v-else class="flex min-h-0 flex-1 flex-col">
               <p
-                v-if="usesPreviewIssues && openPreviewIssueCount === 0"
+                v-if="isColdSession"
+                class="mb-2 shrink-0 text-[11px] leading-relaxed text-txt3"
+                data-testid="gate-cold-help"
+              >
+                {{ helpColdText }}
+              </p>
+              <p
+                v-else-if="usesPreviewIssues && openPreviewIssueCount === 0"
                 class="mb-2 shrink-0 text-[11px] leading-relaxed text-txt3"
               >
                 <b class="font-medium text-txt2">{{ t('pages.clarify.confirmFlow') }}</b>
@@ -1880,13 +1887,6 @@ function onComposerReject() {
                 >
                   {{ t('pages.gateApproval.previewRetry') }}
                 </button>
-              </div>
-              <div
-                v-if="isColdSession"
-                class="mb-2 shrink-0 border border-warn/30 bg-warn/10 px-2.5 py-2 text-[11.5px] leading-relaxed text-warn"
-                data-testid="gate-cold-session-note"
-              >
-                {{ t('pages.reviewComposer.coldNote') }}
               </div>
               <!-- Preview path: unified feedback in sidebar (hot hides built-in submit). -->
               <div
@@ -2022,13 +2022,6 @@ function onComposerReject() {
                 v-else
                 class="mt-2 flex shrink-0 flex-col gap-2"
               >
-                <p
-                  v-if="isColdSession"
-                  class="text-[11px] leading-relaxed text-warn"
-                  data-testid="review-composer-cold-note"
-                >
-                  {{ t('pages.reviewComposer.coldNote') }}
-                </p>
                 <div class="flex flex-wrap gap-2" :class="isMobile ? 'gap-3' : ''">
                   <button
                     v-for="a in footerActions"
@@ -2298,7 +2291,14 @@ function onComposerReject() {
         </div>
         <div v-else>
           <p
-            v-if="usesPreviewIssues && openPreviewIssueCount === 0"
+            v-if="isColdSession"
+            class="mb-2 text-[11px] leading-relaxed text-txt3"
+            data-testid="gate-cold-help"
+          >
+            {{ helpColdText }}
+          </p>
+          <p
+            v-else-if="usesPreviewIssues && openPreviewIssueCount === 0"
             class="mb-2 text-[11px] leading-relaxed text-txt3"
           >
             <b class="font-medium text-txt2">{{ t('pages.clarify.confirmFlow') }}</b>
@@ -2322,13 +2322,6 @@ function onComposerReject() {
             <span class="mx-1">·</span>
             <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
             {{ t('pages.gateApproval.helpReviseDetail') }}
-          </p>
-          <p
-            v-if="isColdSession && !canReactRevise"
-            class="mb-2 text-[11px] leading-relaxed text-warn"
-            data-testid="review-composer-cold-note"
-          >
-            {{ t('pages.reviewComposer.coldNote') }}
           </p>
           <ReviewComposer
             v-if="canReactRevise"
