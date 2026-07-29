@@ -328,7 +328,11 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
     await expect(page.locator('body')).not.toContainText('动作类型')
     await expect(page.locator('body')).not.toContainText('请先选择动作类型')
     await expect(page.locator('body')).not.toContainText('①')
-    await expect(panel.locator('select')).toHaveCount(0)
+    // Filters use custom dropdowns (no cascade <select>); sole native select is Pagination pageSize
+    await expect(page.getByTestId('project-audit-pager-info')).toBeVisible()
+    await expect(page.getByTestId('project-audit-page-size')).toBeVisible()
+    await expect(panel.locator('select')).toHaveCount(1)
+    await expect(page.getByTestId('project-audit-page-size').locator('select')).toHaveCount(1)
 
     // Preselect latest run + MCP rows in table
     await expect(page.getByTestId('project-audit-list')).toBeVisible()
