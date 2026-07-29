@@ -3,7 +3,7 @@
  * Click-to-expand token tip with per-model blocks (Demo-aligned).
  * Does not rely on hover — works on touch. Close via button or toggle chip.
  */
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   effectiveModelUsageRows,
@@ -14,12 +14,16 @@ import {
 } from '@/lib/tokenUsage'
 import type { TokenUsage, TokenUsageByModel } from '@/lib/types'
 
-const props = defineProps<{
-  usage?: TokenUsage | null
-  usageByModel?: TokenUsageByModel | null
-  /** Optional controlled open state; omit for internal toggle. */
-  open?: boolean
-}>()
+/**
+ * `open` uses runtime Boolean + default undefined so omitted prop is uncontrolled.
+ * Type-only `open?: boolean` is cast to Boolean and defaults to false, locking
+ * the tip closed when parents (e.g. PmLeaderChat) do not bind v-model:open.
+ */
+const props = defineProps({
+  usage: { type: Object as PropType<TokenUsage | null>, default: null },
+  usageByModel: { type: Object as PropType<TokenUsageByModel | null>, default: null },
+  open: { type: Boolean, default: undefined },
+})
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
@@ -28,10 +32,13 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const internalOpen = ref(false)
 
+/** Uncontrolled when parent omits `open` (undefined sentinel). */
+const isControlled = computed(() => props.open !== undefined)
+
 const isOpen = computed({
-  get: () => (props.open != null ? props.open : internalOpen.value),
+  get: () => (isControlled.value ? !!props.open : internalOpen.value),
   set: (v: boolean) => {
-    if (props.open == null) internalOpen.value = v
+    if (!isControlled.value) internalOpen.value = v
     emit('update:open', v)
   },
 })
