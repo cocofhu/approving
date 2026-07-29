@@ -58,6 +58,7 @@ async function metrics(page: Page) {
     const upstreamBox = box(upstream)
     const confirmBox = box(confirm)
     const gridBox = box(grid)
+    const gridTemplateColumns = grid ? getComputedStyle(grid).gridTemplateColumns : ''
 
     const gapPreviewToUpstream =
       previewBox && upstreamBox ? upstreamBox.top - previewBox.bottom : null
@@ -76,6 +77,7 @@ async function metrics(page: Page) {
       upstreamBox,
       confirmBox,
       gridBox,
+      gridTemplateColumns,
       gapPreviewToUpstream,
       gapUpstreamToCardBottom,
       gapBudgetToCardBottom,
@@ -85,10 +87,23 @@ async function metrics(page: Page) {
   })
 }
 
+/** Assert production-like dual-column stretch geometry (review v2). */
+function expectDesktopDualColumn(m: Awaited<ReturnType<typeof metrics>>) {
+  const cols = m.gridTemplateColumns.trim().split(/\s+/)
+  expect(cols.length).toBe(2)
+  const first = parseFloat(cols[0]!)
+  const second = parseFloat(cols[1]!)
+  expect(first).toBeGreaterThan(250)
+  expect(first).toBeLessThan(400)
+  expect(second).toBeGreaterThan(first)
+  // Stretched detail card must be tall enough that a 60vh cap would leave a void.
+  expect(m.cardBox!.height).toBeGreaterThan(m.budgetCapPx + 80)
+}
+
 test.describe('Inbox unified preview budget layout', () => {
   test.use({ viewport: { width: 1440, height: 900 } })
 
-  test('collapsed upstream: no large void under upstream; budget wraps both', async ({
+  test('collapsed upstream: no large void under upstream; budget fills stage', async ({
     page,
   }, testInfo) => {
     await mockApi(page)
@@ -103,8 +118,10 @@ test.describe('Inbox unified preview budget layout', () => {
     })
     testInfo.annotations.push({ type: 'metrics', description: JSON.stringify(m) })
 
+    expectDesktopDualColumn(m)
     expect(m.hasBudget).toBe(true)
-    expect(m.budgetMaxHeight).toBe('60vh')
+    // Inbox path: no 60vh maxHeight on budget (review v1)
+    expect(m.budgetMaxHeight).toBe('')
     expect(m.previewMaxHeight).toBe('')
     expect(m.gapPreviewToUpstream).not.toBeNull()
     expect(m.gapPreviewToUpstream!).toBeLessThan(4)
@@ -113,6 +130,8 @@ test.describe('Inbox unified preview budget layout', () => {
     expect(m.gapUpstreamToCardBottom!).toBeLessThan(48)
     // Detail card stretches with grid (g1)
     expect(m.cardBox!.height).toBeGreaterThan(m.viewportH * 0.7)
+    // Budget fills stage — not capped below card
+    expect(m.gapBudgetToCardBottom!).toBeLessThan(48)
     // Confirm reachable near viewport bottom
     expect(m.confirmBox).not.toBeNull()
     expect(m.viewportH - m.confirmBox!.bottom).toBeLessThan(64)
@@ -127,13 +146,14 @@ test.describe('Inbox unified preview budget layout', () => {
       path: path.join(shotDir, 'inbox-budget-short.png'),
       fullPage: false,
     })
+    expectDesktopDualColumn(m)
     expect(m.gapPreviewToUpstream!).toBeLessThan(4)
     expect(m.gapUpstreamToCardBottom!).toBeLessThan(48)
     // Preview shell still occupies meaningful height inside budget (not collapsed short bar)
     expect(m.previewBox!.height).toBeGreaterThan(120)
   })
 
-  test('expand upstream: still no outer void; budget keeps 60vh', async ({ page }) => {
+  test('expand upstream: still no outer void; budget fills stage', async ({ page }) => {
     await mockApi(page)
     await page.goto('/inbox-unified-budget.html?theme=light')
     await expect(page.getByTestId('upstream-context-toggle')).toBeVisible({ timeout: 15_000 })
@@ -144,9 +164,12 @@ test.describe('Inbox unified preview budget layout', () => {
       path: path.join(shotDir, 'inbox-budget-expanded.png'),
       fullPage: false,
     })
-    expect(m.budgetMaxHeight).toBe('60vh')
+    expectDesktopDualColumn(m)
+    expect(m.budgetMaxHeight).toBe('')
     expect(m.gapUpstreamToCardBottom!).toBeLessThan(48)
-    expect(m.budgetBox!.height).toBeLessThanOrEqual(m.budgetCapPx + 2)
+    expect(m.gapBudgetToCardBottom!).toBeLessThan(48)
+    // Preview yields height but stays usable
+    expect(m.previewBox!.height).toBeGreaterThan(80)
   })
 
   test('without upstream: card still stretched, no large bottom void under budget', async ({
@@ -161,6 +184,7 @@ test.describe('Inbox unified preview budget layout', () => {
       path: path.join(shotDir, 'inbox-budget-no-upstream.png'),
       fullPage: false,
     })
+    expectDesktopDualColumn(m)
     expect(m.cardBox!.height).toBeGreaterThan(m.viewportH * 0.7)
     expect(m.gapBudgetToCardBottom!).toBeLessThan(48)
   })

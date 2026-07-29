@@ -79,9 +79,10 @@ const props = defineProps<{
    */
   fillPreview?: boolean
   /**
-   * Inbox desktop only: apply ≈60vh max-height to a wrapper that includes both
-   * content-fit-preview and UpstreamRequirementContext (Demo「修复后」一体预算).
-   * When off (Run Detail default), 60vh stays on the preview shell alone.
+   * Inbox desktop only: wrap content-fit-preview + UpstreamRequirementContext in a
+   * flex-1/min-h-0 budget that fills the stretched stage (no 60vh cap — that would
+   * leave a void under the upstream strip when stage > 60vh). When off (Run Detail
+   * default), 60vh stays on the preview shell alone.
    */
   unifiedPreviewBudget?: boolean
   /**
@@ -1358,7 +1359,7 @@ const useReviewShellLayout = computed(
 )
 
 /**
- * Inbox desktop: 60vh budget wraps preview + upstream as one unit.
+ * Inbox desktop: one budget wraps preview + upstream and fills the stage.
  * Desktop-only so mobile content-fit keeps per-preview maxHeight.
  */
 const useUnifiedPreviewBudget = computed(
@@ -1723,7 +1724,7 @@ function onComposerReject() {
       >
         <template #stage>
           <div class="flex h-full min-h-0 flex-col overflow-hidden">
-            <!-- Inbox: ≈60vh covers preview + upstream as one unit (no void under upstream). -->
+            <!-- Inbox: budget fills stage so upstream sits on card bottom (no 60vh free-space void). -->
             <div
               :class="
                 useUnifiedPreviewBudget
@@ -1731,11 +1732,6 @@ function onComposerReject() {
                   : 'contents'
               "
               :data-testid="useUnifiedPreviewBudget ? 'content-fit-budget' : undefined"
-              :style="
-                useUnifiedPreviewBudget
-                  ? { maxHeight: `${CONTENT_FIT_PREVIEW_MAX_VH}vh` }
-                  : undefined
-              "
             >
               <div
                 ref="gateStageEl"

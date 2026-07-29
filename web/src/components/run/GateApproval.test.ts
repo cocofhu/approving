@@ -1125,8 +1125,9 @@ describe('GateApproval content-fit layout branches', () => {
     wrapper.unmount()
   })
 
-  it('Inbox unified budget: 60vh wraps preview+upstream; preview alone has no maxHeight', async () => {
-    // plan g2.2 / g2.3 / f2: CONTENT_FIT_PREVIEW_MAX_VH on content-fit-budget, not preview
+  it('Inbox unified budget: stage-fill wraps preview+upstream; no 60vh void under upstream', async () => {
+    // plan g2.2 / g2.3 / f2 / review v1: budget fills stage (no maxHeight:60vh);
+    // preview alone has no maxHeight; 60vh remains Run Detail preview-only.
     const pageHtml = '<!doctype html><html><body><h1>Inbox</h1></body></html>'
     const wrapper = mountApproval({
       fillPreview: true,
@@ -1174,13 +1175,13 @@ describe('GateApproval content-fit layout branches', () => {
     expect(budget.exists()).toBe(true)
     expect(preview.exists()).toBe(true)
     expect(upstream.exists()).toBe(true)
-    expect((budget.element as HTMLElement).style.maxHeight).toBe(
-      `${CONTENT_FIT_PREVIEW_MAX_VH}vh`,
-    )
+    // Inbox path: no 60vh cap on budget (would leave void under upstream in tall stage)
+    expect((budget.element as HTMLElement).style.maxHeight).toBe('')
     // g2.3: preview no longer owns the 60vh sibling budget alone
     expect((preview.element as HTMLElement).style.maxHeight).toBe('')
     expect(hasClass(preview.element, 'flex-1')).toBe(true)
     expect(hasClass(budget.element, 'flex-1')).toBe(true)
+    expect(hasClass(budget.element, 'min-h-0')).toBe(true)
     // Upstream is inside budget, sibling of preview (not nested in preview).
     expect(budget.element.contains(preview.element)).toBe(true)
     expect(budget.element.contains(upstream.element)).toBe(true)
@@ -1195,7 +1196,7 @@ describe('GateApproval content-fit layout branches', () => {
     wrapper.unmount()
   })
 
-  it('Inbox unified budget without upstream: budget still caps preview shell', async () => {
+  it('Inbox unified budget without upstream: budget fills stage, preview has no maxHeight', async () => {
     // plan g1.2 / s3: no upstream strip; card still uses unified budget wrapper
     const pageHtml = '<!doctype html><html><body><p>短</p></body></html>'
     const wrapper = mountApproval({
@@ -1228,9 +1229,8 @@ describe('GateApproval content-fit layout branches', () => {
 
     const budget = wrapper.find('[data-testid="content-fit-budget"]')
     expect(budget.exists()).toBe(true)
-    expect((budget.element as HTMLElement).style.maxHeight).toBe(
-      `${CONTENT_FIT_PREVIEW_MAX_VH}vh`,
-    )
+    expect((budget.element as HTMLElement).style.maxHeight).toBe('')
+    expect(hasClass(budget.element, 'flex-1')).toBe(true)
     expect(wrapper.find('[data-testid="upstream-context"]').exists()).toBe(false)
     const preview = wrapper.find('[data-testid="content-fit-preview"]')
     expect((preview.element as HTMLElement).style.maxHeight).toBe('')
@@ -1253,7 +1253,7 @@ describe('GateApproval content-fit layout branches', () => {
   })
 
   it('unified budget expands upstream under budget without preview maxHeight', async () => {
-    // plan g3.2 / f4: expand upstream body; budget still owns 60vh
+    // plan g3.2 / f4: expand upstream body; budget still fills stage (no 60vh void)
     const pageHtml = '<!doctype html><html><body><h1>预览</h1></body></html>'
     const wrapper = mountApproval({
       fillPreview: true,
@@ -1303,9 +1303,8 @@ describe('GateApproval content-fit layout branches', () => {
 
     expect(wrapper.find('[data-testid="upstream-context-body"]').exists()).toBe(true)
     const budget = wrapper.find('[data-testid="content-fit-budget"]')
-    expect((budget.element as HTMLElement).style.maxHeight).toBe(
-      `${CONTENT_FIT_PREVIEW_MAX_VH}vh`,
-    )
+    expect((budget.element as HTMLElement).style.maxHeight).toBe('')
+    expect(hasClass(budget.element, 'flex-1')).toBe(true)
     expect((wrapper.find('[data-testid="content-fit-preview"]').element as HTMLElement).style.maxHeight).toBe(
       '',
     )

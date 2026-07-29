@@ -108,7 +108,8 @@ const Fixture = defineComponent({
           h(
             'div',
             {
-              class: 'grid min-h-0 flex-1 grid-cols-[280px_1fr] items-stretch gap-4',
+              // Match GatesInboxView production desktop grid (review v2/v3).
+              class: 'grid min-h-0 flex-1 grid-cols-[320px_1fr] items-stretch gap-4',
               'data-testid': 'inbox-desktop-grid',
             },
             [
