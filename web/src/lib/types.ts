@@ -89,6 +89,8 @@ export interface ProjectEnvEntry {
   key: string
   value: string
   secret?: boolean
+  /** When false, skipped at injection; missing/undefined means enabled (legacy compat). */
+  enabled?: boolean
 }
 
 /** Project-level workflow variable (vars.*); secret values masked on read. */
