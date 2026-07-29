@@ -151,6 +151,27 @@ describe('ReviewComposer gate busy status (C-tier)', () => {
     bad.unmount()
   })
 
+  // g2.1: failure body + interrupted shares cancel UI; never Done/已完成.
+  it('revise failure stream text + interrupted never shows 已完成/Done', async () => {
+    const fail = mountGate({
+      thinking: false,
+      streamThought: '半截思考',
+      streamText: '(复审修改失败:acp chat idle timeout after 10m0s)',
+      interrupted: true,
+      streamCompletedAt: null,
+    })
+    await flushPromises()
+    expect(fail.text()).toContain('复审修改失败')
+    expect(fail.find('[data-testid="gate-turn-completed"]').exists()).toBe(false)
+    expect(fail.text()).not.toMatch(/\bDone\b/)
+    expect(fail.find('[data-testid="thought-summary-state"]').attributes('data-state')).toBe(
+      'interrupted',
+    )
+    expect(fail.find('[data-testid="thought-summary-state"]').text()).toContain('已中断')
+    expect(fail.find('[data-testid="thought-summary-state"]').text()).not.toContain('已完成')
+    fail.unmount()
+  })
+
   it('idle (not thinking, no completed) hides stream panel', async () => {
     const wrapper = mountGate({
       thinking: false,

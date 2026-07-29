@@ -592,7 +592,9 @@ func (e *Engine) executeReviewTurn(ctx context.Context, s *reviewSession, item *
 	s.mu.Lock()
 	cancelled := s.cancelRequested || ctx.Err() != nil
 	s.mu.Unlock()
-	if cancelled {
+	// Cancel and revise failure share Interrupted so UI never shows Done/已完成.
+	// Surface failure in chat; do not fail the enqueue API or the Run.
+	if cancelled || t.Err != nil {
 		interrupted = true
 	}
 
@@ -610,18 +612,15 @@ func (e *Engine) executeReviewTurn(ctx context.Context, s *reviewSession, item *
 	e.flushTokenUsage(s.runID, s.producerID, t.Usage, t.UsageByModel)
 
 	if interrupted {
-		log.Info().Str("run_id", s.runID).Str("producer", s.producerID).
-			Msg("review turn interrupted by Cancel; session kept parked")
+		if cancelled {
+			log.Info().Str("run_id", s.runID).Str("producer", s.producerID).
+				Msg("review turn interrupted by Cancel; session kept parked")
+		} else {
+			log.Warn().Err(t.Err).Str("run_id", s.runID).Str("producer", s.producerID).
+				Msg("review revise turn failed (session kept for retry)")
+		}
 		e.broker.Publish(s.runID, jsonMsg("react", s.runID, s.producerID))
 		return true, nil
-	}
-
-	if t.Err != nil {
-		log.Warn().Err(t.Err).Str("run_id", s.runID).Str("producer", s.producerID).
-			Msg("review revise turn failed (session kept for retry)")
-		e.broker.Publish(s.runID, jsonMsg("react", s.runID, s.producerID))
-		// Match prior reviewReply: surface failure in chat, do not fail the enqueue API.
-		return false, nil
 	}
 
 	e.refreshProducerOutputs(c, producer)

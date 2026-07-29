@@ -58,4 +58,14 @@ describe('ThoughtSummaryStatus', () => {
     expect(el.text()).not.toContain('已完成')
     w.unmount()
   })
+
+  // g2.1: revise/cancel failure path must never look like Done (even if completed flagged).
+  it('interrupted wins over completed → no Done/已完成', () => {
+    const w = mountStatus({ busy: false, interrupted: true, completed: true })
+    const el = w.find('[data-testid="thought-summary-state"]')
+    expect(el.attributes('data-state')).toBe('interrupted')
+    expect(el.text()).not.toMatch(/\bDone\b/)
+    expect(el.text()).not.toContain('已完成')
+    w.unmount()
+  })
 })
