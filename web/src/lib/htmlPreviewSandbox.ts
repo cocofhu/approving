@@ -69,6 +69,9 @@ export const INSPECT_COMMAND_TYPE = 'html-preview-inspect-cmd'
 /** iframe → parent: element pick with CSS selector + element screenshot. */
 export const INSPECT_MESSAGE_TYPE = 'html-preview-inspect'
 
+/** iframe → parent: user canceled inspect (Esc) inside opaque-origin sandbox. */
+export const INSPECT_CANCELED_TYPE = 'html-preview-inspect-canceled'
+
 /** Timeout before falling back to fixed inline height when no resize message arrives. */
 export const RESIZE_TIMEOUT_MS = 2500
 
@@ -90,6 +93,11 @@ export interface InspectPickMessage {
   selector: string
   tagName: string
   imageDataUrl: string
+}
+
+export interface InspectCanceledMessage {
+  type: typeof INSPECT_CANCELED_TYPE
+  id: string
 }
 
 function escapeForSingleQuotedJs(value: string): string {
@@ -142,6 +150,7 @@ function buildInspectScript(instanceId: string): string {
 var instanceId='${safeId}';
 var cmdType='${INSPECT_COMMAND_TYPE}';
 var pickType='${INSPECT_MESSAGE_TYPE}';
+var cancelType='${INSPECT_CANCELED_TYPE}';
 var enabled=false;
 var hoverEl=null;
 var styleEl=null;
@@ -261,6 +270,8 @@ function onClick(ev){
   var selector=path(t);
   var tagName=t.tagName.toLowerCase();
   clearHover();
+  // One-shot: leave inspect after pick (parent also clears button state).
+  setEnabled(false);
   captureElement(t).then(function(imageDataUrl){
     parent.postMessage({
       type:pickType,
@@ -271,6 +282,14 @@ function onClick(ev){
     },'*');
   });
 }
+function onKeydown(ev){
+  if(!enabled)return;
+  if(ev.key!=='Escape'&&ev.key!=='Esc')return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  setEnabled(false);
+  parent.postMessage({type:cancelType,id:instanceId},'*');
+}
 window.addEventListener('message',function(ev){
   var data=ev.data;
   if(!data||typeof data!=='object')return;
@@ -279,6 +298,7 @@ window.addEventListener('message',function(ev){
 });
 document.addEventListener('mousemove',onMove,true);
 document.addEventListener('click',onClick,true);
+document.addEventListener('keydown',onKeydown,true);
 })();<\/script>`
 }
 
@@ -366,6 +386,14 @@ export function parseInspectPickMessage(data: unknown): InspectPickMessage | nul
     tagName: data.tagName,
     imageDataUrl: data.imageDataUrl,
   }
+}
+
+export function isValidInspectCanceledMessage(data: unknown): data is InspectCanceledMessage {
+  if (!data || typeof data !== 'object') return false
+  const msg = data as Record<string, unknown>
+  if (msg.type !== INSPECT_CANCELED_TYPE) return false
+  if (typeof msg.id !== 'string' || !msg.id) return false
+  return true
 }
 
 /** Build parent→iframe inspect command (caller posts to iframe contentWindow). */

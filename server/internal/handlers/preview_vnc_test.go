@@ -22,6 +22,7 @@ func (p *vncRecPage) DispatchKey(browser.KeyEvent) error        { return nil }
 func (p *vncRecPage) SetViewport(int, int, float64) error       { return nil }
 func (p *vncRecPage) SetInspect(on bool) error                  { p.inspect = &on; return nil }
 func (p *vncRecPage) OnPick(func(browser.Pick))                 {}
+func (p *vncRecPage) OnInspectCanceled(func())                  {}
 func (p *vncRecPage) Navigate(a string) error                   { p.navs = append(p.navs, a); return nil }
 func (p *vncRecPage) Goto(u string) error                       { p.gotos = append(p.gotos, u); return nil }
 func (p *vncRecPage) Close() error                              { return nil }
@@ -41,6 +42,10 @@ func TestApplyVncMsgInspectNavigate(t *testing.T) {
 	h.applyVncMsg(p, decodeVnc(t, `{"type":"inspect","on":true}`))
 	if p.inspect == nil || !*p.inspect {
 		t.Fatal("inspect should be enabled")
+	}
+	h.applyVncMsg(p, decodeVnc(t, `{"type":"inspect","on":false}`))
+	if p.inspect == nil || *p.inspect {
+		t.Fatal("inspect should be disabled on on:false")
 	}
 	h.applyVncMsg(p, decodeVnc(t, `{"type":"navigate","action":"reload"}`))
 	if len(p.navs) != 1 || p.navs[0] != "reload" {

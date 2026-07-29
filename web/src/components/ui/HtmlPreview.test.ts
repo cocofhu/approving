@@ -4,10 +4,12 @@ import { createI18n } from 'vue-i18n'
 import { mount, flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
+import pages from '@/locales/zh-CN/pages.json'
 import {
   HTML_PREVIEW_DEFAULT_TOOLBAR_PX,
   RESIZE_HEIGHT_EPSILON,
   RESIZE_MESSAGE_TYPE,
+  INSPECT_CANCELED_TYPE,
   contentFitPreviewCapPx,
 } from '@/lib/htmlPreviewSandbox'
 import HtmlPreview from './HtmlPreview.vue'
@@ -27,7 +29,7 @@ function mountPreview(props: Record<string, unknown> = {}) {
   const i18n = createI18n({
     legacy: false,
     locale: 'zh-CN',
-    messages: { 'zh-CN': { ...common } },
+    messages: { 'zh-CN': { ...common, ...pages } },
   })
   return mount(HtmlPreview, {
     props: {
@@ -332,6 +334,78 @@ describe('HtmlPreview inline/fillParent enlarge', () => {
     await wrapper.find('[data-testid="html-preview-enlarge"]').trigger('click')
     await nextTick()
     expect(wrapper.findComponent(AppModalStub).props('title')).toBe('窗口放大查看')
+    wrapper.unmount()
+  })
+})
+
+describe('HtmlPreview inspect toggle', () => {
+  beforeEach(() => {
+    vi.stubGlobal('crypto', { randomUUID: () => FIXED_ID })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('toggles with stable 取点标注 label and aria-pressed round-trip', async () => {
+    const wrapper = mountPreview({
+      mode: 'inline',
+      fitContent: false,
+      fillParent: true,
+      inspectable: true,
+      enlargeable: false,
+    })
+    await flushPromises()
+    const btn = wrapper.find('[data-testid="html-preview-inspect-toggle"]')
+    expect(btn.exists()).toBe(true)
+    expect(btn.text()).toContain('取点标注')
+    expect(btn.attributes('aria-pressed')).toBe('false')
+    expect(wrapper.text()).not.toContain('取消取点')
+
+    await btn.trigger('click')
+    await nextTick()
+    expect(btn.attributes('aria-pressed')).toBe('true')
+    expect(btn.text()).toContain('取点标注')
+    expect(wrapper.text()).not.toContain('取消取点')
+
+    await btn.trigger('click')
+    await nextTick()
+    expect(btn.attributes('aria-pressed')).toBe('false')
+    expect(btn.text()).toContain('取点标注')
+    wrapper.unmount()
+  })
+
+  it('clears pressed state when iframe posts inspect-canceled (Esc)', async () => {
+    const wrapper = mountPreview({
+      mode: 'inline',
+      fitContent: false,
+      fillParent: true,
+      inspectable: true,
+      enlargeable: false,
+    })
+    await flushPromises()
+
+    const iframe = wrapper.find('iframe')
+    const el = iframe.element as HTMLIFrameElement
+    Object.defineProperty(el, 'contentWindow', {
+      value: window,
+      configurable: true,
+    })
+
+    const btn = wrapper.find('[data-testid="html-preview-inspect-toggle"]')
+    await btn.trigger('click')
+    await nextTick()
+    expect(btn.attributes('aria-pressed')).toBe('true')
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: INSPECT_CANCELED_TYPE, id: FIXED_ID },
+        source: window,
+      }),
+    )
+    await nextTick()
+    await flushPromises()
+    expect(btn.attributes('aria-pressed')).toBe('false')
     wrapper.unmount()
   })
 })

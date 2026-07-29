@@ -15,6 +15,7 @@ import {
   parseResizeMessage,
   isValidInspectPickMessage,
   parseInspectPickMessage,
+  isValidInspectCanceledMessage,
   buildInspectCommand,
 } from '@/lib/htmlPreviewSandbox'
 import Icon from './Icon.vue'
@@ -226,14 +227,34 @@ function postInspectCommand(enabled: boolean) {
   win.postMessage(buildInspectCommand(instanceId, enabled), '*')
 }
 
+/**
+ * Single exit for inspect mode (toolbar off / Esc / pick). Keeps last pick emit
+ * result with the parent — Esc must only clear the button/mode, not staged UI.
+ */
+function clearInspect(_reason: string, opts?: { syncIframe?: boolean }) {
+  const syncIframe = opts?.syncIframe !== false
+  if (!props.inspectable) return
+  if (!inspecting.value) {
+    if (syncIframe) postInspectCommand(false)
+    return
+  }
+  inspecting.value = false
+  if (syncIframe) postInspectCommand(false)
+}
+
 function setInspecting(on: boolean) {
   if (!props.inspectable) return
-  inspecting.value = on
-  postInspectCommand(on)
+  if (on) {
+    inspecting.value = true
+    postInspectCommand(true)
+    return
+  }
+  clearInspect('setInspecting')
 }
 
 function toggleInspect() {
-  setInspecting(!inspecting.value)
+  if (inspecting.value) clearInspect('toolbar-toggle')
+  else setInspecting(true)
 }
 
 defineExpose({ openEnlarge, closeEnlarge, setInspecting })
@@ -280,11 +301,16 @@ function handlePreviewMessage(event: MessageEvent) {
     return
   }
 
+  if (props.inspectable && isValidInspectCanceledMessage(event.data)) {
+    // iframe Esc — sandbox already disabled inspect; sync parent button only.
+    clearInspect('iframe-esc', { syncIframe: false })
+    return
+  }
+
   if (props.inspectable && isValidInspectPickMessage(event.data)) {
     const parsed = parseInspectPickMessage(event.data)
     if (!parsed) return
-    inspecting.value = false
-    postInspectCommand(false)
+    clearInspect('picked', { syncIframe: true })
     emit('pick', {
       selector: parsed.selector,
       tagName: parsed.tagName,
@@ -397,15 +423,13 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
             ? 'border-accent bg-accent-dim/50 text-accent'
             : 'border-line text-txt2 hover:text-txt'
         "
+        :aria-pressed="inspecting ? 'true' : 'false'"
+        :title="t('pages.appPreview.novnc.inspect')"
         data-testid="html-preview-inspect-toggle"
         @click="toggleInspect"
       >
         <Icon name="crosshair" :size="13" />
-        {{
-          inspecting
-            ? t('pages.appPreview.novnc.cancelInspect')
-            : t('pages.appPreview.novnc.inspect')
-        }}
+        {{ t('pages.appPreview.novnc.inspect') }}
       </button>
       <button
         v-if="enlargeable"
@@ -502,15 +526,13 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
             ? 'border-accent bg-accent-dim/50 text-accent'
             : 'border-line text-txt2 hover:text-txt'
         "
+        :aria-pressed="inspecting ? 'true' : 'false'"
+        :title="t('pages.appPreview.novnc.inspect')"
         data-testid="html-preview-inspect-toggle"
         @click="toggleInspect"
       >
         <Icon name="crosshair" :size="13" />
-        {{
-          inspecting
-            ? t('pages.appPreview.novnc.cancelInspect')
-            : t('pages.appPreview.novnc.inspect')
-        }}
+        {{ t('pages.appPreview.novnc.inspect') }}
       </button>
       <button
         v-if="enlargeable"

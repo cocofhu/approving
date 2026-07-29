@@ -66,6 +66,9 @@ type Page interface {
 	// SetInspect toggles element-pick (inspect) mode; picks fire the OnPick cb.
 	SetInspect(on bool) error
 	OnPick(func(Pick))
+	// OnInspectCanceled is invoked when the user cancels CDP inspect mode
+	// (e.g. Esc → Overlay.inspectModeCanceled). Callers sync UI button state.
+	OnInspectCanceled(func())
 	// Navigate performs "reload" | "back" | "forward".
 	Navigate(action string) error
 	// Goto navigates the tab to url (e.g. about:blank or http://…).

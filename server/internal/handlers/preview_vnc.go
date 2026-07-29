@@ -120,6 +120,10 @@ func (h *Handlers) PreviewVNC(c *gin.Context) {
 	sess.Page().OnPick(func(p browser.Pick) {
 		pushJSON(gin.H{"type": "picked", "pick": p})
 	})
+	sess.Page().OnInspectCanceled(func() {
+		// Remote Esc left CDP inspect; frontend must clear button pressed state.
+		pushJSON(gin.H{"type": "inspect-canceled"})
+	})
 
 	pushJSON(gin.H{"type": "ready", "url": navigateURL})
 
@@ -170,7 +174,9 @@ func (h *Handlers) PreviewVNC(c *gin.Context) {
 func (h *Handlers) applyVncMsg(page browser.Page, m vncClientMsg) {
 	switch m.Type {
 	case "inspect":
-		_ = page.SetInspect(m.On)
+		if err := page.SetInspect(m.On); err != nil {
+			log.Warn().Err(err).Bool("on", m.On).Msg("preview-vnc SetInspect failed")
+		}
 	case "navigate":
 		if m.Action == "goto" || m.URL != "" {
 			url := m.URL
