@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AuditFilterDropdown, { type AuditDdOption } from '@/components/project/AuditFilterDropdown.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
+import Pagination from '@/components/ui/Pagination.vue'
 import { api, isPaginated, type PaginatedResponse } from '@/lib/api'
 import { prettyAuditPayload } from '@/lib/auditPayload'
 import { useBreakpoint } from '@/lib/useBreakpoint'
@@ -86,8 +87,7 @@ const CALLER_LABEL_KEYS: Record<string, string> = {
   system: 'pages.projectDetail.audit.callerSystem',
 }
 
-const hasMore = computed(() => page.value * pageSize.value < total.value)
-const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value) || 1))
+const AUDIT_PAGE_SIZE_OPTIONS = [5, 10, 20]
 
 const runDdOptions = computed<AuditDdOption[]>(() =>
   runOptions.value.map((r) => ({
@@ -133,12 +133,6 @@ const timeDdOptions = computed<AuditDdOption[]>(() => [
   { value: '24h', label: t('pages.projectDetail.audit.time24h') },
   { value: '7d', label: t('pages.projectDetail.audit.time7d') },
   { value: '30d', label: t('pages.projectDetail.audit.time30d') },
-])
-
-const pageSizeOptions = computed<AuditDdOption[]>(() => [
-  { value: '5', label: '5' },
-  { value: '10', label: '10' },
-  { value: '20', label: '20' },
 ])
 
 type Chip = { key: string; label: string; value: string; clearable: boolean }
@@ -527,15 +521,14 @@ async function exportAudit() {
   }
 }
 
-function goPage(p: number) {
-  const max = pageCount.value
-  page.value = Math.max(1, Math.min(max, p))
+function onPageChange(p: number) {
+  page.value = p
   openId.value = null
   void load()
 }
 
-function onPageSizeChange(v: string) {
-  pageSize.value = Number(v) || 10
+function onPageSizeChange(size: number) {
+  pageSize.value = size || 10
   openId.value = null
   void load(true)
 }
@@ -962,35 +955,18 @@ onMounted(() => {
         </table>
       </div>
 
-      <div v-if="!noRuns" class="pager">
-        <span data-testid="project-audit-pager-info">
-          <template v-if="total">
-            <b>{{ (page - 1) * pageSize + 1 }}-{{ Math.min(page * pageSize, total) }}</b>
-            /
-            <b>{{ total }}</b>
-          </template>
-          <template v-else>{{ t('pages.projectDetail.audit.statTotal') }} <b>0</b></template>
-        </span>
-        <div class="pager-btns">
-          <button type="button" class="btn" :disabled="page <= 1 || loading" @click="goPage(page - 1)">
-            {{ t('common.pagination.prev') }}
-          </button>
-          <button type="button" class="btn" :disabled="!hasMore || loading" @click="goPage(page + 1)">
-            {{ t('common.pagination.next') }}
-          </button>
-        </div>
-        <div class="pager-size">
-          <span>{{ t('pages.projectDetail.audit.perPage') }}</span>
-          <AuditFilterDropdown
-            :model-value="String(pageSize)"
-            :options="pageSizeOptions"
-            :width="80"
-            :right="true"
-            test-id="project-audit-page-size"
-            @update:model-value="onPageSizeChange"
-          />
-        </div>
-      </div>
+      <Pagination
+        v-if="!noRuns"
+        :page="page"
+        :page-size="pageSize"
+        :total="total"
+        :loading="loading"
+        :page-size-options="AUDIT_PAGE_SIZE_OPTIONS"
+        summary-test-id="project-audit-pager-info"
+        page-size-test-id="project-audit-page-size"
+        @update:page="onPageChange"
+        @update:page-size="onPageSizeChange"
+      />
     </template>
   </div>
 </template>
@@ -1346,42 +1322,6 @@ tr.detail td {
 .col-run-hide .col-run,
 .col-node-hide .col-node {
   display: none;
-}
-.pager {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 10px 16px;
-  border-top: 1px solid var(--line, #ececef);
-  font-size: 12px;
-  color: var(--txt3, #71717a);
-}
-.pager b {
-  color: var(--txt, #18181b);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.pager-btns {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.pager-btns .btn {
-  height: 28px;
-  min-width: 28px;
-  padding: 0 9px;
-  border-color: transparent;
-  background: transparent;
-}
-.pager-btns .btn:hover:not(:disabled) {
-  background: #f4f4f5;
-}
-.pager-size {
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 .filter-summary {
   display: flex;

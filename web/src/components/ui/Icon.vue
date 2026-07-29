@@ -22,6 +22,7 @@ const paths: Record<string, string> = {
   alert: '<path d="M12 3l9 16H3z"/><path d="M12 9v5M12 17h.01"/>',
   'chevron-down': '<path d="M6 9l6 6 6-6"/>',
   'chevrons-down': '<path d="M6 5l6 6 6-6"/><path d="M6 11l6 6 6-6"/>',
+  'chevron-left': '<path d="M15 6l-6 6 6 6"/>',
   'chevron-right': '<path d="M9 6l6 6-6 6"/>',
   'arrow-left': '<path d="M19 12H5M11 6l-6 6 6 6"/>',
   refresh: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',

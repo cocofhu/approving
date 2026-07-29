@@ -31,6 +31,9 @@
     },
     "pagination": {
       "summary": "共 {total} 条 · 第 {page}/{pages} 页",
+      "rangeSummary": "{from}–{to} / {total}",
+      "emptySummary": "共 0",
+      "perPage": "每页",
       "prev": "上一页",
       "next": "下一页",
       "loadEarlier": "加载更早的事件"
