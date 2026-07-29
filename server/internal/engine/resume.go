@@ -458,7 +458,7 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 		// saveState) so the timeline reflects every react round, not just the
 		// opening one.
 		e.flushMcpCalls(runID, nodeID)
-		e.flushTokenUsage(runID, nodeID, t.Usage)
+		e.flushTokenUsage(runID, nodeID, t.Usage, t.UsageByModel)
 		e.broker.Publish(runID, jsonMsg("react", runID, nodeID))
 		return nil
 	}
@@ -467,7 +467,7 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 	logDB(e.db.Save(&conv), runID, "finish react conversation")
 
 	if t.Err != nil {
-		outcome := nodeOutcome{status: "failed", err: t.Err.Error(), outputMd: t.Msg, events: t.Events, usage: t.Usage}
+		outcome := nodeOutcome{status: "failed", err: t.Err.Error(), outputMd: t.Msg, events: t.Events, usage: t.Usage, usageByModel: t.UsageByModel}
 		e.saveState(c, node, outcome)
 		e.appendTrace(c, models.TraceEntry{NodeID: nodeID, Event: "resume", Detail: "react 失败"})
 		next := e.routeFailure(c, node, outcome)

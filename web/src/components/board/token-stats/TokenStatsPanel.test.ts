@@ -51,6 +51,14 @@ function sampleStats(partial: Partial<ProjectTokenStats> = {}): ProjectTokenStat
       { workflowId: 'wf-b', name: 'doc-review', total: 40 },
       { name: 'other', total: 20, other: true },
     ],
+    modelComposition: [
+      { modelKey: 'claude-sonnet-4', name: 'claude-sonnet-4', total: 100, filled: true },
+      { modelKey: '未知/未分桶', name: '未知/未分桶', total: 40, unknown: true },
+    ],
+    modelRanking: [
+      { modelKey: 'claude-sonnet-4', name: 'claude-sonnet-4', total: 100, filled: true },
+      { modelKey: '未知/未分桶', name: '未知/未分桶', total: 40, unknown: true },
+    ],
     ...partial,
   }
 }

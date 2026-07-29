@@ -468,7 +468,7 @@ func (e *Engine) executeClarifyTurn(ctx context.Context, s *reviewSession, item 
 	if interrupted {
 		logDB(e.db.Save(&conv), s.runID, "save clarify agent turn (interrupted)")
 		e.flushMcpCalls(s.runID, s.producerID)
-		e.flushTokenUsage(s.runID, s.producerID, t.Usage)
+		e.flushTokenUsage(s.runID, s.producerID, t.Usage, t.UsageByModel)
 		log.Info().Str("run_id", s.runID).Str("node", s.producerID).
 			Msg("clarify turn interrupted by Cancel; queue kept for next item")
 		e.broker.Publish(s.runID, jsonMsg("react", s.runID, s.producerID))
@@ -484,7 +484,7 @@ func (e *Engine) executeClarifyTurn(ctx context.Context, s *reviewSession, item 
 	if !t.Done {
 		logDB(e.db.Save(&conv), s.runID, "save clarify conversation")
 		e.flushMcpCalls(s.runID, s.producerID)
-		e.flushTokenUsage(s.runID, s.producerID, t.Usage)
+		e.flushTokenUsage(s.runID, s.producerID, t.Usage, t.UsageByModel)
 		e.broker.Publish(s.runID, jsonMsg("react", s.runID, s.producerID))
 		return false, nil
 	}
@@ -493,7 +493,7 @@ func (e *Engine) executeClarifyTurn(ctx context.Context, s *reviewSession, item 
 	logDB(e.db.Save(&conv), s.runID, "finish clarify conversation")
 
 	if t.Err != nil {
-		outcome := nodeOutcome{status: "failed", err: t.Err.Error(), outputMd: t.Msg, events: t.Events, usage: t.Usage}
+		outcome := nodeOutcome{status: "failed", err: t.Err.Error(), outputMd: t.Msg, events: t.Events, usage: t.Usage, usageByModel: t.UsageByModel}
 		e.saveState(c, node, outcome)
 		e.appendTrace(c, models.TraceEntry{NodeID: s.producerID, Event: "resume", Detail: "react 失败"})
 		next := e.routeFailure(c, node, outcome)
@@ -607,7 +607,7 @@ func (e *Engine) executeReviewTurn(ctx context.Context, s *reviewSession, item *
 	logDB(e.db.Save(&conv), s.runID, "save review agent turn")
 
 	e.flushMcpCalls(s.runID, s.producerID)
-	e.flushTokenUsage(s.runID, s.producerID, t.Usage)
+	e.flushTokenUsage(s.runID, s.producerID, t.Usage, t.UsageByModel)
 
 	if interrupted {
 		log.Info().Str("run_id", s.runID).Str("producer", s.producerID).

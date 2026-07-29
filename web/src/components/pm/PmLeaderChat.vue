@@ -23,6 +23,7 @@ import {
 } from '@/lib/pmTurnState'
 import { extractAgentMessageDelta } from '@/lib/acpUnpack'
 import { useBreakpoint } from '@/lib/useBreakpoint'
+import TokenUsageByModelTip from '@/components/ui/TokenUsageByModelTip.vue'
 import type { ChatMessage, ChatThread, ClarifyImage, PmLeaderBinding } from '@/lib/types'
 
 type FailKind = PmFailKind
@@ -1419,10 +1420,16 @@ onBeforeUnmount(() => {
               >
                 <div class="md" v-html="renderMarkdown(m.content)" />
                 <div
-                  v-if="m.content?.trim()"
-                  class="msg-actions mt-1.5 flex justify-end gap-1 border-t border-line pt-1"
+                  v-if="m.content?.trim() || m.usage != null"
+                  class="msg-actions mt-1.5 flex flex-wrap items-center justify-end gap-2 border-t border-line pt-1"
                 >
+                  <TokenUsageByModelTip
+                    v-if="m.usage != null"
+                    :usage="m.usage"
+                    :usage-by-model="m.usageByModel"
+                  />
                   <button
+                    v-if="m.content?.trim()"
                     type="button"
                     class="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] text-txt3 hover:bg-surface hover:text-txt2"
                     @click="copyAssistantText"

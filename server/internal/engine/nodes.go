@@ -25,8 +25,10 @@ type nodeOutcome struct {
 	events   []models.AcpEvent
 	// usage is this save's token delta (added onto StateRun.Usage). nil skips.
 	usage *models.TokenUsage
-	err   string
-	goto_ string // branch target
+	// usageByModel is this save's per-model delta (added onto StateRun.UsageByModel).
+	usageByModel models.TokenUsageByModel
+	err          string
+	goto_        string // branch target
 	// sandboxSetup marks a react node's sandbox/ACP infrastructure failure
 	// (distinct from a normal clarify pause or agent execution fault).
 	sandboxSetup bool
@@ -205,7 +207,7 @@ func (e *Engine) execAgent(c *execCtx, node *models.Node) nodeOutcome {
 	res, err := e.provider.RunAgent(context.Background(), req)
 	if err != nil {
 		return nodeOutcome{status: "failed", err: err.Error(),
-			outputMd: "Agent 执行失败:" + err.Error(), retryable: true, events: res.Events, usage: res.Usage}
+			outputMd: "Agent 执行失败:" + err.Error(), retryable: true, events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
 	}
 	// Drop before withOutcome so a force-cleared zombie cannot TakeOutcome.
 	if c.execGen != 0 && !e.isExecOwner(c.run.ID, c.execGen) {
@@ -214,7 +216,7 @@ func (e *Engine) execAgent(c *execCtx, node *models.Node) nodeOutcome {
 			err:      "lost exec ownership",
 			outputMd: "dropped late outcome: lost exec ownership",
 			events:   res.Events,
-			usage:    res.Usage,
+			usage: res.Usage, usageByModel: res.UsageByModel,
 		}
 	}
 	return e.withOutcome(c, node, res, func(r runtime.NodeResult) nodeOutcome {
@@ -234,7 +236,7 @@ func (e *Engine) execVisual(c *execCtx, node *models.Node) nodeOutcome {
 	req := e.nodeReq(c, node)
 	res, err := e.provider.RunAgent(context.Background(), req)
 	if err != nil {
-		return nodeOutcome{status: "failed", err: err.Error(), outputMd: "视觉网页节点执行失败:" + err.Error(), events: res.Events, usage: res.Usage}
+		return nodeOutcome{status: "failed", err: err.Error(), outputMd: "视觉网页节点执行失败:" + err.Error(), events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
 	}
 	return e.withOutcome(c, node, res, func(r runtime.NodeResult) nodeOutcome {
 		return e.finalizeVisual(c, node, r)
@@ -274,7 +276,7 @@ func (e *Engine) execPlan(c *execCtx, node *models.Node) nodeOutcome {
 	req := e.nodeReq(c, node)
 	res, err := e.provider.RunAgent(context.Background(), req)
 	if err != nil {
-		return nodeOutcome{status: "failed", err: err.Error(), outputMd: "计划节点执行失败:" + err.Error(), events: res.Events, usage: res.Usage}
+		return nodeOutcome{status: "failed", err: err.Error(), outputMd: "计划节点执行失败:" + err.Error(), events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
 	}
 	return e.withOutcome(c, node, res, func(r runtime.NodeResult) nodeOutcome {
 		return e.finalizePlan(c, node, r)
@@ -313,7 +315,7 @@ func (e *Engine) execStructuredAgent(c *execCtx, node *models.Node, artifactName
 	res, err := e.provider.RunAgent(context.Background(), req)
 	if err != nil {
 		return nodeOutcome{status: "failed", err: err.Error(),
-			outputMd: node.Label + " 执行失败:" + err.Error(), retryable: true, events: res.Events, usage: res.Usage}
+			outputMd: node.Label + " 执行失败:" + err.Error(), retryable: true, events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
 	}
 	return e.withOutcome(c, node, res, func(r runtime.NodeResult) nodeOutcome {
 		return e.finalizeStructured(c, node, r, artifactName, outKey, render)
@@ -772,7 +774,7 @@ func (e *Engine) execReactEnter(c *execCtx, node *models.Node) nodeOutcome {
 			}
 			return nodeOutcome{
 				status: "failed", err: fullErr, outputMd: "沙箱启动失败",
-				events: t.Events, usage: t.Usage, sandboxSetup: true,
+				events: t.Events, usage: t.Usage, usageByModel: t.UsageByModel, sandboxSetup: true,
 			}
 		}
 		conv = models.ReactConversation{RunID: c.run.ID, NodeID: node.ID, Iteration: iter, Done: t.Done,
@@ -788,13 +790,13 @@ func (e *Engine) execReactEnter(c *execCtx, node *models.Node) nodeOutcome {
 		}
 		if t.Done {
 			if t.Err != nil {
-				return nodeOutcome{status: "failed", err: t.Err.Error(), outputMd: t.Msg, events: t.Events, usage: t.Usage}
+				return nodeOutcome{status: "failed", err: t.Err.Error(), outputMd: t.Msg, events: t.Events, usage: t.Usage, usageByModel: t.UsageByModel}
 			}
 			return e.finishAgentOutcome(c, node, t.Result, func(r runtime.NodeResult) nodeOutcome {
 				return e.completeProduces(c, node, r)
 			})
 		}
-		return nodeOutcome{status: "paused", outputMd: "等待人工回复(ReAct 澄清)…", events: t.Events, usage: t.Usage}
+		return nodeOutcome{status: "paused", outputMd: "等待人工回复(ReAct 澄清)…", events: t.Events, usage: t.Usage, usageByModel: t.UsageByModel}
 	}
 	return nodeOutcome{status: "paused", outputMd: "等待人工回复(ReAct 澄清)…"}
 }
@@ -821,6 +823,7 @@ func (e *Engine) autoAdvanceReact(c *execCtx, node *models.Node, conv *models.Re
 	// Keep every auto round's token delta (plus the seed turn) so a single
 	// subsequent saveState/flush does not drop earlier usage.
 	acc := models.CloneTokenUsage(t.Usage)
+	accBy := models.CloneTokenUsageByModel(t.UsageByModel)
 	for !t.Done && len(t.Questions) > 0 {
 		if runtime.ReactCapReached(req, conv.Messages) {
 			break
@@ -833,14 +836,17 @@ func (e *Engine) autoAdvanceReact(c *execCtx, node *models.Node, conv *models.Re
 			At: time.Now().Format(time.RFC3339)})
 		t = e.provider.ReactReply(context.Background(), req, conv.Messages, humanText, nil, false)
 		acc = models.AddTokenUsage(acc, t.Usage)
+		accBy = models.AddTokenUsageByModel(accBy, t.UsageByModel)
 		conv.Messages = append(conv.Messages, models.ReactMessage{Role: "agent", Text: t.Msg,
 			At: time.Now().Format(time.RFC3339), Questions: t.Questions})
 		conv.Done = t.Done
 		logDB(e.db.Save(conv), c.run.ID, "auto react round")
 	}
 	t.Usage = acc
+	t.UsageByModel = accBy
 	if t.Done {
 		t.Result.Usage = models.CloneTokenUsage(acc)
+		t.Result.UsageByModel = models.CloneTokenUsageByModel(accBy)
 	}
 	return t
 }
@@ -855,7 +861,7 @@ func (e *Engine) execAppPreview(c *execCtx, node *models.Node) nodeOutcome {
 	res, err := e.provider.RunAgent(context.Background(), req)
 	// ACP/WS 断连兜底:已有可达预览则仍进入复审,禁止无限 busy。
 	if err != nil && !e.host.HasHealthyPreviewPorts(c.run.ID, node.ID) {
-		return nodeOutcome{status: "failed", err: err.Error(), outputMd: "应用预览执行失败:" + err.Error(), events: res.Events, usage: res.Usage}
+		return nodeOutcome{status: "failed", err: err.Error(), outputMd: "应用预览执行失败:" + err.Error(), events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
 	}
 	if c.execGen != 0 && !e.isExecOwner(c.run.ID, c.execGen) {
 		return nodeOutcome{
@@ -863,12 +869,12 @@ func (e *Engine) execAppPreview(c *execCtx, node *models.Node) nodeOutcome {
 			err:      "lost exec ownership",
 			outputMd: "dropped late outcome: lost exec ownership",
 			events:   res.Events,
-			usage:    res.Usage,
+			usage: res.Usage, usageByModel: res.UsageByModel,
 		}
 	}
 	if !e.host.HasHealthyPreviewPorts(c.run.ID, node.ID) {
 		return nodeOutcome{status: "failed", err: "预览契约未满足:未成功 set_preview(可达)",
-			outputMd: "应用预览失败:未成功注册可达预览端口", events: res.Events, usage: res.Usage}
+			outputMd: "应用预览失败:未成功注册可达预览端口", events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
 	}
 	// Soft-consume node_complete when present; never fail closed on its absence.
 	if o, ok := e.host.TakeOutcome(c.run.ID, node.ID); ok {
@@ -882,7 +888,7 @@ func (e *Engine) execAppPreview(c *execCtx, node *models.Node) nodeOutcome {
 				errMsg = "agent reported failure"
 			}
 			return nodeOutcome{status: "failed", err: errMsg, outputMd: "节点失败:" + errMsg,
-				outputs: res.Outputs, events: res.Events, usage: res.Usage}
+				outputs: res.Outputs, events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
 		}
 	}
 	// Idempotent re-entry: if this visit's review conversation already concluded,
@@ -891,9 +897,9 @@ func (e *Engine) execAppPreview(c *execCtx, node *models.Node) nodeOutcome {
 	var conv models.ReactConversation
 	if err := e.db.Where("run_id = ? AND node_id = ? AND iteration = ?", c.run.ID, node.ID, iter).First(&conv).Error; err == nil && conv.Done {
 		return nodeOutcome{status: "completed", outputMd: "预览复审已完成",
-			outputs: map[string]any{"resolved": true, "preview_ready": true}, events: res.Events, usage: res.Usage}
+			outputs: map[string]any{"resolved": true, "preview_ready": true}, events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
 	}
-	paused := nodeOutcome{status: "paused", outputMd: "等待人工预览复审…", events: res.Events, outputs: res.Outputs, usage: res.Usage}
+	paused := nodeOutcome{status: "paused", outputMd: "等待人工预览复审…", events: res.Events, outputs: res.Outputs, usage: res.Usage, usageByModel: res.UsageByModel}
 	return e.enterReview(c, node, paused)
 }
 
@@ -1190,6 +1196,9 @@ func (e *Engine) saveState(c *execCtx, node *models.Node, o nodeOutcome) {
 	if o.usage != nil {
 		sr.Usage = models.AddTokenUsage(sr.Usage, o.usage)
 	}
+	if o.usageByModel != nil {
+		sr.UsageByModel = models.AddTokenUsageByModel(sr.UsageByModel, o.usageByModel)
+	}
 	sr.Error = o.err
 	sr.Attempt = c.run.Attempt
 	if sr.StartedAt != nil {
@@ -1220,8 +1229,8 @@ func (e *Engine) flushMcpCalls(runID, nodeID string) {
 // flushTokenUsage merges a react mid-turn token delta onto the latest StateRun
 // without ending the execution (paired with flushMcpCalls while the node stays
 // paused).
-func (e *Engine) flushTokenUsage(runID, nodeID string, delta *models.TokenUsage) {
-	if delta == nil {
+func (e *Engine) flushTokenUsage(runID, nodeID string, delta *models.TokenUsage, byModel models.TokenUsageByModel) {
+	if delta == nil && byModel == nil {
 		return
 	}
 	var sr models.StateRun
@@ -1231,6 +1240,7 @@ func (e *Engine) flushTokenUsage(runID, nodeID string, delta *models.TokenUsage)
 		return
 	}
 	sr.Usage = models.AddTokenUsage(sr.Usage, delta)
+	sr.UsageByModel = models.AddTokenUsageByModel(sr.UsageByModel, byModel)
 	logDB(e.db.Save(&sr), runID, "flush token usage")
 }
 

@@ -68,8 +68,12 @@ type ChatMessage struct {
 	// history (not backfilled); non-nil (incl. all zeros) = explicitly reported.
 	// Only assistant messages from successful PM turns carry this; Stdio never
 	// writes here.
-	Usage     *TokenUsage `gorm:"serializer:json" json:"usage,omitempty"`
-	CreatedAt time.Time   `json:"createdAt"`
+	Usage *TokenUsage `gorm:"serializer:json" json:"usage,omitempty"`
+	// UsageByModel is the per-model breakdown after ingest weak-key merge /
+	// ACP_BRIDGE_MODEL backfill. nil with non-nil Usage → readers map to
+	// 「未知/未分桶」. Stdio never writes here.
+	UsageByModel TokenUsageByModel `gorm:"serializer:json" json:"usageByModel,omitempty"`
+	CreatedAt    time.Time         `json:"createdAt"`
 }
 
 // ProgressCitation references a progress object embedded in an assistant reply.

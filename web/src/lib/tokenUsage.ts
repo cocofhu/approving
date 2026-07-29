@@ -1,4 +1,9 @@
-import type { TokenUsage } from './types'
+import type { ModelTokenUsage, TokenUsage, TokenUsageByModel } from './types'
+
+/** Display key for legacy / unbucketed usage (matches server). */
+export const TOKEN_USAGE_UNKNOWN_MODEL = '未知/未分桶'
+
+export const TOKEN_USAGE_SOURCE_BRIDGE = 'via ACP_BRIDGE_MODEL'
 
 /** Sum of the four usage components. */
 export function tokenUsageTotal(u: TokenUsage): number {
@@ -156,6 +161,79 @@ export function mergeTokenUsage(
 export function totalTokensOrNull(usage: TokenUsage | null | undefined): number | null {
   if (usage == null) return null
   return tokenUsageTotal(usage)
+}
+
+export type ModelUsageRow = {
+  modelKey: string
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  total: number
+  source: string
+  filled: boolean
+  unknown: boolean
+}
+
+/**
+ * Effective by-model rows for display. When byModel is absent but usage is
+ * present, maps to a single「未知/未分桶」bucket (no model guessing).
+ */
+export function effectiveModelUsageRows(
+  usage: TokenUsage | null | undefined,
+  byModel: TokenUsageByModel | null | undefined,
+): ModelUsageRow[] {
+  if (byModel != null) {
+    return Object.entries(byModel)
+      .map(([modelKey, u]) => toModelRow(modelKey, u))
+      .sort((a, b) => b.total - a.total || a.modelKey.localeCompare(b.modelKey))
+  }
+  if (usage == null) return []
+  return [toModelRow(TOKEN_USAGE_UNKNOWN_MODEL, { ...usage, source: 'unknown' })]
+}
+
+function toModelRow(modelKey: string, u: ModelTokenUsage): ModelUsageRow {
+  const row: TokenUsage = {
+    inputTokens: u.inputTokens || 0,
+    outputTokens: u.outputTokens || 0,
+    cacheReadTokens: u.cacheReadTokens || 0,
+    cacheWriteTokens: u.cacheWriteTokens || 0,
+  }
+  return {
+    modelKey,
+    ...row,
+    total: tokenUsageTotal(row),
+    source: u.source || (u.filled ? TOKEN_USAGE_SOURCE_BRIDGE : 'upstream'),
+    filled: !!u.filled,
+    unknown: modelKey === TOKEN_USAGE_UNKNOWN_MODEL,
+  }
+}
+
+/** Merge by-model maps (same key = component sum; filled OR). */
+export function mergeTokenUsageByModel(
+  ...parts: Array<TokenUsageByModel | null | undefined>
+): TokenUsageByModel | null {
+  let out: TokenUsageByModel | null = null
+  for (const part of parts) {
+    if (part == null) continue
+    if (out == null) out = {}
+    for (const [k, u] of Object.entries(part)) {
+      const prev = out[k]
+      if (!prev) {
+        out[k] = { ...u }
+        continue
+      }
+      out[k] = {
+        inputTokens: (prev.inputTokens || 0) + (u.inputTokens || 0),
+        outputTokens: (prev.outputTokens || 0) + (u.outputTokens || 0),
+        cacheReadTokens: (prev.cacheReadTokens || 0) + (u.cacheReadTokens || 0),
+        cacheWriteTokens: (prev.cacheWriteTokens || 0) + (u.cacheWriteTokens || 0),
+        filled: !!(prev.filled || u.filled),
+        source: prev.filled || u.filled ? TOKEN_USAGE_SOURCE_BRIDGE : prev.source || u.source,
+      }
+    }
+  }
+  return out
 }
 
 /** Sum totalTokens where present; all-null → null (never coerce unreported to 0). */

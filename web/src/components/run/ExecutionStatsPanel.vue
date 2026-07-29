@@ -25,6 +25,7 @@ import {
   mergeTokenUsage,
 } from '@/lib/tokenUsage'
 import type { Run, TokenUsage, WFNode } from '@/lib/types'
+import TokenUsageByModelTable from './TokenUsageByModelTable.vue'
 
 type StatsTab = 'single' | 'multi'
 type KpiTipId = 'wall' | 'nodeSum' | 'gap' | 'tokens' | 'rate'
@@ -103,9 +104,12 @@ const singleBottleneck = computed(() => {
 })
 
 /** Panel-side merge of process usage for total-token tip (Timeline-aligned parts). */
+const processAtoms = computed(() =>
+  flattenProcesses(props.run, props.nodes, props.nowMs, labelFn),
+)
+
 const mergedUsage = computed((): TokenUsage => {
-  const processes = flattenProcesses(props.run, props.nodes, props.nowMs, labelFn)
-  const merged = mergeTokenUsage(...processes.map((p) => p.usage))
+  const merged = mergeTokenUsage(...processAtoms.value.map((p) => p.usage))
   return (
     merged ?? {
       inputTokens: 0,
@@ -115,6 +119,10 @@ const mergedUsage = computed((): TokenUsage => {
     }
   )
 })
+
+const modelUsageParts = computed(() =>
+  processAtoms.value.map((p) => ({ usage: p.usage, usageByModel: p.usageByModel })),
+)
 
 const tipUsageParts = computed(() => {
   const u = mergedUsage.value
@@ -765,6 +773,12 @@ html.light .stats-panel {
             <div class="mt-0.5 text-[10px] text-txt3">{{ singleRateHint }}</div>
           </div>
         </div>
+
+        <TokenUsageByModelTable
+          v-if="statsTab === 'single' && singleSummary.totalTokens != null"
+          class="mb-3.5"
+          :parts="modelUsageParts"
+        />
 
         <div
           v-if="singleBottleneck"

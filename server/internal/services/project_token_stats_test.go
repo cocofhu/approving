@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -521,4 +522,96 @@ func itoa(n int) string {
 		n /= 10
 	}
 	return string(b[i:])
+}
+
+
+func TestBuildModelStatsTop10AndUnknown(t *testing.T) {
+	t.Parallel()
+	totals := map[string]*tokenModelAgg{}
+	for i := 0; i < 12; i++ {
+		totals[fmt.Sprintf("m%02d", i)] = &tokenModelAgg{total: int64(100 - i), source: models.TokenUsageSourceUpstream}
+	}
+	// Unknown + filled bridge totals high enough to enter Top10 independently.
+	totals[models.TokenUsageModelUnknown] = &tokenModelAgg{total: 95, source: models.TokenUsageSourceUnknown}
+	totals["bridge-m"] = &tokenModelAgg{total: 94, filled: true, source: models.TokenUsageSourceBridge}
+
+	comp, rank := buildModelStats(totals)
+	if len(comp) != 14 {
+		t.Fatalf("composition len=%d", len(comp))
+	}
+	var hasOther, hasUnk, hasFilled bool
+	for _, r := range rank {
+		if r.Other {
+			hasOther = true
+			if r.Unknown {
+				t.Fatal("other must not be marked unknown")
+			}
+		}
+		if r.Unknown {
+			hasUnk = true
+		}
+		if r.Filled {
+			hasFilled = true
+		}
+	}
+	if !hasOther {
+		t.Fatal("expected other for >10 models")
+	}
+	if !hasUnk {
+		t.Fatal("unknown must be able to appear in ranking independently")
+	}
+	if !hasFilled {
+		t.Fatal("filled bridge bucket must surface in ranking")
+	}
+	// Composition always lists every bucket including filled.
+	var compFilled bool
+	for _, r := range comp {
+		if r.Filled {
+			compFilled = true
+		}
+	}
+	if !compFilled {
+		t.Fatal("composition must include filled bucket")
+	}
+}
+
+func TestTokenStatsLegacyMapsToUnknown(t *testing.T) {
+	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "token_stats_legacy.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewProjectService(db)
+	proj, err := s.Create("LegacyTok", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	loc, _ := time.LoadLocation("Asia/Shanghai")
+	day := time.Date(2026, 7, 24, 10, 0, 0, 0, loc).UTC()
+	ptr := func(tt time.Time) *time.Time { return &tt }
+	if err := db.Create(&models.WorkflowDef{ID: "wf-leg", ProjectID: proj.ID, Name: "leg", Status: "draft", Version: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.Run{ID: "run-leg", WorkflowID: "wf-leg", WorkflowName: "leg", Status: "completed", StartedAt: day}).Error; err != nil {
+		t.Fatal(err)
+	}
+	// Legacy flattened Usage only (no UsageByModel).
+	if err := db.Create(&models.StateRun{
+		RunID: "run-leg", NodeID: "n1", Status: "completed", StartedAt: ptr(day),
+		Usage: &models.TokenUsage{InputTokens: 40, OutputTokens: 10},
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.TokenStats(context.Background(), proj.ID, TokenStatsQuery{
+		Window: TokenStatsWindow30d, Timezone: "Asia/Shanghai", Now: now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.ModelComposition) != 1 || res.ModelComposition[0].Name != models.TokenUsageModelUnknown {
+		t.Fatalf("composition=%+v", res.ModelComposition)
+	}
+	if res.ModelComposition[0].Total != 50 || !res.ModelComposition[0].Unknown {
+		t.Fatalf("unknown bucket=%+v", res.ModelComposition[0])
+	}
 }

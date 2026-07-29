@@ -52,7 +52,15 @@
         "emptyCompTitle": "暂无构成数据",
         "emptyCompHint": "无已上报四分量时不绘制 0 环图",
         "emptyRankTitle": "暂无消耗排行",
-        "emptyRankHint": "无已上报 Usage 时不展示占位排行"
+        "emptyRankHint": "无已上报 Usage 时不展示占位排行",
+        "modelCompositionTitle": "模型构成",
+        "modelRankTitle": "模型消耗排行",
+        "modelRankSub": "Top10 · 其余 → other",
+        "modelRankHint": "「未知/未分桶」≠ other；含回填的 bridge 桶按其用量正常参与排行。",
+        "modelOther": "other（其余模型）",
+        "filledTag": "含回填",
+        "emptyModelCompHint": "暂无按模型构成",
+        "emptyModelRankHint": "暂无模型排行"
       },
       "filters": {
         "label": "显示非主列状态"
@@ -184,6 +192,17 @@
       "toastNeedKey": "请先填写 API Key",
       "toastRun": "已启动示例 Run",
       "toastErr": "生成失败"
+    },
+    "tokenByModel": {
+      "tipTitle": "用量提示",
+      "close": "关闭",
+      "sourceUpstream": "upstream · 真实上报",
+      "sourceBridge": "via ACP_BRIDGE_MODEL",
+      "sourceUnknown": "未知/未分桶",
+      "modelTableTitle": "按模型用量",
+      "colModel": "模型",
+      "colSource": "来源",
+      "colSubtotal": "小计"
     },
     "projectDetail": {
       "back": "全部项目",

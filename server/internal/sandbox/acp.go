@@ -96,6 +96,10 @@ type ACPClient struct {
 	// slow-but-working turn (still emitting events) runs to the hard deadline.
 	idleTimeout time.Duration
 
+	// bridgeModel is the session ACP_BRIDGE_MODEL string used at ingest to
+	// backfill weak usage keys (default/unknown/empty). Empty disables backfill.
+	bridgeModel string
+
 	mu        sync.Mutex
 	conn      *websocket.Conn
 	sessionID string
@@ -130,6 +134,18 @@ func (c *ACPClient) WithSession(cwd string, mcpServers json.RawMessage) *ACPClie
 func (c *ACPClient) WithIdleTimeout(d time.Duration) *ACPClient {
 	c.idleTimeout = d
 	return c
+}
+
+// WithBridgeModel sets the ACP_BRIDGE_MODEL string used when parsing
+// prompt_done.usage weak keys. Trim-empty disables backfill.
+func (c *ACPClient) WithBridgeModel(model string) *ACPClient {
+	c.bridgeModel = strings.TrimSpace(model)
+	return c
+}
+
+// BridgeModel returns the configured ACP_BRIDGE_MODEL string (may be empty).
+func (c *ACPClient) BridgeModel() string {
+	return c.bridgeModel
 }
 
 // WithPassword sets the acp-bridge login secret (CURSOR_ACP_PASSWORD). When
@@ -601,8 +617,9 @@ func (c *ACPClient) dispatchEventData(raw json.RawMessage, result *ChatResult) b
 		// Per-turn usage only — never session CumulativeUsage (cross-node reuse
 		// would otherwise bleed prior nodes into this turn).
 		if result != nil {
-			if u := parsePromptDoneUsage(ev.Usage); u != nil {
+			if u, byModel := parsePromptDoneUsage(ev.Usage, c.bridgeModel); u != nil {
 				result.Usage = models.AddTokenUsage(result.Usage, u)
+				result.UsageByModel = models.AddTokenUsageByModel(result.UsageByModel, byModel)
 			}
 		}
 		return true

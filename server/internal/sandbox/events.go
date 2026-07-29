@@ -29,6 +29,9 @@ type ChatResult struct {
 	// summed across model buckets). nil = capabilities omitted usage / not
 	// reported; non-nil (incl. all zeros) = explicitly reported for this turn.
 	Usage *models.TokenUsage `json:"usage,omitempty"`
+	// UsageByModel is the per-model breakdown after weak-key merge / optional
+	// ACP_BRIDGE_MODEL backfill. Non-nil whenever Usage is non-nil.
+	UsageByModel models.TokenUsageByModel `json:"usageByModel,omitempty"`
 
 	// Busy carries the latest authoritative queue_state.busy flag from the
 	// cursor-acp bridge (true while a session/prompt is in flight). BusySet

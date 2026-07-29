@@ -242,11 +242,15 @@ type StateRun struct {
 	McpCalls []McpCall `gorm:"serializer:json" json:"mcpCalls,omitempty"`
 	// Usage is the per-execution token total accumulated from prompt_done.usage
 	// across chat turns in this StateRun. nil = provider never reported usage.
-	Usage       *TokenUsage `gorm:"serializer:json" json:"usage,omitempty"`
-	Error       string      `json:"error,omitempty"`
-	Attempt     int         `json:"attempt"`
-	StartedAt   *time.Time  `json:"startedAt,omitempty"`
-	DurationSec int         `json:"durationSec"`
+	Usage *TokenUsage `gorm:"serializer:json" json:"usage,omitempty"`
+	// UsageByModel is the per-model breakdown after ingest weak-key merge /
+	// ACP_BRIDGE_MODEL backfill. nil = legacy / not reported by model; when
+	// Usage is set but UsageByModel is nil, readers map Usage →「未知/未分桶」.
+	UsageByModel TokenUsageByModel `gorm:"serializer:json" json:"usageByModel,omitempty"`
+	Error        string            `json:"error,omitempty"`
+	Attempt      int               `json:"attempt"`
+	StartedAt    *time.Time        `json:"startedAt,omitempty"`
+	DurationSec  int               `json:"durationSec"`
 }
 
 // McpCall is one built-in MCP tool invocation captured during a node execution.
