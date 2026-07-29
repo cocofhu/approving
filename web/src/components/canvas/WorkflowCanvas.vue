@@ -164,6 +164,7 @@ const flowNodes = computed(() => {
     const branches = n.type === 'branch' ? branchHandles(n) : undefined
     const gateActions = n.type === 'human_gate' ? actionHandles(n) : undefined
     const appPreviewReview = n.type === 'app_preview'
+    const humanGateReview = n.type === 'human_gate'
     const structuredExits =
       n.type === 'test' || n.type === 'review' ? structuredExitHandles(n) : undefined
     const selected = selectedId === n.id
@@ -177,6 +178,7 @@ const flowNodes = computed(() => {
       branches,
       gateActions,
       appPreviewReview,
+      humanGateReview,
       structuredExits,
     })
     return reuseFlowElement(flowNodeCache, n.id, fingerprint, selected, () => ({
@@ -193,6 +195,7 @@ const flowNodes = computed(() => {
         branches,
         gateActions,
         appPreviewReview,
+        humanGateReview,
         structuredExits,
       },
     }))

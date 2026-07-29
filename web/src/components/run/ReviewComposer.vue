@@ -10,9 +10,10 @@ import AnnotationChip from './AnnotationChip.vue'
 
 /**
  * Thin mode wrapper around ClarifyChat / a gate-local composer.
- * - clarify: chips + attachments +「发送澄清回复」(no finish / pass / reject)
- * - review: chips + attachments + send +「确认并流转」
- * - gate: chips + attachments +「打回修改」/「通过并流转」
+ * - clarify: chips + attachments +「发送澄清回复」(no finish)
+ * - review: ClarifyChat chips + attachments + send +「确认并流转」
+ * - gate: local composer with the same review semantics —「发送」+「确认并流转」
+ *   (no 打回修改 / 通过并流转). Send → GateReactRevise; confirm → ResumeGate(approve/pass).
  */
 const props = withDefaults(
   defineProps<{
@@ -23,20 +24,20 @@ const props = withDefaults(
     turns?: ClarifyTurn[]
     done?: boolean
     active?: boolean
-    /** Gate: hot ReAct revise available (unmount reject when false). */
+    /** Gate: hot ReAct send/revise available (unmount send when false / cold). */
     canReject?: boolean
-    /** Gate: show pass action (unmount pass when false; do not use disabled-only). */
+    /** Gate: show confirm action (unmount when false; do not use disabled-only). */
     canPass?: boolean
-    /** Gate: reject in flight. */
+    /** Gate: send/revise in flight. */
     rejecting?: boolean
     rejectError?: string | null
-    /** Gate: cold-session notice. */
+    /** Gate: cold-session notice (send degraded; confirm remains). */
     coldSession?: boolean
     textOnly?: boolean
-    /** Gate: disable pass (e.g. open PreviewIssues). */
+    /** Gate: disable confirm (e.g. open PreviewIssues). */
     passDisabled?: boolean
     /**
-     * Gate: when true, reject may fire without draft/attachments/annotations
+     * Gate: when true, send may fire without draft/attachments/annotations
      * (e.g. PreviewIssues n_open≥1 — issues already recorded elsewhere).
      */
     rejectAllowEmpty?: boolean
@@ -87,7 +88,9 @@ const emit = defineEmits<{
   (e: 'send', text: string, images: ClarifyImage[], annotations: ReactAnnotation[]): void
   (e: 'finish'): void
   (e: 'cancel'): void
+  /** @deprecated Prefer `send`; kept for GateApproval wiring during review-semantics migrate. */
   (e: 'reject'): void
+  /** @deprecated Prefer `finish`; kept for GateApproval wiring during review-semantics migrate. */
   (e: 'pass'): void
 }>()
 
@@ -141,29 +144,38 @@ const showGateCancel = computed(
 const gateQueued = computed(() => props.queued ?? [])
 
 /**
- * Footer hint must follow n_open mutex / cold-session state:
- * - rejectAllowEmpty (n_open≥1): open issues already recorded; draft optional
- * - canReject: normal draft threshold
- * - coldSession: hot reject degraded to cold fail/revise
- * - else (pass-only, e.g. PreviewIssues n_open=0): submit feedback before reject
+ * Footer hint must follow open-issue / cold-session state:
+ * - rejectAllowEmpty (n_open≥1): open issues already recorded; draft optional for send
+ * - canReject (hot send): normal draft threshold
+ * - coldSession: send degraded — confirm only
+ * - else (confirm-only): submit feedback before send
  */
 const gateFooterHint = computed(() => {
-  if (props.rejectAllowEmpty) return t('pages.reviewComposer.openIssuesRejectHint')
+  if (props.rejectAllowEmpty) return t('pages.reviewComposer.openIssuesSendHint')
   if (props.canReject) return t('pages.reviewComposer.thresholdHint')
   if (props.coldSession) return t('pages.reviewComposer.coldHint')
   return t('pages.gateApproval.helpReviseDetailNoIssuesNoForm')
 })
 
+const sendButtonLabel = computed(
+  () => props.rejectLabel || t('pages.reviewComposer.send'),
+)
+const confirmButtonLabel = computed(
+  () => props.passLabel || t('pages.clarify.confirmFlow'),
+)
+
 function removeAnnotation(i: number) {
   annotations.value.splice(i, 1)
 }
 
-function onReject() {
+function onSend() {
   if (!canSubmitGate.value || !props.canReject) return
+  emit('send', draft.value, attachments.value, annotations.value)
   emit('reject')
 }
-function onPass() {
+function onConfirm() {
   if (!props.canPass || props.passDisabled) return
+  emit('finish')
   emit('pass')
 }
 </script>
@@ -193,7 +205,7 @@ function onPass() {
     @cancel="emit('cancel')"
   />
 
-  <!-- Gate: local composer with dual sticky actions (no ClarifyChat turns required). -->
+  <!-- Gate: local composer with review-semantics sticky actions (send + confirm). -->
   <div
     v-else
     class="flex h-full min-h-0 flex-col"
@@ -227,7 +239,7 @@ function onPass() {
         v-model:text="draft"
         v-model:images="attachments"
         :text-only="textOnly"
-        :disabled="rejecting"
+        :disabled="rejecting || !canReject"
         :placeholder="t('pages.gateApproval.reactRevise.placeholder')"
       />
       <div v-if="rejectError" class="mt-1.5 text-[11px] text-err">{{ rejectError }}</div>
@@ -235,13 +247,13 @@ function onPass() {
         <button
           v-if="canReject"
           type="button"
-          class="inline-flex flex-1 items-center justify-center gap-1.5 bg-warn/15 px-3 py-2 text-sm font-medium text-warn transition hover:bg-warn/25 disabled:cursor-not-allowed disabled:opacity-50"
-          data-testid="review-composer-reject"
+          class="inline-flex flex-1 items-center justify-center gap-1.5 bg-accent/15 px-3 py-2 text-sm font-medium text-accent-2 transition hover:bg-accent/25 disabled:cursor-not-allowed disabled:opacity-50"
+          data-testid="review-composer-send"
           :disabled="!canSubmitGate"
-          @click="onReject"
+          @click="onSend"
         >
           <Icon name="arrow-left" :size="14" />
-          {{ rejecting ? t('pages.gateApproval.reactRevise.sending') : rejectLabel || t('pages.reviewComposer.reject') }}
+          {{ rejecting ? t('pages.gateApproval.reactRevise.sending') : sendButtonLabel }}
         </button>
         <button
           v-if="canPass"
@@ -250,10 +262,10 @@ function onPass() {
           data-testid="review-composer-pass"
           :disabled="passDisabled"
           :title="passTitle"
-          @click="onPass"
+          @click="onConfirm"
         >
           <Icon name="check" :size="14" />
-          {{ passLabel || t('pages.reviewComposer.pass') }}
+          {{ confirmButtonLabel }}
         </button>
         <button
           v-if="showGateCancel"

@@ -82,6 +82,10 @@ describe('ReviewComposer gate busy status (C-tier)', () => {
     expect(thought.exists()).toBe(true)
     expect(thought.attributes('open')).toBeDefined()
     expect(thought.text()).toContain('旁路思考过程')
+    expect(wrapper.find('[data-testid="thought-summary-state"]').attributes('data-state')).toBe(
+      'streaming',
+    )
+    expect(wrapper.find('[data-testid="thought-summary-state"]').text()).toContain('生成中')
     expect(wrapper.find('[data-testid="gate-busy-status"]').text()).toContain('思考中')
     wrapper.unmount()
   })
@@ -96,6 +100,11 @@ describe('ReviewComposer gate busy status (C-tier)', () => {
     expect(wrapper.find('[data-testid="gate-busy-status"]').text()).toContain('输出中')
     expect(wrapper.find('[data-testid="gate-react-thought"]').text()).toContain('旁路思考')
     expect(wrapper.find('[data-testid="gate-react-thought"]').attributes('open')).toBeUndefined()
+    // Message outputting — summary stays generating (not done).
+    expect(wrapper.find('[data-testid="thought-summary-state"]').attributes('data-state')).toBe(
+      'streaming',
+    )
+    expect(wrapper.find('[data-testid="thought-summary-state"]').text()).toContain('生成中')
     expect(wrapper.find('[data-testid="gate-stream-caret"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="gate-react-stream"]').text()).toContain('旁路正文流')
     wrapper.unmount()
@@ -120,10 +129,13 @@ describe('ReviewComposer gate busy status (C-tier)', () => {
     expect(done.find('[data-testid="gate-turn-completed"]').exists()).toBe(true)
     expect(done.find('[data-testid="gate-turn-completed"]').text()).toContain('已完成')
     expect(done.find('[data-testid="gate-stream-caret"]').exists()).toBe(false)
+    expect(done.find('[data-testid="thought-summary-state"]').attributes('data-state')).toBe('done')
+    expect(done.find('[data-testid="thought-summary-state"]').text()).toContain('已完成')
     done.unmount()
 
     const bad = mountGate({
       thinking: false,
+      streamThought: '半截思考',
       streamText: '半截',
       interrupted: true,
       streamCompletedAt: null,
@@ -131,6 +143,11 @@ describe('ReviewComposer gate busy status (C-tier)', () => {
     await flushPromises()
     expect(bad.find('[data-testid="gate-turn-completed"]').exists()).toBe(false)
     expect(bad.text()).toContain('interrupted')
+    expect(bad.find('[data-testid="thought-summary-state"]').attributes('data-state')).toBe(
+      'interrupted',
+    )
+    expect(bad.find('[data-testid="thought-summary-state"]').text()).toContain('已中断')
+    expect(bad.find('[data-testid="thought-summary-state"]').text()).not.toContain('已完成')
     bad.unmount()
   })
 
@@ -164,6 +181,46 @@ describe('ReviewComposer nested ClarifyChat delivery', () => {
     expect(vm.isChatReady?.()).toBe(true)
     // chatRef exists but liveAgentIdx < 0 → must not fake true.
     expect(vm.applyAcpEvents?.([{ kind: 'thought', text: 'buffer me' }], 'react-1')).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('ReviewComposer gate review semantics (send + confirm)', () => {
+  it('shows 发送 + 确认并流转, not 打回/通过', async () => {
+    const wrapper = mountGate()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="review-composer-send"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-send"]').text()).toContain('发送')
+    expect(wrapper.find('[data-testid="review-composer-pass"]').text()).toContain('确认并流转')
+    expect(wrapper.text()).not.toContain('打回修改')
+    expect(wrapper.text()).not.toContain('通过并流转')
+    wrapper.unmount()
+  })
+
+  it('cold session hides send and shows cold note; confirm remains', async () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const wrapper = mount(ReviewComposer, {
+      props: {
+        mode: 'gate',
+        canReject: false,
+        canPass: true,
+        coldSession: true,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: { Icon: true, ParagraphInput: true, AnnotationChip: true, ClarifyChat: true },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="review-composer-send"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-cold-note"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-cold-note"]').text()).toContain('无法继续就地改码')
     wrapper.unmount()
   })
 })

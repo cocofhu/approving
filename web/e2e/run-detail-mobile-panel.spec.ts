@@ -95,8 +95,8 @@ test.describe('Run 详情移动端单面板生产路径 (390×844)', () => {
     await expect(page.getByTestId('output-overview')).toBeVisible()
   })
 
-  test('waiting_human 门禁：决策按钮吸底常显 (g3.2)', async ({ page }) => {
-    // Align with GateApproval PreviewIssues mutex: n_open=0 → pass only (reject unmounted).
+  test('waiting_human 门禁：确认并流转吸底常显 (g3.2)', async ({ page }) => {
+    // Review semantics: sticky 确认并流转; no 通过/打回 dual buttons.
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url())
       if (url.pathname.includes('/preview-issues')) {
@@ -129,14 +129,16 @@ test.describe('Run 详情移动端单面板生产路径 (390×844)', () => {
     await expect(sticky).toBeVisible()
     const pass = page.getByTestId('review-composer-pass')
     await expect(pass).toBeVisible()
-    await expect(page.getByRole('button', { name: '通过并流转' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '确认并流转' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '通过并流转' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '打回修改' })).toHaveCount(0)
 
     const passBox = await pass.boundingBox()
     expect(passBox).toBeTruthy()
     expect(passBox!.y).toBeGreaterThanOrEqual(0)
     expect(passBox!.y + passBox!.height).toBeLessThanOrEqual(844 + 1)
 
-    // Scroll preview — sticky pass remains in viewport.
+    // Scroll preview — sticky confirm remains in viewport.
     const preview = page.getByTestId('mobile-fill-preview')
     if (await preview.count()) {
       await preview.evaluate((el) => {
@@ -155,16 +157,20 @@ test.describe('Run 详情移动端单面板生产路径 (390×844)', () => {
     await expect(page.getByTestId('review-composer-pass')).toBeVisible()
   })
 
-  test('waiting_human 复审：预览可滚 + 通过/打回吸底 (g3.3)', async ({ page }) => {
+  test('waiting_human 复审：预览可滚 + 发送/确认并流转吸底 (g3.3)', async ({ page }) => {
     await gotoPanel(page, 'review')
     await expect(page.getByTestId('run-detail-right-panel')).toBeVisible()
     await expect(page.getByTestId('review-shell')).toBeVisible()
     await expect(page.getByTestId('review-product-preview')).toBeVisible()
 
     const pass = page.getByTestId('review-composer-pass')
-    const reject = page.getByTestId('review-composer-reject')
+    const send = page.getByTestId('review-composer-send')
     await expect(pass).toBeVisible()
-    await expect(reject).toBeVisible()
+    await expect(send).toBeVisible()
+    await expect(pass).toContainText('确认并流转')
+    await expect(send).toContainText('发送')
+    await expect(page.getByRole('button', { name: '通过并流转' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '打回修改' })).toHaveCount(0)
     const passBox = await pass.boundingBox()
     expect(passBox).toBeTruthy()
     expect(passBox!.y + passBox!.height).toBeLessThanOrEqual(844 + 1)
