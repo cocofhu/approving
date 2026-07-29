@@ -248,8 +248,10 @@ func dispatchFrame(raw json.RawMessage, result *ChatResult) {
 	}
 	if ev.Type == "prompt_done" {
 		if result != nil {
-			if u := parsePromptDoneUsage(ev.Usage); u != nil {
+			// Event-log replay has no session bridge context; weak keys → unknown.
+			if u, byModel := parsePromptDoneUsage(ev.Usage, ""); u != nil {
 				result.Usage = models.AddTokenUsage(result.Usage, u)
+				result.UsageByModel = models.AddTokenUsageByModel(result.UsageByModel, byModel)
 			}
 		}
 		return

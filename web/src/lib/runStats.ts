@@ -6,7 +6,7 @@ import {
   totalTokensOrNull,
   type MultiRunUsageSummary,
 } from '@/lib/tokenUsage'
-import type { NodeRun, NodeRunStatus, NodeType, Run, TokenUsage, WFNode } from '@/lib/types'
+import type { NodeRun, NodeRunStatus, NodeType, Run, TokenUsage, TokenUsageByModel, WFNode } from '@/lib/types'
 
 /** Node types that typically pause for human input (wait is baked into durationSec). */
 export const HUMAN_WAIT_TYPES: ReadonlySet<NodeType> = new Set([
@@ -31,6 +31,7 @@ export interface ProcessAtom {
   live: boolean
   /** Unreported when undefined/null (UI —); present incl. zeros = reported. */
   usage?: TokenUsage | null
+  usageByModel?: TokenUsageByModel | null
 }
 
 export interface StatItem {
@@ -240,6 +241,7 @@ export function flattenProcesses(
         hasHumanWait: hasHumanWait(ex.status, type),
         live,
         usage: ex.usage,
+        usageByModel: ex.usageByModel,
       })
     })
   }

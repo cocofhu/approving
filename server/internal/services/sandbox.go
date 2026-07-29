@@ -641,7 +641,9 @@ func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID
 		fail(fmt.Errorf("acp not ready: %w", err))
 		return
 	}
-	acp := sb.ACP().WithSession(sb.WorkspaceDir, mcpServersJSON(specs))
+	acp := sb.ACP().
+		WithSession(sb.WorkspaceDir, mcpServersJSON(specs)).
+		WithBridgeModel(env["ACP_BRIDGE_MODEL"])
 	if err := acp.Connect(ctx); err != nil {
 		acp.Close()
 		sb.Destroy(context.Background())
@@ -681,7 +683,7 @@ func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID
 // guard stays as a safety net; serial ordering of multiple messages is handled
 // by the caller's single-worker queue (see handlers.SandboxChat).
 func (s *SandboxService) Chat(ctx context.Context, id uint, text string, images []models.PromptImage, onEvent func(json.RawMessage)) error {
-	_, err := s.ChatWithTimeout(ctx, id, text, images, 0, onEvent)
+	_, _, err := s.ChatWithTimeout(ctx, id, text, images, 0, onEvent)
 	return err
 }
 
@@ -689,17 +691,18 @@ func (s *SandboxService) Chat(ctx context.Context, id uint, text string, images 
 // uses the service default (s.chatTimeout). Used by channel/cron turns that may
 // legitimately run longer than an interactive UI turn.
 //
-// Returns the turn's TokenUsage from prompt_done (nil = not reported). Callers
-// that account usage (PmTurnRunner) must persist only after a successful turn.
-func (s *SandboxService) ChatWithTimeout(ctx context.Context, id uint, text string, images []models.PromptImage, timeout time.Duration, onEvent func(json.RawMessage)) (*models.TokenUsage, error) {
+// Returns the turn's TokenUsage (+ optional by-model breakdown) from
+// prompt_done (nil = not reported). Callers that account usage (PmTurnRunner)
+// must persist only after a successful turn.
+func (s *SandboxService) ChatWithTimeout(ctx context.Context, id uint, text string, images []models.PromptImage, timeout time.Duration, onEvent func(json.RawMessage)) (*models.TokenUsage, models.TokenUsageByModel, error) {
 	ls, row, err := s.ensureConnected(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	s.mu.Lock()
 	if ls.busy {
 		s.mu.Unlock()
-		return nil, fmt.Errorf("sandbox busy")
+		return nil, nil, fmt.Errorf("sandbox busy")
 	}
 	ls.busy = true
 	s.mu.Unlock()
@@ -722,9 +725,9 @@ func (s *SandboxService) ChatWithTimeout(ctx context.Context, id uint, text stri
 	result, err := ls.acp.ChatStream(chatCtx, text, images, onEvent)
 	_ = row
 	if result == nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return models.CloneTokenUsage(result.Usage), err
+	return models.CloneTokenUsage(result.Usage), models.CloneTokenUsageByModel(result.UsageByModel), err
 }
 
 // acpHostPort resolves the live ACP host/port for a sandbox, preferring the
@@ -928,7 +931,9 @@ func (s *SandboxService) ensureConnected(ctx context.Context, id uint) (*liveSan
 		// artifact-upload land after control-plane upgrades. Idempotent.
 		s.mgr.EnsureHelpers(ctx, sb)
 	}
-	acp := sb.ACP().WithSession(sb.WorkspaceDir, mcpServersJSON(specs))
+	acp := sb.ACP().
+		WithSession(sb.WorkspaceDir, mcpServersJSON(specs)).
+		WithBridgeModel(agent.Env["ACP_BRIDGE_MODEL"])
 	if err := acp.Connect(ctx); err != nil {
 		acp.Close()
 		return nil, nil, fmt.Errorf("reconnect acp: %w", err)

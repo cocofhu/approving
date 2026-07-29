@@ -117,6 +117,9 @@ type NodeResult struct {
 	// call (nil = none reported). Engine merges it into the StateRun by adding
 	// components so multi-turn react visits accumulate without double-counting.
 	Usage *models.TokenUsage
+	// UsageByModel is the per-model breakdown paired with Usage (after ingest
+	// weak-key merge / ACP_BRIDGE_MODEL backfill).
+	UsageByModel models.TokenUsageByModel
 }
 
 // ReactTurn is the outcome of one react dialogue turn (open or reply). The
@@ -134,6 +137,8 @@ type ReactTurn struct {
 	// Usage is this provider call's token delta (open/reply/finish chats).
 	// Engine adds it onto the StateRun so mid-turn pauses still surface usage.
 	Usage *models.TokenUsage
+	// UsageByModel is the per-model breakdown paired with Usage.
+	UsageByModel models.TokenUsageByModel
 	// SetupErr is set when the sandbox/ACP session could not be acquired
 	// (container create, image pull, connect handshake). Distinct from a normal
 	// clarify pause where the agent raises Questions via ask_question.

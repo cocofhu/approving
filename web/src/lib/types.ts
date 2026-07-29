@@ -214,6 +214,21 @@ export interface TokenStatsWorkflow {
   kind?: TokenStatsRankKind
 }
 
+/** One model bucket in project TokenStats (composition / ranking). */
+export interface TokenStatsModel {
+  modelKey?: string
+  name: string
+  total: number
+  /** 「未知/未分桶」— distinct from other. */
+  unknown?: boolean
+  /** Top10 remainder of identified models — distinct from unknown. */
+  other?: boolean
+  /** Includes ACP_BRIDGE_MODEL weak-key backfill. */
+  filled?: boolean
+  /** upstream | via ACP_BRIDGE_MODEL | unknown */
+  source?: string
+}
+
 /** Response of GET /projects/:id/token-stats */
 export interface ProjectTokenStats {
   window: TokenStatsWindow | string
@@ -224,6 +239,8 @@ export interface ProjectTokenStats {
   trend: TokenStatsBucket[]
   composition: TokenStatsComposition
   workflows: TokenStatsWorkflow[]
+  modelComposition?: TokenStatsModel[]
+  modelRanking?: TokenStatsModel[]
 }
 
 export interface PmLeaderBinding {
@@ -309,6 +326,10 @@ export interface ChatMessage {
   images?: ClarifyImage[]
   citations?: ProgressCitation[]
   attachedContext?: AttachedContext
+  /** Assistant turn token total (nil = not reported). */
+  usage?: TokenUsage | null
+  /** Per-model breakdown after ingest merge / bridge backfill. */
+  usageByModel?: TokenUsageByModel | null
   createdAt: string
 }
 
@@ -423,6 +444,15 @@ export interface TokenUsage {
   cacheWriteTokens: number
 }
 
+/** One model bucket with optional source / backfill semantics. */
+export interface ModelTokenUsage extends TokenUsage {
+  source?: string
+  filled?: boolean
+}
+
+/** modelKey → bucket (keys are ingest-merged;「未知/未分桶」for legacy). */
+export type TokenUsageByModel = Record<string, ModelTokenUsage>
+
 export interface NodeRun {
   nodeId: string
   // 该节点的第几次执行(1 起)。循环回边/门禁退回会让同一节点执行多次,
@@ -445,6 +475,8 @@ export interface NodeRun {
    * present (incl. all zeros) = explicitly reported.
    */
   usage?: TokenUsage | null
+  /** Per-model breakdown after ingest merge / bridge backfill. */
+  usageByModel?: TokenUsageByModel | null
 }
 
 export interface Artifact {

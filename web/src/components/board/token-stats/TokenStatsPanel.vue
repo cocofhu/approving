@@ -7,6 +7,8 @@ import { fmtCompactTokenCount } from '@/lib/tokenUsage'
 import TokenTrendChart from './TokenTrendChart.vue'
 import TokenDonutChart from './TokenDonutChart.vue'
 import TokenWorkflowRank from './TokenWorkflowRank.vue'
+import TokenModelComposition from './TokenModelComposition.vue'
+import TokenModelRank from './TokenModelRank.vue'
 import { clientTimezoneParams } from './tokenStatsShared'
 
 const props = defineProps<{
@@ -35,6 +37,10 @@ const grainLabel = computed(() => {
 })
 
 const isEmpty = computed(() => !!data.value?.empty)
+
+const modelCompTotal = computed(() =>
+  (data.value?.modelComposition || []).reduce((s, m) => s + (m.total || 0), 0),
+)
 
 async function load() {
   const gen = ++generation
@@ -220,6 +226,27 @@ onUnmounted(() => {
           <span class="text-[11px] text-txt3">{{ grainLabel }}</span>
         </div>
         <TokenTrendChart :trend="data.trend" :bucket-width="data.bucketWidth" />
+      </div>
+      <div class="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+        <div class="min-w-0 rounded-xl border border-line bg-surface p-3.5" data-testid="token-stats-model-comp-card">
+          <div class="mb-2 flex items-baseline justify-between gap-2">
+            <h4 class="m-0 text-[13px] font-semibold text-txt">{{ t('pages.board.tokenStats.modelCompositionTitle') }}</h4>
+            <span class="text-[11px] text-txt3">
+              {{ t('pages.board.tokenStats.compTotal', { n: fmtCompactTokenCount(modelCompTotal) }) }}
+            </span>
+          </div>
+          <TokenModelComposition :models="data.modelComposition || []" />
+        </div>
+        <div class="min-w-0 rounded-xl border border-line bg-surface p-3.5" data-testid="token-stats-model-rank-card">
+          <div class="mb-2 flex flex-col gap-1">
+            <div class="flex items-baseline justify-between gap-2">
+              <h4 class="m-0 text-[13px] font-semibold text-txt">{{ t('pages.board.tokenStats.modelRankTitle') }}</h4>
+              <span class="text-[11px] text-txt3">{{ t('pages.board.tokenStats.modelRankSub') }}</span>
+            </div>
+            <p class="m-0 text-[11px] leading-snug text-txt3">{{ t('pages.board.tokenStats.modelRankHint') }}</p>
+          </div>
+          <TokenModelRank :models="data.modelRanking || []" />
+        </div>
       </div>
       <div class="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
         <div class="min-w-0 rounded-xl border border-line bg-surface p-3.5" data-testid="token-stats-comp-card">

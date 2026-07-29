@@ -52,7 +52,15 @@
         "emptyCompTitle": "No composition data",
         "emptyCompHint": "Ring chart is not drawn when no components are reported",
         "emptyRankTitle": "No usage ranking",
-        "emptyRankHint": "Ranking placeholders are not shown without reported Usage"
+        "emptyRankHint": "Ranking placeholders are not shown without reported Usage",
+        "modelCompositionTitle": "Model composition",
+        "modelRankTitle": "Model usage ranking",
+        "modelRankSub": "Top10 · rest → other",
+        "modelRankHint": "\"Unknown/unbucketed\" ≠ other; bridge-backfilled buckets rank by their usage.",
+        "modelOther": "other (remaining models)",
+        "filledTag": "includes backfill",
+        "emptyModelCompHint": "No model composition yet",
+        "emptyModelRankHint": "No model ranking yet"
       },
       "filters": {
         "label": "Show non-primary statuses"
@@ -184,6 +192,17 @@
       "toastNeedKey": "Please enter an API Key",
       "toastRun": "Sample Run started",
       "toastErr": "Bootstrap failed"
+    },
+    "tokenByModel": {
+      "tipTitle": "Usage tip",
+      "close": "Close",
+      "sourceUpstream": "upstream · reported",
+      "sourceBridge": "via ACP_BRIDGE_MODEL",
+      "sourceUnknown": "Unknown/unbucketed",
+      "modelTableTitle": "Usage by model",
+      "colModel": "Model",
+      "colSource": "Source",
+      "colSubtotal": "Subtotal"
     },
     "projectDetail": {
       "back": "All projects",

@@ -749,19 +749,20 @@ func (s *PmService) ListMessagesWindow(threadID string, limit int, beforeID stri
 // AppendMessage persists one chat message and bumps thread updated_at.
 // Optional source tags the turn origin (user | cron); empty keeps legacy rows.
 func (s *PmService) AppendMessage(threadID, role, content string, citations []models.ProgressCitation, attached *models.AttachedContext, images []models.PromptImage) (models.ChatMessage, error) {
-	return s.AppendMessageSource(threadID, role, content, "", citations, attached, images, nil)
+	return s.AppendMessageSource(threadID, role, content, "", citations, attached, images, nil, nil)
 }
 
 // AppendMessageSource is AppendMessage with an explicit source tag and optional
-// Usage (assistant turns only; nil = not reported / not billed).
-func (s *PmService) AppendMessageSource(threadID, role, content, source string, citations []models.ProgressCitation, attached *models.AttachedContext, images []models.PromptImage, usage *models.TokenUsage) (models.ChatMessage, error) {
+// Usage / UsageByModel (assistant turns only; nil = not reported / not billed).
+func (s *PmService) AppendMessageSource(threadID, role, content, source string, citations []models.ProgressCitation, attached *models.AttachedContext, images []models.PromptImage, usage *models.TokenUsage, usageByModel models.TokenUsageByModel) (models.ChatMessage, error) {
 	if role == "" {
 		return models.ChatMessage{}, fmt.Errorf("role required")
 	}
 	msg := models.ChatMessage{
 		ID: "msg-" + uuid.NewString()[:12], ThreadID: threadID, Role: role, Content: content,
 		Status: "ok", Source: source, Images: images, Citations: citations, AttachedContext: attached,
-		Usage: models.CloneTokenUsage(usage), CreatedAt: time.Now(),
+		Usage: models.CloneTokenUsage(usage), UsageByModel: models.CloneTokenUsageByModel(usageByModel),
+		CreatedAt: time.Now(),
 	}
 	if err := s.db.Create(&msg).Error; err != nil {
 		return models.ChatMessage{}, err

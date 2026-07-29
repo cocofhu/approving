@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  effectiveModelUsageRows,
   fmtCompactTokenCount,
   fmtCompactTokenRate,
   fmtTokenCount,
@@ -8,6 +9,7 @@ import {
   summarizeMultiRunUsage,
   summarizeTimelineUsage,
   sumTotalTokens,
+  TOKEN_USAGE_UNKNOWN_MODEL,
   tokenUsageTotal,
   totalTokensOrNull,
 } from './tokenUsage'
@@ -144,5 +146,34 @@ describe('tokenUsage', () => {
       avgTokens: 0,
       tokenRate: null,
     })
+  })
+
+  it('maps legacy usage to unknown/unbucketed model row', () => {
+    const rows = effectiveModelUsageRows(
+      { inputTokens: 4, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      null,
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.modelKey).toBe(TOKEN_USAGE_UNKNOWN_MODEL)
+    expect(rows[0]?.total).toBe(5)
+    expect(rows[0]?.unknown).toBe(true)
+  })
+
+  it('keeps real model keys and filled bridge semantics', () => {
+    const rows = effectiveModelUsageRows(
+      { inputTokens: 10, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      {
+        'claude-sonnet-4': {
+          inputTokens: 10,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          filled: true,
+          source: 'via ACP_BRIDGE_MODEL',
+        },
+      },
+    )
+    expect(rows[0]?.modelKey).toBe('claude-sonnet-4')
+    expect(rows[0]?.filled).toBe(true)
   })
 })

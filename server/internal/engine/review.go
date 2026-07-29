@@ -226,14 +226,14 @@ func (e *Engine) finalizeProduct(c *execCtx, node *models.Node, res runtime.Node
 func (e *Engine) finalizeAppPreview(c *execCtx, node *models.Node, res runtime.NodeResult) nodeOutcome {
 	if !e.host.HasHealthyPreviewPorts(c.run.ID, node.ID) {
 		return nodeOutcome{status: "failed", err: "预览契约未满足:无可达 set_preview",
-			outputMd: "应用预览失败:无可达预览端口", events: res.Events, usage: res.Usage}
+			outputMd: "应用预览失败:无可达预览端口", events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
 	}
 	out := res.Outputs
 	if out == nil {
 		out = map[string]any{}
 	}
 	out["preview_ready"] = true
-	return nodeOutcome{status: "completed", outputMd: "应用预览已就绪", outputs: out, events: res.Events, usage: res.Usage}
+	return nodeOutcome{status: "completed", outputMd: "应用预览已就绪", outputs: out, events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
 }
 
 // isReviewNode reports whether a node type uses the post-run ReAct review path

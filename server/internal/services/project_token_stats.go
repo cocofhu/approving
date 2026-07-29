@@ -83,7 +83,23 @@ type TokenStatsWorkflow struct {
 	Kind       string `json:"kind,omitempty"` // workflow | pm | other
 }
 
-// TokenStatsResult is the single-response payload for trend/composition/workflows.
+// TokenStatsModel is one model-composition / model-ranking row.
+type TokenStatsModel struct {
+	ModelKey string `json:"modelKey"`
+	Name     string `json:"name"`
+	Total    int64  `json:"total"`
+	// Unknown marks the「未知/未分桶」bucket (≠ other).
+	Unknown bool `json:"unknown,omitempty"`
+	// Other marks Top10 remainder of identified models (≠ unknown).
+	Other bool `json:"other,omitempty"`
+	// Filled is true when the bucket includes ACP_BRIDGE_MODEL backfill.
+	Filled bool `json:"filled,omitempty"`
+	// Source: upstream | via ACP_BRIDGE_MODEL | unknown (omitted for other).
+	Source string `json:"source,omitempty"`
+}
+
+// TokenStatsResult is the single-response payload for trend/composition/workflows
+// plus model composition/ranking.
 type TokenStatsResult struct {
 	Window      string                `json:"window"`
 	BucketWidth string                `json:"bucketWidth"`
@@ -92,11 +108,16 @@ type TokenStatsResult struct {
 	Trend       []TokenStatsBucket    `json:"trend"`
 	Composition TokenStatsComposition `json:"composition"`
 	Workflows   []TokenStatsWorkflow  `json:"workflows"`
+	// ModelComposition is per-model four-component totals (window scope).
+	ModelComposition []TokenStatsModel `json:"modelComposition"`
+	// ModelRanking is Top10 models by total + optional other (unknown independent).
+	ModelRanking []TokenStatsModel `json:"modelRanking"`
 }
 
 type tokenUsageRow struct {
 	ts           time.Time
 	usage        models.TokenUsage
+	byModel      models.TokenUsageByModel // effective (legacy → unknown)
 	workflowID   string
 	workflowName string
 	source       string // workflow | pm
@@ -159,6 +180,7 @@ func (s *ProjectService) TokenStats(ctx context.Context, projectID string, q Tok
 	var hasPM bool
 	var composition agg
 	var hasAny bool
+	modelTotals := map[string]*tokenModelAgg{}
 
 	for _, row := range rows {
 		if err := ctx.Err(); err != nil {
@@ -185,6 +207,21 @@ func (s *ProjectService) TokenStats(ctx context.Context, projectID string, q Tok
 		composition.cacheRead += row.usage.CacheReadTokens
 		composition.cacheWrite += row.usage.CacheWriteTokens
 
+		for mk, mu := range row.byModel {
+			ma := modelTotals[mk]
+			if ma == nil {
+				ma = &tokenModelAgg{source: mu.Source}
+				modelTotals[mk] = ma
+			}
+			ma.total += mu.Total()
+			ma.filled = ma.filled || mu.Filled
+			if mu.Filled {
+				ma.source = models.TokenUsageSourceBridge
+			} else if ma.source == "" {
+				ma.source = mu.Source
+			}
+		}
+
 		total := row.usage.Total()
 		if row.source == TokenStatsKindPM {
 			b.pm += total
@@ -210,13 +247,15 @@ func (s *ProjectService) TokenStats(ctx context.Context, projectID string, q Tok
 	}
 
 	out := TokenStatsResult{
-		Window:      window,
-		BucketWidth: bucketWidth,
-		Timezone:    tzLabel,
-		Empty:       !hasAny,
-		Trend:       []TokenStatsBucket{},
-		Composition: TokenStatsComposition{},
-		Workflows:   []TokenStatsWorkflow{},
+		Window:           window,
+		BucketWidth:      bucketWidth,
+		Timezone:         tzLabel,
+		Empty:            !hasAny,
+		Trend:            []TokenStatsBucket{},
+		Composition:      TokenStatsComposition{},
+		Workflows:        []TokenStatsWorkflow{},
+		ModelComposition: []TokenStatsModel{},
+		ModelRanking:     []TokenStatsModel{},
 	}
 	if !hasAny {
 		// Empty window: no forged all-zero series.
@@ -257,6 +296,7 @@ func (s *ProjectService) TokenStats(ctx context.Context, projectID string, q Tok
 	}
 
 	out.Workflows = buildConsumptionRank(wfTotals, wfNames, pmTotal, hasPM)
+	out.ModelComposition, out.ModelRanking = buildModelStats(modelTotals)
 	return out, nil
 }
 
@@ -386,6 +426,81 @@ func parseWeekKey(key string, loc *time.Location) (time.Time, bool) {
 	jan4 := time.Date(y, 1, 4, 0, 0, 0, 0, loc)
 	start := startOfISOWeek(jan4).AddDate(0, 0, (w-1)*7)
 	return start, true
+}
+
+type tokenModelAgg struct {
+	total  int64
+	filled bool
+	source string
+}
+
+// buildModelStats builds model composition (all buckets desc by total) and
+// Top10 + other ranking. 「未知/未分桶」is independent and never folded into other.
+func buildModelStats(totals map[string]*tokenModelAgg) (composition []TokenStatsModel, ranking []TokenStatsModel) {
+	type item struct {
+		key    string
+		total  int64
+		filled bool
+		source string
+		unk    bool
+	}
+	list := make([]item, 0, len(totals))
+	for k, a := range totals {
+		if a == nil {
+			continue
+		}
+		list = append(list, item{
+			key:    k,
+			total:  a.total,
+			filled: a.filled,
+			source: a.source,
+			unk:    k == models.TokenUsageModelUnknown,
+		})
+	}
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].total != list[j].total {
+			return list[i].total > list[j].total
+		}
+		return list[i].key < list[j].key
+	})
+
+	composition = make([]TokenStatsModel, 0, len(list))
+	for _, it := range list {
+		composition = append(composition, TokenStatsModel{
+			ModelKey: it.key,
+			Name:     it.key,
+			Total:    it.total,
+			Unknown:  it.unk,
+			Filled:   it.filled,
+			Source:   it.source,
+		})
+	}
+
+	const topN = 10
+	ranking = make([]TokenStatsModel, 0, topN+1)
+	var other int64
+	for i, it := range list {
+		if i < topN {
+			ranking = append(ranking, TokenStatsModel{
+				ModelKey: it.key,
+				Name:     it.key,
+				Total:    it.total,
+				Unknown:  it.unk,
+				Filled:   it.filled,
+				Source:   it.source,
+			})
+			continue
+		}
+		other += it.total
+	}
+	if other > 0 {
+		ranking = append(ranking, TokenStatsModel{
+			Name:  "other",
+			Total: other,
+			Other: true,
+		})
+	}
+	return composition, ranking
 }
 
 func buildConsumptionRank(totals map[string]int64, names map[string]string, pmTotal int64, hasPM bool) []TokenStatsWorkflow {
@@ -527,7 +642,7 @@ func (s *ProjectService) loadWorkflowTokenUsageRows(ctx context.Context, project
 		}
 		var srs []models.StateRun
 		if err := s.db.WithContext(ctx).Model(&models.StateRun{}).
-			Select("run_id", "usage", "started_at").
+			Select("run_id", "usage", "usage_by_model", "started_at").
 			Where("run_id IN ? AND usage IS NOT NULL", runIDs[i:end]).
 			Find(&srs).Error; err != nil {
 			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
@@ -550,9 +665,11 @@ func (s *ProjectService) loadWorkflowTokenUsageRows(ctx context.Context, project
 			if ts.IsZero() {
 				continue
 			}
+			by := models.EffectiveUsageByModel(sr.Usage, sr.UsageByModel)
 			out = append(out, tokenUsageRow{
 				ts:           ts,
 				usage:        *sr.Usage,
+				byModel:      by,
 				workflowID:   meta.WorkflowID,
 				workflowName: meta.WorkflowName,
 				source:       TokenStatsKindWorkflow,
@@ -588,7 +705,7 @@ func (s *ProjectService) loadPMTokenUsageRows(ctx context.Context, projectID str
 		}
 		var msgs []models.ChatMessage
 		if err := s.db.WithContext(ctx).Model(&models.ChatMessage{}).
-			Select("usage", "created_at").
+			Select("usage", "usage_by_model", "created_at").
 			Where("thread_id IN ? AND role = ? AND usage IS NOT NULL", threadIDs[i:end], "assistant").
 			Find(&msgs).Error; err != nil {
 			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
@@ -600,10 +717,12 @@ func (s *ProjectService) loadPMTokenUsageRows(ctx context.Context, projectID str
 			if m.Usage == nil || m.CreatedAt.IsZero() {
 				continue
 			}
+			by := models.EffectiveUsageByModel(m.Usage, m.UsageByModel)
 			out = append(out, tokenUsageRow{
-				ts:     m.CreatedAt,
-				usage:  *m.Usage,
-				source: TokenStatsKindPM,
+				ts:      m.CreatedAt,
+				usage:   *m.Usage,
+				byModel: by,
+				source:  TokenStatsKindPM,
 			})
 		}
 	}
