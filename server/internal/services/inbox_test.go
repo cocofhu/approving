@@ -181,6 +181,17 @@ func TestPendingClarificationsKind(t *testing.T) {
 	})
 	db.Create(&models.StateRun{RunID: "run-proposal", NodeID: "proposal", Iteration: 1, Status: "waiting_human"})
 
+	// app_preview → kind=app_preview (not generic review)
+	db.Create(&models.Run{
+		ID: "run-app-preview", WorkflowID: "wf-ap", WorkflowName: "预览流",
+		Status: "waiting_human", StartedAt: now, Graph: reviewCapableGraph("app_preview", "应用预览"),
+	})
+	db.Create(&models.ReactConversation{
+		RunID: "run-app-preview", NodeID: "app_preview", Iteration: 1, Done: false,
+		Messages: []models.ReactMessage{{Role: "agent", Text: "preview", At: now.Add(3 * time.Minute).Format(time.RFC3339)}},
+	})
+	db.Create(&models.StateRun{RunID: "run-app-preview", NodeID: "app_preview", Iteration: 1, Status: "waiting_human"})
+
 	items := s.AllPendingInboxItems()
 	byRun := map[string]ClarifyInboxItem{}
 	for _, it := range items {
@@ -188,7 +199,7 @@ func TestPendingClarificationsKind(t *testing.T) {
 			byRun[c.RunID] = c
 		}
 	}
-	for _, id := range []string{"run-react", "run-research", "run-proposal"} {
+	for _, id := range []string{"run-react", "run-research", "run-proposal", "run-app-preview"} {
 		if _, ok := byRun[id]; !ok {
 			t.Fatalf("missing inbox item for %s among %d items", id, len(items))
 		}
@@ -201,6 +212,9 @@ func TestPendingClarificationsKind(t *testing.T) {
 	}
 	if byRun["run-proposal"].Type != "clarify" || byRun["run-proposal"].Kind != "review" {
 		t.Fatalf("proposal: type=%q kind=%q", byRun["run-proposal"].Type, byRun["run-proposal"].Kind)
+	}
+	if byRun["run-app-preview"].Type != "clarify" || byRun["run-app-preview"].Kind != "app_preview" {
+		t.Fatalf("app_preview: type=%q kind=%q", byRun["run-app-preview"].Type, byRun["run-app-preview"].Kind)
 	}
 	if byRun["run-research"].Label != "调研" || byRun["run-proposal"].Label != "方案" {
 		t.Fatalf("labels: research=%q proposal=%q", byRun["run-research"].Label, byRun["run-proposal"].Label)
@@ -252,11 +266,110 @@ func TestClarifyInboxKind(t *testing.T) {
 	if got := clarifyInboxKind(&models.Node{Type: "proposal"}); got != "review" {
 		t.Fatalf("proposal → %q", got)
 	}
+	if got := clarifyInboxKind(&models.Node{Type: "app_preview"}); got != "app_preview" {
+		t.Fatalf("app_preview → %q, want app_preview", got)
+	}
 	if got := clarifyInboxKind(&models.Node{Type: "proposal_select"}); got != "clarify" {
 		t.Fatalf("proposal_select is gate channel, not review kind: %q", got)
 	}
 	if got := clarifyInboxKind(nil); got != "clarify" {
 		t.Fatalf("nil → %q", got)
+	}
+}
+
+// TestPendingInboxIncludesAppPreview covers g1.3: app_preview waiting_human
+// appears in PendingInboxItems with kind=app_preview; coexists with human_gate;
+// disappears when the conversation is marked done.
+func TestPendingInboxIncludesAppPreview(t *testing.T) {
+	db := newTestDB(t)
+	s := NewRunService(db)
+	now := time.Now().UTC().Truncate(time.Second)
+	previewAt := now.Add(-3 * time.Minute)
+	gateAt := now.Add(-10 * time.Minute)
+
+	db.Create(&models.Run{
+		ID: "run-preview", WorkflowID: "wf-ap", WorkflowName: "预览工作流",
+		Title: "应用预览验收", Status: "waiting_human", StartedAt: now.Add(-20 * time.Minute),
+		Graph: reviewCapableGraph("app_preview", "应用预览"),
+	})
+	db.Create(&models.ReactConversation{
+		RunID: "run-preview", NodeID: "app_preview", Iteration: 1, Done: false,
+		Messages: []models.ReactMessage{
+			{Role: "agent", Text: "preview ready", At: previewAt.Format(time.RFC3339)},
+		},
+	})
+	db.Create(&models.StateRun{
+		RunID: "run-preview", NodeID: "app_preview", Iteration: 1, Status: "waiting_human",
+	})
+
+	// Only app_preview → inbox non-empty with kind=app_preview.
+	items := s.AllPendingInboxItems()
+	if len(items) != 1 {
+		t.Fatalf("only app_preview: expected 1 inbox item, got %d", len(items))
+	}
+	preview, ok := items[0].(ClarifyInboxItem)
+	if !ok {
+		t.Fatalf("expected ClarifyInboxItem, got %T", items[0])
+	}
+	if preview.Type != "clarify" || preview.Kind != "app_preview" {
+		t.Fatalf("app_preview: type=%q kind=%q", preview.Type, preview.Kind)
+	}
+	if preview.RunID != "run-preview" || preview.Label != "应用预览" {
+		t.Fatalf("app_preview fields: runId=%q label=%q", preview.RunID, preview.Label)
+	}
+	if preview.RunTitle != "应用预览验收" || preview.WorkflowName != "预览工作流" {
+		t.Fatalf("app_preview titles: runTitle=%q workflow=%q", preview.RunTitle, preview.WorkflowName)
+	}
+
+	// Coexist with unresolved human_gate — both visible, neither overwritten.
+	db.Create(&models.Run{
+		ID: "run-gate", WorkflowID: "wf1", WorkflowName: "门禁工作流",
+		Title: "方案门禁", Status: "waiting_human", StartedAt: now.Add(-time.Hour), Graph: validGraph(),
+	})
+	db.Create(&models.Gate{
+		RunID: "run-gate", NodeID: "gate-proposal", WorkflowID: "wf1", WorkflowName: "门禁工作流",
+		Title: "方案评审门禁", Resolved: false, RequestedAt: gateAt,
+	})
+
+	items = s.AllPendingInboxItems()
+	if len(items) != 2 {
+		t.Fatalf("gate+preview: expected 2 inbox items, got %d", len(items))
+	}
+	var sawGate, sawPreview bool
+	for _, it := range items {
+		switch v := it.(type) {
+		case GateInboxItem:
+			if v.RunID == "run-gate" && v.Type == "gate" {
+				sawGate = true
+			}
+		case ClarifyInboxItem:
+			if v.RunID == "run-preview" && v.Kind == "app_preview" {
+				sawPreview = true
+			}
+		}
+	}
+	if !sawGate || !sawPreview {
+		t.Fatalf("gate+preview coexistence: sawGate=%v sawPreview=%v items=%#v", sawGate, sawPreview, items)
+	}
+
+	// Confirm/complete: mark conversation done → preview item disappears; gate remains.
+	if err := db.Model(&models.ReactConversation{}).
+		Where("run_id = ? AND node_id = ?", "run-preview", "app_preview").
+		Update("done", true).Error; err != nil {
+		t.Fatalf("mark done: %v", err)
+	}
+	items = s.AllPendingInboxItems()
+	if len(items) != 1 {
+		t.Fatalf("after preview done: expected 1 gate item, got %d", len(items))
+	}
+	gate, ok := items[0].(GateInboxItem)
+	if !ok || gate.RunID != "run-gate" {
+		t.Fatalf("after preview done: expected gate run-gate, got %#v", items[0])
+	}
+	for _, it := range items {
+		if c, ok := it.(ClarifyInboxItem); ok && c.Kind == "app_preview" {
+			t.Fatalf("done app_preview must leave inbox, got %#v", c)
+		}
 	}
 }
 

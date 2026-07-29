@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { inboxBadgeLabelKey, inboxRunLabel, inboxSecondaryLine } from './inboxDisplay'
+import {
+  inboxBadgeLabelKey,
+  inboxBadgeTone,
+  inboxRunLabel,
+  inboxSecondaryLine,
+} from './inboxDisplay'
 
 describe('inboxRunLabel', () => {
   it('shows runTitle when non-empty', () => {
@@ -41,7 +46,22 @@ describe('inboxBadgeLabelKey', () => {
     expect(inboxBadgeLabelKey({ type: 'clarify', kind: 'review' })).toBe('pages.gatesInbox.reviewType')
   })
 
+  it('maps app_preview kind to previewType (application preview)', () => {
+    expect(inboxBadgeLabelKey({ type: 'clarify', kind: 'app_preview' })).toBe(
+      'pages.gatesInbox.previewType',
+    )
+  })
+
   it('falls back to clarifyType when kind omitted', () => {
     expect(inboxBadgeLabelKey({ type: 'clarify' })).toBe('pages.gatesInbox.clarifyType')
+  })
+})
+
+describe('inboxBadgeTone', () => {
+  it('splits gate / preview / review / clarify for Demo badge colors', () => {
+    expect(inboxBadgeTone({ type: 'gate' })).toBe('gate')
+    expect(inboxBadgeTone({ type: 'clarify', kind: 'app_preview' })).toBe('preview')
+    expect(inboxBadgeTone({ type: 'clarify', kind: 'review' })).toBe('review')
+    expect(inboxBadgeTone({ type: 'clarify', kind: 'clarify' })).toBe('clarify')
   })
 })

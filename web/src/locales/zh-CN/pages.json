@@ -599,7 +599,7 @@
         "structuredExitFallback": "未设 goto → 按 when 路由",
         "reviewBadge": "复审",
         "appPreviewSubtitle": "取点标注 · ReAct",
-        "appPreviewBody": "确认并流转 · Run 内",
+        "appPreviewBody": "确认并流转 · 待审批",
         "humanGateSubtitle": "同一套 ReAct",
         "humanGateBody": "确认并流转 · 待审批"
       },
@@ -862,6 +862,7 @@
       "gateType": "人工门禁",
       "clarifyType": "待澄清",
       "reviewType": "待复审",
+      "previewType": "应用预览",
       "loadingRun": "加载运行详情…",
       "reviewFinished": "已确认并流转",
       "reviewFinishedPending": "已提交确认并流转，列表尚未更新，请稍后刷新",

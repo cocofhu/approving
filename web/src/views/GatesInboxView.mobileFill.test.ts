@@ -48,3 +48,16 @@ describe('GatesInboxView review/clarify composer mode', () => {
     expect(src).toMatch(/pages\.gatesInbox\.reviewFinishFailed/)
   })
 })
+
+describe('GatesInboxView app_preview stage (g2.2)', () => {
+  it('mounts AppPreviewPanel with fill + pick wiring on both ReviewShell stages', () => {
+    expect(src).toMatch(/import AppPreviewPanel/)
+    expect(src).toMatch(/inboxAppPreviewActive/)
+    expect(src).toMatch(/addClarifyAnnotation/)
+    expect(src).toMatch(/mergeStagedAppPreviewPick/)
+    const panelBlocks = src.match(/<AppPreviewPanel[\s\S]*?:show-feedback="false"/g) || []
+    expect(panelBlocks.length).toBe(2)
+    expect(src).toMatch(/@pick="onAppPreviewReviewPick"/)
+    expect(src).toMatch(/@staged-pick="onAppPreviewStagedPick"/)
+  })
+})

@@ -13,6 +13,7 @@ import { REVIEW_SHELL_WIDTH_KEY_APPROVAL } from '@/lib/reviewLayoutBudget'
 import ReviewComposer from '@/components/run/ReviewComposer.vue'
 import ArtifactLoadingPane from '@/components/run/ArtifactLoadingPane.vue'
 import ClarifyProductStage from '@/components/run/ClarifyProductStage.vue'
+import AppPreviewPanel from '@/components/run/AppPreviewPanel.vue'
 import Pagination from '@/components/ui/Pagination.vue'
 import { api, isPaginated } from '@/lib/api'
 import { adaptInboxContextToRun } from '@/lib/inboxContext'
@@ -26,10 +27,16 @@ import { usePipelineFilter } from '@/lib/usePipelineFilter'
 import { useTagFilter } from '@/lib/useTagFilter'
 import { useProjectContext } from '@/lib/useProjectContext'
 import { usePendingGates } from '@/lib/usePendingGates'
-import { useClarifyDraft } from '@/lib/useClarifyDraft'
+import { addClarifyAnnotation, useClarifyDraft } from '@/lib/useClarifyDraft'
 import { useBreakpoint } from '@/lib/useBreakpoint'
 import { relTime } from '@/lib/format'
-import { inboxBadgeLabelKey, inboxSecondaryLine } from '@/lib/inboxDisplay'
+import {
+  inboxBadgeLabelKey,
+  inboxBadgeTone,
+  inboxBadgeToneClass,
+  inboxIconToneClass,
+  inboxSecondaryLine,
+} from '@/lib/inboxDisplay'
 import {
   inboxComposerMode,
   pickInboxClarifySession,
@@ -373,6 +380,50 @@ const {
   () => (active.value?.type === 'clarify' ? active.value.runId : null),
   () => (active.value?.type === 'clarify' ? active.value.nodeId : null),
 )
+
+/** VNC pick on app_preview inbox stage → same ReAct annotation chips as Run review. */
+const lastStagedAppPreviewPick = ref<{
+  selector: string
+  tagName: string
+  outerHTML: string
+} | null>(null)
+
+watch(
+  () => (active.value ? itemKey(active.value) : ''),
+  () => {
+    lastStagedAppPreviewPick.value = null
+  },
+)
+
+function onAppPreviewStagedPick(
+  payload: { selector: string; tagName: string; outerHTML: string } | null,
+) {
+  lastStagedAppPreviewPick.value = payload
+}
+
+function onAppPreviewReviewPick(payload: { selector: string; tagName: string; outerHTML: string }) {
+  const rid = active.value?.type === 'clarify' ? active.value.runId : ''
+  const nid = active.value?.type === 'clarify' ? active.value.nodeId : ''
+  if (!rid || !nid) return
+  const result = addClarifyAnnotation(rid, nid, {
+    selector: payload.selector,
+    label: payload.selector || payload.tagName,
+  })
+  if (result === 'duplicate') toast.warn(t('pages.reviewComposer.alreadyAdded'))
+  lastStagedAppPreviewPick.value = null
+}
+
+function mergeStagedAppPreviewPick(
+  annotations: import('@/lib/types').ReactAnnotation[],
+): import('@/lib/types').ReactAnnotation[] {
+  const staged = lastStagedAppPreviewPick.value
+  if (!staged?.selector) return annotations
+  if (annotations.some((a) => a.selector === staged.selector)) return annotations
+  return [
+    ...annotations,
+    { selector: staged.selector, label: staged.selector || staged.tagName },
+  ]
+}
 
 const isClarifyEditing = computed(
   () =>
@@ -1022,6 +1073,14 @@ const activeClarify = computed(() => {
   return pickInboxClarifySession(activeRun.value, active.value.nodeId)
 })
 
+/** Inbox app_preview waiting: prefer API kind, fall back to loaded graph node type. */
+const inboxAppPreviewActive = computed(() => {
+  if (active.value?.type !== 'clarify') return false
+  if (active.value.kind === 'app_preview') return true
+  const n = activeRun.value?.nodes?.find((node) => node.id === active.value!.nodeId)
+  return n?.type === 'app_preview'
+})
+
 // Mirror RunDetailView.reviewActive: post-run product review on a non-react
 // producer (backend only seeds clarify sessions for ReviewCapable nodes).
 // Inbox API type stays "clarify"; mode is decided from the loaded graph.
@@ -1171,10 +1230,13 @@ async function onClarifySend(
   if (force) {
     beginProcessingIntent(it)
   }
+  const mergedAnnotations =
+    inboxAppPreviewActive.value && !force ? mergeStagedAppPreviewPick(annotations) : annotations
   clarifyConfirmError.value = null
   let ok = true
   try {
-    await api.reactReply(it.runId, it.nodeId, text, images, force, annotations)
+    await api.reactReply(it.runId, it.nodeId, text, images, force, mergedAnnotations)
+    if (!force) lastStagedAppPreviewPick.value = null
   } catch (e: any) {
     ok = false
     /* refresh below to reflect real state */
@@ -1286,6 +1348,20 @@ function itemSecondary(it: InboxItem) {
 
 function badgeLabel(it: InboxItem) {
   return t(inboxBadgeLabelKey(it))
+}
+
+function itemIconName(it: InboxItem) {
+  if (it.type === 'gate') return 'gate'
+  if (it.kind === 'app_preview') return 'monitor'
+  return 'chat'
+}
+
+function itemIconClass(it: InboxItem) {
+  return inboxIconToneClass(inboxBadgeTone(it))
+}
+
+function itemBadgeClass(it: InboxItem) {
+  return inboxBadgeToneClass(inboxBadgeTone(it))
 }
 </script>
 
@@ -1414,9 +1490,9 @@ function badgeLabel(it: InboxItem) {
         >
           <div
             class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md"
-            :class="it.type === 'gate' ? 'bg-warn/15 text-warn' : 'bg-n-clarify/15 text-n-clarify'"
+            :class="itemIconClass(it)"
           >
-            <Icon :name="it.type === 'gate' ? 'gate' : 'chat'" :size="18" />
+            <Icon :name="itemIconName(it)" :size="18" />
           </div>
           <div class="min-w-0 flex-1">
             <div class="truncate text-sm font-medium text-txt">{{ itemTitle(it) }}</div>
@@ -1426,11 +1502,7 @@ function badgeLabel(it: InboxItem) {
             <div class="mt-1 flex items-center gap-1.5">
               <span
                 class="rounded border px-1.5 py-px text-[10px]"
-                :class="
-                  it.type === 'gate'
-                    ? 'border-warn/30 bg-warn/10 text-warn'
-                    : 'border-n-clarify/30 bg-n-clarify/10 text-n-clarify'
-                "
+                :class="itemBadgeClass(it)"
               >
                 {{ badgeLabel(it) }}
               </span>
@@ -1486,7 +1558,18 @@ function badgeLabel(it: InboxItem) {
           :storage-key="REVIEW_SHELL_WIDTH_KEY_APPROVAL"
         >
           <template #stage>
+            <div v-if="inboxAppPreviewActive" class="flex h-full min-h-0 flex-col p-3">
+              <AppPreviewPanel
+                :run-id="active.runId"
+                :node-id="active.nodeId"
+                fill
+                :show-feedback="false"
+                @pick="onAppPreviewReviewPick"
+                @staged-pick="onAppPreviewStagedPick"
+              />
+            </div>
             <ClarifyProductStage
+              v-else
               :product-nodes="clarifyProductNodes"
               :selected-product-id="selectedClarifyProductId"
               :stage-kind="clarifyStageKind"
@@ -1546,9 +1629,9 @@ function badgeLabel(it: InboxItem) {
           >
             <div
               class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md"
-              :class="it.type === 'gate' ? 'bg-warn/15 text-warn' : 'bg-n-clarify/15 text-n-clarify'"
+              :class="itemIconClass(it)"
             >
-              <Icon :name="it.type === 'gate' ? 'gate' : 'chat'" :size="18" />
+              <Icon :name="itemIconName(it)" :size="18" />
             </div>
             <div class="min-w-0 flex-1">
               <div class="truncate text-sm font-medium text-txt">{{ itemTitle(it) }}</div>
@@ -1558,11 +1641,7 @@ function badgeLabel(it: InboxItem) {
               <div class="mt-1 flex items-center gap-1.5">
                 <span
                   class="rounded border px-1.5 py-px text-[10px]"
-                  :class="
-                    it.type === 'gate'
-                      ? 'border-warn/30 bg-warn/10 text-warn'
-                      : 'border-n-clarify/30 bg-n-clarify/10 text-n-clarify'
-                  "
+                  :class="itemBadgeClass(it)"
                 >
                   {{ badgeLabel(it) }}
                 </span>
@@ -1605,7 +1684,18 @@ function badgeLabel(it: InboxItem) {
               :storage-key="REVIEW_SHELL_WIDTH_KEY_APPROVAL"
             >
               <template #stage>
+                <div v-if="inboxAppPreviewActive" class="flex h-full min-h-0 flex-col p-3">
+                  <AppPreviewPanel
+                    :run-id="active.runId"
+                    :node-id="active.nodeId"
+                    fill
+                    :show-feedback="false"
+                    @pick="onAppPreviewReviewPick"
+                    @staged-pick="onAppPreviewStagedPick"
+                  />
+                </div>
                 <ClarifyProductStage
+                  v-else
                   :product-nodes="clarifyProductNodes"
                   :selected-product-id="selectedClarifyProductId"
                   :stage-kind="clarifyStageKind"
