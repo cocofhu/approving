@@ -84,7 +84,8 @@ describe('TokenUsageByModelTip', () => {
     await wrapper.get('[data-testid="token-by-model-trigger"]').trigger('click')
     // Still closed until parent updates open; emit notifies parent.
     expect(wrapper.find('[data-testid="token-by-model-tip"]').exists()).toBe(false)
-    expect(wrapper.emitted('update:open')?.at(-1)).toEqual([true])
+    const openEmits = wrapper.emitted('update:open')
+    expect(openEmits?.[openEmits.length - 1]).toEqual([true])
     wrapper.unmount()
   })
 })
