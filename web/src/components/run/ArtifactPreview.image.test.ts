@@ -102,6 +102,18 @@ describe('ArtifactPreview image preview UI', () => {
     wrapper.unmount()
   })
 
+  it('applies p-3 padding on inline image-wrap success canvas', async () => {
+    const wrapper = mountPreview()
+    await flushPromises()
+    const wrap = wrapper.find('[data-testid="artifact-preview-image-wrap"]')
+    expect(wrap.exists()).toBe(true)
+    expect(wrap.classes()).toContain('p-3')
+    // loading/error branches must not be the padded canvas
+    expect(wrapper.find('[data-testid="artifact-preview-image-loading"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="artifact-preview-image-error"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('shows loading until download completes', async () => {
     let resolveFetch: (value: unknown) => void = () => {}
     vi.stubGlobal(
@@ -170,6 +182,19 @@ describe('ArtifactPreview image preview UI', () => {
     const zoom = wrapper.find('[data-testid="artifact-preview-zoom-image"]')
     expect(zoom.exists()).toBe(true)
     expect(zoom.find('img').attributes('src')).toBe('blob:mock-image')
+    wrapper.unmount()
+  })
+
+  it('applies p-3 padding on zoom success image container', async () => {
+    const wrapper = mountPreview()
+    await flushPromises()
+    await wrapper.find('button[title="放大查看"]').trigger('click')
+    await flushPromises()
+    const zoom = wrapper.find('[data-testid="artifact-preview-zoom-image"]')
+    expect(zoom.exists()).toBe(true)
+    const successContainer = zoom.find('img').element.parentElement
+    expect(successContainer).toBeTruthy()
+    expect(successContainer!.classList.contains('p-3')).toBe(true)
     wrapper.unmount()
   })
 })
