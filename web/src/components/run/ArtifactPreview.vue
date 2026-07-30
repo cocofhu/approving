@@ -343,7 +343,7 @@ onBeforeUnmount(() => {
         </div>
         <div
           v-else
-          class="flex h-full min-h-[320px] w-full items-center justify-center border border-line bg-base"
+          class="flex h-full min-h-[320px] w-full items-center justify-center border border-line bg-base p-3"
           data-testid="artifact-preview-image-wrap"
         >
           <img
@@ -446,7 +446,7 @@ onBeforeUnmount(() => {
       >
         {{ t('pages.artifactPreview.loading') }}
       </div>
-      <div v-else class="flex h-full min-h-[360px] w-full items-center justify-center">
+      <div v-else class="flex h-full min-h-[360px] w-full items-center justify-center p-3">
         <img
           :src="imageSrc!"
           :alt="artifact.name"
