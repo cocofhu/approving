@@ -737,6 +737,7 @@
         "outputSources": {
           "migrationBanner": "检测到旧字段 <code>config.result</code>，已自动迁移为 <code>config.results = [result]</code>。保存时将写入新字段。",
           "emptySelected": "未选择任何来源 — 运行时将显示「工作流完成。」",
+          "emptyAvailable": "连接上游节点后可选。将分支、测试/评审门禁或人工门禁连到本输出节点后，可映射的结构化产物会出现在此列表。",
           "availableSection": "可添加上游来源",
           "alreadyAdded": "已添加",
           "duplicateHint": "同一来源不可重复添加",

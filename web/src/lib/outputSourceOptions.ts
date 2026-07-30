@@ -17,10 +17,39 @@ const STRUCTURED_OUT: Partial<Record<string, { key: string; labelKey: string }>>
   visual: { key: 'page', labelKey: 'common.gateBodyLabels.pagePreview' },
 }
 
-/** Collect upstream node ids reachable via edges (transitive predecessors). */
-export function upstreamNodeIds(nodeId: string, edges: WFEdge[]): Set<string> {
+function addPred(preds: Record<string, string[]>, source: string, target: string) {
+  if (!source || !target || source === target) return
+  ;(preds[target] ||= []).push(source)
+}
+
+/**
+ * Collect upstream node ids reachable via real edges ∪ goto adjacency
+ * (branch.cases / human_gate.actions / test|review exits), transitive.
+ * Mirrors canvasLayout.buildAdjacency predecessor semantics for option discovery.
+ */
+export function upstreamNodeIds(nodeId: string, edges: WFEdge[], nodes: WFNode[] = []): Set<string> {
   const preds: Record<string, string[]> = {}
-  for (const e of edges) (preds[e.target] ||= []).push(e.source)
+  for (const e of edges) addPred(preds, e.source, e.target)
+
+  for (const n of nodes) {
+    if (n.type === 'branch') {
+      for (const c of (n.config?.cases as { goto?: string }[]) || []) {
+        if (c?.goto) addPred(preds, n.id, c.goto)
+      }
+    }
+    if (n.type === 'human_gate') {
+      for (const a of (n.config?.actions as { id?: string; goto?: string }[]) || []) {
+        if (a?.goto) addPred(preds, n.id, a.goto)
+      }
+    }
+    if (n.type === 'test' || n.type === 'review') {
+      const exits = (n.config?.exits as Record<string, { goto?: string }>) || {}
+      for (const key of ['pass', 'fail']) {
+        if (exits[key]?.goto) addPred(preds, n.id, exits[key].goto!)
+      }
+    }
+  }
+
   const seen = new Set<string>()
   const stack = [...(preds[nodeId] || [])]
   while (stack.length) {
@@ -46,7 +75,7 @@ export function buildOutputSourceOptions(
     seen.add(value)
     opts.push({ value, label })
   }
-  const upstreamIds = upstreamNodeIds(targetNodeId, edges)
+  const upstreamIds = upstreamNodeIds(targetNodeId, edges, allNodes)
   for (const n of allNodes) {
     if (!upstreamIds.has(n.id)) continue
     const so = STRUCTURED_OUT[n.type]
