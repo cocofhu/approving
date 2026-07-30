@@ -878,6 +878,7 @@ func TestCreatePVCVolumeMounts(t *testing.T) {
 		"/root/go/pkg/mod":  "go-mod",
 		"/var/lib/docker":   "docker",
 		"/var/lib/buildkit": "buildkit",
+		"/tmp":              "tmp",
 	}
 	got := map[string]string{}
 	for _, m := range dep.Spec.Template.Spec.Containers[0].VolumeMounts {
