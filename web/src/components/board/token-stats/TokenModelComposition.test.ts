@@ -14,8 +14,8 @@ const i18n = () =>
     messages: { 'zh-CN': { ...common, ...pages } },
   })
 
-describe('TokenModelComposition solid pie (g1.1/g1.2/g1.3)', () => {
-  it('renders solid pie without inset donut hole (g1.1)', () => {
+describe('TokenModelComposition SVG solid pie (g1/g2)', () => {
+  it('renders svg/path solid pie without conic-gradient or rounded-full (g1.1/g1.2/g2.1)', () => {
     const wrapper = mount(TokenModelComposition, {
       props: {
         models: [{ modelKey: '未知/未分桶', name: '未知/未分桶', total: 1056, unknown: true }],
@@ -24,15 +24,20 @@ describe('TokenModelComposition solid pie (g1.1/g1.2/g1.3)', () => {
     })
     const pie = wrapper.find('[data-testid="token-model-pie"]')
     expect(pie.exists()).toBe(true)
-    const style = (pie.element as HTMLElement).style
-    expect(style.background).toMatch(/conic-gradient/i)
-    // Demo alignment: solid pie — no inset box-shadow hole
-    expect(style.boxShadow).toBe('')
+    expect(pie.find('svg').exists()).toBe(true)
+    const paths = pie.findAll('path')
+    expect(paths.length).toBeGreaterThanOrEqual(1)
+    // Solid pie: path starts from center (M cx cy L …), not a donut ring
+    expect(paths[0]!.attributes('d')).toMatch(/^M\s+55\s+55\s+L/)
+    expect(wrapper.html()).not.toMatch(/conic-gradient/i)
+    expect(wrapper.html()).not.toMatch(/rounded-full/)
     expect(wrapper.html()).not.toMatch(/inset\s+0\s+0\s+0\s+28px/)
+    // No inner hole circle masking the center
+    expect(pie.findAll('circle').length).toBe(0)
     wrapper.unmount()
   })
 
-  it('unknown-only bucket: 100% solid unknown color #71717A (g1.2)', () => {
+  it('unknown-only near-full circle: solid #71717A path + legend 100% (g1.2/g2.2)', () => {
     const unknown = { modelKey: '未知/未分桶', name: '未知/未分桶', total: 1056240000, unknown: true }
     expect(colorForModel(unknown, 0)).toBe('#71717A')
 
@@ -41,16 +46,43 @@ describe('TokenModelComposition solid pie (g1.1/g1.2/g1.3)', () => {
       global: { plugins: [i18n()] },
     })
     const pie = wrapper.find('[data-testid="token-model-pie"]')
-    expect((pie.element as HTMLElement).style.background).toContain('#71717A')
+    const path = pie.find('path')
+    expect(path.exists()).toBe(true)
+    expect(path.attributes('fill')).toBe('#71717A')
+    // Full circle uses two semicircle arcs (Demo describeSlice)
+    expect(path.attributes('d')).toMatch(/A\s+55\s+55\s+0\s+1\s+1/)
     const legend = wrapper.find('[data-testid="token-model-legend"]')
     expect(legend.text()).toContain('未知/未分桶')
     expect(legend.text()).toContain('100%')
     expect(legend.text()).toContain('1056.24M')
-    // Single-color full circle is expected data presentation, not a style defect
     wrapper.unmount()
   })
 
-  it('multi-bucket: solid sectors keep unknown #71717A and other #A1A1AA (g1.3/g2.1)', () => {
+  it('thin wedge + dominant bucket: circular solid sectors (g2.2 attach-like)', () => {
+    const models = [
+      { modelKey: 'cursor-grok', name: 'cursor-grok-4.5-high-fast', total: 50090000, filled: true },
+      { modelKey: '未知/未分桶', name: '未知/未分桶', total: 1059710000, unknown: true },
+    ]
+    const wrapper = mount(TokenModelComposition, {
+      props: { models },
+      global: { plugins: [i18n()] },
+    })
+    const pie = wrapper.find('[data-testid="token-model-pie"]')
+    const paths = pie.findAll('[data-testid="token-model-pie-slice"]')
+    expect(paths.length).toBe(2)
+    expect(paths.every((p) => p.attributes('d')?.startsWith('M 55 55'))).toBe(true)
+    expect(paths[0]!.attributes('fill')).toBe(colorForModel(models[0]!, 0))
+    expect(paths[1]!.attributes('fill')).toBe('#71717A')
+    const legend = wrapper.find('[data-testid="token-model-legend"]').text()
+    expect(legend).toContain('4.5%')
+    expect(legend).toContain('95.5%')
+    expect(legend).toContain('50.09M')
+    expect(legend).toContain('1059.71M')
+    expect(wrapper.html()).not.toMatch(/conic-gradient/i)
+    wrapper.unmount()
+  })
+
+  it('multi-bucket: svg sectors keep unknown #71717A and other #A1A1AA (g1.3/g2.1/g2.2)', () => {
     const models = [
       { modelKey: 'claude-sonnet-4', name: 'claude-sonnet-4', total: 600, filled: true },
       { modelKey: '未知/未分桶', name: '未知/未分桶', total: 300, unknown: true },
@@ -64,15 +96,34 @@ describe('TokenModelComposition solid pie (g1.1/g1.2/g1.3)', () => {
       global: { plugins: [i18n()] },
     })
     const pie = wrapper.find('[data-testid="token-model-pie"]')
-    const bg = (pie.element as HTMLElement).style.background
-    expect(bg).toMatch(/conic-gradient/i)
-    expect(bg).toContain('#71717A')
-    expect(bg).toContain('#A1A1AA')
-    expect((pie.element as HTMLElement).style.boxShadow).toBe('')
+    const paths = pie.findAll('path')
+    expect(paths.length).toBe(3)
+    const fills = paths.map((p) => p.attributes('fill'))
+    expect(fills).toContain('#71717A')
+    expect(fills).toContain('#A1A1AA')
+    expect(pie.findAll('circle').length).toBe(0)
     const legend = wrapper.find('[data-testid="token-model-legend"]').text()
     expect(legend).toContain('未知/未分桶')
     expect(legend).toContain('other')
     expect(legend).toContain('claude-sonnet-4')
+    // Layout: square swatches in legend, left pie + right legend grid
+    expect(wrapper.find('[data-testid="token-model-composition"]').classes()).toContain('sm:grid-cols-[120px_1fr]')
+    const swatch = wrapper.find('[data-testid="token-model-legend"] span.h-2\\.5')
+    expect(swatch.exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('empty models: elevated circle placeholder, no square conic block (g2.2)', () => {
+    const wrapper = mount(TokenModelComposition, {
+      props: { models: [] },
+      global: { plugins: [i18n()] },
+    })
+    const pie = wrapper.find('[data-testid="token-model-pie"]')
+    expect(pie.find('svg').exists()).toBe(true)
+    expect(pie.findAll('path').length).toBe(0)
+    expect(pie.find('circle').exists()).toBe(true)
+    expect(wrapper.html()).not.toMatch(/conic-gradient/i)
+    expect(wrapper.find('[data-testid="token-model-legend"]').text()).toMatch(/./)
     wrapper.unmount()
   })
 })
