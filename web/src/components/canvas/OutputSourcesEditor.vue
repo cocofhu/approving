@@ -121,6 +121,13 @@ function onDrop(target: string) {
       <div class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-txt3">
         {{ t('pages.workflowEditor.inspector.outputSources.availableSection') }}
       </div>
+      <div
+        v-if="!availableOptions.length"
+        data-testid="output-sources-empty-available"
+        class="border border-dashed border-line px-3 py-4 text-[12px] leading-relaxed text-txt3"
+      >
+        {{ t('pages.workflowEditor.inspector.outputSources.emptyAvailable') }}
+      </div>
       <button
         v-for="opt in availableOptions"
         :key="opt.value"

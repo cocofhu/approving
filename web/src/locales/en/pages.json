@@ -737,6 +737,7 @@
         "outputSources": {
           "migrationBanner": "Legacy field <code>config.result</code> detected and migrated to <code>config.results = [result]</code>. Save to persist the new field.",
           "emptySelected": "No sources selected — runtime will show \"Workflow complete.\"",
+          "emptyAvailable": "Connect upstream nodes first. After linking a branch, test/review gate, or human gate to this output node, mappable structured artifacts will appear in this list.",
           "availableSection": "Available upstream sources",
           "alreadyAdded": "Added",
           "duplicateHint": "Each source can only be added once",
