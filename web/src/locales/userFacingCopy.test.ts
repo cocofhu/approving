@@ -54,4 +54,56 @@ describe('user-facing copy remediation keys', () => {
     expect(zh.global.t('pages.board.tokenStats.modelRankHint')).not.toMatch(/分桶|bridge|回填/)
     expect(zh.global.t('pages.board.tokenStats.filledTag')).not.toMatch(/回填/)
   })
+
+  it('user-facing product naming uses 项目管理 / Project Management, not PM', () => {
+    const zhKeys = [
+      'pages.projectDetail.tokenUsageHint',
+      'pages.projectDetail.tokenTipPm',
+      'pages.projectDetail.pm.settingsHint',
+      'pages.projectDetail.pm.enabledMcps',
+      'pages.agentStudio.dialogs.renameCascadeHint',
+      'pages.agentStudio.data.context.hint',
+      'mcp.pmProgress.desc',
+      'mcp.pmProgress.convention',
+      'mcp.pmWorkflowRead.desc',
+      'mcp.pmWorkflowRead.convention',
+      'mcp.pmWorkflowWrite.desc',
+      'mcp.pmWorkflowWrite.convention',
+      'mcp.pmAgentFs.desc',
+      'mcp.pmAgentFs.convention',
+    ] as const
+    for (const key of zhKeys) {
+      const text = zh.global.t(key)
+      expect(text, key).toMatch(/项目管理/)
+      expect(text, key).not.toMatch(/(?<![A-Za-z0-9_-])PM(?![A-Za-z0-9_-])/)
+    }
+
+    const enKeys = [
+      'pages.projectDetail.tokenUsageHint',
+      'pages.projectDetail.tokenTipPm',
+      'pages.projectDetail.pm.settingsHint',
+      'pages.projectDetail.pm.enabledMcps',
+      'pages.projectDetail.pm.gateAutoVar',
+      'pages.agentStudio.dialogs.renameCascadeHint',
+      'pages.agentStudio.data.context.hint',
+      'mcp.pmProgress.desc',
+      'mcp.pmProgress.convention',
+      'mcp.pmWorkflowRead.desc',
+      'mcp.pmWorkflowRead.convention',
+      'mcp.pmWorkflowWrite.desc',
+      'mcp.pmWorkflowWrite.convention',
+      'mcp.pmAgentFs.desc',
+      'mcp.pmAgentFs.convention',
+    ] as const
+    for (const key of enKeys) {
+      const text = en.global.t(key)
+      expect(text, key).toMatch(/Project Management/)
+      expect(text, key).not.toMatch(/(?<![A-Za-z0-9_-])PM(?![A-Za-z0-9_-])/)
+      expect(text, key).not.toMatch(/PM-only|project PM/i)
+    }
+
+    // MCP server ids stay as protocol names
+    expect(zh.global.t('mcp.pmProgress.name')).toBe('pm-progress')
+    expect(en.global.t('mcp.pmProgress.name')).toBe('pm-progress')
+  })
 })
