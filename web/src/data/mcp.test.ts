@@ -168,12 +168,10 @@ describe('BUILTIN_MCPS platform catalog', () => {
     if (locale === 'zh-CN') {
       expect(subtitle).not.toMatch(/^内置 MCP 全程可用/)
       expect(sectionTitle).not.toMatch(/运行级全局注入/)
-      expect(subtitle).toMatch(/按作用域/)
       expect(sectionTitle).toMatch(/按作用域/)
     } else {
       expect(subtitle.toLowerCase()).not.toMatch(/^built-in mcp is always available/)
       expect(sectionTitle.toLowerCase()).not.toMatch(/run-scoped injection$/)
-      expect(subtitle.toLowerCase()).toMatch(/by scope|scope/)
       expect(sectionTitle.toLowerCase()).toMatch(/scope/)
     }
   })

@@ -200,7 +200,7 @@ describe('Token charts (g2.3/g2.4)', () => {
     expect(wrapper.find('.token-rank-pm').exists()).toBe(true)
     expect(wrapper.find('.token-rank-other').exists()).toBe(true)
     expect(wrapper.find('[data-kind="pm"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('PM')
+    expect(wrapper.text()).toContain('项目管理')
     expect(wrapper.text()).toContain('其他')
 
     // Continuous numeric badges for workflow+PM; other stays "·" (Demo: 1→2→3→·)
