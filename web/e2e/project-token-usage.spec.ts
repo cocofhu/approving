@@ -247,7 +247,7 @@ test.describe('项目 Token 总体消耗 UI', () => {
     await expect(stat).toBeVisible({ timeout: 15_000 })
     await expect(stat).toContainText('Token 消耗')
     await expect(stat).toContainText('128.4K')
-    await expect(stat).toContainText('全部历史 · 含工作流与 PM（上线后）')
+    await expect(stat).toContainText('全部历史 · 含工作流与项目管理（上线后）')
 
     const boardShot = path.join(testInfo.outputDir, 'project-detail-token-board.png')
     await page.screenshot({ path: boardShot, fullPage: true })

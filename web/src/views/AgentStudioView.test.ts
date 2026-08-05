@@ -464,7 +464,7 @@ describe('AgentStudio rename entry migration', () => {
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('工作流引用不会自动更新')
-    expect(wrapper.text()).toContain('将同步更新目录、PM、组织关系，以及工作流中的 skill_profile 引用')
+    expect(wrapper.text()).toContain('将同步更新目录、项目管理、组织关系，以及工作流中的 skill_profile 引用')
     await wrapper.findAll('button').find((b) => b.text() === '取消')!.trigger('click')
     await flushPromises()
     expect(mocks.renameAgent).not.toHaveBeenCalled()

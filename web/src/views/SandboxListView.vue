@@ -7,6 +7,7 @@ import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import { api, type SandboxView } from '@/lib/api'
 import { copyToClipboard } from '@/lib/copyToClipboard'
+import { sandboxPurposeLabelKey, sandboxSourceTextKey } from '@/lib/sandboxPurposeLabel'
 import { useBreakpoint } from '@/lib/useBreakpoint'
 import { useToast } from '@/lib/useToast'
 
@@ -96,9 +97,10 @@ function shortId(id?: string): string {
 }
 
 function purposeOf(s: SandboxView): { label: string; cls: string } {
-  if (s.purpose === 'run') return { label: t('pages.sandboxes.purpose.run'), cls: 'border-accent/40 text-accent-2' }
-  if (s.purpose === 'agent' || s.purpose === 'pm') return { label: t('pages.sandboxes.purpose.pm'), cls: 'border-accent/55 text-accent-2 bg-accent/8' }
-  return { label: t('pages.sandboxes.purpose.test'), cls: 'border-line text-txt3' }
+  const label = t(sandboxPurposeLabelKey(s.purpose))
+  if (s.purpose === 'run') return { label, cls: 'border-accent/40 text-accent-2' }
+  if (s.purpose === 'agent' || s.purpose === 'pm') return { label, cls: 'border-accent/55 text-accent-2 bg-accent/8' }
+  return { label, cls: 'border-line text-txt3' }
 }
 
 function statusOf(s: SandboxView): { label: string; cls: string } {
@@ -129,8 +131,8 @@ function sourceText(s: SandboxView): string {
     const run = s.runId || '—'
     return s.nodeId ? `${wf} / run ${run} / ${s.nodeId}` : `${wf} / run ${run}`
   }
-  if (s.purpose === 'agent' || s.purpose === 'pm') return t('pages.sandboxes.source.pmConsult')
-  return t('pages.sandboxes.source.chatTest')
+  const key = sandboxSourceTextKey(s.purpose)
+  return key ? t(key) : t('pages.sandboxes.source.chatTest')
 }
 
 function proxyPaths(id: number) {

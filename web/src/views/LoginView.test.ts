@@ -1,0 +1,92 @@
+// @vitest-environment happy-dom
+import { createI18n } from 'vue-i18n'
+import { createMemoryHistory, createRouter } from 'vue-router'
+import { flushPromises, mount } from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import common from '@/locales/zh-CN/common.json'
+import pages from '@/locales/zh-CN/pages.json'
+import enCommon from '@/locales/en/common.json'
+import enPages from '@/locales/en/pages.json'
+import { markAuthReady, useAuth } from '@/lib/useAuth'
+
+const authApiMocks = vi.hoisted(() => ({
+  login: vi.fn(),
+}))
+
+vi.mock('@/lib/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+  return {
+    ...actual,
+    authApi: {
+      ...actual.authApi,
+      login: authApiMocks.login,
+    },
+  }
+})
+
+import LoginView from './LoginView.vue'
+
+function mountLogin(locale: 'zh-CN' | 'en' = 'zh-CN') {
+  const i18n =
+    locale === 'zh-CN'
+      ? createI18n({
+          legacy: false,
+          locale: 'zh-CN',
+          messages: { 'zh-CN': { ...common, ...pages } },
+        })
+      : createI18n({
+          legacy: false,
+          locale: 'en',
+          messages: { en: { ...enCommon, ...enPages } },
+        })
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/', component: { template: '<div />' } },
+      { path: '/login', component: LoginView },
+    ],
+  })
+  router.push('/login')
+  return mount(LoginView, {
+    global: {
+      plugins: [i18n, router],
+      stubs: { BrandLogo: true, Icon: true, AppButton: { template: '<button type="submit"><slot /></button>' } },
+    },
+  })
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  useAuth().clearUser()
+  markAuthReady()
+})
+
+describe('LoginView copy', () => {
+  it('shows account subtitle without internal 静态账号 wording', async () => {
+    const wrapper = mountLogin('zh-CN')
+    await flushPromises()
+    expect(wrapper.text()).toContain('使用账号登录管理界面')
+    expect(wrapper.text()).not.toContain('静态账号')
+    wrapper.unmount()
+  })
+
+  it('shows rate-limit tip without raw HTTP 429 status phrase', async () => {
+    authApiMocks.login.mockRejectedValue(new Error('429 Too Many Requests'))
+    const wrapper = mountLogin('zh-CN')
+    await flushPromises()
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.text()).toContain('登录尝试过于频繁')
+    expect(wrapper.text()).not.toContain('Too Many Requests')
+    expect(wrapper.text()).not.toMatch(/429/)
+    wrapper.unmount()
+  })
+
+  it('switches subtitle to English', async () => {
+    const wrapper = mountLogin('en')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Sign in with your account to manage the console')
+    expect(wrapper.text()).not.toContain('静态账号')
+    wrapper.unmount()
+  })
+})

@@ -221,7 +221,7 @@ test.describe('看板 Token 统计图', () => {
     await expect(page.getByTestId('token-donut-svg')).toBeVisible()
     await expect(page.getByTestId('token-donut-legend')).toContainText('input')
     await expect(panel).toContainText('approve-main')
-    await expect(panel).toContainText('PM')
+    await expect(panel).toContainText('项目管理')
     await expect(panel).toContainText('其他')
     await expect(page.getByTestId('token-trend-legend')).toContainText('workflow')
     await expect(page.getByTestId('token-trend-legend')).toContainText('pm')
@@ -435,7 +435,7 @@ test.describe('看板 Token 统计图', () => {
     const headerStat = page.getByTestId('project-token-stat')
     await expect(headerStat).toBeVisible({ timeout: 15_000 })
     await expect(headerStat).toContainText('128.4K')
-    await expect(headerStat).toContainText('全部历史 · 含工作流与 PM（上线后）')
+    await expect(headerStat).toContainText('全部历史 · 含工作流与项目管理（上线后）')
 
     await expect(page.getByTestId('token-stats-panel')).toBeVisible()
     await expect(page.getByTestId('token-stats-charts')).toBeVisible()
@@ -443,13 +443,13 @@ test.describe('看板 Token 统计图', () => {
     await page.getByTestId('token-stats-window-all').click()
     await expect(page.getByTestId('token-stats-window-badge')).toContainText('全部历史')
     await expect(headerStat).toContainText('128.4K')
-    await expect(headerStat).toContainText('全部历史 · 含工作流与 PM（上线后）')
+    await expect(headerStat).toContainText('全部历史 · 含工作流与项目管理（上线后）')
 
     await headerStat.hover()
     const tip = page.getByTestId('token-detail-tip')
     await expect(tip).toBeVisible()
     await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('workflow')
-    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('pm')
+    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('项目管理')
     await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('合计')
 
     const detailShot = path.join(testInfo.outputDir, 'project-detail-token-stats.png')

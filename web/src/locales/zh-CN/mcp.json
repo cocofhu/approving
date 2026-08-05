@@ -2,7 +2,7 @@
   "mcp": {
     "integrations": {
       "title": "集成",
-      "subtitle": "内置 MCP 按作用域注入：运行级可全程可用，项目/PM 会话级见于项目管理 · 仓库 / CI 凭据(如 GITLAB_TOKEN / GITLAB_URL)在 Agent 元信息的环境变量里配置,支持引用全局变量 {'${vars.<名字>}'}",
+      "subtitle": "管理内置 MCP 与仓库 / CI 凭据；可在 Agent 元信息中配置环境变量。",
       "sectionTitle": "内置 MCP · 按作用域注入",
       "noConfigNeeded": "无需配置",
       "noConfigHere": "无需在此配置",
@@ -133,7 +133,7 @@
       "name": "memory-store",
       "desc": "通用长期记忆 · 按项目+Agent 隔离，任意 Agent 可在 mcp[] 声明",
       "overview": "Agent 级长期记忆 MCP。按 (projectId, agentName) 隔离。先 list/search 再 get；重要结论 upsert。",
-      "convention": "在 Agent Studio 添加 memory-store（{'${APPROVING_MEMORY_URL/TOKEN}'}）。PM 咨询沙箱会自动注入。",
+      "convention": "在 Agent Studio 添加 memory-store（{'${APPROVING_MEMORY_URL/TOKEN}'}）。项目管理咨询沙箱会自动注入。",
       "tools": {
         "list_memories": {
           "signature": "list_memories()",
@@ -161,7 +161,7 @@
       "name": "context-store",
       "desc": "对话上下文 · 平台自动落 QA，Agent 经 MCP 渐进回看",
       "overview": "对话上下文 MCP。存储为 ChatThread/ChatMessage 单一事实源；每次 Chat 自动落库。按 Agent 隔离。",
-      "convention": "PM 咨询自动注入。请用 list_conversations / get_messages 拉取历史，勿依赖 ACP session 全文。",
+      "convention": "项目管理咨询自动注入。请用 list_conversations / get_messages 拉取历史，勿依赖 ACP session 全文。",
       "tools": {
         "list_conversations": {
           "signature": "list_conversations()",
@@ -188,7 +188,7 @@
     "taskScheduler": {
       "name": "task-scheduler",
       "desc": "Agent 级定时任务 · 定义面 MCP；平台调度执行",
-      "overview": "Agent 级定时任务。仅 PM 咨询可写；到点新建沙箱 Chat。任务独占 cron 线程。",
+      "overview": "Agent 级定时任务。仅 项目管理咨询可写；到点新建沙箱 Chat。任务独占 cron 线程。",
       "convention": "create_job 仅项目管理咨询可用。执行由平台调度器完成，每次新沙箱。",
       "tools": {
         "list_jobs": {
@@ -219,9 +219,9 @@
     },
     "pmProgress": {
       "name": "pm-progress",
-      "desc": "PM 专用 · 项目进度/阻塞/风险只读",
-      "overview": "项目级进度 MCP。仅 PM 咨询沙箱按项目配置注入。",
-      "convention": "项目详情 → PM 设置中启用 pm-progress。",
+      "desc": "项目管理专用 · 项目进度/阻塞/风险只读",
+      "overview": "项目级进度 MCP。仅 项目管理咨询沙箱按项目配置注入。",
+      "convention": "项目详情 → 项目管理设置中启用 pm-progress。",
       "tools": {
         "pm_get_progress": {
           "signature": "pm_get_progress()",
@@ -251,9 +251,9 @@
     },
     "pmWorkflowRead": {
       "name": "pm-workflow-read",
-      "desc": "PM 专用 · 同项目工作流只读查询",
+      "desc": "项目管理专用 · 同项目工作流只读查询",
       "overview": "工作流 list/get/graph/versions/runs 与待审批门禁查询，仅限当前项目。",
-      "convention": "项目详情 → PM 设置中启用 pm-workflow-read。",
+      "convention": "项目详情 → 项目管理设置中启用 pm-workflow-read。",
       "tools": {
         "pm_list_workflows": {
           "signature": "pm_list_workflows()",
@@ -287,9 +287,9 @@
     },
     "pmWorkflowWrite": {
       "name": "pm-workflow-write",
-      "desc": "PM 专用 · 同项目工作流写操作",
+      "desc": "项目管理专用 · 同项目工作流写操作",
       "overview": "创建/更新/复制/删除工作流、发布、启动 Run、审批门禁与取消 Run，仅限当前项目。",
-      "convention": "项目详情 → PM 设置中启用 pm-workflow-write。",
+      "convention": "项目详情 → 项目管理设置中启用 pm-workflow-write。",
       "tools": {
         "pm_create_workflow": {
           "signature": "pm_create_workflow(name, description?, needsRepo?, nodes?, edges?, variables?)",
@@ -331,9 +331,9 @@
     },
     "pmAgentFs": {
       "name": "pm-agent-fs",
-      "desc": "PM 专用 · 读组织架构与编辑下属 Agent 工作目录",
+      "desc": "项目管理专用 · 读组织架构与编辑下属 Agent 工作目录",
       "overview": "读取 _org.json 汇报树（self/direct/indirect/other），并对自身与汇报闭包内 Agent 的 host 侧 workspace/ 做 list/read/write/delete/mkdir/rename。不触及 Run 沙箱，不改 agent.json 元配置。",
-      "convention": "项目详情 → PM 设置中启用 pm-agent-fs（新项目默认启用；旧项目若已显式保存 EnabledMcps 需手动勾选）。变更在 Agent Studio「Agent 工作目录」刷新或重开后可见（非热更新）。注意：若 Studio 打开同一 Agent 且存在未保存草稿，随后 Save 可能覆盖 MCP 已写入内容——Demo/使用时请刷新并避免并行脏写。",
+      "convention": "项目详情 → 项目管理设置中启用 pm-agent-fs（新项目默认启用；旧项目若已显式保存 EnabledMcps 需手动勾选）。变更在 Agent Studio「Agent 工作目录」刷新或重开后可见（非热更新）。注意：若 Studio 打开同一 Agent 且存在未保存草稿，随后 Save 可能覆盖 MCP 已写入内容——Demo/使用时请刷新并避免并行脏写。",
       "tools": {
         "pm_get_org": {
           "signature": "pm_get_org()",

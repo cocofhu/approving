@@ -24,7 +24,7 @@
     "runTrigger": {
       "manual": "Manual",
       "api": "API",
-      "pmMcp": "PM MCP"
+      "pmMcp": "Project Management MCP"
     },
     "statusFilter": {
       "selectedCount": "{n} selected"

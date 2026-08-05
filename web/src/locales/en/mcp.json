@@ -2,7 +2,7 @@
   "mcp": {
     "integrations": {
       "title": "Integrations",
-      "subtitle": "Built-in MCPs are injected by scope: run-scoped ones are always available; project/PM-session ones appear in Project Management. Configure repo/CI credentials (e.g. GITLAB_TOKEN / GITLAB_URL) in agent env vars; reference workflow globals as {'${vars.<name>}'}.",
+      "subtitle": "Manage built-in MCP and repo / CI credentials; configure environment variables in Agent metadata.",
       "sectionTitle": "Built-in MCP · scope-based injection",
       "noConfigNeeded": "No setup required",
       "noConfigHere": "No setup on this page",
@@ -133,7 +133,7 @@
       "name": "memory-store",
       "desc": "Shared long-term memory · isolated by project+agent",
       "overview": "Agent-scoped memory MCP. Progressive list/search then get; upsert conclusions.",
-      "convention": "Add via Agent Studio ({'${APPROVING_MEMORY_URL/TOKEN}'}). Auto-injected in PM consult.",
+      "convention": "Add via Agent Studio ({'${APPROVING_MEMORY_URL/TOKEN}'}). Auto-injected in Project Management consult.",
       "tools": {
         "list_memories": {
           "signature": "list_memories()",
@@ -188,7 +188,7 @@
     "taskScheduler": {
       "name": "task-scheduler",
       "desc": "Agent scheduled tasks · definition MCP; platform executes",
-      "overview": "Agent-level cron. Writes only in PM consult; each fire uses a fresh sandbox.",
+      "overview": "Agent-level cron. Writes only in Project Management consult; each fire uses a fresh sandbox.",
       "convention": "create_job requires Project Management consult. Platform scheduler runs Chat.",
       "tools": {
         "list_jobs": {
@@ -219,9 +219,9 @@
     },
     "pmProgress": {
       "name": "pm-progress",
-      "desc": "PM-only · project progress / blockers (read-only)",
-      "overview": "Project progress MCP injected in PM consult when enabled.",
-      "convention": "Enable under Project → PM settings.",
+      "desc": "Project Management only · project progress / blockers (read-only)",
+      "overview": "Project progress MCP injected in Project Management consult when enabled.",
+      "convention": "Enable under Project → Project Management settings.",
       "tools": {
         "pm_get_progress": {
           "signature": "pm_get_progress()",
@@ -251,9 +251,9 @@
     },
     "pmWorkflowRead": {
       "name": "pm-workflow-read",
-      "desc": "PM-only · read-only workflow queries in the same project",
+      "desc": "Project Management only · read-only workflow queries in the same project",
       "overview": "List/get/graph/versions/runs plus pending gates, scoped to the current project.",
-      "convention": "Enable under Project → PM settings.",
+      "convention": "Enable under Project → Project Management settings.",
       "tools": {
         "pm_list_workflows": {
           "signature": "pm_list_workflows()",
@@ -287,9 +287,9 @@
     },
     "pmWorkflowWrite": {
       "name": "pm-workflow-write",
-      "desc": "PM-only · workflow write operations in the same project",
+      "desc": "Project Management only · workflow write operations in the same project",
       "overview": "Create/update/copy/delete workflows, publish, start runs, approve gates and cancel runs, scoped to the current project.",
-      "convention": "Enable under Project → PM settings.",
+      "convention": "Enable under Project → Project Management settings.",
       "tools": {
         "pm_create_workflow": {
           "signature": "pm_create_workflow(name, description?, needsRepo?, nodes?, edges?, variables?)",
@@ -331,9 +331,9 @@
     },
     "pmAgentFs": {
       "name": "pm-agent-fs",
-      "desc": "PM-only · read org and edit report Agent workspaces",
+      "desc": "Project Management only · read org and edit report Agent workspaces",
       "overview": "Read the reporting tree (self/direct/indirect/other) and list/read/write/delete/mkdir/rename host-side workspace/ for self and reporting-closure agents. Does not touch Run sandboxes or agent.json metadata.",
-      "convention": "Enable under Project → PM settings (on by default for new projects; older projects with an explicit EnabledMcps list must opt in). Changes appear in Agent Studio「Agent workspace」after refresh/reopen (not live hot-reload). Warning: if Studio has an unsaved dirty draft for the same Agent, a later Save may overwrite MCP writes — refresh and avoid concurrent dirty edits.",
+      "convention": "Enable under Project → Project Management settings (on by default for new projects; older projects with an explicit EnabledMcps list must opt in). Changes appear in Agent Studio「Agent workspace」after refresh/reopen (not live hot-reload). Warning: if Studio has an unsaved dirty draft for the same Agent, a later Save may overwrite MCP writes — refresh and avoid concurrent dirty edits.",
       "tools": {
         "pm_get_org": {
           "signature": "pm_get_org()",
