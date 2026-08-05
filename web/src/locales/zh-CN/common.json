@@ -296,9 +296,9 @@
       "mobilePreview": "移动端预览"
     },
     "paragraphInput": {
-      "addImage": "添加图片",
+      "addImage": "添加附件",
       "placeholderTextOnly": "请输入…",
-      "placeholderWithImages": "可粘贴图片…"
+      "placeholderWithImages": "可粘贴附件（≤50 MiB）…"
     }
   }
 }

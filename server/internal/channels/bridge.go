@@ -137,7 +137,7 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 		prompt = ChannelPreamble(rc.Type) + "\n\n用户消息：" + userText
 	}
 	if len(images) > 0 {
-		prompt += fmt.Sprintf("\n（本条消息附带 %d 张图片）", len(images))
+		prompt += fmt.Sprintf("\n（本条消息附带 %d 个附件）", len(images))
 	}
 
 	if err := b.turns.StartWithTimeout(thread.ID, userMsg.ID, row.ID, prompt, images, rc.TurnTimeout); err != nil {
@@ -310,10 +310,10 @@ func channelThreadTitle(in InboundMessage) string {
 // formatChannelUserText builds the persisted/prompt user text. Group and guild
 // threads are keyed by conversation (so the room shares one PM thread); speaker
 // identity is prefixed so the agent can attribute multi-user turns.
-func formatChannelUserText(in InboundMessage, hasImages bool) string {
+func formatChannelUserText(in InboundMessage, hasAttachments bool) string {
 	text := strings.TrimSpace(in.Text)
-	if text == "" && hasImages {
-		text = "(用户发送了图片)"
+	if text == "" && hasAttachments {
+		text = "(用户发送了附件)"
 	}
 	speaker := strings.TrimSpace(in.UserID)
 	if speaker == "" || (in.Scene != SceneGroup && in.Scene != SceneGuild) {
@@ -330,7 +330,7 @@ func toPromptImages(in []Image) []models.PromptImage {
 		return nil
 	}
 	out := make([]models.PromptImage, 0, len(in))
-	for _, img := range in {
+	for i, img := range in {
 		if len(img.Data) == 0 {
 			continue
 		}
@@ -338,12 +338,36 @@ func toPromptImages(in []Image) []models.PromptImage {
 		if mime == "" {
 			mime = "image/png"
 		}
+		name := strings.TrimSpace(img.Filename)
+		if name == "" {
+			name = fmt.Sprintf("attachment-%d%s", i+1, extForMime(mime))
+		}
 		out = append(out, models.PromptImage{
 			Data:     base64.StdEncoding.EncodeToString(img.Data),
 			MimeType: mime,
+			Name:     name,
 		})
 	}
 	return out
+}
+
+func extForMime(mime string) string {
+	switch {
+	case strings.HasPrefix(mime, "image/png"):
+		return ".png"
+	case strings.HasPrefix(mime, "image/jpeg"), strings.HasPrefix(mime, "image/jpg"):
+		return ".jpg"
+	case strings.HasPrefix(mime, "image/gif"):
+		return ".gif"
+	case strings.HasPrefix(mime, "image/webp"):
+		return ".webp"
+	case strings.HasPrefix(mime, "application/pdf"):
+		return ".pdf"
+	case strings.Contains(mime, "zip"):
+		return ".zip"
+	default:
+		return ""
+	}
 }
 
 var (

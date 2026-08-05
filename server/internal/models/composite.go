@@ -60,6 +60,9 @@ func AsCompositeText(v any) *CompositeText {
 					if mt, ok := m["mimeType"].(string); ok {
 						pi.MimeType = mt
 					}
+					if n, ok := m["name"].(string); ok {
+						pi.Name = n
+					}
 					if pi.Data != "" {
 						ct.Images = append(ct.Images, pi)
 					}

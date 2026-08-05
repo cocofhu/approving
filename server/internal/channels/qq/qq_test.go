@@ -10,6 +10,9 @@ import (
 )
 
 func TestIsImageAttachment(t *testing.T) {
+	// Helper still classifies mime/ext; inbound path no longer filters on it
+	// (PDF/zip are accepted via downloadImage). Outbound image send still uses
+	// filterSendableImages separately.
 	cases := []struct {
 		att  attachment
 		want bool
@@ -25,6 +28,21 @@ func TestIsImageAttachment(t *testing.T) {
 		if got := isImageAttachment(c.att); got != c.want {
 			t.Errorf("isImageAttachment(%+v) = %v want %v", c.att, got, c.want)
 		}
+	}
+}
+
+func TestFallbackAttachmentName(t *testing.T) {
+	if got := fallbackAttachmentName(attachment{Filename: ""}, "application/pdf"); got != "attachment.pdf" {
+		t.Fatalf("pdf fallback = %q", got)
+	}
+	if got := fallbackAttachmentName(attachment{URL: "https://x.com/files/report.zip?x=1"}, "application/zip"); got != "attachment.zip" {
+		t.Fatalf("zip mime fallback = %q", got)
+	}
+}
+
+func TestMaxInboundImageBytesIs20MiB(t *testing.T) {
+	if maxInboundImageBytes != 20<<20 {
+		t.Fatalf("maxInboundImageBytes = %d want 20MiB", maxInboundImageBytes)
 	}
 }
 

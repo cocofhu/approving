@@ -3,6 +3,7 @@ package qq
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -16,7 +17,9 @@ import (
 
 const (
 	maxOutboundImages = 4
-	maxInboundImages  = 4
+	// maxInboundImages is a historical QQ inbound cap (not a new product limit).
+	// Site chat does not add a count gate; QQ retains this existing safety cap.
+	maxInboundImages = 4
 )
 
 // Adapter is the QQ channel adapter.
@@ -148,19 +151,49 @@ func (a *Adapter) handleEvent(ctx context.Context, evtType string, data []byte, 
 		MessageID:      m.ID,
 		Timestamp:      time.Now(),
 	}
+	var oversized []string
 	for _, att := range m.Attachments {
-		if !isImageAttachment(att) {
-			continue
-		}
+		// Accept any type (PDF/zip/etc.); only the historical count cap applies.
 		if len(in.Images) >= maxInboundImages {
 			break
 		}
 		img, err := downloadImage(ctx, att)
 		if err != nil {
-			log.Warn().Err(err).Msg("qq: inbound image download failed; skipping")
+			if errors.Is(err, errInboundTooLarge) {
+				name := strings.TrimSpace(att.Filename)
+				if name == "" {
+					name = "附件"
+				}
+				oversized = append(oversized, name)
+				continue
+			}
+			log.Warn().Err(err).Msg("qq: inbound attachment download failed; skipping")
 			continue
 		}
 		in.Images = append(in.Images, img)
+	}
+	if len(oversized) > 0 {
+		tip := fmt.Sprintf(
+			"附件超过 %d MiB 上限，已拒绝：%s。请压缩后重试。",
+			qqAttachMaxMiB, strings.Join(oversized, ", "),
+		)
+		// Pure oversize with nothing else: reply tip without starting an agent turn.
+		if len(in.Images) == 0 && strings.TrimSpace(in.Text) == "" {
+			if err := a.Send(ctx, channels.OutboundMessage{
+				Scene:            scene,
+				ConversationID:   conversationID,
+				ReplyToMessageID: m.ID,
+				Text:             tip,
+			}); err != nil {
+				log.Warn().Err(err).Msg("qq: oversized reject reply failed")
+			}
+			return
+		}
+		if in.Text != "" {
+			in.Text = in.Text + "\n" + tip
+		} else {
+			in.Text = tip
+		}
 	}
 
 	// Run the turn asynchronously so the gateway read loop keeps flowing; the
