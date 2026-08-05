@@ -30,12 +30,15 @@ const (
 	SceneGuild Scene = "guild"
 )
 
-// Image is a normalized image attachment. Inbound images carry raw bytes
-// (downloaded by the adapter); outbound images are referenced by URL.
+// Image is a normalized file/image attachment. Inbound attachments carry raw
+// bytes (downloaded by the adapter); outbound images are referenced by URL.
+// Filename is the original name when the channel provides one; empty means
+// callers should use a distinguishable fallback before PromptImage.Name.
 type Image struct {
 	Data     []byte
 	MimeType string
 	URL      string
+	Filename string
 }
 
 // InboundMessage is a normalized user message received from a channel.

@@ -13,15 +13,19 @@ import (
 	"github.com/cocofhu/approving/internal/channels"
 )
 
-const maxInboundImageBytes = 8 << 20 // 8 MiB safety cap
+const maxInboundImageBytes = 20 << 20 // 20 MiB (clarified QQ inbound cap)
 const maxInboundRedirects = 3
+const qqAttachMaxMiB = 20
+
+// errInboundTooLarge is returned when an attachment exceeds maxInboundImageBytes.
+var errInboundTooLarge = fmt.Errorf("inbound attachment exceeds %d MiB", qqAttachMaxMiB)
 
 // inboundHTTP fetches attachment bytes with SSRF guards (no private IPs,
 // limited redirects, re-validated on every hop).
 var inboundHTTP = newSafeHTTPClient(30 * time.Second)
 
 // downloadImage fetches an inbound attachment into a normalized channels.Image.
-// QQ image messages support png/jpg; other content types are skipped upstream.
+// Any content type is accepted (PDF/zip/etc.); size is capped at 20 MiB.
 func downloadImage(ctx context.Context, att attachment) (channels.Image, error) {
 	rawURL := att.URL
 	if rawURL == "" {
@@ -51,16 +55,47 @@ func downloadImage(ctx context.Context, att attachment) (channels.Image, error) 
 		return channels.Image{}, err
 	}
 	if len(data) > maxInboundImageBytes {
-		return channels.Image{}, fmt.Errorf("inbound image exceeds %d bytes", maxInboundImageBytes)
+		return channels.Image{}, errInboundTooLarge
 	}
 	mime := att.ContentType
 	if mime == "" {
 		mime = resp.Header.Get("Content-Type")
 	}
 	if mime == "" {
-		mime = "image/png"
+		mime = "application/octet-stream"
 	}
-	return channels.Image{Data: data, MimeType: mime, URL: att.URL}, nil
+	name := strings.TrimSpace(att.Filename)
+	if name == "" {
+		name = fallbackAttachmentName(att, mime)
+	}
+	return channels.Image{Data: data, MimeType: mime, URL: att.URL, Filename: name}, nil
+}
+
+func fallbackAttachmentName(att attachment, mime string) string {
+	base := "attachment"
+	switch {
+	case strings.HasPrefix(mime, "image/png"):
+		return base + ".png"
+	case strings.HasPrefix(mime, "image/jpeg"), strings.HasPrefix(mime, "image/jpg"):
+		return base + ".jpg"
+	case strings.HasPrefix(mime, "application/pdf"):
+		return base + ".pdf"
+	case strings.Contains(mime, "zip"):
+		return base + ".zip"
+	default:
+		if u := att.URL; u != "" {
+			if i := strings.LastIndexByte(u, '/'); i >= 0 && i+1 < len(u) {
+				tail := u[i+1:]
+				if q := strings.IndexByte(tail, '?'); q >= 0 {
+					tail = tail[:q]
+				}
+				if tail != "" {
+					return tail
+				}
+			}
+		}
+		return base
+	}
 }
 
 // newSafeHTTPClient builds an HTTP client that refuses private/link-local/

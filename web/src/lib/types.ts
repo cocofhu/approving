@@ -501,6 +501,8 @@ export interface Artifact {
 export interface ClarifyImage {
   data: string // base64 (no data: prefix)
   mimeType: string
+  /** Original filename when known; forwarded through platform → ACP Bridge. */
+  name?: string
 }
 
 /** Paragraph variable composite value: text + optional image attachments. */

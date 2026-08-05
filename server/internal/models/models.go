@@ -538,10 +538,13 @@ func FormatChoiceReply(questions []ReactQuestion) string {
 
 // PromptImage is a base64-encoded image/file attachment for a chat turn. It is
 // the vendor-neutral shape threaded from the UI through the engine/runtime to
-// the sandbox ACP bridge (which accepts {data, mimeType}).
+// the sandbox ACP bridge (which accepts {data, mimeType, name}).
+// Name is optional for backward compatibility with older clients; when empty
+// the Bridge falls back to attachment-N.ext.
 type PromptImage struct {
-	Data     string `json:"data"`     // base64 (no data: prefix)
-	MimeType string `json:"mimeType"` // e.g. image/png
+	Data     string `json:"data"`               // base64 (no data: prefix)
+	MimeType string `json:"mimeType"`           // e.g. image/png or application/pdf
+	Name     string `json:"name,omitempty"`     // original filename when known
 }
 
 // Sandbox is a tracked sandbox container. Purposes share this table:

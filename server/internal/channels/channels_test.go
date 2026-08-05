@@ -37,7 +37,8 @@ func TestFormatChannelUserText(t *testing.T) {
 		{"c2c plain", InboundMessage{Scene: SceneC2C, UserID: "u1", Text: "hi"}, false, "hi"},
 		{"group attributed", InboundMessage{Scene: SceneGroup, UserID: "u1", Text: "hi"}, false, "[来自 u1] hi"},
 		{"guild attributed", InboundMessage{Scene: SceneGuild, UserID: "u2", Text: "yo"}, false, "[来自 u2] yo"},
-		{"group image only", InboundMessage{Scene: SceneGroup, UserID: "u1"}, true, "[来自 u1] (用户发送了图片)"},
+		{"group image only", InboundMessage{Scene: SceneGroup, UserID: "u1"}, true, "[来自 u1] (用户发送了附件)"},
+		{"c2c attachment only", InboundMessage{Scene: SceneC2C, UserID: "u1"}, true, "(用户发送了附件)"},
 		{"group no speaker", InboundMessage{Scene: SceneGroup, Text: "hi"}, false, "hi"},
 	}
 	for _, c := range cases {

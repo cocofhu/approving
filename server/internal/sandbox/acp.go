@@ -55,6 +55,8 @@ func newIdleWatch(idle time.Duration) (<-chan time.Time, func(), func()) {
 
 // chatMessage builds the {op:"chat"} frame, attaching images only when present
 // so the bridge's text-only path stays byte-identical (backward compatible).
+// When Name is set it is forwarded so MaterializeAttachments can keep the
+// original filename; omitting name preserves old-client compatibility.
 func chatMessage(text string, images []models.PromptImage) map[string]any {
 	msg := map[string]any{"op": "chat", "content": text}
 	if len(images) > 0 {
@@ -63,7 +65,11 @@ func chatMessage(text string, images []models.PromptImage) map[string]any {
 			if im.Data == "" {
 				continue
 			}
-			imgs = append(imgs, map[string]string{"data": im.Data, "mimeType": im.MimeType})
+			entry := map[string]string{"data": im.Data, "mimeType": im.MimeType}
+			if im.Name != "" {
+				entry["name"] = im.Name
+			}
+			imgs = append(imgs, entry)
 		}
 		if len(imgs) > 0 {
 			msg["images"] = imgs
