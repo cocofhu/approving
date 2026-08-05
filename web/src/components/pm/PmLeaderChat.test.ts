@@ -291,6 +291,9 @@ describe('PmLeaderChat ACP + hydrate', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('空回复')
+    expect(wrapper.text()).toContain('本轮未产出有效回复')
+    expect(wrapper.text()).not.toContain('未落库')
+    expect(wrapper.text()).not.toContain('空气泡')
     expect(wrapper.text()).toContain('重试')
     expect(apiMocks.patchPmMessage).toHaveBeenCalledWith(
       'proj-1',
@@ -391,6 +394,9 @@ describe('PmLeaderChat ACP + hydrate', () => {
       expect.objectContaining({ status: 'failed', failKind: 'empty' }),
     )
     expect(wrapper.text()).toContain('空回复')
+    expect(wrapper.text()).toContain('本轮未产出有效回复')
+    expect(wrapper.text()).not.toContain('未落库')
+    expect(wrapper.text()).not.toContain('空气泡')
     expect(wrapper.text()).toContain('重试')
     wrapper.unmount()
   })

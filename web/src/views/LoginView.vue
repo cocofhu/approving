@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import BrandLogo from '@/components/shell/BrandLogo.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import Icon from '@/components/ui/Icon.vue'
@@ -10,6 +11,7 @@ import { authRedirectPath } from '@/lib/useAuth'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const { setUser, user, ready } = useAuth()
 
 const username = ref('')
@@ -37,11 +39,11 @@ async function onSubmit() {
     setUser({ username: res.username, expiresAt: res.expires_at })
     await router.replace(res.redirect || redirectTarget.value)
   } catch (e: any) {
-    const msg = e?.message || '登录失败'
-    if (msg.includes('429') || msg.includes('过于频繁')) {
+    const msg = e?.message || t('pages.login.loginFailed')
+    if (msg.includes('429') || msg.includes('过于频繁') || msg.includes('Too many')) {
       rateLimited.value = true
     } else {
-      error.value = msg.includes('用户名或密码错误') ? msg : '用户名或密码错误'
+      error.value = t('pages.login.badCredentials')
       fieldError.value = true
     }
   } finally {
@@ -58,25 +60,25 @@ async function onSubmit() {
       </div>
 
       <template v-if="showLoginForm">
-        <div class="mb-1 text-[15px] font-semibold text-txt">登录</div>
-        <div class="mb-6 text-[12px] text-txt3">静态账号登录管理界面</div>
+        <div class="mb-1 text-[15px] font-semibold text-txt">{{ t('pages.login.title') }}</div>
+        <div class="mb-6 text-[12px] text-txt3">{{ t('pages.login.subtitle') }}</div>
 
         <div
           v-if="route.query.redirect"
           class="mb-4 flex items-center gap-1.5 border border-info/25 bg-info/10 px-2.5 py-2 text-xs text-info"
         >
           <Icon name="chevron-right" :size="14" class="rotate-[-45deg]" />
-          登录后将回跳至 <code class="font-mono text-[11px] text-txt2">{{ redirectTarget }}</code>
+          {{ t('pages.login.redirectHint') }} <code class="font-mono text-[11px] text-txt2">{{ redirectTarget }}</code>
         </div>
 
         <div v-if="error" class="mb-4 border border-err/30 bg-err/10 px-3 py-2.5 text-[13px] text-err">{{ error }}</div>
         <div v-if="rateLimited" class="mb-4 border border-warn/30 bg-warn/10 px-3 py-2.5 text-[13px] text-warn">
-          登录尝试过于频繁，请稍后再试（429 Too Many Requests）
+          {{ t('pages.login.rateLimited') }}
         </div>
 
         <form @submit.prevent="onSubmit">
           <div class="mb-4">
-            <label class="mb-1.5 block text-xs font-medium text-txt2" for="username">用户名</label>
+            <label class="mb-1.5 block text-xs font-medium text-txt2" for="username">{{ t('pages.login.username') }}</label>
             <input
               id="username"
               v-model="username"
@@ -88,7 +90,7 @@ async function onSubmit() {
             />
           </div>
           <div class="mb-4">
-            <label class="mb-1.5 block text-xs font-medium text-txt2" for="password">密码</label>
+            <label class="mb-1.5 block text-xs font-medium text-txt2" for="password">{{ t('pages.login.password') }}</label>
             <input
               id="password"
               v-model="password"
@@ -100,7 +102,7 @@ async function onSubmit() {
             />
           </div>
           <AppButton type="submit" variant="primary" block :disabled="loading">
-            {{ loading ? '登录中…' : '登录' }}
+            {{ loading ? t('pages.login.submitting') : t('pages.login.submit') }}
           </AppButton>
         </form>
 

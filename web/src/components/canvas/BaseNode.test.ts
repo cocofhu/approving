@@ -62,7 +62,8 @@ describe('BaseNode', () => {
       status: undefined,
     })
     expect(wrapper.text()).toContain('复审')
-    expect(wrapper.text()).toContain('取点标注 · ReAct')
+    expect(wrapper.text()).toContain('取点标注 · 等待人工确认')
+    expect(wrapper.text()).not.toContain('ReAct')
     expect(wrapper.text()).toContain('确认并流转 · 待审批')
     expect(wrapper.text()).not.toContain('无通过/退回')
     expect(wrapper.text()).not.toContain('未设 goto')
@@ -83,7 +84,7 @@ describe('BaseNode', () => {
       ],
       status: undefined,
     })
-    expect(wrapper.text()).toContain('同一套 ReAct')
+    expect(wrapper.text()).toContain('人工审批')
     expect(wrapper.text()).toContain('确认并流转 · 待审批')
     expect(wrapper.text()).not.toContain('批准')
     expect(wrapper.text()).not.toContain('退回修改')

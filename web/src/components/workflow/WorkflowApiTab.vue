@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
@@ -11,6 +12,7 @@ import type { Workflow } from '@/lib/types'
 
 const props = defineProps<{ workflow: Workflow }>()
 const toast = useToast()
+const { t } = useI18n()
 
 const baseUrl = computed(() => `${window.location.origin}/v1`)
 const { fields: askFields } = useWorkflowAskInputs(props.workflow)
@@ -67,7 +69,7 @@ async function revokeKey(id: string) {
   try {
     await api.revokeAPIKey(props.workflow.id, id)
     await loadKeys()
-    toast.success('Key 已吊销')
+    toast.success(t('pages.workflowApi.keyRevoked'))
   } catch (e: any) {
     toast.error(String(e?.message || e))
   }
@@ -86,15 +88,15 @@ const copied = ref('')
 function copyText(text: string, label = '') {
   navigator.clipboard.writeText(text).then(() => {
     copied.value = label
-    toast.success('已复制到剪贴板')
+    toast.success(t('pages.workflowApi.copySuccess'))
     setTimeout(() => { copied.value = '' }, 2000)
-  }).catch(() => toast.error('复制失败'))
+  }).catch(() => toast.error(t('pages.workflowApi.copyFailed')))
 }
 
 const inputsExample = computed(() => {
   const obj: Record<string, string> = {}
   for (const f of askFields.value) {
-    obj[f.key] = f.type === 'number' ? '0' : f.type === 'boolean' ? 'true' : `"示例${f.key}"`
+    obj[f.key] = f.type === 'number' ? '0' : f.type === 'boolean' ? 'true' : `"${t('pages.workflowApi.exampleValue', { key: f.key })}"`
   }
   return JSON.stringify(obj, null, 2).replace(/^/gm, '      ').trim()
 })
@@ -119,19 +121,19 @@ const examples = computed(() => {
   }
 })
 
-const tocSections = [
-  { id: 'sec-overview', label: '概述' },
-  { id: 'sec-base-url', label: 'Base URL' },
-  { id: 'sec-auth', label: '鉴权' },
-  { id: 'sec-keys', label: 'API Key' },
-  { id: 'sec-inputs', label: '请求参数' },
-  { id: 'ep-create-run', label: '创建 Run' },
-  { id: 'ep-get-run', label: '查询状态' },
-  { id: 'ep-artifacts', label: '产物列表' },
-  { id: 'ep-download', label: '下载产物' },
-  { id: 'ep-cancel', label: '取消 Run' },
-  { id: 'sec-scope', label: '范围外' },
-]
+const tocSections = computed(() => [
+  { id: 'sec-overview', label: t('pages.workflowApi.tocOverview') },
+  { id: 'sec-base-url', label: t('pages.workflowApi.tocBaseUrl') },
+  { id: 'sec-auth', label: t('pages.workflowApi.tocAuth') },
+  { id: 'sec-keys', label: t('pages.workflowApi.tocKeys') },
+  { id: 'sec-inputs', label: t('pages.workflowApi.tocInputs') },
+  { id: 'ep-create-run', label: t('pages.workflowApi.tocCreateRun') },
+  { id: 'ep-get-run', label: t('pages.workflowApi.tocGetRun') },
+  { id: 'ep-artifacts', label: t('pages.workflowApi.tocArtifacts') },
+  { id: 'ep-download', label: t('pages.workflowApi.tocDownload') },
+  { id: 'ep-cancel', label: t('pages.workflowApi.tocCancel') },
+  { id: 'sec-scope', label: t('pages.workflowApi.tocOutOfScope') },
+])
 
 onMounted(loadKeys)
 </script>
@@ -146,8 +148,8 @@ onMounted(loadKeys)
       <div class="mb-3 flex h-14 w-14 items-center justify-center rounded-xl border border-dashed border-line-strong text-txt3">
         <Icon name="gate" :size="26" />
       </div>
-      <div class="text-sm font-medium text-txt2">请先发布工作流</div>
-      <div class="mt-1 max-w-sm text-center text-xs text-txt3">发布后即可生成 API Key 并查看完整在线文档</div>
+      <div class="text-sm font-medium text-txt2">{{ t('pages.workflowApi.publishRequiredTitle') }}</div>
+      <div class="mt-1 max-w-sm text-center text-xs text-txt3">{{ t('pages.workflowApi.publishRequiredDesc') }}</div>
     </div>
 
     <div class="flex min-h-0 flex-1 overflow-hidden" :class="{ 'opacity-40 pointer-events-none': workflow.status !== 'published' }">
@@ -155,14 +157,13 @@ onMounted(loadKeys)
       <div class="scroll-area flex-1 overflow-y-auto px-8 py-6">
         <!-- Overview -->
         <section id="sec-overview" class="mb-8 scroll-mt-4">
-          <h3 class="mb-3 text-base font-semibold text-txt">概述</h3>
+          <h3 class="mb-3 text-base font-semibold text-txt">{{ t('pages.workflowApi.overviewTitle') }}</h3>
           <p class="mb-4 text-[13px] leading-6 text-txt2">
-            通过独立的 <code class="text-accent-2">/v1/*</code> 路由组从外部系统触发工作流 Run。
-            鉴权方式为 <code class="text-accent-2">Authorization: Bearer {API_KEY}</code>，与内部 <code class="text-txt3">/api/*</code> Session 鉴权物理分离。
+            {{ t('pages.workflowApi.overviewBody') }}
           </p>
           <div class="mb-4 flex items-center gap-2 rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-[12px] text-warn">
             <Icon name="alert" :size="14" class="shrink-0" />
-            <span>请勿将 API Key 写入前端代码或公开仓库。Key 仅在后端校验与存储（哈希），鉴权失败统一返回 401。</span>
+            <span>{{ t('pages.workflowApi.overviewWarn') }}</span>
           </div>
         </section>
 
@@ -172,16 +173,16 @@ onMounted(loadKeys)
           <div class="flex items-center gap-2 rounded-md border border-line bg-base px-3 py-2 font-mono text-[13px]">
             <code class="flex-1 text-accent-2">{{ baseUrl }}</code>
             <button class="chip hover:border-line-strong" @click="copyText(baseUrl, 'base')">
-              {{ copied === 'base' ? '已复制' : '复制' }}
+              {{ copied === 'base' ? t('pages.workflowApi.copied') : t('pages.workflowApi.copy') }}
             </button>
           </div>
         </section>
 
         <!-- Auth -->
         <section id="sec-auth" class="mb-8 scroll-mt-4">
-          <h3 class="mb-3 text-base font-semibold text-txt">鉴权</h3>
+          <h3 class="mb-3 text-base font-semibold text-txt">{{ t('pages.workflowApi.authTitle') }}</h3>
           <div class="rounded-md border border-line bg-surface p-4">
-            <p class="mb-3 text-[13px] text-txt2">所有 <code class="text-accent-2">/v1/*</code> 请求须在 Header 中携带：</p>
+            <p class="mb-3 text-[13px] text-txt2">{{ t('pages.workflowApi.authBody') }}</p>
             <div class="rounded-md border border-line bg-base px-3 py-2 font-mono text-[13px]">
               <code>Authorization: Bearer YOUR_API_KEY</code>
             </div>
@@ -191,12 +192,12 @@ onMounted(loadKeys)
         <!-- API Keys -->
         <section id="sec-keys" class="mb-8 scroll-mt-4">
           <div class="mb-3 flex items-center justify-between">
-            <h3 class="text-base font-semibold text-txt">API Key 管理</h3>
-            <AppButton variant="primary" size="sm" icon="plus" @click="openCreateKey">创建 Key</AppButton>
+            <h3 class="text-base font-semibold text-txt">{{ t('pages.workflowApi.keysTitle') }}</h3>
+            <AppButton variant="primary" size="sm" icon="plus" @click="openCreateKey">{{ t('pages.workflowApi.createKey') }}</AppButton>
           </div>
-          <p class="mb-4 text-[13px] text-txt2">每个工作流可创建多个命名 Key，支持分别吊销。Key 明文仅在创建时展示一次。</p>
-          <div v-if="loadingKeys" class="py-6 text-center text-sm text-txt3">加载中…</div>
-          <div v-else-if="!keys.length" class="rounded-md border border-line bg-surface px-4 py-6 text-center text-[13px] text-txt3">暂无 API Key</div>
+          <p class="mb-4 text-[13px] text-txt2">{{ t('pages.workflowApi.keysDesc') }}</p>
+          <div v-if="loadingKeys" class="py-6 text-center text-sm text-txt3">{{ t('pages.workflowApi.loading') }}</div>
+          <div v-else-if="!keys.length" class="rounded-md border border-line bg-surface px-4 py-6 text-center text-[13px] text-txt3">{{ t('pages.workflowApi.noKeys') }}</div>
           <div v-else class="space-y-2">
             <div
               v-for="k in keys"
@@ -206,16 +207,16 @@ onMounted(loadKeys)
               <span class="min-w-0 flex-1 truncate text-[13px] font-medium text-txt">{{ k.name }}</span>
               <span class="font-mono text-[12px] text-txt3">{{ k.key_prefix }}</span>
               <span class="text-[11px] text-txt3">{{ fmtTime(k.created_at) }}</span>
-              <AppButton variant="ghost" size="sm" class="!text-err" @click="revokeKey(k.id)">吊销</AppButton>
+              <AppButton variant="ghost" size="sm" class="!text-err" @click="revokeKey(k.id)">{{ t('pages.workflowApi.revoke') }}</AppButton>
             </div>
           </div>
         </section>
 
         <!-- Inputs table -->
         <section id="sec-inputs" class="mb-8 scroll-mt-4">
-          <h3 class="mb-3 text-base font-semibold text-txt">请求参数 (inputs)</h3>
-          <p class="mb-4 text-[13px] text-txt2">以下参数表自动从本工作流 input 节点 <code class="text-accent-2">ask=true</code> 的全局变量生成。</p>
-          <div v-if="!askFields.length" class="rounded-md border border-line bg-surface px-4 py-6 text-center text-[13px] text-txt3">本工作流无 ask 变量</div>
+          <h3 class="mb-3 text-base font-semibold text-txt">{{ t('pages.workflowApi.inputsTitle') }}</h3>
+          <p class="mb-4 text-[13px] text-txt2">{{ t('pages.workflowApi.inputsDesc') }}</p>
+          <div v-if="!askFields.length" class="rounded-md border border-line bg-surface px-4 py-6 text-center text-[13px] text-txt3">{{ t('pages.workflowApi.noAskVars') }}</div>
           <table v-else class="w-full border border-line text-[13px]">
             <thead class="bg-elevated text-[11px] uppercase tracking-wider text-txt3">
               <tr>
@@ -229,7 +230,7 @@ onMounted(loadKeys)
               <tr v-for="f in askFields" :key="f.key" class="border-t border-line">
                 <td class="px-4 py-2 font-mono text-accent-2">{{ f.key }}</td>
                 <td class="px-4 py-2 text-txt2">{{ f.type }}</td>
-                <td class="px-4 py-2" :class="f.required ? 'text-ok' : 'text-txt3'">{{ f.required ? '是' : '否' }}</td>
+                <td class="px-4 py-2" :class="f.required ? 'text-ok' : 'text-txt3'">{{ f.required ? t('pages.workflowApi.yes') : t('pages.workflowApi.no') }}</td>
                 <td class="px-4 py-2 text-txt2">{{ f.desc || '—' }}</td>
               </tr>
             </tbody>
@@ -238,7 +239,7 @@ onMounted(loadKeys)
 
         <!-- Endpoints -->
         <section id="sec-endpoints" class="mb-8 scroll-mt-4">
-          <h3 class="mb-4 text-base font-semibold text-txt">API 端点</h3>
+          <h3 class="mb-4 text-base font-semibold text-txt">{{ t('pages.workflowApi.endpointsTitle') }}</h3>
 
           <!-- POST runs -->
           <div id="ep-create-run" class="mb-5 scroll-mt-4 overflow-hidden rounded-md border border-line">
@@ -247,14 +248,14 @@ onMounted(loadKeys)
               <span class="font-mono text-[13px] text-txt">/v1/workflows/{workflow_id}/runs</span>
             </div>
             <div class="p-4">
-              <p class="mb-4 text-[13px] text-txt2">启动一次 Run。仅触发该工作流<strong>已发布</strong>版本，返回 <code>run_id</code> 与初始 <code>status</code>。</p>
+              <p class="mb-4 text-[13px] text-txt2">{{ t('pages.workflowApi.createRunDesc') }}</p>
               <div class="mb-2 flex gap-1">
                 <button class="chip" :class="{ '!border-accent !text-accent': codeLang.create === 'curl' }" @click="codeLang.create = 'curl'">cURL</button>
                 <button class="chip" :class="{ '!border-accent !text-accent': codeLang.create === 'python' }" @click="codeLang.create = 'python'">Python</button>
               </div>
               <div class="relative rounded-md border border-line bg-base p-3">
                 <button class="absolute right-2 top-2 chip text-[11px]" @click="copyText(codeLang.create === 'curl' ? examples.createCurl : examples.createPy, 'create')">
-                  {{ copied === 'create' ? '已复制' : '复制' }}
+                  {{ copied === 'create' ? t('pages.workflowApi.copied') : t('pages.workflowApi.copy') }}
                 </button>
                 <pre class="scroll-area overflow-x-auto pr-16 font-mono text-[12px] leading-5 text-txt2">{{ codeLang.create === 'curl' ? examples.createCurl : examples.createPy }}</pre>
               </div>
@@ -268,14 +269,14 @@ onMounted(loadKeys)
               <span class="font-mono text-[13px] text-txt">/v1/runs/{run_id}</span>
             </div>
             <div class="p-4">
-              <p class="mb-4 text-[13px] text-txt2">查询 Run 状态。含 <code>waiting_human</code> 时外部系统应轮询等待，人工交互由平台 UI 处理。</p>
+              <p class="mb-4 text-[13px] text-txt2">{{ t('pages.workflowApi.getRunDesc') }}</p>
               <div class="mb-2 flex gap-1">
                 <button class="chip" :class="{ '!border-accent !text-accent': codeLang.get === 'curl' }" @click="codeLang.get = 'curl'">cURL</button>
                 <button class="chip" :class="{ '!border-accent !text-accent': codeLang.get === 'python' }" @click="codeLang.get = 'python'">Python</button>
               </div>
               <div class="relative rounded-md border border-line bg-base p-3">
                 <button class="absolute right-2 top-2 chip text-[11px]" @click="copyText(codeLang.get === 'curl' ? examples.getCurl : examples.getPy, 'get')">
-                  {{ copied === 'get' ? '已复制' : '复制' }}
+                  {{ copied === 'get' ? t('pages.workflowApi.copied') : t('pages.workflowApi.copy') }}
                 </button>
                 <pre class="scroll-area overflow-x-auto pr-16 font-mono text-[12px] leading-5 text-txt2">{{ codeLang.get === 'curl' ? examples.getCurl : examples.getPy }}</pre>
               </div>
@@ -295,7 +296,7 @@ onMounted(loadKeys)
               </div>
               <div class="relative rounded-md border border-line bg-base p-3">
                 <button class="absolute right-2 top-2 chip text-[11px]" @click="copyText(codeLang.artifacts === 'curl' ? examples.artifactsCurl : examples.artifactsPy, 'artifacts')">
-                  {{ copied === 'artifacts' ? '已复制' : '复制' }}
+                  {{ copied === 'artifacts' ? t('pages.workflowApi.copied') : t('pages.workflowApi.copy') }}
                 </button>
                 <pre class="scroll-area overflow-x-auto pr-16 font-mono text-[12px] leading-5 text-txt2">{{ codeLang.artifacts === 'curl' ? examples.artifactsCurl : examples.artifactsPy }}</pre>
               </div>
@@ -315,7 +316,7 @@ onMounted(loadKeys)
               </div>
               <div class="relative rounded-md border border-line bg-base p-3">
                 <button class="absolute right-2 top-2 chip text-[11px]" @click="copyText(codeLang.download === 'curl' ? examples.downloadCurl : examples.downloadPy, 'download')">
-                  {{ copied === 'download' ? '已复制' : '复制' }}
+                  {{ copied === 'download' ? t('pages.workflowApi.copied') : t('pages.workflowApi.copy') }}
                 </button>
                 <pre class="scroll-area overflow-x-auto pr-16 font-mono text-[12px] leading-5 text-txt2">{{ codeLang.download === 'curl' ? examples.downloadCurl : examples.downloadPy }}</pre>
               </div>
@@ -335,7 +336,7 @@ onMounted(loadKeys)
               </div>
               <div class="relative rounded-md border border-line bg-base p-3">
                 <button class="absolute right-2 top-2 chip text-[11px]" @click="copyText(codeLang.cancel === 'curl' ? examples.cancelCurl : examples.cancelPy, 'cancel')">
-                  {{ copied === 'cancel' ? '已复制' : '复制' }}
+                  {{ copied === 'cancel' ? t('pages.workflowApi.copied') : t('pages.workflowApi.copy') }}
                 </button>
                 <pre class="scroll-area overflow-x-auto pr-16 font-mono text-[12px] leading-5 text-txt2">{{ codeLang.cancel === 'curl' ? examples.cancelCurl : examples.cancelPy }}</pre>
               </div>
@@ -345,17 +346,17 @@ onMounted(loadKeys)
 
         <!-- Out of scope -->
         <section id="sec-scope" class="mb-8 scroll-mt-4">
-          <h3 class="mb-3 text-base font-semibold text-txt">MVP 范围外</h3>
+          <h3 class="mb-3 text-base font-semibold text-txt">{{ t('pages.workflowApi.outOfScopeTitle') }}</h3>
           <div class="flex gap-2 rounded-md border border-info/30 bg-info/10 px-3 py-2 text-[12px] text-info">
             <Icon name="doc" :size="14" class="shrink-0" />
-            <span>Webhook 回调 · SSE/WS 实时事件 · 外部 resume 门禁/ReAct · OpenAPI 导出 · 平台级统一 Key 管理</span>
+            <span>{{ t('pages.workflowApi.outOfScopeBody') }}</span>
           </div>
         </section>
       </div>
 
       <!-- TOC -->
       <nav class="scroll-area w-48 shrink-0 overflow-y-auto border-l border-line bg-surface px-4 py-6">
-        <div class="mb-3 text-[11px] font-semibold uppercase tracking-wider text-txt3">目录</div>
+        <div class="mb-3 text-[11px] font-semibold uppercase tracking-wider text-txt3">{{ t('pages.workflowApi.toc') }}</div>
         <a
           v-for="s in tocSections"
           :key="s.id"
@@ -366,22 +367,22 @@ onMounted(loadKeys)
     </div>
 
     <!-- Create Key Modal -->
-    <AppModal :open="showCreateKey" title="创建 API Key" :width="440" @close="!creatingKey && (showCreateKey = false)">
+    <AppModal :open="showCreateKey" :title="t('pages.workflowApi.createKeyTitle')" :width="440" @close="!creatingKey && (showCreateKey = false)">
       <div v-if="newKeyPlain" class="space-y-3">
         <div class="flex items-center gap-2 rounded-md border border-line bg-base px-3 py-2 font-mono text-[13px]">
           <code class="flex-1 break-all text-accent-2">{{ newKeyPlain }}</code>
-          <button class="chip" @click="copyText(newKeyPlain, 'newkey')">{{ copied === 'newkey' ? '已复制' : '复制' }}</button>
+          <button class="chip" @click="copyText(newKeyPlain, 'newkey')">{{ copied === 'newkey' ? t('pages.workflowApi.copied') : t('pages.workflowApi.copy') }}</button>
         </div>
-        <p class="text-[12px] text-warn">请立即复制保存，关闭后将无法再次查看明文。</p>
+        <p class="text-[12px] text-warn">{{ t('pages.workflowApi.copyKeyHint') }}</p>
       </div>
       <div v-else class="space-y-3">
-        <label class="text-[12px] text-txt2">Key 名称</label>
-        <input v-model="keyName" class="w-full rounded-md border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent" placeholder="例如：生产环境" />
+        <label class="text-[12px] text-txt2">{{ t('pages.workflowApi.keyName') }}</label>
+        <input v-model="keyName" class="w-full rounded-md border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent" :placeholder="t('pages.workflowApi.keyNamePh')" />
       </div>
       <template #footer>
-        <AppButton variant="ghost" :disabled="creatingKey" @click="showCreateKey = false">{{ newKeyPlain ? '关闭' : '取消' }}</AppButton>
+        <AppButton variant="ghost" :disabled="creatingKey" @click="showCreateKey = false">{{ newKeyPlain ? t('pages.workflowApi.close') : t('pages.workflowApi.cancel') }}</AppButton>
         <AppButton v-if="!newKeyPlain" variant="primary" :disabled="creatingKey || !keyName.trim()" @click="confirmCreateKey">
-          {{ creatingKey ? '创建中…' : '创建' }}
+          {{ creatingKey ? t('pages.workflowApi.creating') : t('pages.workflowApi.create') }}
         </AppButton>
       </template>
     </AppModal>

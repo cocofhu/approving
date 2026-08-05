@@ -36,6 +36,7 @@ describe('ParagraphInput', () => {
   it('shows attach control when not text-only', () => {
     const wrapper = mountInput(false)
     expect(wrapper.find('[data-testid="paragraph-input-attach"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="paragraph-input-attach"]').attributes('title')).toBe('添加附件')
     expect(wrapper.find('[data-testid="paragraph-input"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="paragraph-input-root"]').attributes('data-text-only')).toBe('0')
     wrapper.unmount()

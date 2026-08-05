@@ -24,7 +24,7 @@
     "runTrigger": {
       "manual": "手动",
       "api": "API",
-      "pmMcp": "PM MCP"
+      "pmMcp": "项目管理 MCP"
     },
     "statusFilter": {
       "selectedCount": "已选 {n} 项"
@@ -296,9 +296,9 @@
       "mobilePreview": "移动端预览"
     },
     "paragraphInput": {
-      "addImage": "添加图片",
+      "addImage": "添加附件",
       "placeholderTextOnly": "请输入…",
-      "placeholderWithImages": "可粘贴图片…"
+      "placeholderWithImages": "可粘贴附件（≤50 MiB）…"
     }
   }
 }

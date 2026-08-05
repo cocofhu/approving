@@ -2,7 +2,7 @@
   "mcp": {
     "integrations": {
       "title": "Integrations",
-      "subtitle": "Built-in MCPs are injected by scope: run-scoped ones are always available; project/PM-session ones appear in Project Management. Configure repo/CI credentials (e.g. GITLAB_TOKEN / GITLAB_URL) in agent env vars; reference workflow globals as {'${vars.<name>}'}.",
+      "subtitle": "Manage built-in MCP and repo / CI credentials; configure environment variables in Agent metadata.",
       "sectionTitle": "Built-in MCP · scope-based injection",
       "noConfigNeeded": "No setup required",
       "noConfigHere": "No setup on this page",
@@ -133,7 +133,7 @@
       "name": "memory-store",
       "desc": "Shared long-term memory · isolated by project+agent",
       "overview": "Agent-scoped memory MCP. Progressive list/search then get; upsert conclusions.",
-      "convention": "Add via Agent Studio ({'${APPROVING_MEMORY_URL/TOKEN}'}). Auto-injected in PM consult.",
+      "convention": "Add via Agent Studio ({'${APPROVING_MEMORY_URL/TOKEN}'}). Auto-injected in Project Management consult.",
       "tools": {
         "list_memories": {
           "signature": "list_memories()",
@@ -188,7 +188,7 @@
     "taskScheduler": {
       "name": "task-scheduler",
       "desc": "Agent scheduled tasks · definition MCP; platform executes",
-      "overview": "Agent-level cron. Writes only in PM consult; each fire uses a fresh sandbox.",
+      "overview": "Agent-level cron. Writes only in Project Management consult; each fire uses a fresh sandbox.",
       "convention": "create_job requires Project Management consult. Platform scheduler runs Chat.",
       "tools": {
         "list_jobs": {
@@ -220,7 +220,7 @@
     "pmProgress": {
       "name": "pm-progress",
       "desc": "PM-only · project progress / blockers (read-only)",
-      "overview": "Project progress MCP injected in PM consult when enabled.",
+      "overview": "Project progress MCP injected in Project Management consult when enabled.",
       "convention": "Enable under Project → PM settings.",
       "tools": {
         "pm_get_progress": {

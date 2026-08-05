@@ -24,7 +24,7 @@
     "runTrigger": {
       "manual": "Manual",
       "api": "API",
-      "pmMcp": "PM MCP"
+      "pmMcp": "Project Management MCP"
     },
     "statusFilter": {
       "selectedCount": "{n} selected"
@@ -296,9 +296,9 @@
       "mobilePreview": "Mobile preview"
     },
     "paragraphInput": {
-      "addImage": "Add image",
+      "addImage": "Add attachment",
       "placeholderTextOnly": "Enter text…",
-      "placeholderWithImages": "Paste images here…"
+      "placeholderWithImages": "Paste files here (≤50 MiB)…"
     }
   }
 }
