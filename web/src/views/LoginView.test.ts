@@ -27,11 +27,18 @@ vi.mock('@/lib/api', async () => {
 import LoginView from './LoginView.vue'
 
 function mountLogin(locale: 'zh-CN' | 'en' = 'zh-CN') {
-  const messages =
+  const i18n =
     locale === 'zh-CN'
-      ? { 'zh-CN': { ...common, ...pages } }
-      : { en: { ...enCommon, ...enPages } }
-  const i18n = createI18n({ legacy: false, locale, messages })
+      ? createI18n({
+          legacy: false,
+          locale: 'zh-CN',
+          messages: { 'zh-CN': { ...common, ...pages } },
+        })
+      : createI18n({
+          legacy: false,
+          locale: 'en',
+          messages: { en: { ...enCommon, ...enPages } },
+        })
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [

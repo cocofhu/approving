@@ -221,7 +221,7 @@ test.describe('看板 Token 统计图', () => {
     await expect(page.getByTestId('token-donut-svg')).toBeVisible()
     await expect(page.getByTestId('token-donut-legend')).toContainText('input')
     await expect(panel).toContainText('approve-main')
-    await expect(panel).toContainText('PM')
+    await expect(panel).toContainText('项目管理')
     await expect(panel).toContainText('其他')
     await expect(page.getByTestId('token-trend-legend')).toContainText('workflow')
     await expect(page.getByTestId('token-trend-legend')).toContainText('pm')
@@ -449,7 +449,7 @@ test.describe('看板 Token 统计图', () => {
     const tip = page.getByTestId('token-detail-tip')
     await expect(tip).toBeVisible()
     await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('workflow')
-    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('pm')
+    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('项目管理')
     await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('合计')
 
     const detailShot = path.join(testInfo.outputDir, 'project-detail-token-stats.png')
