@@ -3,6 +3,7 @@ import { createI18n } from 'vue-i18n'
 import zhCommon from '@/locales/zh-CN/common.json'
 import zhPages from '@/locales/zh-CN/pages.json'
 import zhMcp from '@/locales/zh-CN/mcp.json'
+import enCommon from '@/locales/en/common.json'
 import enPages from '@/locales/en/pages.json'
 import enMcp from '@/locales/en/mcp.json'
 
@@ -15,7 +16,7 @@ describe('user-facing copy remediation keys', () => {
   const en = createI18n({
     legacy: false,
     locale: 'en',
-    messages: { en: { ...enPages, ...enMcp } },
+    messages: { en: { ...enCommon, ...enPages, ...enMcp } },
   })
 
   it('attachment fallback is neutral without 仅* / only', () => {
@@ -57,6 +58,7 @@ describe('user-facing copy remediation keys', () => {
 
   it('user-facing product naming uses 项目管理 / Project Management, not PM', () => {
     const zhKeys = [
+      'common.runTrigger.pmMcp',
       'pages.projectDetail.tokenUsageHint',
       'pages.projectDetail.tokenTipPm',
       'pages.projectDetail.pm.settingsHint',
@@ -79,6 +81,7 @@ describe('user-facing copy remediation keys', () => {
     }
 
     const enKeys = [
+      'common.runTrigger.pmMcp',
       'pages.projectDetail.tokenUsageHint',
       'pages.projectDetail.tokenTipPm',
       'pages.projectDetail.pm.settingsHint',
@@ -101,6 +104,10 @@ describe('user-facing copy remediation keys', () => {
       expect(text, key).not.toMatch(/(?<![A-Za-z0-9_-])PM(?![A-Za-z0-9_-])/)
       expect(text, key).not.toMatch(/PM-only|project PM/i)
     }
+
+    expect(zh.global.t('common.runTrigger.pmMcp')).toBe('项目管理 MCP')
+    expect(en.global.t('common.runTrigger.pmMcp')).toBe('Project Management MCP')
+    expect(zh.global.t('pages.projectDetail.tokenUsageHint')).toContain('含工作流与项目管理')
 
     // MCP server ids stay as protocol names
     expect(zh.global.t('mcp.pmProgress.name')).toBe('pm-progress')

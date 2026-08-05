@@ -95,18 +95,19 @@ test.describe('RunListView 触发列统一展示', () => {
     await gotoRunList(page, 'zh')
     await expect(triggerCell(page, '标准 manual')).toHaveText('手动')
     await expect(triggerCell(page, '标准 api')).toHaveText('API')
-    await expect(triggerCell(page, '标准 pm_mcp')).toHaveText('PM MCP')
+    await expect(triggerCell(page, '标准 pm_mcp')).toHaveText('项目管理 MCP')
     await expect(triggerCell(page, '历史中文别名-手动')).toHaveText('手动')
     await expect(triggerCell(page, '历史中文别名-API')).toHaveText('API')
-    await expect(triggerCell(page, '历史展示别名-PM')).toHaveText('PM MCP')
+    await expect(triggerCell(page, '历史展示别名-PM')).toHaveText('项目管理 MCP')
     await expect(triggerCell(page, '历史脏数据-channel')).toHaveText('channel')
     await expect(triggerCell(page, '历史脏数据-自由串')).toHaveText('qq:cron-timezone-bug')
     // Trigger column must not leak raw storage alias for mapped rows
     const triggerTexts = await page.locator('table tbody tr td:nth-child(3)').allTextContents()
     expect(triggerTexts).not.toContain('手动触发')
     expect(triggerTexts).not.toContain('API 触发')
+    expect(triggerTexts).not.toContain('PM MCP')
     expect(triggerTexts).toEqual(
-      expect.arrayContaining(['手动', 'API', 'PM MCP', 'channel', 'qq:cron-timezone-bug']),
+      expect.arrayContaining(['手动', 'API', '项目管理 MCP', 'channel', 'qq:cron-timezone-bug']),
     )
   })
 
@@ -114,8 +115,9 @@ test.describe('RunListView 触发列统一展示', () => {
     await gotoRunList(page, 'en')
     await expect(triggerCell(page, '标准 manual')).toHaveText('Manual')
     await expect(triggerCell(page, '标准 api')).toHaveText('API')
-    await expect(triggerCell(page, '标准 pm_mcp')).toHaveText('PM MCP')
+    await expect(triggerCell(page, '标准 pm_mcp')).toHaveText('Project Management MCP')
     await expect(triggerCell(page, '历史中文别名-手动')).toHaveText('Manual')
+    await expect(triggerCell(page, '历史展示别名-PM')).toHaveText('Project Management MCP')
     await expect(triggerCell(page, '历史脏数据-channel')).toHaveText('channel')
   })
 })

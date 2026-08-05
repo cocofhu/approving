@@ -435,7 +435,7 @@ test.describe('看板 Token 统计图', () => {
     const headerStat = page.getByTestId('project-token-stat')
     await expect(headerStat).toBeVisible({ timeout: 15_000 })
     await expect(headerStat).toContainText('128.4K')
-    await expect(headerStat).toContainText('全部历史 · 含工作流与 PM（上线后）')
+    await expect(headerStat).toContainText('全部历史 · 含工作流与项目管理（上线后）')
 
     await expect(page.getByTestId('token-stats-panel')).toBeVisible()
     await expect(page.getByTestId('token-stats-charts')).toBeVisible()
@@ -443,7 +443,7 @@ test.describe('看板 Token 统计图', () => {
     await page.getByTestId('token-stats-window-all').click()
     await expect(page.getByTestId('token-stats-window-badge')).toContainText('全部历史')
     await expect(headerStat).toContainText('128.4K')
-    await expect(headerStat).toContainText('全部历史 · 含工作流与 PM（上线后）')
+    await expect(headerStat).toContainText('全部历史 · 含工作流与项目管理（上线后）')
 
     await headerStat.hover()
     const tip = page.getByTestId('token-detail-tip')
