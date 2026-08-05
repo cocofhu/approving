@@ -12,6 +12,10 @@ import { createStreamMarkdownPreview } from '@/lib/streamMarkdownPreview'
 import { api } from '@/lib/api'
 import { imgSrc } from '@/lib/compositeText'
 import { useImageAttachments } from '@/lib/useImageAttachments'
+import {
+  attachmentDisplayName,
+  isImageAttachment,
+} from '@/lib/attachments'
 import { useToast } from '@/lib/useToast'
 import {
   classifyPmTurnError,
@@ -142,11 +146,17 @@ const activeUserMessageId = ref('')
 const {
   attachments,
   fileInput,
+  notice: attachNotice,
   onPickFiles,
   onPaste,
   removeAttachment,
   takeAttachments,
+  blockSendIfOversized,
 } = useImageAttachments()
+
+watch(attachNotice, (n) => {
+  if (n?.kind === 'error') toast.error(n.text)
+})
 
 let ws: WebSocket | null = null
 let sandboxId = 0
@@ -1074,13 +1084,16 @@ async function send(text?: string, explicitImages?: ClarifyImage[]) {
   const imgs =
     explicitImages !== undefined
       ? explicitImages.slice()
-      : takeAttachments()
+      : attachments.value.slice()
   if ((!content && imgs.length === 0) || busy.value) return
   if (activeIsChannel.value) return
   if (!enabled.value) {
     emit('openSettings')
     return
   }
+  if (blockSendIfOversized(imgs)) return
+  if (explicitImages === undefined) takeAttachments()
+  else attachments.value = []
   // f7: lock busy BEFORE any await so double-click / suggestion cannot append another user turn.
   const gen = ++turnGen
   streamCancelled = false
@@ -1384,13 +1397,23 @@ onBeforeUnmount(() => {
             </div>
             <div class="min-w-0 max-w-[85%]">
               <div v-if="m.images?.length" class="mb-1.5 flex flex-wrap justify-end gap-1.5">
-                <img
-                  v-for="(im, ii) in m.images"
-                  :key="ii"
-                  :src="imgSrc(im)"
-                  class="h-20 w-20 border border-line object-cover"
-                  alt=""
-                />
+                <template v-for="(im, ii) in m.images" :key="ii">
+                  <img
+                    v-if="isImageAttachment(im)"
+                    :src="imgSrc(im)"
+                    class="h-20 w-20 border border-line object-cover"
+                    :alt="attachmentDisplayName(im, ii)"
+                  />
+                  <div
+                    v-else
+                    class="flex max-w-[200px] items-center gap-2 border border-line bg-elevated px-2 py-1.5"
+                    data-testid="pm-history-file-chip"
+                    :title="attachmentDisplayName(im, ii)"
+                  >
+                    <span class="shrink-0 text-[10px] font-medium uppercase tracking-wide text-info">DOC</span>
+                    <span class="min-w-0 truncate text-[12px] text-txt">{{ attachmentDisplayName(im, ii) }}</span>
+                  </div>
+                </template>
               </div>
               <div
                 v-if="m.content"
@@ -1613,7 +1636,21 @@ onBeforeUnmount(() => {
       <div v-else class="shrink-0 border-t border-line p-3">
         <div v-if="attachments.length" class="mb-2 flex flex-wrap gap-1.5">
           <div v-for="(im, ii) in attachments" :key="ii" class="relative">
-            <img :src="imgSrc(im)" class="h-14 w-14 border border-line object-cover" alt="" />
+            <img
+              v-if="isImageAttachment(im)"
+              :src="imgSrc(im)"
+              class="h-14 w-14 border border-line object-cover"
+              :alt="attachmentDisplayName(im, ii)"
+            />
+            <div
+              v-else
+              class="flex h-14 max-w-[160px] items-center gap-1.5 border border-line bg-elevated px-2"
+              data-testid="pm-pending-file-chip"
+              :title="attachmentDisplayName(im, ii)"
+            >
+              <span class="shrink-0 text-[9px] font-medium uppercase text-info">DOC</span>
+              <span class="min-w-0 truncate text-[11px] text-txt2">{{ attachmentDisplayName(im, ii) }}</span>
+            </div>
             <button
               type="button"
               class="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center bg-err text-white"
@@ -1628,7 +1665,6 @@ onBeforeUnmount(() => {
           <input
             ref="fileInput"
             type="file"
-            accept="image/*"
             multiple
             class="hidden"
             @change="onPickFiles"

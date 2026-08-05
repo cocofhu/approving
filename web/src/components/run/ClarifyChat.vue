@@ -25,6 +25,16 @@ import type {
   AcpEvent,
 } from '@/lib/types'
 import AnnotationChip from './AnnotationChip.vue'
+import {
+  SITE_ATTACH_MAX_BYTES,
+  SITE_ATTACH_MAX_MIB,
+  attachmentDisplayName,
+  fileAttachmentName,
+  findOversizedAttachments,
+  formatSelectRejectMessage,
+  formatSendRejectMessage,
+  isImageAttachment,
+} from '@/lib/attachments'
 
 type QueueItem = {
   id?: string
@@ -353,16 +363,17 @@ type ImagePreview = { src: string; label: string }
 const imagePreview = ref<ImagePreview | null>(null)
 
 function imagePreviewLabel(images: ClarifyImage[], index: number): string {
-  const named = (images[index] as ClarifyImage & { name?: string; filename?: string })?.name
-    || (images[index] as ClarifyImage & { name?: string; filename?: string })?.filename
-  if (named?.trim()) return named.trim()
+  const named = images[index]?.name?.trim()
+  if (named) return named
   if (images.length <= 1) return translate('pages.clarify.imageFallback')
   return translate('pages.clarify.imageFallbackN', { n: index + 1 })
 }
 
+const attachNotice = ref<string | null>(null)
+
 function openImagePreview(images: ClarifyImage[], index: number) {
   const im = images[index]
-  if (!im) return
+  if (!im || !isImageAttachment(im)) return
   imagePreview.value = {
     src: imgSrc(im),
     label: imagePreviewLabel(images, index),
@@ -464,15 +475,31 @@ watch(
 
 function addFiles(files: FileList | null | undefined) {
   if (!files) return
-  for (const f of Array.from(files)) {
-    if (!f.type.startsWith('image/')) continue
+  const rejected: string[] = []
+  const list = Array.from(files)
+  list.forEach((f, i) => {
+    if (f.size > SITE_ATTACH_MAX_BYTES) {
+      rejected.push(fileAttachmentName(f, i))
+      return
+    }
+    const name = fileAttachmentName(f, i)
+    const mimeType = f.type || 'application/octet-stream'
     const reader = new FileReader()
     reader.onload = () => {
       const res = String(reader.result || '')
       const comma = res.indexOf(',')
-      attachments.value.push({ data: comma >= 0 ? res.slice(comma + 1) : res, mimeType: f.type })
+      attachments.value.push({
+        data: comma >= 0 ? res.slice(comma + 1) : res,
+        mimeType,
+        name,
+      })
     }
     reader.readAsDataURL(f)
+  })
+  if (rejected.length) {
+    attachNotice.value = formatSelectRejectMessage(rejected, SITE_ATTACH_MAX_MIB)
+  } else {
+    attachNotice.value = null
   }
 }
 function onPickFiles(e: Event) {
@@ -487,7 +514,7 @@ function onPaste(e: ClipboardEvent) {
   }
   const picked: File[] = []
   for (const it of Array.from(items)) {
-    if (it.type.startsWith('image/')) {
+    if (it.kind === 'file') {
       const f = it.getAsFile()
       if (f) picked.push(f)
     }
@@ -529,9 +556,18 @@ function sendFromComposer() {
   const imgs = attachments.value.slice()
   const anns = annotations.value.slice()
   if ((!t && imgs.length === 0 && anns.length === 0) || props.done || !props.active) return
+  const over = findOversizedAttachments(imgs)
+  if (over.length) {
+    attachNotice.value = formatSendRejectMessage(
+      over.map((im, i) => attachmentDisplayName(im, i)),
+      SITE_ATTACH_MAX_MIB,
+    )
+    return
+  }
   draft.value = ''
   attachments.value = []
   annotations.value = []
+  attachNotice.value = null
   sendMessage(t, imgs, anns)
 }
 
@@ -1072,36 +1108,55 @@ defineExpose({
         </div>
         <div class="min-w-0 max-w-[80%]">
           <div v-if="t.images && t.images.length" class="mb-1.5 flex flex-wrap gap-1.5" :class="t.role === 'human' ? 'justify-end' : ''">
-            <!-- human history: clickable thumbs → AppModal single-image preview -->
+            <!-- human history: images → lightbox; non-images → filename chip -->
             <template v-if="t.role === 'human'">
-              <button
-                v-for="(im, ii) in t.images"
-                :key="ii"
-                type="button"
-                class="group relative h-20 w-20 cursor-pointer overflow-hidden rounded-md border border-line transition hover:border-accent"
-                data-testid="clarify-history-image-thumb"
-                :aria-label="translate('pages.clarify.imagePreviewAria', { label: imagePreviewLabel(t.images, ii) })"
-                @click="openImagePreview(t.images!, ii)"
-              >
-                <img
-                  :src="imgSrc(im)"
-                  class="h-full w-full cursor-pointer object-cover"
-                  alt=""
-                />
-                <span
-                  class="pointer-events-none absolute inset-x-0 bottom-0 bg-black/55 px-1 py-0.5 text-center text-[10px] leading-tight text-white opacity-0 transition-opacity group-hover:opacity-100"
-                >{{ translate('pages.clarify.clickToEnlarge') }}</span>
-              </button>
+              <template v-for="(im, ii) in t.images" :key="ii">
+                <button
+                  v-if="isImageAttachment(im)"
+                  type="button"
+                  class="group relative h-20 w-20 cursor-pointer overflow-hidden rounded-md border border-line transition hover:border-accent"
+                  data-testid="clarify-history-image-thumb"
+                  :aria-label="translate('pages.clarify.imagePreviewAria', { label: imagePreviewLabel(t.images, ii) })"
+                  @click="openImagePreview(t.images!, ii)"
+                >
+                  <img
+                    :src="imgSrc(im)"
+                    class="h-full w-full cursor-pointer object-cover"
+                    alt=""
+                  />
+                  <span
+                    class="pointer-events-none absolute inset-x-0 bottom-0 bg-black/55 px-1 py-0.5 text-center text-[10px] leading-tight text-white opacity-0 transition-opacity group-hover:opacity-100"
+                  >{{ translate('pages.clarify.clickToEnlarge') }}</span>
+                </button>
+                <div
+                  v-else
+                  class="flex max-w-[200px] items-center gap-2 border border-line bg-elevated px-2 py-1.5"
+                  data-testid="clarify-history-file-chip"
+                  :title="imagePreviewLabel(t.images, ii)"
+                >
+                  <span class="shrink-0 text-[10px] font-medium uppercase tracking-wide text-info">DOC</span>
+                  <span class="min-w-0 truncate text-[12px] text-txt">{{ imagePreviewLabel(t.images, ii) }}</span>
+                </div>
+              </template>
             </template>
-            <!-- agent history: static thumbs (out of scope) -->
+            <!-- agent history: static thumbs / filename chips -->
             <template v-else>
-              <img
-                v-for="(im, ii) in t.images"
-                :key="ii"
-                :src="imgSrc(im)"
-                class="h-20 w-20 rounded-md border border-line object-cover"
-                data-testid="clarify-agent-image-thumb"
-              />
+              <template v-for="(im, ii) in t.images" :key="ii">
+                <img
+                  v-if="isImageAttachment(im)"
+                  :src="imgSrc(im)"
+                  class="h-20 w-20 rounded-md border border-line object-cover"
+                  data-testid="clarify-agent-image-thumb"
+                />
+                <div
+                  v-else
+                  class="flex max-w-[200px] items-center gap-2 border border-line bg-elevated px-2 py-1.5"
+                  data-testid="clarify-agent-file-chip"
+                >
+                  <span class="shrink-0 text-[10px] font-medium uppercase tracking-wide text-info">DOC</span>
+                  <span class="min-w-0 truncate text-[12px] text-txt">{{ imagePreviewLabel(t.images, ii) }}</span>
+                </div>
+              </template>
             </template>
           </div>
           <!-- annotation chips attached to this human review turn -->
@@ -1465,9 +1520,26 @@ defineExpose({
           @remove="removeAnnotation(ai)"
         />
       </div>
+      <div v-if="attachNotice" class="mb-2 border border-err/40 bg-err/10 px-2.5 py-1.5 text-[12px] text-err" data-testid="clarify-attach-notice" role="alert">
+        {{ attachNotice }}
+      </div>
       <div v-if="attachments.length" class="mb-2 flex flex-wrap gap-1.5">
         <div v-for="(im, ii) in attachments" :key="ii" class="relative">
-          <img :src="imgSrc(im)" class="h-14 w-14 rounded-md border border-line object-cover" />
+          <img
+            v-if="isImageAttachment(im)"
+            :src="imgSrc(im)"
+            class="h-14 w-14 rounded-md border border-line object-cover"
+            :alt="attachmentDisplayName(im, ii)"
+          />
+          <div
+            v-else
+            class="flex h-14 max-w-[160px] items-center gap-1.5 border border-line bg-elevated px-2"
+            :title="attachmentDisplayName(im, ii)"
+            data-testid="clarify-pending-file-chip"
+          >
+            <span class="shrink-0 text-[9px] font-medium uppercase text-info">DOC</span>
+            <span class="min-w-0 truncate text-[11px] text-txt2">{{ attachmentDisplayName(im, ii) }}</span>
+          </div>
           <button
             class="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-err text-white"
             @click="removeAttachment(ii)"
@@ -1475,10 +1547,11 @@ defineExpose({
         </div>
       </div>
       <div class="flex items-end gap-2">
-        <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="onPickFiles" />
+        <input ref="fileInput" type="file" multiple class="hidden" @change="onPickFiles" />
         <button
           class="flex h-10 w-10 items-center justify-center rounded-md border border-line text-txt2 hover:border-line-strong disabled:opacity-50"
           :title="translate('pages.clarify.addImage')"
+          data-testid="clarify-attach-btn"
           @click="fileInput?.click()"
         >
           <Icon name="paperclip" :size="16" />

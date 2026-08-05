@@ -8,6 +8,16 @@ import ReposEditor, { type RepoRow } from '@/components/ReposEditor.vue'
 import AcpStatusPill from '@/components/run/AcpStatusPill.vue'
 import { renderMarkdown } from '@/lib/markdown'
 import { api, type SandboxView } from '@/lib/api'
+import {
+  SITE_ATTACH_MAX_BYTES,
+  SITE_ATTACH_MAX_MIB,
+  attachmentDisplayName,
+  fileAttachmentName,
+  findOversizedAttachments,
+  formatSelectRejectMessage,
+  formatSendRejectMessage,
+  isImageAttachment,
+} from '@/lib/attachments'
 
 // `attachId` attaches to an existing sandbox (skips the create flow) — used by
 // the sandbox console's ACP tab. `embedded` hides the internal header/controls
@@ -23,7 +33,7 @@ const props = defineProps<{
 const { t, te } = useI18n()
 
 type Tool = { id: string; title: string; status: string }
-type ImageAtt = { data: string; mimeType: string; url: string }
+type ImageAtt = { data: string; mimeType: string; url: string; name?: string }
 type QueueItem = { text: string; images: ImageAtt[] }
 type Turn = {
   role: 'user' | 'agent'
@@ -214,13 +224,31 @@ function send() {
   const text = input.value.trim()
   if ((!text && attachments.value.length === 0) || !canSend()) return
   const imgs = attachments.value.slice()
+  const over = findOversizedAttachments(imgs)
+  if (over.length) {
+    errorMsg.value = formatSendRejectMessage(
+      over.map((im, i) => attachmentDisplayName(im, i)),
+      SITE_ATTACH_MAX_MIB,
+    )
+    return
+  }
   // Enqueue only — the bubble is created on turn_begin (see onFrame), so extra
   // sends show up in the bottom queue panel instead of as premature bubbles.
   queued.value.push({ text, images: imgs })
   input.value = ''
   attachments.value = []
   status.value = 'thinking'
-  ws!.send(JSON.stringify({ type: 'chat', content: text, images: imgs.map((a) => ({ data: a.data, mimeType: a.mimeType })) }))
+  ws!.send(
+    JSON.stringify({
+      type: 'chat',
+      content: text,
+      images: imgs.map((a) => ({
+        data: a.data,
+        mimeType: a.mimeType,
+        ...(a.name ? { name: a.name } : {}),
+      })),
+    }),
+  )
   scrollDown()
 }
 
@@ -291,18 +319,29 @@ function onFrame(data: string) {
   scrollDown()
 }
 
-// --- image attachments -----------------------------------------------------
+// --- file attachments (any type; 50 MiB select/send gate) -----------------
 function addFiles(files: FileList | null | undefined) {
   if (!files) return
-  for (const f of Array.from(files)) {
-    if (!f.type.startsWith('image/')) continue
+  const rejected: string[] = []
+  const list = Array.from(files)
+  list.forEach((f, i) => {
+    if (f.size > SITE_ATTACH_MAX_BYTES) {
+      rejected.push(fileAttachmentName(f, i))
+      return
+    }
+    const name = fileAttachmentName(f, i)
+    const mimeType = f.type || 'application/octet-stream'
     const reader = new FileReader()
     reader.onload = () => {
       const res = String(reader.result || '')
       const comma = res.indexOf(',')
-      attachments.value.push({ data: comma >= 0 ? res.slice(comma + 1) : res, mimeType: f.type, url: res })
+      const data = comma >= 0 ? res.slice(comma + 1) : res
+      attachments.value.push({ data, mimeType, url: res, name })
     }
     reader.readAsDataURL(f)
+  })
+  if (rejected.length) {
+    errorMsg.value = formatSelectRejectMessage(rejected, SITE_ATTACH_MAX_MIB)
   }
 }
 function onPickFiles(e: Event) {
@@ -314,7 +353,7 @@ function onPaste(e: ClipboardEvent) {
   if (!items) return
   const picked: File[] = []
   for (const it of Array.from(items)) {
-    if (it.type.startsWith('image/')) {
+    if (it.kind === 'file') {
       const f = it.getAsFile()
       if (f) picked.push(f)
     }
@@ -715,12 +754,23 @@ const toolIcon: Record<string, string> = { completed: 'check', failed: 'close', 
       <div v-for="(turn, i) in turns" :key="i" class="flex" :class="turn.role === 'user' ? 'justify-end' : 'justify-start'">
         <div v-if="turn.role === 'user'" class="max-w-[80%] space-y-1.5">
           <div v-if="turn.images && turn.images.length" class="flex flex-wrap justify-end gap-1.5">
-            <img
-              v-for="(im, ii) in turn.images"
-              :key="ii"
-              :src="im.url"
-              class="h-20 w-20 rounded-md border border-line object-cover"
-            />
+            <template v-for="(im, ii) in turn.images" :key="ii">
+              <img
+                v-if="isImageAttachment(im)"
+                :src="im.url"
+                class="h-20 w-20 rounded-md border border-line object-cover"
+                :alt="attachmentDisplayName(im, ii)"
+              />
+              <div
+                v-else
+                class="flex max-w-[200px] items-center gap-2 border border-line bg-elevated px-2 py-1.5"
+                data-testid="tester-history-file-chip"
+                :title="attachmentDisplayName(im, ii)"
+              >
+                <span class="shrink-0 text-[10px] font-medium uppercase tracking-wide text-info">DOC</span>
+                <span class="min-w-0 truncate text-[12px] text-txt">{{ attachmentDisplayName(im, ii) }}</span>
+              </div>
+            </template>
           </div>
           <div v-if="turn.text" class="rounded-lg rounded-br-sm bg-accent px-3 py-2 text-[13px] leading-6 text-white">
             {{ turn.text }}
@@ -792,7 +842,21 @@ const toolIcon: Record<string, string> = { completed: 'check', failed: 'close', 
       <!-- pending attachments -->
       <div v-if="attachments.length" class="mb-2 flex flex-wrap gap-1.5">
         <div v-for="(im, ii) in attachments" :key="ii" class="relative">
-          <img :src="im.url" class="h-14 w-14 rounded-md border border-line object-cover" />
+          <img
+            v-if="isImageAttachment(im)"
+            :src="im.url"
+            class="h-14 w-14 rounded-md border border-line object-cover"
+            :alt="attachmentDisplayName(im, ii)"
+          />
+          <div
+            v-else
+            class="flex h-14 max-w-[160px] items-center gap-1.5 border border-line bg-elevated px-2"
+            data-testid="tester-pending-file-chip"
+            :title="attachmentDisplayName(im, ii)"
+          >
+            <span class="shrink-0 text-[9px] font-medium uppercase text-info">DOC</span>
+            <span class="min-w-0 truncate text-[11px] text-txt2">{{ attachmentDisplayName(im, ii) }}</span>
+          </div>
           <button
             class="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-err text-white"
             @click="removeAttachment(ii)"
@@ -800,7 +864,7 @@ const toolIcon: Record<string, string> = { completed: 'check', failed: 'close', 
         </div>
       </div>
       <div class="flex items-end gap-2">
-        <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="onPickFiles" />
+        <input ref="fileInput" type="file" multiple class="hidden" @change="onPickFiles" />
         <AppButton
           size="sm"
           variant="outline"
