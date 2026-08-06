@@ -15,6 +15,8 @@ package channels
 import (
 	"context"
 	"time"
+
+	"github.com/cocofhu/approving/internal/sendable"
 )
 
 // Scene classifies a conversation surface. Adapters map their native scopes
@@ -60,6 +62,7 @@ type OutboundMessage struct {
 	ReplyToMessageID string // passive reply id (empty → active push)
 	Text             string
 	ImageURLs        []string // shareable image URLs to attach
+	Envelope         sendable.DeliveryEnvelope
 }
 
 // InboundHandler is invoked by an adapter for each received message.

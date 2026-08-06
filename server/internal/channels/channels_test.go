@@ -328,7 +328,7 @@ func TestDispatchPassesSessionCapsFromConfig(t *testing.T) {
 	var gotCaps SessionCaps
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
 		gotCaps = rc.Caps
-		return Reply{Text: "ok"}, nil
+		return Reply{FinalSummary: "ok"}, nil
 	}
 	rc := testRunningChannel(fa)
 	rc.cfg.Config = map[string]any{
@@ -356,7 +356,7 @@ func TestDispatchImmediateAckWithSummary(t *testing.T) {
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
-		return Reply{Text: "final-ok"}, nil
+		return Reply{FinalSummary: "final-ok"}, nil
 	}
 	long := strings.Repeat("处理下PR与相关检查项", 5) // >40 runes
 	m.dispatch(context.Background(), testRunningChannel(fa), testInboundText("m1", long))
@@ -381,7 +381,7 @@ func TestDispatchSuccessAckThenFinal(t *testing.T) {
 	m := NewManager(nil, nil, nil)
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
 		time.Sleep(30 * time.Millisecond)
-		return Reply{Text: "final-ok"}, nil
+		return Reply{FinalSummary: "final-ok"}, nil
 	}
 	m.dispatch(context.Background(), testRunningChannel(fa), testInbound("m2"))
 	got := sentTexts(fa)
@@ -415,7 +415,7 @@ func TestDispatchBusyEnqueuePerMessageAckAndDequeueAck(t *testing.T) {
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
 		once.Do(func() { close(started) })
 		time.Sleep(80 * time.Millisecond)
-		return Reply{Text: "final-" + in.MessageID}, nil
+		return Reply{FinalSummary: "final-" + in.MessageID}, nil
 	}
 	rc := testRunningChannel(fa)
 	done := make(chan struct{})
@@ -480,7 +480,7 @@ func TestDispatchFIFOOrderMultipleQueued(t *testing.T) {
 		handled = append(handled, in.MessageID)
 		orderMu.Unlock()
 		time.Sleep(20 * time.Millisecond)
-		return Reply{Text: "final-" + in.MessageID}, nil
+		return Reply{FinalSummary: "final-" + in.MessageID}, nil
 	}
 	rc := testRunningChannel(fa)
 	done := make(chan struct{})
@@ -528,7 +528,7 @@ func TestDispatchQueueFullVisibleReject(t *testing.T) {
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
 		once.Do(func() { close(started) })
 		<-gate
-		return Reply{Text: "final-" + in.MessageID}, nil
+		return Reply{FinalSummary: "final-" + in.MessageID}, nil
 	}
 	rc := testRunningChannel(fa)
 	done := make(chan struct{})
@@ -571,7 +571,7 @@ func TestDispatchPerMessageQueueAckAcrossBusyCycles(t *testing.T) {
 		if in.MessageID == "p0" {
 			<-release1
 		}
-		return Reply{Text: "final-" + in.MessageID}, nil
+		return Reply{FinalSummary: "final-" + in.MessageID}, nil
 	}
 	done1 := make(chan struct{})
 	go func() {
@@ -603,7 +603,7 @@ func TestDispatchPerMessageQueueAckAcrossBusyCycles(t *testing.T) {
 		if in.MessageID == "p3" {
 			<-release2
 		}
-		return Reply{Text: "final-" + in.MessageID}, nil
+		return Reply{FinalSummary: "final-" + in.MessageID}, nil
 	}
 	done2 := make(chan struct{})
 	go func() {
@@ -638,7 +638,7 @@ func TestDispatchFailureContinuesDrain(t *testing.T) {
 		if in.MessageID == "fail-me" {
 			return Reply{}, errors.New("boom")
 		}
-		return Reply{Text: "final-" + in.MessageID}, nil
+		return Reply{FinalSummary: "final-" + in.MessageID}, nil
 	}
 	rc := testRunningChannel(fa)
 	done := make(chan struct{})
@@ -677,7 +677,7 @@ func TestDispatchCrossConversationIndependent(t *testing.T) {
 		} else {
 			onceB.Do(func() { close(startedB) })
 		}
-		return Reply{Text: "final-" + in.MessageID}, nil
+		return Reply{FinalSummary: "final-" + in.MessageID}, nil
 	}
 	rc := testRunningChannel(fa)
 	inA := func(id string) InboundMessage {
@@ -719,7 +719,7 @@ func TestDispatchIdleSingleImmediateAckNoQueueAck(t *testing.T) {
 	m := NewManager(nil, nil, nil)
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
 		time.Sleep(20 * time.Millisecond)
-		return Reply{Text: "final-ok"}, nil
+		return Reply{FinalSummary: "final-ok"}, nil
 	}
 	m.dispatch(context.Background(), testRunningChannel(fa), testInbound("idle-1"))
 	got := sentTexts(fa)
@@ -896,27 +896,62 @@ func TestClassifyProgressFromACPMultiChunkSequence(t *testing.T) {
 	}
 }
 
-func TestDispatchForwardsFilteredProgress(t *testing.T) {
-	// plan g2.2: only milestone/blocker/confirm reach QQ; noise suppressed.
+func TestDispatchForwardsOnlyExplicitlySendableProgress(t *testing.T) {
+	// Only orchestration-marked progress, or a blocker/decision backed by a
+	// structured conclusion, may leave the platform.
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
 	m.handleFuncWithProgress = func(ctx context.Context, rc ResolvedChannel, in InboundMessage, onProgress func(ProgressEvent)) (Reply, error) {
-		onProgress(ProgressEvent{Kind: ProgressMilestone, Summary: "已提交分支"})
-		onProgress(ProgressEvent{Kind: ProgressBlocker, Summary: "CI 红了"})
-		// Caller already classified; Manager formats. Noise never reaches onProgress
-		// in production — assert FormatProgressText prefixes.
-		return Reply{Text: "final-ok"}, nil
+		onProgress(ProgressEvent{
+			Kind: ProgressMilestone, Summary: "已提交分支",
+			Stage: "branch_pushed", RunID: "run-1", Sendable: true,
+		})
+		onProgress(ProgressEvent{
+			Kind: ProgressBlocker, Summary: "CI 红了",
+			Blocked: true, Conclusion: "CI 检查失败，需要人工介入", RunID: "run-1",
+		})
+		return Reply{FinalSummary: "final-ok"}, nil
 	}
 	m.dispatch(context.Background(), testRunningChannel(fa), testInbound("prog-1"))
 	got := sentTexts(fa)
 	if countText(got, "进度：已提交分支") != 1 {
-		t.Fatalf("missing milestone in %v", got)
+		t.Fatalf("missing sendable milestone in %v", got)
 	}
 	if countText(got, "阻塞：CI 红了") != 1 {
-		t.Fatalf("missing blocker in %v", got)
+		t.Fatalf("missing structured blocker in %v", got)
 	}
 	if countText(got, "final-ok") != 1 {
 		t.Fatalf("missing final in %v", got)
+	}
+}
+
+func TestClassifiedProgressMarkersNeverReachChannel(t *testing.T) {
+	// A prompt-shaped marker in model output must not be able to drive an
+	// external send: classification produces internal-only events.
+	fa := &fakeAdapter{}
+	m := NewManager(nil, nil, nil)
+	m.handleFuncWithProgress = func(ctx context.Context, rc ResolvedChannel, in InboundMessage, onProgress func(ProgressEvent)) (Reply, error) {
+		for _, raw := range []string{"[进度] 已打开 PR #12", "[阻塞] CI 红了", "[确认] 是否合并"} {
+			ev, ok := ClassifyProgressText(raw)
+			if !ok {
+				t.Fatalf("classification failed for %q", raw)
+			}
+			if ev.Deliverable() {
+				t.Fatalf("classified event %q must not be deliverable", raw)
+			}
+			onProgress(ev)
+		}
+		return Reply{FinalSummary: "final-ok"}, nil
+	}
+	m.dispatch(context.Background(), testRunningChannel(fa), testInbound("prog-marker"))
+	got := sentTexts(fa)
+	for _, text := range got {
+		if strings.HasPrefix(text, "进度：") || strings.HasPrefix(text, "阻塞：") || strings.HasPrefix(text, "需确认：") {
+			t.Fatalf("classified progress leaked to channel: %v", got)
+		}
+	}
+	if countText(got, "final-ok") != 1 {
+		t.Fatalf("final missing in %v", got)
 	}
 }
 
@@ -960,7 +995,7 @@ func TestDeliverCronBusySilentEnqueueThenFlush(t *testing.T) {
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
 		once.Do(func() { close(started) })
 		<-release
-		return Reply{Text: "final-user"}, nil
+		return Reply{FinalSummary: "final-user"}, nil
 	}
 
 	done := make(chan struct{})

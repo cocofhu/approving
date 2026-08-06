@@ -33,6 +33,7 @@ import (
 	"github.com/cocofhu/approving/internal/runtime"
 	"github.com/cocofhu/approving/internal/sandbox"
 	"github.com/cocofhu/approving/internal/schedulermcp"
+	"github.com/cocofhu/approving/internal/sendable"
 	"github.com/cocofhu/approving/internal/services"
 	"github.com/cocofhu/approving/internal/shutdown"
 
@@ -347,6 +348,29 @@ func main() {
 	channelMgr := channels.NewManager(channelBridge, map[string]channels.AdapterFactory{
 		models.ChannelTypeQQ: qq.New,
 	}, crypto.Decrypt)
+	deliveryPolicy := sendable.NewPolicy(db, func(entry sendable.AuditEntry) {
+		outcome := models.AuditOutcomeOK
+		if entry.Result == "failed" {
+			outcome = models.AuditOutcomeFail
+		}
+		auditSvc.Record(services.AuditRecord{
+			ProjectID: entry.ProjectID, Actor: services.SystemActor(),
+			CallerKind: models.CallerKindSystem, Action: models.AuditActionDelivery,
+			ResourceType: "delivery", ResourceID: entry.DedupeKey,
+			RunID: entry.RunID, Outcome: outcome, Summary: "channel delivery " + entry.Result,
+			Payload: map[string]any{
+				"reason": entry.Reason, "run": entry.RunID, "channel": string(entry.Channel),
+				"dedupe": entry.DedupeKey, "result": entry.Result, "attempt": entry.Attempt,
+			},
+		})
+	})
+	channelMgr.SetSendablePolicy(deliveryPolicy)
+	// Task identities are derived from real Runs on demand, so IM callers never
+	// have to pre-register a task before addressing it.
+	taskContextSvc := services.NewTaskContextService(db)
+	taskContextSvc.EnableRunBackfill()
+	channelMgr.SetTaskContextService(taskContextSvc)
+	channelMgr.SetRiskConfirmationService(services.NewRiskConfirmationService(db))
 	channelMgr.SetLoader(channelSvc.ListRaw)
 	channelSvc.SetOnChange(channelMgr.Reload)
 	channelMgr.ApplyOnBoot()

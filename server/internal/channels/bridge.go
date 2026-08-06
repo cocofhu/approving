@@ -42,9 +42,16 @@ type ResolvedChannel struct {
 }
 
 // Reply is the bridge's produced answer for one inbound message.
+//
+// Text is the raw assistant output and is internal-only: it is persisted and
+// used for orchestration but must never reach an external channel. Only
+// FinalSummary — a structured, explicitly produced summary — is deliverable.
+// When FinalSummary is empty the Manager sends a fixed safe status notice
+// instead of leaking raw model output.
 type Reply struct {
-	Text      string
-	ImageURLs []string
+	Text         string
+	FinalSummary string
+	ImageURLs    []string
 }
 
 // ChannelBridge is the Work-side executor for channel turns: resolve thread,
@@ -161,7 +168,10 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 		return Reply{}, fmt.Errorf("assistant produced no reply")
 	}
 	stripped, urls := splitImageURLs(text)
-	return Reply{Text: stripped, ImageURLs: urls}, nil
+	return Reply{
+		Text:      stripped,
+		ImageURLs: urls,
+	}, nil
 }
 
 // forwardProgress subscribes to PmTurnRunner events and forwards only the three

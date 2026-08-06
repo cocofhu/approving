@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cocofhu/approving/internal/channels"
+	"github.com/cocofhu/approving/internal/sendable"
 
 	"github.com/rs/zerolog/log"
 )
@@ -92,6 +93,10 @@ func (a *Adapter) Stop() error {
 
 // Send implements channels.Adapter.
 func (a *Adapter) Send(ctx context.Context, out channels.OutboundMessage) error {
+	if reason := sendable.GateReason(out.Envelope, sendable.ChannelQQ,
+		out.Text+"\n"+strings.Join(out.ImageURLs, "\n")); reason != "" {
+		return fmt.Errorf("qq: outbound suppressed by delivery policy: %s", reason)
+	}
 	imgs := filterSendableImages(out.ImageURLs)
 	switch out.Scene {
 	case channels.SceneC2C:
@@ -184,6 +189,12 @@ func (a *Adapter) handleEvent(ctx context.Context, evtType string, data []byte, 
 				ConversationID:   conversationID,
 				ReplyToMessageID: m.ID,
 				Text:             tip,
+				Envelope: sendable.AppendSendable(sendable.DeliveryEnvelope{
+					Priority: sendable.PriorityHigh, TaskContext: "turn:" + m.ID,
+					ProjectID: a.cfg.ProjectID, ConversationID: conversationID,
+					UserID: userID, DedupeKey: m.ID + ":oversize",
+					Reason: "oversized_attachment", Kind: sendable.KindSafetyNotice,
+				}, sendable.ChannelQQ),
 			}); err != nil {
 				log.Warn().Err(err).Msg("qq: oversized reject reply failed")
 			}
