@@ -77,9 +77,18 @@ func (m *Manager) handleFastPath(ctx context.Context, rc *runningChannel, in *In
 		return false
 	}
 	switch res.Status {
-	case TaskReferenceAmbiguous, TaskReferenceNotFound, TaskReferenceNoContext:
+	case TaskReferenceAmbiguous:
+		// Several tasks match, so the user has to pick. Asking is the answer.
 		m.sendOrchestrationReply(ctx, rc, *in, res.Message)
 		return true
+	case TaskReferenceNotFound, TaskReferenceNoContext:
+		// Nothing matched. The keywords that got us here are weak — 「怎么样」
+		// appears in "这个功能怎么样" as readily as in "那个任务怎么样" — so a
+		// miss is better evidence that this was never about a task than that
+		// the user named one that does not exist. Answering "no matching task"
+		// would end an ordinary question with a canned line the agent could
+		// have answered properly.
+		return false
 	case TaskReferenceResolved:
 		if res.Task == nil {
 			return false
