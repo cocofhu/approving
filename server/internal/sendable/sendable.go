@@ -297,14 +297,12 @@ func (p *Policy) bucketSuppression(ctx context.Context, e DeliveryEnvelope, chan
 		var last models.SendableDeliveryReceipt
 		err := base().Where("kind = ?", string(KindProgress)).Order("last_attempt_at desc").First(&last).Error
 		if err == nil && now.Sub(last.LastAttemptAt) < p.rateWindow {
-			digest := progressDigest(e)
-			// Same stage/conclusion within the window: coalesce & suppress.
-			if digest == "" || digest == last.ProgressDigest {
-				return "progress_rate_limited_merged"
-			}
-			// Substantive field change: immediately retain/deliver the latest
-			// snapshot (still one logical progress update of the newest stage).
-			return ""
+			// Every ordinary progress update shares the same 60-second bucket,
+			// including a changed stage/conclusion. Producers keep reporting
+			// snapshots, so the first snapshot evaluated after the window is the
+			// latest one. Urgent blocked/action_required/final updates use their
+			// dedicated kinds and therefore bypass this progress-only limit.
+			return "progress_rate_limited_merged"
 		}
 	}
 	return ""

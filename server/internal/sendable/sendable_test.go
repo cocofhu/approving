@@ -157,8 +157,20 @@ func TestPolicyRetainsLatestProgressStageWithinWindow(t *testing.T) {
 	}
 	newer := external("r1", string(KindProgress), "p-b")
 	newer.Progress.Stage = "B"
-	if !sendAndMark(t, p, newer, "stage B") {
-		t.Fatal("newer stage within window must still be delivered (retain latest)")
+	if sendAndMark(t, p, newer, "stage B") {
+		t.Fatal("changed stage within window must be merged, not delivered immediately")
+	}
+	*now = now.Add(31 * time.Second)
+	latest := external("r1", string(KindProgress), "p-c")
+	latest.Progress.Stage = "C"
+	if !sendAndMark(t, p, latest, "stage C") {
+		t.Fatal("first latest snapshot after the window must be delivered")
+	}
+
+	blocked := external("r1", string(KindBlocked), "blocked-now")
+	blocked.Progress.Blocked = true
+	if !sendAndMark(t, p, blocked, "blocked now") {
+		t.Fatal("blocked must bypass the ordinary progress window")
 	}
 }
 

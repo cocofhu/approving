@@ -23,7 +23,7 @@ const (
 )
 
 // ErrTaskIdentityScopeMismatch means the Run already belongs to a different
-// project. Callers must treat the task as invisible, not re-home it.
+// project or user scope. Callers must treat the task as invisible, not re-home it.
 var ErrTaskIdentityScopeMismatch = errors.New("task identity scope mismatch")
 
 type TaskContextService struct {
@@ -95,9 +95,10 @@ func (s *TaskContextService) EnsureIdentity(in EnsureTaskIdentityInput) (*models
 	if err != nil {
 		return nil, err
 	}
-	// Task metadata is project/Run scoped. A different project's claim is a
-	// hard mismatch; a different QQ identity must never steal or hide the row.
-	if identity.ProjectID != in.ProjectID {
+	// Task metadata is project/user/Run scoped. A different user must never
+	// update, discover, or re-home another user's task.
+	if identity.ProjectID != in.ProjectID ||
+		(identity.UserID != "" && in.UserID != "" && identity.UserID != in.UserID) {
 		return nil, ErrTaskIdentityScopeMismatch
 	}
 	oldTitle := strings.TrimSpace(identity.ShortTitle)
@@ -152,9 +153,9 @@ func (s *TaskContextService) EnsureIdentityForRun(run models.Run, projectID, use
 	})
 }
 
-// BackfillProjectRuns lazily materializes project-scoped identities for a
-// project's Runs. userID is optional provenance only — it never claims exclusive
-// ownership, so a later QQ identity can still search the same Runs.
+// BackfillProjectRuns lazily materializes identities for a project's Runs in
+// the requesting user scope. Existing identities owned by another user remain
+// invisible and are never re-homed.
 func (s *TaskContextService) BackfillProjectRuns(projectID, userID string) error {
 	if s == nil || s.db == nil {
 		return errors.New("task context database is unavailable")
@@ -248,6 +249,9 @@ func (s *TaskContextService) BindMessage(scope TaskScope, messageID string, iden
 	if identity == nil || strings.TrimSpace(messageID) == "" {
 		return errors.New("message_id and identity are required")
 	}
+	if identity.ProjectID != scope.ProjectID || identity.UserID != scope.UserID {
+		return ErrTaskIdentityScopeMismatch
+	}
 	b := models.MessageBinding{
 		ProjectID: scope.ProjectID, UserID: scope.UserID, Channel: scope.Channel,
 		ConversationID: scope.ConversationID, MessageID: strings.TrimSpace(messageID),
@@ -262,6 +266,9 @@ func (s *TaskContextService) BindMessage(scope TaskScope, messageID string, iden
 func (s *TaskContextService) SetFocus(scope TaskScope, identity *models.TaskIdentity, language string) (*models.ConversationFocus, error) {
 	if identity == nil {
 		return nil, errors.New("identity is required")
+	}
+	if identity.ProjectID != scope.ProjectID || identity.UserID != scope.UserID {
+		return nil, ErrTaskIdentityScopeMismatch
 	}
 	now := s.now()
 	focus := models.ConversationFocus{
@@ -330,8 +337,8 @@ func (s *TaskContextService) ResolveTask(in ResolveTaskInput) (TaskResolution, e
 			in.Scope.ProjectID, in.Scope.UserID, in.Scope.Channel, ref).First(&b).Error
 		if err == nil {
 			var task models.TaskIdentity
-			if err := s.db.Where("id = ? AND project_id = ?",
-				b.TaskIdentityID, in.Scope.ProjectID).First(&task).Error; err != nil {
+			if err := s.db.Where("id = ? AND project_id = ? AND user_id = ?",
+				b.TaskIdentityID, in.Scope.ProjectID, in.Scope.UserID).First(&task).Error; err != nil {
 				return TaskResolution{}, err
 			}
 			return s.resolvedWithFocus(in.Scope, task, in.Query, nil, "reply_binding")
@@ -354,8 +361,8 @@ func (s *TaskContextService) ResolveTask(in ResolveTaskInput) (TaskResolution, e
 			return TaskResolution{}, err
 		}
 		var task models.TaskIdentity
-		if err := s.db.Where("id = ? AND project_id = ?",
-			focus.TaskIdentityID, in.Scope.ProjectID).First(&task).Error; err != nil {
+		if err := s.db.Where("id = ? AND project_id = ? AND user_id = ?",
+			focus.TaskIdentityID, in.Scope.ProjectID, in.Scope.UserID).First(&task).Error; err != nil {
 			return TaskResolution{}, err
 		}
 		return TaskResolution{Identity: &task, Reason: "conversation_focus"}, nil
@@ -395,9 +402,8 @@ func (s *TaskContextService) Search(scope TaskScope, query string) ([]TaskCandid
 	}
 	now := s.now()
 	var tasks []models.TaskIdentity
-	// Task metadata is project-scoped; focus/bindings remain per QQ identity.
-	if err := s.db.Where("project_id = ? AND (terminal_at IS NULL OR terminal_at >= ?)",
-		scope.ProjectID, now.Add(-TaskTerminalWindow)).Find(&tasks).Error; err != nil {
+	if err := s.db.Where("project_id = ? AND user_id = ? AND (terminal_at IS NULL OR terminal_at >= ?)",
+		scope.ProjectID, scope.UserID, now.Add(-TaskTerminalWindow)).Find(&tasks).Error; err != nil {
 		return nil, err
 	}
 	query = normalizeSearchText(query)
