@@ -25,6 +25,7 @@ import (
 	"github.com/cocofhu/approving/internal/database"
 	"github.com/cocofhu/approving/internal/engine"
 	"github.com/cocofhu/approving/internal/handlers"
+	"github.com/cocofhu/approving/internal/liveagent"
 	"github.com/cocofhu/approving/internal/logging"
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/memorymcp"
@@ -272,7 +273,16 @@ func main() {
 	// runtime-tunable scheduling params. ApplyOnBoot re-applies persisted UI
 	// values so they survive restarts.
 	settingsSvc := services.NewSettingsService(db, eng, sbxSvc)
+	// The conversation model is configured from the same page, so its client
+	// is driven by the same apply path and picks up edits without a restart.
+	liveClient := liveagent.New()
+	settingsSvc.SetLiveTuner(liveClient)
 	settingsSvc.ApplyOnBoot()
+	if liveClient.Configured() {
+		log.Info().Msg("conversation model configured; IM messages route through it before the sandbox")
+	} else {
+		log.Info().Msg("conversation model not configured; every IM message goes to a sandbox")
+	}
 
 	previewSvc := services.NewPreviewService(db, sbxMgr)
 	previewSvc.SetBrowser(browserSvc)

@@ -936,20 +936,35 @@
         "capacity": {
           "title": "沙箱容量",
           "desc": "展示容量相关占用（测试沙箱 + running workflow）的实时合计与分项用量；测试沙箱上限可单独配置。"
+        },
+        "live": {
+          "title": "对话模型",
+          "desc": "IM 对话由一个快速模型接待：它直接回答能当场答的问题，判断需要读项目才能做的事再交给沙箱。未配置时全部消息都走沙箱，功能不缺但每条都慢。任何 OpenAI 兼容接口都可以，改完立即生效，无需重启。"
         }
       },
       "labels": {
         "max_concurrent_runs": "最大并发运行数",
         "run_sandbox_ttl_minutes": "运行沙箱保留时长",
         "test_sandbox_ttl_minutes": "测试沙箱空闲 TTL",
-        "max_test_sandboxes": "最大测试沙箱数"
+        "max_test_sandboxes": "最大测试沙箱数",
+        "live_base_url": "接口地址",
+        "live_model": "模型名称",
+        "live_api_key": "密钥",
+        "live_timeout_seconds": "单次调用超时"
       },
       "settings": {
         "max_concurrent_runs": "同时处于 running 状态的 workflow 运行数上限。由 APPROVING_MAX_RUNS 环境变量锁定时页面只读。",
         "run_sandbox_ttl_minutes": "workflow 回合结束后，运行沙箱继续保活的分钟数，便于 agent 继续写产物。",
         "test_sandbox_ttl_minutes": "测试沙箱在无活动后的空闲销毁时间，避免长期占用资源。",
-        "max_test_sandboxes": "活跃测试沙箱数达到此上限时，新建测试沙箱请求将被后端拒绝（最小值 ≥ 1，不设最大值上限）。"
+        "max_test_sandboxes": "活跃测试沙箱数达到此上限时，新建测试沙箱请求将被后端拒绝（最小值 ≥ 1，不设最大值上限）。",
+        "live_base_url": "OpenAI 兼容的接口根地址，例如 https://api.example.com/v1，系统会在其后拼接 /chat/completions。",
+        "live_model": "传给该接口的模型名称。选一个快的——这一层的价值就在于秒级回应，慢模型不如直接交给沙箱。",
+        "live_api_key": "以 Bearer token 发送，本机或内网模型可以留空。加密存储，保存后页面只显示掩码；留空提交表示不修改已存的密钥。",
+        "live_timeout_seconds": "单次调用的上限。超时不报错，该消息改为交给沙箱处理——慢的时候宁可走完整能力那条路。"
       },
+      "liveUnconfigured": "尚未配置：当前每条 IM 消息都会交给沙箱，功能完整但每条都要等几十秒。填好地址和模型即可启用，本机或内网模型通常不需要密钥。",
+      "liveSecretStored": "已保存，留空则不修改",
+      "liveSecretEmpty": "尚未配置",
       "sourceLabels": {
         "env": "环境变量",
         "db": "已自定义",

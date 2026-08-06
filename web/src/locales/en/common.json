@@ -272,6 +272,7 @@
       "noRepoFlow": "No repo (artifact-only flow)",
       "pinnedVersionTitle": "Workflow version pinned for this run",
       "minutes": "min",
+      "seconds": "sec",
       "lines": "{n} lines",
       "chars": "{n} chars",
       "groups": "{n} groups",
