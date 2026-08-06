@@ -26,6 +26,15 @@ type ProgressEvent struct {
 	Kind    ProgressKind
 	Summary string
 	At      time.Time
+	RunID   string
+
+	authorized bool
+}
+
+// NewSendableProgressEvent is the explicit application producer path. Text
+// classifiers intentionally do not set this authorization.
+func NewSendableProgressEvent(kind ProgressKind, summary, runID string) ProgressEvent {
+	return ProgressEvent{Kind: kind, Summary: summary, RunID: runID, At: time.Now(), authorized: true}
 }
 
 // TurnFinalReport is the Work turn outcome consumed by Reply for the required
@@ -33,6 +42,9 @@ type ProgressEvent struct {
 type TurnFinalReport struct {
 	OK      bool
 	Summary string
+	// ImageURLs are attachments explicitly authorized by the structured final
+	// producer. Raw assistant text never populates this.
+	ImageURLs []string
 }
 
 const progressSummaryRunes = 120
@@ -55,10 +67,8 @@ var progressMarkers = []struct {
 	{"【里程碑】", ProgressMilestone},
 }
 
-// ClassifyProgressText maps assistant narration into one of the three
-// forwardable progress kinds. Markers are authoritative; bare keywords are
-// conservative to avoid false positives on casual chat. Empty / tool-noise /
-// heartbeat-like text is rejected (ok=false) so Reply does not spam QQ.
+// ClassifyProgressText classifies a candidate but never authorizes egress.
+// AppendSendable plus the policy gate remain mandatory after classification.
 func ClassifyProgressText(text string) (ProgressEvent, bool) {
 	text = strings.TrimSpace(text)
 	if text == "" {

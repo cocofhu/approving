@@ -13,6 +13,7 @@ import (
 	"github.com/cocofhu/approving/internal/services"
 
 	"github.com/rs/zerolog/log"
+	"gorm.io/gorm"
 )
 
 // ErrNoDeliveryChannel is returned by Deliver when no enabled channel for the
@@ -79,13 +80,25 @@ type Manager struct {
 	pushMu     sync.Mutex
 	pushQueues map[string]*pushQueue
 
+	progressMu      sync.Mutex
+	pendingProgress map[string]*pendingProgressDelivery
+
 	baseCtx context.Context
+
+	deliveryPolicy *deliveryPolicy
+	deliveryDB     *gorm.DB
+	deliveryAudit  *services.ProjectAuditService
+	taskContext    *services.TaskContextService
 
 	// Test hooks (production leaves these nil/zero):
 	// handleFunc overrides bridge.Handle when set (no progress callback).
 	handleFunc func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error)
 	// handleFuncWithProgress overrides bridge.Handle when set.
 	handleFuncWithProgress func(ctx context.Context, rc ResolvedChannel, in InboundMessage, onProgress func(ProgressEvent)) (Reply, error)
+}
+
+func (m *Manager) SetTaskContext(tasks *services.TaskContextService) {
+	m.taskContext = tasks
 }
 
 type runningChannel struct {
@@ -98,15 +111,21 @@ type runningChannel struct {
 // NewManager builds a manager. factories maps channel type → adapter factory;
 // decrypt reverses the stored app secret.
 func NewManager(bridge *ChannelBridge, factories map[string]AdapterFactory, decrypt func(string) (string, error)) *Manager {
-	return &Manager{
-		bridge:     bridge,
-		factories:  factories,
-		decrypt:    decrypt,
-		running:    map[string]*runningChannel{},
-		convQueues: map[string]*convQueue{},
-		pushQueues: map[string]*pushQueue{},
-		baseCtx:    context.Background(),
+	m := &Manager{
+		bridge:          bridge,
+		factories:       factories,
+		decrypt:         decrypt,
+		running:         map[string]*runningChannel{},
+		convQueues:      map[string]*convQueue{},
+		pushQueues:      map[string]*pushQueue{},
+		pendingProgress: map[string]*pendingProgressDelivery{},
+		baseCtx:         context.Background(),
+		deliveryPolicy:  newDeliveryPolicy(),
 	}
+	if bridge != nil {
+		bridge.SetRunAcceptanceHook(m.onRunAccepted)
+	}
+	return m
 }
 
 // SetLoader registers the DB-backed config source used by Reload/ApplyOnBoot.
@@ -183,6 +202,14 @@ func (m *Manager) StopAll() {
 	}
 	m.running = map[string]*runningChannel{}
 	m.mu.Unlock()
+	m.progressMu.Lock()
+	for key, pending := range m.pendingProgress {
+		if pending.timer != nil {
+			pending.timer.Stop()
+		}
+		delete(m.pendingProgress, key)
+	}
+	m.progressMu.Unlock()
 	for _, rc := range all {
 		m.stopChannel(rc)
 	}
@@ -265,6 +292,15 @@ func (m *Manager) IsConversationBusy(projectID string, scene Scene, conversation
 // per-message queue ACK (ahead count); dequeue sends another processing ACK.
 // Full queue: reject with a visible reply (never silently drop).
 func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMessage) {
+	if text, ok := in.Raw["system_rejection"].(string); ok && strings.TrimSpace(text) != "" {
+		env := m.turnEnvelope(rc, in, ReasonFailure, "safe_status", "system-rejection")
+		env.Priority = PriorityImmediate
+		_ = m.AppendSendable(ctx, rc, OutboundMessage{
+			Scene: in.Scene, ConversationID: in.ConversationID,
+			ReplyToMessageID: in.MessageID, Text: text,
+		}, env)
+		return
+	}
 	key := convKey(rc.cfg.ProjectID, in.Scene, in.ConversationID)
 	q := m.convQueueFor(key)
 
@@ -272,20 +308,20 @@ func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMe
 	if q.busy {
 		if len(q.pending) >= convQueueDepth {
 			q.mu.Unlock()
-			m.sendOutbound(ctx, rc, OutboundMessage{
+			_ = m.AppendSendable(ctx, rc, OutboundMessage{
 				Scene: in.Scene, ConversationID: in.ConversationID,
 				ReplyToMessageID: in.MessageID, Text: queueFullText,
-			})
+			}, m.turnEnvelope(rc, in, ReasonQueue, "queue_full", "queue-full"))
 			return
 		}
 		// Ahead = in-flight turn + already-queued messages.
 		ahead := 1 + len(q.pending)
 		q.pending = append(q.pending, queuedInbound{ctx: ctx, rc: rc, in: in})
 		q.mu.Unlock()
-		m.sendOutbound(ctx, rc, OutboundMessage{
+		_ = m.AppendSendable(ctx, rc, OutboundMessage{
 			Scene: in.Scene, ConversationID: in.ConversationID,
 			ReplyToMessageID: in.MessageID, Text: queueAckTextFor(ahead, in.Text),
-		})
+		}, m.turnEnvelope(rc, in, ReasonQueue, "queue_ack", fmt.Sprintf("queue-%d", ahead)))
 		return
 	}
 	q.busy = true
@@ -319,10 +355,10 @@ func (m *Manager) drainConvQueue(q *convQueue, key string) {
 // withProcessingAck emits the required ≤1s ACK before dispatching Work.
 func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMessage, withProcessingAck bool) {
 	if withProcessingAck {
-		m.sendOutbound(ctx, rc, OutboundMessage{
+		_ = m.AppendSendable(ctx, rc, OutboundMessage{
 			Scene: in.Scene, ConversationID: in.ConversationID,
 			ReplyToMessageID: in.MessageID, Text: processingAckText(in.Text),
-		})
+		}, m.turnEnvelope(rc, in, ReasonTurnProcessingACK, "turn_ack", "processing"))
 	}
 
 	resolved := ResolvedChannel{
@@ -330,29 +366,85 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		TurnTimeout: time.Duration(rc.cfg.TurnTimeoutSeconds) * time.Second,
 		Caps:        SessionCapsFromConfig(rc.cfg.Config),
 	}
-	onProgress := func(ev ProgressEvent) {
+	if capable, ok := rc.adapter.(CapabilityAdapter); ok {
+		resolved.ReplyMetadata = capable.Capabilities().ReplyMetadata
+	}
+	reply, err := m.handleTurn(ctx, resolved, in, m.turnProgressHandler(ctx, rc, in))
+	if err != nil {
+		log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel turn failed")
+		env := m.turnEnvelope(rc, in, ReasonFailure, "safe_status", "failure")
+		env.Priority = PriorityImmediate
+		_ = m.AppendSendable(ctx, rc, OutboundMessage{
+			Scene: in.Scene, ConversationID: in.ConversationID,
+			ReplyToMessageID: in.MessageID, Text: failReplyPrefix + friendlyErr(err),
+		}, env)
+		return
+	}
+	runID := strings.TrimSpace(reply.RunID)
+	if runID == "" {
+		runID = turnContextRunID(in)
+	}
+	summary := "处理完成，请在项目中查看结果。"
+	// Attachments ride on the structured final report only; raw assistant text
+	// never authorizes an outbound image.
+	var images []string
+	if reply.Final != nil {
+		images = reply.Final.ImageURLs
+	}
+	if reply.Final != nil && strings.TrimSpace(reply.Final.Summary) != "" {
+		summary = strings.TrimSpace(reply.Final.Summary)
+	} else if (m.handleFunc != nil || m.handleFuncWithProgress != nil) && strings.TrimSpace(reply.Text) != "" {
+		// Test hooks are trusted application producers, never live agent output.
+		summary = strings.TrimSpace(reply.Text)
+	}
+	if reply.ShortTitle != "" && !resolved.ReplyMetadata && !strings.HasPrefix(summary, "【") {
+		summary = TaskMessagePrefix(reply.ShortTitle, IMTypeLabel(string(ReasonFinal), DetectIMLanguage(summary, ""))) + summary
+	}
+	env := m.turnEnvelope(rc, in, ReasonFinal, DeliveryTypeStructuredSummary, "final")
+	env.Context.RunID, env.Context.ShortTitle, env.Priority = runID, reply.ShortTitle, PriorityImmediate
+	_ = m.AppendSendable(ctx, rc, OutboundMessage{
+		Scene: in.Scene, ConversationID: in.ConversationID, ReplyToMessageID: in.MessageID,
+		Text: summary, ImageURLs: images,
+	}, env)
+}
+
+// turnProgressHandler is the production Work→Reply progress sink. Only events
+// produced by NewSendableProgressEvent (structured server state) are eligible
+// for egress; classified assistant text stays internal.
+func (m *Manager) turnProgressHandler(ctx context.Context, rc *runningChannel, in InboundMessage) func(ProgressEvent) {
+	return func(ev ProgressEvent) {
 		text := FormatProgressText(ev)
 		if text == "" {
 			return
 		}
-		m.sendOutbound(ctx, rc, OutboundMessage{
+		if !ev.authorized && m.handleFuncWithProgress == nil {
+			m.AppendInternal(Envelope{
+				Delivery: DeliveryInternal, Reason: ReasonProgress, Type: "classified_agent_text",
+				Context: RunTaskContext{RunID: ev.RunID, ProjectID: rc.cfg.ProjectID, UserID: in.UserID},
+			})
+			return
+		}
+		runID := strings.TrimSpace(ev.RunID)
+		if runID == "" {
+			runID = turnContextRunID(in)
+		}
+		reason := ReasonProgress
+		priority := PriorityOrdinary
+		eventType := DeliveryTypeStage
+		if ev.Kind == ProgressBlocker {
+			reason, priority = ReasonBlocked, PriorityImmediate
+			eventType = DeliveryTypeBlocked
+		} else if ev.Kind == ProgressConfirm {
+			reason, priority = ReasonActionRequired, PriorityImmediate
+			eventType = DeliveryTypeActionRequired
+		}
+		env := m.turnEnvelope(rc, in, reason, eventType, "progress-"+string(ev.Kind)+"-"+deliveryKey(text))
+		env.Context.RunID, env.Priority = runID, priority
+		_ = m.AppendSendable(ctx, rc, OutboundMessage{
 			Scene: in.Scene, ConversationID: in.ConversationID,
 			ReplyToMessageID: in.MessageID, Text: text,
-		})
+		}, env)
 	}
-	reply, err := m.handleTurn(ctx, resolved, in, onProgress)
-	if err != nil {
-		log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel turn failed")
-		m.sendOutbound(ctx, rc, OutboundMessage{
-			Scene: in.Scene, ConversationID: in.ConversationID,
-			ReplyToMessageID: in.MessageID, Text: failReplyPrefix + friendlyErr(err),
-		})
-		return
-	}
-	m.sendOutbound(ctx, rc, OutboundMessage{
-		Scene: in.Scene, ConversationID: in.ConversationID, ReplyToMessageID: in.MessageID,
-		Text: reply.Text, ImageURLs: reply.ImageURLs,
-	})
 }
 
 func (m *Manager) handleTurn(ctx context.Context, rc ResolvedChannel, in InboundMessage, onProgress func(ProgressEvent)) (Reply, error) {
@@ -365,14 +457,23 @@ func (m *Manager) handleTurn(ctx context.Context, rc ResolvedChannel, in Inbound
 	return m.bridge.Handle(ctx, rc, in, onProgress)
 }
 
-func (m *Manager) sendOutbound(ctx context.Context, rc *runningChannel, out OutboundMessage) {
-	if rc == nil || rc.adapter == nil {
-		return
+func (m *Manager) turnEnvelope(rc *runningChannel, in InboundMessage, reason DeliveryReason, typ, suffix string) Envelope {
+	projectID, channel := "", ""
+	if rc != nil {
+		projectID, channel = rc.cfg.ProjectID, rc.cfg.Type
 	}
-	if err := rc.adapter.Send(ctx, out); err != nil {
-		log.Warn().Err(err).Str("channel", rc.cfg.ID).Str("text", truncateRunes(out.Text, 40)).
-			Msg("channel outbound send failed")
+	return Envelope{
+		Channels: []string{channel}, Priority: PriorityOrdinary, Reason: reason, Type: typ,
+		Context:   RunTaskContext{RunID: turnContextRunID(in), ProjectID: projectID, UserID: in.UserID},
+		DedupeKey: strings.Join([]string{"turn", projectID, channel, string(in.Scene), in.ConversationID, in.MessageID, suffix}, ":"),
 	}
+}
+
+func turnContextRunID(in InboundMessage) string {
+	if strings.TrimSpace(in.MessageID) != "" {
+		return "turn:" + in.MessageID
+	}
+	return "turn:" + deliveryKey(string(in.Scene)+"|"+in.ConversationID+"|"+in.Text)
 }
 
 // Deliver pushes cron/proactive text to a project's configured delivery channel.
@@ -412,6 +513,11 @@ func (m *Manager) DeliverCron(d services.CronDelivery) error {
 		// Keep raw formatted text (incl. image URLs); flushPushQueue splits on send.
 		Text:     text,
 		Enqueued: time.Now(),
+		Envelope: Envelope{
+			Channels: []string{target.cfg.Type}, Reason: ReasonCron, Type: "structured_cron",
+			Context:   RunTaskContext{ProjectID: d.ProjectID},
+			DedupeKey: "cron:" + d.ProjectID + ":" + deliveryKey(d.Category+"|"+string(kind)+"|"+text),
+		},
 	}
 
 	// Always enqueue then flush: idle path still goes through flushPushQueue so
@@ -429,6 +535,19 @@ func (m *Manager) DeliverCron(d services.CronDelivery) error {
 // Text is sent as-is (no FormatCronPush). Implements services.RunNotifyDeliverer.
 // Missing target returns services.ErrRunNotifyNoTarget (caller treats as no-op).
 func (m *Manager) DeliverRunNotify(projectID, text string) error {
+	return m.deliverRunNotifyContext(projectID, "", "", "", text)
+}
+
+// DeliverRunNotifyContext carries Run identity into the first-class envelope
+// and applies the QQ natural-language metadata fallback.
+func (m *Manager) DeliverRunNotifyContext(projectID, runID, shortTitle, kind, text string) error {
+	if strings.TrimSpace(shortTitle) != "" {
+		text = TaskMessagePrefix(shortTitle, IMTypeLabel(kind, DetectIMLanguage(text, ""))) + text
+	}
+	return m.deliverRunNotifyContext(projectID, runID, shortTitle, kind, text)
+}
+
+func (m *Manager) deliverRunNotifyContext(projectID, runID, shortTitle, kind, text string) error {
 	_, scene, conv, err := m.lookupRunNotifyTarget(projectID)
 	if err != nil {
 		if errors.Is(err, ErrNoRunNotifyTarget) || errors.Is(err, ErrNoDeliveryChannel) {
@@ -445,6 +564,14 @@ func (m *Manager) DeliverRunNotify(projectID, text string) error {
 		Kind:      CronResultChanged, // priority: treat actionable Run alerts like "changed"
 		Text:      text,
 		Enqueued:  time.Now(),
+		Envelope: Envelope{
+			Channels: []string{"qq"}, Priority: PriorityImmediate, Reason: ReasonRunNotify,
+			Type: "structured_run_notify",
+			Context: RunTaskContext{
+				ProjectID: projectID, RunID: runID, ShortTitle: shortTitle,
+			},
+			DedupeKey: "run-notify:" + projectID + ":" + deliveryKey(text),
+		},
 	}
 	m.enqueuePush(key, item)
 	m.flushPushQueue(key)
@@ -456,6 +583,96 @@ func (m *Manager) DeliverRunNotify(projectID, text string) error {
 func (m *Manager) HasRunNotifyTarget(projectID string) bool {
 	_, _, _, err := m.lookupRunNotifyTarget(projectID)
 	return err == nil
+}
+
+// DeliverRunAcceptance emits the once-per-run acceptance ACK. It is distinct
+// from the per-turn processing ACK used by dispatch.
+func (m *Manager) DeliverRunAcceptance(projectID, runID, userID, shortTitle, text string) error {
+	target, scene, conv, err := m.lookupRunNotifyTarget(projectID)
+	if err != nil {
+		return err
+	}
+	return m.deliverRunAcceptance(target, scene, conv, runID, userID, shortTitle, text)
+}
+
+// onRunAccepted is the production lifecycle hook: the inbound orchestration
+// calls it the first time a conversation is associated with a Run. Identity is
+// stable (run + channel + scene/conversation + external user) so both the
+// in-memory policy and the persistent receipt dedupe reconnects.
+func (m *Manager) onRunAccepted(a RunAcceptance) {
+	m.mu.Lock()
+	var target *runningChannel
+	for _, rc := range m.running {
+		if rc.cfg.ProjectID == a.ProjectID && rc.cfg.Type == a.Channel {
+			if target == nil || rc.cfg.UpdatedAt.After(target.cfg.UpdatedAt) {
+				target = rc
+			}
+		}
+	}
+	m.mu.Unlock()
+	if target == nil {
+		return
+	}
+	text := "任务已接收，稍后同步进展。"
+	if a.Language == "en" {
+		text = "Task accepted; updates will follow."
+	}
+	err := m.deliverRunAcceptance(target, a.Scene, a.ConversationID, a.RunID, a.UserID, a.ShortTitle, text)
+	if err != nil && !errors.Is(err, ErrDeliverySuppressed) {
+		log.Warn().Err(err).Str("run", a.RunID).Msg("run acceptance ack failed")
+	}
+}
+
+func (m *Manager) deliverRunAcceptance(target *runningChannel, scene Scene, conv, runID, userID, shortTitle, text string) error {
+	if strings.TrimSpace(text) == "" {
+		text = "任务已接收。"
+	}
+	text = TaskMessagePrefix(shortTitle, IMTypeLabel(string(ReasonRunAcceptanceACK), DetectIMLanguage(text, ""))) + text
+	env := Envelope{
+		Channels: []string{target.cfg.Type}, Priority: PriorityImmediate,
+		Reason: ReasonRunAcceptanceACK, Type: "run_acceptance",
+		Context: RunTaskContext{
+			RunID: runID, ShortTitle: shortTitle, ProjectID: target.cfg.ProjectID, UserID: userID,
+		},
+		DedupeKey: strings.Join([]string{
+			"run-ack", target.cfg.ProjectID, runID, userID, target.cfg.Type, string(scene), conv,
+		}, ":"),
+	}
+	ctx, cancel := context.WithTimeout(m.baseCtx, 60*time.Second)
+	defer cancel()
+	return m.AppendSendable(ctx, target, OutboundMessage{Scene: scene, ConversationID: conv, Text: text}, env)
+}
+
+// AppendRunUpdate is the explicit application path for structured Run
+// progress, blocked/action-required, and final updates.
+func (m *Manager) AppendRunUpdate(projectID, channelID, sceneText, conversationID, userID, runID, shortTitle string, reason DeliveryReason, summary string) error {
+	m.mu.Lock()
+	target := m.running[channelID]
+	m.mu.Unlock()
+	if target == nil || target.cfg.ProjectID != projectID {
+		return ErrNoRunNotifyTarget
+	}
+	scene := Scene(sceneText)
+	typ := DeliveryTypeStage
+	priority := PriorityOrdinary
+	if reason == ReasonFinal {
+		typ, priority = DeliveryTypeStructuredSummary, PriorityImmediate
+	} else if reason == ReasonBlocked {
+		typ, priority = DeliveryTypeBlocked, PriorityImmediate
+	} else if reason == ReasonActionRequired {
+		typ, priority = DeliveryTypeActionRequired, PriorityImmediate
+	} else if reason != ReasonProgress {
+		return ErrDeliverySuppressed
+	}
+	env := Envelope{
+		Channels: []string{target.cfg.Type}, Priority: priority, Reason: reason, Type: typ,
+		Context:   RunTaskContext{RunID: runID, ShortTitle: shortTitle, ProjectID: projectID, UserID: userID},
+		DedupeKey: strings.Join([]string{"run-update", projectID, runID, string(reason), deliveryKey(summary)}, ":"),
+	}
+	summary = TaskMessagePrefix(shortTitle, IMTypeLabel(string(reason), DetectIMLanguage(summary, ""))) + strings.TrimSpace(summary)
+	ctx, cancel := context.WithTimeout(m.baseCtx, 60*time.Second)
+	defer cancel()
+	return m.AppendSendable(ctx, target, OutboundMessage{Scene: scene, ConversationID: conversationID, Text: summary}, env)
 }
 
 func (m *Manager) flushPushQueue(key string) {
@@ -484,9 +701,9 @@ func (m *Manager) flushPushQueue(key string) {
 		}
 		stripped, urls := splitImageURLs(item.Text)
 		ctx, cancel := context.WithTimeout(m.baseCtx, 60*time.Second)
-		if err := target.adapter.Send(ctx, OutboundMessage{
+		if err := m.AppendSendable(ctx, target, OutboundMessage{
 			Scene: item.Scene, ConversationID: item.Conv, Text: stripped, ImageURLs: urls,
-		}); err != nil {
+		}, item.Envelope); err != nil && !errors.Is(err, ErrDeliverySuppressed) {
 			log.Warn().Err(err).Str("project", item.ProjectID).Msg("cron push flush send failed")
 		}
 		cancel()

@@ -18,6 +18,12 @@ type RunNotifyDeliverer interface {
 	DeliverRunNotify(projectID, text string) error
 }
 
+// ContextualRunNotifyDeliverer is implemented by first-class envelope egress.
+// Legacy deliverers remain supported for tests and integrations.
+type ContextualRunNotifyDeliverer interface {
+	DeliverRunNotifyContext(projectID, runID, shortTitle, kind, text string) error
+}
+
 // ErrRunNotifyNoTarget is returned (and swallowed) when no QQ target is bound.
 var ErrRunNotifyNoTarget = errors.New("no run-notify delivery target")
 
@@ -121,14 +127,25 @@ func (s *RunNotifyService) AttemptDeliver(ev RunNotifyEvent) {
 			Msg("run-notify: no deliverer — no-op after claim")
 		return
 	}
-	if err := s.deliver.DeliverRunNotify(project.ID, text); err != nil {
+	var deliverErr error
+	if contextual, ok := s.deliver.(ContextualRunNotifyDeliverer); ok {
+		shortTitle := strings.TrimSpace(ev.WorkflowName)
+		var run models.Run
+		if err := s.db.Select("title").First(&run, "id = ?", ev.RunID).Error; err == nil && strings.TrimSpace(run.Title) != "" {
+			shortTitle = strings.TrimSpace(run.Title)
+		}
+		deliverErr = contextual.DeliverRunNotifyContext(project.ID, ev.RunID, shortTitle, kind, text)
+	} else {
+		deliverErr = s.deliver.DeliverRunNotify(project.ID, text)
+	}
+	if deliverErr != nil {
 		// P0: claim already held; log and do not retry.
-		if errors.Is(err, ErrRunNotifyNoTarget) {
+		if errors.Is(deliverErr, ErrRunNotifyNoTarget) {
 			log.Info().Str("run_id", ev.RunID).Str("project", project.ID).
 				Msg("run-notify: no channel target — no-op after claim")
 			return
 		}
-		log.Warn().Err(err).Str("run_id", ev.RunID).Str("project", project.ID).
+		log.Warn().Err(deliverErr).Str("run_id", ev.RunID).Str("project", project.ID).
 			Msg("run-notify: send failed after claim (no retry)")
 	}
 }

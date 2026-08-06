@@ -43,14 +43,18 @@ type Image struct {
 
 // InboundMessage is a normalized user message received from a channel.
 type InboundMessage struct {
-	Scene          Scene
-	ConversationID string // openid / group_openid / channel_id
-	UserID         string // author id (openid/union), for display/attribution
-	Text           string
-	Images         []Image
-	MessageID      string // platform message id (passive reply + dedup)
-	Timestamp      time.Time
-	Raw            map[string]any
+	Scene            Scene
+	ConversationID   string // openid / group_openid / channel_id
+	UserID           string // author id (openid/union), for display/attribution
+	Text             string
+	Images           []Image
+	MessageID        string // platform message id (passive reply + dedup)
+	ReplyToMessageID string // optional native reply target; QQ leaves empty
+	NodeID           string // optional workflow context supplied by capable transports
+	GateID           string
+	Action           string
+	Timestamp        time.Time
+	Raw              map[string]any
 }
 
 // OutboundMessage is a normalized reply/push to a channel conversation.
@@ -58,6 +62,7 @@ type OutboundMessage struct {
 	Scene            Scene
 	ConversationID   string
 	ReplyToMessageID string // passive reply id (empty → active push)
+	MessageID        string // populated only when a transport exposes the sent id
 	Text             string
 	ImageURLs        []string // shareable image URLs to attach
 }
@@ -79,6 +84,17 @@ type Adapter interface {
 	Send(ctx context.Context, out OutboundMessage) error
 	// Stop tears down the connection and releases resources.
 	Stop() error
+}
+
+// AdapterCapabilities makes optional transport features explicit. QQ currently
+// has no reliable reply-metadata API; callers must use the natural-language
+// task prefix fallback.
+type AdapterCapabilities struct {
+	ReplyMetadata bool `json:"replyMetadata"`
+}
+
+type CapabilityAdapter interface {
+	Capabilities() AdapterCapabilities
 }
 
 // AdapterConfig is the resolved, decrypted configuration handed to a factory.

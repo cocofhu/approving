@@ -67,6 +67,12 @@ func New(cfg channels.AdapterConfig) (channels.Adapter, error) {
 // Type implements channels.Adapter.
 func (a *Adapter) Type() string { return "qq" }
 
+// Capabilities documents that QQ cannot carry portable structured reply
+// metadata. Manager uses a natural-language 【short title｜type】 prefix instead.
+func (a *Adapter) Capabilities() channels.AdapterCapabilities {
+	return channels.AdapterCapabilities{ReplyMetadata: false}
+}
+
 // Start implements channels.Adapter (non-blocking; the gateway runs in a goroutine).
 func (a *Adapter) Start(ctx context.Context, onInbound channels.InboundHandler) error {
 	runCtx, cancel := context.WithCancel(ctx)
@@ -177,16 +183,11 @@ func (a *Adapter) handleEvent(ctx context.Context, evtType string, data []byte, 
 			"附件超过 %d MiB 上限，已拒绝：%s。请压缩后重试。",
 			qqAttachMaxMiB, strings.Join(oversized, ", "),
 		)
-		// Pure oversize with nothing else: reply tip without starting an agent turn.
+		// Pure oversize with nothing else is handed to Manager as a structured
+		// rejection. The adapter must never bypass the mandatory egress gate.
 		if len(in.Images) == 0 && strings.TrimSpace(in.Text) == "" {
-			if err := a.Send(ctx, channels.OutboundMessage{
-				Scene:            scene,
-				ConversationID:   conversationID,
-				ReplyToMessageID: m.ID,
-				Text:             tip,
-			}); err != nil {
-				log.Warn().Err(err).Msg("qq: oversized reject reply failed")
-			}
+			in.Raw = map[string]any{"system_rejection": tip}
+			go onInbound(ctx, in)
 			return
 		}
 		if in.Text != "" {

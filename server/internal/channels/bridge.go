@@ -34,17 +34,40 @@ type MCPTokenHooks struct {
 
 // ResolvedChannel is the per-turn channel context passed to the bridge.
 type ResolvedChannel struct {
-	ID          string
-	Type        string
-	ProjectID   string
-	TurnTimeout time.Duration // 0 → runner default
-	Caps        SessionCaps   // from latest ChannelConfig; applied each turn
+	ID            string
+	Type          string
+	ProjectID     string
+	TurnTimeout   time.Duration // 0 → runner default
+	Caps          SessionCaps   // from latest ChannelConfig; applied each turn
+	ReplyMetadata bool
 }
 
-// Reply is the bridge's produced answer for one inbound message.
+// Reply is the bridge's produced answer for one inbound message. Attachments
+// live on Final because only a structured final report may authorize them.
 type Reply struct {
-	Text      string
-	ImageURLs []string
+	Text       string
+	RunID      string
+	ShortTitle string
+	Final      *TurnFinalReport
+}
+
+// RunAcceptance is emitted once the inbound orchestration associates a
+// conversation with a Run. It carries routing identity only.
+type RunAcceptance struct {
+	ProjectID      string
+	Channel        string
+	Scene          Scene
+	ConversationID string
+	UserID         string
+	RunID          string
+	ShortTitle     string
+	Language       string
+}
+
+// RunStateSource exposes engine-persisted Run state. Progress derived from it
+// is a server structure, never assistant text.
+type RunStateSource interface {
+	Get(runID string) (models.Run, bool)
 }
 
 // ChannelBridge is the Work-side executor for channel turns: resolve thread,
@@ -53,15 +76,33 @@ type Reply struct {
 // (Reply). Progress is reported via the optional onProgress callback only for
 // the three allowed kinds (milestone / blocker / confirm).
 type ChannelBridge struct {
-	pm    *services.PmService
-	sbx   *services.SandboxService
-	turns *services.PmTurnRunner
-	hooks MCPTokenHooks
+	pm       *services.PmService
+	sbx      *services.SandboxService
+	turns    *services.PmTurnRunner
+	hooks    MCPTokenHooks
+	tasks    *services.TaskContextService
+	runState RunStateSource
+	accepted func(RunAcceptance)
 }
 
 // NewChannelBridge builds the bridge.
 func NewChannelBridge(pm *services.PmService, sbx *services.SandboxService, turns *services.PmTurnRunner, hooks MCPTokenHooks) *ChannelBridge {
 	return &ChannelBridge{pm: pm, sbx: sbx, turns: turns, hooks: hooks}
+}
+
+func (b *ChannelBridge) SetTaskContext(tasks *services.TaskContextService) {
+	b.tasks = tasks
+}
+
+// SetRunState wires the engine-persisted Run state used by the structured
+// progress producer.
+func (b *ChannelBridge) SetRunState(src RunStateSource) {
+	b.runState = src
+}
+
+// SetRunAcceptanceHook registers the Reply-side acceptance ACK producer.
+func (b *ChannelBridge) SetRunAcceptanceHook(fn func(RunAcceptance)) {
+	b.accepted = fn
 }
 
 // SyntheticUserID derives a stable per-conversation user id, e.g.
@@ -74,6 +115,13 @@ func SyntheticUserID(channelType string, scene Scene, conversationID string) str
 // send as the terminal report. onProgress may be nil; when set, only classified
 // ProgressEvents are forwarded (tool/token noise suppressed).
 func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in InboundMessage, onProgress func(ProgressEvent)) (Reply, error) {
+	preflight, err := b.PreflightInbound(InboundPreflightRequest{Channel: rc, Message: in})
+	if err != nil {
+		return Reply{}, err
+	}
+	if preflight.Disposition == PreflightRespond {
+		return preflight.Reply, nil
+	}
 	if b.pm == nil || b.sbx == nil || b.turns == nil {
 		return Reply{}, fmt.Errorf("channel bridge unavailable")
 	}
@@ -87,6 +135,20 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 	thread, err := b.ensureThread(rc.ProjectID, userID, agent, in)
 	if err != nil {
 		return Reply{}, err
+	}
+	if b.tasks != nil {
+		// Guarding is unconditional for channel threads: destructive PM MCP
+		// mutations are denied unless a confirmed ticket is spendable.
+		if guardErr := b.tasks.GuardChannelThread(rc.ProjectID, thread.ID, rc.Type, userID); guardErr != nil {
+			return Reply{}, guardErr
+		}
+		if preflight.AuthorizedAction != "" && preflight.TicketID != "" {
+			if err := b.tasks.BindActionGrant(preflight.TicketID, thread.ID); err != nil {
+				return Reply{}, err
+			}
+			// The grant lives only for the turn the user authorized.
+			defer func() { _ = b.tasks.ReleaseActionGrant(preflight.TicketID) }()
+		}
 	}
 
 	binding, _ := b.pm.GetBinding(rc.ProjectID)
@@ -139,6 +201,18 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 	if len(images) > 0 {
 		prompt += fmt.Sprintf("\n（本条消息附带 %d 个附件）", len(images))
 	}
+	if preflight.Task != nil {
+		prompt = fmt.Sprintf(
+			"[任务上下文]\nRun: %s\n短标题: %s\n状态: %s\n\n%s",
+			preflight.Task.RunID, preflight.Task.ShortTitle, preflight.Task.Status, prompt,
+		)
+	}
+	if preflight.AuthorizedAction != "" {
+		prompt = fmt.Sprintf(
+			"[已确认的高风险操作]\nTicket: %s\nRun: %s\nAction: %s\n仅允许执行此票据绑定操作。\n\n%s",
+			preflight.TicketID, preflight.Task.RunID, preflight.AuthorizedAction, prompt,
+		)
+	}
 
 	if err := b.turns.StartWithTimeout(thread.ID, userMsg.ID, row.ID, prompt, images, rc.TurnTimeout); err != nil {
 		return Reply{}, err
@@ -147,7 +221,14 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 	progCtx, progCancel := context.WithCancel(ctx)
 	defer progCancel()
 	if onProgress != nil {
-		go b.forwardProgress(progCtx, thread.ID, onProgress)
+		progressRunID := row.RunID
+		if preflight.Task != nil {
+			progressRunID = preflight.Task.RunID
+		}
+		go b.forwardProgress(progCtx, thread.ID, progressRunID, onProgress)
+		if preflight.Task != nil {
+			go b.watchRunState(progCtx, preflight.Task.RunID, onProgress)
+		}
 	}
 
 	if err := b.waitTurn(ctx, thread.ID, rc.TurnTimeout); err != nil {
@@ -160,15 +241,107 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 	if strings.TrimSpace(text) == "" {
 		return Reply{}, fmt.Errorf("assistant produced no reply")
 	}
+	stripped, summary, urls := finalFromAssistantText(text)
+	replyRunID, shortTitle := row.RunID, ""
+	if preflight.Task != nil {
+		replyRunID, shortTitle = preflight.Task.RunID, preflight.Task.ShortTitle
+	}
+	return Reply{
+		Text: stripped, RunID: replyRunID, ShortTitle: shortTitle,
+		Final: &TurnFinalReport{OK: true, Summary: summary, ImageURLs: urls},
+	}, nil
+}
+
+// finalFromAssistantText derives the terminal report. Attachments are returned
+// only when the assistant used the explicit structured final marker: unmarked
+// terminal output stays internal, and so do the URLs embedded in it.
+func finalFromAssistantText(text string) (stripped, summary string, images []string) {
 	stripped, urls := splitImageURLs(text)
-	return Reply{Text: stripped, ImageURLs: urls}, nil
+	summary, ok := ExtractStructuredFinalSummary(stripped)
+	if !ok {
+		return stripped, "处理完成，请在项目中查看结果。", nil
+	}
+	return stripped, summary, urls
+}
+
+// watchRunState is the production structured progress producer. It reads the
+// engine-persisted Run row — never assistant output — and emits an authorized
+// event on each server-observed transition.
+func (b *ChannelBridge) watchRunState(ctx context.Context, runID string, onProgress func(ProgressEvent)) {
+	if b.runState == nil || onProgress == nil || strings.TrimSpace(runID) == "" {
+		return
+	}
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	last := runStateSnapshot{}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			run, ok := b.runState.Get(runID)
+			if !ok {
+				continue
+			}
+			ev, next, changed := runStateProgress(run, last)
+			last = next
+			if changed {
+				onProgress(NewSendableProgressEvent(ev.Kind, ev.Summary, runID))
+			}
+		}
+	}
+}
+
+// runStateSnapshot is the last server state a producer reported on.
+type runStateSnapshot struct {
+	status string
+	step   int
+	seen   bool
+}
+
+// runStateProgress maps engine Run state to a substantive progress event.
+// Progress is bucketed to 10% so routine ticks do not become messages.
+func runStateProgress(run models.Run, last runStateSnapshot) (ProgressEvent, runStateSnapshot, bool) {
+	step := int(run.Progress * 10)
+	if step < 0 {
+		step = 0
+	}
+	next := runStateSnapshot{status: run.Status, step: step, seen: true}
+	if !last.seen {
+		// Baseline only: the first observation is the state the user already
+		// asked about, not a change.
+		return ProgressEvent{}, next, false
+	}
+	if run.Status != last.status {
+		switch run.Status {
+		case "waiting_human":
+			return ProgressEvent{Kind: ProgressConfirm, Summary: "运行等待人工决策"}, next, true
+		case "failed":
+			return ProgressEvent{Kind: ProgressBlocker, Summary: "运行失败"}, next, true
+		case "cancelled":
+			return ProgressEvent{Kind: ProgressBlocker, Summary: "运行已取消"}, next, true
+		case "completed":
+			return ProgressEvent{Kind: ProgressMilestone, Summary: "运行已完成"}, next, true
+		default:
+			return ProgressEvent{
+				Kind: ProgressMilestone, Summary: "运行状态：" + run.Status,
+			}, next, true
+		}
+	}
+	if step > last.step {
+		return ProgressEvent{
+			Kind:    ProgressMilestone,
+			Summary: fmt.Sprintf("运行进度 %d%%", step*10),
+		}, next, true
+	}
+	return ProgressEvent{}, next, false
 }
 
 // forwardProgress subscribes to PmTurnRunner events and forwards only the three
 // allowed progress kinds to Reply. ACP agent_message_chunk deltas are coalesced
 // before classification (short streaming fragments alone rarely match). Tool
 // frames never become QQ text. Status().partial is polled as a backup.
-func (b *ChannelBridge) forwardProgress(ctx context.Context, threadID string, onProgress func(ProgressEvent)) {
+func (b *ChannelBridge) forwardProgress(ctx context.Context, threadID, runID string, onProgress func(ProgressEvent)) {
 	if b.turns == nil || onProgress == nil {
 		return
 	}
@@ -195,6 +368,7 @@ func (b *ChannelBridge) forwardProgress(ctx context.Context, threadID string, on
 	acc := newProgressAccumulator()
 	emit := func(events []ProgressEvent) {
 		for _, pe := range events {
+			pe.RunID = runID
 			onProgress(pe)
 		}
 	}

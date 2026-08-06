@@ -43,21 +43,32 @@ type Session struct {
 	Attached  *models.AttachedContext
 }
 
+// ChannelActionAuthorizer gates destructive mutations that originate from a
+// channel (IM) thread. Web/API routes carry their own authentication and are
+// never guarded: an unguarded thread short-circuits to allow.
+type ChannelActionAuthorizer interface {
+	IsGuardedThread(projectID, threadID string) bool
+	// ConsumeActionGrant must succeed at most once per confirmed ticket and
+	// only for the exact target (run/workflow id) and action kind.
+	ConsumeActionGrant(projectID, threadID, target, actionKind string) error
+}
+
 // Host manages project-scoped PM MCP sessions and tool dispatch.
 type Host struct {
 	mu       sync.RWMutex
 	sessions map[string]*Session // token -> session
 	byKey    map[string]string   // projectID|threadID -> token
 
-	pm       *services.PmService
-	progress *services.PmProgress
-	wf       *services.WorkflowService
-	runs     *services.RunService
-	arts     *services.ArtifactService
-	org      *services.OrgService
-	skill    *services.SkillService
-	eng      engineOps
-	audit    func(services.AuditRecord)
+	pm          *services.PmService
+	progress    *services.PmProgress
+	wf          *services.WorkflowService
+	runs        *services.RunService
+	arts        *services.ArtifactService
+	org         *services.OrgService
+	skill       *services.SkillService
+	eng         engineOps
+	audit       func(services.AuditRecord)
+	channelAuth ChannelActionAuthorizer
 }
 
 // engineOps covers the run operations exposed through pm-workflow-write
@@ -98,6 +109,49 @@ func (h *Host) SetAuditRecorder(fn func(services.AuditRecord)) {
 	h.mu.Lock()
 	h.audit = fn
 	h.mu.Unlock()
+}
+
+// SetChannelActionAuthorizer wires server-side high-risk enforcement for
+// channel-originated threads. Leaving it nil preserves existing behaviour.
+func (h *Host) SetChannelActionAuthorizer(a ChannelActionAuthorizer) {
+	h.mu.Lock()
+	h.channelAuth = a
+	h.mu.Unlock()
+}
+
+// authorizeDestructive is the mandatory server-side check in front of every
+// destructive mutation. A prompt claim is never sufficient: the grant is a
+// persisted, single-use row keyed by project + thread + target + action.
+func (h *Host) authorizeDestructive(projectID, token, target, actionKind string) error {
+	h.mu.RLock()
+	auth := h.channelAuth
+	h.mu.RUnlock()
+	if auth == nil {
+		return nil
+	}
+	sess, ok := h.SessionFor(projectID, token)
+	if !ok || strings.TrimSpace(sess.ThreadID) == "" {
+		return nil
+	}
+	if !auth.IsGuardedThread(projectID, sess.ThreadID) {
+		return nil
+	}
+	return auth.ConsumeActionGrant(projectID, sess.ThreadID, target, actionKind)
+}
+
+// gateActionKind maps a gate decision to the confirmation kind a user must have
+// approved. Unmapped decisions never match a ticket, so they stay denied.
+func gateActionKind(action string) string {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "approve", "approved", "pass", "accept", "allow":
+		return "approve"
+	case "reject", "rejected", "deny", "decline":
+		return "reject"
+	case "authorize", "grant":
+		return "authorize"
+	default:
+		return "resume_gate"
+	}
 }
 
 func (h *Host) recordAudit(rec services.AuditRecord) {
@@ -663,6 +717,9 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		if _, ok := h.workflowInProject(projectID, platformmcp.StrArg(args, "workflowId")); !ok {
 			return map[string]any{"error": "workflow not found"}, true
 		}
+		if err := h.authorizeDestructive(projectID, token, platformmcp.StrArg(args, "workflowId"), "delete"); err != nil {
+			return map[string]any{"error": err.Error()}, true
+		}
 		if err := h.wf.Delete(platformmcp.StrArg(args, "workflowId")); err != nil {
 			return map[string]any{"error": err.Error()}, true
 		}
@@ -736,6 +793,9 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		if nodeID == "" || action == "" {
 			return map[string]any{"error": "nodeId and action required"}, true
 		}
+		if err := h.authorizeDestructive(projectID, token, runID, gateActionKind(action)); err != nil {
+			return map[string]any{"error": err.Error()}, true
+		}
 		if err := h.eng.ResumeGate(runID, nodeID, action, platformmcp.MapArg(args, "form")); err != nil {
 			return map[string]any{"error": err.Error()}, true
 		}
@@ -775,6 +835,9 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		run, ok := h.runInProject(projectID, runID)
 		if !ok {
 			return map[string]any{"error": "run not found"}, true
+		}
+		if err := h.authorizeDestructive(projectID, token, runID, "cancel"); err != nil {
+			return map[string]any{"error": err.Error()}, true
 		}
 		if err := h.eng.Cancel(runID); err != nil {
 			return map[string]any{"error": err.Error()}, true

@@ -9,6 +9,12 @@ import (
 	"github.com/cocofhu/approving/internal/channels"
 )
 
+func TestReplyMetadataCapabilityUnsupported(t *testing.T) {
+	if (&Adapter{}).Capabilities().ReplyMetadata {
+		t.Fatal("QQ must exercise natural-language reply fallback")
+	}
+}
+
 func TestIsImageAttachment(t *testing.T) {
 	// Helper still classifies mime/ext; inbound path no longer filters on it
 	// (PDF/zip are accepted via downloadImage). Outbound image send still uses

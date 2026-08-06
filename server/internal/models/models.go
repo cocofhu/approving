@@ -139,8 +139,8 @@ type Run struct {
 }
 
 const (
-	MaxRunTags       = 8
-	MaxRunTagRunes   = 32
+	MaxRunTags     = 8
+	MaxRunTagRunes = 32
 )
 
 var ErrInvalidRunTag = errors.New("invalid run tag")
@@ -542,9 +542,9 @@ func FormatChoiceReply(questions []ReactQuestion) string {
 // Name is optional for backward compatibility with older clients; when empty
 // the Bridge falls back to attachment-N.ext.
 type PromptImage struct {
-	Data     string `json:"data"`               // base64 (no data: prefix)
-	MimeType string `json:"mimeType"`           // e.g. image/png or application/pdf
-	Name     string `json:"name,omitempty"`     // original filename when known
+	Data     string `json:"data"`           // base64 (no data: prefix)
+	MimeType string `json:"mimeType"`       // e.g. image/png or application/pdf
+	Name     string `json:"name,omitempty"` // original filename when known
 }
 
 // Sandbox is a tracked sandbox container. Purposes share this table:
@@ -645,8 +645,8 @@ type RunPreviewPort struct {
 	// "http://172.17.0.5:9090". Persisting it decouples the proxy read-path from
 	// the co-located sandbox manager so the preview proxy can later be split into
 	// a standalone service that only reads the DB (or a control-plane API).
-	Host         string    `json:"-"`
-	Healthy      bool      `json:"healthy"`
+	Host    string `json:"-"`
+	Healthy bool   `json:"healthy"`
 	// KeepalivePID is the setsid-detached listener pid recorded by KeepalivePort
 	// so Cancel/Abort session cleanup can whitelist it (sandbox Destroy still
 	// reclaims the whole container with the Run/gate lifecycle).
@@ -686,6 +686,8 @@ func AllModels() []any {
 		&AgentCronJob{}, &AgentCronRun{}, &ChannelConfig{},
 		&ProjectAuditEvent{},
 		&NotifyDeliveryReceipt{},
+		&DeliveryReceipt{}, &TaskIdentity{}, &MessageBinding{},
+		&ConversationFocus{}, &RiskConfirmationTicket{}, &ChannelActionGuard{},
 	}
 }
 

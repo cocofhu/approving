@@ -343,10 +343,18 @@ func main() {
 		Unregister:     mcpWire.unregister,
 	}
 	channelBridge := channels.NewChannelBridge(pmSvc, sbxSvc, pmTurns, channelHooks)
+	taskContextSvc := services.NewTaskContextService(db)
+	channelBridge.SetTaskContext(taskContextSvc)
+	channelBridge.SetRunState(runSvc)
+	// Destructive PM MCP mutations from channel threads are denied unless a
+	// confirmed, single-use ticket authorizes exactly that run/workflow+action.
+	pmMCP.SetChannelActionAuthorizer(taskContextSvc)
 	channelSvc := services.NewChannelConfigService(db)
 	channelMgr := channels.NewManager(channelBridge, map[string]channels.AdapterFactory{
 		models.ChannelTypeQQ: qq.New,
 	}, crypto.Decrypt)
+	channelMgr.SetDeliveryPersistence(db, auditSvc)
+	channelMgr.SetTaskContext(taskContextSvc)
 	channelMgr.SetLoader(channelSvc.ListRaw)
 	channelSvc.SetOnChange(channelMgr.Reload)
 	channelMgr.ApplyOnBoot()

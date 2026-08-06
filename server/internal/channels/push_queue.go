@@ -40,6 +40,7 @@ type CronPushItem struct {
 	Kind      CronResultKind
 	Text      string
 	Enqueued  time.Time
+	Envelope  Envelope
 }
 
 type pushQueue struct {
