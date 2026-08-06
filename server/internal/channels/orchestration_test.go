@@ -49,7 +49,7 @@ func TestInboundOrchestrationAmbiguityAndContinuation(t *testing.T) {
 	}
 
 	rc := &runningChannel{
-		cfg: models.ChannelConfig{ID: "c1", Type: models.ChannelTypeQQ, ProjectID: projectID},
+		cfg:     models.ChannelConfig{ID: "c1", Type: models.ChannelTypeQQ, ProjectID: projectID},
 		adapter: fa,
 	}
 	in := InboundMessage{
@@ -119,6 +119,85 @@ func TestInboundOrchestrationAmbiguityAndContinuation(t *testing.T) {
 	}, false)
 	if len(cancelled) != 1 || cancelled[0] != "r1:cancel_run" {
 		t.Fatalf("confirmed cancel = %v", cancelled)
+	}
+}
+
+func TestInboundOrchestrationGenericTitleAndGateConfirmation(t *testing.T) {
+	fa := &fakeAdapter{}
+	m, db := policyManager(t, fa, nil)
+	tasks := services.NewTaskContextService(db)
+	risk := services.NewRiskConfirmationService(db)
+	m.SetTaskContextService(tasks)
+	m.SetRiskConfirmationService(risk)
+
+	const projectID = "proj"
+	if err := db.Create(&models.Run{ID: "r-gate", Status: "waiting_human"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tasks.EnsureIdentity(services.EnsureTaskIdentityInput{
+		RunID: "r-gate", ProjectID: projectID, UserID: services.SyntheticQQUserID("u1"),
+		ShortTitle: "结算页性能", Status: "waiting_human",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.Gate{
+		RunID: "r-gate", NodeID: "review-gate", Iteration: 1,
+		Title: "上线审批", Resolved: false,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	turned := 0
+	m.handleFunc = func(context.Context, ResolvedChannel, InboundMessage) (Reply, error) {
+		turned++
+		return Reply{}, nil
+	}
+	rc := &runningChannel{
+		cfg:     models.ChannelConfig{ID: "c1", Type: models.ChannelTypeQQ, ProjectID: projectID},
+		adapter: fa,
+	}
+	m.runTurn(context.Background(), rc, InboundMessage{
+		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
+		MessageID: "m1", Text: "结算页性能",
+	}, false)
+	if turned != 0 {
+		t.Fatalf("generic exact short title should be handled before PM turn, turned=%d", turned)
+	}
+	if got := sentTexts(fa); len(got) != 1 || !strings.Contains(got[0], "结算页性能") {
+		t.Fatalf("generic title reply = %v", got)
+	}
+
+	fa.mu.Lock()
+	fa.sent = nil
+	fa.mu.Unlock()
+	var executedAction string
+	var executedMeta map[string]string
+	m.SetRiskActionExecutor(func(projectID, runID, action string, meta map[string]string) error {
+		executedAction, executedMeta = action, meta
+		return nil
+	})
+	m.runTurn(context.Background(), rc, InboundMessage{
+		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
+		MessageID: "m2", Text: "批准结算页性能",
+	}, false)
+	pending, err := risk.LatestPending(services.SyntheticQQUserID("u1"), projectID)
+	if err != nil || pending == nil {
+		t.Fatalf("pending gate ticket = %+v err=%v", pending, err)
+	}
+	if pending.Action != "resume_gate:review-gate:approve" {
+		t.Fatalf("gate ticket action = %q", pending.Action)
+	}
+	if executedAction != "" {
+		t.Fatalf("gate executed before confirmation: %s", executedAction)
+	}
+
+	m.runTurn(context.Background(), rc, InboundMessage{
+		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
+		MessageID: "m3", Text: "确认",
+	}, false)
+	if executedAction != "resume_gate" ||
+		executedMeta["nodeId"] != "review-gate" || executedMeta["gateAction"] != "approve" {
+		t.Fatalf("confirmed gate action=%q meta=%v", executedAction, executedMeta)
 	}
 }
 

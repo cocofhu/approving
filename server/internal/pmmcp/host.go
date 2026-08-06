@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/platformmcp"
@@ -40,7 +41,26 @@ type Session struct {
 	ThreadID  string
 	UserID    string
 	AgentName string
+	Channel   ChannelContext
 	Attached  *models.AttachedContext
+}
+
+// ChannelContext is the concrete external identity/destination for a channel
+// MCP session. UserID on Session remains the conversation-scoped thread key.
+type ChannelContext struct {
+	ChannelType    string
+	Scene          string
+	ConversationID string
+	ExternalUserID string
+}
+
+// IMTarget is passed to the external notifier so lifecycle messages stay bound
+// to the active conversation instead of relying on a configured cron target.
+type IMTarget struct {
+	ChannelType    string
+	Scene          string
+	ConversationID string
+	UserID         string
 }
 
 // Host manages project-scoped PM MCP sessions and tool dispatch.
@@ -59,16 +79,16 @@ type Host struct {
 	eng      engineOps
 	audit    func(services.AuditRecord)
 
-	risk     *services.RiskConfirmationService
-	tasks    *services.TaskContextService
-	notify   ExternalIMNotifier
+	risk   *services.RiskConfirmationService
+	tasks  *services.TaskContextService
+	notify ExternalIMNotifier
 }
 
 // ExternalIMNotifier is the minimal IM egress used by PM MCP write tools.
 // Implemented by the channel Manager in main; nil disables explicit IM notify.
 type ExternalIMNotifier interface {
-	NotifyRunAccepted(projectID, runID, userID, shortTitle, language string) error
-	NotifyProgress(projectID, runID, userID, kind, text, stage, conclusion string, blocked, actionRequired bool) error
+	NotifyRunAccepted(projectID, runID string, target IMTarget, shortTitle, language string) error
+	NotifyProgress(projectID, runID string, target IMTarget, kind, text, stage, conclusion string, blocked, actionRequired bool) error
 }
 
 // engineOps covers the run operations exposed through pm-workflow-write
@@ -192,6 +212,16 @@ func (h *Host) SetAttached(token string, attached *models.AttachedContext) {
 	defer h.mu.Unlock()
 	if s, ok := h.sessions[token]; ok {
 		s.Attached = attached
+	}
+}
+
+// SetChannelContext updates the active external sender and destination after a
+// fresh register or sandbox reuse.
+func (h *Host) SetChannelContext(token string, channel ChannelContext) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if s, ok := h.sessions[token]; ok {
+		s.Channel = channel
 	}
 }
 
@@ -754,11 +784,11 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 			}
 		}
 		if h.notify != nil {
-			sessUser := ""
+			target := IMTarget{}
 			if sess, ok := h.SessionFor(projectID, token); ok {
-				sessUser = sess.UserID
+				target = imTargetForSession(sess)
 			}
-			if err := h.notify.NotifyRunAccepted(projectID, run.ID, sessUser, shortTitle, ""); err != nil {
+			if err := h.notify.NotifyRunAccepted(projectID, run.ID, target, shortTitle, ""); err != nil {
 				log.Warn().Err(err).Str("run", run.ID).Msg("pm_start_run acceptance ack failed")
 			}
 		}
@@ -789,11 +819,11 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		if text == "" {
 			return map[string]any{"error": "text, stage or conclusion required"}, true
 		}
-		sessUser := ""
+		target := IMTarget{}
 		if sess, ok := h.SessionFor(projectID, token); ok {
-			sessUser = sess.UserID
+			target = imTargetForSession(sess)
 		}
-		if err := h.notify.NotifyProgress(projectID, runID, sessUser, kind, text, stage, conclusion, blocked, actionRequired); err != nil {
+		if err := h.notify.NotifyProgress(projectID, runID, target, kind, text, stage, conclusion, blocked, actionRequired); err != nil {
 			return map[string]any{"error": err.Error()}, true
 		}
 		return map[string]any{"status": "queued", "kind": kind}, false
@@ -810,7 +840,9 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		if nodeID == "" || action == "" {
 			return map[string]any{"error": "nodeId and action required"}, true
 		}
-		if blocked, prompt := h.requireRiskConfirmation(projectID, token, runID, "resume_gate:"+nodeID+":"+action); blocked {
+		if blocked, completed, prompt := h.requireRiskConfirmation(projectID, token, runID, "resume_gate:"+nodeID+":"+action); completed {
+			return map[string]any{"status": "already_confirmed"}, false
+		} else if blocked {
 			return map[string]any{"status": "needs_confirmation", "prompt": prompt}, false
 		}
 		if err := h.eng.ResumeGate(runID, nodeID, action, platformmcp.MapArg(args, "form")); err != nil {
@@ -853,7 +885,9 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		if !ok {
 			return map[string]any{"error": "run not found"}, true
 		}
-		if blocked, prompt := h.requireRiskConfirmation(projectID, token, runID, "cancel_run"); blocked {
+		if blocked, completed, prompt := h.requireRiskConfirmation(projectID, token, runID, "cancel_run"); completed {
+			return map[string]any{"status": "already_confirmed", "runId": runID}, false
+		} else if blocked {
 			return map[string]any{"status": "needs_confirmation", "prompt": prompt, "runId": runID}, false
 		}
 		if err := h.eng.Cancel(runID); err != nil {
@@ -884,19 +918,24 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 // the user confirms via IM. Returns blocked=false when risk service is unset
 // (unit tests without IM wiring) or when a ticket was already confirmed in-band
 // via confirmed=true after the IM path executed the action separately.
-func (h *Host) requireRiskConfirmation(projectID, token, runID, action string) (blocked bool, prompt string) {
+func (h *Host) requireRiskConfirmation(projectID, token, runID, action string) (blocked, completed bool, prompt string) {
 	if h.risk == nil {
-		return false, ""
+		return false, false, ""
 	}
 	sess, ok := h.SessionFor(projectID, token)
 	if !ok {
-		return true, "session required for high-risk confirmation"
+		return true, false, "session required for high-risk confirmation"
 	}
+	riskUserID := riskUserIDForSession(sess)
 	// If the IM orchestration already confirmed and executed, MCP should not
 	// create another ticket. A fresh pending ticket always blocks.
-	if pending, err := h.risk.LatestPending(sess.UserID, projectID); err == nil && pending != nil &&
+	if pending, err := h.risk.LatestPending(riskUserID, projectID); err == nil && pending != nil &&
 		pending.RunID == runID && pending.Action == action {
-		return true, h.risk.ConfirmationPrompt(*pending)
+		return true, false, h.risk.ConfirmationPrompt(*pending)
+	}
+	if settled, err := h.risk.LatestForAction(riskUserID, projectID, runID, action); err == nil &&
+		settled != nil && settled.Status == "confirmed" && settled.ExpiresAt.After(time.Now()) {
+		return false, true, ""
 	}
 	shortTitle := ""
 	if h.tasks != nil {
@@ -906,13 +945,34 @@ func (h *Host) requireRiskConfirmation(projectID, token, runID, action string) (
 		}
 	}
 	ticket, err := h.risk.CreateTicket(services.RiskTicketInput{
-		ProjectID: projectID, UserID: sess.UserID, RunID: runID,
+		ProjectID: projectID, UserID: riskUserID, RunID: runID,
 		Action: action, ShortTitle: shortTitle, Language: "",
 	})
 	if err != nil {
-		return true, "failed to create confirmation ticket: " + err.Error()
+		return true, false, "failed to create confirmation ticket: " + err.Error()
 	}
-	return true, h.risk.ConfirmationPrompt(*ticket)
+	return true, false, h.risk.ConfirmationPrompt(*ticket)
+}
+
+func riskUserIDForSession(sess *Session) string {
+	if sess == nil {
+		return ""
+	}
+	if strings.EqualFold(strings.TrimSpace(sess.Channel.ChannelType), "qq") &&
+		strings.TrimSpace(sess.Channel.ExternalUserID) != "" {
+		return services.SyntheticQQUserID(sess.Channel.ExternalUserID)
+	}
+	return strings.TrimSpace(sess.UserID)
+}
+
+func imTargetForSession(sess *Session) IMTarget {
+	if sess == nil {
+		return IMTarget{}
+	}
+	return IMTarget{
+		ChannelType: sess.Channel.ChannelType, Scene: sess.Channel.Scene,
+		ConversationID: sess.Channel.ConversationID, UserID: sess.Channel.ExternalUserID,
+	}
 }
 
 func toolSchemas(mcpID string) []map[string]any {

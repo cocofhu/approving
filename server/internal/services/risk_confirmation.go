@@ -224,6 +224,27 @@ func (s *RiskConfirmationService) LatestAny(userID, projectID string) (*models.R
 	return &ticket, nil
 }
 
+// LatestForAction returns the newest ticket for one exact user/project/run/action
+// tuple. MCP retries use it to observe an IM-confirmed action without creating a
+// second ticket or executing the mutation again.
+func (s *RiskConfirmationService) LatestForAction(userID, projectID, runID, action string) (*models.RiskConfirmationTicket, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("risk confirmation database is unavailable")
+	}
+	var ticket models.RiskConfirmationTicket
+	err := s.db.Where("project_id = ? AND user_id = ? AND run_id = ? AND action = ?",
+		strings.TrimSpace(projectID), strings.TrimSpace(userID),
+		strings.TrimSpace(runID), strings.TrimSpace(action)).
+		Order("created_at desc").First(&ticket).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &ticket, nil
+}
+
 func riskPrompt(language string) string {
 	if NormalizeLanguage(language) == "en" {
 		return "Reply “confirm” to proceed or “cancel” to stop."

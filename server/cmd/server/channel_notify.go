@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/cocofhu/approving/internal/channels"
+	"github.com/cocofhu/approving/internal/pmmcp"
 	"github.com/cocofhu/approving/internal/sendable"
 )
 
@@ -13,19 +14,19 @@ type channelIMNotifier struct {
 	mgr *channels.Manager
 }
 
-func (n channelIMNotifier) NotifyRunAccepted(projectID, runID, userID, shortTitle, language string) error {
+func (n channelIMNotifier) NotifyRunAccepted(projectID, runID string, target pmmcp.IMTarget, shortTitle, language string) error {
 	if n.mgr == nil {
 		return nil
 	}
-	qqUser := strings.TrimPrefix(userID, "qq:")
 	_, err := n.mgr.SendRunAcceptanceAck(context.Background(), channels.RunAcceptanceAck{
-		ProjectID: projectID, RunID: runID, Scene: channels.SceneC2C,
-		ConversationID: "", UserID: qqUser, ShortTitle: shortTitle, Language: language,
+		ProjectID: projectID, RunID: runID, Scene: channels.Scene(target.Scene),
+		ConversationID: target.ConversationID, UserID: target.UserID,
+		ShortTitle: shortTitle, Language: language,
 	})
 	return err
 }
 
-func (n channelIMNotifier) NotifyProgress(projectID, runID, userID, kind, text, stage, conclusion string, blocked, actionRequired bool) error {
+func (n channelIMNotifier) NotifyProgress(projectID, runID string, target pmmcp.IMTarget, kind, text, stage, conclusion string, blocked, actionRequired bool) error {
 	if n.mgr == nil {
 		return nil
 	}
@@ -42,9 +43,9 @@ func (n channelIMNotifier) NotifyProgress(projectID, runID, userID, kind, text, 
 	if stage == "" && !blocked && !actionRequired && conclusion == "" {
 		stage = strings.TrimSpace(text)
 	}
-	qqUser := strings.TrimPrefix(userID, "qq:")
 	_, err := n.mgr.ReportRunProgress(context.Background(), channels.SendableRequest{
-		ProjectID: projectID, RunID: runID, UserID: qqUser,
+		ProjectID: projectID, RunID: runID, Scene: channels.Scene(target.Scene),
+		ConversationID: target.ConversationID, UserID: target.UserID,
 		Kind: skind, Reason: "pm_notify_progress", Priority: priority,
 		Progress: sendable.ProgressFields{
 			Stage: stage, Blocked: blocked, ActionRequired: actionRequired, Conclusion: conclusion,

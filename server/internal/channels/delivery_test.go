@@ -189,8 +189,8 @@ func TestSendRunAcceptanceAckOncePerRunAndRejectsMissingRun(t *testing.T) {
 	if _, err := m.SendRunAcceptanceAck(context.Background(), ack); err != nil {
 		t.Fatalf("first ack: %v", err)
 	}
-	if _, err := m.SendRunAcceptanceAck(context.Background(), ack); err != nil {
-		t.Fatalf("second ack: %v", err)
+	if result, err := m.SendRunAcceptanceAck(context.Background(), ack); !errors.Is(err, ErrDeliverySuppressed) || result.Sent {
+		t.Fatalf("second ack should report idempotent suppression: result=%+v err=%v", result, err)
 	}
 	got := sentTexts(fa)
 	if len(got) != 1 {

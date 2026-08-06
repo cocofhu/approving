@@ -53,7 +53,7 @@ func (m *Manager) handleInboundOrchestration(ctx context.Context, rc *runningCha
 	if m.taskContext == nil {
 		return false
 	}
-	if !looksLikeTaskAddressing(text) {
+	if !looksLikeTaskAddressing(text) && !m.hasTaskCandidate(rc, *in, text) {
 		return false
 	}
 	resolveText := text
@@ -157,6 +157,25 @@ func (m *Manager) tryCreateRiskConfirmation(ctx context.Context, rc *runningChan
 		}
 		return false
 	}
+	if action == "approve_gate" || action == "reject_gate" {
+		gateAction := "approve"
+		if action == "reject_gate" {
+			gateAction = "reject"
+		}
+		var gate models.Gate
+		err := m.taskContext.DB().Where("run_id = ? AND resolved = ?", res.Task.RunID, false).
+			Order("iteration desc, id desc").First(&gate).Error
+		if err != nil || strings.TrimSpace(gate.NodeID) == "" {
+			kind, body := "需澄清", "未找到该任务当前待处理的门禁，请先确认任务门禁状态。"
+			if language == "en" {
+				kind, body = "Action required", "No pending gate was found for this task. Check its gate status first."
+			}
+			m.sendOrchestrationReply(ctx, rc, in,
+				FormatTaskMessage(res.Task.ShortTitle, kind, body, text, language))
+			return true
+		}
+		action = "resume_gate:" + gate.NodeID + ":" + gateAction
+	}
 	ticket, err := m.riskConfirmation.CreateTicket(services.RiskTicketInput{
 		ProjectID: rc.cfg.ProjectID, UserID: scopeUser,
 		RunID: res.Task.RunID, Action: action, Language: language,
@@ -236,13 +255,28 @@ func looksLikeTaskAddressing(text string) bool {
 	// Short bare titles / keyword mentions are handled when Resolve finds them;
 	// avoid hijacking every casual chat line.
 	lower := strings.ToLower(text)
-	needles := []string{"任务", "怎么样", "进度", "状态", "登录页", "task", "status", "progress", "how is", "what's"}
+	needles := []string{"任务", "怎么样", "进度", "状态", "task", "status", "progress", "how is", "what's"}
 	for _, n := range needles {
 		if strings.Contains(lower, strings.ToLower(n)) {
 			return true
 		}
 	}
 	return false
+}
+
+func (m *Manager) hasTaskCandidate(rc *runningChannel, in InboundMessage, text string) bool {
+	if m == nil || m.taskContext == nil || rc == nil {
+		return false
+	}
+	text = strings.TrimSpace(text)
+	if text == "" || strings.ContainsAny(text, "\r\n") || len([]rune(text)) > 80 {
+		return false
+	}
+	candidates, err := m.taskContext.Search(services.TaskScope{
+		ProjectID: rc.cfg.ProjectID, UserID: services.SyntheticQQUserID(in.UserID),
+		Channel: rc.cfg.Type, ConversationID: in.ConversationID,
+	}, text)
+	return err == nil && len(candidates) > 0
 }
 
 func isContinuation(text string) bool {

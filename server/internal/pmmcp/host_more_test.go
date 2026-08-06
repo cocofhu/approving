@@ -59,6 +59,60 @@ func TestPmMCPSessionHelpers(t *testing.T) {
 	h.Restore(p.ID, "thr-1", "alice", "agent-a", "")
 }
 
+func TestChannelSessionRiskIdentityAndConfirmedRetry(t *testing.T) {
+	db, _, h, p := setupPmMCPHost(t)
+	risk := services.NewRiskConfirmationService(db)
+	tasks := services.NewTaskContextService(db)
+	h.SetTaskSafety(risk, tasks, nil)
+
+	tok := h.Register(p.ID, "thr-channel", "qq:group:conversation-1", "agent-a")
+	h.SetChannelContext(tok, ChannelContext{
+		ChannelType: "qq", Scene: "group",
+		ConversationID: "conversation-1", ExternalUserID: "openid-1",
+	})
+	if err := db.Create(&models.Run{ID: "run-risk", Status: "running"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tasks.EnsureIdentity(services.EnsureTaskIdentityInput{
+		RunID: "run-risk", ProjectID: p.ID, ShortTitle: "结算页性能", Status: "running",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	blocked, completed, prompt := h.requireRiskConfirmation(p.ID, tok, "run-risk", "cancel_run")
+	if !blocked || completed || !strings.Contains(prompt, "结算页性能") {
+		t.Fatalf("first confirmation = blocked:%v completed:%v prompt:%q", blocked, completed, prompt)
+	}
+	scopeUser := services.SyntheticQQUserID("openid-1")
+	pending, err := risk.LatestPending(scopeUser, p.ID)
+	if err != nil || pending == nil {
+		t.Fatalf("QQ sender must see MCP ticket: ticket=%+v err=%v", pending, err)
+	}
+	if pending.UserID == "qq:group:conversation-1" {
+		t.Fatalf("ticket used conversation thread id instead of sender identity: %+v", pending)
+	}
+	resolved, err := risk.ResolveTicket(services.RiskTicketInput{
+		ProjectID: p.ID, UserID: scopeUser, RunID: "run-risk", Action: "cancel_run",
+	}, "确认")
+	if err != nil || !resolved.Execute {
+		t.Fatalf("QQ confirmation = %+v err=%v", resolved, err)
+	}
+	blocked, completed, _ = h.requireRiskConfirmation(p.ID, tok, "run-risk", "cancel_run")
+	if blocked || !completed {
+		t.Fatalf("confirmed MCP retry must be read-only: blocked=%v completed=%v", blocked, completed)
+	}
+	var count int64
+	if err := db.Model(&models.RiskConfirmationTicket{}).Count(&count).Error; err != nil || count != 1 {
+		t.Fatalf("ticket count=%d err=%v", count, err)
+	}
+
+	sess, _ := h.SessionFor(p.ID, tok)
+	target := imTargetForSession(sess)
+	if target.Scene != "group" || target.ConversationID != "conversation-1" || target.UserID != "openid-1" {
+		t.Fatalf("IM target = %+v", target)
+	}
+}
+
 func TestPmMCPServeRPCBranches(t *testing.T) {
 	db, pm, h, p := setupPmMCPHost(t)
 	tok := h.Register(p.ID, "thr-rpc", "alice", "agent-a")

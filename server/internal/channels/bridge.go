@@ -23,13 +23,23 @@ import (
 type MCPTokenHooks struct {
 	// Register mints a shared token and returns the platform MCP inject specs
 	// for a fresh sandbox open. caps gate memory/scheduler writes for this turn.
-	Register func(projectID, threadID, userID, agent string, enabledMcps []string, caps SessionCaps) (token string, specs []sandbox.MCPServerSpec)
+	Register func(projectID, threadID, userID, agent string, channel ChannelSessionContext, enabledMcps []string, caps SessionCaps) (token string, specs []sandbox.MCPServerSpec)
 	// RestoreOnReuse rebinds the reused sandbox's existing token using the
 	// latest caps (so config changes apply on the next turn without reconnect).
-	RestoreOnReuse func(projectID, threadID, userID, agent, token string, enabledMcps []string, caps SessionCaps)
+	RestoreOnReuse func(projectID, threadID, userID, agent, token string, channel ChannelSessionContext, enabledMcps []string, caps SessionCaps)
 	// Unregister drops a token (used when discarding a freshly minted token
 	// after a sandbox reuse, or on open failure).
 	Unregister func(token string)
+}
+
+// ChannelSessionContext carries the concrete inbound identity and destination
+// alongside the conversation-scoped thread user id. PM MCP writes use it for
+// risk tickets and explicit lifecycle delivery without guessing a cron target.
+type ChannelSessionContext struct {
+	ChannelType    string
+	Scene          Scene
+	ConversationID string
+	ExternalUserID string
 }
 
 // ResolvedChannel is the per-turn channel context passed to the bridge.
@@ -97,7 +107,11 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 	}
 
 	binding, _ := b.pm.GetBinding(rc.ProjectID)
-	token, specs := b.hooks.Register(rc.ProjectID, thread.ID, userID, agent, binding.EnabledMcps, rc.Caps)
+	channelCtx := ChannelSessionContext{
+		ChannelType: rc.Type, Scene: in.Scene,
+		ConversationID: in.ConversationID, ExternalUserID: in.UserID,
+	}
+	token, specs := b.hooks.Register(rc.ProjectID, thread.ID, userID, agent, channelCtx, binding.EnabledMcps, rc.Caps)
 	row, reused, err := b.sbx.OpenAgentSandbox(ctx, services.AgentSandboxOpenOpts{
 		Profile:       agent,
 		ProjectID:     rc.ProjectID,
@@ -119,7 +133,7 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 		}
 		token = row.Token
 		if b.hooks.RestoreOnReuse != nil {
-			b.hooks.RestoreOnReuse(rc.ProjectID, thread.ID, userID, agent, token, binding.EnabledMcps, rc.Caps)
+			b.hooks.RestoreOnReuse(rc.ProjectID, thread.ID, userID, agent, token, channelCtx, binding.EnabledMcps, rc.Caps)
 		}
 	}
 	if err := b.pm.BindSandbox(thread.ID, row.ID); err != nil {
@@ -382,8 +396,8 @@ func extForMime(mime string) string {
 }
 
 var (
-	mdImageRe   = regexp.MustCompile(`!\[[^\]]*\]\((https?://[^)\s]+)\)`)
-	bareImageRe = regexp.MustCompile(`https?://[^\s)]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s)]*)?`)
+	mdImageRe           = regexp.MustCompile(`!\[[^\]]*\]\((https?://[^)\s]+)\)`)
+	bareImageRe         = regexp.MustCompile(`https?://[^\s)]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s)]*)?`)
 	finalSummaryMarkers = []string{"[摘要]", "【摘要】", "[最终]", "【最终】", "[Final]", "[Summary]"}
 )
 

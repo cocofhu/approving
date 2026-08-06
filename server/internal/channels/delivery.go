@@ -88,10 +88,19 @@ func (m *Manager) DeliverSendable(ctx context.Context, req SendableRequest) (Del
 	if ctx == nil {
 		ctx = m.baseCtx
 	}
-	return m.sendOutboundResult(ctx, target, OutboundMessage{
+	result := m.sendOutboundResult(ctx, target, OutboundMessage{
 		Scene: scene, ConversationID: conv, ReplyToMessageID: req.ReplyToMessageID,
 		Text: req.Text, ImageURLs: req.ImageURLs, Envelope: req.Envelope(),
-	}), nil
+	})
+	if result.Sent {
+		return result, nil
+	}
+	switch result.Decision.Reason {
+	case "no_adapter", "policy_error", "transport_failed", "retry_claim_failed":
+		return result, ErrDeliveryFailed
+	default:
+		return result, ErrDeliverySuppressed
+	}
 }
 
 // RunAcceptanceAck confirms that a real Run was accepted for a user. It is
