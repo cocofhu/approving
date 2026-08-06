@@ -430,14 +430,22 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		})
 		return
 	}
-	summary, reason := deliverableFinalText(reply)
-	images := reply.ImageURLs
-	if summary == safeFinalNotice {
-		images = nil // no structured summary → no derived attachments either
+	summary, reason, ok := deliverableFinalText(reply)
+	if !ok {
+		log.Warn().
+			Str("channel", rc.cfg.ID).
+			Str("reason", reason).
+			Msg("channel turn finished without deliverable FinalSummary")
+		m.sendOutbound(ctx, rc, OutboundMessage{
+			Scene: in.Scene, ConversationID: in.ConversationID,
+			ReplyToMessageID: in.MessageID, Text: summary,
+			Envelope: turnEnvelope(rc, in, sendable.KindBlocked, reason, sendable.PriorityCritical),
+		})
+		return
 	}
 	m.sendOutbound(ctx, rc, OutboundMessage{
 		Scene: in.Scene, ConversationID: in.ConversationID, ReplyToMessageID: in.MessageID,
-		Text: summary, ImageURLs: images,
+		Text: summary, ImageURLs: reply.ImageURLs,
 		Envelope: func() sendable.DeliveryEnvelope {
 			e := turnEnvelope(rc, in, sendable.KindFinal, reason, sendable.PriorityCritical)
 			e.Structured = true
@@ -446,18 +454,23 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 	})
 }
 
-// safeFinalNotice is sent when Work produced no structured summary. Raw
-// assistant text is never used as a fallback.
-const safeFinalNotice = "本回合已结束，请在 Approving 查看完整结果。"
+// deprecatedSafeFinalNotice is the #157 fake-completion string. It must never
+// be sent as a successful turn final (kept only so regressions can assert absence).
+const deprecatedSafeFinalNotice = "本回合已结束，请在 Approving 查看完整结果。"
+
+// finalSummaryMissingNotice is the observable failure/fallback sent when Work
+// produced no deliverable FinalSummary. Raw assistant text is never used.
+const finalSummaryMissingNotice = "未能生成可外发答复，请稍后重试或在 Approving 查看详情。"
 
 // deliverableFinalText returns the only text allowed out of a finished turn:
-// the structured FinalSummary, or a fixed safe notice. Reply.Text stays
-// internal regardless of its content.
-func deliverableFinalText(reply Reply) (text, reason string) {
+// the structured FinalSummary. When empty, ok=false and text is an explicit
+// failure notice — never the deprecated "turn ended, check Approving" shell.
+// Reply.Text stays internal regardless of its content.
+func deliverableFinalText(reply Reply) (text, reason string, ok bool) {
 	if summary := strings.TrimSpace(reply.FinalSummary); summary != "" {
-		return truncateRunes(summary, 240), "structured_turn_final"
+		return truncateRunes(summary, 240), "structured_turn_final", true
 	}
-	return safeFinalNotice, "final_summary_missing_safe_notice"
+	return finalSummaryMissingNotice, "final_summary_missing", false
 }
 
 func (m *Manager) handleTurn(ctx context.Context, rc ResolvedChannel, in InboundMessage, onProgress func(ProgressEvent)) (Reply, error) {

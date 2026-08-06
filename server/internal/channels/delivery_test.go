@@ -48,6 +48,8 @@ func TestFinalOnlySendsStructuredSummaryNeverRawAssistantText(t *testing.T) {
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
+		// Stub bypasses bridge: empty FinalSummary must fail observably, never
+		// leak Reply.Text or the deprecated #157 safe-notice shell.
 		return Reply{Text: raw}, nil
 	}
 	m.dispatch(context.Background(), testRunningChannel(fa), testInbound("final-raw"))
@@ -57,9 +59,12 @@ func TestFinalOnlySendsStructuredSummaryNeverRawAssistantText(t *testing.T) {
 		if strings.Contains(text, "内部推理") || strings.Contains(text, "sk-secret") || strings.Contains(text, "提示词标签") {
 			t.Fatalf("raw assistant final leaked: %v", got)
 		}
+		if strings.Contains(text, deprecatedSafeFinalNotice) {
+			t.Fatalf("deprecated safe-notice fake completion must not be sent: %v", got)
+		}
 	}
-	if countText(got, safeFinalNotice) != 1 {
-		t.Fatalf("expected the safe notice when no structured summary exists, got %v", got)
+	if countText(got, finalSummaryMissingNotice) != 1 {
+		t.Fatalf("expected observable missing-summary failure notice, got %v", got)
 	}
 
 	fa2 := &fakeAdapter{}
@@ -76,6 +81,79 @@ func TestFinalOnlySendsStructuredSummaryNeverRawAssistantText(t *testing.T) {
 		if strings.Contains(text, "内部推理") {
 			t.Fatalf("raw text leaked alongside summary: %v", got2)
 		}
+	}
+}
+
+// TestNaturalLanguageQQFinalContainsAnswerNotShellNotice is the cross-layer
+// regression for ordinary QQ chat after #157: inbound NL → turn → FinalSummary
+// construction → Sendable policy → fake QQ adapter outbound must carry a real
+// answer, never only the Approving redirect shell.
+func TestNaturalLanguageQQFinalContainsAnswerNotShellNotice(t *testing.T) {
+	const userQ = "回的慢还不好"
+	const assistantBody = "tool_call read_config\n内部推理：先自评再答\n抱歉回复慢了，也认同质量需要改进。我们会优先排查延迟与答复质量。"
+	const wantAnswer = "抱歉回复慢了，也认同质量需要改进"
+
+	fa := &fakeAdapter{}
+	m, _ := policyManager(t, fa, nil)
+	// Mimic ChannelBridge.Handle: FinalSummary is server-built, Text stays internal.
+	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
+		return Reply{
+			Text:         assistantBody,
+			FinalSummary: buildDeliverableFinalSummary(assistantBody),
+		}, nil
+	}
+
+	rc := testRunningChannel(fa)
+	rc.cfg.Type = "qq"
+	m.dispatch(context.Background(), rc, testInboundText("nl-slow-bad", userQ))
+
+	got := sentTexts(fa)
+	if hasPrefixCount(got, ackProcessingPrefix) != 1 {
+		t.Fatalf("expected processing ACK, got %v", got)
+	}
+	foundAnswer := false
+	for _, text := range got {
+		if strings.Contains(text, deprecatedSafeFinalNotice) || strings.Contains(text, "本回合已结束") {
+			t.Fatalf("shell/fake-completion must not appear in QQ outbound: %v", got)
+		}
+		if strings.Contains(text, "tool_call") || strings.Contains(text, "内部推理") {
+			t.Fatalf("tool/reasoning must not reach QQ outbound: %v", got)
+		}
+		if strings.Contains(text, wantAnswer) {
+			foundAnswer = true
+		}
+	}
+	if !foundAnswer {
+		t.Fatalf("QQ outbound missing real answer %q; got %v", wantAnswer, got)
+	}
+
+	// Empty FinalSummary (noise-only body) → observable failure, not shell success.
+	faFail := &fakeAdapter{}
+	mFail, _ := policyManager(t, faFail, nil)
+	mFail.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
+		noise := "tool_call x\nthinking: y"
+		return Reply{Text: noise, FinalSummary: buildDeliverableFinalSummary(noise)}, nil
+	}
+	mFail.dispatch(context.Background(), testRunningChannel(faFail), testInboundText("nl-empty", userQ))
+	failGot := sentTexts(faFail)
+	if countText(failGot, finalSummaryMissingNotice) != 1 {
+		t.Fatalf("expected missing-summary failure notice, got %v", failGot)
+	}
+	for _, text := range failGot {
+		if strings.Contains(text, deprecatedSafeFinalNotice) {
+			t.Fatalf("failure path must not send deprecated shell: %v", failGot)
+		}
+	}
+	sawMissingReason := false
+	faFail.mu.Lock()
+	for _, out := range faFail.sent {
+		if out.Envelope.Reason == "final_summary_missing" && out.Envelope.Kind == sendable.KindBlocked {
+			sawMissingReason = true
+		}
+	}
+	faFail.mu.Unlock()
+	if !sawMissingReason {
+		t.Fatalf("expected KindBlocked with reason=final_summary_missing; outbound=%v", failGot)
 	}
 }
 
