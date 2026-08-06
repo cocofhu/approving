@@ -638,6 +638,11 @@ func (m *Manager) sendTurnFailure(ctx context.Context, rc *runningChannel, in In
 	})
 }
 
+// deprecatedSafeFinalNotice is the #157 fake-completion string: a turn that
+// produced nothing used to report success and send the user elsewhere. It is
+// kept only so tests can assert it never comes back.
+const deprecatedSafeFinalNotice = "本回合已结束，请在 Approving 查看完整结果。"
+
 // deliverableFinalText returns the text allowed out of a finished turn. Only an
 // explicitly submitted summary qualifies; Reply.Text stays internal regardless
 // of its content. ok=false means the turn produced nothing sendable and the

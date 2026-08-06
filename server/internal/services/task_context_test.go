@@ -154,14 +154,14 @@ func TestRiskConfirmationOneShotDuplicateExpiredAndLanguage(t *testing.T) {
 	}
 	// A task reference reads like speech, not like a ticket header, and is
 	// omitted entirely when there is no task to name.
-	if got := FormatTaskType("Login", "Risk", "en"); !strings.Contains(got, "Login") ||
+	if got := FormatTaskType("Login", "en"); !strings.Contains(got, "Login") ||
 		strings.Contains(got, "【") || strings.Contains(got, "｜") {
 		t.Fatalf("format=%q", got)
 	}
-	if got := FormatTaskType("登录页", "阻塞", "zh-CN"); got != "登录页那个：" {
+	if got := FormatTaskType("登录页", "zh-CN"); got != "登录页那个：" {
 		t.Fatalf("zh format=%q", got)
 	}
-	if got := FormatTaskType("", "阻塞", "zh-CN"); got != "" {
+	if got := FormatTaskType("", "zh-CN"); got != "" {
 		t.Fatalf("a missing title must not become a placeholder prefix: %q", got)
 	}
 }

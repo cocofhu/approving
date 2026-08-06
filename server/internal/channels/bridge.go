@@ -63,9 +63,9 @@ type ResolvedChannel struct {
 //
 // Text is the raw assistant output and is internal-only: it is persisted and
 // used for orchestration but must never reach an external channel. Only
-// FinalSummary — a structured, explicitly produced summary — is deliverable.
-// When FinalSummary is empty the Manager sends a fixed safe status notice
-// instead of leaking raw model output.
+// FinalSummary — a server-constructed, deliverable kind=final summary — may
+// leave the process. When FinalSummary is empty the Manager takes an
+// observable failure path instead of pretending the turn completed for the user.
 type Reply struct {
 	Text         string
 	FinalSummary string
@@ -203,7 +203,7 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 	stripped, urls := splitImageURLs(text)
 	return Reply{
 		Text:         stripped,
-		FinalSummary: extractStructuredFinalSummary(stripped),
+		FinalSummary: buildDeliverableFinalSummary(stripped),
 		ImageURLs:    urls,
 	}, nil
 }
@@ -446,9 +446,20 @@ var (
 	finalSummaryMarkers = []string{"[摘要]", "【摘要】", "[最终]", "【最终】", "[Final]", "[Summary]"}
 )
 
+// buildDeliverableFinalSummary constructs the only text allowed into
+// Reply.FinalSummary. Marker lines ([摘要]/…) win; otherwise a constrained
+// conversational summary is derived from user-visible assistant lines.
+// Empty means the Manager must fail observably — never leak Reply.Text whole.
+func buildDeliverableFinalSummary(text string) string {
+	if summary := extractStructuredFinalSummary(text); summary != "" {
+		return summary
+	}
+	return constrainedConversationalSummary(text)
+}
+
 // extractStructuredFinalSummary pulls an orchestration-authored structured
-// summary line. Prompt markers alone never make raw narration sendable; only
-// this explicit extraction populates Reply.FinalSummary for the Manager gate.
+// summary line. Unmarked narration never becomes a FinalSummary here; the
+// conversational fallback lives in constrainedConversationalSummary.
 func extractStructuredFinalSummary(text string) string {
 	for _, line := range strings.Split(text, "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -459,6 +470,54 @@ func extractStructuredFinalSummary(text string) string {
 		}
 	}
 	return ""
+}
+
+// constrainedConversationalSummary builds a short user-facing final from
+// assistant body text: drop tool/reasoning/progress-marker noise, then truncate.
+// It is still a server-owned summary, not a raw Reply.Text passthrough.
+func constrainedConversationalSummary(text string) string {
+	var keep []string
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || isFinalSummaryNoiseLine(trimmed) {
+			continue
+		}
+		keep = append(keep, trimmed)
+	}
+	joined := strings.TrimSpace(strings.Join(keep, "\n"))
+	if joined == "" {
+		return ""
+	}
+	return truncateRunes(joined, 240)
+}
+
+func isFinalSummaryNoiseLine(line string) bool {
+	if isProgressNoise(line) {
+		return true
+	}
+	for _, m := range progressMarkers {
+		if strings.HasPrefix(line, m.prefix) {
+			return true
+		}
+	}
+	for _, marker := range finalSummaryMarkers {
+		if strings.HasPrefix(line, marker) {
+			return true
+		}
+	}
+	lower := strings.ToLower(line)
+	switch {
+	case strings.HasPrefix(line, "内部推理"),
+		strings.HasPrefix(lower, "reasoning:"),
+		strings.HasPrefix(lower, "thinking:"):
+		return true
+	case strings.Contains(lower, "tool_call"),
+		strings.Contains(lower, "tool call"),
+		strings.Contains(lower, "function_call"),
+		strings.Contains(lower, "reasoning_delta"):
+		return true
+	}
+	return false
 }
 
 // splitImageURLs extracts shareable image URLs (markdown or bare) from an

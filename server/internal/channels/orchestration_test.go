@@ -212,6 +212,34 @@ func TestExtractStructuredFinalSummary(t *testing.T) {
 		t.Fatalf("summary = %q", got)
 	}
 	if extractStructuredFinalSummary("只有普通正文") != "" {
-		t.Fatal("unmarked text must not become FinalSummary")
+		t.Fatal("unmarked text must not become FinalSummary via marker extraction alone")
+	}
+}
+
+func TestBuildDeliverableFinalSummaryConversationalFallback(t *testing.T) {
+	marked := buildDeliverableFinalSummary("内部推理：先想清楚\n[摘要] 已修好延迟\n其它")
+	if marked != "已修好延迟" {
+		t.Fatalf("marker path = %q", marked)
+	}
+
+	plain := buildDeliverableFinalSummary("抱歉回复慢了，也认同质量需要改进。我们会优先排查延迟与答复质量。")
+	if plain == "" || !strings.Contains(plain, "抱歉回复慢了") {
+		t.Fatalf("conversational fallback missing answer: %q", plain)
+	}
+	if plain == deprecatedSafeFinalNotice || strings.Contains(plain, "本回合已结束") {
+		t.Fatalf("fallback must not be shell notice: %q", plain)
+	}
+
+	noisy := buildDeliverableFinalSummary("tool_call foo\n内部推理：密钥 sk-secret\n[进度] 读文件中\n对用户可见的答复在这里")
+	if !strings.Contains(noisy, "对用户可见的答复在这里") {
+		t.Fatalf("expected user-visible line kept: %q", noisy)
+	}
+	if strings.Contains(noisy, "tool_call") || strings.Contains(noisy, "内部推理") ||
+		strings.Contains(noisy, "sk-secret") || strings.Contains(noisy, "读文件中") {
+		t.Fatalf("noise leaked into summary: %q", noisy)
+	}
+
+	if buildDeliverableFinalSummary("tool_call x\nthinking: y") != "" {
+		t.Fatal("noise-only body must yield empty FinalSummary")
 	}
 }

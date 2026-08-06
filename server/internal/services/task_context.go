@@ -626,10 +626,11 @@ func NormalizeLanguage(language string) string {
 // FormatTaskType names which task a message is about, in the way a person
 // would. The old bracketed 【title｜kind】 header made every message read like a
 // ticket update; a reference only earns its place when more than one task could
-// be meant, and then it should sound like speech.
-func FormatTaskType(shortTitle, kind, language string) string {
+// be meant, and then it should sound like speech. The kind is deliberately not
+// part of it — naming the task is what disambiguates, and classifying it out
+// loud is the ticket voice this replaced.
+func FormatTaskType(shortTitle, language string) string {
 	shortTitle = SanitizeShortTitle(shortTitle)
-	kind = strings.TrimSpace(kind)
 	if NormalizeLanguage(language) == "en" {
 		if shortTitle == "" {
 			return ""

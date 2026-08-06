@@ -49,7 +49,7 @@ func FormatTaskMessage(shortTitle, kind, body, currentMessage, recentLanguage st
 	if body == "" {
 		return services.TaskStatusSentence(shortTitle, kind, language)
 	}
-	prefix := services.FormatTaskType(shortTitle, kind, language)
+	prefix := services.FormatTaskType(shortTitle, language)
 	if prefix == "" {
 		return body
 	}
