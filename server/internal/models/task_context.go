@@ -3,12 +3,16 @@ package models
 import "time"
 
 // TaskIdentity is the stable, user-facing identity of a Run.
+// It is project/Run scoped: any QQ identity in the project may search it.
+// Per-sender isolation lives on MessageBinding / ConversationFocus / tickets.
 type TaskIdentity struct {
 	ID                  string     `gorm:"primaryKey;size:64" json:"id"`
-	RunID               string     `gorm:"size:64;uniqueIndex" json:"runId"`
-	ProjectID           string     `gorm:"size:64;index:idx_task_scope,priority:1" json:"projectId"`
-	UserID              string     `gorm:"size:191;index:idx_task_scope,priority:2" json:"userId"`
-	ShortTitle          string     `gorm:"size:160;index:idx_task_scope,priority:3" json:"shortTitle"`
+	RunID               string     `gorm:"size:64;uniqueIndex:idx_task_run_project,priority:1" json:"runId"`
+	ProjectID           string     `gorm:"size:64;uniqueIndex:idx_task_run_project,priority:2;index:idx_task_project_title,priority:1" json:"projectId"`
+	// UserID is an optional provenance hint (who first materialized the row).
+	// It is NOT an ownership or search boundary.
+	UserID              string     `gorm:"size:191" json:"userId,omitempty"`
+	ShortTitle          string     `gorm:"size:160;index:idx_task_project_title,priority:2" json:"shortTitle"`
 	OriginalRequirement string     `gorm:"type:text" json:"originalRequirement"`
 	Aliases             []string   `gorm:"serializer:json" json:"aliases"`
 	Keywords            []string   `gorm:"serializer:json" json:"keywords"`

@@ -186,10 +186,10 @@ func TestSendRunAcceptanceAckOncePerRunAndRejectsMissingRun(t *testing.T) {
 		ProjectID: "proj", RunID: "run-1", Scene: SceneC2C,
 		ConversationID: "user1", UserID: "u1", ShortTitle: "登录页", Language: "zh-CN",
 	}
-	if err := m.SendRunAcceptanceAck(context.Background(), ack); err != nil {
+	if _, err := m.SendRunAcceptanceAck(context.Background(), ack); err != nil {
 		t.Fatalf("first ack: %v", err)
 	}
-	if err := m.SendRunAcceptanceAck(context.Background(), ack); err != nil {
+	if _, err := m.SendRunAcceptanceAck(context.Background(), ack); err != nil {
 		t.Fatalf("second ack: %v", err)
 	}
 	got := sentTexts(fa)
@@ -201,7 +201,7 @@ func TestSendRunAcceptanceAckOncePerRunAndRejectsMissingRun(t *testing.T) {
 	}
 
 	ack.RunID = ""
-	if err := m.SendRunAcceptanceAck(context.Background(), ack); err == nil {
+	if _, err := m.SendRunAcceptanceAck(context.Background(), ack); err == nil {
 		t.Fatal("run acceptance ACK without a real run id must be rejected")
 	}
 }
@@ -255,9 +255,9 @@ func TestResolveTaskReferenceQQFlow(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Another QQ identity in the same project must stay invisible.
+	// Another project's task must stay invisible even with a similar title.
 	if _, err := svc.EnsureIdentity(services.EnsureTaskIdentityInput{
-		RunID: "r3", ProjectID: projectID, UserID: services.SyntheticQQUserID("intruder"),
+		RunID: "r3", ProjectID: "other-proj", UserID: userID,
 		ShortTitle: "登录页", Status: "active",
 	}); err != nil {
 		t.Fatal(err)

@@ -209,11 +209,14 @@ func (p *Policy) Evaluate(ctx context.Context, e DeliveryEnvelope, channel Chann
 			DedupeKey: key, ProjectID: e.ProjectID, RunID: e.RunID,
 			TaskContext:    e.TaskContext,
 			ConversationID: e.ConversationID, Channel: string(channel),
-			Kind: string(e.Kind), ContentHash: contentHash, CreatedAt: now,
+			Kind: string(e.Kind), ContentHash: contentHash,
+			ProgressDigest: progressDigest(e), CreatedAt: now,
 		}
 	}
 	receipt.Status = "pending"
 	receipt.Result = "pending"
+	receipt.ContentHash = contentHash
+	receipt.ProgressDigest = progressDigest(e)
 	receipt.Attempts++
 	receipt.LastAttemptAt = now
 	receipt.UpdatedAt = now
@@ -294,10 +297,40 @@ func (p *Policy) bucketSuppression(ctx context.Context, e DeliveryEnvelope, chan
 		var last models.SendableDeliveryReceipt
 		err := base().Where("kind = ?", string(KindProgress)).Order("last_attempt_at desc").First(&last).Error
 		if err == nil && now.Sub(last.LastAttemptAt) < p.rateWindow {
-			return "progress_rate_limited_merged"
+			digest := progressDigest(e)
+			// Same stage/conclusion within the window: coalesce & suppress.
+			if digest == "" || digest == last.ProgressDigest {
+				return "progress_rate_limited_merged"
+			}
+			// Substantive field change: immediately retain/deliver the latest
+			// snapshot (still one logical progress update of the newest stage).
+			return ""
 		}
 	}
 	return ""
+}
+
+func progressDigest(e DeliveryEnvelope) string {
+	if e.Kind != KindProgress {
+		return ""
+	}
+	raw := strings.Join([]string{
+		strings.TrimSpace(e.Progress.Stage),
+		fmtBool(e.Progress.Blocked),
+		fmtBool(e.Progress.ActionRequired),
+		strings.TrimSpace(e.Progress.Conclusion),
+	}, "\x1f")
+	if strings.TrimSpace(strings.ReplaceAll(raw, "\x1f", "")) == "" {
+		return ""
+	}
+	return digest(raw)
+}
+
+func fmtBool(v bool) string {
+	if v {
+		return "1"
+	}
+	return "0"
 }
 
 // Retry claims the next bounded attempt for a delivery that already failed.

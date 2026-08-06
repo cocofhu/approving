@@ -60,25 +60,38 @@ func (r SendableRequest) Envelope() sendable.DeliveryEnvelope {
 	return sendable.AppendSendable(e, sendable.ChannelQQ)
 }
 
+// DeliveryResult reports whether an outbound attempt was sent, suppressed, or
+// failed after policy evaluation and bounded transport retries.
+type DeliveryResult struct {
+	Decision sendable.Decision
+	Sent     bool
+}
+
+// ErrDeliverySuppressed is returned when policy intentionally blocked a send.
+var ErrDeliverySuppressed = errors.New("delivery suppressed by sendable policy")
+
+// ErrDeliveryFailed is returned when transport retries are exhausted.
+var ErrDeliveryFailed = errors.New("delivery failed after retries")
+
 // DeliverSendable is the explicit external egress for orchestration. Every
-// delivery still passes the Manager's single policy gate.
-func (m *Manager) DeliverSendable(ctx context.Context, req SendableRequest) error {
+// delivery still passes the Manager's single policy gate. Callers can tell
+// sent / suppressed / failed apart from the result.
+func (m *Manager) DeliverSendable(ctx context.Context, req SendableRequest) (DeliveryResult, error) {
 	if strings.TrimSpace(req.Text) == "" {
-		return errors.New("sendable text is empty")
+		return DeliveryResult{}, errors.New("sendable text is empty")
 	}
 	target, scene, conv, err := m.resolveSendableTarget(req)
 	if err != nil {
-		return err
+		return DeliveryResult{}, err
 	}
 	req.Scene, req.ConversationID = scene, conv
 	if ctx == nil {
 		ctx = m.baseCtx
 	}
-	m.sendOutbound(ctx, target, OutboundMessage{
+	return m.sendOutboundResult(ctx, target, OutboundMessage{
 		Scene: scene, ConversationID: conv, ReplyToMessageID: req.ReplyToMessageID,
 		Text: req.Text, ImageURLs: req.ImageURLs, Envelope: req.Envelope(),
-	})
-	return nil
+	}), nil
 }
 
 // RunAcceptanceAck confirms that a real Run was accepted for a user. It is
@@ -95,10 +108,10 @@ type RunAcceptanceAck struct {
 }
 
 // SendRunAcceptanceAck delivers the once-per-run acceptance ACK.
-func (m *Manager) SendRunAcceptanceAck(ctx context.Context, ack RunAcceptanceAck) error {
+func (m *Manager) SendRunAcceptanceAck(ctx context.Context, ack RunAcceptanceAck) (DeliveryResult, error) {
 	runID := strings.TrimSpace(ack.RunID)
 	if runID == "" {
-		return errors.New("run acceptance ack requires a real run id")
+		return DeliveryResult{}, errors.New("run acceptance ack requires a real run id")
 	}
 	language := services.DetectLanguage("", ack.Language)
 	kindLabel := "已接单"

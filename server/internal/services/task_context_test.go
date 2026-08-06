@@ -57,12 +57,27 @@ func TestTaskContextMigrationIdentityResolutionAndIsolation(t *testing.T) {
 	}
 	ensureTask(t, svc, "r2", scope.ProjectID, scope.UserID, "用户登录页")
 	ensureTask(t, svc, "r3", "other-project", scope.UserID, "登录页")
-	ensureTask(t, svc, "r4", scope.ProjectID, SyntheticQQUserID("other"), "登录页")
+	// Another QQ identity may seed the same project; metadata stays project-scoped
+	// and searchable, while focus/bindings remain per synthetic identity.
+	ensureTask(t, svc, "r4", scope.ProjectID, SyntheticQQUserID("other"), "登录页性能优化")
 
 	res, err := svc.ResolveTask(ResolveTaskInput{Scope: scope, Query: "登录页"})
-	if err != nil || !res.Ambiguous || len(res.Candidates) != 2 {
+	if err != nil || !res.Ambiguous || len(res.Candidates) < 2 {
 		t.Fatalf("ambiguous resolution=%+v err=%v", res, err)
 	}
+	for _, c := range res.Candidates {
+		if c.Identity.ProjectID != scope.ProjectID {
+			t.Fatalf("cross-project candidate leaked: %+v", c.Identity)
+		}
+	}
+	otherScope := TaskScope{ProjectID: "p1", UserID: SyntheticQQUserID("other"), Channel: "qq", ConversationID: "c-other"}
+	if _, err := svc.SetFocus(otherScope, &res.Candidates[0].Identity, "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	if focus, err := svc.GetFocus(scope, false); err == nil {
+		t.Fatalf("u1 must not see other identity focus: %+v", focus)
+	}
+
 	ref, err := svc.ResolveTask(ResolveTaskInput{
 		Scope: scope, Query: "用户登录页", ReplyMessageID: "m1",
 	})
@@ -267,21 +282,32 @@ func TestEnsureIdentityForRunDerivesFieldsAndBackfillsScoped(t *testing.T) {
 	if others, err := svc.Search(scope, "结算页"); err != nil || len(others) != 0 {
 		t.Fatalf("cross-project leak: %+v err=%v", others, err)
 	}
-	// A different QQ identity in the same project must not see the task that
-	// already belongs to u1, and the scope conflict must not break resolution.
+	// A different QQ identity in the same project must still find project-scoped
+	// task metadata; only focus/bindings stay isolated per synthetic identity.
 	intruder := TaskScope{ProjectID: "p1", UserID: SyntheticQQUserID("u2"), Channel: "qq", ConversationID: "c9"}
 	res, err := svc.ResolveTask(ResolveTaskInput{Scope: intruder, Query: "修复登录页跳转"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Identity != nil {
-		t.Fatalf("another QQ identity saw a task it does not own: %+v", res.Identity)
+	if res.Identity == nil || res.Identity.RunID != "r1" {
+		t.Fatalf("same-project QQ identity should resolve project tasks: %+v", res)
+	}
+	focusA, err := svc.SetFocus(scope, res.Identity, "zh-CN")
+	if err != nil {
+		t.Fatal(err)
+	}
+	focusB, err := svc.GetFocus(intruder, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if focusA.UserID == focusB.UserID {
+		t.Fatalf("focus must stay isolated per QQ identity: %+v %+v", focusA, focusB)
 	}
 	var count int64
 	if err := db.Model(&models.TaskIdentity{}).Where("run_id = ?", "r1").Count(&count).Error; err != nil {
 		t.Fatal(err)
 	}
 	if count != 1 {
-		t.Fatalf("run r1 has %d identities; a Run belongs to one identity scope", count)
+		t.Fatalf("run r1 has %d identities; a Run has one project-scoped identity", count)
 	}
 }

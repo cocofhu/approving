@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -370,7 +371,27 @@ func main() {
 	taskContextSvc := services.NewTaskContextService(db)
 	taskContextSvc.EnableRunBackfill()
 	channelMgr.SetTaskContextService(taskContextSvc)
-	channelMgr.SetRiskConfirmationService(services.NewRiskConfirmationService(db))
+	riskSvc := services.NewRiskConfirmationService(db)
+	channelMgr.SetRiskConfirmationService(riskSvc)
+	channelMgr.SetRiskActionExecutor(func(projectID, runID, action string, meta map[string]string) error {
+		switch action {
+		case "cancel_run", "delete_run":
+			return eng.Cancel(runID)
+		case "resume_gate", "approve_gate", "reject_gate":
+			nodeID := meta["nodeId"]
+			gateAction := meta["gateAction"]
+			if gateAction == "" {
+				gateAction = "approve"
+			}
+			if nodeID == "" {
+				return fmt.Errorf("gate node id required")
+			}
+			return eng.ResumeGate(runID, nodeID, gateAction, nil)
+		default:
+			return fmt.Errorf("unsupported risk action %q", action)
+		}
+	})
+	pmMCP.SetTaskSafety(riskSvc, taskContextSvc, channelIMNotifier{mgr: channelMgr})
 	channelMgr.SetLoader(channelSvc.ListRaw)
 	channelSvc.SetOnChange(channelMgr.Reload)
 	channelMgr.ApplyOnBoot()

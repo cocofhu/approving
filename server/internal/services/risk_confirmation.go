@@ -65,9 +65,8 @@ func (s *RiskConfirmationService) resolveShortTitle(in RiskTicketInput) string {
 		return title
 	}
 	var identity models.TaskIdentity
-	if err := s.db.Where("run_id = ? AND project_id = ? AND user_id = ?",
-		strings.TrimSpace(in.RunID), strings.TrimSpace(in.ProjectID),
-		strings.TrimSpace(in.UserID)).First(&identity).Error; err == nil {
+	if err := s.db.Where("run_id = ? AND project_id = ?",
+		strings.TrimSpace(in.RunID), strings.TrimSpace(in.ProjectID)).First(&identity).Error; err == nil {
 		return identity.ShortTitle
 	}
 	return ""
@@ -169,8 +168,8 @@ func (s *RiskConfirmationService) latestTaskStatus(tx *gorm.DB, ticket models.Ri
 		}
 	}
 	var identity models.TaskIdentity
-	if err := tx.Where("run_id = ? AND project_id = ? AND user_id = ?",
-		ticket.RunID, ticket.ProjectID, ticket.UserID).First(&identity).Error; err == nil {
+	if err := tx.Where("run_id = ? AND project_id = ?",
+		ticket.RunID, ticket.ProjectID).First(&identity).Error; err == nil {
 		return identity.Status
 	}
 	return ""
@@ -186,6 +185,43 @@ func parseRiskDecision(value string) string {
 	default:
 		return ""
 	}
+}
+
+// ParseRiskDecisionPublic exposes confirmation keyword parsing for IM orchestration.
+func ParseRiskDecisionPublic(value string) string { return parseRiskDecision(value) }
+
+func (s *RiskConfirmationService) LatestPending(userID, projectID string) (*models.RiskConfirmationTicket, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("risk confirmation database is unavailable")
+	}
+	var ticket models.RiskConfirmationTicket
+	err := s.db.Where("project_id = ? AND user_id = ? AND status = ?",
+		strings.TrimSpace(projectID), strings.TrimSpace(userID), "pending").
+		Order("created_at desc").First(&ticket).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &ticket, nil
+}
+
+func (s *RiskConfirmationService) LatestAny(userID, projectID string) (*models.RiskConfirmationTicket, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("risk confirmation database is unavailable")
+	}
+	var ticket models.RiskConfirmationTicket
+	err := s.db.Where("project_id = ? AND user_id = ?",
+		strings.TrimSpace(projectID), strings.TrimSpace(userID)).
+		Order("created_at desc").First(&ticket).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &ticket, nil
 }
 
 func riskPrompt(language string) string {

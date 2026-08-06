@@ -90,6 +90,8 @@ type Manager struct {
 	ambiguityMu sync.Mutex
 	ambiguity   map[string]ambiguityMemory
 
+	riskExecutor RiskActionExecutor
+
 	// Test hooks (production leaves these nil/zero):
 	// handleFunc overrides bridge.Handle when set (no progress callback).
 	handleFunc func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error)
@@ -368,6 +370,10 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		})
 	}
 
+	if m.handleInboundOrchestration(ctx, rc, &in) {
+		return
+	}
+
 	resolved := ResolvedChannel{
 		ID: rc.cfg.ID, Type: rc.cfg.Type, ProjectID: rc.cfg.ProjectID,
 		TurnTimeout: time.Duration(rc.cfg.TurnTimeoutSeconds) * time.Second,
@@ -496,36 +502,46 @@ func progressEnvelope(rc *runningChannel, in InboundMessage, ev ProgressEvent) s
 }
 
 func (m *Manager) sendOutbound(ctx context.Context, rc *runningChannel, out OutboundMessage) {
+	_ = m.sendOutboundResult(ctx, rc, out)
+}
+
+func (m *Manager) sendOutboundResult(ctx context.Context, rc *runningChannel, out OutboundMessage) DeliveryResult {
 	if rc == nil || rc.adapter == nil {
-		return
+		return DeliveryResult{Decision: sendable.Decision{Reason: "no_adapter"}}
 	}
 	contentFingerprint := out.Text + "\n" + strings.Join(out.ImageURLs, "\n")
 	decision, err := m.policy.Evaluate(ctx, out.Envelope, sendable.ChannelQQ, contentFingerprint)
 	if err != nil {
 		log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel outbound policy failed closed")
-		return
+		return DeliveryResult{Decision: sendable.Decision{Reason: "policy_error"}}
 	}
 	for decision.Send {
 		sendErr := rc.adapter.Send(ctx, out)
 		if sendErr == nil {
 			_ = m.policy.MarkSent(ctx, decision, out.Envelope, sendable.ChannelQQ)
-			return
+			return DeliveryResult{Decision: decision, Sent: true}
 		}
 		_ = m.policy.MarkFailed(ctx, decision, out.Envelope, sendable.ChannelQQ, sendErr)
 		log.Warn().Err(sendErr).Str("channel", rc.cfg.ID).Int("attempt", decision.Attempt).
 			Msg("channel outbound send failed")
 		if !m.waitBackoff(ctx, decision.Attempt) {
-			return
+			decision.Reason = "transport_failed"
+			return DeliveryResult{Decision: decision}
 		}
 		// Retry claims the next bounded attempt for this dedupe key; it returns
 		// Send=false once the receipt is sent elsewhere or attempts are spent.
 		next, err := m.policy.Retry(ctx, decision, out.Envelope, sendable.ChannelQQ)
 		if err != nil {
 			log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel outbound retry claim failed")
-			return
+			decision.Reason = "retry_claim_failed"
+			return DeliveryResult{Decision: decision}
 		}
 		decision = next
 	}
+	if decision.Reason == "" {
+		decision.Reason = "suppressed"
+	}
+	return DeliveryResult{Decision: decision}
 }
 
 // waitBackoff sleeps the delivery backoff and reports whether the caller may

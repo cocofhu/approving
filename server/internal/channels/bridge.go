@@ -169,8 +169,9 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 	}
 	stripped, urls := splitImageURLs(text)
 	return Reply{
-		Text:      stripped,
-		ImageURLs: urls,
+		Text:         stripped,
+		FinalSummary: extractStructuredFinalSummary(stripped),
+		ImageURLs:    urls,
 	}, nil
 }
 
@@ -383,7 +384,23 @@ func extForMime(mime string) string {
 var (
 	mdImageRe   = regexp.MustCompile(`!\[[^\]]*\]\((https?://[^)\s]+)\)`)
 	bareImageRe = regexp.MustCompile(`https?://[^\s)]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s)]*)?`)
+	finalSummaryMarkers = []string{"[摘要]", "【摘要】", "[最终]", "【最终】", "[Final]", "[Summary]"}
 )
+
+// extractStructuredFinalSummary pulls an orchestration-authored structured
+// summary line. Prompt markers alone never make raw narration sendable; only
+// this explicit extraction populates Reply.FinalSummary for the Manager gate.
+func extractStructuredFinalSummary(text string) string {
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		for _, marker := range finalSummaryMarkers {
+			if strings.HasPrefix(trimmed, marker) {
+				return truncateRunes(strings.TrimSpace(strings.TrimPrefix(trimmed, marker)), 240)
+			}
+		}
+	}
+	return ""
+}
 
 // splitImageURLs extracts shareable image URLs (markdown or bare) from an
 // assistant reply and returns the text with markdown image syntax removed.

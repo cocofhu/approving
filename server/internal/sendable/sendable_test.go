@@ -142,6 +142,26 @@ func TestTurnAckIsNotRunAcceptanceAck(t *testing.T) {
 	}
 }
 
+func TestPolicyRetainsLatestProgressStageWithinWindow(t *testing.T) {
+	p, _, now := testPolicy(t, nil)
+	first := external("r1", string(KindProgress), "p-a")
+	first.Progress.Stage = "A"
+	if !sendAndMark(t, p, first, "stage A") {
+		t.Fatal("first stage suppressed")
+	}
+	*now = now.Add(30 * time.Second)
+	same := external("r1", string(KindProgress), "p-a2")
+	same.Progress.Stage = "A"
+	if sendAndMark(t, p, same, "stage A again") {
+		t.Fatal("same stage within window must stay rate-limited")
+	}
+	newer := external("r1", string(KindProgress), "p-b")
+	newer.Progress.Stage = "B"
+	if !sendAndMark(t, p, newer, "stage B") {
+		t.Fatal("newer stage within window must still be delivered (retain latest)")
+	}
+}
+
 func TestRetryClaimsBoundedAttempts(t *testing.T) {
 	var audits []AuditEntry
 	p, _, _ := testPolicy(t, func(entry AuditEntry) { audits = append(audits, entry) })

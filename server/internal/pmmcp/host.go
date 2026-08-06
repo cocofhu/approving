@@ -58,6 +58,17 @@ type Host struct {
 	skill    *services.SkillService
 	eng      engineOps
 	audit    func(services.AuditRecord)
+
+	risk     *services.RiskConfirmationService
+	tasks    *services.TaskContextService
+	notify   ExternalIMNotifier
+}
+
+// ExternalIMNotifier is the minimal IM egress used by PM MCP write tools.
+// Implemented by the channel Manager in main; nil disables explicit IM notify.
+type ExternalIMNotifier interface {
+	NotifyRunAccepted(projectID, runID, userID, shortTitle, language string) error
+	NotifyProgress(projectID, runID, userID, kind, text, stage, conclusion string, blocked, actionRequired bool) error
 }
 
 // engineOps covers the run operations exposed through pm-workflow-write
@@ -97,6 +108,16 @@ func (h *Host) SetOrgAndSkill(org *services.OrgService, skill *services.SkillSer
 func (h *Host) SetAuditRecorder(fn func(services.AuditRecord)) {
 	h.mu.Lock()
 	h.audit = fn
+	h.mu.Unlock()
+}
+
+// SetTaskSafety wires high-risk confirmation and task identity helpers used by
+// write tools and explicit IM progress notifications.
+func (h *Host) SetTaskSafety(risk *services.RiskConfirmationService, tasks *services.TaskContextService, notify ExternalIMNotifier) {
+	h.mu.Lock()
+	h.risk = risk
+	h.tasks = tasks
+	h.notify = notify
 	h.mu.Unlock()
 }
 
@@ -722,7 +743,60 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 				"runId":      run.ID,
 			},
 		})
-		return map[string]any{"id": run.ID, "status": run.Status}, false
+		shortTitle := run.Title
+		if h.tasks != nil {
+			sessUser := ""
+			if sess, ok := h.SessionFor(projectID, token); ok {
+				sessUser = sess.UserID
+			}
+			if identity, err := h.tasks.EnsureIdentityForRun(*run, projectID, sessUser); err == nil && identity != nil {
+				shortTitle = identity.ShortTitle
+			}
+		}
+		if h.notify != nil {
+			sessUser := ""
+			if sess, ok := h.SessionFor(projectID, token); ok {
+				sessUser = sess.UserID
+			}
+			if err := h.notify.NotifyRunAccepted(projectID, run.ID, sessUser, shortTitle, ""); err != nil {
+				log.Warn().Err(err).Str("run", run.ID).Msg("pm_start_run acceptance ack failed")
+			}
+		}
+		return map[string]any{"id": run.ID, "status": run.Status, "shortTitle": shortTitle}, false
+	case "pm_notify_progress":
+		if h.notify == nil {
+			return map[string]any{"error": "im notifier unavailable"}, true
+		}
+		runID := platformmcp.StrArg(args, "runId")
+		if _, ok := h.runInProject(projectID, runID); !ok {
+			return map[string]any{"error": "run not found"}, true
+		}
+		text := strings.TrimSpace(platformmcp.StrArg(args, "text"))
+		stage := strings.TrimSpace(platformmcp.StrArg(args, "stage"))
+		conclusion := strings.TrimSpace(platformmcp.StrArg(args, "conclusion"))
+		kind := strings.TrimSpace(platformmcp.StrArg(args, "kind"))
+		if kind == "" {
+			kind = "progress"
+		}
+		blocked := platformmcp.BoolArg(args, "blocked")
+		actionRequired := platformmcp.BoolArg(args, "actionRequired")
+		if text == "" {
+			text = stage
+			if text == "" {
+				text = conclusion
+			}
+		}
+		if text == "" {
+			return map[string]any{"error": "text, stage or conclusion required"}, true
+		}
+		sessUser := ""
+		if sess, ok := h.SessionFor(projectID, token); ok {
+			sessUser = sess.UserID
+		}
+		if err := h.notify.NotifyProgress(projectID, runID, sessUser, kind, text, stage, conclusion, blocked, actionRequired); err != nil {
+			return map[string]any{"error": err.Error()}, true
+		}
+		return map[string]any{"status": "queued", "kind": kind}, false
 	case "pm_resume_gate":
 		if h.eng == nil {
 			return map[string]any{"error": "engine unavailable"}, true
@@ -735,6 +809,9 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		action := strings.TrimSpace(platformmcp.StrArg(args, "action"))
 		if nodeID == "" || action == "" {
 			return map[string]any{"error": "nodeId and action required"}, true
+		}
+		if blocked, prompt := h.requireRiskConfirmation(projectID, token, runID, "resume_gate:"+nodeID+":"+action); blocked {
+			return map[string]any{"status": "needs_confirmation", "prompt": prompt}, false
 		}
 		if err := h.eng.ResumeGate(runID, nodeID, action, platformmcp.MapArg(args, "form")); err != nil {
 			return map[string]any{"error": err.Error()}, true
@@ -776,6 +853,9 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		if !ok {
 			return map[string]any{"error": "run not found"}, true
 		}
+		if blocked, prompt := h.requireRiskConfirmation(projectID, token, runID, "cancel_run"); blocked {
+			return map[string]any{"status": "needs_confirmation", "prompt": prompt, "runId": runID}, false
+		}
 		if err := h.eng.Cancel(runID); err != nil {
 			return map[string]any{"error": err.Error()}, true
 		}
@@ -798,6 +878,41 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 	default:
 		return map[string]any{"error": "unknown tool: " + name}, true
 	}
+}
+
+// requireRiskConfirmation creates a one-shot ticket and blocks the write until
+// the user confirms via IM. Returns blocked=false when risk service is unset
+// (unit tests without IM wiring) or when a ticket was already confirmed in-band
+// via confirmed=true after the IM path executed the action separately.
+func (h *Host) requireRiskConfirmation(projectID, token, runID, action string) (blocked bool, prompt string) {
+	if h.risk == nil {
+		return false, ""
+	}
+	sess, ok := h.SessionFor(projectID, token)
+	if !ok {
+		return true, "session required for high-risk confirmation"
+	}
+	// If the IM orchestration already confirmed and executed, MCP should not
+	// create another ticket. A fresh pending ticket always blocks.
+	if pending, err := h.risk.LatestPending(sess.UserID, projectID); err == nil && pending != nil &&
+		pending.RunID == runID && pending.Action == action {
+		return true, h.risk.ConfirmationPrompt(*pending)
+	}
+	shortTitle := ""
+	if h.tasks != nil {
+		var identity models.TaskIdentity
+		if err := h.tasks.DB().Where("run_id = ? AND project_id = ?", runID, projectID).First(&identity).Error; err == nil {
+			shortTitle = identity.ShortTitle
+		}
+	}
+	ticket, err := h.risk.CreateTicket(services.RiskTicketInput{
+		ProjectID: projectID, UserID: sess.UserID, RunID: runID,
+		Action: action, ShortTitle: shortTitle, Language: "",
+	})
+	if err != nil {
+		return true, "failed to create confirmation ticket: " + err.Error()
+	}
+	return true, h.risk.ConfirmationPrompt(*ticket)
 }
 
 func toolSchemas(mcpID string) []map[string]any {
@@ -915,8 +1030,17 @@ func toolSchemas(mcpID string) []map[string]any {
 					"description": "可选：精确字段/页面元素标注；首版不支持 images",
 				},
 			}),
-			platformmcp.Tool("pm_cancel_run", "取消一次运行中的 Run。", map[string]any{
+			platformmcp.Tool("pm_cancel_run", "取消一次运行中的 Run（需用户短标题二次确认后才会真正取消）。", map[string]any{
 				"runId": map[string]any{"type": "string"},
+			}),
+			platformmcp.Tool("pm_notify_progress", "向外部 IM 显式提交一条 Sendable 进度/阻塞/确认消息（须含 stage/conclusion 等实质字段）。", map[string]any{
+				"runId":          map[string]any{"type": "string"},
+				"kind":           map[string]any{"type": "string", "description": "progress|blocked|action_required|final"},
+				"text":           map[string]any{"type": "string"},
+				"stage":          map[string]any{"type": "string"},
+				"conclusion":     map[string]any{"type": "string"},
+				"blocked":        map[string]any{"type": "boolean"},
+				"actionRequired": map[string]any{"type": "boolean"},
 			}),
 		}
 	default:
