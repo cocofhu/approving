@@ -3,11 +3,13 @@ package services
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/cocofhu/approving/internal/models"
 
@@ -53,6 +55,11 @@ func (s *TaskContextService) DB() *gorm.DB {
 type EnsureTaskIdentityInput struct {
 	RunID, ProjectID, UserID, ShortTitle, OriginalRequirement, Status string
 	Aliases, Keywords                                                 []string
+
+	// Origin conversation, recorded once when the task is created from a
+	// channel turn. Empty values never clear an already-recorded origin.
+	OriginChannel, OriginScene, OriginConversationID, OriginExternalUserID string
+	Language, RecentContext                                                string
 }
 
 func (s *TaskContextService) EnsureIdentity(in EnsureTaskIdentityInput) (*models.TaskIdentity, error) {
@@ -72,10 +79,16 @@ func (s *TaskContextService) EnsureIdentity(in EnsureTaskIdentityInput) (*models
 		identity = models.TaskIdentity{
 			ID: "task-" + uuid.NewString()[:12], RunID: in.RunID,
 			ProjectID: in.ProjectID, UserID: in.UserID,
-			ShortTitle:          strings.TrimSpace(in.ShortTitle),
+			ShortTitle:          SanitizeShortTitle(in.ShortTitle),
 			OriginalRequirement: strings.TrimSpace(in.OriginalRequirement),
 			Aliases:             uniqueStrings(in.Aliases), Keywords: uniqueStrings(in.Keywords),
-			Status: normalizeTaskStatus(in.Status), CreatedAt: now, UpdatedAt: now,
+			OriginChannel:        strings.TrimSpace(in.OriginChannel),
+			OriginScene:          strings.TrimSpace(in.OriginScene),
+			OriginConversationID: strings.TrimSpace(in.OriginConversationID),
+			OriginExternalUserID: strings.TrimSpace(in.OriginExternalUserID),
+			Language:             NormalizeLanguage(in.Language),
+			RecentContext:        strings.TrimSpace(in.RecentContext),
+			Status:               normalizeTaskStatus(in.Status), CreatedAt: now, UpdatedAt: now,
 		}
 		if isTerminalTaskStatus(identity.Status) {
 			t := now
@@ -96,7 +109,7 @@ func (s *TaskContextService) EnsureIdentity(in EnsureTaskIdentityInput) (*models
 		return nil, ErrTaskIdentityScopeMismatch
 	}
 	oldTitle := strings.TrimSpace(identity.ShortTitle)
-	newTitle := strings.TrimSpace(in.ShortTitle)
+	newTitle := SanitizeShortTitle(in.ShortTitle)
 	if newTitle != "" && oldTitle != "" && newTitle != oldTitle {
 		identity.Aliases = uniqueStrings(append(identity.Aliases, oldTitle))
 	}
@@ -108,6 +121,24 @@ func (s *TaskContextService) EnsureIdentity(in EnsureTaskIdentityInput) (*models
 	}
 	if identity.UserID == "" && in.UserID != "" {
 		identity.UserID = in.UserID
+	}
+	// Origin is write-once: whoever created the task owns where its results go.
+	// A later update from another surface must not re-home an existing task.
+	if identity.OriginConversationID == "" {
+		if conv := strings.TrimSpace(in.OriginConversationID); conv != "" {
+			identity.OriginChannel = strings.TrimSpace(in.OriginChannel)
+			identity.OriginScene = strings.TrimSpace(in.OriginScene)
+			identity.OriginConversationID = conv
+			identity.OriginExternalUserID = strings.TrimSpace(in.OriginExternalUserID)
+		}
+	}
+	// Callers decide whether a message really represents a language switch (see
+	// TaskLanguageFor); this just records the decision.
+	if lang := NormalizeLanguage(in.Language); lang != "" {
+		identity.Language = lang
+	}
+	if recent := strings.TrimSpace(in.RecentContext); recent != "" {
+		identity.RecentContext = recent
 	}
 	identity.Aliases = uniqueStrings(append(identity.Aliases, in.Aliases...))
 	identity.Keywords = uniqueStrings(append(identity.Keywords, in.Keywords...))
@@ -149,13 +180,58 @@ func (s *TaskContextService) EnsureIdentityForRun(run models.Run, projectID, use
 
 const runShortTitleRunes = 24
 
+// internalIDPattern matches the internal Run / task identifier shapes in any
+// casing. Short titles are shown to users, who have no idea what a Run id is;
+// letting one through produced titles like 「修复 Run run-1ca1876f」.
+var internalIDPattern = regexp.MustCompile(`(?i)\b(run|task)[-_ ]?[0-9a-f]{6,}\b`)
+
+// genericTitleWords are placeholders that carry no meaning on their own.
+var genericTitleWords = map[string]bool{
+	"run": true, "task": true, "job": true, "workflow": true, "任务": true, "运行": true,
+}
+
+// SanitizeShortTitle strips internal identifiers from a user-facing task title
+// and reports the empty string when nothing meaningful survives, so callers can
+// fall back to real words instead of persisting a leaked id.
+func SanitizeShortTitle(title string) string {
+	cleaned := internalIDPattern.ReplaceAllString(strings.TrimSpace(title), " ")
+	words := strings.Fields(cleaned)
+	// Removing the identifier from 「修复 Run run-1ca1876f」 leaves a dangling
+	// "Run" that means nothing on its own.
+	for len(words) > 0 && genericTitleWords[strings.ToLower(words[len(words)-1])] {
+		words = words[:len(words)-1]
+	}
+	for len(words) > 0 && genericTitleWords[strings.ToLower(words[0])] {
+		words = words[1:]
+	}
+	cleaned = strings.Trim(strings.Join(words, " "), " -_/|:：、,，")
+	if cleaned == "" || genericTitleWords[strings.ToLower(cleaned)] {
+		return ""
+	}
+	return truncateTaskRunes(cleaned, runShortTitleRunes)
+}
+
+// runShortTitle derives a human-readable label for a Run. It prefers the Run's
+// own title, then the workflow name, then the first sentence of the original
+// request — and never falls back to the Run id.
 func runShortTitle(run models.Run) string {
-	for _, candidate := range []string{run.Title, run.WorkflowName} {
-		if candidate = strings.TrimSpace(candidate); candidate != "" {
-			return truncateTaskRunes(firstLine(candidate), runShortTitleRunes)
+	candidates := []string{run.Title, run.WorkflowName, firstSentence(runRequirement(run))}
+	for _, candidate := range candidates {
+		if title := SanitizeShortTitle(firstLine(candidate)); title != "" {
+			return title
 		}
 	}
-	return truncateTaskRunes("Run "+run.ID, runShortTitleRunes)
+	return "未命名任务"
+}
+
+// firstSentence returns the leading sentence of a free-form request, which is
+// usually the request itself in one line.
+func firstSentence(value string) string {
+	value = firstLine(value)
+	if idx := strings.IndexAny(value, "。！？!?;；\n"); idx > 0 {
+		return strings.TrimSpace(value[:idx])
+	}
+	return strings.TrimSpace(value)
 }
 
 // runRequirementKeys are the conventional Run input keys that hold the original
@@ -228,6 +304,48 @@ func (s *TaskContextService) IdentityForRun(runID, projectID string) (*models.Ta
 		return nil, err
 	}
 	return &identity, nil
+}
+
+// CountActive counts the user's non-terminal tasks in one conversation. Reply
+// formatting uses it to decide whether a task label is needed at all: with a
+// single task in flight the context is already unambiguous.
+func (s *TaskContextService) CountActive(scope TaskScope) (int, error) {
+	if s == nil || s.db == nil {
+		return 0, errors.New("task context database is unavailable")
+	}
+	if strings.TrimSpace(scope.ProjectID) == "" {
+		return 0, nil
+	}
+	q := s.db.Model(&models.TaskIdentity{}).
+		Where("project_id = ? AND terminal_at IS NULL", scope.ProjectID)
+	if strings.TrimSpace(scope.UserID) != "" {
+		q = q.Where("user_id = ? OR user_id = ''", scope.UserID)
+	}
+	var n int64
+	if err := q.Count(&n).Error; err != nil {
+		return 0, err
+	}
+	return int(n), nil
+}
+
+// ActiveTasksForConversation lists this conversation's live tasks, most
+// recently updated first, for disambiguation prompts.
+func (s *TaskContextService) ActiveTasksForConversation(scope TaskScope, limit int) ([]models.TaskIdentity, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("task context database is unavailable")
+	}
+	if limit <= 0 {
+		limit = 5
+	}
+	var out []models.TaskIdentity
+	q := s.db.Where("project_id = ? AND terminal_at IS NULL", scope.ProjectID)
+	if strings.TrimSpace(scope.UserID) != "" {
+		q = q.Where("user_id = ? OR user_id = ''", scope.UserID)
+	}
+	if err := q.Order("updated_at DESC").Limit(limit).Find(&out).Error; err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (s *TaskContextService) BindMessage(scope TaskScope, messageID string, identity *models.TaskIdentity) error {
@@ -469,6 +587,31 @@ func DetectLanguage(current, recent string) string {
 	return "zh-CN"
 }
 
+// languageSwitchRunes is how much of a message must be in the other language
+// before it counts as the user switching rather than quoting.
+const languageSwitchRunes = 12
+
+// TaskLanguageFor decides which language to answer a task in.
+//
+// Per-message detection makes a conversation flip languages whenever someone
+// pastes an English identifier or a Chinese label, so an established task
+// language wins unless the user clearly switched: a message long enough to be a
+// real sentence, entirely in the other language.
+func TaskLanguageFor(established, message string) string {
+	established = NormalizeLanguage(established)
+	if established == "" {
+		return DetectLanguage(message, "")
+	}
+	message = strings.TrimSpace(message)
+	if utf8.RuneCountInString(message) < languageSwitchRunes {
+		return established
+	}
+	if detected := DetectLanguage(message, ""); detected != established {
+		return detected
+	}
+	return established
+}
+
 func NormalizeLanguage(language string) string {
 	switch strings.ToLower(strings.TrimSpace(language)) {
 	case "en", "en-us", "en-gb":
@@ -480,24 +623,37 @@ func NormalizeLanguage(language string) string {
 	}
 }
 
+// FormatTaskType names which task a message is about, in the way a person
+// would. The old bracketed 【title｜kind】 header made every message read like a
+// ticket update; a reference only earns its place when more than one task could
+// be meant, and then it should sound like speech.
 func FormatTaskType(shortTitle, kind, language string) string {
-	shortTitle = strings.TrimSpace(shortTitle)
+	shortTitle = SanitizeShortTitle(shortTitle)
 	kind = strings.TrimSpace(kind)
+	if NormalizeLanguage(language) == "en" {
+		if shortTitle == "" {
+			return ""
+		}
+		return fmt.Sprintf("On \"%s\" — ", shortTitle)
+	}
 	if shortTitle == "" {
-		if NormalizeLanguage(language) == "en" {
-			shortTitle = "Task"
-		} else {
-			shortTitle = "任务"
-		}
+		return ""
 	}
-	if kind == "" {
-		if NormalizeLanguage(language) == "en" {
-			kind = "Update"
-		} else {
-			kind = "更新"
-		}
+	return fmt.Sprintf("%s那个：", shortTitle)
+}
+
+// TaskStatusSentence names a task and states what is true of it. statusLabel is
+// the predicate ("is done." / "还在做。"), so the two read as one sentence.
+func TaskStatusSentence(shortTitle, statusLabel, language string) string {
+	shortTitle = SanitizeShortTitle(shortTitle)
+	statusLabel = strings.TrimSpace(statusLabel)
+	if shortTitle == "" {
+		return statusLabel
 	}
-	return fmt.Sprintf("【%s｜%s】", shortTitle, kind)
+	if NormalizeLanguage(language) == "en" {
+		return fmt.Sprintf("\"%s\" %s", shortTitle, statusLabel)
+	}
+	return fmt.Sprintf("「%s」%s", shortTitle, statusLabel)
 }
 
 func normalizeTaskStatus(status string) string {
@@ -508,7 +664,9 @@ func normalizeTaskStatus(status string) string {
 	return status
 }
 
-func isTerminalTaskStatus(status string) bool {
+// IsTerminalTaskStatus reports whether a task has reached a state it can no
+// longer leave.
+func IsTerminalTaskStatus(status string) bool {
 	switch strings.ToLower(strings.TrimSpace(status)) {
 	case "completed", "failed", "cancelled", "canceled", "done":
 		return true
@@ -516,6 +674,8 @@ func isTerminalTaskStatus(status string) bool {
 		return false
 	}
 }
+
+func isTerminalTaskStatus(status string) bool { return IsTerminalTaskStatus(status) }
 
 func uniqueStrings(values []string) []string {
 	seen := map[string]bool{}

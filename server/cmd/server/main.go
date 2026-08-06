@@ -389,9 +389,16 @@ func main() {
 		}
 	})
 	pmMCP.SetTaskSafety(riskSvc, taskContextSvc, channelIMNotifier{mgr: channelMgr})
+	// A finished task reports back to the conversation that asked for it, in
+	// that conversation's own words.
+	channelMgr.SetSynthesizer(newLiveSynthesizer(channelBridge))
+	eng.SetRunTerminalObserver(runTerminalAdapter{mgr: channelMgr})
 	channelMgr.SetLoader(channelSvc.ListRaw)
 	channelSvc.SetOnChange(channelMgr.Reload)
 	channelMgr.ApplyOnBoot()
+	// Turns that died with the previous process left users waiting on a reply
+	// that will never arrive; tell them so instead of failing silently.
+	go channelMgr.RecoverInterruptedTurns(sweeperCtx)
 	cronSched.SetChannelDeliverer(channelMgr)
 	runNotifySvc.SetDeliverer(channelMgr)
 	cronSched.Start(sweeperCtx)

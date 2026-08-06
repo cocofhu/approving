@@ -87,6 +87,35 @@ func TestPolicyBoundsBackgroundEventsAndKeepsCritical(t *testing.T) {
 	}
 }
 
+// Several Runs each stay inside their own progress budget and still bury the
+// conversation between them, so the conversation has a budget of its own. What
+// must never be dropped is something the user has to act on.
+func TestPolicyBudgetsProgressPerConversationNotOnlyPerRun(t *testing.T) {
+	p, _, _ := testPolicy(t, nil)
+	sent := 0
+	for i := 0; i < 8; i++ {
+		e := external("run-"+string(rune('a'+i)), string(KindProgress), "")
+		e.Progress.Stage = "stage-" + string(rune('a'+i))
+		if sendAndMark(t, p, e, "parallel run update "+string(rune('a'+i))) {
+			sent++
+		}
+	}
+	if sent > conversationProgressQuota {
+		t.Fatalf("%d parallel progress messages reached one conversation, budget is %d",
+			sent, conversationProgressQuota)
+	}
+	if sent == 0 {
+		t.Fatal("the conversation budget silenced progress entirely")
+	}
+
+	blocked := external("run-z", string(KindBlocked), "needs-you")
+	blocked.Priority = PriorityCritical
+	blocked.Progress.Blocked = true
+	if !sendAndMark(t, p, blocked, "CI is red, need a decision") {
+		t.Fatal("a decision the user has to make was dropped by the progress budget")
+	}
+}
+
 func TestPolicyRunIsolationDefaultsAndRawFinal(t *testing.T) {
 	p, _, _ := testPolicy(t, nil)
 	p1 := external("r1", string(KindProgress), "")

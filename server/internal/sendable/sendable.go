@@ -304,6 +304,36 @@ func (p *Policy) bucketSuppression(ctx context.Context, e DeliveryEnvelope, chan
 			// dedicated kinds and therefore bypass this progress-only limit.
 			return "progress_rate_limited_merged"
 		}
+		// The per-run bucket above says nothing about how many runs are talking.
+		// Several tasks running in parallel each stay within their own limit and
+		// still bury the conversation, so the conversation has a budget of its
+		// own. Blocked / action_required / final are separate kinds and are not
+		// counted here — a decision the user has to make must never be dropped
+		// because other tasks were chatty.
+		if reason := p.conversationQuota(ctx, e, channel, key, now); reason != "" {
+			return reason
+		}
+	}
+	return ""
+}
+
+// conversationProgressQuota is how many ordinary progress messages one
+// conversation may receive per rate window, across all of its Runs.
+const conversationProgressQuota = 3
+
+func (p *Policy) conversationQuota(ctx context.Context, e DeliveryEnvelope, channel Channel, key string, now time.Time) string {
+	conv := strings.TrimSpace(e.ConversationID)
+	if conv == "" || e.Priority == PriorityCritical {
+		return ""
+	}
+	var count int64
+	err := p.db.WithContext(ctx).Model(&models.SendableDeliveryReceipt{}).
+		Where("conversation_id = ? AND channel = ? AND kind = ? AND status IN ? AND dedupe_key <> ? AND last_attempt_at > ?",
+			conv, string(channel), string(KindProgress),
+			[]string{"pending", "sent"}, key, now.Add(-p.rateWindow)).
+		Count(&count).Error
+	if err == nil && count >= conversationProgressQuota {
+		return "conversation_rate_limited"
 	}
 	return ""
 }

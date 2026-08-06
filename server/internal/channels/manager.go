@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -24,24 +23,36 @@ var ErrNoDeliveryChannel = errors.New("项目未配置定时任务推送渠道")
 // has a usable QQ target session for the project (CronDeliver flag not required).
 var ErrNoRunNotifyTarget = errors.New("项目未配置可用的 QQ 推送目标")
 
-// Reply/Work equivalent orchestration (physical dual sandbox NOT required):
+// The conversation layer and the work layer are separate on purpose, and only
+// the conversation layer talks to the user:
 //
-//   - Manager (= Reply): the unique QQ egress — immediate ACK, queue ACK,
-//     on-demand progress, terminal reports, and cron push coordination.
-//   - ChannelBridge / PmTurnRunner / cron sandbox (= Work): execute turns and
-//     emit internal progress/results; must not bypass Manager to Send on QQ.
+//   - Manager is the sole QQ egress. It answers, relays background events into
+//     the conversation that asked for them, and coordinates cron pushes.
+//   - ChannelBridge / PmTurnRunner / cron sandbox execute turns and emit
+//     internal progress and results. They must never Send on QQ directly.
 //
-// Speak priority: user ACK/final > on-demand progress > cron push > unchanged.
+// A foreground turn either answers or delegates; it never waits for a Run, so
+// the user can keep talking while work happens. Speak priority when several
+// things want the channel at once: the user's own answer, then background
+// progress, then cron pushes.
 
 const (
-	ackProcessingPrefix = "收到，正在处理："
-	ackSummaryRunes     = 40
-	queueAckPrefix      = "已收到，排队中"
-	queueFullText       = "队列已满，请稍候"
-	failReplyPrefix     = "处理失败："
+	// busyHintText is the only thing a user hears about queueing, and only when
+	// the backlog is genuinely full. Live conversations do not narrate their own
+	// plumbing: there is no per-message "received, working on it" and no queue
+	// position, because those crowd out the answer without informing anyone.
+	busyHintText = "我这边还在处理前面几条，稍等一下。"
+	// busyHintCooldown rate-limits busyHintText per conversation so a burst
+	// produces one hint instead of one per rejected message.
+	busyHintCooldown = 2 * time.Minute
 	// convQueueDepth is the per-conversation pending FIFO capacity (in-flight
 	// turn is not counted). The next inbound after 16 pending is rejected.
 	convQueueDepth = 16
+	// foregroundTurnTimeout caps a Live turn. The foreground contract is "answer
+	// briefly or delegate", so exceeding this means the agent tried to do the
+	// work inline; we stop waiting and tell the user it moved to the background
+	// rather than holding the conversation hostage.
+	foregroundTurnTimeout = 25 * time.Second
 )
 
 // queuedInbound is a message waiting behind an in-flight turn for the same
@@ -77,6 +88,19 @@ type Manager struct {
 	convMu     sync.Mutex
 	convQueues map[string]*convQueue
 
+	busyHintMu   sync.Mutex
+	busyHintSent map[string]time.Time
+
+	repliedMu sync.Mutex
+	replied   map[string]bool
+
+	// synthesize rewrites background events for the conversation they belong
+	// to. nil means outcomes go out as structured fallbacks.
+	synthesize SynthesisFunc
+
+	captureMu sync.Mutex
+	captured  map[string]*string
+
 	pushMu     sync.Mutex
 	pushQueues map[string]*pushQueue
 
@@ -110,14 +134,16 @@ type runningChannel struct {
 // decrypt reverses the stored app secret.
 func NewManager(bridge *ChannelBridge, factories map[string]AdapterFactory, decrypt func(string) (string, error)) *Manager {
 	return &Manager{
-		bridge:     bridge,
-		factories:  factories,
-		decrypt:    decrypt,
-		running:    map[string]*runningChannel{},
-		convQueues: map[string]*convQueue{},
-		pushQueues: map[string]*pushQueue{},
-		baseCtx:    context.Background(),
-		policy:     sendable.NewPolicy(nil, nil),
+		bridge:       bridge,
+		factories:    factories,
+		decrypt:      decrypt,
+		running:      map[string]*runningChannel{},
+		convQueues:   map[string]*convQueue{},
+		pushQueues:   map[string]*pushQueue{},
+		busyHintSent: map[string]time.Time{},
+		replied:      map[string]bool{},
+		baseCtx:      context.Background(),
+		policy:       sendable.NewPolicy(nil, nil),
 	}
 }
 
@@ -302,10 +328,13 @@ func (m *Manager) IsConversationBusy(projectID string, scene Scene, conversation
 	return q.busy || len(q.pending) > 0
 }
 
-// dispatch serializes messages per conversation via a bounded in-process FIFO.
-// Idle + empty queue: immediate processing ACK then Work. Busy: enqueue with a
-// per-message queue ACK (ahead count); dequeue sends another processing ACK.
-// Full queue: reject with a visible reply (never silently drop).
+// dispatch is the Live inbound pipeline.
+//
+// Order matters and is the heart of the Live model: messages that can be
+// answered from stored task state are served before the queue is ever
+// consulted, so asking "how's that going?" stays instant no matter how many
+// Runs are executing or how long the agent has been thinking. Only messages
+// that genuinely need the agent contend for the single per-conversation turn.
 func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMessage) {
 	// A notice-only inbound (e.g. every attachment rejected) has no turn to run;
 	// it still goes out through the single policy/dedupe/audit egress.
@@ -313,6 +342,12 @@ func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMe
 		m.sendSafetyNotice(ctx, rc, in, *in.Safety)
 		return
 	}
+
+	// Fast path: answered from the database, never queued, never sandboxed.
+	if m.handleFastPath(ctx, rc, &in) {
+		return
+	}
+
 	key := convKey(rc.cfg.ProjectID, in.Scene, in.ConversationID)
 	q := m.convQueueFor(key)
 
@@ -320,30 +355,53 @@ func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMe
 	if q.busy {
 		if len(q.pending) >= convQueueDepth {
 			q.mu.Unlock()
-			m.sendOutbound(ctx, rc, OutboundMessage{
-				Scene: in.Scene, ConversationID: in.ConversationID,
-				ReplyToMessageID: in.MessageID, Text: queueFullText,
-				Envelope: turnEnvelope(rc, in, sendable.KindSafetyNotice, "queue_full", sendable.PriorityHigh),
-			})
+			// Full queue must never drop silently, but it also must not emit one
+			// notice per rejected message — that is how a burst turns into spam.
+			m.sendBusyHint(ctx, rc, in, key)
 			return
 		}
-		// Ahead = in-flight turn + already-queued messages.
-		ahead := 1 + len(q.pending)
 		q.pending = append(q.pending, queuedInbound{ctx: ctx, rc: rc, in: in})
 		q.mu.Unlock()
-		m.sendOutbound(ctx, rc, OutboundMessage{
-			Scene: in.Scene, ConversationID: in.ConversationID,
-			ReplyToMessageID: in.MessageID, Text: queueAckTextFor(ahead, in.Text),
-			Envelope: turnEnvelope(rc, in, sendable.KindQueueAck, "turn_queued", sendable.PriorityHigh),
-		})
 		return
 	}
 	q.busy = true
 	q.mu.Unlock()
 
 	// This goroutine owns the busy cycle: run the idle-first turn, then drain.
-	m.runTurn(ctx, rc, in, true /* withProcessingAck */)
+	m.runTurn(ctx, rc, in)
 	m.drainConvQueue(q, key)
+}
+
+// handleInbound is the complete Live pipeline for one message, used by callers
+// that are not going through the per-conversation queue.
+func (m *Manager) handleInbound(ctx context.Context, rc *runningChannel, in InboundMessage) {
+	if m.handleFastPath(ctx, rc, &in) {
+		return
+	}
+	m.runTurn(ctx, rc, in)
+}
+
+// sendBusyHint emits at most one backlog notice per conversation per cooldown.
+func (m *Manager) sendBusyHint(ctx context.Context, rc *runningChannel, in InboundMessage, key string) {
+	now := time.Now()
+	m.busyHintMu.Lock()
+	last, seen := m.busyHintSent[key]
+	if seen && now.Sub(last) < busyHintCooldown {
+		m.busyHintMu.Unlock()
+		log.Warn().Str("conversation", in.ConversationID).Str("project", rc.cfg.ProjectID).
+			Msg("live: inbound dropped, queue full within busy-hint cooldown")
+		return
+	}
+	m.busyHintSent[key] = now
+	m.busyHintMu.Unlock()
+
+	log.Warn().Str("conversation", in.ConversationID).Str("project", rc.cfg.ProjectID).
+		Msg("live: inbound dropped, queue full")
+	m.sendOutbound(ctx, rc, OutboundMessage{
+		Scene: in.Scene, ConversationID: in.ConversationID,
+		ReplyToMessageID: in.MessageID, Text: busyHintText,
+		Envelope: turnEnvelope(rc, in, sendable.KindSafetyNotice, "queue_full", sendable.PriorityHigh),
+	})
 }
 
 // sendSafetyNotice delivers an adapter-detected notice through the Manager, so a
@@ -382,29 +440,36 @@ func (m *Manager) drainConvQueue(q *convQueue, key string) {
 		next := q.pending[0]
 		q.pending = q.pending[1:]
 		q.mu.Unlock()
-		// Dequeue: another processing ACK before Work.
-		m.runTurn(next.ctx, next.rc, next.in, true /* withProcessingAck */)
+		m.runTurn(next.ctx, next.rc, next.in)
 	}
 }
 
-// runTurn executes one PM turn and sends the final or failure reply.
-// withProcessingAck emits the required ≤1s ACK before dispatching Work.
-func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMessage, withProcessingAck bool) {
-	if withProcessingAck {
-		m.sendOutbound(ctx, rc, OutboundMessage{
-			Scene: in.Scene, ConversationID: in.ConversationID,
-			ReplyToMessageID: in.MessageID, Text: processingAckText(in.Text),
-			Envelope: turnEnvelope(rc, in, sendable.KindTurnProcessingAck, "turn_processing", sendable.PriorityHigh),
-		})
-	}
+// runTurn executes one foreground Live turn.
+//
+// The turn is expected to either answer briefly or delegate; it is bounded by
+// foregroundTurnTimeout so a conversation is never held open by work that
+// belongs in a Run. No acknowledgement precedes it — the reply is the
+// acknowledgement.
+func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMessage) {
+	// Keyed by conversation, not by inbound message id: the MCP host marks its
+	// own replies and only knows which conversation it is serving.
+	scope := conversationTurnScope(rc.cfg.ProjectID, in.Scene, in.ConversationID)
+	m.clearReplied(scope)
+	defer m.clearReplied(scope)
 
-	if m.handleInboundOrchestration(ctx, rc, &in) {
-		return
+	pendingID := m.beginPendingTurn(rc, in)
+	defer m.endPendingTurn(pendingID)
+
+	timeout := foregroundTurnTimeout
+	if configured := time.Duration(rc.cfg.TurnTimeoutSeconds) * time.Second; configured > 0 {
+		timeout = configured
 	}
+	turnCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
 	resolved := ResolvedChannel{
 		ID: rc.cfg.ID, Type: rc.cfg.Type, ProjectID: rc.cfg.ProjectID,
-		TurnTimeout: time.Duration(rc.cfg.TurnTimeoutSeconds) * time.Second,
+		TurnTimeout: timeout,
 		Caps:        SessionCapsFromConfig(rc.cfg.Config),
 	}
 	onProgress := func(ev ProgressEvent) {
@@ -414,30 +479,56 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		}
 		// Classification-only events stay internal; sendOutbound still runs so
 		// the suppression is audited with a reason instead of vanishing.
-		m.sendOutbound(ctx, rc, OutboundMessage{
+		result := m.sendOutboundResult(ctx, rc, OutboundMessage{
 			Scene: in.Scene, ConversationID: in.ConversationID,
 			ReplyToMessageID: in.MessageID, Text: text,
 			Envelope: progressEnvelope(rc, in, ev),
 		})
+		// A delivered milestone is the turn's first meaningful response; the
+		// final summary must not repeat it verbatim.
+		if result.Sent {
+			m.markReplied(scope)
+		}
 	}
-	reply, err := m.handleTurn(ctx, resolved, in, onProgress)
+	reply, err := m.handleTurn(turnCtx, resolved, in, onProgress)
 	if err != nil {
-		log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel turn failed")
+		// A turn that ran out of time is not a failure: the agent took on
+		// something that belongs in the background. Say that, rather than
+		// reporting an error for work that is still going to happen.
+		if turnCtx.Err() != nil && ctx.Err() == nil {
+			log.Info().Str("channel", rc.cfg.ID).Dur("timeout", timeout).
+				Msg("live: foreground turn exceeded its budget, handed to background")
+			if !m.hasReplied(scope) {
+				m.sendOutbound(ctx, rc, OutboundMessage{
+					Scene: in.Scene, ConversationID: in.ConversationID, ReplyToMessageID: in.MessageID,
+					Text:     turnHandoffText(services.DetectLanguage(in.Text, "")),
+					Envelope: turnEnvelope(rc, in, sendable.KindFinal, "turn_handed_to_background", sendable.PriorityHigh),
+				})
+			}
+			return
+		}
+		m.sendTurnFailure(ctx, rc, in, scope, err)
+		return
+	}
+
+	summary, reason, ok := deliverableFinalText(reply)
+	if !ok {
+		// The agent finished without submitting anything the user can read. If
+		// something substantive already went out this turn, staying quiet is the
+		// honest outcome; otherwise say so in terms the user can act on.
+		if m.hasReplied(scope) {
+			return
+		}
 		m.sendOutbound(ctx, rc, OutboundMessage{
-			Scene: in.Scene, ConversationID: in.ConversationID,
-			ReplyToMessageID: in.MessageID, Text: failReplyPrefix + friendlyErr(err),
-			Envelope: turnEnvelope(rc, in, sendable.KindBlocked, "turn_failed", sendable.PriorityCritical),
+			Scene: in.Scene, ConversationID: in.ConversationID, ReplyToMessageID: in.MessageID,
+			Text:     m.noAnswerFallback(rc, in),
+			Envelope: turnEnvelope(rc, in, sendable.KindFinal, "final_missing_fallback", sendable.PriorityCritical),
 		})
 		return
 	}
-	summary, reason := deliverableFinalText(reply)
-	images := reply.ImageURLs
-	if summary == safeFinalNotice {
-		images = nil // no structured summary → no derived attachments either
-	}
 	m.sendOutbound(ctx, rc, OutboundMessage{
 		Scene: in.Scene, ConversationID: in.ConversationID, ReplyToMessageID: in.MessageID,
-		Text: summary, ImageURLs: images,
+		Text: summary, ImageURLs: reply.ImageURLs,
 		Envelope: func() sendable.DeliveryEnvelope {
 			e := turnEnvelope(rc, in, sendable.KindFinal, reason, sendable.PriorityCritical)
 			e.Structured = true
@@ -446,18 +537,30 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 	})
 }
 
-// safeFinalNotice is sent when Work produced no structured summary. Raw
-// assistant text is never used as a fallback.
-const safeFinalNotice = "本回合已结束，请在 Approving 查看完整结果。"
-
-// deliverableFinalText returns the only text allowed out of a finished turn:
-// the structured FinalSummary, or a fixed safe notice. Reply.Text stays
-// internal regardless of its content.
-func deliverableFinalText(reply Reply) (text, reason string) {
-	if summary := strings.TrimSpace(reply.FinalSummary); summary != "" {
-		return truncateRunes(summary, 240), "structured_turn_final"
+// sendTurnFailure reports a failed turn in the user's terms. Internal error
+// strings ("assistant produced no reply", sandbox/ACP plumbing) never leave the
+// platform; they are logged and mapped to a cause plus a next step.
+func (m *Manager) sendTurnFailure(ctx context.Context, rc *runningChannel, in InboundMessage, scope string, err error) {
+	log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel turn failed")
+	if m.hasReplied(scope) {
+		return
 	}
-	return safeFinalNotice, "final_summary_missing_safe_notice"
+	m.sendOutbound(ctx, rc, OutboundMessage{
+		Scene: in.Scene, ConversationID: in.ConversationID,
+		ReplyToMessageID: in.MessageID, Text: turnFailureText(err),
+		Envelope: turnEnvelope(rc, in, sendable.KindBlocked, "turn_failed", sendable.PriorityCritical),
+	})
+}
+
+// deliverableFinalText returns the text allowed out of a finished turn. Only an
+// explicitly submitted summary qualifies; Reply.Text stays internal regardless
+// of its content. ok=false means the turn produced nothing sendable and the
+// caller must fall back rather than emit a placeholder.
+func deliverableFinalText(reply Reply) (text, reason string, ok bool) {
+	if summary := strings.TrimSpace(reply.FinalSummary); summary != "" {
+		return truncateRunes(summary, 240), "structured_turn_final", true
+	}
+	return "", "final_summary_missing", false
 }
 
 func (m *Manager) handleTurn(ctx context.Context, rc ResolvedChannel, in InboundMessage, onProgress func(ProgressEvent)) (Reply, error) {
@@ -476,7 +579,15 @@ func turnScope(rc *runningChannel, in InboundMessage) string {
 	if id := strings.TrimSpace(in.MessageID); id != "" {
 		return "turn:" + rc.cfg.ProjectID + "|" + id
 	}
-	return "turn:" + convKey(rc.cfg.ProjectID, in.Scene, in.ConversationID)
+	return conversationTurnScope(rc.cfg.ProjectID, in.Scene, in.ConversationID)
+}
+
+// conversationTurnScope keys the in-flight turn by conversation. The MCP host
+// knows which conversation it is serving but not which inbound message id
+// started the turn, so the "already replied" marker is tracked per conversation
+// and both spellings resolve to the same live turn.
+func conversationTurnScope(projectID string, scene Scene, conversationID string) string {
+	return "turn:" + convKey(projectID, scene, conversationID)
 }
 
 // turnEnvelope builds a turn-scoped envelope. RunID stays empty on purpose;
@@ -489,6 +600,10 @@ func turnEnvelope(rc *runningChannel, in InboundMessage, kind sendable.Kind, rea
 		ConversationID: in.ConversationID, UserID: in.UserID,
 		DedupeKey: scope + ":" + string(kind),
 		Reason:    reason, Kind: kind,
+		// Turn-level text is composed by the platform (or extracted through an
+		// explicit structured path), never copied from raw model output, which
+		// is what the transport's Structured gate is checking for.
+		Structured: true,
 	}
 	return sendable.AppendSendable(e, sendable.ChannelQQ)
 }
@@ -536,6 +651,17 @@ func (m *Manager) sendOutbound(ctx context.Context, rc *runningChannel, out Outb
 func (m *Manager) sendOutboundResult(ctx context.Context, rc *runningChannel, out OutboundMessage) DeliveryResult {
 	if rc == nil || rc.adapter == nil {
 		return DeliveryResult{Decision: sendable.Decision{Reason: "no_adapter"}}
+	}
+	// Last gate before the transport. Every outbound path converges here, so
+	// scrubbing once here is what makes "internals never leak" a property of the
+	// system rather than a rule each call site has to remember.
+	if scrubbed := ScrubInternalTerms(out.Text); scrubbed != out.Text {
+		log.Debug().Str("channel", rc.cfg.ID).Str("reason", out.Envelope.Reason).
+			Msg("outbound text scrubbed of internal terms")
+		out.Text = scrubbed
+	}
+	if strings.TrimSpace(out.Text) == "" && len(out.ImageURLs) == 0 {
+		return DeliveryResult{Decision: sendable.Decision{Reason: "empty_after_scrub"}}
 	}
 	contentFingerprint := out.Text + "\n" + strings.Join(out.ImageURLs, "\n")
 	decision, err := m.policy.Evaluate(ctx, out.Envelope, sendable.ChannelQQ, contentFingerprint)
@@ -890,16 +1016,98 @@ func (m *Manager) convQueueFor(key string) *convQueue {
 	return q
 }
 
-func processingAckText(userText string) string {
-	return ackProcessingPrefix + truncateRunes(userText, ackSummaryRunes)
+// markReplied records that something substantive already reached the user in
+// this turn. pm_reply runs in the MCP host and the final summary runs here, so
+// without a shared marker a turn can answer twice.
+func (m *Manager) markReplied(scope string) {
+	if strings.TrimSpace(scope) == "" {
+		return
+	}
+	m.repliedMu.Lock()
+	m.replied[scope] = true
+	m.repliedMu.Unlock()
 }
 
-func queueAckTextFor(ahead int, userText string) string {
-	summary := truncateRunes(userText, ackSummaryRunes)
-	if ahead > 0 {
-		return fmt.Sprintf("%s（前方 %d 条）：%s", queueAckPrefix, ahead, summary)
+func (m *Manager) hasReplied(scope string) bool {
+	m.repliedMu.Lock()
+	defer m.repliedMu.Unlock()
+	return m.replied[scope]
+}
+
+func (m *Manager) clearReplied(scope string) {
+	m.repliedMu.Lock()
+	delete(m.replied, scope)
+	m.repliedMu.Unlock()
+}
+
+// MarkConversationReplied lets the MCP host record an explicit agent reply for
+// the conversation's current turn.
+func (m *Manager) MarkConversationReplied(projectID string, scene Scene, conversationID string) {
+	m.markReplied(conversationTurnScope(projectID, scene, conversationID))
+}
+
+// noAnswerFallback is what the user hears when a turn ends without the agent
+// submitting an answer. It names the task in flight and the next step, because
+// "go look somewhere else" is not an answer.
+func (m *Manager) noAnswerFallback(rc *runningChannel, in InboundMessage) string {
+	language := services.DetectLanguage(in.Text, "")
+	if task := m.activeTaskFor(rc, in); task != nil {
+		if language == "en" {
+			return "I'm still on \"" + task.ShortTitle + "\" and don't have a usable answer yet. I'll come back as soon as there's something concrete."
+		}
+		return "「" + task.ShortTitle + "」我还在弄，暂时没有可用的结论。有实质进展我就回来说。"
 	}
-	return fmt.Sprintf("%s：%s", queueAckPrefix, summary)
+	if language == "en" {
+		return "I couldn't put together an answer for that one. Could you rephrase it, or tell me which part matters most?"
+	}
+	return "这条我没能给出结论。你可以换个说法，或者告诉我最关心哪部分。"
+}
+
+// activeTaskFor returns the conversation's focused task, if any.
+func (m *Manager) activeTaskFor(rc *runningChannel, in InboundMessage) *models.TaskIdentity {
+	if m.taskContext == nil || rc == nil {
+		return nil
+	}
+	res, err := m.taskContext.ResolveTask(services.ResolveTaskInput{
+		Scope: services.TaskScope{
+			ProjectID: rc.cfg.ProjectID, UserID: services.SyntheticQQUserID(in.UserID),
+			Channel: rc.cfg.Type, ConversationID: in.ConversationID,
+		},
+	})
+	if err != nil {
+		return nil
+	}
+	return res.Identity
+}
+
+// turnHandoffText is what the user hears when a foreground turn outlives its
+// budget: the work continues, the conversation does not wait for it.
+func turnHandoffText(language string) string {
+	if services.NormalizeLanguage(language) == "en" {
+		return "This one needs more digging, so I'll keep at it in the background and come back with what I find. You can keep chatting in the meantime."
+	}
+	return "这个得多花点时间，我放到后台接着弄，有结果就来说。你可以接着问别的。"
+}
+
+// turnFailureText maps an internal turn error onto a cause the user can act on.
+func turnFailureText(err error) string {
+	if err == nil {
+		return "这条我没处理成功，你再发一次试试。"
+	}
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "context deadline exceeded"), strings.Contains(msg, "超时"),
+		strings.Contains(msg, "timeout"):
+		return "这条想得有点久，我先放到后台继续，有结果告诉你。"
+	case strings.Contains(msg, "沙箱"), strings.Contains(msg, "sandbox"):
+		return "我的执行环境暂时起不来，稍后再试一次；一直不行就需要管理员看一下。"
+	case strings.Contains(msg, "no reply"), strings.Contains(msg, "empty"):
+		return "这条我没能给出结论。换个说法我再试试。"
+	case strings.Contains(msg, "未启用"), strings.Contains(msg, "disabled"):
+		return "这个项目还没开启对话能力，需要管理员在后台启用。"
+	default:
+		return "这条我没处理成功。你可以再说一次，或者换个问法。"
+	}
 }
 
 func parseTarget(target string) (Scene, string) {
@@ -922,14 +1130,4 @@ func fingerprint(c models.ChannelConfig) string {
 		TurnTimeoutSeconds: c.TurnTimeoutSeconds, Config: c.Config,
 	})
 	return string(b)
-}
-
-func friendlyErr(err error) string {
-	msg := err.Error()
-	// Truncate on runes so a multi-byte (e.g. Chinese) message is never cut
-	// mid-character into invalid UTF-8.
-	if r := []rune(msg); len(r) > 200 {
-		msg = string(r[:200]) + "…"
-	}
-	return msg
 }

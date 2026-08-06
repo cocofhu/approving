@@ -99,6 +99,10 @@ type IMDeliveryOutcome struct {
 type ExternalIMNotifier interface {
 	NotifyRunAccepted(projectID, runID string, target IMTarget, shortTitle, language string) error
 	NotifyProgress(projectID, runID string, target IMTarget, kind, text, stage, conclusion string, blocked, actionRequired bool) (IMDeliveryOutcome, error)
+	// NotifyReply delivers the agent's answer for the current conversation turn.
+	// This is the only way a conversational answer reaches the user: raw model
+	// output is never forwarded, so an answer has to be submitted deliberately.
+	NotifyReply(projectID, runID string, target IMTarget, text, shortTitle string) (IMDeliveryOutcome, error)
 }
 
 // engineOps covers the run operations exposed through pm-workflow-write
@@ -784,18 +788,39 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 			},
 		})
 		shortTitle := run.Title
+		sess, hasSess := h.SessionFor(projectID, token)
 		if h.tasks != nil {
 			sessUser := ""
-			if sess, ok := h.SessionFor(projectID, token); ok {
+			if hasSess {
 				sessUser = riskUserIDForSession(sess)
 			}
 			if identity, err := h.tasks.EnsureIdentityForRun(*run, projectID, sessUser); err == nil && identity != nil {
 				shortTitle = identity.ShortTitle
+				// Bind the task to the conversation that asked for it. Results
+				// have to come back here, and a project-wide push target is not
+				// the same place — this is the only record of where "here" is,
+				// and it must survive a restart.
+				if hasSess && strings.TrimSpace(sess.Channel.ConversationID) != "" {
+					if _, err := h.tasks.UpdateIdentity(services.EnsureTaskIdentityInput{
+						RunID: run.ID, ProjectID: projectID, UserID: sessUser,
+						OriginChannel:        sess.Channel.ChannelType,
+						OriginScene:          sess.Channel.Scene,
+						OriginConversationID: sess.Channel.ConversationID,
+						OriginExternalUserID: sess.Channel.ExternalUserID,
+						// The task is conducted in the language it was asked
+						// in; later updates follow the task, not whichever
+						// message happens to trigger them.
+						Language: services.DetectLanguage(identity.OriginalRequirement, ""),
+					}); err != nil {
+						log.Warn().Err(err).Str("run", run.ID).
+							Msg("pm_start_run: binding task to origin conversation failed")
+					}
+				}
 			}
 		}
 		if h.notify != nil {
 			target := IMTarget{}
-			if sess, ok := h.SessionFor(projectID, token); ok {
+			if hasSess {
 				target = imTargetForSession(sess)
 			}
 			if err := h.notify.NotifyRunAccepted(projectID, run.ID, target, shortTitle, ""); err != nil {
@@ -803,6 +828,42 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 			}
 		}
 		return map[string]any{"id": run.ID, "status": run.Status, "shortTitle": shortTitle}, false
+	case "pm_reply":
+		if h.notify == nil {
+			return map[string]any{"error": "im notifier unavailable"}, true
+		}
+		text := strings.TrimSpace(platformmcp.StrArg(args, "text"))
+		if text == "" {
+			return map[string]any{"error": "text is required"}, true
+		}
+		// A runId is optional, but when given it must be this project's Run —
+		// an answer must never be attributed to another project's task.
+		runID := strings.TrimSpace(platformmcp.StrArg(args, "runId"))
+		if runID != "" {
+			if _, ok := h.runInProject(projectID, runID); !ok {
+				return map[string]any{"error": "run not found"}, true
+			}
+		}
+		target := IMTarget{}
+		if sess, ok := h.SessionFor(projectID, token); ok {
+			target = imTargetForSession(sess)
+		}
+		if strings.TrimSpace(target.ConversationID) == "" {
+			return map[string]any{"error": "no external conversation bound to this session"}, true
+		}
+		outcome, err := h.notify.NotifyReply(projectID, runID, target, text,
+			strings.TrimSpace(platformmcp.StrArg(args, "shortTitle")))
+		if err != nil {
+			return map[string]any{"error": err.Error()}, true
+		}
+		if !outcome.Sent {
+			reason := outcome.Reason
+			if reason == "" {
+				reason = "suppressed"
+			}
+			return map[string]any{"status": "suppressed", "sent": false, "reason": reason}, false
+		}
+		return map[string]any{"status": "sent", "sent": true}, false
 	case "pm_notify_progress":
 		if h.notify == nil {
 			return map[string]any{"error": "im notifier unavailable"}, true
@@ -1134,6 +1195,11 @@ func toolSchemas(mcpID string) []map[string]any {
 			}),
 			platformmcp.Tool("pm_cancel_run", "取消一次运行中的 Run（需用户短标题二次确认后才会真正取消）。", map[string]any{
 				"runId": map[string]any{"type": "string"},
+			}),
+			platformmcp.Tool("pm_reply", "把这一轮对话的回答发给用户。这是回答外发的唯一通道——你在正文里写的内容不会被发出去，只有这里提交的 text 会。text 必须是用户直接能读懂的人话：不要出现 Run ID、工作流名、沙箱/工具/内部事件等实现细节，也不要写推理过程。", map[string]any{
+				"text":       map[string]any{"type": "string", "description": "发给用户的回答，人话，直接可读"},
+				"runId":      map[string]any{"type": "string", "description": "可选：这条回答关联的 Run"},
+				"shortTitle": map[string]any{"type": "string", "description": "可选：关联任务的短标题（人话，禁止填 Run ID）"},
 			}),
 			platformmcp.Tool("pm_notify_progress", "向外部 IM 显式提交一条 Sendable 进度/阻塞/确认消息（须含 stage/conclusion 等实质字段）。返回 status=sent 表示已外发；status=suppressed 表示被限频/去重/合并等策略正常抑制（不是失败，不要改措辞重发）；只有真实投递失败才返回错误。", map[string]any{
 				"runId":          map[string]any{"type": "string"},

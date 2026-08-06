@@ -5,18 +5,29 @@ import "time"
 // TaskIdentity is the stable, user-facing identity of a Run.
 // Search visibility is bounded by both project and external user identity.
 type TaskIdentity struct {
-	ID                  string     `gorm:"primaryKey;size:64" json:"id"`
-	RunID               string     `gorm:"size:64;uniqueIndex:idx_task_run_project,priority:1" json:"runId"`
-	ProjectID           string     `gorm:"size:64;uniqueIndex:idx_task_run_project,priority:2;index:idx_task_project_title,priority:1;index:idx_task_scope_title,priority:1" json:"projectId"`
-	UserID              string     `gorm:"size:191;index:idx_task_scope_title,priority:2" json:"userId,omitempty"`
-	ShortTitle          string     `gorm:"size:160;index:idx_task_project_title,priority:2;index:idx_task_scope_title,priority:3" json:"shortTitle"`
-	OriginalRequirement string     `gorm:"type:text" json:"originalRequirement"`
-	Aliases             []string   `gorm:"serializer:json" json:"aliases"`
-	Keywords            []string   `gorm:"serializer:json" json:"keywords"`
-	Status              string     `gorm:"size:32;index" json:"status"`
-	TerminalAt          *time.Time `gorm:"index" json:"terminalAt,omitempty"`
-	CreatedAt           time.Time  `json:"createdAt"`
-	UpdatedAt           time.Time  `json:"updatedAt"`
+	ID                  string   `gorm:"primaryKey;size:64" json:"id"`
+	RunID               string   `gorm:"size:64;uniqueIndex:idx_task_run_project,priority:1" json:"runId"`
+	ProjectID           string   `gorm:"size:64;uniqueIndex:idx_task_run_project,priority:2;index:idx_task_project_title,priority:1;index:idx_task_scope_title,priority:1" json:"projectId"`
+	UserID              string   `gorm:"size:191;index:idx_task_scope_title,priority:2" json:"userId,omitempty"`
+	ShortTitle          string   `gorm:"size:160;index:idx_task_project_title,priority:2;index:idx_task_scope_title,priority:3" json:"shortTitle"`
+	OriginalRequirement string   `gorm:"type:text" json:"originalRequirement"`
+	Aliases             []string `gorm:"serializer:json" json:"aliases"`
+	Keywords            []string `gorm:"serializer:json" json:"keywords"`
+	// Origin conversation. A task's results belong in the conversation that
+	// asked for them, so this is persisted rather than derived: it must survive
+	// a restart and must not fall back to a project-wide push target.
+	// Scene is stored as a plain string because models must not depend on the
+	// channels package.
+	OriginChannel        string     `gorm:"size:32;index:idx_task_origin,priority:1" json:"originChannel,omitempty"`
+	OriginScene          string     `gorm:"size:32" json:"originScene,omitempty"`
+	OriginConversationID string     `gorm:"size:191;index:idx_task_origin,priority:2" json:"originConversationId,omitempty"`
+	OriginExternalUserID string     `gorm:"size:191" json:"originExternalUserId,omitempty"`
+	Language             string     `gorm:"size:16" json:"language,omitempty"`
+	RecentContext        string     `gorm:"type:text" json:"recentContext,omitempty"`
+	Status               string     `gorm:"size:32;index" json:"status"`
+	TerminalAt           *time.Time `gorm:"index" json:"terminalAt,omitempty"`
+	CreatedAt            time.Time  `json:"createdAt"`
+	UpdatedAt            time.Time  `json:"updatedAt"`
 }
 
 // MessageBinding gives an explicit quoted/replied message precedence over
@@ -46,6 +57,24 @@ type ConversationFocus struct {
 	ExpiresAt      time.Time `gorm:"index" json:"expiresAt"`
 	CreatedAt      time.Time `json:"createdAt"`
 	UpdatedAt      time.Time `json:"updatedAt"`
+}
+
+// PendingChannelTurn records a foreground turn that is currently running.
+//
+// A restart kills the sandbox turn in flight, and without this row the user's
+// message simply disappears — they asked something and nothing ever came back.
+// The row is written when the turn starts and deleted when it ends, so anything
+// still present at boot is a turn that died with the process.
+type PendingChannelTurn struct {
+	ID             string    `gorm:"primaryKey;size:191" json:"id"`
+	ProjectID      string    `gorm:"size:64;index" json:"projectId"`
+	Channel        string    `gorm:"size:32" json:"channel"`
+	Scene          string    `gorm:"size:32" json:"scene"`
+	ConversationID string    `gorm:"size:191;index" json:"conversationId"`
+	ExternalUserID string    `gorm:"size:191" json:"externalUserId"`
+	MessageID      string    `gorm:"size:191" json:"messageId"`
+	Language       string    `gorm:"size:16" json:"language"`
+	StartedAt      time.Time `json:"startedAt"`
 }
 
 // RiskConfirmationTicket authorizes one high-risk action once.

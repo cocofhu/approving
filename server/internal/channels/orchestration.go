@@ -26,10 +26,14 @@ func (m *Manager) SetRiskActionExecutor(exec RiskActionExecutor) {
 	m.riskExecutor = exec
 }
 
-// handleInboundOrchestration runs before the PM turn: risk confirmation,
-// high-risk intent tickets, and natural-language task addressing. Returns true
-// when the inbound message was fully handled (do not start a PM turn).
-func (m *Manager) handleInboundOrchestration(ctx context.Context, rc *runningChannel, in *InboundMessage) bool {
+// handleFastPath answers the deterministic Live intents — task_query,
+// task_control and clarification_reply — straight from stored task state.
+//
+// It runs before the per-conversation queue, so these messages are never
+// blocked by an in-flight agent turn. Returns true when the message was fully
+// handled; returns false (possibly after enriching in.Text with task context)
+// when the agent still needs to see it.
+func (m *Manager) handleFastPath(ctx context.Context, rc *runningChannel, in *InboundMessage) bool {
 	if in == nil || (m.taskContext == nil && m.riskConfirmation == nil) {
 		return false
 	}
@@ -58,7 +62,8 @@ func (m *Manager) handleInboundOrchestration(ctx context.Context, rc *runningCha
 		return false
 	}
 	resolveText := text
-	if isContinuation(text) {
+	amendment := looksLikeAmendment(text)
+	if isContinuation(text) || amendment {
 		resolveText = "" // force conversation-focus binding
 	} else if isStatusQuery(text) {
 		resolveText = stripStatusQueryNoise(text)
@@ -79,16 +84,29 @@ func (m *Manager) handleInboundOrchestration(ctx context.Context, rc *runningCha
 		if res.Task == nil {
 			return false
 		}
+		if amendment {
+			// FR-3: revising an in-flight task must reach that Run instead of
+			// silently becoming a new delegation. A finished task cannot absorb
+			// the change, so say so rather than dropping it.
+			if services.IsTerminalTaskStatus(res.Task.Status) {
+				m.sendOrchestrationReply(ctx, rc, *in,
+					amendAfterTerminalText(res.Task.ShortTitle, taskStatusLabel(res.Task.Status, language), language))
+				return true
+			}
+			m.recordTaskContext(rc, res.Task, text)
+			in.Text = prependAmendmentContext(text, res.Task)
+			return false
+		}
 		if isContinuation(text) {
 			// Focus already renewed by ResolveTask; continue into the PM turn
 			// with the resolved run context prepended.
+			m.recordTaskContext(rc, res.Task, text)
 			in.Text = prependFocusContext(text, res.Task)
 			return false
 		}
 		if isStatusQuery(text) || isBareTaskSelection(text, res) || resolveText != text {
 			// Re-render status with the original user wording language.
-			msg := FormatTaskMessage(res.Task.ShortTitle, taskStatusLabel(res.Task.Status, language),
-				"", text, language)
+			msg := m.formatTaskStatusReply(rc, *in, res.Task, text, language)
 			m.sendOrchestrationReply(ctx, rc, *in, msg)
 			return true
 		}
@@ -131,12 +149,24 @@ func (m *Manager) tryResolveRiskConfirmation(ctx context.Context, rc *runningCha
 		if err := m.riskExecutor(rc.cfg.ProjectID, ticket.RunID, riskBaseAction(ticket.Action), meta); err != nil {
 			log.Warn().Err(err).Str("run", ticket.RunID).Str("action", ticket.Action).
 				Msg("confirmed risk action failed")
-			m.sendOrchestrationReply(ctx, rc, in, resolved.Message+" "+friendlyErr(err))
+			// The user confirmed and it still did not happen. Say that plainly;
+			// the underlying error is a diagnostic, not an answer.
+			m.sendOrchestrationReply(ctx, rc, in, riskExecutionFailedText(language))
 			return true
 		}
 	}
 	m.sendOrchestrationReply(ctx, rc, in, resolved.Message)
 	return true
+}
+
+// riskExecutionFailedText reports a confirmed action that did not go through.
+// It says what the user needs to know — it did not happen, and nothing changed
+// — without repeating the internal error that explains why.
+func riskExecutionFailedText(language string) string {
+	if services.NormalizeLanguage(language) == "en" {
+		return "I couldn't carry that out just now, so nothing has changed. Want me to try again?"
+	}
+	return "这个操作没执行成功，状态没变。要我再试一次吗？"
 }
 
 func (m *Manager) tryCreateRiskConfirmation(ctx context.Context, rc *runningChannel, in InboundMessage, scopeUser, text, language string) bool {
@@ -295,7 +325,11 @@ func isStatusQuery(text string) bool {
 	if t == "" {
 		return false
 	}
-	needles := []string{"怎么样", "怎么了", "进度", "状态", "如何了", "好了吗", "how is", "how's", "status", "progress", "any update"}
+	needles := []string{
+		"怎么样", "怎么了", "什么情况", "到哪了", "到哪一步",
+		"进度", "进展", "状态", "如何了", "好了吗", "完了吗", "完了没", "有结果了吗",
+		"how is", "how's", "status", "progress", "any update", "done yet",
+	}
 	lower := strings.ToLower(t)
 	for _, n := range needles {
 		if strings.Contains(lower, strings.ToLower(n)) {
@@ -309,8 +343,11 @@ func stripStatusQueryNoise(text string) string {
 	out := text
 	for _, noise := range []string{
 		"的事情怎么样了", "事情怎么样了", "怎么样了", "怎么样", "怎么了",
-		"的进度", "进度如何", "进度", "的状态", "状态", "如何了", "好了吗",
-		"how is", "how's", "status of", "status", "progress on", "progress", "any update",
+		"现在什么进展了", "什么进展了", "什么情况", "到哪一步了", "到哪了",
+		"的进度", "进度如何", "进度", "进展", "的状态", "状态", "如何了",
+		"好了吗", "完了吗", "完了没", "有结果了吗",
+		"how is", "how's", "status of", "status", "progress on", "progress",
+		"any update", "done yet",
 		"的事情", "事情",
 	} {
 		out = strings.ReplaceAll(out, noise, " ")
@@ -337,32 +374,96 @@ func prependFocusContext(text string, task *models.TaskIdentity) string {
 	return "（当前焦点任务：" + task.ShortTitle + " / run " + task.RunID + "）\n" + text
 }
 
-func detectHighRiskIntent(text string) (action, query string) {
-	t := strings.TrimSpace(text)
-	lower := strings.ToLower(t)
-	type rule struct {
-		action string
-		keys   []string
+// prependAmendmentContext tells the agent the user is revising an existing
+// task, so it amends that Run instead of starting another one.
+func prependAmendmentContext(text string, task *models.TaskIdentity) string {
+	if task == nil {
+		return text
 	}
-	rules := []rule{
-		{"cancel_run", []string{"取消任务", "取消这个", "取消该", "取消运行", "cancel run", "cancel the task", "取消"}},
-		{"approve_gate", []string{"批准", "同意门禁", "approve", "批准门禁"}},
-		{"reject_gate", []string{"拒绝门禁", "驳回", "reject gate"}},
-		{"delete_run", []string{"删除任务", "删掉", "delete task"}},
+	return "（用户在修改已有任务的要求：" + task.ShortTitle + " / run " + task.RunID +
+		"。请把下面的补充要求并入该任务，不要新建任务。）\n" + text
+}
+
+func amendAfterTerminalText(shortTitle, statusLabel, language string) string {
+	if services.NormalizeLanguage(language) == "en" {
+		return "\"" + shortTitle + "\" is already " + statusLabel +
+			", so I can't fold that into it. Want me to start a new task for it?"
 	}
-	for _, r := range rules {
-		for _, key := range r.keys {
-			if strings.Contains(lower, strings.ToLower(key)) {
-				query = strings.TrimSpace(strings.ReplaceAll(t, key, ""))
-				query = strings.TrimSpace(strings.ReplaceAll(query, strings.ToUpper(key), ""))
-				if query == "" {
-					query = t
-				}
-				return r.action, query
-			}
-		}
+	return "「" + shortTitle + "」已经" + statusLabel + "了，改不进去。要我按这个新开一个任务吗？"
+}
+
+// recordTaskContext keeps the task's most recent conversational context fresh
+// so later status answers and background reflow can reference what the user
+// actually said (FR-6).
+func (m *Manager) recordTaskContext(rc *runningChannel, task *models.TaskIdentity, text string) {
+	if m.taskContext == nil || task == nil || rc == nil {
+		return
 	}
-	return "", ""
+	if _, err := m.taskContext.UpdateIdentity(services.EnsureTaskIdentityInput{
+		RunID: task.RunID, ProjectID: rc.cfg.ProjectID, UserID: task.UserID,
+		RecentContext: strings.TrimSpace(text),
+		Language:      services.TaskLanguageFor(task.Language, text),
+	}); err != nil {
+		log.Warn().Err(err).Str("run", task.RunID).Msg("record task recent context failed")
+	}
+}
+
+// formatTaskReply renders a task-scoped reply, naming the task only when the
+// name carries information.
+//
+// It carries information in two cases: several tasks are live, so the answer
+// would otherwise be ambiguous; or the user named the task themselves, where
+// repeating it confirms which one was understood. Everywhere else the name is
+// noise — a single-task conversation is already unambiguous, and stamping a
+// label on every line is what made the old output read like a ticket queue.
+func (m *Manager) formatTaskStatusReply(rc *runningChannel, in InboundMessage,
+	task *models.TaskIdentity, currentMessage, recentLanguage string) string {
+	if task == nil {
+		return ""
+	}
+	if m.shouldNameTask(rc, in, task, currentMessage) {
+		return FormatTaskMessage(task.ShortTitle,
+			taskStatusLabel(task.Status, recentLanguage), "", currentMessage, recentLanguage)
+	}
+	return soloTaskStatusText(task.Status, recentLanguage)
+}
+
+func (m *Manager) shouldNameTask(rc *runningChannel, in InboundMessage,
+	task *models.TaskIdentity, currentMessage string) bool {
+	return m.liveTaskCount(rc, in) > 1 || mentionsTask(currentMessage, task.ShortTitle)
+}
+
+// mentionsTask reports whether the user's own words picked out this task, so a
+// reply that repeats the name is confirming rather than labelling.
+func mentionsTask(message, shortTitle string) bool {
+	title := services.SanitizeShortTitle(shortTitle)
+	msg := strings.ToLower(strings.TrimSpace(message))
+	if title == "" || msg == "" {
+		return false
+	}
+	lower := strings.ToLower(title)
+	if strings.Contains(msg, lower) {
+		return true
+	}
+	// A bare selection may be a prefix of the stored title ("结算页" for
+	// "结算页性能"); short fragments are too weak to count as a reference.
+	return len([]rune(msg)) >= 3 && strings.Contains(lower, msg)
+}
+
+// liveTaskCount counts this user's non-terminal tasks in the conversation.
+func (m *Manager) liveTaskCount(rc *runningChannel, in InboundMessage) int {
+	if m.taskContext == nil || rc == nil {
+		return 0
+	}
+	n, err := m.taskContext.CountActive(services.TaskScope{
+		ProjectID: rc.cfg.ProjectID, UserID: services.SyntheticQQUserID(in.UserID),
+		Channel: rc.cfg.Type, ConversationID: in.ConversationID,
+	})
+	if err != nil {
+		log.Warn().Err(err).Str("project", rc.cfg.ProjectID).Msg("count active tasks failed")
+		return 0
+	}
+	return n
 }
 
 func riskBaseAction(action string) string {

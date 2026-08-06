@@ -56,7 +56,7 @@ func TestInboundOrchestrationAmbiguityAndContinuation(t *testing.T) {
 		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
 		MessageID: "m1", Text: "登录页怎么样了",
 	}
-	m.runTurn(context.Background(), rc, in, false)
+	m.handleInbound(context.Background(), rc, in)
 	got := sentTexts(fa)
 	if turned != 0 {
 		t.Fatalf("ambiguous status query must not start a PM turn, turned=%d", turned)
@@ -68,10 +68,10 @@ func TestInboundOrchestrationAmbiguityAndContinuation(t *testing.T) {
 	fa.mu.Lock()
 	fa.sent = nil
 	fa.mu.Unlock()
-	m.runTurn(context.Background(), rc, InboundMessage{
+	m.handleInbound(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
 		MessageID: "m2", Text: "登录页性能优化",
-	}, false)
+	})
 	got = sentTexts(fa)
 	if turned != 0 {
 		t.Fatalf("short-title selection should answer without PM turn, turned=%d", turned)
@@ -83,10 +83,10 @@ func TestInboundOrchestrationAmbiguityAndContinuation(t *testing.T) {
 	fa.mu.Lock()
 	fa.sent = nil
 	fa.mu.Unlock()
-	m.runTurn(context.Background(), rc, InboundMessage{
+	m.handleInbound(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
 		MessageID: "m3", Text: "那继续吧",
-	}, false)
+	})
 	if turned != 1 {
 		t.Fatalf("continuation should enter PM turn with focus, turned=%d", turned)
 	}
@@ -98,25 +98,30 @@ func TestInboundOrchestrationAmbiguityAndContinuation(t *testing.T) {
 	fa.mu.Lock()
 	fa.sent = nil
 	fa.mu.Unlock()
-	m.runTurn(context.Background(), rc, InboundMessage{
+	m.handleInbound(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
 		MessageID: "m4", Text: "取消登录页性能优化",
-	}, false)
+	})
 	got = sentTexts(fa)
 	if len(cancelled) != 0 {
 		t.Fatalf("high-risk action executed before confirmation: %v", cancelled)
 	}
-	if len(got) != 1 || !strings.Contains(got[0], "高风险确认") {
+	// The prompt asks in plain words, names the task and says how to answer.
+	if len(got) != 1 || !strings.Contains(got[0], "登录页性能优化") ||
+		!strings.Contains(got[0], "确认") {
 		t.Fatalf("expected confirmation prompt, got %v", got)
+	}
+	if ContainsInternalTerms(got[0]) {
+		t.Fatalf("confirmation prompt exposes internals: %q", got[0])
 	}
 
 	fa.mu.Lock()
 	fa.sent = nil
 	fa.mu.Unlock()
-	m.runTurn(context.Background(), rc, InboundMessage{
+	m.handleInbound(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
 		MessageID: "m5", Text: "确认",
-	}, false)
+	})
 	if len(cancelled) != 1 || cancelled[0] != "r1:cancel_run" {
 		t.Fatalf("confirmed cancel = %v", cancelled)
 	}
@@ -156,10 +161,10 @@ func TestInboundOrchestrationGenericTitleAndGateConfirmation(t *testing.T) {
 		cfg:     models.ChannelConfig{ID: "c1", Type: models.ChannelTypeQQ, ProjectID: projectID},
 		adapter: fa,
 	}
-	m.runTurn(context.Background(), rc, InboundMessage{
+	m.handleInbound(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
 		MessageID: "m1", Text: "结算页性能",
-	}, false)
+	})
 	if turned != 0 {
 		t.Fatalf("generic exact short title should be handled before PM turn, turned=%d", turned)
 	}
@@ -176,10 +181,10 @@ func TestInboundOrchestrationGenericTitleAndGateConfirmation(t *testing.T) {
 		executedAction, executedMeta = action, meta
 		return nil
 	})
-	m.runTurn(context.Background(), rc, InboundMessage{
+	m.handleInbound(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
 		MessageID: "m2", Text: "批准结算页性能",
-	}, false)
+	})
 	pending, err := risk.LatestPending(services.SyntheticQQUserID("u1"), projectID)
 	if err != nil || pending == nil {
 		t.Fatalf("pending gate ticket = %+v err=%v", pending, err)
@@ -191,10 +196,10 @@ func TestInboundOrchestrationGenericTitleAndGateConfirmation(t *testing.T) {
 		t.Fatalf("gate executed before confirmation: %s", executedAction)
 	}
 
-	m.runTurn(context.Background(), rc, InboundMessage{
+	m.handleInbound(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
 		MessageID: "m3", Text: "确认",
-	}, false)
+	})
 	if executedAction != "resume_gate" ||
 		executedMeta["nodeId"] != "review-gate" || executedMeta["gateAction"] != "approve" {
 		t.Fatalf("confirmed gate action=%q meta=%v", executedAction, executedMeta)

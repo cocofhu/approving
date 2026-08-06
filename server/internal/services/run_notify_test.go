@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cocofhu/approving/internal/models"
 
@@ -150,19 +151,57 @@ func TestAttemptDeliver_noTargetStillClaims(t *testing.T) {
 	}
 }
 
-func TestAttemptDeliver_sendFailNoRetry(t *testing.T) {
+// A transport failure must be retried inside the claim: the receipt is taken
+// before the send, so giving up on the first error loses the notification for
+// good. The claim still bounds the whole thing to one notification.
+func TestAttemptDeliver_sendFailRetriesThenRecordsFailure(t *testing.T) {
 	db := setupRunNotifyDB(t)
 	seedNotifyProject(t, db, true, []string{"failed"}, "inherit", nil)
 	d := &fakeRunDeliverer{err: errors.New("qq down")}
 	svc := NewRunNotifyService(db, d, "")
+	svc.SetRetryDelays([]time.Duration{0, 0, 0})
 	ev := RunNotifyEvent{
 		ProjectID: "proj-n1", RunID: "run-5", WorkflowID: "wf-n1",
 		NodeID: "x", Iteration: 1, Kind: "failed",
 	}
 	svc.AttemptDeliver(ev)
+	if d.count() != 4 {
+		t.Fatalf("attempts=%d want 1 initial + 3 retries", d.count())
+	}
+
+	var receipt models.NotifyDeliveryReceipt
+	if err := db.Where("run_id = ? AND node_id = ? AND iteration = ? AND kind = ?",
+		"run-5", "x", 1, "failed").First(&receipt).Error; err != nil {
+		t.Fatal(err)
+	}
+	if receipt.DeliveryStatus != "failed" {
+		t.Fatalf("delivery status = %q; an exhausted delivery must be visible in the data",
+			receipt.DeliveryStatus)
+	}
+
+	// The claim still holds: a second event does not produce a second notification.
+	before := d.count()
 	svc.AttemptDeliver(ev)
-	if d.count() != 1 {
-		t.Fatalf("calls=%d want 1", d.count())
+	if d.count() != before {
+		t.Fatalf("claim did not hold: calls went %d → %d", before, d.count())
+	}
+}
+
+func TestAttemptDeliver_successRecordsDelivered(t *testing.T) {
+	db := setupRunNotifyDB(t)
+	seedNotifyProject(t, db, true, []string{"failed"}, "inherit", nil)
+	d := &fakeRunDeliverer{}
+	svc := NewRunNotifyService(db, d, "")
+	svc.AttemptDeliver(RunNotifyEvent{
+		ProjectID: "proj-n1", RunID: "run-5b", WorkflowID: "wf-n1",
+		NodeID: "x", Iteration: 1, Kind: "failed",
+	})
+	var receipt models.NotifyDeliveryReceipt
+	if err := db.Where("run_id = ?", "run-5b").First(&receipt).Error; err != nil {
+		t.Fatal(err)
+	}
+	if receipt.DeliveryStatus != "delivered" {
+		t.Fatalf("delivery status = %q want delivered", receipt.DeliveryStatus)
 	}
 }
 

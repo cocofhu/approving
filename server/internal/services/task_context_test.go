@@ -152,8 +152,58 @@ func TestRiskConfirmationOneShotDuplicateExpiredAndLanguage(t *testing.T) {
 		DetectLanguage("", "en") != "en" || DetectLanguage("", "") != "zh-CN" {
 		t.Fatal("language fallback order is incorrect")
 	}
-	if got := FormatTaskType("Login", "Risk", "en"); got != "【Login｜Risk】" {
+	// A task reference reads like speech, not like a ticket header, and is
+	// omitted entirely when there is no task to name.
+	if got := FormatTaskType("Login", "Risk", "en"); !strings.Contains(got, "Login") ||
+		strings.Contains(got, "【") || strings.Contains(got, "｜") {
 		t.Fatalf("format=%q", got)
+	}
+	if got := FormatTaskType("登录页", "阻塞", "zh-CN"); got != "登录页那个：" {
+		t.Fatalf("zh format=%q", got)
+	}
+	if got := FormatTaskType("", "阻塞", "zh-CN"); got != "" {
+		t.Fatalf("a missing title must not become a placeholder prefix: %q", got)
+	}
+}
+
+func TestSanitizeShortTitleStripsRunIdentifiers(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"修复 Run run-1ca1876f", "修复"},
+		{"run-1ca1876f", ""},
+		{"Run", ""},
+		{"task-9f8e7d6c5b4a", ""},
+		{"登录页性能优化", "登录页性能优化"},
+	} {
+		if got := SanitizeShortTitle(tc.in); got != tc.want {
+			t.Fatalf("SanitizeShortTitle(%q) = %q want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestRunShortTitleNeverExposesRunID(t *testing.T) {
+	got := runShortTitle(models.Run{
+		ID:     "run-1ca1876f",
+		Inputs: map[string]any{"requirement": "把登录页首屏时间降下来。顺便看看埋点。"},
+	})
+	if got != "把登录页首屏时间降下来" {
+		t.Fatalf("short title = %q", got)
+	}
+	if strings.Contains(runShortTitle(models.Run{ID: "run-1ca1876f"}), "run-") {
+		t.Fatal("a run with no usable text must not fall back to its id")
+	}
+}
+
+func TestTaskLanguageFollowsTaskNotMessage(t *testing.T) {
+	// A short foreign-language fragment inside an established task does not
+	// flip the language; a full sentence does.
+	if got := TaskLanguageFor("zh-CN", "PR #12"); got != "zh-CN" {
+		t.Fatalf("short fragment switched language: %q", got)
+	}
+	if got := TaskLanguageFor("zh-CN", "Could you also check the login page performance?"); got != "en" {
+		t.Fatalf("a clear switch was ignored: %q", got)
+	}
+	if got := TaskLanguageFor("", "怎么样了"); got != "zh-CN" {
+		t.Fatalf("no established language should fall back to detection: %q", got)
 	}
 }
 
@@ -186,9 +236,14 @@ func TestRiskConfirmationEchoesShortTitleAndLatestTaskStatus(t *testing.T) {
 	if ticket.ShortTitle != "结算页" {
 		t.Fatalf("ticket short title = %q", ticket.ShortTitle)
 	}
+	// The prompt names the task and the action so the wrong thing cannot be
+	// confirmed by accident, but it asks the way a person would.
 	prompt := risk.ConfirmationPrompt(*ticket)
-	if !strings.HasPrefix(prompt, "【结算页｜高风险确认】") || !strings.Contains(prompt, "删除生产分支") {
+	if !strings.Contains(prompt, "结算页") || !strings.Contains(prompt, "删除生产分支") {
 		t.Fatalf("prompt = %q", prompt)
+	}
+	if strings.Contains(prompt, "【") || strings.Contains(prompt, "｜") {
+		t.Fatalf("confirmation prompt still uses the ticket header form: %q", prompt)
 	}
 
 	confirmed, err := risk.ResolveTicket(input, "确认")
@@ -228,8 +283,13 @@ func TestRiskConfirmationEchoesShortTitleAndLatestTaskStatus(t *testing.T) {
 	if expired.Execute || expired.Ticket.Status != "expired" {
 		t.Fatalf("expired = %+v", expired)
 	}
-	if !strings.Contains(expired.Message, "【结算页｜已过期】") || expired.TaskStatus != "completed" {
+	// An expired confirmation still names the task and says the action did not
+	// happen, so the user is never left guessing what state things are in.
+	if !strings.Contains(expired.Message, "结算页") || expired.TaskStatus != "completed" {
 		t.Fatalf("expired message = %q status=%q", expired.Message, expired.TaskStatus)
+	}
+	if !strings.Contains(expired.Message, "过期") || strings.Contains(expired.Message, "【") {
+		t.Fatalf("expired message should explain the timeout in plain language: %q", expired.Message)
 	}
 }
 

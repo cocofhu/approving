@@ -218,10 +218,34 @@ func (b *ChannelBridge) forwardProgress(ctx context.Context, threadID string, on
 	defer unsub()
 
 	acc := newProgressAccumulator()
+	sentAnything := false
 	emit := func(events []ProgressEvent) {
 		for _, pe := range events {
+			sentAnything = true
 			onProgress(pe)
 		}
+	}
+	started := time.Now()
+	openerSent := false
+	// Say something real while a slow turn is still thinking. This only fires
+	// after firstSentenceDelay, so a turn that answers quickly still produces
+	// exactly one message — the answer. Past that point the alternative is
+	// silence, and a substantive opening sentence beats both silence and a
+	// content-free "working on it".
+	maybeOpener := func() {
+		if openerSent || sentAnything || time.Since(started) < firstSentenceDelay {
+			return
+		}
+		sentence, ok := acc.FirstCompleteSentence()
+		if !ok {
+			return
+		}
+		openerSent = true
+		sentAnything = true
+		onProgress(ProgressEvent{
+			Kind: ProgressMilestone, Summary: sentence, Stage: sentence,
+			Sendable: true, Reason: "live_first_sentence", At: time.Now(),
+		})
 	}
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
@@ -234,6 +258,7 @@ func (b *ChannelBridge) forwardProgress(ctx context.Context, threadID string, on
 			if _, _, partial, _, _ := b.turns.Status(threadID); partial != "" {
 				emit(acc.FeedSnapshot(partial))
 			}
+			maybeOpener()
 		case ev, open := <-ch:
 			if !open {
 				return
@@ -246,6 +271,7 @@ func (b *ChannelBridge) forwardProgress(ctx context.Context, threadID string, on
 				continue // tool / non-message frames suppressed
 			}
 			emit(acc.Feed(delta))
+			maybeOpener()
 		}
 	}
 }

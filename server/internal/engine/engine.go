@@ -102,6 +102,11 @@ type Engine struct {
 	// node-scoped failed transitions (QQ Run notify). Engine never blocks on it.
 	runNotify RunNotifier
 
+	// runTerminal is an optional async observer for completed / failed /
+	// cancelled transitions, used to bring a task's outcome back to the
+	// conversation that started it. Engine never blocks on it.
+	runTerminal RunTerminalObserver
+
 	// reviewMu guards reviewSess: per parked producer session FIFO + single
 	// worker for node-inline review and gate hot-revise (SandboxChat-aligned).
 	reviewMu   sync.Mutex
@@ -1430,6 +1435,9 @@ func (e *Engine) finish(runID, status string) bool {
 				Payload:      map[string]any{"status": status, "trigger": "engine", "runId": runID},
 			})
 		}
+	}
+	if status == "completed" || status == "failed" || status == "cancelled" {
+		e.fireRunTerminal(runID, status)
 	}
 	msg, _ := json.Marshal(map[string]any{"type": "status", "runId": runID, "status": status})
 	e.broker.Publish(runID, msg)
