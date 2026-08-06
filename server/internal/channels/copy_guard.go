@@ -12,15 +12,19 @@ import (
 // is the equivalent gate for the channel egress, applied at runtime rather than
 // only in tests because outbound text is partly composed by a model.
 
-// identifierToken matches anything shaped like a run or task id. Matching the
-// shape rather than a fixed alphabet matters: ids are uuid-derived today, but a
-// guard that only knows today's alphabet stops guarding the moment that
-// changes.
-var identifierToken = regexp.MustCompile(`(?i)\b(?:run|task)[-_ ]?#?[0-9a-z]{4,}\b`)
+// identifierToken matches anything shaped like a run or task id. It matches the
+// shape rather than a fixed alphabet on purpose: ids are uuid-derived today, so
+// a guard that only knows hex would stop guarding the moment that changes.
+//
+// The separator must be "-" or "_", which is how an id is always written. An
+// earlier version also accepted a space, and that swallowed ordinary prose:
+// "we run 5000 iterations" matched as a whole and left " iterations" behind.
+var identifierToken = regexp.MustCompile(`(?i)\b(?:run|task)[-_][0-9a-z]{4,}\b`)
 
 // internalIDPatterns match identifier spellings that are unambiguous on their
 // own, without the digit test isIdentifier applies.
 var internalIDPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)\brun\s*#\s*[0-9a-z]{4,}\b`),
 	regexp.MustCompile(`(?i)\brun\s+id\s*[:：]?\s*[0-9a-z-]{4,}\b`),
 }
 

@@ -167,6 +167,43 @@ func TestScrubInternalTermsCleansModelComposedText(t *testing.T) {
 	}
 }
 
+// The identifier guard has to cut both ways. Deleting a real id is the point;
+// deleting a chunk of an ordinary sentence is a worse failure than the jargon
+// would have been, because the user cannot even tell something went missing.
+func TestIdentifierScrubbingLeavesOrdinaryProseAlone(t *testing.T) {
+	mustStrip := []string{
+		"run-1ca1876f", "run_1ca1876f", "task-9f8e7d6c5b",
+		"Run ID: 1ca1876f", "run #1ca1876f",
+	}
+	for _, text := range mustStrip {
+		if !ContainsInternalTerms(text) {
+			t.Errorf("%q was not recognised as an identifier", text)
+		}
+		if got := ScrubInternalTerms("结果在 " + text + " 里"); strings.Contains(got, "1ca1876f") ||
+			strings.Contains(got, "9f8e7d6c5b") {
+			t.Errorf("scrubbing %q left the identifier: %q", text, got)
+		}
+	}
+
+	keep := []struct{ text, mustSurvive string }{
+		{"we run 5000 iterations before merging", "5000 iterations"},
+		{"跑了 run 5000 次迭代", "5000"},
+		{"run 3 times and compare", "3 times"},
+		{"这个 task 2 天就能做完", "2 天"},
+		{"run-optimization 那个分支", "run-optimization"},
+		{"the long-run tradeoff here", "long-run tradeoff"},
+		{"overrun2024 is a variable name", "overrun2024"},
+	}
+	for _, c := range keep {
+		if ContainsInternalTerms(c.text) {
+			t.Errorf("%q was wrongly flagged as containing an identifier", c.text)
+		}
+		if got := ScrubInternalTerms(c.text); !strings.Contains(got, c.mustSurvive) {
+			t.Errorf("ScrubInternalTerms(%q) = %q, lost %q", c.text, got, c.mustSurvive)
+		}
+	}
+}
+
 // One message in, one message out. No acknowledgement, no queue narration, no
 // trailing wrap-up alongside the answer.
 func TestOneUserMessageProducesOneReply(t *testing.T) {
