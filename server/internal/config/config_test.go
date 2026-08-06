@@ -232,3 +232,61 @@ func TestParseMalformedYAMLErrors(t *testing.T) {
 		t.Fatal("expected error for malformed YAML, got nil")
 	}
 }
+
+func TestLiveEndpointIsConfiguredWithoutAKey(t *testing.T) {
+	// Endpoints on the local network take no auth, so a key must not be part
+	// of what decides whether the conversation layer is on.
+	for _, tc := range []struct {
+		name string
+		live LiveConfig
+		want bool
+	}{
+		{"endpoint and model", LiveConfig{BaseURL: "http://127.0.0.1:11434/v1", Model: "m"}, true},
+		{"with a key too", LiveConfig{BaseURL: "https://api.example.com/v1", APIKey: "k", Model: "m"}, true},
+		{"no model", LiveConfig{BaseURL: "https://api.example.com/v1", APIKey: "k"}, false},
+		{"no endpoint", LiveConfig{APIKey: "k", Model: "m"}, false},
+		{"nothing", LiveConfig{}, false},
+		{"blank is not set", LiveConfig{BaseURL: "  ", Model: "\t"}, false},
+	} {
+		if got := tc.live.Configured(); got != tc.want {
+			t.Errorf("%s: Configured() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestLiveEnvOverridesWinOverTheFile(t *testing.T) {
+	c := &Config{}
+	c.Live = LiveConfig{BaseURL: "http://from-file/v1", Model: "file-model", TimeoutSeconds: 3}
+	t.Setenv("APPROVING_LIVE_BASE_URL", "https://from-env/v1")
+	t.Setenv("APPROVING_LIVE_API_KEY", "env-key")
+	t.Setenv("APPROVING_LIVE_MODEL", "env-model")
+	t.Setenv("APPROVING_LIVE_TIMEOUT_SEC", "12")
+	applyEnvOverrides(c)
+
+	if c.Live.BaseURL != "https://from-env/v1" || c.Live.Model != "env-model" {
+		t.Errorf("endpoint not overridden: %+v", c.Live)
+	}
+	if c.Live.APIKey != "env-key" {
+		t.Errorf("APPROVING_LIVE_API_KEY not applied: %q", c.Live.APIKey)
+	}
+	if c.Live.TimeoutSeconds != 12 {
+		t.Errorf("APPROVING_LIVE_TIMEOUT_SEC not applied: %d", c.Live.TimeoutSeconds)
+	}
+}
+
+func TestLiveTimeoutFallsBackToAShortDefault(t *testing.T) {
+	// A turn is bounded by this and nothing else, so an unset value must not
+	// mean "wait forever".
+	c := &Config{}
+	setDefaults(c)
+	if c.Live.TimeoutSeconds != 8 {
+		t.Fatalf("default live timeout = %d, want 8", c.Live.TimeoutSeconds)
+	}
+
+	c2 := &Config{}
+	c2.Live.TimeoutSeconds = 30
+	setDefaults(c2)
+	if c2.Live.TimeoutSeconds != 30 {
+		t.Fatalf("configured live timeout was overwritten: %d", c2.Live.TimeoutSeconds)
+	}
+}

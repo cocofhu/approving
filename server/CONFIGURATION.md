@@ -29,6 +29,10 @@ configured on Agent meta env, not in this platform config table.
 | `APPROVING_SANDBOX_IMAGE_TRAE` | `sandbox.images.trae` | image | `Not set` | Public | Sandbox image for trae backend; empty uses the built-in default |
 | `APPROVING_SANDBOX_GATEWAY_URL` | `sandbox.gateway_url` | URL | `http://127.0.0.1:8899` | Public | sandbox-gateway control-plane URL |
 | `APPROVING_SANDBOX_GATEWAY_API_KEY` | `sandbox.gateway_api_key` | string | `Not set` | Sensitive | Gateway bearer token |
+| `APPROVING_LIVE_BASE_URL` | `live.base_url` | URL | `Not set` | Public | OpenAI-compatible endpoint for the conversation model; usually set on the settings page |
+| `APPROVING_LIVE_API_KEY` | `live.api_key` | string | `Not set` | Sensitive | Conversation model API key; usually set on the settings page |
+| `APPROVING_LIVE_MODEL` | `live.model` | string | `Not set` | Public | Conversation model name; usually set on the settings page |
+| `APPROVING_LIVE_TIMEOUT_SEC` | `live.timeout_seconds` | integer | `8` | Public | Timeout for one conversation model call in seconds; escalates to the sandbox on timeout |
 | `APPROVING_BROWSER_ENABLED` | `browser.enabled` | boolean | `Not set` | Deprecated | Compatibility field; VNC preview is always available |
 | `APPROVING_CURSOR_API_KEY` | `sandbox.cursor_api_key` | string | `Not set` | Sensitive, Deprecated | Deprecated; use agent env |
 | `CURSOR_API_KEY` | `sandbox.cursor_api_key` | string | `Not set` | Sensitive, Deprecated | Deprecated alias; use agent env |

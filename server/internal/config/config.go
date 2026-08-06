@@ -41,14 +41,15 @@ type Config struct {
 // which is where operators are expected to configure this; keeping it here lets
 // a deployment ship credentials via env without touching the DB.
 //
-// There is no enabled flag: the layer is active exactly when BaseURL, APIKey and
-// Model are all set. A separate toggle would only add a state where the endpoint
-// is configured but silently unused.
+// There is no enabled flag: the layer is active exactly when BaseURL and Model
+// are set. A separate toggle would only add a state where the endpoint is
+// configured but silently unused.
 type LiveConfig struct {
 	// BaseURL is the API root, e.g. "https://api.example.com/v1". The client
 	// appends "/chat/completions".
 	BaseURL string `yaml:"base_url"`
-	// APIKey authenticates as a bearer token.
+	// APIKey authenticates as a bearer token. It is optional: endpoints on the
+	// local network commonly take no auth at all.
 	APIKey string `yaml:"api_key"`
 	// Model is the model name passed through to the endpoint.
 	Model string `yaml:"model"`
@@ -58,11 +59,10 @@ type LiveConfig struct {
 	TimeoutSeconds int `yaml:"timeout_seconds"`
 }
 
-// Configured reports whether enough is set to call the endpoint.
+// Configured reports whether enough is set to call the endpoint. The key is not
+// part of it, so a keyless local endpoint counts as configured.
 func (l LiveConfig) Configured() bool {
-	return strings.TrimSpace(l.BaseURL) != "" &&
-		strings.TrimSpace(l.APIKey) != "" &&
-		strings.TrimSpace(l.Model) != ""
+	return strings.TrimSpace(l.BaseURL) != "" && strings.TrimSpace(l.Model) != ""
 }
 
 // SecurityConfig holds cross-cutting secrets. SecretsKey is the master key used
