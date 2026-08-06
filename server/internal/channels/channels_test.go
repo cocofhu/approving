@@ -310,16 +310,6 @@ func testInboundText(id, text string) InboundMessage {
 	return in
 }
 
-func hasPrefixCount(ss []string, prefix string) int {
-	n := 0
-	for _, s := range ss {
-		if strings.HasPrefix(s, prefix) {
-			n++
-		}
-	}
-	return n
-}
-
 func sentTexts(fa *fakeAdapter) []string {
 	fa.mu.Lock()
 	defer fa.mu.Unlock()
@@ -359,63 +349,65 @@ func TestDispatchPassesSessionCapsFromConfig(t *testing.T) {
 	}
 }
 
-func TestDispatchImmediateAckWithSummary(t *testing.T) {
-	// plan g1.1: ≤1s ACK with ~40-rune original summary; short turns still ACK.
-	fa := &fakeAdapter{}
-	m := NewManager(nil, nil, nil)
-	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
-		return Reply{FinalSummary: "final-ok"}, nil
-	}
-	long := strings.Repeat("处理下PR与相关检查项", 5) // >40 runes
-	m.dispatch(context.Background(), testRunningChannel(fa), testInboundText("m1", long))
-	got := sentTexts(fa)
-	if len(got) != 2 {
-		t.Fatalf("sends = %v want [ack, final]", got)
-	}
-	if !strings.HasPrefix(got[0], ackProcessingPrefix) {
-		t.Fatalf("ack = %q want prefix %q", got[0], ackProcessingPrefix)
-	}
-	summary := strings.TrimPrefix(got[0], ackProcessingPrefix)
-	if utf8.RuneCountInString(summary) > ackSummaryRunes+1 { // +1 for ellipsis
-		t.Fatalf("summary rune count = %d want <= %d+ellipsis", utf8.RuneCountInString(summary), ackSummaryRunes)
-	}
-	if got[1] != "final-ok" {
-		t.Fatalf("final = %q", got[1])
-	}
-}
-
-func TestDispatchSuccessAckThenFinal(t *testing.T) {
+// One user message produces one bot message. The reply is the acknowledgement;
+// a separate "received, working on it" only pushes the answer further down the
+// screen.
+func TestDispatchAnswersOnceWithNoAcknowledgement(t *testing.T) {
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
 		time.Sleep(30 * time.Millisecond)
-		return Reply{FinalSummary: "final-ok"}, nil
+		return Reply{FinalSummary: "首屏从 3.2s 降到 1.1s"}, nil
 	}
 	m.dispatch(context.Background(), testRunningChannel(fa), testInbound("m2"))
 	got := sentTexts(fa)
-	wantAck := processingAckText("hello")
-	if len(got) != 2 || got[0] != wantAck || got[1] != "final-ok" {
-		t.Fatalf("success sends = %v want [%q final-ok]", got, wantAck)
+	if len(got) != 1 || got[0] != "首屏从 3.2s 降到 1.1s" {
+		t.Fatalf("sends = %v want exactly the answer", got)
 	}
 }
 
-func TestDispatchFailureAckThenFailPrefix(t *testing.T) {
+// An internal error is never quoted back at the user; they get a cause they can
+// act on instead.
+func TestDispatchFailureExplainsInUserTerms(t *testing.T) {
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
-		return Reply{}, errors.New("沙箱未就绪")
+		return Reply{}, errors.New("assistant produced no reply")
 	}
 	m.dispatch(context.Background(), testRunningChannel(fa), testInbound("m3"))
 	got := sentTexts(fa)
-	wantAck := processingAckText("hello")
-	wantFail := failReplyPrefix + "沙箱未就绪"
-	if len(got) != 2 || got[0] != wantAck || got[1] != wantFail {
-		t.Fatalf("failure sends = %v want [%q %q]", got, wantAck, wantFail)
+	if len(got) != 1 {
+		t.Fatalf("failure sends = %v want exactly one message", got)
+	}
+	if strings.Contains(got[0], "assistant produced no reply") {
+		t.Fatalf("internal error text leaked to the user: %q", got[0])
+	}
+	if ContainsInternalTerms(got[0]) {
+		t.Fatalf("failure message exposes internals: %q", got[0])
 	}
 }
 
-func TestDispatchBusyEnqueuePerMessageAckAndDequeueAck(t *testing.T) {
-	// plan g1.2: every queued msg gets queue ACK with ahead count; dequeue ACK.
+// A turn that produced nothing sendable must not emit a placeholder telling the
+// user to go look elsewhere.
+func TestDispatchMissingSummaryFallsBackWithoutPlaceholder(t *testing.T) {
+	fa := &fakeAdapter{}
+	m := NewManager(nil, nil, nil)
+	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
+		return Reply{Text: "内部推理，不应外发"}, nil
+	}
+	m.dispatch(context.Background(), testRunningChannel(fa), testInbound("m4"))
+	got := sentTexts(fa)
+	if len(got) != 1 {
+		t.Fatalf("sends = %v want one fallback message", got)
+	}
+	if strings.Contains(got[0], "Approving") || strings.Contains(got[0], "内部推理") {
+		t.Fatalf("fallback leaked raw output or punted to another surface: %q", got[0])
+	}
+}
+
+// Queueing is invisible: messages that arrive during a turn wait their turn and
+// are answered, with no queue-position narration.
+func TestDispatchBusyQueuesSilentlyAndAnswersInOrder(t *testing.T) {
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
 	started := make(chan struct{})
@@ -437,14 +429,8 @@ func TestDispatchBusyEnqueuePerMessageAckAndDequeueAck(t *testing.T) {
 	<-done
 
 	got := sentTexts(fa)
-	if hasPrefixCount(got, ackProcessingPrefix) < 3 {
-		t.Fatalf("expected processing ACK for idle + each dequeue, got %v", got)
-	}
-	if countText(got, queueAckTextFor(1, "hello")) != 1 {
-		t.Fatalf("expected queue ACK ahead=1 with summary, got %v", got)
-	}
-	if countText(got, queueAckTextFor(2, "hello")) != 1 {
-		t.Fatalf("expected queue ACK ahead=2 with summary, got %v", got)
+	if len(got) != 3 {
+		t.Fatalf("sends = %v want one answer per message and nothing else", got)
 	}
 	if countText(got, "final-m5a") != 1 || countText(got, "final-m5b") != 1 || countText(got, "final-m5c") != 1 {
 		t.Fatalf("missing finals in %v", got)
@@ -510,14 +496,8 @@ func TestDispatchFIFOOrderMultipleQueued(t *testing.T) {
 		t.Fatalf("handle order = %v want %v", gotOrder, wantOrder)
 	}
 	got := sentTexts(fa)
-	queueAcks := 0
-	for _, s := range got {
-		if strings.HasPrefix(s, queueAckPrefix) {
-			queueAcks++
-		}
-	}
-	if queueAcks != 3 {
-		t.Fatalf("queue ACK count = %d want 3 in %v", queueAcks, got)
+	if len(got) != len(wantOrder) {
+		t.Fatalf("sends = %v want one answer per message, no queue narration", got)
 	}
 	for _, id := range wantOrder {
 		if countText(got, "final-"+id) != 1 {
@@ -527,7 +507,7 @@ func TestDispatchFIFOOrderMultipleQueued(t *testing.T) {
 }
 
 func TestDispatchQueueFullVisibleReject(t *testing.T) {
-	// depth 16 pending; next inbound gets queueFullText, not silent drop.
+	// depth 16 pending; the next inbound is dropped but never silently.
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
 	gate := make(chan struct{})
@@ -554,8 +534,8 @@ func TestDispatchQueueFullVisibleReject(t *testing.T) {
 	<-done
 
 	got := sentTexts(fa)
-	if countText(got, queueFullText) != 1 {
-		t.Fatalf("full-queue sends = %v want exactly one %q", got, queueFullText)
+	if countText(got, busyHintText) != 1 {
+		t.Fatalf("full-queue sends = %v want exactly one %q", got, busyHintText)
 	}
 	if countText(got, "final-overflow") != 0 {
 		t.Fatalf("overflow message must not be processed, got %v", got)
@@ -565,8 +545,9 @@ func TestDispatchQueueFullVisibleReject(t *testing.T) {
 	}
 }
 
-func TestDispatchPerMessageQueueAckAcrossBusyCycles(t *testing.T) {
-	// Each enqueued message gets its own queue ACK (no throttle).
+// Across repeated busy cycles the conversation stays one-in one-out: five user
+// messages, five answers, nothing else.
+func TestDispatchOneReplyPerMessageAcrossBusyCycles(t *testing.T) {
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
 	rc := testRunningChannel(fa)
@@ -592,15 +573,8 @@ func TestDispatchPerMessageQueueAckAcrossBusyCycles(t *testing.T) {
 	close(release1)
 	<-done1
 
-	got1 := sentTexts(fa)
-	q1 := 0
-	for _, s := range got1 {
-		if strings.HasPrefix(s, queueAckPrefix) {
-			q1++
-		}
-	}
-	if q1 != 2 {
-		t.Fatalf("first busy cycle queue ACK count = %d want 2 in %v", q1, got1)
+	if got := sentTexts(fa); len(got) != 3 {
+		t.Fatalf("first busy cycle sends = %v want exactly 3 answers", got)
 	}
 
 	release2 := make(chan struct{})
@@ -623,15 +597,14 @@ func TestDispatchPerMessageQueueAckAcrossBusyCycles(t *testing.T) {
 	close(release2)
 	<-done2
 
-	got2 := sentTexts(fa)
-	q2 := 0
-	for _, s := range got2 {
-		if strings.HasPrefix(s, queueAckPrefix) {
-			q2++
-		}
+	got := sentTexts(fa)
+	if len(got) != 5 {
+		t.Fatalf("sends = %v want exactly 5 answers for 5 messages", got)
 	}
-	if q2 != 3 {
-		t.Fatalf("after second busy cycle queue ACK total = %d want 3 in %v", q2, got2)
+	for _, id := range []string{"p0", "p1", "p2", "p3", "p4"} {
+		if countText(got, "final-"+id) != 1 {
+			t.Fatalf("missing exactly one answer for %s in %v", id, got)
+		}
 	}
 }
 
@@ -660,7 +633,7 @@ func TestDispatchFailureContinuesDrain(t *testing.T) {
 	<-done
 
 	got := sentTexts(fa)
-	if countText(got, failReplyPrefix+"boom") != 1 {
+	if countText(got, turnFailureText(errors.New("boom"))) != 1 {
 		t.Fatalf("expected failure reply in %v", got)
 	}
 	if countText(got, "final-after-fail") != 1 {
@@ -722,7 +695,7 @@ func TestDispatchCrossConversationIndependent(t *testing.T) {
 	}
 }
 
-func TestDispatchIdleSingleImmediateAckNoQueueAck(t *testing.T) {
+func TestDispatchIdleSendsOnlyTheAnswer(t *testing.T) {
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
@@ -731,32 +704,33 @@ func TestDispatchIdleSingleImmediateAckNoQueueAck(t *testing.T) {
 	}
 	m.dispatch(context.Background(), testRunningChannel(fa), testInbound("idle-1"))
 	got := sentTexts(fa)
-	for _, s := range got {
-		if strings.HasPrefix(s, queueAckPrefix) {
-			t.Fatalf("idle path must not send queue ACK, got %v", got)
-		}
-	}
-	wantAck := processingAckText("hello")
-	if len(got) != 2 || got[0] != wantAck || got[1] != "final-ok" {
-		t.Fatalf("idle ACK path sends = %v want [%q final-ok]", got, wantAck)
+	if len(got) != 1 || got[0] != "final-ok" {
+		t.Fatalf("idle path sends = %v want [final-ok]", got)
 	}
 }
 
-func TestFriendlyErrRuneTruncation(t *testing.T) {
-	long := strings.Repeat("错", 250)
-	got := friendlyErr(errors.New(long))
-	if !utf8.ValidString(got) {
-		t.Fatal("friendlyErr produced invalid UTF-8")
-	}
-	runes := []rune(got)
-	// 200 runes + ellipsis
-	if len(runes) != 201 || string(runes[:200]) != strings.Repeat("错", 200) || runes[200] != '…' {
-		t.Fatalf("friendlyErr truncation = %q (rune len %d)", got, len(runes))
-	}
-	// Fail prefix composition stays short and stack-free.
-	full := failReplyPrefix + got
-	if !strings.HasPrefix(full, failReplyPrefix) || strings.Contains(full, "goroutine") {
-		t.Fatalf("fail reply unexpected: %q", full)
+// Whatever an internal error says, the user gets a short, actionable sentence
+// with no stack, no internals and no raw error text.
+func TestTurnFailureTextIsUserFacing(t *testing.T) {
+	for _, err := range []error{
+		errors.New(strings.Repeat("错", 250)),
+		errors.New("assistant produced no reply"),
+		errors.New("context deadline exceeded"),
+		errors.New("goroutine 1 [running]: sandbox boom"),
+	} {
+		got := turnFailureText(err)
+		if !utf8.ValidString(got) || strings.TrimSpace(got) == "" {
+			t.Fatalf("turnFailureText(%v) = %q", err, got)
+		}
+		if utf8.RuneCountInString(got) > 80 {
+			t.Fatalf("failure text is too long to read in chat: %q", got)
+		}
+		if strings.Contains(got, "goroutine") || ContainsInternalTerms(got) {
+			t.Fatalf("failure text exposes internals: %q", got)
+		}
+		if strings.Contains(got, err.Error()) {
+			t.Fatalf("failure text quotes the raw error: %q", got)
+		}
 	}
 }
 
@@ -922,10 +896,11 @@ func TestDispatchForwardsOnlyExplicitlySendableProgress(t *testing.T) {
 	}
 	m.dispatch(context.Background(), testRunningChannel(fa), testInbound("prog-1"))
 	got := sentTexts(fa)
-	if countText(got, "进度：已提交分支") != 1 {
+	// A milestone is stated plainly; only a blocker is worth flagging as one.
+	if countText(got, "已提交分支") != 1 {
 		t.Fatalf("missing sendable milestone in %v", got)
 	}
-	if countText(got, "阻塞：CI 红了") != 1 {
+	if countText(got, "卡住了：CI 红了") != 1 {
 		t.Fatalf("missing structured blocker in %v", got)
 	}
 	if countText(got, "final-ok") != 1 {
@@ -1337,11 +1312,19 @@ func TestPushQueueProtectsRunNotify(t *testing.T) {
 	}
 }
 
-func TestChannelPreambleRequiresProgressMarkers(t *testing.T) {
+// The preamble is the only thing telling the agent how a Live turn ends, so it
+// has to name both endings, say that long work goes to the background, and rule
+// out the ticket phrasing this work removed.
+func TestChannelPreambleStatesTheLiveTurnContract(t *testing.T) {
 	p := ChannelPreamble("qq")
-	for _, marker := range []string{"[进度]", "[阻塞]", "[确认]"} {
-		if !strings.Contains(p, marker) {
-			t.Fatalf("preamble missing %s: %s", marker, p)
+	for _, required := range []string{"pm_reply", "pm_start_run", "pm_notify_progress"} {
+		if !strings.Contains(p, required) {
+			t.Fatalf("preamble never mentions %s: %s", required, p)
+		}
+	}
+	for _, banned := range []string{"收到，正在处理", "本回合已结束", "请前往 Approving 查看"} {
+		if !strings.Contains(p, banned) {
+			t.Fatalf("preamble does not forbid %q: %s", banned, p)
 		}
 	}
 }

@@ -26,6 +26,21 @@ func (n channelIMNotifier) NotifyRunAccepted(projectID, runID string, target pmm
 	return err
 }
 
+func (n channelIMNotifier) NotifyReply(projectID, runID string, target pmmcp.IMTarget, text, shortTitle string) (pmmcp.IMDeliveryOutcome, error) {
+	if n.mgr == nil {
+		return pmmcp.IMDeliveryOutcome{}, nil
+	}
+	result, err := n.mgr.DeliverConversationReply(context.Background(), channels.ConversationReply{
+		ProjectID: projectID, RunID: runID, Scene: channels.Scene(target.Scene),
+		ConversationID: target.ConversationID, UserID: target.UserID,
+		Text: text, ShortTitle: shortTitle,
+	})
+	if err != nil {
+		return pmmcp.IMDeliveryOutcome{}, err
+	}
+	return pmmcp.IMDeliveryOutcome{Sent: result.Sent, Reason: result.Reason()}, nil
+}
+
 func (n channelIMNotifier) NotifyProgress(projectID, runID string, target pmmcp.IMTarget, kind, text, stage, conclusion string, blocked, actionRequired bool) (pmmcp.IMDeliveryOutcome, error) {
 	if n.mgr == nil {
 		return pmmcp.IMDeliveryOutcome{}, nil

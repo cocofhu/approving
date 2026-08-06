@@ -72,14 +72,65 @@ func (s *RiskConfirmationService) resolveShortTitle(in RiskTicketInput) string {
 	return ""
 }
 
-// ConfirmationPrompt is the user-facing ask, always echoing the short title.
+// ConfirmationPrompt asks the user to authorize a destructive action. It always
+// names the task, because "confirm?" with no subject is how the wrong thing gets
+// cancelled — but it asks the way a person would.
 func (s *RiskConfirmationService) ConfirmationPrompt(ticket models.RiskConfirmationTicket) string {
-	kind := "高风险确认"
+	title := SanitizeShortTitle(ticket.ShortTitle)
+	action := riskActionPhrase(ticket.Action, ticket.Language)
 	if NormalizeLanguage(ticket.Language) == "en" {
-		kind = "High-risk confirmation"
+		subject := "that task"
+		if title != "" {
+			subject = "\"" + title + "\""
+		}
+		return "Just to be sure — you want me to " + action + " " + subject + "? " + riskPrompt(ticket.Language)
 	}
-	return FormatTaskType(ticket.ShortTitle, kind, ticket.Language) + " " +
-		riskActionLine(ticket.Action, ticket.Language) + riskPrompt(ticket.Language)
+	subject := "这个任务"
+	if title != "" {
+		subject = "「" + title + "」"
+	}
+	return "确认一下，你是要" + action + subject + "吗？" + riskPrompt(ticket.Language)
+}
+
+// riskActionPhrase names a destructive action as a verb rather than an action
+// code. Callers may also pass a plain-language description, which is used as-is;
+// only the internal codes need translating.
+func riskActionPhrase(action, language string) string {
+	en := NormalizeLanguage(language) == "en"
+	action = strings.TrimSpace(action)
+	base, _, _ := strings.Cut(action, ":")
+	switch base {
+	case "cancel_run":
+		if en {
+			return "cancel"
+		}
+		return "取消"
+	case "delete_run":
+		if en {
+			return "delete"
+		}
+		return "删除"
+	case "approve_gate", "resume_gate":
+		if en {
+			return "approve"
+		}
+		return "批准"
+	case "reject_gate":
+		if en {
+			return "reject"
+		}
+		return "驳回"
+	default:
+		// Not a known code. Anything with code punctuation is internal and must
+		// not be read out; anything else is already a human description.
+		if action != "" && !strings.ContainsAny(action, "_:") {
+			return action
+		}
+		if en {
+			return "run that action on"
+		}
+		return "操作"
+	}
 }
 
 type RiskResolution struct {
@@ -247,56 +298,77 @@ func (s *RiskConfirmationService) LatestForAction(userID, projectID, runID, acti
 
 func riskPrompt(language string) string {
 	if NormalizeLanguage(language) == "en" {
-		return "Reply “confirm” to proceed or “cancel” to stop."
+		return "Say “confirm” and I'll do it, or “cancel” to leave it alone."
 	}
-	return "请回复“确认”继续，或回复“取消”停止。"
+	return "回「确认」我就做，回「取消」就算了。"
 }
 
-func riskActionLine(action, language string) string {
-	action = strings.TrimSpace(action)
-	if action == "" {
-		return ""
-	}
-	if NormalizeLanguage(language) == "en" {
-		return "Action: " + action + ". "
-	}
-	return "操作：" + action + "。"
-}
-
-// riskStatusMessage renders the settled reply: task title, ticket outcome, and
-// the latest task status.
+// riskStatusMessage reports how a confirmation settled. It names the task only
+// when the outcome would otherwise be ambiguous, and states what happened rather
+// than the ticket's internal state.
 func riskStatusMessage(ticket models.RiskConfirmationTicket, taskStatus string) string {
 	en := NormalizeLanguage(ticket.Language) == "en"
-	var outcome, kind string
-	switch ticket.Status {
-	case "confirmed":
-		kind, outcome = "已确认", "已确认，本次授权已使用。"
-		if en {
-			kind, outcome = "Confirmed", "Confirmed. This authorization has already been consumed."
+	title := SanitizeShortTitle(ticket.ShortTitle)
+	action := riskActionPhrase(ticket.Action, ticket.Language)
+
+	var subject string
+	if en {
+		subject = "that one"
+		if title != "" {
+			subject = "\"" + title + "\""
 		}
-	case "cancelled":
-		kind, outcome = "已取消", "已取消，操作未执行。"
-		if en {
-			kind, outcome = "Cancelled", "Cancelled. The action was not executed."
-		}
-	case "expired":
-		kind, outcome = "已过期", "确认已过期，操作未执行。"
-		if en {
-			kind, outcome = "Expired", "This confirmation has expired. The action was not executed."
-		}
-	default:
-		kind, outcome = "待确认", riskPrompt(ticket.Language)
-		if en {
-			kind = "Pending"
+	} else {
+		subject = "那个"
+		if title != "" {
+			subject = "「" + title + "」"
 		}
 	}
-	message := FormatTaskType(ticket.ShortTitle, kind, ticket.Language) + " " + outcome
+
+	var message string
+	switch ticket.Status {
+	case "confirmed":
+		if en {
+			message = "Already done — " + subject + " was " + pastTense(action) + "."
+		} else {
+			message = subject + "已经" + action + "了。"
+		}
+	case "cancelled":
+		if en {
+			message = "OK, I left " + subject + " alone."
+		} else {
+			message = "好，" + subject + "我没动。"
+		}
+	case "expired":
+		if en {
+			message = "That confirmation timed out, so I didn't touch " + subject + ". Tell me again if you still want it."
+		} else {
+			message = "刚才那个确认过期了，" + subject + "我没动。还要的话再说一次。"
+		}
+	default:
+		return riskPrompt(ticket.Language)
+	}
 	if status := strings.TrimSpace(taskStatus); status != "" {
 		if en {
-			message += " Latest task status: " + status + "."
+			message += " It's now " + status + "."
 		} else {
-			message += "当前任务状态：" + status + "。"
+			message += "现在是" + status + "。"
 		}
 	}
 	return message
+}
+
+// pastTense renders an action verb for an outcome sentence.
+func pastTense(verb string) string {
+	switch verb {
+	case "cancel":
+		return "cancelled"
+	case "delete":
+		return "deleted"
+	case "approve":
+		return "approved"
+	case "reject":
+		return "rejected"
+	default:
+		return "handled"
+	}
 }

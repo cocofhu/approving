@@ -44,8 +44,13 @@ type ProgressEvent struct {
 	At             time.Time
 }
 
-// Deliverable reports whether this event may leave the platform. Classified
-// narration alone never qualifies.
+// Deliverable reports whether this event may leave the platform.
+//
+// Milestones with a substantive Stage are allowed out: suppressing them at the
+// source meant users heard nothing for the entire life of a Run, and rate
+// limiting is the policy layer's job, not a blanket veto here. What stays
+// internal is raw narration with nothing substantive in it — an event whose only
+// content is a fragment of model output.
 func (ev ProgressEvent) Deliverable() bool {
 	if ev.Sendable {
 		return true
@@ -55,7 +60,24 @@ func (ev ProgressEvent) Deliverable() bool {
 	if ev.Blocked || ev.ActionRequired {
 		return strings.TrimSpace(ev.Conclusion) != ""
 	}
+	if ev.Kind == ProgressMilestone {
+		return isSubstantiveStage(ev.Stage)
+	}
 	return false
+}
+
+// substantiveStageRunes is the length below which a stage is a fragment rather
+// than a milestone worth interrupting the conversation for.
+const substantiveStageRunes = 8
+
+// isSubstantiveStage reports whether a milestone's stage says something a user
+// can act on, as opposed to a token fragment or tool noise.
+func isSubstantiveStage(stage string) bool {
+	stage = strings.TrimSpace(stage)
+	if utf8.RuneCountInString(stage) < substantiveStageRunes {
+		return false
+	}
+	return !isProgressNoise(stage)
 }
 
 // TurnFinalReport is the Work turn outcome consumed by Reply for the required
@@ -301,6 +323,56 @@ func (a *progressAccumulator) emitKeywordLines() []ProgressEvent {
 	return out
 }
 
+const (
+	// firstSentenceDelay is how long a turn may stay silent before its opening
+	// sentence is released early.
+	firstSentenceDelay = 3 * time.Second
+	// firstSentenceMinRunes keeps half-formed openings from going out.
+	firstSentenceMinRunes = 10
+	// firstSentenceMaxRunes bounds an opening that never terminates.
+	firstSentenceMaxRunes = 120
+)
+
+var sentenceTerminators = []rune{'。', '！', '？', '\n', '.', '!', '?'}
+
+// FirstCompleteSentence returns the buffer's opening sentence once it is
+// complete and long enough to be worth sending on its own.
+func (a *progressAccumulator) FirstCompleteSentence() (string, bool) {
+	if a == nil {
+		return "", false
+	}
+	text := strings.TrimSpace(a.buf)
+	if text == "" || isProgressNoise(text) {
+		return "", false
+	}
+	// A marker line is internal scaffolding, not something to read aloud.
+	if _, ok := classifyProgressMarker(text); ok {
+		return "", false
+	}
+	runes := []rune(text)
+	end := -1
+	for i, r := range runes {
+		for _, term := range sentenceTerminators {
+			if r == term {
+				end = i
+				break
+			}
+		}
+		if end >= 0 {
+			break
+		}
+	}
+	if end < 0 {
+		return "", false
+	}
+	sentence := strings.TrimSpace(string(runes[:end+1]))
+	sentence = strings.Trim(sentence, "\n")
+	if utf8.RuneCountInString(sentence) < firstSentenceMinRunes {
+		return "", false
+	}
+	return truncateRunes(sentence, firstSentenceMaxRunes), true
+}
+
 func FormatProgressText(ev ProgressEvent) string {
 	sum := strings.TrimSpace(ev.Summary)
 	if sum == "" {
@@ -308,11 +380,14 @@ func FormatProgressText(ev ProgressEvent) string {
 	}
 	switch ev.Kind {
 	case ProgressBlocker:
-		return "阻塞：" + sum
+		return "卡住了：" + sum
 	case ProgressConfirm:
-		return "需确认：" + sum
+		return "需要你定一下：" + sum
 	default:
-		return "进度：" + sum
+		// Milestones carry no label. The old "进度：" prefix turned the agent's
+		// own words into a machine relaying them, and the content already says
+		// it is progress.
+		return sum
 	}
 }
 

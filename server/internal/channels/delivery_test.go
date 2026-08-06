@@ -63,8 +63,13 @@ func TestFinalOnlySendsStructuredSummaryNeverRawAssistantText(t *testing.T) {
 			t.Fatalf("deprecated safe-notice fake completion must not be sent: %v", got)
 		}
 	}
-	if countText(got, finalSummaryMissingNotice) != 1 {
-		t.Fatalf("expected observable missing-summary failure notice, got %v", got)
+	// Without a structured summary the user still gets one message, and it says
+	// something about their situation rather than pointing them elsewhere.
+	if len(got) != 1 {
+		t.Fatalf("expected exactly one fallback message, got %v", got)
+	}
+	if strings.Contains(got[0], "Approving") {
+		t.Fatalf("fallback told the user to go look somewhere else: %q", got[0])
 	}
 
 	fa2 := &fakeAdapter{}
@@ -108,9 +113,6 @@ func TestNaturalLanguageQQFinalContainsAnswerNotShellNotice(t *testing.T) {
 	m.dispatch(context.Background(), rc, testInboundText("nl-slow-bad", userQ))
 
 	got := sentTexts(fa)
-	if hasPrefixCount(got, ackProcessingPrefix) != 1 {
-		t.Fatalf("expected processing ACK, got %v", got)
-	}
 	foundAnswer := false
 	for _, text := range got {
 		if strings.Contains(text, deprecatedSafeFinalNotice) || strings.Contains(text, "本回合已结束") {
@@ -136,24 +138,24 @@ func TestNaturalLanguageQQFinalContainsAnswerNotShellNotice(t *testing.T) {
 	}
 	mFail.dispatch(context.Background(), testRunningChannel(faFail), testInboundText("nl-empty", userQ))
 	failGot := sentTexts(faFail)
-	if countText(failGot, finalSummaryMissingNotice) != 1 {
-		t.Fatalf("expected missing-summary failure notice, got %v", failGot)
+	if len(failGot) != 1 {
+		t.Fatalf("expected exactly one fallback message, got %v", failGot)
 	}
 	for _, text := range failGot {
-		if strings.Contains(text, deprecatedSafeFinalNotice) {
-			t.Fatalf("failure path must not send deprecated shell: %v", failGot)
+		if strings.Contains(text, deprecatedSafeFinalNotice) || strings.Contains(text, "Approving") {
+			t.Fatalf("failure path must not send the redirect shell: %v", failGot)
 		}
 	}
 	sawMissingReason := false
 	faFail.mu.Lock()
 	for _, out := range faFail.sent {
-		if out.Envelope.Reason == "final_summary_missing" && out.Envelope.Kind == sendable.KindBlocked {
+		if out.Envelope.Reason == "final_missing_fallback" {
 			sawMissingReason = true
 		}
 	}
 	faFail.mu.Unlock()
 	if !sawMissingReason {
-		t.Fatalf("expected KindBlocked with reason=final_summary_missing; outbound=%v", failGot)
+		t.Fatalf("expected reason=final_missing_fallback; outbound=%v", failGot)
 	}
 }
 
@@ -279,8 +281,13 @@ func TestSendRunAcceptanceAckOncePerRunAndRejectsMissingRun(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("run acceptance ACK sent %v want exactly once per run", got)
 	}
-	if !strings.HasPrefix(got[0], "【登录页｜已接单】") {
-		t.Fatalf("ack text = %q want short title prefix", got[0])
+	// The confirmation names the task and hands the conversation back, without
+	// a ticket header and without promising a progress feed.
+	if !strings.Contains(got[0], "登录页") {
+		t.Fatalf("ack text = %q want the task named", got[0])
+	}
+	if strings.Contains(got[0], "【") || strings.Contains(got[0], "已接单") {
+		t.Fatalf("delegation confirmation still reads like a ticket: %q", got[0])
 	}
 
 	ack.RunID = ""
@@ -289,7 +296,9 @@ func TestSendRunAcceptanceAckOncePerRunAndRejectsMissingRun(t *testing.T) {
 	}
 }
 
-func TestTurnProcessingAckIsNotRunScoped(t *testing.T) {
+// Turn traffic is scoped to the turn, never to a fabricated Run: an inbound
+// platform message id must not be able to masquerade as a run_id.
+func TestTurnDeliveryIsNotRunScoped(t *testing.T) {
 	fa := &fakeAdapter{}
 	m, db := policyManager(t, fa, nil)
 	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
@@ -299,8 +308,8 @@ func TestTurnProcessingAckIsNotRunScoped(t *testing.T) {
 	m.dispatch(context.Background(), rc, testInbound("turn-1"))
 	m.dispatch(context.Background(), rc, testInbound("turn-2"))
 
-	if n := hasPrefixCount(sentTexts(fa), ackProcessingPrefix); n != 2 {
-		t.Fatalf("processing ACK count = %d want one per turn", n)
+	if got := sentTexts(fa); len(got) != 2 {
+		t.Fatalf("sends = %v want exactly one answer per turn", got)
 	}
 	var receipts []models.SendableDeliveryReceipt
 	if err := db.Find(&receipts).Error; err != nil {
@@ -851,8 +860,11 @@ func TestResolveTaskReferenceQQFlow(t *testing.T) {
 	if res.Status != TaskReferenceResolved || res.Task.RunID != "r1" {
 		t.Fatalf("unique match = %+v", res)
 	}
-	if !strings.HasPrefix(res.Message, "【支付登录页｜进行中】") {
+	if !strings.Contains(res.Message, "支付登录页") || !strings.Contains(res.Message, "还在做") {
 		t.Fatalf("resolved message = %q", res.Message)
+	}
+	if strings.ContainsAny(res.Message, "【｜】") {
+		t.Fatalf("resolved message still wears a ticket header: %q", res.Message)
 	}
 
 	// No match must not guess.

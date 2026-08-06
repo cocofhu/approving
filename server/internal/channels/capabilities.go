@@ -40,13 +40,18 @@ func QQReplyFallback(currentMessage, recentLanguage string) string {
 	return "当前 QQ 会话不支持引用回复，请按序号或短标题选择任务。"
 }
 
-// FormatTaskMessage applies the stable user-facing task/type prefix.
+// FormatTaskMessage names the task a message is about. Use it only when the
+// name carries information — several tasks are live, or the user named this one
+// — because a reference attached to every line reads like a ticket queue.
 func FormatTaskMessage(shortTitle, kind, body, currentMessage, recentLanguage string) string {
 	language := services.DetectLanguage(currentMessage, recentLanguage)
-	prefix := services.FormatTaskType(shortTitle, kind, language)
 	body = strings.TrimSpace(body)
 	if body == "" {
-		return prefix
+		return services.TaskStatusSentence(shortTitle, kind, language)
 	}
-	return prefix + " " + body
+	prefix := services.FormatTaskType(shortTitle, language)
+	if prefix == "" {
+		return body
+	}
+	return prefix + body
 }

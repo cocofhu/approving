@@ -84,4 +84,9 @@ type NotifyDeliveryReceipt struct {
 	Iteration int       `gorm:"uniqueIndex:idx_notify_receipt" json:"iteration"`
 	Kind      string    `gorm:"size:32;uniqueIndex:idx_notify_receipt" json:"kind"`
 	CreatedAt time.Time `json:"createdAt"`
+	// DeliveryStatus records what became of the claimed notification:
+	// delivered | no_target | failed. The claim is taken before the send, so
+	// without this a delivery failure is indistinguishable from a delivery.
+	DeliveryStatus string `gorm:"size:32;index" json:"deliveryStatus,omitempty"`
+	DeliveryError  string `gorm:"size:512" json:"deliveryError,omitempty"`
 }

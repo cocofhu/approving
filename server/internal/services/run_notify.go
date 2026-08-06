@@ -40,6 +40,9 @@ type RunNotifyService struct {
 	db       *gorm.DB
 	deliver  RunNotifyDeliverer
 	deepLink string
+	// retryDelays is overridable so tests do not have to wait out the real
+	// backoff.
+	retryDelays []time.Duration
 }
 
 // NewRunNotifyService builds the service. deliver may be nil (always no-op send).
@@ -48,6 +51,13 @@ func NewRunNotifyService(db *gorm.DB, deliver RunNotifyDeliverer, publicAdvertis
 		db:       db,
 		deliver:  deliver,
 		deepLink: strings.TrimRight(strings.TrimSpace(publicAdvertise), "/"),
+	}
+}
+
+// SetRetryDelays overrides the delivery backoff schedule (tests).
+func (s *RunNotifyService) SetRetryDelays(delays []time.Duration) {
+	if s != nil {
+		s.retryDelays = delays
 	}
 }
 
@@ -121,15 +131,64 @@ func (s *RunNotifyService) AttemptDeliver(ev RunNotifyEvent) {
 			Msg("run-notify: no deliverer — no-op after claim")
 		return
 	}
-	if err := s.deliver.DeliverRunNotify(project.ID, text); err != nil {
-		// P0: claim already held; log and do not retry.
-		if errors.Is(err, ErrRunNotifyNoTarget) {
-			log.Info().Str("run_id", ev.RunID).Str("project", project.ID).
-				Msg("run-notify: no channel target — no-op after claim")
+	s.deliverWithRetry(ev, project.ID, text, kind)
+}
+
+// runNotifyRetryDelays bound how long a failed delivery is retried. The receipt
+// is claimed before the send, so a transport error used to consume the claim and
+// lose the notification permanently. Retrying inside the claim closes that hole
+// without weakening the once-only guarantee; when the attempts are spent the
+// outcome is recorded on the receipt instead of vanishing into a log line.
+var runNotifyRetryDelays = []time.Duration{time.Second, 3 * time.Second, 8 * time.Second}
+
+func (s *RunNotifyService) deliverWithRetry(ev RunNotifyEvent, projectID, text, kind string) {
+	delays := s.retryDelays
+	if delays == nil {
+		delays = runNotifyRetryDelays
+	}
+	var lastErr error
+	for attempt := 0; ; attempt++ {
+		err := s.deliver.DeliverRunNotify(projectID, text)
+		if err == nil {
+			s.markReceipt(ev, kind, "delivered", "")
 			return
 		}
-		log.Warn().Err(err).Str("run_id", ev.RunID).Str("project", project.ID).
-			Msg("run-notify: send failed after claim (no retry)")
+		// A project with no bound channel is a configuration state, not a
+		// failure to retry against.
+		if errors.Is(err, ErrRunNotifyNoTarget) {
+			log.Info().Str("run_id", ev.RunID).Str("project", projectID).
+				Msg("run-notify: no channel target — no-op after claim")
+			s.markReceipt(ev, kind, "no_target", "")
+			return
+		}
+		lastErr = err
+		if attempt >= len(delays) {
+			break
+		}
+		log.Warn().Err(err).Str("run_id", ev.RunID).Str("project", projectID).
+			Int("attempt", attempt+1).Msg("run-notify: send failed, retrying")
+		time.Sleep(delays[attempt])
+	}
+	log.Error().Err(lastErr).Str("run_id", ev.RunID).Str("project", projectID).
+		Msg("run-notify: send failed after retries")
+	s.markReceipt(ev, kind, "failed", lastErr.Error())
+}
+
+// markReceipt records the delivery outcome on the claimed receipt so a failed
+// notification is visible in the data, not only in the logs.
+func (s *RunNotifyService) markReceipt(ev RunNotifyEvent, kind, status, detail string) {
+	if s.db == nil {
+		return
+	}
+	if len(detail) > 500 {
+		detail = detail[:500]
+	}
+	err := s.db.Model(&models.NotifyDeliveryReceipt{}).
+		Where("run_id = ? AND node_id = ? AND iteration = ? AND kind = ?",
+			ev.RunID, ev.NodeID, ev.Iteration, kind).
+		Updates(map[string]any{"delivery_status": status, "delivery_error": detail}).Error
+	if err != nil {
+		log.Warn().Err(err).Str("run_id", ev.RunID).Msg("run-notify: recording delivery status failed")
 	}
 }
 

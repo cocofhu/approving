@@ -20,12 +20,27 @@ type recordingIMNotifier struct {
 		target                       IMTarget
 		actionRequired               bool
 	}
+	replyCalls []struct {
+		projectID, runID, text, shortTitle string
+		target                             IMTarget
+	}
 	outcome IMDeliveryOutcome
 	err     error
 }
 
 func (n *recordingIMNotifier) NotifyRunAccepted(string, string, IMTarget, string, string) error {
 	return n.err
+}
+
+func (n *recordingIMNotifier) NotifyReply(projectID, runID string, target IMTarget, text, shortTitle string) (IMDeliveryOutcome, error) {
+	n.replyCalls = append(n.replyCalls, struct {
+		projectID, runID, text, shortTitle string
+		target                             IMTarget
+	}{projectID: projectID, runID: runID, text: text, shortTitle: shortTitle, target: target})
+	if n.err != nil {
+		return IMDeliveryOutcome{}, n.err
+	}
+	return n.outcome, nil
 }
 
 func (n *recordingIMNotifier) NotifyProgress(projectID, runID string, target IMTarget, kind, text, stage, conclusion string, blocked, actionRequired bool) (IMDeliveryOutcome, error) {
@@ -270,6 +285,84 @@ func TestRiskConfirmationNotifyFailureIsReturned(t *testing.T) {
 	blocked, completed, prompt, err := h.requireRiskConfirmation(p.ID, tok, "run-notify-fail", "cancel_run")
 	if !blocked || completed || prompt == "" || err == nil || !strings.Contains(err.Error(), "transport down") {
 		t.Fatalf("confirmation failure = blocked:%v completed:%v prompt:%q err:%v", blocked, completed, prompt, err)
+	}
+}
+
+// pm_reply is the only way an agent's answer reaches the user, so it has to
+// refuse everything that would put an answer in the wrong place: no text, no
+// bound conversation, or a Run belonging to a different project.
+func TestPmReplyIsTheGuardedAnswerChannel(t *testing.T) {
+	db, _, h, p := setupPmMCPHost(t)
+	notifier := &recordingIMNotifier{outcome: IMDeliveryOutcome{Sent: true}}
+	h.SetTaskSafety(nil, nil, notifier)
+
+	tok := h.Register(p.ID, "thr-reply", "qq:c2c:user1", "agent-a")
+	reply := func(args map[string]any) (map[string]any, bool) {
+		out, isErr := h.callTool(p.ID, tok, MCPWorkflowWrite, "pm_reply", args)
+		payload, ok := out.(map[string]any)
+		if !ok {
+			t.Fatalf("unexpected tool payload %#v", out)
+		}
+		return payload, isErr
+	}
+
+	// No conversation is bound yet: an answer has nowhere to go and must not
+	// be reported as delivered.
+	if payload, isErr := reply(map[string]any{"text": "缓存没刷新。"}); !isErr {
+		t.Fatalf("reply without a bound conversation = %#v", payload)
+	}
+
+	h.SetChannelContext(tok, ChannelContext{
+		ChannelType: "qq", Scene: "c2c",
+		ConversationID: "user1", ExternalUserID: "openid-1",
+	})
+
+	if payload, isErr := reply(map[string]any{"text": "   "}); !isErr {
+		t.Fatalf("empty reply = %#v", payload)
+	}
+	if payload, isErr := reply(map[string]any{
+		"text": "缓存没刷新。", "runId": "run-from-another-project",
+	}); !isErr {
+		t.Fatalf("reply attributed to an unknown run = %#v", payload)
+	}
+	if len(notifier.replyCalls) != 0 {
+		t.Fatalf("a rejected reply still reached the channel: %+v", notifier.replyCalls)
+	}
+
+	wfDef := &models.WorkflowDef{
+		ID: "wf-reply", ProjectID: p.ID, Name: "Reply WF",
+		Graph: models.Graph{Nodes: []models.Node{{ID: "in", Type: "input"}, {ID: "out", Type: "output"}}},
+	}
+	if err := services.NewWorkflowService(db).Save(wfDef); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.Run{
+		ID: "run-reply", WorkflowID: wfDef.ID, Status: "running",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	payload, isErr := reply(map[string]any{
+		"text": "缓存没刷新，我已经清掉了。", "runId": "run-reply", "shortTitle": "登录页性能",
+	})
+	if isErr || payload["status"] != "sent" || payload["sent"] != true {
+		t.Fatalf("delivered reply = %#v isError=%v", payload, isErr)
+	}
+	if len(notifier.replyCalls) != 1 {
+		t.Fatalf("reply calls = %+v want exactly one", notifier.replyCalls)
+	}
+	call := notifier.replyCalls[0]
+	if call.text != "缓存没刷新，我已经清掉了。" || call.runID != "run-reply" ||
+		call.shortTitle != "登录页性能" || call.target.ConversationID != "user1" ||
+		call.target.UserID != "openid-1" {
+		t.Fatalf("reply call = %+v", call)
+	}
+
+	// Suppression is a normal outcome, not a tool error: reporting it as one is
+	// what made agents rephrase and send the same answer again.
+	notifier.outcome = IMDeliveryOutcome{Reason: "already_sent"}
+	payload, isErr = reply(map[string]any{"text": "缓存没刷新，我已经清掉了。"})
+	if isErr || payload["status"] != "suppressed" || payload["reason"] != "already_sent" {
+		t.Fatalf("suppressed reply = %#v isError=%v", payload, isErr)
 	}
 }
 

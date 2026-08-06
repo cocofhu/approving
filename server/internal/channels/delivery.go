@@ -133,6 +133,67 @@ func (m *Manager) DeliverSendable(ctx context.Context, req SendableRequest) (Del
 	return result, nil
 }
 
+// ConversationReply is an answer the agent explicitly submitted for the current
+// conversation turn.
+type ConversationReply struct {
+	ProjectID      string
+	RunID          string
+	Scene          Scene
+	ConversationID string
+	UserID         string
+	Text           string
+	ShortTitle     string
+}
+
+// DeliverConversationReply sends the agent's answer and records that this turn
+// has been answered, so the turn's own wrap-up does not append a second message.
+// This is the single egress for conversational answers: the model's raw output
+// is never forwarded, which keeps reasoning and tool chatter inside the
+// platform without needing to scrape a summary out of the transcript.
+func (m *Manager) DeliverConversationReply(ctx context.Context, reply ConversationReply) (DeliveryResult, error) {
+	text := ScrubInternalTerms(reply.Text)
+	if text == "" {
+		return DeliveryResult{}, errors.New("conversation reply text is empty")
+	}
+	scene := reply.Scene
+	if scene == "" {
+		scene = SceneC2C
+	}
+	// A synthesis turn borrows this conversation's agent to phrase a background
+	// event. Its answer belongs to the reflow that asked for it, which delivers
+	// it once with the right dedupe key, so it is collected here rather than
+	// sent from under the agent.
+	if m.captureReply(reply.ProjectID, scene, reply.ConversationID, text) {
+		return DeliveryResult{Decision: sendable.Decision{Reason: "captured_for_reflow"}}, nil
+	}
+	// Most conversational answers belong to no Run at all — chat, an
+	// explanation, a clarifying question — so the delivery scope falls back to
+	// the conversation itself. Without it the answer carries no scope and the
+	// policy drops it, which would silently mute ordinary conversation.
+	scope := strings.TrimSpace(reply.ShortTitle)
+	if scope == "" && strings.TrimSpace(reply.RunID) == "" {
+		scope = conversationTurnScope(reply.ProjectID, scene, reply.ConversationID)
+	}
+	result, err := m.DeliverSendable(ctx, SendableRequest{
+		ProjectID: reply.ProjectID, Scene: scene, ConversationID: reply.ConversationID,
+		UserID: reply.UserID, RunID: strings.TrimSpace(reply.RunID),
+		TaskContext: scope,
+		Kind:        sendable.KindFinal, Reason: "pm_reply",
+		Priority: sendable.PriorityCritical,
+		// No explicit dedupe key: the policy derives one from the content, so a
+		// retry of the same answer collapses while two different answers in the
+		// same conversation both go out.
+		Text: text,
+	})
+	if err != nil {
+		return result, err
+	}
+	if result.Sent {
+		m.MarkConversationReplied(reply.ProjectID, scene, reply.ConversationID)
+	}
+	return result, nil
+}
+
 // RunAcceptanceAck confirms that a real Run was accepted for a user. It is
 // distinct from the per-turn processing ACK and is delivered at most once per
 // run × conversation/user × channel.
@@ -153,19 +214,42 @@ func (m *Manager) SendRunAcceptanceAck(ctx context.Context, ack RunAcceptanceAck
 		return DeliveryResult{}, errors.New("run acceptance ack requires a real run id")
 	}
 	language := services.DetectLanguage("", ack.Language)
-	kindLabel := "已接单"
-	body := "任务已接单，我会在有实质进展时同步。"
-	if language == "en" {
-		kindLabel, body = "Accepted", "Task accepted. I will report substantive progress."
-	}
-	return m.DeliverSendable(ctx, SendableRequest{
+	result, err := m.DeliverSendable(ctx, SendableRequest{
 		ProjectID: ack.ProjectID, Scene: ack.Scene, ConversationID: ack.ConversationID,
 		UserID: ack.UserID, RunID: runID,
 		Kind: sendable.KindRunAcceptanceAck, Reason: "run_accepted",
 		Priority:  sendable.PriorityHigh,
 		DedupeKey: runAcceptanceDedupeKey(runID, ack.ConversationID, ack.UserID),
-		Text:      services.FormatTaskType(ack.ShortTitle, kindLabel, language) + " " + body,
+		Text:      runAcceptanceText(ack.ShortTitle, language),
 	})
+	// Handing work to the background is this turn's answer. Marking the turn
+	// replied is what lets the conversation move on immediately instead of
+	// waiting for the Run and then appending a second message about it.
+	if result.Sent {
+		scene := ack.Scene
+		if scene == "" {
+			scene = SceneC2C
+		}
+		m.MarkConversationReplied(ack.ProjectID, scene, ack.ConversationID)
+	}
+	return result, err
+}
+
+// runAcceptanceText confirms a delegation the way a colleague would: what was
+// picked up, and that the user is free to keep talking. No ticket header, no
+// promise to "report substantive progress".
+func runAcceptanceText(shortTitle, language string) string {
+	title := services.SanitizeShortTitle(shortTitle)
+	if services.NormalizeLanguage(language) == "en" {
+		if title == "" {
+			return "Got it, I'll take that one and come back when it's done. Feel free to keep chatting in the meantime."
+		}
+		return "Got it — I'll go work on \"" + title + "\" and tell you when it's done. Feel free to keep chatting in the meantime."
+	}
+	if title == "" {
+		return "好，我去弄，完了告诉你。你可以接着问别的。"
+	}
+	return "好，" + title + "这块我去弄，完了告诉你。你可以接着问别的。"
 }
 
 func runAcceptanceDedupeKey(runID, conversationID, userID string) string {
@@ -174,26 +258,57 @@ func runAcceptanceDedupeKey(runID, conversationID, userID string) string {
 	}, ":")
 }
 
+// resolveSendableTarget decides which conversation a message goes to.
+//
+// Precedence is deliberate: an explicit conversation wins, then the task's own
+// origin conversation, and only then the project's push target. Falling back to
+// the project target for Run traffic is what sent one user's results into an
+// unrelated cron session, so it is the last resort rather than the default.
 func (m *Manager) resolveSendableTarget(req SendableRequest) (*runningChannel, Scene, string, error) {
-	if strings.TrimSpace(req.ConversationID) != "" {
+	scene, conv := req.Scene, strings.TrimSpace(req.ConversationID)
+	if conv == "" {
+		if s, c, ok := m.originConversationForRun(req.ProjectID, req.RunID); ok {
+			scene, conv = s, c
+		}
+	}
+	if conv != "" {
 		m.mu.Lock()
 		defer m.mu.Unlock()
 		for _, rc := range m.running {
 			if rc.cfg.ProjectID == req.ProjectID {
-				scene := req.Scene
 				if scene == "" {
 					scene = SceneC2C
 				}
-				return rc, scene, req.ConversationID, nil
+				return rc, scene, conv, nil
 			}
 		}
 		return nil, "", "", ErrNoSendableTarget
 	}
-	target, scene, conv, err := m.lookupRunNotifyTarget(req.ProjectID)
+	target, fallbackScene, fallbackConv, err := m.lookupRunNotifyTarget(req.ProjectID)
 	if err != nil {
 		return nil, "", "", ErrNoSendableTarget
 	}
-	return target, scene, conv, nil
+	return target, fallbackScene, fallbackConv, nil
+}
+
+// originConversationForRun looks up where a Run's task was created.
+func (m *Manager) originConversationForRun(projectID, runID string) (Scene, string, bool) {
+	if m.taskContext == nil || strings.TrimSpace(runID) == "" || strings.TrimSpace(projectID) == "" {
+		return "", "", false
+	}
+	identity, err := m.taskContext.IdentityForRun(runID, projectID)
+	if err != nil || identity == nil {
+		return "", "", false
+	}
+	conv := strings.TrimSpace(identity.OriginConversationID)
+	if conv == "" {
+		return "", "", false
+	}
+	scene := Scene(strings.TrimSpace(identity.OriginScene))
+	if scene == "" {
+		scene = SceneC2C
+	}
+	return scene, conv, true
 }
 
 // TaskReferenceStatus is the outcome of resolving which task a user meant.
@@ -346,28 +461,57 @@ func shortTitles(candidates []services.TaskCandidate) []string {
 	return out
 }
 
+// taskStatusLabel states a task's state the way a person would say it, as a
+// predicate that reads naturally after the task's name.
 func taskStatusLabel(status, language string) string {
 	if services.NormalizeLanguage(language) == "en" {
 		switch strings.ToLower(strings.TrimSpace(status)) {
 		case "completed", "done":
-			return "Completed"
+			return "is done."
 		case "failed":
-			return "Failed"
+			return "didn't go through."
 		case "cancelled", "canceled":
-			return "Cancelled"
+			return "was cancelled."
 		default:
-			return "In progress"
+			return "is still running."
 		}
 	}
 	switch strings.ToLower(strings.TrimSpace(status)) {
 	case "completed", "done":
-		return "已完成"
+		return "弄完了。"
 	case "failed":
-		return "已失败"
+		return "没做成。"
 	case "cancelled", "canceled":
-		return "已取消"
+		return "取消了。"
 	default:
-		return "进行中"
+		return "还在做。"
+	}
+}
+
+// soloTaskStatusText is the same state stated without naming the task, for a
+// conversation where only one task could possibly be meant.
+func soloTaskStatusText(status, language string) string {
+	if services.NormalizeLanguage(language) == "en" {
+		switch strings.ToLower(strings.TrimSpace(status)) {
+		case "completed", "done":
+			return "It's done."
+		case "failed":
+			return "It didn't go through."
+		case "cancelled", "canceled":
+			return "It was cancelled."
+		default:
+			return "Still running."
+		}
+	}
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "completed", "done":
+		return "弄完了。"
+	case "failed":
+		return "没做成。"
+	case "cancelled", "canceled":
+		return "取消了。"
+	default:
+		return "还在做呢。"
 	}
 }
 
