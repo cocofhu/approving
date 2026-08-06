@@ -48,11 +48,22 @@ const (
 	// convQueueDepth is the per-conversation pending FIFO capacity (in-flight
 	// turn is not counted). The next inbound after 16 pending is rejected.
 	convQueueDepth = 16
-	// foregroundTurnTimeout caps a Live turn. The foreground contract is "answer
-	// briefly or delegate", so exceeding this means the agent tried to do the
-	// work inline; we stop waiting and tell the user it moved to the background
-	// rather than holding the conversation hostage.
+	// foregroundTurnTimeout caps the agent's own work in a Live turn. The
+	// foreground contract is "answer briefly or delegate", so exceeding this
+	// means the agent tried to do the work inline.
 	foregroundTurnTimeout = 25 * time.Second
+	// sandboxOpenBudget is allowed on top, for getting a sandbox ready. It is
+	// separate because the two waits are not comparable: a warm conversation
+	// spends none of it, while the first message of a conversation waits for a
+	// container. Folding it into the answer budget is how a plain question
+	// times out before the agent has read it.
+	sandboxOpenBudget = 45 * time.Second
+	// stillWorkingDelay is how long a turn may leave the user with nothing at
+	// all before saying so. The streaming opener (firstSentenceDelay) covers
+	// any turn that has produced text; this only fires when there is genuinely
+	// nothing yet, which in practice means a cold start. It is deliberately
+	// later than the opener so a real sentence always wins the race.
+	stillWorkingDelay = 8 * time.Second
 )
 
 // queuedInbound is a message waiting behind an in-flight turn for the same
@@ -110,6 +121,10 @@ type Manager struct {
 	riskConfirmation *services.RiskConfirmationService
 	// retryBackoff overrides the delivery backoff (tests set it to zero).
 	retryBackoff func(attempt int) time.Duration
+	// openBudget overrides sandboxOpenBudget; a negative value means none.
+	openBudget time.Duration
+	// stillWorkingAfter overrides stillWorkingDelay (tests shorten it).
+	stillWorkingAfter time.Duration
 
 	ambiguityMu sync.Mutex
 	ambiguity   map[string]ambiguityMemory
@@ -446,10 +461,9 @@ func (m *Manager) drainConvQueue(q *convQueue, key string) {
 
 // runTurn executes one foreground Live turn.
 //
-// The turn is expected to either answer briefly or delegate; it is bounded by
-// foregroundTurnTimeout so a conversation is never held open by work that
-// belongs in a Run. No acknowledgement precedes it — the reply is the
-// acknowledgement.
+// The turn is expected to either answer briefly or delegate, and it is bounded
+// so a conversation is never held open by work that belongs in a Run. No
+// acknowledgement precedes it — the reply is the acknowledgement.
 func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMessage) {
 	// Keyed by conversation, not by inbound message id: the MCP host marks its
 	// own replies and only knows which conversation it is serving.
@@ -464,14 +478,20 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 	if configured := time.Duration(rc.cfg.TurnTimeoutSeconds) * time.Second; configured > 0 {
 		timeout = configured
 	}
-	turnCtx, cancel := context.WithTimeout(ctx, timeout)
+	open := m.sandboxOpenBudget()
+	// The outer deadline is a backstop covering both phases; the bridge bounds
+	// each one separately so cold start cannot consume the answer budget.
+	turnCtx, cancel := context.WithTimeout(ctx, timeout+open)
 	defer cancel()
 
 	resolved := ResolvedChannel{
 		ID: rc.cfg.ID, Type: rc.cfg.Type, ProjectID: rc.cfg.ProjectID,
+		OpenTimeout: open,
 		TurnTimeout: timeout,
 		Caps:        SessionCapsFromConfig(rc.cfg.Config),
 	}
+	stopWaiting := m.sayStillWorking(turnCtx, rc, in, scope)
+	defer stopWaiting()
 	onProgress := func(ev ProgressEvent) {
 		text := FormatProgressText(ev)
 		if text == "" {
@@ -491,18 +511,21 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		}
 	}
 	reply, err := m.handleTurn(turnCtx, resolved, in, onProgress)
+	stopWaiting()
 	if err != nil {
-		// A turn that ran out of time is not a failure: the agent took on
-		// something that belongs in the background. Say that, rather than
-		// reporting an error for work that is still going to happen.
+		// Running out of time is not a failure, but it is not a delegation
+		// either: nothing was started and nothing is still running. Saying "I'll
+		// keep at it in the background" here would be a promise the platform
+		// cannot keep, so the user is offered the delegation instead — their
+		// next message turns it into a real Run.
 		if turnCtx.Err() != nil && ctx.Err() == nil {
 			log.Info().Str("channel", rc.cfg.ID).Dur("timeout", timeout).
-				Msg("live: foreground turn exceeded its budget, handed to background")
+				Msg("live: foreground turn exceeded its budget without an answer")
 			if !m.hasReplied(scope) {
 				m.sendOutbound(ctx, rc, OutboundMessage{
 					Scene: in.Scene, ConversationID: in.ConversationID, ReplyToMessageID: in.MessageID,
-					Text:     turnHandoffText(services.DetectLanguage(in.Text, "")),
-					Envelope: turnEnvelope(rc, in, sendable.KindFinal, "turn_handed_to_background", sendable.PriorityHigh),
+					Text:     turnTooSlowText(services.DetectLanguage(in.Text, "")),
+					Envelope: turnEnvelope(rc, in, sendable.KindFinal, "turn_budget_exceeded", sendable.PriorityHigh),
 				})
 			}
 			return
@@ -535,6 +558,69 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 			return e
 		}(),
 	})
+}
+
+// sandboxOpenBudget is the cold-start allowance for this Manager.
+func (m *Manager) sandboxOpenBudget() time.Duration {
+	if m.openBudget < 0 {
+		return 0
+	}
+	if m.openBudget > 0 {
+		return m.openBudget
+	}
+	return sandboxOpenBudget
+}
+
+// sayStillWorking breaks a long silence once, and returns a function that
+// cancels it.
+//
+// It exists for the one case the streaming opener cannot cover: a cold start,
+// where there is no sandbox yet and therefore no text to release early. Leaving
+// the user staring at nothing for the length of a container boot is its own
+// kind of bad. This is not the mechanical acknowledgement that was removed —
+// that one preceded every message including instant ones; this fires only after
+// a genuinely long wait, at most once, and never when anything has been said.
+func (m *Manager) sayStillWorking(ctx context.Context, rc *runningChannel, in InboundMessage, scope string) (stop func()) {
+	done := make(chan struct{})
+	var once sync.Once
+	stop = func() { once.Do(func() { close(done) }) }
+	delay := stillWorkingDelay
+	if m.stillWorkingAfter > 0 {
+		delay = m.stillWorkingAfter
+	}
+	go func() {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-done:
+			return
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+		if m.hasReplied(scope) {
+			return
+		}
+		envelope := turnEnvelope(rc, in, sendable.KindProgress, "live_still_working", sendable.PriorityNormal)
+		envelope.Progress = sendable.ProgressFields{Stage: "live_still_working"}
+		result := m.sendOutboundResult(ctx, rc, OutboundMessage{
+			Scene: in.Scene, ConversationID: in.ConversationID, ReplyToMessageID: in.MessageID,
+			Text:     stillWorkingText(services.DetectLanguage(in.Text, "")),
+			Envelope: envelope,
+		})
+		if result.Sent {
+			m.markReplied(scope)
+		}
+	}()
+	return stop
+}
+
+// stillWorkingText admits the wait without pretending to report progress.
+func stillWorkingText(language string) string {
+	if services.NormalizeLanguage(language) == "en" {
+		return "Give me a moment on this one."
+	}
+	return "稍等，我看一下。"
 }
 
 // sendTurnFailure reports a failed turn in the user's terms. Internal error
@@ -1082,11 +1168,18 @@ func (m *Manager) activeTaskFor(rc *runningChannel, in InboundMessage) *models.T
 
 // turnHandoffText is what the user hears when a foreground turn outlives its
 // budget: the work continues, the conversation does not wait for it.
-func turnHandoffText(language string) string {
+// turnTooSlowText handles a turn that ran out of time without answering.
+//
+// It offers to delegate rather than claiming to have done so. Nothing is
+// running at this point, and a message that says otherwise leaves the user
+// waiting for a result that will never arrive — worse than the mechanical
+// acknowledgement it would have replaced. Answering yes makes it a real Run on
+// the next turn.
+func turnTooSlowText(language string) string {
 	if services.NormalizeLanguage(language) == "en" {
-		return "This one needs more digging, so I'll keep at it in the background and come back with what I find. You can keep chatting in the meantime."
+		return "This is more than I can work out while we're talking. Want me to take it on as a background task and come back with the result?"
 	}
-	return "这个得多花点时间，我放到后台接着弄，有结果就来说。你可以接着问别的。"
+	return "这个我一时半会儿聊不完。要不要我当成一个后台任务来做，做完了告诉你？"
 }
 
 // turnFailureText maps an internal turn error onto a cause the user can act on.

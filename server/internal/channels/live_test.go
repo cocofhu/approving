@@ -88,7 +88,8 @@ func TestDetectHighRiskIntentRequiresAnExplicitCommand(t *testing.T) {
 func TestOutboundCopyNeverExposesInternals(t *testing.T) {
 	copies := []string{
 		busyHintText,
-		turnHandoffText("zh-CN"), turnHandoffText("en"),
+		turnTooSlowText("zh-CN"), turnTooSlowText("en"),
+		stillWorkingText("zh-CN"), stillWorkingText("en"),
 		interruptedTurnText("zh-CN"), interruptedTurnText("en"),
 		runAcceptanceText("登录页性能", "zh-CN"), runAcceptanceText("Login perf", "en"),
 		taskStatusLabel("completed", "zh-CN"), taskStatusLabel("failed", "en"),
@@ -209,9 +210,9 @@ func TestExplicitReplySuppressesTheTurnWrapUp(t *testing.T) {
 	}
 }
 
-// A turn that overruns is work that belongs in the background. The user is told
-// that, once, instead of being held on the line or handed an error.
-func TestForegroundTurnTimeoutReadsAsAHandoff(t *testing.T) {
+// A turn that overruns has started nothing and is running nothing, so the user
+// is offered the delegation rather than told it already happened.
+func TestForegroundTurnTimeoutOffersDelegationInsteadOfPromising(t *testing.T) {
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
 	m.handleFunc = func(ctx context.Context, _ ResolvedChannel, _ InboundMessage) (Reply, error) {
@@ -220,6 +221,7 @@ func TestForegroundTurnTimeoutReadsAsAHandoff(t *testing.T) {
 	}
 	rc := testRunningChannel(fa)
 	rc.cfg.TurnTimeoutSeconds = 1
+	m.openBudget = -1 // no cold-start allowance; this turn is pure thinking time
 
 	done := make(chan struct{})
 	go func() {
@@ -228,19 +230,69 @@ func TestForegroundTurnTimeoutReadsAsAHandoff(t *testing.T) {
 	}()
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(20 * time.Second):
 		t.Fatal("a foreground turn held the conversation past its budget")
 	}
 
 	got := sentTexts(fa)
 	if len(got) != 1 {
-		t.Fatalf("sends = %v want one handoff message", got)
+		t.Fatalf("sends = %v want one message", got)
 	}
-	if got[0] != turnHandoffText("zh-CN") {
-		t.Fatalf("timeout message = %q want the background handoff wording", got[0])
+	if got[0] != turnTooSlowText("zh-CN") {
+		t.Fatalf("timeout message = %q want the delegation offer", got[0])
 	}
 	if strings.Contains(got[0], "失败") || strings.Contains(got[0], "错误") {
 		t.Fatalf("timeout was reported as a failure: %q", got[0])
+	}
+	// The offer must not claim work is already under way; nothing is running.
+	for _, promise := range []string{"放到后台接着弄", "有结果就来说", "正在处理"} {
+		if strings.Contains(got[0], promise) {
+			t.Fatalf("timeout message promises work nobody is doing: %q", got[0])
+		}
+	}
+}
+
+// Cold start is the one wait the streaming opener cannot cover: there is no
+// sandbox yet, so there is no text to release early. The user hears something
+// once — and a turn that answers quickly still produces only the answer.
+func TestLongSilenceGetsOneNoticeAndFastTurnsGetNone(t *testing.T) {
+	fa := &fakeAdapter{}
+	m := NewManager(nil, nil, nil)
+	m.handleFunc = func(context.Context, ResolvedChannel, InboundMessage) (Reply, error) {
+		return Reply{FinalSummary: "不是 BUG。"}, nil
+	}
+	m.dispatch(context.Background(), testRunningChannel(fa), testInboundText("fast", "那这个是 BUG 吗"))
+	if got := sentTexts(fa); len(got) != 1 || got[0] != "不是 BUG。" {
+		t.Fatalf("fast turn sends = %v want only the answer", got)
+	}
+
+	slow := &fakeAdapter{}
+	m2 := NewManager(nil, nil, nil)
+	rc := testRunningChannel(slow)
+	release := make(chan struct{})
+	m2.handleFunc = func(context.Context, ResolvedChannel, InboundMessage) (Reply, error) {
+		<-release
+		return Reply{FinalSummary: "查完了，是缓存。"}, nil
+	}
+	scope := conversationTurnScope(rc.cfg.ProjectID, SceneC2C, "user1")
+	m2.stillWorkingAfter = 20 * time.Millisecond
+	slowIn := testInboundText("slow", "帮我查一下登录页为什么慢")
+	stop := m2.sayStillWorking(context.Background(), rc, slowIn, scope)
+	deadline := time.Now().Add(5 * time.Second)
+	for len(sentTexts(slow)) == 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	stop()
+	close(release)
+
+	got := sentTexts(slow)
+	if len(got) != 1 || got[0] != stillWorkingText("zh-CN") {
+		t.Fatalf("long silence sends = %v want one waiting notice", got)
+	}
+	// Stopping is idempotent and must not emit a second notice.
+	stop()
+	if n := len(sentTexts(slow)); n != 1 {
+		t.Fatalf("waiting notice repeated: %d sends", n)
 	}
 }
 

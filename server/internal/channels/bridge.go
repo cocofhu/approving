@@ -44,11 +44,19 @@ type ChannelSessionContext struct {
 
 // ResolvedChannel is the per-turn channel context passed to the bridge.
 type ResolvedChannel struct {
-	ID          string
-	Type        string
-	ProjectID   string
-	TurnTimeout time.Duration // 0 → runner default
-	Caps        SessionCaps   // from latest ChannelConfig; applied each turn
+	ID        string
+	Type      string
+	ProjectID string
+	// OpenTimeout bounds getting a sandbox ready. It is separate from
+	// TurnTimeout because provisioning a container and thinking about a
+	// question are different kinds of waiting: charging cold start to the
+	// answer budget means the first message of a conversation can time out
+	// before the agent has read it. 0 → fold into TurnTimeout.
+	OpenTimeout time.Duration
+	// TurnTimeout bounds the agent's own work once the sandbox is ready.
+	// 0 → runner default.
+	TurnTimeout time.Duration
+	Caps        SessionCaps // from latest ChannelConfig; applied each turn
 }
 
 // Reply is the bridge's produced answer for one inbound message.
@@ -111,8 +119,18 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 		ChannelType: rc.Type, Scene: in.Scene,
 		ConversationID: in.ConversationID, ExternalUserID: in.UserID,
 	}
+	// Getting the sandbox up runs on its own clock. A warm conversation passes
+	// through here in milliseconds; the first message of a conversation waits
+	// for a container, and that wait must not be deducted from the time the
+	// agent gets to answer.
+	openCtx, closeOpen := ctx, context.CancelFunc(func() {})
+	if rc.OpenTimeout > 0 {
+		openCtx, closeOpen = context.WithTimeout(ctx, rc.OpenTimeout)
+	}
+	defer closeOpen()
+
 	token, specs := b.hooks.Register(rc.ProjectID, thread.ID, userID, agent, channelCtx, binding.EnabledMcps, rc.Caps)
-	row, reused, err := b.sbx.OpenAgentSandbox(ctx, services.AgentSandboxOpenOpts{
+	row, reused, err := b.sbx.OpenAgentSandbox(openCtx, services.AgentSandboxOpenOpts{
 		Profile:       agent,
 		ProjectID:     rc.ProjectID,
 		ThreadID:      thread.ID,
@@ -141,9 +159,10 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 			Msg("channel bind sandbox failed")
 	}
 
-	if _, err := b.waitReady(ctx, row.ID); err != nil {
+	if _, err := b.waitReady(openCtx, row.ID); err != nil {
 		return Reply{}, err
 	}
+	closeOpen()
 
 	images := toPromptImages(in.Images)
 	userText := formatChannelUserText(in, len(images) > 0)
