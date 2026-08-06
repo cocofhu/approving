@@ -2,6 +2,7 @@ package pmmcp
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -12,6 +13,32 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+type recordingIMNotifier struct {
+	progressCalls []struct {
+		projectID, runID, kind, text string
+		target                       IMTarget
+		actionRequired               bool
+	}
+	outcome IMDeliveryOutcome
+	err     error
+}
+
+func (n *recordingIMNotifier) NotifyRunAccepted(string, string, IMTarget, string, string) error {
+	return n.err
+}
+
+func (n *recordingIMNotifier) NotifyProgress(projectID, runID string, target IMTarget, kind, text, stage, conclusion string, blocked, actionRequired bool) (IMDeliveryOutcome, error) {
+	n.progressCalls = append(n.progressCalls, struct {
+		projectID, runID, kind, text string
+		target                       IMTarget
+		actionRequired               bool
+	}{projectID: projectID, runID: runID, kind: kind, text: text, target: target, actionRequired: actionRequired})
+	if n.err != nil {
+		return IMDeliveryOutcome{}, n.err
+	}
+	return n.outcome, nil
+}
 
 func setupPmMCPHost(t *testing.T) (*gorm.DB, *services.PmService, *Host, models.Project) {
 	t.Helper()
@@ -57,6 +84,193 @@ func TestPmMCPSessionHelpers(t *testing.T) {
 		t.Fatal("thread should be unregistered")
 	}
 	h.Restore(p.ID, "thr-1", "alice", "agent-a", "")
+}
+
+func TestChannelSessionRiskIdentityAndConfirmedRetry(t *testing.T) {
+	db, _, h, p := setupPmMCPHost(t)
+	risk := services.NewRiskConfirmationService(db)
+	tasks := services.NewTaskContextService(db)
+	notifier := &recordingIMNotifier{}
+	h.SetTaskSafety(risk, tasks, notifier)
+
+	tok := h.Register(p.ID, "thr-channel", "qq:group:conversation-1", "agent-a")
+	h.SetChannelContext(tok, ChannelContext{
+		ChannelType: "qq", Scene: "group",
+		ConversationID: "conversation-1", ExternalUserID: "openid-1",
+	})
+	if err := db.Create(&models.Run{ID: "run-risk", Status: "running"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tasks.EnsureIdentity(services.EnsureTaskIdentityInput{
+		RunID: "run-risk", ProjectID: p.ID, ShortTitle: "结算页性能", Status: "running",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	blocked, completed, prompt, err := h.requireRiskConfirmation(p.ID, tok, "run-risk", "cancel_run")
+	if err != nil || !blocked || completed || !strings.Contains(prompt, "结算页性能") {
+		t.Fatalf("first confirmation = blocked:%v completed:%v prompt:%q err:%v", blocked, completed, prompt, err)
+	}
+	if len(notifier.progressCalls) != 1 {
+		t.Fatalf("confirmation notify calls = %d", len(notifier.progressCalls))
+	}
+	confirmation := notifier.progressCalls[0]
+	if confirmation.kind != "action_required" || !confirmation.actionRequired ||
+		confirmation.runID != "run-risk" || !strings.Contains(confirmation.text, "结算页性能") ||
+		confirmation.target.UserID != "openid-1" {
+		t.Fatalf("confirmation notify = %+v", confirmation)
+	}
+	scopeUser := services.SyntheticQQUserID("openid-1")
+	pending, err := risk.LatestPending(scopeUser, p.ID)
+	if err != nil || pending == nil {
+		t.Fatalf("QQ sender must see MCP ticket: ticket=%+v err=%v", pending, err)
+	}
+	if pending.UserID == "qq:group:conversation-1" {
+		t.Fatalf("ticket used conversation thread id instead of sender identity: %+v", pending)
+	}
+	resolved, err := risk.ResolveTicket(services.RiskTicketInput{
+		ProjectID: p.ID, UserID: scopeUser, RunID: "run-risk", Action: "cancel_run",
+	}, "确认")
+	if err != nil || !resolved.Execute {
+		t.Fatalf("QQ confirmation = %+v err=%v", resolved, err)
+	}
+	blocked, completed, _, err = h.requireRiskConfirmation(p.ID, tok, "run-risk", "cancel_run")
+	if err != nil || blocked || !completed {
+		t.Fatalf("confirmed MCP retry must be read-only: blocked=%v completed=%v err=%v", blocked, completed, err)
+	}
+	var count int64
+	if err := db.Model(&models.RiskConfirmationTicket{}).Count(&count).Error; err != nil || count != 1 {
+		t.Fatalf("ticket count=%d err=%v", count, err)
+	}
+
+	sess, _ := h.SessionFor(p.ID, tok)
+	target := imTargetForSession(sess)
+	if target.Scene != "group" || target.ConversationID != "conversation-1" || target.UserID != "openid-1" {
+		t.Fatalf("IM target = %+v", target)
+	}
+}
+
+func TestPmStartRunUsesExternalQQIdentityForTaskSearch(t *testing.T) {
+	db, pm, _, p := setupPmMCPHost(t)
+	wf := services.NewWorkflowService(db)
+	wfDef := &models.WorkflowDef{
+		ID: "wf-qq-task", ProjectID: p.ID, Name: "登录页工作",
+		Graph: models.Graph{Nodes: []models.Node{{ID: "in", Type: "input"}, {ID: "out", Type: "output"}}},
+	}
+	if err := wf.Save(wfDef); err != nil {
+		t.Fatal(err)
+	}
+	eng := &fakePmEngine{runTitle: "登录页性能优化"}
+	rs := services.NewRunService(db)
+	h := NewHost(pm, services.NewPmProgress(pm, rs, nil), wf, rs, services.NewArtifactService(db), eng)
+	tasks := services.NewTaskContextService(db)
+	h.SetTaskSafety(nil, tasks, nil)
+	tok := h.Register(p.ID, "thr-qq-task", "qq:group:conversation-1", "agent-a")
+	h.SetChannelContext(tok, ChannelContext{
+		ChannelType: "qq", Scene: "group", ConversationID: "conversation-1", ExternalUserID: "openid-1",
+	})
+
+	if _, isErr := h.callTool(p.ID, tok, MCPWorkflowWrite, "pm_start_run", map[string]any{
+		"workflowId": wfDef.ID, "inputs": map[string]any{"requirement": "优化登录页性能"},
+	}); isErr {
+		t.Fatal("pm_start_run returned an error")
+	}
+
+	scope := services.TaskScope{
+		ProjectID: p.ID, UserID: services.SyntheticQQUserID("openid-1"),
+		Channel: "qq", ConversationID: "conversation-1",
+	}
+	candidates, err := tasks.Search(scope, "登录页")
+	if err != nil || len(candidates) != 1 || candidates[0].Identity.RunID != "run-pm-mcp" {
+		t.Fatalf("QQ sender task search = %+v err=%v", candidates, err)
+	}
+	if candidates[0].Identity.UserID == "qq:group:conversation-1" {
+		t.Fatalf("conversation identity owns task: %+v", candidates[0].Identity)
+	}
+}
+
+func TestPmNotifyProgressSeparatesSuppressionFromFailure(t *testing.T) {
+	db, pm, _, p := setupPmMCPHost(t)
+	wf := services.NewWorkflowService(db)
+	wfDef := &models.WorkflowDef{
+		ID: "wf-notify", ProjectID: p.ID, Name: "Notify WF",
+		Graph: models.Graph{Nodes: []models.Node{{ID: "in", Type: "input"}, {ID: "out", Type: "output"}}},
+	}
+	if err := wf.Save(wfDef); err != nil {
+		t.Fatal(err)
+	}
+	rs := services.NewRunService(db)
+	if err := rs.DB().Create(&models.Run{ID: "run-notify", WorkflowID: wfDef.ID, Status: "running"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	h := NewHost(pm, services.NewPmProgress(pm, rs, nil), wf, rs, services.NewArtifactService(db), &fakePmEngine{})
+	notifier := &recordingIMNotifier{}
+	h.SetTaskSafety(nil, nil, notifier)
+	tok := h.Register(p.ID, "thr-notify", "alice", "agent-a")
+	notify := func() (map[string]any, bool) {
+		out, isErr := h.callTool(p.ID, tok, MCPWorkflowWrite, "pm_notify_progress", map[string]any{
+			"runId": "run-notify", "kind": "progress", "stage": "已提交分支",
+		})
+		payload, ok := out.(map[string]any)
+		if !ok {
+			t.Fatalf("unexpected tool payload %#v", out)
+		}
+		return payload, isErr
+	}
+
+	notifier.outcome = IMDeliveryOutcome{Sent: true}
+	payload, isErr := notify()
+	if isErr || payload["status"] != "sent" || payload["sent"] != true {
+		t.Fatalf("delivered progress = %#v isError=%v", payload, isErr)
+	}
+
+	// A rate-limited / merged progress update is a normal outcome: reporting it
+	// as a tool error made agents rephrase and resend.
+	notifier.outcome = IMDeliveryOutcome{Reason: "progress_rate_limited_merged"}
+	payload, isErr = notify()
+	if isErr {
+		t.Fatalf("suppression must not be a tool error: %#v", payload)
+	}
+	if payload["status"] != "suppressed" || payload["sent"] != false ||
+		payload["reason"] != "progress_rate_limited_merged" {
+		t.Fatalf("suppressed progress = %#v", payload)
+	}
+	if _, hasError := payload["error"]; hasError {
+		t.Fatalf("suppressed progress carried an error field: %#v", payload)
+	}
+
+	// A suppression without a reason still reads as suppressed, not sent.
+	notifier.outcome = IMDeliveryOutcome{}
+	payload, isErr = notify()
+	if isErr || payload["status"] != "suppressed" || payload["reason"] != "suppressed" {
+		t.Fatalf("reasonless suppression = %#v isError=%v", payload, isErr)
+	}
+
+	// Only a real delivery failure is an error the agent should act on.
+	notifier.err = errors.New("项目未配置可用的外发渠道目标")
+	payload, isErr = notify()
+	if !isErr || !strings.Contains(fmt.Sprint(payload["error"]), "未配置可用的外发渠道") {
+		t.Fatalf("delivery failure = %#v isError=%v", payload, isErr)
+	}
+}
+
+func TestRiskConfirmationNotifyFailureIsReturned(t *testing.T) {
+	db, _, h, p := setupPmMCPHost(t)
+	risk := services.NewRiskConfirmationService(db)
+	tasks := services.NewTaskContextService(db)
+	h.SetTaskSafety(risk, tasks, &recordingIMNotifier{err: errors.New("transport down")})
+	tok := h.Register(p.ID, "thr-notify-fail", "qq:group:c1", "agent-a")
+	h.SetChannelContext(tok, ChannelContext{
+		ChannelType: "qq", Scene: "group", ConversationID: "c1", ExternalUserID: "openid-1",
+	})
+	if err := db.Create(&models.Run{ID: "run-notify-fail", Status: "running"}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	blocked, completed, prompt, err := h.requireRiskConfirmation(p.ID, tok, "run-notify-fail", "cancel_run")
+	if !blocked || completed || prompt == "" || err == nil || !strings.Contains(err.Error(), "transport down") {
+		t.Fatalf("confirmation failure = blocked:%v completed:%v prompt:%q err:%v", blocked, completed, prompt, err)
+	}
 }
 
 func TestPmMCPServeRPCBranches(t *testing.T) {
@@ -170,6 +384,7 @@ type fakePmEngine struct {
 	}
 	cancelled   string
 	lastTrigger string
+	runTitle    string
 	startCalls  int
 	waiting     int
 	thinking    bool
@@ -182,7 +397,10 @@ func (f *fakePmEngine) StartRunWithPriority(workflowID string, inputs map[string
 	if len(tags) > 0 {
 		normalized = append([]string{}, tags[0]...)
 	}
-	return &models.Run{ID: "run-pm-mcp", WorkflowID: workflowID, Status: "queued", Trigger: trigger, Tags: normalized}, nil
+	return &models.Run{
+		ID: "run-pm-mcp", WorkflowID: workflowID, Status: "queued",
+		Title: f.runTitle, Trigger: trigger, Tags: normalized, Inputs: inputs,
+	}, nil
 }
 
 func (f *fakePmEngine) ResumeGate(runID, nodeID, action string, form map[string]any) error {

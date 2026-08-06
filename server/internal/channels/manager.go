@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/sendable"
 	"github.com/cocofhu/approving/internal/services"
 
 	"github.com/rs/zerolog/log"
@@ -79,7 +80,17 @@ type Manager struct {
 	pushMu     sync.Mutex
 	pushQueues map[string]*pushQueue
 
-	baseCtx context.Context
+	baseCtx          context.Context
+	policy           *sendable.Policy
+	taskContext      *services.TaskContextService
+	riskConfirmation *services.RiskConfirmationService
+	// retryBackoff overrides the delivery backoff (tests set it to zero).
+	retryBackoff func(attempt int) time.Duration
+
+	ambiguityMu sync.Mutex
+	ambiguity   map[string]ambiguityMemory
+
+	riskExecutor RiskActionExecutor
 
 	// Test hooks (production leaves these nil/zero):
 	// handleFunc overrides bridge.Handle when set (no progress callback).
@@ -106,7 +117,38 @@ func NewManager(bridge *ChannelBridge, factories map[string]AdapterFactory, decr
 		convQueues: map[string]*convQueue{},
 		pushQueues: map[string]*pushQueue{},
 		baseCtx:    context.Background(),
+		policy:     sendable.NewPolicy(nil, nil),
 	}
+}
+
+// SetSendablePolicy installs the single delivery gate used before Adapter.Send.
+func (m *Manager) SetSendablePolicy(policy *sendable.Policy) {
+	if policy != nil {
+		m.policy = policy
+	}
+}
+
+// SetRetryBackoff overrides the outbound retry backoff schedule.
+func (m *Manager) SetRetryBackoff(backoff func(attempt int) time.Duration) {
+	m.retryBackoff = backoff
+}
+
+// SetTaskContextService exposes DB-backed task identity/focus to orchestration.
+func (m *Manager) SetTaskContextService(service *services.TaskContextService) {
+	m.taskContext = service
+}
+
+// TaskContextService returns the configured task context service.
+func (m *Manager) TaskContextService() *services.TaskContextService { return m.taskContext }
+
+// SetRiskConfirmationService exposes one-shot high-risk confirmation tickets.
+func (m *Manager) SetRiskConfirmationService(service *services.RiskConfirmationService) {
+	m.riskConfirmation = service
+}
+
+// RiskConfirmationService returns the configured ticket service.
+func (m *Manager) RiskConfirmationService() *services.RiskConfirmationService {
+	return m.riskConfirmation
 }
 
 // SetLoader registers the DB-backed config source used by Reload/ApplyOnBoot.
@@ -265,6 +307,12 @@ func (m *Manager) IsConversationBusy(projectID string, scene Scene, conversation
 // per-message queue ACK (ahead count); dequeue sends another processing ACK.
 // Full queue: reject with a visible reply (never silently drop).
 func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMessage) {
+	// A notice-only inbound (e.g. every attachment rejected) has no turn to run;
+	// it still goes out through the single policy/dedupe/audit egress.
+	if in.Safety != nil && in.Safety.Only {
+		m.sendSafetyNotice(ctx, rc, in, *in.Safety)
+		return
+	}
 	key := convKey(rc.cfg.ProjectID, in.Scene, in.ConversationID)
 	q := m.convQueueFor(key)
 
@@ -275,6 +323,7 @@ func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMe
 			m.sendOutbound(ctx, rc, OutboundMessage{
 				Scene: in.Scene, ConversationID: in.ConversationID,
 				ReplyToMessageID: in.MessageID, Text: queueFullText,
+				Envelope: turnEnvelope(rc, in, sendable.KindSafetyNotice, "queue_full", sendable.PriorityHigh),
 			})
 			return
 		}
@@ -285,6 +334,7 @@ func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMe
 		m.sendOutbound(ctx, rc, OutboundMessage{
 			Scene: in.Scene, ConversationID: in.ConversationID,
 			ReplyToMessageID: in.MessageID, Text: queueAckTextFor(ahead, in.Text),
+			Envelope: turnEnvelope(rc, in, sendable.KindQueueAck, "turn_queued", sendable.PriorityHigh),
 		})
 		return
 	}
@@ -294,6 +344,28 @@ func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMe
 	// This goroutine owns the busy cycle: run the idle-first turn, then drain.
 	m.runTurn(ctx, rc, in, true /* withProcessingAck */)
 	m.drainConvQueue(q, key)
+}
+
+// sendSafetyNotice delivers an adapter-detected notice through the Manager, so a
+// replayed inbound message cannot produce a second notice and the outcome is
+// audited as sent or suppressed like any other outbound.
+func (m *Manager) sendSafetyNotice(ctx context.Context, rc *runningChannel, in InboundMessage, notice SafetyNotice) DeliveryResult {
+	text := strings.TrimSpace(notice.Text)
+	if text == "" {
+		return DeliveryResult{Decision: sendable.Decision{Reason: "empty"}}
+	}
+	reason := strings.TrimSpace(notice.Reason)
+	if reason == "" {
+		reason = "safety_notice"
+	}
+	envelope := turnEnvelope(rc, in, sendable.KindSafetyNotice, reason, sendable.PriorityHigh)
+	if key := strings.TrimSpace(notice.DedupeKey); key != "" {
+		envelope.DedupeKey = key
+	}
+	return m.sendOutboundResult(ctx, rc, OutboundMessage{
+		Scene: in.Scene, ConversationID: in.ConversationID,
+		ReplyToMessageID: in.MessageID, Text: text, Envelope: envelope,
+	})
 }
 
 // drainConvQueue runs pending messages in arrival order until the queue is
@@ -322,7 +394,12 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		m.sendOutbound(ctx, rc, OutboundMessage{
 			Scene: in.Scene, ConversationID: in.ConversationID,
 			ReplyToMessageID: in.MessageID, Text: processingAckText(in.Text),
+			Envelope: turnEnvelope(rc, in, sendable.KindTurnProcessingAck, "turn_processing", sendable.PriorityHigh),
 		})
+	}
+
+	if m.handleInboundOrchestration(ctx, rc, &in) {
+		return
 	}
 
 	resolved := ResolvedChannel{
@@ -335,9 +412,12 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		if text == "" {
 			return
 		}
+		// Classification-only events stay internal; sendOutbound still runs so
+		// the suppression is audited with a reason instead of vanishing.
 		m.sendOutbound(ctx, rc, OutboundMessage{
 			Scene: in.Scene, ConversationID: in.ConversationID,
 			ReplyToMessageID: in.MessageID, Text: text,
+			Envelope: progressEnvelope(rc, in, ev),
 		})
 	}
 	reply, err := m.handleTurn(ctx, resolved, in, onProgress)
@@ -346,13 +426,38 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		m.sendOutbound(ctx, rc, OutboundMessage{
 			Scene: in.Scene, ConversationID: in.ConversationID,
 			ReplyToMessageID: in.MessageID, Text: failReplyPrefix + friendlyErr(err),
+			Envelope: turnEnvelope(rc, in, sendable.KindBlocked, "turn_failed", sendable.PriorityCritical),
 		})
 		return
 	}
+	summary, reason := deliverableFinalText(reply)
+	images := reply.ImageURLs
+	if summary == safeFinalNotice {
+		images = nil // no structured summary → no derived attachments either
+	}
 	m.sendOutbound(ctx, rc, OutboundMessage{
 		Scene: in.Scene, ConversationID: in.ConversationID, ReplyToMessageID: in.MessageID,
-		Text: reply.Text, ImageURLs: reply.ImageURLs,
+		Text: summary, ImageURLs: images,
+		Envelope: func() sendable.DeliveryEnvelope {
+			e := turnEnvelope(rc, in, sendable.KindFinal, reason, sendable.PriorityCritical)
+			e.Structured = true
+			return e
+		}(),
 	})
+}
+
+// safeFinalNotice is sent when Work produced no structured summary. Raw
+// assistant text is never used as a fallback.
+const safeFinalNotice = "本回合已结束，请在 Approving 查看完整结果。"
+
+// deliverableFinalText returns the only text allowed out of a finished turn:
+// the structured FinalSummary, or a fixed safe notice. Reply.Text stays
+// internal regardless of its content.
+func deliverableFinalText(reply Reply) (text, reason string) {
+	if summary := strings.TrimSpace(reply.FinalSummary); summary != "" {
+		return truncateRunes(summary, 240), "structured_turn_final"
+	}
+	return safeFinalNotice, "final_summary_missing_safe_notice"
 }
 
 func (m *Manager) handleTurn(ctx context.Context, rc ResolvedChannel, in InboundMessage, onProgress func(ProgressEvent)) (Reply, error) {
@@ -365,13 +470,161 @@ func (m *Manager) handleTurn(ctx context.Context, rc ResolvedChannel, in Inbound
 	return m.bridge.Handle(ctx, rc, in, onProgress)
 }
 
+// turnScope identifies one conversation turn. A turn is NOT a Run: the inbound
+// platform MessageID may only key turn-level dedupe, never a run_id.
+func turnScope(rc *runningChannel, in InboundMessage) string {
+	if id := strings.TrimSpace(in.MessageID); id != "" {
+		return "turn:" + rc.cfg.ProjectID + "|" + id
+	}
+	return "turn:" + convKey(rc.cfg.ProjectID, in.Scene, in.ConversationID)
+}
+
+// turnEnvelope builds a turn-scoped envelope. RunID stays empty on purpose;
+// Run-scoped delivery must come from ProgressEvent.RunID or an explicit
+// DeliverSendable / SendRunAcceptanceAck call that carries a real Run id.
+func turnEnvelope(rc *runningChannel, in InboundMessage, kind sendable.Kind, reason string, priority sendable.Priority) sendable.DeliveryEnvelope {
+	scope := turnScope(rc, in)
+	e := sendable.DeliveryEnvelope{
+		Priority: priority, TaskContext: scope, ProjectID: rc.cfg.ProjectID,
+		ConversationID: in.ConversationID, UserID: in.UserID,
+		DedupeKey: scope + ":" + string(kind),
+		Reason:    reason, Kind: kind,
+	}
+	return sendable.AppendSendable(e, sendable.ChannelQQ)
+}
+
+// progressEnvelope maps a progress event onto a delivery envelope. Events that
+// are not explicitly deliverable stay internal so a prompt-shaped marker in
+// model output can never reach a channel.
+func progressEnvelope(rc *runningChannel, in InboundMessage, ev ProgressEvent) sendable.DeliveryEnvelope {
+	if !ev.Deliverable() {
+		return sendable.Internal(sendable.KindAgentRaw, "classified_progress_not_sendable")
+	}
+	kind := sendable.KindProgress
+	priority := sendable.PriorityNormal
+	switch {
+	case ev.Blocked || ev.Kind == ProgressBlocker:
+		kind, priority = sendable.KindBlocked, sendable.PriorityCritical
+	case ev.ActionRequired || ev.Kind == ProgressConfirm:
+		kind, priority = sendable.KindActionRequired, sendable.PriorityCritical
+	}
+	e := turnEnvelope(rc, in, kind, strings.TrimSpace(ev.Reason), priority)
+	if runID := strings.TrimSpace(ev.RunID); runID != "" {
+		e.RunID = runID
+		e.TaskContext = ""
+	}
+	if key := strings.TrimSpace(ev.DedupeKey); key != "" {
+		e.DedupeKey = key
+	} else {
+		e.DedupeKey = ""
+	}
+	e.Progress = sendable.ProgressFields{
+		Stage: ev.Stage, Blocked: ev.Blocked || ev.Kind == ProgressBlocker,
+		ActionRequired: ev.ActionRequired || ev.Kind == ProgressConfirm,
+		Conclusion:     ev.Conclusion,
+	}
+	if kind == sendable.KindProgress && strings.TrimSpace(e.Progress.Stage) == "" {
+		e.Progress.Stage = strings.TrimSpace(ev.Summary)
+	}
+	return e
+}
+
 func (m *Manager) sendOutbound(ctx context.Context, rc *runningChannel, out OutboundMessage) {
+	_ = m.sendOutboundResult(ctx, rc, out)
+}
+
+func (m *Manager) sendOutboundResult(ctx context.Context, rc *runningChannel, out OutboundMessage) DeliveryResult {
 	if rc == nil || rc.adapter == nil {
+		return DeliveryResult{Decision: sendable.Decision{Reason: "no_adapter"}}
+	}
+	contentFingerprint := out.Text + "\n" + strings.Join(out.ImageURLs, "\n")
+	decision, err := m.policy.Evaluate(ctx, out.Envelope, sendable.ChannelQQ, contentFingerprint)
+	if err != nil {
+		log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel outbound policy failed closed")
+		return DeliveryResult{Decision: sendable.Decision{Reason: "policy_error"}}
+	}
+	for decision.Send {
+		sent, sendErr := rc.adapter.Send(ctx, out)
+		if sendErr == nil {
+			_ = m.policy.MarkSent(ctx, decision, out.Envelope, sendable.ChannelQQ)
+			m.bindOutboundMessage(rc, out, sent.MessageID)
+			return DeliveryResult{Decision: decision, Sent: true, ExternalMessageID: sent.MessageID}
+		}
+		_ = m.policy.MarkFailed(ctx, decision, out.Envelope, sendable.ChannelQQ, sendErr)
+		log.Warn().Err(sendErr).Str("channel", rc.cfg.ID).Int("attempt", decision.Attempt).
+			Msg("channel outbound send failed")
+		if !m.waitBackoff(ctx, decision.Attempt) {
+			decision.Reason = "transport_failed"
+			return DeliveryResult{Decision: decision}
+		}
+		// Retry claims the next bounded attempt for this dedupe key; it returns
+		// Send=false once the receipt is sent elsewhere or attempts are spent.
+		next, err := m.policy.Retry(ctx, decision, out.Envelope, sendable.ChannelQQ)
+		if err != nil {
+			log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel outbound retry claim failed")
+			decision.Reason = "retry_claim_failed"
+			return DeliveryResult{Decision: decision}
+		}
+		decision = next
+	}
+	if decision.Reason == "" {
+		decision.Reason = "suppressed"
+	}
+	return DeliveryResult{Decision: decision}
+}
+
+// bindOutboundMessage records "this channel message belongs to that Run" so a
+// later reply reference resolves to the same task without any guessing. It is
+// best-effort and deliberately narrow: a delivery without a real Run id, without
+// a channel-reported message id, without a sender, or whose Run has no task
+// identity in this user's scope is simply not bound. No id is ever synthesized.
+func (m *Manager) bindOutboundMessage(rc *runningChannel, out OutboundMessage, messageID string) {
+	if m.taskContext == nil || rc == nil {
 		return
 	}
-	if err := rc.adapter.Send(ctx, out); err != nil {
-		log.Warn().Err(err).Str("channel", rc.cfg.ID).Str("text", truncateRunes(out.Text, 40)).
-			Msg("channel outbound send failed")
+	runID := strings.TrimSpace(out.Envelope.RunID)
+	messageID = strings.TrimSpace(messageID)
+	qqUserID := strings.TrimSpace(out.Envelope.UserID)
+	if runID == "" || messageID == "" || qqUserID == "" {
+		return
+	}
+	identity, err := m.taskContext.IdentityForRun(runID, rc.cfg.ProjectID)
+	if err != nil {
+		log.Warn().Err(err).Str("run", runID).Msg("outbound message binding: load task identity failed")
+		return
+	}
+	if identity == nil {
+		return
+	}
+	scope := services.TaskScope{
+		ProjectID: rc.cfg.ProjectID, UserID: services.SyntheticQQUserID(qqUserID),
+		Channel: rc.cfg.Type, ConversationID: out.ConversationID,
+	}
+	// BindMessage re-checks project/user ownership, so another user's task can
+	// never be bound to this conversation's message.
+	if err := m.taskContext.BindMessage(scope, messageID, identity); err != nil {
+		log.Warn().Err(err).Str("run", runID).Str("message", messageID).
+			Msg("outbound message binding skipped")
+	}
+}
+
+// waitBackoff sleeps the delivery backoff and reports whether the caller may
+// continue (false when the context ended).
+func (m *Manager) waitBackoff(ctx context.Context, attempt int) bool {
+	delay := sendable.RetryDelay(attempt)
+	if m.retryBackoff != nil {
+		delay = m.retryBackoff(attempt)
+	}
+	if delay <= 0 {
+		return ctx.Err() == nil
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }
 
@@ -410,7 +663,22 @@ func (m *Manager) DeliverCron(d services.CronDelivery) error {
 		Category:  d.Category,
 		Kind:      kind,
 		// Keep raw formatted text (incl. image URLs); flushPushQueue splits on send.
-		Text:     text,
+		Text: text,
+		Envelope: sendable.AppendSendable(sendable.DeliveryEnvelope{
+			Priority: func() sendable.Priority {
+				if kind == CronResultFailed {
+					return sendable.PriorityCritical
+				}
+				return sendable.PriorityLow
+			}(),
+			// Cron jobs are not Runs: they carry a real Run id only when the
+			// scheduler supplied one, otherwise a cron task scope.
+			RunID:       strings.TrimSpace(d.RunID),
+			TaskContext: cronTaskContext(d),
+			ProjectID:   d.ProjectID, ConversationID: conv,
+			DedupeKey: d.DedupeKey, Reason: "cron_delivery", Kind: sendable.KindCron,
+			Structured: true,
+		}, sendable.ChannelQQ),
 		Enqueued: time.Now(),
 	}
 
@@ -444,7 +712,16 @@ func (m *Manager) DeliverRunNotify(projectID, text string) error {
 		Category:  "run_notify",
 		Kind:      CronResultChanged, // priority: treat actionable Run alerts like "changed"
 		Text:      text,
-		Enqueued:  time.Now(),
+		Envelope: sendable.AppendSendable(sendable.DeliveryEnvelope{
+			Priority: sendable.PriorityCritical,
+			// Only a Run id actually present in the notification is used; an
+			// unlinked notification falls back to a conversation task scope.
+			RunID:       runNotifyRunID(text),
+			TaskContext: runNotifyTaskContext(projectID, text),
+			ProjectID:   projectID, ConversationID: conv,
+			Reason: "run_notification", Kind: sendable.KindRunNotify, Structured: true,
+		}, sendable.ChannelQQ),
+		Enqueued: time.Now(),
 	}
 	m.enqueuePush(key, item)
 	m.flushPushQueue(key)
@@ -484,13 +761,48 @@ func (m *Manager) flushPushQueue(key string) {
 		}
 		stripped, urls := splitImageURLs(item.Text)
 		ctx, cancel := context.WithTimeout(m.baseCtx, 60*time.Second)
-		if err := target.adapter.Send(ctx, OutboundMessage{
-			Scene: item.Scene, ConversationID: item.Conv, Text: stripped, ImageURLs: urls,
-		}); err != nil {
-			log.Warn().Err(err).Str("project", item.ProjectID).Msg("cron push flush send failed")
-		}
+		m.sendOutbound(ctx, target, OutboundMessage{
+			Scene: item.Scene, ConversationID: item.Conv, Text: stripped,
+			ImageURLs: urls, Envelope: item.Envelope,
+		})
 		cancel()
 	}
+}
+
+// runNotifyRunID extracts the real Run id from a notification link, or "" when
+// the notification is not linked to a Run. It never fabricates an id.
+func runNotifyRunID(text string) string {
+	const marker = "/runs/"
+	idx := strings.Index(text, marker)
+	if idx < 0 {
+		return ""
+	}
+	value := text[idx+len(marker):]
+	if end := strings.IndexAny(value, " \t\r\n?#"); end >= 0 {
+		value = value[:end]
+	}
+	return strings.TrimSpace(value)
+}
+
+// runNotifyTaskContext scopes an unlinked notification so it still has a
+// delivery bucket without pretending to be a Run.
+func runNotifyTaskContext(projectID, text string) string {
+	if runNotifyRunID(text) != "" {
+		return ""
+	}
+	return "run-notify:" + projectID
+}
+
+// cronTaskContext scopes a cron push that carries no Run id.
+func cronTaskContext(d services.CronDelivery) string {
+	if strings.TrimSpace(d.RunID) != "" {
+		return ""
+	}
+	category := strings.TrimSpace(d.Category)
+	if category == "" {
+		category = "cron"
+	}
+	return "cron:" + d.ProjectID + "|" + category
 }
 
 // requeuePushAll puts remaining flush items back ahead of anything that arrived

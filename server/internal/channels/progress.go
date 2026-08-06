@@ -22,10 +22,40 @@ const (
 
 // ProgressEvent is an internal Work→Reply progress signal. Tool-level / token
 // noise must not become a ProgressEvent.
+// Delivery is opt-in: events produced by text classification are internal by
+// default, because prompt-shaped markers in model output must not be able to
+// drive external sends. Only an orchestration layer that sets Sendable, or the
+// Manager's explicit blocked/action_required promotion (which additionally
+// requires a reliable structured Conclusion), may reach a channel.
+//
+// RunID must be a real Run identifier when set; it is never synthesized from an
+// inbound platform message id.
 type ProgressEvent struct {
-	Kind    ProgressKind
-	Summary string
-	At      time.Time
+	Kind           ProgressKind
+	Summary        string
+	Stage          string
+	Blocked        bool
+	ActionRequired bool
+	Conclusion     string
+	RunID          string
+	DedupeKey      string
+	Reason         string
+	Sendable       bool
+	At             time.Time
+}
+
+// Deliverable reports whether this event may leave the platform. Classified
+// narration alone never qualifies.
+func (ev ProgressEvent) Deliverable() bool {
+	if ev.Sendable {
+		return true
+	}
+	// Manager-side promotion: an orchestration-set blocker / decision request
+	// backed by a reliable structured conclusion.
+	if ev.Blocked || ev.ActionRequired {
+		return strings.TrimSpace(ev.Conclusion) != ""
+	}
+	return false
 }
 
 // TurnFinalReport is the Work turn outcome consumed by Reply for the required

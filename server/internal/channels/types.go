@@ -15,6 +15,8 @@ package channels
 import (
 	"context"
 	"time"
+
+	"github.com/cocofhu/approving/internal/sendable"
 )
 
 // Scene classifies a conversation surface. Adapters map their native scopes
@@ -41,6 +43,21 @@ type Image struct {
 	Filename string
 }
 
+// SafetyNotice is an adapter-detected notice about an inbound message (e.g. a
+// rejected oversized attachment). Adapters must not send it themselves: they
+// attach it to the inbound message so it leaves through the Manager's single
+// egress and shares its dedupe receipt, retries and audit.
+type SafetyNotice struct {
+	Text   string
+	Reason string
+	// DedupeKey keeps the notice idempotent across gateway reconnects that
+	// replay the same inbound message.
+	DedupeKey string
+	// Only marks an inbound message that carries no user content: deliver the
+	// notice and do not start a turn.
+	Only bool
+}
+
 // InboundMessage is a normalized user message received from a channel.
 type InboundMessage struct {
 	Scene          Scene
@@ -51,6 +68,7 @@ type InboundMessage struct {
 	MessageID      string // platform message id (passive reply + dedup)
 	Timestamp      time.Time
 	Raw            map[string]any
+	Safety         *SafetyNotice
 }
 
 // OutboundMessage is a normalized reply/push to a channel conversation.
@@ -60,10 +78,20 @@ type OutboundMessage struct {
 	ReplyToMessageID string // passive reply id (empty → active push)
 	Text             string
 	ImageURLs        []string // shareable image URLs to attach
+	Envelope         sendable.DeliveryEnvelope
 }
 
 // InboundHandler is invoked by an adapter for each received message.
 type InboundHandler func(ctx context.Context, in InboundMessage)
+
+// SendResult is what a channel reports back about a delivered message.
+// MessageID is the channel's own message identifier and must only be set from a
+// real transport response — it is never derived from an inbound message id, a
+// dedupe key, or any other local value. Channels without such a response leave
+// it empty.
+type SendResult struct {
+	MessageID string
+}
 
 // Adapter is a transport for one external channel account. Implementations are
 // created per ChannelConfig and are responsible only for receiving/sending;
@@ -75,8 +103,9 @@ type Adapter interface {
 	// the ctx is cancelled or Stop is called. It should return once the receive
 	// loop is running (non-blocking) or on a fatal startup error.
 	Start(ctx context.Context, onInbound InboundHandler) error
-	// Send delivers an outbound message.
-	Send(ctx context.Context, out OutboundMessage) error
+	// Send delivers an outbound message and reports the channel's message id
+	// when the transport returns one.
+	Send(ctx context.Context, out OutboundMessage) (SendResult, error)
 	// Stop tears down the connection and releases resources.
 	Stop() error
 }

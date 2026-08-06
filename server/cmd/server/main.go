@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -33,6 +34,7 @@ import (
 	"github.com/cocofhu/approving/internal/runtime"
 	"github.com/cocofhu/approving/internal/sandbox"
 	"github.com/cocofhu/approving/internal/schedulermcp"
+	"github.com/cocofhu/approving/internal/sendable"
 	"github.com/cocofhu/approving/internal/services"
 	"github.com/cocofhu/approving/internal/shutdown"
 
@@ -347,6 +349,46 @@ func main() {
 	channelMgr := channels.NewManager(channelBridge, map[string]channels.AdapterFactory{
 		models.ChannelTypeQQ: qq.New,
 	}, crypto.Decrypt)
+	deliveryPolicy := sendable.NewPolicy(db, func(entry sendable.AuditEntry) {
+		outcome := models.AuditOutcomeOK
+		if entry.Result == "failed" {
+			outcome = models.AuditOutcomeFail
+		}
+		auditSvc.Record(services.AuditRecord{
+			ProjectID: entry.ProjectID, Actor: services.SystemActor(),
+			CallerKind: models.CallerKindSystem, Action: models.AuditActionDelivery,
+			ResourceType: "delivery", ResourceID: entry.DedupeKey,
+			RunID: entry.RunID, Outcome: outcome, Summary: "channel delivery " + entry.Result,
+			Payload: map[string]any{
+				"reason": entry.Reason, "run": entry.RunID, "channel": string(entry.Channel),
+				"dedupe": entry.DedupeKey, "result": entry.Result, "attempt": entry.Attempt,
+			},
+		})
+	})
+	channelMgr.SetSendablePolicy(deliveryPolicy)
+	taskContextSvc := services.NewTaskContextService(db)
+	channelMgr.SetTaskContextService(taskContextSvc)
+	riskSvc := services.NewRiskConfirmationService(db)
+	channelMgr.SetRiskConfirmationService(riskSvc)
+	channelMgr.SetRiskActionExecutor(func(projectID, runID, action string, meta map[string]string) error {
+		switch action {
+		case "cancel_run", "delete_run":
+			return eng.Cancel(runID)
+		case "resume_gate", "approve_gate", "reject_gate":
+			nodeID := meta["nodeId"]
+			gateAction := meta["gateAction"]
+			if gateAction == "" {
+				gateAction = "approve"
+			}
+			if nodeID == "" {
+				return fmt.Errorf("gate node id required")
+			}
+			return eng.ResumeGate(runID, nodeID, gateAction, nil)
+		default:
+			return fmt.Errorf("unsupported risk action %q", action)
+		}
+	})
+	pmMCP.SetTaskSafety(riskSvc, taskContextSvc, channelIMNotifier{mgr: channelMgr})
 	channelMgr.SetLoader(channelSvc.ListRaw)
 	channelSvc.SetOnChange(channelMgr.Reload)
 	channelMgr.ApplyOnBoot()

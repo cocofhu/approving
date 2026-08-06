@@ -49,6 +49,7 @@ const (
 	AuditActionAuditExport     = "audit.export"
 	AuditActionChannel         = "channel.config"
 	AuditActionCron            = "cron.config"
+	AuditActionDelivery        = "channel.delivery"
 )
 
 // Audit outcome values.

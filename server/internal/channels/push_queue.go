@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cocofhu/approving/internal/sendable"
 	"github.com/cocofhu/approving/internal/services"
 
 	"github.com/rs/zerolog/log"
@@ -39,6 +40,7 @@ type CronPushItem struct {
 	Category  string
 	Kind      CronResultKind
 	Text      string
+	Envelope  sendable.DeliveryEnvelope
 	Enqueued  time.Time
 }
 
@@ -264,7 +266,10 @@ func FormatCronPush(category string, kind CronResultKind, body string) string {
 		if body == "" {
 			return catLabel(cat) + "有变化"
 		}
-		return body
+		if lineEnd := strings.IndexAny(body, "\r\n"); lineEnd >= 0 {
+			body = strings.TrimSpace(body[:lineEnd])
+		}
+		return truncateRunes(body, 120)
 	}
 }
 
