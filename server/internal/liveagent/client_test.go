@@ -293,11 +293,40 @@ func TestUnconfiguredClientReportsItselfRatherThanCalling(t *testing.T) {
 	if _, err := c.Complete(context.Background(), chatRequest()); !errors.Is(err, ErrNotConfigured) {
 		t.Fatalf("err = %v", err)
 	}
-	// A partial endpoint is the same as none: the settings page can be
-	// half-filled at any moment.
-	c.SetLiveEndpoint("https://api.example.com/v1", "", "m", time.Second)
+	// A half-filled endpoint is the same as none: the settings page can be
+	// saved mid-edit at any moment.
+	c.SetLiveEndpoint("https://api.example.com/v1", "k", "", time.Second)
 	if c.Configured() {
-		t.Fatal("missing key should leave it unconfigured")
+		t.Fatal("missing model should leave it unconfigured")
+	}
+	c.SetLiveEndpoint("", "k", "m", time.Second)
+	if c.Configured() {
+		t.Fatal("missing base URL should leave it unconfigured")
+	}
+	// A missing key is not half-filled: endpoints on the local network take
+	// no auth, and requiring a placeholder there would protect nothing.
+	c.SetLiveEndpoint("https://api.example.com/v1", "", "m", time.Second)
+	if !c.Configured() {
+		t.Fatal("a keyless endpoint should be usable")
+	}
+}
+
+func TestKeylessEndpointsAreCalledWithoutAnAuthHeader(t *testing.T) {
+	var sawAuth atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, ok := r.Header["Authorization"]
+		sawAuth.Store(ok)
+		io.WriteString(w, textResponse("ok"))
+	}))
+	defer srv.Close()
+
+	c := New()
+	c.SetLiveEndpoint(srv.URL, "", "local-model", 2*time.Second)
+	if _, err := c.Complete(context.Background(), chatRequest()); err != nil {
+		t.Fatal(err)
+	}
+	if sawAuth.Load() {
+		t.Fatal("sent an Authorization header for a keyless endpoint")
 	}
 }
 
@@ -356,5 +385,74 @@ func TestToolSchemaStaysFlatStrings(t *testing.T) {
 	required := fn["parameters"].(map[string]any)["required"].([]any)
 	if len(required) != 2 {
 		t.Fatalf("required = %v", required)
+	}
+}
+// The remaining cases lock in response shapes observed against a real
+// OpenAI-compatible endpoint (Ollama serving a reasoning model), which differ
+// from the textbook shape in ways that decide whether a turn works at all.
+
+func TestSideChannelReasoningIsNeverRead(t *testing.T) {
+	// Ollama returns chain-of-thought in a sibling "reasoning" field rather
+	// than inline. Nothing may pull it into the reply.
+	c := serveJSON(t, func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `{"choices":[{"finish_reason":"stop","message":{
+			"content":"抓完了，一共 1200 条。",
+			"reasoning":"The user is asking about the crawler. I should check...",
+			"reasoning_content":"more private deliberation"
+		}}]}`)
+	})
+	got, err := c.Complete(context.Background(), chatRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Text != "抓完了，一共 1200 条。" {
+		t.Fatalf("text = %q", got.Text)
+	}
+	if strings.Contains(got.Text, "deliberation") || strings.Contains(got.Text, "The user is asking") {
+		t.Fatalf("reasoning leaked into the reply: %q", got.Text)
+	}
+}
+
+func TestToolCallCarriesNoContentAlongside(t *testing.T) {
+	// A real tool call arrives with content "" and finish_reason tool_calls.
+	// The empty content must not be mistaken for an empty response.
+	c := serveJSON(t, func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `{"choices":[{"finish_reason":"tool_calls","message":{
+			"content":"",
+			"reasoning":"This needs the project agent.",
+			"tool_calls":[{"id":"call_1","index":0,"type":"function","function":{
+				"name":"ask_project_agent",
+				"arguments":"{\"question\":\"为什么结算页工作流失败\",\"say\":\"我去查一下\"}"
+			}}]
+		}}]}`)
+	})
+	got, err := c.Complete(context.Background(), chatRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ToolName != "ask_project_agent" {
+		t.Fatalf("tool = %q", got.ToolName)
+	}
+	if got.Args["say"] != "我去查一下" {
+		t.Fatalf("args = %v", got.Args)
+	}
+}
+
+func TestThinkingPastTheBudgetEscalatesInsteadOfRetrying(t *testing.T) {
+	// A reasoning model can burn the entire cap deliberating and return
+	// nothing. Retrying buys the same stall, so this ends the turn at once.
+	var calls atomic.Int32
+	c := serveJSON(t, func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		io.WriteString(w, `{"choices":[{"finish_reason":"length","message":{
+			"content":"","reasoning":"thinking and thinking and never finishing"
+		}}],"usage":{"completion_tokens":2000}}`)
+	})
+	_, err := c.Complete(context.Background(), chatRequest())
+	if !errors.Is(err, ErrBudgetExhausted) {
+		t.Fatalf("err = %v, want ErrBudgetExhausted", err)
+	}
+	if n := calls.Load(); n != 1 {
+		t.Fatalf("called %d times, want no retry", n)
 	}
 }

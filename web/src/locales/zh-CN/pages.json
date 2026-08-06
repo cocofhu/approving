@@ -959,10 +959,10 @@
         "max_test_sandboxes": "活跃测试沙箱数达到此上限时，新建测试沙箱请求将被后端拒绝（最小值 ≥ 1，不设最大值上限）。",
         "live_base_url": "OpenAI 兼容的接口根地址，例如 https://api.example.com/v1，系统会在其后拼接 /chat/completions。",
         "live_model": "传给该接口的模型名称。选一个快的——这一层的价值就在于秒级回应，慢模型不如直接交给沙箱。",
-        "live_api_key": "以 Bearer token 发送。加密存储，保存后页面只显示掩码；留空提交表示不修改已存的密钥。",
+        "live_api_key": "以 Bearer token 发送，本机或内网模型可以留空。加密存储，保存后页面只显示掩码；留空提交表示不修改已存的密钥。",
         "live_timeout_seconds": "单次调用的上限。超时不报错，该消息改为交给沙箱处理——慢的时候宁可走完整能力那条路。"
       },
-      "liveUnconfigured": "尚未配置：当前每条 IM 消息都会交给沙箱，功能完整但每条都要等几十秒。填好上面三项即可启用。",
+      "liveUnconfigured": "尚未配置：当前每条 IM 消息都会交给沙箱，功能完整但每条都要等几十秒。填好地址和模型即可启用，本机或内网模型通常不需要密钥。",
       "liveSecretStored": "已保存，留空则不修改",
       "liveSecretEmpty": "尚未配置",
       "sourceLabels": {

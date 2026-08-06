@@ -26,8 +26,11 @@ type Endpoint struct {
 }
 
 // Configured reports whether the snapshot is complete enough to call.
+// The key is not required: endpoints run on the local network (Ollama,
+// llama.cpp, vLLM) commonly take no auth at all, and demanding a placeholder
+// there would be a setup step that protects nothing.
 func (e Endpoint) Configured() bool {
-	return e.BaseURL != "" && e.APIKey != "" && e.Model != ""
+	return e.BaseURL != "" && e.Model != ""
 }
 
 // defaultTimeout bounds a call when none is configured. The conversation layer

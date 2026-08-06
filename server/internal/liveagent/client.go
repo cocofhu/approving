@@ -17,6 +17,10 @@ import (
 // "there is no conversation layer" and go straight to a sandbox.
 var ErrNotConfigured = errors.New("liveagent: endpoint not configured")
 
+// ErrBudgetExhausted means the model hit the token cap without producing a
+// reply or a tool call. Callers treat it like any other failure and escalate.
+var ErrBudgetExhausted = errors.New("liveagent: token budget exhausted before a reply")
+
 // Message is one turn of conversation sent to the model.
 type Message struct {
 	// Role is "user" or "assistant". The system prompt travels in Request.
@@ -51,8 +55,11 @@ type Request struct {
 	System   string
 	Messages []Message
 	Tools    []ToolSpec
-	// MaxTokens caps the reply. Callers size it by purpose so a routing
-	// decision cannot turn into an essay.
+	// MaxTokens caps the reply. Size it for the reply plus whatever the model
+	// thinks first: a reasoning model can spend a thousand tokens deliberating
+	// over a one-line routing decision, and a cap tight enough to be a real
+	// cost control just truncates it into an empty answer. The timeout, not
+	// this, is what bounds a turn.
 	MaxTokens int
 }
 
@@ -133,7 +140,9 @@ func (c *Client) call(ctx context.Context, ep Endpoint, body []byte, allowed map
 		return Result{}, false, fmt.Errorf("liveagent: build request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+ep.APIKey)
+	if ep.APIKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+ep.APIKey)
+	}
 
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
@@ -177,15 +186,27 @@ func (c *Client) call(ctx context.Context, ep Endpoint, body []byte, allowed map
 		break
 	}
 	if out.ToolName == "" && out.Text == "" {
+		// A reasoning model can spend the whole budget thinking and return
+		// nothing at all. Retrying would just buy the same stall, so this is
+		// reported as final and the caller escalates.
+		if parsed.Choices[0].FinishReason == "length" {
+			return Result{}, false, ErrBudgetExhausted
+		}
 		return Result{}, false, errors.New("liveagent: response was empty")
 	}
 	return out, false, nil
 }
 
 // completionResponse is the subset of the OpenAI response shape we read.
+//
+// Reasoning is deliberately absent: providers put chain-of-thought in varying
+// side fields ("reasoning", "reasoning_content", …) and we want none of them.
+// Ignoring rather than parsing them is what keeps reasoning out of the reply by
+// construction.
 type completionResponse struct {
 	Choices []struct {
-		Message struct {
+		FinishReason string `json:"finish_reason"`
+		Message      struct {
 			Content   json.RawMessage `json:"content"`
 			ToolCalls []struct {
 				Function struct {

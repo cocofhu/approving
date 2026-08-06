@@ -95,10 +95,11 @@ function hydrate(list: SettingItem[]) {
   }
 }
 
-// liveConfigured mirrors the server rule: the layer is on exactly when the
-// endpoint, model and key are all present.
+// liveConfigured mirrors the server rule: the layer is on once the endpoint
+// and model are set. The key is excluded because endpoints on the local
+// network take no auth.
 const liveConfigured = computed(() =>
-  ['live_base_url', 'live_model', 'live_api_key'].every((key) => {
+  ['live_base_url', 'live_model'].every((key) => {
     const it = itemOf(key)
     return !!it && String(it.value ?? '').trim() !== ''
   }),
