@@ -108,6 +108,13 @@ type gatewayResponse struct {
 	URL string `json:"url"`
 }
 
+// sendMessageResponse is the message-send reply. QQ returns the created
+// message id (the same id used for recall), which is the only acceptable source
+// of an external message id for reply bindings.
+type sendMessageResponse struct {
+	ID string `json:"id"`
+}
+
 // fileInfoResponse is the rich-media upload reply (C2C/group).
 type fileInfoResponse struct {
 	FileUUID string `json:"file_uuid"`
