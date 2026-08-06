@@ -26,9 +26,9 @@ func (n channelIMNotifier) NotifyRunAccepted(projectID, runID string, target pmm
 	return err
 }
 
-func (n channelIMNotifier) NotifyProgress(projectID, runID string, target pmmcp.IMTarget, kind, text, stage, conclusion string, blocked, actionRequired bool) error {
+func (n channelIMNotifier) NotifyProgress(projectID, runID string, target pmmcp.IMTarget, kind, text, stage, conclusion string, blocked, actionRequired bool) (pmmcp.IMDeliveryOutcome, error) {
 	if n.mgr == nil {
-		return nil
+		return pmmcp.IMDeliveryOutcome{}, nil
 	}
 	skind := sendable.KindProgress
 	priority := sendable.PriorityNormal
@@ -43,7 +43,7 @@ func (n channelIMNotifier) NotifyProgress(projectID, runID string, target pmmcp.
 	if stage == "" && !blocked && !actionRequired && conclusion == "" {
 		stage = strings.TrimSpace(text)
 	}
-	_, err := n.mgr.ReportRunProgress(context.Background(), channels.SendableRequest{
+	result, err := n.mgr.ReportRunProgress(context.Background(), channels.SendableRequest{
 		ProjectID: projectID, RunID: runID, Scene: channels.Scene(target.Scene),
 		ConversationID: target.ConversationID, UserID: target.UserID,
 		Kind: skind, Reason: "pm_notify_progress", Priority: priority,
@@ -52,5 +52,10 @@ func (n channelIMNotifier) NotifyProgress(projectID, runID string, target pmmcp.
 		},
 		Text: text,
 	})
-	return err
+	if err != nil {
+		return pmmcp.IMDeliveryOutcome{}, err
+	}
+	// Only a real failure reaches the error branch above; a suppressed delivery
+	// is reported as a structured outcome so the agent does not retry it.
+	return pmmcp.IMDeliveryOutcome{Sent: result.Sent, Reason: result.Reason()}, nil
 }

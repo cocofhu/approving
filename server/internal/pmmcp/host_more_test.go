@@ -20,20 +20,24 @@ type recordingIMNotifier struct {
 		target                       IMTarget
 		actionRequired               bool
 	}
-	err error
+	outcome IMDeliveryOutcome
+	err     error
 }
 
 func (n *recordingIMNotifier) NotifyRunAccepted(string, string, IMTarget, string, string) error {
 	return n.err
 }
 
-func (n *recordingIMNotifier) NotifyProgress(projectID, runID string, target IMTarget, kind, text, stage, conclusion string, blocked, actionRequired bool) error {
+func (n *recordingIMNotifier) NotifyProgress(projectID, runID string, target IMTarget, kind, text, stage, conclusion string, blocked, actionRequired bool) (IMDeliveryOutcome, error) {
 	n.progressCalls = append(n.progressCalls, struct {
 		projectID, runID, kind, text string
 		target                       IMTarget
 		actionRequired               bool
 	}{projectID: projectID, runID: runID, kind: kind, text: text, target: target, actionRequired: actionRequired})
-	return n.err
+	if n.err != nil {
+		return IMDeliveryOutcome{}, n.err
+	}
+	return n.outcome, nil
 }
 
 func setupPmMCPHost(t *testing.T) (*gorm.DB, *services.PmService, *Host, models.Project) {
@@ -182,6 +186,71 @@ func TestPmStartRunUsesExternalQQIdentityForTaskSearch(t *testing.T) {
 	}
 	if candidates[0].Identity.UserID == "qq:group:conversation-1" {
 		t.Fatalf("conversation identity owns task: %+v", candidates[0].Identity)
+	}
+}
+
+func TestPmNotifyProgressSeparatesSuppressionFromFailure(t *testing.T) {
+	db, pm, _, p := setupPmMCPHost(t)
+	wf := services.NewWorkflowService(db)
+	wfDef := &models.WorkflowDef{
+		ID: "wf-notify", ProjectID: p.ID, Name: "Notify WF",
+		Graph: models.Graph{Nodes: []models.Node{{ID: "in", Type: "input"}, {ID: "out", Type: "output"}}},
+	}
+	if err := wf.Save(wfDef); err != nil {
+		t.Fatal(err)
+	}
+	rs := services.NewRunService(db)
+	if err := rs.DB().Create(&models.Run{ID: "run-notify", WorkflowID: wfDef.ID, Status: "running"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	h := NewHost(pm, services.NewPmProgress(pm, rs, nil), wf, rs, services.NewArtifactService(db), &fakePmEngine{})
+	notifier := &recordingIMNotifier{}
+	h.SetTaskSafety(nil, nil, notifier)
+	tok := h.Register(p.ID, "thr-notify", "alice", "agent-a")
+	notify := func() (map[string]any, bool) {
+		out, isErr := h.callTool(p.ID, tok, MCPWorkflowWrite, "pm_notify_progress", map[string]any{
+			"runId": "run-notify", "kind": "progress", "stage": "已提交分支",
+		})
+		payload, ok := out.(map[string]any)
+		if !ok {
+			t.Fatalf("unexpected tool payload %#v", out)
+		}
+		return payload, isErr
+	}
+
+	notifier.outcome = IMDeliveryOutcome{Sent: true}
+	payload, isErr := notify()
+	if isErr || payload["status"] != "sent" || payload["sent"] != true {
+		t.Fatalf("delivered progress = %#v isError=%v", payload, isErr)
+	}
+
+	// A rate-limited / merged progress update is a normal outcome: reporting it
+	// as a tool error made agents rephrase and resend.
+	notifier.outcome = IMDeliveryOutcome{Reason: "progress_rate_limited_merged"}
+	payload, isErr = notify()
+	if isErr {
+		t.Fatalf("suppression must not be a tool error: %#v", payload)
+	}
+	if payload["status"] != "suppressed" || payload["sent"] != false ||
+		payload["reason"] != "progress_rate_limited_merged" {
+		t.Fatalf("suppressed progress = %#v", payload)
+	}
+	if _, hasError := payload["error"]; hasError {
+		t.Fatalf("suppressed progress carried an error field: %#v", payload)
+	}
+
+	// A suppression without a reason still reads as suppressed, not sent.
+	notifier.outcome = IMDeliveryOutcome{}
+	payload, isErr = notify()
+	if isErr || payload["status"] != "suppressed" || payload["reason"] != "suppressed" {
+		t.Fatalf("reasonless suppression = %#v isError=%v", payload, isErr)
+	}
+
+	// Only a real delivery failure is an error the agent should act on.
+	notifier.err = errors.New("项目未配置可用的外发渠道目标")
+	payload, isErr = notify()
+	if !isErr || !strings.Contains(fmt.Sprint(payload["error"]), "未配置可用的外发渠道") {
+		t.Fatalf("delivery failure = %#v isError=%v", payload, isErr)
 	}
 }
 

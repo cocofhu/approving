@@ -330,3 +330,30 @@ func TestEnsureIdentityForRunDerivesFieldsAndBackfillsScoped(t *testing.T) {
 		t.Fatalf("run r1 has %d identities; a Run has one project-scoped identity", count)
 	}
 }
+
+func TestIdentityForRunIsProjectScopedAndAbsenceIsNotAnError(t *testing.T) {
+	db := taskContextDB(t)
+	svc := NewTaskContextService(db)
+	ensureTask(t, svc, "r1", "p1", SyntheticQQUserID("u1"), "登录页")
+
+	got, err := svc.IdentityForRun("r1", "p1")
+	if err != nil || got == nil || got.UserID != SyntheticQQUserID("u1") {
+		t.Fatalf("identity for run = %+v err=%v", got, err)
+	}
+	// Another project must never see this Run's identity, and a miss is a
+	// nil identity rather than an error so callers can skip binding.
+	for _, miss := range []struct{ run, project string }{
+		{"r1", "p2"},
+		{"missing", "p1"},
+	} {
+		got, err := svc.IdentityForRun(miss.run, miss.project)
+		if err != nil || got != nil {
+			t.Fatalf("IdentityForRun(%q,%q) = %+v err=%v", miss.run, miss.project, got, err)
+		}
+	}
+	for _, bad := range []struct{ run, project string }{{"", "p1"}, {"r1", ""}} {
+		if _, err := svc.IdentityForRun(bad.run, bad.project); err == nil {
+			t.Fatalf("IdentityForRun(%q,%q) must reject empty scope", bad.run, bad.project)
+		}
+	}
+}

@@ -91,23 +91,33 @@ func (a *Adapter) Stop() error {
 	return nil
 }
 
-// Send implements channels.Adapter.
-func (a *Adapter) Send(ctx context.Context, out channels.OutboundMessage) error {
+// Send implements channels.Adapter. The returned SendResult carries the real QQ
+// message id when the API reported one; it is left empty rather than filled with
+// a locally derived value.
+func (a *Adapter) Send(ctx context.Context, out channels.OutboundMessage) (channels.SendResult, error) {
+	// Second gate: the Manager already evaluated the delivery policy, this
+	// fail-closed check keeps a bypassing caller from reaching QQ.
 	if reason := sendable.GateReason(out.Envelope, sendable.ChannelQQ,
 		out.Text+"\n"+strings.Join(out.ImageURLs, "\n")); reason != "" {
-		return fmt.Errorf("qq: outbound suppressed by delivery policy: %s", reason)
+		return channels.SendResult{}, fmt.Errorf("qq: outbound suppressed by delivery policy: %s", reason)
 	}
 	imgs := filterSendableImages(out.ImageURLs)
+	var messageID string
+	var err error
 	switch out.Scene {
 	case channels.SceneC2C:
-		return a.client.sendC2C(ctx, out.ConversationID, out.ReplyToMessageID, out.Text, imgs)
+		messageID, err = a.client.sendC2C(ctx, out.ConversationID, out.ReplyToMessageID, out.Text, imgs)
 	case channels.SceneGroup:
-		return a.client.sendGroup(ctx, out.ConversationID, out.ReplyToMessageID, out.Text, imgs)
+		messageID, err = a.client.sendGroup(ctx, out.ConversationID, out.ReplyToMessageID, out.Text, imgs)
 	case channels.SceneGuild:
-		return a.client.sendGuild(ctx, out.ConversationID, out.ReplyToMessageID, out.Text, imgs)
+		messageID, err = a.client.sendGuild(ctx, out.ConversationID, out.ReplyToMessageID, out.Text, imgs)
 	default:
-		return fmt.Errorf("qq: 未知会话类型 %q", out.Scene)
+		return channels.SendResult{}, fmt.Errorf("qq: 未知会话类型 %q", out.Scene)
 	}
+	if err != nil {
+		return channels.SendResult{}, err
+	}
+	return channels.SendResult{MessageID: messageID}, nil
 }
 
 func (a *Adapter) handleEvent(ctx context.Context, evtType string, data []byte, onInbound channels.InboundHandler) {
@@ -177,39 +187,40 @@ func (a *Adapter) handleEvent(ctx context.Context, evtType string, data []byte, 
 		}
 		in.Images = append(in.Images, img)
 	}
-	if len(oversized) > 0 {
-		tip := fmt.Sprintf(
-			"附件超过 %d MiB 上限，已拒绝：%s。请压缩后重试。",
-			qqAttachMaxMiB, strings.Join(oversized, ", "),
-		)
-		// Pure oversize with nothing else: reply tip without starting an agent turn.
-		if len(in.Images) == 0 && strings.TrimSpace(in.Text) == "" {
-			if err := a.Send(ctx, channels.OutboundMessage{
-				Scene:            scene,
-				ConversationID:   conversationID,
-				ReplyToMessageID: m.ID,
-				Text:             tip,
-				Envelope: sendable.AppendSendable(sendable.DeliveryEnvelope{
-					Priority: sendable.PriorityHigh, TaskContext: "turn:" + m.ID,
-					ProjectID: a.cfg.ProjectID, ConversationID: conversationID,
-					UserID: userID, DedupeKey: m.ID + ":oversize",
-					Reason: "oversized_attachment", Kind: sendable.KindSafetyNotice,
-				}, sendable.ChannelQQ),
-			}); err != nil {
-				log.Warn().Err(err).Msg("qq: oversized reject reply failed")
-			}
-			return
-		}
-		if in.Text != "" {
-			in.Text = in.Text + "\n" + tip
-		} else {
-			in.Text = tip
-		}
-	}
+	in = applyOversizedNotice(in, oversized)
 
 	// Run the turn asynchronously so the gateway read loop keeps flowing; the
 	// Manager serializes per conversation.
 	go onInbound(ctx, in)
+}
+
+// applyOversizedNotice routes the rejected-attachment tip. An inbound that has
+// nothing but rejected attachments carries the tip as a SafetyNotice, so the
+// Manager delivers it through the single egress (policy, dedupe receipt, retry
+// and audit) instead of the adapter sending it directly. When there is other
+// content, the tip rides along with the user text and the turn runs normally.
+func applyOversizedNotice(in channels.InboundMessage, oversized []string) channels.InboundMessage {
+	if len(oversized) == 0 {
+		return in
+	}
+	tip := fmt.Sprintf(
+		"附件超过 %d MiB 上限，已拒绝：%s。请压缩后重试。",
+		qqAttachMaxMiB, strings.Join(oversized, ", "),
+	)
+	if len(in.Images) == 0 && strings.TrimSpace(in.Text) == "" {
+		in.Safety = &channels.SafetyNotice{
+			Text: tip, Reason: "oversized_attachment",
+			// Same key across gateway reconnects that replay this message.
+			DedupeKey: in.MessageID + ":oversize", Only: true,
+		}
+		return in
+	}
+	if in.Text != "" {
+		in.Text = in.Text + "\n" + tip
+	} else {
+		in.Text = tip
+	}
+	return in
 }
 
 func (a *Adapter) isDuplicate(msgID string) bool {

@@ -2,6 +2,7 @@ package channels
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/cocofhu/approving/internal/models"
@@ -222,7 +223,7 @@ func (m *Manager) ReportRunProgress(ctx context.Context, req SendableRequest) (D
 func (m *Manager) EnsureRunAccepted(ctx context.Context, projectID, runID, qqUserID, conversationID string, scene Scene, language string) (DeliveryResult, error) {
 	runID = strings.TrimSpace(runID)
 	if runID == "" {
-		return DeliveryResult{}, ErrDeliverySuppressed
+		return DeliveryResult{}, errors.New("run acceptance requires a real run id")
 	}
 	shortTitle := runID
 	userID := services.SyntheticQQUserID(qqUserID)

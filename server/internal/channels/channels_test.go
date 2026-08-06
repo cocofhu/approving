@@ -164,23 +164,31 @@ func TestFingerprintChanges(t *testing.T) {
 }
 
 // fakeAdapter records outbound sends and satisfies the Adapter interface.
+// messageIDs, when set, are handed back one per successful send to emulate a
+// channel that reports its own message ids.
 type fakeAdapter struct {
-	mu     sync.Mutex
-	sent   []OutboundMessage
-	onSend func(out OutboundMessage) // optional hook (called under mu)
+	mu         sync.Mutex
+	sent       []OutboundMessage
+	messageIDs []string
+	onSend     func(out OutboundMessage) // optional hook (called under mu)
 }
 
 func (f *fakeAdapter) Type() string                                              { return "fake" }
 func (f *fakeAdapter) Start(ctx context.Context, onInbound InboundHandler) error { return nil }
 func (f *fakeAdapter) Stop() error                                               { return nil }
-func (f *fakeAdapter) Send(ctx context.Context, out OutboundMessage) error {
+func (f *fakeAdapter) Send(ctx context.Context, out OutboundMessage) (SendResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, out)
 	if f.onSend != nil {
 		f.onSend(out)
 	}
-	return nil
+	messageID := ""
+	if len(f.messageIDs) > 0 {
+		messageID = f.messageIDs[0]
+		f.messageIDs = f.messageIDs[1:]
+	}
+	return SendResult{MessageID: messageID}, nil
 }
 
 func newTestManager(fa *fakeAdapter) *Manager {

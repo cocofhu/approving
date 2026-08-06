@@ -62,20 +62,55 @@ func (r SendableRequest) Envelope() sendable.DeliveryEnvelope {
 
 // DeliveryResult reports whether an outbound attempt was sent, suppressed, or
 // failed after policy evaluation and bounded transport retries.
+// ExternalMessageID is the channel's own id for the delivered message when the
+// transport returned one.
 type DeliveryResult struct {
-	Decision sendable.Decision
-	Sent     bool
+	Decision          sendable.Decision
+	Sent              bool
+	ExternalMessageID string
 }
 
-// ErrDeliverySuppressed is returned when policy intentionally blocked a send.
-var ErrDeliverySuppressed = errors.New("delivery suppressed by sendable policy")
+// Reason exposes the policy reason behind the outcome ("" when sent without a
+// specific reason).
+func (r DeliveryResult) Reason() string { return r.Decision.Reason }
 
-// ErrDeliveryFailed is returned when transport retries are exhausted.
+// Suppressed reports a delivery that policy intentionally withheld: rate
+// limiting, dedupe/merge, an already-sent receipt, or a validation gate. It is a
+// normal outcome, not a delivery failure, so callers must not retry it or report
+// it as an error to an agent.
+func (r DeliveryResult) Suppressed() bool {
+	return !r.Sent && !deliveryFailureReasons[r.Decision.Reason]
+}
+
+// Failed reports a delivery that really did not reach the channel: no target,
+// transport error, exhausted retries, or a failed-closed policy evaluation.
+func (r DeliveryResult) Failed() bool {
+	return !r.Sent && deliveryFailureReasons[r.Decision.Reason]
+}
+
+// deliveryFailureReasons enumerates the policy/transport reasons that mean the
+// message did not reach the channel and the caller should surface an error.
+// Every other reason is a deliberate suppression (see DeliveryResult.Suppressed).
+var deliveryFailureReasons = map[string]bool{
+	"no_adapter":         true,
+	"policy_error":       true,
+	"transport_failed":   true,
+	"retry_claim_failed": true,
+	"retry_exhausted":    true,
+	"receipt_missing":    true,
+	"missing_dedupe_key": true,
+}
+
+// ErrDeliveryFailed is returned when a delivery really failed (no adapter,
+// transport error, retries exhausted). Policy suppression is NOT an error: it
+// comes back as a result with Sent=false and a reason.
 var ErrDeliveryFailed = errors.New("delivery failed after retries")
 
 // DeliverSendable is the explicit external egress for orchestration. Every
 // delivery still passes the Manager's single policy gate. Callers can tell
-// sent / suppressed / failed apart from the result.
+// sent / suppressed / failed apart from the result: only a real failure returns
+// an error, so a rate-limited or deduplicated message never looks like a broken
+// transport to the caller.
 func (m *Manager) DeliverSendable(ctx context.Context, req SendableRequest) (DeliveryResult, error) {
 	if strings.TrimSpace(req.Text) == "" {
 		return DeliveryResult{}, errors.New("sendable text is empty")
@@ -92,15 +127,10 @@ func (m *Manager) DeliverSendable(ctx context.Context, req SendableRequest) (Del
 		Scene: scene, ConversationID: conv, ReplyToMessageID: req.ReplyToMessageID,
 		Text: req.Text, ImageURLs: req.ImageURLs, Envelope: req.Envelope(),
 	})
-	if result.Sent {
-		return result, nil
-	}
-	switch result.Decision.Reason {
-	case "no_adapter", "policy_error", "transport_failed", "retry_claim_failed":
+	if result.Failed() {
 		return result, ErrDeliveryFailed
-	default:
-		return result, ErrDeliverySuppressed
 	}
+	return result, nil
 }
 
 // RunAcceptanceAck confirms that a real Run was accepted for a user. It is

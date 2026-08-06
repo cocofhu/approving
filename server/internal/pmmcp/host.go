@@ -84,11 +84,21 @@ type Host struct {
 	notify ExternalIMNotifier
 }
 
+// IMDeliveryOutcome is what an IM egress reports back about one notification.
+// Sent=false with a Reason means the delivery policy withheld the message on
+// purpose (rate limited, deduplicated, merged, already sent); that is a normal
+// outcome and must not be reported to the agent as a tool error. Real failures
+// (no target, transport error, retries exhausted) come back as an error instead.
+type IMDeliveryOutcome struct {
+	Sent   bool
+	Reason string
+}
+
 // ExternalIMNotifier is the minimal IM egress used by PM MCP write tools.
 // Implemented by the channel Manager in main; nil disables explicit IM notify.
 type ExternalIMNotifier interface {
 	NotifyRunAccepted(projectID, runID string, target IMTarget, shortTitle, language string) error
-	NotifyProgress(projectID, runID string, target IMTarget, kind, text, stage, conclusion string, blocked, actionRequired bool) error
+	NotifyProgress(projectID, runID string, target IMTarget, kind, text, stage, conclusion string, blocked, actionRequired bool) (IMDeliveryOutcome, error)
 }
 
 // engineOps covers the run operations exposed through pm-workflow-write
@@ -823,10 +833,23 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		if sess, ok := h.SessionFor(projectID, token); ok {
 			target = imTargetForSession(sess)
 		}
-		if err := h.notify.NotifyProgress(projectID, runID, target, kind, text, stage, conclusion, blocked, actionRequired); err != nil {
+		outcome, err := h.notify.NotifyProgress(projectID, runID, target, kind, text, stage, conclusion, blocked, actionRequired)
+		if err != nil {
 			return map[string]any{"error": err.Error()}, true
 		}
-		return map[string]any{"status": "queued", "kind": kind}, false
+		if !outcome.Sent {
+			// A policy suppression is a successful call with a different
+			// outcome. Reporting it as a tool error made agents rephrase and
+			// resend the very message the policy just merged or deduplicated.
+			reason := outcome.Reason
+			if reason == "" {
+				reason = "suppressed"
+			}
+			return map[string]any{
+				"status": "suppressed", "sent": false, "reason": reason, "kind": kind,
+			}, false
+		}
+		return map[string]any{"status": "sent", "sent": true, "kind": kind}, false
 	case "pm_resume_gate":
 		if h.eng == nil {
 			return map[string]any{"error": "engine unavailable"}, true
@@ -964,7 +987,9 @@ func (h *Host) notifyConfirmation(projectID, runID string, sess *Session, prompt
 	if h.notify == nil {
 		return nil
 	}
-	if err := h.notify.NotifyProgress(projectID, runID, imTargetForSession(sess),
+	// A suppressed confirmation prompt (the same ticket already went out) is not
+	// a failure: only a real delivery failure blocks the write.
+	if _, err := h.notify.NotifyProgress(projectID, runID, imTargetForSession(sess),
 		"action_required", prompt, "", "", false, true); err != nil {
 		return fmt.Errorf("send confirmation prompt: %w", err)
 	}
@@ -1110,7 +1135,7 @@ func toolSchemas(mcpID string) []map[string]any {
 			platformmcp.Tool("pm_cancel_run", "取消一次运行中的 Run（需用户短标题二次确认后才会真正取消）。", map[string]any{
 				"runId": map[string]any{"type": "string"},
 			}),
-			platformmcp.Tool("pm_notify_progress", "向外部 IM 显式提交一条 Sendable 进度/阻塞/确认消息（须含 stage/conclusion 等实质字段）。", map[string]any{
+			platformmcp.Tool("pm_notify_progress", "向外部 IM 显式提交一条 Sendable 进度/阻塞/确认消息（须含 stage/conclusion 等实质字段）。返回 status=sent 表示已外发；status=suppressed 表示被限频/去重/合并等策略正常抑制（不是失败，不要改措辞重发）；只有真实投递失败才返回错误。", map[string]any{
 				"runId":          map[string]any{"type": "string"},
 				"kind":           map[string]any{"type": "string", "description": "progress|blocked|action_required|final"},
 				"text":           map[string]any{"type": "string"},

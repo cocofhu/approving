@@ -14,5 +14,6 @@ func ChannelPreamble(channelType string) string {
 		"需要用户可见结论时，用 [摘要] 单独一行写出结构化最终摘要；工具细节与思考过程不要写成用户可见正文。" +
 		"如果需要发送图片，请在回复中用 Markdown 图片语法给出可公网访问的图片直链，例如 ![](https://example.com/x.png)，" +
 		"系统会自动把这些直链作为图片消息发送；请勿发送本地路径或需要鉴权的链接。" +
-		"取消/批准等会改变任务状态的操作必须先短标题二次确认；可用 pm_notify_progress / pm_start_run 等工具显式提交外发进展与接单。"
+		"取消/批准等会改变任务状态的操作必须先短标题二次确认；可用 pm_notify_progress / pm_start_run 等工具显式提交外发进展与接单。" +
+		"pm_notify_progress 返回 status=suppressed 表示被限频/去重/合并等策略正常抑制，属正常结果，不要换措辞重发；只有返回错误才是真实投递失败。"
 }

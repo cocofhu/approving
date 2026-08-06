@@ -208,6 +208,28 @@ type TaskScope struct {
 	ProjectID, UserID, Channel, ConversationID string
 }
 
+// IdentityForRun loads the task identity of a Run inside one project. A Run
+// without an identity yet returns (nil, nil) so callers can skip instead of
+// treating it as a failure.
+func (s *TaskContextService) IdentityForRun(runID, projectID string) (*models.TaskIdentity, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("task context database is unavailable")
+	}
+	runID, projectID = strings.TrimSpace(runID), strings.TrimSpace(projectID)
+	if runID == "" || projectID == "" {
+		return nil, errors.New("run_id and project_id are required")
+	}
+	var identity models.TaskIdentity
+	err := s.db.Where("run_id = ? AND project_id = ?", runID, projectID).First(&identity).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &identity, nil
+}
+
 func (s *TaskContextService) BindMessage(scope TaskScope, messageID string, identity *models.TaskIdentity) error {
 	if identity == nil || strings.TrimSpace(messageID) == "" {
 		return errors.New("message_id and identity are required")

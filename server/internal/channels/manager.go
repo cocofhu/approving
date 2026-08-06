@@ -307,6 +307,12 @@ func (m *Manager) IsConversationBusy(projectID string, scene Scene, conversation
 // per-message queue ACK (ahead count); dequeue sends another processing ACK.
 // Full queue: reject with a visible reply (never silently drop).
 func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMessage) {
+	// A notice-only inbound (e.g. every attachment rejected) has no turn to run;
+	// it still goes out through the single policy/dedupe/audit egress.
+	if in.Safety != nil && in.Safety.Only {
+		m.sendSafetyNotice(ctx, rc, in, *in.Safety)
+		return
+	}
 	key := convKey(rc.cfg.ProjectID, in.Scene, in.ConversationID)
 	q := m.convQueueFor(key)
 
@@ -338,6 +344,28 @@ func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMe
 	// This goroutine owns the busy cycle: run the idle-first turn, then drain.
 	m.runTurn(ctx, rc, in, true /* withProcessingAck */)
 	m.drainConvQueue(q, key)
+}
+
+// sendSafetyNotice delivers an adapter-detected notice through the Manager, so a
+// replayed inbound message cannot produce a second notice and the outcome is
+// audited as sent or suppressed like any other outbound.
+func (m *Manager) sendSafetyNotice(ctx context.Context, rc *runningChannel, in InboundMessage, notice SafetyNotice) DeliveryResult {
+	text := strings.TrimSpace(notice.Text)
+	if text == "" {
+		return DeliveryResult{Decision: sendable.Decision{Reason: "empty"}}
+	}
+	reason := strings.TrimSpace(notice.Reason)
+	if reason == "" {
+		reason = "safety_notice"
+	}
+	envelope := turnEnvelope(rc, in, sendable.KindSafetyNotice, reason, sendable.PriorityHigh)
+	if key := strings.TrimSpace(notice.DedupeKey); key != "" {
+		envelope.DedupeKey = key
+	}
+	return m.sendOutboundResult(ctx, rc, OutboundMessage{
+		Scene: in.Scene, ConversationID: in.ConversationID,
+		ReplyToMessageID: in.MessageID, Text: text, Envelope: envelope,
+	})
 }
 
 // drainConvQueue runs pending messages in arrival order until the queue is
@@ -516,10 +544,11 @@ func (m *Manager) sendOutboundResult(ctx context.Context, rc *runningChannel, ou
 		return DeliveryResult{Decision: sendable.Decision{Reason: "policy_error"}}
 	}
 	for decision.Send {
-		sendErr := rc.adapter.Send(ctx, out)
+		sent, sendErr := rc.adapter.Send(ctx, out)
 		if sendErr == nil {
 			_ = m.policy.MarkSent(ctx, decision, out.Envelope, sendable.ChannelQQ)
-			return DeliveryResult{Decision: decision, Sent: true}
+			m.bindOutboundMessage(rc, out, sent.MessageID)
+			return DeliveryResult{Decision: decision, Sent: true, ExternalMessageID: sent.MessageID}
 		}
 		_ = m.policy.MarkFailed(ctx, decision, out.Envelope, sendable.ChannelQQ, sendErr)
 		log.Warn().Err(sendErr).Str("channel", rc.cfg.ID).Int("attempt", decision.Attempt).
@@ -542,6 +571,41 @@ func (m *Manager) sendOutboundResult(ctx context.Context, rc *runningChannel, ou
 		decision.Reason = "suppressed"
 	}
 	return DeliveryResult{Decision: decision}
+}
+
+// bindOutboundMessage records "this channel message belongs to that Run" so a
+// later reply reference resolves to the same task without any guessing. It is
+// best-effort and deliberately narrow: a delivery without a real Run id, without
+// a channel-reported message id, without a sender, or whose Run has no task
+// identity in this user's scope is simply not bound. No id is ever synthesized.
+func (m *Manager) bindOutboundMessage(rc *runningChannel, out OutboundMessage, messageID string) {
+	if m.taskContext == nil || rc == nil {
+		return
+	}
+	runID := strings.TrimSpace(out.Envelope.RunID)
+	messageID = strings.TrimSpace(messageID)
+	qqUserID := strings.TrimSpace(out.Envelope.UserID)
+	if runID == "" || messageID == "" || qqUserID == "" {
+		return
+	}
+	identity, err := m.taskContext.IdentityForRun(runID, rc.cfg.ProjectID)
+	if err != nil {
+		log.Warn().Err(err).Str("run", runID).Msg("outbound message binding: load task identity failed")
+		return
+	}
+	if identity == nil {
+		return
+	}
+	scope := services.TaskScope{
+		ProjectID: rc.cfg.ProjectID, UserID: services.SyntheticQQUserID(qqUserID),
+		Channel: rc.cfg.Type, ConversationID: out.ConversationID,
+	}
+	// BindMessage re-checks project/user ownership, so another user's task can
+	// never be bound to this conversation's message.
+	if err := m.taskContext.BindMessage(scope, messageID, identity); err != nil {
+		log.Warn().Err(err).Str("run", runID).Str("message", messageID).
+			Msg("outbound message binding skipped")
+	}
 }
 
 // waitBackoff sleeps the delivery backoff and reports whether the caller may
