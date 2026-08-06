@@ -936,20 +936,35 @@
         "capacity": {
           "title": "Sandbox capacity",
           "desc": "Live capacity usage (test sandboxes + running workflows); test cap configurable."
+        },
+        "live": {
+          "title": "Conversation model",
+          "desc": "A fast model fronts IM conversations: it answers what it can outright and hands anything needing the project itself to a sandbox. Left unconfigured, every message goes to a sandbox — nothing breaks, but everything is slow. Any OpenAI-compatible endpoint works, and edits take effect without a restart."
         }
       },
       "labels": {
         "max_concurrent_runs": "Max concurrent runs",
         "run_sandbox_ttl_minutes": "Run sandbox TTL",
         "test_sandbox_ttl_minutes": "Test sandbox idle TTL",
-        "max_test_sandboxes": "Max test sandboxes"
+        "max_test_sandboxes": "Max test sandboxes",
+        "live_base_url": "Endpoint",
+        "live_model": "Model",
+        "live_api_key": "API key",
+        "live_timeout_seconds": "Call timeout"
       },
       "settings": {
         "max_concurrent_runs": "Max workflows in running state. Read-only when locked by APPROVING_MAX_RUNS.",
         "run_sandbox_ttl_minutes": "Minutes to keep run sandbox alive after a turn for follow-up artifacts.",
         "test_sandbox_ttl_minutes": "Idle TTL for test sandboxes.",
-        "max_test_sandboxes": "Reject new test sandboxes when active count reaches this (min 1)."
+        "max_test_sandboxes": "Reject new test sandboxes when active count reaches this (min 1).",
+        "live_base_url": "OpenAI-compatible API root, e.g. https://api.example.com/v1. The path /chat/completions is appended.",
+        "live_model": "Model name passed to the endpoint. Pick a fast one — this layer earns its place by answering in seconds; a slow model is worse than going straight to the sandbox.",
+        "live_api_key": "Sent as a bearer token. Stored encrypted and shown masked; submit blank to leave the stored key unchanged.",
+        "live_timeout_seconds": "Ceiling for one call. A timeout is not an error — the message goes to a sandbox instead, trading latency for full capability."
       },
+      "liveUnconfigured": "Not configured: every IM message currently goes to a sandbox, which works but takes tens of seconds each. Fill in the three fields above to enable.",
+      "liveSecretStored": "Stored — leave blank to keep",
+      "liveSecretEmpty": "Not configured",
       "sourceLabels": {
         "env": "Environment",
         "db": "Customized",

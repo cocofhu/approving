@@ -33,6 +33,36 @@ type Config struct {
 	Browser  BrowserConfig  `yaml:"browser"`
 	Auth     AuthConfig     `yaml:"auth"`
 	Security SecurityConfig `yaml:"security"`
+	Live     LiveConfig     `yaml:"live"`
+}
+
+// LiveConfig points the conversation layer at an OpenAI-compatible chat
+// completions endpoint. It is the file/env fallback beneath the settings page,
+// which is where operators are expected to configure this; keeping it here lets
+// a deployment ship credentials via env without touching the DB.
+//
+// There is no enabled flag: the layer is active exactly when BaseURL, APIKey and
+// Model are all set. A separate toggle would only add a state where the endpoint
+// is configured but silently unused.
+type LiveConfig struct {
+	// BaseURL is the API root, e.g. "https://api.example.com/v1". The client
+	// appends "/chat/completions".
+	BaseURL string `yaml:"base_url"`
+	// APIKey authenticates as a bearer token.
+	APIKey string `yaml:"api_key"`
+	// Model is the model name passed through to the endpoint.
+	Model string `yaml:"model"`
+	// TimeoutSeconds bounds one call. The conversation layer only stays useful
+	// while it is fast, so this is deliberately short: a slow model should fail
+	// over to the sandbox rather than hold the reply.
+	TimeoutSeconds int `yaml:"timeout_seconds"`
+}
+
+// Configured reports whether enough is set to call the endpoint.
+func (l LiveConfig) Configured() bool {
+	return strings.TrimSpace(l.BaseURL) != "" &&
+		strings.TrimSpace(l.APIKey) != "" &&
+		strings.TrimSpace(l.Model) != ""
 }
 
 // SecurityConfig holds cross-cutting secrets. SecretsKey is the master key used
@@ -361,6 +391,18 @@ func applyEnvOverrides(c *Config) {
 	if v := env("APPROVING_SANDBOX_GATEWAY_API_KEY"); v != "" {
 		c.Sandbox.GatewayAPIKey = v
 	}
+	if v := env("APPROVING_LIVE_BASE_URL"); v != "" {
+		c.Live.BaseURL = v
+	}
+	if v := env("APPROVING_LIVE_API_KEY"); v != "" {
+		c.Live.APIKey = v
+	}
+	if v := env("APPROVING_LIVE_MODEL"); v != "" {
+		c.Live.Model = v
+	}
+	if v := envInt("APPROVING_LIVE_TIMEOUT_SEC"); v != 0 {
+		c.Live.TimeoutSeconds = v
+	}
 	if v := env("APPROVING_BROWSER_ENABLED"); v != "" {
 		lv := strings.ToLower(v)
 		c.Browser.Enabled = lv == "1" || lv == "true" || lv == "yes"
@@ -451,6 +493,9 @@ func setDefaults(c *Config) {
 	}
 	if c.Engine.NodeAutoRetryMax == 0 {
 		c.Engine.NodeAutoRetryMax = 3
+	}
+	if c.Live.TimeoutSeconds == 0 {
+		c.Live.TimeoutSeconds = 8
 	}
 	// Image intentionally has no default: empty means per-backend Images /
 	// DefaultSandboxImage. Set sandbox.image / APPROVING_SANDBOX_IMAGE only to

@@ -247,13 +247,23 @@ export interface DashboardStats {
   artifacts: number
 }
 
-// SettingItem is one platform scheduling knob: its effective value, where it
-// came from (env|db|config) and whether it's pinned by an env var (read-only).
+// SettingKind selects the input control and the value type: 'int' is a number,
+// 'string' is free text, and 'secret' reads back as SECRET_MASK — submitting the
+// mask (or an empty string) leaves the stored credential untouched.
+export type SettingKind = 'int' | 'string' | 'secret'
+
+// SECRET_MASK is the placeholder the API returns for a stored secret and
+// accepts on write to mean "keep what is stored".
+export const SECRET_MASK = '****'
+
+// SettingItem is one platform knob: its effective value, where it came from
+// (env|db|config) and whether it's pinned by an env var (read-only).
 export interface SettingItem {
   key: string
   label: string
   unit?: string
-  value: number
+  kind: SettingKind
+  value: number | string
   min: number
   source: 'env' | 'db' | 'config'
   locked: boolean
@@ -1018,7 +1028,7 @@ export const api = {
   dashboard: () => req<DashboardStats>('/stats/dashboard'),
   // platform settings (scheduling params)
   getSettings: () => req<{ items: SettingItem[] }>('/settings'),
-  updateSettings: (patch: Record<string, number>) =>
+  updateSettings: (patch: Record<string, number | string>) =>
     req<{ items: SettingItem[] }>('/settings', {
       method: 'PUT',
       body: JSON.stringify(patch),

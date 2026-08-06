@@ -272,6 +272,7 @@
       "noRepoFlow": "无仓库(产物流)",
       "pinnedVersionTitle": "本次运行固化执行的工作流版本",
       "minutes": "分钟",
+      "seconds": "秒",
       "lines": "{n} 行",
       "chars": "{n} 字符",
       "groups": "{n} 组",

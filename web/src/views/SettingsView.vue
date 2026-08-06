@@ -36,9 +36,20 @@ const groups = computed(() => [
     icon: 'flask',
     keys: ['max_test_sandboxes'],
   },
+  {
+    id: 'live',
+    title: t('pages.settings.groups.live.title'),
+    desc: t('pages.settings.groups.live.desc'),
+    icon: 'chat',
+    keys: ['live_base_url', 'live_model', 'live_api_key', 'live_timeout_seconds'],
+  },
 ])
 
-const SETTING_KEYS_WITH_UNIT = new Set(['run_sandbox_ttl_minutes', 'test_sandbox_ttl_minutes'])
+const SETTING_UNIT_KEYS: Record<string, string> = {
+  run_sandbox_ttl_minutes: 'common.format.minutes',
+  test_sandbox_ttl_minutes: 'common.format.minutes',
+  live_timeout_seconds: 'common.format.seconds',
+}
 
 function settingDescription(key: string): string {
   return t(`pages.settings.settings.${key}`)
@@ -48,8 +59,9 @@ function settingLabel(key: string): string {
   return t(`pages.settings.labels.${key}`)
 }
 
-function settingHasUnit(key: string): boolean {
-  return SETTING_KEYS_WITH_UNIT.has(key)
+function settingUnit(key: string): string {
+  const unitKey = SETTING_UNIT_KEYS[key]
+  return unitKey ? t(unitKey) : ''
 }
 
 function sourceLabelOf(source: string): string {
@@ -57,7 +69,7 @@ function sourceLabelOf(source: string): string {
 }
 
 const items = ref<SettingItem[]>([])
-const form = reactive<Record<string, number>>({})
+const form = reactive<Record<string, number | string>>({})
 const sandboxes = ref<SandboxView[]>([])
 const dashboard = ref<DashboardStats | null>(null)
 const loading = ref(true)
@@ -74,7 +86,28 @@ function itemOf(key: string): SettingItem | undefined {
 
 function hydrate(list: SettingItem[]) {
   items.value = list
-  for (const it of list) form[it.key] = it.value
+  for (const it of list) {
+    // A secret reads back as the mask, which must never become the field's
+    // value: submitting it would be indistinguishable from setting the key to
+    // literal asterisks. The field starts empty and the placeholder says
+    // whether one is stored.
+    form[it.key] = it.kind === 'secret' ? '' : it.value
+  }
+}
+
+// liveConfigured mirrors the server rule: the layer is on exactly when the
+// endpoint, model and key are all present.
+const liveConfigured = computed(() =>
+  ['live_base_url', 'live_model', 'live_api_key'].every((key) => {
+    const it = itemOf(key)
+    return !!it && String(it.value ?? '').trim() !== ''
+  }),
+)
+
+function secretPlaceholder(key: string): string {
+  const it = itemOf(key)
+  const stored = !!it && String(it.value ?? '').trim() !== ''
+  return t(stored ? 'pages.settings.liveSecretStored' : 'pages.settings.liveSecretEmpty')
 }
 
 function aggregateUsage(list: SandboxView[]) {
@@ -146,9 +179,18 @@ async function save() {
   saving.value = true
   error.value = ''
   try {
-    const patch: Record<string, number> = {}
+    const patch: Record<string, number | string> = {}
     for (const it of items.value) {
-      if (!it.locked) patch[it.key] = Number(form[it.key])
+      if (it.locked) continue
+      if (it.kind === 'int') {
+        patch[it.key] = Number(form[it.key])
+        continue
+      }
+      const v = String(form[it.key] ?? '').trim()
+      // A blank secret means "keep the stored one", which the server honours,
+      // so there is nothing to send.
+      if (it.kind === 'secret' && v === '') continue
+      patch[it.key] = v
     }
     const res = await api.updateSettings(patch)
     hydrate(res.items)
@@ -160,7 +202,16 @@ async function save() {
   }
 }
 
-const dirty = () => items.value.some((it) => !it.locked && Number(form[it.key]) !== it.value)
+const dirty = () =>
+  items.value.some((it) => {
+    if (it.locked) return false
+    if (it.kind === 'int') return Number(form[it.key]) !== it.value
+    const v = String(form[it.key] ?? '').trim()
+    // A secret field is only dirty once something is typed into it; empty is
+    // the resting state, not a cleared value.
+    if (it.kind === 'secret') return v !== ''
+    return v !== String(it.value ?? '')
+  })
 
 onMounted(() => {
   loadSettings()
@@ -329,17 +380,40 @@ onBeforeUnmount(() => {
               </div>
               <div class="flex shrink-0 items-center gap-2">
                 <input
+                  v-if="itemOf(key)!.kind === 'int'"
                   v-model.number="form[key]"
                   type="number"
                   :min="itemOf(key)!.min"
                   :disabled="itemOf(key)!.locked || saving"
                   class="input w-[88px] text-right"
                 />
-                <span v-if="settingHasUnit(key)" class="w-9 text-xs text-txt3">{{ t('common.format.minutes') }}</span>
+                <input
+                  v-else-if="itemOf(key)!.kind === 'secret'"
+                  v-model="form[key]"
+                  type="password"
+                  autocomplete="new-password"
+                  :placeholder="secretPlaceholder(key)"
+                  :disabled="itemOf(key)!.locked || saving"
+                  class="input w-[260px]"
+                />
+                <input
+                  v-else
+                  v-model="form[key]"
+                  type="text"
+                  :disabled="itemOf(key)!.locked || saving"
+                  class="input w-[260px]"
+                />
+                <span v-if="settingUnit(key)" class="w-9 text-xs text-txt3">{{ settingUnit(key) }}</span>
                 <span v-else class="w-9" />
               </div>
             </div>
           </template>
+        </div>
+
+        <div v-if="group.id === 'live' && !liveConfigured" class="px-4 py-3">
+          <p class="border border-warn/30 bg-warn/10 px-3 py-2 text-xs leading-relaxed text-warn">
+            {{ t('pages.settings.liveUnconfigured') }}
+          </p>
         </div>
       </div>
     </template>
