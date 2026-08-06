@@ -239,7 +239,6 @@ func TestEnsureIdentityForRunDerivesFieldsAndBackfillsScoped(t *testing.T) {
 		t.Fatal(err)
 	}
 	svc := NewTaskContextService(db)
-	svc.EnableRunBackfill()
 
 	if err := db.Create(&models.WorkflowDef{ID: "wf1", ProjectID: "p1", Name: "登录流程"}).Error; err != nil {
 		t.Fatal(err)
@@ -263,13 +262,35 @@ func TestEnsureIdentityForRunDerivesFieldsAndBackfillsScoped(t *testing.T) {
 	}
 
 	scope := TaskScope{ProjectID: "p1", UserID: SyntheticQQUserID("u1"), Channel: "qq", ConversationID: "c1"}
-	// The caller supplies nothing but the query; identities are derived lazily.
+	// Search must not claim project Runs on behalf of the first caller.
 	candidates, err := svc.Search(scope, "登录页")
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(candidates) != 0 {
+		t.Fatalf("unclaimed run became visible: %+v", candidates)
+	}
+	var unclaimedCount int64
+	if err := db.Model(&models.TaskIdentity{}).Where("run_id = ?", "r1").Count(&unclaimedCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if unclaimedCount != 0 {
+		t.Fatalf("search claimed an unowned run: count=%d", unclaimedCount)
+	}
+
+	var run models.Run
+	if err := db.First(&run, "id = ?", "r1").Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.EnsureIdentityForRun(run, "p1", scope.UserID); err != nil {
+		t.Fatal(err)
+	}
+	candidates, err = svc.Search(scope, "登录页")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(candidates) != 1 || candidates[0].Identity.RunID != "r1" {
-		t.Fatalf("backfilled candidates = %+v", candidates)
+		t.Fatalf("explicitly owned candidates = %+v", candidates)
 	}
 	got := candidates[0].Identity
 	if got.ShortTitle != "修复登录页跳转" {

@@ -366,10 +366,7 @@ func main() {
 		})
 	})
 	channelMgr.SetSendablePolicy(deliveryPolicy)
-	// Task identities are derived from real Runs on demand, so IM callers never
-	// have to pre-register a task before addressing it.
 	taskContextSvc := services.NewTaskContextService(db)
-	taskContextSvc.EnableRunBackfill()
 	channelMgr.SetTaskContextService(taskContextSvc)
 	riskSvc := services.NewRiskConfirmationService(db)
 	channelMgr.SetRiskConfirmationService(riskSvc)

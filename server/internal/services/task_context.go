@@ -12,7 +12,6 @@ import (
 	"github.com/cocofhu/approving/internal/models"
 
 	"github.com/google/uuid"
-	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -27,18 +26,13 @@ const (
 var ErrTaskIdentityScopeMismatch = errors.New("task identity scope mismatch")
 
 type TaskContextService struct {
-	db           *gorm.DB
-	now          func() time.Time
-	autoBackfill bool
+	db  *gorm.DB
+	now func() time.Time
 }
 
 func NewTaskContextService(db *gorm.DB) *TaskContextService {
 	return &TaskContextService{db: db, now: time.Now}
 }
-
-// EnableRunBackfill makes Search lazily materialize task identities from the
-// project's real Runs, so IM callers never have to pre-register a task.
-func (s *TaskContextService) EnableRunBackfill() { s.autoBackfill = true }
 
 func (s *TaskContextService) SetClock(now func() time.Time) {
 	if now != nil {
@@ -151,37 +145,6 @@ func (s *TaskContextService) EnsureIdentityForRun(run models.Run, projectID, use
 		Keywords:            runKeywords(run, requirement),
 		Status:              run.Status,
 	})
-}
-
-// BackfillProjectRuns lazily materializes identities for a project's Runs in
-// the requesting user scope. Existing identities owned by another user remain
-// invisible and are never re-homed.
-func (s *TaskContextService) BackfillProjectRuns(projectID, userID string) error {
-	if s == nil || s.db == nil {
-		return errors.New("task context database is unavailable")
-	}
-	projectID = strings.TrimSpace(projectID)
-	if projectID == "" {
-		return errors.New("project_id is required")
-	}
-	var runs []models.Run
-	err := s.db.
-		Where("workflow_id IN (?)",
-			s.db.Model(&models.WorkflowDef{}).Select("id").Where("project_id = ?", projectID)).
-		Where("created_at >= ?", s.now().Add(-TaskTerminalWindow)).
-		Find(&runs).Error
-	if err != nil {
-		return err
-	}
-	for _, run := range runs {
-		if _, err := s.EnsureIdentityForRun(run, projectID, strings.TrimSpace(userID)); err != nil {
-			if errors.Is(err, ErrTaskIdentityScopeMismatch) {
-				continue // different project; stay invisible
-			}
-			return err
-		}
-	}
-	return nil
 }
 
 const runShortTitleRunes = 24
@@ -393,13 +356,6 @@ func (s *TaskContextService) resolvedWithFocus(scope TaskScope, task models.Task
 }
 
 func (s *TaskContextService) Search(scope TaskScope, query string) ([]TaskCandidate, error) {
-	if s.autoBackfill {
-		// Best-effort: a backfill failure must not make addressing unavailable.
-		if err := s.BackfillProjectRuns(scope.ProjectID, scope.UserID); err != nil {
-			log.Warn().Err(err).Str("project", scope.ProjectID).
-				Msg("task identity backfill failed; searching existing identities only")
-		}
-	}
 	now := s.now()
 	var tasks []models.TaskIdentity
 	if err := s.db.Where("project_id = ? AND user_id = ? AND (terminal_at IS NULL OR terminal_at >= ?)",

@@ -777,7 +777,7 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		if h.tasks != nil {
 			sessUser := ""
 			if sess, ok := h.SessionFor(projectID, token); ok {
-				sessUser = sess.UserID
+				sessUser = riskUserIDForSession(sess)
 			}
 			if identity, err := h.tasks.EnsureIdentityForRun(*run, projectID, sessUser); err == nil && identity != nil {
 				shortTitle = identity.ShortTitle
@@ -840,7 +840,9 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		if nodeID == "" || action == "" {
 			return map[string]any{"error": "nodeId and action required"}, true
 		}
-		if blocked, completed, prompt := h.requireRiskConfirmation(projectID, token, runID, "resume_gate:"+nodeID+":"+action); completed {
+		if blocked, completed, prompt, confirmErr := h.requireRiskConfirmation(projectID, token, runID, "resume_gate:"+nodeID+":"+action); confirmErr != nil {
+			return map[string]any{"error": confirmErr.Error()}, true
+		} else if completed {
 			return map[string]any{"status": "already_confirmed"}, false
 		} else if blocked {
 			return map[string]any{"status": "needs_confirmation", "prompt": prompt}, false
@@ -885,7 +887,9 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		if !ok {
 			return map[string]any{"error": "run not found"}, true
 		}
-		if blocked, completed, prompt := h.requireRiskConfirmation(projectID, token, runID, "cancel_run"); completed {
+		if blocked, completed, prompt, confirmErr := h.requireRiskConfirmation(projectID, token, runID, "cancel_run"); confirmErr != nil {
+			return map[string]any{"error": confirmErr.Error()}, true
+		} else if completed {
 			return map[string]any{"status": "already_confirmed", "runId": runID}, false
 		} else if blocked {
 			return map[string]any{"status": "needs_confirmation", "prompt": prompt, "runId": runID}, false
@@ -918,24 +922,25 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 // the user confirms via IM. Returns blocked=false when risk service is unset
 // (unit tests without IM wiring) or when a ticket was already confirmed in-band
 // via confirmed=true after the IM path executed the action separately.
-func (h *Host) requireRiskConfirmation(projectID, token, runID, action string) (blocked, completed bool, prompt string) {
+func (h *Host) requireRiskConfirmation(projectID, token, runID, action string) (blocked, completed bool, prompt string, err error) {
 	if h.risk == nil {
-		return false, false, ""
+		return false, false, "", nil
 	}
 	sess, ok := h.SessionFor(projectID, token)
 	if !ok {
-		return true, false, "session required for high-risk confirmation"
+		return true, false, "session required for high-risk confirmation", nil
 	}
 	riskUserID := riskUserIDForSession(sess)
 	// If the IM orchestration already confirmed and executed, MCP should not
 	// create another ticket. A fresh pending ticket always blocks.
 	if pending, err := h.risk.LatestPending(riskUserID, projectID); err == nil && pending != nil &&
 		pending.RunID == runID && pending.Action == action {
-		return true, false, h.risk.ConfirmationPrompt(*pending)
+		prompt := h.risk.ConfirmationPrompt(*pending)
+		return true, false, prompt, h.notifyConfirmation(projectID, runID, sess, prompt)
 	}
 	if settled, err := h.risk.LatestForAction(riskUserID, projectID, runID, action); err == nil &&
 		settled != nil && settled.Status == "confirmed" && settled.ExpiresAt.After(time.Now()) {
-		return false, true, ""
+		return false, true, "", nil
 	}
 	shortTitle := ""
 	if h.tasks != nil {
@@ -949,9 +954,21 @@ func (h *Host) requireRiskConfirmation(projectID, token, runID, action string) (
 		Action: action, ShortTitle: shortTitle, Language: "",
 	})
 	if err != nil {
-		return true, false, "failed to create confirmation ticket: " + err.Error()
+		return true, false, "failed to create confirmation ticket: " + err.Error(), nil
 	}
-	return true, false, h.risk.ConfirmationPrompt(*ticket)
+	prompt = h.risk.ConfirmationPrompt(*ticket)
+	return true, false, prompt, h.notifyConfirmation(projectID, runID, sess, prompt)
+}
+
+func (h *Host) notifyConfirmation(projectID, runID string, sess *Session, prompt string) error {
+	if h.notify == nil {
+		return nil
+	}
+	if err := h.notify.NotifyProgress(projectID, runID, imTargetForSession(sess),
+		"action_required", prompt, "", "", false, true); err != nil {
+		return fmt.Errorf("send confirmation prompt: %w", err)
+	}
+	return nil
 }
 
 func riskUserIDForSession(sess *Session) string {
