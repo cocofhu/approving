@@ -63,10 +63,15 @@ type directorContext struct {
 	ConversationBusy  bool            `json:"conversation_busy"`
 	FocusTaskID       string          `json:"focus_task_id,omitempty"`
 	Tasks             []ledgerEntry   `json:"tasks,omitempty"`
+	RecentTerminal    []ledgerEntry   `json:"recent_terminal,omitempty"`
 	RecentAttachments []AttachmentRef `json:"recent_attachments,omitempty"`
 	LastOutbound      string          `json:"last_outbound,omitempty"`
 	UserMessageID     string          `json:"user_message_id,omitempty"`
 }
+
+// recentTerminalWindow is how far back get_status / briefing still surface
+// finished work so "什么情况了" cannot invent success from an empty active list.
+const recentTerminalWindow = 24 * time.Hour
 
 // render turns the briefing into the lines the model reads.
 //
@@ -78,7 +83,7 @@ func (dc directorContext) render() string {
 	var b strings.Builder
 	b.WriteString("【当前情况】\n")
 	if len(dc.Tasks) == 0 {
-		b.WriteString("现在没有在跑的任务。\n")
+		b.WriteString("现在没有在跑的任务。这不等于「做完了」——先看刚结束的任务状态。\n")
 	} else {
 		b.WriteString("在跑的任务：\n")
 		for _, t := range dc.Tasks {
@@ -103,6 +108,17 @@ func (dc directorContext) render() string {
 			b.WriteString("对方若是补充/收窄这件事，用 refine_work 挂到这个 taskId，不要新开任务，也不要把队列甩给对方选。\n")
 		}
 	}
+	if len(dc.RecentTerminal) > 0 {
+		b.WriteString("刚结束的任务（务必按 status 原样说，failed≠完成）：\n")
+		for _, t := range dc.RecentTerminal {
+			line := fmt.Sprintf("- %s（taskId=%s，状态=%s", t.ShortTitle, t.TaskID, t.Status)
+			if t.UpdatedAgo != "" {
+				line += "，" + t.UpdatedAgo
+			}
+			line += "）"
+			b.WriteString(line + "\n")
+		}
+	}
 	if dc.ConversationBusy {
 		b.WriteString("现在有一件事正在前台执行。\n")
 	}
@@ -125,6 +141,7 @@ func (m *Manager) buildDirectorContext(rc *runningChannel, in InboundMessage) di
 		ConversationBusy: m.IsConversationBusy(rc.cfg.ProjectID, in.Scene, in.ConversationID),
 		UserMessageID:    strings.TrimSpace(in.RecordedMessageID),
 		Tasks:            m.taskLedger(rc, in),
+		RecentTerminal:   m.recentTerminalLedger(rc, in),
 	}
 	if focus := m.focusTaskID(rc, in); focus != "" {
 		dc.FocusTaskID = focus
@@ -148,6 +165,24 @@ func (m *Manager) taskLedger(rc *runningChannel, in InboundMessage) []ledgerEntr
 			Msg("task ledger unavailable; the conversation layer speaks without it")
 		return nil
 	}
+	return m.entriesFromIdentities(rc.cfg.ProjectID, tasks)
+}
+
+func (m *Manager) recentTerminalLedger(rc *runningChannel, in InboundMessage) []ledgerEntry {
+	if m.taskContext == nil {
+		return nil
+	}
+	tasks, err := m.taskContext.RecentTerminalTasksForConversation(
+		m.taskScopeFor(rc, in), ledgerLimit, recentTerminalWindow)
+	if err != nil {
+		log.Debug().Err(err).Str("project", rc.cfg.ProjectID).
+			Msg("recent terminal ledger unavailable")
+		return nil
+	}
+	return m.entriesFromIdentities(rc.cfg.ProjectID, tasks)
+}
+
+func (m *Manager) entriesFromIdentities(projectID string, tasks []models.TaskIdentity) []ledgerEntry {
 	out := make([]ledgerEntry, 0, len(tasks))
 	for _, t := range tasks {
 		entry := ledgerEntry{
@@ -156,7 +191,7 @@ func (m *Manager) taskLedger(rc *runningChannel, in InboundMessage) []ledgerEntr
 			Status:     t.Status,
 			UpdatedAgo: humanizeAge(time.Since(t.UpdatedAt)),
 		}
-		if note, ok := m.workNoteFor(rc.cfg.ProjectID, t.RunID); ok {
+		if note, ok := m.workNoteFor(projectID, t.RunID); ok {
 			entry.Stage, entry.Blocked = note.Stage, note.Blocked
 			entry.LastProgress = note.Stage
 		}
@@ -278,25 +313,41 @@ func (m *Manager) labelProgress(rc *runningChannel, in InboundMessage, ev Progre
 // purpose: a sentence would invite the model to copy it verbatim, and the point
 // of this layer is that the model does the phrasing.
 type statusResult struct {
-	Tasks []ledgerEntry `json:"tasks"`
-	Note  string        `json:"note,omitempty"`
+	Tasks          []ledgerEntry `json:"tasks"`
+	RecentTerminal []ledgerEntry `json:"recent_terminal,omitempty"`
+	Note           string        `json:"note,omitempty"`
 }
 
 // runGetStatus answers "where is it" from the ledger, never from memory.
 func (m *Manager) runGetStatus(rc *runningChannel, in InboundMessage, taskID string) string {
 	tasks := m.taskLedger(rc, in)
+	recent := m.recentTerminalLedger(rc, in)
 	taskID = strings.TrimSpace(taskID)
 	if taskID != "" {
 		for _, t := range tasks {
 			if t.TaskID == taskID || t.RunID == taskID {
-				return encodeToolResult(statusResult{Tasks: []ledgerEntry{t}})
+				return encodeToolResult(statusResult{Tasks: []ledgerEntry{t}, RecentTerminal: recent})
 			}
 		}
-		return encodeToolResult(statusResult{Tasks: tasks, Note: "没有这个 taskId 的在跑任务；下面是目前还在跑的。"})
+		for _, t := range recent {
+			if t.TaskID == taskID || t.RunID == taskID {
+				return encodeToolResult(statusResult{
+					Tasks: nil, RecentTerminal: []ledgerEntry{t},
+					Note: "这个任务已经结束，状态见 recent_terminal，不要说成还在跑或笼统「做完了」。",
+				})
+			}
+		}
+		return encodeToolResult(statusResult{
+			Tasks: tasks, RecentTerminal: recent,
+			Note: "没有这个 taskId；下面是在跑的和刚结束的。",
+		})
 	}
-	res := statusResult{Tasks: tasks}
-	if len(tasks) == 0 {
-		res.Note = "现在没有在跑的任务。如果用户问的事情还没开始，就用 dispatch_pm 派下去。"
+	res := statusResult{Tasks: tasks, RecentTerminal: recent}
+	switch {
+	case len(tasks) == 0 && len(recent) > 0:
+		res.Note = "现在没有在跑的任务。刚结束的在 recent_terminal：必须按每条的 status 说（failed=失败，cancelled=取消，completed=完成）。禁止把空的在跑列表说成「都做完了」。"
+	case len(tasks) == 0:
+		res.Note = "现在没有在跑的任务，也没有刚结束的记录。如果用户问的事情还没开始，用 dispatch_pm 派下去；不要编造完成或失败。"
 	}
 	if m.IsConversationBusy(rc.cfg.ProjectID, in.Scene, in.ConversationID) {
 		res.Note = strings.TrimSpace(res.Note + " 现在有一件事正在前台执行。")

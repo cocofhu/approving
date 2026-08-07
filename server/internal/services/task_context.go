@@ -385,13 +385,47 @@ func (s *TaskContextService) reapStaleActiveTask(task *models.TaskIdentity) bool
 		}
 	}
 	if strings.HasPrefix(runID, "dispatch:") && now.Sub(task.UpdatedAt) > StaleDispatchTTL {
+		// Abandoned stub — not a successful finish. Marking these "completed"
+		// taught get_status to report "做完了" when nothing succeeded.
 		_, _ = s.UpdateIdentity(EnsureTaskIdentityInput{
 			RunID: runID, ProjectID: task.ProjectID, UserID: task.UserID,
-			Status: "completed",
+			Status: "cancelled",
 		})
 		return true
 	}
 	return false
+}
+
+// RecentTerminalTasksForConversation lists recently finished tasks in this
+// conversation so status questions can say "失败了 / 取消了 / 做完了" instead of
+// inventing success from an empty active list.
+func (s *TaskContextService) RecentTerminalTasksForConversation(scope TaskScope, limit int, within time.Duration) ([]models.TaskIdentity, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("task context database is unavailable")
+	}
+	if strings.TrimSpace(scope.ProjectID) == "" {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 5
+	}
+	if within <= 0 {
+		within = 24 * time.Hour
+	}
+	since := s.now().Add(-within)
+	q := s.db.Where("project_id = ? AND terminal_at IS NOT NULL AND terminal_at >= ?",
+		scope.ProjectID, since)
+	if uid := strings.TrimSpace(scope.UserID); uid != "" {
+		q = q.Where("user_id = ? OR user_id = ''", uid)
+	}
+	if conv := strings.TrimSpace(scope.ConversationID); conv != "" {
+		q = q.Where("origin_conversation_id = ?", conv)
+	}
+	var rows []models.TaskIdentity
+	if err := q.Order("terminal_at DESC").Limit(limit).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 // ProjectTaskQuery bounds a project-management task list.
