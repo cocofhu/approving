@@ -510,6 +510,14 @@ export const api = {
     req<ChatThread>(`/projects/${projectId}/pm/threads/${tid}`),
   deletePmThread: (projectId: string, tid: string) =>
     req<{ status: string }>(`/projects/${projectId}/pm/threads/${tid}`, { method: 'DELETE' }),
+  clearPmThreadContext: (projectId: string, tid: string) =>
+    req<{
+      status: string
+      threadId: string
+      messagesCleared: number
+      tasksCancelled?: number
+      conversationId?: string
+    }>(`/projects/${projectId}/pm/threads/${tid}/context`, { method: 'DELETE' }),
   listPmMessages: (
     projectId: string,
     tid: string,

@@ -290,6 +290,7 @@ type ChannelCtx = { open: true; x: number; y: number; threadId: string }
 const channelCtx = ref<ChannelCtx | null>(null)
 const channelDetailOpen = ref(false)
 const channelDetailTitle = ref('')
+const channelDetailThreadId = ref('')
 
 function closeChannelCtx() {
   channelCtx.value = null
@@ -304,18 +305,54 @@ function openChannelCtx(e: MouseEvent, th: ChatThread) {
 
 function openChannelDetail() {
   if (!channelCtx.value) return
-  const th = threads.value.find((x) => x.id === channelCtx.value!.threadId)
+  const tid = channelCtx.value.threadId
+  const th = threads.value.find((x) => x.id === tid)
   channelDetailTitle.value = threadDisplayTitle(th)
+  channelDetailThreadId.value = tid
   channelDetailOpen.value = true
   closeChannelCtx()
 }
 
 function closeChannelDetail() {
   channelDetailOpen.value = false
+  channelDetailThreadId.value = ''
 }
 
 function onChannelCtxAction() {
   openChannelDetail()
+}
+
+const clearingContext = ref(false)
+
+async function clearThreadContext(threadId: string) {
+  if (!threadId || clearingContext.value || turnBusy.value) return
+  if (!confirm(t('pages.projectDetail.pm.channelClearContextConfirm'))) return
+  clearingContext.value = true
+  try {
+    await api.clearPmThreadContext(props.projectId, threadId)
+    if (activeId.value === threadId) {
+      messages.value = []
+      resetTurnLocal()
+      closeWs()
+    }
+    toast.success(t('pages.projectDetail.pm.channelClearContextDone'))
+  } catch (e: any) {
+    toast.error(String(e?.message || e || t('pages.projectDetail.pm.channelClearContextFailed')))
+  } finally {
+    clearingContext.value = false
+  }
+}
+
+async function onChannelCtxClear() {
+  const tid = channelCtx.value?.threadId || ''
+  closeChannelCtx()
+  await clearThreadContext(tid)
+}
+
+async function onChannelDetailClear() {
+  const tid = channelDetailThreadId.value
+  closeChannelDetail()
+  await clearThreadContext(tid)
 }
 
 const FAIL_KIND_KEYS: Record<FailKind, { title: string; desc: string }> = {
@@ -1341,6 +1378,18 @@ onBeforeUnmount(() => {
         </div>
         <span v-else class="min-w-0 flex-1" />
         <AppButton
+          v-if="activeIsChannel && activeId"
+          size="sm"
+          variant="ghost"
+          icon="trash"
+          data-testid="pm-chat-clear-context"
+          :disabled="clearingContext || turnBusy"
+          :class="isMobile ? 'min-h-[44px] shrink-0' : ''"
+          @click="clearThreadContext(activeId)"
+        >
+          {{ t('pages.projectDetail.pm.channelClearContext') }}
+        </AppButton>
+        <AppButton
           size="sm"
           variant="ghost"
           icon="history"
@@ -1657,7 +1706,7 @@ onBeforeUnmount(() => {
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
           </div>
-          <div class="min-w-0">
+          <div class="min-w-0 flex-1">
             <strong class="block text-[13px] font-semibold text-txt">
               {{ t('pages.projectDetail.pm.channelReadonlyTitle') }}
             </strong>
@@ -1665,6 +1714,15 @@ onBeforeUnmount(() => {
               {{ t('pages.projectDetail.pm.channelReadonlyHint') }}
             </p>
           </div>
+          <AppButton
+            size="sm"
+            variant="outline"
+            data-testid="pm-channel-readonly-clear"
+            :disabled="clearingContext || turnBusy || !activeId"
+            @click="clearThreadContext(activeId)"
+          >
+            {{ t('pages.projectDetail.pm.channelClearContext') }}
+          </AppButton>
         </div>
       </div>
       <div v-else class="shrink-0 border-t border-line p-3">
@@ -1778,6 +1836,17 @@ onBeforeUnmount(() => {
       <Icon name="doc" :size="13" />
       {{ t('pages.projectDetail.pm.channelViewDetail') }}
     </button>
+    <button
+      type="button"
+      role="menuitem"
+      class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-err hover:bg-overlay"
+      data-testid="pm-channel-ctx-clear"
+      :disabled="clearingContext"
+      @click="onChannelCtxClear"
+    >
+      <Icon name="trash" :size="13" />
+      {{ t('pages.projectDetail.pm.channelClearContext') }}
+    </button>
   </div>
 
   <!-- Channel detail modal -->
@@ -1814,7 +1883,16 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </div>
-      <div class="flex justify-end border-t border-line px-3.5 py-2.5">
+      <div class="flex justify-end gap-2 border-t border-line px-3.5 py-2.5">
+        <AppButton
+          size="sm"
+          variant="outline"
+          data-testid="pm-channel-detail-clear"
+          :disabled="clearingContext || !channelDetailThreadId"
+          @click="onChannelDetailClear"
+        >
+          {{ t('pages.projectDetail.pm.channelClearContext') }}
+        </AppButton>
         <AppButton size="sm" variant="outline" data-testid="pm-channel-detail-ok" @click="closeChannelDetail">
           {{ t('pages.projectDetail.pm.channelDetailClose') }}
         </AppButton>

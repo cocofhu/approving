@@ -198,6 +198,42 @@ func TestClearPmMemoriesHandler(t *testing.T) {
 	}
 }
 
+func TestClearPmThreadContextHandler(t *testing.T) {
+	hn, pid, _ := setupPmEnabledHarness(t)
+	hn.h.TaskContext = services.NewTaskContextService(hn.db)
+	th, err := hn.h.Pm.CreateThread(pid, "qq:c2c:u-clear", "渠道", "pm-agent", "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hn.h.Pm.AppendMessage(th.ID, "user", "之前聊过", nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hn.h.TaskContext.EnsureIdentity(services.EnsureTaskIdentityInput{
+		RunID: "run-ctx", ProjectID: pid, UserID: services.SyntheticQQUserID("u-clear"),
+		ShortTitle: "旧任务", Status: "active",
+		OriginChannel: "qq", OriginConversationID: "u-clear",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	w := hn.do(http.MethodDelete, "/api/projects/"+pid+"/pm/threads/"+th.ID+"/context", nil)
+	if w.Code != 200 {
+		t.Fatalf("clear context: %d %s", w.Code, w.Body.String())
+	}
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["status"] != "cleared" || resp["messagesCleared"].(float64) < 1 {
+		t.Fatalf("resp=%v", resp)
+	}
+	msgs, err := hn.h.Pm.ListMessages(th.ID)
+	if err != nil || len(msgs) != 0 {
+		t.Fatalf("messages left=%d err=%v", len(msgs), err)
+	}
+	if _, err := hn.h.Pm.GetThreadByID(th.ID); err != nil {
+		t.Fatal("thread must remain")
+	}
+}
+
 func TestGetPmLeaderProjectMissing(t *testing.T) {
 	hn, _, _ := setupPmEnabledHarness(t)
 	w := hn.do(http.MethodGet, "/api/projects/does-not-exist/pm-leader", nil)
