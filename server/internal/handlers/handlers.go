@@ -70,7 +70,9 @@ type Handlers struct {
 	// LiveModel is the conversation-model client, held so the settings page can
 	// test an endpoint and read what that layer has actually been doing. nil
 	// disables both, which is what tests that do not wire it get.
-	LiveModel      *liveagent.Client
+	LiveModel *liveagent.Client
+	// LiveSamples is the per-turn decision / call-chain store for IM debug.
+	LiveSamples    *services.LiveSampleService
 	doctorMu       sync.Mutex
 	doctorSessions map[string]doctorArtifactSession
 }

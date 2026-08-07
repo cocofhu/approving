@@ -41,6 +41,7 @@ type ChannelSessionContext struct {
 	Scene          Scene
 	ConversationID string
 	ExternalUserID string
+	TraceID        string
 }
 
 // ResolvedChannel is the per-turn channel context passed to the bridge.
@@ -119,6 +120,7 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 	channelCtx := ChannelSessionContext{
 		ChannelType: rc.Type, Scene: in.Scene,
 		ConversationID: in.ConversationID, ExternalUserID: in.UserID,
+		TraceID: strings.TrimSpace(in.TraceID),
 	}
 	// Getting the sandbox up runs on its own clock. A warm conversation passes
 	// through here in milliseconds; the first message of a conversation waits
@@ -322,6 +324,9 @@ func (b *ChannelBridge) buildWorkBrief(thread models.ChatThread, current models.
 	var lines []string
 	if note := escalationNote(in); note != "" {
 		lines = append(lines, note)
+	}
+	if tid := strings.TrimSpace(in.TraceID); tid != "" {
+		lines = append(lines, "本轮 traceId="+tid+"（排查调用链时用）。")
 	}
 	if d := in.Dispatch; d != nil {
 		if brief := strings.TrimSpace(d.Brief); brief != "" && brief != strings.TrimSpace(in.EscalationReason) {

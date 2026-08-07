@@ -412,6 +412,7 @@ func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMe
 		return
 	}
 
+	ensureTraceID(&in)
 	m.recordInbound(rc, &in)
 
 	if m.handleFastPath(ctx, rc, &in) {
@@ -459,6 +460,7 @@ func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMe
 // handleInbound is the complete Live pipeline for one message, used by callers
 // that are not going through the per-conversation queue.
 func (m *Manager) handleInbound(ctx context.Context, rc *runningChannel, in InboundMessage) {
+	ensureTraceID(&in)
 	m.recordInbound(rc, &in)
 	if m.handleFastPath(ctx, rc, &in) {
 		return
@@ -620,6 +622,14 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 	// answered (or abandoned) lookups stop polluting "在跑的任务".
 	closeStatus := "completed"
 	defer func() { m.completeEphemeralDispatch(rc, in, closeStatus) }()
+	sandboxStarted := time.Now()
+	defer func() {
+		status := "ok"
+		if closeStatus != "completed" {
+			status = closeStatus
+		}
+		m.appendTraceSpan(in.TraceID, finishSpan("sandbox_turn", status, closeStatus, sandboxStarted))
+	}()
 
 	timeout := foregroundTurnTimeout
 	if configured := time.Duration(rc.cfg.TurnTimeoutSeconds) * time.Second; configured > 0 {
@@ -888,6 +898,7 @@ func turnEnvelope(rc *runningChannel, in InboundMessage, kind sendable.Kind, rea
 	e := sendable.DeliveryEnvelope{
 		Priority: priority, TaskContext: scope, ProjectID: rc.cfg.ProjectID,
 		ConversationID: in.ConversationID, UserID: in.UserID,
+		TraceID:   strings.TrimSpace(in.TraceID),
 		DedupeKey: scope + ":" + string(kind),
 		Reason:    reason, Kind: kind,
 		// Turn-level text is composed by the platform (or extracted through an

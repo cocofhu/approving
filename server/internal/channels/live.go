@@ -125,15 +125,16 @@ func (o liveOutcome) applyTo(in *InboundMessage) {
 // message to be dropped or answered with an apology — the agent can still
 // handle it, just more slowly.
 func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel, in InboundMessage) liveOutcome {
+	ensureTraceID(&in)
 	if m.live == nil || !m.live.Configured() {
-		// Silence here is what made "is the conversation model actually being
-		// used?" unanswerable: an unconfigured endpoint skipped this layer
-		// without leaving a trace, and every reply looked the same from the
-		// outside. Deliveries the model does make are audited as live_reply, so
-		// this is the other half of that answer.
-		log.Debug().Str("project", rc.cfg.ProjectID).
+		// Still record a sample so every inbound turn has a TraceID row to join
+		// sandbox/MCP/outbound against — otherwise "no Live" leaves a hole in
+		// the call chain that debug cannot close.
+		log.Debug().Str("project", rc.cfg.ProjectID).Str("trace", in.TraceID).
 			Msg("no conversation model configured; this message goes straight to the agent")
-		return liveOutcome{}
+		rec := m.newSampleRecorder(rc, in)
+		rec.flag("live_not_configured")
+		return liveOutcome{sampleID: rec.commit(routeDirect)}
 	}
 
 	rec := m.newSampleRecorder(rc, in)
@@ -158,7 +159,7 @@ func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel,
 			if errors.Is(err, liveagent.ErrNotConfigured) {
 				level = log.Debug()
 			}
-			level.Err(err).Str("project", rc.cfg.ProjectID).
+			level.Err(err).Str("project", rc.cfg.ProjectID).Str("trace", in.TraceID).
 				Msg("conversation model unavailable; handing turn to the agent")
 			rec.failed(err)
 			// The sandbox still answers, but it can take a minute to come up.
@@ -200,7 +201,7 @@ func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel,
 
 	// The model kept reaching for tools and never said anything. Handing the
 	// turn on is the only path that still produces a reply.
-	log.Info().Str("project", rc.cfg.ProjectID).
+	log.Info().Str("project", rc.cfg.ProjectID).Str("trace", in.TraceID).
 		Msg("conversation model looped on tools without answering; handing turn to the agent")
 	rec.flag("tool_loop_exhausted")
 	m.ackFallthrough(ctx, rc, in, rec)
@@ -511,7 +512,9 @@ func (c *foregroundCapture) egress(degraded bool) string {
 func (m *Manager) reportThroughDirector(ctx context.Context, rc *runningChannel, in InboundMessage,
 	conclusion string) (text string, degraded bool) {
 	plain := strings.TrimSpace(ScrubInternalTerms(conclusion))
+	started := time.Now()
 	if m.live == nil || !m.live.Configured() || plain == "" {
+		m.appendTraceSpan(in.TraceID, finishSpan("director_report", "skipped", "degraded", started))
 		return plain, true
 	}
 	callCtx, cancel := context.WithTimeout(ctx, directorReportTimeout)
@@ -526,10 +529,16 @@ func (m *Manager) reportThroughDirector(ctx context.Context, rc *runningChannel,
 		MaxTokens: directorReportMaxTokens,
 	})
 	if err != nil || strings.TrimSpace(res.Text) == "" {
-		log.Info().Err(err).Str("project", rc.cfg.ProjectID).
+		log.Info().Err(err).Str("project", rc.cfg.ProjectID).Str("trace", in.TraceID).
 			Msg("conclusion reported in the work layer's own words; the conversation model did not phrase it")
+		detail := "empty"
+		if err != nil {
+			detail = err.Error()
+		}
+		m.appendTraceSpan(in.TraceID, finishSpan("director_report", "error", detail, started))
 		return plain, true
 	}
+	m.appendTraceSpan(in.TraceID, finishSpan("director_report", "ok", "", started))
 	return strings.TrimSpace(res.Text), false
 }
 

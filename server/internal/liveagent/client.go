@@ -119,6 +119,14 @@ func (c *Client) SetLiveEndpoint(baseURL, apiKey, model string, timeout time.Dur
 // Configured reports whether a call would have somewhere to go.
 func (c *Client) Configured() bool { return c.cur.load().Configured() }
 
+// ModelName is the configured conversation model, for decision samples / traces.
+func (c *Client) ModelName() string {
+	if c == nil {
+		return ""
+	}
+	return strings.TrimSpace(c.cur.load().Model)
+}
+
 // Complete makes one call and returns the model's decision. It retries once on
 // a network error or 5xx; a 4xx is not retried because repeating a rejected
 // request cannot fix it.

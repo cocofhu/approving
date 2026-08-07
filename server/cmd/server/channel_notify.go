@@ -33,7 +33,7 @@ func (n channelIMNotifier) NotifyReply(projectID, runID string, target pmmcp.IMT
 	result, err := n.mgr.DeliverConversationReply(context.Background(), channels.ConversationReply{
 		ProjectID: projectID, RunID: runID, Scene: channels.Scene(target.Scene),
 		ConversationID: target.ConversationID, UserID: target.UserID,
-		Text: text, ShortTitle: shortTitle,
+		TraceID: target.TraceID, Text: text, ShortTitle: shortTitle,
 	})
 	if err != nil {
 		return pmmcp.IMDeliveryOutcome{}, err

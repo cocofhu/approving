@@ -87,6 +87,7 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.GET("/projects/:id/channel", h.GetProjectChannel)
 		api.PUT("/projects/:id/channel", h.PutProjectChannel)
 		api.DELETE("/projects/:id/channel", h.DeleteProjectChannel)
+		api.GET("/projects/:id/live-traces", h.ListLiveTraces)
 		api.GET("/projects/:id/pm/memories", h.ListPmMemories)
 		api.POST("/projects/:id/pm/memories", h.UpsertPmMemory)
 		api.DELETE("/projects/:id/pm/memories", h.ClearPmMemories)
