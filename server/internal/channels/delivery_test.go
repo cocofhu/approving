@@ -282,13 +282,13 @@ func TestSendRunAcceptanceAckOncePerRunAndRejectsMissingRun(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("run acceptance ACK sent %v want exactly once per run", got)
 	}
-	// The confirmation names the task and hands the conversation back, without
-	// a ticket header and without promising a progress feed.
-	if !strings.Contains(got[0], "登录页") {
-		t.Fatalf("ack text = %q want the task named", got[0])
+	// Confirmation hands the conversation back without a ticket header and
+	// without pasting the ledger title (often a truncated requirement).
+	if !strings.Contains(got[0], "我去弄") {
+		t.Fatalf("ack text = %q want a short acceptance", got[0])
 	}
-	if strings.Contains(got[0], "【") || strings.Contains(got[0], "已接单") {
-		t.Fatalf("delegation confirmation still reads like a ticket: %q", got[0])
+	if strings.Contains(got[0], "【") || strings.Contains(got[0], "已接单") || strings.Contains(got[0], "登录页") {
+		t.Fatalf("delegation confirmation still pastes title/ticket copy: %q", got[0])
 	}
 
 	ack.RunID = ""
