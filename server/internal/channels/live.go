@@ -158,6 +158,11 @@ func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel,
 			level.Err(err).Str("project", rc.cfg.ProjectID).
 				Msg("conversation model unavailable; handing turn to the agent")
 			rec.failed(err)
+			// The sandbox still answers, but it can take a minute to come up.
+			// Saying nothing until then is how "项目的错误处理完整吗" sat on
+			// screen with a running timer and no bubble — the model timed out
+			// and the fallthrough used to be silent.
+			m.ackFallthrough(ctx, rc, in, rec)
 			return liveOutcome{reason: "会话层没能给出答复", sampleID: rec.commit(routeFallthrough)}
 		}
 		rec.completed(res)
@@ -188,7 +193,29 @@ func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel,
 	log.Info().Str("project", rc.cfg.ProjectID).
 		Msg("conversation model looped on tools without answering; handing turn to the agent")
 	rec.flag("tool_loop_exhausted")
+	m.ackFallthrough(ctx, rc, in, rec)
 	return liveOutcome{reason: "会话层查了状态但没有给出答复", sampleID: rec.commit(routeFallthrough)}
+}
+
+// ackFallthrough tells the user something is happening when the conversation
+// layer could not finish and the sandbox is about to take over. Without it a
+// timed-out Live call looks like the platform ignored the message.
+func (m *Manager) ackFallthrough(ctx context.Context, rc *runningChannel, in InboundMessage, rec *sampleRecorder) {
+	title := truncateRunes(strings.TrimSpace(in.Text), 20)
+	text, flags := gateAcknowledgement("", title, in.Text)
+	rec.flag(flags...)
+	rec.flag("fallthrough_ack")
+	sent := m.sendOutboundResult(ctx, rc, OutboundMessage{
+		Scene: in.Scene, ConversationID: in.ConversationID,
+		ReplyToMessageID: in.MessageID, Text: text,
+		Envelope: turnEnvelope(rc, in, sendable.KindTurnProcessingAck, "live_ack", sendable.PriorityHigh),
+	})
+	rec.acted("live_ack", text, sent)
+	if sent.Sent {
+		scope := conversationTurnScope(rc.cfg.ProjectID, in.Scene, in.ConversationID)
+		m.markReplied(scope)
+		m.markAcknowledged(scope)
+	}
 }
 
 // deliverDirectorReply sends what the model said, as it said it.
@@ -196,6 +223,7 @@ func (m *Manager) deliverDirectorReply(ctx context.Context, rc *runningChannel, 
 	text string, rec *sampleRecorder) liveOutcome {
 	answer := strings.TrimSpace(text)
 	if answer == "" {
+		m.ackFallthrough(ctx, rc, in, rec)
 		return liveOutcome{reason: "会话层没能给出答复", sampleID: rec.commit(routeFallthrough)}
 	}
 	sent := m.sendOutboundResult(ctx, rc, OutboundMessage{
@@ -210,6 +238,7 @@ func (m *Manager) deliverDirectorReply(ctx context.Context, rc *runningChannel, 
 		// reply; claiming success here is what leaves a user waiting in silence.
 		log.Warn().Str("project", rc.cfg.ProjectID).Str("reason", sent.Decision.Reason).
 			Msg("conversation model answer was not delivered; handing turn to the agent")
+		m.ackFallthrough(ctx, rc, in, rec)
 		return liveOutcome{reason: "会话层的回复没有送达", sampleID: rec.commit(routeFallthrough)}
 	}
 	scope := conversationTurnScope(rc.cfg.ProjectID, in.Scene, in.ConversationID)

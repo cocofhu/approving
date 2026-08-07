@@ -279,8 +279,8 @@ func TestLiveTimeoutFallsBackToAShortDefault(t *testing.T) {
 	// mean "wait forever".
 	c := &Config{}
 	setDefaults(c)
-	if c.Live.TimeoutSeconds != 8 {
-		t.Fatalf("default live timeout = %d, want 8", c.Live.TimeoutSeconds)
+	if c.Live.TimeoutSeconds != 120 {
+		t.Fatalf("default live timeout = %d, want 120", c.Live.TimeoutSeconds)
 	}
 
 	c2 := &Config{}

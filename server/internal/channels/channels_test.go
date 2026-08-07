@@ -1321,43 +1321,24 @@ func TestPushQueueProtectsRunNotify(t *testing.T) {
 	}
 }
 
-// The preamble is the only thing telling the agent how a Live turn ends, so it
-// has to name both endings, say that long work goes to the background, and rule
-// out the ticket phrasing this work removed.
+// The work-layer preamble is an operational contract, not a second persona.
+// Voice, identity, and filler bans live on the conversation layer; this text
+// only has to name the two endings, the capture handoff, and confirmation.
 func TestChannelPreambleStatesTheLiveTurnContract(t *testing.T) {
 	p := ChannelPreamble("qq")
-	for _, required := range []string{"pm_reply", "pm_start_run", "pm_notify_progress", "优先"} {
+	for _, required := range []string{
+		"pm_reply", "pm_start_run", "pm_notify_progress",
+		"会话层", "already_replied", "needs_confirmation", "不能代替用户确认", "兜底",
+	} {
 		if !strings.Contains(p, required) {
 			t.Fatalf("preamble never mentions %s: %s", required, p)
 		}
 	}
-	for _, banned := range []string{"收到，正在处理", "本回合已结束", "请前往 Approving 查看", "已发送", "稍等，我看一下"} {
-		if !strings.Contains(p, banned) {
-			t.Fatalf("preamble does not forbid %q: %s", banned, p)
-		}
-	}
-	// Must not claim body text can never be delivered (contradicts #161 fallback).
-	if strings.Contains(p, "正文不会外发") && !strings.Contains(p, "兜底") {
-		t.Fatalf("preamble still claims absolute non-delivery of body without fallback caveat: %s", p)
-	}
-	// The platform withholds a second answer; the agent has to know that before
-	// it tries, or it spends the turn rewording something that will not be sent.
-	if !strings.Contains(p, "already_replied") {
-		t.Fatalf("preamble does not tell the agent one turn gets one answer: %s", p)
-	}
-	// A colleague does not answer 「你是什么模型」 with a model name. This leaked
-	// in production as 「我是 GPT-5.6 Sol」.
-	for _, required := range []string{"你是什么模型", "厂商"} {
-		if !strings.Contains(p, required) {
-			t.Fatalf("preamble does not close the identity question (%s): %s", required, p)
-		}
-	}
-	// The platform sends the confirmation question itself. An agent that asks
-	// again in its own words puts a second question on screen that cannot
-	// settle anything, and it may not confirm on the user's behalf either.
-	for _, required := range []string{"needs_confirmation", "不能代替用户确认"} {
-		if !strings.Contains(p, required) {
-			t.Fatalf("preamble does not fix the confirmation handoff (%s): %s", required, p)
+	// Style/persona belong on liveSystemPrompt — repeating them here is what
+	// made sandbox sessions look like a second director prompt.
+	for _, voiceOnly := range []string{"你是什么模型", "厂商", "稍等，我看一下", "收到，正在处理"} {
+		if strings.Contains(p, voiceOnly) {
+			t.Fatalf("work-layer preamble still carries conversation-layer voice rule %q: %s", voiceOnly, p)
 		}
 	}
 }

@@ -1238,15 +1238,16 @@ func toolSchemas(mcpID string) []map[string]any {
 			platformmcp.Tool("pm_cancel_run", "取消一次运行中的 Run（需用户短标题二次确认后才会真正取消）。", map[string]any{
 				"runId": map[string]any{"type": "string"},
 			}),
-			platformmcp.Tool("pm_reply", "把这一轮对话的回答发给用户。这是回答外发的唯一通道——你在正文里写的内容不会被发出去，只有这里提交的 text 会。"+
-				"text 必须是用户直接能读懂的人话：不要出现 Run ID、工作流名、沙箱/工具/内部事件等实现细节，也不要写推理过程。"+
-				"一轮只发一条：把想说的话一次写完，不要拆成多条。返回 status=already_replied 表示这一轮已经回过了，"+
-				"此时不要改措辞重发，直接结束这一轮。", map[string]any{
-				"text":       map[string]any{"type": "string", "description": "发给用户的回答，人话，直接可读"},
-				"runId":      map[string]any{"type": "string", "description": "可选：这条回答关联的 Run"},
+			platformmcp.Tool("pm_reply", "把这一轮查到的结论交给会话层。会话层（快模型）会用人话转述后再发到 IM；"+
+				"有会话层时你提交的 text 不会原样直发。你在正文里写的内容默认不会外发，只有这里提交的 text 会进入转述。"+
+				"text 必须是事实清楚、用户能读懂的人话：不要出现 Run ID、工作流名、沙箱/工具/内部事件等实现细节，也不要写推理过程。"+
+				"一轮只交一条：把结论一次写完，不要拆成多条。返回 status=already_replied 表示这一轮已经收过结论了，"+
+				"此时不要改措辞重交，直接结束这一轮。", map[string]any{
+				"text":       map[string]any{"type": "string", "description": "交给会话层转述的结论，人话，事实清楚"},
+				"runId":      map[string]any{"type": "string", "description": "可选：这条结论关联的 Run"},
 				"shortTitle": map[string]any{"type": "string", "description": "可选：关联任务的短标题（人话，禁止填 Run ID）"},
 			}),
-			platformmcp.Tool("pm_notify_progress", "向外部 IM 显式提交一条 Sendable 进度/阻塞/确认消息（须含 stage/conclusion 等实质字段）。返回 status=sent 表示已外发；status=suppressed 表示被限频/去重/合并等策略正常抑制（不是失败，不要改措辞重发）；只有真实投递失败才返回错误。", map[string]any{
+			platformmcp.Tool("pm_notify_progress", "向会话层提交一条进度/阻塞/确认事实（须含 stage/conclusion 等实质字段），由会话层转述后再发到 IM。返回 status=sent 表示已外发；status=suppressed 表示被限频/去重/合并等策略正常抑制（不是失败，不要改措辞重交）；只有真实投递失败才返回错误。", map[string]any{
 				"runId":          map[string]any{"type": "string"},
 				"kind":           map[string]any{"type": "string", "description": "progress|blocked|action_required|final"},
 				"text":           map[string]any{"type": "string"},
