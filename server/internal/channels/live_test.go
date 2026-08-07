@@ -57,10 +57,14 @@ func TestCommentaryNeverAuthorizesADestructiveAction(t *testing.T) {
 		cfg:     models.ChannelConfig{ID: "c1", Type: models.ChannelTypeQQ, ProjectID: "proj"},
 		adapter: fa,
 	}
-	if _, err := risk.CreateTicket(services.RiskTicketInput{
+	ticket, err := risk.CreateTicket(services.RiskTicketInput{
 		ProjectID: "proj", UserID: services.SyntheticQQUserID("u1"),
 		RunID: "r1", Action: "cancel_run", ShortTitle: "登录页性能优化", Language: "zh-CN",
-	}); err != nil {
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := risk.MarkPrompted(ticket.ID); err != nil {
 		t.Fatal(err)
 	}
 	for i, text := range []string{

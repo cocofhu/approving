@@ -943,7 +943,7 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		} else if completed {
 			return map[string]any{"status": "already_confirmed"}, false
 		} else if blocked {
-			return map[string]any{"status": "needs_confirmation", "prompt": prompt}, false
+			return needsConfirmationResult(prompt, nil), false
 		}
 		if err := h.eng.ResumeGate(runID, nodeID, action, platformmcp.MapArg(args, "form")); err != nil {
 			return map[string]any{"error": err.Error()}, true
@@ -990,7 +990,7 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		} else if completed {
 			return map[string]any{"status": "already_confirmed", "runId": runID}, false
 		} else if blocked {
-			return map[string]any{"status": "needs_confirmation", "prompt": prompt, "runId": runID}, false
+			return needsConfirmationResult(prompt, map[string]any{"runId": runID}), false
 		}
 		if err := h.eng.Cancel(runID); err != nil {
 			return map[string]any{"error": err.Error()}, true
@@ -1034,7 +1034,7 @@ func (h *Host) requireRiskConfirmation(projectID, token, runID, action string) (
 	if pending, err := h.risk.LatestPending(riskUserID, projectID); err == nil && pending != nil &&
 		pending.RunID == runID && pending.Action == action {
 		prompt := h.risk.ConfirmationPrompt(*pending)
-		return true, false, prompt, h.notifyConfirmation(projectID, runID, sess, prompt)
+		return true, false, prompt, h.notifyConfirmation(projectID, runID, pending.ID, sess, prompt)
 	}
 	if settled, err := h.risk.LatestForAction(riskUserID, projectID, runID, action); err == nil &&
 		settled != nil && settled.Status == "confirmed" && settled.ExpiresAt.After(time.Now()) {
@@ -1055,18 +1055,46 @@ func (h *Host) requireRiskConfirmation(projectID, token, runID, action string) (
 		return true, false, "failed to create confirmation ticket: " + err.Error(), nil
 	}
 	prompt = h.risk.ConfirmationPrompt(*ticket)
-	return true, false, prompt, h.notifyConfirmation(projectID, runID, sess, prompt)
+	return true, false, prompt, h.notifyConfirmation(projectID, runID, ticket.ID, sess, prompt)
 }
 
-func (h *Host) notifyConfirmation(projectID, runID string, sess *Session, prompt string) error {
+// needsConfirmationResult reports a write blocked on the user's authorization.
+//
+// The prompt is included so the agent knows what was asked, not so it can ask
+// again: the platform already sent that exact question, and an agent that
+// rephrases it produces a second, worse-worded question competing with the real
+// one — and only the real one can settle the ticket.
+func needsConfirmationResult(prompt string, extra map[string]any) map[string]any {
+	out := map[string]any{
+		"status": "needs_confirmation", "prompt": prompt,
+		"note": "这个问题平台已经原样发给用户了。本轮不要再自己问一遍，也不要复述，直接结束这一轮等用户回话。",
+	}
+	for k, v := range extra {
+		out[k] = v
+	}
+	return out
+}
+
+// notifyConfirmation sends a ticket's question and records whether it landed.
+// Discarding that outcome is what let an undelivered question sit pending and
+// capture a confirmation meant for a different task, so the ticket is marked
+// prompted only when the user really received it.
+func (h *Host) notifyConfirmation(projectID, runID, ticketID string, sess *Session, prompt string) error {
 	if h.notify == nil {
 		return nil
 	}
 	// A suppressed confirmation prompt (the same ticket already went out) is not
 	// a failure: only a real delivery failure blocks the write.
-	if _, err := h.notify.NotifyProgress(projectID, runID, imTargetForSession(sess),
-		"action_required", prompt, "", "", false, true); err != nil {
+	outcome, err := h.notify.NotifyProgress(projectID, runID, imTargetForSession(sess),
+		"action_required", prompt, "", "", false, true)
+	if err != nil {
 		return fmt.Errorf("send confirmation prompt: %w", err)
+	}
+	if outcome.Sent && h.risk != nil && strings.TrimSpace(ticketID) != "" {
+		if err := h.risk.MarkPrompted(ticketID); err != nil {
+			log.Warn().Err(err).Str("ticket", ticketID).
+				Msg("confirmation prompt delivered but not recorded as asked")
+		}
 	}
 	return nil
 }

@@ -1347,6 +1347,14 @@ func TestChannelPreambleStatesTheLiveTurnContract(t *testing.T) {
 			t.Fatalf("preamble does not close the identity question (%s): %s", required, p)
 		}
 	}
+	// The platform sends the confirmation question itself. An agent that asks
+	// again in its own words puts a second question on screen that cannot
+	// settle anything, and it may not confirm on the user's behalf either.
+	for _, required := range []string{"needs_confirmation", "不能代替用户确认"} {
+		if !strings.Contains(p, required) {
+			t.Fatalf("preamble does not fix the confirmation handoff (%s): %s", required, p)
+		}
+	}
 }
 
 // The conversation model shares the persona, so it needs the same rule: it is

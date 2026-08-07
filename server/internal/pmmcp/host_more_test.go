@@ -165,6 +165,118 @@ func TestChannelSessionRiskIdentityAndConfirmedRetry(t *testing.T) {
 	}
 }
 
+// A ticket counts as asked only when its question was delivered. Recording it
+// on a suppressed prompt is how an invisible ticket became eligible to absorb a
+// confirmation meant for a different task.
+func TestOnlyADeliveredQuestionMakesATicketAnswerable(t *testing.T) {
+	db, _, h, p := setupPmMCPHost(t)
+	risk := services.NewRiskConfirmationService(db)
+	tasks := services.NewTaskContextService(db)
+	notifier := &recordingIMNotifier{}
+	h.SetTaskSafety(risk, tasks, notifier)
+
+	tok := h.Register(p.ID, "thr-prompted", "qq:c2c:user1", "agent-a")
+	h.SetChannelContext(tok, ChannelContext{
+		ChannelType: "qq", Scene: "c2c",
+		ConversationID: "user1", ExternalUserID: "openid-1",
+	})
+	for _, id := range []string{"run-quiet", "run-loud"} {
+		if err := db.Create(&models.Run{ID: id, Status: "running"}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	scopeUser := services.SyntheticQQUserID("openid-1")
+
+	// The prompt was withheld by delivery policy, so the user never saw it.
+	notifier.outcome = IMDeliveryOutcome{Reason: "progress_rate_limited_merged"}
+	if _, _, _, err := h.requireRiskConfirmation(p.ID, tok, "run-quiet", "cancel_run"); err != nil {
+		t.Fatal(err)
+	}
+	answerable, err := risk.LatestAnswerable(scopeUser, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answerable != nil {
+		t.Fatalf("an undelivered question is answerable: %+v", answerable)
+	}
+
+	notifier.outcome = IMDeliveryOutcome{Sent: true}
+	if _, _, _, err := h.requireRiskConfirmation(p.ID, tok, "run-loud", "cancel_run"); err != nil {
+		t.Fatal(err)
+	}
+	answerable, err = risk.LatestAnswerable(scopeUser, p.ID)
+	if err != nil || answerable == nil {
+		t.Fatalf("a delivered question is not answerable: ticket=%+v err=%v", answerable, err)
+	}
+	if answerable.RunID != "run-loud" {
+		t.Fatalf("answerable ticket = %s want run-loud", answerable.RunID)
+	}
+}
+
+// cancelOnlyEngine is enough of an engine to reach the confirmation gate.
+type cancelOnlyEngine struct{ cancelled []string }
+
+func (e *cancelOnlyEngine) StartRunWithPriority(string, map[string]any, string, string, ...[]string) (*models.Run, error) {
+	return nil, errors.New("not used")
+}
+func (e *cancelOnlyEngine) ResumeGate(string, string, string, map[string]any) error { return nil }
+func (e *cancelOnlyEngine) ReactReply(string, string, string, []models.PromptImage, []models.ReactAnnotation, bool) error {
+	return nil
+}
+func (e *cancelOnlyEngine) ReviewSessionState(string, string) (int, bool) { return 0, false }
+func (e *cancelOnlyEngine) Cancel(runID string) error {
+	e.cancelled = append(e.cancelled, runID)
+	return nil
+}
+
+// The platform has already sent the confirmation question verbatim. The tool
+// result has to say so, or the agent asks a second time in its own words and the
+// user sees two competing questions when only one of them can settle anything.
+func TestNeedsConfirmationTellsTheAgentTheQuestionWasAlreadyAsked(t *testing.T) {
+	db, _, h, p := setupPmMCPHost(t)
+	eng := &cancelOnlyEngine{}
+	h.eng = eng
+	risk := services.NewRiskConfirmationService(db)
+	h.SetTaskSafety(risk, services.NewTaskContextService(db), &recordingIMNotifier{
+		outcome: IMDeliveryOutcome{Sent: true},
+	})
+	tok := h.Register(p.ID, "thr-note", "qq:c2c:user1", "agent-a")
+	h.SetChannelContext(tok, ChannelContext{
+		ChannelType: "qq", Scene: "c2c",
+		ConversationID: "user1", ExternalUserID: "openid-1",
+	})
+	wfDef := &models.WorkflowDef{
+		ID: "wf-note", ProjectID: p.ID, Name: "Note WF",
+		Graph: models.Graph{Nodes: []models.Node{{ID: "in", Type: "input"}, {ID: "out", Type: "output"}}},
+	}
+	if err := services.NewWorkflowService(db).Save(wfDef); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.Run{
+		ID: "run-note", WorkflowID: wfDef.ID, Status: "running",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	out, isErr := h.callTool(p.ID, tok, MCPWorkflowWrite, "pm_cancel_run",
+		map[string]any{"runId": "run-note"})
+	payload, ok := out.(map[string]any)
+	if !ok || isErr {
+		t.Fatalf("cancel awaiting confirmation = %#v isError=%v", out, isErr)
+	}
+	if payload["status"] != "needs_confirmation" {
+		t.Fatalf("status = %#v", payload)
+	}
+	note, _ := payload["note"].(string)
+	if !strings.Contains(note, "已经原样发给用户") || !strings.Contains(note, "不要再自己问一遍") {
+		t.Fatalf("the agent is not told the question already went out: %#v", payload)
+	}
+	// And nothing was cancelled while the question is still open.
+	if len(eng.cancelled) != 0 {
+		t.Fatalf("cancelled before the user answered: %v", eng.cancelled)
+	}
+}
+
 func TestPmStartRunUsesExternalQQIdentityForTaskSearch(t *testing.T) {
 	db, pm, _, p := setupPmMCPHost(t)
 	wf := services.NewWorkflowService(db)

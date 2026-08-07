@@ -60,7 +60,8 @@ func (m *Manager) handleFastPath(ctx context.Context, rc *runningChannel, in *In
 }
 
 func (m *Manager) tryResolveRiskConfirmation(ctx context.Context, rc *runningChannel, in InboundMessage, scopeUser, text, language string) bool {
-	ticket, err := m.riskConfirmation.LatestPending(scopeUser, rc.cfg.ProjectID)
+	// Only a question the user actually received can be what they just answered.
+	ticket, err := m.riskConfirmation.LatestAnswerable(scopeUser, rc.cfg.ProjectID)
 	if err != nil {
 		log.Warn().Err(err).Msg("list pending risk ticket failed")
 		return false
@@ -80,6 +81,7 @@ func (m *Manager) tryResolveRiskConfirmation(ctx context.Context, rc *runningCha
 		log.Warn().Err(err).Msg("risk ticket resolve failed")
 		return false
 	}
+	message := resolved.Message
 	if resolved.Execute && m.riskExecutor != nil {
 		meta := map[string]string{}
 		if node := riskMetaNode(ticket.Action); node != "" {
@@ -96,8 +98,12 @@ func (m *Manager) tryResolveRiskConfirmation(ctx context.Context, rc *runningCha
 			m.sendOrchestrationReply(ctx, rc, in, riskExecutionFailedText(language))
 			return true
 		}
+		// Re-render now that the action has run. The text ResolveTicket returned
+		// was built from the status as it was before the cancel, which is how
+		// 「已经取消了。现在是 running」 reached a user.
+		message = m.riskConfirmation.StatusMessageFor(resolved.Ticket)
 	}
-	m.sendOrchestrationReply(ctx, rc, in, resolved.Message)
+	m.sendOrchestrationReply(ctx, rc, in, message)
 	return true
 }
 
