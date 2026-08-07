@@ -37,7 +37,21 @@ const props = defineProps<{
   binding: PmLeaderBinding | null
   restoreMobileChat?: boolean
 }>()
-const emit = defineEmits<{ openSettings: []; openTasks: []; restoredMobileChat: [] }>()
+const emit = defineEmits<{
+  openSettings: []
+  openTasks: []
+  openTraces: [conversationId?: string]
+  restoredMobileChat: []
+}>()
+
+/** qq:scene:conversationId → conversationId for live-traces filter. */
+function channelConversationId(th: ChatThread | undefined | null): string {
+  const uid = th?.userId || ''
+  if (!uid.startsWith('qq:')) return ''
+  const parts = uid.split(':')
+  if (parts.length < 3) return ''
+  return parts.slice(2).join(':')
+}
 
 const { t } = useI18n()
 const toast = useToast()
@@ -1326,6 +1340,16 @@ onBeforeUnmount(() => {
           >QQ</span>
         </div>
         <span v-else class="min-w-0 flex-1" />
+        <AppButton
+          size="sm"
+          variant="ghost"
+          icon="history"
+          data-testid="pm-chat-open-traces"
+          :class="isMobile ? 'min-h-[44px] shrink-0' : ''"
+          @click="emit('openTraces', channelConversationId(activeThread))"
+        >
+          {{ t('pages.projectDetail.pm.traces') }}
+        </AppButton>
         <AppButton
           size="sm"
           variant="ghost"

@@ -1134,6 +1134,22 @@ export const api = {
       `/projects/${encodeURIComponent(projectId)}/pm/tasks/${encodeURIComponent(taskId)}/close`,
       { method: 'POST', body: JSON.stringify({ status }) },
     ),
+
+  /** IM turn call-chain samples (Live / sandbox / delivery) for debug. */
+  listLiveTraces: (
+    projectId: string,
+    opts?: { conversationId?: string; traceId?: string; limit?: number; since?: string },
+  ) => {
+    const q = new URLSearchParams()
+    if (opts?.conversationId) q.set('conversationId', opts.conversationId)
+    if (opts?.traceId) q.set('traceId', opts.traceId)
+    if (opts?.limit) q.set('limit', String(opts.limit))
+    if (opts?.since) q.set('since', opts.since)
+    const qs = q.toString()
+    return req<{ items: LiveDecisionSample[] }>(
+      `/projects/${encodeURIComponent(projectId)}/live-traces${qs ? `?${qs}` : ''}`,
+    )
+  },
 }
 
 export interface ProjectTaskIdentity {
@@ -1152,6 +1168,42 @@ export interface ProjectTaskIdentity {
   terminalAt?: string | null
   createdAt: string
   updatedAt: string
+}
+
+export interface LiveTraceSpan {
+  name: string
+  status?: string
+  detail?: string
+  startedAt?: string
+  endedAt?: string
+  durationMs?: number
+}
+
+/** One IM inbound turn's Live routing sample + call chain. */
+export interface LiveDecisionSample {
+  id: string
+  projectId: string
+  channel?: string
+  scene?: string
+  conversationId: string
+  turnId?: string
+  userMessageId?: string
+  traceId?: string
+  userText: string
+  directorContext?: string
+  transcript?: string
+  model?: string
+  rawCompletion?: string
+  toolResults?: string
+  actions?: string
+  spans?: string
+  route?: string
+  pmOutcome?: string
+  egress?: string
+  latencyMs: number
+  degraded: boolean
+  qualityFlags?: string[]
+  createdAt: string
 }
 
 export interface AuthMeResponse {
