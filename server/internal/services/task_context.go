@@ -394,6 +394,87 @@ func (s *TaskContextService) reapStaleActiveTask(task *models.TaskIdentity) bool
 	return false
 }
 
+// ProjectTaskQuery bounds a project-management task list.
+type ProjectTaskQuery struct {
+	// ActiveOnly keeps non-terminal rows (the usual "待办" view).
+	ActiveOnly bool
+	Limit      int
+}
+
+// ListProjectTasks returns task identities for the project management UI,
+// newest first. Unlike the conversation ledger, this is project-wide so an
+// operator can see and clear ghosts that no longer belong to a live chat.
+func (s *TaskContextService) ListProjectTasks(projectID string, q ProjectTaskQuery) ([]models.TaskIdentity, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("task context database is unavailable")
+	}
+	projectID = strings.TrimSpace(projectID)
+	if projectID == "" {
+		return nil, nil
+	}
+	limit := q.Limit
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	db := s.db.Where("project_id = ?", projectID)
+	if q.ActiveOnly {
+		db = db.Where("terminal_at IS NULL")
+	}
+	var rows []models.TaskIdentity
+	if err := db.Order("updated_at DESC").Limit(limit).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	if !q.ActiveOnly {
+		return rows, nil
+	}
+	out := make([]models.TaskIdentity, 0, len(rows))
+	for i := range rows {
+		if s.reapStaleActiveTask(&rows[i]) {
+			continue
+		}
+		out = append(out, rows[i])
+	}
+	return out, nil
+}
+
+// CloseProjectTask manually retires a task from the project management UI.
+// status must be a terminal value (completed / cancelled / failed).
+func (s *TaskContextService) CloseProjectTask(projectID, taskID, status string) (*models.TaskIdentity, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("task context database is unavailable")
+	}
+	identity, err := s.IdentityByID(taskID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if identity == nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+	status = strings.ToLower(strings.TrimSpace(status))
+	if !IsTerminalTaskStatus(status) {
+		return nil, errors.New("status must be completed, cancelled, or failed")
+	}
+	updated, err := s.UpdateIdentity(EnsureTaskIdentityInput{
+		RunID: identity.RunID, ProjectID: identity.ProjectID, UserID: identity.UserID,
+		Status: status,
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Drop conversation focus if it still points here — otherwise the next IM
+	// follow-up would refine a closed task.
+	if strings.TrimSpace(identity.OriginConversationID) != "" {
+		scope := TaskScope{
+			ProjectID: identity.ProjectID, UserID: identity.UserID,
+			Channel: identity.OriginChannel, ConversationID: identity.OriginConversationID,
+		}
+		if focus, ferr := s.GetFocus(scope, false); ferr == nil && focus != nil && focus.TaskIdentityID == identity.ID {
+			_ = s.ExpireFocus(scope)
+		}
+	}
+	return updated, nil
+}
+
 // IdentityByID loads one task row inside a project.
 func (s *TaskContextService) IdentityByID(id, projectID string) (*models.TaskIdentity, error) {
 	if s == nil || s.db == nil {

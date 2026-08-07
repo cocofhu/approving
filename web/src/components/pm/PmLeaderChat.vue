@@ -37,7 +37,7 @@ const props = defineProps<{
   binding: PmLeaderBinding | null
   restoreMobileChat?: boolean
 }>()
-const emit = defineEmits<{ openSettings: []; restoredMobileChat: [] }>()
+const emit = defineEmits<{ openSettings: []; openTasks: []; restoredMobileChat: [] }>()
 
 const { t } = useI18n()
 const toast = useToast()
@@ -1326,6 +1326,16 @@ onBeforeUnmount(() => {
           >QQ</span>
         </div>
         <span v-else class="min-w-0 flex-1" />
+        <AppButton
+          size="sm"
+          variant="ghost"
+          icon="check"
+          data-testid="pm-chat-open-tasks"
+          :class="isMobile ? 'min-h-[44px] shrink-0' : ''"
+          @click="emit('openTasks')"
+        >
+          {{ t('pages.projectDetail.pm.tasks') }}
+        </AppButton>
         <AppButton
           size="sm"
           variant="ghost"

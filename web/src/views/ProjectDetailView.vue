@@ -23,6 +23,7 @@ import { useWorkflowImport } from '@/lib/useWorkflowImport'
 import PmLeaderChat from '@/components/pm/PmLeaderChat.vue'
 import PmCronJobsPanel from '@/components/pm/PmCronJobsPanel.vue'
 import PmSettingsPanel from '@/components/pm/PmSettingsPanel.vue'
+import PmTasksPanel from '@/components/pm/PmTasksPanel.vue'
 import TokenUsageHoverTip from '@/components/ui/TokenUsageHoverTip.vue'
 import ProjectAuditPanel from '@/components/project/ProjectAuditPanel.vue'
 import ProjectNotifyPanel from '@/components/project/ProjectNotifyPanel.vue'
@@ -58,7 +59,7 @@ type Tab = (typeof PROJECT_TABS)[number]
 const LEGACY_PM_SETTINGS_TAB = 'pmSettings'
 /** Legacy project-memory deep-link; removed tab — fall back to board + migration banner. */
 const LEGACY_PM_MEMORY_TAB = 'pmMemory'
-type PmView = 'chat' | 'settings'
+type PmView = 'chat' | 'settings' | 'tasks'
 
 function isProjectTab(q: unknown): q is Tab {
   return typeof q === 'string' && (PROJECT_TABS as readonly string[]).includes(q)
@@ -104,6 +105,10 @@ const pmRestoreMobileChat = ref(false)
 
 function openPmSettings() {
   pmView.value = 'settings'
+}
+
+function openPmTasks() {
+  pmView.value = 'tasks'
 }
 
 function backToPmChat() {
@@ -872,10 +877,11 @@ onUnmounted(() => {
           :binding="pmBinding"
           :restore-mobile-chat="pmRestoreMobileChat"
           @open-settings="openPmSettings"
+          @open-tasks="openPmTasks"
           @restored-mobile-chat="pmRestoreMobileChat = false"
         />
         <div
-          v-else
+          v-else-if="pmView === 'settings'"
           class="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden"
           data-testid="project-pm-settings-view"
         >
@@ -901,6 +907,34 @@ onUnmounted(() => {
             </AppButton>
           </div>
           <PmSettingsPanel :project-id="projectId" @changed="onPmBindingChanged" />
+        </div>
+        <div
+          v-else
+          class="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden"
+          data-testid="project-pm-tasks-view"
+        >
+          <div class="flex shrink-0 items-center border-b border-line px-3 py-2" :class="isMobile ? 'min-h-[44px]' : ''">
+            <button
+              v-if="isMobile"
+              type="button"
+              class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-txt2 hover:bg-elevated hover:text-txt"
+              data-testid="pm-tasks-back"
+              :aria-label="t('shell.aria.backToList')"
+              @click="backToPmChat"
+            >
+              <Icon name="arrow-left" :size="18" />
+            </button>
+            <AppButton
+              v-else
+              variant="ghost"
+              size="sm"
+              data-testid="pm-tasks-back"
+              @click="backToPmChat"
+            >
+              {{ t('pages.projectDetail.pm.backToChat') }}
+            </AppButton>
+          </div>
+          <PmTasksPanel :project-id="projectId" />
         </div>
       </div>
 

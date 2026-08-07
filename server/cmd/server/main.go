@@ -455,6 +455,7 @@ func main() {
 		InjectBundles: injectStore,
 		LiveModel:     liveClient,
 		LiveSamples:   liveSamples,
+		TaskContext:   taskContextSvc,
 		Onboarding:    services.NewOnboardingService(projectSvc, skillSvc, wfSvc),
 	}
 

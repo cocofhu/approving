@@ -41,6 +41,36 @@ func ensureTask(t *testing.T, svc *TaskContextService, run, project, user, title
 	return task
 }
 
+func TestListAndCloseProjectTasksForManualCleanup(t *testing.T) {
+	db := taskContextDB(t)
+	svc := NewTaskContextService(db)
+	live, err := svc.EnsureIdentity(EnsureTaskIdentityInput{
+		RunID: "run-open", ProjectID: "p1", UserID: SyntheticQQUserID("u1"),
+		ShortTitle: "查主干", Status: "running", OriginConversationID: "c1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.EnsureIdentity(EnsureTaskIdentityInput{
+		RunID: "run-done", ProjectID: "p1", UserID: SyntheticQQUserID("u1"),
+		ShortTitle: "已结束", Status: "completed", OriginConversationID: "c1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	active, err := svc.ListProjectTasks("p1", ProjectTaskQuery{ActiveOnly: true, Limit: 50})
+	if err != nil || len(active) != 1 || active[0].ID != live.ID {
+		t.Fatalf("active = %+v err=%v", active, err)
+	}
+	closed, err := svc.CloseProjectTask("p1", live.ID, "cancelled")
+	if err != nil || closed == nil || closed.TerminalAt == nil {
+		t.Fatalf("close = %+v err=%v", closed, err)
+	}
+	active, err = svc.ListProjectTasks("p1", ProjectTaskQuery{ActiveOnly: true, Limit: 50})
+	if err != nil || len(active) != 0 {
+		t.Fatalf("after close active = %+v err=%v", active, err)
+	}
+}
+
 func TestActiveTasksAreScopedToTheConversationAndReapGhosts(t *testing.T) {
 	db := taskContextDB(t)
 	if err := db.AutoMigrate(&models.Run{}); err != nil {
