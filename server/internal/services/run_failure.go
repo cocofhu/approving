@@ -38,6 +38,7 @@ type RunFailureInfo struct {
 // empty: early-exit / panic paths without StateRun.error fall back to a
 // human-readable default. Call after finalizeActiveStateRuns when possible so
 // in-flight nodes that were force-failed contribute their error text.
+// Sensitive token/Bearer/key shapes in reason and log tails are redacted.
 func (s *RunService) AggregateRunFailure(runID string) RunFailureInfo {
 	info := RunFailureInfo{}
 	if runID == "" || s == nil || s.db == nil {
@@ -65,6 +66,7 @@ func (s *RunService) AggregateRunFailure(runID string) RunFailureInfo {
 	if info.Reason == "" {
 		info.Reason = DefaultRunFailureReason
 	}
+	info.Reason = RedactSensitiveString(info.Reason)
 
 	logContent := s.sandboxLogContent(runID, info.FailedNode)
 	if logContent != "" {
@@ -99,17 +101,18 @@ func (info RunFailureInfo) ShortDisplayReason(max int) string {
 
 // MarshalRunErrorJSON serializes RunFailureInfo for ArtifactService.Save.
 // The reason field uses DisplayReason so empty-product consumers see the same
-// human text as the Web banner.
+// human text as the Web banner. Sensitive shapes are redacted before marshal.
 func MarshalRunErrorJSON(info RunFailureInfo) (string, error) {
+	reason := RedactSensitiveString(info.DisplayReason())
 	payload := map[string]any{
-		"reason":       info.DisplayReason(),
+		"reason":       reason,
 		"noSandboxLog": info.NoSandboxLog,
 	}
 	if info.FailedNode != "" {
 		payload["failedNode"] = info.FailedNode
 	}
 	if info.LogSummaryOrRef != "" {
-		payload["logSummaryOrRef"] = info.LogSummaryOrRef
+		payload["logSummaryOrRef"] = RedactSensitiveString(info.LogSummaryOrRef)
 	}
 	b, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
@@ -118,7 +121,9 @@ func MarshalRunErrorJSON(info RunFailureInfo) (string, error) {
 	return string(b), nil
 }
 
-// TruncateLogSummary keeps the last N lines within a byte budget.
+// TruncateLogSummary keeps the last N lines within a byte budget, then redacts
+// common secrets (token/Bearer/key prefixes) so sandbox log tails are safe in
+// run_error.json and failure UIs.
 func TruncateLogSummary(content string) string {
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 	content = strings.TrimRight(content, "\n")
@@ -136,7 +141,7 @@ func TruncateLogSummary(content string) string {
 			out = out[i+1:]
 		}
 	}
-	return out
+	return RedactSensitiveString(out)
 }
 
 func (s *RunService) runVarString(runID, name string) string {

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/cocofhu/approving/internal/apierr"
 	"github.com/cocofhu/approving/internal/services"
 
 	"github.com/gin-gonic/gin"
@@ -16,7 +17,7 @@ import (
 // (auth/agents/workflow are only written after the key check).
 func (h *Handlers) BootstrapProjectOnboarding(c *gin.Context) {
 	if h.Onboarding == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "onboarding unavailable"})
+		apierr.Internal(c, errors.New("onboarding unavailable"))
 		return
 	}
 	projectID := strings.TrimSpace(c.Param("id"))

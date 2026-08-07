@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cocofhu/approving/internal/apierr"
 	"github.com/cocofhu/approving/internal/auth"
 	"github.com/cocofhu/approving/internal/browser"
 	"github.com/cocofhu/approving/internal/contextmcp"
@@ -296,8 +297,7 @@ func (h *Handlers) SaveWorkflow(c *gin.Context) {
 			errors.Is(err, services.ErrWorkflowProjectImmutable):
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		default:
-			_ = c.Error(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			apierr.Internal(c, err)
 		}
 		return
 	}
@@ -344,8 +344,7 @@ func (h *Handlers) PatchWorkflowNotifyPolicy(c *gin.Context) {
 		case errors.Is(err, services.ErrWorkflowNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		default:
-			_ = c.Error(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			apierr.Internal(c, err)
 		}
 		return
 	}
@@ -439,8 +438,7 @@ func (h *Handlers) DeleteWorkflow(c *gin.Context) {
 	}
 	actor := h.auditActorFromContext(c)
 	if err := h.WF.Delete(id); err != nil {
-		_ = c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Internal(c, err)
 		return
 	}
 	if projectID != "" {
@@ -465,8 +463,7 @@ func (h *Handlers) CopyWorkflowPreview(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		_ = c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Internal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -500,8 +497,7 @@ func (h *Handlers) CopyWorkflow(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		_ = c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Internal(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, workflowDTO(wf))
@@ -711,8 +707,7 @@ func (h *Handlers) DeleteRun(c *gin.Context) {
 		case errors.Is(err, services.ErrRunNotDeletable):
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		default:
-			_ = c.Error(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			apierr.Internal(c, err)
 		}
 		return
 	}
@@ -1089,8 +1084,7 @@ func (h *Handlers) DeleteArtifact(c *gin.Context) {
 		case errors.Is(err, services.ErrArtifactRunNotTerminal):
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		default:
-			_ = c.Error(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			apierr.Internal(c, err)
 		}
 		return
 	}
@@ -1185,8 +1179,7 @@ func (h *Handlers) CreateAgent(c *gin.Context) {
 		return
 	}
 	if err := h.Skill.Save(agent); err != nil {
-		_ = c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Internal(c, err)
 		return
 	}
 	a, _ := h.Skill.Get(name)
@@ -1215,14 +1208,12 @@ func (h *Handlers) SaveAgent(c *gin.Context) {
 	newProjectID := strings.TrimSpace(agent.ProjectID)
 	if oldProjectID != "" && oldProjectID != newProjectID && h.Pm != nil {
 		if err := h.Pm.PurgeAgentProjectData(oldProjectID, name); err != nil {
-			_ = c.Error(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "清除旧项目数据失败：" + err.Error()})
+			apierr.Internal(c, err)
 			return
 		}
 	}
 	if err := h.Skill.Save(agent); err != nil {
-		_ = c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Internal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "saved"})
@@ -1232,14 +1223,12 @@ func (h *Handlers) DeleteAgent(c *gin.Context) {
 	name := c.Param("name")
 	if h.Pm != nil {
 		if err := h.Pm.PurgeAgentEverywhere(name); err != nil {
-			_ = c.Error(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "清除 Agent 项目数据失败：" + err.Error()})
+			apierr.Internal(c, err)
 			return
 		}
 	}
 	if err := h.Skill.Delete(name); err != nil {
-		_ = c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Internal(c, err)
 		return
 	}
 	// Cascade organization references after the agent directory is gone so a
@@ -1247,8 +1236,7 @@ func (h *Handlers) DeleteAgent(c *gin.Context) {
 	// cascade write fails, Get() prune self-heals dangling parentAgent on read.
 	if h.Org != nil {
 		if err := h.Org.OnDeleteAgent(name); err != nil {
-			_ = c.Error(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			apierr.Internal(c, err)
 			return
 		}
 	}
@@ -1286,22 +1274,17 @@ func (h *Handlers) RenameAgent(c *gin.Context) {
 		return
 	}
 	if err := h.Skill.Rename(old, name); err != nil {
-		_ = c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Internal(c, err)
 		return
 	}
 	if h.Pm != nil && name != old {
 		if err := h.Pm.RenameAgentScopedData(old, name); err != nil {
 			if rbErr := h.Skill.Rename(name, old); rbErr != nil {
-				_ = c.Error(err)
 				_ = c.Error(rbErr)
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error": err.Error() + "; rename rollback failed: " + rbErr.Error(),
-				})
+				apierr.Internal(c, err)
 				return
 			}
-			_ = c.Error(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "重命名 Agent 数据失败：" + err.Error()})
+			apierr.Internal(c, err)
 			return
 		}
 	}
@@ -1309,11 +1292,8 @@ func (h *Handlers) RenameAgent(c *gin.Context) {
 		if err := h.Org.OnRenameAgent(old, name); err != nil {
 			// Roll back the directory rename so org and skill stay aligned.
 			if rbErr := h.Skill.Rename(name, old); rbErr != nil {
-				_ = c.Error(err)
 				_ = c.Error(rbErr)
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error": err.Error() + "; rename rollback failed: " + rbErr.Error(),
-				})
+				apierr.Internal(c, err)
 				return
 			}
 			if h.Pm != nil && name != old {
@@ -1321,8 +1301,7 @@ func (h *Handlers) RenameAgent(c *gin.Context) {
 					_ = c.Error(rbData)
 				}
 			}
-			_ = c.Error(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			apierr.Internal(c, err)
 			return
 		}
 	}
@@ -1332,11 +1311,8 @@ func (h *Handlers) RenameAgent(c *gin.Context) {
 		if err != nil {
 			// Roll back Skill/Pm/Org so workflow refs and directory stay aligned.
 			if rbErr := h.Skill.Rename(name, old); rbErr != nil {
-				_ = c.Error(err)
 				_ = c.Error(rbErr)
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error": err.Error() + "; rename rollback failed: " + rbErr.Error(),
-				})
+				apierr.Internal(c, err)
 				return
 			}
 			if h.Pm != nil {
@@ -1349,8 +1325,7 @@ func (h *Handlers) RenameAgent(c *gin.Context) {
 					_ = c.Error(rbOrg)
 				}
 			}
-			_ = c.Error(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "重命名工作流引用失败：" + err.Error()})
+			apierr.Internal(c, err)
 			return
 		}
 		updatedWorkflowCount = n
@@ -1367,8 +1342,7 @@ func (h *Handlers) GetAgentsOrg(c *gin.Context) {
 	}
 	org, err := h.Org.Get()
 	if err != nil {
-		_ = c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Internal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, org)
@@ -1404,8 +1378,7 @@ func (h *Handlers) PutAgentsOrg(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		_ = c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Internal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, org)
@@ -1420,8 +1393,7 @@ func (h *Handlers) ExportAgent(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		_ = c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Internal(c, err)
 		return
 	}
 	c.Header("Content-Type", "application/zip")
