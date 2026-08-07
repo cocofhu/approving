@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cocofhu/approving/internal/liveagent"
 	"github.com/cocofhu/approving/internal/models"
@@ -23,6 +24,7 @@ import (
 // failure worth seeing.
 type fakeLive struct {
 	configured bool
+	timeout    time.Duration
 	decisions  []liveagent.Result
 	err        error
 	// report answers the phrasing call. nil leaves it unanswered, which is what
@@ -34,6 +36,8 @@ type fakeLive struct {
 }
 
 func (f *fakeLive) Configured() bool { return f.configured }
+
+func (f *fakeLive) Timeout() time.Duration { return f.timeout }
 
 func (f *fakeLive) Complete(_ context.Context, req liveagent.Request) (liveagent.Result, error) {
 	if len(req.Tools) == 0 {
@@ -246,6 +250,38 @@ func TestNoConversationModelSendsEverythingToTheAgent(t *testing.T) {
 	}
 	if got := sentTexts(g.fa); len(got) != 1 || got[0] != "agent-answer" {
 		t.Fatalf("sends = %v want the agent's answer", got)
+	}
+}
+
+func TestLiveCallTimeoutFollowsConfiguredLiveTimeout(t *testing.T) {
+	m := &Manager{live: &fakeLive{configured: true, timeout: 300 * time.Second}}
+	if got := m.liveCallTimeout(45 * time.Second); got != 300*time.Second {
+		t.Fatalf("liveCallTimeout = %v want settings value 300s", got)
+	}
+	m.live = &fakeLive{configured: true} // Timeout() == 0
+	if got := m.liveCallTimeout(45 * time.Second); got != 45*time.Second {
+		t.Fatalf("liveCallTimeout = %v want fallback", got)
+	}
+}
+
+func TestFallthroughAckNamesFocusTaskNotUserQuestion(t *testing.T) {
+	g := newGPTLive(t)
+	identity := g.seedTask("run-focus1", "错误处理完整性")
+	scope := g.m.taskScopeFor(g.rc, InboundMessage{UserID: "u1", ConversationID: "user1"})
+	if _, err := g.m.taskContext.SetFocus(scope, identity, ""); err != nil {
+		t.Fatal(err)
+	}
+	g.m.SetLiveModel(&fakeLive{configured: true, err: liveagent.ErrBudgetExhausted})
+	g.say("m-fix", "你看看怎么修复下呢")
+	got := sentTexts(g.fa)
+	if len(got) < 1 {
+		t.Fatalf("sends = %v", got)
+	}
+	if !strings.Contains(got[0], "错误处理完整性") {
+		t.Fatalf("fallthrough ack should name focus task: %q", got[0])
+	}
+	if strings.Contains(got[0], "怎么修复") {
+		t.Fatalf("fallthrough ack echoed the follow-up: %q", got[0])
 	}
 }
 

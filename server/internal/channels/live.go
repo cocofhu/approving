@@ -29,6 +29,8 @@ import (
 // get_status, and anything requiring facts it does not have goes to dispatch_pm.
 type LiveModel interface {
 	Configured() bool
+	// Timeout is live_timeout_seconds from settings. Zero means "use caller fallback".
+	Timeout() time.Duration
 	Complete(ctx context.Context, req liveagent.Request) (liveagent.Result, error)
 }
 
@@ -211,11 +213,12 @@ func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel,
 // ackFallthrough tells the user something is happening when the conversation
 // layer could not finish and the sandbox is about to take over. Without it a
 // timed-out Live call looks like the platform ignored the message.
+//
+// This text is a platform stamp, not model output: Live already failed (timeout
+// / error). Prefer the focus task's short title so a follow-up like「怎么修复」
+// still names the work; never echo the user's raw question as the title.
 func (m *Manager) ackFallthrough(ctx context.Context, rc *runningChannel, in InboundMessage, rec *sampleRecorder) {
-	// No short title from the model here — inventing one from the user's own
-	// question only produces 「项目的错误处理完整吗」我这就去确认…, which tells
-	// them nothing they did not just say.
-	text, flags := gateAcknowledgement("", "", "")
+	text, flags := gateAcknowledgement("", m.focusShortTitle(rc, in), in.Text)
 	rec.flag(flags...)
 	rec.flag("fallthrough_ack")
 	sent := m.sendOutboundResult(ctx, rc, OutboundMessage{
@@ -517,7 +520,7 @@ func (m *Manager) reportThroughDirector(ctx context.Context, rc *runningChannel,
 		m.appendTraceSpan(in.TraceID, finishSpan("director_report", "skipped", "degraded", started))
 		return plain, true
 	}
-	callCtx, cancel := context.WithTimeout(ctx, directorReportTimeout)
+	callCtx, cancel := context.WithTimeout(ctx, m.liveCallTimeout(directorReportFallbackTimeout))
 	defer cancel()
 
 	res, err := m.live.Complete(callCtx, liveagent.Request{
@@ -542,11 +545,24 @@ func (m *Manager) reportThroughDirector(ctx context.Context, rc *runningChannel,
 	return strings.TrimSpace(res.Text), false
 }
 
-// directorReportTimeout bounds the extra hop between having an answer and
-// sending it. Local reasoning models routinely need tens of seconds; a 4s
-// budget was what forced every Ollama conclusion down the degraded "paste the
-// whole agent dump" path in live verification.
-const directorReportTimeout = 45 * time.Second
+// liveCallTimeout prefers the settings-page live_timeout_seconds so director
+// report / synthesis cannot sit on a shorter hard-coded ceiling while route
+// uses 300s.
+func (m *Manager) liveCallTimeout(fallback time.Duration) time.Duration {
+	if m != nil && m.live != nil {
+		if d := m.live.Timeout(); d > 0 {
+			return d
+		}
+	}
+	if fallback > 0 {
+		return fallback
+	}
+	return directorReportFallbackTimeout
+}
+
+// directorReportFallbackTimeout is used only when Live has no configured
+// timeout (tests / miswired client). Production picks up live_timeout_seconds.
+const directorReportFallbackTimeout = 45 * time.Second
 
 // Reasoning models on local Ollama often spend most of a small budget on the
 // side-channel "reasoning" field and return empty content with finish_reason

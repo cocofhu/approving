@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/services"
 
 	"github.com/rs/zerolog/log"
@@ -165,22 +166,38 @@ func (m *Manager) taskLedger(rc *runningChannel, in InboundMessage) []ledgerEntr
 }
 
 func (m *Manager) focusTaskID(rc *runningChannel, in InboundMessage) string {
+	if id := m.focusIdentity(rc, in); id != nil {
+		return id.ID
+	}
+	return ""
+}
+
+// focusShortTitle is for fallthrough acks when Live failed: name the open work
+// without inventing a title from the user's latest sentence.
+func (m *Manager) focusShortTitle(rc *runningChannel, in InboundMessage) string {
+	if id := m.focusIdentity(rc, in); id != nil {
+		return id.ShortTitle
+	}
+	return ""
+}
+
+func (m *Manager) focusIdentity(rc *runningChannel, in InboundMessage) *models.TaskIdentity {
 	if m.taskContext == nil {
-		return ""
+		return nil
 	}
 	scope := m.taskScopeFor(rc, in)
 	focus, err := m.taskContext.GetFocus(scope, false)
 	if err != nil || focus == nil {
-		return ""
+		return nil
 	}
 	identity, err := m.taskContext.IdentityByID(focus.TaskIdentityID, rc.cfg.ProjectID)
 	if err != nil || identity == nil || identity.TerminalAt != nil ||
 		services.IsTerminalTaskStatus(identity.Status) {
 		// Pointing at finished work makes the next follow-up refine a ghost.
 		_ = m.taskContext.ExpireFocus(scope)
-		return ""
+		return nil
 	}
-	return focus.TaskIdentityID
+	return identity
 }
 
 func (m *Manager) taskScopeFor(rc *runningChannel, in InboundMessage) services.TaskScope {
