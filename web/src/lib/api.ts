@@ -1118,6 +1118,92 @@ export const api = {
     }),
   deleteProjectChannel: (projectId: string) =>
     req<{ status: string }>(`/projects/${encodeURIComponent(projectId)}/channel`, { method: 'DELETE' }),
+
+  /** IM / channel task ledger for project-management 待办 cleanup. */
+  listProjectTasks: (projectId: string, opts?: { active?: boolean; limit?: number }) => {
+    const q = new URLSearchParams()
+    if (opts?.active === false) q.set('active', '0')
+    if (opts?.limit) q.set('limit', String(opts.limit))
+    const qs = q.toString()
+    return req<{ items: ProjectTaskIdentity[] }>(
+      `/projects/${encodeURIComponent(projectId)}/pm/tasks${qs ? `?${qs}` : ''}`,
+    )
+  },
+  closeProjectTask: (projectId: string, taskId: string, status: 'completed' | 'cancelled' | 'failed' = 'cancelled') =>
+    req<{ task: ProjectTaskIdentity }>(
+      `/projects/${encodeURIComponent(projectId)}/pm/tasks/${encodeURIComponent(taskId)}/close`,
+      { method: 'POST', body: JSON.stringify({ status }) },
+    ),
+
+  /** IM turn call-chain samples (Live / sandbox / delivery) for debug. */
+  listLiveTraces: (
+    projectId: string,
+    opts?: { conversationId?: string; traceId?: string; limit?: number; since?: string },
+  ) => {
+    const q = new URLSearchParams()
+    if (opts?.conversationId) q.set('conversationId', opts.conversationId)
+    if (opts?.traceId) q.set('traceId', opts.traceId)
+    if (opts?.limit) q.set('limit', String(opts.limit))
+    if (opts?.since) q.set('since', opts.since)
+    const qs = q.toString()
+    return req<{ items: LiveDecisionSample[] }>(
+      `/projects/${encodeURIComponent(projectId)}/live-traces${qs ? `?${qs}` : ''}`,
+    )
+  },
+}
+
+export interface ProjectTaskIdentity {
+  id: string
+  runId: string
+  projectId: string
+  userId?: string
+  shortTitle: string
+  originalRequirement?: string
+  originChannel?: string
+  originScene?: string
+  originConversationId?: string
+  originExternalUserId?: string
+  recentContext?: string
+  status: string
+  terminalAt?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface LiveTraceSpan {
+  name: string
+  status?: string
+  detail?: string
+  startedAt?: string
+  endedAt?: string
+  durationMs?: number
+}
+
+/** One IM inbound turn's Live routing sample + call chain. */
+export interface LiveDecisionSample {
+  id: string
+  projectId: string
+  channel?: string
+  scene?: string
+  conversationId: string
+  turnId?: string
+  userMessageId?: string
+  traceId?: string
+  userText: string
+  directorContext?: string
+  transcript?: string
+  model?: string
+  rawCompletion?: string
+  toolResults?: string
+  actions?: string
+  spans?: string
+  route?: string
+  pmOutcome?: string
+  egress?: string
+  latencyMs: number
+  degraded: boolean
+  qualityFlags?: string[]
+  createdAt: string
 }
 
 export interface AuthMeResponse {

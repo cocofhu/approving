@@ -99,6 +99,7 @@ func (dc directorContext) render() string {
 		}
 		if dc.FocusTaskID != "" {
 			b.WriteString("你们刚才在聊的是 taskId=" + dc.FocusTaskID + "。\n")
+			b.WriteString("对方若是补充/收窄这件事，用 refine_work 挂到这个 taskId，不要新开任务，也不要把队列甩给对方选。\n")
 		}
 	}
 	if dc.ConversationBusy {
@@ -167,8 +168,16 @@ func (m *Manager) focusTaskID(rc *runningChannel, in InboundMessage) string {
 	if m.taskContext == nil {
 		return ""
 	}
-	focus, err := m.taskContext.GetFocus(m.taskScopeFor(rc, in), false)
+	scope := m.taskScopeFor(rc, in)
+	focus, err := m.taskContext.GetFocus(scope, false)
 	if err != nil || focus == nil {
+		return ""
+	}
+	identity, err := m.taskContext.IdentityByID(focus.TaskIdentityID, rc.cfg.ProjectID)
+	if err != nil || identity == nil || identity.TerminalAt != nil ||
+		services.IsTerminalTaskStatus(identity.Status) {
+		// Pointing at finished work makes the next follow-up refine a ghost.
+		_ = m.taskContext.ExpireFocus(scope)
 		return ""
 	}
 	return focus.TaskIdentityID
@@ -352,6 +361,10 @@ func (m *Manager) retireTask(rc *runningChannel, in InboundMessage, target *ledg
 		return
 	}
 	scope := m.taskScopeFor(rc, in)
+	focused := false
+	if focus, err := m.taskContext.GetFocus(scope, false); err == nil && focus != nil {
+		focused = focus.TaskIdentityID == target.TaskID
+	}
 	if _, err := m.taskContext.UpdateIdentity(services.EnsureTaskIdentityInput{
 		RunID: target.RunID, ProjectID: rc.cfg.ProjectID, UserID: scope.UserID,
 		Status: "cancelled",
@@ -359,10 +372,41 @@ func (m *Manager) retireTask(rc *runningChannel, in InboundMessage, target *ledg
 		log.Warn().Err(err).Str("task", target.TaskID).
 			Msg("cancelled task still reads as running in the ledger")
 	}
-	if m.focusTaskID(rc, in) == target.TaskID {
+	if focused {
 		if err := m.taskContext.ExpireFocus(scope); err != nil {
 			log.Debug().Err(err).Msg("conversation focus still points at a cancelled task")
 		}
+	}
+}
+
+// completeEphemeralDispatch closes a dispatch:* ledger row when the foreground
+// turn that created it is over. Real Runs are closed by ReflowTaskOutcome; the
+// temporary dispatch key is not a Run, so without this every answered lookup
+// stays in the "在跑的任务" list forever.
+func (m *Manager) completeEphemeralDispatch(rc *runningChannel, in InboundMessage, status string) {
+	if m.taskContext == nil || in.Dispatch == nil {
+		return
+	}
+	taskID := strings.TrimSpace(in.Dispatch.TaskID)
+	if taskID == "" {
+		return
+	}
+	identity, err := m.taskContext.IdentityByID(taskID, rc.cfg.ProjectID)
+	if err != nil || identity == nil {
+		return
+	}
+	if !strings.HasPrefix(strings.TrimSpace(identity.RunID), "dispatch:") {
+		return
+	}
+	if status = strings.TrimSpace(status); status == "" {
+		status = "completed"
+	}
+	scope := m.taskScopeFor(rc, in)
+	if _, err := m.taskContext.UpdateIdentity(services.EnsureTaskIdentityInput{
+		RunID: identity.RunID, ProjectID: rc.cfg.ProjectID, UserID: scope.UserID,
+		Status: status,
+	}); err != nil {
+		log.Debug().Err(err).Str("task", taskID).Msg("ephemeral dispatch not closed in the ledger")
 	}
 }
 

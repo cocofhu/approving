@@ -412,6 +412,7 @@ func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMe
 		return
 	}
 
+	ensureTraceID(&in)
 	m.recordInbound(rc, &in)
 
 	if m.handleFastPath(ctx, rc, &in) {
@@ -459,6 +460,7 @@ func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMe
 // handleInbound is the complete Live pipeline for one message, used by callers
 // that are not going through the per-conversation queue.
 func (m *Manager) handleInbound(ctx context.Context, rc *runningChannel, in InboundMessage) {
+	ensureTraceID(&in)
 	m.recordInbound(rc, &in)
 	if m.handleFastPath(ctx, rc, &in) {
 		return
@@ -615,6 +617,19 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 
 	collect := m.beginForegroundCapture(rc, in)
 	defer collect.release()
+	// Ephemeral dispatch:* ledger rows are not real Runs, so Reflow never
+	// closes them. Whatever happens in this turn, drop the stub afterwards so
+	// answered (or abandoned) lookups stop polluting "在跑的任务".
+	closeStatus := "completed"
+	defer func() { m.completeEphemeralDispatch(rc, in, closeStatus) }()
+	sandboxStarted := time.Now()
+	defer func() {
+		status := "ok"
+		if closeStatus != "completed" {
+			status = closeStatus
+		}
+		m.appendTraceSpan(in.TraceID, finishSpan("sandbox_turn", status, closeStatus, sandboxStarted))
+	}()
 
 	timeout := foregroundTurnTimeout
 	if configured := time.Duration(rc.cfg.TurnTimeoutSeconds) * time.Second; configured > 0 {
@@ -644,6 +659,7 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		if turnCtx.Err() != nil && ctx.Err() == nil {
 			log.Info().Str("channel", rc.cfg.ID).Dur("timeout", timeout).
 				Msg("live: foreground turn exceeded its budget without an answer")
+			closeStatus = "failed"
 			if !m.hasReplied(scope) {
 				m.sendOutbound(ctx, rc, OutboundMessage{
 					Scene: in.Scene, ConversationID: in.ConversationID, ReplyToMessageID: in.MessageID,
@@ -653,6 +669,7 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 			}
 			return
 		}
+		closeStatus = "failed"
 		m.sendTurnFailure(ctx, rc, in, scope, err)
 		return
 	}
@@ -881,6 +898,7 @@ func turnEnvelope(rc *runningChannel, in InboundMessage, kind sendable.Kind, rea
 	e := sendable.DeliveryEnvelope{
 		Priority: priority, TaskContext: scope, ProjectID: rc.cfg.ProjectID,
 		ConversationID: in.ConversationID, UserID: in.UserID,
+		TraceID:   strings.TrimSpace(in.TraceID),
 		DedupeKey: scope + ":" + string(kind),
 		Reason:    reason, Kind: kind,
 		// Turn-level text is composed by the platform (or extracted through an

@@ -26,6 +26,10 @@ type RunTerminalEvent struct {
 	// FailureSummary carries the aggregated reason for a failed run so the
 	// observer can explain the outcome without reading raw logs.
 	FailureSummary string
+	// ResultSummary is a short digest of what the run produced (artifact
+	// summary / findings). Empty when nothing readable was left — callers must
+	// not invent details, but also must not pretend they are waiting elsewhere.
+	ResultSummary string
 }
 
 // RunTerminalObserver receives terminal Run transitions. Implementations must
@@ -69,6 +73,11 @@ func (e *Engine) fireRunTerminal(runID, status string) {
 		// not something to read out in a chat.
 		info := services.NewRunService(e.db).AggregateRunFailure(runID)
 		ev.FailureSummary = strings.TrimSpace(info.Reason)
+	}
+	if status == "completed" {
+		// Pull whatever the work layer left as a readable conclusion so IM
+		// reflow can say what finished — not only that it finished.
+		ev.ResultSummary = services.NewArtifactService(e.db).DigestedRunOutcome(runID, 800)
 	}
 	go func() {
 		defer func() {

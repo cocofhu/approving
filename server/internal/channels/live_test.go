@@ -528,6 +528,29 @@ func TestQueueFullHintIsSentOnceAndNotSilent(t *testing.T) {
 	once.Do(func() { close(release) })
 }
 
+// Completed reflow must carry the run's findings, not a hollow "弄完了 / ask for details".
+func TestCompletedOutcomeFallbackIncludesResultSummary(t *testing.T) {
+	id := &models.TaskIdentity{ShortTitle: "直接检查 approving 仓库当前主干代码", Language: "zh-CN"}
+	got := outcomeFallbackText(id, TaskOutcome{
+		Status: "completed", ResultSummary: "主干错误处理覆盖了 fallthrough ack，Live 超时仍可能是 8s。",
+	}, "zh-CN")
+	if !strings.Contains(got, "fallthrough") || !strings.Contains(got, "8s") {
+		t.Fatalf("fallback dropped findings: %q", got)
+	}
+	for _, bad := range []string{"想看细节", "Ask me if you want the details"} {
+		if strings.Contains(got, bad) {
+			t.Fatalf("hollow deferral still present (%s): %q", bad, got)
+		}
+	}
+	empty := outcomeFallbackText(id, TaskOutcome{Status: "completed"}, "zh-CN")
+	if strings.Contains(empty, "想看细节") {
+		t.Fatalf("empty fallback still defers details: %q", empty)
+	}
+	if !strings.Contains(empty, "可读结论") {
+		t.Fatalf("empty fallback should admit missing summary: %q", empty)
+	}
+}
+
 // A finished Run reports back to the conversation that asked for it, exactly
 // once, and the task stops answering "still running" afterwards.
 func TestTaskOutcomeReturnsToTheOriginConversation(t *testing.T) {

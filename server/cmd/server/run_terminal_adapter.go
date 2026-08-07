@@ -26,6 +26,7 @@ func (a runTerminalAdapter) OnRunTerminal(ev engine.RunTerminalEvent) {
 		RunID:         ev.RunID,
 		Status:        ev.Status,
 		FailureReason: ev.FailureSummary,
+		ResultSummary: ev.ResultSummary,
 	})
 	if err != nil {
 		log.Warn().Err(err).Str("run", ev.RunID).Str("status", ev.Status).

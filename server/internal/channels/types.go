@@ -84,6 +84,9 @@ type InboundMessage struct {
 	// so the work layer's eventual conclusion lands on the choice that produced
 	// it rather than in a separate row nothing joins.
 	DecisionSampleID string
+	// TraceID joins Live routing, sandbox work, MCP, synthesis, and outbound
+	// delivery for this one user message. Minted at inbound entry.
+	TraceID string
 }
 
 // WorkDispatch is the director's delegation: what the agent is being asked to

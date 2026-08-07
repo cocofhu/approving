@@ -79,11 +79,13 @@ type DeliveryEnvelope struct {
 	ProjectID      string
 	ConversationID string
 	UserID         string
-	DedupeKey      string
-	Reason         string
-	Kind           Kind
-	Progress       ProgressFields
-	Structured     bool
+	// TraceID joins this delivery to the inbound turn's LiveDecisionSample.
+	TraceID   string
+	DedupeKey string
+	Reason    string
+	Kind      Kind
+	Progress  ProgressFields
+	Structured bool
 }
 
 // Internal returns an explicit non-deliverable envelope.
@@ -119,6 +121,7 @@ type AuditEntry struct {
 	ProjectID string
 	RunID     string
 	Channel   Channel
+	TraceID   string
 	DedupeKey string
 	Reason    string
 	Result    string
@@ -449,7 +452,7 @@ func (p *Policy) record(e DeliveryEnvelope, channel Channel, key, reason, result
 	if p.audit != nil {
 		p.audit(AuditEntry{
 			ProjectID: e.ProjectID, RunID: e.RunID, Channel: channel,
-			DedupeKey: key, Reason: reason, Result: result, Attempt: attempt,
+			TraceID: e.TraceID, DedupeKey: key, Reason: reason, Result: result, Attempt: attempt,
 		})
 	}
 }

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -75,11 +76,45 @@ func (s *LiveSampleService) AttachOutcome(id, outcome, egress string) error {
 	return s.db.Model(&models.LiveDecisionSample{}).Where("id = ?", id).Updates(updates).Error
 }
 
-// SampleQuery bounds an export.
+// AppendSpanByTrace adds a call-chain step after the sample was committed
+// (sandbox turn, synthesis, late delivery). Matching is by TraceID so the
+// sandbox does not need the sample primary key.
+func (s *LiveSampleService) AppendSpanByTrace(traceID string, span any) error {
+	if s == nil || s.db == nil {
+		return errors.New("live sample database is unavailable")
+	}
+	traceID = strings.TrimSpace(traceID)
+	if traceID == "" || span == nil {
+		return nil
+	}
+	var sample models.LiveDecisionSample
+	if err := s.db.Where("trace_id = ?", traceID).Order("created_at DESC").First(&sample).Error; err != nil {
+		return err
+	}
+	var spans []json.RawMessage
+	if strings.TrimSpace(sample.Spans) != "" {
+		_ = json.Unmarshal([]byte(sample.Spans), &spans)
+	}
+	raw, err := json.Marshal(span)
+	if err != nil {
+		return err
+	}
+	spans = append(spans, raw)
+	body, err := json.Marshal(spans)
+	if err != nil {
+		return err
+	}
+	return s.db.Model(&models.LiveDecisionSample{}).Where("id = ?", sample.ID).
+		Update("spans", string(body)).Error
+}
+
+// SampleQuery bounds an export or debug listing.
 type SampleQuery struct {
-	ProjectID string
-	Since     time.Time
-	Limit     int
+	ProjectID      string
+	ConversationID string
+	TraceID        string
+	Since          time.Time
+	Limit          int
 }
 
 // List returns samples newest first, for offline review and export.
@@ -95,6 +130,12 @@ func (s *LiveSampleService) List(q SampleQuery) ([]models.LiveDecisionSample, er
 	if p := strings.TrimSpace(q.ProjectID); p != "" {
 		db = db.Where("project_id = ?", p)
 	}
+	if c := strings.TrimSpace(q.ConversationID); c != "" {
+		db = db.Where("conversation_id = ?", c)
+	}
+	if t := strings.TrimSpace(q.TraceID); t != "" {
+		db = db.Where("trace_id = ?", t)
+	}
 	if !q.Since.IsZero() {
 		db = db.Where("created_at >= ?", q.Since)
 	}
@@ -103,4 +144,25 @@ func (s *LiveSampleService) List(q SampleQuery) ([]models.LiveDecisionSample, er
 		return nil, err
 	}
 	return out, nil
+}
+
+// GetByTrace returns the newest sample for a trace id inside a project.
+func (s *LiveSampleService) GetByTrace(projectID, traceID string) (*models.LiveDecisionSample, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("live sample database is unavailable")
+	}
+	projectID, traceID = strings.TrimSpace(projectID), strings.TrimSpace(traceID)
+	if projectID == "" || traceID == "" {
+		return nil, errors.New("project_id and trace_id are required")
+	}
+	var sample models.LiveDecisionSample
+	err := s.db.Where("project_id = ? AND trace_id = ?", projectID, traceID).
+		Order("created_at DESC").First(&sample).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &sample, nil
 }

@@ -118,6 +118,7 @@ func (w *platformMCPWire) registerChannel(projectID, threadID, userID, agent str
 	w.pm.SetChannelContext(tok, pmmcp.ChannelContext{
 		ChannelType: channel.ChannelType, Scene: string(channel.Scene),
 		ConversationID: channel.ConversationID, ExternalUserID: channel.ExternalUserID,
+		TraceID: channel.TraceID,
 	})
 	if w.memory != nil {
 		w.memory.Restore(tok, projectID, agent, threadID, userID, caps.AllowMemoryWrite)
@@ -147,6 +148,7 @@ func (w *platformMCPWire) restoreChannel(projectID, threadID, userID, agent, tok
 		w.pm.SetChannelContext(token, pmmcp.ChannelContext{
 			ChannelType: channel.ChannelType, Scene: string(channel.Scene),
 			ConversationID: channel.ConversationID, ExternalUserID: channel.ExternalUserID,
+			TraceID: channel.TraceID,
 		})
 	}
 	if w.memory != nil {

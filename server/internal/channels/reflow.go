@@ -34,6 +34,10 @@ type TaskOutcome struct {
 	Status string
 	// FailureReason is the aggregated cause for a failed run.
 	FailureReason string
+	// ResultSummary is a short digest of what the run produced (findings /
+	// summary artifact). Used by both synthesis and the structured fallback so
+	// a completed task never reports as an empty "弄完了".
+	ResultSummary string
 }
 
 // ReflowTaskOutcome delivers a finished task's outcome to its origin
@@ -202,7 +206,14 @@ func outcomeBrief(identity *models.TaskIdentity, outcome TaskOutcome, language s
 	}
 	switch strings.ToLower(strings.TrimSpace(outcome.Status)) {
 	case "completed":
-		b.WriteString("结果：做完了。请说清楚做完了什么，不要只说「已完成」。\n")
+		b.WriteString("结果：做完了。\n")
+		if facts := strings.TrimSpace(outcome.ResultSummary); facts != "" {
+			b.WriteString("关键发现（必须写进回复，不要藏到「想看细节」后面）：\n")
+			b.WriteString(truncateRunes(facts, 800) + "\n")
+		} else {
+			b.WriteString("这一轮没有留下可读结论摘要。如实说做完了但还没整理出要点，问对方要不要接着补查；")
+			b.WriteString("禁止空说「弄完了，想看细节跟我说」。\n")
+		}
 	case "cancelled":
 		b.WriteString("结果：被取消了。\n")
 	default:
@@ -211,8 +222,8 @@ func outcomeBrief(identity *models.TaskIdentity, outcome TaskOutcome, language s
 			b.WriteString("原因（请翻译成用户能懂的话，不要照抄）：" + truncateRunes(reason, 200) + "\n")
 		}
 	}
-	b.WriteString("要求：说人话，像同事汇报一样；不要出现任务编号、工作流名、执行环境、工具名；")
-	b.WriteString("不要说「请前往 Approving 查看」；结论要能独立看懂。")
+	b.WriteString("要求：说人话，像同事汇报一样；先给结论再带关键发现；不要出现任务编号、工作流名、执行环境、工具名；")
+	b.WriteString("不要说「请前往 Approving 查看」；不要把实质内容推到下一轮；结论要能独立看懂。")
 	if services.NormalizeLanguage(language) == "en" {
 		b.WriteString("\n用英文回答。")
 	}
@@ -220,22 +231,17 @@ func outcomeBrief(identity *models.TaskIdentity, outcome TaskOutcome, language s
 }
 
 // outcomeFallbackText is the self-contained version sent when synthesis is
-// unavailable. It never tells the user to go look somewhere else.
+// unavailable. It never tells the user to go look somewhere else, and it must
+// carry ResultSummary when present — an empty "弄完了" is what produced the
+// hollow IM replies this path exists to avoid.
 func outcomeFallbackText(identity *models.TaskIdentity, outcome TaskOutcome, language string) string {
 	title := services.SanitizeShortTitle(identity.ShortTitle)
 	en := services.NormalizeLanguage(language) == "en"
+	facts := ScrubInternalTerms(strings.TrimSpace(outcome.ResultSummary))
+	facts = truncateRunes(facts, 400)
 	switch strings.ToLower(strings.TrimSpace(outcome.Status)) {
 	case "completed":
-		if en {
-			if title == "" {
-				return "That one's done. Ask me if you want the details."
-			}
-			return "\"" + title + "\" is done. Ask me if you want the details."
-		}
-		if title == "" {
-			return "刚才那个弄完了。想看细节的话跟我说。"
-		}
-		return title + "弄完了。想看细节的话跟我说。"
+		return completedOutcomeFallback(title, facts, en)
 	case "cancelled":
 		if en {
 			if title == "" {
@@ -260,6 +266,32 @@ func outcomeFallbackText(identity *models.TaskIdentity, outcome TaskOutcome, lan
 		}
 		return title + "没做成：" + reason + "要我再试一次吗？"
 	}
+}
+
+func completedOutcomeFallback(title, facts string, en bool) string {
+	facts = strings.TrimSpace(facts)
+	if facts != "" {
+		if en {
+			if title == "" {
+				return "Done. " + facts
+			}
+			return "\"" + title + "\" is done. " + facts
+		}
+		if title == "" {
+			return "弄完了。" + facts
+		}
+		return title + "弄完了。" + facts
+	}
+	if en {
+		if title == "" {
+			return "That one's done, but this turn didn't leave a readable summary. Want me to dig in again?"
+		}
+		return "\"" + title + "\" is done, but this turn didn't leave a readable summary. Want me to dig in again?"
+	}
+	if title == "" {
+		return "刚才那个弄完了，但这一轮没留下可读结论。要我接着补查可以说。"
+	}
+	return title + "弄完了，但这一轮没留下可读结论。要我接着补查可以说。"
 }
 
 // humanizeFailureReason turns an aggregated failure cause into something a user

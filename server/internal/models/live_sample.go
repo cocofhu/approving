@@ -22,6 +22,9 @@ type LiveDecisionSample struct {
 	ConversationID string `gorm:"size:191;index:idx_live_sample_scope,priority:2" json:"conversationId"`
 	TurnID         string `gorm:"size:191;index" json:"turnId,omitempty"`
 	UserMessageID  string `gorm:"size:191" json:"userMessageId,omitempty"`
+	// TraceID joins every layer that touched this inbound turn: Live routing,
+	// sandbox work, MCP tools, synthesis, and outbound delivery audits.
+	TraceID string `gorm:"size:64;index" json:"traceId,omitempty"`
 
 	UserText string `gorm:"type:text" json:"userText"`
 	// DirectorContext is the ledger snapshot the model was briefed with.
@@ -37,8 +40,11 @@ type LiveDecisionSample struct {
 	ToolResults string `gorm:"type:text" json:"toolResults,omitempty"`
 	// Actions is what actually left the platform: reason and text per message.
 	Actions string `gorm:"type:text" json:"actions,omitempty"`
-	// Route names the decision in one word (reply / dispatch / status /
-	// cancel / fallthrough), so samples can be counted without parsing.
+	// Spans is the ordered call-chain for this turn (JSON), so a debug query
+	// does not have to reconstruct timing from scattered logs.
+	Spans string `gorm:"type:text" json:"spans,omitempty"`
+	// Route names the decision in one word (reply / dispatch / refine /
+	// fallthrough / direct), so samples can be counted without parsing.
 	Route string `gorm:"size:32;index" json:"route,omitempty"`
 	// PMOutcome is what the work layer eventually concluded, filled in when the
 	// result comes back rather than at decision time.

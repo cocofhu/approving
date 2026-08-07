@@ -52,6 +52,7 @@ type ChannelContext struct {
 	Scene          string
 	ConversationID string
 	ExternalUserID string
+	TraceID        string
 }
 
 // IMTarget is passed to the external notifier so lifecycle messages stay bound
@@ -61,6 +62,7 @@ type IMTarget struct {
 	Scene          string
 	ConversationID string
 	UserID         string
+	TraceID        string
 }
 
 // Host manages project-scoped PM MCP sessions and tool dispatch.
@@ -382,6 +384,21 @@ func (h *Host) auditToolCall(projectID, token, mcpID, tool string, args map[stri
 	if s, ok := result.(string); ok && len(s) > 2000 {
 		resultPayload = s[:2000] + "…"
 	}
+	payload := map[string]any{
+		"mcp":       mcpID,
+		"tool":      tool,
+		"arguments": args,
+		"result":    resultPayload,
+		"isError":   isErr,
+	}
+	if sess, ok := h.SessionFor(projectID, token); ok {
+		if tid := strings.TrimSpace(sess.Channel.TraceID); tid != "" {
+			payload["traceId"] = tid
+		}
+		if conv := strings.TrimSpace(sess.Channel.ConversationID); conv != "" {
+			payload["conversationId"] = conv
+		}
+	}
 	h.recordAudit(services.AuditRecord{
 		ProjectID:    projectID,
 		Actor:        actor,
@@ -390,13 +407,7 @@ func (h *Host) auditToolCall(projectID, token, mcpID, tool string, args map[stri
 		ResourceID:   tool,
 		Outcome:      outcome,
 		Summary:      "mcp " + mcpID + "/" + tool,
-		Payload: map[string]any{
-			"mcp":       mcpID,
-			"tool":      tool,
-			"arguments": args,
-			"result":    resultPayload,
-			"isError":   isErr,
-		},
+		Payload:      payload,
 	})
 }
 
@@ -1117,6 +1128,7 @@ func imTargetForSession(sess *Session) IMTarget {
 	return IMTarget{
 		ChannelType: sess.Channel.ChannelType, Scene: sess.Channel.Scene,
 		ConversationID: sess.Channel.ConversationID, UserID: sess.Channel.ExternalUserID,
+		TraceID: sess.Channel.TraceID,
 	}
 }
 

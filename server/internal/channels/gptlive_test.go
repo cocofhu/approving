@@ -82,6 +82,12 @@ func liveCancel(taskID string) liveagent.Result {
 	return liveagent.Result{ToolName: cancelWorkTool, Args: map[string]string{"task_id": taskID}}
 }
 
+func liveRefine(request, taskID, userReply string) liveagent.Result {
+	return liveagent.Result{ToolName: refineWorkTool, Args: map[string]string{
+		"request": request, "task_id": taskID, "user_reply": userReply,
+	}}
+}
+
 // gptLive is the inbound pipeline over a real database: DB-backed delivery
 // policy, a bridge-backed transcript, and a fake adapter standing in for QQ.
 type gptLive struct {
@@ -256,8 +262,11 @@ func TestConversationModelFailureStillAnswersTheUser(t *testing.T) {
 		t.Fatalf("a failed model call swallowed the message: %v", g.agent)
 	}
 	got := sentTexts(g.fa)
-	if len(got) != 2 || !strings.Contains(got[0], "什么进度了") || got[1] != "agent-answer" {
-		t.Fatalf("sends = %v want fallthrough ack then the agent's answer", got)
+	if len(got) != 2 || got[0] != "我这就去确认，有结果马上回你。" || got[1] != "agent-answer" {
+		t.Fatalf("sends = %v want plain fallthrough ack then the agent's answer", got)
+	}
+	if strings.Contains(got[0], "什么进度了") {
+		t.Fatalf("fallthrough ack echoed the user's question: %q", got[0])
 	}
 }
 
@@ -423,6 +432,15 @@ func TestEmptyAcknowledgementIsReplacedAndFlagged(t *testing.T) {
 	kept, flags := gateAcknowledgement("我去翻一下登录页那个 500，翻到就回你。", "登录页报错", "")
 	if kept != "我去翻一下登录页那个 500，翻到就回你。" || len(flags) != 0 {
 		t.Fatalf("an informative acknowledgement was rewritten: %q flags=%v", kept, flags)
+	}
+
+	plain, flags := gateAcknowledgement("", "", "项目的错误处理完整吗")
+	if plain != "我这就去确认，有结果马上回你。" || len(flags) != 1 {
+		t.Fatalf("empty title should not quote the user's question: %q flags=%v", plain, flags)
+	}
+	echo, flags := gateAcknowledgement("", "项目的错误处理完整吗", "项目的错误处理完整吗")
+	if strings.Contains(echo, "「") || len(flags) != 1 {
+		t.Fatalf("title that repeats the question should stay unquoted: %q flags=%v", echo, flags)
 	}
 }
 
@@ -625,11 +643,74 @@ func TestConcurrencyLimitIsExplainedRatherThanImposedSilently(t *testing.T) {
 		t.Fatalf("a rejected delegation reached the agent anyway: %v", g.agent)
 	}
 	last := live.seen[len(live.seen)-1]
-	if !strings.Contains(last[len(last)-1].Content, "rejected") {
-		t.Fatalf("the model was not told the delegation was declined: %s", last[len(last)-1].Content)
+	toolMsg := last[len(last)-1].Content
+	if !strings.Contains(toolMsg, "rejected") || !strings.Contains(toolMsg, "refine_work") {
+		t.Fatalf("decline must point the model at refine_work for follow-ups: %s", toolMsg)
 	}
 	if got := sentTexts(g.fa); len(got) != 1 || !strings.Contains(got[0], "三件事") {
 		t.Fatalf("sends = %v want the limit explained in the model's own words", got)
+	}
+}
+
+// An answered lookup must not linger in the ledger. The temporary dispatch:*
+// row is not a Run, so without an explicit close it kept showing up as one of
+// the "3 tasks still running" ghosts that poisoned later intent.
+func TestAnsweredLookupLeavesNoGhostInTheLedger(t *testing.T) {
+	g := newGPTLive(t)
+	g.m.SetLiveModel(&fakeLive{configured: true, decisions: []liveagent.Result{
+		liveDispatch("查错误处理是否完整", "错误处理"),
+	}})
+
+	g.say("m1", "项目的错误处理完整吗")
+
+	tasks := g.m.taskLedger(g.rc, InboundMessage{UserID: "u1", ConversationID: "user1"})
+	if len(tasks) != 0 {
+		t.Fatalf("answered lookup still listed as running: %+v", tasks)
+	}
+}
+
+// A scope follow-up ("重点看 Release 到现在") must hang on the focused task.
+// Opening a fourth job and asking the user which of three to cancel is exactly
+// the queue-politics reply that should never leave the conversation layer.
+func TestRefineWorkFollowsUpWithoutOpeningANewTask(t *testing.T) {
+	g := newGPTLive(t)
+	focus := g.seedTask("run-err", "查主干错误处理")
+	for i, title := range []string{"审计日志", "修 Run/PR"} {
+		g.seedTask(string(rune('a'+i))+"-run", title)
+	}
+	if _, err := g.m.taskContext.SetFocus(g.m.taskScopeFor(g.rc, InboundMessage{
+		UserID: "u1", ConversationID: "user1",
+	}), focus, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	g.m.SetLiveModel(&fakeLive{configured: true, decisions: []liveagent.Result{
+		liveRefine("重点看最新 Release 到现在的改动，那段比较粗糙", focus.ID, "好，我按 Release 以后这段接着看。"),
+	}})
+
+	g.say("m1", "重点看看最新的Release 到现在的版本 做得比较粗糙")
+
+	if len(g.agent) != 1 {
+		t.Fatalf("refine did not reach the agent: %v", g.agent)
+	}
+	d := g.agent[0].Dispatch
+	if d == nil || d.TaskID != focus.ID {
+		t.Fatalf("refine opened or retargeted work: %+v", d)
+	}
+	if !strings.Contains(d.Brief, "Release") || !strings.Contains(d.Brief, "补充") {
+		t.Fatalf("brief missing the follow-up: %q", d.Brief)
+	}
+	if got := sentTexts(g.fa); len(got) < 1 || !strings.Contains(got[0], "Release") {
+		t.Fatalf("sends = %v want a refine ack, not a queue dump", got)
+	}
+	for _, line := range sentTexts(g.fa) {
+		if strings.Contains(line, "队列") || strings.Contains(line, "先停") {
+			t.Fatalf("refine path dumped queue politics: %q", line)
+		}
+	}
+	tasks := g.m.taskLedger(g.rc, InboundMessage{UserID: "u1", ConversationID: "user1"})
+	if len(tasks) != 3 {
+		t.Fatalf("refine must not create a fourth ledger row: %d", len(tasks))
 	}
 }
 

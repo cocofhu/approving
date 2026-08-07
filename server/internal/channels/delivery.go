@@ -28,6 +28,7 @@ type SendableRequest struct {
 
 	RunID       string
 	TaskContext string
+	TraceID     string
 
 	Kind      sendable.Kind
 	Reason    string
@@ -50,6 +51,7 @@ func (r SendableRequest) Envelope() sendable.DeliveryEnvelope {
 		Priority: priority, RunID: strings.TrimSpace(r.RunID),
 		TaskContext: strings.TrimSpace(r.TaskContext), ProjectID: r.ProjectID,
 		ConversationID: r.ConversationID, UserID: r.UserID,
+		TraceID:   strings.TrimSpace(r.TraceID),
 		DedupeKey: strings.TrimSpace(r.DedupeKey), Reason: r.Reason,
 		Kind: r.Kind, Progress: r.Progress,
 		// Everything routed through this API is composed by orchestration, not
@@ -145,6 +147,7 @@ type ConversationReply struct {
 	Scene          Scene
 	ConversationID string
 	UserID         string
+	TraceID        string
 	Text           string
 	ShortTitle     string
 }
@@ -193,8 +196,8 @@ func (m *Manager) DeliverConversationReply(ctx context.Context, reply Conversati
 	result, err := m.DeliverSendable(ctx, SendableRequest{
 		ProjectID: reply.ProjectID, Scene: scene, ConversationID: reply.ConversationID,
 		UserID: reply.UserID, RunID: strings.TrimSpace(reply.RunID),
-		TaskContext: scope,
-		Kind:        sendable.KindFinal, Reason: "pm_reply",
+		TaskContext: scope, TraceID: strings.TrimSpace(reply.TraceID),
+		Kind:     sendable.KindFinal, Reason: "pm_reply",
 		Priority: sendable.PriorityCritical,
 		// No explicit dedupe key: the policy derives one from the content, so a
 		// retry of the same answer collapses while two different answers in the

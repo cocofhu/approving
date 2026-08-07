@@ -367,6 +367,7 @@ func main() {
 			Payload: map[string]any{
 				"reason": entry.Reason, "run": entry.RunID, "channel": string(entry.Channel),
 				"dedupe": entry.DedupeKey, "result": entry.Result, "attempt": entry.Attempt,
+				"traceId": entry.TraceID,
 			},
 		})
 	})
@@ -386,7 +387,8 @@ func main() {
 	// Every routing decision is recorded. Earlier rounds of this layer were
 	// tuned by adding banned phrases because nothing captured what the model
 	// was shown and what it chose; with samples, a change can be measured.
-	channelMgr.SetLiveSampleService(services.NewLiveSampleService(db))
+	liveSamples := services.NewLiveSampleService(db)
+	channelMgr.SetLiveSampleService(liveSamples)
 	riskSvc := services.NewRiskConfirmationService(db)
 	channelMgr.SetRiskConfirmationService(riskSvc)
 	channelMgr.SetRiskActionExecutor(func(projectID, runID, action string, meta map[string]string) error {
@@ -452,6 +454,8 @@ func main() {
 		Audit:         auditSvc,
 		InjectBundles: injectStore,
 		LiveModel:     liveClient,
+		LiveSamples:   liveSamples,
+		TaskContext:   taskContextSvc,
 		Onboarding:    services.NewOnboardingService(projectSvc, skillSvc, wfSvc),
 	}
 
