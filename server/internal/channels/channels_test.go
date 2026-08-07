@@ -903,12 +903,17 @@ func TestDispatchForwardsOnlyExplicitlySendableProgress(t *testing.T) {
 	if countText(got, "卡住了：CI 红了") != 1 {
 		t.Fatalf("missing structured blocker in %v", got)
 	}
-	// Progress already marked the turn replied; FinalSummary must not double-send.
-	if countText(got, "final-ok") != 0 {
-		t.Fatalf("FinalSummary must be suppressed after progress outbound: %v", got)
+	// Progress is not an answer. Suppressing the conclusion because an update
+	// went out first is how "还在跑" became the last thing a user heard about a
+	// task that had already finished.
+	if countText(got, "final-ok") != 1 {
+		t.Fatalf("the conclusion was swallowed by earlier progress: %v", got)
 	}
-	if len(got) != 2 {
-		t.Fatalf("sends = %v want milestone + blocker only", got)
+	if len(got) != 3 {
+		t.Fatalf("sends = %v want milestone + blocker + conclusion", got)
+	}
+	if got[len(got)-1] != "final-ok" {
+		t.Fatalf("the conclusion did not come last: %v", got)
 	}
 }
 

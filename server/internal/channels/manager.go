@@ -94,17 +94,27 @@ type Manager struct {
 	convMu     sync.Mutex
 	convQueues map[string]*convQueue
 
+	// busyHintMu guards the per-conversation rate limits: the backlog notice and
+	// the progress floor. Both answer the same question — when may this
+	// conversation be interrupted again — so they share a lock.
 	busyHintMu   sync.Mutex
 	busyHintSent map[string]time.Time
+	progressSent map[string]time.Time
 
 	repliedMu sync.Mutex
 	replied   map[string]bool
 	// answered is the stricter marker: this turn has already delivered an
-	// answer, not merely something user-visible. Progress milestones and run
-	// acknowledgements set replied but not this, because suppressing the actual
-	// answer because a progress line went out first is worse than the double
-	// reply the marker exists to prevent.
+	// answer, not merely something user-visible. Progress milestones set
+	// replied but not this, because suppressing the actual answer because a
+	// progress line went out first is worse than the double reply the marker
+	// exists to prevent.
 	answered map[string]bool
+	// acked records that the conversation layer already told the user this is
+	// being picked up. It is separate from replied because only one thing may
+	// be suppressed by it — the platform's own run acceptance notice — and
+	// suppressing that on the strength of any progress line would lose the only
+	// confirmation some delegations ever send.
+	acked map[string]bool
 
 	// synthesize rewrites background events for the conversation they belong
 	// to. nil means outcomes go out as structured fallbacks.
@@ -112,6 +122,24 @@ type Manager struct {
 
 	captureMu sync.Mutex
 	captured  map[string]*string
+
+	// warmed marks conversations whose sandbox has been brought up ahead of
+	// being needed, so the pre-warm happens once rather than on every message.
+	warmMu sync.Mutex
+	warmed map[string]bool
+
+	// workNotes is the conversation layer's memory of what the work layer last
+	// reported, keyed by project|run. It exists so a progress question is
+	// answered from something observed rather than from the model's impression
+	// of how long ago it delegated.
+	noteMu    sync.Mutex
+	workNotes map[string]workNote
+
+	// samples records what the conversation layer decided and why. Every
+	// previous round of this design was tuned by adding banned phrases, because
+	// nothing recorded the decisions well enough to tell whether routing had
+	// actually improved. nil means sampling is off.
+	samples *services.LiveSampleService
 
 	pushMu     sync.Mutex
 	pushQueues map[string]*pushQueue
@@ -161,8 +189,11 @@ func NewManager(bridge *ChannelBridge, factories map[string]AdapterFactory, decr
 		convQueues:   map[string]*convQueue{},
 		pushQueues:   map[string]*pushQueue{},
 		busyHintSent: map[string]time.Time{},
+		progressSent: map[string]time.Time{},
 		replied:      map[string]bool{},
 		answered:     map[string]bool{},
+		acked:        map[string]bool{},
+		workNotes:    map[string]workNote{},
 		baseCtx:      context.Background(),
 		policy:       sendable.NewPolicy(nil, nil),
 	}
@@ -187,6 +218,13 @@ func (m *Manager) SetSendablePolicy(policy *sendable.Policy) {
 // SetRetryBackoff overrides the outbound retry backoff schedule.
 func (m *Manager) SetRetryBackoff(backoff func(attempt int) time.Duration) {
 	m.retryBackoff = backoff
+}
+
+// SetLiveSampleService installs the decision recorder for the conversation
+// layer. Without it the platform still runs, but nothing can be learned from
+// how it routed.
+func (m *Manager) SetLiveSampleService(service *services.LiveSampleService) {
+	m.samples = service
 }
 
 // SetTaskContextService exposes DB-backed task identity/focus to orchestration.
@@ -386,9 +424,13 @@ func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMe
 	// this system used to feel like filing tickets.
 	outcome := m.routeThroughLiveModel(ctx, rc, in)
 	if outcome.answered {
+		// The conversation is moving without the work layer, which is the good
+		// case and also the moment to get it ready: the next message that does
+		// need it should not pay for a container.
+		m.warmWorkLayer(rc, in)
 		return
 	}
-	in.EscalationReason = outcome.reason
+	outcome.applyTo(&in)
 
 	key := convKey(rc.cfg.ProjectID, in.Scene, in.ConversationID)
 	q := m.convQueueFor(key)
@@ -425,7 +467,7 @@ func (m *Manager) handleInbound(ctx context.Context, rc *runningChannel, in Inbo
 	if outcome.answered {
 		return
 	}
-	in.EscalationReason = outcome.reason
+	outcome.applyTo(&in)
 	m.runTurn(ctx, rc, in)
 }
 
@@ -546,20 +588,33 @@ func (m *Manager) drainConvQueue(q *convQueue, key string) {
 	}
 }
 
-// runTurn executes one foreground Live turn.
+// runTurn executes one foreground work turn.
 //
 // The turn is expected to either answer briefly or delegate, and it is bounded
-// so a conversation is never held open by work that belongs in a Run. No
-// acknowledgement precedes it — the reply is the acknowledgement.
+// so a conversation is never held open by work that belongs in a Run. What the
+// agent produces does not go to the user directly: it is captured and reported
+// by the conversation layer, so the user hears one voice for the whole
+// exchange. The capture is dropped when there is no conversation layer to
+// report through, because a silent turn is worse than one in the wrong register.
 func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMessage) {
 	// Keyed by conversation, not by inbound message id: the MCP host marks its
 	// own replies and only knows which conversation it is serving.
 	scope := conversationTurnScope(rc.cfg.ProjectID, in.Scene, in.ConversationID)
 	m.clearReplied(scope)
-	defer m.clearReplied(scope)
+	// An acknowledgement the conversation layer already sent belongs to this
+	// turn: the user has heard from us, even though the turn is only starting
+	// now. Carrying it across is what stops the timeout path from apologising
+	// for silence a moment after promising a result.
+	if m.hasAcknowledged(scope) {
+		m.markReplied(scope)
+	}
+	defer m.clearTurnMarkers(scope)
 
 	pendingID := m.beginPendingTurn(rc, in)
 	defer m.endPendingTurn(pendingID)
+
+	collect := m.beginForegroundCapture(rc, in)
+	defer collect.release()
 
 	timeout := foregroundTurnTimeout
 	if configured := time.Duration(rc.cfg.TurnTimeoutSeconds) * time.Second; configured > 0 {
@@ -577,32 +632,9 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		TurnTimeout: timeout,
 		Caps:        SessionCapsFromConfig(rc.cfg.Config),
 	}
-	// Foreground turns stay silent until the single final answer (or a real
-	// RunAcceptanceAck after pm_start_run). Fixed stillWorking templates and
-	// streaming openers are hard-disabled — they caused multi-send UX noise.
-	onProgress := func(ev ProgressEvent) {
-		text := FormatProgressText(ev)
-		if text == "" {
-			return
-		}
-		// live_first_sentence was an early-release opener; never user-visible.
-		if strings.TrimSpace(ev.Reason) == "live_first_sentence" {
-			return
-		}
-		// Classification-only events stay internal; sendOutbound still runs so
-		// the suppression is audited with a reason instead of vanishing.
-		result := m.sendOutboundResult(ctx, rc, OutboundMessage{
-			Scene: in.Scene, ConversationID: in.ConversationID,
-			ReplyToMessageID: in.MessageID, Text: text,
-			Envelope: progressEnvelope(rc, in, ev),
-		})
-		// A delivered milestone is the turn's first meaningful response; the
-		// final summary must not repeat it verbatim.
-		if result.Sent {
-			m.markReplied(scope)
-		}
-	}
+	onProgress := func(ev ProgressEvent) { m.reportProgress(ctx, rc, in, scope, ev) }
 	reply, err := m.handleTurn(turnCtx, resolved, in, onProgress)
+	captured := collect.take()
 	if err != nil {
 		// Running out of time is not a failure, but it is not a delegation
 		// either: nothing was started and nothing is still running. Saying "I'll
@@ -625,7 +657,12 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		return
 	}
 
-	summary, reason, ok := deliverableFinalText(reply)
+	// What the agent answered through pm_reply is the conclusion; the turn's
+	// own final summary is the fallback for an agent that ended without one.
+	summary, reason, ok := captured, "pm_reply_captured", captured != ""
+	if !ok {
+		summary, reason, ok = deliverableFinalText(reply)
+	}
 	if !ok {
 		// The agent finished without submitting anything the user can read. If
 		// something substantive already went out this turn, staying quiet is the
@@ -641,21 +678,87 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		})
 		return
 	}
-	// Something user-visible already left this turn (pm_reply, RunAcceptanceAck,
-	// or a real progress milestone). Do not append a second FinalSummary — that
-	// is the "answer + wrap-up" double-send the markReplied gate exists to stop.
-	if m.hasReplied(scope) {
+	// An acknowledgement or a progress line is not an answer, so neither may be
+	// the reason a conclusion is withheld. Only a delivered answer is.
+	if m.hasAnswered(scope) {
 		return
 	}
-	m.sendOutbound(ctx, rc, OutboundMessage{
+	final, degraded := m.reportThroughDirector(ctx, rc, in, summary)
+	m.attachSampleOutcome(in.DecisionSampleID, summary, collect.egress(degraded))
+	sent := m.sendOutboundResult(ctx, rc, OutboundMessage{
 		Scene: in.Scene, ConversationID: in.ConversationID, ReplyToMessageID: in.MessageID,
-		Text: summary, ImageURLs: reply.ImageURLs,
+		Text: final, ImageURLs: reply.ImageURLs,
 		Envelope: func() sendable.DeliveryEnvelope {
 			e := turnEnvelope(rc, in, sendable.KindFinal, reason, sendable.PriorityCritical)
 			e.Structured = true
 			return e
 		}(),
 	})
+	if sent.Sent {
+		m.markAnswered(scope)
+	}
+}
+
+// progressReportInterval rate-limits progress lines per conversation.
+//
+// A minute-scale task can emit a dozen classified milestones, and forwarding
+// each one turns an update into a stream the user has to read past to find the
+// answer. Earlier rounds fixed this by banning progress entirely, which traded
+// noise for silence; a floor between reports keeps the update and drops the
+// stream.
+const progressReportInterval = 90 * time.Second
+
+// reportProgress records what the work layer observed and, at most once per
+// interval, says it out loud.
+func (m *Manager) reportProgress(ctx context.Context, rc *runningChannel, in InboundMessage,
+	scope string, ev ProgressEvent) {
+	// live_first_sentence was an early-release opener that raced the answer;
+	// never user-visible.
+	if strings.TrimSpace(ev.Reason) == "live_first_sentence" {
+		return
+	}
+	// The ledger records everything, including events too minor to interrupt
+	// with, so a later "how's it going" can answer from the newest one.
+	m.noteWorkProgress(rc.cfg.ProjectID, ev.RunID, ev.Stage+ev.Summary,
+		ev.Blocked || ev.Kind == ProgressBlocker)
+
+	text := FormatProgressText(ev)
+	if text == "" {
+		return
+	}
+	text = m.labelProgress(rc, in, ev, text)
+	// A blocker or a question needs the user now; ordinary progress waits its
+	// turn. Suppression still goes through sendOutbound so it is audited with a
+	// reason rather than vanishing.
+	urgent := ev.Blocked || ev.ActionRequired ||
+		ev.Kind == ProgressBlocker || ev.Kind == ProgressConfirm
+	if !urgent && !m.progressDue(scope) {
+		return
+	}
+	result := m.sendOutboundResult(ctx, rc, OutboundMessage{
+		Scene: in.Scene, ConversationID: in.ConversationID,
+		ReplyToMessageID: in.MessageID, Text: text,
+		Envelope: progressEnvelope(rc, in, ev),
+	})
+	if result.Sent {
+		// Spoken, but not answered: the conclusion still has to go out.
+		m.markReplied(scope)
+	}
+}
+
+// progressDue claims this conversation's next progress slot.
+func (m *Manager) progressDue(scope string) bool {
+	now := time.Now()
+	m.busyHintMu.Lock()
+	defer m.busyHintMu.Unlock()
+	if last, seen := m.progressSent[scope]; seen && now.Sub(last) < progressReportInterval {
+		return false
+	}
+	if m.progressSent == nil {
+		m.progressSent = map[string]time.Time{}
+	}
+	m.progressSent[scope] = now
+	return true
 }
 
 // sandboxOpenBudget is the cold-start allowance for this Manager.
@@ -1205,6 +1308,34 @@ func (m *Manager) clearReplied(scope string) {
 	m.repliedMu.Lock()
 	delete(m.replied, scope)
 	delete(m.answered, scope)
+	m.repliedMu.Unlock()
+}
+
+// markAcknowledged records that the user has been told this turn's work is
+// being picked up, so the platform does not say it a second time in its own
+// words when the agent starts the Run.
+func (m *Manager) markAcknowledged(scope string) {
+	if strings.TrimSpace(scope) == "" {
+		return
+	}
+	m.repliedMu.Lock()
+	m.acked[scope] = true
+	m.repliedMu.Unlock()
+}
+
+func (m *Manager) hasAcknowledged(scope string) bool {
+	m.repliedMu.Lock()
+	defer m.repliedMu.Unlock()
+	return m.acked[scope]
+}
+
+// clearTurnMarkers ends a turn: nothing it said may suppress anything in the
+// next one.
+func (m *Manager) clearTurnMarkers(scope string) {
+	m.repliedMu.Lock()
+	delete(m.replied, scope)
+	delete(m.answered, scope)
+	delete(m.acked, scope)
 	m.repliedMu.Unlock()
 }
 

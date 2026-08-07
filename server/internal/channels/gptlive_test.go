@@ -13,20 +13,37 @@ import (
 	"gorm.io/gorm"
 )
 
-// fakeLive stands in for a conversation-model endpoint. Each inbound message
-// consumes one scripted decision; running out means the script and the
-// conversation disagree, which is a test failure worth seeing.
+// fakeLive stands in for a conversation-model endpoint.
+//
+// Routing calls and phrasing calls are told apart by whether tools were
+// offered, because that is the real difference between them: routing decides
+// what to do and needs the tools, phrasing only rewords a conclusion the
+// platform already has. Each routing call consumes one scripted decision;
+// running out means the script and the conversation disagree, which is a test
+// failure worth seeing.
 type fakeLive struct {
 	configured bool
 	decisions  []liveagent.Result
 	err        error
-	seen       [][]liveagent.Message
+	// report answers the phrasing call. nil leaves it unanswered, which is what
+	// production does when the endpoint is slow: the conclusion goes out in the
+	// work layer's own words.
+	report  *liveagent.Result
+	seen    [][]liveagent.Message
+	systems []string
 }
 
 func (f *fakeLive) Configured() bool { return f.configured }
 
 func (f *fakeLive) Complete(_ context.Context, req liveagent.Request) (liveagent.Result, error) {
+	if len(req.Tools) == 0 {
+		if f.report == nil {
+			return liveagent.Result{}, errors.New("fakeLive: no phrasing configured")
+		}
+		return *f.report, nil
+	}
 	f.seen = append(f.seen, req.Messages)
+	f.systems = append(f.systems, req.System)
 	if f.err != nil {
 		return liveagent.Result{}, f.err
 	}
@@ -40,8 +57,29 @@ func (f *fakeLive) Complete(_ context.Context, req liveagent.Request) (liveagent
 
 func liveAnswer(text string) liveagent.Result { return liveagent.Result{Text: text} }
 
-func liveEscalate(request string) liveagent.Result {
-	return liveagent.Result{ToolName: askProjectAgentTool, Args: map[string]string{"request": request}}
+// liveDispatch scripts a delegation. Lookup work with no acknowledgement is the
+// quiet shape: the user hears one message, the conclusion.
+func liveDispatch(request, title string) liveagent.Result {
+	return liveagent.Result{ToolName: dispatchPMTool, Args: map[string]string{
+		"request": request, "difficulty": string(DifficultyLookup),
+		"short_title": title, "wait": "true",
+	}}
+}
+
+// liveHeavyDispatch scripts a delegation that answers the user first.
+func liveHeavyDispatch(request, title, userReply string) liveagent.Result {
+	return liveagent.Result{ToolName: dispatchPMTool, Args: map[string]string{
+		"request": request, "difficulty": string(DifficultyHeavy),
+		"short_title": title, "user_reply": userReply,
+	}}
+}
+
+func liveGetStatus(taskID string) liveagent.Result {
+	return liveagent.Result{ToolName: getStatusTool, Args: map[string]string{"task_id": taskID}}
+}
+
+func liveCancel(taskID string) liveagent.Result {
+	return liveagent.Result{ToolName: cancelWorkTool, Args: map[string]string{"task_id": taskID}}
 }
 
 // gptLive is the inbound pipeline over a real database: DB-backed delivery
@@ -72,6 +110,7 @@ func newGPTLive(t *testing.T) *gptLive {
 	m.SetTranscript(bridge)
 	m.SetRiskConfirmationService(services.NewRiskConfirmationService(db))
 	m.SetTaskContextService(services.NewTaskContextService(db))
+	m.SetLiveSampleService(services.NewLiveSampleService(db))
 
 	rc := testRunningChannel(fa)
 	rc.cfg.ProjectID = "proj"
@@ -113,6 +152,21 @@ func (g *gptLive) transcript() []string {
 	return out
 }
 
+// briefFor renders the work brief the sandbox would receive for the escalated
+// turn, which is where "what does the agent actually get told" is decided.
+func (g *gptLive) briefFor(in InboundMessage) string {
+	g.t.Helper()
+	thread, err := g.pm.GetThreadByID(g.threadID())
+	if err != nil {
+		g.t.Fatal(err)
+	}
+	current, err := g.pm.GetMessage(thread.ID, in.RecordedMessageID)
+	if err != nil {
+		g.t.Fatalf("escalated turn has no transcript row: %v", err)
+	}
+	return g.bridge.buildWorkBrief(thread, current, in)
+}
+
 // A configured conversation model answers chat itself, in one message, without
 // ever opening a sandbox.
 func TestLiveModelAnswersChatWithoutTheAgent(t *testing.T) {
@@ -131,13 +185,13 @@ func TestLiveModelAnswersChatWithoutTheAgent(t *testing.T) {
 	assertNoBannedOutbound(t, sentTexts(g.fa))
 }
 
-// Anything that needs the repository is handed over, and the handover carries
+// Anything that needs the repository is delegated, and the delegation carries
 // the request plus the attachments the user sent with it.
-func TestLiveModelEscalationCarriesTextAndAttachments(t *testing.T) {
+func TestDispatchCarriesTextAndAttachments(t *testing.T) {
 	g := newGPTLive(t)
 	g.m.SetLiveModel(&fakeLive{
 		configured: true,
-		decisions:  []liveagent.Result{liveEscalate("按这张截图修登录页")},
+		decisions:  []liveagent.Result{liveDispatch("按这张截图修登录页", "登录页")},
 	})
 
 	g.say("m1", "按这张图修一下", Image{
@@ -145,7 +199,7 @@ func TestLiveModelEscalationCarriesTextAndAttachments(t *testing.T) {
 	})
 
 	if len(g.agent) != 1 {
-		t.Fatalf("escalation did not reach the agent: %v", g.agent)
+		t.Fatalf("delegation did not reach the agent: %v", g.agent)
 	}
 	got := g.agent[0]
 	if got.Text != "按这张图修一下" {
@@ -154,10 +208,13 @@ func TestLiveModelEscalationCarriesTextAndAttachments(t *testing.T) {
 	if len(got.Images) != 1 || got.Images[0].Filename != "shot.png" {
 		t.Fatalf("attachment did not survive routing: %+v", got.Images)
 	}
-	if !strings.Contains(got.EscalationReason, "登录页") {
-		t.Fatalf("escalation reason = %q, the agent cannot tell why it was called", got.EscalationReason)
+	if got.Dispatch == nil || !strings.Contains(got.Dispatch.Brief, "登录页") {
+		t.Fatalf("agent cannot tell why it was called: %+v", got.Dispatch)
 	}
-	// The bytes are stored too, so a later turn can replay them.
+	if got.Dispatch.ShortTitle != "登录页" {
+		t.Fatalf("task title lost: %+v", got.Dispatch)
+	}
+	// The bytes are stored too, so a later turn can fetch them.
 	msgs, err := g.pm.CanonicalWindow(g.threadID(), 10)
 	if err != nil || len(msgs) == 0 {
 		t.Fatalf("transcript = %v err=%v", msgs, err)
@@ -201,16 +258,18 @@ func TestConversationModelFailureStillAnswersTheUser(t *testing.T) {
 	}
 }
 
-// The two layers must see one conversation. After the model answers twice on
-// its own, the turn it hands over has to arrive with those exchanges attached —
-// otherwise the agent starts from a question with no context and asks the user
-// to repeat what they just said.
-func TestEscalatedTurnCarriesWhatTheOuterLayerAnswered(t *testing.T) {
+// The prompt handed to the agent must not be the conversation.
+//
+// Replaying recent turns into every prompt is what this layer replaced: it grew
+// without bound, crowded out the question, and taught the agent to repeat
+// answers the user already had. What the agent gets instead is a pointer to
+// where the history lives.
+func TestWorkBriefDoesNotReplayTheConversation(t *testing.T) {
 	g := newGPTLive(t)
 	g.m.SetLiveModel(&fakeLive{configured: true, decisions: []liveagent.Result{
 		liveAnswer("我在。"),
 		liveAnswer("登录页那条我记得，你说的是首屏。"),
-		liveEscalate("看仓库确认首屏改动"),
+		liveDispatch("看仓库确认首屏改动", "首屏改动"),
 	}})
 
 	g.say("m1", "在吗")
@@ -218,9 +277,9 @@ func TestEscalatedTurnCarriesWhatTheOuterLayerAnswered(t *testing.T) {
 	g.say("m3", "去仓库确认一下改了没")
 
 	if len(g.agent) != 1 {
-		t.Fatalf("agent turns = %d want exactly the escalated one", len(g.agent))
+		t.Fatalf("agent turns = %d want exactly the delegated one", len(g.agent))
 	}
-	// One record, both layers: two turns the model answered, then the escalated
+	// One record, both layers: two turns the model answered, then the delegated
 	// turn and the agent's reply to it.
 	want := []string{
 		"user: 在吗",
@@ -240,37 +299,31 @@ func TestEscalatedTurnCarriesWhatTheOuterLayerAnswered(t *testing.T) {
 		}
 	}
 
-	// The handoff the sandbox would receive names both earlier turns and the
-	// replies the user actually got.
-	thread, err := g.pm.GetThreadByID(g.threadID())
-	if err != nil {
-		t.Fatal(err)
+	brief := g.briefFor(g.agent[0])
+	if strings.Contains(brief, "conversation_handoff") {
+		t.Fatalf("the removed handoff block came back:\n%s", brief)
 	}
-	current, err := g.pm.GetMessage(thread.ID, g.agent[0].RecordedMessageID)
-	if err != nil {
-		t.Fatalf("escalated turn has no transcript row: %v", err)
-	}
-	payload := g.bridge.buildHandoff(thread, current, g.agent[0], false)
-	for _, must := range []string{"在吗", "我在。", "登录页那个还记得吗", "你说的是首屏"} {
-		if !strings.Contains(payload.text, must) {
-			t.Fatalf("handoff lost %q:\n%s", must, payload.text)
+	for _, replayed := range []string{"在吗", "我在。", "登录页那个还记得吗", "你说的是首屏"} {
+		if strings.Contains(brief, replayed) {
+			t.Fatalf("brief replayed the conversation (%q):\n%s", replayed, brief)
 		}
 	}
-	if strings.Contains(payload.text, "去仓库确认一下改了没") {
-		t.Fatalf("handoff repeated the current request as history:\n%s", payload.text)
+	if !strings.Contains(brief, "看仓库确认首屏改动") {
+		t.Fatalf("brief does not say what the agent was asked for:\n%s", brief)
 	}
-	if !strings.Contains(payload.text, "看仓库确认首屏改动") {
-		t.Fatalf("handoff does not say why the turn arrived:\n%s", payload.text)
+	if !strings.Contains(brief, "get_messages") {
+		t.Fatalf("brief does not tell the agent where the history is:\n%s", brief)
 	}
 }
 
-// A picture sent one turn and referred to the next must still reach the layer
-// that can open it.
-func TestAttachmentFromAnEarlierTurnIsReplayedOnEscalation(t *testing.T) {
+// A picture sent one turn and referred to the next must still be reachable. It
+// is named rather than resent: the pointer is everything get_attachment needs,
+// and the bytes would be carried again on every later turn.
+func TestHistoryAttachmentIsNamedRatherThanReplayed(t *testing.T) {
 	g := newGPTLive(t)
 	g.m.SetLiveModel(&fakeLive{configured: true, decisions: []liveagent.Result{
 		liveAnswer("收到，我看看。"),
-		liveEscalate("按上一条的图改"),
+		liveDispatch("按上一条的图改", "按图修改"),
 	}})
 
 	g.say("m1", "这是报错截图", Image{
@@ -278,101 +331,385 @@ func TestAttachmentFromAnEarlierTurnIsReplayedOnEscalation(t *testing.T) {
 	})
 	g.say("m2", "按刚才那张图修")
 
-	thread, err := g.pm.GetThreadByID(g.threadID())
-	if err != nil {
-		t.Fatal(err)
-	}
-	current, err := g.pm.GetMessage(thread.ID, g.agent[0].RecordedMessageID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	payload := g.bridge.buildHandoff(thread, current, g.agent[0], false)
-	if len(payload.images) != 1 {
-		t.Fatalf("history attachment was not replayed: %+v", payload.images)
-	}
-	if payload.images[0].Name != "err.png" || payload.images[0].MimeType != "image/png" {
-		t.Fatalf("replayed attachment lost its identity: %+v", payload.images[0])
-	}
-	if payload.images[0].Data == "" {
-		t.Fatal("replayed attachment carried no bytes")
-	}
-}
-
-// An attachment too large to replay must be named, not dropped: the agent can
-// fetch it, but only if it knows it exists. The current message's own
-// attachments are never the ones sacrificed.
-func TestOversizeHistoryAttachmentIsListedRatherThanDropped(t *testing.T) {
-	g := newGPTLive(t)
-	g.m.SetLiveModel(&fakeLive{configured: true, decisions: []liveagent.Result{
-		liveAnswer("收到。"),
-		liveEscalate("接着上一张图"),
-	}})
-
-	huge := make([]byte, handoffAttachmentBudget)
-	g.say("m1", "大文件", Image{Data: huge, MimeType: "application/pdf", Filename: "big.pdf"})
-	g.say("m2", "按上面那份改", Image{
-		Data: []byte("SMALL"), MimeType: "image/png", Filename: "now.png",
-	})
-
-	thread, err := g.pm.GetThreadByID(g.threadID())
-	if err != nil {
-		t.Fatal(err)
-	}
-	current, err := g.pm.GetMessage(thread.ID, g.agent[0].RecordedMessageID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(current.Images) != 1 || current.Images[0].Name != "now.png" {
-		t.Fatalf("the current message's attachment was not kept intact: %+v", current.Images)
-	}
-	payload := g.bridge.buildHandoff(thread, current, g.agent[0], false)
-	for _, img := range payload.images {
-		if img.Name == "big.pdf" {
-			t.Fatal("an attachment over budget was replayed anyway")
+	brief := g.briefFor(g.agent[0])
+	for _, must := range []string{"err.png", "image/png", "get_attachment", "index=0"} {
+		if !strings.Contains(brief, must) {
+			t.Fatalf("brief lost the attachment pointer %q:\n%s", must, brief)
 		}
 	}
-	if !strings.Contains(payload.text, "big.pdf") || !strings.Contains(payload.text, "get_attachment") {
-		t.Fatalf("oversize attachment vanished silently:\n%s", payload.text)
+	if strings.Contains(brief, "PNGBYTES") {
+		t.Fatalf("attachment bytes were replayed into the prompt:\n%s", brief)
+	}
+	// The pointer names a message the agent can actually fetch.
+	msgs, err := g.pm.CanonicalWindow(g.threadID(), 10)
+	if err != nil || len(msgs) == 0 {
+		t.Fatalf("window = %v err=%v", msgs, err)
+	}
+	if !strings.Contains(brief, msgs[0].ID) {
+		t.Fatalf("brief does not name the message holding the file:\n%s", brief)
+	}
+	// And the conversation layer knew the file existed, so it could point at it.
+	if refs := g.agent[0].Dispatch.Attachments; len(refs) == 0 || refs[0].Name != "err.png" {
+		t.Fatalf("delegation carried no attachment pointer: %+v", refs)
 	}
 }
 
-// A warm sandbox is caught up with what it missed; a fresh one, which
-// remembers nothing, gets the bounded baseline instead of an empty delta.
-func TestHandoffIsIncrementalForAWarmSandboxAndABaselineForAFreshOne(t *testing.T) {
+// The file the user just sent travels with the turn as a file. Only history is
+// fetched on demand; making the agent fetch what it was handed this second
+// would be a round trip for nothing.
+func TestCurrentAttachmentIsNotDeferredToContextStore(t *testing.T) {
 	g := newGPTLive(t)
 	g.m.SetLiveModel(&fakeLive{configured: true, decisions: []liveagent.Result{
-		liveAnswer("早"), liveAnswer("嗯"), liveEscalate("看仓库"),
+		liveDispatch("看这张图", "看图"),
 	}})
-	g.say("m1", "早上好")
-	g.say("m2", "在忙吗")
-	g.say("m3", "去看下仓库")
 
-	thread, err := g.pm.GetThreadByID(g.threadID())
-	if err != nil {
-		t.Fatal(err)
+	g.say("m1", "看看这个", Image{
+		Data: []byte("NOW"), MimeType: "image/png", Filename: "now.png",
+	})
+
+	if imgs := g.agent[0].Images; len(imgs) != 1 || imgs[0].Filename != "now.png" {
+		t.Fatalf("the current attachment did not travel with the turn: %+v", imgs)
 	}
-	current, err := g.pm.GetMessage(thread.ID, g.agent[0].RecordedMessageID)
-	if err != nil {
-		t.Fatal(err)
+	if brief := g.briefFor(g.agent[0]); strings.Contains(brief, "now.png") {
+		t.Fatalf("the current attachment was listed as history to fetch:\n%s", brief)
+	}
+}
+
+// Minute-scale work is acknowledged before it starts, and the acknowledgement
+// says what is being worked on. The conclusion still follows: an
+// acknowledgement is not an answer.
+func TestHeavyWorkIsAcknowledgedBeforeItStarts(t *testing.T) {
+	g := newGPTLive(t)
+	g.m.SetLiveModel(&fakeLive{configured: true, decisions: []liveagent.Result{
+		liveHeavyDispatch("排查登录页 500", "登录页报错", "我去翻一下登录页那个 500，翻到就回你。"),
+	}})
+
+	g.say("m1", "登录页报 500，看看什么原因")
+
+	got := sentTexts(g.fa)
+	if len(got) != 2 {
+		t.Fatalf("sends = %v want an acknowledgement then the conclusion", got)
+	}
+	if !strings.Contains(got[0], "登录页") {
+		t.Fatalf("acknowledgement says nothing verifiable: %q", got[0])
+	}
+	if got[1] != "agent-answer" {
+		t.Fatalf("the conclusion was withheld after an acknowledgement: %v", got)
+	}
+	assertNoBannedOutbound(t, got)
+}
+
+// An acknowledgement that promises nothing is replaced and counted. Banning the
+// old fixed template is not enough: a model saying the same empty thing in its
+// own words leaves the user exactly as uninformed.
+func TestEmptyAcknowledgementIsReplacedAndFlagged(t *testing.T) {
+	text, flags := gateAcknowledgement("好的，稍等，我看一下", "登录页报错", "登录页报 500")
+	if !strings.Contains(text, "登录页报错") {
+		t.Fatalf("replacement names nothing the user can hold us to: %q", text)
+	}
+	if len(flags) != 1 || flags[0] != "empty_ack" {
+		t.Fatalf("flags = %v want the empty acknowledgement counted", flags)
+	}
+	for _, banned := range bannedOutboundPhrases {
+		if strings.Contains(text, banned) {
+			t.Fatalf("replacement reintroduced banned copy %q: %q", banned, text)
+		}
 	}
 
-	fresh := g.bridge.buildHandoff(thread, current, g.agent[0], false)
-	if !strings.Contains(fresh.text, "早上好") {
-		t.Fatalf("a fresh sandbox got no baseline:\n%s", fresh.text)
+	kept, flags := gateAcknowledgement("我去翻一下登录页那个 500，翻到就回你。", "登录页报错", "")
+	if kept != "我去翻一下登录页那个 500，翻到就回你。" || len(flags) != 0 {
+		t.Fatalf("an informative acknowledgement was rewritten: %q flags=%v", kept, flags)
+	}
+}
+
+// "How's it going" is answered from the ledger, and answering it must not start
+// anything. Opening a sandbox to find out where a task is, is how a progress
+// question used to cost a container.
+func TestProgressQuestionIsAnsweredFromTheLedgerWithoutStartingWork(t *testing.T) {
+	g := newGPTLive(t)
+	identity := g.seedTask("run-1", "登录页报错")
+	g.m.noteWorkProgress("proj", "run-1", "正在查代码", false)
+
+	live := &fakeLive{configured: true, decisions: []liveagent.Result{
+		liveGetStatus(identity.ID),
+		liveAnswer("还在跑，现在在查代码。"),
+	}}
+	g.m.SetLiveModel(live)
+
+	g.say("m1", "好了没")
+
+	if len(g.agent) != 0 {
+		t.Fatalf("a progress question opened a sandbox turn: %v", g.agent)
+	}
+	if got := sentTexts(g.fa); len(got) != 1 || got[0] != "还在跑，现在在查代码。" {
+		t.Fatalf("sends = %v want one status reply", got)
+	}
+	// The status the model answered from was the platform's, not its own idea
+	// of one.
+	last := live.seen[len(live.seen)-1]
+	fed := last[len(last)-1].Content
+	for _, must := range []string{getStatusTool, "登录页报错", "正在查代码"} {
+		if !strings.Contains(fed, must) {
+			t.Fatalf("tool result did not carry %q: %s", must, fed)
+		}
+	}
+}
+
+// Cancelling acts on a real task and reports what actually stopped.
+func TestCancelStopsTheNamedTask(t *testing.T) {
+	g := newGPTLive(t)
+	identity := g.seedTask("run-1", "登录页报错")
+	var cancelled []string
+	g.m.SetRiskActionExecutor(func(_, runID, action string, _ map[string]string) error {
+		cancelled = append(cancelled, action+":"+runID)
+		return nil
+	})
+
+	live := &fakeLive{configured: true, decisions: []liveagent.Result{
+		liveCancel(identity.ID),
+		liveAnswer("好，登录页那个我停了。"),
+	}}
+	g.m.SetLiveModel(live)
+
+	g.say("m1", "算了别弄了")
+
+	if len(cancelled) != 1 || cancelled[0] != "cancel_run:run-1" {
+		t.Fatalf("cancel actions = %v want the named run stopped", cancelled)
+	}
+	if got := sentTexts(g.fa); len(got) != 1 || got[0] != "好，登录页那个我停了。" {
+		t.Fatalf("sends = %v want one confirmation", got)
+	}
+}
+
+// With two tasks in flight and nothing to point at, cancelling must not guess.
+// Stopping the wrong task is not a wording mistake that can be apologised for
+// afterwards.
+func TestAmbiguousCancelAsksInsteadOfGuessing(t *testing.T) {
+	g := newGPTLive(t)
+	g.seedTask("run-1", "登录页报错")
+	g.seedTask("run-2", "导出超时")
+	var cancelled []string
+	g.m.SetRiskActionExecutor(func(_, runID, action string, _ map[string]string) error {
+		cancelled = append(cancelled, action+":"+runID)
+		return nil
+	})
+
+	live := &fakeLive{configured: true, decisions: []liveagent.Result{
+		liveCancel(""),
+		liveAnswer("你是说登录页那个，还是导出那个？"),
+	}}
+	g.m.SetLiveModel(live)
+
+	g.say("m1", "算了别弄了")
+
+	if len(cancelled) != 0 {
+		t.Fatalf("an ambiguous cancel stopped something anyway: %v", cancelled)
+	}
+	last := live.seen[len(live.seen)-1]
+	fed := last[len(last)-1].Content
+	if !strings.Contains(fed, "ambiguous") {
+		t.Fatalf("the model was not told the request was ambiguous: %s", fed)
+	}
+	if got := sentTexts(g.fa); len(got) != 1 || !strings.Contains(got[0], "还是") {
+		t.Fatalf("sends = %v want a question back", got)
+	}
+}
+
+// A quick check the director chose to wait on answers once. Acknowledging and
+// then answering a second later is two notifications for one question.
+func TestWaitedLookupAnswersExactlyOnce(t *testing.T) {
+	g := newGPTLive(t)
+	g.m.SetLiveModel(&fakeLive{configured: true, decisions: []liveagent.Result{
+		liveDispatch("确认登录页那个修好没", "登录页报错"),
+	}})
+
+	g.say("m1", "登录页那个修复了没")
+
+	if got := sentTexts(g.fa); len(got) != 1 || got[0] != "agent-answer" {
+		t.Fatalf("sends = %v want a single conclusion with no acknowledgement first", got)
+	}
+	if len(g.agent) != 1 {
+		t.Fatalf("the check never reached the agent: %v", g.agent)
+	}
+}
+
+// A cancelled task must stop reading as running, or the next status question is
+// answered from the ledger with work nobody is doing.
+func TestCancelUpdatesTheLedger(t *testing.T) {
+	g := newGPTLive(t)
+	identity := g.seedTask("run-1", "登录页报错")
+	g.m.SetRiskActionExecutor(func(string, string, string, map[string]string) error { return nil })
+	g.m.SetLiveModel(&fakeLive{configured: true, decisions: []liveagent.Result{
+		liveCancel(identity.ID),
+		liveAnswer("好，停了。"),
+	}})
+
+	g.say("m1", "算了别弄了")
+
+	var stored models.TaskIdentity
+	if err := g.db.First(&stored, "id = ?", identity.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status != "cancelled" || stored.TerminalAt == nil {
+		t.Fatalf("cancelled task still reads as %q (terminal=%v)", stored.Status, stored.TerminalAt)
+	}
+	if focus := g.m.focusTaskID(g.rc, InboundMessage{
+		Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
+	}); focus == identity.ID {
+		t.Fatal("the conversation still points at the task it just cancelled")
+	}
+}
+
+// With two things in flight an update has to say which one moved. With one, the
+// conversation already says it and a title in front reads like a ticket header.
+func TestProgressNamesTheTaskOnlyWhenSeveralAreRunning(t *testing.T) {
+	g := newGPTLive(t)
+	g.seedTask("run-1", "登录页报错")
+	g.m.SetLiveModel(&fakeLive{configured: true, decisions: []liveagent.Result{
+		liveDispatch("查导出超时", "导出超时"),
+	}})
+	g.m.handleFunc = nil
+	g.m.handleFuncWithProgress = func(_ context.Context, _ ResolvedChannel, in InboundMessage,
+		onProgress func(ProgressEvent)) (Reply, error) {
+		g.agent = append(g.agent, in)
+		onProgress(ProgressEvent{
+			Kind: ProgressMilestone, Summary: "已经复现了", Stage: "repro",
+			RunID: "run-1", Sendable: true,
+		})
+		return Reply{FinalSummary: "agent-answer"}, nil
 	}
 
-	// Pretend the sandbox already handled everything up to the second turn.
-	msgs, err := g.pm.CanonicalWindow(thread.ID, 50)
-	if err != nil {
+	g.say("m1", "导出也看看")
+
+	got := sentTexts(g.fa)
+	if len(got) != 2 {
+		t.Fatalf("sends = %v want an update and a conclusion", got)
+	}
+	if !strings.HasPrefix(got[0], "「登录页报错」") {
+		t.Fatalf("update does not say which task moved: %q", got[0])
+	}
+}
+
+// Past the concurrency limit the platform declines and the conversation layer
+// explains. A silent rejection and a platform-worded refusal are both worse:
+// one loses the request, the other puts a template back in the conversation.
+func TestConcurrencyLimitIsExplainedRatherThanImposedSilently(t *testing.T) {
+	g := newGPTLive(t)
+	for i, title := range []string{"登录页", "导出", "搜索"} {
+		g.seedTask(string(rune('a'+i))+"-run", title)
+	}
+	live := &fakeLive{configured: true, decisions: []liveagent.Result{
+		liveHeavyDispatch("再修一个", "订单页", "我去看订单页。"),
+		liveAnswer("我手上还有三件事在跑，先停一个再开新的？"),
+	}}
+	g.m.SetLiveModel(live)
+
+	g.say("m1", "订单页也修一下")
+
+	if len(g.agent) != 0 {
+		t.Fatalf("a rejected delegation reached the agent anyway: %v", g.agent)
+	}
+	last := live.seen[len(live.seen)-1]
+	if !strings.Contains(last[len(last)-1].Content, "rejected") {
+		t.Fatalf("the model was not told the delegation was declined: %s", last[len(last)-1].Content)
+	}
+	if got := sentTexts(g.fa); len(got) != 1 || !strings.Contains(got[0], "三件事") {
+		t.Fatalf("sends = %v want the limit explained in the model's own words", got)
+	}
+}
+
+// The agent's conclusion reaches the user through the conversation layer, in
+// the voice the user has been hearing. Two speakers in one conversation is what
+// made a delegated answer read like a different system replying.
+func TestAgentConclusionIsReportedByTheConversationLayer(t *testing.T) {
+	g := newGPTLive(t)
+	phrased := liveAnswer("查过了，是缓存没刷新导致的。")
+	live := &fakeLive{
+		configured: true,
+		decisions:  []liveagent.Result{liveDispatch("查登录页 500 的根因", "登录页报错")},
+		report:     &phrased,
+	}
+	g.m.SetLiveModel(live)
+	g.m.handleFunc = func(ctx context.Context, _ ResolvedChannel, in InboundMessage) (Reply, error) {
+		g.agent = append(g.agent, in)
+		if _, err := g.m.DeliverConversationReply(ctx, ConversationReply{
+			ProjectID: "proj", Scene: in.Scene, ConversationID: in.ConversationID,
+			UserID: in.UserID, Text: "根因：缓存未刷新，已定位到 CacheWarmer。",
+		}); err != nil {
+			t.Fatalf("pm_reply failed: %v", err)
+		}
+		return Reply{}, nil
+	}
+
+	g.say("m1", "登录页 500 的根因是什么")
+
+	got := sentTexts(g.fa)
+	if len(got) != 1 {
+		t.Fatalf("sends = %v want exactly one message", got)
+	}
+	if got[0] != "查过了，是缓存没刷新导致的。" {
+		t.Fatalf("the work layer spoke to the user directly: %q", got[0])
+	}
+}
+
+// When the conversation layer cannot phrase the conclusion, the conclusion
+// still goes out. Degrading to the work layer's own words reads slightly off;
+// staying silent loses the answer the user waited for.
+func TestConclusionSurvivesAFailedPhrasingCall(t *testing.T) {
+	g := newGPTLive(t)
+	g.m.SetLiveModel(&fakeLive{
+		configured: true,
+		decisions:  []liveagent.Result{liveDispatch("查根因", "根因")},
+		// report left nil: the phrasing call fails.
+	})
+	g.m.handleFunc = func(ctx context.Context, _ ResolvedChannel, in InboundMessage) (Reply, error) {
+		g.agent = append(g.agent, in)
+		if _, err := g.m.DeliverConversationReply(ctx, ConversationReply{
+			ProjectID: "proj", Scene: in.Scene, ConversationID: in.ConversationID,
+			UserID: in.UserID, Text: "缓存没刷新。",
+		}); err != nil {
+			t.Fatalf("pm_reply failed: %v", err)
+		}
+		return Reply{}, nil
+	}
+
+	g.say("m1", "根因是什么")
+
+	if got := sentTexts(g.fa); len(got) != 1 || got[0] != "缓存没刷新。" {
+		t.Fatalf("sends = %v want the conclusion in the work layer's own words", got)
+	}
+}
+
+// Every routing decision is recorded, including what the model was shown and
+// what the user received. Without this, the next change to routing can only be
+// argued about.
+func TestRoutingDecisionsAreRecorded(t *testing.T) {
+	g := newGPTLive(t)
+	g.m.SetLiveModel(&fakeLive{configured: true, decisions: []liveagent.Result{
+		liveAnswer("我在，说吧。"),
+	}})
+
+	g.say("m1", "你好")
+
+	var samples []models.LiveDecisionSample
+	if err := g.db.Find(&samples).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := g.pm.SetHandoffCursor(thread.ID, msgs[3].ID); err != nil {
-		t.Fatal(err)
+	if len(samples) != 1 {
+		t.Fatalf("samples = %d want one per decision", len(samples))
 	}
-	thread.HandoffCursor = msgs[3].ID
-	warm := g.bridge.buildHandoff(thread, current, g.agent[0], true)
-	if strings.Contains(warm.text, "早上好") {
-		t.Fatalf("a warm sandbox was shown history it already lived through:\n%s", warm.text)
+	s := samples[0]
+	if s.Route != routeReply {
+		t.Fatalf("route = %q want %q", s.Route, routeReply)
+	}
+	if s.UserText != "你好" || !strings.Contains(s.Actions, "live_reply") {
+		t.Fatalf("sample does not hold the exchange: %+v", s)
+	}
+	if !strings.Contains(s.RawCompletion, "我在，说吧。") {
+		t.Fatalf("sample does not hold what the model produced: %s", s.RawCompletion)
+	}
+	if s.DirectorContext == "" || s.Transcript == "" {
+		t.Fatalf("sample does not hold what the model was shown: %+v", s)
 	}
 }
 
@@ -438,6 +775,20 @@ func TestFailedTurnKeepsTheUsersMessageInTheRecord(t *testing.T) {
 	if len(after) == 0 || !strings.Contains(after[0], "记一笔") {
 		t.Fatalf("failed turn lost the user's own words: %v", after)
 	}
+}
+
+// seedTask puts a live task in the ledger, as a dispatch or a Run would.
+func (g *gptLive) seedTask(runID, title string) *models.TaskIdentity {
+	g.t.Helper()
+	identity, err := g.m.taskContext.EnsureIdentity(services.EnsureTaskIdentityInput{
+		ProjectID: "proj", UserID: services.SyntheticQQUserID("u1"),
+		RunID: runID, ShortTitle: title, Status: "running",
+		OriginChannel: "qq", OriginScene: string(SceneC2C), OriginConversationID: "user1",
+	})
+	if err != nil {
+		g.t.Fatal(err)
+	}
+	return identity
 }
 
 // threadFromFirstMessage seeds one recorded user message and returns the thread.

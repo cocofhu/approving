@@ -34,14 +34,9 @@ type ChatThread struct {
 	Title string `json:"title"`
 	// SandboxRef stores the bound models.Sandbox.ID as a decimal string when a
 	// PM consult sandbox is live for this thread. Empty means unbound.
-	SandboxRef string `json:"sandboxRef,omitempty"`
-	// HandoffCursor is the last ChatMessage the sandbox agent has been shown.
-	// It is persisted rather than kept in memory because the alternative is a
-	// sandbox that either forgets the conversation or is handed the whole of it
-	// again every time the process restarts or the container reconnects.
-	HandoffCursor string    `json:"-"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	SandboxRef string    `json:"sandboxRef,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
 // Chat thread kinds.

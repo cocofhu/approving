@@ -689,6 +689,7 @@ func AllModels() []any {
 		&SendableDeliveryReceipt{},
 		&TaskIdentity{}, &MessageBinding{}, &ConversationFocus{}, &RiskConfirmationTicket{},
 		&PendingChannelTurn{},
+		&LiveDecisionSample{},
 	}
 }
 

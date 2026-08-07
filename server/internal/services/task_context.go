@@ -411,6 +411,19 @@ func (s *TaskContextService) GetFocus(scope TaskScope, renew bool) (*models.Conv
 	return &focus, nil
 }
 
+// ExpireFocus drops a conversation's task pointer. It is called when the task
+// it points at is no longer something the conversation is about — a cancelled
+// task that stays in focus makes every later "那个" resolve to work nobody is
+// doing.
+func (s *TaskContextService) ExpireFocus(scope TaskScope) error {
+	if s == nil || s.db == nil {
+		return errors.New("task context database is unavailable")
+	}
+	return s.db.Where("project_id = ? AND user_id = ? AND channel = ? AND conversation_id = ?",
+		scope.ProjectID, scope.UserID, scope.Channel, scope.ConversationID).
+		Delete(&models.ConversationFocus{}).Error
+}
+
 type TaskCandidate struct {
 	Identity models.TaskIdentity
 	Score    int

@@ -76,6 +76,64 @@ type InboundMessage struct {
 	// EscalationReason is why the conversation model handed this turn to the
 	// agent. Empty when no conversation model was involved.
 	EscalationReason string
+	// Dispatch is what the director decided about this turn. Empty when the
+	// turn reached the agent without one (no conversation model, or a failure
+	// that fell through to it).
+	Dispatch *WorkDispatch
+	// DecisionSampleID links this turn back to the recorded routing decision,
+	// so the work layer's eventual conclusion lands on the choice that produced
+	// it rather than in a separate row nothing joins.
+	DecisionSampleID string
+}
+
+// WorkDispatch is the director's delegation: what the agent is being asked to
+// do, and the pointers it needs to find the rest for itself.
+//
+// It deliberately carries no conversation replay. The agent reads history
+// through context-store when it needs it, so a long-running conversation costs
+// a prompt that stays the same size instead of one that grows with every turn.
+type WorkDispatch struct {
+	// Brief is one sentence stating what the user wants, written for the agent.
+	Brief string
+	// Difficulty is the director's estimate: DifficultyLookup for a question
+	// that needs a real check, DifficultyHeavy for work that outlives a chat
+	// turn.
+	Difficulty Difficulty
+	// TaskID / ShortTitle identify this work in the conversation's ledger.
+	TaskID     string
+	ShortTitle string
+	// Attachments are files already in this conversation that the agent may
+	// need. Pointers only: the bytes stay in context-store until it asks.
+	Attachments []AttachmentRef
+}
+
+// Difficulty is how much work the director thinks a turn needs. It decides
+// whether the user is answered now and told later, or simply waited with.
+type Difficulty string
+
+const (
+	// DifficultyLookup is a real check the user can reasonably wait a moment
+	// for. The director may hold the turn briefly and answer once.
+	DifficultyLookup Difficulty = "lookup"
+	// DifficultyHeavy is work measured in minutes. The user is answered first
+	// and the work is delegated behind the conversation.
+	DifficultyHeavy Difficulty = "heavy"
+)
+
+// AttachmentRef points at one file already stored in the conversation.
+//
+// It exists so an attachment can be named without being carried: the bytes of
+// an image sent five turns ago do not belong in every later prompt, but
+// "there is a screenshot, here is where it lives" does.
+type AttachmentRef struct {
+	MessageID string
+	Index     int
+	Name      string
+	MimeType  string
+	Bytes     int
+	// Role is who sent it ("user" / "assistant"), so the agent can tell a file
+	// it was given from one it produced.
+	Role string
 }
 
 // OutboundMessage is a normalized reply/push to a channel conversation.

@@ -383,6 +383,10 @@ func main() {
 	}
 	taskContextSvc := services.NewTaskContextService(db)
 	channelMgr.SetTaskContextService(taskContextSvc)
+	// Every routing decision is recorded. Earlier rounds of this layer were
+	// tuned by adding banned phrases because nothing captured what the model
+	// was shown and what it chose; with samples, a change can be measured.
+	channelMgr.SetLiveSampleService(services.NewLiveSampleService(db))
 	riskSvc := services.NewRiskConfirmationService(db)
 	channelMgr.SetRiskConfirmationService(riskSvc)
 	channelMgr.SetRiskActionExecutor(func(projectID, runID, action string, meta map[string]string) error {
@@ -406,7 +410,7 @@ func main() {
 	pmMCP.SetTaskSafety(riskSvc, taskContextSvc, channelIMNotifier{mgr: channelMgr})
 	// A finished task reports back to the conversation that asked for it, in
 	// that conversation's own words.
-	channelMgr.SetSynthesizer(newLiveSynthesizer(channelBridge))
+	channelMgr.SetSynthesizer(newLiveSynthesizer(liveClient))
 	eng.SetRunTerminalObserver(runTerminalAdapter{mgr: channelMgr})
 	channelMgr.SetLoader(channelSvc.ListRaw)
 	channelSvc.SetOnChange(channelMgr.Reload)
