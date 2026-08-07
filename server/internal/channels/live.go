@@ -376,11 +376,16 @@ func (m *Manager) reportThroughDirector(ctx context.Context, rc *runningChannel,
 }
 
 // directorReportTimeout bounds the extra hop between having an answer and
-// sending it. The user has already waited for the work; a slow phrasing call
-// must cost them nothing more than this.
-const directorReportTimeout = 4 * time.Second
+// sending it. Local reasoning models routinely need tens of seconds; a 4s
+// budget was what forced every Ollama conclusion down the degraded "paste the
+// whole agent dump" path in live verification.
+const directorReportTimeout = 45 * time.Second
 
-const directorReportMaxTokens = 600
+// Reasoning models on local Ollama often spend most of a small budget on the
+// side-channel "reasoning" field and return empty content with finish_reason
+// length. 2048 is what actually left room for a two-sentence IM reply in live
+// verification against genesis-hermes-v7.
+const directorReportMaxTokens = 2048
 
 // directorReportPrompt is deliberately narrow. Anything that invites the model
 // to add, judge, or expand turns a verified conclusion into a partly invented

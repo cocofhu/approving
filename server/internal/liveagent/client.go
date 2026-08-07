@@ -312,10 +312,40 @@ var thinkBlock = regexp.MustCompile(`(?is)<(think|thinking|reasoning)>.*?</(thin
 // would otherwise survive as a half-open tag and everything after it.
 var unclosedThink = regexp.MustCompile(`(?is)<(think|thinking|reasoning)>.*\z`)
 
+// orphanCloseThink catches a lone closing tag some local reasoning models put
+// between a draft reply and the same reply again — e.g. "在的。\n</think>\n\n在的。"
+var orphanCloseThink = regexp.MustCompile(`(?is)</(think|thinking|reasoning)>`)
+
 func stripReasoning(s string) string {
 	s = thinkBlock.ReplaceAllString(s, "")
 	s = unclosedThink.ReplaceAllString(s, "")
+	s = orphanCloseThink.ReplaceAllString(s, "")
+	s = collapseDuplicateParagraphs(s)
 	return strings.TrimSpace(s)
+}
+
+// collapseDuplicateParagraphs drops a paragraph that is repeated right after
+// itself. Reasoning models that echo the final answer on both sides of a think
+// tag would otherwise greet the user twice in one bubble.
+func collapseDuplicateParagraphs(s string) string {
+	parts := strings.Split(s, "\n")
+	var out []string
+	var prev string
+	for _, p := range parts {
+		cur := strings.TrimSpace(p)
+		if cur == "" {
+			if len(out) > 0 && out[len(out)-1] != "" {
+				out = append(out, "")
+			}
+			continue
+		}
+		if cur == prev {
+			continue
+		}
+		out = append(out, p)
+		prev = cur
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
 }
 
 // decodeContent accepts both the plain string form and the content-parts array

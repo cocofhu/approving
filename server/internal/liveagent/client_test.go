@@ -155,6 +155,7 @@ func TestReasoningNeverSurvivesIntoTheAnswer(t *testing.T) {
 		{"alternate tag", "<reasoning>internal</reasoning>好了", "好了"},
 		{"truncated by token cap", "还在跑<think>接下来我应该", "还在跑"},
 		{"multiline", "<think>\nline one\nline two\n</think>\n结果出来了", "结果出来了"},
+		{"orphan close with echo", "在的，有什么事你说。\n</think>\n\n在的，有什么事你说。", "在的，有什么事你说。"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := serveJSON(t, func(w http.ResponseWriter, r *http.Request) {
