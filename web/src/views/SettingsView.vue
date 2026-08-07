@@ -1,8 +1,15 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { api, type DashboardStats, type SandboxView, type SettingItem } from '@/lib/api'
+import {
+  api,
+  type DashboardStats,
+  type LiveProbeReport,
+  type LiveStatus,
+  type SandboxView,
+  type SettingItem,
+} from '@/lib/api'
 import { useAuth } from '@/lib/useAuth'
 import AppButton from '@/components/ui/AppButton.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -105,6 +112,59 @@ const liveConfigured = computed(() =>
   }),
 )
 
+const probe = ref<LiveProbeReport | null>(null)
+const probing = ref(false)
+const probeError = ref('')
+const liveStatus = ref<LiveStatus | null>(null)
+
+function probeCheckLabel(name: string): string {
+  const known: Record<string, string> = {
+    reachable: 'pages.settings.liveTest.checks.reachable',
+    tool_calls: 'pages.settings.liveTest.checks.toolCalls',
+  }
+  return known[name] ? t(known[name]) : name
+}
+
+// The probe is sent the same patch save() would send, so what is tested is what
+// is on screen. Editing the form clears a stale result rather than leaving a
+// pass sitting next to a changed address.
+function livePatch(): Record<string, number | string> {
+  const patch: Record<string, number | string> = {}
+  for (const key of ['live_base_url', 'live_model', 'live_api_key', 'live_timeout_seconds']) {
+    const it = itemOf(key)
+    if (!it || it.locked) continue
+    if (it.kind === 'int') {
+      patch[key] = Number(form[key])
+      continue
+    }
+    patch[key] = String(form[key] ?? '').trim()
+  }
+  return patch
+}
+
+async function runLiveTest() {
+  probing.value = true
+  probeError.value = ''
+  probe.value = null
+  try {
+    probe.value = await api.testLiveEndpoint(livePatch())
+  } catch (e: any) {
+    probeError.value = e?.message || t('pages.settings.liveTest.failed')
+  } finally {
+    probing.value = false
+    loadLiveStatus()
+  }
+}
+
+async function loadLiveStatus() {
+  try {
+    liveStatus.value = await api.liveStatus()
+  } catch {
+    // Runtime stats are supplementary; a failure here must not disturb the page.
+    liveStatus.value = null
+  }
+}
+
 function secretPlaceholder(key: string): string {
   const it = itemOf(key)
   const stored = !!it && String(it.value ?? '').trim() !== ''
@@ -196,6 +256,7 @@ async function save() {
     const res = await api.updateSettings(patch)
     hydrate(res.items)
     savedAt.value = Date.now()
+    loadLiveStatus()
   } catch (e: any) {
     error.value = e?.message || t('pages.settings.saveFailed')
   } finally {
@@ -214,8 +275,19 @@ const dirty = () =>
     return v !== String(it.value ?? '')
   })
 
+// A result that outlives the values it was measured against is worse than no
+// result: it reads as a pass for whatever is on screen now.
+watch(
+  () => ['live_base_url', 'live_model', 'live_api_key', 'live_timeout_seconds'].map((k) => form[k]).join('\u0000'),
+  () => {
+    probe.value = null
+    probeError.value = ''
+  },
+)
+
 onMounted(() => {
   loadSettings()
+  loadLiveStatus()
   pollSandboxes()
   poll = window.setInterval(pollSandboxes, 5000)
 })
@@ -411,11 +483,96 @@ onBeforeUnmount(() => {
           </template>
         </div>
 
-        <div v-if="group.id === 'live' && !liveConfigured" class="px-4 py-3">
-          <p class="border border-warn/30 bg-warn/10 px-3 py-2 text-xs leading-relaxed text-warn">
-            {{ t('pages.settings.liveUnconfigured') }}
-          </p>
-        </div>
+        <template v-if="group.id === 'live'">
+          <div v-if="!liveConfigured" class="px-4 py-3">
+            <p class="border border-warn/30 bg-warn/10 px-3 py-2 text-xs leading-relaxed text-warn">
+              {{ t('pages.settings.liveUnconfigured') }}
+            </p>
+          </div>
+
+          <div class="border-t border-line px-4 py-3.5">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="min-w-0">
+                <span class="text-sm font-medium text-txt">{{ t('pages.settings.liveTest.title') }}</span>
+                <p class="mt-1 text-xs leading-relaxed text-txt3">{{ t('pages.settings.liveTest.desc') }}</p>
+              </div>
+              <AppButton
+                variant="ghost"
+                size="sm"
+                icon="flask"
+                :disabled="probing || saving || !liveConfigured"
+                @click="runLiveTest"
+              >
+                {{ probing ? t('pages.settings.liveTest.running') : t('pages.settings.liveTest.action') }}
+              </AppButton>
+            </div>
+
+            <p v-if="probeError" class="mt-2.5 text-[11px] text-err">{{ probeError }}</p>
+
+            <div v-if="probe" class="mt-2.5 border border-line bg-elevated px-3 py-2.5">
+              <div class="flex flex-wrap items-center gap-2 text-xs">
+                <span
+                  class="inline-flex items-center gap-1 font-medium"
+                  :class="probe.ok ? 'text-ok' : 'text-err'"
+                >
+                  <Icon :name="probe.ok ? 'check' : 'close'" :size="12" />
+                  {{ probe.ok ? t('pages.settings.liveTest.pass') : t('pages.settings.liveTest.fail') }}
+                </span>
+                <span v-if="probe.latencyMs > 0" class="text-txt3 tabular-nums">
+                  {{ t('pages.settings.liveTest.latency', { ms: probe.latencyMs }) }}
+                </span>
+              </div>
+
+              <ul class="mt-2 space-y-1.5">
+                <li v-for="check in probe.checks" :key="check.name" class="flex items-start gap-1.5 text-[11px]">
+                  <Icon
+                    :name="check.ok ? 'check' : 'close'"
+                    :size="11"
+                    :class="check.ok ? 'mt-0.5 shrink-0 text-ok' : 'mt-0.5 shrink-0 text-err'"
+                  />
+                  <span class="min-w-0">
+                    <span class="text-txt2">{{ probeCheckLabel(check.name) }}</span>
+                    <span v-if="check.reason" class="text-txt3"> — {{ check.reason }}</span>
+                  </span>
+                </li>
+              </ul>
+
+              <p v-if="probe.sample" class="mt-2 border-t border-line pt-2 text-[11px] text-txt3">
+                {{ t('pages.settings.liveTest.sample') }}
+                <span class="font-mono text-txt2">{{ probe.sample }}</span>
+              </p>
+            </div>
+          </div>
+
+          <div class="border-t border-line px-4 py-3.5">
+            <span class="text-sm font-medium text-txt">{{ t('pages.settings.liveRuntime.title') }}</span>
+            <p class="mt-1 text-xs leading-relaxed text-txt3">{{ t('pages.settings.liveRuntime.desc') }}</p>
+
+            <p
+              v-if="liveStatus && liveStatus.configured && liveStatus.stats.calls === 0"
+              class="mt-2.5 border border-warn/30 bg-warn/10 px-3 py-2 text-[11px] leading-relaxed text-warn"
+            >
+              {{ t('pages.settings.liveRuntime.neverCalled') }}
+            </p>
+
+            <div v-if="liveStatus && liveStatus.stats.calls > 0" class="mt-2.5 space-y-1.5 text-[11px]">
+              <div class="text-txt2 tabular-nums">
+                {{
+                  t('pages.settings.liveRuntime.counts', {
+                    calls: liveStatus.stats.calls,
+                    failed: liveStatus.stats.failed,
+                  })
+                }}
+              </div>
+              <div v-if="liveStatus.stats.avgLatencyMs > 0" class="text-txt3 tabular-nums">
+                {{ t('pages.settings.liveRuntime.avgLatency', { ms: liveStatus.stats.avgLatencyMs }) }}
+              </div>
+              <div v-if="liveStatus.stats.lastFailure" class="text-err">
+                {{ t('pages.settings.liveRuntime.lastFailure') }} {{ liveStatus.stats.lastFailure }}
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
     </template>
 

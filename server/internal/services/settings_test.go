@@ -165,6 +165,68 @@ func TestSettingsCarryStringsAndSecrets(t *testing.T) {
 	}
 }
 
+// The settings page tests what is on screen, not what is stored, so an address
+// can be corrected and checked before it is committed. Two things have to hold
+// for that to be safe: the form never holds the real key, and the environment
+// stays authoritative over anything typed into a locked field.
+func TestLiveEndpointForTestsTheFormNotTheStoredValues(t *testing.T) {
+	db, err := database.OpenSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(crypto.SecretsKeyEnv, base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	config.StoreConfig(&config.Config{Live: config.LiveConfig{TimeoutSeconds: 8}})
+	svc := NewSettingsService(db, nil, nil)
+	if _, err := svc.Update(map[string]any{
+		KeyLiveBaseURL: "https://saved.example.com/v1",
+		KeyLiveModel:   "saved-model",
+		KeyLiveAPIKey:  "sk-stored",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Unsaved edits are what get tested.
+	baseURL, apiKey, model, timeout := svc.LiveEndpointFor(map[string]any{
+		KeyLiveBaseURL:        "http://192.168.2.20:8080/v1",
+		KeyLiveModel:          "typed-model",
+		KeyLiveAPIKey:         "",
+		KeyLiveTimeoutSeconds: 30,
+	})
+	if baseURL != "http://192.168.2.20:8080/v1" || model != "typed-model" {
+		t.Fatalf("form values ignored: %s %s", baseURL, model)
+	}
+	// A blank field is the UI's resting state for a secret, not a cleared key.
+	if apiKey != "sk-stored" {
+		t.Fatalf("api key = %q want the stored one", apiKey)
+	}
+	if timeout != 30*time.Second {
+		t.Fatalf("timeout = %v", timeout)
+	}
+
+	// The mask means the same thing as blank.
+	if _, apiKey, _, _ = svc.LiveEndpointFor(map[string]any{KeyLiveAPIKey: SecretMask}); apiKey != "sk-stored" {
+		t.Fatalf("masked key = %q want the stored one", apiKey)
+	}
+	// A typed key is used as-is, which is the whole point of testing before saving.
+	if _, apiKey, _, _ = svc.LiveEndpointFor(map[string]any{KeyLiveAPIKey: "sk-typed"}); apiKey != "sk-typed" {
+		t.Fatalf("typed key = %q", apiKey)
+	}
+
+	// An omitted key falls back to what is saved.
+	baseURL, _, model, _ = svc.LiveEndpointFor(map[string]any{})
+	if baseURL != "https://saved.example.com/v1" || model != "saved-model" {
+		t.Fatalf("empty patch = %s %s want the saved values", baseURL, model)
+	}
+
+	// An env-locked field cannot take effect, so testing a typed value there
+	// would report on a configuration that will never run.
+	t.Setenv("APPROVING_LIVE_MODEL", "env-model")
+	config.StoreConfig(&config.Config{Live: config.LiveConfig{Model: "env-model", TimeoutSeconds: 8}})
+	if _, _, model, _ = svc.LiveEndpointFor(map[string]any{KeyLiveModel: "typed-model"}); model != "env-model" {
+		t.Fatalf("model = %q want the env-locked value", model)
+	}
+}
+
 // A stored secret that no longer decrypts (rotated master key) must not reach
 // the model client as ciphertext.
 func TestUndecryptableSecretFallsBackToConfig(t *testing.T) {

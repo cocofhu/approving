@@ -447,6 +447,7 @@ func main() {
 		Browser:       browserSvc,
 		Audit:         auditSvc,
 		InjectBundles: injectStore,
+		LiveModel:     liveClient,
 		Onboarding:    services.NewOnboardingService(projectSvc, skillSvc, wfSvc),
 	}
 

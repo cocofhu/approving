@@ -258,6 +258,57 @@ func (s *SettingsService) Update(patch map[string]any) ([]SettingItem, error) {
 	return s.Effective(), nil
 }
 
+// LiveEndpointFor resolves the conversation-model endpoint a patch describes,
+// without saving anything.
+//
+// It exists so the settings page can test what is on screen rather than what is
+// stored: a base URL you have not saved yet is exactly the one you want to
+// check. Two rules make that safe. A blank or masked key falls back to the
+// stored one, because the form never holds the real key to send back. An
+// env-locked knob ignores the form entirely, because the environment is
+// authoritative and testing a value that cannot take effect would be a lie.
+//
+// The key comes back in plaintext and must not be logged or returned to a
+// client.
+func (s *SettingsService) LiveEndpointFor(patch map[string]any) (baseURL, apiKey, model string, timeout time.Duration) {
+	cfg := config.GetConfig()
+	pick := func(k knob) string {
+		stored, _, _ := s.resolveStr(k, cfg)
+		raw, ok := patch[k.key]
+		if !ok || k.envLocked() {
+			return stored
+		}
+		v, isStr := raw.(string)
+		if !isStr {
+			return stored
+		}
+		v = strings.TrimSpace(v)
+		if k.kind == KindSecret && isSecretPlaceholder(v) {
+			return stored
+		}
+		return v
+	}
+	seconds := 0
+	for _, k := range knobs() {
+		switch k.key {
+		case KeyLiveBaseURL:
+			baseURL = pick(k)
+		case KeyLiveModel:
+			model = pick(k)
+		case KeyLiveAPIKey:
+			apiKey = pick(k)
+		case KeyLiveTimeoutSeconds:
+			seconds, _, _ = s.resolveInt(k, cfg)
+			if raw, ok := patch[k.key]; ok && !k.envLocked() {
+				if v, err := coerceInt(raw); err == nil && v >= k.min {
+					seconds = v
+				}
+			}
+		}
+	}
+	return baseURL, apiKey, model, time.Duration(seconds) * time.Second
+}
+
 // coerceInt accepts the shapes an int can take after a JSON round-trip.
 func coerceInt(raw any) (int, error) {
 	switch v := raw.(type) {

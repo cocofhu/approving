@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cocofhu/approving/internal/auth"
+	"github.com/cocofhu/approving/internal/liveagent"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/services"
 	"github.com/cocofhu/approving/internal/shutdown"
@@ -42,6 +43,89 @@ func TestSettingsAndLiveEndpoints(t *testing.T) {
 	h.h.Shutdown.BeginDraining()
 	if w := h.do("GET", "/api/health", nil); w.Code != 503 {
 		t.Fatalf("health draining: %d %s", w.Code, w.Body)
+	}
+}
+
+// The settings page has to be able to answer two different questions: can this
+// endpoint work, and is it being used. Neither may fail loudly — an endpoint
+// that is misconfigured is a finding, not a server error.
+func TestConversationModelTestAndStatusEndpoints(t *testing.T) {
+	h := newHarness(t)
+	h.h.Settings = services.NewSettingsService(h.db, h.h.Eng, h.h.Sbx)
+
+	// Without a client wired, the test is unavailable but status still answers,
+	// because "not configured" is exactly what the page needs to render.
+	if w := h.do("POST", "/api/settings/live/test", map[string]any{}); w.Code != 503 {
+		t.Fatalf("probe without a client: %d %s", w.Code, w.Body)
+	}
+	w := h.do("GET", "/api/settings/live/status", nil)
+	if w.Code != 200 {
+		t.Fatalf("status without a client: %d %s", w.Code, w.Body)
+	}
+	var status struct {
+		Configured bool `json:"configured"`
+		Stats      struct {
+			Calls int `json:"calls"`
+		} `json:"stats"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	if status.Configured || status.Stats.Calls != 0 {
+		t.Fatalf("status = %+v", status)
+	}
+
+	h.h.LiveModel = liveagent.New()
+	// An incomplete form is reported as a failed check rather than a 400: the
+	// page shows why, in the same place every other result appears.
+	w = h.do("POST", "/api/settings/live/test", map[string]any{
+		services.KeyLiveBaseURL: "", services.KeyLiveModel: "",
+	})
+	if w.Code != 200 {
+		t.Fatalf("probe with an empty form: %d %s", w.Code, w.Body)
+	}
+	var report struct {
+		Configured bool `json:"configured"`
+		OK         bool `json:"ok"`
+		Checks     []struct {
+			Name   string `json:"name"`
+			OK     bool   `json:"ok"`
+			Reason string `json:"reason"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Configured || report.OK {
+		t.Fatalf("empty form reported as working: %+v", report)
+	}
+	if len(report.Checks) == 0 || report.Checks[0].Reason == "" {
+		t.Fatalf("empty form gave no reason: %+v", report)
+	}
+
+	// An unreachable address is also a finding, not an error.
+	w = h.do("POST", "/api/settings/live/test", map[string]any{
+		services.KeyLiveBaseURL:        "http://127.0.0.1:1/v1",
+		services.KeyLiveModel:          "m",
+		services.KeyLiveTimeoutSeconds: 1,
+	})
+	if w.Code != 200 {
+		t.Fatalf("probe of an unreachable endpoint: %d %s", w.Code, w.Body)
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	if !report.Configured || report.OK {
+		t.Fatalf("unreachable endpoint reported as working: %+v", report)
+	}
+	// And the manual test must not show up as traffic, or the status panel stops
+	// answering whether real messages are going through this layer.
+	w = h.do("GET", "/api/settings/live/status", nil)
+	if err := json.Unmarshal(w.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	if status.Stats.Calls != 0 {
+		t.Fatalf("a probe counted as traffic: %+v", status)
 	}
 }
 

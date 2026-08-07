@@ -56,6 +56,8 @@ func New(h *handlers.Handlers) *gin.Engine {
 
 		api.GET("/settings", h.GetSettings)
 		api.PUT("/settings", h.UpdateSettings)
+		api.POST("/settings/live/test", h.TestLiveEndpoint)
+		api.GET("/settings/live/status", h.LiveStatus)
 
 		api.GET("/platform-rules", h.ListPlatformRules)
 		api.GET("/platform-rules/:file/embed", h.GetPlatformRuleEmbed)
