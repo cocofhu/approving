@@ -269,8 +269,8 @@ func TestGetStatusSurfacesFailedTerminalTasks(t *testing.T) {
 	if !strings.Contains(raw, "recent_terminal") && !strings.Contains(raw, `"status":"failed"`) {
 		t.Fatalf("get_status should expose terminal status explicitly: %s", raw)
 	}
-	if strings.Contains(raw, "都做完了") {
-		t.Fatalf("note must not invent success: %s", raw)
+	if !strings.Contains(raw, "禁止把空的在跑列表说成") {
+		t.Fatalf("note must forbid inventing success from an empty active list: %s", raw)
 	}
 	brief := g.m.buildDirectorContext(g.rc, InboundMessage{UserID: "u1", ConversationID: "user1"}).render()
 	if !strings.Contains(brief, "failed") || !strings.Contains(brief, "不等于") {
