@@ -66,8 +66,10 @@ const liveSystemPrompt = `你是这个项目的负责人本人，正在 IM 上�
 对方说不用弄了 / 停下 / 算了 —— 调用 cancel_work。
 
 派活前先判断难度：
-- lookup：查一下就知道的事。可以让对方等一下、查完一次性给答案（wait 填 true），也可以先接一句再去查。
-- heavy：要花好几分钟的事。必须先用 user_reply 接一句，说清楚你要去弄哪件事，再派下去。
+- lookup：查一下就知道的事。
+- heavy：要花好几分钟的事。
+
+派活时必须用 user_reply 先接一句，说清楚你要去确认的是哪件事；平台会先把这句发出去，再去查。
 
 规矩：
 - 接话必须有内容。「稍等」「好的我看一下」「收到」这种空话不算接话，要说清楚你要去确认的是哪件事。
@@ -237,11 +239,6 @@ func (m *Manager) dispatchWork(ctx context.Context, rc *runningChannel, in Inbou
 	if title == "" {
 		title = truncateRunes(strings.TrimSpace(in.Text), 40)
 	}
-	// Waiting is only offered for work short enough to wait for. A heavy task
-	// held in the foreground is the blocked conversation this layer exists to
-	// prevent.
-	wait := parseLooseBool(args["wait"]) && difficulty == DifficultyLookup
-
 	if running := m.taskLedger(rc, in); len(running) >= maxConcurrentWork {
 		return liveOutcome{}, encodeToolResult(map[string]any{
 			"rejected": "这个会话同时在跑的任务已经到上限了，没有派下去。",
@@ -256,26 +253,28 @@ func (m *Manager) dispatchWork(ctx context.Context, rc *runningChannel, in Inbou
 	}
 	m.ensureTaskIdentity(rc, in, dispatch)
 
-	// heavy work is always acknowledged: the user is about to wait minutes and
-	// must know what for. A lookup the director chose to wait on says nothing
-	// now and answers once, which is the better shape for a quick check.
-	if difficulty == DifficultyHeavy || (!wait && strings.TrimSpace(args["user_reply"]) != "") {
-		text, flags := gateAcknowledgement(args["user_reply"], title, in.Text)
-		rec.flag(flags...)
-		sent := m.sendOutboundResult(ctx, rc, OutboundMessage{
-			Scene: in.Scene, ConversationID: in.ConversationID,
-			ReplyToMessageID: in.MessageID, Text: text,
-			// An acknowledgement is not the answer. It marks the turn as having
-			// spoken, never as having answered, so the conclusion that follows
-			// is not suppressed as a duplicate.
-			Envelope: turnEnvelope(rc, in, sendable.KindTurnProcessingAck, "live_ack", sendable.PriorityHigh),
-		})
-		rec.acted("live_ack", text, sent)
-		if sent.Sent {
-			scope := conversationTurnScope(rc.cfg.ProjectID, in.Scene, in.ConversationID)
-			m.markReplied(scope)
-			m.markAcknowledged(scope)
-		}
+	// Every sandbox-bound dispatch is acknowledged first.
+	//
+	// An earlier "wait=true means stay silent until the answer" shape assumed a
+	// short synchronous lookup. What we actually start here is a sandbox turn
+	// that can take tens of seconds — silence for that long is exactly the
+	// "快模型没有先回复" failure. Until a real sub-second SoT path exists,
+	// acknowledging is not optional.
+	text, flags := gateAcknowledgement(args["user_reply"], title, in.Text)
+	rec.flag(flags...)
+	sent := m.sendOutboundResult(ctx, rc, OutboundMessage{
+		Scene: in.Scene, ConversationID: in.ConversationID,
+		ReplyToMessageID: in.MessageID, Text: text,
+		// An acknowledgement is not the answer. It marks the turn as having
+		// spoken, never as having answered, so the conclusion that follows
+		// is not suppressed as a duplicate.
+		Envelope: turnEnvelope(rc, in, sendable.KindTurnProcessingAck, "live_ack", sendable.PriorityHigh),
+	})
+	rec.acted("live_ack", text, sent)
+	if sent.Sent {
+		scope := conversationTurnScope(rc.cfg.ProjectID, in.Scene, in.ConversationID)
+		m.markReplied(scope)
+		m.markAcknowledged(scope)
 	}
 
 	return liveOutcome{
@@ -364,7 +363,7 @@ func (m *Manager) reportThroughDirector(ctx context.Context, rc *runningChannel,
 		System: directorReportPrompt,
 		Messages: []liveagent.Message{
 			{Role: "user", Content: "对方问的是：" + truncateRunes(strings.TrimSpace(in.Text), 200)},
-			{Role: "user", Content: "查到的结果：" + truncateRunes(plain, 1200)},
+			{Role: "user", Content: "查到的结果：" + truncateRunes(plain, 3000)},
 		},
 		MaxTokens: directorReportMaxTokens,
 	})
@@ -377,25 +376,30 @@ func (m *Manager) reportThroughDirector(ctx context.Context, rc *runningChannel,
 }
 
 // directorReportTimeout bounds the extra hop between having an answer and
-// sending it. The user has already waited for the work; a slow phrasing call
-// must cost them nothing more than this.
-const directorReportTimeout = 3 * time.Second
+// sending it. Local reasoning models routinely need tens of seconds; a 4s
+// budget was what forced every Ollama conclusion down the degraded "paste the
+// whole agent dump" path in live verification.
+const directorReportTimeout = 45 * time.Second
 
-const directorReportMaxTokens = 800
+// Reasoning models on local Ollama often spend most of a small budget on the
+// side-channel "reasoning" field and return empty content with finish_reason
+// length. 2048 is what actually left room for a two-sentence IM reply in live
+// verification against genesis-hermes-v7.
+const directorReportMaxTokens = 2048
 
 // directorReportPrompt is deliberately narrow. Anything that invites the model
 // to add, judge, or expand turns a verified conclusion into a partly invented
 // one, which is the exact failure this whole layer exists to prevent.
 const directorReportPrompt = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
 
-下面给你的是查到的结果。把它讲给对方听。
+下面给你的是查到的结果。用一两段人话把结论讲给对方听。
 
 规矩：
 - 只讲给出的事实。不要补充、不要推测、不要下额外结论、不要建议。
-- 结果本身已经说得清楚的，几乎原样转述就行，不要为了改写而改写。
-- 说人话，像同事之间当面说，不要写报告，不要分点罗列（除非结果本身就是几条并列的事）。
+- 先给结论，必要细节最多再补两三句；不要把长报告或分点清单原样贴出去。
+- 说人话，像同事当面说，不要写工单腔。
 - 不要出现任务编号、工作流名、执行环境、工具名这些内部说法。
-- 只输出要发出去的话，不要加前缀、标题或解释。`
+- 只输出要发出去的话，不要加前缀、标题或解释，也不要写到一半截断。`
 
 // warmWorkLayer brings the agent's sandbox up in the background.
 //
@@ -528,8 +532,7 @@ func directorTools() []liveagent.ToolSpec {
 					Required:    true,
 				},
 				{Name: "short_title", Description: "给这件事起个对方看得懂的短名字，例如「登录页报错」。", Required: true},
-				{Name: "user_reply", Description: "现在就发给对方的一句话。heavy 必填，要说清楚你去确认的是哪件事。"},
-				{Name: "wait", Description: "只有 lookup 能填 true：不先接话，查完一次性回答。"},
+				{Name: "user_reply", Description: "现在就发给对方的一句话，必填；要说清楚你去确认的是哪件事。", Required: true},
 			},
 		},
 		{
