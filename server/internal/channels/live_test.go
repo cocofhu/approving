@@ -2,6 +2,7 @@ package channels
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -31,53 +32,59 @@ func liveManager(t *testing.T, fa *fakeAdapter) (*Manager, *services.TaskContext
 	return m, tasks
 }
 
-// A question is a question. The router must not turn one into a Run, and it
-// must not read a complaint as a command — both were real failures: 「那这个是
-// BUG 吗」 opened a background task, and 「不要这样啊」 asked to confirm a cancel.
-func TestClassifyIntentKeepsConversationsConversational(t *testing.T) {
-	cases := []struct {
-		text           string
-		pendingRisk    bool
-		taskResolvable bool
-		want           LiveIntent
-	}{
-		{text: "那这个是 BUG 吗", taskResolvable: true, want: IntentConversation},
-		{text: "不要这样啊", taskResolvable: true, want: IntentConversation},
-		{text: "没有实现啊，怎么回事", taskResolvable: true, want: IntentConversation},
-		{text: "我不想取消", taskResolvable: true, want: IntentConversation},
-		{text: "帮我调研并实现登录页性能优化", taskResolvable: false, want: IntentConversation},
-		{text: "现在什么进展了", taskResolvable: true, want: IntentTaskQuery},
-		{text: "现在什么进展了", taskResolvable: false, want: IntentConversation},
-		{text: "取消登录页性能优化", taskResolvable: true, want: IntentTaskControl},
-		{text: "改成只优化首屏", taskResolvable: true, want: IntentTaskControl},
-		{text: "确认", pendingRisk: true, taskResolvable: true, want: IntentClarificationReply},
+// A complaint is not a command. The keyword router read 「不要这样啊」 as a cancel
+// and 「那这个是 BUG 吗」 as work to delegate, so both went somewhere the user did
+// not ask for. Nothing classifies text before the model sees it now — the guard
+// is that no message settles a ticket unless one is pending and the reply is a
+// plain yes or no.
+func TestCommentaryNeverAuthorizesADestructiveAction(t *testing.T) {
+	fa := &fakeAdapter{}
+	m, db := policyManager(t, fa, nil)
+	risk := services.NewRiskConfirmationService(db)
+	m.SetRiskConfirmationService(risk)
+	m.SetTaskContextService(services.NewTaskContextService(db))
+	executed := 0
+	m.SetRiskActionExecutor(func(string, string, string, map[string]string) error {
+		executed++
+		return nil
+	})
+	turned := 0
+	m.handleFunc = func(context.Context, ResolvedChannel, InboundMessage) (Reply, error) {
+		turned++
+		return Reply{FinalSummary: "agent-handled"}, nil
 	}
-	for _, c := range cases {
-		got := classifyIntent(c.text, c.pendingRisk, c.taskResolvable)
-		if got != c.want {
-			t.Errorf("classifyIntent(%q, risk=%v, resolvable=%v) = %q want %q",
-				c.text, c.pendingRisk, c.taskResolvable, got, c.want)
-		}
+	rc := &runningChannel{
+		cfg:     models.ChannelConfig{ID: "c1", Type: models.ChannelTypeQQ, ProjectID: "proj"},
+		adapter: fa,
 	}
-}
-
-// A destructive action needs the user to have asked for it, in those words, at
-// the front of the message.
-func TestDetectHighRiskIntentRequiresAnExplicitCommand(t *testing.T) {
-	for _, text := range []string{
-		"取消登录页性能优化", "停止任务", "批准结算页性能", "delete task foo",
-	} {
-		if action, _ := detectHighRiskIntent(text); action == "" {
-			t.Errorf("detectHighRiskIntent(%q) found no action", text)
-		}
+	if _, err := risk.CreateTicket(services.RiskTicketInput{
+		ProjectID: "proj", UserID: services.SyntheticQQUserID("u1"),
+		RunID: "r1", Action: "cancel_run", ShortTitle: "登录页性能优化", Language: "zh-CN",
+	}); err != nil {
+		t.Fatal(err)
 	}
-	for _, text := range []string{
+	for i, text := range []string{
 		"不要这样啊", "我不想取消这个", "为什么会取消", "这个功能没实现，不对吧",
-		"顺便问一下批准流程是怎么走的",
+		"顺便问一下批准流程是怎么走的", "那这个是 BUG 吗",
 	} {
-		if action, _ := detectHighRiskIntent(text); action != "" {
-			t.Errorf("detectHighRiskIntent(%q) = %q, commentary must not authorize anything", text, action)
+		m.handleInbound(context.Background(), rc, InboundMessage{
+			Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
+			MessageID: "c" + strconv.Itoa(i), Text: text,
+		})
+		if executed != 0 {
+			t.Fatalf("%q authorized a destructive action", text)
 		}
+		if turned != i+1 {
+			t.Fatalf("%q was swallowed before the agent, turns=%d", text, turned)
+		}
+	}
+	// The ticket is still open, and a plain yes still settles it.
+	m.handleInbound(context.Background(), rc, InboundMessage{
+		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
+		MessageID: "c-yes", Text: "确认",
+	})
+	if executed != 1 {
+		t.Fatalf("an explicit confirmation did not settle the ticket (executed=%d)", executed)
 	}
 }
 
@@ -91,8 +98,6 @@ func TestOutboundCopyNeverExposesInternals(t *testing.T) {
 		turnTooSlowText("zh-CN"), turnTooSlowText("en"),
 		interruptedTurnText("zh-CN"), interruptedTurnText("en"),
 		runAcceptanceText("登录页性能", "zh-CN"), runAcceptanceText("Login perf", "en"),
-		taskStatusLabel("completed", "zh-CN"), taskStatusLabel("failed", "en"),
-		soloTaskStatusText("active", "zh-CN"), soloTaskStatusText("cancelled", "en"),
 		FormatProgressText(ProgressEvent{Kind: ProgressMilestone, Summary: "已提交分支"}),
 	}
 	for _, err := range []error{
@@ -522,9 +527,10 @@ func TestRecoverInterruptedTurnsTellsTheUser(t *testing.T) {
 	}
 }
 
-// Two live tasks make a bare "how's that one going?" ambiguous; the answer must
-// name the task rather than guess silently.
-func TestParallelTasksAnswerByShortTitle(t *testing.T) {
+// With two tasks live, a status question is exactly where the platform used to
+// answer on the agent's behalf — from a status column, in one canned line. The
+// question reaches the agent now, and the agent's own words are what go out.
+func TestStatusQuestionWithParallelTasksReachesTheAgent(t *testing.T) {
 	fa := &fakeAdapter{}
 	m, tasks := liveManager(t, fa)
 	for _, task := range []struct{ run, title string }{
@@ -542,10 +548,11 @@ func TestParallelTasksAnswerByShortTitle(t *testing.T) {
 		}
 	}
 
+	const answer = "登录页 profiling 做完了，结算页那边还在跑。"
 	turned := 0
 	m.handleFunc = func(context.Context, ResolvedChannel, InboundMessage) (Reply, error) {
 		turned++
-		return Reply{}, nil
+		return Reply{FinalSummary: answer}, nil
 	}
 	rc := testRunningChannel(fa)
 	rc.cfg.ProjectID = "proj"
@@ -553,15 +560,12 @@ func TestParallelTasksAnswerByShortTitle(t *testing.T) {
 		Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
 		MessageID: "m1", Text: "登录页性能优化怎么样了",
 	})
-	if turned != 0 {
-		t.Fatalf("a status question opened a sandbox turn (%d)", turned)
+	if turned != 1 {
+		t.Fatalf("a status question did not reach the agent (%d turns)", turned)
 	}
 	got := sentTexts(fa)
-	if len(got) != 1 || !strings.Contains(got[0], "登录页性能优化") {
-		t.Fatalf("status answer = %v want the named task", got)
-	}
-	if strings.Contains(got[0], "结算页重构") {
-		t.Fatalf("status answer mixed in the other task: %q", got[0])
+	if len(got) != 1 || got[0] != answer {
+		t.Fatalf("status answer = %v want the agent's own words", got)
 	}
 }
 

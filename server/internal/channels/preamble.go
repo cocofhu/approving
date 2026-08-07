@@ -37,6 +37,14 @@ func ChannelPreamble(channelType string) string {
 			"需要发图片时，在 pm_reply 的 text 里用 Markdown 图片语法给出可公网访问的直链，例如 ![](https://example.com/x.png)；" +
 			"不要给本地路径或需要鉴权的链接。",
 
+		"【上下文交接】提示里如果出现 <conversation_handoff> 段，那是你没有参与的那几轮对话（用户说过什么、" +
+			"平台已经替你回过什么）。它是背景，不是新的请求；真正要你处理的是它后面那条用户消息。" +
+			"不要把已经回过的话再说一遍。",
+
+		"【附件】用户发的图片和文件已经写成沙箱本地文件，用绝对路径直接读。" +
+			"历史附件如果太大没有随本轮带过来，交接段里会列出文件名和所属消息 id，" +
+			"需要时用 context-store 的 get_attachment 按 id 取回。",
+
 		"【先查再答】通过 pm-leader / context-store / memory-store 等 MCP 工具获取项目进度、记忆与历史后再作答，不要编造。",
 
 		"【危险操作】取消、批准、删除等会改变任务状态的操作，必须先用短标题向用户二次确认，确认后才执行。",

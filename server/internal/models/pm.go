@@ -34,15 +34,41 @@ type ChatThread struct {
 	Title string `json:"title"`
 	// SandboxRef stores the bound models.Sandbox.ID as a decimal string when a
 	// PM consult sandbox is live for this thread. Empty means unbound.
-	SandboxRef string    `json:"sandboxRef,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	SandboxRef string `json:"sandboxRef,omitempty"`
+	// HandoffCursor is the last ChatMessage the sandbox agent has been shown.
+	// It is persisted rather than kept in memory because the alternative is a
+	// sandbox that either forgets the conversation or is handed the whole of it
+	// again every time the process restarts or the container reconnects.
+	HandoffCursor string    `json:"-"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
 // Chat thread kinds.
 const (
 	ChatThreadKindUser = "user"
 	ChatThreadKindCron = "cron"
+)
+
+// Message sources record how a stored turn came to exist.
+//
+// The distinction that matters is whether a human ever saw the text. Only
+// MessageSourceChannel and MessageSourceChannelOutbound are things that were
+// actually said in the conversation, and only those may be replayed to a model
+// as history. Everything else is working material: useful to a person reading
+// the thread, misleading to an agent, which cannot tell its own draft from a
+// message the user received and will answer as though the user had read it.
+const (
+	// MessageSourceChannel is an inbound message from an IM channel.
+	MessageSourceChannel = "channel"
+	// MessageSourceChannelOutbound is text a channel confirmed it delivered.
+	MessageSourceChannelOutbound = "channel_outbound"
+	// MessageSourceCron is a scheduler-authored prompt.
+	MessageSourceCron = "cron"
+	// MessageSourceAgentInternal is raw agent output as the sandbox produced
+	// it: reasoning, tool narration, and asides like 「已发送」 that describe a
+	// delivery rather than perform one.
+	MessageSourceAgentInternal = "agent_internal"
 )
 
 // ChatMessage is one persisted turn in a PM Leader thread (context-store SoT).

@@ -165,20 +165,29 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 	}
 	closeOpen()
 
-	images := toPromptImages(in.Images)
-	userText := formatChannelUserText(in, len(images) > 0)
-	userMsg, err := b.pm.AppendMessageSource(thread.ID, "user", userText, "channel", nil, nil, images, nil, nil)
+	userMsg, err := b.currentMessage(thread.ID, in)
 	if err != nil {
 		return Reply{}, err
 	}
+	userText := userMsg.Content
+	images := userMsg.Images
+
+	// What this sandbox has not seen. A warm container already lived through
+	// everything up to its cursor; a fresh one lived through nothing, so it gets
+	// the bounded baseline instead of an empty delta it would silently accept.
+	handoff := b.buildHandoff(thread, userMsg, in, reused)
+	images = append(images, handoff.images...)
 
 	prompt := userText
 	if !reused {
 		// First turn of this conversation's sandbox: orient the agent.
 		prompt = ChannelPreamble(rc.Type) + "\n\n用户消息：" + userText
 	}
+	if handoff.text != "" {
+		prompt = handoff.text + "\n\n" + prompt
+	}
 	if len(images) > 0 {
-		prompt += fmt.Sprintf("\n（本条消息附带 %d 个附件）", len(images))
+		prompt += fmt.Sprintf("\n（随本次请求附带 %d 个附件，已写入沙箱本地文件，用绝对路径读取）", len(images))
 	}
 
 	if err := b.turns.StartWithTimeout(thread.ID, userMsg.ID, row.ID, prompt, images, rc.TurnTimeout); err != nil {
@@ -196,6 +205,14 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 		return Reply{}, err
 	}
 	progCancel()
+
+	// The agent has now seen everything up to this message, so the next turn
+	// only has to carry what comes after it. Recorded before the reply is read:
+	// the sandbox consumed the context whether or not it produced an answer, and
+	// replaying it would show the agent its own conversation twice.
+	if err := b.pm.SetHandoffCursor(thread.ID, userMsg.ID); err != nil {
+		log.Warn().Err(err).Str("thread", thread.ID).Msg("channel handoff cursor not advanced")
+	}
 
 	text := b.readReply(thread.ID, userMsg.CreatedAt)
 	if strings.TrimSpace(text) == "" {
@@ -272,6 +289,189 @@ func (b *ChannelBridge) forwardProgress(ctx context.Context, threadID string, on
 			emit(acc.Feed(delta))
 		}
 	}
+}
+
+// currentMessage returns the stored row for the message being handled.
+//
+// The Manager records inbound messages before routing, so by the time a turn
+// reaches here the row already exists and re-appending would duplicate the
+// user's words in their own history. The append is kept as a fallback for
+// callers that bypass the Manager's inbound path.
+func (b *ChannelBridge) currentMessage(threadID string, in InboundMessage) (models.ChatMessage, error) {
+	if id := strings.TrimSpace(in.RecordedMessageID); id != "" {
+		if msg, err := b.pm.GetMessage(threadID, id); err == nil {
+			return msg, nil
+		}
+	}
+	images := toPromptImages(in.Images)
+	return b.pm.AppendMessageSource(threadID, "user",
+		formatChannelUserText(in, len(images) > 0),
+		models.MessageSourceChannel, nil, nil, images, nil, nil)
+}
+
+// handoffPayload is the conversation the sandbox has not seen, ready to prepend
+// to the turn's prompt.
+type handoffPayload struct {
+	text   string
+	images []models.PromptImage
+}
+
+// handoffAttachmentBudget caps the base64 bytes of replayed history
+// attachments. ACP delivers a turn as one WebSocket JSON frame and base64 adds
+// a third on top of the raw size, so replaying an old 20 MiB upload alongside a
+// new one is how a prompt stops arriving at all. The current message is never
+// charged against this: it is what the user is asking about right now.
+const handoffAttachmentBudget = 8 << 20
+
+// buildHandoff assembles what the sandbox missed: the turns answered without it
+// and, for a container that has just come up, a bounded baseline of the
+// conversation so far.
+//
+// It carries the exchange, not the reasoning behind it. An escalation note says
+// why the turn arrived here; it does not hand over the routing model's train of
+// thought, which the agent has no way to verify and every reason to believe.
+func (b *ChannelBridge) buildHandoff(thread models.ChatThread, current models.ChatMessage,
+	in InboundMessage, warm bool) handoffPayload {
+	var entries []models.ChatMessage
+	var err error
+	label := "以下是这个会话最近的往来，用来对齐上下文"
+	if warm {
+		entries, err = b.pm.CanonicalSince(thread.ID, b.pm.HandoffCursor(thread.ID), transcriptWindow)
+		label = "以下是你上次处理之后、你没有看到的往来"
+	} else {
+		entries, err = b.pm.CanonicalWindow(thread.ID, transcriptWindow)
+	}
+	if err != nil {
+		log.Warn().Err(err).Str("thread", thread.ID).Msg("channel handoff history unavailable")
+		return handoffPayload{text: escalationNote(in)}
+	}
+
+	var lines []string
+	var images []models.PromptImage
+	var deferred []string
+	budget := handoffAttachmentBudget
+	for _, msg := range entries {
+		if msg.ID == current.ID {
+			continue // the request itself, carried by the prompt
+		}
+		speaker := "用户"
+		if msg.Role == "assistant" {
+			speaker = "你（已发给用户）"
+		}
+		line := speaker + "：" + strings.TrimSpace(msg.Content)
+		for i, img := range msg.Images {
+			size := len(img.Data)
+			if size <= budget {
+				budget -= size
+				images = append(images, img)
+				continue
+			}
+			// Too large to replay. Saying so beats dropping it silently: the
+			// listing is everything get_attachment needs to fetch it.
+			deferred = append(deferred, fmt.Sprintf("%s（%s，%d 字节，messageId=%s，index=%d）",
+				img.Name, img.MimeType, size, msg.ID, i))
+		}
+		if len(msg.Images) > 0 {
+			line += fmt.Sprintf("（附 %d 个附件）", len(msg.Images))
+		}
+		lines = append(lines, line)
+	}
+
+	var b2 strings.Builder
+	if len(lines) > 0 {
+		b2.WriteString("<conversation_handoff>\n")
+		b2.WriteString(label)
+		b2.WriteString("：\n")
+		b2.WriteString(strings.Join(lines, "\n"))
+		if len(deferred) > 0 {
+			b2.WriteString("\n未随本次请求携带的历史附件（用 context-store 的 get_attachment 按消息 id 取回）：\n")
+			b2.WriteString(strings.Join(deferred, "\n"))
+		}
+		b2.WriteString("\n</conversation_handoff>")
+	}
+	if note := escalationNote(in); note != "" {
+		if b2.Len() > 0 {
+			b2.WriteString("\n")
+		}
+		b2.WriteString(note)
+	}
+	return handoffPayload{text: b2.String(), images: images}
+}
+
+// escalationNote states why a turn reached the agent instead of being answered
+// outside it. It is one line of routing fact, not an instruction.
+func escalationNote(in InboundMessage) string {
+	reason := strings.TrimSpace(in.EscalationReason)
+	if reason == "" {
+		return ""
+	}
+	return "（这条由会话层转交给你：" + reason + "）"
+}
+
+// RecordInbound implements Transcript.
+func (b *ChannelBridge) RecordInbound(ref ConversationRef, in InboundMessage) (TranscriptEntry, error) {
+	thread, err := b.threadFor(ref, in)
+	if err != nil {
+		return TranscriptEntry{}, err
+	}
+	images := toPromptImages(in.Images)
+	msg, err := b.pm.AppendMessageSource(thread.ID, "user",
+		formatChannelUserText(in, len(images) > 0),
+		models.MessageSourceChannel, nil, nil, images, nil, nil)
+	if err != nil {
+		return TranscriptEntry{}, err
+	}
+	return entryFor(msg), nil
+}
+
+// RecordOutbound implements Transcript.
+func (b *ChannelBridge) RecordOutbound(ref ConversationRef, text string) (TranscriptEntry, error) {
+	thread, err := b.threadFor(ref, InboundMessage{Scene: ref.Scene, ConversationID: ref.ConversationID})
+	if err != nil {
+		return TranscriptEntry{}, err
+	}
+	msg, err := b.pm.AppendMessageSource(thread.ID, "assistant", text,
+		models.MessageSourceChannelOutbound, nil, nil, nil, nil, nil)
+	if err != nil {
+		return TranscriptEntry{}, err
+	}
+	return entryFor(msg), nil
+}
+
+// Window implements Transcript.
+func (b *ChannelBridge) Window(ref ConversationRef, limit int) ([]TranscriptEntry, error) {
+	thread, err := b.threadFor(ref, InboundMessage{Scene: ref.Scene, ConversationID: ref.ConversationID})
+	if err != nil {
+		return nil, err
+	}
+	msgs, err := b.pm.CanonicalWindow(thread.ID, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]TranscriptEntry, 0, len(msgs))
+	for _, msg := range msgs {
+		out = append(out, entryFor(msg))
+	}
+	return out, nil
+}
+
+func entryFor(msg models.ChatMessage) TranscriptEntry {
+	return TranscriptEntry{
+		ID: msg.ID, Role: msg.Role, Text: msg.Content,
+		Images: msg.Images, At: msg.CreatedAt,
+	}
+}
+
+func (b *ChannelBridge) threadFor(ref ConversationRef, in InboundMessage) (models.ChatThread, error) {
+	if b.pm == nil {
+		return models.ChatThread{}, fmt.Errorf("channel bridge unavailable")
+	}
+	proj, err := b.pm.RequireEnabled(ref.ProjectID)
+	if err != nil {
+		return models.ChatThread{}, err
+	}
+	return b.ensureThread(ref.ProjectID, SyntheticUserID(ref.ChannelType, ref.Scene, ref.ConversationID),
+		proj.PmLeaderAgent, in)
 }
 
 func (b *ChannelBridge) ensureThread(projectID, userID, agent string, in InboundMessage) (models.ChatThread, error) {

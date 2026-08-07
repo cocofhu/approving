@@ -69,6 +69,13 @@ type InboundMessage struct {
 	Timestamp      time.Time
 	Raw            map[string]any
 	Safety         *SafetyNotice
+	// RecordedMessageID is this message's row in the canonical transcript. The
+	// Manager writes the message before routing it, so the turn that eventually
+	// runs refers to that row instead of storing the user's words a second time.
+	RecordedMessageID string
+	// EscalationReason is why the conversation model handed this turn to the
+	// agent. Empty when no conversation model was involved.
+	EscalationReason string
 }
 
 // OutboundMessage is a normalized reply/push to a channel conversation.

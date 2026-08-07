@@ -26,104 +26,37 @@ func (m *Manager) SetRiskActionExecutor(exec RiskActionExecutor) {
 	m.riskExecutor = exec
 }
 
-// handleFastPath answers the deterministic Live intents — task_query,
-// task_control and clarification_reply — straight from stored task state.
+// handleFastPath is the only non-model shortcut left in the Live inbound
+// pipeline: it settles a confirmation the platform has already put in front of
+// the user.
 //
-// It runs before the per-conversation queue, so these messages are never
-// blocked by an in-flight agent turn. Returns true when the message was fully
-// handled; returns false (possibly after enriching in.Text with task context)
-// when the agent still needs to see it.
+// Deciding what a message means is the model's job — liveagent when a
+// conversation model is configured, the sandbox agent otherwise. Keyword tables
+// cannot tell "修复登录页" from "这两个都修一下", and when they guessed wrong the
+// platform answered on the agent's behalf and the turn never reached anything
+// that could read the conversation. A pending confirmation ticket is the one
+// exception, and not because it is faster: the ticket is a form the platform
+// showed the user, so a paraphrase must never be re-interpreted into
+// authorizing a destructive action.
+//
+// Everything else continues into the routing layers with its text and its
+// attachments intact.
 func (m *Manager) handleFastPath(ctx context.Context, rc *runningChannel, in *InboundMessage) bool {
-	if in == nil || (m.taskContext == nil && m.riskConfirmation == nil) {
+	if in == nil || m.riskConfirmation == nil {
 		return false
 	}
 	text := strings.TrimSpace(in.Text)
 	if text == "" {
 		return false
 	}
-	scopeUser := services.SyntheticQQUserID(in.UserID)
-	language := services.DetectLanguage(text, "")
-
-	if m.riskConfirmation != nil {
-		decision := services.ParseRiskDecisionPublic(text)
-		if decision != "" {
-			if handled := m.tryResolveRiskConfirmation(ctx, rc, *in, scopeUser, text, language); handled {
-				return true
-			}
-		}
-		if handled := m.tryCreateRiskConfirmation(ctx, rc, *in, scopeUser, text, language); handled {
-			return true
-		}
-	}
-	if m.taskContext == nil {
+	// Only an explicit confirm/cancel answer settles a ticket. Anything else,
+	// including a request that sounds destructive, goes to the model: creating
+	// the ticket is the agent's call, made through the MCP write it guards.
+	if services.ParseRiskDecisionPublic(text) == "" {
 		return false
 	}
-	if !looksLikeTaskAddressing(text) && !m.hasTaskCandidate(rc, *in, text) {
-		return false
-	}
-	resolveText := text
-	amendment := looksLikeAmendment(text)
-	if isContinuation(text) || amendment {
-		resolveText = "" // force conversation-focus binding
-	} else if isStatusQuery(text) {
-		resolveText = stripStatusQueryNoise(text)
-	}
-	res, err := m.ResolveTaskReference(TaskReferenceRequest{
-		ProjectID: rc.cfg.ProjectID, ChannelType: rc.cfg.Type, Scene: in.Scene,
-		ConversationID: in.ConversationID, QQUserID: in.UserID, Text: resolveText,
-	})
-	if err != nil {
-		log.Warn().Err(err).Str("project", rc.cfg.ProjectID).Msg("task reference resolve failed")
-		return false
-	}
-	switch res.Status {
-	case TaskReferenceAmbiguous:
-		// Several tasks match, so the user has to pick. Asking is the answer.
-		m.sendOrchestrationReply(ctx, rc, *in, res.Message)
-		return true
-	case TaskReferenceNotFound, TaskReferenceNoContext:
-		// Nothing matched. The keywords that got us here are weak — 「怎么样」
-		// appears in "这个功能怎么样" as readily as in "那个任务怎么样" — so a
-		// miss is better evidence that this was never about a task than that
-		// the user named one that does not exist. Answering "no matching task"
-		// would end an ordinary question with a canned line the agent could
-		// have answered properly.
-		return false
-	case TaskReferenceResolved:
-		if res.Task == nil {
-			return false
-		}
-		if amendment {
-			// FR-3: revising an in-flight task must reach that Run instead of
-			// silently becoming a new delegation. A finished task cannot absorb
-			// the change, so say so rather than dropping it.
-			if services.IsTerminalTaskStatus(res.Task.Status) {
-				m.sendOrchestrationReply(ctx, rc, *in,
-					amendAfterTerminalText(res.Task.ShortTitle, taskStatusLabel(res.Task.Status, language), language))
-				return true
-			}
-			m.recordTaskContext(rc, res.Task, text)
-			in.Text = prependAmendmentContext(text, res.Task)
-			return false
-		}
-		if isContinuation(text) {
-			// Focus already renewed by ResolveTask; continue into the PM turn
-			// with the resolved run context prepended.
-			m.recordTaskContext(rc, res.Task, text)
-			in.Text = prependFocusContext(text, res.Task)
-			return false
-		}
-		if isStatusQuery(text) || isBareTaskSelection(text, res) || resolveText != text {
-			// Re-render status with the original user wording language.
-			msg := m.formatTaskStatusReply(rc, *in, res.Task, text, language)
-			m.sendOrchestrationReply(ctx, rc, *in, msg)
-			return true
-		}
-		// Named a task but wants the agent to work — keep focus, continue turn.
-		return false
-	default:
-		return false
-	}
+	return m.tryResolveRiskConfirmation(ctx, rc, *in,
+		services.SyntheticQQUserID(in.UserID), text, services.DetectLanguage(text, ""))
 }
 
 func (m *Manager) tryResolveRiskConfirmation(ctx context.Context, rc *runningChannel, in InboundMessage, scopeUser, text, language string) bool {
@@ -176,57 +109,6 @@ func riskExecutionFailedText(language string) string {
 		return "I couldn't carry that out just now, so nothing has changed. Want me to try again?"
 	}
 	return "这个操作没执行成功，状态没变。要我再试一次吗？"
-}
-
-func (m *Manager) tryCreateRiskConfirmation(ctx context.Context, rc *runningChannel, in InboundMessage, scopeUser, text, language string) bool {
-	action, query := detectHighRiskIntent(text)
-	if action == "" {
-		return false
-	}
-	res, err := m.ResolveTaskReference(TaskReferenceRequest{
-		ProjectID: rc.cfg.ProjectID, ChannelType: rc.cfg.Type, Scene: in.Scene,
-		ConversationID: in.ConversationID, QQUserID: in.UserID, Text: query,
-	})
-	if err != nil {
-		return false
-	}
-	if res.Status != TaskReferenceResolved || res.Task == nil {
-		if res.Message != "" {
-			m.sendOrchestrationReply(ctx, rc, in, res.Message)
-			return true
-		}
-		return false
-	}
-	if action == "approve_gate" || action == "reject_gate" {
-		gateAction := "approve"
-		if action == "reject_gate" {
-			gateAction = "reject"
-		}
-		var gate models.Gate
-		err := m.taskContext.DB().Where("run_id = ? AND resolved = ?", res.Task.RunID, false).
-			Order("iteration desc, id desc").First(&gate).Error
-		if err != nil || strings.TrimSpace(gate.NodeID) == "" {
-			kind, body := "需澄清", "未找到该任务当前待处理的门禁，请先确认任务门禁状态。"
-			if language == "en" {
-				kind, body = "Action required", "No pending gate was found for this task. Check its gate status first."
-			}
-			m.sendOrchestrationReply(ctx, rc, in,
-				FormatTaskMessage(res.Task.ShortTitle, kind, body, text, language))
-			return true
-		}
-		action = "resume_gate:" + gate.NodeID + ":" + gateAction
-	}
-	ticket, err := m.riskConfirmation.CreateTicket(services.RiskTicketInput{
-		ProjectID: rc.cfg.ProjectID, UserID: scopeUser,
-		RunID: res.Task.RunID, Action: action, Language: language,
-		ShortTitle: res.Task.ShortTitle,
-	})
-	if err != nil {
-		log.Warn().Err(err).Msg("create risk ticket failed")
-		return false
-	}
-	m.sendOrchestrationReply(ctx, rc, in, m.riskConfirmation.ConfirmationPrompt(*ticket))
-	return true
 }
 
 func (m *Manager) sendOrchestrationReply(ctx context.Context, rc *runningChannel, in InboundMessage, text string) {
@@ -283,196 +165,6 @@ func (m *Manager) EnsureRunAccepted(ctx context.Context, projectID, runID, qqUse
 		ConversationID: conversationID, UserID: qqUserID,
 		ShortTitle: shortTitle, Language: language,
 	})
-}
-
-func looksLikeTaskAddressing(text string) bool {
-	if services.ParseOrdinal(text) > 0 {
-		return true
-	}
-	if isContinuation(text) || isStatusQuery(text) {
-		return true
-	}
-	// Short bare titles / keyword mentions are handled when Resolve finds them;
-	// avoid hijacking every casual chat line.
-	lower := strings.ToLower(text)
-	needles := []string{"任务", "怎么样", "进度", "状态", "task", "status", "progress", "how is", "what's"}
-	for _, n := range needles {
-		if strings.Contains(lower, strings.ToLower(n)) {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *Manager) hasTaskCandidate(rc *runningChannel, in InboundMessage, text string) bool {
-	if m == nil || m.taskContext == nil || rc == nil {
-		return false
-	}
-	text = strings.TrimSpace(text)
-	if text == "" || strings.ContainsAny(text, "\r\n") || len([]rune(text)) > 80 {
-		return false
-	}
-	candidates, err := m.taskContext.Search(services.TaskScope{
-		ProjectID: rc.cfg.ProjectID, UserID: services.SyntheticQQUserID(in.UserID),
-		Channel: rc.cfg.Type, ConversationID: in.ConversationID,
-	}, text)
-	return err == nil && len(candidates) > 0
-}
-
-func isContinuation(text string) bool {
-	t := strings.TrimSpace(strings.ToLower(text))
-	switch t {
-	case "那继续吧", "继续吧", "继续", "接着做", "接着干", "go on", "continue", "keep going", "that continue":
-		return true
-	default:
-		return strings.Contains(t, "继续") && len([]rune(t)) <= 12
-	}
-}
-
-func isStatusQuery(text string) bool {
-	t := strings.TrimSpace(text)
-	if t == "" {
-		return false
-	}
-	needles := []string{
-		"怎么样", "怎么了", "什么情况", "到哪了", "到哪一步",
-		"进度", "进展", "状态", "如何了", "好了吗", "完了吗", "完了没", "有结果了吗",
-		"how is", "how's", "status", "progress", "any update", "done yet",
-	}
-	lower := strings.ToLower(t)
-	for _, n := range needles {
-		if strings.Contains(lower, strings.ToLower(n)) {
-			return true
-		}
-	}
-	return false
-}
-
-func stripStatusQueryNoise(text string) string {
-	out := text
-	for _, noise := range []string{
-		"的事情怎么样了", "事情怎么样了", "怎么样了", "怎么样", "怎么了",
-		"现在什么进展了", "什么进展了", "什么情况", "到哪一步了", "到哪了",
-		"的进度", "进度如何", "进度", "进展", "的状态", "状态", "如何了",
-		"好了吗", "完了吗", "完了没", "有结果了吗",
-		"how is", "how's", "status of", "status", "progress on", "progress",
-		"any update", "done yet",
-		"的事情", "事情",
-	} {
-		out = strings.ReplaceAll(out, noise, " ")
-		out = strings.ReplaceAll(out, strings.ToUpper(noise), " ")
-	}
-	return strings.Join(strings.Fields(strings.TrimSpace(out)), " ")
-}
-
-func isBareTaskSelection(text string, res TaskReferenceResult) bool {
-	if res.Task == nil {
-		return false
-	}
-	t := strings.TrimSpace(text)
-	if services.ParseOrdinal(t) > 0 {
-		return true
-	}
-	return strings.EqualFold(t, res.Task.ShortTitle)
-}
-
-func prependFocusContext(text string, task *models.TaskIdentity) string {
-	if task == nil {
-		return text
-	}
-	return "（当前焦点任务：" + task.ShortTitle + " / run " + task.RunID + "）\n" + text
-}
-
-// prependAmendmentContext tells the agent the user is revising an existing
-// task, so it amends that Run instead of starting another one.
-func prependAmendmentContext(text string, task *models.TaskIdentity) string {
-	if task == nil {
-		return text
-	}
-	return "（用户在修改已有任务的要求：" + task.ShortTitle + " / run " + task.RunID +
-		"。请把下面的补充要求并入该任务，不要新建任务。）\n" + text
-}
-
-func amendAfterTerminalText(shortTitle, statusLabel, language string) string {
-	if services.NormalizeLanguage(language) == "en" {
-		return "\"" + shortTitle + "\" is already " + statusLabel +
-			", so I can't fold that into it. Want me to start a new task for it?"
-	}
-	return "「" + shortTitle + "」已经" + statusLabel + "了，改不进去。要我按这个新开一个任务吗？"
-}
-
-// recordTaskContext keeps the task's most recent conversational context fresh
-// so later status answers and background reflow can reference what the user
-// actually said (FR-6).
-func (m *Manager) recordTaskContext(rc *runningChannel, task *models.TaskIdentity, text string) {
-	if m.taskContext == nil || task == nil || rc == nil {
-		return
-	}
-	if _, err := m.taskContext.UpdateIdentity(services.EnsureTaskIdentityInput{
-		RunID: task.RunID, ProjectID: rc.cfg.ProjectID, UserID: task.UserID,
-		RecentContext: strings.TrimSpace(text),
-		Language:      services.TaskLanguageFor(task.Language, text),
-	}); err != nil {
-		log.Warn().Err(err).Str("run", task.RunID).Msg("record task recent context failed")
-	}
-}
-
-// formatTaskReply renders a task-scoped reply, naming the task only when the
-// name carries information.
-//
-// It carries information in two cases: several tasks are live, so the answer
-// would otherwise be ambiguous; or the user named the task themselves, where
-// repeating it confirms which one was understood. Everywhere else the name is
-// noise — a single-task conversation is already unambiguous, and stamping a
-// label on every line is what made the old output read like a ticket queue.
-func (m *Manager) formatTaskStatusReply(rc *runningChannel, in InboundMessage,
-	task *models.TaskIdentity, currentMessage, recentLanguage string) string {
-	if task == nil {
-		return ""
-	}
-	if m.shouldNameTask(rc, in, task, currentMessage) {
-		return FormatTaskMessage(task.ShortTitle,
-			taskStatusLabel(task.Status, recentLanguage), "", currentMessage, recentLanguage)
-	}
-	return soloTaskStatusText(task.Status, recentLanguage)
-}
-
-func (m *Manager) shouldNameTask(rc *runningChannel, in InboundMessage,
-	task *models.TaskIdentity, currentMessage string) bool {
-	return m.liveTaskCount(rc, in) > 1 || mentionsTask(currentMessage, task.ShortTitle)
-}
-
-// mentionsTask reports whether the user's own words picked out this task, so a
-// reply that repeats the name is confirming rather than labelling.
-func mentionsTask(message, shortTitle string) bool {
-	title := services.SanitizeShortTitle(shortTitle)
-	msg := strings.ToLower(strings.TrimSpace(message))
-	if title == "" || msg == "" {
-		return false
-	}
-	lower := strings.ToLower(title)
-	if strings.Contains(msg, lower) {
-		return true
-	}
-	// A bare selection may be a prefix of the stored title ("结算页" for
-	// "结算页性能"); short fragments are too weak to count as a reference.
-	return len([]rune(msg)) >= 3 && strings.Contains(lower, msg)
-}
-
-// liveTaskCount counts this user's non-terminal tasks in the conversation.
-func (m *Manager) liveTaskCount(rc *runningChannel, in InboundMessage) int {
-	if m.taskContext == nil || rc == nil {
-		return 0
-	}
-	n, err := m.taskContext.CountActive(services.TaskScope{
-		ProjectID: rc.cfg.ProjectID, UserID: services.SyntheticQQUserID(in.UserID),
-		Channel: rc.cfg.Type, ConversationID: in.ConversationID,
-	})
-	if err != nil {
-		log.Warn().Err(err).Str("project", rc.cfg.ProjectID).Msg("count active tasks failed")
-		return 0
-	}
-	return n
 }
 
 func riskBaseAction(action string) string {

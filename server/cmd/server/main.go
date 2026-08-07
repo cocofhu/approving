@@ -278,11 +278,6 @@ func main() {
 	liveClient := liveagent.New()
 	settingsSvc.SetLiveTuner(liveClient)
 	settingsSvc.ApplyOnBoot()
-	if liveClient.Configured() {
-		log.Info().Msg("conversation model configured; IM messages route through it before the sandbox")
-	} else {
-		log.Info().Msg("conversation model not configured; every IM message goes to a sandbox")
-	}
 
 	previewSvc := services.NewPreviewService(db, sbxMgr)
 	previewSvc.SetBrowser(browserSvc)
@@ -376,6 +371,16 @@ func main() {
 		})
 	})
 	channelMgr.SetSendablePolicy(deliveryPolicy)
+	// The conversation model answers what it can without a sandbox. Logged after
+	// it is actually wired, and stated as configuration rather than as routing
+	// behaviour: the previous message claimed messages went through a client
+	// that was never handed to the Manager at all.
+	channelMgr.SetLiveModel(liveClient)
+	if liveClient.Configured() {
+		log.Info().Msg("conversation model endpoint configured")
+	} else {
+		log.Info().Msg("conversation model endpoint not configured; every IM message goes to a sandbox")
+	}
 	taskContextSvc := services.NewTaskContextService(db)
 	channelMgr.SetTaskContextService(taskContextSvc)
 	riskSvc := services.NewRiskConfirmationService(db)

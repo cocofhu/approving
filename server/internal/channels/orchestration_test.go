@@ -2,6 +2,7 @@ package channels
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -9,27 +10,25 @@ import (
 	"github.com/cocofhu/approving/internal/services"
 )
 
-func TestInboundOrchestrationAmbiguityAndContinuation(t *testing.T) {
+// The platform used to answer these itself, from a keyword scan and a scored
+// title search. Two live tasks sharing a prefix made every one of them
+// ambiguous, so 「登录页怎么样了」 and 「两个都修一下」 came back as a numbered menu
+// that no answer could escape. Every message that is about work now reaches
+// something that can read the conversation, and the menu is gone.
+func TestTaskAddressingReachesTheAgentInsteadOfAMenu(t *testing.T) {
 	fa := &fakeAdapter{}
 	m, db := policyManager(t, fa, nil)
 	tasks := services.NewTaskContextService(db)
-	risk := services.NewRiskConfirmationService(db)
 	m.SetTaskContextService(tasks)
-	m.SetRiskConfirmationService(risk)
+	m.SetRiskConfirmationService(services.NewRiskConfirmationService(db))
 
-	var cancelled []string
-	m.SetRiskActionExecutor(func(projectID, runID, action string, meta map[string]string) error {
-		cancelled = append(cancelled, runID+":"+action)
-		return nil
-	})
-
-	turned := 0
-	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
-		turned++
-		return Reply{FinalSummary: "agent-handled:" + in.Text}, nil
+	var seen []string
+	m.handleFunc = func(_ context.Context, _ ResolvedChannel, in InboundMessage) (Reply, error) {
+		seen = append(seen, in.Text)
+		return Reply{FinalSummary: "agent-handled"}, nil
 	}
 
-	projectID := "proj"
+	const projectID = "proj"
 	for _, spec := range []struct{ run, title string }{
 		{"r1", "登录页性能优化"},
 		{"r2", "登录页文案整改"},
@@ -41,6 +40,8 @@ func TestInboundOrchestrationAmbiguityAndContinuation(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// Precondition: these are exactly the conditions the old resolver called
+	// ambiguous, so this test would have produced a menu before.
 	if cands, err := tasks.Search(services.TaskScope{
 		ProjectID: projectID, UserID: services.SyntheticQQUserID("u1"),
 		Channel: "qq", ConversationID: "c1",
@@ -52,82 +53,36 @@ func TestInboundOrchestrationAmbiguityAndContinuation(t *testing.T) {
 		cfg:     models.ChannelConfig{ID: "c1", Type: models.ChannelTypeQQ, ProjectID: projectID},
 		adapter: fa,
 	}
-	in := InboundMessage{
-		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
-		MessageID: "m1", Text: "登录页怎么样了",
-	}
-	m.handleInbound(context.Background(), rc, in)
-	got := sentTexts(fa)
-	if turned != 0 {
-		t.Fatalf("ambiguous status query must not start a PM turn, turned=%d", turned)
-	}
-	if len(got) != 1 || !strings.Contains(got[0], "匹配到多个任务") {
-		t.Fatalf("expected ambiguity clarification, got %v", got)
-	}
-
-	fa.mu.Lock()
-	fa.sent = nil
-	fa.mu.Unlock()
-	m.handleInbound(context.Background(), rc, InboundMessage{
-		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
-		MessageID: "m2", Text: "登录页性能优化",
-	})
-	got = sentTexts(fa)
-	if turned != 0 {
-		t.Fatalf("short-title selection should answer without PM turn, turned=%d", turned)
-	}
-	if len(got) != 1 || !strings.Contains(got[0], "登录页性能优化") {
-		t.Fatalf("short-title reply = %v", got)
-	}
-
-	fa.mu.Lock()
-	fa.sent = nil
-	fa.mu.Unlock()
-	m.handleInbound(context.Background(), rc, InboundMessage{
-		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
-		MessageID: "m3", Text: "那继续吧",
-	})
-	if turned != 1 {
-		t.Fatalf("continuation should enter PM turn with focus, turned=%d", turned)
-	}
-	got = sentTexts(fa)
-	if len(got) != 1 || !strings.Contains(got[0], "agent-handled") {
-		t.Fatalf("continuation final = %v", got)
-	}
-
-	fa.mu.Lock()
-	fa.sent = nil
-	fa.mu.Unlock()
-	m.handleInbound(context.Background(), rc, InboundMessage{
-		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
-		MessageID: "m4", Text: "取消登录页性能优化",
-	})
-	got = sentTexts(fa)
-	if len(cancelled) != 0 {
-		t.Fatalf("high-risk action executed before confirmation: %v", cancelled)
-	}
-	// The prompt asks in plain words, names the task and says how to answer.
-	if len(got) != 1 || !strings.Contains(got[0], "登录页性能优化") ||
-		!strings.Contains(got[0], "确认") {
-		t.Fatalf("expected confirmation prompt, got %v", got)
-	}
-	if ContainsInternalTerms(got[0]) {
-		t.Fatalf("confirmation prompt exposes internals: %q", got[0])
-	}
-
-	fa.mu.Lock()
-	fa.sent = nil
-	fa.mu.Unlock()
-	m.handleInbound(context.Background(), rc, InboundMessage{
-		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
-		MessageID: "m5", Text: "确认",
-	})
-	if len(cancelled) != 1 || cancelled[0] != "r1:cancel_run" {
-		t.Fatalf("confirmed cancel = %v", cancelled)
+	for i, text := range []string{
+		"登录页怎么样了", "两个都修复下", "登录页性能优化", "那继续吧",
+		"取消登录页性能优化", "什么进度了", "改成只优化首屏",
+	} {
+		fa.mu.Lock()
+		fa.sent = nil
+		fa.mu.Unlock()
+		m.handleInbound(context.Background(), rc, InboundMessage{
+			Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
+			MessageID: "m" + strconv.Itoa(i), Text: text,
+		})
+		if len(seen) != i+1 || seen[i] != text {
+			t.Fatalf("%q did not reach the agent; agent saw %v", text, seen)
+		}
+		got := sentTexts(fa)
+		if len(got) != 1 || got[0] != "agent-handled" {
+			t.Fatalf("%q outbound = %v want only the agent's answer", text, got)
+		}
+		for _, banned := range []string{"匹配到多个任务", "Several tasks match", "请回复序号", "没有找到匹配的任务"} {
+			if strings.Contains(got[0], banned) {
+				t.Fatalf("%q got a platform menu: %q", text, got[0])
+			}
+		}
 	}
 }
 
-func TestInboundOrchestrationGenericTitleAndGateConfirmation(t *testing.T) {
+// A confirmation the platform already asked for is the one thing it still
+// settles itself. The ticket comes from the agent's guarded write, so the reply
+// only has to be recognised as yes or no — and until it is, nothing executes.
+func TestPendingConfirmationIsSettledWithoutAModel(t *testing.T) {
 	fa := &fakeAdapter{}
 	m, db := policyManager(t, fa, nil)
 	tasks := services.NewTaskContextService(db)
@@ -136,73 +91,66 @@ func TestInboundOrchestrationGenericTitleAndGateConfirmation(t *testing.T) {
 	m.SetRiskConfirmationService(risk)
 
 	const projectID = "proj"
-	if err := db.Create(&models.Run{ID: "r-gate", Status: "waiting_human"}).Error; err != nil {
-		t.Fatal(err)
-	}
 	if _, err := tasks.EnsureIdentity(services.EnsureTaskIdentityInput{
 		RunID: "r-gate", ProjectID: projectID, UserID: services.SyntheticQQUserID("u1"),
 		ShortTitle: "结算页性能", Status: "waiting_human",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Create(&models.Gate{
-		RunID: "r-gate", NodeID: "review-gate", Iteration: 1,
-		Title: "上线审批", Resolved: false,
-	}).Error; err != nil {
-		t.Fatal(err)
-	}
 
+	var executedRun, executedAction string
+	var executedMeta map[string]string
+	m.SetRiskActionExecutor(func(_, runID, action string, meta map[string]string) error {
+		executedRun, executedAction, executedMeta = runID, action, meta
+		return nil
+	})
 	turned := 0
 	m.handleFunc = func(context.Context, ResolvedChannel, InboundMessage) (Reply, error) {
 		turned++
-		return Reply{}, nil
+		return Reply{FinalSummary: "agent-handled"}, nil
 	}
 	rc := &runningChannel{
 		cfg:     models.ChannelConfig{ID: "c1", Type: models.ChannelTypeQQ, ProjectID: projectID},
 		adapter: fa,
 	}
+
+	// Asking to approve is a request, not an authorization: it goes to the
+	// agent, which raises the ticket through the write it guards.
 	m.handleInbound(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
-		MessageID: "m1", Text: "结算页性能",
+		MessageID: "m1", Text: "批准结算页性能",
 	})
-	if turned != 0 {
-		t.Fatalf("generic exact short title should be handled before PM turn, turned=%d", turned)
+	if turned != 1 {
+		t.Fatalf("a destructive-sounding request must reach the agent, turned=%d", turned)
 	}
-	if got := sentTexts(fa); len(got) != 1 || !strings.Contains(got[0], "结算页性能") {
-		t.Fatalf("generic title reply = %v", got)
+	if executedAction != "" {
+		t.Fatalf("action executed with no ticket at all: %s", executedAction)
+	}
+
+	if _, err := risk.CreateTicket(services.RiskTicketInput{
+		ProjectID: projectID, UserID: services.SyntheticQQUserID("u1"),
+		RunID: "r-gate", Action: "resume_gate:review-gate:approve",
+		ShortTitle: "结算页性能", Language: "zh-CN",
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	fa.mu.Lock()
 	fa.sent = nil
 	fa.mu.Unlock()
-	var executedAction string
-	var executedMeta map[string]string
-	m.SetRiskActionExecutor(func(projectID, runID, action string, meta map[string]string) error {
-		executedAction, executedMeta = action, meta
-		return nil
-	})
 	m.handleInbound(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
-		MessageID: "m2", Text: "批准结算页性能",
+		MessageID: "m2", Text: "确认",
 	})
-	pending, err := risk.LatestPending(services.SyntheticQQUserID("u1"), projectID)
-	if err != nil || pending == nil {
-		t.Fatalf("pending gate ticket = %+v err=%v", pending, err)
+	if turned != 1 {
+		t.Fatalf("settling a ticket must not open an agent turn, turned=%d", turned)
 	}
-	if pending.Action != "resume_gate:review-gate:approve" {
-		t.Fatalf("gate ticket action = %q", pending.Action)
-	}
-	if executedAction != "" {
-		t.Fatalf("gate executed before confirmation: %s", executedAction)
-	}
-
-	m.handleInbound(context.Background(), rc, InboundMessage{
-		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
-		MessageID: "m3", Text: "确认",
-	})
-	if executedAction != "resume_gate" ||
+	if executedRun != "r-gate" || executedAction != "resume_gate" ||
 		executedMeta["nodeId"] != "review-gate" || executedMeta["gateAction"] != "approve" {
-		t.Fatalf("confirmed gate action=%q meta=%v", executedAction, executedMeta)
+		t.Fatalf("confirmed run=%q action=%q meta=%v", executedRun, executedAction, executedMeta)
+	}
+	if got := sentTexts(fa); len(got) != 1 || ContainsInternalTerms(got[0]) {
+		t.Fatalf("settlement outbound = %v", got)
 	}
 }
 

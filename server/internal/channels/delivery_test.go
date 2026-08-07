@@ -778,115 +778,24 @@ func TestOutboundBindingSkippedWithoutRealIDRunOrOwnership(t *testing.T) {
 	})
 }
 
-func TestResolveTaskReferenceQQFlow(t *testing.T) {
-	fa := &fakeAdapter{}
-	m, db := policyManager(t, fa, nil)
-	svc := services.NewTaskContextService(db)
-	m.SetTaskContextService(svc)
-
-	projectID, qqUser := "proj", "u1"
-	userID := services.SyntheticQQUserID(qqUser)
-	for _, spec := range []struct{ run, title string }{
-		{"r1", "支付登录页"},
-		{"r2", "用户登录页"},
+// Task addressing is no longer something the channel layer does, so nothing in
+// the package may compose a numbered pick-one prompt again. Task scoping still
+// matters for delivery — a Run reports back to the conversation that started it
+// — and that is what the binding tests above cover.
+func TestNoOutboundCopyOffersATaskMenu(t *testing.T) {
+	for _, text := range []string{
+		busyHintText,
+		QQReplyFallback("", "zh-CN"), QQReplyFallback("", "en"),
+		FormatTaskMessage("登录页性能优化", "还在做。", "", "登录页怎么样了", "zh-CN"),
+		runAcceptanceText("登录页性能优化", "zh-CN"),
 	} {
-		if _, err := svc.EnsureIdentity(services.EnsureTaskIdentityInput{
-			RunID: spec.run, ProjectID: projectID, UserID: userID,
-			ShortTitle: spec.title, OriginalRequirement: "实现" + spec.title, Status: "active",
-		}); err != nil {
-			t.Fatal(err)
+		for _, banned := range []string{
+			"匹配到多个任务", "Several tasks match", "请回复序号", "Reply with the number",
+			"没有找到匹配的任务", "No matching task",
+		} {
+			if strings.Contains(text, banned) {
+				t.Errorf("outbound copy still offers a task menu (%q): %q", banned, text)
+			}
 		}
-	}
-	// Another project's task must stay invisible even with a similar title.
-	if _, err := svc.EnsureIdentity(services.EnsureTaskIdentityInput{
-		RunID: "r3", ProjectID: "other-proj", UserID: userID,
-		ShortTitle: "登录页", Status: "active",
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	base := TaskReferenceRequest{
-		ProjectID: projectID, ChannelType: models.ChannelTypeQQ, Scene: SceneC2C,
-		ConversationID: "c1", QQUserID: qqUser,
-	}
-
-	// QQ has no reply reference, so a quoted message id is ignored entirely.
-	ambiguous := base
-	ambiguous.Text = "登录页"
-	ambiguous.ReplyToMessageID = "m-quoted"
-	res, err := m.ResolveTaskReference(ambiguous)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Status != TaskReferenceAmbiguous || len(res.Options) != 2 {
-		t.Fatalf("ambiguous result = %+v", res)
-	}
-	if res.ReplyRefSupported {
-		t.Fatal("QQ must report reply references as unsupported")
-	}
-	if !strings.Contains(res.Message, "不支持引用回复") || !strings.Contains(res.Message, "1. ") {
-		t.Fatalf("ambiguity prompt = %q", res.Message)
-	}
-
-	// The ordinal selects from exactly the options the user was shown.
-	pick := base
-	pick.Text = "2"
-	res, err = m.ResolveTaskReference(pick)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Status != TaskReferenceResolved || res.Task == nil {
-		t.Fatalf("ordinal selection = %+v", res)
-	}
-	picked := res.Task.RunID
-
-	// Focus now answers a follow-up with no task words at all.
-	followUp := base
-	followUp.Text = ""
-	res, err = m.ResolveTaskReference(followUp)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Status != TaskReferenceResolved || res.Task.RunID != picked {
-		t.Fatalf("focus follow-up = %+v want %s", res, picked)
-	}
-
-	// A unique short title resolves directly and is formatted for the user.
-	unique := base
-	unique.Text = "支付登录页"
-	res, err = m.ResolveTaskReference(unique)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Status != TaskReferenceResolved || res.Task.RunID != "r1" {
-		t.Fatalf("unique match = %+v", res)
-	}
-	if !strings.Contains(res.Message, "支付登录页") || !strings.Contains(res.Message, "还在做") {
-		t.Fatalf("resolved message = %q", res.Message)
-	}
-	if strings.ContainsAny(res.Message, "【｜】") {
-		t.Fatalf("resolved message still wears a ticket header: %q", res.Message)
-	}
-
-	// No match must not guess.
-	missing := base
-	missing.Text = "结算页面"
-	res, err = m.ResolveTaskReference(missing)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Status != TaskReferenceNotFound || res.Task != nil {
-		t.Fatalf("no-match result = %+v", res)
-	}
-
-	// English input switches the copy.
-	english := base
-	english.Text = "unknown checkout task"
-	res, err = m.ResolveTaskReference(english)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Language != "en" || !strings.Contains(res.Message, "No matching task") {
-		t.Fatalf("english fallback = %+v", res)
 	}
 }
