@@ -38,7 +38,10 @@ func (n channelIMNotifier) NotifyReply(projectID, runID string, target pmmcp.IMT
 	if err != nil {
 		return pmmcp.IMDeliveryOutcome{}, err
 	}
-	return pmmcp.IMDeliveryOutcome{Sent: result.Sent, Reason: result.Reason()}, nil
+	return pmmcp.IMDeliveryOutcome{
+		Sent: result.Sent, Reason: result.Reason(),
+		AlreadyReplied: result.Reason() == channels.ReasonAlreadyReplied,
+	}, nil
 }
 
 func (n channelIMNotifier) NotifyProgress(projectID, runID string, target pmmcp.IMTarget, kind, text, stage, conclusion string, blocked, actionRequired bool) (pmmcp.IMDeliveryOutcome, error) {

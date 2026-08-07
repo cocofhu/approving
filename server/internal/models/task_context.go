@@ -86,9 +86,14 @@ type RiskConfirmationTicket struct {
 	// ShortTitle snapshots the task title at creation time so every prompt and
 	// every later status reply echoes the task the user was actually asked about.
 	ShortTitle string     `gorm:"size:160" json:"shortTitle"`
-	Action     string     `gorm:"size:191;index:idx_risk_ticket,priority:4" json:"action"`
-	Status     string     `gorm:"size:16;index" json:"status"` // pending | confirmed | cancelled | expired
-	Language   string     `gorm:"size:16" json:"language"`
+	Action   string `gorm:"size:191;index:idx_risk_ticket,priority:4" json:"action"`
+	Status   string `gorm:"size:16;index" json:"status"` // pending | confirmed | cancelled | expired
+	Language string `gorm:"size:16" json:"language"`
+	// PromptedAt records when this ticket's question actually reached the user.
+	// Nil means it never did — delivery can be suppressed or fail — and such a
+	// ticket must never be settled by a bare "确认", because the user cannot
+	// have been answering a question they were never asked.
+	PromptedAt *time.Time `json:"promptedAt,omitempty"`
 	ExpiresAt  time.Time  `gorm:"index" json:"expiresAt"`
 	ResolvedAt *time.Time `json:"resolvedAt,omitempty"`
 	CreatedAt  time.Time  `json:"createdAt"`

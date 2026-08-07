@@ -7,6 +7,8 @@ import (
 
 	"github.com/cocofhu/approving/internal/sendable"
 	"github.com/cocofhu/approving/internal/services"
+
+	"github.com/rs/zerolog/log"
 )
 
 // ErrNoSendableTarget is returned when no running channel can reach the
@@ -70,6 +72,11 @@ type DeliveryResult struct {
 // Reason exposes the policy reason behind the outcome ("" when sent without a
 // specific reason).
 func (r DeliveryResult) Reason() string { return r.Decision.Reason }
+
+// ReasonAlreadyReplied marks an answer withheld because this turn was already
+// answered. It is a deliberate suppression, not a failure: the agent is told so
+// it stops rather than rewording and trying again.
+const ReasonAlreadyReplied = "already_replied"
 
 // Suppressed reports a delivery that policy intentionally withheld: rate
 // limiting, dedupe/merge, an already-sent receipt, or a validation gate. It is a
@@ -163,13 +170,25 @@ func (m *Manager) DeliverConversationReply(ctx context.Context, reply Conversati
 	if m.captureReply(reply.ProjectID, scene, reply.ConversationID, text) {
 		return DeliveryResult{Decision: sendable.Decision{Reason: "captured_for_reflow"}}, nil
 	}
+	// One question, one answer. The dedupe key below is derived from the text,
+	// which collapses a retry of the same answer but lets two differently worded
+	// answers both through — and an agent that submits twice in one turn is
+	// exactly what the user sees as the platform talking over itself. The
+	// per-turn marker is the only thing that can tell those apart, so it is
+	// checked here rather than only at the turn's wrap-up.
+	turn := conversationTurnScope(reply.ProjectID, scene, reply.ConversationID)
+	if m.hasAnswered(turn) {
+		log.Info().Str("project", reply.ProjectID).Str("conversation", reply.ConversationID).
+			Msg("second answer in one turn withheld; the agent is told it already replied")
+		return DeliveryResult{Decision: sendable.Decision{Reason: ReasonAlreadyReplied}}, nil
+	}
 	// Most conversational answers belong to no Run at all — chat, an
 	// explanation, a clarifying question — so the delivery scope falls back to
 	// the conversation itself. Without it the answer carries no scope and the
 	// policy drops it, which would silently mute ordinary conversation.
 	scope := strings.TrimSpace(reply.ShortTitle)
 	if scope == "" && strings.TrimSpace(reply.RunID) == "" {
-		scope = conversationTurnScope(reply.ProjectID, scene, reply.ConversationID)
+		scope = turn
 	}
 	result, err := m.DeliverSendable(ctx, SendableRequest{
 		ProjectID: reply.ProjectID, Scene: scene, ConversationID: reply.ConversationID,
@@ -187,6 +206,7 @@ func (m *Manager) DeliverConversationReply(ctx context.Context, reply Conversati
 	}
 	if result.Sent {
 		m.MarkConversationReplied(reply.ProjectID, scene, reply.ConversationID)
+		m.markAnswered(turn)
 	}
 	return result, nil
 }

@@ -127,11 +127,16 @@ func TestPendingConfirmationIsSettledWithoutAModel(t *testing.T) {
 		t.Fatalf("action executed with no ticket at all: %s", executedAction)
 	}
 
-	if _, err := risk.CreateTicket(services.RiskTicketInput{
+	ticket, err := risk.CreateTicket(services.RiskTicketInput{
 		ProjectID: projectID, UserID: services.SyntheticQQUserID("u1"),
 		RunID: "r-gate", Action: "resume_gate:review-gate:approve",
 		ShortTitle: "结算页性能", Language: "zh-CN",
-	}); err != nil {
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The platform asked the question; only then is 「确认」 an answer to it.
+	if err := risk.MarkPrompted(ticket.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -151,6 +156,164 @@ func TestPendingConfirmationIsSettledWithoutAModel(t *testing.T) {
 	}
 	if got := sentTexts(fa); len(got) != 1 || ContainsInternalTerms(got[0]) {
 		t.Fatalf("settlement outbound = %v", got)
+	}
+}
+
+// Confirming one task must never destroy another.
+//
+// This shipped. The agent asked to cancel task A and the user hesitated; the
+// agent then asked to cancel task B and that question was suppressed on its way
+// out. The user's 「确认」 — the only question they had ever seen was A's — was
+// matched against the newest pending ticket, which was B, and B was cancelled.
+// The giveaway was the reply naming a task the user had never been asked about.
+// A ticket whose question never reached the user is now not a candidate.
+func TestConfirmationSettlesTheTaskTheUserWasActuallyAskedAbout(t *testing.T) {
+	fa := &fakeAdapter{}
+	m, db := policyManager(t, fa, nil)
+	risk := services.NewRiskConfirmationService(db)
+	m.SetRiskConfirmationService(risk)
+	m.SetTaskContextService(services.NewTaskContextService(db))
+
+	const projectID = "proj"
+	var cancelled []string
+	m.SetRiskActionExecutor(func(_, runID, _ string, _ map[string]string) error {
+		cancelled = append(cancelled, runID)
+		return nil
+	})
+	m.handleFunc = func(context.Context, ResolvedChannel, InboundMessage) (Reply, error) {
+		return Reply{}, nil
+	}
+	rc := &runningChannel{
+		cfg:     models.ChannelConfig{ID: "c1", Type: models.ChannelTypeQQ, ProjectID: projectID},
+		adapter: fa,
+	}
+
+	newTicket := func(runID, title string) *models.RiskConfirmationTicket {
+		t.Helper()
+		ticket, err := risk.CreateTicket(services.RiskTicketInput{
+			ProjectID: projectID, UserID: services.SyntheticQQUserID("u1"),
+			RunID: runID, Action: "cancel_run", ShortTitle: title, Language: "zh-CN",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ticket
+	}
+
+	asked := newTicket("run-a", "检查并修复 QQ 两项问题")
+	if err := risk.MarkPrompted(asked.ID); err != nil {
+		t.Fatal(err)
+	}
+	// Newer, and never delivered: the user has no idea it exists.
+	newTicket("run-b", "直接检查 approving 仓库当前主干代码")
+
+	m.handleInbound(context.Background(), rc, InboundMessage{
+		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
+		MessageID: "m-confirm", Text: "确认",
+	})
+
+	if len(cancelled) != 1 || cancelled[0] != "run-a" {
+		t.Fatalf("cancelled = %v want only the task the user was asked about", cancelled)
+	}
+	got := sentTexts(fa)
+	if len(got) != 1 || !strings.Contains(got[0], "检查并修复 QQ 两项问题") {
+		t.Fatalf("reply = %v must name the task that was confirmed", got)
+	}
+	if strings.Contains(got[0], "主干代码") {
+		t.Fatalf("reply named a task the user never authorized: %q", got[0])
+	}
+}
+
+// A question that never reached the user cannot be answered by 「确认」, so the
+// message goes to the agent instead — nothing is executed on a guess.
+func TestConfirmationWithNoDeliveredQuestionExecutesNothing(t *testing.T) {
+	fa := &fakeAdapter{}
+	m, db := policyManager(t, fa, nil)
+	risk := services.NewRiskConfirmationService(db)
+	m.SetRiskConfirmationService(risk)
+	m.SetTaskContextService(services.NewTaskContextService(db))
+
+	executed := 0
+	m.SetRiskActionExecutor(func(string, string, string, map[string]string) error {
+		executed++
+		return nil
+	})
+	turned := 0
+	m.handleFunc = func(context.Context, ResolvedChannel, InboundMessage) (Reply, error) {
+		turned++
+		return Reply{}, nil
+	}
+	rc := &runningChannel{
+		cfg:     models.ChannelConfig{ID: "c1", Type: models.ChannelTypeQQ, ProjectID: "proj"},
+		adapter: fa,
+	}
+	if _, err := risk.CreateTicket(services.RiskTicketInput{
+		ProjectID: "proj", UserID: services.SyntheticQQUserID("u1"),
+		RunID: "run-unseen", Action: "cancel_run", ShortTitle: "没问出去的那个", Language: "zh-CN",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	m.handleInbound(context.Background(), rc, InboundMessage{
+		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
+		MessageID: "m-blind", Text: "确认",
+	})
+	if executed != 0 {
+		t.Fatalf("a question the user never saw authorized %d action(s)", executed)
+	}
+	if turned != 1 {
+		t.Fatalf("the message should reach the agent instead, turned=%d", turned)
+	}
+}
+
+// The reply is rendered after the action, not before. Rendering it first read
+// the task as still running and produced 「已经取消了。现在是 running」 — two
+// contradictory claims about the same task in one message.
+func TestCancelReplyDoesNotReportTheStatusFromBeforeTheCancel(t *testing.T) {
+	fa := &fakeAdapter{}
+	m, db := policyManager(t, fa, nil)
+	risk := services.NewRiskConfirmationService(db)
+	m.SetRiskConfirmationService(risk)
+	m.SetTaskContextService(services.NewTaskContextService(db))
+
+	if err := db.Create(&models.Run{ID: "run-live", Status: "running"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	m.SetRiskActionExecutor(func(_, runID, _ string, _ map[string]string) error {
+		return db.Model(&models.Run{}).Where("id = ?", runID).
+			Update("status", "cancelled").Error
+	})
+	m.handleFunc = func(context.Context, ResolvedChannel, InboundMessage) (Reply, error) {
+		return Reply{}, nil
+	}
+	rc := &runningChannel{
+		cfg:     models.ChannelConfig{ID: "c1", Type: models.ChannelTypeQQ, ProjectID: "proj"},
+		adapter: fa,
+	}
+	ticket, err := risk.CreateTicket(services.RiskTicketInput{
+		ProjectID: "proj", UserID: services.SyntheticQQUserID("u1"),
+		RunID: "run-live", Action: "cancel_run", ShortTitle: "登录页性能", Language: "zh-CN",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := risk.MarkPrompted(ticket.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	m.handleInbound(context.Background(), rc, InboundMessage{
+		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
+		MessageID: "m-cancel", Text: "确认",
+	})
+	got := sentTexts(fa)
+	if len(got) != 1 {
+		t.Fatalf("outbound = %v want one settlement reply", got)
+	}
+	if strings.Contains(got[0], "running") {
+		t.Fatalf("reply reports the pre-cancel status: %q", got[0])
+	}
+	if !strings.Contains(got[0], "取消") {
+		t.Fatalf("reply does not say what happened: %q", got[0])
 	}
 }
 

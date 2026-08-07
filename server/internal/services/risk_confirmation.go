@@ -241,6 +241,56 @@ func parseRiskDecision(value string) string {
 // ParseRiskDecisionPublic exposes confirmation keyword parsing for IM orchestration.
 func ParseRiskDecisionPublic(value string) string { return parseRiskDecision(value) }
 
+// MarkPrompted records that a ticket's question reached the user. Until this is
+// set the ticket is invisible to LatestAnswerable, which is what keeps an
+// undelivered question from swallowing the answer to a different one.
+func (s *RiskConfirmationService) MarkPrompted(ticketID string) error {
+	if s == nil || s.db == nil {
+		return errors.New("risk confirmation database is unavailable")
+	}
+	now := s.now()
+	return s.db.Model(&models.RiskConfirmationTicket{}).
+		Where("id = ? AND prompted_at IS NULL", strings.TrimSpace(ticketID)).
+		Updates(map[string]any{"prompted_at": now, "updated_at": now}).Error
+}
+
+// LatestAnswerable returns the pending ticket a bare confirmation belongs to:
+// the most recent one whose question the user actually received.
+//
+// The plain newest-pending ticket is the wrong answer and was a real incident.
+// An agent asked to cancel task A, the user hesitated, the agent then asked to
+// cancel task B and that prompt was suppressed on the way out; the user's
+// 「确认」 — meant for the only question they had seen — settled B and cancelled
+// the wrong task. Confirming one thing must never destroy another, so a ticket
+// the user never saw is not a candidate.
+func (s *RiskConfirmationService) LatestAnswerable(userID, projectID string) (*models.RiskConfirmationTicket, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("risk confirmation database is unavailable")
+	}
+	var ticket models.RiskConfirmationTicket
+	err := s.db.Where("project_id = ? AND user_id = ? AND status = ? AND prompted_at IS NOT NULL",
+		strings.TrimSpace(projectID), strings.TrimSpace(userID), "pending").
+		Order("prompted_at desc").First(&ticket).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &ticket, nil
+}
+
+// StatusMessageFor renders the settled-ticket reply against the task's status
+// right now. It exists because the reply has to be built after the action runs:
+// rendering it beforehand produced 「已经取消了。现在是 running」, which told the
+// user two contradictory things about the same task in one breath.
+func (s *RiskConfirmationService) StatusMessageFor(ticket models.RiskConfirmationTicket) string {
+	if s == nil || s.db == nil {
+		return riskStatusMessage(ticket, "")
+	}
+	return riskStatusMessage(ticket, s.latestTaskStatus(s.db, ticket))
+}
+
 func (s *RiskConfirmationService) LatestPending(userID, projectID string) (*models.RiskConfirmationTicket, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("risk confirmation database is unavailable")
