@@ -99,6 +99,7 @@ func (dc directorContext) render() string {
 		}
 		if dc.FocusTaskID != "" {
 			b.WriteString("你们刚才在聊的是 taskId=" + dc.FocusTaskID + "。\n")
+			b.WriteString("对方若是补充/收窄这件事，用 refine_work 挂到这个 taskId，不要新开任务，也不要把队列甩给对方选。\n")
 		}
 	}
 	if dc.ConversationBusy {
