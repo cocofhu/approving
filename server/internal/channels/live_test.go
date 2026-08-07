@@ -294,6 +294,115 @@ func TestPmReplyPlusNonEmptyFinalSummarySendsExactlyOnce(t *testing.T) {
 	assertNoBannedOutbound(t, got)
 }
 
+// One question, one answer — even when the agent submits twice.
+//
+// This is what shipped to production and got caught: an agent answered 「你好」
+// with two pm_reply calls thirteen seconds apart, and the user watched the
+// platform greet them twice. Dedupe could not collapse them because its key
+// includes the text and the two answers were worded differently, and the
+// existing marker was only consulted at the turn's wrap-up. The second call is
+// now withheld and told so, which is the only outcome that keeps the agent from
+// rewording and trying again.
+func TestSecondPmReplyInOneTurnIsWithheldAndReported(t *testing.T) {
+	fa := &fakeAdapter{}
+	m, _ := liveManager(t, fa)
+	rc := testRunningChannel(fa)
+	rc.cfg.ProjectID = "proj"
+
+	var second DeliveryResult
+	m.handleFunc = func(ctx context.Context, _ ResolvedChannel, in InboundMessage) (Reply, error) {
+		reply := func(text string) (DeliveryResult, error) {
+			return m.DeliverConversationReply(ctx, ConversationReply{
+				ProjectID: "proj", Scene: in.Scene, ConversationID: in.ConversationID,
+				UserID: in.UserID, Text: text,
+			})
+		}
+		if _, err := reply("你好，我在。你继续说。"); err != nil {
+			return Reply{}, err
+		}
+		var err error
+		if second, err = reply("你好，有什么需要我帮你看的？"); err != nil {
+			return Reply{}, err
+		}
+		return Reply{}, nil
+	}
+	m.handleInbound(context.Background(), rc, InboundMessage{
+		Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
+		MessageID: "q-double", Text: "你好",
+	})
+
+	got := sentTexts(fa)
+	if len(got) != 1 || got[0] != "你好，我在。你继续说。" {
+		t.Fatalf("sends = %v want only the first answer", got)
+	}
+	if second.Sent {
+		t.Fatal("the second answer was delivered")
+	}
+	if second.Reason() != ReasonAlreadyReplied {
+		t.Fatalf("second reason = %q want %q", second.Reason(), ReasonAlreadyReplied)
+	}
+	// A withheld duplicate is a normal outcome; reporting it as a transport
+	// failure would make the agent retry the very thing being prevented.
+	if second.Failed() || !second.Suppressed() {
+		t.Fatalf("second outcome: failed=%v suppressed=%v", second.Failed(), second.Suppressed())
+	}
+}
+
+// The gate is per turn, not per conversation: the next question gets its own
+// answer. A marker that outlived its turn would mute the conversation from the
+// second message onward, which is worse than what it set out to fix.
+func TestTheNextTurnCanBeAnsweredAgain(t *testing.T) {
+	fa := &fakeAdapter{}
+	m, _ := liveManager(t, fa)
+	rc := testRunningChannel(fa)
+	rc.cfg.ProjectID = "proj"
+	m.handleFunc = func(ctx context.Context, _ ResolvedChannel, in InboundMessage) (Reply, error) {
+		_, err := m.DeliverConversationReply(ctx, ConversationReply{
+			ProjectID: "proj", Scene: in.Scene, ConversationID: in.ConversationID,
+			UserID: in.UserID, Text: "答:" + in.Text,
+		})
+		return Reply{}, err
+	}
+	for _, q := range []string{"你好", "什么进度了"} {
+		m.handleInbound(context.Background(), rc, InboundMessage{
+			Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
+			MessageID: "q-" + q, Text: q,
+		})
+	}
+	want := []string{"答:你好", "答:什么进度了"}
+	got := sentTexts(fa)
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("sends = %v want %v", got, want)
+	}
+}
+
+// A progress milestone is not the answer. It sets the wrap-up marker so the
+// turn does not append a summary, but it must never be the reason the answer
+// itself is withheld — silence would be a far worse failure than a duplicate.
+func TestProgressMilestoneDoesNotWithholdTheAnswer(t *testing.T) {
+	fa := &fakeAdapter{}
+	m, _ := liveManager(t, fa)
+	rc := testRunningChannel(fa)
+	rc.cfg.ProjectID = "proj"
+	const answer = "首屏慢在字体加载，我改了预加载。"
+	m.handleFunc = func(ctx context.Context, _ ResolvedChannel, in InboundMessage) (Reply, error) {
+		scope := conversationTurnScope("proj", in.Scene, in.ConversationID)
+		m.markReplied(scope) // stands in for a delivered progress milestone
+		_, err := m.DeliverConversationReply(ctx, ConversationReply{
+			ProjectID: "proj", Scene: in.Scene, ConversationID: in.ConversationID,
+			UserID: in.UserID, Text: answer,
+		})
+		return Reply{}, err
+	}
+	m.handleInbound(context.Background(), rc, InboundMessage{
+		Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
+		MessageID: "q-progress", Text: "首屏为什么慢",
+	})
+	if got := sentTexts(fa); len(got) != 1 || got[0] != answer {
+		t.Fatalf("sends = %v want the answer to survive a progress milestone", got)
+	}
+}
+
 // A turn that overruns has started nothing and is running nothing, so the user
 // is offered the delegation rather than told it already happened.
 func TestForegroundTurnTimeoutOffersDelegationInsteadOfPromising(t *testing.T) {

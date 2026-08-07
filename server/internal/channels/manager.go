@@ -99,6 +99,12 @@ type Manager struct {
 
 	repliedMu sync.Mutex
 	replied   map[string]bool
+	// answered is the stricter marker: this turn has already delivered an
+	// answer, not merely something user-visible. Progress milestones and run
+	// acknowledgements set replied but not this, because suppressing the actual
+	// answer because a progress line went out first is worse than the double
+	// reply the marker exists to prevent.
+	answered map[string]bool
 
 	// synthesize rewrites background events for the conversation they belong
 	// to. nil means outcomes go out as structured fallbacks.
@@ -156,6 +162,7 @@ func NewManager(bridge *ChannelBridge, factories map[string]AdapterFactory, decr
 		pushQueues:   map[string]*pushQueue{},
 		busyHintSent: map[string]time.Time{},
 		replied:      map[string]bool{},
+		answered:     map[string]bool{},
 		baseCtx:      context.Background(),
 		policy:       sendable.NewPolicy(nil, nil),
 	}
@@ -1197,7 +1204,28 @@ func (m *Manager) hasReplied(scope string) bool {
 func (m *Manager) clearReplied(scope string) {
 	m.repliedMu.Lock()
 	delete(m.replied, scope)
+	delete(m.answered, scope)
 	m.repliedMu.Unlock()
+}
+
+// markAnswered records that this turn's answer has been delivered.
+//
+// Only an explicit answer sets this. A progress milestone or a run
+// acknowledgement is not the answer, so neither may be the reason a later
+// answer is withheld.
+func (m *Manager) markAnswered(scope string) {
+	if strings.TrimSpace(scope) == "" {
+		return
+	}
+	m.repliedMu.Lock()
+	m.answered[scope] = true
+	m.repliedMu.Unlock()
+}
+
+func (m *Manager) hasAnswered(scope string) bool {
+	m.repliedMu.Lock()
+	defer m.repliedMu.Unlock()
+	return m.answered[scope]
 }
 
 // MarkConversationReplied lets the MCP host record an explicit agent reply for

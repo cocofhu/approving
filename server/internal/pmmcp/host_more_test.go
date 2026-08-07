@@ -364,6 +364,22 @@ func TestPmReplyIsTheGuardedAnswerChannel(t *testing.T) {
 	if isErr || payload["status"] != "suppressed" || payload["reason"] != "already_sent" {
 		t.Fatalf("suppressed reply = %#v isError=%v", payload, isErr)
 	}
+
+	// An answer withheld because the turn was already answered gets its own
+	// status. Generic suppression reads as "try later"; this has to read as
+	// "stop", because the alternative is the agent rewording the same answer
+	// until one of the attempts gets through.
+	notifier.outcome = IMDeliveryOutcome{Reason: "already_replied", AlreadyReplied: true}
+	payload, isErr = reply(map[string]any{"text": "另外补充一句。"})
+	if isErr {
+		t.Fatalf("a withheld duplicate must not be a tool error: %#v", payload)
+	}
+	if payload["status"] != "already_replied" || payload["sent"] != false {
+		t.Fatalf("second answer in one turn = %#v", payload)
+	}
+	if reason, _ := payload["reason"].(string); !strings.Contains(reason, "不要再发") {
+		t.Fatalf("the agent is not told what to do instead: %#v", payload)
+	}
 }
 
 func TestPmMCPServeRPCBranches(t *testing.T) {

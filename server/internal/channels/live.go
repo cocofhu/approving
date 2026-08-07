@@ -49,6 +49,7 @@ const liveSystemPrompt = `你是这个项目的负责人本人，正在 IM 上�
 - 直接回答时只说一句自然的人话，就像微信上回同事。不要写"好的我看一下""稍等""已收到"这类过程话——你要么现在就回答，要么交出去。
 - 不要编造任务状态、进度、代码内容或任何你没有依据的事实。宁可交给 Agent。
 - 不要提到"沙箱""Agent""模型""工具""上下文"这些词，对方只是在和你聊天。
+- 你就是这个项目的负责人本人。不要说自己是 AI、模型或助手，也不要说出任何模型名称、版本或厂商；被问"你是什么模型"就当同事随口一问，把话题带回工作。
 - 不确定就调用 ask_project_agent。`
 
 // liveMaxTokens sizes the reply plus whatever the model thinks first. A
@@ -78,6 +79,13 @@ type liveOutcome struct {
 // handle it, just more slowly.
 func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel, in InboundMessage) liveOutcome {
 	if m.live == nil || !m.live.Configured() {
+		// Silence here is what made "is the conversation model actually being
+		// used?" unanswerable: an unconfigured endpoint skipped this layer
+		// without leaving a trace, and every reply looked the same from the
+		// outside. Deliveries the model does make are audited as live_reply, so
+		// this is the other half of that answer.
+		log.Debug().Str("project", rc.cfg.ProjectID).
+			Msg("no conversation model configured; this message goes straight to the agent")
 		return liveOutcome{}
 	}
 	req := liveagent.Request{

@@ -92,6 +92,11 @@ type Host struct {
 type IMDeliveryOutcome struct {
 	Sent   bool
 	Reason string
+	// AlreadyReplied means this turn was answered before this call. It is
+	// distinguished from ordinary suppression because the two need opposite
+	// reactions: a rate-limited message may be worth sending later, while a
+	// second answer to the same question should simply not exist.
+	AlreadyReplied bool
 }
 
 // ExternalIMNotifier is the minimal IM egress used by PM MCP write tools.
@@ -856,6 +861,15 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		if err != nil {
 			return map[string]any{"error": err.Error()}, true
 		}
+		if outcome.AlreadyReplied {
+			// Not an error: the answer the user needed already went out. Saying
+			// so plainly is what stops the agent from rewording and retrying,
+			// which is how one question ends up with two answers.
+			return map[string]any{
+				"status": "already_replied", "sent": false,
+				"reason": "这一轮已经回过用户了，本轮不要再发第二条",
+			}, false
+		}
 		if !outcome.Sent {
 			reason := outcome.Reason
 			if reason == "" {
@@ -1196,7 +1210,10 @@ func toolSchemas(mcpID string) []map[string]any {
 			platformmcp.Tool("pm_cancel_run", "取消一次运行中的 Run（需用户短标题二次确认后才会真正取消）。", map[string]any{
 				"runId": map[string]any{"type": "string"},
 			}),
-			platformmcp.Tool("pm_reply", "把这一轮对话的回答发给用户。这是回答外发的唯一通道——你在正文里写的内容不会被发出去，只有这里提交的 text 会。text 必须是用户直接能读懂的人话：不要出现 Run ID、工作流名、沙箱/工具/内部事件等实现细节，也不要写推理过程。", map[string]any{
+			platformmcp.Tool("pm_reply", "把这一轮对话的回答发给用户。这是回答外发的唯一通道——你在正文里写的内容不会被发出去，只有这里提交的 text 会。"+
+				"text 必须是用户直接能读懂的人话：不要出现 Run ID、工作流名、沙箱/工具/内部事件等实现细节，也不要写推理过程。"+
+				"一轮只发一条：把想说的话一次写完，不要拆成多条。返回 status=already_replied 表示这一轮已经回过了，"+
+				"此时不要改措辞重发，直接结束这一轮。", map[string]any{
 				"text":       map[string]any{"type": "string", "description": "发给用户的回答，人话，直接可读"},
 				"runId":      map[string]any{"type": "string", "description": "可选：这条回答关联的 Run"},
 				"shortTitle": map[string]any{"type": "string", "description": "可选：关联任务的短标题（人话，禁止填 Run ID）"},

@@ -1335,6 +1335,29 @@ func TestChannelPreambleStatesTheLiveTurnContract(t *testing.T) {
 	if strings.Contains(p, "正文不会外发") && !strings.Contains(p, "兜底") {
 		t.Fatalf("preamble still claims absolute non-delivery of body without fallback caveat: %s", p)
 	}
+	// The platform withholds a second answer; the agent has to know that before
+	// it tries, or it spends the turn rewording something that will not be sent.
+	if !strings.Contains(p, "already_replied") {
+		t.Fatalf("preamble does not tell the agent one turn gets one answer: %s", p)
+	}
+	// A colleague does not answer 「你是什么模型」 with a model name. This leaked
+	// in production as 「我是 GPT-5.6 Sol」.
+	for _, required := range []string{"你是什么模型", "厂商"} {
+		if !strings.Contains(p, required) {
+			t.Fatalf("preamble does not close the identity question (%s): %s", required, p)
+		}
+	}
+}
+
+// The conversation model shares the persona, so it needs the same rule: it is
+// the one layer that answers chit-chat directly, which is exactly where 「你是
+// 什么模型」 lands.
+func TestLiveSystemPromptWithholdsTheModelIdentity(t *testing.T) {
+	for _, required := range []string{"你是什么模型", "厂商", "负责人"} {
+		if !strings.Contains(liveSystemPrompt, required) {
+			t.Fatalf("live prompt does not close the identity question (%s): %s", required, liveSystemPrompt)
+		}
+	}
 }
 
 func TestClassifyCronResultDelegatesToServices(t *testing.T) {
