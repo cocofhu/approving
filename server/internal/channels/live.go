@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cocofhu/approving/internal/liveagent"
+	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/sendable"
 	"github.com/cocofhu/approving/internal/services"
 
@@ -70,13 +71,14 @@ const liveSystemPrompt = `你是这个项目的负责人本人，正在 IM 上�
 - 对方要一件和正在跑的事明显不同的新活 —— 调用 dispatch_pm。
 - 要讲进度、状态或结论 —— 先 get_status，用返回内容说话。recent_terminal 里的 status 必须照实说：failed 就是失败，cancelled 就是取消；没有在跑的任务不等于做完了。
 - 对方说不用弄了 / 停下 / 算了 —— 调用 cancel_work。
+- 对方明确说重跑 / 再试 / 继续做刚才失败或取消的那件 —— 立刻 dispatch_pm（request 用原要求，short_title 沿用原标题），user_reply 写成「好，重新派下去了」；不要只回「我这就去确认」，也不要再问一遍。
 
 派活前判断难度：lookup=查一下就知道；heavy=要花好几分钟。
 dispatch_pm / refine_work 都要用 user_reply 先接一句；平台会先发出去再去查。
 
 规矩：
 - 接话必须有内容。「稍等」「好的我看一下」「收到」这种空话不算接话。
-- 任务 failed / cancelled 时：先如实说原因（有依据才说），然后让对方选下一步，例如重试、换范围/改方向、或先搁置；不要擅自说「我接着跑」「后面重新做」就开干，除非对方刚明确要你继续。
+- 任务 failed / cancelled 时：先如实说原因（有依据才说），然后让对方选下一步，例如重试、换范围/改方向、或先搁置；不要擅自说「我接着跑」「后面重新做」就开干，除非对方刚明确要你继续（重跑/再试等）。
 - 任务已满时：若对方是在补充你们正在聊的那件，用 refine_work，不要把队列甩给对方让他挑停哪件。
 - 只有对方明确要另开一件完全不同的新事、且确实满了，才简短说明手上忙、问要先停哪件。
 - 不要编造任务状态、进度、代码内容或任何你没有依据的事实。
@@ -165,6 +167,11 @@ func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel,
 			level.Err(err).Str("project", rc.cfg.ProjectID).Str("trace", in.TraceID).
 				Msg("conversation model unavailable; handing turn to the agent")
 			rec.failed(err)
+			// Explicit "重跑啊" after a failed task must not become the empty
+			// 「我这就去确认」stamp — rebuild the dispatch from the ledger.
+			if outcome, ok := m.fallbackRetryDispatch(ctx, rc, in, rec); ok {
+				return outcome
+			}
 			// The sandbox still answers, but it can take a minute to come up.
 			// Saying nothing until then is how "项目的错误处理完整吗" sat on
 			// screen with a running timer and no bubble — the model timed out
@@ -233,6 +240,94 @@ func (m *Manager) ackFallthrough(ctx context.Context, rc *runningChannel, in Inb
 		m.markReplied(scope)
 		m.markAcknowledged(scope)
 	}
+}
+
+// fallbackRetryDispatch runs when Live timed out but the user clearly affirmed
+// a retry of recently failed/cancelled work. It re-dispatches from the ledger
+// so "重跑啊" becomes a real sandbox turn instead of a hollow 确认 ack.
+func (m *Manager) fallbackRetryDispatch(ctx context.Context, rc *runningChannel, in InboundMessage, rec *sampleRecorder) (liveOutcome, bool) {
+	if !looksLikeRetryAffirmation(in.Text) {
+		return liveOutcome{}, false
+	}
+	failed := m.latestRetryableTerminal(rc, in)
+	if failed == nil {
+		return liveOutcome{}, false
+	}
+	brief := strings.TrimSpace(failed.OriginalRequirement)
+	if brief == "" {
+		brief = strings.TrimSpace(failed.ShortTitle)
+	}
+	if brief == "" {
+		return liveOutcome{}, false
+	}
+	title := services.SanitizeShortTitle(failed.ShortTitle)
+	userReply := "好，重新派下去了，有进展回你。"
+	if title != "" {
+		userReply = "好，「" + title + "」重新派下去了，有进展回你。"
+	}
+	outcome, refused := m.dispatchWork(ctx, rc, in, map[string]string{
+		"request": brief, "short_title": title,
+		"difficulty": string(DifficultyHeavy),
+		"user_reply": userReply,
+	}, rec)
+	if refused != "" {
+		log.Info().Str("project", rc.cfg.ProjectID).Str("trace", in.TraceID).
+			Str("detail", refused).Msg("retry dispatch fallback refused; using generic fallthrough")
+		return liveOutcome{}, false
+	}
+	rec.flag("retry_dispatch_fallback")
+	return outcome, true
+}
+
+func (m *Manager) latestRetryableTerminal(rc *runningChannel, in InboundMessage) *models.TaskIdentity {
+	if m.taskContext == nil {
+		return nil
+	}
+	rows, err := m.taskContext.RecentTerminalTasksForConversation(
+		m.taskScopeFor(rc, in), ledgerLimit, recentTerminalWindow)
+	if err != nil || len(rows) == 0 {
+		return nil
+	}
+	var cancelled *models.TaskIdentity
+	for i := range rows {
+		switch strings.ToLower(strings.TrimSpace(rows[i].Status)) {
+		case "failed":
+			return &rows[i]
+		case "cancelled", "canceled":
+			if cancelled == nil {
+				cancelled = &rows[i]
+			}
+		}
+	}
+	return cancelled
+}
+
+// looksLikeRetryAffirmation detects short "yes, retry that" replies. Negations
+// ("不要重跑") never match. Longer free-form messages stay with the model.
+func looksLikeRetryAffirmation(text string) bool {
+	t := strings.TrimSpace(text)
+	if t == "" {
+		return false
+	}
+	lower := strings.ToLower(t)
+	for _, neg := range []string{"不要", "别", "不用", "别再", "don't", "do not", "no "} {
+		if strings.Contains(lower, neg) {
+			return false
+		}
+	}
+	if len([]rune(t)) > 24 {
+		return false
+	}
+	for _, a := range []string{
+		"重跑", "再跑", "重试", "再试", "再来一次", "重新做", "重新派", "再弄",
+		"继续做", "接着做", "接着干", "继续",
+		"retry", "try again", "run again", "do it again",
+	} {
+		if lower == a || strings.Contains(lower, a) {
+			return true
+		}
+	}
+	return false
 }
 
 // deliverDirectorReply sends what the model said, as it said it.
@@ -642,6 +737,14 @@ func gateAcknowledgement(reply, shortTitle, userText string) (string, []string) 
 	}
 	title := services.SanitizeShortTitle(shortTitle)
 	flags := []string{"empty_ack"}
+	// A retry affirmation must never read as a vague "确认" — the user already
+	// chose. Name the work when we can.
+	if looksLikeRetryAffirmation(userText) {
+		if title != "" && !echoesUserText(title, userText) {
+			return "好，「" + title + "」我重新安排，有进展回你。", flags
+		}
+		return "好，我重新安排，有进展回你。", flags
+	}
 	// Quoting a real short title ("登录页报错") names the work. Quoting the
 	// user's own question — or a truncation of it — just mirrors them.
 	if title == "" || echoesUserText(title, userText) {

@@ -253,6 +253,37 @@ func TestNoConversationModelSendsEverythingToTheAgent(t *testing.T) {
 	}
 }
 
+func TestRetryAffirmationAfterFailureRedispatchesInsteadOfConfirmAck(t *testing.T) {
+	g := newGPTLive(t)
+	if _, err := g.m.taskContext.EnsureIdentity(services.EnsureTaskIdentityInput{
+		RunID: "run-fail-retry", ProjectID: "proj", UserID: services.SyntheticQQUserID("u1"),
+		ShortTitle: "错误处理与日志", Status: "failed",
+		OriginalRequirement: "修复 Approving 错误处理与日志链路",
+		OriginChannel:       "qq", OriginScene: string(SceneC2C), OriginConversationID: "user1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Live times out — the platform must still redispatch, not stamp 「确认」.
+	g.m.SetLiveModel(&fakeLive{configured: true, err: liveagent.ErrBudgetExhausted})
+	g.say("m-retry", "重跑啊")
+	got := sentTexts(g.fa)
+	if len(got) < 1 {
+		t.Fatalf("sends = %v", got)
+	}
+	if strings.Contains(got[0], "确认") {
+		t.Fatalf("retry affirmation must not use confirm ack: %q", got[0])
+	}
+	if !strings.Contains(got[0], "重新") {
+		t.Fatalf("retry ack should say work is redispatched: %q", got[0])
+	}
+	if len(g.agent) != 1 {
+		t.Fatalf("retry must reach the sandbox agent, got %d turns", len(g.agent))
+	}
+	if d := g.agent[0].Dispatch; d == nil || !strings.Contains(d.Brief, "错误处理") {
+		t.Fatalf("sandbox brief missing original requirement: %+v", g.agent[0].Dispatch)
+	}
+}
+
 func TestGetStatusSurfacesFailedTerminalTasks(t *testing.T) {
 	g := newGPTLive(t)
 	if _, err := g.m.taskContext.EnsureIdentity(services.EnsureTaskIdentityInput{
