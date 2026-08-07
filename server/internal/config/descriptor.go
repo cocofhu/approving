@@ -38,7 +38,7 @@ func OptionDescriptors() []OptionDescriptor {
 		{Env: "APPROVING_LIVE_BASE_URL", YAML: "live.base_url", Type: "URL", Default: "", ZH: "对话层快模型的 OpenAI 兼容接口地址；通常在设置页配置", EN: "OpenAI-compatible endpoint for the conversation model; usually set on the settings page"},
 		{Env: "APPROVING_LIVE_API_KEY", YAML: "live.api_key", Type: "string", Sensitive: true, ZH: "对话层快模型密钥；通常在设置页配置", EN: "Conversation model API key; usually set on the settings page"},
 		{Env: "APPROVING_LIVE_MODEL", YAML: "live.model", Type: "string", Default: "", ZH: "对话层快模型名称；通常在设置页配置", EN: "Conversation model name; usually set on the settings page"},
-		{Env: "APPROVING_LIVE_TIMEOUT_SEC", YAML: "live.timeout_seconds", Type: "integer", Default: "8", ZH: "单次对话模型调用超时秒数；超时则升级到沙箱", EN: "Timeout for one conversation model call in seconds; escalates to the sandbox on timeout"},
+		{Env: "APPROVING_LIVE_TIMEOUT_SEC", YAML: "live.timeout_seconds", Type: "integer", Default: "120", ZH: "单次对话模型调用超时秒数；本地 reasoning 模型通常需要一分钟以上，超时则升级到沙箱", EN: "Timeout for one conversation model call in seconds; local reasoning models often need a minute or more, then escalates to the sandbox"},
 		{Env: "APPROVING_BROWSER_ENABLED", YAML: "browser.enabled", Type: "boolean", Deprecated: true, ZH: "兼容字段；VNC 预览始终可用", EN: "Compatibility field; VNC preview is always available"},
 		{Env: "APPROVING_CURSOR_API_KEY", YAML: "sandbox.cursor_api_key", Type: "string", Sensitive: true, Deprecated: true, ZH: "已弃用；改用 Agent env", EN: "Deprecated; use agent env"},
 		{Env: "CURSOR_API_KEY", YAML: "sandbox.cursor_api_key", Type: "string", Sensitive: true, Deprecated: true, ZH: "已弃用别名；改用 Agent env", EN: "Deprecated alias; use agent env"},

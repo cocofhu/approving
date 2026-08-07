@@ -243,7 +243,9 @@ func TestNoConversationModelSendsEverythingToTheAgent(t *testing.T) {
 	}
 }
 
-// A model that fails must cost latency, not the reply.
+// A model that fails must cost latency, not the reply. The fallthrough used to
+// be silent until the sandbox answered, which is how a timed-out Live call
+// looked like the platform ignored the user — so we ack first, then the agent.
 func TestConversationModelFailureStillAnswersTheUser(t *testing.T) {
 	g := newGPTLive(t)
 	g.m.SetLiveModel(&fakeLive{configured: true, err: liveagent.ErrBudgetExhausted})
@@ -253,8 +255,9 @@ func TestConversationModelFailureStillAnswersTheUser(t *testing.T) {
 	if len(g.agent) != 1 {
 		t.Fatalf("a failed model call swallowed the message: %v", g.agent)
 	}
-	if got := sentTexts(g.fa); len(got) != 1 || got[0] != "agent-answer" {
-		t.Fatalf("sends = %v want the agent's answer", got)
+	got := sentTexts(g.fa)
+	if len(got) != 2 || !strings.Contains(got[0], "什么进度了") || got[1] != "agent-answer" {
+		t.Fatalf("sends = %v want fallthrough ack then the agent's answer", got)
 	}
 }
 

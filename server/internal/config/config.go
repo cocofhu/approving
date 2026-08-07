@@ -495,7 +495,7 @@ func setDefaults(c *Config) {
 		c.Engine.NodeAutoRetryMax = 3
 	}
 	if c.Live.TimeoutSeconds == 0 {
-		c.Live.TimeoutSeconds = 8
+		c.Live.TimeoutSeconds = 120
 	}
 	// Image intentionally has no default: empty means per-backend Images /
 	// DefaultSandboxImage. Set sandbox.image / APPROVING_SANDBOX_IMAGE only to

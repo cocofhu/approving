@@ -32,7 +32,7 @@ configured on Agent meta env, not in this platform config table.
 | `APPROVING_LIVE_BASE_URL` | `live.base_url` | URL | `Not set` | Public | OpenAI-compatible endpoint for the conversation model; usually set on the settings page |
 | `APPROVING_LIVE_API_KEY` | `live.api_key` | string | `Not set` | Sensitive | Conversation model API key; usually set on the settings page |
 | `APPROVING_LIVE_MODEL` | `live.model` | string | `Not set` | Public | Conversation model name; usually set on the settings page |
-| `APPROVING_LIVE_TIMEOUT_SEC` | `live.timeout_seconds` | integer | `8` | Public | Timeout for one conversation model call in seconds; escalates to the sandbox on timeout |
+| `APPROVING_LIVE_TIMEOUT_SEC` | `live.timeout_seconds` | integer | `120` | Public | Timeout for one conversation model call in seconds; local reasoning models often need a minute or more, then escalates to the sandbox |
 | `APPROVING_BROWSER_ENABLED` | `browser.enabled` | boolean | `Not set` | Deprecated | Compatibility field; VNC preview is always available |
 | `APPROVING_CURSOR_API_KEY` | `sandbox.cursor_api_key` | string | `Not set` | Sensitive, Deprecated | Deprecated; use agent env |
 | `CURSOR_API_KEY` | `sandbox.cursor_api_key` | string | `Not set` | Sensitive, Deprecated | Deprecated alias; use agent env |
