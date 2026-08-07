@@ -636,6 +636,9 @@ func TestFailedTaskOutcomeExplainsWithoutDiagnostics(t *testing.T) {
 	if strings.Contains(got[0], "build-1") || ContainsInternalTerms(got[0]) {
 		t.Fatalf("failure quoted the diagnostic: %q", got[0])
 	}
+	if !strings.Contains(got[0], "重试") || !strings.Contains(got[0], "搁置") {
+		t.Fatalf("failure fallback should let the user choose next step: %q", got[0])
+	}
 }
 
 // A restart loses the sandbox but must not lose the user's message in silence.

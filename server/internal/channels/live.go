@@ -76,6 +76,7 @@ dispatch_pm / refine_work 都要用 user_reply 先接一句；平台会先发出
 
 规矩：
 - 接话必须有内容。「稍等」「好的我看一下」「收到」这种空话不算接话。
+- 任务 failed / cancelled 时：先如实说原因（有依据才说），然后让对方选下一步，例如重试、换范围/改方向、或先搁置；不要擅自说「我接着跑」「后面重新做」就开干，除非对方刚明确要你继续。
 - 任务已满时：若对方是在补充你们正在聊的那件，用 refine_work，不要把队列甩给对方让他挑停哪件。
 - 只有对方明确要另开一件完全不同的新事、且确实满了，才简短说明手上忙、问要先停哪件。
 - 不要编造任务状态、进度、代码内容或任何你没有依据的事实。
@@ -745,7 +746,8 @@ func directorTools() []liveagent.ToolSpec {
 			Name: getStatusTool,
 			Description: "查这个会话里任务的真实状态（在跑的 + 刚结束的 recent_terminal）。" +
 				"要跟对方讲进度、状态或结论之前必须先调它，不要凭印象说。" +
-				"recent_terminal.status 为 failed/cancelled/completed 时必须照实转述；空的在跑列表不等于都成功了。",
+				"recent_terminal.status 为 failed/cancelled/completed 时必须照实转述；空的在跑列表不等于都成功了。" +
+				"若有 failed/cancelled：回复里要让对方选下一步（重试 / 换做法 / 先搁置），不要擅自继续派活。",
 			Params: []liveagent.Param{
 				{Name: "task_id", Description: "只查某一件事时填它的 taskId；不填就列出在跑的和刚结束的。"},
 			},

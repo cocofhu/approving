@@ -118,6 +118,9 @@ func (dc directorContext) render() string {
 			line += "）"
 			b.WriteString(line + "\n")
 		}
+		if hasFailedOrCancelled(dc.RecentTerminal) {
+			b.WriteString("其中有失败或取消：先说清状况，再让对方选下一步（重试 / 换范围或改方向 / 先搁置）。不要擅自说接着做。\n")
+		}
 	}
 	if dc.ConversationBusy {
 		b.WriteString("现在有一件事正在前台执行。\n")
@@ -331,9 +334,13 @@ func (m *Manager) runGetStatus(rc *runningChannel, in InboundMessage, taskID str
 		}
 		for _, t := range recent {
 			if t.TaskID == taskID || t.RunID == taskID {
+				note := "这个任务已经结束，状态见 recent_terminal，不要说成还在跑或笼统「做完了」。"
+				if isFailedOrCancelledStatus(t.Status) {
+					note += " " + failedStatusChoiceNote
+				}
 				return encodeToolResult(statusResult{
 					Tasks: nil, RecentTerminal: []ledgerEntry{t},
-					Note: "这个任务已经结束，状态见 recent_terminal，不要说成还在跑或笼统「做完了」。",
+					Note: note,
 				})
 			}
 		}
@@ -346,13 +353,42 @@ func (m *Manager) runGetStatus(rc *runningChannel, in InboundMessage, taskID str
 	switch {
 	case len(tasks) == 0 && len(recent) > 0:
 		res.Note = "现在没有在跑的任务。刚结束的在 recent_terminal：必须按每条的 status 说（failed=失败，cancelled=取消，completed=完成）。禁止把空的在跑列表说成「都做完了」。"
+		if hasFailedOrCancelled(recent) {
+			res.Note += " " + failedStatusChoiceNote
+		}
 	case len(tasks) == 0:
 		res.Note = "现在没有在跑的任务，也没有刚结束的记录。如果用户问的事情还没开始，用 dispatch_pm 派下去；不要编造完成或失败。"
+	default:
+		if hasFailedOrCancelled(recent) {
+			res.Note = failedStatusChoiceNote
+		}
 	}
 	if m.IsConversationBusy(rc.cfg.ProjectID, in.Scene, in.ConversationID) {
 		res.Note = strings.TrimSpace(res.Note + " 现在有一件事正在前台执行。")
 	}
 	return encodeToolResult(res)
+}
+
+// failedStatusChoiceNote steers the conversation model away from unilaterally
+// restarting failed work. The user should pick the next step.
+const failedStatusChoiceNote = "有失败或取消时：先如实说状况，再明确让对方选——重试、换范围/改方向、还是先搁置。不要擅自派活或说「我接着做」。"
+
+func hasFailedOrCancelled(entries []ledgerEntry) bool {
+	for _, e := range entries {
+		if isFailedOrCancelledStatus(e.Status) {
+			return true
+		}
+	}
+	return false
+}
+
+func isFailedOrCancelledStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "failed", "cancelled", "canceled":
+		return true
+	default:
+		return false
+	}
 }
 
 // cancelResult reports what actually stopped.
