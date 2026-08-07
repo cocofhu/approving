@@ -10,10 +10,9 @@ import (
 	"github.com/cocofhu/approving/internal/liveagent"
 )
 
-// synthesisTimeout bounds one phrasing call. Local Ollama routinely needs tens
-// of seconds; a short budget forced every outcome onto the structured fallback
-// even when the conversation model was healthy.
-const synthesisTimeout = 45 * time.Second
+// synthesisFallbackTimeout is used only when the Live client has no configured
+// timeout. Production follows live_timeout_seconds via live.Timeout().
+const synthesisFallbackTimeout = 45 * time.Second
 
 // synthesisMaxTokens sizes a short report that still has room for key findings
 // after a reasoning model spends budget deliberating.
@@ -58,7 +57,11 @@ func newLiveSynthesizer(live *liveagent.Client) channels.SynthesisFunc {
 		if !live.Configured() {
 			return "", liveagent.ErrNotConfigured
 		}
-		callCtx, cancel := context.WithTimeout(ctx, synthesisTimeout)
+		timeout := live.Timeout()
+		if timeout <= 0 {
+			timeout = synthesisFallbackTimeout
+		}
+		callCtx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 
 		res, err := live.Complete(callCtx, liveagent.Request{

@@ -104,9 +104,10 @@ type Client struct {
 // SetLiveEndpoint is called from the settings layer.
 func New() *Client {
 	return &Client{
-		// Per-call deadlines come from the context; this bound only stops a
-		// connection from hanging forever if a context is ever missing one.
-		http: &http.Client{Timeout: 2 * time.Minute},
+		// No Client.Timeout: every Complete wraps the request in
+		// context.WithTimeout(ep.Timeout), which is what live_timeout_seconds
+		// configures. A hard 2m ceiling here used to ignore a 300s setting.
+		http: &http.Client{},
 	}
 }
 
@@ -118,6 +119,16 @@ func (c *Client) SetLiveEndpoint(baseURL, apiKey, model string, timeout time.Dur
 
 // Configured reports whether a call would have somewhere to go.
 func (c *Client) Configured() bool { return c.cur.load().Configured() }
+
+// Timeout is the configured per-call deadline (live_timeout_seconds). Zero when
+// unset; callers that phrase or report through this client should use it so
+// hard-coded 45s/120s caps cannot override the settings page.
+func (c *Client) Timeout() time.Duration {
+	if c == nil {
+		return 0
+	}
+	return c.cur.load().Timeout
+}
 
 // ModelName is the configured conversation model, for decision samples / traces.
 func (c *Client) ModelName() string {
