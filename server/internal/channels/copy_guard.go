@@ -66,6 +66,10 @@ var internalMarkerLines = regexp.MustCompile(`(?m)^\s*(\[(摘要|进度|里程�
 
 var toolNoiseLine = regexp.MustCompile(`(?im)^\s*(tool_call|function_call|tool result|reasoning_delta|input_tokens|output_tokens)\b.*$`)
 
+// deliveryReceiptLine matches whole-line model asides that restate a successful
+// pm_reply / channel delivery. These leaked through FinalSummary after #161.
+var deliveryReceiptLine = regexp.MustCompile(`(?im)^\s*(已发送|已通过\s*QQ\s*回复用户|稍等，?我看一下|Give me a moment on this one|已开始处理|任务已启动|收到，正在处理)\s*[。.!！…]*\s*$`)
+
 // ScrubInternalTerms makes outbound text safe to show a user: internal
 // identifiers are removed, platform vocabulary is rewritten in plain language,
 // and machine scaffolding lines are dropped. It is deliberately applied to every
@@ -78,6 +82,7 @@ func ScrubInternalTerms(text string) string {
 	}
 	original := out
 	out = toolNoiseLine.ReplaceAllString(out, "")
+	out = deliveryReceiptLine.ReplaceAllString(out, "")
 	out = internalMarkerLines.ReplaceAllString(out, "")
 	out = identifierToken.ReplaceAllStringFunc(out, func(token string) string {
 		if isIdentifier(token) {
@@ -112,7 +117,7 @@ func ContainsInternalTerms(text string) bool {
 			return true
 		}
 	}
-	return internalMarkerLines.MatchString(text) || toolNoiseLine.MatchString(text)
+	return internalMarkerLines.MatchString(text) || toolNoiseLine.MatchString(text) || deliveryReceiptLine.MatchString(text)
 }
 
 // cjkGap matches a space between two Han characters. Chinese does not space its

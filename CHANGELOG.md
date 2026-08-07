@@ -4,6 +4,28 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+### Fix: QQ live outbound boundary hard-gate
+
+- Foreground turns: at most one user-visible natural-language reply per user
+  message. `runTurn` skips `FinalSummary` when `hasReplied` (after `pm_reply` /
+  `RunAcceptanceAck` / delivered progress).
+- Hard-disable fixed `stillWorking` (「稍等，我看一下。」) and
+  `live_first_sentence` opener for foreground short queries.
+- Scrub delivery-receipt asides (「已发送。」「已通过 QQ 回复用户。」) from
+  FinalSummary / egress; receipt-only bodies send 0 messages (no #157 shell).
+- Align `ChannelPreamble` with pm_reply-first + unreleased FinalSummary fallback.
+- Cross-layer regressions: greeting / status / tool-then-reply / background start
+  plus `pm_reply + non-empty FinalSummary` must hang at exactly one outbound.
+
+### Deploy note (compose pin vs main)
+
+- `compose.release.yaml` / `start.sh` still default-pin
+  `ghcr.io/cocofhu/approving:0.1.2-beta` (2026-07-31), which predates Live /
+  #161–#163. Symptoms (fixed stillWorking text) prove trial/prod may already
+  run a newer build than the pin. After merging this fix, upgrade the running
+  image to a build that includes this commit; this change does **not** rewrite
+  the compose pin (release step).
+
 ## 0.1.2-beta — 2026-07-31
 
 - Public beta follow-up on [`v0.1.2-beta`](https://github.com/cocofhu/approving/releases/tag/v0.1.2-beta)

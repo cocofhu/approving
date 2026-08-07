@@ -242,4 +242,13 @@ func TestBuildDeliverableFinalSummaryConversationalFallback(t *testing.T) {
 	if buildDeliverableFinalSummary("tool_call x\nthinking: y") != "" {
 		t.Fatal("noise-only body must yield empty FinalSummary")
 	}
+
+	receiptOnly := buildDeliverableFinalSummary("已发送。\n已通过 QQ 回复用户。\n稍等，我看一下。")
+	if receiptOnly != "" {
+		t.Fatalf("receipt/process-only body must yield empty FinalSummary, got %q", receiptOnly)
+	}
+	mixed := buildDeliverableFinalSummary("你好，我在。\n已发送。")
+	if !strings.Contains(mixed, "你好") || strings.Contains(mixed, "已发送") {
+		t.Fatalf("mixed body should keep answer and drop receipt: %q", mixed)
+	}
 }

@@ -324,12 +324,10 @@ func (a *progressAccumulator) emitKeywordLines() []ProgressEvent {
 }
 
 const (
-	// firstSentenceDelay is how long a turn may stay silent before its opening
-	// sentence is released early.
-	firstSentenceDelay = 3 * time.Second
-	// firstSentenceMinRunes keeps half-formed openings from going out.
+	// firstSentenceMinRunes / firstSentenceMaxRunes bound FirstCompleteSentence.
+	// The live_first_sentence early-release path that used firstSentenceDelay
+	// is hard-disabled (foreground turns stay silent until the final answer).
 	firstSentenceMinRunes = 10
-	// firstSentenceMaxRunes bounds an opening that never terminates.
 	firstSentenceMaxRunes = 120
 )
 

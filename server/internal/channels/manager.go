@@ -58,12 +58,6 @@ const (
 	// container. Folding it into the answer budget is how a plain question
 	// times out before the agent has read it.
 	sandboxOpenBudget = 45 * time.Second
-	// stillWorkingDelay is how long a turn may leave the user with nothing at
-	// all before saying so. The streaming opener (firstSentenceDelay) covers
-	// any turn that has produced text; this only fires when there is genuinely
-	// nothing yet, which in practice means a cold start. It is deliberately
-	// later than the opener so a real sentence always wins the race.
-	stillWorkingDelay = 8 * time.Second
 )
 
 // queuedInbound is a message waiting behind an in-flight turn for the same
@@ -123,7 +117,8 @@ type Manager struct {
 	retryBackoff func(attempt int) time.Duration
 	// openBudget overrides sandboxOpenBudget; a negative value means none.
 	openBudget time.Duration
-	// stillWorkingAfter overrides stillWorkingDelay (tests shorten it).
+	// stillWorkingAfter is retained for older tests; production never schedules
+	// the fixed stillWorking template anymore.
 	stillWorkingAfter time.Duration
 
 	ambiguityMu sync.Mutex
@@ -490,11 +485,16 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		TurnTimeout: timeout,
 		Caps:        SessionCapsFromConfig(rc.cfg.Config),
 	}
-	stopWaiting := m.sayStillWorking(turnCtx, rc, in, scope)
-	defer stopWaiting()
+	// Foreground turns stay silent until the single final answer (or a real
+	// RunAcceptanceAck after pm_start_run). Fixed stillWorking templates and
+	// streaming openers are hard-disabled — they caused multi-send UX noise.
 	onProgress := func(ev ProgressEvent) {
 		text := FormatProgressText(ev)
 		if text == "" {
+			return
+		}
+		// live_first_sentence was an early-release opener; never user-visible.
+		if strings.TrimSpace(ev.Reason) == "live_first_sentence" {
 			return
 		}
 		// Classification-only events stay internal; sendOutbound still runs so
@@ -511,7 +511,6 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		}
 	}
 	reply, err := m.handleTurn(turnCtx, resolved, in, onProgress)
-	stopWaiting()
 	if err != nil {
 		// Running out of time is not a failure, but it is not a delegation
 		// either: nothing was started and nothing is still running. Saying "I'll
@@ -538,8 +537,9 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 	if !ok {
 		// The agent finished without submitting anything the user can read. If
 		// something substantive already went out this turn, staying quiet is the
-		// honest outcome; otherwise say so in terms the user can act on.
-		if m.hasReplied(scope) {
+		// honest outcome. Receipt/process-only bodies also stay quiet (0 sends)
+		// rather than inventing a missing-answer fallback or a shell notice.
+		if m.hasReplied(scope) || isReceiptOrProcessOnlyBody(reply.Text) {
 			return
 		}
 		m.sendOutbound(ctx, rc, OutboundMessage{
@@ -547,6 +547,12 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 			Text:     m.noAnswerFallback(rc, in),
 			Envelope: turnEnvelope(rc, in, sendable.KindFinal, "final_missing_fallback", sendable.PriorityCritical),
 		})
+		return
+	}
+	// Something user-visible already left this turn (pm_reply, RunAcceptanceAck,
+	// or a real progress milestone). Do not append a second FinalSummary — that
+	// is the "answer + wrap-up" double-send the markReplied gate exists to stop.
+	if m.hasReplied(scope) {
 		return
 	}
 	m.sendOutbound(ctx, rc, OutboundMessage{
@@ -571,51 +577,20 @@ func (m *Manager) sandboxOpenBudget() time.Duration {
 	return sandboxOpenBudget
 }
 
-// sayStillWorking breaks a long silence once, and returns a function that
-// cancels it.
-//
-// It exists for the one case the streaming opener cannot cover: a cold start,
-// where there is no sandbox yet and therefore no text to release early. Leaving
-// the user staring at nothing for the length of a container boot is its own
-// kind of bad. This is not the mechanical acknowledgement that was removed —
-// that one preceded every message including instant ones; this fires only after
-// a genuinely long wait, at most once, and never when anything has been said.
+// sayStillWorking is retained for tests that document the banned fixed-ack
+// template. Production runTurn never schedules it: foreground short queries
+// stay silent until the single final answer, and minute-scale work must go
+// through pm_start_run → RunAcceptanceAck instead of a generic wait notice.
 func (m *Manager) sayStillWorking(ctx context.Context, rc *runningChannel, in InboundMessage, scope string) (stop func()) {
-	done := make(chan struct{})
-	var once sync.Once
-	stop = func() { once.Do(func() { close(done) }) }
-	delay := stillWorkingDelay
-	if m.stillWorkingAfter > 0 {
-		delay = m.stillWorkingAfter
-	}
-	go func() {
-		timer := time.NewTimer(delay)
-		defer timer.Stop()
-		select {
-		case <-done:
-			return
-		case <-ctx.Done():
-			return
-		case <-timer.C:
-		}
-		if m.hasReplied(scope) {
-			return
-		}
-		envelope := turnEnvelope(rc, in, sendable.KindProgress, "live_still_working", sendable.PriorityNormal)
-		envelope.Progress = sendable.ProgressFields{Stage: "live_still_working"}
-		result := m.sendOutboundResult(ctx, rc, OutboundMessage{
-			Scene: in.Scene, ConversationID: in.ConversationID, ReplyToMessageID: in.MessageID,
-			Text:     stillWorkingText(services.DetectLanguage(in.Text, "")),
-			Envelope: envelope,
-		})
-		if result.Sent {
-			m.markReplied(scope)
-		}
-	}()
-	return stop
+	_ = ctx
+	_ = rc
+	_ = in
+	_ = scope
+	return func() {}
 }
 
-// stillWorkingText admits the wait without pretending to report progress.
+// stillWorkingText is the banned fixed wait template (zh/en). Kept so scrubbers
+// and outbound-copy tests can assert it never reaches users again.
 func stillWorkingText(language string) string {
 	if services.NormalizeLanguage(language) == "en" {
 		return "Give me a moment on this one."
@@ -646,9 +621,14 @@ const deprecatedSafeFinalNotice = "本回合已结束，请在 Approving 查看�
 // deliverableFinalText returns the text allowed out of a finished turn. Only an
 // explicitly submitted summary qualifies; Reply.Text stays internal regardless
 // of its content. ok=false means the turn produced nothing sendable and the
-// caller must fall back rather than emit a placeholder.
+// caller must fall back rather than emit a placeholder. Scrubbing here catches
+// delivery-receipt asides that slipped into FinalSummary construction.
 func deliverableFinalText(reply Reply) (text, reason string, ok bool) {
 	if summary := strings.TrimSpace(reply.FinalSummary); summary != "" {
+		summary = ScrubInternalTerms(summary)
+		if summary == "" {
+			return "", "final_summary_scrubbed_empty", false
+		}
 		return truncateRunes(summary, 240), "structured_turn_final", true
 	}
 	return "", "final_summary_missing", false

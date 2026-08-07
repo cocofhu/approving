@@ -903,8 +903,12 @@ func TestDispatchForwardsOnlyExplicitlySendableProgress(t *testing.T) {
 	if countText(got, "卡住了：CI 红了") != 1 {
 		t.Fatalf("missing structured blocker in %v", got)
 	}
-	if countText(got, "final-ok") != 1 {
-		t.Fatalf("missing final in %v", got)
+	// Progress already marked the turn replied; FinalSummary must not double-send.
+	if countText(got, "final-ok") != 0 {
+		t.Fatalf("FinalSummary must be suppressed after progress outbound: %v", got)
+	}
+	if len(got) != 2 {
+		t.Fatalf("sends = %v want milestone + blocker only", got)
 	}
 }
 
@@ -1317,15 +1321,19 @@ func TestPushQueueProtectsRunNotify(t *testing.T) {
 // out the ticket phrasing this work removed.
 func TestChannelPreambleStatesTheLiveTurnContract(t *testing.T) {
 	p := ChannelPreamble("qq")
-	for _, required := range []string{"pm_reply", "pm_start_run", "pm_notify_progress"} {
+	for _, required := range []string{"pm_reply", "pm_start_run", "pm_notify_progress", "优先"} {
 		if !strings.Contains(p, required) {
 			t.Fatalf("preamble never mentions %s: %s", required, p)
 		}
 	}
-	for _, banned := range []string{"收到，正在处理", "本回合已结束", "请前往 Approving 查看"} {
+	for _, banned := range []string{"收到，正在处理", "本回合已结束", "请前往 Approving 查看", "已发送", "稍等，我看一下"} {
 		if !strings.Contains(p, banned) {
 			t.Fatalf("preamble does not forbid %q: %s", banned, p)
 		}
+	}
+	// Must not claim body text can never be delivered (contradicts #161 fallback).
+	if strings.Contains(p, "正文不会外发") && !strings.Contains(p, "兜底") {
+		t.Fatalf("preamble still claims absolute non-delivery of body without fallback caveat: %s", p)
 	}
 }
 

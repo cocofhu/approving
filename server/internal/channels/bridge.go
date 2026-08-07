@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/sandbox"
@@ -237,34 +238,10 @@ func (b *ChannelBridge) forwardProgress(ctx context.Context, threadID string, on
 	defer unsub()
 
 	acc := newProgressAccumulator()
-	sentAnything := false
 	emit := func(events []ProgressEvent) {
 		for _, pe := range events {
-			sentAnything = true
 			onProgress(pe)
 		}
-	}
-	started := time.Now()
-	openerSent := false
-	// Say something real while a slow turn is still thinking. This only fires
-	// after firstSentenceDelay, so a turn that answers quickly still produces
-	// exactly one message — the answer. Past that point the alternative is
-	// silence, and a substantive opening sentence beats both silence and a
-	// content-free "working on it".
-	maybeOpener := func() {
-		if openerSent || sentAnything || time.Since(started) < firstSentenceDelay {
-			return
-		}
-		sentence, ok := acc.FirstCompleteSentence()
-		if !ok {
-			return
-		}
-		openerSent = true
-		sentAnything = true
-		onProgress(ProgressEvent{
-			Kind: ProgressMilestone, Summary: sentence, Stage: sentence,
-			Sendable: true, Reason: "live_first_sentence", At: time.Now(),
-		})
 	}
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
@@ -277,7 +254,10 @@ func (b *ChannelBridge) forwardProgress(ctx context.Context, threadID string, on
 			if _, _, partial, _, _ := b.turns.Status(threadID); partial != "" {
 				emit(acc.FeedSnapshot(partial))
 			}
-			maybeOpener()
+			// live_first_sentence opener is hard-disabled for foreground turns:
+			// releasing a partial greeting before the final answer caused
+			// greeting + answer multi-sends. Minute-scale work must use
+			// pm_start_run → RunAcceptanceAck instead.
 		case ev, open := <-ch:
 			if !open {
 				return
@@ -290,7 +270,6 @@ func (b *ChannelBridge) forwardProgress(ctx context.Context, threadID string, on
 				continue // tool / non-message frames suppressed
 			}
 			emit(acc.Feed(delta))
-			maybeOpener()
 		}
 	}
 }
@@ -495,6 +474,9 @@ func isFinalSummaryNoiseLine(line string) bool {
 	if isProgressNoise(line) {
 		return true
 	}
+	if isDeliveryReceiptOrProcessLine(line) {
+		return true
+	}
 	for _, m := range progressMarkers {
 		if strings.HasPrefix(line, m.prefix) {
 			return true
@@ -518,6 +500,77 @@ func isFinalSummaryNoiseLine(line string) bool {
 		return true
 	}
 	return false
+}
+
+// isDeliveryReceiptOrProcessLine matches model asides that restate delivery
+// results or fixed wait/ack templates. These must never become user-visible
+// FinalSummary content (e.g. "已发送。" after pm_reply status=sent).
+func isDeliveryReceiptOrProcessLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return false
+	}
+	// Strip trailing punctuation for exact-phrase matching.
+	core := strings.TrimRight(trimmed, "。.!！?？…")
+	core = strings.TrimSpace(core)
+	exact := []string{
+		"已发送",
+		"已通过 QQ 回复用户",
+		"已通过QQ回复用户",
+		"稍等，我看一下",
+		"稍等我看一下",
+		"Give me a moment on this one",
+		"已开始处理",
+		"任务已启动",
+		"正在处理",
+		"收到，正在处理",
+	}
+	for _, p := range exact {
+		if strings.EqualFold(core, p) {
+			return true
+		}
+	}
+	lower := strings.ToLower(trimmed)
+	// Soft contains for short receipt asides that include channel names.
+	soft := []string{
+		"已通过 qq 回复用户",
+		"已通过qq回复用户",
+		"已发送。",
+		"give me a moment on this one",
+	}
+	for _, p := range soft {
+		if strings.Contains(lower, p) && utf8.RuneCountInString(trimmed) <= 40 {
+			return true
+		}
+	}
+	return false
+}
+
+// isReceiptOrProcessOnlyBody reports whether assistant text has no user-facing
+// content and includes delivery-receipt / fixed-process asides. Such turns must
+// produce 0 user-visible sends. Pure tool/reasoning noise (no receipts) still
+// takes the missing-answer fallback path so failures stay observable.
+func isReceiptOrProcessOnlyBody(text string) bool {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return false
+	}
+	sawReceipt := false
+	for _, line := range strings.Split(trimmed, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if isDeliveryReceiptOrProcessLine(line) {
+			sawReceipt = true
+			continue
+		}
+		if isFinalSummaryNoiseLine(line) {
+			continue
+		}
+		return false
+	}
+	return sawReceipt
 }
 
 // splitImageURLs extracts shareable image URLs (markdown or bare) from an

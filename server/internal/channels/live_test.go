@@ -89,7 +89,6 @@ func TestOutboundCopyNeverExposesInternals(t *testing.T) {
 	copies := []string{
 		busyHintText,
 		turnTooSlowText("zh-CN"), turnTooSlowText("en"),
-		stillWorkingText("zh-CN"), stillWorkingText("en"),
 		interruptedTurnText("zh-CN"), interruptedTurnText("en"),
 		runAcceptanceText("登录页性能", "zh-CN"), runAcceptanceText("Login perf", "en"),
 		taskStatusLabel("completed", "zh-CN"), taskStatusLabel("failed", "en"),
@@ -115,6 +114,12 @@ func TestOutboundCopyNeverExposesInternals(t *testing.T) {
 			if strings.Contains(strings.ToLower(text), strings.ToLower(banned)) {
 				t.Errorf("user-facing copy contains %q: %q", banned, text)
 			}
+		}
+	}
+	// Fixed stillWorking templates are banned from egress; scrub must drop them.
+	for _, banned := range []string{stillWorkingText("zh-CN"), stillWorkingText("en")} {
+		if got := ScrubInternalTerms(banned); got != "" {
+			t.Errorf("stillWorking template must scrub to empty, got %q from %q", got, banned)
 		}
 	}
 }
@@ -221,8 +226,9 @@ func TestOneUserMessageProducesOneReply(t *testing.T) {
 	}
 }
 
-// An answer the agent submitted through pm_reply is the turn's answer. The
-// wrap-up must not append a second message on top of it.
+// An answer the agent submitted through pm_reply is the turn's answer. Even
+// when Bridge builds a non-empty FinalSummary from delivery-receipt asides,
+// the wrap-up must not append a second message.
 func TestExplicitReplySuppressesTheTurnWrapUp(t *testing.T) {
 	fa := &fakeAdapter{}
 	m, _ := liveManager(t, fa)
@@ -245,6 +251,42 @@ func TestExplicitReplySuppressesTheTurnWrapUp(t *testing.T) {
 	if len(got) != 1 || got[0] != "缓存没刷新而已。" {
 		t.Fatalf("sends = %v want only the agent's own reply", got)
 	}
+}
+
+// pm_reply already answered; Bridge still builds a non-empty FinalSummary from
+// model asides (「已发送。」). hasReplied must short-circuit structured_turn_final
+// so the user sees exactly one message — the real answer.
+func TestPmReplyPlusNonEmptyFinalSummarySendsExactlyOnce(t *testing.T) {
+	fa := &fakeAdapter{}
+	m, _ := liveManager(t, fa)
+	rc := testRunningChannel(fa)
+	rc.cfg.ProjectID = "proj"
+	const answer = "今天在看登录页首屏延迟。"
+	m.handleFunc = func(ctx context.Context, _ ResolvedChannel, in InboundMessage) (Reply, error) {
+		if _, err := m.DeliverConversationReply(ctx, ConversationReply{
+			ProjectID: "proj", Scene: in.Scene, ConversationID: in.ConversationID,
+			UserID: in.UserID, Text: answer,
+		}); err != nil {
+			return Reply{}, err
+		}
+		aside := "已通过 QQ 回复用户。\n已发送。\n" + answer
+		return Reply{
+			Text:         aside,
+			FinalSummary: buildDeliverableFinalSummary(aside),
+		}, nil
+	}
+	m.handleInbound(context.Background(), rc, InboundMessage{
+		Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
+		MessageID: "q-pm-final", Text: "你在看什么",
+	})
+	got := sentTexts(fa)
+	if len(got) != 1 {
+		t.Fatalf("sends = %v want exactly 1 (pm_reply only)", got)
+	}
+	if got[0] != answer {
+		t.Fatalf("outbound = %q want %q", got[0], answer)
+	}
+	assertNoBannedOutbound(t, got)
 }
 
 // A turn that overruns has started nothing and is running nothing, so the user
@@ -289,10 +331,9 @@ func TestForegroundTurnTimeoutOffersDelegationInsteadOfPromising(t *testing.T) {
 	}
 }
 
-// Cold start is the one wait the streaming opener cannot cover: there is no
-// sandbox yet, so there is no text to release early. The user hears something
-// once — and a turn that answers quickly still produces only the answer.
-func TestLongSilenceGetsOneNoticeAndFastTurnsGetNone(t *testing.T) {
+// Foreground turns must stay silent until the single final answer: the fixed
+// stillWorking template is hard-disabled (Demo: no 「稍等，我看一下。」).
+func TestForegroundTurnsNeverSendStillWorkingTemplate(t *testing.T) {
 	fa := &fakeAdapter{}
 	m := NewManager(nil, nil, nil)
 	m.handleFunc = func(context.Context, ResolvedChannel, InboundMessage) (Reply, error) {
@@ -315,21 +356,17 @@ func TestLongSilenceGetsOneNoticeAndFastTurnsGetNone(t *testing.T) {
 	m2.stillWorkingAfter = 20 * time.Millisecond
 	slowIn := testInboundText("slow", "帮我查一下登录页为什么慢")
 	stop := m2.sayStillWorking(context.Background(), rc, slowIn, scope)
-	deadline := time.Now().Add(5 * time.Second)
-	for len(sentTexts(slow)) == 0 && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
-	}
+	time.Sleep(80 * time.Millisecond)
 	stop()
 	close(release)
 
-	got := sentTexts(slow)
-	if len(got) != 1 || got[0] != stillWorkingText("zh-CN") {
-		t.Fatalf("long silence sends = %v want one waiting notice", got)
+	if got := sentTexts(slow); len(got) != 0 {
+		t.Fatalf("sayStillWorking must be a no-op; got %v", got)
 	}
-	// Stopping is idempotent and must not emit a second notice.
+	// Stopping is idempotent.
 	stop()
-	if n := len(sentTexts(slow)); n != 1 {
-		t.Fatalf("waiting notice repeated: %d sends", n)
+	if n := len(sentTexts(slow)); n != 0 {
+		t.Fatalf("waiting notice must not appear: %d sends", n)
 	}
 }
 
@@ -582,4 +619,214 @@ func TestShortTitlesNeverCarryRunIdentifiers(t *testing.T) {
 			t.Errorf("SanitizeShortTitle(%q) = %q is not a title", in, got)
 		}
 	}
+}
+
+// bannedOutboundPhrases are process/receipt templates that must never appear
+// in user-visible QQ outbound (Demo / clarified requirement).
+var bannedOutboundPhrases = []string{
+	"稍等，我看一下",
+	"Give me a moment on this one",
+	"已发送",
+	"已通过 QQ 回复用户",
+	"已通过QQ回复用户",
+	"本回合已结束",
+	"请前往 Approving",
+	"已开始处理",
+	"任务已启动",
+	"收到，正在处理",
+}
+
+func assertNoBannedOutbound(t *testing.T, texts []string) {
+	t.Helper()
+	for _, text := range texts {
+		for _, banned := range bannedOutboundPhrases {
+			if strings.Contains(text, banned) {
+				t.Fatalf("banned outbound phrase %q in %q (all=%v)", banned, text, texts)
+			}
+		}
+		if strings.Contains(text, deprecatedSafeFinalNotice) {
+			t.Fatalf("shell notice leaked: %v", texts)
+		}
+	}
+}
+
+// Cross-layer Demo scenarios: greeting / status / tool-then-reply / background
+// start. Each asserts outbound count, order, and banned process copy.
+func TestOutboundBoundaryFourScenarios(t *testing.T) {
+	t.Run("greeting_one_natural_reply", func(t *testing.T) {
+		fa := &fakeAdapter{}
+		m, _ := liveManager(t, fa)
+		rc := testRunningChannel(fa)
+		rc.cfg.ProjectID = "proj"
+		const answer = "你好，我在。"
+		m.handleFunc = func(ctx context.Context, _ ResolvedChannel, in InboundMessage) (Reply, error) {
+			if _, err := m.DeliverConversationReply(ctx, ConversationReply{
+				ProjectID: "proj", Scene: in.Scene, ConversationID: in.ConversationID,
+				UserID: in.UserID, Text: answer,
+			}); err != nil {
+				return Reply{}, err
+			}
+			body := answer + "\n已发送。\n稍等，我看一下。"
+			return Reply{Text: body, FinalSummary: buildDeliverableFinalSummary(body)}, nil
+		}
+		m.handleInbound(context.Background(), rc, InboundMessage{
+			Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
+			MessageID: "s1", Text: "你好",
+		})
+		got := sentTexts(fa)
+		if len(got) != 1 || got[0] != answer {
+			t.Fatalf("greeting sends = %v want [%q]", got, answer)
+		}
+		assertNoBannedOutbound(t, got)
+	})
+
+	t.Run("status_query_one_contextual_reply", func(t *testing.T) {
+		fa := &fakeAdapter{}
+		m, _ := liveManager(t, fa)
+		rc := testRunningChannel(fa)
+		rc.cfg.ProjectID = "proj"
+		const answer = "登录页性能优化还在跑，首屏 profiling 做完了。"
+		m.handleFunc = func(ctx context.Context, _ ResolvedChannel, in InboundMessage) (Reply, error) {
+			if _, err := m.DeliverConversationReply(ctx, ConversationReply{
+				ProjectID: "proj", Scene: in.Scene, ConversationID: in.ConversationID,
+				UserID: in.UserID, Text: answer,
+			}); err != nil {
+				return Reply{}, err
+			}
+			body := "已通过 QQ 回复用户。\n" + answer
+			return Reply{Text: body, FinalSummary: buildDeliverableFinalSummary(body)}, nil
+		}
+		m.handleInbound(context.Background(), rc, InboundMessage{
+			Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
+			MessageID: "s2", Text: "什么进度了",
+		})
+		got := sentTexts(fa)
+		if len(got) != 1 || got[0] != answer {
+			t.Fatalf("status sends = %v want [%q]", got, answer)
+		}
+		assertNoBannedOutbound(t, got)
+	})
+
+	t.Run("tool_then_pm_reply_no_receipt_aside", func(t *testing.T) {
+		fa := &fakeAdapter{}
+		m, _ := liveManager(t, fa)
+		rc := testRunningChannel(fa)
+		rc.cfg.ProjectID = "proj"
+		const answer = "缓存没刷新，不是 BUG。"
+		m.handleFunc = func(ctx context.Context, _ ResolvedChannel, in InboundMessage) (Reply, error) {
+			if _, err := m.DeliverConversationReply(ctx, ConversationReply{
+				ProjectID: "proj", Scene: in.Scene, ConversationID: in.ConversationID,
+				UserID: in.UserID, Text: answer,
+			}); err != nil {
+				return Reply{}, err
+			}
+			// Simulate tool call + pm_reply + model re-greeting + receipt aside.
+			body := "tool_call lookup_status\n你好呀\n已发送。\n已通过 QQ 回复用户。\n" + answer
+			return Reply{Text: body, FinalSummary: buildDeliverableFinalSummary(body)}, nil
+		}
+		m.handleInbound(context.Background(), rc, InboundMessage{
+			Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
+			MessageID: "s3", Text: "那这个是 BUG 吗",
+		})
+		got := sentTexts(fa)
+		if len(got) != 1 || got[0] != answer {
+			t.Fatalf("tool-then-reply sends = %v want [%q]", got, answer)
+		}
+		assertNoBannedOutbound(t, got)
+		for _, text := range got {
+			if strings.Count(text, "你好") > 0 && text != answer {
+				t.Fatalf("duplicate greeting leaked: %v", got)
+			}
+		}
+	})
+
+	t.Run("background_start_one_acceptance_ack", func(t *testing.T) {
+		fa := &fakeAdapter{}
+		m, _ := liveManager(t, fa)
+		rc := testRunningChannel(fa)
+		rc.cfg.ProjectID = "proj"
+		m.handleFunc = func(ctx context.Context, _ ResolvedChannel, in InboundMessage) (Reply, error) {
+			if _, err := m.SendRunAcceptanceAck(ctx, RunAcceptanceAck{
+				ProjectID: "proj", RunID: "run-bg0011223344",
+				Scene: in.Scene, ConversationID: in.ConversationID,
+				UserID: in.UserID, ShortTitle: "登录页性能优化", Language: "zh-CN",
+			}); err != nil {
+				return Reply{}, err
+			}
+			// Model also tries to confirm + fixed ack; must not stack.
+			body := "已开始处理。\n任务已启动。\n稍等，我看一下。\n好的我去弄登录页。"
+			return Reply{Text: body, FinalSummary: buildDeliverableFinalSummary(body)}, nil
+		}
+		m.handleInbound(context.Background(), rc, InboundMessage{
+			Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
+			MessageID: "s4", Text: "帮我调研并实现登录页性能优化",
+		})
+		got := sentTexts(fa)
+		if len(got) != 1 {
+			t.Fatalf("background start sends = %v want exactly 1 acceptance ack", got)
+		}
+		want := runAcceptanceText("登录页性能优化", "zh-CN")
+		if got[0] != want {
+			t.Fatalf("acceptance = %q want %q", got[0], want)
+		}
+		assertNoBannedOutbound(t, got)
+	})
+}
+
+// FinalSummary-only path (no pm_reply) still delivers one substantive answer —
+// #161 reachability — without process templates.
+func TestFinalSummaryFallbackAloneSendsOneAnswer(t *testing.T) {
+	fa := &fakeAdapter{}
+	m := NewManager(nil, nil, nil)
+	const answer = "你在看什么？我这边刚看完登录页 profiling。"
+	m.handleFunc = func(context.Context, ResolvedChannel, InboundMessage) (Reply, error) {
+		body := "内部推理：先答\n" + answer
+		return Reply{Text: body, FinalSummary: buildDeliverableFinalSummary(body)}, nil
+	}
+	m.dispatch(context.Background(), testRunningChannel(fa), testInboundText("fb1", "你在看什么"))
+	got := sentTexts(fa)
+	if len(got) != 1 {
+		t.Fatalf("fallback sends = %v want 1", got)
+	}
+	if !strings.Contains(got[0], "登录页") {
+		t.Fatalf("fallback lost answer: %v", got)
+	}
+	assertNoBannedOutbound(t, got)
+}
+
+// Receipt-only assistant body with no prior pm_reply → 0 outbound (not shell).
+func TestReceiptOnlyBodySendsNothing(t *testing.T) {
+	fa := &fakeAdapter{}
+	m := NewManager(nil, nil, nil)
+	m.handleFunc = func(context.Context, ResolvedChannel, InboundMessage) (Reply, error) {
+		body := "已发送。\n已通过 QQ 回复用户。"
+		return Reply{Text: body, FinalSummary: buildDeliverableFinalSummary(body)}, nil
+	}
+	m.dispatch(context.Background(), testRunningChannel(fa), testInboundText("r0", "你好"))
+	if got := sentTexts(fa); len(got) != 0 {
+		t.Fatalf("receipt-only sends = %v want 0", got)
+	}
+}
+
+// live_first_sentence progress must not reach the adapter even if a bridge
+// regression re-emits it.
+func TestLiveFirstSentenceProgressIsBlocked(t *testing.T) {
+	fa := &fakeAdapter{}
+	m := NewManager(nil, nil, nil)
+	m.handleFuncWithProgress = func(ctx context.Context, _ ResolvedChannel, _ InboundMessage, onProgress func(ProgressEvent)) (Reply, error) {
+		onProgress(ProgressEvent{
+			Kind: ProgressMilestone, Summary: "你好", Stage: "你好",
+			Sendable: true, Reason: "live_first_sentence", At: time.Now(),
+		})
+		return Reply{FinalSummary: "你好，有什么我可以帮你的？"}, nil
+	}
+	m.dispatch(context.Background(), testRunningChannel(fa), testInboundText("opener", "你好"))
+	got := sentTexts(fa)
+	if len(got) != 1 {
+		t.Fatalf("sends = %v want only the final answer", got)
+	}
+	if got[0] != "你好，有什么我可以帮你的？" {
+		t.Fatalf("outbound = %q", got[0])
+	}
+	assertNoBannedOutbound(t, got)
 }

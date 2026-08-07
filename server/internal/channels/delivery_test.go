@@ -129,7 +129,8 @@ func TestNaturalLanguageQQFinalContainsAnswerNotShellNotice(t *testing.T) {
 		t.Fatalf("QQ outbound missing real answer %q; got %v", wantAnswer, got)
 	}
 
-	// Empty FinalSummary (noise-only body) → observable failure, not shell success.
+	// Empty FinalSummary from pure tool/reasoning noise → observable fallback
+	// (not shell). Receipt-only bodies stay at 0 sends (see live_test).
 	faFail := &fakeAdapter{}
 	mFail, _ := policyManager(t, faFail, nil)
 	mFail.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
