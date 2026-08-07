@@ -41,6 +41,9 @@ func (f *fakeLive) Timeout() time.Duration { return f.timeout }
 
 func (f *fakeLive) Complete(_ context.Context, req liveagent.Request) (liveagent.Result, error) {
 	if len(req.Tools) == 0 {
+		if f.err != nil {
+			return liveagent.Result{}, f.err
+		}
 		if f.report == nil {
 			return liveagent.Result{}, errors.New("fakeLive: no phrasing configured")
 		}
@@ -263,24 +266,46 @@ func TestRetryAffirmationAfterFailureRedispatchesInsteadOfConfirmAck(t *testing.
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// Live times out — the platform must still redispatch, not stamp 「确认」.
-	g.m.SetLiveModel(&fakeLive{configured: true, err: liveagent.ErrBudgetExhausted})
+	// Live can phrase the ack (no tools ⇒ report path) then we dispatch.
+	ack := "行，那块错误处理我让人重新开干，有进展回你。"
+	g.m.SetLiveModel(&fakeLive{configured: true, report: &liveagent.Result{Text: ack}})
 	g.say("m-retry", "重跑啊")
 	got := sentTexts(g.fa)
 	if len(got) < 1 {
 		t.Fatalf("sends = %v", got)
 	}
-	if strings.Contains(got[0], "确认") {
-		t.Fatalf("retry affirmation must not use confirm ack: %q", got[0])
+	if got[0] != ack {
+		t.Fatalf("retry ack should be Live-phrased GM voice, got %q want %q", got[0], ack)
 	}
-	if !strings.Contains(got[0], "重新") {
-		t.Fatalf("retry ack should say work is redispatched: %q", got[0])
+	if strings.Contains(got[0], "确认") || strings.Contains(got[0], "优先级") {
+		t.Fatalf("retry ack still sounds like a ticket: %q", got[0])
 	}
 	if len(g.agent) != 1 {
 		t.Fatalf("retry must reach the sandbox agent, got %d turns", len(g.agent))
 	}
 	if d := g.agent[0].Dispatch; d == nil || !strings.Contains(d.Brief, "错误处理") {
 		t.Fatalf("sandbox brief missing original requirement: %+v", g.agent[0].Dispatch)
+	}
+}
+
+func TestRetryAffirmationUsesGMTemplateWhenLiveCannotPhrase(t *testing.T) {
+	g := newGPTLive(t)
+	if _, err := g.m.taskContext.EnsureIdentity(services.EnsureTaskIdentityInput{
+		RunID: "run-fail-retry2", ProjectID: "proj", UserID: services.SyntheticQQUserID("u1"),
+		ShortTitle: "错误处理与日志", Status: "failed",
+		OriginalRequirement: "修复 Approving 错误处理与日志链路",
+		OriginChannel:       "qq", OriginScene: string(SceneC2C), OriginConversationID: "user1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	g.m.SetLiveModel(&fakeLive{configured: true, err: liveagent.ErrBudgetExhausted})
+	g.say("m-retry2", "重跑啊")
+	got := sentTexts(g.fa)
+	if len(got) < 1 || strings.Contains(got[0], "确认") {
+		t.Fatalf("want GM retry template without 确认, got %v", got)
+	}
+	if !strings.Contains(got[0], "重新开干") {
+		t.Fatalf("template should sound like a GM restarting work: %q", got[0])
 	}
 }
 

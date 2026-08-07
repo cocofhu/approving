@@ -139,10 +139,20 @@ func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel,
 			Msg("no conversation model configured; this message goes straight to the agent")
 		rec := m.newSampleRecorder(rc, in)
 		rec.flag("live_not_configured")
+		if outcome, ok := m.dispatchRetryFromLedger(ctx, rc, in, rec, ""); ok {
+			return outcome
+		}
 		return liveOutcome{sampleID: rec.commit(routeDirect)}
 	}
 
 	rec := m.newSampleRecorder(rc, in)
+	// "重跑啊" must not enter the full tool-routing loop: that is what timed
+	// out into 「我这就去确认」. Phrase the ack with the fast model (tiny
+	// prompt), then dispatch from the ledger.
+	if outcome, ok := m.routeRetryAffirmation(ctx, rc, in, rec); ok {
+		return outcome
+	}
+
 	briefing := m.buildDirectorContext(rc, in)
 	rec.briefedWith(briefing)
 
@@ -167,11 +177,6 @@ func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel,
 			level.Err(err).Str("project", rc.cfg.ProjectID).Str("trace", in.TraceID).
 				Msg("conversation model unavailable; handing turn to the agent")
 			rec.failed(err)
-			// Explicit "重跑啊" after a failed task must not become the empty
-			// 「我这就去确认」stamp — rebuild the dispatch from the ledger.
-			if outcome, ok := m.fallbackRetryDispatch(ctx, rc, in, rec); ok {
-				return outcome
-			}
 			// The sandbox still answers, but it can take a minute to come up.
 			// Saying nothing until then is how "项目的错误处理完整吗" sat on
 			// screen with a running timer and no bubble — the model timed out
@@ -242,10 +247,39 @@ func (m *Manager) ackFallthrough(ctx context.Context, rc *runningChannel, in Inb
 	}
 }
 
-// fallbackRetryDispatch runs when Live timed out but the user clearly affirmed
-// a retry of recently failed/cancelled work. It re-dispatches from the ledger
-// so "重跑啊" becomes a real sandbox turn instead of a hollow 确认 ack.
-func (m *Manager) fallbackRetryDispatch(ctx context.Context, rc *runningChannel, in InboundMessage, rec *sampleRecorder) (liveOutcome, bool) {
+// routeRetryAffirmation handles "重跑啊" before the slow full Live tool loop.
+// The user-facing line is phrased by the fast model; the ledger supplies the
+// work brief. That is what keeps the voice GM-like when Ollama would otherwise
+// burn the whole timeout on routing tools and fall back to 「确认」.
+func (m *Manager) routeRetryAffirmation(ctx context.Context, rc *runningChannel, in InboundMessage, rec *sampleRecorder) (liveOutcome, bool) {
+	if !looksLikeRetryAffirmation(in.Text) {
+		return liveOutcome{}, false
+	}
+	failed := m.latestRetryableTerminal(rc, in)
+	if failed == nil {
+		return liveOutcome{}, false
+	}
+	title := services.SanitizeShortTitle(failed.ShortTitle)
+	userContent := "对方说：" + strings.TrimSpace(in.Text) + "\n"
+	if title != "" {
+		userContent += "要重跑的事：" + title + "\n"
+	}
+	if req := strings.TrimSpace(failed.OriginalRequirement); req != "" {
+		userContent += "原来的要求：" + truncateRunes(req, 200) + "\n"
+	}
+	ack := strings.TrimSpace(m.phraseThroughLive(ctx, retryAckPhrasePrompt, userContent))
+	if ack != "" {
+		rec.flag("retry_ack_live")
+	} else {
+		ack = gmRetryAck(title)
+		rec.flag("retry_ack_template")
+	}
+	return m.dispatchRetryFromLedger(ctx, rc, in, rec, ack)
+}
+
+// dispatchRetryFromLedger rebuilds a dispatch from a recently failed/cancelled
+// task. preferredAck is the user-facing line (preferably Live-phrased).
+func (m *Manager) dispatchRetryFromLedger(ctx context.Context, rc *runningChannel, in InboundMessage, rec *sampleRecorder, preferredAck string) (liveOutcome, bool) {
 	if !looksLikeRetryAffirmation(in.Text) {
 		return liveOutcome{}, false
 	}
@@ -261,9 +295,9 @@ func (m *Manager) fallbackRetryDispatch(ctx context.Context, rc *runningChannel,
 		return liveOutcome{}, false
 	}
 	title := services.SanitizeShortTitle(failed.ShortTitle)
-	userReply := "好，重新派下去了，有进展回你。"
-	if title != "" {
-		userReply = "好，「" + title + "」重新派下去了，有进展回你。"
+	userReply := strings.TrimSpace(preferredAck)
+	if userReply == "" {
+		userReply = gmRetryAck(title)
 	}
 	outcome, refused := m.dispatchWork(ctx, rc, in, map[string]string{
 		"request": brief, "short_title": title,
@@ -272,12 +306,62 @@ func (m *Manager) fallbackRetryDispatch(ctx context.Context, rc *runningChannel,
 	}, rec)
 	if refused != "" {
 		log.Info().Str("project", rc.cfg.ProjectID).Str("trace", in.TraceID).
-			Str("detail", refused).Msg("retry dispatch fallback refused; using generic fallthrough")
+			Str("detail", refused).Msg("retry dispatch refused; using generic fallthrough")
 		return liveOutcome{}, false
 	}
-	rec.flag("retry_dispatch_fallback")
+	rec.flag("retry_dispatch")
 	return outcome, true
 }
+
+func gmRetryAck(title string) string {
+	title = services.SanitizeShortTitle(title)
+	if title != "" {
+		return "行，「" + title + "」我让人重新开干，有进展回你。"
+	}
+	return "行，那事我让人重新开干，有进展回你。"
+}
+
+// phraseThroughLive asks the fast model for one short IM line. Empty means the
+// caller should use a GM-toned template — never the hollow 「确认」 stamp.
+func (m *Manager) phraseThroughLive(ctx context.Context, system, user string) string {
+	if m == nil || m.live == nil || !m.live.Configured() {
+		return ""
+	}
+	system, user = strings.TrimSpace(system), strings.TrimSpace(user)
+	if system == "" || user == "" {
+		return ""
+	}
+	// Keep this hop short: it is only one sentence. A stuck Ollama must not
+	// burn the full live_timeout before we fall back to the GM template.
+	timeout := 20 * time.Second
+	if d := m.live.Timeout(); d > 0 && d < timeout {
+		timeout = d
+	}
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	res, err := m.live.Complete(callCtx, liveagent.Request{
+		System: system, Messages: []liveagent.Message{{Role: "user", Content: user}},
+		MaxTokens: 256,
+	})
+	if err != nil {
+		return ""
+	}
+	out := strings.TrimSpace(res.Text)
+	if out == "" || strings.Contains(out, "确认") {
+		return ""
+	}
+	return out
+}
+
+const retryAckPhrasePrompt = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
+
+对方刚明确说要重跑/再试一件刚失败的事。用一两句人话告诉对方：你已经按那件事重新安排人去干了。
+
+规矩：
+- 像同事当面说，不要工单腔，不要「我这就去确认」「收到」「稍等」。
+- 不要提优先级、任务编号、工作流、沙箱、跟进页面、Approving。
+- 不要说「已经跑完了 / 已经重新跑过了」——现在只是重新开跑。
+- 只输出要发给对方的那句话。`
 
 func (m *Manager) latestRetryableTerminal(rc *runningChannel, in InboundMessage) *models.TaskIdentity {
 	if m.taskContext == nil {
@@ -677,7 +761,9 @@ const directorReportPrompt = `你是这个项目的负责人本人，正在 IM �
 - 只讲给出的事实。不要补充、不要推测、不要下额外结论、不要建议。
 - 先给结论，必要细节最多再补两三句；不要把长报告或分点清单原样贴出去。
 - 说人话，像同事当面说，不要写工单腔。
-- 不要出现任务编号、工作流名、执行环境、工具名这些内部说法。
+- 不要出现任务编号、工作流名、执行环境、工具名、优先级这些内部说法。
+- 不要说「你那边跟进看看」「请前往 Approving」这类把人打发走的话。
+- 若事实只是「重新开跑了」而不是做完了，就说重新开跑了，不要说得像已经收工。
 - 只输出要发出去的话，不要加前缀、标题或解释，也不要写到一半截断。`
 
 // warmWorkLayer brings the agent's sandbox up in the background.

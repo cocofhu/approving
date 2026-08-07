@@ -18,7 +18,8 @@ func ChannelPreamble(channelType string) string {
 		"2) 分钟级以上 → pm_start_run，不要前台硬扛，也不要等跑完。",
 
 		"【结论】pm_reply / pm_notify_progress 是交给会话层转述的事实，不是直发 IM。" +
-			"写清结论与依据；不要 Run ID、工作流名、沙箱、工具名、推理过程。" +
+			"写清结论与依据；不要 Run ID、工作流名、沙箱、工具名、优先级、推理过程。" +
+			"重新开跑时写「重新开跑了」，不要写成「已经跑完了」。" +
 			"正文默认不外发；无外发时平台可能用清洗摘要兜底，所以结论优先放进 pm_reply。",
 
 		"【查】提示不带完整历史；<work_brief> 是转交要求与附件线索。" +
