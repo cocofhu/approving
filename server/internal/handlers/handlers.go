@@ -16,6 +16,7 @@ import (
 	"github.com/cocofhu/approving/internal/browser"
 	"github.com/cocofhu/approving/internal/contextmcp"
 	"github.com/cocofhu/approving/internal/engine"
+	"github.com/cocofhu/approving/internal/liveagent"
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/memorymcp"
 	"github.com/cocofhu/approving/internal/models"
@@ -65,7 +66,11 @@ type Handlers struct {
 	// to simulate a read-only member denial while production keeps the hook nil.
 	CanViewProjectAudit func(username, projectID string) bool
 	// InjectBundles serves ConfigHome .tgz for gateway SANDBOX_INJECT (no session auth).
-	InjectBundles  *sandbox.BundleStore
+	InjectBundles *sandbox.BundleStore
+	// LiveModel is the conversation-model client, held so the settings page can
+	// test an endpoint and read what that layer has actually been doing. nil
+	// disables both, which is what tests that do not wire it get.
+	LiveModel      *liveagent.Client
 	doctorMu       sync.Mutex
 	doctorSessions map[string]doctorArtifactSession
 }
@@ -90,6 +95,46 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+// TestLiveEndpoint checks a conversation-model endpoint and reports what it
+// found. The body is a settings patch, so the values on screen can be tested
+// before they are saved; a blank or masked key means "use the stored one".
+//
+// A failing endpoint is a successful test with OK=false, not an HTTP error: the
+// caller asked whether it works, and "no, because the key was rejected" is the
+// answer to that question rather than a failure to answer it.
+func (h *Handlers) TestLiveEndpoint(c *gin.Context) {
+	if h.LiveModel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "conversation model client unavailable"})
+		return
+	}
+	var body map[string]any
+	if err := c.ShouldBindJSON(&body); err != nil {
+		// An empty body is a legitimate "test what is saved".
+		body = map[string]any{}
+	}
+	baseURL, apiKey, model, timeout := h.Settings.LiveEndpointFor(body)
+	report := liveagent.Probe(c.Request.Context(), liveagent.Endpoint{
+		BaseURL: baseURL, APIKey: apiKey, Model: model, Timeout: timeout,
+	})
+	c.JSON(http.StatusOK, report)
+}
+
+// LiveStatus reports what the conversation layer has actually been doing.
+//
+// The test button proves an endpoint can work; this is the other question, and
+// the one that was unanswerable: a configured endpoint with zero calls means
+// messages are not going through this layer at all.
+func (h *Handlers) LiveStatus(c *gin.Context) {
+	if h.LiveModel == nil {
+		c.JSON(http.StatusOK, gin.H{"configured": false, "stats": liveagent.Stats{}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"configured": h.LiveModel.Configured(),
+		"stats":      h.LiveModel.Stats(),
+	})
 }
 
 // SandboxInject serves a short-lived ConfigHome .tgz for gateway

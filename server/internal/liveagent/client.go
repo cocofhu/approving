@@ -21,6 +21,27 @@ var ErrNotConfigured = errors.New("liveagent: endpoint not configured")
 // reply or a tool call. Callers treat it like any other failure and escalate.
 var ErrBudgetExhausted = errors.New("liveagent: token budget exhausted before a reply")
 
+// ErrEmptyResponse means the endpoint answered with neither text nor a tool
+// call. ErrBadResponse means the answer could not be read as a completion at
+// all, which usually means the address does not point at an OpenAI-compatible
+// API. They are distinct sentinels because they send you to different places:
+// one is the model, the other is the URL.
+var (
+	ErrEmptyResponse = errors.New("liveagent: response was empty")
+	ErrBadResponse   = errors.New("liveagent: response was not a completion")
+)
+
+// StatusError reports a non-2xx response.
+//
+// The body is deliberately not carried. It can echo request fields — including
+// the conversation — so nothing from it is safe to surface; the status code
+// alone is enough to say which part of the configuration to look at.
+type StatusError struct{ StatusCode int }
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("liveagent: endpoint returned %d", e.StatusCode)
+}
+
 // Message is one turn of conversation sent to the model.
 type Message struct {
 	// Role is "user" or "assistant". The system prompt travels in Request.
@@ -74,8 +95,9 @@ type Result struct {
 
 // Client calls an OpenAI-compatible chat/completions endpoint.
 type Client struct {
-	cur  current
-	http *http.Client
+	cur   current
+	http  *http.Client
+	stats stats
 }
 
 // New returns a client with no endpoint set; it stays unconfigured until
@@ -119,10 +141,12 @@ func (c *Client) Complete(ctx context.Context, req Request) (Result, error) {
 		allowed[t.Name] = true
 	}
 
+	started := time.Now()
 	var lastErr error
 	for attempt := 0; attempt < 2; attempt++ {
 		res, retryable, err := c.call(callCtx, ep, body, allowed)
 		if err == nil {
+			c.stats.record(time.Since(started), time.Now(), "")
 			return res, nil
 		}
 		lastErr = err
@@ -130,6 +154,10 @@ func (c *Client) Complete(ctx context.Context, req Request) (Result, error) {
 			break
 		}
 	}
+	// The recorded reason is the operator-facing one rather than the transport
+	// error, so what shows up on the settings page after a real failure reads
+	// the same as what the test button says.
+	c.stats.record(time.Since(started), time.Now(), describeFailure(lastErr, ep.Timeout))
 	return Result{}, lastErr
 }
 
@@ -157,18 +185,15 @@ func (c *Client) call(ctx context.Context, ep Endpoint, body []byte, allowed map
 		return Result{}, true, fmt.Errorf("liveagent: read response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		// The body can echo request fields, so it is summarised rather than
-		// propagated; nothing from here is ever shown to a user.
-		return Result{}, resp.StatusCode >= 500,
-			fmt.Errorf("liveagent: endpoint returned %d", resp.StatusCode)
+		return Result{}, resp.StatusCode >= 500, &StatusError{StatusCode: resp.StatusCode}
 	}
 
 	var parsed completionResponse
 	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return Result{}, false, fmt.Errorf("liveagent: decode response: %w", err)
+		return Result{}, false, fmt.Errorf("%w: decode: %w", ErrBadResponse, err)
 	}
 	if len(parsed.Choices) == 0 {
-		return Result{}, false, errors.New("liveagent: response had no choices")
+		return Result{}, false, fmt.Errorf("%w: no choices", ErrBadResponse)
 	}
 
 	msg := parsed.Choices[0].Message
@@ -192,7 +217,7 @@ func (c *Client) call(ctx context.Context, ep Endpoint, body []byte, allowed map
 		if parsed.Choices[0].FinishReason == "length" {
 			return Result{}, false, ErrBudgetExhausted
 		}
-		return Result{}, false, errors.New("liveagent: response was empty")
+		return Result{}, false, ErrEmptyResponse
 	}
 	return out, false, nil
 }

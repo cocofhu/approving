@@ -269,6 +269,43 @@ export interface SettingItem {
   locked: boolean
 }
 
+// LiveProbeCheck is one property of a conversation-model endpoint that either
+// holds or does not. `reason` is already operator-facing prose from the server
+// and is shown as-is; `name` is the stable identifier the UI labels.
+export interface LiveProbeCheck {
+  name: 'reachable' | 'tool_calls' | string
+  ok: boolean
+  reason?: string
+}
+
+// LiveProbeReport is the outcome of testing an endpoint. An endpoint that does
+// not work is `ok: false` on a successful request, not a thrown error.
+export interface LiveProbeReport {
+  configured: boolean
+  ok: boolean
+  checks: LiveProbeCheck[]
+  latencyMs: number
+  sample?: string
+}
+
+// LiveStats is what the conversation layer has actually done since the server
+// started. `calls: 0` while configured is the signal that inbound messages are
+// not going through this layer at all.
+export interface LiveStats {
+  calls: number
+  failed: number
+  avgLatencyMs: number
+  lastLatencyMs: number
+  lastSuccessAt?: string
+  lastFailureAt?: string
+  lastFailure?: string
+}
+
+export interface LiveStatus {
+  configured: boolean
+  stats: LiveStats
+}
+
 export type PlatformRuleSource = 'override' | 'global' | 'embed'
 
 export interface PlatformRuleMeta {
@@ -1033,6 +1070,15 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(patch),
     }),
+  // Tests the values in the form rather than the saved ones, so a corrected
+  // address can be checked before committing it. A blank secret means the
+  // server uses the stored key.
+  testLiveEndpoint: (patch: Record<string, number | string>) =>
+    req<LiveProbeReport>('/settings/live/test', {
+      method: 'POST',
+      body: JSON.stringify(patch),
+    }),
+  liveStatus: () => req<LiveStatus>('/settings/live/status'),
 
   listPlatformRules: () => req<{ items: PlatformRuleMeta[] }>('/platform-rules'),
   getPlatformRule: (file: string) => req<PlatformRuleContent>(`/platform-rules/${encodeURIComponent(file)}`),

@@ -965,6 +965,29 @@
       "liveUnconfigured": "尚未配置：当前每条 IM 消息都会交给沙箱，功能完整但每条都要等几十秒。填好地址和模型即可启用，本机或内网模型通常不需要密钥。",
       "liveSecretStored": "已保存，留空则不修改",
       "liveSecretEmpty": "尚未配置",
+      "liveTest": {
+        "title": "在线测试",
+        "desc": "测的是当前表单里的值，不用先保存。除了连通性，还会看这个模型能不能发出工具调用——不能的话它会把所有消息都自己答掉，永远不转交给项目。",
+        "action": "测试",
+        "running": "测试中…",
+        "pass": "可用",
+        "fail": "不可用",
+        "latency": "往返 {ms} ms",
+        "sample": "模型回了：",
+        "failed": "测试请求没发出去",
+        "checks": {
+          "reachable": "连通",
+          "toolCalls": "工具调用"
+        }
+      },
+      "liveRuntime": {
+        "title": "运行状况",
+        "desc": "自本次启动以来这一层真实处理的消息。测试按钮只能证明配置可用，这里才能看出线上有没有在走。",
+        "neverCalled": "配置可用，但启动至今这一层一次都没被调用过。IM 渠道可能没在跑，或者消息没走到这里——此时每条消息都直接交给沙箱，功能不缺但都慢。",
+        "counts": "调用 {calls} 次，失败 {failed} 次",
+        "avgLatency": "成功调用平均 {ms} ms",
+        "lastFailure": "最近一次失败："
+      },
       "sourceLabels": {
         "env": "环境变量",
         "db": "已自定义",

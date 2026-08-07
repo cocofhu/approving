@@ -965,6 +965,29 @@
       "liveUnconfigured": "Not configured: every IM message currently goes to a sandbox, which works but takes tens of seconds each. Fill in the endpoint and model to enable; a local or LAN model usually needs no key.",
       "liveSecretStored": "Stored — leave blank to keep",
       "liveSecretEmpty": "Not configured",
+      "liveTest": {
+        "title": "Test endpoint",
+        "desc": "Tests the values in the form, so there is no need to save first. Besides reachability it checks whether the model can return a tool call — one that cannot will answer everything itself and never hand work to the project.",
+        "action": "Test",
+        "running": "Testing…",
+        "pass": "Working",
+        "fail": "Not working",
+        "latency": "{ms} ms round trip",
+        "sample": "The model said:",
+        "failed": "The test request could not be sent",
+        "checks": {
+          "reachable": "Reachable",
+          "toolCalls": "Tool calls"
+        }
+      },
+      "liveRuntime": {
+        "title": "Runtime",
+        "desc": "What this layer has actually handled since the server started. The test button proves a configuration can work; this is what shows whether it is being used.",
+        "neverCalled": "The configuration works, but this layer has not been called once since startup. The IM channel may not be running, or messages are not reaching it — in which case every message goes straight to a sandbox: nothing is missing, everything is slow.",
+        "counts": "{calls} calls, {failed} failed",
+        "avgLatency": "{ms} ms average on success",
+        "lastFailure": "Most recent failure:"
+      },
       "sourceLabels": {
         "env": "Environment",
         "db": "Customized",
