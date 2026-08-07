@@ -212,7 +212,39 @@ func (h *Host) callTool(sess *Session, name string, args map[string]any) (any, b
 		if err != nil {
 			return map[string]any{"error": err.Error()}, true
 		}
-		return map[string]any{"conversationId": cid, "messages": msgs, "total": total, "count": len(msgs)}, false
+		rows := make([]any, 0, len(msgs))
+		includeImages := platformmcp.BoolArg(args, "includeImages")
+		for _, msg := range msgs {
+			rows = append(rows, messageRow(msg, includeImages))
+		}
+		return map[string]any{"conversationId": cid, "messages": rows, "total": total, "count": len(rows)}, false
+	case "get_attachment":
+		mid := platformmcp.StrArg(args, "messageId")
+		if mid == "" {
+			return map[string]any{"error": "messageId required"}, true
+		}
+		cid := platformmcp.StrArg(args, "conversationId")
+		if cid == "" {
+			cid = sess.ThreadID
+		}
+		if cid == "" || !h.threadVisible(sess, cid) {
+			return map[string]any{"error": "conversation not found"}, true
+		}
+		msg, err := h.pm.GetMessage(cid, mid)
+		if err != nil {
+			return map[string]any{"error": "message not found"}, true
+		}
+		idx := platformmcp.IntArg(args, "index", 0)
+		if idx < 0 || idx >= len(msg.Images) {
+			return map[string]any{
+				"error": "attachment index out of range", "attachmentCount": len(msg.Images),
+			}, true
+		}
+		img := msg.Images[idx]
+		return map[string]any{
+			"messageId": msg.ID, "index": idx, "name": img.Name,
+			"mimeType": img.MimeType, "bytes": len(img.Data), "data": img.Data,
+		}, false
 	case "search_messages":
 		hits, err := h.pm.SearchMessages(sess.ProjectID, sess.AgentName, sess.UserID,
 			platformmcp.StrArg(args, "query"), platformmcp.IntArg(args, "limit", 20))
@@ -262,14 +294,63 @@ func (h *Host) threadVisible(sess *Session, threadID string) bool {
 	return t.UserID == sess.UserID
 }
 
+// messageRow renders one stored message for the agent.
+//
+// Attachments are described, not shipped. A conversation with a handful of
+// screenshots holds tens of megabytes of base64, and this tool used to return
+// the rows verbatim — so reading twenty messages could bury the agent's whole
+// context in image bytes it never asked for. The manifest says what is there;
+// get_attachment fetches the one that matters.
+func messageRow(msg models.ChatMessage, includeImages bool) any {
+	if includeImages || len(msg.Images) == 0 {
+		return msg
+	}
+	manifest := make([]map[string]any, 0, len(msg.Images))
+	for i, img := range msg.Images {
+		manifest = append(manifest, map[string]any{
+			"index": i, "name": img.Name, "mimeType": img.MimeType, "bytes": len(img.Data),
+		})
+	}
+	row := map[string]any{
+		"id": msg.ID, "threadId": msg.ThreadID, "role": msg.Role, "content": msg.Content,
+		"createdAt": msg.CreatedAt, "attachments": manifest,
+	}
+	if msg.Status != "" {
+		row["status"] = msg.Status
+	}
+	if msg.Source != "" {
+		row["source"] = msg.Source
+	}
+	if len(msg.Citations) > 0 {
+		row["citations"] = msg.Citations
+	}
+	if msg.AttachedContext != nil {
+		row["attachedContext"] = msg.AttachedContext
+	}
+	return row
+}
+
 func toolSchemas() []map[string]any {
 	return []map[string]any{
 		platformmcp.Tool("list_conversations", "列出当前用户可见的会话索引（本人用户会话 + Agent 定时会话；不含消息全文）。", nil),
-		platformmcp.Tool("get_messages", "分页读取某会话消息（默认 limit=20）。", map[string]any{
-			"conversationId": map[string]any{"type": "string", "description": "可选；默认当前会话"},
-			"limit":          map[string]any{"type": "number"},
-			"offset":         map[string]any{"type": "number"},
-		}),
+		platformmcp.Tool("get_messages",
+			"分页读取某会话消息（默认 limit=20）。默认只返回附件清单（文件名/类型/字节数/序号），"+
+				"不返回附件内容；需要内容用 get_attachment 单取。", map[string]any{
+				"conversationId": map[string]any{"type": "string", "description": "可选；默认当前会话"},
+				"limit":          map[string]any{"type": "number"},
+				"offset":         map[string]any{"type": "number"},
+				"includeImages": map[string]any{
+					"type":        "boolean",
+					"description": "默认 false。设为 true 会把附件的完整 base64 一并返回，可能非常大。",
+				},
+			}),
+		platformmcp.Tool("get_attachment",
+			"按消息 id 和序号取回单个附件的内容（base64）。序号来自 get_messages 返回的附件清单。",
+			map[string]any{
+				"messageId":      map[string]any{"type": "string"},
+				"index":          map[string]any{"type": "number", "description": "附件序号，从 0 开始"},
+				"conversationId": map[string]any{"type": "string", "description": "可选；默认当前会话"},
+			}),
 		platformmcp.Tool("search_messages", "在当前用户可见的历史消息中关键词搜索（返回摘要）。", map[string]any{
 			"query": map[string]any{"type": "string"},
 			"limit": map[string]any{"type": "number"},

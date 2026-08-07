@@ -16,7 +16,7 @@ const CATALOG = [
   {
     id: 'context-store',
     scope: 'agent' as const,
-    toolCount: 5,
+    toolCount: 6,
     writeTools: [] as string[],
   },
   {

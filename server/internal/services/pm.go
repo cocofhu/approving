@@ -861,6 +861,73 @@ func (s *PmService) RecentMessages(threadID string, n int) ([]models.ChatMessage
 	return filtered, nil
 }
 
+// CanonicalWindow returns the last n turns of a channel conversation as the
+// user experienced it: their own messages, and the replies a channel confirmed
+// it delivered. Oldest first.
+//
+// It deliberately excludes raw agent output. That text is the agent talking to
+// itself — 「已发送」 is written after calling a tool, not after a user read
+// anything — and replaying it as history teaches the next turn that things were
+// said which never left the process.
+//
+// Failed turns keep their user row. The reply never happened, but the request
+// did, and dropping it is how a question the platform failed to answer
+// disappears from the conversation entirely.
+func (s *PmService) CanonicalWindow(threadID string, n int) ([]models.ChatMessage, error) {
+	return s.canonicalQuery(threadID, n, nil)
+}
+
+// CanonicalSince returns the user-visible turns recorded after afterID, oldest
+// first, so a reader that has already seen everything up to that point can be
+// caught up with only what is new. An empty or unknown afterID yields the
+// bounded window instead, which is the correct answer for a reader starting
+// fresh.
+func (s *PmService) CanonicalSince(threadID, afterID string, n int) ([]models.ChatMessage, error) {
+	anchor, err := s.GetMessage(threadID, strings.TrimSpace(afterID))
+	if err != nil {
+		return s.CanonicalWindow(threadID, n)
+	}
+	return s.canonicalQuery(threadID, n, &anchor)
+}
+
+func (s *PmService) canonicalQuery(threadID string, n int, after *models.ChatMessage) ([]models.ChatMessage, error) {
+	if n <= 0 {
+		n = 20
+	}
+	q := s.db.Where("thread_id = ?", threadID).Where(
+		"(role = ? AND source = ?) OR (role = ? AND source = ?)",
+		"user", models.MessageSourceChannel,
+		"assistant", models.MessageSourceChannelOutbound,
+	)
+	if after != nil {
+		q = q.Where("(created_at > ?) OR (created_at = ? AND id > ?)",
+			after.CreatedAt, after.CreatedAt, after.ID)
+	}
+	var newestFirst []models.ChatMessage
+	if err := q.Order("created_at desc, id desc").Limit(n).Find(&newestFirst).Error; err != nil {
+		return nil, err
+	}
+	for i, j := 0, len(newestFirst)-1; i < j; i, j = i+1, j-1 {
+		newestFirst[i], newestFirst[j] = newestFirst[j], newestFirst[i]
+	}
+	return newestFirst, nil
+}
+
+// HandoffCursor reports the last message the thread's sandbox has been shown.
+func (s *PmService) HandoffCursor(threadID string) string {
+	var t models.ChatThread
+	if err := s.db.Select("handoff_cursor").First(&t, "id = ?", threadID).Error; err != nil {
+		return ""
+	}
+	return t.HandoffCursor
+}
+
+// SetHandoffCursor records how far the thread's sandbox has been caught up.
+func (s *PmService) SetHandoffCursor(threadID, messageID string) error {
+	return s.db.Model(&models.ChatThread{}).Where("id = ?", threadID).
+		Update("handoff_cursor", messageID).Error
+}
+
 // ListConversationsForAgent returns threads visible to a context-store session.
 // Interactive users see their own user threads plus the agent's cron threads.
 // Cron sessions (userID == "cron") only see cron threads for the agent.

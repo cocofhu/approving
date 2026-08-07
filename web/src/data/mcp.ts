@@ -81,6 +81,7 @@ export const BUILTIN_MCPS: McpServer[] = [
     tools: [
       { name: 'list_conversations', signatureKey: 'mcp.contextStore.tools.list_conversations.signature', descKey: 'mcp.contextStore.tools.list_conversations.desc', io: 'read' },
       { name: 'get_messages', signatureKey: 'mcp.contextStore.tools.get_messages.signature', descKey: 'mcp.contextStore.tools.get_messages.desc', io: 'read' },
+      { name: 'get_attachment', signatureKey: 'mcp.contextStore.tools.get_attachment.signature', descKey: 'mcp.contextStore.tools.get_attachment.desc', io: 'read' },
       { name: 'search_messages', signatureKey: 'mcp.contextStore.tools.search_messages.signature', descKey: 'mcp.contextStore.tools.search_messages.desc', io: 'read' },
       { name: 'get_current_conversation', signatureKey: 'mcp.contextStore.tools.get_current_conversation.signature', descKey: 'mcp.contextStore.tools.get_current_conversation.desc', io: 'read' },
       { name: 'get_attached_context', signatureKey: 'mcp.contextStore.tools.get_attached_context.signature', descKey: 'mcp.contextStore.tools.get_attached_context.desc', io: 'read' },

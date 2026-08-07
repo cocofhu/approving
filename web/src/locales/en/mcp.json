@@ -168,8 +168,12 @@
           "desc": "List conversations"
         },
         "get_messages": {
-          "signature": "get_messages(conversationId?, limit?, offset?)",
-          "desc": "Page messages"
+          "signature": "get_messages(conversationId?, limit?, offset?, includeImages?)",
+          "desc": "Page messages; attachments listed, not inlined"
+        },
+        "get_attachment": {
+          "signature": "get_attachment(messageId, index?, conversationId?)",
+          "desc": "Fetch one attachment by index"
         },
         "search_messages": {
           "signature": "search_messages(query, limit?)",

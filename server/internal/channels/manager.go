@@ -12,6 +12,7 @@ import (
 	"github.com/cocofhu/approving/internal/sendable"
 	"github.com/cocofhu/approving/internal/services"
 
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
@@ -58,12 +59,6 @@ const (
 	// container. Folding it into the answer budget is how a plain question
 	// times out before the agent has read it.
 	sandboxOpenBudget = 45 * time.Second
-	// stillWorkingDelay is how long a turn may leave the user with nothing at
-	// all before saying so. The streaming opener (firstSentenceDelay) covers
-	// any turn that has produced text; this only fires when there is genuinely
-	// nothing yet, which in practice means a cold start. It is deliberately
-	// later than the opener so a real sentence always wins the race.
-	stillWorkingDelay = 8 * time.Second
 )
 
 // queuedInbound is a message waiting behind an in-flight turn for the same
@@ -119,15 +114,19 @@ type Manager struct {
 	policy           *sendable.Policy
 	taskContext      *services.TaskContextService
 	riskConfirmation *services.RiskConfirmationService
+	// live answers what it can without a sandbox; nil means every message goes
+	// to the agent.
+	live LiveModel
+	// transcript is the shared record of the conversation. nil means the
+	// routing layers fall back to the single message in front of them.
+	transcript Transcript
 	// retryBackoff overrides the delivery backoff (tests set it to zero).
 	retryBackoff func(attempt int) time.Duration
 	// openBudget overrides sandboxOpenBudget; a negative value means none.
 	openBudget time.Duration
-	// stillWorkingAfter overrides stillWorkingDelay (tests shorten it).
+	// stillWorkingAfter is retained for older tests; production never schedules
+	// the fixed stillWorking template anymore.
 	stillWorkingAfter time.Duration
-
-	ambiguityMu sync.Mutex
-	ambiguity   map[string]ambiguityMemory
 
 	riskExecutor RiskActionExecutor
 
@@ -148,7 +147,7 @@ type runningChannel struct {
 // NewManager builds a manager. factories maps channel type → adapter factory;
 // decrypt reverses the stored app secret.
 func NewManager(bridge *ChannelBridge, factories map[string]AdapterFactory, decrypt func(string) (string, error)) *Manager {
-	return &Manager{
+	m := &Manager{
 		bridge:       bridge,
 		factories:    factories,
 		decrypt:      decrypt,
@@ -160,7 +159,16 @@ func NewManager(bridge *ChannelBridge, factories map[string]AdapterFactory, decr
 		baseCtx:      context.Background(),
 		policy:       sendable.NewPolicy(nil, nil),
 	}
+	// The bridge already owns thread resolution and message persistence, so it
+	// is also what records the conversation both layers read back.
+	if bridge != nil {
+		m.transcript = bridge
+	}
+	return m
 }
+
+// SetTranscript overrides the conversation record (tests supply their own).
+func (m *Manager) SetTranscript(t Transcript) { m.transcript = t }
 
 // SetSendablePolicy installs the single delivery gate used before Adapter.Send.
 func (m *Manager) SetSendablePolicy(policy *sendable.Policy) {
@@ -345,11 +353,12 @@ func (m *Manager) IsConversationBusy(projectID string, scene Scene, conversation
 
 // dispatch is the Live inbound pipeline.
 //
-// Order matters and is the heart of the Live model: messages that can be
-// answered from stored task state are served before the queue is ever
-// consulted, so asking "how's that going?" stays instant no matter how many
-// Runs are executing or how long the agent has been thinking. Only messages
-// that genuinely need the agent contend for the single per-conversation turn.
+// Everything the user says reaches a model, with its text and attachments
+// unchanged. This layer used to answer whatever it recognised — status
+// questions, task names, anything a keyword table matched — which meant those
+// turns were decided by a scorer that had never read the conversation. The one
+// message it still handles itself is the answer to a confirmation it already
+// asked for.
 func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMessage) {
 	// A notice-only inbound (e.g. every attachment rejected) has no turn to run;
 	// it still goes out through the single policy/dedupe/audit egress.
@@ -358,10 +367,21 @@ func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMe
 		return
 	}
 
-	// Fast path: answered from the database, never queued, never sandboxed.
+	m.recordInbound(rc, &in)
+
 	if m.handleFastPath(ctx, rc, &in) {
 		return
 	}
+
+	// The conversation layer runs ahead of the queue on purpose. Chat that the
+	// model can answer must not wait behind a sandbox turn that is minutes into
+	// reading a repository — that wait is the whole reason a conversation with
+	// this system used to feel like filing tickets.
+	outcome := m.routeThroughLiveModel(ctx, rc, in)
+	if outcome.answered {
+		return
+	}
+	in.EscalationReason = outcome.reason
 
 	key := convKey(rc.cfg.ProjectID, in.Scene, in.ConversationID)
 	q := m.convQueueFor(key)
@@ -390,10 +410,70 @@ func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMe
 // handleInbound is the complete Live pipeline for one message, used by callers
 // that are not going through the per-conversation queue.
 func (m *Manager) handleInbound(ctx context.Context, rc *runningChannel, in InboundMessage) {
+	m.recordInbound(rc, &in)
 	if m.handleFastPath(ctx, rc, &in) {
 		return
 	}
+	outcome := m.routeThroughLiveModel(ctx, rc, in)
+	if outcome.answered {
+		return
+	}
+	in.EscalationReason = outcome.reason
 	m.runTurn(ctx, rc, in)
+}
+
+// recordInbound writes the user's message to the shared transcript before
+// anything decides what to do with it.
+//
+// Ordering is the point: both the conversation model and the sandbox read this
+// record, so writing it first is what lets them see the same conversation. It
+// happens before the confirmation shortcut too — a plain 「确认」 is part of the
+// exchange even though no model was consulted about it.
+//
+// A failure here costs context, not the reply: the turn continues with whatever
+// the layer in front of it can see.
+func (m *Manager) recordInbound(rc *runningChannel, in *InboundMessage) {
+	if m.transcript == nil || in == nil || rc == nil {
+		return
+	}
+	entry, err := m.transcript.RecordInbound(conversationRefFor(rc, *in), *in)
+	if err != nil {
+		transcriptLevel(err).Err(err).Str("project", rc.cfg.ProjectID).
+			Msg("inbound message not recorded; this turn runs with less context")
+		return
+	}
+	in.RecordedMessageID = entry.ID
+}
+
+// recordOutbound stores text the channel has confirmed it delivered, so the
+// next turn — in either layer — knows what the user has already been told.
+func (m *Manager) recordOutbound(rc *runningChannel, out OutboundMessage) {
+	if m.transcript == nil || rc == nil {
+		return
+	}
+	ref := ConversationRef{
+		ProjectID: rc.cfg.ProjectID, ChannelType: rc.cfg.Type,
+		Scene: out.Scene, ConversationID: out.ConversationID,
+	}
+	if _, err := m.transcript.RecordOutbound(ref, out.Text); err != nil {
+		transcriptLevel(err).Err(err).Str("project", rc.cfg.ProjectID).
+			Msg("delivered reply not recorded; the next turn may repeat it")
+	}
+}
+
+// transcriptLevel separates a transcript that is broken from one that was never
+// switched on. A project without a PM leader has nowhere to store a
+// conversation and never will, so every push it sends would otherwise file a
+// warning about a feature the operator declined.
+func transcriptLevel(err error) *zerolog.Event {
+	switch {
+	case errors.Is(err, services.ErrPmLeaderDisabled),
+		errors.Is(err, services.ErrPmLeaderNoAgent),
+		errors.Is(err, services.ErrProjectNotFound):
+		return log.Debug()
+	default:
+		return log.Warn()
+	}
 }
 
 // sendBusyHint emits at most one backlog notice per conversation per cooldown.
@@ -490,11 +570,16 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		TurnTimeout: timeout,
 		Caps:        SessionCapsFromConfig(rc.cfg.Config),
 	}
-	stopWaiting := m.sayStillWorking(turnCtx, rc, in, scope)
-	defer stopWaiting()
+	// Foreground turns stay silent until the single final answer (or a real
+	// RunAcceptanceAck after pm_start_run). Fixed stillWorking templates and
+	// streaming openers are hard-disabled — they caused multi-send UX noise.
 	onProgress := func(ev ProgressEvent) {
 		text := FormatProgressText(ev)
 		if text == "" {
+			return
+		}
+		// live_first_sentence was an early-release opener; never user-visible.
+		if strings.TrimSpace(ev.Reason) == "live_first_sentence" {
 			return
 		}
 		// Classification-only events stay internal; sendOutbound still runs so
@@ -511,7 +596,6 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		}
 	}
 	reply, err := m.handleTurn(turnCtx, resolved, in, onProgress)
-	stopWaiting()
 	if err != nil {
 		// Running out of time is not a failure, but it is not a delegation
 		// either: nothing was started and nothing is still running. Saying "I'll
@@ -538,8 +622,9 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 	if !ok {
 		// The agent finished without submitting anything the user can read. If
 		// something substantive already went out this turn, staying quiet is the
-		// honest outcome; otherwise say so in terms the user can act on.
-		if m.hasReplied(scope) {
+		// honest outcome. Receipt/process-only bodies also stay quiet (0 sends)
+		// rather than inventing a missing-answer fallback or a shell notice.
+		if m.hasReplied(scope) || isReceiptOrProcessOnlyBody(reply.Text) {
 			return
 		}
 		m.sendOutbound(ctx, rc, OutboundMessage{
@@ -547,6 +632,12 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 			Text:     m.noAnswerFallback(rc, in),
 			Envelope: turnEnvelope(rc, in, sendable.KindFinal, "final_missing_fallback", sendable.PriorityCritical),
 		})
+		return
+	}
+	// Something user-visible already left this turn (pm_reply, RunAcceptanceAck,
+	// or a real progress milestone). Do not append a second FinalSummary — that
+	// is the "answer + wrap-up" double-send the markReplied gate exists to stop.
+	if m.hasReplied(scope) {
 		return
 	}
 	m.sendOutbound(ctx, rc, OutboundMessage{
@@ -571,51 +662,20 @@ func (m *Manager) sandboxOpenBudget() time.Duration {
 	return sandboxOpenBudget
 }
 
-// sayStillWorking breaks a long silence once, and returns a function that
-// cancels it.
-//
-// It exists for the one case the streaming opener cannot cover: a cold start,
-// where there is no sandbox yet and therefore no text to release early. Leaving
-// the user staring at nothing for the length of a container boot is its own
-// kind of bad. This is not the mechanical acknowledgement that was removed —
-// that one preceded every message including instant ones; this fires only after
-// a genuinely long wait, at most once, and never when anything has been said.
+// sayStillWorking is retained for tests that document the banned fixed-ack
+// template. Production runTurn never schedules it: foreground short queries
+// stay silent until the single final answer, and minute-scale work must go
+// through pm_start_run → RunAcceptanceAck instead of a generic wait notice.
 func (m *Manager) sayStillWorking(ctx context.Context, rc *runningChannel, in InboundMessage, scope string) (stop func()) {
-	done := make(chan struct{})
-	var once sync.Once
-	stop = func() { once.Do(func() { close(done) }) }
-	delay := stillWorkingDelay
-	if m.stillWorkingAfter > 0 {
-		delay = m.stillWorkingAfter
-	}
-	go func() {
-		timer := time.NewTimer(delay)
-		defer timer.Stop()
-		select {
-		case <-done:
-			return
-		case <-ctx.Done():
-			return
-		case <-timer.C:
-		}
-		if m.hasReplied(scope) {
-			return
-		}
-		envelope := turnEnvelope(rc, in, sendable.KindProgress, "live_still_working", sendable.PriorityNormal)
-		envelope.Progress = sendable.ProgressFields{Stage: "live_still_working"}
-		result := m.sendOutboundResult(ctx, rc, OutboundMessage{
-			Scene: in.Scene, ConversationID: in.ConversationID, ReplyToMessageID: in.MessageID,
-			Text:     stillWorkingText(services.DetectLanguage(in.Text, "")),
-			Envelope: envelope,
-		})
-		if result.Sent {
-			m.markReplied(scope)
-		}
-	}()
-	return stop
+	_ = ctx
+	_ = rc
+	_ = in
+	_ = scope
+	return func() {}
 }
 
-// stillWorkingText admits the wait without pretending to report progress.
+// stillWorkingText is the banned fixed wait template (zh/en). Kept so scrubbers
+// and outbound-copy tests can assert it never reaches users again.
 func stillWorkingText(language string) string {
 	if services.NormalizeLanguage(language) == "en" {
 		return "Give me a moment on this one."
@@ -646,9 +706,14 @@ const deprecatedSafeFinalNotice = "本回合已结束，请在 Approving 查看�
 // deliverableFinalText returns the text allowed out of a finished turn. Only an
 // explicitly submitted summary qualifies; Reply.Text stays internal regardless
 // of its content. ok=false means the turn produced nothing sendable and the
-// caller must fall back rather than emit a placeholder.
+// caller must fall back rather than emit a placeholder. Scrubbing here catches
+// delivery-receipt asides that slipped into FinalSummary construction.
 func deliverableFinalText(reply Reply) (text, reason string, ok bool) {
 	if summary := strings.TrimSpace(reply.FinalSummary); summary != "" {
+		summary = ScrubInternalTerms(summary)
+		if summary == "" {
+			return "", "final_summary_scrubbed_empty", false
+		}
 		return truncateRunes(summary, 240), "structured_turn_final", true
 	}
 	return "", "final_summary_missing", false
@@ -765,6 +830,10 @@ func (m *Manager) sendOutboundResult(ctx context.Context, rc *runningChannel, ou
 		if sendErr == nil {
 			_ = m.policy.MarkSent(ctx, decision, out.Envelope, sendable.ChannelQQ)
 			m.bindOutboundMessage(rc, out, sent.MessageID)
+			// The single point where text becomes something a user has read.
+			// Recording here rather than at each call site is what keeps the
+			// transcript honest: an answer that failed to send is not in it.
+			m.recordOutbound(rc, out)
 			return DeliveryResult{Decision: decision, Sent: true, ExternalMessageID: sent.MessageID}
 		}
 		_ = m.policy.MarkFailed(ctx, decision, out.Envelope, sendable.ChannelQQ, sendErr)
