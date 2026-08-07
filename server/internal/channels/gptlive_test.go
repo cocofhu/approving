@@ -57,12 +57,12 @@ func (f *fakeLive) Complete(_ context.Context, req liveagent.Request) (liveagent
 
 func liveAnswer(text string) liveagent.Result { return liveagent.Result{Text: text} }
 
-// liveDispatch scripts a delegation. Lookup work with no acknowledgement is the
-// quiet shape: the user hears one message, the conclusion.
+// liveDispatch scripts a lookup delegation. The platform always acknowledges
+// sandbox-bound work first; user_reply may be empty so the gate fills one in.
 func liveDispatch(request, title string) liveagent.Result {
 	return liveagent.Result{ToolName: dispatchPMTool, Args: map[string]string{
 		"request": request, "difficulty": string(DifficultyLookup),
-		"short_title": title, "wait": "true",
+		"short_title": title,
 	}}
 }
 
@@ -280,13 +280,14 @@ func TestWorkBriefDoesNotReplayTheConversation(t *testing.T) {
 		t.Fatalf("agent turns = %d want exactly the delegated one", len(g.agent))
 	}
 	// One record, both layers: two turns the model answered, then the delegated
-	// turn and the agent's reply to it.
+	// turn's acknowledgement, then the agent's reply to it.
 	want := []string{
 		"user: 在吗",
 		"assistant: 我在。",
 		"user: 登录页那个还记得吗",
 		"assistant: 登录页那条我记得，你说的是首屏。",
 		"user: 去仓库确认一下改了没",
+		"assistant: 「首屏改动」我这就去确认，有结果马上回你。",
 		"assistant: agent-answer",
 	}
 	got := g.transcript()
@@ -515,9 +516,10 @@ func TestAmbiguousCancelAsksInsteadOfGuessing(t *testing.T) {
 	}
 }
 
-// A quick check the director chose to wait on answers once. Acknowledging and
-// then answering a second later is two notifications for one question.
-func TestWaitedLookupAnswersExactlyOnce(t *testing.T) {
+// A sandbox-bound lookup still acknowledges first. Staying silent until the
+// agent finishes was the "快模型没有先回复" failure: the wait flag assumed a
+// sub-second SoT check that this path does not perform.
+func TestLookupDispatchAcknowledgesBeforeTheAgent(t *testing.T) {
 	g := newGPTLive(t)
 	g.m.SetLiveModel(&fakeLive{configured: true, decisions: []liveagent.Result{
 		liveDispatch("确认登录页那个修好没", "登录页报错"),
@@ -525,8 +527,15 @@ func TestWaitedLookupAnswersExactlyOnce(t *testing.T) {
 
 	g.say("m1", "登录页那个修复了没")
 
-	if got := sentTexts(g.fa); len(got) != 1 || got[0] != "agent-answer" {
-		t.Fatalf("sends = %v want a single conclusion with no acknowledgement first", got)
+	got := sentTexts(g.fa)
+	if len(got) != 2 {
+		t.Fatalf("sends = %v want an acknowledgement then the conclusion", got)
+	}
+	if !strings.Contains(got[0], "登录页报错") {
+		t.Fatalf("acknowledgement names nothing verifiable: %q", got[0])
+	}
+	if got[1] != "agent-answer" {
+		t.Fatalf("conclusion = %q want agent-answer", got[1])
 	}
 	if len(g.agent) != 1 {
 		t.Fatalf("the check never reached the agent: %v", g.agent)
@@ -582,11 +591,14 @@ func TestProgressNamesTheTaskOnlyWhenSeveralAreRunning(t *testing.T) {
 	g.say("m1", "导出也看看")
 
 	got := sentTexts(g.fa)
-	if len(got) != 2 {
-		t.Fatalf("sends = %v want an update and a conclusion", got)
+	if len(got) != 3 {
+		t.Fatalf("sends = %v want ack, labelled update, and conclusion", got)
 	}
-	if !strings.HasPrefix(got[0], "「登录页报错」") {
-		t.Fatalf("update does not say which task moved: %q", got[0])
+	if !strings.Contains(got[0], "导出超时") {
+		t.Fatalf("acknowledgement names nothing verifiable: %q", got[0])
+	}
+	if !strings.HasPrefix(got[1], "「登录页报错」") {
+		t.Fatalf("update does not say which task moved: %q", got[1])
 	}
 }
 
@@ -644,11 +656,11 @@ func TestAgentConclusionIsReportedByTheConversationLayer(t *testing.T) {
 	g.say("m1", "登录页 500 的根因是什么")
 
 	got := sentTexts(g.fa)
-	if len(got) != 1 {
-		t.Fatalf("sends = %v want exactly one message", got)
+	if len(got) != 2 {
+		t.Fatalf("sends = %v want an acknowledgement then the director's conclusion", got)
 	}
-	if got[0] != "查过了，是缓存没刷新导致的。" {
-		t.Fatalf("the work layer spoke to the user directly: %q", got[0])
+	if got[1] != "查过了，是缓存没刷新导致的。" {
+		t.Fatalf("the work layer spoke to the user directly: %q", got[1])
 	}
 }
 
@@ -675,8 +687,40 @@ func TestConclusionSurvivesAFailedPhrasingCall(t *testing.T) {
 
 	g.say("m1", "根因是什么")
 
-	if got := sentTexts(g.fa); len(got) != 1 || got[0] != "缓存没刷新。" {
-		t.Fatalf("sends = %v want the conclusion in the work layer's own words", got)
+	got := sentTexts(g.fa)
+	if len(got) != 2 || got[1] != "缓存没刷新。" {
+		t.Fatalf("sends = %v want ack then the conclusion in the work layer's own words", got)
+	}
+}
+
+// A long agent conclusion must not be chopped mid-sentence at 240 runes before
+// the director can phrase it. That cut is what produced unfinished outbound
+// like 「因此目前审…」.
+func TestLongConclusionIsNotChoppedBeforeTheDirector(t *testing.T) {
+	g := newGPTLive(t)
+	long := strings.Repeat("查过了，审计里没有模型调用事件。", 40) // well over 240 runes
+	phrased := liveAnswer("审计里确实没有快模型调用记录，现在只落在决策样本表里。")
+	g.m.SetLiveModel(&fakeLive{
+		configured: true,
+		decisions:  []liveagent.Result{liveDispatch("查审计里有没有快模型调用", "审计日志")},
+		report:     &phrased,
+	})
+	g.m.handleFunc = func(_ context.Context, _ ResolvedChannel, in InboundMessage) (Reply, error) {
+		g.agent = append(g.agent, in)
+		return Reply{FinalSummary: long}, nil
+	}
+
+	g.say("m1", "审计日志里看不到快模型调用")
+
+	got := sentTexts(g.fa)
+	if len(got) != 2 {
+		t.Fatalf("sends = %v want ack then summarised conclusion", got)
+	}
+	if got[1] != "审计里确实没有快模型调用记录，现在只落在决策样本表里。" {
+		t.Fatalf("director did not get to phrase the long conclusion: %q", got[1])
+	}
+	if strings.Contains(got[1], "因此目前审") || strings.HasSuffix(got[1], "审…") {
+		t.Fatalf("mid-sentence truncation came back: %q", got[1])
 	}
 }
 
