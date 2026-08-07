@@ -32,13 +32,15 @@ type LiveModel interface {
 	Complete(ctx context.Context, req liveagent.Request) (liveagent.Result, error)
 }
 
-// The three decisions the conversation layer can make about work. They exist as
+// The decisions the conversation layer can make about work. They exist as
 // separate tools rather than one "escalate" because the difference matters at
-// the point of the call: delegating starts something, reading status must never
-// start anything, and cancelling stops something. Collapsing them into one verb
-// is what made "好了没" open a second sandbox to find out.
+// the point of the call: delegating starts something, refining hangs a follow-up
+// on work already running, reading status must never start anything, and
+// cancelling stops something. Collapsing them into one verb is what made
+// "好了没" open a second sandbox — and "重点看 Release" dump a queue at the user.
 const (
 	dispatchPMTool = "dispatch_pm"
+	refineWorkTool = "refine_work"
 	getStatusTool  = "get_status"
 	cancelWorkTool = "cancel_work"
 )
@@ -57,25 +59,26 @@ const liveToolLoopLimit = 3
 // from a real one to the person reading it.
 const liveSystemPrompt = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
 
-你手下有人干活。你的职责是接话、判断这件事有多大、派下去，然后把真实的进展和结论讲给对方听。
+你手下有人干活。你的职责是接话、判断意图、派活或收窄已有任务，然后把真实进展和结论讲给对方听。
 
 你可以直接回答：打招呼、闲聊、澄清对方的意思、解释你们刚才聊过的内容、回答你从这段对话里就能确定的事。
 
-需要看代码或仓库、需要动手改东西、需要跑流程、以及任何你不能仅凭这段对话确定的事实 —— 调用 dispatch_pm 派下去。
-要讲任务的状态、进度或结论 —— 先调用 get_status，用它返回的内容说话。
-对方说不用弄了 / 停下 / 算了 —— 调用 cancel_work。
+意图怎么认（先认意图，再动手）：
+- 对方在补充、收窄、纠正、加重点（例如「重点看 Release 到现在」「别看旧的」「再加上导出」）——只要是挂在已有任务上，调用 refine_work，不要新开任务。
+- 对方要一件和正在跑的事明显不同的新活 —— 调用 dispatch_pm。
+- 要讲进度、状态或结论 —— 先 get_status，用返回内容说话。
+- 对方说不用弄了 / 停下 / 算了 —— 调用 cancel_work。
 
-派活前先判断难度：
-- lookup：查一下就知道的事。
-- heavy：要花好几分钟的事。
-
-派活时必须用 user_reply 先接一句，说清楚你要去确认的是哪件事；平台会先把这句发出去，再去查。
+派活前判断难度：lookup=查一下就知道；heavy=要花好几分钟。
+dispatch_pm / refine_work 都要用 user_reply 先接一句；平台会先发出去再去查。
 
 规矩：
-- 接话必须有内容。「稍等」「好的我看一下」「收到」这种空话不算接话，要说清楚你要去确认的是哪件事。
-- 不要编造任务状态、进度、代码内容或任何你没有依据的事实。宁可先派下去。
-- 一次只说一件事，说人话，像微信上回同事，不要写工单腔。
-- 不要提到"沙箱""Agent""模型""工具""上下文"这些词，对方只是在和你聊天。
+- 接话必须有内容。「稍等」「好的我看一下」「收到」这种空话不算接话。
+- 任务已满时：若对方是在补充你们正在聊的那件，用 refine_work，不要把队列甩给对方让他挑停哪件。
+- 只有对方明确要另开一件完全不同的新事、且确实满了，才简短说明手上忙、问要先停哪件。
+- 不要编造任务状态、进度、代码内容或任何你没有依据的事实。
+- 一次只说一件事，说人话，像微信上回同事，不要写工单腔，不要列举内部任务清单除非对方在问进度。
+- 不要提到"沙箱""Agent""模型""工具""上下文"这些词。
 - 你就是这个项目的负责人本人。不要说自己是 AI、模型或助手，也不要说出任何模型名称、版本或厂商；被问"你是什么模型"就当同事随口一问，把话题带回工作。`
 
 // liveMaxTokens sizes the reply plus whatever the model thinks first. A
@@ -183,6 +186,13 @@ func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel,
 			}
 			rec.toolReturned(dispatchPMTool, res.Args, refused)
 			req.Messages = append(req.Messages, toolResultMessage(dispatchPMTool, refused))
+		case refineWorkTool:
+			outcome, refused := m.refineWork(ctx, rc, in, res.Args, rec)
+			if refused == "" {
+				return outcome
+			}
+			rec.toolReturned(refineWorkTool, res.Args, refused)
+			req.Messages = append(req.Messages, toolResultMessage(refineWorkTool, refused))
 		default:
 			return m.deliverDirectorReply(ctx, rc, in, res.Text, rec)
 		}
@@ -271,10 +281,12 @@ func (m *Manager) dispatchWork(ctx context.Context, rc *runningChannel, in Inbou
 		title = truncateRunes(strings.TrimSpace(in.Text), 40)
 	}
 	if running := m.taskLedger(rc, in); len(running) >= maxConcurrentWork {
+		focus := m.focusTaskID(rc, in)
 		return liveOutcome{}, encodeToolResult(map[string]any{
-			"rejected": "这个会话同时在跑的任务已经到上限了，没有派下去。",
-			"running":  running,
-			"hint":     "跟对方说清楚现在手上有哪几件事，问他要先停掉哪件，或者要不要排在后面。",
+			"rejected":       "这个会话同时在跑的任务已经到上限了，没有派下去。",
+			"running":        running,
+			"focus_task_id":  focus,
+			"hint":           "若对方是在补充/收窄正在聊的那件事，改用 refine_work（可挂到 focus_task_id），不要让对方从队列里选。只有对方明确要另开一件完全不同的新事时，才简短问要先停哪件。",
 		})
 	}
 
@@ -311,6 +323,121 @@ func (m *Manager) dispatchWork(ctx context.Context, rc *runningChannel, in Inbou
 	return liveOutcome{
 		reason: brief, dispatch: dispatch, sampleID: rec.commit(routeDispatch),
 	}, ""
+}
+
+// refineWork hangs a follow-up onto an existing task instead of opening a new
+// one. This is the intentional path for "重点看 Release 到现在": the director
+// recognizes a scope change, the ledger stays the same size, and the user is
+// not asked to triage a queue.
+func (m *Manager) refineWork(ctx context.Context, rc *runningChannel, in InboundMessage,
+	args map[string]string, rec *sampleRecorder) (outcome liveOutcome, refused string) {
+	addition := strings.TrimSpace(args["request"])
+	if addition == "" {
+		addition = strings.TrimSpace(in.Text)
+	}
+	if addition == "" {
+		return liveOutcome{}, encodeToolResult(map[string]any{
+			"rejected": "没有收到要补充的内容。",
+		})
+	}
+	target := m.resolveLedgerTask(rc, in, args["task_id"])
+	if target == nil {
+		tasks := m.taskLedger(rc, in)
+		return liveOutcome{}, encodeToolResult(map[string]any{
+			"rejected": "找不到要补充的任务。",
+			"running":  tasks,
+			"hint":     "有明确 taskId 就填上；只有一件在跑或你们刚在聊一件时可以不填。若其实是全新的事，改用 dispatch_pm。",
+		})
+	}
+
+	m.rememberTaskRefinement(rc, in, target, addition)
+
+	difficulty := DifficultyLookup
+	if strings.TrimSpace(args["difficulty"]) != "" {
+		difficulty = parseDifficulty(args["difficulty"])
+	}
+	brief := "【补充要求】" + addition + "（挂在已有任务「" + target.ShortTitle + "」上，按这个重点继续，不要另开新任务）"
+	dispatch := &WorkDispatch{
+		Brief: brief, Difficulty: difficulty,
+		TaskID: target.TaskID, ShortTitle: target.ShortTitle,
+		Attachments: m.conversationAttachments(rc, in),
+	}
+
+	userReply := strings.TrimSpace(args["user_reply"])
+	var text string
+	var flags []string
+	if userReply == "" {
+		text = "好，按你说的重点接着看「" + target.ShortTitle + "」。"
+	} else {
+		text, flags = gateAcknowledgement(userReply, target.ShortTitle, in.Text)
+	}
+	rec.flag(flags...)
+	rec.flag("refine_work")
+	sent := m.sendOutboundResult(ctx, rc, OutboundMessage{
+		Scene: in.Scene, ConversationID: in.ConversationID,
+		ReplyToMessageID: in.MessageID, Text: text,
+		Envelope: turnEnvelope(rc, in, sendable.KindTurnProcessingAck, "live_ack", sendable.PriorityHigh),
+	})
+	rec.acted("live_ack", text, sent)
+	if sent.Sent {
+		scope := conversationTurnScope(rc.cfg.ProjectID, in.Scene, in.ConversationID)
+		m.markReplied(scope)
+		m.markAcknowledged(scope)
+	}
+	_ = ctx
+	return liveOutcome{
+		reason: brief, dispatch: dispatch, sampleID: rec.commit(routeRefine),
+	}, ""
+}
+
+// resolveLedgerTask picks the task a refine/cancel should act on.
+func (m *Manager) resolveLedgerTask(rc *runningChannel, in InboundMessage, taskID string) *ledgerEntry {
+	tasks := m.taskLedger(rc, in)
+	taskID = strings.TrimSpace(taskID)
+	switch {
+	case taskID != "":
+		for i := range tasks {
+			if tasks[i].TaskID == taskID || tasks[i].RunID == taskID {
+				return &tasks[i]
+			}
+		}
+		return nil
+	case len(tasks) == 1:
+		return &tasks[0]
+	case len(tasks) > 1:
+		if focus := m.focusTaskID(rc, in); focus != "" {
+			for i := range tasks {
+				if tasks[i].TaskID == focus {
+					return &tasks[i]
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// rememberTaskRefinement writes the follow-up into the ledger and reasserts focus.
+func (m *Manager) rememberTaskRefinement(rc *runningChannel, in InboundMessage, target *ledgerEntry, addition string) {
+	if m.taskContext == nil || target == nil {
+		return
+	}
+	scope := m.taskScopeFor(rc, in)
+	identity, err := m.taskContext.UpdateIdentity(services.EnsureTaskIdentityInput{
+		RunID: target.RunID, ProjectID: rc.cfg.ProjectID, UserID: scope.UserID,
+		RecentContext: addition, Status: "running",
+	})
+	if err != nil || identity == nil {
+		log.Debug().Err(err).Str("task", target.TaskID).Msg("task refinement not recorded in the ledger")
+		return
+	}
+	if _, err := m.taskContext.SetFocus(scope, identity, identity.Language); err != nil {
+		log.Debug().Err(err).Msg("conversation focus not updated for refined task")
+	}
+	if msgID := strings.TrimSpace(in.MessageID); msgID != "" {
+		if err := m.taskContext.BindMessage(scope, msgID, identity); err != nil {
+			log.Debug().Err(err).Msg("refined task not bound to the inbound message")
+		}
+	}
 }
 
 // foregroundCapture holds a turn's diverted agent replies.
@@ -560,8 +687,8 @@ func directorTools() []liveagent.ToolSpec {
 	return []liveagent.ToolSpec{
 		{
 			Name: dispatchPMTool,
-			Description: "把这件事派给能读代码仓库、能查真实状态、能动手干活的人。" +
-				"任何需要事实依据或需要执行的事情都用它，不要自己猜。",
+			Description: "把一件新事派给能读代码仓库、能查真实状态、能动手干活的人。" +
+				"对方是在补充/收窄已有任务时不要用这个，改用 refine_work。",
 			Params: []liveagent.Param{
 				{Name: "request", Description: "用一句话说清对方要什么，供接手的人直接开工。", Required: true},
 				{
@@ -572,6 +699,21 @@ func directorTools() []liveagent.ToolSpec {
 				},
 				{Name: "short_title", Description: "给这件事起个对方看得懂的短名字，例如「登录页报错」。", Required: true},
 				{Name: "user_reply", Description: "现在就发给对方的一句话，必填；要说清楚你去确认的是哪件事。", Required: true},
+			},
+		},
+		{
+			Name: refineWorkTool,
+			Description: "把对方的补充、收窄或新重点挂到已有任务上继续查，不新开任务、也不占并发名额。" +
+				"例如「重点看 Release 到现在」「别看旧分支」——认准是跟进就用它。",
+			Params: []liveagent.Param{
+				{Name: "request", Description: "用一句话说清这次补充/收窄的重点。", Required: true},
+				{Name: "task_id", Description: "挂到哪件任务；不填则用你们正在聊的那件（focus），或唯一在跑的那件。"},
+				{
+					Name:        "difficulty",
+					Description: "lookup=查一下就知道；heavy=要花好几分钟。默认 lookup。",
+					Enum:        []string{string(DifficultyLookup), string(DifficultyHeavy)},
+				},
+				{Name: "user_reply", Description: "现在就发给对方的一句话；可空，平台会按任务名接一句。"},
 			},
 		},
 		{

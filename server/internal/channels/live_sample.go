@@ -22,6 +22,7 @@ import (
 const (
 	routeReply       = "reply"
 	routeDispatch    = "dispatch"
+	routeRefine      = "refine"
 	routeFallthrough = "fallthrough"
 )
 
