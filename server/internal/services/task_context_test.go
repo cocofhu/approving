@@ -41,6 +41,63 @@ func ensureTask(t *testing.T, svc *TaskContextService, run, project, user, title
 	return task
 }
 
+func TestActiveTasksAreScopedToTheConversationAndReapGhosts(t *testing.T) {
+	db := taskContextDB(t)
+	if err := db.AutoMigrate(&models.Run{}); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewTaskContextService(db)
+	now := time.Date(2026, 8, 8, 0, 0, 0, 0, time.UTC)
+	svc.SetClock(func() time.Time { return now })
+
+	scope := TaskScope{ProjectID: "p1", UserID: SyntheticQQUserID("u1"), Channel: "qq", ConversationID: "c1"}
+	live, err := svc.EnsureIdentity(EnsureTaskIdentityInput{
+		RunID: "run-live", ProjectID: scope.ProjectID, UserID: scope.UserID,
+		ShortTitle: "查主干", Status: "running",
+		OriginConversationID: "c1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.EnsureIdentity(EnsureTaskIdentityInput{
+		RunID: "run-other-chat", ProjectID: scope.ProjectID, UserID: scope.UserID,
+		ShortTitle: "别的会话的活", Status: "running",
+		OriginConversationID: "c2",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.EnsureIdentity(EnsureTaskIdentityInput{
+		RunID: "dispatch:old", ProjectID: scope.ProjectID, UserID: scope.UserID,
+		ShortTitle: "早答完的查询", Status: "running",
+		OriginConversationID: "c1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Backdate the ephemeral stub past the reap TTL.
+	if err := db.Model(&models.TaskIdentity{}).Where("run_id = ?", "dispatch:old").
+		Update("updated_at", now.Add(-StaleDispatchTTL-time.Minute)).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.Run{ID: "run-done", Status: "completed"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.EnsureIdentity(EnsureTaskIdentityInput{
+		RunID: "run-done", ProjectID: scope.ProjectID, UserID: scope.UserID,
+		ShortTitle: "Run 已结束但账本忘了", Status: "running",
+		OriginConversationID: "c1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := svc.ActiveTasksForConversation(scope, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != live.ID {
+		t.Fatalf("active = %+v want only the live task in this conversation", got)
+	}
+}
+
 func TestTaskContextMigrationIdentityResolutionAndIsolation(t *testing.T) {
 	db := taskContextDB(t)
 	svc := NewTaskContextService(db)

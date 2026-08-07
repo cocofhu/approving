@@ -652,6 +652,23 @@ func TestConcurrencyLimitIsExplainedRatherThanImposedSilently(t *testing.T) {
 	}
 }
 
+// An answered lookup must not linger in the ledger. The temporary dispatch:*
+// row is not a Run, so without an explicit close it kept showing up as one of
+// the "3 tasks still running" ghosts that poisoned later intent.
+func TestAnsweredLookupLeavesNoGhostInTheLedger(t *testing.T) {
+	g := newGPTLive(t)
+	g.m.SetLiveModel(&fakeLive{configured: true, decisions: []liveagent.Result{
+		liveDispatch("查错误处理是否完整", "错误处理"),
+	}})
+
+	g.say("m1", "项目的错误处理完整吗")
+
+	tasks := g.m.taskLedger(g.rc, InboundMessage{UserID: "u1", ConversationID: "user1"})
+	if len(tasks) != 0 {
+		t.Fatalf("answered lookup still listed as running: %+v", tasks)
+	}
+}
+
 // A scope follow-up ("重点看 Release 到现在") must hang on the focused task.
 // Opening a fourth job and asking the user which of three to cancel is exactly
 // the queue-politics reply that should never leave the conversation layer.
