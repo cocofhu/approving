@@ -46,6 +46,21 @@ func IsQQChannelUserID(userID string) bool {
 	return strings.HasPrefix(userID, "qq:")
 }
 
+// ParseQQChannelThreadUserID splits ChatThread.UserID "qq:{scene}:{conversationId}"
+// into scene and conversation id. conversationId may contain further colons.
+func ParseQQChannelThreadUserID(userID string) (scene, conversationID string, ok bool) {
+	userID = strings.TrimSpace(userID)
+	if !strings.HasPrefix(userID, "qq:") {
+		return "", "", false
+	}
+	rest := strings.TrimPrefix(userID, "qq:")
+	i := strings.IndexByte(rest, ':')
+	if i <= 0 || i >= len(rest)-1 {
+		return "", "", false
+	}
+	return rest[:i], rest[i+1:], true
+}
+
 // IsSyntheticThreadUserID reports cron/channel synthetic owners that must not trigger UI merge.
 func IsSyntheticThreadUserID(userID string) bool {
 	return IsQQChannelUserID(userID) || strings.HasPrefix(userID, "cron:")
@@ -1054,6 +1069,48 @@ func (s *PmService) SearchMemories(projectID, agentName, q string, limit int) ([
 		out = append(out, map[string]any{
 			"id": it.ID, "title": it.Title, "summary": summary, "updatedAt": it.UpdatedAt,
 		})
+	}
+	return out, nil
+}
+
+// ClearThreadContextResult summarizes what was wiped while keeping the thread row.
+type ClearThreadContextResult struct {
+	ThreadID         string `json:"threadId"`
+	MessagesCleared  int64  `json:"messagesCleared"`
+	Channel          string `json:"channel,omitempty"`
+	Scene            string `json:"scene,omitempty"`
+	ConversationID   string `json:"conversationId,omitempty"`
+	SandboxUnbound   bool   `json:"sandboxUnbound,omitempty"`
+}
+
+// ClearThreadContext deletes messages and drafts for a readable thread but keeps
+// the ChatThread row so the same QQ conversation keeps a stable identity.
+// Unlike DeleteThread, QQ channel threads are allowed.
+func (s *PmService) ClearThreadContext(projectID, threadID, userID string) (ClearThreadContextResult, error) {
+	var out ClearThreadContextResult
+	t, err := s.GetThread(projectID, threadID, userID)
+	if err != nil {
+		return out, err
+	}
+	out.ThreadID = t.ID
+	if scene, conv, ok := ParseQQChannelThreadUserID(t.UserID); ok {
+		out.Channel = "qq"
+		out.Scene = scene
+		out.ConversationID = conv
+	}
+	_ = s.db.Where("thread_id = ?", t.ID).Delete(&models.ChatTurnDraft{}).Error
+	res := s.db.Where("thread_id = ?", t.ID).Delete(&models.ChatMessage{})
+	if res.Error != nil {
+		return out, res.Error
+	}
+	out.MessagesCleared = res.RowsAffected
+	updates := map[string]any{"updated_at": time.Now().UTC()}
+	if strings.TrimSpace(t.SandboxRef) != "" {
+		updates["sandbox_ref"] = ""
+		out.SandboxUnbound = true
+	}
+	if err := s.db.Model(&models.ChatThread{}).Where("id = ?", t.ID).Updates(updates).Error; err != nil {
+		return out, err
 	}
 	return out, nil
 }

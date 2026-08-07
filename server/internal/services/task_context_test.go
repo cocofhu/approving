@@ -245,6 +245,42 @@ func TestConversationFocusRenewAndExpireWithoutGuess(t *testing.T) {
 	}
 }
 
+func TestClearConversationLedgerCancelsActiveAndDropsFocus(t *testing.T) {
+	db := taskContextDB(t)
+	svc := NewTaskContextService(db)
+	scope := TaskScope{ProjectID: "p1", UserID: SyntheticQQUserID("u1"), Channel: "qq", ConversationID: "c-clear"}
+	task, err := svc.EnsureIdentity(EnsureTaskIdentityInput{
+		RunID: "run-clear", ProjectID: scope.ProjectID, UserID: scope.UserID,
+		ShortTitle: "清上下文", Status: "active",
+		OriginChannel: scope.Channel, OriginConversationID: scope.ConversationID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetFocus(scope, task, "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.BindMessage(scope, "m-1", task); err != nil {
+		t.Fatal(err)
+	}
+	n, err := svc.ClearConversationLedger(scope.ProjectID, scope.Channel, scope.ConversationID)
+	if err != nil || n != 1 {
+		t.Fatalf("cancelled=%d err=%v", n, err)
+	}
+	var focusCount int64
+	if err := db.Model(&models.ConversationFocus{}).Count(&focusCount).Error; err != nil || focusCount != 0 {
+		t.Fatalf("focus left=%d err=%v", focusCount, err)
+	}
+	var bindCount int64
+	if err := db.Model(&models.MessageBinding{}).Count(&bindCount).Error; err != nil || bindCount != 0 {
+		t.Fatalf("bindings left=%d err=%v", bindCount, err)
+	}
+	stored, err := svc.IdentityByID(task.ID, scope.ProjectID)
+	if err != nil || stored == nil || !IsTerminalTaskStatus(stored.Status) {
+		t.Fatalf("task should be terminal: %+v err=%v", stored, err)
+	}
+}
+
 func TestRiskConfirmationOneShotDuplicateExpiredAndLanguage(t *testing.T) {
 	db := taskContextDB(t)
 	svc := NewRiskConfirmationService(db)

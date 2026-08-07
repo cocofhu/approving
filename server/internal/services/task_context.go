@@ -471,6 +471,41 @@ func (s *TaskContextService) ListProjectTasks(projectID string, q ProjectTaskQue
 	return out, nil
 }
 
+// ClearConversationLedger drops focus, message bindings, and cancels active
+// tasks for one origin conversation. Used when PM clears a Channel thread's
+// context so the next IM turn does not refine stale work.
+func (s *TaskContextService) ClearConversationLedger(projectID, channel, conversationID string) (cancelled int, err error) {
+	if s == nil || s.db == nil {
+		return 0, errors.New("task context database is unavailable")
+	}
+	projectID = strings.TrimSpace(projectID)
+	channel = strings.TrimSpace(channel)
+	conversationID = strings.TrimSpace(conversationID)
+	if projectID == "" || channel == "" || conversationID == "" {
+		return 0, errors.New("project, channel, and conversation are required")
+	}
+	_ = s.db.Where("project_id = ? AND channel = ? AND conversation_id = ?",
+		projectID, channel, conversationID).Delete(&models.ConversationFocus{}).Error
+	_ = s.db.Where("project_id = ? AND channel = ? AND conversation_id = ?",
+		projectID, channel, conversationID).Delete(&models.MessageBinding{}).Error
+
+	var active []models.TaskIdentity
+	if err := s.db.Where(
+		"project_id = ? AND origin_channel = ? AND origin_conversation_id = ? AND LOWER(status) NOT IN ?",
+		projectID, channel, conversationID,
+		[]string{"completed", "failed", "cancelled", "canceled", "done"},
+	).Find(&active).Error; err != nil {
+		return 0, err
+	}
+	for i := range active {
+		if _, cerr := s.CloseProjectTask(projectID, active[i].ID, "cancelled"); cerr != nil {
+			continue
+		}
+		cancelled++
+	}
+	return cancelled, nil
+}
+
 // CloseProjectTask manually retires a task from the project management UI.
 // status must be a terminal value (completed / cancelled / failed).
 func (s *TaskContextService) CloseProjectTask(projectID, taskID, status string) (*models.TaskIdentity, error) {

@@ -98,6 +98,7 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.GET("/projects/:id/pm/threads", h.ListPmThreads)
 		api.POST("/projects/:id/pm/threads", h.CreatePmThread)
 		api.GET("/projects/:id/pm/threads/:tid", h.GetPmThread)
+		api.DELETE("/projects/:id/pm/threads/:tid/context", h.ClearPmThreadContext)
 		api.DELETE("/projects/:id/pm/threads/:tid", h.DeletePmThread)
 		api.GET("/projects/:id/pm/threads/:tid/messages", h.ListPmMessages)
 		api.POST("/projects/:id/pm/threads/:tid/messages", h.AppendPmMessage)

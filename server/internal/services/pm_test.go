@@ -528,3 +528,59 @@ func TestIsQQChannelUserID(t *testing.T) {
 		t.Fatal("unexpected channel match")
 	}
 }
+
+func TestParseQQChannelThreadUserID(t *testing.T) {
+	scene, conv, ok := ParseQQChannelThreadUserID("qq:c2c:user-1")
+	if !ok || scene != "c2c" || conv != "user-1" {
+		t.Fatalf("got scene=%q conv=%q ok=%v", scene, conv, ok)
+	}
+	scene, conv, ok = ParseQQChannelThreadUserID("qq:group:a:b")
+	if !ok || scene != "group" || conv != "a:b" {
+		t.Fatalf("multi-colon conv: scene=%q conv=%q ok=%v", scene, conv, ok)
+	}
+	if _, _, ok := ParseQQChannelThreadUserID("alice"); ok {
+		t.Fatal("web user must not parse")
+	}
+}
+
+func TestClearThreadContextKeepsChannelThread(t *testing.T) {
+	db := setupPmDB(t)
+	pm := NewPmService(db, NewSkillService(t.TempDir()))
+	p, err := NewProjectService(db).Create("P-clear", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	th, err := pm.CreateThread(p.ID, "qq:c2c:u9", "渠道会话", "agent", "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pm.AppendMessage(th.ID, "user", "你好", nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pm.AppendMessage(th.ID, "assistant", "在", nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Model(&th).Update("sandbox_ref", "42").Error
+
+	got, err := pm.ClearThreadContext(p.ID, th.ID, "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.MessagesCleared != 2 || got.ConversationID != "u9" || got.Scene != "c2c" || !got.SandboxUnbound {
+		t.Fatalf("clear result = %+v", got)
+	}
+	if _, err := pm.GetThreadByID(th.ID); err != nil {
+		t.Fatal("thread row must remain")
+	}
+	msgs, err := pm.ListMessages(th.ID)
+	if err != nil || len(msgs) != 0 {
+		t.Fatalf("messages should be empty, got %d err=%v", len(msgs), err)
+	}
+	var stored models.ChatThread
+	if err := db.First(&stored, "id = ?", th.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.SandboxRef != "" {
+		t.Fatalf("sandbox_ref should be cleared, got %q", stored.SandboxRef)
+	}
+}
