@@ -30,7 +30,10 @@ type fakeLive struct {
 	// report answers the phrasing call. nil leaves it unanswered, which is what
 	// production does when the endpoint is slow: the conclusion goes out in the
 	// work layer's own words.
-	report  *liveagent.Result
+	report *liveagent.Result
+	// reports, when set, are consumed in order for successive no-tools calls
+	// (retry ack then conclusion phrasing).
+	reports []liveagent.Result
 	seen    [][]liveagent.Message
 	systems []string
 }
@@ -43,6 +46,11 @@ func (f *fakeLive) Complete(_ context.Context, req liveagent.Request) (liveagent
 	if len(req.Tools) == 0 {
 		if f.err != nil {
 			return liveagent.Result{}, f.err
+		}
+		if len(f.reports) > 0 {
+			next := f.reports[0]
+			f.reports = f.reports[1:]
+			return next, nil
 		}
 		if f.report == nil {
 			return liveagent.Result{}, errors.New("fakeLive: no phrasing configured")
@@ -304,8 +312,46 @@ func TestRetryAffirmationUsesGMTemplateWhenLiveCannotPhrase(t *testing.T) {
 	if len(got) < 1 || strings.Contains(got[0], "确认") {
 		t.Fatalf("want GM retry template without 确认, got %v", got)
 	}
-	if !strings.Contains(got[0], "重新开干") {
-		t.Fatalf("template should sound like a GM restarting work: %q", got[0])
+	if got[0] != "行，那事我让人重新开干，有进展回你。" {
+		t.Fatalf("template must not re-quote the ledger title: %q", got[0])
+	}
+}
+
+func TestRetryAffirmationDropsAckThatQuotesLongTitle(t *testing.T) {
+	g := newGPTLive(t)
+	title := "重新执行上次因服务重启而中断的 Approvin"
+	if _, err := g.m.taskContext.EnsureIdentity(services.EnsureTaskIdentityInput{
+		RunID: "run-fail-retry3", ProjectID: "proj", UserID: services.SyntheticQQUserID("u1"),
+		ShortTitle: title, Status: "failed",
+		OriginalRequirement: "重新执行上次因服务重启而中断的 Approving 错误处理与日志链路的修复",
+		OriginChannel:       "qq", OriginScene: string(SceneC2C), OriginConversationID: "user1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	bad := "行，「" + title + "」我让人重新开干，有进展回你。"
+	// First no-tools call phrases the retry ack (rejected); later conclusion
+	// phrasing gets a clean line so it does not pollute the assertion.
+	g.m.SetLiveModel(&fakeLive{configured: true, reports: []liveagent.Result{
+		{Text: bad},
+		{Text: "那事还在跑，有结果回你。"},
+	}})
+	g.say("m-retry3", "重试下")
+	got := sentTexts(g.fa)
+	if len(got) < 1 || got[0] != "行，那事我让人重新开干，有进展回你。" {
+		t.Fatalf("quoted long title must fall back to short ack, got %v", got)
+	}
+	if strings.Contains(got[0], "重新执行") || strings.Contains(got[0], "「") {
+		t.Fatalf("ack still repeats the brief: %q", got[0])
+	}
+}
+
+func TestRetryAckEchoesBrief(t *testing.T) {
+	title := "重新执行上次因服务重启而中断的 Approvin"
+	if !retryAckEchoesBrief("行，「"+title+"」我让人重新开干，有进展回你。", title, "") {
+		t.Fatal("quoted title must count as echo")
+	}
+	if retryAckEchoesBrief("行，那事我让人重新开干，有进展回你。", title, "") {
+		t.Fatal("short GM template must not count as echo")
 	}
 }
 

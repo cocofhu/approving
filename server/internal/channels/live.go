@@ -260,18 +260,21 @@ func (m *Manager) routeRetryAffirmation(ctx context.Context, rc *runningChannel,
 		return liveOutcome{}, false
 	}
 	title := services.SanitizeShortTitle(failed.ShortTitle)
+	req := strings.TrimSpace(failed.OriginalRequirement)
+	// Context for the fast model only — the user already said retry, so the
+	// spoken line must not paste the ledger title back at them.
 	userContent := "对方说：" + strings.TrimSpace(in.Text) + "\n"
 	if title != "" {
-		userContent += "要重跑的事：" + title + "\n"
+		userContent += "（内部参考，勿原样复述）要重跑的事：" + title + "\n"
 	}
-	if req := strings.TrimSpace(failed.OriginalRequirement); req != "" {
-		userContent += "原来的要求：" + truncateRunes(req, 200) + "\n"
+	if req != "" {
+		userContent += "（内部参考，勿原样复述）原来的要求：" + truncateRunes(req, 200) + "\n"
 	}
 	ack := strings.TrimSpace(m.phraseThroughLive(ctx, retryAckPhrasePrompt, userContent))
-	if ack != "" {
+	if ack != "" && !retryAckEchoesBrief(ack, title, req) {
 		rec.flag("retry_ack_live")
 	} else {
-		ack = gmRetryAck(title)
+		ack = gmRetryAck()
 		rec.flag("retry_ack_template")
 	}
 	return m.dispatchRetryFromLedger(ctx, rc, in, rec, ack)
@@ -296,8 +299,8 @@ func (m *Manager) dispatchRetryFromLedger(ctx context.Context, rc *runningChanne
 	}
 	title := services.SanitizeShortTitle(failed.ShortTitle)
 	userReply := strings.TrimSpace(preferredAck)
-	if userReply == "" {
-		userReply = gmRetryAck(title)
+	if userReply == "" || retryAckEchoesBrief(userReply, title, brief) {
+		userReply = gmRetryAck()
 	}
 	outcome, refused := m.dispatchWork(ctx, rc, in, map[string]string{
 		"request": brief, "short_title": title,
@@ -313,12 +316,36 @@ func (m *Manager) dispatchRetryFromLedger(ctx context.Context, rc *runningChanne
 	return outcome, true
 }
 
-func gmRetryAck(title string) string {
-	title = services.SanitizeShortTitle(title)
-	if title != "" {
-		return "行，「" + title + "」我让人重新开干，有进展回你。"
-	}
+func gmRetryAck() string {
+	// The other person just affirmed retry — naming the whole brief again is
+	// noise (and often a truncated requirement, not a real short title).
 	return "行，那事我让人重新开干，有进展回你。"
+}
+
+// retryAckEchoesBrief is true when the spoken line pastes the ledger title /
+// requirement back — the failure mode behind quoting
+// 「重新执行上次因服务重启而中断的 Approvin」.
+func retryAckEchoesBrief(ack, title, req string) bool {
+	ack = strings.TrimSpace(ack)
+	if ack == "" {
+		return false
+	}
+	if strings.Contains(ack, "「") || strings.Contains(ack, "」") {
+		return true
+	}
+	for _, s := range []string{title, req} {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if len([]rune(s)) >= 6 && strings.Contains(ack, s) {
+			return true
+		}
+		if r := []rune(s); len(r) >= 10 && strings.Contains(ack, string(r[:10])) {
+			return true
+		}
+	}
+	return false
 }
 
 // phraseThroughLive asks the fast model for one short IM line. Empty means the
@@ -359,6 +386,7 @@ const retryAckPhrasePrompt = `你是这个项目的负责人本人，正在 IM �
 
 规矩：
 - 像同事当面说，不要工单腔，不要「我这就去确认」「收到」「稍等」。
+- 不要复述任务标题或原要求，也不要用书名号/引号把标题括回去——对方刚说了重试，知道是哪件；用「那事」「那块」指代即可。
 - 不要提优先级、任务编号、工作流、沙箱、跟进页面、Approving。
 - 不要说「已经跑完了 / 已经重新跑过了」——现在只是重新开跑。
 - 只输出要发给对方的那句话。`
@@ -826,9 +854,7 @@ func gateAcknowledgement(reply, shortTitle, userText string) (string, []string) 
 	// A retry affirmation must never read as a vague "确认" — the user already
 	// chose. Name the work when we can.
 	if looksLikeRetryAffirmation(userText) {
-		if title != "" && !echoesUserText(title, userText) {
-			return "好，「" + title + "」我重新安排，有进展回你。", flags
-		}
+		// Don't paste the ledger title — retry affirmations already share context.
 		return "好，我重新安排，有进展回你。", flags
 	}
 	// Quoting a real short title ("登录页报错") names the work. Quoting the
