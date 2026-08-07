@@ -257,14 +257,14 @@ func outcomeFallbackText(identity *models.TaskIdentity, outcome TaskOutcome, lan
 		reason := humanizeFailureReason(outcome.FailureReason, en)
 		if en {
 			if title == "" {
-				return "That one didn't go through: " + reason + " Want me to try again?"
+				return "That one didn't go through: " + reason + " Want me to retry, change the approach, or leave it for now?"
 			}
-			return "\"" + title + "\" didn't go through: " + reason + " Want me to try again?"
+			return "\"" + title + "\" didn't go through: " + reason + " Want me to retry, change the approach, or leave it for now?"
 		}
 		if title == "" {
-			return "刚才那个没做成：" + reason + "要我再试一次吗？"
+			return "刚才那个没做成：" + reason + "你看是重试、换个做法，还是先搁置？"
 		}
-		return title + "没做成：" + reason + "要我再试一次吗？"
+		return title + "没做成：" + reason + "你看是重试、换个做法，还是先搁置？"
 	}
 }
 
