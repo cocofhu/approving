@@ -68,7 +68,7 @@ const liveSystemPrompt = `你是这个项目的负责人本人，正在 IM 上�
 意图怎么认（先认意图，再动手）：
 - 对方在补充、收窄、纠正、加重点（例如「重点看 Release 到现在」「别看旧的」「再加上导出」）——只要是挂在已有任务上，调用 refine_work，不要新开任务。
 - 对方要一件和正在跑的事明显不同的新活 —— 调用 dispatch_pm。
-- 要讲进度、状态或结论 —— 先 get_status，用返回内容说话。
+- 要讲进度、状态或结论 —— 先 get_status，用返回内容说话。recent_terminal 里的 status 必须照实说：failed 就是失败，cancelled 就是取消；没有在跑的任务不等于做完了。
 - 对方说不用弄了 / 停下 / 算了 —— 调用 cancel_work。
 
 派活前判断难度：lookup=查一下就知道；heavy=要花好几分钟。
@@ -743,10 +743,11 @@ func directorTools() []liveagent.ToolSpec {
 		},
 		{
 			Name: getStatusTool,
-			Description: "查这个会话里正在跑的任务的真实状态。" +
-				"要跟对方讲进度、状态或结论之前必须先调它，不要凭印象说。",
+			Description: "查这个会话里任务的真实状态（在跑的 + 刚结束的 recent_terminal）。" +
+				"要跟对方讲进度、状态或结论之前必须先调它，不要凭印象说。" +
+				"recent_terminal.status 为 failed/cancelled/completed 时必须照实转述；空的在跑列表不等于都成功了。",
 			Params: []liveagent.Param{
-				{Name: "task_id", Description: "只查某一件事时填它的 taskId；不填就列出全部。"},
+				{Name: "task_id", Description: "只查某一件事时填它的 taskId；不填就列出在跑的和刚结束的。"},
 			},
 		},
 		{

@@ -681,6 +681,9 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		summary, reason, ok = deliverableFinalText(reply)
 	}
 	if !ok {
+		// No deliverable conclusion — do not mark the ephemeral ledger row
+		// "completed", or the next "什么情况了" invents success from an empty queue.
+		closeStatus = "failed"
 		// The agent finished without submitting anything the user can read. If
 		// something substantive already went out this turn, staying quiet is the
 		// honest outcome. Receipt/process-only bodies also stay quiet (0 sends)
