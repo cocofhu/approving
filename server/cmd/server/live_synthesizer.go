@@ -31,6 +31,7 @@ const synthesisSystemPrompt = `你是这个项目的负责人本人，正在 IM 
 - 禁止「想看细节的话跟我说」「详情再说」这类把实质内容推到下一轮的空话。
 - 不要出现任务编号、工作流名、执行环境、工具名这些内部说法。
 - 不要说「请前往 Approving 查看」之类把人打发走的话。
+- 若 brief 只是刚重新开跑或还在队列/执行中，用现在进行时（正在重试、刚派下去），禁止「已经重试过了 / 重新重试过了」。
 - 只输出要发出去的话，不要加前缀、标题或解释。`
 
 // newLiveSynthesizer phrases a background event through the conversation model,

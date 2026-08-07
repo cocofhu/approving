@@ -268,21 +268,15 @@ func (m *Manager) SendRunAcceptanceAck(ctx context.Context, ack RunAcceptanceAck
 	return result, err
 }
 
-// runAcceptanceText confirms a delegation the way a colleague would: what was
-// picked up, and that the user is free to keep talking. No ticket header, no
-// promise to "report substantive progress".
+// runAcceptanceText is the last-resort line when a Run is accepted but the
+// conversation layer did not already speak. Keep it short and free of pasted
+// ledger titles — long short_title values are truncated requirements, not names.
 func runAcceptanceText(shortTitle, language string) string {
-	title := services.SanitizeShortTitle(shortTitle)
+	_ = shortTitle
 	if services.NormalizeLanguage(language) == "en" {
-		if title == "" {
-			return "Got it, I'll take that one and come back when it's done. Feel free to keep chatting in the meantime."
-		}
-		return "Got it — I'll go work on \"" + title + "\" and tell you when it's done. Feel free to keep chatting in the meantime."
+		return "Got it, I'll take that one and come back when it's done. Feel free to keep chatting in the meantime."
 	}
-	if title == "" {
-		return "好，我去弄，完了告诉你。你可以接着问别的。"
-	}
-	return "好，" + title + "这块我去弄，完了告诉你。你可以接着问别的。"
+	return "好，那事我去弄，完了告诉你。你可以接着问别的。"
 }
 
 func runAcceptanceDedupeKey(runID, conversationID, userID string) string {

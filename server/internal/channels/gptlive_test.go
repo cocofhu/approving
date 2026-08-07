@@ -30,7 +30,10 @@ type fakeLive struct {
 	// report answers the phrasing call. nil leaves it unanswered, which is what
 	// production does when the endpoint is slow: the conclusion goes out in the
 	// work layer's own words.
-	report  *liveagent.Result
+	report *liveagent.Result
+	// reports, when set, are consumed in order for successive no-tools calls
+	// (retry ack then conclusion phrasing).
+	reports []liveagent.Result
 	seen    [][]liveagent.Message
 	systems []string
 }
@@ -41,8 +44,12 @@ func (f *fakeLive) Timeout() time.Duration { return f.timeout }
 
 func (f *fakeLive) Complete(_ context.Context, req liveagent.Request) (liveagent.Result, error) {
 	if len(req.Tools) == 0 {
-		if f.err != nil {
-			return liveagent.Result{}, f.err
+		// Phrasing is a separate hop from tool routing: production may still
+		// get a short ack out after a timed-out routing call.
+		if len(f.reports) > 0 {
+			next := f.reports[0]
+			f.reports = f.reports[1:]
+			return next, nil
 		}
 		if f.report == nil {
 			return liveagent.Result{}, errors.New("fakeLive: no phrasing configured")
@@ -64,12 +71,13 @@ func (f *fakeLive) Complete(_ context.Context, req liveagent.Request) (liveagent
 
 func liveAnswer(text string) liveagent.Result { return liveagent.Result{Text: text} }
 
-// liveDispatch scripts a lookup delegation. The platform always acknowledges
-// sandbox-bound work first; user_reply may be empty so the gate fills one in.
+// liveDispatch scripts a lookup delegation. user_reply is required in production;
+// tests supply a Live-authored line so the platform never stitches one.
 func liveDispatch(request, title string) liveagent.Result {
 	return liveagent.Result{ToolName: dispatchPMTool, Args: map[string]string{
 		"request": request, "difficulty": string(DifficultyLookup),
 		"short_title": title,
+		"user_reply":  "行，那块我让人去查，有进展回你。",
 	}}
 }
 
@@ -288,7 +296,7 @@ func TestRetryAffirmationAfterFailureRedispatchesInsteadOfConfirmAck(t *testing.
 	}
 }
 
-func TestRetryAffirmationUsesGMTemplateWhenLiveCannotPhrase(t *testing.T) {
+func TestRetryAffirmationSkipsAckWhenLiveCannotPhrase(t *testing.T) {
 	g := newGPTLive(t)
 	if _, err := g.m.taskContext.EnsureIdentity(services.EnsureTaskIdentityInput{
 		RunID: "run-fail-retry2", ProjectID: "proj", UserID: services.SyntheticQQUserID("u1"),
@@ -301,11 +309,54 @@ func TestRetryAffirmationUsesGMTemplateWhenLiveCannotPhrase(t *testing.T) {
 	g.m.SetLiveModel(&fakeLive{configured: true, err: liveagent.ErrBudgetExhausted})
 	g.say("m-retry2", "重跑啊")
 	got := sentTexts(g.fa)
-	if len(got) < 1 || strings.Contains(got[0], "确认") {
-		t.Fatalf("want GM retry template without 确认, got %v", got)
+	for _, line := range got {
+		if strings.Contains(line, "确认") || strings.Contains(line, "重新开干") || strings.Contains(line, "重新安排") {
+			t.Fatalf("must not stitch a platform retry sentence when Live fails: %v", got)
+		}
 	}
-	if !strings.Contains(got[0], "重新开干") {
-		t.Fatalf("template should sound like a GM restarting work: %q", got[0])
+	if len(g.agent) != 1 {
+		t.Fatalf("retry must still reach the sandbox agent, got %d turns", len(g.agent))
+	}
+}
+
+func TestRetryAffirmationDropsAckThatQuotesLongTitle(t *testing.T) {
+	g := newGPTLive(t)
+	title := "重新执行上次因服务重启而中断的 Approvin"
+	if _, err := g.m.taskContext.EnsureIdentity(services.EnsureTaskIdentityInput{
+		RunID: "run-fail-retry3", ProjectID: "proj", UserID: services.SyntheticQQUserID("u1"),
+		ShortTitle: title, Status: "failed",
+		OriginalRequirement: "重新执行上次因服务重启而中断的 Approving 错误处理与日志链路的修复",
+		OriginChannel:       "qq", OriginScene: string(SceneC2C), OriginConversationID: "user1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	bad := "行，「" + title + "」我让人重新开干，有进展回你。"
+	g.m.SetLiveModel(&fakeLive{configured: true, reports: []liveagent.Result{
+		{Text: bad},
+		{Text: "那事还在跑，有结果回你。"},
+	}})
+	g.say("m-retry3", "重试下")
+	got := sentTexts(g.fa)
+	for _, line := range got {
+		if strings.Contains(line, "「") || strings.Contains(line, "重新执行") {
+			t.Fatalf("quoted long title must not be sent: %v", got)
+		}
+	}
+	if len(g.agent) != 1 {
+		t.Fatalf("retry must still dispatch, got %d turns", len(g.agent))
+	}
+}
+
+func TestRetryAckUnusable(t *testing.T) {
+	title := "重新执行上次因服务重启而中断的 Approvin"
+	if !retryAckUnusable("行，「"+title+"」我让人重新开干，有进展回你。", title, "") {
+		t.Fatal("quoted title must be unusable")
+	}
+	if !retryAckUnusable("已经重新重试过了，目前任务已经进到队列里了。", title, "") {
+		t.Fatal("past-tense already-retried must be unusable")
+	}
+	if retryAckUnusable("行，那事我正让人重新开干，有进展回你。", title, "") {
+		t.Fatal("in-progress Live line must stay usable")
 	}
 }
 
@@ -351,30 +402,32 @@ func TestLiveCallTimeoutFollowsConfiguredLiveTimeout(t *testing.T) {
 	}
 }
 
-func TestFallthroughAckNamesFocusTaskNotUserQuestion(t *testing.T) {
+func TestFallthroughAckUsesLiveNotStitchedConfirm(t *testing.T) {
 	g := newGPTLive(t)
 	identity := g.seedTask("run-focus1", "错误处理完整性")
 	scope := g.m.taskScopeFor(g.rc, InboundMessage{UserID: "u1", ConversationID: "user1"})
 	if _, err := g.m.taskContext.SetFocus(scope, identity, ""); err != nil {
 		t.Fatal(err)
 	}
-	g.m.SetLiveModel(&fakeLive{configured: true, err: liveagent.ErrBudgetExhausted})
+	// Routing fails; phrasing (no tools) still works via reports.
+	ack := "错误处理那块我让人接着查，有进展回你。"
+	g.m.SetLiveModel(&fakeLive{
+		configured: true,
+		err:        liveagent.ErrBudgetExhausted,
+		reports:    []liveagent.Result{{Text: ack}},
+	})
 	g.say("m-fix", "你看看怎么修复下呢")
 	got := sentTexts(g.fa)
-	if len(got) < 1 {
-		t.Fatalf("sends = %v", got)
+	if len(got) < 1 || got[0] != ack {
+		t.Fatalf("fallthrough ack should be Live-phrased, got %v want %q first", got, ack)
 	}
-	if !strings.Contains(got[0], "错误处理完整性") {
-		t.Fatalf("fallthrough ack should name focus task: %q", got[0])
-	}
-	if strings.Contains(got[0], "怎么修复") {
-		t.Fatalf("fallthrough ack echoed the follow-up: %q", got[0])
+	if strings.Contains(got[0], "确认") || strings.Contains(got[0], "怎么修复") {
+		t.Fatalf("fallthrough ack still stitched/echoed: %q", got[0])
 	}
 }
 
-// A model that fails must cost latency, not the reply. The fallthrough used to
-// be silent until the sandbox answered, which is how a timed-out Live call
-// looked like the platform ignored the user — so we ack first, then the agent.
+// A model that fails must still hand the turn to the agent. Platform must not
+// stamp 「我这就去确认」when Live cannot phrase the fallthrough either.
 func TestConversationModelFailureStillAnswersTheUser(t *testing.T) {
 	g := newGPTLive(t)
 	g.m.SetLiveModel(&fakeLive{configured: true, err: liveagent.ErrBudgetExhausted})
@@ -385,11 +438,8 @@ func TestConversationModelFailureStillAnswersTheUser(t *testing.T) {
 		t.Fatalf("a failed model call swallowed the message: %v", g.agent)
 	}
 	got := sentTexts(g.fa)
-	if len(got) != 2 || got[0] != "我这就去确认，有结果马上回你。" || got[1] != "agent-answer" {
-		t.Fatalf("sends = %v want plain fallthrough ack then the agent's answer", got)
-	}
-	if strings.Contains(got[0], "什么进度了") {
-		t.Fatalf("fallthrough ack echoed the user's question: %q", got[0])
+	if len(got) != 1 || got[0] != "agent-answer" {
+		t.Fatalf("sends = %v want only the agent's answer (no stitched confirm ack)", got)
 	}
 }
 
@@ -422,7 +472,7 @@ func TestWorkBriefDoesNotReplayTheConversation(t *testing.T) {
 		"user: 登录页那个还记得吗",
 		"assistant: 登录页那条我记得，你说的是首屏。",
 		"user: 去仓库确认一下改了没",
-		"assistant: 「首屏改动」我这就去确认，有结果马上回你。",
+		"assistant: 行，那块我让人去查，有进展回你。",
 		"assistant: agent-answer",
 	}
 	got := g.transcript()
@@ -535,21 +585,12 @@ func TestHeavyWorkIsAcknowledgedBeforeItStarts(t *testing.T) {
 	assertNoBannedOutbound(t, got)
 }
 
-// An acknowledgement that promises nothing is replaced and counted. Banning the
-// old fixed template is not enough: a model saying the same empty thing in its
-// own words leaves the user exactly as uninformed.
-func TestEmptyAcknowledgementIsReplacedAndFlagged(t *testing.T) {
+// Empty / filler acknowledgements are rejected — the platform must not stitch a
+// 「确认」sentence to stand in for missing Live voice.
+func TestEmptyAcknowledgementIsRejectedNotStitched(t *testing.T) {
 	text, flags := gateAcknowledgement("好的，稍等，我看一下", "登录页报错", "登录页报 500")
-	if !strings.Contains(text, "登录页报错") {
-		t.Fatalf("replacement names nothing the user can hold us to: %q", text)
-	}
-	if len(flags) != 1 || flags[0] != "empty_ack" {
-		t.Fatalf("flags = %v want the empty acknowledgement counted", flags)
-	}
-	for _, banned := range bannedOutboundPhrases {
-		if strings.Contains(text, banned) {
-			t.Fatalf("replacement reintroduced banned copy %q: %q", banned, text)
-		}
+	if text != "" || len(flags) != 1 || flags[0] != "empty_ack" {
+		t.Fatalf("filler ack must be rejected, got %q flags=%v", text, flags)
 	}
 
 	kept, flags := gateAcknowledgement("我去翻一下登录页那个 500，翻到就回你。", "登录页报错", "")
@@ -558,12 +599,12 @@ func TestEmptyAcknowledgementIsReplacedAndFlagged(t *testing.T) {
 	}
 
 	plain, flags := gateAcknowledgement("", "", "项目的错误处理完整吗")
-	if plain != "我这就去确认，有结果马上回你。" || len(flags) != 1 {
-		t.Fatalf("empty title should not quote the user's question: %q flags=%v", plain, flags)
+	if plain != "" || len(flags) != 1 {
+		t.Fatalf("empty ack must stay empty (no stitched confirm): %q flags=%v", plain, flags)
 	}
-	echo, flags := gateAcknowledgement("", "项目的错误处理完整吗", "项目的错误处理完整吗")
-	if strings.Contains(echo, "「") || len(flags) != 1 {
-		t.Fatalf("title that repeats the question should stay unquoted: %q flags=%v", echo, flags)
+	confirm, flags := gateAcknowledgement("我这就去确认，有结果马上回你。", "登录页报错", "")
+	if confirm != "" || len(flags) != 1 {
+		t.Fatalf("confirm stamp must be rejected: %q flags=%v", confirm, flags)
 	}
 }
 
@@ -675,8 +716,8 @@ func TestLookupDispatchAcknowledgesBeforeTheAgent(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("sends = %v want an acknowledgement then the conclusion", got)
 	}
-	if !strings.Contains(got[0], "登录页报错") {
-		t.Fatalf("acknowledgement names nothing verifiable: %q", got[0])
+	if strings.Contains(got[0], "确认") || strings.TrimSpace(got[0]) == "" {
+		t.Fatalf("acknowledgement must be Live-authored, not a confirm stamp: %q", got[0])
 	}
 	if got[1] != "agent-answer" {
 		t.Fatalf("conclusion = %q want agent-answer", got[1])
@@ -738,8 +779,8 @@ func TestProgressNamesTheTaskOnlyWhenSeveralAreRunning(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("sends = %v want ack, labelled update, and conclusion", got)
 	}
-	if !strings.Contains(got[0], "导出超时") {
-		t.Fatalf("acknowledgement names nothing verifiable: %q", got[0])
+	if strings.Contains(got[0], "确认") || strings.TrimSpace(got[0]) == "" {
+		t.Fatalf("acknowledgement must be Live-authored, not a confirm stamp: %q", got[0])
 	}
 	if !strings.HasPrefix(got[1], "「登录页报错」") {
 		t.Fatalf("update does not say which task moved: %q", got[1])

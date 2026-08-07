@@ -71,7 +71,7 @@ const liveSystemPrompt = `你是这个项目的负责人本人，正在 IM 上�
 - 对方要一件和正在跑的事明显不同的新活 —— 调用 dispatch_pm。
 - 要讲进度、状态或结论 —— 先 get_status，用返回内容说话。recent_terminal 里的 status 必须照实说：failed 就是失败，cancelled 就是取消；没有在跑的任务不等于做完了。
 - 对方说不用弄了 / 停下 / 算了 —— 调用 cancel_work。
-- 对方明确说重跑 / 再试 / 继续做刚才失败或取消的那件 —— 立刻 dispatch_pm（request 用原要求，short_title 沿用原标题），user_reply 写成「好，重新派下去了」；不要只回「我这就去确认」，也不要再问一遍。
+- 对方明确说重跑 / 再试 / 继续做刚才失败或取消的那件 —— 立刻 dispatch_pm（request 用原要求，short_title 沿用原标题）；user_reply 用活人话说明你正派人重新去做（时态是正在重试，不是已经重试完）；不要复述完整任务标题；不要只回空确认。
 
 派活前判断难度：lookup=查一下就知道；heavy=要花好几分钟。
 dispatch_pm / refine_work 都要用 user_reply 先接一句；平台会先发出去再去查。
@@ -224,16 +224,22 @@ func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel,
 }
 
 // ackFallthrough tells the user something is happening when the conversation
-// layer could not finish and the sandbox is about to take over. Without it a
-// timed-out Live call looks like the platform ignored the message.
-//
-// This text is a platform stamp, not model output: Live already failed (timeout
-// / error). Prefer the focus task's short title so a follow-up like「怎么修复」
-// still names the work; never echo the user's raw question as the title.
+// layer could not finish and the sandbox is about to take over. The spoken
+// line must come from the fast model — never a platform-stitched「确认」stamp.
+// If phrasing also fails, stay silent; the sandbox answer still follows.
 func (m *Manager) ackFallthrough(ctx context.Context, rc *runningChannel, in InboundMessage, rec *sampleRecorder) {
-	text, flags := gateAcknowledgement("", m.focusShortTitle(rc, in), in.Text)
-	rec.flag(flags...)
-	rec.flag("fallthrough_ack")
+	title := m.focusShortTitle(rc, in)
+	user := "对方说：" + strings.TrimSpace(in.Text) + "\n"
+	if title != "" && !echoesUserText(title, in.Text) {
+		user += "（内部参考，勿原样复述）正在跟进的事：" + title + "\n"
+	}
+	user += "会话层这一步没谈完，工作层马上接手。用一两句人话接住对方。"
+	text := strings.TrimSpace(m.phraseThroughLive(ctx, fallthroughAckPhrasePrompt, user))
+	if text == "" || strings.Contains(text, "确认") || spokenLineSoundsFinished(text) {
+		rec.flag("fallthrough_ack_omitted")
+		return
+	}
+	rec.flag("fallthrough_ack_live")
 	sent := m.sendOutboundResult(ctx, rc, OutboundMessage{
 		Scene: in.Scene, ConversationID: in.ConversationID,
 		ReplyToMessageID: in.MessageID, Text: text,
@@ -260,25 +266,29 @@ func (m *Manager) routeRetryAffirmation(ctx context.Context, rc *runningChannel,
 		return liveOutcome{}, false
 	}
 	title := services.SanitizeShortTitle(failed.ShortTitle)
+	req := strings.TrimSpace(failed.OriginalRequirement)
+	// Context for the fast model only — the user already said retry, so the
+	// spoken line must not paste the ledger title back at them.
 	userContent := "对方说：" + strings.TrimSpace(in.Text) + "\n"
 	if title != "" {
-		userContent += "要重跑的事：" + title + "\n"
+		userContent += "（内部参考，勿原样复述）要重跑的事：" + title + "\n"
 	}
-	if req := strings.TrimSpace(failed.OriginalRequirement); req != "" {
-		userContent += "原来的要求：" + truncateRunes(req, 200) + "\n"
+	if req != "" {
+		userContent += "（内部参考，勿原样复述）原来的要求：" + truncateRunes(req, 200) + "\n"
 	}
 	ack := strings.TrimSpace(m.phraseThroughLive(ctx, retryAckPhrasePrompt, userContent))
-	if ack != "" {
-		rec.flag("retry_ack_live")
+	if retryAckUnusable(ack, title, req) {
+		ack = ""
+		rec.flag("retry_ack_skipped")
 	} else {
-		ack = gmRetryAck(title)
-		rec.flag("retry_ack_template")
+		rec.flag("retry_ack_live")
 	}
 	return m.dispatchRetryFromLedger(ctx, rc, in, rec, ack)
 }
 
 // dispatchRetryFromLedger rebuilds a dispatch from a recently failed/cancelled
-// task. preferredAck is the user-facing line (preferably Live-phrased).
+// task. preferredAck must already be Live-phrased; empty means send no ack
+// (never a platform-stitched sentence).
 func (m *Manager) dispatchRetryFromLedger(ctx context.Context, rc *runningChannel, in InboundMessage, rec *sampleRecorder, preferredAck string) (liveOutcome, bool) {
 	if !looksLikeRetryAffirmation(in.Text) {
 		return liveOutcome{}, false
@@ -296,13 +306,14 @@ func (m *Manager) dispatchRetryFromLedger(ctx context.Context, rc *runningChanne
 	}
 	title := services.SanitizeShortTitle(failed.ShortTitle)
 	userReply := strings.TrimSpace(preferredAck)
-	if userReply == "" {
-		userReply = gmRetryAck(title)
+	if retryAckUnusable(userReply, title, brief) {
+		userReply = ""
 	}
 	outcome, refused := m.dispatchWork(ctx, rc, in, map[string]string{
 		"request": brief, "short_title": title,
 		"difficulty": string(DifficultyHeavy),
 		"user_reply": userReply,
+		"ack_mode":   "live_only",
 	}, rec)
 	if refused != "" {
 		log.Info().Str("project", rc.cfg.ProjectID).Str("trace", in.TraceID).
@@ -313,16 +324,60 @@ func (m *Manager) dispatchRetryFromLedger(ctx context.Context, rc *runningChanne
 	return outcome, true
 }
 
-func gmRetryAck(title string) string {
-	title = services.SanitizeShortTitle(title)
-	if title != "" {
-		return "行，「" + title + "」我让人重新开干，有进展回你。"
+// retryAckUnusable rejects empty lines, title echoes, and "already done" tense.
+func retryAckUnusable(ack, title, req string) bool {
+	ack = strings.TrimSpace(ack)
+	if ack == "" || strings.Contains(ack, "确认") {
+		return true
 	}
-	return "行，那事我让人重新开干，有进展回你。"
+	if retryAckEchoesBrief(ack, title, req) {
+		return true
+	}
+	return spokenLineSoundsFinished(ack)
+}
+
+// spokenLineSoundsFinished catches "already done / already retried" tense on
+// lines that should mean work is just starting or still in flight.
+func spokenLineSoundsFinished(text string) bool {
+	for _, bad := range []string{
+		"已经重新", "已经重试", "重新重试", "已经跑完", "已经重新跑过",
+		"已经派完", "已经开完", "已经进到队列", "已经在队列", "已经修好", "已经完成",
+	} {
+		if strings.Contains(text, bad) {
+			return true
+		}
+	}
+	return false
+}
+
+// retryAckEchoesBrief is true when the spoken line pastes the ledger title /
+// requirement back — the failure mode behind quoting
+// 「重新执行上次因服务重启而中断的 Approvin」.
+func retryAckEchoesBrief(ack, title, req string) bool {
+	ack = strings.TrimSpace(ack)
+	if ack == "" {
+		return false
+	}
+	if strings.Contains(ack, "「") || strings.Contains(ack, "」") {
+		return true
+	}
+	for _, s := range []string{title, req} {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if len([]rune(s)) >= 6 && strings.Contains(ack, s) {
+			return true
+		}
+		if r := []rune(s); len(r) >= 10 && strings.Contains(ack, string(r[:10])) {
+			return true
+		}
+	}
+	return false
 }
 
 // phraseThroughLive asks the fast model for one short IM line. Empty means the
-// caller should use a GM-toned template — never the hollow 「确认」 stamp.
+// caller must not invent a platform sentence to stand in for it.
 func (m *Manager) phraseThroughLive(ctx context.Context, system, user string) string {
 	if m == nil || m.live == nil || !m.live.Configured() {
 		return ""
@@ -332,7 +387,7 @@ func (m *Manager) phraseThroughLive(ctx context.Context, system, user string) st
 		return ""
 	}
 	// Keep this hop short: it is only one sentence. A stuck Ollama must not
-	// burn the full live_timeout before we fall back to the GM template.
+	// burn the full live_timeout before we skip the spoken ack.
 	timeout := 20 * time.Second
 	if d := m.live.Timeout(); d > 0 && d < timeout {
 		timeout = d
@@ -346,21 +401,50 @@ func (m *Manager) phraseThroughLive(ctx context.Context, system, user string) st
 	if err != nil {
 		return ""
 	}
-	out := strings.TrimSpace(res.Text)
-	if out == "" || strings.Contains(out, "确认") {
-		return ""
-	}
-	return out
+	return strings.TrimSpace(res.Text)
 }
 
 const retryAckPhrasePrompt = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
 
-对方刚明确说要重跑/再试一件刚失败的事。用一两句人话告诉对方：你已经按那件事重新安排人去干了。
+对方刚明确说要重跑/再试一件刚失败的事。用一两句人话告诉对方：你正派人重新去做那件事——时态是正在重试，不是已经做完。
 
 规矩：
 - 像同事当面说，不要工单腔，不要「我这就去确认」「收到」「稍等」。
+- 不要复述任务标题或原要求，也不要用书名号/引号把标题括回去——对方刚说了重试，知道是哪件；用「那事」「那块」指代即可。
 - 不要提优先级、任务编号、工作流、沙箱、跟进页面、Approving。
-- 不要说「已经跑完了 / 已经重新跑过了」——现在只是重新开跑。
+- 禁止「已经重新跑过了 / 已经重试过了 / 重新重试过了 / 已经进到队列」——现在才刚开干，还在进行中。
+- 只输出要发给对方的那句话。`
+
+const fallthroughAckPhrasePrompt = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
+
+你这边还要再查一下才能答，人手马上接着干。用一两句人话接住对方。
+
+规矩：
+- 像同事当面说，不要工单腔，不要「我这就去确认」「收到」「稍等」。
+- 不要复述对方原话，也不要用书名号把长标题括回去。
+- 时态是正在查/正在弄，不是已经查完。
+- 不要提优先级、任务编号、工作流、沙箱、跟进页面、Approving。
+- 只输出要发给对方的那句话。`
+
+const dispatchAckPhrasePrompt = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
+
+你刚把一件事派人去干了。用一两句人话告诉对方你正让人做这件事——时态是正在做，不是做完了。
+
+规矩：
+- 像同事当面说，不要工单腔，不要「我这就去确认」「收到」「稍等」。
+- 不要复述完整任务标题或原要求；用「那事」「那块」或极短口语指代即可。
+- 不要提优先级、任务编号、工作流、沙箱、跟进页面、Approving。
+- 禁止「已经重试过了 / 已经跑完了 / 已经进到队列」。
+- 只输出要发给对方的那句话。`
+
+const refineAckPhrasePrompt = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
+
+对方刚补充/收窄了正在做的事。用一两句人话告诉对方你会按新重点继续——时态是接着做，不是做完了。
+
+规矩：
+- 像同事当面说，不要工单腔，不要「我这就去确认」「收到」「稍等」。
+- 不要复述完整任务标题；不要用书名号把标题括回去。
+- 不要提优先级、任务编号、工作流、沙箱、跟进页面、Approving。
 - 只输出要发给对方的那句话。`
 
 func (m *Manager) latestRetryableTerminal(rc *runningChannel, in InboundMessage) *models.TaskIdentity {
@@ -480,33 +564,60 @@ func (m *Manager) dispatchWork(ctx context.Context, rc *runningChannel, in Inbou
 	}
 	m.ensureTaskIdentity(rc, in, dispatch)
 
-	// Every sandbox-bound dispatch is acknowledged first.
-	//
-	// An earlier "wait=true means stay silent until the answer" shape assumed a
-	// short synchronous lookup. What we actually start here is a sandbox turn
-	// that can take tens of seconds — silence for that long is exactly the
-	// "快模型没有先回复" failure. Until a real sub-second SoT path exists,
-	// acknowledging is not optional.
-	text, flags := gateAcknowledgement(args["user_reply"], title, in.Text)
+	// Prefer a spoken ack before the sandbox turn starts. Never stitch a
+	// platform sentence — Live-phrased user_reply, or a tiny Live hop, or omit.
+	userReply := strings.TrimSpace(args["user_reply"])
+	liveOnly := strings.TrimSpace(args["ack_mode"]) == "live_only"
+	text, flags := gateAcknowledgement(userReply, title, in.Text)
 	rec.flag(flags...)
-	sent := m.sendOutboundResult(ctx, rc, OutboundMessage{
-		Scene: in.Scene, ConversationID: in.ConversationID,
-		ReplyToMessageID: in.MessageID, Text: text,
-		// An acknowledgement is not the answer. It marks the turn as having
-		// spoken, never as having answered, so the conclusion that follows
-		// is not suppressed as a duplicate.
-		Envelope: turnEnvelope(rc, in, sendable.KindTurnProcessingAck, "live_ack", sendable.PriorityHigh),
-	})
-	rec.acted("live_ack", text, sent)
-	if sent.Sent {
-		scope := conversationTurnScope(rc.cfg.ProjectID, in.Scene, in.ConversationID)
-		m.markReplied(scope)
-		m.markAcknowledged(scope)
+	if text == "" && !liveOnly {
+		text = m.phraseDispatchAck(ctx, in.Text, title, brief)
+		if text != "" {
+			rec.flag("dispatch_ack_live")
+		} else {
+			rec.flag("ack_omitted")
+		}
+	} else if text == "" {
+		rec.flag("ack_omitted_live_only")
+	}
+	if text != "" {
+		sent := m.sendOutboundResult(ctx, rc, OutboundMessage{
+			Scene: in.Scene, ConversationID: in.ConversationID,
+			ReplyToMessageID: in.MessageID, Text: text,
+			// An acknowledgement is not the answer. It marks the turn as having
+			// spoken, never as having answered, so the conclusion that follows
+			// is not suppressed as a duplicate.
+			Envelope: turnEnvelope(rc, in, sendable.KindTurnProcessingAck, "live_ack", sendable.PriorityHigh),
+		})
+		rec.acted("live_ack", text, sent)
+		if sent.Sent {
+			scope := conversationTurnScope(rc.cfg.ProjectID, in.Scene, in.ConversationID)
+			m.markReplied(scope)
+			m.markAcknowledged(scope)
+		}
 	}
 
 	return liveOutcome{
 		reason: brief, dispatch: dispatch, sampleID: rec.commit(routeDispatch),
 	}, ""
+}
+
+func (m *Manager) phraseDispatchAck(ctx context.Context, userText, title, brief string) string {
+	user := "对方说：" + strings.TrimSpace(userText) + "\n"
+	if title != "" && !echoesUserText(title, userText) {
+		user += "（内部参考，勿原样复述）短标题：" + title + "\n"
+	}
+	if brief != "" {
+		user += "（内部参考，勿原样复述）派下去的要求：" + truncateRunes(brief, 160) + "\n"
+	}
+	out := strings.TrimSpace(m.phraseThroughLive(ctx, dispatchAckPhrasePrompt, user))
+	if out == "" || strings.Contains(out, "确认") || spokenLineSoundsFinished(out) {
+		return ""
+	}
+	if retryAckEchoesBrief(out, title, brief) {
+		return ""
+	}
+	return out
 }
 
 // refineWork hangs a follow-up onto an existing task instead of opening a new
@@ -548,27 +659,37 @@ func (m *Manager) refineWork(ctx context.Context, rc *runningChannel, in Inbound
 	}
 
 	userReply := strings.TrimSpace(args["user_reply"])
-	var text string
-	var flags []string
-	if userReply == "" {
-		text = "好，按你说的重点接着看「" + target.ShortTitle + "」。"
-	} else {
-		text, flags = gateAcknowledgement(userReply, target.ShortTitle, in.Text)
-	}
+	text, flags := gateAcknowledgement(userReply, target.ShortTitle, in.Text)
 	rec.flag(flags...)
-	rec.flag("refine_work")
-	sent := m.sendOutboundResult(ctx, rc, OutboundMessage{
-		Scene: in.Scene, ConversationID: in.ConversationID,
-		ReplyToMessageID: in.MessageID, Text: text,
-		Envelope: turnEnvelope(rc, in, sendable.KindTurnProcessingAck, "live_ack", sendable.PriorityHigh),
-	})
-	rec.acted("live_ack", text, sent)
-	if sent.Sent {
-		scope := conversationTurnScope(rc.cfg.ProjectID, in.Scene, in.ConversationID)
-		m.markReplied(scope)
-		m.markAcknowledged(scope)
+	if text == "" {
+		user := "对方说：" + strings.TrimSpace(in.Text) + "\n"
+		user += "补充重点：" + truncateRunes(addition, 120) + "\n"
+		if t := services.SanitizeShortTitle(target.ShortTitle); t != "" {
+			user += "（内部参考，勿原样复述）原任务：" + t + "\n"
+		}
+		text = strings.TrimSpace(m.phraseThroughLive(ctx, refineAckPhrasePrompt, user))
+		if text == "" || strings.Contains(text, "确认") || spokenLineSoundsFinished(text) ||
+			retryAckEchoesBrief(text, target.ShortTitle, addition) {
+			text = ""
+			rec.flag("refine_ack_omitted")
+		} else {
+			rec.flag("refine_ack_live")
+		}
 	}
-	_ = ctx
+	rec.flag("refine_work")
+	if text != "" {
+		sent := m.sendOutboundResult(ctx, rc, OutboundMessage{
+			Scene: in.Scene, ConversationID: in.ConversationID,
+			ReplyToMessageID: in.MessageID, Text: text,
+			Envelope: turnEnvelope(rc, in, sendable.KindTurnProcessingAck, "live_ack", sendable.PriorityHigh),
+		})
+		rec.acted("live_ack", text, sent)
+		if sent.Sent {
+			scope := conversationTurnScope(rc.cfg.ProjectID, in.Scene, in.ConversationID)
+			m.markReplied(scope)
+			m.markAcknowledged(scope)
+		}
+	}
 	return liveOutcome{
 		reason: brief, dispatch: dispatch, sampleID: rec.commit(routeRefine),
 	}, ""
@@ -763,7 +884,7 @@ const directorReportPrompt = `你是这个项目的负责人本人，正在 IM �
 - 说人话，像同事当面说，不要写工单腔。
 - 不要出现任务编号、工作流名、执行环境、工具名、优先级这些内部说法。
 - 不要说「你那边跟进看看」「请前往 Approving」这类把人打发走的话。
-- 若事实只是「重新开跑了」而不是做完了，就说重新开跑了，不要说得像已经收工。
+- 若事实只是刚重新开跑 / 还在队列或执行中，用现在进行时（正在重试、刚派下去），禁止「已经重试过了 / 重新重试过了 / 已经跑完了」。
 - 只输出要发出去的话，不要加前缀、标题或解释，也不要写到一半截断。`
 
 // warmWorkLayer brings the agent's sandbox up in the background.
@@ -807,36 +928,20 @@ func (m *Manager) conversationAttachments(rc *runningChannel, in InboundMessage)
 	return b.RecentAttachments(conversationRefFor(rc, in))
 }
 
-// gateAcknowledgement keeps an acknowledgement from being a fixed template
-// wearing the model's voice.
-//
-// An earlier version of this platform shipped "稍等，我看一下" as a literal
-// constant before every turn, which is why that phrase is now banned outright.
-// The ban alone is not the fix: a model that says the same empty thing in its
-// own words leaves the user exactly as uninformed. So an acknowledgement has to
-// name what is being checked, and one that does not is replaced by a line that
-// does — and flagged, because the replacement is a symptom worth counting.
+// gateAcknowledgement accepts a Live-authored acknowledgement, or rejects
+// filler / empty lines. It never stitches a platform sentence — that was how
+// 「我这就去确认」leaked back into GM voice.
 func gateAcknowledgement(reply, shortTitle, userText string) (string, []string) {
+	_ = shortTitle
+	_ = userText
 	text := strings.TrimSpace(reply)
 	if informative := stripFiller(text); len([]rune(informative)) >= 6 {
+		if strings.Contains(text, "确认") || spokenLineSoundsFinished(text) {
+			return "", []string{"empty_ack"}
+		}
 		return text, nil
 	}
-	title := services.SanitizeShortTitle(shortTitle)
-	flags := []string{"empty_ack"}
-	// A retry affirmation must never read as a vague "确认" — the user already
-	// chose. Name the work when we can.
-	if looksLikeRetryAffirmation(userText) {
-		if title != "" && !echoesUserText(title, userText) {
-			return "好，「" + title + "」我重新安排，有进展回你。", flags
-		}
-		return "好，我重新安排，有进展回你。", flags
-	}
-	// Quoting a real short title ("登录页报错") names the work. Quoting the
-	// user's own question — or a truncation of it — just mirrors them.
-	if title == "" || echoesUserText(title, userText) {
-		return "我这就去确认，有结果马上回你。", flags
-	}
-	return "「" + title + "」我这就去确认，有结果马上回你。", flags
+	return "", []string{"empty_ack"}
 }
 
 func echoesUserText(title, userText string) bool {
@@ -913,7 +1018,7 @@ func directorTools() []liveagent.ToolSpec {
 					Required:    true,
 				},
 				{Name: "short_title", Description: "给这件事起个对方看得懂的短名字，例如「登录页报错」。", Required: true},
-				{Name: "user_reply", Description: "现在就发给对方的一句话，必填；要说清楚你去确认的是哪件事。", Required: true},
+				{Name: "user_reply", Description: "现在就发给对方的一句话，必填；活人话说明你正派人去做，时态是正在做不是做完了；不要复述长标题。", Required: true},
 			},
 		},
 		{
@@ -928,7 +1033,7 @@ func directorTools() []liveagent.ToolSpec {
 					Description: "lookup=查一下就知道；heavy=要花好几分钟。默认 lookup。",
 					Enum:        []string{string(DifficultyLookup), string(DifficultyHeavy)},
 				},
-				{Name: "user_reply", Description: "现在就发给对方的一句话；可空，平台会按任务名接一句。"},
+				{Name: "user_reply", Description: "现在就发给对方的一句话；活人话说明按新重点接着做；不要复述长标题。"},
 			},
 		},
 		{
