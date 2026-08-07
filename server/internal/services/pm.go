@@ -877,19 +877,12 @@ func (s *PmService) CanonicalWindow(threadID string, n int) ([]models.ChatMessag
 	return s.canonicalQuery(threadID, n, nil)
 }
 
-// CanonicalSince returns the user-visible turns recorded after afterID, oldest
-// first, so a reader that has already seen everything up to that point can be
-// caught up with only what is new. An empty or unknown afterID yields the
-// bounded window instead, which is the correct answer for a reader starting
-// fresh.
-func (s *PmService) CanonicalSince(threadID, afterID string, n int) ([]models.ChatMessage, error) {
-	anchor, err := s.GetMessage(threadID, strings.TrimSpace(afterID))
-	if err != nil {
-		return s.CanonicalWindow(threadID, n)
-	}
-	return s.canonicalQuery(threadID, n, &anchor)
-}
-
+// A CanonicalSince / HandoffCursor pair used to live here: how far the thread's
+// sandbox had been caught up, so each turn could replay the conversation it had
+// missed. It is gone with the replay itself. The cursor modelled the agent as
+// something that had to be shown the whole conversation to know it, which made
+// every prompt grow with the conversation; the agent now reads what it needs
+// through context-store, so there is nothing to catch up.
 func (s *PmService) canonicalQuery(threadID string, n int, after *models.ChatMessage) ([]models.ChatMessage, error) {
 	if n <= 0 {
 		n = 20
@@ -911,21 +904,6 @@ func (s *PmService) canonicalQuery(threadID string, n int, after *models.ChatMes
 		newestFirst[i], newestFirst[j] = newestFirst[j], newestFirst[i]
 	}
 	return newestFirst, nil
-}
-
-// HandoffCursor reports the last message the thread's sandbox has been shown.
-func (s *PmService) HandoffCursor(threadID string) string {
-	var t models.ChatThread
-	if err := s.db.Select("handoff_cursor").First(&t, "id = ?", threadID).Error; err != nil {
-		return ""
-	}
-	return t.HandoffCursor
-}
-
-// SetHandoffCursor records how far the thread's sandbox has been caught up.
-func (s *PmService) SetHandoffCursor(threadID, messageID string) error {
-	return s.db.Model(&models.ChatThread{}).Where("id = ?", threadID).
-		Update("handoff_cursor", messageID).Error
 }
 
 // ListConversationsForAgent returns threads visible to a context-store session.

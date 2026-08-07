@@ -45,13 +45,16 @@ func ChannelPreamble(channelType string) string {
 			"需要发图片时，在 pm_reply 的 text 里用 Markdown 图片语法给出可公网访问的直链，例如 ![](https://example.com/x.png)；" +
 			"不要给本地路径或需要鉴权的链接。",
 
-		"【上下文交接】提示里如果出现 <conversation_handoff> 段，那是你没有参与的那几轮对话（用户说过什么、" +
-			"平台已经替你回过什么）。它是背景，不是新的请求；真正要你处理的是它后面那条用户消息。" +
-			"不要把已经回过的话再说一遍。",
+		"【上下文自己取】提示里不会再附带这个会话的历史对话。" +
+			"提示里如果出现 <work_brief> 段，那是会话层转交给你的要求、任务名和附件线索，不是用户的新消息。" +
+			"遇到「刚才那个」「上面说的」这类指代，或者需要知道用户之前说过什么、平台已经替你回过什么，" +
+			"先用 context-store 的 get_messages / search_messages 拉取，再回答；不要凭印象猜，也不要把已经回过的话再说一遍。",
 
-		"【附件】用户发的图片和文件已经写成沙箱本地文件，用绝对路径直接读。" +
-			"历史附件如果太大没有随本轮带过来，交接段里会列出文件名和所属消息 id，" +
-			"需要时用 context-store 的 get_attachment 按 id 取回。",
+		"【附件】用户本轮发的图片和文件已经写成沙箱本地文件，用绝对路径直接读。" +
+			"更早的附件不会随本轮下发：<work_brief> 里会列出文件名、messageId 和 index，" +
+			"没列出的用 context-store 的 get_messages 查附件清单，" +
+			"再用 get_attachment 按 messageId+index 取回内容。" +
+			"用户提到「刚才那张图」时，先查清单再取，不要说自己看不到。",
 
 		"【先查再答】通过 pm-leader / context-store / memory-store 等 MCP 工具获取项目进度、记忆与历史后再作答，不要编造。",
 

@@ -93,18 +93,10 @@ func (m *Manager) synthesizeOutcome(ctx context.Context, identity *models.TaskId
 	if m.synthesize == nil {
 		return fallback
 	}
-	// Synthesis borrows the conversation's agent, which can answer through
-	// pm_reply. Capturing that reply instead of letting it out keeps delivery
-	// in one place, so the outcome is sent exactly once with the dedupe key
-	// that guarantees it. A conversation already running a turn is left alone:
-	// interleaving a synthesis turn there would both fail and risk capturing
-	// the user's own answer.
-	take, ok := m.tryCaptureReply(identity.ProjectID, scene, conv)
-	if !ok {
-		log.Debug().Str("run", identity.RunID).
-			Msg("reflow: conversation is busy, using structured fallback")
-		return fallback
-	}
+	// Phrasing happens in the conversation layer, which is not the layer doing
+	// the work. That is what lets an outcome be reported while the agent is
+	// still busy: synthesis used to borrow the conversation's own agent, so a
+	// conversation with a turn in flight got the template instead of a sentence.
 	req := SynthesisRequest{
 		ProjectID: identity.ProjectID, Scene: scene, ConversationID: conv,
 		ExternalUserID: identity.OriginExternalUserID,
@@ -113,10 +105,6 @@ func (m *Manager) synthesizeOutcome(ctx context.Context, identity *models.TaskId
 		Brief: outcomeBrief(identity, outcome, language),
 	}
 	text, err := m.synthesize(ctx, req)
-	captured := take()
-	if strings.TrimSpace(text) == "" {
-		text = captured
-	}
 	if strings.TrimSpace(text) == "" {
 		log.Info().Err(err).Str("run", identity.RunID).
 			Msg("reflow: natural-language synthesis unavailable, using structured fallback")
@@ -149,20 +137,20 @@ type SynthesisFunc func(ctx context.Context, req SynthesisRequest) (string, erro
 // SetSynthesizer wires natural-language reflow (nil keeps structured fallbacks).
 func (m *Manager) SetSynthesizer(fn SynthesisFunc) { m.synthesize = fn }
 
-// tryCaptureReply diverts this conversation's agent replies into a buffer
+// captureAgentReplies diverts this conversation's agent replies into a buffer
 // instead of the channel, and returns a function that ends the capture and
-// yields whatever was collected. It reports false when a foreground turn is
-// already running, because that turn's replies belong to the user.
-func (m *Manager) tryCaptureReply(projectID string, scene Scene, conv string) (take func() string, ok bool) {
+// yields whatever was collected.
+//
+// This is what makes one voice possible. The agent answers through pm_reply,
+// which used to go straight to the channel — so the user heard the work layer
+// directly, in its own register, sometimes twice in a turn, and the
+// conversation layer had no idea what had been said. Capturing turns that
+// answer into an internal result the conversation layer can report.
+//
+// It reports false when the conversation is already under capture, because two
+// captures would split one answer between them.
+func (m *Manager) captureAgentReplies(projectID string, scene Scene, conv string) (take func() string, ok bool) {
 	key := convKey(projectID, scene, conv)
-	q := m.convQueueFor(key)
-	q.mu.Lock()
-	busy := q.busy
-	q.mu.Unlock()
-	if busy {
-		return nil, false
-	}
-
 	m.captureMu.Lock()
 	if m.captured == nil {
 		m.captured = map[string]*string{}

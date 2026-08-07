@@ -230,6 +230,18 @@ func (m *Manager) SendRunAcceptanceAck(ctx context.Context, ack RunAcceptanceAck
 	if runID == "" {
 		return DeliveryResult{}, errors.New("run acceptance ack requires a real run id")
 	}
+	scene := ack.Scene
+	if scene == "" {
+		scene = SceneC2C
+	}
+	// The conversation layer may already have told the user this is being
+	// picked up — that is what a heavy dispatch's acknowledgement is. Adding
+	// the platform's own acceptance notice on top is the "我去看看" + "好的我去看看"
+	// double-send that made delegation feel like the system talking to itself.
+	turn := conversationTurnScope(ack.ProjectID, scene, ack.ConversationID)
+	if m.hasAcknowledged(turn) {
+		return DeliveryResult{Decision: sendable.Decision{Reason: "already_acknowledged"}}, nil
+	}
 	language := services.DetectLanguage("", ack.Language)
 	result, err := m.DeliverSendable(ctx, SendableRequest{
 		ProjectID: ack.ProjectID, Scene: ack.Scene, ConversationID: ack.ConversationID,
@@ -239,15 +251,16 @@ func (m *Manager) SendRunAcceptanceAck(ctx context.Context, ack RunAcceptanceAck
 		DedupeKey: runAcceptanceDedupeKey(runID, ack.ConversationID, ack.UserID),
 		Text:      runAcceptanceText(ack.ShortTitle, language),
 	})
-	// Handing work to the background is this turn's answer. Marking the turn
-	// replied is what lets the conversation move on immediately instead of
-	// waiting for the Run and then appending a second message about it.
+	// Handing work to the background is this turn's answer: the user asked for
+	// something and has been told it is being done. Marking the turn answered
+	// is what lets the conversation move on immediately instead of waiting for
+	// the Run and then appending a second message about it.
+	// The marker deliberately says "answered", not "acknowledged": a repeat of
+	// this notice is caught by its own per-run dedupe, which reports why more
+	// precisely than a turn-level marker could.
 	if result.Sent {
-		scene := ack.Scene
-		if scene == "" {
-			scene = SceneC2C
-		}
 		m.MarkConversationReplied(ack.ProjectID, scene, ack.ConversationID)
+		m.markAnswered(turn)
 	}
 	return result, err
 }
