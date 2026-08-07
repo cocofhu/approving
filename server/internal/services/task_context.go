@@ -21,6 +21,11 @@ import (
 const (
 	TaskFocusTTL       = 30 * time.Minute
 	TaskTerminalWindow = 30 * 24 * time.Hour
+	// StaleDispatchTTL closes ephemeral dispatch:* ledger rows that never became
+	// a real Run and were never marked terminal. Without this, every short IM
+	// lookup stays "running" forever and crowds the director's briefing with
+	// work that finished (or was abandoned) long ago.
+	StaleDispatchTTL = 30 * time.Minute
 )
 
 // ErrTaskIdentityScopeMismatch means the Run already belongs to a different
@@ -310,42 +315,103 @@ func (s *TaskContextService) IdentityForRun(runID, projectID string) (*models.Ta
 // formatting uses it to decide whether a task label is needed at all: with a
 // single task in flight the context is already unambiguous.
 func (s *TaskContextService) CountActive(scope TaskScope) (int, error) {
-	if s == nil || s.db == nil {
-		return 0, errors.New("task context database is unavailable")
-	}
-	if strings.TrimSpace(scope.ProjectID) == "" {
-		return 0, nil
-	}
-	q := s.db.Model(&models.TaskIdentity{}).
-		Where("project_id = ? AND terminal_at IS NULL", scope.ProjectID)
-	if strings.TrimSpace(scope.UserID) != "" {
-		q = q.Where("user_id = ? OR user_id = ''", scope.UserID)
-	}
-	var n int64
-	if err := q.Count(&n).Error; err != nil {
+	tasks, err := s.ActiveTasksForConversation(scope, 100)
+	if err != nil {
 		return 0, err
 	}
-	return int(n), nil
+	return len(tasks), nil
 }
 
 // ActiveTasksForConversation lists this conversation's live tasks, most
 // recently updated first, for disambiguation prompts.
+//
+// Scope is the conversation that asked, not the whole project: an earlier bug
+// listed every non-terminal row for the user, so finished work from other
+// chats (and forgotten dispatch:* stubs) kept showing up as "还在跑".
 func (s *TaskContextService) ActiveTasksForConversation(scope TaskScope, limit int) ([]models.TaskIdentity, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("task context database is unavailable")
 	}
+	if strings.TrimSpace(scope.ProjectID) == "" {
+		return nil, nil
+	}
 	if limit <= 0 {
 		limit = 5
 	}
-	var out []models.TaskIdentity
 	q := s.db.Where("project_id = ? AND terminal_at IS NULL", scope.ProjectID)
-	if strings.TrimSpace(scope.UserID) != "" {
-		q = q.Where("user_id = ? OR user_id = ''", scope.UserID)
+	if uid := strings.TrimSpace(scope.UserID); uid != "" {
+		q = q.Where("user_id = ? OR user_id = ''", uid)
 	}
-	if err := q.Order("updated_at DESC").Limit(limit).Find(&out).Error; err != nil {
+	if conv := strings.TrimSpace(scope.ConversationID); conv != "" {
+		q = q.Where("origin_conversation_id = ?", conv)
+	}
+	// Pull a wider window so reaping stale rows can still fill `limit`.
+	var rows []models.TaskIdentity
+	if err := q.Order("updated_at DESC").Limit(limit * 3).Find(&rows).Error; err != nil {
 		return nil, err
 	}
+	out := make([]models.TaskIdentity, 0, limit)
+	for i := range rows {
+		if s.reapStaleActiveTask(&rows[i]) {
+			continue
+		}
+		out = append(out, rows[i])
+		if len(out) >= limit {
+			break
+		}
+	}
 	return out, nil
+}
+
+// reapStaleActiveTask marks a ledger row terminal when the underlying work is
+// already gone, and reports whether the caller should hide it. It is the
+// self-heal for rows that missed their completion write.
+func (s *TaskContextService) reapStaleActiveTask(task *models.TaskIdentity) bool {
+	if task == nil || task.TerminalAt != nil {
+		return true
+	}
+	runID := strings.TrimSpace(task.RunID)
+	now := s.now()
+	if runID != "" && !strings.HasPrefix(runID, "dispatch:") {
+		var run models.Run
+		if err := s.db.Select("id", "status").Where("id = ?", runID).First(&run).Error; err == nil {
+			if IsTerminalTaskStatus(run.Status) {
+				_, _ = s.UpdateIdentity(EnsureTaskIdentityInput{
+					RunID: runID, ProjectID: task.ProjectID, UserID: task.UserID,
+					Status: run.Status,
+				})
+				return true
+			}
+		}
+	}
+	if strings.HasPrefix(runID, "dispatch:") && now.Sub(task.UpdatedAt) > StaleDispatchTTL {
+		_, _ = s.UpdateIdentity(EnsureTaskIdentityInput{
+			RunID: runID, ProjectID: task.ProjectID, UserID: task.UserID,
+			Status: "completed",
+		})
+		return true
+	}
+	return false
+}
+
+// IdentityByID loads one task row inside a project.
+func (s *TaskContextService) IdentityByID(id, projectID string) (*models.TaskIdentity, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("task context database is unavailable")
+	}
+	id, projectID = strings.TrimSpace(id), strings.TrimSpace(projectID)
+	if id == "" || projectID == "" {
+		return nil, errors.New("id and project_id are required")
+	}
+	var identity models.TaskIdentity
+	err := s.db.Where("id = ? AND project_id = ?", id, projectID).First(&identity).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &identity, nil
 }
 
 func (s *TaskContextService) BindMessage(scope TaskScope, messageID string, identity *models.TaskIdentity) error {
