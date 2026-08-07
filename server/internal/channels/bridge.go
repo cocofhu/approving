@@ -743,16 +743,22 @@ func extractStructuredFinalSummary(text string) string {
 		trimmed := strings.TrimSpace(line)
 		for _, marker := range finalSummaryMarkers {
 			if strings.HasPrefix(trimmed, marker) {
-				return truncateRunes(strings.TrimSpace(strings.TrimPrefix(trimmed, marker)), 240)
+				return truncateRunes(strings.TrimSpace(strings.TrimPrefix(trimmed, marker)), agentConclusionLimit)
 			}
 		}
 	}
 	return ""
 }
 
-// constrainedConversationalSummary builds a short user-facing final from
-// assistant body text: drop tool/reasoning/progress-marker noise, then truncate.
-// It is still a server-owned summary, not a raw Reply.Text passthrough.
+// agentConclusionLimit bounds material kept for the conversation layer to
+// phrase. It is deliberately larger than an IM message: the director turns this
+// into a short reply, and chopping here first is what produced mid-sentence
+// cuts like 「因此目前审…」 before anyone could summarise.
+const agentConclusionLimit = 4000
+
+// constrainedConversationalSummary builds a server-owned conclusion from
+// assistant body text: drop tool/reasoning/progress-marker noise. The length
+// budget is for the director to read, not for the user to receive as-is.
 func constrainedConversationalSummary(text string) string {
 	var keep []string
 	for _, line := range strings.Split(text, "\n") {
@@ -766,7 +772,7 @@ func constrainedConversationalSummary(text string) string {
 	if joined == "" {
 		return ""
 	}
-	return truncateRunes(joined, 240)
+	return truncateRunes(joined, agentConclusionLimit)
 }
 
 func isFinalSummaryNoiseLine(line string) bool {

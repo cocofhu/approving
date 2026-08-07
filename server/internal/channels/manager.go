@@ -684,12 +684,22 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		return
 	}
 	final, degraded := m.reportThroughDirector(ctx, rc, in, summary)
+	if degraded {
+		// Director could not phrase it. Soft-cap the work layer's own words so
+		// a long dump still ends on an ellipsis rather than mid-character —
+		// the hard 240-rune cut is what made 「因此目前审」 look like a hang.
+		final = truncateRunes(final, degradedOutboundLimit)
+	}
 	m.attachSampleOutcome(in.DecisionSampleID, summary, collect.egress(degraded))
 	sent := m.sendOutboundResult(ctx, rc, OutboundMessage{
 		Scene: in.Scene, ConversationID: in.ConversationID, ReplyToMessageID: in.MessageID,
 		Text: final, ImageURLs: reply.ImageURLs,
 		Envelope: func() sendable.DeliveryEnvelope {
-			e := turnEnvelope(rc, in, sendable.KindFinal, reason, sendable.PriorityCritical)
+			outReason := reason
+			if !degraded {
+				outReason = "live_reply"
+			}
+			e := turnEnvelope(rc, in, sendable.KindFinal, outReason, sendable.PriorityCritical)
 			e.Structured = true
 			return e
 		}(),
@@ -698,6 +708,11 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		m.markAnswered(scope)
 	}
 }
+
+// degradedOutboundLimit is how much of the work layer's own words may reach the
+// user when the conversation model cannot phrase them. Short enough for IM,
+// long enough that a real answer is not chopped into an unfinished sentence.
+const degradedOutboundLimit = 1200
 
 // progressReportInterval rate-limits progress lines per conversation.
 //
@@ -824,7 +839,9 @@ func deliverableFinalText(reply Reply) (text, reason string, ok bool) {
 		if summary == "" {
 			return "", "final_summary_scrubbed_empty", false
 		}
-		return truncateRunes(summary, 240), "structured_turn_final", true
+		// Do not chop here. This text is material for the director to phrase
+		// (or a soft-capped degraded fallback), not the IM payload itself.
+		return summary, "structured_turn_final", true
 	}
 	return "", "final_summary_missing", false
 }
