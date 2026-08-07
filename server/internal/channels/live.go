@@ -201,8 +201,10 @@ func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel,
 // layer could not finish and the sandbox is about to take over. Without it a
 // timed-out Live call looks like the platform ignored the message.
 func (m *Manager) ackFallthrough(ctx context.Context, rc *runningChannel, in InboundMessage, rec *sampleRecorder) {
-	title := truncateRunes(strings.TrimSpace(in.Text), 20)
-	text, flags := gateAcknowledgement("", title, in.Text)
+	// No short title from the model here — inventing one from the user's own
+	// question only produces 「项目的错误处理完整吗」我这就去确认…, which tells
+	// them nothing they did not just say.
+	text, flags := gateAcknowledgement("", "", "")
 	rec.flag(flags...)
 	rec.flag("fallthrough_ack")
 	sent := m.sendOutboundResult(ctx, rc, OutboundMessage{
@@ -486,14 +488,22 @@ func gateAcknowledgement(reply, shortTitle, userText string) (string, []string) 
 		return text, nil
 	}
 	title := services.SanitizeShortTitle(shortTitle)
-	if title == "" {
-		title = truncateRunes(strings.TrimSpace(userText), 20)
-	}
 	flags := []string{"empty_ack"}
-	if title == "" {
+	// Quoting a real short title ("登录页报错") names the work. Quoting the
+	// user's own question — or a truncation of it — just mirrors them.
+	if title == "" || echoesUserText(title, userText) {
 		return "我这就去确认，有结果马上回你。", flags
 	}
 	return "「" + title + "」我这就去确认，有结果马上回你。", flags
+}
+
+func echoesUserText(title, userText string) bool {
+	user := strings.TrimSpace(userText)
+	t := strings.TrimSpace(title)
+	if t == "" || user == "" {
+		return false
+	}
+	return t == user || strings.HasPrefix(user, t)
 }
 
 // ackFiller lists the phrases that carry no information on their own. This is

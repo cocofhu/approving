@@ -256,8 +256,11 @@ func TestConversationModelFailureStillAnswersTheUser(t *testing.T) {
 		t.Fatalf("a failed model call swallowed the message: %v", g.agent)
 	}
 	got := sentTexts(g.fa)
-	if len(got) != 2 || !strings.Contains(got[0], "什么进度了") || got[1] != "agent-answer" {
-		t.Fatalf("sends = %v want fallthrough ack then the agent's answer", got)
+	if len(got) != 2 || got[0] != "我这就去确认，有结果马上回你。" || got[1] != "agent-answer" {
+		t.Fatalf("sends = %v want plain fallthrough ack then the agent's answer", got)
+	}
+	if strings.Contains(got[0], "什么进度了") {
+		t.Fatalf("fallthrough ack echoed the user's question: %q", got[0])
 	}
 }
 
@@ -423,6 +426,15 @@ func TestEmptyAcknowledgementIsReplacedAndFlagged(t *testing.T) {
 	kept, flags := gateAcknowledgement("我去翻一下登录页那个 500，翻到就回你。", "登录页报错", "")
 	if kept != "我去翻一下登录页那个 500，翻到就回你。" || len(flags) != 0 {
 		t.Fatalf("an informative acknowledgement was rewritten: %q flags=%v", kept, flags)
+	}
+
+	plain, flags := gateAcknowledgement("", "", "项目的错误处理完整吗")
+	if plain != "我这就去确认，有结果马上回你。" || len(flags) != 1 {
+		t.Fatalf("empty title should not quote the user's question: %q flags=%v", plain, flags)
+	}
+	echo, flags := gateAcknowledgement("", "项目的错误处理完整吗", "项目的错误处理完整吗")
+	if strings.Contains(echo, "「") || len(flags) != 1 {
+		t.Fatalf("title that repeats the question should stay unquoted: %q flags=%v", echo, flags)
 	}
 }
 
