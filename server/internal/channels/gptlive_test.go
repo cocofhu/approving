@@ -253,6 +253,31 @@ func TestNoConversationModelSendsEverythingToTheAgent(t *testing.T) {
 	}
 }
 
+func TestGetStatusSurfacesFailedTerminalTasks(t *testing.T) {
+	g := newGPTLive(t)
+	if _, err := g.m.taskContext.EnsureIdentity(services.EnsureTaskIdentityInput{
+		RunID: "run-fail-status", ProjectID: "proj", UserID: services.SyntheticQQUserID("u1"),
+		ShortTitle: "统一错误码", Status: "failed",
+		OriginChannel: "qq", OriginScene: string(SceneC2C), OriginConversationID: "user1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	raw := g.m.runGetStatus(g.rc, InboundMessage{UserID: "u1", ConversationID: "user1"}, "")
+	if !strings.Contains(raw, "failed") || !strings.Contains(raw, "统一错误码") {
+		t.Fatalf("get_status missing failed terminal: %s", raw)
+	}
+	if !strings.Contains(raw, "recent_terminal") && !strings.Contains(raw, `"status":"failed"`) {
+		t.Fatalf("get_status should expose terminal status explicitly: %s", raw)
+	}
+	if strings.Contains(raw, "都做完了") {
+		t.Fatalf("note must not invent success: %s", raw)
+	}
+	brief := g.m.buildDirectorContext(g.rc, InboundMessage{UserID: "u1", ConversationID: "user1"}).render()
+	if !strings.Contains(brief, "failed") || !strings.Contains(brief, "不等于") {
+		t.Fatalf("briefing must warn empty≠done and list failure: %s", brief)
+	}
+}
+
 func TestLiveCallTimeoutFollowsConfiguredLiveTimeout(t *testing.T) {
 	m := &Manager{live: &fakeLive{configured: true, timeout: 300 * time.Second}}
 	if got := m.liveCallTimeout(45 * time.Second); got != 300*time.Second {

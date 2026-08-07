@@ -126,6 +126,42 @@ func TestActiveTasksAreScopedToTheConversationAndReapGhosts(t *testing.T) {
 	if len(got) != 1 || got[0].ID != live.ID {
 		t.Fatalf("active = %+v want only the live task in this conversation", got)
 	}
+	var stub models.TaskIdentity
+	if err := db.Where("run_id = ?", "dispatch:old").First(&stub).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stub.Status != "cancelled" || stub.TerminalAt == nil {
+		t.Fatalf("stale dispatch should be cancelled, got status=%q terminal=%v", stub.Status, stub.TerminalAt)
+	}
+}
+
+func TestRecentTerminalTasksSurfaceFailuresForStatus(t *testing.T) {
+	db := taskContextDB(t)
+	svc := NewTaskContextService(db)
+	now := time.Date(2026, 8, 8, 3, 0, 0, 0, time.UTC)
+	svc.SetClock(func() time.Time { return now })
+	scope := TaskScope{ProjectID: "p1", UserID: SyntheticQQUserID("u1"), Channel: "qq", ConversationID: "c1"}
+
+	failed, err := svc.EnsureIdentity(EnsureTaskIdentityInput{
+		RunID: "run-fail", ProjectID: scope.ProjectID, UserID: scope.UserID,
+		ShortTitle: "统一错误码", Status: "failed", OriginConversationID: "c1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.EnsureIdentity(EnsureTaskIdentityInput{
+		RunID: "run-ok", ProjectID: scope.ProjectID, UserID: scope.UserID,
+		ShortTitle: "别的会话成功", Status: "completed", OriginConversationID: "c2",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := svc.RecentTerminalTasksForConversation(scope, 10, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != failed.ID || got[0].Status != "failed" {
+		t.Fatalf("recent = %+v want the failed task in this conversation", got)
+	}
 }
 
 func TestTaskContextMigrationIdentityResolutionAndIsolation(t *testing.T) {
