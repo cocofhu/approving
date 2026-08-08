@@ -48,6 +48,11 @@ const (
 	cancelWorkTool = "cancel_work"
 )
 
+// VoicePersonaLead is the single shared opening for every spoken prompt and
+// system instruction that addresses the user as the project owner on IM.
+// Prompt bodies differ; this lead must not be re-copied elsewhere.
+const VoicePersonaLead = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。`
+
 // liveSystemPrompt tells the model who it is and where the line is.
 //
 // The line is drawn by capability, not topic: it may say anything it can
@@ -55,7 +60,7 @@ const (
 // delegate anything that needs the repository or an action. Uncertainty
 // resolves toward delegating, because an invented answer is indistinguishable
 // from a real one to the person reading it.
-const liveSystemPrompt = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
+const liveSystemPrompt = VoicePersonaLead + `
 
 你手下有人干活。你的职责是接话、判断意图、派活或收窄已有任务，然后把真实进展和结论讲给对方听。
 
@@ -354,7 +359,7 @@ func containsAnyFold(text string, needles ...string) bool {
 
 // phrasePromptHeader is the shared role/delivery lead-in for every spoken
 // phrase prompt (status + the four acks).
-const phrasePromptHeader = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。`
+const phrasePromptHeader = VoicePersonaLead
 
 // statusWhileRunningPhrasePrompt rewrites a premature "done" claim against the
 // live ledger so the user hears what is still in flight. Reuses only the shared
@@ -514,7 +519,7 @@ const operationalLineRules = `
 - 不要说已经做完、已经跑完、已经处理好。
 - 只输出要发给对方的那句话。`
 
-const operationalLinePersona = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
+const operationalLinePersona = VoicePersonaLead + `
 
 `
 
@@ -591,7 +596,7 @@ func looksLikeRetryAffirmation(text string) bool {
 	}
 	for _, a := range []string{
 		"重跑", "再跑", "重试", "再试", "再来一次", "重新做", "重新派", "再弄",
-		"继续做", "接着做", "接着干", "继续",
+		"继续做", "接着做", "接着干",
 		"retry", "try again", "run again", "do it again",
 	} {
 		if lower == a || strings.Contains(lower, a) {
@@ -905,7 +910,7 @@ func (c *foregroundCapture) take() string {
 	}
 	c.taken = true
 	if c.collect != nil {
-		c.text = strings.TrimSpace(ScrubInternalTerms(c.collect()))
+		c.text = strings.TrimSpace(ScrubForOutbound(c.collect()))
 	}
 	return c.text
 }
@@ -934,7 +939,7 @@ func (c *foregroundCapture) egress(degraded bool) string {
 // reads slightly off but is true. degraded reports which of the two happened.
 func (m *Manager) reportThroughDirector(ctx context.Context, rc *runningChannel, in InboundMessage,
 	conclusion string) (text string, degraded bool) {
-	plain := strings.TrimSpace(ScrubInternalTerms(conclusion))
+	plain := strings.TrimSpace(ScrubForOutbound(conclusion))
 	started := time.Now()
 	if m.live == nil || !m.live.Configured() || plain == "" {
 		m.appendTraceSpan(in.TraceID, finishSpan("director_report", "skipped", "degraded", started))
@@ -993,7 +998,7 @@ const directorReportMaxTokens = 2048
 // directorReportPrompt is deliberately narrow. Anything that invites the model
 // to add, judge, or expand turns a verified conclusion into a partly invented
 // one, which is the exact failure this whole layer exists to prevent.
-const directorReportPrompt = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
+const directorReportPrompt = VoicePersonaLead + `
 
 下面给你的是查到的结果。用一两段人话把结论讲给对方听。
 

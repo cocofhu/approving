@@ -5,6 +5,7 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/cocofhu/approving/internal/models"
@@ -71,14 +72,16 @@ func (m *Manager) ReflowTaskOutcome(ctx context.Context, outcome TaskOutcome) er
 		scene = SceneC2C
 	}
 
-	text := m.synthesizeOutcome(ctx, identity, outcome, scene, conv)
+	traceID := m.traceIDForReflow(identity)
+	text := m.synthesizeOutcome(ctx, identity, outcome, scene, conv, traceID)
 	if strings.TrimSpace(text) == "" {
 		return nil
 	}
 	_, err := m.DeliverSendable(ctx, SendableRequest{
 		ProjectID: identity.ProjectID, Scene: scene, ConversationID: conv,
 		UserID: identity.OriginExternalUserID, RunID: runID,
-		Kind: sendable.KindFinal, Reason: "task_outcome",
+		TraceID: traceID,
+		Kind:    sendable.KindFinal, Reason: "task_outcome",
 		Priority: sendable.PriorityCritical,
 		// One conclusion per run per conversation, whatever path produced it.
 		DedupeKey: strings.Join([]string{"task-outcome", runID, conv}, ":"),
@@ -87,36 +90,73 @@ func (m *Manager) ReflowTaskOutcome(ctx context.Context, outcome TaskOutcome) er
 	return err
 }
 
+// traceIDForReflow best-effort joins a terminal outcome to the inbound turn that
+// dispatched it. TaskIdentity has no OriginTraceID; matching the newest sample
+// for the origin conversation is enough for observability and matches the
+// existing "sampling may drop" posture. An empty result is fine — delivery still
+// proceeds without a span join.
+func (m *Manager) traceIDForReflow(identity *models.TaskIdentity) string {
+	if m == nil || m.samples == nil || identity == nil {
+		return ""
+	}
+	conv := strings.TrimSpace(identity.OriginConversationID)
+	if conv == "" {
+		return ""
+	}
+	listed, err := m.samples.List(services.SampleQuery{
+		ProjectID: identity.ProjectID, ConversationID: conv, Limit: 10,
+	})
+	if err != nil {
+		return ""
+	}
+	for _, s := range listed {
+		if tid := strings.TrimSpace(s.TraceID); tid != "" {
+			return tid
+		}
+	}
+	return ""
+}
+
 // synthesizeOutcome asks the conversation's agent to phrase the outcome in
 // context, and falls back to a self-contained statement if that is not
 // possible. The fallback is written to be a real answer on its own — it names
 // the task, says what happened, and says what comes next — because it is what
 // the user actually receives whenever the agent is busy or unavailable.
 func (m *Manager) synthesizeOutcome(ctx context.Context, identity *models.TaskIdentity,
-	outcome TaskOutcome, scene Scene, conv string) string {
+	outcome TaskOutcome, scene Scene, conv, traceID string) string {
+	started := time.Now()
 	language := taskLanguage(identity)
 	fallback := outcomeFallbackText(identity, outcome, language)
+	status, detail := "ok", "synthesized"
+	text := ""
 	if m.synthesize == nil {
-		return fallback
+		status, detail = "fallback", "no_synthesizer"
+		text = fallback
+	} else {
+		// Phrasing happens in the conversation layer, which is not the layer doing
+		// the work. That is what lets an outcome be reported while the agent is
+		// still busy: synthesis used to borrow the conversation's own agent, so a
+		// conversation with a turn in flight got the template instead of a sentence.
+		req := SynthesisRequest{
+			ProjectID: identity.ProjectID, Scene: scene, ConversationID: conv,
+			ExternalUserID: identity.OriginExternalUserID,
+			RunID:          identity.RunID, ShortTitle: identity.ShortTitle,
+			Language: language, Fallback: fallback,
+			Brief: outcomeBrief(identity, outcome, language),
+		}
+		var err error
+		text, err = m.synthesize(ctx, req)
+		if strings.TrimSpace(text) == "" {
+			log.Info().Err(err).Str("run", identity.RunID).
+				Msg("reflow: natural-language synthesis unavailable, using structured fallback")
+			status, detail = "fallback", "unavailable"
+			text = fallback
+		}
 	}
-	// Phrasing happens in the conversation layer, which is not the layer doing
-	// the work. That is what lets an outcome be reported while the agent is
-	// still busy: synthesis used to borrow the conversation's own agent, so a
-	// conversation with a turn in flight got the template instead of a sentence.
-	req := SynthesisRequest{
-		ProjectID: identity.ProjectID, Scene: scene, ConversationID: conv,
-		ExternalUserID: identity.OriginExternalUserID,
-		RunID:          identity.RunID, ShortTitle: identity.ShortTitle,
-		Language: language, Fallback: fallback,
-		Brief: outcomeBrief(identity, outcome, language),
-	}
-	text, err := m.synthesize(ctx, req)
-	if strings.TrimSpace(text) == "" {
-		log.Info().Err(err).Str("run", identity.RunID).
-			Msg("reflow: natural-language synthesis unavailable, using structured fallback")
-		return fallback
-	}
-	return ScrubInternalTerms(text)
+	m.appendTraceSpan(traceID, finishSpan("synthesis", status, detail, started))
+	// Final scrub lives in sendOutboundResult (ScrubForOutbound); keep a thin
+	// pass here so captured/fallback text is already clean if inspected early.
+	return ScrubForOutbound(text)
 }
 
 // SynthesisRequest asks the conversation's agent to phrase a background event
@@ -295,7 +335,7 @@ func completedOutcomeFallback(title, facts string, en bool) string {
 		link = m[1]
 		facts = deliveryLine.ReplaceAllString(facts, "")
 	}
-	body := ScrubInternalTerms(leadingConclusion(facts, outcomeFallbackFactsRunes))
+	body := ScrubForOutbound(leadingConclusion(facts, outcomeFallbackFactsRunes))
 	// The task has to be named, first thing. Several jobs can be in flight at
 	// once, and two pushes that both open with 「弄完了」 are indistinguishable
 	// in a chat window — which is the state this message arrived in.

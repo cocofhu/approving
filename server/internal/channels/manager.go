@@ -876,7 +876,7 @@ const deprecatedSafeFinalNotice = "本回合已结束，请在 Approving 查看�
 // delivery-receipt asides that slipped into FinalSummary construction.
 func deliverableFinalText(reply Reply) (text, reason string, ok bool) {
 	if summary := strings.TrimSpace(reply.FinalSummary); summary != "" {
-		summary = ScrubInternalTerms(summary)
+		summary = ScrubForOutbound(summary)
 		if summary == "" {
 			return "", "final_summary_scrubbed_empty", false
 		}
@@ -980,7 +980,7 @@ func (m *Manager) sendOutboundResult(ctx context.Context, rc *runningChannel, ou
 	// Last gate before the transport. Every outbound path converges here, so
 	// scrubbing once here is what makes "internals never leak" a property of the
 	// system rather than a rule each call site has to remember.
-	if scrubbed := ScrubInternalTerms(out.Text); scrubbed != out.Text {
+	if scrubbed := ScrubForOutbound(out.Text); scrubbed != out.Text {
 		log.Debug().Str("channel", rc.cfg.ID).Str("reason", out.Envelope.Reason).
 			Msg("outbound text scrubbed of internal terms")
 		out.Text = scrubbed
@@ -994,13 +994,13 @@ func (m *Manager) sendOutboundResult(ctx context.Context, rc *runningChannel, ou
 		out.Text = repaired
 	}
 	if strings.TrimSpace(out.Text) == "" && len(out.ImageURLs) == 0 {
-		return DeliveryResult{Decision: sendable.Decision{Reason: "empty_after_scrub"}}
+		return m.traceOutbound(out, DeliveryResult{Decision: sendable.Decision{Reason: "empty_after_scrub"}})
 	}
 	contentFingerprint := out.Text + "\n" + strings.Join(out.ImageURLs, "\n")
 	decision, err := m.policy.Evaluate(ctx, out.Envelope, sendable.ChannelQQ, contentFingerprint)
 	if err != nil {
 		log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel outbound policy failed closed")
-		return DeliveryResult{Decision: sendable.Decision{Reason: "policy_error"}}
+		return m.traceOutbound(out, DeliveryResult{Decision: sendable.Decision{Reason: "policy_error"}})
 	}
 	for decision.Send {
 		sent, sendErr := rc.adapter.Send(ctx, out)
@@ -1011,14 +1011,14 @@ func (m *Manager) sendOutboundResult(ctx context.Context, rc *runningChannel, ou
 			// Recording here rather than at each call site is what keeps the
 			// transcript honest: an answer that failed to send is not in it.
 			m.recordOutbound(rc, out)
-			return DeliveryResult{Decision: decision, Sent: true, ExternalMessageID: sent.MessageID}
+			return m.traceOutbound(out, DeliveryResult{Decision: decision, Sent: true, ExternalMessageID: sent.MessageID})
 		}
 		_ = m.policy.MarkFailed(ctx, decision, out.Envelope, sendable.ChannelQQ, sendErr)
 		log.Warn().Err(sendErr).Str("channel", rc.cfg.ID).Int("attempt", decision.Attempt).
 			Msg("channel outbound send failed")
 		if !m.waitBackoff(ctx, decision.Attempt) {
 			decision.Reason = "transport_failed"
-			return DeliveryResult{Decision: decision}
+			return m.traceOutbound(out, DeliveryResult{Decision: decision})
 		}
 		// Retry claims the next bounded attempt for this dedupe key; it returns
 		// Send=false once the receipt is sent elsewhere or attempts are spent.
@@ -1026,14 +1026,35 @@ func (m *Manager) sendOutboundResult(ctx context.Context, rc *runningChannel, ou
 		if err != nil {
 			log.Warn().Err(err).Str("channel", rc.cfg.ID).Msg("channel outbound retry claim failed")
 			decision.Reason = "retry_claim_failed"
-			return DeliveryResult{Decision: decision}
+			return m.traceOutbound(out, DeliveryResult{Decision: decision})
 		}
 		decision = next
 	}
 	if decision.Reason == "" {
 		decision.Reason = "suppressed"
 	}
-	return DeliveryResult{Decision: decision}
+	return m.traceOutbound(out, DeliveryResult{Decision: decision})
+}
+
+// traceOutbound records a late outbound step when Envelope.TraceID is set.
+// Before the decision sample is committed, AppendSpanByTrace finds no row and
+// no-ops — those early ACK/reply paths still get their outbound:* span from
+// sampleRecorder.acted at commit time, so this does not double-count.
+func (m *Manager) traceOutbound(out OutboundMessage, result DeliveryResult) DeliveryResult {
+	tid := strings.TrimSpace(out.Envelope.TraceID)
+	if tid == "" {
+		return result
+	}
+	status := "ok"
+	if !result.Sent {
+		status = "suppressed"
+	}
+	reason := strings.TrimSpace(out.Envelope.Reason)
+	if reason == "" {
+		reason = "outbound"
+	}
+	m.appendTraceSpan(tid, finishSpan("outbound:"+reason, status, truncateRunes(out.Text, 120), time.Now()))
+	return result
 }
 
 // bindOutboundMessage records "this channel message belongs to that Run" so a

@@ -825,7 +825,6 @@ func TestOutboundBindingSkippedWithoutRealIDRunOrOwnership(t *testing.T) {
 func TestNoOutboundCopyOffersATaskMenu(t *testing.T) {
 	for _, text := range []string{
 		busyHintText,
-		QQReplyFallback("", "zh-CN"), QQReplyFallback("", "en"),
 		FormatTaskMessage("登录页性能优化", "还在做。", "", "登录页怎么样了", "zh-CN"),
 		runAcceptanceText("登录页性能优化", "zh-CN"),
 	} {
