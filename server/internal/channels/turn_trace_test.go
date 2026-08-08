@@ -96,7 +96,7 @@ func TestNoLiveModelStillRecordsADirectTrace(t *testing.T) {
 // joined by OriginTraceID on TaskIdentity.
 func TestDispatchReflowOutboundTraceChain(t *testing.T) {
 	g := newGPTLive(t)
-	// handleInbound uses the standalone rc; DeliverSendable resolves via m.running.
+	// dispatch uses the standalone rc; DeliverSendable resolves via m.running.
 	g.m.mu.Lock()
 	if g.m.running == nil {
 		g.m.running = map[string]*runningChannel{}

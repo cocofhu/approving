@@ -858,7 +858,7 @@ func TestProgressAccumulatorBridgeDualChannelOrder(t *testing.T) {
 	}
 }
 
-func TestClassifyProgressFromACPMultiChunkSequence(t *testing.T) {
+func TestProgressAccumulatorMultiChunkACPSequence(t *testing.T) {
 	// Integration-style: multi-chunk ACP agent_message frames → accumulator → QQ kinds.
 	acc := newProgressAccumulator()
 	frames := []string{

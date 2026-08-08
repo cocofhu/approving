@@ -60,7 +60,7 @@ func TestTaskAddressingReachesTheAgentInsteadOfAMenu(t *testing.T) {
 		fa.mu.Lock()
 		fa.sent = nil
 		fa.mu.Unlock()
-		m.handleInbound(context.Background(), rc, InboundMessage{
+		m.dispatch(context.Background(), rc, InboundMessage{
 			Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
 			MessageID: "m" + strconv.Itoa(i), Text: text,
 		})
@@ -116,7 +116,7 @@ func TestPendingConfirmationIsSettledWithoutAModel(t *testing.T) {
 
 	// Asking to approve is a request, not an authorization: it goes to the
 	// agent, which raises the ticket through the write it guards.
-	m.handleInbound(context.Background(), rc, InboundMessage{
+	m.dispatch(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
 		MessageID: "m1", Text: "批准结算页性能",
 	})
@@ -143,7 +143,7 @@ func TestPendingConfirmationIsSettledWithoutAModel(t *testing.T) {
 	fa.mu.Lock()
 	fa.sent = nil
 	fa.mu.Unlock()
-	m.handleInbound(context.Background(), rc, InboundMessage{
+	m.dispatch(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
 		MessageID: "m2", Text: "确认",
 	})
@@ -207,7 +207,7 @@ func TestConfirmationSettlesTheTaskTheUserWasActuallyAskedAbout(t *testing.T) {
 	// Newer, and never delivered: the user has no idea it exists.
 	newTicket("run-b", "直接检查 approving 仓库当前主干代码")
 
-	m.handleInbound(context.Background(), rc, InboundMessage{
+	m.dispatch(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
 		MessageID: "m-confirm", Text: "确认",
 	})
@@ -254,7 +254,7 @@ func TestConfirmationWithNoDeliveredQuestionExecutesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m.handleInbound(context.Background(), rc, InboundMessage{
+	m.dispatch(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
 		MessageID: "m-blind", Text: "确认",
 	})
@@ -301,7 +301,7 @@ func TestCancelReplyDoesNotReportTheStatusFromBeforeTheCancel(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m.handleInbound(context.Background(), rc, InboundMessage{
+	m.dispatch(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
 		MessageID: "m-cancel", Text: "确认",
 	})
@@ -337,7 +337,7 @@ func TestBuildDeliverableFinalSummaryConversationalFallback(t *testing.T) {
 	if plain == "" || !strings.Contains(plain, "抱歉回复慢了") {
 		t.Fatalf("conversational fallback missing answer: %q", plain)
 	}
-	if plain == deprecatedSafeFinalNotice || strings.Contains(plain, "本回合已结束") {
+	if plain == "本回合已结束，请在 Approving 查看完整结果。" || strings.Contains(plain, "本回合已结束") {
 		t.Fatalf("fallback must not be shell notice: %q", plain)
 	}
 

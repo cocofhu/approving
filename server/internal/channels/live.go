@@ -1133,15 +1133,6 @@ func parseDifficulty(v string) Difficulty {
 	return DifficultyLookup
 }
 
-// parseLooseBool accepts what models actually emit for a boolean argument.
-func parseLooseBool(v string) bool {
-	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "true", "1", "yes", "y", "是":
-		return true
-	}
-	return false
-}
-
 // toolResultMessage feeds a tool result back as conversation.
 //
 // The transport speaks plain chat completions against any OpenAI-compatible

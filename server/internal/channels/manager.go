@@ -167,9 +167,6 @@ type Manager struct {
 	retryBackoff func(attempt int) time.Duration
 	// openBudget overrides sandboxOpenBudget; a negative value means none.
 	openBudget time.Duration
-	// stillWorkingAfter is retained for older tests; production never schedules
-	// the fixed stillWorking template anymore.
-	stillWorkingAfter time.Duration
 
 	riskExecutor RiskActionExecutor
 
@@ -465,22 +462,6 @@ func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMe
 	// This goroutine owns the busy cycle: run the idle-first turn, then drain.
 	m.runTurn(ctx, rc, in)
 	m.drainConvQueue(q, key)
-}
-
-// handleInbound is the complete Live pipeline for one message, used by callers
-// that are not going through the per-conversation queue.
-func (m *Manager) handleInbound(ctx context.Context, rc *runningChannel, in InboundMessage) {
-	ensureTraceID(&in)
-	m.recordInbound(rc, &in)
-	if m.handleFastPath(ctx, rc, &in) {
-		return
-	}
-	outcome := m.routeThroughLiveModel(ctx, rc, in)
-	if outcome.answered {
-		return
-	}
-	outcome.applyTo(&in)
-	m.runTurn(ctx, rc, in)
 }
 
 // recordInbound writes the user's message to the shared transcript before
@@ -828,27 +809,6 @@ func (m *Manager) sandboxOpenBudget() time.Duration {
 	return sandboxOpenBudget
 }
 
-// sayStillWorking is retained for tests that document the banned fixed-ack
-// template. Production runTurn never schedules it: foreground short queries
-// stay silent until the single final answer, and minute-scale work must go
-// through pm_start_run → RunAcceptanceAck instead of a generic wait notice.
-func (m *Manager) sayStillWorking(ctx context.Context, rc *runningChannel, in InboundMessage, scope string) (stop func()) {
-	_ = ctx
-	_ = rc
-	_ = in
-	_ = scope
-	return func() {}
-}
-
-// stillWorkingText is the banned fixed wait template (zh/en). Kept so scrubbers
-// and outbound-copy tests can assert it never reaches users again.
-func stillWorkingText(language string) string {
-	if services.NormalizeLanguage(language) == "en" {
-		return "Give me a moment on this one."
-	}
-	return "稍等，我看一下。"
-}
-
 // sendTurnFailure reports a failed turn in the user's terms. Internal error
 // strings ("assistant produced no reply", sandbox/ACP plumbing) never leave the
 // platform; they are logged and mapped to a cause plus a next step.
@@ -863,11 +823,6 @@ func (m *Manager) sendTurnFailure(ctx context.Context, rc *runningChannel, in In
 		Envelope: turnEnvelope(rc, in, sendable.KindBlocked, "turn_failed", sendable.PriorityCritical),
 	})
 }
-
-// deprecatedSafeFinalNotice is the #157 fake-completion string: a turn that
-// produced nothing used to report success and send the user elsewhere. It is
-// kept only so tests can assert it never comes back.
-const deprecatedSafeFinalNotice = "本回合已结束，请在 Approving 查看完整结果。"
 
 // deliverableFinalText returns the text allowed out of a finished turn. Only an
 // explicitly submitted summary qualifies; Reply.Text stays internal regardless

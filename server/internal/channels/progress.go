@@ -1,7 +1,6 @@
 package channels
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -166,16 +165,6 @@ func classifyProgressMarker(text string) (ProgressEvent, bool) {
 	return ProgressEvent{}, false
 }
 
-// ClassifyProgressFromACP extracts agent_message_chunk text from a raw ACP
-// frame and classifies a single chunk. Prefer progressAccumulator for live
-// streaming paths where chunks are short deltas.
-func ClassifyProgressFromACP(raw json.RawMessage, extract func(json.RawMessage) string) (ProgressEvent, bool) {
-	if extract == nil || len(raw) == 0 {
-		return ProgressEvent{}, false
-	}
-	return ClassifyProgressText(extract(raw))
-}
-
 // progressAccumulator coalesces ACP agent_message_chunk deltas (or Status
 // partial snapshots) before classification so short streaming fragments still
 // yield marker/keyword milestones.
@@ -323,54 +312,6 @@ func (a *progressAccumulator) emitKeywordLines() []ProgressEvent {
 		a.keywordLineIdx = nComplete
 	}
 	return out
-}
-
-const (
-	// firstSentenceMinRunes / firstSentenceMaxRunes bound FirstCompleteSentence.
-	// The live_first_sentence early-release path that used firstSentenceDelay
-	// is hard-disabled (foreground turns stay silent until the final answer).
-	firstSentenceMinRunes = 10
-	firstSentenceMaxRunes = 120
-)
-
-var sentenceTerminators = []rune{'。', '！', '？', '\n', '.', '!', '?'}
-
-// FirstCompleteSentence returns the buffer's opening sentence once it is
-// complete and long enough to be worth sending on its own.
-func (a *progressAccumulator) FirstCompleteSentence() (string, bool) {
-	if a == nil {
-		return "", false
-	}
-	text := strings.TrimSpace(a.buf)
-	if text == "" || isProgressNoise(text) {
-		return "", false
-	}
-	// A marker line is internal scaffolding, not something to read aloud.
-	if _, ok := classifyProgressMarker(text); ok {
-		return "", false
-	}
-	runes := []rune(text)
-	end := -1
-	for i, r := range runes {
-		for _, term := range sentenceTerminators {
-			if r == term {
-				end = i
-				break
-			}
-		}
-		if end >= 0 {
-			break
-		}
-	}
-	if end < 0 {
-		return "", false
-	}
-	sentence := strings.TrimSpace(string(runes[:end+1]))
-	sentence = strings.Trim(sentence, "\n")
-	if utf8.RuneCountInString(sentence) < firstSentenceMinRunes {
-		return "", false
-	}
-	return truncateRunes(sentence, firstSentenceMaxRunes), true
 }
 
 func FormatProgressText(ev ProgressEvent) string {
