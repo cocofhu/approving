@@ -608,6 +608,36 @@ func TestEmptyAcknowledgementIsRejectedNotStitched(t *testing.T) {
 	}
 }
 
+// Claiming "已经做完了" while the ledger still has in-flight work must not
+// reach the user (the 调研-v3-at-50% false completion).
+func TestPrematureDoneClaimWhileTaskRunningIsBlocked(t *testing.T) {
+	g := newGPTLive(t)
+	_ = g.seedTask("run-e50054fd", "快模型和 worker 架构精简分析")
+	g.m.noteWorkProgress("proj", "run-e50054fd", "方案报告页", false)
+
+	live := &fakeLive{
+		configured: true,
+		decisions:  []liveagent.Result{liveAnswer("快模型和 worker 架构精简分析已经做完了。结论是确实有可以精简的方法。")},
+		report:     ptrResult(liveAnswer("还在方案报告页，还没跑完。")),
+	}
+	g.m.SetLiveModel(live)
+
+	g.say("m1", "大概多久啊 你就弄这个吗")
+
+	got := sentTexts(g.fa)
+	if len(got) != 1 {
+		t.Fatalf("sends = %v", got)
+	}
+	if claimsActiveWorkFinished(got[0]) {
+		t.Fatalf("premature done still shipped: %q", got[0])
+	}
+	if !strings.Contains(got[0], "方案报告") && !strings.Contains(got[0], "还没") && !strings.Contains(got[0], "还在") {
+		t.Fatalf("rewrite should say still running: %q", got[0])
+	}
+}
+
+func ptrResult(r liveagent.Result) *liveagent.Result { return &r }
+
 // "How's it going" is answered from the ledger, and answering it must not start
 // anything. Opening a sandbox to find out where a task is, is how a progress
 // question used to cost a container.

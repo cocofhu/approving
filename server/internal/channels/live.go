@@ -69,7 +69,7 @@ const liveSystemPrompt = `你是这个项目的负责人本人，正在 IM 上�
 意图怎么认（先认意图，再动手）：
 - 对方在补充、收窄、纠正、加重点（例如「重点看 Release 到现在」「别看旧的」「再加上导出」）——只要是挂在已有任务上，调用 refine_work，不要新开任务。
 - 对方要一件和正在跑的事明显不同的新活 —— 调用 dispatch_pm。
-- 要讲进度、状态或结论 —— 先 get_status，用返回内容说话。recent_terminal 里的 status 必须照实说：failed 就是失败，cancelled 就是取消；没有在跑的任务不等于做完了。
+- 要讲进度、状态、多久或结论 —— 先 get_status，用返回内容说话。tasks 里还有在跑的：只能说还在做/卡在哪，禁止说已经做完、已经弄完、分析已经做完。recent_terminal 是别的已结束任务，不要和当前在跑的混成两件，也不要把同一标题的截断写法说成另一件排队。
 - 刚做完或刚汇报完之后，对方追问这次交付里的细节或产物——先看你上一条汇报和 get_status / recent_terminal 的 result_summary，用那里的事实答；有就直接给，没有就如实说这轮没留下。禁止抛开对话事实去做名词百科或教科书定义。
 - 对方说不用弄了 / 停下 / 算了 —— 调用 cancel_work。
 - 对方明确说重跑 / 再试 / 继续做刚才失败或取消的那件 —— 立刻 dispatch_pm（request 用原要求，short_title 沿用原标题）；user_reply 用活人话说明你正派人重新去做（时态是正在重试，不是已经重试完）；不要复述完整任务标题；不要只回空确认。
@@ -340,16 +340,36 @@ func retryAckUnusable(ack, title, req string) bool {
 // spokenLineSoundsFinished catches "already done / already retried" tense on
 // lines that should mean work is just starting or still in flight.
 func spokenLineSoundsFinished(text string) bool {
-	for _, bad := range []string{
-		"已经重新", "已经重试", "重新重试", "已经跑完", "已经重新跑过",
-		"已经派完", "已经开完", "已经进到队列", "已经在队列", "已经修好", "已经完成",
-	} {
+	return claimsActiveWorkFinished(text) || containsAnyFold(text,
+		"已经重新", "已经重试", "重新重试", "已经重新跑过",
+		"已经派完", "已经开完", "已经进到队列", "已经在队列", "已经修好")
+}
+
+// claimsActiveWorkFinished is true when the line asserts the work already
+// finished — the failure mode behind「架构精简分析已经做完了」while the run
+// was still on 「方案报告页」.
+func claimsActiveWorkFinished(text string) bool {
+	return containsAnyFold(text,
+		"已经做完", "已经弄完", "已经完成", "已经跑完", "已经查完", "已经结束",
+		"做完了", "弄完了", "分析已经做完", "已经好了")
+}
+
+func containsAnyFold(text string, needles ...string) bool {
+	for _, bad := range needles {
 		if strings.Contains(text, bad) {
 			return true
 		}
 	}
 	return false
 }
+
+// statusWhileRunningPhrasePrompt rewrites a premature "done" claim against the
+// live ledger so the user hears what is still in flight.
+const statusWhileRunningPhrasePrompt = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
+
+下面事实里还有在跑的任务。用一两句人话说清还在做、卡在哪（有阶段就带上）；禁止说已经做完、已经弄完、分析已经做完。
+不要把同一件事的标题截断写法说成另一件排队任务。
+只输出要发出去的话。`
 
 // retryAckEchoesBrief is true when the spoken line pastes the ledger title /
 // requirement back — the failure mode behind quoting
@@ -506,6 +526,22 @@ func (m *Manager) deliverDirectorReply(ctx context.Context, rc *runningChannel, 
 	if answer == "" {
 		m.ackFallthrough(ctx, rc, in, rec)
 		return liveOutcome{reason: "会话层没能给出答复", sampleID: rec.commit(routeFallthrough)}
+	}
+	// Live has claimed "做完了" while the ledger still shows in-flight work
+	// (e.g. 调研 v3 at 50% 「方案报告页」). Do not ship that lie.
+	if active := m.taskLedger(rc, in); len(active) > 0 && claimsActiveWorkFinished(answer) {
+		rec.flag("live_reply_premature_done")
+		facts := m.runGetStatus(rc, in, "")
+		fixed := strings.TrimSpace(m.phraseThroughLive(ctx, statusWhileRunningPhrasePrompt,
+			"对方说："+strings.TrimSpace(in.Text)+"\n事实："+facts+
+				"\n你刚才错误地把还在跑的任务说成做完了；按事实重说，禁止说已经做完。"))
+		if fixed == "" || claimsActiveWorkFinished(fixed) {
+			log.Info().Str("project", rc.cfg.ProjectID).Str("trace", in.TraceID).
+				Msg("blocked live reply that claimed finished work while tasks still run")
+			m.ackFallthrough(ctx, rc, in, rec)
+			return liveOutcome{reason: "会话层把还在跑的任务说成做完了", sampleID: rec.commit(routeFallthrough)}
+		}
+		answer = fixed
 	}
 	sent := m.sendOutboundResult(ctx, rc, OutboundMessage{
 		Scene: in.Scene, ConversationID: in.ConversationID,
@@ -1040,8 +1076,8 @@ func directorTools() []liveagent.ToolSpec {
 		{
 			Name: getStatusTool,
 			Description: "查这个会话里任务的真实状态（在跑的 + 刚结束的 recent_terminal）。" +
-				"要跟对方讲进度、状态或结论之前必须先调它，不要凭印象说。" +
-				"recent_terminal.status 为 failed/cancelled/completed 时必须照实转述；空的在跑列表不等于都成功了。" +
+				"要跟对方讲进度、多久、状态或结论之前必须先调它，不要凭印象说。" +
+				"tasks 非空时禁止说已经做完；recent_terminal.status 为 failed/cancelled/completed 时必须照实转述；空的在跑列表不等于都成功了。" +
 				"若有 failed/cancelled：回复里要让对方选下一步（重试 / 换做法 / 先搁置），不要擅自继续派活。",
 			Params: []liveagent.Param{
 				{Name: "task_id", Description: "只查某一件事时填它的 taskId；不填就列出在跑的和刚结束的。"},

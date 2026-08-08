@@ -528,6 +528,23 @@ func TestQueueFullHintIsSentOnceAndNotSilent(t *testing.T) {
 	once.Do(func() { close(release) })
 }
 
+func TestClaimsActiveWorkFinished(t *testing.T) {
+	for _, s := range []string{
+		"快模型和 worker 架构精简分析已经做完了。",
+		"结论是弄完了，可以精简。",
+		"已经查完了。",
+	} {
+		if !claimsActiveWorkFinished(s) {
+			t.Fatalf("should flag finished claim: %q", s)
+		}
+	}
+	for _, s := range []string{"还在方案报告页，大概还要一会儿。", "刚派下去。"} {
+		if claimsActiveWorkFinished(s) {
+			t.Fatalf("false finished claim: %q", s)
+		}
+	}
+}
+
 func TestOutcomeBriefForbidsHollowArchitectureConclusion(t *testing.T) {
 	id := &models.TaskIdentity{ShortTitle: "快模型架构", OriginalRequirement: "看看能不能精简"}
 	empty := outcomeBrief(id, TaskOutcome{Status: "completed"}, "zh-CN")
