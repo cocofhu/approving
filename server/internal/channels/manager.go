@@ -158,6 +158,10 @@ type Manager struct {
 	liveMaxConcurrentWork   atomic.Int64
 	liveToolLoopLimit       atomic.Int64
 	liveMaxTokens           atomic.Int64
+	// liveSystemBody is the operator's replacement for the routing prompt's
+	// body. Empty means the built-in one. The persona is never in here — it is
+	// re-attached on every read.
+	liveSystemBody atomic.Pointer[string]
 	// transcript is the shared record of the conversation. nil means the
 	// routing layers fall back to the single message in front of them.
 	transcript Transcript
@@ -200,7 +204,7 @@ func NewManager(bridge *ChannelBridge, factories map[string]AdapterFactory, decr
 		baseCtx:      context.Background(),
 
 		heartbeatInterval: DefaultHeartbeatInterval,
-		policy:       sendable.NewPolicy(nil, nil),
+		policy:            sendable.NewPolicy(nil, nil),
 	}
 	// The bridge already owns thread resolution and message persistence, so it
 	// is also what records the conversation both layers read back.
@@ -1336,51 +1340,54 @@ func (m *Manager) drainPushQueueRaw(key string) []CronPushItem {
 	return out
 }
 
-func (m *Manager) lookupDeliveryTarget(projectID string) (*runningChannel, Scene, string, error) {
+// lookupTarget finds the project's most recently updated channel that carries a
+// usable session address, among those the caller is willing to accept.
+//
+// The two callers below differ in one predicate and one error, and in nothing
+// else. Keeping them apart meant every fix to the address parsing, the
+// most-recent-wins tie-break or the locking had to be made twice, and the
+// second copy is the one that gets forgotten.
+func (m *Manager) lookupTarget(projectID string, accept func(models.ChannelConfig) bool,
+	missing error) (*runningChannel, Scene, string, error) {
 	m.mu.Lock()
 	var target *runningChannel
 	for _, rc := range m.running {
-		if rc.cfg.ProjectID == projectID && rc.cfg.CronDeliver && strings.TrimSpace(rc.cfg.CronDeliverTarget) != "" {
-			if target == nil || rc.cfg.UpdatedAt.After(target.cfg.UpdatedAt) {
-				target = rc
-			}
+		if rc.cfg.ProjectID != projectID || strings.TrimSpace(rc.cfg.CronDeliverTarget) == "" {
+			continue
+		}
+		if !accept(rc.cfg) {
+			continue
+		}
+		if target == nil || rc.cfg.UpdatedAt.After(target.cfg.UpdatedAt) {
+			target = rc
 		}
 	}
 	m.mu.Unlock()
 	if target == nil {
-		return nil, "", "", ErrNoDeliveryChannel
+		return nil, "", "", missing
 	}
 	scene, conv := parseTarget(target.cfg.CronDeliverTarget)
 	if conv == "" {
-		return nil, "", "", ErrNoDeliveryChannel
+		return nil, "", "", missing
 	}
 	return target, scene, conv, nil
 }
 
-// lookupRunNotifyTarget finds an Enabled channel with a usable session address
-// (CronDeliverTarget), without requiring CronDeliver=true.
+// lookupDeliveryTarget finds a channel that has opted into scheduled delivery.
+func (m *Manager) lookupDeliveryTarget(projectID string) (*runningChannel, Scene, string, error) {
+	return m.lookupTarget(projectID,
+		func(cfg models.ChannelConfig) bool { return cfg.CronDeliver },
+		ErrNoDeliveryChannel)
+}
+
+// lookupRunNotifyTarget finds an Enabled channel with a usable session address,
+// without requiring CronDeliver=true. Run notifications are operational: a
+// project that has a channel bound at all should hear about a failed run, even
+// if it never asked for scheduled pushes.
 func (m *Manager) lookupRunNotifyTarget(projectID string) (*runningChannel, Scene, string, error) {
-	m.mu.Lock()
-	var target *runningChannel
-	for _, rc := range m.running {
-		if !rc.cfg.Enabled {
-			continue
-		}
-		if rc.cfg.ProjectID == projectID && strings.TrimSpace(rc.cfg.CronDeliverTarget) != "" {
-			if target == nil || rc.cfg.UpdatedAt.After(target.cfg.UpdatedAt) {
-				target = rc
-			}
-		}
-	}
-	m.mu.Unlock()
-	if target == nil {
-		return nil, "", "", ErrNoRunNotifyTarget
-	}
-	scene, conv := parseTarget(target.cfg.CronDeliverTarget)
-	if conv == "" {
-		return nil, "", "", ErrNoRunNotifyTarget
-	}
-	return target, scene, conv, nil
+	return m.lookupTarget(projectID,
+		func(cfg models.ChannelConfig) bool { return cfg.Enabled },
+		ErrNoRunNotifyTarget)
 }
 
 func (m *Manager) convQueueFor(key string) *convQueue {

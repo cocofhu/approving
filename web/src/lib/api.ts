@@ -250,9 +250,11 @@ export interface DashboardStats {
 }
 
 // SettingKind selects the input control and the value type: 'int' is a number,
-// 'string' is free text, and 'secret' reads back as SECRET_MASK — submitting the
-// mask (or an empty string) leaves the stored credential untouched.
-export type SettingKind = 'int' | 'string' | 'secret'
+// 'string' is free text, 'secret' reads back as SECRET_MASK — submitting the
+// mask (or an empty string) leaves the stored credential untouched — 'text' is
+// a multi-line body, and 'float' is a decimal that may be left blank to mean
+// "let the endpoint decide".
+export type SettingKind = 'int' | 'string' | 'secret' | 'text' | 'float'
 
 // SECRET_MASK is the placeholder the API returns for a stored secret and
 // accepts on write to mean "keep what is stored".
@@ -269,6 +271,11 @@ export interface SettingItem {
   min: number
   source: 'env' | 'db' | 'config'
   locked: boolean
+  // prefix is text the runtime always puts in front of this value; it is shown
+  // read-only so nobody writes a second copy of it into the body.
+  prefix?: string
+  // preview is what a blank value falls back to.
+  preview?: string
 }
 
 // LiveProbeCheck is one property of a conversation-model endpoint that either

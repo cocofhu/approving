@@ -378,6 +378,8 @@ func main() {
 	// Settings boot before channels exist; wire the window knobs now and
 	// re-apply so DB/config overrides reach the manager without a restart.
 	settingsSvc.SetLiveLimitsController(channelMgr)
+	livePrompts := newLivePromptRelay(channelMgr, liveClient)
+	settingsSvc.SetLivePromptController(livePrompts, livePromptDefaults())
 	settingsSvc.ApplyOnBoot()
 	if liveClient.Configured() {
 		log.Info().Msg("conversation model endpoint configured")
@@ -414,7 +416,7 @@ func main() {
 	pmMCP.SetTaskSafety(riskSvc, taskContextSvc, channelIMNotifier{mgr: channelMgr})
 	// A finished task reports back to the conversation that asked for it, in
 	// that conversation's own words.
-	channelMgr.SetSynthesizer(newLiveSynthesizer(liveClient))
+	channelMgr.SetSynthesizer(newLiveSynthesizer(liveClient, livePrompts))
 	eng.SetRunTerminalObserver(runTerminalAdapter{mgr: channelMgr})
 	eng.SetRunPausedObserver(runPausedAdapter{mgr: channelMgr})
 	eng.SetRunHeartbeatObserver(runHeartbeatAdapter{mgr: channelMgr})

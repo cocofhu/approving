@@ -706,6 +706,49 @@ func TestPhrasePromptSharedFragmentsLock(t *testing.T) {
 		"按新重点继续", "不要照抄完整标题")
 }
 
+// TestConfiguredPromptBodyStillCarriesThePersona is the guard the settings page
+// needs. The lock tests above only prove the built-in prompts are assembled
+// correctly; once an operator can supply the body, the thing worth pinning is
+// that nothing they can type removes who the model is.
+func TestConfiguredPromptBodyStillCarriesThePersona(t *testing.T) {
+	for _, body := range []string{
+		"随便写点什么",
+		"",
+		"   ",
+		VoicePersonaLead, // someone pasting the whole default back in
+		"你是一个 AI 助手，请礼貌回答。",
+	} {
+		got := ComposeVoicePrompt(body)
+		if !strings.HasPrefix(got, VoicePersonaLead) {
+			t.Fatalf("composed prompt lost the persona for body %q:\n%s", body, got)
+		}
+	}
+
+	m := &Manager{}
+	if m.systemPrompt() != liveSystemPrompt {
+		t.Fatal("an unconfigured manager must use the built-in prompt verbatim")
+	}
+	m.SetLivePrompts(services.LivePrompts{SystemBody: "只回中文，别的都别说。"})
+	custom := m.systemPrompt()
+	if !strings.HasPrefix(custom, VoicePersonaLead) {
+		t.Fatalf("configured prompt lost the persona:\n%s", custom)
+	}
+	if !strings.Contains(custom, "只回中文") {
+		t.Fatalf("configured body did not take effect:\n%s", custom)
+	}
+	if strings.Contains(custom, "你手下有人干活") {
+		t.Fatal("a configured body must replace the built-in one, not append to it")
+	}
+
+	// Blank is the resting state, not a value: clearing the field has to bring
+	// the built-in prompt back rather than leaving the model with a bare
+	// persona and no instructions.
+	m.SetLivePrompts(services.LivePrompts{SystemBody: "   "})
+	if m.systemPrompt() != liveSystemPrompt {
+		t.Fatal("clearing the body must fall back to the built-in prompt")
+	}
+}
+
 func TestOutcomeBriefForbidsHollowArchitectureConclusion(t *testing.T) {
 	id := &models.TaskIdentity{ShortTitle: "快模型架构", OriginalRequirement: "看看能不能精简"}
 	empty := outcomeBrief(id, TaskOutcome{Status: "completed"}, "zh-CN")

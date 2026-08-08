@@ -128,9 +128,21 @@ func TestSettingsApplyLiveContextWindows(t *testing.T) {
 	want := LiveLimits{
 		TranscriptWindow: 40, LedgerLimit: 8, RecentTerminalHours: 12,
 		MaxConcurrentWork: 5, ToolLoopLimit: 4, MaxTokens: 4096,
+		// Untouched by the patch above, so it arrives as the built-in default
+		// rather than as a zero — a partial apply must not read as "switch the
+		// volunteered updates off".
+		RunHeartbeat: 30 * time.Minute,
 	}
 	if limits.got != want {
 		t.Fatalf("SetLiveLimits = %+v want %+v", limits.got, want)
+	}
+	// 0 is a setting here, not an absent value: it is how a project says it
+	// does not want to be interrupted.
+	if _, err := svc.Update(map[string]any{KeyRunHeartbeatMinutes: 0}); err != nil {
+		t.Fatal(err)
+	}
+	if limits.got.RunHeartbeat != 0 {
+		t.Fatalf("heartbeat off switch = %v want 0", limits.got.RunHeartbeat)
 	}
 	if _, err := svc.Update(map[string]any{KeyLiveTranscriptWindow: 2}); err == nil {
 		t.Fatal("expected min validation for transcript window")
@@ -213,6 +225,100 @@ func TestSettingsCarryStringsAndSecrets(t *testing.T) {
 	}
 	if live.apiKey != "sk-real-key" {
 		t.Fatalf("blank write must keep the key: %q", live.apiKey)
+	}
+}
+
+type fakeLivePrompts struct{ got LivePrompts }
+
+func (f *fakeLivePrompts) SetLivePrompts(p LivePrompts) { f.got = p }
+
+// The prompt bodies and temperature are what an operator reaches for when the
+// model is talking wrong. They are also the knobs most able to break the layer,
+// so each one has a resting state that must survive a save.
+func TestSettingsCarryPromptBodiesAndTemperature(t *testing.T) {
+	db, err := database.OpenSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.StoreConfig(&config.Config{Live: config.LiveConfig{TimeoutSeconds: 8}})
+	prompts := &fakeLivePrompts{}
+	svc := NewSettingsService(db, nil, nil)
+	svc.SetLivePromptController(prompts, LivePromptDefaults{
+		Prefix: "你是负责人本人。", SystemBody: "内置正文", SynthesisBody: "内置汇报正文",
+	})
+	svc.ApplyOnBoot()
+
+	// Nothing configured: bodies blank so the runtime uses its built-ins, and
+	// no temperature at all so the endpoint's own default stands.
+	if prompts.got.SystemBody != "" || prompts.got.SynthesisBody != "" {
+		t.Fatalf("unconfigured prompts should be blank: %+v", prompts.got)
+	}
+	if prompts.got.Temperature != nil {
+		t.Fatalf("unconfigured temperature = %v want nil", *prompts.got.Temperature)
+	}
+
+	// The settings page has to be able to show what a blank field falls back
+	// to, and what prefix it cannot edit away.
+	byKey := map[string]SettingItem{}
+	for _, it := range svc.Effective() {
+		byKey[it.Key] = it
+	}
+	sys := byKey[KeyLiveSystemPromptBody]
+	if sys.Kind != KindText || sys.Preview != "内置正文" || sys.Prefix != "你是负责人本人。" {
+		t.Fatalf("system prompt item = %+v", sys)
+	}
+	if got := byKey[KeyLiveSynthesisPromptBody]; got.Preview != "内置汇报正文" {
+		t.Fatalf("synthesis preview = %q", got.Preview)
+	}
+	if got := byKey[KeyLiveTemperature]; got.Kind != KindFloat || got.Value != "" {
+		t.Fatalf("temperature item = %+v", got)
+	}
+
+	if _, err := svc.Update(map[string]any{
+		KeyLiveSystemPromptBody:    " 只说中文。 ",
+		KeyLiveSynthesisPromptBody: "先结论。",
+		KeyLiveTemperature:         "0.3",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if prompts.got.SystemBody != "只说中文。" || prompts.got.SynthesisBody != "先结论。" {
+		t.Fatalf("bodies not applied: %+v", prompts.got)
+	}
+	if prompts.got.Temperature == nil || *prompts.got.Temperature != 0.3 {
+		t.Fatalf("temperature not applied: %+v", prompts.got)
+	}
+
+	// 0 is a real answer — say the same thing every time — and must not be
+	// mistaken for the blank that means "let the endpoint decide".
+	if _, err := svc.Update(map[string]any{KeyLiveTemperature: float64(0)}); err != nil {
+		t.Fatal(err)
+	}
+	if prompts.got.Temperature == nil || *prompts.got.Temperature != 0 {
+		t.Fatalf("temperature 0 = %+v want an explicit 0", prompts.got.Temperature)
+	}
+	if _, err := svc.Update(map[string]any{KeyLiveTemperature: "  "}); err != nil {
+		t.Fatal(err)
+	}
+	if prompts.got.Temperature != nil {
+		t.Fatalf("cleared temperature = %v want nil", *prompts.got.Temperature)
+	}
+
+	// A value the endpoint would reject has to fail here, where the message is
+	// readable, rather than there, where it looks like the model went quiet.
+	if _, err := svc.Update(map[string]any{KeyLiveTemperature: "9"}); err == nil {
+		t.Fatal("expected a range error for an out-of-range temperature")
+	}
+	if _, err := svc.Update(map[string]any{KeyLiveTemperature: "warm"}); err == nil {
+		t.Fatal("expected a type error for a non-numeric temperature")
+	}
+
+	// Clearing a body restores the built-in prompt rather than leaving the
+	// model with no instructions.
+	if _, err := svc.Update(map[string]any{KeyLiveSystemPromptBody: ""}); err != nil {
+		t.Fatal(err)
+	}
+	if prompts.got.SystemBody != "" {
+		t.Fatalf("cleared body = %q want blank", prompts.got.SystemBody)
 	}
 }
 

@@ -472,3 +472,49 @@ func TestPartialReplyCutByLengthIsRejected(t *testing.T) {
 		t.Fatalf("err = %v text=%q, want ErrBudgetExhausted", err, got.Text)
 	}
 }
+
+// The settings page has one temperature dial for one endpoint, so every call
+// this client makes has to pick it up — including the ones made from other
+// packages, which is the reason it lives on the client at all.
+func TestTemperatureFollowsTheEndpointSetting(t *testing.T) {
+	var seen atomic.Value
+	c := serveJSON(t, func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		raw, _ := io.ReadAll(r.Body)
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatal(err)
+		}
+		temp, present := body["temperature"]
+		seen.Store([2]any{temp, present})
+		io.WriteString(w, textResponse("好"))
+	})
+
+	// Nothing configured: the field must be absent, not zero. Sending 0 would
+	// silently pin every endpoint to deterministic output.
+	if _, err := c.Complete(context.Background(), chatRequest()); err != nil {
+		t.Fatal(err)
+	}
+	if got := seen.Load().([2]any); got[1].(bool) {
+		t.Fatalf("unconfigured client sent temperature=%v", got[0])
+	}
+
+	for _, want := range []float64{0, 0.7} {
+		set := want
+		c.SetDefaultTemperature(&set)
+		if _, err := c.Complete(context.Background(), chatRequest()); err != nil {
+			t.Fatal(err)
+		}
+		got := seen.Load().([2]any)
+		if !got[1].(bool) || got[0].(float64) != want {
+			t.Fatalf("temperature on the wire = %v (present=%v), want %v", got[0], got[1], want)
+		}
+	}
+
+	c.SetDefaultTemperature(nil)
+	if _, err := c.Complete(context.Background(), chatRequest()); err != nil {
+		t.Fatal(err)
+	}
+	if got := seen.Load().([2]any); got[1].(bool) {
+		t.Fatalf("cleared temperature still sent %v", got[0])
+	}
+}

@@ -39,6 +39,10 @@ configured on Agent meta env, not in this platform config table.
 | `APPROVING_LIVE_MAX_CONCURRENT_WORK` | `live.max_concurrent_work` | integer | `3` | Public | Max concurrent tasks per conversation |
 | `APPROVING_LIVE_TOOL_LOOP_LIMIT` | `live.tool_loop_limit` | integer | `3` | Public | Max tool calls the fast model may make in one turn |
 | `APPROVING_LIVE_MAX_TOKENS` | `live.max_tokens` | integer | `2048` | Public | max_tokens for one Live completion |
+| `APPROVING_RUN_HEARTBEAT_MINUTES` | `live.run_heartbeat_minutes` | integer | `30` | Public | How long a task may run silently before the platform volunteers an update; 0 turns those updates off |
+| `APPROVING_LIVE_SYSTEM_PROMPT_BODY` | `live.system_prompt_body` | string | `Not set` | Public | Body of the fast model's instructions; empty uses the built-in text. The fixed persona prefix is attached at runtime and cannot be overridden |
+| `APPROVING_LIVE_SYNTHESIS_PROMPT_BODY` | `live.synthesis_prompt_body` | string | `Not set` | Public | Body of the outcome-reporting instructions; empty uses the built-in text, with the same fixed persona prefix |
+| `APPROVING_LIVE_TEMPERATURE` | `live.temperature` | float | `Not set` | Public | Temperature for the fast model; empty sends none and lets the endpoint decide |
 | `APPROVING_BROWSER_ENABLED` | `browser.enabled` | boolean | `Not set` | Deprecated | Compatibility field; VNC preview is always available |
 | `APPROVING_CURSOR_API_KEY` | `sandbox.cursor_api_key` | string | `Not set` | Sensitive, Deprecated | Deprecated; use agent env |
 | `CURSOR_API_KEY` | `sandbox.cursor_api_key` | string | `Not set` | Sensitive, Deprecated | Deprecated alias; use agent env |

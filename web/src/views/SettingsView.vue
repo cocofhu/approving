@@ -59,9 +59,17 @@ const groups = computed(() => [
       'live_max_concurrent_work',
       'live_tool_loop_limit',
       'live_max_tokens',
+      'live_temperature',
+      'run_heartbeat_minutes',
+      'live_system_prompt_body',
+      'live_synthesis_prompt_body',
     ],
   },
 ])
+
+// The prompt bodies get their own row layout: a value that runs to dozens of
+// lines cannot sit in the label/input row the other knobs share.
+const TEXT_KINDS = new Set(['text'])
 
 const SETTING_UNIT_KEYS: Record<string, string> = {
   run_sandbox_ttl_minutes: 'common.format.minutes',
@@ -73,6 +81,16 @@ const SETTING_UNIT_KEYS: Record<string, string> = {
   live_max_concurrent_work: 'common.format.units',
   live_tool_loop_limit: 'common.format.times',
   live_max_tokens: 'common.format.tokens',
+  run_heartbeat_minutes: 'common.format.minutes',
+}
+
+// A preview that is dozens of lines long turns the settings page into a wall of
+// prompt. Enough to recognise the text is enough.
+const PREVIEW_LIMIT = 400
+
+function previewOf(item: SettingItem): string {
+  const text = (item.preview ?? '').trim()
+  return text.length > PREVIEW_LIMIT ? `${text.slice(0, PREVIEW_LIMIT)}…` : text
 }
 
 function settingDescription(key: string): string {
@@ -468,7 +486,7 @@ onBeforeUnmount(() => {
                   {{ settingDescription(key) }}
                 </p>
               </div>
-              <div class="flex shrink-0 items-center gap-2">
+              <div v-if="!TEXT_KINDS.has(itemOf(key)!.kind)" class="flex shrink-0 items-center gap-2">
                 <input
                   v-if="itemOf(key)!.kind === 'int'"
                   v-model.number="form[key]"
@@ -476,6 +494,16 @@ onBeforeUnmount(() => {
                   :min="itemOf(key)!.min"
                   :disabled="itemOf(key)!.locked || saving"
                   class="input w-[88px] text-right"
+                />
+                <input
+                  v-else-if="itemOf(key)!.kind === 'float'"
+                  v-model="form[key]"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  :placeholder="t('pages.settings.blankUsesEndpointDefault')"
+                  :disabled="itemOf(key)!.locked || saving"
+                  class="input w-[120px] text-right"
                 />
                 <input
                   v-else-if="itemOf(key)!.kind === 'secret'"
@@ -496,6 +524,40 @@ onBeforeUnmount(() => {
                 <span v-if="settingUnit(key)" class="w-9 text-xs text-txt3">{{ settingUnit(key) }}</span>
                 <span v-else class="w-9" />
               </div>
+            </div>
+
+            <!-- A prompt body is too long for the label row, and it needs two
+                 things beside it that a one-line knob does not: the prefix the
+                 runtime always adds, and the built-in text a blank field falls
+                 back to. -->
+            <div v-if="TEXT_KINDS.has(itemOf(key)!.kind)" class="mt-3">
+              <div
+                v-if="itemOf(key)!.prefix"
+                class="rounded-t-lg border border-b-0 border-line bg-elevated px-3 py-2"
+              >
+                <div class="text-[10px] uppercase tracking-wide text-txt3">
+                  {{ t('pages.settings.promptPrefix') }}
+                </div>
+                <p class="mt-1 whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-txt2">
+                  {{ itemOf(key)!.prefix }}
+                </p>
+              </div>
+              <textarea
+                v-model="form[key]"
+                rows="8"
+                :placeholder="t('pages.settings.blankUsesBuiltIn')"
+                :disabled="itemOf(key)!.locked || saving"
+                class="input w-full resize-y font-mono text-[12px] leading-relaxed"
+                :class="itemOf(key)!.prefix ? 'rounded-t-none' : ''"
+              />
+              <details v-if="previewOf(itemOf(key)!)" class="mt-2">
+                <summary class="cursor-pointer text-xs text-txt3 hover:text-txt2">
+                  {{ t('pages.settings.showBuiltIn') }}
+                </summary>
+                <p class="mt-2 whitespace-pre-wrap rounded-lg border border-line bg-elevated px-3 py-2 font-mono text-[11px] leading-relaxed text-txt3">
+                  {{ previewOf(itemOf(key)!) }}
+                </p>
+              </details>
             </div>
           </template>
         </div>

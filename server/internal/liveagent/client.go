@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -84,6 +85,12 @@ type Request struct {
 	// cost control just truncates it into an empty answer. The timeout, not
 	// this, is what bounds a turn.
 	MaxTokens int
+	// Temperature overrides the client-wide default for this one call. nil
+	// means "whatever the client is set to", and a client with nothing set
+	// sends no temperature at all so the endpoint's own default stands. It
+	// cannot be a bare float: 0 is a real setting (say the same thing every
+	// time), not an absent one.
+	Temperature *float64
 }
 
 // Result is what the model decided. Exactly one of Text and ToolName is
@@ -100,6 +107,10 @@ type Client struct {
 	cur   current
 	http  *http.Client
 	stats stats
+	// temp is the settings-page temperature, applied to every call that does
+	// not carry its own. Held as a pointer so "not configured" stays distinct
+	// from "configured to 0".
+	temp atomic.Pointer[float64]
 }
 
 // New returns a client with no endpoint set; it stays unconfigured until
@@ -117,6 +128,25 @@ func New() *Client {
 // take effect without a restart.
 func (c *Client) SetLiveEndpoint(baseURL, apiKey, model string, timeout time.Duration) {
 	c.cur.store(Endpoint{BaseURL: baseURL, APIKey: apiKey, Model: model, Timeout: timeout})
+}
+
+// SetDefaultTemperature applies the settings-page temperature to every call.
+//
+// It lives on the client rather than on each call site because temperature is
+// one dial for one endpoint: routing, phrasing and reporting all want the same
+// answer to "how loose may this model be", and threading it through six call
+// sites would guarantee that one of them drifts. nil restores the endpoint's
+// own default.
+func (c *Client) SetDefaultTemperature(v *float64) {
+	if c == nil {
+		return
+	}
+	if v == nil {
+		c.temp.Store(nil)
+		return
+	}
+	set := *v
+	c.temp.Store(&set)
 }
 
 // Configured reports whether a call would have somewhere to go.
@@ -149,6 +179,9 @@ func (c *Client) Complete(ctx context.Context, req Request) (Result, error) {
 		return Result{}, ErrNotConfigured
 	}
 
+	if req.Temperature == nil {
+		req.Temperature = c.temp.Load()
+	}
 	body, err := json.Marshal(buildPayload(ep, req))
 	if err != nil {
 		return Result{}, fmt.Errorf("liveagent: encode request: %w", err)
@@ -281,6 +314,9 @@ func buildPayload(ep Endpoint, req Request) map[string]any {
 		// against any OpenAI-compatible endpoint, and it is the field they all
 		// still accept.
 		payload["max_tokens"] = req.MaxTokens
+	}
+	if req.Temperature != nil {
+		payload["temperature"] = *req.Temperature
 	}
 	if len(req.Tools) > 0 {
 		payload["tools"] = toolSchemas(req.Tools)
