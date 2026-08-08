@@ -75,8 +75,8 @@ func (s *ArtifactService) DigestedRunOutcome(runID string, maxRunes int) string 
 	return ""
 }
 
-// AppendRunDeliveryURL adds a run's delivery URL (e.g. submit_mr's mr_url) to
-// the completion digest so later follow-ups can answer from stored facts.
+// AppendRunDeliveryURL adds a delivery URL to the completion digest so later
+// follow-ups can answer from stored facts.
 func AppendRunDeliveryURL(digest, url string) string {
 	digest = strings.TrimSpace(digest)
 	url = strings.TrimSpace(url)
