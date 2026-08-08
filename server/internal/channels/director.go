@@ -597,6 +597,7 @@ func (m *Manager) ensureTaskIdentity(rc *runningChannel, in InboundMessage, d *W
 		OriginScene:          string(in.Scene),
 		OriginConversationID: in.ConversationID,
 		OriginExternalUserID: in.UserID,
+		OriginTraceID:        strings.TrimSpace(in.TraceID),
 		Language:             services.DetectLanguage(in.Text, ""),
 	})
 	if err != nil || identity == nil {

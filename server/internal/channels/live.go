@@ -744,6 +744,11 @@ func (m *Manager) dispatchWork(ctx context.Context, rc *runningChannel, in Inbou
 		}
 	}
 
+	// Record the tool span before commit so successful dispatch samples carry
+	// the same tool:dispatch_pm semantics as the refusal path.
+	rec.toolReturned(dispatchPMTool, args, encodeToolResult(map[string]any{
+		"accepted": true, "short_title": title, "request": brief,
+	}))
 	return liveOutcome{
 		reason: brief, dispatch: dispatch, sampleID: rec.commit(routeDispatch),
 	}, ""
@@ -933,7 +938,8 @@ func (c *foregroundCapture) take() string {
 	}
 	c.taken = true
 	if c.collect != nil {
-		c.text = strings.TrimSpace(ScrubForOutbound(c.collect()))
+		// Pass through; sendOutboundResult is the sole ScrubForOutbound gate.
+		c.text = strings.TrimSpace(c.collect())
 	}
 	return c.text
 }
@@ -958,11 +964,11 @@ func (c *foregroundCapture) egress(degraded bool) string {
 // This is rephrasing, not rewriting. The facts come from the agent, which is
 // the only layer that checked them; the conversation layer is only allowed to
 // say them the way it says everything else. When it cannot — no model, a slow
-// endpoint, an empty completion — the agent's own words go out scrubbed, which
-// reads slightly off but is true. degraded reports which of the two happened.
+// endpoint, an empty completion — the agent's own words go out and are scrubbed
+// at sendOutboundResult. degraded reports which of the two happened.
 func (m *Manager) reportThroughDirector(ctx context.Context, rc *runningChannel, in InboundMessage,
 	conclusion string) (text string, degraded bool) {
-	plain := strings.TrimSpace(ScrubForOutbound(conclusion))
+	plain := strings.TrimSpace(conclusion)
 	started := time.Now()
 	if m.live == nil || !m.live.Configured() || plain == "" {
 		m.appendTraceSpan(in.TraceID, finishSpan("director_report", "skipped", "degraded", started))

@@ -90,31 +90,15 @@ func (m *Manager) ReflowTaskOutcome(ctx context.Context, outcome TaskOutcome) er
 	return err
 }
 
-// traceIDForReflow best-effort joins a terminal outcome to the inbound turn that
-// dispatched it. TaskIdentity has no OriginTraceID; matching the newest sample
-// for the origin conversation is enough for observability and matches the
-// existing "sampling may drop" posture. An empty result is fine — delivery still
-// proceeds without a span join.
+// traceIDForReflow joins a terminal outcome to the inbound turn that dispatched
+// it via the write-once OriginTraceID on TaskIdentity. An empty result is fine —
+// delivery still proceeds without a span join (including historical rows that
+// predate OriginTraceID persistence).
 func (m *Manager) traceIDForReflow(identity *models.TaskIdentity) string {
-	if m == nil || m.samples == nil || identity == nil {
+	if identity == nil {
 		return ""
 	}
-	conv := strings.TrimSpace(identity.OriginConversationID)
-	if conv == "" {
-		return ""
-	}
-	listed, err := m.samples.List(services.SampleQuery{
-		ProjectID: identity.ProjectID, ConversationID: conv, Limit: 10,
-	})
-	if err != nil {
-		return ""
-	}
-	for _, s := range listed {
-		if tid := strings.TrimSpace(s.TraceID); tid != "" {
-			return tid
-		}
-	}
-	return ""
+	return strings.TrimSpace(identity.OriginTraceID)
 }
 
 // synthesizeOutcome asks the conversation's agent to phrase the outcome in
@@ -154,9 +138,8 @@ func (m *Manager) synthesizeOutcome(ctx context.Context, identity *models.TaskId
 		}
 	}
 	m.appendTraceSpan(traceID, finishSpan("synthesis", status, detail, started))
-	// Final scrub lives in sendOutboundResult (ScrubForOutbound); keep a thin
-	// pass here so captured/fallback text is already clean if inspected early.
-	return ScrubForOutbound(text)
+	// Pass through; sendOutboundResult is the sole ScrubForOutbound gate.
+	return text
 }
 
 // SynthesisRequest asks the conversation's agent to phrase a background event
@@ -285,8 +268,8 @@ func outcomeFallbackText(identity *models.TaskIdentity, outcome TaskOutcome, lan
 	en := services.NormalizeLanguage(language) == "en"
 	// The digest goes to completedOutcomeFallback unscrubbed on purpose: it
 	// chooses which sentences to quote by asking whether each one is clean, and
-	// a pre-scrubbed digest looks clean everywhere. What it returns is scrubbed
-	// before it leaves.
+	// a pre-scrubbed digest looks clean everywhere. Outbound scrubbing happens
+	// only in sendOutboundResult.
 	facts := strings.TrimSpace(outcome.ResultSummary)
 	switch strings.ToLower(strings.TrimSpace(outcome.Status)) {
 	case "completed":
@@ -335,7 +318,9 @@ func completedOutcomeFallback(title, facts string, en bool) string {
 		link = m[1]
 		facts = deliveryLine.ReplaceAllString(facts, "")
 	}
-	body := ScrubForOutbound(leadingConclusion(facts, outcomeFallbackFactsRunes))
+	// leadingConclusion already drops sentences with internal terms; final
+	// ScrubForOutbound runs in sendOutboundResult.
+	body := leadingConclusion(facts, outcomeFallbackFactsRunes)
 	// The task has to be named, first thing. Several jobs can be in flight at
 	// once, and two pushes that both open with 「弄完了」 are indistinguishable
 	// in a chat window — which is the state this message arrived in.

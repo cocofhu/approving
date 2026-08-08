@@ -96,8 +96,8 @@ var verdictScaffolding = regexp.MustCompile(`(?m)(^|[。；;\n])\s*(最终判定
 var deliveryReceiptLine = regexp.MustCompile(`(?im)^\s*(已发送|已通过\s*QQ\s*回复用户|稍等，?我看一下|Give me a moment on this one|已开始处理|任务已启动|收到，正在处理)\s*[。.!！…]*\s*$`)
 
 // ScrubForOutbound is the single policy entry for user-visible channel text.
-// sendOutboundResult applies it as the final gate; other call sites that still
-// scrub early do so for local hygiene and must stay behavior-equivalent.
+// Channel egress (capture/report/delivery/reflow) passes text through and
+// sendOutboundResult applies this as the final gate before transport.
 func ScrubForOutbound(text string) string {
 	return ScrubInternalTerms(text)
 }

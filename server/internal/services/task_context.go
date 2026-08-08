@@ -65,7 +65,10 @@ type EnsureTaskIdentityInput struct {
 	// Origin conversation, recorded once when the task is created from a
 	// channel turn. Empty values never clear an already-recorded origin.
 	OriginChannel, OriginScene, OriginConversationID, OriginExternalUserID string
-	Language, RecentContext                                                string
+	// OriginTraceID is the inbound turn that dispatched this task. Write-once
+	// like OriginConversationID: empty values never clear a stored id.
+	OriginTraceID           string
+	Language, RecentContext string
 }
 
 func (s *TaskContextService) EnsureIdentity(in EnsureTaskIdentityInput) (*models.TaskIdentity, error) {
@@ -92,6 +95,7 @@ func (s *TaskContextService) EnsureIdentity(in EnsureTaskIdentityInput) (*models
 			OriginScene:          strings.TrimSpace(in.OriginScene),
 			OriginConversationID: strings.TrimSpace(in.OriginConversationID),
 			OriginExternalUserID: strings.TrimSpace(in.OriginExternalUserID),
+			OriginTraceID:        strings.TrimSpace(in.OriginTraceID),
 			Language:             NormalizeLanguage(in.Language),
 			RecentContext:        strings.TrimSpace(in.RecentContext),
 			Status:               normalizeTaskStatus(in.Status), CreatedAt: now, UpdatedAt: now,
@@ -136,6 +140,11 @@ func (s *TaskContextService) EnsureIdentity(in EnsureTaskIdentityInput) (*models
 			identity.OriginScene = strings.TrimSpace(in.OriginScene)
 			identity.OriginConversationID = conv
 			identity.OriginExternalUserID = strings.TrimSpace(in.OriginExternalUserID)
+		}
+	}
+	if identity.OriginTraceID == "" {
+		if tid := strings.TrimSpace(in.OriginTraceID); tid != "" {
+			identity.OriginTraceID = tid
 		}
 	}
 	// Callers decide whether a message really represents a language switch (see

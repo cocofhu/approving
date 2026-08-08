@@ -616,3 +616,34 @@ func TestIdentityForRunIsProjectScopedAndAbsenceIsNotAnError(t *testing.T) {
 		}
 	}
 }
+
+// TestOriginTraceIDIsWriteOnce pins the reflow join key: once set, empty or
+// different values must not overwrite it (same posture as OriginConversationID).
+func TestOriginTraceIDIsWriteOnce(t *testing.T) {
+	db := taskContextDB(t)
+	svc := NewTaskContextService(db)
+	first, err := svc.EnsureIdentity(EnsureTaskIdentityInput{
+		RunID: "run-trace", ProjectID: "p1", UserID: SyntheticQQUserID("u1"),
+		ShortTitle: "查主干", Status: "running",
+		OriginConversationID: "c1", OriginTraceID: "tr-first",
+	})
+	if err != nil || first.OriginTraceID != "tr-first" {
+		t.Fatalf("create = %+v err=%v", first, err)
+	}
+	second, err := svc.EnsureIdentity(EnsureTaskIdentityInput{
+		RunID: "run-trace", ProjectID: "p1", UserID: SyntheticQQUserID("u1"),
+		ShortTitle: "查主干", Status: "running",
+		OriginTraceID: "tr-other",
+	})
+	if err != nil || second.OriginTraceID != "tr-first" {
+		t.Fatalf("overwrite attempt = %+v err=%v", second, err)
+	}
+	cleared, err := svc.EnsureIdentity(EnsureTaskIdentityInput{
+		RunID: "run-trace", ProjectID: "p1", UserID: SyntheticQQUserID("u1"),
+		ShortTitle: "查主干", Status: "running",
+		OriginTraceID: "",
+	})
+	if err != nil || cleared.OriginTraceID != "tr-first" {
+		t.Fatalf("empty must not clear = %+v err=%v", cleared, err)
+	}
+}

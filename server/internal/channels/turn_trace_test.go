@@ -93,7 +93,7 @@ func TestNoLiveModelStillRecordsADirectTrace(t *testing.T) {
 
 // TestDispatchReflowOutboundTraceChain covers the observable handoff:
 // live_route → tool:dispatch_pm → sandbox_turn → synthesis → outbound:task_outcome
-// joined by one TraceID (reflow best-effort matches the origin conversation).
+// joined by OriginTraceID on TaskIdentity.
 func TestDispatchReflowOutboundTraceChain(t *testing.T) {
 	g := newGPTLive(t)
 	// handleInbound uses the standalone rc; DeliverSendable resolves via m.running.
@@ -119,6 +119,7 @@ func TestDispatchReflowOutboundTraceChain(t *testing.T) {
 		ShortTitle: "错误处理", Status: "running",
 		OriginChannel: "qq", OriginScene: string(SceneC2C),
 		OriginConversationID: "user1", OriginExternalUserID: "u1",
+		OriginTraceID:       traceID,
 		Language:            "zh-CN",
 		OriginalRequirement: "查错误处理",
 	}); err != nil {
@@ -141,18 +142,105 @@ func TestDispatchReflowOutboundTraceChain(t *testing.T) {
 		t.Fatal(err)
 	}
 	names := spanNames(spans)
-	for _, want := range []string{"live_route", "sandbox_turn", "synthesis", "outbound:task_outcome"} {
+	for _, want := range []string{"live_route", "tool:dispatch_pm", "sandbox_turn", "synthesis", "outbound:task_outcome"} {
 		if !containsString(names, want) {
 			t.Fatalf("missing span %q in %v (raw=%s)", want, names, sample.Spans)
 		}
 	}
-	// Successful dispatch returns before toolReturned; the observable handoff is
-	// the live_ack (and route=dispatch on the sample), not tool:dispatch_pm.
 	if sample.Route != routeDispatch {
 		t.Fatalf("route = %q want dispatch", sample.Route)
 	}
-	if !containsString(names, "outbound:live_ack") && !containsString(names, "tool:dispatch_pm") {
-		t.Fatalf("dispatch handoff missing (want live_ack or tool:dispatch_pm): %v", names)
+}
+
+// TestConcurrentReflowUsesOriginTraceIDNotNewestSample proves two tasks in the
+// same origin conversation keep their own inbound TraceID when both reflow —
+// the old newest-sample best-effort would cross-wire them.
+func TestConcurrentReflowUsesOriginTraceIDNotNewestSample(t *testing.T) {
+	fa := &fakeAdapter{}
+	m, db := policyManager(t, fa, nil)
+	m.Apply([]models.ChannelConfig{{
+		ID: "c1", Type: "qq", ProjectID: "proj", AppID: "app", Enabled: true,
+		CronDeliver: true, CronDeliverTarget: "c2c:cron-target",
+	}})
+	t.Cleanup(m.StopAll)
+	m.mu.Lock()
+	for _, rc := range m.running {
+		rc.adapter = fa
+	}
+	m.mu.Unlock()
+	svc := services.NewLiveSampleService(db)
+	m.SetLiveSampleService(svc)
+	tasks := services.NewTaskContextService(db)
+	m.SetTaskContextService(tasks)
+
+	type job struct {
+		runID, traceID, title, summary string
+	}
+	jobs := []job{
+		{"run-concurrent-a", "tr-concurrent-a", "错误处理", "超时策略已对齐。"},
+		{"run-concurrent-b", "tr-concurrent-b", "登录性能", "首屏降到 1.1s。"},
+	}
+	for _, j := range jobs {
+		if _, err := tasks.EnsureIdentity(services.EnsureTaskIdentityInput{
+			RunID: j.runID, ProjectID: "proj",
+			UserID:     services.SyntheticQQUserID("u1"),
+			ShortTitle: j.title, Status: "running",
+			OriginChannel: "qq", OriginScene: string(SceneC2C),
+			OriginConversationID: "user-shared", OriginExternalUserID: "u1",
+			OriginTraceID: j.traceID, Language: "zh-CN",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := svc.Record(models.LiveDecisionSample{
+			ProjectID: "proj", Channel: "qq", Scene: string(SceneC2C),
+			ConversationID: "user-shared", TraceID: j.traceID, Route: routeDispatch,
+			Spans: `[{"name":"live_route","status":"ok"},{"name":"tool:dispatch_pm","status":"ok"}]`,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Newest-first sample list would prefer B; A must still join its own OriginTraceID.
+	for _, j := range jobs {
+		if err := m.ReflowTaskOutcome(context.Background(), TaskOutcome{
+			ProjectID: "proj", RunID: j.runID, Status: "completed",
+			ResultSummary: j.summary,
+		}); err != nil {
+			t.Fatalf("reflow %s: %v", j.runID, err)
+		}
+	}
+	for _, j := range jobs {
+		sample, err := svc.GetByTrace("proj", j.traceID)
+		if err != nil || sample == nil {
+			t.Fatalf("sample %s: %+v err=%v", j.traceID, sample, err)
+		}
+		var spans []TraceSpan
+		if err := json.Unmarshal([]byte(sample.Spans), &spans); err != nil {
+			t.Fatal(err)
+		}
+		names := spanNames(spans)
+		for _, want := range []string{"synthesis", "outbound:task_outcome"} {
+			if !containsString(names, want) {
+				t.Fatalf("%s missing %q in %v (would indicate cross-wired reflow)", j.traceID, want, names)
+			}
+		}
+		var outcomeDetail string
+		for _, sp := range spans {
+			if sp.Name == "outbound:task_outcome" {
+				outcomeDetail = sp.Detail
+			}
+		}
+		if outcomeDetail == "" {
+			t.Fatalf("%s has no outbound:task_outcome detail", j.traceID)
+		}
+		for _, other := range jobs {
+			if other.traceID == j.traceID {
+				continue
+			}
+			// Fallback names the task; the other title must not appear on this chain.
+			if strings.Contains(outcomeDetail, other.title) {
+				t.Fatalf("%s outcome cross-wired to %s: %q", j.traceID, other.title, outcomeDetail)
+			}
+		}
 	}
 }
 
@@ -220,4 +308,3 @@ func containsString(list []string, want string) bool {
 	}
 	return false
 }
-

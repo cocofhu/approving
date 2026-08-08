@@ -823,6 +823,7 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 						OriginScene:          sess.Channel.Scene,
 						OriginConversationID: sess.Channel.ConversationID,
 						OriginExternalUserID: sess.Channel.ExternalUserID,
+						OriginTraceID:        strings.TrimSpace(sess.Channel.TraceID),
 						// The task is conducted in the language it was asked
 						// in; later updates follow the task, not whichever
 						// message happens to trigger them.
