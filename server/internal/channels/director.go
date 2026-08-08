@@ -447,7 +447,12 @@ func (m *Manager) runCancelWork(ctx context.Context, rc *runningChannel, in Inbo
 		}
 		return encodeToolResult(cancelResult{NothingRun: true})
 	}
-	if runID := strings.TrimSpace(target.RunID); runID != "" && m.riskExecutor != nil {
+	// A placeholder row has no Run behind it — the work is the foreground turn
+	// that was just stopped. Asking the engine to cancel an id it has never
+	// seen fails, and the user was being told "没能停下来" about work that had
+	// in fact already stopped.
+	runID := strings.TrimSpace(target.RunID)
+	if runID != "" && !models.IsEphemeralRunID(runID) && m.riskExecutor != nil {
 		if err := m.riskExecutor(rc.cfg.ProjectID, runID, "cancel_run", map[string]string{}); err != nil {
 			log.Warn().Err(err).Str("run", runID).Msg("director cancel_work failed")
 			return encodeToolResult(cancelResult{Failed: "没能停下来，状态没变。"})
@@ -504,7 +509,7 @@ func (m *Manager) completeEphemeralDispatch(rc *runningChannel, in InboundMessag
 	if err != nil || identity == nil {
 		return
 	}
-	if !strings.HasPrefix(strings.TrimSpace(identity.RunID), "dispatch:") {
+	if !identity.IsEphemeral() {
 		return
 	}
 	if status = strings.TrimSpace(status); status == "" {
@@ -611,8 +616,8 @@ func (m *Manager) ensureTaskIdentity(rc *runningChannel, in InboundMessage, d *W
 // own identity once pm_start_run creates it.
 func dispatchLedgerRunID(rc *runningChannel, in InboundMessage) string {
 	if id := strings.TrimSpace(in.RecordedMessageID); id != "" {
-		return "dispatch:" + id
+		return models.EphemeralRunPrefix + id
 	}
-	return fmt.Sprintf("dispatch:%s:%d",
+	return fmt.Sprintf("%s%s:%d", models.EphemeralRunPrefix,
 		convKey(rc.cfg.ProjectID, in.Scene, in.ConversationID), time.Now().UnixNano())
 }

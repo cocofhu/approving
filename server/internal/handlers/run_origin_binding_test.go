@@ -186,3 +186,34 @@ func TestPatchRunOriginBindingRejectsRunsWithNothingToUnbind(t *testing.T) {
 		t.Fatalf("web-triggered run: %d %s", w.Code, w.Body)
 	}
 }
+
+// A placeholder ledger row is not a Run and has nothing to unbind: the work it
+// stands for is a foreground turn that ends on its own. It never reaches this
+// endpoint because the run lookup comes first, and this is what keeps that
+// true — the rows sit in the same table as real ones and carry a full origin.
+func TestPatchRunOriginBindingIgnoresPlaceholderLedgerRows(t *testing.T) {
+	h := newHarness(t)
+	_, svc, _ := seedOriginRun(t, h)
+
+	stubID := models.EphemeralRunPrefix + "msg-9"
+	if _, err := svc.EnsureIdentity(services.EnsureTaskIdentityInput{
+		RunID: stubID, ProjectID: "p-any", UserID: "user1", ShortTitle: "顺手查一下",
+		Status: "running", OriginChannel: "qq", OriginScene: "c2c",
+		OriginConversationID: "conv-1", OriginExternalUserID: "u1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if w := h.do("PATCH", "/api/runs/"+stubID+"/origin-binding",
+		map[string]any{"bound": false}); w.Code != http.StatusNotFound {
+		t.Fatalf("placeholder row answered the unbind endpoint: %d %s", w.Code, w.Body)
+	}
+
+	runs := services.NewRunService(h.db)
+	if origins := runs.RunOrigins([]models.Run{{ID: "run-binding"}}); len(origins) != 1 {
+		t.Fatalf("origins = %v; the real run's own origin is what the list shows", origins)
+	}
+	if _, ok := runs.RunOriginFor(stubID); ok {
+		t.Fatal("a placeholder row was offered as a run origin")
+	}
+}

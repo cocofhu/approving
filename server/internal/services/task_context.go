@@ -489,7 +489,7 @@ func (s *TaskContextService) reapStaleActiveTask(task *models.TaskIdentity) bool
 	}
 	runID := strings.TrimSpace(task.RunID)
 	now := s.now()
-	if runID != "" && !strings.HasPrefix(runID, "dispatch:") {
+	if runID != "" && !task.IsEphemeral() {
 		var run models.Run
 		if err := s.db.Select("id", "status").Where("id = ?", runID).First(&run).Error; err == nil {
 			if IsTerminalTaskStatus(run.Status) {
@@ -501,7 +501,7 @@ func (s *TaskContextService) reapStaleActiveTask(task *models.TaskIdentity) bool
 			}
 		}
 	}
-	if strings.HasPrefix(runID, "dispatch:") && now.Sub(task.UpdatedAt) > StaleDispatchTTL {
+	if task.IsEphemeral() && now.Sub(task.UpdatedAt) > StaleDispatchTTL {
 		// Abandoned stub — not a successful finish. Marking these "completed"
 		// taught get_status to report "做完了" when nothing succeeded.
 		_, _ = s.UpdateIdentity(EnsureTaskIdentityInput{
