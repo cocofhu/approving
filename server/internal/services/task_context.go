@@ -183,7 +183,9 @@ func (s *TaskContextService) EnsureIdentityForRun(run models.Run, projectID, use
 	})
 }
 
-const runShortTitleRunes = 24
+// runShortTitleRunes bounds ledger / IM titles. 24 was short enough to cut
+// mid-token（「…快模型和 wo」）; keep room for a readable phrase.
+const runShortTitleRunes = 40
 
 // internalIDPattern matches the internal Run / task identifier shapes in any
 // casing. Short titles are shown to users, who have no idea what a Run id is;
@@ -282,7 +284,22 @@ func truncateTaskRunes(value string, limit int) string {
 	if limit <= 0 || len(r) <= limit {
 		return string(r)
 	}
-	return string(r[:limit])
+	cut := r[:limit]
+	// Prefer a break at whitespace / light punctuation so we never ship a
+	// dangling Latin stub like 「…和 wo」.
+	for i := len(cut) - 1; i >= limit/2; i-- {
+		switch cut[i] {
+		case ' ', '　', '/', '-', '_', '|', '·':
+			cut = cut[:i]
+			goto done
+		}
+	}
+done:
+	out := strings.TrimSpace(string(cut))
+	if out == "" {
+		out = string(r[:limit])
+	}
+	return out + "…"
 }
 
 type TaskScope struct {

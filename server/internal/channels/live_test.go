@@ -528,6 +528,22 @@ func TestQueueFullHintIsSentOnceAndNotSilent(t *testing.T) {
 	once.Do(func() { close(release) })
 }
 
+func TestOutcomeBriefForbidsHollowArchitectureConclusion(t *testing.T) {
+	id := &models.TaskIdentity{ShortTitle: "快模型架构", OriginalRequirement: "看看能不能精简"}
+	empty := outcomeBrief(id, TaskOutcome{Status: "completed"}, "zh-CN")
+	for _, need := range []string{"没有留下可读结论", "禁止编造", "可以精简"} {
+		if !strings.Contains(empty, need) {
+			t.Fatalf("empty brief missing %q:\n%s", need, empty)
+		}
+	}
+	withFacts := outcomeBrief(id, TaskOutcome{
+		Status: "completed", ResultSummary: "Live 与 worker 可合并超时配置。",
+	}, "zh-CN")
+	if !strings.Contains(withFacts, "空结论") || !strings.Contains(withFacts, "合并超时") {
+		t.Fatalf("facts brief = %s", withFacts)
+	}
+}
+
 // Completed reflow must carry the run's findings, not a hollow "弄完了 / ask for details".
 func TestCompletedOutcomeFallbackIncludesResultSummary(t *testing.T) {
 	id := &models.TaskIdentity{ShortTitle: "直接检查 approving 仓库当前主干代码", Language: "zh-CN"}

@@ -208,10 +208,11 @@ func outcomeBrief(identity *models.TaskIdentity, outcome TaskOutcome, language s
 	case "completed":
 		b.WriteString("结果：做完了。\n")
 		if facts := strings.TrimSpace(outcome.ResultSummary); facts != "" {
-			b.WriteString("关键发现（必须写进回复，不要藏到「想看细节」后面）：\n")
+			b.WriteString("关键发现（必须写进回复，写出具体点，不要藏到「想看细节」后面；禁止只说「有办法 / 可以精简」这种空结论）：\n")
 			b.WriteString(truncateRunes(facts, 800) + "\n")
 		} else {
 			b.WriteString("这一轮没有留下可读结论摘要。如实说做完了但还没整理出要点，问对方要不要接着补查；")
+			b.WriteString("禁止编造「确实有办法 / 可以精简」这类没有依据的实质结论；")
 			b.WriteString("禁止空说「弄完了，想看细节跟我说」。\n")
 		}
 	case "cancelled":
