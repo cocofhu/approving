@@ -447,38 +447,74 @@ const fallthroughAckPhrasePrompt = `你是这个项目的负责人本人，正�
 - 不要提优先级、任务编号、工作流、沙箱、跟进页面、Approving。
 - 只输出要发给对方的那句话。`
 
-const runAcceptedAckPhrasePrompt = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
+// operationalLine is a situation the platform has to tell the user about that
+// no model decided: the backlog is full, a turn ran out of time, a confirmed
+// action did not go through, the process restarted mid-turn.
+//
+// Each of these used to be a fixed string, and a fixed string is how copy
+// nobody chose ends up in someone's chat window — 「你可以接着问别的」 was one
+// of them. The situation is a fact the platform owns; the wording is the
+// conversation model's job, exactly as it is for every other line it speaks.
+// Fallback is what a missing or slow model falls back to, and nothing else.
+type operationalLine struct {
+	// Situation describes what happened, addressed to the model as the person
+	// who has to say it.
+	Situation string
+	// Facts are internal details the model may use but must not quote back.
+	Facts string
+	// Avoid is a title or requirement the reply must not paste back at the user.
+	Avoid    string
+	Language string
+	Fallback string
+}
 
-对方要的事你已经安排下去了，现在只需要接一句。用一两句人话说你去弄、完了回他。
+// operationalLineRules are the constraints every spoken platform line shares.
+// They live in one place because they are one policy: the reasons a line reads
+// as a template do not change with the situation that produced it.
+const operationalLineRules = `
 
 规矩：
 - 像同事当面说，不要工单腔，不要「收到」「稍等」「我这就去确认」。
 - 不要复述任务标题或原要求；用「那事」「那块」指代即可。
-- 时态是正在做，不是做完了。
 - 不要交代对方可以做什么（「你可以接着问别的」「有事随时叫我」这类都不要）——他本来就知道。
-- 不要提优先级、任务编号、工作流、沙箱、跟进页面、Approving。
+- 不要提优先级、任务编号、工作流、执行环境、跟进页面、Approving。
+- 不要说已经做完、已经跑完、已经处理好。
 - 只输出要发给对方的那句话。`
 
-// phraseRunAccepted asks the conversation model for the acceptance line.
-//
-// Every other acknowledgement in this file is phrased by the model; this one
-// was the last template, and a template is exactly what produced the
-// helpdesk-sounding 「你可以接着问别的」. Empty means the caller falls back to
-// the fixed line, which is now only reached when the model is unconfigured or
-// slow.
-func (m *Manager) phraseRunAccepted(ctx context.Context, shortTitle, language string) string {
-	user := "对方刚要的事已经安排下去了。用一两句人话接住他。"
-	if title := strings.TrimSpace(shortTitle); title != "" {
-		user = "（内部参考，勿原样复述）安排下去的事：" + truncateRunes(title, 60) + "\n" + user
+const operationalLinePersona = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
+
+`
+
+// speakOperationalLine phrases one platform notice, falling back to fixed copy.
+func (m *Manager) speakOperationalLine(ctx context.Context, line operationalLine) string {
+	fallback := strings.TrimSpace(line.Fallback)
+	situation := strings.TrimSpace(line.Situation)
+	if situation == "" {
+		return fallback
 	}
-	if services.NormalizeLanguage(language) == "en" {
+	user := "用一两句人话把这个情况告诉对方。"
+	if facts := strings.TrimSpace(line.Facts); facts != "" {
+		user = "（内部参考，勿原样复述）" + truncateRunes(facts, 160) + "\n" + user
+	}
+	if services.NormalizeLanguage(line.Language) == "en" {
 		user += "\n对方说英文，用英文回一句。"
 	}
-	out := strings.TrimSpace(m.phraseThroughLive(ctx, runAcceptedAckPhrasePrompt, user))
-	if out == "" || spokenLineSoundsFinished(out) || retryAckEchoesBrief(out, shortTitle, "") {
-		return ""
+	out := strings.TrimSpace(m.phraseThroughLive(ctx,
+		operationalLinePersona+situation+operationalLineRules, user))
+	if out == "" || spokenLineSoundsFinished(out) || retryAckEchoesBrief(out, line.Avoid, "") {
+		return fallback
 	}
 	return out
+}
+
+// phraseRunAccepted asks the conversation model for the acceptance line.
+func (m *Manager) phraseRunAccepted(ctx context.Context, shortTitle, language string) string {
+	return m.speakOperationalLine(ctx, operationalLine{
+		Situation: "对方要的事你已经安排下去了，现在只需要接一句：你去弄，完了回他。时态是正在做，不是做完了。",
+		Facts:     shortTitle,
+		Avoid:     shortTitle,
+		Language:  language,
+	})
 }
 
 const dispatchAckPhrasePrompt = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
