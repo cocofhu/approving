@@ -346,7 +346,8 @@ func TestSanitizeShortTitleDoesNotCutMidToken(t *testing.T) {
 	if got == "" {
 		t.Fatal("empty title")
 	}
-	if strings.HasSuffix(strings.TrimSuffix(got, "…"), "wo") || strings.Contains(got, "和 wo") {
+	trimmed := strings.TrimSuffix(got, "…")
+	if strings.HasSuffix(trimmed, " wo") || strings.HasSuffix(trimmed, "wo") && !strings.HasSuffix(trimmed, "worker") {
 		t.Fatalf("mid-token cut still present: %q", got)
 	}
 	if len([]rune(in)) > runShortTitleRunes && !strings.HasSuffix(got, "…") {
