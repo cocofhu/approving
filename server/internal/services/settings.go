@@ -28,6 +28,16 @@ const (
 	KeyLiveModel          = "live_model"
 	KeyLiveAPIKey         = "live_api_key"
 	KeyLiveTimeoutSeconds = "live_timeout_seconds"
+
+	// Conversation-layer context windows. These used to be compiled constants;
+	// exposing them lets an operator trade prompt size for recall without a
+	// redeploy. Defaults match the previous hard-coded values.
+	KeyLiveTranscriptWindow    = "live_transcript_window"
+	KeyLiveLedgerLimit         = "live_ledger_limit"
+	KeyLiveRecentTerminalHours = "live_recent_terminal_hours"
+	KeyLiveMaxConcurrentWork   = "live_max_concurrent_work"
+	KeyLiveToolLoopLimit       = "live_tool_loop_limit"
+	KeyLiveMaxTokens           = "live_max_tokens"
 )
 
 // Knob value kinds. Ints render as steppers, strings as text inputs, secrets as
@@ -67,14 +77,32 @@ type LiveTuner interface {
 	SetLiveEndpoint(baseURL, apiKey, model string, timeout time.Duration)
 }
 
+// LiveLimits is one snapshot of the conversation-layer context windows.
+type LiveLimits struct {
+	TranscriptWindow    int
+	LedgerLimit         int
+	RecentTerminalHours int
+	MaxConcurrentWork   int
+	ToolLoopLimit       int
+	MaxTokens           int
+}
+
+// LiveLimitsController receives the effective conversation-layer windows.
+// Implemented by channels.Manager so a settings edit takes effect on the next
+// turn without a restart.
+type LiveLimitsController interface {
+	SetLiveLimits(LiveLimits)
+}
+
 // SettingsService is the DB override layer for platform scheduling params. It
 // resolves effective values (env > DB > config-file > default), persists UI
 // edits, and applies them to the running engine / sandbox service.
 type SettingsService struct {
-	db   *gorm.DB
-	conc ConcurrencyController
-	sbx  SandboxTuner
-	live LiveTuner
+	db         *gorm.DB
+	conc       ConcurrencyController
+	sbx        SandboxTuner
+	live       LiveTuner
+	liveLimits LiveLimitsController
 }
 
 func NewSettingsService(db *gorm.DB, conc ConcurrencyController, sbx SandboxTuner) *SettingsService {
@@ -84,6 +112,10 @@ func NewSettingsService(db *gorm.DB, conc ConcurrencyController, sbx SandboxTune
 // SetLiveTuner wires the conversation-model client. Separate from the
 // constructor so existing callers and test fakes need no change.
 func (s *SettingsService) SetLiveTuner(t LiveTuner) { s.live = t }
+
+// SetLiveLimitsController wires the conversation-layer window knobs. Called
+// after the channel manager exists, because settings boot before channels.
+func (s *SettingsService) SetLiveLimitsController(c LiveLimitsController) { s.liveLimits = c }
 
 // knob describes one tunable: its kind, label, floor, optional env lock, and
 // how to read the config-file/default fallback. Exactly one of fromCfg (int)
@@ -126,7 +158,33 @@ func knobs() []knob {
 		{key: KeyLiveTimeoutSeconds, label: "对话模型超时", unit: "秒", kind: KindInt, min: 1,
 			envVar:  "APPROVING_LIVE_TIMEOUT_SEC",
 			fromCfg: func(c *config.Config) int { return c.Live.TimeoutSeconds }},
+		{key: KeyLiveTranscriptWindow, label: "对话历史条数", unit: "条", kind: KindInt, min: 4,
+			envVar:  "APPROVING_LIVE_TRANSCRIPT_WINDOW",
+			fromCfg: func(c *config.Config) int { return liveIntOr(c.Live.TranscriptWindow, 20) }},
+		{key: KeyLiveLedgerLimit, label: "台账任务条数", unit: "条", kind: KindInt, min: 1,
+			envVar:  "APPROVING_LIVE_LEDGER_LIMIT",
+			fromCfg: func(c *config.Config) int { return liveIntOr(c.Live.LedgerLimit, 5) }},
+		{key: KeyLiveRecentTerminalHours, label: "终态任务回看", unit: "小时", kind: KindInt, min: 1,
+			envVar:  "APPROVING_LIVE_RECENT_TERMINAL_HOURS",
+			fromCfg: func(c *config.Config) int { return liveIntOr(c.Live.RecentTerminalHours, 24) }},
+		{key: KeyLiveMaxConcurrentWork, label: "会话并发任务", unit: "个", kind: KindInt, min: 1,
+			envVar:  "APPROVING_LIVE_MAX_CONCURRENT_WORK",
+			fromCfg: func(c *config.Config) int { return liveIntOr(c.Live.MaxConcurrentWork, 3) }},
+		{key: KeyLiveToolLoopLimit, label: "单轮工具循环", unit: "次", kind: KindInt, min: 1,
+			envVar:  "APPROVING_LIVE_TOOL_LOOP_LIMIT",
+			fromCfg: func(c *config.Config) int { return liveIntOr(c.Live.ToolLoopLimit, 3) }},
+		{key: KeyLiveMaxTokens, label: "单次回复上限", unit: "token", kind: KindInt, min: 256,
+			envVar:  "APPROVING_LIVE_MAX_TOKENS",
+			fromCfg: func(c *config.Config) int { return liveIntOr(c.Live.MaxTokens, 2048) }},
 	}
+}
+
+// liveIntOr keeps a sparse LiveConfig from reading as zero in the settings UI.
+func liveIntOr(v, fallback int) int {
+	if v > 0 {
+		return v
+	}
+	return fallback
 }
 
 // SettingItem is the API shape for one effective knob. Value is an int for
@@ -345,6 +403,16 @@ func (s *SettingsService) apply() {
 			str[KeyLiveBaseURL], str[KeyLiveAPIKey], str[KeyLiveModel],
 			time.Duration(m[KeyLiveTimeoutSeconds])*time.Second,
 		)
+	}
+	if s.liveLimits != nil {
+		s.liveLimits.SetLiveLimits(LiveLimits{
+			TranscriptWindow:    m[KeyLiveTranscriptWindow],
+			LedgerLimit:         m[KeyLiveLedgerLimit],
+			RecentTerminalHours: m[KeyLiveRecentTerminalHours],
+			MaxConcurrentWork:   m[KeyLiveMaxConcurrentWork],
+			ToolLoopLimit:       m[KeyLiveToolLoopLimit],
+			MaxTokens:           m[KeyLiveMaxTokens],
+		})
 	}
 	if s.conc != nil {
 		s.conc.SetMaxConcurrent(m[KeyMaxConcurrentRuns])

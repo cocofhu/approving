@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cocofhu/approving/internal/models"
@@ -151,6 +152,14 @@ type Manager struct {
 	// live answers what it can without a sandbox; nil means every message goes
 	// to the agent.
 	live LiveModel
+	// Conversation-layer context windows. Settings push overrides through
+	// SetLiveLimits; getters fall back to the compiled defaults when zero.
+	liveTranscriptWindow    atomic.Int64
+	liveLedgerLimit         atomic.Int64
+	liveRecentTerminalHours atomic.Int64
+	liveMaxConcurrentWork   atomic.Int64
+	liveToolLoopLimit       atomic.Int64
+	liveMaxTokens           atomic.Int64
 	// transcript is the shared record of the conversation. nil means the
 	// routing layers fall back to the single message in front of them.
 	transcript Transcript
@@ -202,6 +211,7 @@ func NewManager(bridge *ChannelBridge, factories map[string]AdapterFactory, decr
 	if bridge != nil {
 		m.transcript = bridge
 	}
+	m.initLiveLimits()
 	return m
 }
 

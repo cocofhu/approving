@@ -50,12 +50,6 @@ type Transcript interface {
 	Window(ref ConversationRef, limit int) ([]TranscriptEntry, error)
 }
 
-// transcriptWindow is how much of the conversation the routing model is shown,
-// and the baseline a reconnected sandbox is caught up with. Bounded on purpose:
-// a conversation that has been running for weeks must not turn every message
-// into a replay of the whole history.
-const transcriptWindow = 20
-
 // conversationRefFor builds the transcript key for an inbound message.
 func conversationRefFor(rc *runningChannel, in InboundMessage) ConversationRef {
 	return ConversationRef{

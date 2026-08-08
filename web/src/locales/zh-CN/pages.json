@@ -979,7 +979,7 @@
         },
         "live": {
           "title": "对话模型",
-          "desc": "IM 对话由一个快速模型接待：它直接回答能当场答的问题，判断需要读项目才能做的事再交给沙箱。未配置时全部消息都走沙箱，功能不缺但每条都慢。任何 OpenAI 兼容接口都可以，改完立即生效，无需重启。"
+          "desc": "IM 对话由一个快速模型接待：它直接回答能当场答的问题，判断需要读项目才能做的事再交给沙箱。未配置时全部消息都走沙箱，功能不缺但每条都慢。下方还可调节它看到多少历史与台账。任何 OpenAI 兼容接口都可以，改完立即生效，无需重启。"
         }
       },
       "labels": {
@@ -990,7 +990,13 @@
         "live_base_url": "接口地址",
         "live_model": "模型名称",
         "live_api_key": "密钥",
-        "live_timeout_seconds": "单次调用超时"
+        "live_timeout_seconds": "单次调用超时",
+        "live_transcript_window": "对话历史条数",
+        "live_ledger_limit": "台账任务条数",
+        "live_recent_terminal_hours": "终态任务回看",
+        "live_max_concurrent_work": "会话并发任务",
+        "live_tool_loop_limit": "单轮工具循环",
+        "live_max_tokens": "单次回复上限"
       },
       "settings": {
         "max_concurrent_runs": "同时处于 running 状态的 workflow 运行数上限。由 APPROVING_MAX_RUNS 环境变量锁定时页面只读。",
@@ -1000,7 +1006,13 @@
         "live_base_url": "OpenAI 兼容的接口根地址，例如 https://api.example.com/v1，系统会在其后拼接 /chat/completions。",
         "live_model": "传给该接口的模型名称。选一个快的——这一层的价值就在于秒级回应，慢模型不如直接交给沙箱。",
         "live_api_key": "以 Bearer token 发送，本机或内网模型可以留空。加密存储，保存后页面只显示掩码；留空提交表示不修改已存的密钥。",
-        "live_timeout_seconds": "会话层每次调模型的上限（路由、结论转述、后台收尾合成共用）。超时不报错：路由超时会先 ack 再交给沙箱；转述超时则直接发工作层原文。本地慢模型建议 ≥120 秒。"
+        "live_timeout_seconds": "会话层每次调模型的上限（路由、结论转述、后台收尾合成共用）。超时不报错：路由超时会先 ack 再交给沙箱；转述超时则直接发工作层原文。本地慢模型建议 ≥120 秒。",
+        "live_transcript_window": "快模型每轮能看到的最近对话条数（用户消息 + 已送达回复）。加长能记住更早的讨论，但会变慢、更贵；默认 20。",
+        "live_ledger_limit": "briefing / get_status 里展示的在跑任务与近期终态任务条数上限。默认 5。",
+        "live_recent_terminal_hours": "已完成 / 失败 / 取消的任务还会出现在台账里多久。超过此窗口的终态任务不再进入快模型上下文。默认 24 小时。",
+        "live_max_concurrent_work": "同一会话同时挂着的任务数上限；满了之后新派活会被拒，应改用 refine 或先取消一件。默认 3。",
+        "live_tool_loop_limit": "快模型在一轮里最多调用工具的次数（查状态、派活、取消等）。超过则把本轮交给沙箱，避免空转。默认 3。",
+        "live_max_tokens": "快模型单次 completion 的 max_tokens。太小可能截断回复；太大浪费且变慢。默认 2048。"
       },
       "liveUnconfigured": "尚未配置：当前每条 IM 消息都会交给沙箱，功能完整但每条都要等几十秒。填好地址和模型即可启用，本机或内网模型通常不需要密钥。",
       "liveSecretStored": "已保存，留空则不修改",

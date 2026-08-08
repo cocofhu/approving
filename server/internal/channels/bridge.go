@@ -85,6 +85,9 @@ type ChannelBridge struct {
 	sbx   *services.SandboxService
 	turns *services.PmTurnRunner
 	hooks MCPTokenHooks
+	// transcriptLimit follows the settings-page conversation window. nil means
+	// the compiled default; Manager wires this in initLiveLimits.
+	transcriptLimit func() int
 }
 
 // NewChannelBridge builds the bridge.
@@ -394,13 +397,22 @@ func (b *ChannelBridge) attachmentPointers(threadID, currentID string, in Inboun
 	return out
 }
 
+func (b *ChannelBridge) windowLimit() int {
+	if b != nil && b.transcriptLimit != nil {
+		if n := b.transcriptLimit(); n > 0 {
+			return n
+		}
+	}
+	return transcriptWindow
+}
+
 // recentAttachments reads the conversation's attachment manifest from storage,
 // newest first. Manifest only — the bytes stay where they are.
 func (b *ChannelBridge) recentAttachments(threadID string) []AttachmentRef {
 	if b.pm == nil {
 		return nil
 	}
-	msgs, err := b.pm.CanonicalWindow(threadID, transcriptWindow)
+	msgs, err := b.pm.CanonicalWindow(threadID, b.windowLimit())
 	if err != nil {
 		log.Warn().Err(err).Str("thread", threadID).
 			Msg("attachment manifest unavailable; this turn names no earlier files")
