@@ -18,16 +18,20 @@ type TaskIdentity struct {
 	// a restart and must not fall back to a project-wide push target.
 	// Scene is stored as a plain string because models must not depend on the
 	// channels package.
-	OriginChannel        string     `gorm:"size:32;index:idx_task_origin,priority:1" json:"originChannel,omitempty"`
-	OriginScene          string     `gorm:"size:32" json:"originScene,omitempty"`
-	OriginConversationID string     `gorm:"size:191;index:idx_task_origin,priority:2" json:"originConversationId,omitempty"`
-	OriginExternalUserID string     `gorm:"size:191" json:"originExternalUserId,omitempty"`
-	Language             string     `gorm:"size:16" json:"language,omitempty"`
-	RecentContext        string     `gorm:"type:text" json:"recentContext,omitempty"`
-	Status               string     `gorm:"size:32;index" json:"status"`
-	TerminalAt           *time.Time `gorm:"index" json:"terminalAt,omitempty"`
-	CreatedAt            time.Time  `json:"createdAt"`
-	UpdatedAt            time.Time  `json:"updatedAt"`
+	OriginChannel        string `gorm:"size:32;index:idx_task_origin,priority:1" json:"originChannel,omitempty"`
+	OriginScene          string `gorm:"size:32" json:"originScene,omitempty"`
+	OriginConversationID string `gorm:"size:191;index:idx_task_origin,priority:2" json:"originConversationId,omitempty"`
+	OriginExternalUserID string `gorm:"size:191" json:"originExternalUserId,omitempty"`
+	// OriginTraceID is the inbound turn that dispatched this task. Persisted
+	// write-once so reflow can join the terminal outcome to that turn without
+	// guessing from the newest sample in the origin conversation.
+	OriginTraceID string     `gorm:"size:64" json:"originTraceId,omitempty"`
+	Language      string     `gorm:"size:16" json:"language,omitempty"`
+	RecentContext string     `gorm:"type:text" json:"recentContext,omitempty"`
+	Status        string     `gorm:"size:32;index" json:"status"`
+	TerminalAt    *time.Time `gorm:"index" json:"terminalAt,omitempty"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
 }
 
 // MessageBinding gives an explicit quoted/replied message precedence over
@@ -85,10 +89,10 @@ type RiskConfirmationTicket struct {
 	RunID     string `gorm:"size:64;index:idx_risk_ticket,priority:3" json:"runId"`
 	// ShortTitle snapshots the task title at creation time so every prompt and
 	// every later status reply echoes the task the user was actually asked about.
-	ShortTitle string     `gorm:"size:160" json:"shortTitle"`
-	Action   string `gorm:"size:191;index:idx_risk_ticket,priority:4" json:"action"`
-	Status   string `gorm:"size:16;index" json:"status"` // pending | confirmed | cancelled | expired
-	Language string `gorm:"size:16" json:"language"`
+	ShortTitle string `gorm:"size:160" json:"shortTitle"`
+	Action     string `gorm:"size:191;index:idx_risk_ticket,priority:4" json:"action"`
+	Status     string `gorm:"size:16;index" json:"status"` // pending | confirmed | cancelled | expired
+	Language   string `gorm:"size:16" json:"language"`
 	// PromptedAt records when this ticket's question actually reached the user.
 	// Nil means it never did — delivery can be suppressed or fail — and such a
 	// ticket must never be settled by a bare "确认", because the user cannot
