@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cocofhu/approving/internal/apierr"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/services"
 
@@ -223,8 +224,7 @@ func (h *Handlers) GetProjectTokenStats(c *gin.Context) {
 				"retryable": true,
 			})
 		default:
-			_ = c.Error(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			apierr.Internal(c, err)
 		}
 		return
 	}
@@ -243,7 +243,6 @@ func writeProjectErr(c *gin.Context, err error) {
 	case errors.Is(err, services.ErrProjectHasWorkflows):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	default:
-		_ = c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Internal(c, err)
 	}
 }

@@ -76,6 +76,13 @@ type Engine struct {
 	execRuns map[string]bool
 	execGen  map[string]uint64
 
+	// runCtxMu guards runCtx / runCancel: per-run cancellable contexts so
+	// Cancel/timeout propagates into RunAgent/React waits and auto-retry backoff
+	// (AbortRun still closes ACP; this covers Sleep/select paths that only see ctx).
+	runCtxMu  sync.Mutex
+	runCtx    map[string]context.Context
+	runCancel map[string]context.CancelFunc
+
 	// haltMu guards halted: when true the dispatcher stops admitting work and
 	// agent/react nodes finish as cancelled instead of advancing the FSM.
 	haltMu sync.RWMutex
@@ -127,6 +134,7 @@ func New(db *gorm.DB, provider runtime.ExecProvider, host *mcp.Host, store mcp.S
 		wake: make(chan struct{}, 1), stop: make(chan struct{}),
 		tokens: map[string]string{}, resumeLocks: map[string]*sync.Mutex{},
 		execRuns: map[string]bool{}, execGen: map[string]uint64{},
+		runCtx: map[string]context.Context{}, runCancel: map[string]context.CancelFunc{},
 	}
 	// Wire live ACP event streaming (optional provider capability) so a running
 	// agent node's events reach the run detail UI as they happen.
@@ -251,10 +259,19 @@ func (e *Engine) tryAutoRetry(c *execCtx, node *models.Node, outcome nodeOutcome
 	e.appendTrace(c, models.TraceEntry{NodeID: node.ID, Event: "resume",
 		Detail: fmt.Sprintf("自动从失败位置重试 %d/%d:%s", c.autoRetries[node.ID], max, shortReason(reason))})
 	log.Info().Str("run_id", c.run.ID).Str("node_id", node.ID).
-		Int("attempt", c.autoRetries[node.ID]).Int("max", max).Str("err", outcome.err).
+		Int("attempt", c.autoRetries[node.ID]).Int("max", max).
+		Str("err", services.RedactSensitiveString(outcome.err)).
 		Msg("auto-retrying failed node from failure position")
 	if autoRetryBackoff > 0 {
-		time.Sleep(autoRetryBackoff)
+		t := time.NewTimer(autoRetryBackoff)
+		defer t.Stop()
+		select {
+		case <-t.C:
+		case <-c.Context().Done():
+			log.Info().Str("run_id", c.run.ID).Str("node_id", node.ID).
+				Msg("auto-retry backoff cancelled; not retrying")
+			return false
+		}
 	}
 	return true
 }
@@ -719,6 +736,44 @@ type execCtx struct {
 	// must not TakeOutcome (node_complete is keyed only by run+node) or the
 	// fresh visit loses its mark and fails with "未调用 node_complete".
 	execGen uint64
+	// ctx is the run-scoped cancellable context (Cancel/timeout → Done).
+	ctx context.Context
+}
+
+// Context returns the run-scoped cancellable context, or Background when unset
+// (defensive for partial test fixtures).
+func (c *execCtx) Context() context.Context {
+	if c != nil && c.ctx != nil {
+		return c.ctx
+	}
+	return context.Background()
+}
+
+// ensureRunCtx returns (and lazily creates) a cancellable context for runID.
+// Cancel / terminal finish call cancelRunCtx so Agent waits and auto-retry
+// backoff observe ctx.Done().
+func (e *Engine) ensureRunCtx(runID string) context.Context {
+	e.runCtxMu.Lock()
+	defer e.runCtxMu.Unlock()
+	if ctx, ok := e.runCtx[runID]; ok {
+		return ctx
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	e.runCtx[runID] = ctx
+	e.runCancel[runID] = cancel
+	return ctx
+}
+
+// cancelRunCtx cancels and drops the run-scoped context (idempotent).
+func (e *Engine) cancelRunCtx(runID string) {
+	e.runCtxMu.Lock()
+	cancel := e.runCancel[runID]
+	delete(e.runCancel, runID)
+	delete(e.runCtx, runID)
+	e.runCtxMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 }
 
 // lockResume serializes resume operations for a given key (runID:nodeID),
@@ -913,6 +968,7 @@ func (e *Engine) execute(runID, fromNodeID string) {
 		return
 	}
 	c.execGen = gen
+	c.ctx = e.ensureRunCtx(runID)
 	// Cancel/fail may race admission: refuse to drive a run that is already
 	// terminal (e.g. Cancel landed between scheduleRunAdmission and here).
 	if st := e.runStatus(runID); st == "cancelled" || st == "failed" || st == "completed" {
@@ -987,14 +1043,16 @@ func (e *Engine) execute(runID, fromNodeID string) {
 			}
 			return
 		case "failed":
-			log.Info().Str("run_id", runID).Str("node_id", node.ID).Str("err", outcome.err).Msg("node failed")
+			log.Info().Str("run_id", runID).Str("node_id", node.ID).
+				Str("err", services.RedactSensitiveString(outcome.err)).Msg("node failed")
 			e.saveState(c, node, outcome)
 			// React clarify + sandbox infrastructure failure: node is failed but
 			// the run stays running so the operator can retry from this node.
 			if node.Type == "react" && outcome.sandboxSetup {
 				if outcome.err != "" {
-					c.setVar("last_error", outcome.err)
-					e.persistVar(runID, "last_error", outcome.err)
+					safe := services.RedactSensitiveString(outcome.err)
+					c.setVar("last_error", safe)
+					e.persistVar(runID, "last_error", safe)
 				}
 				e.appendTrace(c, models.TraceEntry{NodeID: node.ID, Event: "exit", Detail: "sandbox setup failed"})
 				e.refreshProgress(c)
@@ -1004,8 +1062,9 @@ func (e *Engine) execute(runID, fromNodeID string) {
 			// carries it can inject the cause into the retried upstream node's
 			// prompt ({{vars.last_error}}) — the agent learns what went wrong.
 			if outcome.err != "" {
-				c.setVar("last_error", outcome.err)
-				e.persistVar(runID, "last_error", outcome.err)
+				safe := services.RedactSensitiveString(outcome.err)
+				c.setVar("last_error", safe)
+				e.persistVar(runID, "last_error", safe)
 			}
 			next := e.routeFailure(c, node, outcome)
 			if next == "" {
@@ -1339,7 +1398,7 @@ func (e *Engine) pauseStillPending(runID string, node *models.Node) bool {
 // has a non-empty source before the default fallback.
 func (e *Engine) failRun(runID, reason string) {
 	if strings.TrimSpace(reason) != "" {
-		e.persistVar(runID, "last_error", reason)
+		e.persistVar(runID, "last_error", services.RedactSensitiveString(reason))
 	}
 	e.finish(runID, "failed")
 }
@@ -1401,6 +1460,7 @@ func (e *Engine) finish(runID, status string) bool {
 		// no-op; for cancel/fail while paused at a react node it prevents the
 		// sandbox from lingering forever as "busy". Abort before writing
 		// run_error.json so archived sandbox logs (if any) are available.
+		e.cancelRunCtx(runID)
 		if ab, ok := e.provider.(runtime.RunAborter); ok {
 			ab.AbortRun(runID)
 		}

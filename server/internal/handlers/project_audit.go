@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cocofhu/approving/internal/apierr"
 	"github.com/cocofhu/approving/internal/auth"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/services"
@@ -204,8 +205,7 @@ func (h *Handlers) ListProjectAuditFacets(c *gin.Context) {
 	}
 	facets, err := h.Audit.ListFacets(f)
 	if err != nil {
-		_ = c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Internal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, facets)
@@ -228,14 +228,12 @@ func (h *Handlers) ListProjectAudit(c *gin.Context) {
 	}
 	items, total, err := h.Audit.ListPage(f)
 	if err != nil {
-		_ = c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Internal(c, err)
 		return
 	}
 	stats, err := h.Audit.CountStats(f)
 	if err != nil {
-		_ = c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Internal(c, err)
 		return
 	}
 	out := make([]gin.H, 0, len(items))
@@ -277,8 +275,7 @@ func (h *Handlers) ExportProjectAudit(c *gin.Context) {
 	}
 	items, err := h.Audit.ListAllMatching(f, 5000)
 	if err != nil {
-		_ = c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Internal(c, err)
 		return
 	}
 

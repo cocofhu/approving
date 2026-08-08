@@ -688,6 +688,12 @@ func redactSensitiveString(s string) string {
 	return out
 }
 
+// RedactSensitiveString redacts common token/Bearer/key shapes in free text.
+// Shared by audit masking, run_error summaries, and failure logs.
+func RedactSensitiveString(s string) string {
+	return redactSensitiveString(s)
+}
+
 func isSensitiveKey(key string) bool {
 	k := strings.ToLower(strings.ReplaceAll(key, "-", "_"))
 	// Bare "value" is not treated as sensitive: project vars nest {name,value,secret}
