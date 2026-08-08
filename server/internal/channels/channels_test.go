@@ -534,8 +534,10 @@ func TestDispatchQueueFullVisibleReject(t *testing.T) {
 	<-done
 
 	got := sentTexts(fa)
-	if countText(got, busyHintText) != 1 {
-		t.Fatalf("full-queue sends = %v want exactly one %q", got, busyHintText)
+	// English, because the filler messages are: the platform's own fallbacks
+	// now answer in whatever language the conversation is in.
+	if countText(got, busyHintText("en")) != 1 {
+		t.Fatalf("full-queue sends = %v want exactly one %q", got, busyHintText("en"))
 	}
 	if countText(got, "final-overflow") != 0 {
 		t.Fatalf("overflow message must not be processed, got %v", got)
@@ -633,7 +635,7 @@ func TestDispatchFailureContinuesDrain(t *testing.T) {
 	<-done
 
 	got := sentTexts(fa)
-	if countText(got, turnFailureText(errors.New("boom"))) != 1 {
+	if countText(got, turnFailureText(errors.New("boom"), "en")) != 1 {
 		t.Fatalf("expected failure reply in %v", got)
 	}
 	if countText(got, "final-after-fail") != 1 {
@@ -718,7 +720,7 @@ func TestTurnFailureTextIsUserFacing(t *testing.T) {
 		errors.New("context deadline exceeded"),
 		errors.New("goroutine 1 [running]: sandbox boom"),
 	} {
-		got := turnFailureText(err)
+		got := turnFailureText(err, "zh-CN")
 		if !utf8.ValidString(got) || strings.TrimSpace(got) == "" {
 			t.Fatalf("turnFailureText(%v) = %q", err, got)
 		}

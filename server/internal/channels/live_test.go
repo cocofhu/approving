@@ -98,16 +98,17 @@ func TestCommentaryNeverAuthorizesADestructiveAction(t *testing.T) {
 // composed.
 func TestOutboundCopyNeverExposesInternals(t *testing.T) {
 	copies := []string{
-		busyHintText,
+		busyHintText("zh-CN"), busyHintText("en"),
 		turnTooSlowText("zh-CN"), turnTooSlowText("en"),
 		interruptedTurnText("zh-CN"), interruptedTurnText("en"),
 		runAcceptanceText("登录页性能", "zh-CN"), runAcceptanceText("Login perf", "en"),
 		FormatProgressText(ProgressEvent{Kind: ProgressMilestone, Summary: "已提交分支"}),
+		FormatProgressText(ProgressEvent{Kind: ProgressBlocker, Summary: "dependency install keeps failing"}),
 	}
 	for _, err := range []error{
 		errNoReply(), context.DeadlineExceeded,
 	} {
-		copies = append(copies, turnFailureText(err))
+		copies = append(copies, turnFailureText(err, "zh-CN"), turnFailureText(err, "en"))
 	}
 	for _, text := range copies {
 		if strings.TrimSpace(text) == "" {
@@ -584,7 +585,8 @@ func TestQueueFullHintIsSentOnceAndNotSilent(t *testing.T) {
 	for i := 0; i < convQueueDepth+5; i++ {
 		m.dispatch(context.Background(), rc, testInbound(string(rune('a'+i%26))+"-fill"))
 	}
-	if n := countText(sentTexts(fa), busyHintText); n != 1 {
+	// The filler messages are ASCII, so the hint comes back in English.
+	if n := countText(sentTexts(fa), busyHintText("en")); n != 1 {
 		t.Fatalf("busy hint sent %d times, want exactly one per cooldown", n)
 	}
 	once.Do(func() { close(release) })

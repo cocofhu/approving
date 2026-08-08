@@ -39,13 +39,8 @@ var ErrNoRunNotifyTarget = errors.New("项目未配置可用的 QQ 推送目标"
 // progress, then cron pushes.
 
 const (
-	// busyHintText is the only thing a user hears about queueing, and only when
-	// the backlog is genuinely full. Live conversations do not narrate their own
-	// plumbing: there is no per-message "received, working on it" and no queue
-	// position, because those crowd out the answer without informing anyone.
-	busyHintText = "我这边还在处理前面几条，稍等一下。"
-	// busyHintCooldown rate-limits busyHintText per conversation so a burst
-	// produces one hint instead of one per rejected message.
+	// busyHintCooldown rate-limits busyHintText (usercopy.go) per conversation
+	// so a burst produces one hint instead of one per rejected message.
 	busyHintCooldown = 2 * time.Minute
 	// convQueueDepth is the per-conversation pending FIFO capacity (in-flight
 	// turn is not counted). The next inbound after 16 pending is rejected.
@@ -543,7 +538,7 @@ func (m *Manager) sendBusyHint(ctx context.Context, rc *runningChannel, in Inbou
 		Text: m.speakOperationalLine(ctx, operationalLine{
 			Situation: "你手上还压着对方前面几条没回完，这条一时顾不上。跟他说一声让他等等。",
 			Language:  services.DetectLanguage(in.Text, ""),
-			Fallback:  busyHintText,
+			Fallback:  busyHintText(services.DetectLanguage(in.Text, "")),
 		}),
 		Envelope: turnEnvelope(rc, in, sendable.KindSafetyNotice, "queue_full", sendable.PriorityHigh),
 	})
@@ -762,7 +757,9 @@ func (m *Manager) reportProgress(ctx context.Context, rc *runningChannel, in Inb
 	m.noteWorkProgress(rc.cfg.ProjectID, ev.RunID, ev.Stage+ev.Summary,
 		ev.Blocked || ev.Kind == ProgressBlocker)
 
-	text := FormatProgressText(ev)
+	// The event's own words decide the language, with the conversation as the
+	// tiebreaker for a summary too short to tell.
+	text := formatProgressText(ev, services.DetectLanguage(ev.Summary, services.DetectLanguage(in.Text, "")))
 	if text == "" {
 		return
 	}
@@ -822,8 +819,9 @@ func (m *Manager) sendTurnFailure(ctx context.Context, rc *runningChannel, in In
 	}
 	m.sendOutbound(ctx, rc, OutboundMessage{
 		Scene: in.Scene, ConversationID: in.ConversationID,
-		ReplyToMessageID: in.MessageID, Text: turnFailureText(err),
-		Envelope: turnEnvelope(rc, in, sendable.KindBlocked, "turn_failed", sendable.PriorityCritical),
+		ReplyToMessageID: in.MessageID,
+		Text:             turnFailureText(err, services.DetectLanguage(in.Text, "")),
+		Envelope:         turnEnvelope(rc, in, sendable.KindBlocked, "turn_failed", sendable.PriorityCritical),
 	})
 }
 
@@ -1548,27 +1546,6 @@ func turnTooSlowText(language string) string {
 		return "This is more than I can work out while we're talking. Want me to take it on as a background task and come back with the result?"
 	}
 	return "这个我一时半会儿聊不完。要不要我当成一个后台任务来做，做完了告诉你？"
-}
-
-// turnFailureText maps an internal turn error onto a cause the user can act on.
-func turnFailureText(err error) string {
-	if err == nil {
-		return "这条我没处理成功，你再发一次试试。"
-	}
-	msg := strings.ToLower(err.Error())
-	switch {
-	case strings.Contains(msg, "context deadline exceeded"), strings.Contains(msg, "超时"),
-		strings.Contains(msg, "timeout"):
-		return "这条想得有点久，我先放到后台继续，有结果告诉你。"
-	case strings.Contains(msg, "沙箱"), strings.Contains(msg, "sandbox"):
-		return "我的执行环境暂时起不来，稍后再试一次；一直不行就需要管理员看一下。"
-	case strings.Contains(msg, "no reply"), strings.Contains(msg, "empty"):
-		return "这条我没能给出结论。换个说法我再试试。"
-	case strings.Contains(msg, "未启用"), strings.Contains(msg, "disabled"):
-		return "这个项目还没开启对话能力，需要管理员在后台启用。"
-	default:
-		return "这条我没处理成功。你可以再说一次，或者换个问法。"
-	}
 }
 
 func parseTarget(target string) (Scene, string) {

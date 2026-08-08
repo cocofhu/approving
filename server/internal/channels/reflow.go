@@ -222,35 +222,6 @@ func pauseBrief(identity *models.TaskIdentity, pause TaskPause, language string)
 	return b.String()
 }
 
-// pauseFallbackText is what goes out when phrasing is unavailable. Like the
-// outcome fallback it has to stand on its own, and it must not send the user
-// somewhere else to find out what is being asked.
-func pauseFallbackText(identity *models.TaskIdentity, pause TaskPause, language string) string {
-	en := services.NormalizeLanguage(language) == "en"
-	title := services.SanitizeShortTitle(identity.ShortTitle)
-	subject := title
-	if subject == "" {
-		if en {
-			subject = "That one"
-		} else {
-			subject = "刚才那件事"
-		}
-	} else if en {
-		subject = "\"" + title + "\""
-	}
-	ask := leadingConclusion(pause.Ask, pauseAskRunes)
-	if ask != "" {
-		if en {
-			return subject + " is waiting on you: " + ask + " Tell me how you want to go and I'll carry on."
-		}
-		return subject + "停下来等你拿主意：" + ask + "你说怎么走，我就接着做。"
-	}
-	if en {
-		return subject + " has stopped and needs your call before it can go further. Tell me how you want to handle it."
-	}
-	return subject + "做到一半停下了，得你确认才能往下走。你说说想怎么处理。"
-}
-
 // traceIDForReflow joins a terminal outcome to the inbound turn that dispatched
 // it via the write-once OriginTraceID on TaskIdentity. An empty result is fine —
 // delivery still proceeds without a span join (including historical rows that
@@ -429,59 +400,6 @@ func outcomeBrief(identity *models.TaskIdentity, outcome TaskOutcome, language s
 	return b.String()
 }
 
-// outcomeFallbackText is the self-contained version sent when synthesis is
-// unavailable. It never tells the user to go look somewhere else, and it must
-// carry ResultSummary when present — an empty "弄完了" is what produced the
-// hollow IM replies this path exists to avoid.
-func outcomeFallbackText(identity *models.TaskIdentity, outcome TaskOutcome, language string) string {
-	title := services.SanitizeShortTitle(identity.ShortTitle)
-	en := services.NormalizeLanguage(language) == "en"
-	// The digest goes to completedOutcomeFallback unscrubbed on purpose: it
-	// chooses which sentences to quote by asking whether each one is clean, and
-	// a pre-scrubbed digest looks clean everywhere. Outbound scrubbing happens
-	// only in sendOutboundResult.
-	facts := strings.TrimSpace(outcome.ResultSummary)
-	switch strings.ToLower(strings.TrimSpace(outcome.Status)) {
-	case "completed":
-		return completedOutcomeFallback(title, facts, en)
-	case "cancelled":
-		if en {
-			if title == "" {
-				return "That one's been cancelled, so I've stopped work on it. Tell me if you want it picked back up."
-			}
-			return "\"" + title + "\" has been cancelled, so I've stopped work on it. Tell me if you want it picked back up."
-		}
-		if title == "" {
-			return "刚才那个取消了，我停下了。要重新做的话说一声。"
-		}
-		return title + "取消了，我停下了。要重新做的话说一声。"
-	default:
-		reason := humanizeFailureReason(outcome.FailureReason, en)
-		if en {
-			if title == "" {
-				return "That one didn't go through: " + reason + " Want me to retry, change the approach, or leave it for now?"
-			}
-			return "\"" + title + "\" didn't go through: " + reason + " Want me to retry, change the approach, or leave it for now?"
-		}
-		if title == "" {
-			return "刚才那个没做成：" + reason + "你看是重试、换个做法，还是先搁置？"
-		}
-		return title + "没做成：" + reason + "你看是重试、换个做法，还是先搁置？"
-	}
-}
-
-// outcomeFallbackFactsRunes bounds what the degraded path is allowed to quote.
-// ResultSummary is written by the working agent for the platform, not for the
-// user: a full one is a report with commit hashes, module names and headings.
-// Quoting its opening conclusion is useful; pasting the whole thing is how a
-// finished task arrived in QQ as 「弄完了。对照…基线（git: 90713d62 Merge #177）…」.
-const outcomeFallbackFactsRunes = 160
-
-// deliveryLine matches the link row the platform itself appends to a digest
-// (services.AppendRunDeliveryURL). Lifting it out is what lets the link end the
-// message instead of trailing a wall of text nobody read that far into.
-var deliveryLine = regexp.MustCompile(`(?m)^[^\S\n]*(?:交付链接|Delivery)[：:][^\S\n]*(\S+)[^\S\n]*$`)
-
 func completedOutcomeFallback(title, facts string, en bool) string {
 	link := ""
 	if m := deliveryLine.FindStringSubmatch(facts); m != nil {
@@ -636,42 +554,6 @@ func splitSentences(text string) []string {
 		out = append(out, cur.String())
 	}
 	return out
-}
-
-// humanizeFailureReason turns an aggregated failure cause into something a user
-// can act on. The raw reason is diagnostic text and often mentions internals.
-func humanizeFailureReason(reason string, en bool) string {
-	lower := strings.ToLower(strings.TrimSpace(reason))
-	switch {
-	case lower == "":
-	case strings.Contains(lower, "timeout"), strings.Contains(lower, "超时"),
-		strings.Contains(lower, "deadline exceeded"), strings.Contains(lower, "timed out"):
-		if en {
-			return "it ran out of time."
-		}
-		return "跑太久超时了。"
-	case strings.Contains(lower, "permission"), strings.Contains(lower, "权限"),
-		strings.Contains(lower, "unauthorized"), strings.Contains(lower, "forbidden"):
-		if en {
-			return "it didn't have the access it needed."
-		}
-		return "权限不够。"
-	case strings.Contains(lower, "sandbox"), strings.Contains(lower, "沙箱"):
-		if en {
-			return "the execution environment couldn't start."
-		}
-		return "执行环境没起来。"
-	case strings.Contains(lower, "network"), strings.Contains(lower, "connection"),
-		strings.Contains(lower, "网络"):
-		if en {
-			return "a network call kept failing."
-		}
-		return "网络一直连不上。"
-	}
-	if en {
-		return "something went wrong partway through."
-	}
-	return "中途出了问题。"
 }
 
 // syncTerminalStatus writes the outcome onto the task so status questions stop

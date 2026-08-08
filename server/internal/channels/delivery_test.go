@@ -905,7 +905,7 @@ func TestNoOutboundCopyOffersATaskMenu(t *testing.T) {
 		services.DetectLanguage("登录页怎么样了", "zh-CN"),
 	)
 	for _, text := range []string{
-		busyHintText,
+		busyHintText("zh-CN"),
 		taskNamed,
 		runAcceptanceText("登录页性能优化", "zh-CN"),
 	} {
