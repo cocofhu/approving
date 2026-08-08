@@ -68,6 +68,29 @@ var internalMarkerLines = regexp.MustCompile(`(?m)^\s*(\[(摘要|进度|里程�
 
 var toolNoiseLine = regexp.MustCompile(`(?im)^\s*(tool_call|function_call|tool result|reasoning_delta|input_tokens|output_tokens)\b.*$`)
 
+// repoCoordinates match the way a working agent cites where it looked: a commit
+// hash, a merge commit subject, a HEAD snapshot. They are precise and useful in
+// a report, and meaningless to someone reading QQ — 「对照基线（git: 90713d62
+// Merge #177），之后到 HEAD（652b0d68 Merge #178）」 tells the user nothing about
+// what was decided.
+//
+// Each pattern is anchored on its label (git:, Merge #, HEAD) rather than on the
+// hash alone: a bare hex run also matches ordinary numbers and ids, and deleting
+// those would eat real content.
+var repoCoordinates = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)[（(]\s*git\s*[:：]\s*[0-9a-f]{7,40}[^)）]*[)）]`),
+	regexp.MustCompile(`(?i)\bgit\s*[:：]\s*[0-9a-f]{7,40}\b`),
+	regexp.MustCompile(`(?i)\bHEAD\s*[（(][0-9a-f]{7,40}[^)）]*[)）]`),
+	regexp.MustCompile(`(?i)\bMerge\s*#\s*\d+\b`),
+	regexp.MustCompile(`(?i)\b[0-9a-f]{7,40}\s+Merge\s*#\s*\d+\b`),
+}
+
+// verdictScaffolding matches the headings a working agent puts on a written
+// report. The sentence after the heading is the actual finding and is kept; only
+// the label is dropped, because 「最终判定：需局部修订」 read aloud to a colleague
+// is just 「需局部修订」.
+var verdictScaffolding = regexp.MustCompile(`(?m)(^|[。；;\n])\s*(最终判定|结论状态|判定结果|建议下一步|下一步建议|置信度|证据链)\s*[:：]\s*`)
+
 // deliveryReceiptLine matches whole-line model asides that restate a successful
 // pm_reply / channel delivery. These leaked through FinalSummary after #161.
 var deliveryReceiptLine = regexp.MustCompile(`(?im)^\s*(已发送|已通过\s*QQ\s*回复用户|稍等，?我看一下|Give me a moment on this one|已开始处理|任务已启动|收到，正在处理)\s*[。.!！…]*\s*$`)
@@ -95,6 +118,10 @@ func ScrubInternalTerms(text string) string {
 	for _, p := range internalIDPatterns {
 		out = p.ReplaceAllString(out, "")
 	}
+	for _, p := range repoCoordinates {
+		out = p.ReplaceAllString(out, "")
+	}
+	out = verdictScaffolding.ReplaceAllString(out, "$1")
 	for _, r := range internalTermReplacements {
 		out = r.pattern.ReplaceAllString(out, r.with)
 	}
@@ -113,6 +140,14 @@ func ContainsInternalTerms(text string) bool {
 		if p.MatchString(text) {
 			return true
 		}
+	}
+	for _, p := range repoCoordinates {
+		if p.MatchString(text) {
+			return true
+		}
+	}
+	if verdictScaffolding.MatchString(text) {
+		return true
 	}
 	for _, r := range internalTermReplacements {
 		if r.pattern.MatchString(text) {

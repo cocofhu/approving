@@ -607,8 +607,11 @@ func TestCompletedOutcomeFallbackIncludesResultSummary(t *testing.T) {
 	if !strings.Contains(got, "fallthrough") || !strings.Contains(got, "8s") {
 		t.Fatalf("fallback dropped findings: %q", got)
 	}
-	if strings.Contains(got, "直接检查") {
-		t.Fatalf("findings path should not glue short title: %q", got)
+	// The task has to be named. An unattributed 「弄完了」 lands in a
+	// conversation where other jobs were handed over since, and reads as an
+	// answer to whichever was asked for last.
+	if !strings.Contains(got, "直接检查") {
+		t.Fatalf("completed fallback does not say which task finished: %q", got)
 	}
 	broken := outcomeFallbackText(&models.TaskIdentity{
 		ShortTitle: "调研 Approving 最近关于快模型和 wo", Language: "zh-CN",
@@ -627,6 +630,81 @@ func TestCompletedOutcomeFallbackIncludesResultSummary(t *testing.T) {
 	}
 	if !strings.Contains(empty, "可读结论") {
 		t.Fatalf("empty fallback should admit missing summary: %q", empty)
+	}
+}
+
+// The digest a working agent writes is addressed to the platform, not to the
+// user. When the conversation model cannot phrase an outcome, the degraded path
+// used to paste that digest verbatim, which is how this arrived in QQ:
+//
+//	弄完了。对照 2026-08-08 09:55 UTC 前次「快模型与 worker 架构精简」调研基线
+//	（git: 90713d62 Merge #177），之后到 HEAD（652b0d68 Merge #178）…
+//	最终判定：需局部修订…结论状态：部分成立。建议下一步：仅观察…
+//
+// Commit hashes, merge subjects and report headings are not something a
+// colleague says out loud, and the message never said which task it was about.
+func TestDegradedOutcomeDoesNotPasteTheWorkingAgentsReport(t *testing.T) {
+	digest := "对照 2026-08-08 09:55 UTC 前次「快模型与 worker 架构精简」调研基线" +
+		"（git: 90713d62 Merge #177），之后到 HEAD（652b0d68 Merge #178）只有文案质量与" +
+		"出口守卫改动。原架构判断大体仍成立，但清单需要局部修订。" +
+		"最终判定：需局部修订。结论状态：部分成立。建议下一步：仅观察。"
+
+	got := outcomeFallbackText(&models.TaskIdentity{
+		ShortTitle: "快模型与 worker 架构精简调研", Language: "zh-CN",
+	}, TaskOutcome{Status: "completed", ResultSummary: digest}, "zh-CN")
+
+	// Names the task, keeps the one sentence that was a conclusion, and leaves
+	// the baseline/heading sentences behind — they were written for the
+	// platform, and half-scrubbing them would only produce broken prose.
+	want := "快模型与 worker 架构精简调研跑完了：原架构判断大体仍成立，但清单需要局部修订。"
+	if got != want {
+		t.Errorf("degraded outcome =\n  %q\nwant\n  %q", got, want)
+	}
+	for _, debris := range []string{"90713d62", "652b0d68", "Merge #177", "Merge #178",
+		"git:", "HEAD", "最终判定", "结论状态", "建议下一步"} {
+		if strings.Contains(got, debris) {
+			t.Errorf("degraded outcome leaked %q: %q", debris, got)
+		}
+	}
+	if ContainsInternalTerms(got) {
+		t.Errorf("degraded outcome still reads as an internal report: %q", got)
+	}
+}
+
+// A digest that was already conversational is quoted as it stands — the
+// sentence filter exists to drop report debris, not to shorten real answers.
+func TestDegradedOutcomeKeepsAConversationalDigestWhole(t *testing.T) {
+	got := outcomeFallbackText(&models.TaskIdentity{
+		ShortTitle: "登录页性能优化", Language: "zh-CN",
+	}, TaskOutcome{
+		Status:        "completed",
+		ResultSummary: "首屏从 3.2s 降到 1.1s。改动已提，链接：https://github.com/org/repo/pull/9",
+	}, "zh-CN")
+
+	for _, keep := range []string{"登录页性能优化", "3.2s 降到 1.1s", "pull/9"} {
+		if !strings.Contains(got, keep) {
+			t.Errorf("degraded outcome dropped %q: %q", keep, got)
+		}
+	}
+}
+
+// Sentences are kept whole so the shortened digest still reads as a finished
+// thought, and a single over-long sentence is soft-cut rather than dropped.
+func TestLeadingConclusionKeepsWholeSentences(t *testing.T) {
+	facts := "结论是可以合并。证据来自三处调用点。第三段是方法论，用户不关心。"
+	got := leadingConclusion(facts, 10)
+	if got != "结论是可以合并。" {
+		t.Fatalf("leadingConclusion = %q, want the first whole sentence", got)
+	}
+	if got := leadingConclusion(facts, 400); got != facts {
+		t.Fatalf("short-enough digest was altered: %q", got)
+	}
+	// A single sentence past the budget is soft-cut (which appends an ellipsis)
+	// rather than dropped — a shortened conclusion beats no conclusion.
+	long := strings.Repeat("很长的一句话没有句号", 20)
+	got = leadingConclusion(long, 30)
+	if got == "" || len([]rune(got)) > 31 {
+		t.Fatalf("over-long single sentence = %q (%d runes)", got, len([]rune(got)))
 	}
 }
 
