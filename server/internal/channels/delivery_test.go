@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cocofhu/approving/internal/liveagent"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/sendable"
 	"github.com/cocofhu/approving/internal/services"
@@ -294,6 +295,45 @@ func TestSendRunAcceptanceAckOncePerRunAndRejectsMissingRun(t *testing.T) {
 	ack.RunID = ""
 	if _, err := m.SendRunAcceptanceAck(context.Background(), ack); err == nil {
 		t.Fatal("run acceptance ACK without a real run id must be rejected")
+	}
+}
+
+// The acceptance line is the model's to write, like every other
+// acknowledgement. Leaving it as a platform template is what produced
+// 「你可以接着问别的」— copy nobody chose, in a voice nobody picked.
+func TestRunAcceptanceAckIsPhrasedByTheConversationModel(t *testing.T) {
+	fa := &fakeAdapter{}
+	m, _ := policyManager(t, fa, nil)
+	live := &fakeLive{configured: true, report: &liveagent.Result{Text: "行，那事我这就安排，弄好了喊你。"}}
+	m.SetLiveModel(live)
+	m.Apply([]models.ChannelConfig{{
+		ID: "c1", Type: "qq", ProjectID: "proj", AppID: "app", Enabled: true,
+		CronDeliver: true, CronDeliverTarget: "c2c:user1",
+	}})
+	defer m.StopAll()
+
+	if _, err := m.SendRunAcceptanceAck(context.Background(), RunAcceptanceAck{
+		ProjectID: "proj", RunID: "run-9", Scene: SceneC2C,
+		ConversationID: "user1", UserID: "u1", ShortTitle: "登录页", Language: "zh-CN",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got := sentTexts(fa)
+	if len(got) != 1 || got[0] != "行，那事我这就安排，弄好了喊你。" {
+		t.Fatalf("sends = %v want the model's own line", got)
+	}
+}
+
+// Whatever the fallback says, it must not narrate what the user is allowed to
+// do next; they already know they can keep talking.
+func TestRunAcceptanceFallbackDoesNotCoachTheUser(t *testing.T) {
+	for _, lang := range []string{"zh-CN", "en"} {
+		text := runAcceptanceText("登录页", lang)
+		for _, banned := range []string{"接着问", "别的", "keep chatting", "Feel free"} {
+			if strings.Contains(text, banned) {
+				t.Errorf("%s fallback still coaches the user (%q): %q", lang, banned, text)
+			}
+		}
 	}
 }
 

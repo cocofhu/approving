@@ -77,7 +77,12 @@ func (m *Manager) RecoverInterruptedTurns(ctx context.Context) {
 			Kind:        sendable.KindFinal, Reason: "turn_interrupted_recovery",
 			Priority:  sendable.PriorityHigh,
 			DedupeKey: "turn-recovery:" + row.ID,
-			Text:      interruptedTurnText(row.Language),
+			Text: m.speakOperationalLine(ctx, operationalLine{
+				Situation: "你这边刚重启过，对方上一条消息没处理完就断了。跟他说一声，请他再发一次。" +
+					"别把重启说成是他的问题，也别解释是什么坏了。",
+				Language: row.Language,
+				Fallback: interruptedTurnText(row.Language),
+			}),
 		})
 		if err != nil {
 			log.Warn().Err(err).Str("conversation", row.ConversationID).

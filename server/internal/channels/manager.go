@@ -545,7 +545,12 @@ func (m *Manager) sendBusyHint(ctx context.Context, rc *runningChannel, in Inbou
 		Msg("live: inbound dropped, queue full")
 	m.sendOutbound(ctx, rc, OutboundMessage{
 		Scene: in.Scene, ConversationID: in.ConversationID,
-		ReplyToMessageID: in.MessageID, Text: busyHintText,
+		ReplyToMessageID: in.MessageID,
+		Text: m.speakOperationalLine(ctx, operationalLine{
+			Situation: "你手上还压着对方前面几条没回完，这条一时顾不上。跟他说一声让他等等。",
+			Language:  services.DetectLanguage(in.Text, ""),
+			Fallback:  busyHintText,
+		}),
 		Envelope: turnEnvelope(rc, in, sendable.KindSafetyNotice, "queue_full", sendable.PriorityHigh),
 	})
 }
@@ -661,9 +666,15 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 				Msg("live: foreground turn exceeded its budget without an answer")
 			closeStatus = "failed"
 			if !m.hasReplied(scope) {
+				language := services.DetectLanguage(in.Text, "")
 				m.sendOutbound(ctx, rc, OutboundMessage{
 					Scene: in.Scene, ConversationID: in.ConversationID, ReplyToMessageID: in.MessageID,
-					Text:     turnTooSlowText(services.DetectLanguage(in.Text, "")),
+					Text: m.speakOperationalLine(ctx, operationalLine{
+						Situation: "这件事没法在聊天里当场弄完。问对方要不要你当成后台任务去做、做完回他。" +
+							"注意：现在还没开始做，所以别说已经在跑了，是在征求他同意。",
+						Language: language,
+						Fallback: turnTooSlowText(language),
+					}),
 					Envelope: turnEnvelope(rc, in, sendable.KindFinal, "turn_budget_exceeded", sendable.PriorityHigh),
 				})
 			}
@@ -693,7 +704,7 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		}
 		m.sendOutbound(ctx, rc, OutboundMessage{
 			Scene: in.Scene, ConversationID: in.ConversationID, ReplyToMessageID: in.MessageID,
-			Text:     m.noAnswerFallback(rc, in),
+			Text:     m.sayNoAnswer(ctx, rc, in),
 			Envelope: turnEnvelope(rc, in, sendable.KindFinal, "final_missing_fallback", sendable.PriorityCritical),
 		})
 		return
@@ -1409,6 +1420,26 @@ func (m *Manager) hasAnswered(scope string) bool {
 // the conversation's current turn.
 func (m *Manager) MarkConversationReplied(projectID string, scene Scene, conversationID string) {
 	m.markReplied(conversationTurnScope(projectID, scene, conversationID))
+}
+
+// sayNoAnswer reports a turn that ended without the agent submitting anything.
+// The model words it; noAnswerFallback is the fixed line behind it. Letting the
+// model speak also stops the fallback's 「」+ShortTitle gluing, which is how a
+// mid-token ledger title got pasted into an apology.
+func (m *Manager) sayNoAnswer(ctx context.Context, rc *runningChannel, in InboundMessage) string {
+	situation := "这一轮你没能拿出可用的结论。如实说这个情况，再问对方要不要换个说法、或者告诉你他最关心哪部分。"
+	var title string
+	if task := m.activeTaskFor(rc, in); task != nil {
+		title = task.ShortTitle
+		situation = "那件事你还在弄，这一轮暂时没有可用的结论。如实说还在做、有实质进展再回他。"
+	}
+	return m.speakOperationalLine(ctx, operationalLine{
+		Situation: situation,
+		Facts:     title,
+		Avoid:     title,
+		Language:  services.DetectLanguage(in.Text, ""),
+		Fallback:  m.noAnswerFallback(rc, in),
+	})
 }
 
 // noAnswerFallback is what the user hears when a turn ends without the agent

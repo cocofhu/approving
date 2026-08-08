@@ -95,7 +95,11 @@ func (m *Manager) tryResolveRiskConfirmation(ctx context.Context, rc *runningCha
 				Msg("confirmed risk action failed")
 			// The user confirmed and it still did not happen. Say that plainly;
 			// the underlying error is a diagnostic, not an answer.
-			m.sendOrchestrationReply(ctx, rc, in, riskExecutionFailedText(language))
+			m.sendOrchestrationReply(ctx, rc, in, m.speakOperationalLine(ctx, operationalLine{
+				Situation: "对方确认要做的那个操作没执行成功，状态一点没变。如实说清楚，再问他要不要你再试一次。",
+				Language:  language,
+				Fallback:  riskExecutionFailedText(language),
+			}))
 			return true
 		}
 		// Re-render now that the action has run. The text ResolveTicket returned
