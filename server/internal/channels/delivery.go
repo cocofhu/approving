@@ -246,13 +246,19 @@ func (m *Manager) SendRunAcceptanceAck(ctx context.Context, ack RunAcceptanceAck
 		return DeliveryResult{Decision: sendable.Decision{Reason: "already_acknowledged"}}, nil
 	}
 	language := services.DetectLanguage("", ack.Language)
+	// Phrased by the conversation model like every other acknowledgement; the
+	// fixed line below is only what a missing or slow model falls back to.
+	text := m.phraseRunAccepted(ctx, ack.ShortTitle, language)
+	if text == "" {
+		text = runAcceptanceText(ack.ShortTitle, language)
+	}
 	result, err := m.DeliverSendable(ctx, SendableRequest{
 		ProjectID: ack.ProjectID, Scene: ack.Scene, ConversationID: ack.ConversationID,
 		UserID: ack.UserID, RunID: runID,
 		Kind: sendable.KindRunAcceptanceAck, Reason: "run_accepted",
 		Priority:  sendable.PriorityHigh,
 		DedupeKey: runAcceptanceDedupeKey(runID, ack.ConversationID, ack.UserID),
-		Text:      runAcceptanceText(ack.ShortTitle, language),
+		Text:      text,
 	})
 	// Handing work to the background is this turn's answer: the user asked for
 	// something and has been told it is being done. Marking the turn answered
@@ -271,12 +277,14 @@ func (m *Manager) SendRunAcceptanceAck(ctx context.Context, ack RunAcceptanceAck
 // runAcceptanceText is the last-resort line when a Run is accepted but the
 // conversation layer did not already speak. Keep it short and free of pasted
 // ledger titles — long short_title values are truncated requirements, not names.
+// Do not append "feel free to keep chatting": the user already knows they can
+// talk, and saying so reads like a helpdesk script.
 func runAcceptanceText(shortTitle, language string) string {
 	_ = shortTitle
 	if services.NormalizeLanguage(language) == "en" {
-		return "Got it, I'll take that one and come back when it's done. Feel free to keep chatting in the meantime."
+		return "Got it, I'll take that one and come back when it's done."
 	}
-	return "好，那事我去弄，完了告诉你。你可以接着问别的。"
+	return "好，那事我去弄，完了告诉你。"
 }
 
 func runAcceptanceDedupeKey(runID, conversationID, userID string) string {
