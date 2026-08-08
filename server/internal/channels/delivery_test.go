@@ -60,7 +60,7 @@ func TestFinalOnlySendsStructuredSummaryNeverRawAssistantText(t *testing.T) {
 		if strings.Contains(text, "内部推理") || strings.Contains(text, "sk-secret") || strings.Contains(text, "提示词标签") {
 			t.Fatalf("raw assistant final leaked: %v", got)
 		}
-		if strings.Contains(text, deprecatedSafeFinalNotice) {
+		if strings.Contains(text, "本回合已结束，请在 Approving 查看完整结果。") {
 			t.Fatalf("deprecated safe-notice fake completion must not be sent: %v", got)
 		}
 	}
@@ -116,7 +116,7 @@ func TestNaturalLanguageQQFinalContainsAnswerNotShellNotice(t *testing.T) {
 	got := sentTexts(fa)
 	foundAnswer := false
 	for _, text := range got {
-		if strings.Contains(text, deprecatedSafeFinalNotice) || strings.Contains(text, "本回合已结束") {
+		if strings.Contains(text, "本回合已结束，请在 Approving 查看完整结果。") || strings.Contains(text, "本回合已结束") {
 			t.Fatalf("shell/fake-completion must not appear in QQ outbound: %v", got)
 		}
 		if strings.Contains(text, "tool_call") || strings.Contains(text, "内部推理") {
@@ -144,7 +144,7 @@ func TestNaturalLanguageQQFinalContainsAnswerNotShellNotice(t *testing.T) {
 		t.Fatalf("expected exactly one fallback message, got %v", failGot)
 	}
 	for _, text := range failGot {
-		if strings.Contains(text, deprecatedSafeFinalNotice) || strings.Contains(text, "Approving") {
+		if strings.Contains(text, "本回合已结束，请在 Approving 查看完整结果。") || strings.Contains(text, "Approving") {
 			t.Fatalf("failure path must not send the redirect shell: %v", failGot)
 		}
 	}
@@ -885,9 +885,16 @@ func TestOutboundBindingSkippedWithoutRealIDRunOrOwnership(t *testing.T) {
 // matters for delivery — a Run reports back to the conversation that started it
 // — and that is what the binding tests above cover.
 func TestNoOutboundCopyOffersATaskMenu(t *testing.T) {
+	// Task naming lives in services; keep a status-sentence sample so outbound
+	// copy still cannot look like a pick-one task menu after capabilities removal.
+	taskNamed := services.TaskStatusSentence(
+		"登录页性能优化",
+		"还在做。",
+		services.DetectLanguage("登录页怎么样了", "zh-CN"),
+	)
 	for _, text := range []string{
 		busyHintText,
-		FormatTaskMessage("登录页性能优化", "还在做。", "", "登录页怎么样了", "zh-CN"),
+		taskNamed,
 		runAcceptanceText("登录页性能优化", "zh-CN"),
 	} {
 		for _, banned := range []string{

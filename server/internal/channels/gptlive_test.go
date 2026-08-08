@@ -145,7 +145,7 @@ func newGPTLive(t *testing.T) *gptLive {
 
 func (g *gptLive) say(id, text string, images ...Image) {
 	g.t.Helper()
-	g.m.handleInbound(context.Background(), g.rc, InboundMessage{
+	g.m.dispatch(context.Background(), g.rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
 		MessageID: id, Text: text, Images: images,
 	})

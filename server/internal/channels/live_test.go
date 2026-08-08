@@ -71,7 +71,7 @@ func TestCommentaryNeverAuthorizesADestructiveAction(t *testing.T) {
 		"不要这样啊", "我不想取消这个", "为什么会取消", "这个功能没实现，不对吧",
 		"顺便问一下批准流程是怎么走的", "那这个是 BUG 吗",
 	} {
-		m.handleInbound(context.Background(), rc, InboundMessage{
+		m.dispatch(context.Background(), rc, InboundMessage{
 			Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
 			MessageID: "c" + strconv.Itoa(i), Text: text,
 		})
@@ -83,7 +83,7 @@ func TestCommentaryNeverAuthorizesADestructiveAction(t *testing.T) {
 		}
 	}
 	// The ticket is still open, and a plain yes still settles it.
-	m.handleInbound(context.Background(), rc, InboundMessage{
+	m.dispatch(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "c1", UserID: "u1",
 		MessageID: "c-yes", Text: "确认",
 	})
@@ -126,7 +126,7 @@ func TestOutboundCopyNeverExposesInternals(t *testing.T) {
 		}
 	}
 	// Fixed stillWorking templates are banned from egress; scrub must drop them.
-	for _, banned := range []string{stillWorkingText("zh-CN"), stillWorkingText("en")} {
+	for _, banned := range []string{"稍等，我看一下。", "Give me a moment on this one."} {
 		if got := ScrubInternalTerms(banned); got != "" {
 			t.Errorf("stillWorking template must scrub to empty, got %q from %q", got, banned)
 		}
@@ -306,7 +306,7 @@ func TestExplicitReplySuppressesTheTurnWrapUp(t *testing.T) {
 		})
 		return Reply{}, err
 	}
-	m.handleInbound(context.Background(), rc, InboundMessage{
+	m.dispatch(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
 		MessageID: "q1", Text: "那这个是 BUG 吗",
 	})
@@ -339,7 +339,7 @@ func TestPmReplyPlusNonEmptyFinalSummarySendsExactlyOnce(t *testing.T) {
 			FinalSummary: buildDeliverableFinalSummary(aside),
 		}, nil
 	}
-	m.handleInbound(context.Background(), rc, InboundMessage{
+	m.dispatch(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
 		MessageID: "q-pm-final", Text: "你在看什么",
 	})
@@ -385,7 +385,7 @@ func TestSecondPmReplyInOneTurnIsWithheldAndReported(t *testing.T) {
 		}
 		return Reply{}, nil
 	}
-	m.handleInbound(context.Background(), rc, InboundMessage{
+	m.dispatch(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
 		MessageID: "q-double", Text: "你好",
 	})
@@ -423,7 +423,7 @@ func TestTheNextTurnCanBeAnsweredAgain(t *testing.T) {
 		return Reply{}, err
 	}
 	for _, q := range []string{"你好", "什么进度了"} {
-		m.handleInbound(context.Background(), rc, InboundMessage{
+		m.dispatch(context.Background(), rc, InboundMessage{
 			Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
 			MessageID: "q-" + q, Text: q,
 		})
@@ -453,7 +453,7 @@ func TestProgressMilestoneDoesNotWithholdTheAnswer(t *testing.T) {
 		})
 		return Reply{}, err
 	}
-	m.handleInbound(context.Background(), rc, InboundMessage{
+	m.dispatch(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
 		MessageID: "q-progress", Text: "首屏为什么慢",
 	})
@@ -519,27 +519,35 @@ func TestForegroundTurnsNeverSendStillWorkingTemplate(t *testing.T) {
 
 	slow := &fakeAdapter{}
 	m2 := NewManager(nil, nil, nil)
-	rc := testRunningChannel(slow)
 	release := make(chan struct{})
+	started := make(chan struct{})
 	m2.handleFunc = func(context.Context, ResolvedChannel, InboundMessage) (Reply, error) {
+		close(started)
 		<-release
 		return Reply{FinalSummary: "查完了，是缓存。"}, nil
 	}
-	scope := conversationTurnScope(rc.cfg.ProjectID, SceneC2C, "user1")
 	m2.stillWorkingAfter = 20 * time.Millisecond
-	slowIn := testInboundText("slow", "帮我查一下登录页为什么慢")
-	stop := m2.sayStillWorking(context.Background(), rc, slowIn, scope)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		m2.dispatch(context.Background(), testRunningChannel(slow), testInboundText("slow", "帮我查一下登录页为什么慢"))
+	}()
+	<-started
 	time.Sleep(80 * time.Millisecond)
-	stop()
-	close(release)
-
 	if got := sentTexts(slow); len(got) != 0 {
-		t.Fatalf("sayStillWorking must be a no-op; got %v", got)
+		t.Fatalf("foreground turn must stay silent while working; got %v", got)
 	}
-	// Stopping is idempotent.
-	stop()
-	if n := len(sentTexts(slow)); n != 0 {
-		t.Fatalf("waiting notice must not appear: %d sends", n)
+	for _, banned := range []string{"稍等，我看一下。", "Give me a moment on this one."} {
+		for _, text := range sentTexts(slow) {
+			if strings.Contains(text, banned) {
+				t.Fatalf("banned stillWorking template leaked: %q in %v", banned, sentTexts(slow))
+			}
+		}
+	}
+	close(release)
+	<-done
+	if got := sentTexts(slow); len(got) != 1 || got[0] != "查完了，是缓存。" {
+		t.Fatalf("slow turn sends = %v want only the answer", got)
 	}
 }
 
@@ -1082,7 +1090,7 @@ func TestStatusQuestionWithParallelTasksReachesTheAgent(t *testing.T) {
 	}
 	rc := testRunningChannel(fa)
 	rc.cfg.ProjectID = "proj"
-	m.handleInbound(context.Background(), rc, InboundMessage{
+	m.dispatch(context.Background(), rc, InboundMessage{
 		Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
 		MessageID: "m1", Text: "登录页性能优化怎么样了",
 	})
@@ -1174,7 +1182,7 @@ func assertNoBannedOutbound(t *testing.T, texts []string) {
 				t.Fatalf("banned outbound phrase %q in %q (all=%v)", banned, text, texts)
 			}
 		}
-		if strings.Contains(text, deprecatedSafeFinalNotice) {
+		if strings.Contains(text, "本回合已结束，请在 Approving 查看完整结果。") {
 			t.Fatalf("shell notice leaked: %v", texts)
 		}
 	}
@@ -1199,7 +1207,7 @@ func TestOutboundBoundaryFourScenarios(t *testing.T) {
 			body := answer + "\n已发送。\n稍等，我看一下。"
 			return Reply{Text: body, FinalSummary: buildDeliverableFinalSummary(body)}, nil
 		}
-		m.handleInbound(context.Background(), rc, InboundMessage{
+		m.dispatch(context.Background(), rc, InboundMessage{
 			Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
 			MessageID: "s1", Text: "你好",
 		})
@@ -1226,7 +1234,7 @@ func TestOutboundBoundaryFourScenarios(t *testing.T) {
 			body := "已通过 QQ 回复用户。\n" + answer
 			return Reply{Text: body, FinalSummary: buildDeliverableFinalSummary(body)}, nil
 		}
-		m.handleInbound(context.Background(), rc, InboundMessage{
+		m.dispatch(context.Background(), rc, InboundMessage{
 			Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
 			MessageID: "s2", Text: "什么进度了",
 		})
@@ -1254,7 +1262,7 @@ func TestOutboundBoundaryFourScenarios(t *testing.T) {
 			body := "tool_call lookup_status\n你好呀\n已发送。\n已通过 QQ 回复用户。\n" + answer
 			return Reply{Text: body, FinalSummary: buildDeliverableFinalSummary(body)}, nil
 		}
-		m.handleInbound(context.Background(), rc, InboundMessage{
+		m.dispatch(context.Background(), rc, InboundMessage{
 			Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
 			MessageID: "s3", Text: "那这个是 BUG 吗",
 		})
@@ -1287,7 +1295,7 @@ func TestOutboundBoundaryFourScenarios(t *testing.T) {
 			body := "已开始处理。\n任务已启动。\n稍等，我看一下。\n好的我去弄登录页。"
 			return Reply{Text: body, FinalSummary: buildDeliverableFinalSummary(body)}, nil
 		}
-		m.handleInbound(context.Background(), rc, InboundMessage{
+		m.dispatch(context.Background(), rc, InboundMessage{
 			Scene: SceneC2C, ConversationID: "user1", UserID: "u1",
 			MessageID: "s4", Text: "帮我调研并实现登录页性能优化",
 		})

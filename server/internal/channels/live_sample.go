@@ -138,13 +138,6 @@ func (r *sampleRecorder) acted(reason, text string, result DeliveryResult) {
 	r.spans = append(r.spans, finishSpan("outbound:"+reason, status, truncateRunes(text, 120), time.Now()))
 }
 
-func (r *sampleRecorder) span(name, status, detail string, started time.Time) {
-	if r == nil {
-		return
-	}
-	r.spans = append(r.spans, finishSpan(name, status, detail, started))
-}
-
 func (r *sampleRecorder) flag(flags ...string) {
 	if r == nil {
 		return
@@ -154,14 +147,6 @@ func (r *sampleRecorder) flag(flags ...string) {
 			r.flags = append(r.flags, f)
 		}
 	}
-}
-
-func (r *sampleRecorder) degraded() {
-	if r == nil {
-		return
-	}
-	r.sample.Degraded = true
-	r.sample.Egress = egressPMDirect
 }
 
 // commit writes the sample and returns its id, which links a decision made now

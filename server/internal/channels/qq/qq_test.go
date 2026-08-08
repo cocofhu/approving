@@ -14,28 +14,6 @@ import (
 	"github.com/cocofhu/approving/internal/sendable"
 )
 
-func TestIsImageAttachment(t *testing.T) {
-	// Helper still classifies mime/ext; inbound path no longer filters on it
-	// (PDF/zip are accepted via downloadImage). Outbound image send still uses
-	// filterSendableImages separately.
-	cases := []struct {
-		att  attachment
-		want bool
-	}{
-		{attachment{ContentType: "image/png"}, true},
-		{attachment{ContentType: "image/jpeg"}, true},
-		{attachment{Filename: "photo.PNG"}, true},
-		{attachment{URL: "https://x.com/a.webp"}, true},
-		{attachment{ContentType: "application/pdf", Filename: "doc.pdf"}, false},
-		{attachment{}, false},
-	}
-	for _, c := range cases {
-		if got := isImageAttachment(c.att); got != c.want {
-			t.Errorf("isImageAttachment(%+v) = %v want %v", c.att, got, c.want)
-		}
-	}
-}
-
 func TestFallbackAttachmentName(t *testing.T) {
 	if got := fallbackAttachmentName(attachment{Filename: ""}, "application/pdf"); got != "attachment.pdf" {
 		t.Fatalf("pdf fallback = %q", got)
