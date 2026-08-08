@@ -38,6 +38,7 @@ import (
 	"github.com/cocofhu/approving/internal/sendable"
 	"github.com/cocofhu/approving/internal/services"
 	"github.com/cocofhu/approving/internal/shutdown"
+	"github.com/cocofhu/approving/internal/textutil"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -187,10 +188,7 @@ func main() {
 			outcome = models.AuditOutcomeFail
 		}
 		// Structured payload; SecretMask applied inside Record.
-		resultPayload := any(resultText)
-		if len(resultText) > 2000 {
-			resultPayload = resultText[:2000] + "…"
-		}
+		resultPayload := any(textutil.TruncateBytes(resultText, 2000, "…"))
 		node := strings.TrimSpace(nodeID)
 		if node == "mcp" {
 			node = ""

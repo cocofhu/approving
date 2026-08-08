@@ -3,6 +3,8 @@ package channels
 import (
 	"regexp"
 	"strings"
+
+	"github.com/cocofhu/approving/internal/textutil"
 )
 
 // Everything in this file exists for one reason: a user reading a QQ message
@@ -118,6 +120,34 @@ func ContainsInternalTerms(text string) bool {
 		}
 	}
 	return internalMarkerLines.MatchString(text) || toolNoiseLine.MatchString(text) || deliveryReceiptLine.MatchString(text)
+}
+
+// quotedSpan matches the ways outbound copy quotes a task title. A title is
+// the one fragment in a message that was shortened somewhere else and then
+// pasted into a sentence, so it is where a bad cut surfaces.
+var quotedSpan = regexp.MustCompile(`「[^」]*」|『[^』]*』|“[^”]*”`)
+
+// RepairTruncatedCopy is the last line of defence against text that was cut
+// badly before it got here — a title stored as 「快模型和 wo」 under the old
+// hard cut, or a payload byte-sliced through a Chinese character. The cut sites
+// themselves are fixed, but records written before that are still in the
+// database and still get quoted into new messages, and a user reading
+// 「快模型和 wo」已经跑完了 has no way to know which task that was.
+//
+// It only repairs; it never shortens. Anything it cannot recognise as debris is
+// passed through untouched.
+func RepairTruncatedCopy(text string) string {
+	out := strings.ReplaceAll(text, "\uFFFD", "")
+	out = quotedSpan.ReplaceAllStringFunc(out, func(span string) string {
+		r := []rune(span)
+		inner := string(r[1 : len(r)-1])
+		healed := textutil.HealBrokenTail(inner)
+		if healed == inner {
+			return span
+		}
+		return string(r[0]) + healed + string(r[len(r)-1])
+	})
+	return textutil.HealBrokenTail(out)
 }
 
 // cjkGap matches a space between two Han characters. Chinese does not space its

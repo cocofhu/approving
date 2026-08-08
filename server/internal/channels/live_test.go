@@ -181,6 +181,43 @@ func TestScrubInternalTermsCleansModelComposedText(t *testing.T) {
 	}
 }
 
+// A title cut in half was stored long before the message quoting it was
+// composed, so the egress guard is the only place that can still catch it.
+func TestRepairTruncatedCopyFixesQuotedTitleDebris(t *testing.T) {
+	got := RepairTruncatedCopy("刚才那个「调研 Approving 最近关于快模型和 wo」已经跑完了。")
+	if strings.Contains(got, "和 wo") {
+		t.Fatalf("mid-word debris survived: %q", got)
+	}
+	if !strings.Contains(got, "「调研 Approving 最近关于快模型和…」") {
+		t.Fatalf("title not repaired in place: %q", got)
+	}
+	if !strings.HasSuffix(got, "已经跑完了。") {
+		t.Fatalf("repair damaged the rest of the sentence: %q", got)
+	}
+}
+
+func TestRepairTruncatedCopyLeavesGoodCopyAlone(t *testing.T) {
+	intact := []string{
+		"「登录页性能优化」跑完了，首屏从 3.2s 降到 1.1s，改动在 https://example.com/pr/1 。",
+		"两个检查还在跑，其余全部通过。",
+		"「快模型和 worker 架构精简分析」还在跑，大概过半。",
+		"CI 全绿了，可以合 PR",
+	}
+	for _, in := range intact {
+		if got := RepairTruncatedCopy(in); got != in {
+			t.Errorf("RepairTruncatedCopy(%q) = %q, want unchanged", in, got)
+		}
+	}
+}
+
+// A byte-sliced payload reaches the composer as U+FFFD. Showing a user a black
+// diamond is not better than showing them nothing.
+func TestRepairTruncatedCopyDropsReplacementChars(t *testing.T) {
+	if got := RepairTruncatedCopy("结论：首屏更快了\uFFFD"); strings.Contains(got, "\uFFFD") {
+		t.Fatalf("replacement char survived: %q", got)
+	}
+}
+
 // The identifier guard has to cut both ways. Deleting a real id is the point;
 // deleting a chunk of an ordinary sentence is a worse failure than the jargon
 // would have been, because the user cannot even tell something went missing.

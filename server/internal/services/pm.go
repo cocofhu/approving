@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/textutil"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -794,9 +795,7 @@ func (s *PmService) AppendMessageSource(threadID, role, content, source string, 
 			if title == "" && len(images) > 0 {
 				title = "图片消息"
 			}
-			if len([]rune(title)) > 40 {
-				title = string([]rune(title)[:40]) + "…"
-			}
+			title = textutil.SoftTruncateRunes(title, 40)
 			if title != "" {
 				if err := s.db.Model(&t).Update("title", title).Error; err != nil {
 					log.Warn().Err(err).Str("thread", threadID).Msg("auto-title thread failed")
@@ -1022,10 +1021,7 @@ func (s *PmService) SearchMessages(projectID, agentName, userID, q string, limit
 	}
 	out := make([]map[string]any, 0, len(msgs))
 	for _, m := range msgs {
-		snippet := m.Content
-		if len([]rune(snippet)) > 160 {
-			snippet = string([]rune(snippet)[:160]) + "…"
-		}
+		snippet := textutil.SoftTruncateRunes(m.Content, 160)
 		out = append(out, map[string]any{
 			"messageId": m.ID, "conversationId": m.ThreadID,
 			"title": titleBy[m.ThreadID], "role": m.Role, "snippet": snippet,
@@ -1062,10 +1058,7 @@ func (s *PmService) SearchMemories(projectID, agentName, q string, limit int) ([
 	}
 	out := make([]map[string]any, 0, len(items))
 	for _, it := range items {
-		summary := it.Content
-		if len([]rune(summary)) > 120 {
-			summary = string([]rune(summary)[:120]) + "…"
-		}
+		summary := textutil.SoftTruncateRunes(it.Content, 120)
 		out = append(out, map[string]any{
 			"id": it.ID, "title": it.Title, "summary": summary, "updatedAt": it.UpdatedAt,
 		})

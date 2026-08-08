@@ -12,6 +12,7 @@ import (
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/sandbox"
 	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/approving/internal/textutil"
 
 	"github.com/rs/zerolog/log"
 )
@@ -654,10 +655,7 @@ func channelThreadTitle(in InboundMessage) string {
 	if t == "" {
 		t = "渠道会话"
 	}
-	if len([]rune(t)) > 30 {
-		t = string([]rune(t)[:30]) + "…"
-	}
-	return t
+	return textutil.SoftTruncateRunes(t, 30)
 }
 
 // formatChannelUserText builds the persisted/prompt user text. Group and guild

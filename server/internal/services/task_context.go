@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/textutil"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -217,7 +218,7 @@ func SanitizeShortTitle(title string) string {
 	}
 	// Soft-truncate, then heal legacy mid-token tails like 「…和 wo」that
 	// were already persisted under the old 24-rune hard cut.
-	return healBrokenShortTitle(SoftTruncateRunes(cleaned, runShortTitleRunes))
+	return textutil.HealBrokenTail(SoftTruncateRunes(cleaned, runShortTitleRunes))
 }
 
 // runShortTitle derives a human-readable label for a Run. It prefers the Run's
@@ -281,83 +282,15 @@ func firstLine(value string) string {
 	return strings.TrimSpace(value)
 }
 
-// SoftTruncateRunes shortens user-visible text at a word/punctuation boundary
-// when possible, and always marks a cut with …. Hard mid-token cuts like
-// 「findi…」/「和 wo」are what this exists to stop.
+// SoftTruncateRunes shortens user-visible text without cutting a word in half.
+// It is re-exported from textutil so callers already reaching for the services
+// package do not have to know where the implementation lives.
 func SoftTruncateRunes(value string, limit int) string {
-	r := []rune(strings.TrimSpace(value))
-	if limit <= 0 || len(r) <= limit {
-		return string(r)
-	}
-	cut := r[:limit]
-	for i := len(cut) - 1; i >= limit/2; i-- {
-		switch cut[i] {
-		case ' ', '　', '\n', '\t', '/', '-', '_', '|', '·',
-			'。', '，', ',', '.', ';', '；', '、', ':', '：':
-			cut = cut[:i]
-			goto done
-		}
-	}
-done:
-	out := strings.TrimSpace(string(cut))
-	if out == "" {
-		out = string(r[:limit])
-	}
-	return out + "…"
+	return textutil.SoftTruncateRunes(value, limit)
 }
 
 func truncateTaskRunes(value string, limit int) string {
 	return SoftTruncateRunes(value, limit)
-}
-
-// healBrokenShortTitle repairs titles that already end in a 1–3 letter Latin
-// stub after CJK (the old hard-cut 「…和 wo」shape).
-func healBrokenShortTitle(title string) string {
-	title = strings.TrimSpace(title)
-	if title == "" {
-		return ""
-	}
-	base := strings.TrimSuffix(title, "…")
-	if !hasBrokenLatinStub(base) {
-		return title
-	}
-	r := []rune(base)
-	i := len(r) - 1
-	for i >= 0 && isASCIIAlpha(r[i]) {
-		i--
-	}
-	for i >= 0 && (r[i] == ' ' || r[i] == '　') {
-		i--
-	}
-	if i < 0 {
-		return title
-	}
-	return string(r[:i+1]) + "…"
-}
-
-func hasBrokenLatinStub(title string) bool {
-	r := []rune(strings.TrimSpace(title))
-	if len(r) == 0 {
-		return false
-	}
-	i := len(r) - 1
-	for i >= 0 && isASCIIAlpha(r[i]) {
-		i--
-	}
-	stub := len(r) - 1 - i
-	if stub < 1 || stub > 3 {
-		return false
-	}
-	for _, c := range r[:i+1] {
-		if c >= 0x4e00 && c <= 0x9fff {
-			return true
-		}
-	}
-	return false
-}
-
-func isASCIIAlpha(r rune) bool {
-	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
 }
 
 type TaskScope struct {

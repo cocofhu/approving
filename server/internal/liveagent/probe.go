@@ -8,6 +8,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/cocofhu/approving/internal/textutil"
 )
 
 // ProbeCheck is one property of an endpoint that either holds or does not.
@@ -184,9 +186,5 @@ func describeStatus(code int) string {
 }
 
 func excerpt(s string, max int) string {
-	s = strings.Join(strings.Fields(s), " ")
-	if len([]rune(s)) <= max {
-		return s
-	}
-	return string([]rune(s)[:max]) + "…"
+	return textutil.SoftTruncateRunes(strings.Join(strings.Fields(s), " "), max)
 }

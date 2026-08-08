@@ -1,5 +1,5 @@
 import { beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { formatTrigger, fmtCompactDuration, fmtDuration, relTime } from './format'
+import { formatTrigger, fmtCompactDuration, fmtDuration, relTime, truncateText } from './format'
 import { i18n } from './i18n'
 import { loadLocaleMessages } from './loadLocaleMessages'
 
@@ -103,5 +103,25 @@ describe('formatTrigger', () => {
     expect(formatTrigger('channel')).toBe('channel')
     expect(formatTrigger('qq:cron-timezone-bug')).toBe('qq:cron-timezone-bug')
     expect(formatTrigger('cron-nightly')).toBe('cron-nightly')
+  })
+})
+
+describe('truncateText', () => {
+  it('never ends a label in the middle of a word', () => {
+    const title = '调研 Approving 最近关于快模型和 worker 架构的精简空间'
+    expect(truncateText(title, 24)).toBe('调研 Approving 最近关于快模型和…')
+    expect(truncateText(title, 30)).toBe('调研 Approving 最近关于快模型和 worker 架…')
+  })
+
+  it('cuts Chinese at any character, since it has no word spacing', () => {
+    expect(truncateText('两个检查还在跑其余全部通过', 8)).toBe('两个检查还在跑其…')
+  })
+
+  it('leaves text within budget untouched', () => {
+    expect(truncateText('登录页性能优化', 60)).toBe('登录页性能优化')
+  })
+
+  it('counts code points, so an emoji is not split into squares', () => {
+    expect(truncateText('🎉🎉🎉🎉', 2)).toBe('🎉🎉…')
   })
 })
