@@ -38,8 +38,8 @@ const (
 // sampleRecorder accumulates one turn's decision. A nil recorder is usable and
 // does nothing, so call sites do not branch on whether sampling is configured.
 type sampleRecorder struct {
-	m      *Manager
-	sample models.LiveDecisionSample
+	m       *Manager
+	sample  models.LiveDecisionSample
 	started time.Time
 
 	completions []map[string]any

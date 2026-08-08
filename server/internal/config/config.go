@@ -62,12 +62,12 @@ type LiveConfig struct {
 	// compiled default" so a sparse yaml file does not silently shrink the
 	// window to nothing. The settings page can override each of these at
 	// runtime without a restart.
-	TranscriptWindow     int `yaml:"transcript_window"`
-	LedgerLimit          int `yaml:"ledger_limit"`
-	RecentTerminalHours  int `yaml:"recent_terminal_hours"`
-	MaxConcurrentWork    int `yaml:"max_concurrent_work"`
-	ToolLoopLimit        int `yaml:"tool_loop_limit"`
-	MaxTokens            int `yaml:"max_tokens"`
+	TranscriptWindow    int `yaml:"transcript_window"`
+	LedgerLimit         int `yaml:"ledger_limit"`
+	RecentTerminalHours int `yaml:"recent_terminal_hours"`
+	MaxConcurrentWork   int `yaml:"max_concurrent_work"`
+	ToolLoopLimit       int `yaml:"tool_loop_limit"`
+	MaxTokens           int `yaml:"max_tokens"`
 }
 
 // Configured reports whether enough is set to call the endpoint. The key is not

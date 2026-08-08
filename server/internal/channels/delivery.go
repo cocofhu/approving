@@ -197,7 +197,7 @@ func (m *Manager) DeliverConversationReply(ctx context.Context, reply Conversati
 		ProjectID: reply.ProjectID, Scene: scene, ConversationID: reply.ConversationID,
 		UserID: reply.UserID, RunID: strings.TrimSpace(reply.RunID),
 		TaskContext: scope, TraceID: strings.TrimSpace(reply.TraceID),
-		Kind:     sendable.KindFinal, Reason: "pm_reply",
+		Kind: sendable.KindFinal, Reason: "pm_reply",
 		Priority: sendable.PriorityCritical,
 		// No explicit dedupe key: the policy derives one from the content, so a
 		// retry of the same answer collapses while two different answers in the
@@ -354,4 +354,3 @@ func (m *Manager) originConversationForRun(projectID, runID string) (Scene, stri
 // picking a number only re-entered the same resolver. Which task a message is
 // about is now decided by whichever model handles the turn, with the whole
 // conversation in view.
-

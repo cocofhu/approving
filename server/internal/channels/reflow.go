@@ -3,7 +3,9 @@ package channels
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/sendable"
@@ -282,33 +284,55 @@ func outcomeFallbackText(identity *models.TaskIdentity, outcome TaskOutcome, lan
 // finished task arrived in QQ as 「弄完了。对照…基线（git: 90713d62 Merge #177）…」.
 const outcomeFallbackFactsRunes = 160
 
+// deliveryLine matches the link row the platform itself appends to a digest
+// (services.AppendRunDeliveryURL). Lifting it out is what lets the link end the
+// message instead of trailing a wall of text nobody read that far into.
+var deliveryLine = regexp.MustCompile(`(?m)^[^\S\n]*(?:交付链接|Delivery)[：:][^\S\n]*(\S+)[^\S\n]*$`)
+
 func completedOutcomeFallback(title, facts string, en bool) string {
-	facts = ScrubInternalTerms(leadingConclusion(facts, outcomeFallbackFactsRunes))
-	if facts != "" {
-		// The task has to be named. Two other jobs may have been handed over
-		// since this one started, and an unattributed 「弄完了」 reads as an
-		// answer to whichever was asked for last.
+	link := ""
+	if m := deliveryLine.FindStringSubmatch(facts); m != nil {
+		link = m[1]
+		facts = deliveryLine.ReplaceAllString(facts, "")
+	}
+	body := ScrubInternalTerms(leadingConclusion(facts, outcomeFallbackFactsRunes))
+	// The task has to be named, first thing. Several jobs can be in flight at
+	// once, and two pushes that both open with 「弄完了」 are indistinguishable
+	// in a chat window — which is the state this message arrived in.
+	subject := title
+	if subject == "" {
 		if en {
-			if title == "" {
-				return "That one's done: " + facts
-			}
-			return "\"" + title + "\" is done: " + facts
+			subject = "That one"
+		} else {
+			subject = "刚才那件事"
 		}
-		if title == "" {
-			return "刚才那件事跑完了：" + facts
+	} else if en {
+		subject = "\"" + title + "\""
+	}
+
+	switch {
+	case body != "" && link != "":
+		if en {
+			return subject + " is done: " + body + " The change is at " + link
 		}
-		return title + "跑完了：" + facts
+		return subject + "跑完了：" + body + "改动在 " + link
+	case body != "":
+		if en {
+			return subject + " is done: " + body
+		}
+		return subject + "跑完了：" + body
+	case link != "":
+		// Nothing in the digest was worth quoting, but the link is the whole
+		// point of the task and is enough on its own.
+		if en {
+			return subject + " is done — the change is at " + link
+		}
+		return subject + "跑完了，改动在 " + link
 	}
 	if en {
-		if title == "" {
-			return "That one's done, but this turn didn't leave a readable summary. Want me to dig in again?"
-		}
-		return "\"" + title + "\" is done, but this turn didn't leave a readable summary. Want me to dig in again?"
+		return subject + " is done, but this turn didn't leave a readable summary. Want me to dig in again?"
 	}
-	if title == "" {
-		return "刚才那个弄完了，但这一轮没留下可读结论。要我接着补查可以说。"
-	}
-	return title + "弄完了，但这一轮没留下可读结论。要我接着补查可以说。"
+	return subject + "跑完了，但这一轮没留下可读结论。要我接着补查可以说。"
 }
 
 // leadingConclusion picks the part of a findings digest that can be said out
@@ -332,7 +356,7 @@ func leadingConclusion(facts string, limit int) string {
 	}
 	var kept strings.Builder
 	for _, sentence := range splitSentences(facts) {
-		if ContainsInternalTerms(sentence) {
+		if ContainsInternalTerms(sentence) || readsLikeWorkLog(sentence) {
 			continue
 		}
 		if kept.Len() == 0 && len([]rune(sentence)) > limit {
@@ -347,21 +371,71 @@ func leadingConclusion(facts string, limit int) string {
 	return strings.TrimSpace(kept.String())
 }
 
+// urlSpan matches a link so it can be lifted out of a digest, or excluded when
+// judging whether the prose around it is a work log.
+var urlSpan = regexp.MustCompile(`https?://\S+`)
+
+// workLogShapes are how an agent writes down what it did rather than what it
+// found: branch refs, source paths, CLI flags, API fields echoed verbatim. A
+// sentence built out of these is a work log entry —
+// 「在现有源分支 feat/live-context-settings 上重生 server/CONFIGURATION.md…」—
+// and no amount of word-level cleaning turns it into something to say to
+// somebody. It is dropped whole.
+//
+// This test is deliberately local to quoting a findings digest. It is not part
+// of ScrubInternalTerms, which rewrites every outbound message including the
+// conversation model's own: a branch name or file path is often exactly what a
+// user asked for, and deleting it there would answer the wrong question.
+var workLogShapes = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)\b(?:feat|feature|fix|hotfix|chore|refactor|docs|release)/[a-z0-9][\w.-]*`),
+	regexp.MustCompile(`(?i)\borigin/[\w.-]+`),
+	regexp.MustCompile(`(?i)\b[\w.-]+(?:/[\w.-]+)+\.(?:go|ts|tsx|vue|md|json|ya?ml|sql|sh)\b`),
+	regexp.MustCompile(`\b[a-z][\w]*\s*=\s*[A-Z][A-Z_]{2,}\b`),
+	regexp.MustCompile(`(?i)\bHEAD\s+[0-9a-f]{7,40}\b`),
+	regexp.MustCompile(`\s--?[a-z][\w-]{2,}\b`),
+}
+
+// readsLikeWorkLog reports whether this sentence is an account of the work
+// rather than of the outcome. Links are excluded from the judgement: a delivery
+// URL is the one piece of a digest that is always worth keeping.
+func readsLikeWorkLog(sentence string) bool {
+	probe := urlSpan.ReplaceAllString(sentence, " ")
+	for _, p := range workLogShapes {
+		if p.MatchString(probe) {
+			return true
+		}
+	}
+	return false
+}
+
 // splitSentences cuts after CJK/latin sentence enders and newlines, keeping the
 // terminator (and any spacing that follows) with the sentence it ends, so the
 // pieces can be re-joined without losing the gaps between them.
+//
+// An ASCII period or semicolon only ends a sentence when whitespace or the end
+// of the text follows it. Inside a token it belongs to the token: breaking at
+// every dot cut CONFIGURATION.md in half — and the half that was left no longer
+// looked like a file path, so it passed the work-log filter and went out. It
+// does the same to version numbers, decimals and URLs.
 func splitSentences(text string) []string {
 	var out []string
 	var cur strings.Builder
-	for _, r := range text {
+	runes := []rune(text)
+	for i, r := range runes {
 		cur.WriteRune(r)
 		switch r {
-		case '。', '！', '？', '\n', '.', '!', '?', ';', '；':
-			if strings.TrimSpace(cur.String()) != "" {
-				out = append(out, cur.String())
+		case '。', '！', '？', '；', '\n':
+		case '.', '!', '?', ';':
+			if i+1 < len(runes) && !unicode.IsSpace(runes[i+1]) {
+				continue
 			}
-			cur.Reset()
+		default:
+			continue
 		}
+		if strings.TrimSpace(cur.String()) != "" {
+			out = append(out, cur.String())
+		}
+		cur.Reset()
 	}
 	if strings.TrimSpace(cur.String()) != "" {
 		out = append(out, cur.String())

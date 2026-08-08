@@ -388,6 +388,7 @@ func TestToolSchemaStaysFlatStrings(t *testing.T) {
 		t.Fatalf("required = %v", required)
 	}
 }
+
 // The remaining cases lock in response shapes observed against a real
 // OpenAI-compatible endpoint (Ollama serving a reasoning model), which differ
 // from the textbook shape in ways that decide whether a turn works at all.

@@ -741,6 +741,71 @@ func TestDegradedOutcomeDoesNotPasteTheWorkingAgentsReport(t *testing.T) {
 	}
 }
 
+// Two finished tasks pushed eleven minutes apart both arrived as a wall of
+// branch names and file paths opening with the same 「弄完了。」, so there was no
+// telling them apart, let alone reading them:
+//
+//	弄完了。在现有源分支 feat/live-context-settings 上重生 server/CONFIGURATION.md…
+//	弄完了。在 approving 仓工作分支 feature/phrase-prompt-dedup 上 merge origin/main…
+//
+// An account of the work is not an account of the outcome. Each push has to say
+// which task it belongs to, and land on the one thing the user can act on.
+func TestConsecutivePushesAreTellableApartAndReadable(t *testing.T) {
+	for _, tc := range []struct {
+		name, title, digest, want string
+	}{
+		{
+			name:  "configuration doc",
+			title: "PR 179 的 CI 过不了",
+			digest: "在现有源分支 feat/live-context-settings 上重生 server/CONFIGURATION.md" +
+				"（补齐 6 个 live.* OptionDescriptors 对应文档行），提交并推送后复用 PR #179；" +
+				"本地 gen-configdoc -check 与 channels/services/config 测试通过，" +
+				"推送后 PR #179 全部 CI（含 ci-server）已转绿，mergeable=MERGEABLE / mergeStateStatus=CLEAN。" +
+				"工作分支：approving → feat/live-context-settings（HEAD 8ba964b）。\n" +
+				"交付链接：https://github.com/cocofhu/approving/pull/179",
+			want: "PR 179 的 CI 过不了跑完了，改动在 https://github.com/cocofhu/approving/pull/179",
+		},
+		{
+			name:  "merge conflict",
+			title: "PR 181 有冲突",
+			digest: "在 approving 仓工作分支 feature/phrase-prompt-dedup 上 merge origin/main，" +
+				"按互补策略解决唯一冲突文件 server/internal/channels/live.go，" +
+				"提交并推送后 PR #181 恢复可合并且 CI 全绿，随后已合入 main。\n" +
+				"交付链接：https://github.com/cocofhu/approving/pull/181",
+			want: "PR 181 有冲突跑完了，改动在 https://github.com/cocofhu/approving/pull/181",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := outcomeFallbackText(&models.TaskIdentity{
+				ShortTitle: tc.title, Language: "zh-CN",
+			}, TaskOutcome{Status: "completed", ResultSummary: tc.digest}, "zh-CN")
+			if got != tc.want {
+				t.Errorf("push =\n  %q\nwant\n  %q", got, tc.want)
+			}
+			for _, debris := range []string{"feat/", "feature/", "origin/main",
+				"CONFIGURATION.md", "live.go", "mergeable=", "-check", "8ba964b"} {
+				if strings.Contains(got, debris) {
+					t.Errorf("push still reads as a work log (%q): %q", debris, got)
+				}
+			}
+		})
+	}
+}
+
+// The work-log test is about how the work was done, not about anything
+// technical being unmentionable: a finding that happens to name a branch or a
+// file is still a finding, and the conversation model is free to say so. Only
+// quoting an unphrased digest is filtered.
+func TestWorkLogFilterDoesNotPoliceTheConversationModel(t *testing.T) {
+	spoken := "改的是 server/internal/channels/live.go，分支 feat/live-context-settings 上。"
+	if got := ScrubInternalTerms(spoken); got != spoken {
+		t.Fatalf("ScrubInternalTerms rewrote a legitimate answer:\n  %q\nwant\n  %q", got, spoken)
+	}
+	if ContainsInternalTerms(spoken) {
+		t.Fatalf("a file path is not an internal term leak: %q", spoken)
+	}
+}
+
 // A digest that was already conversational is quoted as it stands — the
 // sentence filter exists to drop report debris, not to shorten real answers.
 func TestDegradedOutcomeKeepsAConversationalDigestWhole(t *testing.T) {
