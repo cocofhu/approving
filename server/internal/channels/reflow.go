@@ -197,13 +197,16 @@ func (m *Manager) captureReply(projectID string, scene Scene, conv, text string)
 func outcomeBrief(identity *models.TaskIdentity, outcome TaskOutcome, language string) string {
 	var b strings.Builder
 	b.WriteString("后台任务已结束，请用一到两句话把结果告诉用户。\n")
-	b.WriteString("任务：" + identity.ShortTitle + "\n")
+	if title := services.SanitizeShortTitle(identity.ShortTitle); title != "" {
+		b.WriteString("任务：" + title + "\n")
+	}
 	if req := strings.TrimSpace(identity.OriginalRequirement); req != "" {
 		b.WriteString("用户当初的要求：" + truncateRunes(req, 200) + "\n")
 	}
 	if recent := strings.TrimSpace(identity.RecentContext); recent != "" {
 		b.WriteString("最近一次相关对话：" + truncateRunes(recent, 200) + "\n")
 	}
+	b.WriteString("不要把截断的任务名或半截英文词贴进回复；有关键发现就直接讲发现。\n")
 	switch strings.ToLower(strings.TrimSpace(outcome.Status)) {
 	case "completed":
 		b.WriteString("结果：做完了。\n")
@@ -239,7 +242,9 @@ func outcomeFallbackText(identity *models.TaskIdentity, outcome TaskOutcome, lan
 	title := services.SanitizeShortTitle(identity.ShortTitle)
 	en := services.NormalizeLanguage(language) == "en"
 	facts := ScrubInternalTerms(strings.TrimSpace(outcome.ResultSummary))
-	facts = truncateRunes(facts, 400)
+	// Keep the same budget as fireRunTerminal's digest — a second hard cut at
+	// 400 is what produced mid-word endings like「findi…」in IM.
+	facts = truncateRunes(facts, 800)
 	switch strings.ToLower(strings.TrimSpace(outcome.Status)) {
 	case "completed":
 		return completedOutcomeFallback(title, facts, en)
@@ -272,16 +277,12 @@ func outcomeFallbackText(identity *models.TaskIdentity, outcome TaskOutcome, lan
 func completedOutcomeFallback(title, facts string, en bool) string {
 	facts = strings.TrimSpace(facts)
 	if facts != "" {
+		// Findings already carry the substance. Gluing ShortTitle produced
+		// 「调研 … 和 wo弄完了」when the ledger title had been mid-token cut.
 		if en {
-			if title == "" {
-				return "Done. " + facts
-			}
-			return "\"" + title + "\" is done. " + facts
+			return "Done. " + facts
 		}
-		if title == "" {
-			return "弄完了。" + facts
-		}
-		return title + "弄完了。" + facts
+		return "弄完了。" + facts
 	}
 	if en {
 		if title == "" {

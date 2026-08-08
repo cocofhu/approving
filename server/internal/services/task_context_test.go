@@ -358,6 +358,27 @@ func TestSanitizeShortTitleDoesNotCutMidToken(t *testing.T) {
 	}
 }
 
+func TestSanitizeShortTitleHealsLegacyMidTokenTail(t *testing.T) {
+	got := SanitizeShortTitle("调研 Approving 最近关于快模型和 wo")
+	if strings.Contains(got, "wo") && !strings.Contains(got, "worker") {
+		t.Fatalf("legacy stub not healed: %q", got)
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Fatalf("healed title should mark the cut: %q", got)
+	}
+}
+
+func TestSoftTruncateRunesBreaksAtBoundary(t *testing.T) {
+	in := strings.Repeat("结论要点 ", 20) + "findings detail here"
+	got := SoftTruncateRunes(in, 40)
+	if strings.HasSuffix(strings.TrimSuffix(got, "…"), "findi") {
+		t.Fatalf("mid-token cut: %q", got)
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Fatalf("want ellipsis: %q", got)
+	}
+}
+
 func TestRunShortTitleNeverExposesRunID(t *testing.T) {
 	got := runShortTitle(models.Run{
 		ID:     "run-1ca1876f",

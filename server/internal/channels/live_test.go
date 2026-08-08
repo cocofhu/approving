@@ -570,6 +570,15 @@ func TestCompletedOutcomeFallbackIncludesResultSummary(t *testing.T) {
 	if !strings.Contains(got, "fallthrough") || !strings.Contains(got, "8s") {
 		t.Fatalf("fallback dropped findings: %q", got)
 	}
+	if strings.Contains(got, "直接检查") {
+		t.Fatalf("findings path should not glue short title: %q", got)
+	}
+	broken := outcomeFallbackText(&models.TaskIdentity{
+		ShortTitle: "调研 Approving 最近关于快模型和 wo", Language: "zh-CN",
+	}, TaskOutcome{Status: "completed", ResultSummary: "分层合理，建议收敛接话出口。"}, "zh-CN")
+	if strings.Contains(broken, "wo") {
+		t.Fatalf("broken title leaked into completion: %q", broken)
+	}
 	for _, bad := range []string{"想看细节", "Ask me if you want the details"} {
 		if strings.Contains(got, bad) {
 			t.Fatalf("hollow deferral still present (%s): %q", bad, got)
@@ -618,8 +627,8 @@ func TestTaskOutcomeReturnsToTheOriginConversation(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("outcome sends = %v want exactly one conclusion", got)
 	}
-	if !strings.Contains(got[0], "登录页性能优化") {
-		t.Fatalf("conclusion does not say which task it is about: %q", got[0])
+	if !strings.Contains(got[0], "超时与重试") || !strings.Contains(got[0], "pull/9") {
+		t.Fatalf("conclusion dropped findings: %q", got[0])
 	}
 	if strings.Contains(got[0], "Approving") || ContainsInternalTerms(got[0]) {
 		t.Fatalf("conclusion is not self-contained: %q", got[0])
