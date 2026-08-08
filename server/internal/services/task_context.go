@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/textutil"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -183,7 +184,9 @@ func (s *TaskContextService) EnsureIdentityForRun(run models.Run, projectID, use
 	})
 }
 
-const runShortTitleRunes = 24
+// runShortTitleRunes bounds ledger / IM titles. 24 was short enough to cut
+// mid-token（「…快模型和 wo」）; keep room for a readable phrase.
+const runShortTitleRunes = 40
 
 // internalIDPattern matches the internal Run / task identifier shapes in any
 // casing. Short titles are shown to users, who have no idea what a Run id is;
@@ -213,7 +216,9 @@ func SanitizeShortTitle(title string) string {
 	if cleaned == "" || genericTitleWords[strings.ToLower(cleaned)] {
 		return ""
 	}
-	return truncateTaskRunes(cleaned, runShortTitleRunes)
+	// Soft-truncate, then heal legacy mid-token tails like 「…和 wo」that
+	// were already persisted under the old 24-rune hard cut.
+	return textutil.HealBrokenTail(SoftTruncateRunes(cleaned, runShortTitleRunes))
 }
 
 // runShortTitle derives a human-readable label for a Run. It prefers the Run's
@@ -277,12 +282,15 @@ func firstLine(value string) string {
 	return strings.TrimSpace(value)
 }
 
+// SoftTruncateRunes shortens user-visible text without cutting a word in half.
+// It is re-exported from textutil so callers already reaching for the services
+// package do not have to know where the implementation lives.
+func SoftTruncateRunes(value string, limit int) string {
+	return textutil.SoftTruncateRunes(value, limit)
+}
+
 func truncateTaskRunes(value string, limit int) string {
-	r := []rune(strings.TrimSpace(value))
-	if limit <= 0 || len(r) <= limit {
-		return string(r)
-	}
-	return string(r[:limit])
+	return SoftTruncateRunes(value, limit)
 }
 
 type TaskScope struct {

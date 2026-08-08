@@ -339,6 +339,46 @@ func TestSanitizeShortTitleStripsRunIdentifiers(t *testing.T) {
 	}
 }
 
+func TestSanitizeShortTitleDoesNotCutMidToken(t *testing.T) {
+	// 24-rune hard cut used to yield 「调研 Approving 最近关于快模型和 wo」。
+	in := "调研 Approving 最近关于快模型和 worker 的架构精简与重构可行性分析"
+	got := SanitizeShortTitle(in)
+	if got == "" {
+		t.Fatal("empty title")
+	}
+	trimmed := strings.TrimSuffix(got, "…")
+	if strings.HasSuffix(trimmed, " wo") || strings.HasSuffix(trimmed, "wo") && !strings.HasSuffix(trimmed, "worker") {
+		t.Fatalf("mid-token cut still present: %q", got)
+	}
+	if len([]rune(in)) > runShortTitleRunes && !strings.HasSuffix(got, "…") {
+		t.Fatalf("truncated title should end with ellipsis: %q", got)
+	}
+	if n := len([]rune(strings.TrimSuffix(got, "…"))); n > runShortTitleRunes {
+		t.Fatalf("title length %d > %d: %q", n, runShortTitleRunes, got)
+	}
+}
+
+func TestSanitizeShortTitleHealsLegacyMidTokenTail(t *testing.T) {
+	got := SanitizeShortTitle("调研 Approving 最近关于快模型和 wo")
+	if strings.Contains(got, "wo") && !strings.Contains(got, "worker") {
+		t.Fatalf("legacy stub not healed: %q", got)
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Fatalf("healed title should mark the cut: %q", got)
+	}
+}
+
+func TestSoftTruncateRunesBreaksAtBoundary(t *testing.T) {
+	in := strings.Repeat("结论要点 ", 20) + "findings detail here"
+	got := SoftTruncateRunes(in, 40)
+	if strings.HasSuffix(strings.TrimSuffix(got, "…"), "findi") {
+		t.Fatalf("mid-token cut: %q", got)
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Fatalf("want ellipsis: %q", got)
+	}
+}
+
 func TestRunShortTitleNeverExposesRunID(t *testing.T) {
 	got := runShortTitle(models.Run{
 		ID:     "run-1ca1876f",

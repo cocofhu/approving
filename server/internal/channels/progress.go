@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/cocofhu/approving/internal/services"
 )
 
 // ProgressKind is the only progress class Reply may forward to QQ.
@@ -417,10 +419,5 @@ func containsAny(s string, parts ...string) bool {
 }
 
 func truncateRunes(s string, n int) string {
-	s = strings.TrimSpace(s)
-	r := []rune(s)
-	if n <= 0 || len(r) <= n {
-		return s
-	}
-	return string(r[:n]) + "…"
+	return services.SoftTruncateRunes(s, n)
 }

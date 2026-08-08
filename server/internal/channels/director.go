@@ -110,6 +110,7 @@ func (dc directorContext) render() string {
 			b.WriteString("你们刚才在聊的是 taskId=" + dc.FocusTaskID + "。\n")
 			b.WriteString("对方若是补充/收窄这件事，用 refine_work 挂到这个 taskId，不要新开任务，也不要把队列甩给对方选。\n")
 		}
+		b.WriteString("有在跑的任务时：对方问进度/多久，只能说还在做；禁止说已经做完。不要把同一标题的截断写法说成另一件排队任务。\n")
 	}
 	if len(dc.RecentTerminal) > 0 {
 		b.WriteString("刚结束的任务（务必按 status 原样说，failed≠完成）：\n")
@@ -377,8 +378,9 @@ func (m *Manager) runGetStatus(rc *runningChannel, in InboundMessage, taskID str
 	case len(tasks) == 0:
 		res.Note = "现在没有在跑的任务，也没有刚结束的记录。如果用户问的事情还没开始，用 dispatch_pm 派下去；不要编造完成或失败。"
 	default:
+		res.Note = "有在跑的任务：按 tasks 的 status/stage 说进展；禁止说已经做完。recent_terminal 是已结束的别的任务，不要和当前在跑的混成两件。"
 		if hasFailedOrCancelled(recent) {
-			res.Note = failedStatusChoiceNote
+			res.Note += " " + failedStatusChoiceNote
 		}
 	}
 	if m.IsConversationBusy(rc.cfg.ProjectID, in.Scene, in.ConversationID) {

@@ -43,9 +43,34 @@ export function fmtCompactDuration(sec: number): string {
   return `${(n / 60).toFixed(1)}m`
 }
 
+const SEPARATORS = new Set([' ', '\u3000', '\n', '\t', '/', '-', '_', '|', '·', '。', '，', ',', '.', ';', '；', '、', ':', '：'])
+const isHan = (c: string) => c >= '\u4e00' && c <= '\u9fff'
+const isTokenChar = (c: string) => /[0-9A-Za-z]/.test(c)
+
+/**
+ * Shorten a label without cutting a word — or a character — in half. Slicing by
+ * code unit split surrogate pairs into replacement squares and ended titles at
+ * 「快模型和 wo」, which is unreadable in a list where the title is the only way
+ * to tell two runs apart. Counting by code point and walking back to a word
+ * boundary costs a few characters and keeps the label meaningful.
+ */
 export function truncateText(s: string, maxLen: number): string {
-  if (!s || s.length <= maxLen) return s
-  return s.slice(0, maxLen) + '…'
+  if (!s) return s
+  const chars = Array.from(s)
+  if (chars.length <= maxLen) return s
+  // A cut between two Han characters is already at a boundary: Chinese does not
+  // space its words. Only a Latin token needs walking back.
+  if (isTokenChar(chars[maxLen - 1]) && isTokenChar(chars[maxLen])) {
+    for (let i = maxLen - 1; i >= 0; i--) {
+      if (SEPARATORS.has(chars[i])) {
+        const kept = chars.slice(0, i).join('').trimEnd()
+        if (kept) return kept + '…'
+        break
+      }
+      if (isHan(chars[i])) return chars.slice(0, i + 1).join('') + '…'
+    }
+  }
+  return chars.slice(0, maxLen).join('').trimEnd() + '…'
 }
 
 export function relTime(iso: string): string {

@@ -181,6 +181,43 @@ func TestScrubInternalTermsCleansModelComposedText(t *testing.T) {
 	}
 }
 
+// A title cut in half was stored long before the message quoting it was
+// composed, so the egress guard is the only place that can still catch it.
+func TestRepairTruncatedCopyFixesQuotedTitleDebris(t *testing.T) {
+	got := RepairTruncatedCopy("刚才那个「调研 Approving 最近关于快模型和 wo」已经跑完了。")
+	if strings.Contains(got, "和 wo") {
+		t.Fatalf("mid-word debris survived: %q", got)
+	}
+	if !strings.Contains(got, "「调研 Approving 最近关于快模型和…」") {
+		t.Fatalf("title not repaired in place: %q", got)
+	}
+	if !strings.HasSuffix(got, "已经跑完了。") {
+		t.Fatalf("repair damaged the rest of the sentence: %q", got)
+	}
+}
+
+func TestRepairTruncatedCopyLeavesGoodCopyAlone(t *testing.T) {
+	intact := []string{
+		"「登录页性能优化」跑完了，首屏从 3.2s 降到 1.1s，改动在 https://example.com/pr/1 。",
+		"两个检查还在跑，其余全部通过。",
+		"「快模型和 worker 架构精简分析」还在跑，大概过半。",
+		"CI 全绿了，可以合 PR",
+	}
+	for _, in := range intact {
+		if got := RepairTruncatedCopy(in); got != in {
+			t.Errorf("RepairTruncatedCopy(%q) = %q, want unchanged", in, got)
+		}
+	}
+}
+
+// A byte-sliced payload reaches the composer as U+FFFD. Showing a user a black
+// diamond is not better than showing them nothing.
+func TestRepairTruncatedCopyDropsReplacementChars(t *testing.T) {
+	if got := RepairTruncatedCopy("结论：首屏更快了\uFFFD"); strings.Contains(got, "\uFFFD") {
+		t.Fatalf("replacement char survived: %q", got)
+	}
+}
+
 // The identifier guard has to cut both ways. Deleting a real id is the point;
 // deleting a chunk of an ordinary sentence is a worse failure than the jargon
 // would have been, because the user cannot even tell something went missing.
@@ -528,6 +565,39 @@ func TestQueueFullHintIsSentOnceAndNotSilent(t *testing.T) {
 	once.Do(func() { close(release) })
 }
 
+func TestClaimsActiveWorkFinished(t *testing.T) {
+	for _, s := range []string{
+		"快模型和 worker 架构精简分析已经做完了。",
+		"结论是弄完了，可以精简。",
+		"已经查完了。",
+	} {
+		if !claimsActiveWorkFinished(s) {
+			t.Fatalf("should flag finished claim: %q", s)
+		}
+	}
+	for _, s := range []string{"还在方案报告页，大概还要一会儿。", "刚派下去。"} {
+		if claimsActiveWorkFinished(s) {
+			t.Fatalf("false finished claim: %q", s)
+		}
+	}
+}
+
+func TestOutcomeBriefForbidsHollowArchitectureConclusion(t *testing.T) {
+	id := &models.TaskIdentity{ShortTitle: "快模型架构", OriginalRequirement: "看看能不能精简"}
+	empty := outcomeBrief(id, TaskOutcome{Status: "completed"}, "zh-CN")
+	for _, need := range []string{"没有留下可读结论", "禁止编造", "可以精简"} {
+		if !strings.Contains(empty, need) {
+			t.Fatalf("empty brief missing %q:\n%s", need, empty)
+		}
+	}
+	withFacts := outcomeBrief(id, TaskOutcome{
+		Status: "completed", ResultSummary: "Live 与 worker 可合并超时配置。",
+	}, "zh-CN")
+	if !strings.Contains(withFacts, "空结论") || !strings.Contains(withFacts, "合并超时") {
+		t.Fatalf("facts brief = %s", withFacts)
+	}
+}
+
 // Completed reflow must carry the run's findings, not a hollow "弄完了 / ask for details".
 func TestCompletedOutcomeFallbackIncludesResultSummary(t *testing.T) {
 	id := &models.TaskIdentity{ShortTitle: "直接检查 approving 仓库当前主干代码", Language: "zh-CN"}
@@ -536,6 +606,15 @@ func TestCompletedOutcomeFallbackIncludesResultSummary(t *testing.T) {
 	}, "zh-CN")
 	if !strings.Contains(got, "fallthrough") || !strings.Contains(got, "8s") {
 		t.Fatalf("fallback dropped findings: %q", got)
+	}
+	if strings.Contains(got, "直接检查") {
+		t.Fatalf("findings path should not glue short title: %q", got)
+	}
+	broken := outcomeFallbackText(&models.TaskIdentity{
+		ShortTitle: "调研 Approving 最近关于快模型和 wo", Language: "zh-CN",
+	}, TaskOutcome{Status: "completed", ResultSummary: "分层合理，建议收敛接话出口。"}, "zh-CN")
+	if strings.Contains(broken, "wo") {
+		t.Fatalf("broken title leaked into completion: %q", broken)
 	}
 	for _, bad := range []string{"想看细节", "Ask me if you want the details"} {
 		if strings.Contains(got, bad) {
@@ -585,8 +664,8 @@ func TestTaskOutcomeReturnsToTheOriginConversation(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("outcome sends = %v want exactly one conclusion", got)
 	}
-	if !strings.Contains(got[0], "登录页性能优化") {
-		t.Fatalf("conclusion does not say which task it is about: %q", got[0])
+	if !strings.Contains(got[0], "超时与重试") || !strings.Contains(got[0], "pull/9") {
+		t.Fatalf("conclusion dropped findings: %q", got[0])
 	}
 	if strings.Contains(got[0], "Approving") || ContainsInternalTerms(got[0]) {
 		t.Fatalf("conclusion is not self-contained: %q", got[0])

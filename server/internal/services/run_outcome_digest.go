@@ -223,9 +223,8 @@ func normalizeOutcomeDigest(content string, maxRunes int) string {
 		}
 		return r
 	}, out)
-	runes := []rune(out)
-	if len(runes) > maxRunes {
-		out = string(runes[:maxRunes]) + "…"
+	if len([]rune(out)) > maxRunes {
+		out = SoftTruncateRunes(out, maxRunes)
 	}
 	return strings.TrimSpace(out)
 }

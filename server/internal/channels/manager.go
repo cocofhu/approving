@@ -964,6 +964,14 @@ func (m *Manager) sendOutboundResult(ctx context.Context, rc *runningChannel, ou
 			Msg("outbound text scrubbed of internal terms")
 		out.Text = scrubbed
 	}
+	// Same argument as the scrub above: composed from stored fragments and
+	// model output, so a bad cut is repaired once here rather than in each
+	// composer.
+	if repaired := RepairTruncatedCopy(out.Text); repaired != out.Text {
+		log.Debug().Str("channel", rc.cfg.ID).Str("reason", out.Envelope.Reason).
+			Msg("outbound text repaired from a broken truncation")
+		out.Text = repaired
+	}
 	if strings.TrimSpace(out.Text) == "" && len(out.ImageURLs) == 0 {
 		return DeliveryResult{Decision: sendable.Decision{Reason: "empty_after_scrub"}}
 	}

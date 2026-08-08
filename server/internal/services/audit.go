@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/textutil"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -667,10 +668,9 @@ func maskValue(v any, depth int, scanValues bool) any {
 		if scanValues {
 			s = redactSensitiveString(s)
 		}
-		if len(s) > 4000 {
-			return s[:4000] + "…"
-		}
-		return s
+		// Byte-sliced this used to split a Chinese character in half and store
+		// a replacement char in the audit record.
+		return textutil.TruncateBytes(s, 4000, "…")
 	default:
 		return v
 	}

@@ -381,8 +381,8 @@ func (h *Host) auditToolCall(projectID, token, mcpID, tool string, args map[stri
 		outcome = models.AuditOutcomeFail
 	}
 	resultPayload := any(result)
-	if s, ok := result.(string); ok && len(s) > 2000 {
-		resultPayload = s[:2000] + "…"
+	if s, ok := result.(string); ok {
+		resultPayload = textutil.TruncateBytes(s, 2000, "…")
 	}
 	payload := map[string]any{
 		"mcp":       mcpID,
