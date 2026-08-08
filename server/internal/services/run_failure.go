@@ -144,6 +144,11 @@ func TruncateLogSummary(content string) string {
 	return RedactSensitiveString(out)
 }
 
+// RunVarString returns a persisted run variable as a trimmed string.
+func (s *RunService) RunVarString(runID, name string) string {
+	return s.runVarString(runID, name)
+}
+
 func (s *RunService) runVarString(runID, name string) string {
 	var rv models.RunVariable
 	if err := s.db.Where("run_id = ? AND name = ?", runID, name).First(&rv).Error; err != nil {

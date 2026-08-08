@@ -569,7 +569,10 @@ func TestTaskOutcomeReturnsToTheOriginConversation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	outcome := TaskOutcome{ProjectID: "proj", RunID: "run-abc123def456", Status: "completed"}
+	outcome := TaskOutcome{
+		ProjectID: "proj", RunID: "run-abc123def456", Status: "completed",
+		ResultSummary: "超时与重试已对齐。\nPR/MR：https://github.com/org/repo/pull/9",
+	}
 	if err := m.ReflowTaskOutcome(context.Background(), outcome); err != nil {
 		t.Fatalf("ReflowTaskOutcome: %v", err)
 	}
@@ -602,6 +605,51 @@ func TestTaskOutcomeReturnsToTheOriginConversation(t *testing.T) {
 	}
 	if !services.IsTerminalTaskStatus(identity.Status) {
 		t.Fatalf("task status = %q, a finished task must not still read as running", identity.Status)
+	}
+	if !strings.Contains(identity.RecentContext, "pull/9") {
+		t.Fatalf("completed digest not persisted for PR follow-up: %q", identity.RecentContext)
+	}
+}
+
+// After a completed delivery, briefing / get_status must surface the digest so
+// 「PR是什么」resolves to that MR/PR — not a glossary definition.
+func TestCompletedDigestSurfacesForPRFollowup(t *testing.T) {
+	fa := &fakeAdapter{}
+	m, tasks := liveManager(t, fa)
+	const mr = "https://github.com/org/repo/pull/12"
+	if _, err := tasks.EnsureIdentity(services.EnsureTaskIdentityInput{
+		RunID: "run-prfollow01", ProjectID: "proj",
+		UserID:     services.SyntheticQQUserID("u1"),
+		ShortTitle: "对齐超时", Status: "completed",
+		OriginChannel: "qq", OriginScene: string(SceneC2C),
+		OriginConversationID: "user1", OriginExternalUserID: "u1",
+		Language: "zh-CN", RecentContext: "关键发现已写入。\nPR/MR：" + mr,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	m.mu.Lock()
+	var rc *runningChannel
+	for _, c := range m.running {
+		rc = c
+		break
+	}
+	m.mu.Unlock()
+	if rc == nil {
+		t.Fatal("no running channel")
+	}
+	in := InboundMessage{UserID: "u1", ConversationID: "user1", Scene: SceneC2C}
+	brief := m.buildDirectorContext(rc, in).render()
+	for _, need := range []string{mr, "结论摘要", "禁止百科"} {
+		if !strings.Contains(brief, need) {
+			t.Fatalf("briefing missing %q:\n%s", need, brief)
+		}
+	}
+	raw := m.runGetStatus(rc, in, "")
+	if !strings.Contains(raw, mr) || !strings.Contains(raw, "result_summary") {
+		t.Fatalf("get_status missing digest: %s", raw)
+	}
+	if !strings.Contains(raw, "禁止百科") {
+		t.Fatalf("get_status missing PR follow-up note: %s", raw)
 	}
 }
 

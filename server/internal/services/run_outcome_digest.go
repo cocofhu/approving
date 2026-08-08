@@ -75,6 +75,24 @@ func (s *ArtifactService) DigestedRunOutcome(runID string, maxRunes int) string 
 	return ""
 }
 
+// AppendRunDeliveryURL adds the PR/MR link to a completion digest so follow-ups
+// like「PR是什么」can answer from the task record instead of a glossary.
+func AppendRunDeliveryURL(digest, mrURL string) string {
+	digest = strings.TrimSpace(digest)
+	mrURL = strings.TrimSpace(mrURL)
+	if mrURL == "" {
+		return digest
+	}
+	if strings.Contains(digest, mrURL) {
+		return digest
+	}
+	line := "PR/MR：" + mrURL
+	if digest == "" {
+		return line
+	}
+	return digest + "\n" + line
+}
+
 func looksLikeTextArtifact(kind, name string) bool {
 	k := strings.ToLower(strings.TrimSpace(kind))
 	n := strings.ToLower(path.Base(name))

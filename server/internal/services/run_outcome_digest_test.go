@@ -63,3 +63,21 @@ func TestDigestedRunOutcomeEmptyWithoutReadableArtifacts(t *testing.T) {
 		t.Fatalf("want empty, got %q", got)
 	}
 }
+
+func TestAppendRunDeliveryURL(t *testing.T) {
+	const url = "https://github.com/org/repo/pull/42"
+	if got := AppendRunDeliveryURL("主干超时已对齐。", url); !strings.Contains(got, url) ||
+		!strings.Contains(got, "主干超时") {
+		t.Fatalf("append = %q", got)
+	}
+	if got := AppendRunDeliveryURL("", url); got != "PR/MR："+url {
+		t.Fatalf("empty digest = %q", got)
+	}
+	already := "见 " + url
+	if got := AppendRunDeliveryURL(already, url); got != already {
+		t.Fatalf("duplicate append = %q", got)
+	}
+	if got := AppendRunDeliveryURL("x", "  "); got != "x" {
+		t.Fatalf("blank url = %q", got)
+	}
+}
