@@ -48,11 +48,6 @@ const (
 	cancelWorkTool = "cancel_work"
 )
 
-// liveToolLoopLimit bounds one turn's tool calls. Two is enough for the shapes
-// that occur — check status then answer, cancel then confirm — and a model that
-// wants a third is looping rather than working.
-const liveToolLoopLimit = 3
-
 // liveSystemPrompt tells the model who it is and where the line is.
 //
 // The line is drawn by capability, not topic: it may say anything it can
@@ -86,12 +81,6 @@ dispatch_pm / refine_work 都要用 user_reply 先接一句；平台会先发出
 - 一次只说一件事，说人话，像微信上回同事，不要写工单腔，不要列举内部任务清单除非对方在问进度。
 - 不要提到"沙箱""Agent""模型""工具""上下文"这些词。
 - 你就是这个项目的负责人本人。不要说自己是 AI、模型或助手，也不要说出任何模型名称、版本或厂商；被问"你是什么模型"就当同事随口一问，把话题带回工作。`
-
-// liveMaxTokens sizes the reply plus whatever the model thinks first. A
-// reasoning model can spend most of a small budget deliberating over a one-line
-// routing decision and then return nothing; the timeout, not this, is the cost
-// control.
-const liveMaxTokens = 2048
 
 // SetLiveModel wires the conversation model. Leaving it unset means every
 // message goes to a sandbox, which is slower but complete.
@@ -161,11 +150,11 @@ func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel,
 		System:    liveSystemPrompt + "\n\n" + briefing.render(),
 		Messages:  m.liveMessages(rc, in),
 		Tools:     directorTools(),
-		MaxTokens: liveMaxTokens,
+		MaxTokens: m.replyMaxTokens(),
 	}
 	rec.shown(req.Messages)
 
-	for step := 0; step < liveToolLoopLimit; step++ {
+	for step := 0; step < m.toolLoopLimit(); step++ {
 		res, err := m.live.Complete(ctx, req)
 		if err != nil {
 			// Not a user-visible failure: the message still gets answered, by
@@ -543,7 +532,7 @@ func (m *Manager) latestRetryableTerminal(rc *runningChannel, in InboundMessage)
 		return nil
 	}
 	rows, err := m.taskContext.RecentTerminalTasksForConversation(
-		m.taskScopeFor(rc, in), ledgerLimit, recentTerminalWindow)
+		m.taskScopeFor(rc, in), m.ledgerTaskLimit(), m.recentTerminalLookback())
 	if err != nil || len(rows) == 0 {
 		return nil
 	}
@@ -655,7 +644,7 @@ func (m *Manager) dispatchWork(ctx context.Context, rc *runningChannel, in Inbou
 	if title == "" {
 		title = truncateRunes(strings.TrimSpace(in.Text), 40)
 	}
-	if running := m.taskLedger(rc, in); len(running) >= maxConcurrentWork {
+	if running := m.taskLedger(rc, in); len(running) >= m.maxConcurrentTasks() {
 		focus := m.focusTaskID(rc, in)
 		return liveOutcome{}, encodeToolResult(map[string]any{
 			"rejected":       "这个会话同时在跑的任务已经到上限了，没有派下去。",
@@ -1169,7 +1158,7 @@ func directorTools() []liveagent.ToolSpec {
 func (m *Manager) liveMessages(rc *runningChannel, in InboundMessage) []liveagent.Message {
 	var out []liveagent.Message
 	if m.transcript != nil {
-		entries, err := m.transcript.Window(conversationRefFor(rc, in), transcriptWindow)
+		entries, err := m.transcript.Window(conversationRefFor(rc, in), m.transcriptLimit())
 		if err != nil {
 			log.Warn().Err(err).Str("project", rc.cfg.ProjectID).
 				Msg("conversation history unavailable for the conversation model")

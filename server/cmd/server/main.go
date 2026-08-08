@@ -375,6 +375,10 @@ func main() {
 	// behaviour: the previous message claimed messages went through a client
 	// that was never handed to the Manager at all.
 	channelMgr.SetLiveModel(liveClient)
+	// Settings boot before channels exist; wire the window knobs now and
+	// re-apply so DB/config overrides reach the manager without a restart.
+	settingsSvc.SetLiveLimitsController(channelMgr)
+	settingsSvc.ApplyOnBoot()
 	if liveClient.Configured() {
 		log.Info().Msg("conversation model endpoint configured")
 	} else {

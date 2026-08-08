@@ -21,16 +21,6 @@ import (
 // arrive, and the tools that read them. The model supplies the wording; this
 // file supplies the facts.
 
-// ledgerLimit bounds how many live tasks the director is shown at once. A
-// conversation with more than a handful in flight has a different problem, and
-// listing them all would push the actual question out of the prompt.
-const ledgerLimit = 5
-
-// maxConcurrentWork caps the tasks one conversation may have running. The limit
-// is the director's to explain, not a silent rejection: past this point it says
-// so and offers to cancel something.
-const maxConcurrentWork = 3
-
 // workNote is the most recent thing the platform actually observed about a
 // task. It is written when progress arrives and read when the user asks, which
 // is what makes "还在跑，现在在查代码" a fact rather than a guess.
@@ -71,10 +61,6 @@ type directorContext struct {
 	LastOutbound      string          `json:"last_outbound,omitempty"`
 	UserMessageID     string          `json:"user_message_id,omitempty"`
 }
-
-// recentTerminalWindow is how far back get_status / briefing still surface
-// finished work so "什么情况了" cannot invent success from an empty active list.
-const recentTerminalWindow = 24 * time.Hour
 
 // render turns the briefing into the lines the model reads.
 //
@@ -172,7 +158,7 @@ func (m *Manager) taskLedger(rc *runningChannel, in InboundMessage) []ledgerEntr
 	if m.taskContext == nil {
 		return nil
 	}
-	tasks, err := m.taskContext.ActiveTasksForConversation(m.taskScopeFor(rc, in), ledgerLimit)
+	tasks, err := m.taskContext.ActiveTasksForConversation(m.taskScopeFor(rc, in), m.ledgerTaskLimit())
 	if err != nil {
 		log.Warn().Err(err).Str("project", rc.cfg.ProjectID).
 			Msg("task ledger unavailable; the conversation layer speaks without it")
@@ -186,7 +172,7 @@ func (m *Manager) recentTerminalLedger(rc *runningChannel, in InboundMessage) []
 		return nil
 	}
 	tasks, err := m.taskContext.RecentTerminalTasksForConversation(
-		m.taskScopeFor(rc, in), ledgerLimit, recentTerminalWindow)
+		m.taskScopeFor(rc, in), m.ledgerTaskLimit(), m.recentTerminalLookback())
 	if err != nil {
 		log.Debug().Err(err).Str("project", rc.cfg.ProjectID).
 			Msg("recent terminal ledger unavailable")

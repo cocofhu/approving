@@ -89,6 +89,57 @@ func (f *fakeLiveTuner) SetLiveEndpoint(baseURL, apiKey, model string, timeout t
 	f.baseURL, f.apiKey, f.model, f.timeout = baseURL, apiKey, model, timeout
 }
 
+type fakeLiveLimits struct {
+	got LiveLimits
+}
+
+func (f *fakeLiveLimits) SetLiveLimits(lim LiveLimits) { f.got = lim }
+
+func TestSettingsApplyLiveContextWindows(t *testing.T) {
+	db, err := database.OpenSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.StoreConfig(&config.Config{Live: config.LiveConfig{TimeoutSeconds: 30}})
+	limits := &fakeLiveLimits{}
+	svc := NewSettingsService(db, nil, nil)
+	svc.SetLiveLimitsController(limits)
+
+	byKey := map[string]SettingItem{}
+	for _, it := range svc.Effective() {
+		byKey[it.Key] = it
+	}
+	// Sparse config must still surface the compiled defaults, not zeros.
+	if byKey[KeyLiveTranscriptWindow].Value != 20 || byKey[KeyLiveMaxTokens].Value != 2048 {
+		t.Fatalf("defaults missing: transcript=%v tokens=%v",
+			byKey[KeyLiveTranscriptWindow].Value, byKey[KeyLiveMaxTokens].Value)
+	}
+
+	if _, err := svc.Update(map[string]any{
+		KeyLiveTranscriptWindow:    40,
+		KeyLiveLedgerLimit:         8,
+		KeyLiveRecentTerminalHours: 12,
+		KeyLiveMaxConcurrentWork:   5,
+		KeyLiveToolLoopLimit:       4,
+		KeyLiveMaxTokens:           4096,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	want := LiveLimits{
+		TranscriptWindow: 40, LedgerLimit: 8, RecentTerminalHours: 12,
+		MaxConcurrentWork: 5, ToolLoopLimit: 4, MaxTokens: 4096,
+	}
+	if limits.got != want {
+		t.Fatalf("SetLiveLimits = %+v want %+v", limits.got, want)
+	}
+	if _, err := svc.Update(map[string]any{KeyLiveTranscriptWindow: 2}); err == nil {
+		t.Fatal("expected min validation for transcript window")
+	}
+	if _, err := svc.Update(map[string]any{KeyLiveMaxTokens: 100}); err == nil {
+		t.Fatal("expected min validation for max tokens")
+	}
+}
+
 // The conversation model is configured from the settings page, so the settings
 // layer has to carry a string and a credential, not just integers.
 func TestSettingsCarryStringsAndSecrets(t *testing.T) {

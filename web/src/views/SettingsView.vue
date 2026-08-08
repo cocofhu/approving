@@ -48,7 +48,18 @@ const groups = computed(() => [
     title: t('pages.settings.groups.live.title'),
     desc: t('pages.settings.groups.live.desc'),
     icon: 'chat',
-    keys: ['live_base_url', 'live_model', 'live_api_key', 'live_timeout_seconds'],
+    keys: [
+      'live_base_url',
+      'live_model',
+      'live_api_key',
+      'live_timeout_seconds',
+      'live_transcript_window',
+      'live_ledger_limit',
+      'live_recent_terminal_hours',
+      'live_max_concurrent_work',
+      'live_tool_loop_limit',
+      'live_max_tokens',
+    ],
   },
 ])
 
@@ -56,6 +67,12 @@ const SETTING_UNIT_KEYS: Record<string, string> = {
   run_sandbox_ttl_minutes: 'common.format.minutes',
   test_sandbox_ttl_minutes: 'common.format.minutes',
   live_timeout_seconds: 'common.format.seconds',
+  live_transcript_window: 'common.format.messages',
+  live_ledger_limit: 'common.format.messages',
+  live_recent_terminal_hours: 'common.format.hours',
+  live_max_concurrent_work: 'common.format.units',
+  live_tool_loop_limit: 'common.format.times',
+  live_max_tokens: 'common.format.tokens',
 }
 
 function settingDescription(key: string): string {

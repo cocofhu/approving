@@ -57,6 +57,17 @@ type LiveConfig struct {
 	// while it is fast, so this is deliberately short: a slow model should fail
 	// over to the sandbox rather than hold the reply.
 	TimeoutSeconds int `yaml:"timeout_seconds"`
+
+	// Context-window knobs for the conversation layer. Zero means "use the
+	// compiled default" so a sparse yaml file does not silently shrink the
+	// window to nothing. The settings page can override each of these at
+	// runtime without a restart.
+	TranscriptWindow     int `yaml:"transcript_window"`
+	LedgerLimit          int `yaml:"ledger_limit"`
+	RecentTerminalHours  int `yaml:"recent_terminal_hours"`
+	MaxConcurrentWork    int `yaml:"max_concurrent_work"`
+	ToolLoopLimit        int `yaml:"tool_loop_limit"`
+	MaxTokens            int `yaml:"max_tokens"`
 }
 
 // Configured reports whether enough is set to call the endpoint. The key is not
@@ -403,6 +414,24 @@ func applyEnvOverrides(c *Config) {
 	if v := envInt("APPROVING_LIVE_TIMEOUT_SEC"); v != 0 {
 		c.Live.TimeoutSeconds = v
 	}
+	if v := envInt("APPROVING_LIVE_TRANSCRIPT_WINDOW"); v != 0 {
+		c.Live.TranscriptWindow = v
+	}
+	if v := envInt("APPROVING_LIVE_LEDGER_LIMIT"); v != 0 {
+		c.Live.LedgerLimit = v
+	}
+	if v := envInt("APPROVING_LIVE_RECENT_TERMINAL_HOURS"); v != 0 {
+		c.Live.RecentTerminalHours = v
+	}
+	if v := envInt("APPROVING_LIVE_MAX_CONCURRENT_WORK"); v != 0 {
+		c.Live.MaxConcurrentWork = v
+	}
+	if v := envInt("APPROVING_LIVE_TOOL_LOOP_LIMIT"); v != 0 {
+		c.Live.ToolLoopLimit = v
+	}
+	if v := envInt("APPROVING_LIVE_MAX_TOKENS"); v != 0 {
+		c.Live.MaxTokens = v
+	}
 	if v := env("APPROVING_BROWSER_ENABLED"); v != "" {
 		lv := strings.ToLower(v)
 		c.Browser.Enabled = lv == "1" || lv == "true" || lv == "yes"
@@ -496,6 +525,24 @@ func setDefaults(c *Config) {
 	}
 	if c.Live.TimeoutSeconds == 0 {
 		c.Live.TimeoutSeconds = 120
+	}
+	if c.Live.TranscriptWindow == 0 {
+		c.Live.TranscriptWindow = 20
+	}
+	if c.Live.LedgerLimit == 0 {
+		c.Live.LedgerLimit = 5
+	}
+	if c.Live.RecentTerminalHours == 0 {
+		c.Live.RecentTerminalHours = 24
+	}
+	if c.Live.MaxConcurrentWork == 0 {
+		c.Live.MaxConcurrentWork = 3
+	}
+	if c.Live.ToolLoopLimit == 0 {
+		c.Live.ToolLoopLimit = 3
+	}
+	if c.Live.MaxTokens == 0 {
+		c.Live.MaxTokens = 2048
 	}
 	// Image intentionally has no default: empty means per-backend Images /
 	// DefaultSandboxImage. Set sandbox.image / APPROVING_SANDBOX_IMAGE only to
