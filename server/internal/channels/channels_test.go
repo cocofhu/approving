@@ -1354,6 +1354,14 @@ func TestLiveSystemPromptWithholdsTheModelIdentity(t *testing.T) {
 	}
 }
 
+func TestLiveSystemPromptAnswersFollowupsFromDeliveryFacts(t *testing.T) {
+	for _, required := range []string{"追问", "result_summary", "名词百科"} {
+		if !strings.Contains(liveSystemPrompt, required) {
+			t.Fatalf("live prompt missing delivery follow-up rule (%s): %s", required, liveSystemPrompt)
+		}
+	}
+}
+
 func TestClassifyCronResultDelegatesToServices(t *testing.T) {
 	// review v5: single shared classification with services.ClassifyCronDeliveryText.
 	cases := []struct {

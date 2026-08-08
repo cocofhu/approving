@@ -333,14 +333,23 @@ func humanizeFailureReason(reason string, en bool) string {
 // syncTerminalStatus writes the outcome onto the task so status questions stop
 // answering "in progress" forever. Without this the task table is the only
 // place a user's question is answered from, and it would never be updated.
+//
+// For completed work, ResultSummary (findings / delivery URLs) is persisted as
+// RecentContext so get_status / briefing can answer follow-ups from facts.
 func (m *Manager) syncTerminalStatus(identity *models.TaskIdentity, outcome TaskOutcome) {
 	if m.taskContext == nil || identity == nil {
 		return
 	}
-	if _, err := m.taskContext.UpdateIdentity(services.EnsureTaskIdentityInput{
+	in := services.EnsureTaskIdentityInput{
 		RunID: identity.RunID, ProjectID: identity.ProjectID, UserID: identity.UserID,
 		Status: strings.TrimSpace(outcome.Status),
-	}); err != nil {
+	}
+	if strings.EqualFold(strings.TrimSpace(outcome.Status), "completed") {
+		if summary := strings.TrimSpace(outcome.ResultSummary); summary != "" {
+			in.RecentContext = summary
+		}
+	}
+	if _, err := m.taskContext.UpdateIdentity(in); err != nil {
 		log.Warn().Err(err).Str("run", identity.RunID).
 			Msg("reflow: writing terminal task status failed")
 	}

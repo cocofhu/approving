@@ -144,18 +144,62 @@ func TruncateLogSummary(content string) string {
 	return RedactSensitiveString(out)
 }
 
+// RunVarString returns a persisted run variable as a trimmed string.
+func (s *RunService) RunVarString(runID, name string) string {
+	return s.runVarString(runID, name)
+}
+
 func (s *RunService) runVarString(runID, name string) string {
 	var rv models.RunVariable
 	if err := s.db.Where("run_id = ? AND name = ?", runID, name).First(&rv).Error; err != nil {
 		return ""
 	}
-	switch v := rv.Value.(type) {
+	return runVarValueString(rv.Value)
+}
+
+// DeliveryURLs returns http(s) values from run variables whose names look like
+// delivery links (name is "url" or ends with "_url"). Used to enrich completion
+// digests without hardcoding a single product term or variable.
+func (s *RunService) DeliveryURLs(runID string) []string {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return nil
+	}
+	var rows []models.RunVariable
+	if err := s.db.Where("run_id = ?", runID).Find(&rows).Error; err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, rv := range rows {
+		name := strings.ToLower(strings.TrimSpace(rv.Name))
+		if name != "url" && !strings.HasSuffix(name, "_url") {
+			continue
+		}
+		u := runVarValueString(rv.Value)
+		if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+			continue
+		}
+		if seen[u] {
+			continue
+		}
+		seen[u] = true
+		out = append(out, u)
+	}
+	return out
+}
+
+func runVarValueString(v any) string {
+	switch x := v.(type) {
 	case string:
-		return strings.TrimSpace(v)
+		return strings.TrimSpace(x)
 	case nil:
 		return ""
 	default:
-		return strings.TrimSpace(fmt.Sprint(v))
+		return strings.TrimSpace(fmt.Sprint(x))
 	}
 }
 

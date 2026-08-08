@@ -76,8 +76,13 @@ func (e *Engine) fireRunTerminal(runID, status string) {
 	}
 	if status == "completed" {
 		// Pull whatever the work layer left as a readable conclusion so IM
-		// reflow can say what finished — not only that it finished.
+		// reflow can say what finished — not only that it finished. Fold in
+		// any delivery http(s) URLs left on the run so later follow-ups can
+		// answer from facts rather than inventing or defining terms.
 		ev.ResultSummary = services.NewArtifactService(e.db).DigestedRunOutcome(runID, 800)
+		for _, u := range services.NewRunService(e.db).DeliveryURLs(runID) {
+			ev.ResultSummary = services.AppendRunDeliveryURL(ev.ResultSummary, u)
+		}
 	}
 	go func() {
 		defer func() {

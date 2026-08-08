@@ -1,9 +1,12 @@
 package services
 
 import (
+	"encoding/json"
 	"path"
 	"strings"
 	"unicode"
+
+	"github.com/cocofhu/approving/internal/models"
 )
 
 // preferredOutcomeArtifactNames are tried first when digesting a finished Run
@@ -15,9 +18,24 @@ var preferredOutcomeArtifactNames = []string{
 	"README.md",
 }
 
+// preferredStructuredArtifactNames carry a required "summary" field under the
+// node contracts. CI/implement runs often leave only these JSON products —
+// skipping them is what produced empty "没留下可读结论" reflows.
+var preferredStructuredArtifactNames = []string{
+	"implementation_result.json",
+	"test_result.json",
+	"review.json",
+	"research.json",
+	"proposals.json",
+	"proposal.json",
+	"clarified_requirement.json",
+	"node_complete.json",
+}
+
 // DigestedRunOutcome returns a short, user-facing fact digest from a run's
-// artifacts. Empty when nothing readable exists — callers must still have a
-// fallback that does not pretend details are waiting elsewhere.
+// artifacts (and, when needed, completed node outcome_summary). Empty when
+// nothing readable exists — callers must still have a fallback that does not
+// pretend details are waiting elsewhere.
 func (s *ArtifactService) DigestedRunOutcome(runID string, maxRunes int) string {
 	if s == nil || s.db == nil {
 		return ""
@@ -36,15 +54,15 @@ func (s *ArtifactService) DigestedRunOutcome(runID string, maxRunes int) string 
 			}
 		}
 	}
-	// Case-insensitive match on preferred basenames (agents vary capitalization).
 	meta := s.ByRun(runID)
-	want := map[string]bool{}
+	// Case-insensitive match on preferred text basenames.
+	wantText := map[string]bool{}
 	for _, n := range preferredOutcomeArtifactNames {
-		want[strings.ToLower(n)] = true
+		wantText[strings.ToLower(n)] = true
 	}
 	for _, a := range meta {
 		base := strings.ToLower(path.Base(a.Name))
-		if !want[base] {
+		if !wantText[base] {
 			continue
 		}
 		content, ok := s.Get(runID, a.Name)
@@ -55,7 +73,28 @@ func (s *ArtifactService) DigestedRunOutcome(runID string, maxRunes int) string 
 			return dig
 		}
 	}
-	// Last resort: first textual artifact that is not orchestration scaffolding.
+	// Structured JSON products (summary field) — the common CI/implement path.
+	for _, name := range preferredStructuredArtifactNames {
+		if content, ok := s.Get(runID, name); ok {
+			if dig := normalizeOutcomeDigest(summaryFromJSONArtifact(content), maxRunes); dig != "" {
+				return dig
+			}
+		}
+	}
+	for _, a := range meta {
+		base := strings.ToLower(path.Base(a.Name))
+		if !strings.HasSuffix(base, ".json") || base == "plan.json" {
+			continue
+		}
+		content, ok := s.Get(runID, a.Name)
+		if !ok {
+			continue
+		}
+		if dig := normalizeOutcomeDigest(summaryFromJSONArtifact(content), maxRunes); dig != "" {
+			return dig
+		}
+	}
+	// Plain textual artifacts that are not orchestration scaffolding.
 	for _, a := range meta {
 		base := strings.ToLower(path.Base(a.Name))
 		if base == "plan.json" || strings.HasSuffix(base, ".json") {
@@ -70,6 +109,68 @@ func (s *ArtifactService) DigestedRunOutcome(runID string, maxRunes int) string 
 		}
 		if dig := normalizeOutcomeDigest(content, maxRunes); dig != "" {
 			return dig
+		}
+	}
+	// Last resort: completed nodes already persist outcome_summary / OutputMd.
+	if dig := s.digestFromStateRuns(runID, maxRunes); dig != "" {
+		return dig
+	}
+	return ""
+}
+
+// AppendRunDeliveryURL adds a delivery URL to the completion digest so later
+// follow-ups can answer from stored facts.
+func AppendRunDeliveryURL(digest, url string) string {
+	digest = strings.TrimSpace(digest)
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return digest
+	}
+	if strings.Contains(digest, url) {
+		return digest
+	}
+	line := "交付链接：" + url
+	if digest == "" {
+		return line
+	}
+	return digest + "\n" + line
+}
+
+func (s *ArtifactService) digestFromStateRuns(runID string, maxRunes int) string {
+	var states []models.StateRun
+	if err := s.db.Where("run_id = ? AND status = ?", runID, "completed").
+		Order("iteration desc, id desc").Find(&states).Error; err != nil {
+		return ""
+	}
+	for _, st := range states {
+		if st.Outputs != nil {
+			if sum, ok := st.Outputs["outcome_summary"].(string); ok {
+				if dig := normalizeOutcomeDigest(sum, maxRunes); dig != "" {
+					return dig
+				}
+			}
+		}
+		if dig := normalizeOutcomeDigest(st.OutputMd, maxRunes); dig != "" {
+			return dig
+		}
+	}
+	return ""
+}
+
+func summaryFromJSONArtifact(content string) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return ""
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(content), &m); err != nil {
+		return ""
+	}
+	for _, key := range []string{"summary", "conclusion", "result"} {
+		if s, ok := m[key].(string); ok {
+			if t := strings.TrimSpace(s); t != "" {
+				return t
+			}
 		}
 	}
 	return ""

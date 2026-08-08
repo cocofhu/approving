@@ -16,7 +16,7 @@ func digestDB(t *testing.T) *ArtifactService {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.Artifact{}); err != nil {
+	if err := db.AutoMigrate(&models.Artifact{}, &models.StateRun{}); err != nil {
 		t.Fatal(err)
 	}
 	return NewArtifactService(db)
@@ -61,5 +61,49 @@ func TestDigestedRunOutcomeEmptyWithoutReadableArtifacts(t *testing.T) {
 	}
 	if got := arts.DigestedRunOutcome("run-3", 100); got != "" {
 		t.Fatalf("want empty, got %q", got)
+	}
+}
+
+func TestDigestedRunOutcomeFromImplementationResultJSON(t *testing.T) {
+	arts := digestDB(t)
+	if _, err := arts.Save("run-ci", "implement", "implementation_result.json", "json",
+		`{"summary":"修了 PmLeaderChat 断言，CI 两个失败项已对齐。","change_type":"fix"}`); err != nil {
+		t.Fatal(err)
+	}
+	got := arts.DigestedRunOutcome("run-ci", 200)
+	if !strings.Contains(got, "PmLeaderChat") || !strings.Contains(got, "CI") {
+		t.Fatalf("digest skipped structured summary: %q", got)
+	}
+}
+
+func TestDigestedRunOutcomeFromStateRunOutcomeSummary(t *testing.T) {
+	arts := digestDB(t)
+	if err := arts.db.Create(&models.StateRun{
+		RunID: "run-st", NodeID: "implement", Status: "completed",
+		Outputs: map[string]any{"outcome_summary": "重跑后 checks 全绿，冲突已消。"},
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	got := arts.DigestedRunOutcome("run-st", 200)
+	if !strings.Contains(got, "全绿") {
+		t.Fatalf("digest skipped state outcome_summary: %q", got)
+	}
+}
+
+func TestAppendRunDeliveryURL(t *testing.T) {
+	const url = "https://github.com/org/repo/pull/42"
+	if got := AppendRunDeliveryURL("主干超时已对齐。", url); !strings.Contains(got, url) ||
+		!strings.Contains(got, "主干超时") || !strings.Contains(got, "交付链接") {
+		t.Fatalf("append = %q", got)
+	}
+	if got := AppendRunDeliveryURL("", url); got != "交付链接："+url {
+		t.Fatalf("empty digest = %q", got)
+	}
+	already := "见 " + url
+	if got := AppendRunDeliveryURL(already, url); got != already {
+		t.Fatalf("duplicate append = %q", got)
+	}
+	if got := AppendRunDeliveryURL("x", "  "); got != "x" {
+		t.Fatalf("blank url = %q", got)
 	}
 }

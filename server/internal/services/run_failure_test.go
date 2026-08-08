@@ -46,6 +46,27 @@ func TestAggregateRunFailureLastErrorFallback(t *testing.T) {
 	}
 }
 
+func TestDeliveryURLsCollectsHTTPURLVars(t *testing.T) {
+	db := newTestDB(t)
+	s := NewRunService(db)
+	db.Create(&models.Run{ID: "du1", Status: "completed"})
+	db.Create(&models.RunVariable{RunID: "du1", Name: "mr_url", Type: "string", Value: "https://github.com/o/r/pull/1"})
+	db.Create(&models.RunVariable{RunID: "du1", Name: "report_url", Type: "string", Value: "https://example.com/r"})
+	db.Create(&models.RunVariable{RunID: "du1", Name: "last_error", Type: "string", Value: "https://not-a-delivery.example/x"})
+	db.Create(&models.RunVariable{RunID: "du1", Name: "callback_url", Type: "string", Value: "not-http"})
+	got := s.DeliveryURLs("du1")
+	if len(got) != 2 {
+		t.Fatalf("DeliveryURLs = %v, want 2 http *_url vars", got)
+	}
+	joined := strings.Join(got, " ")
+	if !strings.Contains(joined, "pull/1") || !strings.Contains(joined, "example.com/r") {
+		t.Fatalf("DeliveryURLs = %v", got)
+	}
+	if strings.Contains(joined, "not-a-delivery") {
+		t.Fatalf("non *_url var leaked: %v", got)
+	}
+}
+
 func TestAggregateRunFailureDefaultFallback(t *testing.T) {
 	db := newTestDB(t)
 	s := NewRunService(db)
