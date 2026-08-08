@@ -246,13 +246,19 @@ func (m *Manager) SendRunAcceptanceAck(ctx context.Context, ack RunAcceptanceAck
 		return DeliveryResult{Decision: sendable.Decision{Reason: "already_acknowledged"}}, nil
 	}
 	language := services.DetectLanguage("", ack.Language)
+	// Phrased by the conversation model like every other acknowledgement; the
+	// fixed line below is only what a missing or slow model falls back to.
+	text := m.phraseRunAccepted(ctx, ack.ShortTitle, language)
+	if text == "" {
+		text = runAcceptanceText(ack.ShortTitle, language)
+	}
 	result, err := m.DeliverSendable(ctx, SendableRequest{
 		ProjectID: ack.ProjectID, Scene: ack.Scene, ConversationID: ack.ConversationID,
 		UserID: ack.UserID, RunID: runID,
 		Kind: sendable.KindRunAcceptanceAck, Reason: "run_accepted",
 		Priority:  sendable.PriorityHigh,
 		DedupeKey: runAcceptanceDedupeKey(runID, ack.ConversationID, ack.UserID),
-		Text:      runAcceptanceText(ack.ShortTitle, language),
+		Text:      text,
 	})
 	// Handing work to the background is this turn's answer: the user asked for
 	// something and has been told it is being done. Marking the turn answered
