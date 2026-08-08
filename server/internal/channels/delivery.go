@@ -275,16 +275,51 @@ func (m *Manager) SendRunAcceptanceAck(ctx context.Context, ack RunAcceptanceAck
 }
 
 // runAcceptanceText is the last-resort line when a Run is accepted but the
-// conversation layer did not already speak. Keep it short and free of pasted
-// ledger titles — long short_title values are truncated requirements, not names.
+// conversation layer did not already speak.
+//
+// It says which task it is whenever the title is short enough to read as a
+// name. This line used to drop the title on the grounds that a short_title is
+// a truncated requirement rather than a name, and back then it was: they
+// arrived as 「快模型和 wo」. Now that they are cut at word boundaries the only
+// remaining objection is length, so length is what is actually checked —
+// dropping the name outright produced 「好，那事我去弄」 in reply to 「修复下」,
+// which names nothing at all.
+//
 // Do not append "feel free to keep chatting": the user already knows they can
 // talk, and saying so reads like a helpdesk script.
 func runAcceptanceText(shortTitle, language string) string {
-	_ = shortTitle
+	name := nameableTitle(shortTitle)
 	if services.NormalizeLanguage(language) == "en" {
+		if name != "" {
+			return "Got it, " + name + " — I'll take it and come back when it's done."
+		}
 		return "Got it, I'll take that one and come back when it's done."
 	}
+	if name != "" {
+		// The comma is doing work: a title can end in either script, and it is
+		// the one separator that reads correctly after both.
+		return "好，" + name + "，我去弄，完了告诉你。"
+	}
 	return "好，那事我去弄，完了告诉你。"
+}
+
+// nameableTitleRunes is where a name stops being a name. Past this a title is
+// the request written out, and reading a request back at the person who just
+// made it is the thing every ack prompt here is trying to avoid.
+const nameableTitleRunes = 14
+
+// nameableTitle returns the title if it can stand in as the name of a task, or
+// empty if it cannot: too long to be anything but the requirement restated, or
+// already marked as cut short.
+func nameableTitle(shortTitle string) string {
+	t := strings.TrimSpace(shortTitle)
+	if t == "" || strings.Contains(t, "…") || strings.Contains(t, "...") {
+		return ""
+	}
+	if len([]rune(t)) > nameableTitleRunes {
+		return ""
+	}
+	return t
 }
 
 func runAcceptanceDedupeKey(runID, conversationID, userID string) string {

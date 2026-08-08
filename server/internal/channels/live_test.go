@@ -662,6 +662,23 @@ func TestPhrasePromptSharedFragmentsLock(t *testing.T) {
 		t.Fatal("statusWhileRunning must keep its own body, not the ack「规矩」block")
 	}
 
+	// The three acks that follow a specific task have to say which one. The
+	// fallthrough ack does not: nothing has been dispatched yet, and the only
+	// thing it could name is the question the user just asked.
+	for i, p := range []string{retryAckPhrasePrompt, dispatchAckPhrasePrompt, refineAckPhrasePrompt} {
+		if strings.Count(p, phraseAckRuleNameIt) != 1 {
+			t.Fatalf("task ack %d must carry the naming rule exactly once", i)
+		}
+	}
+	if strings.Contains(fallthroughAckPhrasePrompt, phraseAckRuleNameIt) {
+		t.Fatal("fallthrough has no dispatched task to name")
+	}
+	for i, p := range acks {
+		if strings.Contains(p, "用「那事」「那块」指代即可") {
+			t.Fatalf("ack %d still tells the model to name nothing", i)
+		}
+	}
+
 	mustContain := func(name, prompt string, needles ...string) {
 		t.Helper()
 		for _, n := range needles {
@@ -673,13 +690,13 @@ func TestPhrasePromptSharedFragmentsLock(t *testing.T) {
 	mustContain("statusWhileRunning", statusWhileRunningPhrasePrompt,
 		"禁止说已经做完", "标题截断写法", "只输出要发出去的话。")
 	mustContain("retry", retryAckPhrasePrompt,
-		"正在重试", "已经重新跑过了", "不要复述任务标题或原要求")
+		"正在重试", "已经重新跑过了", "要能看出是哪件事")
 	mustContain("fallthrough", fallthroughAckPhrasePrompt,
 		"还要再查", "正在查/正在弄", "已经查完", "不要复述对方原话")
 	mustContain("dispatch", dispatchAckPhrasePrompt,
-		"刚把一件事派人", "正在做", "不要复述完整任务标题或原要求")
+		"刚把一件事派人", "正在做", "要能看出是哪件事")
 	mustContain("refine", refineAckPhrasePrompt,
-		"按新重点继续", "不要复述完整任务标题；不要用书名号")
+		"按新重点继续", "不要照抄完整标题")
 }
 
 func TestOutcomeBriefForbidsHollowArchitectureConclusion(t *testing.T) {

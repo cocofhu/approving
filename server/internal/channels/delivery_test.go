@@ -283,13 +283,17 @@ func TestSendRunAcceptanceAckOncePerRunAndRejectsMissingRun(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("run acceptance ACK sent %v want exactly once per run", got)
 	}
-	// Confirmation hands the conversation back without a ticket header and
-	// without pasting the ledger title (often a truncated requirement).
+	// Confirmation hands the conversation back without a ticket header, and it
+	// says which task it took: several can be in flight, and an ack that names
+	// none of them is indistinguishable from the next one.
 	if !strings.Contains(got[0], "我去弄") {
 		t.Fatalf("ack text = %q want a short acceptance", got[0])
 	}
-	if strings.Contains(got[0], "【") || strings.Contains(got[0], "已接单") || strings.Contains(got[0], "登录页") {
-		t.Fatalf("delegation confirmation still pastes title/ticket copy: %q", got[0])
+	if !strings.Contains(got[0], "登录页") {
+		t.Fatalf("acceptance does not say which task it is: %q", got[0])
+	}
+	if strings.Contains(got[0], "【") || strings.Contains(got[0], "已接单") {
+		t.Fatalf("delegation confirmation still reads like a ticket: %q", got[0])
 	}
 
 	ack.RunID = ""
@@ -321,6 +325,64 @@ func TestRunAcceptanceAckIsPhrasedByTheConversationModel(t *testing.T) {
 	got := sentTexts(fa)
 	if len(got) != 1 || got[0] != "行，那事我这就安排，弄好了喊你。" {
 		t.Fatalf("sends = %v want the model's own line", got)
+	}
+}
+
+// 「修复下」 came back as 「好，那事我去弄，完了告诉你。」 — a reply that would
+// have been equally true of anything the user had ever asked for. The name is
+// the only part of an acceptance that carries information.
+func TestRunAcceptanceSaysWhichTaskItTook(t *testing.T) {
+	for _, tc := range []struct {
+		name, title, lang string
+		wantNamed         bool
+	}{
+		{name: "short title is a name", title: "PR 179 的 CI", lang: "zh-CN", wantNamed: true},
+		{name: "short title in english", title: "Login perf", lang: "en", wantNamed: true},
+		// Past a certain length a short_title is the request written out, and
+		// reading a request back to the person who just made it is worse than
+		// the pronoun.
+		{name: "a requirement is not a name", lang: "zh-CN", wantNamed: false,
+			title: "调研 Approving 最近关于快模型和 worker 架构的精简空间"},
+		// A title that was cut short is not a name either.
+		{name: "a cut title is not a name", title: "调研快模型和…", lang: "zh-CN", wantNamed: false},
+		{name: "no title at all", title: "", lang: "zh-CN", wantNamed: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := runAcceptanceText(tc.title, tc.lang)
+			if named := tc.title != "" && strings.Contains(got, tc.title); named != tc.wantNamed {
+				t.Errorf("names the task = %v, want %v: %q", named, tc.wantNamed, got)
+			}
+			if tc.wantNamed {
+				return
+			}
+			// Without a usable name the line stays as it was; it must at least
+			// still read as an acceptance.
+			if !strings.Contains(got, "我去弄") && !strings.Contains(got, "I'll take") {
+				t.Errorf("not an acceptance: %q", got)
+			}
+		})
+	}
+}
+
+// Naming the task and pasting the requirement are different things, and the
+// guard that rejects the second must not reject the first — that is how the
+// pronoun became the only thing a model was allowed to say.
+func TestNamingATaskIsNotPastingIt(t *testing.T) {
+	const title = "重新执行上次因服务重启而中断的 Approving 架构调研"
+	if !retryAckEchoesBrief("行，"+title+"，我这就让人接着弄。", title, "") {
+		t.Error("a pasted requirement should still be rejected")
+	}
+	if !retryAckEchoesBrief("行，「架构调研」那个我去弄。", title, "") {
+		t.Error("a bracket-quoted title should still be rejected")
+	}
+	for _, ack := range []string{
+		"行，架构调研那块我这就让人接着弄。",
+		"CI 那个我去弄，完了告诉你。",
+		"好，登录页那块我盯着，有结果喊你。",
+	} {
+		if retryAckEchoesBrief(ack, title, "") {
+			t.Errorf("naming the task was rejected as a paste: %q", ack)
+		}
 	}
 }
 
