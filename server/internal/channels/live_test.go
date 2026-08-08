@@ -582,6 +582,76 @@ func TestClaimsActiveWorkFinished(t *testing.T) {
 	}
 }
 
+// TestPhrasePromptSharedFragmentsLock locks the rule-level dedup: one shared
+// header for all five spoken prompts, three shared ack rule lines reused by
+// the four acks only, and each event's distinctive semantics kept in place.
+func TestPhrasePromptSharedFragmentsLock(t *testing.T) {
+	if phrasePromptHeader == "" {
+		t.Fatal("phrasePromptHeader must be defined once")
+	}
+	allFive := []string{
+		statusWhileRunningPhrasePrompt,
+		retryAckPhrasePrompt,
+		fallthroughAckPhrasePrompt,
+		dispatchAckPhrasePrompt,
+		refineAckPhrasePrompt,
+	}
+	for i, p := range allFive {
+		if !strings.HasPrefix(p, phrasePromptHeader) {
+			t.Fatalf("prompt %d missing shared header prefix", i)
+		}
+		if strings.Count(p, phrasePromptHeader) != 1 {
+			t.Fatalf("prompt %d should embed shared header exactly once", i)
+		}
+	}
+
+	acks := []string{
+		retryAckPhrasePrompt,
+		fallthroughAckPhrasePrompt,
+		dispatchAckPhrasePrompt,
+		refineAckPhrasePrompt,
+	}
+	for _, rule := range []string{
+		phraseAckRuleColloquial,
+		phraseAckRuleNoInternal,
+		phraseAckRuleOneLine,
+	} {
+		if rule == "" {
+			t.Fatal("ack common rule constant must be non-empty")
+		}
+		for i, p := range acks {
+			if strings.Count(p, rule) != 1 {
+				t.Fatalf("ack %d must reuse common rule exactly once: %q", i, rule)
+			}
+		}
+		if strings.Contains(statusWhileRunningPhrasePrompt, rule) {
+			t.Fatalf("statusWhileRunning must not inherit ack rule %q", rule)
+		}
+	}
+	if strings.Contains(statusWhileRunningPhrasePrompt, "规矩：") {
+		t.Fatal("statusWhileRunning must keep its own body, not the ack「规矩」block")
+	}
+
+	mustContain := func(name, prompt string, needles ...string) {
+		t.Helper()
+		for _, n := range needles {
+			if !strings.Contains(prompt, n) {
+				t.Fatalf("%s missing event-specific %q:\n%s", name, n, prompt)
+			}
+		}
+	}
+	mustContain("statusWhileRunning", statusWhileRunningPhrasePrompt,
+		"禁止说已经做完", "标题截断写法", "只输出要发出去的话。")
+	mustContain("retry", retryAckPhrasePrompt,
+		"正在重试", "已经重新跑过了", "不要复述任务标题或原要求")
+	mustContain("fallthrough", fallthroughAckPhrasePrompt,
+		"还要再查", "正在查/正在弄", "已经查完", "不要复述对方原话")
+	mustContain("dispatch", dispatchAckPhrasePrompt,
+		"刚把一件事派人", "正在做", "不要复述完整任务标题或原要求")
+	mustContain("refine", refineAckPhrasePrompt,
+		"按新重点继续", "不要复述完整任务标题；不要用书名号")
+}
+
 func TestOutcomeBriefForbidsHollowArchitectureConclusion(t *testing.T) {
 	id := &models.TaskIdentity{ShortTitle: "快模型架构", OriginalRequirement: "看看能不能精简"}
 	empty := outcomeBrief(id, TaskOutcome{Status: "completed"}, "zh-CN")

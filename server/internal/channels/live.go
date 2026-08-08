@@ -363,9 +363,14 @@ func containsAnyFold(text string, needles ...string) bool {
 	return false
 }
 
+// phrasePromptHeader is the shared role/delivery lead-in for every spoken
+// phrase prompt (status + the four acks).
+const phrasePromptHeader = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。`
+
 // statusWhileRunningPhrasePrompt rewrites a premature "done" claim against the
-// live ledger so the user hears what is still in flight.
-const statusWhileRunningPhrasePrompt = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
+// live ledger so the user hears what is still in flight. Reuses only the shared
+// header; body and finish-tense bans stay local (not the ack「规矩」block).
+const statusWhileRunningPhrasePrompt = phrasePromptHeader + `
 
 下面事实里还有在跑的任务。用一两句人话说清还在做、卡在哪（有阶段就带上）；禁止说已经做完、已经弄完、分析已经做完。
 不要把同一件事的标题截断写法说成另一件排队任务。
@@ -425,48 +430,66 @@ func (m *Manager) phraseThroughLive(ctx context.Context, system, user string) st
 	return strings.TrimSpace(res.Text)
 }
 
-const retryAckPhrasePrompt = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
+// Shared ack「规矩」lines (byte-identical across retry/fallthrough/dispatch/refine).
+// Event-specific bullets stay beside each prompt; do not fold approximate wording.
+const (
+	phraseAckRuleColloquial = `- 像同事当面说，不要工单腔，不要「我这就去确认」「收到」「稍等」。`
+	phraseAckRuleNoInternal = `- 不要提优先级、任务编号、工作流、沙箱、跟进页面、Approving。`
+	phraseAckRuleOneLine    = `- 只输出要发给对方的那句话。`
+)
 
-对方刚明确说要重跑/再试一件刚失败的事。用一两句人话告诉对方：你正派人重新去做那件事——时态是正在重试，不是已经做完。
+// buildPhraseAckPrompt joins header + event body + ordered rule bullets.
+// Callers pass event-specific lines in place so differences stay readable;
+// there is no event-switch super-template.
+func buildPhraseAckPrompt(eventBody string, rules ...string) string {
+	var b strings.Builder
+	b.WriteString(phrasePromptHeader)
+	b.WriteString("\n\n")
+	b.WriteString(strings.TrimSpace(eventBody))
+	b.WriteString("\n\n规矩：\n")
+	for i, r := range rules {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(r)
+	}
+	return b.String()
+}
 
-规矩：
-- 像同事当面说，不要工单腔，不要「我这就去确认」「收到」「稍等」。
-- 不要复述任务标题或原要求，也不要用书名号/引号把标题括回去——对方刚说了重试，知道是哪件；用「那事」「那块」指代即可。
-- 不要提优先级、任务编号、工作流、沙箱、跟进页面、Approving。
-- 禁止「已经重新跑过了 / 已经重试过了 / 重新重试过了 / 已经进到队列」——现在才刚开干，还在进行中。
-- 只输出要发给对方的那句话。`
+var retryAckPhrasePrompt = buildPhraseAckPrompt(
+	`对方刚明确说要重跑/再试一件刚失败的事。用一两句人话告诉对方：你正派人重新去做那件事——时态是正在重试，不是已经做完。`,
+	phraseAckRuleColloquial,
+	`- 不要复述任务标题或原要求，也不要用书名号/引号把标题括回去——对方刚说了重试，知道是哪件；用「那事」「那块」指代即可。`,
+	phraseAckRuleNoInternal,
+	`- 禁止「已经重新跑过了 / 已经重试过了 / 重新重试过了 / 已经进到队列」——现在才刚开干，还在进行中。`,
+	phraseAckRuleOneLine,
+)
 
-const fallthroughAckPhrasePrompt = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
+var fallthroughAckPhrasePrompt = buildPhraseAckPrompt(
+	`你这边还要再查一下才能答，人手马上接着干。用一两句人话接住对方。`,
+	phraseAckRuleColloquial,
+	`- 不要复述对方原话，也不要用书名号把长标题括回去。`,
+	`- 时态是正在查/正在弄，不是已经查完。`,
+	phraseAckRuleNoInternal,
+	phraseAckRuleOneLine,
+)
 
-你这边还要再查一下才能答，人手马上接着干。用一两句人话接住对方。
+var dispatchAckPhrasePrompt = buildPhraseAckPrompt(
+	`你刚把一件事派人去干了。用一两句人话告诉对方你正让人做这件事——时态是正在做，不是做完了。`,
+	phraseAckRuleColloquial,
+	`- 不要复述完整任务标题或原要求；用「那事」「那块」或极短口语指代即可。`,
+	phraseAckRuleNoInternal,
+	`- 禁止「已经重试过了 / 已经跑完了 / 已经进到队列」。`,
+	phraseAckRuleOneLine,
+)
 
-规矩：
-- 像同事当面说，不要工单腔，不要「我这就去确认」「收到」「稍等」。
-- 不要复述对方原话，也不要用书名号把长标题括回去。
-- 时态是正在查/正在弄，不是已经查完。
-- 不要提优先级、任务编号、工作流、沙箱、跟进页面、Approving。
-- 只输出要发给对方的那句话。`
-
-const dispatchAckPhrasePrompt = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
-
-你刚把一件事派人去干了。用一两句人话告诉对方你正让人做这件事——时态是正在做，不是做完了。
-
-规矩：
-- 像同事当面说，不要工单腔，不要「我这就去确认」「收到」「稍等」。
-- 不要复述完整任务标题或原要求；用「那事」「那块」或极短口语指代即可。
-- 不要提优先级、任务编号、工作流、沙箱、跟进页面、Approving。
-- 禁止「已经重试过了 / 已经跑完了 / 已经进到队列」。
-- 只输出要发给对方的那句话。`
-
-const refineAckPhrasePrompt = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
-
-对方刚补充/收窄了正在做的事。用一两句人话告诉对方你会按新重点继续——时态是接着做，不是做完了。
-
-规矩：
-- 像同事当面说，不要工单腔，不要「我这就去确认」「收到」「稍等」。
-- 不要复述完整任务标题；不要用书名号把标题括回去。
-- 不要提优先级、任务编号、工作流、沙箱、跟进页面、Approving。
-- 只输出要发给对方的那句话。`
+var refineAckPhrasePrompt = buildPhraseAckPrompt(
+	`对方刚补充/收窄了正在做的事。用一两句人话告诉对方你会按新重点继续——时态是接着做，不是做完了。`,
+	phraseAckRuleColloquial,
+	`- 不要复述完整任务标题；不要用书名号把标题括回去。`,
+	phraseAckRuleNoInternal,
+	phraseAckRuleOneLine,
+)
 
 func (m *Manager) latestRetryableTerminal(rc *runningChannel, in InboundMessage) *models.TaskIdentity {
 	if m.taskContext == nil {
