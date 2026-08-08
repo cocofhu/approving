@@ -167,9 +167,6 @@ type Manager struct {
 	retryBackoff func(attempt int) time.Duration
 	// openBudget overrides sandboxOpenBudget; a negative value means none.
 	openBudget time.Duration
-	// stillWorkingAfter is retained for older tests; production never schedules
-	// the fixed stillWorking template anymore.
-	stillWorkingAfter time.Duration
 
 	riskExecutor RiskActionExecutor
 

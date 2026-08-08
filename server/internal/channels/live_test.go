@@ -526,7 +526,6 @@ func TestForegroundTurnsNeverSendStillWorkingTemplate(t *testing.T) {
 		<-release
 		return Reply{FinalSummary: "查完了，是缓存。"}, nil
 	}
-	m2.stillWorkingAfter = 20 * time.Millisecond
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
