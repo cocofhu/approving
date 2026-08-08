@@ -33,3 +33,28 @@ func (a runTerminalAdapter) OnRunTerminal(ev engine.RunTerminalEvent) {
 			Msg("task outcome did not reach its origin conversation")
 	}
 }
+
+// runPausedAdapter tells the conversation that dispatched a task that the task
+// is now waiting on them. Same reasoning as above, one step earlier in the
+// run's life: a pause is news the person who asked needs, and it is not what
+// the project-level notify template is for.
+type runPausedAdapter struct {
+	mgr *channels.Manager
+}
+
+func (a runPausedAdapter) OnRunPaused(ev engine.RunPausedEvent) {
+	if a.mgr == nil {
+		return
+	}
+	err := a.mgr.ReflowTaskPaused(context.Background(), channels.TaskPause{
+		ProjectID: ev.ProjectID,
+		RunID:     ev.RunID,
+		NodeID:    ev.NodeID,
+		Iteration: ev.Iteration,
+		Ask:       ev.Ask,
+	})
+	if err != nil {
+		log.Warn().Err(err).Str("run", ev.RunID).Str("node", ev.NodeID).
+			Msg("task pause did not reach its origin conversation")
+	}
+}

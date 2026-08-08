@@ -114,6 +114,11 @@ type Engine struct {
 	// conversation that started it. Engine never blocks on it.
 	runTerminal RunTerminalObserver
 
+	// runPaused is an optional async observer for confirmed waiting_human
+	// transitions, used to tell the originating conversation that the work has
+	// stopped and needs a person. Engine never blocks on it.
+	runPaused RunPausedObserver
+
 	// reviewMu guards reviewSess: per parked producer session FIFO + single
 	// worker for node-inline review and gate hot-revise (SandboxChat-aligned).
 	reviewMu   sync.Mutex
@@ -1039,7 +1044,17 @@ func (e *Engine) execute(runID, fromNodeID string) {
 					// Must not block the FSM driver; failures are the invoker's concern.
 					e.fireGateAutoInvoke(c, node)
 					e.fireRunNotify(c, node, models.NotifyKindWaitingHuman)
+					// The project-level notify above is a templated alert with
+					// a link; this tells whoever asked for the work, where they
+					// asked for it, that it is now waiting on them.
+					e.fireRunPaused(c, node, outcome.outputMd)
+				} else {
+					log.Info().Str("run_id", runID).Str("node_id", node.ID).
+						Msg("pause not recorded: run is no longer running; no waiting_human notification")
 				}
+			} else {
+				log.Info().Str("run_id", runID).Str("node_id", node.ID).
+					Msg("pause already resolved concurrently; no waiting_human notification")
 			}
 			return
 		case "failed":
