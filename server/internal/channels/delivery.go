@@ -271,12 +271,14 @@ func (m *Manager) SendRunAcceptanceAck(ctx context.Context, ack RunAcceptanceAck
 // runAcceptanceText is the last-resort line when a Run is accepted but the
 // conversation layer did not already speak. Keep it short and free of pasted
 // ledger titles — long short_title values are truncated requirements, not names.
+// Do not append "feel free to keep chatting": the user already knows they can
+// talk, and saying so reads like a helpdesk script.
 func runAcceptanceText(shortTitle, language string) string {
 	_ = shortTitle
 	if services.NormalizeLanguage(language) == "en" {
-		return "Got it, I'll take that one and come back when it's done. Feel free to keep chatting in the meantime."
+		return "Got it, I'll take that one and come back when it's done."
 	}
-	return "好，那事我去弄，完了告诉你。你可以接着问别的。"
+	return "好，那事我去弄，完了告诉你。"
 }
 
 func runAcceptanceDedupeKey(runID, conversationID, userID string) string {
