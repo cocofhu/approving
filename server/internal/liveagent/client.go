@@ -17,8 +17,10 @@ import (
 // "there is no conversation layer" and go straight to a sandbox.
 var ErrNotConfigured = errors.New("liveagent: endpoint not configured")
 
-// ErrBudgetExhausted means the model hit the token cap without producing a
-// reply or a tool call. Callers treat it like any other failure and escalate.
+// ErrBudgetExhausted means the model hit the token cap before finishing. That
+// includes an empty reply and a half-written one — shipping the latter is how
+// IM got mid-sentence cuts like「CI 还没全跑完：两个」。Callers treat it like
+// any other failure and escalate / fall back.
 var ErrBudgetExhausted = errors.New("liveagent: token budget exhausted before a reply")
 
 // ErrEmptyResponse means the endpoint answered with neither text nor a tool
@@ -215,6 +217,11 @@ func (c *Client) call(ctx context.Context, ep Endpoint, body []byte, allowed map
 		return Result{}, false, fmt.Errorf("%w: no choices", ErrBadResponse)
 	}
 
+	if strings.EqualFold(strings.TrimSpace(parsed.Choices[0].FinishReason), "length") {
+		// Cap hit mid-generation. Partial text used to be forwarded as a
+		// finished IM reply; reject so callers can fall back to complete facts.
+		return Result{}, false, ErrBudgetExhausted
+	}
 	msg := parsed.Choices[0].Message
 	out := Result{Text: stripReasoning(decodeContent(msg.Content))}
 	for _, tc := range msg.ToolCalls {
@@ -230,12 +237,6 @@ func (c *Client) call(ctx context.Context, ep Endpoint, body []byte, allowed map
 		break
 	}
 	if out.ToolName == "" && out.Text == "" {
-		// A reasoning model can spend the whole budget thinking and return
-		// nothing at all. Retrying would just buy the same stall, so this is
-		// reported as final and the caller escalates.
-		if parsed.Choices[0].FinishReason == "length" {
-			return Result{}, false, ErrBudgetExhausted
-		}
 		return Result{}, false, ErrEmptyResponse
 	}
 	return out, false, nil

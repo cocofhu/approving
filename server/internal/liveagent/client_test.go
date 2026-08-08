@@ -457,3 +457,17 @@ func TestThinkingPastTheBudgetEscalatesInsteadOfRetrying(t *testing.T) {
 		t.Fatalf("called %d times, want no retry", n)
 	}
 }
+
+func TestPartialReplyCutByLengthIsRejected(t *testing.T) {
+	// finish_reason=length with leftover text is still unfinished. Forwarding
+	// it produced IM cuts like「CI 还没全跑完：两个」with no ellipsis.
+	c := serveJSON(t, func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `{"choices":[{"finish_reason":"length","message":{
+			"content":"任务对应的 PR 是 https://example.com/pull/1。CI 还没全跑完：两个"
+		}}],"usage":{"completion_tokens":2048}}`)
+	})
+	got, err := c.Complete(context.Background(), chatRequest())
+	if !errors.Is(err, ErrBudgetExhausted) {
+		t.Fatalf("err = %v text=%q, want ErrBudgetExhausted", err, got.Text)
+	}
+}
