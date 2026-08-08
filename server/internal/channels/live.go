@@ -670,10 +670,10 @@ func (m *Manager) dispatchWork(ctx context.Context, rc *runningChannel, in Inbou
 	if running := m.taskLedger(rc, in); len(running) >= m.maxConcurrentTasks() {
 		focus := m.focusTaskID(rc, in)
 		return liveOutcome{}, encodeToolResult(map[string]any{
-			"rejected":       "这个会话同时在跑的任务已经到上限了，没有派下去。",
-			"running":        running,
-			"focus_task_id":  focus,
-			"hint":           "若对方是在补充/收窄正在聊的那件事，改用 refine_work（可挂到 focus_task_id），不要让对方从队列里选。只有对方明确要另开一件完全不同的新事时，才简短问要先停哪件。",
+			"rejected":      "这个会话同时在跑的任务已经到上限了，没有派下去。",
+			"running":       running,
+			"focus_task_id": focus,
+			"hint":          "若对方是在补充/收窄正在聊的那件事，改用 refine_work（可挂到 focus_task_id），不要让对方从队列里选。只有对方明确要另开一件完全不同的新事时，才简短问要先停哪件。",
 		})
 	}
 

@@ -274,6 +274,33 @@ func TestLiveEnvOverridesWinOverTheFile(t *testing.T) {
 	}
 }
 
+// The context window knobs are settable from the web UI, the config file and
+// the environment, and an operator reaching for the environment is usually
+// doing it because the other two are not reachable — a container they cannot
+// rebuild, a box they cannot log into. Every one of them has to land.
+func TestLiveContextWindowEnvOverridesWinOverTheFile(t *testing.T) {
+	c := &Config{}
+	c.Live = LiveConfig{
+		TranscriptWindow: 20, LedgerLimit: 5, RecentTerminalHours: 24,
+		MaxConcurrentWork: 3, ToolLoopLimit: 3, MaxTokens: 2048,
+	}
+	t.Setenv("APPROVING_LIVE_TRANSCRIPT_WINDOW", "40")
+	t.Setenv("APPROVING_LIVE_LEDGER_LIMIT", "8")
+	t.Setenv("APPROVING_LIVE_RECENT_TERMINAL_HOURS", "48")
+	t.Setenv("APPROVING_LIVE_MAX_CONCURRENT_WORK", "6")
+	t.Setenv("APPROVING_LIVE_TOOL_LOOP_LIMIT", "5")
+	t.Setenv("APPROVING_LIVE_MAX_TOKENS", "4096")
+	applyEnvOverrides(c)
+
+	want := LiveConfig{
+		TranscriptWindow: 40, LedgerLimit: 8, RecentTerminalHours: 48,
+		MaxConcurrentWork: 6, ToolLoopLimit: 5, MaxTokens: 4096,
+	}
+	if c.Live != want {
+		t.Errorf("context window from env = %+v, want %+v", c.Live, want)
+	}
+}
+
 func TestLiveTimeoutFallsBackToAShortDefault(t *testing.T) {
 	// A turn is bounded by this and nothing else, so an unset value must not
 	// mean "wait forever".

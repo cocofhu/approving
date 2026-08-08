@@ -51,6 +51,47 @@ func TestSoftTruncateRunesDropsDanglingPunctuation(t *testing.T) {
 	}
 }
 
+// Chinese is often written straight up against a Latin word with no space
+// between them. The character before the word is still a boundary, so the cut
+// lands there rather than inside the word.
+func TestSoftTruncateRunesWalksBackToTheChineseBeforeAWord(t *testing.T) {
+	if got := SoftTruncateRunes("调研快模型和worker架构", 9); got != "调研快模型和…" {
+		t.Fatalf("got %q, want %q", got, "调研快模型和…")
+	}
+}
+
+// Walking back is worth any number of characters, but not the whole string.
+// When the budget falls inside a token that has no boundary behind it, the cut
+// stays where it was: a shortened path still tells the reader more than an
+// ellipsis on its own.
+func TestSoftTruncateRunesCutsInPlaceWhenThereIsNoBoundaryToWalkBackTo(t *testing.T) {
+	cases := map[string]string{
+		"averylongunbrokentoken":  "averylon…", // no separator anywhere
+		"/averylongunbrokentoken": "/averylo…", // only a leading one, nothing before it
+	}
+	for in, want := range cases {
+		if got := SoftTruncateRunes(in, 8); got != want {
+			t.Errorf("SoftTruncateRunes(%q, 8) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// splitsLatinToken is asked about a cut point, and a cut at either end of the
+// text is not inside anything. Its caller screens those out before asking, and
+// the guard is what keeps that from being load-bearing — indexing r[at] at the
+// end would panic.
+func TestSplitsLatinTokenSaysNoAtTheEdges(t *testing.T) {
+	r := []rune("worker")
+	for _, at := range []int{-1, 0, len(r), len(r) + 1} {
+		if splitsLatinToken(r, at) {
+			t.Errorf("splitsLatinToken(%q, %d) = true, want false", string(r), at)
+		}
+	}
+	if !splitsLatinToken(r, 3) {
+		t.Errorf("splitsLatinToken(%q, 3) = false, want true", string(r))
+	}
+}
+
 func TestHealBrokenTailRepairsHardCutDebris(t *testing.T) {
 	cases := map[string]string{
 		"调研快模型和 wo":  "调研快模型和…",
@@ -80,5 +121,27 @@ func TestHealBrokenTailLeavesRealSentencesAlone(t *testing.T) {
 		if got := HealBrokenTail(in); got != in {
 			t.Errorf("HealBrokenTail(%q) = %q, want unchanged", in, got)
 		}
+	}
+}
+
+// Healing runs over persisted titles, some of which are empty or were stored as
+// nothing but spacing. Handing back an ellipsis for those would invent content.
+func TestHealBrokenTailLeavesEmptyTextAlone(t *testing.T) {
+	for _, in := range []string{"", "   ", "\n\t"} {
+		if got := HealBrokenTail(in); got != in {
+			t.Errorf("HealBrokenTail(%q) = %q, want unchanged", in, got)
+		}
+	}
+	if HasBrokenLatinStub("") {
+		t.Error("empty text has no stub to heal")
+	}
+}
+
+// The stub test only fires inside Chinese text. English prose ends in short
+// words constantly, and none of them are the debris of a cut — including the
+// ones no dictionary of ours happens to list.
+func TestHasBrokenLatinStubStaysOutOfEnglishProse(t *testing.T) {
+	if HasBrokenLatinStub("rolled the canary back to hk") {
+		t.Error("a short word ending an English sentence is not truncation debris")
 	}
 }
