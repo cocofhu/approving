@@ -306,20 +306,24 @@ func runAcceptanceText(shortTitle, language string) string {
 	return "好，那事我去弄，完了告诉你。"
 }
 
-// nameableTitleRunes is where a name stops being a name. Past this a title is
-// the request written out, and reading a request back at the person who just
-// made it is the thing every ack prompt here is trying to avoid.
-const nameableTitleRunes = 14
+// placeholderTitles are what the title resolver produces for a run that has no
+// name of its own. Saying one of these out loud is no better than the pronoun.
+var placeholderTitles = map[string]bool{
+	"未命名任务": true, "untitled task": true, "untitled": true,
+}
 
-// nameableTitle returns the title if it can stand in as the name of a task, or
-// empty if it cannot: too long to be anything but the requirement restated, or
-// already marked as cut short.
+// nameableTitle returns the title if it can stand in as the name of a task.
+//
+// Only an absent or placeholder title is refused. There was a length limit
+// here, on the theory that a long short_title is the requirement written out
+// rather than a name — but titles are allowed up to 40 runes and most real ones
+// are longer than the limit was, so nearly every acceptance fell through to
+// 「好，那事我去弄」 anyway, which was the whole complaint. A long name is
+// clumsy; no name at all is unusable, and the completion push that follows has
+// been naming these in full for a while now without anyone minding.
 func nameableTitle(shortTitle string) string {
 	t := strings.TrimSpace(shortTitle)
-	if t == "" || strings.Contains(t, "…") || strings.Contains(t, "...") {
-		return ""
-	}
-	if len([]rune(t)) > nameableTitleRunes {
+	if t == "" || placeholderTitles[strings.ToLower(t)] {
 		return ""
 	}
 	return t

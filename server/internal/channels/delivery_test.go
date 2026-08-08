@@ -338,14 +338,16 @@ func TestRunAcceptanceSaysWhichTaskItTook(t *testing.T) {
 	}{
 		{name: "short title is a name", title: "PR 179 的 CI", lang: "zh-CN", wantNamed: true},
 		{name: "short title in english", title: "Login perf", lang: "en", wantNamed: true},
-		// Past a certain length a short_title is the request written out, and
-		// reading a request back to the person who just made it is worse than
-		// the pronoun.
-		{name: "a requirement is not a name", lang: "zh-CN", wantNamed: false,
+		// A long title is clumsy to say and still tells the user which task it
+		// is. Refusing to say it is how 「那事」 survived the first fix: titles
+		// run to 40 runes, so a length gate rejected almost all of them.
+		{name: "a long title is still a name", lang: "zh-CN", wantNamed: true,
 			title: "调研 Approving 最近关于快模型和 worker 架构的精简空间"},
-		// A title that was cut short is not a name either.
-		{name: "a cut title is not a name", title: "调研快模型和…", lang: "zh-CN", wantNamed: false},
+		{name: "a cut title still identifies", title: "调研快模型和…", lang: "zh-CN", wantNamed: true},
 		{name: "no title at all", title: "", lang: "zh-CN", wantNamed: false},
+		// The resolver invents this one when a run carries no name; repeating
+		// it says as little as the pronoun does.
+		{name: "placeholder is not a name", title: "未命名任务", lang: "zh-CN", wantNamed: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := runAcceptanceText(tc.title, tc.lang)
