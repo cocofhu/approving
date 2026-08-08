@@ -373,23 +373,38 @@ const statusWhileRunningPhrasePrompt = phrasePromptHeader + `
 // retryAckEchoesBrief is true when the spoken line pastes the ledger title /
 // requirement back — the failure mode behind quoting
 // 「重新执行上次因服务重启而中断的 Approvin」.
+//
+// Naming the task is not pasting it, and the difference is length. This used to
+// reject any line that reused six characters of the title, which ruled out
+// 「CI 那个我去弄」 along with the quoted requirement, and left the pronoun as
+// the only thing a model could say. What it rejects now is a run long enough to
+// be the requirement read back.
 func retryAckEchoesBrief(ack, title, req string) bool {
 	ack = strings.TrimSpace(ack)
 	if ack == "" {
 		return false
 	}
-	if strings.Contains(ack, "「") || strings.Contains(ack, "」") {
+	if strings.ContainsAny(ack, "「」《》") {
 		return true
 	}
 	for _, s := range []string{title, req} {
-		s = strings.TrimSpace(s)
-		if s == "" {
-			continue
-		}
-		if len([]rune(s)) >= 6 && strings.Contains(ack, s) {
+		if pastesSpanOf(ack, strings.TrimSpace(s)) {
 			return true
 		}
-		if r := []rune(s); len(r) >= 10 && strings.Contains(ack, string(r[:10])) {
+	}
+	return false
+}
+
+// pasteSpanRunes is where reusing the source stops being a reference to it.
+const pasteSpanRunes = 14
+
+// pastesSpanOf reports whether ack quotes any pasteSpanRunes-long run of s.
+// Any run, not just the opening one: a model that skips the first few words of
+// a requirement and reads back the rest has still read it back.
+func pastesSpanOf(ack, s string) bool {
+	r := []rune(s)
+	for i := 0; i+pasteSpanRunes <= len(r); i++ {
+		if strings.Contains(ack, string(r[i:i+pasteSpanRunes])) {
 			return true
 		}
 	}
@@ -430,6 +445,13 @@ const (
 	phraseAckRuleColloquial = `- 像同事当面说，不要工单腔，不要「我这就去确认」「收到」「稍等」。`
 	phraseAckRuleNoInternal = `- 不要提优先级、任务编号、工作流、沙箱、跟进页面、Approving。`
 	phraseAckRuleOneLine    = `- 只输出要发给对方的那句话。`
+
+	// phraseAckRuleNameIt is what keeps two acks apart in a chat window. The
+	// old rule said the opposite — 「用「那事」「那块」指代即可」 — on the
+	// assumption that the user had just named the thing themselves. They often
+	// have not: 「修复下」 got back 「好，那事我去弄」, which could have been
+	// about anything. A handle costs three characters and settles it.
+	phraseAckRuleNameIt = `- 一句话里要能看出是哪件事：从事情本身取两三个字的自然说法（「CI 那个」「登录页那块」）。不要照抄完整标题，不要用书名号或引号把标题括回去，也不要只说「那事」「那块」——对方手上可能同时有好几件。`
 )
 
 // buildPhraseAckPrompt joins header + event body + ordered rule bullets.
@@ -453,7 +475,7 @@ func buildPhraseAckPrompt(eventBody string, rules ...string) string {
 var retryAckPhrasePrompt = buildPhraseAckPrompt(
 	`对方刚明确说要重跑/再试一件刚失败的事。用一两句人话告诉对方：你正派人重新去做那件事——时态是正在重试，不是已经做完。`,
 	phraseAckRuleColloquial,
-	`- 不要复述任务标题或原要求，也不要用书名号/引号把标题括回去——对方刚说了重试，知道是哪件；用「那事」「那块」指代即可。`,
+	phraseAckRuleNameIt,
 	phraseAckRuleNoInternal,
 	`- 禁止「已经重新跑过了 / 已经重试过了 / 重新重试过了 / 已经进到队列」——现在才刚开干，还在进行中。`,
 	phraseAckRuleOneLine,
@@ -471,7 +493,7 @@ var fallthroughAckPhrasePrompt = buildPhraseAckPrompt(
 var dispatchAckPhrasePrompt = buildPhraseAckPrompt(
 	`你刚把一件事派人去干了。用一两句人话告诉对方你正让人做这件事——时态是正在做，不是做完了。`,
 	phraseAckRuleColloquial,
-	`- 不要复述完整任务标题或原要求；用「那事」「那块」或极短口语指代即可。`,
+	phraseAckRuleNameIt,
 	phraseAckRuleNoInternal,
 	`- 禁止「已经重试过了 / 已经跑完了 / 已经进到队列」。`,
 	phraseAckRuleOneLine,
@@ -480,7 +502,7 @@ var dispatchAckPhrasePrompt = buildPhraseAckPrompt(
 var refineAckPhrasePrompt = buildPhraseAckPrompt(
 	`对方刚补充/收窄了正在做的事。用一两句人话告诉对方你会按新重点继续——时态是接着做，不是做完了。`,
 	phraseAckRuleColloquial,
-	`- 不要复述完整任务标题；不要用书名号把标题括回去。`,
+	phraseAckRuleNameIt,
 	phraseAckRuleNoInternal,
 	phraseAckRuleOneLine,
 )
@@ -500,7 +522,8 @@ type operationalLine struct {
 	Situation string
 	// Facts are internal details the model may use but must not quote back.
 	Facts string
-	// Avoid is a title or requirement the reply must not paste back at the user.
+	// Avoid is a title or requirement the reply may name but must not paste
+	// back wholesale.
 	Avoid    string
 	Language string
 	Fallback string
@@ -513,7 +536,7 @@ const operationalLineRules = `
 
 规矩：
 - 像同事当面说，不要工单腔，不要「收到」「稍等」「我这就去确认」。
-- 不要复述任务标题或原要求；用「那事」「那块」指代即可。
+- 内部参考里给了是哪件事的，就用两三个字的自然说法点出来（「CI 那个」「登录页那块」）；不要照抄完整标题，不要用书名号或引号括回去，也不要只说「那事」「那块」——对方手上可能同时有好几件。
 - 不要交代对方可以做什么（「你可以接着问别的」「有事随时叫我」这类都不要）——他本来就知道。
 - 不要提优先级、任务编号、工作流、执行环境、跟进页面、Approving。
 - 不要说已经做完、已经跑完、已经处理好。
