@@ -64,7 +64,7 @@ func (n channelIMNotifier) NotifyProgress(projectID, runID string, target pmmcp.
 	result, err := n.mgr.ReportRunProgress(context.Background(), channels.SendableRequest{
 		ProjectID: projectID, RunID: runID, Scene: channels.Scene(target.Scene),
 		ConversationID: target.ConversationID, UserID: target.UserID,
-		Kind: skind, Reason: "pm_notify_progress", Priority: priority,
+		Kind: skind, Reason: channels.ReasonPMNotifyProgress, Priority: priority,
 		Progress: sendable.ProgressFields{
 			Stage: stage, Blocked: blocked, ActionRequired: actionRequired, Conclusion: conclusion,
 		},

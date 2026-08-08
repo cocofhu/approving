@@ -122,6 +122,15 @@ func (m *Manager) DeliverSendable(ctx context.Context, req SendableRequest) (Del
 		return DeliveryResult{}, errors.New("sendable text is empty")
 	}
 	target, scene, conv, err := m.resolveSendableTarget(req)
+	if errors.Is(err, errOriginUnbound) {
+		// Logged rather than dropped in silence. The last round of this bug
+		// cost real time precisely because three quiet paths left no trace,
+		// and "why did this Run stop talking" is the same question again.
+		log.Info().Str("project", req.ProjectID).Str("run", req.RunID).
+			Str("reason", req.Reason).Str("kind", string(req.Kind)).
+			Msg("run detached from its origin conversation; message withheld")
+		return DeliveryResult{Decision: sendable.Decision{Reason: ReasonOriginUnbound}}, nil
+	}
 	if err != nil {
 		return DeliveryResult{}, err
 	}
@@ -165,10 +174,7 @@ func (m *Manager) DeliverConversationReply(ctx context.Context, reply Conversati
 	if text == "" {
 		return DeliveryResult{}, errors.New("conversation reply text is empty")
 	}
-	scene := reply.Scene
-	if scene == "" {
-		scene = SceneC2C
-	}
+	scene := normalizeScene(reply.Scene)
 	// A synthesis turn borrows this conversation's agent to phrase a background
 	// event. Its answer belongs to the reflow that asked for it, which delivers
 	// it once with the right dedupe key, so it is collected here rather than
@@ -200,7 +206,7 @@ func (m *Manager) DeliverConversationReply(ctx context.Context, reply Conversati
 		ProjectID: reply.ProjectID, Scene: scene, ConversationID: reply.ConversationID,
 		UserID: reply.UserID, RunID: strings.TrimSpace(reply.RunID),
 		TaskContext: scope, TraceID: strings.TrimSpace(reply.TraceID),
-		Kind: sendable.KindFinal, Reason: "pm_reply",
+		Kind: sendable.KindFinal, Reason: ReasonPMReply,
 		Priority: sendable.PriorityCritical,
 		// No explicit dedupe key: the policy derives one from the content, so a
 		// retry of the same answer collapses while two different answers in the
@@ -236,10 +242,7 @@ func (m *Manager) SendRunAcceptanceAck(ctx context.Context, ack RunAcceptanceAck
 	if runID == "" {
 		return DeliveryResult{}, errors.New("run acceptance ack requires a real run id")
 	}
-	scene := ack.Scene
-	if scene == "" {
-		scene = SceneC2C
-	}
+	scene := normalizeScene(ack.Scene)
 	// The conversation layer may already have told the user this is being
 	// picked up — that is what a heavy dispatch's acknowledgement is. Adding
 	// the platform's own acceptance notice on top is the "我去看看" + "好的我去看看"
@@ -258,7 +261,7 @@ func (m *Manager) SendRunAcceptanceAck(ctx context.Context, ack RunAcceptanceAck
 	result, err := m.DeliverSendable(ctx, SendableRequest{
 		ProjectID: ack.ProjectID, Scene: ack.Scene, ConversationID: ack.ConversationID,
 		UserID: ack.UserID, RunID: runID,
-		Kind: sendable.KindRunAcceptanceAck, Reason: "run_accepted",
+		Kind: sendable.KindRunAcceptanceAck, Reason: ReasonRunAccepted,
 		Priority:  sendable.PriorityHigh,
 		DedupeKey: runAcceptanceDedupeKey(runID, ack.ConversationID, ack.UserID),
 		Text:      text,
@@ -343,9 +346,18 @@ func runAcceptanceDedupeKey(runID, conversationID, userID string) string {
 // unrelated cron session, so it is the last resort rather than the default.
 func (m *Manager) resolveSendableTarget(req SendableRequest) (*runningChannel, Scene, string, error) {
 	scene, conv := req.Scene, strings.TrimSpace(req.ConversationID)
-	if conv == "" {
-		if s, c, ok := m.originConversationForRun(req.ProjectID, req.RunID); ok {
-			scene, conv = s, c
+	// The unbind check keys on the Run, not on whether we had to look the
+	// conversation up. Every worker-originated path — the acceptance ack,
+	// pm_reply, pm_notify_progress — passes an explicit ConversationID, so a
+	// guard that only ran when conv was blank would have missed exactly the
+	// three paths a detached Run is loudest on.
+	if runID := strings.TrimSpace(req.RunID); runID != "" {
+		origin := m.resolveRunOrigin(req.ProjectID, runID)
+		if origin.State == originDetached {
+			return nil, "", "", errOriginUnbound
+		}
+		if conv == "" && origin.Speaks() {
+			scene, conv = origin.Scene, origin.Conv
 		}
 	}
 	if conv != "" {
@@ -353,10 +365,7 @@ func (m *Manager) resolveSendableTarget(req SendableRequest) (*runningChannel, S
 		defer m.mu.Unlock()
 		for _, rc := range m.running {
 			if rc.cfg.ProjectID == req.ProjectID {
-				if scene == "" {
-					scene = SceneC2C
-				}
-				return rc, scene, conv, nil
+				return rc, normalizeScene(scene), conv, nil
 			}
 		}
 		return nil, "", "", ErrNoSendableTarget
@@ -366,26 +375,6 @@ func (m *Manager) resolveSendableTarget(req SendableRequest) (*runningChannel, S
 		return nil, "", "", ErrNoSendableTarget
 	}
 	return target, fallbackScene, fallbackConv, nil
-}
-
-// originConversationForRun looks up where a Run's task was created.
-func (m *Manager) originConversationForRun(projectID, runID string) (Scene, string, bool) {
-	if m.taskContext == nil || strings.TrimSpace(runID) == "" || strings.TrimSpace(projectID) == "" {
-		return "", "", false
-	}
-	identity, err := m.taskContext.IdentityForRun(runID, projectID)
-	if err != nil || identity == nil {
-		return "", "", false
-	}
-	conv := strings.TrimSpace(identity.OriginConversationID)
-	if conv == "" {
-		return "", "", false
-	}
-	scene := Scene(strings.TrimSpace(identity.OriginScene))
-	if scene == "" {
-		scene = SceneC2C
-	}
-	return scene, conv, true
 }
 
 // Task addressing used to live here: an ordinal / short-title / focus / scored

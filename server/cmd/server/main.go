@@ -464,7 +464,10 @@ func main() {
 		LiveModel:     liveClient,
 		LiveSamples:   liveSamples,
 		TaskContext:   taskContextSvc,
-		Onboarding:    services.NewOnboardingService(projectSvc, skillSvc, wfSvc),
+		// Detaching a run from its origin conversation says goodbye there
+		// first; without this the requester would just stop hearing back.
+		OriginAnnouncer: channelMgr,
+		Onboarding:      services.NewOnboardingService(projectSvc, skillSvc, wfSvc),
 	}
 
 	r := router.New(h)

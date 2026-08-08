@@ -266,6 +266,60 @@
         "modeCustom": "自定义",
         "wfUpdated": "已更新"
       },
+      "eventRouting": {
+        "title": "运行事件去向",
+        "lead": "一次运行会在什么时候说话、说给谁听。会话一栏是回到派活的那个人，项目推送一栏是发到运维看板，两者是不同的受众。",
+        "colEvent": "事件",
+        "colLive": "会话",
+        "colTemplate": "项目推送",
+        "colUnbindable": "可解绑",
+        "yes": "是",
+        "no": "否",
+        "noEgress": "不进 IM",
+        "templateOff": "已关闭",
+        "templateOnWith": "开启（{kinds}）",
+        "loadFailed": "加载事件去向失败",
+        "footnote": "「可解绑」指能否在单个运行的详情页上切断它与来源会话的联系。项目推送不受解绑影响，要关请用上面的通知策略。",
+        "kinds": {
+          "waiting_human": "等待人工",
+          "failed": "运行失败",
+          "completed": "运行完成"
+        },
+        "events": {
+          "run_accepted": {
+            "label": "接单回执",
+            "trigger": "从会话派出的运行被接下时，每个运行一次"
+          },
+          "pm_notify_progress": {
+            "label": "执行方上报",
+            "trigger": "执行方报进度、卡住、需确认或给出结论时"
+          },
+          "pm_reply": {
+            "label": "执行方回话",
+            "trigger": "执行方为某一轮提交结论时"
+          },
+          "task_paused": {
+            "label": "停下等人",
+            "trigger": "运行停在需要人工处理的节点上"
+          },
+          "task_outcome": {
+            "label": "运行结束",
+            "trigger": "运行完成、失败或被取消"
+          },
+          "origin_binding": {
+            "label": "绑定变更告知",
+            "trigger": "有人在运行详情页解除或恢复它与来源会话的绑定时"
+          },
+          "run_notification": {
+            "label": "项目通知模板",
+            "trigger": "按项目通知策略推送到运维会话，与来源会话无关"
+          },
+          "gate_auto_invoke": {
+            "label": "自动接管",
+            "trigger": "运行停在人工节点时，同时排队交给项目负责人自动处理"
+          }
+        }
+      },
       "audit": {
         "title": "审计",
         "loading": "加载审计事件…",
@@ -846,6 +900,21 @@
       "cancelWarning": "取消后该 Run 将停止并变为 cancelled。排队中的任务不会开始执行；进行中的步骤会被中断。此操作不可恢复为继续执行。",
       "cancelConfirm": "仅停止这一次 Run；取消成功后将停留在详情页并刷新状态。",
       "cancelSuccess": "已取消运行",
+      "originBinding": {
+        "chipBound": "会话同步中",
+        "chipUnbound": "已停止会话同步",
+        "titleBound": "这个运行的进展会同步回会话 {conversation}",
+        "titleUnbound": "已解除绑定：不再往会话 {conversation} 发消息，进展只在这个页面上看",
+        "unbindAction": "解除会话绑定",
+        "rebindAction": "恢复会话绑定",
+        "confirmTitle": "解除会话绑定",
+        "confirmBody": "解除后，这个运行的进展、暂停和结果都不会再发到会话 {conversation}。任务本身继续跑，状态照常记录。",
+        "confirmHint": "会先在那个会话里说一声，免得对方一直干等。之后随时可以恢复。",
+        "confirmAction": "确认解除",
+        "unboundToast": "已解除绑定，并在会话里说明了",
+        "unboundSilentToast": "已解除绑定；没能在会话里说明，对方那边会直接安静下来",
+        "reboundToast": "已恢复会话绑定"
+      },
       "cancelErrorNotFound": "运行不存在或已删除",
       "cancelErrorNotCancellable": "当前状态不可取消（可能已完成）",
       "cancelErrorGeneric": "取消失败",

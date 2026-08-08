@@ -1,6 +1,8 @@
 package services
 
 import (
+	"strings"
+
 	"github.com/cocofhu/approving/internal/models"
 )
 
@@ -145,6 +147,33 @@ type RunOrigin struct {
 	Scene          string `json:"scene,omitempty"`
 	ConversationID string `json:"conversationId,omitempty"`
 	ExternalUserID string `json:"externalUserId,omitempty"`
+	// Unbound means somebody detached this run on purpose, so it no longer
+	// reports back there. The origin is still recorded — that is the point of
+	// showing it: "came from here, does not talk to it any more" is a different
+	// state from "came from nowhere".
+	Unbound bool `json:"unbound,omitempty"`
+}
+
+// RunOriginFor resolves one run's dispatch origin. The second return says
+// whether the run came from a conversation at all.
+func (s *RunService) RunOriginFor(runID string) (RunOrigin, bool) {
+	var row models.TaskIdentity
+	if err := s.db.
+		Where("run_id = ? AND origin_conversation_id <> ''", strings.TrimSpace(runID)).
+		First(&row).Error; err != nil {
+		return RunOrigin{}, false
+	}
+	return runOriginFromIdentity(row), true
+}
+
+func runOriginFromIdentity(row models.TaskIdentity) RunOrigin {
+	return RunOrigin{
+		Channel:        row.OriginChannel,
+		Scene:          row.OriginScene,
+		ConversationID: row.OriginConversationID,
+		ExternalUserID: row.OriginExternalUserID,
+		Unbound:        row.OriginUnboundAt != nil,
+	}
 }
 
 // RunOrigins resolves dispatch origins for a page of runs in one query. Runs
@@ -160,7 +189,8 @@ func (s *RunService) RunOrigins(runs []models.Run) map[string]RunOrigin {
 	}
 	var rows []models.TaskIdentity
 	if err := s.db.
-		Select("run_id", "origin_channel", "origin_scene", "origin_conversation_id", "origin_external_user_id").
+		Select("run_id", "origin_channel", "origin_scene", "origin_conversation_id",
+			"origin_external_user_id", "origin_unbound_at").
 		Where("run_id IN ? AND origin_conversation_id <> ''", ids).
 		Find(&rows).Error; err != nil {
 		return nil
@@ -170,12 +200,7 @@ func (s *RunService) RunOrigins(runs []models.Run) map[string]RunOrigin {
 	}
 	out := make(map[string]RunOrigin, len(rows))
 	for _, row := range rows {
-		out[row.RunID] = RunOrigin{
-			Channel:        row.OriginChannel,
-			Scene:          row.OriginScene,
-			ConversationID: row.OriginConversationID,
-			ExternalUserID: row.OriginExternalUserID,
-		}
+		out[row.RunID] = runOriginFromIdentity(row)
 	}
 	return out
 }

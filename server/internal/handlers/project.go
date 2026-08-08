@@ -59,6 +59,26 @@ func (h *Handlers) GetProject(c *gin.Context) {
 	c.JSON(http.StatusOK, projectDTO(p, h.Projects.WorkflowCount(p.ID), h.Projects.TokenBreakdown(p.ID)))
 }
 
+// GetProjectEventRouting answers "which Run events reach a conversation, and
+// which reach the ops push target" for one project.
+//
+// The table itself is static, but it is served per project on purpose: a route
+// that the project has switched off in its notify policy should read as off
+// rather than as something the code merely supports. A static document would
+// have been wrong the first time someone changed a policy.
+func (h *Handlers) GetProjectEventRouting(c *gin.Context) {
+	if h.Projects == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	p, ok := h.Projects.Get(c.Param("id"))
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"routes": services.ResolveEventRoutes(p.NotifyPolicy)})
+}
+
 func (h *Handlers) ListProjectRunTags(c *gin.Context) {
 	if h.Projects == nil || h.Runs == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
