@@ -6,7 +6,6 @@ import (
 	"errors"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/cocofhu/approving/internal/models"
@@ -78,94 +77,74 @@ type convQueue struct {
 // idempotently: adapters are started, stopped, or restarted based on a config
 // fingerprint so admin edits hot-reload without a server restart.
 type Manager struct {
+	// The channels themselves: what is configured, what is running, and how to
+	// build one.
 	bridge    *ChannelBridge
 	factories map[string]AdapterFactory
 	decrypt   func(enc string) (string, error)
 	loader    func() ([]models.ChannelConfig, error)
+	applyMu   sync.Mutex // serializes Apply/Reload
+	mu        sync.Mutex
+	running   map[string]*runningChannel // keyed by config ID
 
-	applyMu sync.Mutex // serializes Apply/Reload
-	mu      sync.Mutex
-	running map[string]*runningChannel // keyed by config ID
-
+	// Per-conversation turn plumbing: what is waiting, when the user may be
+	// interrupted again, and what the agent said while a turn was diverted.
 	convMu     sync.Mutex
 	convQueues map[string]*convQueue
-
 	// busyHintMu guards the per-conversation rate limits: the backlog notice and
 	// the progress floor. Both answer the same question — when may this
 	// conversation be interrupted again — so they share a lock.
 	busyHintMu   sync.Mutex
 	busyHintSent map[string]time.Time
 	progressSent map[string]time.Time
-
-	repliedMu sync.Mutex
-	replied   map[string]bool
-	// answered is the stricter marker: this turn has already delivered an
-	// answer, not merely something user-visible. Progress milestones set
-	// replied but not this, because suppressing the actual answer because a
-	// progress line went out first is worse than the double reply the marker
-	// exists to prevent.
-	answered map[string]bool
-	// acked records that the conversation layer already told the user this is
-	// being picked up. It is separate from replied because only one thing may
-	// be suppressed by it — the platform's own run acceptance notice — and
-	// suppressing that on the strength of any progress line would lose the only
-	// confirmation some delegations ever send.
-	acked map[string]bool
-
-	// synthesize rewrites background events for the conversation they belong
-	// to. nil means outcomes go out as structured fallbacks.
-	synthesize SynthesisFunc
-
-	captureMu sync.Mutex
-	captured  map[string]*string
-
+	captureMu    sync.Mutex
+	captured     map[string]*string
 	// warmed marks conversations whose sandbox has been brought up ahead of
 	// being needed, so the pre-warm happens once rather than on every message.
 	warmMu sync.Mutex
 	warmed map[string]bool
 
-	// heartbeatInterval is the minimum gap between volunteered updates about
-	// one task. Zero switches them off.
-	heartbeatInterval time.Duration
+	// The three components the manager is a facade over. Each owns its own
+	// state and is readable on its own; see the file named after it.
+	//
+	// turns is what each conversation has already been told this turn, and the
+	// reason the platform does not answer twice.
+	turns *turnState
+	// outbound owns everything the platform sends on its own initiative —
+	// scheduled pushes and Run notifications.
+	outbound *outboundGateway
+	// director is the fast model and everything that shapes what it sees —
+	// context windows, tool budget, prompt body.
+	director liveDirector
 
+	// Collaborators supplied by the composition root.
+	//
+	// synthesize rewrites background events for the conversation they belong
+	// to. nil means outcomes go out as structured fallbacks.
+	synthesize SynthesisFunc
 	// samples records what the conversation layer decided and why. Every
 	// previous round of this design was tuned by adding banned phrases, because
 	// nothing recorded the decisions well enough to tell whether routing had
 	// actually improved. nil means sampling is off.
 	samples *services.LiveSampleService
-
-	pushMu     sync.Mutex
-	pushQueues map[string]*pushQueue
-	pushSent   func(id string)
-
+	// transcript is the shared record of the conversation. nil means the
+	// routing layers fall back to the single message in front of them.
+	transcript       Transcript
 	baseCtx          context.Context
 	policy           *sendable.Policy
 	taskContext      *services.TaskContextService
 	riskConfirmation *services.RiskConfirmationService
-	// live answers what it can without a sandbox; nil means every message goes
-	// to the agent.
-	live LiveModel
-	// Conversation-layer context windows. Settings push overrides through
-	// SetLiveLimits; getters fall back to the compiled defaults when zero.
-	liveTranscriptWindow    atomic.Int64
-	liveLedgerLimit         atomic.Int64
-	liveRecentTerminalHours atomic.Int64
-	liveMaxConcurrentWork   atomic.Int64
-	liveToolLoopLimit       atomic.Int64
-	liveMaxTokens           atomic.Int64
-	// liveSystemBody is the operator's replacement for the routing prompt's
-	// body. Empty means the built-in one. The persona is never in here — it is
-	// re-attached on every read.
-	liveSystemBody atomic.Pointer[string]
-	// transcript is the shared record of the conversation. nil means the
-	// routing layers fall back to the single message in front of them.
-	transcript Transcript
+	riskExecutor     RiskActionExecutor
+
+	// Tunables.
+	//
+	// heartbeatInterval is the minimum gap between volunteered updates about
+	// one task. Zero switches them off.
+	heartbeatInterval time.Duration
 	// retryBackoff overrides the delivery backoff (tests set it to zero).
 	retryBackoff func(attempt int) time.Duration
 	// openBudget overrides sandboxOpenBudget; a negative value means none.
 	openBudget time.Duration
-
-	riskExecutor RiskActionExecutor
 
 	// Test hooks (production leaves these nil/zero):
 	// handleFunc overrides bridge.Handle when set (no progress callback).
@@ -190,23 +169,22 @@ func NewManager(bridge *ChannelBridge, factories map[string]AdapterFactory, decr
 		decrypt:      decrypt,
 		running:      map[string]*runningChannel{},
 		convQueues:   map[string]*convQueue{},
-		pushQueues:   map[string]*pushQueue{},
 		busyHintSent: map[string]time.Time{},
 		progressSent: map[string]time.Time{},
-		replied:      map[string]bool{},
-		answered:     map[string]bool{},
-		acked:        map[string]bool{},
+		turns:        newTurnState(),
 		baseCtx:      context.Background(),
 
 		heartbeatInterval: DefaultHeartbeatInterval,
 		policy:            sendable.NewPolicy(nil, nil),
 	}
+	m.outbound = newOutboundGateway(m)
 	// The bridge already owns thread resolution and message persistence, so it
-	// is also what records the conversation both layers read back.
+	// is also what records the conversation both layers read back — and it
+	// reads the transcript window from the same place every other caller does.
 	if bridge != nil {
 		m.transcript = bridge
+		bridge.transcriptLimit = m.transcriptLimit
 	}
-	m.initLiveLimits()
 	return m
 }
 
@@ -1197,84 +1175,6 @@ func (m *Manager) HasRunNotifyTarget(projectID string) bool {
 	return err == nil
 }
 
-// flushPushQueue drains the conversation's queue and reports, per tracked item
-// id, whether that item actually reached the transport. Items without an id are
-// fire-and-forget and absent from the result. An id missing from the result was
-// neither sent nor dropped — it is still queued, waiting for a later flush.
-func (m *Manager) flushPushQueue(key string) map[string]bool {
-	items := m.takePushQueue(key)
-	if len(items) == 0 {
-		return nil
-	}
-	outcome := map[string]bool{}
-	for i, item := range items {
-		// Re-check busy: a new user message may have arrived.
-		// Re-queue current AND all remaining — never drop the tail.
-		if m.IsConversationBusy(item.ProjectID, item.Scene, item.Conv) {
-			m.requeuePushAll(key, items[i:])
-			return outcome
-		}
-		var target *runningChannel
-		var err error
-		if item.Category == runNotifyCategory {
-			target, _, _, err = m.lookupRunNotifyTarget(item.ProjectID)
-		} else {
-			target, _, _, err = m.lookupDeliveryTarget(item.ProjectID)
-		}
-		if err != nil {
-			log.Warn().Err(err).Str("project", item.ProjectID).Str("category", item.Category).
-				Msg("push flush: no delivery channel")
-			if item.ID != "" {
-				outcome[item.ID] = false
-			}
-			continue
-		}
-		stripped, urls := splitImageURLs(item.Text)
-		ctx, cancel := context.WithTimeout(m.baseCtx, 60*time.Second)
-		res := m.sendOutboundResult(ctx, target, OutboundMessage{
-			Scene: item.Scene, ConversationID: item.Conv, Text: stripped,
-			ImageURLs: urls, Envelope: item.Envelope,
-		})
-		cancel()
-		if item.ID == "" {
-			continue
-		}
-		outcome[item.ID] = res.Sent
-		if res.Sent {
-			m.notifyPushSent(item.ID)
-		}
-	}
-	return outcome
-}
-
-func (m *Manager) notifyPushSent(id string) {
-	m.pushMu.Lock()
-	observer := m.pushSent
-	m.pushMu.Unlock()
-	if observer != nil {
-		observer(id)
-	}
-}
-
-// SetPushSentObserver registers the callback invoked once a tracked push item
-// leaves the queue for real. It is what lets a deferred notification receipt
-// settle to delivered instead of staying deferred forever.
-func (m *Manager) SetPushSentObserver(fn func(id string)) {
-	m.pushMu.Lock()
-	m.pushSent = fn
-	m.pushMu.Unlock()
-}
-
-// SweepPushQueues re-attempts every conversation that still holds queued
-// pushes. Without this the queue only moves when some other event happens to
-// touch the same conversation, so a notification enqueued while the user was
-// mid-turn could sit in memory indefinitely.
-func (m *Manager) SweepPushQueues() {
-	for _, key := range m.pendingPushKeys() {
-		m.flushPushQueue(key)
-	}
-}
-
 // runNotifyRunID extracts the real Run id from a notification link, or "" when
 // the notification is not linked to a Run. It never fabricates an id.
 func runNotifyRunID(text string) string {
@@ -1309,33 +1209,6 @@ func cronTaskContext(d services.CronDelivery) string {
 		category = "cron"
 	}
 	return "cron:" + d.ProjectID + "|" + category
-}
-
-// requeuePushAll puts remaining flush items back ahead of anything that arrived
-// while the queue was taken, re-applying merge/depth via enqueuePush so pending
-// never silently exceeds pushQueueDepth.
-func (m *Manager) requeuePushAll(key string, items []CronPushItem) {
-	if len(items) == 0 {
-		return
-	}
-	arrived := m.drainPushQueueRaw(key)
-	combined := append(append([]CronPushItem(nil), items...), arrived...)
-	for _, item := range combined {
-		m.enqueuePush(key, item)
-	}
-}
-
-// drainPushQueueRaw clears pending without priority reordering (used by requeue).
-func (m *Manager) drainPushQueueRaw(key string) []CronPushItem {
-	q := m.pushQueueFor(key)
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	if len(q.pending) == 0 {
-		return nil
-	}
-	out := append([]CronPushItem(nil), q.pending...)
-	q.pending = nil
-	return out
 }
 
 // lookupTarget finds the project's most recently updated channel that carries a
@@ -1397,85 +1270,6 @@ func (m *Manager) convQueueFor(key string) *convQueue {
 		m.convQueues[key] = q
 	}
 	return q
-}
-
-// markReplied records that something substantive already reached the user in
-// this turn. pm_reply runs in the MCP host and the final summary runs here, so
-// without a shared marker a turn can answer twice.
-func (m *Manager) markReplied(scope string) {
-	if strings.TrimSpace(scope) == "" {
-		return
-	}
-	m.repliedMu.Lock()
-	m.replied[scope] = true
-	m.repliedMu.Unlock()
-}
-
-func (m *Manager) hasReplied(scope string) bool {
-	m.repliedMu.Lock()
-	defer m.repliedMu.Unlock()
-	return m.replied[scope]
-}
-
-func (m *Manager) clearReplied(scope string) {
-	m.repliedMu.Lock()
-	delete(m.replied, scope)
-	delete(m.answered, scope)
-	m.repliedMu.Unlock()
-}
-
-// markAcknowledged records that the user has been told this turn's work is
-// being picked up, so the platform does not say it a second time in its own
-// words when the agent starts the Run.
-func (m *Manager) markAcknowledged(scope string) {
-	if strings.TrimSpace(scope) == "" {
-		return
-	}
-	m.repliedMu.Lock()
-	m.acked[scope] = true
-	m.repliedMu.Unlock()
-}
-
-func (m *Manager) hasAcknowledged(scope string) bool {
-	m.repliedMu.Lock()
-	defer m.repliedMu.Unlock()
-	return m.acked[scope]
-}
-
-// clearTurnMarkers ends a turn: nothing it said may suppress anything in the
-// next one.
-func (m *Manager) clearTurnMarkers(scope string) {
-	m.repliedMu.Lock()
-	delete(m.replied, scope)
-	delete(m.answered, scope)
-	delete(m.acked, scope)
-	m.repliedMu.Unlock()
-}
-
-// markAnswered records that this turn's answer has been delivered.
-//
-// Only an explicit answer sets this. A progress milestone or a run
-// acknowledgement is not the answer, so neither may be the reason a later
-// answer is withheld.
-func (m *Manager) markAnswered(scope string) {
-	if strings.TrimSpace(scope) == "" {
-		return
-	}
-	m.repliedMu.Lock()
-	m.answered[scope] = true
-	m.repliedMu.Unlock()
-}
-
-func (m *Manager) hasAnswered(scope string) bool {
-	m.repliedMu.Lock()
-	defer m.repliedMu.Unlock()
-	return m.answered[scope]
-}
-
-// MarkConversationReplied lets the MCP host record an explicit agent reply for
-// the conversation's current turn.
-func (m *Manager) MarkConversationReplied(projectID string, scene Scene, conversationID string) {
-	m.markReplied(conversationTurnScope(projectID, scene, conversationID))
 }
 
 // sayNoAnswer reports a turn that ended without the agent submitting anything.

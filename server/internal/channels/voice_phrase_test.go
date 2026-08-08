@@ -11,6 +11,15 @@ import (
 	"github.com/cocofhu/approving/internal/models"
 )
 
+// managerWithLive is the smallest manager that can talk to a model: no bridge,
+// no channels, just the fast model wired in. Tests that only exercise phrasing
+// use it instead of standing up the whole thing.
+func managerWithLive(live LiveModel) *Manager {
+	m := &Manager{}
+	m.SetLiveModel(live)
+	return m
+}
+
 // recordingLive captures what one phrasing call looked like on the wire.
 type recordingLive struct {
 	configured bool
@@ -44,7 +53,7 @@ func (r *recordingLive) Complete(ctx context.Context, req liveagent.Request) (li
 // after it. The conclusion path deliberately does not share that cap.
 func TestAckPhrasingKeepsItsOwnCeiling(t *testing.T) {
 	live := &recordingLive{configured: true, timeout: 5 * time.Minute, answer: "行，那事我去弄。"}
-	m := &Manager{live: live}
+	m := managerWithLive(live)
 
 	if got := m.phraseThroughLive(context.Background(), dispatchAckPhrasePrompt, "对方说：修一下"); got != "行，那事我去弄。" {
 		t.Fatalf("ack = %q", got)
@@ -69,7 +78,7 @@ func TestAckPhrasingKeepsItsOwnCeiling(t *testing.T) {
 // rather than the ack ceiling.
 func TestConclusionPhrasingFollowsTheConfiguredTimeout(t *testing.T) {
 	live := &recordingLive{configured: true, timeout: 90 * time.Second, answer: "跑完了，两个用例挂在超时上。"}
-	m := &Manager{live: live}
+	m := managerWithLive(live)
 	rc := &runningChannel{cfg: models.ChannelConfig{ProjectID: "proj"}}
 
 	text, degraded := m.reportThroughDirector(context.Background(), rc,
@@ -96,7 +105,7 @@ func TestPhrasingFailuresFallBackRatherThanGoingSilent(t *testing.T) {
 			err: errors.New("connection refused")},
 		"empty answer": {configured: true, timeout: time.Second, answer: "   "},
 	} {
-		m := &Manager{live: live}
+		m := managerWithLive(live)
 		text, degraded := m.reportThroughDirector(context.Background(), rc,
 			InboundMessage{Text: "怎么样了"}, "2 failed: timeout")
 		if !degraded || text != "2 failed: timeout" {
@@ -109,7 +118,7 @@ func TestPhrasingFailuresFallBackRatherThanGoingSilent(t *testing.T) {
 
 	// An unconfigured model must not even be dialled.
 	quiet := &recordingLive{configured: false}
-	m := &Manager{live: quiet}
+	m := managerWithLive(quiet)
 	m.phraseThroughLive(context.Background(), dispatchAckPhrasePrompt, "对方说：修一下")
 	if quiet.calls != 0 {
 		t.Fatalf("called an unconfigured endpoint %d times", quiet.calls)
@@ -125,7 +134,7 @@ func TestPhrasingFailuresFallBackRatherThanGoingSilent(t *testing.T) {
 // The ack prompts are worth nothing if the user text never reaches the model.
 func TestAckPhrasingCarriesTheUserLineAndPrompt(t *testing.T) {
 	live := &recordingLive{configured: true, timeout: time.Second, answer: "好。"}
-	m := &Manager{live: live}
+	m := managerWithLive(live)
 	m.phraseThroughLive(context.Background(), refineAckPhrasePrompt, "对方说：重点看 Release")
 
 	if live.got.System != refineAckPhrasePrompt {

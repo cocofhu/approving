@@ -89,10 +89,6 @@ dispatch_pm / refine_work 都要用 user_reply 先接一句；平台会先发出
 // operator's body when one is configured.
 var liveSystemPrompt = ComposeVoicePrompt(DefaultLiveSystemPromptBody)
 
-// SetLiveModel wires the conversation model. Leaving it unset means every
-// message goes to a sandbox, which is slower but complete.
-func (m *Manager) SetLiveModel(model LiveModel) { m.live = model }
-
 // liveOutcome is what the conversation layer decided about one message.
 type liveOutcome struct {
 	// answered is true when the user has already been replied to and there is
@@ -128,7 +124,8 @@ func (o liveOutcome) applyTo(in *InboundMessage) {
 // handle it, just more slowly.
 func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel, in InboundMessage) liveOutcome {
 	ensureTraceID(&in)
-	if m.live == nil || !m.live.Configured() {
+	live := m.liveModel()
+	if live == nil || !live.Configured() {
 		// Still record a sample so every inbound turn has a TraceID row to join
 		// sandbox/MCP/outbound against — otherwise "no Live" leaves a hole in
 		// the call chain that debug cannot close.
@@ -162,7 +159,7 @@ func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel,
 	rec.shown(req.Messages)
 
 	for step := 0; step < m.toolLoopLimit(); step++ {
-		res, err := m.live.Complete(ctx, req)
+		res, err := live.Complete(ctx, req)
 		if err != nil {
 			// Not a user-visible failure: the message still gets answered, by
 			// the agent. Logged so an endpoint failing every call is visible as
@@ -697,7 +694,7 @@ type foregroundCapture struct {
 // agent keeps speaking for itself. That is a degradation, not a mode: the user
 // hears the work layer's own register, and the sample says so.
 func (m *Manager) beginForegroundCapture(rc *runningChannel, in InboundMessage) *foregroundCapture {
-	if m.live == nil || !m.live.Configured() {
+	if live := m.liveModel(); live == nil || !live.Configured() {
 		return &foregroundCapture{}
 	}
 	collect, ok := m.captureAgentReplies(rc.cfg.ProjectID, in.Scene, in.ConversationID)
@@ -743,8 +740,8 @@ func (c *foregroundCapture) egress(degraded bool) string {
 // report / synthesis cannot sit on a shorter hard-coded ceiling while route
 // uses 300s.
 func (m *Manager) liveCallTimeout(fallback time.Duration) time.Duration {
-	if m != nil && m.live != nil {
-		if d := m.live.Timeout(); d > 0 {
+	if live := m.liveModel(); live != nil {
+		if d := live.Timeout(); d > 0 {
 			return d
 		}
 	}

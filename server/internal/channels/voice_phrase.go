@@ -229,7 +229,8 @@ var errNoLiveModel = errors.New("channels: no conversation model available")
 // package goes through it, so the timeout handling, the empty-answer rule and
 // the trimming exist once.
 func (m *Manager) livePhrase(ctx context.Context, req phraseRequest) (string, error) {
-	if m == nil || m.live == nil || !m.live.Configured() {
+	live := m.liveModel()
+	if live == nil || !live.Configured() {
 		return "", errNoLiveModel
 	}
 	if strings.TrimSpace(req.System) == "" || len(req.Messages) == 0 {
@@ -237,7 +238,7 @@ func (m *Manager) livePhrase(ctx context.Context, req phraseRequest) (string, er
 	}
 	callCtx, cancel := context.WithTimeout(ctx, req.Timeout)
 	defer cancel()
-	res, err := m.live.Complete(callCtx, liveagent.Request{
+	res, err := live.Complete(callCtx, liveagent.Request{
 		System:    strings.TrimSpace(req.System),
 		Messages:  req.Messages,
 		MaxTokens: req.MaxTokens,
@@ -273,8 +274,8 @@ func (m *Manager) phraseThroughLive(ctx context.Context, system, user string) st
 		return ""
 	}
 	timeout := ackPhraseTimeout
-	if m != nil && m.live != nil {
-		if d := m.live.Timeout(); d > 0 && d < timeout {
+	if live := m.liveModel(); live != nil {
+		if d := live.Timeout(); d > 0 && d < timeout {
 			timeout = d
 		}
 	}

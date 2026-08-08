@@ -54,23 +54,12 @@ type pushQueue struct {
 	pending []CronPushItem
 }
 
-func (m *Manager) pushQueueFor(key string) *pushQueue {
-	m.pushMu.Lock()
-	defer m.pushMu.Unlock()
-	q, ok := m.pushQueues[key]
-	if !ok {
-		q = &pushQueue{}
-		m.pushQueues[key] = q
-	}
-	return q
-}
-
-// enqueuePushLocked merges / evicts per product rules. Caller must NOT hold q.mu.
-func (m *Manager) enqueuePush(key string, item CronPushItem) {
+// enqueue merges / evicts per product rules. Caller must NOT hold q.mu.
+func (g *outboundGateway) enqueue(key string, item CronPushItem) {
 	if item.Enqueued.IsZero() {
 		item.Enqueued = time.Now()
 	}
-	q := m.pushQueueFor(key)
+	q := g.queueFor(key)
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
@@ -196,40 +185,6 @@ func indexOldestNonProtected(items []CronPushItem) int {
 		}
 	}
 	return -1
-}
-
-// pendingPushKeys lists conversation keys that still hold queued pushes, so a
-// compensation sweep can find work without walking every conversation.
-func (m *Manager) pendingPushKeys() []string {
-	m.pushMu.Lock()
-	queues := make(map[string]*pushQueue, len(m.pushQueues))
-	for k, q := range m.pushQueues {
-		queues[k] = q
-	}
-	m.pushMu.Unlock()
-	keys := make([]string, 0, len(queues))
-	for k, q := range queues {
-		q.mu.Lock()
-		pending := len(q.pending)
-		q.mu.Unlock()
-		if pending > 0 {
-			keys = append(keys, k)
-		}
-	}
-	return keys
-}
-
-func (m *Manager) takePushQueue(key string) []CronPushItem {
-	q := m.pushQueueFor(key)
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	if len(q.pending) == 0 {
-		return nil
-	}
-	out := append([]CronPushItem(nil), q.pending...)
-	q.pending = nil
-	// Priority within a flush: changed/failed before compressible unchanged.
-	return sortPushByPriority(out)
 }
 
 func sortPushByPriority(items []CronPushItem) []CronPushItem {
