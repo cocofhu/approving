@@ -30,6 +30,10 @@ const (
 	// Run egress addressed to the project's ops target rather than to whoever
 	// asked for the work.
 	ReasonRunNotification = "run_notification"
+	// ReasonRunHeartbeat is the platform volunteering that a long-running task
+	// is still moving. Unlike every other Run egress it is not triggered by
+	// anything the work layer did; the platform asks on its own schedule.
+	ReasonRunHeartbeat = "run_heartbeat"
 	// ReasonOriginBinding is the notice that a Run is being detached from this
 	// conversation, or reconnected to it. It travels the guarded path like
 	// everything else; it escapes its own guard only by ordering, since the
@@ -46,6 +50,7 @@ func RunEgressReasons() []string {
 		ReasonPMReply,
 		ReasonTaskPaused,
 		ReasonTaskOutcome,
+		ReasonRunHeartbeat,
 		ReasonRunNotification,
 		ReasonOriginBinding,
 	}

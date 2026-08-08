@@ -119,6 +119,11 @@ type Engine struct {
 	// stopped and needs a person. Engine never blocks on it.
 	runPaused RunPausedObserver
 
+	// runHeartbeat is an optional async observer for runs that have been going
+	// a long time without an edge worth reporting, so a slow task stops looking
+	// exactly like a hung one.
+	runHeartbeat RunHeartbeatObserver
+
 	// reviewMu guards reviewSess: per parked producer session FIFO + single
 	// worker for node-inline review and gate hot-revise (SandboxChat-aligned).
 	reviewMu   sync.Mutex

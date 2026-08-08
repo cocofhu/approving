@@ -23,6 +23,14 @@ var errOriginUnbound = errors.New("run detached from its origin conversation")
 // system louder instead of quieter.
 const ReasonOriginUnbound = "origin_unbound"
 
+// ReasonLedgerOnly is why a plain progress report did not go out.
+//
+// It is recorded rather than delivered on purpose: a worker that narrates every
+// step turns the conversation into a build log. The fact is kept so a later
+// "how's it going" can be answered from it, and long-running work is surfaced
+// on the platform's schedule instead of the worker's.
+const ReasonLedgerOnly = "ledger_only"
+
 // originState says whether a Run is allowed to speak to the conversation that
 // created it.
 type originState int

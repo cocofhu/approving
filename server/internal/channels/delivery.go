@@ -202,6 +202,19 @@ func (m *Manager) DeliverConversationReply(ctx context.Context, reply Conversati
 	if scope == "" && strings.TrimSpace(reply.RunID) == "" {
 		scope = turn
 	}
+	// An answer about background work is phrased by the conversation layer like
+	// every other thing the platform says. Without this the docstring above was
+	// only half true: a worker's conclusion went out in the worker's register,
+	// so one conversation alternated between two voices depending on which
+	// layer happened to be speaking. Replies that belong to no run have no task
+	// to brief against and are left exactly as submitted.
+	if phrased := m.phraseRunReport(ctx, SendableRequest{
+		ProjectID: reply.ProjectID, RunID: reply.RunID, Scene: scene,
+		ConversationID: reply.ConversationID, TraceID: reply.TraceID,
+		Kind: sendable.KindFinal, Text: text,
+	}); strings.TrimSpace(phrased) != "" {
+		text = phrased
+	}
 	result, err := m.DeliverSendable(ctx, SendableRequest{
 		ProjectID: reply.ProjectID, Scene: scene, ConversationID: reply.ConversationID,
 		UserID: reply.UserID, RunID: strings.TrimSpace(reply.RunID),

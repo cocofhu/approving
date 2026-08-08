@@ -38,6 +38,9 @@ const (
 	KeyLiveMaxConcurrentWork   = "live_max_concurrent_work"
 	KeyLiveToolLoopLimit       = "live_tool_loop_limit"
 	KeyLiveMaxTokens           = "live_max_tokens"
+	// KeyRunHeartbeatMinutes is how long a task may run without the platform
+	// volunteering an update. 0 switches those updates off entirely.
+	KeyRunHeartbeatMinutes = "run_heartbeat_minutes"
 )
 
 // Knob value kinds. Ints render as steppers, strings as text inputs, secrets as
@@ -77,7 +80,7 @@ type LiveTuner interface {
 	SetLiveEndpoint(baseURL, apiKey, model string, timeout time.Duration)
 }
 
-// LiveLimits is one snapshot of the conversation-layer context windows.
+// LiveLimits is one snapshot of the conversation layer's tunables.
 type LiveLimits struct {
 	TranscriptWindow    int
 	LedgerLimit         int
@@ -85,6 +88,9 @@ type LiveLimits struct {
 	MaxConcurrentWork   int
 	ToolLoopLimit       int
 	MaxTokens           int
+	// RunHeartbeat is the minimum gap between volunteered updates about one
+	// long-running task. Zero switches them off.
+	RunHeartbeat time.Duration
 }
 
 // LiveLimitsController receives the effective conversation-layer windows.
@@ -176,6 +182,12 @@ func knobs() []knob {
 		{key: KeyLiveMaxTokens, label: "单次回复上限", unit: "token", kind: KindInt, min: 256,
 			envVar:  "APPROVING_LIVE_MAX_TOKENS",
 			fromCfg: func(c *config.Config) int { return liveIntOr(c.Live.MaxTokens, 2048) }},
+		// min 0 on purpose: 0 is the off switch. Everything else here has a
+		// floor because a too-small value degrades quietly, but a project that
+		// genuinely does not want unprompted updates needs a way to say so.
+		{key: KeyRunHeartbeatMinutes, label: "长跑任务主动汇报间隔", unit: "分钟（0=不汇报）", kind: KindInt, min: 0,
+			envVar:  "APPROVING_RUN_HEARTBEAT_MINUTES",
+			fromCfg: func(c *config.Config) int { return liveIntOr(c.Live.RunHeartbeatMinutes, 30) }},
 	}
 }
 
@@ -412,6 +424,7 @@ func (s *SettingsService) apply() {
 			MaxConcurrentWork:   m[KeyLiveMaxConcurrentWork],
 			ToolLoopLimit:       m[KeyLiveToolLoopLimit],
 			MaxTokens:           m[KeyLiveMaxTokens],
+			RunHeartbeat:        time.Duration(m[KeyRunHeartbeatMinutes]) * time.Minute,
 		})
 	}
 	if s.conc != nil {

@@ -67,6 +67,10 @@ func (m *Manager) SetLiveLimits(lim services.LiveLimits) {
 	setPositive(&m.liveMaxConcurrentWork, lim.MaxConcurrentWork, defaultMaxConcurrentWork)
 	setPositive(&m.liveToolLoopLimit, lim.ToolLoopLimit, defaultToolLoopLimit)
 	setPositive(&m.liveMaxTokens, lim.MaxTokens, defaultLiveMaxTokens)
+	// Not setPositive: zero is a meaningful value here, not an unset one. A
+	// project that does not want unprompted updates sets this to 0, and
+	// treating that as "fall back to the default" would ignore them.
+	m.SetHeartbeatInterval(lim.RunHeartbeat)
 }
 
 func (m *Manager) transcriptLimit() int {

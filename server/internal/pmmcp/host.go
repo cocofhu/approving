@@ -1255,14 +1255,18 @@ func toolSchemas(mcpID string) []map[string]any {
 				"有会话层时你提交的 text 不会原样直发。你在正文里写的内容默认不会外发，只有这里提交的 text 会进入转述。"+
 				"text 必须是事实清楚、用户能读懂的人话：不要出现 Run ID、工作流名、沙箱/工具/内部事件等实现细节，也不要写推理过程。"+
 				"一轮只交一条：把结论一次写完，不要拆成多条。返回 status=already_replied 表示这一轮已经收过结论了，"+
-				"此时不要改措辞重交，直接结束这一轮。", map[string]any{
+				"此时不要改措辞重交，直接结束这一轮。status=suppressed 同理（含该 Run 已被断开会话绑定），也不要重交。", map[string]any{
 				"text":       map[string]any{"type": "string", "description": "交给会话层转述的结论，人话，事实清楚"},
 				"runId":      map[string]any{"type": "string", "description": "可选：这条结论关联的 Run"},
 				"shortTitle": map[string]any{"type": "string", "description": "可选：关联任务的短标题（人话，禁止填 Run ID）"},
 			}),
-			platformmcp.Tool("pm_notify_progress", "向会话层提交一条进度/阻塞/确认事实（须含 stage/conclusion 等实质字段），由会话层转述后再发到 IM。返回 status=sent 表示已外发；status=suppressed 表示被限频/去重/合并等策略正常抑制（不是失败，不要改措辞重交）；只有真实投递失败才返回错误。", map[string]any{
+			platformmcp.Tool("pm_notify_progress", "向会话层提交一条进度/阻塞/确认事实（须含 stage/conclusion 等实质字段）。"+
+				"kind=progress 只记进台账，不会外发——用户什么时候需要知道进展由平台决定，不由你决定；"+
+				"你照常提交，它会成为对方问「怎么样了」时的答案。kind=blocked/action_required/final 会由会话层转述后发到 IM。"+
+				"返回 status=sent 表示已外发；status=suppressed 表示被策略正常抑制（限频、去重、只记台账、或该 Run 已断开会话）——"+
+				"这不是失败，不要改措辞重交；只有真实投递失败才返回错误。", map[string]any{
 				"runId":          map[string]any{"type": "string"},
-				"kind":           map[string]any{"type": "string", "description": "progress|blocked|action_required|final"},
+				"kind":           map[string]any{"type": "string", "description": "progress（只记台账）|blocked|action_required|final"},
 				"text":           map[string]any{"type": "string"},
 				"stage":          map[string]any{"type": "string"},
 				"conclusion":     map[string]any{"type": "string"},

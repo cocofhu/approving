@@ -21,15 +21,6 @@ import (
 // arrive, and the tools that read them. The model supplies the wording; this
 // file supplies the facts.
 
-// workNote is the most recent thing the platform actually observed about a
-// task. It is written when progress arrives and read when the user asks, which
-// is what makes "还在跑，现在在查代码" a fact rather than a guess.
-type workNote struct {
-	Stage   string
-	Blocked bool
-	At      time.Time
-}
-
 // ledgerEntry is one task as the director is allowed to describe it.
 type ledgerEntry struct {
 	TaskID       string `json:"task_id"`
@@ -190,9 +181,11 @@ func (m *Manager) entriesFromIdentities(projectID string, tasks []models.TaskIde
 			Status:     t.Status,
 			UpdatedAgo: humanizeAge(time.Since(t.UpdatedAt)),
 		}
-		if note, ok := m.workNoteFor(projectID, t.RunID); ok {
-			entry.Stage, entry.Blocked = note.Stage, note.Blocked
-			entry.LastProgress = note.Stage
+		// The note travels on the identity row itself, so the briefing costs no
+		// extra query and cannot disagree with the ledger it came from.
+		if stage := strings.TrimSpace(t.LastStage); stage != "" {
+			entry.Stage, entry.Blocked = stage, t.LastStageBlocked
+			entry.LastProgress = stage
 		}
 		if services.IsTerminalTaskStatus(t.Status) {
 			entry.ResultSummary = truncateRunes(strings.TrimSpace(t.RecentContext), 400)
@@ -266,30 +259,22 @@ func (m *Manager) lastOutboundText(rc *runningChannel, in InboundMessage) string
 
 // noteWorkProgress records what was just observed about a task so a later
 // "how's it going" can be answered from fact.
+//
+// It writes to the task ledger rather than to memory. For a task that runs for
+// hours this note is the only concrete thing the conversation can say about it,
+// and a restart used to drop every one of them at once — after which every
+// in-flight task answered from the status it had when it was created.
 func (m *Manager) noteWorkProgress(projectID, runID, stage string, blocked bool) {
-	runID = strings.TrimSpace(runID)
-	stage = strings.TrimSpace(ScrubForOutbound(stage))
-	if runID == "" || stage == "" {
+	if m.taskContext == nil {
 		return
 	}
-	m.noteMu.Lock()
-	defer m.noteMu.Unlock()
-	if m.workNotes == nil {
-		m.workNotes = map[string]workNote{}
+	stage = strings.TrimSpace(ScrubForOutbound(stage))
+	if strings.TrimSpace(runID) == "" || stage == "" {
+		return
 	}
-	m.workNotes[projectID+"|"+runID] = workNote{
-		Stage: truncateRunes(stage, 120), Blocked: blocked, At: time.Now(),
+	if err := m.taskContext.RecordWorkNote(projectID, runID, stage, blocked); err != nil {
+		log.Warn().Err(err).Str("run", runID).Msg("work note not recorded on the task ledger")
 	}
-}
-
-func (m *Manager) workNoteFor(projectID, runID string) (workNote, bool) {
-	if strings.TrimSpace(runID) == "" {
-		return workNote{}, false
-	}
-	m.noteMu.Lock()
-	defer m.noteMu.Unlock()
-	note, ok := m.workNotes[projectID+"|"+runID]
-	return note, ok
 }
 
 // labelProgress names which task an update is about, but only when the answer
@@ -535,9 +520,12 @@ func (m *Manager) completeEphemeralDispatch(rc *runningChannel, in InboundMessag
 }
 
 func (m *Manager) clearWorkNote(projectID, runID string) {
-	m.noteMu.Lock()
-	delete(m.workNotes, projectID+"|"+runID)
-	m.noteMu.Unlock()
+	if m.taskContext == nil || strings.TrimSpace(runID) == "" {
+		return
+	}
+	if err := m.taskContext.ClearWorkNote(projectID, runID); err != nil {
+		log.Debug().Err(err).Str("run", runID).Msg("work note not cleared")
+	}
 }
 
 // cancelForegroundTurn stops an in-flight sandbox turn for this conversation.

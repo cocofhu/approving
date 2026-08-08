@@ -364,6 +364,70 @@ func (s *TaskContextService) SetOriginBinding(projectID, runID string, bound boo
 	return identity, nil
 }
 
+// RecordWorkNote stores what the work layer just reported about a task, so a
+// later "how's it going" can be answered from the record instead of guessed
+// from the status the task had when it was created.
+//
+// Blank stages are ignored rather than stored: an empty note would overwrite a
+// real one with nothing, and the conversation would lose the only concrete
+// thing it could say.
+func (s *TaskContextService) RecordWorkNote(projectID, runID, stage string, blocked bool) error {
+	if s == nil || s.db == nil {
+		return errors.New("task context database is unavailable")
+	}
+	projectID, runID = strings.TrimSpace(projectID), strings.TrimSpace(runID)
+	stage = strings.TrimSpace(stage)
+	if projectID == "" || runID == "" || stage == "" {
+		return nil
+	}
+	now := s.now()
+	return s.db.Model(&models.TaskIdentity{}).
+		Where("run_id = ? AND project_id = ?", runID, projectID).
+		Updates(map[string]any{
+			"last_stage":         SoftTruncateRunes(stage, WorkNoteStageRunes),
+			"last_stage_blocked": blocked,
+			"last_stage_at":      &now,
+		}).Error
+}
+
+// WorkNoteStageRunes bounds a stored stage. It is a one-line "what is happening
+// right now", not a work log; the rest of the report belongs to the message
+// that carried it.
+const WorkNoteStageRunes = 120
+
+// ClearWorkNote drops the stage note, for when the work it described is no
+// longer happening at all.
+func (s *TaskContextService) ClearWorkNote(projectID, runID string) error {
+	if s == nil || s.db == nil {
+		return errors.New("task context database is unavailable")
+	}
+	projectID, runID = strings.TrimSpace(projectID), strings.TrimSpace(runID)
+	if projectID == "" || runID == "" {
+		return nil
+	}
+	return s.db.Model(&models.TaskIdentity{}).
+		Where("run_id = ? AND project_id = ?", runID, projectID).
+		Updates(map[string]any{
+			"last_stage": "", "last_stage_blocked": false, "last_stage_at": nil,
+		}).Error
+}
+
+// MarkHeartbeat records that the platform just volunteered an update about
+// this task, so the next tick can tell whether one is due.
+func (s *TaskContextService) MarkHeartbeat(projectID, runID string) error {
+	if s == nil || s.db == nil {
+		return errors.New("task context database is unavailable")
+	}
+	projectID, runID = strings.TrimSpace(projectID), strings.TrimSpace(runID)
+	if projectID == "" || runID == "" {
+		return nil
+	}
+	now := s.now()
+	return s.db.Model(&models.TaskIdentity{}).
+		Where("run_id = ? AND project_id = ?", runID, projectID).
+		Update("last_heartbeat_at", &now).Error
+}
+
 // CountActive counts the user's non-terminal tasks in one conversation. Reply
 // formatting uses it to decide whether a task label is needed at all: with a
 // single task in flight the context is already unambiguous.

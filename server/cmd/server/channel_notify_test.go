@@ -70,17 +70,46 @@ func TestChannelNotifierReportsSuppressionWithoutAnError(t *testing.T) {
 	n := channelIMNotifier{mgr: m}
 	target := pmmcp.IMTarget{Scene: "c2c", ConversationID: "user1", UserID: "u1"}
 
-	outcome, err := n.NotifyProgress("proj", "run-1", target, "progress", "已提交分支", "已提交分支", "", false, false)
+	// A blocker rather than plain progress: plain progress is recorded on the
+	// task ledger and never leaves, so it cannot exercise the egress policy.
+	outcome, err := n.NotifyProgress("proj", "run-1", target, "blocked", "依赖装不上", "装依赖", "", true, false)
 	if err != nil || !outcome.Sent {
-		t.Fatalf("first progress = %+v err=%v want sent", outcome, err)
+		t.Fatalf("first report = %+v err=%v want sent", outcome, err)
 	}
 
-	outcome, err = n.NotifyProgress("proj", "run-1", target, "progress", "已提交分支", "已提交分支", "", false, false)
+	outcome, err = n.NotifyProgress("proj", "run-1", target, "blocked", "依赖装不上", "装依赖", "", true, false)
 	if err != nil {
 		t.Fatalf("policy suppression must not surface as an error: %v", err)
 	}
 	if outcome.Sent || outcome.Reason == "" {
-		t.Fatalf("suppressed progress = %+v want sent=false with a reason", outcome)
+		t.Fatalf("suppressed report = %+v want sent=false with a reason", outcome)
+	}
+}
+
+// TestChannelNotifierReportsLedgerOnlyProgressAsSuppressed pins the other half
+// of the contract the tool description now promises: plain progress comes back
+// suppressed rather than sent, and never as an error — a worker told it failed
+// would rephrase and resubmit forever.
+func TestChannelNotifierReportsLedgerOnlyProgressAsSuppressed(t *testing.T) {
+	m := notifyTestManager(t)
+	m.Apply([]models.ChannelConfig{{
+		ID: "c1", Type: "qq", ProjectID: "proj", AppID: "app", Enabled: true,
+		CronDeliver: true, CronDeliverTarget: "c2c:user1",
+	}})
+	defer m.StopAll()
+
+	n := channelIMNotifier{mgr: m}
+	target := pmmcp.IMTarget{Scene: "c2c", ConversationID: "user1", UserID: "u1"}
+
+	outcome, err := n.NotifyProgress("proj", "run-1", target, "progress", "已提交分支", "已提交分支", "", false, false)
+	if err != nil {
+		t.Fatalf("a ledger-only report is not a failure: %v", err)
+	}
+	if outcome.Sent {
+		t.Fatalf("plain progress interrupted the user: %+v", outcome)
+	}
+	if outcome.Reason != channels.ReasonLedgerOnly {
+		t.Fatalf("reason = %q want %q", outcome.Reason, channels.ReasonLedgerOnly)
 	}
 }
 
@@ -91,7 +120,7 @@ func TestChannelNotifierReportsMissingTargetAsError(t *testing.T) {
 	n := channelIMNotifier{mgr: m}
 	outcome, err := n.NotifyProgress("proj", "run-1",
 		pmmcp.IMTarget{Scene: "c2c", ConversationID: "user1", UserID: "u1"},
-		"progress", "已提交分支", "已提交分支", "", false, false)
+		"blocked", "依赖装不上", "装依赖", "", true, false)
 	if !errors.Is(err, channels.ErrNoSendableTarget) {
 		t.Fatalf("missing egress target = %+v err=%v want ErrNoSendableTarget", outcome, err)
 	}

@@ -36,7 +36,21 @@ type TaskIdentity struct {
 	// results once landed in an unrelated cron session. A separate mark keeps
 	// the audit trail and gives delivery a state it can refuse outright.
 	OriginUnboundAt *time.Time `json:"originUnboundAt,omitempty"`
-	Language        string     `gorm:"size:16" json:"language,omitempty"`
+	// LastStage is the most recent thing the work layer actually reported about
+	// this task, which is what lets "还在跑，现在在查代码" be a fact rather than a
+	// guess. It lived in a memory map until it became the only record of a
+	// long-running task's progress — a restart then wiped every in-flight
+	// task's stage and the conversation went back to answering from the status
+	// the task had when it was created.
+	LastStage        string     `gorm:"size:255" json:"lastStage,omitempty"`
+	LastStageBlocked bool       `json:"lastStageBlocked,omitempty"`
+	LastStageAt      *time.Time `json:"lastStageAt,omitempty"`
+	// LastHeartbeatAt is when the platform last volunteered an update about
+	// this task. It lives here rather than in the engine because the engine has
+	// no idea who is listening — only the ledger knows which conversation is
+	// waiting and when it was last spoken to.
+	LastHeartbeatAt *time.Time `json:"lastHeartbeatAt,omitempty"`
+	Language         string     `gorm:"size:16" json:"language,omitempty"`
 	RecentContext   string     `gorm:"type:text" json:"recentContext,omitempty"`
 	Status          string     `gorm:"size:32;index" json:"status"`
 	TerminalAt      *time.Time `gorm:"index" json:"terminalAt,omitempty"`

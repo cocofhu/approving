@@ -306,6 +306,10 @@
             "label": "Run finished",
             "trigger": "The run completed, failed, or was cancelled"
           },
+          "run_heartbeat": {
+            "label": "Long-run check-in",
+            "trigger": "When a task has been going a while with nothing else to report, the platform speaks up on its own schedule; the worker is not involved"
+          },
           "origin_binding": {
             "label": "Binding change notice",
             "trigger": "When someone detaches or reconnects the run from its origin conversation on the run detail page"

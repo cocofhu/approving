@@ -68,6 +68,9 @@ type LiveConfig struct {
 	MaxConcurrentWork   int `yaml:"max_concurrent_work"`
 	ToolLoopLimit       int `yaml:"tool_loop_limit"`
 	MaxTokens           int `yaml:"max_tokens"`
+	// RunHeartbeatMinutes is how long a task may run without the platform
+	// volunteering an update. 0 switches those updates off.
+	RunHeartbeatMinutes int `yaml:"run_heartbeat_minutes"`
 }
 
 // Configured reports whether enough is set to call the endpoint. The key is not

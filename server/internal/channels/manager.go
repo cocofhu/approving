@@ -129,12 +129,9 @@ type Manager struct {
 	warmMu sync.Mutex
 	warmed map[string]bool
 
-	// workNotes is the conversation layer's memory of what the work layer last
-	// reported, keyed by project|run. It exists so a progress question is
-	// answered from something observed rather than from the model's impression
-	// of how long ago it delegated.
-	noteMu    sync.Mutex
-	workNotes map[string]workNote
+	// heartbeatInterval is the minimum gap between volunteered updates about
+	// one task. Zero switches them off.
+	heartbeatInterval time.Duration
 
 	// samples records what the conversation layer decided and why. Every
 	// previous round of this design was tuned by adding banned phrases, because
@@ -200,8 +197,9 @@ func NewManager(bridge *ChannelBridge, factories map[string]AdapterFactory, decr
 		replied:      map[string]bool{},
 		answered:     map[string]bool{},
 		acked:        map[string]bool{},
-		workNotes:    map[string]workNote{},
 		baseCtx:      context.Background(),
+
+		heartbeatInterval: DefaultHeartbeatInterval,
 		policy:       sendable.NewPolicy(nil, nil),
 	}
 	// The bridge already owns thread resolution and message persistence, so it

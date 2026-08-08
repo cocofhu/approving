@@ -417,6 +417,7 @@ func main() {
 	channelMgr.SetSynthesizer(newLiveSynthesizer(liveClient))
 	eng.SetRunTerminalObserver(runTerminalAdapter{mgr: channelMgr})
 	eng.SetRunPausedObserver(runPausedAdapter{mgr: channelMgr})
+	eng.SetRunHeartbeatObserver(runHeartbeatAdapter{mgr: channelMgr})
 	channelMgr.SetLoader(channelSvc.ListRaw)
 	channelSvc.SetOnChange(channelMgr.Reload)
 	channelMgr.ApplyOnBoot()
@@ -430,6 +431,11 @@ func main() {
 	// unrelated event happened to touch the same conversation. Sweep it on a
 	// timer so "等待人工" reaches the user even if nothing else ever happens.
 	go runPushQueueSweeper(sweeperCtx, channelMgr)
+	// A task can run for an hour between two events worth reporting, and that
+	// silence is indistinguishable from a hang. The platform asks on its own
+	// schedule rather than having the worker report in, so nothing about the
+	// worker changes and it cannot decide to be noisy.
+	go runHeartbeatSweeper(sweeperCtx, eng, channelMgr)
 	cronSched.Start(sweeperCtx)
 
 	h := &handlers.Handlers{
