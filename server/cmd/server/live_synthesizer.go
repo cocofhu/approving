@@ -18,6 +18,18 @@ const synthesisFallbackTimeout = 45 * time.Second
 // after a reasoning model spends budget deliberating.
 const synthesisMaxTokens = 2048
 
+// synthesisRetryMaxTokens is the second attempt's cap. A reasoning model can
+// spend the whole first budget thinking and return nothing at all — the
+// endpoint reports finish_reason=length with no content, which the client
+// rejects as ErrBudgetExhausted.
+//
+// That failure is worth one more call here, because the alternative is not a
+// slightly worse sentence: the caller's fallback quotes the raw findings digest,
+// so a model that stays silent is how a working agent's internal report ends up
+// in someone's chat window. Only this one error retries; a refusal, a timeout or
+// a bad endpoint would buy the same answer twice.
+const synthesisRetryMaxTokens = 2 * synthesisMaxTokens
+
 // synthesisSystemPrompt is the reporting voice. It is the same person the user
 // has been talking to all along, which is the whole point of phrasing an
 // outcome instead of pushing a template.
@@ -68,14 +80,24 @@ func newLiveSynthesizer(live *liveagent.Client) channels.SynthesisFunc {
 		callCtx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 
-		res, err := live.Complete(callCtx, liveagent.Request{
-			System:    synthesisSystemPrompt,
-			Messages:  []liveagent.Message{{Role: "user", Content: req.Brief}},
-			MaxTokens: synthesisMaxTokens,
-		})
+		ask := func(maxTokens int) (string, error) {
+			res, err := live.Complete(callCtx, liveagent.Request{
+				System:    synthesisSystemPrompt,
+				Messages:  []liveagent.Message{{Role: "user", Content: req.Brief}},
+				MaxTokens: maxTokens,
+			})
+			if err != nil {
+				return "", err
+			}
+			return strings.TrimSpace(res.Text), nil
+		}
+		text, err := ask(synthesisMaxTokens)
+		if errors.Is(err, liveagent.ErrBudgetExhausted) {
+			text, err = ask(synthesisRetryMaxTokens)
+		}
 		if err != nil {
 			return "", err
 		}
-		return strings.TrimSpace(res.Text), nil
+		return text, nil
 	}
 }

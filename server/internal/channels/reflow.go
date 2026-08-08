@@ -241,10 +241,11 @@ func outcomeBrief(identity *models.TaskIdentity, outcome TaskOutcome, language s
 func outcomeFallbackText(identity *models.TaskIdentity, outcome TaskOutcome, language string) string {
 	title := services.SanitizeShortTitle(identity.ShortTitle)
 	en := services.NormalizeLanguage(language) == "en"
-	facts := ScrubInternalTerms(strings.TrimSpace(outcome.ResultSummary))
-	// Keep the same budget as fireRunTerminal's digest — a second hard cut at
-	// 400 is what produced mid-word endings like「findi…」in IM.
-	facts = truncateRunes(facts, 800)
+	// The digest goes to completedOutcomeFallback unscrubbed on purpose: it
+	// chooses which sentences to quote by asking whether each one is clean, and
+	// a pre-scrubbed digest looks clean everywhere. What it returns is scrubbed
+	// before it leaves.
+	facts := strings.TrimSpace(outcome.ResultSummary)
 	switch strings.ToLower(strings.TrimSpace(outcome.Status)) {
 	case "completed":
 		return completedOutcomeFallback(title, facts, en)
@@ -274,15 +275,29 @@ func outcomeFallbackText(identity *models.TaskIdentity, outcome TaskOutcome, lan
 	}
 }
 
+// outcomeFallbackFactsRunes bounds what the degraded path is allowed to quote.
+// ResultSummary is written by the working agent for the platform, not for the
+// user: a full one is a report with commit hashes, module names and headings.
+// Quoting its opening conclusion is useful; pasting the whole thing is how a
+// finished task arrived in QQ as 「弄完了。对照…基线（git: 90713d62 Merge #177）…」.
+const outcomeFallbackFactsRunes = 160
+
 func completedOutcomeFallback(title, facts string, en bool) string {
-	facts = strings.TrimSpace(facts)
+	facts = ScrubInternalTerms(leadingConclusion(facts, outcomeFallbackFactsRunes))
 	if facts != "" {
-		// Findings already carry the substance. Gluing ShortTitle produced
-		// 「调研 … 和 wo弄完了」when the ledger title had been mid-token cut.
+		// The task has to be named. Two other jobs may have been handed over
+		// since this one started, and an unattributed 「弄完了」 reads as an
+		// answer to whichever was asked for last.
 		if en {
-			return "Done. " + facts
+			if title == "" {
+				return "That one's done: " + facts
+			}
+			return "\"" + title + "\" is done: " + facts
 		}
-		return "弄完了。" + facts
+		if title == "" {
+			return "刚才那件事跑完了：" + facts
+		}
+		return title + "跑完了：" + facts
 	}
 	if en {
 		if title == "" {
@@ -294,6 +309,64 @@ func completedOutcomeFallback(title, facts string, en bool) string {
 		return "刚才那个弄完了，但这一轮没留下可读结论。要我接着补查可以说。"
 	}
 	return title + "弄完了，但这一轮没留下可读结论。要我接着补查可以说。"
+}
+
+// leadingConclusion picks the part of a findings digest that can be said out
+// loud, up to limit runes.
+//
+// Selection is per sentence, and a sentence that carries internal vocabulary is
+// dropped whole rather than cleaned. Scrubbing words out of it leaves a hole —
+// 「对照基线（git: 90713d62 Merge #177），之后到 HEAD（652b0d68）只有文案改动」
+// becomes 「对照基线，之后到 只有文案改动」, which is not better, just broken.
+// The sentence next to it — 「原架构判断大体仍成立，但清单需要局部修订」— is the
+// conclusion, and it was already fine.
+//
+// Everything clean is dropped only for length, and then whole sentences at a
+// time, because the point of this path is that it still reads like a finished
+// thought. An empty result is honest: this digest was written for the platform,
+// and the caller says so instead of quoting it.
+func leadingConclusion(facts string, limit int) string {
+	facts = strings.TrimSpace(facts)
+	if facts == "" || limit <= 0 {
+		return ""
+	}
+	var kept strings.Builder
+	for _, sentence := range splitSentences(facts) {
+		if ContainsInternalTerms(sentence) {
+			continue
+		}
+		if kept.Len() == 0 && len([]rune(sentence)) > limit {
+			// A single clean sentence past the budget: shortened beats absent.
+			return services.SoftTruncateRunes(strings.TrimSpace(sentence), limit)
+		}
+		if kept.Len() > 0 && len([]rune(kept.String()))+len([]rune(sentence)) > limit {
+			break
+		}
+		kept.WriteString(sentence)
+	}
+	return strings.TrimSpace(kept.String())
+}
+
+// splitSentences cuts after CJK/latin sentence enders and newlines, keeping the
+// terminator (and any spacing that follows) with the sentence it ends, so the
+// pieces can be re-joined without losing the gaps between them.
+func splitSentences(text string) []string {
+	var out []string
+	var cur strings.Builder
+	for _, r := range text {
+		cur.WriteRune(r)
+		switch r {
+		case '。', '！', '？', '\n', '.', '!', '?', ';', '；':
+			if strings.TrimSpace(cur.String()) != "" {
+				out = append(out, cur.String())
+			}
+			cur.Reset()
+		}
+	}
+	if strings.TrimSpace(cur.String()) != "" {
+		out = append(out, cur.String())
+	}
+	return out
 }
 
 // humanizeFailureReason turns an aggregated failure cause into something a user
