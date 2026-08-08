@@ -109,7 +109,7 @@ func artifactMetaDTO(a models.Artifact) gin.H {
 	return out
 }
 
-func runSummaryDTO(r models.Run, currentNodeLabel string) gin.H {
+func runSummaryDTO(r models.Run, currentNodeLabel string, origin services.RunOrigin) gin.H {
 	out := gin.H{
 		"id": r.ID, "workflowId": r.WorkflowID, "workflowName": r.WorkflowName,
 		"workflowVersion": r.WorkflowVersion,
@@ -122,6 +122,15 @@ func runSummaryDTO(r models.Run, currentNodeLabel string) gin.H {
 	}
 	if currentNodeLabel != "" {
 		out["currentNodeLabel"] = currentNodeLabel
+	}
+	// Absent for web-triggered runs, following the currentNodeLabel convention:
+	// the list only says where a run came from when that is actually somewhere.
+	if origin.ConversationID != "" {
+		out["origin"] = gin.H{
+			"channel": origin.Channel, "scene": origin.Scene,
+			"conversationId": origin.ConversationID,
+			"externalUserId": origin.ExternalUserID,
+		}
 	}
 	return out
 }

@@ -26,6 +26,13 @@
       "api": "API",
       "pmMcp": "项目管理 MCP"
     },
+    "runOrigin": {
+      "qq": "QQ",
+      "chat": "对话",
+      "label": "{channel} 派活",
+      "labelWithUser": "{channel} 派活 · {user}",
+      "title": "由 {channel} 会话 {conversation} 派发"
+    },
     "statusFilter": {
       "selectedCount": "已选 {n} 项"
     },

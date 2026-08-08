@@ -34,6 +34,11 @@ func isProtectedPush(p CronPushItem) bool {
 
 // CronPushItem is a timed push waiting for a conversation idle slot.
 type CronPushItem struct {
+	// ID identifies this item across an enqueue/flush round trip so the caller
+	// can learn whether its own push actually went out or was deferred. Only
+	// set by callers that report a delivery outcome (run_notify); empty for
+	// fire-and-forget cron pushes.
+	ID        string
 	ProjectID string
 	Scene     Scene
 	Conv      string
@@ -191,6 +196,27 @@ func indexOldestNonProtected(items []CronPushItem) int {
 		}
 	}
 	return -1
+}
+
+// pendingPushKeys lists conversation keys that still hold queued pushes, so a
+// compensation sweep can find work without walking every conversation.
+func (m *Manager) pendingPushKeys() []string {
+	m.pushMu.Lock()
+	queues := make(map[string]*pushQueue, len(m.pushQueues))
+	for k, q := range m.pushQueues {
+		queues[k] = q
+	}
+	m.pushMu.Unlock()
+	keys := make([]string, 0, len(queues))
+	for k, q := range queues {
+		q.mu.Lock()
+		pending := len(q.pending)
+		q.mu.Unlock()
+		if pending > 0 {
+			keys = append(keys, k)
+		}
+	}
+	return keys
 }
 
 func (m *Manager) takePushQueue(key string) []CronPushItem {

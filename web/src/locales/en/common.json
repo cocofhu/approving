@@ -26,6 +26,13 @@
       "api": "API",
       "pmMcp": "Project Management MCP"
     },
+    "runOrigin": {
+      "qq": "QQ",
+      "chat": "Chat",
+      "label": "From {channel}",
+      "labelWithUser": "From {channel} · {user}",
+      "title": "Dispatched from {channel} conversation {conversation}"
+    },
     "statusFilter": {
       "selectedCount": "{n} selected"
     },

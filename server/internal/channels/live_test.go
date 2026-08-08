@@ -957,6 +957,99 @@ func TestTaskOutcomeReturnsToTheOriginConversation(t *testing.T) {
 	}
 }
 
+// A run that stops for a human is news the person who asked for it needs. It
+// used to produce nothing at all in the conversation, and the ledger kept
+// reporting the status the task had when it was created.
+func TestPausedTaskTellsTheOriginConversationAndUpdatesTheLedger(t *testing.T) {
+	fa := &fakeAdapter{}
+	m, tasks := liveManager(t, fa)
+
+	if _, err := tasks.EnsureIdentity(services.EnsureTaskIdentityInput{
+		RunID: "run-paused0001", ProjectID: "proj",
+		UserID:     services.SyntheticQQUserID("u1"),
+		ShortTitle: "登录页性能优化", Status: "queued",
+		OriginChannel: "qq", OriginScene: string(SceneC2C),
+		OriginConversationID: "user1", OriginExternalUserID: "u1",
+		Language:            "zh-CN",
+		OriginalRequirement: "调研并实现登录页性能优化",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	pause := TaskPause{
+		ProjectID: "proj", RunID: "run-paused0001", NodeID: "visual_bqc5", Iteration: 1,
+		Ask: "两版首屏方案都能达标，选哪一版继续做？",
+	}
+	if err := m.ReflowTaskPaused(context.Background(), pause); err != nil {
+		t.Fatalf("ReflowTaskPaused: %v", err)
+	}
+	// The engine can re-announce the same pause; the user must be asked once.
+	if err := m.ReflowTaskPaused(context.Background(), pause); err != nil {
+		t.Fatalf("ReflowTaskPaused (repeat): %v", err)
+	}
+
+	got := sentTexts(fa)
+	if len(got) != 1 {
+		t.Fatalf("pause sends = %v want exactly one nudge", got)
+	}
+	if !strings.Contains(got[0], "选哪一版") {
+		t.Fatalf("nudge dropped what the run is waiting on: %q", got[0])
+	}
+	if strings.Contains(got[0], "Approving") || ContainsInternalTerms(got[0]) {
+		t.Fatalf("nudge is not self-contained: %q", got[0])
+	}
+	fa.mu.Lock()
+	conv := fa.sent[0].ConversationID
+	fa.mu.Unlock()
+	if conv != "user1" {
+		t.Fatalf("nudge delivered to %q want the origin conversation", conv)
+	}
+
+	identity, err := tasks.IdentityForRun("run-paused0001", "proj")
+	if err != nil || identity == nil {
+		t.Fatalf("identity after pause = %+v err=%v", identity, err)
+	}
+	if identity.Status != "waiting_human" {
+		t.Fatalf("task status = %q want waiting_human", identity.Status)
+	}
+	if identity.TerminalAt != nil {
+		t.Fatal("a paused task has not ended and must stay active")
+	}
+}
+
+// A pause event that arrives after the run already ended must not reopen a
+// settled task or ask about work that is over.
+func TestStalePauseAfterTerminalIsIgnored(t *testing.T) {
+	fa := &fakeAdapter{}
+	m, tasks := liveManager(t, fa)
+	if _, err := tasks.EnsureIdentity(services.EnsureTaskIdentityInput{
+		RunID: "run-paused0002", ProjectID: "proj",
+		UserID:     services.SyntheticQQUserID("u1"),
+		ShortTitle: "结算页重构", Status: "completed",
+		OriginChannel: "qq", OriginScene: string(SceneC2C),
+		OriginConversationID: "user1", OriginExternalUserID: "u1", Language: "zh-CN",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := m.ReflowTaskPaused(context.Background(), TaskPause{
+		ProjectID: "proj", RunID: "run-paused0002", NodeID: "gate", Iteration: 1,
+	}); err != nil {
+		t.Fatalf("ReflowTaskPaused: %v", err)
+	}
+
+	if got := sentTexts(fa); len(got) != 0 {
+		t.Fatalf("stale pause produced %v", got)
+	}
+	identity, err := tasks.IdentityForRun("run-paused0002", "proj")
+	if err != nil || identity == nil {
+		t.Fatalf("identity = %+v err=%v", identity, err)
+	}
+	if !services.IsTerminalTaskStatus(identity.Status) {
+		t.Fatalf("task status = %q, a finished task must stay finished", identity.Status)
+	}
+}
+
 // After a completed delivery, briefing / get_status must surface the digest so
 // clarifying follow-ups answer from stored facts — not glossary definitions.
 func TestCompletedDigestSurfacesForFollowup(t *testing.T) {

@@ -1,4 +1,5 @@
 import { i18n } from './i18n'
+import type { RunOrigin } from './types'
 
 /** Run-state trigger codes + historical display aliases → i18n keys (not Triggers product page). */
 const TRIGGER_LABEL_KEYS: Record<string, string> = {
@@ -13,6 +14,40 @@ const TRIGGER_LABEL_KEYS: Record<string, string> = {
 export function formatTrigger(raw: string): string {
   const labelKey = TRIGGER_LABEL_KEYS[raw]
   return labelKey ? i18n.global.t(labelKey) : raw
+}
+
+/** Origin channel codes → i18n keys. Unknown channels display their own code. */
+const ORIGIN_CHANNEL_KEYS: Record<string, string> = {
+  qq: 'common.runOrigin.qq',
+}
+
+function originChannelLabel(channel?: string): string {
+  const code = (channel || '').trim().toLowerCase()
+  if (!code) return i18n.global.t('common.runOrigin.chat')
+  const key = ORIGIN_CHANNEL_KEYS[code]
+  return key ? i18n.global.t(key) : code.toUpperCase()
+}
+
+/**
+ * Renders where a run was dispatched from, for the run list. Empty for runs
+ * started in the web UI, which is what keeps the chip off rows that have no
+ * conversation behind them.
+ */
+export function formatRunOrigin(origin?: RunOrigin): string {
+  if (!origin?.conversationId) return ''
+  const channel = originChannelLabel(origin.channel)
+  const user = (origin.externalUserId || '').trim()
+  if (!user) return i18n.global.t('common.runOrigin.label', { channel })
+  return i18n.global.t('common.runOrigin.labelWithUser', { channel, user })
+}
+
+/** The full origin, for the chip's tooltip — the chip itself stays short. */
+export function formatRunOriginTitle(origin?: RunOrigin): string {
+  if (!origin?.conversationId) return ''
+  return i18n.global.t('common.runOrigin.title', {
+    channel: originChannelLabel(origin.channel),
+    conversation: origin.conversationId,
+  })
 }
 
 export function fmtTime(iso: string): string {

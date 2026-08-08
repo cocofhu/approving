@@ -144,6 +144,7 @@ type Manager struct {
 
 	pushMu     sync.Mutex
 	pushQueues map[string]*pushQueue
+	pushSent   func(id string)
 
 	baseCtx          context.Context
 	policy           *sendable.Policy
@@ -1136,6 +1137,16 @@ func (m *Manager) DeliverCron(d services.CronDelivery) error {
 // Text is sent as-is (no FormatCronPush). Implements services.RunNotifyDeliverer.
 // Missing target returns services.ErrRunNotifyNoTarget (caller treats as no-op).
 func (m *Manager) DeliverRunNotify(projectID, text string) error {
+	return m.DeliverRunNotifyTracked(projectID, text, "")
+}
+
+// DeliverRunNotifyTracked is DeliverRunNotify with an outcome the caller can
+// act on. When the conversation is mid-turn the push is queued rather than
+// sent, and this reports services.ErrRunNotifyDeferred so the caller does not
+// record a delivery that has not happened yet. Passing a non-empty trackID also
+// subscribes the item to the push-sent observer, which is how a deferred
+// receipt eventually settles. Implements services.RunNotifyTrackingDeliverer.
+func (m *Manager) DeliverRunNotifyTracked(projectID, text, trackID string) error {
 	_, scene, conv, err := m.lookupRunNotifyTarget(projectID)
 	if err != nil {
 		if errors.Is(err, ErrNoRunNotifyTarget) || errors.Is(err, ErrNoDeliveryChannel) {
@@ -1145,10 +1156,11 @@ func (m *Manager) DeliverRunNotify(projectID, text string) error {
 	}
 	key := convKey(projectID, scene, conv)
 	item := CronPushItem{
+		ID:        trackID,
 		ProjectID: projectID,
 		Scene:     scene,
 		Conv:      conv,
-		Category:  "run_notify",
+		Category:  runNotifyCategory,
 		Kind:      CronResultChanged, // priority: treat actionable Run alerts like "changed"
 		Text:      text,
 		Envelope: sendable.AppendSendable(sendable.DeliveryEnvelope{
@@ -1163,8 +1175,19 @@ func (m *Manager) DeliverRunNotify(projectID, text string) error {
 		Enqueued: time.Now(),
 	}
 	m.enqueuePush(key, item)
-	m.flushPushQueue(key)
-	return nil
+	outcome := m.flushPushQueue(key)
+	if trackID == "" {
+		return nil
+	}
+	sent, resolved := outcome[trackID]
+	switch {
+	case resolved && sent:
+		return nil
+	case resolved:
+		return errors.New("run notify send failed at transport")
+	default:
+		return services.ErrRunNotifyDeferred
+	}
 }
 
 // HasRunNotifyTarget reports whether an Enabled channel exposes a usable QQ
@@ -1174,21 +1197,26 @@ func (m *Manager) HasRunNotifyTarget(projectID string) bool {
 	return err == nil
 }
 
-func (m *Manager) flushPushQueue(key string) {
+// flushPushQueue drains the conversation's queue and reports, per tracked item
+// id, whether that item actually reached the transport. Items without an id are
+// fire-and-forget and absent from the result. An id missing from the result was
+// neither sent nor dropped — it is still queued, waiting for a later flush.
+func (m *Manager) flushPushQueue(key string) map[string]bool {
 	items := m.takePushQueue(key)
 	if len(items) == 0 {
-		return
+		return nil
 	}
+	outcome := map[string]bool{}
 	for i, item := range items {
 		// Re-check busy: a new user message may have arrived.
 		// Re-queue current AND all remaining — never drop the tail.
 		if m.IsConversationBusy(item.ProjectID, item.Scene, item.Conv) {
 			m.requeuePushAll(key, items[i:])
-			return
+			return outcome
 		}
 		var target *runningChannel
 		var err error
-		if item.Category == "run_notify" {
+		if item.Category == runNotifyCategory {
 			target, _, _, err = m.lookupRunNotifyTarget(item.ProjectID)
 		} else {
 			target, _, _, err = m.lookupDeliveryTarget(item.ProjectID)
@@ -1196,15 +1224,54 @@ func (m *Manager) flushPushQueue(key string) {
 		if err != nil {
 			log.Warn().Err(err).Str("project", item.ProjectID).Str("category", item.Category).
 				Msg("push flush: no delivery channel")
+			if item.ID != "" {
+				outcome[item.ID] = false
+			}
 			continue
 		}
 		stripped, urls := splitImageURLs(item.Text)
 		ctx, cancel := context.WithTimeout(m.baseCtx, 60*time.Second)
-		m.sendOutbound(ctx, target, OutboundMessage{
+		res := m.sendOutboundResult(ctx, target, OutboundMessage{
 			Scene: item.Scene, ConversationID: item.Conv, Text: stripped,
 			ImageURLs: urls, Envelope: item.Envelope,
 		})
 		cancel()
+		if item.ID == "" {
+			continue
+		}
+		outcome[item.ID] = res.Sent
+		if res.Sent {
+			m.notifyPushSent(item.ID)
+		}
+	}
+	return outcome
+}
+
+func (m *Manager) notifyPushSent(id string) {
+	m.pushMu.Lock()
+	observer := m.pushSent
+	m.pushMu.Unlock()
+	if observer != nil {
+		observer(id)
+	}
+}
+
+// SetPushSentObserver registers the callback invoked once a tracked push item
+// leaves the queue for real. It is what lets a deferred notification receipt
+// settle to delivered instead of staying deferred forever.
+func (m *Manager) SetPushSentObserver(fn func(id string)) {
+	m.pushMu.Lock()
+	m.pushSent = fn
+	m.pushMu.Unlock()
+}
+
+// SweepPushQueues re-attempts every conversation that still holds queued
+// pushes. Without this the queue only moves when some other event happens to
+// touch the same conversation, so a notification enqueued while the user was
+// mid-turn could sit in memory indefinitely.
+func (m *Manager) SweepPushQueues() {
+	for _, key := range m.pendingPushKeys() {
+		m.flushPushQueue(key)
 	}
 }
 

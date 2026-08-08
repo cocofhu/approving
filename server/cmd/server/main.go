@@ -416,6 +416,7 @@ func main() {
 	// that conversation's own words.
 	channelMgr.SetSynthesizer(newLiveSynthesizer(liveClient))
 	eng.SetRunTerminalObserver(runTerminalAdapter{mgr: channelMgr})
+	eng.SetRunPausedObserver(runPausedAdapter{mgr: channelMgr})
 	channelMgr.SetLoader(channelSvc.ListRaw)
 	channelSvc.SetOnChange(channelMgr.Reload)
 	channelMgr.ApplyOnBoot()
@@ -424,6 +425,11 @@ func main() {
 	go channelMgr.RecoverInterruptedTurns(sweeperCtx)
 	cronSched.SetChannelDeliverer(channelMgr)
 	runNotifySvc.SetDeliverer(channelMgr)
+	channelMgr.SetPushSentObserver(runNotifySvc.SettlePushSent)
+	// A push parked behind a busy conversation used to move only when some
+	// unrelated event happened to touch the same conversation. Sweep it on a
+	// timer so "等待人工" reaches the user even if nothing else ever happens.
+	go runPushQueueSweeper(sweeperCtx, channelMgr)
 	cronSched.Start(sweeperCtx)
 
 	h := &handlers.Handlers{

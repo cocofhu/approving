@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,8 +19,22 @@ type RunNotifyDeliverer interface {
 	DeliverRunNotify(projectID, text string) error
 }
 
+// RunNotifyTrackingDeliverer is the richer egress: the caller hands over a
+// token identifying the receipt, and the deliverer reports whether the message
+// actually went out. Without it a push parked behind a busy conversation is
+// indistinguishable from one that reached the user.
+type RunNotifyTrackingDeliverer interface {
+	DeliverRunNotifyTracked(projectID, text, trackID string) error
+}
+
 // ErrRunNotifyNoTarget is returned (and swallowed) when no QQ target is bound.
 var ErrRunNotifyNoTarget = errors.New("no run-notify delivery target")
+
+// ErrRunNotifyDeferred means the message is queued behind an in-flight user
+// turn. Like ErrRunNotifyNoTarget this is a state rather than a fault: retrying
+// here would only stack duplicates behind the same queue, so the receipt is
+// parked and the egress reports back when the queue drains.
+var ErrRunNotifyDeferred = errors.New("run notify deferred behind a busy conversation")
 
 // RunNotifyEvent is the Engine → service payload for a lifecycle side-effect.
 type RunNotifyEvent struct {
@@ -93,7 +108,9 @@ func (s *RunNotifyService) AttemptDeliver(ev RunNotifyEvent) {
 	}
 	events := ResolveNotifyEvents(project.NotifyPolicy, workflow.NotifyPolicy)
 	if !NotifyEventAllowed(events, kind) {
-		log.Debug().Str("run_id", ev.RunID).Str("kind", kind).
+		// Info, not debug: "the user was never told" is the exact symptom
+		// operators report, and at debug this path is invisible in production.
+		log.Info().Str("run_id", ev.RunID).Str("kind", kind).
 			Strs("resolved", events).Msg("run-notify: policy miss")
 		return
 	}
@@ -146,9 +163,10 @@ func (s *RunNotifyService) deliverWithRetry(ev RunNotifyEvent, projectID, text, 
 	if delays == nil {
 		delays = runNotifyRetryDelays
 	}
+	track := receiptTrackID(ev.RunID, ev.NodeID, ev.Iteration, kind)
 	var lastErr error
 	for attempt := 0; ; attempt++ {
-		err := s.deliver.DeliverRunNotify(projectID, text)
+		err := s.deliverOnce(projectID, text, track)
 		if err == nil {
 			s.markReceipt(ev, kind, "delivered", "")
 			return
@@ -159,6 +177,15 @@ func (s *RunNotifyService) deliverWithRetry(ev RunNotifyEvent, projectID, text, 
 			log.Info().Str("run_id", ev.RunID).Str("project", projectID).
 				Msg("run-notify: no channel target — no-op after claim")
 			s.markReceipt(ev, kind, "no_target", "")
+			return
+		}
+		// The message is queued, not lost. Recording it as deferred keeps the
+		// claim intact and lets the push sweeper settle it once the
+		// conversation frees up.
+		if errors.Is(err, ErrRunNotifyDeferred) {
+			log.Info().Str("run_id", ev.RunID).Str("project", projectID).Str("kind", kind).
+				Msg("run-notify: conversation busy — queued, awaiting flush")
+			s.markReceipt(ev, kind, "deferred", "")
 			return
 		}
 		lastErr = err
@@ -172,6 +199,51 @@ func (s *RunNotifyService) deliverWithRetry(ev RunNotifyEvent, projectID, text, 
 	log.Error().Err(lastErr).Str("run_id", ev.RunID).Str("project", projectID).
 		Msg("run-notify: send failed after retries")
 	s.markReceipt(ev, kind, "failed", lastErr.Error())
+}
+
+func (s *RunNotifyService) deliverOnce(projectID, text, trackID string) error {
+	if tracking, ok := s.deliver.(RunNotifyTrackingDeliverer); ok {
+		return tracking.DeliverRunNotifyTracked(projectID, text, trackID)
+	}
+	return s.deliver.DeliverRunNotify(projectID, text)
+}
+
+// receiptTrackID packs the receipt key into the token handed to the egress, so
+// a late delivery can be matched back to its row without keeping in-memory
+// state that a restart would lose.
+func receiptTrackID(runID, nodeID string, iteration int, kind string) string {
+	return strings.Join([]string{runID, nodeID, strconv.Itoa(iteration), kind}, "|")
+}
+
+// SettlePushSent flips a deferred receipt to delivered once the egress reports
+// the queued message finally went out. Rows in any other state are left alone:
+// a receipt that already reads delivered, failed or no_target has a settled
+// story that a late queue drain should not rewrite.
+func (s *RunNotifyService) SettlePushSent(trackID string) {
+	if s == nil || s.db == nil {
+		return
+	}
+	parts := strings.Split(trackID, "|")
+	if len(parts) != 4 {
+		return
+	}
+	iteration, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return
+	}
+	res := s.db.Model(&models.NotifyDeliveryReceipt{}).
+		Where("run_id = ? AND node_id = ? AND iteration = ? AND kind = ? AND delivery_status = ?",
+			parts[0], parts[1], iteration, parts[3], "deferred").
+		Updates(map[string]any{"delivery_status": "delivered", "delivery_error": ""})
+	if res.Error != nil {
+		log.Warn().Err(res.Error).Str("run_id", parts[0]).
+			Msg("run-notify: settling deferred receipt failed")
+		return
+	}
+	if res.RowsAffected > 0 {
+		log.Info().Str("run_id", parts[0]).Str("kind", parts[3]).
+			Msg("run-notify: deferred notification delivered on flush")
+	}
 }
 
 // markReceipt records the delivery outcome on the claimed receipt so a failed

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -90,6 +91,167 @@ func (m *Manager) ReflowTaskOutcome(ctx context.Context, outcome TaskOutcome) er
 	return err
 }
 
+// TaskPause is a Run that has stopped and cannot continue without a person, on
+// its way back to the conversation that asked for the work.
+type TaskPause struct {
+	ProjectID string
+	RunID     string
+	NodeID    string
+	Iteration int
+	// Ask is what the run stopped to hear, as the node phrased it. It is raw
+	// working-layer output, so it is filtered before any of it is quoted.
+	Ask string
+}
+
+// ReflowTaskPaused tells the origin conversation that its task has stopped and
+// is waiting on a person, and records that state on the task itself.
+//
+// Both halves matter. Without the message the user hears nothing at all between
+// dispatch and completion, so a run that stops for input is indistinguishable
+// from one that hung. Without the status write the ledger keeps reporting the
+// status the task had when it was created, which is how a run that had been
+// waiting for a human for half an hour still read as queued.
+func (m *Manager) ReflowTaskPaused(ctx context.Context, pause TaskPause) error {
+	runID := strings.TrimSpace(pause.RunID)
+	if runID == "" {
+		return errors.New("task pause requires a real run id")
+	}
+	if ctx == nil {
+		ctx = m.baseCtx
+	}
+	identity := m.identityForRun(runID, pause.ProjectID)
+	if identity == nil {
+		// Nobody dispatched this from a conversation; the project-level notify
+		// is the only audience it has.
+		return nil
+	}
+	// A pause event that arrives after the run already ended is stale. Acting
+	// on it would reopen a settled task and ask the user about work that is
+	// over.
+	if services.IsTerminalTaskStatus(identity.Status) {
+		return nil
+	}
+	m.markTaskWaitingHuman(identity)
+
+	conv := strings.TrimSpace(identity.OriginConversationID)
+	if conv == "" {
+		log.Debug().Str("run", runID).Msg("reflow: paused task has no origin conversation, skipping")
+		return nil
+	}
+	scene := Scene(strings.TrimSpace(identity.OriginScene))
+	if scene == "" {
+		scene = SceneC2C
+	}
+
+	traceID := m.traceIDForReflow(identity)
+	language := taskLanguage(identity)
+	text := m.synthesizeForTask(ctx, identity, scene, conv, traceID,
+		pauseBrief(identity, pause, language),
+		pauseFallbackText(identity, pause, language))
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+	_, err := m.DeliverSendable(ctx, SendableRequest{
+		ProjectID: identity.ProjectID, Scene: scene, ConversationID: conv,
+		UserID: identity.OriginExternalUserID, RunID: runID,
+		TraceID: traceID,
+		Kind:    sendable.KindActionRequired, Reason: "task_paused",
+		Priority: sendable.PriorityCritical,
+		// One nudge per pause. A run can stop at several nodes, and the same
+		// node can pause again on a later iteration, so both are in the key —
+		// otherwise the second stop would be silently deduped away.
+		DedupeKey: strings.Join([]string{
+			"task-paused", runID, pause.NodeID, strconv.Itoa(pause.Iteration), conv,
+		}, ":"),
+		Text: text,
+	})
+	return err
+}
+
+// markTaskWaitingHuman records the pause on the task ledger so status questions
+// stop answering with whatever the run's status happened to be at creation.
+func (m *Manager) markTaskWaitingHuman(identity *models.TaskIdentity) {
+	if m.taskContext == nil || identity == nil {
+		return
+	}
+	if strings.EqualFold(strings.TrimSpace(identity.Status), taskStatusWaitingHuman) {
+		return
+	}
+	_, err := m.taskContext.UpdateIdentity(services.EnsureTaskIdentityInput{
+		RunID: identity.RunID, ProjectID: identity.ProjectID, UserID: identity.UserID,
+		Status: taskStatusWaitingHuman,
+	})
+	if err != nil {
+		log.Warn().Err(err).Str("run", identity.RunID).
+			Msg("reflow: writing waiting_human task status failed")
+	}
+}
+
+// taskStatusWaitingHuman matches the Run status vocabulary so the ledger and
+// the run list read the same way.
+const taskStatusWaitingHuman = "waiting_human"
+
+// pauseAskRunes bounds how much of the node's own words may be quoted. The
+// pause detail is written by the working agent for the platform, so the same
+// per-sentence filter as a findings digest applies: quote the part that is a
+// question to the user, drop the part that is a work log.
+const pauseAskRunes = 160
+
+// pauseBrief states what the conversation's agent may say. The task has not
+// ended, so the one thing the message must do is make clear that it is the
+// user's turn now.
+func pauseBrief(identity *models.TaskIdentity, pause TaskPause, language string) string {
+	var b strings.Builder
+	b.WriteString("后台任务停下来了，需要用户拍板才能继续，请用一到两句话说清楚。\n")
+	if title := services.SanitizeShortTitle(identity.ShortTitle); title != "" {
+		b.WriteString("任务：" + title + "\n")
+	}
+	if req := strings.TrimSpace(identity.OriginalRequirement); req != "" {
+		b.WriteString("用户当初的要求：" + truncateRunes(req, 200) + "\n")
+	}
+	if ask := leadingConclusion(pause.Ask, pauseAskRunes); ask != "" {
+		b.WriteString("停下来是想问：" + ask + "\n")
+	} else {
+		b.WriteString("这一轮没有留下可读的提问内容。如实说需要对方确认才能继续，问对方要怎么走；禁止编造具体选项。\n")
+	}
+	b.WriteString("要求：说人话，像同事当面问一句；先说卡在哪需要什么，再问对方怎么定；")
+	b.WriteString("不要出现任务编号、工作流名、节点名、执行环境、工具名；不要说「请前往 Approving 查看」；")
+	b.WriteString("不要说任务已经完成或失败——它还在等。")
+	if services.NormalizeLanguage(language) == "en" {
+		b.WriteString("\n用英文回答。")
+	}
+	return b.String()
+}
+
+// pauseFallbackText is what goes out when phrasing is unavailable. Like the
+// outcome fallback it has to stand on its own, and it must not send the user
+// somewhere else to find out what is being asked.
+func pauseFallbackText(identity *models.TaskIdentity, pause TaskPause, language string) string {
+	en := services.NormalizeLanguage(language) == "en"
+	title := services.SanitizeShortTitle(identity.ShortTitle)
+	subject := title
+	if subject == "" {
+		if en {
+			subject = "That one"
+		} else {
+			subject = "刚才那件事"
+		}
+	} else if en {
+		subject = "\"" + title + "\""
+	}
+	ask := leadingConclusion(pause.Ask, pauseAskRunes)
+	if ask != "" {
+		if en {
+			return subject + " is waiting on you: " + ask + " Tell me how you want to go and I'll carry on."
+		}
+		return subject + "停下来等你拿主意：" + ask + "你说怎么走，我就接着做。"
+	}
+	if en {
+		return subject + " has stopped and needs your call before it can go further. Tell me how you want to handle it."
+	}
+	return subject + "做到一半停下了，得你确认才能往下走。你说说想怎么处理。"
+}
+
 // traceIDForReflow joins a terminal outcome to the inbound turn that dispatched
 // it via the write-once OriginTraceID on TaskIdentity. An empty result is fine —
 // delivery still proceeds without a span join (including historical rows that
@@ -108,9 +270,18 @@ func (m *Manager) traceIDForReflow(identity *models.TaskIdentity) string {
 // the user actually receives whenever the agent is busy or unavailable.
 func (m *Manager) synthesizeOutcome(ctx context.Context, identity *models.TaskIdentity,
 	outcome TaskOutcome, scene Scene, conv, traceID string) string {
+	language := taskLanguage(identity)
+	return m.synthesizeForTask(ctx, identity, scene, conv, traceID,
+		outcomeBrief(identity, outcome, language),
+		outcomeFallbackText(identity, outcome, language))
+}
+
+// synthesizeForTask is the shared phrasing path: hand the conversation layer a
+// structured brief and the message that goes out if phrasing is unavailable.
+func (m *Manager) synthesizeForTask(ctx context.Context, identity *models.TaskIdentity,
+	scene Scene, conv, traceID, brief, fallback string) string {
 	started := time.Now()
 	language := taskLanguage(identity)
-	fallback := outcomeFallbackText(identity, outcome, language)
 	status, detail := "ok", "synthesized"
 	text := ""
 	if m.synthesize == nil {
@@ -126,7 +297,7 @@ func (m *Manager) synthesizeOutcome(ctx context.Context, identity *models.TaskId
 			ExternalUserID: identity.OriginExternalUserID,
 			RunID:          identity.RunID, ShortTitle: identity.ShortTitle,
 			Language: language, Fallback: fallback,
-			Brief: outcomeBrief(identity, outcome, language),
+			Brief: brief,
 		}
 		var err error
 		text, err = m.synthesize(ctx, req)

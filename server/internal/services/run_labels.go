@@ -138,6 +138,48 @@ func (s *RunService) CurrentNodeIDs(runs []models.Run) map[string]string {
 	return ids
 }
 
+// RunOrigin says where a Run was dispatched from, for the runs that came in
+// through a conversation rather than the web UI.
+type RunOrigin struct {
+	Channel        string `json:"channel,omitempty"`
+	Scene          string `json:"scene,omitempty"`
+	ConversationID string `json:"conversationId,omitempty"`
+	ExternalUserID string `json:"externalUserId,omitempty"`
+}
+
+// RunOrigins resolves dispatch origins for a page of runs in one query. Runs
+// started from the web UI have no task identity and are simply absent from the
+// result, which is what lets the caller render nothing for them.
+func (s *RunService) RunOrigins(runs []models.Run) map[string]RunOrigin {
+	if len(runs) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(runs))
+	for _, r := range runs {
+		ids = append(ids, r.ID)
+	}
+	var rows []models.TaskIdentity
+	if err := s.db.
+		Select("run_id", "origin_channel", "origin_scene", "origin_conversation_id", "origin_external_user_id").
+		Where("run_id IN ? AND origin_conversation_id <> ''", ids).
+		Find(&rows).Error; err != nil {
+		return nil
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	out := make(map[string]RunOrigin, len(rows))
+	for _, row := range rows {
+		out[row.RunID] = RunOrigin{
+			Channel:        row.OriginChannel,
+			Scene:          row.OriginScene,
+			ConversationID: row.OriginConversationID,
+			ExternalUserID: row.OriginExternalUserID,
+		}
+	}
+	return out
+}
+
 // RunFailedError returns the latest error message from failed StateRuns for a
 // failed run, or "" when none.
 func (s *RunService) RunFailedError(runID string) string {

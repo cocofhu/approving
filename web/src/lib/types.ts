@@ -639,6 +639,14 @@ export interface RunVar {
   value: any
 }
 
+/** The conversation a run was dispatched from, when it did not start in the UI. */
+export interface RunOrigin {
+  channel?: string
+  scene?: string
+  conversationId?: string
+  externalUserId?: string
+}
+
 export interface Run {
   id: string
   workflowId: string
@@ -658,6 +666,8 @@ export interface Run {
   currentNodeLabel?: string
   /** Admission priority: high | normal | low (default normal). */
   priority?: 'high' | 'normal' | 'low'
+  /** Where this run was dispatched from. Absent for runs started in the web UI. */
+  origin?: RunOrigin
   tags?: string[]
   attempt?: number
   // The graph snapshot this run executed (pinned at start). Lets the run detail
