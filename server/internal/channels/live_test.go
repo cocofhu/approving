@@ -571,7 +571,7 @@ func TestTaskOutcomeReturnsToTheOriginConversation(t *testing.T) {
 
 	outcome := TaskOutcome{
 		ProjectID: "proj", RunID: "run-abc123def456", Status: "completed",
-		ResultSummary: "超时与重试已对齐。\nPR/MR：https://github.com/org/repo/pull/9",
+		ResultSummary: "超时与重试已对齐。\n交付链接：https://github.com/org/repo/pull/9",
 	}
 	if err := m.ReflowTaskOutcome(context.Background(), outcome); err != nil {
 		t.Fatalf("ReflowTaskOutcome: %v", err)
@@ -612,18 +612,18 @@ func TestTaskOutcomeReturnsToTheOriginConversation(t *testing.T) {
 }
 
 // After a completed delivery, briefing / get_status must surface the digest so
-// 「PR是什么」resolves to that MR/PR — not a glossary definition.
-func TestCompletedDigestSurfacesForPRFollowup(t *testing.T) {
+// clarifying follow-ups answer from stored facts — not glossary definitions.
+func TestCompletedDigestSurfacesForFollowup(t *testing.T) {
 	fa := &fakeAdapter{}
 	m, tasks := liveManager(t, fa)
-	const mr = "https://github.com/org/repo/pull/12"
+	const link = "https://github.com/org/repo/pull/12"
 	if _, err := tasks.EnsureIdentity(services.EnsureTaskIdentityInput{
-		RunID: "run-prfollow01", ProjectID: "proj",
+		RunID: "run-follow01", ProjectID: "proj",
 		UserID:     services.SyntheticQQUserID("u1"),
 		ShortTitle: "对齐超时", Status: "completed",
 		OriginChannel: "qq", OriginScene: string(SceneC2C),
 		OriginConversationID: "user1", OriginExternalUserID: "u1",
-		Language: "zh-CN", RecentContext: "关键发现已写入。\nPR/MR：" + mr,
+		Language: "zh-CN", RecentContext: "关键发现已写入。\n交付链接：" + link,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -639,17 +639,17 @@ func TestCompletedDigestSurfacesForPRFollowup(t *testing.T) {
 	}
 	in := InboundMessage{UserID: "u1", ConversationID: "user1", Scene: SceneC2C}
 	brief := m.buildDirectorContext(rc, in).render()
-	for _, need := range []string{mr, "结论摘要", "禁止百科"} {
+	for _, need := range []string{link, "结论摘要", "名词百科"} {
 		if !strings.Contains(brief, need) {
 			t.Fatalf("briefing missing %q:\n%s", need, brief)
 		}
 	}
 	raw := m.runGetStatus(rc, in, "")
-	if !strings.Contains(raw, mr) || !strings.Contains(raw, "result_summary") {
+	if !strings.Contains(raw, link) || !strings.Contains(raw, "result_summary") {
 		t.Fatalf("get_status missing digest: %s", raw)
 	}
-	if !strings.Contains(raw, "禁止百科") {
-		t.Fatalf("get_status missing PR follow-up note: %s", raw)
+	if !strings.Contains(raw, "名词百科") {
+		t.Fatalf("get_status missing delivery follow-up note: %s", raw)
 	}
 }
 

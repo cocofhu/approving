@@ -1354,10 +1354,10 @@ func TestLiveSystemPromptWithholdsTheModelIdentity(t *testing.T) {
 	}
 }
 
-func TestLiveSystemPromptTreatsPRAsDeliveryNotGlossary(t *testing.T) {
-	for _, required := range []string{"PR是什么", "禁止百科", "result_summary"} {
+func TestLiveSystemPromptAnswersFollowupsFromDeliveryFacts(t *testing.T) {
+	for _, required := range []string{"追问", "result_summary", "名词百科"} {
 		if !strings.Contains(liveSystemPrompt, required) {
-			t.Fatalf("live prompt missing PR-follow-up rule (%s): %s", required, liveSystemPrompt)
+			t.Fatalf("live prompt missing delivery follow-up rule (%s): %s", required, liveSystemPrompt)
 		}
 	}
 }

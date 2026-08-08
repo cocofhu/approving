@@ -49,7 +49,7 @@ type ledgerEntry struct {
 	Stage        string `json:"stage,omitempty"`
 	Blocked      bool   `json:"blocked,omitempty"`
 	LastProgress string `json:"last_progress,omitempty"`
-	// ResultSummary is the completed-run digest (findings + optional PR/MR URL).
+	// ResultSummary is the completed-run digest (findings, links, etc.).
 	// Empty for in-flight work.
 	ResultSummary string `json:"result_summary,omitempty"`
 	UpdatedAgo    string `json:"updated_ago,omitempty"`
@@ -128,7 +128,7 @@ func (dc directorContext) render() string {
 			b.WriteString("其中有失败或取消：先说清状况，再让对方选下一步（重试 / 换范围或改方向 / 先搁置）。不要擅自说接着做。\n")
 		}
 		if hasCompletedWithSummary(dc.RecentTerminal) {
-			b.WriteString("对方若问 PR/MR 是什么、哪个、链接：指刚结束任务的交付，见结论摘要；有链接就直接给，禁止百科解释缩写。\n")
+			b.WriteString("对方若追问刚结束任务里的细节或交付物：用结论摘要和上一条汇报作答；没有的事实如实说没有，不要抛开摘要做名词百科。\n")
 		}
 	}
 	if dc.ConversationBusy {
@@ -269,8 +269,8 @@ func (m *Manager) lastOutboundText(rc *runningChannel, in InboundMessage) string
 	}
 	for i := len(entries) - 1; i >= 0; i-- {
 		if entries[i].Role == "assistant" {
-			// Keep room for a PR/MR URL in the last report so「PR是什么」
-			// can be answered from the prior outbound when get_status is empty.
+			// Keep room for links / findings in the last report so follow-ups
+			// can be answered from the prior outbound when get_status is thin.
 			return truncateRunes(strings.TrimSpace(entries[i].Text), 400)
 		}
 	}
@@ -352,7 +352,7 @@ func (m *Manager) runGetStatus(rc *runningChannel, in InboundMessage, taskID str
 				if isFailedOrCancelledStatus(t.Status) {
 					note += " " + failedStatusChoiceNote
 				} else if strings.TrimSpace(t.ResultSummary) != "" {
-					note += " " + prFollowupNote
+					note += " " + deliveryFollowupNote
 				}
 				return encodeToolResult(statusResult{
 					Tasks: nil, RecentTerminal: []ledgerEntry{t},
@@ -372,7 +372,7 @@ func (m *Manager) runGetStatus(rc *runningChannel, in InboundMessage, taskID str
 		if hasFailedOrCancelled(recent) {
 			res.Note += " " + failedStatusChoiceNote
 		} else if hasCompletedWithSummary(recent) {
-			res.Note += " " + prFollowupNote
+			res.Note += " " + deliveryFollowupNote
 		}
 	case len(tasks) == 0:
 		res.Note = "现在没有在跑的任务，也没有刚结束的记录。如果用户问的事情还没开始，用 dispatch_pm 派下去；不要编造完成或失败。"
@@ -391,9 +391,9 @@ func (m *Manager) runGetStatus(rc *runningChannel, in InboundMessage, taskID str
 // restarting failed work. The user should pick the next step.
 const failedStatusChoiceNote = "有失败或取消时：先如实说状况，再明确让对方选——重试、换范围/改方向、还是先搁置。不要擅自派活或说「我接着做」。"
 
-// prFollowupNote stops「PR是什么」from becoming a glossary definition after a
-// completed delivery that already left a result_summary (often with mr_url).
-const prFollowupNote = "对方若问 PR/MR 是什么、哪个、链接：指刚结束任务的交付，见 result_summary；有链接就直接给，没有就如实说这轮没留下；禁止百科解释缩写。"
+// deliveryFollowupNote steers clarifying follow-ups after a completed delivery
+// toward result_summary facts, instead of glossary answers that ignore them.
+const deliveryFollowupNote = "对方若追问刚结束任务里的细节或交付物：用 result_summary 和上一条汇报作答；有就直接给，没有就如实说这轮没留下；禁止抛开摘要做名词百科。"
 
 func hasFailedOrCancelled(entries []ledgerEntry) bool {
 	for _, e := range entries {

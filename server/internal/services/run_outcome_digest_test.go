@@ -67,10 +67,10 @@ func TestDigestedRunOutcomeEmptyWithoutReadableArtifacts(t *testing.T) {
 func TestAppendRunDeliveryURL(t *testing.T) {
 	const url = "https://github.com/org/repo/pull/42"
 	if got := AppendRunDeliveryURL("主干超时已对齐。", url); !strings.Contains(got, url) ||
-		!strings.Contains(got, "主干超时") {
+		!strings.Contains(got, "主干超时") || !strings.Contains(got, "交付链接") {
 		t.Fatalf("append = %q", got)
 	}
-	if got := AppendRunDeliveryURL("", url); got != "PR/MR："+url {
+	if got := AppendRunDeliveryURL("", url); got != "交付链接："+url {
 		t.Fatalf("empty digest = %q", got)
 	}
 	already := "见 " + url

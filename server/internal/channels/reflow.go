@@ -334,8 +334,8 @@ func humanizeFailureReason(reason string, en bool) string {
 // answering "in progress" forever. Without this the task table is the only
 // place a user's question is answered from, and it would never be updated.
 //
-// For completed work, ResultSummary (including any PR/MR URL) is persisted as
-// RecentContext so get_status / briefing can answer「PR是什么」from facts.
+// For completed work, ResultSummary (findings / delivery URLs) is persisted as
+// RecentContext so get_status / briefing can answer follow-ups from facts.
 func (m *Manager) syncTerminalStatus(identity *models.TaskIdentity, outcome TaskOutcome) {
 	if m.taskContext == nil || identity == nil {
 		return
