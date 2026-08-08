@@ -268,7 +268,7 @@ func (m *Manager) lastOutboundText(rc *runningChannel, in InboundMessage) string
 // "how's it going" can be answered from fact.
 func (m *Manager) noteWorkProgress(projectID, runID, stage string, blocked bool) {
 	runID = strings.TrimSpace(runID)
-	stage = strings.TrimSpace(ScrubInternalTerms(stage))
+	stage = strings.TrimSpace(ScrubForOutbound(stage))
 	if runID == "" || stage == "" {
 		return
 	}

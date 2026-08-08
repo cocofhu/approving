@@ -95,6 +95,13 @@ var verdictScaffolding = regexp.MustCompile(`(?m)(^|[。；;\n])\s*(最终判定
 // pm_reply / channel delivery. These leaked through FinalSummary after #161.
 var deliveryReceiptLine = regexp.MustCompile(`(?im)^\s*(已发送|已通过\s*QQ\s*回复用户|稍等，?我看一下|Give me a moment on this one|已开始处理|任务已启动|收到，正在处理)\s*[。.!！…]*\s*$`)
 
+// ScrubForOutbound is the single policy entry for user-visible channel text.
+// sendOutboundResult applies it as the final gate; other call sites that still
+// scrub early do so for local hygiene and must stay behavior-equivalent.
+func ScrubForOutbound(text string) string {
+	return ScrubInternalTerms(text)
+}
+
 // ScrubInternalTerms makes outbound text safe to show a user: internal
 // identifiers are removed, platform vocabulary is rewritten in plain language,
 // and machine scaffolding lines are dropped. It is deliberately applied to every

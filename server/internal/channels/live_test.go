@@ -178,6 +178,24 @@ func TestScrubInternalTermsCleansModelComposedText(t *testing.T) {
 		if strings.Contains(got, "  ") || strings.HasPrefix(got, " ") {
 			t.Errorf("ScrubInternalTerms(%q) left ragged spacing: %q", c.in, got)
 		}
+		if via := ScrubForOutbound(c.in); via != got {
+			t.Errorf("ScrubForOutbound drifted from ScrubInternalTerms:\n  %q\n  %q", via, got)
+		}
+	}
+}
+
+// Bare「继续」is casual chatter ("那继续吧"), not a retry affirmation. Explicit
+// retry verbs and「继续做」still short-circuit.
+func TestLooksLikeRetryAffirmationNarrowContinue(t *testing.T) {
+	for _, text := range []string{"继续做", "接着做", "重跑", "再试一次", "retry", "try again"} {
+		if !looksLikeRetryAffirmation(text) {
+			t.Errorf("%q should count as retry affirmation", text)
+		}
+	}
+	for _, text := range []string{"继续", "那继续吧", "好的继续", "继续聊", "不要重跑"} {
+		if looksLikeRetryAffirmation(text) {
+			t.Errorf("%q must not count as retry affirmation", text)
+		}
 	}
 }
 
@@ -586,6 +604,18 @@ func TestClaimsActiveWorkFinished(t *testing.T) {
 // header for all five spoken prompts, three shared ack rule lines reused by
 // the four acks only, and each event's distinctive semantics kept in place.
 func TestPhrasePromptSharedFragmentsLock(t *testing.T) {
+	if VoicePersonaLead == "" || phrasePromptHeader != VoicePersonaLead {
+		t.Fatal("phrasePromptHeader must alias VoicePersonaLead exactly once")
+	}
+	if !strings.HasPrefix(liveSystemPrompt, VoicePersonaLead) {
+		t.Fatal("liveSystemPrompt must open with VoicePersonaLead")
+	}
+	if !strings.HasPrefix(directorReportPrompt, VoicePersonaLead) {
+		t.Fatal("directorReportPrompt must open with VoicePersonaLead")
+	}
+	if !strings.HasPrefix(operationalLinePersona, VoicePersonaLead) {
+		t.Fatal("operationalLinePersona must open with VoicePersonaLead")
+	}
 	if phrasePromptHeader == "" {
 		t.Fatal("phrasePromptHeader must be defined once")
 	}

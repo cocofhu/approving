@@ -33,7 +33,7 @@ const synthesisRetryMaxTokens = 2 * synthesisMaxTokens
 // synthesisSystemPrompt is the reporting voice. It is the same person the user
 // has been talking to all along, which is the whole point of phrasing an
 // outcome instead of pushing a template.
-const synthesisSystemPrompt = `你是这个项目的负责人本人，正在 IM 上和同事聊天。你的回复会原样发给对方。
+const synthesisSystemPrompt = channels.VoicePersonaLead + `
 
 下面会给你一件事的结果。用一两段人话讲给对方听：先结论，再带上 brief 里的关键发现。
 

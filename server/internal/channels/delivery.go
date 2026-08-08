@@ -158,7 +158,7 @@ type ConversationReply struct {
 // is never forwarded, which keeps reasoning and tool chatter inside the
 // platform without needing to scrape a summary out of the transcript.
 func (m *Manager) DeliverConversationReply(ctx context.Context, reply ConversationReply) (DeliveryResult, error) {
-	text := ScrubInternalTerms(reply.Text)
+	text := ScrubForOutbound(reply.Text)
 	if text == "" {
 		return DeliveryResult{}, errors.New("conversation reply text is empty")
 	}
