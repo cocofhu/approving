@@ -152,6 +152,9 @@ type failOpsDriver struct {
 	destroyErr error
 	reinstall  error
 	endpoints  error
+	logsErr    error
+	logsTail   int
+	listErr    error
 }
 
 func (f *failOpsDriver) Start(ctx context.Context, id string) error {
@@ -183,6 +186,19 @@ func (f *failOpsDriver) Endpoints(ctx context.Context, id string) (map[int]strin
 		return nil, f.endpoints
 	}
 	return f.Driver.Endpoints(ctx, id)
+}
+func (f *failOpsDriver) Logs(ctx context.Context, id string, tail int) (string, error) {
+	f.logsTail = tail
+	if f.logsErr != nil {
+		return "", f.logsErr
+	}
+	return f.Driver.Logs(ctx, id, tail)
+}
+func (f *failOpsDriver) List(ctx context.Context) ([]*driver.Handle, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return f.Driver.List(ctx)
 }
 
 func TestCreatePersistsSANDBOX_INJECT(t *testing.T) {
@@ -863,9 +879,76 @@ func TestHostMissingSandboxAndDriverEndpointsError(t *testing.T) {
 	}
 }
 
+func TestLogsDefaultsTailAndPropagatesErrors(t *testing.T) {
+	st := testDB(t)
+	base := fake.New()
+	if err := base.WithSessionListener(8765); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(base.Close)
+	drv := &failOpsDriver{Driver: base}
+	svc := New(drv, st, Config{
+		Image: "i", Ports: []int{8765}, SessionPort: 8765,
+		FinalizeTimeout: 2 * time.Second, Resources: testResources(),
+	})
+	sb, err := svc.Create(context.Background(), CreateRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitSvcRunning(t, svc, sb.ID)
+	base.SetLogs(sb.ID, "sandbox output")
+
+	out, err := svc.Logs(context.Background(), sb.ID, 0)
+	if err != nil || out != "sandbox output" {
+		t.Fatalf("Logs=%q err=%v", out, err)
+	}
+	if drv.logsTail != 5000 {
+		t.Fatalf("default tail=%d", drv.logsTail)
+	}
+
+	drv.logsErr = driver.ErrLogsUnsupported
+	if _, err := svc.Logs(context.Background(), sb.ID, 10); !errors.Is(err, ErrLogsUnsupported) {
+		t.Fatalf("unsupported error=%v", err)
+	}
+	drv.logsErr = errors.New("logs failed")
+	if _, err := svc.Logs(context.Background(), sb.ID, 10); err == nil || err.Error() != "logs failed" {
+		t.Fatalf("driver error=%v", err)
+	}
+	if _, err := svc.Logs(context.Background(), "missing", 10); err == nil {
+		t.Fatal("missing sandbox should fail before driver Logs")
+	}
+}
+
+func TestRunOrphanGCStopsOnCancelAndHandlesSweepError(t *testing.T) {
+	svc, _, _ := testService(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	svc.RunOrphanGC(ctx)
+
+	st := testDB(t)
+	drv := &failOpsDriver{Driver: fake.New(), listErr: errors.New("list failed")}
+	t.Cleanup(drv.Close)
+	svc = New(drv, st, Config{OrphanGCInterval: time.Hour})
+	svc.RunOrphanGC(ctx)
+}
+
 func TestMergePortsSkipsNonPositive(t *testing.T) {
 	got := mergePorts([]int{80, 0, -1, 80}, []int{443, 0})
 	if len(got) != 2 || got[0] != 80 || got[1] != 443 {
 		t.Fatalf("%v", got)
+	}
+}
+
+func TestSubtractPorts(t *testing.T) {
+	ports := []int{80, 9222, 443, 6080}
+	got := subtractPorts(ports, []int{9222, 6080, 0, -1})
+	if len(got) != 2 || got[0] != 80 || got[1] != 443 {
+		t.Fatalf("filtered ports=%v", got)
+	}
+	if got := subtractPorts(ports, nil); len(got) != len(ports) {
+		t.Fatalf("nil remove changed ports: %v", got)
+	}
+	if got := subtractPorts(nil, []int{9222}); got != nil {
+		t.Fatalf("nil ports changed: %v", got)
 	}
 }
