@@ -107,7 +107,7 @@ export async function peekZipPackage(file: File): Promise<ZipPeek> {
 export async function peekAgentZipName(file: File): Promise<{ name?: string; error?: string }> {
   const peek = await peekZipPackage(file)
   if (peek.kind === 'agent') return { name: peek.name }
-  if (peek.error === 'invalid zip') return { error: 'invalid zip' }
+  if (peek.kind === 'unknown' && peek.error === 'invalid zip') return { error: 'invalid zip' }
   return { error: 'missing agent.json' }
 }
 

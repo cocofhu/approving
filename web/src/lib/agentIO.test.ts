@@ -191,7 +191,7 @@ describe('peekZipPackage', () => {
       }),
       'agent.json': JSON.stringify({ name: 'should-not-win', schemaVersion: 1 }),
     })
-    const peek = await peekZipPackage(new File([raw], 'folder.zip', { type: 'application/zip' }))
+    const peek = await peekZipPackage(new File([Uint8Array.from(raw)], 'folder.zip', { type: 'application/zip' }))
     expect(peek).toEqual({
       kind: 'org-folder',
       agentNames: ['alice', 'bob'],
@@ -206,7 +206,7 @@ describe('peekZipPackage', () => {
 
   it('returns unrecognized when neither manifest exists', async () => {
     const raw = storeZip({ 'readme.txt': 'no manifests' })
-    const peek = await peekZipPackage(new File([raw], 'x.zip', { type: 'application/zip' }))
+    const peek = await peekZipPackage(new File([Uint8Array.from(raw)], 'x.zip', { type: 'application/zip' }))
     expect(peek.kind).toBe('unknown')
   })
 })

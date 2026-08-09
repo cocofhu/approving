@@ -158,6 +158,7 @@ func parseZipAgent(r io.ReaderAt, size int64, prefix string, maxFileBytes int) (
 			name = strings.TrimPrefix(name, prefix)
 		} else if strings.HasPrefix(name, "agents/") {
 			// Single-agent ZIP must not be confused with folder layout entries.
+			continue
 		}
 		if name == "agent.json" {
 			if foundMeta {
