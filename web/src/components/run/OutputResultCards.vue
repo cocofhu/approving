@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { renderMarkdown } from '@/lib/markdown'
 import { api } from '@/lib/api'
-import StructuredArtifactView from './StructuredArtifactView.vue'
-import HtmlPreview from '../ui/HtmlPreview.vue'
+import OutputResultCardBody from './OutputResultCardBody.vue'
 import AppModal from '../ui/AppModal.vue'
 import Icon from '../ui/Icon.vue'
 import type { OutputCard, Run } from '@/lib/types'
@@ -77,7 +75,20 @@ function parseDoc(card: OutputCard): unknown {
 const showList = computed(() => props.cards.length > 1)
 const currentCard = computed(() => props.cards[selectedIndex.value])
 const currentDoc = computed(() => (currentCard.value ? parseDoc(currentCard.value) : null))
-const canEnlarge = computed(() => !!currentCard.value && currentCard.value.status !== 'failed')
+
+/** F3: enlarge only for success cards that actually have renderable body (review v2). */
+function hasRenderableBody(card: OutputCard | undefined): boolean {
+  if (!card || card.status === 'failed') return false
+  if (card.typeTag === '结构化产物') {
+    if (card.structuredArtifactName && parseDoc(card) != null) return true
+    return !!card.markdown?.trim()
+  }
+  if (card.typeTag === '自定义产物') return !!card.artifactName
+  if (card.typeTag === 'Markdown') return !!card.markdown?.trim()
+  return false
+}
+
+const canEnlarge = computed(() => hasRenderableBody(currentCard.value))
 
 function artifactContent(name: string): string {
   return contentCache.value[name] ?? ''
@@ -183,42 +194,14 @@ function closeEnlarge() {
       </div>
 
       <div :data-testid="`output-result-card-body-${selectedIndex}`">
-        <template v-if="currentCard.status === 'failed'">
-          <p class="text-[12px] text-txt2">
-            <strong class="text-err">{{ t('pages.nodeOutput.outputCards.sourceFailedTitle') }}</strong><br />
-            {{ currentCard.errorReason || t('pages.nodeOutput.outputCards.invalidSource') }}
-          </p>
-        </template>
-        <template v-else-if="currentCard.typeTag === '结构化产物' && currentCard.structuredArtifactName && currentDoc">
-          <StructuredArtifactView
-            :name="currentCard.structuredArtifactName"
-            :doc="currentDoc"
-            :artifacts="run.artifacts"
-            :run-id="run.id"
-            :run-status="run.status"
-          />
-        </template>
-        <template v-else-if="currentCard.typeTag === '结构化产物' && currentCard.markdown">
-          <div class="md text-[12px] leading-relaxed text-txt2" v-html="renderMarkdown(currentCard.markdown)" />
-        </template>
-        <template v-else-if="currentCard.typeTag === '自定义产物' && currentCard.artifactName">
-          <div v-if="loading && !artifactContent(currentCard.artifactName)" class="text-[12px] text-txt3">…</div>
-          <HtmlPreview
-            v-else-if="isHtmlArtifact(currentCard.artifactName)"
-            :html="artifactContent(currentCard.artifactName) || currentCard.markdown || ''"
-            :enlargeable="false"
-          />
-          <pre
-            v-else
-            class="scroll-area max-h-48 overflow-y-auto whitespace-pre-wrap border border-line bg-base p-2.5 font-mono text-[11px] leading-relaxed text-txt2"
-          >{{ artifactContent(currentCard.artifactName) }}</pre>
-        </template>
-        <template v-else-if="currentCard.typeTag === 'Markdown' && currentCard.markdown">
-          <div class="md text-[12px] leading-relaxed text-txt2" v-html="renderMarkdown(currentCard.markdown)" />
-        </template>
-        <template v-else>
-          <p class="text-[12px] text-txt3">{{ t('pages.nodeOutput.outputCards.invalidSource') }}</p>
-        </template>
+        <OutputResultCardBody
+          :card="currentCard"
+          :run="run"
+          :doc="currentDoc"
+          :loading="loading"
+          :artifact-html="currentCard.artifactName ? artifactContent(currentCard.artifactName) : ''"
+          variant="detail"
+        />
       </div>
     </template>
 
@@ -229,37 +212,15 @@ function closeEnlarge() {
       :close-on-esc="true"
       @close="closeEnlarge"
     >
-      <div v-if="currentCard && currentCard.status !== 'failed'" data-testid="output-result-enlarge-body">
-        <template v-if="currentCard.typeTag === '结构化产物' && currentCard.structuredArtifactName && currentDoc">
-          <StructuredArtifactView
-            :name="currentCard.structuredArtifactName"
-            :doc="currentDoc"
-            :artifacts="run.artifacts"
-            :run-id="run.id"
-            :run-status="run.status"
-          />
-        </template>
-        <template v-else-if="currentCard.typeTag === '结构化产物' && currentCard.markdown">
-          <div class="md text-[12px] leading-relaxed text-txt2" v-html="renderMarkdown(currentCard.markdown)" />
-        </template>
-        <template v-else-if="currentCard.typeTag === '自定义产物' && currentCard.artifactName">
-          <div v-if="loading && !artifactContent(currentCard.artifactName)" class="text-[12px] text-txt3">…</div>
-          <HtmlPreview
-            v-else-if="isHtmlArtifact(currentCard.artifactName)"
-            :html="artifactContent(currentCard.artifactName) || currentCard.markdown || ''"
-            :enlargeable="false"
-          />
-          <pre
-            v-else
-            class="whitespace-pre-wrap border border-line bg-base p-2.5 font-mono text-[11px] leading-relaxed text-txt2"
-          >{{ artifactContent(currentCard.artifactName) }}</pre>
-        </template>
-        <template v-else-if="currentCard.typeTag === 'Markdown' && currentCard.markdown">
-          <div class="md text-[12px] leading-relaxed text-txt2" v-html="renderMarkdown(currentCard.markdown)" />
-        </template>
-        <template v-else>
-          <p class="text-[12px] text-txt3">{{ t('pages.nodeOutput.outputCards.invalidSource') }}</p>
-        </template>
+      <div v-if="currentCard && canEnlarge" data-testid="output-result-enlarge-body">
+        <OutputResultCardBody
+          :card="currentCard"
+          :run="run"
+          :doc="currentDoc"
+          :loading="loading"
+          :artifact-html="currentCard.artifactName ? artifactContent(currentCard.artifactName) : ''"
+          variant="enlarge"
+        />
       </div>
     </AppModal>
   </div>

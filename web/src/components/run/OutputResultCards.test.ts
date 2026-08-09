@@ -31,8 +31,13 @@ const StructuredStub = defineComponent({
 
 const HtmlPreviewStub = defineComponent({
   name: 'HtmlPreview',
-  props: { html: String, enlargeable: { type: Boolean, default: true } },
-  template: '<div data-testid="html-preview" :data-enlargeable="enlargeable === false ? \'0\' : \'1\'" />',
+  props: {
+    html: String,
+    enlargeable: { type: Boolean, default: true },
+    fitContent: { type: Boolean, default: false },
+  },
+  template:
+    '<div data-testid="html-preview" :data-enlargeable="enlargeable === false ? \'0\' : \'1\'" :data-fit-content="fitContent ? \'1\' : \'0\'" />',
 })
 
 const AppModalStub = defineComponent({
@@ -175,6 +180,7 @@ describe('OutputResultCards master-detail list + enlarge (g4.1)', () => {
     expect(wrapper.find('[data-testid="output-result-card-body-1"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="html-preview"]').attributes('data-enlargeable')).toBe('0')
+    expect(wrapper.get('[data-testid="html-preview"]').attributes('data-fit-content')).toBe('1')
     expect(apiMocks.artifactContent).toHaveBeenCalledWith('a-page')
     expect(wrapper.find('[data-testid="html-preview-enlarge"]').exists()).toBe(false)
     wrapper.unmount()
@@ -287,6 +293,44 @@ describe('OutputResultCards master-detail list + enlarge (g4.1)', () => {
     expect(list.classes()).not.toContain('overflow-y-auto')
     expect(list.classes()).not.toContain('max-h-48')
     expect(list.classes().some((c) => c.startsWith('max-h-'))).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('success card without renderable body has no enlarge (g2.1/F3)', async () => {
+    const wrapper = mountCards([
+      {
+        index: 1,
+        template: 'research',
+        title: '空结构化',
+        status: 'ok',
+        typeTag: '结构化产物',
+        structuredArtifactName: 'research.json',
+      },
+    ])
+    await flushPromises()
+    expect(wrapper.text()).toContain('无效或无法解析的来源引用')
+    expect(wrapper.find('[data-testid="output-result-enlarge"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('HTML enlarge modal uses 70vh viewport and keeps enlargeable=false (g1.6/g2.3/F4)', async () => {
+    const wrapper = mountCards([cards[1]])
+    await flushPromises()
+    expect(wrapper.find('[data-testid="output-result-list"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="output-result-enlarge"]').exists()).toBe(true)
+    const detailPreview = wrapper.get('[data-testid="html-preview"]')
+    expect(detailPreview.attributes('data-enlargeable')).toBe('0')
+    expect(detailPreview.attributes('data-fit-content')).toBe('1')
+    await wrapper.get('[data-testid="output-result-enlarge"]').trigger('click')
+    await flushPromises()
+    const viewport = wrapper.get('[data-testid="output-result-enlarge-html-viewport"]')
+    expect(viewport.classes()).toContain('h-[70vh]')
+    const modalPreview = viewport.get('[data-testid="html-preview"]')
+    expect(modalPreview.attributes('data-enlargeable')).toBe('0')
+    expect(modalPreview.attributes('data-fit-content')).toBe('0')
+    expect(wrapper.get('[data-testid="output-result-enlarge-body"]').text()).not.toMatch(
+      /打开原始文件|下载|窗口放大查看/,
+    )
     wrapper.unmount()
   })
 })
