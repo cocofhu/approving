@@ -3,7 +3,7 @@ import { defineComponent, h, nextTick } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import type { Agent } from '@/lib/api'
@@ -87,6 +87,17 @@ async function createStudioRouter(query: Record<string, string> = {}) {
   return router
 }
 
+const mountedWrappers: Array<{ unmount: () => void }> = []
+
+function trackMount<T extends { unmount: () => void }>(wrapper: T): T {
+  mountedWrappers.push(wrapper)
+  return wrapper
+}
+
+function removeStudioToasts() {
+  document.querySelectorAll('[data-test="studio-toast"]').forEach((el) => el.remove())
+}
+
 async function mountStudio(query: Record<string, string> = {}) {
   const i18n = createI18n({
     legacy: false,
@@ -94,27 +105,30 @@ async function mountStudio(query: Record<string, string> = {}) {
     messages: { 'zh-CN': { ...common, ...pages } },
   })
   const router = await createStudioRouter(query)
-  return mount(AgentStudioView, {
-    global: {
-      plugins: [i18n, router],
-      stubs: {
-        AppButton: ButtonStub,
-        Icon: true,
-        AppModal: true,
-        CodeEditor: CodeEditorStub,
-        MarkdownSplitEditor: true,
-        ExplorerContextMenu: true,
-        AgentChatTester: true,
-        AgentGitGuide: true,
-        AgentCreateWizard: true,
-        AgentOrgSidebar: true,
-        AgentDataPanel: true,
+  return trackMount(
+    mount(AgentStudioView, {
+      global: {
+        plugins: [i18n, router],
+        stubs: {
+          AppButton: ButtonStub,
+          Icon: true,
+          AppModal: true,
+          CodeEditor: CodeEditorStub,
+          MarkdownSplitEditor: true,
+          ExplorerContextMenu: true,
+          AgentChatTester: true,
+          AgentGitGuide: true,
+          AgentCreateWizard: true,
+          AgentOrgSidebar: true,
+          AgentDataPanel: true,
+        },
       },
-    },
-  })
+    }),
+  )
 }
 
 beforeEach(() => {
+  removeStudioToasts()
   vi.clearAllMocks()
   breakpointMocks.isMobile.value = false
   mocks.listProjects.mockResolvedValue([{ id: 'proj-default', name: 'Default' }])
@@ -130,6 +144,13 @@ beforeEach(() => {
     agents: {},
     ...org,
   }))
+})
+
+afterEach(() => {
+  while (mountedWrappers.length) {
+    mountedWrappers.pop()?.unmount()
+  }
+  removeStudioToasts()
 })
 
 describe('AgentStudio region UI', () => {
@@ -395,24 +416,26 @@ describe('AgentStudio rename entry migration', () => {
       messages: { 'zh-CN': { ...common, ...pages } },
     })
     const router = await createStudioRouter()
-    return mount(AgentStudioView, {
-      global: {
-        plugins: [i18n, router],
-        stubs: {
-          AppButton: ButtonStub,
-          Icon: true,
-          AppModal: ModalStub,
-          CodeEditor: CodeEditorStub,
-          MarkdownSplitEditor: true,
-          ExplorerContextMenu: true,
-          AgentChatTester: true,
-          AgentGitGuide: true,
-          AgentCreateWizard: true,
-          AgentOrgSidebar: SidebarStub,
-          AgentDataPanel: true,
+    return trackMount(
+      mount(AgentStudioView, {
+        global: {
+          plugins: [i18n, router],
+          stubs: {
+            AppButton: ButtonStub,
+            Icon: true,
+            AppModal: ModalStub,
+            CodeEditor: CodeEditorStub,
+            MarkdownSplitEditor: true,
+            ExplorerContextMenu: true,
+            AgentChatTester: true,
+            AgentGitGuide: true,
+            AgentCreateWizard: true,
+            AgentOrgSidebar: SidebarStub,
+            AgentDataPanel: true,
+          },
         },
-      },
-    })
+      }),
+    )
   }
 
   it('blocks sidebar pencil rename and does not call api.renameAgent', async () => {
@@ -549,24 +572,26 @@ describe('AgentStudio mobile core path', () => {
       messages: { 'zh-CN': { ...common, ...pages } },
     })
     const router = await createStudioRouter()
-    return mount(AgentStudioView, {
-      global: {
-        plugins: [i18n, router],
-        stubs: {
-          AppButton: ButtonStub,
-          Icon: true,
-          AppModal: ModalStub,
-          CodeEditor: CodeEditorStub,
-          MarkdownSplitEditor: MdStub,
-          ExplorerContextMenu: true,
-          AgentChatTester: true,
-          AgentGitGuide: true,
-          AgentCreateWizard: true,
-          AgentOrgSidebar: true,
-          AgentDataPanel: true,
+    return trackMount(
+      mount(AgentStudioView, {
+        global: {
+          plugins: [i18n, router],
+          stubs: {
+            AppButton: ButtonStub,
+            Icon: true,
+            AppModal: ModalStub,
+            CodeEditor: CodeEditorStub,
+            MarkdownSplitEditor: MdStub,
+            ExplorerContextMenu: true,
+            AgentChatTester: true,
+            AgentGitGuide: true,
+            AgentCreateWizard: true,
+            AgentOrgSidebar: true,
+            AgentDataPanel: true,
+          },
         },
-      },
-    })
+      }),
+    )
   }
 
   beforeEach(() => {
@@ -736,24 +761,26 @@ describe('AgentStudio mobile core path', () => {
       messages: { 'zh-CN': { ...common, ...pages } },
     })
     const router = await createStudioRouter({ agent: 'alpha', tab: 'data', sub: 'jobs' })
-    const wrapper = mount(AgentStudioView, {
-      global: {
-        plugins: [i18n, router],
-        stubs: {
-          AppButton: ButtonStub,
-          Icon: true,
-          AppModal: ModalStub,
-          CodeEditor: CodeEditorStub,
-          MarkdownSplitEditor: MdStub,
-          ExplorerContextMenu: true,
-          AgentChatTester: true,
-          AgentGitGuide: true,
-          AgentCreateWizard: true,
-          AgentOrgSidebar: true,
-          AgentDataPanel: true,
+    const wrapper = trackMount(
+      mount(AgentStudioView, {
+        global: {
+          plugins: [i18n, router],
+          stubs: {
+            AppButton: ButtonStub,
+            Icon: true,
+            AppModal: ModalStub,
+            CodeEditor: CodeEditorStub,
+            MarkdownSplitEditor: MdStub,
+            ExplorerContextMenu: true,
+            AgentChatTester: true,
+            AgentGitGuide: true,
+            AgentCreateWizard: true,
+            AgentOrgSidebar: true,
+            AgentDataPanel: true,
+          },
         },
-      },
-    })
+      }),
+    )
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('请在桌面端完成')
@@ -1055,24 +1082,26 @@ describe('AgentStudio group assign project', () => {
       messages: { 'zh-CN': { ...common, ...pages } },
     })
     const router = await createStudioRouter()
-    return mount(AgentStudioView, {
-      global: {
-        plugins: [i18n, router],
-        stubs: {
-          AppButton: ButtonStub,
-          Icon: true,
-          AppModal: ModalStub,
-          CodeEditor: CodeEditorStub,
-          MarkdownSplitEditor: true,
-          ExplorerContextMenu: true,
-          AgentChatTester: true,
-          AgentGitGuide: true,
-          AgentCreateWizard: true,
-          AgentOrgSidebar: SidebarStub,
-          AgentDataPanel: true,
+    return trackMount(
+      mount(AgentStudioView, {
+        global: {
+          plugins: [i18n, router],
+          stubs: {
+            AppButton: ButtonStub,
+            Icon: true,
+            AppModal: ModalStub,
+            CodeEditor: CodeEditorStub,
+            MarkdownSplitEditor: true,
+            ExplorerContextMenu: true,
+            AgentChatTester: true,
+            AgentGitGuide: true,
+            AgentCreateWizard: true,
+            AgentOrgSidebar: SidebarStub,
+            AgentDataPanel: true,
+          },
         },
-      },
-    })
+      }),
+    )
   }
 
   beforeEach(() => {
