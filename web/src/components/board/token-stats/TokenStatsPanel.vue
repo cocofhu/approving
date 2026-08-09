@@ -238,12 +238,9 @@ onUnmounted(() => {
           <TokenModelComposition :models="data.modelComposition || []" />
         </div>
         <div class="min-w-0 rounded-xl border border-line bg-surface p-3.5" data-testid="token-stats-model-rank-card">
-          <div class="mb-2 flex flex-col gap-1">
-            <div class="flex items-baseline justify-between gap-2">
-              <h4 class="m-0 text-[13px] font-semibold text-txt">{{ t('pages.board.tokenStats.modelRankTitle') }}</h4>
-              <span class="text-[11px] text-txt3">{{ t('pages.board.tokenStats.modelRankSub') }}</span>
-            </div>
-            <p class="m-0 text-[11px] leading-snug text-txt3">{{ t('pages.board.tokenStats.modelRankHint') }}</p>
+          <div class="mb-2 flex items-baseline justify-between gap-2" data-testid="token-stats-model-rank-head">
+            <h4 class="m-0 text-[13px] font-semibold text-txt">{{ t('pages.board.tokenStats.modelRankTitle') }}</h4>
+            <span class="text-[11px] text-txt3">{{ t('pages.board.tokenStats.modelRankSub') }}</span>
           </div>
           <TokenModelRank :models="data.modelRanking || []" />
         </div>

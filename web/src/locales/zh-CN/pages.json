@@ -56,7 +56,6 @@
         "modelCompositionTitle": "模型构成",
         "modelRankTitle": "模型消耗排行",
         "modelRankSub": "Top10 · 其余 → other",
-        "modelRankHint": "「未知」与 other 不同；相关用量按其实际消耗参与排行。",
         "modelOther": "other（其余模型）",
         "filledTag": "含补全",
         "emptyModelCompHint": "暂无按模型构成",
