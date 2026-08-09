@@ -396,6 +396,10 @@ func main() {
 		InjectBundles: injectStore,
 		Blobs:         blobStore,
 		Onboarding:    services.NewOnboardingService(projectSvc, skillSvc, wfSvc),
+		Team:          services.NewTeamService(projectSvc, skillSvc, orgSvc, pmSvc, sbxSvc),
+	}
+	if h.Team != nil && h.PMMCP != nil {
+		h.PMMCP.SetTeam(h.Team)
 	}
 
 	r := router.New(h)

@@ -1108,7 +1108,12 @@
     "agentStudio": {
       "title": "Agent 管理",
       "errorPrefix": "出错:",
-      "empty": "暂无 Agent。点击右上角\"新建 Agent\"创建,或后端首启会落盘默认 Agent。",
+      "empty": "暂无 Agent。可「创建 Agent 团队」一键拉起项目与流水线角色，或「新建 Agent」创建单个。",
+      "emptyTeamTitle": "用一个入口拉起整支团队",
+      "emptyTeamDesc": "填写项目背景与运行配置后自动起沙箱：创建项目、根组、项目经理与 9 名工程师，并挂好上下级。",
+      "emptyTeamCta": "创建 Agent 团队",
+      "emptyTeamOrSingle": "或新建单个 Agent",
+      "createTeam": "创建 Agent 团队",
       "unsaved": "未保存",
       "saved": "已保存",
       "tabs": {
@@ -1152,6 +1157,7 @@
         "multiGroup": "多组",
         "reportsTo": "上级：{name}",
         "newRootGroup": "新建根组",
+        "newTeam": "创建 Agent 团队",
         "newChildGroup": "新建子组",
         "renameGroup": "重命名组",
         "groupNameLabel": "组名称",
@@ -1552,6 +1558,87 @@
         "skillsNote": "可执行技能目录",
         "commandsNote": "commands/*.md 斜杠命令",
         "envNote": "经容器环境变量注入"
+      },
+      "teamWizard": {
+        "title": "创建 Agent 团队",
+        "headSub": "项目背景 + 运行配置 → 确认后自动起沙箱建团",
+        "confirmStart": "确认并启动沙箱",
+        "submitting": "正在提交",
+        "previewLine": "将创建：{root} / {pipe} · {pm} + {n} 工程师",
+        "steps": {
+          "team": "团队信息",
+          "acp": "Agent",
+          "apiKey": "API Key",
+          "git": "Git",
+          "mcp": "MCP",
+          "env": "环境变量",
+          "review": "确认创建"
+        },
+        "team": {
+          "meta": "先定项目与命名；工程师将在沙箱中按参考编制生成。",
+          "projectName": "项目 / 团队名",
+          "prefix": "命名前缀",
+          "rootGroup": "根组名称",
+          "pipelineGroup": "流水线子组",
+          "pipelineHint": "工程师默认挂到此子组",
+          "pmName": "PM Agent 名称",
+          "background": "项目背景",
+          "backgroundPlaceholder": "描述项目目标、技术栈、仓库形态、流水线诉求等。将作为沙箱建团 Prompt。",
+          "backgroundHint": "类似 Prompt：确认后注入沙箱，据此生成根组、上下级与工程师团队。"
+        },
+        "acp": {
+          "meta": "该配置用于 PM 及后续工程师的默认 ACP。"
+        },
+        "git": {
+          "meta": "可选。供建团结合仓库选型，并写入团队默认 Git 相关配置。",
+          "url": "仓库 URL"
+        },
+        "mcp": {
+          "meta": "写入团队默认 mcp[]；创建 PM / 工程师时一并带上。默认已放入 artifact-store。",
+          "namePh": "名称",
+          "headers": "请求头",
+          "addHeader": "添加 Header",
+          "add": "添加 MCP",
+          "restoreArtifact": "恢复 artifact-store 预设",
+          "runVars": "运行变量：{'${APPROVING_ARTIFACT_URL}'} / {'${APPROVING_ARTIFACT_TOKEN}'}"
+        },
+        "env": {
+          "meta": "写入 PM；工程师创建时默认继承。"
+        },
+        "review": {
+          "meta": "确认后将创建项目与 PM，自动起沙箱并按参考编制生成 9 名工程师。",
+          "project": "项目",
+          "root": "根组",
+          "pipeline": "子组",
+          "set": "已填写",
+          "skip": "跳过（可稍后补）",
+          "none": "无",
+          "roster": "编制：1 PM + 9 工程师 · 共 10",
+          "background": "项目背景（建团 Prompt）",
+          "noArtifactWarn": "流水线角色通常需要 artifact-store；当前 MCP 列表未包含它。"
+        },
+        "errors": {
+          "projectRequired": "请填写项目 / 团队名",
+          "prefixRequired": "请填写命名前缀",
+          "backgroundRequired": "请填写项目背景（建团 Prompt）",
+          "pmRequired": "请填写 PM Agent 名称",
+          "pmInvalid": "PM 名称不合法（仅字母数字与 _/-）",
+          "pmExists": "该 PM 名称已存在"
+        },
+        "progress": {
+          "title": "沙箱 · {name}",
+          "sub": "自动建团：项目 / Org / 工程师 Agent",
+          "starting": "sandbox starting…",
+          "running": "sandbox running",
+          "ready": "team ready · {n} agents",
+          "failed": "failed",
+          "waiting": "等待进度…",
+          "resources": "已产出资源",
+          "openPm": "打开项目经理",
+          "done": "完成",
+          "retry": "重试",
+          "keepCreated": "仅保留已创建资源"
+        }
       },
       "wizard": {
         "title": "新建 Agent",

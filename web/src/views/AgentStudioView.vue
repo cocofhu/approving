@@ -16,7 +16,9 @@ import EnvCredentialHelpModal, {
   type EnvCredentialHelpSection,
 } from '@/components/agent/EnvCredentialHelpModal.vue'
 import AgentCreateWizard from '@/components/agent/AgentCreateWizard.vue'
-import { api, type Agent, type AgentOrg, type MCPServer, type AgentPrompts, type PlatformRuleMeta } from '@/lib/api'
+import CreateAgentTeamWizard from '@/components/agent/CreateAgentTeamWizard.vue'
+import TeamBootstrapPanel from '@/components/agent/TeamBootstrapPanel.vue'
+import { api, type Agent, type AgentOrg, type MCPServer, type AgentPrompts, type PlatformRuleMeta, type TeamBootstrapSession } from '@/lib/api'
 import { useBreakpoint } from '@/lib/useBreakpoint'
 import {
   emptyOrg,
@@ -1721,9 +1723,15 @@ function onImportGroup(groupId: string) {
 }
 
 const showCreateWizard = ref(false)
+const showTeamWizard = ref(false)
+const teamBootstrapSessionId = ref('')
 
 function openCreateAgent() {
   showCreateWizard.value = true
+}
+
+function openCreateTeam() {
+  showTeamWizard.value = true
 }
 
 function onWizardCreated(created: Agent) {
@@ -1732,6 +1740,43 @@ function onWizardCreated(created: Agent) {
   // New agents default to ungrouped / no parent (no org entry).
   select(created.name)
   showToast(t('pages.agentStudio.wizard.createdToast', { name: created.name }))
+}
+
+function onTeamBootstrapStarted(session: TeamBootstrapSession) {
+  teamBootstrapSessionId.value = session.id
+  void reloadOrg()
+  void refreshAgentsList()
+}
+
+async function refreshAgentsList() {
+  try {
+    const list = await api.listAgents()
+    agents.value = list || []
+    agents.value.sort((a, b) => a.name.localeCompare(b.name))
+  } catch {
+    /* ignore */
+  }
+}
+
+async function onTeamBootstrapRefresh() {
+  await Promise.all([reloadOrg(), refreshAgentsList()])
+}
+
+function onTeamBootstrapSelectPm(name: string) {
+  void select(name)
+}
+
+function onTeamBootstrapOpenPm(name: string) {
+  teamBootstrapSessionId.value = ''
+  void select(name)
+}
+
+function onTeamBootstrapDone() {
+  const pm = agents.value.find((a) => a.name.includes('项目经理'))?.name || agents.value[0]?.name
+  teamBootstrapSessionId.value = ''
+  void onTeamBootstrapRefresh().then(() => {
+    if (pm) void select(pm)
+  })
 }
 
 function openAgentManage(focusAgentName?: string) {
@@ -2112,6 +2157,12 @@ onBeforeUnmount(() => {
           @click="triggerImport"
         >{{ t('pages.agentStudio.exportImport.import') }}</AppButton>
         <AppButton
+          variant="outline"
+          icon="skills"
+          :class="isMobile ? 'min-h-11 w-full justify-center' : ''"
+          @click="openCreateTeam"
+        >{{ t('pages.agentStudio.createTeam') }}</AppButton>
+        <AppButton
           variant="primary"
           icon="plus"
           :class="isMobile ? 'min-h-11 w-full justify-center' : ''"
@@ -2139,8 +2190,18 @@ onBeforeUnmount(() => {
     <div class="flex min-h-0 flex-1 flex-col">
       <div v-if="loading" class="card flex flex-1 items-center justify-center text-sm text-txt3">{{ t('common.buttons.loading') }}</div>
 
-      <div v-else-if="!agents.length" class="card flex flex-1 items-center justify-center text-sm text-txt3">
-        {{ t('pages.agentStudio.empty') }}
+      <div
+        v-else-if="!agents.length && !teamBootstrapSessionId"
+        class="card flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center"
+      >
+        <h2 class="m-0 text-[18px] font-semibold text-txt">{{ t('pages.agentStudio.emptyTeamTitle') }}</h2>
+        <p class="m-0 max-w-md text-[13px] leading-6 text-txt3">{{ t('pages.agentStudio.emptyTeamDesc') }}</p>
+        <AppButton variant="primary" icon="skills" @click="openCreateTeam">
+          {{ t('pages.agentStudio.emptyTeamCta') }}
+        </AppButton>
+        <button type="button" class="text-[12px] text-accent-2 hover:underline" @click="openCreateAgent">
+          {{ t('pages.agentStudio.emptyTeamOrSingle') }}
+        </button>
       </div>
 
       <div
@@ -2162,6 +2223,7 @@ onBeforeUnmount(() => {
         @remove-from-group="onRemoveFromGroup"
         @open-manage="openAgentManage"
         @create-root-group="openCreateRootGroup"
+        @create-team="openCreateTeam"
         @create-child-group="openCreateChildGroup"
         @rename-group="openRenameGroup"
         @delete-group="confirmDeleteGroup"
@@ -2173,8 +2235,18 @@ onBeforeUnmount(() => {
         @toggle-collapsed="toggleAgentListCollapsed"
       />
 
+      <TeamBootstrapPanel
+        v-if="teamBootstrapSessionId"
+        class="min-h-0 min-w-0"
+        :session-id="teamBootstrapSessionId"
+        @open-pm="onTeamBootstrapOpenPm"
+        @select-pm="onTeamBootstrapSelectPm"
+        @done="onTeamBootstrapDone"
+        @refresh-org="onTeamBootstrapRefresh"
+      />
+
       <!-- editor -->
-      <div v-if="draft" class="flex min-h-0 min-w-0 flex-col overflow-hidden">
+      <div v-else-if="draft" class="flex min-h-0 min-w-0 flex-col overflow-hidden">
         <div
           class="flex items-center gap-2 border-b border-line px-4"
           :class="isMobile ? 'min-h-12 py-2.5' : 'py-2'"
@@ -3414,6 +3486,13 @@ onBeforeUnmount(() => {
       :existing-names="agents.map((a) => a.name)"
       @close="showCreateWizard = false"
       @created="onWizardCreated"
+    />
+
+    <CreateAgentTeamWizard
+      :open="showTeamWizard"
+      :existing-names="agents.map((a) => a.name)"
+      @close="showTeamWizard = false"
+      @started="onTeamBootstrapStarted"
     />
 
     <AppModal
