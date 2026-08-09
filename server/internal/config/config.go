@@ -68,6 +68,20 @@ type LiveConfig struct {
 	MaxConcurrentWork   int `yaml:"max_concurrent_work"`
 	ToolLoopLimit       int `yaml:"tool_loop_limit"`
 	MaxTokens           int `yaml:"max_tokens"`
+	// RunHeartbeatMinutes is how long a task may run without the platform
+	// volunteering an update. Unlike its neighbours this is a pointer, because
+	// 0 is a real answer here — "never volunteer anything" — and the usual
+	// zero-means-unset convention would read it as "use the default".
+	RunHeartbeatMinutes *int `yaml:"run_heartbeat_minutes"`
+
+	// Prompt bodies. Empty means the compiled-in text. Only the body is
+	// configurable — the persona that says who the model is and that its
+	// output goes out verbatim is attached by the runtime.
+	SystemPromptBody    string `yaml:"system_prompt_body"`
+	SynthesisPromptBody string `yaml:"synthesis_prompt_body"`
+	// Temperature is text so that empty ("let the endpoint decide") stays
+	// distinct from 0 ("say the same thing every time").
+	Temperature string `yaml:"temperature"`
 }
 
 // Configured reports whether enough is set to call the endpoint. The key is not
@@ -431,6 +445,22 @@ func applyEnvOverrides(c *Config) {
 	}
 	if v := envInt("APPROVING_LIVE_MAX_TOKENS"); v != 0 {
 		c.Live.MaxTokens = v
+	}
+	// Read through env() rather than envInt(): 0 is the off switch here, and
+	// envInt cannot tell "set to 0" from "not set".
+	if v := env("APPROVING_RUN_HEARTBEAT_MINUTES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			c.Live.RunHeartbeatMinutes = &n
+		}
+	}
+	if v := env("APPROVING_LIVE_SYSTEM_PROMPT_BODY"); v != "" {
+		c.Live.SystemPromptBody = v
+	}
+	if v := env("APPROVING_LIVE_SYNTHESIS_PROMPT_BODY"); v != "" {
+		c.Live.SynthesisPromptBody = v
+	}
+	if v := env("APPROVING_LIVE_TEMPERATURE"); v != "" {
+		c.Live.Temperature = v
 	}
 	if v := env("APPROVING_BROWSER_ENABLED"); v != "" {
 		lv := strings.ToLower(v)

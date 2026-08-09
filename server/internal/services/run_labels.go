@@ -157,6 +157,12 @@ type RunOrigin struct {
 // RunOriginFor resolves one run's dispatch origin. The second return says
 // whether the run came from a conversation at all.
 func (s *RunService) RunOriginFor(runID string) (RunOrigin, bool) {
+	// Placeholder ledger rows live in the same table and carry a full origin,
+	// but there is no Run behind them and nothing for the UI to detach — the
+	// work they stand for is a foreground turn that ends by itself.
+	if models.IsEphemeralRunID(runID) {
+		return RunOrigin{}, false
+	}
 	var row models.TaskIdentity
 	if err := s.db.
 		Where("run_id = ? AND origin_conversation_id <> ''", strings.TrimSpace(runID)).

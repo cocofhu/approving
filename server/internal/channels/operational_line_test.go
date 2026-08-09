@@ -81,7 +81,7 @@ func TestQueueFullNoticeIsPhrasedByTheModel(t *testing.T) {
 	m.sendBusyHint(context.Background(), rc, testInbound("overflow"), "conv-key")
 
 	got := sentTexts(fa)
-	if countText(got, busyHintText) != 0 {
+	if countText(got, busyHintText("zh-CN"))+countText(got, busyHintText("en")) != 0 {
 		t.Fatalf("the fixed queue-full template still went out: %v", got)
 	}
 	if countText(got, "前面几条还没弄完，稍等我一下。") != 1 {
@@ -98,7 +98,8 @@ func TestQueueFullNoticeStillGoesOutWithoutAModel(t *testing.T) {
 
 	m.sendBusyHint(context.Background(), rc, testInbound("overflow"), "conv-key")
 
-	if got := sentTexts(fa); countText(got, busyHintText) != 1 {
+	// "overflow" is ASCII, so the fallback answers in English.
+	if got := sentTexts(fa); countText(got, busyHintText("en")) != 1 {
 		t.Fatalf("sends = %v want the fallback notice exactly once", got)
 	}
 }
@@ -108,7 +109,7 @@ func TestQueueFullNoticeStillGoesOutWithoutAModel(t *testing.T) {
 func TestNoOperationalCopyCoachesTheUser(t *testing.T) {
 	m := NewManager(nil, nil, nil)
 	copies := []string{
-		busyHintText,
+		busyHintText("zh-CN"), busyHintText("en"),
 		turnTooSlowText("zh-CN"), turnTooSlowText("en"),
 		riskExecutionFailedText("zh-CN"), riskExecutionFailedText("en"),
 		interruptedTurnText("zh-CN"), interruptedTurnText("en"),

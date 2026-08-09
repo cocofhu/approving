@@ -731,6 +731,16 @@ func progressRequest(runID, userID, text, stage string) SendableRequest {
 	}
 }
 
+// blockerRequest is a report that still interrupts the user. Outbound binding
+// is only reachable through one of these: plain progress is recorded on the
+// task ledger and never sent, so it produces no outbound message to bind to.
+func blockerRequest(runID, userID, text, stage string) SendableRequest {
+	req := progressRequest(runID, userID, text, stage)
+	req.Kind = sendable.KindBlocked
+	req.Progress.Blocked = true
+	return req
+}
+
 func bindings(t *testing.T, svc *services.TaskContextService) []models.MessageBinding {
 	t.Helper()
 	var out []models.MessageBinding
@@ -748,7 +758,7 @@ func TestOutboundSuccessBindsExternalMessageIDAndReplyWins(t *testing.T) {
 	ensureTestIdentity(t, svc, "r1", "proj", userID, "支付登录页")
 	ensureTestIdentity(t, svc, "r2", "proj", userID, "用户登录页")
 
-	result, err := m.ReportRunProgress(context.Background(), progressRequest("r1", qqUser, "已提交分支", "branch_pushed"))
+	result, err := m.ReportRunProgress(context.Background(), blockerRequest("r1", qqUser, "已提交分支", "branch_pushed"))
 	if err != nil || !result.Sent {
 		t.Fatalf("progress delivery = %+v err=%v", result, err)
 	}
@@ -815,7 +825,7 @@ func TestOutboundBindingSkippedWithoutRealIDRunOrOwnership(t *testing.T) {
 		fa := &fakeAdapter{}
 		m, svc := bindingManager(t, fa)
 		ensureTestIdentity(t, svc, "r1", "proj", userID, "支付登录页")
-		result, err := m.ReportRunProgress(context.Background(), progressRequest("r1", qqUser, "已提交分支", "s1"))
+		result, err := m.ReportRunProgress(context.Background(), blockerRequest("r1", qqUser, "已提交分支", "s1"))
 		if err != nil || !result.Sent {
 			t.Fatalf("delivery = %+v err=%v", result, err)
 		}
@@ -834,7 +844,7 @@ func TestOutboundBindingSkippedWithoutRealIDRunOrOwnership(t *testing.T) {
 		}
 		m.mu.Unlock()
 		ensureTestIdentity(t, svc, "r1", "proj", userID, "支付登录页")
-		result, err := m.ReportRunProgress(context.Background(), progressRequest("r1", qqUser, "已提交分支", "s1"))
+		result, err := m.ReportRunProgress(context.Background(), blockerRequest("r1", qqUser, "已提交分支", "s1"))
 		if !errors.Is(err, ErrDeliveryFailed) || result.Sent {
 			t.Fatalf("failed delivery = %+v err=%v want ErrDeliveryFailed", result, err)
 		}
@@ -860,7 +870,7 @@ func TestOutboundBindingSkippedWithoutRealIDRunOrOwnership(t *testing.T) {
 		fa := &fakeAdapter{messageIDs: []string{"qq-msg-2"}}
 		m, svc := bindingManager(t, fa)
 		ensureTestIdentity(t, svc, "r1", "proj", services.SyntheticQQUserID("owner"), "支付登录页")
-		result, err := m.ReportRunProgress(context.Background(), progressRequest("r1", "intruder", "已提交分支", "s1"))
+		result, err := m.ReportRunProgress(context.Background(), blockerRequest("r1", "intruder", "已提交分支", "s1"))
 		if err != nil || !result.Sent {
 			t.Fatalf("delivery = %+v err=%v", result, err)
 		}
@@ -872,7 +882,7 @@ func TestOutboundBindingSkippedWithoutRealIDRunOrOwnership(t *testing.T) {
 	t.Run("run has no task identity", func(t *testing.T) {
 		fa := &fakeAdapter{messageIDs: []string{"qq-msg-3"}}
 		m, svc := bindingManager(t, fa)
-		result, err := m.ReportRunProgress(context.Background(), progressRequest("r-unknown", qqUser, "已提交分支", "s1"))
+		result, err := m.ReportRunProgress(context.Background(), blockerRequest("r-unknown", qqUser, "已提交分支", "s1"))
 		if err != nil || !result.Sent {
 			t.Fatalf("delivery = %+v err=%v", result, err)
 		}
@@ -895,7 +905,7 @@ func TestNoOutboundCopyOffersATaskMenu(t *testing.T) {
 		services.DetectLanguage("登录页怎么样了", "zh-CN"),
 	)
 	for _, text := range []string{
-		busyHintText,
+		busyHintText("zh-CN"),
 		taskNamed,
 		runAcceptanceText("登录页性能优化", "zh-CN"),
 	} {

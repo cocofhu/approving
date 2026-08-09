@@ -392,11 +392,11 @@ func TestGetStatusSurfacesFailedTerminalTasks(t *testing.T) {
 }
 
 func TestLiveCallTimeoutFollowsConfiguredLiveTimeout(t *testing.T) {
-	m := &Manager{live: &fakeLive{configured: true, timeout: 300 * time.Second}}
+	m := managerWithLive(&fakeLive{configured: true, timeout: 300 * time.Second})
 	if got := m.liveCallTimeout(45 * time.Second); got != 300*time.Second {
 		t.Fatalf("liveCallTimeout = %v want settings value 300s", got)
 	}
-	m.live = &fakeLive{configured: true} // Timeout() == 0
+	m.SetLiveModel(&fakeLive{configured: true}) // Timeout() == 0
 	if got := m.liveCallTimeout(45 * time.Second); got != 45*time.Second {
 		t.Fatalf("liveCallTimeout = %v want fallback", got)
 	}

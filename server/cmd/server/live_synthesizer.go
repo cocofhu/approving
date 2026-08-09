@@ -30,12 +30,13 @@ const synthesisMaxTokens = 2048
 // a bad endpoint would buy the same answer twice.
 const synthesisRetryMaxTokens = 2 * synthesisMaxTokens
 
-// synthesisSystemPrompt is the reporting voice. It is the same person the user
-// has been talking to all along, which is the whole point of phrasing an
+// defaultSynthesisPromptBody is the reporting voice. It is the same person the
+// user has been talking to all along, which is the whole point of phrasing an
 // outcome instead of pushing a template.
-const synthesisSystemPrompt = channels.VoicePersonaLead + `
-
-下面会给你一件事的结果。用一两段人话讲给对方听：先结论，再带上 brief 里的关键发现。
+//
+// Body only: the persona in front of it comes from channels.ComposeVoicePrompt,
+// which is also what an operator's replacement body gets.
+const defaultSynthesisPromptBody = `下面会给你一件事的结果。用一两段人话讲给对方听：先结论，再带上 brief 里的关键发现。
 
 规矩：
 - 只讲给出的事实，不要补充、不要推测、不要展开成长报告。
@@ -62,7 +63,7 @@ const synthesisSystemPrompt = channels.VoicePersonaLead + `
 // Anything that goes wrong here degrades to the caller's structured fallback,
 // which is a complete message in its own right — synthesis improves how an
 // outcome reads, it is not what makes it deliverable.
-func newLiveSynthesizer(live *liveagent.Client) channels.SynthesisFunc {
+func newLiveSynthesizer(live *liveagent.Client, prompts *livePromptRelay) channels.SynthesisFunc {
 	if live == nil {
 		return nil
 	}
@@ -82,7 +83,7 @@ func newLiveSynthesizer(live *liveagent.Client) channels.SynthesisFunc {
 
 		ask := func(maxTokens int) (string, error) {
 			res, err := live.Complete(callCtx, liveagent.Request{
-				System:    synthesisSystemPrompt,
+				System:    prompts.synthesisPrompt(),
 				Messages:  []liveagent.Message{{Role: "user", Content: req.Brief}},
 				MaxTokens: maxTokens,
 			})

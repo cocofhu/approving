@@ -202,6 +202,19 @@ func (m *Manager) DeliverConversationReply(ctx context.Context, reply Conversati
 	if scope == "" && strings.TrimSpace(reply.RunID) == "" {
 		scope = turn
 	}
+	// An answer about background work is phrased by the conversation layer like
+	// every other thing the platform says. Without this the docstring above was
+	// only half true: a worker's conclusion went out in the worker's register,
+	// so one conversation alternated between two voices depending on which
+	// layer happened to be speaking. Replies that belong to no run have no task
+	// to brief against and are left exactly as submitted.
+	if phrased := m.phraseRunReport(ctx, SendableRequest{
+		ProjectID: reply.ProjectID, RunID: reply.RunID, Scene: scene,
+		ConversationID: reply.ConversationID, TraceID: reply.TraceID,
+		Kind: sendable.KindFinal, Text: text,
+	}); strings.TrimSpace(phrased) != "" {
+		text = phrased
+	}
 	result, err := m.DeliverSendable(ctx, SendableRequest{
 		ProjectID: reply.ProjectID, Scene: scene, ConversationID: reply.ConversationID,
 		UserID: reply.UserID, RunID: strings.TrimSpace(reply.RunID),
@@ -278,41 +291,6 @@ func (m *Manager) SendRunAcceptanceAck(ctx context.Context, ack RunAcceptanceAck
 		m.markAnswered(turn)
 	}
 	return result, err
-}
-
-// runAcceptanceText is the last-resort line when a Run is accepted but the
-// conversation layer did not already speak.
-//
-// It says which task it is whenever the title is short enough to read as a
-// name. This line used to drop the title on the grounds that a short_title is
-// a truncated requirement rather than a name, and back then it was: they
-// arrived as 「快模型和 wo」. Now that they are cut at word boundaries the only
-// remaining objection is length, so length is what is actually checked —
-// dropping the name outright produced 「好，那事我去弄」 in reply to 「修复下」,
-// which names nothing at all.
-//
-// Do not append "feel free to keep chatting": the user already knows they can
-// talk, and saying so reads like a helpdesk script.
-func runAcceptanceText(shortTitle, language string) string {
-	name := nameableTitle(shortTitle)
-	if services.NormalizeLanguage(language) == "en" {
-		if name != "" {
-			return "Got it, " + name + " — I'll take it and come back when it's done."
-		}
-		return "Got it, I'll take that one and come back when it's done."
-	}
-	if name != "" {
-		// The comma is doing work: a title can end in either script, and it is
-		// the one separator that reads correctly after both.
-		return "好，" + name + "，我去弄，完了告诉你。"
-	}
-	return "好，那事我去弄，完了告诉你。"
-}
-
-// placeholderTitles are what the title resolver produces for a run that has no
-// name of its own. Saying one of these out loud is no better than the pronoun.
-var placeholderTitles = map[string]bool{
-	"未命名任务": true, "untitled task": true, "untitled": true,
 }
 
 // nameableTitle returns the title if it can stand in as the name of a task.

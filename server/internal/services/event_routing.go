@@ -70,6 +70,12 @@ func EventRoutes() []EventRoute {
 			Key: "task_outcome", ToLive: true, Unbindable: true,
 		},
 		{
+			// The only row the work layer does not trigger: the platform
+			// volunteers this on its own schedule so a slow task stops looking
+			// like a hung one.
+			Key: "run_heartbeat", ToLive: true, Unbindable: true,
+		},
+		{
 			// The goodbye (and the matching hello) when somebody detaches a Run
 			// from this conversation or puts it back.
 			Key: "origin_binding", ToLive: true, Unbindable: true,

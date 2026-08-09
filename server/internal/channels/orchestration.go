@@ -133,7 +133,22 @@ func (m *Manager) sendOrchestrationReply(ctx context.Context, rc *runningChannel
 	})
 }
 
-// ReportRunProgress is the orchestration-layer explicit progress sendable path.
+// ReportRunProgress is the orchestration-layer path for a fact the work layer
+// reported about a Run in flight.
+//
+// Two things changed here from the obvious "deliver what the worker wrote".
+//
+// The fact is recorded on the task ledger whatever happens to the message,
+// because the ledger is what answers "how's it going" later, and it used to be
+// written only on the inbound-turn path — so a report that arrived through the
+// MCP tool left no trace at all and a follow-up question was answered from the
+// status the task had when it was created.
+//
+// And plain progress no longer interrupts anyone. A worker that reports every
+// step turns the conversation into a build log, which is what made people stop
+// reading it; the interesting cases (blocked, needs a decision, done) still
+// come through, and long-running work is surfaced by the heartbeat instead —
+// on the platform's schedule, not the worker's.
 func (m *Manager) ReportRunProgress(ctx context.Context, req SendableRequest) (DeliveryResult, error) {
 	if req.Kind == "" {
 		req.Kind = sendable.KindProgress
@@ -147,7 +162,91 @@ func (m *Manager) ReportRunProgress(ctx context.Context, req SendableRequest) (D
 	if req.Kind == sendable.KindBlocked || req.Kind == sendable.KindActionRequired {
 		req.Priority = sendable.PriorityCritical
 	}
+	m.noteWorkProgress(req.ProjectID, req.RunID, reportedStage(req), req.Progress.Blocked)
+
+	if req.Kind == sendable.KindProgress {
+		return DeliveryResult{Decision: sendable.Decision{Reason: ReasonLedgerOnly}}, nil
+	}
+	// The user hears one voice. The worker supplies the facts — it is the only
+	// layer that checked them — and the conversation layer says them the way it
+	// says everything else. Phrasing that is unavailable degrades to the
+	// worker's own words rather than to silence.
+	if phrased := m.phraseRunReport(ctx, req); strings.TrimSpace(phrased) != "" {
+		req.Text = phrased
+	}
 	return m.DeliverSendable(ctx, req)
+}
+
+// reportedStage is the one line worth remembering from a report: what is
+// happening right now, falling back to the conclusion and then to the message.
+func reportedStage(req SendableRequest) string {
+	for _, candidate := range []string{
+		req.Progress.Stage, req.Progress.Conclusion, req.Text,
+	} {
+		if s := strings.TrimSpace(candidate); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+// phraseRunReport hands the report to the conversation layer to say. Returns
+// empty when there is nothing to phrase against, which leaves the worker's
+// text as-is.
+func (m *Manager) phraseRunReport(ctx context.Context, req SendableRequest) string {
+	identity := m.identityForRun(req.RunID, req.ProjectID)
+	if identity == nil {
+		return ""
+	}
+	language := taskLanguage(identity)
+	return m.synthesizeForTask(ctx, identity, normalizeScene(req.Scene), req.ConversationID,
+		req.TraceID, runReportBrief(identity, req, language), req.Text)
+}
+
+// runReportRunes bounds how much of the worker's own text may be quoted into
+// the brief. Same reasoning as a pause ask: it was written for the platform,
+// not for the user, so the readable part goes in and the work log does not.
+const runReportRunes = 200
+
+// runReportBrief states what the conversation layer may say about a report
+// from the work layer.
+func runReportBrief(identity *models.TaskIdentity, req SendableRequest, language string) string {
+	var b strings.Builder
+	switch req.Kind {
+	case sendable.KindBlocked:
+		b.WriteString("后台任务卡住了，干不下去，请用一到两句话说清楚卡在哪。\n")
+	case sendable.KindActionRequired:
+		b.WriteString("后台任务需要用户拍板才能继续，请用一到两句话说清楚要对方定什么。\n")
+	default:
+		b.WriteString("后台任务有结论要交给用户，请用一到两句话转述。\n")
+	}
+	if title := services.SanitizeShortTitle(identity.ShortTitle); title != "" {
+		b.WriteString("任务：" + title + "\n")
+	}
+	if want := strings.TrimSpace(identity.OriginalRequirement); want != "" {
+		b.WriteString("用户当初的要求：" + truncateRunes(want, 200) + "\n")
+	}
+	if stage := strings.TrimSpace(req.Progress.Stage); stage != "" {
+		b.WriteString("当前进行到：" + truncateRunes(stage, 120) + "\n")
+	}
+	said := leadingConclusion(req.Progress.Conclusion, runReportRunes)
+	if said == "" {
+		said = leadingConclusion(req.Text, runReportRunes)
+	}
+	if said != "" {
+		b.WriteString("执行方原话：" + said + "\n")
+	} else {
+		b.WriteString("这一轮没有留下可读的内容。如实说情况，不要编具体细节。\n")
+	}
+	b.WriteString("要求：说人话，像同事顺口说一句；不要出现任务编号、工作流名、节点名、执行环境、工具名；")
+	b.WriteString("不要说「请前往 Approving 查看」。")
+	if req.Kind != sendable.KindFinal {
+		b.WriteString("不要说任务已经完成或失败——它还没结束。")
+	}
+	if services.NormalizeLanguage(language) == "en" {
+		b.WriteString("\n用英文回答。")
+	}
+	return b.String()
 }
 
 // EnsureRunAccepted materializes task identity and sends the once-per-run ACK.

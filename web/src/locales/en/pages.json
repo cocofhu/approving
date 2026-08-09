@@ -306,6 +306,10 @@
             "label": "Run finished",
             "trigger": "The run completed, failed, or was cancelled"
           },
+          "run_heartbeat": {
+            "label": "Long-run check-in",
+            "trigger": "When a task has been going a while with nothing else to report, the platform speaks up on its own schedule; the worker is not involved"
+          },
           "origin_binding": {
             "label": "Binding change notice",
             "trigger": "When someone detaches or reconnects the run from its origin conversation on the run detail page"
@@ -1065,7 +1069,11 @@
         "live_recent_terminal_hours": "Terminal lookback",
         "live_max_concurrent_work": "Concurrent tasks",
         "live_tool_loop_limit": "Tool-loop limit",
-        "live_max_tokens": "Max tokens"
+        "live_max_tokens": "Max tokens",
+        "live_temperature": "Wording latitude",
+        "run_heartbeat_minutes": "Unprompted update interval",
+        "live_system_prompt_body": "Conversation instructions",
+        "live_synthesis_prompt_body": "Reporting instructions"
       },
       "settings": {
         "max_concurrent_runs": "Max workflows in running state. Read-only when locked by APPROVING_MAX_RUNS.",
@@ -1081,9 +1089,17 @@
         "live_recent_terminal_hours": "How long completed / failed / cancelled tasks stay in the ledger. Older ones leave the fast model's context. Default 24h.",
         "live_max_concurrent_work": "Max tasks one conversation may keep running. New dispatches are rejected when full — refine or cancel instead. Default 3.",
         "live_tool_loop_limit": "Max tool calls the fast model may make in one turn (status, dispatch, cancel…). Past this the turn falls through to the sandbox. Default 3.",
-        "live_max_tokens": "max_tokens for one Live completion. Too small truncates replies; too large wastes budget. Default 2048."
+        "live_max_tokens": "max_tokens for one Live completion. Too small truncates replies; too large wastes budget. Default 2048.",
+        "live_temperature": "How much the model varies its wording. 0 says nearly the same thing every time; higher is looser. Leave blank to send no temperature at all and let the endpoint use its own default.",
+        "run_heartbeat_minutes": "How long a task may run without news before the platform volunteers an update in the conversation. 0 means it only speaks when the task stops for input or finishes.",
+        "live_system_prompt_body": "The instructions the fast model follows when reading intent, delegating and replying. Blank uses the built-in text. The fixed prefix above is added by the platform and cannot be edited — it is what says who the model is and that its output goes out verbatim; without it the model introduces itself as an assistant in someone's chat.",
+        "live_synthesis_prompt_body": "The instructions the fast model follows when telling someone how a task turned out. Blank uses the built-in text, with the same fixed prefix."
       },
       "liveUnconfigured": "Not configured: every IM message currently goes to a sandbox, which works but takes tens of seconds each. Fill in the endpoint and model to enable; a local or LAN model usually needs no key.",
+      "promptPrefix": "Fixed prefix (not editable)",
+      "blankUsesBuiltIn": "Leave blank to use the built-in text",
+      "blankUsesEndpointDefault": "Blank = endpoint default",
+      "showBuiltIn": "See what the built-in text says",
       "liveSecretStored": "Stored — leave blank to keep",
       "liveSecretEmpty": "Not configured",
       "liveTest": {

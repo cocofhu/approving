@@ -55,9 +55,6 @@ type RunNotifyService struct {
 	db       *gorm.DB
 	deliver  RunNotifyDeliverer
 	deepLink string
-	// retryDelays is overridable so tests do not have to wait out the real
-	// backoff.
-	retryDelays []time.Duration
 }
 
 // NewRunNotifyService builds the service. deliver may be nil (always no-op send).
@@ -66,13 +63,6 @@ func NewRunNotifyService(db *gorm.DB, deliver RunNotifyDeliverer, publicAdvertis
 		db:       db,
 		deliver:  deliver,
 		deepLink: strings.TrimRight(strings.TrimSpace(publicAdvertise), "/"),
-	}
-}
-
-// SetRetryDelays overrides the delivery backoff schedule (tests).
-func (s *RunNotifyService) SetRetryDelays(delays []time.Duration) {
-	if s != nil {
-		s.retryDelays = delays
 	}
 }
 
@@ -148,57 +138,45 @@ func (s *RunNotifyService) AttemptDeliver(ev RunNotifyEvent) {
 			Msg("run-notify: no deliverer — no-op after claim")
 		return
 	}
-	s.deliverWithRetry(ev, project.ID, text, kind)
+	s.deliverAndRecord(ev, project.ID, text, kind)
 }
 
-// runNotifyRetryDelays bound how long a failed delivery is retried. The receipt
-// is claimed before the send, so a transport error used to consume the claim and
-// lose the notification permanently. Retrying inside the claim closes that hole
-// without weakening the once-only guarantee; when the attempts are spent the
-// outcome is recorded on the receipt instead of vanishing into a log line.
-var runNotifyRetryDelays = []time.Duration{time.Second, 3 * time.Second, 8 * time.Second}
-
-func (s *RunNotifyService) deliverWithRetry(ev RunNotifyEvent, projectID, text, kind string) {
-	delays := s.retryDelays
-	if delays == nil {
-		delays = runNotifyRetryDelays
-	}
+// deliverAndRecord makes one attempt and writes down how it went.
+//
+// One attempt, not several. This used to loop with a backoff, on the reasoning
+// that the receipt is claimed before the send so a transport error would burn
+// the claim. That reasoning was right and the loop was still wrong: the egress
+// it calls already retries transport failures with its own backoff, and by the
+// time it returns an error the message is also sitting in the push queue. A
+// second call from out here does not reach the network again — it enqueues a
+// duplicate, which the egress suppresses as duplicate content, and three
+// wasted round trips later the receipt reads failed anyway.
+//
+// The three outcomes that actually differ are kept, because they are what
+// someone reads off the receipt when asking why a notification never arrived.
+func (s *RunNotifyService) deliverAndRecord(ev RunNotifyEvent, projectID, text, kind string) {
 	track := receiptTrackID(ev.RunID, ev.NodeID, ev.Iteration, kind)
-	var lastErr error
-	for attempt := 0; ; attempt++ {
-		err := s.deliverOnce(projectID, text, track)
-		if err == nil {
-			s.markReceipt(ev, kind, "delivered", "")
-			return
-		}
-		// A project with no bound channel is a configuration state, not a
-		// failure to retry against.
-		if errors.Is(err, ErrRunNotifyNoTarget) {
-			log.Info().Str("run_id", ev.RunID).Str("project", projectID).
-				Msg("run-notify: no channel target — no-op after claim")
-			s.markReceipt(ev, kind, "no_target", "")
-			return
-		}
-		// The message is queued, not lost. Recording it as deferred keeps the
-		// claim intact and lets the push sweeper settle it once the
-		// conversation frees up.
-		if errors.Is(err, ErrRunNotifyDeferred) {
-			log.Info().Str("run_id", ev.RunID).Str("project", projectID).Str("kind", kind).
-				Msg("run-notify: conversation busy — queued, awaiting flush")
-			s.markReceipt(ev, kind, "deferred", "")
-			return
-		}
-		lastErr = err
-		if attempt >= len(delays) {
-			break
-		}
-		log.Warn().Err(err).Str("run_id", ev.RunID).Str("project", projectID).
-			Int("attempt", attempt+1).Msg("run-notify: send failed, retrying")
-		time.Sleep(delays[attempt])
+	err := s.deliverOnce(projectID, text, track)
+	switch {
+	case err == nil:
+		s.markReceipt(ev, kind, "delivered", "")
+	// A project with no bound channel is a configuration state, not a failure.
+	case errors.Is(err, ErrRunNotifyNoTarget):
+		log.Info().Str("run_id", ev.RunID).Str("project", projectID).
+			Msg("run-notify: no channel target — no-op after claim")
+		s.markReceipt(ev, kind, "no_target", "")
+	// The message is queued, not lost. Recording it as deferred keeps the
+	// claim intact and lets the push sweeper settle it once the conversation
+	// frees up.
+	case errors.Is(err, ErrRunNotifyDeferred):
+		log.Info().Str("run_id", ev.RunID).Str("project", projectID).Str("kind", kind).
+			Msg("run-notify: conversation busy — queued, awaiting flush")
+		s.markReceipt(ev, kind, "deferred", "")
+	default:
+		log.Error().Err(err).Str("run_id", ev.RunID).Str("project", projectID).
+			Msg("run-notify: send failed")
+		s.markReceipt(ev, kind, "failed", err.Error())
 	}
-	log.Error().Err(lastErr).Str("run_id", ev.RunID).Str("project", projectID).
-		Msg("run-notify: send failed after retries")
-	s.markReceipt(ev, kind, "failed", lastErr.Error())
 }
 
 func (s *RunNotifyService) deliverOnce(projectID, text, trackID string) error {

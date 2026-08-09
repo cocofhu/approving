@@ -58,3 +58,26 @@ func (a runPausedAdapter) OnRunPaused(ev engine.RunPausedEvent) {
 			Msg("task pause did not reach its origin conversation")
 	}
 }
+
+// runHeartbeatAdapter carries the "still going" tick to the conversation layer,
+// which decides whether anyone is waiting and whether they were told recently
+// enough. The engine deliberately does not know either of those things.
+type runHeartbeatAdapter struct {
+	mgr *channels.Manager
+}
+
+func (a runHeartbeatAdapter) OnRunHeartbeat(ev engine.RunHeartbeatEvent) {
+	if a.mgr == nil {
+		return
+	}
+	err := a.mgr.ReportRunHeartbeat(context.Background(), channels.RunHeartbeat{
+		ProjectID:  ev.ProjectID,
+		RunID:      ev.RunID,
+		NodeLabel:  ev.NodeLabel,
+		RunningFor: ev.RunningFor,
+	})
+	if err != nil {
+		log.Warn().Err(err).Str("run", ev.RunID).
+			Msg("long-running update did not reach its origin conversation")
+	}
+}

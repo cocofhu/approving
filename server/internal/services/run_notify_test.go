@@ -5,7 +5,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/cocofhu/approving/internal/models"
 
@@ -151,22 +150,26 @@ func TestAttemptDeliver_noTargetStillClaims(t *testing.T) {
 	}
 }
 
-// A transport failure must be retried inside the claim: the receipt is taken
-// before the send, so giving up on the first error loses the notification for
-// good. The claim still bounds the whole thing to one notification.
-func TestAttemptDeliver_sendFailRetriesThenRecordsFailure(t *testing.T) {
+// A transport failure is asked for once and then written down.
+//
+// It used to retry here with its own backoff, to protect the claim taken before
+// the send. The egress underneath already retries transport errors, and by the
+// time it reports one the message is also sitting in its push queue — so a
+// second call from here never reached the network, it only enqueued a duplicate
+// for the egress to suppress. What has to hold is that the outcome lands on the
+// receipt rather than vanishing into a log line.
+func TestAttemptDeliver_sendFailRecordsFailureWithoutRetryingHere(t *testing.T) {
 	db := setupRunNotifyDB(t)
 	seedNotifyProject(t, db, true, []string{"failed"}, "inherit", nil)
 	d := &fakeRunDeliverer{err: errors.New("qq down")}
 	svc := NewRunNotifyService(db, d, "")
-	svc.SetRetryDelays([]time.Duration{0, 0, 0})
 	ev := RunNotifyEvent{
 		ProjectID: "proj-n1", RunID: "run-5", WorkflowID: "wf-n1",
 		NodeID: "x", Iteration: 1, Kind: "failed",
 	}
 	svc.AttemptDeliver(ev)
-	if d.count() != 4 {
-		t.Fatalf("attempts=%d want 1 initial + 3 retries", d.count())
+	if d.count() != 1 {
+		t.Fatalf("attempts=%d want exactly one; the egress owns the retrying", d.count())
 	}
 
 	var receipt models.NotifyDeliveryReceipt
@@ -175,7 +178,7 @@ func TestAttemptDeliver_sendFailRetriesThenRecordsFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	if receipt.DeliveryStatus != "failed" {
-		t.Fatalf("delivery status = %q; an exhausted delivery must be visible in the data",
+		t.Fatalf("delivery status = %q; a failed delivery must be visible in the data",
 			receipt.DeliveryStatus)
 	}
 

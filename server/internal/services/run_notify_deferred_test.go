@@ -3,7 +3,6 @@ package services
 import (
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/cocofhu/approving/internal/models"
 )
@@ -54,7 +53,6 @@ func TestAttemptDeliver_deferredIsNotDelivered(t *testing.T) {
 	seedNotifyProject(t, db, true, []string{"waiting_human"}, "inherit", nil)
 	d := &fakeTrackingDeliverer{err: ErrRunNotifyDeferred}
 	svc := NewRunNotifyService(db, d, "")
-	svc.SetRetryDelays([]time.Duration{0, 0, 0})
 
 	svc.AttemptDeliver(RunNotifyEvent{
 		ProjectID: "proj-n1", RunID: "run-def", WorkflowID: "wf-n1",
@@ -74,7 +72,6 @@ func TestSettlePushSent_deferredBecomesDelivered(t *testing.T) {
 	seedNotifyProject(t, db, true, []string{"waiting_human"}, "inherit", nil)
 	d := &fakeTrackingDeliverer{err: ErrRunNotifyDeferred}
 	svc := NewRunNotifyService(db, d, "")
-	svc.SetRetryDelays([]time.Duration{0})
 
 	svc.AttemptDeliver(RunNotifyEvent{
 		ProjectID: "proj-n1", RunID: "run-settle", WorkflowID: "wf-n1",

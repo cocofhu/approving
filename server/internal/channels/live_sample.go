@@ -62,7 +62,7 @@ func (m *Manager) newSampleRecorder(rc *runningChannel, in InboundMessage) *samp
 			UserText:       strings.TrimSpace(in.Text),
 			TraceID:        strings.TrimSpace(in.TraceID),
 			Egress:         egressDirector,
-			Model:          liveModelName(m.live),
+			Model:          liveModelName(m.liveModel()),
 		},
 	}
 }

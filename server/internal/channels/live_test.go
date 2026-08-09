@@ -98,16 +98,17 @@ func TestCommentaryNeverAuthorizesADestructiveAction(t *testing.T) {
 // composed.
 func TestOutboundCopyNeverExposesInternals(t *testing.T) {
 	copies := []string{
-		busyHintText,
+		busyHintText("zh-CN"), busyHintText("en"),
 		turnTooSlowText("zh-CN"), turnTooSlowText("en"),
 		interruptedTurnText("zh-CN"), interruptedTurnText("en"),
 		runAcceptanceText("登录页性能", "zh-CN"), runAcceptanceText("Login perf", "en"),
 		FormatProgressText(ProgressEvent{Kind: ProgressMilestone, Summary: "已提交分支"}),
+		FormatProgressText(ProgressEvent{Kind: ProgressBlocker, Summary: "dependency install keeps failing"}),
 	}
 	for _, err := range []error{
 		errNoReply(), context.DeadlineExceeded,
 	} {
-		copies = append(copies, turnFailureText(err))
+		copies = append(copies, turnFailureText(err, "zh-CN"), turnFailureText(err, "en"))
 	}
 	for _, text := range copies {
 		if strings.TrimSpace(text) == "" {
@@ -584,7 +585,8 @@ func TestQueueFullHintIsSentOnceAndNotSilent(t *testing.T) {
 	for i := 0; i < convQueueDepth+5; i++ {
 		m.dispatch(context.Background(), rc, testInbound(string(rune('a'+i%26))+"-fill"))
 	}
-	if n := countText(sentTexts(fa), busyHintText); n != 1 {
+	// The filler messages are ASCII, so the hint comes back in English.
+	if n := countText(sentTexts(fa), busyHintText("en")); n != 1 {
 		t.Fatalf("busy hint sent %d times, want exactly one per cooldown", n)
 	}
 	once.Do(func() { close(release) })
@@ -704,6 +706,49 @@ func TestPhrasePromptSharedFragmentsLock(t *testing.T) {
 		"刚把一件事派人", "正在做", "要能看出是哪件事")
 	mustContain("refine", refineAckPhrasePrompt,
 		"按新重点继续", "不要照抄完整标题")
+}
+
+// TestConfiguredPromptBodyStillCarriesThePersona is the guard the settings page
+// needs. The lock tests above only prove the built-in prompts are assembled
+// correctly; once an operator can supply the body, the thing worth pinning is
+// that nothing they can type removes who the model is.
+func TestConfiguredPromptBodyStillCarriesThePersona(t *testing.T) {
+	for _, body := range []string{
+		"随便写点什么",
+		"",
+		"   ",
+		VoicePersonaLead, // someone pasting the whole default back in
+		"你是一个 AI 助手，请礼貌回答。",
+	} {
+		got := ComposeVoicePrompt(body)
+		if !strings.HasPrefix(got, VoicePersonaLead) {
+			t.Fatalf("composed prompt lost the persona for body %q:\n%s", body, got)
+		}
+	}
+
+	m := &Manager{}
+	if m.systemPrompt() != liveSystemPrompt {
+		t.Fatal("an unconfigured manager must use the built-in prompt verbatim")
+	}
+	m.SetLivePrompts(services.LivePrompts{SystemBody: "只回中文，别的都别说。"})
+	custom := m.systemPrompt()
+	if !strings.HasPrefix(custom, VoicePersonaLead) {
+		t.Fatalf("configured prompt lost the persona:\n%s", custom)
+	}
+	if !strings.Contains(custom, "只回中文") {
+		t.Fatalf("configured body did not take effect:\n%s", custom)
+	}
+	if strings.Contains(custom, "你手下有人干活") {
+		t.Fatal("a configured body must replace the built-in one, not append to it")
+	}
+
+	// Blank is the resting state, not a value: clearing the field has to bring
+	// the built-in prompt back rather than leaving the model with a bare
+	// persona and no instructions.
+	m.SetLivePrompts(services.LivePrompts{SystemBody: "   "})
+	if m.systemPrompt() != liveSystemPrompt {
+		t.Fatal("clearing the body must fall back to the built-in prompt")
+	}
 }
 
 func TestOutcomeBriefForbidsHollowArchitectureConclusion(t *testing.T) {

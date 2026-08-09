@@ -1,9 +1,45 @@
 package models
 
-import "time"
+import (
+	"strings"
+	"time"
+)
+
+// EphemeralRunPrefix marks a ledger row that was keyed by the turn that created
+// it because no Run existed yet.
+//
+// The conversation layer records a task the moment it delegates, which is
+// before the agent has called pm_start_run, so the row needs an id of its own.
+// A real Run later gets its own row; this one is closed when the turn ends.
+const EphemeralRunPrefix = "dispatch:"
+
+// IsEphemeralRunID reports whether an id is a placeholder rather than a Run.
+//
+// Three places used to spell this check out by hand — the stale-row reaper, the
+// live-Run lookup that must not query the runs table for an id that was never
+// in it, and the turn cleanup. They agreed only by coincidence, and the shape
+// of the key is not something a caller should have to know.
+func IsEphemeralRunID(runID string) bool {
+	return strings.HasPrefix(strings.TrimSpace(runID), EphemeralRunPrefix)
+}
 
 // TaskIdentity is the stable, user-facing identity of a Run.
 // Search visibility is bounded by both project and external user identity.
+//
+// Two kinds of row share this table and they are not merged, which is the
+// thing to know before reading any query over it:
+//
+//   - A Run row, keyed by the Run's own id. It can be reflowed, cancelled
+//     through the engine, and detached from its origin conversation.
+//   - A placeholder row, keyed by the turn that created it (IsEphemeral).
+//     The conversation layer writes one the moment it delegates, because the
+//     agent has not called pm_start_run yet and the ledger still needs
+//     something to answer "how's it going" with. It never becomes a Run row —
+//     a real Run gets its own — and it is closed when the turn ends, or reaped
+//     by StaleDispatchTTL if the turn died without closing it.
+//
+// So not every RunID here is a Run. Anything that queries the runs table, asks
+// the engine to act, or offers the row to the UI has to check first.
 type TaskIdentity struct {
 	ID                  string   `gorm:"primaryKey;size:64" json:"id"`
 	RunID               string   `gorm:"size:64;uniqueIndex:idx_task_run_project,priority:1" json:"runId"`
@@ -36,6 +72,20 @@ type TaskIdentity struct {
 	// results once landed in an unrelated cron session. A separate mark keeps
 	// the audit trail and gives delivery a state it can refuse outright.
 	OriginUnboundAt *time.Time `json:"originUnboundAt,omitempty"`
+	// LastStage is the most recent thing the work layer actually reported about
+	// this task, which is what lets "还在跑，现在在查代码" be a fact rather than a
+	// guess. It lived in a memory map until it became the only record of a
+	// long-running task's progress — a restart then wiped every in-flight
+	// task's stage and the conversation went back to answering from the status
+	// the task had when it was created.
+	LastStage        string     `gorm:"size:255" json:"lastStage,omitempty"`
+	LastStageBlocked bool       `json:"lastStageBlocked,omitempty"`
+	LastStageAt      *time.Time `json:"lastStageAt,omitempty"`
+	// LastHeartbeatAt is when the platform last volunteered an update about
+	// this task. It lives here rather than in the engine because the engine has
+	// no idea who is listening — only the ledger knows which conversation is
+	// waiting and when it was last spoken to.
+	LastHeartbeatAt *time.Time `json:"lastHeartbeatAt,omitempty"`
 	Language        string     `gorm:"size:16" json:"language,omitempty"`
 	RecentContext   string     `gorm:"type:text" json:"recentContext,omitempty"`
 	Status          string     `gorm:"size:32;index" json:"status"`
@@ -43,6 +93,12 @@ type TaskIdentity struct {
 	CreatedAt       time.Time  `json:"createdAt"`
 	UpdatedAt       time.Time  `json:"updatedAt"`
 }
+
+// IsEphemeral reports whether this row stands in for a Run that does not exist
+// yet. Derived from the key rather than stored, because the key is the fact: a
+// row that never became a Run keeps its placeholder id for life, and a real Run
+// is a different row.
+func (t TaskIdentity) IsEphemeral() bool { return IsEphemeralRunID(t.RunID) }
 
 // MessageBinding gives an explicit quoted/replied message precedence over
 // fuzzy title matching.

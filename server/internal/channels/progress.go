@@ -314,24 +314,6 @@ func (a *progressAccumulator) emitKeywordLines() []ProgressEvent {
 	return out
 }
 
-func FormatProgressText(ev ProgressEvent) string {
-	sum := strings.TrimSpace(ev.Summary)
-	if sum == "" {
-		return ""
-	}
-	switch ev.Kind {
-	case ProgressBlocker:
-		return "卡住了：" + sum
-	case ProgressConfirm:
-		return "需要你定一下：" + sum
-	default:
-		// Milestones carry no label. The old "进度：" prefix turned the agent's
-		// own words into a machine relaying them, and the content already says
-		// it is progress.
-		return sum
-	}
-}
-
 func isProgressNoise(text string) bool {
 	// Extremely short token-like fragments and tool dump markers.
 	if utf8.RuneCountInString(text) < 4 {

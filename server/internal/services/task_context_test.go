@@ -97,14 +97,14 @@ func TestActiveTasksAreScopedToTheConversationAndReapGhosts(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := svc.EnsureIdentity(EnsureTaskIdentityInput{
-		RunID: "dispatch:old", ProjectID: scope.ProjectID, UserID: scope.UserID,
+		RunID: models.EphemeralRunPrefix + "old", ProjectID: scope.ProjectID, UserID: scope.UserID,
 		ShortTitle: "早答完的查询", Status: "running",
 		OriginConversationID: "c1",
 	}); err != nil {
 		t.Fatal(err)
 	}
 	// Backdate the ephemeral stub past the reap TTL.
-	if err := db.Model(&models.TaskIdentity{}).Where("run_id = ?", "dispatch:old").
+	if err := db.Model(&models.TaskIdentity{}).Where("run_id = ?", models.EphemeralRunPrefix+"old").
 		Update("updated_at", now.Add(-StaleDispatchTTL-time.Minute)).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestActiveTasksAreScopedToTheConversationAndReapGhosts(t *testing.T) {
 		t.Fatalf("active = %+v want only the live task in this conversation", got)
 	}
 	var stub models.TaskIdentity
-	if err := db.Where("run_id = ?", "dispatch:old").First(&stub).Error; err != nil {
+	if err := db.Where("run_id = ?", models.EphemeralRunPrefix+"old").First(&stub).Error; err != nil {
 		t.Fatal(err)
 	}
 	if stub.Status != "cancelled" || stub.TerminalAt == nil {

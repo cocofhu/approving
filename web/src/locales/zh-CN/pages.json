@@ -306,6 +306,10 @@
             "label": "运行结束",
             "trigger": "运行完成、失败或被取消"
           },
+          "run_heartbeat": {
+            "label": "长跑主动汇报",
+            "trigger": "任务跑了很久还没有别的动静时，平台按自己的节奏说一句，执行方无感"
+          },
           "origin_binding": {
             "label": "绑定变更告知",
             "trigger": "有人在运行详情页解除或恢复它与来源会话的绑定时"
@@ -1065,7 +1069,11 @@
         "live_recent_terminal_hours": "终态任务回看",
         "live_max_concurrent_work": "会话并发任务",
         "live_tool_loop_limit": "单轮工具循环",
-        "live_max_tokens": "单次回复上限"
+        "live_max_tokens": "单次回复上限",
+        "live_temperature": "回话发挥空间",
+        "run_heartbeat_minutes": "长跑任务主动汇报间隔",
+        "live_system_prompt_body": "对话模型指令正文",
+        "live_synthesis_prompt_body": "汇报措辞指令正文"
       },
       "settings": {
         "max_concurrent_runs": "同时处于 running 状态的 workflow 运行数上限。由 APPROVING_MAX_RUNS 环境变量锁定时页面只读。",
@@ -1081,9 +1089,17 @@
         "live_recent_terminal_hours": "已完成 / 失败 / 取消的任务还会出现在台账里多久。超过此窗口的终态任务不再进入快模型上下文。默认 24 小时。",
         "live_max_concurrent_work": "同一会话同时挂着的任务数上限；满了之后新派活会被拒，应改用 refine 或先取消一件。默认 3。",
         "live_tool_loop_limit": "快模型在一轮里最多调用工具的次数（查状态、派活、取消等）。超过则把本轮交给沙箱，避免空转。默认 3。",
-        "live_max_tokens": "快模型单次 completion 的 max_tokens。太小可能截断回复；太大浪费且变慢。默认 2048。"
+        "live_max_tokens": "快模型单次 completion 的 max_tokens。太小可能截断回复；太大浪费且变慢。默认 2048。",
+        "live_temperature": "模型措辞的随机程度，0 表示每次都说得几乎一样，越大越放得开。留空则不下发这个参数，按端点自己的默认值走。",
+        "run_heartbeat_minutes": "一个任务跑了这么久还没动静，平台就主动去会话里说一句进展。填 0 表示不主动汇报，只在任务停下等人或结束时才说话。",
+        "live_system_prompt_body": "快模型判断意图、派活和接话时遵循的指令正文。留空用内置默认。上方那段固定前缀由平台拼接，改不掉——它定的是「你是谁、你的话会原样发出去」，丢了模型会在 IM 里自称助手。",
+        "live_synthesis_prompt_body": "任务有结果后，快模型把结论讲给对方听时遵循的指令正文。留空用内置默认，同样自带固定前缀。"
       },
       "liveUnconfigured": "尚未配置：当前每条 IM 消息都会交给沙箱，功能完整但每条都要等几十秒。填好地址和模型即可启用，本机或内网模型通常不需要密钥。",
+      "promptPrefix": "固定前缀（不可修改）",
+      "blankUsesBuiltIn": "留空即用内置默认",
+      "blankUsesEndpointDefault": "留空按端点默认",
+      "showBuiltIn": "看看内置默认写的是什么",
       "liveSecretStored": "已保存，留空则不修改",
       "liveSecretEmpty": "尚未配置",
       "liveTest": {

@@ -48,16 +48,18 @@ const (
 	cancelWorkTool = "cancel_work"
 )
 
-// liveSystemPrompt tells the model who it is and where the line is.
+// DefaultLiveSystemPromptBody tells the model where the line is.
 //
 // The line is drawn by capability, not topic: it may say anything it can
 // support from the conversation in front of it or from a tool result, and must
 // delegate anything that needs the repository or an action. Uncertainty
 // resolves toward delegating, because an invented answer is indistinguishable
 // from a real one to the person reading it.
-const liveSystemPrompt = VoicePersonaLead + `
-
-你手下有人干活。你的职责是接话、判断意图、派活或收窄已有任务，然后把真实进展和结论讲给对方听。
+//
+// This is the body only. Who the model is comes from VoicePersonaLead, which
+// the runtime always puts in front — see ComposeVoicePrompt. An operator may
+// replace this text from the settings page; they may not replace the persona.
+const DefaultLiveSystemPromptBody = `你手下有人干活。你的职责是接话、判断意图、派活或收窄已有任务，然后把真实进展和结论讲给对方听。
 
 你可以直接回答：打招呼、闲聊、澄清对方的意思、解释你们刚才聊过的内容、回答你从这段对话里就能确定的事。
 
@@ -82,9 +84,10 @@ dispatch_pm / refine_work 都要用 user_reply 先接一句；平台会先发出
 - 不要提到"沙箱""Agent""模型""工具""上下文"这些词。
 - 你就是这个项目的负责人本人。不要说自己是 AI、模型或助手，也不要说出任何模型名称、版本或厂商；被问"你是什么模型"就当同事随口一问，把话题带回工作。`
 
-// SetLiveModel wires the conversation model. Leaving it unset means every
-// message goes to a sandbox, which is slower but complete.
-func (m *Manager) SetLiveModel(model LiveModel) { m.live = model }
+// liveSystemPrompt is the built-in prompt: persona plus the default body. The
+// running prompt comes from Manager.systemPrompt(), which swaps in an
+// operator's body when one is configured.
+var liveSystemPrompt = ComposeVoicePrompt(DefaultLiveSystemPromptBody)
 
 // liveOutcome is what the conversation layer decided about one message.
 type liveOutcome struct {
@@ -121,7 +124,8 @@ func (o liveOutcome) applyTo(in *InboundMessage) {
 // handle it, just more slowly.
 func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel, in InboundMessage) liveOutcome {
 	ensureTraceID(&in)
-	if m.live == nil || !m.live.Configured() {
+	live := m.liveModel()
+	if live == nil || !live.Configured() {
 		// Still record a sample so every inbound turn has a TraceID row to join
 		// sandbox/MCP/outbound against — otherwise "no Live" leaves a hole in
 		// the call chain that debug cannot close.
@@ -147,7 +151,7 @@ func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel,
 	rec.briefedWith(briefing)
 
 	req := liveagent.Request{
-		System:    liveSystemPrompt + "\n\n" + briefing.render(),
+		System:    m.systemPrompt() + "\n\n" + briefing.render(),
 		Messages:  m.liveMessages(rc, in),
 		Tools:     directorTools(),
 		MaxTokens: m.replyMaxTokens(),
@@ -155,7 +159,7 @@ func (m *Manager) routeThroughLiveModel(ctx context.Context, rc *runningChannel,
 	rec.shown(req.Messages)
 
 	for step := 0; step < m.toolLoopLimit(); step++ {
-		res, err := m.live.Complete(ctx, req)
+		res, err := live.Complete(ctx, req)
 		if err != nil {
 			// Not a user-visible failure: the message still gets answered, by
 			// the agent. Logged so an endpoint failing every call is visible as
@@ -690,7 +694,7 @@ type foregroundCapture struct {
 // agent keeps speaking for itself. That is a degradation, not a mode: the user
 // hears the work layer's own register, and the sample says so.
 func (m *Manager) beginForegroundCapture(rc *runningChannel, in InboundMessage) *foregroundCapture {
-	if m.live == nil || !m.live.Configured() {
+	if live := m.liveModel(); live == nil || !live.Configured() {
 		return &foregroundCapture{}
 	}
 	collect, ok := m.captureAgentReplies(rc.cfg.ProjectID, in.Scene, in.ConversationID)
@@ -732,53 +736,12 @@ func (c *foregroundCapture) egress(degraded bool) string {
 	return egressDirector
 }
 
-// reportThroughDirector puts the work layer's conclusion into the voice the
-// user has been hearing all along.
-//
-// This is rephrasing, not rewriting. The facts come from the agent, which is
-// the only layer that checked them; the conversation layer is only allowed to
-// say them the way it says everything else. When it cannot — no model, a slow
-// endpoint, an empty completion — the agent's own words go out and are scrubbed
-// at sendOutboundResult. degraded reports which of the two happened.
-func (m *Manager) reportThroughDirector(ctx context.Context, rc *runningChannel, in InboundMessage,
-	conclusion string) (text string, degraded bool) {
-	plain := strings.TrimSpace(conclusion)
-	started := time.Now()
-	if m.live == nil || !m.live.Configured() || plain == "" {
-		m.appendTraceSpan(in.TraceID, finishSpan("director_report", "skipped", "degraded", started))
-		return plain, true
-	}
-	callCtx, cancel := context.WithTimeout(ctx, m.liveCallTimeout(directorReportFallbackTimeout))
-	defer cancel()
-
-	res, err := m.live.Complete(callCtx, liveagent.Request{
-		System: directorReportPrompt,
-		Messages: []liveagent.Message{
-			{Role: "user", Content: "对方问的是：" + truncateRunes(strings.TrimSpace(in.Text), 200)},
-			{Role: "user", Content: "查到的结果：" + truncateRunes(plain, 3000)},
-		},
-		MaxTokens: directorReportMaxTokens,
-	})
-	if err != nil || strings.TrimSpace(res.Text) == "" {
-		log.Info().Err(err).Str("project", rc.cfg.ProjectID).Str("trace", in.TraceID).
-			Msg("conclusion reported in the work layer's own words; the conversation model did not phrase it")
-		detail := "empty"
-		if err != nil {
-			detail = err.Error()
-		}
-		m.appendTraceSpan(in.TraceID, finishSpan("director_report", "error", detail, started))
-		return plain, true
-	}
-	m.appendTraceSpan(in.TraceID, finishSpan("director_report", "ok", "", started))
-	return strings.TrimSpace(res.Text), false
-}
-
 // liveCallTimeout prefers the settings-page live_timeout_seconds so director
 // report / synthesis cannot sit on a shorter hard-coded ceiling while route
 // uses 300s.
 func (m *Manager) liveCallTimeout(fallback time.Duration) time.Duration {
-	if m != nil && m.live != nil {
-		if d := m.live.Timeout(); d > 0 {
+	if live := m.liveModel(); live != nil {
+		if d := live.Timeout(); d > 0 {
 			return d
 		}
 	}

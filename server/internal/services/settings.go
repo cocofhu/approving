@@ -38,15 +38,37 @@ const (
 	KeyLiveMaxConcurrentWork   = "live_max_concurrent_work"
 	KeyLiveToolLoopLimit       = "live_tool_loop_limit"
 	KeyLiveMaxTokens           = "live_max_tokens"
+	// KeyRunHeartbeatMinutes is how long a task may run without the platform
+	// volunteering an update. 0 switches those updates off entirely.
+	KeyRunHeartbeatMinutes = "run_heartbeat_minutes"
+
+	// The editable half of the conversation model's instructions. These hold
+	// the prompt *body* only: the persona that says who the model is and that
+	// its output goes out verbatim is re-attached by the runtime and cannot be
+	// edited away. Blank means the built-in body.
+	KeyLiveSystemPromptBody    = "live_system_prompt_body"
+	KeyLiveSynthesisPromptBody = "live_synthesis_prompt_body"
+	// KeyLiveTemperature is blank when the endpoint's own default should
+	// stand. It is stored as text rather than a number for exactly that
+	// reason: 0 is a real setting, so "unset" needs to look different.
+	KeyLiveTemperature = "live_temperature"
 )
 
 // Knob value kinds. Ints render as steppers, strings as text inputs, secrets as
-// password inputs that read back masked and treat a blank/mask write as "keep".
+// password inputs that read back masked and treat a blank/mask write as "keep",
+// text as a multi-line box, floats as a decimal input that may be left blank.
 const (
 	KindInt    = "int"
 	KindString = "string"
 	KindSecret = "secret"
+	KindText   = "text"
+	KindFloat  = "float"
 )
+
+// maxLiveTemperature is the ceiling every OpenAI-compatible endpoint accepts.
+// Above it the request is rejected at the endpoint, which surfaces as "the
+// assistant went quiet" rather than as a settings error.
+const maxLiveTemperature = 2.0
 
 // ConcurrencyController is the slice of the engine the settings layer drives:
 // changing the live max_concurrent_runs. Defined here (consumer side) so the
@@ -77,7 +99,7 @@ type LiveTuner interface {
 	SetLiveEndpoint(baseURL, apiKey, model string, timeout time.Duration)
 }
 
-// LiveLimits is one snapshot of the conversation-layer context windows.
+// LiveLimits is one snapshot of the conversation layer's tunables.
 type LiveLimits struct {
 	TranscriptWindow    int
 	LedgerLimit         int
@@ -85,6 +107,9 @@ type LiveLimits struct {
 	MaxConcurrentWork   int
 	ToolLoopLimit       int
 	MaxTokens           int
+	// RunHeartbeat is the minimum gap between volunteered updates about one
+	// long-running task. Zero switches them off.
+	RunHeartbeat time.Duration
 }
 
 // LiveLimitsController receives the effective conversation-layer windows.
@@ -94,15 +119,51 @@ type LiveLimitsController interface {
 	SetLiveLimits(LiveLimits)
 }
 
+// LivePrompts is the editable half of what the conversation model is told.
+//
+// The bodies are bodies, not whole prompts. The persona in front of them is
+// assembled at call time and is not represented here, so there is no shape an
+// operator can put in this struct that drops it.
+type LivePrompts struct {
+	// SystemBody replaces the routing prompt's body. Blank keeps the built-in.
+	SystemBody string
+	// SynthesisBody replaces the outcome-reporting body. Blank keeps the
+	// built-in.
+	SynthesisBody string
+	// Temperature is nil when the endpoint's own default should stand.
+	Temperature *float64
+}
+
+// LivePromptController receives the effective prompt bodies and temperature.
+// Implemented at the composition root, which fans them out to the routing
+// layer, the reporting layer and the model client.
+type LivePromptController interface {
+	SetLivePrompts(LivePrompts)
+}
+
+// LivePromptDefaults describes the built-in prompts to the settings UI, so a
+// blank field can show what it is falling back to and what the immutable lead
+// looks like. Injected rather than imported: the prompts live in the channels
+// package, which depends on this one.
+type LivePromptDefaults struct {
+	// Prefix is the persona the runtime always puts in front of a body.
+	Prefix string
+	// SystemBody / SynthesisBody are the built-in bodies.
+	SystemBody    string
+	SynthesisBody string
+}
+
 // SettingsService is the DB override layer for platform scheduling params. It
 // resolves effective values (env > DB > config-file > default), persists UI
 // edits, and applies them to the running engine / sandbox service.
 type SettingsService struct {
-	db         *gorm.DB
-	conc       ConcurrencyController
-	sbx        SandboxTuner
-	live       LiveTuner
-	liveLimits LiveLimitsController
+	db          *gorm.DB
+	conc        ConcurrencyController
+	sbx         SandboxTuner
+	live        LiveTuner
+	liveLimits  LiveLimitsController
+	livePrompts LivePromptController
+	promptHints LivePromptDefaults
 }
 
 func NewSettingsService(db *gorm.DB, conc ConcurrencyController, sbx SandboxTuner) *SettingsService {
@@ -116,6 +177,13 @@ func (s *SettingsService) SetLiveTuner(t LiveTuner) { s.live = t }
 // SetLiveLimitsController wires the conversation-layer window knobs. Called
 // after the channel manager exists, because settings boot before channels.
 func (s *SettingsService) SetLiveLimitsController(c LiveLimitsController) { s.liveLimits = c }
+
+// SetLivePromptController wires the prompt/temperature fan-out, and tells the
+// settings page what the built-in prompts are so a blank field can preview the
+// text it falls back to.
+func (s *SettingsService) SetLivePromptController(c LivePromptController, d LivePromptDefaults) {
+	s.livePrompts, s.promptHints = c, d
+}
 
 // knob describes one tunable: its kind, label, floor, optional env lock, and
 // how to read the config-file/default fallback. Exactly one of fromCfg (int)
@@ -176,6 +244,27 @@ func knobs() []knob {
 		{key: KeyLiveMaxTokens, label: "单次回复上限", unit: "token", kind: KindInt, min: 256,
 			envVar:  "APPROVING_LIVE_MAX_TOKENS",
 			fromCfg: func(c *config.Config) int { return liveIntOr(c.Live.MaxTokens, 2048) }},
+		// min 0 on purpose: 0 is the off switch. Everything else here has a
+		// floor because a too-small value degrades quietly, but a project that
+		// genuinely does not want unprompted updates needs a way to say so.
+		{key: KeyRunHeartbeatMinutes, label: "长跑任务主动汇报间隔", unit: "分钟（0=不汇报）", kind: KindInt, min: 0,
+			envVar: "APPROVING_RUN_HEARTBEAT_MINUTES",
+			fromCfg: func(c *config.Config) int {
+				if c.Live.RunHeartbeatMinutes != nil {
+					return *c.Live.RunHeartbeatMinutes
+				}
+				return 30
+			}},
+
+		{key: KeyLiveSystemPromptBody, label: "对话模型指令正文", kind: KindText,
+			envVar:     "APPROVING_LIVE_SYSTEM_PROMPT_BODY",
+			fromCfgStr: func(c *config.Config) string { return c.Live.SystemPromptBody }},
+		{key: KeyLiveSynthesisPromptBody, label: "汇报措辞指令正文", kind: KindText,
+			envVar:     "APPROVING_LIVE_SYNTHESIS_PROMPT_BODY",
+			fromCfgStr: func(c *config.Config) string { return c.Live.SynthesisPromptBody }},
+		{key: KeyLiveTemperature, label: "对话模型 temperature", unit: "留空=按端点默认", kind: KindFloat,
+			envVar:     "APPROVING_LIVE_TEMPERATURE",
+			fromCfgStr: func(c *config.Config) string { return c.Live.Temperature }},
 	}
 }
 
@@ -199,6 +288,13 @@ type SettingItem struct {
 	Min    int    `json:"min"`
 	Source string `json:"source"` // env | db | config
 	Locked bool   `json:"locked"` // true when pinned by an env var (UI read-only)
+	// Prefix is text the runtime always puts in front of this value and that
+	// no edit can remove. Set only for prompt bodies; the UI shows it read-only
+	// above the editor so nobody writes a persona line that gets duplicated.
+	Prefix string `json:"prefix,omitempty"`
+	// Preview is what a blank value falls back to. Without it "留空即用默认"
+	// is a promise the user has no way to inspect.
+	Preview string `json:"preview,omitempty"`
 }
 
 // Effective returns every knob's current effective value with provenance.
@@ -219,9 +315,21 @@ func (s *SettingsService) Effective() []SettingItem {
 			}
 			item.Value, item.Source, item.Locked = v, src, locked
 		}
+		s.describeDefaults(&item)
 		out = append(out, item)
 	}
 	return out
+}
+
+// describeDefaults attaches the immutable prefix and the built-in body a blank
+// prompt field falls back to.
+func (s *SettingsService) describeDefaults(item *SettingItem) {
+	switch item.Key {
+	case KeyLiveSystemPromptBody:
+		item.Prefix, item.Preview = s.promptHints.Prefix, s.promptHints.SystemBody
+	case KeyLiveSynthesisPromptBody:
+		item.Prefix, item.Preview = s.promptHints.Prefix, s.promptHints.SynthesisBody
+	}
 }
 
 // envLocked reports whether the environment pins this knob, making it
@@ -286,12 +394,26 @@ func (s *SettingsService) Update(patch map[string]any) ([]SettingItem, error) {
 			if err := s.setStr(k.key, strconv.Itoa(v)); err != nil {
 				return nil, err
 			}
-		case KindString:
+		case KindString, KindText:
 			v, ok := raw.(string)
 			if !ok {
 				return nil, fmt.Errorf("%s 必须是字符串", k.label)
 			}
 			if err := s.setStr(k.key, strings.TrimSpace(v)); err != nil {
+				return nil, err
+			}
+		case KindFloat:
+			v, err := coerceOptionalFloat(raw)
+			if err != nil {
+				return nil, fmt.Errorf("%s 必须是数字，留空表示按端点默认", k.label)
+			}
+			if v != "" {
+				f, _ := strconv.ParseFloat(v, 64)
+				if f < 0 || f > maxLiveTemperature {
+					return nil, fmt.Errorf("%s 只能在 0 到 %g 之间", k.label, maxLiveTemperature)
+				}
+			}
+			if err := s.setStr(k.key, v); err != nil {
 				return nil, err
 			}
 		case KindSecret:
@@ -367,6 +489,31 @@ func (s *SettingsService) LiveEndpointFor(patch map[string]any) (baseURL, apiKey
 	return baseURL, apiKey, model, time.Duration(seconds) * time.Second
 }
 
+// coerceOptionalFloat normalises a float knob to its stored text. Blank stays
+// blank — that is the "leave it to the endpoint" value, not a missing one.
+func coerceOptionalFloat(raw any) (string, error) {
+	switch v := raw.(type) {
+	case float64:
+		return strconv.FormatFloat(v, 'g', -1, 64), nil
+	case int:
+		return strconv.Itoa(v), nil
+	case string:
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return "", nil
+		}
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return "", err
+		}
+		return strconv.FormatFloat(f, 'g', -1, 64), nil
+	case nil:
+		return "", nil
+	default:
+		return "", fmt.Errorf("not a number")
+	}
+}
+
 // coerceInt accepts the shapes an int can take after a JSON round-trip.
 func coerceInt(raw any) (int, error) {
 	switch v := raw.(type) {
@@ -412,6 +559,14 @@ func (s *SettingsService) apply() {
 			MaxConcurrentWork:   m[KeyLiveMaxConcurrentWork],
 			ToolLoopLimit:       m[KeyLiveToolLoopLimit],
 			MaxTokens:           m[KeyLiveMaxTokens],
+			RunHeartbeat:        time.Duration(m[KeyRunHeartbeatMinutes]) * time.Minute,
+		})
+	}
+	if s.livePrompts != nil {
+		s.livePrompts.SetLivePrompts(LivePrompts{
+			SystemBody:    str[KeyLiveSystemPromptBody],
+			SynthesisBody: str[KeyLiveSynthesisPromptBody],
+			Temperature:   parseOptionalFloat(str[KeyLiveTemperature]),
 		})
 	}
 	if s.conc != nil {
@@ -428,6 +583,22 @@ func (s *SettingsService) apply() {
 		)
 		s.sbx.SetMaxTestSandboxes(m[KeyMaxTestSandboxes])
 	}
+}
+
+// parseOptionalFloat turns the stored text into a value or an explicit "the
+// endpoint decides". Anything unparseable reads as unset rather than as zero:
+// a corrupted row must not silently pin the model to deterministic output.
+func parseOptionalFloat(raw string) *float64 {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	f, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		log.Warn().Str("value", raw).Msg("stored temperature is not a number; leaving it to the endpoint")
+		return nil
+	}
+	return &f
 }
 
 func (s *SettingsService) dbInt(key string) (int, bool) {
