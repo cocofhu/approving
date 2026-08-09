@@ -31,7 +31,10 @@ A gateway instance runs exactly one driver, selected by `driver` in the config:
 - `kubernetes` — production. ClusterIP Service includes Public+Internal (Listen).
   LoadBalancer Service publishes **Public** only. Endpoints merge LB IP for public
   ports and ClusterIP DNS for `cdp`/`novnc`. `ensure*` updates existing Service
-  `Spec.Ports` on AlreadyExists so inventory LBs drop 9222/6080.
+  `Spec.Ports` on AlreadyExists. Driver Options carry Public/Internal so
+  `ReconcileOnStartup` / `Start` / `Get` call `ConvergePublishSurface` and heal
+  inventory `*-lb` after upgrade (not only Create/Reinstall). Until that
+  reconcile finishes, a pre-existing LB may still expose 9222/6080.
 
 Docker and Kubernetes are deployed separately and never run together in one
 instance.

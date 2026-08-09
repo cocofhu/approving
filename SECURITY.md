@@ -38,8 +38,9 @@ Unauthenticated Chromium CDP (`:9222`, socat) and noVNC/websockify (`:6080`,
 - **Users** reach the desktop only through Approving WebSocket proxies:
   `/sandbox-vnc/:sandboxId/ws` and `/preview-vnc/:runId/:nodeId/:port/ws`.
   When platform Auth is injected (always on outside local-demo), these require
-  a valid session cookie. The UI does not expose or copy direct `cdp` / `novnc`
-  addresses.
+  a valid session cookie. Auth checks **Session validity only** — it does **not**
+  check sandbox or run ownership; any logged-in user who knows the URL can
+  connect. The UI does not expose or copy direct `cdp` / `novnc` addresses.
 - **session / ide / ssh** may still be published. They use their own passwords
   or SSH keys (`ROOT_PASSWORD` / `SSH_KEY` / IDE password). Direct CDP/noVNC
   is not a substitute.
@@ -51,5 +52,10 @@ Unauthenticated Chromium CDP (`:9222`, socat) and noVNC/websockify (`:6080`,
 - **Docker inventory**: already-running containers keep their existing `-p`
   mappings until TTL expiry or Reinstall. Old `host:9222` / `host:6080`
   bookmarks becoming unreachable is an **expected breaking change**.
+- **Kubernetes inventory**: existing `*-lb` Services that still list 9222/6080
+  stay exposed until gateway **startup reconcile** (`ReconcileOnStartup`),
+  `Start`, or `Reinstall` updates `Spec.Ports`. Until that heal completes, old
+  bookmarks and untrusted scans may still succeed. After converge, Endpoints
+  report ClusterIP DNS for CDP/noVNC; LB Ingress IPs are public ports only.
 - Do not rely on traditional VNC 8-character passwords; isolation is by
   publish surface + platform Session, not RFB auth.

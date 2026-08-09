@@ -33,6 +33,8 @@ database:
 # data-plane. Approving outside the cluster/Docker net is unsupported for CDP/VNC.
 # Docker: already-running containers keep old -p until TTL/Reinstall (breaking:
 # old host:9222 / host:6080 bookmarks become unreachable).
+# Kubernetes: inventory *-lb still listing 9222/6080 is healed on gateway
+# startup reconcile / Start / Reinstall; until then old bookmarks may work.
 image:
   ref: universal-sandbox-cursor:local
   # 每 agent 一个薄镜像时，按请求里的 provider 解析镜像。解析顺序：

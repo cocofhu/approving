@@ -534,9 +534,27 @@ func (s *SandboxService) RunOrphanGC(ctx context.Context) {
 	}
 }
 
+// publishConverger is optionally implemented by drivers that can heal the
+// external publish surface (kubernetes LB/ClusterIP) without a full Spec.
+// Docker does not implement it: already-running -p mappings are not rewritten.
+type publishConverger interface {
+	ConvergePublishSurface(ctx context.Context, id string) error
+}
+
+func (s *SandboxService) convergePublishSurface(ctx context.Context, id string) {
+	c, ok := s.drv.(publishConverger)
+	if !ok {
+		return
+	}
+	if err := c.ConvergePublishSurface(ctx, id); err != nil {
+		log.Warn().Err(err).Str("sandbox_id", id).Msg("reconcile: converge publish surface failed")
+	}
+}
+
 // ReconcileOnStartup reconciles persisted records against live driver state
 // after a gateway restart: it refreshes statuses/endpoints and marks records
-// whose resources vanished as error.
+// whose resources vanished as error. For kubernetes it also converges Service
+// ports so inventory LoadBalancers drop unauthenticated 9222/6080.
 func (s *SandboxService) ReconcileOnStartup(ctx context.Context) {
 	records, err := s.store.List(context.Background(), ListFilter{})
 	if err != nil {
@@ -558,6 +576,7 @@ func (s *SandboxService) ReconcileOnStartup(ctx context.Context) {
 				s.persist(sb, "reconcile: persist not-found status")
 			}
 		case driver.StatusRunning:
+			s.convergePublishSurface(ctx, sb.ID)
 			eps, epErr := s.drv.Endpoints(ctx, sb.ID)
 			if epErr != nil {
 				logging.WarnErr(epErr, "reconcile: endpoints failed", map[string]any{"sandbox_id": sb.ID})
@@ -567,8 +586,12 @@ func (s *SandboxService) ReconcileOnStartup(ctx context.Context) {
 			sb.Status = models.StatusRunning
 			s.persist(sb, "reconcile: persist running status")
 		case driver.StatusStopped:
+			// Scale=0 keeps Services; still drop 9222/6080 from inventory LBs.
+			s.convergePublishSurface(ctx, sb.ID)
 			sb.Status = models.StatusStopped
 			s.persist(sb, "reconcile: persist stopped status")
+		case driver.StatusPending:
+			s.convergePublishSurface(ctx, sb.ID)
 		}
 	}
 	log.Info().Int("count", len(records)).Msg("reconcile complete")

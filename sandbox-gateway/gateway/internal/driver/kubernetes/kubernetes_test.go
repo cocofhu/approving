@@ -1186,6 +1186,157 @@ func TestEndpointsMergesInternalClusterDNSWhenLBEnabled(t *testing.T) {
 	}
 }
 
+func isolationDriver(t *testing.T) *Driver {
+	t.Helper()
+	cs := fake.NewSimpleClientset()
+	return NewFromClient(cs, Options{
+		Namespace:          "sandboxes",
+		NamePrefix:         "sbx-",
+		EnableLoadBalancer: true,
+		PublicPorts:        []int{8765, 8744, 22, 80},
+		InternalPorts:      []int{9222, 6080},
+	})
+}
+
+func seedRunningSandboxWithStaleLB(t *testing.T, d *Driver, id, lbIP string) {
+	t.Helper()
+	ctx := context.Background()
+	replicas := int32(1)
+	labels := d.selector(id)
+	_, err := d.cs.AppsV1().Deployments(d.opts.Namespace).Create(ctx, &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      d.resourceName(id),
+			Namespace: d.opts.Namespace,
+			Labels:    labels,
+		},
+		Spec:   appsv1.DeploymentSpec{Replicas: &replicas},
+		Status: appsv1.DeploymentStatus{ReadyReplicas: 1},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("seed deployment: %v", err)
+	}
+	_, err = d.cs.CoreV1().Services(d.opts.Namespace).Create(ctx, &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: d.resourceName(id), Namespace: d.opts.Namespace, Labels: labels},
+		Spec: corev1.ServiceSpec{
+			Selector: labels,
+			Ports:    servicePorts([]int{8765, 22, 9222, 6080}),
+		},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("seed clusterip: %v", err)
+	}
+	lb := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: d.lbName(id), Namespace: d.opts.Namespace, Labels: labels},
+		Spec: corev1.ServiceSpec{
+			Type:     corev1.ServiceTypeLoadBalancer,
+			Selector: labels,
+			Ports:    servicePorts([]int{8765, 22, 9222, 6080}),
+		},
+		Status: corev1.ServiceStatus{
+			LoadBalancer: corev1.LoadBalancerStatus{
+				Ingress: []corev1.LoadBalancerIngress{{IP: lbIP}},
+			},
+		},
+	}
+	created, err := d.cs.CoreV1().Services(d.opts.Namespace).Create(ctx, lb, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("seed lb: %v", err)
+	}
+	created.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: lbIP}}
+	if _, err := d.cs.CoreV1().Services(d.opts.Namespace).UpdateStatus(ctx, created, metav1.UpdateOptions{}); err != nil {
+		created.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: lbIP}}
+		if _, err := d.cs.CoreV1().Services(d.opts.Namespace).Update(ctx, created, metav1.UpdateOptions{}); err != nil {
+			t.Fatalf("seed lb ingress: %v", err)
+		}
+	}
+}
+
+func assertLBConvergedInternalClusterDNS(t *testing.T, d *Driver, id, lbIP string) {
+	t.Helper()
+	ctx := context.Background()
+	lb, err := d.cs.CoreV1().Services(d.opts.Namespace).Get(ctx, d.lbName(id), metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range lb.Spec.Ports {
+		if p.Port == 9222 || p.Port == 6080 {
+			t.Fatalf("inventory LB still exposes %d: %+v", p.Port, lb.Spec.Ports)
+		}
+	}
+	cip, err := d.cs.CoreV1().Services(d.opts.Namespace).Get(ctx, d.resourceName(id), metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotCIP := map[int32]bool{}
+	for _, p := range cip.Spec.Ports {
+		gotCIP[p.Port] = true
+	}
+	for _, w := range []int32{8765, 22, 9222, 6080} {
+		if !gotCIP[w] {
+			t.Fatalf("ClusterIP missing port %d: %+v", w, cip.Spec.Ports)
+		}
+	}
+	eps, err := d.Endpoints(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if eps[8765] != lbIP+":8765" {
+		t.Fatalf("public should stay on LB IP, got %v", eps)
+	}
+	wantHost := clusterDNS(d.resourceName(id), d.opts.Namespace)
+	if eps[9222] != wantHost+":9222" || eps[6080] != wantHost+":6080" {
+		t.Fatalf("internal should use ClusterIP DNS after converge, got %v", eps)
+	}
+}
+
+func TestStartConvergesStaleLoadBalancer(t *testing.T) {
+	d := isolationDriver(t)
+	ctx := context.Background()
+	seedRunningSandboxWithStaleLB(t, d, "inv", "203.0.113.40")
+	if err := d.Start(ctx, "inv"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	assertLBConvergedInternalClusterDNS(t, d, "inv", "203.0.113.40")
+}
+
+func TestGetConvergesStaleLoadBalancer(t *testing.T) {
+	d := isolationDriver(t)
+	ctx := context.Background()
+	seedRunningSandboxWithStaleLB(t, d, "g1", "203.0.113.41")
+	h, err := d.Get(ctx, "g1")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if h.Status != driver.StatusRunning {
+		t.Fatalf("status=%s", h.Status)
+	}
+	assertLBConvergedInternalClusterDNS(t, d, "g1", "203.0.113.41")
+	wantHost := clusterDNS("sbx-g1", "sandboxes")
+	if h.Endpoints[9222] != wantHost+":9222" || h.Endpoints[6080] != wantHost+":6080" {
+		t.Fatalf("Get endpoints still on publish surface: %v", h.Endpoints)
+	}
+}
+
+func TestConvergePublishSurfaceNoOpWithoutOptions(t *testing.T) {
+	d := testDriver(t, true)
+	ctx := context.Background()
+	seedRunningSandboxWithStaleLB(t, d, "keep", "203.0.113.42")
+	if err := d.ConvergePublishSurface(ctx, "keep"); err != nil {
+		t.Fatal(err)
+	}
+	lb, err := d.cs.CoreV1().Services("sandboxes").Get(ctx, "sbx-keep-lb", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[int32]bool{}
+	for _, p := range lb.Spec.Ports {
+		got[p.Port] = true
+	}
+	if !got[9222] || !got[6080] {
+		t.Fatalf("empty Options must not wipe inventory LB: %+v", lb.Spec.Ports)
+	}
+}
+
 func TestEnsureServicesUpdateExistingPorts(t *testing.T) {
 	d := testDriver(t, true)
 	ctx := context.Background()

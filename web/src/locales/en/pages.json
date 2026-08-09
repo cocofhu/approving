@@ -1047,7 +1047,7 @@
         "sectionProxyHint": "Proxied paths and WS for signed-in operators. VNC is the platform path, not a direct :6080.",
         "sectionEndpoints": "Direct endpoints",
         "sectionEndpointsHint": "Operators may reach authenticated services (session / ide / ssh). Numeric port keys are filtered. Direct access needs separate auth — do not open in the browser.",
-        "endpointsNotice": "CDP / noVNC are not directly reachable. No app-layer auth. Use platform proxies /sandbox-vnc/:sandboxId/ws and /preview-vnc/:runId/:nodeId/:port/ws only (Session required when Auth is enabled). session/ide use their own passwords; ssh uses ROOT_PASSWORD or SSH_KEY.",
+        "endpointsNotice": "CDP / noVNC are not directly reachable. No app-layer auth. Use platform proxies /sandbox-vnc/:sandboxId/ws and /preview-vnc/:runId/:nodeId/:port/ws only (Session required when Auth is enabled; validity only, no sandbox/run ownership check). session/ide use their own passwords; ssh uses ROOT_PASSWORD or SSH_KEY.",
         "endpointsEmpty": "No direct endpoints available (gateway unreachable or no named ports).",
         "loadFailed": "Failed to load sandbox details",
         "copy": "Copy",

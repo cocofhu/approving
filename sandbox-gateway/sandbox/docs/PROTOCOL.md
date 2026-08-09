@@ -222,8 +222,10 @@ WebSocket `/ws`,JSON 帧:
 - `/sandbox-vnc/:sandboxId/ws`
 - `/preview-vnc/:runId/:nodeId/:port/ws`
 
-启用平台 Auth 时上述 WS **须有效 Session**。集群外 Approving 不能拨 CDP/noVNC,
-不是支持的拓扑。旧书签 `host:9222` / `host:6080` 不可达为预期破坏性变更。
+启用平台 Auth 时上述 WS **须有效 Session**（仅校验登录有效，不校验沙箱/跑步归属）。
+集群外 Approving 不能拨 CDP/noVNC,不是支持的拓扑。旧书签 `host:9222` /
+`host:6080` 不可达为预期破坏性变更。Docker 已运行容器的 `-p` 须 TTL/Reinstall；
+K8s 存量 `*-lb` 在网关启动调和 / Start / Reinstall 完成前仍可能对外暴露这两口。
 
 参考实现细节(可替换,只要对**平台**契约不变;勿改 `vnc-preview.sh` 监听与 `-nopw`):
 

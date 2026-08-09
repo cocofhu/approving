@@ -110,6 +110,8 @@ func buildDriver(cfg *config.Config) (driver.Driver, error) {
 			MemoryRequestMB:    cfg.K8s.MemoryRequestMB,
 			CPURequestRatio:    cfg.K8s.CPURequestRatio,
 			MemoryRequestRatio: cfg.K8s.MemoryRequestRatio,
+			PublicPorts:        cfg.Image.Ports.Public(),
+			InternalPorts:      cfg.Image.Ports.Internal(),
 		})
 	default:
 		return nil, fmt.Errorf("unknown driver %q", cfg.Driver)

@@ -248,10 +248,12 @@ CDP `:9222` / noVNC `:6080` **不是**对外 data-plane（无应用层鉴权，�
 - `GET /sandbox-vnc/:sandboxId/ws`
 - `GET /preview-vnc/:runId/:nodeId/:port/ws`
 
-鉴权始终启用时（`auth` 无开关）上述路径 `RequireSession`；`Auth == nil` 的测试
-形态不 401。`/preview/:runId/:nodeId/:port` HTTP 反代**不加** Session（iframe
-无法带 cookie）。Pick/导航与 RFB 共套，不回退直连 websockify。集群外 Approving
-不能拨沙箱 CDP/noVNC。
+鉴权始终启用时（`auth` 无开关）上述路径 `RequireSession`（仅校验 Session 有效，
+**不**校验沙箱/跑步归属）；`Auth == nil` 的测试形态不 401。
+`/preview/:runId/:nodeId/:port` HTTP 反代**不加** Session（iframe 无法带 cookie）。
+Pick/导航与 RFB 共套，不回退直连 websockify，也不回退 `sandboxIP:9222/6080`
+（有 gateway 命名端点时缺内部地址则失败关闭）。集群外 Approving 不能拨沙箱
+CDP/noVNC。K8s 存量 LB 在 gateway 启动调和完成前仍可能对外暴露 9222/6080。
 
 ## 种子数据
 

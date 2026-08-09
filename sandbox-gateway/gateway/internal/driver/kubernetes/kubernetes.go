@@ -53,6 +53,12 @@ type Options struct {
 	MemoryRequestMB    int64
 	CPURequestRatio    float64
 	MemoryRequestRatio float64
+	// PublicPorts are published on the LoadBalancer (session/ide/ssh/app).
+	// InternalPorts stay on ClusterIP only (cdp/novnc). Both are required for
+	// ConvergePublishSurface so ReconcileOnStartup/Start can heal inventory LBs
+	// without a full Spec.
+	PublicPorts   []int
+	InternalPorts []int
 }
 
 // Driver provisions sandboxes as Deployments in Kubernetes and exposes them via
@@ -127,6 +133,12 @@ func withDefaults(o Options) Options {
 	}
 	if o.MemoryRequestRatio <= 0 {
 		o.MemoryRequestRatio = 0.25
+	}
+	if len(o.PublicPorts) > 0 {
+		o.PublicPorts = append([]int(nil), o.PublicPorts...)
+	}
+	if len(o.InternalPorts) > 0 {
+		o.InternalPorts = append([]int(nil), o.InternalPorts...)
 	}
 	return o
 }
@@ -503,13 +515,47 @@ func servicePorts(ports []int) []corev1.ServicePort {
 	return out
 }
 
+func servicePortSet(ports []corev1.ServicePort) map[int32]struct{} {
+	out := make(map[int32]struct{}, len(ports))
+	for _, p := range ports {
+		out[p.Port] = struct{}{}
+	}
+	return out
+}
+
+func samePortSet(a, b []corev1.ServicePort) bool {
+	sa, sb := servicePortSet(a), servicePortSet(b)
+	if len(sa) != len(sb) {
+		return false
+	}
+	for p := range sa {
+		if _, ok := sb[p]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func selectorEqual(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
 func (d *Driver) ensureClusterIPService(ctx context.Context, id string, ports []int) error {
 	labels := d.selector(id)
+	wantPorts := servicePorts(ports)
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: d.resourceName(id), Namespace: d.opts.Namespace, Labels: labels},
 		Spec: corev1.ServiceSpec{
 			Selector: labels,
-			Ports:    servicePorts(ports),
+			Ports:    wantPorts,
 		},
 	}
 	_, err := d.cs.CoreV1().Services(d.opts.Namespace).Create(ctx, svc, metav1.CreateOptions{})
@@ -523,7 +569,10 @@ func (d *Driver) ensureClusterIPService(ctx context.Context, id string, ports []
 	if getErr != nil {
 		return getErr
 	}
-	existing.Spec.Ports = servicePorts(ports)
+	if samePortSet(existing.Spec.Ports, wantPorts) && selectorEqual(existing.Spec.Selector, labels) {
+		return nil
+	}
+	existing.Spec.Ports = wantPorts
 	existing.Spec.Selector = labels
 	_, err = d.cs.CoreV1().Services(d.opts.Namespace).Update(ctx, existing, metav1.UpdateOptions{})
 	return err
@@ -531,12 +580,13 @@ func (d *Driver) ensureClusterIPService(ctx context.Context, id string, ports []
 
 func (d *Driver) ensureLoadBalancer(ctx context.Context, id string, ports []int) error {
 	labels := d.selector(id)
+	wantPorts := servicePorts(ports)
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: d.lbName(id), Namespace: d.opts.Namespace, Labels: labels},
 		Spec: corev1.ServiceSpec{
 			Type:     corev1.ServiceTypeLoadBalancer,
 			Selector: labels,
-			Ports:    servicePorts(ports),
+			Ports:    wantPorts,
 		},
 	}
 	_, err := d.cs.CoreV1().Services(d.opts.Namespace).Create(ctx, svc, metav1.CreateOptions{})
@@ -550,15 +600,55 @@ func (d *Driver) ensureLoadBalancer(ctx context.Context, id string, ports []int)
 	if getErr != nil {
 		return getErr
 	}
+	if existing.Spec.Type == corev1.ServiceTypeLoadBalancer &&
+		samePortSet(existing.Spec.Ports, wantPorts) &&
+		selectorEqual(existing.Spec.Selector, labels) {
+		return nil
+	}
 	existing.Spec.Type = corev1.ServiceTypeLoadBalancer
-	existing.Spec.Ports = servicePorts(ports)
+	existing.Spec.Ports = wantPorts
 	existing.Spec.Selector = labels
 	_, err = d.cs.CoreV1().Services(d.opts.Namespace).Update(ctx, existing, metav1.UpdateOptions{})
 	return err
 }
 
-func (d *Driver) Start(ctx context.Context, id string) error { return d.scale(ctx, id, 1) }
-func (d *Driver) Stop(ctx context.Context, id string) error  { return d.scale(ctx, id, 0) }
+// ConvergePublishSurface heals ClusterIP + LoadBalancer Spec.Ports from driver
+// Options (no Spec required). ReconcileOnStartup / Start / Get use this so
+// inventory *-lb drop unauthenticated 9222/6080 after upgrade. Empty Options
+// are a no-op so unit tests without Public/Internal do not wipe Services.
+func (d *Driver) ConvergePublishSurface(ctx context.Context, id string) error {
+	if strings.TrimSpace(id) == "" {
+		return fmt.Errorf("empty sandbox id")
+	}
+	public := append([]int(nil), d.opts.PublicPorts...)
+	internal := append([]int(nil), d.opts.InternalPorts...)
+	listen := listenPorts(driver.Spec{Ports: public, InternalPorts: internal})
+	if len(listen) == 0 {
+		return nil
+	}
+	if err := d.ensureClusterIPService(ctx, id, listen); err != nil {
+		return fmt.Errorf("converge clusterip: %w", err)
+	}
+	if !d.opts.EnableLoadBalancer || len(public) == 0 {
+		return nil
+	}
+	if err := d.ensureLoadBalancer(ctx, id, public); err != nil {
+		return fmt.Errorf("converge loadbalancer: %w", err)
+	}
+	return nil
+}
+
+func (d *Driver) Start(ctx context.Context, id string) error {
+	if err := d.scale(ctx, id, 1); err != nil {
+		return err
+	}
+	if err := d.ConvergePublishSurface(ctx, id); err != nil {
+		log.Warn().Err(err).Str("sandbox_id", id).Msg("k8s start: converge publish surface failed")
+		return err
+	}
+	return nil
+}
+func (d *Driver) Stop(ctx context.Context, id string) error { return d.scale(ctx, id, 0) }
 
 func (d *Driver) scale(ctx context.Context, id string, replicas int32) error {
 	name := d.resourceName(id)
@@ -690,6 +780,12 @@ func (d *Driver) Get(ctx context.Context, id string) (*driver.Handle, error) {
 	st, err := d.Status(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	switch st {
+	case driver.StatusRunning, driver.StatusStopped, driver.StatusPending:
+		if convErr := d.ConvergePublishSurface(ctx, id); convErr != nil {
+			log.Warn().Err(convErr).Str("sandbox_id", id).Msg("k8s get: converge publish surface failed")
+		}
 	}
 	h := &driver.Handle{ID: id, Name: d.resourceName(id), Namespace: d.opts.Namespace, Status: st}
 	eps, err := d.Endpoints(ctx, id)

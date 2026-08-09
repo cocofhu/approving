@@ -16,8 +16,12 @@ and VNC WS proxy. Users must **not** reach them directly — use Approving
 the cluster or Docker network is not supported for CDP/VNC.
 
 Docker `-p` on already-running containers is not rewritten automatically; rely
-on TTL or Reinstall. Old `host:9222` / `host:6080` bookmarks becoming
-unreachable is an expected breaking change.
+on TTL or Reinstall. Kubernetes inventory `*-lb` Services that still publish
+9222/6080 are converged on gateway startup reconcile (`ReconcileOnStartup`),
+`Start`, or `Reinstall` — until then old bookmarks/scans may still succeed.
+After converge, internal endpoints are ClusterIP DNS, not the LB IP. Old
+`host:9222` / `host:6080` bookmarks becoming unreachable is an expected
+breaking change.
 
 - Base path: `/api/v1`
 - Auth: `Authorization: Bearer <apiKey>` (when `auth.apiKeys` is configured)

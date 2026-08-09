@@ -12,7 +12,14 @@ import (
 	"sandbox-gateway/internal/database"
 	"sandbox-gateway/internal/driver"
 	"sandbox-gateway/internal/driver/fake"
+	k8sdriver "sandbox-gateway/internal/driver/kubernetes"
+	"sandbox-gateway/internal/models"
 	"sandbox-gateway/internal/store"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
 func TestConfigInjectEnv(t *testing.T) {
@@ -496,6 +503,112 @@ func TestReconcileOnStartup(t *testing.T) {
 	got2, _ := st.Get(context.Background(), sb.ID)
 	if got2.Status != "error" {
 		t.Fatalf("%s", got2.Status)
+	}
+}
+
+func TestReconcileOnStartupConvergesStaleK8sLB(t *testing.T) {
+	st := testDB(t)
+	cs := k8sfake.NewSimpleClientset()
+	d := k8sdriver.NewFromClient(cs, k8sdriver.Options{
+		Namespace:          "sandboxes",
+		NamePrefix:         "sbx-",
+		EnableLoadBalancer: true,
+		PublicPorts:        []int{8765, 22},
+		InternalPorts:      []int{9222, 6080},
+	})
+	svc := New(d, st, Config{
+		Image:           "img",
+		Ports:           []int{8765, 22},
+		InternalPorts:   []int{9222, 6080},
+		SessionPort:     8765,
+		FinalizeTimeout: 2 * time.Second,
+		Resources:       testResources(),
+	})
+
+	ctx := context.Background()
+	id := "legacy"
+	replicas := int32(1)
+	labels := map[string]string{
+		"app.kubernetes.io/managed-by": "sandbox-gateway",
+		"sandbox-gateway.io/id":        id,
+	}
+	_, err := cs.AppsV1().Deployments("sandboxes").Create(ctx, &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "sbx-legacy", Namespace: "sandboxes", Labels: labels},
+		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+		Status:     appsv1.DeploymentStatus{ReadyReplicas: 1},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("seed deployment: %v", err)
+	}
+	ports := func(ps []int) []corev1.ServicePort {
+		out := make([]corev1.ServicePort, 0, len(ps))
+		for _, p := range ps {
+			out = append(out, corev1.ServicePort{Name: fmt.Sprintf("p-%d", p), Port: int32(p)})
+		}
+		return out
+	}
+	_, err = cs.CoreV1().Services("sandboxes").Create(ctx, &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "sbx-legacy", Namespace: "sandboxes", Labels: labels},
+		Spec:       corev1.ServiceSpec{Selector: labels, Ports: ports([]int{8765, 22, 9222, 6080})},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("seed clusterip: %v", err)
+	}
+	lb, err := cs.CoreV1().Services("sandboxes").Create(ctx, &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "sbx-legacy-lb", Namespace: "sandboxes", Labels: labels},
+		Spec: corev1.ServiceSpec{
+			Type:     corev1.ServiceTypeLoadBalancer,
+			Selector: labels,
+			Ports:    ports([]int{8765, 22, 9222, 6080}),
+		},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("seed lb: %v", err)
+	}
+	lb.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: "203.0.113.77"}}
+	if _, err := cs.CoreV1().Services("sandboxes").UpdateStatus(ctx, lb, metav1.UpdateOptions{}); err != nil {
+		lb.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: "203.0.113.77"}}
+		if _, err := cs.CoreV1().Services("sandboxes").Update(ctx, lb, metav1.UpdateOptions{}); err != nil {
+			t.Fatalf("seed lb ingress: %v", err)
+		}
+	}
+
+	rec := &models.Sandbox{ID: id, Name: "sbx-legacy", Status: models.StatusRunning, Image: "img"}
+	rec.SetEndpoints(map[int]string{
+		8765: "203.0.113.77:8765",
+		22:   "203.0.113.77:22",
+		9222: "203.0.113.77:9222",
+		6080: "203.0.113.77:6080",
+	})
+	if err := st.Create(ctx, rec); err != nil {
+		t.Fatalf("store create: %v", err)
+	}
+
+	svc.ReconcileOnStartup(ctx)
+
+	gotLB, err := cs.CoreV1().Services("sandboxes").Get(ctx, "sbx-legacy-lb", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range gotLB.Spec.Ports {
+		if p.Port == 9222 || p.Port == 6080 {
+			t.Fatalf("ReconcileOnStartup left inventory LB exposing %d", p.Port)
+		}
+	}
+	got, err := st.Get(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != models.StatusRunning {
+		t.Fatalf("status=%s", got.Status)
+	}
+	eps := got.Endpoints()
+	if eps[8765] != "203.0.113.77:8765" {
+		t.Fatalf("public endpoint: %v", eps)
+	}
+	wantInternal := "sbx-legacy.sandboxes.svc.cluster.local"
+	if eps[9222] != wantInternal+":9222" || eps[6080] != wantInternal+":6080" {
+		t.Fatalf("internal endpoints must be ClusterIP DNS after reconcile, got %v", eps)
 	}
 }
 

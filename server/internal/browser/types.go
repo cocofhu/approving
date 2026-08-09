@@ -88,7 +88,9 @@ type SandboxExecer interface {
 }
 
 // SandboxEndpointResolver resolves gateway-published "host:port" endpoints
-// (cdp / novnc). Optional; when absent, browser falls back to sandboxIP:9222/6080.
+// (cdp / novnc). When the sandbox manager implements this, browser requires
+// named internal endpoints and will not fall back to sandboxIP:9222/6080
+// (that host is usually the LB / bindIP publish surface).
 type SandboxEndpointResolver interface {
 	EndpointAddr(ctx context.Context, name, key string) (string, error)
 }
