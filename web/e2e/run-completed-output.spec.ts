@@ -1,5 +1,5 @@
 /**
- * g6.2 / g6.3: completed deep link → output accordion / Demo empty / mobile detail.
+ * g6.2 / g6.3: completed deep link → output master-detail list / enlarge / Demo empty / mobile detail.
  */
 import { test, expect, type Page } from '@playwright/test'
 
@@ -121,23 +121,43 @@ async function gotoDeepLink(
 }
 
 test.describe('completed 深链输出视图 (g6.2/g6.3)', () => {
-  test('已登录深链：输出视图 + 第 1 张结果卡展开', async ({ page }) => {
+  test('已登录深链：名称列表单选 + 放大模态 + 失败行 (g4.2)', async ({ page }) => {
     await gotoDeepLink(page)
     await expect(page.getByTestId('run-detail-right-panel')).toBeVisible()
     await expect(page.getByTestId('output-result-cards')).toBeVisible()
-    await expect(page.getByTestId('output-result-card-toggle-0')).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByTestId('output-result-list')).toBeVisible()
+    await expect(page.getByTestId('output-result-list-header')).toContainText('产出')
+    await expect(page.getByTestId('output-result-card-toggle-0')).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByTestId('output-result-card-body-0')).toContainText('首张结果卡正文')
     await expect(page.getByTestId('output-result-card-body-1')).toHaveCount(0)
     await expect(page.getByTestId('run-detail-right-panel')).toContainText('结束')
     await expect(page.getByTestId('run-detail-right-panel')).not.toContainText('打开原始文件')
     await expect(page.getByTestId('run-detail-right-panel')).not.toContainText('下载')
+    await expect(page.getByTestId('run-detail-right-panel')).not.toContainText('窗口放大查看')
+
+    await page.getByTestId('output-result-card-toggle-0').click()
+    await expect(page.getByTestId('output-result-card-toggle-0')).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByTestId('output-result-card-body-0')).toContainText('首张结果卡正文')
+
+    await page.getByTestId('output-result-enlarge').click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toContainText('首张结果卡正文')
+    await expect(dialog).not.toContainText('打开原始文件')
+    await expect(dialog).not.toContainText('下载')
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+    await expect(page.getByTestId('output-result-card-toggle-0')).toHaveAttribute('aria-selected', 'true')
 
     await page.getByTestId('output-result-card-toggle-1').click()
-    await expect(page.getByTestId('output-result-card-toggle-0')).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.getByTestId('output-result-card-toggle-0')).toHaveAttribute('aria-selected', 'false')
     await expect(page.getByTestId('output-result-card-body-1')).toContainText('第二张')
+    await expect(page.getByTestId('output-result-enlarge')).toBeVisible()
 
     await page.getByTestId('output-result-card-toggle-2').click()
     await expect(page.getByTestId('output-result-card-body-2')).toContainText('上游测试节点失败')
+    await expect(page.getByTestId('output-result-list-kind-2')).toHaveText('失败')
+    await expect(page.getByTestId('output-result-enlarge')).toHaveCount(0)
   })
 
   test('无结果卡：Demo 空态文案', async ({ page }) => {
@@ -161,7 +181,7 @@ test.describe('completed 深链输出视图 (g6.2/g6.3)', () => {
     await expect(page.getByTestId('mobile-main-panel-tabs')).toBeVisible()
     await expect(page.getByTestId('run-detail-right-panel')).toBeVisible()
     await expect(page.getByTestId('output-result-cards')).toBeVisible()
-    await expect(page.getByTestId('output-result-card-toggle-0')).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByTestId('output-result-card-toggle-0')).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByTestId('run-timeline-pane')).toBeHidden()
 
     await page.getByTestId('mobile-back-to-timeline').click()

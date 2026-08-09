@@ -5,14 +5,17 @@ import { renderMarkdown } from '@/lib/markdown'
 import { api } from '@/lib/api'
 import StructuredArtifactView from './StructuredArtifactView.vue'
 import HtmlPreview from '../ui/HtmlPreview.vue'
+import AppModal from '../ui/AppModal.vue'
+import Icon from '../ui/Icon.vue'
 import type { OutputCard, Run } from '@/lib/types'
 
 const props = defineProps<{ cards: OutputCard[]; run: Run }>()
 
 const { t } = useI18n()
 
-/** Exclusive accordion: 0 = first card; -1 = all collapsed. */
-const openIndex = ref(0)
+/** Master-detail: always exactly one selected card. Default 0; never -1. */
+const selectedIndex = ref(0)
+const enlargeOpen = ref(false)
 
 const contentCache = ref<Record<string, string>>({})
 const loading = ref(false)
@@ -38,16 +41,15 @@ async function loadArtifactContent(name: string) {
 watch(
   () => props.cards.map((c) => `${c.index}:${c.template}`).join(','),
   () => {
-    openIndex.value = props.cards.length ? 0 : -1
+    selectedIndex.value = 0
+    enlargeOpen.value = false
   },
 )
 
 watch(
-  [openIndex, () => props.cards],
+  [selectedIndex, () => props.cards],
   () => {
-    const i = openIndex.value
-    if (i < 0) return
-    const c = props.cards[i]
+    const c = props.cards[selectedIndex.value]
     if (c?.typeTag === '自定义产物' && c.artifactName && !c.structuredArtifactName) {
       void loadArtifactContent(c.artifactName)
     }
@@ -55,12 +57,11 @@ watch(
   { immediate: true },
 )
 
-function toggleCard(i: number) {
-  openIndex.value = openIndex.value === i ? -1 : i
-}
-
-function isOpen(i: number) {
-  return openIndex.value === i
+function selectCard(i: number) {
+  if (enlargeOpen.value) return
+  if (i < 0 || i >= props.cards.length) return
+  if (i === selectedIndex.value) return
+  selectedIndex.value = i
 }
 
 function parseDoc(card: OutputCard): unknown {
@@ -73,9 +74,10 @@ function parseDoc(card: OutputCard): unknown {
   }
 }
 
-const cardsWithDoc = computed(() =>
-  props.cards.map((c) => ({ card: c, doc: parseDoc(c) })),
-)
+const showList = computed(() => props.cards.length > 1)
+const currentCard = computed(() => props.cards[selectedIndex.value])
+const currentDoc = computed(() => (currentCard.value ? parseDoc(currentCard.value) : null))
+const canEnlarge = computed(() => !!currentCard.value && currentCard.value.status !== 'failed')
 
 function artifactContent(name: string): string {
   return contentCache.value[name] ?? ''
@@ -84,70 +86,181 @@ function artifactContent(name: string): string {
 function isHtmlArtifact(name?: string): boolean {
   return !!name && name.endsWith('.html')
 }
+
+/** Short list label: failed → 失败; else map typeTag (+ .html → HTML). */
+function shortKindLabel(card: OutputCard): string {
+  if (card.status === 'failed') return t('pages.nodeOutput.outputCards.kindFailed')
+  if (card.typeTag === '结构化产物') return t('pages.nodeOutput.outputCards.kindStructured')
+  if (card.typeTag === 'Markdown') return t('pages.nodeOutput.outputCards.kindMarkdown')
+  if (card.typeTag === '自定义产物' && isHtmlArtifact(card.artifactName)) {
+    return t('pages.nodeOutput.outputCards.kindHtml')
+  }
+  if (card.typeTag === '自定义产物') return t('pages.nodeOutput.outputCards.kindCustom')
+  return card.typeTag
+}
+
+function openEnlarge() {
+  if (!canEnlarge.value) return
+  enlargeOpen.value = true
+}
+
+function closeEnlarge() {
+  enlargeOpen.value = false
+}
 </script>
 
 <template>
-  <div class="space-y-3" data-testid="output-result-cards">
-    <article
-      v-for="({ card, doc }, i) in cardsWithDoc"
-      :key="card.index + ':' + card.template"
-      class="card overflow-hidden"
-      :class="card.status === 'failed' ? 'border-err/30' : ''"
-      :data-testid="`output-result-card-${i}`"
+  <div class="min-w-0" data-testid="output-result-cards">
+    <!-- Multi-card name+status list (g1.2 / g3.2): no max-height / own overflow. -->
+    <div
+      v-if="showList"
+      class="mb-3 border border-line bg-base"
+      role="listbox"
+      :aria-label="t('pages.nodeOutput.outputCards.listTitle')"
+      data-testid="output-result-list"
     >
-      <h3 class="m-0">
+      <div
+        class="flex items-center justify-between border-b border-line px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-txt3"
+        data-testid="output-result-list-header"
+      >
+        <span>{{ t('pages.nodeOutput.outputCards.listTitle') }}</span>
+        <b class="text-[11px] font-semibold normal-case tracking-normal text-txt2">{{ cards.length }}</b>
+      </div>
+      <button
+        v-for="(card, i) in cards"
+        :key="card.index + ':' + card.template"
+        type="button"
+        role="option"
+        class="flex h-8 w-full items-center gap-2 border-l-2 border-solid px-2.5 text-left"
+        :class="[
+          i > 0 ? 'border-t border-t-line' : '',
+          card.status === 'failed' ? 'text-err' : 'text-txt2',
+          i === selectedIndex
+            ? card.status === 'failed'
+              ? 'border-l-err bg-err/10 text-err'
+              : 'border-l-accent bg-accent-dim text-txt'
+            : 'border-l-transparent hover:bg-elevated hover:text-txt',
+        ]"
+        :aria-selected="i === selectedIndex ? 'true' : 'false'"
+        :data-testid="`output-result-card-toggle-${i}`"
+        @click="selectCard(i)"
+      >
+        <Icon
+          :name="card.status === 'failed' ? 'alert' : 'check'"
+          :size="12"
+          class="shrink-0"
+          :class="card.status === 'failed' ? 'text-err' : 'text-ok'"
+        />
+        <span class="min-w-0 flex-1 truncate text-[12px]" :title="card.title">{{ card.title }}</span>
+        <span
+          class="shrink-0 text-[10px]"
+          :class="card.status === 'failed' ? 'text-err' : 'text-txt3'"
+          :data-testid="`output-result-list-kind-${i}`"
+        >{{ shortKindLabel(card) }}</span>
+      </button>
+    </div>
+
+    <template v-if="currentCard">
+      <!-- Sticky detail bar: NodeOutputPanel padding moved inward so top-0 is flush (g3.1). -->
+      <div
+        class="sticky top-0 z-[2] -mx-4 mb-2.5 flex items-center gap-2 border-b border-line bg-surface px-4 py-2"
+        data-testid="output-result-detail-bar"
+      >
+        <span
+          class="min-w-0 flex-1 truncate text-[12px] font-semibold"
+          :class="currentCard.status === 'failed' ? 'text-err' : 'text-txt'"
+        >{{ currentCard.title }}</span>
+        <span class="shrink-0 border border-line px-1.5 py-0.5 text-[10px] text-txt3">{{ currentCard.typeTag }}</span>
         <button
+          v-if="canEnlarge"
           type="button"
-          class="flex w-full items-center gap-2 border-b border-line bg-elevated px-3 py-2.5 text-left"
-          :class="card.status === 'failed' ? 'border-err/25 bg-err/10' : ''"
-          :aria-expanded="isOpen(i) ? 'true' : 'false'"
-          :data-testid="`output-result-card-toggle-${i}`"
-          @click="toggleCard(i)"
+          class="inline-flex shrink-0 items-center bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white hover:bg-accent-2"
+          data-testid="output-result-enlarge"
+          @click="openEnlarge"
         >
-          <span class="bg-accent-dim px-1.5 py-0.5 text-[10px] font-semibold text-accent-2">{{ card.index }}</span>
-          <span class="flex-1 truncate text-[12px] font-semibold" :class="card.status === 'failed' ? 'text-err' : 'text-txt'">
-            {{ card.title }}
-          </span>
-          <span class="border border-line px-1.5 py-0.5 text-[10px] text-txt3">{{ card.typeTag }}</span>
+          {{ t('pages.nodeOutput.outputCards.enlarge') }}
         </button>
-      </h3>
-      <div v-if="isOpen(i)" class="p-3" :data-testid="`output-result-card-body-${i}`">
-        <template v-if="card.status === 'failed'">
+      </div>
+
+      <div :data-testid="`output-result-card-body-${selectedIndex}`">
+        <template v-if="currentCard.status === 'failed'">
           <p class="text-[12px] text-txt2">
             <strong class="text-err">{{ t('pages.nodeOutput.outputCards.sourceFailedTitle') }}</strong><br />
-            {{ card.errorReason || t('pages.nodeOutput.outputCards.invalidSource') }}
+            {{ currentCard.errorReason || t('pages.nodeOutput.outputCards.invalidSource') }}
           </p>
         </template>
-        <template v-else-if="card.typeTag === '结构化产物' && card.structuredArtifactName && doc">
+        <template v-else-if="currentCard.typeTag === '结构化产物' && currentCard.structuredArtifactName && currentDoc">
           <StructuredArtifactView
-            :name="card.structuredArtifactName"
-            :doc="doc"
+            :name="currentCard.structuredArtifactName"
+            :doc="currentDoc"
             :artifacts="run.artifacts"
             :run-id="run.id"
             :run-status="run.status"
           />
         </template>
-        <template v-else-if="card.typeTag === '结构化产物' && card.markdown">
-          <div class="md text-[12px] leading-relaxed text-txt2" v-html="renderMarkdown(card.markdown)" />
+        <template v-else-if="currentCard.typeTag === '结构化产物' && currentCard.markdown">
+          <div class="md text-[12px] leading-relaxed text-txt2" v-html="renderMarkdown(currentCard.markdown)" />
         </template>
-        <template v-else-if="card.typeTag === '自定义产物' && card.artifactName">
-          <div v-if="loading && !artifactContent(card.artifactName)" class="text-[12px] text-txt3">…</div>
+        <template v-else-if="currentCard.typeTag === '自定义产物' && currentCard.artifactName">
+          <div v-if="loading && !artifactContent(currentCard.artifactName)" class="text-[12px] text-txt3">…</div>
           <HtmlPreview
-            v-else-if="isHtmlArtifact(card.artifactName)"
-            :html="artifactContent(card.artifactName) || card.markdown || ''"
+            v-else-if="isHtmlArtifact(currentCard.artifactName)"
+            :html="artifactContent(currentCard.artifactName) || currentCard.markdown || ''"
+            :enlargeable="false"
           />
           <pre
             v-else
             class="scroll-area max-h-48 overflow-y-auto whitespace-pre-wrap border border-line bg-base p-2.5 font-mono text-[11px] leading-relaxed text-txt2"
-          >{{ artifactContent(card.artifactName) }}</pre>
+          >{{ artifactContent(currentCard.artifactName) }}</pre>
         </template>
-        <template v-else-if="card.typeTag === 'Markdown' && card.markdown">
-          <div class="md text-[12px] leading-relaxed text-txt2" v-html="renderMarkdown(card.markdown)" />
+        <template v-else-if="currentCard.typeTag === 'Markdown' && currentCard.markdown">
+          <div class="md text-[12px] leading-relaxed text-txt2" v-html="renderMarkdown(currentCard.markdown)" />
         </template>
         <template v-else>
           <p class="text-[12px] text-txt3">{{ t('pages.nodeOutput.outputCards.invalidSource') }}</p>
         </template>
       </div>
-    </article>
+    </template>
+
+    <AppModal
+      :open="enlargeOpen"
+      :title="currentCard?.title || ''"
+      :width="960"
+      :close-on-esc="true"
+      @close="closeEnlarge"
+    >
+      <div v-if="currentCard && currentCard.status !== 'failed'" data-testid="output-result-enlarge-body">
+        <template v-if="currentCard.typeTag === '结构化产物' && currentCard.structuredArtifactName && currentDoc">
+          <StructuredArtifactView
+            :name="currentCard.structuredArtifactName"
+            :doc="currentDoc"
+            :artifacts="run.artifacts"
+            :run-id="run.id"
+            :run-status="run.status"
+          />
+        </template>
+        <template v-else-if="currentCard.typeTag === '结构化产物' && currentCard.markdown">
+          <div class="md text-[12px] leading-relaxed text-txt2" v-html="renderMarkdown(currentCard.markdown)" />
+        </template>
+        <template v-else-if="currentCard.typeTag === '自定义产物' && currentCard.artifactName">
+          <div v-if="loading && !artifactContent(currentCard.artifactName)" class="text-[12px] text-txt3">…</div>
+          <HtmlPreview
+            v-else-if="isHtmlArtifact(currentCard.artifactName)"
+            :html="artifactContent(currentCard.artifactName) || currentCard.markdown || ''"
+            :enlargeable="false"
+          />
+          <pre
+            v-else
+            class="whitespace-pre-wrap border border-line bg-base p-2.5 font-mono text-[11px] leading-relaxed text-txt2"
+          >{{ artifactContent(currentCard.artifactName) }}</pre>
+        </template>
+        <template v-else-if="currentCard.typeTag === 'Markdown' && currentCard.markdown">
+          <div class="md text-[12px] leading-relaxed text-txt2" v-html="renderMarkdown(currentCard.markdown)" />
+        </template>
+        <template v-else>
+          <p class="text-[12px] text-txt3">{{ t('pages.nodeOutput.outputCards.invalidSource') }}</p>
+        </template>
+      </div>
+    </AppModal>
   </div>
 </template>

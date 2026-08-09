@@ -147,6 +147,41 @@ describe('NodeOutputPanel', () => {
     wrapper.unmount()
   })
 
+  it('scroll root has no p-4 so output detail bar can sticky top-0 (g3.1)', async () => {
+    const node: WFNode = {
+      id: 'end',
+      type: 'output',
+      label: '结束',
+      position: { x: 0, y: 0 },
+      config: {},
+    }
+    const nodeRun: NodeRun = {
+      nodeId: 'end',
+      iteration: 1,
+      status: 'completed',
+      outputs: {
+        outputCards: [
+          {
+            index: 1,
+            template: 'research',
+            title: '调研',
+            status: 'ok',
+            typeTag: 'Markdown',
+            markdown: 'body',
+          },
+        ],
+      },
+    }
+    const run = { id: 'run-1', status: 'completed', artifacts: [] } as unknown as Run
+    const wrapper = mountPanel(node, nodeRun, run)
+    await flushPromises()
+    const scroll = wrapper.get('[data-testid="node-output-scroll"]')
+    expect(scroll.classes()).not.toContain('p-4')
+    expect(scroll.find('.p-4').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="node-output-empty"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('shows Demo empty state when run completed but output node never ran (g4.4)', async () => {
     const node: WFNode = {
       id: 'end',
