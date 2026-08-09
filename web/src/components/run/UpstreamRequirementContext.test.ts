@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
-import { defineComponent, nextTick } from 'vue'
+import { defineComponent, h, nextTick } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import type { Artifact } from '@/lib/types'
+import { provideReviewAnnotate, useReviewAnnotate } from '@/lib/reviewAnnotate'
 import UpstreamRequirementContext, {
   UPSTREAM_REQUIREMENT_ARTIFACT,
   bodyTemplateShowsRequirement,
@@ -29,7 +30,20 @@ vi.mock('@/lib/api', async () => {
 const StructuredStub = defineComponent({
   name: 'StructuredArtifactView',
   props: { name: String, doc: Object },
-  template: '<div data-testid="structured-view" :data-name="name" />',
+  setup() {
+    const channel = useReviewAnnotate()
+    return { channel }
+  },
+  template: `
+    <div data-testid="structured-view" :data-name="name">
+      <span v-if="doc && doc.title">{{ doc.title }}</span>
+      <button
+        v-if="channel && channel.enabled"
+        data-testid="upstream-annotate-btn"
+        type="button"
+      >↗ 标注</button>
+    </div>
+  `,
 })
 
 const AppModalStub = defineComponent({
@@ -72,27 +86,64 @@ function mountCtx(opts: {
   artifacts?: Artifact[]
   productName?: string | null
   bodyTemplate?: string | null
+  variant?: 'default' | 'persistent-bar'
+  disableAnnotate?: boolean
+  provideAnnotate?: boolean
 } = {}) {
   const i18n = createI18n({
     legacy: false,
     locale: 'zh-CN',
     messages: { 'zh-CN': { ...common, ...pages } },
   })
-  return mount(UpstreamRequirementContext, {
+  const ctxProps = {
+    artifacts: opts.artifacts ?? [artifact()],
+    runId: 'run-1',
+    productName: opts.productName ?? 'page.html',
+    bodyTemplate: opts.bodyTemplate,
+    variant: opts.variant,
+    disableAnnotate: opts.disableAnnotate,
+  }
+  const global = {
+    plugins: [i18n],
+    stubs: {
+      Icon: true,
+      StructuredArtifactView: StructuredStub,
+      AppModal: AppModalStub,
+    },
+  }
+  if (!opts.provideAnnotate) {
+    return mount(UpstreamRequirementContext, {
+      props: ctxProps,
+      global,
+      attachTo: document.body,
+    })
+  }
+  const Wrapper = defineComponent({
     props: {
-      artifacts: opts.artifacts ?? [artifact()],
-      runId: 'run-1',
+      productName: { type: String, default: 'page.html' },
+      variant: { type: String, default: undefined },
+      disableAnnotate: { type: Boolean, default: false },
+    },
+    setup(p) {
+      provideReviewAnnotate({ enabled: true, annotate() {} })
+      return () =>
+        h(UpstreamRequirementContext, {
+          artifacts: ctxProps.artifacts,
+          runId: ctxProps.runId,
+          productName: p.productName,
+          bodyTemplate: ctxProps.bodyTemplate,
+          variant: (p.variant as 'default' | 'persistent-bar' | undefined) || ctxProps.variant,
+          disableAnnotate: p.disableAnnotate || ctxProps.disableAnnotate,
+        })
+    },
+  })
+  return mount(Wrapper, {
+    props: {
       productName: opts.productName ?? 'page.html',
-      bodyTemplate: opts.bodyTemplate,
+      variant: opts.variant,
+      disableAnnotate: opts.disableAnnotate ?? false,
     },
-    global: {
-      plugins: [i18n],
-      stubs: {
-        Icon: true,
-        StructuredArtifactView: StructuredStub,
-        AppModal: AppModalStub,
-      },
-    },
+    global,
     attachTo: document.body,
   })
 }
@@ -289,6 +340,69 @@ describe('UpstreamRequirementContext', () => {
 
     await wrapper.find('[data-testid="upstream-mode-structured"]').trigger('click')
     expect(wrapper.find('[data-testid="structured-view"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('persistent-bar shows title, hint and enlarge without chevron or inline body', async () => {
+    const wrapper = mountCtx({ variant: 'persistent-bar' })
+    expect(wrapper.find('[data-testid="upstream-context"]').attributes('data-variant')).toBe(
+      'persistent-bar',
+    )
+    expect(wrapper.find('[data-testid="upstream-context-toggle"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="upstream-context-body"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="upstream-bar-hint"]').text()).toContain('上游上下文')
+    expect(wrapper.find('[data-testid="upstream-bar-hint"]').text()).toContain(
+      '本 run 已有澄清需求文档',
+    )
+    expect(wrapper.find('[data-testid="upstream-enlarge"]').text()).toContain('放大上游上下文')
+    expect(apiMocks.artifactContent).not.toHaveBeenCalled()
+
+    await wrapper.find('[data-testid="upstream-enlarge"]').trigger('click')
+    await flushPromises()
+
+    expect(apiMocks.artifactContent).toHaveBeenCalledWith('a-req')
+    expect(wrapper.find('[data-testid="upstream-enlarge-modal"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="upstream-context-body"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="structured-view"]').text()).toContain('需求')
+    wrapper.unmount()
+  })
+
+  it('disableAnnotate suppresses ↗ even when parent review annotate is enabled', async () => {
+    const wrapper = mountCtx({
+      variant: 'persistent-bar',
+      disableAnnotate: true,
+      provideAnnotate: true,
+    })
+    await wrapper.find('[data-testid="upstream-enlarge"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="structured-view"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="upstream-annotate-btn"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('inherits parent annotate channel when disableAnnotate is false', async () => {
+    const wrapper = mountCtx({ provideAnnotate: true })
+    await wrapper.find('[data-testid="upstream-enlarge"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="upstream-annotate-btn"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('closes modal when visible becomes false and does not reopen on return', async () => {
+    const wrapper = mountCtx({ variant: 'persistent-bar' })
+    await wrapper.find('[data-testid="upstream-enlarge"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="upstream-enlarge-modal"]').exists()).toBe(true)
+
+    await wrapper.setProps({ productName: UPSTREAM_REQUIREMENT_ARTIFACT })
+    await nextTick()
+    expect(wrapper.find('[data-testid="upstream-context"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="upstream-enlarge-modal"]').exists()).toBe(false)
+
+    await wrapper.setProps({ productName: 'page.html' })
+    await nextTick()
+    expect(wrapper.find('[data-testid="upstream-context"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="upstream-enlarge-modal"]').exists()).toBe(false)
     wrapper.unmount()
   })
 })

@@ -20,6 +20,30 @@ test.describe('GatesInbox clarify 产物台', () => {
     await expect(page.getByTestId('clarify-product-tabs')).toHaveCount(0)
   })
 
+  test('Inbox 视觉复审可从常驻条打开上游需求模态并读到结构化标题', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+
+    await page.goto('/clarify-inbox-product.html?scenario=visual')
+    await expect(page.getByTestId('clarify-product-stage')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('structured-product-name')).toHaveText('page.html')
+    await expect(page.getByTestId('structured-product-header')).not.toContainText(
+      'clarified_requirement.json',
+    )
+
+    const bar = page.getByTestId('upstream-context')
+    await expect(bar).toBeVisible()
+    await expect(bar).toHaveAttribute('data-variant', 'persistent-bar')
+    await expect(bar.getByTestId('upstream-bar-hint')).toContainText('上游上下文')
+    await expect(bar.getByTestId('upstream-enlarge')).toBeInViewport()
+
+    await bar.getByTestId('upstream-enlarge').click()
+    const modal = page.getByTestId('upstream-enlarge-modal')
+    await expect(modal).toBeVisible()
+    await expect(modal).toContainText('复审产物台展示上游澄清需求文档')
+    await expect(page.getByTestId('upstream-modal-readonly-footer')).toContainText('只读对照')
+    await expect(modal.getByText('↗ 标注')).toHaveCount(0)
+  })
+
   test('三态空态、重试恢复与加载中不闪尚未执行', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 })
 
