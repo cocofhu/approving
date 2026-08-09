@@ -86,6 +86,18 @@ func TestTeamBootstrap_CreatesRoster(t *testing.T) {
 	}
 }
 
+func TestLoadTeamAgentTemplates_AllNine(t *testing.T) {
+	for _, role := range TeamEngineerTemplates {
+		ag, err := loadTeamAgentTemplate(role.EmbedName)
+		if err != nil {
+			t.Fatalf("%s: %v", role.ID, err)
+		}
+		if len(ag.Files) == 0 {
+			t.Fatalf("%s: empty workspace files", role.ID)
+		}
+	}
+}
+
 func TestCreateAgentFromTemplate_Conflict(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:team_scope_"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
 	if err != nil {
