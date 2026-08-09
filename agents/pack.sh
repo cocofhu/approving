@@ -21,6 +21,7 @@ DIST="${ROOT}/dist"
 TARGET="${1:-all}"
 
 ALL_AGENTS=(
+  PMAgent
   ClarifyAgent
   ResearchAgent
   ProposalAgent

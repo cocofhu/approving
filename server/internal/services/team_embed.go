@@ -22,6 +22,9 @@ type TeamRoleTemplate struct {
 	Summary     string `json:"summary"`
 }
 
+// TeamPMEmbedName is the embedded PM Leader package under team_embed/.
+const TeamPMEmbedName = "PMAgent"
+
 // TeamEngineerTemplates is the fixed 9-role pipeline roster.
 var TeamEngineerTemplates = []TeamRoleTemplate{
 	{ID: "research", EmbedName: "ResearchAgent", RoleLabelZH: "调研工程师", Summary: "技术与竞品调研"},
@@ -33,6 +36,16 @@ var TeamEngineerTemplates = []TeamRoleTemplate{
 	{ID: "test", EmbedName: "TestAgent", RoleLabelZH: "测试工程师", Summary: "测试验证"},
 	{ID: "review", EmbedName: "ReviewAgent", RoleLabelZH: "代码Review工程师", Summary: "代码复核"},
 	{ID: "preview", EmbedName: "PreviewAgent", RoleLabelZH: "变更摘要视觉工程师", Summary: "变更摘要视觉预览"},
+}
+
+// TeamEmbedPackageNames lists all packages under team_embed/ (PM + 9 engineers).
+func TeamEmbedPackageNames() []string {
+	out := make([]string, 0, 1+len(TeamEngineerTemplates))
+	out = append(out, TeamPMEmbedName)
+	for _, r := range TeamEngineerTemplates {
+		out = append(out, r.EmbedName)
+	}
+	return out
 }
 
 // TeamRoleByID returns a template by id.
