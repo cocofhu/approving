@@ -2620,10 +2620,29 @@ describe('GateApproval app_preview reject without form', () => {
       selector: '#hero',
       tagName: 'DIV',
       outerHTML: '<div id="hero">x</div>',
+      url: 'http://127.0.0.1:5173/settings?tab=1',
     })
     await flushPromises()
-    // Annotation chip appears in review composer (selector label).
+    // Annotation chip: path · selector; full url stays on annotation.
+    expect(wrapper.text()).toContain('/settings?tab=1 · #hero')
+    const vm = wrapper.vm as any
+    expect(vm.reactAnnotations?.[0]?.url).toBe('http://127.0.0.1:5173/settings?tab=1')
+    wrapper.unmount()
+  })
+
+  it('hot app_preview VNC pick without url still stages selector', async () => {
+    const wrapper = appPreviewHotMount()
+    await flushPromises()
+    const panel = wrapper.findComponent({ name: 'AppPreviewPanel' })
+    await panel.vm.$emit('pick', {
+      selector: '#hero',
+      tagName: 'DIV',
+      outerHTML: '<div id="hero">x</div>',
+    })
+    await flushPromises()
     expect(wrapper.text()).toContain('#hero')
+    const vm = wrapper.vm as any
+    expect(vm.reactAnnotations?.[0]?.url).toBeUndefined()
     wrapper.unmount()
   })
 

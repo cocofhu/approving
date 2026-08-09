@@ -269,6 +269,7 @@ const pickScript = `() => {
     selector: path(el),
     tagName: el.tagName.toLowerCase(),
     outerHTML: (el.outerHTML || '').slice(0, 4000),
+    url: String(location.href || ''),
     x: r.x, y: r.y, width: r.width, height: r.height
   };
 }`
@@ -287,6 +288,7 @@ func (rp *rodPage) describeBackendNode(id proto.DOMBackendNodeID) (Pick, error) 
 		Selector:  v.Get("selector").Str(),
 		TagName:   v.Get("tagName").Str(),
 		OuterHTML: v.Get("outerHTML").Str(),
+		URL:       v.Get("url").Str(),
 		Box:       [4]float64{v.Get("x").Num(), v.Get("y").Num(), v.Get("width").Num(), v.Get("height").Num()},
 	}, nil
 }

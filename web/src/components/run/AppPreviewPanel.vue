@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api, type PreviewPort } from '@/lib/api'
+import type { AppPreviewPickPayload } from '@/lib/previewPickUrl'
 import NovncPreviewPanel from './NovncPreviewPanel.vue'
 import PreviewFeedbackChat from './PreviewFeedbackChat.vue'
 
@@ -18,8 +19,8 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  (e: 'pick', payload: { selector: string; tagName: string; outerHTML: string }): void
-  (e: 'staged-pick', payload: { selector: string; tagName: string; outerHTML: string } | null): void
+  (e: 'pick', payload: AppPreviewPickPayload): void
+  (e: 'staged-pick', payload: AppPreviewPickPayload | null): void
   (e: 'issues-changed'): void
 }>()
 
@@ -36,12 +37,12 @@ function isApiPort(p: PreviewPort): boolean {
   return label.includes('api')
 }
 
-function onPick(payload: { selector: string; tagName: string; outerHTML: string }) {
+function onPick(payload: AppPreviewPickPayload) {
   pickedSelector.value = payload.selector
   emit('pick', payload)
 }
 
-function onStagedPick(payload: { selector: string; tagName: string; outerHTML: string } | null) {
+function onStagedPick(payload: AppPreviewPickPayload | null) {
   if (payload) pickedSelector.value = payload.selector
   emit('staged-pick', payload)
 }

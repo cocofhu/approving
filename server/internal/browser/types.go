@@ -43,6 +43,8 @@ type Pick struct {
 	Selector  string     `json:"selector"`
 	TagName   string     `json:"tagName"`
 	OuterHTML string     `json:"outerHTML"`
+	// URL is location.href at pick time (SPA navigations included).
+	URL       string     `json:"url,omitempty"`
 	Box       [4]float64 `json:"box"` // x, y, width, height (CSS px)
 }
 

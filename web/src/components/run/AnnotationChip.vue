@@ -51,7 +51,7 @@ const showFieldLabel = computed(() => kind.value === 'field' && !!fieldLabel.val
   <span
     class="inline-flex max-w-full items-start gap-1 border px-1.5 py-0.5 text-[11px] leading-snug"
     :class="chipClass"
-    :title="ann.note || path || ann.quote || ''"
+    :title="ann.note || ann.url || path || ann.quote || ''"
     :data-testid="testId"
     :data-chip-kind="kind"
   >

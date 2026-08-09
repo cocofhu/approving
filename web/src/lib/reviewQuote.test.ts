@@ -25,6 +25,23 @@ describe('reviewQuote', () => {
     expect(annotationDedupeKey({ quote: 'a' })).toBe('quote||a')
     expect(annotationDedupeKey({ jsonPath: 'summary' })).toBe('field|summary')
     expect(annotationDedupeKey({ selector: '#hero' })).toBe('field|#hero')
+    expect(annotationDedupeKey({ selector: '#hero', url: 'http://127.0.0.1/a' })).toBe(
+      'field|#hero|http://127.0.0.1/a',
+    )
+  })
+
+  it('allows same selector on different page urls', () => {
+    const list: Parameters<typeof pushAnnotationUnique>[0] = []
+    expect(
+      pushAnnotationUnique(list, { selector: '#hero', url: 'http://127.0.0.1/a', label: 'a' }),
+    ).toBe('added')
+    expect(
+      pushAnnotationUnique(list, { selector: '#hero', url: 'http://127.0.0.1/b', label: 'b' }),
+    ).toBe('added')
+    expect(
+      pushAnnotationUnique(list, { selector: '#hero', url: 'http://127.0.0.1/a', label: 'again' }),
+    ).toBe('duplicate')
+    expect(list).toHaveLength(2)
   })
 
   it('allows multiple quotes on the same path and rejects exact duplicates', () => {

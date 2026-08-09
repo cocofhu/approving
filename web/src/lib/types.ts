@@ -542,6 +542,8 @@ export interface ReactQuestion {
 export interface ReactAnnotation {
   jsonPath?: string
   selector?: string
+  /** Page location.href at DOM pick time (SPA navigations). */
+  url?: string
   label?: string
   note?: string
   /** Paragraph excerpt from a text selection ("添加到聊天"). */

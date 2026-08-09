@@ -28,6 +28,7 @@ import { useTagFilter } from '@/lib/useTagFilter'
 import { useProjectContext } from '@/lib/useProjectContext'
 import { usePendingGates } from '@/lib/usePendingGates'
 import { addClarifyAnnotation, useClarifyDraft } from '@/lib/useClarifyDraft'
+import { previewPickLabel, type AppPreviewPickPayload } from '@/lib/previewPickUrl'
 import { useBreakpoint } from '@/lib/useBreakpoint'
 import { relTime } from '@/lib/format'
 import {
@@ -382,11 +383,7 @@ const {
 )
 
 /** VNC pick on app_preview inbox stage → same ReAct annotation chips as Run review. */
-const lastStagedAppPreviewPick = ref<{
-  selector: string
-  tagName: string
-  outerHTML: string
-} | null>(null)
+const lastStagedAppPreviewPick = ref<AppPreviewPickPayload | null>(null)
 
 watch(
   () => (active.value ? itemKey(active.value) : ''),
@@ -395,19 +392,19 @@ watch(
   },
 )
 
-function onAppPreviewStagedPick(
-  payload: { selector: string; tagName: string; outerHTML: string } | null,
-) {
+function onAppPreviewStagedPick(payload: AppPreviewPickPayload | null) {
   lastStagedAppPreviewPick.value = payload
 }
 
-function onAppPreviewReviewPick(payload: { selector: string; tagName: string; outerHTML: string }) {
+function onAppPreviewReviewPick(payload: AppPreviewPickPayload) {
   const rid = active.value?.type === 'clarify' ? active.value.runId : ''
   const nid = active.value?.type === 'clarify' ? active.value.nodeId : ''
   if (!rid || !nid) return
+  const url = (payload.url || '').trim()
   const result = addClarifyAnnotation(rid, nid, {
     selector: payload.selector,
-    label: payload.selector || payload.tagName,
+    url: url || undefined,
+    label: previewPickLabel(url, payload.selector, payload.tagName),
   })
   if (result === 'duplicate') toast.warn(t('pages.reviewComposer.alreadyAdded'))
   lastStagedAppPreviewPick.value = null
@@ -418,10 +415,21 @@ function mergeStagedAppPreviewPick(
 ): import('@/lib/types').ReactAnnotation[] {
   const staged = lastStagedAppPreviewPick.value
   if (!staged?.selector) return annotations
-  if (annotations.some((a) => a.selector === staged.selector)) return annotations
+  const url = (staged.url || '').trim()
+  if (
+    annotations.some(
+      (a) => a.selector === staged.selector && (a.url || '').trim() === url,
+    )
+  ) {
+    return annotations
+  }
   return [
     ...annotations,
-    { selector: staged.selector, label: staged.selector || staged.tagName },
+    {
+      selector: staged.selector,
+      url: url || undefined,
+      label: previewPickLabel(url, staged.selector, staged.tagName),
+    },
   ]
 }
 
