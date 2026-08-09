@@ -22,3 +22,19 @@ export function lastOutputNodeId(run: Run, nodes: { id: string; type: string }[]
   }
   return bestId
 }
+
+/** First output node in graph order (fallback when nothing executed). */
+export function firstGraphOutputNodeId(nodes: { id: string; type: string }[]): string | null {
+  return nodes.find((n) => n.type === 'output')?.id ?? null
+}
+
+/**
+ * Focus target for completed notify / live complete:
+ * last executed output node, else first graph output node, else null.
+ */
+export function resolveOutputFocusNodeId(
+  run: Run,
+  nodes: { id: string; type: string }[],
+): string | null {
+  return lastOutputNodeId(run, nodes) || firstGraphOutputNodeId(nodes)
+}

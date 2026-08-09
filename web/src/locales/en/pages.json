@@ -247,11 +247,12 @@
         "evCompletedLabel": "Run completed",
         "evWaitingHuman": "When a run pauses for your confirmation or action",
         "evFailed": "When a step fails and the run cannot continue",
-        "evCompleted": "Coming soon — not sent yet",
+        "evCompleted": "Off by default; when on, send QQ when a run succeeds",
         "templatesTitle": "Message templates",
         "templatesHint": "Write the full QQ body per trigger; leave empty to use the system default. Workflows only choose triggers, not copy.",
         "segWaitingHuman": "Waiting for human",
         "segFailed": "Run failed",
+        "segCompleted": "Run completed",
         "placeholders": "Placeholders",
         "fillDefault": "Fill / restore default",
         "clearDefault": "Clear (use default)",
@@ -2046,6 +2047,9 @@
       "artifactsMcp": "Artifacts · written via artifact-store MCP",
       "output": "Output",
       "workflowComplete": "Workflow complete.",
+      "noPreviewCardsTitle": "No previewable result cards this run",
+      "noPreviewCardsBody": "The run completed successfully. Final result sources are empty, or no output node ran. This is not a load failure.",
+      "noPreviewCardsHint": "You can still browse all raw artifacts on this page's Artifacts tab.",
       "outputCards": {
         "sourceFailedTitle": "Source node failed / no product",
         "invalidSource": "Invalid or unparseable source reference"

@@ -4,6 +4,7 @@ import {
   formatDefaultRunNotifyMessage,
   renderRunNotifyMessage,
   replaceRunNotifyPlaceholders,
+  runNotifyTitle,
   RUN_NOTIFY_PREVIEW_FAKE,
 } from './runNotifyTemplate'
 
@@ -69,6 +70,17 @@ describe('runNotifyTemplate', () => {
         title: 'T',
       }),
     ).toBe('x P {nope} T')
+  })
+
+  it('completed title is 运行完成 not 运行失败', () => {
+    expect(runNotifyTitle('completed')).toBe('运行完成')
+    expect(formatDefaultRunNotifyMessage('completed', RUN_NOTIFY_PREVIEW_FAKE)).toContain(
+      '【Approving】运行完成',
+    )
+    expect(formatDefaultRunNotifyMessage('completed', RUN_NOTIFY_PREVIEW_FAKE)).not.toContain(
+      '运行失败',
+    )
+    expect(renderRunNotifyMessage('completed', '')).toContain('【Approving】运行完成')
   })
 
   it('default editable skeleton renders to default with fake data', () => {

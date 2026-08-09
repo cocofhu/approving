@@ -7,6 +7,7 @@ describe('useAuth', () => {
     expect(authRedirectPath('https://evil')).toBe('/')
     expect(authRedirectPath('//evil')).toBe('/')
     expect(authRedirectPath('/runs?x=1')).toBe('/runs?x=1')
+    expect(authRedirectPath('/runs/r1?node=out&tab=output')).toBe('/runs/r1?node=out&tab=output')
 
     const auth = useAuth()
     auth.clearUser()

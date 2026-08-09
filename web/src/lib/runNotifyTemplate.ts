@@ -5,7 +5,7 @@
  * FormatRunNotifyMessage / RenderRunNotifyMessage).
  */
 
-export type RunNotifyKind = 'waiting_human' | 'failed'
+export type RunNotifyKind = 'waiting_human' | 'failed' | 'completed'
 
 export const RUN_NOTIFY_PLACEHOLDERS = [
   '{project}',
@@ -36,7 +36,14 @@ export const RUN_NOTIFY_PREVIEW_FAKE: RunNotifyPreviewContext = {
 }
 
 export function runNotifyTitle(kind: RunNotifyKind): string {
-  return kind === 'waiting_human' ? '等待人工处理' : '运行失败'
+  switch (kind) {
+    case 'waiting_human':
+      return '等待人工处理'
+    case 'completed':
+      return '运行完成'
+    default:
+      return '运行失败'
+  }
 }
 
 /**

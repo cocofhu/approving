@@ -2,12 +2,19 @@ package models
 
 import "time"
 
-// Notify event kinds delivered in P0. completed may appear in schema/UI as a
-// greyed preview but is never delivered by the P0 engine hook.
+// Notify event kinds. waiting_human and failed are on by default; completed is
+// opt-in (DefaultEvents stays [waiting_human, failed] so existing projects do
+// not start notifying on success).
 const (
 	NotifyKindWaitingHuman = "waiting_human"
 	NotifyKindFailed       = "failed"
-	NotifyKindCompleted    = "completed" // P1 reserved; not delivered in P0
+	NotifyKindCompleted    = "completed"
+)
+
+// Completed notify receipt / deep-link fallbacks when a run has no output node.
+const (
+	NotifyCompletedSentinelNodeID = "_run"
+	NotifyCompletedFallbackLabel  = "输出"
 )
 
 // Workflow notify override modes.
@@ -21,13 +28,14 @@ const (
 // Enabled=nil means default ON (hard-close only when explicitly false).
 // DefaultEvents=nil means the product default [waiting_human, failed]; an
 // explicit empty slice means "no default events".
-// WaitingHumanTemplate / FailedTemplate are optional full message bodies;
-// trim-empty means fall back to FormatRunNotifyMessage (zero regression).
+// WaitingHumanTemplate / FailedTemplate / CompletedTemplate are optional full
+// message bodies; trim-empty means fall back to FormatRunNotifyMessage.
 type ProjectNotifyPolicy struct {
 	Enabled              *bool    `json:"enabled"`
 	DefaultEvents        []string `json:"defaultEvents"`
 	WaitingHumanTemplate string   `json:"waitingHumanTemplate,omitempty"`
 	FailedTemplate       string   `json:"failedTemplate,omitempty"`
+	CompletedTemplate    string   `json:"completedTemplate,omitempty"`
 }
 
 // WorkflowNotifyPolicy is the per-workflow override. Empty Mode ≡ inherit.

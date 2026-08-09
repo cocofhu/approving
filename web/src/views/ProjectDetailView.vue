@@ -300,13 +300,13 @@ async function setWorkflowNotifyMode(w: Workflow, mode: 'off' | 'inherit' | 'cus
   await persistWorkflowNotify(w, { mode, events })
 }
 
-async function toggleWorkflowNotifyEvent(w: Workflow, ev: 'waiting_human' | 'failed') {
+async function toggleWorkflowNotifyEvent(w: Workflow, ev: 'waiting_human' | 'failed' | 'completed') {
   const cur = new Set(w.notifyPolicy?.events || [])
   if (cur.has(ev)) cur.delete(ev)
   else cur.add(ev)
   await persistWorkflowNotify(w, {
     mode: 'custom',
-    events: ['waiting_human', 'failed'].filter((k) => cur.has(k)),
+    events: (['waiting_human', 'failed', 'completed'] as const).filter((k) => cur.has(k)),
   })
 }
 
@@ -1042,6 +1042,16 @@ onUnmounted(() => {
                     />
                     <span>{{ t('pages.projectDetail.notify.segFailed') }}</span>
                   </label>
+                  <label class="inline-flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      class="accent-accent"
+                      :checked="wfNotifyHas(w, 'completed')"
+                      :disabled="savingNotifyWfId === w.id"
+                      @change="toggleWorkflowNotifyEvent(w, 'completed')"
+                    />
+                    <span>{{ t('pages.projectDetail.notify.segCompleted') }}</span>
+                  </label>
                 </div>
               </div>
               <button
@@ -1199,6 +1209,16 @@ onUnmounted(() => {
                           @change="toggleWorkflowNotifyEvent(w, 'failed')"
                         />
                         <span>{{ t('pages.projectDetail.notify.segFailed') }}</span>
+                      </label>
+                      <label class="inline-flex items-center gap-1">
+                        <input
+                          type="checkbox"
+                          class="accent-accent"
+                          :checked="wfNotifyHas(w, 'completed')"
+                          :disabled="savingNotifyWfId === w.id"
+                          @change="toggleWorkflowNotifyEvent(w, 'completed')"
+                        />
+                        <span>{{ t('pages.projectDetail.notify.segCompleted') }}</span>
                       </label>
                     </div>
                   </td>
