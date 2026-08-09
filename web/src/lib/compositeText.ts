@@ -1,8 +1,17 @@
 import type { ClarifyImage, CompositeText } from '@/lib/types'
+import { blobContentUrl } from './api'
 import { i18n } from './i18n'
 
+/** Prefer blob:{id} URL; fall back to legacy inline base64 data URL. */
 export function imgSrc(im: ClarifyImage): string {
-  return `data:${im.mimeType || 'image/png'};base64,${im.data}`
+  const ref = (im.ref || '').trim()
+  if (ref.startsWith('blob:')) {
+    return blobContentUrl(ref)
+  }
+  if (im.data) {
+    return `data:${im.mimeType || 'image/png'};base64,${im.data}`
+  }
+  return ''
 }
 
 export function isCompositeText(v: unknown): v is CompositeText {

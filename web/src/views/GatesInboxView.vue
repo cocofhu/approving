@@ -1218,7 +1218,7 @@ function backToList() {
 
 async function onClarifySend(
   text: string,
-  images: { data: string; mimeType: string }[] = [],
+  images: import('@/lib/types').ClarifyImage[] = [],
   annotations: import('@/lib/types').ReactAnnotation[] = [],
   force = false,
 ) {

@@ -1,11 +1,13 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/cocofhu/approving/internal/blob"
 	"github.com/cocofhu/approving/internal/models"
 
 	"github.com/google/uuid"
@@ -71,6 +73,7 @@ func validPmFailKind(kind string) bool {
 
 // PmService manages project PM Leader binding, memory, and chat persistence.
 type PmService struct {
+	blobs blob.Store
 	db     *gorm.DB
 	skills *SkillService
 }
@@ -79,6 +82,9 @@ type PmService struct {
 func NewPmService(db *gorm.DB, skills *SkillService) *PmService {
 	return &PmService{db: db, skills: skills}
 }
+
+// SetBlobStore wires attachment externalization for chat messages.
+func (s *PmService) SetBlobStore(store blob.Store) { s.blobs = store }
 
 // --- binding ----------------------------------------------------------------
 
@@ -757,6 +763,11 @@ func (s *PmService) AppendMessage(threadID, role, content string, citations []mo
 func (s *PmService) AppendMessageSource(threadID, role, content, source string, citations []models.ProgressCitation, attached *models.AttachedContext, images []models.PromptImage, usage *models.TokenUsage, usageByModel models.TokenUsageByModel) (models.ChatMessage, error) {
 	if role == "" {
 		return models.ChatMessage{}, fmt.Errorf("role required")
+	}
+	var err error
+	images, err = blob.IngestPromptImages(context.Background(), s.blobs, images)
+	if err != nil {
+		return models.ChatMessage{}, fmt.Errorf("ingest attachments: %w", err)
 	}
 	msg := models.ChatMessage{
 		ID: "msg-" + uuid.NewString()[:12], ThreadID: threadID, Role: role, Content: content,

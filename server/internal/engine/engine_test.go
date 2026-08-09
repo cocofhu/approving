@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cocofhu/approving/internal/blob"
 	"github.com/cocofhu/approving/internal/database"
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/models"
@@ -43,6 +44,7 @@ func setupEngine(t *testing.T) (*Engine, *gorm.DB) {
 	host := mcp.NewHost(arts)
 	provider := &fakeProvider{host: host}
 	eng := New(db, provider, host, arts, 5)
+	eng.SetBlobStore(blob.NewMemory())
 	cleanupEngineDB(t, eng, db)
 	return eng, db
 }
@@ -190,6 +192,7 @@ func setupEngineGraph(t *testing.T, g models.Graph) (*Engine, *gorm.DB) {
 	arts := services.NewArtifactService(db)
 	host := mcp.NewHost(arts)
 	eng := New(db, &fakeProvider{host: host}, host, arts, 5)
+	eng.SetBlobStore(blob.NewMemory())
 	cleanupEngineDB(t, eng, db)
 	return eng, db
 }

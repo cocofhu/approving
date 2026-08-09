@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/cocofhu/approving/internal/auth"
+	"github.com/cocofhu/approving/internal/blob"
 	"github.com/cocofhu/approving/internal/browser"
 	"github.com/cocofhu/approving/internal/contextmcp"
 	"github.com/cocofhu/approving/internal/engine"
@@ -66,6 +67,8 @@ type Handlers struct {
 	CanViewProjectAudit func(username, projectID string) bool
 	// InjectBundles serves ConfigHome .tgz for gateway SANDBOX_INJECT (no session auth).
 	InjectBundles  *sandbox.BundleStore
+	// Blobs serves externalized attachment bytes (GET /api/blobs/:id).
+	Blobs          blob.Store
 	doctorMu       sync.Mutex
 	doctorSessions map[string]doctorArtifactSession
 }

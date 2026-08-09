@@ -5,6 +5,7 @@ import {
   formatImageCountFull,
   formatVarChip,
   formatVarValue,
+  imgSrc,
   isCompositeText,
 } from './compositeText'
 import { i18n } from './i18n'
@@ -29,6 +30,14 @@ describe('compositeImages', () => {
     const imgs = [{ data: 'x', mimeType: 'image/png' }]
     expect(compositeImages({ text: '', images: imgs })).toEqual(imgs)
     expect(compositeImages('plain')).toEqual([])
+  })
+})
+
+describe('imgSrc', () => {
+  it('prefers blob ref URL over inline data', () => {
+    expect(imgSrc({ ref: 'blob:abc123', data: 'xx', mimeType: 'image/png' })).toBe('/api/blobs/abc123')
+    expect(imgSrc({ data: 'QUJD', mimeType: 'image/png' })).toBe('data:image/png;base64,QUJD')
+    expect(imgSrc({ mimeType: 'image/png' })).toBe('')
   })
 })
 

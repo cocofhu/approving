@@ -130,6 +130,8 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 	if err != nil {
 		return Reply{}, err
 	}
+	// AppendMessageSource externalizes bytes; use refs for the ACP turn.
+	images = userMsg.Images
 
 	prompt := userText
 	if !reused {

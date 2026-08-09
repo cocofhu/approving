@@ -41,6 +41,13 @@ import {
 // an empty/error state.
 const BASE = ((import.meta as any).env?.VITE_API_BASE ?? '/api').replace(/\/$/, '')
 
+/** Browser URL for a stored attachment (`blob:{id}` → `/api/blobs/{id}`). */
+export function blobContentUrl(ref: string): string {
+  const id = String(ref || '').trim().replace(/^blob:/, '')
+  if (!id) return ''
+  return `${BASE}/blobs/${encodeURIComponent(id)}`
+}
+
 const AUTH_WHITELIST = new Set(['/auth/login', '/auth/logout', '/auth/me', '/health', '/live'])
 
 function redirectToLogin() {
@@ -133,7 +140,7 @@ export interface PreviewIssue {
   body: string
   selector?: string
   port?: number
-  images?: { data: string; mimeType: string }[]
+  images?: ClarifyImage[]
   status: string
   createdAt: string
 }
@@ -671,7 +678,7 @@ export const api = {
     runId: string,
     nodeId: string,
     text: string,
-    images: { data: string; mimeType: string }[] = [],
+    images: ClarifyImage[] = [],
     force = false,
     annotations: ReactAnnotation[] = [],
   ) =>
@@ -689,7 +696,7 @@ export const api = {
     runId: string,
     nodeId: string,
     text: string,
-    images: { data: string; mimeType: string }[] = [],
+    images: ClarifyImage[] = [],
     annotations: ReactAnnotation[] = [],
   ) =>
     req<{ status: string; waiting?: number; producerNodeId?: string }>(
@@ -867,6 +874,7 @@ export const api = {
   },
   artifactContent: (id: string) => req<Artifact>(`/artifacts/${id}/content`),
   artifactDownloadUrl: (id: string) => `${origin()}/api/artifacts/${id}/download`,
+  blobContentUrl,
   exportRunLogsUrl: (id: string) => `${origin()}/api/runs/${id}/logs/export`,
   // DELETE returns 204 No Content — must not go through req()'s unconditional res.json().
   deleteArtifact: async (id: string): Promise<void> => {
@@ -984,7 +992,7 @@ export const api = {
     body: string,
     selector = '',
     port = 0,
-    images: { data: string; mimeType: string }[] = [],
+    images: ClarifyImage[] = [],
   ) =>
     req<PreviewIssue>(`/runs/${runId}/nodes/${nodeId}/preview-issues`, {
       method: 'POST',

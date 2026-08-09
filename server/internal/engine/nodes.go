@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cocofhu/approving/internal/blob"
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/models"
 	gatenode "github.com/cocofhu/approving/internal/models/nodereg"
@@ -1176,7 +1177,7 @@ func (e *Engine) saveState(c *execCtx, node *models.Node, o nodeOutcome) {
 	// timeline can surface each card's vars-at-that-moment for debugging.
 	snap := map[string]any{}
 	for k, v := range c.vars {
-		snap[k] = v
+		snap[k] = blob.StripDataInValue(v)
 	}
 	sr.VarsSnapshot = snap
 	// Accumulate this execution's built-in MCP tool-call trace so the timeline

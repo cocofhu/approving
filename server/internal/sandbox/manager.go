@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cocofhu/approving/internal/blob"
 	"github.com/cocofhu/approving/internal/config"
 
 	"github.com/google/uuid"
@@ -75,6 +76,9 @@ type Manager struct {
 	// running sandbox with a resolved session endpoint.
 	createTimeout time.Duration
 
+	// blobs resolves blob:{id} attachments when opening ACP clients.
+	blobs blob.Store
+
 	// hostKeys holds per-endpoint TOFU SSH host keys for data-plane dials.
 	hostKeys *hostKeyCache
 }
@@ -99,6 +103,8 @@ type ManagerOptions struct {
 	// finishes provisioning (large cold-start image pull + PVC attach + boot).
 	// 0 → default (see NewManager).
 	CreateTimeout time.Duration
+	// Blobs resolves blob:{id} attachments for ACP chat turns.
+	Blobs blob.Store
 }
 
 // Spec describes one sandbox to create. The sandbox is a generic agent runner:
@@ -272,6 +278,7 @@ func NewManager(gw *GatewayClient, opts ManagerOptions) *Manager {
 		bundles:                 opts.InjectStore,
 		injectAdvertiseFallback: strings.TrimSpace(opts.InjectAdvertise),
 		createTimeout:           createTimeout,
+		blobs:                   opts.Blobs,
 		hostKeys:                newHostKeyCache(),
 	}
 }
@@ -783,7 +790,11 @@ func (s *Sandbox) Destroy(ctx context.Context) {
 // ACP returns a new ACP client wired to this sandbox's session endpoint,
 // pre-authenticated with the sandbox token when the bridge requires it.
 func (s *Sandbox) ACP() *ACPClient {
-	return NewACPClient(s.Host, s.Port).WithPassword(s.Password)
+	c := NewACPClient(s.Host, s.Port).WithPassword(s.Password)
+	if s.mgr != nil && s.mgr.blobs != nil {
+		c = c.WithBlobs(s.mgr.blobs)
+	}
+	return c
 }
 
 // shellArgPattern is the allowlist for remote shell argv fragments (CodeQL #11).

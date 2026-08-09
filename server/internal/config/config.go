@@ -33,6 +33,15 @@ type Config struct {
 	Browser  BrowserConfig  `yaml:"browser"`
 	Auth     AuthConfig     `yaml:"auth"`
 	Security SecurityConfig `yaml:"security"`
+	Storage  StorageConfig  `yaml:"storage"`
+}
+
+// StorageConfig selects how attachment bytes are persisted (DB keeps refs only).
+type StorageConfig struct {
+	// Driver is "local" (default) or "cos" (reserved; not implemented yet).
+	Driver string `yaml:"driver"`
+	// BlobsRoot is the LocalFS directory for blob:{id} objects.
+	BlobsRoot string `yaml:"blobs_root"`
 }
 
 // SecurityConfig holds cross-cutting secrets. SecretsKey is the master key used
@@ -411,6 +420,12 @@ func applyEnvOverrides(c *Config) {
 	if v := env("APPROVING_SECRETS_KEY"); v != "" {
 		c.Security.SecretsKey = v
 	}
+	if v := env("APPROVING_STORAGE_DRIVER"); v != "" {
+		c.Storage.Driver = v
+	}
+	if v := env("APPROVING_BLOBS_ROOT"); v != "" {
+		c.Storage.BlobsRoot = v
+	}
 }
 
 // setDefaults fills any still-empty fields with the built-in defaults. Runs
@@ -445,6 +460,13 @@ func setDefaults(c *Config) {
 	}
 	if c.Engine.ProfilesRoot == "" {
 		c.Engine.ProfilesRoot = "data/profiles"
+	}
+	if c.Storage.Driver == "" {
+		c.Storage.Driver = "local"
+	}
+	c.Storage.Driver = strings.ToLower(strings.TrimSpace(c.Storage.Driver))
+	if c.Storage.BlobsRoot == "" {
+		c.Storage.BlobsRoot = "data/blobs"
 	}
 	if c.Engine.PlatformRulesRoot == "" {
 		c.Engine.PlatformRulesRoot = "data/platform-rules"

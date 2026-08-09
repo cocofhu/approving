@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cocofhu/approving/internal/blob"
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/models"
 	gatenode "github.com/cocofhu/approving/internal/models/nodereg"
@@ -339,6 +340,11 @@ func (e *Engine) snapshotPreviewIssues(c *execCtx, runID, nodeID string) error {
 func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.PromptImage, annotations []models.ReactAnnotation, force bool) error {
 	if e.IsHalted() {
 		return errors.New("server is shutting down")
+	}
+	var err error
+	images, err = blob.IngestPromptImages(context.Background(), e.blobs, images)
+	if err != nil {
+		return fmt.Errorf("ingest attachments: %w", err)
 	}
 
 	cPeek, peekErr := e.loadCtx(runID)

@@ -1,8 +1,11 @@
 package services
 
 import (
+	"context"
+	"fmt"
 	"time"
 
+	"github.com/cocofhu/approving/internal/blob"
 	"github.com/cocofhu/approving/internal/models"
 
 	"github.com/google/uuid"
@@ -13,16 +16,28 @@ import (
 // from the app_preview UI via REST; the engine snapshots them into a run
 // variable (preview_issues) at gate resume so a downstream node can consume
 // them via {{vars.preview_issues}}.
-type IssueService struct{ db *gorm.DB }
+type IssueService struct {
+	db    *gorm.DB
+	blobs blob.Store
+}
 
 // NewIssueService builds the service.
 func NewIssueService(db *gorm.DB) *IssueService { return &IssueService{db: db} }
+
+// SetBlobStore wires attachment externalization for preview issue images.
+func (s *IssueService) SetBlobStore(store blob.Store) { s.blobs = store }
 
 // Create persists a new open preview issue, attributing it to the run's
 // workflow (mirrors ArtifactService.Save's run lookup).
 func (s *IssueService) Create(runID, nodeID, body, selector string, port int, images []models.PromptImage) (models.PreviewIssue, error) {
 	var run models.Run
 	s.db.Select("workflow_id", "workflow_name").First(&run, "id = ?", runID)
+
+	var err error
+	images, err = blob.IngestPromptImages(context.Background(), s.blobs, images)
+	if err != nil {
+		return models.PreviewIssue{}, fmt.Errorf("ingest attachments: %w", err)
+	}
 
 	issue := models.PreviewIssue{
 		ID: "iss-" + uuid.NewString()[:8], RunID: runID, NodeID: nodeID,

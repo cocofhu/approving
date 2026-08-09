@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cocofhu/approving/internal/blob"
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/runtime"
@@ -206,6 +207,10 @@ func (e *Engine) enqueueReactTurn(runID, producerID, text string, images []model
 	}
 	if strings.TrimSpace(text) == "" && len(images) == 0 && len(annotations) == 0 {
 		return 0, errors.New("text, images, or annotations required")
+	}
+	images, err = blob.IngestPromptImages(context.Background(), e.blobs, images)
+	if err != nil {
+		return 0, fmt.Errorf("ingest attachments: %w", err)
 	}
 	s := e.getOrCreateReviewSession(runID, producerID, kind)
 	item := &reviewQueueItem{

@@ -118,11 +118,11 @@ func TestNodeReqPromptImages(t *testing.T) {
 	run, err := eng.StartRun("wf", map[string]any{
 		"feature": map[string]any{
 			"text":   "f",
-			"images": []any{map[string]any{"data": "fimg", "mimeType": "image/png"}},
+			"images": []any{map[string]any{"data": "ZmltZw==", "mimeType": "image/png"}},
 		},
 		"extra": map[string]any{
 			"text":   "e",
-			"images": []any{map[string]any{"data": "eimg", "mimeType": "image/jpeg"}},
+			"images": []any{map[string]any{"data": "ZWltZw==", "mimeType": "image/jpeg"}},
 		},
 	}, "test")
 	if err != nil {
@@ -137,8 +137,14 @@ func TestNodeReqPromptImages(t *testing.T) {
 	if len(req.PromptImages) != 2 {
 		t.Fatalf("PromptImages = %+v", req.PromptImages)
 	}
-	if req.PromptImages[0].Data != "fimg" || req.PromptImages[1].Data != "eimg" {
-		t.Fatalf("order wrong: %+v", req.PromptImages)
+	if req.PromptImages[0].Ref == "" || req.PromptImages[1].Ref == "" {
+		t.Fatalf("expected blob refs: %+v", req.PromptImages)
+	}
+	if req.PromptImages[0].Data != "" || req.PromptImages[1].Data != "" {
+		t.Fatalf("persisted images must not keep data: %+v", req.PromptImages)
+	}
+	if req.PromptImages[0].MimeType != "image/png" || req.PromptImages[1].MimeType != "image/jpeg" {
+		t.Fatalf("mime order wrong: %+v", req.PromptImages)
 	}
 	_ = db
 }
@@ -166,18 +172,19 @@ func TestPromptImagesIntegration(t *testing.T) {
 	run, err := eng.StartRun("wf", map[string]any{
 		"feature": map[string]any{
 			"text":   "topic",
-			"images": []any{map[string]any{"data": "imgdata", "mimeType": "image/png"}},
+			"images": []any{map[string]any{"data": "aW1nZGF0YQ==", "mimeType": "image/png"}},
 		},
 		"unused": map[string]any{
 			"text":   "x",
-			"images": []any{map[string]any{"data": "skip", "mimeType": "image/png"}},
+			"images": []any{map[string]any{"data": "c2tpcA==", "mimeType": "image/png"}},
 		},
 	}, "test")
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	waitRunStatus(t, db, run.ID, "completed")
-	if imgs := fp.lastPromptImages("research"); len(imgs) != 1 || imgs[0].Data != "imgdata" {
+	imgs := fp.lastPromptImages("research")
+	if len(imgs) != 1 || imgs[0].Ref == "" || imgs[0].Data != "" {
 		t.Fatalf("fake provider images = %+v", imgs)
 	}
 }

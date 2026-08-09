@@ -35,6 +35,7 @@ import {
   formatSendRejectMessage,
   isImageAttachment,
 } from '@/lib/attachments'
+import { imgSrc } from '@/lib/compositeText'
 
 type QueueItem = {
   id?: string
@@ -353,10 +354,6 @@ const turns = computed<ClarifyTurn[]>(() => {
   }
   return list
 })
-
-function imgSrc(im: ClarifyImage): string {
-  return `data:${im.mimeType || 'image/png'};base64,${im.data}`
-}
 
 /** Single-image lightbox for human history attachments (no gallery / Esc). */
 type ImagePreview = { src: string; label: string }

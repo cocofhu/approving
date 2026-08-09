@@ -499,10 +499,15 @@ export interface Artifact {
 }
 
 export interface ClarifyImage {
-  data: string // base64 (no data: prefix)
+  /** Base64 (no data: prefix) on upload / legacy rows; omitted after blob externalization. */
+  data?: string
+  /** blob:{id} reference after server-side externalization. */
+  ref?: string
   mimeType: string
   /** Original filename when known; forwarded through platform → ACP Bridge. */
   name?: string
+  /** Decoded byte length when known. */
+  sizeBytes?: number
 }
 
 /** Paragraph variable composite value: text + optional image attachments. */

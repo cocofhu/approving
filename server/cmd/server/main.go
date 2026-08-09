@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cocofhu/approving/internal/auth"
+	"github.com/cocofhu/approving/internal/blob"
 	"github.com/cocofhu/approving/internal/browser"
 	"github.com/cocofhu/approving/internal/channels"
 	"github.com/cocofhu/approving/internal/channels/qq"
@@ -144,6 +145,11 @@ func main() {
 	// (startup.sh extracts before agent start). Served at /sandbox-inject/:id.
 	injectStore := sandbox.NewBundleStore()
 
+	blobStore, err := blob.NewFromConfig(cfg)
+	if err != nil {
+		log.Fatal().Err(err).Msg("blob store init failed")
+	}
+
 	projectSvc := services.NewProjectService(db)
 	auditSvc := services.NewProjectAuditService(db)
 	services.BackfillAuditElevatedFields(db)
@@ -161,6 +167,7 @@ func main() {
 		SandboxCreateTimeout: cfg.SandboxCreateTimeout(),
 		MCPEndpoint:          cfg.Server.MCPAdvertise,
 		InjectStore:          injectStore,
+		Blobs:                blobStore,
 		ProfilesRoot:         cfg.Engine.ProfilesRoot,
 		PlatformRulesRoot:    cfg.Engine.PlatformRulesRoot,
 		ProjectEnvForWorkflow: func(workflowID string) map[string]string {
@@ -168,6 +175,7 @@ func main() {
 		},
 	})
 	eng := engine.New(db, provider, host, artifactSvc, cfg.Engine.MaxConcurrentRuns)
+	eng.SetBlobStore(blobStore)
 	eng.SetProjectVarsLookup(func(workflowID string) []models.ProjectVariable {
 		return projectSvc.VariablesForWorkflow(workflowID)
 	})
@@ -233,6 +241,7 @@ func main() {
 		InjectStore:     injectStore,
 		InjectAdvertise: cfg.Server.MCPAdvertise,
 		CreateTimeout:   cfg.SandboxCreateTimeout(),
+		Blobs:           blobStore,
 	})
 	log.Info().Str("gateway", cfg.Sandbox.GatewayURL).Msg("sandbox control plane: sandbox-gateway")
 	sbxSvc := services.NewSandboxService(db, sbxMgr, skillSvc, host, services.SandboxOptions{
@@ -282,12 +291,14 @@ func main() {
 	// The engine snapshots them into the preview_issues run variable at gate
 	// resume so a downstream node consumes them via {{vars.preview_issues}}.
 	issueSvc := services.NewIssueService(db)
+	issueSvc.SetBlobStore(blobStore)
 	eng.SetIssueService(issueSvc)
 
 	coord := shutdown.New(cfg.AgentChatTimeout())
 	authSvc := auth.NewService(db, config.GetConfig)
 
 	pmSvc := services.NewPmService(db, skillSvc)
+	pmSvc.SetBlobStore(blobStore)
 	pmProgress := services.NewPmProgress(pmSvc, runSvc, artifactSvc)
 	wfSvc := services.NewWorkflowService(db)
 	wfSvc.SetSkills(skillSvc)
@@ -383,6 +394,7 @@ func main() {
 		Browser:       browserSvc,
 		Audit:         auditSvc,
 		InjectBundles: injectStore,
+		Blobs:         blobStore,
 		Onboarding:    services.NewOnboardingService(projectSvc, skillSvc, wfSvc),
 	}
 

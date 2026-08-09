@@ -150,6 +150,7 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.GET("/artifacts/:id/content", h.ArtifactContent)
 		api.GET("/artifacts/:id/download", h.DownloadArtifact)
 		api.DELETE("/artifacts/:id", h.DeleteArtifact)
+		api.GET("/blobs/:id", h.GetBlob)
 
 		api.GET("/agents", h.ListAgents)
 		api.POST("/agents", h.CreateAgent)

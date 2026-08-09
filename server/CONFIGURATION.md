@@ -45,3 +45,5 @@ configured on Agent meta env, not in this platform config table.
 | `APPROVING_AUTH_SESSION_TTL` | `auth.session_ttl` | duration | `168h` | Public | Session lifetime |
 | `APPROVING_AUTH_USERS` | `auth.users` | YAML/JSON | `Not set` | Sensitive | Static user array; required explicitly outside local mode |
 | `APPROVING_SECRETS_KEY` | `security.secrets_key` | string | `Not set` | Sensitive | Master AES key for encrypting channel credentials at rest (base64 32 bytes); treat as a fixed salt, do not rotate |
+| `APPROVING_STORAGE_DRIVER` | `storage.driver` | enum | `local` | Public | Attachment storage driver: local (cos reserved) |
+| `APPROVING_BLOBS_ROOT` | `storage.blobs_root` | path | `data/blobs` | Public | Local attachment blob root directory |
