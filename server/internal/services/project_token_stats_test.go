@@ -125,6 +125,9 @@ func TestTokenStatsAggregation(t *testing.T) {
 		if res.Composition.Total != 0 || len(res.Workflows) != 0 {
 			t.Fatalf("empty composition/workflows: %+v", res)
 		}
+		if len(res.ModelRanking) != 0 || len(res.ModelComposition) != 0 {
+			t.Fatalf("empty window must not forge model rank/composition: rank=%+v comp=%+v", res.ModelRanking, res.ModelComposition)
+		}
 	})
 
 	t.Run("7d_day_buckets_and_null_not_zero", func(t *testing.T) {
@@ -525,54 +528,176 @@ func itoa(n int) string {
 }
 
 
-func TestBuildModelStatsTop10AndUnknown(t *testing.T) {
-	t.Parallel()
-	totals := map[string]*tokenModelAgg{}
-	for i := 0; i < 12; i++ {
-		totals[fmt.Sprintf("m%02d", i)] = &tokenModelAgg{total: int64(100 - i), source: models.TokenUsageSourceUpstream}
+func sumModelTotals(rows []TokenStatsModel) int64 {
+	var n int64
+	for _, r := range rows {
+		n += r.Total
 	}
-	// Unknown + filled bridge totals high enough to enter Top10 independently.
-	totals[models.TokenUsageModelUnknown] = &tokenModelAgg{total: 95, source: models.TokenUsageSourceUnknown}
-	totals["bridge-m"] = &tokenModelAgg{total: 94, filled: true, source: models.TokenUsageSourceBridge}
+	return n
+}
 
-	comp, rank := buildModelStats(totals)
-	if len(comp) != 14 {
-		t.Fatalf("composition len=%d", len(comp))
+func assertRankConservesComposition(t *testing.T, comp, rank []TokenStatsModel) {
+	t.Helper()
+	cSum, rSum := sumModelTotals(comp), sumModelTotals(rank)
+	if cSum != rSum {
+		t.Fatalf("ranking Σ=%d != composition Σ=%d", rSum, cSum)
 	}
-	var hasOther, hasUnk, hasFilled bool
 	for _, r := range rank {
-		if r.Other {
-			hasOther = true
+		if r.Other && r.Unknown {
+			t.Fatalf("other must not be marked unknown: %+v", r)
+		}
+	}
+}
+
+// TestBuildModelStatsDemoScenes locks Demo s2/s3/s4: unknown competes by total,
+// qualifies as「未知/未分桶」, otherwise folds into other; ranking Σ = composition Σ.
+func TestBuildModelStatsDemoScenes(t *testing.T) {
+	t.Parallel()
+
+	t.Run("s2_unknown_qualifies_with_other", func(t *testing.T) {
+		totals := map[string]*tokenModelAgg{}
+		for i := 0; i < 12; i++ {
+			totals[fmt.Sprintf("m%02d", i)] = &tokenModelAgg{total: int64(100 - i), source: models.TokenUsageSourceUpstream}
+		}
+		// Unknown + filled bridge totals high enough to enter Top10 independently.
+		totals[models.TokenUsageModelUnknown] = &tokenModelAgg{total: 95, source: models.TokenUsageSourceUnknown}
+		totals["bridge-m"] = &tokenModelAgg{total: 94, filled: true, source: models.TokenUsageSourceBridge}
+
+		comp, rank := buildModelStats(totals)
+		if len(comp) != 14 {
+			t.Fatalf("composition len=%d", len(comp))
+		}
+		if len(rank) != 11 { // Top10 + other
+			t.Fatalf("rank len=%d want 11", len(rank))
+		}
+		var unkIdx = -1
+		var hasOther, hasFilled bool
+		for i, r := range rank {
+			if r.Other {
+				hasOther = true
+				if r.Unknown {
+					t.Fatal("other must not be marked unknown")
+				}
+				if r.Name != "other" {
+					t.Fatalf("other name=%q", r.Name)
+				}
+			}
 			if r.Unknown {
-				t.Fatal("other must not be marked unknown")
+				if unkIdx >= 0 {
+					t.Fatal("duplicate unknown row")
+				}
+				unkIdx = i
+				if r.Name != models.TokenUsageModelUnknown {
+					t.Fatalf("unknown renamed: %q", r.Name)
+				}
+				if r.Other {
+					t.Fatal("unknown row must not be other")
+				}
+			}
+			if r.Filled {
+				hasFilled = true
 			}
 		}
-		if r.Unknown {
-			hasUnk = true
+		if !hasOther {
+			t.Fatal("expected other for >10 models")
 		}
-		if r.Filled {
-			hasFilled = true
+		if unkIdx < 0 {
+			t.Fatal("unknown must appear in ranking independently")
 		}
-	}
-	if !hasOther {
-		t.Fatal("expected other for >10 models")
-	}
-	if !hasUnk {
-		t.Fatal("unknown must be able to appear in ranking independently")
-	}
-	if !hasFilled {
-		t.Fatal("filled bridge bucket must surface in ranking")
-	}
-	// Composition always lists every bucket including filled.
-	var compFilled bool
-	for _, r := range comp {
-		if r.Filled {
-			compFilled = true
+		if unkIdx >= 10 {
+			t.Fatalf("unknown must not be forced as extra 11th row, idx=%d", unkIdx)
 		}
-	}
-	if !compFilled {
-		t.Fatal("composition must include filled bucket")
-	}
+		if !hasFilled {
+			t.Fatal("filled bridge bucket must surface in ranking")
+		}
+		var compFilled bool
+		for _, r := range comp {
+			if r.Filled {
+				compFilled = true
+			}
+		}
+		if !compFilled {
+			t.Fatal("composition must include filled bucket")
+		}
+		assertRankConservesComposition(t, comp, rank)
+	})
+
+	t.Run("s3_unknown_below_top10_folded_into_other", func(t *testing.T) {
+		totals := map[string]*tokenModelAgg{}
+		for i := 0; i < 12; i++ {
+			totals[fmt.Sprintf("m%02d", i)] = &tokenModelAgg{
+				total:  int64(120 - i*10), // 120,110,...,10
+				source: models.TokenUsageSourceUpstream,
+			}
+		}
+		unkTotal := int64(5)
+		totals[models.TokenUsageModelUnknown] = &tokenModelAgg{total: unkTotal, source: models.TokenUsageSourceUnknown}
+
+		comp, rank := buildModelStats(totals)
+		if len(comp) != 13 {
+			t.Fatalf("composition len=%d", len(comp))
+		}
+		var hasUnk bool
+		var other *TokenStatsModel
+		for i := range rank {
+			r := &rank[i]
+			if r.Unknown {
+				hasUnk = true
+			}
+			if r.Other {
+				other = r
+			}
+		}
+		if hasUnk {
+			t.Fatal("unknown below Top10 must not appear as its own row")
+		}
+		if other == nil {
+			t.Fatal("expected other remainder")
+		}
+		if other.Unknown {
+			t.Fatal("other.Unknown must be false")
+		}
+		if other.Name != "other" {
+			t.Fatalf("other name=%q", other.Name)
+		}
+		// other = m10(20)+m11(10)+unk(5)=35
+		if other.Total != 35 {
+			t.Fatalf("other.Total=%d want 35 (must include unknown %d)", other.Total, unkTotal)
+		}
+		assertRankConservesComposition(t, comp, rank)
+	})
+
+	t.Run("s4_at_most_ten_no_other", func(t *testing.T) {
+		totals := map[string]*tokenModelAgg{
+			"m00":                         {total: 50, source: models.TokenUsageSourceUpstream},
+			"m01":                         {total: 40, source: models.TokenUsageSourceUpstream},
+			"m02":                         {total: 30, source: models.TokenUsageSourceUpstream},
+			models.TokenUsageModelUnknown: {total: 20, source: models.TokenUsageSourceUnknown},
+		}
+		comp, rank := buildModelStats(totals)
+		if len(comp) != 4 || len(rank) != 4 {
+			t.Fatalf("comp=%d rank=%d want 4", len(comp), len(rank))
+		}
+		var hasOther, hasUnk bool
+		for _, r := range rank {
+			if r.Other {
+				hasOther = true
+			}
+			if r.Unknown {
+				hasUnk = true
+				if r.Name != models.TokenUsageModelUnknown {
+					t.Fatalf("unknown name=%q", r.Name)
+				}
+			}
+		}
+		if hasOther {
+			t.Fatal("≤10 buckets must not emit other")
+		}
+		if !hasUnk {
+			t.Fatal("unknown must appear under 未知/未分桶 when ≤10")
+		}
+		assertRankConservesComposition(t, comp, rank)
+	})
 }
 
 func TestTokenStatsLegacyMapsToUnknown(t *testing.T) {

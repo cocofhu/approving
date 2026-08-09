@@ -219,9 +219,9 @@ export interface TokenStatsModel {
   modelKey?: string
   name: string
   total: number
-  /** 「未知/未分桶」— distinct from other. */
+  /** 「未知/未分桶」. Shown in ranking only when it ranks in Top10; otherwise its usage is folded into other. */
   unknown?: boolean
-  /** Top10 remainder of identified models — distinct from unknown. */
+  /** Top10 remainder (may include unknown usage that did not qualify). other is not unknown. */
   other?: boolean
   /** Includes ACP_BRIDGE_MODEL weak-key backfill. */
   filled?: boolean

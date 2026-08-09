@@ -57,7 +57,6 @@
         "modelCompositionTitle": "Model composition",
         "modelRankTitle": "Model usage ranking",
         "modelRankSub": "Top10 · rest → other",
-        "modelRankHint": "\"Unknown\" is not the same as other; related usage ranks by its actual consumption.",
         "modelOther": "other (remaining models)",
         "filledTag": "includes filled data",
         "emptyModelCompHint": "No model composition yet",
