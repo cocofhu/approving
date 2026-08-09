@@ -704,31 +704,81 @@ func (s *TeamService) EnsureChildGroup(sessionID, parentGroupID, name string) (O
 }
 
 func (s *TeamService) buildPMAgent(req normalizedTeamReq, projectID string) (Agent, error) {
-	files := []AgentFile{{
-		Path: "rules/" + req.PMName + ".md",
-		Content: "# " + req.PMName + "\n\n" +
-			"你是项目经理（PM Leader）。根据项目背景组建并协调工程师团队。\n\n" +
-			"## 项目背景\n\n" + req.Background + "\n",
-	}}
-	env := map[string]string{}
+	tmpl, err := loadTeamAgentTemplate(TeamPMEmbedName)
+	if err != nil {
+		return Agent{}, err
+	}
+	tmpl.Name = req.PMName
+	tmpl.ProjectID = projectID
+	backend := NormalizeAcpBackend(req.AcpBackend)
+	if backend == "" {
+		backend = tmpl.AcpBackend
+	}
+	tmpl.AcpBackend = backend
+	tmpl.Layout.ConfigRoot = DefaultConfigRootForBackend(backend)
+	if strings.TrimSpace(tmpl.Layout.WorkspaceDir) == "" {
+		tmpl.Layout.WorkspaceDir = DefaultWorkspaceDir
+	}
+	if req.GitCredType != "" {
+		tmpl.GitCredentialType = req.GitCredType
+	}
+
+	mergedEnv := map[string]string{}
+	for k, v := range tmpl.Env {
+		mergedEnv[k] = v
+	}
 	for k, v := range req.Env {
-		env[k] = v
+		k = strings.TrimSpace(k)
+		if k != "" {
+			mergedEnv[k] = v
+		}
 	}
-	applyOnboardingAgentRegion(env, req.AcpBackend, req.Region)
-	a := Agent{
-		Name:              req.PMName,
-		ProjectID:         projectID,
-		AcpBackend:        req.AcpBackend,
-		GitCredentialType: req.GitCredType,
-		Files:             files,
-		MCP:               req.MCP,
-		Env:               env,
-		Layout: AgentLayout{
-			ConfigRoot:   DefaultConfigRootForBackend(req.AcpBackend),
-			WorkspaceDir: DefaultWorkspaceDir,
-		},
+	applyOnboardingAgentRegion(mergedEnv, backend, req.Region)
+	tmpl.Env = mergedEnv
+
+	if len(req.MCP) > 0 {
+		tmpl.MCP = req.MCP
+	} else if len(tmpl.MCP) == 0 {
+		tmpl.MCP = DefaultPlatformMCP()
 	}
-	return a, nil
+
+	tmpl.Files = upsertAgentFile(tmpl.Files, "rules/project-context.md", teamPMProjectContextMarkdown(req))
+	return tmpl, nil
+}
+
+func teamPMProjectContextMarkdown(req normalizedTeamReq) string {
+	var b strings.Builder
+	b.WriteString("---\n")
+	b.WriteString("description: 本项目背景与建团编制（始终应用；由创建 Agent 团队写入）\n")
+	b.WriteString("alwaysApply: true\n")
+	b.WriteString("---\n\n")
+	b.WriteString("# 项目上下文 · " + req.PMName + "\n\n")
+	b.WriteString("## 项目背景（建团 Prompt）\n\n")
+	b.WriteString(strings.TrimSpace(req.Background))
+	b.WriteString("\n\n## 编制约定\n\n")
+	b.WriteString("- 命名前缀：`" + req.Prefix + "`\n")
+	b.WriteString("- 根组：`" + req.RootGroupName + "`（你在此组）\n")
+	b.WriteString("- 流水线子组：`" + req.PipelineGroup + "`（9 名工程师挂此组，上级为你）\n")
+	b.WriteString("- PM：`" + req.PMName + "`\n")
+	b.WriteString("- 工程师命名：`{前缀}{角色}工程师`（调研/计划/方案/澄清/视觉原型/实现/测试/代码Review/变更摘要视觉）\n\n")
+	if req.GitURL != "" {
+		b.WriteString("## 仓库\n\n")
+		b.WriteString("- Git URL：`" + req.GitURL + "`\n\n")
+	}
+	b.WriteString("## 工作方式\n\n")
+	b.WriteString("先 `pm_get_org` 确认编制，再按流水线分派工程师；缺人时用模板补齐，勿覆盖重名。\n")
+	return b.String()
+}
+
+func upsertAgentFile(files []AgentFile, path, content string) []AgentFile {
+	path = strings.TrimSpace(path)
+	for i := range files {
+		if files[i].Path == path {
+			files[i].Content = content
+			return files
+		}
+	}
+	return append(files, AgentFile{Path: path, Content: content})
 }
 
 func (s *TeamService) assertSessionProject(sessionID, projectID string) error {

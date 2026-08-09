@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,6 +63,26 @@ func TestTeamBootstrap_CreatesRoster(t *testing.T) {
 	if len(cur.AgentNames) != 10 {
 		t.Fatalf("agents=%d want 10: %v", len(cur.AgentNames), cur.AgentNames)
 	}
+	pmAg, ok := skills.Get("Demo项目经理")
+	if !ok {
+		t.Fatal("missing PM agent")
+	}
+	if !agentHasFilePath(pmAg, "rules/role.md") {
+		t.Fatalf("PM missing role.md files=%v", filePaths(pmAg))
+	}
+	if !agentHasFilePath(pmAg, "rules/project-context.md") {
+		t.Fatalf("PM missing project-context.md files=%v", filePaths(pmAg))
+	}
+	if !agentHasFilePath(pmAg, "skills/pm-orchestrate/SKILL.md") {
+		t.Fatalf("PM missing orchestrate skill files=%v", filePaths(pmAg))
+	}
+	ctx := agentFileContent(pmAg, "rules/project-context.md")
+	if !strings.Contains(ctx, "demo background for pipeline team") {
+		t.Fatalf("project-context missing background: %q", ctx)
+	}
+	if !strings.Contains(ctx, "alwaysApply: true") {
+		t.Fatalf("project-context should be alwaysApply: %q", ctx)
+	}
 	impl := "Demo实现工程师"
 	ag, ok := skills.Get(impl)
 	if !ok {
@@ -86,16 +107,49 @@ func TestTeamBootstrap_CreatesRoster(t *testing.T) {
 	}
 }
 
-func TestLoadTeamAgentTemplates_AllNine(t *testing.T) {
-	for _, role := range TeamEngineerTemplates {
-		ag, err := loadTeamAgentTemplate(role.EmbedName)
+func TestLoadTeamAgentTemplates_AllPackages(t *testing.T) {
+	for _, name := range TeamEmbedPackageNames() {
+		ag, err := loadTeamAgentTemplate(name)
 		if err != nil {
-			t.Fatalf("%s: %v", role.ID, err)
+			t.Fatalf("%s: %v", name, err)
 		}
 		if len(ag.Files) == 0 {
-			t.Fatalf("%s: empty workspace files", role.ID)
+			t.Fatalf("%s: empty workspace files", name)
 		}
 	}
+	pm, err := loadTeamAgentTemplate(TeamPMEmbedName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !agentHasFilePath(pm, "rules/role.md") || !agentHasFilePath(pm, "skills/pm-orchestrate/SKILL.md") {
+		t.Fatalf("PM template incomplete: %v", filePaths(pm))
+	}
+}
+
+func agentHasFilePath(a Agent, path string) bool {
+	for _, f := range a.Files {
+		if f.Path == path {
+			return true
+		}
+	}
+	return false
+}
+
+func agentFileContent(a Agent, path string) string {
+	for _, f := range a.Files {
+		if f.Path == path {
+			return f.Content
+		}
+	}
+	return ""
+}
+
+func filePaths(a Agent) []string {
+	out := make([]string, 0, len(a.Files))
+	for _, f := range a.Files {
+		out = append(out, f.Path)
+	}
+	return out
 }
 
 func TestCreateAgentFromTemplate_Conflict(t *testing.T) {
