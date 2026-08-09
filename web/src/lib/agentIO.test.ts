@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   peekAgentZipName,
+  peekZipPackage,
   resolveImportName,
   suggestRename,
   validateAgentName,
@@ -93,5 +94,119 @@ describe('peekAgentZipName', () => {
     const file = new File([empty], 'empty.zip', { type: 'application/zip' })
     const result = await peekAgentZipName(file)
     expect(result.error).toBe('missing agent.json')
+  })
+})
+
+function crc32(data: Uint8Array): number {
+  let c = ~0 >>> 0
+  for (let i = 0; i < data.length; i++) {
+    c ^= data[i]
+    for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1))
+  }
+  return ~c >>> 0
+}
+
+function u16(n: number) {
+  const b = new Uint8Array(2)
+  new DataView(b.buffer).setUint16(0, n, true)
+  return b
+}
+
+function u32(n: number) {
+  const b = new Uint8Array(4)
+  new DataView(b.buffer).setUint32(0, n, true)
+  return b
+}
+
+function concat(...parts: Uint8Array[]) {
+  const out = new Uint8Array(parts.reduce((s, p) => s + p.length, 0))
+  let o = 0
+  for (const p of parts) {
+    out.set(p, o)
+    o += p.length
+  }
+  return out
+}
+
+function storeZip(files: Record<string, string>): Uint8Array {
+  const locals: Uint8Array[] = []
+  const centrals: Uint8Array[] = []
+  let offset = 0
+  for (const [name, text] of Object.entries(files)) {
+    const nameB = new TextEncoder().encode(name)
+    const data = new TextEncoder().encode(text)
+    const crc = crc32(data)
+    const local = concat(
+      new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
+      u32(crc),
+      u32(data.length),
+      u32(data.length),
+      u16(nameB.length),
+      u16(0),
+      nameB,
+      data,
+    )
+    locals.push(local)
+    centrals.push(
+      concat(
+        new Uint8Array([0x50, 0x4b, 0x01, 0x02, 0x14, 0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
+        u32(crc),
+        u32(data.length),
+        u32(data.length),
+        u16(nameB.length),
+        u16(0),
+        u16(0),
+        u16(0),
+        u16(0),
+        u32(0),
+        u32(offset),
+        nameB,
+      ),
+    )
+    offset += local.length
+  }
+  const localAll = concat(...locals)
+  const centralAll = concat(...centrals)
+  return concat(
+    localAll,
+    centralAll,
+    new Uint8Array([0x50, 0x4b, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00]),
+    u16(locals.length),
+    u16(locals.length),
+    u32(centralAll.length),
+    u32(localAll.length),
+    u16(0),
+  )
+}
+
+describe('peekZipPackage', () => {
+  it('prefers folder.json org-folder over agent.json', async () => {
+    const raw = storeZip({
+      'folder.json': JSON.stringify({
+        kind: 'org-folder',
+        schemaVersion: 1,
+        rootGroupId: 'g1',
+        groups: [{ id: 'g1', name: 'Approving项目组' }],
+        agentNames: ['alice', 'bob'],
+      }),
+      'agent.json': JSON.stringify({ name: 'should-not-win', schemaVersion: 1 }),
+    })
+    const peek = await peekZipPackage(new File([raw], 'folder.zip', { type: 'application/zip' }))
+    expect(peek).toEqual({
+      kind: 'org-folder',
+      agentNames: ['alice', 'bob'],
+      rootGroupName: 'Approving项目组',
+    })
+  })
+
+  it('falls back to root agent.json for single-agent zip', async () => {
+    const peek = await peekZipPackage(goExportFile())
+    expect(peek).toEqual({ kind: 'agent', name: 'peek_test' })
+  })
+
+  it('returns unrecognized when neither manifest exists', async () => {
+    const raw = storeZip({ 'readme.txt': 'no manifests' })
+    const peek = await peekZipPackage(new File([raw], 'x.zip', { type: 'application/zip' }))
+    expect(peek.kind).toBe('unknown')
   })
 })

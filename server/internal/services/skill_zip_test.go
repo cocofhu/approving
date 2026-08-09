@@ -41,6 +41,7 @@ func TestExportImportZIPRoundTrip(t *testing.T) {
 	binary := []byte{0x00, 0x01, 0xFF, 0xFE, 0x89, 0x50, 0x4E, 0x47}
 	err := s.Save(Agent{
 		Name:              "trip",
+		AcpBackend:        AcpBackendClaudeCode,
 		GitCredentialType: "gitlab_https",
 		Env:               map[string]string{"GITLAB_TOKEN": "secret"},
 		MCP:               DefaultPlatformMCP(),
@@ -71,6 +72,9 @@ func TestExportImportZIPRoundTrip(t *testing.T) {
 	}
 	if imported.GitCredentialType != "gitlab_https" {
 		t.Fatalf("gitCredentialType = %q, want gitlab_https", imported.GitCredentialType)
+	}
+	if imported.AcpBackend != AcpBackendClaudeCode {
+		t.Fatalf("acpBackend = %q, want %s", imported.AcpBackend, AcpBackendClaudeCode)
 	}
 	if len(imported.Files) != 2 {
 		t.Fatalf("files = %d", len(imported.Files))
@@ -134,6 +138,48 @@ func TestImportZIPOverwriteClearsOldFiles(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "target", WorkDirName, "skills", "keep", "SKILL.md")); !os.IsNotExist(err) {
 		t.Fatal("old cursor file should be removed on overwrite")
+	}
+}
+
+func TestImportZIPAcpBackendCreateAndOverwrite(t *testing.T) {
+	s := NewSkillService(t.TempDir())
+	if err := s.Save(Agent{Name: "src", AcpBackend: AcpBackendTrae}); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := s.ExportZIP("src")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := NewSkillService(t.TempDir())
+	created, err := dst.ImportZIP(raw, "src-copy", ImportZIPCreate)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if created.AcpBackend != AcpBackendTrae {
+		t.Fatalf("create acpBackend=%q", created.AcpBackend)
+	}
+	if err := dst.Save(Agent{Name: "src-copy", AcpBackend: AcpBackendCursor}); err != nil {
+		t.Fatal(err)
+	}
+	over, err := dst.ImportZIP(raw, "src-copy", ImportZIPOverwrite)
+	if err != nil {
+		t.Fatalf("overwrite: %v", err)
+	}
+	if over.AcpBackend != AcpBackendTrae {
+		t.Fatalf("overwrite acpBackend=%q", over.AcpBackend)
+	}
+}
+
+func TestImportZIPMissingAcpBackendDefaultsCursor(t *testing.T) {
+	s := NewSkillService(t.TempDir())
+	meta := []byte(`{"name":"legacy","schemaVersion":1,"exportedAt":"2026-01-01T00:00:00Z"}`)
+	raw := buildTestZip(t, meta, map[string][]byte{"rules/a.md": []byte("a")})
+	got, err := s.ImportZIP(raw, "legacy", ImportZIPCreate)
+	if err != nil {
+		t.Fatalf("import legacy: %v", err)
+	}
+	if got.AcpBackend != AcpBackendCursor {
+		t.Fatalf("default acpBackend=%q", got.AcpBackend)
 	}
 }
 

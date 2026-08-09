@@ -1463,6 +1463,23 @@
         "import": "Import",
         "exportSuccess": "Downloaded {name}.zip",
         "importSuccess": "Agent \"{name}\" imported",
+        "folderExportSuccess": "Downloaded {name}.zip",
+        "folderImportSuccess": "Folder imported",
+        "folderSecrets": {
+          "title": "Exporting a folder takes secrets with it",
+          "body": "The package includes environment variables/secrets. After download it leaves this environment; only share with trusted recipients.",
+          "confirm": "Confirm and download"
+        },
+        "batchConflict": {
+          "title": "Duplicate agent names detected",
+          "intro": "These agents already exist in this environment:",
+          "rename": "Rename all",
+          "renameDesc": "Create conflicting agents with a name_v2 suffix; do not overwrite existing workspaces",
+          "overwrite": "Overwrite all",
+          "overwriteDesc": "Clear target workspaces and remove these agents from other groups here; keep only membership from the import package",
+          "cancel": "Cancel entire import",
+          "cancelDesc": "Abort import without creating or changing any agents or groups"
+        },
         "unsavedExport": {
           "title": "Cannot export",
           "message": "Agent \"{name}\" has unsaved changes. Export includes only saved on-disk content.",
@@ -1493,6 +1510,10 @@
           "invalidZip": "Invalid ZIP file.",
           "missingAgentJson": "ZIP is missing root agent.json.",
           "invalidName": "Agent name does not match naming rules.",
+          "unrecognized": "Unrecognized ZIP: neither a folder package nor a single-agent export.",
+          "singleAgentOnGroup": "This is a single-agent ZIP. Group import only accepts a folder package; use the top-bar Import instead.",
+          "folderTooLarge": "Folder package exceeds the 64MiB limit.",
+          "rolledBack": "Import failed and was fully rolled back.",
           "ok": "OK"
         }
       },

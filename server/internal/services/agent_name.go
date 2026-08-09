@@ -28,6 +28,28 @@ var agentNamePathPattern = regexp.MustCompile(`^[\p{L}\p{N}._-]+$`)
 // fullwidthPunctRe rejects common fullwidth punctuation that must not become identity keys.
 var fullwidthPunctRe = regexp.MustCompile(`[－＿．／＼、，。！？：；（）【】]`)
 
+// SuggestAgentRename returns the first free `{name}_vN` (N starting at 2) that
+// is not in existing and passes NormalizeAndValidateAgentName.
+func SuggestAgentRename(name string, existing map[string]struct{}) string {
+	base, err := NormalizeAndValidateAgentName(name)
+	if err != nil {
+		base = strings.TrimSpace(name)
+	}
+	n := 2
+	for {
+		candidate := fmt.Sprintf("%s_v%d", base, n)
+		if _, taken := existing[candidate]; !taken {
+			if normalized, err := NormalizeAndValidateAgentName(candidate); err == nil {
+				return normalized
+			}
+		}
+		n++
+		if n > 10000 {
+			return candidate
+		}
+	}
+}
+
 // NormalizeAndValidateAgentName NFC-normalizes and validates a write-path Agent name
 // (Create / Rename target / import conflict rename). Returns the normalized name.
 func NormalizeAndValidateAgentName(raw string) (string, error) {

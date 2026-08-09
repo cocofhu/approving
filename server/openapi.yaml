@@ -23,6 +23,8 @@ servers:
 tags:
   - name: artifacts
     description: Platform-wide artifact catalog
+  - name: agents
+    description: Agent Studio export/import (single agent and org-folder)
 
 paths:
   /runs/{id}/gates/{nodeId}/primary-artifacts:
@@ -228,6 +230,139 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  /agents/org/export:
+    get:
+      operationId: exportOrgFolder
+      tags: [agents]
+      summary: Export a virtual-group subtree as a folder ZIP
+      description: |
+        Downloads a folder package (`folder.json` + `agents/{name}/`) for the
+        given virtual group and all descendant groups (including empty groups).
+        Auth matches other Agent APIs (session cookie / APIMiddleware). Must be
+        registered before `/agents/{name}/export` so `name=org` is not captured.
+      parameters:
+        - name: groupId
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: ZIP attachment
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Missing groupId or package too large
+        '401':
+          description: Unauthenticated
+        '404':
+          description: Group not found
+
+  /agents/org/import:
+    post:
+      operationId: importOrgFolder
+      tags: [agents]
+      summary: Import a folder ZIP (atomic)
+      description: |
+        Multipart import of an `org-folder` ZIP. Optional `targetGroupId` mounts
+        the package root as a child of that group; omit it to create a new root
+        group. `mode` is `rename` (default, `name_v2`) or `overwrite`.
+        Failures roll back to the pre-import environment. Auth is session only.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                targetGroupId:
+                  type: string
+                mode:
+                  type: string
+                  enum: [rename, overwrite]
+      responses:
+        '200':
+          description: Imported org snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  org: { type: object }
+                  created:
+                    type: array
+                    items: { type: string }
+                  overwritten:
+                    type: array
+                    items: { type: string }
+                  renamed:
+                    type: object
+                    additionalProperties: { type: string }
+        '400':
+          description: Invalid package, single-agent ZIP, oversize, or validation
+        '401':
+          description: Unauthenticated
+        '404':
+          description: Target group not found
+
+  /agents/{name}/export:
+    get:
+      operationId: exportAgent
+      tags: [agents]
+      summary: Export one Agent as a ZIP
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: ZIP attachment
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Unauthenticated
+        '404':
+          description: Agent not found
+
+  /agents/import:
+    post:
+      operationId: importAgent
+      tags: [agents]
+      summary: Import a single-agent ZIP
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, targetName]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                targetName:
+                  type: string
+                mode:
+                  type: string
+                  enum: [create, overwrite]
+      responses:
+        '200':
+          description: Imported agent
+        '400':
+          description: Invalid ZIP or name
+        '401':
+          description: Unauthenticated
 
 components:
   parameters:

@@ -157,6 +157,8 @@ func New(h *handlers.Handlers) *gin.Engine {
 		// /agents/org must be registered before /agents/:name so "org" is not captured as a name.
 		api.GET("/agents/org", h.GetAgentsOrg)
 		api.PUT("/agents/org", h.PutAgentsOrg)
+		api.GET("/agents/org/export", h.ExportOrgFolder)
+		api.POST("/agents/org/import", h.ImportOrgFolder)
 		api.GET("/agents/:name/export", h.ExportAgent)
 		api.POST("/agents/import", h.ImportAgent)
 		api.GET("/agents/:name/platform-rules", h.ListAgentPlatformRules)

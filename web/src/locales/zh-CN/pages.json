@@ -1463,6 +1463,23 @@
         "import": "导入",
         "exportSuccess": "已下载 {name}.zip",
         "importSuccess": "Agent「{name}」导入成功",
+        "folderExportSuccess": "已下载 {name}.zip",
+        "folderImportSuccess": "文件夹导入成功",
+        "folderSecrets": {
+          "title": "导出文件夹将带走密钥",
+          "body": "导出包内含环境变量/密钥。下载后文件将离开本环境，请仅发送给受信任的接收方。",
+          "confirm": "确认并下载"
+        },
+        "batchConflict": {
+          "title": "检测到同名 Agent",
+          "intro": "以下 Agent 与当前环境同名：",
+          "rename": "全部重命名",
+          "renameDesc": "冲突项将按 name_v2 规则创建为新 Agent，不覆盖已有工作区",
+          "overwrite": "全部覆盖",
+          "overwriteDesc": "清空目标工作区，并移除这些 Agent 在本环境其它组中的归属，仅保留导入包内关系",
+          "cancel": "取消整次导入",
+          "cancelDesc": "中止导入，不创建或修改任何 Agent 或组"
+        },
         "unsavedExport": {
           "title": "无法导出",
           "message": "当前 Agent「{name}」有未保存的修改。导出仅包含已落盘版本，请先保存或放弃修改后再导出。",
@@ -1493,6 +1510,10 @@
           "invalidZip": "ZIP 格式非法，请检查后重试。",
           "missingAgentJson": "ZIP 缺少根目录 agent.json，请检查后重试。",
           "invalidName": "Agent 名称不符合命名规则，请检查 agent.json 或 ZIP 文件名。",
+          "unrecognized": "无法识别该 ZIP，既不是文件夹包也不是单 Agent 导出。",
+          "singleAgentOnGroup": "这是单 Agent ZIP。组右键导入仅接受文件夹包，请改用顶栏「导入」。",
+          "folderTooLarge": "文件夹包超过 64MiB 上限。",
+          "rolledBack": "导入失败，已整次回滚。",
           "ok": "知道了"
         }
       },
