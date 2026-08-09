@@ -143,6 +143,42 @@ describe('AgentCreateWizard 5-step IA', () => {
     wrapper.unmount()
   })
 
+  it('Git step help stacks on wizard and does not close or reset it', async () => {
+    const wrapper = mountWizard()
+    fillName('help-agent')
+    await wrapper.vm.$nextTick()
+    buttonByText('下一步').click()
+    await wrapper.vm.$nextTick()
+    buttonByText('下一步').click()
+    await wrapper.vm.$nextTick()
+    buttonByText('跳过').click()
+    await wrapper.vm.$nextTick()
+
+    expect(document.body.textContent).toContain('Git')
+    expect(document.body.textContent).not.toContain('不会验证变量引用的实际值')
+    const helpLink = document.body.querySelector('[data-test="git-help-link"]') as HTMLButtonElement
+    expect(helpLink?.textContent?.trim()).toBe('帮助')
+    helpLink.click()
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+
+    expect(document.body.textContent).toContain('环境变量与凭据')
+    expect(document.body.textContent).toContain('不会验证变量引用的实际值')
+    expect(document.body.querySelectorAll('[data-test="env-credential-help"]')).toHaveLength(1)
+    expect(document.body.querySelector('.wiz-root')).toBeTruthy()
+    expect(railLabels()).toEqual(['基础信息', 'Agent', 'API Key', 'Git', '确认创建'])
+
+    const gotIt = document.body.querySelector('[data-test="env-help-got-it"]') as HTMLButtonElement
+    gotIt.click()
+    await wrapper.vm.$nextTick()
+
+    expect(document.body.querySelector('[data-test="env-credential-help"]')).toBeFalsy()
+    expect(document.body.querySelector('.wiz-root')).toBeTruthy()
+    expect(document.body.textContent).toContain('Git')
+    expect(railLabels()).toEqual(['基础信息', 'Agent', 'API Key', 'Git', '确认创建'])
+    wrapper.unmount()
+  })
+
   it('renders equivalent English site semantics and Agent step label', async () => {
     const wrapper = mountWizard('en')
     expect(railLabels()).toEqual(['Basics', 'Agent', 'API Key', 'Git', 'Confirm'])

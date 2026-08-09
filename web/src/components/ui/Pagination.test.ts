@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createI18n } from 'vue-i18n'
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,6 +9,8 @@ import { ref } from 'vue'
 import commonZh from '@/locales/zh-CN/common.json'
 import commonEn from '@/locales/en/common.json'
 import Pagination from './Pagination.vue'
+
+const pagerSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'Pagination.vue'), 'utf8')
 
 const isMobile = ref(false)
 
@@ -180,5 +185,53 @@ describe('Pagination', () => {
     expect(prev.text()).toMatch(/上一页/)
     expect(next.text()).toMatch(/下一页/)
     wrapper.unmount()
+  })
+
+  it('disables both prev and next on a single page and keeps them visible', () => {
+    const wrapper = mountPager({ page: 1, pageSize: 10, total: 8 })
+    const btns = wrapper.findAll('button.pg-btn')
+    expect(btns).toHaveLength(2)
+    expect((btns[0]!.element as HTMLButtonElement).disabled).toBe(true)
+    expect((btns[1]!.element as HTMLButtonElement).disabled).toBe(true)
+    expect(wrapper.text()).toMatch(/上一页/)
+    expect(wrapper.text()).toMatch(/下一页/)
+    wrapper.unmount()
+  })
+
+  it('active page uses accent-2 on accent-dim with purple border and inset shadow', () => {
+    const start = pagerSrc.indexOf('.page-num.active {')
+    expect(start).toBeGreaterThanOrEqual(0)
+    const block = pagerSrc.slice(start, pagerSrc.indexOf('}', start) + 1)
+    expect(block).toMatch(/color:\s*rgb\(var\(--c-accent-2\)\)/)
+    expect(block).toMatch(/background:\s*rgb\(var\(--c-accent-dim\)\)/)
+    expect(block).toMatch(/border-color:\s*#7b61ff/)
+    expect(block).toMatch(/box-shadow:\s*inset 0 0 0 1px rgba\(123,\s*97,\s*255/)
+    expect(block).not.toMatch(/color:\s*#fff/)
+  })
+
+  it('disabled prev/next uses txt2 at full opacity (not 0.45 fade)', () => {
+    const start = pagerSrc.indexOf('.pg-btn:disabled {')
+    expect(start).toBeGreaterThanOrEqual(0)
+    const block = pagerSrc.slice(start, pagerSrc.indexOf('}', start) + 1)
+    expect(block).toMatch(/color:\s*rgb\(var\(--c-txt2\)\)/)
+    expect(block).toMatch(/opacity:\s*1/)
+    expect(block).toMatch(/cursor:\s*not-allowed/)
+    expect(block).not.toMatch(/opacity:\s*0\.45/)
+  })
+
+  it('disabled page nums and pageSize select stay readable with txt2', () => {
+    const numStart = pagerSrc.indexOf('.page-num:disabled {')
+    expect(numStart).toBeGreaterThanOrEqual(0)
+    const numBlock = pagerSrc.slice(numStart, pagerSrc.indexOf('}', numStart) + 1)
+    expect(numBlock).toMatch(/color:\s*rgb\(var\(--c-txt2\)\)/)
+    expect(numBlock).toMatch(/opacity:\s*1/)
+    expect(numBlock).not.toMatch(/opacity:\s*0\.45/)
+
+    const sizeStart = pagerSrc.indexOf('.pg-size-select:disabled {')
+    expect(sizeStart).toBeGreaterThanOrEqual(0)
+    const sizeBlock = pagerSrc.slice(sizeStart, pagerSrc.indexOf('}', sizeStart) + 1)
+    expect(sizeBlock).toMatch(/color:\s*rgb\(var\(--c-txt2\)\)/)
+    expect(sizeBlock).toMatch(/opacity:\s*1/)
+    expect(sizeBlock).not.toMatch(/opacity:\s*0\.45/)
   })
 })

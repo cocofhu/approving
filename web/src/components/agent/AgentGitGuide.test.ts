@@ -47,15 +47,20 @@ describe('AgentGitGuide', () => {
     expect(wrapper.text()).not.toContain('凭据不完整')
   })
 
-  it('完整状态明确说明只做静态检查，不承诺 clone/push', () => {
+  it('完整状态不再内嵌静态检查长文，改为帮助入口', async () => {
     const wrapper = mountGuide([
       { k: 'GIT_REPOS', v: 'app|https://gitlab.com/acme/app.git|main' },
       { k: 'GITLAB_TOKEN', v: '${vars.gitlab_token}' },
     ])
     expect(wrapper.text()).toContain('配置形态完整')
-    expect(wrapper.text()).toContain('不会验证变量引用的实际值')
-    expect(wrapper.text()).toContain('远端 clone / push 权限')
+    expect(wrapper.text()).not.toContain('不会验证变量引用的实际值')
+    expect(wrapper.text()).not.toContain('远端 clone / push 权限')
     expect(wrapper.text()).not.toContain('可成功 clone')
+    const help = wrapper.get('[data-test="git-help-link"]')
+    expect(help.text()).toBe('帮助')
+    expect(help.attributes('type')).toBe('button')
+    await help.trigger('click')
+    expect(wrapper.emitted('help')).toEqual([['git']])
   })
 
   it('运行时引用未选类型时给出可操作指引，无未逐仓解析告警', () => {
@@ -66,6 +71,7 @@ describe('AgentGitGuide', () => {
     expect(wrapper.text()).toContain('请选择凭据类型')
     expect(wrapper.text()).toContain('GitHub / GitLab / SSH')
     expect(wrapper.text()).toContain('运行时解析')
+    expect(wrapper.text()).not.toContain('本页不逐仓展开')
     expect(wrapper.text()).not.toContain('未逐仓解析')
     expect(wrapper.text()).not.toContain('无法在此页面逐仓解析')
   })
@@ -78,7 +84,7 @@ describe('AgentGitGuide', () => {
     const wrapper = mountGuide(env)
     expect(wrapper.text()).toContain('请选择凭据类型')
 
-    await wrapper.get('header button').trigger('click')
+    await wrapper.findAll('header button').find((b) => b.text() === '调整类型')!.trigger('click')
     const radios = wrapper.findAll('input[type="radio"]')
     await radios[1].setValue()
     const buttons = wrapper.findAll('[data-test="modal"] button')

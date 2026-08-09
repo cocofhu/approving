@@ -53,10 +53,16 @@ func TestResolveNotifyEvents(t *testing.T) {
 			want:     nil,
 		},
 		{
-			name:     "completed stripped from inherit",
+			name:     "completed kept when opted in",
 			project:  models.ProjectNotifyPolicy{Enabled: boolPtr(true), DefaultEvents: []string{"waiting_human", "failed", "completed"}},
 			workflow: models.WorkflowNotifyPolicy{Mode: "inherit"},
-			want:     []string{"waiting_human", "failed"},
+			want:     []string{"waiting_human", "failed", "completed"},
+		},
+		{
+			name:     "custom completed only",
+			project:  def,
+			workflow: models.WorkflowNotifyPolicy{Mode: "custom", Events: []string{"completed"}},
+			want:     []string{"completed"},
 		},
 		{
 			name:     "nil project defaults enabled with waiting+failed",
@@ -98,17 +104,26 @@ func TestNotifyPoliciesEqual_includesTemplates(t *testing.T) {
 	if !NotifyPoliciesEqual(base, blank) {
 		t.Fatal("whitespace-only template normalizes to empty")
 	}
+	completed := base
+	completed.CompletedTemplate = "DONE {title}"
+	if NotifyPoliciesEqual(base, completed) {
+		t.Fatal("completedTemplate-only change must not equal")
+	}
 }
 
 func TestNormalizeProjectNotifyPolicy_trimsTemplates(t *testing.T) {
 	got := NormalizeProjectNotifyPolicy(models.ProjectNotifyPolicy{
 		WaitingHumanTemplate: "  hi  ",
 		FailedTemplate:       "\n\t",
+		CompletedTemplate:    " \n",
 	})
 	if got.WaitingHumanTemplate != "  hi  " {
 		t.Fatalf("non-empty must keep surrounding spaces: %q", got.WaitingHumanTemplate)
 	}
 	if got.FailedTemplate != "" {
 		t.Fatalf("failed=%q want empty", got.FailedTemplate)
+	}
+	if got.CompletedTemplate != "" {
+		t.Fatalf("completed=%q want empty", got.CompletedTemplate)
 	}
 }

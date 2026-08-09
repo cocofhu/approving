@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"net/url"
 	"strings"
 	"time"
 
@@ -31,7 +32,7 @@ type RunNotifyEvent struct {
 	NodeID       string
 	NodeLabel    string
 	Iteration    int
-	Kind         string // waiting_human | failed
+	Kind         string // waiting_human | failed | completed
 	DeepLinkBase string // PublicAdvertise; empty → relative /runs/{id}
 }
 
@@ -67,8 +68,19 @@ func (s *RunNotifyService) AttemptDeliver(ev RunNotifyEvent) {
 		return
 	}
 	kind := strings.TrimSpace(ev.Kind)
-	if kind != models.NotifyKindWaitingHuman && kind != models.NotifyKindFailed {
+	if kind != models.NotifyKindWaitingHuman && kind != models.NotifyKindFailed && kind != models.NotifyKindCompleted {
 		return
+	}
+	if kind == models.NotifyKindCompleted {
+		if strings.TrimSpace(ev.NodeID) == "" {
+			ev.NodeID = models.NotifyCompletedSentinelNodeID
+		}
+		if ev.Iteration < 1 {
+			ev.Iteration = 1
+		}
+		if strings.TrimSpace(ev.NodeLabel) == "" && ev.NodeID == models.NotifyCompletedSentinelNodeID {
+			ev.NodeLabel = models.NotifyCompletedFallbackLabel
+		}
 	}
 	if strings.TrimSpace(ev.RunID) == "" || strings.TrimSpace(ev.NodeID) == "" || ev.Iteration < 1 {
 		// failed without node context (and malformed waiting_human) → skip, no claim
@@ -213,6 +225,8 @@ func templateForKind(p models.ProjectNotifyPolicy, kind string) string {
 		return p.WaitingHumanTemplate
 	case models.NotifyKindFailed:
 		return p.FailedTemplate
+	case models.NotifyKindCompleted:
+		return p.CompletedTemplate
 	default:
 		return ""
 	}
@@ -220,18 +234,27 @@ func templateForKind(p models.ProjectNotifyPolicy, kind string) string {
 
 // RunNotifyTitle returns the event title used by {title} and the default formatter.
 func RunNotifyTitle(kind string) string {
-	if kind == models.NotifyKindWaitingHuman {
+	switch kind {
+	case models.NotifyKindWaitingHuman:
 		return "等待人工处理"
+	case models.NotifyKindCompleted:
+		return "运行完成"
+	default:
+		return "运行失败"
 	}
-	return "运行失败"
 }
 
 // RunNotifyNodeDisplay returns Label if set, otherwise NodeID (may be empty).
+// The completed sentinel "_run" is not shown; callers fall back to「输出」.
 func RunNotifyNodeDisplay(ev RunNotifyEvent) string {
 	if n := strings.TrimSpace(ev.NodeLabel); n != "" {
 		return n
 	}
-	return strings.TrimSpace(ev.NodeID)
+	id := strings.TrimSpace(ev.NodeID)
+	if id == models.NotifyCompletedSentinelNodeID {
+		return ""
+	}
+	return id
 }
 
 // ReplaceRunNotifyPlaceholders performs literal six-key replacement.
@@ -263,7 +286,7 @@ func RenderRunNotifyMessage(ev RunNotifyEvent, base, template string) string {
 		wfName = "—"
 	}
 	node := RunNotifyNodeDisplay(ev) // custom path: empty stays empty (no line delete)
-	link := runDeepLink(base, ev.RunID)
+	link := runDeepLink(base, ev.RunID, ev.Kind, ev.NodeID)
 	title := RunNotifyTitle(ev.Kind)
 	return ReplaceRunNotifyPlaceholders(template, projectName, wfName, ev.RunID, node, link, title)
 }
@@ -282,7 +305,10 @@ func FormatRunNotifyMessage(ev RunNotifyEvent, base string) string {
 		wfName = "—"
 	}
 	node := RunNotifyNodeDisplay(ev)
-	link := runDeepLink(base, ev.RunID)
+	if kind := strings.TrimSpace(ev.Kind); kind == models.NotifyKindCompleted && node == "" {
+		node = models.NotifyCompletedFallbackLabel
+	}
+	link := runDeepLink(base, ev.RunID, ev.Kind, ev.NodeID)
 	var b strings.Builder
 	b.WriteString("【Approving】")
 	b.WriteString(title)
@@ -306,8 +332,16 @@ func FormatRunNotifyMessage(ev RunNotifyEvent, base string) string {
 	return b.String()
 }
 
-func runDeepLink(base, runID string) string {
+func runDeepLink(base, runID, kind, nodeID string) string {
 	path := "/runs/" + runID
+	if strings.TrimSpace(kind) == models.NotifyKindCompleted {
+		q := url.Values{}
+		q.Set("tab", "output")
+		if n := strings.TrimSpace(nodeID); n != "" && n != models.NotifyCompletedSentinelNodeID {
+			q.Set("node", n)
+		}
+		path += "?" + q.Encode()
+	}
 	base = strings.TrimRight(strings.TrimSpace(base), "/")
 	if base == "" {
 		return path
@@ -317,7 +351,12 @@ func runDeepLink(base, runID string) string {
 
 // FormatRunDeepLinkForTest exposes runDeepLink for unit tests.
 func FormatRunDeepLinkForTest(base, runID string) string {
-	return runDeepLink(base, runID)
+	return runDeepLink(base, runID, "", "")
+}
+
+// FormatCompletedRunDeepLinkForTest exposes completed deep links for unit tests.
+func FormatCompletedRunDeepLinkForTest(base, runID, nodeID string) string {
+	return runDeepLink(base, runID, models.NotifyKindCompleted, nodeID)
 }
 
 // ClaimReceiptForTest exposes claimReceipt for unit tests.

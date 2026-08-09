@@ -2,7 +2,10 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
+import ChatImageThumb from '@/components/ui/ChatImageThumb.vue'
+import ChatImagePreviewModal from '@/components/ui/ChatImagePreviewModal.vue'
 import { imgSrc } from '@/lib/compositeText'
+import { useChatImagePreview } from '@/lib/useChatImagePreview'
 import { useImageAttachments } from '@/lib/useImageAttachments'
 import { attachmentDisplayName, isImageAttachment } from '@/lib/attachments'
 import type { ClarifyImage } from '@/lib/types'
@@ -20,6 +23,7 @@ const text = defineModel<string>('text', { default: '' })
 const images = defineModel<ClarifyImage[]>('images', { default: () => [] })
 
 const { attachments, fileInput, notice, onPickFiles, onPaste, removeAttachment } = useImageAttachments()
+const { preview: imagePreview, openChatImagePreview, closeChatImagePreview } = useChatImagePreview()
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const overflowScroll = ref(false)
@@ -77,11 +81,16 @@ onMounted(() => nextTick(autoGrow))
     </div>
     <div v-if="!textOnly && attachments.length" class="mb-2 flex flex-wrap gap-1.5">
       <div v-for="(im, ii) in attachments" :key="ii" class="relative">
-        <img
+        <ChatImageThumb
           v-if="isImageAttachment(im)"
+          mode="previewable"
+          size="sm"
+          thumb-class="rounded-md"
           :src="imgSrc(im)"
-          class="h-14 w-14 rounded-md border border-line object-cover"
+          :label="attachmentDisplayName(im, ii)"
           :alt="attachmentDisplayName(im, ii)"
+          test-id="paragraph-draft-image-thumb"
+          @preview="openChatImagePreview(imgSrc(im), attachmentDisplayName(im, ii))"
         />
         <div
           v-else
@@ -96,7 +105,7 @@ onMounted(() => nextTick(autoGrow))
           type="button"
           class="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-err text-white"
           :disabled="disabled"
-          @click="removeAttachment(ii)"
+          @click.stop="removeAttachment(ii)"
         >
           <Icon name="close" :size="9" />
         </button>
@@ -127,5 +136,12 @@ onMounted(() => nextTick(autoGrow))
         @paste="onTextPaste"
       />
     </div>
+    <ChatImagePreviewModal
+      :open="!!imagePreview"
+      :src="imagePreview?.src || ''"
+      :label="imagePreview?.label || ''"
+      test-id-prefix="paragraph-image-preview"
+      @close="closeChatImagePreview"
+    />
   </div>
 </template>

@@ -60,6 +60,41 @@ describe('GatesInboxView review/clarify composer mode', () => {
   })
 })
 
+const EMPTY_CARD_CLASS =
+  'card flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto'
+
+describe('GatesInboxView empty inbox fill (plan g1 / g2.1 / g1.3)', () => {
+  it('mobile + desktop empty wrappers both include flex-1 and vertical centering (g1.1 g1.2 g2.1)', () => {
+    const escaped = EMPTY_CARD_CLASS.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const matches = src.match(new RegExp(`class="${escaped}"`, 'g')) || []
+    expect(matches.length).toBe(2)
+    expect(src).toMatch(/items-center justify-center overflow-auto/)
+    expect(src).not.toMatch(/<div v-else class="card">/)
+  })
+
+  it('pipeline-filter empty and global empty share the same fill wrappers (g1.3)', () => {
+    const blocks = [
+      ...src.matchAll(
+        /<div v-else class="card flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto">[\s\S]*?<\/div>/g,
+      ),
+    ]
+    expect(blocks.length).toBe(2)
+    for (const block of blocks) {
+      expect(block[0]).toMatch(/listTotal \? t\('common\.empty\.noPendingGatesForPipeline'\)/)
+      expect(block[0]).toMatch(/listTotal\s+\?\s+t\('common\.empty\.noPendingGatesPipelineDesc'\)/)
+      expect(block[0]).toMatch(/t\('common\.empty\.noPendingGates'\)/)
+      expect(block[0]).toMatch(/t\('common\.empty\.noPendingGatesDesc'\)/)
+    }
+  })
+
+  it('empty wrappers keep .card skin tokens and do not zero-radius (g3.1)', () => {
+    const matches = src.match(/class="card flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto"/g) || []
+    expect(matches.length).toBe(2)
+    expect(src).not.toMatch(/inbox-empty.*rounded-none/)
+    expect(src).not.toMatch(/empty-card.*!rounded-none/)
+  })
+})
+
 describe('GatesInboxView app_preview stage (g2.2)', () => {
   it('mounts AppPreviewPanel with fill + pick wiring on both ReviewShell stages', () => {
     expect(src).toMatch(/import AppPreviewPanel/)

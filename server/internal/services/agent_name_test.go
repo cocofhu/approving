@@ -9,6 +9,21 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
+func TestSuggestAgentRename_v2v3(t *testing.T) {
+	existing := map[string]struct{}{"agent": {}, "agent_v2": {}}
+	got := SuggestAgentRename("agent", existing)
+	if got != "agent_v3" {
+		t.Fatalf("got %q", got)
+	}
+	if _, err := NormalizeAndValidateAgentName(got); err != nil {
+		t.Fatal(err)
+	}
+	zh := SuggestAgentRename("视觉研发", map[string]struct{}{"视觉研发": {}})
+	if zh != "视觉研发_v2" {
+		t.Fatalf("zh got %q", zh)
+	}
+}
+
 func TestNormalizeAndValidateAgentName_demoSamples(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

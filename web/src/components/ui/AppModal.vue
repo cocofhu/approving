@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref, watch, onBeforeUnmount } from 'vue'
+import { ref, watch, onBeforeUnmount, useId } from 'vue'
 import Icon from './Icon.vue'
+
+const titleId = `app-modal-title-${useId().replace(/:/g, '')}`
 
 const props = withDefaults(
   defineProps<{
@@ -63,13 +65,16 @@ defineExpose({ scrollAreaEl })
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="onBackdropClick" />
         <div
           class="relative flex max-h-[88vh] w-full flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-card"
+          role="dialog"
+          aria-modal="true"
+          :aria-labelledby="titleId"
           :style="{ maxWidth: (width || 560) + 'px' }"
         >
           <div class="flex h-14 shrink-0 items-center gap-2 border-b border-line px-5">
-            <div v-if="$slots.header" class="flex min-w-0 flex-1 items-center">
+            <div v-if="$slots.header" :id="titleId" class="flex min-w-0 flex-1 items-center">
               <slot name="header" />
             </div>
-            <div v-else class="flex-1 text-[15px] font-semibold text-txt">{{ title }}</div>
+            <div v-else :id="titleId" class="flex-1 text-[15px] font-semibold text-txt">{{ title }}</div>
             <button class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-txt3 hover:bg-elevated hover:text-txt" @click="emit('close')">
               <Icon name="close" :size="18" />
             </button>

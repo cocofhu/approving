@@ -322,12 +322,23 @@ describe('RunDetailView mobile timeline view contract', () => {
     )
   })
 
-  it('defaults completed→timeline and waiting_human→detail on mobile', () => {
+  it('defaults waiting_human→detail on mobile; live/deep-link completed→detail', () => {
     expect(src).toMatch(/mobileMainPanel\.value = 'timeline'/)
     expect(src).toMatch(/mobileMainPanel\.value = 'detail'/)
-    expect(src).toMatch(/timelineScrollToken\.value \+= 1/)
+    expect(src).toMatch(/outputFocusLock/)
+    expect(src).toMatch(/applyOutputDeepLinkFocus/)
+    expect(src).toMatch(/resolveOutputFocusNodeId/)
+    expect(src).toMatch(/queryParam\('tab'\) === 'output'/)
+    expect(src).toMatch(/if \(isMobile\.value\) mobileMainPanel\.value = 'detail'/)
+    expect(src).toMatch(/prev !== 'running' && prev !== 'waiting_human'/)
+    expect(src).toMatch(/if \(runLoading\.value\) return/)
     expect(src).toMatch(/hasProduct\.value && nodeCompleted\.value\) nodeTab\.value = 'product'/)
     expect(src).toMatch(/:mobile-fill-remaining="true"/)
+  })
+
+  it('does not toast on run completed (g5.3)', () => {
+    expect(src).not.toMatch(/运行已完成/)
+    expect(src).not.toMatch(/toast\.(success|info|warn)\([^)]*complet/i)
   })
 })
 

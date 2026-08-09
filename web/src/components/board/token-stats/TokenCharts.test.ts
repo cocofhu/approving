@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { createI18n } from 'vue-i18n'
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import TokenTrendChart from './TokenTrendChart.vue'
@@ -66,8 +67,11 @@ describe('Token charts (g2.3/g2.4)', () => {
     })
     expect(wrapper.find('[data-testid="token-trend-wrap"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="token-trend-chart"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="token-trend-legend"]').text()).toContain('workflow')
-    expect(wrapper.find('[data-testid="token-trend-legend"]').text()).toContain('pm')
+    const legend = wrapper.find('[data-testid="token-trend-legend"]')
+    expect(legend.find('[data-kind="workflow"]').text()).toContain('工作流')
+    expect(legend.find('[data-kind="pm"]').text()).toContain('项目管理')
+    expect(legend.find('[data-kind="workflow"]').text()).not.toMatch(/^\s*workflow\s*$/i)
+    expect(legend.find('[data-kind="pm"]').text()).not.toMatch(/^\s*pm\s*$/i)
     expect(wrapper.find('canvas').exists()).toBe(true)
     // Chart.js Canvas path — no legacy non-uniform SVG stretch host
     expect(wrapper.find('[data-testid="token-trend-svg"]').exists()).toBe(false)
@@ -77,6 +81,56 @@ describe('Token charts (g2.3/g2.4)', () => {
     }
     expect(exposed.chartData.datasets).toHaveLength(2)
     expect(exposed.chartData.datasets.map((d) => d.label)).toEqual(['workflow', 'pm'])
+    wrapper.unmount()
+  })
+
+  it('tooltip source names use i18n labels with data-tip-row (g2.2/g3.1)', async () => {
+    const wrapper = mount(TokenTrendChart, {
+      props: {
+        bucketWidth: 'day',
+        trend: [
+          {
+            bucket: '2026-07-24',
+            total: 100,
+            workflowTotal: 70,
+            pmTotal: 30,
+            inputTokens: 40,
+            outputTokens: 30,
+            cacheReadTokens: 20,
+            cacheWriteTokens: 10,
+          },
+        ],
+      },
+      global: { plugins: [i18n()] },
+      attachTo: document.body,
+    })
+    const wrapEl = wrapper.find('[data-testid="token-trend-wrap"]').element as HTMLElement
+    const exposed = wrapper.vm as unknown as {
+      chartOptions: {
+        plugins?: { tooltip?: { external?: (ctx: unknown) => void } }
+      }
+    }
+    const external = exposed.chartOptions.plugins?.tooltip?.external
+    expect(typeof external).toBe('function')
+    const canvas = document.createElement('canvas')
+    wrapEl.appendChild(canvas)
+    Object.defineProperty(canvas, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 200, height: 200, right: 200, bottom: 200 }),
+    })
+    Object.defineProperty(wrapEl, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 400, height: 200, right: 400, bottom: 200 }),
+    })
+    external?.({
+      chart: { canvas },
+      tooltip: { opacity: 1, dataPoints: [{ dataIndex: 0 }], caretX: 40, caretY: 40 },
+    })
+    await wrapper.vm.$nextTick()
+    const tip = wrapper.find('[data-testid="token-trend-tooltip"]')
+    expect(tip.exists()).toBe(true)
+    expect(tip.find('[data-tip-row="workflow"]').text()).toContain('工作流')
+    expect(tip.find('[data-tip-row="pm"]').text()).toContain('项目管理')
+    expect(tip.find('[data-tip-row="workflow"]').text()).not.toMatch(/\bworkflow\b/)
+    expect(tip.find('[data-tip-row="pm"]').text()).not.toMatch(/(?<![A-Za-z0-9_-])pm(?![A-Za-z0-9_-])/i)
     wrapper.unmount()
   })
 
@@ -313,6 +367,201 @@ describe('Token charts (g2.3/g2.4)', () => {
     expect(pmDs!.borderDash).toEqual([5, 4])
     expect(wfDs!.borderDash).toBeUndefined()
     expect(String(pmDs!.backgroundColor)).not.toMatch(/245,\s*158,\s*11/)
+    wrapper.unmount()
+  })
+})
+
+type ExternalTooltip = (ctx: {
+  chart: { canvas: HTMLCanvasElement }
+  tooltip: {
+    opacity: number
+    caretX: number
+    caretY: number
+    dataPoints?: { dataIndex: number }[]
+  }
+}) => void | Promise<void>
+
+const TIP_W = 168
+const TIP_H = 72
+
+function mockTipBoxSize() {
+  Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+    configurable: true,
+    get() {
+      return (this as HTMLElement).getAttribute?.('data-testid') === 'token-trend-tooltip' ? TIP_W : 600
+    },
+  })
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+    configurable: true,
+    get() {
+      return (this as HTMLElement).getAttribute?.('data-testid') === 'token-trend-tooltip' ? TIP_H : 200
+    },
+  })
+}
+
+function restoreTipBoxSize() {
+  delete (HTMLElement.prototype as { offsetWidth?: unknown }).offsetWidth
+  delete (HTMLElement.prototype as { offsetHeight?: unknown }).offsetHeight
+}
+
+function leftZeroTrend() {
+  return [
+    {
+      bucket: '2026-07-11',
+      total: 0,
+      workflowTotal: 0,
+      pmTotal: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    },
+    {
+      bucket: '2026-07-12',
+      total: 1_200_000,
+      workflowTotal: 900_000,
+      pmTotal: 300_000,
+      inputTokens: 400,
+      outputTokens: 300,
+      cacheReadTokens: 200,
+      cacheWriteTokens: 100,
+    },
+    {
+      bucket: '2026-08-09',
+      total: 96_000_000,
+      workflowTotal: 72_000_000,
+      pmTotal: 24_000_000,
+      inputTokens: 400,
+      outputTokens: 300,
+      cacheReadTokens: 200,
+      cacheWriteTokens: 100,
+    },
+  ]
+}
+
+function tipBoxInViewport(el: HTMLElement) {
+  const left = parseFloat(el.style.left || '0')
+  const top = parseFloat(el.style.top || '0')
+  const right = left + (el.offsetWidth || TIP_W)
+  const bottom = top + (el.offsetHeight || TIP_H)
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  expect(left).toBeGreaterThanOrEqual(0)
+  expect(top).toBeGreaterThanOrEqual(0)
+  expect(right).toBeLessThanOrEqual(vw)
+  expect(bottom).toBeLessThanOrEqual(vh)
+  return { left, top, right, bottom }
+}
+
+async function fireExternalTooltip(
+  wrapper: ReturnType<typeof mount>,
+  opts: { caretX: number; caretY: number; dataIndex?: number; opacity?: number; canvasLeft?: number; canvasTop?: number },
+) {
+  const canvas = wrapper.find('canvas').element as HTMLCanvasElement
+  const canvasLeft = opts.canvasLeft ?? 40
+  const canvasTop = opts.canvasTop ?? 80
+  vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+    x: canvasLeft,
+    y: canvasTop,
+    left: canvasLeft,
+    top: canvasTop,
+    right: canvasLeft + 600,
+    bottom: canvasTop + 178,
+    width: 600,
+    height: 178,
+    toJSON() {
+      return {}
+    },
+  } as DOMRect)
+
+  const vm = wrapper.vm as unknown as { externalTooltip: ExternalTooltip; hideTip: () => void }
+  await vm.externalTooltip({
+    chart: { canvas },
+    tooltip: {
+      opacity: opts.opacity ?? 1,
+      caretX: opts.caretX,
+      caretY: opts.caretY,
+      dataPoints: opts.opacity === 0 ? [] : [{ dataIndex: opts.dataIndex ?? 0 }],
+    },
+  })
+  await nextTick()
+  await nextTick()
+  return vm
+}
+
+describe('TokenTrendChart tooltip visibility (g4.1/g4.2/g4.3/g1.1)', () => {
+  afterEach(() => {
+    restoreTipBoxSize()
+    vi.restoreAllMocks()
+    document.querySelectorAll('[data-testid="token-trend-tooltip"]').forEach((n) => n.remove())
+  })
+
+  it('left-edge total=0 shows full MM-DD · 0 and box stays in viewport (g4.1)', async () => {
+    mockTipBoxSize()
+    const wrapper = mount(TokenTrendChart, {
+      props: { bucketWidth: 'day', trend: leftZeroTrend() },
+      global: { plugins: [i18n()] },
+      attachTo: document.body,
+    })
+
+    await fireExternalTooltip(wrapper, { caretX: 8, caretY: 160, dataIndex: 0 })
+    const tip = document.querySelector('[data-testid="token-trend-tooltip"]') as HTMLElement | null
+    expect(tip).toBeTruthy()
+    const text = (tip!.textContent || '').replace(/\s+/g, ' ')
+    expect(text).toContain('07-11')
+    expect(text).toMatch(/07-11\s*·\s*0/)
+    expect(text).not.toMatch(/(^|\s)-11\s*·/)
+    expect(text).toContain('workflow')
+    expect(text).toContain('pm')
+    tipBoxInViewport(tip!)
+
+    const wrap = wrapper.find('[data-testid="token-trend-wrap"]').element
+    expect(wrap.contains(tip!)).toBe(false)
+    expect(tip!.className).toMatch(/fixed/)
+    expect(tip!.className).toMatch(/z-\[100\]/)
+    expect(tip!.className).toMatch(/pointer-events-none/)
+    expect(tip!.className).toMatch(/rounded-lg/)
+    expect(tip!.className).toMatch(/bg-\[#1a1d23\]/)
+    wrapper.unmount()
+  })
+
+  it('right-edge / high caret flip or clamp keeps box in viewport (g4.2)', async () => {
+    mockTipBoxSize()
+    const wrapper = mount(TokenTrendChart, {
+      props: { bucketWidth: 'day', trend: leftZeroTrend() },
+      global: { plugins: [i18n()] },
+      attachTo: document.body,
+    })
+
+    await fireExternalTooltip(wrapper, { caretX: 590, caretY: 8, dataIndex: 2, canvasLeft: 40, canvasTop: 20 })
+    const tip = document.querySelector('[data-testid="token-trend-tooltip"]') as HTMLElement | null
+    expect(tip).toBeTruthy()
+    const text = (tip!.textContent || '').replace(/\s+/g, ' ')
+    expect(text).toContain('08-09')
+    expect(text).not.toMatch(/translate\(-50%/)
+    tipBoxInViewport(tip!)
+    wrapper.unmount()
+  })
+
+  it('hides tooltip after leaving the trend wrap (g4.3)', async () => {
+    mockTipBoxSize()
+    const wrapper = mount(TokenTrendChart, {
+      props: { bucketWidth: 'day', trend: leftZeroTrend() },
+      global: { plugins: [i18n()] },
+      attachTo: document.body,
+    })
+
+    await fireExternalTooltip(wrapper, { caretX: 80, caretY: 100, dataIndex: 1 })
+    expect(document.querySelector('[data-testid="token-trend-tooltip"]')).toBeTruthy()
+
+    await wrapper.find('[data-testid="token-trend-wrap"]').trigger('mouseleave')
+    await nextTick()
+    expect(document.querySelector('[data-testid="token-trend-tooltip"]')).toBeNull()
+
+    await fireExternalTooltip(wrapper, { caretX: 80, caretY: 100, dataIndex: 1 })
+    expect(document.querySelector('[data-testid="token-trend-tooltip"]')).toBeTruthy()
+    await fireExternalTooltip(wrapper, { caretX: 80, caretY: 100, opacity: 0 })
+    expect(document.querySelector('[data-testid="token-trend-tooltip"]')).toBeNull()
     wrapper.unmount()
   })
 })

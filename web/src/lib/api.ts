@@ -219,6 +219,31 @@ export interface AgentOrg {
   agents: Record<string, OrgAgentMembership>
 }
 
+/** Result of POST /agents/org/import. */
+export interface OrgFolderImportResult {
+  org: AgentOrg
+  created?: string[]
+  overwritten?: string[]
+  renamed?: Record<string, string>
+}
+
+function filenameFromContentDisposition(header: string | null, fallback: string): string {
+  if (!header) return fallback
+  const star = /filename\*=(?:UTF-8''|utf-8'')([^;]+)/i.exec(header)
+  if (star?.[1]) {
+    try {
+      return decodeURIComponent(star[1])
+    } catch {
+      /* ignore */
+    }
+  }
+  const quoted = /filename="([^"]+)"/i.exec(header)
+  if (quoted?.[1]) return quoted[1]
+  const plain = /filename=([^;]+)/i.exec(header)
+  if (plain?.[1]) return plain[1].trim()
+  return fallback
+}
+
 export interface SandboxView {
   id: number
   name: string
@@ -812,6 +837,52 @@ export const api = {
       throw new Error(msg)
     }
     return res.blob()
+  },
+  exportOrgFolder: async (groupId: string): Promise<{ blob: Blob; filename: string }> => {
+    const res = await fetch(`${BASE}/agents/org/export?groupId=${encodeURIComponent(groupId)}`, {
+      credentials: 'include',
+    })
+    if (!res.ok) {
+      let msg = `${res.status} export failed`
+      try {
+        const body = await res.json()
+        if (body?.error) msg = body.error
+      } catch {
+        // non-JSON
+      }
+      throw new Error(msg)
+    }
+    const blob = await res.blob()
+    const filename = filenameFromContentDisposition(
+      res.headers.get('Content-Disposition'),
+      'folder.zip',
+    )
+    return { blob, filename }
+  },
+  importOrgFolder: async (
+    zipFile: File,
+    opts: { targetGroupId?: string; mode: 'rename' | 'overwrite' },
+  ): Promise<OrgFolderImportResult> => {
+    const fd = new FormData()
+    fd.append('file', zipFile)
+    if (opts.targetGroupId) fd.append('targetGroupId', opts.targetGroupId)
+    fd.append('mode', opts.mode)
+    const res = await fetch(`${BASE}/agents/org/import`, {
+      method: 'POST',
+      credentials: 'include',
+      body: fd,
+    })
+    if (!res.ok) {
+      let msg = `${res.status} import failed`
+      try {
+        const body = await res.json()
+        if (body?.error) msg = body.error
+      } catch {
+        // non-JSON
+      }
+      throw new Error(msg)
+    }
+    return (await res.json()) as OrgFolderImportResult
   },
   importAgent: async (zipFile: File, opts: { targetName: string; mode: 'create' | 'overwrite' }): Promise<Agent> => {
     const fd = new FormData()

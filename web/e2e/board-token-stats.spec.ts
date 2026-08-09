@@ -23,33 +23,34 @@ function stubRun(partial: {
   }
 }
 
+function dayBucket(offset: number, totals: { total: number; workflowTotal: number; pmTotal: number }) {
+  const d = new Date(2026, 6, 11 + offset)
+  const bucket = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return {
+    bucket,
+    ...totals,
+    inputTokens: Math.floor(totals.total * 0.4),
+    outputTokens: Math.floor(totals.total * 0.3),
+    cacheReadTokens: Math.floor(totals.total * 0.2),
+    cacheWriteTokens: Math.max(0, totals.total - Math.floor(totals.total * 0.9)),
+  }
+}
+
+/** Near-30d series: left-edge 2026-07-11 is a 0-value point (g4.5 hover). */
+const TREND_30D_LEFT_ZERO = Array.from({ length: 30 }, (_, i) => {
+  if (i === 0) return dayBucket(0, { total: 0, workflowTotal: 0, pmTotal: 0 })
+  if (i === 22) return dayBucket(i, { total: 124_000_000, workflowTotal: 96_000_000, pmTotal: 28_000_000 })
+  const total = i * 12_000
+  const pm = Math.floor(total * 0.25)
+  return dayBucket(i, { total, workflowTotal: total - pm, pmTotal: pm })
+})
+
 const STATS_30D = {
   window: '30d',
   bucketWidth: 'day',
   timezone: 'Asia/Shanghai',
   empty: false,
-  trend: [
-    {
-      bucket: '2026-07-24',
-      total: 1200,
-      workflowTotal: 900,
-      pmTotal: 300,
-      inputTokens: 500,
-      outputTokens: 400,
-      cacheReadTokens: 200,
-      cacheWriteTokens: 100,
-    },
-    {
-      bucket: '2026-07-25',
-      total: 800,
-      workflowTotal: 600,
-      pmTotal: 200,
-      inputTokens: 300,
-      outputTokens: 250,
-      cacheReadTokens: 150,
-      cacheWriteTokens: 100,
-    },
-  ],
+  trend: TREND_30D_LEFT_ZERO,
   composition: {
     inputTokens: 800,
     outputTokens: 650,
@@ -69,6 +70,7 @@ const STATS_30D = {
 const STATS_7D = {
   ...STATS_30D,
   window: '7d',
+  trend: TREND_30D_LEFT_ZERO.slice(-7),
   composition: { ...STATS_30D.composition, total: 900 },
   workflows: [
     { workflowId: 'wf-a', name: 'approve-main', total: 600 },
@@ -223,8 +225,14 @@ test.describe('看板 Token 统计图', () => {
     await expect(panel).toContainText('approve-main')
     await expect(panel).toContainText('项目管理')
     await expect(panel).toContainText('其他')
-    await expect(page.getByTestId('token-trend-legend')).toContainText('workflow')
-    await expect(page.getByTestId('token-trend-legend')).toContainText('pm')
+    const trendLegend = page.getByTestId('token-trend-legend')
+    await expect(trendLegend.locator('[data-kind="workflow"]')).toContainText('工作流')
+    await expect(trendLegend.locator('[data-kind="pm"]')).toContainText('项目管理')
+    await page.getByTestId('token-trend-chart').locator('canvas').hover({ position: { x: 120, y: 80 } })
+    const trendTip = page.getByTestId('token-trend-tooltip')
+    await expect(trendTip).toBeVisible()
+    await expect(trendTip.locator('[data-tip-row="workflow"]')).toContainText('工作流')
+    await expect(trendTip.locator('[data-tip-row="pm"]')).toContainText('项目管理')
     await expect(panel).toContainText('消耗排行')
     await expect(panel).toContainText('按来源堆叠')
     await expect(page.getByTestId('token-rank-list').locator('[data-kind="pm"]')).toBeVisible()
@@ -435,7 +443,7 @@ test.describe('看板 Token 统计图', () => {
     const headerStat = page.getByTestId('project-token-stat')
     await expect(headerStat).toBeVisible({ timeout: 15_000 })
     await expect(headerStat).toContainText('128.4K')
-    await expect(headerStat).toContainText('全部历史 · 含工作流与项目管理（上线后）')
+    await expect(headerStat).not.toContainText('全部历史 · 含工作流与项目管理（上线后）')
 
     await expect(page.getByTestId('token-stats-panel')).toBeVisible()
     await expect(page.getByTestId('token-stats-charts')).toBeVisible()
@@ -443,17 +451,103 @@ test.describe('看板 Token 统计图', () => {
     await page.getByTestId('token-stats-window-all').click()
     await expect(page.getByTestId('token-stats-window-badge')).toContainText('全部历史')
     await expect(headerStat).toContainText('128.4K')
-    await expect(headerStat).toContainText('全部历史 · 含工作流与项目管理（上线后）')
+    await expect(headerStat).not.toContainText('全部历史 · 含工作流与项目管理（上线后）')
 
     await headerStat.hover()
     const tip = page.getByTestId('token-detail-tip')
     await expect(tip).toBeVisible()
-    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('workflow')
-    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('项目管理')
+    await expect(tip.locator('[data-tip-row="workflow"]')).toContainText('工作流')
+    await expect(tip.locator('[data-tip-row="pm"]')).toContainText('项目管理')
     await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('合计')
 
     const detailShot = path.join(testInfo.outputDir, 'project-detail-token-stats.png')
     await page.screenshot({ path: detailShot, fullPage: true })
     await testInfo.attach('project-detail-token-stats', { path: detailShot, contentType: 'image/png' })
+  })
+
+  test('近 30 天左端 0 值点 hover：文案完整、盒子不裁切、离开隐藏、窄屏仍可见 (g4.5)', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await mockBoardShell(page)
+    await page.route('**/api/projects/*/token-stats**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(STATS_30D),
+      })
+    })
+
+    await page.goto('/board.html?start=project-board&memory=1&projectId=proj-1')
+    await expect(page.getByTestId('token-stats-charts')).toBeVisible({ timeout: 15_000 })
+    const canvas = page.getByTestId('token-trend-chart').locator('canvas')
+    await expect(canvas).toBeVisible()
+
+    async function hoverLeftZeroPoint() {
+      const box = await canvas.boundingBox()
+      expect(box).toBeTruthy()
+      const ys = [box!.height - 28, Math.floor(box!.height * 0.55)]
+      const xs = [40, 48, 56, 64, 72, 84, 96]
+      for (const y of ys) {
+        for (const x of xs) {
+          if (x >= box!.width - 4 || y >= box!.height - 4) continue
+          await canvas.hover({ position: { x, y } })
+          const loc = page.getByTestId('token-trend-tooltip')
+          if (await loc.isVisible().catch(() => false)) {
+            const text = await loc.innerText()
+            if (text.includes('07-11')) return
+          }
+        }
+      }
+      throw new Error('left-edge 07-11 tooltip not shown')
+    }
+
+    await expect(async () => {
+      await hoverLeftZeroPoint()
+    }).toPass({ timeout: 12_000 })
+
+    const tip = page.getByTestId('token-trend-tooltip')
+    await expect(tip).toContainText('07-11')
+    await expect(tip).toContainText('workflow')
+    await expect(tip).toContainText('pm')
+    const tipText = (await tip.innerText()).replace(/\s+/g, ' ')
+    expect(tipText).toMatch(/07-11\s*·\s*0/)
+    expect(tipText).not.toMatch(/(^|\s)-11\s*·/)
+
+    const tipBox = await tip.boundingBox()
+    expect(tipBox).toBeTruthy()
+    expect(tipBox!.x).toBeGreaterThanOrEqual(0)
+    expect(tipBox!.y).toBeGreaterThanOrEqual(0)
+    expect(tipBox!.x + tipBox!.width).toBeLessThanOrEqual(1280 + 1)
+    expect(tipBox!.y + tipBox!.height).toBeLessThanOrEqual(900 + 1)
+
+    const hoverShot = path.join(testInfo.outputDir, 'token-trend-tooltip-left-zero.png')
+    await page.screenshot({ path: hoverShot, fullPage: true })
+    await testInfo.attach('token-trend-tooltip-left-zero', { path: hoverShot, contentType: 'image/png' })
+
+    await page.mouse.move(4, 4)
+    await expect(page.getByTestId('token-trend-tooltip')).toHaveCount(0)
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(page.getByTestId('token-trend-wrap')).toBeVisible()
+    const panelBox = await page.getByTestId('token-stats-panel').boundingBox()
+    const wrapBox = await page.getByTestId('token-trend-wrap').boundingBox()
+    expect(panelBox && wrapBox).toBeTruthy()
+    expect(wrapBox!.x).toBeGreaterThanOrEqual(panelBox!.x - 1)
+    expect(wrapBox!.x + wrapBox!.width).toBeLessThanOrEqual(panelBox!.x + panelBox!.width + 2)
+
+    await expect(async () => {
+      await hoverLeftZeroPoint()
+    }).toPass({ timeout: 12_000 })
+    const narrowTip = page.getByTestId('token-trend-tooltip')
+    await expect(narrowTip).toContainText('07-11')
+    const narrowTipBox = await narrowTip.boundingBox()
+    expect(narrowTipBox).toBeTruthy()
+    expect(narrowTipBox!.x).toBeGreaterThanOrEqual(0)
+    expect(narrowTipBox!.y).toBeGreaterThanOrEqual(0)
+    expect(narrowTipBox!.x + narrowTipBox!.width).toBeLessThanOrEqual(390 + 1)
+    expect(narrowTipBox!.y + narrowTipBox!.height).toBeLessThanOrEqual(844 + 1)
+
+    const narrowHoverShot = path.join(testInfo.outputDir, 'token-trend-tooltip-narrow.png')
+    await page.screenshot({ path: narrowHoverShot, fullPage: true })
+    await testInfo.attach('token-trend-tooltip-narrow', { path: narrowHoverShot, contentType: 'image/png' })
   })
 })

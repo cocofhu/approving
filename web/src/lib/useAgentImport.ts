@@ -1,22 +1,27 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { api } from '@/lib/api'
+import { api, type Agent, type AgentOrg } from '@/lib/api'
 import {
   peekAgentZipName,
+  peekZipPackage,
   resolveImportName,
   suggestRename,
   validateAgentName,
   normalizeAgentName,
 } from '@/lib/agentIO'
 import { useToast } from '@/lib/useToast'
-import type { Agent } from '@/lib/api'
 
 export type ConflictAction = 'overwrite' | 'rename' | 'cancel'
+export type FolderConflictAction = 'rename' | 'overwrite' | 'cancel'
 
 export function useAgentImport(opts: {
   dirty: () => boolean
+  agentDirty?: () => boolean
+  orgDirty?: () => boolean
+  persistOrg?: () => Promise<boolean>
   agentNames: () => string[]
   onImported: (agent: Agent) => void | Promise<void>
+  onFolderImported?: (org: AgentOrg) => void | Promise<void>
 }) {
   const { t } = useI18n()
   const toast = useToast()
@@ -32,19 +37,54 @@ export function useAgentImport(opts: {
   const renameValue = ref('')
   const renameError = ref('')
 
+  const showBatchConflict = ref(false)
+  const batchConflictNames = ref<string[]>([])
+
   let pendingFile: File | null = null
+  let pendingTargetGroupId: string | null = null
+  let requireFolder = false
+
+  function agentIsDirty() {
+    return opts.agentDirty ? opts.agentDirty() : opts.dirty()
+  }
+
+  async function persistOrgIfNeeded(): Promise<boolean> {
+    if (!opts.orgDirty?.()) return true
+    if (!opts.persistOrg) return true
+    return opts.persistOrg()
+  }
 
   function triggerImport() {
-    if (opts.dirty()) {
-      showDiscardConfirm.value = true
-      return
-    }
-    fileInput.value?.click()
+    pendingTargetGroupId = null
+    requireFolder = false
+    void (async () => {
+      if (!(await persistOrgIfNeeded())) return
+      if (agentIsDirty()) {
+        showDiscardConfirm.value = true
+        return
+      }
+      fileInput.value?.click()
+    })()
+  }
+
+  function triggerGroupImport(groupId: string) {
+    pendingTargetGroupId = groupId
+    requireFolder = true
+    void (async () => {
+      if (!(await persistOrgIfNeeded())) return
+      if (agentIsDirty()) {
+        showDiscardConfirm.value = true
+        return
+      }
+      fileInput.value?.click()
+    })()
   }
 
   function onDiscardCancel() {
     showDiscardConfirm.value = false
     pendingFile = null
+    pendingTargetGroupId = null
+    requireFolder = false
   }
 
   function onDiscardConfirm() {
@@ -65,8 +105,40 @@ export function useAgentImport(opts: {
     }
 
     pendingFile = file
-    const peek = await peekAgentZipName(file)
-    if (peek.error) {
+    const peek = await peekZipPackage(file)
+
+    if (peek.kind === 'unknown') {
+      importError.value =
+        peek.error === 'invalid zip'
+          ? t('pages.agentStudio.exportImport.importError.invalidZip')
+          : t('pages.agentStudio.exportImport.importError.unrecognized')
+      showImportError.value = true
+      pendingFile = null
+      return
+    }
+
+    if (requireFolder) {
+      if (peek.kind === 'agent') {
+        importError.value = t('pages.agentStudio.exportImport.importError.singleAgentOnGroup')
+        showImportError.value = true
+        pendingFile = null
+        return
+      }
+      await beginFolderImport(peek.agentNames)
+      return
+    }
+
+    if (peek.kind === 'org-folder') {
+      await beginFolderImport(peek.agentNames)
+      return
+    }
+
+    await beginSingleAgentImport(file, peek.name)
+  }
+
+  async function beginSingleAgentImport(file: File, peekedName?: string) {
+    const peek = peekedName != null ? { name: peekedName } : await peekAgentZipName(file)
+    if ('error' in peek && peek.error && peekedName == null) {
       importError.value =
         peek.error === 'missing agent.json'
           ? t('pages.agentStudio.exportImport.importError.missingAgentJson')
@@ -76,7 +148,7 @@ export function useAgentImport(opts: {
       return
     }
 
-    const targetName = normalizeAgentName(resolveImportName(peek.name, file.name))
+    const targetName = normalizeAgentName(resolveImportName(peekedName ?? peek.name, file.name))
     const nameErr = validateAgentName(targetName)
     if (nameErr === 'required' || nameErr === 'invalid') {
       importError.value = t('pages.agentStudio.exportImport.importError.invalidName')
@@ -96,6 +168,17 @@ export function useAgentImport(opts: {
     }
 
     await runImport(targetName, 'create')
+  }
+
+  async function beginFolderImport(agentNames: string[]) {
+    const existing = new Set(opts.agentNames())
+    const conflicts = agentNames.filter((n) => existing.has(n))
+    if (conflicts.length > 0) {
+      batchConflictNames.value = conflicts
+      showBatchConflict.value = true
+      return
+    }
+    await runFolderImport('rename')
   }
 
   function selectConflict(action: ConflictAction) {
@@ -141,6 +224,24 @@ export function useAgentImport(opts: {
     await runImport(newName, 'create')
   }
 
+  function closeBatchConflict() {
+    showBatchConflict.value = false
+    pendingFile = null
+    pendingTargetGroupId = null
+    requireFolder = false
+    batchConflictNames.value = []
+  }
+
+  async function confirmBatchRename() {
+    showBatchConflict.value = false
+    await runFolderImport('rename')
+  }
+
+  async function confirmBatchOverwrite() {
+    showBatchConflict.value = false
+    await runFolderImport('overwrite')
+  }
+
   async function runImport(targetName: string, mode: 'create' | 'overwrite') {
     const file = pendingFile
     pendingFile = null
@@ -156,6 +257,32 @@ export function useAgentImport(opts: {
     }
   }
 
+  async function runFolderImport(mode: 'rename' | 'overwrite') {
+    const file = pendingFile
+    const targetGroupId = pendingTargetGroupId
+    pendingFile = null
+    pendingTargetGroupId = null
+    requireFolder = false
+    if (!file) return
+
+    try {
+      const result = await api.importOrgFolder(file, {
+        targetGroupId: targetGroupId || undefined,
+        mode,
+      })
+      if (opts.onFolderImported) {
+        await opts.onFolderImported(result.org)
+      }
+      toast.success(t('pages.agentStudio.exportImport.folderImportSuccess'))
+    } catch (err: any) {
+      const msg = String(err?.message || err)
+      importError.value = msg.includes('整次回滚')
+        ? msg
+        : `${t('pages.agentStudio.exportImport.importError.rolledBack')} ${msg}`
+      showImportError.value = true
+    }
+  }
+
   return {
     fileInput,
     showDiscardConfirm,
@@ -166,12 +293,18 @@ export function useAgentImport(opts: {
     conflictAction,
     renameValue,
     renameError,
+    showBatchConflict,
+    batchConflictNames,
     triggerImport,
+    triggerGroupImport,
     onDiscardCancel,
     onDiscardConfirm,
     handleFileChange,
     selectConflict,
     closeConflict,
     confirmConflict,
+    closeBatchConflict,
+    confirmBatchRename,
+    confirmBatchOverwrite,
   }
 }

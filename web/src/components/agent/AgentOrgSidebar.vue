@@ -30,6 +30,8 @@ const emit = defineEmits<{
   (e: 'rename-group', groupId: string): void
   (e: 'delete-group', groupId: string): void
   (e: 'assign-project', groupId: string): void
+  (e: 'export-group', groupId: string): void
+  (e: 'import-group', groupId: string): void
   (e: 'move-group', groupId: string, newParentId: string): void
   (e: 'move-agent', agentName: string, sourceGroupId: string, targetGroupId: string): void
   (e: 'toggle-collapsed'): void
@@ -131,6 +133,8 @@ function onCtxAction(action: string) {
   if (current.kind === 'group') {
     const id = current.groupId
     if (action === 'newChild') emit('create-child-group', id)
+    else if (action === 'export') emit('export-group', id)
+    else if (action === 'import') emit('import-group', id)
     else if (action === 'rename') emit('rename-group', id)
     else if (action === 'assignProject') emit('assign-project', id)
     else if (action === 'delete') emit('delete-group', id)
@@ -383,10 +387,6 @@ function onDrop(e: DragEvent, row: OrgTreeRow) {
           </div>
         </template>
       </div>
-
-      <p class="mx-1 mt-2 border border-dashed border-line-strong/60 bg-white/[0.015] px-2.5 py-2 text-[11px] leading-relaxed text-txt3">
-        {{ t('pages.agentStudio.org.dragHint') }}
-      </p>
     </div>
 
     <Teleport to="body">
@@ -414,6 +414,24 @@ function onDrop(e: DragEvent, row: OrgTreeRow) {
           >
             <Icon name="plus" :size="13" class="text-txt3" />
             {{ t('pages.agentStudio.org.newChildGroup') }}
+          </button>
+          <button
+            type="button"
+            data-org-ctx-action="export"
+            class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-txt2 hover:bg-overlay hover:text-txt"
+            @click="onCtxAction('export')"
+          >
+            <Icon name="download" :size="13" class="text-txt3" />
+            {{ t('pages.agentStudio.exportImport.export') }}
+          </button>
+          <button
+            type="button"
+            data-org-ctx-action="import"
+            class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-txt2 hover:bg-overlay hover:text-txt"
+            @click="onCtxAction('import')"
+          >
+            <Icon name="input" :size="13" class="text-txt3" />
+            {{ t('pages.agentStudio.exportImport.import') }}
           </button>
           <button
             type="button"

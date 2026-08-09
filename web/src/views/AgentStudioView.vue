@@ -12,6 +12,9 @@ import AgentOrgSidebar from '@/components/agent/AgentOrgSidebar.vue'
 import AgentChatTester from '@/components/agent/AgentChatTester.vue'
 import AgentDataPanel, { type DataSubTab } from '@/components/agent/AgentDataPanel.vue'
 import AgentGitGuide from '@/components/agent/AgentGitGuide.vue'
+import EnvCredentialHelpModal, {
+  type EnvCredentialHelpSection,
+} from '@/components/agent/EnvCredentialHelpModal.vue'
 import AgentCreateWizard from '@/components/agent/AgentCreateWizard.vue'
 import { api, type Agent, type AgentOrg, type MCPServer, type AgentPrompts, type PlatformRuleMeta } from '@/lib/api'
 import { useBreakpoint } from '@/lib/useBreakpoint'
@@ -32,6 +35,7 @@ import {
   classifyAssignTargets,
   assignNeedsDraftConfirm,
   shouldSyncDraftAfterAssign,
+  isAgentInGroupSubtree,
   UNGROUPED_ID,
 } from '@/lib/agentOrg'
 import type { GitCredentialType } from '@/lib/gitCredentialAnalysis'
@@ -321,6 +325,14 @@ function selectAcpBackend(id: BackendId) {
 
 const currentAuthHint = computed(() => BACKEND_AUTH_HINTS[draft.value?.acpBackend || 'cursor'])
 
+const envHelpOpen = ref(false)
+const envHelpSection = ref<EnvCredentialHelpSection>('inject')
+
+function openEnvHelp(section: EnvCredentialHelpSection) {
+  envHelpSection.value = section
+  envHelpOpen.value = true
+}
+
 function upsertEnv(key: string, value: string) {
   if (!draft.value) return
   const row = draft.value.env.find((e) => e.k === key)
@@ -472,9 +484,14 @@ const renameBlockedTarget = ref('')
 
 const showUnsavedExport = ref(false)
 const exporting = ref(false)
+const showFolderSecrets = ref(false)
+const pendingFolderExportGroupId = ref('')
 
 const agentImport = useAgentImport({
-  dirty: () => dirty.value,
+  dirty: () => agentDirty.value,
+  agentDirty: () => agentDirty.value,
+  orgDirty: () => orgDirty.value,
+  persistOrg: () => persistOrg(org.value),
   agentNames: () => agents.value.map((a) => a.name),
   onImported: async (agent) => {
     const i = agents.value.findIndex((a) => a.name === agent.name)
@@ -487,6 +504,25 @@ const agentImport = useAgentImport({
     await reloadOrg()
     select(agent.name)
   },
+  onFolderImported: async (importedOrg) => {
+    org.value = importedOrg
+    orgBaseline.value = orgSnapshot(importedOrg)
+    try {
+      const list = await api.listAgents()
+      agents.value = list || []
+      if (activeName.value && agents.value.some((a) => a.name === activeName.value)) {
+        const a = agents.value.find((x) => x.name === activeName.value)!
+        const loaded = toDraft(a)
+        originalJson.value = JSON.stringify(fromDraftRaw(loaded))
+        normalizeDraftRegions(loaded)
+        draft.value = loaded
+      } else if (agents.value.length) {
+        select(agents.value[0].name)
+      }
+    } catch (e: any) {
+      error.value = String(e?.message || e)
+    }
+  },
 })
 const {
   fileInput: importFileInput,
@@ -498,13 +534,19 @@ const {
   conflictAction: importConflictAction,
   renameValue: importRenameValue,
   renameError: importRenameError,
+  showBatchConflict,
+  batchConflictNames,
   triggerImport,
+  triggerGroupImport,
   onDiscardCancel: onImportDiscardCancel,
   onDiscardConfirm: onImportDiscardConfirm,
   handleFileChange: onImportFileChange,
   selectConflict: selectImportConflict,
   closeConflict: closeImportConflict,
   confirmConflict: confirmImportConflict,
+  closeBatchConflict,
+  confirmBatchRename,
+  confirmBatchOverwrite,
 } = agentImport
 
 function recToKV(rec?: Record<string, string>): KV[] {
@@ -599,11 +641,11 @@ function orgSnapshot(o: AgentOrg): string {
   })
 }
 
-const dirty = computed(() => {
-  const agentDirty = !!draft.value && JSON.stringify(fromDraft(draft.value)) !== originalJson.value
-  const orgDirty = orgSnapshot(org.value) !== orgBaseline.value
-  return agentDirty || orgDirty
-})
+const agentDirty = computed(
+  () => !!draft.value && JSON.stringify(fromDraft(draft.value)) !== originalJson.value,
+)
+const orgDirty = computed(() => orgSnapshot(org.value) !== orgBaseline.value)
+const dirty = computed(() => agentDirty.value || orgDirty.value)
 
 watch(dirty, (d) => {
   if (d) justSaved.value = false
@@ -1600,6 +1642,7 @@ async function doExport(name: string) {
 
 function triggerExport() {
   if (!activeName.value || exporting.value) return
+  pendingFolderExportGroupId.value = ''
   if (dirty.value) {
     showUnsavedExport.value = true
     return
@@ -1609,10 +1652,15 @@ function triggerExport() {
 
 function cancelUnsavedExport() {
   showUnsavedExport.value = false
+  pendingFolderExportGroupId.value = ''
 }
 
 async function discardAndExport() {
   showUnsavedExport.value = false
+  if (pendingFolderExportGroupId.value) {
+    showFolderSecrets.value = true
+    return
+  }
   if (!activeName.value) return
   await doExport(activeName.value)
 }
@@ -1621,7 +1669,55 @@ async function saveThenExport() {
   const ok = await save()
   if (!ok) return
   showUnsavedExport.value = false
+  if (pendingFolderExportGroupId.value) {
+    showFolderSecrets.value = true
+    return
+  }
   if (activeName.value) await doExport(activeName.value)
+}
+
+async function onExportGroup(groupId: string) {
+  if (exporting.value) return
+  if (orgDirty.value) {
+    if (!(await persistOrg(org.value))) return
+  }
+  const inSubtree =
+    !!activeName.value && isAgentInGroupSubtree(org.value, activeName.value, groupId)
+  if (inSubtree && agentDirty.value) {
+    pendingFolderExportGroupId.value = groupId
+    showUnsavedExport.value = true
+    return
+  }
+  pendingFolderExportGroupId.value = groupId
+  showFolderSecrets.value = true
+}
+
+function cancelFolderSecrets() {
+  showFolderSecrets.value = false
+  pendingFolderExportGroupId.value = ''
+}
+
+async function confirmFolderSecrets() {
+  const groupId = pendingFolderExportGroupId.value
+  showFolderSecrets.value = false
+  pendingFolderExportGroupId.value = ''
+  if (!groupId || exporting.value) return
+  exporting.value = true
+  error.value = ''
+  try {
+    const { blob, filename } = await api.exportOrgFolder(groupId)
+    downloadZip(blob, filename)
+    const base = filename.replace(/\.zip$/i, '')
+    showToast(t('pages.agentStudio.exportImport.folderExportSuccess', { name: base }))
+  } catch (e: any) {
+    error.value = String(e?.message || e)
+  } finally {
+    exporting.value = false
+  }
+}
+
+function onImportGroup(groupId: string) {
+  triggerGroupImport(groupId)
 }
 
 const showCreateWizard = ref(false)
@@ -2006,9 +2102,8 @@ onBeforeUnmount(() => {
   <div class="flex h-full min-h-0 flex-col overflow-hidden">
     <div
       class="mb-5 flex shrink-0 gap-4"
-      :class="isMobile ? 'flex-col items-stretch' : 'items-end justify-between'"
+      :class="isMobile ? 'flex-col items-stretch' : 'justify-end'"
     >
-      <p class="max-w-3xl text-sm text-txt3">{{ t('pages.agentStudio.subtitle', { configRoot: draft?.layout?.configRoot || DEFAULT_CONFIG_ROOT }) }}</p>
       <div class="flex shrink-0 gap-2" :class="isMobile ? 'flex-col' : 'items-center'">
         <AppButton
           variant="outline"
@@ -2071,6 +2166,8 @@ onBeforeUnmount(() => {
         @rename-group="openRenameGroup"
         @delete-group="confirmDeleteGroup"
         @assign-project="onAssignProject"
+        @export-group="onExportGroup"
+        @import-group="onImportGroup"
         @move-group="onMoveGroup"
         @move-agent="onMoveAgent"
         @toggle-collapsed="toggleAgentListCollapsed"
@@ -2511,7 +2608,15 @@ onBeforeUnmount(() => {
         <!-- env -->
         <div v-else-if="tab === 'env'" class="flex min-h-0 flex-1 flex-col">
           <div class="flex items-center gap-2 border-b border-line px-4 py-2">
-            <p class="flex-1 text-[11px] text-txt3">{{ t('pages.agentStudio.env.hint') }}</p>
+            <button
+              type="button"
+              class="bg-transparent p-0 text-[12px] text-accent-2 underline underline-offset-[3px] hover:text-[#c4b5fd] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              data-test="env-help-inject"
+              @click="openEnvHelp('inject')"
+            >
+              {{ t('pages.agentStudio.envHelp.link') }}
+            </button>
+            <span class="flex-1" />
             <button class="rounded border border-line px-2 py-1 text-[11px] text-txt2 hover:border-line-strong" @click="toggleEnvRaw">{{ envRaw ? t('pages.agentStudio.mcp.formEdit') : t('pages.agentStudio.mcp.rawJson') }}</button>
           </div>
 
@@ -2525,12 +2630,21 @@ onBeforeUnmount(() => {
               :upsert-env="upsertEnv"
               :credential-type="draft.gitCredentialType"
               @update:credential-type="draft.gitCredentialType = $event"
+              @help="openEnvHelp('git')"
             />
             <div class="mb-3 rounded-lg border border-line bg-base/50 p-3 text-[11px] leading-6 text-txt3">
-              <div class="mb-1 font-medium text-txt2">{{ t('pages.agentStudio.env.backendAuthTitle') }}</div>
-              <p>{{ t('pages.agentStudio.env.backendAuthIntro', { backend: draft.acpBackend }) }}</p>
-              <p class="mt-1 font-mono text-accent-2">{{ currentAuthHint.key }}<span v-if="currentAuthHint.alt"> / {{ currentAuthHint.alt }}</span></p>
-              <p class="mt-1">{{ currentAuthHint.note }} — {{ t('pages.agentStudio.env.backendAuthMasked') }}</p>
+              <div class="mb-1 flex items-center justify-between gap-2">
+                <div class="font-medium text-txt2">{{ t('pages.agentStudio.env.backendAuthTitle') }}</div>
+                <button
+                  type="button"
+                  class="bg-transparent p-0 text-[12px] text-accent-2 underline underline-offset-[3px] hover:text-[#c4b5fd] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  data-test="env-help-acp"
+                  @click="openEnvHelp('acp')"
+                >
+                  {{ t('pages.agentStudio.envHelp.link') }}
+                </button>
+              </div>
+              <p class="font-mono text-accent-2">{{ currentAuthHint.key }}<span v-if="currentAuthHint.alt"> / {{ currentAuthHint.alt }}</span></p>
             </div>
             <template v-for="(e, i) in draft.env" :key="i">
               <div v-if="!isManagedRegionKey(e.k)" class="flex items-center gap-1.5">
@@ -3153,6 +3267,63 @@ onBeforeUnmount(() => {
       </template>
     </AppModal>
 
+    <!-- folder export secrets warning (Demo) -->
+    <AppModal
+      :open="showFolderSecrets"
+      :title="t('pages.agentStudio.exportImport.folderSecrets.title')"
+      :width="460"
+      close-on-esc
+      @close="cancelFolderSecrets"
+    >
+      <p class="text-[13px] leading-6 text-txt2">{{ t('pages.agentStudio.exportImport.folderSecrets.body') }}</p>
+      <template #footer>
+        <AppButton size="sm" variant="ghost" @click="cancelFolderSecrets">{{ t('common.buttons.cancel') }}</AppButton>
+        <AppButton size="sm" variant="primary" :disabled="exporting" @click="confirmFolderSecrets">
+          {{ t('pages.agentStudio.exportImport.folderSecrets.confirm') }}
+        </AppButton>
+      </template>
+    </AppModal>
+
+    <!-- folder batch name conflict (Demo) -->
+    <AppModal
+      :open="showBatchConflict"
+      :title="t('pages.agentStudio.exportImport.batchConflict.title')"
+      :width="480"
+      close-on-esc
+      @close="closeBatchConflict"
+    >
+      <p class="text-[13px] leading-6 text-txt2">{{ t('pages.agentStudio.exportImport.batchConflict.intro') }}</p>
+      <ul class="mt-2 max-h-32 overflow-auto border border-line bg-base px-3 py-2 text-[12px] text-txt">
+        <li v-for="n in batchConflictNames" :key="n" class="font-mono">{{ n }}</li>
+      </ul>
+      <div class="mt-3 flex flex-col gap-2">
+        <button
+          type="button"
+          class="w-full border border-accent/50 bg-accent-dim px-3 py-2.5 text-left"
+          @click="confirmBatchRename"
+        >
+          <div class="text-[13px] font-medium text-txt">{{ t('pages.agentStudio.exportImport.batchConflict.rename') }}</div>
+          <div class="text-[11.5px] text-txt3">{{ t('pages.agentStudio.exportImport.batchConflict.renameDesc') }}</div>
+        </button>
+        <button
+          type="button"
+          class="w-full border border-err/40 bg-base px-3 py-2.5 text-left hover:bg-err/10"
+          @click="confirmBatchOverwrite"
+        >
+          <div class="text-[13px] font-medium text-err">{{ t('pages.agentStudio.exportImport.batchConflict.overwrite') }}</div>
+          <div class="text-[11.5px] text-txt3">{{ t('pages.agentStudio.exportImport.batchConflict.overwriteDesc') }}</div>
+        </button>
+        <button
+          type="button"
+          class="w-full border border-line bg-base px-3 py-2.5 text-left hover:bg-elevated"
+          @click="closeBatchConflict"
+        >
+          <div class="text-[13px] font-medium text-txt">{{ t('pages.agentStudio.exportImport.batchConflict.cancel') }}</div>
+          <div class="text-[11.5px] text-txt3">{{ t('pages.agentStudio.exportImport.batchConflict.cancelDesc') }}</div>
+        </button>
+      </div>
+    </AppModal>
+
     <!-- unsaved export guide -->
     <AppModal :open="showUnsavedExport" :title="t('pages.agentStudio.exportImport.unsavedExport.title')" :width="420" @close="cancelUnsavedExport">
       <p class="text-[13px] leading-6 text-txt2">{{ t('pages.agentStudio.exportImport.unsavedExport.message', { name: activeName }) }}</p>
@@ -3351,6 +3522,13 @@ onBeforeUnmount(() => {
         >{{ t('pages.agentStudio.project.assignDraftOverwrite') }}</AppButton>
       </template>
     </AppModal>
+
+    <EnvCredentialHelpModal
+      :open="envHelpOpen"
+      :section="envHelpSection"
+      :backend="draft?.acpBackend || 'cursor'"
+      @close="envHelpOpen = false"
+    />
 
     <AppModal :open="showProjectSwitch" :title="t('pages.agentStudio.project.switchTitle')" :width="460" @close="cancelProjectChange">
       <div class="space-y-2 text-[13px] leading-6 text-txt2">

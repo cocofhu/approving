@@ -237,6 +237,9 @@ export default defineConfig({
           new URL('./e2e/run-detail-mobile-panel.html', import.meta.url),
         ),
         'run-detail-real': fileURLToPath(new URL('./e2e/run-detail-real.html', import.meta.url)),
+        'run-completed-output': fileURLToPath(
+          new URL('./e2e/run-completed-output.html', import.meta.url),
+        ),
         'gate-mobile-fill': fileURLToPath(new URL('./e2e/gate-mobile-fill.html', import.meta.url)),
         'gate-cold-silent': fileURLToPath(new URL('./e2e/gate-cold-silent.html', import.meta.url)),
         'clarify-inbox-product': fileURLToPath(

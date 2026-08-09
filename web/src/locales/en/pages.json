@@ -44,6 +44,7 @@
         "compTotal": "Total {n}",
         "donutCenter": "Total",
         "other": "Other",
+        "workflow": "Workflow",
         "pm": "Project Management",
         "value": "Value",
         "share": "Share",
@@ -56,7 +57,6 @@
         "modelCompositionTitle": "Model composition",
         "modelRankTitle": "Model usage ranking",
         "modelRankSub": "Top10 · rest → other",
-        "modelRankHint": "\"Unknown\" is not the same as other; related usage ranks by its actual consumption.",
         "modelOther": "other (remaining models)",
         "filledTag": "includes filled data",
         "emptyModelCompHint": "No model composition yet",
@@ -208,10 +208,9 @@
       "back": "All projects",
       "notFound": "Project not found or deleted",
       "tokenUsage": "Token usage",
-      "tokenUsageHint": "All history · workflow + Project Management (since launch)",
       "tokenTipTitle": "Usage details",
       "tokenTipTotal": "Total",
-      "tokenTipWorkflow": "workflow",
+      "tokenTipWorkflow": "Workflow",
       "tokenTipPm": "Project Management",
       "tokenTipAria": "Token usage, hover for details",
       "help": "Merge rules",
@@ -247,11 +246,12 @@
         "evCompletedLabel": "Run completed",
         "evWaitingHuman": "When a run pauses for your confirmation or action",
         "evFailed": "When a step fails and the run cannot continue",
-        "evCompleted": "Coming soon — not sent yet",
+        "evCompleted": "Off by default; when on, send QQ when a run succeeds",
         "templatesTitle": "Message templates",
         "templatesHint": "Write the full QQ body per trigger; leave empty to use the system default. Workflows only choose triggers, not copy.",
         "segWaitingHuman": "Waiting for human",
         "segFailed": "Run failed",
+        "segCompleted": "Run completed",
         "placeholders": "Placeholders",
         "fillDefault": "Fill / restore default",
         "clearDefault": "Clear (use default)",
@@ -1106,7 +1106,6 @@
     },
     "agentStudio": {
       "title": "Agent Studio",
-      "subtitle": "Reusable agents: workspace (rules/skills/scripts), MCP, env. Nodes reference skill_profile; workspace is copied to {configRoot} in sandbox.",
       "errorPrefix": "Error:",
       "empty": "No agents. Click New agent or wait for default seed on first backend start.",
       "unsaved": "Unsaved",
@@ -1160,7 +1159,6 @@
         "deleteGroupMessage": "Delete group \"{name}\"? Subgroups promote to its parent; members move to the parent or become ungrouped.",
         "groupCycle": "Cannot move a group into itself or its descendants (cycle)",
         "reportingCycle": "Cannot set that parent: it would create a reporting cycle",
-        "dragHint": "Drag agents to change membership; drop on Ungrouped to clear all groups. Right-click a group or agent for org actions; hard delete via the Agent management icon in the header.",
         "removeFromGroup": "Remove from group",
         "removeFromGroupToast": "Removed from group and saved · entity kept",
         "manage": "Manage",
@@ -1282,6 +1280,16 @@
         "regionIntl": "International (trae.ai)",
         "add": "Add env var",
         "parseError": "Invalid env JSON:"
+      },
+      "envHelp": {
+        "link": "Help",
+        "title": "Env & credentials",
+        "gotIt": "Got it",
+        "chip": {
+          "inject": "Injection",
+          "git": "Git credentials",
+          "acp": "ACP auth"
+        }
       },
       "region": {
         "title": "Service site",
@@ -1477,6 +1485,23 @@
         "import": "Import",
         "exportSuccess": "Downloaded {name}.zip",
         "importSuccess": "Agent \"{name}\" imported",
+        "folderExportSuccess": "Downloaded {name}.zip",
+        "folderImportSuccess": "Folder imported",
+        "folderSecrets": {
+          "title": "Exporting a folder takes secrets with it",
+          "body": "The package includes environment variables/secrets. After download it leaves this environment; only share with trusted recipients.",
+          "confirm": "Confirm and download"
+        },
+        "batchConflict": {
+          "title": "Duplicate agent names detected",
+          "intro": "These agents already exist in this environment:",
+          "rename": "Rename all",
+          "renameDesc": "Create conflicting agents with a name_v2 suffix; do not overwrite existing workspaces",
+          "overwrite": "Overwrite all",
+          "overwriteDesc": "Clear target workspaces and remove these agents from other groups here; keep only membership from the import package",
+          "cancel": "Cancel entire import",
+          "cancelDesc": "Abort import without creating or changing any agents or groups"
+        },
         "unsavedExport": {
           "title": "Cannot export",
           "message": "Agent \"{name}\" has unsaved changes. Export includes only saved on-disk content.",
@@ -1507,6 +1532,10 @@
           "invalidZip": "Invalid ZIP file.",
           "missingAgentJson": "ZIP is missing root agent.json.",
           "invalidName": "Agent name does not match naming rules.",
+          "unrecognized": "Unrecognized ZIP: neither a folder package nor a single-agent export.",
+          "singleAgentOnGroup": "This is a single-agent ZIP. Group import only accepts a folder package; use the top-bar Import instead.",
+          "folderTooLarge": "Folder package exceeds the 64MiB limit.",
+          "rolledBack": "Import failed and was fully rolled back.",
           "ok": "OK"
         }
       },
@@ -1937,6 +1966,7 @@
       "upstreamRetry": "Retry",
       "upstreamViewStructured": "Structured",
       "upstreamViewRaw": "Raw JSON",
+      "upstreamBarHint": "This run has a clarified requirement — open it to review against the current product",
       "primaryBadge": "Primary",
       "readonlyBadge": "Read-only",
       "readonlyHint": "Non-text artifact · read-only reference",
@@ -2073,6 +2103,9 @@
       "artifactsMcp": "Artifacts · written via artifact-store MCP",
       "output": "Output",
       "workflowComplete": "Workflow complete.",
+      "noPreviewCardsTitle": "No previewable result cards this run",
+      "noPreviewCardsBody": "The run completed successfully. Final result sources are empty, or no output node ran. This is not a load failure.",
+      "noPreviewCardsHint": "You can still browse all raw artifacts on this page's Artifacts tab.",
       "outputCards": {
         "sourceFailedTitle": "Source node failed / no product",
         "invalidSource": "Invalid or unparseable source reference"

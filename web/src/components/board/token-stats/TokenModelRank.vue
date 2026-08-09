@@ -39,9 +39,6 @@ function barWidth(total: number): string {
           :title="displayName(m)"
         >
           {{ displayName(m) }}
-          <span v-if="m.filled && !m.other" class="ml-1 text-[10px] font-normal text-ok">
-            {{ t('pages.board.tokenStats.filledTag') }}
-          </span>
         </div>
         <div class="mt-1 h-2 overflow-hidden bg-elevated">
           <div

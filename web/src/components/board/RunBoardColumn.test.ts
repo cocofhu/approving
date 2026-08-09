@@ -96,7 +96,31 @@ describe('RunBoardColumn', () => {
     const body = wrapper.find('[data-testid="run-board-column-body"]')
     expect(body.exists()).toBe(true)
     expect((body.element as HTMLElement).style.maxHeight).toMatch(/min\(\s*52vh\s*,\s*420px\s*\)/)
+    expect(wrapper.find('[data-testid="run-board-column"]').classes()).not.toContain('h-full')
     expect(wrapper.text()).not.toMatch(/列内可独立滚动/)
+    wrapper.unmount()
+  })
+
+  it('fill mode drops max-height, stretches outer, and keeps column-body overflow-y', () => {
+    const wrapper = mountColumn({
+      fill: true,
+      items: [
+        stubRun({ id: 'run-1', status: 'completed', title: '完成-1' }),
+        stubRun({ id: 'run-2', status: 'completed', title: '完成-2' }),
+      ],
+      total: 2,
+    })
+
+    const root = wrapper.find('[data-testid="run-board-column"]')
+    expect(root.classes()).toContain('h-full')
+
+    const body = wrapper.find('[data-testid="run-board-column-body"]')
+    expect(body.exists()).toBe(true)
+    expect(body.classes()).toContain('overflow-y-auto')
+    expect(body.classes()).toContain('min-h-0')
+    expect(body.classes()).toContain('flex-1')
+    expect((body.element as HTMLElement).style.maxHeight).toBe('')
+
     wrapper.unmount()
   })
 })

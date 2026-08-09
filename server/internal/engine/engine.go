@@ -1407,6 +1407,11 @@ func (e *Engine) finish(runID, status string) bool {
 	if res.Error != nil {
 		return false
 	}
+	if status == "completed" {
+		// All finish(completed) paths (execute drain, resume, review) fire once
+		// here. Receipt (runId,nodeId,iteration,kind) dedups RowsAffected==0 reentry.
+		e.fireCompletedRunNotify(runID)
+	}
 	if status == "failed" || status == "cancelled" {
 		e.finalizeActiveStateRuns(runID, status)
 		e.supersedePendingGates(runID, status)

@@ -4,6 +4,8 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
+import enCommon from '@/locales/en/common.json'
+import enPages from '@/locales/en/pages.json'
 import type { AgentOrg } from '@/lib/api'
 import AgentOrgSidebar from './AgentOrgSidebar.vue'
 
@@ -232,7 +234,7 @@ describe('AgentOrgSidebar two-column right-edge count layout', () => {
 })
 
 describe('AgentOrgSidebar context menus', () => {
-  it('组头行右键顺序为新建子组/重命名/指定项目(NEW)/分隔线/删除', async () => {
+  it('组头行右键包含导出、导入和指定项目操作', async () => {
     const wrapper = mountSidebar(sampleOrg, true)
     const group = wrapper
       .findAll('[data-org-kind="group"]')
@@ -242,16 +244,32 @@ describe('AgentOrgSidebar context menus', () => {
     const menu = document.querySelector('[data-org-ctx-menu]') as HTMLElement | null
     expect(menu).toBeTruthy()
     expect(menu?.getAttribute('data-org-ctx-kind')).toBe('group')
-    const actions = [...(menu?.querySelectorAll('[data-org-ctx-action]') || [])].map((el) =>
-      el.getAttribute('data-org-ctx-action'),
+    const actions = [...(menu?.querySelectorAll('[data-org-ctx-action]') || [])].map(
+      (el) => el.getAttribute('data-org-ctx-action'),
     )
-    expect(actions).toEqual(['newChild', 'rename', 'assignProject', 'delete'])
+    expect(actions).toEqual(['newChild', 'export', 'import', 'rename', 'assignProject', 'delete'])
     expect(menu?.querySelector('[data-org-ctx-sep]')).toBeTruthy()
     expect(menu?.querySelector('[data-org-ctx-new]')?.textContent).toContain('NEW')
     expect(menu?.textContent).toContain('新建子组')
+    expect(menu?.textContent).toContain('导出')
+    expect(menu?.textContent).toContain('导入')
     expect(menu?.textContent).toContain('指定项目')
+    expect(menu?.textContent).not.toContain('导出文件夹')
 
-    const assignBtn = menu!.querySelector('[data-org-ctx-action="assignProject"]') as HTMLButtonElement
+    const exportBtn = menu!.querySelector('[data-org-ctx-action="export"]') as HTMLButtonElement
+    exportBtn.click()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('export-group')?.[0]).toEqual(['g_dev'])
+    expect(document.querySelector('[data-org-ctx-menu]')).toBeNull()
+
+    await group.trigger('contextmenu', { clientX: 12, clientY: 24 })
+    const importBtn = document.querySelector('[data-org-ctx-action="import"]') as HTMLButtonElement
+    importBtn.click()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('import-group')?.[0]).toEqual(['g_dev'])
+
+    await group.trigger('contextmenu', { clientX: 12, clientY: 24 })
+    const assignBtn = document.querySelector('[data-org-ctx-action="assignProject"]') as HTMLButtonElement
     assignBtn.click()
     await wrapper.vm.$nextTick()
     expect(wrapper.emitted('assign-project')?.[0]).toEqual(['g_dev'])
@@ -326,6 +344,48 @@ describe('AgentOrgSidebar context menus', () => {
     await wrapper.vm.$nextTick()
     expect(wrapper.emitted('remove-from-group')?.[0]).toEqual(['alice', 'g_dev'])
     wrapper.unmount()
+  })
+})
+
+describe('AgentOrgSidebar dragHint removal', () => {
+  function mountSidebarEn(org: AgentOrg = sampleOrg) {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'en',
+      messages: { en: { ...enCommon, ...enPages } },
+    })
+    return mount(AgentOrgSidebar, {
+      props: {
+        org,
+        agentNames,
+        activeName: '',
+        collapsed: false,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          Icon: { template: '<span class="icon" />' },
+          Teleport: true,
+        },
+      },
+    })
+  }
+
+  it('不再展示中文 dragHint 与虚线提示框', () => {
+    const wrapper = mountSidebar()
+    expect(wrapper.text()).not.toContain('拖拽 Agent 调整归属')
+    expect(wrapper.text()).not.toContain('真删请用顶栏 Agent 管理入口')
+    expect(wrapper.find('.scroll-area p.border-dashed').exists()).toBe(false)
+    expect(wrapper.html()).not.toContain('border-dashed border-line-strong')
+    expect(wrapper.find('[data-org-manage]').exists()).toBe(true)
+  })
+
+  it('不再展示英文 dragHint', () => {
+    const wrapper = mountSidebarEn()
+    expect(wrapper.text()).not.toContain('Drag agents to change membership')
+    expect(wrapper.text()).not.toContain('hard delete via the Agent management')
+    expect(wrapper.find('.scroll-area p.border-dashed').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Ungrouped')
   })
 })
 

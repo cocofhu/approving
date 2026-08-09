@@ -300,13 +300,13 @@ async function setWorkflowNotifyMode(w: Workflow, mode: 'off' | 'inherit' | 'cus
   await persistWorkflowNotify(w, { mode, events })
 }
 
-async function toggleWorkflowNotifyEvent(w: Workflow, ev: 'waiting_human' | 'failed') {
+async function toggleWorkflowNotifyEvent(w: Workflow, ev: 'waiting_human' | 'failed' | 'completed') {
   const cur = new Set(w.notifyPolicy?.events || [])
   if (cur.has(ev)) cur.delete(ev)
   else cur.add(ev)
   await persistWorkflowNotify(w, {
     mode: 'custom',
-    events: ['waiting_human', 'failed'].filter((k) => cur.has(k)),
+    events: (['waiting_human', 'failed', 'completed'] as const).filter((k) => cur.has(k)),
   })
 }
 
@@ -794,9 +794,6 @@ onUnmounted(() => {
               >
                 {{ fmtCompactTokenCount(project.totalTokens) }}
               </div>
-              <div class="mt-0.5 text-[11px] text-txt3">
-                {{ t('pages.projectDetail.tokenUsageHint') }}
-              </div>
               <TokenUsageHoverTip
                 v-if="project.totalTokens != null"
                 tip-id="project-token-detail-tip"
@@ -1042,6 +1039,16 @@ onUnmounted(() => {
                     />
                     <span>{{ t('pages.projectDetail.notify.segFailed') }}</span>
                   </label>
+                  <label class="inline-flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      class="accent-accent"
+                      :checked="wfNotifyHas(w, 'completed')"
+                      :disabled="savingNotifyWfId === w.id"
+                      @change="toggleWorkflowNotifyEvent(w, 'completed')"
+                    />
+                    <span>{{ t('pages.projectDetail.notify.segCompleted') }}</span>
+                  </label>
                 </div>
               </div>
               <button
@@ -1199,6 +1206,16 @@ onUnmounted(() => {
                           @change="toggleWorkflowNotifyEvent(w, 'failed')"
                         />
                         <span>{{ t('pages.projectDetail.notify.segFailed') }}</span>
+                      </label>
+                      <label class="inline-flex items-center gap-1">
+                        <input
+                          type="checkbox"
+                          class="accent-accent"
+                          :checked="wfNotifyHas(w, 'completed')"
+                          :disabled="savingNotifyWfId === w.id"
+                          @change="toggleWorkflowNotifyEvent(w, 'completed')"
+                        />
+                        <span>{{ t('pages.projectDetail.notify.segCompleted') }}</span>
                       </label>
                     </div>
                   </td>
@@ -1565,7 +1582,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div v-else-if="tab === 'audit'" class="flex min-h-[420px] flex-col" data-testid="project-audit-tab">
+      <div v-else-if="tab === 'audit'" class="flex min-h-0 flex-1 flex-col" data-testid="project-audit-tab">
         <ProjectAuditPanel :project-id="projectId" :force-denied="auditForceDenied" />
       </div>
 

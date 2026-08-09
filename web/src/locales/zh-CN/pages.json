@@ -44,6 +44,7 @@
         "compTotal": "合计 {n}",
         "donutCenter": "总量",
         "other": "其他",
+        "workflow": "工作流",
         "pm": "项目管理",
         "value": "数值",
         "share": "占比",
@@ -56,7 +57,6 @@
         "modelCompositionTitle": "模型构成",
         "modelRankTitle": "模型消耗排行",
         "modelRankSub": "Top10 · 其余 → other",
-        "modelRankHint": "「未知」与 other 不同；相关用量按其实际消耗参与排行。",
         "modelOther": "other（其余模型）",
         "filledTag": "含补全",
         "emptyModelCompHint": "暂无按模型构成",
@@ -208,10 +208,9 @@
       "back": "全部项目",
       "notFound": "项目不存在或已删除",
       "tokenUsage": "Token 消耗",
-      "tokenUsageHint": "全部历史 · 含工作流与项目管理（上线后）",
       "tokenTipTitle": "用量细节",
       "tokenTipTotal": "合计",
-      "tokenTipWorkflow": "workflow",
+      "tokenTipWorkflow": "工作流",
       "tokenTipPm": "项目管理",
       "tokenTipAria": "Token 消耗，悬停查看细节",
       "help": "合并规则",
@@ -247,11 +246,12 @@
         "evCompletedLabel": "运行完成",
         "evWaitingHuman": "运行停下来等待你确认或处理时",
         "evFailed": "某个步骤失败、运行无法继续时",
-        "evCompleted": "即将支持，当前不会推送",
+        "evCompleted": "默认关闭，打开后运行成功结束时发 QQ",
         "templatesTitle": "消息文案模板",
         "templatesHint": "按通知时机编写完整 QQ 正文；留空则使用系统默认文案。工作流只能选择通知时机，不能覆盖文案。",
         "segWaitingHuman": "等待人工",
         "segFailed": "运行失败",
+        "segCompleted": "运行完成",
         "placeholders": "占位符",
         "fillDefault": "填入 / 恢复默认文案",
         "clearDefault": "清空（用默认）",
@@ -1106,7 +1106,6 @@
     },
     "agentStudio": {
       "title": "Agent 管理",
-      "subtitle": "配置可复用的 Agent:工作目录(rules / skills / 脚本…)、MCP 服务、环境变量。节点通过 skill_profile 引用,运行时整个工作目录复制进沙箱 {configRoot}。",
       "errorPrefix": "出错:",
       "empty": "暂无 Agent。点击右上角\"新建 Agent\"创建,或后端首启会落盘默认 Agent。",
       "unsaved": "未保存",
@@ -1160,7 +1159,6 @@
         "deleteGroupMessage": "确定删除组「{name}」？子组将提升到其父级；仅属于该组的成员将迁入父组或进入未分组。",
         "groupCycle": "不能将组移入自身或其子孙（会形成环路）",
         "reportingCycle": "不能设置该上级：会形成汇报环路",
-        "dragHint": "拖拽 Agent 调整归属；拖到「未分组」清空全部组归属。右键组或 Agent 可进行组织操作；真删请用顶栏 Agent 管理入口。",
         "removeFromGroup": "移出本组",
         "removeFromGroupToast": "已移出本组并立即保存 · 实体仍在",
         "manage": "管理",
@@ -1282,6 +1280,16 @@
         "regionIntl": "国际站 (trae.ai)",
         "add": "添加环境变量",
         "parseError": "环境变量 JSON 无法解析:"
+      },
+      "envHelp": {
+        "link": "帮助",
+        "title": "环境变量与凭据",
+        "gotIt": "知道了",
+        "chip": {
+          "inject": "注入说明",
+          "git": "Git 凭据",
+          "acp": "ACP 鉴权"
+        }
       },
       "region": {
         "title": "服务站点",
@@ -1477,6 +1485,23 @@
         "import": "导入",
         "exportSuccess": "已下载 {name}.zip",
         "importSuccess": "Agent「{name}」导入成功",
+        "folderExportSuccess": "已下载 {name}.zip",
+        "folderImportSuccess": "文件夹导入成功",
+        "folderSecrets": {
+          "title": "导出文件夹将带走密钥",
+          "body": "导出包内含环境变量/密钥。下载后文件将离开本环境，请仅发送给受信任的接收方。",
+          "confirm": "确认并下载"
+        },
+        "batchConflict": {
+          "title": "检测到同名 Agent",
+          "intro": "以下 Agent 与当前环境同名：",
+          "rename": "全部重命名",
+          "renameDesc": "冲突项将按 name_v2 规则创建为新 Agent，不覆盖已有工作区",
+          "overwrite": "全部覆盖",
+          "overwriteDesc": "清空目标工作区，并移除这些 Agent 在本环境其它组中的归属，仅保留导入包内关系",
+          "cancel": "取消整次导入",
+          "cancelDesc": "中止导入，不创建或修改任何 Agent 或组"
+        },
         "unsavedExport": {
           "title": "无法导出",
           "message": "当前 Agent「{name}」有未保存的修改。导出仅包含已落盘版本，请先保存或放弃修改后再导出。",
@@ -1507,6 +1532,10 @@
           "invalidZip": "ZIP 格式非法，请检查后重试。",
           "missingAgentJson": "ZIP 缺少根目录 agent.json，请检查后重试。",
           "invalidName": "Agent 名称不符合命名规则，请检查 agent.json 或 ZIP 文件名。",
+          "unrecognized": "无法识别该 ZIP，既不是文件夹包也不是单 Agent 导出。",
+          "singleAgentOnGroup": "这是单 Agent ZIP。组右键导入仅接受文件夹包，请改用顶栏「导入」。",
+          "folderTooLarge": "文件夹包超过 64MiB 上限。",
+          "rolledBack": "导入失败，已整次回滚。",
           "ok": "知道了"
         }
       },
@@ -1937,6 +1966,7 @@
       "upstreamRetry": "重试",
       "upstreamViewStructured": "结构化",
       "upstreamViewRaw": "原始 JSON",
+      "upstreamBarHint": "本 run 已有澄清需求文档，可对照审阅当前主产物",
       "primaryBadge": "主产物",
       "readonlyBadge": "只读",
       "readonlyHint": "非文本产物 · 只读引用",
@@ -2073,6 +2103,9 @@
       "artifactsMcp": "产物 · 经 artifact-store MCP 写入",
       "output": "输出",
       "workflowComplete": "工作流完成。",
+      "noPreviewCardsTitle": "本次没有可预览的结果卡",
+      "noPreviewCardsBody": "运行已成功完成。最终结果来源为空，或本次未执行输出节点。这不是加载失败。",
+      "noPreviewCardsHint": "可从同页 Artifacts Tab 查看全量原始产物。",
       "outputCards": {
         "sourceFailedTitle": "来源节点失败 / 无产物",
         "invalidSource": "无效或无法解析的来源引用"

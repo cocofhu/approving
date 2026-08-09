@@ -29,8 +29,10 @@ const toast = useToast()
 const enabled = ref(true)
 const waitingHuman = ref(true)
 const failed = ref(true)
+const completed = ref(false)
 const waitingHumanTemplate = ref('')
 const failedTemplate = ref('')
+const completedTemplate = ref('')
 const templateKind = ref<RunNotifyKind>('waiting_human')
 const hasChannel = ref(false)
 const loadingChannel = ref(true)
@@ -46,6 +48,7 @@ function policyFromProject(p: Project): ProjectNotifyPolicy {
       : ['waiting_human', 'failed'],
     waitingHumanTemplate: raw?.waitingHumanTemplate ?? '',
     failedTemplate: raw?.failedTemplate ?? '',
+    completedTemplate: raw?.completedTemplate ?? '',
   }
 }
 
@@ -55,8 +58,10 @@ function syncFromProject() {
   const ev = new Set(p.defaultEvents || [])
   waitingHuman.value = ev.has('waiting_human')
   failed.value = ev.has('failed')
+  completed.value = ev.has('completed')
   waitingHumanTemplate.value = p.waitingHumanTemplate || ''
   failedTemplate.value = p.failedTemplate || ''
+  completedTemplate.value = p.completedTemplate || ''
 }
 
 async function loadChannel() {
@@ -94,16 +99,14 @@ const statusLabel = computed(() => {
 
 const currentTemplate = computed({
   get() {
-    return templateKind.value === 'waiting_human'
-      ? waitingHumanTemplate.value
-      : failedTemplate.value
+    if (templateKind.value === 'waiting_human') return waitingHumanTemplate.value
+    if (templateKind.value === 'completed') return completedTemplate.value
+    return failedTemplate.value
   },
   set(v: string) {
-    if (templateKind.value === 'waiting_human') {
-      waitingHumanTemplate.value = v
-    } else {
-      failedTemplate.value = v
-    }
+    if (templateKind.value === 'waiting_human') waitingHumanTemplate.value = v
+    else if (templateKind.value === 'completed') completedTemplate.value = v
+    else failedTemplate.value = v
   },
 })
 
@@ -126,12 +129,14 @@ async function save() {
     const defaultEvents: string[] = []
     if (waitingHuman.value) defaultEvents.push('waiting_human')
     if (failed.value) defaultEvents.push('failed')
-    // Always round-trip both templates so enabled/events-only saves cannot wipe them.
+    if (completed.value) defaultEvents.push('completed')
+    // Always round-trip templates so enabled/events-only saves cannot wipe them.
     const notifyPolicy: ProjectNotifyPolicy = {
       enabled: enabled.value,
       defaultEvents,
       waitingHumanTemplate: waitingHumanTemplate.value,
       failedTemplate: failedTemplate.value,
+      completedTemplate: completedTemplate.value,
     }
     const updated = await api.updateProject(props.projectId, { notifyPolicy })
     emit('updated', updated)
@@ -261,25 +266,22 @@ function goChannelSettings() {
               }}</span>
             </span>
           </label>
-          <div
-            class="flex items-start gap-3 opacity-50"
-            data-testid="notify-ev-completed-disabled"
-          >
+          <label class="flex items-start gap-3">
             <AppSwitch
+              v-model="completed"
               class="mt-0.5"
-              :model-value="false"
-              disabled
+              data-testid="notify-ev-completed"
               :aria-label="t('pages.projectDetail.notify.evCompletedLabel')"
             />
             <span>
-              <span class="block text-[13px] font-medium text-txt3">{{
+              <span class="block text-[13px] font-medium text-txt">{{
                 t('pages.projectDetail.notify.evCompletedLabel')
               }}</span>
               <span class="mt-0.5 block text-[12px] text-txt3">{{
                 t('pages.projectDetail.notify.evCompleted')
               }}</span>
             </span>
-          </div>
+          </label>
         </div>
       </div>
     </div>
@@ -320,6 +322,19 @@ function goChannelSettings() {
           @click="templateKind = 'failed'"
         >
           {{ t('pages.projectDetail.notify.segFailed') }}
+        </button>
+        <button
+          type="button"
+          class="flex-1 rounded-md border px-3 py-2 text-[12px] transition"
+          :class="
+            templateKind === 'completed'
+              ? 'border-accent/45 bg-accent-dim text-accent-2'
+              : 'border-line bg-elevated text-txt3 hover:text-txt'
+          "
+          data-testid="notify-tpl-seg-completed"
+          @click="templateKind = 'completed'"
+        >
+          {{ t('pages.projectDetail.notify.segCompleted') }}
         </button>
       </div>
 

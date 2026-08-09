@@ -299,6 +299,15 @@
       "addImage": "添加附件",
       "placeholderTextOnly": "请输入…",
       "placeholderWithImages": "可粘贴附件（≤50 MiB）…"
+    },
+    "chatImage": {
+      "clickToEnlarge": "点击放大",
+      "previewTitle": "图片预览 · {label}",
+      "previewUnavailable": "不可预览",
+      "imageLoadFailed": "图片加载失败",
+      "previewAria": "预览{label}",
+      "imageFallback": "图片",
+      "imageFallbackN": "图片 {n}"
     }
   }
 }

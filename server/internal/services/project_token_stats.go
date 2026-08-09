@@ -88,9 +88,12 @@ type TokenStatsModel struct {
 	ModelKey string `json:"modelKey"`
 	Name     string `json:"name"`
 	Total    int64  `json:"total"`
-	// Unknown marks the「未知/未分桶」bucket (≠ other).
+	// Unknown marks the「未知/未分桶」bucket. It is a normal model bucket:
+	// it appears in ranking only when its total places it in Top10; otherwise
+	// its usage is folded into other. other.Unknown must stay false.
 	Unknown bool `json:"unknown,omitempty"`
-	// Other marks Top10 remainder of identified models (≠ unknown).
+	// Other marks Top10 remainder (all buckets outside Top10, including unknown
+	// if it did not qualify). other is not unknown.
 	Other bool `json:"other,omitempty"`
 	// Filled is true when the bucket includes ACP_BRIDGE_MODEL backfill.
 	Filled bool `json:"filled,omitempty"`
@@ -110,7 +113,9 @@ type TokenStatsResult struct {
 	Workflows   []TokenStatsWorkflow  `json:"workflows"`
 	// ModelComposition is per-model four-component totals (window scope).
 	ModelComposition []TokenStatsModel `json:"modelComposition"`
-	// ModelRanking is Top10 models by total + optional other (unknown independent).
+	// ModelRanking is Top10 models by total + optional other remainder.
+	// Unknown is a normal bucket: shown as「未知/未分桶」only when it ranks
+	// in Top10; otherwise its total is included in other.
 	ModelRanking []TokenStatsModel `json:"modelRanking"`
 }
 
@@ -435,7 +440,9 @@ type tokenModelAgg struct {
 }
 
 // buildModelStats builds model composition (all buckets desc by total) and
-// Top10 + other ranking. 「未知/未分桶」is independent and never folded into other.
+// Top10 + other ranking. 「未知/未分桶」is a normal bucket: it competes by
+// total, appears in ranking only when it ranks in Top10, and is otherwise
+// folded into other. other.Unknown is always false.
 func buildModelStats(totals map[string]*tokenModelAgg) (composition []TokenStatsModel, ranking []TokenStatsModel) {
 	type item struct {
 		key    string

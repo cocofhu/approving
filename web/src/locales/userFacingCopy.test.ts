@@ -52,15 +52,42 @@ describe('user-facing copy remediation keys', () => {
   it('token empty-state drops Usage/分桶/bridge/回填 jargon', () => {
     expect(zh.global.t('pages.board.tokenStats.emptyTrendHint')).not.toMatch(/Usage|分桶|bridge|回填/)
     expect(zh.global.t('pages.board.tokenStats.emptyRankHint')).not.toMatch(/Usage|分桶|bridge|回填/)
-    expect(zh.global.t('pages.board.tokenStats.modelRankHint')).not.toMatch(/分桶|bridge|回填/)
     expect(zh.global.t('pages.board.tokenStats.filledTag')).not.toMatch(/回填/)
+  })
+
+  it('model rank card copy has no unknown≠other hint (g1.3)', () => {
+    expect(zh.global.te('pages.board.tokenStats.modelRankHint')).toBe(false)
+    expect(en.global.te('pages.board.tokenStats.modelRankHint')).toBe(false)
+
+    const zhRank = [
+      zh.global.t('pages.board.tokenStats.modelRankTitle'),
+      zh.global.t('pages.board.tokenStats.modelRankSub'),
+      zh.global.t('pages.board.tokenStats.modelOther'),
+      zh.global.t('pages.board.tokenStats.emptyModelRankHint'),
+    ].join('\n')
+    const enRank = [
+      en.global.t('pages.board.tokenStats.modelRankTitle'),
+      en.global.t('pages.board.tokenStats.modelRankSub'),
+      en.global.t('pages.board.tokenStats.modelOther'),
+      en.global.t('pages.board.tokenStats.emptyModelRankHint'),
+    ].join('\n')
+
+    expect(zhRank).toContain('模型消耗排行')
+    expect(zhRank).toContain('Top10 · 其余 → other')
+    expect(zhRank).toContain('other（其余模型）')
+    expect(zhRank).not.toMatch(/未知\s*[≠不等].*other|与 other 不同|不是 other/)
+    expect(enRank).toContain('Model usage ranking')
+    expect(enRank).toContain('Top10 · rest → other')
+    expect(enRank).toContain('other (remaining models)')
+    expect(enRank).not.toMatch(/Unknown is not the same as other/i)
+    expect(enRank).not.toMatch(/Unknown.*≠.*other/i)
   })
 
   it('user-facing product naming uses 项目管理 / Project Management, not PM', () => {
     const zhKeys = [
       'common.runTrigger.pmMcp',
-      'pages.projectDetail.tokenUsageHint',
       'pages.projectDetail.tokenTipPm',
+      'pages.board.tokenStats.pm',
       'pages.projectDetail.pm.settingsHint',
       'pages.projectDetail.pm.enabledMcps',
       'pages.agentStudio.dialogs.renameCascadeHint',
@@ -82,8 +109,8 @@ describe('user-facing copy remediation keys', () => {
 
     const enKeys = [
       'common.runTrigger.pmMcp',
-      'pages.projectDetail.tokenUsageHint',
       'pages.projectDetail.tokenTipPm',
+      'pages.board.tokenStats.pm',
       'pages.projectDetail.pm.settingsHint',
       'pages.projectDetail.pm.enabledMcps',
       'pages.projectDetail.pm.gateAutoVar',
@@ -107,7 +134,29 @@ describe('user-facing copy remediation keys', () => {
 
     expect(zh.global.t('common.runTrigger.pmMcp')).toBe('项目管理 MCP')
     expect(en.global.t('common.runTrigger.pmMcp')).toBe('Project Management MCP')
-    expect(zh.global.t('pages.projectDetail.tokenUsageHint')).toContain('含工作流与项目管理')
+    expect(zh.global.t('pages.projectDetail.tokenTipWorkflow')).toBe('工作流')
+    expect(en.global.t('pages.projectDetail.tokenTipWorkflow')).toBe('Workflow')
+
+    // Token source visible copy: 工作流 / Workflow + 项目管理 / Project Management (exact Title Case)
+    expect(zh.global.t('pages.board.tokenStats.workflow')).toBe('工作流')
+    expect(zh.global.t('pages.projectDetail.tokenTipWorkflow')).toBe('工作流')
+    expect(zh.global.t('pages.board.tokenStats.pm')).toBe('项目管理')
+    expect(en.global.t('pages.board.tokenStats.workflow')).toBe('Workflow')
+    expect(en.global.t('pages.projectDetail.tokenTipWorkflow')).toBe('Workflow')
+    expect(en.global.t('pages.board.tokenStats.pm')).toBe('Project Management')
+    // Do not verify Title Case with case-insensitive /workflow/ substring
+    expect(en.global.t('pages.board.tokenStats.workflow')).not.toBe('workflow')
+    expect(en.global.t('pages.projectDetail.tokenTipWorkflow')).not.toBe('workflow')
+
+    const tokenSourceNoPmKeys = [
+      'pages.board.tokenStats.workflow',
+      'pages.projectDetail.tokenTipWorkflow',
+      'pages.board.tokenStats.pm',
+    ] as const
+    for (const key of tokenSourceNoPmKeys) {
+      expect(zh.global.t(key), key).not.toMatch(/(?<![A-Za-z0-9_-])PM(?![A-Za-z0-9_-])/)
+      expect(en.global.t(key), key).not.toMatch(/(?<![A-Za-z0-9_-])PM(?![A-Za-z0-9_-])/)
+    }
 
     // MCP server ids stay as protocol names
     expect(zh.global.t('mcp.pmProgress.name')).toBe('pm-progress')

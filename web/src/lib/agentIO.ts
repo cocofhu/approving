@@ -59,17 +59,56 @@ export function suggestRename(name: string, existing: string[]): string {
   return candidate
 }
 
-/** Read agent.json name field from a ZIP file (client-side peek for conflict UI). */
-export async function peekAgentZipName(file: File): Promise<{ name?: string; error?: string }> {
+export type ZipPeek =
+  | { kind: 'org-folder'; agentNames: string[]; rootGroupName?: string }
+  | { kind: 'agent'; name?: string }
+  | { kind: 'unknown'; error: string }
+
+/** Peek a ZIP: folder.json (org-folder) first, then root agent.json. */
+export async function peekZipPackage(file: File): Promise<ZipPeek> {
   try {
     const buf = new Uint8Array(await file.arrayBuffer())
-    const text = await readZipTextEntry(buf, 'agent.json')
-    if (text == null) return { error: 'missing agent.json' }
-    const json = JSON.parse(text) as { name?: string }
-    return { name: typeof json.name === 'string' ? json.name.trim() : undefined }
+    const folderText = await readZipTextEntry(buf, 'folder.json')
+    if (folderText != null) {
+      try {
+        const json = JSON.parse(folderText) as {
+          kind?: string
+          agentNames?: unknown
+          agents?: Record<string, unknown>
+          groups?: { id?: string; name?: string }[]
+          rootGroupId?: string
+        }
+        if (json?.kind === 'org-folder') {
+          let names: string[] = []
+          if (Array.isArray(json.agentNames)) {
+            names = json.agentNames.map((n) => String(n).trim()).filter(Boolean)
+          } else if (json.agents && typeof json.agents === 'object') {
+            names = Object.keys(json.agents)
+          }
+          const rootGroupName = json.groups?.find((g) => g.id === json.rootGroupId)?.name
+          return { kind: 'org-folder', agentNames: names, rootGroupName }
+        }
+      } catch {
+        return { kind: 'unknown', error: 'invalid zip' }
+      }
+    }
+    const agentText = await readZipTextEntry(buf, 'agent.json')
+    if (agentText != null) {
+      const json = JSON.parse(agentText) as { name?: string }
+      return { kind: 'agent', name: typeof json.name === 'string' ? json.name.trim() : undefined }
+    }
+    return { kind: 'unknown', error: 'unrecognized' }
   } catch {
-    return { error: 'invalid zip' }
+    return { kind: 'unknown', error: 'invalid zip' }
   }
+}
+
+/** Read agent.json name field from a ZIP file (client-side peek for conflict UI). */
+export async function peekAgentZipName(file: File): Promise<{ name?: string; error?: string }> {
+  const peek = await peekZipPackage(file)
+  if (peek.kind === 'agent') return { name: peek.name }
+  if (peek.kind === 'unknown' && peek.error === 'invalid zip') return { error: 'invalid zip' }
+  return { error: 'missing agent.json' }
 }
 
 function readUint16LE(data: Uint8Array, off: number): number {

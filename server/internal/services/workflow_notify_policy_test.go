@@ -76,3 +76,19 @@ func TestFormatRunDeepLinkRelativeWhenBaseEmpty(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestFormatCompletedRunDeepLink(t *testing.T) {
+	got := FormatCompletedRunDeepLinkForTest("https://app.example", "run-1", "output_end")
+	want := "https://app.example/runs/run-1?node=output_end&tab=output"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+	noNode := FormatCompletedRunDeepLinkForTest("", "run-2", models.NotifyCompletedSentinelNodeID)
+	if noNode != "/runs/run-2?tab=output" {
+		t.Fatalf("sentinel deep link: %q", noNode)
+	}
+	emptyNode := FormatCompletedRunDeepLinkForTest("", "run-3", "")
+	if emptyNode != "/runs/run-3?tab=output" {
+		t.Fatalf("empty node deep link: %q", emptyNode)
+	}
+}
