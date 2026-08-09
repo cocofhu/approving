@@ -126,6 +126,20 @@ function actionHandles(n: WFNode) {
     .filter((a) => a.id)
 }
 
+function isPositiveGateAction(id: string): boolean {
+  return id === 'approve' || id === 'pass'
+}
+
+// human_gate actions render like review/test structured exits (ok/bad chips +
+// right-side handles). Routing still comes from config.actions[].goto.
+function humanGateExitHandles(n: WFNode) {
+  return actionHandles(n).map((a) => ({
+    id: a.id,
+    label: a.label || a.id,
+    tone: (isPositiveGateAction(a.id) ? 'ok' : 'bad') as 'ok' | 'bad',
+  }))
+}
+
 // test/review expose fixed pass/fail handles for structured gate routing.
 function structuredExitHandles(n: WFNode) {
   if (n.type === 'test') {
@@ -162,11 +176,13 @@ const flowNodes = computed(() => {
     const position = resolvePosition(n)
     const status = props.statusMap?.[n.id]
     const branches = n.type === 'branch' ? branchHandles(n) : undefined
-    const gateActions = n.type === 'human_gate' ? actionHandles(n) : undefined
     const appPreviewReview = n.type === 'app_preview'
-    const humanGateReview = n.type === 'human_gate'
     const structuredExits =
-      n.type === 'test' || n.type === 'review' ? structuredExitHandles(n) : undefined
+      n.type === 'test' || n.type === 'review'
+        ? structuredExitHandles(n)
+        : n.type === 'human_gate'
+          ? humanGateExitHandles(n)
+          : undefined
     const selected = selectedId === n.id
     const fingerprint = flowFingerprint({
       type: n.type,
@@ -176,9 +192,7 @@ const flowNodes = computed(() => {
       position,
       draggable: !modeRun,
       branches,
-      gateActions,
       appPreviewReview,
-      humanGateReview,
       structuredExits,
     })
     return reuseFlowElement(flowNodeCache, n.id, fingerprint, selected, () => ({
@@ -193,9 +207,7 @@ const flowNodes = computed(() => {
         status,
         checkpoint: n.checkpoint,
         branches,
-        gateActions,
         appPreviewReview,
-        humanGateReview,
         structuredExits,
       },
     }))
@@ -307,9 +319,10 @@ const branchEdges = computed(() => {
 // human_gate actions route by their `config.actions[].goto` target (see engine
 // ResumeGate), not by real edges — mirror the branch approach and derive
 // display-only edges from each action's goto. Prefixed `ga:` so handlers can
-// tell them apart from real edges.
+// tell them apart from real edges. Stroke tones match review/test exits.
 const gateEdges = computed(() => {
   const ids = new Set(props.nodes.map((n) => n.id))
+  const strokes = edgeStrokes.value
   const out: any[] = []
   for (const n of props.nodes) {
     if (n.type !== 'human_gate') continue
@@ -319,6 +332,7 @@ const gateEdges = computed(() => {
       const target = a?.goto
       if (!aid || !target || !ids.has(target)) continue
       const label = String(a?.label || aid)
+      const isOk = isPositiveGateAction(aid)
       out.push({
         id: `ga:${n.id}:${aid}`,
         source: n.id,
@@ -326,9 +340,9 @@ const gateEdges = computed(() => {
         target,
         type: 'condition',
         selectable: false,
-        data: { label, tone: 'default', shape: 'step' },
+        data: { label, tone: isOk ? 'ok' : 'err', shape: 'step' },
         markerEnd: MarkerType.ArrowClosed,
-        style: { stroke: BRANCH_COLOR, strokeWidth: 1.6, strokeDasharray: '5 4' },
+        style: { stroke: isOk ? strokes.ok : strokes.err, strokeWidth: 1.6 },
       })
     }
   }
