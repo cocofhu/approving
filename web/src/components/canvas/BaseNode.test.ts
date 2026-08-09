@@ -73,23 +73,23 @@ describe('BaseNode', () => {
     wrapper.unmount()
   })
 
-  it('human_gate review: Demo footnote instead of action Handle rows', () => {
+  it('human_gate: dual structured exits (approve / revise) like review', () => {
     const wrapper = mountNode({
       type: 'human_gate',
-      label: '人工门禁',
-      humanGateReview: true,
-      gateActions: [
-        { id: 'approve', label: '批准' },
-        { id: 'revise', label: '退回修改' },
+      label: '人工确认',
+      structuredExits: [
+        { id: 'approve', label: '批准', tone: 'ok' },
+        { id: 'revise', label: '退回修改', tone: 'bad' },
       ],
       status: undefined,
     })
     expect(wrapper.text()).toContain('人工审批')
-    expect(wrapper.text()).toContain('确认并流转 · 待审批')
-    expect(wrapper.text()).not.toContain('批准')
-    expect(wrapper.text()).not.toContain('退回修改')
-    expect(wrapper.text()).not.toContain('未设 goto')
-    expect(wrapper.find('[data-testid="human-gate-body"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('批准')
+    expect(wrapper.text()).toContain('退回修改')
+    expect(wrapper.text()).toContain('未设 goto')
+    expect(wrapper.find('[data-testid="human-gate-body"]').exists()).toBe(false)
+    // target + two action sources + bottom fallback source
+    expect(wrapper.findAll('[data-testid="handle"]').length).toBeGreaterThanOrEqual(4)
     wrapper.unmount()
   })
 })
