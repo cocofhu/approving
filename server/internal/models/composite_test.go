@@ -57,3 +57,30 @@ func TestExtractImages(t *testing.T) {
 		t.Error("string should yield nil images")
 	}
 }
+
+func TestAsCompositeTextRefAndSizeBytes(t *testing.T) {
+	comp := map[string]any{
+		"text": "t",
+		"images": []any{
+			map[string]any{
+				"ref": "blob:abc", "mimeType": "image/png", "name": "a.png",
+				"sizeBytes": float64(12),
+			},
+			map[string]any{"data": "", "mimeType": "image/jpeg"}, // skipped: no data/ref
+		},
+	}
+	ct := AsCompositeText(comp)
+	if ct == nil || len(ct.Images) != 1 {
+		t.Fatalf("AsCompositeText = %#v", ct)
+	}
+	if ct.Images[0].Ref != "blob:abc" || ct.Images[0].SizeBytes != 12 || ct.Images[0].Name != "a.png" {
+		t.Fatalf("image = %+v", ct.Images[0])
+	}
+	if IsBlankVar(comp) {
+		t.Fatal("ref-only composite should not be blank")
+	}
+	typed := CompositeText{Text: "x", Images: []PromptImage{{Ref: "blob:y", MimeType: "image/png"}}}
+	if got := ExtractImages(typed); len(got) != 1 || got[0].Ref != "blob:y" {
+		t.Fatalf("ExtractImages typed = %+v", got)
+	}
+}

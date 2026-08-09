@@ -1155,8 +1155,8 @@ const canRecordIssue = computed(
       !!pickedElementImage.value?.data),
 )
 
-function collectUnifiedIssueImages(): { data: string; mimeType: string }[] {
-  const images: { data: string; mimeType: string }[] = []
+function collectUnifiedIssueImages(): ClarifyImage[] {
+  const images: ClarifyImage[] = []
   if (pickedElementImage.value?.data) {
     images.push({
       data: pickedElementImage.value.data,
@@ -1164,7 +1164,7 @@ function collectUnifiedIssueImages(): { data: string; mimeType: string }[] {
     })
   }
   for (const im of reactImages.value) {
-    images.push({ data: im.data, mimeType: im.mimeType })
+    if (im.data) images.push({ data: im.data, mimeType: im.mimeType, name: im.name })
   }
   return images
 }
@@ -1245,7 +1245,7 @@ async function sendReactRevise() {
       props.run.id,
       props.gate.nodeId,
       body,
-      reactImages.value.map((im) => ({ data: im.data, mimeType: im.mimeType })),
+      reactImages.value,
       reactAnnotations.value.slice(),
     )
     clearUnifiedDraft()

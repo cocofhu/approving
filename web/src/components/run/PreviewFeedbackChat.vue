@@ -136,8 +136,8 @@ function toggleHistory() {
   if (historyExpanded.value) nextTick(() => scrollToBottom())
 }
 
-function collectImages(): { data: string; mimeType: string }[] {
-  const images: { data: string; mimeType: string }[] = []
+function collectImages(): ClarifyImage[] {
+  const images: ClarifyImage[] = []
   if (props.elementImage?.data) {
     images.push({
       data: props.elementImage.data,
@@ -145,7 +145,7 @@ function collectImages(): { data: string; mimeType: string }[] {
     })
   }
   for (const im of attachments.value) {
-    images.push({ data: im.data, mimeType: im.mimeType })
+    if (im.data) images.push({ data: im.data, mimeType: im.mimeType, name: im.name })
   }
   return images
 }

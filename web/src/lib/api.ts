@@ -140,7 +140,7 @@ export interface PreviewIssue {
   body: string
   selector?: string
   port?: number
-  images?: { data: string; mimeType: string }[]
+  images?: ClarifyImage[]
   status: string
   createdAt: string
 }
@@ -678,7 +678,7 @@ export const api = {
     runId: string,
     nodeId: string,
     text: string,
-    images: { data: string; mimeType: string }[] = [],
+    images: ClarifyImage[] = [],
     force = false,
     annotations: ReactAnnotation[] = [],
   ) =>
@@ -696,7 +696,7 @@ export const api = {
     runId: string,
     nodeId: string,
     text: string,
-    images: { data: string; mimeType: string }[] = [],
+    images: ClarifyImage[] = [],
     annotations: ReactAnnotation[] = [],
   ) =>
     req<{ status: string; waiting?: number; producerNodeId?: string }>(
@@ -992,7 +992,7 @@ export const api = {
     body: string,
     selector = '',
     port = 0,
-    images: { data: string; mimeType: string }[] = [],
+    images: ClarifyImage[] = [],
   ) =>
     req<PreviewIssue>(`/runs/${runId}/nodes/${nodeId}/preview-issues`, {
       method: 'POST',

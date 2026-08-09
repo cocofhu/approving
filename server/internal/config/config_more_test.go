@@ -77,12 +77,15 @@ func TestApplyAllEnvOverrides(t *testing.T) {
 	t.Setenv("APPROVING_SANDBOX_MAX_ATTEMPTS", "4")
 	t.Setenv("APPROVING_SANDBOX_RETRY_BACKOFF_SEC", "3")
 	t.Setenv("APPROVING_SANDBOX_WORK_DIR", "/wd")
+	t.Setenv("APPROVING_STORAGE_DRIVER", "local")
+	t.Setenv("APPROVING_BLOBS_ROOT", "/blobs")
 	applyEnvOverrides(c)
 	if c.Server.MCPAdvertise != "http://adv" || c.Database.Path != "/db" ||
 		c.Engine.ExecProvider != "cursor" || c.Engine.MaxConcurrentRuns != 7 ||
 		c.Engine.ProfilesRoot != "/pr" || c.Sandbox.CursorAuthPath != "/auth" ||
 		c.Sandbox.AgentChatTimeoutSeconds != 11 || c.Sandbox.ChatIdleTimeoutSeconds != 12 ||
-		c.Sandbox.MaxAttempts != 4 || c.Sandbox.RetryBackoffSeconds != 3 || c.Sandbox.WorkDir != "/wd" {
+		c.Sandbox.MaxAttempts != 4 || c.Sandbox.RetryBackoffSeconds != 3 || c.Sandbox.WorkDir != "/wd" ||
+		c.Storage.Driver != "local" || c.Storage.BlobsRoot != "/blobs" {
 		t.Fatalf("env overrides not fully applied: %+v", c)
 	}
 }
