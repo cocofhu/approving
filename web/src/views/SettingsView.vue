@@ -1,15 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import {
-  api,
-  type DashboardStats,
-  type LiveProbeReport,
-  type LiveStatus,
-  type SandboxView,
-  type SettingItem,
-} from '@/lib/api'
+import { api, type DashboardStats, type SandboxView, type SettingItem } from '@/lib/api'
 import { useAuth } from '@/lib/useAuth'
 import AppButton from '@/components/ui/AppButton.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -43,55 +36,9 @@ const groups = computed(() => [
     icon: 'flask',
     keys: ['max_test_sandboxes'],
   },
-  {
-    id: 'live',
-    title: t('pages.settings.groups.live.title'),
-    desc: t('pages.settings.groups.live.desc'),
-    icon: 'chat',
-    keys: [
-      'live_base_url',
-      'live_model',
-      'live_api_key',
-      'live_timeout_seconds',
-      'live_transcript_window',
-      'live_ledger_limit',
-      'live_recent_terminal_hours',
-      'live_max_concurrent_work',
-      'live_tool_loop_limit',
-      'live_max_tokens',
-      'live_temperature',
-      'run_heartbeat_minutes',
-      'live_system_prompt_body',
-      'live_synthesis_prompt_body',
-    ],
-  },
 ])
 
-// The prompt bodies get their own row layout: a value that runs to dozens of
-// lines cannot sit in the label/input row the other knobs share.
-const TEXT_KINDS = new Set(['text'])
-
-const SETTING_UNIT_KEYS: Record<string, string> = {
-  run_sandbox_ttl_minutes: 'common.format.minutes',
-  test_sandbox_ttl_minutes: 'common.format.minutes',
-  live_timeout_seconds: 'common.format.seconds',
-  live_transcript_window: 'common.format.messages',
-  live_ledger_limit: 'common.format.messages',
-  live_recent_terminal_hours: 'common.format.hours',
-  live_max_concurrent_work: 'common.format.units',
-  live_tool_loop_limit: 'common.format.times',
-  live_max_tokens: 'common.format.tokens',
-  run_heartbeat_minutes: 'common.format.minutes',
-}
-
-// A preview that is dozens of lines long turns the settings page into a wall of
-// prompt. Enough to recognise the text is enough.
-const PREVIEW_LIMIT = 400
-
-function previewOf(item: SettingItem): string {
-  const text = (item.preview ?? '').trim()
-  return text.length > PREVIEW_LIMIT ? `${text.slice(0, PREVIEW_LIMIT)}…` : text
-}
+const SETTING_KEYS_WITH_UNIT = new Set(['run_sandbox_ttl_minutes', 'test_sandbox_ttl_minutes'])
 
 function settingDescription(key: string): string {
   return t(`pages.settings.settings.${key}`)
@@ -101,9 +48,8 @@ function settingLabel(key: string): string {
   return t(`pages.settings.labels.${key}`)
 }
 
-function settingUnit(key: string): string {
-  const unitKey = SETTING_UNIT_KEYS[key]
-  return unitKey ? t(unitKey) : ''
+function settingHasUnit(key: string): boolean {
+  return SETTING_KEYS_WITH_UNIT.has(key)
 }
 
 function sourceLabelOf(source: string): string {
@@ -111,7 +57,7 @@ function sourceLabelOf(source: string): string {
 }
 
 const items = ref<SettingItem[]>([])
-const form = reactive<Record<string, number | string>>({})
+const form = reactive<Record<string, number>>({})
 const sandboxes = ref<SandboxView[]>([])
 const dashboard = ref<DashboardStats | null>(null)
 const loading = ref(true)
@@ -128,82 +74,7 @@ function itemOf(key: string): SettingItem | undefined {
 
 function hydrate(list: SettingItem[]) {
   items.value = list
-  for (const it of list) {
-    // A secret reads back as the mask, which must never become the field's
-    // value: submitting it would be indistinguishable from setting the key to
-    // literal asterisks. The field starts empty and the placeholder says
-    // whether one is stored.
-    form[it.key] = it.kind === 'secret' ? '' : it.value
-  }
-}
-
-// liveConfigured mirrors the server rule: the layer is on once the endpoint
-// and model are set. The key is excluded because endpoints on the local
-// network take no auth.
-const liveConfigured = computed(() =>
-  ['live_base_url', 'live_model'].every((key) => {
-    const it = itemOf(key)
-    return !!it && String(it.value ?? '').trim() !== ''
-  }),
-)
-
-const probe = ref<LiveProbeReport | null>(null)
-const probing = ref(false)
-const probeError = ref('')
-const liveStatus = ref<LiveStatus | null>(null)
-
-function probeCheckLabel(name: string): string {
-  const known: Record<string, string> = {
-    reachable: 'pages.settings.liveTest.checks.reachable',
-    tool_calls: 'pages.settings.liveTest.checks.toolCalls',
-  }
-  return known[name] ? t(known[name]) : name
-}
-
-// The probe is sent the same patch save() would send, so what is tested is what
-// is on screen. Editing the form clears a stale result rather than leaving a
-// pass sitting next to a changed address.
-function livePatch(): Record<string, number | string> {
-  const patch: Record<string, number | string> = {}
-  for (const key of ['live_base_url', 'live_model', 'live_api_key', 'live_timeout_seconds']) {
-    const it = itemOf(key)
-    if (!it || it.locked) continue
-    if (it.kind === 'int') {
-      patch[key] = Number(form[key])
-      continue
-    }
-    patch[key] = String(form[key] ?? '').trim()
-  }
-  return patch
-}
-
-async function runLiveTest() {
-  probing.value = true
-  probeError.value = ''
-  probe.value = null
-  try {
-    probe.value = await api.testLiveEndpoint(livePatch())
-  } catch (e: any) {
-    probeError.value = e?.message || t('pages.settings.liveTest.failed')
-  } finally {
-    probing.value = false
-    loadLiveStatus()
-  }
-}
-
-async function loadLiveStatus() {
-  try {
-    liveStatus.value = await api.liveStatus()
-  } catch {
-    // Runtime stats are supplementary; a failure here must not disturb the page.
-    liveStatus.value = null
-  }
-}
-
-function secretPlaceholder(key: string): string {
-  const it = itemOf(key)
-  const stored = !!it && String(it.value ?? '').trim() !== ''
-  return t(stored ? 'pages.settings.liveSecretStored' : 'pages.settings.liveSecretEmpty')
+  for (const it of list) form[it.key] = it.value
 }
 
 function aggregateUsage(list: SandboxView[]) {
@@ -275,23 +146,13 @@ async function save() {
   saving.value = true
   error.value = ''
   try {
-    const patch: Record<string, number | string> = {}
+    const patch: Record<string, number> = {}
     for (const it of items.value) {
-      if (it.locked) continue
-      if (it.kind === 'int') {
-        patch[it.key] = Number(form[it.key])
-        continue
-      }
-      const v = String(form[it.key] ?? '').trim()
-      // A blank secret means "keep the stored one", which the server honours,
-      // so there is nothing to send.
-      if (it.kind === 'secret' && v === '') continue
-      patch[it.key] = v
+      if (!it.locked) patch[it.key] = Number(form[it.key])
     }
     const res = await api.updateSettings(patch)
     hydrate(res.items)
     savedAt.value = Date.now()
-    loadLiveStatus()
   } catch (e: any) {
     error.value = e?.message || t('pages.settings.saveFailed')
   } finally {
@@ -299,30 +160,10 @@ async function save() {
   }
 }
 
-const dirty = () =>
-  items.value.some((it) => {
-    if (it.locked) return false
-    if (it.kind === 'int') return Number(form[it.key]) !== it.value
-    const v = String(form[it.key] ?? '').trim()
-    // A secret field is only dirty once something is typed into it; empty is
-    // the resting state, not a cleared value.
-    if (it.kind === 'secret') return v !== ''
-    return v !== String(it.value ?? '')
-  })
-
-// A result that outlives the values it was measured against is worse than no
-// result: it reads as a pass for whatever is on screen now.
-watch(
-  () => ['live_base_url', 'live_model', 'live_api_key', 'live_timeout_seconds'].map((k) => form[k]).join('\u0000'),
-  () => {
-    probe.value = null
-    probeError.value = ''
-  },
-)
+const dirty = () => items.value.some((it) => !it.locked && Number(form[it.key]) !== it.value)
 
 onMounted(() => {
   loadSettings()
-  loadLiveStatus()
   pollSandboxes()
   poll = window.setInterval(pollSandboxes, 5000)
 })
@@ -486,172 +327,20 @@ onBeforeUnmount(() => {
                   {{ settingDescription(key) }}
                 </p>
               </div>
-              <div v-if="!TEXT_KINDS.has(itemOf(key)!.kind)" class="flex shrink-0 items-center gap-2">
+              <div class="flex shrink-0 items-center gap-2">
                 <input
-                  v-if="itemOf(key)!.kind === 'int'"
                   v-model.number="form[key]"
                   type="number"
                   :min="itemOf(key)!.min"
                   :disabled="itemOf(key)!.locked || saving"
                   class="input w-[88px] text-right"
                 />
-                <input
-                  v-else-if="itemOf(key)!.kind === 'float'"
-                  v-model="form[key]"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  :placeholder="t('pages.settings.blankUsesEndpointDefault')"
-                  :disabled="itemOf(key)!.locked || saving"
-                  class="input w-[120px] text-right"
-                />
-                <input
-                  v-else-if="itemOf(key)!.kind === 'secret'"
-                  v-model="form[key]"
-                  type="password"
-                  autocomplete="new-password"
-                  :placeholder="secretPlaceholder(key)"
-                  :disabled="itemOf(key)!.locked || saving"
-                  class="input w-[260px]"
-                />
-                <input
-                  v-else
-                  v-model="form[key]"
-                  type="text"
-                  :disabled="itemOf(key)!.locked || saving"
-                  class="input w-[260px]"
-                />
-                <span v-if="settingUnit(key)" class="w-9 text-xs text-txt3">{{ settingUnit(key) }}</span>
+                <span v-if="settingHasUnit(key)" class="w-9 text-xs text-txt3">{{ t('common.format.minutes') }}</span>
                 <span v-else class="w-9" />
               </div>
             </div>
-
-            <!-- A prompt body is too long for the label row, and it needs two
-                 things beside it that a one-line knob does not: the prefix the
-                 runtime always adds, and the built-in text a blank field falls
-                 back to. -->
-            <div v-if="TEXT_KINDS.has(itemOf(key)!.kind)" class="mt-3">
-              <div
-                v-if="itemOf(key)!.prefix"
-                class="rounded-t-lg border border-b-0 border-line bg-elevated px-3 py-2"
-              >
-                <div class="text-[10px] uppercase tracking-wide text-txt3">
-                  {{ t('pages.settings.promptPrefix') }}
-                </div>
-                <p class="mt-1 whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-txt2">
-                  {{ itemOf(key)!.prefix }}
-                </p>
-              </div>
-              <textarea
-                v-model="form[key]"
-                rows="8"
-                :placeholder="t('pages.settings.blankUsesBuiltIn')"
-                :disabled="itemOf(key)!.locked || saving"
-                class="input w-full resize-y font-mono text-[12px] leading-relaxed"
-                :class="itemOf(key)!.prefix ? 'rounded-t-none' : ''"
-              />
-              <details v-if="previewOf(itemOf(key)!)" class="mt-2">
-                <summary class="cursor-pointer text-xs text-txt3 hover:text-txt2">
-                  {{ t('pages.settings.showBuiltIn') }}
-                </summary>
-                <p class="mt-2 whitespace-pre-wrap rounded-lg border border-line bg-elevated px-3 py-2 font-mono text-[11px] leading-relaxed text-txt3">
-                  {{ previewOf(itemOf(key)!) }}
-                </p>
-              </details>
-            </div>
           </template>
         </div>
-
-        <template v-if="group.id === 'live'">
-          <div v-if="!liveConfigured" class="px-4 py-3">
-            <p class="border border-warn/30 bg-warn/10 px-3 py-2 text-xs leading-relaxed text-warn">
-              {{ t('pages.settings.liveUnconfigured') }}
-            </p>
-          </div>
-
-          <div class="border-t border-line px-4 py-3.5">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <div class="min-w-0">
-                <span class="text-sm font-medium text-txt">{{ t('pages.settings.liveTest.title') }}</span>
-                <p class="mt-1 text-xs leading-relaxed text-txt3">{{ t('pages.settings.liveTest.desc') }}</p>
-              </div>
-              <AppButton
-                variant="ghost"
-                size="sm"
-                icon="flask"
-                :disabled="probing || saving || !liveConfigured"
-                @click="runLiveTest"
-              >
-                {{ probing ? t('pages.settings.liveTest.running') : t('pages.settings.liveTest.action') }}
-              </AppButton>
-            </div>
-
-            <p v-if="probeError" class="mt-2.5 text-[11px] text-err">{{ probeError }}</p>
-
-            <div v-if="probe" class="mt-2.5 border border-line bg-elevated px-3 py-2.5">
-              <div class="flex flex-wrap items-center gap-2 text-xs">
-                <span
-                  class="inline-flex items-center gap-1 font-medium"
-                  :class="probe.ok ? 'text-ok' : 'text-err'"
-                >
-                  <Icon :name="probe.ok ? 'check' : 'close'" :size="12" />
-                  {{ probe.ok ? t('pages.settings.liveTest.pass') : t('pages.settings.liveTest.fail') }}
-                </span>
-                <span v-if="probe.latencyMs > 0" class="text-txt3 tabular-nums">
-                  {{ t('pages.settings.liveTest.latency', { ms: probe.latencyMs }) }}
-                </span>
-              </div>
-
-              <ul class="mt-2 space-y-1.5">
-                <li v-for="check in probe.checks" :key="check.name" class="flex items-start gap-1.5 text-[11px]">
-                  <Icon
-                    :name="check.ok ? 'check' : 'close'"
-                    :size="11"
-                    :class="check.ok ? 'mt-0.5 shrink-0 text-ok' : 'mt-0.5 shrink-0 text-err'"
-                  />
-                  <span class="min-w-0">
-                    <span class="text-txt2">{{ probeCheckLabel(check.name) }}</span>
-                    <span v-if="check.reason" class="text-txt3"> — {{ check.reason }}</span>
-                  </span>
-                </li>
-              </ul>
-
-              <p v-if="probe.sample" class="mt-2 border-t border-line pt-2 text-[11px] text-txt3">
-                {{ t('pages.settings.liveTest.sample') }}
-                <span class="font-mono text-txt2">{{ probe.sample }}</span>
-              </p>
-            </div>
-          </div>
-
-          <div class="border-t border-line px-4 py-3.5">
-            <span class="text-sm font-medium text-txt">{{ t('pages.settings.liveRuntime.title') }}</span>
-            <p class="mt-1 text-xs leading-relaxed text-txt3">{{ t('pages.settings.liveRuntime.desc') }}</p>
-
-            <p
-              v-if="liveStatus && liveStatus.configured && liveStatus.stats.calls === 0"
-              class="mt-2.5 border border-warn/30 bg-warn/10 px-3 py-2 text-[11px] leading-relaxed text-warn"
-            >
-              {{ t('pages.settings.liveRuntime.neverCalled') }}
-            </p>
-
-            <div v-if="liveStatus && liveStatus.stats.calls > 0" class="mt-2.5 space-y-1.5 text-[11px]">
-              <div class="text-txt2 tabular-nums">
-                {{
-                  t('pages.settings.liveRuntime.counts', {
-                    calls: liveStatus.stats.calls,
-                    failed: liveStatus.stats.failed,
-                  })
-                }}
-              </div>
-              <div v-if="liveStatus.stats.avgLatencyMs > 0" class="text-txt3 tabular-nums">
-                {{ t('pages.settings.liveRuntime.avgLatency', { ms: liveStatus.stats.avgLatencyMs }) }}
-              </div>
-              <div v-if="liveStatus.stats.lastFailure" class="text-err">
-                {{ t('pages.settings.liveRuntime.lastFailure') }} {{ liveStatus.stats.lastFailure }}
-              </div>
-            </div>
-          </div>
-        </template>
       </div>
     </template>
 

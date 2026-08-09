@@ -1,12 +1,11 @@
 package channels
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	"github.com/cocofhu/approving/internal/services"
 )
 
 // ProgressKind is the only progress class Reply may forward to QQ.
@@ -23,62 +22,10 @@ const (
 
 // ProgressEvent is an internal Work→Reply progress signal. Tool-level / token
 // noise must not become a ProgressEvent.
-// Delivery is opt-in: events produced by text classification are internal by
-// default, because prompt-shaped markers in model output must not be able to
-// drive external sends. Only an orchestration layer that sets Sendable, or the
-// Manager's explicit blocked/action_required promotion (which additionally
-// requires a reliable structured Conclusion), may reach a channel.
-//
-// RunID must be a real Run identifier when set; it is never synthesized from an
-// inbound platform message id.
 type ProgressEvent struct {
-	Kind           ProgressKind
-	Summary        string
-	Stage          string
-	Blocked        bool
-	ActionRequired bool
-	Conclusion     string
-	RunID          string
-	DedupeKey      string
-	Reason         string
-	Sendable       bool
-	At             time.Time
-}
-
-// Deliverable reports whether this event may leave the platform.
-//
-// Milestones with a substantive Stage are allowed out: suppressing them at the
-// source meant users heard nothing for the entire life of a Run, and rate
-// limiting is the policy layer's job, not a blanket veto here. What stays
-// internal is raw narration with nothing substantive in it — an event whose only
-// content is a fragment of model output.
-func (ev ProgressEvent) Deliverable() bool {
-	if ev.Sendable {
-		return true
-	}
-	// Manager-side promotion: an orchestration-set blocker / decision request
-	// backed by a reliable structured conclusion.
-	if ev.Blocked || ev.ActionRequired {
-		return strings.TrimSpace(ev.Conclusion) != ""
-	}
-	if ev.Kind == ProgressMilestone {
-		return isSubstantiveStage(ev.Stage)
-	}
-	return false
-}
-
-// substantiveStageRunes is the length below which a stage is a fragment rather
-// than a milestone worth interrupting the conversation for.
-const substantiveStageRunes = 8
-
-// isSubstantiveStage reports whether a milestone's stage says something a user
-// can act on, as opposed to a token fragment or tool noise.
-func isSubstantiveStage(stage string) bool {
-	stage = strings.TrimSpace(stage)
-	if utf8.RuneCountInString(stage) < substantiveStageRunes {
-		return false
-	}
-	return !isProgressNoise(stage)
+	Kind    ProgressKind
+	Summary string
+	At      time.Time
 }
 
 // TurnFinalReport is the Work turn outcome consumed by Reply for the required
@@ -163,6 +110,16 @@ func classifyProgressMarker(text string) (ProgressEvent, bool) {
 		return ProgressEvent{Kind: m.kind, Summary: truncateRunes(rest, progressSummaryRunes), At: time.Now()}, true
 	}
 	return ProgressEvent{}, false
+}
+
+// ClassifyProgressFromACP extracts agent_message_chunk text from a raw ACP
+// frame and classifies a single chunk. Prefer progressAccumulator for live
+// streaming paths where chunks are short deltas.
+func ClassifyProgressFromACP(raw json.RawMessage, extract func(json.RawMessage) string) (ProgressEvent, bool) {
+	if extract == nil || len(raw) == 0 {
+		return ProgressEvent{}, false
+	}
+	return ClassifyProgressText(extract(raw))
 }
 
 // progressAccumulator coalesces ACP agent_message_chunk deltas (or Status
@@ -314,6 +271,21 @@ func (a *progressAccumulator) emitKeywordLines() []ProgressEvent {
 	return out
 }
 
+func FormatProgressText(ev ProgressEvent) string {
+	sum := strings.TrimSpace(ev.Summary)
+	if sum == "" {
+		return ""
+	}
+	switch ev.Kind {
+	case ProgressBlocker:
+		return "阻塞：" + sum
+	case ProgressConfirm:
+		return "需确认：" + sum
+	default:
+		return "进度：" + sum
+	}
+}
+
 func isProgressNoise(text string) bool {
 	// Extremely short token-like fragments and tool dump markers.
 	if utf8.RuneCountInString(text) < 4 {
@@ -342,5 +314,10 @@ func containsAny(s string, parts ...string) bool {
 }
 
 func truncateRunes(s string, n int) string {
-	return services.SoftTruncateRunes(s, n)
+	s = strings.TrimSpace(s)
+	r := []rune(s)
+	if n <= 0 || len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
 }

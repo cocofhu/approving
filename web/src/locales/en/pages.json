@@ -266,64 +266,6 @@
         "modeCustom": "Custom",
         "wfUpdated": "Updated"
       },
-      "eventRouting": {
-        "title": "Where run events go",
-        "lead": "When a run speaks, and who hears it. The conversation column is the person who asked for the work; the project push column is the ops target. They are different audiences, not duplicates.",
-        "colEvent": "Event",
-        "colLive": "Conversation",
-        "colTemplate": "Project push",
-        "colUnbindable": "Unbindable",
-        "yes": "Yes",
-        "no": "No",
-        "noEgress": "Never reaches IM",
-        "templateOff": "Switched off",
-        "templateOnWith": "On ({kinds})",
-        "loadFailed": "Could not load event routing",
-        "footnote": "\"Unbindable\" means a single run can be detached from its origin conversation on its detail page. Project push is unaffected by unbinding — switch it off in the notify policy above.",
-        "kinds": {
-          "waiting_human": "Waiting on a person",
-          "failed": "Run failed",
-          "completed": "Run completed"
-        },
-        "events": {
-          "run_accepted": {
-            "label": "Acceptance ack",
-            "trigger": "Once per run, when a run dispatched from a conversation is picked up"
-          },
-          "pm_notify_progress": {
-            "label": "Worker report",
-            "trigger": "When the worker reports progress, a blocker, a confirmation request, or a conclusion"
-          },
-          "pm_reply": {
-            "label": "Worker reply",
-            "trigger": "When the worker submits a conclusion for a turn"
-          },
-          "task_paused": {
-            "label": "Stopped for a person",
-            "trigger": "The run stopped at a node that needs someone"
-          },
-          "task_outcome": {
-            "label": "Run finished",
-            "trigger": "The run completed, failed, or was cancelled"
-          },
-          "run_heartbeat": {
-            "label": "Long-run check-in",
-            "trigger": "When a task has been going a while with nothing else to report, the platform speaks up on its own schedule; the worker is not involved"
-          },
-          "origin_binding": {
-            "label": "Binding change notice",
-            "trigger": "When someone detaches or reconnects the run from its origin conversation on the run detail page"
-          },
-          "run_notification": {
-            "label": "Project notify template",
-            "trigger": "Pushed to the ops conversation per the project notify policy, regardless of origin"
-          },
-          "gate_auto_invoke": {
-            "label": "Automatic handover",
-            "trigger": "A pause at a human node also queues the project lead to handle it automatically"
-          }
-        }
-      },
       "audit": {
         "title": "Audit",
         "loading": "Loading audit events…",
@@ -478,42 +420,6 @@
         "disabledHint": "Enable Project Management to bind a channel and start consultations.",
         "goSettings": "Open settings",
         "settings": "Settings",
-        "tasks": "Task inbox",
-        "tasksTitle": "Conversation tasks",
-        "tasksHint": "Open task ledger rows from channel chats. Automatic cleanup retires stubs; use this list to mark work done or cancelled so Live routing is not confused.",
-        "tasksEmpty": "No open tasks",
-        "tasksEmptyHint": "New channel dispatches show up here. Close them when finished.",
-        "tasksLoading": "Loading tasks…",
-        "tasksRefresh": "Refresh",
-        "tasksLoadFailed": "Failed to load tasks",
-        "tasksCloseFailed": "Failed to update task",
-        "tasksMarkedDone": "Marked completed",
-        "tasksMarkedCancelled": "Cancelled",
-        "tasksMarkDone": "Done",
-        "tasksMarkCancel": "Cancel",
-        "tasksEphemeral": "Stub",
-        "tasksConversation": "Conversation",
-        "traces": "Call chain",
-        "tracesTitle": "IM call chain",
-        "tracesHint": "Per-inbound Live routing samples: route, spans, model, and egress. Use this to debug silence, timeouts, and bad replies.",
-        "tracesEmpty": "No traces yet",
-        "tracesEmptyHint": "Channel messages will show up here. Filter by conversation or traceId when needed.",
-        "tracesLoading": "Loading traces…",
-        "tracesRefresh": "Refresh",
-        "tracesSearch": "Search",
-        "tracesLoadFailed": "Failed to load traces",
-        "tracesFilterConversation": "Conversation ID",
-        "tracesFilterConversationPh": "Optional QQ conversationId",
-        "tracesFilterTrace": "Trace ID",
-        "tracesFilterTracePh": "Optional, e.g. tr-xxxxxxxxxxxx",
-        "tracesDegraded": "Degraded",
-        "tracesSpans": "Spans",
-        "tracesNoSpans": "No spans recorded for this turn",
-        "tracesEgress": "Egress",
-        "tracesOutcome": "Work outcome",
-        "tracesActions": "Actions",
-        "tracesTools": "Tool results",
-        "tracesRaw": "Raw model output",
         "backToChat": "Back to chat",
         "threads": "Threads",
         "newThread": "New",
@@ -521,12 +427,8 @@
         "channelUntitled": "Untitled chat",
         "channelSource": "From QQ Channel",
         "channelReadonlyTitle": "From QQ — reply in QQ",
-        "channelReadonlyHint": "Channel chats are read-only on the Web (no send). You can clear context to start fresh.",
+        "channelReadonlyHint": "Channel chats are read-only on the Web: no send, no delete",
         "channelViewDetail": "View details",
-        "channelClearContext": "Clear context",
-        "channelClearContextConfirm": "Clear this channel chat's context? Messages and in-flight conversation tasks will be removed; the thread stays so the next QQ message starts fresh.",
-        "channelClearContextDone": "Context cleared",
-        "channelClearContextFailed": "Failed to clear context",
         "channelDetailTitle": "Chat details",
         "channelDetailLabelTitle": "Title",
         "channelDetailLabelSource": "Source",
@@ -904,21 +806,6 @@
       "cancelWarning": "Cancelling stops the run and sets its status to cancelled. Queued work will not start; in-progress steps are interrupted. This cannot be resumed as a continuing execution.",
       "cancelConfirm": "Only this run is stopped; you will stay on the detail page and see the updated status.",
       "cancelSuccess": "Run cancelled",
-      "originBinding": {
-        "chipBound": "Reports to conversation",
-        "chipUnbound": "Detached from conversation",
-        "titleBound": "Progress on this run goes back to conversation {conversation}",
-        "titleUnbound": "Detached: nothing is sent to conversation {conversation} any more; progress lives on this page",
-        "unbindAction": "Detach from conversation",
-        "rebindAction": "Reconnect to conversation",
-        "confirmTitle": "Detach from conversation",
-        "confirmBody": "Progress, pauses, and results for this run will no longer be sent to conversation {conversation}. The run itself keeps going and its status is still tracked.",
-        "confirmHint": "We'll say so in that conversation first, so nobody is left waiting. You can reconnect at any time.",
-        "confirmAction": "Detach",
-        "unboundToast": "Detached, and the conversation was told",
-        "unboundSilentToast": "Detached; the conversation could not be told, so it will simply go quiet there",
-        "reboundToast": "Reconnected to the conversation"
-      },
       "cancelErrorNotFound": "Run not found or already deleted",
       "cancelErrorNotCancellable": "This run status cannot be cancelled (it may already be finished)",
       "cancelErrorGeneric": "Failed to cancel run",
@@ -1049,81 +936,19 @@
         "capacity": {
           "title": "Sandbox capacity",
           "desc": "Live capacity usage (test sandboxes + running workflows); test cap configurable."
-        },
-        "live": {
-          "title": "Conversation model",
-          "desc": "A fast model fronts IM conversations: it answers what it can outright and hands anything needing the project itself to a sandbox. Left unconfigured, every message goes to a sandbox — nothing breaks, but everything is slow. Context windows below control how much history and task ledger it sees. Any OpenAI-compatible endpoint works, and edits take effect without a restart."
         }
       },
       "labels": {
         "max_concurrent_runs": "Max concurrent runs",
         "run_sandbox_ttl_minutes": "Run sandbox TTL",
         "test_sandbox_ttl_minutes": "Test sandbox idle TTL",
-        "max_test_sandboxes": "Max test sandboxes",
-        "live_base_url": "Endpoint",
-        "live_model": "Model",
-        "live_api_key": "API key",
-        "live_timeout_seconds": "Call timeout",
-        "live_transcript_window": "Transcript window",
-        "live_ledger_limit": "Ledger size",
-        "live_recent_terminal_hours": "Terminal lookback",
-        "live_max_concurrent_work": "Concurrent tasks",
-        "live_tool_loop_limit": "Tool-loop limit",
-        "live_max_tokens": "Max tokens",
-        "live_temperature": "Wording latitude",
-        "run_heartbeat_minutes": "Unprompted update interval",
-        "live_system_prompt_body": "Conversation instructions",
-        "live_synthesis_prompt_body": "Reporting instructions"
+        "max_test_sandboxes": "Max test sandboxes"
       },
       "settings": {
         "max_concurrent_runs": "Max workflows in running state. Read-only when locked by APPROVING_MAX_RUNS.",
         "run_sandbox_ttl_minutes": "Minutes to keep run sandbox alive after a turn for follow-up artifacts.",
         "test_sandbox_ttl_minutes": "Idle TTL for test sandboxes.",
-        "max_test_sandboxes": "Reject new test sandboxes when active count reaches this (min 1).",
-        "live_base_url": "OpenAI-compatible API root, e.g. https://api.example.com/v1. The path /chat/completions is appended.",
-        "live_model": "Model name passed to the endpoint. Pick a fast one — this layer earns its place by answering in seconds; a slow model is worse than going straight to the sandbox.",
-        "live_api_key": "Sent as a bearer token; leave empty for a local or LAN model. Stored encrypted and shown masked; submit blank to leave the stored key unchanged.",
-        "live_timeout_seconds": "Per Live model call (routing, conclusion phrasing, and background reflow). A routing timeout acks then falls through to the sandbox; a phrasing timeout sends the work layer's own words. Slow local models usually want ≥120s.",
-        "live_transcript_window": "How many recent conversation messages (user + delivered replies) the fast model sees each turn. Larger remembers more, costs more. Default 20.",
-        "live_ledger_limit": "How many active and recent-terminal tasks appear in the briefing / get_status. Default 5.",
-        "live_recent_terminal_hours": "How long completed / failed / cancelled tasks stay in the ledger. Older ones leave the fast model's context. Default 24h.",
-        "live_max_concurrent_work": "Max tasks one conversation may keep running. New dispatches are rejected when full — refine or cancel instead. Default 3.",
-        "live_tool_loop_limit": "Max tool calls the fast model may make in one turn (status, dispatch, cancel…). Past this the turn falls through to the sandbox. Default 3.",
-        "live_max_tokens": "max_tokens for one Live completion. Too small truncates replies; too large wastes budget. Default 2048.",
-        "live_temperature": "How much the model varies its wording. 0 says nearly the same thing every time; higher is looser. Leave blank to send no temperature at all and let the endpoint use its own default.",
-        "run_heartbeat_minutes": "How long a task may run without news before the platform volunteers an update in the conversation. 0 means it only speaks when the task stops for input or finishes.",
-        "live_system_prompt_body": "The instructions the fast model follows when reading intent, delegating and replying. Blank uses the built-in text. The fixed prefix above is added by the platform and cannot be edited — it is what says who the model is and that its output goes out verbatim; without it the model introduces itself as an assistant in someone's chat.",
-        "live_synthesis_prompt_body": "The instructions the fast model follows when telling someone how a task turned out. Blank uses the built-in text, with the same fixed prefix."
-      },
-      "liveUnconfigured": "Not configured: every IM message currently goes to a sandbox, which works but takes tens of seconds each. Fill in the endpoint and model to enable; a local or LAN model usually needs no key.",
-      "promptPrefix": "Fixed prefix (not editable)",
-      "blankUsesBuiltIn": "Leave blank to use the built-in text",
-      "blankUsesEndpointDefault": "Blank = endpoint default",
-      "showBuiltIn": "See what the built-in text says",
-      "liveSecretStored": "Stored — leave blank to keep",
-      "liveSecretEmpty": "Not configured",
-      "liveTest": {
-        "title": "Test endpoint",
-        "desc": "Tests the values in the form, so there is no need to save first. Besides reachability it checks whether the model can return a tool call — one that cannot will answer everything itself and never hand work to the project.",
-        "action": "Test",
-        "running": "Testing…",
-        "pass": "Working",
-        "fail": "Not working",
-        "latency": "{ms} ms round trip",
-        "sample": "The model said:",
-        "failed": "The test request could not be sent",
-        "checks": {
-          "reachable": "Reachable",
-          "toolCalls": "Tool calls"
-        }
-      },
-      "liveRuntime": {
-        "title": "Runtime",
-        "desc": "What this layer has actually handled since the server started. The test button proves a configuration can work; this is what shows whether it is being used.",
-        "neverCalled": "The configuration works, but this layer has not been called once since startup. The IM channel may not be running, or messages are not reaching it — in which case every message goes straight to a sandbox: nothing is missing, everything is slow.",
-        "counts": "{calls} calls, {failed} failed",
-        "avgLatency": "{ms} ms average on success",
-        "lastFailure": "Most recent failure:"
+        "max_test_sandboxes": "Reject new test sandboxes when active count reaches this (min 1)."
       },
       "sourceLabels": {
         "env": "Environment",

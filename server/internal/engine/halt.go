@@ -65,7 +65,7 @@ func (e *Engine) WaitAgentReact(ctx context.Context, deadline time.Time) bool {
 		}
 		if time.Now().After(deadline) {
 			n := e.forceCancelActiveAgentReact()
-			log.Warn().Int("runs", n).Msg("timeout force-cancel active agent/react")
+			log.Warn().Int("runs", n).Msg("timeout force")
 			return true
 		}
 		select {
@@ -104,8 +104,6 @@ func (e *Engine) forceCancelActiveAgentReact() int {
 		if e.db.First(&run, "id = ?", sr.RunID).Error != nil || run.Status != "running" {
 			continue
 		}
-		log.Info().Str("run_id", sr.RunID).Str("node_id", sr.NodeID).
-			Msg("force-cancel active agent/react on shutdown timeout")
 		logDB(e.db.Model(&models.StateRun{}).
 			Where("run_id = ? AND status = ?", sr.RunID, "running").
 			Updates(map[string]any{"status": "cancelled", "error": "shutdown grace 超时"}), sr.RunID, "force cancel state_run")

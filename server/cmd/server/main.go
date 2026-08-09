@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -25,7 +24,6 @@ import (
 	"github.com/cocofhu/approving/internal/database"
 	"github.com/cocofhu/approving/internal/engine"
 	"github.com/cocofhu/approving/internal/handlers"
-	"github.com/cocofhu/approving/internal/liveagent"
 	"github.com/cocofhu/approving/internal/logging"
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/memorymcp"
@@ -35,10 +33,8 @@ import (
 	"github.com/cocofhu/approving/internal/runtime"
 	"github.com/cocofhu/approving/internal/sandbox"
 	"github.com/cocofhu/approving/internal/schedulermcp"
-	"github.com/cocofhu/approving/internal/sendable"
 	"github.com/cocofhu/approving/internal/services"
 	"github.com/cocofhu/approving/internal/shutdown"
-	"github.com/cocofhu/approving/internal/textutil"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -188,7 +184,10 @@ func main() {
 			outcome = models.AuditOutcomeFail
 		}
 		// Structured payload; SecretMask applied inside Record.
-		resultPayload := any(textutil.TruncateBytes(resultText, 2000, "…"))
+		resultPayload := any(resultText)
+		if len(resultText) > 2000 {
+			resultPayload = resultText[:2000] + "…"
+		}
 		node := strings.TrimSpace(nodeID)
 		if node == "mcp" {
 			node = ""
@@ -271,10 +270,6 @@ func main() {
 	// runtime-tunable scheduling params. ApplyOnBoot re-applies persisted UI
 	// values so they survive restarts.
 	settingsSvc := services.NewSettingsService(db, eng, sbxSvc)
-	// The conversation model is configured from the same page, so its client
-	// is driven by the same apply path and picks up edits without a restart.
-	liveClient := liveagent.New()
-	settingsSvc.SetLiveTuner(liveClient)
 	settingsSvc.ApplyOnBoot()
 
 	previewSvc := services.NewPreviewService(db, sbxMgr)
@@ -352,92 +347,11 @@ func main() {
 	channelMgr := channels.NewManager(channelBridge, map[string]channels.AdapterFactory{
 		models.ChannelTypeQQ: qq.New,
 	}, crypto.Decrypt)
-	deliveryPolicy := sendable.NewPolicy(db, func(entry sendable.AuditEntry) {
-		outcome := models.AuditOutcomeOK
-		if entry.Result == "failed" {
-			outcome = models.AuditOutcomeFail
-		}
-		auditSvc.Record(services.AuditRecord{
-			ProjectID: entry.ProjectID, Actor: services.SystemActor(),
-			CallerKind: models.CallerKindSystem, Action: models.AuditActionDelivery,
-			ResourceType: "delivery", ResourceID: entry.DedupeKey,
-			RunID: entry.RunID, Outcome: outcome, Summary: "channel delivery " + entry.Result,
-			Payload: map[string]any{
-				"reason": entry.Reason, "run": entry.RunID, "channel": string(entry.Channel),
-				"dedupe": entry.DedupeKey, "result": entry.Result, "attempt": entry.Attempt,
-				"traceId": entry.TraceID,
-			},
-		})
-	})
-	channelMgr.SetSendablePolicy(deliveryPolicy)
-	// The conversation model answers what it can without a sandbox. Logged after
-	// it is actually wired, and stated as configuration rather than as routing
-	// behaviour: the previous message claimed messages went through a client
-	// that was never handed to the Manager at all.
-	channelMgr.SetLiveModel(liveClient)
-	// Settings boot before channels exist; wire the window knobs now and
-	// re-apply so DB/config overrides reach the manager without a restart.
-	settingsSvc.SetLiveLimitsController(channelMgr)
-	livePrompts := newLivePromptRelay(channelMgr, liveClient)
-	settingsSvc.SetLivePromptController(livePrompts, livePromptDefaults())
-	settingsSvc.ApplyOnBoot()
-	if liveClient.Configured() {
-		log.Info().Msg("conversation model endpoint configured")
-	} else {
-		log.Info().Msg("conversation model endpoint not configured; every IM message goes to a sandbox")
-	}
-	taskContextSvc := services.NewTaskContextService(db)
-	channelMgr.SetTaskContextService(taskContextSvc)
-	// Every routing decision is recorded. Earlier rounds of this layer were
-	// tuned by adding banned phrases because nothing captured what the model
-	// was shown and what it chose; with samples, a change can be measured.
-	liveSamples := services.NewLiveSampleService(db)
-	channelMgr.SetLiveSampleService(liveSamples)
-	riskSvc := services.NewRiskConfirmationService(db)
-	channelMgr.SetRiskConfirmationService(riskSvc)
-	channelMgr.SetRiskActionExecutor(func(projectID, runID, action string, meta map[string]string) error {
-		switch action {
-		case "cancel_run", "delete_run":
-			return eng.Cancel(runID)
-		case "resume_gate", "approve_gate", "reject_gate":
-			nodeID := meta["nodeId"]
-			gateAction := meta["gateAction"]
-			if gateAction == "" {
-				gateAction = "approve"
-			}
-			if nodeID == "" {
-				return fmt.Errorf("gate node id required")
-			}
-			return eng.ResumeGate(runID, nodeID, gateAction, nil)
-		default:
-			return fmt.Errorf("unsupported risk action %q", action)
-		}
-	})
-	pmMCP.SetTaskSafety(riskSvc, taskContextSvc, channelIMNotifier{mgr: channelMgr})
-	// A finished task reports back to the conversation that asked for it, in
-	// that conversation's own words.
-	channelMgr.SetSynthesizer(newLiveSynthesizer(liveClient, livePrompts))
-	eng.SetRunTerminalObserver(runTerminalAdapter{mgr: channelMgr})
-	eng.SetRunPausedObserver(runPausedAdapter{mgr: channelMgr})
-	eng.SetRunHeartbeatObserver(runHeartbeatAdapter{mgr: channelMgr})
 	channelMgr.SetLoader(channelSvc.ListRaw)
 	channelSvc.SetOnChange(channelMgr.Reload)
 	channelMgr.ApplyOnBoot()
-	// Turns that died with the previous process left users waiting on a reply
-	// that will never arrive; tell them so instead of failing silently.
-	go channelMgr.RecoverInterruptedTurns(sweeperCtx)
 	cronSched.SetChannelDeliverer(channelMgr)
 	runNotifySvc.SetDeliverer(channelMgr)
-	channelMgr.SetPushSentObserver(runNotifySvc.SettlePushSent)
-	// A push parked behind a busy conversation used to move only when some
-	// unrelated event happened to touch the same conversation. Sweep it on a
-	// timer so "等待人工" reaches the user even if nothing else ever happens.
-	go runPushQueueSweeper(sweeperCtx, channelMgr)
-	// A task can run for an hour between two events worth reporting, and that
-	// silence is indistinguishable from a hang. The platform asks on its own
-	// schedule rather than having the worker report in, so nothing about the
-	// worker changes and it cannot decide to be noisy.
-	go runHeartbeatSweeper(sweeperCtx, eng, channelMgr)
 	cronSched.Start(sweeperCtx)
 
 	h := &handlers.Handlers{
@@ -469,13 +383,7 @@ func main() {
 		Browser:       browserSvc,
 		Audit:         auditSvc,
 		InjectBundles: injectStore,
-		LiveModel:     liveClient,
-		LiveSamples:   liveSamples,
-		TaskContext:   taskContextSvc,
-		// Detaching a run from its origin conversation says goodbye there
-		// first; without this the requester would just stop hearing back.
-		OriginAnnouncer: channelMgr,
-		Onboarding:      services.NewOnboardingService(projectSvc, skillSvc, wfSvc),
+		Onboarding:    services.NewOnboardingService(projectSvc, skillSvc, wfSvc),
 	}
 
 	r := router.New(h)

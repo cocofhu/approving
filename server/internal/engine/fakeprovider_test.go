@@ -52,10 +52,6 @@ type fakeProvider struct {
 	mrFailOnRepo string
 	// mrURLByRepo optionally overrides mrURL per pinned repo name.
 	mrURLByRepo map[string]string
-	// mrReuseURL / mrReuseKind (test-only): when set, LookupExistingMR returns
-	// them so engine submit_mr idempotent fallback can be exercised offline.
-	mrReuseURL  string
-	mrReuseKind string
 
 	// skipOutcome (test-only): when true, do not call node_complete so the
 	// engine's missing-mark path can be exercised.
@@ -225,20 +221,6 @@ func (f *fakeProvider) lastPromptImages(nodeID string) []models.PromptImage {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.promptImages[nodeID]
-}
-
-// LookupExistingMR implements runtime.MRReuser for submit_mr idempotent tests.
-func (f *fakeProvider) LookupExistingMR(ctx context.Context, req runtime.NodeReq) (url string, kind string, ok bool) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if strings.TrimSpace(f.mrReuseURL) == "" {
-		return "", "", false
-	}
-	kind = f.mrReuseKind
-	if kind == "" {
-		kind = runtime.MRIdempotentExists
-	}
-	return f.mrReuseURL, kind, true
 }
 
 func (f *fakeProvider) RunAgent(ctx context.Context, req runtime.NodeReq) (runtime.NodeResult, error) {

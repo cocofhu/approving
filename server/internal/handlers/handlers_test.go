@@ -1224,50 +1224,6 @@ func TestListRunsCurrentNodeLabel(t *testing.T) {
 	assertLabel("run-queued", "")
 }
 
-// The run list has to say which rows came in from a chat. Without it there is
-// no way to tell a run somebody dispatched from QQ — and is waiting on an
-// answer in QQ — from one started in the web UI.
-func TestListRunsOrigin(t *testing.T) {
-	h := newHarness(t)
-	h.h.Eng.Halt()
-	h.db.Create(&models.Run{ID: "run-from-qq", Status: "waiting_human", WorkflowID: "wf-1"})
-	h.db.Create(&models.Run{ID: "run-from-web", Status: "waiting_human", WorkflowID: "wf-1"})
-	h.db.Create(&models.TaskIdentity{
-		ID: "task-qq", RunID: "run-from-qq", ProjectID: "proj-1", Status: "waiting_human",
-		OriginChannel: "qq", OriginScene: "c2c",
-		OriginConversationID: "conv-1", OriginExternalUserID: "u1",
-	})
-	// A task row with no origin conversation is not an origin: the run list
-	// must stay silent rather than render an empty chip.
-	h.db.Create(&models.TaskIdentity{
-		ID: "task-web", RunID: "run-from-web", ProjectID: "proj-1", Status: "waiting_human",
-	})
-
-	w := h.do("GET", "/api/runs", nil)
-	if w.Code != 200 {
-		t.Fatalf("list runs: %d %s", w.Code, w.Body)
-	}
-	var rows []map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &rows); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	byID := map[string]map[string]any{}
-	for _, row := range rows {
-		byID[row["id"].(string)] = row
-	}
-
-	origin, ok := byID["run-from-qq"]["origin"].(map[string]any)
-	if !ok {
-		t.Fatalf("run dispatched from a conversation has no origin: %v", byID["run-from-qq"])
-	}
-	if origin["channel"] != "qq" || origin["externalUserId"] != "u1" {
-		t.Fatalf("origin = %v", origin)
-	}
-	if _, present := byID["run-from-web"]["origin"]; present {
-		t.Fatalf("web-triggered run carries an origin: %v", byID["run-from-web"])
-	}
-}
-
 func TestListRunsStatusFilter(t *testing.T) {
 	h := newHarness(t)
 	base := time.Date(2026, 7, 4, 18, 30, 0, 0, time.UTC)

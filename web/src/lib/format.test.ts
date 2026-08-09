@@ -1,13 +1,5 @@
 import { beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  formatTrigger,
-  formatRunOrigin,
-  formatRunOriginTitle,
-  fmtCompactDuration,
-  fmtDuration,
-  relTime,
-  truncateText,
-} from './format'
+import { formatTrigger, fmtCompactDuration, fmtDuration, relTime } from './format'
 import { i18n } from './i18n'
 import { loadLocaleMessages } from './loadLocaleMessages'
 
@@ -111,58 +103,5 @@ describe('formatTrigger', () => {
     expect(formatTrigger('channel')).toBe('channel')
     expect(formatTrigger('qq:cron-timezone-bug')).toBe('qq:cron-timezone-bug')
     expect(formatTrigger('cron-nightly')).toBe('cron-nightly')
-  })
-})
-
-describe('formatRunOrigin', () => {
-  it('names the channel and the person who dispatched the run', () => {
-    i18n.global.locale.value = 'zh-CN'
-    expect(formatRunOrigin({ channel: 'qq', conversationId: 'c1', externalUserId: 'u1' })).toBe(
-      'QQ 派活 · u1',
-    )
-    i18n.global.locale.value = 'en'
-    expect(formatRunOrigin({ channel: 'qq', conversationId: 'c1', externalUserId: 'u1' })).toBe(
-      'From QQ · u1',
-    )
-  })
-
-  it('still names the channel when the dispatcher is unknown', () => {
-    i18n.global.locale.value = 'zh-CN'
-    expect(formatRunOrigin({ channel: 'qq', conversationId: 'c1' })).toBe('QQ 派活')
-  })
-
-  // Runs started in the web UI have no conversation behind them, so the list
-  // must render nothing rather than an empty chip.
-  it('is empty without an origin conversation', () => {
-    expect(formatRunOrigin(undefined)).toBe('')
-    expect(formatRunOrigin({ channel: 'qq' })).toBe('')
-    expect(formatRunOriginTitle(undefined)).toBe('')
-  })
-
-  it('keeps the conversation out of the chip and in the tooltip', () => {
-    i18n.global.locale.value = 'zh-CN'
-    const origin = { channel: 'qq', conversationId: 'conv-9', externalUserId: 'u1' }
-    expect(formatRunOrigin(origin)).not.toContain('conv-9')
-    expect(formatRunOriginTitle(origin)).toContain('conv-9')
-  })
-})
-
-describe('truncateText', () => {
-  it('never ends a label in the middle of a word', () => {
-    const title = '调研 Approving 最近关于快模型和 worker 架构的精简空间'
-    expect(truncateText(title, 24)).toBe('调研 Approving 最近关于快模型和…')
-    expect(truncateText(title, 30)).toBe('调研 Approving 最近关于快模型和 worker 架…')
-  })
-
-  it('cuts Chinese at any character, since it has no word spacing', () => {
-    expect(truncateText('两个检查还在跑其余全部通过', 8)).toBe('两个检查还在跑其…')
-  })
-
-  it('leaves text within budget untouched', () => {
-    expect(truncateText('登录页性能优化', 60)).toBe('登录页性能优化')
-  })
-
-  it('counts code points, so an emoji is not split into squares', () => {
-    expect(truncateText('🎉🎉🎉🎉', 2)).toBe('🎉🎉…')
   })
 })

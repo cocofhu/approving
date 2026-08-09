@@ -243,14 +243,7 @@ func (r *PmTurnRunner) run(ctx context.Context, t *pmActiveTurn, prompt string, 
 	citations := r.filterAndEnrichCitations(t.threadID, extractPmCitations(text))
 	// Persist Usage only on successful finalize. Append failure must not silently
 	// count toward project totals (usage stays off the message).
-	//
-	// This is the agent's raw output, not a reply anyone received: on a channel
-	// turn the user sees whatever the agent submitted through pm_reply, which is
-	// recorded separately when the channel confirms delivery. Tagging it
-	// internal keeps the web thread complete while keeping lines like 「已发送」
-	// out of the history the next turn reads back.
-	if _, aerr := r.pm.AppendMessageSource(t.threadID, "assistant", text,
-		models.MessageSourceAgentInternal, citations, nil, nil, usage, usageByModel); aerr != nil {
+	if _, aerr := r.pm.AppendMessageSource(t.threadID, "assistant", text, "", citations, nil, nil, usage, usageByModel); aerr != nil {
 		log.Warn().Err(aerr).Str("thread", t.threadID).Msg("pm turn finalize append failed")
 		r.persistTurnFailure(t.threadID, userMsgID, PmFailUnknown)
 		r.emitTerminal(t, "error", aerr.Error(), PmFailUnknown)

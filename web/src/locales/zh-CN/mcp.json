@@ -168,12 +168,8 @@
           "desc": "列出会话索引"
         },
         "get_messages": {
-          "signature": "get_messages(conversationId?, limit?, offset?, includeImages?)",
-          "desc": "分页读取消息，默认只给附件清单"
-        },
-        "get_attachment": {
-          "signature": "get_attachment(messageId, index?, conversationId?)",
-          "desc": "按序号取回单个附件内容"
+          "signature": "get_messages(conversationId?, limit?, offset?)",
+          "desc": "分页读取消息"
         },
         "search_messages": {
           "signature": "search_messages(query, limit?)",

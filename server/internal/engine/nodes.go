@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -203,7 +204,7 @@ func (e *Engine) execBranch(c *execCtx, node *models.Node) nodeOutcome {
 
 func (e *Engine) execAgent(c *execCtx, node *models.Node) nodeOutcome {
 	req := e.nodeReq(c, node)
-	res, err := e.provider.RunAgent(c.Context(), req)
+	res, err := e.provider.RunAgent(context.Background(), req)
 	if err != nil {
 		return nodeOutcome{status: "failed", err: err.Error(),
 			outputMd: "Agent 执行失败:" + err.Error(), retryable: true, events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
@@ -215,7 +216,7 @@ func (e *Engine) execAgent(c *execCtx, node *models.Node) nodeOutcome {
 			err:      "lost exec ownership",
 			outputMd: "dropped late outcome: lost exec ownership",
 			events:   res.Events,
-			usage:    res.Usage, usageByModel: res.UsageByModel,
+			usage: res.Usage, usageByModel: res.UsageByModel,
 		}
 	}
 	return e.withOutcome(c, node, res, func(r runtime.NodeResult) nodeOutcome {
@@ -233,7 +234,7 @@ const visualPageName = "page.html"
 // iframe (a page written via write_artifact would default to markdown).
 func (e *Engine) execVisual(c *execCtx, node *models.Node) nodeOutcome {
 	req := e.nodeReq(c, node)
-	res, err := e.provider.RunAgent(c.Context(), req)
+	res, err := e.provider.RunAgent(context.Background(), req)
 	if err != nil {
 		return nodeOutcome{status: "failed", err: err.Error(), outputMd: "视觉网页节点执行失败:" + err.Error(), events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
 	}
@@ -253,7 +254,7 @@ func (e *Engine) finalizeVisual(c *execCtx, node *models.Node, r runtime.NodeRes
 	}
 	// Guarantee the artifact kind is html so the UI previews it in an iframe.
 	if _, serr := e.store.Save(c.run.ID, node.ID, visualPageName, "html", content); serr != nil {
-		log.Warn().Err(serr).Str("run_id", c.run.ID).Str("node_id", node.ID).Msg("visual page re-save failed")
+		log.Warn().Err(serr).Str("node", node.ID).Msg("visual page re-save failed")
 	}
 	outputs := r.Outputs
 	if outputs == nil {
@@ -273,7 +274,7 @@ func (e *Engine) finalizeVisual(c *execCtx, node *models.Node, r runtime.NodeRes
 // and no auto-captured fallback.
 func (e *Engine) execPlan(c *execCtx, node *models.Node) nodeOutcome {
 	req := e.nodeReq(c, node)
-	res, err := e.provider.RunAgent(c.Context(), req)
+	res, err := e.provider.RunAgent(context.Background(), req)
 	if err != nil {
 		return nodeOutcome{status: "failed", err: err.Error(), outputMd: "计划节点执行失败:" + err.Error(), events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
 	}
@@ -311,7 +312,7 @@ func (e *Engine) finalizePlan(c *execCtx, node *models.Node, r runtime.NodeResul
 // references (human_gate bodies, the UI) render the real content.
 func (e *Engine) execStructuredAgent(c *execCtx, node *models.Node, artifactName, outKey string, render func(string) string) nodeOutcome {
 	req := e.nodeReq(c, node)
-	res, err := e.provider.RunAgent(c.Context(), req)
+	res, err := e.provider.RunAgent(context.Background(), req)
 	if err != nil {
 		return nodeOutcome{status: "failed", err: err.Error(),
 			outputMd: node.Label + " 执行失败:" + err.Error(), retryable: true, events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
@@ -609,11 +610,8 @@ func (e *Engine) runSubmitMROnceWithGit(c *execCtx, node *models.Node, repo, sou
 	req.Config["source_branch"] = sourceBranch
 	req.Config["target_branch"] = targetBranch
 
-	res, err := e.provider.RunAgent(c.Context(), req)
+	res, err := e.provider.RunAgent(context.Background(), req)
 	if err != nil {
-		if oc, ok := e.reuseSubmitMR(c, req, err.Error(), nil); ok {
-			return oc, res.Git
-		}
 		return nodeOutcome{status: "failed", err: err.Error(), outputMd: "提交 MR 失败:" + err.Error()}, nil
 	}
 	oc := e.withOutcome(c, node, res, func(r runtime.NodeResult) nodeOutcome {
@@ -630,46 +628,7 @@ func (e *Engine) runSubmitMROnceWithGit(c *execCtx, node *models.Node, repo, sou
 		}
 		return nodeOutcome{status: "completed", outputMd: md, outputs: outputs, events: r.Events}
 	})
-	if oc.status == "failed" {
-		msg := strings.TrimSpace(oc.err + "\n" + oc.outputMd)
-		if reused, ok := e.reuseSubmitMR(c, req, msg, oc.outputs); ok {
-			reused.events = oc.events
-			return reused, res.Git
-		}
-	}
 	return oc, res.Git
-}
-
-// reuseSubmitMR applies platform-level submit_mr idempotent fallback: when the
-// agent failed (or mis-reported failure) but GH/GL already has a reusable
-// PR/MR (exists/merged/no-diff/duplicate), complete with mr_url instead of
-// failing or creating a second PR/MR.
-func (e *Engine) reuseSubmitMR(c *execCtx, req runtime.NodeReq, msg string, priorOutputs map[string]any) (nodeOutcome, bool) {
-	url, kind, ok := runtime.ResolveIdempotentMRURL(msg, str(priorOutputs["mr_url"]))
-	if !ok {
-		if reuser, has := e.provider.(runtime.MRReuser); has {
-			if u, k, found := reuser.LookupExistingMR(c.Context(), req); found && strings.TrimSpace(u) != "" {
-				url, kind, ok = u, k, true
-			}
-		}
-	}
-	if !ok || strings.TrimSpace(url) == "" {
-		return nodeOutcome{}, false
-	}
-	outputs := map[string]any{}
-	for k, v := range priorOutputs {
-		outputs[k] = v
-	}
-	outputs["mr_url"] = url
-	outputs["mr_idempotent"] = kind
-	log.Info().Str("run_id", c.run.ID).Str("node_id", req.NodeID).
-		Str("mr_url", url).Str("kind", kind).
-		Msg("submit_mr idempotent reuse")
-	md := "已复用已有 MR:" + url
-	if kind == runtime.MRIdempotentNoDiff {
-		md = "无差异，幂等完成:" + url
-	}
-	return nodeOutcome{status: "completed", outputMd: md, outputs: outputs}, true
 }
 
 // execProposalSelect resolves a single final proposal from the upstream
@@ -804,7 +763,7 @@ func (e *Engine) execReactEnter(c *execCtx, node *models.Node) nodeOutcome {
 		// First entry: open the dialogue. The opening turn may already conclude
 		// the clarification (agent asked nothing) — then finish the node now.
 		req := e.nodeReq(c, node)
-		t := e.provider.ReactOpen(c.Context(), req)
+		t := e.provider.ReactOpen(context.Background(), req)
 		if t.SetupErr != nil {
 			fullErr := ""
 			if t.SetupErr != nil {
@@ -875,7 +834,7 @@ func (e *Engine) autoAdvanceReact(c *execCtx, node *models.Node, conv *models.Re
 		}
 		conv.Messages = append(conv.Messages, models.ReactMessage{Role: "human", Text: humanText,
 			At: time.Now().Format(time.RFC3339)})
-		t = e.provider.ReactReply(c.Context(), req, conv.Messages, humanText, nil, false)
+		t = e.provider.ReactReply(context.Background(), req, conv.Messages, humanText, nil, false)
 		acc = models.AddTokenUsage(acc, t.Usage)
 		accBy = models.AddTokenUsageByModel(accBy, t.UsageByModel)
 		conv.Messages = append(conv.Messages, models.ReactMessage{Role: "agent", Text: t.Msg,
@@ -899,7 +858,7 @@ func (e *Engine) autoAdvanceReact(c *execCtx, node *models.Node, conv *models.Re
 func (e *Engine) execAppPreview(c *execCtx, node *models.Node) nodeOutcome {
 	req := e.nodeReq(c, node)
 	e.host.ResetPreviewReady(c.run.ID, node.ID)
-	res, err := e.provider.RunAgent(c.Context(), req)
+	res, err := e.provider.RunAgent(context.Background(), req)
 	// ACP/WS 断连兜底:已有可达预览则仍进入复审,禁止无限 busy。
 	if err != nil && !e.host.HasHealthyPreviewPorts(c.run.ID, node.ID) {
 		return nodeOutcome{status: "failed", err: err.Error(), outputMd: "应用预览执行失败:" + err.Error(), events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
@@ -910,7 +869,7 @@ func (e *Engine) execAppPreview(c *execCtx, node *models.Node) nodeOutcome {
 			err:      "lost exec ownership",
 			outputMd: "dropped late outcome: lost exec ownership",
 			events:   res.Events,
-			usage:    res.Usage, usageByModel: res.UsageByModel,
+			usage: res.Usage, usageByModel: res.UsageByModel,
 		}
 	}
 	if !e.host.HasHealthyPreviewPorts(c.run.ID, node.ID) {
@@ -1012,7 +971,7 @@ func (e *Engine) captureDeliverable(c *execCtx, node *models.Node, res runtime.N
 		}
 	}
 	if _, err := e.store.Save(c.run.ID, node.ID, node.ID+".md", "markdown", content); err != nil {
-		log.Warn().Err(err).Str("run_id", c.run.ID).Str("node_id", node.ID).Msg("auto-capture deliverable failed")
+		log.Warn().Err(err).Str("node", node.ID).Msg("auto-capture deliverable failed")
 	}
 }
 

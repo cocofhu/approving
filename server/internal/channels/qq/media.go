@@ -206,3 +206,18 @@ func isBlockedIP(ip net.IP) bool {
 	}
 	return false
 }
+
+// isImageAttachment reports whether an attachment looks like an image.
+func isImageAttachment(att attachment) bool {
+	ct := strings.ToLower(att.ContentType)
+	if strings.HasPrefix(ct, "image/") {
+		return true
+	}
+	name := strings.ToLower(att.Filename + att.URL)
+	for _, ext := range []string{".png", ".jpg", ".jpeg", ".gif", ".webp"} {
+		if strings.Contains(name, ext) {
+			return true
+		}
+	}
+	return false
+}

@@ -46,27 +46,6 @@ func TestAggregateRunFailureLastErrorFallback(t *testing.T) {
 	}
 }
 
-func TestDeliveryURLsCollectsHTTPURLVars(t *testing.T) {
-	db := newTestDB(t)
-	s := NewRunService(db)
-	db.Create(&models.Run{ID: "du1", Status: "completed"})
-	db.Create(&models.RunVariable{RunID: "du1", Name: "mr_url", Type: "string", Value: "https://github.com/o/r/pull/1"})
-	db.Create(&models.RunVariable{RunID: "du1", Name: "report_url", Type: "string", Value: "https://example.com/r"})
-	db.Create(&models.RunVariable{RunID: "du1", Name: "last_error", Type: "string", Value: "https://not-a-delivery.example/x"})
-	db.Create(&models.RunVariable{RunID: "du1", Name: "callback_url", Type: "string", Value: "not-http"})
-	got := s.DeliveryURLs("du1")
-	if len(got) != 2 {
-		t.Fatalf("DeliveryURLs = %v, want 2 http *_url vars", got)
-	}
-	joined := strings.Join(got, " ")
-	if !strings.Contains(joined, "pull/1") || !strings.Contains(joined, "example.com/r") {
-		t.Fatalf("DeliveryURLs = %v", got)
-	}
-	if strings.Contains(joined, "not-a-delivery") {
-		t.Fatalf("non *_url var leaked: %v", got)
-	}
-}
-
 func TestAggregateRunFailureDefaultFallback(t *testing.T) {
 	db := newTestDB(t)
 	s := NewRunService(db)
@@ -91,7 +70,7 @@ func TestAggregateRunFailureWithSandboxLog(t *testing.T) {
 	}
 	db.Create(&models.SandboxLog{
 		Name: "sbx-rf4", RunID: "rf4", NodeID: "research",
-		Content:   strings.Join(lines, "\n") + "\nTAIL_MARKER",
+		Content: strings.Join(lines, "\n") + "\nTAIL_MARKER",
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	})
 
@@ -141,74 +120,6 @@ func TestTruncateLogSummary(t *testing.T) {
 	out := TruncateLogSummary(b.String())
 	if strings.Count(out, "\n")+1 > maxLogSummaryLines {
 		t.Fatalf("too many lines: %d", strings.Count(out, "\n")+1)
-	}
-}
-
-// fake secret fixtures are built by prefix+suffix at runtime so source never
-// contains contiguous ghp_/sk- literals that trip gitleaks (CI scans PR diffs).
-func testFixtureGitHubPAT() string {
-	return "ghp_" + "abcdefghijklmnopqrstuvwxyz0123456789"
-}
-
-func testFixtureOpenAIKey() string {
-	return "sk-" + "abcdefghijklmnopqrstuvwxyz0123"
-}
-
-func testFixtureShortPAT() string {
-	return "ghp_" + "abcdefghijklmnopqrstuvwxyz01"
-}
-
-// TestRunErrorRedactsSecretsRegression: run_error summaries must not leak
-// token/Bearer/key prefixes from reason or sandbox log tails.
-func TestRunErrorRedactsSecretsRegression(t *testing.T) {
-	ghp := testFixtureGitHubPAT()
-	sk := testFixtureOpenAIKey()
-	apiVal := "supersecretvalue99"
-	bearerTok := "abcdefghijklmnopqr"
-	secretLine := "Authorization: Bearer " + ghp + "\n" +
-		"cursor key=" + sk + "\n" +
-		"api_key=" + apiVal + "\n" +
-		"TAIL_OK"
-	out := TruncateLogSummary(secretLine)
-	for _, leak := range []string{
-		ghp,
-		sk,
-		apiVal,
-		"Bearer ghp_",
-	} {
-		if strings.Contains(out, leak) {
-			t.Fatalf("log summary leaked %q in %q", leak, out)
-		}
-	}
-	if !strings.Contains(out, SecretMask) {
-		t.Fatalf("expected mask in %q", out)
-	}
-	if !strings.Contains(out, "TAIL_OK") {
-		t.Fatalf("expected non-secret tail kept: %q", out)
-	}
-
-	body, err := MarshalRunErrorJSON(RunFailureInfo{
-		Reason:          "agent failed with token=leakytoken123 and Bearer " + bearerTok,
-		FailedNode:      "implement",
-		LogSummaryOrRef: TruncateLogSummary(secretLine),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, leak := range []string{"leakytoken123", bearerTok, ghp, apiVal} {
-		if strings.Contains(body, leak) {
-			t.Fatalf("run_error.json leaked %q in %s", leak, body)
-		}
-	}
-}
-
-func TestRedactSensitiveStringExported(t *testing.T) {
-	bearerTok := "abcdefghijklmnopqr"
-	ghp := testFixtureShortPAT()
-	in := "Bearer " + bearerTok + " and " + ghp
-	out := RedactSensitiveString(in)
-	if strings.Contains(out, bearerTok) || strings.Contains(out, ghp) {
-		t.Fatalf("not redacted: %q", out)
 	}
 }
 

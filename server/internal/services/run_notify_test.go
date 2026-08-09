@@ -150,15 +150,7 @@ func TestAttemptDeliver_noTargetStillClaims(t *testing.T) {
 	}
 }
 
-// A transport failure is asked for once and then written down.
-//
-// It used to retry here with its own backoff, to protect the claim taken before
-// the send. The egress underneath already retries transport errors, and by the
-// time it reports one the message is also sitting in its push queue — so a
-// second call from here never reached the network, it only enqueued a duplicate
-// for the egress to suppress. What has to hold is that the outcome lands on the
-// receipt rather than vanishing into a log line.
-func TestAttemptDeliver_sendFailRecordsFailureWithoutRetryingHere(t *testing.T) {
+func TestAttemptDeliver_sendFailNoRetry(t *testing.T) {
 	db := setupRunNotifyDB(t)
 	seedNotifyProject(t, db, true, []string{"failed"}, "inherit", nil)
 	d := &fakeRunDeliverer{err: errors.New("qq down")}
@@ -168,43 +160,9 @@ func TestAttemptDeliver_sendFailRecordsFailureWithoutRetryingHere(t *testing.T) 
 		NodeID: "x", Iteration: 1, Kind: "failed",
 	}
 	svc.AttemptDeliver(ev)
-	if d.count() != 1 {
-		t.Fatalf("attempts=%d want exactly one; the egress owns the retrying", d.count())
-	}
-
-	var receipt models.NotifyDeliveryReceipt
-	if err := db.Where("run_id = ? AND node_id = ? AND iteration = ? AND kind = ?",
-		"run-5", "x", 1, "failed").First(&receipt).Error; err != nil {
-		t.Fatal(err)
-	}
-	if receipt.DeliveryStatus != "failed" {
-		t.Fatalf("delivery status = %q; a failed delivery must be visible in the data",
-			receipt.DeliveryStatus)
-	}
-
-	// The claim still holds: a second event does not produce a second notification.
-	before := d.count()
 	svc.AttemptDeliver(ev)
-	if d.count() != before {
-		t.Fatalf("claim did not hold: calls went %d → %d", before, d.count())
-	}
-}
-
-func TestAttemptDeliver_successRecordsDelivered(t *testing.T) {
-	db := setupRunNotifyDB(t)
-	seedNotifyProject(t, db, true, []string{"failed"}, "inherit", nil)
-	d := &fakeRunDeliverer{}
-	svc := NewRunNotifyService(db, d, "")
-	svc.AttemptDeliver(RunNotifyEvent{
-		ProjectID: "proj-n1", RunID: "run-5b", WorkflowID: "wf-n1",
-		NodeID: "x", Iteration: 1, Kind: "failed",
-	})
-	var receipt models.NotifyDeliveryReceipt
-	if err := db.Where("run_id = ?", "run-5b").First(&receipt).Error; err != nil {
-		t.Fatal(err)
-	}
-	if receipt.DeliveryStatus != "delivered" {
-		t.Fatalf("delivery status = %q want delivered", receipt.DeliveryStatus)
+	if d.count() != 1 {
+		t.Fatalf("calls=%d want 1", d.count())
 	}
 }
 

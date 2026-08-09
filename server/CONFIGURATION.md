@@ -29,20 +29,6 @@ configured on Agent meta env, not in this platform config table.
 | `APPROVING_SANDBOX_IMAGE_TRAE` | `sandbox.images.trae` | image | `Not set` | Public | Sandbox image for trae backend; empty uses the built-in default |
 | `APPROVING_SANDBOX_GATEWAY_URL` | `sandbox.gateway_url` | URL | `http://127.0.0.1:8899` | Public | sandbox-gateway control-plane URL |
 | `APPROVING_SANDBOX_GATEWAY_API_KEY` | `sandbox.gateway_api_key` | string | `Not set` | Sensitive | Gateway bearer token |
-| `APPROVING_LIVE_BASE_URL` | `live.base_url` | URL | `Not set` | Public | OpenAI-compatible endpoint for the conversation model; usually set on the settings page |
-| `APPROVING_LIVE_API_KEY` | `live.api_key` | string | `Not set` | Sensitive | Conversation model API key; usually set on the settings page |
-| `APPROVING_LIVE_MODEL` | `live.model` | string | `Not set` | Public | Conversation model name; usually set on the settings page |
-| `APPROVING_LIVE_TIMEOUT_SEC` | `live.timeout_seconds` | integer | `120` | Public | Timeout for one conversation model call in seconds; local reasoning models often need a minute or more, then escalates to the sandbox |
-| `APPROVING_LIVE_TRANSCRIPT_WINDOW` | `live.transcript_window` | integer | `20` | Public | Recent conversation messages the fast model sees each turn |
-| `APPROVING_LIVE_LEDGER_LIMIT` | `live.ledger_limit` | integer | `5` | Public | Active and recent-terminal tasks shown in the briefing |
-| `APPROVING_LIVE_RECENT_TERMINAL_HOURS` | `live.recent_terminal_hours` | integer | `24` | Public | Hours finished tasks remain in the conversation ledger |
-| `APPROVING_LIVE_MAX_CONCURRENT_WORK` | `live.max_concurrent_work` | integer | `3` | Public | Max concurrent tasks per conversation |
-| `APPROVING_LIVE_TOOL_LOOP_LIMIT` | `live.tool_loop_limit` | integer | `3` | Public | Max tool calls the fast model may make in one turn |
-| `APPROVING_LIVE_MAX_TOKENS` | `live.max_tokens` | integer | `2048` | Public | max_tokens for one Live completion |
-| `APPROVING_RUN_HEARTBEAT_MINUTES` | `live.run_heartbeat_minutes` | integer | `30` | Public | How long a task may run silently before the platform volunteers an update; 0 turns those updates off |
-| `APPROVING_LIVE_SYSTEM_PROMPT_BODY` | `live.system_prompt_body` | string | `Not set` | Public | Body of the fast model's instructions; empty uses the built-in text. The fixed persona prefix is attached at runtime and cannot be overridden |
-| `APPROVING_LIVE_SYNTHESIS_PROMPT_BODY` | `live.synthesis_prompt_body` | string | `Not set` | Public | Body of the outcome-reporting instructions; empty uses the built-in text, with the same fixed persona prefix |
-| `APPROVING_LIVE_TEMPERATURE` | `live.temperature` | float | `Not set` | Public | Temperature for the fast model; empty sends none and lets the endpoint decide |
 | `APPROVING_BROWSER_ENABLED` | `browser.enabled` | boolean | `Not set` | Deprecated | Compatibility field; VNC preview is always available |
 | `APPROVING_CURSOR_API_KEY` | `sandbox.cursor_api_key` | string | `Not set` | Sensitive, Deprecated | Deprecated; use agent env |
 | `CURSOR_API_KEY` | `sandbox.cursor_api_key` | string | `Not set` | Sensitive, Deprecated | Deprecated alias; use agent env |

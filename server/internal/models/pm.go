@@ -45,27 +45,6 @@ const (
 	ChatThreadKindCron = "cron"
 )
 
-// Message sources record how a stored turn came to exist.
-//
-// The distinction that matters is whether a human ever saw the text. Only
-// MessageSourceChannel and MessageSourceChannelOutbound are things that were
-// actually said in the conversation, and only those may be replayed to a model
-// as history. Everything else is working material: useful to a person reading
-// the thread, misleading to an agent, which cannot tell its own draft from a
-// message the user received and will answer as though the user had read it.
-const (
-	// MessageSourceChannel is an inbound message from an IM channel.
-	MessageSourceChannel = "channel"
-	// MessageSourceChannelOutbound is text a channel confirmed it delivered.
-	MessageSourceChannelOutbound = "channel_outbound"
-	// MessageSourceCron is a scheduler-authored prompt.
-	MessageSourceCron = "cron"
-	// MessageSourceAgentInternal is raw agent output as the sandbox produced
-	// it: reasoning, tool narration, and asides like 「已发送」 that describe a
-	// delivery rather than perform one.
-	MessageSourceAgentInternal = "agent_internal"
-)
-
 // ChatMessage is one persisted turn in a PM Leader thread (context-store SoT).
 type ChatMessage struct {
 	ID       string `gorm:"primaryKey" json:"id"`
@@ -78,10 +57,8 @@ type ChatMessage struct {
 	// FailKind classifies why a turn failed (only when Status=failed).
 	// Values: connection | sandbox | empty | unknown | stopped.
 	FailKind string `json:"failKind,omitempty"`
-	// Source tags where this row came from; see the MessageSource constants.
-	// Legacy rows predate the tag and are empty, which readers must treat as
-	// internal rather than as conversation.
-	Source string `json:"source,omitempty"`
+	// Source tags how the user turn was produced (user chat vs cron scheduler).
+	Source string `json:"source,omitempty"` // user | cron | ""
 	// Images are optional base64 attachments the user sent with this turn.
 	Images          []PromptImage      `gorm:"serializer:json" json:"images,omitempty"`
 	Citations       []ProgressCitation `gorm:"serializer:json" json:"citations,omitempty"`

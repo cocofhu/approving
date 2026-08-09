@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/platformmcp"
@@ -41,28 +40,7 @@ type Session struct {
 	ThreadID  string
 	UserID    string
 	AgentName string
-	Channel   ChannelContext
 	Attached  *models.AttachedContext
-}
-
-// ChannelContext is the concrete external identity/destination for a channel
-// MCP session. UserID on Session remains the conversation-scoped thread key.
-type ChannelContext struct {
-	ChannelType    string
-	Scene          string
-	ConversationID string
-	ExternalUserID string
-	TraceID        string
-}
-
-// IMTarget is passed to the external notifier so lifecycle messages stay bound
-// to the active conversation instead of relying on a configured cron target.
-type IMTarget struct {
-	ChannelType    string
-	Scene          string
-	ConversationID string
-	UserID         string
-	TraceID        string
 }
 
 // Host manages project-scoped PM MCP sessions and tool dispatch.
@@ -80,36 +58,6 @@ type Host struct {
 	skill    *services.SkillService
 	eng      engineOps
 	audit    func(services.AuditRecord)
-
-	risk   *services.RiskConfirmationService
-	tasks  *services.TaskContextService
-	notify ExternalIMNotifier
-}
-
-// IMDeliveryOutcome is what an IM egress reports back about one notification.
-// Sent=false with a Reason means the delivery policy withheld the message on
-// purpose (rate limited, deduplicated, merged, already sent); that is a normal
-// outcome and must not be reported to the agent as a tool error. Real failures
-// (no target, transport error, retries exhausted) come back as an error instead.
-type IMDeliveryOutcome struct {
-	Sent   bool
-	Reason string
-	// AlreadyReplied means this turn was answered before this call. It is
-	// distinguished from ordinary suppression because the two need opposite
-	// reactions: a rate-limited message may be worth sending later, while a
-	// second answer to the same question should simply not exist.
-	AlreadyReplied bool
-}
-
-// ExternalIMNotifier is the minimal IM egress used by PM MCP write tools.
-// Implemented by the channel Manager in main; nil disables explicit IM notify.
-type ExternalIMNotifier interface {
-	NotifyRunAccepted(projectID, runID string, target IMTarget, shortTitle, language string) error
-	NotifyProgress(projectID, runID string, target IMTarget, kind, text, stage, conclusion string, blocked, actionRequired bool) (IMDeliveryOutcome, error)
-	// NotifyReply delivers the agent's answer for the current conversation turn.
-	// This is the only way a conversational answer reaches the user: raw model
-	// output is never forwarded, so an answer has to be submitted deliberately.
-	NotifyReply(projectID, runID string, target IMTarget, text, shortTitle string) (IMDeliveryOutcome, error)
 }
 
 // engineOps covers the run operations exposed through pm-workflow-write
@@ -149,16 +97,6 @@ func (h *Host) SetOrgAndSkill(org *services.OrgService, skill *services.SkillSer
 func (h *Host) SetAuditRecorder(fn func(services.AuditRecord)) {
 	h.mu.Lock()
 	h.audit = fn
-	h.mu.Unlock()
-}
-
-// SetTaskSafety wires high-risk confirmation and task identity helpers used by
-// write tools and explicit IM progress notifications.
-func (h *Host) SetTaskSafety(risk *services.RiskConfirmationService, tasks *services.TaskContextService, notify ExternalIMNotifier) {
-	h.mu.Lock()
-	h.risk = risk
-	h.tasks = tasks
-	h.notify = notify
 	h.mu.Unlock()
 }
 
@@ -233,16 +171,6 @@ func (h *Host) SetAttached(token string, attached *models.AttachedContext) {
 	defer h.mu.Unlock()
 	if s, ok := h.sessions[token]; ok {
 		s.Attached = attached
-	}
-}
-
-// SetChannelContext updates the active external sender and destination after a
-// fresh register or sandbox reuse.
-func (h *Host) SetChannelContext(token string, channel ChannelContext) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if s, ok := h.sessions[token]; ok {
-		s.Channel = channel
 	}
 }
 
@@ -381,23 +309,8 @@ func (h *Host) auditToolCall(projectID, token, mcpID, tool string, args map[stri
 		outcome = models.AuditOutcomeFail
 	}
 	resultPayload := any(result)
-	if s, ok := result.(string); ok {
-		resultPayload = textutil.TruncateBytes(s, 2000, "…")
-	}
-	payload := map[string]any{
-		"mcp":       mcpID,
-		"tool":      tool,
-		"arguments": args,
-		"result":    resultPayload,
-		"isError":   isErr,
-	}
-	if sess, ok := h.SessionFor(projectID, token); ok {
-		if tid := strings.TrimSpace(sess.Channel.TraceID); tid != "" {
-			payload["traceId"] = tid
-		}
-		if conv := strings.TrimSpace(sess.Channel.ConversationID); conv != "" {
-			payload["conversationId"] = conv
-		}
+	if s, ok := result.(string); ok && len(s) > 2000 {
+		resultPayload = s[:2000] + "…"
 	}
 	h.recordAudit(services.AuditRecord{
 		ProjectID:    projectID,
@@ -407,7 +320,13 @@ func (h *Host) auditToolCall(projectID, token, mcpID, tool string, args map[stri
 		ResourceID:   tool,
 		Outcome:      outcome,
 		Summary:      "mcp " + mcpID + "/" + tool,
-		Payload:      payload,
+		Payload: map[string]any{
+			"mcp":       mcpID,
+			"tool":      tool,
+			"arguments": args,
+			"result":    resultPayload,
+			"isError":   isErr,
+		},
 	})
 }
 
@@ -803,140 +722,7 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 				"runId":      run.ID,
 			},
 		})
-		shortTitle := run.Title
-		sess, hasSess := h.SessionFor(projectID, token)
-		if h.tasks != nil {
-			sessUser := ""
-			if hasSess {
-				sessUser = riskUserIDForSession(sess)
-			}
-			if identity, err := h.tasks.EnsureIdentityForRun(*run, projectID, sessUser); err == nil && identity != nil {
-				shortTitle = identity.ShortTitle
-				// Bind the task to the conversation that asked for it. Results
-				// have to come back here, and a project-wide push target is not
-				// the same place — this is the only record of where "here" is,
-				// and it must survive a restart.
-				if hasSess && strings.TrimSpace(sess.Channel.ConversationID) != "" {
-					if _, err := h.tasks.UpdateIdentity(services.EnsureTaskIdentityInput{
-						RunID: run.ID, ProjectID: projectID, UserID: sessUser,
-						OriginChannel:        sess.Channel.ChannelType,
-						OriginScene:          sess.Channel.Scene,
-						OriginConversationID: sess.Channel.ConversationID,
-						OriginExternalUserID: sess.Channel.ExternalUserID,
-						OriginTraceID:        strings.TrimSpace(sess.Channel.TraceID),
-						// The task is conducted in the language it was asked
-						// in; later updates follow the task, not whichever
-						// message happens to trigger them.
-						Language: services.DetectLanguage(identity.OriginalRequirement, ""),
-					}); err != nil {
-						log.Warn().Err(err).Str("run", run.ID).
-							Msg("pm_start_run: binding task to origin conversation failed")
-					}
-				}
-			}
-		}
-		if h.notify != nil {
-			target := IMTarget{}
-			if hasSess {
-				target = imTargetForSession(sess)
-			}
-			if err := h.notify.NotifyRunAccepted(projectID, run.ID, target, shortTitle, ""); err != nil {
-				log.Warn().Err(err).Str("run", run.ID).Msg("pm_start_run acceptance ack failed")
-			}
-		}
-		return map[string]any{"id": run.ID, "status": run.Status, "shortTitle": shortTitle}, false
-	case "pm_reply":
-		if h.notify == nil {
-			return map[string]any{"error": "im notifier unavailable"}, true
-		}
-		text := strings.TrimSpace(platformmcp.StrArg(args, "text"))
-		if text == "" {
-			return map[string]any{"error": "text is required"}, true
-		}
-		// A runId is optional, but when given it must be this project's Run —
-		// an answer must never be attributed to another project's task.
-		runID := strings.TrimSpace(platformmcp.StrArg(args, "runId"))
-		if runID != "" {
-			if _, ok := h.runInProject(projectID, runID); !ok {
-				return map[string]any{"error": "run not found"}, true
-			}
-		}
-		target := IMTarget{}
-		if sess, ok := h.SessionFor(projectID, token); ok {
-			target = imTargetForSession(sess)
-		}
-		if strings.TrimSpace(target.ConversationID) == "" {
-			return map[string]any{"error": "no external conversation bound to this session"}, true
-		}
-		outcome, err := h.notify.NotifyReply(projectID, runID, target, text,
-			strings.TrimSpace(platformmcp.StrArg(args, "shortTitle")))
-		if err != nil {
-			return map[string]any{"error": err.Error()}, true
-		}
-		if outcome.AlreadyReplied {
-			// Not an error: the answer the user needed already went out. Saying
-			// so plainly is what stops the agent from rewording and retrying,
-			// which is how one question ends up with two answers.
-			return map[string]any{
-				"status": "already_replied", "sent": false,
-				"reason": "这一轮已经回过用户了，本轮不要再发第二条",
-			}, false
-		}
-		if !outcome.Sent {
-			reason := outcome.Reason
-			if reason == "" {
-				reason = "suppressed"
-			}
-			return map[string]any{"status": "suppressed", "sent": false, "reason": reason}, false
-		}
-		return map[string]any{"status": "sent", "sent": true}, false
-	case "pm_notify_progress":
-		if h.notify == nil {
-			return map[string]any{"error": "im notifier unavailable"}, true
-		}
-		runID := platformmcp.StrArg(args, "runId")
-		if _, ok := h.runInProject(projectID, runID); !ok {
-			return map[string]any{"error": "run not found"}, true
-		}
-		text := strings.TrimSpace(platformmcp.StrArg(args, "text"))
-		stage := strings.TrimSpace(platformmcp.StrArg(args, "stage"))
-		conclusion := strings.TrimSpace(platformmcp.StrArg(args, "conclusion"))
-		kind := strings.TrimSpace(platformmcp.StrArg(args, "kind"))
-		if kind == "" {
-			kind = "progress"
-		}
-		blocked := platformmcp.BoolArg(args, "blocked")
-		actionRequired := platformmcp.BoolArg(args, "actionRequired")
-		if text == "" {
-			text = stage
-			if text == "" {
-				text = conclusion
-			}
-		}
-		if text == "" {
-			return map[string]any{"error": "text, stage or conclusion required"}, true
-		}
-		target := IMTarget{}
-		if sess, ok := h.SessionFor(projectID, token); ok {
-			target = imTargetForSession(sess)
-		}
-		outcome, err := h.notify.NotifyProgress(projectID, runID, target, kind, text, stage, conclusion, blocked, actionRequired)
-		if err != nil {
-			return map[string]any{"error": err.Error()}, true
-		}
-		if !outcome.Sent {
-			// A policy suppression is a successful call with a different
-			// outcome. Reporting it as a tool error made agents rephrase and
-			// resend the very message the policy just merged or deduplicated.
-			reason := outcome.Reason
-			if reason == "" {
-				reason = "suppressed"
-			}
-			return map[string]any{
-				"status": "suppressed", "sent": false, "reason": reason, "kind": kind,
-			}, false
-		}
-		return map[string]any{"status": "sent", "sent": true, "kind": kind}, false
+		return map[string]any{"id": run.ID, "status": run.Status}, false
 	case "pm_resume_gate":
 		if h.eng == nil {
 			return map[string]any{"error": "engine unavailable"}, true
@@ -949,13 +735,6 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		action := strings.TrimSpace(platformmcp.StrArg(args, "action"))
 		if nodeID == "" || action == "" {
 			return map[string]any{"error": "nodeId and action required"}, true
-		}
-		if blocked, completed, prompt, confirmErr := h.requireRiskConfirmation(projectID, token, runID, "resume_gate:"+nodeID+":"+action); confirmErr != nil {
-			return map[string]any{"error": confirmErr.Error()}, true
-		} else if completed {
-			return map[string]any{"status": "already_confirmed"}, false
-		} else if blocked {
-			return needsConfirmationResult(prompt, nil), false
 		}
 		if err := h.eng.ResumeGate(runID, nodeID, action, platformmcp.MapArg(args, "form")); err != nil {
 			return map[string]any{"error": err.Error()}, true
@@ -997,13 +776,6 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		if !ok {
 			return map[string]any{"error": "run not found"}, true
 		}
-		if blocked, completed, prompt, confirmErr := h.requireRiskConfirmation(projectID, token, runID, "cancel_run"); confirmErr != nil {
-			return map[string]any{"error": confirmErr.Error()}, true
-		} else if completed {
-			return map[string]any{"status": "already_confirmed", "runId": runID}, false
-		} else if blocked {
-			return needsConfirmationResult(prompt, map[string]any{"runId": runID}), false
-		}
 		if err := h.eng.Cancel(runID); err != nil {
 			return map[string]any{"error": err.Error()}, true
 		}
@@ -1025,111 +797,6 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		return map[string]any{"status": "cancelled"}, false
 	default:
 		return map[string]any{"error": "unknown tool: " + name}, true
-	}
-}
-
-// requireRiskConfirmation creates a one-shot ticket and blocks the write until
-// the user confirms via IM. Returns blocked=false when risk service is unset
-// (unit tests without IM wiring) or when a ticket was already confirmed in-band
-// via confirmed=true after the IM path executed the action separately.
-func (h *Host) requireRiskConfirmation(projectID, token, runID, action string) (blocked, completed bool, prompt string, err error) {
-	if h.risk == nil {
-		return false, false, "", nil
-	}
-	sess, ok := h.SessionFor(projectID, token)
-	if !ok {
-		return true, false, "session required for high-risk confirmation", nil
-	}
-	riskUserID := riskUserIDForSession(sess)
-	// If the IM orchestration already confirmed and executed, MCP should not
-	// create another ticket. A fresh pending ticket always blocks.
-	if pending, err := h.risk.LatestPending(riskUserID, projectID); err == nil && pending != nil &&
-		pending.RunID == runID && pending.Action == action {
-		prompt := h.risk.ConfirmationPrompt(*pending)
-		return true, false, prompt, h.notifyConfirmation(projectID, runID, pending.ID, sess, prompt)
-	}
-	if settled, err := h.risk.LatestForAction(riskUserID, projectID, runID, action); err == nil &&
-		settled != nil && settled.Status == "confirmed" && settled.ExpiresAt.After(time.Now()) {
-		return false, true, "", nil
-	}
-	shortTitle := ""
-	if h.tasks != nil {
-		var identity models.TaskIdentity
-		if err := h.tasks.DB().Where("run_id = ? AND project_id = ?", runID, projectID).First(&identity).Error; err == nil {
-			shortTitle = identity.ShortTitle
-		}
-	}
-	ticket, err := h.risk.CreateTicket(services.RiskTicketInput{
-		ProjectID: projectID, UserID: riskUserID, RunID: runID,
-		Action: action, ShortTitle: shortTitle, Language: "",
-	})
-	if err != nil {
-		return true, false, "failed to create confirmation ticket: " + err.Error(), nil
-	}
-	prompt = h.risk.ConfirmationPrompt(*ticket)
-	return true, false, prompt, h.notifyConfirmation(projectID, runID, ticket.ID, sess, prompt)
-}
-
-// needsConfirmationResult reports a write blocked on the user's authorization.
-//
-// The prompt is included so the agent knows what was asked, not so it can ask
-// again: the platform already sent that exact question, and an agent that
-// rephrases it produces a second, worse-worded question competing with the real
-// one — and only the real one can settle the ticket.
-func needsConfirmationResult(prompt string, extra map[string]any) map[string]any {
-	out := map[string]any{
-		"status": "needs_confirmation", "prompt": prompt,
-		"note": "这个问题平台已经原样发给用户了。本轮不要再自己问一遍，也不要复述，直接结束这一轮等用户回话。",
-	}
-	for k, v := range extra {
-		out[k] = v
-	}
-	return out
-}
-
-// notifyConfirmation sends a ticket's question and records whether it landed.
-// Discarding that outcome is what let an undelivered question sit pending and
-// capture a confirmation meant for a different task, so the ticket is marked
-// prompted only when the user really received it.
-func (h *Host) notifyConfirmation(projectID, runID, ticketID string, sess *Session, prompt string) error {
-	if h.notify == nil {
-		return nil
-	}
-	// A suppressed confirmation prompt (the same ticket already went out) is not
-	// a failure: only a real delivery failure blocks the write.
-	outcome, err := h.notify.NotifyProgress(projectID, runID, imTargetForSession(sess),
-		"action_required", prompt, "", "", false, true)
-	if err != nil {
-		return fmt.Errorf("send confirmation prompt: %w", err)
-	}
-	if outcome.Sent && h.risk != nil && strings.TrimSpace(ticketID) != "" {
-		if err := h.risk.MarkPrompted(ticketID); err != nil {
-			log.Warn().Err(err).Str("ticket", ticketID).
-				Msg("confirmation prompt delivered but not recorded as asked")
-		}
-	}
-	return nil
-}
-
-func riskUserIDForSession(sess *Session) string {
-	if sess == nil {
-		return ""
-	}
-	if strings.EqualFold(strings.TrimSpace(sess.Channel.ChannelType), "qq") &&
-		strings.TrimSpace(sess.Channel.ExternalUserID) != "" {
-		return services.SyntheticQQUserID(sess.Channel.ExternalUserID)
-	}
-	return strings.TrimSpace(sess.UserID)
-}
-
-func imTargetForSession(sess *Session) IMTarget {
-	if sess == nil {
-		return IMTarget{}
-	}
-	return IMTarget{
-		ChannelType: sess.Channel.ChannelType, Scene: sess.Channel.Scene,
-		ConversationID: sess.Channel.ConversationID, UserID: sess.Channel.ExternalUserID,
-		TraceID: sess.Channel.TraceID,
 	}
 }
 
@@ -1248,30 +915,8 @@ func toolSchemas(mcpID string) []map[string]any {
 					"description": "可选：精确字段/页面元素标注；首版不支持 images",
 				},
 			}),
-			platformmcp.Tool("pm_cancel_run", "取消一次运行中的 Run（需用户短标题二次确认后才会真正取消）。", map[string]any{
+			platformmcp.Tool("pm_cancel_run", "取消一次运行中的 Run。", map[string]any{
 				"runId": map[string]any{"type": "string"},
-			}),
-			platformmcp.Tool("pm_reply", "把这一轮查到的结论交给会话层。会话层（快模型）会用人话转述后再发到 IM；"+
-				"有会话层时你提交的 text 不会原样直发。你在正文里写的内容默认不会外发，只有这里提交的 text 会进入转述。"+
-				"text 必须是事实清楚、用户能读懂的人话：不要出现 Run ID、工作流名、沙箱/工具/内部事件等实现细节，也不要写推理过程。"+
-				"一轮只交一条：把结论一次写完，不要拆成多条。返回 status=already_replied 表示这一轮已经收过结论了，"+
-				"此时不要改措辞重交，直接结束这一轮。status=suppressed 同理（含该 Run 已被断开会话绑定），也不要重交。", map[string]any{
-				"text":       map[string]any{"type": "string", "description": "交给会话层转述的结论，人话，事实清楚"},
-				"runId":      map[string]any{"type": "string", "description": "可选：这条结论关联的 Run"},
-				"shortTitle": map[string]any{"type": "string", "description": "可选：关联任务的短标题（人话，禁止填 Run ID）"},
-			}),
-			platformmcp.Tool("pm_notify_progress", "向会话层提交一条进度/阻塞/确认事实（须含 stage/conclusion 等实质字段）。"+
-				"kind=progress 只记进台账，不会外发——用户什么时候需要知道进展由平台决定，不由你决定；"+
-				"你照常提交，它会成为对方问「怎么样了」时的答案。kind=blocked/action_required/final 会由会话层转述后发到 IM。"+
-				"返回 status=sent 表示已外发；status=suppressed 表示被策略正常抑制（限频、去重、只记台账、或该 Run 已断开会话）——"+
-				"这不是失败，不要改措辞重交；只有真实投递失败才返回错误。", map[string]any{
-				"runId":          map[string]any{"type": "string"},
-				"kind":           map[string]any{"type": "string", "description": "progress（只记台账）|blocked|action_required|final"},
-				"text":           map[string]any{"type": "string"},
-				"stage":          map[string]any{"type": "string"},
-				"conclusion":     map[string]any{"type": "string"},
-				"blocked":        map[string]any{"type": "boolean"},
-				"actionRequired": map[string]any{"type": "boolean"},
 			}),
 		}
 	default:

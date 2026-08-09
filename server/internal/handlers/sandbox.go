@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cocofhu/approving/internal/apierr"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/sandbox"
 
@@ -230,7 +229,8 @@ func (h *Handlers) GetSandbox(c *gin.Context) {
 func (h *Handlers) ListSandboxes(c *gin.Context) {
 	views, err := h.Sbx.List(c.Request.Context())
 	if err != nil {
-		apierr.Internal(c, err)
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, views)

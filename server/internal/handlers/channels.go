@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/cocofhu/approving/internal/apierr"
 	"github.com/cocofhu/approving/internal/crypto"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/services"
@@ -41,7 +40,8 @@ func (h *Handlers) GetProjectChannel(c *gin.Context) {
 	}
 	dto, err := h.Channels.GetByProject(c.Param("id"))
 	if err != nil {
-		apierr.Internal(c, err)
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	// secretsKeyConfigured lets the UI hide the "configure encryption key"
@@ -70,13 +70,13 @@ func (h *Handlers) PutProjectChannel(c *gin.Context) {
 		return
 	}
 	h.recordAudit(services.AuditRecord{
-		ProjectID:    c.Param("id"),
-		Actor:        h.auditActorFromContext(c),
-		Action:       models.AuditActionChannel,
-		ResourceType: "channel",
-		ResourceID:   c.Param("id"),
-		Outcome:      models.AuditOutcomeOK,
-		Summary:      "upsert project channel",
+		ProjectID:      c.Param("id"),
+		Actor:          h.auditActorFromContext(c),
+		Action:         models.AuditActionChannel,
+		ResourceType:   "channel",
+		ResourceID:     c.Param("id"),
+		Outcome:        models.AuditOutcomeOK,
+		Summary:        "upsert project channel",
 		Payload: map[string]any{
 			"type":    dto.Type,
 			"enabled": dto.Enabled,
@@ -97,14 +97,14 @@ func (h *Handlers) DeleteProjectChannel(c *gin.Context) {
 		return
 	}
 	h.recordAudit(services.AuditRecord{
-		ProjectID:    c.Param("id"),
-		Actor:        h.auditActorFromContext(c),
-		Action:       models.AuditActionChannel,
-		ResourceType: "channel",
-		ResourceID:   c.Param("id"),
-		Outcome:      models.AuditOutcomeOK,
-		Summary:      "delete project channel",
-		Payload:      map[string]any{"deleted": true},
+		ProjectID:      c.Param("id"),
+		Actor:          h.auditActorFromContext(c),
+		Action:         models.AuditActionChannel,
+		ResourceType:   "channel",
+		ResourceID:     c.Param("id"),
+		Outcome:        models.AuditOutcomeOK,
+		Summary:        "delete project channel",
+		Payload:        map[string]any{"deleted": true},
 	})
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 }
@@ -126,6 +126,7 @@ func writeChannelErr(c *gin.Context, err error) {
 		errors.Is(err, services.ErrChannelCronTargetInvalid):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	default:
-		apierr.Internal(c, err)
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
 }

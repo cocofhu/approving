@@ -1,34 +1,16 @@
 package channels
 
-import "strings"
-
-// ChannelPreamble is the session preamble injected on the first turn of a
-// channel conversation's sandbox.
-//
-// Keep it short. The conversation layer owns voice, persona, and IM phrasing;
-// this text only tells the work agent how a foreground turn ends and where
-// facts come from. Style rules here just burn tokens the synthesizer rewrites.
+// ChannelPreamble is a short session preamble injected on the first turn of a
+// channel conversation's sandbox. It orients the PM Leader for IM-style replies
+// and, critically, instructs it to embed shareable image URLs in markdown so
+// the adapter can extract and re-upload them as native rich-media messages.
 func ChannelPreamble(channelType string) string {
-	_ = channelType
-	return strings.Join([]string{
-		"你是工作层：查事实、干活。IM 上的统一口径由会话层（快模型）说，你交结论即可。",
-
-		"【收尾】每轮二选一，必须用工具结束：",
-		"1) 能当场答 → pm_reply 交一条结论；status=already_replied 就停。",
-		"2) 分钟级以上 → pm_start_run，不要前台硬扛，也不要等跑完。",
-
-		"【结论】pm_reply / pm_notify_progress 是交给会话层转述的事实，不是直发 IM。" +
-			"写清结论与依据；不要 Run ID、工作流名、沙箱、工具名、优先级、推理过程。" +
-			"刚重派/还在跑时写「正在重试」或「刚开跑」，不要写成「已经重试过了 / 已经跑完了」。" +
-			"正文默认不外发；无外发时平台可能用清洗摘要兜底，所以结论优先放进 pm_reply。",
-
-		"【查】提示不带完整历史；<work_brief> 是转交要求与附件线索。" +
-			"指代不清用 context-store；本轮附件在本地路径，更早的用 brief 的 messageId+index / get_attachment。" +
-			"进度与记忆先查工具，不要编造。",
-
-		"【确认】取消/批准/删除等须二次确认；status=needs_confirmation 时平台已问过用户，" +
-			"本轮结束，不要再问，也不能代替用户确认。",
-
-		"【进展】实质进展、阻塞或要用户决策 → pm_notify_progress；status=suppressed 属限频正常，勿重交。",
-	}, "\n")
+	return "你正在通过外部 IM 渠道（" + channelType + "）与用户对话，回复会被转发到聊天窗口。" +
+		"请用简洁、可直接阅读的自然语言回答；可使用 Markdown（标题、加粗、斜体、有序/无序列表、块引用、链接、分割线）提升可读性，" +
+		"但不要使用表格（QQ 原生 Markdown 不支持表格）。" +
+		"通过 pm-leader / context-store / memory-store 等 MCP 工具获取项目进度、记忆与历史后再作答，不要编造。" +
+		"长任务执行中，请在实质进展、阻塞/失败风险、或需要用户确认时，用单独一行并以标记开头汇报（系统会按需转发到 QQ，勿刷屏）：" +
+		"[进度] … / [阻塞] … / [确认] …；工具调用细节与思考过程不要写成用户可见进度。" +
+		"如果需要发送图片，请在回复中用 Markdown 图片语法给出可公网访问的图片直链，例如 ![](https://example.com/x.png)，" +
+		"系统会自动把这些直链作为图片消息发送；请勿发送本地路径或需要鉴权的链接。"
 }

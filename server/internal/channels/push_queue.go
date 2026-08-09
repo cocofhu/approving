@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cocofhu/approving/internal/sendable"
 	"github.com/cocofhu/approving/internal/services"
 
 	"github.com/rs/zerolog/log"
@@ -34,18 +33,12 @@ func isProtectedPush(p CronPushItem) bool {
 
 // CronPushItem is a timed push waiting for a conversation idle slot.
 type CronPushItem struct {
-	// ID identifies this item across an enqueue/flush round trip so the caller
-	// can learn whether its own push actually went out or was deferred. Only
-	// set by callers that report a delivery outcome (run_notify); empty for
-	// fire-and-forget cron pushes.
-	ID        string
 	ProjectID string
 	Scene     Scene
 	Conv      string
 	Category  string
 	Kind      CronResultKind
 	Text      string
-	Envelope  sendable.DeliveryEnvelope
 	Enqueued  time.Time
 }
 
@@ -54,12 +47,23 @@ type pushQueue struct {
 	pending []CronPushItem
 }
 
-// enqueue merges / evicts per product rules. Caller must NOT hold q.mu.
-func (g *outboundGateway) enqueue(key string, item CronPushItem) {
+func (m *Manager) pushQueueFor(key string) *pushQueue {
+	m.pushMu.Lock()
+	defer m.pushMu.Unlock()
+	q, ok := m.pushQueues[key]
+	if !ok {
+		q = &pushQueue{}
+		m.pushQueues[key] = q
+	}
+	return q
+}
+
+// enqueuePushLocked merges / evicts per product rules. Caller must NOT hold q.mu.
+func (m *Manager) enqueuePush(key string, item CronPushItem) {
 	if item.Enqueued.IsZero() {
 		item.Enqueued = time.Now()
 	}
-	q := g.queueFor(key)
+	q := m.pushQueueFor(key)
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
@@ -187,6 +191,19 @@ func indexOldestNonProtected(items []CronPushItem) int {
 	return -1
 }
 
+func (m *Manager) takePushQueue(key string) []CronPushItem {
+	q := m.pushQueueFor(key)
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if len(q.pending) == 0 {
+		return nil
+	}
+	out := append([]CronPushItem(nil), q.pending...)
+	q.pending = nil
+	// Priority within a flush: changed/failed before compressible unchanged.
+	return sortPushByPriority(out)
+}
+
 func sortPushByPriority(items []CronPushItem) []CronPushItem {
 	if len(items) < 2 {
 		return items
@@ -230,51 +247,42 @@ func ClassifyCronResult(text string) CronResultKind {
 	}
 }
 
-// The category labels below are copy, but they stay here rather than in
-// usercopy.go: they only make sense next to cronCategoryClass, which is the
-// classification they are labelling.
+// FormatCronPush builds the short QQ body for a structured cron result.
+// Unchanged uses a minimal template; changed/failed keep (truncated) body.
+func FormatCronPush(category string, kind CronResultKind, body string) string {
+	body = strings.TrimSpace(body)
+	cat := strings.TrimSpace(category)
+	switch kind {
+	case CronResultUnchanged:
+		return unchangedTemplate(cat)
+	case CronResultFailed:
+		if body == "" {
+			return failLabel(cat) + "失败"
+		}
+		return failLabel(cat) + truncateRunes(body, 120)
+	default:
+		if body == "" {
+			return catLabel(cat) + "有变化"
+		}
+		return body
+	}
+}
 
-func unchangedTemplate(category, language string) string {
-	en := services.NormalizeLanguage(language) == "en"
+func unchangedTemplate(category string) string {
 	switch cronCategoryClass(category) {
 	case "pr":
-		if en {
-			return "PR: no change"
-		}
 		return "PR：无变化"
 	case "daily":
-		if en {
-			return "Daily: no change"
-		}
 		return "日报：无变化"
 	default:
 		if category == "" {
-			if en {
-				return "No change"
-			}
 			return "无变化"
-		}
-		if en {
-			return truncateRunes(category, 20) + ": no change"
 		}
 		return truncateRunes(category, 20) + "：无变化"
 	}
 }
 
-func failLabel(category, language string) string {
-	if services.NormalizeLanguage(language) == "en" {
-		switch cronCategoryClass(category) {
-		case "pr":
-			return "PR: "
-		case "daily":
-			return "Daily: "
-		default:
-			if category == "" {
-				return "Failed: "
-			}
-			return truncateRunes(category, 20) + ": "
-		}
-	}
+func failLabel(category string) string {
 	switch cronCategoryClass(category) {
 	case "pr":
 		return "PR："
@@ -288,26 +296,16 @@ func failLabel(category, language string) string {
 	}
 }
 
-func catLabel(category, language string) string {
-	if category == "" {
-		return ""
-	}
-	if services.NormalizeLanguage(language) == "en" {
-		switch cronCategoryClass(category) {
-		case "pr":
-			return "PR: "
-		case "daily":
-			return "Daily: "
-		default:
-			return truncateRunes(category, 20) + ": "
-		}
-	}
+func catLabel(category string) string {
 	switch cronCategoryClass(category) {
 	case "pr":
 		return "PR："
 	case "daily":
 		return "日报："
 	default:
+		if category == "" {
+			return ""
+		}
 		return truncateRunes(category, 20) + "："
 	}
 }

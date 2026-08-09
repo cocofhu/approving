@@ -106,7 +106,7 @@ func TestContextMCPAuthToolsAndIsolation(t *testing.T) {
 	}
 	for _, name := range []string{
 		"list_conversations", "get_messages", "search_messages",
-		"get_current_conversation", "get_attached_context", "get_attachment",
+		"get_current_conversation", "get_attached_context",
 	} {
 		if !strings.Contains(string(resp), `"name":"`+name+`"`) {
 			t.Fatalf("missing %s", name)
@@ -179,65 +179,6 @@ func TestContextMCPAuthToolsAndIsolation(t *testing.T) {
 		t.Fatalf("empty query should error: %s", text)
 	}
 	_ = st
-}
-
-// Reading a conversation must not cost the agent its context window. This tool
-// used to return stored messages verbatim, base64 attachments included, so one
-// call over a thread with a few screenshots could bury everything else the
-// agent was holding. The listing describes the attachments; a second call
-// fetches the one that matters.
-func TestGetMessagesDescribesAttachmentsAndGetAttachmentReturnsThem(t *testing.T) {
-	_, pm, p := setupContextDB(t)
-	th, err := pm.CreateThread(p.ID, "alice", "带附件", "agent-a", models.ChatThreadKindUser)
-	if err != nil {
-		t.Fatal(err)
-	}
-	const payload = "QUJDREVGRw==" // base64 of "ABCDEFG"
-	msg, err := pm.AppendMessage(th.ID, "user", "这是报错截图", nil, nil, []models.PromptImage{
-		{Data: payload, MimeType: "image/png", Name: "err.png"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	h := NewHost(pm)
-	tok := h.Register(p.ID, "agent-a", th.ID, "alice")
-
-	_, resp := h.ServeRPC(p.ID, tok, ctxToolCall(1, "get_messages", nil))
-	text, isErr := ctxToolText(t, resp)
-	if isErr {
-		t.Fatal(text)
-	}
-	if strings.Contains(text, payload) {
-		t.Fatalf("get_messages inlined attachment bytes by default: %s", text)
-	}
-	for _, must := range []string{"err.png", "image/png", "这是报错截图"} {
-		if !strings.Contains(text, must) {
-			t.Fatalf("attachment manifest lost %q: %s", must, text)
-		}
-	}
-
-	_, resp = h.ServeRPC(p.ID, tok, ctxToolCall(2, "get_messages", map[string]any{"includeImages": true}))
-	text, isErr = ctxToolText(t, resp)
-	if isErr || !strings.Contains(text, payload) {
-		t.Fatalf("includeImages=true must return the bytes: %s", text)
-	}
-
-	_, resp = h.ServeRPC(p.ID, tok, ctxToolCall(3, "get_attachment", map[string]any{
-		"messageId": msg.ID, "index": 0,
-	}))
-	text, isErr = ctxToolText(t, resp)
-	if isErr || !strings.Contains(text, payload) || !strings.Contains(text, "err.png") {
-		t.Fatalf("get_attachment: %s", text)
-	}
-
-	_, resp = h.ServeRPC(p.ID, tok, ctxToolCall(4, "get_attachment", map[string]any{
-		"messageId": msg.ID, "index": 7,
-	}))
-	text, isErr = ctxToolText(t, resp)
-	if !isErr || !strings.Contains(text, "out of range") {
-		t.Fatalf("out-of-range index must be an error, got isErr=%v %s", isErr, text)
-	}
 }
 
 func TestContextMCPRestoreAndUnregister(t *testing.T) {

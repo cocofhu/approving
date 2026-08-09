@@ -326,34 +326,27 @@ func (c *client) uploadMedia(ctx context.Context, scene, target, imageURL string
 	return out.FileInfo, nil
 }
 
-// sendC2C sends a text and/or images to a user openid and returns the id of the
-// first message QQ created.
-func (c *client) sendC2C(ctx context.Context, openid, replyMsgID, text string, imageURLs []string) (string, error) {
+// sendC2C sends a text and/or images to a user openid.
+func (c *client) sendC2C(ctx context.Context, openid, replyMsgID, text string, imageURLs []string) error {
 	return c.sendUserOrGroup(ctx, "c2c", "/v2/users/"+openid+"/messages", "c2c", openid, replyMsgID, text, imageURLs)
 }
 
-// sendGroup sends a text and/or images to a group openid and returns the id of
-// the first message QQ created.
-func (c *client) sendGroup(ctx context.Context, groupOpenID, replyMsgID, text string, imageURLs []string) (string, error) {
+// sendGroup sends a text and/or images to a group openid.
+func (c *client) sendGroup(ctx context.Context, groupOpenID, replyMsgID, text string, imageURLs []string) error {
 	return c.sendUserOrGroup(ctx, "group", "/v2/groups/"+groupOpenID+"/messages", "group", groupOpenID, replyMsgID, text, imageURLs)
 }
 
-func (c *client) sendUserOrGroup(ctx context.Context, scene, path, uploadScene, target, replyMsgID, text string, imageURLs []string) (string, error) {
-	// Text first (if any), then each image as its own media message. A
-	// multi-part send is identified by its first message: the text one when
-	// there is text, so later media parts never overwrite it.
-	messageID := ""
+func (c *client) sendUserOrGroup(ctx context.Context, scene, path, uploadScene, target, replyMsgID, text string, imageURLs []string) error {
+	// Text first (if any), then each image as its own media message.
 	if strings.TrimSpace(text) != "" {
-		id, err := c.sendUserOrGroupText(ctx, scene, path, target, replyMsgID, text)
-		if err != nil {
-			return "", err
+		if err := c.sendUserOrGroupText(ctx, scene, path, target, replyMsgID, text); err != nil {
+			return err
 		}
-		messageID = id
 	}
 	for _, u := range imageURLs {
 		fileInfo, err := c.uploadMedia(ctx, uploadScene, target, u)
 		if err != nil {
-			return messageID, err
+			return err
 		}
 		payload := map[string]any{
 			"content":  " ",
@@ -364,21 +357,17 @@ func (c *client) sendUserOrGroup(ctx context.Context, scene, path, uploadScene, 
 			payload["msg_id"] = replyMsgID
 			payload["msg_seq"] = c.nextSeq(replyMsgID)
 		}
-		var out sendMessageResponse
-		if err := c.doJSON(ctx, http.MethodPost, path, payload, &out); err != nil {
-			return messageID, err
-		}
-		if messageID == "" {
-			messageID = strings.TrimSpace(out.ID)
+		if err := c.doJSON(ctx, http.MethodPost, path, payload, nil); err != nil {
+			return err
 		}
 	}
-	return messageID, nil
+	return nil
 }
 
 // sendGuildText sends the text body for a guild channel message. Guild Markdown
 // still requires 内邀开通, so a Markdown attempt (markdown.content) falls back to
 // a plain-text content message and caches the target as unsupported.
-func (c *client) sendGuildText(ctx context.Context, path, channelID, replyMsgID, text string) (string, error) {
+func (c *client) sendGuildText(ctx context.Context, path, channelID, replyMsgID, text string) error {
 	capKey := "guild:" + channelID
 	if c.markdownSupported(capKey) {
 		payload := map[string]any{
@@ -387,16 +376,15 @@ func (c *client) sendGuildText(ctx context.Context, path, channelID, replyMsgID,
 		if replyMsgID != "" {
 			payload["msg_id"] = replyMsgID
 		}
-		var out sendMessageResponse
-		err := c.doJSON(ctx, http.MethodPost, path, payload, &out)
+		err := c.doJSON(ctx, http.MethodPost, path, payload, nil)
 		if err == nil {
-			return strings.TrimSpace(out.ID), nil
+			return nil
 		}
 		// Only downgrade on an outright rejection; propagate transient errors so
 		// we neither cache a false negative nor risk double-posting a message
 		// that may have actually been delivered.
 		if !markdownRejected(err) {
-			return "", err
+			return err
 		}
 		c.markMarkdownUnsupported(capKey)
 		log.Warn().Err(err).Str("scene", "guild").Msg("qq: markdown rejected; falling back to plain text")
@@ -405,18 +393,14 @@ func (c *client) sendGuildText(ctx context.Context, path, channelID, replyMsgID,
 	if replyMsgID != "" {
 		payload["msg_id"] = replyMsgID
 	}
-	var out sendMessageResponse
-	if err := c.doJSON(ctx, http.MethodPost, path, payload, &out); err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(out.ID), nil
+	return c.doJSON(ctx, http.MethodPost, path, payload, nil)
 }
 
 // sendUserOrGroupText sends the text body for a C2C/group message. When Markdown
 // is enabled and the target isn't known to reject it, the text is sent as a
 // native Markdown message (msg_type=2); on failure it falls back to plain text
 // (msg_type=0) and remembers the target as Markdown-unsupported.
-func (c *client) sendUserOrGroupText(ctx context.Context, scene, path, target, replyMsgID, text string) (string, error) {
+func (c *client) sendUserOrGroupText(ctx context.Context, scene, path, target, replyMsgID, text string) error {
 	capKey := scene + ":" + target
 	// Reserve a single msg_seq up front and reuse it for both the Markdown
 	// attempt and the plain-text fallback. QQ dedups on (msg_id, msg_seq), so if
@@ -436,14 +420,13 @@ func (c *client) sendUserOrGroupText(ctx context.Context, scene, path, target, r
 			payload["msg_id"] = replyMsgID
 			payload["msg_seq"] = seq
 		}
-		var out sendMessageResponse
-		err := c.doJSON(ctx, http.MethodPost, path, payload, &out)
+		err := c.doJSON(ctx, http.MethodPost, path, payload, nil)
 		if err == nil {
-			return strings.TrimSpace(out.ID), nil
+			return nil
 		}
 		// Only downgrade on an outright rejection; propagate transient errors.
 		if !markdownRejected(err) {
-			return "", err
+			return err
 		}
 		c.markMarkdownUnsupported(capKey)
 		log.Warn().Err(err).Str("scene", scene).Msg("qq: markdown rejected; falling back to plain text")
@@ -456,38 +439,27 @@ func (c *client) sendUserOrGroupText(ctx context.Context, scene, path, target, r
 		payload["msg_id"] = replyMsgID
 		payload["msg_seq"] = seq
 	}
-	var out sendMessageResponse
-	if err := c.doJSON(ctx, http.MethodPost, path, payload, &out); err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(out.ID), nil
+	return c.doJSON(ctx, http.MethodPost, path, payload, nil)
 }
 
 // sendGuild sends to a guild channel. Guild channel messages carry text plus an
 // optional image URL (public-domain guilds cannot receive inbound rich media,
 // but can be sent an image URL).
-func (c *client) sendGuild(ctx context.Context, channelID, replyMsgID, text string, imageURLs []string) (string, error) {
+func (c *client) sendGuild(ctx context.Context, channelID, replyMsgID, text string, imageURLs []string) error {
 	path := "/channels/" + channelID + "/messages"
-	messageID := ""
 	if strings.TrimSpace(text) != "" || len(imageURLs) == 0 {
-		id, err := c.sendGuildText(ctx, path, channelID, replyMsgID, text)
-		if err != nil {
-			return "", err
+		if err := c.sendGuildText(ctx, path, channelID, replyMsgID, text); err != nil {
+			return err
 		}
-		messageID = id
 	}
 	for _, u := range imageURLs {
 		payload := map[string]any{"image": u}
 		if replyMsgID != "" {
 			payload["msg_id"] = replyMsgID
 		}
-		var out sendMessageResponse
-		if err := c.doJSON(ctx, http.MethodPost, path, payload, &out); err != nil {
-			return messageID, err
-		}
-		if messageID == "" {
-			messageID = strings.TrimSpace(out.ID)
+		if err := c.doJSON(ctx, http.MethodPost, path, payload, nil); err != nil {
+			return err
 		}
 	}
-	return messageID, nil
+	return nil
 }
