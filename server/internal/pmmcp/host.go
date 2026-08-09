@@ -56,6 +56,7 @@ type Host struct {
 	arts     *services.ArtifactService
 	org      *services.OrgService
 	skill    *services.SkillService
+	team     *services.TeamService
 	eng      engineOps
 	audit    func(services.AuditRecord)
 }
@@ -90,6 +91,13 @@ func (h *Host) SetOrgAndSkill(org *services.OrgService, skill *services.SkillSer
 	h.mu.Lock()
 	h.org = org
 	h.skill = skill
+	h.mu.Unlock()
+}
+
+// SetTeam wires TeamService for pm-agent-fs team-bootstrap tools.
+func (h *Host) SetTeam(team *services.TeamService) {
+	h.mu.Lock()
+	h.team = team
 	h.mu.Unlock()
 }
 
@@ -805,6 +813,20 @@ func toolSchemas(mcpID string) []map[string]any {
 	case MCPAgentFS:
 		return []map[string]any{
 			platformmcp.Tool("pm_get_org", "读取组织架构：全量 groups/agents（含相对当前 Leader 的 self/direct/indirect/other 标注）以及以 Leader 为根的下属树与直接/间接列表。只读，不可改 parent/groups。", nil),
+			platformmcp.Tool("pm_list_agent_templates", "列出内置工程师角色模板（id、中文角色名、简介），用于组建团队。", nil),
+			platformmcp.Tool("pm_create_agent_from_template", "从模板创建工程师 Agent（同项目；默认继承 Leader 的 mcp/env；禁止覆盖重名）。", map[string]any{
+				"templateId": map[string]any{"type": "string", "description": "模板 id，如 implement / clarify"},
+				"name":       map[string]any{"type": "string", "description": "新 Agent 名称，如 Approving实现工程师"},
+			}),
+			platformmcp.Tool("pm_set_org_membership", "设置 Agent 的组成员与汇报上级（parentAgent 须为当前 PM；groupIds 须在授权范围内）。", map[string]any{
+				"agentName":   map[string]any{"type": "string"},
+				"groupIds":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				"parentAgent": map[string]any{"type": "string", "description": "汇报上级，默认当前 PM"},
+			}),
+			platformmcp.Tool("pm_ensure_child_group", "在授权根组下幂等确保子组存在（如 Pipeline(GitHub)）。", map[string]any{
+				"name":          map[string]any{"type": "string"},
+				"parentGroupId": map[string]any{"type": "string", "description": "父组 id；省略则用建团结会话根组"},
+			}),
 			platformmcp.Tool("pm_fs_list", "列出授权 Agent 的 host 侧 workspace 目录（非 Run 沙箱）。", map[string]any{
 				"agentName": map[string]any{"type": "string", "description": "目标 Agent 名（自身或汇报闭包内下属）"},
 				"path":      map[string]any{"type": "string", "description": "workspace 相对目录，空或省略表示根"},

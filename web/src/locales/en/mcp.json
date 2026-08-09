@@ -339,6 +339,22 @@
           "signature": "pm_get_org()",
           "desc": "Read org and reporting relations"
         },
+        "pm_list_agent_templates": {
+          "signature": "pm_list_agent_templates()",
+          "desc": "List built-in engineer role templates"
+        },
+        "pm_create_agent_from_template": {
+          "signature": "pm_create_agent_from_template(templateId, name)",
+          "desc": "Create an engineer Agent from a template (same project; no overwrite)"
+        },
+        "pm_set_org_membership": {
+          "signature": "pm_set_org_membership(agentName, groupIds, parentAgent?)",
+          "desc": "Set group membership and reporting parent (parent must be current PM)"
+        },
+        "pm_ensure_child_group": {
+          "signature": "pm_ensure_child_group(name, parentGroupId?)",
+          "desc": "Idempotently ensure a child group under the authorized root"
+        },
         "pm_fs_list": {
           "signature": "pm_fs_list(agentName, path?)",
           "desc": "List workspace directory"

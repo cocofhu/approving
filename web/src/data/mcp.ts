@@ -168,6 +168,10 @@ export const BUILTIN_MCPS: McpServer[] = [
     overviewKey: 'mcp.pmAgentFs.overview',
     tools: [
       { name: 'pm_get_org', signatureKey: 'mcp.pmAgentFs.tools.pm_get_org.signature', descKey: 'mcp.pmAgentFs.tools.pm_get_org.desc', io: 'read' },
+      { name: 'pm_list_agent_templates', signatureKey: 'mcp.pmAgentFs.tools.pm_list_agent_templates.signature', descKey: 'mcp.pmAgentFs.tools.pm_list_agent_templates.desc', io: 'read' },
+      { name: 'pm_create_agent_from_template', signatureKey: 'mcp.pmAgentFs.tools.pm_create_agent_from_template.signature', descKey: 'mcp.pmAgentFs.tools.pm_create_agent_from_template.desc', io: 'write' },
+      { name: 'pm_set_org_membership', signatureKey: 'mcp.pmAgentFs.tools.pm_set_org_membership.signature', descKey: 'mcp.pmAgentFs.tools.pm_set_org_membership.desc', io: 'write' },
+      { name: 'pm_ensure_child_group', signatureKey: 'mcp.pmAgentFs.tools.pm_ensure_child_group.signature', descKey: 'mcp.pmAgentFs.tools.pm_ensure_child_group.desc', io: 'write' },
       { name: 'pm_fs_list', signatureKey: 'mcp.pmAgentFs.tools.pm_fs_list.signature', descKey: 'mcp.pmAgentFs.tools.pm_fs_list.desc', io: 'read' },
       { name: 'pm_fs_read', signatureKey: 'mcp.pmAgentFs.tools.pm_fs_read.signature', descKey: 'mcp.pmAgentFs.tools.pm_fs_read.desc', io: 'read' },
       { name: 'pm_fs_write', signatureKey: 'mcp.pmAgentFs.tools.pm_fs_write.signature', descKey: 'mcp.pmAgentFs.tools.pm_fs_write.desc', io: 'write' },

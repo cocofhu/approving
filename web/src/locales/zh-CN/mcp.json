@@ -339,6 +339,22 @@
           "signature": "pm_get_org()",
           "desc": "读组织架构与下属关系"
         },
+        "pm_list_agent_templates": {
+          "signature": "pm_list_agent_templates()",
+          "desc": "列出内置工程师角色模板"
+        },
+        "pm_create_agent_from_template": {
+          "signature": "pm_create_agent_from_template(templateId, name)",
+          "desc": "从模板创建工程师 Agent（同项目，禁止覆盖重名）"
+        },
+        "pm_set_org_membership": {
+          "signature": "pm_set_org_membership(agentName, groupIds, parentAgent?)",
+          "desc": "设置组成员与汇报上级（parent 须为当前 PM）"
+        },
+        "pm_ensure_child_group": {
+          "signature": "pm_ensure_child_group(name, parentGroupId?)",
+          "desc": "在授权根组下幂等确保子组存在"
+        },
         "pm_fs_list": {
           "signature": "pm_fs_list(agentName, path?)",
           "desc": "列出 workspace 目录"
