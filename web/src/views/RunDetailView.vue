@@ -38,6 +38,7 @@ import {
 } from '@/lib/reviewLayoutBudget'
 import { useBreakpoint } from '@/lib/useBreakpoint'
 import { addClarifyAnnotation, useClarifyDraft } from '@/lib/useClarifyDraft'
+import { previewPickLabel, type AppPreviewPickPayload } from '@/lib/previewPickUrl'
 import { NODE_DEFS } from '@/data/nodeRegistry'
 import { resolveNodeDisplayLabelFromNode } from '@/lib/resolveNodeDisplayLabel'
 import { fmtTime, fmtDuration, formatTrigger } from '@/lib/format'
@@ -1472,25 +1473,21 @@ const showRunFailureBanner = computed(() => !!runFailureReason.value)
 const { draft: clarifyDraft, attachments: clarifyAttachments, annotations: clarifyAnnotations } = useClarifyDraft(() => runId.value, () => selected.value)
 
 /** VNC pick on app_preview review stage → same ReAct annotation chips as structured ⤴. */
-const lastStagedAppPreviewPick = ref<{
-  selector: string
-  tagName: string
-  outerHTML: string
-} | null>(null)
+const lastStagedAppPreviewPick = ref<AppPreviewPickPayload | null>(null)
 
-function onAppPreviewStagedPick(
-  payload: { selector: string; tagName: string; outerHTML: string } | null,
-) {
+function onAppPreviewStagedPick(payload: AppPreviewPickPayload | null) {
   lastStagedAppPreviewPick.value = payload
 }
 
-function onAppPreviewReviewPick(payload: { selector: string; tagName: string; outerHTML: string }) {
+function onAppPreviewReviewPick(payload: AppPreviewPickPayload) {
   const rid = run.value?.id
   const nid = selNode.value?.id
   if (!rid || !nid) return
+  const url = (payload.url || '').trim()
   const result = addClarifyAnnotation(rid, nid, {
     selector: payload.selector,
-    label: payload.selector || payload.tagName,
+    url: url || undefined,
+    label: previewPickLabel(url, payload.selector, payload.tagName),
   })
   if (result === 'duplicate') toast.warn(t('pages.reviewComposer.alreadyAdded'))
   // Added to pending chips — clear staged so send won't double-attach.
@@ -1502,10 +1499,21 @@ function mergeStagedAppPreviewPick(
 ): import('@/lib/types').ReactAnnotation[] {
   const staged = lastStagedAppPreviewPick.value
   if (!staged?.selector) return annotations
-  if (annotations.some((a) => a.selector === staged.selector)) return annotations
+  const url = (staged.url || '').trim()
+  if (
+    annotations.some(
+      (a) => a.selector === staged.selector && (a.url || '').trim() === url,
+    )
+  ) {
+    return annotations
+  }
   return [
     ...annotations,
-    { selector: staged.selector, label: staged.selector || staged.tagName },
+    {
+      selector: staged.selector,
+      url: url || undefined,
+      label: previewPickLabel(url, staged.selector, staged.tagName),
+    },
   ]
 }
 // Every sandbox-backed node (all "Agent" category types: agent/react/plan/

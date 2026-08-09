@@ -387,9 +387,11 @@ type ReactMessage struct {
 // JSONPath (structured product field), Selector (visual DOM element), and/or
 // Quote (paragraph excerpt from a text selection) may be set; Note carries the
 // human's instruction for that spot. Truncated marks soft-capped quotes.
+// URL is the page location.href at DOM pick time (SPA navigations).
 type ReactAnnotation struct {
 	JSONPath  string `json:"jsonPath,omitempty"`
 	Selector  string `json:"selector,omitempty"`
+	URL       string `json:"url,omitempty"`
 	Label     string `json:"label,omitempty"`
 	Note      string `json:"note,omitempty"`
 	Quote     string `json:"quote,omitempty"`
@@ -420,6 +422,7 @@ func RenderAnnotations(anns []ReactAnnotation) string {
 		if note == "" {
 			note = "(见下方文字说明)"
 		}
+		pageURL := strings.TrimSpace(a.URL)
 		if quote != "" {
 			if ref == "" {
 				fmt.Fprintf(&b, "%d. [段落摘录] 引用原文: 「%s」", i+1, quote)
@@ -437,6 +440,9 @@ func RenderAnnotations(anns []ReactAnnotation) string {
 				b.WriteString(" (已截断)")
 			}
 			fmt.Fprintf(&b, " → %s\n", note)
+			if kind == "页面元素" && pageURL != "" {
+				fmt.Fprintf(&b, "   页面 URL: %s\n", pageURL)
+			}
 			continue
 		}
 		if ref == "" {
@@ -444,6 +450,9 @@ func RenderAnnotations(anns []ReactAnnotation) string {
 			continue
 		}
 		fmt.Fprintf(&b, "%d. [%s] `%s`%s → %s\n", i+1, kind, ref, label, note)
+		if kind == "页面元素" && pageURL != "" {
+			fmt.Fprintf(&b, "   页面 URL: %s\n", pageURL)
+		}
 	}
 	return b.String()
 }

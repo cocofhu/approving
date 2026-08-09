@@ -26,13 +26,15 @@ export function isQuoteAnnotation(ann: ReactAnnotation): boolean {
 /**
  * Dedup key:
  * - quote annotations → quote + path (path may be empty for unbound)
- * - whole-field / selector → path/selector only
+ * - whole-field / selector → path/selector + optional page url (SPA pick)
  */
 export function annotationDedupeKey(ann: ReactAnnotation): string {
   if (isQuoteAnnotation(ann)) {
     return `quote|${ann.jsonPath || ''}|${(ann.quote || '').trim()}`
   }
-  return `field|${ann.jsonPath || ann.selector || ''}`
+  const ref = ann.jsonPath || ann.selector || ''
+  const page = (ann.url || '').trim()
+  return page ? `field|${ref}|${page}` : `field|${ref}`
 }
 
 /** Apply quote soft-cap; leave field/selector annotations unchanged. */

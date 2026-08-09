@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { api } from '@/lib/api'
 import { PreviewVncChannel } from '@/lib/previewVncChannel'
 import { createPreviewFpsCounter } from '@/lib/previewFps'
+import type { AppPreviewPickPayload } from '@/lib/previewPickUrl'
 // @ts-expect-error noVNC ships without bundled types
 // Pinned to exact 1.5.0 (see package.json). Official path is HTTP + x11vnc -nopw
 // (None auth) + PreviewVncChannel demux. noVNC's Secure Context Log.Error is
@@ -26,9 +27,9 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  (e: 'pick', payload: { selector: string; tagName: string; outerHTML: string }): void
+  (e: 'pick', payload: AppPreviewPickPayload): void
   /** Element picked in inspect mode but not yet added to chat (last staged). */
-  (e: 'staged-pick', payload: { selector: string; tagName: string; outerHTML: string } | null): void
+  (e: 'staged-pick', payload: AppPreviewPickPayload | null): void
 }>()
 
 const { t } = useI18n()
@@ -42,7 +43,7 @@ const isFullscreen = ref(false)
 const status = ref<'connecting' | 'live' | 'closed' | 'error'>('connecting')
 const statusMsg = ref('')
 const inspect = ref(false)
-const picked = ref<{ selector: string; tagName: string; outerHTML: string } | null>(null)
+const picked = ref<AppPreviewPickPayload | null>(null)
 const address = ref('about:blank')
 
 let rfb: InstanceType<typeof RFB> | null = null
@@ -109,6 +110,9 @@ function handleCtrlText(data: string) {
       break
     case 'picked':
       picked.value = msg.pick
+      if (typeof msg.pick?.url === 'string' && msg.pick.url) {
+        address.value = msg.pick.url
+      }
       // Server already left inspect mode after one-shot pick.
       clearInspect('picked', { syncRemote: false })
       if (msg.pick) emit('staged-pick', msg.pick)

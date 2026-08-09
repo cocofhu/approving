@@ -64,6 +64,7 @@ import {
 } from '@/lib/gateUpstream'
 import GateProductEditor from './GateProductEditor.vue'
 import type { ClarifyImage, Gate, Run, ReactAnnotation } from '@/lib/types'
+import { previewPickLabel } from '@/lib/previewPickUrl'
 
 const props = defineProps<{
   gate: Gate
@@ -209,14 +210,21 @@ function onHtmlPreviewPick(payload: { selector: string; tagName: string; imageDa
   }
 }
 
-/** VNC/app_preview pick payload uses outerHTML (no imageDataUrl). */
-function onAppPreviewPick(payload: { selector: string; tagName: string; outerHTML: string }) {
+/** VNC/app_preview pick payload uses outerHTML (no imageDataUrl); url is page href at pick. */
+function onAppPreviewPick(payload: {
+  selector: string
+  tagName: string
+  outerHTML: string
+  url?: string
+}) {
   pickedSelector.value = payload.selector
   pickedElementImage.value = null
   if (canReactRevise.value) {
+    const url = (payload.url || '').trim()
     pushReactAnnotation({
       selector: payload.selector,
-      label: payload.selector || payload.tagName,
+      url: url || undefined,
+      label: previewPickLabel(url, payload.selector, payload.tagName),
     })
   }
 }
