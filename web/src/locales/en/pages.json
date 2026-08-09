@@ -2195,7 +2195,14 @@
       "noPreviewCardsHint": "You can still browse all raw artifacts on this page's Artifacts tab.",
       "outputCards": {
         "sourceFailedTitle": "Source node failed / no product",
-        "invalidSource": "Invalid or unparseable source reference"
+        "invalidSource": "Invalid or unparseable source reference",
+        "listTitle": "Outputs",
+        "enlarge": "Enlarge",
+        "kindStructured": "Structured",
+        "kindMarkdown": "Markdown",
+        "kindHtml": "HTML",
+        "kindCustom": "Custom",
+        "kindFailed": "Failed"
       },
       "nodeNotRun": "This node has not run yet",
       "nodeNoOutput": "This node produced no output yet"

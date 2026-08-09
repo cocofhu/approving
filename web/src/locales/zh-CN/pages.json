@@ -2195,7 +2195,14 @@
       "noPreviewCardsHint": "可从同页 Artifacts Tab 查看全量原始产物。",
       "outputCards": {
         "sourceFailedTitle": "来源节点失败 / 无产物",
-        "invalidSource": "无效或无法解析的来源引用"
+        "invalidSource": "无效或无法解析的来源引用",
+        "listTitle": "产出",
+        "enlarge": "放大查看",
+        "kindStructured": "结构化",
+        "kindMarkdown": "Markdown",
+        "kindHtml": "HTML",
+        "kindCustom": "自定义",
+        "kindFailed": "失败"
       },
       "nodeNotRun": "该节点尚未执行",
       "nodeNoOutput": "该节点尚未产生输出"
