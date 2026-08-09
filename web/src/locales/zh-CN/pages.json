@@ -507,7 +507,7 @@
       "secretForced": "强制",
       "secretForcedHint": "官方 ACP 鉴权键强制为密钥，回读打码，不可改为明文",
       "envHint": "注入流水线节点沙箱的 Spec.Env（OS 环境变量）。可临时停用某行并保留 key/value；开关与字段变更须保存后才影响下次注入。",
-      "varsHint": "StartRun 时作为 {'${vars.*}'} 默认值 seed，不会整表注入 OS environ。",
+      "varsHint": "启动运行时作为 {'${vars.*}'} 默认值，不整表注入沙箱环境。",
       "envKey": "KEY",
       "envValue": "value",
       "envEnabled": "启用",

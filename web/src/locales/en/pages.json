@@ -507,7 +507,7 @@
       "secretForced": "Forced",
       "secretForcedHint": "Official ACP auth keys are always Secret and masked; cannot switch to plain",
       "envHint": "Injected into pipeline node Spec.Env (OS environment variables). You can temporarily disable a row while keeping its key/value; changes take effect on the next injection only after you save.",
-      "varsHint": "Seeded as {'${vars.*}'} defaults at StartRun; not dumped into OS environ as a whole table.",
+      "varsHint": "{'${vars.*}'} defaults at launch; not dumped as a whole into sandbox OS env.",
       "envKey": "KEY",
       "envValue": "value",
       "envEnabled": "Enabled",
