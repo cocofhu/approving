@@ -28,7 +28,11 @@ const sampleOrg: AgentOrg = {
 
 const agentNames = ['alice', 'bob', ...Array.from({ length: 10 }, (_, i) => `qa${i}`), 'orphan']
 
-function mountSidebar(org: AgentOrg = sampleOrg, teleport = false) {
+function mountSidebar(
+  org: AgentOrg = sampleOrg,
+  teleport = false,
+  extra: { agents?: { name: string; projectId?: string }[]; projects?: { id: string; name: string }[] } = {},
+) {
   const i18n = createI18n({
     legacy: false,
     locale: 'zh-CN',
@@ -40,6 +44,8 @@ function mountSidebar(org: AgentOrg = sampleOrg, teleport = false) {
       agentNames,
       activeName: '',
       collapsed: false,
+      agents: extra.agents,
+      projects: extra.projects,
     },
     attachTo: teleport ? document.body : undefined,
     global: {
@@ -228,7 +234,7 @@ describe('AgentOrgSidebar two-column right-edge count layout', () => {
 })
 
 describe('AgentOrgSidebar context menus', () => {
-  it('组头行右键弹出新建子组/导出/导入/重命名/删除', async () => {
+  it('组头行右键包含导出、导入和指定项目操作', async () => {
     const wrapper = mountSidebar(sampleOrg, true)
     const group = wrapper
       .findAll('[data-org-kind="group"]')
@@ -241,11 +247,13 @@ describe('AgentOrgSidebar context menus', () => {
     const actions = [...(menu?.querySelectorAll('[data-org-ctx-action]') || [])].map(
       (el) => el.getAttribute('data-org-ctx-action'),
     )
-    expect(actions).toEqual(['newChild', 'export', 'import', 'rename', 'delete'])
-    expect(menu?.querySelectorAll('[data-org-ctx-action]')).toHaveLength(5)
+    expect(actions).toEqual(['newChild', 'export', 'import', 'rename', 'assignProject', 'delete'])
+    expect(menu?.querySelector('[data-org-ctx-sep]')).toBeTruthy()
+    expect(menu?.querySelector('[data-org-ctx-new]')?.textContent).toContain('NEW')
     expect(menu?.textContent).toContain('新建子组')
     expect(menu?.textContent).toContain('导出')
     expect(menu?.textContent).toContain('导入')
+    expect(menu?.textContent).toContain('指定项目')
     expect(menu?.textContent).not.toContain('导出文件夹')
 
     const exportBtn = menu!.querySelector('[data-org-ctx-action="export"]') as HTMLButtonElement
@@ -261,10 +269,30 @@ describe('AgentOrgSidebar context menus', () => {
     expect(wrapper.emitted('import-group')?.[0]).toEqual(['g_dev'])
 
     await group.trigger('contextmenu', { clientX: 12, clientY: 24 })
-    const renameBtn = document.querySelector('[data-org-ctx-action="rename"]') as HTMLButtonElement
-    renameBtn.click()
+    const assignBtn = document.querySelector('[data-org-ctx-action="assignProject"]') as HTMLButtonElement
+    assignBtn.click()
     await wrapper.vm.$nextTick()
-    expect(wrapper.emitted('rename-group')?.[0]).toEqual(['g_dev'])
+    expect(wrapper.emitted('assign-project')?.[0]).toEqual(['g_dev'])
+    expect(document.querySelector('[data-org-ctx-menu]')).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('叶子行与未分组头不出现指定项目', async () => {
+    const wrapper = mountSidebar(sampleOrg, true)
+    const leaf = findAgentRow(wrapper, 'bob')!
+    expect(leaf).toBeTruthy()
+    await leaf.trigger('contextmenu', { clientX: 20, clientY: 30 })
+    const agentMenu = document.querySelector('[data-org-ctx-menu]') as HTMLElement | null
+    expect(agentMenu?.getAttribute('data-org-ctx-kind')).toBe('agent')
+    expect(agentMenu?.querySelector('[data-org-ctx-action="assignProject"]')).toBeNull()
+    expect(agentMenu?.textContent).not.toContain('指定项目')
+
+    ;(document.querySelector('[data-org-ctx-backdrop]') as HTMLElement | null)?.click()
+    await wrapper.vm.$nextTick()
+    expect(document.querySelector('[data-org-ctx-menu]')).toBeNull()
+
+    const ug = wrapper.find('[data-org-kind="ungrouped-header"]')
+    await ug.trigger('contextmenu', { clientX: 40, clientY: 50 })
     expect(document.querySelector('[data-org-ctx-menu]')).toBeNull()
     wrapper.unmount()
   })
@@ -443,5 +471,79 @@ describe('AgentOrgSidebar agent name text color', () => {
       .findAll('span')
       .find((s) => s.classes().includes('text-txt3') && s.text().includes('alice'))
     expect(reportsTo).toBeFalsy()
+  })
+})
+
+describe('AgentOrgSidebar project bracket', () => {
+  it('递归成员同项目时双 span 显示括号，徽章仍为直接成员数', () => {
+    const wrapper = mountSidebar(sampleOrg, false, {
+      agents: [
+        { name: 'alice', projectId: 'github' },
+        { name: 'bob', projectId: 'github' },
+        ...Array.from({ length: 10 }, (_, i) => ({ name: `qa${i}`, projectId: 'figma' })),
+        { name: 'orphan', projectId: '' },
+      ],
+      projects: [
+        { id: 'github', name: 'GitHub' },
+        { id: 'figma', name: 'Figma' },
+      ],
+    })
+    const sub = wrapper
+      .findAll('[data-org-kind="group"]')
+      .find((r) => r.text().includes('前端组'))!
+    expect(sub.find('[data-org-project]').text()).toBe('(GitHub)')
+    expect(sub.find('[data-org-gname] .font-medium.text-txt2').classes()).toContain('truncate')
+    expect(sub.find('[data-org-project]').classes()).toContain('shrink-0')
+    expect(sub.find('[data-org-project]').classes()).toContain('font-normal')
+    expect(sub.find('[data-org-project]').classes()).toContain('text-txt3')
+    expect(sub.find('[data-org-count]').text()).toBe('1')
+
+    const qa = wrapper
+      .findAll('[data-org-kind="group"]')
+      .find((r) => r.text().includes('测试部门'))!
+    expect(qa.find('[data-org-project]').text()).toBe('(Figma)')
+    expect(qa.find('[data-org-count]').text()).toBe('10')
+
+    const dev = wrapper
+      .findAll('[data-org-kind="group"]')
+      .find((r) => r.text().includes('开发部门'))!
+    // alice(github)+bob(github via 前端组) → 递归统一 GitHub
+    expect(dev.find('[data-org-project]').text()).toBe('(GitHub)')
+    expect(dev.find('[data-org-count]').text()).toBe('1')
+
+    expect(wrapper.find('[data-org-kind="ungrouped-header"] [data-org-project]').exists()).toBe(false)
+    expect(wrapper.find('[data-org-kind="agent"] [data-org-project]').exists()).toBe(false)
+  })
+
+  it('空组/全未绑/混合不显示括号也不显示空括号', () => {
+    const org: AgentOrg = {
+      revision: 1,
+      groups: [
+        { id: 'g_empty', name: '空组' },
+        { id: 'g_unbound', name: '未绑定组' },
+        { id: 'g_mix', name: '混合组' },
+      ],
+      agents: {
+        scout: { groupIds: ['g_unbound'] },
+        alice: { groupIds: ['g_mix'] },
+        bob: { groupIds: ['g_mix'] },
+      },
+    }
+    const wrapper = mountSidebar(org, false, {
+      agents: [
+        { name: 'scout', projectId: '' },
+        { name: 'alice', projectId: 'github' },
+        { name: 'bob', projectId: 'figma' },
+      ],
+      projects: [
+        { id: 'github', name: 'GitHub' },
+        { id: 'figma', name: 'Figma' },
+      ],
+    })
+    for (const label of ['空组', '未绑定组', '混合组']) {
+      const row = wrapper.findAll('[data-org-kind="group"]').find((r) => r.text().includes(label))!
+      expect(row.find('[data-org-project]').exists()).toBe(false)
+      expect(row.text()).not.toMatch(/\(\)/)
+    }
   })
 })

@@ -125,12 +125,14 @@ describe('Token charts (g2.3/g2.4)', () => {
       tooltip: { opacity: 1, dataPoints: [{ dataIndex: 0 }], caretX: 40, caretY: 40 },
     })
     await wrapper.vm.$nextTick()
-    const tip = wrapper.find('[data-testid="token-trend-tooltip"]')
-    expect(tip.exists()).toBe(true)
-    expect(tip.find('[data-tip-row="workflow"]').text()).toContain('工作流')
-    expect(tip.find('[data-tip-row="pm"]').text()).toContain('项目管理')
-    expect(tip.find('[data-tip-row="workflow"]').text()).not.toMatch(/\bworkflow\b/)
-    expect(tip.find('[data-tip-row="pm"]').text()).not.toMatch(/(?<![A-Za-z0-9_-])pm(?![A-Za-z0-9_-])/i)
+    const tip = document.querySelector('[data-testid="token-trend-tooltip"]')
+    expect(tip).toBeTruthy()
+    const workflowRow = tip?.querySelector('[data-tip-row="workflow"]')
+    const pmRow = tip?.querySelector('[data-tip-row="pm"]')
+    expect(workflowRow?.textContent).toContain('工作流')
+    expect(pmRow?.textContent).toContain('项目管理')
+    expect(workflowRow?.textContent).not.toMatch(/\bworkflow\b/)
+    expect(pmRow?.textContent).not.toMatch(/(?<![A-Za-z0-9_-])pm(?![A-Za-z0-9_-])/i)
     wrapper.unmount()
   })
 
@@ -511,8 +513,8 @@ describe('TokenTrendChart tooltip visibility (g4.1/g4.2/g4.3/g1.1)', () => {
     expect(text).toContain('07-11')
     expect(text).toMatch(/07-11\s*·\s*0/)
     expect(text).not.toMatch(/(^|\s)-11\s*·/)
-    expect(text).toContain('workflow')
-    expect(text).toContain('pm')
+    expect(text).toContain('工作流')
+    expect(text).toContain('项目管理')
     tipBoxInViewport(tip!)
 
     const wrap = wrapper.find('[data-testid="token-trend-wrap"]').element

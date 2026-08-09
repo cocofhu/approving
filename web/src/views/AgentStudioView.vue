@@ -31,6 +31,10 @@ import {
   wouldCreateGroupCycle,
   wouldCreateReportingCycle,
   buildOrgTreeRows,
+  recursiveMemberNames,
+  classifyAssignTargets,
+  assignNeedsDraftConfirm,
+  shouldSyncDraftAfterAssign,
   isAgentInGroupSubtree,
   UNGROUPED_ID,
 } from '@/lib/agentOrg'
@@ -660,8 +664,162 @@ watch(isMobile, (mobile) => {
 const agentNames = computed(() => agents.value.map((a) => a.name))
 
 const orgSheetRows = computed(() =>
-  buildOrgTreeRows(org.value, agentNames.value, orgSheetCollapsed.value),
+  buildOrgTreeRows(org.value, agentNames.value, orgSheetCollapsed.value, agents.value, projects.value),
 )
+
+type AssignFailItem = { name: string; reason: string }
+const showAssignPick = ref(false)
+const showAssignCover = ref(false)
+const showAssignDraft = ref(false)
+const assignApplying = ref(false)
+const assignGroupName = ref('')
+const assignMembers = ref<string[]>([])
+const assignTargetId = ref('')
+const assignDiffBound = ref<{ name: string; oldProjectId: string }[]>([])
+const assignFail = ref<AssignFailItem[]>([])
+const assignOkCount = ref(0)
+
+const assignTargetLabel = computed(() =>
+  assignTargetId.value ? projectNameById(assignTargetId.value) : '',
+)
+const assignMemberList = computed(() => assignMembers.value.join('、'))
+const assignAffectedList = computed(() =>
+  assignDiffBound.value
+    .map((item) => `${item.name}（${projectNameById(item.oldProjectId)}）`)
+    .join('、'),
+)
+
+function closeAssignModals() {
+  showAssignPick.value = false
+  showAssignCover.value = false
+  showAssignDraft.value = false
+  assignApplying.value = false
+}
+
+function onAssignProject(groupId: string) {
+  const group = (org.value.groups || []).find((g) => g.id === groupId)
+  if (!group) return
+  assignFail.value = []
+  assignOkCount.value = 0
+  const members = recursiveMemberNames(org.value, groupId, agentNames.value)
+  if (!members.length) {
+    showToast(t('pages.agentStudio.org.assignEmpty'))
+    return
+  }
+  if (!projects.value.length) {
+    showToast(t('pages.agentStudio.org.assignNoProjects'))
+    return
+  }
+  assignGroupName.value = group.name
+  assignMembers.value = members
+  assignTargetId.value = projects.value[0]?.id || ''
+  assignDiffBound.value = []
+  showAssignCover.value = false
+  showAssignDraft.value = false
+  showAssignPick.value = true
+}
+
+function onAssignPickNext() {
+  const target = assignTargetId.value.trim()
+  if (!target) {
+    showToast(t('pages.agentStudio.org.assignNoProjects'))
+    return
+  }
+  const classified = classifyAssignTargets(assignMembers.value, agents.value, target)
+  if (classified.already.length === assignMembers.value.length) {
+    closeAssignModals()
+    showToast(t('pages.agentStudio.org.assignAlready'))
+    return
+  }
+  assignDiffBound.value = classified.diffBound
+  if (classified.diffBound.length) {
+    showAssignPick.value = false
+    showAssignCover.value = true
+    return
+  }
+  maybeAssignDraftThenApply()
+}
+
+function cancelAssignCover() {
+  closeAssignModals()
+  showToast(t('pages.agentStudio.org.assignCancelled'))
+}
+
+function maybeAssignDraftThenApply() {
+  const needsDraft = assignNeedsDraftConfirm({
+    activeName: activeName.value,
+    memberNames: assignMembers.value,
+    draftBindingDirty: draftBindingDirty.value,
+  })
+  if (needsDraft) {
+    showAssignPick.value = false
+    showAssignCover.value = false
+    showAssignDraft.value = true
+    return
+  }
+  void applyAssign(assignMembers.value.includes(activeName.value))
+}
+
+function keepAssignDraft() {
+  closeAssignModals()
+  showToast(t('pages.agentStudio.org.assignDraftKept'))
+}
+
+function syncDraftProjectId(target: string) {
+  if (!draft.value) return
+  draft.value.projectId = target
+  try {
+    const snap = JSON.parse(originalJson.value || '{}') as Agent
+    snap.projectId = target
+    originalJson.value = JSON.stringify(snap)
+  } catch {
+    /* ignore malformed snapshot */
+  }
+}
+
+async function applyAssign(syncDraftRequested: boolean) {
+  const target = assignTargetId.value.trim()
+  if (!target || assignApplying.value) return
+  assignApplying.value = true
+  assignFail.value = []
+  assignOkCount.value = 0
+  const ok: string[] = []
+  const fail: AssignFailItem[] = []
+  for (const name of assignMembers.value) {
+    try {
+      await api.patchAgentProject(name, target)
+      ok.push(name)
+    } catch (e: any) {
+      fail.push({ name, reason: String(e?.message || e) })
+    }
+  }
+  assignOkCount.value = ok.length
+  assignFail.value = fail
+  try {
+    const list = await api.listAgents()
+    agents.value = list || []
+  } catch {
+    /* keep local list; brackets refresh on next load */
+  }
+  if (
+    shouldSyncDraftAfterAssign({
+      activeName: activeName.value,
+      memberNames: assignMembers.value,
+      failNames: fail.map((f) => f.name),
+      syncDraftRequested,
+    })
+  ) {
+    syncDraftProjectId(target)
+  }
+  closeAssignModals()
+  if (fail.length) {
+    showToast(t('pages.agentStudio.org.assignPartialToast', { ok: ok.length, fail: fail.length }))
+  } else {
+    showToast(
+      t('pages.agentStudio.org.assignOkToast', { n: ok.length, project: projectNameById(target) }),
+    )
+  }
+}
 
 function openOrgSheet() {
   showOrgSheet.value = true
@@ -1963,6 +2121,20 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="error" class="card mb-3 shrink-0 border-err/40 p-3 text-[13px] text-err">{{ t('pages.agentStudio.errorPrefix') }}{{ error }}</div>
+    <div
+      v-if="assignFail.length"
+      data-test="org-assign-fail"
+      class="card mb-3 shrink-0 border-err/40 bg-err/10 p-3 text-[13px] text-txt2"
+    >
+      <div class="font-medium text-err">{{ t('pages.agentStudio.project.assignFailTitle') }}</div>
+      <div class="mt-1 text-[12px]">
+        {{ t('pages.agentStudio.project.assignFailSummary', { ok: assignOkCount, fail: assignFail.length }) }}
+      </div>
+      <ul class="mt-2 list-disc space-y-1 pl-5 text-[12px]">
+        <li v-for="item in assignFail" :key="item.name">{{ item.name }}：{{ item.reason }}</li>
+      </ul>
+      <div class="mt-2 text-[11px] text-txt3">{{ t('pages.agentStudio.project.assignFailHint') }}</div>
+    </div>
 
     <div class="flex min-h-0 flex-1 flex-col">
       <div v-if="loading" class="card flex flex-1 items-center justify-center text-sm text-txt3">{{ t('common.buttons.loading') }}</div>
@@ -1983,6 +2155,8 @@ onBeforeUnmount(() => {
         :agent-names="agentNames"
         :active-name="activeName"
         :collapsed="agentListCollapsed"
+        :agents="agents"
+        :projects="projects"
         @select-agent="chooseAgent"
         @rename-agent="onSidebarRenameBlocked"
         @remove-from-group="onRemoveFromGroup"
@@ -1991,6 +2165,7 @@ onBeforeUnmount(() => {
         @create-child-group="openCreateChildGroup"
         @rename-group="openRenameGroup"
         @delete-group="confirmDeleteGroup"
+        @assign-project="onAssignProject"
         @export-group="onExportGroup"
         @import-group="onImportGroup"
         @move-group="onMoveGroup"
@@ -2654,6 +2829,7 @@ onBeforeUnmount(() => {
             <p class="mb-2.5 text-[11px] leading-5 text-txt3">{{ t('pages.agentStudio.project.hint') }}</p>
             <select
               v-model="projectSelectValue"
+              data-test="agent-project-select"
               class="max-w-sm w-full rounded border border-line bg-surface px-2 py-1.5 text-[12px] text-txt outline-none focus:border-accent"
             >
               <option value="">{{ t('pages.agentStudio.project.unbound') }}</option>
@@ -3005,7 +3181,13 @@ onBeforeUnmount(() => {
                 >
                   <Icon name="chevron-right" :size="12" class="shrink-0 text-txt3" :class="row.collapsed ? '' : 'rotate-90'" />
                   <Icon name="folder" :size="14" class="shrink-0 text-warn" />
-                  <span class="truncate font-medium text-txt2">{{ row.name }}</span>
+                  <span class="flex min-w-0 flex-1 items-baseline overflow-hidden" data-org-gname>
+                    <span class="min-w-0 truncate font-medium text-txt2">{{ row.name }}</span><span
+                      v-if="row.projectLabel"
+                      class="shrink-0 font-normal text-txt3"
+                      data-org-project
+                    >({{ row.projectLabel }})</span>
+                  </span>
                   <span class="ml-auto inline-flex h-4 min-w-[18px] shrink-0 items-center justify-end border border-line bg-base px-1 text-[10px] font-semibold tabular-nums text-txt3">{{ row.count }}</span>
                 </button>
               </template>
@@ -3234,6 +3416,113 @@ onBeforeUnmount(() => {
       @created="onWizardCreated"
     />
 
+    <AppModal
+      :open="showAssignPick"
+      :title="t('pages.agentStudio.org.assignTitle', { name: assignGroupName })"
+      :width="460"
+      data-test="org-assign-pick"
+      :close-on-backdrop="!assignApplying"
+      @close="closeAssignModals"
+    >
+      <div class="space-y-3 text-[13px] text-txt2">
+        <p>{{ t('pages.agentStudio.org.assignIntro', { n: assignMembers.length }) }}</p>
+        <div class="flex max-h-48 flex-col gap-1.5 overflow-y-auto">
+          <label
+            v-for="p in projects"
+            :key="p.id"
+            class="flex cursor-pointer items-center gap-2.5 border border-line bg-base px-2.5 py-2"
+            :class="assignTargetId === p.id ? 'border-accent bg-accent-dim' : ''"
+          >
+            <input v-model="assignTargetId" type="radio" class="accent-accent" :value="p.id" />
+            <span class="min-w-0 flex-1 text-txt">{{ p.name }}</span>
+            <span class="font-mono text-[11px] text-txt3">{{ p.id }}</span>
+          </label>
+        </div>
+        <p v-if="!projects.length" class="text-[12px] text-warn">{{ t('pages.agentStudio.org.assignNoProjects') }}</p>
+        <div class="max-h-28 overflow-y-auto text-[11px] leading-relaxed text-txt3">
+          {{ t('pages.agentStudio.org.assignMembers', { list: assignMemberList }) }}
+        </div>
+      </div>
+      <template #footer>
+        <AppButton size="sm" variant="ghost" :disabled="assignApplying" @click="closeAssignModals">{{ t('common.buttons.cancel') }}</AppButton>
+        <AppButton
+          size="sm"
+          variant="primary"
+          data-test="org-assign-submit"
+          :disabled="assignApplying || !projects.length || !assignTargetId"
+          @click="onAssignPickNext"
+        >{{ assignApplying ? t('pages.agentStudio.org.assignApplying') : t('pages.agentStudio.org.assignSubmit') }}</AppButton>
+      </template>
+    </AppModal>
+
+    <AppModal
+      :open="showAssignCover"
+      :title="t('pages.agentStudio.project.assignCoverTitle')"
+      :width="460"
+      data-test="org-assign-cover"
+      :close-on-backdrop="!assignApplying"
+      @close="cancelAssignCover"
+    >
+      <div class="space-y-2 text-[13px] leading-6 text-txt2">
+        <p>{{ t('pages.agentStudio.project.assignCoverLead', { n: assignDiffBound.length }) }}</p>
+        <div class="border border-warn/35 bg-warn/10 px-3 py-2.5 text-[12px]">
+          <b class="text-warn">{{ t('pages.agentStudio.project.assignCoverWarn') }}</b>
+          <ul class="mt-1.5 list-disc space-y-1 pl-5">
+            <li>{{ t('pages.agentStudio.project.switchItemMemory') }}</li>
+            <li>{{ t('pages.agentStudio.project.switchItemContext') }}</li>
+            <li>{{ t('pages.agentStudio.project.switchItemJobs') }}</li>
+            <li>{{ t('pages.agentStudio.project.switchItemPm') }}</li>
+          </ul>
+        </div>
+        <p class="text-[12px]">
+          {{ t('pages.agentStudio.project.assignCoverCross') }}
+          {{ t('pages.agentStudio.project.assignCoverAffected', { list: assignAffectedList }) }}
+        </p>
+        <p class="text-[11.5px] text-txt3">{{ t('pages.agentStudio.project.assignImmediateHint') }}</p>
+      </div>
+      <template #footer>
+        <AppButton size="sm" variant="ghost" :disabled="assignApplying" @click="cancelAssignCover">{{ t('common.buttons.cancel') }}</AppButton>
+        <AppButton
+          size="sm"
+          variant="primary"
+          data-test="org-assign-cover-ok"
+          :disabled="assignApplying"
+          @click="maybeAssignDraftThenApply"
+        >{{ t('pages.agentStudio.project.switchConfirm', { name: assignTargetLabel }) }}</AppButton>
+      </template>
+    </AppModal>
+
+    <AppModal
+      :open="showAssignDraft"
+      :title="t('pages.agentStudio.project.assignDraftTitle')"
+      :width="460"
+      data-test="org-assign-draft"
+      :close-on-backdrop="!assignApplying"
+      @close="keepAssignDraft"
+    >
+      <p class="text-[13px] leading-6 text-txt2">
+        {{
+          t('pages.agentStudio.project.assignDraftBody', {
+            name: activeName,
+            draft: projectNameById(draft?.projectId || '') || t('pages.agentStudio.project.unbound'),
+            target: assignTargetLabel,
+          })
+        }}
+      </p>
+      <template #footer>
+        <AppButton size="sm" variant="ghost" data-test="org-assign-draft-keep" :disabled="assignApplying" @click="keepAssignDraft">
+          {{ t('pages.agentStudio.project.assignDraftKeep') }}
+        </AppButton>
+        <AppButton
+          size="sm"
+          variant="primary"
+          data-test="org-assign-draft-ok"
+          :disabled="assignApplying"
+          @click="applyAssign(true)"
+        >{{ t('pages.agentStudio.project.assignDraftOverwrite') }}</AppButton>
+      </template>
+    </AppModal>
+
     <EnvCredentialHelpModal
       :open="envHelpOpen"
       :section="envHelpSection"
@@ -3263,6 +3552,7 @@ onBeforeUnmount(() => {
     <Teleport to="body">
       <div
         v-if="toastMsg"
+        data-test="studio-toast"
         class="fixed bottom-5 right-5 z-[10000] border border-line bg-elevated px-3.5 py-2 text-[12px] text-txt2 shadow-card"
       >
         {{ toastMsg }}

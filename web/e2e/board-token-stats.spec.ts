@@ -506,8 +506,8 @@ test.describe('看板 Token 统计图', () => {
 
     const tip = page.getByTestId('token-trend-tooltip')
     await expect(tip).toContainText('07-11')
-    await expect(tip).toContainText('workflow')
-    await expect(tip).toContainText('pm')
+    await expect(tip.locator('[data-tip-row="workflow"]')).toContainText('工作流')
+    await expect(tip.locator('[data-tip-row="pm"]')).toContainText('项目管理')
     const tipText = (await tip.innerText()).replace(/\s+/g, ' ')
     expect(tipText).toMatch(/07-11\s*·\s*0/)
     expect(tipText).not.toMatch(/(^|\s)-11\s*·/)

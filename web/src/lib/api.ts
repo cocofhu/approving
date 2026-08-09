@@ -771,6 +771,12 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(agent),
     }),
+  /** Group-level assign: only changes projectId; does not rewrite workspace. Unbind is not allowed. */
+  patchAgentProject: (name: string, projectId: string) =>
+    req<{ status: string; projectId: string }>(`/agents/${encodeURIComponent(name)}/project`, {
+      method: 'PATCH',
+      body: JSON.stringify({ projectId }),
+    }),
   renameAgent: (name: string, newName: string) =>
     req<Agent & { updatedWorkflowCount?: number }>(`/agents/${encodeURIComponent(name)}/rename`, {
       method: 'POST',
