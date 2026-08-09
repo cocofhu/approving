@@ -59,7 +59,6 @@ describe('user-facing copy remediation keys', () => {
   it('user-facing product naming uses 项目管理 / Project Management, not PM', () => {
     const zhKeys = [
       'common.runTrigger.pmMcp',
-      'pages.projectDetail.tokenUsageHint',
       'pages.projectDetail.tokenTipPm',
       'pages.projectDetail.pm.settingsHint',
       'pages.projectDetail.pm.enabledMcps',
@@ -82,7 +81,6 @@ describe('user-facing copy remediation keys', () => {
 
     const enKeys = [
       'common.runTrigger.pmMcp',
-      'pages.projectDetail.tokenUsageHint',
       'pages.projectDetail.tokenTipPm',
       'pages.projectDetail.pm.settingsHint',
       'pages.projectDetail.pm.enabledMcps',
@@ -107,7 +105,8 @@ describe('user-facing copy remediation keys', () => {
 
     expect(zh.global.t('common.runTrigger.pmMcp')).toBe('项目管理 MCP')
     expect(en.global.t('common.runTrigger.pmMcp')).toBe('Project Management MCP')
-    expect(zh.global.t('pages.projectDetail.tokenUsageHint')).toContain('含工作流与项目管理')
+    expect(zh.global.t('pages.projectDetail.tokenTipWorkflow')).toBe('工作流')
+    expect(en.global.t('pages.projectDetail.tokenTipWorkflow')).toBe('Workflow')
 
     // MCP server ids stay as protocol names
     expect(zh.global.t('mcp.pmProgress.name')).toBe('pm-progress')

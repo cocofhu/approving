@@ -794,9 +794,6 @@ onUnmounted(() => {
               >
                 {{ fmtCompactTokenCount(project.totalTokens) }}
               </div>
-              <div class="mt-0.5 text-[11px] text-txt3">
-                {{ t('pages.projectDetail.tokenUsageHint') }}
-              </div>
               <TokenUsageHoverTip
                 v-if="project.totalTokens != null"
                 tip-id="project-token-detail-tip"

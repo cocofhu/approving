@@ -247,7 +247,7 @@ test.describe('项目 Token 总体消耗 UI', () => {
     await expect(stat).toBeVisible({ timeout: 15_000 })
     await expect(stat).toContainText('Token 消耗')
     await expect(stat).toContainText('128.4K')
-    await expect(stat).toContainText('全部历史 · 含工作流与项目管理（上线后）')
+    await expect(stat).not.toContainText('全部历史 · 含工作流与项目管理（上线后）')
 
     const boardShot = path.join(testInfo.outputDir, 'project-detail-token-board.png')
     await page.screenshot({ path: boardShot, fullPage: true })
@@ -286,10 +286,10 @@ test.describe('项目 Token 总体消耗 UI', () => {
     const tip = page.getByTestId('token-detail-tip')
     await expect(tip).toBeVisible()
     await expect(tip.getByTestId('token-detail-tip-exact')).toContainText('152,090,000')
-    // 来源拆分：workflow / pm / 合计（与看板 tip 及 Demo「改后」一致）
+    // 来源拆分：工作流 / 项目管理 / 合计（可见文案；定位键仍为 workflow/pm）
     await expect(tip.getByTestId('token-detail-tip-breakdown')).toBeVisible()
-    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('workflow')
-    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('pm')
+    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('工作流')
+    await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('项目管理')
     await expect(tip.getByTestId('token-detail-tip-breakdown')).toContainText('合计')
     await expect(tip.locator('[data-tip-row="workflow"]')).toContainText('140,000,000')
     await expect(tip.locator('[data-tip-row="pm"]')).toContainText('12,090,000')
