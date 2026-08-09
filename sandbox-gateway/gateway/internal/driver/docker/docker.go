@@ -15,22 +15,25 @@ import (
 // cmdRunner executes docker CLI commands (overridable in unit tests).
 type cmdRunner func(ctx context.Context, timeout time.Duration, args ...string) (string, error)
 
-// Driver runs sandboxes as containers via the host docker CLI. It publishes the
-// image's ports on the host (bindIP:ephemeral) so clients connect directly.
+// Driver runs sandboxes as containers via the host docker CLI. It publishes
+// public ports on the host (bindIP:ephemeral). CDP/noVNC stay on the container
+// network and are reported via the container IP (not -p).
 type Driver struct {
-	bindIP     string
-	network    string
-	namePrefix string
-	shmSize    string
-	run        cmdRunner
+	bindIP        string
+	network       string
+	namePrefix    string
+	shmSize       string
+	internalPorts []int
+	run           cmdRunner
 }
 
 // Options configures the docker driver.
 type Options struct {
-	BindIP     string
-	Network    string
-	NamePrefix string
-	ShmSize    string
+	BindIP        string
+	Network       string
+	NamePrefix    string
+	ShmSize       string
+	InternalPorts []int // cdp/novnc — not published; reported via container IP
 }
 
 // New builds a docker driver.
@@ -45,11 +48,12 @@ func New(o Options) *Driver {
 		o.ShmSize = "1g"
 	}
 	return &Driver{
-		bindIP:     o.BindIP,
-		network:    o.Network,
-		namePrefix: o.NamePrefix,
-		shmSize:    o.ShmSize,
-		run:        run,
+		bindIP:        o.BindIP,
+		network:       o.Network,
+		namePrefix:    o.NamePrefix,
+		shmSize:       o.ShmSize,
+		internalPorts: append([]int(nil), o.InternalPorts...),
+		run:           run,
 	}
 }
 
@@ -77,7 +81,8 @@ func (d *Driver) Create(ctx context.Context, spec driver.Spec) (*driver.Handle, 
 	if spec.WorkspaceDir != "" {
 		args = append(args, "-e", "WORKSPACE_DIR="+spec.WorkspaceDir)
 	}
-	// Publish each requested port on bindIP with an ephemeral host port.
+	// Publish only public ports on bindIP. Internal CDP/noVNC stay unpublished
+	// even when bindIP is 127.0.0.1 (host-side unauthenticated access must fail).
 	for _, p := range spec.Ports {
 		args = append(args, "-p", fmt.Sprintf("%s::%d", d.bindIP, p))
 	}
@@ -117,7 +122,7 @@ func (d *Driver) Create(ctx context.Context, spec driver.Spec) (*driver.Handle, 
 		return nil, fmt.Errorf("docker run: %w", err)
 	}
 
-	eps, err := d.endpoints(ctx, name, spec.Ports)
+	eps, err := d.endpoints(ctx, name, spec.Ports, d.internalPortsFor(spec))
 	if err != nil {
 		logging.WarnErr(d.destroyByName(context.Background(), name, true), "docker create rollback destroy", map[string]any{
 			"container": name,
@@ -188,8 +193,8 @@ func (d *Driver) Get(ctx context.Context, id string) (*driver.Handle, error) {
 	}
 	h := &driver.Handle{ID: id, Name: name, Status: st}
 	if st == driver.StatusRunning {
-		// Ports are discovered from docker inspect (all published mappings).
-		eps, err := d.endpoints(ctx, name, nil)
+		// Ports are discovered from docker inspect (published + internal IP).
+		eps, err := d.endpoints(ctx, name, nil, d.internalPorts)
 		if err == nil {
 			h.Endpoints = eps
 		}
@@ -262,7 +267,14 @@ func (d *Driver) status(ctx context.Context, name string) (driver.Status, error)
 }
 
 func (d *Driver) Endpoints(ctx context.Context, id string) (map[int]string, error) {
-	return d.endpoints(ctx, d.containerName(id), nil)
+	return d.endpoints(ctx, d.containerName(id), nil, d.internalPorts)
+}
+
+func (d *Driver) internalPortsFor(spec driver.Spec) []int {
+	if len(spec.InternalPorts) > 0 {
+		return spec.InternalPorts
+	}
+	return d.internalPorts
 }
 
 // Logs returns combined PID1 stdout/stderr via `docker logs --tail` (non-follow).
@@ -281,47 +293,117 @@ func (d *Driver) Logs(ctx context.Context, id string, tail int) (string, error) 
 	return out, nil
 }
 
-// endpoints returns container-port -> "bindIP:hostPort". When ports is nil it
-// discovers all published tcp ports from docker inspect.
-func (d *Driver) endpoints(ctx context.Context, name string, ports []int) (map[int]string, error) {
+// endpoints returns container-port -> "host:port". Public ports use bindIP:hostPort.
+// Internal ports (cdp/novnc) are filled from the container IP and are never -p published.
+func (d *Driver) endpoints(ctx context.Context, name string, ports, internal []int) (map[int]string, error) {
+	var res map[int]string
 	if len(ports) > 0 {
-		out := map[int]string{}
+		res = map[int]string{}
 		for _, p := range ports {
 			hp, err := d.hostPort(ctx, name, p)
 			if err != nil {
 				return nil, err
 			}
-			out[p] = fmt.Sprintf("%s:%d", d.bindIP, hp)
+			res[p] = fmt.Sprintf("%s:%d", d.bindIP, hp)
 		}
-		return out, nil
+	} else {
+		out, err := d.run(ctx, 10*time.Second, "inspect", "--format",
+			`{{range $p, $conf := .NetworkSettings.Ports}}{{if $conf}}{{$p}}={{(index $conf 0).HostPort}}{{"\n"}}{{end}}{{end}}`, name)
+		if err != nil {
+			return nil, err
+		}
+		res = map[int]string{}
+		for _, line := range strings.Split(out, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			portProto, hostPort, ok := strings.Cut(line, "=")
+			if !ok {
+				continue
+			}
+			cportStr, _, _ := strings.Cut(portProto, "/")
+			var cport, hp int
+			if _, err := fmt.Sscanf(strings.TrimSpace(cportStr), "%d", &cport); err != nil {
+				continue
+			}
+			if _, err := fmt.Sscanf(strings.TrimSpace(hostPort), "%d", &hp); err != nil || hp == 0 {
+				continue
+			}
+			res[cport] = fmt.Sprintf("%s:%d", d.bindIP, hp)
+		}
 	}
-	// Discover all published ports: "<cport>/tcp -> <hostIP>:<hostPort>" lines.
-	out, err := d.run(ctx, 10*time.Second, "inspect", "--format",
-		`{{range $p, $conf := .NetworkSettings.Ports}}{{if $conf}}{{$p}}={{(index $conf 0).HostPort}}{{"\n"}}{{end}}{{end}}`, name)
+	return d.withInternalEndpoints(ctx, name, res, internal)
+}
+
+func (d *Driver) withInternalEndpoints(ctx context.Context, name string, eps map[int]string, internal []int) (map[int]string, error) {
+	if len(internal) == 0 {
+		return eps, nil
+	}
+	if eps == nil {
+		eps = map[int]string{}
+	}
+	missing := false
+	for _, p := range internal {
+		if p <= 0 {
+			continue
+		}
+		if _, ok := eps[p]; !ok {
+			missing = true
+			break
+		}
+	}
+	if !missing {
+		return eps, nil
+	}
+	ip, err := d.containerIP(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	res := map[int]string{}
-	for _, line := range strings.Split(out, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		portProto, hostPort, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		cportStr, _, _ := strings.Cut(portProto, "/")
-		var cport, hp int
-		if _, err := fmt.Sscanf(strings.TrimSpace(cportStr), "%d", &cport); err != nil {
-			continue
-		}
-		if _, err := fmt.Sscanf(strings.TrimSpace(hostPort), "%d", &hp); err != nil || hp == 0 {
-			continue
-		}
-		res[cport] = fmt.Sprintf("%s:%d", d.bindIP, hp)
+	if ip == "" {
+		return nil, fmt.Errorf("docker inspect: empty container IP for internal ports on %s", name)
 	}
-	return res, nil
+	for _, p := range internal {
+		if p <= 0 {
+			continue
+		}
+		if _, ok := eps[p]; ok {
+			continue
+		}
+		eps[p] = fmt.Sprintf("%s:%d", ip, p)
+	}
+	return eps, nil
+}
+
+func (d *Driver) containerIP(ctx context.Context, name string) (string, error) {
+	out, err := d.run(ctx, 10*time.Second, "inspect", "--format", "{{.NetworkSettings.IPAddress}}", name)
+	if err != nil {
+		return "", fmt.Errorf("docker inspect container IP: %w", err)
+	}
+	if ip := strings.TrimSpace(out); ip != "" {
+		return ip, nil
+	}
+	if d.network != "" {
+		format := fmt.Sprintf(`{{(index .NetworkSettings.Networks %q).IPAddress}}`, d.network)
+		out, err = d.run(ctx, 10*time.Second, "inspect", "--format", format, name)
+		if err != nil {
+			return "", fmt.Errorf("docker inspect network %q IP: %w", d.network, err)
+		}
+		if ip := strings.TrimSpace(out); ip != "" {
+			return ip, nil
+		}
+	}
+	out, err = d.run(ctx, 10*time.Second, "inspect", "--format",
+		`{{range $n, $v := .NetworkSettings.Networks}}{{if $v.IPAddress}}{{$v.IPAddress}}{{"\n"}}{{end}}{{end}}`, name)
+	if err != nil {
+		return "", fmt.Errorf("docker inspect networks IP: %w", err)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if ip := strings.TrimSpace(line); ip != "" {
+			return ip, nil
+		}
+	}
+	return "", nil
 }
 
 func (d *Driver) hostPort(ctx context.Context, name string, containerPort int) (int, error) {

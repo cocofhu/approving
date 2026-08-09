@@ -5,6 +5,12 @@ description: sandbox-gateway 契约摘要；完整说明见 GATEWAY.md。
 
 Approving 通过 vendored 的 **sandbox-gateway** 控制平面调度通用沙箱镜像。Web UI 走 Approving API；Agent / react 节点经 gateway 在容器中执行。
 
+## 直连与平台代理
+
+- **可直连（已鉴权）**：`session`（会话密码）、`ide`（IDE 密码）、`ssh`（`ROOT_PASSWORD` 或 `SSH_KEY`）。
+- **不可直连**：CDP `:9222`、noVNC `:6080` 无应用层鉴权，不发布到宿主/LB，详情页不展示/不复制直连地址。
+- **用户入口**：仅平台代理 `/sandbox-vnc/:sandboxId/ws` 与 `/preview-vnc/:runId/:nodeId/:port/ws`（启用平台 Auth 时须 Session）。「打开预览」进入沙箱控台 noVNC，不直连 websockify。
+
 ## 完整文档
 
 - [GATEWAY.md](https://github.com/cocofhu/approving/blob/main/GATEWAY.md)

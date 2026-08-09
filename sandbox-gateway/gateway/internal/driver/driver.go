@@ -50,7 +50,8 @@ type Spec struct {
 	ID           string            // gateway-assigned id (also seeds the resource name)
 	Image        string            // container image ref
 	Env          map[string]string // environment injected into the container
-	Ports        []int             // container ports to expose (defaults from image config)
+	Ports         []int            // public ports published to host / LoadBalancer (session/ide/ssh/app)
+	InternalPorts []int            // cdp/novnc — cluster/container network only, not published externally
 	WorkspaceDir string            // WORKSPACE_DIR inside the container
 	Mounts       []string          // extra docker "-v host:container[:ro]" specs (docker only)
 	Config       *ConfigInject     // optional rules/skills/mcp injection

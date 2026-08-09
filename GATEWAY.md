@@ -36,13 +36,13 @@ build `universal-sandbox-cursor:local` from `sandbox-gateway/sandbox` on first r
 | --- | --- |
 | Health | `GET /healthz` returns 2xx |
 | Create | `POST /api/v1/sandboxes` accepts image, env, labels, ports, resources, config.bundleUrl; response `202`, status often `creating` |
-| Get | `GET /api/v1/sandboxes/{id}` returns status and endpoints (session/ide/ssh/cdp/novnc) |
+| Get | `GET /api/v1/sandboxes/{id}` returns status and endpoints. Gateway still includes internal `cdp`/`novnc` (container/ClusterIP) for in-cluster Approving. Approving user `GetView` only returns `session`/`ide`/`ssh`. |
 | List | `GET /api/v1/sandboxes?label=key:value` (AND) |
 | Delete | `DELETE /api/v1/sandboxes/{id}` returns 2xx |
 | Logs | `GET /api/v1/sandboxes/{id}/logs?tail=` returns `{content}` (PID1 stdout/stderr, non-follow). Docker (`docker logs --tail`) and kubernetes (pod `sandbox` container via client-go GetLogs) both supported. Cluster RBAC must allow `get` on `pods/log` in the sandbox namespace; the incremental Role+RoleBinding is shipped in `sandbox-gateway/deploy/k8s/` (apply alongside existing Roles — do not replace a full production Role). Drivers that still omit Logs → `501` |
 | Ready | status `running` with a `session` endpoint |
 | Images | per Agent `acpBackend`: `universal-sandbox-{cursor\|claude_code\|codebuddy\|trae}` |
-| Data plane | SSH / session / cdp / novnc connect to endpoints directly |
+| Data plane | SSH / session / ide may connect directly (each has its own auth). CDP `:9222` and noVNC `:6080` are **not** external data-plane: they stay on the container/cluster network. Users use `/sandbox-vnc/:id/ws` and `/preview-vnc/:runId/:nodeId/:port/ws` (Session when Auth is on). Approving outside the cluster/Docker net cannot dial CDP/noVNC. |
 | Auth | Bearer token: gateway `SBGW_API_KEYS` / client `APPROVING_SANDBOX_GATEWAY_API_KEY` (compose default `approving-local-demo` via `SANDBOX_GATEWAY_API_KEY`) |
 
 `approving doctor --run-demo` verifies health, create, ready, and cleanup after failure.

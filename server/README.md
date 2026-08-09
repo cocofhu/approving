@@ -238,9 +238,20 @@ sandbox: { image, env, cursor_auth_path, agent_chat_timeout_seconds, ... }
 
 ### VNC 预览（沙箱内置）
 
-app_preview 前端 Tab 走沙箱内置 VNC 栈（`VNC_PREVIEW=1` 时启动
+app_preview 前端 Tab 与沙箱控台 noVNC 走沙箱内置 VNC 栈（`VNC_PREVIEW=1` 时启动
 Xvfb+Chromium+x11vnc+websockify）。VNC 栈由 sandbox-gateway 的 `universal-sandbox`
 镜像提供；本仓不构建沙箱镜像。
+
+CDP `:9222` / noVNC `:6080` **不是**对外 data-plane（无应用层鉴权，不 publish
+到宿主/LB）。用户只经本服务 WebSocket：
+
+- `GET /sandbox-vnc/:sandboxId/ws`
+- `GET /preview-vnc/:runId/:nodeId/:port/ws`
+
+鉴权始终启用时（`auth` 无开关）上述路径 `RequireSession`；`Auth == nil` 的测试
+形态不 401。`/preview/:runId/:nodeId/:port` HTTP 反代**不加** Session（iframe
+无法带 cookie）。Pick/导航与 RFB 共套，不回退直连 websockify。集群外 Approving
+不能拨沙箱 CDP/noVNC。
 
 ## 种子数据
 

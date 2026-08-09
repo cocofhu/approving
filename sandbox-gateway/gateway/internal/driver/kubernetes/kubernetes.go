@@ -190,7 +190,7 @@ func (d *Driver) Create(ctx context.Context, spec driver.Spec) (*driver.Handle, 
 		return nil, err
 	}
 	if err := step("ensure_clusterip", func() error {
-		return d.ensureClusterIPService(ctx, id, spec.Ports)
+		return d.ensureClusterIPService(ctx, id, listenPorts(spec))
 	}); err != nil {
 		return nil, err
 	}
@@ -409,8 +409,9 @@ func (d *Driver) ensureDeployment(ctx context.Context, spec driver.Spec, resLimi
 	name := d.resourceName(id)
 	labels := d.selector(id)
 
-	containerPorts := make([]corev1.ContainerPort, 0, len(spec.Ports))
-	for _, p := range spec.Ports {
+	listen := listenPorts(spec)
+	containerPorts := make([]corev1.ContainerPort, 0, len(listen))
+	for _, p := range listen {
 		if p < 1 || p > 65535 {
 			continue
 		}
@@ -512,9 +513,19 @@ func (d *Driver) ensureClusterIPService(ctx context.Context, id string, ports []
 		},
 	}
 	_, err := d.cs.CoreV1().Services(d.opts.Namespace).Create(ctx, svc, metav1.CreateOptions{})
-	if apierrors.IsAlreadyExists(err) {
+	if err == nil {
 		return nil
 	}
+	if !apierrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, getErr := d.cs.CoreV1().Services(d.opts.Namespace).Get(ctx, d.resourceName(id), metav1.GetOptions{})
+	if getErr != nil {
+		return getErr
+	}
+	existing.Spec.Ports = servicePorts(ports)
+	existing.Spec.Selector = labels
+	_, err = d.cs.CoreV1().Services(d.opts.Namespace).Update(ctx, existing, metav1.UpdateOptions{})
 	return err
 }
 
@@ -529,9 +540,20 @@ func (d *Driver) ensureLoadBalancer(ctx context.Context, id string, ports []int)
 		},
 	}
 	_, err := d.cs.CoreV1().Services(d.opts.Namespace).Create(ctx, svc, metav1.CreateOptions{})
-	if apierrors.IsAlreadyExists(err) {
+	if err == nil {
 		return nil
 	}
+	if !apierrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, getErr := d.cs.CoreV1().Services(d.opts.Namespace).Get(ctx, d.lbName(id), metav1.GetOptions{})
+	if getErr != nil {
+		return getErr
+	}
+	existing.Spec.Type = corev1.ServiceTypeLoadBalancer
+	existing.Spec.Ports = servicePorts(ports)
+	existing.Spec.Selector = labels
+	_, err = d.cs.CoreV1().Services(d.opts.Namespace).Update(ctx, existing, metav1.UpdateOptions{})
 	return err
 }
 
@@ -588,8 +610,9 @@ func (d *Driver) Reinstall(ctx context.Context, spec driver.Spec, preserveData b
 	if err := d.ensureDeployment(ctx, spec, res); err != nil {
 		return err
 	}
-	// Keep existing Services when present; recreate if missing (e.g. partial wipe).
-	if err := d.ensureClusterIPService(ctx, id, spec.Ports); err != nil {
+	// Keep existing Services when present; Update Spec.Ports so a stale LB
+	// that still exposes 9222/6080 is converged (AlreadyExists must not no-op).
+	if err := d.ensureClusterIPService(ctx, id, listenPorts(spec)); err != nil {
 		return err
 	}
 	if d.opts.EnableLoadBalancer {
@@ -770,34 +793,74 @@ func deploymentStatus(dep *appsv1.Deployment) driver.Status {
 	return driver.StatusPending
 }
 
+func listenPorts(spec driver.Spec) []int {
+	seen := map[int]struct{}{}
+	var out []int
+	for _, p := range append(append([]int{}, spec.Ports...), spec.InternalPorts...) {
+		if p < 1 || p > 65535 {
+			continue
+		}
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+	return out
+}
+
+func clusterDNS(svcName, namespace string) string {
+	return fmt.Sprintf("%s.%s.svc.cluster.local", svcName, namespace)
+}
+
 func (d *Driver) Endpoints(ctx context.Context, id string) (map[int]string, error) {
 	out := map[int]string{}
-	svcName := d.lbName(id)
+	clusterHost := clusterDNS(d.resourceName(id), d.opts.Namespace)
+
 	if !d.opts.EnableLoadBalancer {
-		// Without a LB, expose the in-cluster ClusterIP address (co-located clients).
 		svc, err := d.cs.CoreV1().Services(d.opts.Namespace).Get(ctx, d.resourceName(id), metav1.GetOptions{})
 		if err != nil {
 			return out, err
 		}
-		host := fmt.Sprintf("%s.%s.svc.cluster.local", svc.Name, d.opts.Namespace)
 		for _, p := range svc.Spec.Ports {
-			out[int(p.Port)] = fmt.Sprintf("%s:%d", host, p.Port)
+			out[int(p.Port)] = fmt.Sprintf("%s:%d", clusterHost, p.Port)
 		}
 		return out, nil
 	}
-	svc, err := d.cs.CoreV1().Services(d.opts.Namespace).Get(ctx, svcName, metav1.GetOptions{})
+
+	lb, err := d.cs.CoreV1().Services(d.opts.Namespace).Get(ctx, d.lbName(id), metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return out, nil
 		}
 		return out, err
 	}
-	ip := loadBalancerIP(svc)
-	if ip == "" {
-		return out, nil
+	ip := loadBalancerIP(lb)
+	lbPorts := map[int]struct{}{}
+	for _, p := range lb.Spec.Ports {
+		port := int(p.Port)
+		lbPorts[port] = struct{}{}
+		if ip != "" {
+			out[port] = fmt.Sprintf("%s:%d", ip, port)
+		}
 	}
-	for _, p := range svc.Spec.Ports {
-		out[int(p.Port)] = fmt.Sprintf("%s:%d", ip, p.Port)
+
+	cip, cipErr := d.cs.CoreV1().Services(d.opts.Namespace).Get(ctx, d.resourceName(id), metav1.GetOptions{})
+	if cipErr != nil {
+		if ip == "" {
+			return out, nil
+		}
+		if apierrors.IsNotFound(cipErr) {
+			return out, nil
+		}
+		return out, cipErr
+	}
+	for _, p := range cip.Spec.Ports {
+		port := int(p.Port)
+		if _, ok := lbPorts[port]; ok {
+			continue
+		}
+		out[port] = fmt.Sprintf("%s:%d", clusterHost, port)
 	}
 	return out, nil
 }

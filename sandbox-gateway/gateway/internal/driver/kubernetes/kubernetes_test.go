@@ -1110,6 +1110,136 @@ func TestListSkipsEmptyIDUsesNamePrefix(t *testing.T) {
 	}
 }
 
+func TestCreateLBOmitsInternalPortsClusterIPKeepsThem(t *testing.T) {
+	d := testDriver(t, true)
+	ctx := context.Background()
+	_, err := d.Create(ctx, driver.Spec{
+		ID:            "iso",
+		Image:         "img",
+		Ports:         []int{8765, 8744, 22, 80},
+		InternalPorts: []int{9222, 6080},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lb, err := d.cs.CoreV1().Services("sandboxes").Get(ctx, "sbx-iso-lb", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotLB := map[int]bool{}
+	for _, p := range lb.Spec.Ports {
+		gotLB[int(p.Port)] = true
+	}
+	if gotLB[9222] || gotLB[6080] {
+		t.Fatalf("LB must not publish 9222/6080: %+v", lb.Spec.Ports)
+	}
+	for _, w := range []int{8765, 8744, 22, 80} {
+		if !gotLB[w] {
+			t.Fatalf("LB missing public port %d: %+v", w, lb.Spec.Ports)
+		}
+	}
+	cip, err := d.cs.CoreV1().Services("sandboxes").Get(ctx, "sbx-iso", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotCIP := map[int]bool{}
+	for _, p := range cip.Spec.Ports {
+		gotCIP[int(p.Port)] = true
+	}
+	for _, w := range []int{8765, 8744, 22, 80, 9222, 6080} {
+		if !gotCIP[w] {
+			t.Fatalf("ClusterIP missing listen port %d: %+v", w, cip.Spec.Ports)
+		}
+	}
+}
+
+func TestEndpointsMergesInternalClusterDNSWhenLBEnabled(t *testing.T) {
+	d := testDriver(t, true)
+	ctx := context.Background()
+	_, err := d.Create(ctx, driver.Spec{
+		ID: "m1", Image: "img", Ports: []int{8765, 22}, InternalPorts: []int{9222, 6080},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, err := d.cs.CoreV1().Services("sandboxes").Get(ctx, "sbx-m1-lb", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: "203.0.113.9"}}
+	if _, err := d.cs.CoreV1().Services("sandboxes").UpdateStatus(ctx, svc, metav1.UpdateOptions{}); err != nil {
+		svc.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: "203.0.113.9"}}
+		if _, err := d.cs.CoreV1().Services("sandboxes").Update(ctx, svc, metav1.UpdateOptions{}); err != nil {
+			t.Fatalf("update lb: %v", err)
+		}
+	}
+	eps, err := d.Endpoints(ctx, "m1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if eps[8765] != "203.0.113.9:8765" || eps[22] != "203.0.113.9:22" {
+		t.Fatalf("public should use LB IP: %v", eps)
+	}
+	wantHost := "sbx-m1.sandboxes.svc.cluster.local"
+	if eps[9222] != wantHost+":9222" || eps[6080] != wantHost+":6080" {
+		t.Fatalf("internal should use ClusterIP DNS, not LB: %v", eps)
+	}
+}
+
+func TestEnsureServicesUpdateExistingPorts(t *testing.T) {
+	d := testDriver(t, true)
+	ctx := context.Background()
+	// Seed a stale LB+ClusterIP that still expose 9222/6080 (pre-hardening).
+	labels := d.selector("old")
+	_, err := d.cs.CoreV1().Services("sandboxes").Create(ctx, &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "sbx-old", Namespace: "sandboxes", Labels: labels},
+		Spec: corev1.ServiceSpec{
+			Selector: labels,
+			Ports:    servicePorts([]int{8765, 22, 9222, 6080}),
+		},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = d.cs.CoreV1().Services("sandboxes").Create(ctx, &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "sbx-old-lb", Namespace: "sandboxes", Labels: labels},
+		Spec: corev1.ServiceSpec{
+			Type:     corev1.ServiceTypeLoadBalancer,
+			Selector: labels,
+			Ports:    servicePorts([]int{8765, 22, 9222, 6080}),
+		},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.ensureClusterIPService(ctx, "old", []int{8765, 22, 9222, 6080}); err != nil {
+		t.Fatalf("update clusterip: %v", err)
+	}
+	if err := d.ensureLoadBalancer(ctx, "old", []int{8765, 22}); err != nil {
+		t.Fatalf("update lb: %v", err)
+	}
+	lb, err := d.cs.CoreV1().Services("sandboxes").Get(ctx, "sbx-old-lb", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range lb.Spec.Ports {
+		if p.Port == 9222 || p.Port == 6080 {
+			t.Fatalf("stale LB still exposes %d", p.Port)
+		}
+	}
+	cip, err := d.cs.CoreV1().Services("sandboxes").Get(ctx, "sbx-old", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[int32]bool{}
+	for _, p := range cip.Spec.Ports {
+		got[p.Port] = true
+	}
+	if !got[9222] || !got[6080] || !got[8765] {
+		t.Fatalf("ClusterIP should keep internal+public: %+v", cip.Spec.Ports)
+	}
+}
+
 func TestEndpointsLBNotFound(t *testing.T) {
 	d := testDriver(t, true)
 	eps, err := d.Endpoints(context.Background(), "missing")
