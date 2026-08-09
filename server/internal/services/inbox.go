@@ -86,31 +86,36 @@ type GateShareInboxStatus struct {
 
 // GateInboxItem is a pending gate in the unified inbox (GET /gates).
 type GateInboxItem struct {
-	Type              string              `json:"type"`
-	RunID             string              `json:"runId"`
-	NodeID            string              `json:"nodeId"`
-	Iteration         int                 `json:"iteration"`
-	WorkflowID        string              `json:"workflowId"`
-	WorkflowName      string              `json:"workflowName"`
-	RunTitle          string              `json:"runTitle,omitempty"`
-	Title             string              `json:"title"`
-	BodyMd            string              `json:"bodyMd"`
-	Actions           []models.GateAction `json:"actions"`
-	Form              []models.GateField  `json:"form"`
-	UpstreamNodeID    string              `json:"upstreamNodeId,omitempty"`
-	UpstreamIteration int                 `json:"upstreamIteration,omitempty"`
-	RequestedAt       time.Time           `json:"requestedAt"`
-	Tags              []string            `json:"tags"`
+	Type              string                `json:"type"`
+	RunID             string                `json:"runId"`
+	NodeID            string                `json:"nodeId"`
+	Iteration         int                   `json:"iteration"`
+	WorkflowID        string                `json:"workflowId"`
+	WorkflowName      string                `json:"workflowName"`
+	RunTitle          string                `json:"runTitle,omitempty"`
+	Title             string                `json:"title"`
+	BodyMd            string                `json:"bodyMd"`
+	Actions           []models.GateAction   `json:"actions"`
+	Form              []models.GateField    `json:"form"`
+	UpstreamNodeID    string                `json:"upstreamNodeId,omitempty"`
+	UpstreamIteration int                   `json:"upstreamIteration,omitempty"`
+	RequestedAt       time.Time             `json:"requestedAt"`
+	Tags              []string              `json:"tags"`
+	NodeType          string                `json:"nodeType,omitempty"`
 	ShareLink         *GateShareInboxStatus `json:"shareLink,omitempty"`
 }
 
-func gateInboxItem(g models.Gate, runTitle string, tags []string) GateInboxItem {
+func gateInboxItem(g models.Gate, meta runInboxMeta) GateInboxItem {
+	nodeType := ""
+	if n := meta.Graph.FindNode(g.NodeID); n != nil {
+		nodeType = n.Type
+	}
 	return GateInboxItem{
-		Type: "gate", RunID: g.RunID, NodeID: g.NodeID, Iteration: g.Iteration,
-		WorkflowID: g.WorkflowID, WorkflowName: g.WorkflowName, RunTitle: runTitle,
+		Type: "gate", NodeType: nodeType, RunID: g.RunID, NodeID: g.NodeID, Iteration: g.Iteration,
+		WorkflowID: g.WorkflowID, WorkflowName: g.WorkflowName, RunTitle: meta.Title,
 		Title: g.Title, BodyMd: g.BodyMd, Actions: g.Actions, Form: g.Form,
 		UpstreamNodeID: g.UpstreamNodeID, UpstreamIteration: g.UpstreamIteration,
-		RequestedAt: g.RequestedAt, Tags: append([]string{}, tags...),
+		RequestedAt: g.RequestedAt, Tags: append([]string{}, meta.Tags...),
 	}
 }
 
@@ -207,7 +212,7 @@ func (s *RunService) pendingInboxEntries(wf, projectID string, tags []string) []
 	entries := make([]inboxEntry, 0, len(gates)+len(clarifies))
 	for _, g := range gates {
 		meta := runMeta[g.RunID]
-		entries = append(entries, inboxEntry{sortAt: g.RequestedAt, item: gateInboxItem(g, meta.Title, meta.Tags)})
+		entries = append(entries, inboxEntry{sortAt: g.RequestedAt, item: gateInboxItem(g, meta)})
 	}
 	for _, c := range clarifies {
 		meta := runMeta[c.RunID]
@@ -226,6 +231,7 @@ func (s *RunService) pendingInboxEntries(wf, projectID string, tags []string) []
 type runInboxMeta struct {
 	Title string
 	Tags  []string
+	Graph models.Graph
 }
 
 // runMetaByIDs returns Run.Title/Tags keyed by run id.
@@ -237,7 +243,7 @@ func (s *RunService) runMetaByIDs(runIDs []string) map[string]runInboxMeta {
 	var rows []models.Run
 	s.db.Model(&models.Run{}).Where("id IN ?", runIDs).Find(&rows)
 	for _, r := range rows {
-		out[r.ID] = runInboxMeta{Title: strings.TrimSpace(r.Title), Tags: append([]string{}, r.Tags...)}
+		out[r.ID] = runInboxMeta{Title: strings.TrimSpace(r.Title), Tags: append([]string{}, r.Tags...), Graph: r.Graph}
 	}
 	return out
 }

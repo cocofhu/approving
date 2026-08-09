@@ -52,6 +52,7 @@ import {
 } from '@/lib/busySeedRetry'
 import { createWsReconnectController } from '@/lib/wsReconnect'
 import { useToast } from '@/lib/useToast'
+import { isHumanGateInboxItem } from '@/lib/gateShareLink'
 import type { AcpEvent, Gate, GateInboxItem, GateShareInboxStatus, InboxItem, Run } from '@/lib/types'
 
 const router = useRouter()
@@ -1213,7 +1214,7 @@ function patchShareStatus(it: GateInboxItem, status: GateShareInboxStatus) {
 }
 
 function openSharePanel(it: InboxItem, alsoOpenDetail = false) {
-  if (processingLock.value || it.type !== 'gate') return
+  if (processingLock.value || !isHumanGateInboxItem(it)) return
   selectItem(it)
   shareTarget.value = it
   sharePanelOpen.value = true
@@ -1513,7 +1514,7 @@ function itemSecondary(it: InboxItem) {
     <div v-else-if="isMobile && mobileView === 'detail' && active" class="card flex min-h-0 flex-1 flex-col overflow-hidden">
       <div class="flex shrink-0 items-center justify-end gap-3 border-b border-line px-4 py-2">
         <button
-          v-if="active.type === 'gate'"
+          v-if="isHumanGateInboxItem(active)"
           type="button"
           class="inline-flex min-h-11 items-center text-xs text-accent-2 hover:underline"
           data-testid="gate-share-copy-btn-detail"
@@ -1535,7 +1536,7 @@ function itemSecondary(it: InboxItem) {
           :gate="activeGate!"
           :run="activeRun || undefined"
           :fill-preview="true"
-          :share-link="active.type === 'gate' ? active.shareLink ?? { state: 'none' } : null"
+          :share-link="isHumanGateInboxItem(active) ? active.shareLink ?? { state: 'none' } : null"
           @resolve="onResolve"
           @react-revised="onReactRevised"
           @open-share="openSharePanel(active)"
@@ -1643,7 +1644,7 @@ function itemSecondary(it: InboxItem) {
               :fill-preview="true"
               :unified-preview-budget="true"
               class="min-h-0 flex-1"
-              :share-link="active.type === 'gate' ? active.shareLink ?? { state: 'none' } : null"
+              :share-link="isHumanGateInboxItem(active) ? active.shareLink ?? { state: 'none' } : null"
               @resolve="onResolve"
               @react-revised="onReactRevised"
               @open-share="openSharePanel(active)"

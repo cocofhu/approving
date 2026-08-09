@@ -19,11 +19,11 @@ const (
 )
 
 type publicDecideBody struct {
-	Token  string `json:"token"`
-	Action string `json:"action"`
+	Token   string `json:"token"`
+	Action  string `json:"action"`
 	Comment string `json:"comment"`
-	Name   string `json:"name"`
-	Nonce  string `json:"nonce"`
+	Name    string `json:"name"`
+	Nonce   string `json:"nonce"`
 }
 
 func (h *Handlers) publicRateLimit(c *gin.Context) bool {
@@ -79,7 +79,7 @@ func (h *Handlers) PublicGateDecide(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "unavailable"})
 		return
 	}
-	if !checkPublicCSRF(c) {
+	if !h.checkPublicCSRF(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "csrf", "message": "请求未通过安全校验"})
 		return
 	}
@@ -170,9 +170,12 @@ func (h *Handlers) PublicGateApprovalPage(c *gin.Context) {
 }
 
 func (h *Handlers) publicGateArtifacts(lookup *gateshare.LookupResult) (visualHTML, structName, structContent string) {
-	if lookup == nil || h.Arts == nil {
+	if lookup == nil || h.Arts == nil || h.Eng == nil {
 		return "", "", ""
 	}
+	// Only this human_gate's primary products (body_template / upstream produces
+	// whitelist). Never scan the whole Run — other nodes' page.html / research.json
+	// must not leak to an unauthenticated holder.
 	items, err := h.Eng.ListGatePrimaryProducts(lookup.Link.RunID, lookup.Link.NodeID)
 	if err != nil {
 		return "", "", ""
@@ -195,36 +198,18 @@ func (h *Handlers) publicGateArtifacts(lookup *gateshare.LookupResult) (visualHT
 			structContent = a.Content
 		}
 	}
-	if visualHTML == "" || structContent == "" {
-		arts := h.Arts.ByRun(lookup.Link.RunID)
-		for _, meta := range arts {
-			n := strings.ToLower(meta.Name)
-			content, ok := h.Arts.Get(lookup.Link.RunID, meta.Name)
-			if !ok {
-				continue
-			}
-			if visualHTML == "" && (n == "page.html" || strings.HasSuffix(n, ".html")) {
-				visualHTML = content
-				continue
-			}
-			if structContent == "" && strings.HasSuffix(n, ".json") && !strings.Contains(n, "env") {
-				structName = meta.Name
-				structContent = content
-			}
-		}
-	}
 	return visualHTML, structName, structContent
 }
 
-func checkPublicCSRF(c *gin.Context) bool {
+func (h *Handlers) checkPublicCSRF(c *gin.Context) bool {
 	if strings.TrimSpace(c.GetHeader(headerShareRequest)) == "" {
 		return false
 	}
-	origin := strings.TrimSpace(c.GetHeader("Origin"))
-	host := c.Request.Host
-	if xh := strings.TrimSpace(c.GetHeader("X-Forwarded-Host")); xh != "" {
-		host = xh
+	host := h.trustedPublicHost(c)
+	if host == "" {
+		return false
 	}
+	origin := strings.TrimSpace(c.GetHeader("Origin"))
 	if origin != "" {
 		u, err := url.Parse(origin)
 		if err != nil || u.Host == "" {

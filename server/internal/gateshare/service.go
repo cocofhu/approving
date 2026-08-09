@@ -2,6 +2,7 @@ package gateshare
 
 import (
 	"errors"
+	"net/url"
 	"strings"
 	"time"
 
@@ -443,6 +444,20 @@ func (s *Service) ConsumeCAS(linkID, action string) (bool, *models.GateShareLink
 	return res.RowsAffected == 1, &link, nil
 }
 
+// RollbackConsume clears used_at/used_action so a failed resume can retry.
+func (s *Service) RollbackConsume(linkID string) error {
+	if s == nil || s.db == nil || strings.TrimSpace(linkID) == "" {
+		return errors.New("share service unavailable")
+	}
+	res := s.db.Model(&models.GateShareLink{}).
+		Where("id = ? AND used_at IS NOT NULL AND revoked_at IS NULL", linkID).
+		Updates(map[string]any{
+			"used_at":     gorm.Expr("NULL"),
+			"used_action": "",
+		})
+	return res.Error
+}
+
 // LoadLinkByID loads a share link row.
 func (s *Service) LoadLinkByID(id string) (*models.GateShareLink, error) {
 	var link models.GateShareLink
@@ -634,4 +649,22 @@ func PublicOriginFromRequest(scheme, host string) string {
 		scheme = "https"
 	}
 	return strings.TrimRight(scheme, ":/") + "://" + host
+}
+
+// ParsePublicAdvertise returns origin (scheme://host) and host from the
+// configured public_advertise URL. Empty / invalid → ("", "").
+func ParsePublicAdvertise(raw string) (origin, host string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || strings.TrimSpace(u.Host) == "" {
+		return "", ""
+	}
+	scheme := strings.ToLower(strings.TrimSpace(u.Scheme))
+	if scheme != "http" && scheme != "https" {
+		scheme = "https"
+	}
+	return scheme + "://" + u.Host, u.Host
 }

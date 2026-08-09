@@ -103,24 +103,25 @@ func newHarness(t *testing.T) *harness {
 	projectSvc := services.NewProjectService(db)
 	wfSvc := services.NewWorkflowService(db)
 	h := &handlers.Handlers{
-		WF:            wfSvc,
-		Projects:      projectSvc,
-		Runs:          services.NewRunService(db),
-		Arts:          arts,
-		APIKeys:       services.NewAPIKeyService(db),
-		Skill:         skills,
-		Dash:          services.NewDashboardService(db),
-		Sbx:           sbx,
-		Eng:           eng,
-		MCP:           host,
-		Auth:          authSvc,
-		PlatformRules: platformRules,
-		Issues:        services.NewIssueService(db),
+		WF:               wfSvc,
+		Projects:         projectSvc,
+		Runs:             services.NewRunService(db),
+		Arts:             arts,
+		APIKeys:          services.NewAPIKeyService(db),
+		Skill:            skills,
+		Dash:             services.NewDashboardService(db),
+		Sbx:              sbx,
+		Eng:              eng,
+		MCP:              host,
+		Auth:             authSvc,
+		PlatformRules:    platformRules,
+		Issues:           services.NewIssueService(db),
 		Audit:            auditSvc,
 		Onboarding:       services.NewOnboardingService(projectSvc, skills, wfSvc),
 		GateShare:        gateShareSvc,
 		GateShareNonces:  gateshare.NewNonceStore(),
 		GateShareLimiter: gateshare.NewIPLimiter(),
+		PublicAdvertise:  "http://example.test",
 	}
 	hn := &harness{r: router.New(h), h: h, db: db, host: host, auth: authSvc, fg: fg}
 	hn.cookie = hn.login(t)

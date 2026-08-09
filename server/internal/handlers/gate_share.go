@@ -16,22 +16,27 @@ type createShareBody struct {
 }
 
 func (h *Handlers) shareOrigin(c *gin.Context) string {
-	scheme := "https"
-	if c.Request.TLS == nil && !strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https") {
-		if fwd := c.GetHeader("X-Forwarded-Proto"); fwd != "" {
-			scheme = fwd
-		} else {
-			scheme = "http"
-		}
+	if origin, _ := gateshare.ParsePublicAdvertise(h.PublicAdvertise); origin != "" {
+		return origin
 	}
-	if fwd := c.GetHeader("X-Forwarded-Proto"); fwd != "" {
+	// Fallback: request Host only. Never trust client X-Forwarded-Host.
+	scheme := "http"
+	if c.Request.TLS != nil {
+		scheme = "https"
+	}
+	if fwd := strings.ToLower(strings.TrimSpace(c.GetHeader("X-Forwarded-Proto"))); fwd == "http" || fwd == "https" {
 		scheme = fwd
 	}
-	host := c.Request.Host
-	if xh := c.GetHeader("X-Forwarded-Host"); xh != "" {
-		host = xh
+	return gateshare.PublicOriginFromRequest(scheme, c.Request.Host)
+}
+
+// trustedPublicHost is the CSRF comparison host: PublicAdvertise when set,
+// otherwise the request Host. X-Forwarded-Host is ignored (untrusted).
+func (h *Handlers) trustedPublicHost(c *gin.Context) string {
+	if _, host := gateshare.ParsePublicAdvertise(h.PublicAdvertise); host != "" {
+		return host
 	}
-	return gateshare.PublicOriginFromRequest(scheme, host)
+	return strings.TrimSpace(c.Request.Host)
 }
 
 func (h *Handlers) shareActor(c *gin.Context) string {
@@ -98,23 +103,23 @@ func (h *Handlers) RevokeGateShareLink(c *gin.Context) {
 func writeShareErr(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, gateshare.ErrNoStandardAction):
-		c.JSON(http.StatusBadRequest, gin.H{"error": "需要配置标准批准或驳回动作后才能创建临时链接"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no_standard_action"})
 	case errors.Is(err, gateshare.ErrNotHumanGate):
-		c.JSON(http.StatusBadRequest, gin.H{"error": "仅 human_gate 支持临时审批链接"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "not_human_gate"})
 	case errors.Is(err, gateshare.ErrUsedReadonly):
-		c.JSON(http.StatusConflict, gin.H{"error": "审批已完成，不能再创建链接", "state": models.ShareLinkStateUsed})
+		c.JSON(http.StatusConflict, gin.H{"error": "used_readonly", "state": models.ShareLinkStateUsed})
 	case errors.Is(err, gateshare.ErrRunEnded):
-		c.JSON(http.StatusConflict, gin.H{"error": "运行已结束，不能创建链接"})
+		c.JSON(http.StatusConflict, gin.H{"error": "run_ended"})
 	case errors.Is(err, gateshare.ErrGateNotPending):
-		c.JSON(http.StatusNotFound, gin.H{"error": "没有待审批的门禁"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "gate_not_pending"})
 	case errors.Is(err, gateshare.ErrInvalidTTL):
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的有效期档位"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_ttl"})
 	case errors.Is(err, gateshare.ErrNotActive):
-		c.JSON(http.StatusConflict, gin.H{"error": "当前没有有效的临时链接"})
+		c.JSON(http.StatusConflict, gin.H{"error": "not_active"})
 	case errors.Is(err, gateshare.ErrNotFound):
-		c.JSON(http.StatusNotFound, gin.H{"error": "临时链接不存在"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
 	default:
 		_ = c.Error(err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "share_failed"})
 	}
 }

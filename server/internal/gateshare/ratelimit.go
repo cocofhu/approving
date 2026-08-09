@@ -8,6 +8,7 @@ import (
 const (
 	publicRateWindow = time.Minute
 	publicRateMax    = 30
+	ipLimiterGCAt    = 64
 )
 
 type ipWindow struct {
@@ -16,6 +17,7 @@ type ipWindow struct {
 }
 
 // IPLimiter is a per-IP sliding-window QPS limiter (not login lockout).
+// In-process only; expired IP entries are garbage-collected.
 type IPLimiter struct {
 	mu   sync.Mutex
 	byIP map[string]*ipWindow
@@ -34,6 +36,9 @@ func (l *IPLimiter) Allow(ip string) bool {
 	now := time.Now()
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if len(l.byIP) >= ipLimiterGCAt {
+		l.gcExpiredLocked(now)
+	}
 	w := l.byIP[ip]
 	if w == nil || now.Sub(w.start) >= publicRateWindow {
 		l.byIP[ip] = &ipWindow{start: now, count: 1}
@@ -44,4 +49,19 @@ func (l *IPLimiter) Allow(ip string) bool {
 	}
 	w.count++
 	return true
+}
+
+func (l *IPLimiter) gcExpiredLocked(now time.Time) {
+	for k, w := range l.byIP {
+		if w == nil || now.Sub(w.start) >= publicRateWindow {
+			delete(l.byIP, k)
+		}
+	}
+}
+
+// LenForTest returns the number of tracked IPs (tests / diagnostics).
+func (l *IPLimiter) LenForTest() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.byIP)
 }

@@ -41,6 +41,13 @@ Inbox operators can mint a one-shot external approval URL for a single pending
   and a strict CSP. The `/public/gate-approvals` prefix does **not** emit
   `Access-Control-Allow-Origin`. POST decide requires Origin/Referer + custom
   header + one-time nonce, and is per-IP rate limited.
+- Share URLs and CSRF host checks use `server.public_advertise` (never client
+  `X-Forwarded-Host`). External preview only returns this `human_gate`'s primary
+  products — it does not scan other nodes in the Run.
+- Preview nonces and the public IP limiter are **in-process**. A single replica
+  is the supported deployment for `/public/gate-approvals`; multi-instance
+  setups must share nonce/limiter storage or preview→decide may 403. The store
+  keeps the last few nonces per link so multiple tabs can submit after refresh.
 - Audit records create / regen / revoke / use with `callerKind=external` on
   use, optional self-reported name, masked IP (last octet/group), and
   browser/OS UA only — still without the plaintext token.

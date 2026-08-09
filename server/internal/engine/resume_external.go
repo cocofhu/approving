@@ -10,12 +10,12 @@ import (
 
 // ExternalResumeResult is returned after an external share-link decision.
 type ExternalResumeResult struct {
-	Status            string // approved | rejected | already_processed
-	Action            string
-	AlreadyProcessed  bool
-	Conflict          bool
-	Link              *models.GateShareLink
-	Gate              models.Gate
+	Status           string // approved | rejected | already_processed
+	Action           string
+	AlreadyProcessed bool
+	Conflict         bool
+	Link             *models.GateShareLink
+	Gate             models.Gate
 }
 
 // ResumeGateExternal consumes a share link (CAS) then resumes the bound human_gate.
@@ -151,6 +151,12 @@ func (e *Engine) ResumeGateExternal(share *gateshare.Service, token, action, com
 				}, nil
 			}
 			return &ExternalResumeResult{Status: "used", Link: usedLink, Gate: lookup.Gate, Conflict: true}, gateshare.ErrActionConflict
+		}
+		// Resume failed while the gate is still pending: roll back CAS so the
+		// one-shot link remains usable. Do not burn the token on loadCtx / node /
+		// persist errors.
+		if usedLink != nil {
+			_ = share.RollbackConsume(usedLink.ID)
 		}
 		return nil, err
 	}

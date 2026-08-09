@@ -1,4 +1,4 @@
-import type { GateShareInboxStatus } from '@/lib/types'
+import type { GateInboxItem, GateShareInboxStatus, InboxItem } from '@/lib/types'
 
 export const GATE_SHARE_TTL_TIERS = ['1h', '8h', '24h', '72h', '7d'] as const
 export type GateShareTTLTier = (typeof GATE_SHARE_TTL_TIERS)[number]
@@ -7,25 +7,75 @@ export const DEFAULT_GATE_SHARE_TTL: GateShareTTLTier = '24h'
 export const GATE_SHARE_TOKEN_HEADER = 'X-Gate-Share-Token'
 export const GATE_SHARE_REQUEST_HEADER = 'X-Gate-Share-Requested'
 
-/** In-memory only (never persisted): last fragment URL for this gate instance. */
+const SHARE_URL_STORAGE_PREFIX = 'approving.gateShareUrl.'
+
+/** In-memory cache plus sessionStorage so refresh can copy the same active URL. */
 const shareUrlMemory = new Map<string, string>()
 
 export function shareMemoryKey(runId: string, nodeId: string, iteration?: number): string {
   return `${runId}:${nodeId}:${iteration ?? 0}`
 }
 
+function storageKey(runId: string, nodeId: string, iteration?: number): string {
+  return SHARE_URL_STORAGE_PREFIX + shareMemoryKey(runId, nodeId, iteration)
+}
+
 export function rememberShareUrl(runId: string, nodeId: string, iteration: number | undefined, url: string) {
   const u = url.trim()
   if (!u) return
-  shareUrlMemory.set(shareMemoryKey(runId, nodeId, iteration), u)
+  const memKey = shareMemoryKey(runId, nodeId, iteration)
+  shareUrlMemory.set(memKey, u)
+  try {
+    sessionStorage.setItem(storageKey(runId, nodeId, iteration), u)
+  } catch {
+    /* private mode / quota */
+  }
 }
 
 export function recallShareUrl(runId: string, nodeId: string, iteration?: number): string {
-  return shareUrlMemory.get(shareMemoryKey(runId, nodeId, iteration)) || ''
+  const mem = shareUrlMemory.get(shareMemoryKey(runId, nodeId, iteration))
+  if (mem) return mem
+  try {
+    return sessionStorage.getItem(storageKey(runId, nodeId, iteration)) || ''
+  } catch {
+    return ''
+  }
 }
 
 export function forgetShareUrl(runId: string, nodeId: string, iteration?: number) {
   shareUrlMemory.delete(shareMemoryKey(runId, nodeId, iteration))
+  try {
+    sessionStorage.removeItem(storageKey(runId, nodeId, iteration))
+  } catch {
+    /* ignore */
+  }
+}
+
+export function isHumanGateInboxItem(item: InboxItem | null | undefined): item is GateInboxItem {
+  return !!item && item.type === 'gate' && item.nodeType === 'human_gate'
+}
+
+const SHARE_API_ERROR_KEYS: Record<string, string> = {
+  no_standard_action: 'pages.gatesInbox.share.errors.noStandardAction',
+  not_human_gate: 'pages.gatesInbox.share.errors.notHumanGate',
+  used_readonly: 'pages.gatesInbox.share.errors.usedReadonly',
+  run_ended: 'pages.gatesInbox.share.errors.runEnded',
+  gate_not_pending: 'pages.gatesInbox.share.errors.gateNotPending',
+  invalid_ttl: 'pages.gatesInbox.share.errors.invalidTtl',
+  not_active: 'pages.gatesInbox.share.errors.notActive',
+  not_found: 'pages.gatesInbox.share.errors.notFound',
+  share_failed: 'pages.gatesInbox.share.errors.shareFailed',
+}
+
+export function shareApiErrorMessage(
+  err: unknown,
+  t: (key: string, values?: Record<string, unknown>) => string,
+): string {
+  const msg = err instanceof Error ? err.message : String(err || '')
+  const code = msg.trim()
+  const key = SHARE_API_ERROR_KEYS[code]
+  if (key) return t(key)
+  return msg || t('pages.gatesInbox.share.errors.shareFailed')
 }
 
 /** Mask fragment token so the management panel never shows plaintext by default. */

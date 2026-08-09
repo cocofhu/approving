@@ -881,8 +881,9 @@
         "linkLabel": "分享链接",
         "copied": "已复制到剪贴板",
         "clipboardFallback": "无法写入剪贴板，请全选下方链接手动复制",
-        "urlHiddenUntilCopy": "创建后可复制完整链接。若刷新后需再复制，请重新生成。",
-        "needRegenToCopy": "当前会话没有完整链接，请重新生成后再复制（旧链接会立刻失效）。",
+        "urlHiddenUntilCopy": "创建后可复制完整链接。同一浏览器标签刷新后仍可再复制。",
+        "copyUnavailable": "无法再次复制同一链接。仅可重新生成或撤销（重新生成会立刻作废旧链接）。",
+        "needRegenToCopy": "当前无法复制完整链接。请重新生成或撤销，不要把重新生成当作复制。",
         "regenerate": "重新生成",
         "revoke": "立即撤销",
         "confirmRegen": "重新生成将立刻作废旧链接，并按原有效期档位从现在重新起算。确认继续？",
@@ -903,6 +904,17 @@
           "24h": "24 小时",
           "72h": "72 小时",
           "7d": "7 天"
+        },
+        "errors": {
+          "noStandardAction": "需要配置标准批准或驳回动作后才能创建临时链接",
+          "notHumanGate": "仅 human_gate 支持临时审批链接",
+          "usedReadonly": "审批已完成，不能再创建链接",
+          "runEnded": "运行已结束，不能创建链接",
+          "gateNotPending": "没有待审批的门禁",
+          "invalidTtl": "无效的有效期档位",
+          "notActive": "当前没有有效的临时链接",
+          "notFound": "临时链接不存在",
+          "shareFailed": "临时链接操作失败，请重试"
         }
       }
     },

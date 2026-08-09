@@ -881,8 +881,9 @@
         "linkLabel": "Share link",
         "copied": "Copied to clipboard",
         "clipboardFallback": "Clipboard unavailable. Select the URL below and copy it manually.",
-        "urlHiddenUntilCopy": "The full link can be copied after create. After a refresh, regenerate to copy again.",
-        "needRegenToCopy": "This session has no full URL. Regenerate to copy (the old link is revoked immediately).",
+        "urlHiddenUntilCopy": "The full link can be copied after create. Refreshing this tab still lets you copy the same URL.",
+        "copyUnavailable": "Cannot copy the same URL again. You can only regenerate or revoke (regenerate immediately revokes the old link).",
+        "needRegenToCopy": "The full URL is not available here. Regenerate or revoke — do not treat regenerate as a copy shortcut.",
         "regenerate": "Regenerate",
         "revoke": "Revoke now",
         "confirmRegen": "Regenerating immediately revokes the old link and restarts the same TTL from now. Continue?",
@@ -903,6 +904,17 @@
           "24h": "24 hours",
           "72h": "72 hours",
           "7d": "7 days"
+        },
+        "errors": {
+          "noStandardAction": "Add a standard approve or reject action before creating a temp link",
+          "notHumanGate": "Temp approval links are only available for human_gate",
+          "usedReadonly": "Approval already finished. A new link cannot be created",
+          "runEnded": "This run has ended. A link cannot be created",
+          "gateNotPending": "No pending gate",
+          "invalidTtl": "Invalid expiry option",
+          "notActive": "There is no active temp link",
+          "notFound": "Temp link not found",
+          "shareFailed": "Temp link action failed. Please try again"
         }
       }
     },

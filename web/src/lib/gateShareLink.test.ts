@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest'
 import {
   maskShareUrl,
@@ -6,6 +7,11 @@ import {
   shareStatusLabel,
   canCreateGateShare,
   isGateShareActive,
+  rememberShareUrl,
+  recallShareUrl,
+  forgetShareUrl,
+  isHumanGateInboxItem,
+  shareApiErrorMessage,
 } from './gateShareLink'
 
 const t = (key: string, values?: Record<string, unknown>) => {
@@ -47,5 +53,66 @@ describe('gateShareLink helpers', () => {
     expect(canCreateGateShare({ state: 'revoked', canCreate: true })).toBe(true)
     expect(canCreateGateShare({ state: 'expired', canCreate: true })).toBe(true)
     expect(isGateShareActive({ state: 'active' })).toBe(true)
+  })
+
+  it('isHumanGateInboxItem only matches human_gate', () => {
+    expect(
+      isHumanGateInboxItem({
+        type: 'gate',
+        nodeType: 'human_gate',
+        runId: 'r',
+        nodeId: 'n',
+        workflowName: 'w',
+        title: 't',
+        bodyMd: '',
+        actions: [],
+        requestedAt: '',
+      }),
+    ).toBe(true)
+    expect(
+      isHumanGateInboxItem({
+        type: 'gate',
+        nodeType: 'proposal_select',
+        runId: 'r',
+        nodeId: 'n',
+        workflowName: 'w',
+        title: 't',
+        bodyMd: '',
+        actions: [],
+        requestedAt: '',
+      }),
+    ).toBe(false)
+    expect(
+      isHumanGateInboxItem({
+        type: 'clarify',
+        runId: 'r',
+        nodeId: 'n',
+        workflowName: 'w',
+        label: 'l',
+        done: false,
+        requestedAt: '',
+        updatedAt: '',
+      }),
+    ).toBe(false)
+  })
+
+  it('recalls share URL from sessionStorage and maps API error codes', () => {
+    const url = 'https://app.example/public/gate-approvals#t=' + 'ab'.repeat(32)
+    rememberShareUrl('run-1', 'hg1', 1, url)
+    expect(recallShareUrl('run-1', 'hg1', 1)).toBe(url)
+    expect(sessionStorage.getItem('approving.gateShareUrl.run-1:hg1:1')).toBe(url)
+    forgetShareUrl('run-1', 'hg1', 1)
+    expect(recallShareUrl('run-1', 'hg1', 1)).toBe('')
+    sessionStorage.setItem('approving.gateShareUrl.run-1:hg1:1', url)
+    expect(recallShareUrl('run-1', 'hg1', 1)).toBe(url)
+    forgetShareUrl('run-1', 'hg1', 1)
+
+    const t = (key: string) => key
+    expect(shareApiErrorMessage(new Error('no_standard_action'), t)).toBe(
+      'pages.gatesInbox.share.errors.noStandardAction',
+    )
+    expect(shareApiErrorMessage(new Error('used_readonly'), t)).toBe(
+      'pages.gatesInbox.share.errors.usedReadonly',
+    )
   })
 })

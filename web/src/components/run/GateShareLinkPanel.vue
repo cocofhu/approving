@@ -15,6 +15,7 @@ import {
   maskShareUrl,
   recallShareUrl,
   rememberShareUrl,
+  shareApiErrorMessage,
   type GateShareTTLTier,
 } from '@/lib/gateShareLink'
 
@@ -107,7 +108,7 @@ async function createAndCopy() {
     emit('updated', next, res.url)
     await copyText(res.url)
   } catch (e) {
-    errorText.value = e instanceof Error ? e.message : String(e)
+    errorText.value = shareApiErrorMessage(e, t)
   } finally {
     busy.value = false
   }
@@ -115,7 +116,7 @@ async function createAndCopy() {
 
 async function copyExisting() {
   if (!fullUrl.value) {
-    errorText.value = t('pages.gatesInbox.share.needRegenToCopy')
+    errorText.value = t('pages.gatesInbox.share.copyUnavailable')
     return
   }
   await copyText(fullUrl.value)
@@ -142,7 +143,7 @@ async function confirmRegen() {
     emit('updated', next, res.url)
     await copyText(res.url)
   } catch (e) {
-    errorText.value = e instanceof Error ? e.message : String(e)
+    errorText.value = shareApiErrorMessage(e, t)
   } finally {
     busy.value = false
   }
@@ -166,7 +167,7 @@ async function confirmRevoke() {
     emit('revoked', next)
     emit('close')
   } catch (e) {
-    errorText.value = e instanceof Error ? e.message : String(e)
+    errorText.value = shareApiErrorMessage(e, t)
   } finally {
     busy.value = false
   }
@@ -237,12 +238,15 @@ function close() {
           :value="displayUrl || t('pages.gatesInbox.share.urlHiddenUntilCopy')"
           @focus="($event.target as HTMLTextAreaElement).select()"
         />
+        <p v-if="!fullUrl" class="text-xs text-txt3" role="status" data-testid="gate-share-copy-unavailable">
+          {{ t('pages.gatesInbox.share.copyUnavailable') }}
+        </p>
         <div class="flex flex-wrap gap-2">
           <button
             type="button"
             class="inline-flex min-h-11 items-center gap-1.5 bg-accent px-3 text-xs font-medium text-white hover:bg-accent-2 disabled:opacity-45"
             data-testid="gate-share-copy"
-            :disabled="busy"
+            :disabled="busy || !fullUrl"
             @click="copyExisting"
           >
             <Icon name="copy" :size="14" />

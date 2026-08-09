@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cocofhu/approving/internal/auth"
 	"github.com/cocofhu/approving/internal/gateshare"
 	"github.com/cocofhu/approving/internal/models"
 )
@@ -32,7 +33,7 @@ func seedHumanGate(t *testing.T, h *harness, runID, nodeID string, actions []mod
 		StartedAt: now,
 		Graph: models.Graph{Nodes: []models.Node{{
 			ID: nodeID, Type: "human_gate", Label: "审",
-			Config: map[string]any{"title": "审阅", "body_template": "请审阅", "actions": []any{
+			Config: map[string]any{"title": "审阅", "body_template": `请审阅 {{ artifact("page.html") }}`, "actions": []any{
 				map[string]any{"id": "approve", "label": "批准"},
 				map[string]any{"id": "revise", "label": "驳回", "requireForm": true},
 			}},
@@ -93,6 +94,9 @@ func TestGateShareCreateRegenRevokeAndInboxStatus(t *testing.T) {
 	if !bytes.Contains(list.Body.Bytes(), []byte(`"shareLink"`)) {
 		t.Fatalf("inbox missing shareLink: %s", list.Body.String())
 	}
+	if !bytes.Contains(list.Body.Bytes(), []byte(`"nodeType":"human_gate"`)) {
+		t.Fatalf("inbox missing nodeType=human_gate: %s", list.Body.String())
+	}
 	if bytes.Contains(list.Body.Bytes(), []byte(token)) {
 		t.Fatal("inbox leaked plaintext token")
 	}
@@ -118,6 +122,9 @@ func TestGateShareCreateRegenRevokeAndInboxStatus(t *testing.T) {
 	if strings.Contains(prev2.Body.String(), "run-share-1") || strings.Contains(prev2.Body.String(), "should-hide") || strings.Contains(prev2.Body.String(), "/api/blobs") {
 		t.Fatalf("preview leak: %s", prev2.Body.String())
 	}
+	if strings.Contains(prev2.Body.String(), "外部一次审批") {
+		t.Fatalf("preview leaked non-primary structured artifact: %s", prev2.Body.String())
+	}
 	if p2["visualHtml"] == nil || p2["nonce"] == "" {
 		t.Fatalf("preview missing visual/nonce: %+v", p2)
 	}
@@ -141,7 +148,7 @@ func TestGateShareNoStandardActionAndUsedCannotRecreate(t *testing.T) {
 	h := newHarness(t)
 	seedHumanGate(t, h, "run-share-2", "hg2", []models.GateAction{{ID: "custom", Label: "自定义"}})
 	w := h.do(http.MethodPost, "/api/runs/run-share-2/gates/hg2/share-link", map[string]any{"ttlTier": "24h"})
-	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "标准") {
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "no_standard_action") {
 		t.Fatalf("no standard action: %d %s", w.Code, w.Body.String())
 	}
 
@@ -250,10 +257,14 @@ func TestGateSharePublicSecurityHeadersCSRFAndRateLimit(t *testing.T) {
 	if bad.Code != http.StatusForbidden {
 		t.Fatalf("csrf missing header: %d %s", bad.Code, bad.Body.String())
 	}
-	// CSRF: bad origin
+	// CSRF: bad origin (even with spoofed X-Forwarded-Host)
 	bad2 := h.doPublic(http.MethodPost, "/public/gate-approvals/decide", map[string]any{
 		"token": token, "action": "approve", "nonce": "x",
-	}, map[string]string{headerShareRequest: "1", "Origin": "https://evil.example"})
+	}, map[string]string{
+		headerShareRequest: "1",
+		"Origin":           "https://evil.example",
+		"X-Forwarded-Host": "evil.example",
+	})
 	if bad2.Code != http.StatusForbidden {
 		t.Fatalf("csrf bad origin: %d %s", bad2.Code, bad2.Body.String())
 	}
@@ -342,6 +353,206 @@ func TestGateShareUnauthorizedCannotCreate(t *testing.T) {
 	w := h.doWithCookie(http.MethodPost, "/api/runs/run-share-6/gates/hg6/share-link", map[string]any{"ttlTier": "24h"}, "")
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("unauth create: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestGateShareIgnoresForwardedHostOnCreate(t *testing.T) {
+	h := newHarness(t)
+	seedHumanGate(t, h, "run-share-xfh", "hg-xfh", nil)
+	b, _ := json.Marshal(map[string]any{"ttlTier": "24h"})
+	req := httptest.NewRequest(http.MethodPost, "/api/runs/run-share-xfh/gates/hg-xfh/share-link", bytes.NewReader(b))
+	req.Host = "ignored.invalid"
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Forwarded-Host", "evil.example")
+	req.AddCookie(&http.Cookie{Name: auth.CookieName, Value: h.cookie})
+	w := httptest.NewRecorder()
+	h.r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	created := parseJSON(t, w)
+	url, _ := created["url"].(string)
+	if strings.Contains(url, "evil.example") || strings.Contains(url, "ignored.invalid") {
+		t.Fatalf("share URL trusted request/forwarded host: %s", url)
+	}
+	if !strings.Contains(url, "example.test/public/gate-approvals#t=") {
+		t.Fatalf("expected PublicAdvertise origin, got %s", url)
+	}
+}
+
+func TestGateShareExpiredPreviewDecideAndRecreate(t *testing.T) {
+	h := newHarness(t)
+	seedHumanGate(t, h, "run-share-exp", "hg-exp", nil)
+	created := parseJSON(t, h.do(http.MethodPost, "/api/runs/run-share-exp/gates/hg-exp/share-link", map[string]any{"ttlTier": "24h"}))
+	url, _ := created["url"].(string)
+	token := strings.TrimPrefix(url[strings.Index(url, "#t="):], "#t=")
+
+	past := time.Now().Add(-time.Hour)
+	if err := h.db.Model(&models.GateShareLink{}).Where("run_id = ?", "run-share-exp").Update("expires_at", past).Error; err != nil {
+		t.Fatalf("backdate expires: %v", err)
+	}
+
+	prev := h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: token})
+	if parseJSON(t, prev)["status"] != models.ShareLinkStateExpired {
+		t.Fatalf("expired preview: %s", prev.Body.String())
+	}
+	nonce := publicPreviewNonce(t, h, token)
+	dec := h.doPublic(http.MethodPost, "/public/gate-approvals/decide", map[string]any{
+		"token": token, "action": "approve", "nonce": nonce,
+	}, map[string]string{headerShareRequest: "1", "Origin": "http://" + publicHost})
+	st := parseJSON(t, dec)
+	if st["status"] != models.ShareLinkStateExpired && dec.Code != http.StatusOK {
+		t.Fatalf("expired decide: %d %s", dec.Code, dec.Body.String())
+	}
+	if st["status"] != models.ShareLinkStateExpired {
+		t.Fatalf("expired decide status: %+v", st)
+	}
+
+	w := h.do(http.MethodPost, "/api/runs/run-share-exp/gates/hg-exp/share-link", map[string]any{"ttlTier": "1h"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("recreate after expire: %d %s", w.Code, w.Body.String())
+	}
+	newURL, _ := parseJSON(t, w)["url"].(string)
+	if newURL == url {
+		t.Fatal("recreate returned same url")
+	}
+}
+
+func TestGateShareLoginResumeInvalidatesUnusedLink(t *testing.T) {
+	h := newHarness(t)
+	seedHumanGate(t, h, "run-share-login", "hg-login", nil)
+	created := parseJSON(t, h.do(http.MethodPost, "/api/runs/run-share-login/gates/hg-login/share-link", map[string]any{"ttlTier": "24h"}))
+	url, _ := created["url"].(string)
+	token := strings.TrimPrefix(url[strings.Index(url, "#t="):], "#t=")
+
+	w := h.do(http.MethodPost, "/api/runs/run-share-login/gates/hg-login/resume", map[string]any{
+		"action": "approve", "form": map[string]any{},
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("login resume: %d %s", w.Code, w.Body.String())
+	}
+	prev := h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: token})
+	st := parseJSON(t, prev)["status"]
+	if st != models.ShareLinkStateRevoked && st != models.ShareLinkStateUsed {
+		t.Fatalf("after login resume preview=%v body=%s", st, prev.Body.String())
+	}
+	re := h.do(http.MethodPost, "/api/runs/run-share-login/gates/hg-login/share-link", map[string]any{"ttlTier": "24h"})
+	if re.Code != http.StatusConflict {
+		t.Fatalf("recreate after login resume: %d %s", re.Code, re.Body.String())
+	}
+}
+
+func TestGateShareCancelRunInvalidatesAndBlocksRecreate(t *testing.T) {
+	h := newHarness(t)
+	seedHumanGate(t, h, "run-share-cancel", "hg-cancel", nil)
+	created := parseJSON(t, h.do(http.MethodPost, "/api/runs/run-share-cancel/gates/hg-cancel/share-link", map[string]any{"ttlTier": "8h"}))
+	url, _ := created["url"].(string)
+	token := strings.TrimPrefix(url[strings.Index(url, "#t="):], "#t=")
+
+	if w := h.do(http.MethodPost, "/api/runs/run-share-cancel/cancel", nil); w.Code != http.StatusOK {
+		t.Fatalf("cancel: %d %s", w.Code, w.Body.String())
+	}
+	prev := h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: token})
+	st := parseJSON(t, prev)["status"]
+	if st != models.ShareLinkStateRevoked && st != models.ShareLinkStateUsed {
+		t.Fatalf("after cancel preview=%v body=%s", st, prev.Body.String())
+	}
+	re := h.do(http.MethodPost, "/api/runs/run-share-cancel/gates/hg-cancel/share-link", map[string]any{"ttlTier": "24h"})
+	if re.Code != http.StatusConflict || (!strings.Contains(re.Body.String(), "run_ended") && !strings.Contains(re.Body.String(), "used_readonly")) {
+		t.Fatalf("recreate after cancel: %d %s", re.Code, re.Body.String())
+	}
+}
+
+func TestGateSharePreviewDoesNotLeakOtherNodeArtifacts(t *testing.T) {
+	h := newHarness(t)
+	now := time.Now()
+	runID, nodeID := "run-share-leak", "hg-leak"
+	h.db.Create(&models.WorkflowDef{
+		ID: "wf-" + runID, ProjectID: models.DefaultProjectID, Name: "share-" + runID,
+		Status: "published", Version: 1,
+	})
+	h.db.Create(&models.Run{
+		ID: runID, WorkflowID: "wf-" + runID, WorkflowName: "share-" + runID, Status: "waiting_human",
+		StartedAt: now,
+		Graph: models.Graph{Nodes: []models.Node{
+			{ID: "research", Type: "research", Label: "调研", Config: map[string]any{"produces": "research.json,page.html"}},
+			{ID: nodeID, Type: "human_gate", Label: "审",
+				Config: map[string]any{"title": "仅说明", "body_template": "请根据说明批准，不要展示上游调研", "actions": []any{
+					map[string]any{"id": "approve", "label": "批准"},
+					map[string]any{"id": "revise", "label": "驳回", "requireForm": true},
+				}}},
+		}},
+	})
+	h.db.Create(&models.Gate{
+		RunID: runID, NodeID: nodeID, Iteration: 1, WorkflowID: "wf-" + runID, WorkflowName: "share-" + runID,
+		Title: "仅说明门禁", BodyMd: "请根据说明批准",
+		Actions:     []models.GateAction{{ID: "approve", Label: "批准"}, {ID: "revise", Label: "驳回", RequireForm: true}},
+		Form:        []models.GateField{{Key: "comment", Label: "意见"}},
+		RequestedAt: now,
+	})
+	h.h.Arts.Save(runID, "research", "research.json", "json", `{"title":"LEAK-RESEARCH-TITLE","goals":["secret-goal-xyz"]}`)
+	h.h.Arts.Save(runID, "research", "page.html", "html", `<html><body>LEAK-OTHER-NODE-HTML</body></html>`)
+
+	created := parseJSON(t, h.do(http.MethodPost, "/api/runs/"+runID+"/gates/"+nodeID+"/share-link", map[string]any{"ttlTier": "24h"}))
+	url, _ := created["url"].(string)
+	token := strings.TrimPrefix(url[strings.Index(url, "#t="):], "#t=")
+	prev := h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: token})
+	body := prev.Body.String()
+	if prev.Code != 200 {
+		t.Fatalf("preview: %d %s", prev.Code, body)
+	}
+	if strings.Contains(body, "LEAK-RESEARCH-TITLE") || strings.Contains(body, "secret-goal-xyz") || strings.Contains(body, "LEAK-OTHER-NODE-HTML") {
+		t.Fatalf("preview leaked other-node artifacts: %s", body)
+	}
+	p := parseJSON(t, prev)
+	if p["status"] != models.ShareLinkStateActive {
+		t.Fatalf("preview status: %+v", p)
+	}
+	if p["visualHtml"] != nil && p["visualHtml"] != "" {
+		t.Fatalf("expected empty visual for description-only gate, got %+v", p["visualHtml"])
+	}
+	if p["structured"] != nil {
+		t.Fatalf("expected no structured DTO, got %+v", p["structured"])
+	}
+}
+
+func TestGateShareResumeFailureDoesNotBurnLink(t *testing.T) {
+	h := newHarness(t)
+	seedHumanGate(t, h, "run-share-rollback", "hg-rb", nil)
+	created := parseJSON(t, h.do(http.MethodPost, "/api/runs/run-share-rollback/gates/hg-rb/share-link", map[string]any{"ttlTier": "24h"}))
+	url, _ := created["url"].(string)
+	token := strings.TrimPrefix(url[strings.Index(url, "#t="):], "#t=")
+
+	// Move the pending gate off the bound node id so resumeGateLocked fails
+	// with "no pending gate" after CAS; RollbackConsume must restore the link.
+	if err := h.db.Model(&models.Gate{}).Where("run_id = ? AND node_id = ?", "run-share-rollback", "hg-rb").
+		Update("node_id", "hg-moved").Error; err != nil {
+		t.Fatalf("move gate: %v", err)
+	}
+
+	nonce := publicPreviewNonce(t, h, token)
+	dec := h.doPublic(http.MethodPost, "/public/gate-approvals/decide", map[string]any{
+		"token": token, "action": "approve", "nonce": nonce,
+	}, map[string]string{headerShareRequest: "1", "Origin": "http://" + publicHost})
+	if dec.Code == http.StatusOK && parseJSON(t, dec)["status"] == "approved" {
+		t.Fatalf("decide should fail after gate move: %s", dec.Body.String())
+	}
+
+	prev := h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: token})
+	if parseJSON(t, prev)["status"] != models.ShareLinkStateActive {
+		t.Fatalf("link burned after resume failure: %s", prev.Body.String())
+	}
+
+	if err := h.db.Model(&models.Gate{}).Where("run_id = ? AND node_id = ?", "run-share-rollback", "hg-moved").
+		Update("node_id", "hg-rb").Error; err != nil {
+		t.Fatalf("restore gate: %v", err)
+	}
+	nonce2 := publicPreviewNonce(t, h, token)
+	dec2 := h.doPublic(http.MethodPost, "/public/gate-approvals/decide", map[string]any{
+		"token": token, "action": "approve", "nonce": nonce2,
+	}, map[string]string{headerShareRequest: "1", "Origin": "http://" + publicHost})
+	if dec2.Code != 200 || parseJSON(t, dec2)["status"] != "approved" {
+		t.Fatalf("retry after restore: %d %s", dec2.Code, dec2.Body.String())
 	}
 }
 

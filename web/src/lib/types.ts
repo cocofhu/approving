@@ -616,6 +616,8 @@ export interface GateShareInboxStatus {
 
 export interface GateInboxItem extends Gate {
   type: 'gate'
+  /** Graph node type (human_gate / proposal_select). Share entry only for human_gate. */
+  nodeType?: string
   shareLink?: GateShareInboxStatus
 }
 

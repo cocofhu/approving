@@ -70,6 +70,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
 
 const gate: GateInboxItem = {
   type: 'gate',
+  nodeType: 'human_gate',
   runId: 'run-e2e-share',
   nodeId: 'hg-e2e',
   iteration: 1,

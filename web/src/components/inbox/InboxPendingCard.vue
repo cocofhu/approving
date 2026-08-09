@@ -10,7 +10,7 @@ import {
   inboxIconToneClass,
   inboxSecondaryLine,
 } from '@/lib/inboxDisplay'
-import { shareStatusLabel } from '@/lib/gateShareLink'
+import { isHumanGateInboxItem, shareStatusLabel } from '@/lib/gateShareLink'
 import type { InboxItem } from '@/lib/types'
 
 const props = defineProps<{
@@ -40,12 +40,12 @@ const iconName = computed(() => {
 const iconClass = computed(() => inboxIconToneClass(inboxBadgeTone(props.item)))
 const badgeClass = computed(() => inboxBadgeToneClass(inboxBadgeTone(props.item)))
 const badgeText = computed(() => t(inboxBadgeLabelKey(props.item)))
-const isGate = computed(() => props.item.type === 'gate')
+const showShare = computed(() => isHumanGateInboxItem(props.item))
 const shareLabel = computed(() =>
-  isGate.value && props.item.type === 'gate' ? shareStatusLabel(props.item.shareLink, t) : '',
+  showShare.value && props.item.type === 'gate' ? shareStatusLabel(props.item.shareLink, t) : '',
 )
 const shareUsed = computed(
-  () => props.item.type === 'gate' && props.item.shareLink?.state === 'used',
+  () => showShare.value && props.item.type === 'gate' && props.item.shareLink?.state === 'used',
 )
 </script>
 
@@ -82,7 +82,7 @@ const shareUsed = computed(
       <Icon v-if="showChevron" name="chevron-right" :size="16" class="mt-2 shrink-0 text-txt3" />
     </button>
     <div
-      v-if="isGate"
+      v-if="showShare"
       class="mt-2 flex flex-wrap items-center gap-2 pl-12"
       data-testid="gate-share-row"
     >

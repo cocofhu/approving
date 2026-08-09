@@ -16,6 +16,7 @@ const i18n = createI18n({
 function gate(over: Partial<GateInboxItem> = {}): GateInboxItem {
   return {
     type: 'gate',
+    nodeType: 'human_gate',
     runId: 'run-1',
     nodeId: 'hg1',
     workflowName: 'wf',
@@ -58,6 +59,13 @@ describe('InboxPendingCard share entry', () => {
     })
     expect(c.find('[data-testid="gate-share-copy-btn"]').exists()).toBe(false)
     expect(c.find('[data-testid="gate-share-status"]').exists()).toBe(false)
+
+    const ps = mount(InboxPendingCard, {
+      props: { item: gate({ nodeId: 'ps1', nodeType: 'proposal_select', title: '选择方案' }) },
+      global: { plugins: [i18n] },
+    })
+    expect(ps.find('[data-testid="gate-share-copy-btn"]').exists()).toBe(false)
+    expect(ps.find('[data-testid="gate-share-status"]').exists()).toBe(false)
   })
 
   it('disables copy when used', () => {

@@ -47,6 +47,7 @@ const i18n = createI18n({
 function item(over: Partial<GateInboxItem> = {}): GateInboxItem {
   return {
     type: 'gate',
+    nodeType: 'human_gate',
     runId: 'run-1',
     nodeId: 'hg1',
     iteration: 1,
@@ -137,5 +138,57 @@ describe('GateShareLinkPanel', () => {
     await flushPromises()
     expect(mocks.regen).not.toHaveBeenCalled()
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(url)
+  })
+
+  it('recalls URL from sessionStorage after in-memory miss (refresh)', async () => {
+    const token = 'ef'.repeat(32)
+    const url = `https://app.example/public/gate-approvals#t=${token}`
+    rememberShareUrl('run-1', 'hg1', 1, url)
+    forgetShareUrl('run-1', 'hg1', 1)
+    sessionStorage.setItem('approving.gateShareUrl.run-1:hg1:1', url)
+    mockClipboard(vi.fn().mockResolvedValue(undefined))
+
+    const w = mount(GateShareLinkPanel, {
+      props: {
+        open: true,
+        gate: item({ shareLink: { state: 'active', ttlTier: '24h', canManage: true, canCreate: false } }),
+      },
+      global: { plugins: [i18n], stubs: { Teleport: true } },
+    })
+    await flushPromises()
+    await w.get('[data-testid="gate-share-copy"]').trigger('click')
+    await flushPromises()
+    expect(mocks.regen).not.toHaveBeenCalled()
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(url)
+  })
+
+  it('disables copy when active URL cannot be recalled', async () => {
+    sessionStorage.clear()
+    forgetShareUrl('run-1', 'hg1', 1)
+    mockClipboard(vi.fn().mockResolvedValue(undefined))
+
+    const w = mount(GateShareLinkPanel, {
+      props: {
+        open: true,
+        gate: item({ shareLink: { state: 'active', ttlTier: '24h', canManage: true, canCreate: false } }),
+      },
+      global: { plugins: [i18n], stubs: { Teleport: true } },
+    })
+    await flushPromises()
+    expect((w.get('[data-testid="gate-share-copy"]').element as HTMLButtonElement).disabled).toBe(true)
+    expect(w.get('[data-testid="gate-share-copy-unavailable"]').text()).toMatch(/重新生成或撤销/)
+    expect(mocks.regen).not.toHaveBeenCalled()
+  })
+
+  it('maps API error codes to locale text', async () => {
+    mocks.create.mockRejectedValue(new Error('no_standard_action'))
+    mockClipboard(vi.fn().mockResolvedValue(undefined))
+    const w = mount(GateShareLinkPanel, {
+      props: { open: true, gate: item() },
+      global: { plugins: [i18n], stubs: { Teleport: true } },
+    })
+    await w.get('[data-testid="gate-share-create"]').trigger('click')
+    await flushPromises()
+    expect(w.get('[data-testid="gate-share-error"]').text()).toContain('标准批准或驳回')
   })
 })
