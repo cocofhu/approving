@@ -72,12 +72,16 @@ test.describe('ClarifyChat human history image AppModal preview', () => {
 
     const agentThumb = page.getByTestId('clarify-agent-image-thumb')
     await expect(agentThumb).toBeVisible()
+    await expect(agentThumb).toContainText('不可预览')
+    await expect(agentThumb).not.toContainText('点击放大')
     await agentThumb.click()
     await expect(page.getByTestId('clarify-image-preview-img')).toHaveCount(0)
 
-    const draftSrc = `data:image/png;base64,${PNG_A}`
-    const draftImg = page.locator(`img[src="${draftSrc}"]`).last()
-    await draftImg.click()
+    const draftThumb = page.getByTestId('clarify-draft-image-thumb')
+    await expect(draftThumb).toBeVisible()
+    await expect(draftThumb).toContainText('不可预览')
+    await expect(draftThumb).not.toContainText('点击放大')
+    await draftThumb.click()
     await expect(page.getByTestId('clarify-image-preview-img')).toHaveCount(0)
     await shot('05-scope-guards.png')
   })

@@ -2,7 +2,8 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
-import AppModal from '../ui/AppModal.vue'
+import ChatImageThumb from '../ui/ChatImageThumb.vue'
+import ChatImagePreviewModal from '../ui/ChatImagePreviewModal.vue'
 import ClarifyDemoFrame from './ClarifyDemoFrame.vue'
 import { renderMarkdown } from '@/lib/markdown'
 import { createStreamMarkdownPreview } from '@/lib/streamMarkdownPreview'
@@ -36,6 +37,7 @@ import {
   isImageAttachment,
 } from '@/lib/attachments'
 import { imgSrc } from '@/lib/compositeText'
+import { useChatImagePreview } from '@/lib/useChatImagePreview'
 
 type QueueItem = {
   id?: string
@@ -356,14 +358,14 @@ const turns = computed<ClarifyTurn[]>(() => {
 })
 
 /** Single-image lightbox for human history attachments (no gallery / Esc). */
-type ImagePreview = { src: string; label: string }
-const imagePreview = ref<ImagePreview | null>(null)
+const { preview: imagePreview, openChatImagePreview, closeChatImagePreview: closeImagePreview } =
+  useChatImagePreview()
 
 function imagePreviewLabel(images: ClarifyImage[], index: number): string {
   const named = images[index]?.name?.trim()
   if (named) return named
-  if (images.length <= 1) return translate('pages.clarify.imageFallback')
-  return translate('pages.clarify.imageFallbackN', { n: index + 1 })
+  if (images.length <= 1) return translate('common.chatImage.imageFallback')
+  return translate('common.chatImage.imageFallbackN', { n: index + 1 })
 }
 
 const attachNotice = ref<string | null>(null)
@@ -371,21 +373,8 @@ const attachNotice = ref<string | null>(null)
 function openImagePreview(images: ClarifyImage[], index: number) {
   const im = images[index]
   if (!im || !isImageAttachment(im)) return
-  imagePreview.value = {
-    src: imgSrc(im),
-    label: imagePreviewLabel(images, index),
-  }
+  openChatImagePreview(imgSrc(im), imagePreviewLabel(images, index))
 }
-
-function closeImagePreview() {
-  imagePreview.value = null
-}
-
-const imagePreviewTitle = computed(() =>
-  imagePreview.value
-    ? translate('pages.clarify.imagePreviewTitle', { label: imagePreview.value.label })
-    : '',
-)
 
 function turnsSemanticKey(turnList: ClarifyTurn[]): string {
   if (!turnList.length) return '0'
@@ -1108,23 +1097,16 @@ defineExpose({
             <!-- human history: images → lightbox; non-images → filename chip -->
             <template v-if="t.role === 'human'">
               <template v-for="(im, ii) in t.images" :key="ii">
-                <button
+                <ChatImageThumb
                   v-if="isImageAttachment(im)"
-                  type="button"
-                  class="group relative h-20 w-20 cursor-pointer overflow-hidden rounded-md border border-line transition hover:border-accent"
-                  data-testid="clarify-history-image-thumb"
-                  :aria-label="translate('pages.clarify.imagePreviewAria', { label: imagePreviewLabel(t.images, ii) })"
-                  @click="openImagePreview(t.images!, ii)"
-                >
-                  <img
-                    :src="imgSrc(im)"
-                    class="h-full w-full cursor-pointer object-cover"
-                    alt=""
-                  />
-                  <span
-                    class="pointer-events-none absolute inset-x-0 bottom-0 bg-black/55 px-1 py-0.5 text-center text-[10px] leading-tight text-white opacity-0 transition-opacity group-hover:opacity-100"
-                  >{{ translate('pages.clarify.clickToEnlarge') }}</span>
-                </button>
+                  mode="previewable"
+                  size="md"
+                  thumb-class="rounded-md"
+                  :src="imgSrc(im)"
+                  :label="imagePreviewLabel(t.images, ii)"
+                  test-id="clarify-history-image-thumb"
+                  @preview="openImagePreview(t.images!, ii)"
+                />
                 <div
                   v-else
                   class="flex max-w-[200px] items-center gap-2 border border-line bg-elevated px-2 py-1.5"
@@ -1136,14 +1118,17 @@ defineExpose({
                 </div>
               </template>
             </template>
-            <!-- agent history: static thumbs / filename chips -->
+            <!-- agent history: locked thumbs / filename chips (FR-f7) -->
             <template v-else>
               <template v-for="(im, ii) in t.images" :key="ii">
-                <img
+                <ChatImageThumb
                   v-if="isImageAttachment(im)"
+                  mode="locked"
+                  size="md"
+                  thumb-class="rounded-md"
                   :src="imgSrc(im)"
-                  class="h-20 w-20 rounded-md border border-line object-cover"
-                  data-testid="clarify-agent-image-thumb"
+                  :label="imagePreviewLabel(t.images, ii)"
+                  test-id="clarify-agent-image-thumb"
                 />
                 <div
                   v-else
@@ -1522,11 +1507,15 @@ defineExpose({
       </div>
       <div v-if="attachments.length" class="mb-2 flex flex-wrap gap-1.5">
         <div v-for="(im, ii) in attachments" :key="ii" class="relative">
-          <img
+          <ChatImageThumb
             v-if="isImageAttachment(im)"
+            mode="locked"
+            size="sm"
+            thumb-class="rounded-md"
             :src="imgSrc(im)"
-            class="h-14 w-14 rounded-md border border-line object-cover"
+            :label="attachmentDisplayName(im, ii)"
             :alt="attachmentDisplayName(im, ii)"
+            test-id="clarify-draft-image-thumb"
           />
           <div
             v-else
@@ -1539,7 +1528,7 @@ defineExpose({
           </div>
           <button
             class="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-err text-white"
-            @click="removeAttachment(ii)"
+            @click.stop="removeAttachment(ii)"
           ><Icon name="close" :size="9" /></button>
         </div>
       </div>
@@ -1639,25 +1628,13 @@ defineExpose({
   </div>
 
   <!-- Human history attachment image preview (single slot; no gallery / Esc) -->
-  <AppModal
+  <ChatImagePreviewModal
     :open="!!imagePreview"
-    :title="imagePreviewTitle"
-    :width="960"
+    :src="imagePreview?.src || ''"
+    :label="imagePreview?.label || ''"
+    test-id-prefix="clarify-image-preview"
     @close="closeImagePreview"
-  >
-    <div
-      v-if="imagePreview"
-      class="flex min-h-[280px] items-center justify-center"
-      data-testid="clarify-image-preview-body"
-    >
-      <img
-        :src="imagePreview.src"
-        :alt="imagePreview.label"
-        class="max-h-[74vh] max-w-full object-contain"
-        data-testid="clarify-image-preview-img"
-      />
-    </div>
-  </AppModal>
+  />
 </template>
 
 <style scoped>

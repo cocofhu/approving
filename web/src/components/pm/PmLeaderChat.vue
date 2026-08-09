@@ -3,6 +3,8 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/ui/AppButton.vue'
 import Icon from '@/components/ui/Icon.vue'
+import ChatImageThumb from '@/components/ui/ChatImageThumb.vue'
+import ChatImagePreviewModal from '@/components/ui/ChatImagePreviewModal.vue'
 import CitationCard from '@/components/pm/CitationCard.vue'
 import ArtifactLoadingPane from '@/components/run/ArtifactLoadingPane.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -11,6 +13,7 @@ import { renderMarkdown } from '@/lib/markdown'
 import { createStreamMarkdownPreview } from '@/lib/streamMarkdownPreview'
 import { api } from '@/lib/api'
 import { imgSrc } from '@/lib/compositeText'
+import { useChatImagePreview } from '@/lib/useChatImagePreview'
 import { useImageAttachments } from '@/lib/useImageAttachments'
 import {
   attachmentDisplayName,
@@ -153,6 +156,8 @@ const {
   takeAttachments,
   blockSendIfOversized,
 } = useImageAttachments()
+
+const { preview: imagePreview, openChatImagePreview, closeChatImagePreview } = useChatImagePreview()
 
 watch(attachNotice, (n) => {
   if (n?.kind === 'error') toast.error(n.text)
@@ -1398,11 +1403,15 @@ onBeforeUnmount(() => {
             <div class="min-w-0 max-w-[85%]">
               <div v-if="m.images?.length" class="mb-1.5 flex flex-wrap justify-end gap-1.5">
                 <template v-for="(im, ii) in m.images" :key="ii">
-                  <img
+                  <ChatImageThumb
                     v-if="isImageAttachment(im)"
+                    mode="previewable"
+                    size="md"
                     :src="imgSrc(im)"
-                    class="h-20 w-20 border border-line object-cover"
+                    :label="attachmentDisplayName(im, ii)"
                     :alt="attachmentDisplayName(im, ii)"
+                    test-id="pm-history-image-thumb"
+                    @preview="openChatImagePreview(imgSrc(im), attachmentDisplayName(im, ii))"
                   />
                   <div
                     v-else
@@ -1636,11 +1645,15 @@ onBeforeUnmount(() => {
       <div v-else class="shrink-0 border-t border-line p-3">
         <div v-if="attachments.length" class="mb-2 flex flex-wrap gap-1.5">
           <div v-for="(im, ii) in attachments" :key="ii" class="relative">
-            <img
+            <ChatImageThumb
               v-if="isImageAttachment(im)"
+              mode="previewable"
+              size="sm"
               :src="imgSrc(im)"
-              class="h-14 w-14 border border-line object-cover"
+              :label="attachmentDisplayName(im, ii)"
               :alt="attachmentDisplayName(im, ii)"
+              test-id="pm-draft-image-thumb"
+              @preview="openChatImagePreview(imgSrc(im), attachmentDisplayName(im, ii))"
             />
             <div
               v-else
@@ -1655,7 +1668,7 @@ onBeforeUnmount(() => {
               type="button"
               class="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center bg-err text-white"
               :disabled="busy"
-              @click="removeAttachment(ii)"
+              @click.stop="removeAttachment(ii)"
             >
               <Icon name="close" :size="9" />
             </button>
@@ -1787,6 +1800,14 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </div>
+
+  <ChatImagePreviewModal
+    :open="!!imagePreview"
+    :src="imagePreview?.src || ''"
+    :label="imagePreview?.label || ''"
+    test-id-prefix="pm-image-preview"
+    @close="closeChatImagePreview"
+  />
 </template>
 
 <style scoped>

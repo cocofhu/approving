@@ -299,6 +299,15 @@
       "addImage": "Add attachment",
       "placeholderTextOnly": "Enter text…",
       "placeholderWithImages": "Paste files here (≤50 MiB)…"
+    },
+    "chatImage": {
+      "clickToEnlarge": "Click to enlarge",
+      "previewTitle": "Image preview · {label}",
+      "previewUnavailable": "Preview unavailable",
+      "imageLoadFailed": "Failed to load image",
+      "previewAria": "Preview {label}",
+      "imageFallback": "Image",
+      "imageFallbackN": "Image {n}"
     }
   }
 }
