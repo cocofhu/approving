@@ -36,6 +36,8 @@ const mockSandboxDetail = {
     ssh: '10.8.2.14:30222',
     cdp: '10.8.2.14:30203',
     novnc: '10.8.2.14:30204',
+    '9222': '10.8.2.14:9222',
+    '6080': '10.8.2.14:6080',
     '8080': '10.8.2.14:30880',
   },
 }
@@ -230,6 +232,7 @@ export default defineConfig({
       input: {
         main: fileURLToPath(new URL('./e2e/index.html', import.meta.url)),
         console: fileURLToPath(new URL('./e2e/console.html', import.meta.url)),
+        'sandbox-list': fileURLToPath(new URL('./e2e/sandbox-list.html', import.meta.url)),
         'workflow-list': fileURLToPath(new URL('./e2e/workflow-list.html', import.meta.url)),
         'project-detail': fileURLToPath(new URL('./e2e/project-detail.html', import.meta.url)),
         'run-detail-mobile': fileURLToPath(new URL('./e2e/run-detail-mobile.html', import.meta.url)),
