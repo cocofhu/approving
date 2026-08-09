@@ -1106,7 +1106,6 @@
     },
     "agentStudio": {
       "title": "Agent Studio",
-      "subtitle": "Reusable agents: workspace (rules/skills/scripts), MCP, env. Nodes reference skill_profile; workspace is copied to {configRoot} in sandbox.",
       "errorPrefix": "Error:",
       "empty": "No agents. Click New agent or wait for default seed on first backend start.",
       "unsaved": "Unsaved",
@@ -1160,7 +1159,6 @@
         "deleteGroupMessage": "Delete group \"{name}\"? Subgroups promote to its parent; members move to the parent or become ungrouped.",
         "groupCycle": "Cannot move a group into itself or its descendants (cycle)",
         "reportingCycle": "Cannot set that parent: it would create a reporting cycle",
-        "dragHint": "Drag agents to change membership; drop on Ungrouped to clear all groups. Right-click a group or agent for org actions; hard delete via the Agent management icon in the header.",
         "removeFromGroup": "Remove from group",
         "removeFromGroupToast": "Removed from group and saved · entity kept",
         "manage": "Manage",

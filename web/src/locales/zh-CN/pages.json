@@ -1106,7 +1106,6 @@
     },
     "agentStudio": {
       "title": "Agent 管理",
-      "subtitle": "配置可复用的 Agent:工作目录(rules / skills / 脚本…)、MCP 服务、环境变量。节点通过 skill_profile 引用,运行时整个工作目录复制进沙箱 {configRoot}。",
       "errorPrefix": "出错:",
       "empty": "暂无 Agent。点击右上角\"新建 Agent\"创建,或后端首启会落盘默认 Agent。",
       "unsaved": "未保存",
@@ -1160,7 +1159,6 @@
         "deleteGroupMessage": "确定删除组「{name}」？子组将提升到其父级；仅属于该组的成员将迁入父组或进入未分组。",
         "groupCycle": "不能将组移入自身或其子孙（会形成环路）",
         "reportingCycle": "不能设置该上级：会形成汇报环路",
-        "dragHint": "拖拽 Agent 调整归属；拖到「未分组」清空全部组归属。右键组或 Agent 可进行组织操作；真删请用顶栏 Agent 管理入口。",
         "removeFromGroup": "移出本组",
         "removeFromGroupToast": "已移出本组并立即保存 · 实体仍在",
         "manage": "管理",
