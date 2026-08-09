@@ -14,8 +14,10 @@ const props = withDefaults(
     total?: number
     loading?: boolean
     loadingText?: string
+    /** Fill parent height without max-height cap (dashboard preview only). */
+    fill?: boolean
   }>(),
-  { accent: 'extra', total: 0, loading: false },
+  { accent: 'extra', total: 0, loading: false, fill: false },
 )
 
 const emit = defineEmits<{ (e: 'select', run: Run): void }>()
@@ -40,7 +42,7 @@ function badgeLabel(): string {
 <template>
   <div
     class="flex min-h-[200px] flex-col border border-line bg-base"
-    :class="accentClass[accent] || accentClass.extra"
+    :class="[accentClass[accent] || accentClass.extra, fill ? 'h-full' : '']"
     data-testid="run-board-column"
   >
     <div class="flex items-center gap-2 border-b border-line bg-surface px-3 py-2.5">
@@ -55,7 +57,7 @@ function badgeLabel(): string {
     </div>
     <div
       class="scroll-area flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2.5"
-      style="max-height: min(52vh, 420px)"
+      :style="fill ? undefined : { maxHeight: 'min(52vh, 420px)' }"
       data-testid="run-board-column-body"
     >
       <template v-if="loading && !items.length">
