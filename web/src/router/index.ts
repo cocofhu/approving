@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { updateDocumentTitle } from '@/lib/locale'
 import { authApi } from '@/lib/api'
-import { getAuthState, markAuthReady, useAuth } from '@/lib/useAuth'
+import { authRedirectPath, getAuthState, markAuthReady, useAuth } from '@/lib/useAuth'
 import LoginView from '@/views/LoginView.vue'
 
 const routes: RouteRecordRaw[] = [
@@ -38,8 +38,9 @@ router.beforeEach(async (to) => {
     if (to.name === 'login') {
       const { user, setUser } = useAuth()
       if (user.value) {
+        // Return a string so Vue Router parses ?query (object `{ path }` drops it).
         const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : '/'
-        return { path: redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/' }
+        return authRedirectPath(redirect)
       }
       // Do not await /me before painting login — brand LCP must not wait on auth RTT.
       // Keep auth.ready false until /me settles so LoginView can show brand-only shell
@@ -49,8 +50,7 @@ router.beforeEach(async (to) => {
         .then((me) => {
           setUser({ username: me.username, expiresAt: me.expires_at, isAdmin: !!me.is_admin })
           const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : '/'
-          const path = redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
-          return router.replace(path)
+          return router.replace(authRedirectPath(redirect))
         })
         .catch(() => {
           markAuthReady()

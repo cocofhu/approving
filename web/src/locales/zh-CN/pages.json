@@ -246,11 +246,12 @@
         "evCompletedLabel": "运行完成",
         "evWaitingHuman": "运行停下来等待你确认或处理时",
         "evFailed": "某个步骤失败、运行无法继续时",
-        "evCompleted": "即将支持，当前不会推送",
+        "evCompleted": "默认关闭，打开后运行成功结束时发 QQ",
         "templatesTitle": "消息文案模板",
         "templatesHint": "按通知时机编写完整 QQ 正文；留空则使用系统默认文案。工作流只能选择通知时机，不能覆盖文案。",
         "segWaitingHuman": "等待人工",
         "segFailed": "运行失败",
+        "segCompleted": "运行完成",
         "placeholders": "占位符",
         "fillDefault": "填入 / 恢复默认文案",
         "clearDefault": "清空（用默认）",
@@ -2054,6 +2055,9 @@
       "artifactsMcp": "产物 · 经 artifact-store MCP 写入",
       "output": "输出",
       "workflowComplete": "工作流完成。",
+      "noPreviewCardsTitle": "本次没有可预览的结果卡",
+      "noPreviewCardsBody": "运行已成功完成。最终结果来源为空，或本次未执行输出节点。这不是加载失败。",
+      "noPreviewCardsHint": "可从同页 Artifacts Tab 查看全量原始产物。",
       "outputCards": {
         "sourceFailedTitle": "来源节点失败 / 无产物",
         "invalidSource": "无效或无法解析的来源引用"

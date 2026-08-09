@@ -11,6 +11,9 @@ const props = defineProps<{ cards: OutputCard[]; run: Run }>()
 
 const { t } = useI18n()
 
+/** Exclusive accordion: 0 = first card; -1 = all collapsed. */
+const openIndex = ref(0)
+
 const contentCache = ref<Record<string, string>>({})
 const loading = ref(false)
 
@@ -33,16 +36,32 @@ async function loadArtifactContent(name: string) {
 }
 
 watch(
-  () => props.cards.map((c) => c.artifactName).join(','),
+  () => props.cards.map((c) => `${c.index}:${c.template}`).join(','),
   () => {
-    for (const c of props.cards) {
-      if (c.typeTag === '自定义产物' && c.artifactName && !c.structuredArtifactName) {
-        void loadArtifactContent(c.artifactName)
-      }
+    openIndex.value = props.cards.length ? 0 : -1
+  },
+)
+
+watch(
+  [openIndex, () => props.cards],
+  () => {
+    const i = openIndex.value
+    if (i < 0) return
+    const c = props.cards[i]
+    if (c?.typeTag === '自定义产物' && c.artifactName && !c.structuredArtifactName) {
+      void loadArtifactContent(c.artifactName)
     }
   },
   { immediate: true },
 )
+
+function toggleCard(i: number) {
+  openIndex.value = openIndex.value === i ? -1 : i
+}
+
+function isOpen(i: number) {
+  return openIndex.value === i
+}
 
 function parseDoc(card: OutputCard): unknown {
   const raw = card.jsonSnapshot?.trim()
@@ -68,24 +87,31 @@ function isHtmlArtifact(name?: string): boolean {
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="space-y-3" data-testid="output-result-cards">
     <article
-      v-for="{ card, doc } in cardsWithDoc"
+      v-for="({ card, doc }, i) in cardsWithDoc"
       :key="card.index + ':' + card.template"
       class="card overflow-hidden"
       :class="card.status === 'failed' ? 'border-err/30' : ''"
+      :data-testid="`output-result-card-${i}`"
     >
-      <header
-        class="flex items-center gap-2 border-b border-line bg-elevated px-3 py-2.5"
-        :class="card.status === 'failed' ? 'border-err/25 bg-err/10' : ''"
-      >
-        <span class="bg-accent-dim px-1.5 py-0.5 text-[10px] font-semibold text-accent-2">{{ card.index }}</span>
-        <span class="flex-1 truncate text-[12px] font-semibold" :class="card.status === 'failed' ? 'text-err' : 'text-txt'">
-          {{ card.title }}
-        </span>
-        <span class="border border-line px-1.5 py-0.5 text-[10px] text-txt3">{{ card.typeTag }}</span>
-      </header>
-      <div class="p-3">
+      <h3 class="m-0">
+        <button
+          type="button"
+          class="flex w-full items-center gap-2 border-b border-line bg-elevated px-3 py-2.5 text-left"
+          :class="card.status === 'failed' ? 'border-err/25 bg-err/10' : ''"
+          :aria-expanded="isOpen(i) ? 'true' : 'false'"
+          :data-testid="`output-result-card-toggle-${i}`"
+          @click="toggleCard(i)"
+        >
+          <span class="bg-accent-dim px-1.5 py-0.5 text-[10px] font-semibold text-accent-2">{{ card.index }}</span>
+          <span class="flex-1 truncate text-[12px] font-semibold" :class="card.status === 'failed' ? 'text-err' : 'text-txt'">
+            {{ card.title }}
+          </span>
+          <span class="border border-line px-1.5 py-0.5 text-[10px] text-txt3">{{ card.typeTag }}</span>
+        </button>
+      </h3>
+      <div v-if="isOpen(i)" class="p-3" :data-testid="`output-result-card-body-${i}`">
         <template v-if="card.status === 'failed'">
           <p class="text-[12px] text-txt2">
             <strong class="text-err">{{ t('pages.nodeOutput.outputCards.sourceFailedTitle') }}</strong><br />

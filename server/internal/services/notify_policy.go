@@ -6,16 +6,17 @@ import (
 	"github.com/cocofhu/approving/internal/models"
 )
 
-// ResolveNotifyEvents returns the effective P0 event set for a workflow under
-// a project policy. Aligns with Demo page.html resolveEvents:
+// ResolveNotifyEvents returns the effective event set for a workflow under a
+// project policy. Aligns with Demo page.html resolveEvents:
 //
 //	enabled=false → empty (hard close)
 //	mode=off      → empty
 //	mode=custom   → workflow events (may be empty)
 //	inherit/else  → project defaultEvents
 //
-// Only waiting_human and failed participate in P0 delivery; completed (and any
-// other kind) is filtered out even if present in stored policy.
+// waiting_human, failed, and completed may be delivered when present in the
+// resolved set; unknown kinds are stripped. DefaultEvents still default to
+// waiting_human+failed (completed is opt-in).
 func ResolveNotifyEvents(project models.ProjectNotifyPolicy, workflow models.WorkflowNotifyPolicy) []string {
 	if !project.IsEnabled() {
 		return nil
@@ -45,10 +46,10 @@ func NotifyEventAllowed(events []string, kind string) bool {
 
 func filterP0NotifyEvents(in []string) []string {
 	seen := map[string]bool{}
-	out := make([]string, 0, 2)
+	out := make([]string, 0, 3)
 	for _, e := range in {
 		switch strings.TrimSpace(e) {
-		case models.NotifyKindWaitingHuman, models.NotifyKindFailed:
+		case models.NotifyKindWaitingHuman, models.NotifyKindFailed, models.NotifyKindCompleted:
 			if !seen[e] {
 				seen[e] = true
 				out = append(out, e)
@@ -59,13 +60,10 @@ func filterP0NotifyEvents(in []string) []string {
 }
 
 // NormalizeProjectNotifyPolicy sanitizes a project policy for persistence.
-// Nil Enabled defaults to true; nil DefaultEvents defaults to waiting_human+failed.
-// completed may be stored for schema foresight but is stripped from delivery set
-// at resolve time; we still allow it in DefaultEvents for UI grey-state roundtrip
-// only when explicitly present — P0 UI never writes it as selectable, so strip
-// unknown kinds except the known three for forward-compat storage foresight.
-// Template fields: whitespace-only is trimmed to ""; empty is NOT rewritten to
-// the default QQ body (empty must trigger FormatRunNotifyMessage fallback).
+// Nil Enabled defaults to true; nil DefaultEvents defaults to waiting_human+failed
+// (completed is not added automatically). Known kinds including completed may be
+// stored; unknown kinds are stripped. Template fields: whitespace-only is trimmed
+// to ""; empty is NOT rewritten to the default QQ body.
 func NormalizeProjectNotifyPolicy(p models.ProjectNotifyPolicy) models.ProjectNotifyPolicy {
 	if p.Enabled == nil {
 		on := true
@@ -81,6 +79,9 @@ func NormalizeProjectNotifyPolicy(p models.ProjectNotifyPolicy) models.ProjectNo
 	}
 	if strings.TrimSpace(p.FailedTemplate) == "" {
 		p.FailedTemplate = ""
+	}
+	if strings.TrimSpace(p.CompletedTemplate) == "" {
+		p.CompletedTemplate = ""
 	}
 	return p
 }
@@ -133,7 +134,8 @@ func NotifyPoliciesEqual(a, b models.ProjectNotifyPolicy) bool {
 		return false
 	}
 	return a.WaitingHumanTemplate == b.WaitingHumanTemplate &&
-		a.FailedTemplate == b.FailedTemplate
+		a.FailedTemplate == b.FailedTemplate &&
+		a.CompletedTemplate == b.CompletedTemplate
 }
 
 // WorkflowNotifyPoliciesEqual compares workflow overrides.

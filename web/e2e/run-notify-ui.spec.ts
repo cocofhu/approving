@@ -20,6 +20,7 @@ const MOCK_PROJECT = {
     defaultEvents: ['waiting_human', 'failed'],
     waitingHumanTemplate: '',
     failedTemplate: '',
+    completedTemplate: '',
   },
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
@@ -245,7 +246,7 @@ async function setupNotifyHarness(
 }
 
 test.describe('Run NotifyPolicy UI (P0)', () => {
-  test('通知 Tab：总开关/默认事件/completed 灰态/无渠道提示/可保存', async ({ page }) => {
+  test('通知 Tab：总开关/默认事件/completed 可勾/无渠道提示/可保存', async ({ page }) => {
     const harness = await setupNotifyHarness(page, { hasChannel: false })
 
     await expect(page.getByRole('button', { name: '通知' })).toBeVisible()
@@ -255,10 +256,11 @@ test.describe('Run NotifyPolicy UI (P0)', () => {
     await expect(page.getByTestId('notify-master-toggle')).toHaveAttribute('aria-checked', 'true')
     await expect(page.getByTestId('notify-ev-waiting-human')).toHaveAttribute('aria-checked', 'true')
     await expect(page.getByTestId('notify-ev-failed')).toHaveAttribute('aria-checked', 'true')
-    await expect(page.getByTestId('notify-ev-completed-disabled')).toBeVisible()
-    await expect(
-      page.getByTestId('notify-ev-completed-disabled').locator('button[disabled]'),
-    ).toHaveCount(1)
+    await expect(page.getByTestId('notify-ev-completed')).toBeVisible()
+    await expect(page.getByTestId('notify-ev-completed')).toHaveAttribute('aria-checked', 'false')
+    await expect(page.getByTestId('notify-ev-completed-disabled')).toHaveCount(0)
+    await expect(page.getByTestId('notify-ev-completed').locator('button[disabled]')).toHaveCount(0)
+    await expect(page.getByText('默认关闭，打开后运行成功结束时发 QQ')).toBeVisible()
 
     await page.screenshot({
       path: path.join(shotDir, '01-notify-tab-no-channel.png'),
@@ -273,6 +275,7 @@ test.describe('Run NotifyPolicy UI (P0)', () => {
       defaultEvents: ['waiting_human', 'failed'],
       waitingHumanTemplate: '',
       failedTemplate: '',
+      completedTemplate: '',
     })
 
     await page.screenshot({
@@ -317,6 +320,12 @@ test.describe('Run NotifyPolicy UI (P0)', () => {
     await expect(page.getByTestId('notify-preview-mode')).toContainText('使用系统默认')
     await expect(page.getByTestId('notify-preview-body')).toContainText('【Approving】运行失败')
 
+    // Completed segment: title must be 运行完成, never 运行失败
+    await page.getByTestId('notify-tpl-seg-completed').click()
+    await expect(page.getByTestId('notify-preview-mode')).toContainText('使用系统默认')
+    await expect(page.getByTestId('notify-preview-body')).toContainText('【Approving】运行完成')
+    await expect(page.getByTestId('notify-preview-body')).not.toContainText('运行失败')
+
     // Only toggle master off and save — waiting template must round-trip
     await page.getByTestId('notify-master-toggle').click()
     await page.getByTestId('notify-save').click()
@@ -325,8 +334,12 @@ test.describe('Run NotifyPolicy UI (P0)', () => {
         enabled?: boolean
         waitingHumanTemplate?: string
         failedTemplate?: string
+        completedTemplate?: string
       } | null
-      return p?.enabled === false && p?.waitingHumanTemplate?.includes('📦') && p?.failedTemplate === ''
+      return p?.enabled === false &&
+        p?.waitingHumanTemplate?.includes('📦') &&
+        p?.failedTemplate === '' &&
+        p?.completedTemplate === ''
         ? 'roundtrip'
         : JSON.stringify(p)
     }).toBe('roundtrip')
@@ -372,10 +385,12 @@ test.describe('Run NotifyPolicy UI (P0)', () => {
       return s?.id === 'wf-inherit' ? `${s.via}:${s.notifyPolicy?.mode}:nodes=${Array.isArray(s.nodes)}` : null
     }).toBe('patch-notify-policy:custom:nodes=false')
 
-    // 自我迭代已是 custom：取消「等待人工」，仅留「运行失败」（payload events 仍为内部 key）
+    // 自我迭代已是 custom：第三勾「运行完成」默认不勾；取消「等待人工」，仅留「运行失败」
     const customRow = page.locator('tbody tr', { hasText: '自我迭代' })
     const waitingCb = customRow.locator('label', { hasText: '等待人工' }).locator('input[type="checkbox"]')
+    const completedCb = customRow.locator('label', { hasText: '运行完成' }).locator('input[type="checkbox"]')
     await expect(waitingCb).toBeChecked()
+    await expect(completedCb).not.toBeChecked()
     await waitingCb.click()
     await expect.poll(() => {
       const s = harness.getLastWorkflowSave() as {

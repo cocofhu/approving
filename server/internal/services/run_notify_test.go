@@ -363,3 +363,119 @@ func TestAttemptDeliver_kindsIndependent(t *testing.T) {
 		t.Fatalf("failed should use default: %s", d.calls[1])
 	}
 }
+
+func TestAttemptDeliver_completedOptInAndDedup(t *testing.T) {
+	db := setupRunNotifyDB(t)
+	seedNotifyProject(t, db, true, []string{"waiting_human", "failed", "completed"}, "inherit", nil)
+	d := &fakeRunDeliverer{}
+	svc := NewRunNotifyService(db, d, "https://app.example")
+
+	ev := RunNotifyEvent{
+		ProjectID: "proj-n1", RunID: "run-done", WorkflowID: "wf-n1",
+		NodeID: "output_end", NodeLabel: "结束", Iteration: 1, Kind: models.NotifyKindCompleted,
+	}
+	svc.AttemptDeliver(ev)
+	svc.AttemptDeliver(ev)
+	if d.count() != 1 {
+		t.Fatalf("completed deliver calls=%d want 1", d.count())
+	}
+	text := d.calls[0]
+	if !containsAll(text, "运行完成", "https://app.example/runs/run-done?node=output_end&tab=output", "结束") {
+		t.Fatalf("unexpected completed text: %s", text)
+	}
+	if strings.Contains(text, "运行失败") {
+		t.Fatalf("completed must not use failed title: %s", text)
+	}
+}
+
+func TestAttemptDeliver_completedPolicyMiss(t *testing.T) {
+	db := setupRunNotifyDB(t)
+	seedNotifyProject(t, db, true, []string{"waiting_human", "failed"}, "inherit", nil)
+	d := &fakeRunDeliverer{}
+	svc := NewRunNotifyService(db, d, "")
+	svc.AttemptDeliver(RunNotifyEvent{
+		ProjectID: "proj-n1", RunID: "run-off", WorkflowID: "wf-n1",
+		NodeID: "output", Iteration: 1, Kind: models.NotifyKindCompleted,
+	})
+	if d.count() != 0 {
+		t.Fatal("completed must not deliver when not opted in")
+	}
+	if svc.HasClaimedForTest("run-off", "output", 1, models.NotifyKindCompleted) {
+		t.Fatal("policy miss must not claim completed")
+	}
+}
+
+func TestAttemptDeliver_completedSentinelNode(t *testing.T) {
+	db := setupRunNotifyDB(t)
+	seedNotifyProject(t, db, true, []string{"completed"}, "custom", []string{"completed"})
+	d := &fakeRunDeliverer{}
+	svc := NewRunNotifyService(db, d, "https://app.example")
+	svc.AttemptDeliver(RunNotifyEvent{
+		ProjectID: "proj-n1", RunID: "run-empty", WorkflowID: "wf-n1",
+		Kind: models.NotifyKindCompleted, // no node — coerce sentinel
+	})
+	if d.count() != 1 {
+		t.Fatalf("calls=%d want 1", d.count())
+	}
+	text := d.calls[0]
+	if !containsAll(text, "运行完成", "节点：输出", "https://app.example/runs/run-empty?tab=output") {
+		t.Fatalf("sentinel completed text: %s", text)
+	}
+	if strings.Contains(text, "node=") {
+		t.Fatalf("sentinel deep link must omit node: %s", text)
+	}
+	if !svc.HasClaimedForTest("run-empty", models.NotifyCompletedSentinelNodeID, 1, models.NotifyKindCompleted) {
+		t.Fatal("expected sentinel receipt")
+	}
+}
+
+func TestAttemptDeliver_completedCustomTemplate(t *testing.T) {
+	db := setupRunNotifyDB(t)
+	p := models.Project{
+		ID: "proj-n1", Name: "Demo",
+		NotifyPolicy: models.ProjectNotifyPolicy{
+			Enabled:           boolPtr(true),
+			DefaultEvents:     []string{"completed"},
+			CompletedTemplate: "DONE {title} {run_id} {node}",
+		},
+	}
+	if err := db.Create(&p).Error; err != nil {
+		t.Fatal(err)
+	}
+	wf := models.WorkflowDef{
+		ID: "wf-n1", ProjectID: p.ID, Name: "WF", Status: "published", Version: 1,
+		NotifyPolicy: models.WorkflowNotifyPolicy{Mode: "inherit"},
+	}
+	if err := db.Create(&wf).Error; err != nil {
+		t.Fatal(err)
+	}
+	d := &fakeRunDeliverer{}
+	svc := NewRunNotifyService(db, d, "")
+	svc.AttemptDeliver(RunNotifyEvent{
+		ProjectID: "proj-n1", RunID: "r-c", WorkflowID: "wf-n1",
+		NodeID: "out", NodeLabel: "结束", Iteration: 1, Kind: models.NotifyKindCompleted,
+	})
+	if d.count() != 1 || d.calls[0] != "proj-n1|DONE 运行完成 r-c 结束" {
+		t.Fatalf("unexpected: %v", d.calls)
+	}
+}
+
+func TestRunNotifyTitle_completed(t *testing.T) {
+	if got := RunNotifyTitle(models.NotifyKindCompleted); got != "运行完成" {
+		t.Fatalf("got %q", got)
+	}
+	if got := RunNotifyTitle(models.NotifyKindFailed); got != "运行失败" {
+		t.Fatalf("failed title %q", got)
+	}
+}
+
+func TestFormatRunNotifyMessage_completedDefault(t *testing.T) {
+	got := FormatRunNotifyMessage(RunNotifyEvent{
+		ProjectName: "Demo", WorkflowName: "自我迭代", RunID: "run-1",
+		NodeID: "output_end", NodeLabel: "结束", Kind: models.NotifyKindCompleted,
+	}, "https://app.example")
+	want := "【Approving】运行完成\n项目：Demo\n工作流：自我迭代\nRun：run-1\n节点：结束\n打开：https://app.example/runs/run-1?node=output_end&tab=output"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}

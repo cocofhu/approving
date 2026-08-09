@@ -395,16 +395,27 @@ function fileStatusClass(s: string): string {
     </div>
 
     <!-- output node: multi-card structured display -->
-    <div v-if="isOutputNode && hasRun" class="mb-3">
+    <div v-if="isOutputNode && (hasRun || run.status === 'completed')" class="mb-3">
       <OutputResultCards v-if="outputCards.length" :cards="outputCards" :run="run" />
-      <div v-else class="px-1 py-8 text-center text-[12px] text-txt3">{{ t('pages.nodeOutput.workflowComplete') }}</div>
+      <div
+        v-else
+        class="px-1 py-8 text-center text-[12px] text-txt3"
+        data-testid="node-output-empty"
+      >
+        <strong class="mb-1.5 block text-[13px] text-txt">{{ t('pages.nodeOutput.noPreviewCardsTitle') }}</strong>
+        <p class="mb-1">{{ t('pages.nodeOutput.noPreviewCardsBody') }}</p>
+        <p>{{ t('pages.nodeOutput.noPreviewCardsHint') }}</p>
+      </div>
     </div>
 
     <div v-if="showOutputMd" class="card p-4">
       <div class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-txt3">{{ t('pages.nodeOutput.output') }}</div>
       <div class="md" v-html="renderMarkdown(nodeRun.outputMd || '')" />
     </div>
-    <div v-else-if="!hasRun" class="px-1 py-8 text-center text-[12px] text-txt3">{{ t('pages.nodeOutput.nodeNotRun') }}</div>
+    <div
+      v-else-if="!hasRun && !(isOutputNode && run.status === 'completed')"
+      class="px-1 py-8 text-center text-[12px] text-txt3"
+    >{{ t('pages.nodeOutput.nodeNotRun') }}</div>
     <div v-else-if="!isOutputNode && node.type !== 'input' && node.type !== 'branch' && node.type !== 'set_var'" class="px-1 py-8 text-center text-[12px] text-txt3">{{ t('pages.nodeOutput.nodeNoOutput') }}</div>
   </div>
 </template>

@@ -76,6 +76,8 @@ export interface ProjectNotifyPolicy {
   waitingHumanTemplate?: string
   /** Full QQ body for failed; trim-empty → legacy FormatRunNotifyMessage. */
   failedTemplate?: string
+  /** Full QQ body for completed; trim-empty → FormatRunNotifyMessage. Opt-in. */
+  completedTemplate?: string
 }
 
 /** Workflow-level notify override: off | inherit | custom. */

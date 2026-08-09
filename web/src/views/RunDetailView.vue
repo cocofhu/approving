@@ -42,7 +42,7 @@ import { previewPickLabel, type AppPreviewPickPayload } from '@/lib/previewPickU
 import { NODE_DEFS } from '@/data/nodeRegistry'
 import { resolveNodeDisplayLabelFromNode } from '@/lib/resolveNodeDisplayLabel'
 import { fmtTime, fmtDuration, formatTrigger } from '@/lib/format'
-import { lastOutputNodeId } from '@/lib/runOutputSelection'
+import { resolveOutputFocusNodeId } from '@/lib/runOutputSelection'
 import { pickDefaultTimelineNodeId } from '@/lib/runStats'
 import { PRODUCT_NODE_TYPES } from '@/lib/productNodeArtifacts'
 import { applyLiveWsAcpPage } from '@/lib/applyLiveWsAcpPage'
@@ -615,7 +615,7 @@ function syncAllMcpCallsFromRun() {
 }
 
 async function initAfterLoadSuccess() {
-  if (!selected.value) selected.value = defaultNode.value || null
+  if (!applyOutputDeepLinkFocus() && !selected.value) selected.value = defaultNode.value || null
   syncAllMcpCallsFromRun()
   // Rehydrate regardless of which tab is active (default tab stays unchanged).
   void rehydrateNodeEvents(selected.value)
@@ -1560,14 +1560,51 @@ function onNodeTabDisabledClick(id: string) {
   if (id === 'gate') toast.warn(t('pages.runDetail.gateRemoved'))
 }
 const nodeTab = ref('output')
+/** When set, watch(selected) must not steal tab=output (QQ deep link / live complete). */
+const outputFocusLock = ref(false)
+
+function graphNodesForFocus() {
+  return wf.value.nodes.length ? wf.value.nodes : run.value.nodes || []
+}
+
+function queryParam(key: string): string {
+  const raw = route.query[key]
+  if (typeof raw === 'string') return raw.trim()
+  if (Array.isArray(raw) && typeof raw[0] === 'string') return String(raw[0]).trim()
+  return ''
+}
+
+/** Parse ?node=&tab=output (completed QQ deep link). Returns true when applied. */
+function applyOutputDeepLinkFocus(): boolean {
+  const qNode = queryParam('node')
+  const qTab = queryParam('tab')
+  if (qTab !== 'output' && !qNode) return false
+
+  const nodes = graphNodesForFocus()
+  const focusId =
+    (qNode && nodes.some((n) => n.id === qNode) ? qNode : null) ||
+    resolveOutputFocusNodeId(run.value, nodes)
+
+  outputFocusLock.value = true
+  if (focusId) {
+    manual.value = false
+    selected.value = focusId
+  }
+  nodeTab.value = 'output'
+  if (isMobile.value) mobileMainPanel.value = 'detail'
+  return true
+}
 
 /**
  * Mobile (≤768) list-detail: mutually exclusive timeline vs node detail.
  * Desktop keeps side-by-side panes; this state is ignored when !isMobile.
- * Defaults: completed → timeline; waiting_human → detail; else timeline.
+ * Defaults: waiting_human or deep-link tab=output → detail; else timeline.
+ * Live running→completed also switches to detail (see status watch).
  */
 const mobileMainPanel = ref<'timeline' | 'detail'>(
-  isMobile.value && run.value.status === 'waiting_human' ? 'detail' : 'timeline',
+  isMobile.value && (run.value.status === 'waiting_human' || queryParam('tab') === 'output')
+    ? 'detail'
+    : 'timeline',
 )
 /** Bumped to re-scroll selected timeline item (e.g. back from detail). */
 const timelineScrollToken = ref(0)
@@ -1605,6 +1642,10 @@ const canvasPaneStyle = computed(() =>
 watch(
   selected,
   () => {
+    if (outputFocusLock.value) {
+      nodeTab.value = 'output'
+      return
+    }
     // app_preview: Gate 仅壳，主交互为复审对话 + VNC
     if (hasAppPreview.value && reviewActive.value) nodeTab.value = 'review'
     else if (gateActive.value) nodeTab.value = 'gate'
@@ -1616,21 +1657,25 @@ watch(
   },
   { immediate: true },
 )
-// On mobile, prioritize the active human gate when entering or when gate appears.
+watch(nodeTab, (tab) => {
+  if (outputFocusLock.value && tab !== 'output') outputFocusLock.value = false
+})
+// Live running/waiting_human→completed: select last output node, open output view,
+// mobile detail. Skip hard-load hydration (emptyRun dummy running → completed).
 watch(
   () => run.value.status,
-  (st) => {
+  (st, prev) => {
     if (st !== 'completed') return
-    const id = lastOutputNodeId(run.value, wf.value.nodes)
-    if (!id) return
-    manual.value = false
-    selected.value = id
-    nodeTab.value = 'output'
-    // Completed: first land on timeline with last item selected (scroll via token).
-    if (isMobile.value) {
-      mobileMainPanel.value = 'timeline'
-      timelineScrollToken.value += 1
+    if (runLoading.value) return
+    if (prev !== 'running' && prev !== 'waiting_human') return
+    const id = resolveOutputFocusNodeId(run.value, graphNodesForFocus())
+    if (id) {
+      manual.value = false
+      selected.value = id
     }
+    outputFocusLock.value = true
+    nodeTab.value = 'output'
+    if (isMobile.value) mobileMainPanel.value = 'detail'
   },
 )
 
@@ -1741,6 +1786,7 @@ const detailTabs = computed(() => {
 })
 
 function selectNode(id: string) {
+  outputFocusLock.value = false
   manual.value = true
   selected.value = id
   if (isMobile.value) mobileMainPanel.value = 'detail'
@@ -1773,6 +1819,7 @@ watch([viewMode, isMobile, defaultNode], () => {
 // the iteration pointer (watch above), so route the desired index through
 // pendingIter when the node actually changes.
 function selectExecution(nodeId: string, idx: number) {
+  outputFocusLock.value = false
   manual.value = true
   if (selected.value === nodeId) {
     selIterIdx.value = idx

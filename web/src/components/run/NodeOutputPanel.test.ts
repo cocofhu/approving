@@ -122,4 +122,45 @@ describe('NodeOutputPanel', () => {
     expect(wrapper.findComponent({ name: 'PlanView' }).exists()).toBe(true)
     wrapper.unmount()
   })
+
+  it('shows Demo empty state when completed output node has no cards (g4.4)', async () => {
+    const node: WFNode = {
+      id: 'end',
+      type: 'output',
+      label: '结束',
+      position: { x: 0, y: 0 },
+      config: {},
+    }
+    const nodeRun: NodeRun = {
+      nodeId: 'end',
+      iteration: 1,
+      status: 'completed',
+      outputs: { outputCards: [] },
+    }
+    const run = { id: 'run-1', status: 'completed', artifacts: [] } as unknown as Run
+    const wrapper = mountPanel(node, nodeRun, run)
+    await flushPromises()
+    expect(wrapper.get('[data-testid="node-output-empty"]').text()).toContain('本次没有可预览的结果卡')
+    expect(wrapper.text()).toContain('这不是加载失败')
+    expect(wrapper.text()).toContain('Artifacts Tab')
+    expect(wrapper.text()).not.toContain('该节点尚未执行')
+    wrapper.unmount()
+  })
+
+  it('shows Demo empty state when run completed but output node never ran (g4.4)', async () => {
+    const node: WFNode = {
+      id: 'end',
+      type: 'output',
+      label: '结束',
+      position: { x: 0, y: 0 },
+      config: {},
+    }
+    const nodeRun: NodeRun = { nodeId: 'end', status: 'pending', outputs: {} }
+    const run = { id: 'run-1', status: 'completed', artifacts: [] } as unknown as Run
+    const wrapper = mountPanel(node, nodeRun, run)
+    await flushPromises()
+    expect(wrapper.get('[data-testid="node-output-empty"]').text()).toContain('本次没有可预览的结果卡')
+    expect(wrapper.text()).not.toContain('该节点尚未执行')
+    wrapper.unmount()
+  })
 })
