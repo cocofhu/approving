@@ -402,9 +402,6 @@ onUnmounted(() => {
         <h2 class="m-0 text-sm font-semibold text-txt">
           {{ t('pages.projectDetail.pm.settingsTitle') }}
         </h2>
-        <p class="m-0 mt-1 text-[13px] leading-snug text-txt3">
-          {{ t('pages.projectDetail.pm.settingsHint') }}
-        </p>
       </div>
       <div
         v-if="statusBadge"
