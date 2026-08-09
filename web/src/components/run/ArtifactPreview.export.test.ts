@@ -200,6 +200,44 @@ describe('ArtifactPreview structured export UI', () => {
     wrapper.unmount()
   })
 
+  it('keeps inline ancestor p-4 and export root without resident padding (g3.3)', async () => {
+    const wrapper = mountPreview(structuredArtifact)
+    await flushPromises()
+    const exportRoot = wrapper.find('[data-testid="structured-artifact-export-root"]')
+    expect(exportRoot.exists()).toBe(true)
+    expect(exportRoot.classes()).toContain('structured-artifact-export-root')
+    expect(exportRoot.classes()).not.toContain('p-3')
+    expect(exportRoot.classes()).not.toContain('p-4')
+    expect(exportRoot.classes()).not.toContain('p-5')
+    const rootEl = exportRoot.element as HTMLElement
+    expect(rootEl.style.padding).toBe('')
+    expect(rootEl.getAttribute('style') ?? '').not.toMatch(/padding/i)
+
+    const scrollParent = exportRoot.element.parentElement
+    expect(scrollParent).toBeTruthy()
+    expect(scrollParent!.classList.contains('p-4')).toBe(true)
+    expect(scrollParent!.classList.contains('scroll-area')).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('keeps zoom export root without resident padding (g3.3)', async () => {
+    const wrapper = mountPreview(structuredArtifact)
+    await flushPromises()
+    const enlarge = wrapper.findAll('button').find((b) => b.attributes('title') === '放大查看')
+    expect(enlarge).toBeTruthy()
+    await enlarge!.trigger('click')
+    await flushPromises()
+    const zoomRoot = wrapper.find('[data-testid="structured-artifact-export-root-zoom"]')
+    expect(zoomRoot.exists()).toBe(true)
+    expect(zoomRoot.classes()).toContain('structured-artifact-export-root')
+    expect(zoomRoot.classes()).not.toContain('p-3')
+    expect(zoomRoot.classes()).not.toContain('p-4')
+    expect(zoomRoot.classes()).not.toContain('p-5')
+    const zoomEl = zoomRoot.element as HTMLElement
+    expect(zoomEl.style.padding).toBe('')
+    wrapper.unmount()
+  })
+
   it('shows zoom footer export buttons for structured preview', async () => {
     const wrapper = mountPreview(structuredArtifact)
     await flushPromises()

@@ -33,6 +33,14 @@ describe('AppModal', () => {
     wrapper.unmount()
   })
 
+  it('keeps modal body p-5 (ArtifactPreview zoom ancestor, g3.3)', () => {
+    const wrapper = mountModal({ open: true })
+    const body = document.body.querySelector('.modal-scroll-area') as HTMLElement | null
+    expect(body).toBeTruthy()
+    expect(body!.classList.contains('p-5')).toBe(true)
+    wrapper.unmount()
+  })
+
   it('emits close on backdrop click by default', async () => {
     const wrapper = mountModal({ open: true })
     const overlay = document.body.querySelector('.bg-black\\/60') as HTMLElement
