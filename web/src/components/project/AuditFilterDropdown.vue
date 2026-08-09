@@ -221,12 +221,12 @@ defineExpose({ close })
   align-items: center;
   gap: 6px;
   max-width: 220px;
-  border: 1px solid var(--line, #e4e4e7);
-  background: var(--card, #fff);
+  border: 1px solid rgb(var(--c-line));
+  background: rgb(var(--c-surface));
   padding: 0 8px 0 10px;
   font: inherit;
   font-size: 12px;
-  color: var(--txt, #18181b);
+  color: rgb(var(--c-txt));
   cursor: pointer;
   text-align: left;
   white-space: nowrap;
@@ -242,19 +242,19 @@ defineExpose({ close })
   white-space: normal;
 }
 .audit-dd-trig:hover:not(:disabled) {
-  border-color: #d4d4d8;
-  background: #fafafa;
+  border-color: rgb(var(--c-line-strong));
+  background: rgb(var(--c-elevated));
 }
 .audit-dd.open .audit-dd-trig {
-  border-color: color-mix(in srgb, var(--accent, #7c3aed) 55%, #c4b5fd);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #7c3aed) 12%, transparent);
+  border-color: rgb(var(--c-accent));
+  box-shadow: 0 0 0 3px rgb(var(--c-accent) / 0.12);
 }
 .audit-dd-trig:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 .audit-dd-trig .k {
-  color: var(--txt3, #71717a);
+  color: rgb(var(--c-txt2));
   font-weight: 500;
   flex: 0 0 auto;
 }
@@ -270,20 +270,20 @@ defineExpose({ close })
   max-width: none;
 }
 .audit-dd-trig .v.muted {
-  color: var(--txt3, #a1a1aa);
+  color: rgb(var(--c-txt2));
   font-weight: 400;
 }
 .caret {
   width: 12px;
   height: 12px;
-  color: var(--txt3, #a1a1aa);
+  color: rgb(var(--c-txt2));
   flex: 0 0 auto;
   margin-left: auto;
   transition: transform 0.12s;
 }
 .audit-dd.open .caret {
   transform: rotate(180deg);
-  color: var(--accent, #7c3aed);
+  color: rgb(var(--c-accent));
 }
 </style>
 

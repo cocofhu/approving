@@ -561,7 +561,7 @@ onMounted(() => {
   <div class="audit-panel" data-testid="project-audit-panel">
     <div
       v-if="denied || forceDenied"
-      class="flex flex-1 flex-col items-center justify-center gap-2 border border-dashed border-line bg-surface px-6 py-16 text-center"
+      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 border border-dashed border-line bg-surface px-6 py-16 text-center"
       data-testid="project-audit-denied"
     >
       <div class="text-sm font-semibold text-txt">{{ t('pages.projectDetail.audit.deniedTitle') }}</div>
@@ -805,12 +805,12 @@ onMounted(() => {
         <span v-if="mode === 'run' && runId">Run <b>{{ shortRun(runId) }}</b></span>
       </div>
 
-      <div v-if="loading" class="py-10 text-center text-[13px] text-txt3">
+      <div v-if="loading" class="list-placeholder text-[13px] text-txt2">
         {{ t('pages.projectDetail.audit.loading') }}
       </div>
       <div
         v-else-if="noRuns"
-        class="empty"
+        class="empty list-placeholder"
         data-testid="project-audit-empty-runs"
       >
         <div class="big">{{ t('pages.projectDetail.audit.emptyRunsTitle') }}</div>
@@ -823,6 +823,7 @@ onMounted(() => {
       </div>
       <EmptyState
         v-else-if="!events.length"
+        class="list-placeholder"
         data-testid="project-audit-empty"
         :title="t('pages.projectDetail.audit.emptyTitle')"
         :desc="t('pages.projectDetail.audit.emptyDesc')"
@@ -957,6 +958,7 @@ onMounted(() => {
 
       <Pagination
         v-if="!noRuns"
+        class="shrink-0"
         :page="page"
         :page-size="pageSize"
         :total="total"
@@ -975,10 +977,11 @@ onMounted(() => {
 .audit-panel {
   display: flex;
   flex-direction: column;
-  min-height: 420px;
-  border: 1px solid var(--line, #ececef);
-  background: var(--card, #fff);
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
+  border: 1px solid rgb(var(--c-line));
+  background: rgb(var(--c-surface));
 }
 .panel-hd {
   display: flex;
@@ -986,19 +989,20 @@ onMounted(() => {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  flex-shrink: 0;
   padding: 14px 16px 12px;
-  border-bottom: 1px solid var(--line, #ececef);
+  border-bottom: 1px solid rgb(var(--c-line));
 }
 .panel-hd h4 {
   margin: 0;
   font-size: 15px;
   font-weight: 650;
   letter-spacing: -0.02em;
-  color: var(--txt, #18181b);
+  color: rgb(var(--c-txt));
 }
 .seg {
   display: inline-flex;
-  background: #f4f4f5;
+  background: rgb(var(--c-elevated));
   padding: 3px;
   gap: 2px;
 }
@@ -1009,16 +1013,16 @@ onMounted(() => {
   padding: 0 12px;
   font: inherit;
   font-size: 12px;
-  color: var(--txt3, #71717a);
+  color: rgb(var(--c-txt2));
   cursor: pointer;
   font-weight: 500;
 }
 .seg button:hover {
-  color: var(--txt, #18181b);
+  color: rgb(var(--c-txt));
 }
 .seg button.on {
-  background: #fff;
-  color: var(--txt, #18181b);
+  background: rgb(var(--c-surface));
+  color: rgb(var(--c-txt));
   font-weight: 600;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
@@ -1027,8 +1031,9 @@ onMounted(() => {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--line, #ececef);
+  border-bottom: 1px solid rgb(var(--c-line));
 }
 .search {
   flex: 1 1 180px;
@@ -1074,7 +1079,7 @@ onMounted(() => {
   padding: 0 12px;
   border: 1px solid #e4e4e7;
   background: #fff;
-  color: var(--txt, #18181b);
+  color: rgb(var(--c-txt));
   font: inherit;
   font-size: 12px;
   font-weight: 500;
@@ -1094,8 +1099,9 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+  flex-shrink: 0;
   padding: 0 16px 12px;
-  border-bottom: 1px solid var(--line, #ececef);
+  border-bottom: 1px solid rgb(var(--c-line));
 }
 .chip {
   display: inline-flex;
@@ -1106,11 +1112,11 @@ onMounted(() => {
   background: #f4f4f5;
   border: 1px solid #e4e4e7;
   font-size: 11px;
-  color: var(--txt, #18181b);
+  color: rgb(var(--c-txt));
 }
 .chip em {
   font-style: normal;
-  color: var(--txt3, #71717a);
+  color: rgb(var(--c-txt2));
   font-weight: 500;
 }
 .chip b {
@@ -1121,26 +1127,26 @@ onMounted(() => {
   height: 18px;
   border: 0;
   background: transparent;
-  color: var(--txt3, #71717a);
+  color: rgb(var(--c-txt2));
   cursor: pointer;
   font-size: 13px;
   line-height: 1;
 }
 .chip .x:hover {
-  color: var(--txt, #18181b);
+  color: rgb(var(--c-txt));
   background: #e4e4e7;
 }
 .linkish {
   border: 0;
   background: transparent;
-  color: var(--txt3, #71717a);
+  color: rgb(var(--c-txt2));
   font: inherit;
   font-size: 11px;
   cursor: pointer;
   padding: 0 4px;
 }
 .linkish:hover {
-  color: var(--accent, #7c3aed);
+  color: rgb(var(--c-accent));
 }
 .meta {
   display: flex;
@@ -1148,13 +1154,14 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  flex-shrink: 0;
   padding: 8px 16px;
   font-size: 12px;
-  color: var(--txt3, #71717a);
-  border-bottom: 1px solid var(--line, #ececef);
+  color: rgb(var(--c-txt2));
+  border-bottom: 1px solid rgb(var(--c-line));
 }
 .meta b {
-  color: var(--txt, #18181b);
+  color: rgb(var(--c-txt));
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -1169,34 +1176,36 @@ onMounted(() => {
   padding: 6px 16px;
 }
 .meta-mobile b {
-  color: var(--txt, #18181b);
+  color: rgb(var(--c-txt));
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 .table-wrap {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
-  max-height: 520px;
 }
 table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   min-width: 820px;
 }
 thead th {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
   text-align: left;
   padding: 9px 14px;
-  background: #fafafa;
-  color: var(--txt3, #71717a);
+  background: rgb(var(--c-elevated));
+  color: rgb(var(--c-txt2));
   font-size: 11px;
   font-weight: 600;
-  border-bottom: 1px solid var(--line, #ececef);
+  border-bottom: 1px solid rgb(var(--c-line));
 }
 td {
   padding: 11px 14px;
-  border-bottom: 1px solid var(--line, #ececef);
+  border-bottom: 1px solid rgb(var(--c-line));
   vertical-align: middle;
   font-size: 13px;
 }
@@ -1215,16 +1224,16 @@ tr.row.fail td:first-child {
 tr.detail td {
   padding: 0;
   background: #fafafa;
-  border-bottom: 1px solid var(--line, #ececef);
+  border-bottom: 1px solid rgb(var(--c-line));
 }
 .detail-inner {
   padding: 12px 14px 14px;
   margin-left: 2px;
-  border-left: 2px solid var(--accent, #7c3aed);
+  border-left: 2px solid rgb(var(--c-accent));
 }
 .detail-meta {
   font-size: 12px;
-  color: var(--txt3, #71717a);
+  color: rgb(var(--c-txt2));
   margin-bottom: 8px;
   display: flex;
   flex-wrap: wrap;
@@ -1233,15 +1242,15 @@ tr.detail td {
 .detail-meta code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
-  color: var(--txt, #18181b);
+  color: rgb(var(--c-txt));
   background: #fff;
-  border: 1px solid var(--line, #ececef);
+  border: 1px solid rgb(var(--c-line));
   padding: 1px 5px;
 }
 .payload {
   margin: 0;
   padding: 10px 12px;
-  border: 1px solid var(--line, #ececef);
+  border: 1px solid rgb(var(--c-line));
   background: #fff;
   font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre-wrap;
@@ -1260,7 +1269,7 @@ tr.detail td {
   font-size: 12px;
 }
 .who {
-  color: var(--txt, #18181b);
+  color: rgb(var(--c-txt));
   font-weight: 500;
 }
 .act {
@@ -1304,15 +1313,23 @@ tr.detail td {
 .summary {
   color: #3f3f46;
 }
+.list-placeholder {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
 .empty {
   padding: 48px 16px;
   text-align: center;
-  color: var(--txt3, #71717a);
+  color: rgb(var(--c-txt2));
 }
 .empty .big {
   font-size: 14px;
   font-weight: 600;
-  color: var(--txt, #18181b);
+  color: rgb(var(--c-txt));
   margin-bottom: 4px;
 }
 .col-run-hide :deep(.col-run),
@@ -1341,7 +1358,7 @@ tr.detail td {
   flex: 1;
   min-width: 0;
   font-size: 12px;
-  color: var(--txt, #18181b);
+  color: rgb(var(--c-txt));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1350,7 +1367,7 @@ tr.detail td {
   flex: 0 0 auto;
   font-size: 11px;
   font-weight: 600;
-  color: var(--accent, #7c3aed);
+  color: rgb(var(--c-accent));
   white-space: nowrap;
 }
 .filters-editor {
@@ -1396,6 +1413,9 @@ tr.detail td {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
   padding: 12px 16px;
 }
 .event-card {
@@ -1414,7 +1434,7 @@ tr.detail td {
   border-color: #c4b5fd;
 }
 .event-card.open {
-  border-color: var(--accent, #7c3aed);
+  border-color: rgb(var(--c-accent));
   background: #faf8ff;
 }
 .event-card.fail {
@@ -1467,9 +1487,9 @@ tr.detail td {
 .ec-detail code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
-  color: var(--txt, #18181b);
+  color: rgb(var(--c-txt));
   background: #fff;
-  border: 1px solid var(--line, #ececef);
+  border: 1px solid rgb(var(--c-line));
   padding: 1px 5px;
 }
 .ec-detail .payload {
@@ -1478,7 +1498,7 @@ tr.detail td {
 .ec-hint {
   margin-top: 6px;
   font-size: 10px;
-  color: var(--accent, #7c3aed);
+  color: rgb(var(--c-accent));
 }
 @media (max-width: 768px) {
   .filters:not(.filters-mobile) {

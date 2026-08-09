@@ -191,7 +191,8 @@ function onPageSizeChange(event: Event) {
   background: rgb(var(--c-overlay));
 }
 .pg-btn:disabled {
-  opacity: 0.45;
+  color: rgb(var(--c-txt2));
+  opacity: 1;
   cursor: not-allowed;
 }
 .page-nums {
@@ -209,7 +210,7 @@ function onPageSizeChange(event: Event) {
   transition: border-color 0.12s, color 0.12s, background 0.12s;
 }
 .page-num.active {
-  color: #fff;
+  color: rgb(var(--c-accent-2));
   background: rgb(var(--c-accent-dim));
   border-color: #7b61ff;
   box-shadow: inset 0 0 0 1px rgba(123, 97, 255, 0.35);
@@ -220,7 +221,8 @@ function onPageSizeChange(event: Event) {
   color: rgb(var(--c-txt));
 }
 .page-num:disabled {
-  opacity: 0.45;
+  color: rgb(var(--c-txt2));
+  opacity: 1;
   cursor: not-allowed;
 }
 .pg-size {
@@ -244,7 +246,8 @@ function onPageSizeChange(event: Event) {
   font-size: 12px;
 }
 .pg-size-select:disabled {
-  opacity: 0.45;
+  color: rgb(var(--c-txt2));
+  opacity: 1;
   cursor: not-allowed;
 }
 </style>

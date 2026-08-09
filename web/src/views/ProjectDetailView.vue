@@ -1565,7 +1565,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div v-else-if="tab === 'audit'" class="flex min-h-[420px] flex-col" data-testid="project-audit-tab">
+      <div v-else-if="tab === 'audit'" class="flex min-h-0 flex-1 flex-col" data-testid="project-audit-tab">
         <ProjectAuditPanel :project-id="projectId" :force-denied="auditForceDenied" />
       </div>
 
