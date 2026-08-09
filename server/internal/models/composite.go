@@ -57,13 +57,24 @@ func AsCompositeText(v any) *CompositeText {
 					if d, ok := m["data"].(string); ok {
 						pi.Data = d
 					}
+					if r, ok := m["ref"].(string); ok {
+						pi.Ref = r
+					}
 					if mt, ok := m["mimeType"].(string); ok {
 						pi.MimeType = mt
 					}
 					if n, ok := m["name"].(string); ok {
 						pi.Name = n
 					}
-					if pi.Data != "" {
+					switch sb := m["sizeBytes"].(type) {
+					case float64:
+						pi.SizeBytes = int64(sb)
+					case int64:
+						pi.SizeBytes = sb
+					case int:
+						pi.SizeBytes = int64(sb)
+					}
+					if pi.Data != "" || pi.Ref != "" {
 						ct.Images = append(ct.Images, pi)
 					}
 				}

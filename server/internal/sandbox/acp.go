@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cocofhu/approving/internal/blob"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/textutil"
 
@@ -91,6 +92,9 @@ type ACPClient struct {
 	cwd        string
 	mcpServers json.RawMessage // JSON array, may be nil
 
+	// blobs resolves blob:{id} attachments to base64 for the wire format.
+	blobs blob.Store
+
 	// password, when set, is the sandbox token the acp-bridge expects
 	// (CURSOR_ACP_PASSWORD). Connect logs in first (POST /api/login) and
 	// carries the returned cursor_acp_session cookie on the /ws handshake.
@@ -147,6 +151,16 @@ func (c *ACPClient) WithIdleTimeout(d time.Duration) *ACPClient {
 func (c *ACPClient) WithBridgeModel(model string) *ACPClient {
 	c.bridgeModel = strings.TrimSpace(model)
 	return c
+}
+
+// WithBlobs wires a blob.Store so chat turns can resolve blob:{id} refs.
+func (c *ACPClient) WithBlobs(store blob.Store) *ACPClient {
+	c.blobs = store
+	return c
+}
+
+func (c *ACPClient) prepareImages(ctx context.Context, images []models.PromptImage) ([]models.PromptImage, error) {
+	return blob.ResolveForWire(ctx, c.blobs, images)
 }
 
 // BridgeModel returns the configured ACP_BRIDGE_MODEL string (may be empty).
@@ -389,6 +403,11 @@ func (c *ACPClient) ChatStructured(ctx context.Context, text string, images []mo
 	if !c.IsConnected() {
 		return nil, fmt.Errorf("%w: not connected", ErrConnClosed)
 	}
+	var err error
+	images, err = c.prepareImages(ctx, images)
+	if err != nil {
+		return nil, err
+	}
 	c.drainEvents()
 	if err := c.send(chatMessage(text, images)); err != nil {
 		return nil, fmt.Errorf("%w: send chat: %v", ErrConnClosed, err)
@@ -454,6 +473,11 @@ func (c *ACPClient) ChatStream(ctx context.Context, text string, images []models
 	if !c.IsConnected() {
 		return nil, fmt.Errorf("%w: not connected", ErrConnClosed)
 	}
+	var err error
+	images, err = c.prepareImages(ctx, images)
+	if err != nil {
+		return nil, err
+	}
 	c.drainEvents()
 	if err := c.send(chatMessage(text, images)); err != nil {
 		return nil, fmt.Errorf("%w: send chat: %v", ErrConnClosed, err)
@@ -517,6 +541,11 @@ func (c *ACPClient) ChatStream(ctx context.Context, text string, images []models
 func (c *ACPClient) ChatStreamResult(ctx context.Context, text string, images []models.PromptImage, onProgress func(*ChatResult)) (*ChatResult, error) {
 	if !c.IsConnected() {
 		return nil, fmt.Errorf("%w: not connected", ErrConnClosed)
+	}
+	var err error
+	images, err = c.prepareImages(ctx, images)
+	if err != nil {
+		return nil, err
 	}
 	c.drainEvents()
 	if err := c.send(chatMessage(text, images)); err != nil {

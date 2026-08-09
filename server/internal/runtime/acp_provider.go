@@ -332,6 +332,7 @@ func newBaseACPProvider(host *mcp.Host, opts Options, backend AcpBackend) ExecPr
 		InjectStore:     opts.InjectStore,
 		InjectAdvertise: opts.MCPEndpoint,
 		CreateTimeout:   opts.SandboxCreateTimeout,
+		Blobs:           opts.Blobs,
 	})
 	log.Info().Str("image", mgr.Image).Str("gateway", opts.GatewayURL).Str("acpBackend", string(backend)).
 		Str("bridge", AgentRuntimeLabel(backend)).Msg("sandbox exec provider ready")

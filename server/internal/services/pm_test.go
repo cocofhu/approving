@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cocofhu/approving/internal/blob"
 	"github.com/cocofhu/approving/internal/models"
 
 	"gorm.io/driver/sqlite"
@@ -46,6 +47,7 @@ func TestPmBindingEnableRequiresAgent(t *testing.T) {
 func TestPmMemoryAndThreadIsolation(t *testing.T) {
 	db := setupPmDB(t)
 	pm := NewPmService(db, nil)
+	pm.SetBlobStore(blob.NewMemory())
 	ps := NewProjectService(db)
 	p, err := ps.Create("MemProj", "", nil, nil)
 	if err != nil {
@@ -86,15 +88,15 @@ func TestPmMemoryAndThreadIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(imgMsg.Images) != 1 || imgMsg.Images[0].MimeType != "image/png" {
-		t.Fatalf("images not persisted: %+v", imgMsg)
+	if len(imgMsg.Images) != 1 || imgMsg.Images[0].MimeType != "image/png" || imgMsg.Images[0].Ref == "" || imgMsg.Images[0].Data != "" {
+		t.Fatalf("images not externalized: %+v", imgMsg)
 	}
 	msgs, err = pm.ListMessages(ta.ID)
 	if err != nil || len(msgs) != 2 {
 		t.Fatalf("msgs after image=%v err=%v", msgs, err)
 	}
-	if len(msgs[1].Images) != 1 {
-		t.Fatalf("listed message missing images: %+v", msgs[1])
+	if len(msgs[1].Images) != 1 || msgs[1].Images[0].Ref == "" || msgs[1].Images[0].Data != "" {
+		t.Fatalf("listed message missing blob ref: %+v", msgs[1])
 	}
 	bobThreads, _ := pm.ListThreads(p.ID, "bob")
 	if len(bobThreads) != 1 || bobThreads[0].ID != tb.ID {

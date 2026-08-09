@@ -1,0 +1,213 @@
+package blob
+
+import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"fmt"
+	"io"
+	"strings"
+
+	"github.com/cocofhu/approving/internal/models"
+)
+
+// IngestPromptImages externalizes any image with inline Data into store,
+// clears Data, and fills Ref / SizeBytes. Images that already have Ref are
+// left alone (Data still stripped). Nil store with inline Data is an error.
+func IngestPromptImages(ctx context.Context, store Store, images []models.PromptImage) ([]models.PromptImage, error) {
+	if len(images) == 0 {
+		return images, nil
+	}
+	out := make([]models.PromptImage, len(images))
+	for i, im := range images {
+		out[i] = im
+		if ref := strings.TrimSpace(im.Ref); ref != "" {
+			if _, err := ParseRef(ref); err != nil {
+				return nil, fmt.Errorf("image[%d]: %w", i, err)
+			}
+			out[i].Ref = ref
+			out[i].Data = ""
+			continue
+		}
+		data := strings.TrimSpace(im.Data)
+		if data == "" {
+			return nil, fmt.Errorf("image[%d]: missing data and ref", i)
+		}
+		if store == nil {
+			return nil, fmt.Errorf("image[%d]: blob store not configured", i)
+		}
+		raw, err := base64.StdEncoding.DecodeString(data)
+		if err != nil {
+			return nil, fmt.Errorf("image[%d]: decode base64: %w", i, err)
+		}
+		ref, err := store.Put(ctx, bytes.NewReader(raw), Meta{
+			MimeType: im.MimeType,
+			Name:     im.Name,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("image[%d]: store: %w", i, err)
+		}
+		out[i].Ref = ref.String()
+		out[i].Data = ""
+		out[i].SizeBytes = int64(len(raw))
+		if out[i].MimeType == "" {
+			out[i].MimeType = "application/octet-stream"
+		}
+	}
+	return out, nil
+}
+
+// IngestBytes stores raw bytes and returns a PromptImage with Ref set.
+func IngestBytes(ctx context.Context, store Store, raw []byte, mimeType, name string) (models.PromptImage, error) {
+	if store == nil {
+		return models.PromptImage{}, fmt.Errorf("blob store not configured")
+	}
+	if len(raw) == 0 {
+		return models.PromptImage{}, fmt.Errorf("empty attachment")
+	}
+	ref, err := store.Put(ctx, bytes.NewReader(raw), Meta{MimeType: mimeType, Name: name})
+	if err != nil {
+		return models.PromptImage{}, err
+	}
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+	return models.PromptImage{
+		Ref:       ref.String(),
+		MimeType:  mimeType,
+		Name:      name,
+		SizeBytes: int64(len(raw)),
+	}, nil
+}
+
+// IngestCompositeInputs walks a launch inputs map and externalizes any
+// composite {text, images[]} values in place. Returns the same map.
+func IngestCompositeInputs(ctx context.Context, store Store, inputs map[string]any) (map[string]any, error) {
+	if inputs == nil {
+		return inputs, nil
+	}
+	for k, v := range inputs {
+		nv, err := ingestValue(ctx, store, v)
+		if err != nil {
+			return nil, fmt.Errorf("input %q: %w", k, err)
+		}
+		inputs[k] = nv
+	}
+	return inputs, nil
+}
+
+func ingestValue(ctx context.Context, store Store, v any) (any, error) {
+	if ct := models.AsCompositeText(v); ct != nil && len(ct.Images) > 0 {
+		imgs, err := IngestPromptImages(ctx, store, ct.Images)
+		if err != nil {
+			return nil, err
+		}
+		ct.Images = imgs
+		return map[string]any{
+			"text":   ct.Text,
+			"images": promptImagesToAny(imgs),
+		}, nil
+	}
+	return v, nil
+}
+
+func promptImagesToAny(imgs []models.PromptImage) []any {
+	out := make([]any, len(imgs))
+	for i, im := range imgs {
+		m := map[string]any{"mimeType": im.MimeType}
+		if im.Ref != "" {
+			m["ref"] = im.Ref
+		} else if im.Data != "" {
+			// Legacy dual-read: keep inline data when not yet externalized.
+			m["data"] = im.Data
+		}
+		if im.Name != "" {
+			m["name"] = im.Name
+		}
+		if im.SizeBytes > 0 {
+			m["sizeBytes"] = im.SizeBytes
+		}
+		out[i] = m
+	}
+	return out
+}
+
+// ResolveForWire returns copies with Data filled for ACP/LLM transport.
+// Ref-backed images are loaded from store; legacy inline Data is kept.
+// When store is nil, only inline Data images are returned.
+func ResolveForWire(ctx context.Context, store Store, images []models.PromptImage) ([]models.PromptImage, error) {
+	if len(images) == 0 {
+		return images, nil
+	}
+	out := make([]models.PromptImage, 0, len(images))
+	for i, im := range images {
+		if data := strings.TrimSpace(im.Data); data != "" {
+			cp := im
+			out = append(out, cp)
+			continue
+		}
+		ref := strings.TrimSpace(im.Ref)
+		if ref == "" {
+			continue
+		}
+		if store == nil {
+			return nil, fmt.Errorf("image[%d]: blob store not configured to resolve %s", i, ref)
+		}
+		parsed, err := ParseRef(ref)
+		if err != nil {
+			return nil, fmt.Errorf("image[%d]: %w", i, err)
+		}
+		rc, meta, err := store.Open(ctx, parsed)
+		if err != nil {
+			return nil, fmt.Errorf("image[%d]: open %s: %w", i, ref, err)
+		}
+		raw, err := io.ReadAll(rc)
+		_ = rc.Close()
+		if err != nil {
+			return nil, fmt.Errorf("image[%d]: read %s: %w", i, ref, err)
+		}
+		mime := im.MimeType
+		if mime == "" {
+			mime = meta.MimeType
+		}
+		name := im.Name
+		if name == "" {
+			name = meta.Name
+		}
+		out = append(out, models.PromptImage{
+			Data:      base64.StdEncoding.EncodeToString(raw),
+			MimeType:  mime,
+			Name:      name,
+			Ref:       ref,
+			SizeBytes: int64(len(raw)),
+		})
+	}
+	return out, nil
+}
+
+// StripData clears inline Data when Ref is already set (defensive before persist).
+// Legacy rows with only Data are left untouched for dual-read.
+func StripData(images []models.PromptImage) []models.PromptImage {
+	if len(images) == 0 {
+		return images
+	}
+	out := make([]models.PromptImage, len(images))
+	for i, im := range images {
+		out[i] = im
+		if strings.TrimSpace(im.Ref) != "" {
+			out[i].Data = ""
+		}
+	}
+	return out
+}
+
+// StripDataInValue clears PromptImage.Data inside composite map/struct values.
+func StripDataInValue(v any) any {
+	if ct := models.AsCompositeText(v); ct != nil && len(ct.Images) > 0 {
+		return map[string]any{
+			"text":   ct.Text,
+			"images": promptImagesToAny(StripData(ct.Images)),
+		}
+	}
+	return v
+}

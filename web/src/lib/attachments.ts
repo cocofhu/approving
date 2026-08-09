@@ -32,6 +32,7 @@ export function fileAttachmentName(file: File, index = 0): string {
 
 /** Decode base64 payload length (approx original bytes). */
 export function attachmentByteLength(im: ClarifyImage): number {
+  if (im.sizeBytes && im.sizeBytes > 0) return im.sizeBytes
   if (!im.data) return 0
   const len = im.data.length
   let pad = 0

@@ -9,6 +9,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cocofhu/approving/internal/blob"
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/sandbox"
@@ -54,6 +55,8 @@ type Options struct {
 	MCPEndpoint string
 	// InjectStore holds short-lived ConfigHome .tgz for gateway bundleUrl inject.
 	InjectStore *sandbox.BundleStore
+	// Blobs resolves blob:{id} attachments for ACP chat turns.
+	Blobs blob.Store
 	// ProfilesRoot is where skill_profile rules live (<root>/<profile>/rules.md),
 	// copied into the per-node /root/.cursor mount.
 	ProfilesRoot string

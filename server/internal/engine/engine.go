@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cocofhu/approving/internal/blob"
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/runtime"
@@ -109,7 +110,13 @@ type Engine struct {
 
 	// skills looks up Agents for same-project skill_profile runtime gate.
 	skills *services.SkillService
+
+	// blobs externalizes PromptImage bytes (optional in unit tests).
+	blobs blob.Store
 }
+
+// SetBlobStore wires attachment externalization for StartRun / react turns.
+func (e *Engine) SetBlobStore(store blob.Store) { e.blobs = store }
 
 // New builds an engine.
 func New(db *gorm.DB, provider runtime.ExecProvider, host *mcp.Host, store mcp.Store, maxRuns int) *Engine {
@@ -466,6 +473,12 @@ func (e *Engine) startRun(def models.WorkflowDef, graph models.Graph, inputs map
 	if inputs == nil {
 		inputs = map[string]any{}
 	}
+	// Externalize composite launch images before any DB write (runs.inputs + vars).
+	var err error
+	inputs, err = blob.IngestCompositeInputs(context.Background(), e.blobs, inputs)
+	if err != nil {
+		return nil, fmt.Errorf("ingest launch attachments: %w", err)
+	}
 	// Resolve the live value of every global variable: project defaults first,
 	// then Graph.Variables + launcher-submitted Ask values (latter wins on name).
 	var projectVars []models.ProjectVariable
@@ -475,6 +488,13 @@ func (e *Engine) startRun(def models.WorkflowDef, graph models.Graph, inputs map
 	seeded, err := resolveStartVars(graph, inputs, projectVars)
 	if err != nil {
 		return nil, err
+	}
+	for i := range seeded {
+		nv, ierr := blob.IngestCompositeInputs(context.Background(), e.blobs, map[string]any{seeded[i].Name: seeded[i].Value})
+		if ierr != nil {
+			return nil, fmt.Errorf("ingest seed %q: %w", seeded[i].Name, ierr)
+		}
+		seeded[i].Value = nv[seeded[i].Name]
 	}
 	title := computeRunTitle(graph, seeded)
 	// Enqueue as "queued": the priority dispatcher promotes it to "running" (and
@@ -1198,7 +1218,7 @@ func (e *Engine) snapshotCheckpoint(c *execCtx, nodeID string) {
 	}
 	snap := map[string]any{}
 	for k, v := range c.vars {
-		snap[k] = v
+		snap[k] = blob.StripDataInValue(v)
 	}
 	c.run.Checkpoints[nodeID] = snap
 	// Only the checkpoints column — see appendTrace on why a full-row Save is
@@ -1210,6 +1230,7 @@ func (e *Engine) snapshotCheckpoint(c *execCtx, nodeID string) {
 func (c *execCtx) setVar(name string, v any) { c.vars[name] = v }
 
 func (e *Engine) persistVar(runID, name string, v any) {
+	v = blob.StripDataInValue(v)
 	var rv models.RunVariable
 	if err := e.db.Where("run_id = ? AND name = ?", runID, name).First(&rv).Error; err == nil {
 		rv.Value = v
