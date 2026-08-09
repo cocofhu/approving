@@ -204,7 +204,10 @@ function fileStatusClass(s: string): string {
 </script>
 
 <template>
-  <div class="scroll-area h-full min-w-0 w-full max-w-full overflow-x-clip overflow-y-auto p-4">
+  <!-- Padding on inner wrapper (not the scroll root) so OutputResultCards sticky top-0
+       sits flush with the panel chrome instead of below p-4. Empty state stays inside. -->
+  <div class="scroll-area h-full min-w-0 w-full max-w-full overflow-x-clip overflow-y-auto" data-testid="node-output-scroll">
+    <div class="p-4">
     <div class="mb-3 flex min-w-0 items-center gap-2.5">
       <div class="flex h-8 w-8 items-center justify-center rounded-md" :style="{ background: hex + '22', color: hex }">
         <Icon :name="def.icon" :size="16" />
@@ -417,5 +420,6 @@ function fileStatusClass(s: string): string {
       class="px-1 py-8 text-center text-[12px] text-txt3"
     >{{ t('pages.nodeOutput.nodeNotRun') }}</div>
     <div v-else-if="!isOutputNode && node.type !== 'input' && node.type !== 'branch' && node.type !== 'set_var'" class="px-1 py-8 text-center text-[12px] text-txt3">{{ t('pages.nodeOutput.nodeNoOutput') }}</div>
+    </div>
   </div>
 </template>

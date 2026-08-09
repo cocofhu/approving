@@ -472,6 +472,14 @@ describe('AgentOrgSidebar agent name text color', () => {
       .find((s) => s.classes().includes('text-txt3') && s.text().includes('alice'))
     expect(reportsTo).toBeFalsy()
   })
+
+  it('顶栏可触发创建 Agent 团队', async () => {
+    const wrapper = mountSidebar()
+    const btn = wrapper.find('[aria-label="创建 Agent 团队"]')
+    expect(btn.exists()).toBe(true)
+    await btn.trigger('click')
+    expect(wrapper.emitted('create-team')).toBeTruthy()
+  })
 })
 
 describe('AgentOrgSidebar project bracket', () => {

@@ -228,6 +228,54 @@ export interface OrgFolderImportResult {
   renamed?: Record<string, string>
 }
 
+/** Create Agent Team bootstrap progress (GET/POST /agent-teams/bootstrap). */
+export interface TeamBootstrapEvent {
+  kind: string
+  message: string
+  at: string
+}
+
+export interface TeamBootstrapResource {
+  kind: string
+  name: string
+  detail?: string
+}
+
+export interface TeamBootstrapSession {
+  id: string
+  status: 'starting' | 'running' | 'ready' | 'failed' | string
+  error?: string
+  projectId?: string
+  rootGroupId?: string
+  pipelineGroupId?: string
+  pmAgent?: string
+  sandboxId?: string
+  prefix?: string
+  background?: string
+  allowedGroupIds?: string[]
+  agentNames?: string[]
+  events: TeamBootstrapEvent[]
+  resources: TeamBootstrapResource[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TeamBootstrapRequest {
+  projectName: string
+  prefix: string
+  rootGroupName: string
+  pipelineGroupName: string
+  pmName: string
+  background: string
+  acpBackend: string
+  apiKey?: string
+  region?: string
+  gitUrl?: string
+  gitCredentialType?: string
+  mcp?: MCPServer[]
+  env?: Record<string, string>
+}
+
 function filenameFromContentDisposition(header: string | null, fallback: string): string {
   if (!header) return fallback
   const star = /filename\*=(?:UTF-8''|utf-8'')([^;]+)/i.exec(header)
@@ -776,6 +824,21 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  bootstrapAgentTeam: (body: TeamBootstrapRequest) =>
+    req<TeamBootstrapSession>('/agent-teams/bootstrap', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  getAgentTeamBootstrap: (id: string) =>
+    req<TeamBootstrapSession>(`/agent-teams/bootstrap/${encodeURIComponent(id)}`),
+  retryAgentTeamBootstrap: (id: string) =>
+    req<TeamBootstrapSession>(`/agent-teams/bootstrap/${encodeURIComponent(id)}/retry`, {
+      method: 'POST',
+    }),
+  listAgentTeamTemplates: () =>
+    req<{ items: { id: string; embedName: string; roleLabelZh: string; summary: string }[] }>(
+      '/agent-teams/templates',
+    ),
   getAgentsOrg: () => req<AgentOrg>('/agents/org'),
   saveAgentsOrg: (org: AgentOrg) =>
     req<AgentOrg>('/agents/org', { method: 'PUT', body: JSON.stringify(org) }),

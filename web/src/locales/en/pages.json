@@ -1178,7 +1178,12 @@
     "agentStudio": {
       "title": "Agent Studio",
       "errorPrefix": "Error:",
-      "empty": "No agents. Click New agent or wait for default seed on first backend start.",
+      "empty": "No agents yet. Use \"Create Agent team\" for a full roster, or \"New Agent\" for a single one.",
+      "emptyTeamTitle": "Launch a full team from one entry",
+      "emptyTeamDesc": "After you fill project background and runtime config, a sandbox creates the project, root group, PM, and 9 engineers with reporting lines.",
+      "emptyTeamCta": "Create Agent team",
+      "emptyTeamOrSingle": "or create a single Agent",
+      "createTeam": "Create Agent team",
       "unsaved": "Unsaved",
       "saved": "Saved",
       "tabs": {
@@ -1222,6 +1227,7 @@
         "multiGroup": "Multi",
         "reportsTo": "Reports to: {name}",
         "newRootGroup": "New root group",
+        "newTeam": "Create Agent team",
         "newChildGroup": "New subgroup",
         "renameGroup": "Rename group",
         "groupNameLabel": "Group name",
@@ -1622,6 +1628,87 @@
         "skillsNote": "Executable skill directories",
         "commandsNote": "commands/*.md slash commands",
         "envNote": "Injected via container environment"
+      },
+      "teamWizard": {
+        "title": "Create Agent team",
+        "headSub": "Project background + runtime config → confirm to start sandbox",
+        "confirmStart": "Confirm & start sandbox",
+        "submitting": "Submitting",
+        "previewLine": "Will create: {root} / {pipe} · {pm} + {n} engineers",
+        "steps": {
+          "team": "Team info",
+          "acp": "Agent",
+          "apiKey": "API Key",
+          "git": "Git",
+          "mcp": "MCP",
+          "env": "Env vars",
+          "review": "Confirm"
+        },
+        "team": {
+          "meta": "Define project and naming first; engineers are provisioned from the reference roster in the sandbox.",
+          "projectName": "Project / team name",
+          "prefix": "Name prefix",
+          "rootGroup": "Root group name",
+          "pipelineGroup": "Pipeline subgroup",
+          "pipelineHint": "Engineers join this subgroup by default",
+          "pmName": "PM Agent name",
+          "background": "Project background",
+          "backgroundPlaceholder": "Goals, stack, repos, pipeline needs… Used as the sandbox team-build prompt.",
+          "backgroundHint": "Like a prompt: injected into the sandbox to generate groups, reporting lines, and engineers."
+        },
+        "acp": {
+          "meta": "Used as the default ACP for the PM and engineers."
+        },
+        "git": {
+          "meta": "Optional. Helps roster selection and team Git defaults.",
+          "url": "Repository URL"
+        },
+        "mcp": {
+          "meta": "Default mcp[] for the team; applied when creating the PM and engineers. artifact-store is prefilled.",
+          "namePh": "Name",
+          "headers": "Headers",
+          "addHeader": "Add header",
+          "add": "Add MCP",
+          "restoreArtifact": "Restore artifact-store preset",
+          "runVars": "Run vars: {'${APPROVING_ARTIFACT_URL}'} / {'${APPROVING_ARTIFACT_TOKEN}'}"
+        },
+        "env": {
+          "meta": "Written to the PM; engineers inherit by default."
+        },
+        "review": {
+          "meta": "Creates the project and PM, starts a sandbox, and provisions 9 engineers from the reference roster.",
+          "project": "Project",
+          "root": "Root group",
+          "pipeline": "Subgroup",
+          "set": "Set",
+          "skip": "Skipped (add later)",
+          "none": "None",
+          "roster": "Roster: 1 PM + 9 engineers · 10 total",
+          "background": "Project background (team prompt)",
+          "noArtifactWarn": "Pipeline roles usually need artifact-store; it is missing from the MCP list."
+        },
+        "errors": {
+          "projectRequired": "Project / team name is required",
+          "prefixRequired": "Name prefix is required",
+          "backgroundRequired": "Project background (team prompt) is required",
+          "pmRequired": "PM Agent name is required",
+          "pmInvalid": "Invalid PM name (letters/digits/_/- only)",
+          "pmExists": "That PM name already exists"
+        },
+        "progress": {
+          "title": "Sandbox · {name}",
+          "sub": "Auto-provision: project / org / engineer agents",
+          "starting": "sandbox starting…",
+          "running": "sandbox running",
+          "ready": "team ready · {n} agents",
+          "failed": "failed",
+          "waiting": "Waiting for progress…",
+          "resources": "Created resources",
+          "openPm": "Open project manager",
+          "done": "Done",
+          "retry": "Retry",
+          "keepCreated": "Keep created resources"
+        }
       },
       "wizard": {
         "title": "New Agent",
@@ -2179,7 +2266,14 @@
       "noPreviewCardsHint": "You can still browse all raw artifacts on this page's Artifacts tab.",
       "outputCards": {
         "sourceFailedTitle": "Source node failed / no product",
-        "invalidSource": "Invalid or unparseable source reference"
+        "invalidSource": "Invalid or unparseable source reference",
+        "listTitle": "Outputs",
+        "enlarge": "Enlarge",
+        "kindStructured": "Structured",
+        "kindMarkdown": "Markdown",
+        "kindHtml": "HTML",
+        "kindCustom": "Custom",
+        "kindFailed": "Failed"
       },
       "nodeNotRun": "This node has not run yet",
       "nodeNoOutput": "This node produced no output yet"

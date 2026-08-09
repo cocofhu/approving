@@ -68,6 +68,7 @@ type Handlers struct {
 	// PublicAdvertise is the browser-facing origin for share URLs and public
 	// CSRF host checks. Never fall back to client X-Forwarded-Host.
 	PublicAdvertise string
+	Team            *services.TeamService
 	// CanViewProjectAudit optionally overrides the default audit ACL
 	// (is_admin OR authenticated user who can UpdateProject). Tests use this
 	// to simulate a read-only member denial while production keeps the hook nil.
