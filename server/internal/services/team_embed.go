@@ -101,6 +101,9 @@ func loadTeamAgentTemplate(embedName string) (Agent, error) {
 }
 
 func readTeamEmbedWorkspaceFiles(root string) ([]AgentFile, error) {
+	if _, err := fs.Stat(teamEmbedFS, root); err != nil {
+		return nil, fmt.Errorf("team embed workspace missing %s: %w (rebuild image with team_embed/*.md included)", root, err)
+	}
 	var out []AgentFile
 	prefix := strings.TrimSuffix(root, "/") + "/"
 	err := fs.WalkDir(teamEmbedFS, root, func(p string, d fs.DirEntry, err error) error {
@@ -124,6 +127,9 @@ func readTeamEmbedWorkspaceFiles(root string) ([]AgentFile, error) {
 	})
 	if err != nil {
 		return nil, fmt.Errorf("walk team embed workspace %s: %w", root, err)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("team embed workspace empty %s (check Docker .md allowlist for team_embed)", root)
 	}
 	return out, nil
 }
