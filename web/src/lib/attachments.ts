@@ -8,12 +8,43 @@ export const QQ_ATTACH_MAX_BYTES = 20 * 1024 * 1024
 
 export const SITE_ATTACH_MAX_MIB = 50
 
-/** True when mime or filename looks like an image (preview as thumb). */
-export function isImageAttachment(im: Pick<ClarifyImage, 'mimeType' | 'name'> | { mimeType?: string; name?: string }): boolean {
+/** True when a URL itself is an image data URL or http(s) image address. */
+export function isLikelyImageUrl(url: string): boolean {
+  const u = (url || '').trim()
+  if (!u) return false
+  if (u.toLowerCase().startsWith('data:image/')) return true
+  return /^https?:\/\//i.test(u) && /\.(png|jpe?g|gif|webp|bmp|svg)(?:\?|#|$)/i.test(u)
+}
+
+/**
+ * Infer mime from a restored image URL (data:image/… or http(s) with ext).
+ * Bare http(s) imageURLs (no ext) default to image/png so thumbs stay previewable.
+ */
+export function inferImageMimeFromUrl(url: string): string {
+  const u = (url || '').trim()
+  if (!u) return ''
+  const dataMatch = /^data:(image\/[a-z0-9.+-]+)/i.exec(u)
+  if (dataMatch) return dataMatch[1].toLowerCase()
+  const extMatch = /\.(png|jpe?g|gif|webp|bmp|svg)(?:\?|#|$)/i.exec(u)
+  if (extMatch) {
+    const ext = extMatch[1].toLowerCase()
+    if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg'
+    if (ext === 'svg') return 'image/svg+xml'
+    return `image/${ext}`
+  }
+  if (/^https?:\/\//i.test(u)) return 'image/png'
+  return ''
+}
+
+/** True when mime, filename, or url looks like an image (preview as thumb). */
+export function isImageAttachment(
+  im: Pick<ClarifyImage, 'mimeType' | 'name'> | { mimeType?: string; name?: string; url?: string },
+): boolean {
   const mime = (im.mimeType || '').toLowerCase()
   if (mime.startsWith('image/')) return true
   const name = (im.name || '').toLowerCase()
-  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name)
+  if (/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name)) return true
+  return isLikelyImageUrl('url' in im ? String(im.url || '') : '')
 }
 
 /** Display label: original name, else fallback. */

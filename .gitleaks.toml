@@ -8,7 +8,9 @@ title = "approving gitleaks"
 useDefault = true
 
 [allowlist]
-description = "WorkflowApiTab API docs: curl Authorization examples use placeholder YOUR_API_KEY"
+description = "Confirmed placeholders and public model identifiers that resemble API keys"
 regexes = [
   '''YOUR_API_KEY''',
+  '''cursor-grok-4\.5-high-fast''',
+  '''gpt-5\.6-sol-medium''',
 ]

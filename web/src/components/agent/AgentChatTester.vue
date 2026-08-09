@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
+import ChatImageThumb from '@/components/ui/ChatImageThumb.vue'
+import ChatImagePreviewModal from '@/components/ui/ChatImagePreviewModal.vue'
 import ReposEditor, { type RepoRow } from '@/components/ReposEditor.vue'
 import AcpStatusPill from '@/components/run/AcpStatusPill.vue'
 import { renderMarkdown } from '@/lib/markdown'
@@ -16,8 +18,11 @@ import {
   findOversizedAttachments,
   formatSelectRejectMessage,
   formatSendRejectMessage,
+  inferImageMimeFromUrl,
   isImageAttachment,
 } from '@/lib/attachments'
+import { chatImageSrc } from '@/lib/compositeText'
+import { useChatImagePreview } from '@/lib/useChatImagePreview'
 
 // `attachId` attaches to an existing sandbox (skips the create flow) — used by
 // the sandbox console's ACP tab. `embedded` hides the internal header/controls
@@ -31,6 +36,7 @@ const props = defineProps<{
 }>()
 
 const { t, te } = useI18n()
+const { preview: imagePreview, openChatImagePreview, closeChatImagePreview } = useChatImagePreview()
 
 type Tool = { id: string; title: string; status: string }
 type ImageAtt = { data: string; mimeType: string; url: string; name?: string }
@@ -396,7 +402,9 @@ function rebuildTurnsFromFrames(events: any[]): Turn[] {
           tools: [],
           plan: [],
           streaming: false,
-          images: urls.length ? urls.map((u) => ({ url: u, data: '', mimeType: '' })) : undefined,
+          images: urls.length
+            ? urls.map((u) => ({ url: u, data: '', mimeType: inferImageMimeFromUrl(u) }))
+            : undefined,
         })
         newAgent()
       }
@@ -755,11 +763,16 @@ const toolIcon: Record<string, string> = { completed: 'check', failed: 'close', 
         <div v-if="turn.role === 'user'" class="max-w-[80%] space-y-1.5">
           <div v-if="turn.images && turn.images.length" class="flex flex-wrap justify-end gap-1.5">
             <template v-for="(im, ii) in turn.images" :key="ii">
-              <img
+              <ChatImageThumb
                 v-if="isImageAttachment(im)"
-                :src="im.url"
-                class="h-20 w-20 rounded-md border border-line object-cover"
+                mode="previewable"
+                size="md"
+                thumb-class="rounded-md"
+                :src="chatImageSrc(im)"
+                :label="attachmentDisplayName(im, ii)"
                 :alt="attachmentDisplayName(im, ii)"
+                test-id="tester-history-image-thumb"
+                @preview="openChatImagePreview(chatImageSrc(im), attachmentDisplayName(im, ii))"
               />
               <div
                 v-else
@@ -842,11 +855,16 @@ const toolIcon: Record<string, string> = { completed: 'check', failed: 'close', 
       <!-- pending attachments -->
       <div v-if="attachments.length" class="mb-2 flex flex-wrap gap-1.5">
         <div v-for="(im, ii) in attachments" :key="ii" class="relative">
-          <img
+          <ChatImageThumb
             v-if="isImageAttachment(im)"
-            :src="im.url"
-            class="h-14 w-14 rounded-md border border-line object-cover"
+            mode="previewable"
+            size="sm"
+            thumb-class="rounded-md"
+            :src="chatImageSrc(im)"
+            :label="attachmentDisplayName(im, ii)"
             :alt="attachmentDisplayName(im, ii)"
+            test-id="tester-draft-image-thumb"
+            @preview="openChatImagePreview(chatImageSrc(im), attachmentDisplayName(im, ii))"
           />
           <div
             v-else
@@ -859,7 +877,7 @@ const toolIcon: Record<string, string> = { completed: 'check', failed: 'close', 
           </div>
           <button
             class="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-err text-white"
-            @click="removeAttachment(ii)"
+            @click.stop="removeAttachment(ii)"
           ><Icon name="close" :size="9" /></button>
         </div>
       </div>
@@ -891,6 +909,14 @@ const toolIcon: Record<string, string> = { completed: 'check', failed: 'close', 
         >{{ t('pages.agentChatTester.send') }}</AppButton>
       </div>
     </div>
+
+    <ChatImagePreviewModal
+      :open="!!imagePreview"
+      :src="imagePreview?.src || ''"
+      :label="imagePreview?.label || ''"
+      test-id-prefix="tester-image-preview"
+      @close="closeChatImagePreview"
+    />
 
     <AppModal :open="confirmDestroy" :title="t('pages.agentChatTester.destroyTitle')" :width="420" @close="confirmDestroy = false">
       <div class="space-y-3 text-sm text-txt2">

@@ -12,6 +12,9 @@ import AgentOrgSidebar from '@/components/agent/AgentOrgSidebar.vue'
 import AgentChatTester from '@/components/agent/AgentChatTester.vue'
 import AgentDataPanel, { type DataSubTab } from '@/components/agent/AgentDataPanel.vue'
 import AgentGitGuide from '@/components/agent/AgentGitGuide.vue'
+import EnvCredentialHelpModal, {
+  type EnvCredentialHelpSection,
+} from '@/components/agent/EnvCredentialHelpModal.vue'
 import AgentCreateWizard from '@/components/agent/AgentCreateWizard.vue'
 import { api, type Agent, type AgentOrg, type MCPServer, type AgentPrompts, type PlatformRuleMeta } from '@/lib/api'
 import { useBreakpoint } from '@/lib/useBreakpoint'
@@ -316,6 +319,14 @@ function selectAcpBackend(id: BackendId) {
 }
 
 const currentAuthHint = computed(() => BACKEND_AUTH_HINTS[draft.value?.acpBackend || 'cursor'])
+
+const envHelpOpen = ref(false)
+const envHelpSection = ref<EnvCredentialHelpSection>('inject')
+
+function openEnvHelp(section: EnvCredentialHelpSection) {
+  envHelpSection.value = section
+  envHelpOpen.value = true
+}
 
 function upsertEnv(key: string, value: string) {
   if (!draft.value) return
@@ -1848,9 +1859,8 @@ onBeforeUnmount(() => {
   <div class="flex h-full min-h-0 flex-col overflow-hidden">
     <div
       class="mb-5 flex shrink-0 gap-4"
-      :class="isMobile ? 'flex-col items-stretch' : 'items-end justify-between'"
+      :class="isMobile ? 'flex-col items-stretch' : 'justify-end'"
     >
-      <p class="max-w-3xl text-sm text-txt3">{{ t('pages.agentStudio.subtitle', { configRoot: draft?.layout?.configRoot || DEFAULT_CONFIG_ROOT }) }}</p>
       <div class="flex shrink-0 gap-2" :class="isMobile ? 'flex-col' : 'items-center'">
         <AppButton
           variant="outline"
@@ -2336,7 +2346,15 @@ onBeforeUnmount(() => {
         <!-- env -->
         <div v-else-if="tab === 'env'" class="flex min-h-0 flex-1 flex-col">
           <div class="flex items-center gap-2 border-b border-line px-4 py-2">
-            <p class="flex-1 text-[11px] text-txt3">{{ t('pages.agentStudio.env.hint') }}</p>
+            <button
+              type="button"
+              class="bg-transparent p-0 text-[12px] text-accent-2 underline underline-offset-[3px] hover:text-[#c4b5fd] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              data-test="env-help-inject"
+              @click="openEnvHelp('inject')"
+            >
+              {{ t('pages.agentStudio.envHelp.link') }}
+            </button>
+            <span class="flex-1" />
             <button class="rounded border border-line px-2 py-1 text-[11px] text-txt2 hover:border-line-strong" @click="toggleEnvRaw">{{ envRaw ? t('pages.agentStudio.mcp.formEdit') : t('pages.agentStudio.mcp.rawJson') }}</button>
           </div>
 
@@ -2350,12 +2368,21 @@ onBeforeUnmount(() => {
               :upsert-env="upsertEnv"
               :credential-type="draft.gitCredentialType"
               @update:credential-type="draft.gitCredentialType = $event"
+              @help="openEnvHelp('git')"
             />
             <div class="mb-3 rounded-lg border border-line bg-base/50 p-3 text-[11px] leading-6 text-txt3">
-              <div class="mb-1 font-medium text-txt2">{{ t('pages.agentStudio.env.backendAuthTitle') }}</div>
-              <p>{{ t('pages.agentStudio.env.backendAuthIntro', { backend: draft.acpBackend }) }}</p>
-              <p class="mt-1 font-mono text-accent-2">{{ currentAuthHint.key }}<span v-if="currentAuthHint.alt"> / {{ currentAuthHint.alt }}</span></p>
-              <p class="mt-1">{{ currentAuthHint.note }} — {{ t('pages.agentStudio.env.backendAuthMasked') }}</p>
+              <div class="mb-1 flex items-center justify-between gap-2">
+                <div class="font-medium text-txt2">{{ t('pages.agentStudio.env.backendAuthTitle') }}</div>
+                <button
+                  type="button"
+                  class="bg-transparent p-0 text-[12px] text-accent-2 underline underline-offset-[3px] hover:text-[#c4b5fd] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  data-test="env-help-acp"
+                  @click="openEnvHelp('acp')"
+                >
+                  {{ t('pages.agentStudio.envHelp.link') }}
+                </button>
+              </div>
+              <p class="font-mono text-accent-2">{{ currentAuthHint.key }}<span v-if="currentAuthHint.alt"> / {{ currentAuthHint.alt }}</span></p>
             </div>
             <template v-for="(e, i) in draft.env" :key="i">
               <div v-if="!isManagedRegionKey(e.k)" class="flex items-center gap-1.5">
@@ -3061,6 +3088,13 @@ onBeforeUnmount(() => {
       :existing-names="agents.map((a) => a.name)"
       @close="showCreateWizard = false"
       @created="onWizardCreated"
+    />
+
+    <EnvCredentialHelpModal
+      :open="envHelpOpen"
+      :section="envHelpSection"
+      :backend="draft?.acpBackend || 'cursor'"
+      @close="envHelpOpen = false"
     />
 
     <AppModal :open="showProjectSwitch" :title="t('pages.agentStudio.project.switchTitle')" :width="460" @close="cancelProjectChange">

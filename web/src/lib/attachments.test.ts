@@ -6,7 +6,9 @@ import {
   findOversizedAttachments,
   formatSelectRejectMessage,
   formatSendRejectMessage,
+  inferImageMimeFromUrl,
   isImageAttachment,
+  isLikelyImageUrl,
 } from './attachments'
 
 describe('attachments helpers', () => {
@@ -15,6 +17,17 @@ describe('attachments helpers', () => {
     expect(isImageAttachment({ mimeType: 'application/pdf', name: 'doc.pdf' })).toBe(false)
     expect(attachmentDisplayName({ data: 'x', mimeType: 'application/pdf', name: '需求.pdf' })).toBe('需求.pdf')
     expect(attachmentDisplayName({ data: 'x', mimeType: 'application/pdf' }, 2)).toBe('attachment-3')
+  })
+
+  it('treats data:image / http(s) image URLs as images even with empty mimeType', () => {
+    expect(isLikelyImageUrl('data:image/png;base64,AAA')).toBe(true)
+    expect(isLikelyImageUrl('https://cdn.example/shot.png')).toBe(true)
+    expect(isLikelyImageUrl('https://cdn.example/note.pdf')).toBe(false)
+    expect(isImageAttachment({ mimeType: '', name: '', url: 'data:image/jpeg;base64,BBB' })).toBe(true)
+    expect(isImageAttachment({ mimeType: '', name: '', url: 'https://x.test/a.webp' })).toBe(true)
+    expect(inferImageMimeFromUrl('data:image/jpeg;base64,BBB')).toBe('image/jpeg')
+    expect(inferImageMimeFromUrl('https://x.test/a.webp')).toBe('image/webp')
+    expect(inferImageMimeFromUrl('https://x.test/screenshot')).toBe('image/png')
   })
 
   it('detects oversized base64 payloads for send-stage gate', () => {

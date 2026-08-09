@@ -171,17 +171,17 @@ defineExpose({ chartOptions, chartData })
       data-testid="token-trend-legend"
       class="mb-1 flex flex-wrap items-center gap-3 text-[11px] text-txt3"
     >
-      <span class="inline-flex items-center gap-1.5">
+      <span class="inline-flex items-center gap-1.5" data-kind="workflow">
         <i class="inline-block h-2 w-2 rounded-sm" :style="{ background: WF_COLOR }" />
-        workflow
+        {{ t('pages.board.tokenStats.workflow') }}
       </span>
-      <span class="inline-flex items-center gap-1.5">
+      <span class="inline-flex items-center gap-1.5" data-kind="pm">
         <i
           class="inline-block h-0 w-3 border-t-2 border-dashed"
           :style="{ borderColor: PM_COLOR }"
           aria-hidden="true"
         />
-        pm
+        {{ t('pages.board.tokenStats.pm') }}
       </span>
     </div>
     <div data-testid="token-trend-chart" class="h-[calc(100%-22px)] w-full">
@@ -197,21 +197,21 @@ defineExpose({ chartOptions, chartData })
         {{ formatBucketLabel(tipBucket.bucket, bucketWidth) }}
         · {{ fmtTokenCount(tipBucket.total) }}
       </div>
-      <div class="flex justify-between gap-3 text-[#c7cbd4]">
+      <div class="flex justify-between gap-3 text-[#c7cbd4]" data-tip-row="workflow">
         <span class="inline-flex items-center gap-1.5">
           <i class="inline-block h-2 w-2 rounded-sm" :style="{ background: WF_COLOR }" />
-          workflow
+          {{ t('pages.board.tokenStats.workflow') }}
         </span>
         <b class="font-normal tabular-nums text-white">{{ fmtTokenCount(tipBucket.workflowTotal || 0) }}</b>
       </div>
-      <div class="flex justify-between gap-3 text-[#c7cbd4]">
+      <div class="flex justify-between gap-3 text-[#c7cbd4]" data-tip-row="pm">
         <span class="inline-flex items-center gap-1.5">
           <i
             class="inline-block h-0 w-3 border-t-2 border-dashed"
             :style="{ borderColor: PM_COLOR }"
             aria-hidden="true"
           />
-          pm
+          {{ t('pages.board.tokenStats.pm') }}
         </span>
         <b class="font-normal tabular-nums text-white">{{ fmtTokenCount(tipBucket.pmTotal || 0) }}</b>
       </div>

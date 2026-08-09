@@ -75,4 +75,17 @@ describe('AppModal', () => {
     expect(wrapper.emitted('close')).toHaveLength(1)
     wrapper.unmount()
   })
+
+  it('exposes dialog semantics with accessible name from title', () => {
+    const wrapper = mountModal({ open: true, title: '图片预览 · 看板.png' })
+    const dialog = document.body.querySelector('[role="dialog"]')
+    expect(dialog).toBeTruthy()
+    expect(dialog?.getAttribute('aria-modal')).toBe('true')
+    const labelledBy = dialog?.getAttribute('aria-labelledby')
+    expect(labelledBy).toBeTruthy()
+    const titleEl = document.getElementById(labelledBy!)
+    expect(titleEl?.textContent).toContain('图片预览 · 看板.png')
+    wrapper.unmount()
+  })
 })
+

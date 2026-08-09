@@ -1758,3 +1758,138 @@ describe('PmLeaderChat tail window + lazyload', () => {
     wrapper.unmount()
   })
 })
+
+const PreviewAppModalStub = {
+  props: ['open', 'title', 'width'],
+  emits: ['close'],
+  template: `
+    <div v-if="open" data-testid="pm-image-preview-modal">
+      <div data-testid="pm-image-preview-title">{{ title }}</div>
+      <button type="button" data-testid="pm-image-preview-close" @click="$emit('close')">×</button>
+      <button type="button" data-testid="pm-image-preview-backdrop" @click="$emit('close')">backdrop</button>
+      <slot />
+    </div>
+  `,
+}
+
+function mountChatForPreview() {
+  const i18n = createI18n({
+    legacy: false,
+    locale: 'zh-CN',
+    messages: { 'zh-CN': { ...common, ...pages } },
+  })
+  return mount(PmLeaderChat, {
+    props: {
+      projectId: 'proj-1',
+      binding: {
+        enabled: true,
+        agentAvailable: true,
+        agentConfigRef: 'agent-1',
+        aclNote: '',
+      },
+    },
+    global: {
+      plugins: [i18n],
+      stubs: { Icon: true, CitationCard: true, AppModal: PreviewAppModalStub },
+    },
+  })
+}
+
+describe('PmLeaderChat image preview (f1/f2)', () => {
+  const originalWS = globalThis.WebSocket
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    // @ts-expect-error test stub
+    globalThis.WebSocket = MockWebSocket
+    apiMocks.listPmThreads.mockResolvedValue({ items: [{ id: 'thr-1', title: '会话' }] })
+    apiMocks.listPmMessages.mockResolvedValue({
+      items: [
+        {
+          id: 'u1',
+          role: 'user',
+          content: '看下这两张',
+          status: 'ok',
+          createdAt: '2026-08-09T00:00:00Z',
+          images: [
+            { data: 'AAAAhist', mimeType: 'image/png', name: '看板截图.png' },
+            { data: 'BBBBhist', mimeType: 'image/png', name: '表单截图.png' },
+            { data: 'DOCDATA', mimeType: 'application/pdf', name: '说明.docx' },
+          ],
+        },
+      ],
+    })
+    apiMocks.getPmDraft.mockResolvedValue({ draft: null, live: false, hasFinal: false })
+    apiMocks.ensurePmSandbox.mockResolvedValue({ sandbox: { id: 1, status: 'running' }, preamble: '' })
+    apiMocks.getSandbox.mockResolvedValue({ id: 1, status: 'running' })
+  })
+
+  afterEach(() => {
+    globalThis.WebSocket = originalWS
+  })
+
+  it('opens history thumb preview, Esc stays, no gallery, no unavailable overlay', async () => {
+    const wrapper = mountChatForPreview()
+    await flushPromises()
+    const thumbs = wrapper.findAll('[data-testid="pm-history-image-thumb"]')
+    expect(thumbs).toHaveLength(2)
+    expect(thumbs[0].text()).toContain('点击放大')
+    expect(thumbs[0].text()).not.toContain('不可预览')
+    expect(wrapper.find('[data-testid="pm-history-file-chip"]').exists()).toBe(true)
+
+    await thumbs[1].trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="pm-image-preview-title"]').text()).toBe('图片预览 · 表单截图.png')
+    expect(wrapper.find('[data-testid="pm-image-preview-img"]').attributes('src')).toContain('BBBBhist')
+    expect(wrapper.find('[data-testid="pm-image-preview-prev"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="pm-image-preview-next"]').exists()).toBe(false)
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(wrapper.find('[data-testid="pm-image-preview-modal"]').exists()).toBe(true)
+
+    await wrapper.find('[data-testid="pm-image-preview-close"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="pm-image-preview-modal"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('draft preview closes without dropping attachment; load-failed still closes', async () => {
+    const wrapper = mountChatForPreview()
+    await flushPromises()
+
+    class MockFR {
+      result = 'data:image/png;base64,DRAFTPM'
+      onload: ((this: FileReader, ev: ProgressEvent<FileReader>) => unknown) | null = null
+      readAsDataURL() {
+        queueMicrotask(() => this.onload?.call(this as unknown as FileReader, {} as ProgressEvent<FileReader>))
+      }
+    }
+    vi.stubGlobal('FileReader', MockFR)
+
+    const fileInput = wrapper.find('input[type="file"]')
+    const file = new File(['x'], '待发截图.png', { type: 'image/png' })
+    Object.defineProperty(fileInput.element, 'files', { configurable: true, value: [file] })
+    await fileInput.trigger('change')
+    await flushPromises()
+
+    const draft = wrapper.find('[data-testid="pm-draft-image-thumb"]')
+    expect(draft.exists()).toBe(true)
+    expect(draft.text()).toContain('点击放大')
+    expect(draft.text()).not.toContain('不可预览')
+    await draft.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="pm-image-preview-title"]').text()).toBe('图片预览 · 待发截图.png')
+
+    await wrapper.find('[data-testid="pm-image-preview-img"]').trigger('error')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="pm-image-preview-failed"]').text()).toContain('图片加载失败')
+    await wrapper.find('[data-testid="pm-image-preview-close"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="pm-image-preview-modal"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="pm-draft-image-thumb"]').exists()).toBe(true)
+    vi.unstubAllGlobals()
+    wrapper.unmount()
+  })
+})
