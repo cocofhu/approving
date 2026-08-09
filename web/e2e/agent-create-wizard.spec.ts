@@ -51,8 +51,22 @@ test('新建 Agent 五步向导浏览器验收', async ({ page }) => {
   const gitBody = await page.locator('.step-pane').innerText()
   expect(gitBody).not.toContain('未逐仓解析')
   expect(gitBody).not.toContain('无法在此页面逐仓解析')
+  expect(gitBody).not.toContain('不会验证变量引用的实际值')
+  expect(gitBody).not.toContain('远端 clone / push 权限')
   await expect(page.getByText(/GitHub|GitLab|SSH/).first()).toBeVisible()
+  await expect(page.locator('[data-test="git-help-link"]')).toBeVisible()
   await page.screenshot({ path: path.join(OUT, '04-git.png'), fullPage: true })
+
+  await page.locator('[data-test="git-help-link"]').click()
+  await expect(page.getByText('环境变量与凭据')).toBeVisible()
+  await expect(page.getByText(/GITHUB_TOKEN|凭据可通过环境变量/)).toBeVisible()
+  await expect(page.getByText(/不会验证变量引用的实际值|远端 clone/)).toBeVisible()
+  await expect(page.locator('.wiz-rail')).toBeVisible()
+  await expect(page.locator('.sec-head h3')).toHaveText('Git')
+  await page.locator('[data-test="env-help-got-it"]').click()
+  await expect(page.getByText('环境变量与凭据')).toHaveCount(0)
+  await expect(page.locator('.wiz-rail')).toBeVisible()
+  await expect(page.locator('.sec-head h3')).toHaveText('Git')
 
   // Select GitLab + add recommended vars (runtime ${vars.repos}) and assert no dead-end badge.
   await page.getByRole('button', { name: /调整类型/ }).click()

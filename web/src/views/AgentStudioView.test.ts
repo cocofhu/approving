@@ -1017,3 +1017,113 @@ describe('AgentStudio mobile core path', () => {
     wrapper.unmount()
   })
 })
+
+describe('AgentStudio env credential help', () => {
+  const HelpAppModalStub = defineComponent({
+    props: { open: Boolean, title: String, width: Number },
+    emits: ['close'],
+    template:
+      '<div v-if="open" data-test="env-help-modal" :data-width="width">' +
+      '<h2>{{ title }}</h2><div data-test="env-help-scroll"><slot /></div><slot name="footer" />' +
+      '</div>',
+  })
+  const GitGuideHelpStub = defineComponent({
+    emits: ['help', 'update:credentialType'],
+    template:
+      '<div data-test="git-guide"><button type="button" data-test="git-help-emit" @click="$emit(\'help\', \'git\')">帮助</button></div>',
+  })
+
+  async function mountStudioWithHelp() {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const router = await createStudioRouter()
+    return mount(AgentStudioView, {
+      global: {
+        plugins: [i18n, router],
+        stubs: {
+          AppButton: ButtonStub,
+          Icon: true,
+          AppModal: HelpAppModalStub,
+          CodeEditor: CodeEditorStub,
+          MarkdownSplitEditor: true,
+          ExplorerContextMenu: true,
+          AgentChatTester: true,
+          AgentGitGuide: GitGuideHelpStub,
+          AgentCreateWizard: true,
+          AgentOrgSidebar: true,
+          AgentDataPanel: true,
+        },
+      },
+    })
+  }
+
+  async function openEnvTab(wrapper: Awaited<ReturnType<typeof mountStudioWithHelp>>) {
+    await wrapper.findAll('button').find((item) => item.text().startsWith('环境变量'))!.trigger('click')
+    await flushPromises()
+  }
+
+  it('moves long copy into one help modal and jumps inject / git / acp', async () => {
+    mocks.listAgents.mockResolvedValue([agent('public')])
+    const wrapper = await mountStudioWithHelp()
+    await flushPromises()
+    await openEnvTab(wrapper)
+
+    expect(wrapper.get('[data-test="env-help-inject"]').text()).toBe('帮助')
+    expect(wrapper.get('[data-test="env-help-acp"]').text()).toBe('帮助')
+    expect(wrapper.text()).toContain('APPROVING_CODEBUDDY_API_KEY')
+    expect(wrapper.text()).not.toContain('环境变量会注入该 Agent 的沙箱容器')
+    expect(wrapper.text()).not.toContain('请在下方添加对应 Key')
+    expect(wrapper.text()).not.toContain('保存后写入 agent.json')
+
+    await wrapper.get('[data-test="env-help-inject"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('[data-test="env-help-modal"]')).toHaveLength(1)
+    expect(wrapper.get('[data-test="env-help-modal"]').attributes('data-width')).toBe('640')
+    expect(wrapper.get('[data-test="env-help-modal"]').text()).toContain('环境变量与凭据')
+    expect(wrapper.get('[data-help-chip="inject"]').classes().join(' ')).toContain('border-accent')
+    expect(wrapper.get('[data-test="env-help-modal"]').text()).toContain('环境变量会注入该 Agent 的沙箱容器')
+
+    await wrapper.get('[data-test="git-help-emit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('[data-test="env-help-modal"]')).toHaveLength(1)
+    expect(wrapper.get('[data-help-chip="git"]').classes().join(' ')).toContain('border-accent')
+    expect(wrapper.get('[data-test="env-help-modal"]').text()).toContain('不会验证变量引用的实际值')
+
+    await wrapper.get('[data-test="env-help-acp"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('[data-test="env-help-modal"]')).toHaveLength(1)
+    expect(wrapper.get('[data-help-chip="acp"]').classes().join(' ')).toContain('border-accent')
+    expect(wrapper.get('[data-test="env-help-modal"]').text()).toContain('CodeBuddy ACP 鉴权')
+    wrapper.unmount()
+  })
+
+  it('keeps unsaved env draft after closing help', async () => {
+    mocks.listAgents.mockResolvedValue([agent('public')])
+    const wrapper = await mountStudioWithHelp()
+    await flushPromises()
+    await openEnvTab(wrapper)
+
+    await wrapper.findAll('button').find((item) => item.text() === '添加环境变量')!.trigger('click')
+    await flushPromises()
+    const keyInput = wrapper.findAll('input').find((el) => {
+      const node = el.element as HTMLInputElement
+      return node.placeholder === 'KEY' && !node.readOnly && node.value === ''
+    })!
+    await keyInput.setValue('MY_DRAFT_KEY')
+    expect((keyInput.element as HTMLInputElement).value).toBe('MY_DRAFT_KEY')
+
+    await wrapper.get('[data-test="env-help-inject"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="env-help-modal"]').exists()).toBe(true)
+    await wrapper.get('[data-test="env-help-got-it"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="env-help-modal"]').exists()).toBe(false)
+    const kept = wrapper.findAll('input').find((el) => (el.element as HTMLInputElement).value === 'MY_DRAFT_KEY')
+    expect(kept).toBeTruthy()
+    wrapper.unmount()
+  })
+})

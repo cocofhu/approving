@@ -1269,6 +1269,16 @@
         "add": "添加环境变量",
         "parseError": "环境变量 JSON 无法解析:"
       },
+      "envHelp": {
+        "link": "帮助",
+        "title": "环境变量与凭据",
+        "gotIt": "知道了",
+        "chip": {
+          "inject": "注入说明",
+          "git": "Git 凭据",
+          "acp": "ACP 鉴权"
+        }
+      },
       "region": {
         "title": "服务站点",
         "domestic": "国内站",

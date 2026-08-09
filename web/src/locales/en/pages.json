@@ -1269,6 +1269,16 @@
         "add": "Add env var",
         "parseError": "Invalid env JSON:"
       },
+      "envHelp": {
+        "link": "Help",
+        "title": "Env & credentials",
+        "gotIt": "Got it",
+        "chip": {
+          "inject": "Injection",
+          "git": "Git credentials",
+          "acp": "ACP auth"
+        }
+      },
       "region": {
         "title": "Service site",
         "domestic": "China",
