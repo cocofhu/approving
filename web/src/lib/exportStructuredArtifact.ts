@@ -4,6 +4,12 @@ import { jsPDF } from 'jspdf'
 /** Default wait for test_result screenshot placeholders before exporting. */
 export const TEST_SCREENSHOT_WAIT_MS = 5000
 
+/**
+ * Outer padding injected only on the html-to-image clone (not the live preview DOM).
+ * Gold standard: page.html「改后·16px」; matches inline preview ancestor p-4.
+ */
+export const EXPORT_OUTER_PADDING_PX = 16
+
 /** Soft browser canvas limits; downscale when exceeded. */
 const MAX_CANVAS_SIDE = 16384
 const MAX_CANVAS_AREA = 268_435_456
@@ -71,7 +77,7 @@ export async function waitForTestScreenshots(
   })
 }
 
-function computePixelRatio(width: number, height: number): number {
+export function computePixelRatio(width: number, height: number): number {
   let pixelRatio = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
   while (
     pixelRatio > 0.25 &&
@@ -84,25 +90,45 @@ function computePixelRatio(width: number, height: number): number {
   return Math.max(0.25, pixelRatio)
 }
 
+/** Content box vs export canvas size (content + 2× outer padding). */
+export function measureStructuredExportBox(el: HTMLElement): {
+  contentWidth: number
+  contentHeight: number
+  exportWidth: number
+  exportHeight: number
+  backgroundColor: string
+} {
+  const backgroundColor = resolveThemeBackgroundColor()
+  const contentWidth = Math.max(el.scrollWidth, el.offsetWidth, 1)
+  const contentHeight = Math.max(el.scrollHeight, el.offsetHeight, 1)
+  return {
+    contentWidth,
+    contentHeight,
+    exportWidth: contentWidth + 2 * EXPORT_OUTER_PADDING_PX,
+    exportHeight: contentHeight + 2 * EXPORT_OUTER_PADDING_PX,
+    backgroundColor,
+  }
+}
+
 /** Capture the full scrollable box of `el` (not just the visible viewport). */
 export async function captureStructuredElement(el: HTMLElement): Promise<HTMLCanvasElement> {
-  const backgroundColor = resolveThemeBackgroundColor()
-  const width = Math.max(el.scrollWidth, el.offsetWidth, 1)
-  const height = Math.max(el.scrollHeight, el.offsetHeight, 1)
-  const pixelRatio = computePixelRatio(width, height)
+  const { exportWidth, exportHeight, backgroundColor } = measureStructuredExportBox(el)
+  const pixelRatio = computePixelRatio(exportWidth, exportHeight)
 
   return toCanvas(el, {
     backgroundColor,
-    width,
-    height,
-    canvasWidth: Math.ceil(width * pixelRatio),
-    canvasHeight: Math.ceil(height * pixelRatio),
+    width: exportWidth,
+    height: exportHeight,
+    canvasWidth: Math.ceil(exportWidth * pixelRatio),
+    canvasHeight: Math.ceil(exportHeight * pixelRatio),
     pixelRatio,
     style: {
       overflow: 'visible',
-      height: `${height}px`,
+      height: `${exportHeight}px`,
       maxHeight: 'none',
-      width: `${width}px`,
+      width: `${exportWidth}px`,
+      padding: `${EXPORT_OUTER_PADDING_PX}px`,
+      boxSizing: 'border-box',
     },
   })
 }
@@ -116,27 +142,149 @@ function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   })
 }
 
-/** Build a multi-page A4 PDF from a full-height canvas image (bitmap slices). */
-export function canvasToPdfBlob(canvas: HTMLCanvasElement): Blob {
-  const imgData = canvas.toDataURL('image/png')
-  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-  const pageWidth = pdf.internal.pageSize.getWidth()
-  const pageHeight = pdf.internal.pageSize.getHeight()
-  const imgWidth = pageWidth
-  const imgHeight = (canvas.height * imgWidth) / Math.max(canvas.width, 1)
+export type CanvasToPdfOptions = {
+  /** CSS width of the export canvas (content + 2× outer padding). */
+  exportCssWidth: number
+  /** Theme background used to fill page margins (must match PNG padding). */
+  backgroundColor: string
+  /** Outer padding in CSS px; defaults to EXPORT_OUTER_PADDING_PX. */
+  outerPaddingPx?: number
+}
 
-  let heightLeft = imgHeight
-  let position = 0
+export type PdfPageSlice = {
+  srcX: number
+  srcY: number
+  srcW: number
+  srcH: number
+  destX: number
+  destY: number
+  destW: number
+  destH: number
+}
 
-  pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
-  heightLeft -= pageHeight
+export type PdfPageLayout = {
+  marginMm: number
+  pageWidthMm: number
+  pageHeightMm: number
+  pageBmpWidth: number
+  pageBmpHeight: number
+  insetPx: number
+  slices: PdfPageSlice[]
+}
 
-  while (heightLeft > 0.5) {
-    position -= pageHeight
-    pdf.addPage()
-    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
-    heightLeft -= pageHeight
+/**
+ * Slice only the content region (excluding baked-in 16px outer padding) so every
+ * PDF page can be recomposed with the same inset margins. Do not feed the full
+ * padded canvas through negative-Y addImage — that keeps top padding on page 1
+ * and bottom padding on the last page only.
+ */
+export function computePdfPageLayout(
+  canvas: { width: number; height: number },
+  options: {
+    exportCssWidth: number
+    outerPaddingPx?: number
+    pageWidthMm?: number
+    pageHeightMm?: number
+  },
+): PdfPageLayout {
+  const outerPaddingPx = options.outerPaddingPx ?? EXPORT_OUTER_PADDING_PX
+  const pageWidthMm = options.pageWidthMm ?? 210
+  const pageHeightMm = options.pageHeightMm ?? 297
+  const exportCssWidth = Math.max(options.exportCssWidth, 1)
+  const canvasWidth = Math.max(canvas.width, 1)
+  const canvasHeight = Math.max(canvas.height, 1)
+
+  const marginMm = (outerPaddingPx / exportCssWidth) * pageWidthMm
+  const scale = canvasWidth / exportCssWidth
+  const padCanvas = Math.min(outerPaddingPx * scale, (canvasWidth - 1) / 2, (canvasHeight - 1) / 2)
+
+  const contentLeft = padCanvas
+  const contentTop = padCanvas
+  const contentWidth = Math.max(canvasWidth - 2 * padCanvas, 1)
+  const contentHeight = Math.max(canvasHeight - 2 * padCanvas, 1)
+
+  const pageBmpWidth = canvasWidth
+  const pageBmpHeight = Math.max(1, Math.round(pageBmpWidth * (pageHeightMm / pageWidthMm)))
+  const insetPx = padCanvas
+  const destWidth = Math.max(pageBmpWidth - 2 * insetPx, 1)
+  const destHeight = Math.max(pageBmpHeight - 2 * insetPx, 1)
+
+  const slices: PdfPageSlice[] = []
+  let remaining = contentHeight
+  let srcY = contentTop
+  while (remaining > 0.5 || slices.length === 0) {
+    const srcH = Math.min(remaining, destHeight)
+    slices.push({
+      srcX: contentLeft,
+      srcY,
+      srcW: contentWidth,
+      srcH,
+      destX: insetPx,
+      destY: insetPx,
+      destW: destWidth,
+      destH: srcH,
+    })
+    srcY += srcH
+    remaining -= srcH
+    if (remaining <= 0.5) break
   }
+
+  return {
+    marginMm,
+    pageWidthMm,
+    pageHeightMm,
+    pageBmpWidth,
+    pageBmpHeight,
+    insetPx,
+    slices,
+  }
+}
+
+function cssColorToCanvasFill(color: string): string {
+  const spaceRgb = color.match(/^rgba?\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)((?:\s*\/\s*[\d.]+)?)?\s*\)$/i)
+  if (spaceRgb) {
+    const alpha = spaceRgb[4]
+    if (alpha) return `rgba(${spaceRgb[1]}, ${spaceRgb[2]}, ${spaceRgb[3]}${alpha.replace('/', ',')})`
+    return `rgb(${spaceRgb[1]}, ${spaceRgb[2]}, ${spaceRgb[3]})`
+  }
+  return color
+}
+
+/**
+ * Build a multi-page A4 PDF: each page is a theme-filled bitmap with the content
+ * slice drawn into a 16px-equivalent inset rect (margins live in the bitmap so
+ * jsPDF's default white page never shows).
+ */
+export function canvasToPdfBlob(canvas: HTMLCanvasElement, options: CanvasToPdfOptions): Blob {
+  const layout = computePdfPageLayout(canvas, {
+    exportCssWidth: options.exportCssWidth,
+    outerPaddingPx: options.outerPaddingPx,
+  })
+  const fillStyle = cssColorToCanvasFill(options.backgroundColor)
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+
+  layout.slices.forEach((slice, index) => {
+    const pageCanvas = document.createElement('canvas')
+    pageCanvas.width = layout.pageBmpWidth
+    pageCanvas.height = layout.pageBmpHeight
+    const ctx = pageCanvas.getContext('2d')
+    if (!ctx) throw new Error('PDF page canvas 2d context unavailable')
+    ctx.fillStyle = fillStyle
+    ctx.fillRect(0, 0, layout.pageBmpWidth, layout.pageBmpHeight)
+    ctx.drawImage(
+      canvas,
+      slice.srcX,
+      slice.srcY,
+      slice.srcW,
+      slice.srcH,
+      slice.destX,
+      slice.destY,
+      slice.destW,
+      slice.destH,
+    )
+    if (index > 0) pdf.addPage()
+    pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG', 0, 0, layout.pageWidthMm, layout.pageHeightMm)
+  })
 
   return pdf.output('blob')
 }
@@ -152,6 +300,7 @@ export async function exportStructuredArtifact(
   options?: { screenshotWaitMs?: number },
 ): Promise<StructuredExportResult> {
   const incomplete = !(await waitForTestScreenshots(el, options?.screenshotWaitMs ?? TEST_SCREENSHOT_WAIT_MS))
+  const box = measureStructuredExportBox(el)
   const canvas = await captureStructuredElement(el)
   const filename = exportFilename(artifactName, format)
 
@@ -159,7 +308,10 @@ export async function exportStructuredArtifact(
     const blob = await canvasToPngBlob(canvas)
     triggerBlobDownload(filename, blob)
   } else {
-    const blob = canvasToPdfBlob(canvas)
+    const blob = canvasToPdfBlob(canvas, {
+      exportCssWidth: box.exportWidth,
+      backgroundColor: box.backgroundColor,
+    })
     triggerBlobDownload(filename, blob)
   }
 
