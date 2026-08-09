@@ -209,7 +209,6 @@
       "back": "全部项目",
       "notFound": "项目不存在或已删除",
       "tokenUsage": "Token 消耗",
-      "tokenUsageHint": "全部历史 · 含工作流与项目管理（上线后）",
       "tokenTipTitle": "用量细节",
       "tokenTipTotal": "合计",
       "tokenTipWorkflow": "工作流",

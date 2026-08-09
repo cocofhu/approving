@@ -59,7 +59,6 @@ describe('user-facing copy remediation keys', () => {
   it('user-facing product naming uses 项目管理 / Project Management, not PM', () => {
     const zhKeys = [
       'common.runTrigger.pmMcp',
-      'pages.projectDetail.tokenUsageHint',
       'pages.projectDetail.tokenTipPm',
       'pages.board.tokenStats.pm',
       'pages.projectDetail.pm.settingsHint',
@@ -83,7 +82,6 @@ describe('user-facing copy remediation keys', () => {
 
     const enKeys = [
       'common.runTrigger.pmMcp',
-      'pages.projectDetail.tokenUsageHint',
       'pages.projectDetail.tokenTipPm',
       'pages.board.tokenStats.pm',
       'pages.projectDetail.pm.settingsHint',
@@ -109,7 +107,8 @@ describe('user-facing copy remediation keys', () => {
 
     expect(zh.global.t('common.runTrigger.pmMcp')).toBe('项目管理 MCP')
     expect(en.global.t('common.runTrigger.pmMcp')).toBe('Project Management MCP')
-    expect(zh.global.t('pages.projectDetail.tokenUsageHint')).toContain('含工作流与项目管理')
+    expect(zh.global.t('pages.projectDetail.tokenTipWorkflow')).toBe('工作流')
+    expect(en.global.t('pages.projectDetail.tokenTipWorkflow')).toBe('Workflow')
 
     // Token source visible copy: 工作流 / Workflow + 项目管理 / Project Management (exact Title Case)
     expect(zh.global.t('pages.board.tokenStats.workflow')).toBe('工作流')
@@ -118,19 +117,14 @@ describe('user-facing copy remediation keys', () => {
     expect(en.global.t('pages.board.tokenStats.workflow')).toBe('Workflow')
     expect(en.global.t('pages.projectDetail.tokenTipWorkflow')).toBe('Workflow')
     expect(en.global.t('pages.board.tokenStats.pm')).toBe('Project Management')
-    expect(en.global.t('pages.projectDetail.tokenUsageHint')).toBe(
-      'All history · Workflow + Project Management (since launch)',
-    )
     // Do not verify Title Case with case-insensitive /workflow/ substring
     expect(en.global.t('pages.board.tokenStats.workflow')).not.toBe('workflow')
     expect(en.global.t('pages.projectDetail.tokenTipWorkflow')).not.toBe('workflow')
-    expect(en.global.t('pages.projectDetail.tokenUsageHint')).not.toMatch(/\bworkflow\b/)
 
     const tokenSourceNoPmKeys = [
       'pages.board.tokenStats.workflow',
       'pages.projectDetail.tokenTipWorkflow',
       'pages.board.tokenStats.pm',
-      'pages.projectDetail.tokenUsageHint',
     ] as const
     for (const key of tokenSourceNoPmKeys) {
       expect(zh.global.t(key), key).not.toMatch(/(?<![A-Za-z0-9_-])PM(?![A-Za-z0-9_-])/)
