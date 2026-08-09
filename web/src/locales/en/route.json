@@ -17,6 +17,7 @@
     "triggers": "Triggers",
     "settings": "Settings",
     "platformRules": "Platform rules",
-    "login": "Login"
+    "login": "Login",
+    "publicGateApproval": "External approval"
   }
 }

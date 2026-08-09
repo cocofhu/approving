@@ -20,6 +20,22 @@ export function detectLocale(): AppLocale {
   return 'zh-CN'
 }
 
+/** Public external page: zh* → 简体中文, otherwise English. Does not persist. */
+export function detectPublicLocale(): AppLocale {
+  const lang = (navigator.language || '').toLowerCase()
+  if (lang.startsWith('zh')) return 'zh-CN'
+  return 'en'
+}
+
+export async function applyPublicLocale(): Promise<void> {
+  const next = detectPublicLocale()
+  const messages = await loadLocaleMessages(next)
+  i18n.global.setLocaleMessage(next, messages)
+  i18n.global.locale.value = next
+  locale.value = next
+  applyHtmlLocale(next)
+}
+
 export const locale = ref<AppLocale>(detectLocale())
 
 function applyHtmlLocale(loc: AppLocale) {

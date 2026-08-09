@@ -18,6 +18,7 @@ import (
 	"github.com/cocofhu/approving/internal/config"
 	"github.com/cocofhu/approving/internal/database"
 	"github.com/cocofhu/approving/internal/engine"
+	"github.com/cocofhu/approving/internal/gateshare"
 	"github.com/cocofhu/approving/internal/handlers"
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/models"
@@ -79,6 +80,8 @@ func newHarness(t *testing.T) *harness {
 	eng.SetAuditRecorder(func(rec services.AuditRecord) {
 		auditSvc.Record(rec)
 	})
+	gateShareSvc := gateshare.NewService(db, auditSvc)
+	eng.SetShareRevoker(gateShareSvc)
 	t.Cleanup(func() {
 		eng.Close()
 		if sqlDB, err := db.DB(); err == nil {
@@ -113,8 +116,11 @@ func newHarness(t *testing.T) *harness {
 		Auth:          authSvc,
 		PlatformRules: platformRules,
 		Issues:        services.NewIssueService(db),
-		Audit:         auditSvc,
-		Onboarding:    services.NewOnboardingService(projectSvc, skills, wfSvc),
+		Audit:            auditSvc,
+		Onboarding:       services.NewOnboardingService(projectSvc, skills, wfSvc),
+		GateShare:        gateShareSvc,
+		GateShareNonces:  gateshare.NewNonceStore(),
+		GateShareLimiter: gateshare.NewIPLimiter(),
 	}
 	hn := &harness{r: router.New(h), h: h, db: db, host: host, auth: authSvc, fg: fg}
 	hn.cookie = hn.login(t)

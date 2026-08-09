@@ -19,6 +19,15 @@ When a step needs a human decision, the run stops at a **gate** until someone ap
 
 Approval moments are first-class — not an afterthought. Approving bets that agents can be fast while people still own the critical decisions.
 
+### Temporary approval links (human_gate)
+
+In the pending-gates inbox, only **human_gate** cards (and the visual preview toolbar when a page artifact exists) offer **Copy temp link**. A signed-in operator can mint a one-shot URL so an unauthenticated person can approve or reject once.
+
+- Default TTL is 24 hours (1h / 8h / 24h / 72h / 7d). At most one active link per instance.
+- The management panel masks the URL by default; Copy writes the full fragment URL. Regenerating immediately revokes the old link and reuses the same TTL tier; Revoke now disables the link. While the gate is still pending, revoked/expired links can be replaced; after the gate is decided the entry is read-only.
+- The external page needs no login. It shows only the title, description, redacted visual/structured artifacts, approve/reject, comment, and an optional name. It does not expose project, run, members, or internal URLs.
+- The token is bound to that one approval. Expiry, revoke, a successful submit, a login-side decision, or run completion invalidate unused links immediately.
+
 ## Real Docker sandboxes
 
 Agents are not black-box prompts on a laptop. They execute in Docker containers through the in-repo [sandbox-gateway](https://github.com/cocofhu/approving/tree/main/sandbox-gateway), talking over ACP.

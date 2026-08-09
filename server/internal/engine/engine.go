@@ -99,6 +99,9 @@ type Engine struct {
 	// app_preview pauses (PM auto-invoke). Engine never blocks on it.
 	gateAuto GateAutoInvoker
 
+	// shareRevoker invalidates unused GateShareLinks when a gate/run ends.
+	shareRevoker ShareLinkRevoker
+
 	// runNotify is an optional async observer for confirmed waiting_human /
 	// node-scoped failed transitions (QQ Run notify). Engine never blocks on it.
 	runNotify RunNotifier
@@ -165,6 +168,18 @@ func (e *Engine) MaxConcurrent() int { return e.sem.Limit() }
 // workflow variables into the run's vars.* namespace.
 func (e *Engine) SetProjectVarsLookup(fn func(workflowID string) []models.ProjectVariable) {
 	e.projectVarsLookup = fn
+}
+
+// ShareLinkRevoker invalidates unused temporary approval links.
+type ShareLinkRevoker interface {
+	RevokeUnusedForRun(runID string)
+	RevokeUnusedForGate(runID, nodeID string, iteration int)
+	RevokeUnusedForNode(runID, nodeID string)
+}
+
+// SetShareRevoker wires GateShareLink invalidation on resume/cancel/finish.
+func (e *Engine) SetShareRevoker(r ShareLinkRevoker) {
+	e.shareRevoker = r
 }
 
 // SetAuditRecorder wires project audit recording for run lifecycle / gate events.
@@ -1417,6 +1432,9 @@ func (e *Engine) finish(runID, status string) bool {
 		e.supersedePendingGates(runID, status)
 	}
 	if status == "completed" || status == "failed" || status == "cancelled" {
+		if e.shareRevoker != nil {
+			e.shareRevoker.RevokeUnusedForRun(runID)
+		}
 		// Release any live react session (and its sandbox) still held for this
 		// run. For completed runs the session is already closed, so this is a
 		// no-op; for cancel/fail while paused at a react node it prevents the

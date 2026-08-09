@@ -41,6 +41,19 @@ describe('user-facing copy remediation keys', () => {
     expect(zh.global.t('pages.workflowEditor.canvas.humanGateSubtitle')).not.toMatch(/ReAct/)
   })
 
+  it('gate share-link copy is bilingual without hardcoded jargon', () => {
+    expect(zh.global.t('pages.gatesInbox.share.copyLink')).toBe('复制临时链接')
+    expect(en.global.t('pages.gatesInbox.share.copyLink')).toBe('Copy temp link')
+    expect(zh.global.t('pages.gatesInbox.share.safetyHint')).toContain('信任')
+    expect(en.global.t('pages.gatesInbox.share.safetyHint')).toMatch(/trust/i)
+    expect(zh.global.t('pages.publicGate.badge')).toBe('外部审批')
+    expect(en.global.t('pages.publicGate.badge')).toBe('External approval')
+    expect(zh.global.t('pages.publicGate.approve')).toBe('批准')
+    expect(en.global.t('pages.publicGate.reject')).toBe('Reject')
+    expect(zh.global.t('pages.projectDetail.audit.callerExternal')).toBe('外部')
+    expect(en.global.t('pages.projectDetail.audit.callerExternal')).toBe('External')
+  })
+
   it('integrations subtitle is the live mcp key without env/template pile-up', () => {
     const sub = zh.global.t('mcp.integrations.subtitle')
     expect(sub).toContain('MCP')

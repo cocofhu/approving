@@ -22,7 +22,7 @@ export function actionVariantClasses(variant: ActionVariant): string {
 </script>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import ParagraphInput from '../ui/ParagraphInput.vue'
@@ -63,7 +63,7 @@ import {
   type GatePrimaryProductRef,
 } from '@/lib/gateUpstream'
 import GateProductEditor from './GateProductEditor.vue'
-import type { ClarifyImage, Gate, Run, ReactAnnotation } from '@/lib/types'
+import type { ClarifyImage, Gate, GateShareInboxStatus, Run, ReactAnnotation } from '@/lib/types'
 import { previewPickLabel } from '@/lib/previewPickUrl'
 
 const props = defineProps<{
@@ -91,11 +91,20 @@ const props = defineProps<{
    * fills remaining height above the composable sidebar). Inbox must omit.
    */
   mobileFillRemaining?: boolean
+  /** Inbox human_gate share-link chip; when set, HtmlPreview toolbar shows copy entry. */
+  shareLink?: GateShareInboxStatus | null
 }>()
 const emit = defineEmits<{
   (e: 'resolve', action: string, form: Record<string, any>): void
   (e: 'react-revised'): void
+  (e: 'open-share'): void
 }>()
+
+provide('gateShareOpen', () => emit('open-share'))
+provide(
+  'gateShareEnabled',
+  computed(() => props.shareLink != null),
+)
 
 const { t } = useI18n()
 const { isMobile } = useBreakpoint()

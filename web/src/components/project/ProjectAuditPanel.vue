@@ -85,6 +85,7 @@ const CALLER_LABEL_KEYS: Record<string, string> = {
   pm: 'pages.projectDetail.audit.callerPm',
   apikey: 'pages.projectDetail.audit.callerApiKey',
   system: 'pages.projectDetail.audit.callerSystem',
+  external: 'pages.projectDetail.audit.callerExternal',
 }
 
 const AUDIT_PAGE_SIZE_OPTIONS = [5, 10, 20]
@@ -113,6 +114,7 @@ const callerDdOptions = computed<AuditDdOption[]>(() => [
   { value: 'pm', label: t('pages.projectDetail.audit.callerPm'), sub: t('pages.projectDetail.audit.callerPmSub') },
   { value: 'apikey', label: t('pages.projectDetail.audit.callerApiKey'), sub: t('pages.projectDetail.audit.callerApiKeySub') },
   { value: 'system', label: t('pages.projectDetail.audit.callerSystem'), sub: t('pages.projectDetail.audit.callerSystemSub') },
+  { value: 'external', label: t('pages.projectDetail.audit.callerExternal'), sub: t('pages.projectDetail.audit.callerExternalSub') },
 ])
 
 const resourceDdOptions = computed<AuditDdOption[]>(() => [

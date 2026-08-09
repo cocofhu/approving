@@ -10,7 +10,7 @@ type ProjectAuditEvent struct {
 	OccurredAt     time.Time `gorm:"index:idx_audit_proj_occurred,priority:2;index" json:"occurredAt"`
 	Actor          string    `gorm:"index" json:"actor"`
 	Unattributable bool      `json:"unattributable"`
-	// CallerKind is the product-facing attribution class: pm | apikey | system.
+	// CallerKind is the product-facing attribution class: pm | apikey | system | external.
 	CallerKind   string `gorm:"index" json:"callerKind"`
 	Action       string `gorm:"index" json:"action"`
 	ResourceType string `gorm:"index" json:"resourceType"`
@@ -27,9 +27,10 @@ type ProjectAuditEvent struct {
 
 // CallerKind values for audit attribution filters.
 const (
-	CallerKindPM     = "pm"
-	CallerKindAPIKey = "apikey"
-	CallerKindSystem = "system"
+	CallerKindPM       = "pm"
+	CallerKindAPIKey   = "apikey"
+	CallerKindSystem   = "system"
+	CallerKindExternal = "external"
 )
 
 // Audit action namespaces (aligned with Demo filters).
@@ -40,6 +41,10 @@ const (
 	AuditActionWorkflowDelete  = "workflow.delete"
 	AuditActionWorkflowPublish = "workflow.publish"
 	AuditActionGateDecide      = "gate.decide"
+	AuditActionGateShareCreate = "gate.share.create"
+	AuditActionGateShareRegen  = "gate.share.regen"
+	AuditActionGateShareRevoke = "gate.share.revoke"
+	AuditActionGateShareUse    = "gate.share.use"
 	AuditActionRunStart        = "run.start"
 	AuditActionRunCancel       = "run.cancel"
 	AuditActionRunCompleted    = "run.completed"

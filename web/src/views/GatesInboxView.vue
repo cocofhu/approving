@@ -8,6 +8,8 @@ import PipelineFilter from '@/components/ui/PipelineFilter.vue'
 import ProjectFilter from '@/components/ui/ProjectFilter.vue'
 import TagFilter from '@/components/ui/TagFilter.vue'
 import GateApproval from '@/components/run/GateApproval.vue'
+import GateShareLinkPanel from '@/components/run/GateShareLinkPanel.vue'
+import InboxPendingCard from '@/components/inbox/InboxPendingCard.vue'
 import ReviewShell from '@/components/run/ReviewShell.vue'
 import { REVIEW_SHELL_WIDTH_KEY_APPROVAL } from '@/lib/reviewLayoutBudget'
 import ReviewComposer from '@/components/run/ReviewComposer.vue'
@@ -30,14 +32,7 @@ import { usePendingGates } from '@/lib/usePendingGates'
 import { addClarifyAnnotation, useClarifyDraft } from '@/lib/useClarifyDraft'
 import { previewPickLabel, type AppPreviewPickPayload } from '@/lib/previewPickUrl'
 import { useBreakpoint } from '@/lib/useBreakpoint'
-import { relTime } from '@/lib/format'
-import {
-  inboxBadgeLabelKey,
-  inboxBadgeTone,
-  inboxBadgeToneClass,
-  inboxIconToneClass,
-  inboxSecondaryLine,
-} from '@/lib/inboxDisplay'
+import { inboxSecondaryLine } from '@/lib/inboxDisplay'
 import {
   inboxComposerMode,
   pickInboxClarifySession,
@@ -57,11 +52,11 @@ import {
 } from '@/lib/busySeedRetry'
 import { createWsReconnectController } from '@/lib/wsReconnect'
 import { useToast } from '@/lib/useToast'
-import type { AcpEvent, Gate, InboxItem, Run } from '@/lib/types'
+import type { AcpEvent, Gate, GateInboxItem, GateShareInboxStatus, InboxItem, Run } from '@/lib/types'
 
 const router = useRouter()
 const route = useRoute()
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const toast = useToast()
 const {
   displayedItems,
@@ -1203,6 +1198,28 @@ async function onResolve(action: string, form: Record<string, any> = {}) {
   }
 }
 
+const sharePanelOpen = ref(false)
+const shareTarget = ref<GateInboxItem | null>(null)
+
+function patchShareStatus(it: GateInboxItem, status: GateShareInboxStatus) {
+  const next = { ...it, shareLink: status }
+  listItems.value = listItems.value.map((row) =>
+    row.type === 'gate' && itemKey(row) === itemKey(it) ? next : row,
+  )
+  if (active.value && itemKey(active.value) === itemKey(it)) {
+    active.value = next
+  }
+  shareTarget.value = next
+}
+
+function openSharePanel(it: InboxItem, alsoOpenDetail = false) {
+  if (processingLock.value || it.type !== 'gate') return
+  selectItem(it)
+  shareTarget.value = it
+  sharePanelOpen.value = true
+  if (alsoOpenDetail) openDetail(it)
+}
+
 function selectItem(it: InboxItem) {
   if (processingLock.value) return
   showProcessedBanner.value = false
@@ -1342,34 +1359,12 @@ onUnmounted(() => {
   for (const triple of [...inboxContextAborts.keys()]) abortInboxContext(triple)
 })
 
-function itemTime(it: InboxItem) {
-  return it.type === 'gate' ? relTime(it.requestedAt) : relTime(it.updatedAt)
-}
-
 function itemTitle(it: InboxItem) {
   return it.type === 'gate' ? it.title : it.label
 }
 
 function itemSecondary(it: InboxItem) {
   return inboxSecondaryLine(it)
-}
-
-function badgeLabel(it: InboxItem) {
-  return t(inboxBadgeLabelKey(it))
-}
-
-function itemIconName(it: InboxItem) {
-  if (it.type === 'gate') return 'gate'
-  if (it.kind === 'app_preview') return 'monitor'
-  return 'chat'
-}
-
-function itemIconClass(it: InboxItem) {
-  return inboxIconToneClass(inboxBadgeTone(it))
-}
-
-function itemBadgeClass(it: InboxItem) {
-  return inboxBadgeToneClass(inboxBadgeTone(it))
 }
 </script>
 
@@ -1488,40 +1483,16 @@ function itemBadgeClass(it: InboxItem) {
     <template v-if="isMobile && mobileView === 'list'">
       <div v-if="listItems.length" class="flex min-h-0 flex-1 flex-col">
         <div ref="listEl" class="scroll-area flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-        <button
+        <InboxPendingCard
           v-for="it in listItems"
           :key="itemKey(it)"
-          class="flex w-full shrink-0 items-start gap-3 rounded-lg border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-45"
-          :class="isActive(it) ? 'border-accent/50 bg-accent-dim/40' : 'border-line bg-surface hover:bg-elevated'"
+          :item="it"
+          :active="isActive(it)"
           :disabled="processingLock"
-          @click="openDetail(it)"
-        >
-          <div
-            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md"
-            :class="itemIconClass(it)"
-          >
-            <Icon :name="itemIconName(it)" :size="18" />
-          </div>
-          <div class="min-w-0 flex-1">
-            <div class="truncate text-sm font-medium text-txt">{{ itemTitle(it) }}</div>
-            <div class="truncate text-[11px] text-txt3" :title="itemSecondary(it)">
-              {{ itemSecondary(it) }}
-            </div>
-            <div class="mt-1 flex items-center gap-1.5">
-              <span
-                class="rounded border px-1.5 py-px text-[10px]"
-                :class="itemBadgeClass(it)"
-              >
-                {{ badgeLabel(it) }}
-              </span>
-              <span class="text-[10px] text-txt3">{{ locale && itemTime(it) }}</span>
-            </div>
-            <div v-if="it.tags?.length" class="mt-1 flex flex-wrap gap-1.5">
-              <span v-for="tag in it.tags" :key="tag" class="chip text-txt2">{{ tag }}</span>
-            </div>
-          </div>
-          <Icon name="chevron-right" :size="16" class="mt-2 shrink-0 text-txt3" />
-        </button>
+          show-chevron
+          @select="openDetail(it)"
+          @open-share="openSharePanel(it, true)"
+        />
         </div>
         <Pagination v-if="listTotal > PAGE_SIZE" v-model:page="listPage" :page-size="PAGE_SIZE" :total="listTotal" />
       </div>
@@ -1540,22 +1511,34 @@ function itemBadgeClass(it: InboxItem) {
 
     <!-- Mobile detail view -->
     <div v-else-if="isMobile && mobileView === 'detail' && active" class="card flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div class="flex shrink-0 items-center justify-end border-b border-line px-4 py-2">
+      <div class="flex shrink-0 items-center justify-end gap-3 border-b border-line px-4 py-2">
+        <button
+          v-if="active.type === 'gate'"
+          type="button"
+          class="inline-flex min-h-11 items-center text-xs text-accent-2 hover:underline"
+          data-testid="gate-share-copy-btn-detail"
+          :aria-label="t('pages.gatesInbox.share.copyLinkAria')"
+          @click="openSharePanel(active)"
+        >
+          {{ t('pages.gatesInbox.share.copyLink') }}
+        </button>
         <button class="text-xs text-accent-2 hover:underline" @click="router.push('/runs/' + active.runId)">
           {{ t('common.buttons.openRunDetail') }}
         </button>
       </div>
       <div class="flex min-h-0 flex-1 flex-col">
         <ArtifactLoadingPane v-if="activeRunLoading" message-key="pages.gatesInbox.loadingRun" />
-        <GateApproval
+            <GateApproval
           v-else-if="active.type === 'gate'"
           ref="gateApprovalRef"
           :key="active.runId + active.nodeId"
           :gate="activeGate!"
           :run="activeRun || undefined"
           :fill-preview="true"
+          :share-link="active.type === 'gate' ? active.shareLink ?? { state: 'none' } : null"
           @resolve="onResolve"
           @react-revised="onReactRevised"
+          @open-share="openSharePanel(active)"
         />
         <ReviewShell
           v-else-if="active.type === 'clarify' && activeClarify"
@@ -1628,39 +1611,15 @@ function itemBadgeClass(it: InboxItem) {
     <div v-else-if="!isMobile && listItems.length" class="grid min-h-0 flex-1 grid-cols-[320px_1fr] items-stretch gap-4">
       <div class="flex h-full min-h-0 flex-col overflow-hidden">
         <div class="scroll-area flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-          <button
+          <InboxPendingCard
             v-for="it in listItems"
             :key="itemKey(it)"
-            class="flex w-full shrink-0 items-start gap-3 rounded-lg border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-45"
-            :class="isActive(it) ? 'border-accent/50 bg-accent-dim/40' : 'border-line bg-surface hover:bg-elevated'"
+            :item="it"
+            :active="isActive(it)"
             :disabled="processingLock"
-            @click="selectItem(it)"
-          >
-            <div
-              class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md"
-              :class="itemIconClass(it)"
-            >
-              <Icon :name="itemIconName(it)" :size="18" />
-            </div>
-            <div class="min-w-0 flex-1">
-              <div class="truncate text-sm font-medium text-txt">{{ itemTitle(it) }}</div>
-              <div class="truncate text-[11px] text-txt3" :title="itemSecondary(it)">
-                {{ itemSecondary(it) }}
-              </div>
-              <div class="mt-1 flex items-center gap-1.5">
-                <span
-                  class="rounded border px-1.5 py-px text-[10px]"
-                  :class="itemBadgeClass(it)"
-                >
-                  {{ badgeLabel(it) }}
-                </span>
-                <span class="text-[10px] text-txt3">{{ locale && itemTime(it) }}</span>
-              </div>
-              <div v-if="it.tags?.length" class="mt-1 flex flex-wrap gap-1.5">
-                <span v-for="tag in it.tags" :key="tag" class="chip text-txt2">{{ tag }}</span>
-              </div>
-            </div>
-          </button>
+            @select="selectItem(it)"
+            @open-share="openSharePanel(it)"
+          />
         </div>
         <Pagination v-if="listTotal > PAGE_SIZE" v-model:page="listPage" :page-size="PAGE_SIZE" :total="listTotal" />
       </div>
@@ -1684,8 +1643,10 @@ function itemBadgeClass(it: InboxItem) {
               :fill-preview="true"
               :unified-preview-budget="true"
               class="min-h-0 flex-1"
+              :share-link="active.type === 'gate' ? active.shareLink ?? { state: 'none' } : null"
               @resolve="onResolve"
               @react-revised="onReactRevised"
+              @open-share="openSharePanel(active)"
             />
             <ReviewShell
               v-else-if="active.type === 'clarify' && activeClarify"
@@ -1765,6 +1726,19 @@ function itemBadgeClass(it: InboxItem) {
         "
       />
     </div>
+
+    <GateShareLinkPanel
+      :open="sharePanelOpen"
+      :gate="shareTarget"
+      @close="sharePanelOpen = false"
+      @updated="(st) => shareTarget && patchShareStatus(shareTarget, st)"
+      @revoked="
+        (st) => {
+          if (shareTarget) patchShareStatus(shareTarget, st)
+          sharePanelOpen = false
+        }
+      "
+    />
   </div>
 </template>
 

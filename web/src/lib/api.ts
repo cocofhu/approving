@@ -6,6 +6,7 @@ import type {
   Run,
   Artifact,
   InboxItem,
+  GateShareInboxStatus,
   AcpEvent,
   WorkflowGraph,
   Project,
@@ -665,6 +666,20 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ action, form }),
     }),
+  createGateShareLink: (runId: string, nodeId: string, ttlTier = '24h') =>
+    req<{ id: string; url: string; ttlTier: string; expiresAt: string; state: string }>(
+      `/runs/${runId}/gates/${nodeId}/share-link`,
+      { method: 'POST', body: JSON.stringify({ ttlTier }) },
+    ),
+  getGateShareLink: (runId: string, nodeId: string) =>
+    req<GateShareInboxStatus>(`/runs/${runId}/gates/${nodeId}/share-link`),
+  regenGateShareLink: (runId: string, nodeId: string) =>
+    req<{ id: string; url: string; ttlTier: string; expiresAt: string; state: string }>(
+      `/runs/${runId}/gates/${nodeId}/share-link/regen`,
+      { method: 'POST' },
+    ),
+  revokeGateShareLink: (runId: string, nodeId: string) =>
+    req<{ status: string }>(`/runs/${runId}/gates/${nodeId}/share-link/revoke`, { method: 'POST' }),
   listGatePrimaryArtifacts: (runId: string, nodeId: string) =>
     req<{
       items: {

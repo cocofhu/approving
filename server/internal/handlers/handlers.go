@@ -14,6 +14,7 @@ import (
 
 	"github.com/cocofhu/approving/internal/auth"
 	"github.com/cocofhu/approving/internal/blob"
+	"github.com/cocofhu/approving/internal/gateshare"
 	"github.com/cocofhu/approving/internal/browser"
 	"github.com/cocofhu/approving/internal/contextmcp"
 	"github.com/cocofhu/approving/internal/engine"
@@ -61,6 +62,9 @@ type Handlers struct {
 	Browser       *browser.Service
 	Audit         *services.ProjectAuditService
 	Onboarding    *services.OnboardingService
+	GateShare         *gateshare.Service
+	GateShareNonces   *gateshare.NonceStore
+	GateShareLimiter  *gateshare.IPLimiter
 	// CanViewProjectAudit optionally overrides the default audit ACL
 	// (is_admin OR authenticated user who can UpdateProject). Tests use this
 	// to simulate a read-only member denial while production keeps the hook nil.
@@ -974,11 +978,17 @@ func (h *Handlers) ListGates(c *gin.Context) {
 	}
 	if !pg.Active {
 		items, _ := h.Runs.PendingInboxItems(wf, projectID, tags, 0, 0)
+		if h.GateShare != nil {
+			h.GateShare.AttachInboxStatus(items)
+		}
 		c.JSON(http.StatusOK, items)
 		return
 	}
 	offset := (pg.Page - 1) * pg.PageSize
 	items, total := h.Runs.PendingInboxItems(wf, projectID, tags, offset, pg.PageSize)
+	if h.GateShare != nil {
+		h.GateShare.AttachInboxStatus(items)
+	}
 	c.JSON(http.StatusOK, paginatedResponse(items, total, pg.Page, pg.PageSize))
 }
 

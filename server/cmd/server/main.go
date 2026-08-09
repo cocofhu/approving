@@ -24,6 +24,7 @@ import (
 	"github.com/cocofhu/approving/internal/crypto"
 	"github.com/cocofhu/approving/internal/database"
 	"github.com/cocofhu/approving/internal/engine"
+	"github.com/cocofhu/approving/internal/gateshare"
 	"github.com/cocofhu/approving/internal/handlers"
 	"github.com/cocofhu/approving/internal/logging"
 	"github.com/cocofhu/approving/internal/mcp"
@@ -182,6 +183,8 @@ func main() {
 	eng.SetAuditRecorder(func(rec services.AuditRecord) {
 		auditSvc.Record(rec)
 	})
+	gateShareSvc := gateshare.NewService(db, auditSvc)
+	eng.SetShareRevoker(gateShareSvc)
 	host.SetProjectAuditHook(func(runID, nodeID, tool string, args map[string]any, resultText string, isError bool) {
 		projectID := services.ResolveProjectIDForRun(db, runID)
 		if projectID == "" {
@@ -392,8 +395,11 @@ func main() {
 		PlatformRules: platformRuleSvc,
 		Channels:      channelSvc,
 		Browser:       browserSvc,
-		Audit:         auditSvc,
-		InjectBundles: injectStore,
+		Audit:            auditSvc,
+		GateShare:        gateShareSvc,
+		GateShareNonces:  gateshare.NewNonceStore(),
+		GateShareLimiter: gateshare.NewIPLimiter(),
+		InjectBundles:    injectStore,
 		Blobs:         blobStore,
 		Onboarding:    services.NewOnboardingService(projectSvc, skillSvc, wfSvc),
 	}

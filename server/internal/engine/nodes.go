@@ -927,6 +927,9 @@ func (e *Engine) execGate(c *execCtx, node *models.Node) nodeOutcome {
 			UpstreamIteration: upIter,
 			RequestedAt:       time.Now()}
 		logDB(e.db.Create(&gate), c.run.ID, "create gate")
+		if e.shareRevoker != nil {
+			e.shareRevoker.RevokeUnusedForNode(c.run.ID, node.ID)
+		}
 	}
 	return nodeOutcome{status: "paused", outputMd: "等待人工门禁审批…"}
 }

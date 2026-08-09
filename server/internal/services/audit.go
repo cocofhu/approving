@@ -53,7 +53,7 @@ func SystemActor() AuditActor {
 type AuditRecord struct {
 	ProjectID    string
 	Actor        AuditActor
-	CallerKind   string // pm | apikey | system; empty → inferred from Actor
+	CallerKind   string // pm | apikey | system | external; empty → inferred from Actor
 	Action       string
 	ResourceType string
 	ResourceID   string
@@ -111,7 +111,7 @@ func (s *ProjectAuditService) Record(rec AuditRecord) {
 
 func resolveCallerKind(explicit string, actor AuditActor) string {
 	switch strings.TrimSpace(explicit) {
-	case models.CallerKindPM, models.CallerKindAPIKey, models.CallerKindSystem:
+	case models.CallerKindPM, models.CallerKindAPIKey, models.CallerKindSystem, models.CallerKindExternal:
 		return strings.TrimSpace(explicit)
 	}
 	if actor.Unattributable || actor.Username == "" || actor.Username == "system" {
@@ -158,7 +158,7 @@ type AuditListFilter struct {
 	From       *time.Time
 	To         *time.Time
 	Actor      string // legacy exact actor username
-	CallerKind string // pm | apikey | system
+	CallerKind string // pm | apikey | system | external
 	Action     string // exact or prefix (e.g. "workflow" matches workflow.*)
 	Resource   string // substring match on resource_type, resource_id, or summary
 	RunID      string // first-class run association
