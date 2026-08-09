@@ -3,9 +3,37 @@ package browser
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
+
+type fakeResolverSandbox struct {
+	fakeSandbox
+	addrs map[string]string
+	err   error
+}
+
+func (d *fakeResolverSandbox) EndpointAddr(_ context.Context, _, key string) (string, error) {
+	if d.err != nil {
+		return "", d.err
+	}
+	if addr, ok := d.addrs[key]; ok && strings.TrimSpace(addr) != "" {
+		return addr, nil
+	}
+	return "", fmt.Errorf("no %q endpoint", key)
+}
+
+func newResolverService(addrs map[string]string) (*Service, *fakeResolverSandbox) {
+	d := &fakeResolverSandbox{addrs: addrs}
+	s := New(d, Config{MaxTabs: 4, MaxTabsPerContainer: 1})
+	s.readyProbe = func(context.Context, string) bool { return true }
+	s.dial = func(context.Context, string) (Engine, error) {
+		return &fakeEngine{name: "sandbox"}, nil
+	}
+	return s, d
+}
 
 func TestOpenInSandboxDialAndTabFailures(t *testing.T) {
 	s, _, _ := newFakeService(Config{MaxTabs: 4, MaxTabsPerContainer: 1})
@@ -76,4 +104,62 @@ func TestStartStopIdempotent(t *testing.T) {
 		t.Fatalf("reason=%q", sess.Reason())
 	}
 	s.Stop() // second stop is safe via sync.Once
+}
+
+func TestResolvePreviewEndpointsMissingNamedDoesNotDialLB(t *testing.T) {
+	s, _ := newResolverService(map[string]string{
+		"session": "203.0.113.9:8765",
+	})
+	cdp, novnc, err := s.resolvePreviewEndpoints(context.Background(), "sb", "203.0.113.9")
+	if !errors.Is(err, ErrInternalEndpointMissing) {
+		t.Fatalf("want ErrInternalEndpointMissing, got cdp=%q novnc=%q err=%v", cdp, novnc, err)
+	}
+	if strings.Contains(cdp, "203.0.113.9:9222") || strings.Contains(novnc, "203.0.113.9:6080") ||
+		cdp == "203.0.113.9:9222" || novnc == "203.0.113.9:6080" {
+		t.Fatalf("must not fall back to LB_IP:9222/6080: cdp=%q novnc=%q", cdp, novnc)
+	}
+	if _, err := s.OpenInSandbox(context.Background(), "sb", "203.0.113.9", "http://127.0.0.1:3000/"); !errors.Is(err, ErrInternalEndpointMissing) {
+		t.Fatalf("OpenInSandbox should fail closed, got %v", err)
+	}
+}
+
+func TestResolvePreviewEndpointsRejectsPublishSurface(t *testing.T) {
+	s, _ := newResolverService(map[string]string{
+		"cdp":   "203.0.113.9:9222",
+		"novnc": "203.0.113.9:6080",
+	})
+	cdp, novnc, err := s.resolvePreviewEndpoints(context.Background(), "sb", "203.0.113.9")
+	if !errors.Is(err, ErrInternalEndpointMissing) {
+		t.Fatalf("LB-published cdp/novnc must fail closed, got cdp=%q novnc=%q err=%v", cdp, novnc, err)
+	}
+}
+
+func TestResolvePreviewEndpointsUsesClusterDNS(t *testing.T) {
+	wantCDP := "sbx-m1.sandboxes.svc.cluster.local:9222"
+	wantVNC := "sbx-m1.sandboxes.svc.cluster.local:6080"
+	s, _ := newResolverService(map[string]string{
+		"cdp":   wantCDP,
+		"novnc": wantVNC,
+	})
+	cdp, novnc, err := s.resolvePreviewEndpoints(context.Background(), "sb", "203.0.113.9")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cdp != wantCDP || novnc != wantVNC {
+		t.Fatalf("cdp=%q novnc=%q", cdp, novnc)
+	}
+}
+
+func TestResolvePreviewEndpointsUsesContainerIP(t *testing.T) {
+	s, _ := newResolverService(map[string]string{
+		"cdp":   "10.88.0.12:9222",
+		"novnc": "10.88.0.12:6080",
+	})
+	cdp, novnc, err := s.resolvePreviewEndpoints(context.Background(), "sb", "10.1.2.3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cdp != "10.88.0.12:9222" || novnc != "10.88.0.12:6080" {
+		t.Fatalf("cdp=%q novnc=%q", cdp, novnc)
+	}
 }

@@ -131,6 +131,20 @@ describe('NovncPreviewPanel', () => {
     wrapper.unmount()
   })
 
+  it('uses platform WS only and never mentions websockify/6080 (g4.2)', async () => {
+    const preview = mountNovnc()
+    await flushPromises()
+    expect(apiMocks.previewVncWsUrl).toHaveBeenCalledWith('run-1', 'node-1', 5173)
+    expect(preview.html()).not.toMatch(/6080|websockify/i)
+    preview.unmount()
+
+    const consoleWrap = mountNovnc({ sandboxId: 42, runId: undefined, nodeId: undefined, port: undefined })
+    await flushPromises()
+    expect(apiMocks.sandboxVncWsUrl).toHaveBeenCalledWith(42)
+    expect(consoleWrap.html()).not.toMatch(/6080|websockify/i)
+    consoleWrap.unmount()
+  })
+
   it('toggles inspect with stable label and aria-pressed; second click sends on:false', async () => {
     const wrapper = mountNovnc()
     await flushPromises()

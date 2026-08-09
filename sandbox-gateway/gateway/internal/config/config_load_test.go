@@ -34,18 +34,50 @@ func TestPortsConfigAll(t *testing.T) {
 		Session: 8765, CodeServer: 8744, SSH: 22, CDP: 9222, NoVNC: 6080,
 		App: []int{80, 80, 0, -1, 443},
 	}
-	all := p.All()
-	seen := map[int]int{}
-	for _, v := range all {
-		seen[v]++
-	}
-	for _, want := range []int{8765, 8744, 22, 9222, 6080, 80, 443} {
-		if seen[want] != 1 {
-			t.Fatalf("port %d count=%d in %v", want, seen[want], all)
+	assertUnique := func(t *testing.T, got []int, want []int, forbid []int) {
+		t.Helper()
+		seen := map[int]int{}
+		for _, v := range got {
+			seen[v]++
+		}
+		for _, w := range want {
+			if seen[w] != 1 {
+				t.Fatalf("port %d count=%d in %v", w, seen[w], got)
+			}
+		}
+		for _, f := range forbid {
+			if seen[f] != 0 {
+				t.Fatalf("port %d must not be in publish set %v", f, got)
+			}
+		}
+		if len(got) != len(want) {
+			t.Fatalf("len=%d want %d %v", len(got), len(want), got)
 		}
 	}
-	if len(all) != 7 {
-		t.Fatalf("len=%d %v", len(all), all)
+
+	// All/Public are the external publish set: session/ide/ssh/app only.
+	// 9222/6080 must not be treated as host/LB publish ports (g1.1).
+	assertUnique(t, p.Public(), []int{8765, 8744, 22, 80, 443}, []int{9222, 6080})
+	assertUnique(t, p.All(), []int{8765, 8744, 22, 80, 443}, []int{9222, 6080})
+
+	internal := p.Internal()
+	seenI := map[int]int{}
+	for _, v := range internal {
+		seenI[v]++
+	}
+	if seenI[9222] != 1 || seenI[6080] != 1 || len(internal) != 2 {
+		t.Fatalf("Internal=%v want 9222 and 6080 once each", internal)
+	}
+
+	listen := p.Listen()
+	seenL := map[int]int{}
+	for _, v := range listen {
+		seenL[v]++
+	}
+	for _, w := range []int{8765, 8744, 22, 80, 443, 9222, 6080} {
+		if seenL[w] != 1 {
+			t.Fatalf("Listen missing %d in %v", w, listen)
+		}
 	}
 }
 

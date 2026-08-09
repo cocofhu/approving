@@ -1044,9 +1044,10 @@
         "title": "Sandbox details",
         "sectionMeta": "Metadata",
         "sectionProxy": "Platform proxy URLs",
-        "sectionProxyHint": "Relative paths for operators to copy; not clickable links.",
+        "sectionProxyHint": "Proxied paths and WS for signed-in operators. VNC is the platform path, not a direct :6080.",
         "sectionEndpoints": "Direct endpoints",
-        "sectionEndpointsHint": "In-cluster host:port (session / ide / ssh / cdp / novnc); numeric port keys are filtered. Direct access needs separate auth — do not open in the browser.",
+        "sectionEndpointsHint": "Operators may reach authenticated services (session / ide / ssh). Numeric port keys are filtered. Direct access needs separate auth — do not open in the browser.",
+        "endpointsNotice": "CDP / noVNC are not directly reachable. No app-layer auth. Use platform proxies /sandbox-vnc/:sandboxId/ws and /preview-vnc/:runId/:nodeId/:port/ws only (Session required when Auth is enabled; validity only, no sandbox/run ownership check). session/ide use their own passwords; ssh uses ROOT_PASSWORD or SSH_KEY.",
         "endpointsEmpty": "No direct endpoints available (gateway unreachable or no named ports).",
         "loadFailed": "Failed to load sandbox details",
         "copy": "Copy",
@@ -1065,10 +1066,10 @@
           "error": "error"
         },
         "proxy": {
-          "sandbox": "Sandbox proxy",
-          "bridge": "Bridge proxy",
-          "terminal": "Terminal WS",
-          "vnc": "VNC WS"
+          "session": "session",
+          "ide": "ide",
+          "vnc": "VNC WS",
+          "openPreview": "Open preview"
         }
       }
     },
@@ -1095,7 +1096,7 @@
       "novncOpen": "Open",
       "novncAddressPlaceholder": "about:blank",
       "password": "Direct password",
-      "passwordHint": "Use when opening sandbox host:port directly (not via platform proxy); same as PASSWORD / CURSOR_ACP_PASSWORD",
+      "passwordHint": "Applies only to direct session / ide / ssh. CDP / noVNC are proxy-only (Session required when Auth is enabled).",
       "showPassword": "Show",
       "hidePassword": "Hide",
       "copyPassword": "Copy",

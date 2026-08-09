@@ -31,6 +31,10 @@ var (
 	ErrCapacity = errors.New("preview capacity reached")
 	// ErrInvalidMaxTabs is returned when SetMaxTabs is called with n < 1.
 	ErrInvalidMaxTabs = errors.New("max tabs must be at least 1")
+	// ErrInternalEndpointMissing is returned when a gateway resolver is present
+	// but named cdp/novnc are absent or still point at the external publish
+	// surface. Callers must not dial fallbackIP:9222/6080.
+	ErrInternalEndpointMissing = errors.New("sandbox internal cdp/novnc endpoint missing")
 )
 
 // StatsSnapshot is a point-in-time view of the remote preview tab pool.
@@ -151,20 +155,52 @@ func splitHostPort(addr string) (string, int) {
 }
 
 // resolvePreviewEndpoints prefers gateway-published cdp/novnc addresses.
-func (s *Service) resolvePreviewEndpoints(ctx context.Context, sandboxName, fallbackIP string) (cdpAddr, novncAddr string) {
-	cdpAddr = fmt.Sprintf("%s:%d", fallbackIP, cdpPort)
-	novncAddr = fmt.Sprintf("%s:%d", fallbackIP, vncWSport)
+// Without a resolver (unit tests / legacy), it falls back to sandboxIP:9222/6080.
+// With a resolver, missing or publish-surface addresses fail closed — never
+// dial LB_IP/bindIP:9222/6080.
+func (s *Service) resolvePreviewEndpoints(ctx context.Context, sandboxName, fallbackIP string) (cdpAddr, novncAddr string, err error) {
 	r, ok := s.sbx.(SandboxEndpointResolver)
 	if !ok || r == nil {
-		return cdpAddr, novncAddr
+		return fmt.Sprintf("%s:%d", fallbackIP, cdpPort), fmt.Sprintf("%s:%d", fallbackIP, vncWSport), nil
 	}
-	if addr, err := r.EndpointAddr(ctx, sandboxName, "cdp"); err == nil && strings.TrimSpace(addr) != "" {
-		cdpAddr = dialableEndpoint(strings.TrimSpace(addr))
+	cdpRaw, cdpErr := r.EndpointAddr(ctx, sandboxName, "cdp")
+	if cdpErr != nil || strings.TrimSpace(cdpRaw) == "" {
+		return "", "", fmt.Errorf("%w: cdp: %v", ErrInternalEndpointMissing, cdpErr)
 	}
-	if addr, err := r.EndpointAddr(ctx, sandboxName, "novnc"); err == nil && strings.TrimSpace(addr) != "" {
-		novncAddr = dialableEndpoint(strings.TrimSpace(addr))
+	novncRaw, novncErr := r.EndpointAddr(ctx, sandboxName, "novnc")
+	if novncErr != nil || strings.TrimSpace(novncRaw) == "" {
+		return "", "", fmt.Errorf("%w: novnc: %v", ErrInternalEndpointMissing, novncErr)
 	}
-	return cdpAddr, novncAddr
+	cdpAddr = dialableEndpoint(strings.TrimSpace(cdpRaw))
+	novncAddr = dialableEndpoint(strings.TrimSpace(novncRaw))
+	if unsafeInternalEndpoint(cdpAddr, fallbackIP) || unsafeInternalEndpoint(novncAddr, fallbackIP) {
+		log.Error().
+			Str("sandbox", sandboxName).
+			Str("fallback_ip", fallbackIP).
+			Str("cdp", cdpAddr).
+			Str("novnc", novncAddr).
+			Msg("refusing to dial CDP/noVNC on publish surface")
+		return "", "", fmt.Errorf("%w: still on publish surface (fallbackIP=%s cdp=%s novnc=%s)", ErrInternalEndpointMissing, fallbackIP, cdpAddr, novncAddr)
+	}
+	return cdpAddr, novncAddr, nil
+}
+
+func unsafeInternalEndpoint(addr, fallbackIP string) bool {
+	host, _ := splitHostPort(addr)
+	if host == "" {
+		return true
+	}
+	if strings.Contains(host, ".svc.cluster.local") {
+		return false
+	}
+	fb := strings.TrimSpace(fallbackIP)
+	if fb == "" || host != fb {
+		return false
+	}
+	if host == "127.0.0.1" || host == "::1" || host == "localhost" {
+		return false
+	}
+	return true
 }
 
 // dialableEndpoint rewrites 0.0.0.0 / :: publish hosts to loopback so local
@@ -233,12 +269,16 @@ func (s *Service) Stop() {
 // OpenInSandbox attaches to the VNC/CDP stack running inside an app_preview
 // sandbox and opens an isolated tab navigated to targetURL (typically
 // http://127.0.0.1:<port>/ so Chromium stays inside the sandbox network namespace).
-// sandboxIP is a fallback host when the gateway has not published cdp/novnc.
+// sandboxIP is only used when no SandboxEndpointResolver is present (legacy /
+// unit tests). With a gateway resolver, named internal cdp/novnc are required.
 func (s *Service) OpenInSandbox(ctx context.Context, sandboxName, sandboxIP, targetURL string) (*Session, error) {
 	if sandboxName == "" || sandboxIP == "" {
 		return nil, fmt.Errorf("sandbox name/ip required")
 	}
-	cdpAddr, novncAddr := s.resolvePreviewEndpoints(ctx, sandboxName, sandboxIP)
+	cdpAddr, novncAddr, err := s.resolvePreviewEndpoints(ctx, sandboxName, sandboxIP)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.EnsureSandboxVNC(ctx, sandboxName, sandboxIP); err != nil {
 		return nil, err
 	}
@@ -312,7 +352,10 @@ func (s *Service) openTabInSandboxLocked(ctx context.Context, sandboxName, sandb
 // EnsureSandboxVNC starts /usr/local/bin/vnc-preview.sh inside the sandbox (over
 // SSH) when CDP/websockify are not yet reachable (idempotent).
 func (s *Service) EnsureSandboxVNC(ctx context.Context, sandboxName, sandboxIP string) error {
-	cdpAddr, novncAddr := s.resolvePreviewEndpoints(ctx, sandboxName, sandboxIP)
+	cdpAddr, novncAddr, err := s.resolvePreviewEndpoints(ctx, sandboxName, sandboxIP)
+	if err != nil {
+		return err
+	}
 	_, hasResolver := s.sbx.(SandboxEndpointResolver)
 	checkReady := func() bool {
 		// Prefer gateway-published cdp/novnc when the manager can resolve them.

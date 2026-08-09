@@ -27,14 +27,14 @@ sandbox/
 | --- | --- |
 | `8765` | backend（ACP 桥接）：agent 会话 `/ws` + `/api/capabilities` / `/api/events` 等（多后端） |
 | `8744` | code-server：浏览器 IDE（密码 = `ROOT_PASSWORD`；刻意避开常用的 8080） |
-| `22`   | SSH（密码同上；或用 `SSH_KEY` 免密） |
-| `9222` | Chromium CDP（`VNC_PREVIEW=1` 时） |
-| `6080` | noVNC websockify（`VNC_PREVIEW=1` 时） |
+| `22`   | SSH（密码同上；或用 `SSH_KEY` 免密）— 可对外发布 |
+| `9222` | Chromium CDP（`VNC_PREVIEW=1` 时）— **仅容器网/ClusterIP**，不映射宿主 |
+| `6080` | noVNC websockify（`VNC_PREVIEW=1` 时）— **仅容器网/ClusterIP**，不映射宿主 |
 
 ## Playwright + noVNC 预览
 
 - 镜像预装 **Playwright Chromium**（`PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`，版本 `1.61.1`）及系统依赖与 CJK 字体，`npx playwright test` / 无头浏览器验收开箱即用；项目 pin 其它版本时 `npx playwright install chromium` 会按需再拉。
-- 设 `VNC_PREVIEW=1` 启动 **headed Chromium on Xvfb + x11vnc + websockify** 预览栈：CDP 在 `9222`、noVNC 在 `6080`。默认关闭，避免普通场景吃 headed Chromium 资源。
+- 设 `VNC_PREVIEW=1` 启动 **headed Chromium on Xvfb + x11vnc + websockify** 预览栈：箱内 CDP `9222`、noVNC `6080`（无应用层鉴权，**不** publish 到宿主/LB）。用户经 Approving `/sandbox-vnc/:id/ws` 与 `/preview-vnc/.../ws`（Auth 开启时须 Session）。默认关闭，避免普通场景吃 headed Chromium 资源。
 
 ## 浏览器 MCP（可选）
 
@@ -160,8 +160,8 @@ docker run --privileged -d \
 | --- | --- | --- |
 | `VNC_PREVIEW` | 空 | `1` / `true` 启动 headed Chromium on Xvfb + x11vnc + websockify（CDP `9222` / noVNC `6080`）；`ENABLE_VNC_PREVIEW` 同义 |
 | `BROWSER_MCP` | 空 | `1` / `true` 把沙箱内 Chromium 经 CDP 注册为 `chrome-devtools` MCP（合并进 `$CONFIG_ROOT/mcp.json`），并隐含开启预览栈。见[浏览器 MCP](#浏览器-mcp可选) |
-| `CDP_PORT` | `9222` | 对外暴露的 Chromium CDP 端口（也是浏览器 MCP attach 的目标） |
-| `WS_PORT` | `6080` | noVNC websockify 端口 |
+| `CDP_PORT` | `9222` | 箱内 Chromium CDP 监听端口（浏览器 MCP attach 目标；仅容器网可达，不对外发布） |
+| `WS_PORT` | `6080` | 箱内 noVNC websockify 端口（仅容器网可达；用户走平台 VNC WS） |
 | `VNC_PID_DIR` | `/tmp/sandbox-vnc` | 预览栈各进程 PID / 锁文件目录 |
 
 ### 9. 契约注入（启动期，先于所有服务）

@@ -13,7 +13,7 @@ import { useToast } from '@/lib/useToast'
 
 const SKELETON_ROWS = 6
 const SKELETON_CARDS = 4
-const NAMED_ENDPOINT_KEYS = ['session', 'ide', 'ssh', 'cdp', 'novnc'] as const
+const NAMED_ENDPOINT_KEYS = ['session', 'ide', 'ssh'] as const
 
 /** Persists across route remounts within the same session. */
 let hasInitialLoaded = false
@@ -137,10 +137,9 @@ function sourceText(s: SandboxView): string {
 
 function proxyPaths(id: number) {
   return [
-    { key: 'sandbox', label: t('pages.sandboxes.detail.proxy.sandbox'), value: `/sandbox/${id}/` },
-    { key: 'bridge', label: t('pages.sandboxes.detail.proxy.bridge'), value: `/sandbox-bridge/${id}/` },
-    { key: 'terminal', label: t('pages.sandboxes.detail.proxy.terminal'), value: `WS /sandboxes/${id}/terminal` },
-    { key: 'vnc', label: t('pages.sandboxes.detail.proxy.vnc'), value: `/sandbox-vnc/${id}/ws` },
+    { key: 'session', label: t('pages.sandboxes.detail.proxy.session'), value: `/sandbox/${id}` },
+    { key: 'ide', label: t('pages.sandboxes.detail.proxy.ide'), value: `/sandbox-bridge/${id}` },
+    { key: 'vnc', label: t('pages.sandboxes.detail.proxy.vnc'), value: `/sandbox-vnc/${id}/ws`, preview: true },
   ]
 }
 
@@ -207,6 +206,11 @@ function closeDetail() {
   detailListSnapshot.value = null
   copiedKey.value = ''
   if (detailCopiedTimer) window.clearTimeout(detailCopiedTimer)
+}
+
+function openSandboxVncPreview(id: number) {
+  closeDetail()
+  router.push({ path: `/sandboxes/${id}/console`, query: { tab: 'novnc' } })
 }
 
 async function copyText(key: string, text: string) {
@@ -575,18 +579,31 @@ onBeforeUnmount(() => {
             >
               <div class="pt-px text-txt3">{{ row.label }}</div>
               <div class="min-w-0 break-all font-mono leading-snug text-txt">{{ row.value }}</div>
-              <button
-                type="button"
-                class="shrink-0 self-center rounded border border-line px-2 py-0.5 text-[11px] text-txt2 hover:border-line-strong hover:text-txt"
-                :class="{ 'border-ok/40 text-ok': copiedKey === 'proxy-' + row.key }"
-                @click="copyText('proxy-' + row.key, row.value)"
-              >{{ copiedKey === 'proxy-' + row.key ? t('pages.sandboxes.detail.copied') : t('pages.sandboxes.detail.copy') }}</button>
+              <span class="flex shrink-0 items-center gap-1.5 self-center">
+                <button
+                  type="button"
+                  class="border border-line px-2 py-0.5 text-[11px] text-txt2 hover:border-line-strong hover:text-txt"
+                  :class="{ 'border-ok/40 text-ok': copiedKey === 'proxy-' + row.key }"
+                  @click="copyText('proxy-' + row.key, row.value)"
+                >{{ copiedKey === 'proxy-' + row.key ? t('pages.sandboxes.detail.copied') : t('pages.sandboxes.detail.copy') }}</button>
+                <button
+                  v-if="row.preview"
+                  type="button"
+                  data-testid="sandbox-vnc-open-preview"
+                  class="border border-accent bg-accent px-2 py-0.5 text-[11px] text-white hover:brightness-110"
+                  @click="openSandboxVncPreview(detailView.id)"
+                >{{ t('pages.sandboxes.detail.proxy.openPreview') }}</button>
+              </span>
             </div>
           </div>
         </section>
 
         <section>
           <h3 class="mb-1 text-[12px] font-semibold uppercase tracking-wider text-txt3">{{ t('pages.sandboxes.detail.sectionEndpoints') }}</h3>
+          <div
+            data-testid="sandbox-endpoints-notice"
+            class="mb-2.5 border border-[rgb(var(--c-info)/0.45)] bg-[rgb(var(--c-info)/0.14)] px-3 py-2 text-[12px] leading-snug text-txt"
+          >{{ t('pages.sandboxes.detail.endpointsNotice') }}</div>
           <p class="mb-2.5 text-[11px] leading-snug text-txt3">{{ t('pages.sandboxes.detail.sectionEndpointsHint') }}</p>
           <div
             v-if="!detailEndpointRows.length"
@@ -602,7 +619,7 @@ onBeforeUnmount(() => {
               <div class="min-w-0 break-all font-mono leading-snug text-txt">{{ row.value }}</div>
               <button
                 type="button"
-                class="shrink-0 self-center rounded border border-line px-2 py-0.5 text-[11px] text-txt2 hover:border-line-strong hover:text-txt"
+                class="shrink-0 self-center border border-line px-2 py-0.5 text-[11px] text-txt2 hover:border-line-strong hover:text-txt"
                 :class="{ 'border-ok/40 text-ok': copiedKey === 'ep-' + row.key }"
                 @click="copyText('ep-' + row.key, row.value)"
               >{{ copiedKey === 'ep-' + row.key ? t('pages.sandboxes.detail.copied') : t('pages.sandboxes.detail.copy') }}</button>

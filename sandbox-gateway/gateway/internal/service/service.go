@@ -42,7 +42,8 @@ type Config struct {
 	ProviderImages map[string]string
 	// ImageTemplate derives a per-provider image by convention ("{provider}").
 	ImageTemplate string
-	Ports         []int // ports to expose (image config)
+	Ports         []int // public ports to publish (image config Public())
+	InternalPorts []int // cdp/novnc — cluster/container network only
 	SessionPort   int   // port used for the readiness probe (default 8765)
 	WorkspaceDir  string
 	// FinalizeTimeout bounds async readiness (LB IP + session probe).
@@ -114,7 +115,7 @@ func (s *SandboxService) Create(_ context.Context, req CreateRequest) (*models.S
 	if workspace == "" {
 		workspace = s.cfg.WorkspaceDir
 	}
-	ports := mergePorts(s.cfg.Ports, req.Ports)
+	ports := subtractPorts(mergePorts(s.cfg.Ports, req.Ports), s.cfg.InternalPorts)
 
 	sb := &models.Sandbox{
 		ID:       id,
@@ -153,14 +154,15 @@ func (s *SandboxService) Create(_ context.Context, req CreateRequest) (*models.S
 	log.Info().Str("sandbox_id", id).Msg("persist creating record ok")
 
 	spec := driver.Spec{
-		ID:           id,
-		Image:        image,
-		Env:          env,
-		Ports:        ports,
-		WorkspaceDir: workspace,
-		Mounts:       req.Mounts,
-		Config:       req.Config,
-		Labels:       req.Labels,
+		ID:            id,
+		Image:         image,
+		Env:           env,
+		Ports:         ports,
+		InternalPorts: s.cfg.InternalPorts,
+		WorkspaceDir:  workspace,
+		Mounts:        req.Mounts,
+		Config:        req.Config,
+		Labels:        req.Labels,
 		Resources: driver.Resources{
 			CPUCores: cpu,
 			MemoryMB: mem,
@@ -353,6 +355,7 @@ func (s *SandboxService) Reinstall(ctx context.Context, id string, preserveData 
 	for p := range sb.Endpoints() {
 		ports = mergePorts(ports, []int{p})
 	}
+	ports = subtractPorts(ports, s.cfg.InternalPorts)
 
 	env := sb.Env()
 	workspace := s.cfg.WorkspaceDir
@@ -361,12 +364,13 @@ func (s *SandboxService) Reinstall(ctx context.Context, id string, preserveData 
 	}
 
 	spec := driver.Spec{
-		ID:           id,
-		Image:        sb.Image,
-		Env:          env,
-		Ports:        ports,
-		WorkspaceDir: workspace,
-		Labels:       sb.Labels(),
+		ID:            id,
+		Image:         sb.Image,
+		Env:           env,
+		Ports:         ports,
+		InternalPorts: s.cfg.InternalPorts,
+		WorkspaceDir:  workspace,
+		Labels:        sb.Labels(),
 		Resources: driver.Resources{
 			CPUCores: cpu,
 			MemoryMB: mem,
@@ -530,9 +534,27 @@ func (s *SandboxService) RunOrphanGC(ctx context.Context) {
 	}
 }
 
+// publishConverger is optionally implemented by drivers that can heal the
+// external publish surface (kubernetes LB/ClusterIP) without a full Spec.
+// Docker does not implement it: already-running -p mappings are not rewritten.
+type publishConverger interface {
+	ConvergePublishSurface(ctx context.Context, id string) error
+}
+
+func (s *SandboxService) convergePublishSurface(ctx context.Context, id string) {
+	c, ok := s.drv.(publishConverger)
+	if !ok {
+		return
+	}
+	if err := c.ConvergePublishSurface(ctx, id); err != nil {
+		log.Warn().Err(err).Str("sandbox_id", id).Msg("reconcile: converge publish surface failed")
+	}
+}
+
 // ReconcileOnStartup reconciles persisted records against live driver state
 // after a gateway restart: it refreshes statuses/endpoints and marks records
-// whose resources vanished as error.
+// whose resources vanished as error. For kubernetes it also converges Service
+// ports so inventory LoadBalancers drop unauthenticated 9222/6080.
 func (s *SandboxService) ReconcileOnStartup(ctx context.Context) {
 	records, err := s.store.List(context.Background(), ListFilter{})
 	if err != nil {
@@ -554,6 +576,7 @@ func (s *SandboxService) ReconcileOnStartup(ctx context.Context) {
 				s.persist(sb, "reconcile: persist not-found status")
 			}
 		case driver.StatusRunning:
+			s.convergePublishSurface(ctx, sb.ID)
 			eps, epErr := s.drv.Endpoints(ctx, sb.ID)
 			if epErr != nil {
 				logging.WarnErr(epErr, "reconcile: endpoints failed", map[string]any{"sandbox_id": sb.ID})
@@ -563,8 +586,12 @@ func (s *SandboxService) ReconcileOnStartup(ctx context.Context) {
 			sb.Status = models.StatusRunning
 			s.persist(sb, "reconcile: persist running status")
 		case driver.StatusStopped:
+			// Scale=0 keeps Services; still drop 9222/6080 from inventory LBs.
+			s.convergePublishSurface(ctx, sb.ID)
 			sb.Status = models.StatusStopped
 			s.persist(sb, "reconcile: persist stopped status")
+		case driver.StatusPending:
+			s.convergePublishSurface(ctx, sb.ID)
 		}
 	}
 	log.Info().Int("count", len(records)).Msg("reconcile complete")
@@ -613,6 +640,26 @@ func mergePorts(base, extra []int) []int {
 			continue
 		}
 		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+	return out
+}
+
+func subtractPorts(ports, remove []int) []int {
+	if len(remove) == 0 || len(ports) == 0 {
+		return ports
+	}
+	drop := map[int]struct{}{}
+	for _, p := range remove {
+		if p > 0 {
+			drop[p] = struct{}{}
+		}
+	}
+	var out []int
+	for _, p := range ports {
+		if _, ok := drop[p]; ok {
+			continue
+		}
 		out = append(out, p)
 	}
 	return out

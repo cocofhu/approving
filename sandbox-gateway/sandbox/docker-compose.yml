@@ -10,8 +10,8 @@ services:
       - "8765:8765"   # backend（ACP 桥接：agent 会话 /ws + /api/*）
       - "8744:8744"   # code-server
       - "22:22"       # SSH
-      - "9222:9222"   # Chromium CDP（VNC_PREVIEW=1 时）
-      - "6080:6080"   # noVNC websockify（VNC_PREVIEW=1 时）
+      # 9222 (CDP) / 6080 (noVNC) 无应用层鉴权：不映射到宿主。
+      # 箱内仍监听 0.0.0.0；Approving 经容器网 dial。旧书签不可达为预期破坏性变更。
     environment:
       ROOT_PASSWORD: "toor"
       WORKSPACE_DIR: "/root/workspace"

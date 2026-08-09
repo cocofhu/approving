@@ -157,6 +157,11 @@ func TestSandboxListGetView(t *testing.T) {
 	ds.fg.SetEndpoints(row.Name, map[string]string{
 		"session": "10.0.0.1:30101",
 		"ide":     "10.0.0.1:30102",
+		"ssh":     "10.0.0.1:22",
+		"cdp":     "10.0.0.1:9222",
+		"novnc":   "10.0.0.1:6080",
+		"9222":    "10.0.0.1:9222",
+		"6080":    "10.0.0.1:6080",
 		"8080":    "10.0.0.1:30880",
 	})
 
@@ -168,8 +173,16 @@ func TestSandboxListGetView(t *testing.T) {
 	if err != nil || gv.ContainerStatus != "running" || !gv.HasACP || !gv.HasCodeServer {
 		t.Fatalf("getview: %+v %v", gv, err)
 	}
-	if gv.Endpoints["session"] != "10.0.0.1:30101" || gv.Endpoints["ide"] != "10.0.0.1:30102" {
+	if gv.Endpoints["session"] != "10.0.0.1:30101" || gv.Endpoints["ide"] != "10.0.0.1:30102" || gv.Endpoints["ssh"] != "10.0.0.1:22" {
 		t.Fatalf("getview endpoints = %#v", gv.Endpoints)
+	}
+	if len(gv.Endpoints) != 3 {
+		t.Fatalf("getview must only expose session/ide/ssh, got %#v", gv.Endpoints)
+	}
+	for _, banned := range []string{"cdp", "novnc", "9222", "6080", "8080"} {
+		if _, ok := gv.Endpoints[banned]; ok {
+			t.Fatalf("getview leaked sensitive endpoint %q: %#v", banned, gv.Endpoints)
+		}
 	}
 	list, err := s.List(ctx)
 	if err != nil || len(list) != 1 {
@@ -180,6 +193,31 @@ func TestSandboxListGetView(t *testing.T) {
 	}
 	if list[0].Endpoints != nil {
 		t.Fatalf("list must not attach endpoints, got %#v", list[0].Endpoints)
+	}
+}
+
+func TestPublicSandboxEndpointsWhitelist(t *testing.T) {
+	in := map[string]string{
+		"session": "10.0.0.1:8765",
+		"ide":     "10.0.0.1:8744",
+		"ssh":     "10.0.0.1:22",
+		"cdp":     "10.0.0.1:9222",
+		"novnc":   "10.0.0.1:6080",
+		"9222":    "10.0.0.1:9222",
+		"6080":    "10.0.0.1:6080",
+		"8080":    "10.0.0.1:8080",
+	}
+	got := publicSandboxEndpoints(in)
+	if len(got) != 3 || got["session"] != "10.0.0.1:8765" || got["ide"] != "10.0.0.1:8744" || got["ssh"] != "10.0.0.1:22" {
+		t.Fatalf("whitelist = %#v", got)
+	}
+	// Named key still dropped if the value is a sensitive host:port.
+	got = publicSandboxEndpoints(map[string]string{"session": "203.0.113.10:9222", "ide": "203.0.113.10:8744"})
+	if _, ok := got["session"]; ok || got["ide"] != "203.0.113.10:8744" || len(got) != 1 {
+		t.Fatalf("sensitive value not filtered: %#v", got)
+	}
+	if got := publicSandboxEndpoints(nil); got == nil || len(got) != 0 {
+		t.Fatalf("nil in should yield empty map, got %#v", got)
 	}
 }
 

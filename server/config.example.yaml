@@ -77,8 +77,13 @@ sandbox:
   # config.bundleUrl / SSH 注入沙箱。留空=系统临时目录(本地开发与 K8s 预览均可)。
   work_dir: ""
 
-# VNC preview (server-side Chromium + noVNC for app_preview frontend tab).
+# VNC preview (sandbox-side Chromium + noVNC; Approving only proxies WS).
 # Always enabled; Settings max_preview_tabs overrides max_tabs at runtime.
+# Users connect via /sandbox-vnc/:sandboxId/ws and
+# /preview-vnc/:runId/:nodeId/:port/ws — never host:6080 / host:9222.
+# When auth users are configured (always on outside local-demo), those WS
+# paths require a valid Session cookie. Preview HTTP /preview/:runId/...
+# stays session-free (iframe credential is runId+nodeId+port).
 browser:
   enabled: true
   # Global LRU cap on concurrent preview tabs (one per viewer session).

@@ -566,6 +566,170 @@ func TestPackageLevelRunError(t *testing.T) {
 	}
 }
 
+func TestCreateDoesNotPublishInternalPortsAndBackfillsContainerIP(t *testing.T) {
+	m := newMock()
+	d := New(Options{BindIP: "192.168.1.1", NamePrefix: "sbx-"})
+	d.run = func(ctx context.Context, timeout time.Duration, args ...string) (string, error) {
+		_ = ctx
+		_ = timeout
+		m.mu.Lock()
+		m.calls = append(m.calls, append([]string(nil), args...))
+		m.mu.Unlock()
+		if len(args) == 0 {
+			return "", nil
+		}
+		if args[0] == "run" {
+			return "cid", nil
+		}
+		if args[0] == "inspect" {
+			format := inspectFormat(args)
+			if strings.Contains(format, "HostPort") {
+				return "30100", nil
+			}
+			if strings.Contains(format, "IPAddress") {
+				return "172.17.0.4", nil
+			}
+			return "30100", nil
+		}
+		return "", nil
+	}
+
+	h, err := d.Create(context.Background(), driver.Spec{
+		ID:            "iso1",
+		Image:         "img",
+		Ports:         []int{8765, 8744, 22, 80},
+		InternalPorts: []int{9222, 6080},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	runs := m.callsWith("run")
+	if len(runs) != 1 {
+		t.Fatalf("want 1 run, got %d", len(runs))
+	}
+	args := runs[0]
+	if containsPair(args, "-p", "192.168.1.1::9222") || containsPair(args, "-p", "192.168.1.1::6080") {
+		t.Fatalf("must not publish 9222/6080: %v", args)
+	}
+	if !containsPair(args, "-p", "192.168.1.1::8765") || !containsPair(args, "-p", "192.168.1.1::8744") ||
+		!containsPair(args, "-p", "192.168.1.1::22") || !containsPair(args, "-p", "192.168.1.1::80") {
+		t.Fatalf("public ports must still be published: %v", args)
+	}
+	if h.Endpoints[8765] != "192.168.1.1:30100" || h.Endpoints[22] != "192.168.1.1:30100" {
+		t.Fatalf("public eps: %v", h.Endpoints)
+	}
+	if h.Endpoints[9222] != "172.17.0.4:9222" || h.Endpoints[6080] != "172.17.0.4:6080" {
+		t.Fatalf("internal eps missing container IP: %v", h.Endpoints)
+	}
+}
+
+func TestCreateInternalIPFromCustomNetwork(t *testing.T) {
+	m := newMock()
+	d := New(Options{BindIP: "10.0.0.1", Network: "sbx-net", NamePrefix: "sbx-"})
+	d.run = func(ctx context.Context, timeout time.Duration, args ...string) (string, error) {
+		_ = ctx
+		_ = timeout
+		m.mu.Lock()
+		m.calls = append(m.calls, append([]string(nil), args...))
+		m.mu.Unlock()
+		if len(args) == 0 {
+			return "", nil
+		}
+		if args[0] == "run" {
+			return "cid", nil
+		}
+		if args[0] == "inspect" {
+			format := inspectFormat(args)
+			if strings.Contains(format, "HostPort") {
+				return "40000", nil
+			}
+			if strings.Contains(format, ".NetworkSettings.IPAddress") && !strings.Contains(format, "Networks") {
+				return "", nil // top-level empty on custom networks
+			}
+			if strings.Contains(format, `Networks "sbx-net"`) || strings.Contains(format, `Networks \"sbx-net\"`) {
+				return "10.8.0.12", nil
+			}
+			return "", nil
+		}
+		return "", nil
+	}
+
+	h, err := d.Create(context.Background(), driver.Spec{
+		ID: "n1", Image: "img", Ports: []int{8765}, InternalPorts: []int{9222, 6080},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if h.Endpoints[9222] != "10.8.0.12:9222" || h.Endpoints[6080] != "10.8.0.12:6080" {
+		t.Fatalf("custom network internal eps: %v", h.Endpoints)
+	}
+	if containsPair(m.callsWith("run")[0], "-p", "10.0.0.1::9222") {
+		t.Fatal("must not -p 9222 on custom network")
+	}
+}
+
+func TestEndpointsDiscoverFillsInternalFromOptions(t *testing.T) {
+	m := newMock()
+	d := New(Options{BindIP: "10.1.2.3", InternalPorts: []int{9222, 6080}})
+	d.run = func(ctx context.Context, timeout time.Duration, args ...string) (string, error) {
+		_ = ctx
+		_ = timeout
+		m.mu.Lock()
+		m.calls = append(m.calls, append([]string(nil), args...))
+		m.mu.Unlock()
+		if len(args) == 0 || args[0] != "inspect" {
+			return "", nil
+		}
+		format := inspectFormat(args)
+		if strings.Contains(format, "NetworkSettings.Ports") {
+			return "8765/tcp=4000\n22/tcp=4001\n", nil
+		}
+		if strings.Contains(format, "IPAddress") {
+			return "172.18.0.9", nil
+		}
+		return "", nil
+	}
+	eps, err := d.Endpoints(context.Background(), "id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if eps[8765] != "10.1.2.3:4000" || eps[22] != "10.1.2.3:4001" {
+		t.Fatalf("public: %v", eps)
+	}
+	if eps[9222] != "172.18.0.9:9222" || eps[6080] != "172.18.0.9:6080" {
+		t.Fatalf("internal missing: %v", eps)
+	}
+}
+
+func TestEndpointsMissingInternalIPFails(t *testing.T) {
+	d := New(Options{InternalPorts: []int{9222, 6080}})
+	d.run = func(ctx context.Context, timeout time.Duration, args ...string) (string, error) {
+		_ = ctx
+		_ = timeout
+		if len(args) > 0 && args[0] == "inspect" {
+			format := inspectFormat(args)
+			if strings.Contains(format, "NetworkSettings.Ports") {
+				return "8765/tcp=4000\n", nil
+			}
+			return "", nil
+		}
+		return "", nil
+	}
+	_, err := d.Endpoints(context.Background(), "id")
+	if err == nil || !strings.Contains(err.Error(), "empty container IP") {
+		t.Fatalf("want empty container IP error, got %v", err)
+	}
+}
+
+func inspectFormat(args []string) string {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "--format" {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
 func TestLogsTailAndEmpty(t *testing.T) {
 	m := newMock()
 	m.on("logs", "[boot] ok", nil)

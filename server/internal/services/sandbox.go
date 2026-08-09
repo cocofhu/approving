@@ -117,9 +117,9 @@ type SandboxView struct {
 	// code-server / ACP when opening the published host:port directly
 	// (remote-dev Environment.password parity). Empty when unset.
 	Password string `json:"password,omitempty"`
-	// Endpoints are gateway-published host:port addresses (named keys plus
-	// raw port numbers). Populated only by GetView (lazy); List leaves this
-	// nil so JSON omits the field and list polling never hits gateway Get.
+	// Endpoints are user-visible host:port addresses. GetView only returns
+	// session/ide/ssh; CDP/noVNC (9222/6080) are internal and never included.
+	// List leaves this nil so JSON omits the field.
 	Endpoints map[string]string `json:"endpoints,omitempty"`
 }
 
@@ -989,10 +989,44 @@ func (s *SandboxService) GetView(ctx context.Context, id uint) (*SandboxView, er
 		if sb, err := gw.Get(ctx, row.Name); err != nil {
 			log.Debug().Err(err).Str("sandbox", row.Name).Msg("sandbox GetView: gateway Get failed; endpoints empty")
 		} else if sb != nil && sb.Endpoints != nil {
-			v.Endpoints = sb.Endpoints
+			v.Endpoints = publicSandboxEndpoints(sb.Endpoints)
 		}
 	}
 	return &v, nil
+}
+
+var userVisibleEndpointKeys = map[string]struct{}{
+	"session": {},
+	"ide":     {},
+	"ssh":     {},
+}
+
+// publicSandboxEndpoints is the user-side GetView whitelist: only session/ide/ssh.
+// Named cdp/novnc, numeric 9222/6080, and host:port values ending in those
+// ports are dropped. VNC WS paths are not written here — the UI builds them.
+func publicSandboxEndpoints(eps map[string]string) map[string]string {
+	out := map[string]string{}
+	if eps == nil {
+		return out
+	}
+	for k, v := range eps {
+		if _, ok := userVisibleEndpointKeys[k]; !ok {
+			continue
+		}
+		if isSensitiveDirectAddr(v) {
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
+func isSensitiveDirectAddr(addr string) bool {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return false
+	}
+	return strings.HasSuffix(addr, ":9222") || strings.HasSuffix(addr, ":6080")
 }
 
 func (s *SandboxService) view(ctx context.Context, row *models.Sandbox) SandboxView {

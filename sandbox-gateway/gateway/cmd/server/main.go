@@ -55,7 +55,8 @@ func main() {
 		Image:            cfg.Image.Ref,
 		ProviderImages:   cfg.Image.ByProvider,
 		ImageTemplate:    cfg.Image.Template,
-		Ports:            cfg.Image.Ports.All(),
+		Ports:            cfg.Image.Ports.Public(),
+		InternalPorts:    cfg.Image.Ports.Internal(),
 		SessionPort:      cfg.Image.Ports.Session,
 		FinalizeTimeout:  cfg.FinalizeTimeout(),
 		Resources:        cfg.ResourceDefaults(),
@@ -85,10 +86,11 @@ func buildDriver(cfg *config.Config) (driver.Driver, error) {
 	switch cfg.Driver {
 	case "docker":
 		return dockerdriver.New(dockerdriver.Options{
-			BindIP:     cfg.Docker.BindIP,
-			Network:    cfg.Docker.Network,
-			NamePrefix: cfg.Docker.NamePrefix,
-			ShmSize:    cfg.Docker.ShmSize,
+			BindIP:        cfg.Docker.BindIP,
+			Network:       cfg.Docker.Network,
+			NamePrefix:    cfg.Docker.NamePrefix,
+			ShmSize:       cfg.Docker.ShmSize,
+			InternalPorts: cfg.Image.Ports.Internal(),
 		}), nil
 	case "kubernetes":
 		return k8sdriver.New(k8sdriver.Options{
@@ -108,6 +110,8 @@ func buildDriver(cfg *config.Config) (driver.Driver, error) {
 			MemoryRequestMB:    cfg.K8s.MemoryRequestMB,
 			CPURequestRatio:    cfg.K8s.CPURequestRatio,
 			MemoryRequestRatio: cfg.K8s.MemoryRequestRatio,
+			PublicPorts:        cfg.Image.Ports.Public(),
+			InternalPorts:      cfg.Image.Ports.Internal(),
 		})
 	default:
 		return nil, fmt.Errorf("unknown driver %q", cfg.Driver)

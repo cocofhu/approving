@@ -7,6 +7,11 @@ repository so a single clone can run the full stack with Docker Compose.
 - Universal sandbox image: `sandbox/`
 - Local config: `deploy/config/config.local.yaml`
 
+Public data-plane ports: session / ide / ssh / app. CDP `:9222` and noVNC `:6080`
+stay on the container or ClusterIP network (no host/LB publish). Users reach
+noVNC only through Approving VNC WebSockets. See `SECURITY.md` and `GATEWAY.md`
+in the Approving repo root.
+
 ## Build
 
 ```bash

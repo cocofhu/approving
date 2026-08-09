@@ -12,7 +12,14 @@ import (
 	"sandbox-gateway/internal/database"
 	"sandbox-gateway/internal/driver"
 	"sandbox-gateway/internal/driver/fake"
+	k8sdriver "sandbox-gateway/internal/driver/kubernetes"
+	"sandbox-gateway/internal/models"
 	"sandbox-gateway/internal/store"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
 func TestConfigInjectEnv(t *testing.T) {
@@ -145,6 +152,9 @@ type failOpsDriver struct {
 	destroyErr error
 	reinstall  error
 	endpoints  error
+	logsErr    error
+	logsTail   int
+	listErr    error
 }
 
 func (f *failOpsDriver) Start(ctx context.Context, id string) error {
@@ -176,6 +186,19 @@ func (f *failOpsDriver) Endpoints(ctx context.Context, id string) (map[int]strin
 		return nil, f.endpoints
 	}
 	return f.Driver.Endpoints(ctx, id)
+}
+func (f *failOpsDriver) Logs(ctx context.Context, id string, tail int) (string, error) {
+	f.logsTail = tail
+	if f.logsErr != nil {
+		return "", f.logsErr
+	}
+	return f.Driver.Logs(ctx, id, tail)
+}
+func (f *failOpsDriver) List(ctx context.Context) ([]*driver.Handle, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return f.Driver.List(ctx)
 }
 
 func TestCreatePersistsSANDBOX_INJECT(t *testing.T) {
@@ -499,6 +522,112 @@ func TestReconcileOnStartup(t *testing.T) {
 	}
 }
 
+func TestReconcileOnStartupConvergesStaleK8sLB(t *testing.T) {
+	st := testDB(t)
+	cs := k8sfake.NewSimpleClientset()
+	d := k8sdriver.NewFromClient(cs, k8sdriver.Options{
+		Namespace:          "sandboxes",
+		NamePrefix:         "sbx-",
+		EnableLoadBalancer: true,
+		PublicPorts:        []int{8765, 22},
+		InternalPorts:      []int{9222, 6080},
+	})
+	svc := New(d, st, Config{
+		Image:           "img",
+		Ports:           []int{8765, 22},
+		InternalPorts:   []int{9222, 6080},
+		SessionPort:     8765,
+		FinalizeTimeout: 2 * time.Second,
+		Resources:       testResources(),
+	})
+
+	ctx := context.Background()
+	id := "legacy"
+	replicas := int32(1)
+	labels := map[string]string{
+		"app.kubernetes.io/managed-by": "sandbox-gateway",
+		"sandbox-gateway.io/id":        id,
+	}
+	_, err := cs.AppsV1().Deployments("sandboxes").Create(ctx, &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "sbx-legacy", Namespace: "sandboxes", Labels: labels},
+		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+		Status:     appsv1.DeploymentStatus{ReadyReplicas: 1},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("seed deployment: %v", err)
+	}
+	ports := func(ps []int) []corev1.ServicePort {
+		out := make([]corev1.ServicePort, 0, len(ps))
+		for _, p := range ps {
+			out = append(out, corev1.ServicePort{Name: fmt.Sprintf("p-%d", p), Port: int32(p)})
+		}
+		return out
+	}
+	_, err = cs.CoreV1().Services("sandboxes").Create(ctx, &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "sbx-legacy", Namespace: "sandboxes", Labels: labels},
+		Spec:       corev1.ServiceSpec{Selector: labels, Ports: ports([]int{8765, 22, 9222, 6080})},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("seed clusterip: %v", err)
+	}
+	lb, err := cs.CoreV1().Services("sandboxes").Create(ctx, &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "sbx-legacy-lb", Namespace: "sandboxes", Labels: labels},
+		Spec: corev1.ServiceSpec{
+			Type:     corev1.ServiceTypeLoadBalancer,
+			Selector: labels,
+			Ports:    ports([]int{8765, 22, 9222, 6080}),
+		},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("seed lb: %v", err)
+	}
+	lb.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: "203.0.113.77"}}
+	if _, err := cs.CoreV1().Services("sandboxes").UpdateStatus(ctx, lb, metav1.UpdateOptions{}); err != nil {
+		lb.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: "203.0.113.77"}}
+		if _, err := cs.CoreV1().Services("sandboxes").Update(ctx, lb, metav1.UpdateOptions{}); err != nil {
+			t.Fatalf("seed lb ingress: %v", err)
+		}
+	}
+
+	rec := &models.Sandbox{ID: id, Name: "sbx-legacy", Status: models.StatusRunning, Image: "img"}
+	rec.SetEndpoints(map[int]string{
+		8765: "203.0.113.77:8765",
+		22:   "203.0.113.77:22",
+		9222: "203.0.113.77:9222",
+		6080: "203.0.113.77:6080",
+	})
+	if err := st.Create(ctx, rec); err != nil {
+		t.Fatalf("store create: %v", err)
+	}
+
+	svc.ReconcileOnStartup(ctx)
+
+	gotLB, err := cs.CoreV1().Services("sandboxes").Get(ctx, "sbx-legacy-lb", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range gotLB.Spec.Ports {
+		if p.Port == 9222 || p.Port == 6080 {
+			t.Fatalf("ReconcileOnStartup left inventory LB exposing %d", p.Port)
+		}
+	}
+	got, err := st.Get(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != models.StatusRunning {
+		t.Fatalf("status=%s", got.Status)
+	}
+	eps := got.Endpoints()
+	if eps[8765] != "203.0.113.77:8765" {
+		t.Fatalf("public endpoint: %v", eps)
+	}
+	wantInternal := "sbx-legacy.sandboxes.svc.cluster.local"
+	if eps[9222] != wantInternal+":9222" || eps[6080] != wantInternal+":6080" {
+		t.Fatalf("internal endpoints must be ClusterIP DNS after reconcile, got %v", eps)
+	}
+}
+
 func TestStatusPassthrough(t *testing.T) {
 	svc, _, _ := testService(t)
 	sb, err := svc.Create(context.Background(), CreateRequest{})
@@ -750,9 +879,76 @@ func TestHostMissingSandboxAndDriverEndpointsError(t *testing.T) {
 	}
 }
 
+func TestLogsDefaultsTailAndPropagatesErrors(t *testing.T) {
+	st := testDB(t)
+	base := fake.New()
+	if err := base.WithSessionListener(8765); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(base.Close)
+	drv := &failOpsDriver{Driver: base}
+	svc := New(drv, st, Config{
+		Image: "i", Ports: []int{8765}, SessionPort: 8765,
+		FinalizeTimeout: 2 * time.Second, Resources: testResources(),
+	})
+	sb, err := svc.Create(context.Background(), CreateRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitSvcRunning(t, svc, sb.ID)
+	base.SetLogs(sb.ID, "sandbox output")
+
+	out, err := svc.Logs(context.Background(), sb.ID, 0)
+	if err != nil || out != "sandbox output" {
+		t.Fatalf("Logs=%q err=%v", out, err)
+	}
+	if drv.logsTail != 5000 {
+		t.Fatalf("default tail=%d", drv.logsTail)
+	}
+
+	drv.logsErr = driver.ErrLogsUnsupported
+	if _, err := svc.Logs(context.Background(), sb.ID, 10); !errors.Is(err, ErrLogsUnsupported) {
+		t.Fatalf("unsupported error=%v", err)
+	}
+	drv.logsErr = errors.New("logs failed")
+	if _, err := svc.Logs(context.Background(), sb.ID, 10); err == nil || err.Error() != "logs failed" {
+		t.Fatalf("driver error=%v", err)
+	}
+	if _, err := svc.Logs(context.Background(), "missing", 10); err == nil {
+		t.Fatal("missing sandbox should fail before driver Logs")
+	}
+}
+
+func TestRunOrphanGCStopsOnCancelAndHandlesSweepError(t *testing.T) {
+	svc, _, _ := testService(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	svc.RunOrphanGC(ctx)
+
+	st := testDB(t)
+	drv := &failOpsDriver{Driver: fake.New(), listErr: errors.New("list failed")}
+	t.Cleanup(drv.Close)
+	svc = New(drv, st, Config{OrphanGCInterval: time.Hour})
+	svc.RunOrphanGC(ctx)
+}
+
 func TestMergePortsSkipsNonPositive(t *testing.T) {
 	got := mergePorts([]int{80, 0, -1, 80}, []int{443, 0})
 	if len(got) != 2 || got[0] != 80 || got[1] != 443 {
 		t.Fatalf("%v", got)
+	}
+}
+
+func TestSubtractPorts(t *testing.T) {
+	ports := []int{80, 9222, 443, 6080}
+	got := subtractPorts(ports, []int{9222, 6080, 0, -1})
+	if len(got) != 2 || got[0] != 80 || got[1] != 443 {
+		t.Fatalf("filtered ports=%v", got)
+	}
+	if got := subtractPorts(ports, nil); len(got) != len(ports) {
+		t.Fatalf("nil remove changed ports: %v", got)
+	}
+	if got := subtractPorts(nil, []int{9222}); got != nil {
+		t.Fatalf("nil ports changed: %v", got)
 	}
 }

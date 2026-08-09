@@ -4,28 +4,37 @@ A thin control-plane service that manages the lifecycle of sandboxes (instances
 of the Phase 1 universal image in [`../sandbox`](../sandbox)) and returns the
 client-reachable address for each exposed port.
 
-The gateway deliberately does **not** proxy or handle data-plane traffic. All
-data-plane operations are direct client-to-sandbox connections:
+The gateway does **not** proxy data-plane traffic. Public ports are direct
+client-to-sandbox connections; CDP/noVNC stay internal:
 
-- session / agent bridge (WSP/1): `8765`
-- code-server (web IDE): `8744`
-- SSH (shell, exec, file transfer): `22`
-- Chromium CDP: `9222`
-- noVNC preview: `6080`
+- session / agent bridge (WSP/1): `8765` — **public**, session auth
+- code-server (web IDE): `8744` — **public**, IDE password
+- SSH (shell, exec, file transfer): `22` — **public**, `ROOT_PASSWORD` / `SSH_KEY`
+- Chromium CDP: `9222` — **internal only** (container / ClusterIP)
+- noVNC preview: `6080` — **internal only** (container / ClusterIP)
 
-There is no gateway `exec`/`files`/`terminal` API and no reverse proxy: run
-commands and move files over a direct SSH connection, and open the IDE/session
-directly against the returned endpoints.
+Users reach noVNC via Approving `/sandbox-vnc/:id/ws` and
+`/preview-vnc/:runId/:nodeId/:port/ws` (Session when Auth is on). Approving
+outside the cluster or Docker network cannot dial CDP/noVNC.
+
+There is no gateway `exec`/`files`/`terminal` API: run commands and move files
+over SSH, and open the IDE/session against the returned **public** endpoints.
 
 ## Drivers (one per deployment)
 
 A gateway instance runs exactly one driver, selected by `driver` in the config:
 
-- `docker` — local testing. Publishes container ports on a host IP
-  (`bindIP:ephemeral`) discovered via `docker inspect`.
-- `kubernetes` — production. Creates a Deployment + PVC + Secret + ClusterIP
-  Service, plus a `Type=LoadBalancer` Service. With MetalLB the gateway reads
-  back the assigned external IP and exposes `lbIP:port` for each port.
+- `docker` — local testing. Publishes **Public** ports only (`session`/`ide`/`ssh`/`app`)
+  on a host IP (`bindIP:ephemeral`). CDP/noVNC are **not** `-p` mapped; Endpoints
+  backfill them from the container IP (`Networks[name].IPAddress` when a custom
+  network is set). Already-running `-p` mappings are not rewritten (TTL/Reinstall).
+- `kubernetes` — production. ClusterIP Service includes Public+Internal (Listen).
+  LoadBalancer Service publishes **Public** only. Endpoints merge LB IP for public
+  ports and ClusterIP DNS for `cdp`/`novnc`. `ensure*` updates existing Service
+  `Spec.Ports` on AlreadyExists. Driver Options carry Public/Internal so
+  `ReconcileOnStartup` / `Start` / `Get` call `ConvergePublishSurface` and heal
+  inventory `*-lb` after upgrade (not only Create/Reinstall). Until that
+  reconcile finishes, a pre-existing LB may still expose 9222/6080.
 
 Docker and Kubernetes are deployed separately and never run together in one
 instance.
@@ -37,7 +46,8 @@ flowchart TB
   gw -->|"docker run / kubectl (client-go)"| drv["one driver: docker OR kubernetes"]
   drv --> sbx["sandbox (Docker host IP / K8s LB IP)"]
   gw -. "returns per-port direct addresses" .-> client
-  client ==>|"data plane direct: 8765/ws · 8744 · 22 · 9222 · 6080 · app"| sbx
+  client ==>|"public data plane: 8765/ws · 8744 · 22 · app"| sbx
+  approving["Approving in-cluster"] -.->|"internal dial: 9222 CDP · 6080 noVNC"| sbx
 ```
 
 ## Layout

@@ -109,34 +109,54 @@ type PortsConfig struct {
 	Session    int   `yaml:"session"`    // ACP bridge / WSP session, default 8765
 	CodeServer int   `yaml:"codeServer"` // code-server, default 8744
 	SSH        int   `yaml:"ssh"`        // sshd, default 22
-	CDP        int   `yaml:"cdp"`        // Chromium CDP, default 9222
-	NoVNC      int   `yaml:"novnc"`      // noVNC websockify, default 6080
+	CDP        int   `yaml:"cdp"`        // Chromium CDP, default 9222 (internal-only)
+	NoVNC      int   `yaml:"novnc"`      // noVNC websockify, default 6080 (internal-only)
 	App        []int `yaml:"app"`        // extra user application ports to expose
 }
 
-// All returns every distinct port the gateway should expose for a sandbox.
-func (p PortsConfig) All() []int {
+func collectPorts(vals ...int) []int {
 	seen := map[int]struct{}{}
 	var out []int
-	add := func(v int) {
+	for _, v := range vals {
 		if v <= 0 {
-			return
+			continue
 		}
 		if _, ok := seen[v]; ok {
-			return
+			continue
 		}
 		seen[v] = struct{}{}
 		out = append(out, v)
 	}
-	add(p.Session)
-	add(p.CodeServer)
-	add(p.SSH)
-	add(p.CDP)
-	add(p.NoVNC)
-	for _, v := range p.App {
-		add(v)
-	}
 	return out
+}
+
+// Public returns ports that may be published to untrusted networks
+// (Docker -p / K8s LoadBalancer): session, IDE, SSH, and extra app ports.
+// CDP and noVNC are intentionally omitted — they have no application-layer auth.
+func (p PortsConfig) Public() []int {
+	vals := []int{p.Session, p.CodeServer, p.SSH}
+	vals = append(vals, p.App...)
+	return collectPorts(vals...)
+}
+
+// Internal returns ports that stay on the container / cluster network only
+// (CDP 9222, noVNC 6080). Approving dials these in-cluster; they must not be
+// published to the host or an external LoadBalancer.
+func (p PortsConfig) Internal() []int {
+	return collectPorts(p.CDP, p.NoVNC)
+}
+
+// All returns the external publish set. Historically this included CDP/noVNC;
+// those are now Internal-only. Callers that publish to untrusted networks
+// MUST use Public()/All(), not Internal().
+func (p PortsConfig) All() []int {
+	return p.Public()
+}
+
+// Listen returns Public ∪ Internal — every port the sandbox process listens on
+// (ClusterIP / container ports). Not the external publish set.
+func (p PortsConfig) Listen() []int {
+	return collectPorts(append(p.Public(), p.Internal()...)...)
 }
 
 // DockerConfig configures the local Docker driver.

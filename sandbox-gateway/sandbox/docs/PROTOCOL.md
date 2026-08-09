@@ -208,18 +208,31 @@ WebSocket `/ws`,JSON 帧:
 
 ### 5.2 端口与可达性契约
 
-沙箱须在容器网桥 IP 上对外暴露(宿主/平台侧 dial 容器 IP,无需 publish 到宿主机):
+沙箱在**容器网 / ClusterIP** 上监听 CDP/noVNC(平台侧 dial 容器 IP 或
+`<svc>.<ns>.svc.cluster.local`,**不得** publish 到宿主机或外部 LoadBalancer)。
+用户/不可信网络不可直连;无应用层鉴权(`socat` + `x11vnc -nopw`)。
 
-| 端口 | 协议 | 用途 |
-| --- | --- | --- |
-| `9222` | HTTP CDP (`/json/version` + DevTools) | Pick / navigate / 开隔离 tab |
-| `6080` | WebSocket(websockify → RFB) | 前端 noVNC 画面 |
+| 端口 | 协议 | 用途 | 可达面 |
+| --- | --- | --- | --- |
+| `9222` | HTTP CDP (`/json/version` + DevTools) | Pick / navigate / 开隔离 tab | 仅集群内 / 容器网;Approving 拨号 |
+| `6080` | WebSocket(websockify → RFB) | 前端 noVNC 画面 | 仅集群内 / 容器网;用户经 Approving WS |
 
-参考实现细节(可替换,只要对外契约不变):
+用户只走平台代理:
+
+- `/sandbox-vnc/:sandboxId/ws`
+- `/preview-vnc/:runId/:nodeId/:port/ws`
+
+启用平台 Auth 时上述 WS **须有效 Session**（仅校验登录有效，不校验沙箱/跑步归属）。
+集群外 Approving 不能拨 CDP/noVNC,不是支持的拓扑。旧书签 `host:9222` /
+`host:6080` 不可达为预期破坏性变更。Docker 已运行容器的 `-p` 须 TTL/Reinstall；
+K8s 存量 `*-lb` 在网关启动调和 / Start / Reinstall 完成前仍可能对外暴露这两口。
+
+参考实现细节(可替换,只要对**平台**契约不变;勿改 `vnc-preview.sh` 监听与 `-nopw`):
 
 - Chromium remote-debugging 绑 loopback(如 `:9223`),再经 `socat` 转到 `0.0.0.0:9222`。
 - `x11vnc` 只听 localhost RFB,`websockify` 把 `:6080` 转到该 RFB。
 - 建议 `--shm-size≥1g`,避免 Chromium `/dev/shm` 耗尽。
+- 不做传统 VNC 8 字符密码;隔离靠发布面 + 平台 Session,不靠 RFB 鉴权。
 
 ### 5.3 导航目标(隔离)
 

@@ -80,6 +80,12 @@ func (d *Driver) endpointsFor(spec driver.Spec) map[int]string {
 	for _, p := range spec.Ports {
 		eps[p] = fmt.Sprintf("127.0.0.1:%d", 30000+p)
 	}
+	for _, p := range spec.InternalPorts {
+		if _, ok := eps[p]; ok {
+			continue
+		}
+		eps[p] = fmt.Sprintf("10.88.0.2:%d", p)
+	}
 	if d.sessionPort > 0 {
 		eps[d.sessionPort] = addr
 	} else if len(spec.Ports) > 0 {

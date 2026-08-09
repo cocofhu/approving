@@ -1044,9 +1044,10 @@
         "title": "沙箱详情",
         "sectionMeta": "元数据",
         "sectionProxy": "平台代理 URL",
-        "sectionProxyHint": "相对路径，供已登录运维复制；不可点击跳转。",
+        "sectionProxyHint": "用户可访问的反代与 WS。VNC 仍展示平台路径，不是直连 :6080。",
         "sectionEndpoints": "直连 Endpoints",
-        "sectionEndpointsHint": "集群内 host:port（session / ide / ssh / cdp / novnc）；数字端口键已过滤。直连需另行鉴权，请勿当浏览器可打开链接。",
+        "sectionEndpointsHint": "运维可直连已鉴权服务（session / ide / ssh）。数字端口键已过滤。直连需另行鉴权，请勿当浏览器可打开链接。",
+        "endpointsNotice": "CDP / noVNC 不提供直连。两者无应用层鉴权，仅允许经平台代理 /sandbox-vnc/:sandboxId/ws 与 /preview-vnc/:runId/:nodeId/:port/ws（启用平台 Auth 时须 Session；仅校验登录有效，不校验沙箱/跑步归属）。session / ide 各自密码鉴权；ssh 使用 ROOT_PASSWORD 或 SSH_KEY。",
         "endpointsEmpty": "暂无可用直连 endpoints（gateway 不可达或未返回命名端口）",
         "loadFailed": "加载沙箱详情失败",
         "copy": "复制",
@@ -1065,10 +1066,10 @@
           "error": "error"
         },
         "proxy": {
-          "sandbox": "Sandbox 代理",
-          "bridge": "Bridge 代理",
-          "terminal": "Terminal WS",
-          "vnc": "VNC WS"
+          "session": "session",
+          "ide": "ide",
+          "vnc": "VNC WS",
+          "openPreview": "打开预览"
         }
       }
     },
@@ -1095,7 +1096,7 @@
       "novncOpen": "打开",
       "novncAddressPlaceholder": "about:blank",
       "password": "直连密码",
-      "passwordHint": "直连沙箱 host:port（不经平台代理）时使用；与 PASSWORD / CURSOR_ACP_PASSWORD 相同",
+      "passwordHint": "仅用于直连 session / ide / ssh。CDP / noVNC 不可直连，仅允许经平台代理 WS（启用 Auth 时须 Session）。",
       "showPassword": "显示",
       "hidePassword": "隐藏",
       "copyPassword": "复制",

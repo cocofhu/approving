@@ -1,10 +1,27 @@
 # Sandbox Gateway API
 
 The gateway is a thin control plane. It creates, exposes, and destroys sandboxes
-(instances of the Phase 1 universal image) and returns the client-reachable
-address for each exposed port. It does **not** proxy or handle any data-plane
-traffic: sessions (`8765`), code-server (`8744`), SSH (`22`), CDP (`9222`), and
-noVNC (`6080`) are all direct client-to-sandbox connections.
+(instances of the Phase 1 universal image) and returns addresses for each port.
+
+**Public data-plane** (may be published to host / LoadBalancer): session (`8765`),
+code-server (`8744`), SSH (`22`), and extra app ports. Clients connect directly;
+each service has its own auth (session/IDE password, `ROOT_PASSWORD` / `SSH_KEY`).
+
+**Internal-only** (container network / ClusterIP, **not** published to host or
+external LB): Chromium CDP (`9222`) and noVNC/websockify (`6080`). These have
+**no application-layer auth**. Approving dials them in-cluster for Pick/navigate
+and VNC WS proxy. Users must **not** reach them directly — use Approving
+`/sandbox-vnc/:sandboxId/ws` and `/preview-vnc/:runId/:nodeId/:port/ws`
+(Session required when platform Auth is injected). Approving running outside
+the cluster or Docker network is not supported for CDP/VNC.
+
+Docker `-p` on already-running containers is not rewritten automatically; rely
+on TTL or Reinstall. Kubernetes inventory `*-lb` Services that still publish
+9222/6080 are converged on gateway startup reconcile (`ReconcileOnStartup`),
+`Start`, or `Reinstall` — until then old bookmarks/scans may still succeed.
+After converge, internal endpoints are ClusterIP DNS, not the LB IP. Old
+`host:9222` / `host:6080` bookmarks becoming unreachable is an expected
+breaking change.
 
 - Base path: `/api/v1`
 - Auth: `Authorization: Bearer <apiKey>` (when `auth.apiKeys` is configured)
@@ -140,8 +157,8 @@ GET /api/v1/sandboxes/:id
     "session": "10.0.0.21:8765",
     "ide": "10.0.0.21:8744",
     "ssh": "10.0.0.21:22",
-    "cdp": "10.0.0.21:9222",
-    "novnc": "10.0.0.21:6080",
+    "cdp": "10.88.0.12:9222",
+    "novnc": "10.88.0.12:6080",
     "8765": "10.0.0.21:8765",
     "8744": "10.0.0.21:8744",
     "22": "10.0.0.21:22"
@@ -149,8 +166,12 @@ GET /api/v1/sandboxes/:id
 }
 ```
 
-`endpoints` carries both friendly names (`session`/`ide`/`ssh`/`cdp`/`novnc`)
-and raw port keys. Clients connect directly to these addresses.
+`endpoints` carries friendly names and raw port keys. `session`/`ide`/`ssh`
+(and app ports) are **public** host or LB addresses. `cdp`/`novnc` are
+**internal** container IP or ClusterIP DNS (`<svc>.<ns>.svc.cluster.local`)
+for in-cluster Approving only — not user-facing, not an external LB IP.
+
+Approving's user `GetView` whitelist returns only `session`/`ide`/`ssh`.
 
 ## Lifecycle
 
@@ -236,8 +257,10 @@ for the agent execution event log.
 
 - No `exec` / file / terminal endpoints. Run commands and move files by
   connecting directly to the sandbox **SSH (`22`)** or the WSP/1 session.
-- No reverse proxy for code-server, session, or preview. Clients connect to the
-  returned endpoint addresses directly.
+- No reverse proxy for code-server, session, SSH, or app ports. Clients connect
+  to the returned **public** endpoint addresses directly.
+- CDP / noVNC are not an external data-plane. Users go through Approving VNC
+  WebSocket proxies; the gateway does not terminate those WS paths.
 - No streaming / follow logs (`?follow=1` / SSE). Clients re-fetch on demand.
 - No previous-container / multi-container log fan-out (single `sandbox` container).
 - code-flow's former `/api/changes` is gone from the image; compute "changes"

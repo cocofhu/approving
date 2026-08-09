@@ -51,6 +51,11 @@ func TestApplyVncMsgInspectNavigate(t *testing.T) {
 	if len(p.navs) != 1 || p.navs[0] != "reload" {
 		t.Fatalf("navigate wrong: %v", p.navs)
 	}
+	h.applyVncMsg(p, decodeVnc(t, `{"type":"navigate","action":"back"}`))
+	h.applyVncMsg(p, decodeVnc(t, `{"type":"navigate","action":"forward"}`))
+	if len(p.navs) != 3 || p.navs[1] != "back" || p.navs[2] != "forward" {
+		t.Fatalf("back/forward wrong: %v", p.navs)
+	}
 }
 
 func TestApplyVncMsgIgnoresUnknown(t *testing.T) {
