@@ -5,6 +5,7 @@ import {
   formatImageCountFull,
   formatVarChip,
   formatVarValue,
+  chatImageSrc,
   imgSrc,
   isCompositeText,
 } from './compositeText'
@@ -38,6 +39,15 @@ describe('imgSrc', () => {
     expect(imgSrc({ ref: 'blob:abc123', data: 'xx', mimeType: 'image/png' })).toBe('/api/blobs/abc123')
     expect(imgSrc({ data: 'QUJD', mimeType: 'image/png' })).toBe('data:image/png;base64,QUJD')
     expect(imgSrc({ mimeType: 'image/png' })).toBe('')
+  })
+})
+
+describe('chatImageSrc', () => {
+  it('prefers live url then falls back to imgSrc', () => {
+    expect(
+      chatImageSrc({ url: 'data:image/png;base64,LIVE', data: 'QUJD', mimeType: 'image/png' }),
+    ).toBe('data:image/png;base64,LIVE')
+    expect(chatImageSrc({ data: 'QUJD', mimeType: 'image/png' })).toBe('data:image/png;base64,QUJD')
   })
 })
 

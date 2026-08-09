@@ -4,7 +4,11 @@ import { useI18n } from 'vue-i18n'
 import { api, type PreviewIssue } from '@/lib/api'
 import ParagraphInput from '@/components/ui/ParagraphInput.vue'
 import Icon from '@/components/ui/Icon.vue'
+import ChatImageThumb from '@/components/ui/ChatImageThumb.vue'
+import ChatImagePreviewModal from '@/components/ui/ChatImagePreviewModal.vue'
 import { imgSrc } from '@/lib/compositeText'
+import { useChatImagePreview } from '@/lib/useChatImagePreview'
+import { attachmentDisplayName, isImageAttachment } from '@/lib/attachments'
 import type { ClarifyImage } from '@/lib/types'
 
 const props = withDefaults(
@@ -60,6 +64,7 @@ const text = defineModel<string>('text', { default: '' })
 const attachments = defineModel<ClarifyImage[]>('images', { default: () => [] })
 
 const { t } = useI18n()
+const { preview: imagePreview, openChatImagePreview, closeChatImagePreview } = useChatImagePreview()
 
 const copyNs = computed(() =>
   props.copyVariant === 'review'
@@ -294,12 +299,18 @@ defineExpose({
         <p class="mt-1 whitespace-pre-wrap break-words text-xs text-txt">{{ is.body }}</p>
         <code v-if="is.selector" class="mt-1 block truncate text-[10px] text-accent">{{ is.selector }}</code>
         <div v-if="is.images?.length" class="mt-1.5 flex flex-wrap gap-1.5">
-          <img
-            v-for="(im, ii) in is.images"
-            :key="ii"
-            :src="imgSrc(im)"
-            class="h-14 w-14 rounded-md border border-line object-cover"
-          />
+          <template v-for="(im, ii) in is.images" :key="ii">
+            <ChatImageThumb
+              v-if="isImageAttachment(im)"
+              mode="previewable"
+              size="sm"
+              thumb-class="rounded-md"
+              :src="imgSrc(im)"
+              :label="attachmentDisplayName(im, ii)"
+              test-id="preview-issue-image-thumb"
+              @preview="openChatImagePreview(imgSrc(im), attachmentDisplayName(im, ii))"
+            />
+          </template>
         </div>
       </div>
     </div>
@@ -318,11 +329,15 @@ defineExpose({
       >
         <span class="shrink-0 text-[10px] text-txt3">{{ t(copyKey('attached')) }}</span>
         <code v-if="selector" class="min-w-0 flex-1 truncate text-[10px] text-accent">{{ selector }}</code>
-        <img
+        <ChatImageThumb
           v-if="elementImage"
+          mode="previewable"
+          size="xs"
+          thumb-class="rounded shrink-0"
           :src="imgSrc(elementImage)"
-          class="h-8 w-8 shrink-0 rounded border border-line object-cover"
-          alt=""
+          :label="attachmentDisplayName(elementImage)"
+          test-id="preview-element-image-thumb"
+          @preview="openChatImagePreview(imgSrc(elementImage), attachmentDisplayName(elementImage))"
         />
         <button
           type="button"
@@ -357,4 +372,11 @@ defineExpose({
       </div>
     </div>
   </div>
+  <ChatImagePreviewModal
+    :open="!!imagePreview"
+    :src="imagePreview?.src || ''"
+    :label="imagePreview?.label || ''"
+    test-id-prefix="preview-feedback-image-preview"
+    @close="closeChatImagePreview"
+  />
 </template>
