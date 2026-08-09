@@ -592,12 +592,19 @@ test.describe('ProjectDetailView 项目信息面板', () => {
     await expect(deleteBtn).toHaveClass(/text-err/)
     await expect(saveBtn).toBeVisible()
     await expect(saveBtn).toHaveClass(/bg-accent/)
+    // 无改动时保存仍可点（现网 savingMeta，非 Demo dirty-disable）（g2.1 / g3.2）
+    await expect(saveBtn).toBeEnabled()
 
     // 左删右存：删除在保存左侧（g2.1 / g3.2）
     const deleteBox = await deleteBtn.boundingBox()
     const saveBox = await saveBtn.boundingBox()
     expect(deleteBox && saveBox).toBeTruthy()
     expect(deleteBox!.x).toBeLessThan(saveBox!.x)
+
+    // 脚栏贴近主区底，消除卡外页底空洞（g1.1 / g1.2 / g3.2）
+    const footerBox = await footer.boundingBox()
+    expect(footerBox).toBeTruthy()
+    expect(footerBox!.y + footerBox!.height).toBeGreaterThan(800 - 80)
 
     // 点击删除 → 既有确认弹窗 → 取消后仍停留详情且项目未删
     await deleteBtn.click()
@@ -607,6 +614,129 @@ test.describe('ProjectDetailView 项目信息面板', () => {
     await expect(page.getByText('删除项目 · Demo Project')).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Demo Project' })).toBeVisible()
     await expect(panel.getByTestId('project-meta-delete')).toBeVisible()
+  })
+
+  test('保存后页头名称同步；其它 Tab 仍可切换（g2.2 / g3.2）', async ({ page }) => {
+    let savedName = MOCK_PROJECT.name
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.route('**/api/projects/proj-1', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ ...MOCK_PROJECT, name: savedName }),
+        })
+        return
+      }
+      if (route.request().method() === 'PATCH' || route.request().method() === 'PUT') {
+        const body = route.request().postDataJSON() as { name?: string; description?: string }
+        savedName = body.name?.trim() || savedName
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ...MOCK_PROJECT,
+            name: savedName,
+            description: body.description ?? MOCK_PROJECT.description,
+          }),
+        })
+        return
+      }
+      await route.continue()
+    })
+    await page.route('**/api/workflows**', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(MOCK_WORKFLOWS),
+        })
+        return
+      }
+      await route.continue()
+    })
+    await page.route('**/api/runs**', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20, hasMore: false }),
+        })
+        return
+      }
+      await route.continue()
+    })
+    await page.route('**/api/projects/proj-1/pm-leader', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ enabled: false }),
+      })
+    })
+    await page.route('**/api/projects/proj-1/cron-jobs', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ items: [] }),
+        })
+        return
+      }
+      await route.continue()
+    })
+    await page.route('**/api/projects/proj-1/channel**', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ channel: null, secretsKeyConfigured: false }),
+        })
+        return
+      }
+      await route.continue()
+    })
+    await page.route('**/api/projects/*/token-stats**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          window: '30d',
+          bucketWidth: 'day',
+          timezone: 'UTC',
+          empty: true,
+          trend: [],
+          composition: {
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            total: 0,
+          },
+          workflows: [],
+        }),
+      })
+    })
+    await page.goto('/project-detail.html')
+    await expect(page.getByRole('heading', { name: 'Demo Project' })).toBeVisible({ timeout: 10_000 })
+    await page.getByRole('button', { name: '项目信息' }).click()
+
+    await page.locator('#project-meta-name').fill('Renamed Project')
+    await page.getByTestId('project-meta-footer').getByRole('button', { name: '保存' }).click()
+    await expect(page.getByRole('heading', { name: 'Renamed Project' })).toBeVisible({ timeout: 5_000 })
+
+    await page.getByRole('button', { name: '沙箱环境变量' }).click()
+    await expect(page.getByText('暂无沙箱环境变量')).toBeVisible()
+    await expect(page).toHaveURL(/tab=sandboxEnv/)
+    await page.getByRole('button', { name: '定时任务' }).click()
+    await expect(page.getByText('暂无定时任务')).toBeVisible()
+    await expect(page).toHaveURL(/tab=cronJobs/)
+    await page.getByRole('button', { name: '通知' }).click()
+    await expect(page.getByTestId('project-notify-panel')).toBeVisible()
+    await expect(page).toHaveURL(/tab=notify/)
+    await page.getByRole('button', { name: '项目信息' }).click()
+    await expect(page.getByTestId('project-meta-footer')).toBeVisible()
+    await expect(page.locator('#project-meta-name')).toHaveValue('Renamed Project')
+    await expect(page).toHaveURL(/tab=meta/)
   })
 })
 
