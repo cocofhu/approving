@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   regen: vi.fn(),
   revoke: vi.fn(),
   toastSuccess: vi.fn(),
-  toastInfo: vi.fn(),
+  toastShow: vi.fn(),
 }))
 
 vi.mock('@/lib/api', async () => {
@@ -32,9 +32,9 @@ vi.mock('@/lib/api', async () => {
 vi.mock('@/lib/useToast', () => ({
   useToast: () => ({
     success: mocks.toastSuccess,
-    info: mocks.toastInfo,
+    show: mocks.toastShow,
     error: vi.fn(),
-    warning: vi.fn(),
+    warn: vi.fn(),
   }),
 }))
 
@@ -73,7 +73,7 @@ beforeEach(() => {
   mocks.regen.mockReset()
   mocks.revoke.mockReset()
   mocks.toastSuccess.mockReset()
-  mocks.toastInfo.mockReset()
+  mocks.toastShow.mockReset()
   forgetShareUrl('run-1', 'hg1', 1)
 })
 
@@ -116,7 +116,7 @@ describe('GateShareLinkPanel', () => {
     await flushPromises()
     const shown = (w.get('[data-testid="gate-share-url"]').element as HTMLTextAreaElement).value
     expect(shown).toBe(url)
-    expect(mocks.toastInfo).toHaveBeenCalled()
+    expect(mocks.toastShow).toHaveBeenCalled()
   })
 
   it('manage mode copies remembered URL without regenerating', async () => {

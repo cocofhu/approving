@@ -3,6 +3,7 @@ package router
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -86,5 +87,44 @@ func TestErrorLogger5xx(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/warn", nil))
 	if w.Code != 400 {
 		t.Fatalf("warn: %d", w.Code)
+	}
+}
+
+func TestPublicGateMiddlewareHeadersAndPreflight(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(cors(), publicGateMiddleware())
+	r.GET("/public/gate-approvals/preview", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+	r.OPTIONS("/public/gate-approvals/preview", func(c *gin.Context) {
+		c.Status(http.StatusTeapot)
+	})
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/public/gate-approvals/preview", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET status=%d", w.Code)
+	}
+	for name, want := range map[string]string{
+		"Cache-Control":           "no-store",
+		"Pragma":                  "no-cache",
+		"Referrer-Policy":         "no-referrer",
+		"X-Content-Type-Options":  "nosniff",
+		"X-Frame-Options":         "DENY",
+		"Content-Security-Policy": "frame-ancestors 'none'",
+	} {
+		if got := w.Header().Get(name); !strings.Contains(got, want) {
+			t.Errorf("%s=%q, want to contain %q", name, got, want)
+		}
+	}
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("public route must not expose CORS, got %q", got)
+	}
+
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodOptions, "/public/gate-approvals/preview", nil))
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("OPTIONS status=%d, want 204", w.Code)
 	}
 }

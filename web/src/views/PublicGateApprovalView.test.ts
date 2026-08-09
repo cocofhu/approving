@@ -71,8 +71,8 @@ describe('PublicGateApprovalView', () => {
     expect(w.get('[data-testid="public-gate-title"]').text()).toBe('审阅视觉稿')
     expect(w.get('[data-testid="public-gate-root"]').text()).toContain('外部审批')
     expect(w.get('[data-testid="public-gate-root"]').text()).not.toMatch(/run-|projectId|10\.1\.2\.3|\/api\/blobs/)
-    expect(w.get('[data-testid="public-gate-approve"]').exists()).toBe(true)
-    expect(w.get('[data-testid="public-gate-reject"]').exists()).toBe(true)
+    expect(w.find('[data-testid="public-gate-approve"]').exists()).toBe(true)
+    expect(w.find('[data-testid="public-gate-reject"]').exists()).toBe(true)
   })
 
   it('shows expired / used / revoked / invalid separately', async () => {

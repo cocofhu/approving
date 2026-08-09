@@ -83,7 +83,7 @@ async function copyText(text: string) {
     return true
   } catch {
     revealUrl.value = true
-    toast.info(t('pages.gatesInbox.share.clipboardFallback'))
+    toast.show(t('pages.gatesInbox.share.clipboardFallback'))
     return false
   }
 }
