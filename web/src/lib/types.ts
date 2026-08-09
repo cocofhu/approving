@@ -325,6 +325,8 @@ export interface ChatMessage {
   status?: 'ok' | 'failed' | string
   /** connection | sandbox | empty | unknown | stopped */
   failKind?: 'connection' | 'sandbox' | 'empty' | 'unknown' | 'stopped' | string
+  /** user | cron | channel | "" */
+  source?: string
   images?: ClarifyImage[]
   citations?: ProgressCitation[]
   attachedContext?: AttachedContext

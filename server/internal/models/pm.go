@@ -57,8 +57,8 @@ type ChatMessage struct {
 	// FailKind classifies why a turn failed (only when Status=failed).
 	// Values: connection | sandbox | empty | unknown | stopped.
 	FailKind string `json:"failKind,omitempty"`
-	// Source tags how the user turn was produced (user chat vs cron scheduler).
-	Source string `json:"source,omitempty"` // user | cron | ""
+	// Source tags how the turn was produced (user chat vs cron vs channel).
+	Source string `json:"source,omitempty"` // user | cron | channel | ""
 	// Images are optional base64 attachments the user sent with this turn.
 	Images          []PromptImage      `gorm:"serializer:json" json:"images,omitempty"`
 	Citations       []ProgressCitation `gorm:"serializer:json" json:"citations,omitempty"`

@@ -51,6 +51,9 @@ type InboundMessage struct {
 	MessageID      string // platform message id (passive reply + dedup)
 	Timestamp      time.Time
 	Raw            map[string]any
+	// ChannelHint is an optional PM-only system note (e.g. QQ image download
+	// failure). Persisted as role=system source=channel; never sent back to IM.
+	ChannelHint string
 }
 
 // OutboundMessage is a normalized reply/push to a channel conversation.

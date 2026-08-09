@@ -2,6 +2,7 @@ package qq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -10,7 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cocofhu/approving/internal/blob"
 	"github.com/cocofhu/approving/internal/channels"
+
+	"github.com/rs/zerolog/log"
 )
 
 const maxInboundImageBytes = 20 << 20 // 20 MiB (clarified QQ inbound cap)
@@ -24,9 +28,32 @@ var errInboundTooLarge = fmt.Errorf("inbound attachment exceeds %d MiB", qqAttac
 // limited redirects, re-validated on every hop).
 var inboundHTTP = newSafeHTTPClient(30 * time.Second)
 
+// qqAuthCDNHostSuffixes are QQ multimedia CDNs that require QQBot Authorization.
+// Signed qpic / grouptalk URLs typically work without a bot token.
+var qqAuthCDNHostSuffixes = []string{
+	"multimedia.nt.qq.com.cn",
+	"multimedia.nt.qq.com",
+}
+
+func hostNeedsQQBotAuth(host string) bool {
+	h := strings.ToLower(strings.TrimSpace(host))
+	if h == "" {
+		return false
+	}
+	for _, suf := range qqAuthCDNHostSuffixes {
+		if h == suf || strings.HasSuffix(h, "."+suf) {
+			return true
+		}
+	}
+	return false
+}
+
+type imageDownloader func(ctx context.Context, att attachment, authHeader string) (channels.Image, error)
+
 // downloadImage fetches an inbound attachment into a normalized channels.Image.
 // Any content type is accepted (PDF/zip/etc.); size is capped at 20 MiB.
-func downloadImage(ctx context.Context, att attachment) (channels.Image, error) {
+// authHeader is Authorization: QQBot {token} and is only sent to auth CDN hosts.
+func downloadImage(ctx context.Context, att attachment, authHeader string) (channels.Image, error) {
 	rawURL := att.URL
 	if rawURL == "" {
 		return channels.Image{}, fmt.Errorf("empty attachment url")
@@ -38,9 +65,16 @@ func downloadImage(ctx context.Context, att attachment) (channels.Image, error) 
 	if err := validatePublicHTTPURL(rawURL); err != nil {
 		return channels.Image{}, err
 	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return channels.Image{}, err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return channels.Image{}, err
+	}
+	if authHeader != "" && hostNeedsQQBotAuth(parsed.Hostname()) {
+		req.Header.Set("Authorization", authHeader)
 	}
 	resp, err := inboundHTTP.Do(req)
 	if err != nil {
@@ -57,18 +91,137 @@ func downloadImage(ctx context.Context, att attachment) (channels.Image, error) 
 	if len(data) > maxInboundImageBytes {
 		return channels.Image{}, errInboundTooLarge
 	}
-	mime := att.ContentType
-	if mime == "" {
-		mime = resp.Header.Get("Content-Type")
-	}
-	if mime == "" {
-		mime = "application/octet-stream"
-	}
+	mime := normalizeInboundImageMIME(att.ContentType, resp.Header.Get("Content-Type"), data)
 	name := strings.TrimSpace(att.Filename)
 	if name == "" {
 		name = fallbackAttachmentName(att, mime)
 	}
 	return channels.Image{Data: data, MimeType: mime, URL: att.URL, Filename: name}, nil
+}
+
+// normalizeInboundImageMIME always prefers magic-bytes for JPEG/PNG/WEBP/GIF
+// (does not copy sandbox qqbot "only sniff when Content-Type is empty") and
+// strips charset parameters so nosniff clients can decode.
+func normalizeInboundImageMIME(claimed, responseCT string, data []byte) string {
+	claimed = blob.StripContentTypeParams(claimed)
+	responseCT = blob.StripContentTypeParams(responseCT)
+	detected := blob.StripContentTypeParams(http.DetectContentType(data))
+	if sniffed := blob.SniffSupportedImageMIME(data); sniffed != "" {
+		return sniffed
+	}
+	claimedLower := strings.ToLower(claimed)
+	// Claimed image/* / empty / «file» must not keep a lie; use sniffed type.
+	if claimedLower == "" || claimedLower == "file" || strings.HasPrefix(claimedLower, "image/") {
+		if detected != "" {
+			return strings.ToLower(detected)
+		}
+		if responseCT != "" {
+			return strings.ToLower(responseCT)
+		}
+		return "application/octet-stream"
+	}
+	if claimed != "" {
+		return claimed
+	}
+	if responseCT != "" {
+		return responseCT
+	}
+	if detected != "" {
+		return strings.ToLower(detected)
+	}
+	return "application/octet-stream"
+}
+
+func isSniffedImageMIME(mime string) bool {
+	switch strings.ToLower(blob.StripContentTypeParams(mime)) {
+	case "image/jpeg", "image/png", "image/gif", "image/webp":
+		return true
+	default:
+		return false
+	}
+}
+
+// looksLikeInboundImage reports whether an attachment should count toward the
+// QQ image download-failure hint (N/M). Unknown QQ types (empty/file + MD5
+// name) are treated as potential images; obvious non-image extensions are not.
+func looksLikeInboundImage(att attachment) bool {
+	if isImageAttachment(att) {
+		return true
+	}
+	ct := strings.ToLower(blob.StripContentTypeParams(att.ContentType))
+	if ct != "" && ct != "file" && ct != "application/octet-stream" {
+		return false
+	}
+	name := strings.ToLower(att.Filename + " " + att.URL)
+	for _, ext := range []string{".pdf", ".zip", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".mp3", ".mp4", ".mov", ".wav", ".rar", ".7z"} {
+		if strings.Contains(name, ext) {
+			return false
+		}
+	}
+	return true
+}
+
+// formatQQImageDownloadHint builds the PM-only channel hint (Demo copy).
+// received is N (image attachments including over-cap); failed is M.
+func formatQQImageDownloadHint(received, failed int) string {
+	if failed <= 0 || received <= 0 {
+		return ""
+	}
+	if failed >= received {
+		if received == 1 {
+			return "收到 1 张图片，但下载失败，未能展示。"
+		}
+		return fmt.Sprintf("收到 %d 张图片，但下载失败，未能展示。", received)
+	}
+	return fmt.Sprintf("收到 %d 张图片，其中 %d 张下载失败，未能展示。", received, failed)
+}
+
+// collectInboundAttachments downloads up to maxInboundImages successes, counts
+// image download failures (including over-cap skips) for a PM channel hint,
+// and keeps oversized names on the existing QQ reply path.
+func collectInboundAttachments(ctx context.Context, atts []attachment, authHeader string, dl imageDownloader) (images []channels.Image, hint string, oversized []string) {
+	if dl == nil {
+		dl = downloadImage
+	}
+	var received, failed int
+	for _, att := range atts {
+		asImage := looksLikeInboundImage(att)
+		if asImage {
+			received++
+		}
+		if len(images) >= maxInboundImages {
+			if asImage {
+				failed++
+			}
+			continue
+		}
+		img, err := dl(ctx, att, authHeader)
+		if err != nil {
+			if errors.Is(err, errInboundTooLarge) {
+				name := strings.TrimSpace(att.Filename)
+				if name == "" {
+					name = "附件"
+				}
+				oversized = append(oversized, name)
+				if asImage {
+					received--
+				}
+				continue
+			}
+			log.Warn().Err(err).Msg("qq: inbound attachment download failed; skipping")
+			if asImage {
+				failed++
+			}
+			continue
+		}
+		if asImage && !isSniffedImageMIME(img.MimeType) {
+			log.Warn().Str("mime", img.MimeType).Msg("qq: inbound claimed image is not jpeg/png/gif/webp; skipping")
+			failed++
+			continue
+		}
+		images = append(images, img)
+	}
+	return images, formatQQImageDownloadHint(received, failed), oversized
 }
 
 func fallbackAttachmentName(att attachment, mime string) string {
@@ -78,6 +231,10 @@ func fallbackAttachmentName(att attachment, mime string) string {
 		return base + ".png"
 	case strings.HasPrefix(mime, "image/jpeg"), strings.HasPrefix(mime, "image/jpg"):
 		return base + ".jpg"
+	case strings.HasPrefix(mime, "image/webp"):
+		return base + ".webp"
+	case strings.HasPrefix(mime, "image/gif"):
+		return base + ".gif"
 	case strings.HasPrefix(mime, "application/pdf"):
 		return base + ".pdf"
 	case strings.Contains(mime, "zip"):

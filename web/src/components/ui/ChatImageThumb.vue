@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const props = withDefaults(
@@ -20,10 +20,19 @@ const props = withDefaults(
 const emit = defineEmits<{ preview: [] }>()
 const { t } = useI18n()
 
+const loadFailed = ref(false)
+const retryNonce = ref(0)
+
 const sizeClass = computed(() => {
   if (props.size === 'sm') return 'h-14 w-14'
   if (props.size === 'xs') return 'h-8 w-8'
   return 'h-20 w-20'
+})
+
+const failCardClass = computed(() => {
+  if (props.size === 'xs') return 'w-28'
+  if (props.size === 'sm') return 'w-36'
+  return 'w-[10.5rem]'
 })
 
 const hintClass = computed(() =>
@@ -32,24 +41,93 @@ const hintClass = computed(() =>
     : 'text-[10px] leading-tight',
 )
 
+const displaySrc = computed(() => {
+  if (!retryNonce.value || !props.src) return props.src
+  const sep = props.src.includes('?') ? '&' : '?'
+  return `${props.src}${sep}_r=${retryNonce.value}`
+})
+
+const retryTestId = computed(() =>
+  props.testId ? `${props.testId}-retry` : 'chat-image-retry',
+)
+
+watch(
+  () => props.src,
+  () => {
+    loadFailed.value = false
+    retryNonce.value = 0
+  },
+)
+
+function onImgError() {
+  loadFailed.value = true
+}
+
+function onImgLoad() {
+  loadFailed.value = false
+}
+
+function retryLoad() {
+  retryNonce.value += 1
+  loadFailed.value = false
+}
+
 function onPreviewClick() {
+  if (loadFailed.value) return
   if (props.mode === 'previewable') emit('preview')
 }
 </script>
 
 <template>
+  <div
+    v-if="loadFailed"
+    class="flex flex-col gap-1.5 border border-err/40 bg-err/[0.08] p-2"
+    :class="[failCardClass, thumbClass]"
+    :data-testid="testId"
+    data-image-failed="1"
+  >
+    <div
+      class="flex h-7 w-7 items-center justify-center border border-err/35 text-red-300"
+      aria-hidden="true"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+        <rect x="3" y="5" width="18" height="14" />
+        <path d="M3 15l5-5 4 4 3-3 6 6" />
+        <path d="M15 5l6 6" />
+      </svg>
+    </div>
+    <div class="text-[12px] font-semibold text-red-300">{{ t('common.chatImage.imageLoadFailed') }}</div>
+    <div
+      class="truncate font-mono text-[11px] text-txt2"
+      :title="label"
+    >{{ label }}</div>
+    <button
+      type="button"
+      class="bg-accent px-2.5 py-1 text-left text-[12px] text-white hover:brightness-110"
+      :data-testid="retryTestId"
+      @click.stop="retryLoad"
+    >
+      {{ t('common.chatImage.retry') }}
+    </button>
+  </div>
   <button
-    v-if="mode === 'previewable'"
+    v-else-if="mode === 'previewable'"
     type="button"
-    class="group relative cursor-pointer overflow-hidden border border-line transition hover:border-accent"
+    class="group relative cursor-pointer overflow-hidden border border-line transition hover:border-accent focus-visible:border-accent focus-visible:outline-none"
     :class="[sizeClass, thumbClass]"
     :data-testid="testId"
     :aria-label="t('common.chatImage.previewAria', { label })"
     @click="onPreviewClick"
   >
-    <img :src="src" class="h-full w-full object-cover" :alt="alt" />
+    <img
+      :src="displaySrc"
+      class="h-full w-full object-cover"
+      :alt="alt"
+      @error="onImgError"
+      @load="onImgLoad"
+    />
     <span
-      class="pointer-events-none absolute inset-x-0 bottom-0 bg-black/55 px-1 py-0.5 text-center text-white opacity-0 transition-opacity group-hover:opacity-100"
+      class="pointer-events-none absolute inset-x-0 bottom-0 bg-black/55 px-1 py-0.5 text-center text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
       :class="hintClass"
     >{{ t('common.chatImage.clickToEnlarge') }}</span>
   </button>
@@ -59,7 +137,13 @@ function onPreviewClick() {
     :class="[sizeClass, thumbClass]"
     :data-testid="testId"
   >
-    <img :src="src" class="h-full w-full object-cover" :alt="alt" />
+    <img
+      :src="displaySrc"
+      class="h-full w-full object-cover"
+      :alt="alt"
+      @error="onImgError"
+      @load="onImgLoad"
+    />
     <span
       class="pointer-events-none absolute inset-x-0 bottom-0 bg-black/45 px-0.5 py-0.5 text-center text-[9px] leading-tight text-txt2"
     >{{ t('common.chatImage.previewUnavailable') }}</span>

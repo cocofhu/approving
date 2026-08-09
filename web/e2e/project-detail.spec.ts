@@ -1345,6 +1345,7 @@ test.describe('ProjectDetailView PM Leader QQ Channel 侧栏', () => {
     await expect(page.getByTestId('pm-qq-tag-header')).toBeVisible()
     await expect(page.getByTestId('pm-channel-readonly')).toBeVisible()
     await expect(page.getByTestId('pm-channel-readonly')).toContainText('来自 QQ，请在 QQ 侧回复')
+    await expect(page.getByTestId('pm-channel-readonly')).toContainText('可点击缩略图查看大图')
     await expect(page.getByTestId('pm-chat-send')).toHaveCount(0)
 
     await channelItem.click({ button: 'right' })

@@ -305,6 +305,7 @@
       "previewTitle": "Image preview · {label}",
       "previewUnavailable": "Preview unavailable",
       "imageLoadFailed": "Failed to load image",
+      "retry": "Retry",
       "previewAria": "Preview {label}",
       "imageFallback": "Image",
       "imageFallbackN": "Image {n}"
