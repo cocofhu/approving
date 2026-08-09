@@ -1,0 +1,24 @@
+package gateshare
+
+import "errors"
+
+var (
+	ErrNoStandardAction = errors.New("gate has no standard approve/reject action")
+	ErrNotHumanGate     = errors.New("not a human_gate")
+	ErrGateNotPending   = errors.New("gate is not pending")
+	ErrRunEnded         = errors.New("run already ended")
+	ErrUsedReadonly     = errors.New("link already used; cannot create another")
+	ErrInvalidTTL       = errors.New("invalid ttl tier")
+	ErrNotFound         = errors.New("share link not found")
+	ErrNotActive        = errors.New("share link is not active")
+	ErrIterationStale   = errors.New("gate instance is no longer current")
+	ErrTokenInvalid     = errors.New("invalid token")
+	ErrAlreadyProcessed = errors.New("already processed")
+	ErrActionConflict   = errors.New("action conflict")
+	ErrCommentRequired  = errors.New("comment required")
+	ErrCommentTooLong   = errors.New("comment too long")
+	ErrNameTooLong      = errors.New("name too long")
+	ErrCSRF             = errors.New("csrf check failed")
+	ErrRateLimited      = errors.New("rate limited")
+	ErrNonce            = errors.New("invalid or expired nonce")
+)

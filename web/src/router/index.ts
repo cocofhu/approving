@@ -7,6 +7,12 @@ import LoginView from '@/views/LoginView.vue'
 const routes: RouteRecordRaw[] = [
   // Eager: /login hosts brand LCP; avoid extra async chunk on critical path
   { path: '/login', name: 'login', component: LoginView, meta: { titleKey: 'route.login', public: true, bare: true } },
+  {
+    path: '/public/gate-approvals',
+    name: 'public-gate-approval',
+    component: () => import('@/views/PublicGateApprovalView.vue'),
+    meta: { titleKey: 'route.publicGateApproval', public: true, bare: true },
+  },
   { path: '/', redirect: '/dashboard' },
   { path: '/dashboard', name: 'dashboard', component: () => import('@/views/DashboardView.vue'), meta: { titleKey: 'route.dashboard' } },
   { path: '/board', name: 'board', component: () => import('@/views/BoardRedirectView.vue'), meta: { titleKey: 'route.board' } },

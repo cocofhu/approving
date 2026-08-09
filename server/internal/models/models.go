@@ -696,6 +696,7 @@ func AllModels() []any {
 		&AgentCronJob{}, &AgentCronRun{}, &ChannelConfig{},
 		&ProjectAuditEvent{},
 		&NotifyDeliveryReceipt{},
+		&GateShareLink{},
 	}
 }
 

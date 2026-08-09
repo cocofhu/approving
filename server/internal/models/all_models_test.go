@@ -7,6 +7,16 @@ func TestAllModelsAndComposite(t *testing.T) {
 	if len(ms) < 10 {
 		t.Fatalf("AllModels=%d", len(ms))
 	}
+	foundShare := false
+	for _, m := range ms {
+		if _, ok := m.(*GateShareLink); ok {
+			foundShare = true
+			break
+		}
+	}
+	if !foundShare {
+		t.Fatal("AllModels missing GateShareLink")
+	}
 	if IsCompositeText("x") || !IsCompositeText(map[string]any{"text": "hi"}) {
 		t.Fatal("IsCompositeText")
 	}

@@ -600,8 +600,25 @@ export interface Gate {
   tags?: string[]
 }
 
+/** Leak-free human_gate share-link chip (no plaintext token). */
+export interface GateShareInboxStatus {
+  state: 'none' | 'active' | 'used' | 'revoked' | 'expired' | string
+  ttlTier?: string
+  expiresAt?: string
+  remainingSec?: number
+  usedAt?: string
+  revokedAt?: string
+  canCreate?: boolean
+  canManage?: boolean
+  hasPass?: boolean
+  hasFail?: boolean
+}
+
 export interface GateInboxItem extends Gate {
   type: 'gate'
+  /** Graph node type (human_gate / proposal_select). Share entry only for human_gate. */
+  nodeType?: string
+  shareLink?: GateShareInboxStatus
 }
 
 export interface ClarifyInboxItem {

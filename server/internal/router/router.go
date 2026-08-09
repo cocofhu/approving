@@ -142,6 +142,10 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.POST("/runs/:id/nodes/:nodeId/preview-issues", h.CreatePreviewIssue)
 		api.DELETE("/runs/:id/nodes/:nodeId/preview-issues/:issueId", h.DeletePreviewIssue)
 		api.POST("/runs/:id/gates/:nodeId/resume", h.ResumeGate)
+		api.POST("/runs/:id/gates/:nodeId/share-link", h.CreateGateShareLink)
+		api.GET("/runs/:id/gates/:nodeId/share-link", h.GetGateShareLink)
+		api.POST("/runs/:id/gates/:nodeId/share-link/regen", h.RegenGateShareLink)
+		api.POST("/runs/:id/gates/:nodeId/share-link/revoke", h.RevokeGateShareLink)
 		api.POST("/runs/:id/gates/:nodeId/react-revise", h.GateReactRevise)
 		api.POST("/runs/:id/gates/:nodeId/react-cancel", h.GateReactCancel)
 		api.GET("/runs/:id/gates/:nodeId/primary-artifacts", h.ListGatePrimaryArtifacts)
@@ -270,6 +274,18 @@ func New(h *handlers.Handlers) *gin.Engine {
 	// Console VNC (WebSocket): sandbox-scoped noVNC proxy (no preview port triple).
 	r.GET("/sandbox-vnc/:sandboxId/ws", h.SandboxVNC)
 
+	// Public gate-approval page + API (no session). Security headers + no ACAO.
+	pub := r.Group("/public/gate-approvals")
+	pub.Use(publicGateMiddleware())
+	{
+		pub.GET("", h.PublicGateApprovalPage)
+		pub.GET("/", h.PublicGateApprovalPage)
+		pub.GET("/preview", h.PublicGatePreview)
+		pub.POST("/decide", h.PublicGateDecide)
+		pub.OPTIONS("/preview", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+		pub.OPTIONS("/decide", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	}
+
 	// SPA fallback: serve index.html for unknown non-API paths so vue-router
 	// deep links work; real API/asset/mcp misses still 404.
 	r.NoRoute(func(c *gin.Context) {
@@ -284,7 +300,8 @@ func New(h *handlers.Handlers) *gin.Engine {
 			strings.HasPrefix(p, "/sandbox-acp/") ||
 			strings.HasPrefix(p, "/sandbox-vnc/") ||
 			strings.HasPrefix(p, "/preview/") ||
-			strings.HasPrefix(p, "/preview-vnc/") {
+			strings.HasPrefix(p, "/preview-vnc/") ||
+			strings.HasPrefix(p, "/public/gate-approvals") {
 			// /mcp/ covers both /mcp/runs/ and /mcp/pm/
 			c.String(http.StatusNotFound, "not found: %s", p)
 			return
@@ -329,11 +346,34 @@ func errorLogger() gin.HandlerFunc {
 
 func cors() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if strings.HasPrefix(c.Request.URL.Path, "/public/gate-approvals") {
+			c.Next()
+			return
+		}
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
+			return
+		}
+		c.Next()
+	}
+}
+
+func publicGateMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		c.Header("Pragma", "no-cache")
+		c.Header("Referrer-Policy", "no-referrer")
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Header("X-Frame-Options", "DENY")
+		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+		c.Writer.Header().Del("Access-Control-Allow-Origin")
+		c.Writer.Header().Del("Access-Control-Allow-Methods")
+		c.Writer.Header().Del("Access-Control-Allow-Headers")
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
 		c.Next()

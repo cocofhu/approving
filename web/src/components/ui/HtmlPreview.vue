@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount, computed } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount, computed, inject, type ComputedRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { injectDemoScrollbarStyles } from '@/lib/demoScrollbar'
 import {
@@ -75,6 +75,9 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const gateShareOpen = inject<(() => void) | undefined>('gateShareOpen', undefined)
+const gateShareEnabled = inject<ComputedRef<boolean> | undefined>('gateShareEnabled', undefined)
+const showGateShare = computed(() => typeof gateShareOpen === 'function' && !!gateShareEnabled?.value)
 const device = ref<'desktop' | 'mobile'>('desktop')
 const big = ref(false)
 const modalHtml = ref('')
@@ -432,6 +435,16 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
         {{ t('pages.appPreview.novnc.inspect') }}
       </button>
       <button
+        v-if="showGateShare"
+        type="button"
+        class="flex min-h-11 items-center gap-1 border border-accent/40 px-2 py-1 text-[11px] text-accent-2 hover:bg-accent/10"
+        data-testid="html-preview-share-link"
+        :aria-label="t('pages.gatesInbox.share.copyLinkAria')"
+        @click="gateShareOpen?.()"
+      >
+        <Icon name="copy" :size="13" />{{ t('pages.gatesInbox.share.copyLink') }}
+      </button>
+      <button
         v-if="enlargeable"
         type="button"
         class="ml-auto flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-txt2 transition-colors hover:text-txt"
@@ -448,6 +461,7 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
         ref="iframeRef"
         :srcdoc="previewSrcdoc"
         :sandbox="sandboxAttr"
+        referrerpolicy="no-referrer"
         :scrolling="iframeScrolling"
         class="w-full border-0 bg-white"
         :class="[
@@ -467,6 +481,7 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
       :key="iframeMountKey"
       :srcdoc="demoSrcdoc"
       :sandbox="sandboxAttr"
+      referrerpolicy="no-referrer"
       class="block h-[140px] w-full border-0 bg-white"
       :title="demoModalTitle"
     />
@@ -482,6 +497,7 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
         :key="iframeMountKey + '-modal'"
         :srcdoc="modalHtml"
         :sandbox="sandboxAttr"
+        referrerpolicy="no-referrer"
         class="block h-[70vh] w-full border-0 bg-white"
         :title="demoModalTitle"
       />
@@ -535,6 +551,16 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
         {{ t('pages.appPreview.novnc.inspect') }}
       </button>
       <button
+        v-if="showGateShare"
+        type="button"
+        class="flex min-h-11 items-center gap-1 border border-accent/40 px-2 py-1 text-[11px] text-accent-2 hover:bg-accent/10"
+        data-testid="html-preview-share-link"
+        :aria-label="t('pages.gatesInbox.share.copyLinkAria')"
+        @click="gateShareOpen?.()"
+      >
+        <Icon name="copy" :size="13" />{{ t('pages.gatesInbox.share.copyLink') }}
+      </button>
+      <button
         v-if="enlargeable"
         type="button"
         class="ml-auto flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-txt2 transition-colors hover:text-txt"
@@ -558,6 +584,7 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
         ref="iframeRef"
         :srcdoc="inspectable || fitContent ? previewSrcdoc : html"
         :sandbox="sandboxAttr"
+        referrerpolicy="no-referrer"
         :scrolling="fitContent || fillParent ? iframeScrolling : undefined"
         class="w-full border-0 bg-white"
         :class="fitContent && !fillParent ? '' : 'h-full'"
@@ -576,6 +603,7 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
           ref="iframeRef"
           :srcdoc="inspectable || fitContent ? previewSrcdoc : html"
           :sandbox="sandboxAttr"
+          referrerpolicy="no-referrer"
           :scrolling="fitContent || fillParent ? iframeScrolling : undefined"
           class="h-full w-full border-0 bg-white"
           :title="t('common.htmlPreview.mobilePreview')"

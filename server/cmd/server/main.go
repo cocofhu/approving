@@ -24,6 +24,7 @@ import (
 	"github.com/cocofhu/approving/internal/crypto"
 	"github.com/cocofhu/approving/internal/database"
 	"github.com/cocofhu/approving/internal/engine"
+	"github.com/cocofhu/approving/internal/gateshare"
 	"github.com/cocofhu/approving/internal/handlers"
 	"github.com/cocofhu/approving/internal/logging"
 	"github.com/cocofhu/approving/internal/mcp"
@@ -182,6 +183,8 @@ func main() {
 	eng.SetAuditRecorder(func(rec services.AuditRecord) {
 		auditSvc.Record(rec)
 	})
+	gateShareSvc := gateshare.NewService(db, auditSvc)
+	eng.SetShareRevoker(gateShareSvc)
 	host.SetProjectAuditHook(func(runID, nodeID, tool string, args map[string]any, resultText string, isError bool) {
 		projectID := services.ResolveProjectIDForRun(db, runID)
 		if projectID == "" {
@@ -366,37 +369,41 @@ func main() {
 	cronSched.Start(sweeperCtx)
 
 	h := &handlers.Handlers{
-		WF:            wfSvc,
-		Projects:      projectSvc,
-		Runs:          runSvc,
-		Arts:          artifactSvc,
-		APIKeys:       services.NewAPIKeyService(db),
-		Skill:         skillSvc,
-		Org:           orgSvc,
-		Dash:          services.NewDashboardService(db),
-		Sbx:           sbxSvc,
-		Preview:       previewSvc,
-		Issues:        issueSvc,
-		Eng:           eng,
-		MCP:           host,
-		Pm:            pmSvc,
-		PmProgress:    pmProgress,
-		PmTurns:       pmTurns,
-		PMMCP:         pmMCP,
-		MemoryMCP:     memoryMCP,
-		ContextMCP:    contextMCP,
-		SchedulerMCP:  schedulerMCP,
-		Settings:      settingsSvc,
-		Shutdown:      coord,
-		Auth:          authSvc,
-		PlatformRules: platformRuleSvc,
-		Channels:      channelSvc,
-		Browser:       browserSvc,
-		Audit:         auditSvc,
-		InjectBundles: injectStore,
-		Blobs:         blobStore,
-		Onboarding:    services.NewOnboardingService(projectSvc, skillSvc, wfSvc),
-		Team:          services.NewTeamService(projectSvc, skillSvc, orgSvc, pmSvc, sbxSvc),
+		WF:               wfSvc,
+		Projects:         projectSvc,
+		Runs:             runSvc,
+		Arts:             artifactSvc,
+		APIKeys:          services.NewAPIKeyService(db),
+		Skill:            skillSvc,
+		Org:              orgSvc,
+		Dash:             services.NewDashboardService(db),
+		Sbx:              sbxSvc,
+		Preview:          previewSvc,
+		Issues:           issueSvc,
+		Eng:              eng,
+		MCP:              host,
+		Pm:               pmSvc,
+		PmProgress:       pmProgress,
+		PmTurns:          pmTurns,
+		PMMCP:            pmMCP,
+		MemoryMCP:        memoryMCP,
+		ContextMCP:       contextMCP,
+		SchedulerMCP:     schedulerMCP,
+		Settings:         settingsSvc,
+		Shutdown:         coord,
+		Auth:             authSvc,
+		PlatformRules:    platformRuleSvc,
+		Channels:         channelSvc,
+		Browser:          browserSvc,
+		Audit:            auditSvc,
+		GateShare:        gateShareSvc,
+		GateShareNonces:  gateshare.NewNonceStore(),
+		GateShareLimiter: gateshare.NewIPLimiter(),
+		PublicAdvertise:  cfg.Server.PublicAdvertise,
+		InjectBundles:    injectStore,
+		Blobs:            blobStore,
+		Onboarding:       services.NewOnboardingService(projectSvc, skillSvc, wfSvc),
+		Team:             services.NewTeamService(projectSvc, skillSvc, orgSvc, pmSvc, sbxSvc),
 	}
 	if h.Team != nil && h.PMMCP != nil {
 		h.PMMCP.SetTeam(h.Team)

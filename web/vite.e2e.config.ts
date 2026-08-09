@@ -244,6 +244,7 @@ export default defineConfig({
           new URL('./e2e/run-completed-output.html', import.meta.url),
         ),
         'gate-mobile-fill': fileURLToPath(new URL('./e2e/gate-mobile-fill.html', import.meta.url)),
+        'gate-share-link': fileURLToPath(new URL('./e2e/gate-share-link.html', import.meta.url)),
         'gate-cold-silent': fileURLToPath(new URL('./e2e/gate-cold-silent.html', import.meta.url)),
         'clarify-inbox-product': fileURLToPath(
           new URL('./e2e/clarify-inbox-product.html', import.meta.url),

@@ -17,6 +17,7 @@ import (
 	"github.com/cocofhu/approving/internal/browser"
 	"github.com/cocofhu/approving/internal/contextmcp"
 	"github.com/cocofhu/approving/internal/engine"
+	"github.com/cocofhu/approving/internal/gateshare"
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/memorymcp"
 	"github.com/cocofhu/approving/internal/models"
@@ -33,41 +34,47 @@ import (
 
 // Handlers bundles dependencies for route handlers.
 type Handlers struct {
-	WF            *services.WorkflowService
-	Projects      *services.ProjectService
-	Runs          *services.RunService
-	Arts          *services.ArtifactService
-	APIKeys       *services.APIKeyService
-	Skill         *services.SkillService
-	Org           *services.OrgService
-	Dash          *services.DashboardService
-	Sbx           *services.SandboxService
-	Eng           *engine.Engine
-	MCP           *mcp.Host
-	Pm            *services.PmService
-	PmProgress    *services.PmProgress
-	PmTurns       *services.PmTurnRunner
-	PMMCP         *pmmcp.Host
-	MemoryMCP     *memorymcp.Host
-	ContextMCP    *contextmcp.Host
-	SchedulerMCP  *schedulermcp.Host
-	Preview       *services.PreviewService
-	Issues        *services.IssueService
-	Settings      *services.SettingsService
-	Shutdown      *shutdown.Coordinator
-	Auth          *auth.Service
-	PlatformRules *services.PlatformRuleService
-	Channels      *services.ChannelConfigService
-	Browser       *browser.Service
-	Audit         *services.ProjectAuditService
-	Onboarding    *services.OnboardingService
-	Team          *services.TeamService
+	WF               *services.WorkflowService
+	Projects         *services.ProjectService
+	Runs             *services.RunService
+	Arts             *services.ArtifactService
+	APIKeys          *services.APIKeyService
+	Skill            *services.SkillService
+	Org              *services.OrgService
+	Dash             *services.DashboardService
+	Sbx              *services.SandboxService
+	Eng              *engine.Engine
+	MCP              *mcp.Host
+	Pm               *services.PmService
+	PmProgress       *services.PmProgress
+	PmTurns          *services.PmTurnRunner
+	PMMCP            *pmmcp.Host
+	MemoryMCP        *memorymcp.Host
+	ContextMCP       *contextmcp.Host
+	SchedulerMCP     *schedulermcp.Host
+	Preview          *services.PreviewService
+	Issues           *services.IssueService
+	Settings         *services.SettingsService
+	Shutdown         *shutdown.Coordinator
+	Auth             *auth.Service
+	PlatformRules    *services.PlatformRuleService
+	Channels         *services.ChannelConfigService
+	Browser          *browser.Service
+	Audit            *services.ProjectAuditService
+	Onboarding       *services.OnboardingService
+	GateShare        *gateshare.Service
+	GateShareNonces  *gateshare.NonceStore
+	GateShareLimiter *gateshare.IPLimiter
+	// PublicAdvertise is the browser-facing origin for share URLs and public
+	// CSRF host checks. Never fall back to client X-Forwarded-Host.
+	PublicAdvertise string
+	Team            *services.TeamService
 	// CanViewProjectAudit optionally overrides the default audit ACL
 	// (is_admin OR authenticated user who can UpdateProject). Tests use this
 	// to simulate a read-only member denial while production keeps the hook nil.
 	CanViewProjectAudit func(username, projectID string) bool
 	// InjectBundles serves ConfigHome .tgz for gateway SANDBOX_INJECT (no session auth).
-	InjectBundles  *sandbox.BundleStore
+	InjectBundles *sandbox.BundleStore
 	// Blobs serves externalized attachment bytes (GET /api/blobs/:id).
 	Blobs          blob.Store
 	doctorMu       sync.Mutex
@@ -975,11 +982,17 @@ func (h *Handlers) ListGates(c *gin.Context) {
 	}
 	if !pg.Active {
 		items, _ := h.Runs.PendingInboxItems(wf, projectID, tags, 0, 0)
+		if h.GateShare != nil {
+			h.GateShare.AttachInboxStatus(items)
+		}
 		c.JSON(http.StatusOK, items)
 		return
 	}
 	offset := (pg.Page - 1) * pg.PageSize
 	items, total := h.Runs.PendingInboxItems(wf, projectID, tags, offset, pg.PageSize)
+	if h.GateShare != nil {
+		h.GateShare.AttachInboxStatus(items)
+	}
 	c.JSON(http.StatusOK, paginatedResponse(items, total, pg.Page, pg.PageSize))
 }
 

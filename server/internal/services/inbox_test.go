@@ -102,6 +102,43 @@ func TestAllPendingInboxItems(t *testing.T) {
 	}
 }
 
+func TestPendingInboxItemsIncludesGateNodeType(t *testing.T) {
+	db := newTestDB(t)
+	s := NewRunService(db)
+	now := time.Now().UTC().Truncate(time.Second)
+	graph := models.Graph{Nodes: []models.Node{
+		{ID: "hg1", Type: "human_gate", Label: "审"},
+		{ID: "ps1", Type: "proposal_select", Label: "选"},
+	}}
+	db.Create(&models.Run{
+		ID: "run-nt", WorkflowID: "wf-nt", WorkflowName: "NT", Status: "waiting_human",
+		StartedAt: now, Graph: graph,
+	})
+	db.Create(&models.Gate{
+		RunID: "run-nt", NodeID: "hg1", WorkflowID: "wf-nt", WorkflowName: "NT",
+		Title: "人审", Resolved: false, RequestedAt: now.Add(-time.Minute),
+	})
+	db.Create(&models.Gate{
+		RunID: "run-nt", NodeID: "ps1", WorkflowID: "wf-nt", WorkflowName: "NT",
+		Title: "方案选择", Resolved: false, RequestedAt: now,
+	})
+	items := s.AllPendingInboxItems()
+	if len(items) != 2 {
+		t.Fatalf("expected 2 gates, got %d", len(items))
+	}
+	byNode := map[string]string{}
+	for _, it := range items {
+		g, ok := it.(GateInboxItem)
+		if !ok {
+			t.Fatalf("expected GateInboxItem, got %T", it)
+		}
+		byNode[g.NodeID] = g.NodeType
+	}
+	if byNode["hg1"] != "human_gate" || byNode["ps1"] != "proposal_select" {
+		t.Fatalf("nodeType map=%v", byNode)
+	}
+}
+
 func TestPendingInboxItemsOmitsEmptyRunTitle(t *testing.T) {
 	db := newTestDB(t)
 	s := NewRunService(db)

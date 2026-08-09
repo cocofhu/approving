@@ -51,6 +51,12 @@ func (e *Engine) ResumeGate(runID, nodeID, action string, form map[string]any) e
 	return e.ResumeGateAs(runID, nodeID, action, form, "")
 }
 
+type resumeGateOpts struct {
+	skipFormValidate bool
+	callerKind       string
+	externalName     string
+}
+
 // ResumeGateAs is like ResumeGate but records the reviewer username on outputs
 // and audit. Empty reviewer → system + unattributable (no fabricated names).
 func (e *Engine) ResumeGateAs(runID, nodeID, action string, form map[string]any, reviewer string) error {
@@ -59,7 +65,10 @@ func (e *Engine) ResumeGateAs(runID, nodeID, action string, form map[string]any,
 	}
 	unlock := e.lockResume(runID + ":" + nodeID)
 	defer unlock()
+	return e.resumeGateLocked(runID, nodeID, action, form, reviewer, resumeGateOpts{})
+}
 
+func (e *Engine) resumeGateLocked(runID, nodeID, action string, form map[string]any, reviewer string, opts resumeGateOpts) error {
 	c, err := e.loadCtx(runID)
 	if err != nil {
 		return err
@@ -87,7 +96,7 @@ func (e *Engine) ResumeGateAs(runID, nodeID, action string, form map[string]any,
 	// Validate the form before locking the gate as resolved: a field marked
 	// required, or any field when the chosen action requires the form (e.g. a
 	// "reject" action that mandates a comment), must be non-blank.
-	if node.Type == "human_gate" {
+	if node.Type == "human_gate" && !opts.skipFormValidate {
 		if !shouldSnapshotPreviewIssues(node) {
 			if err := validateGateForm(gate, action, form); err != nil {
 				return err
@@ -172,7 +181,7 @@ func (e *Engine) ResumeGateAs(runID, nodeID, action string, form map[string]any,
 
 	// Project audit: gate decision with real Session actor when provided.
 	if projectID := services.ResolveProjectIDForRun(e.db, runID); projectID != "" {
-		e.recordAudit(services.AuditRecord{
+		rec := services.AuditRecord{
 			ProjectID:      projectID,
 			Actor:          services.ActorFromUsername(reviewer),
 			Action:         models.AuditActionGateDecide,
@@ -188,7 +197,22 @@ func (e *Engine) ResumeGateAs(runID, nodeID, action string, form map[string]any,
 				"nodeId": nodeID,
 				"form":   form,
 			},
-		})
+		}
+		if opts.callerKind != "" {
+			rec.CallerKind = opts.callerKind
+			if opts.externalName != "" {
+				rec.Payload["externalName"] = opts.externalName
+			}
+			rec.Payload["external"] = true
+			if opts.callerKind == models.CallerKindExternal {
+				rec.Summary = "external gate " + action
+			}
+		}
+		e.recordAudit(rec)
+	}
+
+	if e.shareRevoker != nil && node.Type == "human_gate" {
+		e.shareRevoker.RevokeUnusedForGate(runID, nodeID, gate.Iteration)
 	}
 
 	next := e.routeSuccess(c, node, outcome)
