@@ -1,4 +1,4 @@
-import type { GateInboxItem, GateShareInboxStatus, InboxItem } from '@/lib/types'
+import type { ClarifyInboxItem, GateInboxItem, GateShareInboxStatus, InboxItem } from '@/lib/types'
 
 export const GATE_SHARE_TTL_TIERS = ['1h', '8h', '24h', '72h', '7d'] as const
 export type GateShareTTLTier = (typeof GATE_SHARE_TTL_TIERS)[number]
@@ -55,12 +55,29 @@ export function isHumanGateInboxItem(item: InboxItem | null | undefined): item i
   return !!item && item.type === 'gate' && item.nodeType === 'human_gate'
 }
 
+export function isReviewInboxItem(item: InboxItem | null | undefined): item is ClarifyInboxItem {
+  return !!item && item.type === 'clarify' && item.kind === 'review'
+}
+
+/** Inbox share entry: human_gate or 待复审 only. */
+export function isShareableInboxItem(item: InboxItem | null | undefined): boolean {
+  return isHumanGateInboxItem(item) || isReviewInboxItem(item)
+}
+
+export function inboxShareKind(item: InboxItem | null | undefined): 'human_gate' | 'review' {
+  return isReviewInboxItem(item) ? 'review' : 'human_gate'
+}
+
 const SHARE_API_ERROR_KEYS: Record<string, string> = {
   no_standard_action: 'pages.gatesInbox.share.errors.noStandardAction',
   not_human_gate: 'pages.gatesInbox.share.errors.notHumanGate',
+  not_review_session: 'pages.gatesInbox.share.errors.notReviewSession',
   used_readonly: 'pages.gatesInbox.share.errors.usedReadonly',
   run_ended: 'pages.gatesInbox.share.errors.runEnded',
   gate_not_pending: 'pages.gatesInbox.share.errors.gateNotPending',
+  review_not_pending: 'pages.gatesInbox.share.errors.reviewNotPending',
+  review_busy: 'pages.gatesInbox.share.errors.reviewBusy',
+  review_validation_failed: 'pages.gatesInbox.share.errors.reviewValidationFailed',
   invalid_ttl: 'pages.gatesInbox.share.errors.invalidTtl',
   not_active: 'pages.gatesInbox.share.errors.notActive',
   not_found: 'pages.gatesInbox.share.errors.notFound',
@@ -136,11 +153,12 @@ export function shareStatusLabel(
 
 export type PublicGatePreview = {
   status: string
+  kind?: 'human_gate' | 'review' | string
   title?: string
   description?: string
   remainingSec?: number
   expiresAt?: string
-  actions?: { approve?: string; reject?: string }
+  actions?: { approve?: string; reject?: string; confirm?: string }
   visualHtml?: string
   structured?: { name?: string; title?: string; goals?: unknown; text?: string }
   nonce?: string

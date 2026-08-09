@@ -118,6 +118,14 @@ func writeShareErr(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, gin.H{"error": "not_active"})
 	case errors.Is(err, gateshare.ErrNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
+	case errors.Is(err, gateshare.ErrNotReviewSession):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "not_review_session"})
+	case errors.Is(err, gateshare.ErrReviewNotPending):
+		c.JSON(http.StatusNotFound, gin.H{"error": "review_not_pending"})
+	case errors.Is(err, gateshare.ErrReviewBusy):
+		c.JSON(http.StatusConflict, gin.H{"error": "review_busy"})
+	case errors.Is(err, gateshare.ErrReviewValidation):
+		c.JSON(http.StatusConflict, gin.H{"error": "review_validation_failed"})
 	default:
 		_ = c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "share_failed"})

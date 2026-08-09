@@ -160,8 +160,16 @@ func finalize(db *gorm.DB) (*gorm.DB, error) {
 	migrateChannelUniqueProject(db)
 	backfillLegacyProjectMemories(db)
 	backfillWorkflowIDs(db)
+	backfillGateShareLinkKind(db)
 	ensureDefaultProject(db)
 	return db, nil
+}
+
+func backfillGateShareLinkKind(db *gorm.DB) {
+	_ = db.Exec(
+		"UPDATE gate_share_links SET kind = ? WHERE kind IS NULL OR kind = ''",
+		models.ShareLinkKindHumanGate,
+	).Error
 }
 
 // migrateProjectMemoryIndexes drops legacy unique indexes that predate

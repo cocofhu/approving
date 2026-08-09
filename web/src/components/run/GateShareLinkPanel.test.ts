@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   regen: vi.fn(),
   revoke: vi.fn(),
+  createReview: vi.fn(),
+  regenReview: vi.fn(),
+  revokeReview: vi.fn(),
   toastSuccess: vi.fn(),
   toastShow: vi.fn(),
 }))
@@ -25,6 +28,9 @@ vi.mock('@/lib/api', async () => {
       createGateShareLink: mocks.create,
       regenGateShareLink: mocks.regen,
       revokeGateShareLink: mocks.revoke,
+      createReviewShareLink: mocks.createReview,
+      regenReviewShareLink: mocks.regenReview,
+      revokeReviewShareLink: mocks.revokeReview,
     },
   }
 })
@@ -72,9 +78,13 @@ beforeEach(() => {
   mocks.create.mockReset()
   mocks.regen.mockReset()
   mocks.revoke.mockReset()
+  mocks.createReview.mockReset()
+  mocks.regenReview.mockReset()
+  mocks.revokeReview.mockReset()
   mocks.toastSuccess.mockReset()
   mocks.toastShow.mockReset()
   forgetShareUrl('run-1', 'hg1', 1)
+  forgetShareUrl('run-1', 'research1', 1)
 })
 
 describe('GateShareLinkPanel', () => {
@@ -85,7 +95,7 @@ describe('GateShareLinkPanel', () => {
     mockClipboard(vi.fn().mockResolvedValue(undefined))
 
     const w = mount(GateShareLinkPanel, {
-      props: { open: true, gate: item() },
+      props: { open: true, target: item() },
       global: { plugins: [i18n], stubs: { Teleport: true } },
     })
     await flushPromises()
@@ -109,7 +119,7 @@ describe('GateShareLinkPanel', () => {
     mockClipboard(vi.fn().mockRejectedValue(new Error('denied')))
 
     const w = mount(GateShareLinkPanel, {
-      props: { open: true, gate: item() },
+      props: { open: true, target: item() },
       global: { plugins: [i18n], stubs: { Teleport: true } },
     })
     await w.get('[data-testid="gate-share-create"]').trigger('click')
@@ -128,7 +138,7 @@ describe('GateShareLinkPanel', () => {
     const w = mount(GateShareLinkPanel, {
       props: {
         open: true,
-        gate: item({ shareLink: { state: 'active', ttlTier: '24h', canManage: true, canCreate: false } }),
+        target: item({ shareLink: { state: 'active', ttlTier: '24h', canManage: true, canCreate: false } }),
       },
       global: { plugins: [i18n], stubs: { Teleport: true } },
     })
@@ -151,7 +161,7 @@ describe('GateShareLinkPanel', () => {
     const w = mount(GateShareLinkPanel, {
       props: {
         open: true,
-        gate: item({ shareLink: { state: 'active', ttlTier: '24h', canManage: true, canCreate: false } }),
+        target: item({ shareLink: { state: 'active', ttlTier: '24h', canManage: true, canCreate: false } }),
       },
       global: { plugins: [i18n], stubs: { Teleport: true } },
     })
@@ -170,7 +180,7 @@ describe('GateShareLinkPanel', () => {
     const w = mount(GateShareLinkPanel, {
       props: {
         open: true,
-        gate: item({ shareLink: { state: 'active', ttlTier: '24h', canManage: true, canCreate: false } }),
+        target: item({ shareLink: { state: 'active', ttlTier: '24h', canManage: true, canCreate: false } }),
       },
       global: { plugins: [i18n], stubs: { Teleport: true } },
     })
@@ -184,11 +194,38 @@ describe('GateShareLinkPanel', () => {
     mocks.create.mockRejectedValue(new Error('no_standard_action'))
     mockClipboard(vi.fn().mockResolvedValue(undefined))
     const w = mount(GateShareLinkPanel, {
-      props: { open: true, gate: item() },
+      props: { open: true, target: item() },
       global: { plugins: [i18n], stubs: { Teleport: true } },
     })
     await w.get('[data-testid="gate-share-create"]').trigger('click')
     await flushPromises()
     expect(w.get('[data-testid="gate-share-error"]').text()).toContain('标准批准或驳回')
+  })
+
+  it('review kind calls reviews API and keeps primary actions at min-h-11', async () => {
+    const token = 'ab'.repeat(32)
+    const url = `https://app.example/public/gate-approvals#t=${token}`
+    mocks.createReview.mockResolvedValue({ id: 'gsl-r1', url, ttlTier: '24h', expiresAt: '2026-08-10T00:00:00Z', state: 'active' })
+    mockClipboard(vi.fn().mockResolvedValue(undefined))
+    const w = mount(GateShareLinkPanel, {
+      props: {
+        open: true,
+        kind: 'review',
+        target: {
+          runId: 'run-1',
+          nodeId: 'research1',
+          iteration: 1,
+          shareLink: { state: 'none', canCreate: true },
+          kind: 'review',
+        },
+      },
+      global: { plugins: [i18n], stubs: { Teleport: true } },
+    })
+    const createBtn = w.get('[data-testid="gate-share-create"]')
+    expect(createBtn.classes().join(' ')).toContain('min-h-11')
+    await createBtn.trigger('click')
+    await flushPromises()
+    expect(mocks.createReview).toHaveBeenCalledWith('run-1', 'research1', '24h')
+    expect(mocks.create).not.toHaveBeenCalled()
   })
 })
