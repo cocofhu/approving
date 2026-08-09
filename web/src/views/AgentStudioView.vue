@@ -31,6 +31,7 @@ import {
   wouldCreateGroupCycle,
   wouldCreateReportingCycle,
   buildOrgTreeRows,
+  isAgentInGroupSubtree,
   UNGROUPED_ID,
 } from '@/lib/agentOrg'
 import type { GitCredentialType } from '@/lib/gitCredentialAnalysis'
@@ -479,9 +480,14 @@ const renameBlockedTarget = ref('')
 
 const showUnsavedExport = ref(false)
 const exporting = ref(false)
+const showFolderSecrets = ref(false)
+const pendingFolderExportGroupId = ref('')
 
 const agentImport = useAgentImport({
-  dirty: () => dirty.value,
+  dirty: () => agentDirty.value,
+  agentDirty: () => agentDirty.value,
+  orgDirty: () => orgDirty.value,
+  persistOrg: () => persistOrg(org.value),
   agentNames: () => agents.value.map((a) => a.name),
   onImported: async (agent) => {
     const i = agents.value.findIndex((a) => a.name === agent.name)
@@ -494,6 +500,25 @@ const agentImport = useAgentImport({
     await reloadOrg()
     select(agent.name)
   },
+  onFolderImported: async (importedOrg) => {
+    org.value = importedOrg
+    orgBaseline.value = orgSnapshot(importedOrg)
+    try {
+      const list = await api.listAgents()
+      agents.value = list || []
+      if (activeName.value && agents.value.some((a) => a.name === activeName.value)) {
+        const a = agents.value.find((x) => x.name === activeName.value)!
+        const loaded = toDraft(a)
+        originalJson.value = JSON.stringify(fromDraftRaw(loaded))
+        normalizeDraftRegions(loaded)
+        draft.value = loaded
+      } else if (agents.value.length) {
+        select(agents.value[0].name)
+      }
+    } catch (e: any) {
+      error.value = String(e?.message || e)
+    }
+  },
 })
 const {
   fileInput: importFileInput,
@@ -505,13 +530,19 @@ const {
   conflictAction: importConflictAction,
   renameValue: importRenameValue,
   renameError: importRenameError,
+  showBatchConflict,
+  batchConflictNames,
   triggerImport,
+  triggerGroupImport,
   onDiscardCancel: onImportDiscardCancel,
   onDiscardConfirm: onImportDiscardConfirm,
   handleFileChange: onImportFileChange,
   selectConflict: selectImportConflict,
   closeConflict: closeImportConflict,
   confirmConflict: confirmImportConflict,
+  closeBatchConflict,
+  confirmBatchRename,
+  confirmBatchOverwrite,
 } = agentImport
 
 function recToKV(rec?: Record<string, string>): KV[] {
@@ -606,11 +637,11 @@ function orgSnapshot(o: AgentOrg): string {
   })
 }
 
-const dirty = computed(() => {
-  const agentDirty = !!draft.value && JSON.stringify(fromDraft(draft.value)) !== originalJson.value
-  const orgDirty = orgSnapshot(org.value) !== orgBaseline.value
-  return agentDirty || orgDirty
-})
+const agentDirty = computed(
+  () => !!draft.value && JSON.stringify(fromDraft(draft.value)) !== originalJson.value,
+)
+const orgDirty = computed(() => orgSnapshot(org.value) !== orgBaseline.value)
+const dirty = computed(() => agentDirty.value || orgDirty.value)
 
 watch(dirty, (d) => {
   if (d) justSaved.value = false
@@ -1453,6 +1484,7 @@ async function doExport(name: string) {
 
 function triggerExport() {
   if (!activeName.value || exporting.value) return
+  pendingFolderExportGroupId.value = ''
   if (dirty.value) {
     showUnsavedExport.value = true
     return
@@ -1462,10 +1494,15 @@ function triggerExport() {
 
 function cancelUnsavedExport() {
   showUnsavedExport.value = false
+  pendingFolderExportGroupId.value = ''
 }
 
 async function discardAndExport() {
   showUnsavedExport.value = false
+  if (pendingFolderExportGroupId.value) {
+    showFolderSecrets.value = true
+    return
+  }
   if (!activeName.value) return
   await doExport(activeName.value)
 }
@@ -1474,7 +1511,55 @@ async function saveThenExport() {
   const ok = await save()
   if (!ok) return
   showUnsavedExport.value = false
+  if (pendingFolderExportGroupId.value) {
+    showFolderSecrets.value = true
+    return
+  }
   if (activeName.value) await doExport(activeName.value)
+}
+
+async function onExportGroup(groupId: string) {
+  if (exporting.value) return
+  if (orgDirty.value) {
+    if (!(await persistOrg(org.value))) return
+  }
+  const inSubtree =
+    !!activeName.value && isAgentInGroupSubtree(org.value, activeName.value, groupId)
+  if (inSubtree && agentDirty.value) {
+    pendingFolderExportGroupId.value = groupId
+    showUnsavedExport.value = true
+    return
+  }
+  pendingFolderExportGroupId.value = groupId
+  showFolderSecrets.value = true
+}
+
+function cancelFolderSecrets() {
+  showFolderSecrets.value = false
+  pendingFolderExportGroupId.value = ''
+}
+
+async function confirmFolderSecrets() {
+  const groupId = pendingFolderExportGroupId.value
+  showFolderSecrets.value = false
+  pendingFolderExportGroupId.value = ''
+  if (!groupId || exporting.value) return
+  exporting.value = true
+  error.value = ''
+  try {
+    const { blob, filename } = await api.exportOrgFolder(groupId)
+    downloadZip(blob, filename)
+    const base = filename.replace(/\.zip$/i, '')
+    showToast(t('pages.agentStudio.exportImport.folderExportSuccess', { name: base }))
+  } catch (e: any) {
+    error.value = String(e?.message || e)
+  } finally {
+    exporting.value = false
+  }
+}
+
+function onImportGroup(groupId: string) {
+  triggerGroupImport(groupId)
 }
 
 const showCreateWizard = ref(false)
@@ -1906,6 +1991,8 @@ onBeforeUnmount(() => {
         @create-child-group="openCreateChildGroup"
         @rename-group="openRenameGroup"
         @delete-group="confirmDeleteGroup"
+        @export-group="onExportGroup"
+        @import-group="onImportGroup"
         @move-group="onMoveGroup"
         @move-agent="onMoveAgent"
         @toggle-collapsed="toggleAgentListCollapsed"
@@ -2996,6 +3083,63 @@ onBeforeUnmount(() => {
           >{{ t('common.buttons.cancel') }}</AppButton>
         </div>
       </template>
+    </AppModal>
+
+    <!-- folder export secrets warning (Demo) -->
+    <AppModal
+      :open="showFolderSecrets"
+      :title="t('pages.agentStudio.exportImport.folderSecrets.title')"
+      :width="460"
+      close-on-esc
+      @close="cancelFolderSecrets"
+    >
+      <p class="text-[13px] leading-6 text-txt2">{{ t('pages.agentStudio.exportImport.folderSecrets.body') }}</p>
+      <template #footer>
+        <AppButton size="sm" variant="ghost" @click="cancelFolderSecrets">{{ t('common.buttons.cancel') }}</AppButton>
+        <AppButton size="sm" variant="primary" :disabled="exporting" @click="confirmFolderSecrets">
+          {{ t('pages.agentStudio.exportImport.folderSecrets.confirm') }}
+        </AppButton>
+      </template>
+    </AppModal>
+
+    <!-- folder batch name conflict (Demo) -->
+    <AppModal
+      :open="showBatchConflict"
+      :title="t('pages.agentStudio.exportImport.batchConflict.title')"
+      :width="480"
+      close-on-esc
+      @close="closeBatchConflict"
+    >
+      <p class="text-[13px] leading-6 text-txt2">{{ t('pages.agentStudio.exportImport.batchConflict.intro') }}</p>
+      <ul class="mt-2 max-h-32 overflow-auto border border-line bg-base px-3 py-2 text-[12px] text-txt">
+        <li v-for="n in batchConflictNames" :key="n" class="font-mono">{{ n }}</li>
+      </ul>
+      <div class="mt-3 flex flex-col gap-2">
+        <button
+          type="button"
+          class="w-full border border-accent/50 bg-accent-dim px-3 py-2.5 text-left"
+          @click="confirmBatchRename"
+        >
+          <div class="text-[13px] font-medium text-txt">{{ t('pages.agentStudio.exportImport.batchConflict.rename') }}</div>
+          <div class="text-[11.5px] text-txt3">{{ t('pages.agentStudio.exportImport.batchConflict.renameDesc') }}</div>
+        </button>
+        <button
+          type="button"
+          class="w-full border border-err/40 bg-base px-3 py-2.5 text-left hover:bg-err/10"
+          @click="confirmBatchOverwrite"
+        >
+          <div class="text-[13px] font-medium text-err">{{ t('pages.agentStudio.exportImport.batchConflict.overwrite') }}</div>
+          <div class="text-[11.5px] text-txt3">{{ t('pages.agentStudio.exportImport.batchConflict.overwriteDesc') }}</div>
+        </button>
+        <button
+          type="button"
+          class="w-full border border-line bg-base px-3 py-2.5 text-left hover:bg-elevated"
+          @click="closeBatchConflict"
+        >
+          <div class="text-[13px] font-medium text-txt">{{ t('pages.agentStudio.exportImport.batchConflict.cancel') }}</div>
+          <div class="text-[11.5px] text-txt3">{{ t('pages.agentStudio.exportImport.batchConflict.cancelDesc') }}</div>
+        </button>
+      </div>
     </AppModal>
 
     <!-- unsaved export guide -->

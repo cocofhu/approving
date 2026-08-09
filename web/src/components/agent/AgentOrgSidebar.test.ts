@@ -228,7 +228,7 @@ describe('AgentOrgSidebar two-column right-edge count layout', () => {
 })
 
 describe('AgentOrgSidebar context menus', () => {
-  it('组头行右键弹出新建子组/重命名/删除', async () => {
+  it('组头行右键弹出新建子组/导出/导入/重命名/删除', async () => {
     const wrapper = mountSidebar(sampleOrg, true)
     const group = wrapper
       .findAll('[data-org-kind="group"]')
@@ -238,10 +238,30 @@ describe('AgentOrgSidebar context menus', () => {
     const menu = document.querySelector('[data-org-ctx-menu]') as HTMLElement | null
     expect(menu).toBeTruthy()
     expect(menu?.getAttribute('data-org-ctx-kind')).toBe('group')
-    expect(menu?.querySelectorAll('[data-org-ctx-action]')).toHaveLength(3)
+    const actions = [...(menu?.querySelectorAll('[data-org-ctx-action]') || [])].map(
+      (el) => el.getAttribute('data-org-ctx-action'),
+    )
+    expect(actions).toEqual(['newChild', 'export', 'import', 'rename', 'delete'])
+    expect(menu?.querySelectorAll('[data-org-ctx-action]')).toHaveLength(5)
     expect(menu?.textContent).toContain('新建子组')
+    expect(menu?.textContent).toContain('导出')
+    expect(menu?.textContent).toContain('导入')
+    expect(menu?.textContent).not.toContain('导出文件夹')
 
-    const renameBtn = menu!.querySelector('[data-org-ctx-action="rename"]') as HTMLButtonElement
+    const exportBtn = menu!.querySelector('[data-org-ctx-action="export"]') as HTMLButtonElement
+    exportBtn.click()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('export-group')?.[0]).toEqual(['g_dev'])
+    expect(document.querySelector('[data-org-ctx-menu]')).toBeNull()
+
+    await group.trigger('contextmenu', { clientX: 12, clientY: 24 })
+    const importBtn = document.querySelector('[data-org-ctx-action="import"]') as HTMLButtonElement
+    importBtn.click()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('import-group')?.[0]).toEqual(['g_dev'])
+
+    await group.trigger('contextmenu', { clientX: 12, clientY: 24 })
+    const renameBtn = document.querySelector('[data-org-ctx-action="rename"]') as HTMLButtonElement
     renameBtn.click()
     await wrapper.vm.$nextTick()
     expect(wrapper.emitted('rename-group')?.[0]).toEqual(['g_dev'])

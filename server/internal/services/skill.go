@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/cocofhu/approving/internal/models"
 
@@ -26,7 +27,10 @@ import (
 // skills, AGENTS.md, scripts, …), layers the platform base rules + the resolved
 // mcp.json on top, and injects the env vars. Files the agent authors are loaded
 // natively by the in-container ACP agent.
-type SkillService struct{ root string }
+type SkillService struct {
+	root string
+	mu   sync.Mutex
+}
 
 // NewSkillService builds the service. It ships no preset agents (users create
 // their own); it only migrates any existing agents to the current on-disk layout.
@@ -444,6 +448,12 @@ func (s *SkillService) readConfig(name string) agentConfig {
 // workspace/ tree is fully rewritten so removed files disappear from disk; the
 // legacy rules.md / skills/ / cursor/ are dropped on save.
 func (s *SkillService) Save(a Agent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.saveUnlocked(a)
+}
+
+func (s *SkillService) saveUnlocked(a Agent) error {
 	name := sanitize(a.Name)
 	if name == "" {
 		return fmt.Errorf("invalid agent name")
@@ -506,6 +516,12 @@ func (s *SkillService) Save(a Agent) error {
 
 // Delete removes an agent and all its files.
 func (s *SkillService) Delete(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.deleteUnlocked(name)
+}
+
+func (s *SkillService) deleteUnlocked(name string) error {
 	n := sanitize(name)
 	if n == "" {
 		return fmt.Errorf("invalid agent name")
@@ -517,6 +533,8 @@ func (s *SkillService) Delete(name string) error {
 // so the change either fully succeeds or leaves the old agent untouched (no
 // half-copied intermediate state).
 func (s *SkillService) Rename(old, newName string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	o, n := sanitize(old), sanitize(newName)
 	if o == "" || n == "" {
 		return fmt.Errorf("invalid agent name")

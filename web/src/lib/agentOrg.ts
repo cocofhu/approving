@@ -60,6 +60,36 @@ export function ungroupedAgents(org: AgentOrg, agentNames: string[]): string[] {
   return agentNames.filter((n) => groupIdsOf(org, n).length === 0)
 }
 
+/** All virtual-group ids in the subtree rooted at rootId (including root). */
+export function groupSubtreeIds(org: AgentOrg, rootId: string): Set<string> {
+  const ids = new Set<string>()
+  if (!rootId) return ids
+  ids.add(rootId)
+  const groups = org.groups || []
+  let added = true
+  while (added) {
+    added = false
+    for (const g of groups) {
+      if (g.parentGroupId && ids.has(g.parentGroupId) && !ids.has(g.id)) {
+        ids.add(g.id)
+        added = true
+      }
+    }
+  }
+  return ids
+}
+
+/** Agent names that belong to any group in the subtree. */
+export function agentNamesInSubtree(org: AgentOrg, rootId: string, agentNames: string[]): string[] {
+  const gids = groupSubtreeIds(org, rootId)
+  return agentNames.filter((n) => groupIdsOf(org, n).some((id) => gids.has(id)))
+}
+
+export function isAgentInGroupSubtree(org: AgentOrg, agentName: string, rootGroupId: string): boolean {
+  const ids = groupSubtreeIds(org, rootGroupId)
+  return groupIdsOf(org, agentName).some((id) => ids.has(id))
+}
+
 /** Would attaching child as descendant of ancestor create a cycle? */
 export function wouldCreateGroupCycle(org: AgentOrg, childId: string, newParentId: string): boolean {
   if (!newParentId) return false
