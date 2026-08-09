@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   listAgents: vi.fn(),
   listProjects: vi.fn(),
   saveAgent: vi.fn(),
+  patchAgentProject: vi.fn(),
   getAgentsOrg: vi.fn(),
   saveAgentsOrg: vi.fn(),
   renameAgent: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock('@/lib/api', async () => {
       listAgents: mocks.listAgents,
       listProjects: mocks.listProjects,
       saveAgent: mocks.saveAgent,
+      patchAgentProject: mocks.patchAgentProject,
       getAgentsOrg: mocks.getAgentsOrg,
       saveAgentsOrg: mocks.saveAgentsOrg,
       renameAgent: mocks.renameAgent,
@@ -117,6 +119,10 @@ beforeEach(() => {
   breakpointMocks.isMobile.value = false
   mocks.listProjects.mockResolvedValue([{ id: 'proj-default', name: 'Default' }])
   mocks.saveAgent.mockImplementation(async (payload: Agent) => payload)
+  mocks.patchAgentProject.mockImplementation(async (name: string, projectId: string) => ({
+    status: 'saved',
+    projectId,
+  }))
   mocks.getAgentsOrg.mockResolvedValue({ revision: 0, groups: [], agents: {} })
   mocks.saveAgentsOrg.mockImplementation(async (org: { revision?: number }) => ({
     revision: (org.revision || 0) + 1,
@@ -1014,6 +1020,186 @@ describe('AgentStudio mobile core path', () => {
     expect(wrapper.find('[data-test="org-switch"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('导入')
     expect(wrapper.text()).toContain('新建 Agent')
+    wrapper.unmount()
+  })
+})
+
+describe('AgentStudio group assign project', () => {
+  const ModalStub = defineComponent({
+    props: { open: Boolean, title: String },
+    emits: ['close'],
+    template: '<div v-if="open" data-test="modal"><h2>{{ title }}</h2><slot /><slot name="footer" /></div>',
+  })
+  const SidebarStub = defineComponent({
+    props: { org: Object, agents: Array, projects: Array },
+    emits: ['assign-project', 'select-agent'],
+    template: '<div data-test="sidebar"><button data-test="assign-g1" @click="$emit(\'assign-project\', \'g1\')">assign</button></div>',
+  })
+
+  function studioAgent(name: string, projectId: string): Agent {
+    return {
+      name,
+      projectId,
+      acpBackend: 'cursor',
+      files: [{ path: 'AGENTS.md', content: `# ${name}\n` }],
+      mcp: [],
+      env: {},
+      layout: { configRoot: '/root/.cursor', workspaceDir: '/root/workspace' },
+    }
+  }
+
+  async function mountAssignStudio() {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const router = await createStudioRouter()
+    return mount(AgentStudioView, {
+      global: {
+        plugins: [i18n, router],
+        stubs: {
+          AppButton: ButtonStub,
+          Icon: true,
+          AppModal: ModalStub,
+          CodeEditor: CodeEditorStub,
+          MarkdownSplitEditor: true,
+          ExplorerContextMenu: true,
+          AgentChatTester: true,
+          AgentGitGuide: true,
+          AgentCreateWizard: true,
+          AgentOrgSidebar: SidebarStub,
+          AgentDataPanel: true,
+        },
+      },
+    })
+  }
+
+  beforeEach(() => {
+    breakpointMocks.isMobile.value = false
+    mocks.listProjects.mockResolvedValue([
+      { id: 'github', name: 'GitHub' },
+      { id: 'figma', name: 'Figma' },
+    ])
+    mocks.getAgentsOrg.mockResolvedValue({
+      revision: 1,
+      groups: [{ id: 'g1', name: '设计组' }],
+      agents: {
+        alice: { groupIds: ['g1'] },
+        bob: { groupIds: ['g1'] },
+      },
+    })
+  })
+
+  it('集合内非 dirty 成功后同步草稿 projectId，不弹草稿冲突', async () => {
+    mocks.listAgents.mockResolvedValue([
+      studioAgent('alice', 'figma'),
+      studioAgent('bob', 'github'),
+    ])
+    mocks.listAgents
+      .mockResolvedValueOnce([
+        studioAgent('alice', 'figma'),
+        studioAgent('bob', 'github'),
+      ])
+      .mockResolvedValueOnce([
+        studioAgent('alice', 'github'),
+        studioAgent('bob', 'github'),
+      ])
+    const wrapper = await mountAssignStudio()
+    await flushPromises()
+
+    await wrapper.get('[data-test="assign-g1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('指定项目 · 设计组')
+    expect(wrapper.text()).toContain('alice')
+    expect(wrapper.text()).toContain('bob')
+
+    await wrapper.get('[data-test="org-assign-submit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('确认切换主项目')
+    expect(wrapper.text()).toContain('立即生效')
+    expect(wrapper.text()).not.toContain('草稿主项目冲突')
+
+    await wrapper.get('[data-test="org-assign-cover-ok"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.patchAgentProject).toHaveBeenCalledTimes(2)
+    expect(mocks.patchAgentProject).toHaveBeenNthCalledWith(1, 'alice', 'github')
+    expect(mocks.patchAgentProject).toHaveBeenNthCalledWith(2, 'bob', 'github')
+    expect(document.querySelector('[data-test="studio-toast"]')?.textContent).toContain('已绑定到 GitHub')
+    wrapper.unmount()
+  })
+
+  it('dirty 保留草稿则整次不写 PATCH', async () => {
+    mocks.listAgents.mockResolvedValue([
+      studioAgent('alice', 'figma'),
+      studioAgent('bob', 'github'),
+    ])
+    const wrapper = await mountAssignStudio()
+    await flushPromises()
+
+    await wrapper.findAll('button').find((b) => b.text() === '元信息')!.trigger('click')
+    await flushPromises()
+    const select = wrapper.get('[data-test="agent-project-select"]')
+    await select.setValue('github')
+    await flushPromises()
+    // confirm single-agent draft switch modal if it appears
+    const confirmSwitch = wrapper.findAll('button').find((b) => b.text().includes('切换到'))
+    if (confirmSwitch) {
+      await confirmSwitch.trigger('click')
+      await flushPromises()
+    }
+
+    await wrapper.get('[data-test="assign-g1"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-test="org-assign-submit"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-test="org-assign-cover-ok"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('草稿主项目冲突')
+    await wrapper.get('[data-test="org-assign-draft-keep"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.patchAgentProject).not.toHaveBeenCalled()
+    expect(document.querySelector('[data-test="studio-toast"]')?.textContent).toContain('组级指定未执行')
+    wrapper.unmount()
+  })
+
+  it('部分失败 err-box 列出原因，当前 Agent fail 不同步草稿', async () => {
+    mocks.listAgents.mockResolvedValue([
+      studioAgent('alice', 'figma'),
+      studioAgent('bob', 'github'),
+    ])
+    mocks.patchAgentProject.mockImplementation(async (name: string, projectId: string) => {
+      if (name === 'alice') throw Object.assign(new Error('绑定不被允许（含项目级 MCP 约束）'), { status: 400 })
+      return { status: 'saved', projectId }
+    })
+    mocks.listAgents
+      .mockResolvedValueOnce([
+        studioAgent('alice', 'figma'),
+        studioAgent('bob', 'github'),
+      ])
+      .mockResolvedValueOnce([
+        studioAgent('alice', 'figma'),
+        studioAgent('bob', 'github'),
+      ])
+
+    const wrapper = await mountAssignStudio()
+    await flushPromises()
+    await wrapper.get('[data-test="assign-g1"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-test="org-assign-submit"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-test="org-assign-cover-ok"]').trigger('click')
+    await flushPromises()
+
+    const failBox = wrapper.get('[data-test="org-assign-fail"]')
+    expect(failBox.text()).toContain('部分成功')
+    expect(failBox.text()).toContain('alice')
+    expect(failBox.text()).toContain('绑定不被允许')
+    expect(failBox.text()).toContain('括号按完成后实际绑定刷新')
+    expect(mocks.patchAgentProject).toHaveBeenCalledTimes(2)
     wrapper.unmount()
   })
 })

@@ -1147,6 +1147,50 @@ func (h *Handlers) CreateAgent(c *gin.Context) {
 	c.JSON(http.StatusCreated, a)
 }
 
+// PatchAgentProject handles PATCH /api/agents/:name/project.
+// Group-level assign: only changes projectId (via UpdateProjectID). Empty
+// projectId is rejected — unbind stays on the full SaveAgent path.
+func (h *Handlers) PatchAgentProject(c *gin.Context) {
+	name := c.Param("name")
+	var b struct {
+		ProjectID string `json:"projectId"`
+	}
+	if err := c.ShouldBindJSON(&b); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	projectID := strings.TrimSpace(b.ProjectID)
+	if projectID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "组级指定不支持解绑主项目"})
+		return
+	}
+	prev, ok := h.Skill.Get(name)
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	oldProjectID := strings.TrimSpace(prev.ProjectID)
+	agent := prev
+	agent.ProjectID = projectID
+	if err := h.validateAgentProjectBinding(agent); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if oldProjectID != "" && oldProjectID != projectID && h.Pm != nil {
+		if err := h.Pm.PurgeAgentProjectData(oldProjectID, name); err != nil {
+			_ = c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "清除旧项目数据失败：" + err.Error()})
+			return
+		}
+	}
+	if err := h.Skill.UpdateProjectID(name, projectID); err != nil {
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "saved", "projectId": projectID})
+}
+
 func (h *Handlers) SaveAgent(c *gin.Context) {
 	var b agentBody
 	if err := c.ShouldBindJSON(&b); err != nil {

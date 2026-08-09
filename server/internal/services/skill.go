@@ -440,6 +440,27 @@ func (s *SkillService) readConfig(name string) agentConfig {
 	return cfg
 }
 
+// UpdateProjectID writes only agent.json.projectId. Unlike Save it does not
+// RemoveAll(workspace), rewrite files, or touch MCP / env / layout / prompts.
+// Used by group-level assign so unrelated drafts and workspace stay intact.
+func (s *SkillService) UpdateProjectID(name, projectID string) error {
+	n := sanitize(name)
+	if n == "" {
+		return fmt.Errorf("invalid agent name")
+	}
+	if !s.Exists(n) {
+		return fmt.Errorf("agent %q not found", name)
+	}
+	dir := filepath.Join(s.root, n)
+	cfg := s.readConfig(n)
+	cfg.ProjectID = strings.TrimSpace(projectID)
+	b, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "agent.json"), b, 0o644)
+}
+
 // Save writes an agent's working-dir tree + config, creating it if needed. The
 // workspace/ tree is fully rewritten so removed files disappear from disk; the
 // legacy rules.md / skills/ / cursor/ are dropped on save.

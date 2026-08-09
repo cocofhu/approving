@@ -6,7 +6,9 @@ import type { AgentOrg } from '@/lib/api'
 import {
   UNGROUPED_ID,
   buildOrgTreeRows,
+  type AgentProjectRef,
   type OrgTreeRow,
+  type ProjectNameRef,
 } from '@/lib/agentOrg'
 
 const props = defineProps<{
@@ -14,6 +16,8 @@ const props = defineProps<{
   agentNames: string[]
   activeName: string
   collapsed: boolean
+  agents?: AgentProjectRef[]
+  projects?: ProjectNameRef[]
 }>()
 
 const emit = defineEmits<{
@@ -25,6 +29,7 @@ const emit = defineEmits<{
   (e: 'create-child-group', parentId: string): void
   (e: 'rename-group', groupId: string): void
   (e: 'delete-group', groupId: string): void
+  (e: 'assign-project', groupId: string): void
   (e: 'move-group', groupId: string, newParentId: string): void
   (e: 'move-agent', agentName: string, sourceGroupId: string, targetGroupId: string): void
   (e: 'toggle-collapsed'): void
@@ -56,7 +61,9 @@ type CtxState =
 
 const ctx = ref<CtxState | null>(null)
 
-const rows = computed(() => buildOrgTreeRows(props.org, props.agentNames, collapsedNodes.value))
+const rows = computed(() =>
+  buildOrgTreeRows(props.org, props.agentNames, collapsedNodes.value, props.agents, props.projects),
+)
 
 watch(
   () => props.org.groups?.map((g) => g.id).join(','),
@@ -125,6 +132,7 @@ function onCtxAction(action: string) {
     const id = current.groupId
     if (action === 'newChild') emit('create-child-group', id)
     else if (action === 'rename') emit('rename-group', id)
+    else if (action === 'assignProject') emit('assign-project', id)
     else if (action === 'delete') emit('delete-group', id)
     return
   }
@@ -293,7 +301,13 @@ function onDrop(e: DragEvent, row: OrgTreeRow) {
               @click.stop="toggleNode(row.id)"
             >
               <Icon name="folder" :size="14" class="shrink-0 text-warn" />
-              <span class="truncate font-medium text-txt2">{{ row.name }}</span>
+              <span class="flex min-w-0 flex-1 items-baseline overflow-hidden" data-org-gname>
+                <span class="min-w-0 truncate font-medium text-txt2">{{ row.name }}</span><span
+                  v-if="row.projectLabel"
+                  class="shrink-0 font-normal text-txt3"
+                  data-org-project
+                >({{ row.projectLabel }})</span>
+              </span>
             </div>
           </div>
           <span
@@ -410,6 +424,20 @@ function onDrop(e: DragEvent, row: OrgTreeRow) {
             <Icon name="edit" :size="13" class="text-txt3" />
             {{ t('pages.agentStudio.explorer.rename') }}
           </button>
+          <button
+            type="button"
+            data-org-ctx-action="assignProject"
+            class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-txt hover:bg-overlay"
+            @click="onCtxAction('assignProject')"
+          >
+            <Icon name="dashboard" :size="13" class="text-accent-2" />
+            {{ t('pages.agentStudio.org.assignProject') }}
+            <span
+              data-org-ctx-new
+              class="ml-auto border border-ok/40 px-1 text-[9px] font-bold uppercase tracking-wide text-ok"
+            >{{ t('pages.agentStudio.org.assignNewBadge') }}</span>
+          </button>
+          <div data-org-ctx-sep class="my-1 h-px bg-line" />
           <button
             type="button"
             data-org-ctx-action="delete"

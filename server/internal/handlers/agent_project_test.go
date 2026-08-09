@@ -414,6 +414,144 @@ func TestAgentCronJobsListAllowedForNonAdmin(t *testing.T) {
 	}
 }
 
+func TestPatchAgentProjectFirstBindAndRejectUnbind(t *testing.T) {
+	hn := newHarness(t)
+	attachPm(t, hn)
+
+	w := hn.do(http.MethodPost, "/api/projects", map[string]any{"name": "FirstHome"})
+	if w.Code != 200 {
+		t.Fatalf("project: %d %s", w.Code, w.Body.String())
+	}
+	var proj map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &proj)
+	pid := proj["id"].(string)
+
+	w = hn.do(http.MethodPost, "/api/agents", map[string]any{
+		"name": "first-bind",
+		"files": []map[string]any{
+			{"path": "AGENTS.md", "content": "# stay\n"},
+		},
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+
+	w = hn.do(http.MethodPatch, "/api/agents/first-bind/project", map[string]any{
+		"projectId": pid,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("first bind: %d %s", w.Code, w.Body.String())
+	}
+	ag, ok := hn.h.Skill.Get("first-bind")
+	if !ok || ag.ProjectID != pid {
+		t.Fatalf("expected bound agent, got %+v", ag)
+	}
+	found := false
+	for _, f := range ag.Files {
+		if f.Path == "AGENTS.md" && f.Content == "# stay\n" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("workspace should be preserved after PATCH, files=%+v", ag.Files)
+	}
+
+	w = hn.do(http.MethodPatch, "/api/agents/first-bind/project", map[string]any{
+		"projectId": "",
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("unbind via PATCH want 400 got %d %s", w.Code, w.Body.String())
+	}
+	ag, _ = hn.h.Skill.Get("first-bind")
+	if ag.ProjectID != pid {
+		t.Fatalf("unbind must be rejected, got projectId=%q", ag.ProjectID)
+	}
+}
+
+func TestPatchAgentProjectSwitchPurgesAndKeepsWorkspace(t *testing.T) {
+	hn := newHarness(t)
+	pm := attachPm(t, hn)
+
+	w := hn.do(http.MethodPost, "/api/projects", map[string]any{"name": "PatchOld"})
+	if w.Code != 200 {
+		t.Fatalf("project A: %d %s", w.Code, w.Body.String())
+	}
+	var projA map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &projA)
+	pidA := projA["id"].(string)
+
+	w = hn.do(http.MethodPost, "/api/projects", map[string]any{"name": "PatchNew"})
+	if w.Code != 200 {
+		t.Fatalf("project B: %d %s", w.Code, w.Body.String())
+	}
+	var projB map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &projB)
+	pidB := projB["id"].(string)
+
+	w = hn.do(http.MethodPost, "/api/agents", map[string]any{
+		"name": "patch-switch", "projectId": pidA,
+		"files": []map[string]any{
+			{"path": "notes.md", "content": "keep\n"},
+		},
+		"mcp": []map[string]any{
+			{"name": "artifact-store", "url": "${APPROVING_ARTIFACT_URL}"},
+		},
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	if _, err := pm.UpsertMemory(pidA, "patch-switch", "记", "old", "agent", "u"); err != nil {
+		t.Fatal(err)
+	}
+
+	w = hn.do(http.MethodPatch, "/api/agents/patch-switch/project", map[string]any{
+		"projectId": pidB,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("switch: %d %s", w.Code, w.Body.String())
+	}
+	mem, _ := pm.ListMemories(pidA, "patch-switch")
+	if len(mem) != 0 {
+		t.Fatalf("old memories should be purged: %v", mem)
+	}
+	ag, ok := hn.h.Skill.Get("patch-switch")
+	if !ok || ag.ProjectID != pidB {
+		t.Fatalf("expected new binding, got %+v", ag)
+	}
+	found := false
+	for _, f := range ag.Files {
+		if f.Path == "notes.md" && f.Content == "keep\n" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("workspace cleared on PATCH switch, files=%+v", ag.Files)
+	}
+	if len(ag.MCP) == 0 || ag.MCP[0].Name != "artifact-store" {
+		t.Fatalf("mcp mutated: %+v", ag.MCP)
+	}
+}
+
+func TestPatchAgentProjectRejectsMissingProject(t *testing.T) {
+	hn := newHarness(t)
+	attachPm(t, hn)
+
+	w := hn.do(http.MethodPost, "/api/agents", map[string]any{"name": "bad-target"})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	w = hn.do(http.MethodPatch, "/api/agents/bad-target/project", map[string]any{
+		"projectId": "proj_dead",
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("missing project want 400 got %d %s", w.Code, w.Body.String())
+	}
+	ag, _ := hn.h.Skill.Get("bad-target")
+	if ag.ProjectID != "" {
+		t.Fatalf("binding should stay empty, got %+v", ag)
+	}
+}
+
 func TestPmLeaderBindRejectsWrongHomeProject(t *testing.T) {
 	hn := newHarness(t)
 	attachPm(t, hn)
