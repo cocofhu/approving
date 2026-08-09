@@ -1525,7 +1525,7 @@ function itemBadgeClass(it: InboxItem) {
         </div>
         <Pagination v-if="listTotal > PAGE_SIZE" v-model:page="listPage" :page-size="PAGE_SIZE" :total="listTotal" />
       </div>
-      <div v-else class="card">
+      <div v-else class="card flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto">
         <EmptyState
           icon="gate"
           :title="listTotal ? t('common.empty.noPendingGatesForPipeline') : t('common.empty.noPendingGates')"
@@ -1754,7 +1754,7 @@ function itemBadgeClass(it: InboxItem) {
       </div>
     </div>
 
-    <div v-else class="card">
+    <div v-else class="card flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto">
       <EmptyState
         icon="gate"
         :title="listTotal ? t('common.empty.noPendingGatesForPipeline') : t('common.empty.noPendingGates')"
