@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   Chart as ChartJS,
@@ -16,7 +16,7 @@ import {
 import { Line } from 'vue-chartjs'
 import type { TokenStatsBucket } from '@/lib/types'
 import { fmtTokenCount } from '@/lib/tokenUsage'
-import { TOKEN_SOURCE_COLORS, formatBucketLabel } from './tokenStatsShared'
+import { TOKEN_SOURCE_COLORS, formatBucketLabel, placeTrendTooltipAfter } from './tokenStatsShared'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip)
 
@@ -32,7 +32,11 @@ const WF_COLOR = TOKEN_SOURCE_COLORS.workflow
 const PM_COLOR = TOKEN_SOURCE_COLORS.pm
 
 const tip = ref({ show: false, x: 0, y: 0, idx: -1 })
+const tipEl = ref<HTMLElement | null>(null)
 const tipBucket = computed(() => (tip.value.idx >= 0 ? props.trend[tip.value.idx] : null))
+
+type LastCaret = { canvas: HTMLCanvasElement; caretX: number; caretY: number }
+let lastCaret: LastCaret | null = null
 
 function fmtCompact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -41,13 +45,36 @@ function fmtCompact(n: number): string {
 }
 
 function hideTip() {
+  lastCaret = null
   tip.value = { ...tip.value, show: false, idx: -1 }
+}
+
+function repositionTip() {
+  const el = tipEl.value
+  if (!tip.value.show || !lastCaret || !el) return
+  const { canvas, caretX, caretY } = lastCaret
+  const canvasRect = canvas.getBoundingClientRect()
+  const pos = placeTrendTooltipAfter({
+    caretX: canvasRect.left + caretX,
+    caretY: canvasRect.top + caretY,
+    tipW: el.offsetWidth,
+    tipH: el.offsetHeight,
+  })
+  if (tip.value.x !== pos.left || tip.value.y !== pos.top) {
+    tip.value = { ...tip.value, x: pos.left, y: pos.top }
+  }
+}
+
+async function schedulePlaceTip() {
+  await nextTick()
+  repositionTip()
+  if (tipEl.value && (tipEl.value.offsetWidth === 0 || tipEl.value.offsetHeight === 0)) {
+    requestAnimationFrame(() => repositionTip())
+  }
 }
 
 function externalTooltip(context: { chart: Chart; tooltip: TooltipModel<'line'> }) {
   const { chart, tooltip } = context
-  const wrap = chart.canvas.closest('[data-testid="token-trend-wrap"]') as HTMLElement | null
-  if (!wrap) return
 
   if (tooltip.opacity === 0 || !tooltip.dataPoints?.length) {
     hideTip()
@@ -55,17 +82,18 @@ function externalTooltip(context: { chart: Chart; tooltip: TooltipModel<'line'> 
   }
 
   const idx = tooltip.dataPoints[0]!.dataIndex
-  const rect = wrap.getBoundingClientRect()
-  const canvasRect = chart.canvas.getBoundingClientRect()
-  const caretX = canvasRect.left - rect.left + tooltip.caretX
-  const caretY = canvasRect.top - rect.top + tooltip.caretY
-
+  lastCaret = { canvas: chart.canvas, caretX: tooltip.caretX, caretY: tooltip.caretY }
   tip.value = {
     show: true,
-    x: Math.min(Math.max(caretX, 8), rect.width - 160),
-    y: Math.max(caretY - 8, 8),
+    x: tip.value.show ? tip.value.x : 0,
+    y: tip.value.show ? tip.value.y : 0,
     idx,
   }
+  return schedulePlaceTip()
+}
+
+function onViewportChange() {
+  if (tip.value.show) repositionTip()
 }
 
 const chartData = computed(() => {
@@ -155,8 +183,19 @@ watch(
   () => hideTip(),
 )
 
-/** Exposed for unit tests: option mapping (tick thinning / aspect / tooltip). */
-defineExpose({ chartOptions, chartData })
+onMounted(() => {
+  window.addEventListener('resize', onViewportChange)
+  window.addEventListener('scroll', onViewportChange, true)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onViewportChange)
+  window.removeEventListener('scroll', onViewportChange, true)
+  hideTip()
+})
+
+/** Exposed for unit tests: option mapping + external tooltip trigger. */
+defineExpose({ chartOptions, chartData, externalTooltip, hideTip })
 </script>
 
 <template>
@@ -166,6 +205,7 @@ defineExpose({ chartOptions, chartData })
     :style="{ height: `${CHART_HEIGHT_PX}px` }"
     role="img"
     :aria-label="t('pages.board.tokenStats.trendTitle')"
+    @mouseleave="hideTip"
   >
     <div
       data-testid="token-trend-legend"
@@ -187,11 +227,14 @@ defineExpose({ chartOptions, chartData })
     <div data-testid="token-trend-chart" class="h-[calc(100%-22px)] w-full">
       <Line :data="chartData" :options="chartOptions" />
     </div>
+  </div>
+  <Teleport to="body">
     <div
       v-if="tip.show && tipBucket"
+      ref="tipEl"
       data-testid="token-trend-tooltip"
-      class="pointer-events-none absolute z-10 min-w-[140px] rounded-lg bg-[#1a1d23] px-2.5 py-2 text-[11px] text-white shadow-lg"
-      :style="{ left: tip.x + 'px', top: tip.y + 'px', transform: 'translate(-50%, -100%)' }"
+      class="pointer-events-none fixed z-[100] min-w-[140px] rounded-lg bg-[#1a1d23] px-2.5 py-2 text-[11px] text-white shadow-lg"
+      :style="{ left: tip.x + 'px', top: tip.y + 'px' }"
     >
       <div class="mb-1 font-semibold">
         {{ formatBucketLabel(tipBucket.bucket, bucketWidth) }}
@@ -216,5 +259,5 @@ defineExpose({ chartOptions, chartData })
         <b class="font-normal tabular-nums text-white">{{ fmtTokenCount(tipBucket.pmTotal || 0) }}</b>
       </div>
     </div>
-  </div>
+  </Teleport>
 </template>

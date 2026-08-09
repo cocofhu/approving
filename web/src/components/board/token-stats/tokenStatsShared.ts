@@ -39,3 +39,40 @@ export function formatBucketLabel(bucket: string, bucketWidth: string): string {
   if (m) return `${m[2]}-${m[3]}`
   return bucket
 }
+
+/** Demo「修复后」placeAfter: viewport pad / gap. */
+export const TREND_TOOLTIP_PAD = 8
+export const TREND_TOOLTIP_GAP = 10
+
+/**
+ * Viewport placement for TokenTrendChart tooltip (Demo placeAfter).
+ * Prefer above the caret; flip up↔down / left↔right on overflow, then clamp by real box size.
+ */
+export function placeTrendTooltipAfter(input: {
+  caretX: number
+  caretY: number
+  tipW: number
+  tipH: number
+  vw?: number
+  vh?: number
+  pad?: number
+  gap?: number
+}): { left: number; top: number } {
+  const pad = input.pad ?? TREND_TOOLTIP_PAD
+  const gap = input.gap ?? TREND_TOOLTIP_GAP
+  const vw = input.vw ?? (typeof window !== 'undefined' ? window.innerWidth : 0)
+  const vh = input.vh ?? (typeof window !== 'undefined' ? window.innerHeight : 0)
+  const { caretX, caretY, tipW, tipH } = input
+
+  let top = caretY - gap - tipH
+  if (top < pad) top = caretY + gap
+  if (top + tipH > vh - pad) top = Math.max(pad, vh - pad - tipH)
+
+  let left = caretX - tipW / 2
+  if (left < pad) left = caretX + gap
+  if (left + tipW > vw - pad) left = caretX - gap - tipW
+  if (left < pad) left = pad
+  if (left + tipW > vw - pad) left = vw - pad - tipW
+
+  return { left, top }
+}
