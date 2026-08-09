@@ -132,86 +132,75 @@
       </div>
     </section>
 
-    <!-- Big page 1: Approve -->
+    <!-- Big page 1: Approve — unified Inbox (clarify + gates) -->
     <section class="showcase showcase--alt" id="showcase-approve" data-showcase="approve" aria-label="Approve demo">
       <div class="showcase__inner showcase__inner--wide">
         <header class="showcase__intro">
           <h2 class="showcase__title">Human–agent collaboration, made simple</h2>
-          <p class="showcase__lead showcase__lead--single">Review is the bottleneck in multi-agent work. Visual, interactive approvals make gates what-you-see-is-what-you-get.</p>
+          <p class="showcase__lead showcase__lead--single">Review is the bottleneck. Unified Inbox: central clarify &amp; approve, then each Run continues.</p>
         </header>
         <div class="showcase__stage" data-stage="approve">
           <div class="panel panel--light">
             <div class="panel__chrome panel__chrome--light">
               <span class="panel__dot"></span><span class="panel__dot"></span><span class="panel__dot"></span>
-              <span class="panel__title">Gates · Pending</span>
+              <span class="panel__title">
+                Gates Inbox
+                <span class="approve-count" data-approve-total aria-hidden="true">0</span>
+              </span>
             </div>
             <div class="panel__body panel__body--approve">
-              <aside class="approve-rail">
-                <p class="approve-rail__label">Pending</p>
-                <div class="approve-rail__item is-active" data-approve-rail="reject">Human review · Sign-in</div>
-                <div class="approve-rail__item" data-approve-rail="pass">Human review · Session renew</div>
+              <aside class="approve-lanes-col">
+                <p class="approve-lanes-label">Workflow Runs</p>
+                <div class="approve-lanes" data-approve-lanes>
+                  <div class="approve-lane" data-lane-id="a" data-status="running">
+                    <div class="approve-lane__name">Landing page refresh</div>
+                    <div class="approve-lane__status">running</div>
+                  </div>
+                  <div class="approve-lane" data-lane-id="b" data-status="running">
+                    <div class="approve-lane__name">API contract review</div>
+                    <div class="approve-lane__status">running</div>
+                  </div>
+                  <div class="approve-lane" data-lane-id="c" data-status="running">
+                    <div class="approve-lane__name">Sandbox preview QA</div>
+                    <div class="approve-lane__status">running</div>
+                  </div>
+                </div>
               </aside>
-              <div class="approve-stage">
-                <div class="approve-window" data-approve-window>
-                  <header class="approve-window__head">
-                    <div>
-                      <p class="approve-window__eyebrow">human_gate · waiting_human</p>
-                      <h3 class="approve-window__title" data-approve-title>Sign-in · UI DEMO</h3>
+              <div class="approve-inbox" data-approve-inbox>
+                <div class="approve-funnel" data-approve-funnel aria-hidden="true">
+                  <div class="approve-funnel__card">
+                    <h4 class="approve-funnel__title">Multi-run todos ingest</h4>
+                    <div class="approve-funnel__arrows">
+                      <span>Run A</span><span>Run B</span><span>Run C</span>
+                      <span class="approve-funnel__to">→ Inbox</span>
                     </div>
-                    <span class="approve-window__pill" data-approve-pill>pending</span>
-                  </header>
-                  <div class="approve-window__main">
-                    <div class="approve-window__content">
-                      <div class="preview-board">
-                        <div class="preview-board__meta">
-                          <span class="preview-chip">artifact</span>
-                          <span class="preview-chip">ui-demo</span>
-                          <span class="preview-chip preview-chip--ok">interactive</span>
-                        </div>
-                        <p class="preview-board__desc" data-approve-desc>Review an interactive demo — annotate issues, then reject or approve.</p>
-                        <div class="demo-stage" data-demo-stage>
-                          <div class="demo-ui" data-demo-case="reject">
-                            <div class="demo-ui__brand">Approving</div>
-                            <h4 class="demo-ui__title">Welcome back</h4>
-                            <p class="demo-ui__hint">Continue with your work account</p>
-                            <div class="demo-ui__field"><span></span></div>
-                            <div class="demo-ui__field"><span></span></div>
-                            <div class="demo-ui__actions">
-                              <span class="demo-ui__btn">Cancel</span>
-                              <span class="demo-ui__btn is-bad" data-annotate-target>Delete account</span>
-                            </div>
-                            <div class="demo-marquee" data-marquee aria-hidden="true"></div>
-                          </div>
-                          <div class="demo-ui is-pass" data-demo-case="pass" hidden>
-                            <div class="demo-ui__brand">Approving</div>
-                            <h4 class="demo-ui__title">Renew session</h4>
-                            <p class="demo-ui__hint">Stay signed in — confirm securely</p>
-                            <div class="demo-ui__card">
-                              <div class="demo-ui__avatar"></div>
-                              <div class="demo-ui__meta"><i></i><i></i></div>
-                            </div>
-                            <div class="demo-ui__actions">
-                              <span class="demo-ui__btn">Later</span>
-                              <span class="demo-ui__btn is-primary">Confirm renew</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <aside class="approve-window__aside">
-                      <p class="approve-aside__label">Review comment</p>
-                      <div class="approve-aside__comment" data-approve-comment></div>
-                      <div class="approve-aside__actions">
-                        <button type="button" class="approve-btn approve-btn--reject" data-reject-btn tabindex="-1">Reject</button>
-                        <button type="button" class="approve-btn" data-approve-btn tabindex="-1">Approve</button>
-                      </div>
-                    </aside>
+                    <p class="approve-funnel__text">Clarify and gate items from different workflows enter one Inbox, then are handled in order.</p>
+                  </div>
+                </div>
+                <div class="approve-inbox-tabs" role="tablist" aria-label="Inbox queues">
+                  <button type="button" class="approve-inbox-tab is-active" data-approve-tab="clarify" role="tab" tabindex="-1">
+                    <span class="approve-inbox-tab__dot approve-inbox-tab__dot--c" aria-hidden="true"></span>
+                    <span>Clarify</span>
+                    <span class="approve-q" data-approve-clarify-count aria-hidden="true">0</span>
+                  </button>
+                  <button type="button" class="approve-inbox-tab" data-approve-tab="gate" role="tab" tabindex="-1">
+                    <span class="approve-inbox-tab__dot approve-inbox-tab__dot--g" aria-hidden="true"></span>
+                    <span>Approve</span>
+                    <span class="approve-q" data-approve-gate-count aria-hidden="true">0</span>
+                  </button>
+                </div>
+                <div class="approve-inbox-split">
+                  <div class="approve-list" data-approve-list>
+                    <div class="approve-list-empty">—</div>
+                  </div>
+                  <div class="approve-detail" data-approve-detail>
+                    <div class="approve-detail-empty">Select an item for detail</div>
                   </div>
                 </div>
                 <div class="demo-cursor" data-cursor="approve"></div>
               </div>
             </div>
-            <p class="panel__caption panel__caption--light" data-caption="approve">Open the approval window…</p>
+            <p class="panel__caption panel__caption--light" data-caption="approve">Several workflows run in parallel; some nodes will need clarify or approval.</p>
           </div>
         </div>
       </div>

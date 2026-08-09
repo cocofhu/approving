@@ -25,19 +25,65 @@
         capParShip: "Two MRs submitted; billing still awaiting approval",
         capParGate: "Gate cleared — billing submits its MR",
         capParDone: "IM start → parallel run → closed out",
-        approveTitleReject: "Sign-in · UI DEMO",
-        approveDescReject: "Review an interactive demo — annotate issues, then reject or approve.",
-        approveTitlePass: "Session renew · UI DEMO",
-        approveDescPass: "Issues fixed. Review the demo again — approve if it looks good.",
-        capApproveOpen: "Open the approval window — reviewing a UI demo",
-        capApproveAnnotate: "Annotate the issue: primary button label is wrong",
+        approveCaptions: [
+          "Several workflows run in parallel; some nodes will need clarify or approval.",
+          "Todos from different Runs ingest into Gates Inbox (clarify 2 + approve 2).",
+          "Central clarify: pick an answer → confirm; item leaves; that Run waiting → running.",
+          "Handle the next clarify item; when count hits 0, switch to Approve.",
+          "Approval detail: annotate → reject → approve (folded homepage UI Demo).",
+          "Light-approve the next item; clear the approve queue; Run identity remains.",
+          "Both queues at 0; ~3 workflows resume running — centralized handling, separate resume.",
+        ],
+        approveLanes: [
+          { id: "a", name: "Landing page refresh" },
+          { id: "b", name: "API contract review" },
+          { id: "c", name: "Sandbox preview QA" },
+        ],
+        approveClarify: [
+          {
+            id: "c1",
+            run: "a",
+            src: "Landing · Run #a1",
+            q: "Which tone for the primary CTA?",
+            opts: ["Action-first (Try now)", "Value-first (See how it collaborates)", "Decide later"],
+          },
+          {
+            id: "c2",
+            run: "b",
+            src: "API contract · Run #b2",
+            q: "Unify error bodies on problem+json?",
+            opts: ["Yes, problem+json everywhere", "Keep per-endpoint status quo", "Public APIs only"],
+          },
+        ],
+        approveGates: [
+          { id: "g1", run: "c", src: "Sandbox · Run #c3", title: "Sign-in · UI DEMO", mode: "full" },
+          { id: "g2", run: "a", src: "Landing · Run #a1", title: "Release notes blurb", mode: "light" },
+        ],
+        approveEmptyClarify: "Clarify queue empty",
+        approveEmptyGate: "Approve queue empty",
+        approveEmptyDetail: "Select an item for detail",
+        approveEmptyFinale: "Queues cleared · each Run continues",
+        approveConfirm: "Confirm",
+        approveBtn: "Approve",
+        approveReject: "Reject",
+        approveLight: "Approve",
+        approveStatusRunning: "running",
+        approveStatusWaiting: "waiting",
+        approveFunnelTitle: "Multi-run todos ingest",
+        approveFunnelText:
+          "Clarify and gate items from different workflows enter one Inbox, then are handled in order.",
+        approveUiTitle: "Welcome back",
+        approveUiHint: "Continue with your work account",
+        approveUiCancel: "Cancel",
+        approveUiBad: "Delete account",
+        approveDesc:
+          "Review an interactive demo — annotate issues, then reject or approve.",
         approveRejectComment:
-          'Reject: primary button should not be "Delete account" — change it back to "Sign in / Continue".',
-        capApproveReject: "Reject case — send back with annotation feedback",
-        capApproveNext: "Next item: session renew demo — approve if clean",
-        approvePassComment: "LGTM — demo flow and copy match. Approved.",
-        capApproveJust: "Just Approve",
-        capApproveDone: "Annotate reject / demo approve — both paths covered",
+          "“Delete account” on the sign-in screen is easy to mis-tap. Move it to a secondary action.",
+        approvePassComment: "Dangerous action relocated; hierarchy is clear. Approved.",
+        approveLightMsg: "Release notes look fine — approve.",
+        approveAside: "Review comment",
+        approveAnnot: "Issue",
         pmAsk:
           "How do we guarantee quality? Research industry harness practices and software engineering experience for this open-source project.",
         pmConfirm: "Confirmed — start the workflow with this plan.",
@@ -62,18 +108,62 @@
         capParShip: "两条已提交 MR；计费仍等批准",
         capParGate: "门禁通过 — 计费补交 MR",
         capParDone: "IM 启动 → 并行执行 → 收口完成",
-        approveTitleReject: "登录鉴权 · UI DEMO",
-        approveDescReject: "审阅可交互 Demo — 框选问题区域后可拒绝或批准。",
-        approveTitlePass: "会话续期 · UI DEMO",
-        approveDescPass: "问题已修。再看一遍 Demo，没问题即可批准。",
-        capApproveOpen: "打开审批窗口 — 审的是 UI Demo",
-        capApproveAnnotate: "框选问题区域：主按钮文案不对",
-        approveRejectComment: "拒绝：主按钮不应是「删除账号」，请改回「登录 / 继续」。",
-        capApproveReject: "拒绝 Case — 带着框选反馈打回",
-        capApproveNext: "下一单：会话续期 Demo — 无问题可批准",
-        approvePassComment: "LGTM — Demo 流程与文案一致，批准。",
-        capApproveJust: "Just Approve",
-        capApproveDone: "框选拒绝 / Demo 批准 — 两种路径都走通",
+        approveCaptions: [
+          "多条工作流并行运行；部分节点即将需要人工澄清或审批。",
+          "待办从不同 Run 汇入统一 Gates Inbox（澄清 2 + 审批 2）。",
+          "集中澄清：选择答案 → 确认；该项消失，对应 Run waiting → running。",
+          "继续处理下一条澄清；计数减至 0 后切到审批 Tab。",
+          "审批详情：标注问题 → 拒绝 → 批准（收编原首页 UI Demo）。",
+          "下一项轻量批准，清空审批队列；每项保留 Run 身份。",
+          "双队列为 0；约 3 条工作流恢复 running —— 集中处理，分流恢复。",
+        ],
+        approveLanes: [
+          { id: "a", name: "官网落地页改版" },
+          { id: "b", name: "API 契约评审" },
+          { id: "c", name: "沙箱预览验收" },
+        ],
+        approveClarify: [
+          {
+            id: "c1",
+            run: "a",
+            src: "官网落地页 · Run #a1",
+            q: "主 CTA 文案偏好哪种语气？",
+            opts: ["直接行动（立即试用）", "价值导向（看看如何协作）", "稍后决定"],
+          },
+          {
+            id: "c2",
+            run: "b",
+            src: "API 契约 · Run #b2",
+            q: "错误响应是否统一使用 problem+json？",
+            opts: ["是，统一 problem+json", "保持现状分接口约定", "仅对外 API 统一"],
+          },
+        ],
+        approveGates: [
+          { id: "g1", run: "c", src: "沙箱预览 · Run #c3", title: "登录鉴权 · UI DEMO", mode: "full" },
+          { id: "g2", run: "a", src: "官网落地页 · Run #a1", title: "发布说明摘要", mode: "light" },
+        ],
+        approveEmptyClarify: "澄清队列已清空",
+        approveEmptyGate: "审批队列已清空",
+        approveEmptyDetail: "选择一项查看详情",
+        approveEmptyFinale: "队列已清空 · 各 Run 继续推进",
+        approveConfirm: "确认并继续",
+        approveBtn: "批准",
+        approveReject: "拒绝",
+        approveLight: "批准",
+        approveStatusRunning: "running",
+        approveStatusWaiting: "waiting",
+        approveFunnelTitle: "多 Run 待办汇入",
+        approveFunnelText: "待澄清与待审批从不同工作流汇入统一入口，再按队列连续处理。",
+        approveUiTitle: "欢迎回来",
+        approveUiHint: "使用企业账号继续",
+        approveUiCancel: "取消",
+        approveUiBad: "删除账号",
+        approveDesc: "审阅可交互 Demo — 框选问题区域后可拒绝或批准。",
+        approveRejectComment: "「删除账号」放在登录页不合适，容易误触。请改为次要操作或移出。",
+        approvePassComment: "已修正危险操作位置，视觉层级清晰，批准通过。",
+        approveLightMsg: "发布说明摘要看起来没问题，可直接批准。",
+        approveAside: "审批意见",
+        approveAnnot: "问题",
         pmAsk:
           "有什么办法可以保证质量？调研一下业界的 harness 和软件工程经验，看看怎么保证这个开源项目的质量。",
         pmConfirm: "确认，按这个方案启动工作流。",
@@ -630,7 +720,7 @@
     }
   }
 
-  /* Approve showcase — UI demo, marquee annotate, reject then approve */
+  /* Approve showcase — unified Inbox: ingest → clarify ×2 → gate full+light → resume */
   async function typeComment(el, text, signal, ms = 22) {
     if (!el) return;
     el.textContent = "";
@@ -646,131 +736,392 @@
     el.classList.remove("is-typing");
   }
 
-  function setApproveCase(root, which) {
-    const rejectUi = within(root, '[data-demo-case="reject"]');
-    const passUi = within(root, '[data-demo-case="pass"]');
-    const title = within(root, "[data-approve-title]");
-    const desc = within(root, "[data-approve-desc]");
-    const pill = within(root, "[data-approve-pill]");
-    const marquee = within(root, "[data-marquee]");
-    const railReject = within(root, '[data-approve-rail="reject"]');
-    const railPass = within(root, '[data-approve-rail="pass"]');
-    marquee?.classList.remove("is-show");
-    if (which === "reject") {
-      if (rejectUi) rejectUi.hidden = false;
-      if (passUi) passUi.hidden = true;
-      if (title) title.textContent = COPY.approveTitleReject;
-      if (desc) desc.textContent = COPY.approveDescReject;
-      if (pill) {
-        pill.textContent = "pending";
-        pill.classList.remove("is-rejected", "is-approved");
+  function approveLaneStatuses(stage) {
+    if (stage === 0) return { a: "running", b: "running", c: "running" };
+    if (stage <= 2) return { a: "waiting", b: "waiting", c: "waiting" };
+    if (stage === 3) return { a: "running", b: "waiting", c: "waiting" };
+    if (stage === 4) return { a: "running", b: "running", c: "waiting" };
+    return { a: "running", b: "running", c: "running" };
+  }
+
+  function approveClarifyDone(stage) {
+    if (stage <= 2) return [];
+    if (stage === 3) return ["c1"];
+    return ["c1", "c2"];
+  }
+
+  function approveGateDone(stage) {
+    if (stage < 5) return [];
+    if (stage === 5) return ["g1"];
+    return ["g1", "g2"];
+  }
+
+  function approveActiveTab(stage) {
+    return stage >= 4 ? "gate" : "clarify";
+  }
+
+  function approveCounts(stage) {
+    if (stage === 0 || stage >= 6) return { c: 0, g: 0, total: 0 };
+    const c = 2 - approveClarifyDone(stage).length;
+    const g = 2 - approveGateDone(stage).length;
+    return { c, g, total: c + g };
+  }
+
+  function renderApproveLanes(root, stage) {
+    const host = within(root, "[data-approve-lanes]");
+    if (!host) return;
+    const st = approveLaneStatuses(stage);
+    host.innerHTML = COPY.approveLanes
+      .map(
+        (L) =>
+          `<div class="approve-lane" data-lane-id="${L.id}" data-status="${st[L.id]}">` +
+          `<div class="approve-lane__name">${L.name}</div>` +
+          `<div class="approve-lane__status">${
+            st[L.id] === "waiting" ? COPY.approveStatusWaiting : COPY.approveStatusRunning
+          }</div></div>`,
+      )
+      .join("");
+  }
+
+  function renderApproveCounts(root, stage) {
+    const c = approveCounts(stage);
+    const total = within(root, "[data-approve-total]");
+    const clarify = within(root, "[data-approve-clarify-count]");
+    const gate = within(root, "[data-approve-gate-count]");
+    if (total) {
+      total.textContent = String(c.total);
+      total.className = `approve-count${c.total === 0 ? " zero" : " has"}`;
+    }
+    if (clarify) clarify.textContent = String(c.c);
+    if (gate) gate.textContent = String(c.g);
+  }
+
+  function setApproveTab(root, which) {
+    root.querySelectorAll("[data-approve-tab]").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.dataset.approveTab === which);
+    });
+  }
+
+  function renderApproveList(root, stage) {
+    const pane = within(root, "[data-approve-list]");
+    if (!pane) return;
+    const tab = approveActiveTab(stage);
+    setApproveTab(root, tab);
+    if (stage === 0) {
+      pane.innerHTML = `<div class="approve-list-empty">—</div>`;
+      return;
+    }
+    if (tab === "clarify") {
+      if (approveClarifyDone(stage).length === 2 && stage >= 4) {
+        pane.innerHTML = `<div class="approve-list-empty">${COPY.approveEmptyClarify}</div>`;
+        return;
       }
-      railReject?.classList.add("is-active");
-      railReject?.classList.remove("is-done");
-      railPass?.classList.remove("is-active");
+      pane.innerHTML = COPY.approveClarify
+        .map((it, idx) => {
+          const gone = approveClarifyDone(stage).includes(it.id);
+          const active =
+            (stage === 2 && it.id === "c1") ||
+            (stage === 3 && it.id === "c2") ||
+            (stage === 1 && idx === 0);
+          return (
+            `<button type="button" class="approve-list-item${active ? " is-active" : ""}${
+              gone ? " is-gone" : ""
+            }" tabindex="-1">` +
+            `<div class="approve-list-item__src">${it.src}</div>` +
+            `<div class="approve-list-item__q">${it.q}</div></button>`
+          );
+        })
+        .join("");
     } else {
-      if (rejectUi) rejectUi.hidden = true;
-      if (passUi) passUi.hidden = false;
-      if (title) title.textContent = COPY.approveTitlePass;
-      if (desc) desc.textContent = COPY.approveDescPass;
-      if (pill) {
-        pill.textContent = "pending";
-        pill.classList.remove("is-rejected", "is-approved");
+      if (approveGateDone(stage).length === 2) {
+        pane.innerHTML = `<div class="approve-list-empty">${COPY.approveEmptyGate}</div>`;
+        return;
       }
-      railReject?.classList.remove("is-active");
-      railReject?.classList.add("is-done");
-      railPass?.classList.add("is-active");
-      railPass?.classList.remove("is-done");
+      pane.innerHTML = COPY.approveGates
+        .map((it) => {
+          const gone = approveGateDone(stage).includes(it.id);
+          const active = (stage === 4 && it.id === "g1") || (stage === 5 && it.id === "g2");
+          return (
+            `<button type="button" class="approve-list-item${active ? " is-active" : ""}${
+              gone ? " is-gone" : ""
+            }" tabindex="-1">` +
+            `<div class="approve-list-item__src">${it.src}</div>` +
+            `<div class="approve-list-item__q">${it.title}</div></button>`
+          );
+        })
+        .join("");
     }
   }
 
-  async function playApprove(root, signal) {
+  function renderApproveFullGate(root, gatePhase) {
+    const pane = within(root, "[data-approve-detail]");
+    if (!pane) return;
+    const g = COPY.approveGates[0];
+    let pillCls = "approve-window__pill";
+    let comment = "";
+    let rejPressed = "";
+    let okPressed = "";
+    let marquee = "";
+    if (gatePhase === "annotate") {
+      marquee = " is-show";
+    } else if (gatePhase === "reject") {
+      marquee = " is-show";
+      pillCls += " is-rejected";
+      comment = COPY.approveRejectComment;
+      rejPressed = " is-pressed";
+    } else if (gatePhase === "approve") {
+      pillCls += " is-approved";
+      comment = COPY.approvePassComment;
+      okPressed = " is-pressed";
+    }
+    /* gatePhase === "pending": open window, no marquee yet */
+    const pillText =
+      gatePhase === "approve" ? "approved" : gatePhase === "reject" ? "rejected" : "pending";
+    pane.innerHTML =
+      `<div class="approve-window is-open" data-approve-window>` +
+      `<header class="approve-window__head">` +
+      `<div><p class="approve-window__eyebrow">human_gate · waiting_human</p>` +
+      `<h3 class="approve-window__title">${g.title}</h3></div>` +
+      `<span class="${pillCls}" data-approve-pill>${pillText}</span>` +
+      `</header>` +
+      `<div class="approve-window__main">` +
+      `<div class="approve-window__content">` +
+      `<div class="preview-board">` +
+      `<div class="preview-board__meta">` +
+      `<span class="preview-chip">artifact</span>` +
+      `<span class="preview-chip">ui-demo</span>` +
+      `<span class="preview-chip preview-chip--ok">interactive</span>` +
+      `</div>` +
+      `<p class="preview-board__desc">${COPY.approveDesc}</p>` +
+      `<div class="demo-stage" data-demo-stage>` +
+      `<div class="demo-ui" data-demo-case="reject">` +
+      `<div class="demo-ui__brand">Approving</div>` +
+      `<h4 class="demo-ui__title">${COPY.approveUiTitle}</h4>` +
+      `<p class="demo-ui__hint">${COPY.approveUiHint}</p>` +
+      `<div class="demo-ui__field"><span></span></div>` +
+      `<div class="demo-ui__field"><span></span></div>` +
+      `<div class="demo-ui__actions">` +
+      `<span class="demo-ui__btn">${COPY.approveUiCancel}</span>` +
+      `<span class="demo-ui__btn is-bad" data-annotate-target>${COPY.approveUiBad}</span>` +
+      `</div>` +
+      `<div class="demo-marquee${marquee}" data-marquee data-label="${COPY.approveAnnot}" aria-hidden="true"></div>` +
+      `</div></div></div></div>` +
+      `<aside class="approve-window__aside">` +
+      `<p class="approve-aside__label">${COPY.approveAside}</p>` +
+      `<div class="approve-aside__comment" data-approve-comment>${comment}</div>` +
+      `<div class="approve-aside__actions">` +
+      `<button type="button" class="approve-btn approve-btn--reject${rejPressed}" data-reject-btn tabindex="-1">${COPY.approveReject}</button>` +
+      `<button type="button" class="approve-btn${okPressed}" data-approve-btn tabindex="-1">${COPY.approveBtn}</button>` +
+      `</div></aside></div></div>`;
+  }
+
+  function renderApproveDetail(root, stage, gatePhase = "annotate") {
+    const pane = within(root, "[data-approve-detail]");
+    if (!pane) return;
+    if (stage === 0) {
+      pane.innerHTML = `<div class="approve-detail-empty">${COPY.approveEmptyDetail}</div>`;
+      return;
+    }
+    if (stage === 1) {
+      pane.innerHTML = `<div class="approve-detail-empty">${COPY.approveFunnelText}</div>`;
+      return;
+    }
+    if (stage >= 6) {
+      pane.innerHTML = `<div class="approve-detail-empty">${COPY.approveEmptyFinale}</div>`;
+      return;
+    }
+    if (stage === 2 || stage === 3) {
+      const it = COPY.approveClarify[stage === 2 ? 0 : 1];
+      const selected = stage === 2 || stage === 3 ? 0 : -1;
+      pane.innerHTML =
+        `<div class="approve-detail-meta">${it.src} · waiting → running</div>` +
+        `<div class="approve-detail-q">${it.q}</div>` +
+        `<div class="approve-options">` +
+        it.opts
+          .map(
+            (o, i) =>
+              `<button type="button" class="approve-opt${i === selected ? " is-selected" : ""}" data-approve-opt="${i}" tabindex="-1">${o}</button>`,
+          )
+          .join("") +
+        `</div>` +
+        `<button type="button" class="approve-confirm" data-approve-confirm tabindex="-1">${COPY.approveConfirm}</button>`;
+      return;
+    }
+    if (stage === 4) {
+      renderApproveFullGate(root, gatePhase);
+      return;
+    }
+    if (stage === 5) {
+      const g2 = COPY.approveGates[1];
+      pane.innerHTML =
+        `<div class="approve-detail-meta">${g2.src} · gate · light</div>` +
+        `<div class="approve-detail-q">${g2.title}</div>` +
+        `<div class="approve-light-card"><p>${COPY.approveLightMsg}</p></div>` +
+        `<button type="button" class="approve-btn" data-approve-btn tabindex="-1" style="width:auto;padding:0.55rem 1rem">${COPY.approveLight}</button>`;
+    }
+  }
+
+  function renderApproveStage(root, stage, gatePhase = "annotate") {
+    renderApproveLanes(root, stage);
+    renderApproveCounts(root, stage);
+    renderApproveList(root, stage);
+    renderApproveDetail(root, stage, gatePhase);
+    const funnel = within(root, "[data-approve-funnel]");
+    funnel?.classList.toggle("is-on", stage === 1);
     const caption = within(root, '[data-caption="approve"]');
-    const stage = within(root, ".approve-stage");
-    const win = within(root, "[data-approve-window]");
-    const approveBtn = within(root, "[data-approve-btn]");
-    const rejectBtn = within(root, "[data-reject-btn]");
+    if (caption) caption.textContent = COPY.approveCaptions[stage] || "";
+    const funnelTitle = within(root, ".approve-funnel__title");
+    const funnelText = within(root, ".approve-funnel__text");
+    if (funnelTitle) funnelTitle.textContent = COPY.approveFunnelTitle;
+    if (funnelText) funnelText.textContent = COPY.approveFunnelText;
+  }
+
+  function resetApproveDemo(root) {
+    hideCursor(within(root, '[data-cursor="approve"]'));
+    renderApproveStage(root, 0);
+  }
+
+  async function playApproveFullGate(root, signal) {
+    const inbox = within(root, "[data-approve-inbox]");
     const cursor = within(root, '[data-cursor="approve"]');
-    const comment = within(root, "[data-approve-comment]");
+    renderApproveStage(root, 4, "pending");
+    await sleep(400);
+    if (signal.aborted) return;
+
+    const target = within(root, "[data-annotate-target]");
+    const demoUi = target?.closest(".demo-ui") || within(root, '[data-demo-case="reject"]');
     const marquee = within(root, "[data-marquee]");
-    const pill = within(root, "[data-approve-pill]");
-    const railPass = within(root, '[data-approve-rail="pass"]');
 
+    if (target && cursor && inbox && demoUi) {
+      const box = marqueeBoxInStage(inbox, demoUi);
+      const prevTransition = cursor.style.transition;
+      cursor.style.transition = "none";
+      placeCursorAt(inbox, cursor, box.x0 - 28, box.y0 - 24);
+      void cursor.offsetWidth;
+      cursor.style.transition = prevTransition;
+      await animateCursorTo(cursor, box.x0, box.y0, 380);
+      await sleep(120);
+      if (signal.aborted) return;
+      marquee?.classList.add("is-show");
+      await animateCursorTo(cursor, box.x1, box.y1, 550);
+      await sleep(280);
+      if (signal.aborted) return;
+      hideCursor(cursor);
+    } else {
+      marquee?.classList.add("is-show");
+    }
+    await sleep(350);
+    if (signal.aborted) return;
+
+    const comment = within(root, "[data-approve-comment]");
+    await typeComment(comment, COPY.approveRejectComment, signal);
+    if (signal.aborted) return;
+    await sleep(200);
+    if (signal.aborted) return;
+
+    const rejectBtn = within(root, "[data-reject-btn]");
+    await clickEl(inbox, cursor, rejectBtn);
+    if (signal.aborted) return;
+    renderApproveStage(root, 4, "reject");
+    await sleep(700);
+    if (signal.aborted) return;
+
+    renderApproveStage(root, 4, "pending");
+    const comment2 = within(root, "[data-approve-comment]");
+    if (comment2) comment2.textContent = "";
+    const marquee2 = within(root, "[data-marquee]");
+    marquee2?.classList.remove("is-show");
+    await typeComment(comment2, COPY.approvePassComment, signal);
+    if (signal.aborted) return;
+    await sleep(200);
+    if (signal.aborted) return;
+
+    const approveBtn = within(root, "[data-approve-btn]");
+    await clickEl(inbox, cursor, approveBtn);
+    if (signal.aborted) return;
+    renderApproveStage(root, 4, "approve");
+    await sleep(900);
+  }
+
+  async function playApproveClarifyItem(root, signal, stage) {
+    const inbox = within(root, "[data-approve-inbox]");
+    const cursor = within(root, '[data-cursor="approve"]');
+    renderApproveStage(root, stage);
+    await sleep(450);
+    if (signal.aborted) return;
+
+    const opt = within(root, '[data-approve-opt="0"]');
+    await clickEl(inbox, cursor, opt);
+    if (signal.aborted) return;
+    opt?.classList.add("is-selected");
+    await sleep(350);
+    if (signal.aborted) return;
+
+    const confirm = within(root, "[data-approve-confirm]");
+    await clickEl(inbox, cursor, confirm);
+    if (signal.aborted) return;
+    confirm?.classList.add("is-pressed");
+    await sleep(550);
+  }
+
+  async function playApproveLightGate(root, signal) {
+    const inbox = within(root, "[data-approve-inbox]");
+    const cursor = within(root, '[data-cursor="approve"]');
+    renderApproveStage(root, 5);
+    await sleep(500);
+    if (signal.aborted) return;
+    const btn = within(root, "[data-approve-btn]");
+    await clickEl(inbox, cursor, btn);
+    if (signal.aborted) return;
+    btn?.classList.add("is-pressed");
+    await sleep(700);
+  }
+
+  async function playApprove(root, signal) {
     while (!signal.aborted) {
-      win?.classList.remove("is-open");
-      setApproveCase(root, "reject");
-      if (comment) comment.textContent = "";
-      if (caption) caption.textContent = COPY.capApproveOpen;
-      await sleep(350);
+      resetApproveDemo(root);
+      await sleep(900);
       if (signal.aborted) break;
 
-      win?.classList.add("is-open");
-      await sleep(reduceMotion ? 300 : 700);
+      /* stage 1 — ingest */
+      renderApproveStage(root, 1);
+      await sleep(1600);
       if (signal.aborted) break;
 
-      if (caption) caption.textContent = COPY.capApproveAnnotate;
-      const target = within(root, "[data-annotate-target]");
-      const demoUi = target?.closest(".demo-ui") || within(root, '[data-demo-case="reject"]');
-      if (target && cursor && stage && demoUi) {
-        /* Frame-select path: NW tip at marquee top-left → drag to bottom-right with is-show (no is-click) */
-        const box = marqueeBoxInStage(stage, demoUi);
-        const prevTransition = cursor.style.transition;
-        cursor.style.transition = "none";
-        placeCursorAt(stage, cursor, box.x0 - 28, box.y0 - 24);
-        void cursor.offsetWidth;
-        cursor.style.transition = prevTransition;
-        await animateCursorTo(cursor, box.x0, box.y0, 380);
-        await sleep(120);
-        if (signal.aborted) break;
-        marquee?.classList.add("is-show");
-        await animateCursorTo(cursor, box.x1, box.y1, 550);
-        await sleep(280);
-        if (signal.aborted) break;
-        hideCursor(cursor);
-      } else {
-        marquee?.classList.add("is-show");
-      }
+      /* stage 2 — clarify ① */
+      await playApproveClarifyItem(root, signal, 2);
+      if (signal.aborted) break;
+      renderApproveStage(root, 3);
       await sleep(400);
       if (signal.aborted) break;
 
-      await typeComment(comment, COPY.approveRejectComment, signal);
+      /* stage 3 — clarify ② (already at stage 3 visually for list; animate confirm) */
+      await playApproveClarifyItem(root, signal, 3);
       if (signal.aborted) break;
-      await sleep(250);
-      if (signal.aborted) break;
-
-      if (caption) caption.textContent = COPY.capApproveReject;
-      await clickEl(stage, cursor, rejectBtn);
-      if (signal.aborted) break;
-      if (pill) {
-        pill.textContent = "rejected";
-        pill.classList.add("is-rejected");
-      }
-      await sleep(700);
+      renderApproveStage(root, 4, "pending");
+      await sleep(350);
       if (signal.aborted) break;
 
-      setApproveCase(root, "pass");
-      if (comment) comment.textContent = "";
-      if (caption) caption.textContent = COPY.capApproveNext;
-      await sleep(550);
+      /* stage 4 — full UI demo */
+      await playApproveFullGate(root, signal);
+      if (signal.aborted) break;
+      renderApproveStage(root, 5);
+      await sleep(300);
       if (signal.aborted) break;
 
-      await typeComment(comment, COPY.approvePassComment, signal);
-      if (signal.aborted) break;
-      await sleep(250);
+      /* stage 5 — light approve */
+      await playApproveLightGate(root, signal);
       if (signal.aborted) break;
 
-      if (caption) caption.textContent = COPY.capApproveJust;
-      await clickEl(stage, cursor, approveBtn);
-      if (signal.aborted) break;
-      if (pill) {
-        pill.textContent = "approved";
-        pill.classList.remove("is-rejected");
-        pill.classList.add("is-approved");
-      }
-      railPass?.classList.add("is-done");
-      if (caption) caption.textContent = COPY.capApproveDone;
-      await sleep(1400);
+      /* stage 6 — resume finale */
+      renderApproveStage(root, 6);
+      await sleep(1800);
     }
+  }
+
+  function applyApproveReducedMotion(root) {
+    hideCursor(within(root, '[data-cursor="approve"]'));
+    renderApproveStage(root, 6);
   }
 
   /* PM showcase — typewriter IM, no bottom caption */
@@ -950,15 +1301,7 @@
         setSbChip(el, 3);
         setLiveChip(el, "● live run");
       } else if (key === "approve") {
-        within(el, "[data-approve-window]")?.classList.add("is-open");
-        setApproveCase(el, "pass");
-        const c = within(el, "[data-approve-comment]");
-        if (c) c.textContent = COPY.approvePassComment;
-        const pill = within(el, "[data-approve-pill]");
-        if (pill) {
-          pill.textContent = "approved";
-          pill.classList.add("is-approved");
-        }
+        applyApproveReducedMotion(el);
       } else if (key === "pm") {
         el.querySelectorAll("[data-pm-msg]").forEach((m) => {
           m.classList.add("is-show");

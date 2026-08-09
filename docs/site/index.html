@@ -132,86 +132,75 @@
       </div>
     </section>
 
-    <!-- Big page 1: Approve -->
+    <!-- Big page 1: Approve — unified Inbox (clarify + gates) -->
     <section class="showcase showcase--alt" id="showcase-approve" data-showcase="approve" aria-label="Approve 演示">
       <div class="showcase__inner showcase__inner--wide">
         <header class="showcase__intro">
           <h2 class="showcase__title">人机协作 从未如此简单</h2>
-          <p class="showcase__lead showcase__lead--single">多 Agent 协作最大瓶颈就是审核，我们做了大量的视觉展示审批，审批变得所见即所得。</p>
+          <p class="showcase__lead showcase__lead--single">多 Agent 协作最大瓶颈就是审核。统一 Inbox：集中澄清与集中审批后，各 Run 继续推进。</p>
         </header>
         <div class="showcase__stage" data-stage="approve">
           <div class="panel panel--light">
             <div class="panel__chrome panel__chrome--light">
               <span class="panel__dot"></span><span class="panel__dot"></span><span class="panel__dot"></span>
-              <span class="panel__title">Gates · 待审批</span>
+              <span class="panel__title">
+                Gates Inbox
+                <span class="approve-count" data-approve-total aria-hidden="true">0</span>
+              </span>
             </div>
             <div class="panel__body panel__body--approve">
-              <aside class="approve-rail">
-                <p class="approve-rail__label">待审批</p>
-                <div class="approve-rail__item is-active" data-approve-rail="reject">人工评审 · 登录鉴权</div>
-                <div class="approve-rail__item" data-approve-rail="pass">人工评审 · 会话续期</div>
+              <aside class="approve-lanes-col">
+                <p class="approve-lanes-label">工作流 Runs</p>
+                <div class="approve-lanes" data-approve-lanes>
+                  <div class="approve-lane" data-lane-id="a" data-status="running">
+                    <div class="approve-lane__name">官网落地页改版</div>
+                    <div class="approve-lane__status">running</div>
+                  </div>
+                  <div class="approve-lane" data-lane-id="b" data-status="running">
+                    <div class="approve-lane__name">API 契约评审</div>
+                    <div class="approve-lane__status">running</div>
+                  </div>
+                  <div class="approve-lane" data-lane-id="c" data-status="running">
+                    <div class="approve-lane__name">沙箱预览验收</div>
+                    <div class="approve-lane__status">running</div>
+                  </div>
+                </div>
               </aside>
-              <div class="approve-stage">
-                <div class="approve-window" data-approve-window>
-                  <header class="approve-window__head">
-                    <div>
-                      <p class="approve-window__eyebrow">human_gate · waiting_human</p>
-                      <h3 class="approve-window__title" data-approve-title>登录鉴权 · UI DEMO</h3>
+              <div class="approve-inbox" data-approve-inbox>
+                <div class="approve-funnel" data-approve-funnel aria-hidden="true">
+                  <div class="approve-funnel__card">
+                    <h4 class="approve-funnel__title">多 Run 待办汇入</h4>
+                    <div class="approve-funnel__arrows">
+                      <span>Run A</span><span>Run B</span><span>Run C</span>
+                      <span class="approve-funnel__to">→ Inbox</span>
                     </div>
-                    <span class="approve-window__pill" data-approve-pill>pending</span>
-                  </header>
-                  <div class="approve-window__main">
-                    <div class="approve-window__content">
-                      <div class="preview-board">
-                        <div class="preview-board__meta">
-                          <span class="preview-chip">artifact</span>
-                          <span class="preview-chip">ui-demo</span>
-                          <span class="preview-chip preview-chip--ok">interactive</span>
-                        </div>
-                        <p class="preview-board__desc" data-approve-desc>审阅可交互 Demo — 框选问题区域后可拒绝或批准。</p>
-                        <div class="demo-stage" data-demo-stage>
-                          <div class="demo-ui" data-demo-case="reject">
-                            <div class="demo-ui__brand">Approving</div>
-                            <h4 class="demo-ui__title">欢迎回来</h4>
-                            <p class="demo-ui__hint">使用企业账号继续</p>
-                            <div class="demo-ui__field"><span></span></div>
-                            <div class="demo-ui__field"><span></span></div>
-                            <div class="demo-ui__actions">
-                              <span class="demo-ui__btn">取消</span>
-                              <span class="demo-ui__btn is-bad" data-annotate-target>删除账号</span>
-                            </div>
-                            <div class="demo-marquee" data-marquee aria-hidden="true"></div>
-                          </div>
-                          <div class="demo-ui is-pass" data-demo-case="pass" hidden>
-                            <div class="demo-ui__brand">Approving</div>
-                            <h4 class="demo-ui__title">会话续期</h4>
-                            <p class="demo-ui__hint">保持登录，安全确认</p>
-                            <div class="demo-ui__card">
-                              <div class="demo-ui__avatar"></div>
-                              <div class="demo-ui__meta"><i></i><i></i></div>
-                            </div>
-                            <div class="demo-ui__actions">
-                              <span class="demo-ui__btn">稍后</span>
-                              <span class="demo-ui__btn is-primary">确认续期</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <aside class="approve-window__aside">
-                      <p class="approve-aside__label">审批意见</p>
-                      <div class="approve-aside__comment" data-approve-comment></div>
-                      <div class="approve-aside__actions">
-                        <button type="button" class="approve-btn approve-btn--reject" data-reject-btn tabindex="-1">拒绝</button>
-                        <button type="button" class="approve-btn" data-approve-btn tabindex="-1">批准</button>
-                      </div>
-                    </aside>
+                    <p class="approve-funnel__text">待澄清与待审批从不同工作流汇入统一入口，再按队列连续处理。</p>
+                  </div>
+                </div>
+                <div class="approve-inbox-tabs" role="tablist" aria-label="Inbox 队列">
+                  <button type="button" class="approve-inbox-tab is-active" data-approve-tab="clarify" role="tab" tabindex="-1">
+                    <span class="approve-inbox-tab__dot approve-inbox-tab__dot--c" aria-hidden="true"></span>
+                    <span>集中澄清</span>
+                    <span class="approve-q" data-approve-clarify-count aria-hidden="true">0</span>
+                  </button>
+                  <button type="button" class="approve-inbox-tab" data-approve-tab="gate" role="tab" tabindex="-1">
+                    <span class="approve-inbox-tab__dot approve-inbox-tab__dot--g" aria-hidden="true"></span>
+                    <span>集中审批</span>
+                    <span class="approve-q" data-approve-gate-count aria-hidden="true">0</span>
+                  </button>
+                </div>
+                <div class="approve-inbox-split">
+                  <div class="approve-list" data-approve-list>
+                    <div class="approve-list-empty">—</div>
+                  </div>
+                  <div class="approve-detail" data-approve-detail>
+                    <div class="approve-detail-empty">选择一项查看详情</div>
                   </div>
                 </div>
                 <div class="demo-cursor" data-cursor="approve"></div>
               </div>
             </div>
-            <p class="panel__caption panel__caption--light" data-caption="approve">打开审批窗口…</p>
+            <p class="panel__caption panel__caption--light" data-caption="approve">多条工作流并行运行；部分节点即将需要人工澄清或审批。</p>
           </div>
         </div>
       </div>
