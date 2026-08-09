@@ -4,6 +4,8 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
+import enCommon from '@/locales/en/common.json'
+import enPages from '@/locales/en/pages.json'
 import TokenModelComposition from './TokenModelComposition.vue'
 import { colorForModel } from './tokenModelColors'
 
@@ -13,6 +15,25 @@ const i18n = () =>
     locale: 'zh-CN',
     messages: { 'zh-CN': { ...common, ...pages } },
   })
+
+const i18nEn = () =>
+  createI18n({
+    legacy: false,
+    locale: 'en',
+    messages: { en: { ...enCommon, ...enPages } },
+  })
+
+/** Screenshot-like sample: unknown grey + two filled (ACP_BRIDGE backfill) buckets. */
+const screenshotLikeModels = [
+  { modelKey: '未知/未分桶', name: '未知/未分桶', total: 100, unknown: true },
+  { modelKey: 'cursor-grok-4.5-high-fast', name: 'cursor-grok-4.5-high-fast', total: 80, filled: true },
+  { modelKey: 'gpt-5.6-sol-medium', name: 'gpt-5.6-sol-medium', total: 60, filled: true },
+]
+
+function expectNoFilledTagCopy(text: string) {
+  expect(text).not.toContain('含补全')
+  expect(text).not.toContain('includes filled data')
+}
 
 describe('TokenModelComposition SVG solid pie (g1/g2)', () => {
   it('renders svg/path solid pie without conic-gradient or rounded-full (g1.1/g1.2/g2.1)', () => {
@@ -78,6 +99,9 @@ describe('TokenModelComposition SVG solid pie (g1/g2)', () => {
     expect(legend).toContain('95.5%')
     expect(legend).toContain('50.09M')
     expect(legend).toContain('1059.71M')
+    expect(legend).toContain('cursor-grok-4.5-high-fast')
+    expectNoFilledTagCopy(legend)
+    expect(colorForModel(models[0]!, 0)).toBe('#34D399')
     expect(wrapper.html()).not.toMatch(/conic-gradient/i)
     wrapper.unmount()
   })
@@ -124,6 +148,59 @@ describe('TokenModelComposition SVG solid pie (g1/g2)', () => {
     expect(pie.find('circle').exists()).toBe(true)
     expect(wrapper.html()).not.toMatch(/conic-gradient/i)
     expect(wrapper.find('[data-testid="token-model-legend"]').text()).toMatch(/./)
+    wrapper.unmount()
+  })
+})
+
+describe('TokenModelComposition hides filledTag (g2.1)', () => {
+  it('zh-CN legend: swatch+name only, no 含补全; filled=#34D399 unknown=#71717A', () => {
+    expect(colorForModel(screenshotLikeModels[0]!, 0)).toBe('#71717A')
+    expect(colorForModel(screenshotLikeModels[1]!, 1)).toBe('#34D399')
+    expect(colorForModel(screenshotLikeModels[2]!, 2)).toBe('#34D399')
+
+    const wrapper = mount(TokenModelComposition, {
+      props: { models: screenshotLikeModels },
+      global: { plugins: [i18n()] },
+    })
+    const legend = wrapper.find('[data-testid="token-model-legend"]')
+    const text = legend.text()
+    expect(text).toContain('未知/未分桶')
+    expect(text).toContain('cursor-grok-4.5-high-fast')
+    expect(text).toContain('gpt-5.6-sol-medium')
+    expectNoFilledTagCopy(text)
+    expect(wrapper.html()).not.toContain('含补全')
+
+    const items = legend.findAll('li')
+    expect(items).toHaveLength(3)
+    const unknownSwatch = items[0]!.find('span.h-2\\.5')
+    const filledSwatch = items[1]!.find('span.h-2\\.5')
+    expect(unknownSwatch.attributes('style')).toMatch(/background:\s*#71717A/i)
+    expect(filledSwatch.attributes('style')).toMatch(/background:\s*#34D399/i)
+
+    const nameSpans = items.map((li) => li.findAll('span')[1]!)
+    expect(nameSpans[0]!.classes()).toContain('text-txt3')
+    expect(nameSpans[1]!.classes()).toContain('text-ok')
+    expect(nameSpans[2]!.classes()).toContain('text-ok')
+
+    const fills = wrapper.findAll('[data-testid="token-model-pie-slice"]').map((p) => p.attributes('fill'))
+    expect(fills).toEqual(['#71717A', '#34D399', '#34D399'])
+    wrapper.unmount()
+  })
+
+  it('en locale legend: no includes filled data; filled/#71717A colors unchanged', () => {
+    const wrapper = mount(TokenModelComposition, {
+      props: { models: screenshotLikeModels },
+      global: { plugins: [i18nEn()] },
+    })
+    const text = wrapper.find('[data-testid="token-model-legend"]').text()
+    expect(text).toContain('cursor-grok-4.5-high-fast')
+    expect(text).toContain('gpt-5.6-sol-medium')
+    expectNoFilledTagCopy(text)
+    expect(wrapper.html()).not.toContain('includes filled data')
+    expect(wrapper.html()).not.toContain('含补全')
+
+    const fills = wrapper.findAll('[data-testid="token-model-pie-slice"]').map((p) => p.attributes('fill'))
+    expect(fills).toEqual(['#71717A', '#34D399', '#34D399'])
     wrapper.unmount()
   })
 })

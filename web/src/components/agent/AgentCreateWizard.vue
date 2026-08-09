@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AgentGitGuide from '@/components/agent/AgentGitGuide.vue'
+import EnvCredentialHelpModal from '@/components/agent/EnvCredentialHelpModal.vue'
 import { api, type Agent } from '@/lib/api'
 import {
   ACP_BACKENDS,
@@ -40,6 +41,7 @@ const creating = ref(false)
 const createError = ref('')
 const pendingAcp = ref<WizardBackendId | null>(null)
 const showAcpConfirm = ref(false)
+const envHelpOpen = ref(false)
 const stepAnimKey = ref(0)
 const apiKeyInput = ref('')
 
@@ -78,6 +80,7 @@ watch(
       creating.value = false
       pendingAcp.value = null
       showAcpConfirm.value = false
+      envHelpOpen.value = false
       apiKeyInput.value = ''
       stepAnimKey.value++
       nextTick(() => {
@@ -475,6 +478,7 @@ function chipClass(kind: string) {
                     "
                     :credential-type="draft.gitCredentialType"
                     @update:credential-type="onGitCredentialType"
+                    @help="envHelpOpen = true"
                   />
                 </template>
 
@@ -534,6 +538,14 @@ function chipClass(kind: string) {
           </div>
         </div>
       </div>
+
+      <EnvCredentialHelpModal
+        :open="open && envHelpOpen"
+        section="git"
+        :backend="draft.acpBackend"
+        elevated
+        @close="envHelpOpen = false"
+      />
 
       <div v-if="showAcpConfirm" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/60" @click="cancelAcpSwitch" />

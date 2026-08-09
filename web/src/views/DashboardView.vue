@@ -102,8 +102,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div data-testid="dashboard-view">
-    <div class="mb-5 flex items-center justify-between">
+  <div data-testid="dashboard-view" class="flex flex-col md:h-full md:min-h-0">
+    <div class="mb-5 flex shrink-0 items-center justify-between">
       <div>
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.dashboard.title') }}</h2>
         <p class="text-sm text-txt3">{{ t('pages.dashboard.subtitle') }}</p>
@@ -112,7 +112,7 @@ onUnmounted(() => {
 
     <div
       v-if="loadError"
-      class="mb-4 flex flex-wrap items-center justify-between gap-2 border border-err/40 bg-err/10 px-3 py-2 text-[13px] text-err"
+      class="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-2 border border-err/40 bg-err/10 px-3 py-2 text-[13px] text-err"
       data-testid="dashboard-load-error"
     >
       <span>{{ t('pages.board.loadFailed') }}</span>
@@ -126,7 +126,7 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <div class="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+    <div class="mb-6 grid shrink-0 grid-cols-2 gap-4 md:grid-cols-4">
       <div v-for="k in kpis" :key="k.label" class="card p-4">
         <div class="flex items-center justify-between">
           <span class="text-[13px] text-txt2">{{ k.label }}</span>
@@ -136,8 +136,11 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="card">
-      <div class="flex items-center justify-between border-b border-line px-5 py-3">
+    <div
+      class="card"
+      :class="hasProject ? 'md:flex md:min-h-0 md:flex-1 md:flex-col md:overflow-hidden' : ''"
+    >
+      <div class="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">
         <h3 class="text-sm font-semibold text-txt">{{ t('pages.dashboard.boardTitle') }}</h3>
         <button
           v-if="hasProject"
@@ -148,7 +151,10 @@ onUnmounted(() => {
           {{ t('pages.dashboard.viewFullBoard') }}
         </button>
       </div>
-      <div class="p-3.5">
+      <div
+        class="p-3.5"
+        :class="hasProject ? 'md:flex md:min-h-0 md:flex-1 md:flex-col' : ''"
+      >
         <div
           v-if="!hasProject"
           class="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center"
@@ -164,7 +170,10 @@ onUnmounted(() => {
             {{ t('pages.dashboard.selectProject') }}
           </button>
         </div>
-        <div v-else class="grid grid-cols-1 items-start gap-3.5 md:grid-cols-2">
+        <div
+          v-else
+          class="grid grid-cols-1 items-start gap-3.5 md:grid-cols-2 md:min-h-0 md:flex-1 md:items-stretch"
+        >
           <RunBoardColumn
             :title="t('pages.board.columns.active')"
             :hint="t('pages.board.hints.active')"
@@ -174,6 +183,7 @@ onUnmounted(() => {
             :loading="showInitialLoading"
             :loading-text="t('pages.board.loading')"
             :empty-text="t('pages.board.empty.active')"
+            :fill="true"
             @select="openPreview"
           />
           <RunBoardColumn
@@ -185,6 +195,7 @@ onUnmounted(() => {
             :loading="showInitialLoading"
             :loading-text="t('pages.board.loading')"
             :empty-text="t('pages.board.empty.completed')"
+            :fill="true"
             @select="openPreview"
           />
         </div>

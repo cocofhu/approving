@@ -44,6 +44,7 @@
         "compTotal": "合计 {n}",
         "donutCenter": "总量",
         "other": "其他",
+        "workflow": "工作流",
         "pm": "项目管理",
         "value": "数值",
         "share": "占比",
@@ -207,10 +208,9 @@
       "back": "全部项目",
       "notFound": "项目不存在或已删除",
       "tokenUsage": "Token 消耗",
-      "tokenUsageHint": "全部历史 · 含工作流与项目管理（上线后）",
       "tokenTipTitle": "用量细节",
       "tokenTipTotal": "合计",
-      "tokenTipWorkflow": "workflow",
+      "tokenTipWorkflow": "工作流",
       "tokenTipPm": "项目管理",
       "tokenTipAria": "Token 消耗，悬停查看细节",
       "help": "合并规则",
@@ -1105,7 +1105,6 @@
     },
     "agentStudio": {
       "title": "Agent 管理",
-      "subtitle": "配置可复用的 Agent:工作目录(rules / skills / 脚本…)、MCP 服务、环境变量。节点通过 skill_profile 引用,运行时整个工作目录复制进沙箱 {configRoot}。",
       "errorPrefix": "出错:",
       "empty": "暂无 Agent。点击右上角\"新建 Agent\"创建,或后端首启会落盘默认 Agent。",
       "unsaved": "未保存",
@@ -1159,7 +1158,6 @@
         "deleteGroupMessage": "确定删除组「{name}」？子组将提升到其父级；仅属于该组的成员将迁入父组或进入未分组。",
         "groupCycle": "不能将组移入自身或其子孙（会形成环路）",
         "reportingCycle": "不能设置该上级：会形成汇报环路",
-        "dragHint": "拖拽 Agent 调整归属；拖到「未分组」清空全部组归属。右键组或 Agent 可进行组织操作；真删请用顶栏 Agent 管理入口。",
         "removeFromGroup": "移出本组",
         "removeFromGroupToast": "已移出本组并立即保存 · 实体仍在",
         "manage": "管理",
@@ -1267,6 +1265,16 @@
         "regionIntl": "国际站 (trae.ai)",
         "add": "添加环境变量",
         "parseError": "环境变量 JSON 无法解析:"
+      },
+      "envHelp": {
+        "link": "帮助",
+        "title": "环境变量与凭据",
+        "gotIt": "知道了",
+        "chip": {
+          "inject": "注入说明",
+          "git": "Git 凭据",
+          "acp": "ACP 鉴权"
+        }
       },
       "region": {
         "title": "服务站点",
@@ -1909,6 +1917,7 @@
       "upstreamRetry": "重试",
       "upstreamViewStructured": "结构化",
       "upstreamViewRaw": "原始 JSON",
+      "upstreamBarHint": "本 run 已有澄清需求文档，可对照审阅当前主产物",
       "primaryBadge": "主产物",
       "readonlyBadge": "只读",
       "readonlyHint": "非文本产物 · 只读引用",

@@ -42,7 +42,22 @@ function mountChat(opts: { compact?: boolean; selector?: string; copyVariant?: '
     },
     global: {
       plugins: [i18n],
-      stubs: { Icon: true, ParagraphInput: false },
+      stubs: {
+        Icon: true,
+        ParagraphInput: false,
+        AppModal: {
+          props: ['open', 'title', 'width'],
+          emits: ['close'],
+          template: `
+            <div v-if="open" data-testid="preview-feedback-image-preview-modal">
+              <div data-testid="preview-feedback-image-preview-title">{{ title }}</div>
+              <button type="button" data-testid="preview-feedback-image-preview-close" @click="$emit('close')">×</button>
+              <button type="button" data-testid="preview-feedback-image-preview-backdrop" @click="$emit('close')">backdrop</button>
+              <slot />
+            </div>
+          `,
+        },
+      },
     },
   })
 }
@@ -148,6 +163,92 @@ describe('PreviewFeedbackChat', () => {
     expect(wrapper.text()).not.toContain('问题反馈')
     const sendBtn = wrapper.findAll('button').find((b) => b.text().includes('提交评审意见'))
     expect(sendBtn).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  it('issue images and element screenshot open single preview without dropping selector', async () => {
+    apiMocks.listPreviewIssues.mockResolvedValue({
+      issues: [
+        {
+          id: 'i1',
+          body: '顶栏过窄',
+          createdAt: '2026-07-18T00:00:00Z',
+          images: [
+            { data: 'ISSUEIMG', mimeType: 'image/png', name: 'issue附图.png' },
+            { data: 'DOC', mimeType: 'application/pdf', name: '说明.pdf' },
+          ],
+        },
+      ],
+    })
+    const wrapper = mount(PreviewFeedbackChat, {
+      props: {
+        runId: 'run-1',
+        nodeId: 'preview-1',
+        selector: 'button.surf.active',
+        elementImage: { data: 'ELEMIMG', mimeType: 'image/png', name: '元素截图.png' },
+        images: [{ data: 'DRAFTFB', mimeType: 'image/png', name: '反馈草稿.png' }],
+      },
+      global: {
+        plugins: [
+          createI18n({
+            legacy: false,
+            locale: 'zh-CN',
+            messages: { 'zh-CN': { ...common, ...pages } },
+          }),
+        ],
+        stubs: {
+          Icon: true,
+          ParagraphInput: false,
+          AppModal: {
+            props: ['open', 'title', 'width'],
+            emits: ['close'],
+            template: `
+              <div v-if="open" data-testid="preview-feedback-image-preview-modal">
+                <div data-testid="preview-feedback-image-preview-title">{{ title }}</div>
+                <button type="button" data-testid="preview-feedback-image-preview-close" @click="$emit('close')">×</button>
+                <button type="button" data-testid="preview-feedback-image-preview-backdrop" @click="$emit('close')">backdrop</button>
+                <slot />
+              </div>
+            `,
+          },
+        },
+      },
+    })
+    await flushPromises()
+
+    const issueThumb = wrapper.find('[data-testid="preview-issue-image-thumb"]')
+    expect(issueThumb.exists()).toBe(true)
+    expect(issueThumb.text()).toContain('点击放大')
+    expect(issueThumb.text()).not.toContain('不可预览')
+    await issueThumb.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="preview-feedback-image-preview-title"]').text()).toBe(
+      '图片预览 · issue附图.png',
+    )
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(wrapper.find('[data-testid="preview-feedback-image-preview-modal"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="preview-feedback-image-preview-close"]').trigger('click')
+    await flushPromises()
+
+    const elemThumb = wrapper.find('[data-testid="preview-element-image-thumb"]')
+    expect(elemThumb.exists()).toBe(true)
+    await elemThumb.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="preview-feedback-image-preview-title"]').text()).toBe(
+      '图片预览 · 元素截图.png',
+    )
+    await wrapper.find('[data-testid="preview-feedback-image-preview-img"]').trigger('error')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="preview-feedback-image-preview-failed"]').text()).toContain(
+      '图片加载失败',
+    )
+    await wrapper.find('[data-testid="preview-feedback-image-preview-close"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('button.surf.active')
+    expect(wrapper.find('[data-testid="preview-element-image-thumb"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="paragraph-draft-image-thumb"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="paragraph-draft-image-thumb"]').text()).not.toContain('不可预览')
     wrapper.unmount()
   })
 })

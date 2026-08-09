@@ -8,6 +8,7 @@ import { useNodeDefs } from '@/lib/useNodeDefs'
 import StructuredArtifactView from './StructuredArtifactView.vue'
 import HtmlPreview from '../ui/HtmlPreview.vue'
 import SelectionAddToChat from './SelectionAddToChat.vue'
+import UpstreamRequirementContext from './UpstreamRequirementContext.vue'
 import { ARTIFACT_TO_OUTPUT_JSON } from '@/lib/structuredArtifacts'
 import { productArtifactName } from '@/lib/productNodeArtifacts'
 import { provideReviewAnnotate } from '@/lib/reviewAnnotate'
@@ -192,50 +193,69 @@ const pending = computed(() => props.nodeRun.status === 'pending')
 </script>
 
 <template>
-  <div ref="stageEl" class="scroll-area h-full overflow-y-auto p-4" data-review-annotate-stage>
-    <div class="mb-3 flex items-center gap-2.5">
+  <div ref="stageEl" class="flex h-full min-h-0 flex-col" data-review-annotate-stage>
+    <div
+      class="flex shrink-0 items-center gap-2.5 px-4 pt-4 pb-3"
+      data-testid="structured-product-header"
+    >
       <div class="flex h-8 w-8 items-center justify-center rounded-md" :style="{ background: hex + '22', color: hex }">
         <Icon :name="def.icon" :size="16" />
       </div>
       <div class="min-w-0 flex-1">
         <div class="text-sm font-semibold text-txt">{{ def.label }}{{ t('pages.structuredProduct.titleSuffix') }}</div>
-        <div class="text-[11px] text-txt3">{{ spec?.name }}</div>
+        <div class="text-[11px] text-txt3" data-testid="structured-product-name">{{ spec?.name }}</div>
       </div>
     </div>
 
-    <div v-if="isVisual && rawHtml" class="h-[75vh] border border-line">
-      <HtmlPreview
-        :html="rawHtml"
-        :inspectable="annotatable"
-        @pick="onHtmlPick"
+    <div
+      class="min-h-0 flex-1"
+      :class="isVisual && rawHtml ? 'flex flex-col overflow-hidden px-4' : 'overflow-y-auto px-4 pb-4'"
+      data-testid="structured-product-preview"
+    >
+      <div v-if="isVisual && rawHtml" class="min-h-0 flex-1 border border-line">
+        <HtmlPreview
+          :html="rawHtml"
+          :inspectable="annotatable"
+          fill-parent
+          @pick="onHtmlPick"
+        />
+      </div>
+
+      <StructuredArtifactView
+        v-else-if="doc && spec"
+        :name="spec.name"
+        :doc="doc"
+        :accent="hex"
+        :run-id="run.id"
+        :artifacts="run.artifacts"
+        :run-status="run.status"
+      />
+
+      <div v-else class="flex h-[60%] items-center justify-center text-center text-[12px] text-txt3">
+        <div>
+          <Icon name="artifact" :size="26" class="mx-auto mb-2 opacity-40" />
+          <p v-if="loading">{{ t('pages.structuredProduct.loading') }}</p>
+          <p v-else-if="pending">{{ t('pages.structuredProduct.pending') }}</p>
+          <p v-else-if="isVisual">{{ t('pages.structuredProduct.noPage') }}</p>
+          <p v-else>{{ t('pages.structuredProduct.noStructured') }}</p>
+        </div>
+      </div>
+
+      <SelectionAddToChat
+        v-if="annotatable && !isVisual"
+        :enabled="annotatable"
+        :root="stageEl"
+        @add="onQuoteAdd"
       />
     </div>
 
-    <StructuredArtifactView
-      v-else-if="doc && spec"
-      :name="spec.name"
-      :doc="doc"
-      :accent="hex"
-      :run-id="run.id"
+    <UpstreamRequirementContext
+      variant="persistent-bar"
+      disable-annotate
       :artifacts="run.artifacts"
+      :run-id="run.id"
       :run-status="run.status"
-    />
-
-    <div v-else class="flex h-[60%] items-center justify-center text-center text-[12px] text-txt3">
-      <div>
-        <Icon name="artifact" :size="26" class="mx-auto mb-2 opacity-40" />
-        <p v-if="loading">{{ t('pages.structuredProduct.loading') }}</p>
-        <p v-else-if="pending">{{ t('pages.structuredProduct.pending') }}</p>
-        <p v-else-if="isVisual">{{ t('pages.structuredProduct.noPage') }}</p>
-        <p v-else>{{ t('pages.structuredProduct.noStructured') }}</p>
-      </div>
-    </div>
-
-    <SelectionAddToChat
-      v-if="annotatable && !isVisual"
-      :enabled="annotatable"
-      :root="stageEl"
-      @add="onQuoteAdd"
+      :product-name="spec?.name"
     />
   </div>
 </template>

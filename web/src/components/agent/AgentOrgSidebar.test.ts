@@ -4,6 +4,8 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
+import enCommon from '@/locales/en/common.json'
+import enPages from '@/locales/en/pages.json'
 import type { AgentOrg } from '@/lib/api'
 import AgentOrgSidebar from './AgentOrgSidebar.vue'
 
@@ -294,6 +296,48 @@ describe('AgentOrgSidebar context menus', () => {
     await wrapper.vm.$nextTick()
     expect(wrapper.emitted('remove-from-group')?.[0]).toEqual(['alice', 'g_dev'])
     wrapper.unmount()
+  })
+})
+
+describe('AgentOrgSidebar dragHint removal', () => {
+  function mountSidebarEn(org: AgentOrg = sampleOrg) {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'en',
+      messages: { en: { ...enCommon, ...enPages } },
+    })
+    return mount(AgentOrgSidebar, {
+      props: {
+        org,
+        agentNames,
+        activeName: '',
+        collapsed: false,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          Icon: { template: '<span class="icon" />' },
+          Teleport: true,
+        },
+      },
+    })
+  }
+
+  it('不再展示中文 dragHint 与虚线提示框', () => {
+    const wrapper = mountSidebar()
+    expect(wrapper.text()).not.toContain('拖拽 Agent 调整归属')
+    expect(wrapper.text()).not.toContain('真删请用顶栏 Agent 管理入口')
+    expect(wrapper.find('.scroll-area p.border-dashed').exists()).toBe(false)
+    expect(wrapper.html()).not.toContain('border-dashed border-line-strong')
+    expect(wrapper.find('[data-org-manage]').exists()).toBe(true)
+  })
+
+  it('不再展示英文 dragHint', () => {
+    const wrapper = mountSidebarEn()
+    expect(wrapper.text()).not.toContain('Drag agents to change membership')
+    expect(wrapper.text()).not.toContain('hard delete via the Agent management')
+    expect(wrapper.find('.scroll-area p.border-dashed').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Ungrouped')
   })
 })
 

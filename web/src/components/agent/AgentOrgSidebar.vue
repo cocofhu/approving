@@ -369,10 +369,6 @@ function onDrop(e: DragEvent, row: OrgTreeRow) {
           </div>
         </template>
       </div>
-
-      <p class="mx-1 mt-2 border border-dashed border-line-strong/60 bg-white/[0.015] px-2.5 py-2 text-[11px] leading-relaxed text-txt3">
-        {{ t('pages.agentStudio.org.dragHint') }}
-      </p>
     </div>
 
     <Teleport to="body">

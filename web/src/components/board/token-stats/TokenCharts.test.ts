@@ -66,8 +66,11 @@ describe('Token charts (g2.3/g2.4)', () => {
     })
     expect(wrapper.find('[data-testid="token-trend-wrap"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="token-trend-chart"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="token-trend-legend"]').text()).toContain('workflow')
-    expect(wrapper.find('[data-testid="token-trend-legend"]').text()).toContain('pm')
+    const legend = wrapper.find('[data-testid="token-trend-legend"]')
+    expect(legend.find('[data-kind="workflow"]').text()).toContain('工作流')
+    expect(legend.find('[data-kind="pm"]').text()).toContain('项目管理')
+    expect(legend.find('[data-kind="workflow"]').text()).not.toMatch(/^\s*workflow\s*$/i)
+    expect(legend.find('[data-kind="pm"]').text()).not.toMatch(/^\s*pm\s*$/i)
     expect(wrapper.find('canvas').exists()).toBe(true)
     // Chart.js Canvas path — no legacy non-uniform SVG stretch host
     expect(wrapper.find('[data-testid="token-trend-svg"]').exists()).toBe(false)
@@ -77,6 +80,56 @@ describe('Token charts (g2.3/g2.4)', () => {
     }
     expect(exposed.chartData.datasets).toHaveLength(2)
     expect(exposed.chartData.datasets.map((d) => d.label)).toEqual(['workflow', 'pm'])
+    wrapper.unmount()
+  })
+
+  it('tooltip source names use i18n labels with data-tip-row (g2.2/g3.1)', async () => {
+    const wrapper = mount(TokenTrendChart, {
+      props: {
+        bucketWidth: 'day',
+        trend: [
+          {
+            bucket: '2026-07-24',
+            total: 100,
+            workflowTotal: 70,
+            pmTotal: 30,
+            inputTokens: 40,
+            outputTokens: 30,
+            cacheReadTokens: 20,
+            cacheWriteTokens: 10,
+          },
+        ],
+      },
+      global: { plugins: [i18n()] },
+      attachTo: document.body,
+    })
+    const wrapEl = wrapper.find('[data-testid="token-trend-wrap"]').element as HTMLElement
+    const exposed = wrapper.vm as unknown as {
+      chartOptions: {
+        plugins?: { tooltip?: { external?: (ctx: unknown) => void } }
+      }
+    }
+    const external = exposed.chartOptions.plugins?.tooltip?.external
+    expect(typeof external).toBe('function')
+    const canvas = document.createElement('canvas')
+    wrapEl.appendChild(canvas)
+    Object.defineProperty(canvas, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 200, height: 200, right: 200, bottom: 200 }),
+    })
+    Object.defineProperty(wrapEl, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 400, height: 200, right: 400, bottom: 200 }),
+    })
+    external?.({
+      chart: { canvas },
+      tooltip: { opacity: 1, dataPoints: [{ dataIndex: 0 }], caretX: 40, caretY: 40 },
+    })
+    await wrapper.vm.$nextTick()
+    const tip = wrapper.find('[data-testid="token-trend-tooltip"]')
+    expect(tip.exists()).toBe(true)
+    expect(tip.find('[data-tip-row="workflow"]').text()).toContain('工作流')
+    expect(tip.find('[data-tip-row="pm"]').text()).toContain('项目管理')
+    expect(tip.find('[data-tip-row="workflow"]').text()).not.toMatch(/\bworkflow\b/)
+    expect(tip.find('[data-tip-row="pm"]').text()).not.toMatch(/(?<![A-Za-z0-9_-])pm(?![A-Za-z0-9_-])/i)
     wrapper.unmount()
   })
 

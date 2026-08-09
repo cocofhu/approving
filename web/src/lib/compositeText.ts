@@ -14,6 +14,13 @@ export function imgSrc(im: ClarifyImage): string {
   return ''
 }
 
+/** Prefer live/restored `url` (Agent tester), then imgSrc. */
+export function chatImageSrc(im: ClarifyImage & { url?: string }): string {
+  const url = (im.url || '').trim()
+  if (url) return url
+  return imgSrc(im)
+}
+
 export function isCompositeText(v: unknown): v is CompositeText {
   return !!v && typeof v === 'object' && ('text' in v || 'images' in v)
 }

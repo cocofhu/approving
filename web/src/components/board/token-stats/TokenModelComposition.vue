@@ -125,7 +125,6 @@ const slices = computed(() => {
           :title="r.name"
         >
           {{ r.name }}
-          <span v-if="r.filled" class="ml-1 text-[10px] text-ok">{{ t('pages.board.tokenStats.filledTag') }}</span>
         </span>
         <span class="tabular-nums text-txt3" :title="fmtTokenCount(r.total)">
           {{ r.pct }}% · {{ fmtCompactTokenCount(r.total) }}

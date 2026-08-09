@@ -1,19 +1,32 @@
 // @vitest-environment happy-dom
 import { createI18n } from 'vue-i18n'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import ParagraphInput from './ParagraphInput.vue'
 
-function mountInput(textOnly = false) {
+const PreviewAppModalStub = {
+  props: ['open', 'title', 'width'],
+  emits: ['close'],
+  template: `
+    <div v-if="open" data-testid="paragraph-image-preview-modal">
+      <div data-testid="paragraph-image-preview-title">{{ title }}</div>
+      <button type="button" data-testid="paragraph-image-preview-close" @click="$emit('close')">×</button>
+      <button type="button" data-testid="paragraph-image-preview-backdrop" @click="$emit('close')">backdrop</button>
+      <slot />
+    </div>
+  `,
+}
+
+function mountInput(textOnly = false, images: { data: string; mimeType: string; name?: string }[] = []) {
   const i18n = createI18n({
     legacy: false,
     locale: 'zh-CN',
     messages: { 'zh-CN': { ...common } },
   })
   return mount(ParagraphInput, {
-    props: { text: 'hello', textOnly },
-    global: { plugins: [i18n], stubs: { Icon: true } },
+    props: { text: 'hello', textOnly, images },
+    global: { plugins: [i18n], stubs: { Icon: true, AppModal: PreviewAppModalStub } },
   })
 }
 
@@ -46,6 +59,42 @@ describe('ParagraphInput', () => {
     const wrapper = mountInput(true)
     expect(wrapper.find('[data-testid="paragraph-input-attach"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="paragraph-input-root"]').attributes('data-text-only')).toBe('1')
+    wrapper.unmount()
+  })
+
+  it('hides thumbs in text-only even if images are passed', () => {
+    const wrapper = mountInput(true, [{ data: 'AAA', mimeType: 'image/png', name: 'a.png' }])
+    expect(wrapper.find('[data-testid="paragraph-draft-image-thumb"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('opens draft image preview, Esc stays, close keeps attachment, no unavailable overlay', async () => {
+    const wrapper = mountInput(false, [
+      { data: 'DRAFTPARA', mimeType: 'image/png', name: '门禁附件.png' },
+      { data: 'DOC', mimeType: 'application/pdf', name: '审计记录.txt' },
+    ])
+    const thumb = wrapper.find('[data-testid="paragraph-draft-image-thumb"]')
+    expect(thumb.exists()).toBe(true)
+    expect(thumb.text()).toContain('点击放大')
+    expect(thumb.text()).not.toContain('不可预览')
+    expect(wrapper.find('[data-testid="paragraph-pending-file-chip"]').exists()).toBe(true)
+
+    await thumb.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="paragraph-image-preview-title"]').text()).toBe('图片预览 · 门禁附件.png')
+    expect(wrapper.find('[data-testid="paragraph-image-preview-prev"]').exists()).toBe(false)
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(wrapper.find('[data-testid="paragraph-image-preview-modal"]').exists()).toBe(true)
+
+    await wrapper.find('[data-testid="paragraph-image-preview-img"]').trigger('error')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="paragraph-image-preview-failed"]').text()).toContain('图片加载失败')
+    await wrapper.find('[data-testid="paragraph-image-preview-close"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="paragraph-image-preview-modal"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="paragraph-draft-image-thumb"]').exists()).toBe(true)
     wrapper.unmount()
   })
 })
