@@ -2,7 +2,6 @@
 package router
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -57,8 +56,6 @@ func New(h *handlers.Handlers) *gin.Engine {
 
 		api.GET("/settings", h.GetSettings)
 		api.PUT("/settings", h.UpdateSettings)
-		api.POST("/settings/live/test", h.TestLiveEndpoint)
-		api.GET("/settings/live/status", h.LiveStatus)
 
 		api.GET("/platform-rules", h.ListPlatformRules)
 		api.GET("/platform-rules/:file/embed", h.GetPlatformRuleEmbed)
@@ -71,7 +68,6 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.POST("/projects", h.CreateProject)
 		api.GET("/projects/:id", h.GetProject)
 		api.GET("/projects/:id/run-tags", h.ListProjectRunTags)
-		api.GET("/projects/:id/event-routing", h.GetProjectEventRouting)
 		api.GET("/projects/:id/token-stats", h.GetProjectTokenStats)
 		api.GET("/projects/:id/audit", h.ListProjectAudit)
 		api.GET("/projects/:id/audit/facets", h.ListProjectAuditFacets)
@@ -89,9 +85,6 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.GET("/projects/:id/channel", h.GetProjectChannel)
 		api.PUT("/projects/:id/channel", h.PutProjectChannel)
 		api.DELETE("/projects/:id/channel", h.DeleteProjectChannel)
-		api.GET("/projects/:id/live-traces", h.ListLiveTraces)
-		api.GET("/projects/:id/pm/tasks", h.ListProjectTasks)
-		api.POST("/projects/:id/pm/tasks/:taskId/close", h.CloseProjectTask)
 		api.GET("/projects/:id/pm/memories", h.ListPmMemories)
 		api.POST("/projects/:id/pm/memories", h.UpsertPmMemory)
 		api.DELETE("/projects/:id/pm/memories", h.ClearPmMemories)
@@ -100,7 +93,6 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.GET("/projects/:id/pm/threads", h.ListPmThreads)
 		api.POST("/projects/:id/pm/threads", h.CreatePmThread)
 		api.GET("/projects/:id/pm/threads/:tid", h.GetPmThread)
-		api.DELETE("/projects/:id/pm/threads/:tid/context", h.ClearPmThreadContext)
 		api.DELETE("/projects/:id/pm/threads/:tid", h.DeletePmThread)
 		api.GET("/projects/:id/pm/threads/:tid/messages", h.ListPmMessages)
 		api.POST("/projects/:id/pm/threads/:tid/messages", h.AppendPmMessage)
@@ -133,7 +125,6 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.POST("/runs/:id/cancel", h.CancelRun)
 		api.POST("/runs/:id/resume", h.ResumeRun)
 		api.PATCH("/runs/:id/priority", h.UpdateRunPriority)
-		api.PATCH("/runs/:id/origin-binding", h.PatchRunOriginBinding)
 		api.GET("/runs/:id/variables", h.RunVariables)
 		api.GET("/runs/:id/artifacts", h.RunArtifacts)
 		api.GET("/runs/:id/logs/export", h.ExportRunLogs)
@@ -302,20 +293,9 @@ func New(h *handlers.Handlers) *gin.Engine {
 // failures across all handlers are diagnosable in one place without sprinkling
 // log calls through every handler. 4xx are intentionally not logged as errors
 // (they are client faults) unless a handler explicitly attached a c.Error.
-// request_id is taken from X-Request-Id / X-Request-ID when present, else a
-// short generated id, so HTTP failures correlate with client traces.
 func errorLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
-		reqID := strings.TrimSpace(c.GetHeader("X-Request-Id"))
-		if reqID == "" {
-			reqID = strings.TrimSpace(c.GetHeader("X-Request-ID"))
-		}
-		if reqID == "" {
-			reqID = fmt.Sprintf("req-%d", start.UnixNano()%1_000_000_000_000)
-		}
-		c.Set("request_id", reqID)
-		c.Writer.Header().Set("X-Request-Id", reqID)
 		c.Next()
 		status := c.Writer.Status()
 		if status < http.StatusInternalServerError && len(c.Errors) == 0 {
@@ -326,7 +306,6 @@ func errorLogger() gin.HandlerFunc {
 			ev = log.Warn()
 		}
 		ev = ev.
-			Str("request_id", reqID).
 			Str("method", c.Request.Method).
 			Str("path", c.Request.URL.Path).
 			Int("status", status).

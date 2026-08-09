@@ -5,7 +5,7 @@ import "time"
 // ProjectAuditEvent is an append-only, project-scoped operation audit record.
 // Managers must not Update/Delete via public API; only List/Export are exposed.
 type ProjectAuditEvent struct {
-	ID             string    `gorm:"primaryKey" json:"id"`
+	ID             string         `gorm:"primaryKey" json:"id"`
 	ProjectID      string    `gorm:"index:idx_audit_proj_occurred,priority:1;index:idx_audit_proj_run,priority:1;index" json:"projectId"`
 	OccurredAt     time.Time `gorm:"index:idx_audit_proj_occurred,priority:2;index" json:"occurredAt"`
 	Actor          string    `gorm:"index" json:"actor"`
@@ -45,15 +45,10 @@ const (
 	AuditActionRunCompleted    = "run.completed"
 	AuditActionRunFailed       = "run.failed"
 	AuditActionRunCancelled    = "run.cancelled"
-	// AuditActionRunOriginBinding covers detaching a run from the conversation
-	// that asked for it, and reconnecting it. It is audited because it silences
-	// a channel the requester is relying on.
-	AuditActionRunOriginBinding = "run.origin_binding"
-	AuditActionMCPCall          = "mcp.call"
-	AuditActionAuditExport      = "audit.export"
-	AuditActionChannel          = "channel.config"
-	AuditActionCron             = "cron.config"
-	AuditActionDelivery         = "channel.delivery"
+	AuditActionMCPCall         = "mcp.call"
+	AuditActionAuditExport     = "audit.export"
+	AuditActionChannel         = "channel.config"
+	AuditActionCron            = "cron.config"
 )
 
 // Audit outcome values.

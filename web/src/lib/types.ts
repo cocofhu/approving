@@ -78,28 +78,6 @@ export interface ProjectNotifyPolicy {
   failedTemplate?: string
 }
 
-/**
- * One Run event and where it is allowed to speak, resolved against the
- * project's current notify policy. `key` matches the backend sendable reason.
- */
-export interface EventRouteStatus {
-  key: string
-  /** Reaches the conversation that asked for the work, phrased by the fast model. */
-  toLive?: boolean
-  /** Reaches the project's ops push target through the notify template. */
-  toTemplate?: boolean
-  /** A single Run can be detached from this event. */
-  unbindable?: boolean
-  /** Notify policy kinds this route can deliver; only set when toTemplate. */
-  notifyKinds?: string[]
-  /** Never reaches IM at all — listed so the fan-out is visible. */
-  noEgress?: boolean
-  /** Whether the template push would actually fire for this route today. */
-  templateActive?: boolean
-  /** The notifyKinds the project currently has switched on. */
-  activeKinds?: string[]
-}
-
 /** Workflow-level notify override: off | inherit | custom. */
 export interface WorkflowNotifyPolicy {
   mode?: 'off' | 'inherit' | 'custom' | string
@@ -661,19 +639,6 @@ export interface RunVar {
   value: any
 }
 
-/** The conversation a run was dispatched from, when it did not start in the UI. */
-export interface RunOrigin {
-  channel?: string
-  scene?: string
-  conversationId?: string
-  externalUserId?: string
-  /**
-   * Detached on purpose: the run still records where it came from, but no
-   * longer reports back there. Different from having no origin at all.
-   */
-  unbound?: boolean
-}
-
 export interface Run {
   id: string
   workflowId: string
@@ -693,8 +658,6 @@ export interface Run {
   currentNodeLabel?: string
   /** Admission priority: high | normal | low (default normal). */
   priority?: 'high' | 'normal' | 'low'
-  /** Where this run was dispatched from. Absent for runs started in the web UI. */
-  origin?: RunOrigin
   tags?: string[]
   attempt?: number
   // The graph snapshot this run executed (pinned at start). Lets the run detail

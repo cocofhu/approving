@@ -2,7 +2,6 @@ package services
 
 import (
 	"errors"
-	"strconv"
 	"strings"
 	"time"
 
@@ -19,22 +18,8 @@ type RunNotifyDeliverer interface {
 	DeliverRunNotify(projectID, text string) error
 }
 
-// RunNotifyTrackingDeliverer is the richer egress: the caller hands over a
-// token identifying the receipt, and the deliverer reports whether the message
-// actually went out. Without it a push parked behind a busy conversation is
-// indistinguishable from one that reached the user.
-type RunNotifyTrackingDeliverer interface {
-	DeliverRunNotifyTracked(projectID, text, trackID string) error
-}
-
 // ErrRunNotifyNoTarget is returned (and swallowed) when no QQ target is bound.
 var ErrRunNotifyNoTarget = errors.New("no run-notify delivery target")
-
-// ErrRunNotifyDeferred means the message is queued behind an in-flight user
-// turn. Like ErrRunNotifyNoTarget this is a state rather than a fault: retrying
-// here would only stack duplicates behind the same queue, so the receipt is
-// parked and the egress reports back when the queue drains.
-var ErrRunNotifyDeferred = errors.New("run notify deferred behind a busy conversation")
 
 // RunNotifyEvent is the Engine → service payload for a lifecycle side-effect.
 type RunNotifyEvent struct {
@@ -98,9 +83,7 @@ func (s *RunNotifyService) AttemptDeliver(ev RunNotifyEvent) {
 	}
 	events := ResolveNotifyEvents(project.NotifyPolicy, workflow.NotifyPolicy)
 	if !NotifyEventAllowed(events, kind) {
-		// Info, not debug: "the user was never told" is the exact symptom
-		// operators report, and at debug this path is invisible in production.
-		log.Info().Str("run_id", ev.RunID).Str("kind", kind).
+		log.Debug().Str("run_id", ev.RunID).Str("kind", kind).
 			Strs("resolved", events).Msg("run-notify: policy miss")
 		return
 	}
@@ -138,107 +121,15 @@ func (s *RunNotifyService) AttemptDeliver(ev RunNotifyEvent) {
 			Msg("run-notify: no deliverer — no-op after claim")
 		return
 	}
-	s.deliverAndRecord(ev, project.ID, text, kind)
-}
-
-// deliverAndRecord makes one attempt and writes down how it went.
-//
-// One attempt, not several. This used to loop with a backoff, on the reasoning
-// that the receipt is claimed before the send so a transport error would burn
-// the claim. That reasoning was right and the loop was still wrong: the egress
-// it calls already retries transport failures with its own backoff, and by the
-// time it returns an error the message is also sitting in the push queue. A
-// second call from out here does not reach the network again — it enqueues a
-// duplicate, which the egress suppresses as duplicate content, and three
-// wasted round trips later the receipt reads failed anyway.
-//
-// The three outcomes that actually differ are kept, because they are what
-// someone reads off the receipt when asking why a notification never arrived.
-func (s *RunNotifyService) deliverAndRecord(ev RunNotifyEvent, projectID, text, kind string) {
-	track := receiptTrackID(ev.RunID, ev.NodeID, ev.Iteration, kind)
-	err := s.deliverOnce(projectID, text, track)
-	switch {
-	case err == nil:
-		s.markReceipt(ev, kind, "delivered", "")
-	// A project with no bound channel is a configuration state, not a failure.
-	case errors.Is(err, ErrRunNotifyNoTarget):
-		log.Info().Str("run_id", ev.RunID).Str("project", projectID).
-			Msg("run-notify: no channel target — no-op after claim")
-		s.markReceipt(ev, kind, "no_target", "")
-	// The message is queued, not lost. Recording it as deferred keeps the
-	// claim intact and lets the push sweeper settle it once the conversation
-	// frees up.
-	case errors.Is(err, ErrRunNotifyDeferred):
-		log.Info().Str("run_id", ev.RunID).Str("project", projectID).Str("kind", kind).
-			Msg("run-notify: conversation busy — queued, awaiting flush")
-		s.markReceipt(ev, kind, "deferred", "")
-	default:
-		log.Error().Err(err).Str("run_id", ev.RunID).Str("project", projectID).
-			Msg("run-notify: send failed")
-		s.markReceipt(ev, kind, "failed", err.Error())
-	}
-}
-
-func (s *RunNotifyService) deliverOnce(projectID, text, trackID string) error {
-	if tracking, ok := s.deliver.(RunNotifyTrackingDeliverer); ok {
-		return tracking.DeliverRunNotifyTracked(projectID, text, trackID)
-	}
-	return s.deliver.DeliverRunNotify(projectID, text)
-}
-
-// receiptTrackID packs the receipt key into the token handed to the egress, so
-// a late delivery can be matched back to its row without keeping in-memory
-// state that a restart would lose.
-func receiptTrackID(runID, nodeID string, iteration int, kind string) string {
-	return strings.Join([]string{runID, nodeID, strconv.Itoa(iteration), kind}, "|")
-}
-
-// SettlePushSent flips a deferred receipt to delivered once the egress reports
-// the queued message finally went out. Rows in any other state are left alone:
-// a receipt that already reads delivered, failed or no_target has a settled
-// story that a late queue drain should not rewrite.
-func (s *RunNotifyService) SettlePushSent(trackID string) {
-	if s == nil || s.db == nil {
-		return
-	}
-	parts := strings.Split(trackID, "|")
-	if len(parts) != 4 {
-		return
-	}
-	iteration, err := strconv.Atoi(parts[2])
-	if err != nil {
-		return
-	}
-	res := s.db.Model(&models.NotifyDeliveryReceipt{}).
-		Where("run_id = ? AND node_id = ? AND iteration = ? AND kind = ? AND delivery_status = ?",
-			parts[0], parts[1], iteration, parts[3], "deferred").
-		Updates(map[string]any{"delivery_status": "delivered", "delivery_error": ""})
-	if res.Error != nil {
-		log.Warn().Err(res.Error).Str("run_id", parts[0]).
-			Msg("run-notify: settling deferred receipt failed")
-		return
-	}
-	if res.RowsAffected > 0 {
-		log.Info().Str("run_id", parts[0]).Str("kind", parts[3]).
-			Msg("run-notify: deferred notification delivered on flush")
-	}
-}
-
-// markReceipt records the delivery outcome on the claimed receipt so a failed
-// notification is visible in the data, not only in the logs.
-func (s *RunNotifyService) markReceipt(ev RunNotifyEvent, kind, status, detail string) {
-	if s.db == nil {
-		return
-	}
-	if len(detail) > 500 {
-		detail = detail[:500]
-	}
-	err := s.db.Model(&models.NotifyDeliveryReceipt{}).
-		Where("run_id = ? AND node_id = ? AND iteration = ? AND kind = ?",
-			ev.RunID, ev.NodeID, ev.Iteration, kind).
-		Updates(map[string]any{"delivery_status": status, "delivery_error": detail}).Error
-	if err != nil {
-		log.Warn().Err(err).Str("run_id", ev.RunID).Msg("run-notify: recording delivery status failed")
+	if err := s.deliver.DeliverRunNotify(project.ID, text); err != nil {
+		// P0: claim already held; log and do not retry.
+		if errors.Is(err, ErrRunNotifyNoTarget) {
+			log.Info().Str("run_id", ev.RunID).Str("project", project.ID).
+				Msg("run-notify: no channel target — no-op after claim")
+			return
+		}
+		log.Warn().Err(err).Str("run_id", ev.RunID).Str("project", project.ID).
+			Msg("run-notify: send failed after claim (no retry)")
 	}
 }
 

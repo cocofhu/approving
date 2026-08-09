@@ -51,16 +51,3 @@ func TestApplySandboxImageEnv(t *testing.T) {
 		t.Fatalf("claude_code env: %v", c.Sandbox.Images)
 	}
 }
-
-func TestKnownSandboxBackendsHandsOutACopy(t *testing.T) {
-	got := KnownSandboxBackends()
-	if len(got) == 0 {
-		t.Fatal("no backends listed")
-	}
-	// Callers get a copy: mutating the result must not reach the package list.
-	first := got[0]
-	got[0] = "clobbered"
-	if again := KnownSandboxBackends(); again[0] != first {
-		t.Fatalf("caller mutated the shared list: %q", again[0])
-	}
-}

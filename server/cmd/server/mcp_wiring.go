@@ -105,7 +105,7 @@ func (w *platformMCPWire) registerCron(projectID, threadID, agent string) (strin
 // registerChannel mints a shared token for an IM channel turn. Memory/scheduler
 // write gates follow caps from ChannelConfig (default off for unauthenticated
 // channel senders).
-func (w *platformMCPWire) registerChannel(projectID, threadID, userID, agent string, channel channels.ChannelSessionContext, enabledMcps []string, caps channels.SessionCaps) (string, []sandbox.MCPServerSpec) {
+func (w *platformMCPWire) registerChannel(projectID, threadID, userID, agent string, enabledMcps []string, caps channels.SessionCaps) (string, []sandbox.MCPServerSpec) {
 	if w.pm == nil {
 		return "", nil
 	}
@@ -115,11 +115,6 @@ func (w *platformMCPWire) registerChannel(projectID, threadID, userID, agent str
 		return "", nil
 	}
 	tok := w.pm.Register(projectID, threadID, userID, agent)
-	w.pm.SetChannelContext(tok, pmmcp.ChannelContext{
-		ChannelType: channel.ChannelType, Scene: string(channel.Scene),
-		ConversationID: channel.ConversationID, ExternalUserID: channel.ExternalUserID,
-		TraceID: channel.TraceID,
-	})
 	if w.memory != nil {
 		w.memory.Restore(tok, projectID, agent, threadID, userID, caps.AllowMemoryWrite)
 	}
@@ -136,7 +131,7 @@ func (w *platformMCPWire) registerChannel(projectID, threadID, userID, agent str
 	return tok, specs
 }
 
-func (w *platformMCPWire) restoreChannel(projectID, threadID, userID, agent, token string, channel channels.ChannelSessionContext, enabledMcps []string, caps channels.SessionCaps) {
+func (w *platformMCPWire) restoreChannel(projectID, threadID, userID, agent, token string, enabledMcps []string, caps channels.SessionCaps) {
 	_ = enabledMcps
 	if !w.agentBoundToProject(projectID, agent) {
 		log.Warn().Str("project", projectID).Str("agent", agent).
@@ -145,11 +140,6 @@ func (w *platformMCPWire) restoreChannel(projectID, threadID, userID, agent, tok
 	}
 	if w.pm != nil {
 		w.pm.Restore(projectID, threadID, userID, agent, token)
-		w.pm.SetChannelContext(token, pmmcp.ChannelContext{
-			ChannelType: channel.ChannelType, Scene: string(channel.Scene),
-			ConversationID: channel.ConversationID, ExternalUserID: channel.ExternalUserID,
-			TraceID: channel.TraceID,
-		})
 	}
 	if w.memory != nil {
 		w.memory.Restore(token, projectID, agent, threadID, userID, caps.AllowMemoryWrite)

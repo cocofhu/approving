@@ -26,13 +26,6 @@
       "api": "API",
       "pmMcp": "Project Management MCP"
     },
-    "runOrigin": {
-      "qq": "QQ",
-      "chat": "Chat",
-      "label": "From {channel}",
-      "labelWithUser": "From {channel} · {user}",
-      "title": "Dispatched from {channel} conversation {conversation}"
-    },
     "statusFilter": {
       "selectedCount": "{n} selected"
     },
@@ -279,11 +272,6 @@
       "noRepoFlow": "No repo (artifact-only flow)",
       "pinnedVersionTitle": "Workflow version pinned for this run",
       "minutes": "min",
-      "seconds": "sec",
-      "hours": "h",
-      "messages": "msgs",
-      "times": "×",
-      "tokens": "tokens",
       "lines": "{n} lines",
       "chars": "{n} chars",
       "groups": "{n} groups",

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/textutil"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -668,9 +667,10 @@ func maskValue(v any, depth int, scanValues bool) any {
 		if scanValues {
 			s = redactSensitiveString(s)
 		}
-		// Byte-sliced this used to split a Chinese character in half and store
-		// a replacement char in the audit record.
-		return textutil.TruncateBytes(s, 4000, "…")
+		if len(s) > 4000 {
+			return s[:4000] + "…"
+		}
+		return s
 	default:
 		return v
 	}
@@ -686,12 +686,6 @@ func redactSensitiveString(s string) string {
 		}
 	}
 	return out
-}
-
-// RedactSensitiveString redacts common token/Bearer/key shapes in free text.
-// Shared by audit masking, run_error summaries, and failure logs.
-func RedactSensitiveString(s string) string {
-	return redactSensitiveString(s)
 }
 
 func isSensitiveKey(key string) bool {

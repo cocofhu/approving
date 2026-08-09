@@ -3,9 +3,7 @@ import type {
   Workflow,
   WorkflowVersion,
   WorkflowNotifyPolicy,
-  EventRouteStatus,
   Run,
-  RunOrigin,
   Artifact,
   InboxItem,
   AcpEvent,
@@ -249,70 +247,16 @@ export interface DashboardStats {
   artifacts: number
 }
 
-// SettingKind selects the input control and the value type: 'int' is a number,
-// 'string' is free text, 'secret' reads back as SECRET_MASK — submitting the
-// mask (or an empty string) leaves the stored credential untouched — 'text' is
-// a multi-line body, and 'float' is a decimal that may be left blank to mean
-// "let the endpoint decide".
-export type SettingKind = 'int' | 'string' | 'secret' | 'text' | 'float'
-
-// SECRET_MASK is the placeholder the API returns for a stored secret and
-// accepts on write to mean "keep what is stored".
-export const SECRET_MASK = '****'
-
-// SettingItem is one platform knob: its effective value, where it came from
-// (env|db|config) and whether it's pinned by an env var (read-only).
+// SettingItem is one platform scheduling knob: its effective value, where it
+// came from (env|db|config) and whether it's pinned by an env var (read-only).
 export interface SettingItem {
   key: string
   label: string
   unit?: string
-  kind: SettingKind
-  value: number | string
+  value: number
   min: number
   source: 'env' | 'db' | 'config'
   locked: boolean
-  // prefix is text the runtime always puts in front of this value; it is shown
-  // read-only so nobody writes a second copy of it into the body.
-  prefix?: string
-  // preview is what a blank value falls back to.
-  preview?: string
-}
-
-// LiveProbeCheck is one property of a conversation-model endpoint that either
-// holds or does not. `reason` is already operator-facing prose from the server
-// and is shown as-is; `name` is the stable identifier the UI labels.
-export interface LiveProbeCheck {
-  name: 'reachable' | 'tool_calls' | string
-  ok: boolean
-  reason?: string
-}
-
-// LiveProbeReport is the outcome of testing an endpoint. An endpoint that does
-// not work is `ok: false` on a successful request, not a thrown error.
-export interface LiveProbeReport {
-  configured: boolean
-  ok: boolean
-  checks: LiveProbeCheck[]
-  latencyMs: number
-  sample?: string
-}
-
-// LiveStats is what the conversation layer has actually done since the server
-// started. `calls: 0` while configured is the signal that inbound messages are
-// not going through this layer at all.
-export interface LiveStats {
-  calls: number
-  failed: number
-  avgLatencyMs: number
-  lastLatencyMs: number
-  lastSuccessAt?: string
-  lastFailureAt?: string
-  lastFailure?: string
-}
-
-export interface LiveStatus {
-  configured: boolean
-  stats: LiveStats
 }
 
 export type PlatformRuleSource = 'override' | 'global' | 'embed'
@@ -365,21 +309,6 @@ export const api = {
   updateProject: (id: string, body: Partial<Project>) =>
     req<Project>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteProject: (id: string) => req<{ status: string }>(`/projects/${id}`, { method: 'DELETE' }),
-
-  /**
-   * Detach a run from the conversation that asked for it, or reconnect it.
-   * Detaching says goodbye there first; `noticeDelivered` says whether that
-   * actually reached anyone.
-   */
-  patchRunOriginBinding: (runId: string, bound: boolean) =>
-    req<{ origin: RunOrigin | null; noticeDelivered: boolean }>(
-      `/runs/${runId}/origin-binding`,
-      { method: 'PATCH', body: JSON.stringify({ bound }) },
-    ),
-
-  /** Which Run events reach a conversation vs the project push target. */
-  getProjectEventRouting: (id: string) =>
-    req<{ routes: EventRouteStatus[] }>(`/projects/${id}/event-routing`),
 
   /** Project audit timeline (paginated). Default time window: 24h. */
   listProjectAudit: (
@@ -534,14 +463,6 @@ export const api = {
     req<ChatThread>(`/projects/${projectId}/pm/threads/${tid}`),
   deletePmThread: (projectId: string, tid: string) =>
     req<{ status: string }>(`/projects/${projectId}/pm/threads/${tid}`, { method: 'DELETE' }),
-  clearPmThreadContext: (projectId: string, tid: string) =>
-    req<{
-      status: string
-      threadId: string
-      messagesCleared: number
-      tasksCancelled?: number
-      conversationId?: string
-    }>(`/projects/${projectId}/pm/threads/${tid}/context`, { method: 'DELETE' }),
   listPmMessages: (
     projectId: string,
     tid: string,
@@ -1097,20 +1018,11 @@ export const api = {
   dashboard: () => req<DashboardStats>('/stats/dashboard'),
   // platform settings (scheduling params)
   getSettings: () => req<{ items: SettingItem[] }>('/settings'),
-  updateSettings: (patch: Record<string, number | string>) =>
+  updateSettings: (patch: Record<string, number>) =>
     req<{ items: SettingItem[] }>('/settings', {
       method: 'PUT',
       body: JSON.stringify(patch),
     }),
-  // Tests the values in the form rather than the saved ones, so a corrected
-  // address can be checked before committing it. A blank secret means the
-  // server uses the stored key.
-  testLiveEndpoint: (patch: Record<string, number | string>) =>
-    req<LiveProbeReport>('/settings/live/test', {
-      method: 'POST',
-      body: JSON.stringify(patch),
-    }),
-  liveStatus: () => req<LiveStatus>('/settings/live/status'),
 
   listPlatformRules: () => req<{ items: PlatformRuleMeta[] }>('/platform-rules'),
   getPlatformRule: (file: string) => req<PlatformRuleContent>(`/platform-rules/${encodeURIComponent(file)}`),
@@ -1150,92 +1062,6 @@ export const api = {
     }),
   deleteProjectChannel: (projectId: string) =>
     req<{ status: string }>(`/projects/${encodeURIComponent(projectId)}/channel`, { method: 'DELETE' }),
-
-  /** IM / channel task ledger for project-management 待办 cleanup. */
-  listProjectTasks: (projectId: string, opts?: { active?: boolean; limit?: number }) => {
-    const q = new URLSearchParams()
-    if (opts?.active === false) q.set('active', '0')
-    if (opts?.limit) q.set('limit', String(opts.limit))
-    const qs = q.toString()
-    return req<{ items: ProjectTaskIdentity[] }>(
-      `/projects/${encodeURIComponent(projectId)}/pm/tasks${qs ? `?${qs}` : ''}`,
-    )
-  },
-  closeProjectTask: (projectId: string, taskId: string, status: 'completed' | 'cancelled' | 'failed' = 'cancelled') =>
-    req<{ task: ProjectTaskIdentity }>(
-      `/projects/${encodeURIComponent(projectId)}/pm/tasks/${encodeURIComponent(taskId)}/close`,
-      { method: 'POST', body: JSON.stringify({ status }) },
-    ),
-
-  /** IM turn call-chain samples (Live / sandbox / delivery) for debug. */
-  listLiveTraces: (
-    projectId: string,
-    opts?: { conversationId?: string; traceId?: string; limit?: number; since?: string },
-  ) => {
-    const q = new URLSearchParams()
-    if (opts?.conversationId) q.set('conversationId', opts.conversationId)
-    if (opts?.traceId) q.set('traceId', opts.traceId)
-    if (opts?.limit) q.set('limit', String(opts.limit))
-    if (opts?.since) q.set('since', opts.since)
-    const qs = q.toString()
-    return req<{ items: LiveDecisionSample[] }>(
-      `/projects/${encodeURIComponent(projectId)}/live-traces${qs ? `?${qs}` : ''}`,
-    )
-  },
-}
-
-export interface ProjectTaskIdentity {
-  id: string
-  runId: string
-  projectId: string
-  userId?: string
-  shortTitle: string
-  originalRequirement?: string
-  originChannel?: string
-  originScene?: string
-  originConversationId?: string
-  originExternalUserId?: string
-  recentContext?: string
-  status: string
-  terminalAt?: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export interface LiveTraceSpan {
-  name: string
-  status?: string
-  detail?: string
-  startedAt?: string
-  endedAt?: string
-  durationMs?: number
-}
-
-/** One IM inbound turn's Live routing sample + call chain. */
-export interface LiveDecisionSample {
-  id: string
-  projectId: string
-  channel?: string
-  scene?: string
-  conversationId: string
-  turnId?: string
-  userMessageId?: string
-  traceId?: string
-  userText: string
-  directorContext?: string
-  transcript?: string
-  model?: string
-  rawCompletion?: string
-  toolResults?: string
-  actions?: string
-  spans?: string
-  route?: string
-  pmOutcome?: string
-  egress?: string
-  latencyMs: number
-  degraded: boolean
-  qualityFlags?: string[]
-  createdAt: string
 }
 
 export interface AuthMeResponse {

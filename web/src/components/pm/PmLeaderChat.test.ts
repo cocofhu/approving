@@ -19,7 +19,6 @@ const apiMocks = vi.hoisted(() => ({
   getPmDraft: vi.fn(),
   patchPmMessage: vi.fn(),
   deletePmThread: vi.fn(),
-  clearPmThreadContext: vi.fn(),
 }))
 
 vi.mock('@/lib/api', async () => {
@@ -39,7 +38,6 @@ vi.mock('@/lib/api', async () => {
       getPmDraft: apiMocks.getPmDraft,
       patchPmMessage: apiMocks.patchPmMessage,
       deletePmThread: apiMocks.deletePmThread,
-      clearPmThreadContext: apiMocks.clearPmThreadContext,
     },
   }
 })
@@ -1352,10 +1350,8 @@ describe('PmLeaderChat stick-to-bottom', () => {
     expect(wrapper.find('[data-testid="pm-qq-tag-header"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="pm-channel-readonly"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="pm-chat-send"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="pm-chat-clear-context"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="pm-channel-readonly-clear"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('来自 QQ，请在 QQ 侧回复')
-    expect(wrapper.text()).toContain('渠道会话在 Web 只读：不可发送；可清空上下文让负责人重新开聊')
+    expect(wrapper.text()).toContain('渠道会话在 Web 只读：不可发送、不可删除')
     expect(apiMocks.appendPmMessage).not.toHaveBeenCalled()
 
     // Web thread has send composer and no QQ header tag.
@@ -1364,44 +1360,6 @@ describe('PmLeaderChat stick-to-bottom', () => {
     expect(wrapper.find('[data-testid="pm-qq-tag-header"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="pm-channel-readonly"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="pm-chat-send"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="pm-chat-clear-context"]').exists()).toBe(false)
-    wrapper.unmount()
-  })
-
-  it('channel clear context confirms then wipes messages', async () => {
-    apiMocks.listPmThreads.mockResolvedValue({
-      items: [
-        {
-          id: 'thr-qq',
-          title: '产品评审同步',
-          userId: 'qq:guild:ch1',
-          projectId: 'proj-1',
-          createdAt: '2026-01-02T00:00:00Z',
-          updatedAt: '2026-01-02T12:00:00Z',
-        },
-      ],
-    })
-    apiMocks.listPmMessages.mockResolvedValue({
-      items: [{ id: 'm1', role: 'user', content: '旧消息', status: 'ok' }],
-    })
-    apiMocks.clearPmThreadContext.mockResolvedValue({
-      status: 'cleared',
-      threadId: 'thr-qq',
-      messagesCleared: 1,
-    })
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
-
-    const wrapper = mountChat()
-    await flushPromises()
-    expect(wrapper.text()).toContain('旧消息')
-
-    await wrapper.find('[data-testid="pm-chat-clear-context"]').trigger('click')
-    await flushPromises()
-    expect(confirmSpy).toHaveBeenCalled()
-    expect(apiMocks.clearPmThreadContext).toHaveBeenCalledWith('proj-1', 'thr-qq')
-    expect(wrapper.text()).not.toContain('旧消息')
-
-    confirmSpy.mockRestore()
     wrapper.unmount()
   })
 
@@ -1443,14 +1401,12 @@ describe('PmLeaderChat stick-to-bottom', () => {
     const menu = wrapper.find('[data-testid="pm-channel-ctx-menu"]')
     expect(menu.exists()).toBe(true)
     expect(menu.text()).toContain('查看详情')
-    expect(menu.text()).toContain('清空上下文')
     expect(menu.text()).not.toContain('删除')
 
     await wrapper.find('[data-testid="pm-channel-ctx-detail"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="pm-channel-detail-title"]').text()).toBe('未命名会话')
     expect(wrapper.find('[data-testid="pm-channel-detail-source"]').text()).toBe('来自 QQ Channel')
-    expect(wrapper.find('[data-testid="pm-channel-detail-clear"]').exists()).toBe(true)
     wrapper.unmount()
   })
 

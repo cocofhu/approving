@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/textutil"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -45,21 +44,6 @@ var (
 // IsQQChannelUserID reports whether userID is a QQ Channel synthetic identity (qq:…).
 func IsQQChannelUserID(userID string) bool {
 	return strings.HasPrefix(userID, "qq:")
-}
-
-// ParseQQChannelThreadUserID splits ChatThread.UserID "qq:{scene}:{conversationId}"
-// into scene and conversation id. conversationId may contain further colons.
-func ParseQQChannelThreadUserID(userID string) (scene, conversationID string, ok bool) {
-	userID = strings.TrimSpace(userID)
-	if !strings.HasPrefix(userID, "qq:") {
-		return "", "", false
-	}
-	rest := strings.TrimPrefix(userID, "qq:")
-	i := strings.IndexByte(rest, ':')
-	if i <= 0 || i >= len(rest)-1 {
-		return "", "", false
-	}
-	return rest[:i], rest[i+1:], true
 }
 
 // IsSyntheticThreadUserID reports cron/channel synthetic owners that must not trigger UI merge.
@@ -795,7 +779,9 @@ func (s *PmService) AppendMessageSource(threadID, role, content, source string, 
 			if title == "" && len(images) > 0 {
 				title = "图片消息"
 			}
-			title = textutil.SoftTruncateRunes(title, 40)
+			if len([]rune(title)) > 40 {
+				title = string([]rune(title)[:40]) + "…"
+			}
 			if title != "" {
 				if err := s.db.Model(&t).Update("title", title).Error; err != nil {
 					log.Warn().Err(err).Str("thread", threadID).Msg("auto-title thread failed")
@@ -873,51 +859,6 @@ func (s *PmService) RecentMessages(threadID string, n int) ([]models.ChatMessage
 		filtered = filtered[len(filtered)-n:]
 	}
 	return filtered, nil
-}
-
-// CanonicalWindow returns the last n turns of a channel conversation as the
-// user experienced it: their own messages, and the replies a channel confirmed
-// it delivered. Oldest first.
-//
-// It deliberately excludes raw agent output. That text is the agent talking to
-// itself — 「已发送」 is written after calling a tool, not after a user read
-// anything — and replaying it as history teaches the next turn that things were
-// said which never left the process.
-//
-// Failed turns keep their user row. The reply never happened, but the request
-// did, and dropping it is how a question the platform failed to answer
-// disappears from the conversation entirely.
-func (s *PmService) CanonicalWindow(threadID string, n int) ([]models.ChatMessage, error) {
-	return s.canonicalQuery(threadID, n, nil)
-}
-
-// A CanonicalSince / HandoffCursor pair used to live here: how far the thread's
-// sandbox had been caught up, so each turn could replay the conversation it had
-// missed. It is gone with the replay itself. The cursor modelled the agent as
-// something that had to be shown the whole conversation to know it, which made
-// every prompt grow with the conversation; the agent now reads what it needs
-// through context-store, so there is nothing to catch up.
-func (s *PmService) canonicalQuery(threadID string, n int, after *models.ChatMessage) ([]models.ChatMessage, error) {
-	if n <= 0 {
-		n = 20
-	}
-	q := s.db.Where("thread_id = ?", threadID).Where(
-		"(role = ? AND source = ?) OR (role = ? AND source = ?)",
-		"user", models.MessageSourceChannel,
-		"assistant", models.MessageSourceChannelOutbound,
-	)
-	if after != nil {
-		q = q.Where("(created_at > ?) OR (created_at = ? AND id > ?)",
-			after.CreatedAt, after.CreatedAt, after.ID)
-	}
-	var newestFirst []models.ChatMessage
-	if err := q.Order("created_at desc, id desc").Limit(n).Find(&newestFirst).Error; err != nil {
-		return nil, err
-	}
-	for i, j := 0, len(newestFirst)-1; i < j; i, j = i+1, j-1 {
-		newestFirst[i], newestFirst[j] = newestFirst[j], newestFirst[i]
-	}
-	return newestFirst, nil
 }
 
 // ListConversationsForAgent returns threads visible to a context-store session.
@@ -1021,7 +962,10 @@ func (s *PmService) SearchMessages(projectID, agentName, userID, q string, limit
 	}
 	out := make([]map[string]any, 0, len(msgs))
 	for _, m := range msgs {
-		snippet := textutil.SoftTruncateRunes(m.Content, 160)
+		snippet := m.Content
+		if len([]rune(snippet)) > 160 {
+			snippet = string([]rune(snippet)[:160]) + "…"
+		}
 		out = append(out, map[string]any{
 			"messageId": m.ID, "conversationId": m.ThreadID,
 			"title": titleBy[m.ThreadID], "role": m.Role, "snippet": snippet,
@@ -1058,52 +1002,13 @@ func (s *PmService) SearchMemories(projectID, agentName, q string, limit int) ([
 	}
 	out := make([]map[string]any, 0, len(items))
 	for _, it := range items {
-		summary := textutil.SoftTruncateRunes(it.Content, 120)
+		summary := it.Content
+		if len([]rune(summary)) > 120 {
+			summary = string([]rune(summary)[:120]) + "…"
+		}
 		out = append(out, map[string]any{
 			"id": it.ID, "title": it.Title, "summary": summary, "updatedAt": it.UpdatedAt,
 		})
-	}
-	return out, nil
-}
-
-// ClearThreadContextResult summarizes what was wiped while keeping the thread row.
-type ClearThreadContextResult struct {
-	ThreadID         string `json:"threadId"`
-	MessagesCleared  int64  `json:"messagesCleared"`
-	Channel          string `json:"channel,omitempty"`
-	Scene            string `json:"scene,omitempty"`
-	ConversationID   string `json:"conversationId,omitempty"`
-	SandboxUnbound   bool   `json:"sandboxUnbound,omitempty"`
-}
-
-// ClearThreadContext deletes messages and drafts for a readable thread but keeps
-// the ChatThread row so the same QQ conversation keeps a stable identity.
-// Unlike DeleteThread, QQ channel threads are allowed.
-func (s *PmService) ClearThreadContext(projectID, threadID, userID string) (ClearThreadContextResult, error) {
-	var out ClearThreadContextResult
-	t, err := s.GetThread(projectID, threadID, userID)
-	if err != nil {
-		return out, err
-	}
-	out.ThreadID = t.ID
-	if scene, conv, ok := ParseQQChannelThreadUserID(t.UserID); ok {
-		out.Channel = "qq"
-		out.Scene = scene
-		out.ConversationID = conv
-	}
-	_ = s.db.Where("thread_id = ?", t.ID).Delete(&models.ChatTurnDraft{}).Error
-	res := s.db.Where("thread_id = ?", t.ID).Delete(&models.ChatMessage{})
-	if res.Error != nil {
-		return out, res.Error
-	}
-	out.MessagesCleared = res.RowsAffected
-	updates := map[string]any{"updated_at": time.Now().UTC()}
-	if strings.TrimSpace(t.SandboxRef) != "" {
-		updates["sandbox_ref"] = ""
-		out.SandboxUnbound = true
-	}
-	if err := s.db.Model(&models.ChatThread{}).Where("id = ?", t.ID).Updates(updates).Error; err != nil {
-		return out, err
 	}
 	return out, nil
 }

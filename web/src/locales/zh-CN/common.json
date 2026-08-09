@@ -26,13 +26,6 @@
       "api": "API",
       "pmMcp": "项目管理 MCP"
     },
-    "runOrigin": {
-      "qq": "QQ",
-      "chat": "对话",
-      "label": "{channel} 派活",
-      "labelWithUser": "{channel} 派活 · {user}",
-      "title": "由 {channel} 会话 {conversation} 派发"
-    },
     "statusFilter": {
       "selectedCount": "已选 {n} 项"
     },
@@ -279,11 +272,6 @@
       "noRepoFlow": "无仓库(产物流)",
       "pinnedVersionTitle": "本次运行固化执行的工作流版本",
       "minutes": "分钟",
-      "seconds": "秒",
-      "hours": "小时",
-      "messages": "条",
-      "times": "次",
-      "tokens": "token",
       "lines": "{n} 行",
       "chars": "{n} 字符",
       "groups": "{n} 组",

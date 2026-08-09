@@ -109,7 +109,7 @@ func artifactMetaDTO(a models.Artifact) gin.H {
 	return out
 }
 
-func runSummaryDTO(r models.Run, currentNodeLabel string, origin services.RunOrigin) gin.H {
+func runSummaryDTO(r models.Run, currentNodeLabel string) gin.H {
 	out := gin.H{
 		"id": r.ID, "workflowId": r.WorkflowID, "workflowName": r.WorkflowName,
 		"workflowVersion": r.WorkflowVersion,
@@ -123,21 +123,7 @@ func runSummaryDTO(r models.Run, currentNodeLabel string, origin services.RunOri
 	if currentNodeLabel != "" {
 		out["currentNodeLabel"] = currentNodeLabel
 	}
-	// Absent for web-triggered runs, following the currentNodeLabel convention:
-	// the list only says where a run came from when that is actually somewhere.
-	if origin.ConversationID != "" {
-		out["origin"] = runOriginDTO(origin)
-	}
 	return out
-}
-
-func runOriginDTO(origin services.RunOrigin) gin.H {
-	return gin.H{
-		"channel": origin.Channel, "scene": origin.Scene,
-		"conversationId": origin.ConversationID,
-		"externalUserId": origin.ExternalUserID,
-		"unbound":        origin.Unbound,
-	}
 }
 
 // runDetailDTO assembles the full run view (nodeRuns, gate, clarify,
@@ -203,11 +189,6 @@ func (h *Handlers) runDetailDTO(r models.Run) gin.H {
 	}
 	if git != nil {
 		out["git"] = git
-	}
-	// The detail view is where a run can be detached from its origin, so unlike
-	// the list it needs the binding state, not just the label.
-	if origin, ok := h.Runs.RunOriginFor(r.ID); ok {
-		out["origin"] = runOriginDTO(origin)
 	}
 	if g, ok := h.Runs.PendingGate(r.ID); ok {
 		gateDTO := gin.H{

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -171,15 +172,15 @@ func (e *Engine) ResumeGateAs(runID, nodeID, action string, form map[string]any,
 	// Project audit: gate decision with real Session actor when provided.
 	if projectID := services.ResolveProjectIDForRun(e.db, runID); projectID != "" {
 		e.recordAudit(services.AuditRecord{
-			ProjectID:    projectID,
-			Actor:        services.ActorFromUsername(reviewer),
-			Action:       models.AuditActionGateDecide,
-			ResourceType: "gate",
-			ResourceID:   nodeID,
-			RunID:        runID,
-			NodeID:       nodeID,
-			Outcome:      models.AuditOutcomeOK,
-			Summary:      "gate " + action,
+			ProjectID:      projectID,
+			Actor:          services.ActorFromUsername(reviewer),
+			Action:         models.AuditActionGateDecide,
+			ResourceType:   "gate",
+			ResourceID:     nodeID,
+			RunID:          runID,
+			NodeID:         nodeID,
+			Outcome:        models.AuditOutcomeOK,
+			Summary:        "gate " + action,
 			Payload: map[string]any{
 				"runId":  runID,
 				"action": action,
@@ -396,7 +397,6 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 	if err != nil {
 		return err
 	}
-	c.ctx = e.ensureRunCtx(runID)
 	node := c.graph.FindNode(nodeID)
 	if node == nil || (node.Type != "react" && !isReviewNode(node.Type)) {
 		return errors.New("react node not found")
@@ -440,7 +440,7 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 	logDB(e.db.Save(&conv), runID, "save react human turn")
 
 	req := e.nodeReq(c, node)
-	t := e.provider.ReactReply(c.Context(), req, conv.Messages, effective, images, force)
+	t := e.provider.ReactReply(context.Background(), req, conv.Messages, effective, images, force)
 	conv.Messages = append(conv.Messages, models.ReactMessage{Role: "agent", Text: t.Msg,
 		At: time.Now().Format(time.RFC3339), Questions: t.Questions})
 
@@ -713,7 +713,6 @@ func (e *Engine) Cancel(runID string) error {
 		// slot so the operator can continue without restarting the server.
 		e.finalizeActiveStateRuns(runID, run.Status)
 		e.forceEndExecute(runID)
-		e.cancelRunCtx(runID)
 		if ab, ok := e.provider.(runtime.RunAborter); ok {
 			ab.AbortRun(runID)
 		}

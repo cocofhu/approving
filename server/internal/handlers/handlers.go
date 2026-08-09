@@ -12,12 +12,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cocofhu/approving/internal/apierr"
 	"github.com/cocofhu/approving/internal/auth"
 	"github.com/cocofhu/approving/internal/browser"
 	"github.com/cocofhu/approving/internal/contextmcp"
 	"github.com/cocofhu/approving/internal/engine"
-	"github.com/cocofhu/approving/internal/liveagent"
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/memorymcp"
 	"github.com/cocofhu/approving/internal/models"
@@ -67,18 +65,7 @@ type Handlers struct {
 	// to simulate a read-only member denial while production keeps the hook nil.
 	CanViewProjectAudit func(username, projectID string) bool
 	// InjectBundles serves ConfigHome .tgz for gateway SANDBOX_INJECT (no session auth).
-	InjectBundles *sandbox.BundleStore
-	// LiveModel is the conversation-model client, held so the settings page can
-	// test an endpoint and read what that layer has actually been doing. nil
-	// disables both, which is what tests that do not wire it get.
-	LiveModel *liveagent.Client
-	// LiveSamples is the per-turn decision / call-chain store for IM debug.
-	LiveSamples *services.LiveSampleService
-	// TaskContext backs the project-management 会话任务待办 list.
-	// OriginAnnouncer speaks into a run's origin conversation when its binding
-	// is changed from the web UI. Nil when no IM channel is wired.
-	OriginAnnouncer OriginAnnouncer
-	TaskContext     *services.TaskContextService
+	InjectBundles  *sandbox.BundleStore
 	doctorMu       sync.Mutex
 	doctorSessions map[string]doctorArtifactSession
 }
@@ -92,7 +79,7 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 // UpdateSettings persists a patch of platform scheduling params and applies
 // them at runtime. Only keys present are changed; env-locked keys are ignored.
 func (h *Handlers) UpdateSettings(c *gin.Context) {
-	var body map[string]any
+	var body map[string]int
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 		return
@@ -103,46 +90,6 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items})
-}
-
-// TestLiveEndpoint checks a conversation-model endpoint and reports what it
-// found. The body is a settings patch, so the values on screen can be tested
-// before they are saved; a blank or masked key means "use the stored one".
-//
-// A failing endpoint is a successful test with OK=false, not an HTTP error: the
-// caller asked whether it works, and "no, because the key was rejected" is the
-// answer to that question rather than a failure to answer it.
-func (h *Handlers) TestLiveEndpoint(c *gin.Context) {
-	if h.LiveModel == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "conversation model client unavailable"})
-		return
-	}
-	var body map[string]any
-	if err := c.ShouldBindJSON(&body); err != nil {
-		// An empty body is a legitimate "test what is saved".
-		body = map[string]any{}
-	}
-	baseURL, apiKey, model, timeout := h.Settings.LiveEndpointFor(body)
-	report := liveagent.Probe(c.Request.Context(), liveagent.Endpoint{
-		BaseURL: baseURL, APIKey: apiKey, Model: model, Timeout: timeout,
-	})
-	c.JSON(http.StatusOK, report)
-}
-
-// LiveStatus reports what the conversation layer has actually been doing.
-//
-// The test button proves an endpoint can work; this is the other question, and
-// the one that was unanswerable: a configured endpoint with zero calls means
-// messages are not going through this layer at all.
-func (h *Handlers) LiveStatus(c *gin.Context) {
-	if h.LiveModel == nil {
-		c.JSON(http.StatusOK, gin.H{"configured": false, "stats": liveagent.Stats{}})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"configured": h.LiveModel.Configured(),
-		"stats":      h.LiveModel.Stats(),
-	})
 }
 
 // SandboxInject serves a short-lived ConfigHome .tgz for gateway
@@ -300,7 +247,8 @@ func (h *Handlers) SaveWorkflow(c *gin.Context) {
 			errors.Is(err, services.ErrWorkflowProjectImmutable):
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		default:
-			apierr.Internal(c, err)
+			_ = c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
 		return
 	}
@@ -347,7 +295,8 @@ func (h *Handlers) PatchWorkflowNotifyPolicy(c *gin.Context) {
 		case errors.Is(err, services.ErrWorkflowNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		default:
-			apierr.Internal(c, err)
+			_ = c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
 		return
 	}
@@ -441,7 +390,8 @@ func (h *Handlers) DeleteWorkflow(c *gin.Context) {
 	}
 	actor := h.auditActorFromContext(c)
 	if err := h.WF.Delete(id); err != nil {
-		apierr.Internal(c, err)
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	if projectID != "" {
@@ -466,7 +416,8 @@ func (h *Handlers) CopyWorkflowPreview(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		apierr.Internal(c, err)
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -500,7 +451,8 @@ func (h *Handlers) CopyWorkflow(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		apierr.Internal(c, err)
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, workflowDTO(wf))
@@ -621,20 +573,18 @@ func (h *Handlers) ListRuns(c *gin.Context) {
 	if !pg.Active {
 		runs := h.Runs.ListByTags(statuses, wf, projectID, tags, sort, order)
 		labels := h.Runs.CurrentNodeLabels(runs)
-		origins := h.Runs.RunOrigins(runs)
 		out := make([]gin.H, 0, len(runs))
 		for _, r := range runs {
-			out = append(out, runSummaryDTO(r, labels[r.ID], origins[r.ID]))
+			out = append(out, runSummaryDTO(r, labels[r.ID]))
 		}
 		c.JSON(http.StatusOK, out)
 		return
 	}
 	runs, total := h.Runs.ListPageByTags(statuses, wf, projectID, tags, pg.Page, pg.PageSize, sort, order)
 	labels := h.Runs.CurrentNodeLabels(runs)
-	origins := h.Runs.RunOrigins(runs)
 	items := make([]gin.H, 0, len(runs))
 	for _, r := range runs {
-		items = append(items, runSummaryDTO(r, labels[r.ID], origins[r.ID]))
+		items = append(items, runSummaryDTO(r, labels[r.ID]))
 	}
 	c.JSON(http.StatusOK, paginatedResponse(items, int(total), pg.Page, pg.PageSize))
 }
@@ -712,7 +662,8 @@ func (h *Handlers) DeleteRun(c *gin.Context) {
 		case errors.Is(err, services.ErrRunNotDeletable):
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		default:
-			apierr.Internal(c, err)
+			_ = c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
 		return
 	}
@@ -1089,7 +1040,8 @@ func (h *Handlers) DeleteArtifact(c *gin.Context) {
 		case errors.Is(err, services.ErrArtifactRunNotTerminal):
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		default:
-			apierr.Internal(c, err)
+			_ = c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
 		return
 	}
@@ -1184,7 +1136,8 @@ func (h *Handlers) CreateAgent(c *gin.Context) {
 		return
 	}
 	if err := h.Skill.Save(agent); err != nil {
-		apierr.Internal(c, err)
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	a, _ := h.Skill.Get(name)
@@ -1213,12 +1166,14 @@ func (h *Handlers) SaveAgent(c *gin.Context) {
 	newProjectID := strings.TrimSpace(agent.ProjectID)
 	if oldProjectID != "" && oldProjectID != newProjectID && h.Pm != nil {
 		if err := h.Pm.PurgeAgentProjectData(oldProjectID, name); err != nil {
-			apierr.Internal(c, err)
+			_ = c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "清除旧项目数据失败：" + err.Error()})
 			return
 		}
 	}
 	if err := h.Skill.Save(agent); err != nil {
-		apierr.Internal(c, err)
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "saved"})
@@ -1228,12 +1183,14 @@ func (h *Handlers) DeleteAgent(c *gin.Context) {
 	name := c.Param("name")
 	if h.Pm != nil {
 		if err := h.Pm.PurgeAgentEverywhere(name); err != nil {
-			apierr.Internal(c, err)
+			_ = c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "清除 Agent 项目数据失败：" + err.Error()})
 			return
 		}
 	}
 	if err := h.Skill.Delete(name); err != nil {
-		apierr.Internal(c, err)
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	// Cascade organization references after the agent directory is gone so a
@@ -1241,7 +1198,8 @@ func (h *Handlers) DeleteAgent(c *gin.Context) {
 	// cascade write fails, Get() prune self-heals dangling parentAgent on read.
 	if h.Org != nil {
 		if err := h.Org.OnDeleteAgent(name); err != nil {
-			apierr.Internal(c, err)
+			_ = c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 	}
@@ -1279,17 +1237,22 @@ func (h *Handlers) RenameAgent(c *gin.Context) {
 		return
 	}
 	if err := h.Skill.Rename(old, name); err != nil {
-		apierr.Internal(c, err)
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	if h.Pm != nil && name != old {
 		if err := h.Pm.RenameAgentScopedData(old, name); err != nil {
 			if rbErr := h.Skill.Rename(name, old); rbErr != nil {
+				_ = c.Error(err)
 				_ = c.Error(rbErr)
-				apierr.Internal(c, err)
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": err.Error() + "; rename rollback failed: " + rbErr.Error(),
+				})
 				return
 			}
-			apierr.Internal(c, err)
+			_ = c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "重命名 Agent 数据失败：" + err.Error()})
 			return
 		}
 	}
@@ -1297,8 +1260,11 @@ func (h *Handlers) RenameAgent(c *gin.Context) {
 		if err := h.Org.OnRenameAgent(old, name); err != nil {
 			// Roll back the directory rename so org and skill stay aligned.
 			if rbErr := h.Skill.Rename(name, old); rbErr != nil {
+				_ = c.Error(err)
 				_ = c.Error(rbErr)
-				apierr.Internal(c, err)
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": err.Error() + "; rename rollback failed: " + rbErr.Error(),
+				})
 				return
 			}
 			if h.Pm != nil && name != old {
@@ -1306,7 +1272,8 @@ func (h *Handlers) RenameAgent(c *gin.Context) {
 					_ = c.Error(rbData)
 				}
 			}
-			apierr.Internal(c, err)
+			_ = c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 	}
@@ -1316,8 +1283,11 @@ func (h *Handlers) RenameAgent(c *gin.Context) {
 		if err != nil {
 			// Roll back Skill/Pm/Org so workflow refs and directory stay aligned.
 			if rbErr := h.Skill.Rename(name, old); rbErr != nil {
+				_ = c.Error(err)
 				_ = c.Error(rbErr)
-				apierr.Internal(c, err)
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": err.Error() + "; rename rollback failed: " + rbErr.Error(),
+				})
 				return
 			}
 			if h.Pm != nil {
@@ -1330,7 +1300,8 @@ func (h *Handlers) RenameAgent(c *gin.Context) {
 					_ = c.Error(rbOrg)
 				}
 			}
-			apierr.Internal(c, err)
+			_ = c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "重命名工作流引用失败：" + err.Error()})
 			return
 		}
 		updatedWorkflowCount = n
@@ -1347,7 +1318,8 @@ func (h *Handlers) GetAgentsOrg(c *gin.Context) {
 	}
 	org, err := h.Org.Get()
 	if err != nil {
-		apierr.Internal(c, err)
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, org)
@@ -1383,7 +1355,8 @@ func (h *Handlers) PutAgentsOrg(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		apierr.Internal(c, err)
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, org)
@@ -1398,7 +1371,8 @@ func (h *Handlers) ExportAgent(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		apierr.Internal(c, err)
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.Header("Content-Type", "application/zip")

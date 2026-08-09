@@ -24,8 +24,6 @@ type CronTokenHooks struct {
 // egress (changed / unchanged / failed).
 type CronDelivery struct {
 	ProjectID string
-	RunID     string
-	DedupeKey string
 	Category  string // job name / pr / daily — used for minimal templates
 	Kind      string // changed | unchanged | failed (empty → classify from Text)
 	Text      string
@@ -300,7 +298,6 @@ func (s *CronScheduler) deliverCronFailure(job *models.AgentCronJob, reason stri
 	}
 	d := CronDelivery{
 		ProjectID: job.ProjectID,
-		DedupeKey: "cron-failure:" + job.ID + ":" + uuid.NewString(),
 		Category:  category,
 		Kind:      "failed",
 		Text:      text,
@@ -341,7 +338,6 @@ func (s *CronScheduler) maybeDeliver(job *models.AgentCronJob, userMsg models.Ch
 	}
 	d := CronDelivery{
 		ProjectID: job.ProjectID,
-		DedupeKey: "cron-result:" + job.ID + ":" + userMsg.ID,
 		Category:  category,
 		Kind:      kind,
 		Text:      text,

@@ -1,18 +1,35 @@
 package qq
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/cocofhu/approving/internal/channels"
-	"github.com/cocofhu/approving/internal/sendable"
 )
+
+func TestIsImageAttachment(t *testing.T) {
+	// Helper still classifies mime/ext; inbound path no longer filters on it
+	// (PDF/zip are accepted via downloadImage). Outbound image send still uses
+	// filterSendableImages separately.
+	cases := []struct {
+		att  attachment
+		want bool
+	}{
+		{attachment{ContentType: "image/png"}, true},
+		{attachment{ContentType: "image/jpeg"}, true},
+		{attachment{Filename: "photo.PNG"}, true},
+		{attachment{URL: "https://x.com/a.webp"}, true},
+		{attachment{ContentType: "application/pdf", Filename: "doc.pdf"}, false},
+		{attachment{}, false},
+	}
+	for _, c := range cases {
+		if got := isImageAttachment(c.att); got != c.want {
+			t.Errorf("isImageAttachment(%+v) = %v want %v", c.att, got, c.want)
+		}
+	}
+}
 
 func TestFallbackAttachmentName(t *testing.T) {
 	if got := fallbackAttachmentName(attachment{Filename: ""}, "application/pdf"); got != "attachment.pdf" {
@@ -174,158 +191,6 @@ func TestNewAdapterSandboxBase(t *testing.T) {
 	qa := a.(*Adapter)
 	if qa.client.apiBase != sandboxAPIBase {
 		t.Fatalf("apiBase = %q want sandbox base", qa.client.apiBase)
-	}
-}
-
-// testAdapter builds an adapter talking to srvURL with a pre-primed token so no
-// real QQ endpoint is contacted.
-func testAdapter(t *testing.T, srvURL string) *Adapter {
-	t.Helper()
-	a, err := New(channels.AdapterConfig{
-		Type: "qq", AppID: "app", AppSecret: "sec", ProjectID: "proj",
-		Config: map[string]any{"apiBase": srvURL, "markdown": false},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	qa := a.(*Adapter)
-	qa.client.token = "token"
-	qa.client.tokenExp = time.Now().Add(time.Hour)
-	return qa
-}
-
-func testEnvelope() sendable.DeliveryEnvelope {
-	return sendable.AppendSendable(sendable.DeliveryEnvelope{
-		Priority: sendable.PriorityHigh, RunID: "r1", ProjectID: "proj",
-		ConversationID: "user1", UserID: "user1",
-		Reason: "test", Kind: sendable.KindSafetyNotice,
-	}, sendable.ChannelQQ)
-}
-
-func TestSendReturnsRealMessageID(t *testing.T) {
-	var paths []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		paths = append(paths, r.URL.Path)
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case strings.HasSuffix(r.URL.Path, "/files"):
-			_, _ = w.Write([]byte(`{"file_info":"file-1"}`))
-		default:
-			_, _ = w.Write([]byte(`{"id":"MSG-REAL-1"}`))
-		}
-	}))
-	defer srv.Close()
-	a := testAdapter(t, srv.URL)
-
-	res, err := a.Send(context.Background(), channels.OutboundMessage{
-		Scene: channels.SceneC2C, ConversationID: "user1", Text: "hello",
-		ImageURLs: []string{"https://x.com/a.png"}, Envelope: testEnvelope(),
-	})
-	if err != nil {
-		t.Fatalf("Send: %v", err)
-	}
-	// Text goes first, so the multi-part send is identified by the text message.
-	if res.MessageID != "MSG-REAL-1" {
-		t.Fatalf("MessageID = %q want the id from the QQ response", res.MessageID)
-	}
-	if len(paths) != 3 {
-		t.Fatalf("request paths = %v want text + upload + media", paths)
-	}
-}
-
-func TestSendWithoutResponseIDReportsNoMessageID(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{}`))
-	}))
-	defer srv.Close()
-	a := testAdapter(t, srv.URL)
-
-	res, err := a.Send(context.Background(), channels.OutboundMessage{
-		Scene: channels.SceneGroup, ConversationID: "group1", Text: "hello",
-		Envelope: testEnvelope(),
-	})
-	if err != nil {
-		t.Fatalf("Send: %v", err)
-	}
-	// No id in the response means no id at all: nothing local may stand in.
-	if res.MessageID != "" {
-		t.Fatalf("MessageID = %q want empty when QQ reported none", res.MessageID)
-	}
-}
-
-func TestSendGuildReturnsRealMessageID(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"GUILD-MSG-1"}`))
-	}))
-	defer srv.Close()
-	a := testAdapter(t, srv.URL)
-
-	res, err := a.Send(context.Background(), channels.OutboundMessage{
-		Scene: channels.SceneGuild, ConversationID: "chan1", Text: "hello",
-		Envelope: testEnvelope(),
-	})
-	if err != nil {
-		t.Fatalf("Send: %v", err)
-	}
-	if res.MessageID != "GUILD-MSG-1" {
-		t.Fatalf("MessageID = %q", res.MessageID)
-	}
-}
-
-func TestSendFailClosedOnPolicyGate(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatalf("gate must close before any request (%s)", r.URL.Path)
-	}))
-	defer srv.Close()
-	a := testAdapter(t, srv.URL)
-
-	// Internal-only envelope: the adapter's second gate refuses it.
-	if _, err := a.Send(context.Background(), channels.OutboundMessage{
-		Scene: channels.SceneC2C, ConversationID: "user1", Text: "hello",
-		Envelope: sendable.Internal(sendable.KindAgentRaw, "not_sendable"),
-	}); err == nil {
-		t.Fatal("Send must fail closed for a non-sendable envelope")
-	}
-}
-
-func TestApplyOversizedNoticeRoutesThroughManager(t *testing.T) {
-	base := channels.InboundMessage{
-		Scene: channels.SceneC2C, ConversationID: "user1", UserID: "user1", MessageID: "m1",
-	}
-
-	// Nothing but rejected attachments: the tip becomes a notice for the
-	// Manager's single egress, keyed for reconnect idempotency.
-	only := applyOversizedNotice(base, []string{"big.zip"})
-	if only.Safety == nil || !only.Safety.Only {
-		t.Fatalf("pure oversize inbound = %+v want a notice-only safety notice", only)
-	}
-	if only.Safety.DedupeKey != "m1:oversize" || only.Safety.Reason != "oversized_attachment" {
-		t.Fatalf("safety notice = %+v", only.Safety)
-	}
-	if !strings.Contains(only.Safety.Text, "big.zip") ||
-		!strings.Contains(only.Safety.Text, fmt.Sprintf("%d MiB", qqAttachMaxMiB)) {
-		t.Fatalf("safety notice text = %q", only.Safety.Text)
-	}
-	if only.Text != "" {
-		t.Fatalf("pure oversize must not fabricate turn text: %q", only.Text)
-	}
-
-	// With user text the turn still runs and the tip rides along.
-	mixed := base
-	mixed.Text = "看下这个"
-	mixed = applyOversizedNotice(mixed, []string{"big.zip"})
-	if mixed.Safety != nil {
-		t.Fatalf("mixed inbound must not short-circuit the turn: %+v", mixed.Safety)
-	}
-	if !strings.Contains(mixed.Text, "看下这个") || !strings.Contains(mixed.Text, "big.zip") {
-		t.Fatalf("mixed text = %q", mixed.Text)
-	}
-
-	// No rejected attachment changes nothing.
-	if got := applyOversizedNotice(base, nil); got.Safety != nil || got.Text != "" {
-		t.Fatalf("unchanged inbound = %+v", got)
 	}
 }
 

@@ -38,7 +38,6 @@ type RunFailureInfo struct {
 // empty: early-exit / panic paths without StateRun.error fall back to a
 // human-readable default. Call after finalizeActiveStateRuns when possible so
 // in-flight nodes that were force-failed contribute their error text.
-// Sensitive token/Bearer/key shapes in reason and log tails are redacted.
 func (s *RunService) AggregateRunFailure(runID string) RunFailureInfo {
 	info := RunFailureInfo{}
 	if runID == "" || s == nil || s.db == nil {
@@ -66,7 +65,6 @@ func (s *RunService) AggregateRunFailure(runID string) RunFailureInfo {
 	if info.Reason == "" {
 		info.Reason = DefaultRunFailureReason
 	}
-	info.Reason = RedactSensitiveString(info.Reason)
 
 	logContent := s.sandboxLogContent(runID, info.FailedNode)
 	if logContent != "" {
@@ -101,18 +99,17 @@ func (info RunFailureInfo) ShortDisplayReason(max int) string {
 
 // MarshalRunErrorJSON serializes RunFailureInfo for ArtifactService.Save.
 // The reason field uses DisplayReason so empty-product consumers see the same
-// human text as the Web banner. Sensitive shapes are redacted before marshal.
+// human text as the Web banner.
 func MarshalRunErrorJSON(info RunFailureInfo) (string, error) {
-	reason := RedactSensitiveString(info.DisplayReason())
 	payload := map[string]any{
-		"reason":       reason,
+		"reason":       info.DisplayReason(),
 		"noSandboxLog": info.NoSandboxLog,
 	}
 	if info.FailedNode != "" {
 		payload["failedNode"] = info.FailedNode
 	}
 	if info.LogSummaryOrRef != "" {
-		payload["logSummaryOrRef"] = RedactSensitiveString(info.LogSummaryOrRef)
+		payload["logSummaryOrRef"] = info.LogSummaryOrRef
 	}
 	b, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
@@ -121,9 +118,7 @@ func MarshalRunErrorJSON(info RunFailureInfo) (string, error) {
 	return string(b), nil
 }
 
-// TruncateLogSummary keeps the last N lines within a byte budget, then redacts
-// common secrets (token/Bearer/key prefixes) so sandbox log tails are safe in
-// run_error.json and failure UIs.
+// TruncateLogSummary keeps the last N lines within a byte budget.
 func TruncateLogSummary(content string) string {
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 	content = strings.TrimRight(content, "\n")
@@ -141,12 +136,7 @@ func TruncateLogSummary(content string) string {
 			out = out[i+1:]
 		}
 	}
-	return RedactSensitiveString(out)
-}
-
-// RunVarString returns a persisted run variable as a trimmed string.
-func (s *RunService) RunVarString(runID, name string) string {
-	return s.runVarString(runID, name)
+	return out
 }
 
 func (s *RunService) runVarString(runID, name string) string {
@@ -154,52 +144,13 @@ func (s *RunService) runVarString(runID, name string) string {
 	if err := s.db.Where("run_id = ? AND name = ?", runID, name).First(&rv).Error; err != nil {
 		return ""
 	}
-	return runVarValueString(rv.Value)
-}
-
-// DeliveryURLs returns http(s) values from run variables whose names look like
-// delivery links (name is "url" or ends with "_url"). Used to enrich completion
-// digests without hardcoding a single product term or variable.
-func (s *RunService) DeliveryURLs(runID string) []string {
-	if s == nil || s.db == nil {
-		return nil
-	}
-	runID = strings.TrimSpace(runID)
-	if runID == "" {
-		return nil
-	}
-	var rows []models.RunVariable
-	if err := s.db.Where("run_id = ?", runID).Find(&rows).Error; err != nil {
-		return nil
-	}
-	seen := map[string]bool{}
-	var out []string
-	for _, rv := range rows {
-		name := strings.ToLower(strings.TrimSpace(rv.Name))
-		if name != "url" && !strings.HasSuffix(name, "_url") {
-			continue
-		}
-		u := runVarValueString(rv.Value)
-		if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
-			continue
-		}
-		if seen[u] {
-			continue
-		}
-		seen[u] = true
-		out = append(out, u)
-	}
-	return out
-}
-
-func runVarValueString(v any) string {
-	switch x := v.(type) {
+	switch v := rv.Value.(type) {
 	case string:
-		return strings.TrimSpace(x)
+		return strings.TrimSpace(v)
 	case nil:
 		return ""
 	default:
-		return strings.TrimSpace(fmt.Sprint(x))
+		return strings.TrimSpace(fmt.Sprint(v))
 	}
 }
 

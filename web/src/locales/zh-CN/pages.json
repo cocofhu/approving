@@ -266,64 +266,6 @@
         "modeCustom": "自定义",
         "wfUpdated": "已更新"
       },
-      "eventRouting": {
-        "title": "运行事件去向",
-        "lead": "一次运行会在什么时候说话、说给谁听。会话一栏是回到派活的那个人，项目推送一栏是发到运维看板，两者是不同的受众。",
-        "colEvent": "事件",
-        "colLive": "会话",
-        "colTemplate": "项目推送",
-        "colUnbindable": "可解绑",
-        "yes": "是",
-        "no": "否",
-        "noEgress": "不进 IM",
-        "templateOff": "已关闭",
-        "templateOnWith": "开启（{kinds}）",
-        "loadFailed": "加载事件去向失败",
-        "footnote": "「可解绑」指能否在单个运行的详情页上切断它与来源会话的联系。项目推送不受解绑影响，要关请用上面的通知策略。",
-        "kinds": {
-          "waiting_human": "等待人工",
-          "failed": "运行失败",
-          "completed": "运行完成"
-        },
-        "events": {
-          "run_accepted": {
-            "label": "接单回执",
-            "trigger": "从会话派出的运行被接下时，每个运行一次"
-          },
-          "pm_notify_progress": {
-            "label": "执行方上报",
-            "trigger": "执行方报进度、卡住、需确认或给出结论时"
-          },
-          "pm_reply": {
-            "label": "执行方回话",
-            "trigger": "执行方为某一轮提交结论时"
-          },
-          "task_paused": {
-            "label": "停下等人",
-            "trigger": "运行停在需要人工处理的节点上"
-          },
-          "task_outcome": {
-            "label": "运行结束",
-            "trigger": "运行完成、失败或被取消"
-          },
-          "run_heartbeat": {
-            "label": "长跑主动汇报",
-            "trigger": "任务跑了很久还没有别的动静时，平台按自己的节奏说一句，执行方无感"
-          },
-          "origin_binding": {
-            "label": "绑定变更告知",
-            "trigger": "有人在运行详情页解除或恢复它与来源会话的绑定时"
-          },
-          "run_notification": {
-            "label": "项目通知模板",
-            "trigger": "按项目通知策略推送到运维会话，与来源会话无关"
-          },
-          "gate_auto_invoke": {
-            "label": "自动接管",
-            "trigger": "运行停在人工节点时，同时排队交给项目负责人自动处理"
-          }
-        }
-      },
       "audit": {
         "title": "审计",
         "loading": "加载审计事件…",
@@ -478,42 +420,6 @@
         "disabledHint": "需先在本页设置中绑定已有 Agent 并启用后，才能发起进度咨询。",
         "goSettings": "前往设置",
         "settings": "设置",
-        "tasks": "任务待办",
-        "tasksTitle": "会话任务待办",
-        "tasksHint": "渠道会话里还在「进行中」的任务账本。自动清理会收口临时行；这里可人工标完成或取消，避免干扰 Live 意图判断。",
-        "tasksEmpty": "没有进行中的任务",
-        "tasksEmptyHint": "新的渠道派活会出现在这里，结束后可手动收口。",
-        "tasksLoading": "加载任务…",
-        "tasksRefresh": "刷新",
-        "tasksLoadFailed": "加载任务失败",
-        "tasksCloseFailed": "更新任务失败",
-        "tasksMarkedDone": "已标为完成",
-        "tasksMarkedCancelled": "已取消",
-        "tasksMarkDone": "完成",
-        "tasksMarkCancel": "取消",
-        "tasksEphemeral": "临时",
-        "tasksConversation": "会话",
-        "traces": "调用链",
-        "tracesTitle": "IM 调用链",
-        "tracesHint": "每条渠道入站消息的 Live 路由样本：route、spans、模型与出站结果。用来排查静默、超时和乱回。",
-        "tracesEmpty": "还没有调用链样本",
-        "tracesEmptyHint": "有 QQ / 渠道消息进来后会出现在这里。也可按会话或 traceId 精确查。",
-        "tracesLoading": "加载调用链…",
-        "tracesRefresh": "刷新",
-        "tracesSearch": "查询",
-        "tracesLoadFailed": "加载调用链失败",
-        "tracesFilterConversation": "会话 ID",
-        "tracesFilterConversationPh": "可选，如 QQ conversationId",
-        "tracesFilterTrace": "Trace ID",
-        "tracesFilterTracePh": "可选，如 tr-xxxxxxxxxxxx",
-        "tracesDegraded": "降级",
-        "tracesSpans": "调用步骤",
-        "tracesNoSpans": "此轮没有记录 spans",
-        "tracesEgress": "出站层",
-        "tracesOutcome": "工作层结论",
-        "tracesActions": "Actions",
-        "tracesTools": "Tool results",
-        "tracesRaw": "模型原始输出",
         "backToChat": "返回咨询",
         "threads": "会话",
         "newThread": "新建",
@@ -521,12 +427,8 @@
         "channelUntitled": "未命名会话",
         "channelSource": "来自 QQ Channel",
         "channelReadonlyTitle": "来自 QQ，请在 QQ 侧回复",
-        "channelReadonlyHint": "渠道会话在 Web 只读：不可发送；可清空上下文让负责人重新开聊",
+        "channelReadonlyHint": "渠道会话在 Web 只读：不可发送、不可删除",
         "channelViewDetail": "查看详情",
-        "channelClearContext": "清空上下文",
-        "channelClearContextConfirm": "确认清空该渠道会话的对话上下文？消息记录与进行中的会话任务会被清掉，会话本身保留，下次在 QQ 说话会像新开一场。",
-        "channelClearContextDone": "已清空上下文",
-        "channelClearContextFailed": "清空上下文失败",
         "channelDetailTitle": "会话详情",
         "channelDetailLabelTitle": "标题",
         "channelDetailLabelSource": "来源",
@@ -904,21 +806,6 @@
       "cancelWarning": "取消后该 Run 将停止并变为 cancelled。排队中的任务不会开始执行；进行中的步骤会被中断。此操作不可恢复为继续执行。",
       "cancelConfirm": "仅停止这一次 Run；取消成功后将停留在详情页并刷新状态。",
       "cancelSuccess": "已取消运行",
-      "originBinding": {
-        "chipBound": "会话同步中",
-        "chipUnbound": "已停止会话同步",
-        "titleBound": "这个运行的进展会同步回会话 {conversation}",
-        "titleUnbound": "已解除绑定：不再往会话 {conversation} 发消息，进展只在这个页面上看",
-        "unbindAction": "解除会话绑定",
-        "rebindAction": "恢复会话绑定",
-        "confirmTitle": "解除会话绑定",
-        "confirmBody": "解除后，这个运行的进展、暂停和结果都不会再发到会话 {conversation}。任务本身继续跑，状态照常记录。",
-        "confirmHint": "会先在那个会话里说一声，免得对方一直干等。之后随时可以恢复。",
-        "confirmAction": "确认解除",
-        "unboundToast": "已解除绑定，并在会话里说明了",
-        "unboundSilentToast": "已解除绑定；没能在会话里说明，对方那边会直接安静下来",
-        "reboundToast": "已恢复会话绑定"
-      },
       "cancelErrorNotFound": "运行不存在或已删除",
       "cancelErrorNotCancellable": "当前状态不可取消（可能已完成）",
       "cancelErrorGeneric": "取消失败",
@@ -1049,81 +936,19 @@
         "capacity": {
           "title": "沙箱容量",
           "desc": "展示容量相关占用（测试沙箱 + running workflow）的实时合计与分项用量；测试沙箱上限可单独配置。"
-        },
-        "live": {
-          "title": "对话模型",
-          "desc": "IM 对话由一个快速模型接待：它直接回答能当场答的问题，判断需要读项目才能做的事再交给沙箱。未配置时全部消息都走沙箱，功能不缺但每条都慢。下方还可调节它看到多少历史与台账。任何 OpenAI 兼容接口都可以，改完立即生效，无需重启。"
         }
       },
       "labels": {
         "max_concurrent_runs": "最大并发运行数",
         "run_sandbox_ttl_minutes": "运行沙箱保留时长",
         "test_sandbox_ttl_minutes": "测试沙箱空闲 TTL",
-        "max_test_sandboxes": "最大测试沙箱数",
-        "live_base_url": "接口地址",
-        "live_model": "模型名称",
-        "live_api_key": "密钥",
-        "live_timeout_seconds": "单次调用超时",
-        "live_transcript_window": "对话历史条数",
-        "live_ledger_limit": "台账任务条数",
-        "live_recent_terminal_hours": "终态任务回看",
-        "live_max_concurrent_work": "会话并发任务",
-        "live_tool_loop_limit": "单轮工具循环",
-        "live_max_tokens": "单次回复上限",
-        "live_temperature": "回话发挥空间",
-        "run_heartbeat_minutes": "长跑任务主动汇报间隔",
-        "live_system_prompt_body": "对话模型指令正文",
-        "live_synthesis_prompt_body": "汇报措辞指令正文"
+        "max_test_sandboxes": "最大测试沙箱数"
       },
       "settings": {
         "max_concurrent_runs": "同时处于 running 状态的 workflow 运行数上限。由 APPROVING_MAX_RUNS 环境变量锁定时页面只读。",
         "run_sandbox_ttl_minutes": "workflow 回合结束后，运行沙箱继续保活的分钟数，便于 agent 继续写产物。",
         "test_sandbox_ttl_minutes": "测试沙箱在无活动后的空闲销毁时间，避免长期占用资源。",
-        "max_test_sandboxes": "活跃测试沙箱数达到此上限时，新建测试沙箱请求将被后端拒绝（最小值 ≥ 1，不设最大值上限）。",
-        "live_base_url": "OpenAI 兼容的接口根地址，例如 https://api.example.com/v1，系统会在其后拼接 /chat/completions。",
-        "live_model": "传给该接口的模型名称。选一个快的——这一层的价值就在于秒级回应，慢模型不如直接交给沙箱。",
-        "live_api_key": "以 Bearer token 发送，本机或内网模型可以留空。加密存储，保存后页面只显示掩码；留空提交表示不修改已存的密钥。",
-        "live_timeout_seconds": "会话层每次调模型的上限（路由、结论转述、后台收尾合成共用）。超时不报错：路由超时会先 ack 再交给沙箱；转述超时则直接发工作层原文。本地慢模型建议 ≥120 秒。",
-        "live_transcript_window": "快模型每轮能看到的最近对话条数（用户消息 + 已送达回复）。加长能记住更早的讨论，但会变慢、更贵；默认 20。",
-        "live_ledger_limit": "briefing / get_status 里展示的在跑任务与近期终态任务条数上限。默认 5。",
-        "live_recent_terminal_hours": "已完成 / 失败 / 取消的任务还会出现在台账里多久。超过此窗口的终态任务不再进入快模型上下文。默认 24 小时。",
-        "live_max_concurrent_work": "同一会话同时挂着的任务数上限；满了之后新派活会被拒，应改用 refine 或先取消一件。默认 3。",
-        "live_tool_loop_limit": "快模型在一轮里最多调用工具的次数（查状态、派活、取消等）。超过则把本轮交给沙箱，避免空转。默认 3。",
-        "live_max_tokens": "快模型单次 completion 的 max_tokens。太小可能截断回复；太大浪费且变慢。默认 2048。",
-        "live_temperature": "模型措辞的随机程度，0 表示每次都说得几乎一样，越大越放得开。留空则不下发这个参数，按端点自己的默认值走。",
-        "run_heartbeat_minutes": "一个任务跑了这么久还没动静，平台就主动去会话里说一句进展。填 0 表示不主动汇报，只在任务停下等人或结束时才说话。",
-        "live_system_prompt_body": "快模型判断意图、派活和接话时遵循的指令正文。留空用内置默认。上方那段固定前缀由平台拼接，改不掉——它定的是「你是谁、你的话会原样发出去」，丢了模型会在 IM 里自称助手。",
-        "live_synthesis_prompt_body": "任务有结果后，快模型把结论讲给对方听时遵循的指令正文。留空用内置默认，同样自带固定前缀。"
-      },
-      "liveUnconfigured": "尚未配置：当前每条 IM 消息都会交给沙箱，功能完整但每条都要等几十秒。填好地址和模型即可启用，本机或内网模型通常不需要密钥。",
-      "promptPrefix": "固定前缀（不可修改）",
-      "blankUsesBuiltIn": "留空即用内置默认",
-      "blankUsesEndpointDefault": "留空按端点默认",
-      "showBuiltIn": "看看内置默认写的是什么",
-      "liveSecretStored": "已保存，留空则不修改",
-      "liveSecretEmpty": "尚未配置",
-      "liveTest": {
-        "title": "在线测试",
-        "desc": "测的是当前表单里的值，不用先保存。除了连通性，还会看这个模型能不能发出工具调用——不能的话它会把所有消息都自己答掉，永远不转交给项目。",
-        "action": "测试",
-        "running": "测试中…",
-        "pass": "可用",
-        "fail": "不可用",
-        "latency": "往返 {ms} ms",
-        "sample": "模型回了：",
-        "failed": "测试请求没发出去",
-        "checks": {
-          "reachable": "连通",
-          "toolCalls": "工具调用"
-        }
-      },
-      "liveRuntime": {
-        "title": "运行状况",
-        "desc": "自本次启动以来这一层真实处理的消息。测试按钮只能证明配置可用，这里才能看出线上有没有在走。",
-        "neverCalled": "配置可用，但启动至今这一层一次都没被调用过。IM 渠道可能没在跑，或者消息没走到这里——此时每条消息都直接交给沙箱，功能不缺但都慢。",
-        "counts": "调用 {calls} 次，失败 {failed} 次",
-        "avgLatency": "成功调用平均 {ms} ms",
-        "lastFailure": "最近一次失败："
+        "max_test_sandboxes": "活跃测试沙箱数达到此上限时，新建测试沙箱请求将被后端拒绝（最小值 ≥ 1，不设最大值上限）。"
       },
       "sourceLabels": {
         "env": "环境变量",

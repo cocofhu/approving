@@ -686,10 +686,6 @@ func AllModels() []any {
 		&AgentCronJob{}, &AgentCronRun{}, &ChannelConfig{},
 		&ProjectAuditEvent{},
 		&NotifyDeliveryReceipt{},
-		&SendableDeliveryReceipt{},
-		&TaskIdentity{}, &MessageBinding{}, &ConversationFocus{}, &RiskConfirmationTicket{},
-		&PendingChannelTurn{},
-		&LiveDecisionSample{},
 	}
 }
 

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/textutil"
 )
 
 // PmProgress aggregates project-scoped progress facts for the PM MCP.
@@ -367,7 +366,10 @@ func strAny(v any) string {
 }
 
 func truncateStr(s string, n int) string {
-	return textutil.TruncateBytes(s, n, "…")
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
 
 func formatDuration(d time.Duration) string {

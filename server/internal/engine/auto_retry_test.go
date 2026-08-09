@@ -1,10 +1,8 @@
 package engine
 
 import (
-	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cocofhu/approving/internal/models"
 )
@@ -191,38 +189,6 @@ func TestStaleNodeCompleteNotReusedAfterRunAgentError(t *testing.T) {
 	if !strings.Contains(sr.Error, "node_complete") && !strings.Contains(sr.OutputMd, "node_complete") {
 		t.Fatalf("want missing node_complete after stale mark cleared, got err=%q outputMd=%q",
 			sr.Error, sr.OutputMd)
-	}
-}
-
-// TestTryAutoRetryCancelledDuringBackoff: Cancel/timeout during the auto-retry
-// pause must abort the wait and return false (do not continue retrying).
-func TestTryAutoRetryCancelledDuringBackoff(t *testing.T) {
-	prev := autoRetryBackoff
-	autoRetryBackoff = 2 * time.Second
-	t.Cleanup(func() { autoRetryBackoff = prev })
-
-	eng, _, _ := setupEngineGraphP(t, autoRetryGraph())
-	eng.SetAutoRetryMax(3)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	c := &execCtx{
-		run:         &models.Run{ID: "run-cancel-backoff"},
-		autoRetries: map[string]int{},
-		ctx:         ctx,
-	}
-	go func() {
-		time.Sleep(40 * time.Millisecond)
-		cancel()
-	}()
-
-	start := time.Now()
-	ok := eng.tryAutoRetry(c, &models.Node{ID: "risky"}, nodeOutcome{retryable: true, err: "transient"})
-	elapsed := time.Since(start)
-	if ok {
-		t.Fatal("tryAutoRetry should return false when cancelled during backoff")
-	}
-	if elapsed >= 1500*time.Millisecond {
-		t.Fatalf("expected early return on cancel, took %v", elapsed)
 	}
 }
 

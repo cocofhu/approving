@@ -25,14 +25,7 @@ import {
   initStatusFilterFromStorage,
 } from '@/lib/useStatusFilter'
 import { useBreakpoint } from '@/lib/useBreakpoint'
-import {
-  fmtTime,
-  fmtDuration,
-  truncateText,
-  formatTrigger,
-  formatRunOrigin,
-  formatRunOriginTitle,
-} from '@/lib/format'
+import { fmtTime, fmtDuration, truncateText, formatTrigger } from '@/lib/format'
 import type { Run } from '@/lib/types'
 
 const PAGE_SIZE = 20
@@ -553,12 +546,6 @@ onUnmounted(() => {
             </div>
             <div class="flex flex-wrap items-center gap-1.5">
               <PriorityBadge :priority="r.priority" />
-              <span
-                v-if="formatRunOrigin(r.origin)"
-                data-testid="run-origin-chip"
-                class="chip text-txt2"
-                :title="formatRunOriginTitle(r.origin)"
-              >{{ formatRunOrigin(r.origin) }}</span>
               <span v-for="tag in r.tags || []" :key="tag" class="chip text-txt2">{{ tag }}</span>
             </div>
             <div class="flex min-w-0 flex-col gap-1">
@@ -747,15 +734,7 @@ onUnmounted(() => {
                   {{ r.workflowName }}
                   <span v-if="r.workflowVersion" class="chip ml-1.5">v{{ r.workflowVersion }}</span>
                 </td>
-                <td class="px-5 py-3 text-txt3">
-                  <div>{{ formatTrigger(r.trigger) }}</div>
-                  <div
-                    v-if="formatRunOrigin(r.origin)"
-                    data-testid="run-origin-chip"
-                    class="mt-1 max-w-[168px] truncate text-[11px] text-txt2"
-                    :title="formatRunOriginTitle(r.origin)"
-                  >{{ formatRunOrigin(r.origin) }}</div>
-                </td>
+                <td class="px-5 py-3 text-txt3">{{ formatTrigger(r.trigger) }}</td>
                 <td class="px-5 py-3 text-txt3">
                   <template v-if="r.status === 'queued'">
                     {{ fmtTime(r.createdAt ?? '') }}
