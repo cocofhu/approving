@@ -931,6 +931,66 @@ async function confirmCancelRun() {
   }
 }
 
+// Origin binding: this run reports back to the conversation that asked for it,
+// and can be detached from it. Only meaningful for runs that came from a
+// conversation at all — web-triggered runs have nothing to detach.
+const origin = computed(() => run.value?.origin)
+const originBound = computed(() => !!origin.value?.conversationId && !origin.value.unbound)
+const showOriginBinding = computed(() => !!origin.value?.conversationId)
+const showUnbindConfirm = ref(false)
+const bindingSaving = ref(false)
+const bindingError = ref('')
+
+const originBindingLabel = computed(() =>
+  originBound.value
+    ? t('pages.runDetail.originBinding.chipBound')
+    : t('pages.runDetail.originBinding.chipUnbound'),
+)
+
+const originBindingTitle = computed(() => {
+  const conversation = origin.value?.conversationId || ''
+  return originBound.value
+    ? t('pages.runDetail.originBinding.titleBound', { conversation })
+    : t('pages.runDetail.originBinding.titleUnbound', { conversation })
+})
+
+function openUnbindConfirm() {
+  if (bindingSaving.value) return
+  bindingError.value = ''
+  showUnbindConfirm.value = true
+}
+
+function closeUnbindConfirm() {
+  if (bindingSaving.value) return
+  showUnbindConfirm.value = false
+  bindingError.value = ''
+}
+
+async function setOriginBinding(bound: boolean) {
+  if (bindingSaving.value) return
+  bindingSaving.value = true
+  bindingError.value = ''
+  try {
+    const res = await api.patchRunOriginBinding(runId.value, bound)
+    showUnbindConfirm.value = false
+    if (bound) {
+      toast.success(t('pages.runDetail.originBinding.reboundToast'))
+    } else if (res.noticeDelivered) {
+      toast.success(t('pages.runDetail.originBinding.unboundToast'))
+    } else {
+      // Worth saying out loud: the requester was not told, so from their side
+      // the run simply goes quiet.
+      toast.success(t('pages.runDetail.originBinding.unboundSilentToast'))
+    }
+    await loadRun(false)
+  } catch (e) {
+    bindingError.value = e instanceof Error ? e.message : String(e || '')
+    if (bound) toast.error(bindingError.value)
+  } finally {
+    bindingSaving.value = false
+  }
+}
+
 const canDeleteRun = computed(() => {
   const s = run.value?.status
   return s === 'completed' || s === 'failed' || s === 'cancelled'
@@ -1844,10 +1904,31 @@ function selectExecution(nodeId: string, idx: number) {
               :priority="run.priority"
               class="shrink-0"
             />
+            <span
+              v-if="showOriginBinding"
+              data-testid="run-origin-binding-chip"
+              class="chip hidden shrink-0 md:inline-flex"
+              :class="originBound ? 'text-txt2' : 'text-txt3 line-through'"
+              :title="originBindingTitle"
+            >{{ originBindingLabel }}</span>
           </div>
           <div data-testid="run-header-actions" class="flex flex-wrap items-center gap-2 pl-10 md:ml-auto md:shrink-0 md:pl-0">
             <AppButton variant="ghost" size="sm" icon="edit" @click="router.push('/workflows/' + run.workflowId + '/edit')">{{ t('common.buttons.edit') }}</AppButton>
             <AppButton variant="ghost" size="sm" icon="doc" @click="showDetail = true">{{ t('common.buttons.details') }}</AppButton>
+            <AppButton
+              v-if="showOriginBinding"
+              data-testid="run-origin-binding-btn"
+              variant="ghost"
+              size="sm"
+              :disabled="bindingSaving"
+              @click="originBound ? openUnbindConfirm() : setOriginBinding(true)"
+            >
+              {{
+                originBound
+                  ? t('pages.runDetail.originBinding.unbindAction')
+                  : t('pages.runDetail.originBinding.rebindAction')
+              }}
+            </AppButton>
             <AppButton
               data-testid="export-logs-btn"
               variant="ghost"
@@ -2475,6 +2556,47 @@ function selectExecution(nodeId: string, idx: number) {
           @click="confirmCancelRun"
         >
           {{ cancellingRun ? t('common.buttons.cancelling') : t('common.buttons.confirmCancelRun') }}
+        </AppButton>
+      </template>
+    </AppModal>
+
+    <AppModal
+      :open="showUnbindConfirm"
+      :title="t('pages.runDetail.originBinding.confirmTitle')"
+      :width="440"
+      @close="closeUnbindConfirm"
+    >
+      <div class="space-y-3 text-sm text-txt2">
+        <p>
+          {{
+            t('pages.runDetail.originBinding.confirmBody', {
+              conversation: origin?.conversationId || '',
+            })
+          }}
+        </p>
+        <p class="text-[12px] text-txt3">{{ t('pages.runDetail.originBinding.confirmHint') }}</p>
+        <div
+          v-if="bindingError"
+          class="flex items-start gap-2 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-[12px] text-err"
+        >
+          <Icon name="alert" :size="14" class="mt-0.5" />{{ bindingError }}
+        </div>
+      </div>
+      <template #footer>
+        <AppButton variant="ghost" :disabled="bindingSaving" @click="closeUnbindConfirm">
+          {{ t('common.buttons.cancel') }}
+        </AppButton>
+        <AppButton
+          data-testid="confirm-unbind-run-btn"
+          variant="primary"
+          :disabled="bindingSaving"
+          @click="setOriginBinding(false)"
+        >
+          {{
+            bindingSaving
+              ? t('common.buttons.saving')
+              : t('pages.runDetail.originBinding.confirmAction')
+          }}
         </AppButton>
       </template>
     </AppModal>

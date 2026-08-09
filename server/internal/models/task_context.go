@@ -25,13 +25,23 @@ type TaskIdentity struct {
 	// OriginTraceID is the inbound turn that dispatched this task. Persisted
 	// write-once so reflow can join the terminal outcome to that turn without
 	// guessing from the newest sample in the origin conversation.
-	OriginTraceID string     `gorm:"size:64" json:"originTraceId,omitempty"`
-	Language      string     `gorm:"size:16" json:"language,omitempty"`
-	RecentContext string     `gorm:"type:text" json:"recentContext,omitempty"`
-	Status        string     `gorm:"size:32;index" json:"status"`
-	TerminalAt    *time.Time `gorm:"index" json:"terminalAt,omitempty"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	UpdatedAt     time.Time  `json:"updatedAt"`
+	OriginTraceID string `gorm:"size:64" json:"originTraceId,omitempty"`
+	// OriginUnboundAt detaches this task from its origin conversation without
+	// forgetting where it came from.
+	//
+	// Clearing OriginConversationID would have been the obvious way to do this
+	// and is wrong twice over: the origin fields are write-once, so the next
+	// UpdateIdentity would restore them, and an empty conversation makes
+	// delivery fall back to the project push target — which is how one user's
+	// results once landed in an unrelated cron session. A separate mark keeps
+	// the audit trail and gives delivery a state it can refuse outright.
+	OriginUnboundAt *time.Time `json:"originUnboundAt,omitempty"`
+	Language        string     `gorm:"size:16" json:"language,omitempty"`
+	RecentContext   string     `gorm:"type:text" json:"recentContext,omitempty"`
+	Status          string     `gorm:"size:32;index" json:"status"`
+	TerminalAt      *time.Time `gorm:"index" json:"terminalAt,omitempty"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	UpdatedAt       time.Time  `json:"updatedAt"`
 }
 
 // MessageBinding gives an explicit quoted/replied message precedence over

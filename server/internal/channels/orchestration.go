@@ -139,7 +139,7 @@ func (m *Manager) ReportRunProgress(ctx context.Context, req SendableRequest) (D
 		req.Kind = sendable.KindProgress
 	}
 	if req.Reason == "" {
-		req.Reason = "explicit_progress"
+		req.Reason = ReasonPMNotifyProgress
 	}
 	if req.Priority == "" {
 		req.Priority = sendable.PriorityNormal
@@ -167,9 +167,7 @@ func (m *Manager) EnsureRunAccepted(ctx context.Context, projectID, runID, qqUse
 			}
 		}
 	}
-	if scene == "" {
-		scene = SceneC2C
-	}
+	scene = normalizeScene(scene)
 	return m.SendRunAcceptanceAck(ctx, RunAcceptanceAck{
 		ProjectID: projectID, RunID: runID, Scene: scene,
 		ConversationID: conversationID, UserID: qqUserID,

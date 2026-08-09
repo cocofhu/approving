@@ -266,6 +266,60 @@
         "modeCustom": "Custom",
         "wfUpdated": "Updated"
       },
+      "eventRouting": {
+        "title": "Where run events go",
+        "lead": "When a run speaks, and who hears it. The conversation column is the person who asked for the work; the project push column is the ops target. They are different audiences, not duplicates.",
+        "colEvent": "Event",
+        "colLive": "Conversation",
+        "colTemplate": "Project push",
+        "colUnbindable": "Unbindable",
+        "yes": "Yes",
+        "no": "No",
+        "noEgress": "Never reaches IM",
+        "templateOff": "Switched off",
+        "templateOnWith": "On ({kinds})",
+        "loadFailed": "Could not load event routing",
+        "footnote": "\"Unbindable\" means a single run can be detached from its origin conversation on its detail page. Project push is unaffected by unbinding — switch it off in the notify policy above.",
+        "kinds": {
+          "waiting_human": "Waiting on a person",
+          "failed": "Run failed",
+          "completed": "Run completed"
+        },
+        "events": {
+          "run_accepted": {
+            "label": "Acceptance ack",
+            "trigger": "Once per run, when a run dispatched from a conversation is picked up"
+          },
+          "pm_notify_progress": {
+            "label": "Worker report",
+            "trigger": "When the worker reports progress, a blocker, a confirmation request, or a conclusion"
+          },
+          "pm_reply": {
+            "label": "Worker reply",
+            "trigger": "When the worker submits a conclusion for a turn"
+          },
+          "task_paused": {
+            "label": "Stopped for a person",
+            "trigger": "The run stopped at a node that needs someone"
+          },
+          "task_outcome": {
+            "label": "Run finished",
+            "trigger": "The run completed, failed, or was cancelled"
+          },
+          "origin_binding": {
+            "label": "Binding change notice",
+            "trigger": "When someone detaches or reconnects the run from its origin conversation on the run detail page"
+          },
+          "run_notification": {
+            "label": "Project notify template",
+            "trigger": "Pushed to the ops conversation per the project notify policy, regardless of origin"
+          },
+          "gate_auto_invoke": {
+            "label": "Automatic handover",
+            "trigger": "A pause at a human node also queues the project lead to handle it automatically"
+          }
+        }
+      },
       "audit": {
         "title": "Audit",
         "loading": "Loading audit events…",
@@ -846,6 +900,21 @@
       "cancelWarning": "Cancelling stops the run and sets its status to cancelled. Queued work will not start; in-progress steps are interrupted. This cannot be resumed as a continuing execution.",
       "cancelConfirm": "Only this run is stopped; you will stay on the detail page and see the updated status.",
       "cancelSuccess": "Run cancelled",
+      "originBinding": {
+        "chipBound": "Reports to conversation",
+        "chipUnbound": "Detached from conversation",
+        "titleBound": "Progress on this run goes back to conversation {conversation}",
+        "titleUnbound": "Detached: nothing is sent to conversation {conversation} any more; progress lives on this page",
+        "unbindAction": "Detach from conversation",
+        "rebindAction": "Reconnect to conversation",
+        "confirmTitle": "Detach from conversation",
+        "confirmBody": "Progress, pauses, and results for this run will no longer be sent to conversation {conversation}. The run itself keeps going and its status is still tracked.",
+        "confirmHint": "We'll say so in that conversation first, so nobody is left waiting. You can reconnect at any time.",
+        "confirmAction": "Detach",
+        "unboundToast": "Detached, and the conversation was told",
+        "unboundSilentToast": "Detached; the conversation could not be told, so it will simply go quiet there",
+        "reboundToast": "Reconnected to the conversation"
+      },
       "cancelErrorNotFound": "Run not found or already deleted",
       "cancelErrorNotCancellable": "This run status cannot be cancelled (it may already be finished)",
       "cancelErrorGeneric": "Failed to cancel run",

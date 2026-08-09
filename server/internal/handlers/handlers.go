@@ -75,7 +75,10 @@ type Handlers struct {
 	// LiveSamples is the per-turn decision / call-chain store for IM debug.
 	LiveSamples *services.LiveSampleService
 	// TaskContext backs the project-management 会话任务待办 list.
-	TaskContext    *services.TaskContextService
+	// OriginAnnouncer speaks into a run's origin conversation when its binding
+	// is changed from the web UI. Nil when no IM channel is wired.
+	OriginAnnouncer OriginAnnouncer
+	TaskContext     *services.TaskContextService
 	doctorMu       sync.Mutex
 	doctorSessions map[string]doctorArtifactSession
 }

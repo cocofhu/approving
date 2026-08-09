@@ -55,23 +55,23 @@ func (m *Manager) ReflowTaskOutcome(ctx context.Context, outcome TaskOutcome) er
 	if ctx == nil {
 		ctx = m.baseCtx
 	}
-	identity := m.identityForRun(runID, outcome.ProjectID)
+	origin := m.resolveRunOrigin(outcome.ProjectID, runID)
+	identity := origin.Identity
 	if identity == nil {
 		// No task identity means this Run was never started from a
 		// conversation; there is nobody waiting on it here.
 		return nil
 	}
+	// Ahead of the origin check on purpose: a detached Run stops talking, it
+	// does not stop being tracked. Skipping this would put the ledger back to
+	// answering with whatever status the task had when it was created.
 	m.syncTerminalStatus(identity, outcome)
 
-	conv := strings.TrimSpace(identity.OriginConversationID)
-	if conv == "" {
-		log.Debug().Str("run", runID).Msg("reflow: task has no origin conversation, skipping")
+	if !origin.Speaks() {
+		log.Debug().Str("run", runID).Msg("reflow: task outcome has nowhere to go, skipping")
 		return nil
 	}
-	scene := Scene(strings.TrimSpace(identity.OriginScene))
-	if scene == "" {
-		scene = SceneC2C
-	}
+	scene, conv := origin.Scene, origin.Conv
 
 	traceID := m.traceIDForReflow(identity)
 	text := m.synthesizeOutcome(ctx, identity, outcome, scene, conv, traceID)
@@ -82,7 +82,7 @@ func (m *Manager) ReflowTaskOutcome(ctx context.Context, outcome TaskOutcome) er
 		ProjectID: identity.ProjectID, Scene: scene, ConversationID: conv,
 		UserID: identity.OriginExternalUserID, RunID: runID,
 		TraceID: traceID,
-		Kind:    sendable.KindFinal, Reason: "task_outcome",
+		Kind:    sendable.KindFinal, Reason: ReasonTaskOutcome,
 		Priority: sendable.PriorityCritical,
 		// One conclusion per run per conversation, whatever path produced it.
 		DedupeKey: strings.Join([]string{"task-outcome", runID, conv}, ":"),
@@ -119,7 +119,8 @@ func (m *Manager) ReflowTaskPaused(ctx context.Context, pause TaskPause) error {
 	if ctx == nil {
 		ctx = m.baseCtx
 	}
-	identity := m.identityForRun(runID, pause.ProjectID)
+	origin := m.resolveRunOrigin(pause.ProjectID, runID)
+	identity := origin.Identity
 	if identity == nil {
 		// Nobody dispatched this from a conversation; the project-level notify
 		// is the only audience it has.
@@ -131,17 +132,15 @@ func (m *Manager) ReflowTaskPaused(ctx context.Context, pause TaskPause) error {
 	if services.IsTerminalTaskStatus(identity.Status) {
 		return nil
 	}
+	// Before the origin check for the same reason as the terminal write above:
+	// a detached Run still has to read as waiting on a person.
 	m.markTaskWaitingHuman(identity)
 
-	conv := strings.TrimSpace(identity.OriginConversationID)
-	if conv == "" {
-		log.Debug().Str("run", runID).Msg("reflow: paused task has no origin conversation, skipping")
+	if !origin.Speaks() {
+		log.Debug().Str("run", runID).Msg("reflow: paused task has nowhere to go, skipping")
 		return nil
 	}
-	scene := Scene(strings.TrimSpace(identity.OriginScene))
-	if scene == "" {
-		scene = SceneC2C
-	}
+	scene, conv := origin.Scene, origin.Conv
 
 	traceID := m.traceIDForReflow(identity)
 	language := taskLanguage(identity)
@@ -155,7 +154,7 @@ func (m *Manager) ReflowTaskPaused(ctx context.Context, pause TaskPause) error {
 		ProjectID: identity.ProjectID, Scene: scene, ConversationID: conv,
 		UserID: identity.OriginExternalUserID, RunID: runID,
 		TraceID: traceID,
-		Kind:    sendable.KindActionRequired, Reason: "task_paused",
+		Kind:    sendable.KindActionRequired, Reason: ReasonTaskPaused,
 		Priority: sendable.PriorityCritical,
 		// One nudge per pause. A run can stop at several nodes, and the same
 		// node can pause again on a later iteration, so both are in the key —
@@ -698,18 +697,6 @@ func (m *Manager) syncTerminalStatus(identity *models.TaskIdentity, outcome Task
 		log.Warn().Err(err).Str("run", identity.RunID).
 			Msg("reflow: writing terminal task status failed")
 	}
-}
-
-func (m *Manager) identityForRun(runID, projectID string) *models.TaskIdentity {
-	if m.taskContext == nil {
-		return nil
-	}
-	identity, err := m.taskContext.IdentityForRun(runID, projectID)
-	if err != nil {
-		log.Warn().Err(err).Str("run", runID).Msg("reflow: loading task identity failed")
-		return nil
-	}
-	return identity
 }
 
 // taskLanguage returns the language the task has been conducted in. Following

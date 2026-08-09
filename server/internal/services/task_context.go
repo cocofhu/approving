@@ -328,6 +328,42 @@ func (s *TaskContextService) IdentityForRun(runID, projectID string) (*models.Ta
 	return &identity, nil
 }
 
+// SetOriginBinding attaches or detaches a Run from the conversation that
+// created it, and reports the identity as it now stands.
+//
+// This deliberately does not go through UpdateIdentity: the origin fields are
+// write-once there, which is the right rule for "who owns this task's results"
+// and the wrong tool for a reversible switch. The mark is written directly so
+// the origin itself stays intact — a detached Run still knows where it came
+// from, which is what makes re-attaching possible and the audit trail readable.
+//
+// Returns nil when the Run has no ledger row: a Run that never came from a
+// conversation has no binding to change.
+func (s *TaskContextService) SetOriginBinding(projectID, runID string, bound bool) (*models.TaskIdentity, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("task context database is unavailable")
+	}
+	identity, err := s.IdentityForRun(runID, projectID)
+	if err != nil || identity == nil {
+		return nil, err
+	}
+	if strings.TrimSpace(identity.OriginConversationID) == "" {
+		return identity, nil
+	}
+	var mark *time.Time
+	if !bound {
+		now := time.Now()
+		mark = &now
+	}
+	if err := s.db.Model(&models.TaskIdentity{}).
+		Where("id = ?", identity.ID).
+		Update("origin_unbound_at", mark).Error; err != nil {
+		return nil, err
+	}
+	identity.OriginUnboundAt = mark
+	return identity, nil
+}
+
 // CountActive counts the user's non-terminal tasks in one conversation. Reply
 // formatting uses it to decide whether a task label is needed at all: with a
 // single task in flight the context is already unambiguous.

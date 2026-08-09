@@ -3,7 +3,9 @@ import type {
   Workflow,
   WorkflowVersion,
   WorkflowNotifyPolicy,
+  EventRouteStatus,
   Run,
+  RunOrigin,
   Artifact,
   InboxItem,
   AcpEvent,
@@ -356,6 +358,21 @@ export const api = {
   updateProject: (id: string, body: Partial<Project>) =>
     req<Project>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteProject: (id: string) => req<{ status: string }>(`/projects/${id}`, { method: 'DELETE' }),
+
+  /**
+   * Detach a run from the conversation that asked for it, or reconnect it.
+   * Detaching says goodbye there first; `noticeDelivered` says whether that
+   * actually reached anyone.
+   */
+  patchRunOriginBinding: (runId: string, bound: boolean) =>
+    req<{ origin: RunOrigin | null; noticeDelivered: boolean }>(
+      `/runs/${runId}/origin-binding`,
+      { method: 'PATCH', body: JSON.stringify({ bound }) },
+    ),
+
+  /** Which Run events reach a conversation vs the project push target. */
+  getProjectEventRouting: (id: string) =>
+    req<{ routes: EventRouteStatus[] }>(`/projects/${id}/event-routing`),
 
   /** Project audit timeline (paginated). Default time window: 24h. */
   listProjectAudit: (

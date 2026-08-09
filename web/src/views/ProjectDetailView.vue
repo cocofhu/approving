@@ -28,6 +28,7 @@ import PmLiveTracesPanel from '@/components/pm/PmLiveTracesPanel.vue'
 import TokenUsageHoverTip from '@/components/ui/TokenUsageHoverTip.vue'
 import ProjectAuditPanel from '@/components/project/ProjectAuditPanel.vue'
 import ProjectNotifyPanel from '@/components/project/ProjectNotifyPanel.vue'
+import ProjectEventRoutingPanel from '@/components/project/ProjectEventRoutingPanel.vue'
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard.vue'
 import type {
   ClarifyImage,
@@ -269,8 +270,13 @@ function onPmBindingChanged(b: PmLeaderBinding) {
   pmView.value = 'chat'
 }
 
+const eventRoutingRevision = ref(0)
+
 function onNotifyProjectUpdated(p: Project) {
   project.value = p
+  // The routing table resolves against the policy that was just saved, so it
+  // has to re-read rather than keep showing the previous answer.
+  eventRoutingRevision.value++
 }
 
 function openNotifyChannelSettings() {
@@ -990,6 +996,10 @@ onUnmounted(() => {
           :project="project"
           @updated="onNotifyProjectUpdated"
           @open-channel-settings="openNotifyChannelSettings"
+        />
+        <ProjectEventRoutingPanel
+          :project-id="projectId"
+          :revision="eventRoutingRevision"
         />
       </div>
 

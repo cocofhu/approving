@@ -1170,7 +1170,7 @@ func (m *Manager) DeliverRunNotifyTracked(projectID, text, trackID string) error
 			RunID:       runNotifyRunID(text),
 			TaskContext: runNotifyTaskContext(projectID, text),
 			ProjectID:   projectID, ConversationID: conv,
-			Reason: "run_notification", Kind: sendable.KindRunNotify, Structured: true,
+			Reason: ReasonRunNotification, Kind: sendable.KindRunNotify, Structured: true,
 		}, sendable.ChannelQQ),
 		Enqueued: time.Now(),
 	}
