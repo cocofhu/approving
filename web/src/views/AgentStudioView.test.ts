@@ -6,6 +6,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
+import enCommon from '@/locales/en/common.json'
+import enPages from '@/locales/en/pages.json'
 import type { Agent } from '@/lib/api'
 
 const mocks = vi.hoisted(() => ({
@@ -1014,6 +1016,180 @@ describe('AgentStudio mobile core path', () => {
     expect(wrapper.find('[data-test="org-switch"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('导入')
     expect(wrapper.text()).toContain('新建 Agent')
+    expect(wrapper.text()).not.toContain('配置可复用的 Agent')
+    expect(wrapper.text()).not.toContain('复制进沙箱')
+    wrapper.unmount()
+  })
+})
+
+describe('AgentStudio copy removal (subtitle + toolbar)', () => {
+  const subtitleZh = ['配置可复用的 Agent', '复制进沙箱', '/root/.cursor']
+  const subtitleEn = ['Reusable agents', 'copied to', '/root/.cursor']
+  const demoShell = [
+    '可复用 Agent 配置 · 组织与 skill_profile 引用',
+    '已拖入未分组',
+    'clearToast',
+  ]
+
+  function toolbar(wrapper: Awaited<ReturnType<typeof mountStudio>>) {
+    return wrapper.find('.mb-5.flex.shrink-0')
+  }
+
+  async function mountStudioEn() {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'en',
+      messages: { en: { ...enCommon, ...enPages } },
+    })
+    const router = await createStudioRouter()
+    return mount(AgentStudioView, {
+      global: {
+        plugins: [i18n, router],
+        stubs: {
+          AppButton: ButtonStub,
+          Icon: true,
+          AppModal: true,
+          CodeEditor: CodeEditorStub,
+          MarkdownSplitEditor: true,
+          ExplorerContextMenu: true,
+          AgentChatTester: true,
+          AgentGitGuide: true,
+          AgentCreateWizard: true,
+          AgentOrgSidebar: true,
+          AgentDataPanel: true,
+        },
+      },
+    })
+  }
+
+  it('hides zh subtitle, right-aligns desktop import/new, and does not add a page title', async () => {
+    mocks.listAgents.mockResolvedValue([agent('public')])
+    const wrapper = await mountStudio()
+    await flushPromises()
+
+    const text = wrapper.text()
+    for (const s of subtitleZh) expect(text).not.toContain(s)
+    for (const s of demoShell) expect(text).not.toContain(s)
+    expect(text).not.toMatch(/改前|改后/)
+    expect(wrapper.findAll('h1,h2').some((el) => /Agent\s*(管理|Studio)/i.test(el.text()))).toBe(false)
+
+    const bar = toolbar(wrapper)
+    expect(bar.exists()).toBe(true)
+    expect(bar.classes()).toContain('justify-end')
+    expect(bar.classes()).not.toContain('justify-between')
+    expect(bar.text()).toContain('导入')
+    expect(bar.text()).toContain('新建 Agent')
+    wrapper.unmount()
+  })
+
+  it('hides en subtitle and keeps Import / New agent', async () => {
+    mocks.listAgents.mockResolvedValue([agent('public')])
+    const wrapper = await mountStudioEn()
+    await flushPromises()
+
+    const text = wrapper.text()
+    for (const s of subtitleEn) expect(text).not.toContain(s)
+    expect(text).toContain('Import')
+    expect(text).toContain('New agent')
+    wrapper.unmount()
+  })
+})
+
+describe('AgentStudio org toast and remaining hints', () => {
+  const ModalStub = defineComponent({
+    props: { open: Boolean, title: String },
+    emits: ['close'],
+    template: '<div v-if="open" data-test="modal"><h2>{{ title }}</h2><slot /><slot name="footer" /></div>',
+  })
+  const SidebarStub = defineComponent({
+    emits: ['remove-from-group', 'move-agent', 'open-manage', 'select-agent'],
+    template:
+      '<div data-test="sidebar">' +
+      '<button data-test="remove-from-group" @click="$emit(\'remove-from-group\', \'legacy\', \'g1\')">remove</button>' +
+      '<button data-test="move-ungrouped" @click="$emit(\'move-agent\', \'legacy\', \'g1\', \'\')">ungroup</button>' +
+      '<button data-test="manage" @click="$emit(\'open-manage\')">manage</button>' +
+      '</div>',
+  })
+
+  async function mountHintStudio() {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const router = await createStudioRouter()
+    return mount(AgentStudioView, {
+      global: {
+        plugins: [i18n, router],
+        stubs: {
+          AppButton: ButtonStub,
+          Icon: true,
+          AppModal: ModalStub,
+          CodeEditor: CodeEditorStub,
+          MarkdownSplitEditor: true,
+          ExplorerContextMenu: true,
+          AgentChatTester: true,
+          AgentGitGuide: true,
+          AgentCreateWizard: true,
+          AgentOrgSidebar: SidebarStub,
+          AgentDataPanel: true,
+        },
+      },
+    })
+  }
+
+  beforeEach(() => {
+    mocks.listAgents.mockResolvedValue([agent('public')])
+    mocks.getAgentsOrg.mockResolvedValue({
+      revision: 1,
+      groups: [{ id: 'g1', name: 'Dev' }],
+      agents: { legacy: { groupIds: ['g1'] } },
+    })
+    mocks.saveAgentsOrg.mockImplementation(async (org: { revision?: number; groups?: unknown; agents?: unknown }) => ({
+      revision: (org.revision || 0) + 1,
+      groups: org.groups || [],
+      agents: org.agents || {},
+    }))
+  })
+
+  it('toasts on 移出本组 but not when dragging to ungrouped', async () => {
+    const wrapper = await mountHintStudio()
+    await flushPromises()
+
+    await wrapper.get('[data-test="move-ungrouped"]').trigger('click')
+    await flushPromises()
+    expect(document.body.textContent || '').not.toContain('已拖入未分组')
+    expect(document.body.textContent || '').not.toContain('已移出本组并立即保存')
+    expect(mocks.saveAgentsOrg).toHaveBeenCalled()
+
+    await wrapper.get('[data-test="remove-from-group"]').trigger('click')
+    await flushPromises()
+    expect(document.body.textContent || '').toContain('已移出本组并立即保存 · 实体仍在')
+    expect(document.body.textContent || '').not.toContain('已拖入未分组')
+    wrapper.unmount()
+  })
+
+  it('keeps MCP hint, platform-rules subtitle, manageIntro, and data/meta tabs', async () => {
+    const wrapper = await mountHintStudio()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('数据')
+    expect(wrapper.text()).toContain('元信息')
+    expect(wrapper.text()).not.toContain('可复用 Agent 配置 · 组织与 skill_profile 引用')
+    expect(wrapper.text()).not.toMatch(/改前|改后/)
+
+    await wrapper.findAll('button').find((item) => item.text().startsWith('MCP'))!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('整份 mcp.json 由你配置')
+    expect(wrapper.text()).toContain('/root/.codebuddy/mcp.json')
+
+    await wrapper.findAll('button').find((item) => item.text() === '平台规则')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('profiles/legacy/platform-rules/')
+
+    await wrapper.get('[data-test="manage"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('列出全部 Agent。此处「Rename」修改身份名称')
     wrapper.unmount()
   })
 })

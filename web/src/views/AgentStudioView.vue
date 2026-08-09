@@ -1859,9 +1859,8 @@ onBeforeUnmount(() => {
   <div class="flex h-full min-h-0 flex-col overflow-hidden">
     <div
       class="mb-5 flex shrink-0 gap-4"
-      :class="isMobile ? 'flex-col items-stretch' : 'items-end justify-between'"
+      :class="isMobile ? 'flex-col items-stretch' : 'justify-end'"
     >
-      <p class="max-w-3xl text-sm text-txt3">{{ t('pages.agentStudio.subtitle', { configRoot: draft?.layout?.configRoot || DEFAULT_CONFIG_ROOT }) }}</p>
       <div class="flex shrink-0 gap-2" :class="isMobile ? 'flex-col' : 'items-center'">
         <AppButton
           variant="outline"
