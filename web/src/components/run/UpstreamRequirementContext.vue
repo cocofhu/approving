@@ -19,18 +19,42 @@ import AppModal from '../ui/AppModal.vue'
 import StructuredArtifactView from './StructuredArtifactView.vue'
 import { api } from '@/lib/api'
 import { parseJsonState } from '@/lib/highlightJson'
+import { provideReviewAnnotate } from '@/lib/reviewAnnotate'
 import type { Artifact } from '@/lib/types'
 
-const props = defineProps<{
-  artifacts?: Artifact[]
-  runId?: string
-  /** Live run status; forwarded for structured views that need terminal error gating. */
-  runStatus?: string
-  /** Current main product name; skip when already reviewing this JSON. */
-  productName?: string | null
-  /** Gate body_template; used to skip when main preview already is the requirement. */
-  bodyTemplate?: string | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    artifacts?: Artifact[]
+    runId?: string
+    /** Live run status; forwarded for structured views that need terminal error gating. */
+    runStatus?: string
+    /** Current main product name; skip when already reviewing this JSON. */
+    productName?: string | null
+    /** Gate body_template; used to skip when main preview already is the requirement. */
+    bodyTemplate?: string | null
+    /**
+     * Review-desk opt-in: always-visible bar (title + hint + enlarge), no chevron /
+     * inline 40vh. GateApproval omits this and keeps the fold + inline default.
+     */
+    variant?: 'default' | 'persistent-bar'
+    /**
+     * Review-desk opt-in: re-provide annotate channel as disabled so AppModal
+     * Teleport cannot inherit ↗ from a parent review panel. GateApproval omits this.
+     */
+    disableAnnotate?: boolean
+  }>(),
+  {
+    variant: 'default',
+    disableAnnotate: false,
+  },
+)
+
+if (props.disableAnnotate) {
+  provideReviewAnnotate({
+    enabled: false,
+    annotate() {},
+  })
+}
 
 const { t } = useI18n()
 
@@ -57,9 +81,11 @@ const doc = ref<Record<string, unknown> | null>(null)
 
 const jsonState = computed(() => (rawContent.value ? parseJsonState(rawContent.value) : null))
 const enlargeLabel = computed(() => t('pages.gateApproval.upstreamEnlarge'))
+const persistentBar = computed(() => props.variant === 'persistent-bar')
 
 async function loadIfNeeded() {
-  if ((!expanded.value && !modalOpen.value) || !contextArtifact.value || loaded.value || loading.value) {
+  const wantInline = !persistentBar.value && expanded.value
+  if ((!wantInline && !modalOpen.value) || !contextArtifact.value || loaded.value || loading.value) {
     return
   }
   loading.value = true
@@ -114,11 +140,40 @@ watch(
     loadErr.value = ''
   },
 )
+
+watch(visible, (isVisible) => {
+  if (!isVisible) {
+    modalOpen.value = false
+    expanded.value = false
+  }
+})
 </script>
 
 <template>
-  <div v-if="visible" class="shrink-0 border-t border-line" data-testid="upstream-context">
-    <div class="flex w-full items-stretch">
+  <div
+    v-if="visible"
+    class="shrink-0 border-t border-line"
+    data-testid="upstream-context"
+    :data-variant="persistentBar ? 'persistent-bar' : 'default'"
+  >
+    <div v-if="persistentBar" class="flex w-full items-center gap-2 px-4 py-2.5">
+      <div class="min-w-0 flex-1 text-xs text-txt2" data-testid="upstream-bar-hint">
+        <span class="font-medium text-txt">{{ t('pages.gateApproval.upstreamContext') }}</span>
+        <span class="text-txt3"> · {{ t('pages.gateApproval.upstreamBarHint') }}</span>
+      </div>
+      <button
+        type="button"
+        class="enlarge-btn inline-flex shrink-0 items-center gap-1.5 bg-accent px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-accent-2"
+        data-testid="upstream-enlarge"
+        :title="enlargeLabel"
+        :aria-label="enlargeLabel"
+        @click="openModal"
+      >
+        <Icon name="expand" :size="14" />
+        <span class="enlarge-label">{{ enlargeLabel }}</span>
+      </button>
+    </div>
+    <div v-else class="flex w-full items-stretch">
       <button
         type="button"
         class="flex min-w-0 flex-1 items-center gap-2 px-4 py-2.5 text-left text-xs text-txt2 transition hover:bg-elevated/60"
@@ -148,7 +203,7 @@ watch(
       </button>
     </div>
     <div
-      v-if="expanded"
+      v-if="!persistentBar && expanded"
       class="upstream-context-body scroll-area border-t border-line px-4 py-3"
       data-testid="upstream-context-body"
     >

@@ -7,6 +7,7 @@ import { setTheme } from '../src/lib/theme'
 import ArtifactLoadingPane from '../src/components/run/ArtifactLoadingPane.vue'
 import ClarifyProductStage from '../src/components/run/ClarifyProductStage.vue'
 import ReviewShell from '../src/components/run/ReviewShell.vue'
+import { api } from '../src/lib/api'
 import {
   defaultClarifyProductId,
   listClarifyProductNodes,
@@ -18,6 +19,7 @@ import type { NodeRun, Run, WFNode } from '../src/lib/types'
 type Scenario =
   | 'research'
   | 'react'
+  | 'visual'
   | 'pending'
   | 'executedEmpty'
   | 'loadFailed'
@@ -35,6 +37,23 @@ const reactDoc = {
   title: '澄清需求',
   summary: '在审批箱澄清阶段展示结构化产物。',
   goals: ['预览当前节点产物'],
+}
+const visualPage = '<!doctype html><html><body><h1>视觉预览 Demo</h1><p>Inbox 复审主产物</p></body></html>'
+const upstreamReqDoc = {
+  title: '复审产物台展示上游澄清需求文档',
+  summary: '对照审阅当前主产物',
+  goals: ['就地查看上游澄清需求'],
+  functional_requirements: [{ title: '常驻条 + 960px 只读模态', detail: '预览下方放大查看' }],
+}
+
+;(api as { artifactContent: (id: string) => Promise<{ content: string }> }).artifactContent = async (
+  id: string,
+) => {
+  if (id === 'art-react' || id === 'art-visual-req') {
+    return { content: JSON.stringify(id === 'art-visual-req' ? upstreamReqDoc : reactDoc) }
+  }
+  if (id === 'art-page') return { content: visualPage }
+  return { content: '{}' }
 }
 
 function node(id: string, type: string, label: string): WFNode {
@@ -92,6 +111,42 @@ function buildRun(scenario: Scenario): Run | null {
       nodeRuns: {},
       clarifyByNode: {
         agent_1: { nodeId: 'agent_1', iteration: 1, turns: [], done: false },
+      },
+    }
+  }
+
+  if (scenario === 'visual') {
+    return {
+      id: 'run-clarify-visual',
+      workflowId: 'wf',
+      workflowName: 'wf',
+      status: 'waiting_human',
+      trigger: '',
+      startedAt: '',
+      durationSec: 0,
+      progress: 0,
+      nodes: [node('visual', 'visual', '视觉网页')],
+      edges: [],
+      artifacts: [
+        {
+          id: 'art-page',
+          name: 'page.html',
+          sizeBytes: 128,
+          createdAt: '2026-07-23T00:00:00Z',
+        },
+        {
+          id: 'art-visual-req',
+          name: 'clarified_requirement.json',
+          sizeBytes: 64,
+          createdAt: '2026-07-23T00:00:00Z',
+        },
+      ],
+      nodeExecutions: {
+        visual: [exec('visual', 'waiting_human', { page: visualPage })],
+      },
+      nodeRuns: {},
+      clarifyByNode: {
+        visual: { nodeId: 'visual', iteration: 1, turns: [], done: false },
       },
     }
   }
@@ -180,6 +235,7 @@ function buildRun(scenario: Scenario): Run | null {
 
 function inboxNodeId(scenario: Scenario): string {
   if (scenario === 'react') return 'react'
+  if (scenario === 'visual') return 'visual'
   if (scenario === 'pending' || scenario === 'executedEmpty') return 'agent_1'
   return 'research_1'
 }
