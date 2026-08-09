@@ -26,6 +26,7 @@ const emit = defineEmits<{
   (e: 'remove-from-group', name: string, groupId: string): void
   (e: 'open-manage', agentName?: string): void
   (e: 'create-root-group'): void
+  (e: 'create-team'): void
   (e: 'create-child-group', parentId: string): void
   (e: 'rename-group', groupId: string): void
   (e: 'delete-group', groupId: string): void
@@ -237,6 +238,16 @@ function onDrop(e: DragEvent, row: OrgTreeRow) {
         @click="emit('create-root-group')"
       >
         <Icon name="folder" :size="13" />
+      </button>
+      <button
+        v-if="!collapsed"
+        type="button"
+        class="flex h-[22px] w-[22px] shrink-0 items-center justify-center text-txt3 transition hover:bg-elevated hover:text-accent-2"
+        :title="t('pages.agentStudio.org.newTeam')"
+        :aria-label="t('pages.agentStudio.org.newTeam')"
+        @click="emit('create-team')"
+      >
+        <Icon name="skills" :size="13" />
       </button>
       <button
         v-if="!collapsed"

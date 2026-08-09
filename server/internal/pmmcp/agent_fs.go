@@ -34,6 +34,9 @@ func (h *Host) callAgentFS(projectID, token, name string, args map[string]any) (
 		view := services.BuildOrgLeaderView(doc, sess.AgentName, allNames)
 		return view, false
 
+	case "pm_list_agent_templates", "pm_create_agent_from_template", "pm_set_org_membership", "pm_ensure_child_group":
+		return h.callTeamTools(sess, skill, name, args)
+
 	case "pm_fs_list", "pm_fs_read", "pm_fs_write", "pm_fs_delete", "pm_fs_mkdir", "pm_fs_rename":
 		agentName := strings.TrimSpace(platformmcp.StrArg(args, "agentName"))
 		if agentName == "" {

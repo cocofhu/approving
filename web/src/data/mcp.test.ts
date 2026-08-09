@@ -56,8 +56,16 @@ const CATALOG = [
   {
     id: 'pm-agent-fs',
     scope: 'project' as const,
-    toolCount: 7,
-    writeTools: ['pm_fs_write', 'pm_fs_delete', 'pm_fs_mkdir', 'pm_fs_rename'],
+    toolCount: 11,
+    writeTools: [
+      'pm_fs_write',
+      'pm_fs_delete',
+      'pm_fs_mkdir',
+      'pm_fs_rename',
+      'pm_create_agent_from_template',
+      'pm_set_org_membership',
+      'pm_ensure_child_group',
+    ],
   },
 ] as const
 
