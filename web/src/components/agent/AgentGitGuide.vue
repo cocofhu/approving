@@ -24,6 +24,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   'update:credentialType': [value: GitCredentialType]
+  help: [section: 'git']
 }>()
 const { t } = useI18n()
 const showChooser = ref(false)
@@ -112,14 +113,24 @@ defineExpose({ isGitEnvKey })
 
 <template>
   <section class="mb-4 overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
-    <header class="flex items-center gap-3 border-b border-line px-4 py-3">
+    <header class="flex items-start gap-3 border-b border-line px-4 py-3">
       <div class="min-w-0 flex-1">
         <div class="text-[13px] font-semibold text-txt">{{ t('pages.agentStudio.git.title') }}</div>
         <div class="mt-0.5 text-[11px] text-txt3">{{ t('pages.agentStudio.git.subtitle') }}</div>
       </div>
-      <AppButton size="sm" variant="outline" @click="openChooser">
-        {{ t('pages.agentStudio.git.adjustType') }}
-      </AppButton>
+      <div class="flex shrink-0 items-center gap-3">
+        <button
+          type="button"
+          class="bg-transparent p-0 text-[12px] text-accent-2 underline underline-offset-[3px] hover:text-[#c4b5fd] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          data-test="git-help-link"
+          @click="emit('help', 'git')"
+        >
+          {{ t('pages.agentStudio.envHelp.link') }}
+        </button>
+        <AppButton size="sm" variant="outline" @click="openChooser">
+          {{ t('pages.agentStudio.git.adjustType') }}
+        </AppButton>
+      </div>
     </header>
 
     <div class="p-4">
@@ -152,10 +163,9 @@ defineExpose({ isGitEnvKey })
         v-if="showRuntimeResolveBadge"
         class="mt-3 rounded-lg border border-line bg-base/40 px-3.5 py-2.5 text-[11px] leading-5 text-txt2"
       >
-        <span class="mr-2 inline-block rounded bg-elevated px-1.5 py-0.5 text-[10px] text-txt3">
+        <span class="inline-block rounded bg-elevated px-1.5 py-0.5 text-[10px] text-txt3">
           {{ t('pages.agentStudio.git.runtimeResolve') }}
         </span>
-        {{ t('pages.agentStudio.git.runtimeResolveHint') }}
       </div>
 
       <div v-if="analysis.status !== 'disabled'" class="mt-3 rounded-lg border border-line">
@@ -181,9 +191,6 @@ defineExpose({ isGitEnvKey })
           </div>
         </div>
       </div>
-
-      <p class="mt-3 text-[11px] leading-5 text-txt3">{{ t('pages.agentStudio.git.envHint') }}</p>
-      <p class="mt-1.5 text-[11px] leading-5 text-txt3">{{ t('pages.agentStudio.git.boundary') }}</p>
     </div>
   </section>
 
