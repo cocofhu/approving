@@ -517,7 +517,7 @@
       "envEmptyTitle": "No sandbox env yet",
       "envEmptyDesc": "Add KEY/VALUE rows to write into node Spec.Env. Secret values are masked on read.",
       "varsEmptyTitle": "No workflow variables yet",
-      "varsEmptyDesc": "Define project-level defaults (string / number / bool / select, etc.). Ask-at-launch still belongs on pipeline input nodes.",
+      "varsEmptyDesc": "Add a row to configure project-level defaults.",
       "varName": "Name",
       "varValue": "Default",
       "varDescPlaceholder": "Description (optional)",
