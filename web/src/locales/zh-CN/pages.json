@@ -972,7 +972,12 @@
       "invalidHint": "此链接无效。请向分享人确认是否仍有效。",
       "loading": "加载中…",
       "submitting": "提交中…",
+      "confirming": "正在确认…",
       "networkError": "网络错误，请稍后重试",
+      "securityCheckFailed": "安全校验未通过，请再试一次「确认并流转」",
+      "linkInvalid": "链接失效，请重新打开复审链接",
+      "networkFault": "网络故障，请检查网络后重试",
+      "rateLimited": "请求过于频繁，请稍后再试",
       "maybeStuck": "可能卡死 · 请求仍在进行，可继续等待或重试"
     },
     "artifacts": {

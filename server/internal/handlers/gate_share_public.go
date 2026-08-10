@@ -38,11 +38,11 @@ type publicCancelBody struct {
 	Token string `json:"token"`
 }
 
-func (h *Handlers) publicRateLimit(c *gin.Context) bool {
+func (h *Handlers) publicRateLimit(c *gin.Context, bucket string) bool {
 	if h.GateShareLimiter == nil {
 		return true
 	}
-	if h.GateShareLimiter.Allow(c.ClientIP()) {
+	if h.GateShareLimiter.AllowBucket(c.ClientIP(), bucket) {
 		return true
 	}
 	c.JSON(http.StatusTooManyRequests, gin.H{"error": "rate_limited", "message": "请求过于频繁，请稍后再试"})
@@ -51,7 +51,7 @@ func (h *Handlers) publicRateLimit(c *gin.Context) bool {
 
 func (h *Handlers) PublicGatePreview(c *gin.Context) {
 	applyPublicSecurityHeaders(c)
-	if !h.publicRateLimit(c) {
+	if !h.publicRateLimit(c, gateshare.RateBucketPreview) {
 		return
 	}
 	if h.GateShare == nil || h.Eng == nil {
@@ -93,7 +93,7 @@ func (h *Handlers) PublicGatePreview(c *gin.Context) {
 
 func (h *Handlers) PublicGateReply(c *gin.Context) {
 	applyPublicSecurityHeaders(c)
-	if !h.publicRateLimit(c) {
+	if !h.publicRateLimit(c, gateshare.RateBucketPreview) {
 		return
 	}
 	if h.GateShare == nil || h.Eng == nil {
@@ -145,7 +145,7 @@ func (h *Handlers) PublicGateReply(c *gin.Context) {
 
 func (h *Handlers) PublicGateCancel(c *gin.Context) {
 	applyPublicSecurityHeaders(c)
-	if !h.publicRateLimit(c) {
+	if !h.publicRateLimit(c, gateshare.RateBucketPreview) {
 		return
 	}
 	if h.GateShare == nil || h.Eng == nil {
@@ -214,7 +214,7 @@ func (h *Handlers) writePublicReactErr(c *gin.Context, err error) {
 
 func (h *Handlers) PublicGateDecide(c *gin.Context) {
 	applyPublicSecurityHeaders(c)
-	if !h.publicRateLimit(c) {
+	if !h.publicRateLimit(c, gateshare.RateBucketDecide) {
 		return
 	}
 	if h.GateShare == nil || h.Eng == nil || h.GateShareNonces == nil {
@@ -580,14 +580,18 @@ func (h *Handlers) checkPublicCSRF(c *gin.Context) bool {
 		return strings.EqualFold(u.Host, host)
 	}
 	ref := strings.TrimSpace(c.GetHeader("Referer"))
-	if ref == "" {
-		return false
+	if ref != "" {
+		u, err := url.Parse(ref)
+		if err != nil || u.Host == "" {
+			return false
+		}
+		return strings.EqualFold(u.Host, host)
 	}
-	u, err := url.Parse(ref)
-	if err != nil || u.Host == "" {
-		return false
+	// Embedded WebView may omit Origin/Referer; accept same-origin Fetch Metadata only.
+	if strings.EqualFold(strings.TrimSpace(c.GetHeader("Sec-Fetch-Site")), "same-origin") {
+		return true
 	}
-	return strings.EqualFold(u.Host, host)
+	return false
 }
 
 func applyPublicSecurityHeaders(c *gin.Context) {

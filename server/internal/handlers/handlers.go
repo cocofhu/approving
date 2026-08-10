@@ -65,8 +65,9 @@ type Handlers struct {
 	GateShare        *gateshare.Service
 	GateShareNonces  *gateshare.NonceStore
 	GateShareLimiter *gateshare.IPLimiter
-	// PublicAdvertise is the browser-facing origin for share URLs and public
-	// CSRF host checks. Never fall back to client X-Forwarded-Host.
+	// PublicAdvertise is the browser-facing origin for share URLs.
+	// Public CSRF compares Origin/Referer to this request's Host (never client
+	// X-Forwarded-Host; advertise host is not used for CSRF).
 	PublicAdvertise string
 	Team            *services.TeamService
 	// CanViewProjectAudit optionally overrides the default audit ACL

@@ -119,7 +119,7 @@ func newHarness(t *testing.T) *harness {
 		Audit:            auditSvc,
 		Onboarding:       services.NewOnboardingService(projectSvc, skills, wfSvc),
 		GateShare:        gateShareSvc,
-		GateShareNonces:  gateshare.NewNonceStore(),
+		GateShareNonces:  gateshare.NewNonceStore(db),
 		GateShareLimiter: gateshare.NewIPLimiter(),
 		PublicAdvertise:  "http://example.test",
 	}

@@ -41,13 +41,16 @@ Inbox operators can mint a one-shot external approval URL for a single pending
   and a strict CSP. The `/public/gate-approvals` prefix does **not** emit
   `Access-Control-Allow-Origin`. POST decide requires Origin/Referer + custom
   header + one-time nonce, and is per-IP rate limited.
-- Share URLs and CSRF host checks use `server.public_advertise` (never client
-  `X-Forwarded-Host`). External preview only returns this `human_gate`'s primary
-  products — it does not scan other nodes in the Run.
-- Preview nonces and the public IP limiter are **in-process**. A single replica
-  is the supported deployment for `/public/gate-approvals`; multi-instance
-  setups must share nonce/limiter storage or preview→decide may 403. The store
-  keeps the last few nonces per link so multiple tabs can submit after refresh.
+- Share URLs use `server.public_advertise`. Public CSRF compares Origin/Referer
+  host to this request's `Host` (never client `X-Forwarded-Host`, and not the
+  advertise host). Third-party Origin still fails. External preview only returns
+  this `human_gate`'s primary products — it does not scan other nodes in the Run.
+- Preview nonces live in the GateShare database (same DB as share links), keyed
+  by token hash, last few unused nonces, 15-minute TTL, no plaintext token.
+  Multi-replica preview→decide share the same bucket. The public IP limiter
+  remains in-process; GET preview and POST decide use separate per-IP buckets so
+  polling cannot starve confirm. The store keeps the last few nonces per link so
+  multiple tabs can submit after refresh.
 - Audit records create / regen / revoke / use with `callerKind=external` on
   use, optional self-reported name, masked IP (last octet/group), and
   browser/OS UA only — still without the plaintext token.

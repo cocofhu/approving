@@ -421,7 +421,8 @@ describe('PublicGateApprovalView workbench', () => {
     await flushPromises()
 
     expect(mocks.decide).toHaveBeenCalledTimes(1)
-    expect(w.get('[data-testid="public-gate-confirm"]').text()).toContain('提交中…')
+    expect(w.get('[data-testid="public-gate-confirm"]').text()).toContain('正在确认…')
+    expect(w.get('[data-testid="public-gate-confirm"]').text()).not.toContain('提交中…')
     expect(w.get('[data-testid="public-gate-reject"]').text()).toContain('提交中…')
     expect(w.get('[data-testid="public-gate-confirm"]').attributes('aria-busy')).toBe('true')
     expect((w.get('[data-testid="public-gate-confirm"]').element as HTMLButtonElement).disabled).toBe(true)
@@ -456,8 +457,209 @@ describe('PublicGateApprovalView workbench', () => {
     mocks.decide.mockRejectedValueOnce(new Error('postgres connection refused at 10.1.2.3'))
     await w.get('[data-testid="public-gate-confirm"]').trigger('click')
     await flushPromises()
-    expect(w.get('[role="alert"]').text()).toContain('网络错误')
+    expect(w.get('[data-testid="public-gate-error"]').text()).toBe('安全校验未通过，请再试一次「确认并流转」')
+    expect(w.get('[data-testid="public-gate-error"]').text()).not.toMatch(/网络错误/)
     expect(w.text()).not.toContain('postgres')
     expect(w.text()).not.toContain('10.1.2.3')
+    expect(w.text()).not.toMatch(/\bcsrf\b|\bnonce\b/i)
+    expect(w.find('[data-testid="public-gate-workbench"]').exists()).toBe(true)
+    expect((w.get('[data-testid="public-gate-confirm"]').element as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('maps decide failures to Demo-locked footnotes without leaking internals', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'human_gate',
+      nonce: 'n1',
+      actions: { approve: 'approve' },
+    })
+    const w = mountView()
+    await flushPromises()
+    await w.get('[data-testid="public-gate-name"]').setValue('Jordan')
+    await w.get('[data-testid="public-gate-comment"]').setValue('可以流转')
+
+    const cases: Array<{ err: unknown; copy: string }> = [
+      {
+        err: Object.assign(new Error('csrf rejected'), { status: 403, body: { error: 'csrf', message: 'csrf rejected' } }),
+        copy: '安全校验未通过，请再试一次「确认并流转」',
+      },
+      {
+        err: Object.assign(new Error('rate_limited'), { status: 429, body: { error: 'rate_limited' } }),
+        copy: '请求过于频繁，请稍后再试',
+      },
+      {
+        err: Object.assign(new Error('Failed to fetch'), { name: 'TypeError', message: 'Failed to fetch' }),
+        copy: '网络故障，请检查网络后重试',
+      },
+      {
+        err: Object.assign(new Error('upstream 502'), { status: 502, body: { error: 'unavailable' } }),
+        copy: '网络故障，请检查网络后重试',
+      },
+    ]
+    for (const c of cases) {
+      mocks.decide.mockRejectedValueOnce(c.err)
+      await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+      await flushPromises()
+      expect(w.get('[data-testid="public-gate-error"]').text()).toBe(c.copy)
+      expect(w.text()).not.toMatch(/\bcsrf\b|\bnonce\b/i)
+      expect(w.find('[data-testid="public-gate-workbench"]').exists()).toBe(true)
+      expect(w.find('[data-testid="public-gate-invalid"]').exists()).toBe(false)
+      expect((w.get('[data-testid="public-gate-confirm"]').element as HTMLButtonElement).disabled).toBe(false)
+    }
+  })
+
+  it('does not silent-poll preview while confirming', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'human_gate',
+      nonce: 'n-poll',
+      actions: { approve: 'approve', reject: 'revise' },
+    })
+    let resolveDecide!: (value: unknown) => void
+    mocks.decide.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveDecide = resolve
+        }),
+    )
+    const w = mountView()
+    await flushPromises()
+    await w.get('[data-testid="public-gate-name"]').setValue('Jordan')
+    await w.get('[data-testid="public-gate-comment"]').setValue('可以流转')
+    const previewCalls = mocks.preview.mock.calls.length
+    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await flushPromises()
+    await new Promise((r) => setTimeout(r, 2500))
+    await flushPromises()
+    expect(mocks.preview.mock.calls.length).toBe(previewCalls)
+    expect(w.get('[data-testid="public-gate-confirm"]').text()).toContain('正在确认…')
+    resolveDecide({ status: 'approved' })
+    await flushPromises()
+    expect(w.get('[data-testid="public-gate-done"]').text()).toContain('已确认')
+  })
+
+  it('silently retries once on nonce failure and hides the error on success', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-old',
+      reactSessionAlive: true,
+      actions: { confirm: 'confirm' },
+    })
+    const w = mountView()
+    await flushPromises()
+    mocks.decide
+      .mockRejectedValueOnce(
+        Object.assign(new Error('nonce'), { status: 403, body: { error: 'nonce', message: 'nonce expired' } }),
+      )
+      .mockResolvedValueOnce({ status: 'confirmed' })
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-new',
+      reactSessionAlive: true,
+      actions: { confirm: 'confirm' },
+    })
+    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await flushPromises()
+    expect(mocks.decide).toHaveBeenCalledTimes(2)
+    expect(mocks.decide.mock.calls[0][0]).toEqual(expect.objectContaining({ nonce: 'n-old' }))
+    expect(mocks.decide.mock.calls[1][0]).toEqual(expect.objectContaining({ nonce: 'n-new' }))
+    expect(w.find('[data-testid="public-gate-error"]').exists()).toBe(false)
+    expect(w.get('[data-testid="public-gate-done"]').text()).toContain('已确认')
+    expect(w.text()).not.toMatch(/\bnonce\b/i)
+  })
+
+  it('retries nonce only once then shows security footnote', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-a',
+      reactSessionAlive: true,
+      actions: { confirm: 'confirm' },
+    })
+    const w = mountView()
+    await flushPromises()
+    mocks.decide.mockRejectedValue(
+      Object.assign(new Error('nonce'), { status: 403, body: { error: 'nonce' } }),
+    )
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-b',
+      reactSessionAlive: true,
+      actions: { confirm: 'confirm' },
+    })
+    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await flushPromises()
+    expect(mocks.decide).toHaveBeenCalledTimes(2)
+    expect(w.get('[data-testid="public-gate-error"]').text()).toBe('安全校验未通过，请再试一次「确认并流转」')
+    expect(w.text()).not.toMatch(/\bnonce\b/i)
+    expect((w.get('[data-testid="public-gate-confirm"]').element as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('does not refresh nonce for csrf, rate limit, or network failures', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-fixed',
+      reactSessionAlive: true,
+      actions: { confirm: 'confirm' },
+    })
+    const w = mountView()
+    await flushPromises()
+    const previewCalls = mocks.preview.mock.calls.length
+    mocks.decide.mockRejectedValueOnce(
+      Object.assign(new Error('csrf'), { status: 403, body: { error: 'csrf' } }),
+    )
+    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await flushPromises()
+    expect(mocks.decide).toHaveBeenCalledTimes(1)
+    expect(mocks.preview.mock.calls.length).toBe(previewCalls)
+    expect(w.get('[data-testid="public-gate-error"]').text()).toContain('安全校验未通过')
+
+    mocks.decide.mockRejectedValueOnce(
+      Object.assign(new Error('rate'), { status: 429, body: { error: 'rate_limited' } }),
+    )
+    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await flushPromises()
+    expect(mocks.decide).toHaveBeenCalledTimes(2)
+    expect(mocks.preview.mock.calls.length).toBe(previewCalls)
+    expect(w.get('[data-testid="public-gate-error"]').text()).toBe('请求过于频繁，请稍后再试')
+
+    mocks.decide.mockRejectedValueOnce(Object.assign(new Error('Failed to fetch'), { name: 'TypeError' }))
+    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await flushPromises()
+    expect(mocks.decide).toHaveBeenCalledTimes(3)
+    expect(mocks.preview.mock.calls.length).toBe(previewCalls)
+    expect(w.get('[data-testid="public-gate-error"]').text()).toBe('网络故障，请检查网络后重试')
+  })
+
+  it('keeps workbench with disabled confirm when the link becomes invalid after open', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-used',
+      reactSessionAlive: true,
+      actions: { confirm: 'confirm' },
+    })
+    const w = mountView()
+    await flushPromises()
+    expect(w.find('[data-testid="public-gate-workbench"]').exists()).toBe(true)
+    mocks.decide.mockResolvedValueOnce({ status: 'used', error: 'conflict' })
+    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="public-gate-workbench"]').exists()).toBe(true)
+    expect(w.find('[data-testid="public-gate-invalid"]').exists()).toBe(false)
+    expect(w.find('[data-testid="public-gate-done"]').exists()).toBe(false)
+    expect(w.get('[data-testid="public-gate-error"]').text()).toBe('链接失效，请重新打开复审链接')
+    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
+    expect((w.get('[data-testid="public-gate-confirm"]').element as HTMLButtonElement).disabled).toBe(true)
   })
 })

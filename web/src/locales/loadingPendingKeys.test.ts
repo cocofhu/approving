@@ -57,12 +57,23 @@ describe('loading/pending Demo-locked locale keys', () => {
     expect(enPages.pages.publicGate.loading).toBe('Loading…')
     expect(zhPages.pages.publicGate.submitting).toBe('提交中…')
     expect(enPages.pages.publicGate.submitting).toBe('Submitting…')
+    expect(zhPages.pages.publicGate.confirming).toBe('正在确认…')
+    expect(enPages.pages.publicGate.confirming).toBe('Confirming…')
     expect(zhPages.pages.publicGate.networkError).toBe('网络错误，请稍后重试')
     expect(enPages.pages.publicGate.networkError).toBe('Network error. Please try again.')
+    expect(zhPages.pages.publicGate.securityCheckFailed).toBe('安全校验未通过，请再试一次「确认并流转」')
+    expect(enPages.pages.publicGate.securityCheckFailed).toMatch(/Security check failed/i)
+    expect(zhPages.pages.publicGate.linkInvalid).toBe('链接失效，请重新打开复审链接')
+    expect(enPages.pages.publicGate.linkInvalid).toMatch(/no longer valid|reopen/i)
+    expect(zhPages.pages.publicGate.networkFault).toBe('网络故障，请检查网络后重试')
+    expect(enPages.pages.publicGate.networkFault).toMatch(/Network failure/i)
+    expect(zhPages.pages.publicGate.rateLimited).toBe('请求过于频繁，请稍后再试')
+    expect(enPages.pages.publicGate.rateLimited).toMatch(/Too many requests/i)
     for (const bag of [zhPages.pages.publicGate, enPages.pages.publicGate]) {
       for (const v of Object.values(bag)) {
         if (typeof v !== 'string') continue
         expect(v).not.toMatch(/run-|projectId|token A|no runId/i)
+        expect(v).not.toMatch(/\bcsrf\b|\bnonce\b/i)
       }
     }
   })

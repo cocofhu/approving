@@ -4,8 +4,12 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
-	"sync"
+	"errors"
 	"time"
+
+	"github.com/cocofhu/approving/internal/models"
+
+	"gorm.io/gorm"
 )
 
 const (
@@ -13,108 +17,89 @@ const (
 	maxNoncesPerLink = 4 // multi-tab preview: keep the last N unused nonces
 )
 
-type nonceItem struct {
-	nonce   string
-	expires time.Time
-}
-
-type nonceBucket struct {
-	items []nonceItem
-}
-
 // NonceStore issues one-time preview nonces keyed by token hash (never plaintext).
-// In-process only: multi-replica deployments must share storage (see SECURITY.md).
+// Persistence uses the GateShare database so multi-replica preview→decide share
+// the same bucket (see SECURITY.md).
 type NonceStore struct {
-	mu     sync.Mutex
-	byHash map[string]*nonceBucket
+	db *gorm.DB
 }
 
-// NewNonceStore builds an in-process nonce map.
-func NewNonceStore() *NonceStore {
-	return &NonceStore{byHash: map[string]*nonceBucket{}}
+// NewNonceStore builds a DB-backed nonce store on the GateShare database.
+func NewNonceStore(db *gorm.DB) *NonceStore {
+	return &NonceStore{db: db}
 }
 
 // Issue adds a nonce for tokenHash without invalidating prior unexpired ones
 // (up to maxNoncesPerLink) so multiple tabs can submit after each previewed.
 func (s *NonceStore) Issue(tokenHash string) (string, error) {
+	if s == nil || s.db == nil {
+		return "", errors.New("nonce store unavailable")
+	}
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
 	}
 	n := hex.EncodeToString(buf)
 	now := time.Now()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.gcLocked(now)
-	b := s.byHash[tokenHash]
-	if b == nil {
-		b = &nonceBucket{}
-		s.byHash[tokenHash] = b
+	row := models.GateShareNonce{
+		TokenHash: tokenHash,
+		Nonce:     n,
+		ExpiresAt: now.Add(nonceTTL),
 	}
-	b.items = append(b.items, nonceItem{nonce: n, expires: now.Add(nonceTTL)})
-	if len(b.items) > maxNoncesPerLink {
-		b.items = b.items[len(b.items)-maxNoncesPerLink:]
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("token_hash = ? AND expires_at <= ?", tokenHash, now).
+			Delete(&models.GateShareNonce{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&row).Error; err != nil {
+			return err
+		}
+		var alive []models.GateShareNonce
+		if err := tx.Where("token_hash = ?", tokenHash).Order("id ASC").Find(&alive).Error; err != nil {
+			return err
+		}
+		if len(alive) <= maxNoncesPerLink {
+			return nil
+		}
+		drop := alive[:len(alive)-maxNoncesPerLink]
+		ids := make([]uint, len(drop))
+		for i, r := range drop {
+			ids[i] = r.ID
+		}
+		return tx.Where("id IN ?", ids).Delete(&models.GateShareNonce{}).Error
+	})
+	if err != nil {
+		return "", err
 	}
 	return n, nil
 }
 
 // Consume validates and deletes a matching nonce. Constant-time compare per item.
 func (s *NonceStore) Consume(tokenHash, nonce string) bool {
+	if s == nil || s.db == nil {
+		return false
+	}
 	nonce = hexNormalize(nonce)
 	now := time.Now()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	b, ok := s.byHash[tokenHash]
-	if !ok || len(b.items) == 0 {
+	var rows []models.GateShareNonce
+	if err := s.db.Where("token_hash = ? AND expires_at > ?", tokenHash, now).Find(&rows).Error; err != nil {
 		return false
 	}
 	want := []byte(nonce)
-	idx := -1
-	for i, e := range b.items {
-		if now.After(e.expires) {
-			continue
-		}
-		got := []byte(e.nonce)
+	var matchID uint
+	for i := range rows {
+		got := []byte(rows[i].Nonce)
 		if len(got) == len(want) && subtle.ConstantTimeCompare(got, want) == 1 {
-			idx = i
+			matchID = rows[i].ID
 			break
 		}
 	}
-	if idx < 0 {
-		s.gcBucketLocked(b, now)
-		if len(b.items) == 0 {
-			delete(s.byHash, tokenHash)
-		}
+	if matchID == 0 {
+		_ = s.db.Where("token_hash = ? AND expires_at <= ?", tokenHash, now).Delete(&models.GateShareNonce{}).Error
 		return false
 	}
-	b.items = append(b.items[:idx], b.items[idx+1:]...)
-	if len(b.items) == 0 {
-		delete(s.byHash, tokenHash)
-	}
-	return true
-}
-
-func (s *NonceStore) gcLocked(now time.Time) {
-	for k, b := range s.byHash {
-		s.gcBucketLocked(b, now)
-		if len(b.items) == 0 {
-			delete(s.byHash, k)
-		}
-	}
-}
-
-func (s *NonceStore) gcBucketLocked(b *nonceBucket, now time.Time) {
-	if b == nil {
-		return
-	}
-	alive := b.items[:0]
-	for _, e := range b.items {
-		if now.After(e.expires) {
-			continue
-		}
-		alive = append(alive, e)
-	}
-	b.items = alive
+	res := s.db.Where("id = ?", matchID).Delete(&models.GateShareNonce{})
+	return res.Error == nil && res.RowsAffected == 1
 }
 
 func hexNormalize(s string) string {

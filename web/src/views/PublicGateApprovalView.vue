@@ -17,6 +17,7 @@ import {
   parseShareTokenFromHash,
   publicGateApi,
   type PublicGateActiveItem,
+  type PublicGateDecideResult,
   type PublicGatePreview,
   type PublicGateQueueItem,
 } from '@/lib/gateShareLink'
@@ -46,8 +47,11 @@ const preview = ref<PublicGatePreview | null>(null)
 const comment = ref('')
 const reviewerName = ref('')
 const submitting = ref(false)
+const pendingKind = ref<'confirm' | 'reject' | null>(null)
 const errorText = ref('')
 const networkFailed = ref(false)
+const workbenchSeen = ref(false)
+const linkInvalid = ref(false)
 const doneKind = ref<'approved' | 'rejected' | 'confirmed' | null>(null)
 const upstreamOpen = ref(false)
 const draft = ref('')
@@ -173,6 +177,8 @@ async function loadPreview(opts?: { silent?: boolean }) {
     loading.value = true
     errorText.value = ''
     networkFailed.value = false
+    workbenchSeen.value = false
+    linkInvalid.value = false
     stuckTimer = window.setTimeout(() => {
       if (attemptGen === previewGen) maybeStuck.value = true
     }, 10_000)
@@ -190,7 +196,9 @@ async function loadPreview(opts?: { silent?: boolean }) {
     const next = await publicGateApi.preview(tok, signal)
     if (attemptGen !== previewGen) return
     preview.value = next
-    if (!opts?.silent) errorText.value = ''
+    if (next.status === 'active') workbenchSeen.value = true
+    noteWorkbenchLinkInvalid(next)
+    if (!opts?.silent && !linkInvalid.value) errorText.value = ''
   } catch (e) {
     if (attemptGen !== previewGen || isAbortError(e)) return
     if (!opts?.silent) {
@@ -259,8 +267,130 @@ function auditReady(): boolean {
   return true
 }
 
+type DecideFailure = {
+  status?: number
+  body?: { error?: string; status?: string; message?: string }
+  message?: string
+  name?: string
+}
+
+function decideFailureOf(e: unknown): DecideFailure {
+  if (!e || typeof e !== 'object') return { message: String(e || '') }
+  const err = e as DecideFailure & { message?: string; name?: string }
+  return {
+    status: err.status,
+    body: err.body,
+    message: err.message || '',
+    name: err.name,
+  }
+}
+
+function isNonceError(e: unknown): boolean {
+  return String(decideFailureOf(e).body?.error || '').toLowerCase() === 'nonce'
+}
+
+function isLinkInvalidStatus(status?: string, error?: string): boolean {
+  const s = String(status || '').toLowerCase()
+  const err = String(error || '').toLowerCase()
+  if (['invalid', 'expired', 'revoked', 'used'].includes(s)) return true
+  if (err === 'conflict' || ['invalid', 'expired', 'revoked', 'used'].includes(err)) return true
+  return false
+}
+
+function noteWorkbenchLinkInvalid(p?: PublicGatePreview | null) {
+  if (!workbenchSeen.value || doneKind.value || !p) return
+  const expiredRemain = typeof p.remainingSec === 'number' && p.remainingSec <= 0
+  if ((p.status && p.status !== 'active') || expiredRemain) {
+    linkInvalid.value = true
+    errorText.value = t('pages.publicGate.linkInvalid')
+  }
+}
+
+function mapDecideFootnote(e: unknown): { key: string; linkInvalid: boolean } {
+  const f = decideFailureOf(e)
+  const code = String(f.body?.error || '').toLowerCase()
+  const st = String(f.body?.status || '').toLowerCase()
+  const msg = String(f.message || '')
+  if (f.status === 429 || code === 'rate_limited') {
+    return { key: 'pages.publicGate.rateLimited', linkInvalid: false }
+  }
+  if (f.status === 409 || isLinkInvalidStatus(st, code)) {
+    return { key: 'pages.publicGate.linkInvalid', linkInvalid: true }
+  }
+  const networkLike =
+    (typeof f.status === 'number' && f.status >= 500) ||
+    f.name === 'TypeError' ||
+    /failed to fetch|networkerror|network request failed|timeout|timed out/i.test(msg)
+  if (networkLike) {
+    return { key: 'pages.publicGate.networkFault', linkInvalid: false }
+  }
+  return { key: 'pages.publicGate.securityCheckFailed', linkInvalid: false }
+}
+
+function markLinkInvalid(status?: string) {
+  linkInvalid.value = true
+  errorText.value = t('pages.publicGate.linkInvalid')
+  if (preview.value && status) {
+    preview.value = { ...preview.value, status }
+  }
+}
+
+async function applyDecideResult(kind: 'confirm' | 'reject', res: PublicGateDecideResult) {
+  if (res.status === 'confirmed' || (res.alreadyProcessed && kind === 'confirm' && isReview.value)) {
+    doneKind.value = 'confirmed'
+    clearHash()
+    return
+  }
+  if (res.status === 'approved' || (res.alreadyProcessed && kind === 'confirm' && !isReview.value)) {
+    doneKind.value = 'approved'
+    clearHash()
+    return
+  }
+  if (res.status === 'rejected' || (res.alreadyProcessed && kind === 'reject')) {
+    doneKind.value = 'rejected'
+    clearHash()
+    return
+  }
+  if (res.status === 'busy' || res.error === 'review_busy') {
+    errorText.value = t('pages.publicGate.busy')
+    await loadPreview({ silent: true })
+    return
+  }
+  if (res.status === 'validation_failed' || res.error === 'review_validation_failed') {
+    errorText.value = t('pages.publicGate.validationFailed')
+    await loadPreview({ silent: true })
+    return
+  }
+  if (isLinkInvalidStatus(res.status, res.error) || res.error === 'conflict') {
+    markLinkInvalid(res.status || 'used')
+    return
+  }
+  errorText.value = t('pages.publicGate.securityCheckFailed')
+}
+
+async function decideOnce(
+  kind: 'confirm' | 'reject',
+  nonce: string,
+  signal: AbortSignal,
+): Promise<PublicGateDecideResult> {
+  const action =
+    kind === 'reject'
+      ? preview.value?.actions?.reject
+      : preview.value?.actions?.confirm || preview.value?.actions?.approve || 'confirm'
+  return publicGateApi.decide(
+    {
+      token: token.value,
+      action: action || 'confirm',
+      comment: isReview.value ? undefined : comment.value,
+      name: isReview.value ? undefined : reviewerName.value,
+      nonce,
+    },
+    signal,
+  )
+}
+
 async function submitFinal(kind: 'confirm' | 'reject') {
-  if (!preview.value || submitting.value) return
+  if (!preview.value || submitting.value || (linkInvalid.value && kind === 'confirm')) return
   if (sessionBusy.value && kind === 'confirm') {
     errorText.value = t('pages.publicGate.busy')
     return
@@ -277,68 +407,38 @@ async function submitFinal(kind: 'confirm' | 'reject') {
       : preview.value.actions?.confirm || preview.value.actions?.approve || 'confirm'
   if (!action) return
   submitting.value = true
+  pendingKind.value = kind
   errorText.value = ''
+  stopPoll()
+  abortPreview()
   decideAbort?.abort()
   decideAbort = new AbortController()
+  const signal = decideAbort.signal
   try {
-    const res = await publicGateApi.decide(
-      {
-        token: token.value,
-        action,
-        comment: isReview.value ? undefined : comment.value,
-        name: isReview.value ? undefined : reviewerName.value,
-        nonce: preview.value.nonce,
-      },
-      decideAbort.signal,
-    )
-    if (res.status === 'confirmed' || (res.alreadyProcessed && kind === 'confirm' && isReview.value)) {
-      doneKind.value = 'confirmed'
-      clearHash()
-      return
-    }
-    if (res.status === 'approved' || (res.alreadyProcessed && kind === 'confirm' && !isReview.value)) {
-      doneKind.value = 'approved'
-      clearHash()
-      return
-    }
-    if (res.status === 'rejected' || (res.alreadyProcessed && kind === 'reject')) {
-      doneKind.value = 'rejected'
-      clearHash()
-      return
-    }
-    if (res.status === 'busy' || res.error === 'review_busy') {
-      errorText.value = t('pages.publicGate.busy')
+    let res: PublicGateDecideResult
+    try {
+      res = await decideOnce(kind, preview.value.nonce, signal)
+    } catch (e) {
+      if (isAbortError(e)) return
+      if (kind !== 'confirm' || !isNonceError(e)) throw e
       await loadPreview({ silent: true })
-      return
+      if (signal.aborted) return
+      const nextNonce = preview.value?.nonce
+      if (!nextNonce) throw e
+      res = await decideOnce(kind, nextNonce, signal)
     }
-    if (res.status === 'validation_failed' || res.error === 'review_validation_failed') {
-      errorText.value = t('pages.publicGate.validationFailed')
-      await loadPreview({ silent: true })
-      return
-    }
-    if (res.status === 'used' || res.error === 'conflict') {
-      preview.value = { ...preview.value, status: 'used' }
-      return
-    }
-    if (res.status === 'expired' || res.status === 'revoked') {
-      preview.value = { ...preview.value, status: res.status }
-      return
-    }
-    preview.value = { ...preview.value, status: res.status || 'invalid' }
+    await applyDecideResult(kind, res)
   } catch (e) {
     if (isAbortError(e)) return
-    errorText.value = t('pages.publicGate.networkError')
-    try {
-      const refreshed = await publicGateApi.preview(token.value, decideAbort.signal)
-      if (refreshed.status && refreshed.status !== 'active') {
-        preview.value = { ...preview.value, ...refreshed }
-        errorText.value = ''
-      }
-    } catch {
-      // Keep the sandboxed network error.
+    const mapped = mapDecideFootnote(e)
+    errorText.value = t(mapped.key)
+    if (mapped.linkInvalid) {
+      linkInvalid.value = true
     }
   } finally {
     submitting.value = false
+    pendingKind.value = null
+    if (isActive.value && !doneKind.value && !linkInvalid.value) startPoll()
   }
 }
 
@@ -390,7 +490,7 @@ function onHashChange() {
 function startPoll() {
   stopPoll()
   pollTimer = setInterval(() => {
-    if (!isActive.value || doneKind.value || !token.value) return
+    if (!isActive.value || doneKind.value || !token.value || submitting.value || linkInvalid.value) return
     void loadPreview({ silent: true })
   }, POLL_MS)
 }
@@ -402,7 +502,7 @@ function stopPoll() {
 }
 
 watch([isActive, doneKind], () => {
-  if (isActive.value && !doneKind.value) startPoll()
+  if (isActive.value && !doneKind.value && !submitting.value && !linkInvalid.value) startPoll()
   else stopPoll()
 })
 
@@ -510,7 +610,7 @@ defineExpose({ loadPreview })
     </div>
 
     <div
-      v-else-if="!isActive"
+      v-else-if="!isActive && !workbenchSeen"
       class="flex flex-1 flex-col items-center justify-center gap-2 py-16 text-center"
       data-testid="public-gate-invalid"
       role="status"
@@ -665,17 +765,17 @@ defineExpose({ loadPreview })
             {{ submitting ? t('pages.publicGate.submitting') : t('pages.publicGate.reject') }}
           </button>
           <button
-            v-if="canConfirm"
+            v-if="canConfirm || linkInvalid"
             type="button"
             class="inline-flex min-h-9 min-w-[8rem] items-center justify-center gap-2 bg-ok px-4 text-sm font-medium text-white disabled:opacity-45"
             data-testid="public-gate-confirm"
-            :disabled="submitting || sessionBusy || replyInFlight"
-            :aria-busy="submitting ? 'true' : 'false'"
+            :disabled="submitting || sessionBusy || replyInFlight || linkInvalid || !canConfirm"
+            :aria-busy="pendingKind === 'confirm' && submitting ? 'true' : 'false'"
             :aria-label="t('pages.publicGate.confirmAria')"
             @click="submitFinal('confirm')"
           >
-            <Icon v-if="submitting" name="spinner" :size="16" class="animate-spin" aria-hidden="true" />
-            {{ submitting ? t('pages.publicGate.submitting') : t('pages.publicGate.confirm') }}
+            <Icon v-if="pendingKind === 'confirm' && submitting" name="spinner" :size="16" class="animate-spin" aria-hidden="true" />
+            {{ pendingKind === 'confirm' && submitting ? t('pages.publicGate.confirming') : t('pages.publicGate.confirm') }}
           </button>
         </div>
       </footer>
