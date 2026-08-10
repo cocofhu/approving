@@ -12,6 +12,18 @@ const props = defineProps<{
 const { t } = useI18n()
 const active = ref<TokenPartKey | null>(null)
 
+/** Reuse executionTimeline part* as the authoritative UI labels (g2.1/g2.2). */
+const PART_LABEL_KEYS: Record<TokenPartKey, string> = {
+  input: 'pages.executionTimeline.partInput',
+  output: 'pages.executionTimeline.partOutput',
+  cacheRead: 'pages.executionTimeline.partCacheRead',
+  cacheWrite: 'pages.executionTimeline.partCacheWrite',
+}
+
+function partLabel(key: TokenPartKey): string {
+  return t(PART_LABEL_KEYS[key])
+}
+
 const parts = computed(() => {
   const c = props.composition
   const values: Record<TokenPartKey, number> = {
@@ -154,7 +166,7 @@ const tipPart = computed(() => parts.value.find((p) => p.key === tip.value.key) 
         @click="activate(p.key)"
       >
         <i class="h-2 w-2 rounded-sm" :style="{ background: p.color }" />
-        <span class="truncate text-txt">{{ p.key }}</span>
+        <span class="truncate text-txt">{{ partLabel(p.key) }}</span>
         <span class="tabular-nums text-txt3">{{ p.pct }}%</span>
       </li>
     </ul>
@@ -164,7 +176,7 @@ const tipPart = computed(() => parts.value.find((p) => p.key === tip.value.key) 
       class="pointer-events-none absolute z-10 min-w-[120px] rounded-lg bg-[#1a1d23] px-2.5 py-2 text-[11px] text-white shadow-lg"
       :style="{ left: tip.x + 'px', top: tip.y + 'px', transform: 'translate(-20%, -110%)' }"
     >
-      <div class="mb-1 font-semibold">{{ tipPart.key }}</div>
+      <div class="mb-1 font-semibold">{{ partLabel(tipPart.key) }}</div>
       <div class="flex justify-between gap-3 text-[#c7cbd4]">
         <span>{{ t('pages.board.tokenStats.value') }}</span>
         <b class="font-normal tabular-nums text-white">{{ fmtTokenCount(tipPart.value) }}</b>

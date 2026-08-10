@@ -211,8 +211,48 @@ describe('Token charts (g2.3/g2.4)', () => {
       global: { plugins: [i18n()] },
     })
     expect(wrapper.find('[data-testid="token-donut-svg"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('input')
+    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('输入')
+    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('输出')
+    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('缓存读')
+    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('缓存写')
+    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).not.toMatch(/\binput\b/)
+    // g3.3: share math unchanged for 70/55/35/20 over total 180
+    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('38.9%')
+    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('30.6%')
+    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('19.4%')
+    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('11.1%')
     expect(wrapper.text()).toContain('总量')
+    // g3.3: center total stays compact-formatted composition.total (180 → 180)
+    expect(wrapper.find('[data-testid="token-donut-svg"]').text()).toContain('180')
+    expect(wrapper.find('[data-testid="token-donut-svg"]').attributes('aria-label')).toBe('用量构成')
+    wrapper.unmount()
+  })
+
+  it('donut tooltip uses the same part* labels as the legend (g2.2)', async () => {
+    const wrapper = mount(TokenDonutChart, {
+      props: {
+        composition: {
+          inputTokens: 70,
+          outputTokens: 55,
+          cacheReadTokens: 35,
+          cacheWriteTokens: 20,
+          total: 180,
+        },
+      },
+      global: { plugins: [i18n()] },
+    })
+    const slice = wrapper.find('[data-testid="token-donut-svg"] path')
+    expect(slice.exists()).toBe(true)
+    // Provide a MouseEvent so activate() can position/show the tip (legend hover skips tip).
+    await slice.trigger('mouseenter', {
+      clientX: 40,
+      clientY: 40,
+    })
+    const tip = wrapper.find('[data-testid="token-donut-tooltip"]')
+    expect(tip.exists()).toBe(true)
+    expect(tip.text()).toContain('输入')
+    expect(tip.text()).not.toMatch(/\binput\b/)
+    expect(tip.text()).toContain('38.9%')
     wrapper.unmount()
   })
 
