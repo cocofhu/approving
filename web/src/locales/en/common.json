@@ -324,7 +324,6 @@
     },
     "loading": {
       "label": "Loading",
-      "elapsed": "Elapsed {s}s · heartbeat alive",
       "stuck": "May be stuck · request still running; wait or retry"
     },
     "chatImage": {
