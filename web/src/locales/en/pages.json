@@ -7,7 +7,8 @@
         "running": "Running",
         "waitingHuman": "Waiting for human",
         "failed": "Failed",
-        "completed": "Completed"
+        "completed": "Completed",
+        "ariaNav": "View {label} runs, currently {count}"
       },
       "boardTitle": "Requirement progress board",
       "viewFullBoard": "View full board →",

@@ -7,7 +7,8 @@
         "running": "运行中",
         "waitingHuman": "等待人工",
         "failed": "失败",
-        "completed": "已完成"
+        "completed": "已完成",
+        "ariaNav": "查看{label}的 Run，当前 {count}"
       },
       "boardTitle": "需求进度看板",
       "viewFullBoard": "查看完整看板 →",

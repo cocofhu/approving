@@ -54,6 +54,13 @@ describe('DashboardView desktop fill height chain (g1 / g2)', () => {
     expect(src).toMatch(/pages\.dashboard\.kpi\.completed/)
     expect(src).toMatch(/query: \{ tab: 'board' \}/)
   })
+
+  it('KPI grid remains shrink-0 after button conversion (g2.2)', () => {
+    expect(src).toMatch(/mb-6 grid shrink-0 grid-cols-2 gap-4 md:grid-cols-4/)
+    expect(src).toMatch(/type="button"/)
+    expect(src).toMatch(/dashboard-kpi-\$\{k\.status\}/)
+    expect(src).toMatch(/goKpiRuns\(k\.status\)/)
+  })
 })
 
 describe('BoardView / AppShell unchanged by dashboard fill (g3.3)', () => {

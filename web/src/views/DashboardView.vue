@@ -8,6 +8,7 @@ import RunBoardPreviewDrawer from '@/components/board/RunBoardPreviewDrawer.vue'
 import { api, type DashboardStats } from '@/lib/api'
 import { readStoredProjectId } from '@/lib/useProjectContext'
 import { useRunBoard } from '@/lib/useRunBoard'
+import { serializeStatusQuery } from '@/lib/useStatusFilter'
 import type { Run } from '@/lib/types'
 
 const router = useRouter()
@@ -27,10 +28,34 @@ const selected = ref<Run | null>(null)
 const drawerOpen = ref(false)
 
 const kpis = computed(() => [
-  { label: t('pages.dashboard.kpi.running'), value: stats.value?.running ?? 0, icon: 'runs', cls: 'text-info' },
-  { label: t('pages.dashboard.kpi.waitingHuman'), value: stats.value?.waitingHuman ?? 0, icon: 'gate', cls: 'text-warn' },
-  { label: t('pages.dashboard.kpi.failed'), value: stats.value?.failed ?? 0, icon: 'alert', cls: 'text-err' },
-  { label: t('pages.dashboard.kpi.completed'), value: stats.value?.completed ?? 0, icon: 'check', cls: 'text-ok' },
+  {
+    status: 'running',
+    label: t('pages.dashboard.kpi.running'),
+    value: stats.value?.running ?? 0,
+    icon: 'runs',
+    cls: 'text-info',
+  },
+  {
+    status: 'waiting_human',
+    label: t('pages.dashboard.kpi.waitingHuman'),
+    value: stats.value?.waitingHuman ?? 0,
+    icon: 'gate',
+    cls: 'text-warn',
+  },
+  {
+    status: 'failed',
+    label: t('pages.dashboard.kpi.failed'),
+    value: stats.value?.failed ?? 0,
+    icon: 'alert',
+    cls: 'text-err',
+  },
+  {
+    status: 'completed',
+    label: t('pages.dashboard.kpi.completed'),
+    value: stats.value?.completed ?? 0,
+    icon: 'check',
+    cls: 'text-ok',
+  },
 ])
 
 const showInitialLoading = computed(() => hasProject.value && loading.value && !hasLoaded.value)
@@ -49,6 +74,13 @@ function openPreview(run: Run) {
 function closePreview() {
   drawerOpen.value = false
   selected.value = null
+}
+
+function goKpiRuns(status: string) {
+  void router.push({
+    path: '/runs',
+    query: { status: serializeStatusQuery([status]) },
+  })
 }
 
 function goFullBoard() {
@@ -127,13 +159,21 @@ onUnmounted(() => {
     </div>
 
     <div class="mb-6 grid shrink-0 grid-cols-2 gap-4 md:grid-cols-4">
-      <div v-for="k in kpis" :key="k.label" class="card p-4">
+      <button
+        v-for="k in kpis"
+        :key="k.status"
+        type="button"
+        class="card w-full cursor-pointer p-4 text-left transition hover:border-line-strong hover:bg-elevated focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/35"
+        :data-testid="`dashboard-kpi-${k.status}`"
+        :aria-label="t('pages.dashboard.kpi.ariaNav', { label: k.label, count: k.value })"
+        @click="goKpiRuns(k.status)"
+      >
         <div class="flex items-center justify-between">
           <span class="text-[13px] text-txt2">{{ k.label }}</span>
           <Icon :name="k.icon" :size="18" :class="k.cls" />
         </div>
         <div class="mt-2 text-3xl font-semibold text-txt">{{ k.value }}</div>
-      </div>
+      </button>
     </div>
 
     <div
