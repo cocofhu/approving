@@ -3,9 +3,11 @@ import { createI18n } from 'vue-i18n'
 import zhCommon from '@/locales/zh-CN/common.json'
 import zhPages from '@/locales/zh-CN/pages.json'
 import zhMcp from '@/locales/zh-CN/mcp.json'
+import zhRoute from '@/locales/zh-CN/route.json'
 import enCommon from '@/locales/en/common.json'
 import enPages from '@/locales/en/pages.json'
 import enMcp from '@/locales/en/mcp.json'
+import enRoute from '@/locales/en/route.json'
 
 describe('user-facing copy remediation keys', () => {
   const zh = createI18n({
@@ -45,15 +47,30 @@ describe('user-facing copy remediation keys', () => {
     expect(zh.global.t('pages.gatesInbox.share.copyLink')).toBe('复制临时链接')
     expect(en.global.t('pages.gatesInbox.share.copyLink')).toBe('Copy temp link')
     expect(zh.global.t('pages.gatesInbox.share.safetyHint')).toContain('信任')
+    expect(zh.global.t('pages.gatesInbox.share.safetyHint')).toContain('外部一次确认')
+    expect(zh.global.t('pages.gatesInbox.share.safetyHint')).toContain('不是内部审批工作台')
+    expect(zh.global.t('pages.gatesInbox.share.safetyHint')).not.toMatch(/完成一次审批/)
     expect(en.global.t('pages.gatesInbox.share.safetyHint')).toMatch(/trust/i)
+    expect(en.global.t('pages.gatesInbox.share.safetyHint')).toMatch(/one-time external confirm/i)
+    expect(en.global.t('pages.gatesInbox.share.safetyHint')).not.toMatch(/complete one approval/i)
     expect(zh.global.t('pages.gatesInbox.share.copyUnavailable')).toContain('重新生成或撤销')
     expect(en.global.t('pages.gatesInbox.share.copyUnavailable')).toMatch(/regenerate or revoke/i)
     expect(zh.global.t('pages.gatesInbox.share.errors.noStandardAction')).toContain('标准')
     expect(en.global.t('pages.gatesInbox.share.errors.noStandardAction')).toMatch(/approve or reject/i)
-    expect(zh.global.t('pages.publicGate.badge')).toBe('外部审批')
-    expect(en.global.t('pages.publicGate.badge')).toBe('External approval')
+    expect(zh.global.t('pages.publicGate.badge')).toBe('外部一次决策')
+    expect(en.global.t('pages.publicGate.badge')).toBe('One-time external decision')
     expect(zh.global.t('pages.publicGate.badgeReview')).toBe('外部复审')
     expect(en.global.t('pages.publicGate.badgeReview')).toBe('External review')
+    expect(zh.global.t('pages.publicGate.heading')).toBe('请确认本次交付')
+    expect(en.global.t('pages.publicGate.heading')).toBe('Please confirm this delivery')
+    expect(zh.global.t('pages.publicGate.contentLabel')).toBe('待确认的内容')
+    expect(zh.global.t('pages.publicGate.approve')).toBe('确认')
+    expect(en.global.t('pages.publicGate.approve')).toBe('Confirm')
+    expect(zh.global.t('pages.publicGate.reject')).toBe('驳回并说明原因')
+    expect(en.global.t('pages.publicGate.reject')).toBe('Reject and explain')
+    expect(zh.global.t('pages.publicGate.doneApproved')).toBe('已确认')
+    expect(zhRoute.route.publicGateApproval).toBe('外部一次决策')
+    expect(enRoute.route.publicGateApproval).toBe('One-time external decision')
     expect(zh.global.t('pages.publicGate.confirm')).toBe('确认并流转')
     expect(en.global.t('pages.publicGate.confirm')).toMatch(/Confirm and advance/i)
     expect(zh.global.t('pages.publicGate.doneConfirmed')).toBe('已确认')
@@ -61,8 +78,6 @@ describe('user-facing copy remediation keys', () => {
     expect(zh.global.t('pages.gatesInbox.share.errors.reviewBusy')).toContain('复审进行中')
     expect(zh.global.t('pages.publicGate.busy')).toContain('复审进行中')
     expect(zh.global.t('pages.publicGate.validationFailed')).toContain('产物校验')
-    expect(zh.global.t('pages.publicGate.approve')).toBe('批准')
-    expect(en.global.t('pages.publicGate.reject')).toBe('Reject')
     expect(zh.global.t('pages.projectDetail.audit.callerExternal')).toBe('外部')
     expect(en.global.t('pages.projectDetail.audit.callerExternal')).toBe('External')
   })

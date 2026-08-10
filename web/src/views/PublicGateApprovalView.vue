@@ -5,6 +5,7 @@ import HtmlPreview from '@/components/ui/HtmlPreview.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { renderMarkdown } from '@/lib/markdown'
 import { applyPublicLocale } from '@/lib/locale'
+import { applyPublicLightChrome, reapplyThemeChrome } from '@/lib/theme'
 import {
   formatRemainingSec,
   parseShareTokenFromHash,
@@ -34,6 +35,15 @@ const remainingLabel = computed(() =>
 const descriptionHtml = computed(() => renderMarkdown(preview.value?.description || ''))
 const canApprove = computed(() => !!preview.value?.actions?.approve)
 const canReject = computed(() => !!preview.value?.actions?.reject)
+const hasDeliverable = computed(
+  () => !!preview.value?.visualHtml || !!preview.value?.structured,
+)
+const statusHint = computed(() => {
+  if (status.value === 'expired') return t('pages.publicGate.expiredHint')
+  if (status.value === 'used') return t('pages.publicGate.usedHint')
+  if (status.value === 'revoked') return t('pages.publicGate.revokedHint')
+  return t('pages.publicGate.invalidHint')
+})
 
 async function loadPreview() {
   loading.value = true
@@ -157,6 +167,7 @@ async function submitReviewConfirm() {
 }
 
 onMounted(async () => {
+  applyPublicLightChrome()
   await applyPublicLocale()
   ready.value = true
   await loadPreview()
@@ -164,6 +175,7 @@ onMounted(async () => {
 })
 onUnmounted(() => {
   window.removeEventListener('hashchange', loadPreview)
+  reapplyThemeChrome()
 })
 </script>
 
@@ -172,19 +184,25 @@ onUnmounted(() => {
     class="flex min-h-screen flex-col bg-base text-txt"
     data-testid="public-gate-root"
   >
-    <header class="flex shrink-0 items-center justify-between border-b border-line px-4 py-3">
+    <header
+      class="flex shrink-0 items-center justify-between bg-accent px-4 py-3 text-white"
+      data-testid="public-gate-chrome"
+    >
       <div class="flex items-center gap-2">
-        <span class="text-sm font-semibold tracking-wide text-txt">Approving</span>
-        <span class="border border-accent/40 bg-accent/10 px-2 py-0.5 text-[11px] text-accent-2">
+        <span class="text-sm font-semibold tracking-wide">Approving</span>
+        <span
+          class="border border-white/40 bg-white/15 px-2 py-0.5 text-[11px] text-white"
+          data-testid="public-gate-badge"
+        >
           {{ isReview ? t('pages.publicGate.badgeReview') : t('pages.publicGate.badge') }}
         </span>
       </div>
-      <span v-if="isActive && !doneKind" class="text-[12px] text-txt3" data-testid="public-gate-remaining">
+      <span v-if="isActive && !doneKind" class="text-[12px] text-white/80" data-testid="public-gate-remaining">
         {{ t('pages.publicGate.remaining', { remaining: remainingLabel }) }}
       </span>
     </header>
 
-    <main class="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-6">
+    <main class="mx-auto flex w-full flex-1 flex-col px-4 py-6 md:px-8">
       <div v-if="!ready || loading" class="py-16 text-center text-sm text-txt3">
         {{ t('common.buttons.loading') }}
       </div>
@@ -225,12 +243,20 @@ onUnmounted(() => {
                   : t('pages.publicGate.invalid')
           }}
         </h1>
-        <p class="max-w-[40ch] text-sm text-txt3">{{ t('pages.publicGate.invalidHint') }}</p>
+        <p class="max-w-[40ch] text-sm text-txt3">{{ statusHint }}</p>
       </div>
 
-      <div v-else class="flex min-h-0 flex-1 flex-col gap-4">
+      <div v-else class="flex min-h-0 flex-1 flex-col gap-5">
         <div>
-          <h1 class="text-lg font-semibold text-txt" data-testid="public-gate-title">{{ preview?.title }}</h1>
+          <h1 class="text-xl font-semibold text-txt md:text-2xl" data-testid="public-gate-title">
+            {{ t('pages.publicGate.heading') }}
+          </h1>
+          <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-txt2" data-testid="public-gate-meta">
+            <span v-if="preview?.title" data-testid="public-gate-gate-title">{{ preview.title }}</span>
+            <span>{{ t('pages.publicGate.onceOnly') }}</span>
+            <span>{{ t('pages.publicGate.noLogin') }}</span>
+            <span>{{ t('pages.publicGate.previewRedacted') }}</span>
+          </p>
           <div
             v-if="preview?.description"
             class="prose-sm mt-2 text-txt2"
@@ -239,24 +265,40 @@ onUnmounted(() => {
           />
         </div>
 
-        <div v-if="preview?.visualHtml" class="min-h-[200px] border border-line" data-testid="public-gate-visual">
-          <HtmlPreview :html="preview.visualHtml" mode="default" :enlargeable="true" :inspectable="false" />
-        </div>
-
-        <div
-          v-if="preview?.structured"
-          class="border border-line bg-surface px-3 py-3"
-          data-testid="public-gate-structured"
+        <section
+          v-if="hasDeliverable"
+          class="flex min-h-0 flex-1 flex-col gap-3"
+          data-testid="public-gate-content"
         >
-          <div v-if="preview.structured.name" class="text-[11px] text-txt3">{{ preview.structured.name }}</div>
-          <div v-if="preview.structured.title" class="mt-1 font-medium">{{ preview.structured.title }}</div>
-          <ul v-if="Array.isArray(preview.structured.goals)" class="mt-2 list-disc pl-5 text-sm text-txt2">
-            <li v-for="(g, i) in preview.structured.goals" :key="i">{{ g }}</li>
-          </ul>
-          <p v-else-if="preview.structured.text" class="mt-2 text-sm text-txt2">{{ preview.structured.text }}</p>
-        </div>
+          <div>
+            <h2 class="text-sm font-semibold text-txt">{{ t('pages.publicGate.contentLabel') }}</h2>
+            <p class="mt-0.5 text-xs text-txt3">{{ t('pages.publicGate.contentHint') }}</p>
+          </div>
 
-        <form class="mt-auto space-y-3 border-t border-line pt-4" @submit.prevent>
+          <div v-if="preview?.visualHtml" class="min-h-[200px] w-full border border-line bg-white" data-testid="public-gate-visual">
+            <HtmlPreview
+              :html="preview.visualHtml"
+              mode="inline"
+              :enlargeable="false"
+              :inspectable="false"
+            />
+          </div>
+
+          <div
+            v-if="preview?.structured"
+            class="border border-line bg-surface px-3 py-3"
+            data-testid="public-gate-structured"
+          >
+            <div v-if="preview.structured.name" class="text-[11px] text-txt3">{{ preview.structured.name }}</div>
+            <div v-if="preview.structured.title" class="mt-1 font-medium">{{ preview.structured.title }}</div>
+            <ul v-if="Array.isArray(preview.structured.goals)" class="mt-2 list-disc pl-5 text-sm text-txt2">
+              <li v-for="(g, i) in preview.structured.goals" :key="i">{{ g }}</li>
+            </ul>
+            <p v-else-if="preview.structured.text" class="mt-2 text-sm text-txt2">{{ preview.structured.text }}</p>
+          </div>
+        </section>
+
+        <form class="mt-auto max-w-xl space-y-3 border-t border-line pt-4" @submit.prevent>
           <template v-if="isReview">
             <p v-if="errorText" class="text-xs text-err" role="alert" data-testid="public-gate-error">{{ errorText }}</p>
             <button
@@ -296,11 +338,11 @@ onUnmounted(() => {
             />
           </label>
           <p v-if="errorText" class="text-xs text-err" role="alert">{{ errorText }}</p>
-          <div class="flex flex-wrap gap-2">
+          <div class="flex flex-col items-start gap-3">
             <button
               v-if="canApprove"
               type="button"
-              class="inline-flex min-h-11 min-w-[44px] flex-1 items-center justify-center bg-ok px-4 text-sm font-medium text-white disabled:opacity-45"
+              class="inline-flex min-h-11 min-w-[12rem] items-center justify-center bg-accent px-5 text-sm font-semibold text-white disabled:opacity-45"
               data-testid="public-gate-approve"
               :disabled="submitting"
               :aria-label="t('pages.publicGate.approveAria')"
@@ -311,7 +353,7 @@ onUnmounted(() => {
             <button
               v-if="canReject"
               type="button"
-              class="inline-flex min-h-11 min-w-[44px] flex-1 items-center justify-center border border-err/50 bg-err/10 px-4 text-sm font-medium text-err disabled:opacity-45"
+              class="min-h-11 bg-transparent px-0 text-sm text-txt2 underline underline-offset-4 hover:text-txt disabled:opacity-45"
               data-testid="public-gate-reject"
               :disabled="submitting"
               :aria-label="t('pages.publicGate.rejectAria')"

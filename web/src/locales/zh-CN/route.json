@@ -18,6 +18,6 @@
     "settings": "设置",
     "platformRules": "平台规则",
     "login": "登录",
-    "publicGateApproval": "外部审批"
+    "publicGateApproval": "外部一次决策"
   }
 }

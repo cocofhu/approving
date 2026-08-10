@@ -28,4 +28,20 @@ export function toggleTheme() {
   setTheme(theme.value === 'dark' ? 'light' : 'dark')
 }
 
+/**
+ * Public external page: force light chrome (html.light + color-scheme).
+ * Does not call setTheme or write approving-theme, so internal users'
+ * persisted theme is not polluted.
+ */
+export function applyPublicLightChrome(): void {
+  const root = document.documentElement
+  root.classList.add('light')
+  root.style.colorScheme = 'light'
+}
+
+/** Re-apply persisted/default theme after leaving a public page. */
+export function reapplyThemeChrome(): void {
+  apply(theme.value)
+}
+
 apply(theme.value)

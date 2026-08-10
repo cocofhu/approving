@@ -18,6 +18,6 @@
     "settings": "Settings",
     "platformRules": "Platform rules",
     "login": "Login",
-    "publicGateApproval": "External approval"
+    "publicGateApproval": "One-time external decision"
   }
 }
