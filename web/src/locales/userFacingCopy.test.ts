@@ -59,6 +59,8 @@ describe('user-facing copy remediation keys', () => {
     expect(en.global.t('pages.gatesInbox.share.errors.noStandardAction')).toMatch(/approve or reject/i)
     expect(zh.global.t('pages.publicGate.badge')).toBe('外部一次决策')
     expect(en.global.t('pages.publicGate.badge')).toBe('One-time external decision')
+    expect(zh.global.t('pages.publicGate.badgeReview')).toBe('外部复审')
+    expect(en.global.t('pages.publicGate.badgeReview')).toBe('External review')
     expect(zh.global.t('pages.publicGate.heading')).toBe('请确认本次交付')
     expect(en.global.t('pages.publicGate.heading')).toBe('Please confirm this delivery')
     expect(zh.global.t('pages.publicGate.contentLabel')).toBe('待确认的内容')
@@ -69,6 +71,13 @@ describe('user-facing copy remediation keys', () => {
     expect(zh.global.t('pages.publicGate.doneApproved')).toBe('已确认')
     expect(zhRoute.route.publicGateApproval).toBe('外部一次决策')
     expect(enRoute.route.publicGateApproval).toBe('One-time external decision')
+    expect(zh.global.t('pages.publicGate.confirm')).toBe('确认并流转')
+    expect(en.global.t('pages.publicGate.confirm')).toMatch(/Confirm and advance/i)
+    expect(zh.global.t('pages.publicGate.doneConfirmed')).toBe('已确认')
+    expect(en.global.t('pages.publicGate.doneConfirmed')).toBe('Confirmed')
+    expect(zh.global.t('pages.gatesInbox.share.errors.reviewBusy')).toContain('复审进行中')
+    expect(zh.global.t('pages.publicGate.busy')).toContain('复审进行中')
+    expect(zh.global.t('pages.publicGate.validationFailed')).toContain('产物校验')
     expect(zh.global.t('pages.projectDetail.audit.callerExternal')).toBe('外部')
     expect(en.global.t('pages.projectDetail.audit.callerExternal')).toBe('External')
   })
@@ -120,7 +129,6 @@ describe('user-facing copy remediation keys', () => {
       'common.runTrigger.pmMcp',
       'pages.projectDetail.tokenTipPm',
       'pages.board.tokenStats.pm',
-      'pages.projectDetail.pm.settingsHint',
       'pages.projectDetail.pm.enabledMcps',
       'pages.agentStudio.dialogs.renameCascadeHint',
       'pages.agentStudio.data.context.hint',
@@ -143,7 +151,6 @@ describe('user-facing copy remediation keys', () => {
       'common.runTrigger.pmMcp',
       'pages.projectDetail.tokenTipPm',
       'pages.board.tokenStats.pm',
-      'pages.projectDetail.pm.settingsHint',
       'pages.projectDetail.pm.enabledMcps',
       'pages.projectDetail.pm.gateAutoVar',
       'pages.agentStudio.dialogs.renameCascadeHint',

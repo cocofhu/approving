@@ -5,6 +5,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
+import enCommon from '@/locales/en/common.json'
+import enPages from '@/locales/en/pages.json'
 import type { PmLeaderBinding } from '@/lib/types'
 import PmSettingsPanel from './PmSettingsPanel.vue'
 
@@ -611,5 +613,100 @@ describe('PmSettingsPanel gate-auto config', () => {
     }
     expect(body.gateAutoVar).toBe('other_switch')
     expect(body.gateAutoPrompt).toBe('')
+  })
+})
+
+describe('PmSettingsPanel header without settingsHint', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    apiMocks.listPmThreads.mockResolvedValue({ items: [] })
+  })
+
+  it('keeps settings title + status badge and omits the removed settingsHint copy', async () => {
+    const w = await mountPanel({ ...BINDING, aclNote: '' })
+    const text = w.text()
+
+    expect(w.find('h2').text()).toBe('项目管理设置')
+    const badge = w.find('[role="status"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toContain('已启用')
+    expect(badge.text()).toContain('agent-1')
+
+    const titleWrap = w.find('h2').element.parentElement
+    expect(titleWrap?.classList.contains('max-w-[42em]')).toBe(true)
+    expect(titleWrap?.classList.contains('min-w-0')).toBe(true)
+    expect(text).not.toContain('无官方模板')
+    expect(text).not.toContain('仅配置项目管理专用 MCP')
+    expect(text).not.toContain('No official template')
+    expect(text).not.toContain('pages.projectDetail.pm.settingsHint')
+
+    expect(text).toContain('任意已登录用户可启用/换绑/停用')
+    expect(text).toContain('通用记忆/上下文/调度器始终注入，不受此列表控制')
+    expect(text).toContain('记忆请在已绑定主项目的 Agent Studio「数据 → 记忆」中管理')
+  })
+
+  it('still shows noAgents hint when no bindable Agent exists', async () => {
+    apiMocks.getPmLeader.mockResolvedValue({ ...BINDING, enabled: false, agentConfigRef: '' })
+    apiMocks.listAgents.mockResolvedValue([])
+    apiMocks.getProjectChannel.mockResolvedValue({ channel: null, secretsKeyConfigured: true })
+
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', component: { template: '<div />' } },
+        { path: '/agents', component: { template: '<div />' } },
+      ],
+    })
+    await router.push('/')
+    const w = mount(PmSettingsPanel, {
+      props: { projectId: 'proj-1' },
+      global: { plugins: [i18n, router] },
+    })
+    await flushPromises()
+
+    const text = w.text()
+    expect(w.find('h2').text()).toBe('项目管理设置')
+    expect(w.find('[role="status"]').text()).toContain('Agent 不可用')
+    expect(text).toContain('当前无可绑定的 Agent，请先到 Agent 配置中心创建。')
+    expect(text).toContain('前往 Agent 配置中心')
+    expect(text).toContain('任意已登录用户可启用/换绑/停用')
+    expect(text).toContain('通用记忆/上下文/调度器始终注入，不受此列表控制')
+    expect(text).not.toContain('无官方模板')
+    expect(text).not.toContain('仅配置项目管理专用 MCP')
+  })
+
+  it('English locale keeps the settings title and never shows No official template', async () => {
+    apiMocks.getPmLeader.mockResolvedValue(BINDING)
+    apiMocks.listAgents.mockResolvedValue([{ name: 'agent-1' }])
+    apiMocks.getProjectChannel.mockResolvedValue({ channel: null, secretsKeyConfigured: true })
+
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'en',
+      messages: { en: { ...enCommon, ...enPages } },
+    })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/', component: { template: '<div />' } }],
+    })
+    await router.push('/')
+    const w = mount(PmSettingsPanel, {
+      props: { projectId: 'proj-1' },
+      global: { plugins: [i18n, router] },
+    })
+    await flushPromises()
+
+    const text = w.text()
+    expect(w.find('h2').text()).toBe('Project Management settings')
+    expect(w.find('[role="status"]').text()).toContain('Enabled')
+    expect(text).toContain('Any signed-in user may enable, rebind, or disable')
+    expect(text).toContain('Shared memory/context/scheduler always inject and are not controlled here.')
+    expect(text).not.toContain('No official template')
+    expect(text).not.toContain('pages.projectDetail.pm.settingsHint')
   })
 })

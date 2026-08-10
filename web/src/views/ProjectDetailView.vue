@@ -1276,6 +1276,7 @@ onUnmounted(() => {
           <button
             type="button"
             class="p-0 text-[13px] text-accent-2 underline underline-offset-2 hover:text-txt"
+            data-testid="project-detail-merge-rules"
             @click="helpOpen = true"
           >
             {{ t('pages.projectDetail.viewMergeRules') }}
@@ -1412,6 +1413,7 @@ onUnmounted(() => {
           <button
             type="button"
             class="p-0 text-[13px] text-accent-2 underline underline-offset-2 hover:text-txt"
+            data-testid="project-detail-merge-rules"
             @click="helpOpen = true"
           >
             {{ t('pages.projectDetail.viewMergeRules') }}
@@ -1586,12 +1588,12 @@ onUnmounted(() => {
         <ProjectAuditPanel :project-id="projectId" :force-denied="auditForceDenied" />
       </div>
 
-      <!-- Project info (meta) tab: near-full-width panel (shell / head / fields / primary save) -->
-      <div v-else-if="tab === 'meta'" class="flex min-h-[420px] flex-col">
+      <!-- Project info (meta) tab: fill remaining main area (no page void under card) -->
+      <div v-else-if="tab === 'meta'" class="flex min-h-0 flex-1 flex-col">
         <div
           class="flex flex-1 flex-col overflow-hidden border border-line bg-surface shadow-[var(--shadow-card)]"
         >
-          <div class="border-b border-line bg-elevated/55 px-4 py-3.5">
+          <div class="shrink-0 border-b border-line bg-elevated/55 px-4 py-3.5">
             <h2 class="m-0 text-sm font-semibold text-txt">
               {{ t('pages.projectDetail.metaTitle') }}
             </h2>
@@ -1600,7 +1602,7 @@ onUnmounted(() => {
             </p>
           </div>
 
-          <div class="flex flex-1 flex-col gap-3.5 p-4">
+          <div class="scroll-area flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-4">
             <div>
               <label class="label" for="project-meta-name">{{ t('pages.projectList.nameLabel') }}</label>
               <input
@@ -1616,14 +1618,14 @@ onUnmounted(() => {
                 id="project-meta-desc"
                 v-model="editDesc"
                 rows="5"
-                class="input min-h-[120px]"
+                class="input min-h-[120px] resize-y"
                 :placeholder="t('pages.projectDetail.metaDescPlaceholder')"
               />
             </div>
           </div>
 
           <div
-            class="flex flex-wrap items-center justify-between gap-2 border-t border-line bg-surface p-3"
+            class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line bg-surface p-3"
             data-testid="project-meta-footer"
           >
             <AppButton
@@ -1746,6 +1748,15 @@ onUnmounted(() => {
         <p>{{ t('pages.projectDetail.helpMerge') }}</p>
         <p>{{ t('pages.projectDetail.helpNamespaces') }}</p>
         <p>{{ t('pages.projectDetail.helpSecret') }}</p>
+        <div
+          class="border border-accent/40 bg-accent-dim px-3 py-2.5 text-txt"
+          data-testid="merge-rules-new-note"
+        >
+          <span class="mb-1 inline-flex border border-ok/35 bg-ok/10 px-2 py-0.5 text-[12px] text-ok">
+            {{ t('pages.projectDetail.helpNewBadge') }}
+          </span>
+          <p class="m-0 text-sm">{{ t('pages.projectDetail.helpDisableSave') }}</p>
+        </div>
       </div>
     </AppModal>
   </div>

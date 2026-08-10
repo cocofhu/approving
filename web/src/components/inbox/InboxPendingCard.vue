@@ -10,8 +10,8 @@ import {
   inboxIconToneClass,
   inboxSecondaryLine,
 } from '@/lib/inboxDisplay'
-import { isHumanGateInboxItem, shareStatusLabel } from '@/lib/gateShareLink'
-import type { InboxItem } from '@/lib/types'
+import { isShareableInboxItem, shareStatusLabel } from '@/lib/gateShareLink'
+import type { GateShareInboxStatus, InboxItem } from '@/lib/types'
 
 const props = defineProps<{
   item: InboxItem
@@ -40,13 +40,13 @@ const iconName = computed(() => {
 const iconClass = computed(() => inboxIconToneClass(inboxBadgeTone(props.item)))
 const badgeClass = computed(() => inboxBadgeToneClass(inboxBadgeTone(props.item)))
 const badgeText = computed(() => t(inboxBadgeLabelKey(props.item)))
-const showShare = computed(() => isHumanGateInboxItem(props.item))
-const shareLabel = computed(() =>
-  showShare.value && props.item.type === 'gate' ? shareStatusLabel(props.item.shareLink, t) : '',
-)
-const shareUsed = computed(
-  () => showShare.value && props.item.type === 'gate' && props.item.shareLink?.state === 'used',
-)
+const showShare = computed(() => isShareableInboxItem(props.item))
+const itemShareLink = computed((): GateShareInboxStatus | undefined => {
+  if (!showShare.value) return undefined
+  return 'shareLink' in props.item ? props.item.shareLink : undefined
+})
+const shareLabel = computed(() => (showShare.value ? shareStatusLabel(itemShareLink.value, t) : ''))
+const shareUsed = computed(() => showShare.value && itemShareLink.value?.state === 'used')
 </script>
 
 <template>
@@ -95,13 +95,13 @@ const shareUsed = computed(
       </span>
       <button
         type="button"
-        class="inline-flex min-h-11 min-w-[44px] items-center gap-1.5 border border-accent/40 bg-accent/10 px-2.5 text-xs font-medium text-accent-2 hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-45"
+        class="inline-flex min-h-11 min-w-[44px] items-center gap-1.5 border border-accent/40 bg-accent/10 px-2.5 text-xs font-medium leading-[1.4] text-accent-2 hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-45 md:min-h-6 md:min-w-0 md:gap-1 md:px-1.5 md:py-0.5 md:text-[10px]"
         data-testid="gate-share-copy-btn"
         :disabled="disabled || shareUsed"
         :aria-label="t('pages.gatesInbox.share.copyLinkAria')"
         @click.stop="emit('open-share')"
       >
-        <Icon name="copy" :size="14" />
+        <Icon name="copy" :size="12" />
         {{ t('pages.gatesInbox.share.copyLink') }}
       </button>
     </div>

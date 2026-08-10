@@ -29,6 +29,10 @@ Approving 把 coding agent 变成工作流里的步骤。你在有限状态机�
 - 主出口为「确认」（意见可空）；次要出口为「驳回并说明原因」（意见必填；门禁未配置退回/不通过动作时不展示）。「你的姓名」可选，仅用于审计。不展示项目、Run、成员或内部地址，也不复用 Inbox / 复审三区壳。
 - 链接只绑定这一次决策；过期、撤销、提交成功、登录侧先审完或 Run 结束都会立刻失效。已用/过期/撤销/无效状态页沿用同一外部一次确认镜框，不再展示决策按钮。
 
+### 待复审临时链接（Inbox kind=review）
+
+Inbox **待复审**卡片使用同一套管理面板与令牌规则，但认证 API 走 `/api/runs/:id/reviews/:nodeId/share-link*`，不复用 `/gates/...`，也不伪造 Gate 行。公开页标识为「外部复审」，唯一动作是「确认并流转」（等价登录侧 force 确认）；无姓名、意见、驳回、对话或取点。运行详情复审 Tab / 登录侧复审面板不提供临时链接入口。
+
 ## 真实 Docker 沙箱
 
 Agent 不是在笔记本上跑的黑盒 prompt。它们通过仓库内嵌的 [sandbox-gateway](https://github.com/cocofhu/approving/tree/main/sandbox-gateway) 在 Docker 容器中执行，经 ACP 通信。

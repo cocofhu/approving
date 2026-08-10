@@ -1352,6 +1352,7 @@ describe('PmLeaderChat stick-to-bottom', () => {
     expect(wrapper.find('[data-testid="pm-chat-send"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('来自 QQ，请在 QQ 侧回复')
     expect(wrapper.text()).toContain('渠道会话在 Web 只读：不可发送、不可删除')
+    expect(wrapper.text()).toContain('可点击缩略图查看大图')
     expect(apiMocks.appendPmMessage).not.toHaveBeenCalled()
 
     // Web thread has send composer and no QQ header tag.
@@ -1360,6 +1361,44 @@ describe('PmLeaderChat stick-to-bottom', () => {
     expect(wrapper.find('[data-testid="pm-qq-tag-header"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="pm-channel-readonly"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="pm-chat-send"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('renders yellow channel hint for system+channel source only (g5.4)', async () => {
+    apiMocks.listPmThreads.mockResolvedValue({
+      items: [
+        {
+          id: 'thr-qq',
+          title: '你好',
+          userId: 'qq:c2c:u1',
+          projectId: 'proj-1',
+          createdAt: '2026-01-02T00:00:00Z',
+          updatedAt: '2026-01-02T12:00:00Z',
+        },
+      ],
+    })
+    apiMocks.listPmMessages.mockResolvedValue({
+      items: [
+        { id: 'u1', role: 'user', content: '这是现场照片', status: 'ok', source: 'channel' },
+        {
+          id: 'h1',
+          role: 'system',
+          source: 'channel',
+          content: '收到 1 张图片，但下载失败，未能展示。',
+          status: 'ok',
+        },
+        { id: 's-other', role: 'system', source: 'cron', content: '不该露出的系统消息', status: 'ok' },
+      ],
+    })
+
+    const wrapper = mountChat()
+    await flushPromises()
+    const hint = wrapper.find('[data-testid="pm-channel-hint"]')
+    expect(hint.exists()).toBe(true)
+    expect(hint.text()).toContain('渠道提示')
+    expect(hint.text()).toContain('收到 1 张图片，但下载失败，未能展示。')
+    expect(hint.classes().join(' ')).toMatch(/border-warn/)
+    expect(wrapper.text()).not.toContain('不该露出的系统消息')
     wrapper.unmount()
   })
 
@@ -1827,6 +1866,47 @@ describe('PmLeaderChat image preview (f1/f2)', () => {
 
   afterEach(() => {
     globalThis.WebSocket = originalWS
+  })
+
+  it('QQ channel thread thumbs stay previewable (g4.2)', async () => {
+    apiMocks.listPmThreads.mockResolvedValue({
+      items: [
+        {
+          id: 'thr-qq',
+          title: '你好',
+          userId: 'qq:c2c:u1',
+          projectId: 'proj-1',
+          createdAt: '2026-08-09T00:00:00Z',
+          updatedAt: '2026-08-09T00:00:00Z',
+        },
+      ],
+    })
+    apiMocks.listPmMessages.mockResolvedValue({
+      items: [
+        {
+          id: 'u1',
+          role: 'user',
+          content: '看图',
+          status: 'ok',
+          source: 'channel',
+          createdAt: '2026-08-09T00:00:00Z',
+          images: [{ data: 'WEBPB64', mimeType: 'image/webp', name: '70345B2BE' }],
+        },
+      ],
+    })
+    const wrapper = mountChatForPreview()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="pm-channel-readonly"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="pm-chat-send"]').exists()).toBe(false)
+    const thumb = wrapper.find('[data-testid="pm-history-image-thumb"]')
+    expect(thumb.exists()).toBe(true)
+    expect(thumb.element.tagName).toBe('BUTTON')
+    expect(thumb.text()).toContain('点击放大')
+    await thumb.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="pm-image-preview-title"]').text()).toBe('图片预览 · 70345B2BE')
+    expect(wrapper.find('[data-testid="pm-chat-send"]').exists()).toBe(false)
+    wrapper.unmount()
   })
 
   it('opens history thumb preview, Esc stays, no gallery, no unavailable overlay', async () => {

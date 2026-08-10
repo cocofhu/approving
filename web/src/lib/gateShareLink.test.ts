@@ -11,6 +11,7 @@ import {
   recallShareUrl,
   forgetShareUrl,
   isHumanGateInboxItem,
+  isShareableInboxItem,
   shareApiErrorMessage,
 } from './gateShareLink'
 
@@ -55,20 +56,20 @@ describe('gateShareLink helpers', () => {
     expect(isGateShareActive({ state: 'active' })).toBe(true)
   })
 
-  it('isHumanGateInboxItem only matches human_gate', () => {
-    expect(
-      isHumanGateInboxItem({
-        type: 'gate',
-        nodeType: 'human_gate',
-        runId: 'r',
-        nodeId: 'n',
-        workflowName: 'w',
-        title: 't',
-        bodyMd: '',
-        actions: [],
-        requestedAt: '',
-      }),
-    ).toBe(true)
+  it('isHumanGateInboxItem only matches human_gate; isShareableInboxItem also matches kind=review', () => {
+    const humanGate = {
+      type: 'gate' as const,
+      nodeType: 'human_gate',
+      runId: 'r',
+      nodeId: 'n',
+      workflowName: 'w',
+      title: 't',
+      bodyMd: '',
+      actions: [],
+      requestedAt: '',
+    }
+    expect(isHumanGateInboxItem(humanGate)).toBe(true)
+    expect(isShareableInboxItem(humanGate)).toBe(true)
     expect(
       isHumanGateInboxItem({
         type: 'gate',
@@ -82,18 +83,20 @@ describe('gateShareLink helpers', () => {
         requestedAt: '',
       }),
     ).toBe(false)
-    expect(
-      isHumanGateInboxItem({
-        type: 'clarify',
-        runId: 'r',
-        nodeId: 'n',
-        workflowName: 'w',
-        label: 'l',
-        done: false,
-        requestedAt: '',
-        updatedAt: '',
-      }),
-    ).toBe(false)
+    const clarify = {
+      type: 'clarify' as const,
+      runId: 'r',
+      nodeId: 'n',
+      workflowName: 'w',
+      label: 'l',
+      done: false,
+      requestedAt: '',
+      updatedAt: '',
+    }
+    expect(isHumanGateInboxItem(clarify)).toBe(false)
+    expect(isShareableInboxItem(clarify)).toBe(false)
+    expect(isShareableInboxItem({ ...clarify, kind: 'review' })).toBe(true)
+    expect(isShareableInboxItem({ ...clarify, kind: 'app_preview' })).toBe(false)
   })
 
   it('recalls share URL from sessionStorage and maps API error codes', () => {
@@ -113,6 +116,9 @@ describe('gateShareLink helpers', () => {
     )
     expect(shareApiErrorMessage(new Error('used_readonly'), t)).toBe(
       'pages.gatesInbox.share.errors.usedReadonly',
+    )
+    expect(shareApiErrorMessage(new Error('review_busy'), t)).toBe(
+      'pages.gatesInbox.share.errors.reviewBusy',
     )
   })
 })

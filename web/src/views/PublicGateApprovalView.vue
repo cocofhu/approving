@@ -23,10 +23,12 @@ const comment = ref('')
 const reviewerName = ref('')
 const submitting = ref(false)
 const errorText = ref('')
-const doneKind = ref<'approved' | 'rejected' | null>(null)
+const doneKind = ref<'approved' | 'rejected' | 'confirmed' | null>(null)
+const isReview = computed(() => preview.value?.kind === 'review')
 
 const status = computed(() => preview.value?.status || (token.value ? 'invalid' : 'invalid'))
 const isActive = computed(() => status.value === 'active')
+const canConfirm = computed(() => isReview.value && (!!preview.value?.actions?.confirm || isActive.value))
 const remainingLabel = computed(() =>
   formatRemainingSec(preview.value?.remainingSec, t),
 )
@@ -120,6 +122,50 @@ async function submit(kind: 'approve' | 'reject') {
   }
 }
 
+async function submitReviewConfirm() {
+  if (!preview.value || submitting.value) return
+  if (!preview.value.nonce) {
+    errorText.value = t('pages.publicGate.unavailable')
+    return
+  }
+  submitting.value = true
+  errorText.value = ''
+  try {
+    const res = await publicGateApi.decide({
+      token: token.value,
+      action: preview.value.actions?.confirm || 'confirm',
+      nonce: preview.value.nonce,
+    })
+    if (res.status === 'confirmed' || res.alreadyProcessed) {
+      doneKind.value = 'confirmed'
+      clearHash()
+      return
+    }
+    if (res.status === 'busy' || res.error === 'review_busy') {
+      errorText.value = res.message || t('pages.publicGate.busy')
+      return
+    }
+    if (res.status === 'validation_failed' || res.error === 'review_validation_failed') {
+      errorText.value = res.message || t('pages.publicGate.validationFailed')
+      return
+    }
+    if (res.status === 'used' || res.error === 'conflict') {
+      preview.value = { ...preview.value, status: 'used' }
+      return
+    }
+    preview.value = { ...preview.value, status: res.status || 'invalid' }
+  } catch (e) {
+    errorText.value = e instanceof Error ? e.message : String(e)
+    try {
+      preview.value = await publicGateApi.preview(token.value)
+    } catch {
+      // keep error
+    }
+  } finally {
+    submitting.value = false
+  }
+}
+
 onMounted(async () => {
   applyPublicLightChrome()
   await applyPublicLocale()
@@ -148,7 +194,7 @@ onUnmounted(() => {
           class="border border-white/40 bg-white/15 px-2 py-0.5 text-[11px] text-white"
           data-testid="public-gate-badge"
         >
-          {{ t('pages.publicGate.badge') }}
+          {{ isReview ? t('pages.publicGate.badgeReview') : t('pages.publicGate.badge') }}
         </span>
       </div>
       <span v-if="isActive && !doneKind" class="text-[12px] text-white/80" data-testid="public-gate-remaining">
@@ -162,9 +208,19 @@ onUnmounted(() => {
       </div>
 
       <div v-else-if="doneKind" class="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-center" data-testid="public-gate-done">
-        <Icon :name="doneKind === 'approved' ? 'check' : 'alert'" :size="28" :class="doneKind === 'approved' ? 'text-ok' : 'text-warn'" />
+        <Icon
+          :name="doneKind === 'rejected' ? 'alert' : 'check'"
+          :size="28"
+          :class="doneKind === 'rejected' ? 'text-warn' : 'text-ok'"
+        />
         <h1 class="text-lg font-semibold">
-          {{ doneKind === 'approved' ? t('pages.publicGate.doneApproved') : t('pages.publicGate.doneRejected') }}
+          {{
+            doneKind === 'confirmed'
+              ? t('pages.publicGate.doneConfirmed')
+              : doneKind === 'approved'
+                ? t('pages.publicGate.doneApproved')
+                : t('pages.publicGate.doneRejected')
+          }}
         </h1>
         <p class="text-sm text-txt3">{{ t('pages.publicGate.doneHint') }}</p>
       </div>
@@ -243,6 +299,21 @@ onUnmounted(() => {
         </section>
 
         <form class="mt-auto max-w-xl space-y-3 border-t border-line pt-4" @submit.prevent>
+          <template v-if="isReview">
+            <p v-if="errorText" class="text-xs text-err" role="alert" data-testid="public-gate-error">{{ errorText }}</p>
+            <button
+              v-if="canConfirm"
+              type="button"
+              class="inline-flex min-h-11 min-w-[44px] w-full items-center justify-center bg-ok px-4 text-sm font-medium text-white disabled:opacity-45"
+              data-testid="public-gate-confirm"
+              :disabled="submitting"
+              :aria-label="t('pages.publicGate.confirmAria')"
+              @click="submitReviewConfirm"
+            >
+              {{ t('pages.publicGate.confirm') }}
+            </button>
+          </template>
+          <template v-else>
           <label class="block text-xs text-txt2">
             {{ t('pages.publicGate.nameLabel') }}
             <input
@@ -291,6 +362,7 @@ onUnmounted(() => {
               {{ t('pages.publicGate.reject') }}
             </button>
           </div>
+          </template>
         </form>
       </div>
     </main>

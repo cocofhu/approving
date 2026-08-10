@@ -304,6 +304,9 @@ func (e *Engine) reviewReply(c *execCtx, node *models.Node, conv *models.ReactCo
 
 	conv.Done = true
 	logDB(e.db.Save(conv), runID, "finish review conversation")
+	if e.shareRevoker != nil {
+		e.shareRevoker.RevokeUnusedForGate(runID, nodeID, conv.Iteration)
+	}
 	e.host.SetActiveReview(runID, false)
 	if rp, ok := e.provider.(runtime.ReviewProvider); ok {
 		rp.RetireSession(runID, nodeID) // idempotent

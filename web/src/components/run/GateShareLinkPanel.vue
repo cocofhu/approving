@@ -5,7 +5,7 @@ import AppModal from '@/components/ui/AppModal.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { api } from '@/lib/api'
 import { useToast } from '@/lib/useToast'
-import type { GateInboxItem, GateShareInboxStatus } from '@/lib/types'
+import type { GateShareInboxStatus, ShareLinkTarget } from '@/lib/types'
 import {
   DEFAULT_GATE_SHARE_TTL,
   GATE_SHARE_TTL_TIERS,
@@ -21,7 +21,8 @@ import {
 
 const props = defineProps<{
   open: boolean
-  gate: GateInboxItem | null
+  target: ShareLinkTarget | null
+  kind?: 'human_gate' | 'review' | string
 }>()
 
 const emit = defineEmits<{
@@ -41,7 +42,8 @@ const confirmKind = ref<'regen' | 'revoke' | null>(null)
 const localStatus = ref<GateShareInboxStatus | null>(null)
 const errorText = ref('')
 
-const status = computed(() => localStatus.value || props.gate?.shareLink || { state: 'none' })
+const shareKind = computed(() => (props.kind === 'review' || props.target?.kind === 'review' ? 'review' : 'human_gate'))
+const status = computed(() => localStatus.value || props.target?.shareLink || { state: 'none' })
 const mode = computed(() => {
   if (status.value.state === 'used' || (!canCreateGateShare(status.value) && !isGateShareActive(status.value))) {
     return 'readonly' as const
@@ -55,7 +57,7 @@ const displayUrl = computed(() => {
 })
 
 watch(
-  () => [props.open, props.gate?.runId, props.gate?.nodeId] as const,
+  () => [props.open, props.target?.runId, props.target?.nodeId, shareKind.value] as const,
   () => {
     if (!props.open) {
       revealUrl.value = false
@@ -64,11 +66,11 @@ watch(
       errorText.value = ''
       return
     }
-    localStatus.value = props.gate?.shareLink || { state: 'none' }
+    localStatus.value = props.target?.shareLink || { state: 'none' }
     ttlTier.value =
-      (props.gate?.shareLink?.ttlTier as GateShareTTLTier) || DEFAULT_GATE_SHARE_TTL
+      (props.target?.shareLink?.ttlTier as GateShareTTLTier) || DEFAULT_GATE_SHARE_TTL
     revealUrl.value = false
-    fullUrl.value = recallShareUrl(props.gate?.runId || '', props.gate?.nodeId || '', props.gate?.iteration)
+    fullUrl.value = recallShareUrl(props.target?.runId || '', props.target?.nodeId || '', props.target?.iteration)
     confirmKind.value = null
     errorText.value = ''
   },
@@ -89,13 +91,16 @@ async function copyText(text: string) {
 }
 
 async function createAndCopy() {
-  if (!props.gate || busy.value) return
+  if (!props.target || busy.value) return
   busy.value = true
   errorText.value = ''
   try {
-    const res = await api.createGateShareLink(props.gate.runId, props.gate.nodeId, ttlTier.value)
+    const res =
+      shareKind.value === 'review'
+        ? await api.createReviewShareLink(props.target.runId, props.target.nodeId, ttlTier.value)
+        : await api.createGateShareLink(props.target.runId, props.target.nodeId, ttlTier.value)
     fullUrl.value = res.url
-    rememberShareUrl(props.gate.runId, props.gate.nodeId, props.gate.iteration, res.url)
+    rememberShareUrl(props.target.runId, props.target.nodeId, props.target.iteration, res.url)
     const next: GateShareInboxStatus = {
       state: res.state || 'active',
       ttlTier: res.ttlTier,
@@ -123,13 +128,16 @@ async function copyExisting() {
 }
 
 async function confirmRegen() {
-  if (!props.gate || busy.value) return
+  if (!props.target || busy.value) return
   busy.value = true
   errorText.value = ''
   try {
-    const res = await api.regenGateShareLink(props.gate.runId, props.gate.nodeId)
+    const res =
+      shareKind.value === 'review'
+        ? await api.regenReviewShareLink(props.target.runId, props.target.nodeId)
+        : await api.regenGateShareLink(props.target.runId, props.target.nodeId)
     fullUrl.value = res.url
-    rememberShareUrl(props.gate.runId, props.gate.nodeId, props.gate.iteration, res.url)
+    rememberShareUrl(props.target.runId, props.target.nodeId, props.target.iteration, res.url)
     revealUrl.value = false
     confirmKind.value = null
     const next: GateShareInboxStatus = {
@@ -150,12 +158,16 @@ async function confirmRegen() {
 }
 
 async function confirmRevoke() {
-  if (!props.gate || busy.value) return
+  if (!props.target || busy.value) return
   busy.value = true
   errorText.value = ''
   try {
-    await api.revokeGateShareLink(props.gate.runId, props.gate.nodeId)
-    forgetShareUrl(props.gate.runId, props.gate.nodeId, props.gate.iteration)
+    if (shareKind.value === 'review') {
+      await api.revokeReviewShareLink(props.target.runId, props.target.nodeId)
+    } else {
+      await api.revokeGateShareLink(props.target.runId, props.target.nodeId)
+    }
+    forgetShareUrl(props.target.runId, props.target.nodeId, props.target.iteration)
     const next: GateShareInboxStatus = {
       state: 'revoked',
       canCreate: true,
@@ -186,7 +198,7 @@ function close() {
     close-on-esc
     @close="close"
   >
-    <div v-if="gate" class="space-y-4 text-sm text-txt" data-testid="gate-share-panel-body">
+    <div v-if="target" class="space-y-4 text-sm text-txt" data-testid="gate-share-panel-body">
       <p class="border border-warn/35 bg-warn/10 px-3 py-2 text-[13px] text-warn" role="note">
         {{ t('pages.gatesInbox.share.safetyHint') }}
       </p>

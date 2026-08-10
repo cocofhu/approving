@@ -3,7 +3,10 @@
 // including inbound and outbound images. It implements channels.Adapter.
 package qq
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // Gateway opcodes (QQ bot WebSocket).
 const (
@@ -83,6 +86,26 @@ type attachment struct {
 	ContentType string `json:"content_type"`
 	URL         string `json:"url"`
 	Filename    string `json:"filename"`
+}
+
+// UnmarshalJSON accepts both QQ snake_case content_type and camelCase contentType.
+func (a *attachment) UnmarshalJSON(b []byte) error {
+	var raw struct {
+		ContentType  string `json:"content_type"`
+		ContentType2 string `json:"contentType"`
+		URL          string `json:"url"`
+		Filename     string `json:"filename"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	a.ContentType = strings.TrimSpace(raw.ContentType)
+	if a.ContentType == "" {
+		a.ContentType = strings.TrimSpace(raw.ContentType2)
+	}
+	a.URL = raw.URL
+	a.Filename = raw.Filename
+	return nil
 }
 
 // inboundMessage is the union of C2C/group/guild message payloads.

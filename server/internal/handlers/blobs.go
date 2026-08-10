@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,8 @@ import (
 )
 
 // GetBlob streams a stored attachment by id (blob:{id} without the prefix).
+// Image responses sniff magic bytes for Content-Type (no charset) so nosniff
+// browsers can decode mislabeled history blobs. Storage bytes/meta are not rewritten.
 func (h *Handlers) GetBlob(c *gin.Context) {
 	if h.Blobs == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "blob store unavailable"})
@@ -30,7 +33,19 @@ func (h *Handlers) GetBlob(c *gin.Context) {
 		return
 	}
 	defer rc.Close()
-	mime := meta.MimeType
+
+	header := make([]byte, 512)
+	n, readErr := io.ReadFull(rc, header)
+	if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "blob read failed"})
+		return
+	}
+	header = header[:n]
+
+	mime := blob.StripContentTypeParams(meta.MimeType)
+	if sniffed := blob.SniffSupportedImageMIME(header); sniffed != "" {
+		mime = sniffed
+	}
 	if mime == "" {
 		mime = "application/octet-stream"
 	}
@@ -42,5 +57,5 @@ func (h *Handlers) GetBlob(c *gin.Context) {
 		c.Header("Content-Length", fmt.Sprintf("%d", meta.Size))
 	}
 	c.Status(http.StatusOK)
-	_, _ = io.Copy(c.Writer, rc)
+	_, _ = io.Copy(c.Writer, io.MultiReader(bytes.NewReader(header), rc))
 }

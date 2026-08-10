@@ -349,17 +349,24 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
     const headerActions = page.getByTestId('project-detail-header-actions')
     await expect(headerActions.getByTestId('project-token-stat')).toBeVisible()
     await expect(headerActions.getByRole('button', { name: '删除' })).toHaveCount(0)
-    // 页头不应再有「合并规则」按钮；Tab hint 旁的「查看合并规则」链接在进入对应 Tab 后才出现
-    await expect(page.getByRole('button', { name: '合并规则' })).toHaveCount(0)
+    // 页头不应再有「合并规则」按钮；Tab hint 旁的「合并规则」链接在进入对应 Tab 后才出现
+    await expect(headerActions.getByRole('button', { name: '合并规则' })).toHaveCount(0)
   })
 
   test('沙箱空态：同壳面板 + primary「添加一行」+ 合并规则入口', async ({ page }) => {
     await gotoProjectDetailWithProject(page, MOCK_PROJECT)
     await page.getByRole('button', { name: '沙箱环境变量' }).click()
 
-    await expect(page.getByRole('button', { name: '查看合并规则' })).toBeVisible()
-    await page.getByRole('button', { name: '查看合并规则' }).click()
+    await expect(page.getByRole('button', { name: '合并规则' })).toBeVisible()
+    await page.getByRole('button', { name: '合并规则' }).click()
     await expect(page.getByText('环境变量与工作流变量')).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByText(/沙箱 OS 环境变量合并顺序/)).toBeVisible()
+    await expect(page.getByText(/两套命名空间/)).toBeVisible()
+    await expect(page.getByText(/密钥项回读打码/)).toBeVisible()
+    const newNote = page.getByTestId('merge-rules-new-note')
+    await expect(newNote).toBeVisible()
+    await expect(newNote.getByText('新增', { exact: true })).toBeVisible()
+    await expect(newNote.getByText('停用的行会保留 key/value，但不参与注入；开关与字段变更须保存后，才影响下次注入。')).toBeVisible()
     await page.keyboard.press('Escape')
 
     const shell = page
@@ -408,7 +415,14 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
     await expect(legacyRow).toHaveAttribute('data-env-enabled', 'true')
     await expect(legacyRow.getByText('开', { exact: true })).toBeVisible()
     await expect(legacyRow.getByText('· 旧')).toHaveCount(0)
-    await expect(page.getByText(/可临时停用|须保存后才影响/)).toBeVisible()
+    await expect(page.getByText('注入流水线节点沙箱的 OS 环境变量。')).toBeVisible()
+    await page.getByTestId('project-detail-merge-rules').click()
+    await expect(page.getByText(/沙箱 OS 环境变量合并顺序/)).toBeVisible()
+    await expect(page.getByText(/两套命名空间/)).toBeVisible()
+    await expect(page.getByText(/密钥项回读打码/)).toBeVisible()
+    const newNote = page.getByTestId('merge-rules-new-note')
+    await expect(newNote.getByText('新增', { exact: true })).toBeVisible()
+    await expect(newNote.getByText('停用的行会保留 key/value，但不参与注入；开关与字段变更须保存后，才影响下次注入。')).toBeVisible()
   })
 
   test('沙箱启用开关：停用弱化 + 保存 payload 含 enabled:false', async ({ page }) => {
@@ -532,7 +546,13 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
 
     const addBtn = shell.getByRole('button', { name: '添加一行' })
     await expect(addBtn).toHaveClass(/bg-accent/)
-    await expect(page.getByRole('button', { name: '查看合并规则' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '合并规则' })).toBeVisible()
+    await page.getByRole('button', { name: '合并规则' }).click()
+    await expect(page.getByText('环境变量与工作流变量')).toBeVisible({ timeout: 5_000 })
+    const newNote = page.getByTestId('merge-rules-new-note')
+    await expect(newNote).toBeVisible()
+    await expect(newNote.getByText('新增', { exact: true })).toBeVisible()
+    await expect(newNote.getByText('停用的行会保留 key/value，但不参与注入；开关与字段变更须保存后，才影响下次注入。')).toBeVisible()
   })
 
   test('工作流变量有数据：表头 + 底栏 + 次行描述', async ({ page }) => {
@@ -592,12 +612,19 @@ test.describe('ProjectDetailView 项目信息面板', () => {
     await expect(deleteBtn).toHaveClass(/text-err/)
     await expect(saveBtn).toBeVisible()
     await expect(saveBtn).toHaveClass(/bg-accent/)
+    // 无改动时保存仍可点（现网 savingMeta，非 Demo dirty-disable）（g2.1 / g3.2）
+    await expect(saveBtn).toBeEnabled()
 
     // 左删右存：删除在保存左侧（g2.1 / g3.2）
     const deleteBox = await deleteBtn.boundingBox()
     const saveBox = await saveBtn.boundingBox()
     expect(deleteBox && saveBox).toBeTruthy()
     expect(deleteBox!.x).toBeLessThan(saveBox!.x)
+
+    // 脚栏贴近主区底，消除卡外页底空洞（g1.1 / g1.2 / g3.2）
+    const footerBox = await footer.boundingBox()
+    expect(footerBox).toBeTruthy()
+    expect(footerBox!.y + footerBox!.height).toBeGreaterThan(800 - 80)
 
     // 点击删除 → 既有确认弹窗 → 取消后仍停留详情且项目未删
     await deleteBtn.click()
@@ -607,6 +634,129 @@ test.describe('ProjectDetailView 项目信息面板', () => {
     await expect(page.getByText('删除项目 · Demo Project')).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Demo Project' })).toBeVisible()
     await expect(panel.getByTestId('project-meta-delete')).toBeVisible()
+  })
+
+  test('保存后页头名称同步；其它 Tab 仍可切换（g2.2 / g3.2）', async ({ page }) => {
+    let savedName = MOCK_PROJECT.name
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.route('**/api/projects/proj-1', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ ...MOCK_PROJECT, name: savedName }),
+        })
+        return
+      }
+      if (route.request().method() === 'PATCH' || route.request().method() === 'PUT') {
+        const body = route.request().postDataJSON() as { name?: string; description?: string }
+        savedName = body.name?.trim() || savedName
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ...MOCK_PROJECT,
+            name: savedName,
+            description: body.description ?? MOCK_PROJECT.description,
+          }),
+        })
+        return
+      }
+      await route.continue()
+    })
+    await page.route('**/api/workflows**', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(MOCK_WORKFLOWS),
+        })
+        return
+      }
+      await route.continue()
+    })
+    await page.route('**/api/runs**', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20, hasMore: false }),
+        })
+        return
+      }
+      await route.continue()
+    })
+    await page.route('**/api/projects/proj-1/pm-leader', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ enabled: false }),
+      })
+    })
+    await page.route('**/api/projects/proj-1/cron-jobs', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ items: [] }),
+        })
+        return
+      }
+      await route.continue()
+    })
+    await page.route('**/api/projects/proj-1/channel**', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ channel: null, secretsKeyConfigured: false }),
+        })
+        return
+      }
+      await route.continue()
+    })
+    await page.route('**/api/projects/*/token-stats**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          window: '30d',
+          bucketWidth: 'day',
+          timezone: 'UTC',
+          empty: true,
+          trend: [],
+          composition: {
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            total: 0,
+          },
+          workflows: [],
+        }),
+      })
+    })
+    await page.goto('/project-detail.html')
+    await expect(page.getByRole('heading', { name: 'Demo Project' })).toBeVisible({ timeout: 10_000 })
+    await page.getByRole('button', { name: '项目信息' }).click()
+
+    await page.locator('#project-meta-name').fill('Renamed Project')
+    await page.getByTestId('project-meta-footer').getByRole('button', { name: '保存' }).click()
+    await expect(page.getByRole('heading', { name: 'Renamed Project' })).toBeVisible({ timeout: 5_000 })
+
+    await page.getByRole('button', { name: '沙箱环境变量' }).click()
+    await expect(page.getByText('暂无沙箱环境变量')).toBeVisible()
+    await expect(page).toHaveURL(/tab=sandboxEnv/)
+    await page.getByRole('button', { name: '定时任务' }).click()
+    await expect(page.getByText('暂无定时任务')).toBeVisible()
+    await expect(page).toHaveURL(/tab=cronJobs/)
+    await page.getByRole('button', { name: '通知' }).click()
+    await expect(page.getByTestId('project-notify-panel')).toBeVisible()
+    await expect(page).toHaveURL(/tab=notify/)
+    await page.getByRole('button', { name: '项目信息' }).click()
+    await expect(page.getByTestId('project-meta-footer')).toBeVisible()
+    await expect(page.locator('#project-meta-name')).toHaveValue('Renamed Project')
+    await expect(page).toHaveURL(/tab=meta/)
   })
 })
 
@@ -1345,6 +1495,7 @@ test.describe('ProjectDetailView PM Leader QQ Channel 侧栏', () => {
     await expect(page.getByTestId('pm-qq-tag-header')).toBeVisible()
     await expect(page.getByTestId('pm-channel-readonly')).toBeVisible()
     await expect(page.getByTestId('pm-channel-readonly')).toContainText('来自 QQ，请在 QQ 侧回复')
+    await expect(page.getByTestId('pm-channel-readonly')).toContainText('可点击缩略图查看大图')
     await expect(page.getByTestId('pm-chat-send')).toHaveCount(0)
 
     await channelItem.click({ button: 'right' })

@@ -3,7 +3,6 @@ package qq
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -151,27 +150,14 @@ func (a *Adapter) handleEvent(ctx context.Context, evtType string, data []byte, 
 		MessageID:      m.ID,
 		Timestamp:      time.Now(),
 	}
-	var oversized []string
-	for _, att := range m.Attachments {
-		// Accept any type (PDF/zip/etc.); only the historical count cap applies.
-		if len(in.Images) >= maxInboundImages {
-			break
-		}
-		img, err := downloadImage(ctx, att)
-		if err != nil {
-			if errors.Is(err, errInboundTooLarge) {
-				name := strings.TrimSpace(att.Filename)
-				if name == "" {
-					name = "附件"
-				}
-				oversized = append(oversized, name)
-				continue
-			}
-			log.Warn().Err(err).Msg("qq: inbound attachment download failed; skipping")
-			continue
-		}
-		in.Images = append(in.Images, img)
+	auth, err := a.client.authHeader(ctx)
+	if err != nil {
+		log.Warn().Err(err).Msg("qq: auth header for inbound download failed; continuing without token")
+		auth = ""
 	}
+	images, hint, oversized := collectInboundAttachments(ctx, m.Attachments, auth, downloadImage)
+	in.Images = images
+	in.ChannelHint = hint
 	if len(oversized) > 0 {
 		tip := fmt.Sprintf(
 			"附件超过 %d MiB 上限，已拒绝：%s。请压缩后重试。",
