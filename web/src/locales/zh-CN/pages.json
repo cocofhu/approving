@@ -2579,7 +2579,10 @@
       "retry": "重试",
       "contentEmpty": "该产物内容为空",
       "platformStorage": "平台存储",
-      "fallbackPlainText": "fallback · plain text"
+      "fallbackPlainText": "fallback · plain text",
+      "modeToggleAria": "预览模式",
+      "modeStructured": "结构化 UI",
+      "modeRaw": "原始 JSON"
     },
     "acpStatus": {
       "busy": "运行中",
