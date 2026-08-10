@@ -30,15 +30,14 @@
       "viewAll": "查看全部通知",
       "clickForOutput": "点击查看产出",
       "outputTitle": "运行产出",
-      "outputHint": "以 PPT 幻灯片卡片浏览本次输出产物，点击卡片可预览。",
-      "outputCard": "产出卡片",
+      "outputHint": "左侧选择产物，右侧查看真实内容预览；结构化产物默认分区 UI，可切换原始 JSON。",
       "noArtifacts": "本次运行暂无产出",
       "noArtifactsHint": "可打开 Run 详情查看执行过程",
       "openRunDetail": "打开 Run 详情",
       "done": "完成",
       "previewLabel": "预览",
-      "previewSummary": "类型 {kind} · 产物 {name}（站内摘要预览）",
-      "loadingOutputs": "正在加载产出…"
+      "loadingOutputs": "正在加载产出…",
+      "listAria": "本次运行产物列表"
     }
   }
 }

@@ -2584,7 +2584,10 @@
       "retry": "Retry",
       "contentEmpty": "This artifact is empty",
       "platformStorage": "Platform storage",
-      "fallbackPlainText": "fallback · plain text"
+      "fallbackPlainText": "fallback · plain text",
+      "modeToggleAria": "Preview mode",
+      "modeStructured": "Structured UI",
+      "modeRaw": "Raw JSON"
     },
     "acpStatus": {
       "busy": "Busy",
