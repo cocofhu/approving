@@ -59,6 +59,8 @@ const props = withDefaults(
     interrupted?: boolean
     /** ISO when turn completed normally — drives restrained「已完成」footnote. */
     streamCompletedAt?: string | null
+    /** App preview Inbox: show「打开分享面板」entry above composer body. */
+    showSharePanel?: boolean
   }>(),
   {
     iteration: 1,
@@ -82,6 +84,7 @@ const props = withDefaults(
     streamThought: '',
     interrupted: false,
     streamCompletedAt: null,
+    showSharePanel: false,
   },
 )
 
@@ -89,6 +92,7 @@ const emit = defineEmits<{
   (e: 'send', text: string, images: ClarifyImage[], annotations: ReactAnnotation[]): void
   (e: 'finish'): void
   (e: 'cancel'): void
+  (e: 'open-share'): void
   /** @deprecated Prefer `send`; kept for GateApproval wiring during review-semantics migrate. */
   (e: 'reject'): void
   /** @deprecated Prefer `finish`; kept for GateApproval wiring during review-semantics migrate. */
@@ -181,28 +185,51 @@ function onConfirm() {
 
 <template>
   <!-- Clarify / review: reuse ClarifyChat (chip + image + threshold already wired). -->
-  <ClarifyChat
+  <div
     v-if="mode === 'clarify' || mode === 'review'"
-    ref="chatRef"
-    class="h-full min-h-0"
-    :run-id="runId || ''"
-    :node-id="nodeId || ''"
-    :iteration="iteration"
-    v-model:draft="draft"
-    v-model:attachments="attachments"
-    v-model:annotations="annotations"
-    :turns="turns"
-    :done="done"
-    :active="active"
-    :review-mode="mode === 'review'"
-    :annotate-enabled="mode === 'clarify' || mode === 'review'"
-    :hide-finish="mode === 'clarify'"
-    :send-label="mode === 'clarify' ? t('pages.reviewComposer.sendClarify') : undefined"
-    :confirm-error="confirmError"
-    @send="(text, images, anns) => emit('send', text, images, anns)"
-    @finish="emit('finish')"
-    @cancel="emit('cancel')"
-  />
+    class="flex h-full min-h-0 flex-col"
+    data-testid="review-composer-shell"
+  >
+    <div
+      v-if="showSharePanel"
+      class="shrink-0 border-b border-line bg-elevated/40 px-3 py-2"
+      data-testid="review-composer-share-panel"
+    >
+      <p class="mb-2 text-[11px] text-txt3">
+        {{ t('pages.gatesInbox.share.appPreviewShareHint') }}
+      </p>
+      <button
+        type="button"
+        class="inline-flex min-h-9 w-full items-center justify-center border border-accent/40 bg-accent/10 px-3 py-1.5 text-[12px] font-medium text-accent-2 hover:bg-accent/20"
+        data-testid="review-composer-open-share"
+        :aria-label="t('pages.gatesInbox.share.openSharePanelAria')"
+        @click="emit('open-share')"
+      >
+        {{ t('pages.gatesInbox.share.openSharePanel') }}
+      </button>
+    </div>
+    <ClarifyChat
+      ref="chatRef"
+      class="min-h-0 flex-1"
+      :run-id="runId || ''"
+      :node-id="nodeId || ''"
+      :iteration="iteration"
+      v-model:draft="draft"
+      v-model:attachments="attachments"
+      v-model:annotations="annotations"
+      :turns="turns"
+      :done="done"
+      :active="active"
+      :review-mode="mode === 'review'"
+      :annotate-enabled="mode === 'clarify' || mode === 'review'"
+      :hide-finish="mode === 'clarify'"
+      :send-label="mode === 'clarify' ? t('pages.reviewComposer.sendClarify') : undefined"
+      :confirm-error="confirmError"
+      @send="(text, images, anns) => emit('send', text, images, anns)"
+      @finish="emit('finish')"
+      @cancel="emit('cancel')"
+    />
+  </div>
 
   <!-- Gate: local composer with review-semantics sticky actions (send + confirm). -->
   <div

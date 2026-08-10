@@ -336,3 +336,117 @@ func TestReviewShareReplyAndCancelDoNotConsume(t *testing.T) {
 		t.Fatalf("decide after reply: %d %s", dec.Code, dec.Body.String())
 	}
 }
+
+func seedAppPreviewReview(t *testing.T, h *harness, runID, nodeID string) {
+	t.Helper()
+	now := time.Now()
+	h.db.Create(&models.WorkflowDef{
+		ID: "wf-" + runID, ProjectID: models.DefaultProjectID, Name: "preview-" + runID,
+		Status: "published", Version: 1,
+	})
+	h.db.Create(&models.Run{
+		ID: runID, WorkflowID: "wf-" + runID, WorkflowName: "preview-" + runID, Status: "waiting_human",
+		StartedAt: now, Title: "应用预览运行",
+		Graph: models.Graph{Nodes: []models.Node{
+			{ID: nodeID, Type: "app_preview", Label: "应用预览"},
+		}},
+	})
+	h.db.Create(&models.ReactConversation{
+		RunID: runID, NodeID: nodeID, Iteration: 1, Done: false,
+		Messages: []models.ReactMessage{{Role: "agent", Text: "应用预览已就绪", At: now.Format(time.RFC3339)}},
+	})
+	h.db.Create(&models.StateRun{
+		RunID: runID, NodeID: nodeID, Iteration: 1, Status: "waiting_human", NodeType: "app_preview",
+	})
+}
+
+// TestAppPreviewShareCreateAttachPreviewAndGateAPIRejected covers plan g1/g3/g4.2:
+// waiting_human app_preview can mint review share links, inbox attaches shareLink,
+// public preview is productKind=app_preview (read-only), and gates API must fail.
+func TestAppPreviewShareCreateAttachPreviewAndGateAPIRejected(t *testing.T) {
+	h := newHarness(t)
+	seedAppPreviewReview(t, h, "run-ap-share", "app_preview1")
+
+	w := h.do(http.MethodPost, "/api/runs/run-ap-share/reviews/app_preview1/share-link", map[string]any{"ttlTier": "24h"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("create app_preview share: %d %s", w.Code, w.Body.String())
+	}
+	created := parseJSON(t, w)
+	url, _ := created["url"].(string)
+	if !strings.Contains(url, "/public/gate-approvals#t=") {
+		t.Fatalf("url fragment: %s", url)
+	}
+	token := strings.TrimPrefix(url[strings.Index(url, "#t="):], "#t=")
+	if !gateshare.ValidTokenShape(token) {
+		t.Fatalf("token shape: %s", token)
+	}
+
+	var row models.GateShareLink
+	if err := h.db.Where("run_id = ? AND node_id = ?", "run-ap-share", "app_preview1").First(&row).Error; err != nil {
+		t.Fatalf("load link: %v", err)
+	}
+	if row.Kind != models.ShareLinkKindReview {
+		t.Fatalf("kind=%q want review", row.Kind)
+	}
+	if row.GateID != nil {
+		t.Fatalf("app_preview link must not fake GateID: %+v", row.GateID)
+	}
+
+	st := parseJSON(t, h.do(http.MethodGet, "/api/runs/run-ap-share/reviews/app_preview1/share-link", nil))
+	if st["state"] != models.ShareLinkStateActive {
+		t.Fatalf("status: %+v", st)
+	}
+
+	list := h.do(http.MethodGet, "/api/gates", nil)
+	if list.Code != 200 {
+		t.Fatalf("list: %d", list.Code)
+	}
+	body := list.Body.String()
+	if !strings.Contains(body, `"kind":"app_preview"`) {
+		t.Fatalf("inbox missing app_preview item: %s", body)
+	}
+	if !strings.Contains(body, `"shareLink"`) {
+		t.Fatalf("inbox missing shareLink for app_preview: %s", body)
+	}
+	if strings.Contains(body, token) {
+		t.Fatal("inbox leaked plaintext token")
+	}
+
+	prev := h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: token})
+	p := parseJSON(t, prev)
+	if p["status"] != models.ShareLinkStateActive {
+		t.Fatalf("preview: %s", prev.Body.String())
+	}
+	if p["kind"] != models.ShareLinkKindReview {
+		t.Fatalf("preview kind: %+v", p)
+	}
+	if p["productKind"] != "app_preview" {
+		t.Fatalf("productKind=%v want app_preview", p["productKind"])
+	}
+	if strings.Contains(prev.Body.String(), "novnc") || strings.Contains(prev.Body.String(), "inspect") {
+		t.Fatalf("public preview must not expose novnc/inspect: %s", prev.Body.String())
+	}
+	actions, _ := p["actions"].(map[string]any)
+	if actions["confirm"] != "confirm" {
+		t.Fatalf("preview actions: %+v", actions)
+	}
+
+	// g3.3: app_preview must not succeed via human_gate share API
+	gateW := h.do(http.MethodPost, "/api/runs/run-ap-share/gates/app_preview1/share-link", map[string]any{"ttlTier": "24h"})
+	if gateW.Code == http.StatusOK {
+		t.Fatalf("gates API on app_preview must fail: %s", gateW.Body.String())
+	}
+	gateBody := gateW.Body.String()
+	if !strings.Contains(gateBody, "not_human_gate") && !strings.Contains(gateBody, "gate_not_pending") {
+		t.Fatalf("gates API on app_preview: %d %s", gateW.Code, gateBody)
+	}
+
+	nonce := publicPreviewNonce(t, h, token)
+	dec := h.doPublic(http.MethodPost, "/public/gate-approvals/decide", map[string]any{
+		"token": token, "action": "confirm", "nonce": nonce,
+	}, map[string]string{headerShareRequest: "1", "Origin": "http://" + publicHost})
+	out := parseJSON(t, dec)
+	if dec.Code != 200 || (out["status"] != "confirmed" && out["status"] != "busy" && out["status"] != "validation_failed") {
+		t.Fatalf("decide app_preview: %d %s", dec.Code, dec.Body.String())
+	}
+}

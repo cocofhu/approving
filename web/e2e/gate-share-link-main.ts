@@ -94,6 +94,26 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       )
     }
+    if (scene === 'public-app-preview') {
+      return new Response(
+        JSON.stringify({
+          status: 'active',
+          kind: 'review',
+          title: '应用预览',
+          description: '应用预览待审批',
+          remainingSec: 3600,
+          nonce: 'nonce-e2e-preview',
+          reactSessionAlive: true,
+          sessionBusy: false,
+          waiting: 0,
+          productKind: 'app_preview',
+          productName: 'app_preview',
+          actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
+          turns: [{ role: 'agent', text: '应用预览已就绪（set_preview 可达）。公开页为只读占位。', at: '2026-08-01T00:00:00Z' }],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
     return new Response(
       JSON.stringify({
         status: 'active',
@@ -187,6 +207,20 @@ const reviewItem: ClarifyInboxItem = {
   shareLink: { state: 'none', canCreate: true },
 }
 
+const appPreviewItem: ClarifyInboxItem = {
+  type: 'clarify',
+  kind: 'app_preview',
+  runId: 'run-e2e-preview',
+  nodeId: 'app_preview-e2e',
+  iteration: 1,
+  workflowName: 'wf',
+  label: '应用预览',
+  done: false,
+  requestedAt: '2026-08-01T00:00:00Z',
+  updatedAt: '2026-08-01T00:00:00Z',
+  shareLink: { state: 'none', canCreate: true },
+}
+
 const ToolbarHost = defineComponent({
   name: 'ToolbarHost',
   setup() {
@@ -206,10 +240,17 @@ const Fixture = defineComponent({
   setup() {
     const scene = new URLSearchParams(location.search).get('scene') || 'inbox'
     const open = ref(false)
-    const item = ref<InboxItem>(scene === 'inbox-review' ? { ...reviewItem } : { ...gate })
-    const kind = scene === 'inbox-review' ? 'review' : 'human_gate'
+    const item = ref<InboxItem>(
+      scene === 'inbox-review'
+        ? { ...reviewItem }
+        : scene === 'inbox-app-preview'
+          ? { ...appPreviewItem }
+          : { ...gate },
+    )
+    const kind =
+      scene === 'inbox-review' || scene === 'inbox-app-preview' ? 'review' : 'human_gate'
 
-    if (scene === 'public' || scene === 'public-review') {
+    if (scene === 'public' || scene === 'public-review' || scene === 'public-app-preview') {
       if (!location.hash) location.hash = `#t=${TOKEN}`
       return () => h('div', { 'data-testid': 'gate-share-e2e-root' }, [h(PublicGateApprovalView)])
     }
@@ -225,7 +266,7 @@ const Fixture = defineComponent({
             open.value = true
           },
         }),
-        h(ToolbarHost),
+        scene === 'inbox' ? h(ToolbarHost) : null,
         h(GateShareLinkPanel, {
           open: open.value,
           target: {

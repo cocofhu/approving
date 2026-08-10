@@ -12,6 +12,7 @@ import {
   forgetShareUrl,
   isHumanGateInboxItem,
   isShareableInboxItem,
+  inboxShareKind,
   shareApiErrorMessage,
 } from './gateShareLink'
 
@@ -56,7 +57,7 @@ describe('gateShareLink helpers', () => {
     expect(isGateShareActive({ state: 'active' })).toBe(true)
   })
 
-  it('isHumanGateInboxItem only matches human_gate; isShareableInboxItem also matches kind=review', () => {
+  it('isHumanGateInboxItem only matches human_gate; isShareableInboxItem matches review and app_preview', () => {
     const humanGate = {
       type: 'gate' as const,
       nodeType: 'human_gate',
@@ -96,7 +97,10 @@ describe('gateShareLink helpers', () => {
     expect(isHumanGateInboxItem(clarify)).toBe(false)
     expect(isShareableInboxItem(clarify)).toBe(false)
     expect(isShareableInboxItem({ ...clarify, kind: 'review' })).toBe(true)
-    expect(isShareableInboxItem({ ...clarify, kind: 'app_preview' })).toBe(false)
+    expect(isShareableInboxItem({ ...clarify, kind: 'app_preview' })).toBe(true)
+    expect(inboxShareKind({ ...clarify, kind: 'app_preview' })).toBe('review')
+    expect(inboxShareKind({ ...clarify, kind: 'review' })).toBe('review')
+    expect(inboxShareKind(humanGate)).toBe('human_gate')
   })
 
   it('recalls share URL from sessionStorage and maps API error codes', () => {

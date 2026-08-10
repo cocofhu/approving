@@ -261,3 +261,42 @@ describe('ReviewComposer gate review semantics (send + confirm)', () => {
     wrapper.unmount()
   })
 })
+
+describe('ReviewComposer app_preview share panel entry', () => {
+  it('shows open-share when showSharePanel is true (plan g2.4)', async () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const wrapper = mount(ReviewComposer, {
+      props: {
+        mode: 'review',
+        runId: 'run-1',
+        nodeId: 'app_preview',
+        iteration: 1,
+        turns: [],
+        done: false,
+        active: true,
+        showSharePanel: true,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: { Icon: true, ParagraphInput: true, AnnotationChip: true, ClarifyChat: true },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="review-composer-share-panel"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="review-composer-open-share"]').text()).toContain('打开分享面板')
+    await wrapper.get('[data-testid="review-composer-open-share"]').trigger('click')
+    expect(wrapper.emitted('open-share')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('hides share panel for clarify without showSharePanel', async () => {
+    const wrapper = mountClarify()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="review-composer-open-share"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})

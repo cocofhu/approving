@@ -44,7 +44,7 @@ function clarify(over: Partial<ClarifyInboxItem> = {}): ClarifyInboxItem {
 }
 
 describe('InboxPendingCard share entry', () => {
-  it('shows copy button and status for human_gate and kind=review only', async () => {
+  it('shows copy button and status for human_gate, kind=review, and kind=app_preview', async () => {
     const w = mount(InboxPendingCard, {
       props: { item: gate() },
       global: { plugins: [i18n] },
@@ -76,10 +76,19 @@ describe('InboxPendingCard share entry', () => {
     expect(c.find('[data-testid="gate-share-status"]').exists()).toBe(false)
 
     const preview = mount(InboxPendingCard, {
-      props: { item: clarify({ kind: 'app_preview', label: '应用预览' }) },
+      props: {
+        item: clarify({
+          kind: 'app_preview',
+          label: '应用预览',
+          shareLink: { state: 'none', canCreate: true },
+        }),
+      },
       global: { plugins: [i18n] },
     })
-    expect(preview.find('[data-testid="gate-share-copy-btn"]').exists()).toBe(false)
+    expect(preview.find('[data-testid="gate-share-copy-btn"]').exists()).toBe(true)
+    expect(preview.get('[data-testid="gate-share-status"]').text()).toContain('尚未创建')
+    await preview.get('[data-testid="gate-share-copy-btn"]').trigger('click')
+    expect(preview.emitted('open-share')).toHaveLength(1)
 
     const ps = mount(InboxPendingCard, {
       props: { item: gate({ nodeId: 'ps1', nodeType: 'proposal_select', title: '选择方案' }) },
