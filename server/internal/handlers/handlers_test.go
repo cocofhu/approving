@@ -109,7 +109,7 @@ func newHarness(t *testing.T) *harness {
 		Arts:             arts,
 		APIKeys:          services.NewAPIKeyService(db),
 		Skill:            skills,
-		Dash:             services.NewDashboardService(db),
+		Dash:             services.NewDashboardService(db, projectSvc),
 		Sbx:              sbx,
 		Eng:              eng,
 		MCP:              host,

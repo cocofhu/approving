@@ -8,7 +8,14 @@
         "waitingHuman": "等待人工",
         "failed": "失败",
         "completed": "已完成",
-        "ariaNav": "查看{label}的 Run，当前 {count}"
+        "ariaNav": "查看{label}的 Run，当前 {count}",
+        "totalTokens": "总 Token",
+        "totalTokensScope": "全平台 · 历史累计",
+        "totalTokensUnreported": "全平台 · 尚未上报用量",
+        "totalTokensZero": "全平台 · 已上报且合计为 0",
+        "totalTokensUpdating": "更新中",
+        "totalTokensAria": "全平台总 Token 消耗，当前 {count}",
+        "totalTokensAriaUnreported": "全平台总 Token 消耗，尚未上报"
       },
       "boardTitle": "需求进度看板",
       "viewFullBoard": "查看完整看板 →",
