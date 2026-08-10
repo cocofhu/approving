@@ -847,6 +847,7 @@
         "archived": "archived",
         "errorBadge": "error",
         "errorTitle": "无法读取沙箱日志",
+        "loadFailed": "无法读取沙箱日志，请重试。",
         "liveEmpty": "（已连接 · 当前无 stdout/stderr 输出）",
         "pending": "节点尚未执行,暂无沙箱日志",
         "empty": "暂无沙箱日志(容器可能尚未创建或已回收且未归档)"
@@ -959,7 +960,11 @@
       "expiredHint": "此一次性链接已过期，请向分享人要求重新发送。",
       "usedHint": "该外部一次决策已完成，不能再次确认或驳回。",
       "revokedHint": "分享人已撤销此链接，无法再次决策。",
-      "invalidHint": "此链接不能用于外部一次决策。请向分享人确认是否仍有效。"
+      "invalidHint": "此链接不能用于外部一次决策。请向分享人确认是否仍有效。",
+      "loading": "加载中…",
+      "submitting": "提交中…",
+      "networkError": "网络错误，请稍后重试",
+      "maybeStuck": "可能卡死 · 请求仍在进行，可继续等待或重试"
     },
     "artifacts": {
       "title": "产物",
@@ -1195,6 +1200,8 @@
       "copied": "已复制",
       "logTitle": "沙箱容器日志 · stdout/stderr",
       "logEmpty": "暂无日志(容器可能尚未产生输出或已回收且未归档)",
+      "logFailed": "日志请求失败，请重试。",
+      "logRefreshing": "正在刷新日志…",
       "disconnected": "[连接已断开]"
     },
     "agentStudio": {
@@ -1975,7 +1982,8 @@
         "publishedVersion": "已发布版本 v{n}",
         "publishedVersionDesc": "WorkflowVersion 快照 graph",
         "confirm": "下载 JSON",
-        "success": "已导出「{name}.json」"
+        "success": "已导出「{name}.json」",
+        "failed": "导出失败，请重试"
       },
       "import": {
         "success": "导入成功，正在跳转到「{name}」编辑器",
@@ -2066,6 +2074,8 @@
     "appPreview": {
       "loading": "加载预览…",
       "noPorts": "尚未注册预览端口",
+      "loadFailed": "端口列表加载失败，可重试。",
+      "refreshing": "正在刷新端口列表…",
       "unavailable": "预览服务暂不可用",
       "connectionLost": "预览连接已断开",
       "sandboxRecycled": "沙箱已回收,预览不可用",
@@ -2083,6 +2093,7 @@
         "error": "noVNC 预览连接失败",
         "connectingTitle": "正在启动预览环境…",
         "connectingHint": "首次启动约需 30–60s(需在沙箱内拉起浏览器),请稍候。",
+        "maybeStuck": "可能卡死 · 请求仍在进行，可继续等待或重试",
         "fps": "FPS",
         "fpsTooltip": "VNC 按需刷新：画面静止时帧率接近 0 属正常，不代表采样失败。此指标反映预览流刷新流畅度，不等于被测页面渲染性能。",
         "status": {
@@ -2120,12 +2131,14 @@
         "placeholder": "描述要修改的地方（可附图），发回上游生产节点就地重写产物…",
         "placeholderProposals": "说明方案需要如何调整（可附图），发回上游就地重写候选方案…",
         "send": "打回并修改",
-        "sending": "修改中…",
+        "sending": "发送中…",
         "failed": "打回修改失败",
         "issueSavedReviseFailed": "意见已记入但打回未成功，可重试打回",
         "annotationOnly": "（标注打回）",
         "annotationSummary": "标注：{summary}"
       },
+      "approveSuccess": "已批准",
+      "rejectSuccess": "已驳回",
       "subtitle": "人工门禁 · 工作流已在此挂起 (waiting_human)",
       "loadingArtifact": "加载产物中…",
       "loadingPreviewIssues": "正在获取预览问题，请稍候…",
@@ -2537,7 +2550,8 @@
       "deleteErrorNotFound": "产物不存在或已删除",
       "deleteErrorGeneric": "删除失败",
       "loading": "加载产物内容…",
-      "loadFailed": "加载失败:",
+      "loadFailed": "产物加载失败，请重试。",
+      "copied": "已复制",
       "imageLoadFailed": "图片加载失败",
       "retry": "重试",
       "contentEmpty": "该产物内容为空",

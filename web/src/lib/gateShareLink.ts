@@ -182,10 +182,11 @@ async function readJson<T>(res: Response): Promise<T> {
 
 /** Unauthenticated public gate APIs. Token never goes in path/query. */
 export const publicGateApi = {
-  preview(token: string): Promise<PublicGatePreview> {
+  preview(token: string, signal?: AbortSignal): Promise<PublicGatePreview> {
     return fetch('/public/gate-approvals/preview', {
       method: 'GET',
       credentials: 'omit',
+      signal,
       headers: {
         [GATE_SHARE_TOKEN_HEADER]: token,
         [GATE_SHARE_REQUEST_HEADER]: '1',
@@ -201,16 +202,20 @@ export const publicGateApi = {
       return body
     })
   },
-  decide(payload: {
-    token: string
-    action: string
-    comment?: string
-    name?: string
-    nonce: string
-  }): Promise<PublicGateDecideResult> {
+  decide(
+    payload: {
+      token: string
+      action: string
+      comment?: string
+      name?: string
+      nonce: string
+    },
+    signal?: AbortSignal,
+  ): Promise<PublicGateDecideResult> {
     return fetch('/public/gate-approvals/decide', {
       method: 'POST',
       credentials: 'omit',
+      signal,
       headers: {
         'Content-Type': 'application/json',
         [GATE_SHARE_REQUEST_HEADER]: '1',

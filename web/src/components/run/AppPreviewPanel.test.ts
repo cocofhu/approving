@@ -73,7 +73,11 @@ describe('AppPreviewPanel', () => {
   it('loads ports and renders preview tabs', async () => {
     const wrapper = mountPanel()
     await flushPromises()
-    expect(apiMocks.nodePreviews).toHaveBeenCalledWith('run-1', 'preview-1')
+    expect(apiMocks.nodePreviews).toHaveBeenCalledWith(
+      'run-1',
+      'preview-1',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(wrapper.text()).toContain('前端')
     expect(wrapper.find('[data-testid="novnc-stub"]').exists()).toBe(true)
     wrapper.unmount()
@@ -102,6 +106,43 @@ describe('AppPreviewPanel', () => {
     const wrapper = mountPanel()
     await flushPromises()
     expect(wrapper.text()).toMatch(/暂无|没有|未/)
+    expect(wrapper.find('[data-testid="app-preview-empty"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('passes AbortSignal and replaces ports on node switch', async () => {
+    apiMocks.nodePreviews.mockResolvedValue({
+      ports: [
+        { port: 5173, label: '前端' },
+        { port: 5174, label: '管理端' },
+      ],
+    })
+    const wrapper = mountPanel()
+    await flushPromises()
+    expect(wrapper.text()).toContain('前端')
+    expect(apiMocks.nodePreviews.mock.calls[0][2]).toEqual(
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    apiMocks.nodePreviews.mockResolvedValue({
+      ports: [
+        { port: 3000, label: 'NEWPORT' },
+        { port: 3001, label: 'OTHER' },
+      ],
+    })
+    await wrapper.setProps({ nodeId: 'preview-2' })
+    await flushPromises()
+    expect(wrapper.text()).toContain('NEWPORT')
+    expect(wrapper.text()).not.toContain('前端')
+    wrapper.unmount()
+  })
+
+  it('sandboxes loadError and keeps retry without e.message', async () => {
+    apiMocks.nodePreviews.mockRejectedValue(new Error('internal-preview-token-leak'))
+    const wrapper = mountPanel()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="app-preview-load-error"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('internal-preview-token-leak')
+    expect(wrapper.text()).toMatch(/失败|retry|重试/i)
     wrapper.unmount()
   })
 })

@@ -85,6 +85,9 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     )
   }
   if (url.includes('/public/gate-approvals/decide')) {
+    if (new URLSearchParams(location.search).get('slowDecide')) {
+      await new Promise((r) => setTimeout(r, 800))
+    }
     const body = init?.body ? JSON.parse(String(init.body)) : {}
     if (body.action === 'confirm') {
       return new Response(JSON.stringify({ status: 'confirmed', action: 'confirm' }), {

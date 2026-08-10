@@ -65,6 +65,34 @@ describe('CopyWorkflowModal', () => {
     wrapper.unmount()
   })
 
+  it('aborts copy when modal closes mid-flight and ignores double submit', async () => {
+    let resolveCopy!: (v: { id: string; name: string }) => void
+    apiMocks.copyWorkflow.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveCopy = resolve
+        }),
+    )
+    const wrapper = mountModal(false)
+    await wrapper.setProps({ open: true })
+    await flushPromises()
+    const confirm = wrapper.findAll('button').find((b) => b.text().includes('确认复制') || b.text().includes('复制'))
+    expect(confirm).toBeTruthy()
+    await confirm!.trigger('click')
+    await confirm!.trigger('click')
+    expect(apiMocks.copyWorkflow).toHaveBeenCalledTimes(1)
+    expect(apiMocks.copyWorkflow).toHaveBeenCalledWith(
+      'wf-1',
+      '源流水线-副本',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    await wrapper.setProps({ open: false })
+    resolveCopy({ id: 'wf-2', name: '源流水线-副本' })
+    await flushPromises()
+    expect(wrapper.emitted('copied')).toBeFalsy()
+    wrapper.unmount()
+  })
+
   it('shows validation error for duplicate name', async () => {
     const wrapper = mountModal(true)
     await flushPromises()

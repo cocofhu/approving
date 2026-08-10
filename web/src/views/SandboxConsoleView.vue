@@ -4,6 +4,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import NovncPreviewPanel from '@/components/run/NovncPreviewPanel.vue'
+import RefreshStrip from '@/components/run/RefreshStrip.vue'
+import HardLoadLayer from '@/components/run/HardLoadLayer.vue'
+import { isAbortError } from '@/lib/liveLogRehydrate'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
@@ -68,14 +71,24 @@ async function copyPassword() {
 // Raw container logs (docker logs): live while running, else archived snapshot.
 const log = ref<{ content: string; live: boolean; found: boolean } | null>(null)
 const logLoading = ref(false)
+const logError = ref<string | null>(null)
+let logGen = 0
+let logAbort: AbortController | null = null
 async function fetchLog() {
+  logAbort?.abort()
+  const gen = ++logGen
+  logAbort = new AbortController()
   logLoading.value = true
+  logError.value = null
   try {
-    log.value = await api.sandboxLog(id)
-  } catch {
-    log.value = null
+    const next = await api.sandboxLog(id, { signal: logAbort.signal })
+    if (gen !== logGen) return
+    log.value = next
+  } catch (e) {
+    if (gen !== logGen || isAbortError(e) || logAbort.signal.aborted) return
+    logError.value = t('pages.sandboxConsole.logFailed')
   } finally {
-    logLoading.value = false
+    if (gen === logGen) logLoading.value = false
   }
 }
 const termHost = ref<HTMLElement | null>(null)
@@ -202,6 +215,9 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  logAbort?.abort()
+  logAbort = null
+  logGen++
   ro?.disconnect()
   ws?.close()
   term?.dispose()
@@ -295,7 +311,12 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- container logs (docker logs): live or archived snapshot -->
-      <div v-show="tab === 'log'" class="flex h-full flex-col">
+      <div
+        v-show="tab === 'log'"
+        class="relative flex h-full flex-col"
+        :aria-busy="logLoading ? 'true' : 'false'"
+      >
+        <RefreshStrip v-if="logLoading && log?.content" :message="t('pages.sandboxConsole.logRefreshing')" />
         <div class="flex items-center gap-2 border-b border-line px-3 py-1.5 text-[11px] text-txt3">
           <Icon name="terminal" :size="12" />
           <span>{{ t('pages.sandboxConsole.logTitle') }}</span>
@@ -304,10 +325,32 @@ onBeforeUnmount(() => {
           <div class="flex-1" />
           <button class="text-txt3 hover:text-txt" :title="t('common.buttons.refresh')" @click="fetchLog"><Icon name="refresh" :size="12" /></button>
         </div>
-        <div class="scroll-area min-h-0 flex-1 overflow-auto bg-[#0b0e14] p-3">
+        <div class="scroll-area relative min-h-0 flex-1 overflow-auto bg-[#0b0e14] p-3">
+          <div
+            v-if="logError"
+            class="mb-2 rounded-lg border border-err/30 bg-err/10 px-3 py-2.5 text-[12px] text-err"
+            role="alert"
+            data-testid="sandbox-console-log-error"
+          >
+            <p>{{ logError }}</p>
+            <button
+              type="button"
+              class="mt-2 inline-flex min-h-11 items-center border border-line px-3 text-[12px] text-txt"
+              @click="fetchLog"
+            >
+              {{ t('common.chatImage.retry') }}
+            </button>
+          </div>
           <pre v-if="log?.content" class="whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed text-[#cdd6f4]">{{ log.content }}</pre>
-          <div v-else class="flex h-full items-center justify-center text-center text-[12px] text-[#cdd6f4]">
-            {{ logLoading ? t('common.buttons.loading') : t('pages.sandboxConsole.logEmpty') }}
+          <HardLoadLayer
+            v-else-if="logLoading && !logError"
+            :overlay="false"
+            :stuck-after-ms="10_000"
+            :stage="t('common.loading.label')"
+            @retry="fetchLog"
+          />
+          <div v-else-if="!logError" class="flex h-full items-center justify-center text-center text-[12px] text-[#cdd6f4]" data-testid="sandbox-console-log-empty">
+            {{ t('pages.sandboxConsole.logEmpty') }}
           </div>
         </div>
       </div>

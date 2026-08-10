@@ -38,6 +38,7 @@ const ttlTier = ref<GateShareTTLTier>(DEFAULT_GATE_SHARE_TTL)
 const fullUrl = ref('')
 const revealUrl = ref(false)
 const busy = ref(false)
+const busyKind = ref<'create' | 'copy' | null>(null)
 const confirmKind = ref<'regen' | 'revoke' | null>(null)
 const localStatus = ref<GateShareInboxStatus | null>(null)
 const errorText = ref('')
@@ -93,6 +94,7 @@ async function copyText(text: string) {
 async function createAndCopy() {
   if (!props.target || busy.value) return
   busy.value = true
+  busyKind.value = 'create'
   errorText.value = ''
   try {
     const res =
@@ -116,6 +118,7 @@ async function createAndCopy() {
     errorText.value = shareApiErrorMessage(e, t)
   } finally {
     busy.value = false
+    busyKind.value = null
   }
 }
 
@@ -124,7 +127,15 @@ async function copyExisting() {
     errorText.value = t('pages.gatesInbox.share.copyUnavailable')
     return
   }
-  await copyText(fullUrl.value)
+  if (busy.value) return
+  busy.value = true
+  busyKind.value = 'copy'
+  try {
+    await copyText(fullUrl.value)
+  } finally {
+    busy.value = false
+    busyKind.value = null
+  }
 }
 
 async function confirmRegen() {
@@ -232,11 +243,12 @@ function close() {
           class="inline-flex min-h-11 w-full items-center justify-center gap-2 bg-accent px-3 text-sm font-medium text-white hover:bg-accent-2 disabled:opacity-45"
           data-testid="gate-share-create"
           :disabled="busy"
+          :aria-busy="busy ? 'true' : undefined"
           :aria-label="t('pages.gatesInbox.share.createCopyAria')"
           @click="createAndCopy"
         >
-          <Icon name="copy" :size="16" />
-          {{ t('pages.gatesInbox.share.createCopy') }}
+          <Icon :name="busy ? 'spinner' : 'copy'" :size="16" :class="busy ? 'animate-spin' : ''" aria-hidden="true" />
+          {{ busy ? t('common.buttons.creating') : t('pages.gatesInbox.share.createCopy') }}
         </button>
       </div>
 
@@ -259,10 +271,11 @@ function close() {
             class="inline-flex min-h-11 items-center gap-1.5 bg-accent px-3 text-xs font-medium text-white hover:bg-accent-2 disabled:opacity-45"
             data-testid="gate-share-copy"
             :disabled="busy || !fullUrl"
+            :aria-busy="busy ? 'true' : undefined"
             @click="copyExisting"
           >
-            <Icon name="copy" :size="14" />
-            {{ t('common.buttons.copy') }}
+            <Icon :name="busy && busyKind === 'copy' ? 'spinner' : 'copy'" :size="14" :class="busy && busyKind === 'copy' ? 'animate-spin' : ''" aria-hidden="true" />
+            {{ busy && busyKind === 'copy' ? t('common.buttons.copying') : t('common.buttons.copy') }}
           </button>
           <button
             type="button"

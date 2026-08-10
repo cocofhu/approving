@@ -113,6 +113,13 @@ describe('NovncPreviewPanel', () => {
     vi.unstubAllGlobals()
   })
 
+  it('sets aria-busy while connecting', async () => {
+    const wrapper = mountNovnc()
+    expect(wrapper.find('[aria-busy="true"]').exists()).toBe(true)
+    await flushPromises()
+    wrapper.unmount()
+  })
+
   it('connects preview mode and shows live toolbar', async () => {
     const wrapper = mountNovnc()
     await flushPromises()

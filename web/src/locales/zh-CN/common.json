@@ -81,6 +81,12 @@
       "resumeFromFail": "从失败位置继续",
       "resumeFromNode": "从此节点继续",
       "loading": "加载中…",
+      "approving": "批准中…",
+      "rejecting": "驳回中…",
+      "sending": "发送中…",
+      "submitting": "提交中…",
+      "refreshing": "正在刷新…",
+      "creating": "创建中…",
       "cancelling": "取消中…",
       "deleting": "删除中…",
       "copying": "复制中…",
@@ -299,6 +305,11 @@
       "addImage": "添加附件",
       "placeholderTextOnly": "请输入…",
       "placeholderWithImages": "可粘贴附件（≤50 MiB）…"
+    },
+    "loading": {
+      "label": "加载中",
+      "elapsed": "已用时 {s}s · 心跳存活",
+      "stuck": "可能卡死 · 请求仍在进行，可继续等待或重试"
     },
     "chatImage": {
       "clickToEnlarge": "点击放大",

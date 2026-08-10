@@ -25,6 +25,8 @@ import ExecutionTimeline from '@/components/run/ExecutionTimeline.vue'
 import ExecutionStatsPanel from '@/components/run/ExecutionStatsPanel.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import ArtifactLoadingPane from '@/components/run/ArtifactLoadingPane.vue'
+import RefreshStrip from '@/components/run/RefreshStrip.vue'
+import HardLoadLayer from '@/components/run/HardLoadLayer.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import AppDrawer from '@/components/ui/AppDrawer.vue'
 import AppModal from '@/components/ui/AppModal.vue'
@@ -307,12 +309,25 @@ async function loadEarlierEvents(nodeId: string) {
 type SbxLogState = { content: string; live: boolean; found: boolean; error?: string }
 const sbxLogs = reactive<Record<string, SbxLogState>>({})
 const sandboxLookup = ref<SandboxView | null>(null)
+const sbxLogLoading = ref(false)
+let sandboxLogGen = 0
+let sandboxLogAbort: AbortController | null = null
 // Boot dwell/timeout must survive LiveLogPanel remounts (log ↔ sandbox / other tabs).
 const liveLogBootSessions = reactive<Record<string, LiveLogBootSession>>({})
 async function fetchSandboxLog(nodeId: string | null) {
-  if (!nodeId) return
+  if (!nodeId) {
+    sandboxLogAbort?.abort()
+    sandboxLogAbort = null
+    sbxLogLoading.value = false
+    return
+  }
+  const attemptGen = ++sandboxLogGen
+  sandboxLogAbort?.abort()
+  sandboxLogAbort = new AbortController()
+  sbxLogLoading.value = true
   try {
-    const r = await api.nodeSandboxLog(runId.value, nodeId)
+    const r = await api.nodeSandboxLog(runId.value, nodeId, { signal: sandboxLogAbort.signal })
+    if (attemptGen !== sandboxLogGen) return
     // Always write the response so empty live / found=false / error map correctly
     // (do not treat empty content as "no update").
     sbxLogs[nodeId] = {
@@ -322,8 +337,17 @@ async function fetchSandboxLog(nodeId: string | null) {
       error: r.error || undefined,
     }
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    sbxLogs[nodeId] = { content: '', live: false, found: false, error: msg || 'sandbox log request failed' }
+    if (attemptGen !== sandboxLogGen) return
+    if (isAbortError(e)) return
+    const prev = sbxLogs[nodeId]
+    sbxLogs[nodeId] = {
+      content: prev?.content ?? '',
+      live: false,
+      found: !!prev?.found,
+      error: t('pages.runDetail.sandboxLog.loadFailed'),
+    }
+  } finally {
+    if (attemptGen === sandboxLogGen) sbxLogLoading.value = false
   }
 }
 
@@ -812,6 +836,9 @@ watch(
 onUnmounted(() => {
   if (timer) window.clearInterval(timer)
   if (clock) window.clearInterval(clock)
+  sandboxLogAbort?.abort()
+  sandboxLogAbort = null
+  sandboxLogGen++
   disposeAllRehydrateOrchs()
   document.removeEventListener('visibilitychange', onVisible)
   window.removeEventListener('focus', onFocusRefresh)
@@ -823,17 +850,23 @@ function onArtifactDeleted(id: string) {
 }
 
 const gateError = ref<string | null>(null)
+const gateSubmitting = ref(false)
 const clarifyConfirmError = ref<string | null>(null)
 async function onGateResolve(action: string, form: Record<string, any> = {}) {
-  if (!run.value.gate) return
+  if (!run.value.gate || gateSubmitting.value) return
+  gateSubmitting.value = true
   gateError.value = null
   try {
     await api.resumeGate(runId.value, run.value.gate.nodeId, action, form)
+    const positive = action === 'pass' || action === 'approve'
+    toast.success(positive ? t('pages.gateApproval.approveSuccess') : t('pages.gateApproval.rejectSuccess'))
   } catch (e: any) {
     // Surface the backend rejection (e.g. a required form field, or the run
     // having ended while paused) instead of silently swallowing it and leaving
     // the gate showing an optimistic "已提交".
     gateError.value = e?.message || t('pages.runDetail.gateError')
+  } finally {
+    gateSubmitting.value = false
   }
   await loadRun(false)
 }
@@ -1924,10 +1957,11 @@ function selectExecution(nodeId: string, idx: number) {
               data-testid="cancel-run-btn"
               variant="danger"
               size="sm"
-              icon="close"
+              :icon="cancellingRun ? 'spinner' : 'close'"
               :disabled="cancellingRun"
+              :aria-busy="cancellingRun ? 'true' : 'false'"
               @click="openCancelConfirm"
-            >{{ t('common.buttons.cancelRun') }}</AppButton>
+            >{{ cancellingRun ? t('common.buttons.cancelling') : t('common.buttons.cancelRun') }}</AppButton>
             <AppButton
               data-testid="delete-run-btn"
               variant="danger"
@@ -2265,13 +2299,16 @@ function selectExecution(nodeId: string, idx: number) {
           <div class="shrink-0 px-3 pt-2">
             <AppTabs :tabs="nodeTabs" v-model="nodeTab" @disabled-click="onNodeTabDisabledClick" />
           </div>
-          <div class="min-h-0 flex-1">
-            <ArtifactLoadingPane
-              v-if="panelSwitching"
+          <div
+            class="relative min-h-0 flex-1"
+            data-testid="run-detail-node-panel"
+            :aria-busy="panelSwitching || sbxLogLoading ? 'true' : 'false'"
+          >
+            <RefreshStrip
+              v-if="panelSwitching && !(nodeTab === 'gate' && run.gate)"
               data-testid="run-detail-panel-switching"
-              message-key="pages.runDetail.switchingNode"
+              :message="t('common.buttons.refreshing')"
             />
-            <template v-else>
             <GateApproval
               v-if="nodeTab === 'gate' && run.gate"
               ref="gateApprovalRef"
@@ -2392,7 +2429,15 @@ function selectExecution(nodeId: string, idx: number) {
                 @boot-session="onLiveLogBootSession"
                 @retry-rehydrate="retryRehydrate"
               />
-              <div v-show="nodeTab === 'sandbox'" class="flex h-full min-h-0 flex-col">
+              <div v-show="nodeTab === 'sandbox'" class="relative flex h-full min-h-0 flex-col">
+                <RefreshStrip v-if="sbxLogLoading && sbxLog?.content" :message="t('pages.sandboxConsole.logRefreshing')" />
+                <HardLoadLayer
+                  v-else-if="sbxLogLoading && !sbxLog?.content && !sbxLog?.error"
+                  :overlay="true"
+                  :stuck-after-ms="10_000"
+                  :stage="t('common.loading.label')"
+                  @retry="fetchSandboxLog(selected)"
+                />
                 <div class="flex items-center gap-2 border-b border-line px-3 py-1.5 text-[11px] text-txt3">
                   <Icon name="terminal" :size="12" />
                   <span>{{ t('pages.runDetail.sandboxLog.title') }}</span>
@@ -2419,14 +2464,22 @@ function selectExecution(nodeId: string, idx: number) {
                 <div class="scroll-area min-h-0 flex-1 overflow-auto bg-base p-3">
                   <div
                     v-if="sbxLog?.error"
-                    class="rounded-lg border border-err/30 bg-err/10 px-3 py-2.5 text-[12px] text-err"
+                    class="mb-2 rounded-lg border border-err/30 bg-err/10 px-3 py-2.5 text-[12px] text-err"
                     data-testid="sandbox-log-error"
+                    role="alert"
                   >
                     <strong class="mb-1 block">{{ t('pages.runDetail.sandboxLog.errorTitle') }}</strong>
                     <span>{{ sbxLog.error }}</span>
+                    <button
+                      type="button"
+                      class="mt-2 inline-flex min-h-11 items-center border border-line px-3 text-[12px] text-txt"
+                      @click="fetchSandboxLog(selected)"
+                    >
+                      {{ t('common.chatImage.retry') }}
+                    </button>
                   </div>
                   <pre
-                    v-else-if="sbxLog?.found && sbxLog.content"
+                    v-if="sbxLog?.found && sbxLog.content"
                     class="min-w-max whitespace-pre font-mono text-[11px] leading-relaxed text-txt2"
                   >{{ sbxLog.content }}</pre>
                   <pre
@@ -2444,7 +2497,6 @@ function selectExecution(nodeId: string, idx: number) {
               </div>
             </div>
             <NodeOutputPanel v-else :node="selNode" :node-run="selRunView" :run="run" />
-            </template>
           </div>
         </template>
         <EmptyState v-else :title="t('common.empty.selectNode')" :desc="t('common.empty.selectNodeDesc')" />
@@ -2453,7 +2505,13 @@ function selectExecution(nodeId: string, idx: number) {
       </div>
 
       <div v-if="runLoading || loadError" class="absolute inset-0 z-10 bg-surface">
-        <ArtifactLoadingPane v-if="runLoading" message-key="pages.runDetail.loadingRun" />
+        <HardLoadLayer
+          v-if="runLoading"
+          :overlay="false"
+          :stuck-after-ms="10_000"
+          :stage="t('pages.runDetail.loadingRun')"
+          @retry="loadRun(true)"
+        />
         <EmptyState
           v-else
           icon="alert"
@@ -2514,6 +2572,8 @@ function selectExecution(nodeId: string, idx: number) {
         <div
           v-if="cancelRunError"
           class="flex items-start gap-2 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-[12px] text-err"
+          role="alert"
+          data-testid="cancel-run-error"
         >
           <Icon name="alert" :size="14" class="mt-0.5" />{{ cancelRunError }}
         </div>
@@ -2525,8 +2585,9 @@ function selectExecution(nodeId: string, idx: number) {
         <AppButton
           data-testid="confirm-cancel-run-btn"
           variant="danger"
-          icon="close"
+          :icon="cancellingRun ? 'spinner' : 'close'"
           :disabled="cancellingRun"
+          :aria-busy="cancellingRun ? 'true' : 'false'"
           @click="confirmCancelRun"
         >
           {{ cancellingRun ? t('common.buttons.cancelling') : t('common.buttons.confirmCancelRun') }}

@@ -6,6 +6,7 @@ import Icon from '@/components/ui/Icon.vue'
 import { renderMarkdown } from '@/lib/markdown'
 import { applyPublicLocale } from '@/lib/locale'
 import { applyPublicLightChrome, reapplyThemeChrome } from '@/lib/theme'
+import { isAbortError } from '@/lib/liveLogRehydrate'
 import {
   formatRemainingSec,
   parseShareTokenFromHash,
@@ -17,14 +18,39 @@ const { t } = useI18n()
 
 const ready = ref(false)
 const loading = ref(true)
+const maybeStuck = ref(false)
 const token = ref('')
 const preview = ref<PublicGatePreview | null>(null)
 const comment = ref('')
 const reviewerName = ref('')
 const submitting = ref(false)
 const errorText = ref('')
+const networkFailed = ref(false)
 const doneKind = ref<'approved' | 'rejected' | 'confirmed' | null>(null)
 const isReview = computed(() => preview.value?.kind === 'review')
+
+let previewGen = 0
+let previewAbort: AbortController | null = null
+let decideAbort: AbortController | null = null
+let stuckTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearStuckTimer() {
+  if (stuckTimer != null) {
+    clearTimeout(stuckTimer)
+    stuckTimer = null
+  }
+  maybeStuck.value = false
+}
+
+function abortPreview() {
+  previewAbort?.abort()
+  previewAbort = null
+  clearStuckTimer()
+}
+
+function sandboxPreviewError(): string {
+  return t('pages.publicGate.networkError')
+}
 
 const status = computed(() => preview.value?.status || (token.value ? 'invalid' : 'invalid'))
 const isActive = computed(() => status.value === 'active')
@@ -46,22 +72,47 @@ const statusHint = computed(() => {
 })
 
 async function loadPreview() {
-  loading.value = true
+  if (doneKind.value) return
+  const attemptGen = ++previewGen
+  abortPreview()
+  previewAbort = new AbortController()
+  const signal = previewAbort.signal
+
+  preview.value = null
   errorText.value = ''
+  networkFailed.value = false
+  doneKind.value = null
+  loading.value = true
+  maybeStuck.value = false
+  stuckTimer = window.setTimeout(() => {
+    if (attemptGen === previewGen) maybeStuck.value = true
+  }, 10_000)
+
   const tok = parseShareTokenFromHash(window.location.hash)
   token.value = tok
   if (!tok) {
+    if (attemptGen !== previewGen) return
     preview.value = { status: 'invalid' }
     loading.value = false
+    clearStuckTimer()
     return
   }
   try {
-    preview.value = await publicGateApi.preview(tok)
+    const next = await publicGateApi.preview(tok, signal)
+    if (attemptGen !== previewGen) return
+    preview.value = next
+    errorText.value = ''
   } catch (e) {
-    preview.value = { status: 'invalid' }
-    errorText.value = e instanceof Error ? e.message : String(e)
+    if (attemptGen !== previewGen) return
+    if (isAbortError(e)) return
+    preview.value = null
+    networkFailed.value = true
+    errorText.value = sandboxPreviewError()
   } finally {
-    loading.value = false
+    if (attemptGen === previewGen) {
+      loading.value = false
+      clearStuckTimer()
+    }
   }
 }
 
@@ -87,14 +138,19 @@ async function submit(kind: 'approve' | 'reject') {
   }
   submitting.value = true
   errorText.value = ''
+  decideAbort?.abort()
+  decideAbort = new AbortController()
   try {
-    const res = await publicGateApi.decide({
-      token: token.value,
-      action,
-      comment: comment.value,
-      name: reviewerName.value,
-      nonce: preview.value.nonce,
-    })
+    const res = await publicGateApi.decide(
+      {
+        token: token.value,
+        action,
+        comment: comment.value,
+        name: reviewerName.value,
+        nonce: preview.value.nonce,
+      },
+      decideAbort.signal,
+    )
     if (res.status === 'approved' || (res.alreadyProcessed && kind === 'approve')) {
       doneKind.value = 'approved'
       clearHash()
@@ -109,13 +165,26 @@ async function submit(kind: 'approve' | 'reject') {
       preview.value = { status: 'used' }
       return
     }
+    if (res.status === 'expired') {
+      preview.value = { status: 'expired' }
+      return
+    }
+    if (res.status === 'revoked') {
+      preview.value = { status: 'revoked' }
+      return
+    }
     preview.value = { status: res.status || 'invalid' }
   } catch (e) {
-    errorText.value = e instanceof Error ? e.message : String(e)
+    if (isAbortError(e)) return
+    errorText.value = sandboxPreviewError()
     try {
-      preview.value = await publicGateApi.preview(token.value)
+      const refreshed = await publicGateApi.preview(token.value, decideAbort.signal)
+      if (refreshed.status && refreshed.status !== 'active') {
+        preview.value = refreshed
+        errorText.value = ''
+      }
     } catch {
-      // keep error
+      // keep sandboxed network error
     }
   } finally {
     submitting.value = false
@@ -130,23 +199,28 @@ async function submitReviewConfirm() {
   }
   submitting.value = true
   errorText.value = ''
+  decideAbort?.abort()
+  decideAbort = new AbortController()
   try {
-    const res = await publicGateApi.decide({
-      token: token.value,
-      action: preview.value.actions?.confirm || 'confirm',
-      nonce: preview.value.nonce,
-    })
+    const res = await publicGateApi.decide(
+      {
+        token: token.value,
+        action: preview.value.actions?.confirm || 'confirm',
+        nonce: preview.value.nonce,
+      },
+      decideAbort.signal,
+    )
     if (res.status === 'confirmed' || res.alreadyProcessed) {
       doneKind.value = 'confirmed'
       clearHash()
       return
     }
     if (res.status === 'busy' || res.error === 'review_busy') {
-      errorText.value = res.message || t('pages.publicGate.busy')
+      errorText.value = t('pages.publicGate.busy')
       return
     }
     if (res.status === 'validation_failed' || res.error === 'review_validation_failed') {
-      errorText.value = res.message || t('pages.publicGate.validationFailed')
+      errorText.value = t('pages.publicGate.validationFailed')
       return
     }
     if (res.status === 'used' || res.error === 'conflict') {
@@ -155,26 +229,39 @@ async function submitReviewConfirm() {
     }
     preview.value = { ...preview.value, status: res.status || 'invalid' }
   } catch (e) {
-    errorText.value = e instanceof Error ? e.message : String(e)
+    if (isAbortError(e)) return
+    errorText.value = sandboxPreviewError()
     try {
-      preview.value = await publicGateApi.preview(token.value)
+      const refreshed = await publicGateApi.preview(token.value, decideAbort.signal)
+      if (refreshed.status && refreshed.status !== 'active') {
+        preview.value = { ...preview.value, ...refreshed }
+        errorText.value = ''
+      }
     } catch {
-      // keep error
+      // keep sandboxed network error
     }
   } finally {
     submitting.value = false
   }
 }
 
+function onHashChange() {
+  if (doneKind.value || submitting.value) return
+  void loadPreview()
+}
+
 onMounted(async () => {
   applyPublicLightChrome()
   await applyPublicLocale()
   ready.value = true
+  window.addEventListener('hashchange', onHashChange)
   await loadPreview()
-  window.addEventListener('hashchange', loadPreview)
 })
 onUnmounted(() => {
-  window.removeEventListener('hashchange', loadPreview)
+  window.removeEventListener('hashchange', onHashChange)
+  abortPreview()
+  decideAbort?.abort()
+  decideAbort = null
   reapplyThemeChrome()
 })
 </script>
@@ -183,6 +270,7 @@ onUnmounted(() => {
   <div
     class="flex min-h-screen flex-col bg-base text-txt"
     data-testid="public-gate-root"
+    :aria-busy="(!ready || loading || submitting) ? 'true' : 'false'"
   >
     <header
       class="flex shrink-0 items-center justify-between bg-accent px-4 py-3 text-white"
@@ -203,8 +291,36 @@ onUnmounted(() => {
     </header>
 
     <main class="mx-auto flex w-full flex-1 flex-col px-4 py-6 md:px-8">
-      <div v-if="!ready || loading" class="py-16 text-center text-sm text-txt3">
-        {{ t('common.buttons.loading') }}
+      <div
+        v-if="!ready || loading"
+        class="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-center"
+        role="status"
+        aria-busy="true"
+        data-testid="public-gate-loading"
+      >
+        <Icon name="spinner" :size="28" class="animate-spin text-accent" aria-hidden="true" />
+        <p class="text-sm text-txt3">{{ t('pages.publicGate.loading') }}</p>
+        <p v-if="maybeStuck" class="max-w-[40ch] text-xs text-txt3" data-testid="public-gate-maybe-stuck">
+          {{ t('pages.publicGate.maybeStuck') }}
+        </p>
+      </div>
+
+      <div
+        v-else-if="networkFailed"
+        class="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-center"
+        data-testid="public-gate-network-error"
+        role="alert"
+      >
+        <Icon name="alert" :size="28" class="text-warn" />
+        <h1 class="text-lg font-semibold">{{ t('pages.publicGate.networkError') }}</h1>
+        <button
+          type="button"
+          class="inline-flex min-h-11 items-center justify-center border border-line bg-surface px-4 text-sm font-medium text-txt"
+          data-testid="public-gate-network-retry"
+          @click="loadPreview"
+        >
+          {{ t('common.chatImage.retry') }}
+        </button>
       </div>
 
       <div v-else-if="doneKind" class="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-center" data-testid="public-gate-done">
@@ -304,13 +420,15 @@ onUnmounted(() => {
             <button
               v-if="canConfirm"
               type="button"
-              class="inline-flex min-h-11 min-w-[44px] w-full items-center justify-center bg-ok px-4 text-sm font-medium text-white disabled:opacity-45"
+              class="inline-flex min-h-11 min-w-[44px] w-full items-center justify-center gap-2 bg-ok px-4 text-sm font-medium text-white disabled:opacity-45"
               data-testid="public-gate-confirm"
               :disabled="submitting"
+              :aria-busy="submitting ? 'true' : 'false'"
               :aria-label="t('pages.publicGate.confirmAria')"
               @click="submitReviewConfirm"
             >
-              {{ t('pages.publicGate.confirm') }}
+              <Icon v-if="submitting" name="spinner" :size="16" class="animate-spin" aria-hidden="true" />
+              {{ submitting ? t('pages.publicGate.submitting') : t('pages.publicGate.confirm') }}
             </button>
           </template>
           <template v-else>
@@ -342,24 +460,28 @@ onUnmounted(() => {
             <button
               v-if="canApprove"
               type="button"
-              class="inline-flex min-h-11 min-w-[12rem] items-center justify-center bg-accent px-5 text-sm font-semibold text-white disabled:opacity-45"
+              class="inline-flex min-h-11 min-w-[12rem] items-center justify-center gap-2 bg-accent px-5 text-sm font-semibold text-white disabled:opacity-45"
               data-testid="public-gate-approve"
               :disabled="submitting"
+              :aria-busy="submitting ? 'true' : 'false'"
               :aria-label="t('pages.publicGate.approveAria')"
               @click="submit('approve')"
             >
-              {{ t('pages.publicGate.approve') }}
+              <Icon v-if="submitting" name="spinner" :size="16" class="animate-spin" aria-hidden="true" />
+              {{ submitting ? t('pages.publicGate.submitting') : t('pages.publicGate.approve') }}
             </button>
             <button
               v-if="canReject"
               type="button"
-              class="min-h-11 bg-transparent px-0 text-sm text-txt2 underline underline-offset-4 hover:text-txt disabled:opacity-45"
+              class="inline-flex min-h-11 items-center gap-2 bg-transparent px-0 text-sm text-txt2 underline underline-offset-4 hover:text-txt disabled:opacity-45"
               data-testid="public-gate-reject"
               :disabled="submitting"
+              :aria-busy="submitting ? 'true' : 'false'"
               :aria-label="t('pages.publicGate.rejectAria')"
               @click="submit('reject')"
             >
-              {{ t('pages.publicGate.reject') }}
+              <Icon v-if="submitting" name="spinner" :size="16" class="animate-spin" aria-hidden="true" />
+              {{ submitting ? t('pages.publicGate.submitting') : t('pages.publicGate.reject') }}
             </button>
           </div>
           </template>

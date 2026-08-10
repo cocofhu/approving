@@ -133,6 +133,67 @@ describe('GateShareLinkPanel', () => {
     expect(mocks.toastShow).toHaveBeenCalled()
   })
 
+  it('copyExisting sets busy and ignores double click', async () => {
+    const token = 'ef'.repeat(32)
+    const url = `https://app.example/public/gate-approvals#t=${token}`
+    rememberShareUrl('run-1', 'hg1', 1, url)
+    let resolveWrite!: () => void
+    mockClipboard(
+      vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveWrite = resolve
+          }),
+      ),
+    )
+
+    const w = mount(GateShareLinkPanel, {
+      props: {
+        open: true,
+        target: item({ shareLink: { state: 'active', ttlTier: '24h', canManage: true, canCreate: false } }),
+      },
+      global: { plugins: [i18n], stubs: { Teleport: true } },
+    })
+    await flushPromises()
+    const copyBtn = w.get('[data-testid="gate-share-copy"]')
+    await copyBtn.trigger('click')
+    await copyBtn.trigger('click')
+    expect(copyBtn.attributes('disabled')).toBeDefined()
+    expect(copyBtn.attributes('aria-busy')).toBe('true')
+    expect(copyBtn.text()).toMatch(/复制中/)
+    expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1)
+    resolveWrite()
+    await flushPromises()
+    expect(mocks.toastSuccess).toHaveBeenCalled()
+    w.unmount()
+  })
+
+  it('createAndCopy shows 创建中… and does not create twice', async () => {
+    const token = 'ab'.repeat(32)
+    const url = `https://app.example/public/gate-approvals#t=${token}`
+    let resolveCreate!: (v: unknown) => void
+    mocks.create.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveCreate = resolve
+        }),
+    )
+    mockClipboard(vi.fn().mockResolvedValue(undefined))
+    const w = mount(GateShareLinkPanel, {
+      props: { open: true, target: item() },
+      global: { plugins: [i18n], stubs: { Teleport: true } },
+    })
+    await flushPromises()
+    const createBtn = w.get('[data-testid="gate-share-create"]')
+    await createBtn.trigger('click')
+    await createBtn.trigger('click')
+    expect(createBtn.text()).toMatch(/创建中/)
+    expect(mocks.create).toHaveBeenCalledTimes(1)
+    resolveCreate({ id: 'gsl-1', url, ttlTier: '24h', expiresAt: '2026-08-10T00:00:00Z', state: 'active' })
+    await flushPromises()
+    w.unmount()
+  })
+
   it('manage mode copies remembered URL without regenerating', async () => {
     const token = 'ef'.repeat(32)
     const url = `https://app.example/public/gate-approvals#t=${token}`
