@@ -519,7 +519,7 @@ func (s *Service) LoadLinkByID(id string) (*models.GateShareLink, error) {
 	return &link, nil
 }
 
-// AttachInboxStatus fills shareLink on gate and inbox-review items (no plaintext token).
+// AttachInboxStatus fills shareLink on gate, inbox-review, and app_preview items (no plaintext token).
 func (s *Service) AttachInboxStatus(items []any) {
 	if s == nil || s.db == nil || len(items) == 0 {
 		return
@@ -544,7 +544,7 @@ func (s *Service) AttachInboxStatus(items []any) {
 			seen[k] = struct{}{}
 			keys = append(keys, k)
 		case services.ClarifyInboxItem:
-			if v.Kind != "review" {
+			if v.Kind != "review" && v.Kind != "app_preview" {
 				continue
 			}
 			k := key{v.RunID, v.NodeID, v.Iteration}
@@ -597,7 +597,7 @@ func (s *Service) AttachInboxStatus(items []any) {
 			v.ShareLink = inboxStatusPtr(st)
 			items[i] = v
 		case services.ClarifyInboxItem:
-			if v.Kind != "review" {
+			if v.Kind != "review" && v.Kind != "app_preview" {
 				continue
 			}
 			k := key{v.RunID, v.NodeID, v.Iteration}

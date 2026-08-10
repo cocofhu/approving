@@ -59,13 +59,18 @@ export function isReviewInboxItem(item: InboxItem | null | undefined): item is C
   return !!item && item.type === 'clarify' && item.kind === 'review'
 }
 
-/** Inbox share entry: human_gate or 待复审 only. */
-export function isShareableInboxItem(item: InboxItem | null | undefined): boolean {
-  return isHumanGateInboxItem(item) || isReviewInboxItem(item)
+export function isAppPreviewInboxItem(item: InboxItem | null | undefined): item is ClarifyInboxItem {
+  return !!item && item.type === 'clarify' && item.kind === 'app_preview'
 }
 
+/** Inbox share entry: human_gate, 待复审, or app_preview (review share API). */
+export function isShareableInboxItem(item: InboxItem | null | undefined): boolean {
+  return isHumanGateInboxItem(item) || isReviewInboxItem(item) || isAppPreviewInboxItem(item)
+}
+
+/** App preview and Inbox review both mint ShareLinkKindReview links. */
 export function inboxShareKind(item: InboxItem | null | undefined): 'human_gate' | 'review' {
-  return isReviewInboxItem(item) ? 'review' : 'human_gate'
+  return isReviewInboxItem(item) || isAppPreviewInboxItem(item) ? 'review' : 'human_gate'
 }
 
 const SHARE_API_ERROR_KEYS: Record<string, string> = {

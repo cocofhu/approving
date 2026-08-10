@@ -24,13 +24,13 @@ Approval moments are first-class — not an afterthought. Approving bets that ag
 In the pending-gates inbox, only **human_gate** cards (and the visual preview toolbar when a page artifact exists) offer **Copy temp link**. A signed-in operator can mint a one-shot URL so an unauthenticated person can approve or reject once.
 
 - Default TTL is 24 hours (1h / 8h / 24h / 72h / 7d). At most one active link per instance.
-- The management panel masks the URL by default; Copy writes the full fragment URL. Refreshing the same browser tab still lets you copy the same active URL. Regenerating immediately revokes the old link and reuses the same TTL tier; Revoke now disables the link. While the gate is still pending, revoked/expired links can be replaced; after the gate is decided the entry is read-only. `proposal_select`, pending clarify, and app preview have no share entry.
+- The management panel masks the URL by default; Copy writes the full fragment URL. Refreshing the same browser tab still lets you copy the same active URL. Regenerating immediately revokes the old link and reuses the same TTL tier; Revoke now disables the link. While the gate is still pending, revoked/expired links can be replaced; after the gate is decided the entry is read-only. `proposal_select` and pending clarify have no share entry (app preview uses the review-share path below).
 - The external page needs no login. It shows only the title, description, redacted visual/structured artifacts, approve/reject, comment, and an optional name. It does not expose project, run, members, or internal URLs.
 - The token is bound to that one approval. Expiry, revoke, a successful submit, a login-side decision, or run completion invalidate unused links immediately.
 
-### Temporary review links (Inbox kind=review)
+### Temporary review links (Inbox kind=review / app_preview)
 
-Inbox **pending review** cards reuse the same management panel and token rules, but authenticated APIs live under `/api/runs/:id/reviews/:nodeId/share-link*` — not `/gates/...`, and no fake Gate row is created. The public page is labeled **External review**; the only action is **Confirm and advance** (same as a logged-in force confirm). There is no name, comment, reject, chat, or inspect. Run-detail review tabs and the logged-in review composer do not add a temp-link entry.
+Inbox **pending review** and **app preview** cards reuse the same management panel and token rules (`ShareLinkKindReview`), but authenticated APIs live under `/api/runs/:id/reviews/:nodeId/share-link*` — not `/gates/...`, and no fake Gate row is created. In-product entries: card **Copy temp link**, app-preview workbench toolbar **Share approval**, and the Agent sidebar **Open share panel**. The public page is labeled **External review**; hot sessions support multi-turn ReAct. For `productKind=app_preview` the stage is a read-only placeholder — **no noVNC / picking** (the signed-in workbench for the same item still has remote desktop and picking). The only footer action is **Confirm and advance**. Run-detail review tabs and the logged-in review composer do not add a temp-link entry; `proposal_select` and pending clarify stay out of scope.
 
 ## Real Docker sandboxes
 

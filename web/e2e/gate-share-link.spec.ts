@@ -166,4 +166,40 @@ test.describe('human_gate 临时审批链接', () => {
     await expect(page.getByTestId('public-gate-done')).toContainText('已确认')
     await expect(page.getByTestId('public-gate-confirm')).toHaveCount(0)
   })
+
+  test('应用预览 Inbox 卡片可打开 review 分享面板', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: async (text: string) => {
+            ;(window as unknown as { __copied?: string }).__copied = text
+          },
+        },
+      })
+    })
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/gate-share-link.html?scene=inbox-app-preview')
+    await expect(page.getByTestId('gate-share-copy-btn')).toBeVisible({ timeout: 10_000 })
+    await page.getByTestId('gate-share-copy-btn').click()
+    await expect(page.getByTestId('gate-share-panel-body')).toBeVisible()
+    await page.getByTestId('gate-share-create').click()
+    await expect(page.getByTestId('gate-share-url')).toBeVisible()
+    const copied = await page.evaluate(() => (window as unknown as { __copied?: string }).__copied || '')
+    expect(copied).toContain('/public/gate-approvals#t=')
+  })
+
+  test('公开应用预览页只读占位可确认且无取点', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/gate-share-link.html?scene=public-app-preview')
+    await expect(page.getByTestId('public-gate-root')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('public-gate-app-preview')).toBeVisible()
+    await expect(page.getByTestId('public-gate-app-preview')).toContainText('只读')
+    await expect(page.getByTestId('html-preview-inspect-toggle')).toHaveCount(0)
+    await expect(page.getByTestId('novnc-inspect-toggle')).toHaveCount(0)
+    await expect(page.getByTestId('clarify-input')).toBeVisible()
+    await expect(page.getByTestId('public-gate-confirm')).toBeVisible()
+    await page.getByTestId('public-gate-confirm').click()
+    await expect(page.getByTestId('public-gate-done')).toContainText('已确认')
+  })
 })

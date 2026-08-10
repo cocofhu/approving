@@ -146,6 +146,14 @@ func ClarifyInboxKind(node *models.Node) string { return clarifyInboxKind(node) 
 // IsInboxReviewNode reports whether the node is an Inbox 待复审 item (kind=review).
 func IsInboxReviewNode(node *models.Node) bool { return clarifyInboxKind(node) == "review" }
 
+// IsShareableReviewSession reports whether the node can mint a ShareLinkKindReview
+// temp link (Inbox kind=review or kind=app_preview). Distinct from IsInboxReviewNode
+// so Inbox badge semantics stay review-only.
+func IsShareableReviewSession(node *models.Node) bool {
+	k := clarifyInboxKind(node)
+	return k == "review" || k == "app_preview"
+}
+
 // clarifyInboxKind returns badge semantic for a waiting_human conversation.
 // react → clarify; app_preview → app_preview (distinct from generic review);
 // other ReviewCapable product nodes → review; default clarify.

@@ -12,6 +12,13 @@ import type { AppPreviewPickPayload } from '@/lib/previewPickUrl'
 // already secure; non-localhost http:// would otherwise spam / risk breakage).
 import RFB from '@novnc/novnc/lib/rfb.js'
 
+const emit = defineEmits<{
+  (e: 'pick', payload: AppPreviewPickPayload): void
+  /** Element picked in inspect mode but not yet added to chat (last staged). */
+  (e: 'staged-pick', payload: AppPreviewPickPayload | null): void
+  (e: 'open-share'): void
+}>()
+
 const props = withDefaults(
   defineProps<{
     /** Preview mode: run/node/port triple (app_preview). */
@@ -22,15 +29,11 @@ const props = withDefaults(
     sandboxId?: number
     fill?: boolean
     compact?: boolean
+    /** When true, preview toolbar shows share-approval entry (Gates Inbox). */
+    shareEnabled?: boolean
   }>(),
-  { fill: false, compact: false },
+  { fill: false, compact: false, shareEnabled: false },
 )
-
-const emit = defineEmits<{
-  (e: 'pick', payload: AppPreviewPickPayload): void
-  /** Element picked in inspect mode but not yet added to chat (last staged). */
-  (e: 'staged-pick', payload: AppPreviewPickPayload | null): void
-}>()
 
 const { t } = useI18n()
 const fpsCounter = createPreviewFpsCounter()
@@ -438,6 +441,16 @@ onBeforeUnmount(() => {
         @click="toggleFullscreen"
       >
         {{ isFullscreen ? '⤢' : '⛶' }}
+      </button>
+      <button
+        v-if="shareEnabled"
+        type="button"
+        class="rounded border border-accent/40 bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent-2 hover:bg-accent/20"
+        data-testid="novnc-share-approval"
+        :aria-label="t('pages.gatesInbox.share.shareApprovalAria')"
+        @click="emit('open-share')"
+      >
+        {{ t('pages.gatesInbox.share.shareApproval') }}
       </button>
       <span class="ml-auto flex items-center gap-2.5 text-[10px]">
         <span

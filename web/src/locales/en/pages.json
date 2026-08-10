@@ -877,6 +877,11 @@
       "share": {
         "copyLink": "Copy temp link",
         "copyLinkAria": "Copy temporary approval link",
+        "shareApproval": "Share approval",
+        "shareApprovalAria": "Open share-approval link manager",
+        "openSharePanel": "Open share panel",
+        "openSharePanelAria": "Open share-approval panel",
+        "appPreviewShareHint": "Same policy as pending review · public page has no remote desktop",
         "createCopy": "Create and copy link",
         "createCopyAria": "Create a temporary approval link and copy it",
         "panelTitle": "Temporary approval link",
@@ -912,7 +917,7 @@
         "errors": {
           "noStandardAction": "Add a standard approve or reject action before creating a temp link",
           "notHumanGate": "Temp approval links are only available for human_gate",
-          "notReviewSession": "Temp review links are only available for pending Inbox reviews",
+          "notReviewSession": "Temp review links are only available for pending Inbox reviews or app preview sessions",
           "usedReadonly": "Approval already finished. A new link cannot be created",
           "runEnded": "This run has ended. A link cannot be created",
           "gateNotPending": "No pending gate",
