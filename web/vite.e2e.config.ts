@@ -259,6 +259,9 @@ export default defineConfig({
           new URL('./e2e/structured-export-harness.html', import.meta.url),
         ),
         'shell-loading': fileURLToPath(new URL('./e2e/shell-loading.html', import.meta.url)),
+        'notifications-center': fileURLToPath(
+          new URL('./e2e/notifications-center.html', import.meta.url),
+        ),
       },
     },
   },
