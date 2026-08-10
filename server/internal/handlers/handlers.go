@@ -1008,7 +1008,15 @@ func (h *Handlers) ListArtifacts(c *gin.Context) {
 		c.JSON(http.StatusOK, h.Arts.All())
 		return
 	}
-	arts, total := h.Arts.AllPage(wf, projectID, pg.Page, pg.PageSize, c.Query("q"))
+	q := c.Query("q")
+	// Opt-in Run paging for ArtifactsView L2; default remains artifact-row paging
+	// so pm_citations / pm_progress and other callers stay unchanged.
+	if c.Query("groupBy") == "run" {
+		arts, total := h.Arts.AllPageByRun(wf, projectID, pg.Page, pg.PageSize, q)
+		c.JSON(http.StatusOK, paginatedResponse(arts, int(total), pg.Page, pg.PageSize))
+		return
+	}
+	arts, total := h.Arts.AllPage(wf, projectID, pg.Page, pg.PageSize, q)
 	c.JSON(http.StatusOK, paginatedResponse(arts, int(total), pg.Page, pg.PageSize))
 }
 

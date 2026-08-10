@@ -1047,6 +1047,8 @@ export const api = {
     wf?: string
     projectId?: string
     q?: string
+    /** Opt-in: page by Run (total/pageSize = Run count; items = whole-Run flat list). */
+    groupBy?: 'run'
   }) => {
     const qs = new URLSearchParams()
     if (params?.page != null) qs.set('page', String(params.page))
@@ -1054,6 +1056,7 @@ export const api = {
     if (params?.wf) qs.set('wf', params.wf)
     if (params?.projectId) qs.set('projectId', params.projectId)
     if (params?.q) qs.set('q', params.q)
+    if (params?.groupBy) qs.set('groupBy', params.groupBy)
     const q = qs.toString()
     const path = q ? `/artifacts?${q}` : '/artifacts'
     if (params?.page != null || params?.pageSize != null) {

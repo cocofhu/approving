@@ -143,6 +143,18 @@ paths:
         - Either `page` or `pageSize` present → paginated envelope
           `{ items, total, page, pageSize, hasMore }` (used by L2 list).
 
+        **Pagination unit (paginated requests only):**
+        - Default (no `groupBy`, or any value other than `run`): `pageSize` /
+          `total` count **artifact rows**; `items` is a slice of artifacts.
+        - `groupBy=run` (opt-in, ArtifactsView L2): `pageSize` / `total` count
+          **Runs**; `items` is the flat list of **all** artifacts belonging to
+          the Runs on this page (whole-Run expansion). Therefore `items.length`
+          may be greater than `pageSize` when a Run has many artifacts.
+          Runs are ordered by `MAX(artifacts.created_at)` descending.
+          When `q` is set, a Run qualifies if any of its artifacts match; the
+          expand step drops `q` so non-matching files in that Run are still
+          returned (wf / project filters still apply).
+
         **Filtering:**
         - `wf`: restrict to a workflow ID, or `__unnamed__` for artifacts whose
           `workflow_id` is NULL or empty string.
@@ -160,6 +172,7 @@ paths:
         - $ref: '#/components/parameters/PageSizeQuery'
         - $ref: '#/components/parameters/WfQuery'
         - $ref: '#/components/parameters/ArtifactSearchQuery'
+        - $ref: '#/components/parameters/ArtifactGroupByQuery'
       responses:
         '200':
           description: Success — response shape depends on pagination params
@@ -190,7 +203,7 @@ paths:
                       createdAt: '2026-07-12T00:00:00Z'
                       runTitle: Sprint Planning
                 paginated:
-                  summary: With page/pageSize (L2 list)
+                  summary: With page/pageSize (default — by artifact)
                   value:
                     items:
                       - id: art-abc123
@@ -206,6 +219,32 @@ paths:
                     page: 1
                     pageSize: 20
                     hasMore: true
+                paginatedByRun:
+                  summary: groupBy=run (L2 — by Run; items may exceed pageSize)
+                  value:
+                    items:
+                      - id: art-abc123
+                        runId: run-1
+                        nodeId: plan
+                        workflowId: wf-product
+                        name: plan.json
+                        kind: json
+                        sizeBytes: 1024
+                        createdAt: '2026-07-12T00:00:00Z'
+                        runTitle: Sprint Planning
+                      - id: art-def456
+                        runId: run-1
+                        nodeId: research
+                        workflowId: wf-product
+                        name: research.json
+                        kind: json
+                        sizeBytes: 2048
+                        createdAt: '2026-07-12T00:01:00Z'
+                        runTitle: Sprint Planning
+                    total: 12
+                    page: 1
+                    pageSize: 20
+                    hasMore: false
                 emptyPage:
                   summary: No matches (paginated)
                   value:
@@ -407,9 +446,25 @@ components:
         Case-insensitive substring search against artifact `name`, `nodeId`,
         and associated run `title` (SQL `LOWER LIKE` with `%` wildcards).
         Only applied in paginated requests (when `page` or `pageSize` is set).
+        With `groupBy=run`, `q` selects which Runs qualify; expansion returns
+        the full Run (see operation description).
       schema:
         type: string
         example: plan
+    ArtifactGroupByQuery:
+      name: groupBy
+      in: query
+      required: false
+      description: |
+        Pagination grouping mode for paginated requests only.
+        Omit or use any value other than `run` to page by artifact row
+        (`total` / `pageSize` = artifact count).
+        Set to `run` to page by Run (`total` / `pageSize` = Run count;
+        `items` = flat whole-Run artifact lists for the page).
+      schema:
+        type: string
+        enum: [run]
+        example: run
 
   schemas:
     Error:

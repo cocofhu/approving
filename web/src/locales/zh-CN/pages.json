@@ -2547,7 +2547,7 @@
       "emptyPlatform": "平台暂无产物",
       "emptyRun": "本次运行暂无产物",
       "artSearchPlaceholder": "搜索产物（文件名 / 节点 / Run）…",
-      "matchCount": "（匹配 {n}）",
+      "matchCount": "（匹配 {n} 个 Run）",
       "noMatchingArtifacts": "无匹配产物",
       "expandAll": "展开",
       "collapseAll": "折叠"

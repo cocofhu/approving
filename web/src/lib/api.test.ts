@@ -185,6 +185,9 @@ describe('api req helpers', () => {
       .mockResolvedValueOnce(
         jsonResponse({ items: [{ id: 'art' }], total: 1, page: 1, pageSize: 10, hasMore: false }),
       )
+      .mockResolvedValueOnce(
+        jsonResponse({ items: [{ id: 'art' }], total: 1, page: 1, pageSize: 20, hasMore: false }),
+      )
       .mockResolvedValueOnce(jsonResponse({ id: 'art', content: 'x' }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
       .mockResolvedValueOnce(jsonResponse({ events: [], live: false }))
@@ -244,6 +247,9 @@ describe('api req helpers', () => {
     await expect(api.listArtifacts()).resolves.toEqual([{ id: 'art' }])
     await expect(
       api.listArtifacts({ page: 1, pageSize: 10, wf: 'w', projectId: 'p', q: 'x' }),
+    ).resolves.toMatchObject({ total: 1 })
+    await expect(
+      api.listArtifacts({ page: 1, pageSize: 20, groupBy: 'run', wf: 'w' }),
     ).resolves.toMatchObject({ total: 1 })
     await expect(api.artifactContent('art')).resolves.toMatchObject({ id: 'art' })
     expect(api.artifactDownloadUrl('art')).toContain('/api/artifacts/art/download')
