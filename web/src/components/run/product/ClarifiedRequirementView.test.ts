@@ -87,6 +87,160 @@ describe('ClarifiedRequirementView', () => {
     wrapper.unmount()
   })
 
+  const LONG_CJK_DETAIL =
+    'NFR说明与指标在常见手机宽度下可连续扫读，中文不得被压成逐字竖排。'
+  const LONG_CJK_METRIC =
+    '与单次 Tab 紧凑主值同一套格式；芯片含开始时间与当前列KPI主值在常见桌面宽度下可扫读，不被七位数字撑破；芯片对比态不另起视觉体系。'
+  const UNBROKEN_TOKEN = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyzToken'
+
+  function nfrCard(wrapper: ReturnType<typeof mountView>, id: string) {
+    return wrapper.get(`[data-json-path="non_functional_requirements[${id}]"]`)
+  }
+
+  function nfrBlocks(wrapper: ReturnType<typeof mountView>, id: string) {
+    const card = nfrCard(wrapper, id).element as HTMLElement
+    return Array.from(card.children) as HTMLElement[]
+  }
+
+  it('renders long CJK NFR as full-width blocks without shrink-0 metric (g2.1)', () => {
+    const doc: ClarifiedRequirementDoc = {
+      summary: '摘要',
+      non_functional_requirements: [
+        {
+          id: 'n1',
+          category: 'usability',
+          detail: LONG_CJK_DETAIL,
+          metric: LONG_CJK_METRIC,
+        },
+      ],
+    }
+    const wrapper = mountView(doc)
+    expect(wrapper.text()).toContain('非功能需求')
+    expect(wrapper.text()).toContain('usability')
+    expect(wrapper.text()).toContain(LONG_CJK_DETAIL)
+    expect(wrapper.text()).toContain(LONG_CJK_METRIC)
+    expect(wrapper.text()).toContain('指标:')
+
+    const card = nfrCard(wrapper, 'n1')
+    expect(card.classes()).toEqual(
+      expect.arrayContaining(['rounded-lg', 'border', 'border-line', 'bg-base/40', 'p-2.5']),
+    )
+    expect(card.classes()).not.toContain('flex')
+
+    const [head, detailEl, metricEl] = nfrBlocks(wrapper, 'n1')
+    expect(head.className).toMatch(/\bflex\b/)
+    expect(head.className).toMatch(/\bflex-wrap\b/)
+    expect(head.className).toMatch(/\bitems-center\b/)
+    expect(head.textContent).toContain('usability')
+    expect(head.textContent).not.toContain(LONG_CJK_DETAIL)
+    expect(head.textContent).not.toContain(LONG_CJK_METRIC)
+    expect(head.textContent).not.toContain('指标:')
+
+    expect(detailEl.textContent).toBe(LONG_CJK_DETAIL)
+    expect(detailEl.className).toMatch(/overflow-wrap:anywhere/)
+    expect(detailEl.className).toMatch(/\bbreak-words\b/)
+    expect(detailEl.className).toMatch(/\bw-full\b/)
+    expect(detailEl.className).toMatch(/\bmin-w-0\b/)
+
+    expect(metricEl.getAttribute('data-json-path')).toBe('non_functional_requirements[n1].metric')
+    expect(metricEl.textContent).toContain(`指标: ${LONG_CJK_METRIC}`)
+    expect(metricEl.className).not.toMatch(/\bshrink-0\b/)
+    expect(metricEl.className).toMatch(/overflow-wrap:anywhere/)
+    expect(metricEl.className).toMatch(/\bbreak-words\b/)
+    expect(metricEl.className).toMatch(/\bw-full\b/)
+    expect(metricEl.className).toMatch(/\bmin-w-0\b/)
+    wrapper.unmount()
+  })
+
+  it('hides empty NFR fields and keeps short/long metric structure consistent (g2.2)', () => {
+    const doc: ClarifiedRequirementDoc = {
+      summary: '摘要',
+      non_functional_requirements: [
+        { id: 'a', category: 'usability', detail: '只有说明没有指标' },
+        { id: 'b', detail: '无类别只有说明与短指标', metric: 'p95' },
+        { id: 'c', category: 'performance', metric: 'p95' },
+        {
+          id: 'd',
+          category: 'reliability',
+          detail: `超长无空格 ${UNBROKEN_TOKEN}`,
+          metric: LONG_CJK_METRIC,
+        },
+      ],
+    }
+    const wrapper = mountView(doc)
+    expect(wrapper.text()).toContain('只有说明没有指标')
+    expect(wrapper.text()).toContain('无类别只有说明与短指标')
+    expect(wrapper.text()).toContain(UNBROKEN_TOKEN)
+
+    const aKids = nfrBlocks(wrapper, 'a')
+    expect(aKids).toHaveLength(2)
+    expect(aKids[0].textContent).toContain('usability')
+    expect(aKids[1].textContent).toBe('只有说明没有指标')
+    expect(wrapper.get('[data-json-path="non_functional_requirements[a]"]').text()).not.toContain('指标:')
+
+    const bKids = nfrBlocks(wrapper, 'b')
+    expect(bKids).toHaveLength(3)
+    expect(bKids[0].textContent?.trim()).toBe('')
+    expect(bKids[0].querySelector('.bg-elevated')).toBeNull()
+    expect(bKids[1].textContent).toBe('无类别只有说明与短指标')
+    expect(bKids[2].textContent).toContain('指标: p95')
+    expect(bKids[2].className).not.toMatch(/\bshrink-0\b/)
+    expect(bKids[2].className).toMatch(/\bw-full\b/)
+
+    const cKids = nfrBlocks(wrapper, 'c')
+    expect(cKids).toHaveLength(2)
+    expect(cKids[0].textContent).toContain('performance')
+    expect(cKids[1].textContent).toContain('指标: p95')
+    expect(cKids[1].className).not.toMatch(/\bshrink-0\b/)
+    expect(cKids[1].className).toMatch(/overflow-wrap:anywhere/)
+    expect(wrapper.get('[data-json-path="non_functional_requirements[c]"]').text()).not.toContain('只有说明')
+
+    const dKids = nfrBlocks(wrapper, 'd')
+    expect(dKids).toHaveLength(3)
+    expect(dKids[2].textContent).toContain(`指标: ${LONG_CJK_METRIC}`)
+    expect(dKids[1].className).toMatch(/overflow-wrap:anywhere/)
+    expect(dKids[2].className).toMatch(/overflow-wrap:anywhere/)
+    expect(dKids[2].className).not.toMatch(/\bshrink-0\b/)
+    expect(dKids[2].className.split(/\s+/).sort().join(' ')).toBe(cKids[1].className.split(/\s+/).sort().join(' '))
+
+    const cards = wrapper.findAll('[data-json-path^="non_functional_requirements["]').filter((n) => {
+      const path = n.attributes('data-json-path') || ''
+      return /non_functional_requirements\[[^\]]+\]$/.test(path)
+    })
+    expect(cards.length).toBeGreaterThanOrEqual(4)
+    wrapper.unmount()
+  })
+
+  it('keeps annotate control on the NFR chip row when channel is enabled (g2.3)', () => {
+    const doc: ClarifiedRequirementDoc = {
+      summary: '摘要',
+      non_functional_requirements: [
+        {
+          id: 'n1',
+          category: 'usability',
+          detail: LONG_CJK_DETAIL,
+          metric: LONG_CJK_METRIC,
+        },
+      ],
+    }
+    const wrapper = mountView(doc, true)
+    const card = nfrCard(wrapper, 'n1')
+    const btn = card.find('button[title="标注 non_functional_requirements[n1]"]')
+    expect(btn.exists()).toBe(true)
+
+    const [head, detailEl, metricEl] = nfrBlocks(wrapper, 'n1')
+    expect(head.contains(btn.element)).toBe(true)
+    expect(head.textContent).toContain('usability')
+    expect(head.textContent).not.toContain(LONG_CJK_DETAIL)
+    expect(head.textContent).not.toContain(LONG_CJK_METRIC)
+    expect(detailEl.contains(btn.element)).toBe(false)
+    expect(metricEl.contains(btn.element)).toBe(false)
+    expect(metricEl.className).not.toMatch(/\bshrink-0\b/)
+    expect(detailEl.className).toMatch(/\bw-full\b/)
+    expect(metricEl.className).toMatch(/\bw-full\b/)
+    wrapper.unmount()
+  })
+
   it('exposes AnnotateBtn for personas/interfaces/entities/business_rules', () => {
     const doc: ClarifiedRequirementDoc = {
       summary: '摘要',
