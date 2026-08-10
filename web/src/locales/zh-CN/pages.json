@@ -350,7 +350,6 @@
       },
       "pm": {
         "settingsTitle": "项目管理设置",
-        "settingsHint": "启用并绑定已有 Agent。无官方模板；无可用 Agent 时无法启用。memory-store / context-store / task-scheduler 由平台自动注入；此处仅配置项目管理专用 MCP。",
         "enable": "启用项目管理",
         "enablePermissionHint": "任意已登录用户可启用/换绑/停用",
         "aclMemoryNote": "记忆请在已绑定主项目的 Agent Studio「数据 → 记忆」中管理；任意已登录用户可编辑。",

@@ -350,7 +350,6 @@
       },
       "pm": {
         "settingsTitle": "Project Management settings",
-        "settingsHint": "Enable and bind an existing Agent. No official template; enable is blocked when no Agent is available. memory-store / context-store / task-scheduler are auto-injected; configure Project Management MCPs here.",
         "enable": "Enable Project Management",
         "enablePermissionHint": "Any signed-in user may enable, rebind, or disable",
         "aclMemoryNote": "Manage memories in the bound Agent Studio under Data → Memory; any signed-in user may edit.",
