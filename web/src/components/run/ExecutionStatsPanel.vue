@@ -6,7 +6,7 @@ import Icon from '../ui/Icon.vue'
 import TruncatedTextTooltip from '../ui/TruncatedTextTooltip.vue'
 import { api, isPaginated } from '@/lib/api'
 import { NODE_DEFS } from '@/data/nodeRegistry'
-import { fmtCompactDuration, fmtDuration } from '@/lib/format'
+import { fmtCompactDuration, fmtDuration, fmtTime } from '@/lib/format'
 import { resolveNodeDisplayLabel } from '@/lib/resolveNodeDisplayLabel'
 import {
   aggregateMultiRuns,
@@ -28,7 +28,16 @@ import type { Run, TokenUsage, WFNode } from '@/lib/types'
 import TokenUsageByModelTable from './TokenUsageByModelTable.vue'
 
 type StatsTab = 'single' | 'multi'
-type KpiTipId = 'wall' | 'nodeSum' | 'gap' | 'tokens' | 'rate'
+type KpiTipId =
+  | 'wall'
+  | 'nodeSum'
+  | 'gap'
+  | 'tokens'
+  | 'rate'
+  | 'avgWall'
+  | 'sumTokens'
+  | 'avgTokens'
+  | 'multiRate'
 
 const props = withDefaults(
   defineProps<{
@@ -46,7 +55,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{ (e: 'update:statsTab', tab: StatsTab): void }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const localTab = ref<StatsTab>('single')
 const tabControlled = computed(() => props.statsTab != null)
@@ -212,7 +221,66 @@ const detailsLoading = ref(false)
 const candidatesError = ref<string | null>(null)
 /** True until the first successful candidate load for the current run. */
 const selectionInitialized = ref(false)
+/** Candidate picker collapsed by default (Demo progressive disclosure). */
+const pickerOpen = ref(false)
 let loadGen = 0
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0')
+}
+
+function localYmd(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
+function startedAtYmd(iso: string): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return localYmd(d)
+}
+
+/** Large start clock HH:mm from startedAt (local); missing → —. */
+function fmtStartHm(iso: string): string {
+  if (!iso) return t('pages.executionStats.dash')
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return t('pages.executionStats.dash')
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+}
+
+function fmtOlderDateLabel(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return t('pages.executionStats.unknownTime')
+  const loc = String(locale.value || 'zh-CN')
+  if (loc.toLowerCase().startsWith('zh')) {
+    return `${d.getMonth() + 1} 月 ${d.getDate()} 日`
+  }
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function dayGroupLabel(iso: string): string {
+  const ymd = startedAtYmd(iso)
+  if (!ymd) return t('pages.executionStats.unknownTime')
+  const today = localYmd(new Date())
+  const ydayD = new Date()
+  ydayD.setDate(ydayD.getDate() - 1)
+  const yday = localYmd(ydayD)
+  if (ymd === today) return t('pages.executionStats.today')
+  if (ymd === yday) return t('pages.executionStats.yesterday')
+  return fmtOlderDateLabel(iso)
+}
+
+function candidateWallSec(c: Candidate): number {
+  return c.id === props.run.id ? props.wallSec : c.listWallSec
+}
+
+function durationWithPrefix(sec: number): string {
+  return `${t('pages.executionStats.duration')} ${fmtDuration(sec)}`
+}
+
+function isCurrentRun(id: string): boolean {
+  return id === props.run.id
+}
 
 function defaultSelectedIds(list: Candidate[], currentId: string): Set<string> {
   const defaults = new Set<string>()
@@ -286,6 +354,7 @@ watch(
       selectedIds.value = new Set()
       detailCache.value = {}
       detailErrors.value = {}
+      pickerOpen.value = false
     }
     if (tab === 'multi') loadCandidates()
   },
@@ -325,6 +394,8 @@ watch(
 )
 
 function toggleRun(id: string) {
+  // Current detail run cannot be deselected (f10).
+  if (id === props.run.id && selectedIds.value.has(id)) return
   const next = new Set(selectedIds.value)
   if (next.has(id)) {
     if (next.size <= 1) return
@@ -334,6 +405,61 @@ function toggleRun(id: string) {
   }
   selectedIds.value = next
 }
+
+function togglePicker() {
+  pickerOpen.value = !pickerOpen.value
+}
+
+/** Selected compare-bar cells in candidate list order (near → far), not Set insertion order. */
+const selectedCandidates = computed(() => candidates.value.filter((c) => selectedIds.value.has(c.id)))
+
+const selectedRunsTitle = computed(() =>
+  t('pages.executionStats.selectedRunsCount', {
+    n: selectedIds.value.size,
+    total: candidates.value.length,
+  }),
+)
+
+interface CandidateGroup {
+  key: string
+  label: string
+  items: Candidate[]
+}
+
+const candidateGroups = computed((): CandidateGroup[] => {
+  const today = localYmd(new Date())
+  const ydayD = new Date()
+  ydayD.setDate(ydayD.getDate() - 1)
+  const yday = localYmd(ydayD)
+  const buckets = new Map<string, CandidateGroup>()
+  for (const c of candidates.value) {
+    const ymd = startedAtYmd(c.startedAt)
+    const key = ymd ?? 'unknown'
+    let group = buckets.get(key)
+    if (!group) {
+      let label: string
+      if (key === 'unknown') label = t('pages.executionStats.unknownTime')
+      else if (key === today) label = t('pages.executionStats.today')
+      else if (key === yday) label = t('pages.executionStats.yesterday')
+      else label = fmtOlderDateLabel(c.startedAt)
+      group = { key, label, items: [] }
+      buckets.set(key, group)
+    }
+    group.items.push(c)
+  }
+  const out: CandidateGroup[] = []
+  const todayG = buckets.get(today)
+  const ydayG = buckets.get(yday)
+  const unknownG = buckets.get('unknown')
+  if (todayG) out.push(todayG)
+  if (ydayG) out.push(ydayG)
+  for (const g of buckets.values()) {
+    if (g.key === today || g.key === yday || g.key === 'unknown') continue
+    out.push(g)
+  }
+  if (unknownG) out.push(unknownG)
+  return out
+})
 
 const multiInputs = computed(() => {
   const out: { run: Run; wallSec: number; nodes?: WFNode[] }[] = []
@@ -356,6 +482,11 @@ const multiInputs = computed(() => {
 const multiSummary = computed(() =>
   aggregateMultiRuns(multiInputs.value, multiDim.value, props.nowMs, labelFn),
 )
+
+const multiAvgWallSec = computed(() => {
+  if (!multiSummary.value.selectedCount) return 0
+  return multiSummary.value.wallSumSec / multiSummary.value.selectedCount
+})
 
 const multiItems = computed(() =>
   multiSummary.value.items.map((it) => ({
@@ -918,52 +1049,139 @@ html.light .stats-panel {
 
       <!-- Multi run -->
       <template v-else>
-        <div class="mb-3">
-          <div class="mb-2 flex items-center justify-between gap-2">
-            <h3 class="text-[12px] font-medium text-txt3">{{ t('pages.executionStats.pickRuns') }}</h3>
-            <button
-              type="button"
-              class="inline-flex items-center gap-1 text-[11px] text-txt3 hover:text-txt2"
-              :disabled="candidatesLoading"
-              @click="loadCandidates"
+        <div class="mb-3 border border-line bg-surface" data-testid="stats-multi-selection">
+          <div class="flex items-center justify-between gap-3 border-b border-line px-3.5 py-2.5">
+            <h3
+              class="min-w-0 text-[12px] font-medium text-txt3"
+              data-testid="stats-selected-runs-title"
             >
-              <Icon name="refresh" :size="12" :class="{ 'animate-spin': candidatesLoading }" />
-              {{ t('common.buttons.refresh') }}
-            </button>
+              {{ selectedRunsTitle }}
+            </h3>
+            <div class="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 px-2 py-1 text-[11px] text-txt3 hover:text-txt2"
+                :disabled="candidatesLoading"
+                :title="t('common.buttons.refresh')"
+                data-testid="stats-multi-refresh"
+                @click="loadCandidates"
+              >
+                <Icon name="refresh" :size="12" :class="{ 'animate-spin': candidatesLoading }" />
+                {{ t('common.buttons.refresh') }}
+              </button>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 border px-2.5 py-1 text-[12px] transition-colors"
+                :class="
+                  pickerOpen
+                    ? 'border-accent/50 bg-accent-dim text-accent-2'
+                    : 'border-line bg-elevated text-txt2 hover:text-txt'
+                "
+                :aria-expanded="pickerOpen"
+                aria-controls="stats-multi-picker"
+                data-testid="stats-multi-picker-toggle"
+                @click="togglePicker"
+              >
+                {{ t('pages.executionStats.pickRuns') }}
+              </button>
+            </div>
           </div>
-          <p v-if="candidatesError" class="mb-2 text-[12px] text-err">{{ candidatesError }}</p>
-          <div v-else-if="candidatesLoading && !candidates.length" class="py-4 text-[12px] text-txt3">
+          <p v-if="candidatesError" class="px-3.5 py-3 text-[12px] text-err">{{ candidatesError }}</p>
+          <div
+            v-else-if="candidatesLoading && !candidates.length"
+            class="px-3.5 py-4 text-[12px] text-txt3"
+          >
             {{ t('pages.executionStats.loadingCandidates') }}
           </div>
-          <div v-else class="flex flex-wrap gap-1.5">
-            <button
-              v-for="c in candidates"
+          <div
+            v-else
+            class="flex overflow-x-auto"
+            data-testid="stats-multi-compare-bar"
+          >
+            <div
+              v-for="c in selectedCandidates"
               :key="c.id"
-              type="button"
-              class="inline-flex items-center gap-1.5 border px-2 py-1 text-[12px] transition-colors"
-              :class="
-                selectedIds.has(c.id)
-                  ? 'border-accent/50 bg-accent-dim text-accent-2'
-                  : 'border-line bg-surface text-txt2 hover:bg-elevated'
-              "
-              @click="toggleRun(c.id)"
+              class="relative min-w-[156px] max-w-[220px] flex-1 border-r border-line px-3.5 py-3 last:border-r-0"
+              :class="isCurrentRun(c.id) ? 'bg-accent-dim shadow-[inset_2px_0_0_rgb(var(--c-accent))]' : ''"
+              data-testid="stats-multi-compare-cell"
+              :data-run-id="c.id"
+              :data-current="isCurrentRun(c.id) ? 'true' : 'false'"
             >
               <span
-                class="h-1.5 w-1.5 shrink-0"
-                :class="selectedIds.has(c.id) ? 'bg-accent-2' : 'bg-line-strong'"
-              />
-              {{ c.label }}
-              <span class="text-txt3">{{ fmtDuration(c.id === run.id ? wallSec : c.listWallSec) }}</span>
-            </button>
+                v-if="isCurrentRun(c.id)"
+                class="mb-1 inline-block text-[10px] font-semibold tracking-wide text-accent-2"
+                data-testid="stats-multi-current-badge"
+              >
+                {{ t('pages.executionStats.current') }}
+              </span>
+              <span v-else class="mb-1 block text-[11px] text-txt3">{{ dayGroupLabel(c.startedAt) }}</span>
+              <button
+                v-if="!isCurrentRun(c.id)"
+                type="button"
+                class="absolute right-2 top-2 h-5 w-5 text-[14px] leading-5 text-txt3 hover:bg-overlay hover:text-txt"
+                :aria-label="t('common.buttons.close')"
+                data-testid="stats-multi-remove"
+                @click="toggleRun(c.id)"
+              >
+                ×
+              </button>
+              <span class="block text-[22px] font-semibold tabular-nums tracking-tight text-txt sm:text-[24px]">
+                {{ fmtStartHm(c.startedAt) }}
+              </span>
+              <div class="mt-1 text-[12px] text-txt3">{{ c.startedAt ? fmtTime(c.startedAt) : t('pages.executionStats.dash') }}</div>
+              <div class="stats-kpi-time mt-0.5 text-[12px]">{{ durationWithPrefix(candidateWallSec(c)) }}</div>
+              <span class="mt-1.5 block font-mono text-[11px] text-txt3">{{ c.label }}</span>
+            </div>
+          </div>
+          <div
+            v-if="pickerOpen"
+            id="stats-multi-picker"
+            class="max-h-[280px] overflow-y-auto border-t border-line py-2"
+            data-testid="stats-multi-picker"
+          >
+            <template v-for="g in candidateGroups" :key="g.key">
+              <div class="px-3.5 pb-1 pt-2 text-[11px] tracking-wide text-txt3" data-testid="stats-multi-day-group">
+                {{ g.label }}
+              </div>
+              <button
+                v-for="c in g.items"
+                :key="c.id"
+                type="button"
+                class="grid w-full grid-cols-[18px_44px_minmax(0,148px)_minmax(0,1fr)_auto] items-center gap-2 px-3.5 py-1.5 text-left text-[12px] text-txt2 hover:bg-elevated hover:text-txt"
+                :class="selectedIds.has(c.id) ? 'bg-accent-dim/60 text-txt' : ''"
+                :aria-pressed="selectedIds.has(c.id)"
+                data-testid="stats-multi-picker-row"
+                :data-run-id="c.id"
+                :data-current="isCurrentRun(c.id) ? 'true' : 'false'"
+                @click="toggleRun(c.id)"
+              >
+                <span
+                  class="inline-block h-3.5 w-3.5 shrink-0 border"
+                  :class="
+                    selectedIds.has(c.id)
+                      ? 'border-accent-2 bg-accent-2'
+                      : 'border-line-strong bg-elevated'
+                  "
+                />
+                <span class="text-[11px] font-semibold text-accent-2">
+                  {{ isCurrentRun(c.id) ? t('pages.executionStats.current') : '' }}
+                </span>
+                <span class="truncate tabular-nums">
+                  {{ c.startedAt ? fmtTime(c.startedAt) : t('pages.executionStats.dash') }}
+                </span>
+                <span class="stats-kpi-time truncate">{{ durationWithPrefix(candidateWallSec(c)) }}</span>
+                <span class="font-mono text-[11px] text-txt3">{{ c.label }}</span>
+              </button>
+            </template>
           </div>
           <p
             v-for="(msg, id) in detailErrors"
             :key="id"
-            class="mt-1.5 text-[11px] text-warn"
+            class="px-3.5 py-1 text-[11px] text-warn"
           >
             {{ msg }}
           </p>
-          <p v-if="detailsLoading || pendingDetailCount" class="mt-2 text-[11px] text-txt3">
+          <p v-if="detailsLoading || pendingDetailCount" class="px-3.5 pb-2 text-[11px] text-txt3">
             {{ t('pages.executionStats.loadingDetails') }}
           </p>
         </div>
@@ -971,55 +1189,145 @@ html.light .stats-panel {
         <div class="mb-3.5 grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-6">
           <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-selected">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.selectedRuns') }}</div>
-            <div class="text-[16px] font-semibold tabular-nums text-txt">{{ selectedCountDisplay }}</div>
+            <div
+              class="text-[16px] font-semibold tabular-nums text-txt"
+              data-testid="stats-kpi-selected-value"
+            >
+              {{ selectedCountDisplay }}
+            </div>
           </div>
           <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-avg-wall">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.avgWall') }}</div>
-            <div class="stats-kpi-time text-[16px] font-semibold tabular-nums">
-              {{
-                multiReady && multiSummary.selectedCount
-                  ? fmtDuration(Math.round(multiSummary.wallSumSec / multiSummary.selectedCount))
-                  : t('pages.executionStats.dash')
-              }}
+            <div class="stats-kpi-value-wrap">
+              <div
+                class="stats-kpi-value stats-kpi-time text-[16px] font-semibold tabular-nums tracking-tight"
+                tabindex="0"
+                data-testid="stats-kpi-avg-wall-value"
+                :aria-describedby="openTip === 'avgWall' ? tipDomId('avgWall') : undefined"
+                @mouseenter="showTip('avgWall')"
+                @mouseleave="hideTip('avgWall')"
+                @focus="showTip('avgWall')"
+                @blur="hideTip('avgWall')"
+              >
+                {{
+                  multiReady && multiSummary.selectedCount
+                    ? fmtCompactDuration(multiAvgWallSec)
+                    : t('pages.executionStats.dash')
+                }}
+              </div>
+              <span
+                v-if="openTip === 'avgWall'"
+                :id="tipDomId('avgWall')"
+                role="tooltip"
+                class="stats-kpi-tip stats-kpi-tip-left"
+                data-testid="stats-kpi-avg-wall-tip"
+              >
+                {{ durationTipText(Math.round(multiAvgWallSec)) }}
+              </span>
             </div>
           </div>
           <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-process-count">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.processCount') }}</div>
-            <div class="text-[16px] font-semibold tabular-nums text-txt">
+            <div
+              class="text-[16px] font-semibold tabular-nums text-txt"
+              data-testid="stats-kpi-process-count-value"
+            >
               {{ multiReady ? multiSummary.processCount : t('pages.executionStats.dash') }}
             </div>
           </div>
           <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-sum-tokens">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.sumTokens') }}</div>
-            <div
-              class="text-[16px] font-semibold tabular-nums tracking-tight"
-              :class="!multiReady || multiSummary.totalTokens == null ? 'text-txt3' : 'stats-kpi-token'"
-            >
-              {{ multiReady ? fmtTokensOrDash(multiSummary.totalTokens) : t('pages.executionStats.dash') }}
+            <div class="stats-kpi-value-wrap">
+              <div
+                class="stats-kpi-value text-[16px] font-semibold tabular-nums tracking-tight"
+                :class="!multiReady || multiSummary.totalTokens == null ? 'text-txt3' : 'stats-kpi-token'"
+                tabindex="0"
+                data-testid="stats-kpi-sum-tokens-value"
+                :aria-describedby="openTip === 'sumTokens' ? tipDomId('sumTokens') : undefined"
+                @mouseenter="showTip('sumTokens')"
+                @mouseleave="hideTip('sumTokens')"
+                @focus="showTip('sumTokens')"
+                @blur="hideTip('sumTokens')"
+              >
+                {{ multiReady ? compactTokensMain(multiSummary.totalTokens) : t('pages.executionStats.dash') }}
+              </div>
+              <span
+                v-if="openTip === 'sumTokens'"
+                :id="tipDomId('sumTokens')"
+                role="tooltip"
+                class="stats-kpi-tip stats-kpi-tip-right"
+                data-testid="stats-kpi-sum-tokens-tip"
+              >
+                {{
+                  t('pages.executionStats.tipTokenTotal', {
+                    n: fmtTokenCount(multiSummary.totalTokens ?? 0),
+                  })
+                }}
+              </span>
             </div>
             <div class="mt-0.5 text-[10px] text-txt3">{{ multiSumHint }}</div>
           </div>
           <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-avg-tokens">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.avgTokens') }}</div>
-            <div
-              class="text-[16px] font-semibold tabular-nums tracking-tight"
-              :class="!multiReady || multiSummary.avgTokens == null ? 'text-txt3' : 'stats-kpi-token'"
-            >
-              {{ multiReady ? fmtTokensOrDash(multiSummary.avgTokens) : t('pages.executionStats.dash') }}
+            <div class="stats-kpi-value-wrap">
+              <div
+                class="stats-kpi-value text-[16px] font-semibold tabular-nums tracking-tight"
+                :class="!multiReady || multiSummary.avgTokens == null ? 'text-txt3' : 'stats-kpi-token'"
+                tabindex="0"
+                data-testid="stats-kpi-avg-tokens-value"
+                :aria-describedby="openTip === 'avgTokens' ? tipDomId('avgTokens') : undefined"
+                @mouseenter="showTip('avgTokens')"
+                @mouseleave="hideTip('avgTokens')"
+                @focus="showTip('avgTokens')"
+                @blur="hideTip('avgTokens')"
+              >
+                {{ multiReady ? compactTokensMain(multiSummary.avgTokens) : t('pages.executionStats.dash') }}
+              </div>
+              <span
+                v-if="openTip === 'avgTokens'"
+                :id="tipDomId('avgTokens')"
+                role="tooltip"
+                class="stats-kpi-tip stats-kpi-tip-right"
+                data-testid="stats-kpi-avg-tokens-tip"
+              >
+                {{
+                  t('pages.executionStats.tipTokenTotal', {
+                    n: fmtTokenCount(multiSummary.avgTokens ?? 0),
+                  })
+                }}
+              </span>
             </div>
             <div class="mt-0.5 text-[10px] text-txt3">{{ multiAvgHint }}</div>
           </div>
           <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-multi-token-rate">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.tokenRate') }}</div>
-            <div
-              class="text-[16px] font-semibold tabular-nums tracking-tight"
-              :class="!multiReady || multiSummary.tokenRate == null ? 'text-txt3' : 'stats-kpi-token'"
-            >
-              {{
-                multiReady
-                  ? (multiSummary.tokenRate ?? t('pages.executionStats.dash'))
-                  : t('pages.executionStats.dash')
-              }}
+            <div class="stats-kpi-value-wrap">
+              <div
+                class="stats-kpi-value text-[16px] font-semibold tabular-nums tracking-tight"
+                :class="!multiReady || multiSummary.totalTokens == null ? 'text-txt3' : 'stats-kpi-token'"
+                tabindex="0"
+                data-testid="stats-kpi-multi-token-rate-value"
+                :aria-describedby="openTip === 'multiRate' ? tipDomId('multiRate') : undefined"
+                @mouseenter="showTip('multiRate')"
+                @mouseleave="hideTip('multiRate')"
+                @focus="showTip('multiRate')"
+                @blur="hideTip('multiRate')"
+              >
+                {{
+                  multiReady
+                    ? compactRateMain(multiSummary.totalTokens, multiSummary.wallSumSec)
+                    : t('pages.executionStats.dash')
+                }}
+              </div>
+              <span
+                v-if="openTip === 'multiRate'"
+                :id="tipDomId('multiRate')"
+                role="tooltip"
+                class="stats-kpi-tip stats-kpi-tip-right"
+                data-testid="stats-kpi-multi-token-rate-tip"
+              >
+                {{ tokenRateTipText(multiSummary.totalTokens, multiSummary.wallSumSec) }}
+              </span>
             </div>
             <div class="mt-0.5 text-[10px] text-txt3">{{ multiRateHint }}</div>
           </div>
@@ -1112,7 +1420,7 @@ html.light .stats-panel {
                 {{ t('pages.executionStats.avg') }}
                 <span class="stats-kpi-time font-medium">{{ fmtDuration(it.avgSec) }}</span>
               </span>
-              <span>· Σ {{ fmtDuration(it.durationSec) }}</span>
+              <span>· {{ t('pages.executionStats.rankTotal') }} {{ fmtDuration(it.durationSec) }}</span>
               <span>· {{ it.sharePct == null ? t('pages.executionStats.dash') : it.sharePct + '%' }}</span>
               <span>· {{ t('pages.executionStats.times', { n: it.count }) }}</span>
               <span
