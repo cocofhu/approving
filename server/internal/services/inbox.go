@@ -124,20 +124,27 @@ func gateInboxItem(g models.Gate, meta runInboxMeta) GateInboxItem {
 // Kind is the list-badge semantic: "clarify" (react), "review" (ReviewCapable),
 // or "app_preview" (application preview waiting for confirm & continue).
 type ClarifyInboxItem struct {
-	Type         string    `json:"type"`
-	Kind         string    `json:"kind"` // clarify | review | app_preview
-	RunID        string    `json:"runId"`
-	NodeID       string    `json:"nodeId"`
-	Iteration    int       `json:"iteration"`
-	WorkflowID   string    `json:"workflowId"`
-	WorkflowName string    `json:"workflowName"`
-	RunTitle     string    `json:"runTitle,omitempty"`
-	Label        string    `json:"label"`
-	Done         bool      `json:"done"`
-	RequestedAt  time.Time `json:"requestedAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
-	Tags         []string  `json:"tags"`
+	Type         string                `json:"type"`
+	Kind         string                `json:"kind"` // clarify | review | app_preview
+	RunID        string                `json:"runId"`
+	NodeID       string                `json:"nodeId"`
+	Iteration    int                   `json:"iteration"`
+	WorkflowID   string                `json:"workflowId"`
+	WorkflowName string                `json:"workflowName"`
+	RunTitle     string                `json:"runTitle,omitempty"`
+	Label        string                `json:"label"`
+	Done         bool                  `json:"done"`
+	RequestedAt  time.Time             `json:"requestedAt"`
+	UpdatedAt    time.Time             `json:"updatedAt"`
+	Tags         []string              `json:"tags"`
+	ShareLink    *GateShareInboxStatus `json:"shareLink,omitempty"`
 }
+
+// ClarifyInboxKind is the exported badge semantic for waiting_human conversations.
+func ClarifyInboxKind(node *models.Node) string { return clarifyInboxKind(node) }
+
+// IsInboxReviewNode reports whether the node is an Inbox 待复审 item (kind=review).
+func IsInboxReviewNode(node *models.Node) bool { return clarifyInboxKind(node) == "review" }
 
 // clarifyInboxKind returns badge semantic for a waiting_human conversation.
 // react → clarify; app_preview → app_preview (distinct from generic review);

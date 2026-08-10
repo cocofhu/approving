@@ -9,6 +9,7 @@ import (
 
 	"github.com/cocofhu/approving/internal/gateshare"
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/nodereg"
 
 	"github.com/gin-gonic/gin"
 )
@@ -61,8 +62,15 @@ func (h *Handlers) PublicGatePreview(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "unavailable"})
 		return
 	}
+	kind := publicShareKind(lookup)
 	if st != models.ShareLinkStateActive {
-		c.JSON(http.StatusOK, gin.H{"status": st, "nonce": nonce})
+		c.JSON(http.StatusOK, gin.H{"status": st, "kind": kind, "nonce": nonce})
+		return
+	}
+	if kind == models.ShareLinkKindReview {
+		visual, structName, structContent := h.publicReviewArtifacts(lookup)
+		dto := gateshare.BuildReviewPreviewDTO(st, lookup, visual, structName, structContent, nonce)
+		c.JSON(http.StatusOK, dto)
 		return
 	}
 	visual, structName, structContent := h.publicGateArtifacts(lookup)
@@ -104,6 +112,11 @@ func (h *Handlers) PublicGateDecide(c *gin.Context) {
 	}
 	if !h.GateShareNonces.Consume(lookup.Link.TokenHash, strings.TrimSpace(body.Nonce)) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "nonce", "message": "请求未通过安全校验"})
+		return
+	}
+	kind := publicShareKind(lookup)
+	if kind == models.ShareLinkKindReview {
+		h.publicReviewDecide(c, lookup, token, strings.TrimSpace(body.Action))
 		return
 	}
 	comment, ok := gateshare.ClampComment(body.Comment)
@@ -167,6 +180,91 @@ func (h *Handlers) PublicGateApprovalPage(c *gin.Context) {
 		return
 	}
 	c.Data(http.StatusOK, "text/html; charset=utf-8", b)
+}
+
+func publicShareKind(lookup *gateshare.LookupResult) string {
+	if lookup == nil {
+		return models.ShareLinkKindHumanGate
+	}
+	if strings.TrimSpace(lookup.Kind) == models.ShareLinkKindReview {
+		return models.ShareLinkKindReview
+	}
+	if strings.TrimSpace(lookup.Link.Kind) == models.ShareLinkKindReview {
+		return models.ShareLinkKindReview
+	}
+	return models.ShareLinkKindHumanGate
+}
+
+func (h *Handlers) publicReviewDecide(c *gin.Context, lookup *gateshare.LookupResult, token, action string) {
+	if action == "" {
+		action = "confirm"
+	}
+	if action != "confirm" && action != "pass" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported_action", "message": "复审公开页仅支持确认并流转"})
+		return
+	}
+	res, err := h.Eng.ResumeReviewExternal(h.GateShare, token, action)
+	if err != nil {
+		if errors.Is(err, gateshare.ErrReviewBusy) {
+			c.JSON(http.StatusOK, gin.H{"status": "busy", "error": "review_busy", "message": "复审进行中，请稍后再试"})
+			return
+		}
+		if errors.Is(err, gateshare.ErrReviewValidation) {
+			c.JSON(http.StatusOK, gin.H{"status": "validation_failed", "error": "review_validation_failed", "message": "产物校验未通过，链接仍有效，请稍后重试"})
+			return
+		}
+		if errors.Is(err, gateshare.ErrActionConflict) && res != nil {
+			c.JSON(http.StatusConflict, gin.H{"error": "conflict", "status": "used", "action": res.Action})
+			return
+		}
+		if errors.Is(err, gateshare.ErrNotActive) && res != nil {
+			c.JSON(http.StatusOK, gin.H{"status": res.Status})
+			return
+		}
+		if errors.Is(err, gateshare.ErrTokenInvalid) {
+			c.JSON(http.StatusOK, gin.H{"status": "invalid"})
+			return
+		}
+		if errors.Is(err, gateshare.ErrNoStandardAction) || errors.Is(err, gateshare.ErrNotReviewSession) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported_action"})
+			return
+		}
+		_ = c.Error(err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "submit_failed"})
+		return
+	}
+	if res.Link != nil {
+		h.GateShare.RecordUseAudit(
+			res.Link.RunID, res.Link.NodeID, res.Action, "",
+			gateshare.MaskIP(c.ClientIP()), gateshare.SummarizeUA(c.Request.UserAgent()),
+			res.Link.CreatedAt, res.Link.ExpiresAt, res.Link.RevokedAt, res.Link.UsedAt,
+		)
+	}
+	out := gin.H{"status": res.Status, "action": res.Action, "kind": models.ShareLinkKindReview}
+	if res.AlreadyProcessed {
+		out["alreadyProcessed"] = true
+	}
+	c.JSON(http.StatusOK, out)
+}
+
+func (h *Handlers) publicReviewArtifacts(lookup *gateshare.LookupResult) (visualHTML, structName, structContent string) {
+	if lookup == nil || h.Arts == nil || lookup.Node == nil {
+		return "", "", ""
+	}
+	spec, ok := nodereg.Get(lookup.Node.Type)
+	name := strings.TrimSpace(spec.ArtifactName)
+	if !ok || name == "" {
+		return "", "", ""
+	}
+	a, ok := h.Arts.GetRecord(lookup.Link.RunID, name)
+	if !ok {
+		return "", "", ""
+	}
+	lower := strings.ToLower(name)
+	if lower == "page.html" || strings.HasSuffix(lower, ".html") {
+		return a.Content, "", ""
+	}
+	return "", name, a.Content
 }
 
 func (h *Handlers) publicGateArtifacts(lookup *gateshare.LookupResult) (visualHTML, structName, structContent string) {

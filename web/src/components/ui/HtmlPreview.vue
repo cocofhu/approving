@@ -437,7 +437,7 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
       <button
         v-if="showGateShare"
         type="button"
-        class="flex min-h-11 items-center gap-1 border border-accent/40 px-2 py-1 text-[11px] text-accent-2 hover:bg-accent/10"
+        class="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-txt2 transition-colors hover:text-txt"
         data-testid="html-preview-share-link"
         :aria-label="t('pages.gatesInbox.share.copyLinkAria')"
         @click="gateShareOpen?.()"
@@ -553,7 +553,7 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
       <button
         v-if="showGateShare"
         type="button"
-        class="flex min-h-11 items-center gap-1 border border-accent/40 px-2 py-1 text-[11px] text-accent-2 hover:bg-accent/10"
+        class="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-txt2 transition-colors hover:text-txt"
         data-testid="html-preview-share-link"
         :aria-label="t('pages.gatesInbox.share.copyLinkAria')"
         @click="gateShareOpen?.()"

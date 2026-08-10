@@ -623,6 +623,15 @@ export interface GateInboxItem extends Gate {
   shareLink?: GateShareInboxStatus
 }
 
+/** Generic share-panel target (human_gate or inbox review). */
+export type ShareLinkTarget = {
+  runId: string
+  nodeId: string
+  iteration?: number
+  shareLink?: GateShareInboxStatus
+  kind?: 'human_gate' | 'review' | string
+}
+
 export interface ClarifyInboxItem {
   type: 'clarify'
   /**
@@ -644,6 +653,8 @@ export interface ClarifyInboxItem {
   requestedAt: string
   updatedAt: string
   tags?: string[]
+  /** Present on kind=review only (leak-free chip, no plaintext token). */
+  shareLink?: GateShareInboxStatus
 }
 
 export type InboxItem = GateInboxItem | ClarifyInboxItem

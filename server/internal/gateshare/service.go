@@ -36,12 +36,29 @@ type CreateResult struct {
 	State     string    `json:"state"`
 }
 
-// LookupResult is a validated share link plus its bound gate (no plaintext token).
+// LookupResult is a validated share link plus its bound instance (no plaintext token).
+// Gate is populated for human_gate; review rows leave Gate zero-value.
 type LookupResult struct {
 	Link models.GateShareLink
+	Kind string
 	Gate models.Gate
 	Run  models.Run
 	Node *models.Node
+}
+
+func normalizeShareKind(kind string) string {
+	if strings.TrimSpace(kind) == models.ShareLinkKindReview {
+		return models.ShareLinkKindReview
+	}
+	return models.ShareLinkKindHumanGate
+}
+
+func gateIDPtr(id uint) *uint {
+	if id == 0 {
+		return nil
+	}
+	v := id
+	return &v
 }
 
 // Service manages GateShareLink lifecycle.
@@ -84,10 +101,13 @@ func linkState(link *models.GateShareLink, now time.Time) string {
 	return models.ShareLinkStateActive
 }
 
-func (s *Service) latestLink(runID, nodeID string, iteration int) (*models.GateShareLink, error) {
+func (s *Service) latestLink(runID, nodeID string, iteration int, kind string) (*models.GateShareLink, error) {
 	var link models.GateShareLink
-	err := s.db.Where("run_id = ? AND node_id = ? AND iteration = ?", runID, nodeID, iteration).
-		Order("created_at desc, id desc").First(&link).Error
+	q := s.db.Where("run_id = ? AND node_id = ? AND iteration = ?", runID, nodeID, iteration)
+	if k := strings.TrimSpace(kind); k != "" {
+		q = q.Where("kind = ?", normalizeShareKind(k))
+	}
+	err := q.Order("created_at desc, id desc").First(&link).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -136,7 +156,7 @@ func (s *Service) Status(runID, nodeID string) (InboxShareStatus, error) {
 		gate = g
 		_ = s.db.First(&run, "id = ?", runID)
 	}
-	link, lerr := s.latestLink(runID, nodeID, gate.Iteration)
+	link, lerr := s.latestLink(runID, nodeID, gate.Iteration, models.ShareLinkKindHumanGate)
 	if lerr != nil {
 		return st, lerr
 	}
@@ -199,7 +219,7 @@ func (s *Service) Create(runID, nodeID, ttlTier, createdBy, publicOrigin string)
 	if !ok {
 		return nil, ErrInvalidTTL
 	}
-	latest, err := s.latestLink(runID, nodeID, gate.Iteration)
+	latest, err := s.latestLink(runID, nodeID, gate.Iteration, models.ShareLinkKindHumanGate)
 	if err != nil {
 		return nil, err
 	}
@@ -214,17 +234,18 @@ func (s *Service) Create(runID, nodeID, ttlTier, createdBy, publicOrigin string)
 	link := models.GateShareLink{
 		ID:        newShareID(),
 		TokenHash: HashToken(token),
+		Kind:      models.ShareLinkKindHumanGate,
 		RunID:     runID,
 		NodeID:    nodeID,
 		Iteration: gate.Iteration,
-		GateID:    gate.ID,
+		GateID:    gateIDPtr(gate.ID),
 		CreatedBy: strings.TrimSpace(createdBy),
 		TTLTier:   tier,
 		ExpiresAt: now.Add(dur),
 		CreatedAt: now,
 	}
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
-		if err := revokeActiveInTx(tx, runID, nodeID, gate.Iteration, now); err != nil {
+		if err := revokeActiveInTx(tx, runID, nodeID, gate.Iteration, now, models.ShareLinkKindHumanGate); err != nil {
 			return err
 		}
 		return tx.Create(&link).Error
@@ -252,7 +273,7 @@ func (s *Service) Regenerate(runID, nodeID, createdBy, publicOrigin string) (*Cr
 	if err != nil {
 		return nil, err
 	}
-	latest, err := s.latestLink(runID, nodeID, gate.Iteration)
+	latest, err := s.latestLink(runID, nodeID, gate.Iteration, models.ShareLinkKindHumanGate)
 	if err != nil {
 		return nil, err
 	}
@@ -272,17 +293,18 @@ func (s *Service) Regenerate(runID, nodeID, createdBy, publicOrigin string) (*Cr
 	link := models.GateShareLink{
 		ID:        newShareID(),
 		TokenHash: HashToken(token),
+		Kind:      models.ShareLinkKindHumanGate,
 		RunID:     runID,
 		NodeID:    nodeID,
 		Iteration: gate.Iteration,
-		GateID:    gate.ID,
+		GateID:    gateIDPtr(gate.ID),
 		CreatedBy: strings.TrimSpace(createdBy),
 		TTLTier:   tier,
 		ExpiresAt: now.Add(dur),
 		CreatedAt: now,
 	}
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
-		if err := revokeActiveInTx(tx, runID, nodeID, gate.Iteration, now); err != nil {
+		if err := revokeActiveInTx(tx, runID, nodeID, gate.Iteration, now, models.ShareLinkKindHumanGate); err != nil {
 			return err
 		}
 		return tx.Create(&link).Error
@@ -319,7 +341,7 @@ func (s *Service) Revoke(runID, nodeID, actor string) error {
 		}
 		gate = g
 	}
-	latest, err := s.latestLink(runID, nodeID, gate.Iteration)
+	latest, err := s.latestLink(runID, nodeID, gate.Iteration, models.ShareLinkKindHumanGate)
 	if err != nil {
 		return err
 	}
@@ -344,11 +366,14 @@ func (s *Service) Revoke(runID, nodeID, actor string) error {
 	return nil
 }
 
-func revokeActiveInTx(tx *gorm.DB, runID, nodeID string, iteration int, now time.Time) error {
-	return tx.Model(&models.GateShareLink{}).
+func revokeActiveInTx(tx *gorm.DB, runID, nodeID string, iteration int, now time.Time, kind string) error {
+	q := tx.Model(&models.GateShareLink{}).
 		Where("run_id = ? AND node_id = ? AND iteration = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?",
-			runID, nodeID, iteration, now).
-		Update("revoked_at", now).Error
+			runID, nodeID, iteration, now)
+	if k := strings.TrimSpace(kind); k != "" {
+		q = q.Where("kind = ?", normalizeShareKind(k))
+	}
+	return q.Update("revoked_at", now).Error
 }
 
 // RevokeUnusedForRun invalidates unused active links for a run (cancel/finish).
@@ -403,15 +428,42 @@ func (s *Service) LookupByToken(token string) (*LookupResult, string, error) {
 		return nil, models.ShareLinkStateNone, ErrTokenInvalid
 	}
 	st := linkState(&link, time.Now())
-	var gate models.Gate
-	if err := s.db.First(&gate, "id = ?", link.GateID).Error; err != nil {
-		return nil, st, ErrTokenInvalid
-	}
+	kind := normalizeShareKind(link.Kind)
 	var run models.Run
 	if err := s.db.First(&run, "id = ?", link.RunID).Error; err != nil {
 		return nil, st, ErrTokenInvalid
 	}
-	res := &LookupResult{Link: link, Gate: gate, Run: run, Node: run.Graph.FindNode(link.NodeID)}
+	res := &LookupResult{Link: link, Kind: kind, Run: run, Node: run.Graph.FindNode(link.NodeID)}
+	if kind == models.ShareLinkKindReview {
+		if st == models.ShareLinkStateActive {
+			if terminalRun(run.Status) {
+				st = models.ShareLinkStateUsed
+			} else {
+				var conv models.ReactConversation
+				if err := s.db.Where("run_id = ? AND node_id = ? AND iteration = ?", link.RunID, link.NodeID, link.Iteration).
+					First(&conv).Error; err != nil || conv.Done || run.Status != "waiting_human" {
+					st = models.ShareLinkStateUsed
+				} else {
+					var latest models.ReactConversation
+					if err := s.db.Where("run_id = ? AND node_id = ?", link.RunID, link.NodeID).
+						Order("iteration desc, id desc").First(&latest).Error; err == nil {
+						if latest.Iteration != link.Iteration {
+							st = models.ShareLinkStateRevoked
+						}
+					}
+				}
+			}
+		}
+		return res, st, nil
+	}
+	if link.GateID == nil || *link.GateID == 0 {
+		return nil, st, ErrTokenInvalid
+	}
+	var gate models.Gate
+	if err := s.db.First(&gate, "id = ?", *link.GateID).Error; err != nil {
+		return nil, st, ErrTokenInvalid
+	}
+	res.Gate = gate
 	if st == models.ShareLinkStateActive {
 		if terminalRun(run.Status) || gate.Resolved {
 			st = models.ShareLinkStateUsed
@@ -467,7 +519,7 @@ func (s *Service) LoadLinkByID(id string) (*models.GateShareLink, error) {
 	return &link, nil
 }
 
-// AttachInboxStatus fills shareLink on gate inbox items (no plaintext token).
+// AttachInboxStatus fills shareLink on gate and inbox-review items (no plaintext token).
 func (s *Service) AttachInboxStatus(items []any) {
 	if s == nil || s.db == nil || len(items) == 0 {
 		return
@@ -480,20 +532,28 @@ func (s *Service) AttachInboxStatus(items []any) {
 	keys := make([]key, 0)
 	seen := map[key]struct{}{}
 	for _, it := range items {
-		g, ok := it.(services.GateInboxItem)
-		if !ok {
-			// pointer / map from JSON round-trip won't happen here; items are structs.
-			continue
+		switch v := it.(type) {
+		case services.GateInboxItem:
+			if v.Type != "gate" {
+				continue
+			}
+			k := key{v.RunID, v.NodeID, v.Iteration}
+			if _, ok := seen[k]; ok {
+				continue
+			}
+			seen[k] = struct{}{}
+			keys = append(keys, k)
+		case services.ClarifyInboxItem:
+			if v.Kind != "review" {
+				continue
+			}
+			k := key{v.RunID, v.NodeID, v.Iteration}
+			if _, ok := seen[k]; ok {
+				continue
+			}
+			seen[k] = struct{}{}
+			keys = append(keys, k)
 		}
-		if g.Type != "gate" {
-			continue
-		}
-		k := key{g.RunID, g.NodeID, g.Iteration}
-		if _, ok := seen[k]; ok {
-			continue
-		}
-		seen[k] = struct{}{}
-		keys = append(keys, k)
 	}
 	if len(keys) == 0 {
 		return
@@ -524,20 +584,29 @@ func (s *Service) AttachInboxStatus(items []any) {
 	}
 	now := time.Now()
 	for i, it := range items {
-		g, ok := it.(services.GateInboxItem)
-		if !ok {
-			continue
+		switch v := it.(type) {
+		case services.GateInboxItem:
+			k := key{v.RunID, v.NodeID, v.Iteration}
+			link := latest[k]
+			run := runByID[v.RunID]
+			gate := models.Gate{
+				RunID: v.RunID, NodeID: v.NodeID, Iteration: v.Iteration,
+				Actions: v.Actions, Resolved: false,
+			}
+			st := s.statusFrom(link, gate, run, now)
+			v.ShareLink = inboxStatusPtr(st)
+			items[i] = v
+		case services.ClarifyInboxItem:
+			if v.Kind != "review" {
+				continue
+			}
+			k := key{v.RunID, v.NodeID, v.Iteration}
+			link := latest[k]
+			run := runByID[v.RunID]
+			st := s.statusFromReview(link, v.Done, run, now)
+			v.ShareLink = inboxStatusPtr(st)
+			items[i] = v
 		}
-		k := key{g.RunID, g.NodeID, g.Iteration}
-		link := latest[k]
-		run := runByID[g.RunID]
-		gate := models.Gate{
-			RunID: g.RunID, NodeID: g.NodeID, Iteration: g.Iteration,
-			Actions: g.Actions, Resolved: false,
-		}
-		st := s.statusFrom(link, gate, run, now)
-		g.ShareLink = inboxStatusPtr(st)
-		items[i] = g
 	}
 }
 

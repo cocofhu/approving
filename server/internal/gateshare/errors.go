@@ -21,4 +21,8 @@ var (
 	ErrCSRF             = errors.New("csrf check failed")
 	ErrRateLimited      = errors.New("rate limited")
 	ErrNonce            = errors.New("invalid or expired nonce")
+	ErrNotReviewSession = errors.New("not an inbox review session")
+	ErrReviewNotPending = errors.New("review is not pending")
+	ErrReviewBusy       = errors.New("review session is busy")
+	ErrReviewValidation = errors.New("review product validation failed")
 )

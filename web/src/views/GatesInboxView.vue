@@ -52,7 +52,7 @@ import {
 } from '@/lib/busySeedRetry'
 import { createWsReconnectController } from '@/lib/wsReconnect'
 import { useToast } from '@/lib/useToast'
-import { isHumanGateInboxItem } from '@/lib/gateShareLink'
+import { inboxShareKind, isHumanGateInboxItem, isShareableInboxItem } from '@/lib/gateShareLink'
 import type { AcpEvent, Gate, GateInboxItem, GateShareInboxStatus, InboxItem, Run } from '@/lib/types'
 
 const router = useRouter()
@@ -1200,13 +1200,11 @@ async function onResolve(action: string, form: Record<string, any> = {}) {
 }
 
 const sharePanelOpen = ref(false)
-const shareTarget = ref<GateInboxItem | null>(null)
+const shareTarget = ref<InboxItem | null>(null)
 
-function patchShareStatus(it: GateInboxItem, status: GateShareInboxStatus) {
-  const next = { ...it, shareLink: status }
-  listItems.value = listItems.value.map((row) =>
-    row.type === 'gate' && itemKey(row) === itemKey(it) ? next : row,
-  )
+function patchShareStatus(it: InboxItem, status: GateShareInboxStatus) {
+  const next = { ...it, shareLink: status } as InboxItem
+  listItems.value = listItems.value.map((row) => (itemKey(row) === itemKey(it) ? next : row))
   if (active.value && itemKey(active.value) === itemKey(it)) {
     active.value = next
   }
@@ -1214,7 +1212,7 @@ function patchShareStatus(it: GateInboxItem, status: GateShareInboxStatus) {
 }
 
 function openSharePanel(it: InboxItem, alsoOpenDetail = false) {
-  if (processingLock.value || !isHumanGateInboxItem(it)) return
+  if (processingLock.value || !isShareableInboxItem(it)) return
   selectItem(it)
   shareTarget.value = it
   sharePanelOpen.value = true
@@ -1514,7 +1512,7 @@ function itemSecondary(it: InboxItem) {
     <div v-else-if="isMobile && mobileView === 'detail' && active" class="card flex min-h-0 flex-1 flex-col overflow-hidden">
       <div class="flex shrink-0 items-center justify-end gap-3 border-b border-line px-4 py-2">
         <button
-          v-if="isHumanGateInboxItem(active)"
+          v-if="isShareableInboxItem(active)"
           type="button"
           class="inline-flex min-h-11 items-center text-xs text-accent-2 hover:underline"
           data-testid="gate-share-copy-btn-detail"
@@ -1730,7 +1728,8 @@ function itemSecondary(it: InboxItem) {
 
     <GateShareLinkPanel
       :open="sharePanelOpen"
-      :gate="shareTarget"
+      :target="shareTarget"
+      :kind="shareTarget ? inboxShareKind(shareTarget) : 'human_gate'"
       @close="sharePanelOpen = false"
       @updated="(st) => shareTarget && patchShareStatus(shareTarget, st)"
       @revoked="

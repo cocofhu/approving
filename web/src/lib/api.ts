@@ -728,6 +728,20 @@ export const api = {
     ),
   revokeGateShareLink: (runId: string, nodeId: string) =>
     req<{ status: string }>(`/runs/${runId}/gates/${nodeId}/share-link/revoke`, { method: 'POST' }),
+  createReviewShareLink: (runId: string, nodeId: string, ttlTier = '24h') =>
+    req<{ id: string; url: string; ttlTier: string; expiresAt: string; state: string }>(
+      `/runs/${runId}/reviews/${nodeId}/share-link`,
+      { method: 'POST', body: JSON.stringify({ ttlTier }) },
+    ),
+  getReviewShareLink: (runId: string, nodeId: string) =>
+    req<GateShareInboxStatus>(`/runs/${runId}/reviews/${nodeId}/share-link`),
+  regenReviewShareLink: (runId: string, nodeId: string) =>
+    req<{ id: string; url: string; ttlTier: string; expiresAt: string; state: string }>(
+      `/runs/${runId}/reviews/${nodeId}/share-link/regen`,
+      { method: 'POST' },
+    ),
+  revokeReviewShareLink: (runId: string, nodeId: string) =>
+    req<{ status: string }>(`/runs/${runId}/reviews/${nodeId}/share-link/revoke`, { method: 'POST' }),
   listGatePrimaryArtifacts: (runId: string, nodeId: string) =>
     req<{
       items: {
