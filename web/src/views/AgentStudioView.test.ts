@@ -1011,17 +1011,38 @@ describe('AgentStudio mobile core path', () => {
     wrapper.unmount()
   })
 
-  it('keeps file row actions visible without hover on mobile', async () => {
+  it('keeps a single more trigger visible without hover on mobile', async () => {
     mocks.listAgents.mockResolvedValue([agentWithFiles()])
     const wrapper = await mountMobileStudio()
     await flushPromises()
 
-    const actions = wrapper.findAll('[data-test="file-row-action"]')
-    expect(actions.length).toBeGreaterThan(0)
-    for (const btn of actions) {
-      expect(btn.classes().join(' ')).toContain('opacity-100')
-      expect(btn.classes().join(' ')).not.toContain('opacity-0')
+    expect(wrapper.findAll('[data-test="file-row-action"]').length).toBe(0)
+    const mores = wrapper.findAll('[data-test="file-row-more"]')
+    expect(mores.length).toBeGreaterThan(0)
+    for (const btn of mores) {
+      const cls = btn.classes().join(' ')
+      expect(cls).toMatch(/min-h-11/)
+      expect(cls).toMatch(/min-w-11/)
+      expect(cls).not.toContain('opacity-0')
     }
+
+    await wrapper.get('[data-test="file-row-more"][data-path="rules"]').trigger('click')
+    await flushPromises()
+    const folderMenu = document.querySelector('[data-test="explorer-more-menu"]')
+    expect(folderMenu).toBeTruthy()
+    const folderActions = Array.from(folderMenu!.querySelectorAll('[data-test="explorer-more-item"]')).map(
+      (el) => el.getAttribute('data-action'),
+    )
+    expect(folderActions).toEqual(['newFile', 'newFolder', 'rename'])
+
+    await wrapper.get('[data-test="file-row-more"][data-path="AGENTS.md"]').trigger('click')
+    await flushPromises()
+    const fileMenu = document.querySelector('[data-test="explorer-more-menu"]')
+    expect(fileMenu).toBeTruthy()
+    const fileActions = Array.from(fileMenu!.querySelectorAll('[data-test="explorer-more-item"]')).map(
+      (el) => el.getAttribute('data-action'),
+    )
+    expect(fileActions).toEqual(['rename', 'delete'])
     wrapper.unmount()
   })
 
@@ -1051,6 +1072,214 @@ describe('AgentStudio mobile core path', () => {
     expect(wrapper.text()).toContain('新建 Agent')
     expect(wrapper.text()).not.toContain('配置可复用的 Agent')
     expect(wrapper.text()).not.toContain('复制进沙箱')
+    wrapper.unmount()
+  })
+})
+
+describe('AgentStudio mobile chrome', () => {
+  const ModalStub = defineComponent({
+    props: { open: Boolean, title: String },
+    emits: ['close'],
+    template: '<div v-if="open" data-test="modal"><h2>{{ title }}</h2><slot /><slot name="footer" /></div>',
+  })
+  const MdStub = defineComponent({
+    props: { modelValue: String, filePath: String, variant: String },
+    emits: ['update:modelValue'],
+    template:
+      '<div data-test="md-editor" :data-variant="variant">' +
+      '<textarea :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' +
+      '</div>',
+  })
+
+  function agentWithFiles(): Agent {
+    return {
+      ...agent('public'),
+      files: [
+        { path: 'AGENTS.md', content: '# hello\n' },
+        { path: 'rules/system.md', content: '---\ntitle: system\n---\n\n# rule\n' },
+      ],
+    }
+  }
+
+  async function mountMobileStudio() {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const router = await createStudioRouter()
+    return trackMount(
+      mount(AgentStudioView, {
+        global: {
+          plugins: [i18n, router],
+          stubs: {
+            AppButton: ButtonStub,
+            Icon: true,
+            AppModal: ModalStub,
+            CodeEditor: CodeEditorStub,
+            MarkdownSplitEditor: MdStub,
+            ExplorerContextMenu: true,
+            AgentChatTester: true,
+            AgentGitGuide: true,
+            AgentCreateWizard: true,
+            AgentOrgSidebar: true,
+            AgentDataPanel: true,
+          },
+        },
+      }),
+    )
+  }
+
+  beforeEach(() => {
+    breakpointMocks.isMobile.value = true
+  })
+
+  it('splits name bar into two rows and hides disabled saved button when clean', async () => {
+    mocks.listAgents.mockResolvedValue([{ ...agentWithFiles(), name: 'Approving代办助手' }])
+    const wrapper = await mountMobileStudio()
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="studio-name-row-top"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="studio-name-row-bottom"]').exists()).toBe(true)
+    expect(wrapper.get('[data-test="agent-name"]').text()).toContain('Approving代办助手')
+    expect(wrapper.get('[data-test="org-switch"]').classes().join(' ')).toMatch(/min-h-11/)
+    expect(wrapper.get('[data-test="studio-export"]').classes().join(' ')).toMatch(/min-h-11/)
+    expect(wrapper.find('[data-test="studio-save"]').exists()).toBe(false)
+    expect(wrapper.findAll('button').filter((b) => b.text() === '已保存').length).toBe(0)
+    wrapper.unmount()
+  })
+
+  it('shows unsaved chip and save on dirty two-row bar', async () => {
+    mocks.listAgents.mockResolvedValue([agentWithFiles()])
+    const wrapper = await mountMobileStudio()
+    await flushPromises()
+
+    await wrapper.findAll('button').find((b) => b.text().includes('rules'))!.trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find((b) => b.text().includes('system.md'))!.trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-test="md-editor"] textarea').setValue('# dirty chrome\n')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="studio-name-row-top"]').text()).toContain('未保存')
+    const save = wrapper.get('[data-test="studio-save"]')
+    expect(save.text()).toContain('保存')
+    expect(save.classes().join(' ')).toMatch(/min-h-11/)
+    wrapper.unmount()
+  })
+
+  it('opens full name tip only when the name is truncated', async () => {
+    mocks.listAgents.mockResolvedValue([{ ...agentWithFiles(), name: 'Approving代办助手超长名称' }])
+    const wrapper = await mountMobileStudio()
+    await flushPromises()
+
+    const nameBtn = wrapper.get('[data-test="agent-name"]')
+    await nameBtn.trigger('click')
+    await nextTick()
+    expect(document.querySelector('[data-test="agent-name-tip"]')).toBeNull()
+
+    Object.defineProperty(nameBtn.element, 'scrollWidth', { configurable: true, get: () => 240 })
+    Object.defineProperty(nameBtn.element, 'clientWidth', { configurable: true, get: () => 80 })
+    await nameBtn.trigger('click')
+    await nextTick()
+    const tip = document.querySelector('[data-test="agent-name-tip"]')
+    expect(tip).toBeTruthy()
+    expect(tip!.textContent).toContain('Approving代办助手超长名称')
+    expect(tip!.textContent).toContain('完整名称')
+
+    ;(document.querySelector('[data-test="agent-name-tip-backdrop"]') as HTMLElement).click()
+    await nextTick()
+    expect(document.querySelector('[data-test="agent-name-tip"]')).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('shows tab edge fades from scrollLeft and hides them at the ends', async () => {
+    mocks.listAgents.mockResolvedValue([agentWithFiles()])
+    const wrapper = await mountMobileStudio()
+    await flushPromises()
+
+    const strip = wrapper.get('[data-test="studio-tab-strip"]')
+    const el = strip.element as HTMLElement
+    let scrollLeft = 0
+    Object.defineProperty(el, 'scrollWidth', { configurable: true, get: () => 900 })
+    Object.defineProperty(el, 'clientWidth', { configurable: true, get: () => 320 })
+    Object.defineProperty(el, 'scrollLeft', {
+      configurable: true,
+      get: () => scrollLeft,
+      set: (v: number) => {
+        scrollLeft = v
+      },
+    })
+
+    await strip.trigger('scroll')
+    await nextTick()
+    expect(wrapper.find('[data-test="tab-fade-right"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="tab-fade-left"]').exists()).toBe(false)
+
+    scrollLeft = 40
+    await strip.trigger('scroll')
+    await nextTick()
+    expect(wrapper.find('[data-test="tab-fade-left"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="tab-fade-right"]').exists()).toBe(true)
+
+    scrollLeft = 580
+    await strip.trigger('scroll')
+    await nextTick()
+    expect(wrapper.find('[data-test="tab-fade-right"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="tab-fade-left"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('keeps more menu items at least 44px and mutually exclusive with full name tip', async () => {
+    mocks.listAgents.mockResolvedValue([{ ...agentWithFiles(), name: 'Approving代办助手超长名称' }])
+    const wrapper = await mountMobileStudio()
+    await flushPromises()
+
+    await wrapper.get('[data-test="file-row-more"][data-path="rules"]').trigger('click')
+    await flushPromises()
+    const items = Array.from(document.querySelectorAll('[data-test="explorer-more-item"]'))
+    expect(items.length).toBeGreaterThan(0)
+    for (const item of items) {
+      expect((item as HTMLElement).className).toMatch(/min-h-11/)
+    }
+
+    const nameBtn = wrapper.get('[data-test="agent-name"]')
+    Object.defineProperty(nameBtn.element, 'scrollWidth', { configurable: true, get: () => 240 })
+    Object.defineProperty(nameBtn.element, 'clientWidth', { configurable: true, get: () => 80 })
+    await nameBtn.trigger('click')
+    await nextTick()
+    expect(document.querySelector('[data-test="explorer-more-menu"]')).toBeNull()
+    expect(document.querySelector('[data-test="agent-name-tip"]')).toBeTruthy()
+    wrapper.unmount()
+  })
+})
+
+describe('AgentStudio desktop chrome unchanged', () => {
+  function agentWithFiles(): Agent {
+    return {
+      ...agent('public'),
+      files: [
+        { path: 'AGENTS.md', content: '# hello\n' },
+        { path: 'rules/system.md', content: '---\ntitle: system\n---\n\n# rule\n' },
+      ],
+    }
+  }
+
+  it('keeps single-row name bar, disabled save, and hover row actions', async () => {
+    breakpointMocks.isMobile.value = false
+    mocks.listAgents.mockResolvedValue([agentWithFiles()])
+    const wrapper = await mountStudio()
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="studio-name-row-top"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="studio-name-row-bottom"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="org-switch"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="file-row-more"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="tab-fade-right"]').exists()).toBe(false)
+    const save = wrapper.get('[data-test="studio-save"]')
+    expect(save.text()).toContain('已保存')
+    expect(save.attributes('disabled')).toBeDefined()
+    expect(wrapper.findAll('[data-test="file-row-action"]').length).toBeGreaterThan(0)
     wrapper.unmount()
   })
 })

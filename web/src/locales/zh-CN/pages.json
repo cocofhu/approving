@@ -1338,7 +1338,8 @@
         "chars": "{n} 字符",
         "markdownBadge": "分屏+同步+小地图",
         "newFileInFolder": "在此新建文件",
-        "newFolderInFolder": "在此新建文件夹"
+        "newFolderInFolder": "在此新建文件夹",
+        "more": "更多"
       },
       "mcp": {
         "hint": "整份 mcp.json 由你配置,写入 {configRoot}/mcp.json 并在 ACP session 注入。新建 Agent 默认带平台 artifact-store,可自行增删。项目管理 MCP 需手动添加,与 artifact-store 并列、互不合并。",
@@ -1536,7 +1537,9 @@
         "orgSheetTitle": "Agent 组织树",
         "orgSheetHint": "只读浏览：支持折叠展开与切换；不提供分组创建 / 拖拽排序。可通过遮罩或关闭按钮收起。",
         "desktopOnlyTitle": "请在桌面端完成",
-        "desktopOnlyDesc": "「{tab}」本期窄屏仅保留入口，请在桌面浏览器中完成完整配置。"
+        "desktopOnlyDesc": "「{tab}」本期窄屏仅保留入口，请在桌面浏览器中完成完整配置。",
+        "fullNameLabel": "完整名称",
+        "fullNameAria": "查看完整 Agent 名称"
       },
       "dialogs": {
         "leaveUnsavedTitle": "有未保存的修改",
