@@ -324,7 +324,6 @@
     },
     "loading": {
       "label": "加载中",
-      "elapsed": "已用时 {s}s · 心跳存活",
       "stuck": "可能卡死 · 请求仍在进行，可继续等待或重试"
     },
     "chatImage": {

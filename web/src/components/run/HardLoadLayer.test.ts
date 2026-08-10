@@ -26,13 +26,16 @@ describe('HardLoadLayer', () => {
     vi.useRealTimers()
   })
 
-  it('shows stage, elapsed, and heartbeat without stuck warning before threshold', () => {
+  it('shows stage and heartbeat without elapsed row or stuck warning before threshold', () => {
     vi.useFakeTimers()
     const w = mountLayer({ stuckAfterMs: 10_000, stage: '加载中' })
     expect(w.get('[data-testid="hard-load-layer"]').attributes('aria-busy')).toBe('true')
     expect(w.find('[data-testid="hard-load-heartbeat"]').exists()).toBe(true)
+    expect(w.find('[data-testid="hard-load-heartbeat"] i').exists()).toBe(true)
+    expect(w.findAll('[data-testid="hard-load-heartbeat"] i')).toHaveLength(3)
     expect(w.get('[data-testid="hard-load-stage"]').text()).toBe('加载中')
-    expect(w.get('[data-testid="hard-load-elapsed"]').text()).toMatch(/已用时 0s/)
+    expect(w.find('[data-testid="hard-load-elapsed"]').exists()).toBe(false)
+    expect(w.get('[data-testid="hard-load-layer"]').text()).not.toMatch(/已用时|心跳|Elapsed|heartbeat/)
     expect(w.find('[data-testid="hard-load-stuck"]').exists()).toBe(false)
     vi.advanceTimersByTime(9_000)
     expect(w.find('[data-testid="hard-load-stuck"]').exists()).toBe(false)
@@ -50,7 +53,7 @@ describe('HardLoadLayer', () => {
     w.unmount()
   })
 
-  it('retry resets elapsed and emits retry', async () => {
+  it('retry resets clock and emits retry without restoring elapsed row', async () => {
     vi.useFakeTimers()
     const w = mountLayer({ stuckAfterMs: 1_000 })
     vi.advanceTimersByTime(1_000)
@@ -59,18 +62,23 @@ describe('HardLoadLayer', () => {
     await w.get('[data-testid="hard-load-retry"]').trigger('click')
     expect(w.emitted('retry')).toHaveLength(1)
     expect(w.find('[data-testid="hard-load-stuck"]').exists()).toBe(false)
-    expect(w.get('[data-testid="hard-load-elapsed"]').text()).toMatch(/已用时 0s/)
+    expect(w.find('[data-testid="hard-load-elapsed"]').exists()).toBe(false)
+    expect(w.get('[data-testid="hard-load-layer"]').text()).not.toMatch(/已用时|心跳|Elapsed|heartbeat/)
     w.unmount()
   })
 
-  it('renders English Demo-locked copy', async () => {
+  it('renders English Demo-locked copy without elapsed/heartbeat text', async () => {
     vi.useFakeTimers()
     const w = mountLayer({ stuckAfterMs: 20_000, stage: 'Starting…' }, 'en')
     expect(w.get('[data-testid="hard-load-stage"]').text()).toBe('Starting…')
-    expect(w.get('[data-testid="hard-load-elapsed"]').text()).toMatch(/Elapsed 0s/)
+    expect(w.find('[data-testid="hard-load-heartbeat"]').exists()).toBe(true)
+    expect(w.find('[data-testid="hard-load-elapsed"]').exists()).toBe(false)
+    expect(w.get('[data-testid="hard-load-layer"]').text()).not.toMatch(/已用时|心跳|Elapsed|heartbeat/)
     vi.advanceTimersByTime(20_000)
     await w.vm.$nextTick()
     expect(w.get('[data-testid="hard-load-stuck"]').text()).toMatch(/May be stuck/i)
+    expect(w.find('[data-testid="hard-load-retry"]').exists()).toBe(true)
+    expect(w.get('[data-testid="hard-load-layer"]').text()).not.toMatch(/已用时|心跳|Elapsed|heartbeat/)
     w.unmount()
   })
 })

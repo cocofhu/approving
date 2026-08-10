@@ -86,9 +86,6 @@ defineExpose({ reset: startClock, elapsedSec, stuck })
       <i class="hard-hb inline-block w-[3px] bg-accent" style="height: 12px; animation-delay: 0.3s" />
     </span>
     <p class="text-[13px] font-semibold text-txt" data-testid="hard-load-stage">{{ stageLabel }}</p>
-    <p class="text-[12px] text-txt3" data-testid="hard-load-elapsed">
-      {{ t('common.loading.elapsed', { s: elapsedSec }) }}
-    </p>
     <div
       v-if="stuck"
       class="max-w-[360px] border border-warn/40 bg-warn/10 px-2.5 py-2 text-[12px] text-warn"
