@@ -6,7 +6,8 @@ import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import AppSwitch from '@/components/ui/AppSwitch.vue'
 import ParagraphInput from '@/components/ui/ParagraphInput.vue'
-import ArtifactLoadingPane from '@/components/run/ArtifactLoadingPane.vue'
+import HardLoadLayer from '@/components/run/HardLoadLayer.vue'
+import { isAbortError } from '@/lib/liveLogRehydrate'
 import ReposEditor, { type RepoRow } from '@/components/ReposEditor.vue'
 import PrioritySegmented, { type RunPriority } from '@/components/ui/PrioritySegmented.vue'
 import { api } from '@/lib/api'
@@ -70,6 +71,8 @@ const tagSuggestions = ref<string[]>([])
 const maxTags = MAX_RUN_TAGS
 const maxTagRunes = MAX_TAG_RUNES
 const reposDraft = ref<Record<string, RepoRow[]>>({})
+let startAbort: AbortController | null = null
+let startGen = 0
 /** loading 可见层显式高度：≥ max(捕获高度, 200)，捕获为空也至少 200px */
 const loadingLayerMinHeight = computed(() =>
   isLoading.value ? Math.max(scrollAreaMinHeight.value ?? 0, 200) : undefined,
@@ -146,6 +149,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', onEnterKeydown)
+  startAbort?.abort()
+  startAbort = null
+  startGen++
 })
 
 function fieldOptions(f: InputField): string[] {
@@ -170,6 +176,10 @@ function onModalClose() {
     return
   }
   if (phase.value === 'loading') {
+    startAbort?.abort()
+    startAbort = null
+    startGen++
+    emit('update:loading', false)
     emit('close')
     return
   }
@@ -290,6 +300,9 @@ async function startRun() {
   }
 
   captureScrollAreaHeight()
+  startAbort?.abort()
+  const gen = ++startGen
+  startAbort = new AbortController()
   phase.value = 'loading'
   startError.value = ''
   emit('update:loading', true)
@@ -305,15 +318,19 @@ async function startRun() {
 
   try {
     if (props.beforeStart) await props.beforeStart()
-    const res = await api.startRun(props.workflowId, inputs, 'manual', priority.value, tags.value)
+    const res = await api.startRun(props.workflowId, inputs, 'manual', priority.value, tags.value, {
+      signal: startAbort.signal,
+    })
+    if (gen !== startGen) return
     successRunId.value = res.id
     emit('started', res.id)
     phase.value = 'success'
   } catch (e: any) {
+    if (gen !== startGen || isAbortError(e) || startAbort.signal.aborted) return
     phase.value = 'error'
     startError.value = String(e?.message || e)
   } finally {
-    emit('update:loading', false)
+    if (gen === startGen) emit('update:loading', false)
   }
 }
 </script>
@@ -478,7 +495,12 @@ async function startRun() {
         :class="bodyLayerClass(isLoading)"
         :style="loadingLayerMinHeight != null ? { minHeight: `${loadingLayerMinHeight}px` } : undefined"
       >
-        <ArtifactLoadingPane message-key="pages.runLaunch.starting" />
+        <HardLoadLayer
+          :overlay="false"
+          :stuck-after-ms="90_000"
+          :stage="t('common.buttons.starting')"
+          @retry="startRun"
+        />
       </div>
 
       <div

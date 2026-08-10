@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onBeforeUnmount } from 'vue'
+import { isAbortError } from '@/lib/liveLogRehydrate'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -24,6 +25,8 @@ const { t } = useI18n()
 const name = ref('')
 const error = ref('')
 const copying = ref(false)
+let copyAbort: AbortController | null = null
+let copyGen = 0
 
 const modalTitle = computed(() => t('pages.copyWorkflow.title', { name: props.sourceName }))
 
@@ -34,9 +37,20 @@ watch(
       name.value = props.suggestedName
       error.value = ''
       copying.value = false
+    } else {
+      copyAbort?.abort()
+      copyAbort = null
+      copyGen++
+      copying.value = false
     }
   },
 )
+
+onBeforeUnmount(() => {
+  copyAbort?.abort()
+  copyAbort = null
+  copyGen++
+})
 
 function clearError() {
   error.value = ''
@@ -57,14 +71,19 @@ async function confirmCopy() {
     error.value = localErr
     return
   }
+  copyAbort?.abort()
+  const gen = ++copyGen
+  copyAbort = new AbortController()
   copying.value = true
   try {
-    const wf = await api.copyWorkflow(props.sourceId, name.value)
+    const wf = await api.copyWorkflow(props.sourceId, name.value, { signal: copyAbort.signal })
+    if (gen !== copyGen) return
     emit('copied', wf)
   } catch (e: any) {
+    if (gen !== copyGen || isAbortError(e) || copyAbort.signal.aborted) return
     error.value = String(e?.message || e)
   } finally {
-    copying.value = false
+    if (gen === copyGen) copying.value = false
   }
 }
 </script>
@@ -105,8 +124,8 @@ async function confirmCopy() {
       </div>
     </div>
     <template #footer>
-      <AppButton variant="ghost" @click="emit('close')">{{ t('common.buttons.cancel') }}</AppButton>
-      <AppButton variant="primary" icon="copy" :disabled="copying" @click="confirmCopy">
+      <AppButton variant="ghost" :disabled="copying" @click="emit('close')">{{ t('common.buttons.cancel') }}</AppButton>
+      <AppButton variant="primary" icon="copy" :disabled="copying" :aria-busy="copying ? 'true' : undefined" @click="confirmCopy">
         {{ copying ? t('common.buttons.copying') : t('common.buttons.confirmCopy') }}
       </AppButton>
     </template>

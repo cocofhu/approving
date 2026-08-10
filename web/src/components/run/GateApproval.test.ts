@@ -261,6 +261,7 @@ function mountApproval(opts: {
   fillPreview?: boolean
   mobileFillRemaining?: boolean
   unifiedPreviewBudget?: boolean
+  compact?: boolean
 }) {
   const i18n = createI18n({
     legacy: false,
@@ -274,7 +275,7 @@ function mountApproval(opts: {
       fillPreview: opts.fillPreview,
       mobileFillRemaining: opts.mobileFillRemaining,
       unifiedPreviewBudget: opts.unifiedPreviewBudget,
-      compact: true,
+      compact: opts.compact ?? true,
     },
     global: {
       plugins: [i18n],
@@ -3927,6 +3928,92 @@ describe('GateApproval record issue refreshes real PreviewFeedbackChat history',
     expect((form.find('[data-testid="paragraph-input"]').element as HTMLTextAreaElement).value).toBe(
       '',
     )
+    wrapper.unmount()
+  })
+})
+
+describe('GateApproval cold footer pending + loadProduct gen (专项三 g4)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    breakpointMocks.isMobile.value = false
+    apiMocks.listPreviewIssues.mockResolvedValue({ issues: [] })
+    apiMocks.listGatePrimaryArtifacts.mockRejectedValue(new Error('offline'))
+    apiMocks.artifactContent.mockResolvedValue({ content: '# doc' })
+  })
+
+  it('shows 批准中…, disables siblings, and ignores double click', async () => {
+    const wrapper = mountApproval({
+      gate: baseGate({ form: [] }),
+      run: baseRun(),
+      compact: false,
+    })
+    await flushPromises()
+    const buttons = wrapper.findAll('[data-testid="review-composer-pass"]')
+    const approve = buttons.find((b) => /确认并流转|批准/.test(b.text()))
+    expect(approve).toBeTruthy()
+    await approve!.trigger('click')
+    await approve!.trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('resolve')?.length).toBe(1)
+    expect(wrapper.emitted('resolve')?.[0]?.[0]).toBe('approve')
+    expect(approve!.text()).toContain('批准中')
+    expect(approve!.attributes('disabled')).toBeDefined()
+    expect(approve!.attributes('aria-busy')).toBe('true')
+    wrapper.unmount()
+  })
+
+  it('rolls back pending on submitError so reviewer can retry', async () => {
+    const wrapper = mountApproval({
+      gate: baseGate({ form: [] }),
+      run: baseRun(),
+      compact: false,
+    })
+    await flushPromises()
+    const approve = wrapper.findAll('[data-testid="review-composer-pass"]').find((b) => /确认并流转|批准/.test(b.text()))
+    await approve!.trigger('click')
+    await flushPromises()
+    await wrapper.setProps({ submitError: 'gate still open' })
+    await flushPromises()
+    const again = wrapper.findAll('[data-testid="review-composer-pass"]').find((b) => /确认并流转|批准/.test(b.text()))
+    expect(again).toBeTruthy()
+    expect(again!.text()).toMatch(/确认并流转|批准/)
+    expect(again!.text()).not.toContain('批准中')
+    expect(wrapper.text()).toContain('gate still open')
+    await again!.trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('resolve')?.length).toBe(2)
+    wrapper.unmount()
+  })
+
+  it('passes AbortSignal into artifactContent for loadProduct', async () => {
+    apiMocks.listGatePrimaryArtifacts.mockResolvedValue({
+      artifacts: [{ name: 'research.json', outputKey: 'research', nodeId: 'research' }],
+    })
+    const wrapper = mountApproval({
+      gate: baseGate({ nodeId: 'hg-1', upstreamNodeId: 'research' }),
+      run: baseRun({
+        artifacts: [
+          {
+            id: 'art-1',
+            name: 'research.json',
+            kind: 'json',
+            nodeId: 'research',
+            runId: 'run-1',
+            sizeBytes: 12,
+            createdAt: '2026-07-18T00:00:00Z',
+          } as any,
+        ],
+        nodes: [
+          { id: 'hg-1', type: 'human_gate', label: '审阅', position: { x: 0, y: 0 }, config: {} },
+          { id: 'research', type: 'agent', label: '调研', position: { x: 0, y: 0 }, config: {} },
+        ],
+      }),
+    })
+    await flushPromises()
+    if (apiMocks.artifactContent.mock.calls.length) {
+      const last = apiMocks.artifactContent.mock.calls[apiMocks.artifactContent.mock.calls.length - 1]
+      expect(last?.[1]).toEqual(expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    }
     wrapper.unmount()
   })
 })

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onBeforeUnmount } from 'vue'
+import { isAbortError } from '@/lib/liveLogRehydrate'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
@@ -27,27 +28,55 @@ const toast = useToast()
 const versions = ref<WorkflowVersion[]>([])
 const loading = ref(false)
 const exporting = ref(false)
+const exportError = ref('')
 const selected = ref<string>('draft')
+let listAbort: AbortController | null = null
+let exportAbort: AbortController | null = null
+let listGen = 0
+let exportGen = 0
+
+function abortPending() {
+  listAbort?.abort()
+  exportAbort?.abort()
+  listAbort = null
+  exportAbort = null
+  listGen++
+  exportGen++
+  loading.value = false
+  exporting.value = false
+}
 
 watch(
   () => props.open,
   async (open) => {
-    if (!open) return
+    if (!open) {
+      abortPending()
+      exportError.value = ''
+      return
+    }
     selected.value = 'draft'
     versions.value = []
+    exportError.value = ''
     if (props.status === 'published' && props.workflowId) {
+      listAbort?.abort()
+      const gen = ++listGen
+      listAbort = new AbortController()
       loading.value = true
       try {
-        versions.value = await api.listWorkflowVersions(props.workflowId)
-      } catch {
+        versions.value = await api.listWorkflowVersions(props.workflowId, { signal: listAbort.signal })
+        if (gen !== listGen) return
+      } catch (e) {
+        if (gen !== listGen || isAbortError(e)) return
         versions.value = []
       } finally {
-        loading.value = false
+        if (gen === listGen) loading.value = false
       }
     }
   },
   { immediate: true },
 )
+
+onBeforeUnmount(abortPending)
 
 const options = computed(() => {
   const opts: { id: string; label: string; desc?: string }[] = [
@@ -71,7 +100,11 @@ const options = computed(() => {
 
 async function confirmExport() {
   if (exporting.value) return
+  exportAbort?.abort()
+  const gen = ++exportGen
+  exportAbort = new AbortController()
   exporting.value = true
+  exportError.value = ''
   try {
     const meta = { name: props.workflowName, description: props.description, needsRepo: props.needsRepo }
     let graph: WorkflowGraphPayload
@@ -80,22 +113,25 @@ async function confirmExport() {
       if (props.localDraft) {
         graph = props.localDraft
       } else {
-        const wf = await api.getWorkflow(props.workflowId)
+        const wf = await api.getWorkflow(props.workflowId, { signal: exportAbort.signal })
         graph = { nodes: wf.nodes, edges: wf.edges, variables: (wf as any).variables }
       }
     } else {
       const version = parseInt(selected.value.slice(1), 10)
-      graph = await api.getWorkflowVersionGraph(props.workflowId, version)
+      graph = await api.getWorkflowVersionGraph(props.workflowId, version, { signal: exportAbort.signal })
     }
 
+    if (gen !== exportGen) return
     const envelope = buildEnvelope(meta, graph)
     downloadJson(sanitizeFilename(meta.name), envelope)
     toast.success(t('pages.workflowIO.export.success', { name: meta.name }))
     emit('close')
   } catch (e: any) {
-    toast.error(String(e?.message || e))
+    if (gen !== exportGen || isAbortError(e) || exportAbort.signal.aborted) return
+    exportError.value = t('pages.workflowIO.export.failed')
+    toast.error(exportError.value)
   } finally {
-    exporting.value = false
+    if (gen === exportGen) exporting.value = false
   }
 }
 </script>
@@ -104,7 +140,7 @@ async function confirmExport() {
   <AppModal :open="open" :title="t('pages.workflowIO.export.title', { name: workflowName })" :width="440" @close="emit('close')">
     <div class="space-y-3">
       <p class="text-[12px] leading-relaxed text-txt3">{{ t('pages.workflowIO.export.intro') }}</p>
-      <div v-if="loading" class="py-6 text-center text-sm text-txt3">{{ t('common.buttons.loading') }}</div>
+      <div v-if="loading" class="py-6 text-center text-sm text-txt3" role="status" aria-busy="true">{{ t('common.buttons.loading') }}</div>
       <div v-else class="space-y-2">
         <label
           v-for="opt in options"
@@ -119,11 +155,12 @@ async function confirmExport() {
           </div>
         </label>
       </div>
+      <p v-if="exportError" class="text-[12px] text-err" role="alert">{{ exportError }}</p>
     </div>
     <template #footer>
-      <AppButton variant="ghost" @click="emit('close')">{{ t('common.buttons.cancel') }}</AppButton>
-      <AppButton variant="primary" icon="download" :disabled="exporting || loading" @click="confirmExport">
-        {{ exporting ? t('common.buttons.loading') : t('pages.workflowIO.export.confirm') }}
+      <AppButton variant="ghost" :disabled="exporting" @click="emit('close')">{{ t('common.buttons.cancel') }}</AppButton>
+      <AppButton variant="primary" icon="download" :disabled="exporting || loading" :aria-busy="exporting ? 'true' : undefined" @click="confirmExport">
+        {{ exporting ? t('common.buttons.submitting') : t('pages.workflowIO.export.confirm') }}
       </AppButton>
     </template>
   </AppModal>

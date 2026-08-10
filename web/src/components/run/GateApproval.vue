@@ -22,7 +22,7 @@ export function actionVariantClasses(variant: ActionVariant): string {
 </script>
 
 <script setup lang="ts">
-import { ref, computed, watch, provide } from 'vue'
+import { ref, computed, watch, provide, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import ParagraphInput from '../ui/ParagraphInput.vue'
@@ -41,6 +41,8 @@ import HtmlPreview from '../ui/HtmlPreview.vue'
 import AppPreviewPanel from './AppPreviewPanel.vue'
 import PreviewFeedbackChat from './PreviewFeedbackChat.vue'
 import ArtifactLoadingPane from './ArtifactLoadingPane.vue'
+import RefreshStrip from './RefreshStrip.vue'
+import { isAbortError } from '@/lib/liveLogRehydrate'
 import UpstreamRequirementContext from './UpstreamRequirementContext.vue'
 import ReviewShell from './ReviewShell.vue'
 import ReviewComposer from './ReviewComposer.vue'
@@ -146,6 +148,7 @@ watch(
   (e) => {
     if (e) {
       resolved.value = null
+      actionSubmitting.value = false
       formError.value = e
     }
   },
@@ -484,9 +487,15 @@ const shouldHideGateForm = computed(
     (!!props.gate.reactSessionAlive && resolved.value == null && !!props.run?.id),
 )
 
-/** Action buttons are not disabled by hidden form/issue state; validate() handles form rules. */
+const actionSubmitting = ref(false)
+
+/** Action buttons lock while a cold approve/reject is in flight. */
 function isActionDisabled(_actionId: string): boolean {
-  return false
+  return actionSubmitting.value || resolved.value != null
+}
+
+function actionPendingLabel(id: string): string {
+  return POSITIVE_ACTION_IDS.has(id) ? t('common.buttons.approving') : t('common.buttons.rejecting')
 }
 
 function actionButtonTitle(_actionId: string): string {
@@ -568,6 +577,11 @@ const productHtml = ref('')
 const productLoading = ref(false)
 /** Distinguishes load failure from empty body; null when last load succeeded. */
 const productLoadError = ref<string | null>(null)
+const productHasSavedContent = computed(() =>
+  Object.values(savedProductContent.value).some((c) => (c || '').trim().length > 0),
+)
+let productLoadGen = 0
+let productLoadAbort: AbortController | null = null
 /**
  * Structured artifact + fillPreview: same content-fit column as visual.
  * Requires a parsed productDoc; loading / parse failure stay on the v-else path.
@@ -714,7 +728,7 @@ function upstreamOutputs(): { outputs: Record<string, any> | null; pointerMiss: 
 
 async function loadOneProductContent(
   p: GatePrimaryProductRef,
-  opts?: { preferSnapshot?: boolean },
+  opts?: { preferSnapshot?: boolean; signal?: AbortSignal },
 ): Promise<string> {
   let snapContent = ''
   const pending = resolved.value == null
@@ -744,7 +758,7 @@ async function loadOneProductContent(
   if (opts?.preferSnapshot && snapContent) return snapContent
   const a = props.run?.artifacts.find((x) => x.name === p.name)
   if (!a) return snapContent
-  const full = await api.artifactContent(a.id)
+  const full = await api.artifactContent(a.id, opts?.signal ? { signal: opts.signal } : undefined)
   const storeContent = full.content || ''
   // Prefer store ETag on first load so subsequent saves send If-Match by default.
   savedProductMeta.value = {
@@ -785,6 +799,11 @@ async function loadProduct(opts?: { force?: boolean }) {
   const pending = resolved.value == null
   const showLoading = opts?.force || isInitialLoad
 
+  productLoadAbort?.abort()
+  const gen = ++productLoadGen
+  productLoadAbort = new AbortController()
+  const signal = productLoadAbort.signal
+
   if (showLoading) productLoading.value = true
   try {
     const next: Record<string, string> = { ...savedProductContent.value }
@@ -794,13 +813,16 @@ async function loadProduct(opts?: { force?: boolean }) {
         next[p.name] = await loadOneProductContent(p, {
           // Pending follows live store; only resolved/history prefer frozen snap.
           preferSnapshot: !pending && fingerprintChanged && !isInitialLoad,
+          signal,
         })
       } catch (e: any) {
+        if (gen !== productLoadGen || isAbortError(e) || signal.aborted) return
         // Keep prior content if any; do not collapse failure into empty string.
         const msg = e?.message || String(e)
         errors.push(`${p.name}: ${msg}`)
       }
     }
+    if (gen !== productLoadGen) return
     if (errors.length) {
       productLoadError.value = errors.join('; ')
     } else {
@@ -826,7 +848,7 @@ async function loadProduct(opts?: { force?: boolean }) {
       productHtml.value = ''
     }
   } finally {
-    productLoading.value = false
+    if (gen === productLoadGen) productLoading.value = false
   }
 }
 
@@ -847,6 +869,12 @@ watch(
   },
   { immediate: true },
 )
+
+onUnmounted(() => {
+  productLoadAbort?.abort()
+  productLoadAbort = null
+  productLoadGen++
+})
 
 function onProductSaved(payload: {
   name: string
@@ -953,6 +981,7 @@ function clearUnifiedDraft() {
 }
 
 function choose(id: string) {
+  if (actionSubmitting.value || resolved.value != null) return
   const err = validate(id)
   if (err) {
     formError.value = err
@@ -975,6 +1004,7 @@ function choose(id: string) {
     clearUnifiedDraft()
   }
   formError.value = null
+  actionSubmitting.value = true
   resolved.value = id
   emit('resolve', id, buildFormPayload())
 }
@@ -1374,6 +1404,7 @@ async function sendHotReject() {
 
 /** Cold sidebar action: flush unsent feedback text before revise; approve via choose. */
 async function onSidebarAction(id: string) {
+  if (actionSubmitting.value || resolved.value != null) return
   if (REVERT_ACTION_IDS.has(id) && usesPreviewIssues.value) {
     reactSending.value = true
     reactError.value = null
@@ -1481,6 +1512,7 @@ function onComposerReject() {
                   {{ t('pages.gateApproval.reviewingUpstreamFallback') }}
                 </span>
               </div>
+              <RefreshStrip v-if="productLoading && productHasSavedContent" />
               <GateProductEditor
                 v-if="canEditProducts && run"
                 ref="productEditorRef"
@@ -1570,10 +1602,10 @@ function onComposerReject() {
                 />
               </div>
             </div>
-            <div v-if="formError" class="mb-2 shrink-0 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-xs text-err">
+            <div v-if="formError" class="mb-2 shrink-0 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-xs text-err" role="alert">
               {{ formError }}
             </div>
-            <div v-if="resolved" class="rounded-md border border-ok/30 bg-ok/10 px-3 py-2 text-xs text-ok">
+            <div v-if="resolved && !actionSubmitting" class="rounded-md border border-ok/30 bg-ok/10 px-3 py-2 text-xs text-ok">
               {{ t('pages.gateApproval.submitted', { label: gate.actions.find((a) => a.id === resolved)?.label }) }}
             </div>
             <div
@@ -1735,12 +1767,18 @@ function onComposerReject() {
                     class="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-md px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50"
                     :class="actionVariantClasses(actionVariant(a.id))"
                     :disabled="isActionDisabled(a.id) || reactSending"
+                    :aria-busy="actionSubmitting && resolved === a.id ? 'true' : undefined"
                     :title="actionButtonTitle(a.id)"
                     data-testid="review-composer-pass"
                     @click="onSidebarAction(a.id)"
                   >
-                    <Icon :name="actionIcon(a.id)" :size="14" />
-                    {{ a.label }}
+                    <Icon
+                      :name="actionSubmitting && resolved === a.id ? 'spinner' : actionIcon(a.id)"
+                      :size="14"
+                      :class="actionSubmitting && resolved === a.id ? 'animate-spin' : ''"
+                      aria-hidden="true"
+                    />
+                    {{ actionSubmitting && resolved === a.id ? actionPendingLabel(a.id) : a.label }}
                   </button>
                 </div>
               </div>
@@ -1798,6 +1836,7 @@ function onComposerReject() {
                     {{ t('pages.gateApproval.reviewingUpstreamFallback') }}
                   </span>
                 </div>
+                <RefreshStrip v-if="productLoading && productHasSavedContent" />
                 <GateProductEditor
                   v-if="canEditProducts && run"
                   ref="productEditorRef"
@@ -1899,10 +1938,10 @@ function onComposerReject() {
                 />
               </div>
             </div>
-            <div v-if="formError" class="mb-2 shrink-0 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-xs text-err">
+            <div v-if="formError" class="mb-2 shrink-0 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-xs text-err" role="alert">
               {{ formError }}
             </div>
-            <div v-if="resolved" class="rounded-md border border-ok/30 bg-ok/10 px-3 py-2 text-xs text-ok">
+            <div v-if="resolved && !actionSubmitting" class="rounded-md border border-ok/30 bg-ok/10 px-3 py-2 text-xs text-ok">
               {{ t('pages.gateApproval.submitted', { label: gate.actions.find((a) => a.id === resolved)?.label }) }}
             </div>
             <div
@@ -2108,12 +2147,18 @@ function onComposerReject() {
                       isMobile ? 'min-h-[44px] flex-1' : 'py-2',
                     ]"
                     :disabled="isActionDisabled(a.id) || reactSending"
+                    :aria-busy="actionSubmitting && resolved === a.id ? 'true' : undefined"
                     :title="actionButtonTitle(a.id)"
                     data-testid="review-composer-pass"
                     @click="onSidebarAction(a.id)"
                   >
-                    <Icon :name="actionIcon(a.id)" :size="14" />
-                    {{ a.label }}
+                    <Icon
+                      :name="actionSubmitting && resolved === a.id ? 'spinner' : actionIcon(a.id)"
+                      :size="14"
+                      :class="actionSubmitting && resolved === a.id ? 'animate-spin' : ''"
+                      aria-hidden="true"
+                    />
+                    {{ actionSubmitting && resolved === a.id ? actionPendingLabel(a.id) : a.label }}
                   </button>
                 </div>
               </div>
@@ -2210,6 +2255,7 @@ function onComposerReject() {
               {{ t('pages.gateApproval.reviewingUpstreamFallback') }}
             </span>
           </div>
+          <RefreshStrip v-if="productLoading && productHasSavedContent" />
           <GateProductEditor
             ref="productEditorRef"
             :run-id="run.id"
@@ -2354,10 +2400,10 @@ function onComposerReject() {
             />
           </div>
         </div>
-        <div v-if="formError" class="mb-2 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-xs text-err">
+        <div v-if="formError" class="mb-2 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-xs text-err" role="alert">
           {{ formError }}
         </div>
-        <div v-if="resolved" class="rounded-md border border-ok/30 bg-ok/10 px-3 py-2 text-xs text-ok">
+        <div v-if="resolved && !actionSubmitting" class="rounded-md border border-ok/30 bg-ok/10 px-3 py-2 text-xs text-ok">
           {{ t('pages.gateApproval.submitted', { label: gate.actions.find((a) => a.id === resolved)?.label }) }}
         </div>
         <div
@@ -2439,13 +2485,19 @@ function onComposerReject() {
                 actionVariantClasses(actionVariant(a.id)),
                 isMobile ? 'min-h-[44px] flex-1' : 'py-2',
               ]"
-              :disabled="isActionDisabled(a.id)"
+              :disabled="isActionDisabled(a.id) || reactSending"
+              :aria-busy="actionSubmitting && resolved === a.id ? 'true' : undefined"
               :title="actionButtonTitle(a.id)"
               data-testid="review-composer-pass"
               @click="onSidebarAction(a.id)"
             >
-              <Icon :name="actionIcon(a.id)" :size="14" />
-              {{ a.label }}
+              <Icon
+                :name="actionSubmitting && resolved === a.id ? 'spinner' : actionIcon(a.id)"
+                :size="14"
+                :class="actionSubmitting && resolved === a.id ? 'animate-spin' : ''"
+                aria-hidden="true"
+              />
+              {{ actionSubmitting && resolved === a.id ? actionPendingLabel(a.id) : a.label }}
             </button>
           </div>
         </div>

@@ -39,6 +39,9 @@ vi.mock('@/lib/locale', async () => {
 })
 
 import PublicGateApprovalView from './PublicGateApprovalView.vue'
+import type { VueWrapper } from '@vue/test-utils'
+
+const mounted: VueWrapper[] = []
 
 function mountView(locale: 'zh-CN' | 'en' = 'zh-CN') {
   const i18n = createI18n({
@@ -49,7 +52,9 @@ function mountView(locale: 'zh-CN' | 'en' = 'zh-CN') {
       en: { ...commonEn, ...pagesEn, ...shellEn },
     },
   })
-  return mount(PublicGateApprovalView, { global: { plugins: [i18n] } })
+  const wrapper = mount(PublicGateApprovalView, { global: { plugins: [i18n] } })
+  mounted.push(wrapper)
+  return wrapper
 }
 
 beforeEach(() => {
@@ -63,6 +68,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  while (mounted.length) mounted.pop()?.unmount()
   document.documentElement.classList.remove('light')
 })
 
@@ -134,7 +140,10 @@ describe('PublicGateApprovalView workbench', () => {
     mocks.decide.mockResolvedValue({ status: 'confirmed', action: 'confirm' })
     await w.get('[data-testid="public-gate-confirm"]').trigger('click')
     await flushPromises()
-    expect(mocks.decide).toHaveBeenCalledWith(expect.objectContaining({ action: 'confirm' }))
+    expect(mocks.decide).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'confirm' }),
+      expect.any(AbortSignal),
+    )
     expect(w.get('[data-testid="public-gate-done"]').text()).toContain('已确认')
   })
 
@@ -183,11 +192,14 @@ describe('PublicGateApprovalView workbench', () => {
     mocks.decide.mockResolvedValue({ status: 'approved' })
     await w.get('[data-testid="public-gate-confirm"]').trigger('click')
     await flushPromises()
-    expect(mocks.decide).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'approve',
-      name: 'Jordan',
-      comment: '可以流转',
-    }))
+    expect(mocks.decide).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'approve',
+        name: 'Jordan',
+        comment: '可以流转',
+      }),
+      expect.any(AbortSignal),
+    )
     expect(w.get('[data-testid="public-gate-done"]').text()).toContain('已确认')
   })
 
@@ -335,5 +347,117 @@ describe('PublicGateApprovalView workbench', () => {
     expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(false)
     expect(w.find('[data-testid="clarify-input"]').exists()).toBe(false)
     expect(w.get('[data-testid="public-gate-root"]').text()).not.toMatch(/请确认本次交付/)
+  })
+
+  it('clears the previous preview and discards a stale hash response', async () => {
+    const tokenA = 'aa'.repeat(32)
+    const tokenB = 'bb'.repeat(32)
+    let resolveA!: (value: unknown) => void
+    mocks.preview.mockImplementation((tok: string) => {
+      if (tok === tokenA) {
+        return new Promise((resolve) => {
+          resolveA = resolve
+        })
+      }
+      return Promise.resolve({
+        status: 'active',
+        kind: 'human_gate',
+        nonce: 'nB',
+        productKind: 'structured',
+        productName: 'TokenB-only',
+        structured: { name: 'TokenB-only', doc: { title: 'Token B' } },
+        actions: { approve: 'approve' },
+      })
+    })
+
+    history.replaceState(null, '', `#t=${tokenA}`)
+    const w = mountView()
+    await flushPromises()
+    expect(w.find('[data-testid="public-gate-loading"]').exists()).toBe(true)
+    expect(w.get('[data-testid="public-gate-loading"]').attributes('role')).toBe('status')
+    expect(w.get('[data-testid="public-gate-root"]').text()).not.toMatch(/run-|projectId|TokenA/)
+
+    history.replaceState(null, '', `#t=${tokenB}`)
+    await (w.vm as unknown as { loadPreview: () => Promise<void> }).loadPreview()
+    await flushPromises()
+    expect(w.get('[data-testid="public-gate-product-name"]').text()).toBe('TokenB-only')
+
+    resolveA({
+      status: 'active',
+      kind: 'human_gate',
+      title: 'TokenA-SECRET',
+      nonce: 'nA',
+      visualHtml: '<p>run-old-internal</p>',
+      actions: { approve: 'approve' },
+    })
+    await flushPromises()
+    expect(w.text()).not.toContain('TokenA-SECRET')
+    expect(w.text()).not.toContain('run-old-internal')
+    expect(w.get('[data-testid="public-gate-product-name"]').text()).toBe('TokenB-only')
+  })
+
+  it('shows submitting state and ignores duplicate final actions', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'human_gate',
+      nonce: 'n1',
+      actions: { approve: 'approve', reject: 'revise' },
+    })
+    let resolveDecide!: (value: unknown) => void
+    mocks.decide.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveDecide = resolve
+        }),
+    )
+    const w = mountView()
+    await flushPromises()
+    await w.get('[data-testid="public-gate-name"]').setValue('Jordan')
+    await w.get('[data-testid="public-gate-comment"]').setValue('可以流转')
+    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await w.get('[data-testid="public-gate-reject"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.decide).toHaveBeenCalledTimes(1)
+    expect(w.get('[data-testid="public-gate-confirm"]').text()).toContain('提交中…')
+    expect(w.get('[data-testid="public-gate-reject"]').text()).toContain('提交中…')
+    expect(w.get('[data-testid="public-gate-confirm"]').attributes('aria-busy')).toBe('true')
+    expect((w.get('[data-testid="public-gate-confirm"]').element as HTMLButtonElement).disabled).toBe(true)
+    expect((w.get('[data-testid="public-gate-reject"]').element as HTMLButtonElement).disabled).toBe(true)
+
+    resolveDecide({ status: 'approved' })
+    await flushPromises()
+    expect(w.get('[data-testid="public-gate-done"]').text()).toContain('已确认')
+  })
+
+  it('sandboxes preview and decision errors without rendering internal messages', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    mocks.preview.mockRejectedValue(new Error('internal stack /api/runs/run-123 projectId=p1'))
+    const w = mountView()
+    await flushPromises()
+    expect(w.get('[data-testid="public-gate-network-error"]').text()).toContain('网络错误')
+    expect(w.text()).not.toContain('internal stack')
+    expect(w.text()).not.toContain('run-123')
+    expect(w.text()).not.toContain('projectId')
+    expect(w.find('[data-testid="public-gate-invalid"]').exists()).toBe(false)
+
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'human_gate',
+      nonce: 'n1',
+      actions: { approve: 'approve' },
+    })
+    await w.get('[data-testid="public-gate-network-retry"]').trigger('click')
+    await flushPromises()
+    await w.get('[data-testid="public-gate-name"]').setValue('Jordan')
+    await w.get('[data-testid="public-gate-comment"]').setValue('可以流转')
+    mocks.decide.mockRejectedValueOnce(new Error('postgres connection refused at 10.1.2.3'))
+    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await flushPromises()
+    expect(w.get('[role="alert"]').text()).toContain('网络错误')
+    expect(w.text()).not.toContain('postgres')
+    expect(w.text()).not.toContain('10.1.2.3')
   })
 })

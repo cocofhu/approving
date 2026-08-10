@@ -205,6 +205,27 @@ describe('SandboxConsoleView IDE/ACP lazy mount', () => {
     wrapper.unmount()
   })
 
+  it('log tab failure is not empty state and keeps prior content', async () => {
+    const wrapper = await mountConsole()
+    apiMocks.sandboxLog.mockReset()
+    apiMocks.sandboxLog.mockResolvedValueOnce({ content: 'boot ok\n', live: true, found: true })
+    apiMocks.sandboxLog.mockRejectedValueOnce(new Error('docker gone'))
+    const logBtn = wrapper.findAll('button').find((b) => b.text().includes('日志'))
+    expect(logBtn).toBeTruthy()
+    await logBtn!.trigger('click')
+    await flushPromises()
+    await nextTick()
+    expect(wrapper.text()).toContain('boot ok')
+    const refresh = wrapper.findAll('button').find((b) => b.attributes('title')?.includes('刷新') || b.attributes('title')?.includes('Refresh'))
+    expect(refresh).toBeTruthy()
+    await refresh!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sandbox-console-log-error"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('boot ok')
+    expect(wrapper.find('[data-testid="sandbox-console-log-empty"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('?tab=acp-native deep link mounts ACP iframe; legacy ?tab=acp does not', async () => {
     const native = await mountConsole('acp-native')
     await flushPromises()

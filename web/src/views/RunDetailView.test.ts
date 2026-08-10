@@ -49,6 +49,7 @@ describe('RunDetailView cancel run', () => {
     const confirmEnd = src.indexOf('\nconst canDeleteRun', confirmStart)
     const confirmFn = src.slice(confirmStart, confirmEnd)
     expect(confirmFn).toContain('api.cancelRun(runId.value)')
+    expect(confirmFn).toContain('cancellingRun.value = true')
     expect(confirmFn).toContain("toast.success(t('pages.runDetail.cancelSuccess'))")
     expect(confirmFn).toContain('await loadRun(false)')
     expect(confirmFn).not.toContain('router.push')
@@ -165,6 +166,19 @@ describe('RunDetailView live-log boot timeout persistence', () => {
 
   it('polls sandbox signals for boot while on log or sandbox tab', () => {
     expect(src).toMatch(/nodeTab\.value !== 'log' && nodeTab\.value !== 'sandbox'/)
+  })
+
+  it('uses RefreshStrip/HardLoadLayer dual-track and sandbox log gen+Abort', () => {
+    expect(src).toMatch(/RefreshStrip/)
+    expect(src).toMatch(/HardLoadLayer/)
+    expect(src).toMatch(/sandboxLogGen/)
+    expect(src).toMatch(/sandboxLogAbort/)
+    expect(src).toMatch(/attemptGen !== sandboxLogGen/)
+    expect(src).toMatch(/pages\.sandboxConsole\.logRefreshing/)
+    expect(src).toMatch(/common\.buttons\.cancelling/)
+    expect(src).toMatch(/cancellingRun/)
+    expect(src).toMatch(/gateSubmitting/)
+    expect(src).toMatch(/panelSwitching && !\(nodeTab === 'gate' && run\.gate\)/)
   })
 
   it('maps sandbox-log six states (empty / live / live-empty / archived / error)', () => {

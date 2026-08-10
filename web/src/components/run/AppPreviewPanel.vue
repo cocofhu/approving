@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api, type PreviewPort } from '@/lib/api'
 import type { AppPreviewPickPayload } from '@/lib/previewPickUrl'
 import NovncPreviewPanel from './NovncPreviewPanel.vue'
 import PreviewFeedbackChat from './PreviewFeedbackChat.vue'
+import RefreshStrip from './RefreshStrip.vue'
+import HardLoadLayer from './HardLoadLayer.vue'
+import { isAbortError } from '@/lib/liveLogRehydrate'
 
 const props = withDefaults(
   defineProps<{
@@ -30,6 +33,8 @@ const loading = ref(false)
 const loadError = ref<string | null>(null)
 const activePort = ref<number | null>(null)
 const pickedSelector = ref('')
+let portsGen = 0
+let portsAbort: AbortController | null = null
 
 /** API Tab uses PreviewProxy iframe; all other ports use noVNC. */
 function isApiPort(p: PreviewPort): boolean {
@@ -48,10 +53,14 @@ function onStagedPick(payload: AppPreviewPickPayload | null) {
 }
 
 async function loadPorts() {
+  portsAbort?.abort()
+  const gen = ++portsGen
+  portsAbort = new AbortController()
   loading.value = true
   loadError.value = null
   try {
-    const r = await api.nodePreviews(props.runId, props.nodeId)
+    const r = await api.nodePreviews(props.runId, props.nodeId, { signal: portsAbort.signal })
+    if (gen !== portsGen) return
     ports.value = r.ports || []
     if (ports.value.length && activePort.value == null) {
       activePort.value = ports.value[0].port
@@ -59,14 +68,21 @@ async function loadPorts() {
       activePort.value = ports.value[0]?.port ?? null
     }
   } catch (e: any) {
-    loadError.value = e?.message || 'load failed'
-    ports.value = []
+    if (gen !== portsGen || isAbortError(e) || portsAbort.signal.aborted) return
+    loadError.value = t('pages.appPreview.loadFailed')
+    if (!ports.value.length) ports.value = []
   } finally {
-    loading.value = false
+    if (gen === portsGen) loading.value = false
   }
 }
 
 watch(() => [props.runId, props.nodeId], loadPorts, { immediate: true })
+
+onUnmounted(() => {
+  portsAbort?.abort()
+  portsAbort = null
+  portsGen++
+})
 
 function tabLabel(p: PreviewPort): string {
   return (p.label || '').trim() || String(p.port)
@@ -80,17 +96,41 @@ function selectPort(port: number) {
 <template>
   <div
     data-testid="app-preview"
-    class="flex min-h-0 flex-col"
+    class="relative flex min-h-0 flex-col"
     :class="fill ? 'h-full flex-1' : ''"
+    :aria-busy="loading ? 'true' : 'false'"
   >
-    <div v-if="loading" class="p-4 text-xs text-txt3">{{ t('pages.appPreview.loading') }}</div>
-    <div v-else-if="loadError" class="rounded-md border border-err/30 bg-err/10 p-4 text-xs text-err">
-      {{ loadError }}
+    <RefreshStrip v-if="loading && ports.length" />
+    <HardLoadLayer
+      v-else-if="loading && !ports.length && !loadError"
+      :overlay="false"
+      :stuck-after-ms="10_000"
+      :stage="t('pages.appPreview.loading')"
+      @retry="loadPorts"
+    />
+    <div
+      v-if="loadError"
+      class="rounded-md border border-err/30 bg-err/10 p-4 text-xs text-err"
+      role="alert"
+      data-testid="app-preview-load-error"
+    >
+      <p>{{ loadError }}</p>
+      <button
+        type="button"
+        class="mt-2 inline-flex min-h-11 items-center border border-line px-3 text-[12px] text-txt"
+        @click="loadPorts"
+      >
+        {{ t('common.chatImage.retry') }}
+      </button>
     </div>
-    <div v-else-if="!ports.length" class="rounded-md border border-line bg-elevated p-4 text-xs text-txt3">
+    <div
+      v-else-if="!loading && !ports.length"
+      class="rounded-md border border-line bg-elevated p-4 text-xs text-txt3"
+      data-testid="app-preview-empty"
+    >
       {{ t('pages.appPreview.noPorts') }}
     </div>
-    <template v-else>
+    <template v-if="ports.length">
       <div v-if="ports.length > 1" class="mb-2 flex flex-wrap gap-1">
         <button
           v-for="p in ports"

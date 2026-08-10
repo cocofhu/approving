@@ -4,6 +4,9 @@ import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import AppModal from '../ui/AppModal.vue'
 import AppButton from '../ui/AppButton.vue'
+import RefreshStrip from './RefreshStrip.vue'
+import HardLoadLayer from './HardLoadLayer.vue'
+import { isAbortError } from '@/lib/liveLogRehydrate'
 import HtmlPreview from '../ui/HtmlPreview.vue'
 import StructuredArtifactView from './StructuredArtifactView.vue'
 import { isImagePreviewArtifact, resolveArtifactPreviewBranch } from './artifactPreviewBranch'
@@ -44,6 +47,9 @@ const toast = useToast()
 const zoom = ref(false)
 const loading = ref(false)
 const loadErr = ref('')
+const copying = ref(false)
+let contentLoadGen = 0
+let contentLoadAbort: AbortController | null = null
 /** Raw API content only — never store highlighted HTML here. */
 const contentCache = ref<Record<string, string>>({})
 
@@ -147,25 +153,38 @@ function handleImageLoadError() {
   imageDownloadError.value = true
 }
 
-async function loadContent(a: Artifact) {
-  if (contentCache.value[a.id] !== undefined) return
+async function loadContent(a: Artifact, opts?: { force?: boolean }) {
+  if (!opts?.force && contentCache.value[a.id] !== undefined) return
+  contentLoadAbort?.abort()
+  const gen = ++contentLoadGen
+  contentLoadAbort = new AbortController()
   loading.value = true
   loadErr.value = ''
   try {
-    const full = await api.artifactContent(a.id)
+    const full = await api.artifactContent(a.id, { signal: contentLoadAbort.signal })
+    if (gen !== contentLoadGen) return
     contentCache.value[a.id] = full.content ?? ''
   } catch (e: any) {
-    loadErr.value = String(e?.message || e)
-    contentCache.value[a.id] = ''
+    if (gen !== contentLoadGen || isAbortError(e) || contentLoadAbort.signal.aborted) return
+    loadErr.value = t('pages.artifactPreview.loadFailed')
+    if (contentCache.value[a.id] === undefined) contentCache.value[a.id] = ''
   } finally {
-    loading.value = false
+    if (gen === contentLoadGen) loading.value = false
   }
 }
 
 async function copyContent() {
-  const ok = await copyToClipboard(activeContent.value)
-  if (!ok) {
-    toast.error(t('common.toast.copyFailed'))
+  if (copying.value) return
+  copying.value = true
+  try {
+    const ok = await copyToClipboard(activeContent.value)
+    if (!ok) {
+      toast.error(t('common.toast.copyFailed'))
+    } else {
+      toast.success(t('pages.artifactPreview.copied'))
+    }
+  } finally {
+    copying.value = false
   }
 }
 
@@ -268,6 +287,9 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  contentLoadAbort?.abort()
+  contentLoadAbort = null
+  contentLoadGen++
   imageLoadGen++
   revokeImageBlob()
 })
@@ -281,8 +303,16 @@ onBeforeUnmount(() => {
       <button v-if="!activeIsHtml" class="text-txt3 hover:text-txt" :title="t('pages.artifactPreview.enlarge')" @click="zoom = true">
         <Icon name="expand" :size="15" />
       </button>
-      <button class="text-txt3 hover:text-txt" :title="t('pages.artifactPreview.copy')" data-testid="artifact-preview-copy" @click="copyContent">
-        <Icon name="copy" :size="15" />
+      <button
+        class="text-txt3 hover:text-txt disabled:opacity-50"
+        :title="copying ? t('common.buttons.copying') : t('pages.artifactPreview.copy')"
+        :aria-label="copying ? t('common.buttons.copying') : t('pages.artifactPreview.copy')"
+        :disabled="copying"
+        :aria-busy="copying ? 'true' : undefined"
+        data-testid="artifact-preview-copy"
+        @click="copyContent"
+      >
+        <Icon :name="copying ? 'spinner' : 'copy'" :size="15" :class="copying ? 'animate-spin' : ''" aria-hidden="true" />
       </button>
       <button
         class="text-txt3 hover:text-txt"
@@ -321,8 +351,8 @@ onBeforeUnmount(() => {
       :class="activeIsHtml && activeContent && !loading && !loadErr ? '' : 'scroll-area overflow-y-auto p-4'"
     >
       <template v-if="artifact && isImageBranch">
-        <div v-if="loadErr" class="flex h-full items-center justify-center text-center text-[12px] text-err">
-          {{ t('pages.artifactPreview.loadFailed') }}{{ loadErr }}
+        <div v-if="loadErr" class="flex h-full items-center justify-center text-center text-[12px] text-err" role="alert">
+          {{ t('pages.artifactPreview.loadFailed') }}
         </div>
         <div
           v-else-if="imageDownloadError"
@@ -354,43 +384,65 @@ onBeforeUnmount(() => {
           />
         </div>
       </template>
-      <div v-else-if="artifact && loading" class="flex h-full items-center justify-center text-[12px] text-txt3">
-        {{ t('pages.artifactPreview.loading') }}
-      </div>
-      <div v-else-if="artifact && loadErr" class="flex h-full items-center justify-center text-center text-[12px] text-err">
-        {{ t('pages.artifactPreview.loadFailed') }}{{ loadErr }}
-      </div>
-      <HtmlPreview v-else-if="artifact && previewBranch.kind === 'html'" :html="activeContent" />
-      <div
-        v-else-if="artifact && previewBranch.kind === 'structured'"
-        ref="structuredExportRootInline"
-        data-testid="structured-artifact-export-root"
-        class="structured-artifact-export-root"
-      >
-        <StructuredArtifactView
-          :name="artifact.name"
-          :doc="structuredDoc"
-          :artifacts="artifacts"
-          :run-id="runId || artifact.runId"
+      <template v-else-if="artifact">
+        <RefreshStrip v-if="loading && activeContent" />
+        <HardLoadLayer
+          v-else-if="loading && !activeContent && !loadErr"
+          :overlay="false"
+          :stuck-after-ms="10_000"
+          :stage="t('pages.artifactPreview.loading')"
+          @retry="artifact && loadContent(artifact, { force: true })"
         />
-      </div>
-      <div
-        v-else-if="artifact && previewBranch.kind === 'json' && jsonState"
-        class="json-code-view scroll-area cursor-zoom-in"
-        @dblclick="zoom = true"
-      >
-        <div v-if="!jsonState.ok" class="fallback-tag">{{ t('pages.artifactPreview.fallbackPlainText') }}</div>
-        <pre v-html="jsonState.html" />
-      </div>
-      <div
-        v-else-if="artifact && previewBranch.kind === 'markdown'"
-        class="md cursor-zoom-in"
-        v-html="renderMarkdown(activeContent)"
-        @dblclick="zoom = true"
-      />
-      <div v-else-if="artifact" class="flex h-full items-center justify-center text-center text-[12px] text-txt3">
-        {{ t('pages.artifactPreview.contentEmpty') }}
-      </div>
+        <div
+          v-if="loadErr"
+          class="mb-2 flex items-center justify-center gap-2 text-center text-[12px] text-err"
+          role="alert"
+          data-testid="artifact-preview-load-error"
+        >
+          {{ t('pages.artifactPreview.loadFailed') }}
+          <button
+            type="button"
+            class="inline-flex min-h-11 items-center border border-line px-3 text-[12px] text-txt"
+            @click="artifact && loadContent(artifact, { force: true })"
+          >
+            {{ t('pages.artifactPreview.retry') }}
+          </button>
+        </div>
+        <HtmlPreview v-if="previewBranch.kind === 'html' && activeContent" :html="activeContent" />
+        <div
+          v-else-if="previewBranch.kind === 'structured'"
+          ref="structuredExportRootInline"
+          data-testid="structured-artifact-export-root"
+          class="structured-artifact-export-root"
+        >
+          <StructuredArtifactView
+            :name="artifact.name"
+            :doc="structuredDoc"
+            :artifacts="artifacts"
+            :run-id="runId || artifact.runId"
+          />
+        </div>
+        <div
+          v-else-if="previewBranch.kind === 'json' && jsonState"
+          class="json-code-view scroll-area cursor-zoom-in"
+          @dblclick="zoom = true"
+        >
+          <div v-if="!jsonState.ok" class="fallback-tag">{{ t('pages.artifactPreview.fallbackPlainText') }}</div>
+          <pre v-html="jsonState.html" />
+        </div>
+        <div
+          v-else-if="previewBranch.kind === 'markdown' && activeContent"
+          class="md cursor-zoom-in"
+          v-html="renderMarkdown(activeContent)"
+          @dblclick="zoom = true"
+        />
+        <div
+          v-else-if="!loading && !loadErr"
+          class="flex h-full items-center justify-center text-center text-[12px] text-txt3"
+        >
+          {{ t('pages.artifactPreview.contentEmpty') }}
+        </div>
+      </template>
       <div v-else class="flex h-full items-center justify-center text-center text-[12px] text-txt3">
         {{ emptyHint || t('pages.artifactPreview.emptyHint') }}
       </div>
@@ -428,8 +480,8 @@ onBeforeUnmount(() => {
       class="flex min-h-[280px] items-center justify-center"
       data-testid="artifact-preview-zoom-image"
     >
-      <div v-if="loadErr" class="py-8 text-center text-[12px] text-err">
-        {{ t('pages.artifactPreview.loadFailed') }}{{ loadErr }}
+      <div v-if="loadErr" class="py-8 text-center text-[12px] text-err" role="alert">
+        {{ t('pages.artifactPreview.loadFailed') }}
       </div>
       <div
         v-else-if="imageDownloadError"
