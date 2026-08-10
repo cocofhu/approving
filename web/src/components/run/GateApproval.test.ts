@@ -4011,7 +4011,7 @@ describe('GateApproval cold footer pending + loadProduct gen (专项三 g4)', ()
     })
     await flushPromises()
     if (apiMocks.artifactContent.mock.calls.length) {
-      const last = apiMocks.artifactContent.mock.calls.at(-1)
+      const last = apiMocks.artifactContent.mock.calls[apiMocks.artifactContent.mock.calls.length - 1]
       expect(last?.[1]).toEqual(expect.objectContaining({ signal: expect.any(AbortSignal) }))
     }
     wrapper.unmount()

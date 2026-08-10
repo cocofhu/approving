@@ -347,7 +347,7 @@ describe('PublicGateApprovalView', () => {
     window.location.hash = `#t=${tokenA}`
     const w = mountView()
     await flushPromises()
-    expect(w.get('[data-testid="public-gate-loading"]').exists()).toBe(true)
+    expect(w.find('[data-testid="public-gate-loading"]').exists()).toBe(true)
     expect(w.get('[data-testid="public-gate-loading"]').attributes('role')).toBe('status')
     expect(w.get('[data-testid="public-gate-loading"]').text()).toContain('加载中…')
     expect(w.get('[data-testid="public-gate-root"]').text()).not.toMatch(/run-|projectId|TokenA|内部复审|审阅视觉稿/)

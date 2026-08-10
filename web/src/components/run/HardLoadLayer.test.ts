@@ -30,7 +30,7 @@ describe('HardLoadLayer', () => {
     vi.useFakeTimers()
     const w = mountLayer({ stuckAfterMs: 10_000, stage: '加载中' })
     expect(w.get('[data-testid="hard-load-layer"]').attributes('aria-busy')).toBe('true')
-    expect(w.get('[data-testid="hard-load-heartbeat"]').exists()).toBe(true)
+    expect(w.find('[data-testid="hard-load-heartbeat"]').exists()).toBe(true)
     expect(w.get('[data-testid="hard-load-stage"]').text()).toBe('加载中')
     expect(w.get('[data-testid="hard-load-elapsed"]').text()).toMatch(/已用时 0s/)
     expect(w.find('[data-testid="hard-load-stuck"]').exists()).toBe(false)

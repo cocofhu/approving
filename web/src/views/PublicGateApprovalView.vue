@@ -32,7 +32,7 @@ const isReview = computed(() => preview.value?.kind === 'review')
 let previewGen = 0
 let previewAbort: AbortController | null = null
 let decideAbort: AbortController | null = null
-let stuckTimer: ReturnType<typeof setTimeout> | null = null
+let stuckTimer: number | null = null
 
 function clearStuckTimer() {
   if (stuckTimer != null) {
