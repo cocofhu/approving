@@ -972,7 +972,12 @@
       "invalidHint": "This link is invalid. Ask the sender whether it is still valid.",
       "loading": "Loading…",
       "submitting": "Submitting…",
+      "confirming": "Confirming…",
       "networkError": "Network error. Please try again.",
+      "securityCheckFailed": "Security check failed. Please try Confirm and advance again.",
+      "linkInvalid": "This link is no longer valid. Please reopen the review link.",
+      "networkFault": "Network failure. Please check your connection and retry.",
+      "rateLimited": "Too many requests. Please try again later.",
       "maybeStuck": "May be stuck · request still running; wait or retry"
     },
     "artifacts": {

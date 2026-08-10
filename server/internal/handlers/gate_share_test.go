@@ -272,6 +272,34 @@ func TestGateSharePublicSecurityHeadersCSRFAndRateLimit(t *testing.T) {
 		t.Fatalf("csrf bad origin: %d %s", bad2.Code, bad2.Body.String())
 	}
 
+	// Third-party Origin on a non-advertise Request.Host is still rejected.
+	bad3 := h.doPublicHost(http.MethodPost, "/public/gate-approvals/decide", map[string]any{
+		"token": token, "action": "approve", "nonce": "x",
+	}, map[string]string{
+		headerShareRequest: "1",
+		"Origin":           "https://evil.example",
+	}, "sta.internal")
+	if bad3.Code != http.StatusForbidden {
+		t.Fatalf("csrf third-party origin: %d %s", bad3.Code, bad3.Body.String())
+	}
+
+	// Address-bar host ≠ public_advertise: Origin matching Request.Host succeeds.
+	// X-Forwarded-Host must not be trusted.
+	nonceOK := publicPreviewNonce(t, h, token)
+	okHost := h.doPublicHost(http.MethodPost, "/public/gate-approvals/decide", map[string]any{
+		"token": token, "action": "approve", "comment": "可以流转", "name": "Jordan", "nonce": nonceOK,
+	}, map[string]string{
+		headerShareRequest: "1",
+		"Origin":           "http://sta.internal",
+		"X-Forwarded-Host": "evil.example",
+	}, "sta.internal")
+	if okHost.Code != http.StatusOK {
+		t.Fatalf("host mismatch decide: %d %s", okHost.Code, okHost.Body.String())
+	}
+	if st := parseJSON(t, okHost)["status"]; st != "approved" {
+		t.Fatalf("host mismatch status: %v %s", st, okHost.Body.String())
+	}
+
 	// Cross-origin GET preview must not include ACAO (browser hides body).
 	cross := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/public/gate-approvals/preview", nil)
@@ -308,6 +336,96 @@ func TestGateSharePublicSecurityHeadersCSRFAndRateLimit(t *testing.T) {
 	}
 	if !limited {
 		t.Fatal("expected rate limit")
+	}
+}
+
+func TestGateSharePreviewPollDoesNotStarveDecide(t *testing.T) {
+	h := newHarness(t)
+	seedHumanGate(t, h, "run-share-rl-split", "hg-rl-split", nil)
+	created := parseJSON(t, h.do(http.MethodPost, "/api/runs/run-share-rl-split/gates/hg-rl-split/share-link", map[string]any{"ttlTier": "24h"}))
+	url, _ := created["url"].(string)
+	token := strings.TrimPrefix(url[strings.Index(url, "#t="):], "#t=")
+	nonce := publicPreviewNonce(t, h, token)
+
+	unk := strings.Repeat("ab", 32)
+	limited := false
+	for i := 0; i < 40; i++ {
+		w := h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: unk})
+		if w.Code == http.StatusTooManyRequests {
+			limited = true
+			break
+		}
+	}
+	if !limited {
+		t.Fatal("expected preview rate limit")
+	}
+
+	dec := h.doPublic(http.MethodPost, "/public/gate-approvals/decide", map[string]any{
+		"token": token, "action": "approve", "comment": "可以流转", "name": "Jordan", "nonce": nonce,
+	}, map[string]string{headerShareRequest: "1", "Origin": "http://" + publicHost})
+	if dec.Code != http.StatusOK {
+		t.Fatalf("decide starved by preview poll: %d %s", dec.Code, dec.Body.String())
+	}
+	if parseJSON(t, dec)["status"] != "approved" {
+		t.Fatalf("decide status: %s", dec.Body.String())
+	}
+}
+
+func TestGateShareDecideRateLimited(t *testing.T) {
+	h := newHarness(t)
+	seedHumanGate(t, h, "run-share-rl-dec", "hg-rl-dec", nil)
+	created := parseJSON(t, h.do(http.MethodPost, "/api/runs/run-share-rl-dec/gates/hg-rl-dec/share-link", map[string]any{"ttlTier": "24h"}))
+	url, _ := created["url"].(string)
+	token := strings.TrimPrefix(url[strings.Index(url, "#t="):], "#t=")
+
+	limited := false
+	for i := 0; i < 40; i++ {
+		w := h.doPublic(http.MethodPost, "/public/gate-approvals/decide", map[string]any{
+			"token": token, "action": "approve", "nonce": "x",
+		}, map[string]string{headerShareRequest: "1", "Origin": "http://" + publicHost})
+		if w.Code == http.StatusTooManyRequests {
+			limited = true
+			body := w.Body.String()
+			if !strings.Contains(body, "rate_limited") {
+				t.Fatalf("429 missing rate_limited: %s", body)
+			}
+			if strings.Contains(body, token) {
+				t.Fatal("429 leaked token")
+			}
+			break
+		}
+	}
+	if !limited {
+		t.Fatal("expected decide rate limit")
+	}
+}
+
+func TestGateShareCSRFSecFetchSiteSameOrigin(t *testing.T) {
+	h := newHarness(t)
+	seedHumanGate(t, h, "run-share-sfs", "hg-sfs", nil)
+	created := parseJSON(t, h.do(http.MethodPost, "/api/runs/run-share-sfs/gates/hg-sfs/share-link", map[string]any{"ttlTier": "24h"}))
+	url, _ := created["url"].(string)
+	token := strings.TrimPrefix(url[strings.Index(url, "#t="):], "#t=")
+
+	cross := h.doPublicHost(http.MethodPost, "/public/gate-approvals/decide", map[string]any{
+		"token": token, "action": "approve", "nonce": "x",
+	}, map[string]string{
+		headerShareRequest: "1",
+		"Sec-Fetch-Site":   "cross-site",
+	}, "sta.internal")
+	if cross.Code != http.StatusForbidden {
+		t.Fatalf("cross-site Sec-Fetch-Site: %d %s", cross.Code, cross.Body.String())
+	}
+
+	nonce := publicPreviewNonce(t, h, token)
+	ok := h.doPublicHost(http.MethodPost, "/public/gate-approvals/decide", map[string]any{
+		"token": token, "action": "approve", "comment": "可以流转", "name": "Jordan", "nonce": nonce,
+	}, map[string]string{
+		headerShareRequest: "1",
+		"Sec-Fetch-Site":   "same-origin",
+	}, "sta.internal")
+	if ok.Code != http.StatusOK {
+		t.Fatalf("same-origin WebView decide: %d %s", ok.Code, ok.Body.String())
 	}
 }
 
@@ -649,6 +767,10 @@ const (
 )
 
 func (hn *harness) doPublic(method, path string, body any, headers map[string]string) *httptest.ResponseRecorder {
+	return hn.doPublicHost(method, path, body, headers, publicHost)
+}
+
+func (hn *harness) doPublicHost(method, path string, body any, headers map[string]string, host string) *httptest.ResponseRecorder {
 	var rdr *bytes.Reader
 	if body != nil {
 		b, _ := json.Marshal(body)
@@ -657,7 +779,7 @@ func (hn *harness) doPublic(method, path string, body any, headers map[string]st
 		rdr = bytes.NewReader(nil)
 	}
 	req := httptest.NewRequest(method, path, rdr)
-	req.Host = publicHost
+	req.Host = host
 	req.Header.Set("Content-Type", "application/json")
 	for k, v := range headers {
 		req.Header.Set(k, v)

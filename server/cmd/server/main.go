@@ -397,7 +397,7 @@ func main() {
 		Browser:          browserSvc,
 		Audit:            auditSvc,
 		GateShare:        gateShareSvc,
-		GateShareNonces:  gateshare.NewNonceStore(),
+		GateShareNonces:  gateshare.NewNonceStore(db),
 		GateShareLimiter: gateshare.NewIPLimiter(),
 		PublicAdvertise:  cfg.Server.PublicAdvertise,
 		InjectBundles:    injectStore,

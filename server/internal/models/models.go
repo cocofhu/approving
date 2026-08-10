@@ -697,6 +697,7 @@ func AllModels() []any {
 		&ProjectAuditEvent{},
 		&NotifyDeliveryReceipt{},
 		&GateShareLink{},
+		&GateShareNonce{},
 	}
 }
 

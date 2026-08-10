@@ -30,12 +30,10 @@ func (h *Handlers) shareOrigin(c *gin.Context) string {
 	return gateshare.PublicOriginFromRequest(scheme, c.Request.Host)
 }
 
-// trustedPublicHost is the CSRF comparison host: PublicAdvertise when set,
-// otherwise the request Host. X-Forwarded-Host is ignored (untrusted).
+// trustedPublicHost is the CSRF comparison host: this request's Host.
+// X-Forwarded-Host is ignored (untrusted). public_advertise is only used to
+// mint share URLs, never to compare CSRF origins.
 func (h *Handlers) trustedPublicHost(c *gin.Context) string {
-	if _, host := gateshare.ParsePublicAdvertise(h.PublicAdvertise); host != "" {
-		return host
-	}
 	return strings.TrimSpace(c.Request.Host)
 }
 

@@ -9,6 +9,9 @@ const (
 	publicRateWindow = time.Minute
 	publicRateMax    = 30
 	ipLimiterGCAt    = 64
+
+	RateBucketPreview = "preview"
+	RateBucketDecide  = "decide"
 )
 
 type ipWindow struct {
@@ -18,30 +21,44 @@ type ipWindow struct {
 
 // IPLimiter is a per-IP sliding-window QPS limiter (not login lockout).
 // In-process only; expired IP entries are garbage-collected.
+// Preview and decide use separate buckets so polling cannot starve confirm.
 type IPLimiter struct {
-	mu   sync.Mutex
-	byIP map[string]*ipWindow
+	mu    sync.Mutex
+	byKey map[string]*ipWindow
 }
 
 // NewIPLimiter builds a public-endpoint limiter.
 func NewIPLimiter() *IPLimiter {
-	return &IPLimiter{byIP: map[string]*ipWindow{}}
+	return &IPLimiter{byKey: map[string]*ipWindow{}}
 }
 
-// Allow reports whether ip may proceed. false → over limit.
-func (l *IPLimiter) Allow(ip string) bool {
+func bucketKey(ip, bucket string) string {
 	if ip == "" {
 		ip = "unknown"
 	}
+	if bucket == "" {
+		bucket = RateBucketPreview
+	}
+	return ip + "\x00" + bucket
+}
+
+// Allow reports whether ip may proceed on the preview bucket. false → over limit.
+func (l *IPLimiter) Allow(ip string) bool {
+	return l.AllowBucket(ip, RateBucketPreview)
+}
+
+// AllowBucket reports whether ip may proceed on the named bucket.
+func (l *IPLimiter) AllowBucket(ip, bucket string) bool {
+	key := bucketKey(ip, bucket)
 	now := time.Now()
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if len(l.byIP) >= ipLimiterGCAt {
+	if len(l.byKey) >= ipLimiterGCAt {
 		l.gcExpiredLocked(now)
 	}
-	w := l.byIP[ip]
+	w := l.byKey[key]
 	if w == nil || now.Sub(w.start) >= publicRateWindow {
-		l.byIP[ip] = &ipWindow{start: now, count: 1}
+		l.byKey[key] = &ipWindow{start: now, count: 1}
 		return true
 	}
 	if w.count >= publicRateMax {
@@ -52,16 +69,16 @@ func (l *IPLimiter) Allow(ip string) bool {
 }
 
 func (l *IPLimiter) gcExpiredLocked(now time.Time) {
-	for k, w := range l.byIP {
+	for k, w := range l.byKey {
 		if w == nil || now.Sub(w.start) >= publicRateWindow {
-			delete(l.byIP, k)
+			delete(l.byKey, k)
 		}
 	}
 }
 
-// LenForTest returns the number of tracked IPs (tests / diagnostics).
+// LenForTest returns the number of tracked IP+bucket keys (tests / diagnostics).
 func (l *IPLimiter) LenForTest() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return len(l.byIP)
+	return len(l.byKey)
 }
