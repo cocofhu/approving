@@ -1,6 +1,6 @@
 import '../src/styles/global.css'
 import { createApp, h } from 'vue'
-import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
+import { createMemoryHistory, createRouter, RouterView, useRoute } from 'vue-router'
 import { i18n } from '../src/lib/i18n'
 import { initLocale, setLocale } from '../src/lib/locale'
 import { installIdleScrollbar } from '../src/lib/idleScrollbar'
@@ -42,7 +42,30 @@ async function bootstrap() {
       {
         path: '/runs',
         component: {
-          render: () => h('div', { 'data-testid': 'runs-page' }, 'runs'),
+          setup() {
+            const route = useRoute()
+            return () => {
+              const status = typeof route.query.status === 'string' ? route.query.status : ''
+              const projectId =
+                typeof route.query.projectId === 'string' ? route.query.projectId : ''
+              return h(
+                'div',
+                {
+                  'data-testid': 'runs-page',
+                  'data-status': status,
+                  'data-project-id': projectId,
+                },
+                [
+                  h('span', { 'data-testid': 'runs-status-query' }, status || '(none)'),
+                  h(
+                    'span',
+                    { 'data-testid': 'runs-project-id-query' },
+                    projectId || '(none)',
+                  ),
+                ],
+              )
+            }
+          },
         },
       },
       {
