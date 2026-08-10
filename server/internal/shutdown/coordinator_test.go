@@ -18,15 +18,15 @@ func TestCoordinatorGraceRemaining(t *testing.T) {
 	if rem < 598 || rem > 600 {
 		t.Fatalf("grace remaining = %d, want ~600", rem)
 	}
-	if c.GracePeriod() != 600*time.Second {
-		t.Fatalf("grace period = %v", c.GracePeriod())
+	if c.gracePeriod() != 600*time.Second {
+		t.Fatalf("grace period = %v", c.gracePeriod())
 	}
 }
 
 func TestCoordinatorDefaultGrace(t *testing.T) {
 	c := New(0)
-	if c.GracePeriod() != 600*time.Second {
-		t.Fatalf("default grace = %v", c.GracePeriod())
+	if c.gracePeriod() != 600*time.Second {
+		t.Fatalf("default grace = %v", c.gracePeriod())
 	}
 }
 

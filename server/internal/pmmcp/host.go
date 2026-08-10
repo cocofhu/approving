@@ -117,11 +117,6 @@ func (h *Host) recordAudit(rec services.AuditRecord) {
 	}
 }
 
-// Register creates (or replaces) a session for project+thread and returns the token.
-func (h *Host) Register(projectID, threadID, userID, agentName string) string {
-	return h.restore(projectID, threadID, userID, agentName, platformmcp.NewToken())
-}
-
 // Restore re-binds an existing token.
 func (h *Host) Restore(projectID, threadID, userID, agentName, token string) {
 	if strings.TrimSpace(token) == "" {

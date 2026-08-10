@@ -510,17 +510,6 @@ func SelectRecommendedOptions(q ReactQuestion) ([]ReactOption, bool) {
 	return []ReactOption{q.Options[0]}, true
 }
 
-// SelectRecommendedOption resolves a single auto-selected option for a
-// question (first of SelectRecommendedOptions). Prefer SelectRecommendedOptions
-// when AllowMultiple may select more than one.
-func SelectRecommendedOption(q ReactQuestion) (ReactOption, bool) {
-	opts, ok := SelectRecommendedOptions(q)
-	if !ok || len(opts) == 0 {
-		return ReactOption{}, false
-	}
-	return opts[0], true
-}
-
 // FormatChoiceReply builds the human reply text an auto-select would submit,
 // matching the UI's "我的选择:\n- 问题 → 选项" format so the transcript reads the
 // same whether the choice came from a human click or an automatic pick. Each

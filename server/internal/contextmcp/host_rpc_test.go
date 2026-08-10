@@ -2,6 +2,7 @@ package contextmcp
 
 import (
 	"encoding/json"
+	"github.com/cocofhu/approving/internal/platformmcp"
 	"strings"
 	"testing"
 )
@@ -9,8 +10,8 @@ import (
 func TestContextMCPServeRPCMetaMethods(t *testing.T) {
 	_, pm, p := setupContextDB(t)
 	h := NewHost(pm)
-	tok := h.Register(p.ID, "agent-a", "thr", "alice")
-
+	tok := platformmcp.NewToken()
+	h.Restore(tok, p.ID, "agent-a", "thr", "alice")
 	st, _ := h.ServeRPC(p.ID, "bad", []byte(`{}`))
 	if st != 401 {
 		t.Fatalf("unauth: %d", st)

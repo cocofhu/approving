@@ -21,15 +21,15 @@ func TestFetchCapabilities(t *testing.T) {
 	}))
 	defer srv.Close()
 	h, p := httpHostPort(t, srv)
-	caps, err := FetchCapabilities(context.Background(), h, p)
+	caps, err := fetchCapabilities(context.Background(), h, p)
 	if err != nil {
 		t.Fatalf("FetchCapabilities: %v", err)
 	}
-	if !caps.SupportsChanges() {
+	if !caps.supportsChanges() {
 		t.Error("expected SupportsChanges true")
 	}
 	var nilCaps *Capabilities
-	if nilCaps.SupportsChanges() {
+	if nilCaps.supportsChanges() {
 		t.Error("nil caps must not support changes")
 	}
 }
@@ -40,7 +40,7 @@ func TestFetchCapabilitiesErrors(t *testing.T) {
 	}))
 	defer notFound.Close()
 	h, p := httpHostPort(t, notFound)
-	if _, err := FetchCapabilities(context.Background(), h, p); err == nil {
+	if _, err := fetchCapabilities(context.Background(), h, p); err == nil {
 		t.Error("expected 404 error")
 	}
 
@@ -49,7 +49,7 @@ func TestFetchCapabilitiesErrors(t *testing.T) {
 	}))
 	defer badJSON.Close()
 	h2, p2 := httpHostPort(t, badJSON)
-	if _, err := FetchCapabilities(context.Background(), h2, p2); err == nil {
+	if _, err := fetchCapabilities(context.Background(), h2, p2); err == nil {
 		t.Error("expected decode error")
 	}
 }
@@ -60,7 +60,7 @@ func TestFetchChanges(t *testing.T) {
 	}))
 	defer srv.Close()
 	h, p := httpHostPort(t, srv)
-	ch, err := FetchChanges(context.Background(), h, p)
+	ch, err := fetchChanges(context.Background(), h, p)
 	if err != nil {
 		t.Fatalf("FetchChanges: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestFetchChanges(t *testing.T) {
 	}))
 	defer nf.Close()
 	h2, p2 := httpHostPort(t, nf)
-	if _, err := FetchChanges(context.Background(), h2, p2); err == nil {
+	if _, err := fetchChanges(context.Background(), h2, p2); err == nil {
 		t.Error("expected non-200 error")
 	}
 }

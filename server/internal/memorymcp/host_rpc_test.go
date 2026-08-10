@@ -2,6 +2,7 @@ package memorymcp
 
 import (
 	"encoding/json"
+	"github.com/cocofhu/approving/internal/platformmcp"
 	"strings"
 	"testing"
 )
@@ -9,8 +10,8 @@ import (
 func TestMemoryMCPServeRPCMetaMethods(t *testing.T) {
 	_, pm, p := setupMemoryDB(t)
 	h := NewHost(pm)
-	tok := h.Register(p.ID, "agent-a", "thr", "u", true)
-
+	tok := platformmcp.NewToken()
+	h.Restore(tok, p.ID, "agent-a", "thr", "u", true)
 	st, _ := h.ServeRPC(p.ID, "bad", []byte(`{}`))
 	if st != 401 {
 		t.Fatalf("unauth: %d", st)
