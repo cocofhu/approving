@@ -220,6 +220,36 @@ func dialableEndpoint(addr string) string {
 	return addr
 }
 
+// lookupIPAddr resolves a hostname for CDP/noVNC dial. Overridable in tests.
+var lookupIPAddr = func(ctx context.Context, host string) ([]net.IP, error) {
+	return net.DefaultResolver.LookupIP(ctx, "ip", host)
+}
+
+// preferIPAddr rewrites hostnames (e.g. sbx-*.svc.cluster.local) to a dialable
+// IP. Chrome DevTools rejects WebSocket upgrades whose Host is a DNS name
+// ("not an IP address or localhost"); rod's ResolveURL keeps the dial host in
+// the WS URL, so Approving must dial by IP after CDP/noVNC ClusterIP isolation.
+func preferIPAddr(ctx context.Context, addr string) string {
+	host, port := splitHostPort(addr)
+	if host == "" || port <= 0 {
+		return addr
+	}
+	if net.ParseIP(host) != nil {
+		return addr
+	}
+	ips, err := lookupIPAddr(ctx, host)
+	if err != nil || len(ips) == 0 {
+		log.Warn().Str("addr", addr).Err(err).Msg("cdp/novnc DNS resolve failed; dialing hostname")
+		return addr
+	}
+	for _, ip := range ips {
+		if v4 := ip.To4(); v4 != nil {
+			return net.JoinHostPort(v4.String(), strconv.Itoa(port))
+		}
+	}
+	return net.JoinHostPort(ips[0].String(), strconv.Itoa(port))
+}
+
 // SetReadyProbe overrides the CDP/websockify readiness check (tests / custom
 // health logic). Passing nil restores the default probeVNCReady.
 func (s *Service) SetReadyProbe(fn func(ctx context.Context, ip string) bool) {
@@ -392,6 +422,8 @@ func (s *Service) probeVNCReady(ctx context.Context, ip string) bool {
 }
 
 func (s *Service) probeVNCReadyAddrs(ctx context.Context, cdpAddr, novncAddr string) bool {
+	cdpAddr = preferIPAddr(ctx, cdpAddr)
+	novncAddr = preferIPAddr(ctx, novncAddr)
 	cdpHost, cdpP := splitHostPort(cdpAddr)
 	if cdpHost == "" {
 		return false
@@ -412,8 +444,8 @@ func (s *Service) probeVNCReadyAddrs(ctx context.Context, cdpAddr, novncAddr str
 	if err != nil {
 		return false
 	}
-	// Chrome DevTools HTTP rejects non-IP/non-localhost Host on some endpoints;
-	// keep dialing the ClusterIP DNS while advertising a loopback Host.
+	// Belt-and-suspenders: if DNS resolve failed and we still dial a hostname,
+	// force Host to loopback so /json/version + /json/new are accepted.
 	setCDPRequestHost(req, cdpP)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -436,8 +468,8 @@ func (s *Service) probeVNCReadyAddrs(ctx context.Context, cdpAddr, novncAddr str
 }
 
 // setCDPRequestHost forces Host to 127.0.0.1:<port> so Chromium accepts
-// /json/new (and related DevTools HTTP) when Approving dials via Service DNS
-// (sbx-*.svc.cluster.local). TCP still targets req.URL.Host.
+// DevTools HTTP when the dial target is still a DNS name. Prefer preferIPAddr
+// for WebSocket; rod keeps the dial host in the WS URL Host header.
 func setCDPRequestHost(req *http.Request, port int) {
 	if req == nil || port <= 0 {
 		return
@@ -494,18 +526,22 @@ func (s *Service) attachSandboxLocked(ctx context.Context, name, ip, cdpAddr, no
 		}
 		return cs, nil
 	}
-	host, port := splitHostPort(cdpAddr)
+	dialCDP := preferIPAddr(ctx, cdpAddr)
+	host, port := splitHostPort(dialCDP)
 	if host == "" {
 		host = ip
 	}
 	if port <= 0 {
 		port = cdpPort
 	}
+	if net.ParseIP(host) == nil {
+		return nil, fmt.Errorf("connect sandbox cdp: dial host %q is not an IP (Chrome DevTools rejects DNS Host on websocket)", host)
+	}
 	eng, err := s.dial(ctx, fmt.Sprintf("http://%s:%d", host, port))
 	if err != nil {
 		return nil, fmt.Errorf("connect sandbox cdp: %w", err)
 	}
-	cs := &containerState{name: name, ip: ip, cdpAddr: cdpAddr, novncAddr: novncAddr, engine: eng}
+	cs := &containerState{name: name, ip: ip, cdpAddr: dialCDP, novncAddr: preferIPAddr(ctx, novncAddr), engine: eng}
 	s.containers[name] = cs
 	return cs, nil
 }

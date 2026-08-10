@@ -11,6 +11,63 @@ import (
 	"time"
 )
 
+func TestPreferIPAddrResolvesClusterDNS(t *testing.T) {
+	prev := lookupIPAddr
+	t.Cleanup(func() { lookupIPAddr = prev })
+	lookupIPAddr = func(_ context.Context, host string) ([]net.IP, error) {
+		if host != "sbx-m1.sandbox-gateway.svc.cluster.local" {
+			t.Fatalf("lookup host=%q", host)
+		}
+		return []net.IP{net.ParseIP("10.43.9.9"), net.ParseIP("2001:db8::9")}, nil
+	}
+	got := preferIPAddr(context.Background(), "sbx-m1.sandbox-gateway.svc.cluster.local:9222")
+	if got != "10.43.9.9:9222" {
+		t.Fatalf("got %q want 10.43.9.9:9222", got)
+	}
+}
+
+func TestPreferIPAddrLeavesIPUnchanged(t *testing.T) {
+	prev := lookupIPAddr
+	t.Cleanup(func() { lookupIPAddr = prev })
+	lookupIPAddr = func(context.Context, string) ([]net.IP, error) {
+		t.Fatal("must not lookup bare IP")
+		return nil, nil
+	}
+	if got := preferIPAddr(context.Background(), "10.88.0.12:9222"); got != "10.88.0.12:9222" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestAttachSandboxDialsResolvedIP(t *testing.T) {
+	prev := lookupIPAddr
+	t.Cleanup(func() { lookupIPAddr = prev })
+	lookupIPAddr = func(context.Context, string) ([]net.IP, error) {
+		return []net.IP{net.ParseIP("10.43.1.2")}, nil
+	}
+	s, _ := newResolverService(map[string]string{
+		"cdp":   "sbx-m1.sandbox-gateway.svc.cluster.local:9222",
+		"novnc": "sbx-m1.sandbox-gateway.svc.cluster.local:6080",
+	})
+	var dialed string
+	s.dial = func(_ context.Context, httpBase string) (Engine, error) {
+		dialed = httpBase
+		return &fakeEngine{name: "sandbox"}, nil
+	}
+	// EnsureSandboxVNC ignores readyProbe when a resolver is present; exercise
+	// attach directly so we only assert the CDP dial host rewrite.
+	s.mu.Lock()
+	_, err := s.attachSandboxLocked(context.Background(), "sb", "203.0.113.9",
+		"sbx-m1.sandbox-gateway.svc.cluster.local:9222",
+		"sbx-m1.sandbox-gateway.svc.cluster.local:6080")
+	s.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dialed != "http://10.43.1.2:9222" {
+		t.Fatalf("dialed %q want http://10.43.1.2:9222", dialed)
+	}
+}
+
 // TestProbeTabCreateUsesLoopbackHostHeader locks the Chrome 149 DevTools rule:
 // PUT /json/new rejects Host that is neither an IP nor localhost. Approving
 // dials ClusterIP DNS (sbx-*.svc.cluster.local) after CDP/noVNC isolation, so
