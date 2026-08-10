@@ -77,6 +77,14 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.DELETE("/projects/:id", h.DeleteProject)
 		api.POST("/projects/:id/bootstrap-onboarding", h.BootstrapProjectOnboarding)
 
+		api.GET("/projects/:id/requirement-drafts", h.ListRequirementDrafts)
+		api.POST("/projects/:id/requirement-drafts", h.CreateRequirementDraft)
+		api.GET("/projects/:id/requirement-drafts/:draftId", h.GetRequirementDraft)
+		api.PUT("/projects/:id/requirement-drafts/:draftId", h.UpdateRequirementDraft)
+		api.PATCH("/projects/:id/requirement-drafts/:draftId", h.UpdateRequirementDraft)
+		api.PATCH("/projects/:id/requirement-drafts/:draftId/status", h.PatchRequirementDraftStatus)
+		api.DELETE("/projects/:id/requirement-drafts/:draftId", h.DeleteRequirementDraft)
+
 		api.GET("/agent-teams/templates", h.ListAgentTeamTemplates)
 		api.POST("/agent-teams/bootstrap", h.BootstrapAgentTeam)
 		api.GET("/agent-teams/bootstrap/:id", h.GetAgentTeamBootstrap)

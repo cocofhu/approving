@@ -34,37 +34,38 @@ import (
 
 // Handlers bundles dependencies for route handlers.
 type Handlers struct {
-	WF               *services.WorkflowService
-	Projects         *services.ProjectService
-	Runs             *services.RunService
-	Arts             *services.ArtifactService
-	APIKeys          *services.APIKeyService
-	Skill            *services.SkillService
-	Org              *services.OrgService
-	Dash             *services.DashboardService
-	Sbx              *services.SandboxService
-	Eng              *engine.Engine
-	MCP              *mcp.Host
-	Pm               *services.PmService
-	PmProgress       *services.PmProgress
-	PmTurns          *services.PmTurnRunner
-	PMMCP            *pmmcp.Host
-	MemoryMCP        *memorymcp.Host
-	ContextMCP       *contextmcp.Host
-	SchedulerMCP     *schedulermcp.Host
-	Preview          *services.PreviewService
-	Issues           *services.IssueService
-	Settings         *services.SettingsService
-	Shutdown         *shutdown.Coordinator
-	Auth             *auth.Service
-	PlatformRules    *services.PlatformRuleService
-	Channels         *services.ChannelConfigService
-	Browser          *browser.Service
-	Audit            *services.ProjectAuditService
-	Onboarding       *services.OnboardingService
-	GateShare        *gateshare.Service
-	GateShareNonces  *gateshare.NonceStore
-	GateShareLimiter *gateshare.IPLimiter
+	WF                *services.WorkflowService
+	Projects          *services.ProjectService
+	Runs              *services.RunService
+	Arts              *services.ArtifactService
+	APIKeys           *services.APIKeyService
+	Skill             *services.SkillService
+	Org               *services.OrgService
+	Dash              *services.DashboardService
+	Sbx               *services.SandboxService
+	Eng               *engine.Engine
+	MCP               *mcp.Host
+	Pm                *services.PmService
+	PmProgress        *services.PmProgress
+	PmTurns           *services.PmTurnRunner
+	PMMCP             *pmmcp.Host
+	MemoryMCP         *memorymcp.Host
+	ContextMCP        *contextmcp.Host
+	SchedulerMCP      *schedulermcp.Host
+	Preview           *services.PreviewService
+	Issues            *services.IssueService
+	RequirementDrafts *services.RequirementDraftService
+	Settings          *services.SettingsService
+	Shutdown          *shutdown.Coordinator
+	Auth              *auth.Service
+	PlatformRules     *services.PlatformRuleService
+	Channels          *services.ChannelConfigService
+	Browser           *browser.Service
+	Audit             *services.ProjectAuditService
+	Onboarding        *services.OnboardingService
+	GateShare         *gateshare.Service
+	GateShareNonces   *gateshare.NonceStore
+	GateShareLimiter  *gateshare.IPLimiter
 	// PublicAdvertise is the browser-facing origin for share URLs.
 	// Public CSRF compares Origin/Referer to this request's Host (never client
 	// X-Forwarded-Host; advertise host is not used for CSRF).

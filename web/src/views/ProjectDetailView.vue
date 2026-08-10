@@ -27,6 +27,7 @@ import PmSettingsPanel from '@/components/pm/PmSettingsPanel.vue'
 import TokenUsageHoverTip from '@/components/ui/TokenUsageHoverTip.vue'
 import ProjectAuditPanel from '@/components/project/ProjectAuditPanel.vue'
 import ProjectNotifyPanel from '@/components/project/ProjectNotifyPanel.vue'
+import RequirementDraftsPanel from '@/components/project/RequirementDraftsPanel.vue'
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard.vue'
 import type {
   ClarifyImage,
@@ -46,6 +47,7 @@ import {
 const PROJECT_TABS = [
   'board',
   'workflows',
+  'requirementDrafts',
   'notify',
   'pmLeader',
   'cronJobs',
@@ -239,6 +241,7 @@ const { fileInput, triggerImport, handleFileChange } = useWorkflowImport({
 const tabs: { id: Tab; labelKey: string }[] = [
   { id: 'board', labelKey: 'pages.projectDetail.tabBoard' },
   { id: 'workflows', labelKey: 'pages.projectDetail.tabWorkflows' },
+  { id: 'requirementDrafts', labelKey: 'pages.projectDetail.tabRequirementDrafts' },
   { id: 'notify', labelKey: 'pages.projectDetail.tabNotify' },
   { id: 'pmLeader', labelKey: 'pages.projectDetail.tabPmLeader' },
   { id: 'cronJobs', labelKey: 'pages.projectDetail.tabCronJobs' },
@@ -985,6 +988,14 @@ onUnmounted(() => {
 
       <div v-else-if="tab === 'board'" class="min-w-0" data-testid="project-board-panel">
         <BoardView :project-id="projectId" embedded />
+      </div>
+
+      <div
+        v-else-if="tab === 'requirementDrafts'"
+        class="min-w-0"
+        data-testid="project-requirement-drafts-panel"
+      >
+        <RequirementDraftsPanel :project-id="projectId" />
       </div>
 
       <div
