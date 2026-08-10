@@ -517,7 +517,7 @@
       "envEmptyTitle": "暂无沙箱环境变量",
       "envEmptyDesc": "添加 KEY/VALUE 行后，将写入节点沙箱 Spec.Env。密钥项回读会打码。",
       "varsEmptyTitle": "暂无工作流变量",
-      "varsEmptyDesc": "定义项目级默认值（string / number / bool / select 等）。启动询问仍在流水线 input 节点配置。",
+      "varsEmptyDesc": "添加一行后，即可配置项目级默认值。",
       "varName": "变量名",
       "varValue": "默认值",
       "varDescPlaceholder": "描述（可选）",
