@@ -993,6 +993,18 @@
       "rateLimited": "请求过于频繁，请稍后再试",
       "maybeStuck": "可能卡死 · 请求仍在进行，可继续等待或重试"
     },
+    "notifications": {
+      "title": "通知",
+      "subtitle": "仅展示执行完成或失败的收件事件 · 进行中请前往「运行」",
+      "loading": "正在加载通知…",
+      "filterEmpty": "没有符合筛选的通知",
+      "filterEmptyHint": "试试切换全部 / 未读 / 已读",
+      "filter": {
+        "all": "全部",
+        "unread": "未读",
+        "read": "已读"
+      }
+    },
     "artifacts": {
       "title": "产物",
       "subtitle": "Agent / 澄清等节点的输出自动留存为平台产物(PRD / 设计 / 方案等),无需额外配置,不依赖代码托管平台",

@@ -993,6 +993,18 @@
       "rateLimited": "Too many requests. Please try again later.",
       "maybeStuck": "May be stuck · request still running; wait or retry"
     },
+    "notifications": {
+      "title": "Notifications",
+      "subtitle": "Inbox for completed or failed runs · in-progress work stays on Runs",
+      "loading": "Loading notifications…",
+      "filterEmpty": "No notifications match this filter",
+      "filterEmptyHint": "Try All / Unread / Read",
+      "filter": {
+        "all": "All",
+        "unread": "Unread",
+        "read": "Read"
+      }
+    },
     "artifacts": {
       "title": "Artifacts",
       "subtitle": "Outputs from agents/clarify nodes are stored automatically (PRD, design, proposals, etc.) without extra setup or git hosting",

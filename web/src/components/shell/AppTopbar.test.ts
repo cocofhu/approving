@@ -22,6 +22,7 @@ vi.mock('@/lib/useShutdownState', () => ({
 vi.mock('@/lib/useAuth', () => ({
   useAuth: () => ({
     user: ref({ username: 'tester', expiresAt: 't' }),
+    ready: ref(true),
   }),
 }))
 
@@ -39,6 +40,8 @@ vi.mock('@/lib/api', () => ({
 import { api } from '@/lib/api'
 import {
   __resetRunTerminalNotificationsForTests,
+  prefsKeyForUser,
+  RUN_TERMINAL_PANEL_LIMIT,
   RUN_TERMINAL_POOL_SIZE,
 } from '@/lib/useRunTerminalNotifications'
 import AppTopbar from './AppTopbar.vue'
@@ -62,6 +65,10 @@ function paged(items: Run[], total = items.length) {
   return { items, total, page: 1, pageSize: RUN_TERMINAL_POOL_SIZE, hasMore: false }
 }
 
+function seedBaseline(enabledAt = '2020-01-01T00:00:00Z', readIds: string[] = []) {
+  localStorage.setItem(prefsKeyForUser('tester'), JSON.stringify({ enabledAt, readIds }))
+}
+
 function mountTopbar() {
   const i18n = createI18n({
     legacy: false,
@@ -81,7 +88,7 @@ function mountTopbar() {
   })
 }
 
-describe('AppTopbar run notifications', () => {
+describe('AppTopbar notifications', () => {
   beforeEach(() => {
     localStorage.clear()
     __resetRunTerminalNotificationsForTests()
@@ -108,14 +115,14 @@ describe('AppTopbar run notifications', () => {
     __resetRunTerminalNotificationsForTests()
   })
 
-  it('renders header with theme toggle and bell aria', async () => {
+  it('renders header with theme toggle and bell aria titled 通知', async () => {
     const wrapper = mountTopbar()
     await flushPromises()
     expect(wrapper.find('header').exists()).toBe(true)
     expect(wrapper.find('[data-testid="lang"]').exists()).toBe(true)
     const bell = wrapper.find('[data-testid="run-notifications-bell"]')
     expect(bell.exists()).toBe(true)
-    expect(bell.attributes('aria-label')).toBe('运行通知')
+    expect(bell.attributes('aria-label')).toBe('通知')
     expect(bell.attributes('aria-haspopup')).toBe('true')
     expect(bell.attributes('aria-expanded')).toBe('false')
     expect(wrapper.find('[data-testid="run-notifications-badge"]').exists()).toBe(false)
@@ -130,46 +137,60 @@ describe('AppTopbar run notifications', () => {
     wrapper.unmount()
   })
 
-  it('shows unread badge and opens panel with empty state', async () => {
+  it('shows panel empty state without a clickable runs escape', async () => {
     const wrapper = mountTopbar()
     await flushPromises()
     await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
     await nextTick()
     expect(wrapper.find('[data-testid="run-notifications-panel"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="run-notifications-empty"]').text()).toContain('暂无运行通知')
+    const empty = wrapper.find('[data-testid="run-notifications-empty"]')
+    expect(empty.text()).toContain('暂无通知')
+    expect(empty.text()).toContain('执行完成或失败后才会出现')
+    expect(empty.text()).toContain('运行')
+    expect(empty.find('a').exists()).toBe(false)
+    expect(empty.find('button').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('caps dropdown at 5 items and shows more hint; view-all does not mark read', async () => {
-    const items = Array.from({ length: 7 }, (_, i) =>
+  it('caps dropdown at 10 items; view-all goes to /notifications; mark-all clears badge', async () => {
+    seedBaseline()
+    const items = Array.from({ length: 12 }, (_, i) =>
       run({
         id: `r${i}`,
         status: i === 0 ? 'failed' : 'completed',
-        startedAt: `2026-08-10T1${i}:00:00Z`,
+        startedAt: `2026-08-10T${String(12 + (i % 10)).padStart(2, '0')}:${String(i).padStart(2, '0')}:00Z`,
       }),
     )
-    vi.mocked(api.listRuns).mockResolvedValue(paged(items, 7))
+    vi.mocked(api.listRuns).mockResolvedValue(paged(items, 12))
     const wrapper = mountTopbar()
     await flushPromises()
 
     const badge = wrapper.find('[data-testid="run-notifications-badge"]')
     expect(badge.exists()).toBe(true)
-    expect(badge.text()).toBe('7')
+    expect(badge.text()).toBe('12')
     expect(badge.classes().join(' ')).toMatch(/bg-err/)
 
     await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
     await nextTick()
-    expect(wrapper.findAll('[data-testid="run-notifications-item"]')).toHaveLength(5)
+    expect(wrapper.findAll('[data-testid="run-notifications-item"]')).toHaveLength(
+      RUN_TERMINAL_PANEL_LIMIT,
+    )
     expect(wrapper.find('[data-testid="run-notifications-more"]').text()).toContain('还有 2 条')
 
+    await wrapper.find('[data-testid="run-notifications-mark-all"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="run-notifications-badge"]').exists()).toBe(false)
+
     await wrapper.find('[data-testid="run-notifications-view-all"]').trigger('click')
-    expect(push).toHaveBeenCalledWith({ path: '/runs', query: { status: 'completed,failed' } })
-    // Panel closed; unread unchanged (no batch mark-read)
-    expect(wrapper.find('[data-testid="run-notifications-badge"]').text()).toBe('7')
+    expect(push).toHaveBeenCalledWith({ path: '/notifications' })
+    expect(push).not.toHaveBeenCalledWith(
+      expect.objectContaining({ path: '/runs' }),
+    )
     wrapper.unmount()
   })
 
   it('clicking failed item marks read and navigates to run detail without output modal', async () => {
+    seedBaseline()
     vi.mocked(api.listRuns).mockResolvedValue(
       paged([run({ id: 'fail-1', status: 'failed', title: 'boom' })]),
     )
@@ -186,6 +207,7 @@ describe('AppTopbar run notifications', () => {
   })
 
   it('clicking completed item marks read and opens output modal (empty artifacts)', async () => {
+    seedBaseline()
     vi.mocked(api.listRuns).mockResolvedValue(
       paged([run({ id: 'ok-1', status: 'completed', title: 'done' })]),
     )
@@ -214,6 +236,7 @@ describe('AppTopbar run notifications', () => {
   })
 
   it('completed with artifacts shows master-detail list+preview and download control', async () => {
+    seedBaseline()
     vi.mocked(api.listRuns).mockResolvedValue(
       paged([run({ id: 'ok-2', status: 'completed', title: 'done' })]),
     )
@@ -289,6 +312,28 @@ describe('AppTopbar run notifications', () => {
     expect(document.body.querySelector('[data-testid="run-output-done"]')).toBeTruthy()
     // No PPT / slide metaphor
     expect(document.body.textContent || '').not.toMatch(/PPT|幻灯片|16:9/)
+    wrapper.unmount()
+  })
+
+  it('cleans noisy progress titles in the panel', async () => {
+    seedBaseline()
+    vi.mocked(api.listRuns).mockResolvedValue(
+      paged([
+        run({
+          id: 'noisy',
+          status: 'completed',
+          title: '运行中 3 / 等待 1',
+          workflowName: '自我迭代',
+        }),
+      ]),
+    )
+    const wrapper = mountTopbar()
+    await flushPromises()
+    await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
+    await nextTick()
+    const item = wrapper.find('[data-testid="run-notifications-item"]')
+    expect(item.text()).toContain('自我迭代 · 已完成')
+    expect(item.text()).not.toMatch(/运行中/)
     wrapper.unmount()
   })
 })

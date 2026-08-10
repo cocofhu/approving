@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { api, isPaginated } from '@/lib/api'
 import type { Run } from '@/lib/types'
 import { createTimeoutController, isAbortError } from '@/lib/loadingRequest'
@@ -7,19 +7,28 @@ import { useAuth } from '@/lib/useAuth'
 
 /** Recent completed/failed runs that form the notification pool (plan: ~50). */
 export const RUN_TERMINAL_POOL_SIZE = 50
-/** Dropdown preview hard limit. */
-export const RUN_TERMINAL_PANEL_LIMIT = 5
+/** Dropdown preview hard limit (~10 per clarified requirement). */
+export const RUN_TERMINAL_PANEL_LIMIT = 10
 /** Align with AppSidebarNav pending-gates peek interval. */
 export const RUN_TERMINAL_POLL_MS = 15_000
 
 export type RunTerminalStatus = 'completed' | 'failed'
 
+/**
+ * Client-side Notification projection of a terminal Run.
+ * Product object is Notification (inbox event), not Run list row.
+ */
 export interface RunTerminalNotification {
   runId: string
   status: RunTerminalStatus
+  /** Cleaned display title (never progress-noise). */
   title: string
+  /** True when title was replaced by the neutral template. */
+  titleNeutral: boolean
   workflowName: string
   startedAt: string
+  /** Approx terminal time: startedAt + durationSec (ISO). */
+  finishedApprox: string
 }
 
 export type RunTerminalRefreshSource =
@@ -28,6 +37,13 @@ export type RunTerminalRefreshSource =
   | 'visibility'
   | 'focus'
   | 'manual'
+  | 'auth'
+
+interface NotificationPrefs {
+  /** Feature-enable baseline; history before this is always treated as read. */
+  enabledAt: string
+  readIds: string[]
+}
 
 export function formatUnreadBadge(n: number): string {
   if (n <= 0) return ''
@@ -35,46 +51,122 @@ export function formatUnreadBadge(n: number): string {
   return String(n)
 }
 
+/** @deprecated Prefer prefsKeyForUser; kept for migration of legacy read sets. */
 export function storageKeyForUser(username: string): string {
   return `approving.runTerminalNotifications.readIds.${username || 'anonymous'}`
 }
 
+export function prefsKeyForUser(username: string): string {
+  return `approving.notifications.prefs.${username || 'anonymous'}`
+}
+
+/** Progress / in-progress wording that must not appear as notification titles. */
+export function isNoisyNotificationTitle(title: string): boolean {
+  const s = title.trim()
+  if (!s) return false
+  return /运行中|排队中?|等待人工|等待中|(?:^|[\s·\-_/，,])(queued|running|waiting)(?:[\s·\-_/，,]|$)|waiting[_ ]human|in\s*progress/i.test(
+    s,
+  )
+}
+
+/** Approx enter-terminal timestamp for sort + unread baseline. */
+export function finishedApproxIso(run: Run): string {
+  const start = (run.startedAt || run.createdAt || '').trim()
+  if (!start) return ''
+  const dur = typeof run.durationSec === 'number' && run.durationSec > 0 ? run.durationSec : 0
+  if (!dur) return start
+  const t = Date.parse(start)
+  if (Number.isNaN(t)) return start
+  return new Date(t + dur * 1000).toISOString()
+}
+
 export function mapRunToNotification(run: Run): RunTerminalNotification | null {
   if (run.status !== 'completed' && run.status !== 'failed') return null
-  const title = (run.title || '').trim() || run.workflowName || run.id
+  const raw = (run.title || '').trim()
+  const workflowName = (run.workflowName || '').trim()
+  const finishedApprox = finishedApproxIso(run)
+  const startedAt = (run.startedAt || run.createdAt || '').trim()
+
+  let title = raw || workflowName || run.id
+  let titleNeutral = false
+  if (isNoisyNotificationTitle(title)) {
+    const name = workflowName || run.id
+    // Neutral template tokens; UI may re-localize via titleNeutral + status.
+    title = `${name} · ${run.status === 'failed' ? 'failed' : 'completed'}`
+    titleNeutral = true
+  }
+
   return {
     runId: run.id,
     status: run.status,
     title,
-    workflowName: run.workflowName || '',
-    startedAt: run.startedAt || run.createdAt || '',
+    titleNeutral,
+    workflowName,
+    startedAt,
+    finishedApprox: finishedApprox || startedAt,
   }
 }
 
-function loadReadIds(username: string): Set<string> {
-  if (typeof localStorage === 'undefined') return new Set()
+function compareFinishedDesc(a: RunTerminalNotification, b: RunTerminalNotification): number {
+  const ta = Date.parse(a.finishedApprox || a.startedAt || '') || 0
+  const tb = Date.parse(b.finishedApprox || b.startedAt || '') || 0
+  if (tb !== ta) return tb - ta
+  return b.runId.localeCompare(a.runId)
+}
+
+function loadPrefs(username: string): NotificationPrefs {
+  const now = new Date().toISOString()
+  if (typeof localStorage === 'undefined') {
+    return { enabledAt: now, readIds: [] }
+  }
   try {
-    const raw = localStorage.getItem(storageKeyForUser(username))
-    if (!raw) return new Set()
-    const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return new Set()
-    return new Set(parsed.filter((x): x is string => typeof x === 'string'))
+    const raw = localStorage.getItem(prefsKeyForUser(username))
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<NotificationPrefs>
+      const enabledAt =
+        typeof parsed.enabledAt === 'string' && parsed.enabledAt.trim()
+          ? parsed.enabledAt
+          : now
+      const readIds = Array.isArray(parsed.readIds)
+        ? parsed.readIds.filter((x): x is string => typeof x === 'string')
+        : []
+      return { enabledAt, readIds }
+    }
   } catch {
-    return new Set()
+    // fall through to migrate / create
   }
+
+  // Migrate legacy readIds-only storage once.
+  let legacyIds: string[] = []
+  try {
+    const legacy = localStorage.getItem(storageKeyForUser(username))
+    if (legacy) {
+      const parsed = JSON.parse(legacy) as unknown
+      if (Array.isArray(parsed)) {
+        legacyIds = parsed.filter((x): x is string => typeof x === 'string')
+      }
+    }
+  } catch {
+    legacyIds = []
+  }
+
+  const prefs: NotificationPrefs = { enabledAt: now, readIds: legacyIds }
+  persistPrefs(username, prefs)
+  return prefs
 }
 
-function persistReadIds(username: string, ids: Set<string>) {
+function persistPrefs(username: string, prefs: NotificationPrefs) {
   if (typeof localStorage === 'undefined') return
   try {
-    localStorage.setItem(storageKeyForUser(username), JSON.stringify([...ids]))
+    localStorage.setItem(prefsKeyForUser(username), JSON.stringify(prefs))
   } catch {
-    // Quota / private mode — ignore; unread will reset next session.
+    // Quota / private mode — ignore; unread may reset next session.
   }
 }
 
 const pool = ref<RunTerminalNotification[]>([])
 const readIds = ref<Set<string>>(new Set())
+const enabledAt = ref<string>('')
 const usernameKey = ref('anonymous')
 const error = ref<string | null>(null)
 const lastRefreshSource = ref<RunTerminalRefreshSource | null>(null)
@@ -86,42 +178,121 @@ let refreshGeneration = 0
 let abortCtrl: AbortController | null = null
 let pollTimer: number | undefined
 let listenersAttached = false
-let readIdsHydrated = false
+let prefsHydrated = false
+let authWatchInstalled = false
+
+/**
+ * Resolve the prefs username only after auth has settled.
+ * Avoid hydrating as `anonymous` while /auth/me is in flight — that stamped
+ * enabledAt≈now and under-counted the badge until focus/poll rehydrated.
+ */
+function resolveUsername(): { name: string; settled: boolean } {
+  const { user, ready } = useAuth()
+  const name = user.value?.username?.trim() || ''
+  if (name) return { name, settled: true }
+  // Auth explicitly in flight (ready===false) → wait; do not stamp anonymous prefs.
+  if (ready && ready.value === false) return { name: '', settled: false }
+  // ready===true with no user, or callers/tests without ready → anonymous fallback.
+  return { name: 'anonymous', settled: true }
+}
+
+function isUnread(n: RunTerminalNotification): boolean {
+  if (readIds.value.has(n.runId)) return false
+  const baseline = enabledAt.value
+  if (!baseline) return false
+  const finished = n.finishedApprox || n.startedAt
+  if (!finished) return false
+  const ft = Date.parse(finished)
+  const bt = Date.parse(baseline)
+  if (Number.isNaN(ft) || Number.isNaN(bt)) return false
+  // Only events that entered terminal after the enable baseline count as unread.
+  return ft > bt
+}
 
 const unreadCount = computed(
-  () => pool.value.filter((n) => !readIds.value.has(n.runId)).length,
+  () => pool.value.filter((n) => isUnread(n)).length,
 )
 
 const hasUnreadFailed = computed(() =>
-  pool.value.some((n) => !readIds.value.has(n.runId) && n.status === 'failed'),
+  pool.value.some((n) => isUnread(n) && n.status === 'failed'),
 )
 
 const badgeLabel = computed(() => formatUnreadBadge(unreadCount.value))
 
+function withUnread(n: RunTerminalNotification) {
+  return { ...n, unread: isUnread(n) }
+}
+
 const previewItems = computed(() =>
-  pool.value.slice(0, RUN_TERMINAL_PANEL_LIMIT).map((n) => ({
-    ...n,
-    unread: !readIds.value.has(n.runId),
-  })),
+  pool.value.slice(0, RUN_TERMINAL_PANEL_LIMIT).map(withUnread),
 )
+
+/** Full pool with unread flags for the independent notifications page. */
+const listItems = computed(() => pool.value.map(withUnread))
 
 const remainingCount = computed(() => Math.max(pool.value.length - RUN_TERMINAL_PANEL_LIMIT, 0))
 
 const poolTotal = computed(() => pool.value.length)
 
-function ensureUsername() {
-  const { user } = useAuth()
-  const next = user.value?.username?.trim() || 'anonymous'
-  if (next !== usernameKey.value) {
-    usernameKey.value = next
-    readIds.value = loadReadIds(next)
-    readIdsHydrated = true
-    return
+/** @returns true when prefs are hydrated for a settled auth identity */
+function ensureUsername(): boolean {
+  const { name, settled } = resolveUsername()
+  if (!settled) {
+    // Stay pending so the next real identity always rehydrates (no anonymous stamp).
+    prefsHydrated = false
+    return false
   }
-  if (!readIdsHydrated) {
-    readIds.value = loadReadIds(next)
-    readIdsHydrated = true
+  if (name !== usernameKey.value) {
+    usernameKey.value = name
+    const prefs = loadPrefs(name)
+    enabledAt.value = prefs.enabledAt
+    readIds.value = new Set(prefs.readIds)
+    prefsHydrated = true
+    return true
   }
+  if (!prefsHydrated) {
+    const prefs = loadPrefs(name)
+    enabledAt.value = prefs.enabledAt
+    readIds.value = new Set(prefs.readIds)
+    prefsHydrated = true
+  }
+  return true
+}
+
+function onAuthIdentityChange() {
+  const prevKey = usernameKey.value
+  const prevHydrated = prefsHydrated
+  const ok = ensureUsername()
+  if (!ok) return
+  // Rehydrate + refresh as soon as auth paints — do not wait for focus/15s poll.
+  if (!prevHydrated || prevKey !== usernameKey.value) {
+    void refresh({ source: 'auth' })
+  }
+}
+
+function installAuthWatch() {
+  if (authWatchInstalled) return
+  authWatchInstalled = true
+  const { user, ready } = useAuth()
+  watch(
+    () =>
+      [
+        // Treat missing ready (legacy mocks) as settled; only ready===false blocks.
+        ready ? ready.value : true,
+        user.value?.username?.trim() || '',
+      ] as const,
+    () => {
+      onAuthIdentityChange()
+    },
+    { flush: 'sync' },
+  )
+}
+
+function persistCurrent() {
+  persistPrefs(usernameKey.value, {
+    enabledAt: enabledAt.value || new Date().toISOString(),
+    readIds: [...readIds.value],
+  })
 }
 
 function markRead(runId: string) {
@@ -129,7 +300,20 @@ function markRead(runId: string) {
   const next = new Set(readIds.value)
   next.add(runId)
   readIds.value = next
-  persistReadIds(usernameKey.value, next)
+  persistCurrent()
+}
+
+function markAllRead() {
+  ensureUsername()
+  if (!pool.value.length) {
+    // Still persist baseline so empty sessions don't re-seed oddly.
+    persistCurrent()
+    return
+  }
+  const next = new Set(readIds.value)
+  for (const n of pool.value) next.add(n.runId)
+  readIds.value = next
+  persistCurrent()
 }
 
 async function fetchPool(signal?: AbortSignal): Promise<RunTerminalNotification[]> {
@@ -147,12 +331,27 @@ async function fetchPool(signal?: AbortSignal): Promise<RunTerminalNotification[
     const n = mapRunToNotification(run)
     if (n) mapped.push(n)
   }
+  mapped.sort(compareFinishedDesc)
   return mapped
 }
 
 async function refresh(opts?: { source?: RunTerminalRefreshSource }): Promise<void> {
-  ensureUsername()
-  if (refreshPromise) return refreshPromise
+  installAuthWatch()
+  const hydrated = ensureUsername()
+  // Auth still in flight: keep pool empty of unread semantics until identity settles.
+  if (!hydrated && opts?.source !== 'auth') {
+    return
+  }
+  if (refreshPromise) {
+    // Identity flip must not join the prior flight that may have started pre-auth.
+    if (opts?.source === 'auth') {
+      refreshGeneration++
+      abortCtrl?.abort()
+      refreshPromise = null
+    } else {
+      return refreshPromise
+    }
+  }
 
   const gen = ++refreshGeneration
   abortCtrl?.abort()
@@ -165,13 +364,15 @@ async function refresh(opts?: { source?: RunTerminalRefreshSource }): Promise<vo
     try {
       const next = await fetchPool(tc.signal)
       if (gen !== refreshGeneration) return
+      // Auth may have settled while the request was in flight.
+      ensureUsername()
       pool.value = next
       // Keep read set bounded to current pool (+ already-persisted ids intersecting pool).
       const poolIds = new Set(next.map((n) => n.runId))
       const pruned = new Set([...readIds.value].filter((id) => poolIds.has(id)))
       if (pruned.size !== readIds.value.size) {
         readIds.value = pruned
-        persistReadIds(usernameKey.value, pruned)
+        persistCurrent()
       }
       error.value = null
       lastRefreshSource.value = opts?.source ?? null
@@ -201,8 +402,9 @@ function onFocus() {
 }
 
 function startPolling() {
-  ensureUsername()
+  installAuthWatch()
   stopPolling()
+  // If auth is not ready yet, skip mount fetch; auth watch will refresh on settle.
   void refresh({ source: 'mount' })
   if (typeof window === 'undefined') return
   pollTimer = window.setInterval(() => {
@@ -234,6 +436,7 @@ export function __resetRunTerminalNotificationsForTests() {
   stopPolling()
   pool.value = []
   readIds.value = new Set()
+  enabledAt.value = ''
   usernameKey.value = 'anonymous'
   error.value = null
   lastRefreshSource.value = null
@@ -241,7 +444,8 @@ export function __resetRunTerminalNotificationsForTests() {
   loading.value = false
   refreshPromise = null
   refreshGeneration = 0
-  readIdsHydrated = false
+  prefsHydrated = false
+  // Keep authWatchInstalled: watch is idempotent and must survive test resets.
 }
 
 export function useRunTerminalNotifications() {
@@ -249,18 +453,22 @@ export function useRunTerminalNotifications() {
     pool,
     poolTotal,
     previewItems,
+    listItems,
     remainingCount,
     unreadCount,
     hasUnreadFailed,
     badgeLabel,
+    enabledAt,
     error,
     loading,
     lastRefreshSource,
     lastPeekAt,
     markRead,
+    markAllRead,
     refresh,
     startPolling,
     stopPolling,
     ensureUsername,
+    isUnread,
   }
 }

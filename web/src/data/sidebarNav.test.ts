@@ -14,4 +14,14 @@ describe('sidebarNav', () => {
     expect(allTos).not.toContain('/board')
     expect(allTos).toContain('/projects')
   })
+
+  it('exposes independent /notifications next to runs/gates without replacing them', () => {
+    const primary = sidebarNavGroups[0].items.map((i) => i.to)
+    expect(primary).toContain('/notifications')
+    expect(primary).toContain('/runs')
+    expect(primary).toContain('/gates')
+    expect(sidebarNavGroups[0].items.find((i) => i.to === '/notifications')?.labelKey).toBe(
+      'nav.notifications',
+    )
+  })
 })

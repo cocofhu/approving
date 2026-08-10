@@ -7,6 +7,7 @@
     "runs": "运行",
     "gates": "待审批",
     "artifacts": "产物",
+    "notifications": "通知",
     "groupConfig": "配置",
     "agents": "Agent 管理",
     "sandboxes": "沙箱",

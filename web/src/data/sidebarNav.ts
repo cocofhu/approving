@@ -9,6 +9,7 @@ export const sidebarNavGroups: SidebarNavGroup[] = [
       { to: '/runs', icon: 'runs', labelKey: 'nav.runs' },
       { to: '/gates', icon: 'gate', labelKey: 'nav.gates' },
       { to: '/artifacts', icon: 'artifact', labelKey: 'nav.artifacts' },
+      { to: '/notifications', icon: 'bell', labelKey: 'nav.notifications' },
     ],
   },
   {
