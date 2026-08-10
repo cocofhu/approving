@@ -119,6 +119,7 @@ async function loadPageArtifacts({ showLoading = false }: { showLoading?: boolea
       page: page.value,
       pageSize: PAGE_SIZE,
       q: searchQ.value || undefined,
+      groupBy: 'run',
     })
     if (gen !== pageLoadGen) return
     if (isPaginated(data)) {

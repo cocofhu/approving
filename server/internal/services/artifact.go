@@ -159,6 +159,50 @@ func (s *ArtifactService) AllPage(wf, projectID string, page, pageSize int, q st
 	return arts, total
 }
 
+// AllPageByRun pages by Run (not artifact row): total/pageSize are Run counts.
+// Stage 1 aggregates DISTINCT run_id under allQuery filters (wf/project/q),
+// ordered by MAX(created_at) desc. Stage 2 expands those Runs' full artifacts
+// under wf/project only — search q is NOT reapplied so a hit returns the whole Run.
+func (s *ArtifactService) AllPageByRun(wf, projectID string, page, pageSize int, q string) ([]models.Artifact, int64) {
+	var total int64
+	s.allQuery(wf, projectID, q).Distinct("artifacts.run_id").Count(&total)
+	if total == 0 || pageSize <= 0 {
+		return []models.Artifact{}, total
+	}
+	offset := (page - 1) * pageSize
+	if offset < 0 {
+		offset = 0
+	}
+
+	type runIDRow struct {
+		RunID string `gorm:"column:run_id"`
+	}
+	var rows []runIDRow
+	s.allQuery(wf, projectID, q).
+		Select("artifacts.run_id as run_id, MAX(artifacts.created_at) as latest_at").
+		Group("artifacts.run_id").
+		Order("latest_at DESC").
+		Limit(pageSize).
+		Offset(offset).
+		Scan(&rows)
+	if len(rows) == 0 {
+		return []models.Artifact{}, total
+	}
+
+	runIDs := make([]string, len(rows))
+	for i, r := range rows {
+		runIDs[i] = r.RunID
+	}
+
+	var arts []models.Artifact
+	// Expand without q: whole-Run return for search hits (wf/project retained).
+	s.allQuery(wf, projectID, "").
+		Where("artifacts.run_id IN ?", runIDs).
+		Order("artifacts.created_at DESC").
+		Scan(&arts)
+	return arts, total
+}
+
 // Get loads one artifact by id (for download).
 func (s *ArtifactService) GetByID(id string) (models.Artifact, bool) {
 	var a models.Artifact

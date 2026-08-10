@@ -2546,7 +2546,7 @@
       "emptyPlatform": "No platform artifacts",
       "emptyRun": "No artifacts in this run",
       "artSearchPlaceholder": "Search artifacts (name / node / run)…",
-      "matchCount": "({n} matched)",
+      "matchCount": "({n} runs matched)",
       "noMatchingArtifacts": "No matching artifacts",
       "expandAll": "Expand",
       "collapseAll": "Collapse"

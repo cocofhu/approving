@@ -1633,6 +1633,68 @@ func TestListArtifactsPaginationAndWf(t *testing.T) {
 	}
 }
 
+func TestListArtifactsGroupByRun(t *testing.T) {
+	h := newHarness(t)
+	now := time.Now()
+	h.db.Create(&models.Run{ID: "run-a", WorkflowID: "wf-a", WorkflowName: "A", Title: "Run A"})
+	h.db.Create(&models.Run{ID: "run-b", WorkflowID: "wf-a", WorkflowName: "A", Title: "Run B"})
+	// run-a: two artifacts; newer than run-b's single artifact.
+	h.db.Create(&models.Artifact{ID: "art-a1", RunID: "run-a", WorkflowID: "wf-a", NodeID: "plan", Name: "plan.json", CreatedAt: now.Add(-time.Minute)})
+	h.db.Create(&models.Artifact{ID: "art-a2", RunID: "run-a", WorkflowID: "wf-a", NodeID: "research", Name: "research.json", CreatedAt: now})
+	h.db.Create(&models.Artifact{ID: "art-b1", RunID: "run-b", WorkflowID: "wf-a", NodeID: "plan", Name: "other.json", CreatedAt: now.Add(-time.Hour)})
+
+	// Default path (no groupBy): pageSize=1 still means 1 artifact row.
+	w := h.do("GET", "/api/artifacts?page=1&pageSize=1&wf=wf-a", nil)
+	if w.Code != 200 {
+		t.Fatalf("default page: %d", w.Code)
+	}
+	var body map[string]any
+	json.Unmarshal(w.Body.Bytes(), &body)
+	if int(body["total"].(float64)) != 3 {
+		t.Fatalf("default total want 3 artifacts, got %v", body["total"])
+	}
+	if len(body["items"].([]any)) != 1 {
+		t.Fatalf("default pageSize=1 want 1 artifact, got %d", len(body["items"].([]any)))
+	}
+
+	// groupBy=run: pageSize=1 → 1 Run, but whole-Run expands to 2 items for run-a.
+	w = h.do("GET", "/api/artifacts?page=1&pageSize=1&wf=wf-a&groupBy=run", nil)
+	if w.Code != 200 {
+		t.Fatalf("groupBy=run: %d %s", w.Code, w.Body.String())
+	}
+	json.Unmarshal(w.Body.Bytes(), &body)
+	if int(body["total"].(float64)) != 2 {
+		t.Fatalf("groupBy=run total want 2 Runs, got %v", body["total"])
+	}
+	items := body["items"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("groupBy=run page1 want 2 arts (whole run-a), got %d", len(items))
+	}
+	for _, it := range items {
+		if it.(map[string]any)["runId"] != "run-a" {
+			t.Fatalf("page1 should only be run-a, got %v", it)
+		}
+	}
+
+	w = h.do("GET", "/api/artifacts?page=2&pageSize=1&wf=wf-a&groupBy=run", nil)
+	json.Unmarshal(w.Body.Bytes(), &body)
+	items = body["items"].([]any)
+	if len(items) != 1 || items[0].(map[string]any)["runId"] != "run-b" {
+		t.Fatalf("page2 want run-b only, got %v", items)
+	}
+
+	// Search hit research.json → whole run-a (plan.json included); total=1 Run.
+	w = h.do("GET", "/api/artifacts?page=1&pageSize=20&wf=wf-a&groupBy=run&q=research", nil)
+	json.Unmarshal(w.Body.Bytes(), &body)
+	if int(body["total"].(float64)) != 1 {
+		t.Fatalf("search Run total want 1, got %v", body["total"])
+	}
+	items = body["items"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("search whole-Run want 2 items, got %d", len(items))
+	}
+}
+
 func TestListGatesPagination(t *testing.T) {
 	h := newHarness(t)
 	now := time.Now()
