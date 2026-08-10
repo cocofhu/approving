@@ -261,7 +261,7 @@ describe('RunOutputPptModal master-detail preview', () => {
     wrapper.unmount()
   })
 
-  it('keeps footer open-run and done actions (g2.5)', async () => {
+  it('footer only has mark-as-read and emits mark-read (g3.1)', async () => {
     apiMocks.getRun.mockResolvedValue({
       id: 'run-1',
       title: 't',
@@ -270,10 +270,15 @@ describe('RunOutputPptModal master-detail preview', () => {
     })
     const wrapper = mountModal()
     await flushPromises()
-    expect(wrapper.find('[data-testid="run-output-open-run"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="run-output-done"]').exists()).toBe(true)
-    await wrapper.find('[data-testid="run-output-open-run"]').trigger('click')
-    expect(push).toHaveBeenCalledWith('/runs/run-1')
+    expect(wrapper.find('[data-testid="run-output-open-run"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="run-output-done"]').exists()).toBe(false)
+    const markBtn = wrapper.find('[data-testid="run-output-mark-read"]')
+    expect(markBtn.exists()).toBe(true)
+    expect(markBtn.text()).toContain('标记已读')
+    await markBtn.trigger('click')
+    expect(wrapper.emitted('mark-read')).toBeTruthy()
+    expect(wrapper.emitted('close')).toBeFalsy()
+    expect(push).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 })

@@ -206,7 +206,7 @@ describe('AppTopbar notifications', () => {
     wrapper.unmount()
   })
 
-  it('clicking completed item marks read and opens output modal (empty artifacts)', async () => {
+  it('clicking completed item opens output modal without marking read (g2.1)', async () => {
     seedBaseline()
     vi.mocked(api.listRuns).mockResolvedValue(
       paged([run({ id: 'ok-1', status: 'completed', title: 'done' })]),
@@ -218,6 +218,7 @@ describe('AppTopbar notifications', () => {
     await flushPromises()
     await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
     await nextTick()
+    expect(wrapper.find('[data-testid="run-notifications-badge"]').text()).toBe('1')
     await wrapper.find('[data-testid="run-notifications-item"]').trigger('click')
     await flushPromises()
     await nextTick()
@@ -231,6 +232,52 @@ describe('AppTopbar notifications', () => {
     expect(document.body.querySelector('[data-testid="run-output-empty"]')?.textContent).toContain(
       '本次运行暂无产出',
     )
+    // Opening must NOT clear unread (g2.1 / f3)
+    expect(wrapper.find('[data-testid="run-notifications-badge"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="run-notifications-badge"]').text()).toBe('1')
+    wrapper.unmount()
+  })
+
+  it('mark-as-read marks read and closes modal; Esc close keeps unread (g3.2)', async () => {
+    seedBaseline()
+    vi.mocked(api.listRuns).mockResolvedValue(
+      paged([run({ id: 'ok-1', status: 'completed', title: 'done' })]),
+    )
+    vi.mocked(api.getRun).mockResolvedValue(
+      run({ id: 'ok-1', status: 'completed', artifacts: [] }),
+    )
+    const wrapper = mountTopbar()
+    await flushPromises()
+    await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
+    await nextTick()
+    await wrapper.find('[data-testid="run-notifications-item"]').trigger('click')
+    await flushPromises()
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('[data-testid="run-output-mark-read"]')).toBeTruthy()
+    })
+    expect(wrapper.find('[data-testid="run-notifications-badge"]').text()).toBe('1')
+
+    // Passive close via AppModal close (Esc/X/mask) keeps unread
+    const modal = wrapper.findComponent({ name: 'AppModal' })
+    modal.vm.$emit('close')
+    await nextTick()
+    expect(wrapper.vm.outputOpen).toBe(false)
+    expect(wrapper.find('[data-testid="run-notifications-badge"]').text()).toBe('1')
+
+    // Re-open and mark as read
+    await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
+    await nextTick()
+    await wrapper.find('[data-testid="run-notifications-item"]').trigger('click')
+    await flushPromises()
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('[data-testid="run-output-mark-read"]')).toBeTruthy()
+    })
+    const markBtn = document.body.querySelector(
+      '[data-testid="run-output-mark-read"]',
+    ) as HTMLButtonElement
+    markBtn.click()
+    await nextTick()
+    expect(wrapper.vm.outputOpen).toBe(false)
     expect(wrapper.find('[data-testid="run-notifications-badge"]').exists()).toBe(false)
     wrapper.unmount()
   })
@@ -308,8 +355,13 @@ describe('AppTopbar notifications', () => {
     expect(document.body.querySelector('[data-testid="artifact-preview-download-raw"]')).toBeTruthy()
     expect(document.body.querySelector('[data-testid="artifact-preview-delete"]')).toBeNull()
     expect(document.body.querySelector('[data-testid="artifact-preview-copy"]')).toBeNull()
-    expect(document.body.querySelector('[data-testid="run-output-open-run"]')).toBeTruthy()
-    expect(document.body.querySelector('[data-testid="run-output-done"]')).toBeTruthy()
+    expect(document.body.querySelector('[data-testid="run-output-open-run"]')).toBeNull()
+    expect(document.body.querySelector('[data-testid="run-output-done"]')).toBeNull()
+    const markBtn = document.body.querySelector('[data-testid="run-output-mark-read"]')
+    expect(markBtn).toBeTruthy()
+    expect(markBtn?.textContent).toContain('标记已读')
+    // Opening completed item must keep unread badge (g2.1)
+    expect(wrapper.find('[data-testid="run-notifications-badge"]').exists()).toBe(true)
     // No PPT / slide metaphor
     expect(document.body.textContent || '').not.toMatch(/PPT|幻灯片|16:9/)
     wrapper.unmount()

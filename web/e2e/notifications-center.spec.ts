@@ -78,7 +78,9 @@ test.describe('shell notification center (IA separation)', () => {
     await expect(page.getByTestId('shell-main-run-detail')).toContainText('run-new-fail')
   })
 
-  test('completed click opens output modal and marks read', async ({ page }) => {
+  test('completed click opens output without marking read; mark-as-read then clears badge', async ({
+    page,
+  }) => {
     await page.goto('/notifications-center.html?scene=with-items')
     await expect(page.getByTestId('shell-main-dashboard')).toBeVisible({ timeout: 15_000 })
     await settleAuth(page)
@@ -88,10 +90,14 @@ test.describe('shell notification center (IA separation)', () => {
       .locator('[data-testid="run-notifications-item"][data-status="completed"]')
       .first()
       .click()
-    await expect(page.getByTestId('run-output-empty').or(page.getByTestId('run-output-deck'))).toBeVisible({
+    await expect(page.getByTestId('run-output-empty').or(page.getByTestId('run-output-master-detail'))).toBeVisible({
       timeout: 10_000,
     })
-    // badge should drop by 1 (3 → 2)
+    // Opening alone must NOT drop unread (3 stays 3)
+    await expect(page.getByTestId('run-notifications-badge')).toHaveText('3')
+    await page.getByTestId('run-output-mark-read').click()
+    await expect(page.getByTestId('run-output-mark-read')).toHaveCount(0)
+    // badge should drop by 1 (3 → 2) only after mark-as-read
     await expect(page.getByTestId('run-notifications-badge')).toHaveText('2')
   })
 

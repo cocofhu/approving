@@ -37,8 +37,7 @@
       "outputHint": "Select an artifact on the left to preview real content on the right. Structured artifacts default to partitioned UI; switch to raw JSON when needed.",
       "noArtifacts": "This run has no outputs",
       "noArtifactsHint": "Open the run detail to inspect execution",
-      "openRunDetail": "Open run detail",
-      "done": "Done",
+      "markAsRead": "Mark as read",
       "previewLabel": "Preview",
       "loadingOutputs": "Loading outputs…",
       "listAria": "Artifacts from this run"

@@ -111,12 +111,13 @@ async function onItemClick(item: {
   title: string
   workflowName: string
 }) {
-  markRead(item.runId)
   closePanel()
   if (item.status === 'failed') {
+    markRead(item.runId)
     await router.push(`/runs/${item.runId}`)
     return
   }
+  // completed: defer markRead until user clicks「标记已读」in the output modal
   outputContext.value = itemContext(item)
   outputRunId.value = item.runId
   outputOpen.value = true
@@ -126,6 +127,11 @@ function closeOutputModal() {
   outputOpen.value = false
   outputRunId.value = null
   outputContext.value = ''
+}
+
+function onOutputMarkRead() {
+  if (outputRunId.value) markRead(outputRunId.value)
+  closeOutputModal()
 }
 
 function onMarkAllRead() {
@@ -308,6 +314,7 @@ defineExpose({
       :run-id="outputRunId"
       :context-label="outputContext"
       @close="closeOutputModal"
+      @mark-read="onOutputMarkRead"
     />
   </header>
 </template>

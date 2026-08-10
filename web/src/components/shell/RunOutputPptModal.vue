@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
 import AppModal from '@/components/ui/AppModal.vue'
 import ArtifactPreview from '@/components/run/ArtifactPreview.vue'
 import { api } from '@/lib/api'
@@ -13,10 +12,12 @@ const props = defineProps<{
   contextLabel?: string
 }>()
 
-const emit = defineEmits<{ (e: 'close'): void }>()
+const emit = defineEmits<{
+  (e: 'close'): void
+  (e: 'mark-read'): void
+}>()
 
 const { t } = useI18n()
-const router = useRouter()
 
 const loading = ref(false)
 const loadError = ref<string | null>(null)
@@ -84,10 +85,8 @@ function close() {
   emit('close')
 }
 
-function openRunDetail() {
-  const id = props.runId
-  close()
-  if (id) void router.push(`/runs/${id}`)
+function markRead() {
+  emit('mark-read')
 }
 </script>
 
@@ -179,19 +178,11 @@ function openRunDetail() {
     <template #footer>
       <button
         type="button"
-        class="border border-line bg-transparent px-3 py-2 text-[13px] text-txt2 hover:border-line-strong hover:text-txt"
-        data-testid="run-output-open-run"
-        @click="openRunDetail"
-      >
-        {{ t('shell.runNotifications.openRunDetail') }}
-      </button>
-      <button
-        type="button"
         class="border border-transparent bg-accent px-3 py-2 text-[13px] text-white hover:brightness-110"
-        data-testid="run-output-done"
-        @click="close"
+        data-testid="run-output-mark-read"
+        @click="markRead"
       >
-        {{ t('shell.runNotifications.done') }}
+        {{ t('shell.runNotifications.markAsRead') }}
       </button>
     </template>
   </AppModal>
