@@ -72,6 +72,17 @@ describe('ProjectDetailView loading source lock', () => {
     expect(src).not.toMatch(/v-if="loading" class="h-8 w-48 animate-pulse rounded bg-elevated"/)
   })
 
+  it('initialLoading skeleton precedes real board/cron panels (v-else-if chain)', () => {
+    const skelIdx = src.indexOf('data-testid="project-detail-content-skeleton"')
+    const boardIdx = src.indexOf('data-testid="project-board-panel"')
+    const cronIdx = src.indexOf('tab === \'cronJobs\'')
+    expect(skelIdx).toBeGreaterThan(0)
+    expect(boardIdx).toBeGreaterThan(skelIdx)
+    expect(cronIdx).toBeGreaterThan(skelIdx)
+    expect(src).toMatch(/v-else-if="tab === 'board'"/)
+    expect(src).toMatch(/v-else-if="tab === 'cronJobs'"/)
+  })
+
   it('uses requestSeq on watch\(projectId\) and reloadWorkflows', () => {
     expect(src).toMatch(/createListRequestSeq/)
     expect(src).toMatch(/projectSeq\.beginListRequest/)
@@ -107,7 +118,7 @@ describe('ProjectDetailView project switch race', () => {
     apiMocks.getProjectChannel.mockResolvedValue({})
   })
 
-  async function mountDetail(id: string) {
+  async function mountDetail(id: string, query = '?tab=workflows') {
     const i18n = createI18n({
       legacy: false,
       locale: 'zh-CN',
@@ -120,7 +131,7 @@ describe('ProjectDetailView project switch race', () => {
         { path: '/projects', component: { template: '<div />' } },
       ],
     })
-    await router.push(`/projects/${id}?tab=workflows`)
+    await router.push(`/projects/${id}${query}`)
     await router.isReady()
     const wrapper = mount(
       defineComponent({
@@ -155,6 +166,21 @@ describe('ProjectDetailView project switch race', () => {
     )
     return { wrapper, router }
   }
+
+  it('default board tab first load shows content skeleton without mounting BoardView', async () => {
+    let release!: (v: unknown) => void
+    apiMocks.getProject.mockReturnValue(new Promise((resolve) => { release = resolve }))
+    apiMocks.listWorkflows.mockResolvedValue([])
+    const { wrapper } = await mountDetail('proj-a', '')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="project-detail-content-skeleton"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="project-board-panel"]').exists()).toBe(false)
+    release!(PROJ_A)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="project-detail-content-skeleton"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="project-board-panel"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
 
   it('shows title+tabs+list skeleton on first load', async () => {
     let release!: (v: unknown) => void

@@ -23,7 +23,7 @@ const loading = ref(true)
 const hasInitialLoaded = ref(false)
 const loadFailed = ref(false)
 const loadDenied = ref(false)
-const togglingId = ref<string | null>(null)
+const togglingIds = ref<string[]>([])
 const deletingId = ref<string | null>(null)
 
 const showRefreshProgress = computed(
@@ -66,10 +66,10 @@ function scheduleLabel(job: AgentCronJob): string {
 }
 
 async function onDeliverToggle(job: AgentCronJob, checked: boolean) {
-  if (togglingId.value) return
+  if (togglingIds.value.includes(job.id) || deletingId.value === job.id) return
   const prev = job.deliverToChannel
   job.deliverToChannel = checked
-  togglingId.value = job.id
+  togglingIds.value = [...togglingIds.value, job.id]
   try {
     const updated = await api.patchProjectCronJob(props.projectId, job.id, {
       deliverToChannel: checked,
@@ -80,7 +80,7 @@ async function onDeliverToggle(job: AgentCronJob, checked: boolean) {
     job.deliverToChannel = prev
     toast.error(String(e?.message || e))
   } finally {
-    togglingId.value = null
+    togglingIds.value = togglingIds.value.filter((id) => id !== job.id)
   }
 }
 
@@ -227,7 +227,7 @@ onMounted(() => void load())
                     <AppSwitch
                       data-testid="cron-deliver-toggle"
                       :model-value="job.deliverToChannel"
-                      :disabled="togglingId === job.id || deletingId === job.id"
+                      :disabled="togglingIds.includes(job.id) || deletingId === job.id"
                       :aria-label="t('pages.projectDetail.cron.deliverLabel')"
                       @update:model-value="onDeliverToggle(job, $event)"
                     />
@@ -245,7 +245,7 @@ onMounted(() => void load())
                     type="button"
                     class="text-[11px] text-err disabled:cursor-not-allowed disabled:opacity-40"
                     data-testid="project-cron-delete"
-                    :disabled="deletingId === job.id || togglingId === job.id"
+                    :disabled="deletingId === job.id || togglingIds.includes(job.id)"
                     @click="removeJob(job.id)"
                   >
                     {{ deletingId === job.id ? t('common.buttons.deleting') : t('common.buttons.delete') }}

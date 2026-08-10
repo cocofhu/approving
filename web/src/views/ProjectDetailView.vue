@@ -939,7 +939,48 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div v-if="tab === 'board'" class="min-w-0" data-testid="project-board-panel">
+      <div
+        v-if="initialLoading"
+        data-testid="project-detail-content-skeleton"
+        aria-hidden="true"
+        class="min-h-[280px]"
+      >
+        <div v-if="tab === 'workflows' && isMobile" class="flex flex-col gap-2">
+          <div
+            v-for="n in 4"
+            :key="'wf-skel-m-' + n"
+            class="flex flex-col gap-3 border border-line bg-surface p-3"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0 flex-1 space-y-2">
+                <div class="h-3.5 w-2/3 bg-elevated animate-pulse" />
+                <div class="h-2.5 w-1/2 bg-elevated animate-pulse" />
+              </div>
+              <div class="h-5 w-14 bg-elevated animate-pulse" />
+            </div>
+            <div class="h-8 w-full bg-elevated animate-pulse" />
+          </div>
+        </div>
+        <div v-else-if="tab === 'workflows'" class="overflow-hidden border border-line">
+          <div class="grid grid-cols-5 gap-3 border-b border-line bg-elevated px-3 py-2">
+            <div v-for="n in 5" :key="'wf-th-' + n" class="h-2.5 bg-elevated animate-pulse" />
+          </div>
+          <div v-for="n in 5" :key="'wf-skel-r-' + n" class="grid grid-cols-5 gap-3 border-t border-line px-3 py-3">
+            <div class="h-3 bg-elevated animate-pulse" />
+            <div class="h-3 w-2/3 bg-elevated animate-pulse" />
+            <div class="h-3 w-1/2 bg-elevated animate-pulse" />
+            <div class="h-3 w-1/3 bg-elevated animate-pulse" />
+            <div class="h-3 w-1/2 bg-elevated animate-pulse" />
+          </div>
+        </div>
+        <div v-else class="space-y-3 border border-line bg-surface p-4">
+          <div class="h-4 w-40 bg-elevated animate-pulse" />
+          <div class="h-24 w-full bg-elevated animate-pulse" />
+          <div class="h-10 w-full bg-elevated animate-pulse" />
+        </div>
+      </div>
+
+      <div v-else-if="tab === 'board'" class="min-w-0" data-testid="project-board-panel">
         <BoardView :project-id="projectId" embedded />
       </div>
 
@@ -997,47 +1038,6 @@ onUnmounted(() => {
           @updated="onNotifyProjectUpdated"
           @open-channel-settings="openNotifyChannelSettings"
         />
-      </div>
-
-      <div
-        v-if="initialLoading"
-        data-testid="project-detail-content-skeleton"
-        aria-hidden="true"
-        class="min-h-[280px]"
-      >
-        <div v-if="tab === 'workflows' && isMobile" class="flex flex-col gap-2">
-          <div
-            v-for="n in 4"
-            :key="'wf-skel-m-' + n"
-            class="flex flex-col gap-3 border border-line bg-surface p-3"
-          >
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0 flex-1 space-y-2">
-                <div class="h-3.5 w-2/3 bg-elevated animate-pulse" />
-                <div class="h-2.5 w-1/2 bg-elevated animate-pulse" />
-              </div>
-              <div class="h-5 w-14 bg-elevated animate-pulse" />
-            </div>
-            <div class="h-8 w-full bg-elevated animate-pulse" />
-          </div>
-        </div>
-        <div v-else-if="tab === 'workflows'" class="overflow-hidden border border-line">
-          <div class="grid grid-cols-5 gap-3 border-b border-line bg-elevated px-3 py-2">
-            <div v-for="n in 5" :key="'wf-th-' + n" class="h-2.5 bg-elevated animate-pulse" />
-          </div>
-          <div v-for="n in 5" :key="'wf-skel-r-' + n" class="grid grid-cols-5 gap-3 border-t border-line px-3 py-3">
-            <div class="h-3 bg-elevated animate-pulse" />
-            <div class="h-3 w-2/3 bg-elevated animate-pulse" />
-            <div class="h-3 w-1/2 bg-elevated animate-pulse" />
-            <div class="h-3 w-1/3 bg-elevated animate-pulse" />
-            <div class="h-3 w-1/2 bg-elevated animate-pulse" />
-          </div>
-        </div>
-        <div v-else class="space-y-3 border border-line bg-surface p-4">
-          <div class="h-4 w-40 bg-elevated animate-pulse" />
-          <div class="h-24 w-full bg-elevated animate-pulse" />
-          <div class="h-10 w-full bg-elevated animate-pulse" />
-        </div>
       </div>
 
       <!-- Workflows tab -->

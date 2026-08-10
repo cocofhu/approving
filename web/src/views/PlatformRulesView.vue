@@ -25,8 +25,8 @@ const saving = ref(false)
 const resetting = ref(false)
 const error = ref('')
 const savedAt = ref(0)
+/** Shared seq for list load + file select so refresh and click-file cannot cross-write. */
 const rulesSeq = createListRequestSeq()
-const fileSeq = createListRequestSeq()
 const showRefreshProgress = computed(
   () => (loading.value || resetting.value) && hasInitialLoaded.value && items.value.length > 0,
 )
@@ -48,19 +48,19 @@ async function ensureAuth() {
   }
 }
 
-async function loadList() {
-  const res = await api.listPlatformRules()
-  items.value = res.items
-  if (!activeFile.value && res.items.length) {
-    activeFile.value = res.items[0].file
-  }
+function ruleSource(src: string | undefined): 'global' | 'embed' {
+  return src === 'embed' ? 'embed' : 'global'
 }
 
-async function loadFile(file: string) {
-  if (!file) return
+/** Fetch only — callers must check isCurrentSeq before writing refs. */
+async function fetchRuleList() {
+  const res = await api.listPlatformRules()
+  return res.items
+}
+
+async function fetchRuleFile(file: string) {
   const item = await api.getPlatformRule(file)
-  content.value = item.content
-  source.value = item.source === 'embed' ? 'embed' : 'global'
+  return { content: item.content, source: ruleSource(item.source) }
 }
 
 async function loadAll() {
@@ -71,9 +71,20 @@ async function loadAll() {
   loadDenied.value = false
   try {
     await ensureAuth()
-    await loadList()
-    if (activeFile.value) await loadFile(activeFile.value)
+    const list = await fetchRuleList()
     if (!rulesSeq.isCurrentSeq(localSeq)) return
+    items.value = list
+    let file = activeFile.value
+    if (!file && list.length) {
+      file = list[0].file
+      activeFile.value = file
+    }
+    if (file) {
+      const data = await fetchRuleFile(file)
+      if (!rulesSeq.isCurrentSeq(localSeq)) return
+      content.value = data.content
+      source.value = data.source
+    }
   } catch (e: any) {
     if (!rulesSeq.isCurrentSeq(localSeq)) return
     if (items.value.length > 0) {
@@ -92,14 +103,16 @@ async function loadAll() {
 }
 
 async function selectFile(file: string) {
-  const localSeq = fileSeq.beginListRequest()
+  const localSeq = rulesSeq.beginListRequest()
   activeFile.value = file
   error.value = ''
   try {
-    await loadFile(file)
-    if (!fileSeq.isCurrentSeq(localSeq)) return
+    const data = await fetchRuleFile(file)
+    if (!rulesSeq.isCurrentSeq(localSeq)) return
+    content.value = data.content
+    source.value = data.source
   } catch (e: any) {
-    if (!fileSeq.isCurrentSeq(localSeq)) return
+    if (!rulesSeq.isCurrentSeq(localSeq)) return
     error.value = e?.message || t('pages.platformRules.loadFailed')
   }
 }
@@ -112,7 +125,8 @@ async function save() {
     const item = await api.savePlatformRule(activeFile.value, content.value)
     content.value = item.content
     source.value = 'global'
-    await loadList()
+    const list = await fetchRuleList()
+    items.value = list
     savedAt.value = Date.now()
   } catch (e: any) {
     error.value = e?.message || t('pages.platformRules.saveFailed')
@@ -129,7 +143,8 @@ async function resetToEmbed() {
     const item = await api.resetPlatformRule(activeFile.value)
     content.value = item.content
     source.value = 'global'
-    await loadList()
+    const list = await fetchRuleList()
+    items.value = list
     savedAt.value = Date.now()
   } catch (e: any) {
     error.value = e?.message || t('pages.platformRules.resetFailed')

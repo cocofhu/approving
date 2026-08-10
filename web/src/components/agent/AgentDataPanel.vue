@@ -37,8 +37,6 @@ function classifyLoadError(err: unknown) {
   const status = httpStatusOf(err)
   loadDenied.value = status === 403
   loadFailed.value = status !== 403
-  if (status === 403) return
-  toast.error(permissionMessage(err))
 }
 
 watch(
@@ -361,10 +359,11 @@ const showSkeleton = computed(
                 type="button"
                 class="rounded bg-accent px-3 text-[12px] text-white disabled:opacity-50"
                 :class="isMobile ? 'min-h-11 px-4' : 'py-1.5'"
+                data-testid="agent-data-mem-save"
                 :disabled="memSaving"
                 @click="saveMemory"
               >
-                {{ memEditingId ? t('common.buttons.save') : t('pages.agentStudio.data.memory.add') }}
+                {{ memSaving ? t('common.buttons.saving') : memEditingId ? t('common.buttons.save') : t('pages.agentStudio.data.memory.add') }}
               </button>
               <button
                 v-if="memEditingId"

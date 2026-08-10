@@ -108,6 +108,32 @@ describe('PmCronJobsPanel', () => {
     })
   })
 
+  it('deliver toggle on one row does not block another row', async () => {
+    useAuth().setUser({ username: 'u', expiresAt: 't', isAdmin: false })
+    const jobA = { ...SAMPLE_JOB, id: 'cron-1', name: '任务一', deliverToChannel: false }
+    const jobB = { ...SAMPLE_JOB, id: 'cron-2', name: '任务二', deliverToChannel: false }
+    apiMocks.listProjectCronJobs.mockResolvedValue({ items: [jobA, jobB] })
+    let releaseA!: (v: unknown) => void
+    apiMocks.patchProjectCronJob.mockImplementation((_pid: string, id: string) => {
+      if (id === 'cron-1') return new Promise((resolve) => { releaseA = resolve })
+      return Promise.resolve({ ...jobB, deliverToChannel: true })
+    })
+    const w = mountPanel()
+    await flushPromises()
+    const toggles = w.findAll('[data-testid="cron-deliver-toggle"]')
+    expect(toggles).toHaveLength(2)
+    await toggles[0].trigger('click')
+    await flushPromises()
+    expect((toggles[0].element as HTMLButtonElement).disabled).toBe(true)
+    expect((toggles[1].element as HTMLButtonElement).disabled).toBe(false)
+    await toggles[1].trigger('click')
+    await flushPromises()
+    expect(apiMocks.patchProjectCronJob).toHaveBeenCalledWith('proj-1', 'cron-1', { deliverToChannel: true })
+    expect(apiMocks.patchProjectCronJob).toHaveBeenCalledWith('proj-1', 'cron-2', { deliverToChannel: true })
+    releaseA!({ ...jobA, deliverToChannel: true })
+    await flushPromises()
+  })
+
   it('patches deliverToChannel for admin', async () => {
     useAuth().setUser({ username: 'admin', expiresAt: 't', isAdmin: true })
     const w = mountPanel()

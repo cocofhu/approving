@@ -9,6 +9,8 @@ import AgentDataPanel from './AgentDataPanel.vue'
 
 const apiMocks = vi.hoisted(() => ({
   listAgentMemories: vi.fn(),
+  upsertAgentMemory: vi.fn(),
+  updateAgentMemory: vi.fn(),
   listAgentThreads: vi.fn(),
   listAgentThreadMessages: vi.fn(),
   deleteAgentThread: vi.fn(),
@@ -30,6 +32,8 @@ vi.mock('@/lib/api', async () => {
     api: {
       ...actual.api,
       listAgentMemories: apiMocks.listAgentMemories,
+      upsertAgentMemory: apiMocks.upsertAgentMemory,
+      updateAgentMemory: apiMocks.updateAgentMemory,
       listAgentThreads: apiMocks.listAgentThreads,
       listAgentThreadMessages: apiMocks.listAgentThreadMessages,
       deleteAgentThread: apiMocks.deleteAgentThread,
@@ -235,11 +239,42 @@ describe('AgentDataPanel', () => {
     expect(apiMocks.patchAgentCronJob).toHaveBeenCalledWith('demo-agent', 'cron-1', { enabled: false })
   })
 
-  it('maps admin required errors to Chinese tip', async () => {
+  it('first-load generic failure shows red card without toast', async () => {
     useAuth().setUser({ username: 'admin', expiresAt: 't', isAdmin: true })
-    apiMocks.listAgentCronJobs.mockRejectedValue(new Error('admin required'))
+    apiMocks.listAgentMemories.mockRejectedValue(new Error('admin required'))
     const w = mountPanel()
-    await openTab(w, /定时任务/)
+    await flushPromises()
+    expect(w.find('[data-testid="agent-data-failed"]').exists()).toBe(true)
+    expect(w.text()).toContain('加载失败')
+    expect(w.text()).toContain('重试')
+    expect(toastError).not.toHaveBeenCalled()
+  })
+
+  it('keepStale refresh failure toasts and keeps old list', async () => {
+    useAuth().setUser({ username: 'admin', expiresAt: 't', isAdmin: true })
+    apiMocks.listAgentMemories.mockResolvedValue({
+      items: [
+        {
+          id: 'm1',
+          projectId: 'proj-1',
+          agentName: 'demo-agent',
+          title: '部署约定',
+          content: '确认配置',
+          source: 'user',
+          updatedBy: 'admin',
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    })
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.text()).toContain('部署约定')
+    apiMocks.listAgentMemories.mockRejectedValue(new Error('admin required'))
+    await w.setProps({ agentName: 'other-agent' })
+    await flushPromises()
+    expect(w.text()).toContain('部署约定')
+    expect(w.find('[data-testid="agent-data-failed"]').exists()).toBe(false)
     expect(toastError).toHaveBeenCalledWith('需要平台管理员权限')
   })
 
@@ -351,6 +386,46 @@ describe('AgentDataPanel', () => {
     expect(w.get('[data-testid="agent-cron-delete"]').text()).toBe('删除中…')
     releaseJob!()
     await flushPromises()
+  })
+
+  it('memory save button shows Saving… pending and is disabled', async () => {
+    useAuth().setUser({ username: 'u', expiresAt: 't', isAdmin: false })
+    apiMocks.listAgentMemories.mockResolvedValue({ items: [] })
+    let release!: (v: unknown) => void
+    apiMocks.upsertAgentMemory.mockReturnValue(new Promise((resolve) => { release = resolve }))
+    const w = mountPanel()
+    await flushPromises()
+    await w.find('input').setValue('新记忆')
+    const saveBtn = w.get('[data-testid="agent-data-mem-save"]')
+    expect(saveBtn.text()).toBe('添加记忆')
+    await saveBtn.trigger('click')
+    await flushPromises()
+    expect(saveBtn.text()).toBe('保存中…')
+    expect((saveBtn.element as HTMLButtonElement).disabled).toBe(true)
+    release!({
+      id: 'm-new',
+      projectId: 'proj-1',
+      agentName: 'demo-agent',
+      title: '新记忆',
+      content: '',
+      source: 'user',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    apiMocks.listAgentMemories.mockResolvedValue({
+      items: [{
+        id: 'm-new',
+        projectId: 'proj-1',
+        agentName: 'demo-agent',
+        title: '新记忆',
+        content: '',
+        source: 'user',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      }],
+    })
+    await flushPromises()
+    expect(w.get('[data-testid="agent-data-mem-save"]').text()).toBe('添加记忆')
   })
 
   it('403 uses independent denied surface instead of toast-only', async () => {
