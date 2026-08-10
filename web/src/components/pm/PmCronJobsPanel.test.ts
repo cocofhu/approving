@@ -58,7 +58,12 @@ function mountPanel() {
     props: { projectId: 'proj-1' },
     global: {
       plugins: [i18n],
-      stubs: { EmptyState: true, StatusPill: true },
+      stubs: {
+        EmptyState: { props: ['title'], template: '<div data-testid="cron-empty">{{ title }}</div>' },
+        StatusPill: true,
+        Icon: true,
+        AppButton: { template: '<button type="button" v-bind="$attrs"><slot /></button>' },
+      },
     },
   })
 }
@@ -145,5 +150,48 @@ describe('PmCronJobsPanel', () => {
     expect(toastSuccess).toHaveBeenCalled()
     expect(toastError).not.toHaveBeenCalled()
     expect(w.text()).not.toContain('每日汇报')
+  })
+
+  it('shows table skeleton before rows arrive', async () => {
+    useAuth().setUser({ username: 'u', expiresAt: 't', isAdmin: false })
+    let release!: (v: unknown) => void
+    apiMocks.listProjectCronJobs.mockReturnValue(new Promise((resolve) => { release = resolve }))
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.find('[data-testid="cron-table-skeleton"]').exists()).toBe(true)
+    expect(w.text()).not.toContain('加载中')
+    release!({ items: [{ ...SAMPLE_JOB }] })
+    await flushPromises()
+    expect(w.find('[data-testid="cron-table-skeleton"]').exists()).toBe(false)
+    expect(w.text()).toContain('每日汇报')
+  })
+
+  it('delete keeps old row visible until reload finishes and shows deleting pending', async () => {
+    useAuth().setUser({ username: 'u', expiresAt: 't', isAdmin: false })
+    apiMocks.listProjectCronJobs.mockResolvedValue({ items: [{ ...SAMPLE_JOB }] })
+    let releaseDel!: () => void
+    apiMocks.deleteProjectCronJob.mockReturnValue(new Promise<void>((resolve) => { releaseDel = resolve }))
+    const w = mountPanel()
+    await flushPromises()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await w.get('[data-testid="project-cron-delete"]').trigger('click')
+    await flushPromises()
+    expect(w.get('[data-testid="project-cron-delete"]').text()).toBe('删除中…')
+    expect((w.get('[data-testid="project-cron-delete"]').element as HTMLButtonElement).disabled).toBe(true)
+    expect(w.text()).toContain('每日汇报')
+    releaseDel!()
+    apiMocks.listProjectCronJobs.mockResolvedValue({ items: [{ ...SAMPLE_JOB }] })
+    await flushPromises()
+  })
+
+  it('failure is distinct from empty', async () => {
+    useAuth().setUser({ username: 'u', expiresAt: 't', isAdmin: false })
+    apiMocks.listProjectCronJobs.mockRejectedValue(Object.assign(new Error('down'), { status: 500 }))
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.find('[data-testid="cron-failed"]').exists()).toBe(true)
+    expect(w.find('[data-testid="cron-empty"]').exists()).toBe(false)
+    expect(w.text()).toContain('加载失败')
+    expect(w.text()).toContain('重试')
   })
 })

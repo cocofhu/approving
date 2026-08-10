@@ -8,6 +8,8 @@ import type { ProjectMemoryItem, ChatThread, ChatMessage, AgentCronJob } from '@
 import { fmtTime } from '@/lib/format'
 import { useToast } from '@/lib/useToast'
 import { useBreakpoint } from '@/lib/useBreakpoint'
+import { createListRequestSeq, httpStatusOf } from '@/lib/listRequestSeq'
+import AppButton from '@/components/ui/AppButton.vue'
 
 export type DataSubTab = 'memory' | 'context' | 'jobs'
 
@@ -22,8 +24,22 @@ const toast = useToast()
 const { isMobile } = useBreakpoint()
 
 const adminRequiredTip = computed(() => t('pages.projectDetail.pm.adminRequired'))
+const dataSeq = createListRequestSeq()
 
 const sub = ref<DataSubTab>(props.subTab || 'memory')
+const loadFailed = ref(false)
+const loadDenied = ref(false)
+const deletingMemId = ref<string | null>(null)
+const deletingThreadId = ref<string | null>(null)
+const deletingJobId = ref<string | null>(null)
+
+function classifyLoadError(err: unknown) {
+  const status = httpStatusOf(err)
+  loadDenied.value = status === 403
+  loadFailed.value = status !== 403
+  if (status === 403) return
+  toast.error(permissionMessage(err))
+}
 
 watch(
   () => props.subTab,
@@ -51,14 +67,24 @@ const memContent = ref('')
 const memEditingId = ref<string | null>(null)
 const memSaving = ref(false)
 
-async function loadMemories() {
+async function loadMemories(localSeq = dataSeq.beginListRequest()) {
+  const keepStale = memories.value.length > 0
   memLoading.value = true
+  loadFailed.value = false
+  loadDenied.value = false
   try {
     const res = await api.listAgentMemories(props.agentName)
+    if (!dataSeq.isCurrentSeq(localSeq)) return
     memories.value = res.items || []
-  } catch (e: any) {
-    toast.error(permissionMessage(e))
+  } catch (e: unknown) {
+    if (!dataSeq.isCurrentSeq(localSeq)) return
+    if (keepStale) {
+      toast.error(permissionMessage(e))
+      return
+    }
+    classifyLoadError(e)
   } finally {
+    if (!dataSeq.isCurrentSeq(localSeq)) return
     memLoading.value = false
   }
 }
@@ -96,12 +122,15 @@ async function saveMemory() {
   }
 }
 async function removeMemory(id: string) {
+  deletingMemId.value = id
   try {
     await api.deleteAgentMemory(props.agentName, id)
     if (memEditingId.value === id) resetMemForm()
     await loadMemories()
   } catch (e: any) {
     toast.error(permissionMessage(e))
+  } finally {
+    deletingMemId.value = null
   }
 }
 async function clearMemories() {
@@ -122,15 +151,25 @@ const openThreadId = ref<string | null>(null)
 const threadMessages = ref<ChatMessage[]>([])
 const msgLoading = ref(false)
 
-async function loadThreads() {
+async function loadThreads(localSeq = dataSeq.beginListRequest()) {
+  const keepStale = threads.value.length > 0
   ctxLoading.value = true
+  loadFailed.value = false
+  loadDenied.value = false
   try {
     const res = await api.listAgentThreads(props.agentName)
+    if (!dataSeq.isCurrentSeq(localSeq)) return
     threads.value = res.items || []
     threadCounts.value = res.messageCounts || {}
-  } catch (e: any) {
-    toast.error(permissionMessage(e))
+  } catch (e: unknown) {
+    if (!dataSeq.isCurrentSeq(localSeq)) return
+    if (keepStale) {
+      toast.error(permissionMessage(e))
+      return
+    }
+    classifyLoadError(e)
   } finally {
+    if (!dataSeq.isCurrentSeq(localSeq)) return
     ctxLoading.value = false
   }
 }
@@ -148,6 +187,7 @@ async function openThread(id: string) {
 }
 async function removeThread(id: string) {
   if (!confirm(t('pages.agentStudio.data.context.deleteConfirm'))) return
+  deletingThreadId.value = id
   try {
     await api.deleteAgentThread(props.agentName, id)
     if (openThreadId.value === id) {
@@ -157,6 +197,8 @@ async function removeThread(id: string) {
     await loadThreads()
   } catch (e: any) {
     toast.error(permissionMessage(e))
+  } finally {
+    deletingThreadId.value = null
   }
 }
 
@@ -164,14 +206,24 @@ const jobs = ref<AgentCronJob[]>([])
 const jobsLoading = ref(false)
 const jobBusy = ref<string | null>(null)
 
-async function loadJobs() {
+async function loadJobs(localSeq = dataSeq.beginListRequest()) {
+  const keepStale = jobs.value.length > 0
   jobsLoading.value = true
+  loadFailed.value = false
+  loadDenied.value = false
   try {
     const res = await api.listAgentCronJobs(props.agentName)
+    if (!dataSeq.isCurrentSeq(localSeq)) return
     jobs.value = res.items || []
-  } catch (e: any) {
-    toast.error(permissionMessage(e))
+  } catch (e: unknown) {
+    if (!dataSeq.isCurrentSeq(localSeq)) return
+    if (keepStale) {
+      toast.error(permissionMessage(e))
+      return
+    }
+    classifyLoadError(e)
   } finally {
+    if (!dataSeq.isCurrentSeq(localSeq)) return
     jobsLoading.value = false
   }
 }
@@ -203,28 +255,43 @@ async function patchJob(job: AgentCronJob, body: { enabled?: boolean; deliverToC
 }
 async function removeJob(id: string) {
   if (!confirm(t('pages.agentStudio.data.jobs.deleteConfirm'))) return
+  deletingJobId.value = id
   try {
     await api.deleteAgentCronJob(props.agentName, id)
     await loadJobs()
     toast.success(t('pages.agentStudio.data.jobs.deleted'))
   } catch (e: any) {
     toast.error(permissionMessage(e))
+  } finally {
+    deletingJobId.value = null
   }
 }
 
 function reload() {
+  const localSeq = dataSeq.beginListRequest()
   if (sub.value === 'memory') {
-    void loadMemories()
+    void loadMemories(localSeq)
   } else if (sub.value === 'context') {
-    void loadThreads()
-  } else void loadJobs()
+    void loadThreads(localSeq)
+  } else void loadJobs(localSeq)
 }
 watch(() => [props.agentName, sub.value], () => reload())
 onMounted(() => reload())
+
+const tabLoading = computed(() =>
+  sub.value === 'memory' ? memLoading.value : sub.value === 'context' ? ctxLoading.value : jobsLoading.value,
+)
+const tabHasItems = computed(() =>
+  sub.value === 'memory' ? memories.value.length > 0 : sub.value === 'context' ? threads.value.length > 0 : jobs.value.length > 0,
+)
+const showRefreshProgress = computed(() => tabLoading.value && tabHasItems.value)
+const showSkeleton = computed(
+  () => tabLoading.value && !tabHasItems.value && !loadFailed.value && !loadDenied.value,
+)
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col">
+  <div class="flex h-full min-h-0 flex-col" data-testid="agent-data-panel" :aria-busy="tabLoading ? 'true' : 'false'">
     <div class="border-b border-line px-4 py-3">
       <h3 class="text-sm font-semibold text-txt">{{ t('pages.agentStudio.data.title') }}</h3>
       <p class="mt-0.5 text-[12px] text-txt3">
@@ -248,8 +315,43 @@ onMounted(() => reload())
     </div>
 
     <div class="scroll-area min-h-0 flex-1 overflow-auto p-4">
+      <div
+        v-if="showRefreshProgress"
+        class="mb-3 h-[2px] overflow-hidden bg-line"
+        data-testid="agent-data-thin-progress"
+        aria-hidden="true"
+      >
+        <i class="admin-list-thin-bar bg-accent" />
+      </div>
+
+      <div
+        v-if="loadDenied"
+        role="status"
+        data-testid="agent-data-denied"
+        class="border border-warn/40 bg-warn/10 px-5 py-10 text-center"
+      >
+        <Icon name="lock" :size="22" class="mx-auto mb-3 text-warn" />
+        <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.permissionDeniedTitle') }}</h3>
+        <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.permissionDeniedDesc') }}</p>
+        <AppButton class="mt-4" variant="outline" data-testid="agent-data-retry" @click="reload">
+          {{ t('common.buttons.retry') }}
+        </AppButton>
+      </div>
+      <div
+        v-else-if="loadFailed"
+        role="status"
+        data-testid="agent-data-failed"
+        class="border border-err/40 bg-err/10 px-5 py-10 text-center"
+      >
+        <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.loadFailedTitle') }}</h3>
+        <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.loadFailedDesc') }}</p>
+        <AppButton class="mt-4" variant="outline" data-testid="agent-data-retry" @click="reload">
+          {{ t('common.buttons.retry') }}
+        </AppButton>
+      </div>
+
       <!-- memory: any authenticated user -->
-      <div v-if="sub === 'memory'" class="space-y-4">
+      <div v-else-if="sub === 'memory'" class="space-y-4" :class="showRefreshProgress ? 'opacity-[0.55]' : ''">
         <div class="rounded border border-line bg-base p-3">
           <div class="grid gap-2">
             <input v-model="memTitle" class="rounded border border-line bg-surface px-3 py-2 text-sm" :placeholder="t('pages.agentStudio.data.memory.titlePh')" />
@@ -281,7 +383,17 @@ onMounted(() => reload())
             </div>
           </div>
         </div>
-        <div v-if="memLoading" class="text-sm text-txt3">{{ t('common.buttons.loading') }}</div>
+        <div
+          v-if="showSkeleton"
+          class="space-y-2"
+          data-testid="agent-data-mem-skeleton"
+          aria-hidden="true"
+        >
+          <div v-for="n in 3" :key="'mem-skel-' + n" class="rounded border border-line bg-base p-3">
+            <div class="h-3.5 w-1/3 bg-elevated animate-pulse" />
+            <div class="mt-2 h-10 w-full bg-elevated animate-pulse" />
+          </div>
+        </div>
         <div v-else-if="!memories.length" class="text-sm text-txt3">{{ t('pages.agentStudio.data.memory.empty') }}</div>
         <div v-else class="space-y-2">
           <div v-for="m in memories" :key="m.id" class="rounded border border-line bg-base p-3">
@@ -302,10 +414,12 @@ onMounted(() => reload())
                 >{{ t('common.buttons.edit') }}</button>
                 <button
                   type="button"
-                  class="rounded border border-err/30 px-2 text-[11px] text-err"
+                  class="rounded border border-err/30 px-2 text-[11px] text-err disabled:opacity-40"
                   :class="isMobile ? 'min-h-11 flex-1 px-3' : 'py-1'"
+                  :disabled="deletingMemId === m.id"
+                  data-testid="agent-mem-delete"
                   @click="removeMemory(m.id)"
-                >{{ t('common.buttons.delete') }}</button>
+                >{{ deletingMemId === m.id ? t('common.buttons.deleting') : t('common.buttons.delete') }}</button>
               </div>
             </div>
           </div>
@@ -313,9 +427,19 @@ onMounted(() => reload())
       </div>
 
       <!-- context: any authenticated user -->
-      <div v-else-if="sub === 'context'" class="space-y-3">
+      <div v-else-if="sub === 'context'" class="space-y-3" :class="showRefreshProgress ? 'opacity-[0.55]' : ''">
         <p class="text-[12px] text-txt3">{{ t('pages.agentStudio.data.context.hint') }}</p>
-        <div v-if="ctxLoading" class="text-sm text-txt3">{{ t('common.buttons.loading') }}</div>
+        <div
+          v-if="showSkeleton"
+          class="space-y-2"
+          data-testid="agent-data-ctx-skeleton"
+          aria-hidden="true"
+        >
+          <div v-for="n in 3" :key="'ctx-skel-' + n" class="rounded border border-line bg-base px-3 py-2">
+            <div class="h-3.5 w-1/2 bg-elevated animate-pulse" />
+            <div class="mt-2 h-2.5 w-2/3 bg-elevated animate-pulse" />
+          </div>
+        </div>
         <div v-else-if="!threads.length" class="text-sm text-txt3">{{ t('pages.agentStudio.data.context.empty') }}</div>
         <div v-else class="space-y-2">
           <div v-for="th in threads" :key="th.id" class="rounded border border-line bg-base">
@@ -326,8 +450,11 @@ onMounted(() => reload())
               </button>
               <button
                 type="button"
-                class="rounded border border-err/30 px-2 text-[11px] text-err"
+                class="rounded border border-err/30 px-2 text-[11px] text-err disabled:opacity-40"
                 :class="isMobile ? 'min-h-11 min-w-11' : 'py-1'"
+                :disabled="deletingThreadId === th.id"
+                data-testid="agent-thread-delete"
+                :aria-label="deletingThreadId === th.id ? t('common.buttons.deleting') : t('common.buttons.delete')"
                 @click="removeThread(th.id)"
               >
                 <Icon name="trash" :size="12" />
@@ -347,11 +474,39 @@ onMounted(() => reload())
       </div>
 
       <!-- jobs: list + write for any authenticated user -->
-      <div v-else class="space-y-3">
+      <div v-else class="space-y-3" :class="showRefreshProgress ? 'opacity-[0.55]' : ''">
         <p class="text-[12px] text-txt3">
           {{ t('pages.agentStudio.data.jobs.hint') }}
         </p>
-        <div v-if="jobsLoading" class="text-sm text-txt3">{{ t('common.buttons.loading') }}</div>
+        <div
+          v-if="showSkeleton"
+          class="overflow-x-auto border border-line"
+          data-testid="agent-data-jobs-skeleton"
+          aria-hidden="true"
+        >
+          <div v-if="isMobile" class="space-y-3 p-2">
+            <div v-for="n in 3" :key="'job-skel-m-' + n" class="rounded border border-line p-3">
+              <div class="h-3.5 w-1/2 bg-elevated animate-pulse" />
+              <div class="mt-2 h-8 w-full bg-elevated animate-pulse" />
+            </div>
+          </div>
+          <table v-else class="w-full text-left text-sm">
+            <thead class="text-xs text-txt3">
+              <tr>
+                <th class="px-2 py-1.5">{{ t('pages.agentStudio.data.jobs.colName') }}</th>
+                <th class="px-2 py-1.5">{{ t('pages.agentStudio.data.jobs.colSchedule') }}</th>
+                <th class="px-2 py-1.5">{{ t('pages.agentStudio.data.jobs.colEnabled') }}</th>
+                <th class="px-2 py-1.5">{{ t('pages.agentStudio.data.jobs.colDeliver') }}</th>
+                <th class="px-2 py-1.5" />
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="n in 4" :key="'job-skel-' + n" class="border-t border-line">
+                <td v-for="c in 5" :key="'jc' + c" class="px-2 py-2"><div class="h-3 w-3/4 bg-elevated animate-pulse" /></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <div v-else-if="!jobs.length" class="text-sm text-txt3">{{ t('pages.agentStudio.data.jobs.empty') }}</div>
 
         <!-- narrow: card stack (no 5-col table) -->
@@ -389,10 +544,10 @@ onMounted(() => reload())
                 type="button"
                 class="mt-1 min-h-11 w-full rounded border border-err/30 px-3 text-[12px] text-err disabled:cursor-not-allowed disabled:opacity-40"
                 data-testid="agent-cron-delete"
-                :disabled="jobBusy === job.id"
+                :disabled="jobBusy === job.id || deletingJobId === job.id"
                 @click="removeJob(job.id)"
               >
-                {{ t('common.buttons.delete') }}
+                {{ deletingJobId === job.id ? t('common.buttons.deleting') : t('common.buttons.delete') }}
               </button>
             </div>
           </div>
@@ -436,9 +591,10 @@ onMounted(() => reload())
                   type="button"
                   class="text-[11px] text-err disabled:cursor-not-allowed disabled:opacity-40"
                   data-testid="agent-cron-delete"
+                  :disabled="jobBusy === job.id || deletingJobId === job.id"
                   @click="removeJob(job.id)"
                 >
-                  {{ t('common.buttons.delete') }}
+                  {{ deletingJobId === job.id ? t('common.buttons.deleting') : t('common.buttons.delete') }}
                 </button>
               </td>
             </tr>

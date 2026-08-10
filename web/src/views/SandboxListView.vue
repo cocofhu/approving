@@ -6,6 +6,7 @@ import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import { api, type SandboxView } from '@/lib/api'
+import { httpStatusOf } from '@/lib/listRequestSeq'
 import { copyToClipboard } from '@/lib/copyToClipboard'
 import { sandboxPurposeLabelKey, sandboxSourceTextKey } from '@/lib/sandboxPurposeLabel'
 import { useBreakpoint } from '@/lib/useBreakpoint'
@@ -26,6 +27,7 @@ const rows = ref<SandboxView[]>([])
 const loading = ref(false)
 const initialLoading = ref(false)
 const initialLoadFailed = ref(false)
+const loadDenied = ref(false)
 const error = ref('')
 const now = ref(Date.now())
 const showTableLoading = computed(() => loading.value && hasInitialLoaded)
@@ -60,6 +62,7 @@ async function load({ showLoading = false }: { showLoading?: boolean } = {}) {
   if (isFirstLoad) {
     initialLoading.value = true
     initialLoadFailed.value = false
+    loadDenied.value = false
   } else if (showLoading) {
     activeLoadingSeq = localSeq
     loading.value = true
@@ -71,10 +74,13 @@ async function load({ showLoading = false }: { showLoading?: boolean } = {}) {
     rows.value = data
     error.value = ''
     if (initialLoadFailed.value) initialLoadFailed.value = false
+    if (loadDenied.value) loadDenied.value = false
   } catch (e: any) {
     if (localSeq !== requestSeq) return
     if (isFirstLoad) {
-      initialLoadFailed.value = true
+      const status = httpStatusOf(e)
+      loadDenied.value = status === 403
+      initialLoadFailed.value = status !== 403
       error.value = String(e?.message || e)
     } else {
       /* keep previous list; surface error banner for actions/poll awareness */
@@ -288,7 +294,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div>
+  <div data-testid="sandbox-list-panel" :aria-busy="loading || initialLoading ? 'true' : 'false'">
     <div class="mb-5 flex flex-col items-start gap-2.5 md:flex-row md:items-end md:justify-between">
       <div class="min-w-0">
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.sandboxes.title') }}</h2>
@@ -297,7 +303,19 @@ onBeforeUnmount(() => {
       <AppButton variant="outline" icon="trash" @click="cleanupOpen = true">{{ t('common.buttons.cleanupIdle') }}</AppButton>
     </div>
 
-    <div v-if="error && !initialLoading" class="card mb-3 border-err/40 p-3 text-[13px] text-err">{{ t('pages.sandboxes.errorPrefix') }}{{ error }}</div>
+    <div
+      v-if="error && !initialLoading && rows.length && !initialLoadFailed && !loadDenied"
+      class="card mb-3 border-err/40 p-3 text-[13px] text-err"
+    >{{ t('pages.sandboxes.errorPrefix') }}{{ error }}</div>
+
+    <div
+      v-if="showTableLoading"
+      class="mb-2 h-[2px] overflow-hidden bg-line"
+      data-testid="sandbox-list-thin-progress"
+      aria-hidden="true"
+    >
+      <i class="admin-list-thin-bar bg-accent" />
+    </div>
 
     <!-- Mobile card list -->
     <div v-if="isMobile" :class="{ 'table-loading': showTableLoading }">
@@ -319,11 +337,30 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </template>
-      <div v-else-if="initialLoadFailed" class="card px-5 py-10 text-center">
-        <div class="mx-auto mb-2.5 inline-flex h-10 w-10 items-center justify-center border border-err/30 bg-err/10 text-err">
-          <Icon name="alert" :size="18" />
-        </div>
-        <div class="text-[13px] font-medium text-txt">{{ t('pages.sandboxes.errorPrefix') }}{{ error }}</div>
+      <div
+        v-else-if="loadDenied"
+        role="status"
+        data-testid="sandbox-list-denied"
+        class="card border-warn/40 bg-warn/10 px-5 py-10 text-center"
+      >
+        <Icon name="lock" :size="22" class="mx-auto mb-3 text-warn" />
+        <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.permissionDeniedTitle') }}</h3>
+        <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.permissionDeniedDesc') }}</p>
+        <AppButton class="mt-4" variant="outline" data-testid="sandbox-list-retry" @click="load({ showLoading: true })">
+          {{ t('common.buttons.retry') }}
+        </AppButton>
+      </div>
+      <div
+        v-else-if="initialLoadFailed"
+        role="status"
+        data-testid="sandbox-list-failed"
+        class="card border-err/40 bg-err/10 px-5 py-10 text-center"
+      >
+        <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.loadFailedTitle') }}</h3>
+        <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.loadFailedDesc') }}</p>
+        <AppButton class="mt-4" variant="outline" data-testid="sandbox-list-retry" @click="load({ showLoading: true })">
+          {{ t('common.buttons.retry') }}
+        </AppButton>
       </div>
       <div v-else-if="!rows.length" class="card px-5 py-10 text-center text-[13px] text-txt3">
         {{ t('pages.sandboxes.empty') }}
@@ -458,12 +495,27 @@ onBeforeUnmount(() => {
                 </td>
               </tr>
             </template>
+            <tr v-else-if="loadDenied">
+              <td colspan="8" class="px-4 py-10 text-center">
+                <div role="status" data-testid="sandbox-list-denied" class="border border-warn/40 bg-warn/10 px-5 py-8">
+                  <Icon name="lock" :size="22" class="mx-auto mb-3 text-warn" />
+                  <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.permissionDeniedTitle') }}</h3>
+                  <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.permissionDeniedDesc') }}</p>
+                  <AppButton class="mt-4" variant="outline" data-testid="sandbox-list-retry" @click="load({ showLoading: true })">
+                    {{ t('common.buttons.retry') }}
+                  </AppButton>
+                </div>
+              </td>
+            </tr>
             <tr v-else-if="initialLoadFailed">
               <td colspan="8" class="px-4 py-10 text-center">
-                <div class="mx-auto mb-2.5 inline-flex h-10 w-10 items-center justify-center border border-err/30 bg-err/10 text-err">
-                  <Icon name="alert" :size="18" />
+                <div role="status" data-testid="sandbox-list-failed" class="border border-err/40 bg-err/10 px-5 py-8">
+                  <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.loadFailedTitle') }}</h3>
+                  <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.loadFailedDesc') }}</p>
+                  <AppButton class="mt-4" variant="outline" data-testid="sandbox-list-retry" @click="load({ showLoading: true })">
+                    {{ t('common.buttons.retry') }}
+                  </AppButton>
                 </div>
-                <div class="text-[13px] font-medium text-txt">{{ t('pages.sandboxes.errorPrefix') }}{{ error }}</div>
               </td>
             </tr>
             <tr v-else-if="!rows.length">
@@ -666,7 +718,6 @@ onBeforeUnmount(() => {
 <style scoped>
 .table-loading {
   opacity: 0.55;
-  pointer-events: none;
 }
 .btn-detail-hint {
   border-color: rgb(var(--c-accent-2) / 0.45);

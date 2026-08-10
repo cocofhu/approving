@@ -86,7 +86,10 @@ function mountPanel(props?: { subTab?: 'memory' | 'context' | 'jobs' }) {
     props: { agentName: 'demo-agent', projectName: 'demo-project', ...props },
     global: {
       plugins: [i18n],
-      stubs: { Icon: true },
+      stubs: {
+        Icon: true,
+        AppButton: { template: '<button type="button" v-bind="$attrs"><slot /></button>' },
+      },
     },
   })
 }
@@ -292,6 +295,71 @@ describe('AgentDataPanel', () => {
     await w.get('[data-testid="agent-cron-delete"]').trigger('click')
     await flushPromises()
     expect(apiMocks.deleteAgentCronJob).toHaveBeenCalledWith('demo-agent', 'cron-1')
+    expect(toastError).not.toHaveBeenCalled()
+  })
+
+  it('memory/context/jobs keep old list while refreshing and disable delete', async () => {
+    useAuth().setUser({ username: 'u', expiresAt: 't', isAdmin: false })
+    apiMocks.listAgentMemories.mockResolvedValue({
+      items: [
+        {
+          id: 'm1',
+          projectId: 'proj-1',
+          agentName: 'demo-agent',
+          title: '部署约定',
+          content: '确认配置',
+          source: 'user',
+          updatedBy: 'u',
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    })
+    apiMocks.listAgentThreads.mockResolvedValue({
+      items: [{ ...SAMPLE_THREAD }],
+      messageCounts: { 'th-user-1': 1 },
+    })
+    apiMocks.listAgentCronJobs.mockResolvedValue({ items: [{ ...SAMPLE_JOB }] })
+
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.text()).toContain('部署约定')
+
+    let releaseMem!: (v: unknown) => void
+    apiMocks.listAgentMemories.mockReturnValue(new Promise((resolve) => { releaseMem = resolve }))
+    await w.setProps({ agentName: 'other-agent' })
+    await flushPromises()
+    expect(w.text()).toContain('部署约定')
+    expect(w.find('[data-testid="agent-data-thin-progress"]').exists()).toBe(true)
+    releaseMem!({ items: [{ id: 'm2', title: '新记忆', content: 'x', projectId: 'p', agentName: 'other-agent', source: 'user', createdAt: '', updatedAt: '' }] })
+    await flushPromises()
+
+    await openTab(w, /上下文/)
+    expect(w.text()).toContain('他人会话')
+    const threadDel = w.get('[data-testid="agent-thread-delete"]')
+    expect((threadDel.element as HTMLButtonElement).disabled).toBe(false)
+
+    await openTab(w, /定时任务/)
+    const jobDel = w.get('[data-testid="agent-cron-delete"]')
+    expect((jobDel.element as HTMLButtonElement).disabled).toBe(false)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    let releaseJob!: () => void
+    apiMocks.deleteAgentCronJob.mockReturnValue(new Promise<void>((resolve) => { releaseJob = resolve }))
+    await jobDel.trigger('click')
+    await flushPromises()
+    expect((w.get('[data-testid="agent-cron-delete"]').element as HTMLButtonElement).disabled).toBe(true)
+    expect(w.get('[data-testid="agent-cron-delete"]').text()).toBe('删除中…')
+    releaseJob!()
+    await flushPromises()
+  })
+
+  it('403 uses independent denied surface instead of toast-only', async () => {
+    useAuth().setUser({ username: 'u', expiresAt: 't', isAdmin: false })
+    apiMocks.listAgentMemories.mockRejectedValue(Object.assign(new Error('admin required'), { status: 403 }))
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.find('[data-testid="agent-data-denied"]').exists()).toBe(true)
+    expect(w.text()).toContain('权限不足')
     expect(toastError).not.toHaveBeenCalled()
   })
 })

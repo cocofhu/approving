@@ -4,8 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { api, authApi, type PlatformRuleMeta } from '@/lib/api'
 import { useAuth } from '@/lib/useAuth'
+import { createListRequestSeq, httpStatusOf } from '@/lib/listRequestSeq'
 import AppButton from '@/components/ui/AppButton.vue'
-import EmptyState from '@/components/ui/EmptyState.vue'
 import Icon from '@/components/ui/Icon.vue'
 import MarkdownSplitEditor from '@/components/agent/MarkdownSplitEditor.vue'
 
@@ -18,10 +18,21 @@ const activeFile = ref('')
 const content = ref('')
 const source = ref<'global' | 'embed'>('global')
 const loading = ref(true)
+const hasInitialLoaded = ref(false)
+const loadFailed = ref(false)
+const loadDenied = ref(false)
 const saving = ref(false)
 const resetting = ref(false)
 const error = ref('')
 const savedAt = ref(0)
+const rulesSeq = createListRequestSeq()
+const fileSeq = createListRequestSeq()
+const showRefreshProgress = computed(
+  () => (loading.value || resetting.value) && hasInitialLoaded.value && items.value.length > 0,
+)
+const showSkeleton = computed(
+  () => loading.value && items.value.length === 0 && !loadFailed.value && !loadDenied.value,
+)
 
 const isAdmin = computed(() => !!user.value?.isAdmin)
 const canWrite = computed(() => isAdmin.value)
@@ -53,25 +64,42 @@ async function loadFile(file: string) {
 }
 
 async function loadAll() {
+  const localSeq = rulesSeq.beginListRequest()
   loading.value = true
   error.value = ''
+  loadFailed.value = false
+  loadDenied.value = false
   try {
     await ensureAuth()
     await loadList()
     if (activeFile.value) await loadFile(activeFile.value)
+    if (!rulesSeq.isCurrentSeq(localSeq)) return
   } catch (e: any) {
+    if (!rulesSeq.isCurrentSeq(localSeq)) return
+    if (items.value.length > 0) {
+      error.value = e?.message || t('pages.platformRules.loadFailed')
+      return
+    }
+    const status = httpStatusOf(e)
+    loadDenied.value = status === 403
+    loadFailed.value = status !== 403
     error.value = e?.message || t('pages.platformRules.loadFailed')
   } finally {
+    if (!rulesSeq.isCurrentSeq(localSeq)) return
     loading.value = false
+    hasInitialLoaded.value = true
   }
 }
 
 async function selectFile(file: string) {
+  const localSeq = fileSeq.beginListRequest()
   activeFile.value = file
   error.value = ''
   try {
     await loadFile(file)
+    if (!fileSeq.isCurrentSeq(localSeq)) return
   } catch (e: any) {
+    if (!fileSeq.isCurrentSeq(localSeq)) return
     error.value = e?.message || t('pages.platformRules.loadFailed')
   }
 }
@@ -118,7 +146,7 @@ onMounted(loadAll)
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col">
+  <div class="flex h-full min-h-0 flex-col" data-testid="platform-rules-panel" :aria-busy="loading || saving || resetting ? 'true' : 'false'">
     <div class="mb-4 flex items-end justify-between gap-3">
       <div>
         <div class="mb-1 flex items-center gap-2">
@@ -153,13 +181,68 @@ onMounted(loadAll)
       </div>
     </div>
 
-    <div v-if="error" class="mb-3 rounded-lg border border-err/30 bg-err/10 px-3 py-2 text-sm text-err">{{ error }}</div>
+    <div
+      v-if="error && items.length && !loadFailed && !loadDenied"
+      class="mb-3 rounded-lg border border-err/30 bg-err/10 px-3 py-2 text-sm text-err"
+    >{{ error }}</div>
 
-    <div v-if="loading" class="card flex flex-1 items-center justify-center">
-      <EmptyState icon="settings" :title="t('pages.settings.loadingTitle')" :desc="t('pages.settings.loadingDesc')" />
+    <div
+      v-if="showRefreshProgress"
+      class="mb-2 h-[2px] overflow-hidden bg-line"
+      data-testid="platform-rules-thin-progress"
+      aria-hidden="true"
+    >
+      <i class="admin-list-thin-bar bg-accent" />
     </div>
 
-    <div v-else class="card grid min-h-0 flex-1 grid-cols-[240px_1fr_280px] overflow-hidden">
+    <div
+      v-if="showSkeleton"
+      class="card grid min-h-0 flex-1 grid-cols-[240px_1fr_280px] overflow-hidden"
+      data-testid="platform-rules-skeleton"
+      aria-hidden="true"
+    >
+      <aside class="border-r border-line p-3">
+        <div class="mb-3 h-3 w-24 bg-elevated animate-pulse" />
+        <div v-for="n in 6" :key="'pr-file-' + n" class="mb-1.5 h-8 bg-elevated animate-pulse" />
+      </aside>
+      <section class="space-y-3 p-4">
+        <div class="h-4 w-48 bg-elevated animate-pulse" />
+        <div class="h-48 w-full bg-elevated animate-pulse" />
+      </section>
+      <aside class="border-l border-line p-3">
+        <div class="h-3 w-20 bg-elevated animate-pulse" />
+        <div class="mt-3 h-24 w-full bg-elevated animate-pulse" />
+      </aside>
+    </div>
+
+    <div
+      v-else-if="loadDenied"
+      role="status"
+      data-testid="platform-rules-denied"
+      class="border border-warn/40 bg-warn/10 px-5 py-10 text-center"
+    >
+      <Icon name="lock" :size="22" class="mx-auto mb-3 text-warn" />
+      <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.permissionDeniedTitle') }}</h3>
+      <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.permissionDeniedDesc') }}</p>
+      <AppButton class="mt-4" variant="outline" data-testid="platform-rules-retry" @click="loadAll">
+        {{ t('common.buttons.retry') }}
+      </AppButton>
+    </div>
+
+    <div
+      v-else-if="loadFailed"
+      role="status"
+      data-testid="platform-rules-failed"
+      class="border border-err/40 bg-err/10 px-5 py-10 text-center"
+    >
+      <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.loadFailedTitle') }}</h3>
+      <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.loadFailedDesc') }}</p>
+      <AppButton class="mt-4" variant="outline" data-testid="platform-rules-retry" @click="loadAll">
+        {{ t('common.buttons.retry') }}
+      </AppButton>
+    </div>
+
+    <div v-else class="card grid min-h-0 flex-1 grid-cols-[240px_1fr_280px] overflow-hidden" :class="showRefreshProgress ? 'opacity-[0.55]' : ''">
       <aside class="flex min-h-0 flex-col border-r border-line bg-base/30">
         <div class="border-b border-line px-3 py-3">
           <h3 class="text-[13px] font-semibold text-txt">{{ t('pages.platformRules.fileListTitle') }}</h3>

@@ -222,6 +222,22 @@ body {
   }
 }
 
+/* Indeterminate 2px accent bar for admin-list stale-while-revalidate (token, not #7B61FF). */
+@keyframes admin-list-indet {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(380%);
+  }
+}
+.admin-list-thin-bar {
+  display: block;
+  height: 100%;
+  width: 34%;
+  animation: admin-list-indet 1.15s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .brand-logo__name {
     animation: none;
