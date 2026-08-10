@@ -7,6 +7,7 @@ const paths: Record<string, string> = {
   workflow: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="12" r="3"/><path d="M9 6h4a3 3 0 0 1 3 3M9 18h4a3 3 0 0 0 3-3"/>',
   runs: '<circle cx="12" cy="12" r="9"/><path d="M10 9l5 3-5 3z"/>',
   gate: '<path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/>',
+  lock: '<rect x="5" y="11" width="14" height="10"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   artifact: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
   skills: '<path d="M4 7h12v5H4z"/><path d="M16 9h2a2 2 0 0 1 0 4h-2"/><path d="M9 4a2 2 0 1 1 4 0v3H9z"/><path d="M4 12v5a2 2 0 0 0 2 2h8"/>',
   connector: '<path d="M9 7V3M15 7V3M8 7h8v4a4 4 0 0 1-8 0z"/><path d="M12 15v6"/>',

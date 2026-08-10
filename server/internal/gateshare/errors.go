@@ -16,6 +16,8 @@ var (
 	ErrAlreadyProcessed = errors.New("already processed")
 	ErrActionConflict   = errors.New("action conflict")
 	ErrCommentRequired  = errors.New("comment required")
+	ErrNameRequired     = errors.New("name required")
+	ErrAuditRequired    = errors.New("name and comment required")
 	ErrCommentTooLong   = errors.New("comment too long")
 	ErrNameTooLong      = errors.New("name too long")
 	ErrCSRF             = errors.New("csrf check failed")

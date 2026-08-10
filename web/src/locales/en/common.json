@@ -94,6 +94,7 @@
       "submitting": "Submitting…",
       "refreshing": "Refreshing…",
       "creating": "Creating…",
+      "retry": "Retry",
       "cancelling": "Cancelling…",
       "deleting": "Deleting…",
       "copying": "Copying…",
@@ -148,6 +149,12 @@
       "artifact": "Artifact",
       "node": "Node",
       "created": "Created"
+    },
+    "asyncState": {
+      "loadFailedTitle": "Failed to load",
+      "loadFailedDesc": "Could not fetch the list. Please retry.",
+      "permissionDeniedTitle": "Permission denied",
+      "permissionDeniedDesc": "You do not have access to this resource. Retry or contact an admin."
     },
     "empty": {
       "noWorkflows": "No workflows yet",

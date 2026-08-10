@@ -94,6 +94,7 @@
       "submitting": "提交中…",
       "refreshing": "正在刷新…",
       "creating": "创建中…",
+      "retry": "重试",
       "cancelling": "取消中…",
       "deleting": "删除中…",
       "copying": "复制中…",
@@ -148,6 +149,12 @@
       "artifact": "产物",
       "node": "节点",
       "created": "创建时间"
+    },
+    "asyncState": {
+      "loadFailedTitle": "加载失败",
+      "loadFailedDesc": "无法获取列表，请稍后重试。",
+      "permissionDeniedTitle": "权限不足",
+      "permissionDeniedDesc": "你没有查看此资源的权限，可重试或联系管理员。"
     },
     "empty": {
       "noWorkflows": "暂无工作流",
