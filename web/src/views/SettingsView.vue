@@ -383,7 +383,10 @@ onBeforeUnmount(() => {
             <div class="flex items-start justify-between gap-4">
               <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-1.5">
-                  <span class="text-sm font-medium text-txt">{{ settingLabel(key) }}</span>
+                  <label
+                    :for="`setting-${key}`"
+                    class="text-sm font-medium text-txt"
+                  >{{ settingLabel(key) }}</label>
                   <span
                     class="rounded-full border border-line bg-elevated px-2 py-0.5 text-[10px] text-txt3"
                     :title="t('pages.settings.sourceTitle', { source: itemOf(key)!.source })"
@@ -405,14 +408,14 @@ onBeforeUnmount(() => {
               </div>
               <div class="flex shrink-0 items-center gap-2">
                 <input
+                  :id="`setting-${key}`"
                   v-model.number="form[key]"
                   type="number"
                   :min="itemOf(key)!.min"
                   :disabled="itemOf(key)!.locked || saving"
-                  class="input w-[88px] text-right"
+                  class="input settings-number-input w-[88px] text-right disabled:cursor-not-allowed disabled:opacity-55"
                 />
-                <span v-if="settingHasUnit(key)" class="w-9 text-xs text-txt3">{{ t('common.format.minutes') }}</span>
-                <span v-else class="w-9" />
+                <span v-if="settingHasUnit(key)" class="chip">{{ t('common.minutes') }}</span>
               </div>
             </div>
           </template>
@@ -426,3 +429,16 @@ onBeforeUnmount(() => {
     </p>
   </div>
 </template>
+
+<style scoped>
+/* Hide native number spinner — scoped to SettingsView number inputs only (g2.2 / f5) */
+.settings-number-input[type='number']::-webkit-outer-spin-button,
+.settings-number-input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.settings-number-input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+</style>

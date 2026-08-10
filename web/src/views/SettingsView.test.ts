@@ -82,6 +82,59 @@ describe('SettingsView loading source lock', () => {
   })
 })
 
+describe('SettingsView number input polish (Demo 优化后)', () => {
+  it('skeleton keeps w-[88px] number placeholder width', () => {
+    expect(src).toMatch(/data-testid="settings-form-skeleton"/)
+    expect(src).toMatch(/h-9 w-\[88px\] bg-elevated animate-pulse/)
+  })
+
+  it('number rows: label/for, chip unit, no empty w-9, disabled visual, scoped spinner hide', () => {
+    // g1.1 — no empty unit placeholder
+    expect(src).not.toMatch(/<span v-else class="w-9"\s*\/>/)
+    // g1.2 — TTL unit via .chip + common.minutes (NodeInspector-aligned)
+    expect(src).toMatch(/class="chip">\{\{\s*t\('common\.minutes'\)\s*\}\}<\/span>/)
+    expect(src).not.toMatch(/common\.format\.minutes/)
+    // g1.3 / f7 — width + right align preserved
+    expect(src).toMatch(/settings-number-input w-\[88px\] text-right/)
+    // g2.1 — locked/saving disabled visual
+    expect(src).toMatch(/disabled:cursor-not-allowed disabled:opacity-55/)
+    // g2.2 — scoped spinner hide (not global.css)
+    expect(src).toMatch(/\.settings-number-input\[type='number'\]::-webkit-inner-spin-button/)
+    expect(src).toMatch(/appearance:\s*textfield/)
+    // g3.1 — label/for + stable id
+    expect(src).toMatch(/:for="`setting-\$\{key\}`"/)
+    expect(src).toMatch(/:id="`setting-\$\{key\}`"/)
+  })
+
+  it('mounted: unit rows show chip 分钟; no-unit rows have only input on the right', async () => {
+    apiMocks.getSettings.mockResolvedValue(SETTINGS)
+    apiMocks.listSandboxes.mockResolvedValue([])
+    apiMocks.dashboard.mockResolvedValue({ running: 0 })
+    const w = mountSettings()
+    await flushPromises()
+
+    const runTtl = w.find('#setting-run_sandbox_ttl_minutes')
+    expect(runTtl.exists()).toBe(true)
+    expect(runTtl.classes()).toContain('settings-number-input')
+    const runCtrl = runTtl.element.parentElement!
+    expect(runCtrl.querySelector('.chip')?.textContent).toContain('分钟')
+    expect(runCtrl.querySelectorAll('span.w-9').length).toBe(0)
+
+    const mcr = w.find('#setting-max_concurrent_runs')
+    expect(mcr.exists()).toBe(true)
+    const mcrCtrl = mcr.element.parentElement!
+    expect(mcrCtrl.querySelector('.chip')).toBeNull()
+    expect(mcrCtrl.querySelectorAll('span.w-9').length).toBe(0)
+
+    // label association: clicking title focuses input when enabled
+    const label = w.find('label[for="setting-max_concurrent_runs"]')
+    expect(label.exists()).toBe(true)
+    expect(label.text()).toContain('最大并发运行数')
+
+    w.unmount()
+  })
+})
+
 describe('SettingsView first skeleton vs reset keep form', () => {
   beforeEach(() => {
     vi.clearAllMocks()
