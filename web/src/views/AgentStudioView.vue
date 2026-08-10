@@ -19,6 +19,7 @@ import AgentCreateWizard from '@/components/agent/AgentCreateWizard.vue'
 import CreateAgentTeamWizard from '@/components/agent/CreateAgentTeamWizard.vue'
 import TeamBootstrapPanel from '@/components/agent/TeamBootstrapPanel.vue'
 import { api, type Agent, type AgentOrg, type MCPServer, type AgentPrompts, type PlatformRuleMeta, type TeamBootstrapSession } from '@/lib/api'
+import { createListRequestSeq, httpStatusOf } from '@/lib/listRequestSeq'
 import { useBreakpoint } from '@/lib/useBreakpoint'
 import {
   emptyOrg,
@@ -390,8 +391,16 @@ const derivedPaths = computed(() => {
   ]
 })
 const loading = ref(true)
+const hasInitialLoaded = ref(false)
+const loadFailed = ref(false)
+const loadDenied = ref(false)
+const studioSeq = createListRequestSeq()
 const error = ref('')
 const saving = ref(false)
+const initialLoading = computed(() => loading.value && !hasInitialLoaded.value)
+const showRefreshProgress = computed(
+  () => loading.value && hasInitialLoaded.value && agents.value.length > 0,
+)
 
 // working-dir file tree state. The active/open files are tracked by object
 // reference (not path) so renaming a file's path never drops the selection.
@@ -1460,10 +1469,15 @@ function commitRename(row: TreeRow) {
 }
 
 async function load() {
+  const localSeq = studioSeq.beginListRequest()
+  const keepStale = agents.value.length > 0
   loading.value = true
   error.value = ''
+  loadFailed.value = false
+  loadDenied.value = false
   try {
     const [list, o, projList] = await Promise.all([api.listAgents(), api.getAgentsOrg(), api.listProjects()])
+    if (!studioSeq.isCurrentSeq(localSeq)) return
     agents.value = list || []
     projects.value = (projList || []).map((p) => ({ id: p.id, name: p.name }))
     org.value = o?.groups ? o : { revision: o?.revision || 0, groups: o?.groups || [], agents: o?.agents || {} }
@@ -1485,10 +1499,17 @@ async function load() {
     }
     syncStudioQuery()
   } catch (e: any) {
+    if (!studioSeq.isCurrentSeq(localSeq)) return
+    if (keepStale) return
     error.value = String(e?.message || e)
     agents.value = []
+    const status = httpStatusOf(e)
+    loadDenied.value = status === 403
+    loadFailed.value = status !== 403
   } finally {
+    if (!studioSeq.isCurrentSeq(localSeq)) return
     loading.value = false
+    hasInitialLoaded.value = true
   }
 }
 
@@ -2144,7 +2165,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col overflow-hidden">
+  <div
+    class="flex h-full min-h-0 flex-col overflow-hidden"
+    data-testid="agent-studio-panel"
+    :aria-busy="loading ? 'true' : 'false'"
+  >
     <div
       class="mb-5 flex shrink-0 gap-4"
       :class="isMobile ? 'flex-col items-stretch' : 'justify-end'"
@@ -2171,7 +2196,10 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-if="error" class="card mb-3 shrink-0 border-err/40 p-3 text-[13px] text-err">{{ t('pages.agentStudio.errorPrefix') }}{{ error }}</div>
+    <div
+      v-if="error && !loadFailed && !loadDenied && agents.length"
+      class="card mb-3 shrink-0 border-err/40 p-3 text-[13px] text-err"
+    >{{ t('pages.agentStudio.errorPrefix') }}{{ error }}</div>
     <div
       v-if="assignFail.length"
       data-test="org-assign-fail"
@@ -2188,11 +2216,64 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="flex min-h-0 flex-1 flex-col">
-      <div v-if="loading" class="card flex flex-1 items-center justify-center text-sm text-txt3">{{ t('common.buttons.loading') }}</div>
+      <div
+        v-if="showRefreshProgress"
+        class="mb-2 h-[2px] overflow-hidden bg-line"
+        data-testid="agent-studio-thin-progress"
+        aria-hidden="true"
+      >
+        <i class="admin-list-thin-bar bg-accent" />
+      </div>
+
+      <div
+        v-if="initialLoading"
+        class="card grid min-h-0 flex-1 overflow-hidden"
+        data-testid="agent-studio-skeleton"
+        aria-hidden="true"
+        :style="isMobile ? { gridTemplateColumns: '1fr' } : { gridTemplateColumns: '280px 1fr' }"
+      >
+        <div v-if="!isMobile" class="border-r border-line bg-base p-3">
+          <div class="mb-3 h-3 w-16 bg-elevated animate-pulse" />
+          <div v-for="n in 6" :key="'org-skel-' + n" class="mb-1.5 h-8 bg-elevated animate-pulse" />
+        </div>
+        <div class="space-y-3 p-4">
+          <div class="h-8 w-48 bg-elevated animate-pulse" />
+          <div class="h-10 w-full bg-elevated animate-pulse" />
+          <div class="h-40 w-full bg-elevated animate-pulse" />
+        </div>
+      </div>
+
+      <div
+        v-else-if="loadDenied"
+        role="status"
+        data-testid="agent-studio-denied"
+        class="card flex flex-1 flex-col items-center justify-center border-warn/40 bg-warn/10 px-6 text-center"
+      >
+        <Icon name="lock" :size="22" class="mb-3 text-warn" />
+        <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.permissionDeniedTitle') }}</h3>
+        <p class="mt-1 max-w-md text-xs text-txt2">{{ t('common.asyncState.permissionDeniedDesc') }}</p>
+        <AppButton class="mt-4" variant="outline" data-testid="agent-studio-retry" @click="load">
+          {{ t('common.buttons.retry') }}
+        </AppButton>
+      </div>
+
+      <div
+        v-else-if="loadFailed"
+        role="status"
+        data-testid="agent-studio-failed"
+        class="card flex flex-1 flex-col items-center justify-center border-err/40 bg-err/10 px-6 text-center"
+      >
+        <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.loadFailedTitle') }}</h3>
+        <p class="mt-1 max-w-md text-xs text-txt2">{{ t('common.asyncState.loadFailedDesc') }}</p>
+        <AppButton class="mt-4" variant="outline" data-testid="agent-studio-retry" @click="load">
+          {{ t('common.buttons.retry') }}
+        </AppButton>
+      </div>
 
       <div
         v-else-if="!agents.length && !teamBootstrapSessionId"
         class="card flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center"
+        data-testid="agent-studio-empty-team"
       >
         <h2 class="m-0 text-[18px] font-semibold text-txt">{{ t('pages.agentStudio.emptyTeamTitle') }}</h2>
         <p class="m-0 max-w-md text-[13px] leading-6 text-txt3">{{ t('pages.agentStudio.emptyTeamDesc') }}</p>
@@ -2207,6 +2288,7 @@ onBeforeUnmount(() => {
       <div
         v-else
         class="card grid min-h-0 flex-1 overflow-hidden transition-[grid-template-columns] duration-[220ms] ease-in-out"
+        :class="showRefreshProgress ? 'opacity-[0.55]' : ''"
         :style="cardGridStyle"
       >
       <!-- agent org tree (hidden on narrow screens; agent name bar remains) -->

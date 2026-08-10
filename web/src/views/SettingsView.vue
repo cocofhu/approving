@@ -4,8 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { api, type DashboardStats, type SandboxView, type SettingItem } from '@/lib/api'
 import { useAuth } from '@/lib/useAuth'
+import { createListRequestSeq, httpStatusOf } from '@/lib/listRequestSeq'
 import AppButton from '@/components/ui/AppButton.vue'
-import EmptyState from '@/components/ui/EmptyState.vue'
 import Icon from '@/components/ui/Icon.vue'
 
 const { t } = useI18n()
@@ -61,10 +61,20 @@ const form = reactive<Record<string, number>>({})
 const sandboxes = ref<SandboxView[]>([])
 const dashboard = ref<DashboardStats | null>(null)
 const loading = ref(true)
+const hasInitialLoaded = ref(false)
+const loadFailed = ref(false)
+const loadDenied = ref(false)
 const saving = ref(false)
 const error = ref('')
 const usageError = ref('')
 const savedAt = ref(0)
+const settingsSeq = createListRequestSeq()
+const showRefreshProgress = computed(
+  () => loading.value && hasInitialLoaded.value && items.value.length > 0,
+)
+const showSkeleton = computed(
+  () => loading.value && items.value.length === 0 && !loadFailed.value && !loadDenied.value,
+)
 
 let poll: number | undefined
 
@@ -110,15 +120,29 @@ function barWidth(ratio: number): string {
 }
 
 async function loadSettings() {
+  const localSeq = settingsSeq.beginListRequest()
   loading.value = true
   error.value = ''
+  loadFailed.value = false
+  loadDenied.value = false
   try {
     const res = await api.getSettings()
+    if (!settingsSeq.isCurrentSeq(localSeq)) return
     hydrate(res.items)
   } catch (e: any) {
+    if (!settingsSeq.isCurrentSeq(localSeq)) return
+    if (items.value.length > 0) {
+      error.value = e?.message || t('pages.settings.loadFailed')
+      return
+    }
+    const status = httpStatusOf(e)
+    loadDenied.value = status === 403
+    loadFailed.value = status !== 403
     error.value = e?.message || t('pages.settings.loadFailed')
   } finally {
+    if (!settingsSeq.isCurrentSeq(localSeq)) return
     loading.value = false
+    hasInitialLoaded.value = true
   }
 }
 
@@ -174,7 +198,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div>
+  <div data-testid="settings-panel" :aria-busy="loading || saving ? 'true' : 'false'">
     <div class="mb-5 flex items-end justify-between gap-3">
       <div>
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.settings.title') }}</h2>
@@ -191,15 +215,67 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-if="error" class="mb-4 rounded-lg border border-err/30 bg-err/10 px-3 py-2 text-sm text-err">
+    <div
+      v-if="error && items.length && !loadFailed && !loadDenied"
+      class="mb-4 rounded-lg border border-err/30 bg-err/10 px-3 py-2 text-sm text-err"
+    >
       {{ error }}
     </div>
 
-    <div v-if="loading" class="card">
-      <EmptyState icon="settings" :title="t('pages.settings.loadingTitle')" :desc="t('pages.settings.loadingDesc')" />
+    <div
+      v-if="showRefreshProgress"
+      class="mb-2 h-[2px] overflow-hidden bg-line"
+      data-testid="settings-thin-progress"
+      aria-hidden="true"
+    >
+      <i class="admin-list-thin-bar bg-accent" />
+    </div>
+
+    <div
+      v-if="showSkeleton"
+      class="card"
+      data-testid="settings-form-skeleton"
+      aria-hidden="true"
+    >
+      <div v-for="n in 3" :key="'set-skel-' + n" class="border-b border-line px-4 py-3.5 last:border-b-0">
+        <div class="mb-2 h-4 w-32 bg-elevated animate-pulse" />
+        <div class="h-3 w-2/3 bg-elevated animate-pulse" />
+        <div class="mt-3 flex justify-between gap-4">
+          <div class="h-4 w-40 bg-elevated animate-pulse" />
+          <div class="h-9 w-[88px] bg-elevated animate-pulse" />
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-else-if="loadDenied"
+      role="status"
+      data-testid="settings-denied"
+      class="border border-warn/40 bg-warn/10 px-5 py-10 text-center"
+    >
+      <Icon name="lock" :size="22" class="mx-auto mb-3 text-warn" />
+      <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.permissionDeniedTitle') }}</h3>
+      <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.permissionDeniedDesc') }}</p>
+      <AppButton class="mt-4" variant="outline" data-testid="settings-retry" @click="loadSettings">
+        {{ t('common.buttons.retry') }}
+      </AppButton>
+    </div>
+
+    <div
+      v-else-if="loadFailed"
+      role="status"
+      data-testid="settings-failed"
+      class="border border-err/40 bg-err/10 px-5 py-10 text-center"
+    >
+      <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.loadFailedTitle') }}</h3>
+      <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.loadFailedDesc') }}</p>
+      <AppButton class="mt-4" variant="outline" data-testid="settings-retry" @click="loadSettings">
+        {{ t('common.buttons.retry') }}
+      </AppButton>
     </div>
 
     <template v-else>
+      <div :class="showRefreshProgress ? 'opacity-[0.55]' : ''">
       <div class="card mb-4 border-accent/20 bg-accent-dim/20">
         <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
           <div class="flex items-start gap-3">
@@ -341,6 +417,7 @@ onBeforeUnmount(() => {
             </div>
           </template>
         </div>
+      </div>
       </div>
     </template>
 

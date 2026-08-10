@@ -1518,3 +1518,29 @@ describe('AgentStudio group assign project', () => {
     wrapper.unmount()
   })
 })
+
+describe('AgentStudioView loading / four-state', () => {
+  it('first load shows org-tree skeleton, not centered 加载中…', async () => {
+    let release!: (v: unknown) => void
+    mocks.listAgents.mockReturnValue(new Promise((resolve) => { release = resolve }))
+    const wrapper = await mountStudio()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="agent-studio-skeleton"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('加载中')
+    release!([])
+    await flushPromises()
+    wrapper.unmount()
+  })
+
+  it('failure does not show empty-team CTA', async () => {
+    mocks.listAgents.mockRejectedValue(Object.assign(new Error('down'), { status: 500 }))
+    const wrapper = await mountStudio()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="agent-studio-failed"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="agent-studio-empty-team"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('加载失败')
+    expect(wrapper.text()).toContain('重试')
+    expect(wrapper.text()).not.toContain('用一个入口拉起整支团队')
+    wrapper.unmount()
+  })
+})

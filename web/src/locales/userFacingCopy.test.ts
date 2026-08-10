@@ -21,6 +21,29 @@ describe('user-facing copy remediation keys', () => {
     messages: { en: { ...enCommon, ...enPages, ...enMcp } },
   })
 
+  it('admin list async-state copy matches Demo lock (creating/retry/four-state)', () => {
+    expect(zh.global.t('common.buttons.creating')).toBe('创建中…')
+    expect(en.global.t('common.buttons.creating')).toBe('Creating…')
+    expect(zh.global.t('common.buttons.retry')).toBe('重试')
+    expect(en.global.t('common.buttons.retry')).toBe('Retry')
+    expect(zh.global.t('common.asyncState.loadFailedTitle')).toBe('加载失败')
+    expect(en.global.t('common.asyncState.loadFailedTitle')).toBe('Failed to load')
+    expect(zh.global.t('common.asyncState.loadFailedDesc')).toBe('无法获取列表，请稍后重试。')
+    expect(en.global.t('common.asyncState.loadFailedDesc')).toBe('Could not fetch the list. Please retry.')
+    expect(zh.global.t('common.asyncState.permissionDeniedTitle')).toBe('权限不足')
+    expect(en.global.t('common.asyncState.permissionDeniedTitle')).toBe('Permission denied')
+    expect(zh.global.t('common.asyncState.permissionDeniedDesc')).toBe(
+      '你没有查看此资源的权限，可重试或联系管理员。',
+    )
+    expect(en.global.t('common.asyncState.permissionDeniedDesc')).toBe(
+      'You do not have access to this resource. Retry or contact an admin.',
+    )
+    expect(zh.global.t('common.buttons.deleting')).toBe('删除中…')
+    expect(en.global.t('common.buttons.deleting')).toBe('Deleting…')
+    expect(zh.global.t('common.buttons.saving')).toBe('保存中…')
+    expect(en.global.t('common.buttons.saving')).toBe('Saving…')
+  })
+
   it('attachment fallback is neutral without 仅* / only', () => {
     expect(zh.global.t('pages.projectDetail.pm.imagesOnly')).toBe('附件')
     expect(zh.global.t('pages.agentChatTester.imagesOnly')).toBe('附件')
