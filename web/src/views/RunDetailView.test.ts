@@ -341,6 +341,8 @@ describe('RunDetailView mobile timeline view contract', () => {
     expect(src).toMatch(/mobileMainPanel\.value = 'detail'/)
     expect(src).toMatch(/outputFocusLock/)
     expect(src).toMatch(/applyOutputDeepLinkFocus/)
+    expect(src).toMatch(/applyDetailArtifactsDeepLink/)
+    expect(src).toMatch(/detail === 'artifacts'|detail'\) !== 'artifacts'/)
     expect(src).toMatch(/resolveOutputFocusNodeId/)
     expect(src).toMatch(/queryParam\('tab'\) === 'output'/)
     expect(src).toMatch(/if \(isMobile\.value\) mobileMainPanel\.value = 'detail'/)

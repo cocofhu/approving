@@ -639,6 +639,7 @@ function syncAllMcpCallsFromRun() {
 }
 
 async function initAfterLoadSuccess() {
+  applyDetailArtifactsDeepLink()
   if (!applyOutputDeepLinkFocus() && !selected.value) selected.value = defaultNode.value || null
   syncAllMcpCallsFromRun()
   // Rehydrate regardless of which tab is active (default tab stays unchanged).
@@ -1817,6 +1818,14 @@ const detailTabs = computed(() => {
   tabs.push({ id: 'artifacts', label: t('pages.runDetail.tabs.artifacts') })
   return tabs
 })
+
+/** Parse ?detail=artifacts (run-output empty-state / triage deep link). */
+function applyDetailArtifactsDeepLink(): boolean {
+  if (queryParam('detail') !== 'artifacts') return false
+  showDetail.value = true
+  detailTab.value = 'artifacts'
+  return true
+}
 
 function selectNode(id: string) {
   outputFocusLock.value = false
