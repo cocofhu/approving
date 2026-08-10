@@ -328,7 +328,6 @@
       },
       "cron": {
         "title": "Scheduled tasks",
-        "hint": "All Agent cron jobs in this project. Create and edit schedules via task-scheduler in Project Management consult; here you can review and delete them, and any authenticated user can toggle channel delivery.",
         "emptyTitle": "No scheduled tasks yet",
         "emptyDesc": "Jobs created in Project Management consult will appear in this list.",
         "colName": "Name",

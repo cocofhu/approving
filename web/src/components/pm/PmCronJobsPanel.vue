@@ -79,10 +79,7 @@ onMounted(() => void load())
 
 <template>
   <div class="flex min-h-[420px] flex-col gap-4" data-testid="project-cron-jobs-panel">
-    <div>
-      <h3 class="text-base font-semibold">{{ t('pages.projectDetail.cron.title') }}</h3>
-      <p class="mt-1 text-sm text-txt3">{{ t('pages.projectDetail.cron.hint') }}</p>
-    </div>
+    <h3 class="text-base font-semibold">{{ t('pages.projectDetail.cron.title') }}</h3>
 
     <div v-if="loading" class="text-sm text-txt3">{{ t('common.buttons.loading') }}</div>
     <EmptyState
