@@ -233,7 +233,6 @@ export default defineConfig({
         main: fileURLToPath(new URL('./e2e/index.html', import.meta.url)),
         console: fileURLToPath(new URL('./e2e/console.html', import.meta.url)),
         'sandbox-list': fileURLToPath(new URL('./e2e/sandbox-list.html', import.meta.url)),
-        'workflow-list': fileURLToPath(new URL('./e2e/workflow-list.html', import.meta.url)),
         'project-detail': fileURLToPath(new URL('./e2e/project-detail.html', import.meta.url)),
         'run-detail-mobile': fileURLToPath(new URL('./e2e/run-detail-mobile.html', import.meta.url)),
         'run-detail-mobile-panel': fileURLToPath(

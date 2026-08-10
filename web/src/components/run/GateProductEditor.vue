@@ -4,9 +4,9 @@ import { useI18n } from 'vue-i18n'
 import HtmlPreview from '../ui/HtmlPreview.vue'
 import StructuredArtifactView, { isStructuredArtifactName } from './StructuredArtifactView.vue'
 import Icon from '../ui/Icon.vue'
-import { api } from '@/lib/api'
-import { isReadonlyArtifactKind, type GatePrimaryProductRef } from '@/lib/gateUpstream'
-import type { Artifact } from '@/lib/types'
+import { api } from '@/lib/api/api'
+import { isReadonlyArtifactKind, type GatePrimaryProductRef } from '@/lib/inbox/gateUpstream'
+import type { Artifact } from '@/lib/shared/types'
 
 const props = withDefaults(
   defineProps<{

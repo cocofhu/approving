@@ -4,8 +4,8 @@ import { useI18n } from 'vue-i18n'
 import AppModal from '@/components/ui/AppModal.vue'
 import Icon from '@/components/ui/Icon.vue'
 import AnnotateBtn from './AnnotateBtn.vue'
-import { useTestScreenshotLoad, type TestScreenshotInput } from '@/lib/useTestScreenshotLoad'
-import type { Artifact } from '@/lib/types'
+import { useTestScreenshotLoad, type TestScreenshotInput } from '@/lib/composables/useTestScreenshotLoad'
+import type { Artifact } from '@/lib/shared/types'
 
 export type TestCase = { id?: string; name?: string; status?: string; detail?: string }
 export type TestDefect = { id?: string; title?: string; severity?: string; detail?: string; status?: string }

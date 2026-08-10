@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { renderMarkdown } from '@/lib/markdown'
+import { renderMarkdown } from '@/lib/shared/markdown'
 import StructuredArtifactView from './StructuredArtifactView.vue'
 import HtmlPreview from '../ui/HtmlPreview.vue'
-import type { OutputCard, Run } from '@/lib/types'
+import type { OutputCard, Run } from '@/lib/shared/types'
 
 const props = defineProps<{
   card: OutputCard

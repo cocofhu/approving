@@ -9,15 +9,15 @@ import BaseNode from './BaseNode.vue'
 import ConditionEdge from './ConditionEdge.vue'
 import { getEdgeStroke, type EdgeTone } from './edgeColors'
 import { nodeColorHex } from '@/data/nodeRegistry'
-import { computeSessionLayout, isInvalidPosition } from '@/lib/canvasLayout'
+import { computeSessionLayout, isInvalidPosition } from '@/lib/run/canvasLayout'
 import {
   flowFingerprint,
   pruneFlowCache,
   reuseFlowElement,
   type FlowNodeCacheEntry,
-} from '@/lib/workflowCanvasFlow'
-import { theme } from '@/lib/theme'
-import type { WFNode, WFEdge, NodeType, NodeRunStatus } from '@/lib/types'
+} from '@/lib/run/workflowCanvasFlow'
+import { theme } from '@/lib/shared/theme'
+import type { WFNode, WFEdge, NodeType, NodeRunStatus } from '@/lib/shared/types'
 
 const { t } = useI18n()
 

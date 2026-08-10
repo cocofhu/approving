@@ -5,11 +5,11 @@ import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import LangSelect from '../ui/LangSelect.vue'
 import RunOutputPptModal from './RunOutputPptModal.vue'
-import { theme, toggleTheme } from '@/lib/theme'
-import { isDraining } from '@/lib/useShutdownState'
-import { locale, setLocale, type AppLocale } from '@/lib/locale'
-import { relTime } from '@/lib/format'
-import { useRunTerminalNotifications } from '@/lib/useRunTerminalNotifications'
+import { theme, toggleTheme } from '@/lib/shared/theme'
+import { isDraining } from '@/lib/composables/useShutdownState'
+import { locale, setLocale, type AppLocale } from '@/lib/shared/locale'
+import { relTime } from '@/lib/shared/format'
+import { useRunTerminalNotifications } from '@/lib/run/useRunTerminalNotifications'
 
 const emit = defineEmits<{ (e: 'toggle-menu'): void }>()
 

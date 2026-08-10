@@ -14,8 +14,8 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mocks.push }),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {
@@ -25,7 +25,7 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
-vi.mock('@/lib/useRunBoard', async () => {
+vi.mock('@/lib/run/useRunBoard', async () => {
   const { ref: vueRef } = await import('vue')
   return {
     useRunBoard: () => ({
@@ -38,7 +38,7 @@ vi.mock('@/lib/useRunBoard', async () => {
   }
 })
 
-vi.mock('@/lib/useProjectContext', () => ({
+vi.mock('@/lib/composables/useProjectContext', () => ({
   readStoredProjectId: () => '',
 }))
 

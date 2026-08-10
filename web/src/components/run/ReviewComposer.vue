@@ -5,7 +5,7 @@ import Icon from '../ui/Icon.vue'
 import ClarifyChat from './ClarifyChat.vue'
 import ParagraphInput from '../ui/ParagraphInput.vue'
 import GateReactStreamPanel from './GateReactStreamPanel.vue'
-import type { ClarifyTurn, ClarifyImage, ReactAnnotation, AcpEvent } from '@/lib/types'
+import type { ClarifyTurn, ClarifyImage, ReactAnnotation, AcpEvent } from '@/lib/shared/types'
 import AnnotationChip from './AnnotationChip.vue'
 
 /**

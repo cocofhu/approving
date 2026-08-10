@@ -7,14 +7,14 @@ import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import enCommon from '@/locales/en/common.json'
 import enPages from '@/locales/en/pages.json'
-import { markAuthReady, useAuth } from '@/lib/useAuth'
+import { markAuthReady, useAuth } from '@/lib/composables/useAuth'
 
 const authApiMocks = vi.hoisted(() => ({
   login: vi.fn(),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     authApi: {

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { toRef } from 'vue'
-import type { ReactAnnotation } from '@/lib/types'
-import { useReviewTextSelection } from '@/lib/useReviewTextSelection'
-import { useToast } from '@/lib/useToast'
+import type { ReactAnnotation } from '@/lib/shared/types'
+import { useReviewTextSelection } from '@/lib/inbox/useReviewTextSelection'
+import { useToast } from '@/lib/composables/useToast'
 
 const props = defineProps<{
   enabled: boolean

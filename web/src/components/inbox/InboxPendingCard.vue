@@ -2,16 +2,16 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
-import { relTime } from '@/lib/format'
+import { relTime } from '@/lib/shared/format'
 import {
   inboxBadgeLabelKey,
   inboxBadgeTone,
   inboxBadgeToneClass,
   inboxIconToneClass,
   inboxSecondaryLine,
-} from '@/lib/inboxDisplay'
-import { isShareableInboxItem, shareStatusLabel } from '@/lib/gateShareLink'
-import type { GateShareInboxStatus, InboxItem } from '@/lib/types'
+} from '@/lib/inbox/inboxDisplay'
+import { isShareableInboxItem, shareStatusLabel } from '@/lib/inbox/gateShareLink'
+import type { GateShareInboxStatus, InboxItem } from '@/lib/shared/types'
 
 const props = defineProps<{
   item: InboxItem

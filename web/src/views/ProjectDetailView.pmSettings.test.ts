@@ -6,7 +6,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
-import type { PmLeaderBinding } from '@/lib/types'
+import type { PmLeaderBinding } from '@/lib/shared/types'
 
 const apiMocks = vi.hoisted(() => ({
   getProject: vi.fn(),
@@ -14,13 +14,12 @@ const apiMocks = vi.hoisted(() => ({
   getPmLeader: vi.fn(),
   updatePmLeader: vi.fn(),
   listAgents: vi.fn(),
-  listPmMemories: vi.fn(),
   listProjectCronJobs: vi.fn(),
   getProjectChannel: vi.fn(),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {
@@ -30,21 +29,20 @@ vi.mock('@/lib/api', async () => {
       getPmLeader: apiMocks.getPmLeader,
       updatePmLeader: apiMocks.updatePmLeader,
       listAgents: apiMocks.listAgents,
-      listPmMemories: apiMocks.listPmMemories,
       listProjectCronJobs: apiMocks.listProjectCronJobs,
       getProjectChannel: apiMocks.getProjectChannel,
     },
   }
 })
 
-vi.mock('@/lib/useBreakpoint', async () => {
+vi.mock('@/lib/composables/useBreakpoint', async () => {
   const { ref } = await import('vue')
   return {
     useBreakpoint: () => ({ isMobile: ref(false) }),
   }
 })
 
-vi.mock('@/lib/useToast', () => ({
+vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn() }),
 }))
 
@@ -87,7 +85,6 @@ async function mountDetail(tabQuery?: string, binding: PmLeaderBinding = DISABLE
   apiMocks.listWorkflows.mockResolvedValue([])
   apiMocks.getPmLeader.mockResolvedValue(binding)
   apiMocks.listAgents.mockResolvedValue([{ name: 'agent-1' }])
-  apiMocks.listPmMemories.mockResolvedValue({ items: [] })
   apiMocks.listProjectCronJobs.mockResolvedValue({ items: [] })
   apiMocks.getProjectChannel.mockResolvedValue({ channel: null })
   apiMocks.updatePmLeader.mockImplementation(async (_id: string, body: Partial<PmLeaderBinding>) => ({

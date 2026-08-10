@@ -6,11 +6,11 @@ import AppButton from '@/components/ui/AppButton.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import Icon from '@/components/ui/Icon.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
-import { api } from '@/lib/api'
-import { fmtTime } from '@/lib/format'
-import { useToast } from '@/lib/useToast'
-import { createListRequestSeq, httpStatusOf } from '@/lib/listRequestSeq'
-import type { AgentCronJob } from '@/lib/types'
+import { api } from '@/lib/api/api'
+import { fmtTime } from '@/lib/shared/format'
+import { useToast } from '@/lib/composables/useToast'
+import { createListRequestSeq, httpStatusOf } from '@/lib/shared/listRequestSeq'
+import type { AgentCronJob } from '@/lib/shared/types'
 
 const SKELETON_ROWS = 5
 const props = defineProps<{ projectId: string }>()

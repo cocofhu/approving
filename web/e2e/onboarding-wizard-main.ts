@@ -1,8 +1,8 @@
 import '../src/styles/global.css'
 import { createApp, h, ref } from 'vue'
-import { i18n } from '../src/lib/i18n'
-import { initLocale, setLocale } from '../src/lib/locale'
-import { setTheme } from '../src/lib/theme'
+import { i18n } from '../src/lib/shared/i18n'
+import { initLocale, setLocale } from '../src/lib/shared/locale'
+import { setTheme } from '../src/lib/shared/theme'
 import OnboardingWizard from '../src/components/onboarding/OnboardingWizard.vue'
 
 async function boot() {

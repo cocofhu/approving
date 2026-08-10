@@ -4,7 +4,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
-import type { StateTraceEntry } from '@/lib/types'
+import type { StateTraceEntry } from '@/lib/shared/types'
 import StateTracePanel from './StateTracePanel.vue'
 
 function mountPanel(trace: StateTraceEntry[] = []) {

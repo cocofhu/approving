@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { compositeImages, imgSrc } from '@/lib/compositeText'
+import { compositeImages, imgSrc } from '@/lib/shared/compositeText'
 
 const props = withDefaults(
   defineProps<{

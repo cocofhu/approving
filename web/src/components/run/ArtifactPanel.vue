@@ -2,7 +2,7 @@
 import { ref, watch, onMounted } from 'vue'
 import ArtifactList from './ArtifactList.vue'
 import ArtifactPreview from './ArtifactPreview.vue'
-import type { Artifact } from '@/lib/types'
+import type { Artifact } from '@/lib/shared/types'
 
 const props = withDefaults(defineProps<{ artifacts: Artifact[]; scope?: 'run' | 'platform' }>(), {
   scope: 'run',

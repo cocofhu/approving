@@ -6,7 +6,7 @@ import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import enCommon from '@/locales/en/common.json'
 import enPages from '@/locales/en/pages.json'
-import type { AgentOrg } from '@/lib/api'
+import type { AgentOrg } from '@/lib/api/api'
 import AgentOrgSidebar from './AgentOrgSidebar.vue'
 
 const sampleOrg: AgentOrg = {

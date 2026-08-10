@@ -7,10 +7,10 @@ import pagesZh from '@/locales/zh-CN/pages.json'
 import commonEn from '@/locales/en/common.json'
 import pagesEn from '@/locales/en/pages.json'
 import AgentCreateWizard from './AgentCreateWizard.vue'
-import { WIZARD_STEPS } from '@/lib/agentCreateWizard'
+import { WIZARD_STEPS } from '@/lib/agent/agentCreateWizard'
 
 const createAgent = vi.fn(async (payload: unknown) => payload)
-vi.mock('@/lib/api', () => ({
+vi.mock('@/lib/api/api', () => ({
   api: {
     createAgent: (payload: unknown) => createAgent(payload),
   },

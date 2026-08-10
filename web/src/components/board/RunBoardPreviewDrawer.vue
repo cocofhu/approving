@@ -6,9 +6,9 @@ import AppDrawer from '@/components/ui/AppDrawer.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import PriorityBadge from '@/components/ui/PriorityBadge.vue'
-import { fmtDuration, fmtTime } from '@/lib/format'
-import { runBoardTitle, runIdShort } from '@/lib/runBoard'
-import type { Run } from '@/lib/types'
+import { fmtDuration, fmtTime } from '@/lib/shared/format'
+import { runBoardTitle, runIdShort } from '@/lib/run/runBoard'
+import type { Run } from '@/lib/shared/types'
 
 const props = defineProps<{ open: boolean; run: Run | null }>()
 const emit = defineEmits<{ (e: 'close'): void }>()

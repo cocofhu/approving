@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { api } from '@/lib/api'
-import { useToast } from '@/lib/useToast'
-import type { Project, ProjectNotifyPolicy } from '@/lib/types'
+import { api } from '@/lib/api/api'
+import { useToast } from '@/lib/composables/useToast'
+import type { Project, ProjectNotifyPolicy } from '@/lib/shared/types'
 import {
   RUN_NOTIFY_PLACEHOLDERS,
   defaultEditableRunNotifyTemplate,
   renderRunNotifyMessage,
   type RunNotifyKind,
-} from '@/lib/runNotifyTemplate'
+} from '@/lib/run/runNotifyTemplate'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppSwitch from '@/components/ui/AppSwitch.vue'
 

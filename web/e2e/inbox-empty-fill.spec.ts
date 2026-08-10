@@ -21,6 +21,11 @@ const MOCK_WORKFLOWS = [
 
 async function mockApi(page: Page, opts: { filterEmpty?: boolean } = {}) {
   await page.route('**/api/**', async (route) => {
+    // Skip Vite module URLs like /@fs/.../src/lib/api/api.ts (pathname is not /api/...)
+    if (!new URL(route.request().url()).pathname.startsWith('/api/')) {
+      await route.continue()
+      return
+    }
     const url = new URL(route.request().url())
     const p = url.pathname
     if (p.includes('/gates')) {

@@ -14,8 +14,8 @@ const apiMocks = vi.hoisted(() => ({
   destroySandbox: vi.fn(),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {

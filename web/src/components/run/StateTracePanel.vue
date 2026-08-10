@@ -2,8 +2,8 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
-import { fmtTime } from '@/lib/format'
-import type { StateTraceEntry } from '@/lib/types'
+import { fmtTime } from '@/lib/shared/format'
+import type { StateTraceEntry } from '@/lib/shared/types'
 
 const props = defineProps<{ trace: StateTraceEntry[] }>()
 

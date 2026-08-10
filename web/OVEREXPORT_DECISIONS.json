@@ -1,0 +1,339 @@
+{
+  "generatedFor": "feature/frontend-lib-domain-refactor g2",
+  "scan": "104 production modules; 55 value exports with no external lexical refs in src/e2e",
+  "policy": "Every candidate must converge or keep with reason; no silent skips. No knip/ESLint changes.",
+  "decisions": [
+    {
+      "symbol": "flattenUpdate",
+      "file": "run/acpUnpack.ts",
+      "decision": "converge",
+      "reason": "module-internal helper; no external refs"
+    },
+    {
+      "symbol": "defaultCommandTemplate",
+      "file": "agent/agentCreateWizard.ts",
+      "decision": "converge",
+      "reason": "wizard-internal default"
+    },
+    {
+      "symbol": "defaultSkillTemplate",
+      "file": "agent/agentCreateWizard.ts",
+      "decision": "converge",
+      "reason": "wizard-internal default"
+    },
+    {
+      "symbol": "promptConfiguredCount",
+      "file": "agent/agentCreateWizard.ts",
+      "decision": "converge",
+      "reason": "wizard-internal helper"
+    },
+    {
+      "symbol": "WIZARD_PROMPT_KEYS",
+      "file": "agent/agentCreateWizard.ts",
+      "decision": "converge",
+      "reason": "wizard-internal constant"
+    },
+    {
+      "symbol": "agentNameRuneCount",
+      "file": "agent/agentIO.ts",
+      "decision": "converge",
+      "reason": "IO-internal helper"
+    },
+    {
+      "symbol": "parseImportError",
+      "file": "agent/agentIO.ts",
+      "decision": "converge",
+      "reason": "IO-internal helper"
+    },
+    {
+      "symbol": "agentNamesInSubtree",
+      "file": "agent/agentOrg.ts",
+      "decision": "converge",
+      "reason": "org-internal helper"
+    },
+    {
+      "symbol": "descendantGroupIds",
+      "file": "agent/agentOrg.ts",
+      "decision": "converge",
+      "reason": "org-internal helper"
+    },
+    {
+      "symbol": "directMemberCount",
+      "file": "agent/agentOrg.ts",
+      "decision": "converge",
+      "reason": "org-internal helper"
+    },
+    {
+      "symbol": "groupById",
+      "file": "agent/agentOrg.ts",
+      "decision": "converge",
+      "reason": "org-internal helper"
+    },
+    {
+      "symbol": "groupSubtreeIds",
+      "file": "agent/agentOrg.ts",
+      "decision": "converge",
+      "reason": "org-internal helper"
+    },
+    {
+      "symbol": "membershipOf",
+      "file": "agent/agentOrg.ts",
+      "decision": "converge",
+      "reason": "org-internal helper"
+    },
+    {
+      "symbol": "ungroupedAgents",
+      "file": "agent/agentOrg.ts",
+      "decision": "converge",
+      "reason": "org-internal helper"
+    },
+    {
+      "symbol": "teamDraftAsWizardDraft",
+      "file": "agent/agentTeamWizard.ts",
+      "decision": "converge",
+      "reason": "wizard-internal mapper"
+    },
+    {
+      "symbol": "UNNAMED_WORKFLOW_SNAPSHOT",
+      "file": "run/artifactGroups.ts",
+      "decision": "converge",
+      "reason": "grouping-internal constant"
+    },
+    {
+      "symbol": "isOversizedAttachment",
+      "file": "shared/attachments.ts",
+      "decision": "converge",
+      "reason": "attachment-internal helper"
+    },
+    {
+      "symbol": "QQ_ATTACH_MAX_BYTES",
+      "file": "shared/attachments.ts",
+      "decision": "converge",
+      "reason": "attachment-internal constant"
+    },
+    {
+      "symbol": "GAP_X",
+      "file": "run/canvasLayout.ts",
+      "decision": "converge",
+      "reason": "layout-internal constant"
+    },
+    {
+      "symbol": "GAP_Y",
+      "file": "run/canvasLayout.ts",
+      "decision": "converge",
+      "reason": "layout-internal constant"
+    },
+    {
+      "symbol": "NODE_W",
+      "file": "run/canvasLayout.ts",
+      "decision": "converge",
+      "reason": "layout-internal constant"
+    },
+    {
+      "symbol": "sanitizeCoord",
+      "file": "run/canvasPath.ts",
+      "decision": "converge",
+      "reason": "path-internal helper"
+    },
+    {
+      "symbol": "sanitizePoint",
+      "file": "run/canvasPath.ts",
+      "decision": "converge",
+      "reason": "path-internal helper"
+    },
+    {
+      "symbol": "formatImageCountBadge",
+      "file": "shared/compositeText.ts",
+      "decision": "converge",
+      "reason": "text-internal helper"
+    },
+    {
+      "symbol": "isValidPushTargetValue",
+      "file": "pm/cronDeliverTargets.ts",
+      "decision": "converge",
+      "reason": "cron-internal validator"
+    },
+    {
+      "symbol": "captureStructuredElement",
+      "file": "run/exportStructuredArtifact.ts",
+      "decision": "converge",
+      "reason": "export-internal helper"
+    },
+    {
+      "symbol": "measureStructuredExportBox",
+      "file": "run/exportStructuredArtifact.ts",
+      "decision": "converge",
+      "reason": "export-internal helper"
+    },
+    {
+      "symbol": "TEST_SCREENSHOT_WAIT_MS",
+      "file": "run/exportStructuredArtifact.ts",
+      "decision": "converge",
+      "reason": "export-internal test timing constant"
+    },
+    {
+      "symbol": "triggerBlobDownload",
+      "file": "run/exportStructuredArtifact.ts",
+      "decision": "converge",
+      "reason": "export-internal helper"
+    },
+    {
+      "symbol": "GATE_SHARE_REQUEST_HEADER",
+      "file": "inbox/gateShareLink.ts",
+      "decision": "converge",
+      "reason": "share-internal header name"
+    },
+    {
+      "symbol": "GATE_SHARE_TOKEN_HEADER",
+      "file": "inbox/gateShareLink.ts",
+      "decision": "converge",
+      "reason": "share-internal header name"
+    },
+    {
+      "symbol": "isAppPreviewInboxItem",
+      "file": "inbox/gateShareLink.ts",
+      "decision": "converge",
+      "reason": "share-internal predicate"
+    },
+    {
+      "symbol": "isReviewInboxItem",
+      "file": "inbox/gateShareLink.ts",
+      "decision": "converge",
+      "reason": "share-internal predicate"
+    },
+    {
+      "symbol": "shareMemoryKey",
+      "file": "inbox/gateShareLink.ts",
+      "decision": "converge",
+      "reason": "share-internal key helper"
+    },
+    {
+      "symbol": "parseGitRepos",
+      "file": "agent/gitCredentialAnalysis.ts",
+      "decision": "converge",
+      "reason": "analysis-internal helper"
+    },
+    {
+      "symbol": "injectIntoHtml",
+      "file": "shared/htmlPreviewSandbox.ts",
+      "decision": "converge",
+      "reason": "sandbox-internal helper"
+    },
+    {
+      "symbol": "clearLiveLogSnapshotsForRun",
+      "file": "run/liveLogSnapshotCache.ts",
+      "decision": "converge",
+      "reason": "cache-internal helper"
+    },
+    {
+      "symbol": "eventsFromSnapshot",
+      "file": "run/liveLogSnapshotCache.ts",
+      "decision": "converge",
+      "reason": "cache-internal helper"
+    },
+    {
+      "symbol": "snapshotCacheKey",
+      "file": "run/liveLogSnapshotCache.ts",
+      "decision": "converge",
+      "reason": "cache-internal helper"
+    },
+    {
+      "symbol": "isTimeoutError",
+      "file": "shared/loadingRequest.ts",
+      "decision": "converge",
+      "reason": "loading-internal helper"
+    },
+    {
+      "symbol": "detectPublicLocale",
+      "file": "shared/locale.ts",
+      "decision": "converge",
+      "reason": "locale-internal helper"
+    },
+    {
+      "symbol": "clearOnboardingDismiss",
+      "file": "pm/onboardingWizard.ts",
+      "decision": "converge",
+      "reason": "onboarding-internal helper"
+    },
+    {
+      "symbol": "PM_FAIL_KINDS",
+      "file": "pm/pmTurnState.ts",
+      "decision": "converge",
+      "reason": "pm-internal constant"
+    },
+    {
+      "symbol": "MANAGED_REGION_KEYS",
+      "file": "shared/regionPolicy.ts",
+      "decision": "converge",
+      "reason": "policy-internal constant; public surface is helpers"
+    },
+    {
+      "symbol": "REGION_POLICIES",
+      "file": "shared/regionPolicy.ts",
+      "decision": "converge",
+      "reason": "policy-internal table; public surface is helpers"
+    },
+    {
+      "symbol": "colorForType",
+      "file": "run/runStats.ts",
+      "decision": "converge",
+      "reason": "stats-internal helper"
+    },
+    {
+      "symbol": "HUMAN_WAIT_TYPES",
+      "file": "run/runStats.ts",
+      "decision": "converge",
+      "reason": "stats-internal constant"
+    },
+    {
+      "symbol": "RUN_TAG_PATTERN",
+      "file": "run/runTags.ts",
+      "decision": "converge",
+      "reason": "tags-internal pattern"
+    },
+    {
+      "symbol": "PROJECT_CONTEXT_ALL",
+      "file": "composables/useProjectContext.ts",
+      "decision": "converge",
+      "reason": "composable-internal sentinel"
+    },
+    {
+      "symbol": "DASHBOARD_COLUMNS",
+      "file": "run/useRunBoard.ts",
+      "decision": "converge",
+      "reason": "board-internal column set"
+    },
+    {
+      "symbol": "EXTRA_COLUMNS",
+      "file": "run/useRunBoard.ts",
+      "decision": "converge",
+      "reason": "board-internal column set"
+    },
+    {
+      "symbol": "FULL_MAIN_COLUMNS",
+      "file": "run/useRunBoard.ts",
+      "decision": "converge",
+      "reason": "board-internal column set"
+    },
+    {
+      "symbol": "RUN_TERMINAL_POLL_MS",
+      "file": "run/useRunTerminalNotifications.ts",
+      "decision": "converge",
+      "reason": "composable-internal poll interval"
+    },
+    {
+      "symbol": "VALID_RUN_STATUSES",
+      "file": "composables/useStatusFilter.ts",
+      "decision": "converge",
+      "reason": "filter-internal allowlist"
+    },
+    {
+      "symbol": "EXPORT_SCHEMA_VERSION",
+      "file": "run/workflowIO.ts",
+      "decision": "converge",
+      "reason": "IO-internal schema version constant"
+    }
+  ],
+  "kept": [],
+  "notes": "All 55 candidates converged (export removed → module-local). Zero kept."
+}

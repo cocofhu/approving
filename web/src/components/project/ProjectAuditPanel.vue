@@ -4,17 +4,17 @@ import { useI18n } from 'vue-i18n'
 import AuditFilterDropdown, { type AuditDdOption } from '@/components/project/AuditFilterDropdown.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import Pagination from '@/components/ui/Pagination.vue'
-import { api, isPaginated, type PaginatedResponse } from '@/lib/api'
-import { prettyAuditPayload } from '@/lib/auditPayload'
-import { useBreakpoint } from '@/lib/useBreakpoint'
-import { useToast } from '@/lib/useToast'
-import { fmtTime } from '@/lib/format'
+import { api, isPaginated, type PaginatedResponse } from '@/lib/api/api'
+import { prettyAuditPayload } from '@/lib/shared/auditPayload'
+import { useBreakpoint } from '@/lib/composables/useBreakpoint'
+import { useToast } from '@/lib/composables/useToast'
+import { fmtTime } from '@/lib/shared/format'
 import type {
   ProjectAuditEvent,
   ProjectAuditFacetResource,
   ProjectAuditFacetRun,
   ProjectAuditStats,
-} from '@/lib/types'
+} from '@/lib/shared/types'
 
 const props = defineProps<{
   projectId: string

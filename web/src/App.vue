@@ -4,11 +4,11 @@ import { useRoute } from 'vue-router'
 import AppShell from './components/shell/AppShell.vue'
 import ToastHost from './components/ui/ToastHost.vue'
 import AppSkeleton from './components/ui/AppSkeleton.vue'
-import { locale, updateDocumentTitle } from '@/lib/locale'
-import { useAuth } from '@/lib/useAuth'
-import { useDelayedBusy } from '@/lib/useDelayedBusy'
-import { useRoutePending } from '@/lib/routePending'
-import { useLoadingAnnouncer } from '@/lib/loadingAnnouncer'
+import { locale, updateDocumentTitle } from '@/lib/shared/locale'
+import { useAuth } from '@/lib/composables/useAuth'
+import { useDelayedBusy } from '@/lib/composables/useDelayedBusy'
+import { useRoutePending } from '@/lib/shared/routePending'
+import { useLoadingAnnouncer } from '@/lib/shared/loadingAnnouncer'
 
 const route = useRoute()
 const bareLayout = computed(() => !!route.meta.bare)

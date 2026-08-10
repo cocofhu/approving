@@ -6,7 +6,7 @@ import { nextTick, ref } from 'vue'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import shell from '@/locales/zh-CN/shell.json'
-import type { Run } from '@/lib/types'
+import type { Run } from '@/lib/shared/types'
 
 const push = vi.fn()
 
@@ -15,18 +15,18 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push }),
 }))
 
-vi.mock('@/lib/useShutdownState', () => ({
+vi.mock('@/lib/composables/useShutdownState', () => ({
   isDraining: () => false,
 }))
 
-vi.mock('@/lib/useAuth', () => ({
+vi.mock('@/lib/composables/useAuth', () => ({
   useAuth: () => ({
     user: ref({ username: 'tester', expiresAt: 't' }),
     ready: ref(true),
   }),
 }))
 
-vi.mock('@/lib/api', () => ({
+vi.mock('@/lib/api/api', () => ({
   api: {
     listRuns: vi.fn(),
     getRun: vi.fn(),
@@ -37,13 +37,13 @@ vi.mock('@/lib/api', () => ({
     data != null && typeof data === 'object' && !Array.isArray(data) && 'items' in data,
 }))
 
-import { api } from '@/lib/api'
+import { api } from '@/lib/api/api'
 import {
   __resetRunTerminalNotificationsForTests,
   prefsKeyForUser,
   RUN_TERMINAL_PANEL_LIMIT,
   RUN_TERMINAL_POOL_SIZE,
-} from '@/lib/useRunTerminalNotifications'
+} from '@/lib/run/useRunTerminalNotifications'
 import AppTopbar from './AppTopbar.vue'
 
 function run(partial: Partial<Run> & Pick<Run, 'id' | 'status'>): Run {

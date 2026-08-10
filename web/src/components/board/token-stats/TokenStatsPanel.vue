@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { api } from '@/lib/api'
-import type { ProjectTokenStats, TokenStatsWindow } from '@/lib/types'
-import { fmtCompactTokenCount } from '@/lib/tokenUsage'
+import { api } from '@/lib/api/api'
+import type { ProjectTokenStats, TokenStatsWindow } from '@/lib/shared/types'
+import { fmtCompactTokenCount } from '@/lib/run/tokenUsage'
 import TokenTrendChart from './TokenTrendChart.vue'
 import TokenDonutChart from './TokenDonutChart.vue'
 import TokenWorkflowRank from './TokenWorkflowRank.vue'

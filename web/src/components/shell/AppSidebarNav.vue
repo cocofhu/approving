@@ -4,7 +4,7 @@ import { watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import { sidebarNavGroups } from '@/data/sidebarNav'
-import { usePendingGates } from '@/lib/usePendingGates'
+import { usePendingGates } from '@/lib/inbox/usePendingGates'
 
 defineProps<{ drawer?: boolean }>()
 const emit = defineEmits<{ (e: 'navigate'): void }>()

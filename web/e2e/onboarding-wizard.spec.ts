@@ -10,6 +10,11 @@ test.beforeAll(() => {
 
 test('空项目上手引导五步向导浏览器验收', async ({ page }) => {
   await page.route('**/api/**', async (route) => {
+    // Skip Vite module URLs like /@fs/.../src/lib/api/api.ts (pathname is not /api/...)
+    if (!new URL(route.request().url()).pathname.startsWith('/api/')) {
+      await route.continue()
+      return
+    }
     const url = new URL(route.request().url())
     if (url.pathname.includes('/bootstrap-onboarding') && route.request().method() === 'POST') {
       const body = route.request().postDataJSON() as { apiKey?: string; repos?: string }

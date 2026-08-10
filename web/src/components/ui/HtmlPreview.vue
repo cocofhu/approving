@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount, computed, inject, type ComputedRef } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { injectDemoScrollbarStyles } from '@/lib/demoScrollbar'
+import { injectDemoScrollbarStyles } from '@/lib/shared/demoScrollbar'
 import {
   SANDBOX_ATTR,
   INLINE_FALLBACK_HEIGHT,
@@ -17,7 +17,7 @@ import {
   parseInspectPickMessage,
   isValidInspectCanceledMessage,
   buildInspectCommand,
-} from '@/lib/htmlPreviewSandbox'
+} from '@/lib/shared/htmlPreviewSandbox'
 import Icon from './Icon.vue'
 import AppModal from './AppModal.vue'
 

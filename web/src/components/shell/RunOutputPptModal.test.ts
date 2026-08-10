@@ -6,7 +6,7 @@ import { nextTick } from 'vue'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import shell from '@/locales/zh-CN/shell.json'
-import type { Artifact } from '@/lib/types'
+import type { Artifact } from '@/lib/shared/types'
 
 const push = vi.fn()
 
@@ -20,8 +20,8 @@ const apiMocks = vi.hoisted(() => ({
   artifactDownloadUrl: vi.fn((id: string) => `http://test/api/artifacts/${id}/download`),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {
@@ -33,7 +33,7 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
-vi.mock('@/lib/useToast', () => ({
+vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), warn: vi.fn() }),
 }))
 

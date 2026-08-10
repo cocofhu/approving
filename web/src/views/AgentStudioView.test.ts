@@ -8,7 +8,7 @@ import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import enCommon from '@/locales/en/common.json'
 import enPages from '@/locales/en/pages.json'
-import type { Agent } from '@/lib/api'
+import type { Agent } from '@/lib/api/api'
 
 const mocks = vi.hoisted(() => ({
   listAgents: vi.fn(),
@@ -26,8 +26,8 @@ const breakpointMocks = vi.hoisted(() => {
   return { isMobile: vue.ref(false) }
 })
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {
@@ -43,7 +43,7 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
-vi.mock('@/lib/useProjectContext', () => ({
+vi.mock('@/lib/composables/useProjectContext', () => ({
   useProjectContext: () => ({
     selected: { value: 'proj-default' },
     ensureHydrated: vi.fn(),
@@ -51,7 +51,7 @@ vi.mock('@/lib/useProjectContext', () => ({
   }),
 }))
 
-vi.mock('@/lib/useBreakpoint', () => ({
+vi.mock('@/lib/composables/useBreakpoint', () => ({
   useBreakpoint: () => ({ isMobile: breakpointMocks.isMobile }),
 }))
 

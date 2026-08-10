@@ -8,7 +8,6 @@ const dir = dirname(fileURLToPath(import.meta.url))
 const src = readFileSync(join(dir, 'RunListView.vue'), 'utf8')
 const shellSrc = readFileSync(join(dir, '../components/shell/AppShell.vue'), 'utf8')
 const routerSrc = readFileSync(join(dir, '../router/index.ts'), 'utf8')
-const workflowSrc = readFileSync(join(dir, 'WorkflowListView.vue'), 'utf8')
 const sandboxSrc = readFileSync(join(dir, 'SandboxListView.vue'), 'utf8')
 const projectSrc = readFileSync(join(dir, 'ProjectListView.vue'), 'utf8')
 const zhCommon = readFileSync(join(dir, '../locales/zh-CN/common.json'), 'utf8')
@@ -123,7 +122,6 @@ describe('RunListView fill scope lock (g4.3)', () => {
   })
 
   it('does not change other list pages, EmptyState, or empty/fail i18n strings', () => {
-    expect(workflowSrc).toMatch(/^\s*<div>\s*$/m)
     expect(sandboxSrc).toMatch(/^\s*<div>\s*$/m)
     expect(projectSrc).toMatch(/^\s*<div>\s*$/m)
     expect(src).not.toMatch(/EmptyState/)

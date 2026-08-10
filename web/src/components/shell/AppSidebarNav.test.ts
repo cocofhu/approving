@@ -18,7 +18,7 @@ const gateMocks = vi.hoisted(() => ({
   refresh: vi.fn(),
 }))
 
-vi.mock('@/lib/usePendingGates', () => ({
+vi.mock('@/lib/inbox/usePendingGates', () => ({
   usePendingGates: () => ({
     count: { value: 2 },
     peek: gateMocks.peek,

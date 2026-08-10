@@ -7,8 +7,8 @@
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { fmtTokenCount } from '@/lib/tokenUsage'
-import type { TokenUsage } from '@/lib/types'
+import { fmtTokenCount } from '@/lib/run/tokenUsage'
+import type { TokenUsage } from '@/lib/shared/types'
 
 const props = defineProps<{
   totalTokens: number

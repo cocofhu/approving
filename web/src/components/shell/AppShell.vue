@@ -15,10 +15,10 @@ import {
   shutdownState,
   startShutdownPolling,
   stopShutdownPolling,
-} from '@/lib/useShutdownState'
-import { useAuth } from '@/lib/useAuth'
-import { useRefreshChrome } from '@/lib/refreshChrome'
-import { useRoutePending } from '@/lib/routePending'
+} from '@/lib/composables/useShutdownState'
+import { useAuth } from '@/lib/composables/useAuth'
+import { useRefreshChrome } from '@/lib/shared/refreshChrome'
+import { useRoutePending } from '@/lib/shared/routePending'
 
 const route = useRoute()
 const { t } = useI18n()

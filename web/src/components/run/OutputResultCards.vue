@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { api } from '@/lib/api'
+import { api } from '@/lib/api/api'
 import OutputResultCardBody from './OutputResultCardBody.vue'
 import AppModal from '../ui/AppModal.vue'
 import Icon from '../ui/Icon.vue'
-import type { OutputCard, Run } from '@/lib/types'
+import type { OutputCard, Run } from '@/lib/shared/types'
 
 const props = defineProps<{ cards: OutputCard[]; run: Run }>()
 

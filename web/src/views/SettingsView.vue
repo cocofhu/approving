@@ -2,9 +2,9 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { api, type DashboardStats, type SandboxView, type SettingItem } from '@/lib/api'
-import { useAuth } from '@/lib/useAuth'
-import { createListRequestSeq, httpStatusOf } from '@/lib/listRequestSeq'
+import { api, type DashboardStats, type SandboxView, type SettingItem } from '@/lib/api/api'
+import { useAuth } from '@/lib/composables/useAuth'
+import { createListRequestSeq, httpStatusOf } from '@/lib/shared/listRequestSeq'
 import AppButton from '@/components/ui/AppButton.vue'
 import Icon from '@/components/ui/Icon.vue'
 

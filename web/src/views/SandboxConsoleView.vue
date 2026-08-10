@@ -6,13 +6,13 @@ import Icon from '@/components/ui/Icon.vue'
 import NovncPreviewPanel from '@/components/run/NovncPreviewPanel.vue'
 import RefreshStrip from '@/components/run/RefreshStrip.vue'
 import HardLoadLayer from '@/components/run/HardLoadLayer.vue'
-import { isAbortError } from '@/lib/liveLogRehydrate'
+import { isAbortError } from '@/lib/run/liveLogRehydrate'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
-import { api, type SandboxView } from '@/lib/api'
-import { copyToClipboard } from '@/lib/copyToClipboard'
-import { useToast } from '@/lib/useToast'
+import { api, type SandboxView } from '@/lib/api/api'
+import { copyToClipboard } from '@/lib/shared/copyToClipboard'
+import { useToast } from '@/lib/composables/useToast'
 
 const route = useRoute()
 const router = useRouter()

@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/ui/AppButton.vue'
-import { api, type TeamBootstrapSession } from '@/lib/api'
+import { api, type TeamBootstrapSession } from '@/lib/api/api'
 
 const props = defineProps<{
   sessionId: string

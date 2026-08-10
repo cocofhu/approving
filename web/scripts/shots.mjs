@@ -47,20 +47,9 @@ const run = async () => {
     await sleep(500)
   }
 
-  // 03 workflow list
-  await goto(page, '/workflows')
-  await shot(page, '03-workflow-list.png')
-
-  // 04 start-run modal — click 运行 on first workflow row
-  const runBtn = page.getByRole('button', { name: /运行/ }).nth(0)
-  if (await runBtn.count()) {
-    await runBtn.click().catch(() => {})
-    await sleep(800)
-    await shot(page, '04-start-run-modal.png')
-    await page.keyboard.press('Escape').catch(() => {})
-    await page.getByRole('button', { name: '取消' }).first().click().catch(() => {})
-    await sleep(400)
-  }
+  // 03 project list (legacy /workflows redirects here; WorkflowListView retired)
+  await goto(page, '/projects')
+  await shot(page, '03-project-list.png')
 
   // 05 workflow canvas (FSM: prd-to-mr)
   await goto(page, '/workflows/prd-to-mr/edit')

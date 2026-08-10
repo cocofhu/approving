@@ -4,10 +4,10 @@ import { useI18n } from 'vue-i18n'
 import Icon from './Icon.vue'
 import EmptyState from './EmptyState.vue'
 import AppInlineError from './AppInlineError.vue'
-import { api } from '@/lib/api'
-import { createTimeoutController, isAbortError } from '@/lib/loadingRequest'
-import { DEFAULT_LOADING_TIMEOUT_MS } from '@/lib/loadingTypes'
-import type { Project } from '@/lib/types'
+import { api } from '@/lib/api/api'
+import { createTimeoutController, isAbortError } from '@/lib/shared/loadingRequest'
+import { DEFAULT_LOADING_TIMEOUT_MS } from '@/lib/shared/loadingTypes'
+import type { Project } from '@/lib/shared/types'
 
 const props = withDefaults(
   defineProps<{ modelValue: string; count?: number; open?: boolean }>(),

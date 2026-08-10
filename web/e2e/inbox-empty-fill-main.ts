@@ -1,10 +1,10 @@
 import '../src/styles/global.css'
 import { createApp, defineComponent, h } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { i18n } from '../src/lib/i18n'
-import { initLocale, setLocale } from '../src/lib/locale'
-import { installIdleScrollbar } from '../src/lib/idleScrollbar'
-import { setTheme } from '../src/lib/theme'
+import { i18n } from '../src/lib/shared/i18n'
+import { initLocale, setLocale } from '../src/lib/shared/locale'
+import { installIdleScrollbar } from '../src/lib/shared/idleScrollbar'
+import { setTheme } from '../src/lib/shared/theme'
 import GatesInboxView from '../src/views/GatesInboxView.vue'
 
 const params = new URLSearchParams(window.location.search)

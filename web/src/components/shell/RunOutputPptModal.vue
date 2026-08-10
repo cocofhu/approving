@@ -4,8 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import AppModal from '@/components/ui/AppModal.vue'
 import ArtifactPreview from '@/components/run/ArtifactPreview.vue'
-import { api } from '@/lib/api'
-import type { Artifact } from '@/lib/types'
+import { api } from '@/lib/api/api'
+import type { Artifact } from '@/lib/shared/types'
 
 const props = defineProps<{
   open: boolean

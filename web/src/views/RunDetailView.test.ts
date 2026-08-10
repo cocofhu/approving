@@ -217,9 +217,9 @@ describe('RunDetailView ACP log rehydrate state machine', () => {
   })
 
   it('keeps session snapshot cache across hard remount and WS does not clear error', () => {
-    expect(src).toMatch(/from '@\/lib\/liveLogSnapshotCache'/)
-    expect(src).toMatch(/from '@\/lib\/applyLiveWsAcpPage'/)
-    expect(src).toMatch(/from '@\/lib\/pendingAcpBuffer'/)
+    expect(src).toMatch(/from '@\/lib\/run\/liveLogSnapshotCache'/)
+    expect(src).toMatch(/from '@\/lib\/run\/applyLiveWsAcpPage'/)
+    expect(src).toMatch(/from '@\/lib\/run\/pendingAcpBuffer'/)
     expect(src).toMatch(/restoreEventPagesFromCache/)
     expect(src).toMatch(/clearLiveLogSnapshotsExceptRun/)
     expect(src).toMatch(/syncEventPageToCache/)
@@ -253,7 +253,7 @@ describe('RunDetailView ACP log rehydrate state machine', () => {
 
 describe('RunDetailView desktop review layout budget', () => {
   it('guards review widen to desktop review tab and restores ~520 otherwise', () => {
-    expect(src).toMatch(/from '@\/lib\/reviewLayoutBudget'/)
+    expect(src).toMatch(/from '@\/lib\/inbox\/reviewLayoutBudget'/)
     expect(src).toMatch(/REVIEW_CANVAS_MIN/)
     expect(src).toMatch(/REVIEW_SIDEBAR/)
     expect(src).toMatch(/reviewRightPanelCssWidth/)

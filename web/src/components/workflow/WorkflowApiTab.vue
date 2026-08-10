@@ -4,11 +4,11 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
-import { api } from '@/lib/api'
-import { useWorkflowAskInputs } from '@/lib/useWorkflowAskInputs'
-import { fmtTime } from '@/lib/format'
-import { useToast } from '@/lib/useToast'
-import type { Workflow } from '@/lib/types'
+import { api } from '@/lib/api/api'
+import { useWorkflowAskInputs } from '@/lib/run/useWorkflowAskInputs'
+import { fmtTime } from '@/lib/shared/format'
+import { useToast } from '@/lib/composables/useToast'
+import type { Workflow } from '@/lib/shared/types'
 
 const props = defineProps<{ workflow: Workflow }>()
 const toast = useToast()

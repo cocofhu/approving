@@ -7,9 +7,9 @@ import {
   dismissOnboarding,
   isOnboardingDismissed,
   shouldAutoOpenOnboarding,
-} from '@/lib/onboardingWizard'
+} from '@/lib/pm/onboardingWizard'
 
-vi.mock('@/lib/api', () => ({
+vi.mock('@/lib/api/api', () => ({
   api: {
     bootstrapProjectOnboarding: vi.fn(async () => ({
       agentIds: ['ClarifyAgent', 'VisualAgent', 'ImplementAgent', 'TestAgent', 'PreviewAgent'],
@@ -22,7 +22,7 @@ vi.mock('@/lib/api', () => ({
   },
 }))
 
-vi.mock('@/lib/useToast', () => ({
+vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), warn: vi.fn(), show: vi.fn() }),
 }))
 
@@ -74,7 +74,7 @@ describe('OnboardingWizard', () => {
   })
 
   it('blocks generate without API key then succeeds with key', async () => {
-    const { api } = await import('@/lib/api')
+    const { api } = await import('@/lib/api/api')
     const wrapper = mount(OnboardingWizard, {
       props: { open: true, projectId: 'p5' },
       global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
