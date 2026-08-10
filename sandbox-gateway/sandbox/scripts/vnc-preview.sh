@@ -70,12 +70,15 @@ if ! curl -fsS "http://127.0.0.1:${CDP_LOOPBACK_PORT}/json/version" >/dev/null 2
     sleep 1
   fi
 
+  # No window manager on Xvfb: pin geometry explicitly. Approving NewTab windows
+  # are re-sized via CDP (presentDesktop); this covers the bootstrap window.
   "$CHROME_BIN" \
     --no-sandbox \
     --disable-dev-shm-usage \
     --remote-debugging-port="${CDP_LOOPBACK_PORT}" \
     --window-size=1920,1080 \
     --window-position=0,0 \
+    --start-maximized \
     --no-first-run \
     --no-default-browser-check \
     about:blank \

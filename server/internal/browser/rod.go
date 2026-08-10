@@ -8,6 +8,7 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
 	"github.com/go-rod/rod/lib/proto"
+	"github.com/rs/zerolog/log"
 )
 
 // Fixed remote CSS viewport. A stable 1920x1080 (16:9) desktop size; the UI
@@ -50,12 +51,40 @@ func (e *rodEngine) NewTab(_ context.Context, url string) (Page, error) {
 		return nil, fmt.Errorf("create page: %w", err)
 	}
 	rp := &rodPage{engine: e, page: page, ctxID: ctxRes.BrowserContextID}
-	// Pin the CSS viewport to 1920x1080 at DSF 1 so the page lays out at a stable
-	// desktop size regardless of the image's default window, and the frame's pixels
-	// equal CSS pixels (client clicks map 1:1). Best-effort — render still works.
+	// Headed Chromium on Xvfb (no window manager) opens NewTab as a second,
+	// often undersized window — leaving a black desktop strip in noVNC and
+	// breaking Overlay inspect hit-testing. Fill + focus before viewport pin.
+	rp.presentDesktop()
+	// Pin the CSS viewport to 1920x1080 at DSF 1 so layout matches the outer
+	// window we just sized (VNC mouse ↔ Overlay coordinates stay aligned).
 	_ = rp.SetViewport(ViewportWidth, ViewportHeight, 1)
 	rp.installPickListener()
 	return rp, nil
+}
+
+// desktopWindowBounds is the outer Chromium window on the Xvfb 1920x1080 display.
+func desktopWindowBounds() *proto.BrowserBounds {
+	left, top := 0, 0
+	w, h := ViewportWidth, ViewportHeight
+	return &proto.BrowserBounds{
+		Left: &left, Top: &top, Width: &w, Height: &h,
+		WindowState: proto.BrowserWindowStateNormal,
+	}
+}
+
+// presentDesktop focuses the tab and forces the headed window to cover Xvfb.
+// Best-effort: failures are logged but do not fail tab open / inspect toggle.
+func (rp *rodPage) presentDesktop() {
+	if rp == nil || rp.page == nil {
+		return
+	}
+	_ = proto.PageBringToFront{}.Call(rp.page)
+	if _, err := rp.page.Activate(); err != nil {
+		log.Debug().Err(err).Msg("preview presentDesktop Activate")
+	}
+	if err := rp.page.SetWindow(desktopWindowBounds()); err != nil {
+		log.Debug().Err(err).Msg("preview presentDesktop SetWindow")
+	}
 }
 
 func (e *rodEngine) Close() error { return e.browser.Close() }
@@ -180,6 +209,9 @@ func (rp *rodPage) SetInspect(on bool) error {
 		_ = proto.OverlayDisable{}.Call(rp.page)
 		return nil
 	}
+	// Re-assert focus/geometry so VNC clicks land on this tab's Overlay, not a
+	// leftover bootstrap about:blank window or an undersized cascade window.
+	rp.presentDesktop()
 	_ = proto.DOMEnable{}.Call(rp.page)
 	_ = proto.OverlayEnable{}.Call(rp.page)
 	content, border := 0.4, 1.0
@@ -224,13 +256,21 @@ func (rp *rodPage) installPickListener() {
 		func(e *proto.OverlayInspectNodeRequested) {
 			cb := rp.getPick()
 			if cb == nil {
+				_ = rp.SetInspect(false)
 				return
 			}
-			if pick, err := rp.describeBackendNode(e.BackendNodeID); err == nil {
-				cb(pick)
-			}
-			// One-shot: leave inspect mode after a pick.
+			pick, err := rp.describeBackendNode(e.BackendNodeID)
+			// One-shot: leave inspect mode after a pick attempt.
 			_ = rp.SetInspect(false)
+			if err != nil {
+				// Previously silent: server left inspect while UI stayed pressed.
+				log.Warn().Err(err).Msg("preview describeBackendNode failed")
+				if cancel := rp.getInspectCanceled(); cancel != nil {
+					cancel()
+				}
+				return
+			}
+			cb(pick)
 		},
 		func(_ *proto.OverlayInspectModeCanceled) {
 			// User Esc (or equivalent) canceled SearchForNode — notify UI to clear sticky toggle.
