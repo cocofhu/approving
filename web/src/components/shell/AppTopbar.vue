@@ -1,18 +1,39 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import LangSelect from '../ui/LangSelect.vue'
+import RunOutputPptModal from './RunOutputPptModal.vue'
 import { theme, toggleTheme } from '@/lib/theme'
 import { isDraining } from '@/lib/useShutdownState'
 import { locale, setLocale, type AppLocale } from '@/lib/locale'
+import { relTime } from '@/lib/format'
+import { useRunTerminalNotifications } from '@/lib/useRunTerminalNotifications'
 
 const emit = defineEmits<{ (e: 'toggle-menu'): void }>()
 
 const { t } = useI18n()
 const route = useRoute()
+const router = useRouter()
 const menuOpen = ref(false)
+const panelOpen = ref(false)
+const bellWrapEl = ref<HTMLElement | null>(null)
+
+const {
+  previewItems,
+  remainingCount,
+  unreadCount,
+  hasUnreadFailed,
+  badgeLabel,
+  markRead,
+  startPolling,
+  stopPolling,
+} = useRunTerminalNotifications()
+
+const outputOpen = ref(false)
+const outputRunId = ref<string | null>(null)
+const outputContext = ref('')
 
 const themeTitle = computed(() =>
   t(theme.value === 'dark' ? 'shell.theme.toLight' : 'shell.theme.toDark'),
@@ -22,6 +43,7 @@ watch(
   () => route.path,
   () => {
     menuOpen.value = false
+    panelOpen.value = false
   },
 )
 
@@ -34,7 +56,87 @@ function onLocaleSelect(v: AppLocale) {
   void setLocale(v)
 }
 
-defineExpose({ menuOpen, toggleMenu })
+function togglePanel() {
+  panelOpen.value = !panelOpen.value
+}
+
+function closePanel() {
+  panelOpen.value = false
+}
+
+function onDocClick(ev: MouseEvent) {
+  if (!panelOpen.value) return
+  const root = bellWrapEl.value
+  if (root && ev.target instanceof Node && root.contains(ev.target)) return
+  closePanel()
+}
+
+function onDocKeydown(ev: KeyboardEvent) {
+  if (ev.key === 'Escape' && panelOpen.value) {
+    closePanel()
+  }
+}
+
+function statusLabel(status: string) {
+  return status === 'failed'
+    ? t('common.status.failed')
+    : t('common.status.completed')
+}
+
+function itemContext(item: { workflowName: string; runId: string; title: string }) {
+  const wf = item.workflowName || item.title
+  return wf ? `${wf} · ${item.runId}` : item.runId
+}
+
+async function onItemClick(item: {
+  runId: string
+  status: 'completed' | 'failed'
+  title: string
+  workflowName: string
+}) {
+  markRead(item.runId)
+  closePanel()
+  if (item.status === 'failed') {
+    await router.push(`/runs/${item.runId}`)
+    return
+  }
+  outputContext.value = itemContext(item)
+  outputRunId.value = item.runId
+  outputOpen.value = true
+}
+
+function closeOutputModal() {
+  outputOpen.value = false
+  outputRunId.value = null
+  outputContext.value = ''
+}
+
+function viewAll() {
+  // Opening "view all" must NOT batch-mark read (plan g2.3 / f3).
+  closePanel()
+  void router.push({ path: '/runs', query: { status: 'completed,failed' } })
+}
+
+onMounted(() => {
+  startPolling()
+  document.addEventListener('click', onDocClick)
+  document.addEventListener('keydown', onDocKeydown)
+})
+
+onBeforeUnmount(() => {
+  stopPolling()
+  document.removeEventListener('click', onDocClick)
+  document.removeEventListener('keydown', onDocKeydown)
+})
+
+defineExpose({
+  menuOpen,
+  toggleMenu,
+  panelOpen,
+  togglePanel,
+  outputOpen,
+  outputRunId,
+})
 </script>
 
 <template>
@@ -63,8 +165,113 @@ defineExpose({ menuOpen, toggleMenu })
     >
       <Icon :name="theme === 'dark' ? 'sun' : 'moon'" :size="18" />
     </button>
-    <button class="relative flex h-9 w-9 items-center justify-center rounded-md text-txt2 hover:bg-elevated hover:text-txt">
-      <Icon name="bell" :size="18" />
-    </button>
+    <div ref="bellWrapEl" class="relative">
+      <button
+        type="button"
+        class="relative flex h-9 w-9 items-center justify-center rounded-md text-txt2 hover:bg-elevated hover:text-txt"
+        :class="panelOpen ? 'bg-elevated text-txt' : ''"
+        data-testid="run-notifications-bell"
+        :aria-label="t('shell.runNotifications.title')"
+        aria-haspopup="true"
+        :aria-expanded="panelOpen ? 'true' : 'false'"
+        @click.stop="togglePanel"
+      >
+        <Icon name="bell" :size="18" />
+        <span
+          v-if="badgeLabel"
+          class="absolute right-0.5 top-0.5 inline-flex h-4 min-w-4 items-center justify-center px-1 text-[10px] font-bold leading-none text-white"
+          :class="hasUnreadFailed ? 'bg-err' : 'bg-accent'"
+          data-testid="run-notifications-badge"
+        >{{ badgeLabel }}</span>
+      </button>
+
+      <div
+        v-if="panelOpen"
+        class="absolute right-0 top-[calc(100%+6px)] z-40 flex w-[min(380px,calc(100vw-2rem))] flex-col border border-line-strong bg-elevated shadow-card"
+        role="menu"
+        :aria-label="t('shell.runNotifications.title')"
+        data-testid="run-notifications-panel"
+        @click.stop
+      >
+        <div class="flex items-center justify-between border-b border-line px-3.5 py-3">
+          <h3 class="m-0 text-[13px] font-semibold text-txt">{{ t('shell.runNotifications.title') }}</h3>
+          <span class="text-xs text-txt3">
+            {{ t('shell.runNotifications.unreadCount', { n: unreadCount }) }}
+          </span>
+        </div>
+
+        <div class="max-h-[360px] overflow-auto">
+          <div
+            v-if="!previewItems.length"
+            class="px-5 py-9 text-center"
+            data-testid="run-notifications-empty"
+          >
+            <p class="m-0 text-[13px] text-txt2">{{ t('shell.runNotifications.empty') }}</p>
+            <p class="mt-1.5 text-xs text-txt3">{{ t('shell.runNotifications.emptyHint') }}</p>
+          </div>
+          <button
+            v-for="item in previewItems"
+            :key="item.runId"
+            type="button"
+            class="relative block w-full border-b border-line px-3.5 py-3 text-left hover:bg-overlay"
+            :class="item.unread ? 'bg-accent/5' : ''"
+            data-testid="run-notifications-item"
+            :data-run-id="item.runId"
+            :data-status="item.status"
+            :data-unread="item.unread ? 'true' : 'false'"
+            @click="onItemClick(item)"
+          >
+            <span
+              v-if="item.unread"
+              class="absolute bottom-0 left-0 top-0 w-0.5 bg-accent"
+              aria-hidden="true"
+            />
+            <div class="mb-1 flex items-center gap-2">
+              <span
+                class="shrink-0 border px-1.5 py-0.5 text-[10px] font-semibold"
+                :class="
+                  item.status === 'failed'
+                    ? 'border-err/45 text-err'
+                    : 'border-ok/40 text-ok'
+                "
+              >{{ statusLabel(item.status) }}</span>
+              <span class="truncate text-[13px] font-medium text-txt">{{ item.title }}</span>
+            </div>
+            <div class="truncate text-xs text-txt3">
+              {{ itemContext(item) }}
+              <template v-if="item.status === 'completed'">
+                · {{ t('shell.runNotifications.clickForOutput') }}
+              </template>
+              · {{ relTime(item.startedAt) }}
+            </div>
+          </button>
+        </div>
+
+        <div class="flex flex-col gap-2 border-t border-line px-3.5 py-2.5">
+          <div
+            v-if="remainingCount > 0"
+            class="text-xs text-txt3"
+            data-testid="run-notifications-more"
+          >
+            {{ t('shell.runNotifications.moreHint', { n: remainingCount }) }}
+          </div>
+          <button
+            type="button"
+            class="w-full border border-line bg-transparent px-3 py-2 text-[13px] text-accent-2 hover:border-accent hover:bg-accent-dim hover:text-accent"
+            data-testid="run-notifications-view-all"
+            @click="viewAll"
+          >
+            {{ t('shell.runNotifications.viewAll') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <RunOutputPptModal
+      :open="outputOpen"
+      :run-id="outputRunId"
+      :context-label="outputContext"
+      @close="closeOutputModal"
+    />
   </header>
 </template>
