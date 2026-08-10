@@ -180,6 +180,31 @@ func TestChannelDeleteByProject(t *testing.T) {
 	}
 }
 
+func TestChannelDeleteByProjectRejectsMulti(t *testing.T) {
+	// plan g4.1 / review v2: legacy DELETE /channel must not silent ConfirmNoPrimary
+	// when secondaries exist.
+	setChannelKey(t)
+	svc, pid := newChannelSvc(t)
+	primaryIn := validInput(pid)
+	primaryIn.AgentName = "agent-a"
+	if _, err := svc.Create(primaryIn); err != nil {
+		t.Fatalf("primary: %v", err)
+	}
+	secIn := validInput(pid)
+	secIn.AppID = "app-sec"
+	secIn.AgentName = "agent-b"
+	if _, err := svc.Create(secIn); err != nil {
+		t.Fatalf("secondary: %v", err)
+	}
+	if err := svc.DeleteByProject(pid); err != ErrChannelLegacyDeleteMulti {
+		t.Fatalf("got %v want ErrChannelLegacyDeleteMulti", err)
+	}
+	list, err := svc.ListByProject(pid)
+	if err != nil || len(list) != 2 {
+		t.Fatalf("channels should remain: n=%d err=%v", len(list), err)
+	}
+}
+
 func TestChannelCreateWithoutKeyFails(t *testing.T) {
 	t.Setenv(crypto.SecretsKeyEnv, "")
 	svc, pid := newChannelSvc(t)

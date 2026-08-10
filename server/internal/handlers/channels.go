@@ -241,7 +241,8 @@ func writeChannelErr(c *gin.Context, err error) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, services.ErrChannelAppIDExists),
 		errors.Is(err, services.ErrChannelAgentTaken),
-		errors.Is(err, services.ErrChannelDualPrimary):
+		errors.Is(err, services.ErrChannelDualPrimary),
+		errors.Is(err, services.ErrChannelLegacyDeleteMulti):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	case errors.Is(err, services.ErrProjectNotFound),
 		errors.Is(err, services.ErrChannelProjectRequired),

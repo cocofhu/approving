@@ -202,8 +202,13 @@ func migrateChannelMultiPerProject(db *gorm.DB) {
 	switch db.Dialector.Name() {
 	case "mysql":
 		_ = db.Exec("DROP INDEX udx_channel_configs_project_id ON channel_configs").Error
-		// MySQL lacks partial unique indexes; uniqueness for non-empty agent_name
-		// / single primary is enforced in ChannelConfigService.
+		// MySQL 8 functional unique indexes: NULL expression values do not
+		// collide, so secondaries (is_primary=0) and empty agent_name are free.
+		// Best-effort — older MySQL falls back to ChannelConfigService tx locks.
+		_ = db.Exec(`CREATE UNIQUE INDEX udx_channel_configs_primary ON channel_configs
+			((CASE WHEN is_primary = 1 THEN project_id ELSE NULL END))`).Error
+		_ = db.Exec(`CREATE UNIQUE INDEX udx_channel_configs_agent_name ON channel_configs
+			((CASE WHEN agent_name IS NOT NULL AND agent_name != '' THEN agent_name ELSE NULL END))`).Error
 	default:
 		_ = db.Exec("DROP INDEX IF EXISTS udx_channel_configs_project_id").Error
 		// Partial uniques: empty agent_name allowed during backfill; only one
@@ -215,9 +220,42 @@ func migrateChannelMultiPerProject(db *gorm.DB) {
 	}
 }
 
+// channelPmMCPAllowed mirrors services.FilterPmEnabledMcps without importing
+// services (database must not depend on that package).
+var channelPmMCPAllowed = map[string]bool{
+	"pm-progress": true, "pm-workflow-read": true, "pm-workflow-write": true,
+	"pm-agent-fs": true,
+}
+
+// snapshotChannelEnabledMcps copies Project.PmEnabledMcps onto a legacy Channel
+// whose EnabledMcps is still nil. nil project → nil channel (both mean
+// platform defaults). Non-nil project (incl. explicit empty) → filtered copy
+// so channel turns keep the pre-upgrade GetBinding() permission set.
+func snapshotChannelEnabledMcps(projectMcps []string) []string {
+	if projectMcps == nil {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, id := range projectMcps {
+		id = strings.TrimSpace(id)
+		if !channelPmMCPAllowed[id] || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	if out == nil {
+		return []string{}
+	}
+	return out
+}
+
 // backfillChannelPrimaryAndAgent marks each project's earliest channel as
-// primary (when none is marked) and binds empty AgentName to the project's
-// PmLeaderAgent when available. Existing credentials/fields are preserved.
+// primary (when none is marked), binds empty AgentName to the project's
+// PmLeaderAgent when available, and copies Project.PmEnabledMcps onto Channels
+// whose EnabledMcps is still nil (upgrade-compat for channel-turn MCP scope).
+// Existing credentials/fields are preserved.
 func backfillChannelPrimaryAndAgent(db *gorm.DB) {
 	var rows []models.ChannelConfig
 	if err := db.Order("project_id asc, created_at asc, id asc").Find(&rows).Error; err != nil {
@@ -248,15 +286,20 @@ func backfillChannelPrimaryAndAgent(db *gorm.DB) {
 				Msg("channel backfill: failed to mark primary")
 		}
 	}
-	// Bind empty agent_name → project PmLeaderAgent (best-effort; skips empty).
+	// Bind empty agent_name → project PmLeaderAgent and snapshot EnabledMcps.
 	var projects []models.Project
-	if err := db.Select("id", "pm_leader_agent").Find(&projects).Error; err != nil {
+	if err := db.Select("id", "pm_leader_agent", "pm_enabled_mcps").Find(&projects).Error; err != nil {
 		return
 	}
 	pmByID := map[string]string{}
+	mcpsByID := map[string][]string{}
 	for _, p := range projects {
 		if a := strings.TrimSpace(p.PmLeaderAgent); a != "" {
 			pmByID[p.ID] = a
+		}
+		// Preserve nil vs non-nil: only non-nil project lists are snapshotted.
+		if p.PmEnabledMcps != nil {
+			mcpsByID[p.ID] = snapshotChannelEnabledMcps(p.PmEnabledMcps)
 		}
 	}
 	// Track agents already claimed so we do not violate udx_channel_configs_agent_name.
@@ -281,6 +324,26 @@ func backfillChannelPrimaryAndAgent(db *gorm.DB) {
 			continue
 		}
 		claimed[agent] = true
+	}
+	// EnabledMcps nil → copy project PmEnabledMcps snapshot (at least primary;
+	// apply to every nil channel so secondary leftovers stay consistent).
+	for _, r := range rows {
+		if r.EnabledMcps != nil {
+			continue
+		}
+		snap, ok := mcpsByID[r.ProjectID]
+		if !ok {
+			// Project also nil → leave channel nil (Effective = defaults).
+			continue
+		}
+		// Must use Updates(struct) so serializer:json persists valid JSON
+		// (column Update with []string would store Go fmt text).
+		if err := db.Model(&models.ChannelConfig{}).Where("id = ?", r.ID).
+			Select("EnabledMcps").
+			Updates(models.ChannelConfig{EnabledMcps: snap}).Error; err != nil {
+			log.Warn().Err(err).Str("channel", r.ID).
+				Msg("channel backfill: failed to snapshot enabled_mcps")
+		}
 	}
 }
 

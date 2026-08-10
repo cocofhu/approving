@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // Channel config errors.
@@ -33,6 +34,10 @@ var (
 	ErrChannelPromoteForbidden      = errors.New("不允许将副 Channel 提升为主；请通过删除主流指定新主")
 	ErrChannelDeletePrimaryNeedsAck = errors.New("删除主 Channel 须指定新主或确认无主")
 	ErrChannelNewPrimaryNotFound    = errors.New("指定的新主 Channel 不存在或不属于本项目")
+	// ErrChannelLegacyDeleteMulti rejects legacy DELETE /channel when the project
+	// already has more than one channel — callers must use DELETE /channels/:id
+	// with newPrimaryId or confirmNoPrimary.
+	ErrChannelLegacyDeleteMulti = errors.New("项目存在多个 Channel，请使用按 id 删除并指定新主或确认无主")
 )
 
 // supportedChannelTypes gates the Type field. Extend as adapters are added.
@@ -189,6 +194,8 @@ func (s *ChannelConfigService) GetByAgent(agentName string) (*ChannelConfigDTO, 
 
 // Create inserts a new config. First channel (or first while no primary) becomes
 // primary; when a primary already exists the new row is secondary.
+// Primary election and agent uniqueness run inside a transaction with row locks
+// so concurrent creates cannot write dual-primary / dual-bind windows.
 func (s *ChannelConfigService) Create(in ChannelConfigInput) (ChannelConfigDTO, error) {
 	in.ProjectID = strings.TrimSpace(in.ProjectID)
 	in.AgentName = strings.TrimSpace(in.AgentName)
@@ -204,53 +211,71 @@ func (s *ChannelConfigService) Create(in ChannelConfigInput) (ChannelConfigDTO, 
 		return ChannelConfigDTO{}, mapEncryptErr(err)
 	}
 
-	hasPrimary, err := s.projectHasPrimary(in.ProjectID)
-	if err != nil {
-		return ChannelConfigDTO{}, err
-	}
-	isPrimary := !hasPrimary // first / no-primary → primary; else secondary
-	// Ignore client-supplied IsPrimary elevation of a secondary create.
-	if in.IsPrimary && hasPrimary {
-		return ChannelConfigDTO{}, ErrChannelDualPrimary
-	}
-
-	if in.AgentName == "" && isPrimary {
-		if agent := s.defaultPrimaryAgent(in.ProjectID); agent != "" {
-			if err := s.ensureAgentFree(agent, ""); err == nil && s.agentInProject(agent, in.ProjectID) {
-				in.AgentName = agent
-			}
-		}
-	}
-	if in.AgentName == "" {
-		return ChannelConfigDTO{}, ErrChannelAgentRequired
-	}
-	if err := s.ensureAgentFree(in.AgentName, ""); err != nil {
-		return ChannelConfigDTO{}, err
-	}
-	if !s.agentInProject(in.AgentName, in.ProjectID) {
-		return ChannelConfigDTO{}, ErrChannelAgentNotInProject
-	}
-
-	now := time.Now()
 	var storedMcps []string
 	if in.EnabledMcps != nil {
 		storedMcps = FilterPmEnabledMcps(in.EnabledMcps)
 	}
-	row := models.ChannelConfig{
-		ID: "chn-" + uuid.NewString()[:12], Type: in.Type, Name: strings.TrimSpace(in.Name),
-		Enabled: in.Enabled, ProjectID: in.ProjectID, AgentName: in.AgentName, IsPrimary: isPrimary,
-		EnabledMcps: storedMcps,
-		AppID:       strings.TrimSpace(in.AppID), AppSecretEnc: enc,
-		TurnTimeoutSeconds: in.TurnTimeoutSeconds,
-		CronDeliver:        in.CronDeliver, CronDeliverTarget: strings.TrimSpace(in.CronDeliverTarget),
-		Config: in.Config, CreatedAt: now, UpdatedAt: now,
-	}
-	s.warnIfNoPmLeader(row.ProjectID)
-	if err := s.db.Create(&row).Error; err != nil {
+
+	var out ChannelConfigDTO
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// Serialize against other creates/updates for this project.
+		var existing []models.ChannelConfig
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("project_id = ?", in.ProjectID).Find(&existing).Error; err != nil {
+			return err
+		}
+		hasPrimary := false
+		for _, e := range existing {
+			if e.IsPrimary {
+				hasPrimary = true
+				break
+			}
+		}
+		isPrimary := !hasPrimary
+		if in.IsPrimary && hasPrimary {
+			return ErrChannelDualPrimary
+		}
+
+		agent := in.AgentName
+		if agent == "" && isPrimary {
+			if a := s.defaultPrimaryAgent(in.ProjectID); a != "" {
+				if err := ensureAgentFreeTx(tx, a, ""); err == nil && s.agentInProject(a, in.ProjectID) {
+					agent = a
+				}
+			}
+		}
+		if agent == "" {
+			return ErrChannelAgentRequired
+		}
+		if err := ensureAgentFreeTx(tx, agent, ""); err != nil {
+			return err
+		}
+		if !s.agentInProject(agent, in.ProjectID) {
+			return ErrChannelAgentNotInProject
+		}
+
+		now := time.Now()
+		row := models.ChannelConfig{
+			ID: "chn-" + uuid.NewString()[:12], Type: in.Type, Name: strings.TrimSpace(in.Name),
+			Enabled: in.Enabled, ProjectID: in.ProjectID, AgentName: agent, IsPrimary: isPrimary,
+			EnabledMcps: storedMcps,
+			AppID:       strings.TrimSpace(in.AppID), AppSecretEnc: enc,
+			TurnTimeoutSeconds: in.TurnTimeoutSeconds,
+			CronDeliver:        in.CronDeliver, CronDeliverTarget: strings.TrimSpace(in.CronDeliverTarget),
+			Config: in.Config, CreatedAt: now, UpdatedAt: now,
+		}
+		if err := tx.Create(&row).Error; err != nil {
+			return mapChannelConstraintErr(err)
+		}
+		out = toChannelDTO(row)
+		return nil
+	})
+	if err != nil {
 		return ChannelConfigDTO{}, err
 	}
+	s.warnIfNoPmLeader(in.ProjectID)
 	s.notify()
-	return toChannelDTO(row), nil
+	return out, nil
 }
 
 // Update patches an existing config. Empty/masked AppSecret keeps the stored one.
@@ -314,11 +339,27 @@ func (s *ChannelConfigService) Update(id string, in ChannelConfigInput) (Channel
 		row.AppSecretEnc = enc
 	}
 	row.UpdatedAt = time.Now()
-	s.warnIfNoPmLeader(row.ProjectID)
-	if err := s.db.Save(&row).Error; err != nil {
+
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// Lock project channels + re-check agent under the same tx.
+		var lockRows []models.ChannelConfig
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("project_id = ?", row.ProjectID).Find(&lockRows).Error; err != nil {
+			return err
+		}
+		if err := ensureAgentFreeTx(tx, row.AgentName, row.ID); err != nil {
+			return err
+		}
+		if err := tx.Save(&row).Error; err != nil {
+			return mapChannelConstraintErr(err)
+		}
+		return nil
+	})
+	if err != nil {
 		return ChannelConfigDTO{}, err
 	}
 
+	s.warnIfNoPmLeader(row.ProjectID)
 	// Primary rebind → optional PmLeader sync (UI confirmed via SyncPmLeader).
 	if row.IsPrimary && in.SyncPmLeader && row.AgentName != "" && row.AgentName != oldAgent {
 		_ = s.syncProjectPmLeader(row.ProjectID, row.AgentName)
@@ -379,24 +420,30 @@ func (s *ChannelConfigService) UpsertForProject(projectID string, in ChannelConf
 	return s.Update(primary.ID, in)
 }
 
-// DeleteByProject removes the primary channel (legacy alias). Prefer Delete.
+// DeleteByProject removes the sole channel for a project (legacy alias).
+// When more than one channel exists, rejects so callers use Delete-by-id with
+// newPrimaryId / confirmNoPrimary (avoids silent ConfirmNoPrimary on multi).
 func (s *ChannelConfigService) DeleteByProject(projectID string) error {
-	primary, err := s.GetPrimaryByProject(projectID)
-	if err != nil {
+	projectID = strings.TrimSpace(projectID)
+	var n int64
+	if err := s.db.Model(&models.ChannelConfig{}).Where("project_id = ?", projectID).Count(&n).Error; err != nil {
 		return err
 	}
-	if primary == nil {
-		// Legacy: delete earliest / any single row.
-		res := s.db.Where("project_id = ?", strings.TrimSpace(projectID)).Delete(&models.ChannelConfig{})
-		if res.Error != nil {
-			return res.Error
-		}
-		if res.RowsAffected > 0 {
-			s.notify()
-		}
+	if n == 0 {
 		return nil
 	}
-	return s.Delete(primary.ID, ChannelDeleteOpts{ConfirmNoPrimary: true})
+	if n > 1 {
+		return ErrChannelLegacyDeleteMulti
+	}
+	var row models.ChannelConfig
+	if err := s.db.Where("project_id = ?", projectID).First(&row).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return err
+	}
+	// Single-channel legacy clients may delete without an explicit primary ack.
+	return s.Delete(row.ID, ChannelDeleteOpts{ConfirmNoPrimary: true})
 }
 
 // Delete removes a channel by id. Deleting the primary requires NewPrimaryID or ConfirmNoPrimary.
@@ -508,11 +555,17 @@ func (s *ChannelConfigService) defaultPrimaryAgent(projectID string) string {
 }
 
 func (s *ChannelConfigService) ensureAgentFree(agentName, selfID string) error {
+	return ensureAgentFreeTx(s.db, agentName, selfID)
+}
+
+func ensureAgentFreeTx(tx *gorm.DB, agentName, selfID string) error {
 	agentName = strings.TrimSpace(agentName)
 	if agentName == "" {
 		return ErrChannelAgentRequired
 	}
-	q := s.db.Model(&models.ChannelConfig{}).Where("agent_name = ?", agentName)
+	// Lock matching rows (if any) so concurrent binds serialize.
+	q := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Model(&models.ChannelConfig{}).Where("agent_name = ?", agentName)
 	if selfID != "" {
 		q = q.Where("id <> ?", selfID)
 	}
@@ -524,6 +577,31 @@ func (s *ChannelConfigService) ensureAgentFree(agentName, selfID string) error {
 		return ErrChannelAgentTaken
 	}
 	return nil
+}
+
+// mapChannelConstraintErr turns unique-index races into typed channel errors.
+func mapChannelConstraintErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "udx_channel_configs_primary") ||
+		strings.Contains(msg, "dual primary") {
+		return ErrChannelDualPrimary
+	}
+	if strings.Contains(msg, "udx_channel_configs_agent_name") {
+		return ErrChannelAgentTaken
+	}
+	// Generic unique / duplicate key (MySQL 1062, SQLite).
+	if strings.Contains(msg, "unique") || strings.Contains(msg, "duplicate") {
+		if strings.Contains(msg, "agent") {
+			return ErrChannelAgentTaken
+		}
+		if strings.Contains(msg, "primary") || strings.Contains(msg, "project_id") {
+			return ErrChannelDualPrimary
+		}
+	}
+	return err
 }
 
 func (s *ChannelConfigService) agentInProject(agentName, projectID string) bool {

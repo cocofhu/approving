@@ -246,15 +246,17 @@ func (m *Manager) stopChannel(rc *runningChannel) {
 	log.Info().Str("id", rc.cfg.ID).Str("type", rc.cfg.Type).Msg("channel adapter stopped")
 }
 
-// convKey builds the per-conversation queue key.
-func convKey(projectID string, scene Scene, conversationID string) string {
-	return projectID + "|" + string(scene) + "|" + conversationID
+// convKey builds the per-channel conversation queue key. channelID is required
+// so two bots in the same project that share a scene:conversation address do
+// not serialize on one FIFO (run_notify fan-out / multi-bot edge cases).
+func convKey(channelID, projectID string, scene Scene, conversationID string) string {
+	return channelID + "|" + projectID + "|" + string(scene) + "|" + conversationID
 }
 
 // IsConversationBusy reports whether a user turn is in-flight or the user FIFO
-// is non-empty for the conversation. Shared by cron push coordination.
-func (m *Manager) IsConversationBusy(projectID string, scene Scene, conversationID string) bool {
-	q := m.convQueueFor(convKey(projectID, scene, conversationID))
+// is non-empty for the channel conversation. Shared by cron push coordination.
+func (m *Manager) IsConversationBusy(channelID, projectID string, scene Scene, conversationID string) bool {
+	q := m.convQueueFor(convKey(channelID, projectID, scene, conversationID))
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	return q.busy || len(q.pending) > 0
@@ -265,7 +267,7 @@ func (m *Manager) IsConversationBusy(projectID string, scene Scene, conversation
 // per-message queue ACK (ahead count); dequeue sends another processing ACK.
 // Full queue: reject with a visible reply (never silently drop).
 func (m *Manager) dispatch(ctx context.Context, rc *runningChannel, in InboundMessage) {
-	key := convKey(rc.cfg.ProjectID, in.Scene, in.ConversationID)
+	key := convKey(rc.cfg.ID, rc.cfg.ProjectID, in.Scene, in.ConversationID)
 	q := m.convQueueFor(key)
 
 	q.mu.Lock()
@@ -407,7 +409,7 @@ func (m *Manager) DeliverCron(d services.CronDelivery) error {
 		kind = ClassifyCronResult(d.Text)
 	}
 	text := FormatCronPush(d.Category, kind, d.Text)
-	key := convKey(d.ProjectID, scene, conv)
+	key := convKey(target.cfg.ID, d.ProjectID, scene, conv)
 	item := CronPushItem{
 		ProjectID: d.ProjectID,
 		AgentName: d.AgentName,
@@ -450,7 +452,7 @@ func (m *Manager) DeliverRunNotify(projectID, text string, channelIDs []string) 
 			continue
 		}
 		_ = target
-		key := convKey(projectID, scene, conv)
+		key := convKey(id, projectID, scene, conv)
 		item := CronPushItem{
 			ProjectID: projectID,
 			ChannelID: id,
@@ -490,7 +492,7 @@ func (m *Manager) flushPushQueue(key string) {
 	for i, item := range items {
 		// Re-check busy: a new user message may have arrived.
 		// Re-queue current AND all remaining — never drop the tail.
-		if m.IsConversationBusy(item.ProjectID, item.Scene, item.Conv) {
+		if m.IsConversationBusy(item.ChannelID, item.ProjectID, item.Scene, item.Conv) {
 			m.requeuePushAll(key, items[i:])
 			return
 		}

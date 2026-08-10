@@ -280,6 +280,60 @@ func TestManagerDeliverRunNotifyNoTarget(t *testing.T) {
 	}
 }
 
+func TestConvKeyIncludesChannelID(t *testing.T) {
+	// plan g2.4 / review v4: same scene:conv on two channels must not share a FIFO.
+	if convKey("c1", "proj", SceneC2C, "user1") == convKey("c2", "proj", SceneC2C, "user1") {
+		t.Fatal("convKey must differ by channelID")
+	}
+	fa1, fa2 := &fakeAdapter{}, &fakeAdapter{}
+	m := NewManager(nil, nil, nil)
+	m.mu.Lock()
+	m.running["c1"] = &runningChannel{
+		cfg: models.ChannelConfig{
+			ID: "c1", Type: "qq", ProjectID: "proj", Enabled: true,
+			AgentName: "agent-a", CronDeliver: true, CronDeliverTarget: "c2c:user1",
+		},
+		adapter: fa1,
+	}
+	m.running["c2"] = &runningChannel{
+		cfg: models.ChannelConfig{
+			ID: "c2", Type: "qq", ProjectID: "proj", Enabled: true,
+			AgentName: "agent-b", CronDeliver: true, CronDeliverTarget: "c2c:user1",
+		},
+		adapter: fa2,
+	}
+	m.mu.Unlock()
+
+	release := make(chan struct{})
+	started := make(chan struct{})
+	var once sync.Once
+	m.handleFunc = func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error) {
+		once.Do(func() { close(started) })
+		<-release
+		return Reply{Text: "done"}, nil
+	}
+	rc1 := &runningChannel{
+		cfg: models.ChannelConfig{
+			ID: "c1", Type: "qq", ProjectID: "proj", Enabled: true,
+		},
+		adapter: fa1,
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		m.dispatch(context.Background(), rc1, testInbound("u1"))
+	}()
+	<-started
+	if !m.IsConversationBusy("c1", "proj", SceneC2C, "user1") {
+		t.Fatal("c1 should be busy")
+	}
+	if m.IsConversationBusy("c2", "proj", SceneC2C, "user1") {
+		t.Fatal("c2 must not share c1 busy state")
+	}
+	close(release)
+	<-done
+}
+
 func testRunningChannel(adapter Adapter) *runningChannel {
 	return &runningChannel{
 		cfg: models.ChannelConfig{
@@ -970,7 +1024,7 @@ func TestDeliverCronBusySilentEnqueueThenFlush(t *testing.T) {
 	}()
 	<-started
 
-	if !m.IsConversationBusy("proj", SceneC2C, "user1") {
+	if !m.IsConversationBusy("c1", "proj", SceneC2C, "user1") {
 		t.Fatal("expected busy during turn")
 	}
 
@@ -1009,7 +1063,7 @@ func TestPushQueueMergesUnchangedAndPriority(t *testing.T) {
 	}
 	m.mu.Unlock()
 
-	key := convKey("proj", SceneC2C, "user1")
+	key := convKey("c1", "proj", SceneC2C, "user1")
 	// Simulate busy so all enqueue.
 	q := m.convQueueFor(key)
 	q.mu.Lock()
@@ -1077,7 +1131,7 @@ func TestFlushPushQueueMidBusyRequeuesRemaining(t *testing.T) {
 	}
 	m.mu.Unlock()
 
-	key := convKey("proj", SceneC2C, "user1")
+	key := convKey("c1", "proj", SceneC2C, "user1")
 	q := m.convQueueFor(key)
 	q.mu.Lock()
 	q.busy = true
@@ -1142,7 +1196,7 @@ func TestFlushPushQueueMidBusyRespectsDepth(t *testing.T) {
 	}
 	m.mu.Unlock()
 
-	key := convKey("proj", SceneC2C, "user1")
+	key := convKey("c1", "proj", SceneC2C, "user1")
 	q := m.convQueueFor(key)
 	q.mu.Lock()
 	q.busy = true
@@ -1191,7 +1245,7 @@ func TestFlushPushQueueMidBusyRespectsDepth(t *testing.T) {
 func TestPushQueueFullRetainsNewestFailed(t *testing.T) {
 	// review v4: depth full of high-priority → newest failed/changed retained (not silent drop).
 	m := NewManager(nil, nil, nil)
-	key := convKey("proj", SceneC2C, "user1")
+	key := convKey("c1", "proj", SceneC2C, "user1")
 	for i := 0; i < pushQueueDepth; i++ {
 		m.enqueuePush(key, CronPushItem{
 			ProjectID: "proj", Scene: SceneC2C, Conv: "user1",
@@ -1225,7 +1279,7 @@ func TestPushQueueFullRetainsNewestFailed(t *testing.T) {
 // is full, run_notify (already receipt-claimed) must not be silently dropped.
 func TestPushQueueProtectsRunNotify(t *testing.T) {
 	m := NewManager(nil, nil, nil)
-	key := convKey("proj", SceneC2C, "user1")
+	key := convKey("c1", "proj", SceneC2C, "user1")
 
 	// Fill with cron changed items + one protected run_notify.
 	for i := 0; i < pushQueueDepth-1; i++ {
@@ -1263,7 +1317,7 @@ func TestPushQueueProtectsRunNotify(t *testing.T) {
 
 	// When queue is all run_notify, a new run_notify soft-overflows past depth.
 	m2 := NewManager(nil, nil, nil)
-	key2 := convKey("proj2", SceneC2C, "user2")
+	key2 := convKey("c2", "proj2", SceneC2C, "user2")
 	for i := 0; i < pushQueueDepth; i++ {
 		m2.enqueuePush(key2, CronPushItem{
 			ProjectID: "proj2", Scene: SceneC2C, Conv: "user2",
