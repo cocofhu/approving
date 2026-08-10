@@ -47,6 +47,13 @@ const itemShareLink = computed((): GateShareInboxStatus | undefined => {
 })
 const shareLabel = computed(() => (showShare.value ? shareStatusLabel(itemShareLink.value, t) : ''))
 const shareUsed = computed(() => showShare.value && itemShareLink.value?.state === 'used')
+/** covers card `disabled` (incl. parent processingLock) and used share tokens */
+const shareDisabled = computed(() => Boolean(props.disabled) || shareUsed.value)
+
+function onOpenShare() {
+  if (shareDisabled.value) return
+  emit('open-share')
+}
 </script>
 
 <template>
@@ -93,17 +100,24 @@ const shareUsed = computed(() => showShare.value && itemShareLink.value?.state =
       >
         {{ shareLabel }}
       </span>
-      <button
-        type="button"
-        class="inline-flex min-h-11 min-w-[44px] items-center gap-1.5 border border-accent/40 bg-accent/10 px-2.5 text-xs font-medium leading-[1.4] text-accent-2 hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-45 md:min-h-6 md:min-w-0 md:gap-1 md:px-1.5 md:py-0.5 md:text-[10px]"
-        data-testid="gate-share-copy-btn"
-        :disabled="disabled || shareUsed"
-        :aria-label="t('pages.gatesInbox.share.copyLinkAria')"
-        @click.stop="emit('open-share')"
+      <!-- max-md hit-wrap: Demo .hit-wrap.mobile-hit — vertical only, no dashed ghost -->
+      <span
+        class="inline-flex items-center justify-end max-md:-my-2.5 max-md:min-h-[44px] max-md:min-w-[44px] max-md:py-2.5"
+        data-testid="gate-share-hit-wrap"
+        @click.stop="onOpenShare"
       >
-        <Icon name="copy" :size="12" />
-        {{ t('pages.gatesInbox.share.copyLink') }}
-      </button>
+        <button
+          type="button"
+          class="inline-flex min-h-6 items-center gap-1 border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium leading-[1.4] text-accent-2 hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-45"
+          data-testid="gate-share-copy-btn"
+          :disabled="shareDisabled"
+          :aria-label="t('pages.gatesInbox.share.copyLinkAria')"
+          @click.stop="onOpenShare"
+        >
+          <Icon name="copy" :size="12" />
+          {{ t('pages.gatesInbox.share.copyLink') }}
+        </button>
+      </span>
     </div>
   </article>
 </template>
