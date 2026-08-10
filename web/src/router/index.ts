@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { updateDocumentTitle } from '@/lib/locale'
-import { authApi } from '@/lib/api'
-import { authRedirectPath, getAuthState, markAuthReady, useAuth } from '@/lib/useAuth'
+import { installAuthGuard } from '@/lib/authGuard'
+import { installRoutePendingGuards } from '@/lib/routePending'
 import LoginView from '@/views/LoginView.vue'
 
 const routes: RouteRecordRaw[] = [
@@ -39,48 +39,8 @@ export const router = createRouter({
   scrollBehavior: () => ({ top: 0 }),
 })
 
-router.beforeEach(async (to) => {
-  if (to.meta.public) {
-    if (to.name === 'login') {
-      const { user, setUser } = useAuth()
-      if (user.value) {
-        // Return a string so Vue Router parses ?query (object `{ path }` drops it).
-        const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : '/'
-        return authRedirectPath(redirect)
-      }
-      // Do not await /me before painting login — brand LCP must not wait on auth RTT.
-      // Keep auth.ready false until /me settles so LoginView can show brand-only shell
-      // (no form / Demo credentials flash) while a session redirect may still happen.
-      void authApi
-        .me()
-        .then((me) => {
-          setUser({ username: me.username, expiresAt: me.expires_at, isAdmin: !!me.is_admin })
-          const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : '/'
-          return router.replace(authRedirectPath(redirect))
-        })
-        .catch(() => {
-          markAuthReady()
-        })
-      return true
-    }
-    return true
-  }
-
-  const state = getAuthState()
-  const { setUser } = useAuth()
-  if (!state.user) {
-    try {
-      const me = await authApi.me()
-      setUser({ username: me.username, expiresAt: me.expires_at, isAdmin: !!me.is_admin })
-    } catch {
-      markAuthReady()
-      return { path: '/login', query: { redirect: to.fullPath } }
-    }
-  } else {
-    markAuthReady()
-  }
-  return true
-})
+installRoutePendingGuards(router)
+installAuthGuard(router)
 
 router.afterEach((to) => {
   updateDocumentTitle(to.meta.titleKey as string | undefined)
