@@ -546,13 +546,18 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
 
     const addBtn = shell.getByRole('button', { name: '添加一行' })
     await expect(addBtn).toHaveClass(/bg-accent/)
-    await expect(page.getByRole('button', { name: '合并规则' })).toBeVisible()
-    await page.getByRole('button', { name: '合并规则' }).click()
-    await expect(page.getByText('环境变量与工作流变量')).toBeVisible({ timeout: 5_000 })
-    const newNote = page.getByTestId('merge-rules-new-note')
-    await expect(newNote).toBeVisible()
-    await expect(newNote.getByText('新增', { exact: true })).toBeVisible()
-    await expect(newNote.getByText('停用的行会保留 key/value，但不参与注入；开关与字段变更须保存后，才影响下次注入。')).toBeVisible()
+    // g2.1 / F1 / F4: Demo 改后态 — 该 Tab 无 varsHint、无「合并规则」（真删除 hint-row）
+    await expect(page.getByRole('button', { name: '合并规则' })).toHaveCount(0)
+    await expect(page.getByTestId('project-detail-merge-rules')).toHaveCount(0)
+    await expect(page.getByText('启动运行时作为 ${vars.*} 默认值，不整表注入沙箱环境。')).toHaveCount(0)
+    await expect(page.getByText(/\$\{vars\.\*\}/)).toHaveCount(0)
+    await expect(page.getByText(/不整表注入沙箱环境/)).toHaveCount(0)
+
+    // g1.2 / F2: 空态加行后也不会重新出现说明行或「合并规则」
+    await addBtn.click()
+    await expect(page.getByText('暂无工作流变量')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '合并规则' })).toHaveCount(0)
+    await expect(page.getByText(/不整表注入沙箱环境/)).toHaveCount(0)
   })
 
   test('工作流变量有数据：表头 + 底栏 + 次行描述', async ({ page }) => {
@@ -569,6 +574,13 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
     const foot = panel.locator('.border-t.border-line').last()
     await expect(foot.getByRole('button', { name: '添加一行' })).toHaveClass(/border/)
     await expect(foot.getByRole('button', { name: '保存' })).toHaveClass(/bg-accent/)
+
+    // g2.2 / F2: 有数据态同样无 varsHint、无「合并规则」
+    await expect(page.getByRole('button', { name: '合并规则' })).toHaveCount(0)
+    await expect(page.getByTestId('project-detail-merge-rules')).toHaveCount(0)
+    await expect(page.getByText('启动运行时作为 ${vars.*} 默认值，不整表注入沙箱环境。')).toHaveCount(0)
+    await expect(page.getByText(/\$\{vars\.\*\}/)).toHaveCount(0)
+    await expect(page.getByText(/不整表注入沙箱环境/)).toHaveCount(0)
   })
 
   test('沙箱空态点击「添加一行」进入有数据面板', async ({ page }) => {

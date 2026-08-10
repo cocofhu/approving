@@ -2,7 +2,11 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from './Icon.vue'
+import EmptyState from './EmptyState.vue'
+import AppInlineError from './AppInlineError.vue'
 import { api } from '@/lib/api'
+import { createTimeoutController, isAbortError } from '@/lib/loadingRequest'
+import { DEFAULT_LOADING_TIMEOUT_MS } from '@/lib/loadingTypes'
 import type { Project } from '@/lib/types'
 
 const props = withDefaults(
@@ -19,6 +23,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const projects = ref<Project[]>([])
+const loadError = ref<string | null>(null)
 const internalOpen = ref(false)
 const search = ref('')
 const root = ref<HTMLElement | null>(null)
@@ -58,13 +63,26 @@ function onDocClick(e: MouseEvent) {
   if (open.value && root.value && !root.value.contains(e.target as Node)) open.value = false
 }
 
-onMounted(async () => {
-  document.addEventListener('click', onDocClick)
+async function loadProjects() {
+  loadError.value = null
+  const tc = createTimeoutController(DEFAULT_LOADING_TIMEOUT_MS)
   try {
-    projects.value = await api.listProjects()
-  } catch {
-    projects.value = []
+    projects.value = await api.listProjects({ signal: tc.signal })
+  } catch (err) {
+    if (isAbortError(err) && !tc.timedOut) return
+    loadError.value = tc.timedOut
+      ? String(t('common.loading.timeout'))
+      : err instanceof Error && err.message
+        ? err.message
+        : String(t('common.projectFilter.loadFailed'))
+  } finally {
+    tc.clear()
   }
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+  void loadProjects()
 })
 onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 </script>
@@ -87,33 +105,42 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
       class="scroll-area absolute left-0 right-0 z-40 mt-1 max-h-72 overflow-auto rounded-md border border-line-strong bg-surface p-1 shadow-lg md:left-auto md:right-0 md:w-64"
       @click.stop
     >
-      <input
-        v-model="search"
-        type="search"
-        class="mb-1 w-full rounded border border-line bg-elevated px-2 py-1.5 text-sm text-txt outline-none focus:border-accent"
-        :placeholder="t('common.projectFilter.searchPlaceholder')"
-      />
-      <button
-        type="button"
-        class="flex w-full items-center rounded px-2 py-1.5 text-left text-sm transition hover:bg-elevated"
-        :class="!modelValue ? 'text-accent-2' : 'text-txt2'"
-        @click="choose('')"
-      >
-        {{ t('common.projectFilter.all') }}
-      </button>
-      <button
-        v-for="p in filtered"
-        :key="p.id"
-        type="button"
-        class="flex w-full items-center rounded px-2 py-1.5 text-left text-sm transition hover:bg-elevated"
-        :class="modelValue === p.id ? 'text-accent-2' : 'text-txt2'"
-        @click="choose(p.id)"
-      >
-        <span class="truncate">{{ p.name }}</span>
-      </button>
-      <div v-if="!filtered.length" class="px-2 py-2 text-xs text-txt3">
-        {{ t('common.projectFilter.noMatch') }}
-      </div>
+      <template v-if="loadError">
+        <AppInlineError :title="t('common.projectFilter.loadFailed')" :message="loadError" @retry="loadProjects" />
+      </template>
+      <template v-else>
+        <input
+          v-model="search"
+          type="search"
+          class="mb-1 w-full rounded border border-line bg-elevated px-2 py-1.5 text-sm text-txt outline-none focus:border-accent"
+          :placeholder="t('common.projectFilter.searchPlaceholder')"
+        />
+        <button
+          type="button"
+          class="flex w-full items-center rounded px-2 py-1.5 text-left text-sm transition hover:bg-elevated"
+          :class="!modelValue ? 'text-accent-2' : 'text-txt2'"
+          @click="choose('')"
+        >
+          {{ t('common.projectFilter.all') }}
+        </button>
+        <button
+          v-for="p in filtered"
+          :key="p.id"
+          type="button"
+          class="flex w-full items-center rounded px-2 py-1.5 text-left text-sm transition hover:bg-elevated"
+          :class="modelValue === p.id ? 'text-accent-2' : 'text-txt2'"
+          @click="choose(p.id)"
+        >
+          <span class="truncate">{{ p.name }}</span>
+        </button>
+        <EmptyState
+          v-if="!projects.length && !search.trim()"
+          :title="t('common.projectFilter.empty')"
+        />
+        <div v-else-if="!filtered.length" class="px-2 py-2 text-xs text-txt3">
+          {{ t('common.projectFilter.noMatch') }}
+        </div>
+      </template>
     </div>
   </div>
 </template>

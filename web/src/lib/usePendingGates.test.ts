@@ -60,7 +60,7 @@ describe('usePendingGates', () => {
 
   it('keeps last known items when refresh fails', async () => {
     vi.mocked(api.listGates).mockResolvedValueOnce(paged([gate('1')], 1))
-    const { items, count, refresh } = usePendingGates()
+    const { items, count, refresh, error } = usePendingGates()
     await refresh({ mode: 'force' })
     expect(count.value).toBe(1)
 
@@ -68,6 +68,7 @@ describe('usePendingGates', () => {
     await refresh({ mode: 'force' })
     expect(count.value).toBe(1)
     expect(items.value).toHaveLength(1)
+    expect(error.value).toBe('network')
   })
 
   it('deduplicates concurrent refresh calls', async () => {
@@ -223,6 +224,21 @@ describe('usePendingGates', () => {
     expect(pg.remoteItems.value).toHaveLength(1)
     expect(pg.totalCount.value).toBe(1)
     expect(pg.displayedItems.value[0].nodeId).toBe('node-2')
+  })
+
+  it('peek does not trigger refresh chrome or live announce', async () => {
+    const { resetRefreshChrome, useRefreshChrome } = await import('@/lib/refreshChrome')
+    const { resetLoadingAnnouncer, useLoadingAnnouncer } = await import('@/lib/loadingAnnouncer')
+    resetRefreshChrome()
+    resetLoadingAnnouncer()
+    vi.mocked(api.listGates).mockResolvedValueOnce(paged([gate('1')], 1))
+    const pg = usePendingGates()
+    await pg.peek({ source: 'sidebar-poll' })
+    const chrome = useRefreshChrome()
+    expect(chrome.showTopBar.value).toBe(false)
+    expect(chrome.dimContent.value).toBe(false)
+    expect(useLoadingAnnouncer().liveMessage.value).toBe('')
+    expect(pg.ariaBusy.value).toBe(false)
   })
 
   it('peek awaits in-flight force instead of starting a parallel peek', async () => {
