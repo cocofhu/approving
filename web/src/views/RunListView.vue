@@ -442,8 +442,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div>
-    <div class="mb-5 flex flex-col gap-2.5 md:flex-row md:items-start md:justify-between">
+  <div class="flex h-full min-h-0 flex-col">
+    <div class="mb-5 flex shrink-0 flex-col gap-2.5 md:flex-row md:items-start md:justify-between">
       <div class="min-w-0">
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.runList.title') }}</h2>
         <p class="text-sm text-txt3">{{ t('pages.runList.subtitle') }}</p>
@@ -473,40 +473,50 @@ onUnmounted(() => {
     </div>
 
     <!-- Mobile card list -->
-    <div v-if="isMobile" :class="{ 'table-loading': showTableLoading }">
+    <div
+      v-if="isMobile"
+      class="flex min-h-0 flex-1 flex-col overflow-hidden"
+      :class="{ 'table-loading': showTableLoading }"
+    >
       <template v-if="initialLoading">
-        <div class="flex flex-col gap-2">
-          <div
-            v-for="n in SKELETON_ROWS"
-            :key="'skel-card-' + n"
-            class="rounded-lg border border-line bg-surface p-3"
-          >
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0 flex-1">
-                <div class="h-3.5 w-[75%] rounded bg-elevated animate-pulse" />
-                <div class="mt-1.5 h-2.5 w-20 rounded bg-elevated animate-pulse" />
+        <div class="card flex min-h-0 flex-1 flex-col overflow-hidden p-2">
+          <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+            <div
+              v-for="n in SKELETON_ROWS"
+              :key="'skel-card-' + n"
+              class="rounded-lg border border-line bg-surface p-3"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <div class="h-3.5 w-[75%] rounded bg-elevated animate-pulse" />
+                  <div class="mt-1.5 h-2.5 w-20 rounded bg-elevated animate-pulse" />
+                </div>
+                <div class="h-5 w-14 shrink-0 rounded bg-elevated animate-pulse" />
               </div>
-              <div class="h-5 w-14 shrink-0 rounded bg-elevated animate-pulse" />
+              <div class="mt-2 flex items-center gap-2">
+                <div class="h-1.5 w-20 shrink-0 rounded-full bg-elevated animate-pulse" />
+                <div class="h-2.5 w-7 rounded bg-elevated animate-pulse" />
+              </div>
+              <div class="mt-2.5 h-2.5 w-[55%] rounded bg-elevated animate-pulse" />
             </div>
-            <div class="mt-2 flex items-center gap-2">
-              <div class="h-1.5 w-20 shrink-0 rounded-full bg-elevated animate-pulse" />
-              <div class="h-2.5 w-7 rounded bg-elevated animate-pulse" />
-            </div>
-            <div class="mt-2.5 h-2.5 w-[55%] rounded bg-elevated animate-pulse" />
           </div>
         </div>
       </template>
-      <div v-else-if="initialLoadFailed" class="card px-5 py-10 text-center">
-        <div class="mx-auto mb-2.5 inline-flex h-10 w-10 items-center justify-center border border-err/30 bg-err/10 text-err">
-          <Icon name="alert" :size="18" />
-        </div>
+      <div
+        v-else-if="initialLoadFailed"
+        class="card flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-5 py-10 text-center"
+      >
         <div class="text-[13px] font-medium text-txt">{{ t('pages.runList.loadFailedTitle') }}</div>
         <p class="mx-auto mt-1 max-w-[360px] text-xs text-txt3">{{ t('pages.runList.loadFailedDesc') }}</p>
       </div>
-      <div v-else-if="!runs.length" class="card px-5 py-10 text-center text-[13px] text-txt3">
+      <div
+        v-else-if="!runs.length"
+        class="card flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-5 py-10 text-center text-[13px] text-txt3"
+      >
         {{ emptyMessage }}
       </div>
-      <div v-else class="flex flex-col gap-2">
+      <div v-else class="card flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
         <!--
           custom + navigate (not a real <a>): ops @click.stop must not sit inside
           a native link, or stopPropagation blocks Vue Router's preventDefault and
@@ -595,12 +605,37 @@ onUnmounted(() => {
             </div>
           </div>
         </RouterLink>
+        </div>
+        <Pagination v-if="total > PAGE_SIZE" v-model:page="page" class="shrink-0" :page-size="PAGE_SIZE" :total="total" />
       </div>
-      <Pagination v-if="total > PAGE_SIZE" v-model:page="page" :page-size="PAGE_SIZE" :total="total" />
     </div>
 
     <!-- Desktop table -->
-    <div v-else class="card overflow-hidden" :class="{ 'table-loading': showTableLoading }">
+    <div
+      v-else-if="initialLoadFailed"
+      class="card flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-5 py-10 text-center"
+      :class="{ 'table-loading': showTableLoading }"
+    >
+      <div class="text-[13px] font-medium text-txt">{{ t('pages.runList.loadFailedTitle') }}</div>
+      <p class="mx-auto mt-1 max-w-[360px] text-xs text-txt3">{{ t('pages.runList.loadFailedDesc') }}</p>
+    </div>
+
+    <!-- Desktop: empty / no matching -->
+    <div
+      v-else-if="!runs.length && !initialLoading"
+      class="card flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-5 py-10 text-center text-[13px] text-txt3"
+      :class="{ 'table-loading': showTableLoading }"
+    >
+      {{ emptyMessage }}
+    </div>
+
+    <!-- Desktop table (loading skeleton or rows) -->
+    <div
+      v-else
+      class="card flex min-h-0 flex-1 flex-col overflow-hidden"
+      :class="{ 'table-loading': showTableLoading }"
+    >
+      <div class="min-h-0 flex-1 overflow-auto">
       <table class="w-full text-sm">
         <thead>
           <tr class="text-left text-[11px] uppercase tracking-wider text-txt3">
@@ -687,20 +722,6 @@ onUnmounted(() => {
               </td>
             </tr>
           </template>
-          <tr v-else-if="initialLoadFailed">
-            <td colspan="10" class="px-5 py-10 text-center">
-              <div class="mx-auto mb-2.5 inline-flex h-10 w-10 items-center justify-center border border-err/30 bg-err/10 text-err">
-                <Icon name="alert" :size="18" />
-              </div>
-              <div class="text-[13px] font-medium text-txt">{{ t('pages.runList.loadFailedTitle') }}</div>
-              <p class="mx-auto mt-1 max-w-[360px] text-xs text-txt3">{{ t('pages.runList.loadFailedDesc') }}</p>
-            </td>
-          </tr>
-          <tr v-else-if="!runs.length">
-            <td colspan="10" class="px-5 py-10 text-center text-[13px] text-txt3">
-              {{ emptyMessage }}
-            </td>
-          </tr>
           <template v-else>
             <RouterLink
               v-for="r in runs"
@@ -796,7 +817,8 @@ onUnmounted(() => {
           </template>
         </tbody>
       </table>
-      <Pagination v-if="total > PAGE_SIZE" v-model:page="page" :page-size="PAGE_SIZE" :total="total" />
+      </div>
+      <Pagination v-if="total > PAGE_SIZE" v-model:page="page" class="shrink-0" :page-size="PAGE_SIZE" :total="total" />
     </div>
 
     <AppModal
@@ -874,6 +896,13 @@ onUnmounted(() => {
 <style scoped>
 .table-loading {
   opacity: 0.55;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgb(var(--c-elevated));
 }
 
 @keyframes nodeLabelFadeIn {
