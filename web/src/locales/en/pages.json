@@ -1333,7 +1333,8 @@
         "chars": "{n} chars",
         "markdownBadge": "Split + sync + minimap",
         "newFileInFolder": "New file here",
-        "newFolderInFolder": "New folder here"
+        "newFolderInFolder": "New folder here",
+        "more": "More"
       },
       "mcp": {
         "hint": "Full mcp.json written to {configRoot}/mcp.json and injected in ACP. New agents include artifact-store by default. Project Management MCP must be added manually and stays separate from artifact-store — do not merge them.",
@@ -1531,7 +1532,9 @@
         "orgSheetTitle": "Agent organization",
         "orgSheetHint": "Read-only: expand groups and switch agents. No group create or drag reorder. Close via backdrop or the close button.",
         "desktopOnlyTitle": "Please complete on desktop",
-        "desktopOnlyDesc": "\"{tab}\" keeps an entry on narrow screens only; please finish full configuration in a desktop browser."
+        "desktopOnlyDesc": "\"{tab}\" keeps an entry on narrow screens only; please finish full configuration in a desktop browser.",
+        "fullNameLabel": "Full name",
+        "fullNameAria": "View full agent name"
       },
       "dialogs": {
         "leaveUnsavedTitle": "Unsaved changes",

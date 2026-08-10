@@ -175,6 +175,35 @@ type FilesStep = 'list' | 'edit'
 const filesStep = ref<FilesStep>('list')
 const justSaved = ref(false)
 
+const TAB_FADE_THRESHOLD = 4
+const agentNameEl = ref<HTMLElement | null>(null)
+const tabStripEl = ref<HTMLElement | null>(null)
+const agentNameTruncated = ref(false)
+const showFullNameTip = ref(false)
+const fullNameTipStyle = ref<Record<string, string>>({})
+const tabFadeLeft = ref(false)
+const tabFadeRight = ref(false)
+
+type ExplorerMoreTarget = { dir: boolean; path: string; name: string }
+const explorerMore = ref<ExplorerMoreTarget | null>(null)
+const explorerMoreStyle = ref<Record<string, string>>({})
+const explorerMoreAnchor = ref<HTMLElement | null>(null)
+let tabStripObserver: ResizeObserver | null = null
+
+function closeFullNameTip() {
+  showFullNameTip.value = false
+}
+
+function closeExplorerMore() {
+  explorerMore.value = null
+  explorerMoreAnchor.value = null
+}
+
+function closeMobileChromeOverlays() {
+  closeFullNameTip()
+  closeExplorerMore()
+}
+
 /** Narrow-screen agent org tree bottom sheet (≈70vh). */
 const showOrgSheet = ref(false)
 const orgSheetCollapsed = ref<Set<string>>(new Set())
@@ -669,7 +698,12 @@ watch(isMobile, (mobile) => {
   } else {
     // Desktop sidebar owns org navigation — close sheet to avoid dual entry.
     showOrgSheet.value = false
+    closeMobileChromeOverlays()
   }
+  nextTick(() => {
+    measureAgentNameTruncation()
+    syncTabFade()
+  })
 })
 
 const agentNames = computed(() => agents.value.map((a) => a.name))
@@ -833,6 +867,7 @@ async function applyAssign(syncDraftRequested: boolean) {
 }
 
 function openOrgSheet() {
+  closeMobileChromeOverlays()
   showOrgSheet.value = true
 }
 
@@ -2149,17 +2184,151 @@ function onDocumentClick() {
   hideCtxMenu()
 }
 
+function measureAgentNameTruncation() {
+  const el = agentNameEl.value
+  if (!el) {
+    agentNameTruncated.value = false
+    return
+  }
+  agentNameTruncated.value = el.scrollWidth > el.clientWidth + 1
+}
+
+function placeFullNameTip() {
+  const el = agentNameEl.value
+  if (!el || !showFullNameTip.value) return
+  const rect = el.getBoundingClientRect()
+  const margin = 12
+  fullNameTipStyle.value = {
+    top: `${Math.round(rect.bottom + 8)}px`,
+    left: `${margin}px`,
+    right: `${margin}px`,
+  }
+}
+
+function onAgentNameClick() {
+  measureAgentNameTruncation()
+  if (!agentNameTruncated.value) return
+  closeExplorerMore()
+  showFullNameTip.value = !showFullNameTip.value
+  if (showFullNameTip.value) nextTick(placeFullNameTip)
+}
+
+function syncTabFade() {
+  const el = tabStripEl.value
+  if (!el || !isMobile.value) {
+    tabFadeLeft.value = false
+    tabFadeRight.value = false
+    return
+  }
+  const max = el.scrollWidth - el.clientWidth
+  tabFadeLeft.value = el.scrollLeft > TAB_FADE_THRESHOLD
+  tabFadeRight.value = el.scrollLeft < max - TAB_FADE_THRESHOLD
+}
+
+function bindTabStripObserver() {
+  if (typeof ResizeObserver === 'undefined') return
+  tabStripObserver?.disconnect()
+  tabStripObserver = null
+  if (!tabStripEl.value) return
+  tabStripObserver = new ResizeObserver(() => syncTabFade())
+  tabStripObserver.observe(tabStripEl.value)
+}
+
+function explorerMoreItemCount(target: ExplorerMoreTarget) {
+  if (target.dir) return isProtectedDir(target.path) ? 3 : 4
+  return 2
+}
+
+function placeExplorerMore() {
+  const anchor = explorerMoreAnchor.value
+  const target = explorerMore.value
+  if (!anchor || !target) return
+  const rect = anchor.getBoundingClientRect()
+  const margin = 8
+  const menuWidth = Math.min(220, Math.max(160, window.innerWidth - margin * 2))
+  const menuHeight = explorerMoreItemCount(target) * 44 + 8
+  let left = rect.right - menuWidth
+  left = Math.max(margin, Math.min(left, window.innerWidth - margin - menuWidth))
+  let top = rect.bottom + 4
+  if (top + menuHeight > window.innerHeight - margin) {
+    top = Math.max(margin, rect.top - menuHeight - 4)
+  }
+  explorerMoreStyle.value = {
+    top: `${Math.round(top)}px`,
+    left: `${Math.round(left)}px`,
+    width: `${Math.round(menuWidth)}px`,
+  }
+}
+
+function toggleExplorerMore(e: MouseEvent, row: TreeRow) {
+  const el = e.currentTarget as HTMLElement
+  if (explorerMore.value?.path === row.path) {
+    closeExplorerMore()
+    return
+  }
+  closeFullNameTip()
+  hideCtxMenu()
+  explorerMore.value = { dir: row.dir, path: row.path, name: row.name }
+  explorerMoreAnchor.value = el
+  nextTick(placeExplorerMore)
+}
+
+function onExplorerMoreAction(action: 'newFile' | 'newFolder' | 'rename' | 'delete') {
+  const target = explorerMore.value
+  if (!target) return
+  const row: TreeRow = { name: target.name, path: target.path, dir: target.dir, depth: 0 }
+  closeExplorerMore()
+  if (action === 'newFile' && target.dir) newFile(target.path)
+  else if (action === 'newFolder' && target.dir) newFolder(target.path)
+  else if (action === 'rename') startRename(row)
+  else if (action === 'delete' && !(target.dir && isProtectedDir(target.path))) deleteEntry(row)
+}
+
+function onChromeReposition() {
+  if (showFullNameTip.value) placeFullNameTip()
+  if (explorerMore.value) placeExplorerMore()
+  syncTabFade()
+}
+
+function onChromeKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return
+  if (showFullNameTip.value || explorerMore.value) closeMobileChromeOverlays()
+}
+
+watch(activeName, () => {
+  closeFullNameTip()
+  nextTick(measureAgentNameTruncation)
+})
+
+watch(tabStripEl, () => {
+  bindTabStripObserver()
+  nextTick(syncTabFade)
+})
+
 onMounted(() => {
   agentListCollapsed.value = readCollapsedState(AGENT_LIST_COLLAPSED_KEY)
   explorerCollapsed.value = readCollapsedState(EXPLORER_COLLAPSED_KEY)
   load()
   document.addEventListener('click', onDocumentClick)
   document.addEventListener('keydown', onExplorerKeydown)
+  document.addEventListener('keydown', onChromeKeydown)
+  window.addEventListener('resize', onChromeReposition)
+  window.addEventListener('scroll', onChromeReposition, true)
+  nextTick(() => {
+    measureAgentNameTruncation()
+    bindTabStripObserver()
+    syncTabFade()
+  })
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', onDocumentClick)
   document.removeEventListener('keydown', onExplorerKeydown)
+  document.removeEventListener('keydown', onChromeKeydown)
+  window.removeEventListener('resize', onChromeReposition)
+  window.removeEventListener('scroll', onChromeReposition, true)
+  tabStripObserver?.disconnect()
+  tabStripObserver = null
   if (toastTimer) clearTimeout(toastTimer)
 })
 </script>
@@ -2330,36 +2499,89 @@ onBeforeUnmount(() => {
       <!-- editor -->
       <div v-else-if="draft" class="flex min-h-0 min-w-0 flex-col overflow-hidden">
         <div
-          class="flex items-center gap-2 border-b border-line px-4"
-          :class="isMobile ? 'min-h-12 py-2.5' : 'py-2'"
+          v-if="isMobile"
+          data-test="studio-name-bar"
+          class="flex flex-col gap-2 border-b border-line px-4 py-2.5"
+        >
+          <div data-test="studio-name-row-top" class="flex min-w-0 items-center gap-2">
+            <Icon name="robot" :size="15" class="shrink-0 text-accent-2" />
+            <button
+              ref="agentNameEl"
+              type="button"
+              data-test="agent-name"
+              class="min-w-0 flex-1 truncate text-left text-[13px] font-medium text-txt"
+              :class="agentNameTruncated ? 'cursor-pointer' : 'cursor-default'"
+              :title="activeName"
+              :aria-label="agentNameTruncated ? t('pages.agentStudio.mobile.fullNameAria') : undefined"
+              @click="onAgentNameClick"
+            >{{ activeName }}</button>
+            <button
+              type="button"
+              data-test="org-switch"
+              class="inline-flex min-h-11 shrink-0 items-center gap-1 rounded border border-line bg-elevated px-2.5 text-[12px] text-txt2 transition hover:border-line-strong hover:text-txt"
+              :title="t('pages.agentStudio.mobile.switchTitle')"
+              :aria-label="t('pages.agentStudio.mobile.switchAria')"
+              @click="openOrgSheet"
+            >
+              <Icon name="menu" :size="14" />
+              <span>{{ t('pages.agentStudio.mobile.switch') }}</span>
+            </button>
+            <span v-if="dirty" class="chip shrink-0 border-warn/30 text-warn">{{ t('pages.agentStudio.unsaved') }}</span>
+            <span
+              v-else-if="justSaved"
+              class="chip shrink-0 border-ok/30 bg-ok/10 text-ok"
+            >{{ t('pages.agentStudio.saved') }}</span>
+          </div>
+          <div data-test="studio-name-row-bottom" class="flex items-center gap-2">
+            <AppButton
+              data-test="studio-export"
+              variant="outline"
+              icon="download"
+              class="min-h-11"
+              :disabled="exporting"
+              @click="triggerExport"
+            >
+              {{ t('pages.agentStudio.exportImport.export') }}
+            </AppButton>
+            <AppButton
+              v-if="dirty"
+              data-test="studio-save"
+              variant="primary"
+              class="min-h-11"
+              :disabled="saving"
+              @click="save"
+            >
+              {{ saving ? t('common.buttons.saving') : t('common.buttons.save') }}
+            </AppButton>
+          </div>
+        </div>
+        <div
+          v-else
+          data-test="studio-name-bar"
+          class="flex items-center gap-2 border-b border-line px-4 py-2"
         >
           <Icon name="robot" :size="15" class="shrink-0 text-accent-2" />
-          <span class="min-w-0 truncate text-[13px] font-medium text-txt">{{ activeName }}</span>
-          <button
-            v-if="isMobile"
-            type="button"
-            data-test="org-switch"
-            class="inline-flex shrink-0 items-center gap-1 rounded border border-line bg-elevated px-2 py-1 text-[12px] text-txt2 transition hover:border-line-strong hover:text-txt"
-            :title="t('pages.agentStudio.mobile.switchTitle')"
-            :aria-label="t('pages.agentStudio.mobile.switchAria')"
-            @click="openOrgSheet"
-          >
-            <Icon name="menu" :size="14" />
-            <span>{{ t('pages.agentStudio.mobile.switch') }}</span>
-          </button>
+          <span class="min-w-0 truncate text-[13px] font-medium text-txt" :title="activeName">{{ activeName }}</span>
           <span v-if="dirty" class="chip shrink-0 border-warn/30 text-warn">{{ t('pages.agentStudio.unsaved') }}</span>
           <span
             v-else-if="justSaved"
             class="chip shrink-0 border-ok/30 bg-ok/10 text-ok"
           >{{ t('pages.agentStudio.saved') }}</span>
           <div class="ml-auto flex shrink-0 items-center gap-2">
-            <AppButton size="sm" variant="outline" icon="download" :disabled="exporting" @click="triggerExport">
+            <AppButton
+              data-test="studio-export"
+              size="sm"
+              variant="outline"
+              icon="download"
+              :disabled="exporting"
+              @click="triggerExport"
+            >
               {{ t('pages.agentStudio.exportImport.export') }}
             </AppButton>
             <AppButton
+              data-test="studio-save"
               size="sm"
               variant="primary"
-              :class="isMobile ? 'min-h-11' : ''"
               :disabled="!dirty || saving"
               @click="save"
             >
@@ -2368,17 +2590,40 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div class="scroll-area flex gap-1 overflow-x-auto border-b border-line px-3 pt-2 [-webkit-overflow-scrolling:touch]">
-          <button
-            v-for="tabItem in studioTabs"
-            :key="tabItem.k"
-            class="shrink-0 whitespace-nowrap px-3 text-[12px] transition"
-            :class="[
-              isMobile ? 'min-h-11 py-2.5' : 'rounded-t py-1.5',
-              tab === tabItem.k ? 'border-b-2 border-accent text-txt' : 'text-txt3 hover:text-txt2',
-            ]"
-            @click="requestStudioTab(tabItem.k)"
-          >{{ tabItem.l }}</button>
+        <div data-test="studio-tabs" class="relative min-w-0 border-b border-line">
+          <div
+            ref="tabStripEl"
+            data-test="studio-tab-strip"
+            class="scroll-area flex min-w-0 gap-1 overflow-x-auto px-3 pt-2 [-webkit-overflow-scrolling:touch]"
+            @scroll="syncTabFade"
+          >
+            <button
+              v-for="tabItem in studioTabs"
+              :key="tabItem.k"
+              class="shrink-0 whitespace-nowrap px-3 text-[12px] transition"
+              :class="[
+                isMobile ? 'min-h-11 py-2.5' : 'rounded-t py-1.5',
+                tab === tabItem.k ? 'border-b-2 border-accent text-txt' : 'text-txt3 hover:text-txt2',
+              ]"
+              @click="requestStudioTab(tabItem.k)"
+            >{{ tabItem.l }}</button>
+          </div>
+          <div
+            v-if="isMobile && tabFadeLeft"
+            data-test="tab-fade-left"
+            class="pointer-events-none absolute inset-y-0 left-0 flex w-10 items-center justify-center bg-gradient-to-r from-surface to-transparent text-txt2"
+            aria-hidden="true"
+          >
+            <Icon name="chevron-left" :size="14" />
+          </div>
+          <div
+            v-if="isMobile && tabFadeRight"
+            data-test="tab-fade-right"
+            class="pointer-events-none absolute inset-y-0 right-0 flex w-10 items-center justify-center bg-gradient-to-l from-surface to-transparent text-txt2"
+            aria-hidden="true"
+          >
+            <Icon name="chevron-right" :size="14" />
+          </div>
         </div>
 
         <!-- agent working directory (VSCode-style explorer + tabs + editor) -->
@@ -2508,36 +2753,45 @@ onBeforeUnmount(() => {
                     <span class="truncate font-mono">{{ row.name }}</span>
                   </button>
                   <button
-                    v-if="row.dir"
-                    data-test="file-row-action"
-                    class="shrink-0 text-txt3 hover:text-accent-2"
-                    :class="isMobile ? 'flex min-h-9 min-w-9 items-center justify-center opacity-100' : 'opacity-0 group-hover:opacity-100'"
-                    :title="t('pages.agentStudio.explorer.newFileInFolder')"
-                    @click.stop="newFile(row.path)"
-                  ><Icon name="doc" :size="12" /></button>
-                  <button
-                    v-if="row.dir"
-                    data-test="file-row-action"
-                    class="shrink-0 text-txt3 hover:text-accent-2"
-                    :class="isMobile ? 'flex min-h-9 min-w-9 items-center justify-center opacity-100' : 'opacity-0 group-hover:opacity-100'"
-                    :title="t('pages.agentStudio.explorer.newFolderInFolder')"
-                    @click.stop="newFolder(row.path)"
-                  ><Icon name="folder" :size="12" /></button>
-                  <button
-                    data-test="file-row-action"
-                    class="shrink-0 text-txt3 hover:text-accent-2"
-                    :class="isMobile ? 'flex min-h-9 min-w-9 items-center justify-center opacity-100' : 'opacity-0 group-hover:opacity-100'"
-                    :title="t('pages.agentStudio.explorer.rename')"
-                    @click.stop="startRename(row)"
-                  ><Icon name="edit" :size="12" /></button>
-                  <button
-                    v-if="!row.dir || !isProtectedDir(row.path)"
-                    data-test="file-row-action"
-                    class="shrink-0 text-txt3 hover:text-err"
-                    :class="isMobile ? 'flex min-h-9 min-w-9 items-center justify-center opacity-100' : 'opacity-0 group-hover:opacity-100'"
-                    :title="t('pages.agentStudio.explorer.delete')"
-                    @click.stop="deleteEntry(row)"
-                  ><Icon name="close" :size="12" /></button>
+                    v-if="isMobile"
+                    type="button"
+                    data-test="file-row-more"
+                    :data-path="row.path"
+                    class="flex min-h-11 min-w-11 shrink-0 items-center justify-center text-txt3 hover:text-accent-2"
+                    :title="t('pages.agentStudio.explorer.more')"
+                    :aria-label="t('pages.agentStudio.explorer.more')"
+                    :aria-expanded="explorerMore?.path === row.path"
+                    @click.stop="toggleExplorerMore($event, row)"
+                  ><Icon name="more" :size="16" /></button>
+                  <template v-else>
+                    <button
+                      v-if="row.dir"
+                      data-test="file-row-action"
+                      class="shrink-0 text-txt3 opacity-0 hover:text-accent-2 group-hover:opacity-100"
+                      :title="t('pages.agentStudio.explorer.newFileInFolder')"
+                      @click.stop="newFile(row.path)"
+                    ><Icon name="doc" :size="12" /></button>
+                    <button
+                      v-if="row.dir"
+                      data-test="file-row-action"
+                      class="shrink-0 text-txt3 opacity-0 hover:text-accent-2 group-hover:opacity-100"
+                      :title="t('pages.agentStudio.explorer.newFolderInFolder')"
+                      @click.stop="newFolder(row.path)"
+                    ><Icon name="folder" :size="12" /></button>
+                    <button
+                      data-test="file-row-action"
+                      class="shrink-0 text-txt3 opacity-0 hover:text-accent-2 group-hover:opacity-100"
+                      :title="t('pages.agentStudio.explorer.rename')"
+                      @click.stop="startRename(row)"
+                    ><Icon name="edit" :size="12" /></button>
+                    <button
+                      v-if="!row.dir || !isProtectedDir(row.path)"
+                      data-test="file-row-action"
+                      class="shrink-0 text-txt3 opacity-0 hover:text-err group-hover:opacity-100"
+                      :title="t('pages.agentStudio.explorer.delete')"
+                      @click.stop="deleteEntry(row)"
+                    ><Icon name="close" :size="12" /></button>
+                  </template>
                 </template>
               </div>
 
@@ -3553,6 +3807,70 @@ onBeforeUnmount(() => {
     </AppModal>
 
     <input ref="importFileInput" type="file" accept=".zip" class="hidden" @change="onImportFileChange" />
+
+    <Teleport to="body">
+      <div
+        v-if="isMobile && showFullNameTip"
+        data-test="agent-name-tip-backdrop"
+        class="fixed inset-0 z-[9998]"
+        @click="closeFullNameTip"
+      />
+      <div
+        v-if="isMobile && showFullNameTip"
+        data-test="agent-name-tip"
+        class="fixed z-[9999] border border-line bg-elevated px-3 py-2.5 text-[12.5px] text-txt shadow-card"
+        :style="fullNameTipStyle"
+        @click.stop
+      >
+        <small class="mb-1 block text-[11px] text-txt3">{{ t('pages.agentStudio.mobile.fullNameLabel') }}</small>
+        <b class="break-all font-semibold">{{ activeName }}</b>
+      </div>
+      <div
+        v-if="isMobile && explorerMore"
+        data-test="explorer-more-backdrop"
+        class="fixed inset-0 z-[9998]"
+        @click="closeExplorerMore"
+      />
+      <div
+        v-if="isMobile && explorerMore"
+        data-test="explorer-more-menu"
+        class="fixed z-[9999] min-w-[180px] border border-line bg-elevated py-1 shadow-card"
+        :style="explorerMoreStyle"
+        @click.stop
+      >
+        <button
+          v-if="explorerMore.dir"
+          type="button"
+          data-test="explorer-more-item"
+          data-action="newFile"
+          class="flex min-h-11 w-full items-center px-3.5 text-left text-[13px] text-txt hover:bg-overlay"
+          @click="onExplorerMoreAction('newFile')"
+        >{{ t('pages.agentStudio.explorer.newFile') }}</button>
+        <button
+          v-if="explorerMore.dir"
+          type="button"
+          data-test="explorer-more-item"
+          data-action="newFolder"
+          class="flex min-h-11 w-full items-center px-3.5 text-left text-[13px] text-txt hover:bg-overlay"
+          @click="onExplorerMoreAction('newFolder')"
+        >{{ t('pages.agentStudio.explorer.newFolder') }}</button>
+        <button
+          type="button"
+          data-test="explorer-more-item"
+          data-action="rename"
+          class="flex min-h-11 w-full items-center px-3.5 text-left text-[13px] text-txt hover:bg-overlay"
+          @click="onExplorerMoreAction('rename')"
+        >{{ t('pages.agentStudio.explorer.rename') }}</button>
+        <button
+          v-if="!explorerMore.dir || !isProtectedDir(explorerMore.path)"
+          type="button"
+          data-test="explorer-more-item"
+          data-action="delete"
+          class="flex min-h-11 w-full items-center px-3.5 text-left text-[13px] text-err hover:bg-err/10"
+          @click="onExplorerMoreAction('delete')"
+        >{{ t('pages.agentStudio.explorer.delete') }}</button>
+      </div>
+    </Teleport>
 
     <ExplorerContextMenu
       :open="ctxMenu.open"
