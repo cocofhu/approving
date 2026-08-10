@@ -362,6 +362,9 @@ export interface ChannelConfig {
   name: string
   enabled: boolean
   projectId: string
+  agentName: string
+  isPrimary: boolean
+  enabledMcps: string[]
   appId: string
   appSecretSet: boolean
   turnTimeoutSeconds: number
@@ -372,17 +375,28 @@ export interface ChannelConfig {
   updatedAt: string
 }
 
-// Per-project channel upsert payload. type is fixed to "qq" server-side and
-// projectId is implied by the request path, so neither is sent by the client.
+// Channel create/update payload. type is fixed to "qq" server-side and
+// projectId is implied by the request path.
 export interface ChannelConfigInput {
   name: string
   enabled: boolean
+  agentName: string
+  isPrimary?: boolean
+  enabledMcps?: string[]
   appId: string
   appSecret?: string
   turnTimeoutSeconds: number
   cronDeliver: boolean
   cronDeliverTarget?: string
   config?: Record<string, unknown>
+  /** Confirm syncing Project.PmLeaderAgent when rebinding primary. */
+  syncPmLeader?: boolean
+}
+
+export interface ChannelDeleteOpts {
+  newPrimaryId?: string
+  confirmNoPrimary?: boolean
+  syncPmLeader?: boolean
 }
 
 export const api = {
@@ -1270,7 +1284,30 @@ export const api = {
       method: 'DELETE',
     }),
 
-  // per-project external IM channel (one QQ channel per project)
+  // multi-channel QQ APIs (primary + secondary)
+  listProjectChannels: (projectId: string) =>
+    req<{ items: ChannelConfig[]; secretsKeyConfigured?: boolean; freeAgents?: string[] }>(
+      `/projects/${encodeURIComponent(projectId)}/channels`,
+    ),
+  createProjectChannel: (projectId: string, body: ChannelConfigInput) =>
+    req<ChannelConfig>(`/projects/${encodeURIComponent(projectId)}/channels`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateProjectChannel: (projectId: string, channelId: string, body: ChannelConfigInput) =>
+    req<ChannelConfig>(
+      `/projects/${encodeURIComponent(projectId)}/channels/${encodeURIComponent(channelId)}`,
+      { method: 'PUT', body: JSON.stringify(body) },
+    ),
+  deleteProjectChannelById: (projectId: string, channelId: string, body?: ChannelDeleteOpts) =>
+    req<{ status: string }>(
+      `/projects/${encodeURIComponent(projectId)}/channels/${encodeURIComponent(channelId)}`,
+      {
+        method: 'DELETE',
+        body: body ? JSON.stringify(body) : undefined,
+      },
+    ),
+  // legacy singular aliases → primary channel
   getProjectChannel: (projectId: string) =>
     req<{ channel: ChannelConfig | null; secretsKeyConfigured?: boolean }>(
       `/projects/${encodeURIComponent(projectId)}/channel`,

@@ -327,6 +327,8 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 
 	resolved := ResolvedChannel{
 		ID: rc.cfg.ID, Type: rc.cfg.Type, ProjectID: rc.cfg.ProjectID,
+		AgentName:   rc.cfg.AgentName,
+		EnabledMcps: rc.cfg.EnabledMcps,
 		TurnTimeout: time.Duration(rc.cfg.TurnTimeoutSeconds) * time.Second,
 		Caps:        SessionCapsFromConfig(rc.cfg.Config),
 	}
@@ -377,6 +379,7 @@ func (m *Manager) sendOutbound(ctx context.Context, rc *runningChannel, out Outb
 
 // Deliver pushes cron/proactive text to a project's configured delivery channel.
 // Legacy entry: treats body as "changed" and routes through coordinated egress.
+// Without AgentName it cannot pick among multiple channels — returns ErrNoDeliveryChannel.
 // Implements services.ChannelDeliverer.
 func (m *Manager) Deliver(projectID, text string) error {
 	return m.DeliverCron(services.CronDelivery{
@@ -388,9 +391,11 @@ func (m *Manager) Deliver(projectID, text string) error {
 }
 
 // DeliverCron is the coordinated cron→QQ egress: busy conversations silent-enqueue
-// (no enqueue side-chat); idle sends immediately. Implements services.ChannelDeliverer.
+// (no enqueue side-chat); idle sends immediately. Routes by job AgentName → the
+// Channel bound to that Agent (respecting that Channel's CronDeliver flag).
+// Implements services.ChannelDeliverer.
 func (m *Manager) DeliverCron(d services.CronDelivery) error {
-	target, scene, conv, err := m.lookupDeliveryTarget(d.ProjectID)
+	target, scene, conv, err := m.lookupDeliveryTarget(d.ProjectID, d.AgentName)
 	if err != nil {
 		return err
 	}
@@ -405,6 +410,8 @@ func (m *Manager) DeliverCron(d services.CronDelivery) error {
 	key := convKey(d.ProjectID, scene, conv)
 	item := CronPushItem{
 		ProjectID: d.ProjectID,
+		AgentName: d.AgentName,
+		ChannelID: target.cfg.ID,
 		Scene:     scene,
 		Conv:      conv,
 		Category:  d.Category,
@@ -423,39 +430,56 @@ func (m *Manager) DeliverCron(d services.CronDelivery) error {
 	return nil
 }
 
-// DeliverRunNotify pushes a Run lifecycle notification to the project's bound
-// QQ target session. Unlike DeliverCron it does NOT require CronDeliver=true —
-// any Enabled channel with a non-empty CronDeliverTarget (session address) works.
+// DeliverRunNotify fans out a Run lifecycle notification to the explicit
+// channelIDs list. Unlike DeliverCron it does NOT require CronDeliver=true —
+// each Enabled channel with a non-empty CronDeliverTarget (session address) works.
 // Text is sent as-is (no FormatCronPush). Implements services.RunNotifyDeliverer.
-// Missing target returns services.ErrRunNotifyNoTarget (caller treats as no-op).
-func (m *Manager) DeliverRunNotify(projectID, text string) error {
-	_, scene, conv, err := m.lookupRunNotifyTarget(projectID)
-	if err != nil {
-		if errors.Is(err, ErrNoRunNotifyTarget) || errors.Is(err, ErrNoDeliveryChannel) {
-			return services.ErrRunNotifyNoTarget
+// Empty channelIDs or no valid targets → services.ErrRunNotifyNoTarget.
+// Individual invalid/disabled targets are skipped; failures do not abort others.
+func (m *Manager) DeliverRunNotify(projectID, text string, channelIDs []string) error {
+	channelIDs = services.NormalizeNotifyChannelIDs(channelIDs)
+	if len(channelIDs) == 0 {
+		return services.ErrRunNotifyNoTarget
+	}
+	sent := 0
+	for _, id := range channelIDs {
+		target, scene, conv, err := m.lookupRunNotifyTargetByID(projectID, id)
+		if err != nil {
+			log.Info().Err(err).Str("project", projectID).Str("channel", id).
+				Msg("run-notify: skip invalid/disabled channel target")
+			continue
 		}
-		return err
+		_ = target
+		key := convKey(projectID, scene, conv)
+		item := CronPushItem{
+			ProjectID: projectID,
+			ChannelID: id,
+			Scene:     scene,
+			Conv:      conv,
+			Category:  "run_notify",
+			Kind:      CronResultChanged, // priority: treat actionable Run alerts like "changed"
+			Text:      text,
+			Enqueued:  time.Now(),
+		}
+		m.enqueuePush(key, item)
+		m.flushPushQueue(key)
+		sent++
 	}
-	key := convKey(projectID, scene, conv)
-	item := CronPushItem{
-		ProjectID: projectID,
-		Scene:     scene,
-		Conv:      conv,
-		Category:  "run_notify",
-		Kind:      CronResultChanged, // priority: treat actionable Run alerts like "changed"
-		Text:      text,
-		Enqueued:  time.Now(),
+	if sent == 0 {
+		return services.ErrRunNotifyNoTarget
 	}
-	m.enqueuePush(key, item)
-	m.flushPushQueue(key)
 	return nil
 }
 
-// HasRunNotifyTarget reports whether an Enabled channel exposes a usable QQ
-// session address for the project (independent of CronDeliver).
-func (m *Manager) HasRunNotifyTarget(projectID string) bool {
-	_, _, _, err := m.lookupRunNotifyTarget(projectID)
-	return err == nil
+// HasRunNotifyTarget reports whether any of the listed channelIDs is an Enabled
+// channel with a usable QQ session address (independent of CronDeliver).
+func (m *Manager) HasRunNotifyTarget(projectID string, channelIDs []string) bool {
+	for _, id := range services.NormalizeNotifyChannelIDs(channelIDs) {
+		if _, _, _, err := m.lookupRunNotifyTargetByID(projectID, id); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *Manager) flushPushQueue(key string) {
@@ -473,12 +497,17 @@ func (m *Manager) flushPushQueue(key string) {
 		var target *runningChannel
 		var err error
 		if item.Category == "run_notify" {
-			target, _, _, err = m.lookupRunNotifyTarget(item.ProjectID)
+			if item.ChannelID != "" {
+				target, _, _, err = m.lookupRunNotifyTargetByID(item.ProjectID, item.ChannelID)
+			} else {
+				err = ErrNoRunNotifyTarget
+			}
 		} else {
-			target, _, _, err = m.lookupDeliveryTarget(item.ProjectID)
+			target, _, _, err = m.lookupDeliveryTarget(item.ProjectID, item.AgentName)
 		}
 		if err != nil {
 			log.Warn().Err(err).Str("project", item.ProjectID).Str("category", item.Category).
+				Str("channel", item.ChannelID).Str("agent", item.AgentName).
 				Msg("push flush: no delivery channel")
 			continue
 		}
@@ -520,14 +549,25 @@ func (m *Manager) drainPushQueueRaw(key string) []CronPushItem {
 	return out
 }
 
-func (m *Manager) lookupDeliveryTarget(projectID string) (*runningChannel, Scene, string, error) {
+// lookupDeliveryTarget finds the CronDeliver channel bound to agentName.
+// Empty agentName refuses the legacy "latest in project" ambiguity.
+func (m *Manager) lookupDeliveryTarget(projectID, agentName string) (*runningChannel, Scene, string, error) {
+	agentName = strings.TrimSpace(agentName)
+	if agentName == "" {
+		return nil, "", "", ErrNoDeliveryChannel
+	}
 	m.mu.Lock()
 	var target *runningChannel
 	for _, rc := range m.running {
-		if rc.cfg.ProjectID == projectID && rc.cfg.CronDeliver && strings.TrimSpace(rc.cfg.CronDeliverTarget) != "" {
-			if target == nil || rc.cfg.UpdatedAt.After(target.cfg.UpdatedAt) {
-				target = rc
-			}
+		if rc.cfg.ProjectID != projectID {
+			continue
+		}
+		if strings.TrimSpace(rc.cfg.AgentName) != agentName {
+			continue
+		}
+		if rc.cfg.CronDeliver && strings.TrimSpace(rc.cfg.CronDeliverTarget) != "" {
+			target = rc
+			break
 		}
 	}
 	m.mu.Unlock()
@@ -541,30 +581,27 @@ func (m *Manager) lookupDeliveryTarget(projectID string) (*runningChannel, Scene
 	return target, scene, conv, nil
 }
 
-// lookupRunNotifyTarget finds an Enabled channel with a usable session address
-// (CronDeliverTarget), without requiring CronDeliver=true.
-func (m *Manager) lookupRunNotifyTarget(projectID string) (*runningChannel, Scene, string, error) {
-	m.mu.Lock()
-	var target *runningChannel
-	for _, rc := range m.running {
-		if !rc.cfg.Enabled {
-			continue
-		}
-		if rc.cfg.ProjectID == projectID && strings.TrimSpace(rc.cfg.CronDeliverTarget) != "" {
-			if target == nil || rc.cfg.UpdatedAt.After(target.cfg.UpdatedAt) {
-				target = rc
-			}
-		}
-	}
-	m.mu.Unlock()
-	if target == nil {
+// lookupRunNotifyTargetByID finds an Enabled channel by id with a usable
+// session address (CronDeliverTarget), without requiring CronDeliver=true.
+func (m *Manager) lookupRunNotifyTargetByID(projectID, channelID string) (*runningChannel, Scene, string, error) {
+	channelID = strings.TrimSpace(channelID)
+	if channelID == "" {
 		return nil, "", "", ErrNoRunNotifyTarget
 	}
-	scene, conv := parseTarget(target.cfg.CronDeliverTarget)
+	m.mu.Lock()
+	rc := m.running[channelID]
+	m.mu.Unlock()
+	if rc == nil || !rc.cfg.Enabled || rc.cfg.ProjectID != projectID {
+		return nil, "", "", ErrNoRunNotifyTarget
+	}
+	if strings.TrimSpace(rc.cfg.CronDeliverTarget) == "" {
+		return nil, "", "", ErrNoRunNotifyTarget
+	}
+	scene, conv := parseTarget(rc.cfg.CronDeliverTarget)
 	if conv == "" {
 		return nil, "", "", ErrNoRunNotifyTarget
 	}
-	return target, scene, conv, nil
+	return rc, scene, conv, nil
 }
 
 func (m *Manager) convQueueFor(key string) *convQueue {
@@ -600,14 +637,16 @@ func parseTarget(target string) (Scene, string) {
 
 func fingerprint(c models.ChannelConfig) string {
 	b, _ := json.Marshal(struct {
-		Type, ProjectID, AppID, AppSecretEnc, CronDeliverTarget string
-		Enabled, CronDeliver                                    bool
-		TurnTimeoutSeconds                                      int
-		Config                                                  map[string]any
+		Type, ProjectID, AgentName, AppID, AppSecretEnc, CronDeliverTarget string
+		Enabled, CronDeliver, IsPrimary                                    bool
+		TurnTimeoutSeconds                                                 int
+		EnabledMcps                                                        []string
+		Config                                                             map[string]any
 	}{
-		Type: c.Type, ProjectID: c.ProjectID, AppID: c.AppID, AppSecretEnc: c.AppSecretEnc,
-		CronDeliverTarget: c.CronDeliverTarget, Enabled: c.Enabled, CronDeliver: c.CronDeliver,
-		TurnTimeoutSeconds: c.TurnTimeoutSeconds, Config: c.Config,
+		Type: c.Type, ProjectID: c.ProjectID, AgentName: c.AgentName, AppID: c.AppID,
+		AppSecretEnc: c.AppSecretEnc, CronDeliverTarget: c.CronDeliverTarget,
+		Enabled: c.Enabled, CronDeliver: c.CronDeliver, IsPrimary: c.IsPrimary,
+		TurnTimeoutSeconds: c.TurnTimeoutSeconds, EnabledMcps: c.EnabledMcps, Config: c.Config,
 	})
 	return string(b)
 }

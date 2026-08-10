@@ -1026,7 +1026,12 @@ onUnmounted(() => {
               {{ t('pages.projectDetail.pm.backToChat') }}
             </AppButton>
           </div>
-          <PmSettingsPanel :project-id="projectId" @changed="onPmBindingChanged" />
+          <PmSettingsPanel
+            :project-id="projectId"
+            :project="project"
+            @changed="onPmBindingChanged"
+            @project-updated="(p) => { project = p }"
+          />
         </div>
       </div>
 

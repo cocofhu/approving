@@ -37,6 +37,8 @@ type ResolvedChannel struct {
 	ID          string
 	Type        string
 	ProjectID   string
+	AgentName   string        // channel-bound PM Agent (not Project.PmLeader)
+	EnabledMcps []string      // platform PM role MCPs for this channel turn only
 	TurnTimeout time.Duration // 0 → runner default
 	Caps        SessionCaps   // from latest ChannelConfig; applied each turn
 }
@@ -77,11 +79,14 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 	if b.pm == nil || b.sbx == nil || b.turns == nil {
 		return Reply{}, fmt.Errorf("channel bridge unavailable")
 	}
-	proj, err := b.pm.RequireEnabled(rc.ProjectID)
-	if err != nil {
+	if _, err := b.pm.RequireEnabled(rc.ProjectID); err != nil {
 		return Reply{}, err
 	}
-	agent := proj.PmLeaderAgent
+	agent := strings.TrimSpace(rc.AgentName)
+	if agent == "" {
+		return Reply{}, fmt.Errorf("channel %s has no bound agent", rc.ID)
+	}
+	enabledMcps := rc.EnabledMcps
 	userID := SyntheticUserID(rc.Type, in.Scene, in.ConversationID)
 
 	thread, err := b.ensureThread(rc.ProjectID, userID, agent, in)
@@ -89,8 +94,7 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 		return Reply{}, err
 	}
 
-	binding, _ := b.pm.GetBinding(rc.ProjectID)
-	token, specs := b.hooks.Register(rc.ProjectID, thread.ID, userID, agent, binding.EnabledMcps, rc.Caps)
+	token, specs := b.hooks.Register(rc.ProjectID, thread.ID, userID, agent, enabledMcps, rc.Caps)
 	row, reused, err := b.sbx.OpenAgentSandbox(ctx, services.AgentSandboxOpenOpts{
 		Profile:       agent,
 		ProjectID:     rc.ProjectID,
@@ -112,7 +116,7 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 		}
 		token = row.Token
 		if b.hooks.RestoreOnReuse != nil {
-			b.hooks.RestoreOnReuse(rc.ProjectID, thread.ID, userID, agent, token, binding.EnabledMcps, rc.Caps)
+			b.hooks.RestoreOnReuse(rc.ProjectID, thread.ID, userID, agent, token, enabledMcps, rc.Caps)
 		}
 	}
 	if err := b.pm.BindSandbox(thread.ID, row.ID); err != nil {
@@ -239,8 +243,13 @@ func (b *ChannelBridge) ensureThread(projectID, userID, agent string, in Inbound
 	if err != nil {
 		return models.ChatThread{}, err
 	}
-	if len(threads) > 0 {
-		return threads[0], nil // ListThreads is ordered updated_at desc
+	// Prefer a thread already owned by this Agent. Rebinding a Channel to
+	// another Agent must open a new thread so memory/sandbox profile do not
+	// silently stay on the previous Agent.
+	for _, th := range threads {
+		if strings.TrimSpace(th.AgentName) == strings.TrimSpace(agent) {
+			return th, nil
+		}
 	}
 	title := channelThreadTitle(in)
 	return b.pm.CreateThread(projectID, userID, title, agent, models.ChatThreadKindUser)

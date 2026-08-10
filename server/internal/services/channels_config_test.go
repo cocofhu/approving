@@ -33,6 +33,7 @@ func validInput(projectID string) ChannelConfigInput {
 		Name:      "QQ Bot",
 		Enabled:   true,
 		ProjectID: projectID,
+		AgentName: "pm-agent",
 		AppID:     "app-123",
 		AppSecret: "the-secret",
 	}
@@ -240,5 +241,60 @@ func TestValidCronDeliverTarget(t *testing.T) {
 		if got := validCronDeliverTarget(c.in); got != c.want {
 			t.Errorf("validCronDeliverTarget(%q) = %v want %v", c.in, got, c.want)
 		}
+	}
+}
+
+func TestChannelMultiPrimarySecondary(t *testing.T) {
+	setChannelKey(t)
+	svc, pid := newChannelSvc(t)
+
+	primaryIn := validInput(pid)
+	primaryIn.AgentName = "agent-primary"
+	primary, err := svc.Create(primaryIn)
+	if err != nil {
+		t.Fatalf("create primary: %v", err)
+	}
+	if !primary.IsPrimary {
+		t.Fatalf("first channel should be primary")
+	}
+
+	secIn := validInput(pid)
+	secIn.AppID = "app-456"
+	secIn.AgentName = "agent-secondary"
+	sec, err := svc.Create(secIn)
+	if err != nil {
+		t.Fatalf("create secondary: %v", err)
+	}
+	if sec.IsPrimary {
+		t.Fatalf("second channel should be secondary")
+	}
+
+	list, err := svc.ListByProject(pid)
+	if err != nil || len(list) != 2 {
+		t.Fatalf("list: %v n=%d", err, len(list))
+	}
+	if !list[0].IsPrimary {
+		t.Fatalf("list should put primary first")
+	}
+
+	// Cannot bind taken agent.
+	secIn2 := validInput(pid)
+	secIn2.AppID = "app-789"
+	secIn2.AgentName = "agent-primary"
+	if _, err := svc.Create(secIn2); err != ErrChannelAgentTaken {
+		t.Fatalf("taken agent: got %v", err)
+	}
+
+	// Delete primary without ack fails.
+	if err := svc.Delete(primary.ID, ChannelDeleteOpts{}); err != ErrChannelDeletePrimaryNeedsAck {
+		t.Fatalf("delete primary no ack: %v", err)
+	}
+	// Promote secondary then delete.
+	if err := svc.Delete(primary.ID, ChannelDeleteOpts{NewPrimaryID: sec.ID}); err != nil {
+		t.Fatalf("delete primary with new: %v", err)
+	}
+	got, err := svc.GetByID(sec.ID)
+	if err != nil || !got.IsPrimary {
+		t.Fatalf("secondary should be primary now: %+v err=%v", got, err)
 	}
 }

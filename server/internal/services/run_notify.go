@@ -12,11 +12,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// RunNotifyDeliverer pushes a formatted Run lifecycle message to the project's
-// bound QQ target without requiring CronDeliver. Implementations must treat
-// missing targets as a soft no-op (return nil or a sentinel that callers log).
+// RunNotifyDeliverer pushes a formatted Run lifecycle message to explicit
+// channel targets without requiring CronDeliver. Implementations must treat
+// missing/invalid targets as a soft no-op (return nil or a sentinel) and must
+// not abort the whole fan-out when one target fails.
 type RunNotifyDeliverer interface {
-	DeliverRunNotify(projectID, text string) error
+	DeliverRunNotify(projectID, text string, channelIDs []string) error
 }
 
 // ErrRunNotifyNoTarget is returned (and swallowed) when no QQ target is bound.
@@ -100,6 +101,15 @@ func (s *RunNotifyService) AttemptDeliver(ev RunNotifyEvent) {
 		return
 	}
 
+	// Empty ChannelIDs ⇒ do not deliver (and do not claim). Distinct from
+	// Enabled=false which already returned via ResolveNotifyEvents.
+	channelIDs := NormalizeNotifyChannelIDs(project.NotifyPolicy.ChannelIDs)
+	if len(channelIDs) == 0 {
+		log.Debug().Str("run_id", ev.RunID).Str("project", project.ID).
+			Msg("run-notify: empty channelIds — no-op before claim")
+		return
+	}
+
 	claimed, err := s.claimReceipt(ev.RunID, ev.NodeID, ev.Iteration, kind)
 	if err != nil {
 		log.Warn().Err(err).Str("run_id", ev.RunID).Str("kind", kind).
@@ -133,7 +143,7 @@ func (s *RunNotifyService) AttemptDeliver(ev RunNotifyEvent) {
 			Msg("run-notify: no deliverer — no-op after claim")
 		return
 	}
-	if err := s.deliver.DeliverRunNotify(project.ID, text); err != nil {
+	if err := s.deliver.DeliverRunNotify(project.ID, text, channelIDs); err != nil {
 		// P0: claim already held; log and do not retry.
 		if errors.Is(err, ErrRunNotifyNoTarget) {
 			log.Info().Str("run_id", ev.RunID).Str("project", project.ID).

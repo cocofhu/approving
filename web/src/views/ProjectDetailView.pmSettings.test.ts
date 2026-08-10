@@ -17,6 +17,7 @@ const apiMocks = vi.hoisted(() => ({
   listPmMemories: vi.fn(),
   listProjectCronJobs: vi.fn(),
   getProjectChannel: vi.fn(),
+  listProjectChannels: vi.fn(),
 }))
 
 vi.mock('@/lib/api', async () => {
@@ -33,6 +34,7 @@ vi.mock('@/lib/api', async () => {
       listPmMemories: apiMocks.listPmMemories,
       listProjectCronJobs: apiMocks.listProjectCronJobs,
       getProjectChannel: apiMocks.getProjectChannel,
+      listProjectChannels: apiMocks.listProjectChannels,
     },
   }
 })
@@ -90,6 +92,7 @@ async function mountDetail(tabQuery?: string, binding: PmLeaderBinding = DISABLE
   apiMocks.listPmMemories.mockResolvedValue({ items: [] })
   apiMocks.listProjectCronJobs.mockResolvedValue({ items: [] })
   apiMocks.getProjectChannel.mockResolvedValue({ channel: null })
+  apiMocks.listProjectChannels.mockResolvedValue({ items: [], freeAgents: [], secretsKeyConfigured: true })
   apiMocks.updatePmLeader.mockImplementation(async (_id: string, body: Partial<PmLeaderBinding>) => ({
     ...ENABLED_BINDING,
     ...body,

@@ -202,12 +202,12 @@ func TestManagerDeliverRoutesToTarget(t *testing.T) {
 	m := newTestManager(fa)
 	m.Apply([]models.ChannelConfig{{
 		ID: "c1", Type: "qq", ProjectID: "proj", AppID: "app", Enabled: true,
-		CronDeliver: true, CronDeliverTarget: "guild:123",
+		AgentName: "agent-a", CronDeliver: true, CronDeliverTarget: "guild:123",
 	}})
 	defer m.StopAll()
 
-	if err := m.Deliver("proj", "result ![](https://x.com/a.png)"); err != nil {
-		t.Fatalf("Deliver: %v", err)
+	if err := m.DeliverCron(cronDelivery("proj", "agent-a", "cron", string(CronResultChanged), "result ![](https://x.com/a.png)")); err != nil {
+		t.Fatalf("DeliverCron: %v", err)
 	}
 	fa.mu.Lock()
 	defer fa.mu.Unlock()
@@ -246,13 +246,13 @@ func TestManagerDeliverRunNotifyWithoutCronDeliver(t *testing.T) {
 	// Bound QQ target without CronDeliver — Run notify must still work.
 	m.Apply([]models.ChannelConfig{{
 		ID: "c1", Type: "qq", ProjectID: "proj", AppID: "app", Enabled: true,
-		CronDeliver: false, CronDeliverTarget: "c2c:user1",
+		AgentName: "agent-a", CronDeliver: false, CronDeliverTarget: "c2c:user1",
 	}})
 	defer m.StopAll()
-	if !m.HasRunNotifyTarget("proj") {
+	if !m.HasRunNotifyTarget("proj", []string{"c1"}) {
 		t.Fatal("expected HasRunNotifyTarget")
 	}
-	if err := m.DeliverRunNotify("proj", "【Approving】等待人工处理\n打开：/runs/r1"); err != nil {
+	if err := m.DeliverRunNotify("proj", "【Approving】等待人工处理\n打开：/runs/r1", []string{"c1"}); err != nil {
 		t.Fatalf("DeliverRunNotify: %v", err)
 	}
 	fa.mu.Lock()
@@ -274,7 +274,7 @@ func TestManagerDeliverRunNotifyWithoutCronDeliver(t *testing.T) {
 
 func TestManagerDeliverRunNotifyNoTarget(t *testing.T) {
 	m := newTestManager(&fakeAdapter{})
-	err := m.DeliverRunNotify("proj", "x")
+	err := m.DeliverRunNotify("proj", "x", []string{"missing"})
 	if !errors.Is(err, services.ErrRunNotifyNoTarget) {
 		t.Fatalf("got %v want ErrRunNotifyNoTarget", err)
 	}
@@ -925,11 +925,11 @@ func TestDeliverCronIdleImmediate(t *testing.T) {
 	m := newTestManager(fa)
 	m.Apply([]models.ChannelConfig{{
 		ID: "c1", Type: "qq", ProjectID: "proj", AppID: "app", Enabled: true,
-		CronDeliver: true, CronDeliverTarget: "c2c:user1",
+		AgentName: "agent-a", CronDeliver: true, CronDeliverTarget: "c2c:user1",
 	}})
 	defer m.StopAll()
 
-	if err := m.DeliverCron(cronDelivery("proj", "每小时PR", "unchanged", "PR 检查完毕，无变化")); err != nil {
+	if err := m.DeliverCron(cronDelivery("proj", "agent-a", "每小时PR", "unchanged", "PR 检查完毕，无变化")); err != nil {
 		t.Fatalf("DeliverCron: %v", err)
 	}
 	got := sentTexts(fa)
@@ -946,7 +946,7 @@ func TestDeliverCronBusySilentEnqueueThenFlush(t *testing.T) {
 	m.running["c1"] = &runningChannel{
 		cfg: models.ChannelConfig{
 			ID: "c1", Type: "qq", ProjectID: "proj", Enabled: true,
-			CronDeliver: true, CronDeliverTarget: "c2c:user1",
+			AgentName: "agent-a", CronDeliver: true, CronDeliverTarget: "c2c:user1",
 		},
 		adapter: fa,
 	}
@@ -974,7 +974,7 @@ func TestDeliverCronBusySilentEnqueueThenFlush(t *testing.T) {
 		t.Fatal("expected busy during turn")
 	}
 
-	if err := m.DeliverCron(cronDelivery("proj", "每小时PR", "changed", "有 2 个新 PR")); err != nil {
+	if err := m.DeliverCron(cronDelivery("proj", "agent-a", "每小时PR", "changed", "有 2 个新 PR")); err != nil {
 		t.Fatalf("DeliverCron busy: %v", err)
 	}
 	mid := sentTexts(fa)
@@ -1003,7 +1003,7 @@ func TestPushQueueMergesUnchangedAndPriority(t *testing.T) {
 	m.running["c1"] = &runningChannel{
 		cfg: models.ChannelConfig{
 			ID: "c1", Type: "qq", ProjectID: "proj", Enabled: true,
-			CronDeliver: true, CronDeliverTarget: "c2c:user1",
+			AgentName: "agent-a", CronDeliver: true, CronDeliverTarget: "c2c:user1",
 		},
 		adapter: fa,
 	}
@@ -1016,10 +1016,10 @@ func TestPushQueueMergesUnchangedAndPriority(t *testing.T) {
 	q.busy = true
 	q.mu.Unlock()
 
-	_ = m.DeliverCron(cronDelivery("proj", "每小时PR", "unchanged", "a"))
-	_ = m.DeliverCron(cronDelivery("proj", "每小时PR", "unchanged", "b"))
-	_ = m.DeliverCron(cronDelivery("proj", "日报", "changed", "日报有更新"))
-	_ = m.DeliverCron(cronDelivery("proj", "每小时PR", "failed", "PR 拉取失败"))
+	_ = m.DeliverCron(cronDelivery("proj", "agent-a", "每小时PR", "unchanged", "a"))
+	_ = m.DeliverCron(cronDelivery("proj", "agent-a", "每小时PR", "unchanged", "b"))
+	_ = m.DeliverCron(cronDelivery("proj", "agent-a", "日报", "changed", "日报有更新"))
+	_ = m.DeliverCron(cronDelivery("proj", "agent-a", "每小时PR", "failed", "PR 拉取失败"))
 
 	q.mu.Lock()
 	q.busy = false
@@ -1071,7 +1071,7 @@ func TestFlushPushQueueMidBusyRequeuesRemaining(t *testing.T) {
 	m.running["c1"] = &runningChannel{
 		cfg: models.ChannelConfig{
 			ID: "c1", Type: "qq", ProjectID: "proj", Enabled: true,
-			CronDeliver: true, CronDeliverTarget: "c2c:user1",
+			AgentName: "agent-a", CronDeliver: true, CronDeliverTarget: "c2c:user1",
 		},
 		adapter: fa,
 	}
@@ -1083,9 +1083,9 @@ func TestFlushPushQueueMidBusyRequeuesRemaining(t *testing.T) {
 	q.busy = true
 	q.mu.Unlock()
 
-	_ = m.DeliverCron(cronDelivery("proj", "每小时PR", "changed", "有 2 个新 PR"))
-	_ = m.DeliverCron(cronDelivery("proj", "日报", "changed", "日报有更新"))
-	_ = m.DeliverCron(cronDelivery("proj", "每小时PR", "failed", "PR 拉取失败"))
+	_ = m.DeliverCron(cronDelivery("proj", "agent-a", "每小时PR", "changed", "有 2 个新 PR"))
+	_ = m.DeliverCron(cronDelivery("proj", "agent-a", "日报", "changed", "日报有更新"))
+	_ = m.DeliverCron(cronDelivery("proj", "agent-a", "每小时PR", "failed", "PR 拉取失败"))
 
 	// During flush of the first item, mark busy again so remaining must requeue.
 	sendCount := 0
@@ -1136,7 +1136,7 @@ func TestFlushPushQueueMidBusyRespectsDepth(t *testing.T) {
 	m.running["c1"] = &runningChannel{
 		cfg: models.ChannelConfig{
 			ID: "c1", Type: "qq", ProjectID: "proj", Enabled: true,
-			CronDeliver: true, CronDeliverTarget: "c2c:user1",
+			AgentName: "agent-a", CronDeliver: true, CronDeliverTarget: "c2c:user1",
 		},
 		adapter: fa,
 	}
@@ -1150,7 +1150,7 @@ func TestFlushPushQueueMidBusyRespectsDepth(t *testing.T) {
 
 	// Seed flush batch.
 	for i := 0; i < 3; i++ {
-		_ = m.DeliverCron(cronDelivery("proj", fmt.Sprintf("job-%d", i), "changed", fmt.Sprintf("body-%d", i)))
+		_ = m.DeliverCron(cronDelivery("proj", "agent-a", fmt.Sprintf("job-%d", i), "changed", fmt.Sprintf("body-%d", i)))
 	}
 
 	sendCount := 0
@@ -1321,6 +1321,6 @@ func TestClassifyCronResultDelegatesToServices(t *testing.T) {
 	}
 }
 
-func cronDelivery(projectID, category, kind, text string) services.CronDelivery {
-	return services.CronDelivery{ProjectID: projectID, Category: category, Kind: kind, Text: text}
+func cronDelivery(projectID, agentName, category, kind, text string) services.CronDelivery {
+	return services.CronDelivery{ProjectID: projectID, AgentName: agentName, Category: category, Kind: kind, Text: text}
 }

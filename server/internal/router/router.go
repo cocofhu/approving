@@ -87,6 +87,12 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.GET("/projects/:id/cron-jobs", h.ListProjectCronJobs)
 		api.PATCH("/projects/:id/cron-jobs/:jobId", h.PatchProjectCronJob)
 		api.DELETE("/projects/:id/cron-jobs/:jobId", h.DeleteProjectCronJob)
+		// Plural multi-channel APIs (primary + secondary).
+		api.GET("/projects/:id/channels", h.ListProjectChannels)
+		api.POST("/projects/:id/channels", h.CreateProjectChannel)
+		api.PUT("/projects/:id/channels/:channelId", h.UpdateProjectChannel)
+		api.DELETE("/projects/:id/channels/:channelId", h.DeleteProjectChannelByID)
+		// Legacy singular aliases → primary channel.
 		api.GET("/projects/:id/channel", h.GetProjectChannel)
 		api.PUT("/projects/:id/channel", h.PutProjectChannel)
 		api.DELETE("/projects/:id/channel", h.DeleteProjectChannel)

@@ -17,6 +17,7 @@ const apiMocks = vi.hoisted(() => ({
   getPmLeader: vi.fn(),
   listProjectCronJobs: vi.fn(),
   getProjectChannel: vi.fn(),
+  listProjectChannels: vi.fn(),
 }))
 
 vi.mock('@/lib/api', async () => {
@@ -31,6 +32,7 @@ vi.mock('@/lib/api', async () => {
       getPmLeader: apiMocks.getPmLeader,
       listProjectCronJobs: apiMocks.listProjectCronJobs,
       getProjectChannel: apiMocks.getProjectChannel,
+      listProjectChannels: apiMocks.listProjectChannels,
     },
   }
 })
@@ -116,6 +118,7 @@ describe('ProjectDetailView project switch race', () => {
     apiMocks.getPmLeader.mockResolvedValue({ enabled: false })
     apiMocks.listProjectCronJobs.mockResolvedValue({ items: [] })
     apiMocks.getProjectChannel.mockResolvedValue({})
+    apiMocks.listProjectChannels.mockResolvedValue({ items: [], freeAgents: [], secretsKeyConfigured: true })
   })
 
   async function mountDetail(id: string, query = '?tab=workflows') {
