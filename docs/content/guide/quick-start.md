@@ -34,6 +34,16 @@ cd approving
 
 Agent / workspace / platform-rules 与 SQLite 持久在仓库根 `.localdata` 宿主机目录（bind mount：`gateway` / `db` / `app-data`）。`./start.sh restart` 与 `./start.sh down` 会保留该目录。清空数据：`./start.sh down && rm -rf .localdata`。
 
+### 数据库与附件同生命周期（备份 / 清理）
+
+正式栈（`compose.release.yaml`）把 **SQLite** 挂在 `./.localdata/db`，把 **应用数据（含默认附件 blobs，相对 `WORKDIR` 的 `data/blobs`）** 挂在 `./.localdata/app-data`。复合变量附图在库/Run 输出里只保留 `blob:{id}` 引用，字节落在 blobs 目录；若只备份或只清理其中一侧，会出现「库里还有引用、GET `/api/blobs/:id` 却 404」的孤儿引用，Run 详情里附图会显示为「无法显示 / 附件不可用」。
+
+运维约束：
+
+- **成对备份**：同一备份集须同时包含 `./.localdata/db` 与 `./.localdata/app-data`（或整棵 `.localdata`）。
+- **成对清理 / 迁移 / 升级**：不要只搬 SQLite 或只删附件目录；自定义 `APPROVING_BLOBS_ROOT` 时，须把该路径与数据库一并纳入同一生命周期。
+- **历史孤儿**：已损坏的引用不保证可从附件存储找回；界面仅展示永久失败占位。本次交付**不做**孤儿巡检台、批量扫描页或启动/健康检查告警。
+
 ## 常用命令
 
 ```bash

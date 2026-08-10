@@ -335,6 +335,11 @@
       "previewAria": "预览{label}",
       "imageFallback": "图片",
       "imageFallbackN": "图片 {n}"
+    },
+    "compositeImage": {
+      "loading": "加载中",
+      "cannotDisplay": "无法显示",
+      "attachmentUnavailable": "附件不可用"
     }
   }
 }

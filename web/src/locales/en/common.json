@@ -335,6 +335,11 @@
       "previewAria": "Preview {label}",
       "imageFallback": "Image",
       "imageFallbackN": "Image {n}"
+    },
+    "compositeImage": {
+      "loading": "Loading",
+      "cannotDisplay": "Cannot display",
+      "attachmentUnavailable": "Attachment unavailable"
     }
   }
 }
