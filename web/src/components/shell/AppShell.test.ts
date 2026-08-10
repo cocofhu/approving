@@ -46,6 +46,7 @@ describe('AppShell', () => {
     expect(wrapper.find('[data-testid="sidebar"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="topbar"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="main"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="app-refresh-bar"]').exists()).toBe(false)
     wrapper.unmount()
   })
 })
