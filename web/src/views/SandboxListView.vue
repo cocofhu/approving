@@ -292,7 +292,6 @@ onBeforeUnmount(() => {
     <div class="mb-5 flex flex-col items-start gap-2.5 md:flex-row md:items-end md:justify-between">
       <div class="min-w-0">
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.sandboxes.title') }}</h2>
-        <p class="text-sm text-txt3">{{ t('pages.sandboxes.subtitle') }}</p>
       </div>
       <AppButton variant="outline" icon="trash" @click="cleanupOpen = true">{{ t('common.buttons.cleanupIdle') }}</AppButton>
     </div>

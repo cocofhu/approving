@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { authRedirectPath } from '@/lib/useAuth'
 
-const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'index.ts'), 'utf8')
+const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../lib/authGuard.ts'), 'utf8')
 
 describe('login redirect query preservation (g3.4)', () => {
   it('logged-in /login uses string redirect via authRedirectPath, not { path }', () => {

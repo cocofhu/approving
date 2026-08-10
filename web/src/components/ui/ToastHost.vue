@@ -6,7 +6,12 @@ const { toasts } = useToast()
 
 <template>
   <Teleport to="body">
-    <div class="pointer-events-none fixed bottom-5 left-1/2 z-[100] flex -translate-x-1/2 flex-col gap-2">
+    <div
+      class="pointer-events-none fixed bottom-6 right-6 z-[100] flex flex-col gap-2"
+      role="status"
+      aria-live="polite"
+      data-testid="toast-host"
+    >
       <TransitionGroup name="toast">
         <div
           v-for="t in toasts"

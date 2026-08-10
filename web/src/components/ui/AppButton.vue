@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import Icon from './Icon.vue'
+import AppSpinner from './AppSpinner.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -8,8 +9,10 @@ const props = withDefaults(
     size?: 'sm' | 'md'
     icon?: string
     block?: boolean
+    disabled?: boolean
+    loading?: boolean
   }>(),
-  { variant: 'outline', size: 'md' }
+  { variant: 'outline', size: 'md', disabled: false, loading: false },
 )
 
 const cls = computed(() => {
@@ -25,11 +28,14 @@ const cls = computed(() => {
   }
   return [base, sizes, variants[props.variant], props.block ? 'w-full' : '']
 })
+
+const isDisabled = computed(() => props.disabled || props.loading)
 </script>
 
 <template>
-  <button :class="cls">
-    <Icon v-if="icon" :name="icon" :size="size === 'sm' ? 14 : 16" />
+  <button :class="cls" :disabled="isDisabled" :aria-busy="loading ? 'true' : undefined">
+    <AppSpinner v-if="loading" :size="size === 'sm' ? 12 : 14" />
+    <Icon v-else-if="icon" :name="icon" :size="size === 'sm' ? 14 : 16" />
     <slot />
   </button>
 </template>
