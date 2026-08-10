@@ -2349,7 +2349,10 @@
         "kindMarkdown": "Markdown",
         "kindHtml": "HTML",
         "kindCustom": "Custom",
-        "kindFailed": "Failed"
+        "kindCustomHtml": "Custom · HTML",
+        "kindFailed": "Failed",
+        "previewUnavailableTitle": "Unable to preview",
+        "previewUnavailableBody": "page.html content is unavailable or the preview failed to load. It will not fall back to Markdown source."
       },
       "nodeNotRun": "This node has not run yet",
       "nodeNoOutput": "This node produced no output yet"
