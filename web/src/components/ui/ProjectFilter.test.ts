@@ -42,6 +42,41 @@ describe('ProjectFilter', () => {
     wrapper.unmount()
   })
 
+  it('shows inline error instead of empty list when load fails', async () => {
+    apiMocks.listProjects.mockRejectedValueOnce(new Error('network down'))
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common } },
+    })
+    const wrapper = mount(ProjectFilter, {
+      props: { modelValue: '', open: true },
+      global: { plugins: [i18n], stubs: { Icon: true } },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="app-inline-error"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('项目列表加载失败')
+    expect(wrapper.text()).not.toContain('无匹配项目')
+    wrapper.unmount()
+  })
+
+  it('shows EmptyState without retry when project list is empty', async () => {
+    apiMocks.listProjects.mockResolvedValueOnce([])
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common } },
+    })
+    const wrapper = mount(ProjectFilter, {
+      props: { modelValue: '', open: true },
+      global: { plugins: [i18n], stubs: { Icon: true } },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="app-inline-error"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('暂无项目')
+    wrapper.unmount()
+  })
+
   it('emits update:open when controlled open toggles', async () => {
     const i18n = createI18n({
       legacy: false,

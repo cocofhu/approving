@@ -1099,7 +1099,6 @@
     },
     "sandboxes": {
       "title": "Sandboxes",
-      "subtitle": "Run node sandboxes and Agent chat test sandboxes. Busy sandboxes are not recycled; idle test sandboxes expire by TTL.",
       "errorPrefix": "Error:",
       "empty": "No sandboxes. Created on workflow runs or from Agent Studio → Chat test.",
       "copyId": "Copy ID",
@@ -2416,8 +2415,8 @@
       "wallHint": "Default share denominator",
       "nodeSum": "Node sum",
       "nodeSumHint": "Sum of process durations",
-      "gap": "Gap",
-      "gapHint": "Wall − sum",
+      "gap": "Idle",
+      "gapHint": "Unoccupied wall",
       "totalTokens": "Total tokens",
       "tokenRate": "token/s",
       "sumTokens": "Σ total tokens",

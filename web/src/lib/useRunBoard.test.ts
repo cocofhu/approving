@@ -53,18 +53,22 @@ describe('useRunBoard', () => {
     const board = useRunBoard({ mode: 'dashboard', projectId: 'proj-a' })
     await board.load()
 
-    expect(listRuns).toHaveBeenCalledWith({
-      status: 'running,waiting_human',
-      page: 1,
-      pageSize: 5,
-      projectId: 'proj-a',
-    })
-    expect(listRuns).toHaveBeenCalledWith({
-      status: 'completed',
-      page: 1,
-      pageSize: 5,
-      projectId: 'proj-a',
-    })
+    expect(listRuns).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'running,waiting_human',
+        page: 1,
+        pageSize: 5,
+        projectId: 'proj-a',
+      }),
+    )
+    expect(listRuns).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'completed',
+        page: 1,
+        pageSize: 5,
+        projectId: 'proj-a',
+      }),
+    )
     expect(board.column('active').items.map((r) => r.id)).toEqual(['run-new', 'run-old'])
     expect(board.column('completed').items).toHaveLength(1)
   })
@@ -77,18 +81,22 @@ describe('useRunBoard', () => {
 
     const statuses = listRuns.mock.calls.map((c) => c[0].status).sort()
     expect(statuses).toEqual(['completed', 'failed', 'running', 'waiting_human'])
-    expect(listRuns).toHaveBeenCalledWith({
-      status: 'running',
-      page: 1,
-      pageSize: 100,
-      projectId: 'proj-b',
-    })
-    expect(listRuns).toHaveBeenCalledWith({
-      status: 'completed',
-      page: 1,
-      pageSize: 20,
-      projectId: 'proj-b',
-    })
+    expect(listRuns).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'running',
+        page: 1,
+        pageSize: 100,
+        projectId: 'proj-b',
+      }),
+    )
+    expect(listRuns).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'completed',
+        page: 1,
+        pageSize: 20,
+        projectId: 'proj-b',
+      }),
+    )
   })
 
   it('does not call listRuns when projectId is missing (fail-safe)', async () => {
@@ -143,5 +151,57 @@ describe('useRunBoard', () => {
     expect(board.column('completed').error).toBeNull()
     expect(warn).toHaveBeenCalled()
     warn.mockRestore()
+  })
+
+  it('times out, clears loading, and does not treat abort as failure', async () => {
+    vi.useFakeTimers()
+    listRuns.mockReturnValue(new Promise(() => {}))
+    const board = useRunBoard({ mode: 'dashboard', projectId: 'proj-x', timeoutMs: 80 })
+    const pending = board.load()
+    await vi.advanceTimersByTimeAsync(80)
+    await pending
+    expect(board.loading.value).toBe(false)
+    expect(board.terminalState.value).toBe('error')
+    expect(board.hasLoaded.value).toBe(true)
+
+    listRuns.mockReturnValue(new Promise(() => {}))
+    const hung = board.load()
+    board.abort()
+    await hung
+    expect(board.loading.value).toBe(false)
+    expect(board.terminalState.value).toBe('cancelled')
+    vi.useRealTimers()
+  })
+
+  it('discards stale requestSeq results', async () => {
+    let resolveFirst!: (value: unknown) => void
+    let resolveSecond!: (value: unknown) => void
+    listRuns
+      .mockReturnValueOnce(
+        new Promise((r) => {
+          resolveFirst = r
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((r) => {
+          resolveSecond = r
+        }),
+      )
+      .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 5, hasMore: false })
+
+    const board = useRunBoard({ mode: 'dashboard', projectId: 'proj-x' })
+    const first = board.load()
+    const second = board.load()
+    resolveFirst({
+      items: [{ id: 'stale', status: 'running', workflowId: 'wf', workflowName: 'P', trigger: 'manual', startedAt: '2026-07-18T12:00:00Z', durationSec: 0, progress: 0, nodeRuns: {}, artifacts: [] }],
+      total: 1,
+      page: 1,
+      pageSize: 5,
+      hasMore: false,
+    })
+    resolveSecond({ items: [], total: 0, page: 1, pageSize: 5, hasMore: false })
+    await Promise.all([first, second])
+    expect(board.loading.value).toBe(false)
+    expect(board.column('active').items).toEqual([])
   })
 })
