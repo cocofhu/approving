@@ -63,7 +63,9 @@ if ! curl -fsS "http://127.0.0.1:${CDP_LOOPBACK_PORT}/json/version" >/dev/null 2
   }
 
   if ! pgrep -f "Xvfb ${DISPLAY}" >/dev/null 2>&1; then
-    Xvfb "$DISPLAY" -screen 0 1920x1080x24 >/tmp/sandbox-vnc-xvfb.log 2>&1 &
+    # Close flock FD 9 in children so the lock is released when this script exits
+    # (otherwise Chrome/socat/x11vnc inherit it and block later warmup execs).
+    Xvfb "$DISPLAY" -screen 0 1920x1080x24 9>&- >/tmp/sandbox-vnc-xvfb.log 2>&1 &
     echo $! >"$PID_DIR/xvfb.pid"
     sleep 1
   fi
@@ -77,7 +79,7 @@ if ! curl -fsS "http://127.0.0.1:${CDP_LOOPBACK_PORT}/json/version" >/dev/null 2
     --no-first-run \
     --no-default-browser-check \
     about:blank \
-    >/tmp/sandbox-vnc-chrome.log 2>&1 &
+    9>&- >/tmp/sandbox-vnc-chrome.log 2>&1 &
   echo $! >"$PID_DIR/chrome.pid"
 
   for i in $(seq 1 60); do
@@ -95,18 +97,18 @@ fi
 
 if ! pgrep -f "socat TCP-LISTEN:${CDP_PORT}" >/dev/null 2>&1; then
   socat TCP-LISTEN:"${CDP_PORT}",bind=0.0.0.0,fork,reuseaddr TCP:127.0.0.1:"${CDP_LOOPBACK_PORT}" \
-    >/tmp/sandbox-vnc-socat.log 2>&1 &
+    9>&- >/tmp/sandbox-vnc-socat.log 2>&1 &
   echo $! >"$PID_DIR/socat.pid"
 fi
 
 if ! pgrep -f "x11vnc .* -rfbport ${VNC_PORT}" >/dev/null 2>&1; then
   x11vnc -display "$DISPLAY" -rfbport "$VNC_PORT" -shared -forever -nopw -localhost -cursor arrow \
-    >/tmp/sandbox-vnc-x11vnc.log 2>&1 &
+    9>&- >/tmp/sandbox-vnc-x11vnc.log 2>&1 &
   echo $! >"$PID_DIR/x11vnc.pid"
 fi
 
 if ! pgrep -f "websockify ${WS_PORT}" >/dev/null 2>&1; then
-  websockify "$WS_PORT" "localhost:${VNC_PORT}" >/tmp/sandbox-vnc-websockify.log 2>&1 &
+  websockify "$WS_PORT" "localhost:${VNC_PORT}" 9>&- >/tmp/sandbox-vnc-websockify.log 2>&1 &
   echo $! >"$PID_DIR/websockify.pid"
 fi
 

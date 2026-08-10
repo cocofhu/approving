@@ -406,12 +406,15 @@ func (s *Service) probeVNCReadyAddrs(ctx context.Context, cdpAddr, novncAddr str
 	if novncP <= 0 {
 		novncP = vncWSport
 	}
-	reqCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, fmt.Sprintf("http://%s:%d/json/version", cdpHost, cdpP), nil)
+	verCtx, verCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer verCancel()
+	req, err := http.NewRequestWithContext(verCtx, http.MethodGet, fmt.Sprintf("http://%s:%d/json/version", cdpHost, cdpP), nil)
 	if err != nil {
 		return false
 	}
+	// Chrome DevTools HTTP rejects non-IP/non-localhost Host on some endpoints;
+	// keep dialing the ClusterIP DNS while advertising a loopback Host.
+	setCDPRequestHost(req, cdpP)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return false
@@ -423,11 +426,23 @@ func (s *Service) probeVNCReadyAddrs(ctx context.Context, cdpAddr, novncAddr str
 		return false
 	}
 	_ = conn.Close()
-	if !s.probeTabCreate(reqCtx, cdpHost, cdpP) {
+	tabCtx, tabCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer tabCancel()
+	if !s.probeTabCreate(tabCtx, cdpHost, cdpP) {
 		log.Warn().Str("cdp", cdpAddr).Msg("vnc-preview tab probe failed")
 		return false
 	}
 	return true
+}
+
+// setCDPRequestHost forces Host to 127.0.0.1:<port> so Chromium accepts
+// /json/new (and related DevTools HTTP) when Approving dials via Service DNS
+// (sbx-*.svc.cluster.local). TCP still targets req.URL.Host.
+func setCDPRequestHost(req *http.Request, port int) {
+	if req == nil || port <= 0 {
+		return
+	}
+	req.Host = net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
 }
 
 // probeTabCreate verifies Chromium can still create a tab (catches zombie CDP).
@@ -436,6 +451,7 @@ func (s *Service) probeTabCreate(ctx context.Context, host string, port int) boo
 	if err != nil {
 		return false
 	}
+	setCDPRequestHost(req, port)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return false
@@ -455,6 +471,7 @@ func (s *Service) probeTabCreate(ctx context.Context, host string, port int) boo
 	if err != nil {
 		return false
 	}
+	setCDPRequestHost(closeReq, port)
 	closeResp, err := http.DefaultClient.Do(closeReq)
 	if err != nil {
 		return false
