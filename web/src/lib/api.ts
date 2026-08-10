@@ -605,7 +605,8 @@ export const api = {
     const q = qs.toString()
     return req<Workflow[]>(q ? `/workflows?${q}` : '/workflows')
   },
-  getWorkflow: (id: string) => req<Workflow>(`/workflows/${id}`),
+  getWorkflow: (id: string, opts?: { signal?: AbortSignal }) =>
+    req<Workflow>(`/workflows/${id}`, opts?.signal ? { signal: opts.signal } : undefined),
   saveWorkflow: (wf: Partial<Workflow>) =>
     req<Workflow>(wf.id ? `/workflows/${wf.id}` : '/workflows', {
       method: wf.id ? 'PUT' : 'POST',
@@ -628,15 +629,23 @@ export const api = {
   revokeAPIKey: (workflowId: string, keyId: string) =>
     req<{ status: string }>(`/workflows/${workflowId}/api-keys/${keyId}`, { method: 'DELETE' }),
   deleteWorkflow: (id: string) => req<{ status: string }>(`/workflows/${id}`, { method: 'DELETE' }),
-  listWorkflowVersions: (id: string) => req<WorkflowVersion[]>(`/workflows/${id}/versions`),
+  listWorkflowVersions: (id: string, opts?: { signal?: AbortSignal }) =>
+    req<WorkflowVersion[]>(`/workflows/${id}/versions`, opts?.signal ? { signal: opts.signal } : undefined),
   restoreWorkflowVersion: (id: string, version: number) =>
     req<Workflow>(`/workflows/${id}/versions/${version}/restore`, { method: 'POST' }),
   copyPreviewWorkflow: (id: string) =>
     req<{ suggestedName: string; sourceName: string; sourceId: string }>(`/workflows/${id}/copy-preview`),
-  copyWorkflow: (id: string, name: string) =>
-    req<Workflow>(`/workflows/${id}/copy`, { method: 'POST', body: JSON.stringify({ name }) }),
-  getWorkflowVersionGraph: (id: string, version: number) =>
-    req<WorkflowGraph>(`/workflows/${id}/versions/${version}/graph`),
+  copyWorkflow: (id: string, name: string, opts?: { signal?: AbortSignal }) =>
+    req<Workflow>(`/workflows/${id}/copy`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+      ...(opts?.signal ? { signal: opts.signal } : {}),
+    }),
+  getWorkflowVersionGraph: (id: string, version: number, opts?: { signal?: AbortSignal }) =>
+    req<WorkflowGraph>(
+      `/workflows/${id}/versions/${version}/graph`,
+      opts?.signal ? { signal: opts.signal } : undefined,
+    ),
   importWorkflow: (json: string, projectId?: string) => {
     const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''
     return req<Workflow>(`/workflows/import${qs}`, { method: 'POST', body: json })
@@ -693,10 +702,18 @@ export const api = {
     ),
   listProjectRunTags: (projectId: string) =>
     req<{ tags: string[] }>(`/projects/${encodeURIComponent(projectId)}/run-tags`),
-  startRun: (workflowId: string, inputs: Record<string, any>, trigger = 'manual', priority = 'normal', tags: string[] = []) =>
+  startRun: (
+    workflowId: string,
+    inputs: Record<string, any>,
+    trigger = 'manual',
+    priority = 'normal',
+    tags: string[] = [],
+    opts?: { signal?: AbortSignal },
+  ) =>
     req<{ id: string; status: string; priority?: string }>(`/workflows/${workflowId}/runs`, {
       method: 'POST',
       body: JSON.stringify({ inputs, trigger, priority, tags }),
+      ...(opts?.signal ? { signal: opts.signal } : {}),
     }),
   updateRunPriority: (id: string, priority: string) =>
     req<{ id: string; status: string; priority: string }>(`/runs/${id}/priority`, {
@@ -1044,7 +1061,8 @@ export const api = {
     }
     return req<Artifact[]>(path)
   },
-  artifactContent: (id: string) => req<Artifact>(`/artifacts/${id}/content`),
+  artifactContent: (id: string, opts?: { signal?: AbortSignal }) =>
+    req<Artifact>(`/artifacts/${id}/content`, opts?.signal ? { signal: opts.signal } : undefined),
   artifactDownloadUrl: (id: string) => `${origin()}/api/artifacts/${id}/download`,
   blobContentUrl,
   exportRunLogsUrl: (id: string) => `${origin()}/api/runs/${id}/logs/export`,
@@ -1128,9 +1146,10 @@ export const api = {
   // snapshot captured at teardown. Used for post-mortem troubleshooting.
   // `error` is set when the control plane should have logs but the read failed
   // (distinct from found=false = no log source).
-  nodeSandboxLog: (runId: string, nodeId: string) =>
+  nodeSandboxLog: (runId: string, nodeId: string, opts?: { signal?: AbortSignal }) =>
     req<{ content: string; live: boolean; found: boolean; error?: string }>(
       `/runs/${runId}/nodes/${nodeId}/sandbox-log`,
+      opts?.signal ? { signal: opts.signal } : undefined,
     ),
   getRunNodeSandbox: async (runId: string, nodeId: string): Promise<SandboxView | null> => {
     const res = await fetch(BASE + `/runs/${runId}/nodes/${nodeId}/sandbox`, {
@@ -1152,10 +1171,16 @@ export const api = {
     apiState.online = true
     return (await res.json()) as SandboxView
   },
-  sandboxLog: (id: number) =>
-    req<{ content: string; live: boolean; found: boolean }>(`/sandboxes/${id}/log`),
-  nodePreviews: (runId: string, nodeId: string) =>
-    req<{ ports: PreviewPort[] }>(`/runs/${runId}/nodes/${nodeId}/previews`),
+  sandboxLog: (id: number, opts?: { signal?: AbortSignal }) =>
+    req<{ content: string; live: boolean; found: boolean }>(
+      `/sandboxes/${id}/log`,
+      opts?.signal ? { signal: opts.signal } : undefined,
+    ),
+  nodePreviews: (runId: string, nodeId: string, opts?: { signal?: AbortSignal }) =>
+    req<{ ports: PreviewPort[] }>(
+      `/runs/${runId}/nodes/${nodeId}/previews`,
+      opts?.signal ? { signal: opts.signal } : undefined,
+    ),
   listPreviewIssues: (runId: string, nodeId: string) =>
     req<{ issues: PreviewIssue[] }>(`/runs/${runId}/nodes/${nodeId}/preview-issues`),
   createPreviewIssue: (

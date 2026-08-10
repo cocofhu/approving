@@ -61,7 +61,11 @@ function buildRun(status: string) {
   }
 }
 
-async function openRunDetail(page: Page, status: string, opts?: { onCancel?: () => void; afterCancelStatus?: string }) {
+async function openRunDetail(
+  page: Page,
+  status: string,
+  opts?: { onCancel?: () => void; afterCancelStatus?: string; slowCancel?: boolean },
+) {
   await page.setViewportSize({ width: 1280, height: 900 })
   let currentStatus = status
 
@@ -74,6 +78,7 @@ async function openRunDetail(page: Page, status: string, opts?: { onCancel?: () 
     if (method === 'POST' && path === `/api/runs/${RUN_ID}/cancel`) {
       opts?.onCancel?.()
       currentStatus = opts?.afterCancelStatus || 'cancelled'
+      if (opts?.slowCancel) await new Promise((r) => setTimeout(r, 600))
       await route.fulfill({ json: { status: 'cancelled' } })
       return
     }
@@ -133,6 +138,22 @@ test.describe('CancelRun UI acceptance', () => {
     await expect(page.getByTestId('run-detail-root')).toBeVisible()
     await expect(page.getByTestId('cancel-run-btn')).toHaveCount(0)
     await page.screenshot({ path: '/tmp/cancel-run-queued-after.png', fullPage: true })
+  })
+
+  test('confirm cancel shows 取消中… pending copy', async ({ page }) => {
+    let cancelCalled = false
+    await openRunDetail(page, 'running', {
+      onCancel: () => {
+        cancelCalled = true
+      },
+      slowCancel: true,
+    })
+    await page.getByTestId('cancel-run-btn').click()
+    const confirm = page.getByTestId('confirm-cancel-run-btn')
+    await confirm.click()
+    await expect(confirm).toHaveText(/取消中/)
+    await expect.poll(() => cancelCalled).toBe(true)
+    await expect(page.getByTestId('run-detail-root')).toBeVisible()
   })
 
   test('running: cancel confirm posts and refreshes to cancelled', async ({ page }) => {

@@ -41,6 +41,21 @@ test.describe('human_gate 临时审批链接', () => {
     expect(copied).toMatch(/#t=[0-9a-f]{64}$/)
   })
 
+  test('未登录外部页提交中文案且加载不泄露内部标识', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/gate-share-link.html?scene=public&slowPreview=1&slowDecide=1')
+    await expect(page.getByTestId('public-gate-root')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('public-gate-loading')).toBeVisible()
+    await expect(page.getByTestId('public-gate-root')).not.toContainText('run-e2e')
+    await expect(page.getByTestId('public-gate-root')).not.toContainText('确认并流转')
+    await page.getByTestId('public-gate-name').fill('Jordan')
+    await page.getByTestId('public-gate-comment').fill('可以流转')
+    await page.getByTestId('public-gate-confirm').click()
+    await expect(page.getByTestId('public-gate-confirm')).toHaveText(/提交中/)
+    await expect(page.getByTestId('public-gate-reject')).toBeDisabled()
+    await expect(page.getByTestId('public-gate-done')).toContainText('已确认', { timeout: 10_000 })
+  })
+
   test('未登录外部页可确认', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/gate-share-link.html?scene=public')

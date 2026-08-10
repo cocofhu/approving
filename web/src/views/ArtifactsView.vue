@@ -3,6 +3,8 @@ import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ArtifactList from '@/components/run/ArtifactList.vue'
 import ArtifactPreview from '@/components/run/ArtifactPreview.vue'
+import RefreshStrip from '@/components/run/RefreshStrip.vue'
+import HardLoadLayer from '@/components/run/HardLoadLayer.vue'
 import Pagination from '@/components/ui/Pagination.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { api, isPaginated } from '@/lib/api'
@@ -28,6 +30,7 @@ const pageArtifacts = ref<Artifact[]>([])
 const pageTotal = ref(0)
 const page = ref(1)
 const pageLoading = ref(false)
+let pageLoadGen = 0
 const workflows = ref<Workflow[]>([])
 const workflowsMap = computed(() => {
   const map = new Map<string, { name: string }>()
@@ -107,6 +110,7 @@ async function loadPageArtifacts({ showLoading = false }: { showLoading?: boolea
     pageTotal.value = 0
     return
   }
+  const gen = ++pageLoadGen
   if (showLoading) pageLoading.value = true
   try {
     const data = await api.listArtifacts({
@@ -116,6 +120,7 @@ async function loadPageArtifacts({ showLoading = false }: { showLoading?: boolea
       pageSize: PAGE_SIZE,
       q: searchQ.value || undefined,
     })
+    if (gen !== pageLoadGen) return
     if (isPaginated(data)) {
       pageArtifacts.value = data.items ?? []
       pageTotal.value = data.total
@@ -124,10 +129,13 @@ async function loadPageArtifacts({ showLoading = false }: { showLoading?: boolea
       pageTotal.value = data.length
     }
   } catch {
-    pageArtifacts.value = []
-    pageTotal.value = 0
+    if (gen !== pageLoadGen) return
+    if (!pageArtifacts.value.length) {
+      pageArtifacts.value = []
+      pageTotal.value = 0
+    }
   } finally {
-    pageLoading.value = false
+    if (gen === pageLoadGen) pageLoading.value = false
   }
 }
 
@@ -324,9 +332,17 @@ onMounted(async () => {
     </div>
 
     <div
-      class="card flex min-h-0 flex-1 flex-col overflow-hidden"
-      :class="{ 'opacity-55 pointer-events-none': pageLoading }"
+      class="card relative flex min-h-0 flex-1 flex-col overflow-hidden"
+      :aria-busy="pageLoading ? 'true' : 'false'"
     >
+      <RefreshStrip v-if="pageLoading && pageArtifacts.length" />
+      <HardLoadLayer
+        v-else-if="pageLoading && !pageArtifacts.length"
+        :overlay="true"
+        :stuck-after-ms="10_000"
+        :stage="t('common.loading.label')"
+        @retry="loadPageArtifacts({ showLoading: true })"
+      />
       <div class="flex min-h-0 flex-1" :class="isMobile ? 'flex-col' : ''">
         <aside
           v-if="!isMobile || mobileStep === 'groups'"

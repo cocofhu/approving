@@ -25,6 +25,7 @@ test.describe('ClarifyChat reviewMode 双面三项', () => {
     await expect(queue).toContainText('视觉意见甲')
     await expect(queue).toContainText('视觉意见乙')
     await expect(page.getByTestId('clarify-confirm-flow')).toBeDisabled()
+    await expect(page.getByTestId('clarify-review-queue')).toBeVisible()
     await page.screenshot({ path: path.join(shotDir, '01-visual-queue.png'), fullPage: true })
 
     await page.getByTestId('sim-turn-stream').click()

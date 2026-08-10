@@ -88,6 +88,11 @@
       "resumeFromFail": "Resume from failure",
       "resumeFromNode": "Resume from this node",
       "loading": "Loading…",
+      "approving": "Approving…",
+      "rejecting": "Rejecting…",
+      "sending": "Sending…",
+      "submitting": "Submitting…",
+      "refreshing": "Refreshing…",
       "creating": "Creating…",
       "retry": "Retry",
       "cancelling": "Cancelling…",
@@ -316,6 +321,11 @@
       "addImage": "Add attachment",
       "placeholderTextOnly": "Enter text…",
       "placeholderWithImages": "Paste files here (≤50 MiB)…"
+    },
+    "loading": {
+      "label": "Loading",
+      "elapsed": "Elapsed {s}s · heartbeat alive",
+      "stuck": "May be stuck · request still running; wait or retry"
     },
     "chatImage": {
       "clickToEnlarge": "Click to enlarge",

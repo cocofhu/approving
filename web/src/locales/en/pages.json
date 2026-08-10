@@ -847,6 +847,7 @@
         "archived": "archived",
         "errorBadge": "error",
         "errorTitle": "Unable to read sandbox log",
+        "loadFailed": "Could not read sandbox log. Please retry.",
         "liveEmpty": "(connected · no stdout/stderr output yet)",
         "pending": "Node not started yet; no sandbox log",
         "empty": "No sandbox log (container not created or recycled without archive)"
@@ -968,7 +969,11 @@
       "expiredHint": "This link has expired. You cannot send, confirm, or reject. Ask the sender for a new one.",
       "usedHint": "This link already completed a final decision. You cannot confirm, reject, or send again.",
       "revokedHint": "The sender revoked this link. You cannot act on it.",
-      "invalidHint": "This link is invalid. Ask the sender whether it is still valid."
+      "invalidHint": "This link is invalid. Ask the sender whether it is still valid.",
+      "loading": "Loading…",
+      "submitting": "Submitting…",
+      "networkError": "Network error. Please try again.",
+      "maybeStuck": "May be stuck · request still running; wait or retry"
     },
     "artifacts": {
       "title": "Artifacts",
@@ -1203,6 +1208,8 @@
       "copied": "Copied",
       "logTitle": "Container log · stdout/stderr",
       "logEmpty": "No log yet (no output or recycled without archive)",
+      "logFailed": "Log request failed. Please retry.",
+      "logRefreshing": "Refreshing logs…",
       "disconnected": "[Disconnected]"
     },
     "agentStudio": {
@@ -1983,7 +1990,8 @@
         "publishedVersion": "Published v{n}",
         "publishedVersionDesc": "WorkflowVersion snapshot graph",
         "confirm": "Download JSON",
-        "success": "Exported \"{name}.json\""
+        "success": "Exported \"{name}.json\"",
+        "failed": "Export failed. Please retry."
       },
       "import": {
         "success": "Imported \"{name}\"; opening editor…",
@@ -2074,6 +2082,8 @@
     "appPreview": {
       "loading": "Loading preview…",
       "noPorts": "No preview ports registered yet",
+      "loadFailed": "Failed to load preview ports. Retry available.",
+      "refreshing": "Refreshing port list…",
       "unavailable": "Preview service unavailable",
       "connectionLost": "Preview connection lost",
       "sandboxRecycled": "Sandbox recycled; preview unavailable",
@@ -2091,6 +2101,7 @@
         "error": "noVNC preview connection failed",
         "connectingTitle": "Starting preview environment…",
         "connectingHint": "First launch takes ~30–60s (the browser must spin up inside the sandbox). Please wait.",
+        "maybeStuck": "May be stuck · request still running; wait or retry",
         "fps": "FPS",
         "fpsTooltip": "VNC updates on demand: near-zero FPS on a static screen is normal and does not mean sampling failed. This reflects preview stream smoothness, not the target app's render performance.",
         "status": {
@@ -2128,12 +2139,14 @@
         "placeholder": "Describe what to change (attach images optional); sent to the upstream producer to edit its product in place…",
         "placeholderProposals": "Explain how the proposals should change (images optional); sent upstream to rewrite the candidates in place…",
         "send": "Reject & revise",
-        "sending": "Revising…",
+        "sending": "Sending…",
         "failed": "ReAct revise failed",
         "issueSavedReviseFailed": "Feedback was saved but reject failed — you can retry",
         "annotationOnly": "(annotation reject)",
         "annotationSummary": "Annotations: {summary}"
       },
+      "approveSuccess": "Approved",
+      "rejectSuccess": "Rejected",
       "subtitle": "Human gate · workflow paused (waiting_human)",
       "loadingArtifact": "Loading artifact…",
       "loadingPreviewIssues": "Loading preview issues, please wait…",
@@ -2551,7 +2564,8 @@
       "deleteErrorNotFound": "Artifact not found or already deleted",
       "deleteErrorGeneric": "Delete failed",
       "loading": "Loading artifact…",
-      "loadFailed": "Load failed:",
+      "loadFailed": "Failed to load artifact. Please retry.",
+      "copied": "Copied",
       "imageLoadFailed": "Failed to load image",
       "retry": "Retry",
       "contentEmpty": "This artifact is empty",

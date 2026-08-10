@@ -42,6 +42,9 @@ const rootEl = ref<HTMLDivElement | null>(null)
 const isFullscreen = ref(false)
 const status = ref<'connecting' | 'live' | 'closed' | 'error'>('connecting')
 const statusMsg = ref('')
+const previewStuck = ref(false)
+let previewWarnTimer: ReturnType<typeof setTimeout> | null = null
+const PREVIEW_STUCK_MS = 20_000
 const inspect = ref(false)
 const picked = ref<AppPreviewPickPayload | null>(null)
 const address = ref('about:blank')
@@ -60,6 +63,14 @@ function clearConnectTimer() {
   }
 }
 
+function clearPreviewWarnTimer() {
+  if (previewWarnTimer != null) {
+    clearTimeout(previewWarnTimer)
+    previewWarnTimer = null
+  }
+  previewStuck.value = false
+}
+
 function sendCtrl(obj: unknown) {
   if (channel && channel.readyState === WebSocket.OPEN) {
     channel.send(JSON.stringify(obj))
@@ -68,6 +79,7 @@ function sendCtrl(obj: unknown) {
 
 function fail(m: string) {
   clearConnectTimer()
+  clearPreviewWarnTimer()
   status.value = 'error'
   statusMsg.value = m
 }
@@ -75,6 +87,7 @@ function fail(m: string) {
 function teardown() {
   disposed = true
   clearConnectTimer()
+  clearPreviewWarnTimer()
   fpsCounter.detach()
   if (rfb) {
     try {
@@ -105,6 +118,7 @@ function handleCtrlText(data: string) {
   switch (msg.type) {
     case 'ready':
       clearConnectTimer()
+      clearPreviewWarnTimer()
       status.value = 'live'
       if (typeof msg.url === 'string' && msg.url) address.value = msg.url
       break
@@ -244,6 +258,12 @@ function connect() {
         /* ignore */
       }
     }, CONSOLE_CONNECT_TIMEOUT_MS)
+  } else {
+    clearPreviewWarnTimer()
+    previewWarnTimer = setTimeout(() => {
+      if (disposed || status.value !== 'connecting') return
+      previewStuck.value = true
+    }, PREVIEW_STUCK_MS)
   }
 
   // Demux: text JSON → Vue control; binary → noVNC RFB (same physical WebSocket).
@@ -365,7 +385,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="rootEl" class="flex min-h-0 flex-col bg-surface" :class="fill ? 'h-full flex-1' : ''">
+  <div
+    ref="rootEl"
+    class="flex min-h-0 flex-col bg-surface"
+    :class="fill ? 'h-full flex-1' : ''"
+    :aria-busy="status === 'connecting' ? 'true' : 'false'"
+  >
     <!-- Preview toolbar: back/forward/reload + Pick + fullscreen + FPS -->
     <div
       v-if="!consoleMode"
@@ -516,6 +541,9 @@ onBeforeUnmount(() => {
       <div
         v-if="consoleMode && status === 'connecting'"
         class="absolute inset-0 z-10 flex items-center justify-center bg-base/90 px-6 text-center text-sm text-txt3"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
       >
         {{ t('pages.sandboxConsole.novncConnecting') }}
       </div>
@@ -545,7 +573,12 @@ onBeforeUnmount(() => {
 
       <div
         v-if="!consoleMode && status === 'connecting'"
-        class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center"
+        class="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center"
+        :class="previewStuck ? '' : 'pointer-events-none'"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        data-testid="novnc-connecting"
       >
         <span
           class="h-6 w-6 animate-spin rounded-full border-2 border-line-strong border-t-txt2"
@@ -555,6 +588,20 @@ onBeforeUnmount(() => {
         <span class="max-w-[320px] text-xs leading-snug text-txt3">{{
           t('pages.appPreview.novnc.connectingHint')
         }}</span>
+        <div
+          v-if="previewStuck"
+          class="pointer-events-auto max-w-[360px] border border-warn/40 bg-warn/10 px-2.5 py-2 text-[12px] text-warn"
+          data-testid="novnc-preview-stuck"
+        >
+          <p>{{ t('pages.appPreview.novnc.maybeStuck') }}</p>
+          <button
+            type="button"
+            class="mt-2 inline-flex min-h-11 items-center border border-line bg-surface px-3 text-[12px] font-medium text-txt"
+            @click="reconnect"
+          >
+            {{ t('pages.appPreview.novnc.reconnect') }}
+          </button>
+        </div>
       </div>
     </div>
 

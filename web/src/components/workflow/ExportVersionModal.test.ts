@@ -61,7 +61,26 @@ describe('ExportVersionModal', () => {
   it('loads versions when opened for published workflow', async () => {
     mountModal(true)
     await flushPromises()
-    expect(apiMocks.listWorkflowVersions).toHaveBeenCalledWith('wf-1')
+    expect(apiMocks.listWorkflowVersions).toHaveBeenCalledWith(
+      'wf-1',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+  })
+
+  it('aborts version list when modal closes', async () => {
+    let resolveList!: (v: unknown[]) => void
+    apiMocks.listWorkflowVersions.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveList = resolve
+        }),
+    )
+    const wrapper = mountModal(true)
+    await wrapper.setProps({ open: false })
+    resolveList([{ version: 1 }])
+    await flushPromises()
+    expect(wrapper.text()).not.toMatch(/已发布版本|Published/)
+    wrapper.unmount()
   })
 
   it('renders export options', async () => {

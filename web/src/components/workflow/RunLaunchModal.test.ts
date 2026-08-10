@@ -53,14 +53,16 @@ function mountModal(open = true, extraProps: Record<string, unknown> = {}) {
         AppButton: { template: '<button v-bind="$attrs"><slot /></button>' },
         AppModal: {
           props: ['open', 'title'],
-          template: '<div v-if="open" data-testid="modal"><slot /><slot name="footer" /></div>',
+          emits: ['close'],
+          template:
+            '<div v-if="open" data-testid="modal"><button data-testid="modal-close" @click="$emit(\'close\')" /><slot /><slot name="footer" /></div>',
         },
         ParagraphInput: {
           props: ['text'],
           emits: ['update:text'],
           template: '<textarea data-testid="paragraph" :value="text" @input="$emit(\'update:text\', $event.target.value)" />',
         },
-        ArtifactLoadingPane: true,
+        HardLoadLayer: true,
         ReposEditor: true,
         PrioritySegmented: true,
       },
@@ -111,7 +113,7 @@ describe('RunLaunchModal', () => {
           AppButton: { template: '<button v-bind="$attrs"><slot /></button>' },
           AppModal: { props: ['open'], template: '<div v-if="open"><slot /><slot name="footer" /></div>' },
           ParagraphInput: true,
-          ArtifactLoadingPane: true,
+          HardLoadLayer: true,
           ReposEditor: true,
           PrioritySegmented: true,
         },
@@ -134,7 +136,14 @@ describe('RunLaunchModal', () => {
     const startBtn = findStartButton(wrapper)
     await startBtn!.trigger('click')
     await flushPromises()
-    expect(apiMocks.startRun).toHaveBeenCalledWith('wf-1', expect.objectContaining({ topic: 'hello' }), 'manual', 'normal', [])
+    expect(apiMocks.startRun).toHaveBeenCalledWith(
+      'wf-1',
+      expect.objectContaining({ topic: 'hello' }),
+      'manual',
+      'normal',
+      [],
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(wrapper.emitted('started')?.[0]?.[0]).toBe('run-99')
     wrapper.unmount()
   })
@@ -170,6 +179,27 @@ describe('RunLaunchModal', () => {
     await flushPromises()
     expect(apiMocks.listProjectRunTags).toHaveBeenCalledTimes(1)
     expect(apiMocks.listProjectRunTags).toHaveBeenCalledWith('proj-2')
+    wrapper.unmount()
+  })
+
+  it('aborts in-flight start when modal closes during loading', async () => {
+    let resolveStart!: (v: { id: string }) => void
+    apiMocks.startRun.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveStart = resolve
+        }),
+    )
+    const wrapper = mountModal(true)
+    await flushPromises()
+    const startBtn = findStartButton(wrapper)
+    await startBtn!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toMatch(/启动中|Starting/i)
+    await wrapper.get('[data-testid="modal-close"]').trigger('click')
+    resolveStart({ id: 'run-late' })
+    await flushPromises()
+    expect(wrapper.emitted('started')).toBeFalsy()
     wrapper.unmount()
   })
 

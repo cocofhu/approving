@@ -72,6 +72,7 @@ test.describe('AppPreviewPanel noVNC', () => {
       expect(page.getByText('连接中…')).toBeVisible(),
       expect(page.getByText('FPS')).toHaveCount(0),
     ])
+    await expect(page.locator('[aria-busy="true"]').first()).toBeVisible()
   })
 
   test('live 时工具栏显示数值 FPS，非 live 或 API Tab 时隐藏', async ({ page }) => {
