@@ -1554,8 +1554,10 @@ function itemSecondary(it: InboxItem) {
                 :node-id="active.nodeId"
                 fill
                 :show-feedback="false"
+                share-enabled
                 @pick="onAppPreviewReviewPick"
                 @staged-pick="onAppPreviewStagedPick"
+                @open-share="openSharePanel(active)"
               />
             </div>
             <ClarifyProductStage
@@ -1585,9 +1587,11 @@ function itemSecondary(it: InboxItem) {
               :done="activeClarify.done"
               :active="clarifyInputActive"
               :confirm-error="clarifyConfirmError"
+              :show-share-panel="inboxAppPreviewActive"
               @send="onClarifySend"
               @finish="onClarifyFinish"
               @cancel="onClarifyCancel"
+              @open-share="openSharePanel(active)"
             />
           </template>
         </ReviewShell>
@@ -1661,8 +1665,10 @@ function itemSecondary(it: InboxItem) {
                     :node-id="active.nodeId"
                     fill
                     :show-feedback="false"
+                    share-enabled
                     @pick="onAppPreviewReviewPick"
                     @staged-pick="onAppPreviewStagedPick"
+                    @open-share="openSharePanel(active)"
                   />
                 </div>
                 <ClarifyProductStage
@@ -1692,9 +1698,11 @@ function itemSecondary(it: InboxItem) {
                   :done="activeClarify.done"
                   :active="clarifyInputActive"
                   :confirm-error="clarifyConfirmError"
+                  :show-share-panel="inboxAppPreviewActive"
                   @send="onClarifySend"
                   @finish="onClarifyFinish"
                   @cancel="onClarifyCancel"
+                  @open-share="openSharePanel(active)"
                 />
               </template>
             </ReviewShell>

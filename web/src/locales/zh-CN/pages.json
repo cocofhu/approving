@@ -8,7 +8,14 @@
         "waitingHuman": "等待人工",
         "failed": "失败",
         "completed": "已完成",
-        "ariaNav": "查看{label}的 Run，当前 {count}"
+        "ariaNav": "查看{label}的 Run，当前 {count}",
+        "totalTokens": "总 Token",
+        "totalTokensScope": "全平台 · 历史累计",
+        "totalTokensUnreported": "全平台 · 尚未上报用量",
+        "totalTokensZero": "全平台 · 已上报且合计为 0",
+        "totalTokensUpdating": "更新中",
+        "totalTokensAria": "全平台总 Token 消耗，当前 {count}",
+        "totalTokensAriaUnreported": "全平台总 Token 消耗，尚未上报"
       },
       "boardTitle": "需求进度看板",
       "viewFullBoard": "查看完整看板 →",
@@ -36,7 +43,7 @@
         "loadFailed": "Token 统计加载失败，请重试",
         "retry": "重试",
         "trendTitle": "消耗趋势 · 按来源堆叠",
-        "compositionTitle": "四分量构成",
+        "compositionTitle": "用量构成",
         "rankTitle": "消耗排行",
         "rankSub": "含工作流 Top 与项目管理",
         "rankHint": "「其他」= 未进 Top 的其余工作流合计（不是项目管理）。项目管理单独成行。",
@@ -51,8 +58,8 @@
         "share": "占比",
         "emptyTrendTitle": "暂无 Token 数据",
         "emptyTrendHint": "当前时间窗内暂无已上报的 Token 用量（含工作流与项目管理）；未上报不会显示为 0",
-        "emptyCompTitle": "暂无构成数据",
-        "emptyCompHint": "无已上报四分量时不绘制 0 环图",
+        "emptyCompTitle": "暂无用量构成",
+        "emptyCompHint": "暂无已上报的用量构成数据",
         "emptyRankTitle": "暂无消耗排行",
         "emptyRankHint": "暂无已上报的 Token 用量，不展示占位排行",
         "modelCompositionTitle": "模型构成",
@@ -877,6 +884,11 @@
       "share": {
         "copyLink": "复制临时链接",
         "copyLinkAria": "复制临时审批链接",
+        "shareApproval": "分享审批",
+        "shareApprovalAria": "打开分享审批链接管理",
+        "openSharePanel": "打开分享面板",
+        "openSharePanelAria": "打开分享审批面板",
+        "appPreviewShareHint": "与待复审同策略 · 公开页不含远程桌面",
         "createCopy": "创建并复制链接",
         "createCopyAria": "创建临时审批链接并复制",
         "panelTitle": "临时审批链接",
@@ -912,7 +924,7 @@
         "errors": {
           "noStandardAction": "需要配置标准批准或驳回动作后才能创建临时链接",
           "notHumanGate": "仅 human_gate 支持临时审批链接",
-          "notReviewSession": "仅 Inbox 待复审支持临时复审链接",
+          "notReviewSession": "仅 Inbox 待复审或应用预览会话支持临时复审链接",
           "usedReadonly": "审批已完成，不能再创建链接",
           "runEnded": "运行已结束，不能创建链接",
           "gateNotPending": "没有待审批的门禁",
@@ -2591,7 +2603,10 @@
       "retry": "重试",
       "contentEmpty": "该产物内容为空",
       "platformStorage": "平台存储",
-      "fallbackPlainText": "fallback · plain text"
+      "fallbackPlainText": "fallback · plain text",
+      "modeToggleAria": "预览模式",
+      "modeStructured": "结构化 UI",
+      "modeRaw": "原始 JSON"
     },
     "acpStatus": {
       "busy": "运行中",

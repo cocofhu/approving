@@ -30,6 +30,8 @@ vi.mock('@/lib/api', () => ({
   api: {
     listRuns: vi.fn(),
     getRun: vi.fn(),
+    artifactContent: vi.fn(),
+    artifactDownloadUrl: vi.fn((id: string) => `http://test/api/artifacts/${id}/download`),
   },
   isPaginated: (data: unknown): data is { items: unknown[]; total: number } =>
     data != null && typeof data === 'object' && !Array.isArray(data) && 'items' in data,
@@ -93,8 +95,20 @@ describe('AppTopbar notifications', () => {
     push.mockReset()
     vi.mocked(api.listRuns).mockReset()
     vi.mocked(api.getRun).mockReset()
+    vi.mocked(api.artifactContent).mockReset()
     vi.mocked(api.listRuns).mockResolvedValue(paged([]))
     vi.mocked(api.getRun).mockResolvedValue(run({ id: 'r1', status: 'completed', artifacts: [] }))
+    vi.mocked(api.artifactContent).mockImplementation(async (id: string) => ({
+      id,
+      name: 'summary.md',
+      kind: 'markdown',
+      nodeId: 'n1',
+      runId: 'ok-2',
+      workflowName: 'demo-wf',
+      sizeBytes: 10,
+      createdAt: '2026-08-10T12:00:00Z',
+      content: '# hello',
+    }))
   })
 
   afterEach(() => {
@@ -221,7 +235,7 @@ describe('AppTopbar notifications', () => {
     wrapper.unmount()
   })
 
-  it('completed with artifacts shows ppt cards and preview; no download control', async () => {
+  it('completed with artifacts shows master-detail list+preview and download control', async () => {
     seedBaseline()
     vi.mocked(api.listRuns).mockResolvedValue(
       paged([run({ id: 'ok-2', status: 'completed', title: 'done' })]),
@@ -254,6 +268,17 @@ describe('AppTopbar notifications', () => {
         ],
       }),
     )
+    vi.mocked(api.artifactContent).mockResolvedValue({
+      id: 'a1',
+      name: 'summary.md',
+      kind: 'markdown',
+      nodeId: 'n1',
+      runId: 'ok-2',
+      workflowName: 'demo-wf',
+      sizeBytes: 10,
+      createdAt: '2026-08-10T12:00:00Z',
+      content: '# summary',
+    })
     const wrapper = mountTopbar()
     await flushPromises()
     await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
@@ -263,14 +288,30 @@ describe('AppTopbar notifications', () => {
     await nextTick()
     expect(wrapper.vm.outputOpen).toBe(true)
     await vi.waitFor(() => {
-      expect(document.body.querySelector('[data-testid="run-output-deck"]')).toBeTruthy()
+      expect(document.body.querySelector('[data-testid="run-output-master-detail"]')).toBeTruthy()
     })
-    expect(document.body.querySelectorAll('[data-testid="run-output-card"]')).toHaveLength(2)
+    expect(document.body.querySelector('[data-testid="run-output-deck"]')).toBeNull()
+    expect(document.body.querySelectorAll('[data-testid="run-output-row"]')).toHaveLength(2)
     expect(document.body.querySelector('[data-testid="run-output-preview"]')).toBeTruthy()
+    expect(document.body.querySelector('[data-testid="run-output-list"]')).toBeTruthy()
+    // First row selected by default (g2.4)
+    expect(
+      document.body.querySelector('[data-testid="run-output-row"]')?.getAttribute('aria-selected'),
+    ).toBe('true')
+    // List fields: kind, name, nodeId, size (g2.3)
+    const firstRow = document.body.querySelector('[data-testid="run-output-row"]')
+    expect(firstRow?.textContent).toContain('markdown')
+    expect(firstRow?.textContent).toContain('summary.md')
+    expect(firstRow?.textContent).toContain('n1')
+    expect(firstRow?.textContent).toContain('10 B')
+    // Download available; delete/copy hidden in modal (g1.1 / g3.2)
+    expect(document.body.querySelector('[data-testid="artifact-preview-download-raw"]')).toBeTruthy()
+    expect(document.body.querySelector('[data-testid="artifact-preview-delete"]')).toBeNull()
+    expect(document.body.querySelector('[data-testid="artifact-preview-copy"]')).toBeNull()
     expect(document.body.querySelector('[data-testid="run-output-open-run"]')).toBeTruthy()
     expect(document.body.querySelector('[data-testid="run-output-done"]')).toBeTruthy()
-    expect(document.body.querySelector('[data-testid="artifact-download"]')).toBeNull()
-    expect(document.body.querySelector('a[download]')).toBeNull()
+    // No PPT / slide metaphor
+    expect(document.body.textContent || '').not.toMatch(/PPT|幻灯片|16:9/)
     wrapper.unmount()
   })
 

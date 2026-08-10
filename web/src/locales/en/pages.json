@@ -8,7 +8,14 @@
         "waitingHuman": "Waiting for human",
         "failed": "Failed",
         "completed": "Completed",
-        "ariaNav": "View {label} runs, currently {count}"
+        "ariaNav": "View {label} runs, currently {count}",
+        "totalTokens": "Total Tokens",
+        "totalTokensScope": "Platform · all-time",
+        "totalTokensUnreported": "Platform · no usage reported yet",
+        "totalTokensZero": "Platform · reported total is 0",
+        "totalTokensUpdating": "Updating",
+        "totalTokensAria": "Platform total Token usage, currently {count}",
+        "totalTokensAriaUnreported": "Platform total Token usage, not reported yet"
       },
       "boardTitle": "Requirement progress board",
       "viewFullBoard": "View full board →",
@@ -36,7 +43,7 @@
         "loadFailed": "Failed to load Token stats. Please retry.",
         "retry": "Retry",
         "trendTitle": "Usage trend · stacked by source",
-        "compositionTitle": "Four-part composition",
+        "compositionTitle": "Usage composition",
         "rankTitle": "Usage ranking",
         "rankSub": "Workflow top + Project Management",
         "rankHint": "\"Other\" = remaining workflows outside the top (not Project Management). Project Management is a separate row.",
@@ -51,8 +58,8 @@
         "share": "Share",
         "emptyTrendTitle": "No Token data",
         "emptyTrendHint": "No reported Token usage in this window (includes workflows and Project Management); unreported usage is not shown as 0",
-        "emptyCompTitle": "No composition data",
-        "emptyCompHint": "Ring chart is not drawn when no components are reported",
+        "emptyCompTitle": "No usage composition",
+        "emptyCompHint": "No reported usage composition data yet",
         "emptyRankTitle": "No usage ranking",
         "emptyRankHint": "No reported Token usage yet; ranking placeholders are not shown",
         "modelCompositionTitle": "Model composition",
@@ -877,6 +884,11 @@
       "share": {
         "copyLink": "Copy temp link",
         "copyLinkAria": "Copy temporary approval link",
+        "shareApproval": "Share approval",
+        "shareApprovalAria": "Open share-approval link manager",
+        "openSharePanel": "Open share panel",
+        "openSharePanelAria": "Open share-approval panel",
+        "appPreviewShareHint": "Same policy as pending review · public page has no remote desktop",
         "createCopy": "Create and copy link",
         "createCopyAria": "Create a temporary approval link and copy it",
         "panelTitle": "Temporary approval link",
@@ -912,7 +924,7 @@
         "errors": {
           "noStandardAction": "Add a standard approve or reject action before creating a temp link",
           "notHumanGate": "Temp approval links are only available for human_gate",
-          "notReviewSession": "Temp review links are only available for pending Inbox reviews",
+          "notReviewSession": "Temp review links are only available for pending Inbox reviews or app preview sessions",
           "usedReadonly": "Approval already finished. A new link cannot be created",
           "runEnded": "This run has ended. A link cannot be created",
           "gateNotPending": "No pending gate",
@@ -2591,7 +2603,10 @@
       "retry": "Retry",
       "contentEmpty": "This artifact is empty",
       "platformStorage": "Platform storage",
-      "fallbackPlainText": "fallback · plain text"
+      "fallbackPlainText": "fallback · plain text",
+      "modeToggleAria": "Preview mode",
+      "modeStructured": "Structured UI",
+      "modeRaw": "Raw JSON"
     },
     "acpStatus": {
       "busy": "Busy",

@@ -82,6 +82,9 @@ describe('DashboardView KPI → /runs status navigation (g1 / g2.1)', () => {
       waitingHuman: 0,
       failed: 1,
       completed: 157,
+      totalTokens: null,
+      workflowTokens: null,
+      pmTokens: null,
     })
   })
 

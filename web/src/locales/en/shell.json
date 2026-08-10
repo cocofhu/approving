@@ -34,15 +34,14 @@
       "clickForDetail": "Click to view details",
       "neutralTitle": "{name} · {status}",
       "outputTitle": "Run outputs",
-      "outputHint": "Browse this run’s outputs as 16:9 PPT-style cards. Select a card to preview.",
-      "outputCard": "Output card",
+      "outputHint": "Select an artifact on the left to preview real content on the right. Structured artifacts default to partitioned UI; switch to raw JSON when needed.",
       "noArtifacts": "This run has no outputs",
       "noArtifactsHint": "Open the run detail to inspect execution",
       "openRunDetail": "Open run detail",
       "done": "Done",
       "previewLabel": "Preview",
-      "previewSummary": "Kind {kind} · artifact {name} (in-app summary preview)",
-      "loadingOutputs": "Loading outputs…"
+      "loadingOutputs": "Loading outputs…",
+      "listAria": "Artifacts from this run"
     }
   }
 }

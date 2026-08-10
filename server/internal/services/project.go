@@ -149,6 +149,58 @@ func (s *ProjectService) TokenBreakdownByProjectIDs(projectIDs []string) map[str
 	return out
 }
 
+// AggregatePlatformTokenBreakdown sums per-project breakdowns with null-aware
+// semantics: Workflow/PM are sums of reported sides only (all absent → nil);
+// Total is set when either side reported (nil side treated as 0 in the sum).
+func AggregatePlatformTokenBreakdown(byProject map[string]ProjectTokenBreakdown) ProjectTokenBreakdown {
+	var wfSum, pmSum int64
+	var hasWf, hasPm bool
+	for _, b := range byProject {
+		if b.Workflow != nil {
+			wfSum += *b.Workflow
+			hasWf = true
+		}
+		if b.PM != nil {
+			pmSum += *b.PM
+			hasPm = true
+		}
+	}
+	out := ProjectTokenBreakdown{}
+	if hasWf {
+		v := wfSum
+		out.Workflow = &v
+	}
+	if hasPm {
+		v := pmSum
+		out.PM = &v
+	}
+	if hasWf || hasPm {
+		var total int64
+		if hasWf {
+			total += wfSum
+		}
+		if hasPm {
+			total += pmSum
+		}
+		out.Total = &total
+	}
+	return out
+}
+
+// PlatformTokenBreakdown returns the cross-project Token summary for the
+// dashboard KPI (same semantics as summing each project's TokenBreakdown).
+func (s *ProjectService) PlatformTokenBreakdown() ProjectTokenBreakdown {
+	projects := s.List()
+	if len(projects) == 0 {
+		return ProjectTokenBreakdown{}
+	}
+	ids := make([]string, len(projects))
+	for i, p := range projects {
+		ids[i] = p.ID
+	}
+	return AggregatePlatformTokenBreakdown(s.TokenBreakdownByProjectIDs(ids))
+}
+
 func (s *ProjectService) sumWorkflowTokensByProjectIDs(projectIDs []string) (sums map[string]int64, has map[string]struct{}) {
 	sums = make(map[string]int64)
 	has = make(map[string]struct{})

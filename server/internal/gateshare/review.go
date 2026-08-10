@@ -54,7 +54,7 @@ func (s *Service) currentPendingReview(runID, nodeID string) (models.ReactConver
 		return models.ReactConversation{}, run, ErrRunEnded
 	}
 	node := run.Graph.FindNode(nodeID)
-	if !services.IsInboxReviewNode(node) {
+	if !services.IsShareableReviewSession(node) {
 		return models.ReactConversation{}, run, ErrNotReviewSession
 	}
 	var conv models.ReactConversation

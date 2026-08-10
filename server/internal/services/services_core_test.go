@@ -794,7 +794,8 @@ func TestArtifactServiceDeleteByID(t *testing.T) {
 
 func TestDashboardService(t *testing.T) {
 	db := newTestDB(t)
-	s := NewDashboardService(db)
+	projects := NewProjectService(db)
+	s := NewDashboardService(db, projects)
 	db.Create(&models.Run{ID: "a", Status: "running"})
 	db.Create(&models.Run{ID: "b", Status: "waiting_human"})
 	db.Create(&models.Run{ID: "c", Status: "failed"})
@@ -809,5 +810,10 @@ func TestDashboardService(t *testing.T) {
 	}
 	if st.Workflows != 1 || st.Artifacts != 1 {
 		t.Fatalf("stats counts: %+v", st)
+	}
+	// No project Usage → Token fields stay null (not 0).
+	if st.TotalTokens != nil || st.WorkflowTokens != nil || st.PMTokens != nil {
+		t.Fatalf("expected null tokens without usage, got total=%v wf=%v pm=%v",
+			st.TotalTokens, st.WorkflowTokens, st.PMTokens)
 	}
 }

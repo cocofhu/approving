@@ -7,22 +7,31 @@ import (
 )
 
 // DashboardService computes summary statistics for the dashboard.
-type DashboardService struct{ db *gorm.DB }
-
-// NewDashboardService builds the service.
-func NewDashboardService(db *gorm.DB) *DashboardService { return &DashboardService{db: db} }
-
-// Stats is the dashboard summary payload.
-type Stats struct {
-	Running      int64 `json:"running"`
-	WaitingHuman int64 `json:"waitingHuman"`
-	Failed       int64 `json:"failed"`
-	Completed    int64 `json:"completed"`
-	Workflows    int64 `json:"workflows"`
-	Artifacts    int64 `json:"artifacts"`
+type DashboardService struct {
+	db       *gorm.DB
+	projects *ProjectService
 }
 
-// Compute returns the current stats.
+// NewDashboardService builds the service. projects may be nil (Token fields stay null).
+func NewDashboardService(db *gorm.DB, projects *ProjectService) *DashboardService {
+	return &DashboardService{db: db, projects: projects}
+}
+
+// Stats is the dashboard summary payload.
+// Token fields use pointers so JSON null means "never reported"; 0 is a real zero.
+type Stats struct {
+	Running        int64  `json:"running"`
+	WaitingHuman   int64  `json:"waitingHuman"`
+	Failed         int64  `json:"failed"`
+	Completed      int64  `json:"completed"`
+	Workflows      int64  `json:"workflows"`
+	Artifacts      int64  `json:"artifacts"`
+	TotalTokens    *int64 `json:"totalTokens"`
+	WorkflowTokens *int64 `json:"workflowTokens"`
+	PMTokens       *int64 `json:"pmTokens"`
+}
+
+// Compute returns the current stats (Run status counts + platform Token totals).
 func (s *DashboardService) Compute() Stats {
 	var st Stats
 	count := func(status string) int64 {
@@ -36,5 +45,12 @@ func (s *DashboardService) Compute() Stats {
 	st.Completed = count("completed")
 	s.db.Model(&models.WorkflowDef{}).Count(&st.Workflows)
 	s.db.Model(&models.Artifact{}).Count(&st.Artifacts)
+
+	if s.projects != nil {
+		bd := s.projects.PlatformTokenBreakdown()
+		st.TotalTokens = bd.Total
+		st.WorkflowTokens = bd.Workflow
+		st.PMTokens = bd.PM
+	}
 	return st
 }

@@ -314,6 +314,24 @@ func TestClarifyInboxKind(t *testing.T) {
 	}
 }
 
+func TestIsShareableReviewSession(t *testing.T) {
+	if IsShareableReviewSession(&models.Node{Type: "research"}) != true {
+		t.Fatal("research must be shareable")
+	}
+	if IsShareableReviewSession(&models.Node{Type: "app_preview"}) != true {
+		t.Fatal("app_preview must be shareable (plan g1.1)")
+	}
+	if IsInboxReviewNode(&models.Node{Type: "app_preview"}) {
+		t.Fatal("IsInboxReviewNode must stay review-only; app_preview is a distinct kind")
+	}
+	if IsShareableReviewSession(&models.Node{Type: "react"}) {
+		t.Fatal("clarify react must not be shareable")
+	}
+	if IsShareableReviewSession(nil) {
+		t.Fatal("nil must not be shareable")
+	}
+}
+
 // TestPendingInboxIncludesAppPreview covers g1.3: app_preview waiting_human
 // appears in PendingInboxItems with kind=app_preview; coexists with human_gate;
 // disappears when the conversation is marked done.
