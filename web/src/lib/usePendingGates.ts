@@ -1,5 +1,9 @@
 import { ref, computed } from 'vue'
 import { api, isPaginated } from '@/lib/api'
+import { i18n } from '@/lib/i18n'
+import { beginRefresh, endRefresh } from '@/lib/refreshChrome'
+import { createTimeoutController, isAbortError } from '@/lib/loadingRequest'
+import { DEFAULT_LOADING_TIMEOUT_MS } from '@/lib/loadingTypes'
 import type { InboxItem } from '@/lib/types'
 
 export type RefreshSource =
@@ -43,6 +47,11 @@ function diffKeys(displayed: InboxItem[], remote: InboxItem[]): PendingMeta {
   return { added, removed }
 }
 
+function errorMessage(err: unknown): string {
+  if (err instanceof Error && err.message) return err.message
+  return String(err || 'load failed')
+}
+
 // Module-level singleton
 const displayedItems = ref<InboxItem[]>([])
 const remoteItems = ref<InboxItem[]>([])
@@ -51,6 +60,8 @@ const hasPendingUpdate = ref(false)
 const pendingMeta = ref<PendingMeta | null>(null)
 const lastRefreshSource = ref<RefreshSource | null>(null)
 const lastPeekAt = ref(0)
+const error = ref<string | null>(null)
+const ariaBusy = ref(false)
 
 // Backward-compatible alias: list UI binds to displayedItems.
 const items = displayedItems
@@ -64,9 +75,10 @@ let forcePromise: Promise<void> | null = null
  * Force always bumps so a slower peek cannot overwrite with setPending.
  */
 let refreshGeneration = 0
+let abortCtrl: AbortController | null = null
 
-async function fetchPeek(): Promise<{ items: InboxItem[]; total: number }> {
-  const data = await api.listGates({ page: 1, pageSize: 20 })
+async function fetchPeek(signal?: AbortSignal): Promise<{ items: InboxItem[]; total: number }> {
+  const data = await api.listGates({ page: 1, pageSize: 20, signal })
   if (isPaginated(data)) {
     return { items: data.items, total: data.total }
   }
@@ -105,6 +117,10 @@ function syncPendingMetaFromDiff() {
   }
 }
 
+function syncAriaBusy() {
+  ariaBusy.value = peekPromise != null || forcePromise != null
+}
+
 /**
  * Optimistic local removal after approve/reject/clarify-force succeeds.
  * Keeps sidebar totalCount/displayedItems aligned even when force refresh fails
@@ -129,20 +145,29 @@ async function peek(opts?: PeekOptions): Promise<void> {
   if (peekPromise) return peekPromise
 
   const gen = ++refreshGeneration
+  abortCtrl?.abort()
+  abortCtrl = new AbortController()
+  const tc = createTimeoutController(DEFAULT_LOADING_TIMEOUT_MS, abortCtrl.signal)
   // Holder avoids TS2454: const flight = (async () => flight)() is "used before assigned".
   const holder: { flight: Promise<void> | null } = { flight: null }
   holder.flight = (async () => {
+    ariaBusy.value = true
     try {
-      const { items: remote, total } = await fetchPeek()
+      const { items: remote, total } = await fetchPeek(tc.signal)
       // Discard if a newer peek/force superseded this request.
       if (gen !== refreshGeneration) return
       lastRefreshSource.value = opts?.source ?? null
+      error.value = null
       setPending(remote, total)
       lastPeekAt.value = Date.now()
-    } catch {
-      /* keep last known items on transient errors */
+    } catch (err) {
+      if (gen !== refreshGeneration) return
+      if (isAbortError(err) && !tc.timedOut) return
+      error.value = tc.timedOut ? String(i18n.global.t('common.loading.timeout')) : errorMessage(err)
     } finally {
+      tc.clear()
       if (peekPromise === holder.flight) peekPromise = null
+      syncAriaBusy()
     }
   })()
   peekPromise = holder.flight
@@ -175,20 +200,33 @@ async function refresh(opts?: RefreshOptions): Promise<void> {
   // Deduplicate concurrent force calls, but never join an in-flight peek.
   if (forcePromise) return forcePromise
 
+  const isManual = opts?.source === 'manual'
+
   // Invalidate any in-flight peek writeback (setPending) before we apply.
   const gen = ++refreshGeneration
+  abortCtrl?.abort()
+  abortCtrl = new AbortController()
+  const tc = createTimeoutController(DEFAULT_LOADING_TIMEOUT_MS, abortCtrl.signal)
   // Holder avoids TS2454 on self-referential flight cleanup.
   const holder: { flight: Promise<void> | null } = { flight: null }
   holder.flight = (async () => {
+    ariaBusy.value = true
+    if (isManual) beginRefresh('user_initiated')
     try {
-      const { items: remote, total } = await fetchPeek()
+      const { items: remote, total } = await fetchPeek(tc.signal)
       if (gen !== refreshGeneration) return
       lastRefreshSource.value = opts?.source ?? null
+      error.value = null
       applyRemoteToDisplayed(remote, total)
-    } catch {
-      /* keep last known items on transient errors */
+    } catch (err) {
+      if (gen !== refreshGeneration) return
+      if (isAbortError(err) && !tc.timedOut) return
+      error.value = tc.timedOut ? String(i18n.global.t('common.loading.timeout')) : errorMessage(err)
     } finally {
+      tc.clear()
       if (forcePromise === holder.flight) forcePromise = null
+      syncAriaBusy()
+      if (isManual) endRefresh()
     }
   })()
   forcePromise = holder.flight
@@ -206,6 +244,8 @@ export function usePendingGates() {
     pendingMeta,
     lastRefreshSource,
     lastPeekAt,
+    error,
+    ariaBusy,
     refresh,
     peek,
     applyPending,

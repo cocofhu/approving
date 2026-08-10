@@ -257,6 +257,7 @@ export default defineConfig({
         'structured-export-harness': fileURLToPath(
           new URL('./e2e/structured-export-harness.html', import.meta.url),
         ),
+        'shell-loading': fileURLToPath(new URL('./e2e/shell-loading.html', import.meta.url)),
       },
     },
   },

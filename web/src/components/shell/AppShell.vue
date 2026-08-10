@@ -16,12 +16,26 @@ import {
   startShutdownPolling,
   stopShutdownPolling,
 } from '@/lib/useShutdownState'
+import { useAuth } from '@/lib/useAuth'
+import { useRefreshChrome } from '@/lib/refreshChrome'
+import { useRoutePending } from '@/lib/routePending'
 
 const route = useRoute()
 const { t } = useI18n()
 const full = computed(() => route.meta.full === true)
 const draining = computed(() => isDraining())
 const offline = computed(() => isOffline())
+const auth = useAuth()
+const refresh = useRefreshChrome()
+const routePending = useRoutePending()
+
+const showRefreshBar = computed(() => refresh.showTopBar.value)
+const dimContent = computed(() => refresh.dimContent.value)
+const mainAriaBusy = computed(() => {
+  if (!auth.ready.value || !auth.user.value) return true
+  if (routePending.pending.value || routePending.showUi.value) return true
+  return refresh.ariaBusy.value
+})
 
 const drawerOpen = ref(false)
 
@@ -62,12 +76,34 @@ onUnmounted(() => stopShutdownPolling())
       </div>
 
       <AppTopbar v-if="!full" @toggle-menu="toggleDrawer" />
-      <main class="relative min-h-0 flex-1 overflow-hidden">
-        <div v-if="full" class="h-full">
+      <div
+        v-if="!full && showRefreshBar"
+        class="app-refresh-track"
+        data-testid="app-refresh-bar"
+        aria-hidden="true"
+      >
+        <div class="app-refresh-bar" />
+      </div>
+      <main
+        class="relative min-h-0 flex-1 overflow-hidden"
+        :aria-busy="mainAriaBusy ? 'true' : 'false'"
+      >
+        <div
+          v-if="full && showRefreshBar"
+          class="app-refresh-track"
+          data-testid="app-refresh-bar"
+          aria-hidden="true"
+        >
+          <div class="app-refresh-bar" />
+        </div>
+        <div v-if="full" class="h-full" :class="{ 'app-refresh-dim': dimContent }">
           <slot />
         </div>
         <div v-else class="scroll-area safe-area-bottom h-full min-h-0 overflow-y-auto bg-base">
-          <div class="flex h-full min-h-0 flex-col px-4 py-4 md:px-6 md:py-6">
+          <div
+            class="flex h-full min-h-0 flex-col px-4 py-4 md:px-6 md:py-6"
+            :class="{ 'app-refresh-dim': dimContent }"
+          >
             <slot />
           </div>
         </div>
