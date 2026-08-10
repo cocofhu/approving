@@ -5,14 +5,38 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/cocofhu/approving/internal/models"
 )
 
 const (
-	maxVisualHTMLBytes = 512 * 1024
-	maxDescriptionRunes = 8000
-	MaxCommentRunes     = 4000
+	maxVisualHTMLBytes   = 512 * 1024
+	maxDescriptionRunes  = 8000
+	MaxCommentRunes      = 4000
 	MaxExternalNameRunes = 80
+	maxTurns             = 80
+	maxTurnRunes         = 4000
+	maxAnnotationRunes   = 400
+	maxUpstreamBytes     = 64 * 1024
 )
+
+// PreviewTurn is a leak-free conversation turn for the public workbench.
+type PreviewTurn struct {
+	Role         string              `json:"role"`
+	Text         string              `json:"text,omitempty"`
+	At           string              `json:"at,omitempty"`
+	Interrupted  bool                `json:"interrupted,omitempty"`
+	Annotations  []PreviewAnnotation `json:"annotations,omitempty"`
+}
+
+// PreviewAnnotation is a leak-free annotation chip (no blob URLs).
+type PreviewAnnotation struct {
+	Selector string `json:"selector,omitempty"`
+	JSONPath string `json:"jsonPath,omitempty"`
+	Label    string `json:"label,omitempty"`
+	Note     string `json:"note,omitempty"`
+	Quote    string `json:"quote,omitempty"`
+}
 
 var (
 	leakyURLRe = regexp.MustCompile(`(?i)(?:blob:[^\s"'<>]*|/api/[^\s"'<>]*|/preview/[^\s"'<>]*|/sandbox[^\s"'<>]*|/v1/[^\s"'<>]*|https?://(?:localhost|127\.0\.0\.1|0\.0\.0\.0|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(?::\d+)?[^\s"'<>]*)`)
@@ -81,6 +105,9 @@ func SanitizeStructured(name, content string) map[string]any {
 		}
 		if d := stringField(m, "description", "detail", "body"); d != "" {
 			out["description"] = d
+		}
+		if doc := capStructuredDoc(m); doc != nil {
+			out["doc"] = doc
 		}
 	}
 	if len(out) == 1 && out["name"] != nil {
@@ -169,6 +196,147 @@ func sanitizeJSONValue(v any, depth int) any {
 	default:
 		return nil
 	}
+}
+
+// SanitizeTurns redacts conversation history for the public ReAct sidebar.
+// Images / blob URLs are dropped; text and annotation chips are size-capped.
+func SanitizeTurns(msgs []models.ReactMessage) []PreviewTurn {
+	if len(msgs) == 0 {
+		return nil
+	}
+	if len(msgs) > maxTurns {
+		msgs = msgs[len(msgs)-maxTurns:]
+	}
+	out := make([]PreviewTurn, 0, len(msgs))
+	for _, m := range msgs {
+		role := strings.ToLower(strings.TrimSpace(m.Role))
+		if role != "agent" && role != "human" {
+			continue
+		}
+		text := SanitizeDescription(m.Text)
+		if utf8.RuneCountInString(text) > maxTurnRunes {
+			r := []rune(text)
+			text = string(r[:maxTurnRunes]) + "…"
+		}
+		turn := PreviewTurn{Role: role, Text: text, At: strings.TrimSpace(m.At), Interrupted: m.Interrupted}
+		if anns := sanitizeAnnotations(m.Annotations); len(anns) > 0 {
+			turn.Annotations = anns
+		}
+		if turn.Text == "" && len(turn.Annotations) == 0 && !turn.Interrupted {
+			continue
+		}
+		out = append(out, turn)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func sanitizeAnnotations(anns []models.ReactAnnotation) []PreviewAnnotation {
+	if len(anns) == 0 {
+		return nil
+	}
+	out := make([]PreviewAnnotation, 0, len(anns))
+	for _, a := range anns {
+		pa := PreviewAnnotation{
+			Selector: clampAnnotationField(a.Selector),
+			JSONPath: clampAnnotationField(a.JSONPath),
+			Label:    clampAnnotationField(a.Label),
+			Note:     clampAnnotationField(a.Note),
+			Quote:    clampAnnotationField(a.Quote),
+		}
+		if pa.Selector == "" && pa.JSONPath == "" && pa.Label == "" && pa.Note == "" && pa.Quote == "" {
+			continue
+		}
+		out = append(out, pa)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func clampAnnotationField(s string) string {
+	s = SanitizeDescription(s)
+	if utf8.RuneCountInString(s) > maxAnnotationRunes {
+		r := []rune(s)
+		s = string(r[:maxAnnotationRunes]) + "…"
+	}
+	return s
+}
+
+// SanitizeUpstream extracts a leak-free clarified_requirement (or similar) summary.
+func SanitizeUpstream(name, content string) map[string]any {
+	name = strings.TrimSpace(name)
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return nil
+	}
+	out := map[string]any{}
+	if name != "" && !looksInternalName(name) {
+		out["name"] = safeArtifactName(name)
+	} else {
+		out["name"] = "clarified_requirement.json"
+	}
+	var parsed any
+	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
+		text := SanitizeDescription(content)
+		if text == "" {
+			return nil
+		}
+		out["text"] = text
+		return out
+	}
+	walk := sanitizeJSONValue(parsed, 0)
+	m, ok := walk.(map[string]any)
+	if !ok {
+		if s, ok := walk.(string); ok && strings.TrimSpace(s) != "" {
+			out["text"] = SanitizeDescription(s)
+			return out
+		}
+		return nil
+	}
+	if t := stringField(m, "title", "summary"); t != "" {
+		out["title"] = t
+	}
+	if s := stringField(m, "summary", "background"); s != "" {
+		out["summary"] = s
+	}
+	if d := stringField(m, "description", "detail", "background"); d != "" {
+		out["description"] = d
+	}
+	if doc := capStructuredDoc(m); doc != nil {
+		out["doc"] = doc
+	}
+	if len(out) <= 1 {
+		return nil
+	}
+	return out
+}
+
+func capStructuredDoc(m map[string]any) map[string]any {
+	if m == nil {
+		return nil
+	}
+	b, err := json.Marshal(m)
+	if err != nil || len(b) == 0 {
+		return nil
+	}
+	if len(b) > maxUpstreamBytes {
+		// Keep title/summary/goals so the main thesis remains reviewable.
+		slim := map[string]any{}
+		for _, k := range []string{"title", "summary", "background", "goals", "description", "in_scope", "out_of_scope"} {
+			if v, ok := m[k]; ok {
+				slim[k] = v
+			}
+		}
+		if len(slim) == 0 {
+			return nil
+		}
+		return slim
+	}
+	return m
 }
 
 // ClampComment bounds external comment length.

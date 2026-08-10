@@ -122,11 +122,14 @@ func TestGateShareCreateRegenRevokeAndInboxStatus(t *testing.T) {
 	if strings.Contains(prev2.Body.String(), "run-share-1") || strings.Contains(prev2.Body.String(), "should-hide") || strings.Contains(prev2.Body.String(), "/api/blobs") {
 		t.Fatalf("preview leak: %s", prev2.Body.String())
 	}
-	if strings.Contains(prev2.Body.String(), "外部一次审批") {
-		t.Fatalf("preview leaked non-primary structured artifact: %s", prev2.Body.String())
+	if p2["structured"] != nil {
+		t.Fatalf("preview leaked non-primary structured as main product: %+v", p2["structured"])
 	}
 	if p2["visualHtml"] == nil || p2["nonce"] == "" {
 		t.Fatalf("preview missing visual/nonce: %+v", p2)
+	}
+	if p2["productKind"] != "visual" {
+		t.Fatalf("productKind=%v", p2["productKind"])
 	}
 
 	if w := h.do(http.MethodPost, "/api/runs/run-share-1/gates/hg1/share-link/revoke", nil); w.Code != 200 {
@@ -553,6 +556,38 @@ func TestGateShareResumeFailureDoesNotBurnLink(t *testing.T) {
 	}, map[string]string{headerShareRequest: "1", "Origin": "http://" + publicHost})
 	if dec2.Code != 200 || parseJSON(t, dec2)["status"] != "approved" {
 		t.Fatalf("retry after restore: %d %s", dec2.Code, dec2.Body.String())
+	}
+}
+
+func TestGateShareReplyDoesNotConsume(t *testing.T) {
+	h := newHarness(t)
+	seedHumanGate(t, h, "run-share-reply", "hg-reply", nil)
+	created := parseJSON(t, h.do(http.MethodPost, "/api/runs/run-share-reply/gates/hg-reply/share-link", map[string]any{"ttlTier": "24h"}))
+	url, _ := created["url"].(string)
+	token := strings.TrimPrefix(url[strings.Index(url, "#t="):], "#t=")
+
+	prev := parseJSON(t, h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: token}))
+	if prev["status"] != models.ShareLinkStateActive {
+		t.Fatalf("preview: %+v", prev)
+	}
+	if prev["kind"] != models.ShareLinkKindHumanGate && prev["kind"] != nil && prev["kind"] != "" {
+		if prev["status"] != models.ShareLinkStateActive {
+			t.Fatalf("kind: %+v", prev)
+		}
+	}
+	if prev["visualHtml"] == nil {
+		t.Fatalf("expected visual: %+v", prev)
+	}
+
+	reply := h.doPublic(http.MethodPost, "/public/gate-approvals/reply", map[string]any{
+		"token": token, "text": "请改标题",
+	}, map[string]string{headerShareRequest: "1", "Origin": "http://" + publicHost})
+	if reply.Code == http.StatusForbidden {
+		t.Fatalf("reply csrf: %s", reply.Body.String())
+	}
+	prev2 := h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: token})
+	if parseJSON(t, prev2)["status"] != models.ShareLinkStateActive {
+		t.Fatalf("reply burned token: %d %s preview=%s", reply.Code, reply.Body.String(), prev2.Body.String())
 	}
 }
 

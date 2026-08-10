@@ -103,6 +103,17 @@ func (e *Engine) dropReviewSessionIfIdle(runID, producerID string) {
 	}
 }
 
+// HasLiveReviewSession reports whether a parked ACP review session is still alive
+// (hot ReAct). Distinct from ReviewSessionReady, which is true both when idle-hot
+// and when no session exists (cold).
+func (e *Engine) HasLiveReviewSession(runID, nodeID string) bool {
+	rp, ok := e.provider.(runtime.ReviewProvider)
+	if !ok {
+		return false
+	}
+	return rp.HasLiveSession(runID, nodeID)
+}
+
 // ReviewSessionReady reports whether the producer session has no in-flight turn
 // and an empty pending queue (FR4 ready gate for force confirm).
 func (e *Engine) ReviewSessionReady(runID, producerID string) bool {

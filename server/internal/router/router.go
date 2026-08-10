@@ -286,8 +286,12 @@ func New(h *handlers.Handlers) *gin.Engine {
 		pub.GET("/", h.PublicGateApprovalPage)
 		pub.GET("/preview", h.PublicGatePreview)
 		pub.POST("/decide", h.PublicGateDecide)
+		pub.POST("/reply", h.PublicGateReply)
+		pub.POST("/cancel", h.PublicGateCancel)
 		pub.OPTIONS("/preview", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 		pub.OPTIONS("/decide", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+		pub.OPTIONS("/reply", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+		pub.OPTIONS("/cancel", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 	}
 
 	// SPA fallback: serve index.html for unknown non-API paths so vue-router

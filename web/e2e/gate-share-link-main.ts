@@ -63,8 +63,13 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
           description: '待复审脱敏摘要',
           remainingSec: 3600,
           nonce: 'nonce-e2e-review',
-          actions: { confirm: 'confirm' },
-          structured: { name: 'research.json', title: '调研摘要' },
+          reactSessionAlive: true,
+          productKind: 'structured',
+          productName: 'research.json',
+          actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
+          structured: { name: 'research.json', title: '调研摘要', doc: { title: '调研摘要' } },
+          turns: [{ role: 'agent', text: '请复审 research.json', at: '2026-08-01T00:00:00Z' }],
+          upstream: { name: 'clarified_requirement.json', title: '澄清', summary: '已有澄清需求文档，可对照审阅当前主产物' },
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       )
@@ -77,12 +82,29 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
         description: '请审阅脱敏产物',
         remainingSec: 3600,
         nonce: 'nonce-e2e',
-        actions: { approve: 'approve', reject: 'revise' },
+        reactSessionAlive: true,
+        productKind: 'visual',
+        productName: 'page.html',
+        actions: { approve: 'approve', reject: 'revise', confirm: 'approve', reply: 'reply', cancel: 'cancel' },
         visualHtml: '<p>ok</p>',
         structured: { title: '外部一次审批', goals: ['g1'] },
+        turns: [{ role: 'agent', text: '请审阅 page.html', at: '2026-08-01T00:00:00Z' }],
+        upstream: { name: 'clarified_requirement.json', title: '澄清', summary: '已有澄清需求文档，可对照审阅当前主产物' },
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     )
+  }
+  if (url.includes('/public/gate-approvals/reply')) {
+    return new Response(JSON.stringify({ status: 'accepted' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+  if (url.includes('/public/gate-approvals/cancel')) {
+    return new Response(JSON.stringify({ status: 'ok' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
   }
   if (url.includes('/public/gate-approvals/decide')) {
     const body = init?.body ? JSON.parse(String(init.body)) : {}

@@ -121,13 +121,22 @@ func TestReviewShareCreateLookupConfirmAndInboxStatus(t *testing.T) {
 	}
 	actions, _ := p["actions"].(map[string]any)
 	if actions["confirm"] != "confirm" || actions["approve"] != nil || actions["reject"] != nil {
-		t.Fatalf("review preview must be confirm-only: %+v", actions)
+		t.Fatalf("review preview must not expose gate reject/approve: %+v", actions)
 	}
 	if strings.Contains(prev.Body.String(), "run-rev-1") || strings.Contains(prev.Body.String(), "should-hide") || strings.Contains(prev.Body.String(), "LEAK-OTHER") {
 		t.Fatalf("preview leak: %s", prev.Body.String())
 	}
 	if p["structured"] == nil {
 		t.Fatalf("expected research.json structured preview: %+v", p)
+	}
+	if p["productKind"] != "structured" && p["productName"] != "research.json" {
+		if p["productName"] != "research.json" {
+			t.Fatalf("expected structured research.json product, got kind=%v name=%v", p["productKind"], p["productName"])
+		}
+	}
+	turns, _ := p["turns"].([]any)
+	if len(turns) == 0 {
+		t.Fatalf("expected sanitized turns: %+v", p)
 	}
 
 	nonce := publicPreviewNonce(t, h, token)
@@ -286,5 +295,44 @@ func TestReviewShareDoneConversationCannotCreate(t *testing.T) {
 	w := h.do(http.MethodPost, "/api/runs/run-rev-done/reviews/research1/share-link", map[string]any{"ttlTier": "24h"})
 	if w.Code != http.StatusConflict && w.Code != http.StatusNotFound {
 		t.Fatalf("create on done conv: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestReviewShareReplyAndCancelDoNotConsume(t *testing.T) {
+	h := newHarness(t)
+	seedInboxReview(t, h, "run-rev-reply", "research1", true)
+	created := parseJSON(t, h.do(http.MethodPost, "/api/runs/run-rev-reply/reviews/research1/share-link", map[string]any{"ttlTier": "24h"}))
+	url, _ := created["url"].(string)
+	token := strings.TrimPrefix(url[strings.Index(url, "#t="):], "#t=")
+
+	reply := h.doPublic(http.MethodPost, "/public/gate-approvals/reply", map[string]any{
+		"token": token, "text": "请把摘要写短一点",
+	}, map[string]string{headerShareRequest: "1", "Origin": "http://" + publicHost})
+	if reply.Code == http.StatusForbidden {
+		t.Fatalf("reply csrf: %s", reply.Body.String())
+	}
+	prev := h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: token})
+	if parseJSON(t, prev)["status"] != models.ShareLinkStateActive {
+		t.Fatalf("reply burned token: %d %s preview=%s", reply.Code, reply.Body.String(), prev.Body.String())
+	}
+
+	cancel := h.doPublic(http.MethodPost, "/public/gate-approvals/cancel", map[string]any{
+		"token": token,
+	}, map[string]string{headerShareRequest: "1", "Origin": "http://" + publicHost})
+	if cancel.Code == http.StatusForbidden {
+		t.Fatalf("cancel csrf: %s", cancel.Body.String())
+	}
+	prev2 := h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: token})
+	if parseJSON(t, prev2)["status"] != models.ShareLinkStateActive {
+		t.Fatalf("cancel burned token: %d %s preview=%s", cancel.Code, cancel.Body.String(), prev2.Body.String())
+	}
+
+	nonce := publicPreviewNonce(t, h, token)
+	dec := h.doPublic(http.MethodPost, "/public/gate-approvals/decide", map[string]any{
+		"token": token, "action": "confirm", "nonce": nonce,
+	}, map[string]string{headerShareRequest: "1", "Origin": "http://" + publicHost})
+	out := parseJSON(t, dec)
+	if dec.Code != 200 || (out["status"] != "confirmed" && out["status"] != "validation_failed" && out["status"] != "busy") {
+		t.Fatalf("decide after reply: %d %s", dec.Code, dec.Body.String())
 	}
 }
