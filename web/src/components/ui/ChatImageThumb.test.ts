@@ -60,4 +60,36 @@ describe('ChatImageThumb', () => {
     expect(wrapper.find('[data-testid="thumb-round"]').classes()).toContain('rounded-md')
     wrapper.unmount()
   })
+
+  it('load error: placeholder + label + retry; does not emit preview (g3.1/g3.3)', async () => {
+    const wrapper = mountThumb({ mode: 'previewable', size: 'md', testId: 'thumb-md', label: '70345B2BE' })
+    await wrapper.find('img').trigger('error')
+    expect(wrapper.text()).toContain('图片加载失败')
+    expect(wrapper.text()).toContain('70345B2BE')
+    expect(wrapper.text()).toContain('重试')
+    expect(wrapper.find('[data-image-failed="1"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="thumb-md"]').trigger('click')
+    expect(wrapper.emitted('preview')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('retry adds cache-buster and restores thumb without QQ re-download (g3.2)', async () => {
+    const wrapper = mountThumb({
+      mode: 'previewable',
+      src: '/api/blobs/abc123',
+      label: '70345B2BE',
+      testId: 'thumb-retry',
+    })
+    await wrapper.find('img').trigger('error')
+    await wrapper.find('[data-testid="thumb-retry-retry"]').trigger('click')
+    const img = wrapper.find('img')
+    expect(img.exists()).toBe(true)
+    expect(img.attributes('src')).toMatch(/\/api\/blobs\/abc123\?_r=1$/)
+    await img.trigger('load')
+    expect(wrapper.text()).toContain('点击放大')
+    expect(wrapper.text()).not.toContain('图片加载失败')
+    await wrapper.find('[data-testid="thumb-retry"]').trigger('click')
+    expect(wrapper.emitted('preview')).toHaveLength(1)
+    wrapper.unmount()
+  })
 })

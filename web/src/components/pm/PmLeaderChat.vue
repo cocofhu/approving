@@ -338,6 +338,11 @@ function isFailedUser(m: ChatMessage) {
   return m.role === 'user' && m.status === 'failed'
 }
 
+/** QQ inbound download-failure notice only; other system rows stay hidden. */
+function isChannelHint(m: ChatMessage) {
+  return m.role === 'system' && m.source === 'channel'
+}
+
 async function loadThreads() {
   loading.value = true
   try {
@@ -1394,7 +1399,25 @@ onBeforeUnmount(() => {
         </div>
 
         <template v-for="m in messages" :key="m.id">
-          <div v-if="m.role === 'user'" class="flex gap-2.5 flex-row-reverse" :data-msg-id="m.id">
+          <div
+            v-if="isChannelHint(m)"
+            class="mx-auto flex max-w-[92%] items-start gap-2 self-center border border-warn/35 bg-warn/[0.08] px-3 py-2 text-[12px] text-txt"
+            :data-msg-id="m.id"
+            data-testid="pm-channel-hint"
+          >
+            <span
+              class="shrink-0 border border-warn/35 px-1.5 py-px text-[10px] font-bold tracking-wide text-warn"
+            >
+              {{ t('pages.projectDetail.pm.channelHintLabel') }}
+            </span>
+            <div class="min-w-0">
+              <div>{{ m.content }}</div>
+              <div class="mt-0.5 text-[11px] text-txt2">
+                {{ t('pages.projectDetail.pm.channelHintMeta') }}
+              </div>
+            </div>
+          </div>
+          <div v-else-if="m.role === 'user'" class="flex gap-2.5 flex-row-reverse" :data-msg-id="m.id">
             <div
               class="flex h-7 w-7 shrink-0 items-center justify-center border border-accent/20 bg-accent-dim text-[11px] font-semibold text-accent-2"
             >

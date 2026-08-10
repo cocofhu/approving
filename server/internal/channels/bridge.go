@@ -141,6 +141,13 @@ func (b *ChannelBridge) Handle(ctx context.Context, rc ResolvedChannel, in Inbou
 	if len(images) > 0 {
 		prompt += fmt.Sprintf("\n（本条消息附带 %d 个附件）", len(images))
 	}
+	if hint := strings.TrimSpace(in.ChannelHint); hint != "" {
+		if _, herr := b.pm.AppendMessageSource(thread.ID, "system", hint, "channel", nil, nil, nil, nil, nil); herr != nil {
+			log.Warn().Err(herr).Str("thread", thread.ID).Msg("channel hint persist failed")
+		} else {
+			prompt += "\n" + hint
+		}
+	}
 
 	if err := b.turns.StartWithTimeout(thread.ID, userMsg.ID, row.ID, prompt, images, rc.TurnTimeout); err != nil {
 		return Reply{}, err

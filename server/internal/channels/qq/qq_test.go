@@ -38,6 +38,12 @@ func TestFallbackAttachmentName(t *testing.T) {
 	if got := fallbackAttachmentName(attachment{URL: "https://x.com/files/report.zip?x=1"}, "application/zip"); got != "attachment.zip" {
 		t.Fatalf("zip mime fallback = %q", got)
 	}
+	if got := fallbackAttachmentName(attachment{}, "image/webp"); got != "attachment.webp" {
+		t.Fatalf("webp fallback = %q", got)
+	}
+	if got := fallbackAttachmentName(attachment{}, "image/gif"); got != "attachment.gif" {
+		t.Fatalf("gif fallback = %q", got)
+	}
 }
 
 func TestMaxInboundImageBytesIs20MiB(t *testing.T) {
