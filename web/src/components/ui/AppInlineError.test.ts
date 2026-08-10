@@ -2,15 +2,23 @@
 import { createI18n } from 'vue-i18n'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import common from '@/locales/zh-CN/common.json'
 import AppInlineError from './AppInlineError.vue'
 import EmptyState from './EmptyState.vue'
 
 function mountErr(props: Record<string, unknown> = {}) {
   const i18n = createI18n({
     legacy: false,
-    locale: 'zh-CN',
-    messages: { 'zh-CN': { ...common } },
+    locale: 'zh',
+    messages: {
+      zh: {
+        common: {
+          loading: {
+            failed: '加载失败',
+            retry: '重试',
+          },
+        },
+      },
+    },
   })
   return mount(AppInlineError, {
     props,

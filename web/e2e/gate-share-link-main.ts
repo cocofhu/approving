@@ -66,7 +66,11 @@ const originalFetch = window.fetch.bind(window)
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
   if (url.includes('/public/gate-approvals/preview')) {
-    const scene = new URLSearchParams(location.search).get('scene') || ''
+    const params = new URLSearchParams(location.search)
+    const scene = params.get('scene') || ''
+    if (params.get('slowPreview')) {
+      await new Promise((resolve) => setTimeout(resolve, 800))
+    }
     if (scene === 'public-review') {
       return new Response(
         JSON.stringify({
