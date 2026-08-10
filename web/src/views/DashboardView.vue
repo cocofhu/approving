@@ -3,19 +3,31 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
+import TokenUsageHoverTip from '@/components/ui/TokenUsageHoverTip.vue'
 import RunBoardColumn from '@/components/board/RunBoardColumn.vue'
 import RunBoardPreviewDrawer from '@/components/board/RunBoardPreviewDrawer.vue'
 import { api, type DashboardStats } from '@/lib/api'
+import { fmtCompactTokenCount } from '@/lib/tokenUsage'
 import { readStoredProjectId } from '@/lib/useProjectContext'
 import { useRunBoard } from '@/lib/useRunBoard'
 import { serializeStatusQuery } from '@/lib/useStatusFilter'
 import type { Run } from '@/lib/types'
+
+type TokenSnapshot = {
+  totalTokens: number | null
+  workflowTokens: number | null
+  pmTokens: number | null
+}
 
 const router = useRouter()
 const { t } = useI18n()
 const stats = ref<DashboardStats | null>(null)
 const statsError = ref<string | null>(null)
 const storedProjectId = ref(readStoredProjectId())
+
+/** Last successful Token snapshot for stale-while-revalidate (never flash to 0). */
+const lastSuccessTokens = ref<TokenSnapshot | null>(null)
+const tokensRefreshing = ref(false)
 
 const hasProject = computed(() => !!storedProjectId.value)
 
@@ -58,6 +70,37 @@ const kpis = computed(() => [
   },
 ])
 
+const displayTokens = computed<TokenSnapshot | null>(() => lastSuccessTokens.value)
+
+const tokenDisplayValue = computed(() =>
+  displayTokens.value ? displayTokens.value.totalTokens : undefined,
+)
+
+const tokenFoot = computed(() => {
+  if (tokensRefreshing.value && lastSuccessTokens.value) {
+    return t('pages.dashboard.kpi.totalTokensUpdating')
+  }
+  if (!lastSuccessTokens.value) {
+    return tokensRefreshing.value
+      ? t('pages.dashboard.kpi.totalTokensUpdating')
+      : t('pages.dashboard.kpi.totalTokensScope')
+  }
+  const total = lastSuccessTokens.value.totalTokens
+  if (total == null) return t('pages.dashboard.kpi.totalTokensUnreported')
+  if (total === 0) return t('pages.dashboard.kpi.totalTokensZero')
+  return t('pages.dashboard.kpi.totalTokensScope')
+})
+
+const tokenAria = computed(() => {
+  const total = tokenDisplayValue.value
+  if (total == null) return t('pages.dashboard.kpi.totalTokensAriaUnreported')
+  return t('pages.dashboard.kpi.totalTokensAria', {
+    count: fmtCompactTokenCount(total),
+  })
+})
+
+const showTokenTip = computed(() => tokenDisplayValue.value != null)
+
 const showInitialLoading = computed(() => hasProject.value && loading.value && !hasLoaded.value)
 const loadError = computed(() => {
   if (statsError.value) return statsError.value
@@ -96,13 +139,31 @@ function goSelectProject() {
   void router.push('/projects')
 }
 
+function snapshotTokens(s: DashboardStats): TokenSnapshot {
+  return {
+    totalTokens: s.totalTokens ?? null,
+    workflowTokens: s.workflowTokens ?? null,
+    pmTokens: s.pmTokens ?? null,
+  }
+}
+
 async function refreshStats() {
+  const hadSuccess = lastSuccessTokens.value != null
+  tokensRefreshing.value = true
   try {
-    stats.value = await api.dashboard()
+    const next = await api.dashboard()
+    stats.value = next
     statsError.value = null
+    lastSuccessTokens.value = snapshotTokens(next)
   } catch (err) {
     console.warn('[DashboardView] dashboard stats failed', err)
     statsError.value = err instanceof Error ? err.message : String(err || 'stats failed')
+    // Keep lastSuccessTokens on failure so we never flash a fake 0.
+    if (!hadSuccess) {
+      // First load failed: still do not invent 0; leave snapshot null.
+    }
+  } finally {
+    tokensRefreshing.value = false
   }
 }
 
@@ -158,7 +219,11 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <div class="mb-6 grid shrink-0 grid-cols-2 gap-4 md:grid-cols-4">
+    <!-- Desktop 5 / mid 3 / narrow 2; Token after status KPIs (plan g2.1) -->
+    <div
+      class="mb-6 grid shrink-0 grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5"
+      data-testid="dashboard-kpi-grid"
+    >
       <button
         v-for="k in kpis"
         :key="k.status"
@@ -174,6 +239,47 @@ onUnmounted(() => {
         </div>
         <div class="mt-2 text-3xl font-semibold text-txt">{{ k.value }}</div>
       </button>
+
+      <div
+        class="group relative card w-full p-4 text-left transition"
+        :class="[
+          showTokenTip
+            ? 'cursor-help border-accent/45 bg-gradient-to-b from-accent-dim/80 to-surface hover:border-accent'
+            : 'border-accent/35 bg-gradient-to-b from-accent-dim/50 to-surface',
+          tokensRefreshing && lastSuccessTokens ? 'opacity-70' : '',
+        ]"
+        data-testid="dashboard-kpi-total-tokens"
+        role="group"
+        :aria-label="tokenAria"
+        :aria-describedby="showTokenTip ? 'dashboard-token-detail-tip' : undefined"
+        :tabindex="showTokenTip ? 0 : undefined"
+        @click.stop
+      >
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-[13px] text-txt2">{{ t('pages.dashboard.kpi.totalTokens') }}</span>
+          <Icon name="sparkles" :size="18" class="text-accent-2" />
+        </div>
+        <div
+          class="mt-2 font-mono text-3xl font-semibold tabular-nums tracking-tight"
+          :class="tokenDisplayValue == null ? 'text-txt3' : 'text-txt'"
+          data-testid="dashboard-kpi-total-tokens-value"
+        >
+          {{ fmtCompactTokenCount(tokenDisplayValue) }}
+        </div>
+        <div
+          class="mt-1.5 text-[11px] text-txt3"
+          data-testid="dashboard-kpi-total-tokens-foot"
+        >
+          {{ tokenFoot }}
+        </div>
+        <TokenUsageHoverTip
+          v-if="showTokenTip && displayTokens"
+          tip-id="dashboard-token-detail-tip"
+          :total-tokens="displayTokens.totalTokens!"
+          :workflow-tokens="displayTokens.workflowTokens"
+          :pm-tokens="displayTokens.pmTokens"
+        />
+      </div>
     </div>
 
     <div

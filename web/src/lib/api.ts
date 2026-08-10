@@ -326,6 +326,10 @@ export interface DashboardStats {
   completed: number
   workflows: number
   artifacts: number
+  /** Platform-wide cumulative tokens; null = never reported (UI "—"). */
+  totalTokens?: number | null
+  workflowTokens?: number | null
+  pmTokens?: number | null
 }
 
 // SettingItem is one platform scheduling knob: its effective value, where it

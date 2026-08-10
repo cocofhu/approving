@@ -376,7 +376,7 @@ func main() {
 		APIKeys:          services.NewAPIKeyService(db),
 		Skill:            skillSvc,
 		Org:              orgSvc,
-		Dash:             services.NewDashboardService(db),
+		Dash:             services.NewDashboardService(db, projectSvc),
 		Sbx:              sbxSvc,
 		Preview:          previewSvc,
 		Issues:           issueSvc,
