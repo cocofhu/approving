@@ -49,6 +49,9 @@ func TestSanitizeUpstreamKeepsThesisWithoutRunID(t *testing.T) {
 	if up["title"] != "澄清需求" {
 		t.Fatalf("title: %+v", up)
 	}
+	if up["doc"] == nil {
+		t.Fatal("full SanitizeUpstream must include doc for on-demand path")
+	}
 	b, err := json.Marshal(up)
 	if err != nil {
 		t.Fatal(err)
@@ -56,6 +59,61 @@ func TestSanitizeUpstreamKeepsThesisWithoutRunID(t *testing.T) {
 	s := string(b)
 	if strings.Contains(s, "run-secret") || strings.Contains(s, "127.0.0.1") || strings.Contains(s, "projectId") {
 		t.Fatalf("upstream leak: %s", s)
+	}
+}
+
+func TestSanitizeUpstreamSummaryOmitsDoc(t *testing.T) {
+	raw := `{"title":"澄清需求","summary":"摘要","goals":["g1"],"background":"背景较长"}`
+	sum := SanitizeUpstreamSummary("clarified_requirement.json", raw)
+	if sum == nil {
+		t.Fatal("expected summary")
+	}
+	if sum["doc"] != nil {
+		t.Fatalf("summary must not include doc: %+v", sum)
+	}
+	if sum["title"] != "澄清需求" || sum["summary"] == "" {
+		t.Fatalf("summary fields: %+v", sum)
+	}
+	full := SanitizeUpstream("clarified_requirement.json", raw)
+	if full["doc"] == nil {
+		t.Fatal("full upstream must keep doc")
+	}
+}
+
+func TestApplySparsePreviewOmitsUnchangedLargeFields(t *testing.T) {
+	html := "<p>visual</p>"
+	up := map[string]any{"name": "clarified_requirement.json", "title": "澄清", "summary": "摘要"}
+	dto := PreviewDTO{
+		Status:         "active",
+		VisualHTML:     html,
+		VisualHTMLHash: ContentHash(html),
+		Upstream:       up,
+		UpstreamHash:   HashUpstream(up),
+	}
+	ApplySparsePreview(&dto, dto.VisualHTMLHash, dto.UpstreamHash)
+	if dto.VisualHTML != "" {
+		t.Fatalf("expected visualHtml omitted, got %q", dto.VisualHTML)
+	}
+	if dto.Upstream != nil {
+		t.Fatalf("expected upstream omitted, got %+v", dto.Upstream)
+	}
+	if dto.VisualHTMLHash == "" || dto.UpstreamHash == "" {
+		t.Fatal("hashes must remain so client can keep merging")
+	}
+	// Changed visual → body returns.
+	dto2 := PreviewDTO{
+		Status:         "active",
+		VisualHTML:     "<p>new</p>",
+		VisualHTMLHash: ContentHash("<p>new</p>"),
+		Upstream:       up,
+		UpstreamHash:   HashUpstream(up),
+	}
+	ApplySparsePreview(&dto2, ContentHash(html), dto.UpstreamHash)
+	if dto2.VisualHTML != "<p>new</p>" {
+		t.Fatalf("changed visual must be returned: %q", dto2.VisualHTML)
+	}
+	if dto2.Upstream != nil {
+		t.Fatalf("unchanged upstream still omitted: %+v", dto2.Upstream)
 	}
 }
 
@@ -93,6 +151,15 @@ func TestBuildReviewPreviewDTOIncludesWorkbenchFields(t *testing.T) {
 	}
 	if len(dto.Turns) != 1 || dto.Upstream == nil || dto.Upstream["title"] != "澄清" {
 		t.Fatalf("turns/upstream: turns=%+v upstream=%+v", dto.Turns, dto.Upstream)
+	}
+	if dto.Upstream["doc"] != nil {
+		t.Fatalf("preview upstream must omit doc: %+v", dto.Upstream)
+	}
+	if dto.VisualHTMLHash == "" && dto.VisualHTML != "" {
+		t.Fatal("expected visualHtmlHash when visual present")
+	}
+	if dto.UpstreamHash == "" {
+		t.Fatal("expected upstreamHash")
 	}
 	raw, _ := json.Marshal(dto)
 	s := string(raw)

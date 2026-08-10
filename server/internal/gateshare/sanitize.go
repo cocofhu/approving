@@ -350,8 +350,19 @@ func clampAnnotationField(s string) string {
 	return s
 }
 
-// SanitizeUpstream extracts a leak-free clarified_requirement (or similar) summary.
+// SanitizeUpstream extracts a leak-free clarified_requirement (or similar) payload,
+// including a size-capped doc for on-demand full upstream views.
 func SanitizeUpstream(name, content string) map[string]any {
+	return sanitizeUpstream(name, content, true)
+}
+
+// SanitizeUpstreamSummary is the open-path / poll payload: name/title/summary/description
+// only — never doc. Full body is fetched via the dedicated public upstream route.
+func SanitizeUpstreamSummary(name, content string) map[string]any {
+	return sanitizeUpstream(name, content, false)
+}
+
+func sanitizeUpstream(name, content string, includeDoc bool) map[string]any {
 	name = strings.TrimSpace(name)
 	content = strings.TrimSpace(content)
 	if content == "" {
@@ -390,8 +401,10 @@ func SanitizeUpstream(name, content string) map[string]any {
 	if d := stringField(m, "description", "detail", "background"); d != "" {
 		out["description"] = d
 	}
-	if doc := capStructuredDoc(m); doc != nil {
-		out["doc"] = doc
+	if includeDoc {
+		if doc := capStructuredDoc(m); doc != nil {
+			out["doc"] = doc
+		}
 	}
 	if len(out) <= 1 {
 		return nil

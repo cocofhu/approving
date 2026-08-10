@@ -130,6 +130,22 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
         structured: { title: '外部一次审批', goals: ['g1'] },
         turns: [{ role: 'agent', text: '请审阅 page.html', at: '2026-08-01T00:00:00Z' }],
         upstream: { name: 'clarified_requirement.json', title: '澄清', summary: '已有澄清需求文档，可对照审阅当前主产物' },
+        visualHtmlHash: 'e2e-vh',
+        upstreamHash: 'e2e-up',
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+  if (url.includes('/public/gate-approvals/upstream')) {
+    return new Response(
+      JSON.stringify({
+        status: 'active',
+        upstream: {
+          name: 'clarified_requirement.json',
+          title: '澄清',
+          summary: '已有澄清需求文档，可对照审阅当前主产物',
+          doc: { title: '澄清全文', summary: '按需全文', goals: ['三区布局'] },
+        },
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     )

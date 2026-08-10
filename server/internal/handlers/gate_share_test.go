@@ -807,3 +807,62 @@ func fmtPayload(p map[string]any) string {
 	b, _ := json.Marshal(p)
 	return string(b)
 }
+
+func TestPublicGatePreviewOmitsUpstreamDocAndSupportsOnDemandUpstream(t *testing.T) {
+	h := newHarness(t)
+	seedHumanGate(t, h, "run-share-slim", "hg-slim", nil)
+	created := parseJSON(t, h.do(http.MethodPost, "/api/runs/run-share-slim/gates/hg-slim/share-link", map[string]any{"ttlTier": "24h"}))
+	url, _ := created["url"].(string)
+	token := strings.TrimPrefix(url[strings.Index(url, "#t="):], "#t=")
+
+	prev := parseJSON(t, h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: token}))
+	if prev["status"] != models.ShareLinkStateActive {
+		t.Fatalf("preview: %+v", prev)
+	}
+	if prev["visualHtml"] == nil || prev["visualHtml"] == "" {
+		t.Fatalf("first preview must include visualHtml: %+v", prev)
+	}
+	vhHash, _ := prev["visualHtmlHash"].(string)
+	upHash, _ := prev["upstreamHash"].(string)
+	if vhHash == "" || upHash == "" {
+		t.Fatalf("expected hashes: %+v", prev)
+	}
+	up, _ := prev["upstream"].(map[string]any)
+	if up == nil {
+		t.Fatalf("expected upstream summary: %+v", prev)
+	}
+	if _, hasDoc := up["doc"]; hasDoc {
+		t.Fatalf("open preview must not embed upstream.doc: %+v", up)
+	}
+
+	sparse := parseJSON(t, h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{
+		headerShareToken:                       token,
+		gateshare.HeaderKnownVisualHTMLHash:    vhHash,
+		gateshare.HeaderKnownUpstreamHash:      upHash,
+	}))
+	if sparse["visualHtml"] != nil && sparse["visualHtml"] != "" {
+		t.Fatalf("unchanged visualHtml must be omitted: %+v", sparse)
+	}
+	if sparse["upstream"] != nil {
+		t.Fatalf("unchanged upstream must be omitted: %+v", sparse)
+	}
+	if sparse["visualHtmlHash"] != vhHash || sparse["upstreamHash"] != upHash {
+		t.Fatalf("hashes must remain: %+v", sparse)
+	}
+	if sparse["remainingSec"] == nil {
+		t.Fatalf("remainingSec still required: %+v", sparse)
+	}
+
+	full := parseJSON(t, h.doPublic(http.MethodGet, "/public/gate-approvals/upstream", nil, map[string]string{headerShareToken: token}))
+	if full["status"] != models.ShareLinkStateActive {
+		t.Fatalf("upstream status: %+v", full)
+	}
+	fullUp, _ := full["upstream"].(map[string]any)
+	if fullUp == nil || fullUp["doc"] == nil {
+		t.Fatalf("on-demand upstream must include doc: %+v", full)
+	}
+	raw, _ := json.Marshal(fullUp)
+	if strings.Contains(string(raw), "should-hide") || strings.Contains(string(raw), "projectId") {
+		t.Fatalf("on-demand upstream leaked: %s", raw)
+	}
+}
