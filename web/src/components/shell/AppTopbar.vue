@@ -27,6 +27,7 @@ const {
   hasUnreadFailed,
   badgeLabel,
   markRead,
+  markAllRead,
   startPolling,
   stopPolling,
 } = useRunTerminalNotifications()
@@ -83,6 +84,22 @@ function statusLabel(status: string) {
     : t('common.status.completed')
 }
 
+function itemTitle(item: {
+  title: string
+  titleNeutral?: boolean
+  workflowName: string
+  runId: string
+  status: 'completed' | 'failed'
+}) {
+  if (item.titleNeutral) {
+    return t('shell.runNotifications.neutralTitle', {
+      name: item.workflowName || item.runId,
+      status: statusLabel(item.status),
+    })
+  }
+  return item.title
+}
+
 function itemContext(item: { workflowName: string; runId: string; title: string }) {
   const wf = item.workflowName || item.title
   return wf ? `${wf} · ${item.runId}` : item.runId
@@ -111,10 +128,14 @@ function closeOutputModal() {
   outputContext.value = ''
 }
 
+function onMarkAllRead() {
+  markAllRead()
+}
+
 function viewAll() {
-  // Opening "view all" must NOT batch-mark read (plan g2.3 / f3).
+  // Opening "view all" must NOT batch-mark read; goes to independent notifications page.
   closePanel()
-  void router.push({ path: '/runs', query: { status: 'completed,failed' } })
+  void router.push({ path: '/notifications' })
 }
 
 onMounted(() => {
@@ -193,11 +214,22 @@ defineExpose({
         data-testid="run-notifications-panel"
         @click.stop
       >
-        <div class="flex items-center justify-between border-b border-line px-3.5 py-3">
+        <div class="flex items-center justify-between gap-2 border-b border-line px-3.5 py-3">
           <h3 class="m-0 text-[13px] font-semibold text-txt">{{ t('shell.runNotifications.title') }}</h3>
-          <span class="text-xs text-txt3">
-            {{ t('shell.runNotifications.unreadCount', { n: unreadCount }) }}
-          </span>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-txt3">
+              {{ t('shell.runNotifications.unreadCount', { n: unreadCount }) }}
+            </span>
+            <button
+              v-if="unreadCount > 0"
+              type="button"
+              class="border border-line bg-transparent px-2 py-0.5 text-[11px] text-txt2 hover:border-accent hover:text-accent"
+              data-testid="run-notifications-mark-all"
+              @click="onMarkAllRead"
+            >
+              {{ t('shell.runNotifications.markAllRead') }}
+            </button>
+          </div>
         </div>
 
         <div class="max-h-[360px] overflow-auto">
@@ -208,6 +240,7 @@ defineExpose({
           >
             <p class="m-0 text-[13px] text-txt2">{{ t('shell.runNotifications.empty') }}</p>
             <p class="mt-1.5 text-xs text-txt3">{{ t('shell.runNotifications.emptyHint') }}</p>
+            <p class="mt-1.5 text-xs text-txt3">{{ t('shell.runNotifications.emptyRunsHint') }}</p>
           </div>
           <button
             v-for="item in previewItems"
@@ -235,14 +268,17 @@ defineExpose({
                     : 'border-ok/40 text-ok'
                 "
               >{{ statusLabel(item.status) }}</span>
-              <span class="truncate text-[13px] font-medium text-txt">{{ item.title }}</span>
+              <span class="truncate text-[13px] font-medium text-txt">{{ itemTitle(item) }}</span>
             </div>
             <div class="truncate text-xs text-txt3">
               {{ itemContext(item) }}
               <template v-if="item.status === 'completed'">
                 · {{ t('shell.runNotifications.clickForOutput') }}
               </template>
-              · {{ relTime(item.startedAt) }}
+              <template v-else>
+                · {{ t('shell.runNotifications.clickForDetail') }}
+              </template>
+              · {{ relTime(item.finishedApprox || item.startedAt) }}
             </div>
           </button>
         </div>
