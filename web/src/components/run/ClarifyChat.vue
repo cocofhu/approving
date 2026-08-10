@@ -1064,6 +1064,7 @@ function showTurnCompleted(t: ClarifyTurn): boolean {
 defineExpose({
   applyReviewFrame,
   applyAcpEvents,
+  applyQueueState,
   cancelReview,
   discardLastQueued,
   /** Host narrow-update gate: skip loadRun/softRefresh while true. */

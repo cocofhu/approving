@@ -100,10 +100,9 @@ describe('GateShareLinkPanel', () => {
     })
     await flushPromises()
     expect(w.get('[data-testid="gate-share-panel-body"]').text()).toContain('信任')
-    expect(w.get('[data-testid="gate-share-panel-body"]').text()).toContain('外部一次确认')
-    expect(w.get('[data-testid="gate-share-panel-body"]').text()).toContain('不是内部审批工作台')
-    expect(w.get('[data-testid="gate-share-panel-body"]').text()).toContain('不可取点')
-    expect(w.get('[data-testid="gate-share-panel-body"]').text()).not.toMatch(/完成一次审批/)
+    expect(w.get('[data-testid="gate-share-panel-body"]').text()).toContain('审批工作台')
+    expect(w.get('[data-testid="gate-share-panel-body"]').text()).toContain('可取点')
+    expect(w.get('[data-testid="gate-share-panel-body"]').text()).not.toMatch(/不是内部审批工作台|不可取点|外部一次确认页/)
     const ttl24 = w.findAll('[data-testid="gate-share-ttl"]').find((b) => b.attributes('data-tier') === '24h')
     expect(ttl24).toBeTruthy()
 

@@ -151,6 +151,31 @@ export function shareStatusLabel(
   return t('pages.gatesInbox.share.stateNone')
 }
 
+export type PublicGatePreviewTurn = {
+  role: 'agent' | 'human' | string
+  text?: string
+  at?: string
+  interrupted?: boolean
+  annotations?: Array<{
+    selector?: string
+    jsonPath?: string
+    label?: string
+    note?: string
+    quote?: string
+  }>
+}
+
+export type PublicGateQueueItem = {
+  id?: string
+  text?: string
+}
+
+export type PublicGateActiveItem = {
+  id?: string
+  text?: string
+  annotations?: PublicGatePreviewTurn['annotations']
+}
+
 export type PublicGatePreview = {
   status: string
   kind?: 'human_gate' | 'review' | string
@@ -158,10 +183,33 @@ export type PublicGatePreview = {
   description?: string
   remainingSec?: number
   expiresAt?: string
-  actions?: { approve?: string; reject?: string; confirm?: string }
+  actions?: { approve?: string; reject?: string; confirm?: string; reply?: string; cancel?: string }
   visualHtml?: string
-  structured?: { name?: string; title?: string; goals?: unknown; text?: string }
+  structured?: {
+    name?: string
+    title?: string
+    goals?: unknown
+    text?: string
+    description?: string
+    doc?: Record<string, unknown>
+  }
   nonce?: string
+  turns?: PublicGatePreviewTurn[]
+  upstream?: {
+    name?: string
+    title?: string
+    summary?: string
+    description?: string
+    text?: string
+    doc?: Record<string, unknown>
+  }
+  reactSessionAlive?: boolean
+  sessionBusy?: boolean
+  waiting?: number
+  queueItems?: PublicGateQueueItem[]
+  activeItem?: PublicGateActiveItem | null
+  productKind?: 'visual' | 'structured' | 'app_preview' | string
+  productName?: string
 }
 
 export type PublicGateDecideResult = {
@@ -170,6 +218,14 @@ export type PublicGateDecideResult = {
   alreadyProcessed?: boolean
   error?: string
   message?: string
+  kind?: string
+}
+
+export type PublicGateReplyResult = {
+  status: string
+  error?: string
+  message?: string
+  kind?: string
 }
 
 async function readJson<T>(res: Response): Promise<T> {
@@ -225,6 +281,57 @@ export const publicGateApi = {
         })
       }
       return { ...body, status: body.status || (res.status === 409 ? 'used' : body.status) }
+    })
+  },
+  reply(payload: {
+    token: string
+    text: string
+    annotations?: Array<{
+      selector?: string
+      jsonPath?: string
+      label?: string
+      note?: string
+      quote?: string
+    }>
+    images?: Array<{ data?: string; mimeType?: string; name?: string }>
+  }): Promise<PublicGateReplyResult> {
+    return fetch('/public/gate-approvals/reply', {
+      method: 'POST',
+      credentials: 'omit',
+      headers: {
+        'Content-Type': 'application/json',
+        [GATE_SHARE_REQUEST_HEADER]: '1',
+      },
+      body: JSON.stringify(payload),
+    }).then(async (res) => {
+      const body = await readJson<PublicGateReplyResult>(res)
+      if (!res.ok) {
+        throw Object.assign(new Error(body.message || body.error || `${res.status}`), {
+          status: res.status,
+          body,
+        })
+      }
+      return body
+    })
+  },
+  cancel(token: string): Promise<PublicGateReplyResult> {
+    return fetch('/public/gate-approvals/cancel', {
+      method: 'POST',
+      credentials: 'omit',
+      headers: {
+        'Content-Type': 'application/json',
+        [GATE_SHARE_REQUEST_HEADER]: '1',
+      },
+      body: JSON.stringify({ token }),
+    }).then(async (res) => {
+      const body = await readJson<PublicGateReplyResult>(res)
+      if (!res.ok) {
+        throw Object.assign(new Error(body.message || body.error || `${res.status}`), {
+          status: res.status,
+          body,
+        })
+      }
+      return body
     })
   },
 }

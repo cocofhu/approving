@@ -19,7 +19,7 @@ type ExternalResumeResult struct {
 }
 
 // ResumeGateExternal consumes a share link (CAS) then resumes the bound human_gate.
-// reviewer is always empty (system + unattributable). Name is audit-only.
+// External confirm and reject both require non-empty name + comment (audit).
 func (e *Engine) ResumeGateExternal(share *gateshare.Service, token, action, comment, externalName string) (*ExternalResumeResult, error) {
 	if e.IsHalted() {
 		return nil, errors.New("server is shutting down")
@@ -60,8 +60,8 @@ func (e *Engine) ResumeGateExternal(share *gateshare.Service, token, action, com
 	if !gateshare.IsWhitelistedExternalAction(action, lookup.Gate.Actions) {
 		return nil, gateshare.ErrNoStandardAction
 	}
-	if gateshare.IsFailAction(action) && strings.TrimSpace(comment) == "" {
-		return nil, gateshare.ErrCommentRequired
+	if strings.TrimSpace(externalName) == "" || strings.TrimSpace(comment) == "" {
+		return nil, gateshare.ErrAuditRequired
 	}
 
 	unlock := e.lockResume(lookup.Link.RunID + ":" + lookup.Link.NodeID)
