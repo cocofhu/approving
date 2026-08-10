@@ -383,7 +383,8 @@ export interface ChannelConfigInput {
 
 export const api = {
   // projects
-  listProjects: () => req<Project[]>('/projects'),
+  listProjects: (opts?: { signal?: AbortSignal }) =>
+    req<Project[]>('/projects', opts?.signal ? { signal: opts.signal } : undefined),
   getProject: (id: string) => req<Project>(`/projects/${id}`),
   createProject: (body: Partial<Project>) =>
     req<Project>('/projects', { method: 'POST', body: JSON.stringify(body) }),
@@ -653,6 +654,7 @@ export const api = {
     sort?: string
     /** Whitelist: asc | desc. Only sent when paired with a valid sort. */
     order?: 'asc' | 'desc' | string
+    signal?: AbortSignal
   }) => {
     const qs = new URLSearchParams()
     if (params?.status) qs.set('status', params.status)
@@ -672,10 +674,11 @@ export const api = {
     }
     const q = qs.toString()
     const path = q ? `/runs?${q}` : '/runs'
+    const init = params?.signal ? { signal: params.signal } : undefined
     if (params?.page != null || params?.pageSize != null) {
-      return req<PaginatedResponse<Run>>(path)
+      return req<PaginatedResponse<Run>>(path, init)
     }
-    return req<Run[]>(path)
+    return req<Run[]>(path, init)
   },
   getRun: (id: string) => req<Run>(`/runs/${id}`),
   inboxContext: (
@@ -1178,7 +1181,14 @@ export const api = {
   /** Console noVNC: sandbox-scoped WS (not preview runId/nodeId/port). */
   sandboxVncWsUrl: (sandboxId: number) =>
     rootWsUrl(`/sandbox-vnc/${sandboxId}/ws`),
-  listGates: (params?: { page?: number; pageSize?: number; wf?: string; projectId?: string; tag?: string }) => {
+  listGates: (params?: {
+    page?: number
+    pageSize?: number
+    wf?: string
+    projectId?: string
+    tag?: string
+    signal?: AbortSignal
+  }) => {
     const qs = new URLSearchParams()
     if (params?.page != null) qs.set('page', String(params.page))
     if (params?.pageSize != null) qs.set('pageSize', String(params.pageSize))
@@ -1187,10 +1197,11 @@ export const api = {
     if (params?.tag) qs.set('tag', params.tag)
     const q = qs.toString()
     const path = q ? `/gates?${q}` : '/gates'
+    const init = params?.signal ? { signal: params.signal } : undefined
     if (params?.page != null || params?.pageSize != null) {
-      return req<PaginatedResponse<InboxItem>>(path)
+      return req<PaginatedResponse<InboxItem>>(path, init)
     }
-    return req<InboxItem[]>(path)
+    return req<InboxItem[]>(path, init)
   },
   dashboard: () => req<DashboardStats>('/stats/dashboard'),
   // platform settings (scheduling params)
