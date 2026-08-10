@@ -25,10 +25,131 @@ function makeRun(partial: Record<string, unknown>) {
     startedAt: (partial.startedAt as string) || '2026-08-10T12:00:00Z',
     durationSec: (partial.durationSec as number) ?? 60,
     progress: 100,
+    nodes: [],
+    edges: [],
     nodeRuns: {},
     artifacts: [],
     ...partial,
   }
+}
+
+/** Completed run with outputCards + audit artifacts (node_complete must stay out of modal). */
+function makeCompletedWithCards(partial: Record<string, unknown>) {
+  return makeRun({
+    nodes: [{ id: 'out-1', type: 'output', label: '输出', position: { x: 0, y: 0 }, config: {} }],
+    nodeRuns: {
+      'out-1': {
+        nodeId: 'out-1',
+        status: 'completed',
+        startedAt: '2026-08-10T16:01:00Z',
+        outputs: {
+          outputCards: [
+            {
+              index: 1,
+              title: '视觉 Demo',
+              template: 'artifact("page.html")',
+              typeTag: '自定义产物',
+              status: 'ok',
+              artifactName: 'page.html',
+            },
+            {
+              index: 2,
+              title: '澄清需求',
+              template: 'artifact("clarified_requirement.json")',
+              typeTag: '结构化产物',
+              status: 'ok',
+              structuredArtifactName: 'clarified_requirement.json',
+              jsonSnapshot: JSON.stringify({
+                title: '运行产出弹窗仅展示输出节点最终结果来源',
+                summary: '通知弹窗改为输出结果卡',
+              }),
+            },
+          ],
+        },
+      },
+    },
+    artifacts: [
+      {
+        id: 'a-research',
+        name: 'research.json',
+        kind: 'json',
+        nodeId: 'research',
+        runId: partial.id || 'run',
+        workflowName: '自我迭代',
+        sizeBytes: 10800,
+        createdAt: '2026-08-10T16:00:00Z',
+      },
+      {
+        id: 'a-nc',
+        name: 'node_complete.json',
+        kind: 'json',
+        nodeId: 'submit_mr',
+        runId: partial.id || 'run',
+        workflowName: '自我迭代',
+        sizeBytes: 1024,
+        createdAt: '2026-08-10T16:02:00Z',
+      },
+      {
+        id: 'a-page',
+        name: 'page.html',
+        kind: 'html',
+        nodeId: 'visual',
+        runId: partial.id || 'run',
+        workflowName: '自我迭代',
+        sizeBytes: 20800,
+        createdAt: '2026-08-10T16:00:30Z',
+      },
+      {
+        id: 'a-plan',
+        name: 'plan.json',
+        kind: 'json',
+        nodeId: 'plan',
+        runId: partial.id || 'run',
+        workflowName: '自我迭代',
+        sizeBytes: 5000,
+        createdAt: '2026-08-10T16:00:10Z',
+      },
+    ],
+    ...partial,
+  })
+}
+
+/** Completed run with output node but empty cards → empty dual-exit path. */
+function makeCompletedEmptyCards(partial: Record<string, unknown>) {
+  return makeRun({
+    nodes: [{ id: 'out-1', type: 'output', label: '输出', position: { x: 0, y: 0 }, config: {} }],
+    nodeRuns: {
+      'out-1': {
+        nodeId: 'out-1',
+        status: 'completed',
+        startedAt: '2026-08-10T15:01:00Z',
+        outputs: { outputCards: [] },
+      },
+    },
+    artifacts: [
+      {
+        id: 'a-nc-empty',
+        name: 'node_complete.json',
+        kind: 'json',
+        nodeId: 'agent-1',
+        runId: partial.id || 'run',
+        workflowName: '自我迭代',
+        sizeBytes: 900,
+        createdAt: '2026-08-10T15:02:00Z',
+      },
+      {
+        id: 'a-plan-empty',
+        name: 'plan.json',
+        kind: 'json',
+        nodeId: 'plan',
+        runId: partial.id || 'run',
+        workflowName: '自我迭代',
+        sizeBytes: 4000,
+        createdAt: '2026-08-10T15:00:10Z',
+      },
+    ],
+    ...partial,
+  })
 }
 
 const historyItems = [
@@ -49,7 +170,7 @@ const historyItems = [
 ]
 
 const postEnableItems = [
-  makeRun({
+  makeCompletedWithCards({
     id: 'run-new-ok',
     status: 'completed',
     title: '运行中 4 等待 1 暂停 0 失败 0 已完成',
@@ -65,7 +186,7 @@ const postEnableItems = [
     startedAt: '2026-08-10T17:00:00Z',
     durationSec: 20,
   }),
-  makeRun({
+  makeCompletedEmptyCards({
     id: 'run-clean',
     status: 'completed',
     title: '干净标题无噪声',
@@ -107,6 +228,22 @@ window.fetch = async (input: RequestInfo | URL) => {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     })
+  }
+  if (url.includes('/artifacts/') && url.includes('/content')) {
+    return new Response(
+      JSON.stringify({
+        id: 'a-page',
+        name: 'page.html',
+        kind: 'html',
+        nodeId: 'visual',
+        runId: 'run-new-ok',
+        workflowName: '自我迭代',
+        sizeBytes: 20800,
+        createdAt: '2026-08-10T16:00:30Z',
+        content: '<!doctype html><html><body><h1>视觉 Demo</h1><p>最终结果来源预览</p></body></html>',
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    )
   }
   if (url.includes('/runs/') && !url.includes('?')) {
     const id = url.split('/runs/')[1]?.split(/[?#]/)[0] || ''
