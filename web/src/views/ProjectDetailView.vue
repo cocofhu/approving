@@ -1276,6 +1276,7 @@ onUnmounted(() => {
           <button
             type="button"
             class="p-0 text-[13px] text-accent-2 underline underline-offset-2 hover:text-txt"
+            data-testid="project-detail-merge-rules"
             @click="helpOpen = true"
           >
             {{ t('pages.projectDetail.viewMergeRules') }}
@@ -1412,6 +1413,7 @@ onUnmounted(() => {
           <button
             type="button"
             class="p-0 text-[13px] text-accent-2 underline underline-offset-2 hover:text-txt"
+            data-testid="project-detail-merge-rules"
             @click="helpOpen = true"
           >
             {{ t('pages.projectDetail.viewMergeRules') }}
@@ -1746,6 +1748,15 @@ onUnmounted(() => {
         <p>{{ t('pages.projectDetail.helpMerge') }}</p>
         <p>{{ t('pages.projectDetail.helpNamespaces') }}</p>
         <p>{{ t('pages.projectDetail.helpSecret') }}</p>
+        <div
+          class="border border-accent/40 bg-accent-dim px-3 py-2.5 text-txt"
+          data-testid="merge-rules-new-note"
+        >
+          <span class="mb-1 inline-flex border border-ok/35 bg-ok/10 px-2 py-0.5 text-[12px] text-ok">
+            {{ t('pages.projectDetail.helpNewBadge') }}
+          </span>
+          <p class="m-0 text-sm">{{ t('pages.projectDetail.helpDisableSave') }}</p>
+        </div>
       </div>
     </AppModal>
   </div>

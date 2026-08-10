@@ -349,17 +349,24 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
     const headerActions = page.getByTestId('project-detail-header-actions')
     await expect(headerActions.getByTestId('project-token-stat')).toBeVisible()
     await expect(headerActions.getByRole('button', { name: '删除' })).toHaveCount(0)
-    // 页头不应再有「合并规则」按钮；Tab hint 旁的「查看合并规则」链接在进入对应 Tab 后才出现
-    await expect(page.getByRole('button', { name: '合并规则' })).toHaveCount(0)
+    // 页头不应再有「合并规则」按钮；Tab hint 旁的「合并规则」链接在进入对应 Tab 后才出现
+    await expect(headerActions.getByRole('button', { name: '合并规则' })).toHaveCount(0)
   })
 
   test('沙箱空态：同壳面板 + primary「添加一行」+ 合并规则入口', async ({ page }) => {
     await gotoProjectDetailWithProject(page, MOCK_PROJECT)
     await page.getByRole('button', { name: '沙箱环境变量' }).click()
 
-    await expect(page.getByRole('button', { name: '查看合并规则' })).toBeVisible()
-    await page.getByRole('button', { name: '查看合并规则' }).click()
+    await expect(page.getByRole('button', { name: '合并规则' })).toBeVisible()
+    await page.getByRole('button', { name: '合并规则' }).click()
     await expect(page.getByText('环境变量与工作流变量')).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByText(/沙箱 OS 环境变量合并顺序/)).toBeVisible()
+    await expect(page.getByText(/两套命名空间/)).toBeVisible()
+    await expect(page.getByText(/密钥项回读打码/)).toBeVisible()
+    const newNote = page.getByTestId('merge-rules-new-note')
+    await expect(newNote).toBeVisible()
+    await expect(newNote.getByText('新增', { exact: true })).toBeVisible()
+    await expect(newNote.getByText('停用的行会保留 key/value，但不参与注入；开关与字段变更须保存后，才影响下次注入。')).toBeVisible()
     await page.keyboard.press('Escape')
 
     const shell = page
@@ -408,7 +415,14 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
     await expect(legacyRow).toHaveAttribute('data-env-enabled', 'true')
     await expect(legacyRow.getByText('开', { exact: true })).toBeVisible()
     await expect(legacyRow.getByText('· 旧')).toHaveCount(0)
-    await expect(page.getByText(/可临时停用|须保存后才影响/)).toBeVisible()
+    await expect(page.getByText('注入流水线节点沙箱的 OS 环境变量。')).toBeVisible()
+    await page.getByTestId('project-detail-merge-rules').click()
+    await expect(page.getByText(/沙箱 OS 环境变量合并顺序/)).toBeVisible()
+    await expect(page.getByText(/两套命名空间/)).toBeVisible()
+    await expect(page.getByText(/密钥项回读打码/)).toBeVisible()
+    const newNote = page.getByTestId('merge-rules-new-note')
+    await expect(newNote.getByText('新增', { exact: true })).toBeVisible()
+    await expect(newNote.getByText('停用的行会保留 key/value，但不参与注入；开关与字段变更须保存后，才影响下次注入。')).toBeVisible()
   })
 
   test('沙箱启用开关：停用弱化 + 保存 payload 含 enabled:false', async ({ page }) => {
@@ -532,7 +546,13 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
 
     const addBtn = shell.getByRole('button', { name: '添加一行' })
     await expect(addBtn).toHaveClass(/bg-accent/)
-    await expect(page.getByRole('button', { name: '查看合并规则' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '合并规则' })).toBeVisible()
+    await page.getByRole('button', { name: '合并规则' }).click()
+    await expect(page.getByText('环境变量与工作流变量')).toBeVisible({ timeout: 5_000 })
+    const newNote = page.getByTestId('merge-rules-new-note')
+    await expect(newNote).toBeVisible()
+    await expect(newNote.getByText('新增', { exact: true })).toBeVisible()
+    await expect(newNote.getByText('停用的行会保留 key/value，但不参与注入；开关与字段变更须保存后，才影响下次注入。')).toBeVisible()
   })
 
   test('工作流变量有数据：表头 + 底栏 + 次行描述', async ({ page }) => {

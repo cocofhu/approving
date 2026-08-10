@@ -81,7 +81,7 @@ test.describe('项目 env 官方 ACP 鉴权键 UI', () => {
     await expect(cursorRow.getByRole('button', { name: '密钥' })).toBeDisabled()
     await expect(panel.getByRole('button', { name: '明文' })).toBeEnabled()
 
-    await page.getByRole('button', { name: '查看合并规则' }).click()
+    await page.getByRole('button', { name: '合并规则' }).click()
     await expect(page.getByText('环境变量与工作流变量')).toBeVisible({ timeout: 5_000 })
     await expect(page.getByText(/官方 ACP 鉴权键可写入项目 env 作为流水线底噪/)).toBeVisible()
     await expect(page.getByText(/Agent Studio 不继承项目 env/)).toBeVisible()
