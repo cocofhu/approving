@@ -22,6 +22,7 @@ vi.mock('@/lib/useShutdownState', () => ({
 vi.mock('@/lib/useAuth', () => ({
   useAuth: () => ({
     user: ref({ username: 'tester', expiresAt: 't' }),
+    ready: ref(true),
   }),
 }))
 

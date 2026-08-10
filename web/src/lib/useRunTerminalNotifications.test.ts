@@ -1,6 +1,13 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ref } from 'vue'
 import type { Run } from '@/lib/types'
+
+const authUser = ref<{ username: string; expiresAt: string } | null>({
+  username: 'alice',
+  expiresAt: 't',
+})
+const authReady = ref(true)
 
 vi.mock('@/lib/api', () => ({
   api: {
@@ -12,7 +19,8 @@ vi.mock('@/lib/api', () => ({
 
 vi.mock('@/lib/useAuth', () => ({
   useAuth: () => ({
-    user: { value: { username: 'alice', expiresAt: 't' } },
+    user: authUser,
+    ready: authReady,
   }),
 }))
 
@@ -116,6 +124,8 @@ describe('isNoisyNotificationTitle / mapRunToNotification', () => {
 describe('useRunTerminalNotifications', () => {
   beforeEach(() => {
     localStorage.clear()
+    authUser.value = { username: 'alice', expiresAt: 't' }
+    authReady.value = true
     __resetRunTerminalNotificationsForTests()
     vi.mocked(api.listRuns).mockReset()
     vi.mocked(api.listRuns).mockResolvedValue(paged([]))
@@ -249,5 +259,41 @@ describe('useRunTerminalNotifications', () => {
     const prefs = JSON.parse(localStorage.getItem(prefsKeyForUser('alice')) || '{}')
     expect(prefs.enabledAt).toBeTruthy()
     expect(prefs.readIds).toContain('legacy-1')
+  })
+
+  it('does not hydrate anonymous prefs before auth; rehydrates on user settle without focus', async () => {
+    // Drop ready before clearing user so we never briefly settle as anonymous.
+    authReady.value = false
+    authUser.value = null
+    localStorage.setItem(
+      prefsKeyForUser('alice'),
+      JSON.stringify({ enabledAt: '2020-01-01T00:00:00Z', readIds: [] }),
+    )
+    localStorage.removeItem(prefsKeyForUser('anonymous'))
+    vi.mocked(api.listRuns).mockResolvedValue(
+      paged([
+        run({ id: 'a', status: 'completed' }),
+        run({ id: 'b', status: 'failed' }),
+        run({ id: 'c', status: 'completed' }),
+      ]),
+    )
+
+    const n = useRunTerminalNotifications()
+    n.startPolling()
+    // Pre-auth: no anonymous prefs stamp, unread stays 0 (no baseline).
+    expect(localStorage.getItem(prefsKeyForUser('anonymous'))).toBeNull()
+    expect(n.ensureUsername()).toBe(false)
+    expect(n.unreadCount.value).toBe(0)
+    expect(n.badgeLabel.value).toBe('')
+
+    // Auth paints: sync watch rehydrates user prefs and refreshes pool.
+    authUser.value = { username: 'alice', expiresAt: 't' }
+    authReady.value = true
+    await vi.waitFor(() => {
+      expect(n.unreadCount.value).toBe(3)
+      expect(n.badgeLabel.value).toBe('3')
+    })
+    expect(localStorage.getItem(prefsKeyForUser('anonymous'))).toBeNull()
+    n.stopPolling()
   })
 })

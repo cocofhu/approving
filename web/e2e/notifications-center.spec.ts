@@ -1,17 +1,15 @@
 import { expect, test, type Page } from '@playwright/test'
 
-/** AppTopbar may hydrate prefs as anonymous before /auth/me; focus triggers refresh+ensureUsername. */
-async function settleAuthAndRefresh(page: Page) {
+/** Wait for /auth/me to paint; prefs must hydrate on auth settle (no focus/poll required). */
+async function settleAuth(page: Page) {
   await expect(page.getByText('e2e', { exact: true })).toBeVisible({ timeout: 15_000 })
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
-  await page.waitForTimeout(300)
 }
 
 test.describe('shell notification center (IA separation)', () => {
   test('dropdown titled 通知; empty has no clickable runs escape', async ({ page }) => {
     await page.goto('/notifications-center.html?scene=empty')
     await expect(page.getByTestId('shell-main-dashboard')).toBeVisible({ timeout: 15_000 })
-    await settleAuthAndRefresh(page)
+    await settleAuth(page)
 
     const bell = page.getByTestId('run-notifications-bell')
     await expect(bell).toHaveAttribute('aria-label', '通知')
@@ -34,7 +32,7 @@ test.describe('shell notification center (IA separation)', () => {
   test('history-only enable: badge not inventory; list items are read', async ({ page }) => {
     await page.goto('/notifications-center.html?scene=history-only&start=notifications')
     await expect(page.getByTestId('notifications-page')).toBeVisible({ timeout: 15_000 })
-    await settleAuthAndRefresh(page)
+    await settleAuth(page)
     await expect(page.getByTestId('run-notifications-badge')).toHaveCount(0)
     const items = page.getByTestId('notifications-item')
     await expect(items).toHaveCount(2)
@@ -48,7 +46,7 @@ test.describe('shell notification center (IA separation)', () => {
   }) => {
     await page.goto('/notifications-center.html?scene=with-items')
     await expect(page.getByTestId('shell-main-dashboard')).toBeVisible({ timeout: 15_000 })
-    await settleAuthAndRefresh(page)
+    await settleAuth(page)
 
     const badge = page.getByTestId('run-notifications-badge')
     await expect(badge).toBeVisible()
@@ -83,7 +81,7 @@ test.describe('shell notification center (IA separation)', () => {
   test('completed click opens output modal and marks read', async ({ page }) => {
     await page.goto('/notifications-center.html?scene=with-items')
     await expect(page.getByTestId('shell-main-dashboard')).toBeVisible({ timeout: 15_000 })
-    await settleAuthAndRefresh(page)
+    await settleAuth(page)
     await expect(page.getByTestId('run-notifications-badge')).toHaveText('3')
     await page.getByTestId('run-notifications-bell').click()
     await page
@@ -97,15 +95,13 @@ test.describe('shell notification center (IA separation)', () => {
     await expect(page.getByTestId('run-notifications-badge')).toHaveText('2')
   })
 
-  test('auth race: badge wrong until focus refresh after /auth/me', async ({ page }) => {
+  test('auth settle: badge matches unread immediately after /auth/me (no focus needed)', async ({
+    page,
+  }) => {
     await page.goto('/notifications-center.html?scene=with-items')
     await expect(page.getByTestId('shell-main-dashboard')).toBeVisible({ timeout: 15_000 })
     await expect(page.getByText('e2e', { exact: true })).toBeVisible({ timeout: 15_000 })
-    // Immediately after auth paints, prefs may still be anonymous-hydrated → badge absent.
-    const before = await page.getByTestId('run-notifications-badge').count()
-    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    // Must not under-count until focus/15s poll — auth watch rehydrates prefs sync.
     await expect(page.getByTestId('run-notifications-badge')).toHaveText('3', { timeout: 5_000 })
-    // Record whether the race manifested (informational; badge must recover after focus).
-    expect(before === 0 || before === 1).toBeTruthy()
   })
 })

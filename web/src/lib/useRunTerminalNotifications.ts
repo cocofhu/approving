@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { api, isPaginated } from '@/lib/api'
 import type { Run } from '@/lib/types'
 import { createTimeoutController, isAbortError } from '@/lib/loadingRequest'
@@ -37,6 +37,7 @@ export type RunTerminalRefreshSource =
   | 'visibility'
   | 'focus'
   | 'manual'
+  | 'auth'
 
 interface NotificationPrefs {
   /** Feature-enable baseline; history before this is always treated as read. */
@@ -178,6 +179,22 @@ let abortCtrl: AbortController | null = null
 let pollTimer: number | undefined
 let listenersAttached = false
 let prefsHydrated = false
+let authWatchInstalled = false
+
+/**
+ * Resolve the prefs username only after auth has settled.
+ * Avoid hydrating as `anonymous` while /auth/me is in flight — that stamped
+ * enabledAt≈now and under-counted the badge until focus/poll rehydrated.
+ */
+function resolveUsername(): { name: string; settled: boolean } {
+  const { user, ready } = useAuth()
+  const name = user.value?.username?.trim() || ''
+  if (name) return { name, settled: true }
+  // Auth explicitly in flight (ready===false) → wait; do not stamp anonymous prefs.
+  if (ready && ready.value === false) return { name: '', settled: false }
+  // ready===true with no user, or callers/tests without ready → anonymous fallback.
+  return { name: 'anonymous', settled: true }
+}
 
 function isUnread(n: RunTerminalNotification): boolean {
   if (readIds.value.has(n.runId)) return false
@@ -217,23 +234,58 @@ const remainingCount = computed(() => Math.max(pool.value.length - RUN_TERMINAL_
 
 const poolTotal = computed(() => pool.value.length)
 
-function ensureUsername() {
-  const { user } = useAuth()
-  const next = user.value?.username?.trim() || 'anonymous'
-  if (next !== usernameKey.value) {
-    usernameKey.value = next
-    const prefs = loadPrefs(next)
+/** @returns true when prefs are hydrated for a settled auth identity */
+function ensureUsername(): boolean {
+  const { name, settled } = resolveUsername()
+  if (!settled) {
+    // Stay pending so the next real identity always rehydrates (no anonymous stamp).
+    prefsHydrated = false
+    return false
+  }
+  if (name !== usernameKey.value) {
+    usernameKey.value = name
+    const prefs = loadPrefs(name)
     enabledAt.value = prefs.enabledAt
     readIds.value = new Set(prefs.readIds)
     prefsHydrated = true
-    return
+    return true
   }
   if (!prefsHydrated) {
-    const prefs = loadPrefs(next)
+    const prefs = loadPrefs(name)
     enabledAt.value = prefs.enabledAt
     readIds.value = new Set(prefs.readIds)
     prefsHydrated = true
   }
+  return true
+}
+
+function onAuthIdentityChange() {
+  const prevKey = usernameKey.value
+  const prevHydrated = prefsHydrated
+  const ok = ensureUsername()
+  if (!ok) return
+  // Rehydrate + refresh as soon as auth paints — do not wait for focus/15s poll.
+  if (!prevHydrated || prevKey !== usernameKey.value) {
+    void refresh({ source: 'auth' })
+  }
+}
+
+function installAuthWatch() {
+  if (authWatchInstalled) return
+  authWatchInstalled = true
+  const { user, ready } = useAuth()
+  watch(
+    () =>
+      [
+        // Treat missing ready (legacy mocks) as settled; only ready===false blocks.
+        ready ? ready.value : true,
+        user.value?.username?.trim() || '',
+      ] as const,
+    () => {
+      onAuthIdentityChange()
+    },
+    { flush: 'sync' },
+  )
 }
 
 function persistCurrent() {
@@ -284,8 +336,22 @@ async function fetchPool(signal?: AbortSignal): Promise<RunTerminalNotification[
 }
 
 async function refresh(opts?: { source?: RunTerminalRefreshSource }): Promise<void> {
-  ensureUsername()
-  if (refreshPromise) return refreshPromise
+  installAuthWatch()
+  const hydrated = ensureUsername()
+  // Auth still in flight: keep pool empty of unread semantics until identity settles.
+  if (!hydrated && opts?.source !== 'auth') {
+    return
+  }
+  if (refreshPromise) {
+    // Identity flip must not join the prior flight that may have started pre-auth.
+    if (opts?.source === 'auth') {
+      refreshGeneration++
+      abortCtrl?.abort()
+      refreshPromise = null
+    } else {
+      return refreshPromise
+    }
+  }
 
   const gen = ++refreshGeneration
   abortCtrl?.abort()
@@ -298,6 +364,8 @@ async function refresh(opts?: { source?: RunTerminalRefreshSource }): Promise<vo
     try {
       const next = await fetchPool(tc.signal)
       if (gen !== refreshGeneration) return
+      // Auth may have settled while the request was in flight.
+      ensureUsername()
       pool.value = next
       // Keep read set bounded to current pool (+ already-persisted ids intersecting pool).
       const poolIds = new Set(next.map((n) => n.runId))
@@ -334,8 +402,9 @@ function onFocus() {
 }
 
 function startPolling() {
-  ensureUsername()
+  installAuthWatch()
   stopPolling()
+  // If auth is not ready yet, skip mount fetch; auth watch will refresh on settle.
   void refresh({ source: 'mount' })
   if (typeof window === 'undefined') return
   pollTimer = window.setInterval(() => {
@@ -376,6 +445,7 @@ export function __resetRunTerminalNotificationsForTests() {
   refreshPromise = null
   refreshGeneration = 0
   prefsHydrated = false
+  // Keep authWatchInstalled: watch is idempotent and must survive test resets.
 }
 
 export function useRunTerminalNotifications() {
