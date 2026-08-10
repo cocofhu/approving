@@ -20,6 +20,25 @@
       "openNav": "Open navigation menu",
       "closeNav": "Close navigation menu",
       "backToList": "Back to list"
+    },
+    "runNotifications": {
+      "title": "Run notifications",
+      "unreadCount": "{n} unread",
+      "empty": "No run notifications",
+      "emptyHint": "Completed or failed runs will show up here",
+      "moreHint": "{n} more not shown",
+      "viewAll": "View all notifications",
+      "clickForOutput": "Click to view outputs",
+      "outputTitle": "Run outputs",
+      "outputHint": "Browse this run’s outputs as 16:9 PPT-style cards. Select a card to preview.",
+      "outputCard": "Output card",
+      "noArtifacts": "This run has no outputs",
+      "noArtifactsHint": "Open the run detail to inspect execution",
+      "openRunDetail": "Open run detail",
+      "done": "Done",
+      "previewLabel": "Preview",
+      "previewSummary": "Kind {kind} · artifact {name} (in-app summary preview)",
+      "loadingOutputs": "Loading outputs…"
     }
   }
 }

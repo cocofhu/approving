@@ -20,6 +20,25 @@
       "openNav": "打开导航菜单",
       "closeNav": "关闭导航菜单",
       "backToList": "返回列表"
+    },
+    "runNotifications": {
+      "title": "运行通知",
+      "unreadCount": "{n} 条未读",
+      "empty": "暂无运行通知",
+      "emptyHint": "执行完成或失败后会出现在这里",
+      "moreHint": "还有 {n} 条未展示",
+      "viewAll": "查看全部通知",
+      "clickForOutput": "点击查看产出",
+      "outputTitle": "运行产出",
+      "outputHint": "以 PPT 幻灯片卡片浏览本次输出产物，点击卡片可预览。",
+      "outputCard": "产出卡片",
+      "noArtifacts": "本次运行暂无产出",
+      "noArtifactsHint": "可打开 Run 详情查看执行过程",
+      "openRunDetail": "打开 Run 详情",
+      "done": "完成",
+      "previewLabel": "预览",
+      "previewSummary": "类型 {kind} · 产物 {name}（站内摘要预览）",
+      "loadingOutputs": "正在加载产出…"
     }
   }
 }
