@@ -52,6 +52,11 @@ func (e *Engine) ResumeReviewExternal(share *gateshare.Service, token, action st
 		return nil, gateshare.ErrNotReviewSession
 	}
 
+	// Check busy before CAS so a mid-stream confirm does not flicker consume/rollback.
+	if !e.ReviewSessionReady(lookup.Link.RunID, lookup.Link.NodeID) {
+		return &ExternalResumeResult{Status: "busy", Link: &lookup.Link}, gateshare.ErrReviewBusy
+	}
+
 	consumed, usedLink, err := share.ConsumeCAS(lookup.Link.ID, "confirm")
 	if err != nil {
 		return nil, err

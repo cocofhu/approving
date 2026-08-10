@@ -322,7 +322,7 @@ test('已上报全 0：总 token 显示 0（非 —）', async ({ page }) => {
   await expect(total).not.toContainText('—')
 })
 
-test('多次：Σ/平均忽略无 usage Run；口径说明可见', async ({ page }) => {
+test('多次：总/平均 token 忽略无用量 Run；先展 picker 再勾选', async ({ page }) => {
   const withUsage = buildRun({ withUsage: true, id: 'run-stats-token-e2e' })
   const without = buildRun({
     withUsage: false,
@@ -338,22 +338,33 @@ test('多次：Σ/平均忽略无 usage Run；口径说明可见', async ({ page
   await multiTab.click()
   await expect(page.getByTestId('stats-kpi-sum-tokens')).toBeVisible({ timeout: 10_000 })
 
-  // select both runs if chips exist
-  const chip2 = page.getByText(/run-stats-token-e2e-2|#2/).first()
-  if (await chip2.isVisible().catch(() => false)) {
-    await chip2.click()
+  // g1.3 / g5.2: picker collapsed by default; open then ensure secondary is selected
+  await expect(page.getByTestId('stats-multi-picker')).toHaveCount(0)
+  await page.getByTestId('stats-multi-picker-toggle').click()
+  await expect(page.getByTestId('stats-multi-picker')).toBeVisible()
+
+  const row2 = page.locator('[data-testid="stats-multi-picker-row"][data-run-id="run-stats-token-e2e-2"]')
+  await expect(row2).toBeVisible()
+  if ((await row2.getAttribute('aria-pressed')) !== 'true') {
+    await row2.click()
   }
 
-  const sum = page.getByTestId('stats-kpi-sum-tokens')
-  const avg = page.getByTestId('stats-kpi-avg-tokens')
-  await expect(sum).toContainText(/14,?940/)
-  await expect(sum).toContainText('仅合计有 usage')
-  // average denom = 1 (only the usage run)
-  await expect(avg).toContainText(/14,?940/)
-  await expect(avg).toContainText(/分母=有用量 Run 数 1/)
+  await expect(page.getByTestId('stats-kpi-sum-tokens-value')).toHaveText(/14\.9K token/)
+  await expect(page.getByTestId('stats-kpi-sum-tokens')).toContainText('只统计有上报用量的执行')
+  await expect(page.getByTestId('stats-kpi-avg-tokens-value')).toHaveText(/14\.9K token/)
+  await expect(page.getByTestId('stats-kpi-avg-tokens')).toContainText(/按 1 次有用量的执行取平均/)
 
   const multiRate = page.getByTestId('stats-kpi-multi-token-rate')
-  await expect(multiRate).toContainText('÷ 所选总耗时之和')
+  await expect(multiRate).toContainText('总 token ÷ 所选执行总耗时')
+  await expect(page.getByTestId('stats-kpi-process-count')).toContainText('过程执行次数')
+
+  const panelText = await page.getByTestId('execution-stats-panel').innerText()
+  expect(panelText).not.toMatch(/\busage\b/i)
+  expect(panelText).not.toContain('分母=')
+  expect(panelText).not.toContain('Σ')
+
+  await expect(page.getByTestId('stats-selected-runs-title')).toBeVisible()
+  await expect(page.getByTestId('stats-multi-compare-bar')).toBeVisible()
 
   await page.screenshot({
     path: path.join(shotDir, 'stats-multi-mixed-usage.png'),

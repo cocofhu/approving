@@ -13,6 +13,7 @@ import CopyWorkflowModal from '@/components/workflow/CopyWorkflowModal.vue'
 import ExportVersionModal from '@/components/workflow/ExportVersionModal.vue'
 import BoardView from '@/views/BoardView.vue'
 import { api } from '@/lib/api'
+import { createListRequestSeq, httpStatusOf } from '@/lib/listRequestSeq'
 import { writeStoredProjectId } from '@/lib/useProjectContext'
 import { useToast } from '@/lib/useToast'
 import { fmtTime } from '@/lib/format'
@@ -81,6 +82,17 @@ const projectId = computed(() => route.params.id as string)
 const project = ref<Project | null>(null)
 const workflows = ref<Workflow[]>([])
 const loading = ref(true)
+const hasInitialLoaded = ref(false)
+const loadFailed = ref(false)
+const loadDenied = ref(false)
+const notFound = ref(false)
+const wfRefreshing = ref(false)
+const projectSeq = createListRequestSeq()
+const workflowSeq = createListRequestSeq()
+const initialLoading = computed(() => loading.value && !project.value)
+const showRefreshProgress = computed(
+  () => (loading.value && !!project.value) || wfRefreshing.value,
+)
 const initialLegacyPmSettings = route.query.tab === LEGACY_PM_SETTINGS_TAB
 const initialLegacyPmMemory = route.query.tab === LEGACY_PM_MEMORY_TAB
 const tab = ref<Tab>(parseProjectTab(route.query.tab))
@@ -373,13 +385,19 @@ function onScrollClose() {
 
 async function load() {
   resetPmViewForProjectContext()
+  const localSeq = projectSeq.beginListRequest()
+  const keepStale = !!project.value
   loading.value = true
+  loadFailed.value = false
+  loadDenied.value = false
+  notFound.value = false
   try {
     const [p, wfs, agents] = await Promise.all([
       api.getProject(projectId.value),
       api.listWorkflows({ projectId: projectId.value }),
       api.listAgents().catch(() => [] as { name: string; projectId?: string }[]),
     ])
+    if (!projectSeq.isCurrentSeq(localSeq)) return
     project.value = p
     void loadPmBinding()
     writeStoredProjectId(p.id)
@@ -393,11 +411,19 @@ async function load() {
     if (shouldAutoOpenOnboarding(p.id, wfs.length, projectAgents.value)) {
       onboardingOpen.value = true
     }
-  } catch {
+  } catch (e: unknown) {
+    if (!projectSeq.isCurrentSeq(localSeq)) return
+    if (keepStale && project.value) return
     project.value = null
     workflows.value = []
+    const status = httpStatusOf(e)
+    if (status === 403) loadDenied.value = true
+    else if (status === 404) notFound.value = true
+    else loadFailed.value = true
   } finally {
+    if (!projectSeq.isCurrentSeq(localSeq)) return
     loading.value = false
+    hasInitialLoaded.value = true
   }
 }
 
@@ -421,10 +447,18 @@ function onOnboardingRunStarted(runId: string) {
 }
 
 async function reloadWorkflows() {
+  const localSeq = workflowSeq.beginListRequest()
+  if (workflows.value.length > 0) wfRefreshing.value = true
   try {
-    workflows.value = await api.listWorkflows({ projectId: projectId.value })
+    const wfs = await api.listWorkflows({ projectId: projectId.value })
+    if (!workflowSeq.isCurrentSeq(localSeq)) return
+    workflows.value = wfs
   } catch {
+    if (!workflowSeq.isCurrentSeq(localSeq)) return
     // keep current list on refresh failure
+  } finally {
+    if (!workflowSeq.isCurrentSeq(localSeq)) return
+    wfRefreshing.value = false
   }
 }
 
@@ -731,6 +765,12 @@ async function confirmDelete() {
 
 watch(projectId, () => {
   resetPmViewForProjectContext()
+  project.value = null
+  workflows.value = []
+  hasInitialLoaded.value = false
+  loadFailed.value = false
+  loadDenied.value = false
+  notFound.value = false
   void load()
 })
 watch(
@@ -754,7 +794,20 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col">
+  <div
+    class="flex min-h-0 flex-1 flex-col"
+    data-testid="project-detail-panel"
+    :aria-busy="loading || wfRefreshing ? 'true' : 'false'"
+  >
+    <div
+      v-if="showRefreshProgress"
+      class="mb-2 h-[2px] overflow-hidden bg-line"
+      data-testid="project-detail-thin-progress"
+      aria-hidden="true"
+    >
+      <i class="admin-list-thin-bar bg-accent" />
+    </div>
+    <div :class="showRefreshProgress ? 'opacity-[0.55]' : ''">
     <div class="mb-4 shrink-0">
       <button
         type="button"
@@ -764,7 +817,14 @@ onUnmounted(() => {
         <Icon name="chevron-right" :size="12" class="rotate-180" />
         {{ t('pages.projectDetail.back') }}
       </button>
-      <div v-if="loading" class="h-8 w-48 animate-pulse rounded bg-elevated" />
+      <div
+        v-if="initialLoading"
+        data-testid="project-detail-title-skeleton"
+        aria-hidden="true"
+      >
+        <div class="h-7 w-48 bg-elevated animate-pulse" />
+        <div class="mt-2 h-3 w-72 bg-elevated animate-pulse" />
+      </div>
       <template v-else-if="project">
         <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div class="min-w-0">
@@ -805,10 +865,35 @@ onUnmounted(() => {
           </div>
         </div>
       </template>
-      <div v-else class="text-sm text-err">{{ t('pages.projectDetail.notFound') }}</div>
+      <div
+        v-else-if="loadDenied"
+        role="status"
+        data-testid="project-detail-denied"
+        class="border border-warn/40 bg-warn/10 px-5 py-10 text-center"
+      >
+        <Icon name="lock" :size="22" class="mx-auto mb-3 text-warn" />
+        <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.permissionDeniedTitle') }}</h3>
+        <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.permissionDeniedDesc') }}</p>
+        <AppButton class="mt-4" variant="outline" data-testid="project-detail-retry" @click="load">
+          {{ t('common.buttons.retry') }}
+        </AppButton>
+      </div>
+      <div
+        v-else-if="loadFailed"
+        role="status"
+        data-testid="project-detail-failed"
+        class="border border-err/40 bg-err/10 px-5 py-10 text-center"
+      >
+        <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.loadFailedTitle') }}</h3>
+        <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.loadFailedDesc') }}</p>
+        <AppButton class="mt-4" variant="outline" data-testid="project-detail-retry" @click="load">
+          {{ t('common.buttons.retry') }}
+        </AppButton>
+      </div>
+      <div v-else-if="notFound" class="text-sm text-err">{{ t('pages.projectDetail.notFound') }}</div>
     </div>
 
-    <template v-if="project">
+    <template v-if="initialLoading || project">
       <div
         class="scroll-area mb-4 flex shrink-0 flex-nowrap gap-1 overflow-x-auto overflow-y-hidden border-b border-line [-webkit-overflow-scrolling:touch]"
         data-testid="project-detail-tabs"
@@ -854,7 +939,48 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div v-if="tab === 'board'" class="min-w-0" data-testid="project-board-panel">
+      <div
+        v-if="initialLoading"
+        data-testid="project-detail-content-skeleton"
+        aria-hidden="true"
+        class="min-h-[280px]"
+      >
+        <div v-if="tab === 'workflows' && isMobile" class="flex flex-col gap-2">
+          <div
+            v-for="n in 4"
+            :key="'wf-skel-m-' + n"
+            class="flex flex-col gap-3 border border-line bg-surface p-3"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0 flex-1 space-y-2">
+                <div class="h-3.5 w-2/3 bg-elevated animate-pulse" />
+                <div class="h-2.5 w-1/2 bg-elevated animate-pulse" />
+              </div>
+              <div class="h-5 w-14 bg-elevated animate-pulse" />
+            </div>
+            <div class="h-8 w-full bg-elevated animate-pulse" />
+          </div>
+        </div>
+        <div v-else-if="tab === 'workflows'" class="overflow-hidden border border-line">
+          <div class="grid grid-cols-5 gap-3 border-b border-line bg-elevated px-3 py-2">
+            <div v-for="n in 5" :key="'wf-th-' + n" class="h-2.5 bg-elevated animate-pulse" />
+          </div>
+          <div v-for="n in 5" :key="'wf-skel-r-' + n" class="grid grid-cols-5 gap-3 border-t border-line px-3 py-3">
+            <div class="h-3 bg-elevated animate-pulse" />
+            <div class="h-3 w-2/3 bg-elevated animate-pulse" />
+            <div class="h-3 w-1/2 bg-elevated animate-pulse" />
+            <div class="h-3 w-1/3 bg-elevated animate-pulse" />
+            <div class="h-3 w-1/2 bg-elevated animate-pulse" />
+          </div>
+        </div>
+        <div v-else class="space-y-3 border border-line bg-surface p-4">
+          <div class="h-4 w-40 bg-elevated animate-pulse" />
+          <div class="h-24 w-full bg-elevated animate-pulse" />
+          <div class="h-10 w-full bg-elevated animate-pulse" />
+        </div>
+      </div>
+
+      <div v-else-if="tab === 'board'" class="min-w-0" data-testid="project-board-panel">
         <BoardView :project-id="projectId" embedded />
       </div>
 
@@ -977,6 +1103,11 @@ onUnmounted(() => {
 
             <div class="relative flex items-center gap-2" data-wf-menu @click.stop>
               <div class="flex min-w-0 flex-1 flex-col gap-1.5" data-testid="wf-notify-inline">
+                <span
+                  v-if="savingNotifyWfId === w.id"
+                  class="text-[11px] text-txt3"
+                  data-testid="wf-notify-saving"
+                >{{ t('common.buttons.saving') }}</span>
                 <div class="inline-flex overflow-hidden rounded-md border border-line text-[11px]">
                   <button
                     type="button"
@@ -1093,7 +1224,7 @@ onUnmounted(() => {
                   @click="openCopy(w)"
                 >
                   <Icon name="copy" :size="14" />{{
-                    copyPreviewLoading === w.id ? t('common.buttons.loading') : t('common.buttons.copy')
+                    copyPreviewLoading === w.id ? t('common.buttons.copying') : t('common.buttons.copy')
                   }}
                 </button>
                 <button
@@ -1142,6 +1273,11 @@ onUnmounted(() => {
                   </td>
                   <td class="px-3 py-2.5"><StatusPill :status="w.status" size="sm" /></td>
                   <td class="px-3 py-2.5" @click.stop data-testid="wf-notify-cell">
+                    <span
+                      v-if="savingNotifyWfId === w.id"
+                      class="mr-2 text-[11px] text-txt3"
+                      data-testid="wf-notify-saving"
+                    >{{ t('common.buttons.saving') }}</span>
                     <div class="inline-flex overflow-hidden rounded-md border border-line text-[11px]">
                       <button
                         type="button"
@@ -1243,7 +1379,7 @@ onUnmounted(() => {
                         @click="openCopy(w)"
                       >
                         <Icon name="copy" :size="13" class="mr-1 inline" />{{
-                          copyPreviewLoading === w.id ? t('common.buttons.loading') : t('common.buttons.copy')
+                          copyPreviewLoading === w.id ? t('common.buttons.copying') : t('common.buttons.copy')
                         }}
                       </button>
                       <button
@@ -1397,7 +1533,7 @@ onUnmounted(() => {
               {{ t('pages.projectDetail.addRow') }}
             </AppButton>
             <AppButton variant="primary" :disabled="savingEnv" @click="saveEnv">
-              {{ t('common.buttons.save') }}
+              {{ savingEnv ? t('common.buttons.saving') : t('common.buttons.save') }}
             </AppButton>
           </div>
         </div>
@@ -1563,7 +1699,7 @@ onUnmounted(() => {
               {{ t('pages.projectDetail.addRow') }}
             </AppButton>
             <AppButton variant="primary" :disabled="savingVars" @click="saveVars">
-              {{ t('common.buttons.save') }}
+              {{ savingVars ? t('common.buttons.saving') : t('common.buttons.save') }}
             </AppButton>
           </div>
         </div>
@@ -1623,12 +1759,13 @@ onUnmounted(() => {
               {{ t('common.buttons.delete') }}
             </AppButton>
             <AppButton variant="primary" :disabled="savingMeta" @click="saveMeta">
-              {{ t('common.buttons.save') }}
+              {{ savingMeta ? t('common.buttons.saving') : t('common.buttons.save') }}
             </AppButton>
           </div>
         </div>
       </div>
     </template>
+    </div>
 
     <input ref="fileInput" type="file" accept=".json" class="hidden" @change="handleFileChange" />
 

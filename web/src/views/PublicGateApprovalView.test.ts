@@ -13,6 +13,8 @@ import { setTheme } from '@/lib/theme'
 const mocks = vi.hoisted(() => ({
   preview: vi.fn(),
   decide: vi.fn(),
+  reply: vi.fn(),
+  cancel: vi.fn(),
 }))
 
 vi.mock('@/lib/gateShareLink', async () => {
@@ -22,6 +24,8 @@ vi.mock('@/lib/gateShareLink', async () => {
     publicGateApi: {
       preview: mocks.preview,
       decide: mocks.decide,
+      reply: mocks.reply,
+      cancel: mocks.cancel,
     },
   }
 })
@@ -51,6 +55,8 @@ function mountView(locale: 'zh-CN' | 'en' = 'zh-CN') {
 beforeEach(() => {
   mocks.preview.mockReset()
   mocks.decide.mockReset()
+  mocks.reply.mockReset()
+  mocks.cancel.mockReset()
   window.location.hash = ''
   localStorage.clear()
   setTheme('dark')
@@ -60,87 +66,70 @@ afterEach(() => {
   document.documentElement.classList.remove('light')
 })
 
-describe('PublicGateApprovalView', () => {
-  it('renders one-shot confirm chrome with gate title as meta only', async () => {
+describe('PublicGateApprovalView workbench', () => {
+  it('renders dark three-pane workbench for human_gate without purple chrome', async () => {
     window.location.hash = `#t=${'aa'.repeat(32)}`
     mocks.preview.mockResolvedValue({
       status: 'active',
+      kind: 'human_gate',
       title: '审阅视觉稿',
-      description: '请审阅产物',
       remainingSec: 3600,
       nonce: 'n1',
-      actions: { approve: 'approve', reject: 'revise' },
+      reactSessionAlive: true,
+      productKind: 'visual',
+      productName: 'page.html',
+      actions: { approve: 'approve', reject: 'revise', confirm: 'approve', reply: 'reply', cancel: 'cancel' },
       visualHtml: '<p>ok</p>',
-      structured: { name: 'clarified_requirement.json', title: '外部一次审批', goals: ['g1'] },
+      turns: [{ role: 'agent', text: '请审阅 page.html', at: '2026-08-01T00:00:00Z' }],
+      upstream: { name: 'clarified_requirement.json', title: '澄清需求', summary: '可对照审阅当前主产物' },
     })
     const w = mountView()
     await flushPromises()
-    expect(document.documentElement.classList.contains('light')).toBe(true)
-    expect(localStorage.getItem('approving-theme')).toBe('dark')
-    expect(w.get('[data-testid="public-gate-title"]').text()).toBe('请确认本次交付')
-    expect(w.get('[data-testid="public-gate-gate-title"]').text()).toBe('审阅视觉稿')
+    expect(document.documentElement.classList.contains('light')).toBe(false)
+    expect(w.find('[data-testid="public-gate-chrome"]').classes().join(' ')).not.toMatch(/bg-accent/)
     expect(w.get('[data-testid="public-gate-badge"]').text()).toBe('外部一次决策')
-    expect(w.get('[data-testid="public-gate-root"]').text()).toContain('待确认的内容')
-    expect(w.get('[data-testid="public-gate-root"]').text()).toContain('链接仅可使用一次')
-    expect(w.get('[data-testid="public-gate-root"]').text()).toContain('无需登录')
-    expect(w.get('[data-testid="public-gate-root"]').text()).toContain('预览已脱敏')
-    expect(w.get('[data-testid="public-gate-root"]').text()).not.toMatch(/run-|projectId|10\.1\.2\.3|\/api\/blobs/)
-    expect(w.get('[data-testid="public-gate-root"]').text()).not.toMatch(/确认并流转|取点标注|发送就地改|人工评审/)
-    expect(w.get('[data-testid="public-gate-approve"]').text()).toBe('确认')
-    expect(w.get('[data-testid="public-gate-reject"]').text()).toBe('驳回并说明原因')
-    expect(w.find('[data-testid="html-preview-inline"]').exists()).toBe(true)
-    expect(w.find('[data-testid="html-preview-toolbar"]').exists()).toBe(false)
-    expect(w.find('[data-testid="html-preview-enlarge"]').exists()).toBe(false)
-    expect(w.find('[data-testid="html-preview-inspect-toggle"]').exists()).toBe(false)
-    expect(w.get('[data-testid="public-gate-content"]').text()).toContain('外部一次审批')
+    expect(w.find('[data-testid="review-shell"]').exists()).toBe(true)
+    expect(w.get('[data-testid="public-gate-product-label"]').text()).toContain('视觉网页产物')
+    expect(w.get('[data-testid="public-gate-product-name"]').text()).toBe('page.html')
+    expect(w.get('[data-testid="public-gate-footer"]').text()).toContain('上游上下文')
+    expect(w.get('[data-testid="public-gate-upstream-enlarge"]').text()).toContain('放大上游上下文')
+    expect(w.get('[data-testid="public-gate-confirm"]').text()).toBe('确认并流转')
+    expect(w.get('[data-testid="public-gate-reject"]').text()).toBe('驳回')
+    expect(w.get('[data-testid="public-gate-confirm-hint"]').text()).toContain('不触发 Agent')
+    expect(w.get('[data-testid="public-gate-sidebar"]').text()).toContain('Agent交互')
+    expect(w.find('[data-testid="clarify-confirm-flow"]').exists()).toBe(false)
+    expect(w.find('[data-testid="clarify-input"]').exists()).toBe(true)
+    expect(w.get('[data-testid="public-gate-root"]').text()).not.toMatch(/请确认本次交付|这是交付预览|不是审批工作台|Approving|打开运行详情|run-/)
+    expect(w.find('[data-testid="html-preview-inspect-toggle"]').exists()).toBe(true)
   })
 
-  it('shows expired / used / revoked / invalid separately', async () => {
-    window.location.hash = `#t=${'bb'.repeat(32)}`
-    mocks.preview.mockResolvedValue({ status: 'expired' })
-    const w = mountView()
-    await flushPromises()
-    expect(w.get('[data-testid="public-gate-invalid"]').text()).toContain('已过期')
-    expect(w.find('[data-testid="public-gate-approve"]').exists()).toBe(false)
-
-    mocks.preview.mockResolvedValue({ status: 'used' })
-    window.location.hash = `#t=${'cc'.repeat(32)}`
-    const w2 = mountView()
-    await flushPromises()
-    expect(w2.get('[data-testid="public-gate-invalid"]').text()).toContain('已使用')
-
-    mocks.preview.mockResolvedValue({ status: 'revoked' })
-    const w3 = mountView()
-    await flushPromises()
-    expect(w3.get('[data-testid="public-gate-invalid"]').text()).toContain('已撤销')
-
-    window.location.hash = ''
-    const w4 = mountView()
-    await flushPromises()
-    expect(w4.get('[data-testid="public-gate-invalid"]').text()).toContain('无效')
-  })
-
-  it('review preview only shows confirm-and-advance', async () => {
+  it('review hot session has ReAct + footer confirm and no reject', async () => {
     window.location.hash = `#t=${'ee'.repeat(32)}`
     mocks.preview.mockResolvedValue({
       status: 'active',
       kind: 'review',
-      title: '调研',
-      description: '待复审',
       remainingSec: 3600,
       nonce: 'n3',
-      actions: { confirm: 'confirm' },
-      structured: { name: 'research.json', title: '调研摘要' },
+      reactSessionAlive: true,
+      productKind: 'structured',
+      productName: 'research.json',
+      actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
+      structured: { name: 'research.json', title: '调研摘要', doc: { title: '调研摘要' } },
+      turns: [
+        { role: 'agent', text: '请复审', at: '2026-08-01T00:00:00Z' },
+        { role: 'human', text: '改摘要', at: '2026-08-01T00:01:00Z' },
+      ],
+      upstream: { title: '澄清', summary: '已有澄清需求文档' },
     })
     const w = mountView()
     await flushPromises()
-    expect(w.get('[data-testid="public-gate-root"]').text()).toContain('外部复审')
+    expect(w.get('[data-testid="public-gate-badge"]').text()).toBe('外部复审')
+    expect(w.get('[data-testid="public-gate-sidebar"]').text()).toContain('共 2 条')
     expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
-    expect(w.get('[data-testid="public-gate-confirm"]').text()).toContain('确认并流转')
-    expect(w.find('[data-testid="public-gate-approve"]').exists()).toBe(false)
     expect(w.find('[data-testid="public-gate-reject"]').exists()).toBe(false)
     expect(w.find('[data-testid="public-gate-name"]').exists()).toBe(false)
-    expect(w.find('[data-testid="public-gate-comment"]').exists()).toBe(false)
+    expect(w.find('[data-testid="clarify-confirm-flow"]').exists()).toBe(false)
+    expect(w.get('[data-testid="public-gate-footer"]').text()).toContain('放大上游上下文')
 
     mocks.decide.mockResolvedValue({ status: 'confirmed', action: 'confirm' })
     await w.get('[data-testid="public-gate-confirm"]').trigger('click')
@@ -149,32 +138,107 @@ describe('PublicGateApprovalView', () => {
     expect(w.get('[data-testid="public-gate-done"]').text()).toContain('已确认')
   })
 
-  it('gate preview still has approve/reject plus optional name/comment', async () => {
+  it('cold review keeps three panes, hides send/inspect, footer still confirms', async () => {
+    window.location.hash = `#t=${'cc'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-cold',
+      reactSessionAlive: false,
+      productKind: 'visual',
+      productName: 'page.html',
+      actions: { confirm: 'confirm' },
+      visualHtml: '<p>ok</p>',
+      turns: [{ role: 'agent', text: '历史回合', at: '2026-08-01T00:00:00Z' }],
+    })
+    const w = mountView()
+    await flushPromises()
+    expect(w.find('[data-testid="review-shell"]').exists()).toBe(true)
+    expect(w.get('[data-testid="public-gate-session-ended"]').text()).toContain('会话已结束')
+    expect(w.get('[data-testid="public-gate-cold-hint"]').text()).toContain('仅可确认并流转')
+    expect(w.find('[data-testid="clarify-input"]').exists()).toBe(false)
+    expect(w.find('[data-testid="html-preview-inspect-toggle"]').exists()).toBe(false)
+    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
+    expect(w.get('[data-testid="public-gate-sidebar"]').text()).toContain('历史回合')
+  })
+
+  it('human_gate requires name and comment before confirm or reject', async () => {
     window.location.hash = `#t=${'ff'.repeat(32)}`
     mocks.preview.mockResolvedValue({
       status: 'active',
       kind: 'human_gate',
-      title: '审阅视觉稿',
       nonce: 'n4',
-      actions: { approve: 'approve', reject: 'revise' },
+      reactSessionAlive: false,
+      actions: { approve: 'approve', reject: 'revise', confirm: 'approve' },
     })
     const w = mountView()
     await flushPromises()
-    expect(w.find('[data-testid="public-gate-approve"]').exists()).toBe(true)
-    expect(w.find('[data-testid="public-gate-reject"]').exists()).toBe(true)
-    expect(w.find('[data-testid="public-gate-name"]').exists()).toBe(true)
-    expect(w.find('[data-testid="public-gate-comment"]').exists()).toBe(true)
-    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(false)
+    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await flushPromises()
+    expect(mocks.decide).not.toHaveBeenCalled()
+    expect(w.get('[data-testid="public-gate-error"]').text()).toContain('姓名与意见')
+
+    await w.get('[data-testid="public-gate-name"]').setValue('Jordan')
+    await w.get('[data-testid="public-gate-comment"]').setValue('可以流转')
+    mocks.decide.mockResolvedValue({ status: 'approved' })
+    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await flushPromises()
+    expect(mocks.decide).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'approve',
+      name: 'Jordan',
+      comment: '可以流转',
+    }))
+    expect(w.get('[data-testid="public-gate-done"]').text()).toContain('已确认')
   })
 
-  it('review busy/validation keeps confirm and does not clear the link', async () => {
+  it('reply uses token adapter and does not call decide', async () => {
     window.location.hash = `#t=${'aa'.repeat(32)}`
     mocks.preview.mockResolvedValue({
       status: 'active',
       kind: 'review',
-      title: '调研',
+      nonce: 'n-reply',
+      reactSessionAlive: true,
+      actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
+      turns: [],
+    })
+    mocks.reply.mockResolvedValue({ status: 'accepted' })
+    mocks.preview.mockResolvedValueOnce({
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-reply',
+      reactSessionAlive: true,
+      actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
+      turns: [],
+    }).mockResolvedValue({
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-reply',
+      reactSessionAlive: true,
+      actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
+      turns: [
+        { role: 'human', text: '改标题', at: '2026-08-01T00:02:00Z' },
+      ],
+    })
+    const w = mountView()
+    await flushPromises()
+    await w.get('[data-testid="clarify-input"]').setValue('改标题')
+    await w.get('[data-testid="clarify-send-icon"]').trigger('click')
+    await flushPromises()
+    expect(mocks.reply).toHaveBeenCalledWith(expect.objectContaining({ token: 'aa'.repeat(32), text: '改标题' }))
+    expect(mocks.decide).not.toHaveBeenCalled()
+    expect(w.find('[data-testid="public-gate-done"]').exists()).toBe(false)
+    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
+  })
+
+  it('busy confirm stays on workbench and keeps the link', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'review',
       nonce: 'n-busy',
-      actions: { confirm: 'confirm' },
+      reactSessionAlive: true,
+      sessionBusy: false,
+      actions: { confirm: 'confirm', reply: 'reply' },
     })
     const w = mountView()
     await flushPromises()
@@ -188,125 +252,88 @@ describe('PublicGateApprovalView', () => {
     expect(w.get('[data-testid="public-gate-error"]').text()).toContain('复审进行中')
     expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
     expect(w.find('[data-testid="public-gate-done"]').exists()).toBe(false)
+  })
 
-    mocks.decide.mockResolvedValueOnce({
-      status: 'validation_failed',
-      error: 'review_validation_failed',
-      message: '产物校验未通过，链接仍有效，请稍后重试',
-    })
-    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+  it('silent preview without new turns does not drop optimistic ReAct queue', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    const basePreview = {
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-race',
+      reactSessionAlive: true,
+      sessionBusy: false,
+      waiting: 0,
+      actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
+      turns: [{ role: 'agent', text: '请复审', at: '2026-08-01T00:00:00Z' }],
+    }
+    mocks.preview.mockResolvedValue({ ...basePreview })
+    let resolveReply: ((value: unknown) => void) | undefined
+    mocks.reply.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveReply = resolve
+        }),
+    )
+    const w = mountView()
     await flushPromises()
-    expect(w.get('[data-testid="public-gate-error"]').text()).toContain('产物校验')
+    await w.get('[data-testid="clarify-input"]').setValue('改标题')
+    await w.get('[data-testid="clarify-send-icon"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="clarify-review-queue"]').exists()).toBe(true)
+    expect(w.get('[data-testid="clarify-review-queue"]').text()).toContain('改标题')
+
+    mocks.preview.mockResolvedValue({
+      ...basePreview,
+      sessionBusy: false,
+      waiting: 0,
+      turns: [{ role: 'agent', text: '请复审', at: '2026-08-01T00:00:00Z' }],
+    })
+    await (w.vm as unknown as { loadPreview: (opts?: { silent?: boolean }) => Promise<void> }).loadPreview({
+      silent: true,
+    })
+    await flushPromises()
+    expect(w.find('[data-testid="clarify-review-queue"]').exists()).toBe(true)
+    expect(w.get('[data-testid="clarify-review-queue"]').text()).toContain('改标题')
+    expect(w.find('[data-testid="public-gate-done"]').exists()).toBe(false)
+    expect(mocks.decide).not.toHaveBeenCalled()
+
+    resolveReply?.({ status: 'accepted' })
+    await flushPromises()
+    expect(w.find('[data-testid="clarify-review-queue"]').exists()).toBe(true)
     expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
   })
 
-  it('hides reject when PreviewDTO has no fail action', async () => {
+  it('sessionBusy preview restores thinking placeholder and cancel', async () => {
     window.location.hash = `#t=${'dd'.repeat(32)}`
     mocks.preview.mockResolvedValue({
       status: 'active',
-      title: 'Review',
-      nonce: 'n2',
-      remainingSec: 120,
-      actions: { approve: 'approve' },
-    })
-    const w = mountView('en')
-    await flushPromises()
-    expect(w.get('[data-testid="public-gate-badge"]').text()).toBe('One-time external decision')
-    expect(w.get('[data-testid="public-gate-title"]').text()).toBe('Please confirm this delivery')
-    expect(w.get('[data-testid="public-gate-approve"]').text()).toBe('Confirm')
-    expect(w.find('[data-testid="public-gate-reject"]').exists()).toBe(false)
-  })
-
-  it('allows confirm with empty comment and still maps approve action', async () => {
-    window.location.hash = `#t=${'aa'.repeat(32)}`
-    mocks.preview.mockResolvedValue({
-      status: 'active',
-      title: '审阅视觉稿',
-      nonce: 'n1',
-      remainingSec: 3600,
-      actions: { approve: 'approve', reject: 'revise' },
-    })
-    mocks.decide.mockResolvedValue({ status: 'approved' })
-    const w = mountView()
-    await flushPromises()
-    await w.get('[data-testid="public-gate-approve"]').trigger('click')
-    await flushPromises()
-    expect(mocks.decide).toHaveBeenCalledWith({
-      token: 'aa'.repeat(32),
-      action: 'approve',
-      comment: '',
-      name: '',
-      nonce: 'n1',
-    })
-    expect(w.get('[data-testid="public-gate-done"]').text()).toContain('已确认')
-    expect(w.find('[data-testid="public-gate-approve"]').exists()).toBe(false)
-    expect(w.find('[data-testid="public-gate-reject"]').exists()).toBe(false)
-  })
-
-  it('blocks reject without comment and keeps token usable', async () => {
-    window.location.hash = `#t=${'aa'.repeat(32)}`
-    mocks.preview.mockResolvedValue({
-      status: 'active',
-      title: '审阅视觉稿',
-      nonce: 'n1',
-      remainingSec: 3600,
-      actions: { approve: 'approve', reject: 'revise' },
+      kind: 'review',
+      nonce: 'n-busy-resume',
+      reactSessionAlive: true,
+      sessionBusy: true,
+      waiting: 0,
+      activeItem: { text: '改标题' },
+      actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
+      turns: [{ role: 'agent', text: '请复审', at: '2026-08-01T00:00:00Z' }],
     })
     const w = mountView()
     await flushPromises()
-    await w.get('[data-testid="public-gate-reject"]').trigger('click')
     await flushPromises()
-    expect(mocks.decide).not.toHaveBeenCalled()
-    expect(w.get('[role="alert"]').text()).toContain('驳回必须填写意见')
-    expect(w.find('[data-testid="public-gate-approve"]').exists()).toBe(true)
-    expect(w.find('[data-testid="public-gate-reject"]').exists()).toBe(true)
-
-    await w.get('[data-testid="public-gate-comment"]').setValue('需要改文案')
-    await w.get('[data-testid="public-gate-name"]').setValue('Jordan')
-    mocks.decide.mockResolvedValue({ status: 'rejected' })
-    await w.get('[data-testid="public-gate-reject"]').trigger('click')
-    await flushPromises()
-    expect(mocks.decide).toHaveBeenCalledWith({
-      token: 'aa'.repeat(32),
-      action: 'revise',
-      comment: '需要改文案',
-      name: 'Jordan',
-      nonce: 'n1',
-    })
-    expect(w.get('[data-testid="public-gate-done"]').text()).toContain('已驳回')
+    expect(w.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(true)
+    expect(w.find('[data-testid="clarify-review-cancel"]').exists()).toBe(true)
+    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(false)
+    expect(w.find('[data-testid="public-gate-done"]').exists()).toBe(false)
   })
 
-  it('shows expired / used / revoked / invalid with same chrome and no write actions', async () => {
+  it('unavailable states keep dark chrome without confirm/send', async () => {
     window.location.hash = `#t=${'bb'.repeat(32)}`
-    mocks.preview.mockResolvedValue({ status: 'expired' })
+    mocks.preview.mockResolvedValue({ status: 'expired', kind: 'human_gate' })
     const w = mountView()
     await flushPromises()
     expect(w.get('[data-testid="public-gate-badge"]').text()).toBe('外部一次决策')
     expect(w.get('[data-testid="public-gate-invalid"]').text()).toContain('已过期')
-    expect(w.get('[data-testid="public-gate-invalid"]').text()).toContain('一次性链接已过期')
-    expect(w.find('[data-testid="public-gate-approve"]').exists()).toBe(false)
-    expect(w.find('[data-testid="public-gate-reject"]').exists()).toBe(false)
-    expect(w.get('[data-testid="public-gate-root"]').text()).not.toMatch(/取点标注|发送就地改|确认并流转/)
-
-    mocks.preview.mockResolvedValue({ status: 'used' })
-    window.location.hash = `#t=${'cc'.repeat(32)}`
-    const w2 = mountView()
-    await flushPromises()
-    expect(w2.get('[data-testid="public-gate-badge"]').text()).toBe('外部一次决策')
-    expect(w2.get('[data-testid="public-gate-invalid"]').text()).toContain('已使用')
-    expect(w2.get('[data-testid="public-gate-invalid"]').text()).toContain('不能再次确认或驳回')
-    expect(w2.find('[data-testid="public-gate-approve"]').exists()).toBe(false)
-
-    mocks.preview.mockResolvedValue({ status: 'revoked' })
-    const w3 = mountView()
-    await flushPromises()
-    expect(w3.get('[data-testid="public-gate-invalid"]').text()).toContain('已撤销')
-    expect(w3.get('[data-testid="public-gate-invalid"]').text()).toContain('已撤销此链接')
-
-    window.location.hash = ''
-    const w4 = mountView()
-    await flushPromises()
-    expect(w4.get('[data-testid="public-gate-invalid"]').text()).toContain('无效')
-    expect(w4.get('[data-testid="public-gate-invalid"]').text()).toContain('外部一次决策')
+    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(false)
+    expect(w.find('[data-testid="clarify-input"]').exists()).toBe(false)
+    expect(w.get('[data-testid="public-gate-root"]').text()).not.toMatch(/请确认本次交付/)
   })
 })

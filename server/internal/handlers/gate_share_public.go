@@ -27,6 +27,17 @@ type publicDecideBody struct {
 	Nonce   string `json:"nonce"`
 }
 
+type publicReplyBody struct {
+	Token       string                   `json:"token"`
+	Text        string                   `json:"text"`
+	Annotations []models.ReactAnnotation `json:"annotations"`
+	Images      []models.PromptImage     `json:"images"`
+}
+
+type publicCancelBody struct {
+	Token string `json:"token"`
+}
+
 func (h *Handlers) publicRateLimit(c *gin.Context) bool {
 	if h.GateShareLimiter == nil {
 		return true
@@ -69,13 +80,136 @@ func (h *Handlers) PublicGatePreview(c *gin.Context) {
 	}
 	if kind == models.ShareLinkKindReview {
 		visual, structName, structContent := h.publicReviewArtifacts(lookup)
-		dto := gateshare.BuildReviewPreviewDTO(st, lookup, visual, structName, structContent, nonce)
+		extras := h.publicReviewExtras(lookup, visual, structName)
+		dto := gateshare.BuildReviewPreviewDTO(st, lookup, visual, structName, structContent, nonce, extras)
 		c.JSON(http.StatusOK, dto)
 		return
 	}
 	visual, structName, structContent := h.publicGateArtifacts(lookup)
-	dto := gateshare.BuildPreviewDTO(st, lookup, visual, structName, structContent, nonce)
+	extras := h.publicGateExtras(lookup, visual, structName)
+	dto := gateshare.BuildPreviewDTO(st, lookup, visual, structName, structContent, nonce, extras)
 	c.JSON(http.StatusOK, dto)
+}
+
+func (h *Handlers) PublicGateReply(c *gin.Context) {
+	applyPublicSecurityHeaders(c)
+	if !h.publicRateLimit(c) {
+		return
+	}
+	if h.GateShare == nil || h.Eng == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "unavailable"})
+		return
+	}
+	if !h.checkPublicCSRF(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "csrf", "message": "请求未通过安全校验"})
+		return
+	}
+	var body publicReplyBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_body"})
+		return
+	}
+	token := strings.TrimSpace(body.Token)
+	if token == "" || !gateshare.ValidTokenShape(token) {
+		c.JSON(http.StatusOK, gin.H{"status": "invalid"})
+		return
+	}
+	lookup, st, err := h.GateShare.LookupByToken(token)
+	if err != nil || lookup == nil || st != models.ShareLinkStateActive {
+		if st == "" {
+			st = "invalid"
+		}
+		c.JSON(http.StatusOK, gin.H{"status": st})
+		return
+	}
+	text := strings.TrimSpace(body.Text)
+	if text == "" && len(body.Annotations) == 0 && len(body.Images) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "empty_reply", "message": "请填写修订意见或标注后再发送"})
+		return
+	}
+	kind := publicShareKind(lookup)
+	if kind == models.ShareLinkKindReview {
+		if err := h.Eng.ReactReply(lookup.Link.RunID, lookup.Link.NodeID, text, body.Images, body.Annotations, false); err != nil {
+			h.writePublicReactErr(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "accepted", "kind": models.ShareLinkKindReview})
+		return
+	}
+	if err := h.Eng.GateReactRevise(lookup.Link.RunID, lookup.Link.NodeID, text, body.Images, body.Annotations); err != nil {
+		h.writePublicReactErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "accepted", "kind": models.ShareLinkKindHumanGate})
+}
+
+func (h *Handlers) PublicGateCancel(c *gin.Context) {
+	applyPublicSecurityHeaders(c)
+	if !h.publicRateLimit(c) {
+		return
+	}
+	if h.GateShare == nil || h.Eng == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "unavailable"})
+		return
+	}
+	if !h.checkPublicCSRF(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "csrf", "message": "请求未通过安全校验"})
+		return
+	}
+	var body publicCancelBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_body"})
+		return
+	}
+	token := strings.TrimSpace(body.Token)
+	if token == "" || !gateshare.ValidTokenShape(token) {
+		c.JSON(http.StatusOK, gin.H{"status": "invalid"})
+		return
+	}
+	lookup, st, err := h.GateShare.LookupByToken(token)
+	if err != nil || lookup == nil || st != models.ShareLinkStateActive {
+		if st == "" {
+			st = "invalid"
+		}
+		c.JSON(http.StatusOK, gin.H{"status": st})
+		return
+	}
+	kind := publicShareKind(lookup)
+	if kind == models.ShareLinkKindReview {
+		if err := h.Eng.CancelReviewSession(lookup.Link.RunID, lookup.Link.NodeID); err != nil {
+			h.writePublicReactErr(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "kind": models.ShareLinkKindReview})
+		return
+	}
+	producerID, alive := h.Eng.GateReactInfo(lookup.Link.RunID, lookup.Link.NodeID)
+	if producerID == "" || !alive {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "session_cold", "message": "上游会话已结束，无法取消"})
+		return
+	}
+	if err := h.Eng.CancelReviewSession(lookup.Link.RunID, producerID); err != nil {
+		h.writePublicReactErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "kind": models.ShareLinkKindHumanGate})
+}
+
+func (h *Handlers) writePublicReactErr(c *gin.Context, err error) {
+	if err == nil {
+		return
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "already done") || strings.Contains(msg, "react already done") {
+		c.JSON(http.StatusOK, gin.H{"status": "used", "error": "already_done", "message": "会话已结束"})
+		return
+	}
+	if strings.Contains(msg, "上游会话已不存在") || strings.Contains(msg, "cold") {
+		c.JSON(http.StatusOK, gin.H{"status": "cold", "error": "session_cold", "message": "会话已结束，仅可确认并流转"})
+		return
+	}
+	_ = c.Error(err)
+	c.JSON(http.StatusBadRequest, gin.H{"error": "react_failed", "message": msg})
 }
 
 func (h *Handlers) PublicGateDecide(c *gin.Context) {
@@ -110,30 +244,38 @@ func (h *Handlers) PublicGateDecide(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": st})
 		return
 	}
+	kind := publicShareKind(lookup)
+	comment, name := "", ""
+	if kind != models.ShareLinkKindReview && st == models.ShareLinkStateActive {
+		var ok bool
+		comment, ok = gateshare.ClampComment(body.Comment)
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "comment_too_long"})
+			return
+		}
+		name, ok = gateshare.ClampExternalName(body.Name)
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "name_too_long"})
+			return
+		}
+		if comment == "" || name == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "audit_required", "message": "请填写姓名与意见后再提交"})
+			return
+		}
+	}
 	if !h.GateShareNonces.Consume(lookup.Link.TokenHash, strings.TrimSpace(body.Nonce)) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "nonce", "message": "请求未通过安全校验"})
 		return
 	}
-	kind := publicShareKind(lookup)
 	if kind == models.ShareLinkKindReview {
 		h.publicReviewDecide(c, lookup, token, strings.TrimSpace(body.Action))
-		return
-	}
-	comment, ok := gateshare.ClampComment(body.Comment)
-	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "comment_too_long"})
-		return
-	}
-	name, ok := gateshare.ClampExternalName(body.Name)
-	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "name_too_long"})
 		return
 	}
 	action := strings.TrimSpace(body.Action)
 	res, err := h.Eng.ResumeGateExternal(h.GateShare, token, action, comment, name)
 	if err != nil {
-		if errors.Is(err, gateshare.ErrCommentRequired) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "comment_required", "message": "驳回必须填写意见"})
+		if errors.Is(err, gateshare.ErrAuditRequired) || errors.Is(err, gateshare.ErrCommentRequired) || errors.Is(err, gateshare.ErrNameRequired) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "audit_required", "message": "请填写姓名与意见后再提交"})
 			return
 		}
 		if errors.Is(err, gateshare.ErrActionConflict) && res != nil {
@@ -265,6 +407,128 @@ func (h *Handlers) publicReviewArtifacts(lookup *gateshare.LookupResult) (visual
 		return a.Content, "", ""
 	}
 	return "", name, a.Content
+}
+
+func (h *Handlers) publicReviewExtras(lookup *gateshare.LookupResult, visualHTML, structName string) gateshare.PreviewExtras {
+	ex := gateshare.PreviewExtras{}
+	if lookup == nil {
+		return ex
+	}
+	runID, nodeID := lookup.Link.RunID, lookup.Link.NodeID
+	if lookup.Node != nil && lookup.Node.Type == "app_preview" {
+		ex.ProductKind = gateshare.ProductKindAppPreview
+		ex.ProductName = "app_preview"
+	} else if strings.TrimSpace(visualHTML) != "" {
+		ex.ProductKind = gateshare.ProductKindVisual
+		ex.ProductName = "page.html"
+	} else if strings.TrimSpace(structName) != "" {
+		ex.ProductKind = gateshare.ProductKindStructured
+		ex.ProductName = structName
+	}
+	if conv := h.publicConversation(runID, nodeID); conv != nil {
+		ex.Turns = conv.Messages
+	}
+	ex.ReactSessionAlive = h.Eng != nil && h.Eng.HasLiveReviewSession(runID, nodeID)
+	if ex.ReactSessionAlive && h.Eng != nil {
+		if snap, ok := h.Eng.ReviewSessionSnapshotFor(runID, nodeID); ok {
+			ex.Waiting = snap.Waiting
+			ex.QueueItems = snap.Items
+			ex.ActiveItem = snap.ActiveItem
+			ex.SessionBusy = snap.Busy || snap.Waiting > 0 || !h.Eng.ReviewSessionReady(runID, nodeID)
+		} else {
+			waiting, thinking := h.Eng.ReviewSessionState(runID, nodeID)
+			ex.Waiting = waiting
+			ex.SessionBusy = thinking || waiting > 0 || !h.Eng.ReviewSessionReady(runID, nodeID)
+		}
+	}
+	ex.UpstreamName, ex.UpstreamContent = h.publicUpstreamArtifact(runID, structName)
+	return ex
+}
+
+func (h *Handlers) publicGateExtras(lookup *gateshare.LookupResult, visualHTML, structName string) gateshare.PreviewExtras {
+	ex := gateshare.PreviewExtras{}
+	if lookup == nil {
+		return ex
+	}
+	runID, gateID := lookup.Link.RunID, lookup.Link.NodeID
+	if strings.TrimSpace(visualHTML) != "" {
+		ex.ProductKind = gateshare.ProductKindVisual
+		ex.ProductName = "page.html"
+	} else if strings.TrimSpace(structName) != "" {
+		ex.ProductKind = gateshare.ProductKindStructured
+		ex.ProductName = structName
+	}
+	producerID, alive := "", false
+	if h.Eng != nil {
+		producerID, alive = h.Eng.GateReactInfo(runID, gateID)
+	}
+	if producerID == "" {
+		producerID = h.publicGateProducerID(lookup)
+	}
+	if producerID != "" {
+		if conv := h.publicConversation(runID, producerID); conv != nil {
+			ex.Turns = conv.Messages
+		}
+		if lookup.Run.Graph.FindNode(producerID) != nil && lookup.Run.Graph.FindNode(producerID).Type == "app_preview" {
+			ex.ProductKind = gateshare.ProductKindAppPreview
+			if ex.ProductName == "" {
+				ex.ProductName = "app_preview"
+			}
+		}
+	}
+	ex.ReactSessionAlive = alive
+	if alive && h.Eng != nil && producerID != "" {
+		if snap, ok := h.Eng.ReviewSessionSnapshotFor(runID, producerID); ok {
+			ex.Waiting = snap.Waiting
+			ex.QueueItems = snap.Items
+			ex.ActiveItem = snap.ActiveItem
+			ex.SessionBusy = snap.Busy || snap.Waiting > 0 || !h.Eng.ReviewSessionReady(runID, producerID)
+		} else {
+			waiting, thinking := h.Eng.ReviewSessionState(runID, producerID)
+			ex.Waiting = waiting
+			ex.SessionBusy = thinking || waiting > 0 || !h.Eng.ReviewSessionReady(runID, producerID)
+		}
+	}
+	ex.UpstreamName, ex.UpstreamContent = h.publicUpstreamArtifact(runID, structName)
+	return ex
+}
+
+func (h *Handlers) publicGateProducerID(lookup *gateshare.LookupResult) string {
+	if lookup == nil || lookup.Node == nil {
+		return ""
+	}
+	up := strings.TrimSpace(lookup.Gate.UpstreamNodeID)
+	if up != "" {
+		return up
+	}
+	return ""
+}
+
+func (h *Handlers) publicConversation(runID, nodeID string) *models.ReactConversation {
+	if h.Runs == nil || strings.TrimSpace(runID) == "" || strings.TrimSpace(nodeID) == "" {
+		return nil
+	}
+	var conv models.ReactConversation
+	if err := h.Runs.DB().Where("run_id = ? AND node_id = ?", runID, nodeID).
+		Order("iteration desc, id desc").First(&conv).Error; err != nil {
+		return nil
+	}
+	return &conv
+}
+
+func (h *Handlers) publicUpstreamArtifact(runID, primaryName string) (name, content string) {
+	const upstreamName = "clarified_requirement.json"
+	if h.Arts == nil || strings.TrimSpace(runID) == "" {
+		return "", ""
+	}
+	if strings.EqualFold(strings.TrimSpace(primaryName), upstreamName) {
+		return "", ""
+	}
+	a, ok := h.Arts.GetRecord(runID, upstreamName)
+	if !ok || strings.TrimSpace(a.Content) == "" {
+		return "", ""
+	}
+	return upstreamName, a.Content
 }
 
 func (h *Handlers) publicGateArtifacts(lookup *gateshare.LookupResult) (visualHTML, structName, structContent string) {

@@ -237,20 +237,32 @@ const { t } = useI18n()
     <section v-if="doc.non_functional_requirements?.length">
       <div class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-txt3">{{ t('pages.product.clarifiedRequirement.nonFunctional') }}</div>
       <div class="space-y-1.5">
-        <div v-for="(n, i) in doc.non_functional_requirements" :key="n.id || i" class="group flex items-start gap-2 text-[11px] leading-5 text-txt2">
-          <span v-if="n.category" class="mt-0.5 shrink-0 rounded-md bg-elevated px-1.5 py-0.5 text-[10px] font-medium text-txt2">{{ n.category }}</span>
-          <span
-            class="min-w-0 flex-1"
+        <div
+          v-for="(n, i) in doc.non_functional_requirements"
+          :key="n.id || i"
+          class="group rounded-lg border border-line bg-base/40 p-2.5"
+          :data-json-path="`non_functional_requirements[${n.id || i}]`"
+          :data-label="n.detail || `NFR ${i + 1}`"
+        >
+          <div class="flex flex-wrap items-center gap-2">
+            <span
+              v-if="n.category"
+              class="shrink-0 rounded-md bg-elevated px-1.5 py-0.5 text-[10px] font-medium text-txt2"
+            >{{ n.category }}</span>
+            <AnnotateBtn :json-path="`non_functional_requirements[${n.id || i}]`" :label="n.detail || `NFR ${i + 1}`" />
+          </div>
+          <div
+            v-if="n.detail"
+            class="mt-1 min-w-0 w-full text-[11px] leading-relaxed text-txt2 [overflow-wrap:anywhere] break-words"
             :data-json-path="`non_functional_requirements[${n.id || i}]`"
             :data-label="n.detail || `NFR ${i + 1}`"
-          >{{ n.detail }}</span>
-          <AnnotateBtn :json-path="`non_functional_requirements[${n.id || i}]`" :label="n.detail || `NFR ${i + 1}`" />
-          <span
+          >{{ n.detail }}</div>
+          <div
             v-if="n.metric"
-            class="shrink-0 text-[10px] text-txt3"
+            class="mt-1 min-w-0 w-full text-[10px] text-txt3 [overflow-wrap:anywhere] break-words"
             :data-json-path="`non_functional_requirements[${n.id || i}].metric`"
             :data-label="`${n.detail || `NFR ${i + 1}`} metric`"
-          >{{ t('pages.product.clarifiedRequirement.metric') }}: {{ n.metric }}</span>
+          >{{ t('pages.product.clarifiedRequirement.metric') }}: {{ n.metric }}</div>
         </div>
       </div>
     </section>

@@ -15,4 +15,11 @@ describe('Icon', () => {
     expect(wrapper.find('svg').exists()).toBe(true)
     wrapper.unmount()
   })
+
+  it('renders lock glyph used by 403 states', () => {
+    const wrapper = mount(Icon, { props: { name: 'lock', size: 18 } })
+    expect(wrapper.find('svg').exists()).toBe(true)
+    expect(wrapper.html()).toMatch(/rect|M8 11V8/)
+    wrapper.unmount()
+  })
 })

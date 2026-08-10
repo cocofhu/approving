@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -174,6 +177,22 @@ describe('SandboxListView detail endpoints (g3)', () => {
     expect(notice).toMatch(/Session required/i)
     expect(notice).toMatch(/session\/ide/i)
     wrapper.unmount()
+  })
+})
+
+describe('SandboxListView loading small-fix lock', () => {
+  it('table-loading must not use pointer-events:none', () => {
+    const sandboxSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'SandboxListView.vue'), 'utf8')
+    const blockStart = sandboxSrc.indexOf('.table-loading {')
+    expect(blockStart).toBeGreaterThanOrEqual(0)
+    const blockEnd = sandboxSrc.indexOf('}', blockStart)
+    const block = sandboxSrc.slice(blockStart, blockEnd + 1)
+    expect(block).toMatch(/opacity:\s*0\.55/)
+    expect(block).not.toMatch(/pointer-events:\s*none/)
+    expect(sandboxSrc).not.toMatch(/\.table-loading\s*\{[^}]*pointer-events:\s*none/)
+    expect(sandboxSrc).toMatch(/admin-list-thin-bar bg-accent/)
+    expect(sandboxSrc).toMatch(/data-testid="sandbox-list-retry"/)
+    expect(sandboxSrc).toMatch(/data-testid="sandbox-list-denied"/)
   })
 })
 
