@@ -78,10 +78,12 @@ describe('PmCronJobsPanel', () => {
     const w = mountPanel()
     await flushPromises()
     expect(apiMocks.listProjectCronJobs).toHaveBeenCalledWith('proj-1')
+    expect(w.find('[data-testid="project-cron-jobs-panel"]').exists()).toBe(true)
     expect(w.text()).toContain('每日汇报')
     expect(w.text()).toContain('agent-a')
     expect(w.text()).toContain('cron: 0 9 * * *')
-    expect(w.text()).toMatch(/可查看与删除/)
+    expect(w.text()).not.toMatch(/可查看与删除/)
+    expect(w.text()).not.toContain('本项目下全部 Agent 的定时任务')
   })
 
   it('allows deliver toggle for non-admin without readonly banner', async () => {
@@ -91,7 +93,7 @@ describe('PmCronJobsPanel', () => {
     const toggle = w.get('[data-testid="cron-deliver-toggle"]')
     expect((toggle.element as HTMLButtonElement).disabled).toBe(false)
     expect(toggle.attributes('role')).toBe('switch')
-    expect(w.text()).toContain('任意已登录用户')
+    expect(w.text()).not.toContain('任意已登录用户')
     expect(w.text()).not.toMatch(/修改需平台管理员|但不能修改渠道推送/)
     expect(w.find('.bg-amber-500\\/10').exists()).toBe(false)
     await toggle.trigger('click')

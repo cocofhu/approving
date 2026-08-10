@@ -185,7 +185,9 @@ describe('ProjectDetailView PM Leader settings inline', () => {
     const { wrapper } = await mountDetail('cronJobs')
     expect(wrapper.find('[data-testid="project-cron-jobs-panel"]').exists()).toBe(true)
     expect(apiMocks.listProjectCronJobs).toHaveBeenCalledWith('proj-1')
-    expect(wrapper.text()).toContain('本项目下全部 Agent 的定时任务')
+    expect(wrapper.text()).not.toContain('本项目下全部 Agent 的定时任务')
+    expect(wrapper.text()).not.toContain('可查看与删除')
+    expect(wrapper.text()).not.toContain('任意已登录用户开关是否推送到项目绑定渠道')
   })
 
   it('maps legacy ?tab=pmSettings to PM Leader settings and rewrites URL', async () => {
