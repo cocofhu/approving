@@ -165,6 +165,17 @@ export type PublicGatePreviewTurn = {
   }>
 }
 
+export type PublicGateQueueItem = {
+  id?: string
+  text?: string
+}
+
+export type PublicGateActiveItem = {
+  id?: string
+  text?: string
+  annotations?: PublicGatePreviewTurn['annotations']
+}
+
 export type PublicGatePreview = {
   status: string
   kind?: 'human_gate' | 'review' | string
@@ -194,6 +205,9 @@ export type PublicGatePreview = {
   }
   reactSessionAlive?: boolean
   sessionBusy?: boolean
+  waiting?: number
+  queueItems?: PublicGateQueueItem[]
+  activeItem?: PublicGateActiveItem | null
   productKind?: 'visual' | 'structured' | 'app_preview' | string
   productName?: string
 }

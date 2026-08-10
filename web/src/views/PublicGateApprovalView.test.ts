@@ -254,6 +254,77 @@ describe('PublicGateApprovalView workbench', () => {
     expect(w.find('[data-testid="public-gate-done"]').exists()).toBe(false)
   })
 
+  it('silent preview without new turns does not drop optimistic ReAct queue', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    const basePreview = {
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-race',
+      reactSessionAlive: true,
+      sessionBusy: false,
+      waiting: 0,
+      actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
+      turns: [{ role: 'agent', text: '请复审', at: '2026-08-01T00:00:00Z' }],
+    }
+    mocks.preview.mockResolvedValue({ ...basePreview })
+    let resolveReply: ((value: unknown) => void) | undefined
+    mocks.reply.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveReply = resolve
+        }),
+    )
+    const w = mountView()
+    await flushPromises()
+    await w.get('[data-testid="clarify-input"]').setValue('改标题')
+    await w.get('[data-testid="clarify-send-icon"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="clarify-review-queue"]').exists()).toBe(true)
+    expect(w.get('[data-testid="clarify-review-queue"]').text()).toContain('改标题')
+
+    mocks.preview.mockResolvedValue({
+      ...basePreview,
+      sessionBusy: false,
+      waiting: 0,
+      turns: [{ role: 'agent', text: '请复审', at: '2026-08-01T00:00:00Z' }],
+    })
+    await (w.vm as unknown as { loadPreview: (opts?: { silent?: boolean }) => Promise<void> }).loadPreview({
+      silent: true,
+    })
+    await flushPromises()
+    expect(w.find('[data-testid="clarify-review-queue"]').exists()).toBe(true)
+    expect(w.get('[data-testid="clarify-review-queue"]').text()).toContain('改标题')
+    expect(w.find('[data-testid="public-gate-done"]').exists()).toBe(false)
+    expect(mocks.decide).not.toHaveBeenCalled()
+
+    resolveReply?.({ status: 'accepted' })
+    await flushPromises()
+    expect(w.find('[data-testid="clarify-review-queue"]').exists()).toBe(true)
+    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
+  })
+
+  it('sessionBusy preview restores thinking placeholder and cancel', async () => {
+    window.location.hash = `#t=${'dd'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-busy-resume',
+      reactSessionAlive: true,
+      sessionBusy: true,
+      waiting: 0,
+      activeItem: { text: '改标题' },
+      actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
+      turns: [{ role: 'agent', text: '请复审', at: '2026-08-01T00:00:00Z' }],
+    })
+    const w = mountView()
+    await flushPromises()
+    await flushPromises()
+    expect(w.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(true)
+    expect(w.find('[data-testid="clarify-review-cancel"]').exists()).toBe(true)
+    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(false)
+    expect(w.find('[data-testid="public-gate-done"]').exists()).toBe(false)
+  })
+
   it('unavailable states keep dark chrome without confirm/send', async () => {
     window.location.hash = `#t=${'bb'.repeat(32)}`
     mocks.preview.mockResolvedValue({ status: 'expired', kind: 'human_gate' })

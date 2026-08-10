@@ -130,15 +130,38 @@ func (e *Engine) ReviewSessionReady(runID, producerID string) bool {
 
 // ReviewSessionState returns waiting count and whether a turn is in flight.
 func (e *Engine) ReviewSessionState(runID, producerID string) (waiting int, thinking bool) {
+	snap, ok := e.ReviewSessionSnapshotFor(runID, producerID)
+	if !ok {
+		return 0, false
+	}
+	return snap.Waiting, snap.Busy
+}
+
+// ReviewSessionSnapshotFor returns the leak-safe queue snapshot for one parked session.
+func (e *Engine) ReviewSessionSnapshotFor(runID, producerID string) (ReviewSessionSnapshot, bool) {
 	e.reviewMu.Lock()
 	s := e.reviewSess[e.reviewSessionKey(runID, producerID)]
 	e.reviewMu.Unlock()
 	if s == nil {
-		return 0, false
+		return ReviewSessionSnapshot{}, false
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.waiting, s.active != nil
+	snap := ReviewSessionSnapshot{
+		NodeID:  s.producerID,
+		Kind:    string(s.kind),
+		Waiting: s.waiting,
+		Busy:    s.active != nil,
+		Items:   s.queueSnapshotLocked(),
+	}
+	if s.active != nil {
+		snap.ActiveItem = map[string]any{
+			"id":          s.active.ID,
+			"text":        s.active.Text,
+			"annotations": s.active.Annotations,
+		}
+	}
+	return snap, true
 }
 
 // ReviewSessionSnapshot is the refresh-resume DTO for one parked session.

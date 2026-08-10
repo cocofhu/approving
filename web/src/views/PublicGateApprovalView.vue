@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import HtmlPreview from '@/components/ui/HtmlPreview.vue'
 import Icon from '@/components/ui/Icon.vue'
@@ -15,9 +15,22 @@ import {
   formatRemainingSec,
   parseShareTokenFromHash,
   publicGateApi,
+  type PublicGateActiveItem,
   type PublicGatePreview,
+  type PublicGateQueueItem,
 } from '@/lib/gateShareLink'
 import type { ClarifyImage, ClarifyTurn, ReactAnnotation } from '@/lib/types'
+
+type PublicChatRef = {
+  discardLastQueued?: () => void
+  applyQueueState?: (
+    waiting: number,
+    items: PublicGateQueueItem[] | null,
+    busy?: boolean,
+    activeItem?: PublicGateActiveItem | null,
+  ) => void
+  isSessionBusy?: () => boolean
+}
 
 const POLL_MS = 2000
 
@@ -37,7 +50,9 @@ const upstreamOpen = ref(false)
 const draft = ref('')
 const attachments = ref<ClarifyImage[]>([])
 const annotations = ref<ReactAnnotation[]>([])
-const chatRef = ref<{ discardLastQueued?: () => void } | null>(null)
+const chatRef = ref<PublicChatRef | null>(null)
+const replyInFlight = ref(false)
+const pendingReplyText = ref('')
 
 const isReview = computed(() => preview.value?.kind === 'review')
 const status = computed(() => preview.value?.status || (token.value ? 'invalid' : 'invalid'))
@@ -49,8 +64,8 @@ const canReply = computed(() => isActive.value && reactAlive.value && !!preview.
 const canReject = computed(() => !isReview.value && !!preview.value?.actions?.reject)
 const canConfirm = computed(() => {
   if (!isActive.value || doneKind.value) return false
-  if (sessionBusy.value) return false
-  if (isReview.value) return !!preview.value?.actions?.confirm || true
+  if (sessionBusy.value || replyInFlight.value) return false
+  if (isReview.value) return !!preview.value?.actions?.confirm
   return !!preview.value?.actions?.approve || !!preview.value?.actions?.confirm
 })
 const productKind = computed(() => preview.value?.productKind || inferProductKind())
@@ -138,15 +153,47 @@ async function loadPreview(opts?: { silent?: boolean }) {
   }
   try {
     preview.value = await publicGateApi.preview(tok)
-    if (!preview.value?.sessionBusy) {
-      chatRef.value?.discardLastQueued?.()
-    }
   } catch (e) {
     preview.value = { status: 'invalid' }
     if (!opts?.silent) errorText.value = e instanceof Error ? e.message : String(e)
   } finally {
     loading.value = false
   }
+  await nextTick()
+  syncChatQueueFromPreview()
+}
+
+function turnsIncludeHumanText(text: string): boolean {
+  const want = text.trim()
+  if (!want) return false
+  return turns.value.some((turn) => turn.role === 'human' && (turn.text || '').trim() === want)
+}
+
+function syncChatQueueFromPreview() {
+  const chat = chatRef.value
+  const p = preview.value
+  if (!chat || !p || !isActive.value) return
+  const waiting = typeof p.waiting === 'number' ? p.waiting : 0
+  const items = p.queueItems || []
+  const activeItem = p.activeItem || null
+  const busy = !!p.sessionBusy || waiting > 0 || !!activeItem
+
+  if (busy) {
+    chat.applyQueueState?.(waiting, items.length ? items : null, true, activeItem)
+    if (pendingReplyText.value && (turnsIncludeHumanText(pendingReplyText.value) || activeItem?.text?.trim() === pendingReplyText.value)) {
+      pendingReplyText.value = ''
+    }
+    return
+  }
+
+  if (replyInFlight.value) return
+  if (pendingReplyText.value && !turnsIncludeHumanText(pendingReplyText.value)) return
+
+  if (pendingReplyText.value && turnsIncludeHumanText(pendingReplyText.value)) {
+    chat.discardLastQueued?.()
+    pendingReplyText.value = ''
+  }
+  chat.applyQueueState?.(0, [], false, null)
 }
 
 function clearHash() {
@@ -237,6 +284,8 @@ async function submitFinal(kind: 'confirm' | 'reject') {
 
 async function onSend(text: string, images: ClarifyImage[], anns: ReactAnnotation[]) {
   errorText.value = ''
+  replyInFlight.value = true
+  pendingReplyText.value = text.trim()
   try {
     await publicGateApi.reply({
       token: token.value,
@@ -247,7 +296,12 @@ async function onSend(text: string, images: ClarifyImage[], anns: ReactAnnotatio
     await loadPreview({ silent: true })
   } catch (e) {
     chatRef.value?.discardLastQueued?.()
+    pendingReplyText.value = ''
     errorText.value = e instanceof Error ? e.message : t('pages.publicGate.replyFailed')
+  } finally {
+    replyInFlight.value = false
+    await nextTick()
+    syncChatQueueFromPreview()
   }
 }
 
@@ -291,6 +345,10 @@ watch([isActive, doneKind], () => {
   else stopPoll()
 })
 
+watch(chatRef, (chat) => {
+  if (chat) syncChatQueueFromPreview()
+})
+
 onMounted(async () => {
   await applyPublicLocale()
   ready.value = true
@@ -303,6 +361,8 @@ onUnmounted(() => {
   window.removeEventListener('hashchange', onHashChange)
   reapplyThemeChrome()
 })
+
+defineExpose({ loadPreview })
 </script>
 
 <template>
@@ -511,7 +571,7 @@ onUnmounted(() => {
             type="button"
             class="inline-flex min-h-9 min-w-[8rem] items-center justify-center bg-ok px-4 text-sm font-medium text-white disabled:opacity-45"
             data-testid="public-gate-confirm"
-            :disabled="submitting || sessionBusy"
+            :disabled="submitting || sessionBusy || replyInFlight"
             :aria-label="t('pages.publicGate.confirmAria')"
             @click="submitFinal('confirm')"
           >

@@ -100,3 +100,34 @@ func TestBuildReviewPreviewDTOIncludesWorkbenchFields(t *testing.T) {
 		t.Fatalf("preview leak: %s", s)
 	}
 }
+
+func TestBuildReviewPreviewDTOIncludesQueueState(t *testing.T) {
+	lookup := &LookupResult{
+		Kind: models.ShareLinkKindReview,
+		Link: models.GateShareLink{ExpiresAt: mustFuture()},
+		Node: &models.Node{ID: "research1", Type: "research", Label: "调研"},
+	}
+	dto := BuildReviewPreviewDTO(models.ShareLinkStateActive, lookup, "", "research.json", `{"title":"调研摘要"}`, "nonce-q", PreviewExtras{
+		ReactSessionAlive: true,
+		SessionBusy:       true,
+		Waiting:           1,
+		QueueItems:        []map[string]any{{"id": "q1", "text": "请改标题，勿访问 http://10.1.2.3/api/runs/x"}},
+		ActiveItem: map[string]any{
+			"id":   "q1",
+			"text": "请改标题，勿访问 http://10.1.2.3/api/runs/x",
+			"images": []any{map[string]any{"url": "blob:http://127.0.0.1/abc"}},
+		},
+		ProductKind: ProductKindStructured,
+		ProductName: "research.json",
+	})
+	if !dto.SessionBusy || dto.Waiting != 1 || len(dto.QueueItems) != 1 || dto.ActiveItem == nil {
+		t.Fatalf("queue dto: busy=%v waiting=%d items=%+v active=%+v", dto.SessionBusy, dto.Waiting, dto.QueueItems, dto.ActiveItem)
+	}
+	if strings.Contains(dto.QueueItems[0].Text, "10.1.2.3") || strings.Contains(dto.ActiveItem.Text, "/api/runs") {
+		t.Fatalf("queue leak: %+v %+v", dto.QueueItems[0], dto.ActiveItem)
+	}
+	raw, _ := json.Marshal(dto)
+	if strings.Contains(string(raw), "blob:") || strings.Contains(string(raw), "127.0.0.1") {
+		t.Fatalf("activeItem leaked images/host: %s", raw)
+	}
+}

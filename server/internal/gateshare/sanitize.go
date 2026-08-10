@@ -38,6 +38,19 @@ type PreviewAnnotation struct {
 	Quote    string `json:"quote,omitempty"`
 }
 
+// PreviewQueueItem is a leak-free pending-send row for polling resume.
+type PreviewQueueItem struct {
+	ID   string `json:"id,omitempty"`
+	Text string `json:"text,omitempty"`
+}
+
+// PreviewActiveItem is a leak-free in-flight turn hint (no images / blob URLs).
+type PreviewActiveItem struct {
+	ID          string              `json:"id,omitempty"`
+	Text        string              `json:"text,omitempty"`
+	Annotations []PreviewAnnotation `json:"annotations,omitempty"`
+}
+
 var (
 	leakyURLRe = regexp.MustCompile(`(?i)(?:blob:[^\s"'<>]*|/api/[^\s"'<>]*|/preview/[^\s"'<>]*|/sandbox[^\s"'<>]*|/v1/[^\s"'<>]*|https?://(?:localhost|127\.0\.0\.1|0\.0\.0\.0|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(?::\d+)?[^\s"'<>]*)`)
 	internalHostRe = regexp.MustCompile(`(?i)\b(?:localhost|127\.0\.0\.1|0\.0\.0\.0)\b`)
@@ -213,11 +226,7 @@ func SanitizeTurns(msgs []models.ReactMessage) []PreviewTurn {
 		if role != "agent" && role != "human" {
 			continue
 		}
-		text := SanitizeDescription(m.Text)
-		if utf8.RuneCountInString(text) > maxTurnRunes {
-			r := []rune(text)
-			text = string(r[:maxTurnRunes]) + "…"
-		}
+		text := capTurnText(SanitizeDescription(m.Text))
 		turn := PreviewTurn{Role: role, Text: text, At: strings.TrimSpace(m.At), Interrupted: m.Interrupted}
 		if anns := sanitizeAnnotations(m.Annotations); len(anns) > 0 {
 			turn.Annotations = anns
@@ -231,6 +240,81 @@ func SanitizeTurns(msgs []models.ReactMessage) []PreviewTurn {
 		return nil
 	}
 	return out
+}
+
+// SanitizeQueueItems redacts pending FIFO rows for the public ReAct sidebar.
+func SanitizeQueueItems(items []map[string]any) []PreviewQueueItem {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]PreviewQueueItem, 0, len(items))
+	for _, it := range items {
+		if it == nil {
+			continue
+		}
+		id, _ := it["id"].(string)
+		text, _ := it["text"].(string)
+		text = capTurnText(SanitizeDescription(text))
+		id = strings.TrimSpace(id)
+		if id == "" && text == "" {
+			continue
+		}
+		out = append(out, PreviewQueueItem{ID: id, Text: text})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// SanitizeActiveItem redacts the in-flight turn for polling resume. Images are dropped.
+func SanitizeActiveItem(m map[string]any) *PreviewActiveItem {
+	if m == nil {
+		return nil
+	}
+	id, _ := m["id"].(string)
+	text, _ := m["text"].(string)
+	item := &PreviewActiveItem{
+		ID:   strings.TrimSpace(id),
+		Text: capTurnText(SanitizeDescription(text)),
+	}
+	switch anns := m["annotations"].(type) {
+	case []models.ReactAnnotation:
+		item.Annotations = sanitizeAnnotations(anns)
+	case []any:
+		parsed := make([]models.ReactAnnotation, 0, len(anns))
+		for _, raw := range anns {
+			am, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			parsed = append(parsed, models.ReactAnnotation{
+				Selector: stringMapField(am, "selector"),
+				JSONPath: stringMapField(am, "jsonPath"),
+				Label:    stringMapField(am, "label"),
+				Note:     stringMapField(am, "note"),
+				Quote:    stringMapField(am, "quote"),
+			})
+		}
+		item.Annotations = sanitizeAnnotations(parsed)
+	}
+	if item.ID == "" && item.Text == "" && len(item.Annotations) == 0 {
+		return nil
+	}
+	return item
+}
+
+func capTurnText(text string) string {
+	if utf8.RuneCountInString(text) <= maxTurnRunes {
+		return text
+	}
+	r := []rune(text)
+	return string(r[:maxTurnRunes]) + "…"
+}
+
+func stringMapField(m map[string]any, key string) string {
+	s, _ := m[key].(string)
+	return strings.TrimSpace(s)
 }
 
 func sanitizeAnnotations(anns []models.ReactAnnotation) []PreviewAnnotation {

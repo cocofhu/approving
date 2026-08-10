@@ -222,7 +222,7 @@ func TestReviewShareKindIsolationAndHumanGateUnchanged(t *testing.T) {
 
 	nonce := publicPreviewNonce(t, h, gateTok)
 	dec := h.doPublic(http.MethodPost, "/public/gate-approvals/decide", map[string]any{
-		"token": gateTok, "action": "approve", "nonce": nonce,
+		"token": gateTok, "action": "approve", "comment": "可以流转", "name": "Jordan", "nonce": nonce,
 	}, map[string]string{headerShareRequest: "1", "Origin": "http://" + publicHost})
 	if dec.Code != 200 || parseJSON(t, dec)["status"] != "approved" {
 		t.Fatalf("gate decide regression: %d %s", dec.Code, dec.Body.String())

@@ -18,6 +18,19 @@ setTheme('dark')
 const TOKEN = 'ab'.repeat(32)
 const SHARE_URL = `http://127.0.0.1:5174/public/gate-approvals#t=${TOKEN}`
 
+let reviewPreviewBusy = false
+let reviewPreviewTurns: Array<{ role: string; text: string; at: string }> = [
+  { role: 'agent', text: '请复审 research.json', at: '2026-08-01T00:00:00Z' },
+]
+
+;(window as unknown as { __idleReview?: () => void }).__idleReview = () => {
+  reviewPreviewBusy = false
+  reviewPreviewTurns = [
+    { role: 'agent', text: '请复审 research.json', at: '2026-08-01T00:00:00Z' },
+    { role: 'human', text: '请改标题', at: '2026-08-01T00:02:00Z' },
+  ]
+}
+
 ;(api as any).createGateShareLink = async (_runId: string, _nodeId: string, ttlTier = '24h') => ({
   id: 'gsl-e2e',
   url: SHARE_URL,
@@ -64,11 +77,14 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
           remainingSec: 3600,
           nonce: 'nonce-e2e-review',
           reactSessionAlive: true,
+          sessionBusy: reviewPreviewBusy,
+          waiting: reviewPreviewBusy ? 0 : 0,
+          activeItem: reviewPreviewBusy ? { text: '请改标题' } : undefined,
           productKind: 'structured',
           productName: 'research.json',
           actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
           structured: { name: 'research.json', title: '调研摘要', doc: { title: '调研摘要' } },
-          turns: [{ role: 'agent', text: '请复审 research.json', at: '2026-08-01T00:00:00Z' }],
+          turns: reviewPreviewTurns,
           upstream: { name: 'clarified_requirement.json', title: '澄清', summary: '已有澄清需求文档，可对照审阅当前主产物' },
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -95,6 +111,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     )
   }
   if (url.includes('/public/gate-approvals/reply')) {
+    reviewPreviewBusy = true
     return new Response(JSON.stringify({ status: 'accepted' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -109,13 +126,16 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   if (url.includes('/public/gate-approvals/decide')) {
     const body = init?.body ? JSON.parse(String(init.body)) : {}
     if (body.action === 'confirm') {
+      reviewPreviewBusy = false
       return new Response(JSON.stringify({ status: 'confirmed', action: 'confirm' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
     }
-    if (body.action === 'revise' && !String(body.comment || '').trim()) {
-      return new Response(JSON.stringify({ error: 'comment_required', message: '驳回必须填写意见' }), {
+    const name = String(body.name || '').trim()
+    const comment = String(body.comment || '').trim()
+    if (!name || !comment) {
+      return new Response(JSON.stringify({ error: 'audit_required', message: '请填写姓名与意见后再提交' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       })

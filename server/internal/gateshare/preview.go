@@ -28,10 +28,13 @@ type PreviewDTO struct {
 	Nonce             string           `json:"nonce,omitempty"`
 	Turns             []PreviewTurn    `json:"turns,omitempty"`
 	Upstream          map[string]any   `json:"upstream,omitempty"`
-	ReactSessionAlive *bool            `json:"reactSessionAlive,omitempty"`
-	SessionBusy       bool             `json:"sessionBusy,omitempty"`
-	ProductKind       string           `json:"productKind,omitempty"`
-	ProductName       string           `json:"productName,omitempty"`
+	ReactSessionAlive *bool              `json:"reactSessionAlive,omitempty"`
+	SessionBusy       bool               `json:"sessionBusy,omitempty"`
+	Waiting           int                `json:"waiting,omitempty"`
+	QueueItems        []PreviewQueueItem `json:"queueItems,omitempty"`
+	ActiveItem        *PreviewActiveItem `json:"activeItem,omitempty"`
+	ProductKind       string             `json:"productKind,omitempty"`
+	ProductName       string             `json:"productName,omitempty"`
 }
 
 // PreviewExtras carries workbench fields that are optional on inactive links.
@@ -41,6 +44,9 @@ type PreviewExtras struct {
 	UpstreamContent   string
 	ReactSessionAlive bool
 	SessionBusy       bool
+	Waiting           int
+	QueueItems        []map[string]any
+	ActiveItem        map[string]any
 	ProductKind       string
 	ProductName       string
 }
@@ -150,7 +156,16 @@ func applyPreviewArtifacts(dto *PreviewDTO, visualHTML, structuredName, structur
 	}
 	alive := extras.ReactSessionAlive
 	dto.ReactSessionAlive = &alive
-	dto.SessionBusy = extras.SessionBusy && alive
+	if items := SanitizeQueueItems(extras.QueueItems); len(items) > 0 {
+		dto.QueueItems = items
+	}
+	if ai := SanitizeActiveItem(extras.ActiveItem); ai != nil {
+		dto.ActiveItem = ai
+	}
+	if extras.Waiting > 0 {
+		dto.Waiting = extras.Waiting
+	}
+	dto.SessionBusy = alive && (extras.SessionBusy || extras.Waiting > 0 || dto.ActiveItem != nil)
 }
 
 func inferProductKind(visualHTML, structuredName, hinted string) (kind, name string) {

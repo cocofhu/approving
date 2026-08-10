@@ -244,30 +244,38 @@ func (h *Handlers) PublicGateDecide(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": st})
 		return
 	}
+	kind := publicShareKind(lookup)
+	comment, name := "", ""
+	if kind != models.ShareLinkKindReview && st == models.ShareLinkStateActive {
+		var ok bool
+		comment, ok = gateshare.ClampComment(body.Comment)
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "comment_too_long"})
+			return
+		}
+		name, ok = gateshare.ClampExternalName(body.Name)
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "name_too_long"})
+			return
+		}
+		if comment == "" || name == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "audit_required", "message": "请填写姓名与意见后再提交"})
+			return
+		}
+	}
 	if !h.GateShareNonces.Consume(lookup.Link.TokenHash, strings.TrimSpace(body.Nonce)) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "nonce", "message": "请求未通过安全校验"})
 		return
 	}
-	kind := publicShareKind(lookup)
 	if kind == models.ShareLinkKindReview {
 		h.publicReviewDecide(c, lookup, token, strings.TrimSpace(body.Action))
-		return
-	}
-	comment, ok := gateshare.ClampComment(body.Comment)
-	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "comment_too_long"})
-		return
-	}
-	name, ok := gateshare.ClampExternalName(body.Name)
-	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "name_too_long"})
 		return
 	}
 	action := strings.TrimSpace(body.Action)
 	res, err := h.Eng.ResumeGateExternal(h.GateShare, token, action, comment, name)
 	if err != nil {
-		if errors.Is(err, gateshare.ErrCommentRequired) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "comment_required", "message": "驳回必须填写意见"})
+		if errors.Is(err, gateshare.ErrAuditRequired) || errors.Is(err, gateshare.ErrCommentRequired) || errors.Is(err, gateshare.ErrNameRequired) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "audit_required", "message": "请填写姓名与意见后再提交"})
 			return
 		}
 		if errors.Is(err, gateshare.ErrActionConflict) && res != nil {
@@ -422,8 +430,16 @@ func (h *Handlers) publicReviewExtras(lookup *gateshare.LookupResult, visualHTML
 	}
 	ex.ReactSessionAlive = h.Eng != nil && h.Eng.HasLiveReviewSession(runID, nodeID)
 	if ex.ReactSessionAlive && h.Eng != nil {
-		waiting, thinking := h.Eng.ReviewSessionState(runID, nodeID)
-		ex.SessionBusy = thinking || waiting > 0 || !h.Eng.ReviewSessionReady(runID, nodeID)
+		if snap, ok := h.Eng.ReviewSessionSnapshotFor(runID, nodeID); ok {
+			ex.Waiting = snap.Waiting
+			ex.QueueItems = snap.Items
+			ex.ActiveItem = snap.ActiveItem
+			ex.SessionBusy = snap.Busy || snap.Waiting > 0 || !h.Eng.ReviewSessionReady(runID, nodeID)
+		} else {
+			waiting, thinking := h.Eng.ReviewSessionState(runID, nodeID)
+			ex.Waiting = waiting
+			ex.SessionBusy = thinking || waiting > 0 || !h.Eng.ReviewSessionReady(runID, nodeID)
+		}
 	}
 	ex.UpstreamName, ex.UpstreamContent = h.publicUpstreamArtifact(runID, structName)
 	return ex
@@ -462,8 +478,16 @@ func (h *Handlers) publicGateExtras(lookup *gateshare.LookupResult, visualHTML, 
 	}
 	ex.ReactSessionAlive = alive
 	if alive && h.Eng != nil && producerID != "" {
-		waiting, thinking := h.Eng.ReviewSessionState(runID, producerID)
-		ex.SessionBusy = thinking || waiting > 0 || !h.Eng.ReviewSessionReady(runID, producerID)
+		if snap, ok := h.Eng.ReviewSessionSnapshotFor(runID, producerID); ok {
+			ex.Waiting = snap.Waiting
+			ex.QueueItems = snap.Items
+			ex.ActiveItem = snap.ActiveItem
+			ex.SessionBusy = snap.Busy || snap.Waiting > 0 || !h.Eng.ReviewSessionReady(runID, producerID)
+		} else {
+			waiting, thinking := h.Eng.ReviewSessionState(runID, producerID)
+			ex.Waiting = waiting
+			ex.SessionBusy = thinking || waiting > 0 || !h.Eng.ReviewSessionReady(runID, producerID)
+		}
 	}
 	ex.UpstreamName, ex.UpstreamContent = h.publicUpstreamArtifact(runID, structName)
 	return ex
