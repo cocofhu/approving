@@ -1588,12 +1588,12 @@ onUnmounted(() => {
         <ProjectAuditPanel :project-id="projectId" :force-denied="auditForceDenied" />
       </div>
 
-      <!-- Project info (meta) tab: near-full-width panel (shell / head / fields / primary save) -->
-      <div v-else-if="tab === 'meta'" class="flex min-h-[420px] flex-col">
+      <!-- Project info (meta) tab: fill remaining main area (no page void under card) -->
+      <div v-else-if="tab === 'meta'" class="flex min-h-0 flex-1 flex-col">
         <div
           class="flex flex-1 flex-col overflow-hidden border border-line bg-surface shadow-[var(--shadow-card)]"
         >
-          <div class="border-b border-line bg-elevated/55 px-4 py-3.5">
+          <div class="shrink-0 border-b border-line bg-elevated/55 px-4 py-3.5">
             <h2 class="m-0 text-sm font-semibold text-txt">
               {{ t('pages.projectDetail.metaTitle') }}
             </h2>
@@ -1602,7 +1602,7 @@ onUnmounted(() => {
             </p>
           </div>
 
-          <div class="flex flex-1 flex-col gap-3.5 p-4">
+          <div class="scroll-area flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-4">
             <div>
               <label class="label" for="project-meta-name">{{ t('pages.projectList.nameLabel') }}</label>
               <input
@@ -1618,14 +1618,14 @@ onUnmounted(() => {
                 id="project-meta-desc"
                 v-model="editDesc"
                 rows="5"
-                class="input min-h-[120px]"
+                class="input min-h-[120px] resize-y"
                 :placeholder="t('pages.projectDetail.metaDescPlaceholder')"
               />
             </div>
           </div>
 
           <div
-            class="flex flex-wrap items-center justify-between gap-2 border-t border-line bg-surface p-3"
+            class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line bg-surface p-3"
             data-testid="project-meta-footer"
           >
             <AppButton
