@@ -75,10 +75,23 @@ const postEnableItems = [
   }),
 ]
 
+/** 7 post-baseline items → dropdown shows 5 +「还有 2 条未展示」. */
+const cappedItems = Array.from({ length: 7 }, (_, i) =>
+  makeRun({
+    id: `run-cap-${i}`,
+    status: i === 0 ? 'failed' : 'completed',
+    title: `封顶预览条目 ${i}`,
+    workflowName: '自我迭代',
+    startedAt: `2026-08-10T${String(10 + i).padStart(2, '0')}:00:00Z`,
+    durationSec: 30,
+  }),
+)
+
 function poolForScene() {
   if (scene === 'empty') return []
   if (scene === 'history-only') return historyItems
   if (scene === 'post-enable') return [...postEnableItems, ...historyItems]
+  if (scene === 'capped') return cappedItems
   return postEnableItems
 }
 
@@ -140,9 +153,9 @@ async function bootstrap() {
   await initLocale()
   await setLocale('zh-CN')
 
-  // Seed enable baseline: for post-enable / with-items, baseline in past so items unread;
+  // Seed enable baseline: for post-enable / with-items / capped, baseline in past so items unread;
   // for history-only, leave unset so first enable treats history as read.
-  if (scene === 'post-enable' || scene === 'with-items') {
+  if (scene === 'post-enable' || scene === 'with-items' || scene === 'capped') {
     localStorage.setItem(
       'approving.notifications.prefs.e2e',
       JSON.stringify({ enabledAt: '2020-01-01T00:00:00Z', readIds: [] }),
