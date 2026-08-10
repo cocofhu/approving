@@ -369,14 +369,13 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
     await expect(newNote.getByText('停用的行会保留 key/value，但不参与注入；开关与字段变更须保存后，才影响下次注入。')).toBeVisible()
     await page.keyboard.press('Escape')
 
-    const shell = page
-      .locator('.border.border-line.bg-surface')
-      .filter({ hasText: '暂无沙箱环境变量' })
-      .first()
+    const shell = page.getByTestId('sandbox-env-empty-shell')
     await expect(shell).toBeVisible()
     const box = await shell.boundingBox()
     expect(box?.height).toBeGreaterThanOrEqual(360)
     expect(box?.width).toBeGreaterThan(900)
+    // 空态壳底贴近视口主区底，消除卡外页底空洞（g2.2 / 对齐 meta footerBox）
+    expect(box!.y + box!.height).toBeGreaterThan(800 - 80)
 
     const addBtn = shell.getByRole('button', { name: '添加一行' })
     await expect(addBtn).toBeVisible()
@@ -387,7 +386,7 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
     await gotoProjectDetailWithProject(page, MOCK_PROJECT_WITH_VARS)
     await page.getByRole('button', { name: '沙箱环境变量' }).click()
 
-    const panel = page.locator('.border.border-line.bg-surface').filter({ hasText: 'KEY' }).first()
+    const panel = page.getByTestId('sandbox-env-data-panel')
     await expect(panel.getByText('KEY', { exact: true })).toBeVisible()
     await expect(panel.getByText('VALUE', { exact: true })).toBeVisible()
     await expect(panel.getByText('类型', { exact: true })).toBeVisible()
@@ -398,13 +397,17 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
     await expect(panel.getByTestId('sandbox-env-enabled')).toBeVisible()
     await expect(panel.getByText('开', { exact: true })).toBeVisible()
 
-    const foot = panel.locator('.border-t.border-line').last()
+    const foot = panel.getByTestId('sandbox-env-footer')
     const addBtn = foot.getByRole('button', { name: '添加一行' })
     const saveBtn = foot.getByRole('button', { name: '保存' })
     await expect(addBtn).toBeVisible()
     await expect(addBtn).toHaveClass(/border/)
     await expect(saveBtn).toBeVisible()
     await expect(saveBtn).toHaveClass(/bg-accent/)
+    // 有数据底栏贴近视口主区底（g2.2）
+    const footBox = await foot.boundingBox()
+    expect(footBox).toBeTruthy()
+    expect(footBox!.y + footBox!.height).toBeGreaterThan(800 - 80)
   })
 
   test('沙箱启用开关：旧 mock 无 enabled 时行显示为开', async ({ page }) => {
@@ -522,7 +525,7 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
     await expect(onRow).toHaveAttribute('data-env-enabled', 'false')
     await expect(onRow.getByText('关', { exact: true })).toBeVisible()
 
-    const panel = page.locator('.border.border-line.bg-surface').filter({ hasText: 'KEY' }).first()
+    const panel = page.getByTestId('sandbox-env-data-panel')
     await panel.getByRole('button', { name: '保存' }).click()
     await expect.poll(() => saveBody).not.toBeNull()
     const apiUrl = saveBody!.sandboxEnv?.find((e) => e.key === 'API_URL')
@@ -535,14 +538,13 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
     await gotoProjectDetailWithProject(page, MOCK_PROJECT)
     await page.getByRole('button', { name: '工作流变量' }).click()
 
-    const shell = page
-      .locator('.border.border-line.bg-surface')
-      .filter({ hasText: '暂无工作流变量' })
-      .first()
+    const shell = page.getByTestId('workflow-vars-empty-shell')
     await expect(shell).toBeVisible()
     const box = await shell.boundingBox()
     expect(box?.height).toBeGreaterThanOrEqual(360)
     expect(box?.width).toBeGreaterThan(900)
+    // 空态壳底贴近视口主区底（g2.2 / 与沙箱同构）
+    expect(box!.y + box!.height).toBeGreaterThan(800 - 80)
 
     const addBtn = shell.getByRole('button', { name: '添加一行' })
     await expect(addBtn).toHaveClass(/bg-accent/)
@@ -564,16 +566,20 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
     await gotoProjectDetailWithProject(page, MOCK_PROJECT_WITH_VARS)
     await page.getByRole('button', { name: '工作流变量' }).click()
 
-    const panel = page.locator('.border.border-line.bg-surface').filter({ hasText: '默认值' }).first()
+    const panel = page.getByTestId('workflow-vars-data-panel')
     await expect(panel.getByText('名称', { exact: true })).toBeVisible()
     await expect(panel.getByText('默认值', { exact: true })).toBeVisible()
     await expect(panel.getByText('类型', { exact: true })).toBeVisible()
     await expect(panel.getByText('操作', { exact: true })).toBeVisible()
     await expect(panel.getByPlaceholder('描述（可选）')).toHaveValue('部署区域')
 
-    const foot = panel.locator('.border-t.border-line').last()
+    const foot = panel.getByTestId('workflow-vars-footer')
     await expect(foot.getByRole('button', { name: '添加一行' })).toHaveClass(/border/)
     await expect(foot.getByRole('button', { name: '保存' })).toHaveClass(/bg-accent/)
+    // 有数据底栏贴近视口主区底（g2.2）
+    const footBox = await foot.boundingBox()
+    expect(footBox).toBeTruthy()
+    expect(footBox!.y + footBox!.height).toBeGreaterThan(800 - 80)
 
     // g2.2 / F2: 有数据态同样无 varsHint、无「合并规则」
     await expect(page.getByRole('button', { name: '合并规则' })).toHaveCount(0)
@@ -587,14 +593,11 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
     await gotoProjectDetailWithProject(page, MOCK_PROJECT)
     await page.getByRole('button', { name: '沙箱环境变量' }).click()
 
-    const emptyShell = page
-      .locator('.border.border-line.bg-surface')
-      .filter({ hasText: '暂无沙箱环境变量' })
-      .first()
+    const emptyShell = page.getByTestId('sandbox-env-empty-shell')
     await emptyShell.getByRole('button', { name: '添加一行' }).click()
 
     await expect(page.getByText('暂无沙箱环境变量')).toHaveCount(0)
-    const panel = page.locator('.border.border-line.bg-surface').filter({ hasText: 'KEY' }).first()
+    const panel = page.getByTestId('sandbox-env-data-panel')
     await expect(panel.getByText('KEY', { exact: true })).toBeVisible()
     await expect(panel.getByRole('button', { name: '明文' })).toBeVisible()
     await expect(panel.getByRole('button', { name: '保存' })).toBeVisible()

@@ -72,8 +72,30 @@ describe('ProjectDetailView meta tab keeps existing chrome and save semantics (g
     expect(shellSrc).toMatch(/<main[\s\S]*class="relative min-h-0 flex-1 overflow-hidden"/)
     expect(detailSrc).toMatch(/tab === 'cronJobs'" class="flex min-h-\[420px\] flex-col"/)
     expect(detailSrc).toMatch(/tab === 'notify' && project" class="min-h-\[420px\]"/)
-    expect(detailSrc).toMatch(/tab === 'sandboxEnv'" class="flex min-h-\[420px\] flex-col"/)
-    expect(detailSrc).toMatch(/tab === 'variables'" class="flex min-h-\[420px\] flex-col"/)
+    // variables / sandboxEnv 已接入铺满链（对齐 meta），不再锁定 420 硬底
+    expect(detailSrc).toMatch(/tab === 'sandboxEnv'" class="flex min-h-0 flex-1 flex-col"/)
+    expect(detailSrc).toMatch(/tab === 'variables'" class="flex min-h-0 flex-1 flex-col"/)
     expect(detailSrc).toMatch(/tab === 'audit'" class="flex min-h-0 flex-1 flex-col"/)
+  })
+
+  it('variables / sandboxEnv shells drop bottom border and use three-zone flex (fill-height)', () => {
+    const sandboxStart = detailSrc.indexOf("tab === 'sandboxEnv'")
+    const variablesStart = detailSrc.indexOf("tab === 'variables'")
+    const auditStart = detailSrc.indexOf("tab === 'audit'")
+    expect(sandboxStart).toBeGreaterThanOrEqual(0)
+    expect(variablesStart).toBeGreaterThan(sandboxStart)
+    expect(auditStart).toBeGreaterThan(variablesStart)
+    const sandbox = detailSrc.slice(sandboxStart, variablesStart)
+    const variables = detailSrc.slice(variablesStart, auditStart)
+
+    for (const block of [sandbox, variables]) {
+      expect(block).toMatch(/border border-b-0 border-line bg-surface/)
+      expect(block).toMatch(/scroll-area flex min-h-0 flex-1 flex-col overflow-y-auto/)
+      expect(block).toMatch(/flex shrink-0 flex-wrap gap-2 border-t border-line/)
+      expect(block).not.toMatch(/min-h-\[420px\]/)
+    }
+    expect(sandbox).toMatch(/mb-3 flex shrink-0 flex-wrap items-baseline/)
+    expect(sandbox).toMatch(/data-testid="sandbox-env-footer"/)
+    expect(variables).toMatch(/data-testid="workflow-vars-footer"/)
   })
 })

@@ -807,7 +807,10 @@ onUnmounted(() => {
     >
       <i class="admin-list-thin-bar bg-accent" />
     </div>
-    <div :class="showRefreshProgress ? 'opacity-[0.55]' : ''">
+    <div
+      class="flex min-h-0 flex-1 flex-col"
+      :class="showRefreshProgress ? 'opacity-[0.55]' : ''"
+    >
     <div class="mb-4 shrink-0">
       <button
         type="button"
@@ -1405,9 +1408,9 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Sandbox env tab -->
-      <div v-else-if="tab === 'sandboxEnv'" class="flex min-h-[420px] flex-col">
-        <div class="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
+      <!-- Sandbox env tab: fill remaining main area, no page void under card -->
+      <div v-else-if="tab === 'sandboxEnv'" class="flex min-h-0 flex-1 flex-col">
+        <div class="mb-3 flex shrink-0 flex-wrap items-baseline gap-x-3 gap-y-1.5">
           <p class="m-0 text-[13px] text-txt3">{{ t('pages.projectDetail.envHint') }}</p>
           <button
             type="button"
@@ -1419,12 +1422,13 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <!-- Empty: same shell as data panel, min-h centered, primary CTA -->
+        <!-- Empty: same shell as data panel, fill + centered CTA, no bottom border -->
         <div
           v-if="!envRows.length"
-          class="flex min-h-[360px] flex-1 flex-col border border-line bg-surface shadow-[var(--shadow-card)]"
+          class="flex min-h-[360px] flex-1 flex-col border border-b-0 border-line bg-surface shadow-[var(--shadow-card)]"
+          data-testid="sandbox-env-empty-shell"
         >
-          <div class="flex flex-1 flex-col justify-center">
+          <div class="flex flex-1 flex-col items-center justify-center">
             <EmptyState
               icon="variable"
               :title="t('pages.projectDetail.envEmptyTitle')"
@@ -1437,13 +1441,14 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Data: unified panel with head / rows / foot -->
+        <!-- Data: head / scroll rows / foot stick to shell bottom -->
         <div
           v-else
-          class="flex flex-1 flex-col overflow-hidden border border-line bg-surface shadow-[var(--shadow-card)]"
+          class="flex min-h-0 flex-1 flex-col overflow-hidden border border-b-0 border-line bg-surface shadow-[var(--shadow-card)]"
+          data-testid="sandbox-env-data-panel"
         >
           <div
-            class="hidden gap-2 border-b border-line bg-elevated/55 px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-txt3 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_88px_96px_40px]"
+            class="hidden shrink-0 gap-2 border-b border-line bg-elevated/55 px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-txt3 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_88px_96px_40px]"
           >
             <span>{{ t('pages.projectDetail.envKey') }}</span>
             <span>{{ t('pages.projectDetail.colValue') }}</span>
@@ -1452,7 +1457,7 @@ onUnmounted(() => {
             <span>{{ t('common.table.actions') }}</span>
           </div>
 
-          <div class="flex flex-col">
+          <div class="scroll-area flex min-h-0 flex-1 flex-col overflow-y-auto">
             <div
               v-for="(row, i) in envRows"
               :key="i"
@@ -1528,7 +1533,10 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div class="flex flex-wrap gap-2 border-t border-line bg-surface p-3">
+          <div
+            class="flex shrink-0 flex-wrap gap-2 border-t border-line bg-surface p-3"
+            data-testid="sandbox-env-footer"
+          >
             <AppButton variant="outline" icon="plus" @click="addEnvRow">
               {{ t('pages.projectDetail.addRow') }}
             </AppButton>
@@ -1539,14 +1547,15 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Variables tab: no varsHint / merge-rules row (Demo after); sandbox tab keeps them -->
-      <div v-else-if="tab === 'variables'" class="flex min-h-[420px] flex-col">
+      <!-- Variables tab: fill remaining main area; no varsHint / merge-rules row -->
+      <div v-else-if="tab === 'variables'" class="flex min-h-0 flex-1 flex-col">
         <!-- Empty: same shell as sandbox tab -->
         <div
           v-if="!varRows.length"
-          class="flex min-h-[360px] flex-1 flex-col border border-line bg-surface shadow-[var(--shadow-card)]"
+          class="flex min-h-[360px] flex-1 flex-col border border-b-0 border-line bg-surface shadow-[var(--shadow-card)]"
+          data-testid="workflow-vars-empty-shell"
         >
-          <div class="flex flex-1 flex-col justify-center">
+          <div class="flex flex-1 flex-col items-center justify-center">
             <EmptyState
               icon="doc"
               :title="t('pages.projectDetail.varsEmptyTitle')"
@@ -1559,13 +1568,14 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Data: unified panel; main row 4-col + secondary desc/options -->
+        <!-- Data: head / scroll rows / foot stick to shell bottom -->
         <div
           v-else
-          class="flex flex-1 flex-col overflow-hidden border border-line bg-surface shadow-[var(--shadow-card)]"
+          class="flex min-h-0 flex-1 flex-col overflow-hidden border border-b-0 border-line bg-surface shadow-[var(--shadow-card)]"
+          data-testid="workflow-vars-data-panel"
         >
           <div
-            class="hidden gap-2 border-b border-line bg-elevated/55 px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-txt3 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(120px,auto)_40px]"
+            class="hidden shrink-0 gap-2 border-b border-line bg-elevated/55 px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-txt3 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(120px,auto)_40px]"
           >
             <span>{{ t('pages.projectDetail.colVarName') }}</span>
             <span>{{ t('pages.projectDetail.colDefault') }}</span>
@@ -1573,7 +1583,7 @@ onUnmounted(() => {
             <span>{{ t('common.table.actions') }}</span>
           </div>
 
-          <div class="flex flex-col">
+          <div class="scroll-area flex min-h-0 flex-1 flex-col overflow-y-auto">
             <div
               v-for="(row, i) in varRows"
               :key="i"
@@ -1694,7 +1704,10 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div class="flex flex-wrap gap-2 border-t border-line bg-surface p-3">
+          <div
+            class="flex shrink-0 flex-wrap gap-2 border-t border-line bg-surface p-3"
+            data-testid="workflow-vars-footer"
+          >
             <AppButton variant="outline" icon="plus" @click="addVarRow">
               {{ t('pages.projectDetail.addRow') }}
             </AppButton>
