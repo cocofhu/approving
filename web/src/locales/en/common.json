@@ -38,6 +38,13 @@
       "next": "Next",
       "loadEarlier": "Load earlier events"
     },
+    "loading": {
+      "inProgress": "Loading",
+      "refreshing": "Refreshing",
+      "retry": "Retry",
+      "timeout": "Request timed out",
+      "failed": "Failed to load"
+    },
     "buttons": {
       "cancel": "Cancel",
       "confirm": "Confirm",
@@ -237,7 +244,9 @@
     "projectFilter": {
       "all": "All projects",
       "noMatch": "No matching projects",
-      "searchPlaceholder": "Search projects…"
+      "searchPlaceholder": "Search projects…",
+      "empty": "No projects yet",
+      "loadFailed": "Failed to load projects"
     },
     "tagFilter": {
       "label": "Tags",

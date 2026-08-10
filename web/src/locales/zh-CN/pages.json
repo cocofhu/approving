@@ -1094,7 +1094,6 @@
     },
     "sandboxes": {
       "title": "沙箱",
-      "subtitle": "所有沙箱容器:工作流运行时的节点沙箱(运行)与 Agent 对话测试沙箱(测试)。运行中的沙箱不会被回收;空闲测试沙箱超过 TTL 自动回收。",
       "errorPrefix": "出错:",
       "empty": "暂无沙箱。运行工作流时会按需创建节点沙箱,或前往 \"Agent 管理 → 对话测试\" 启动一个测试沙箱。",
       "copyId": "复制 ID",
@@ -2403,8 +2402,8 @@
       "wallHint": "占比默认分母",
       "nodeSum": "节点合计",
       "nodeSumHint": "各过程耗时之和",
-      "gap": "差额",
-      "gapHint": "总耗时 − 合计",
+      "gap": "空闲",
+      "gapHint": "过程未占用的墙钟",
       "totalTokens": "总 token",
       "tokenRate": "token/s",
       "sumTokens": "Σ 总 token",

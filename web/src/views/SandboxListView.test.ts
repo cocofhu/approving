@@ -196,3 +196,128 @@ describe('SandboxListView loading small-fix lock', () => {
   })
 })
 
+describe('SandboxListView page header copy removal (g1/g2)', () => {
+  const subtitleZh = ['工作流运行时', '空闲测试沙箱', '所有沙箱容器']
+  const subtitleEn = ['Run node sandboxes', 'idle test sandboxes', 'Agent chat test sandboxes']
+  const demoReview = ['副标题已移除', '改前', '改后', 'ghost-sub', 'subtitle removed']
+
+  function pageHead(wrapper: ReturnType<typeof mountList>['wrapper']) {
+    return wrapper.find('.mb-5.flex.flex-col')
+  }
+
+  function mountBilingual(initial: 'zh-CN' | 'en' = 'zh-CN') {
+    const i18n = createI18n({
+      legacy: false,
+      locale: initial,
+      messages: {
+        'zh-CN': { ...common, ...pages },
+        en: { ...enCommon, ...enPages },
+      },
+    })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', component: { template: '<div />' } },
+        { path: '/sandboxes', component: SandboxListView },
+        { path: '/sandboxes/:id/console', name: 'sandbox-console', component: { template: '<div data-testid="console" />' } },
+      ],
+    })
+    router.push('/sandboxes')
+    const wrapper = mount(SandboxListView, {
+      global: {
+        plugins: [i18n, router],
+        stubs: {
+          Icon: true,
+          AppButton: { template: '<button type="button"><slot /></button>' },
+          AppModal: {
+            props: ['open', 'title', 'width'],
+            template: '<div v-if="open" data-testid="sandbox-detail-modal"><slot /><slot name="footer" /></div>',
+          },
+        },
+      },
+    })
+    return { wrapper, i18n }
+  }
+
+  it('removes pages.sandboxes.subtitle i18n keys (g1.2)', () => {
+    expect((pages as { pages: { sandboxes: Record<string, unknown> } }).pages.sandboxes.subtitle).toBeUndefined()
+    expect((enPages as { pages: { sandboxes: Record<string, unknown> } }).pages.sandboxes.subtitle).toBeUndefined()
+  })
+
+  it('hides zh subtitle, keeps title + cleanup, and Demo-aligned header (g1.1/g1.3/g2.1)', async () => {
+    const { wrapper } = mountList('zh-CN')
+    await flushPromises()
+
+    const text = wrapper.text()
+    for (const s of subtitleZh) expect(text).not.toContain(s)
+    for (const s of demoReview) expect(text).not.toContain(s)
+    expect(text).toContain('沙箱')
+    expect(text).toContain('清理空闲')
+
+    const head = pageHead(wrapper)
+    expect(head.exists()).toBe(true)
+    expect(head.classes()).toEqual(
+      expect.arrayContaining([
+        'mb-5',
+        'flex',
+        'flex-col',
+        'items-start',
+        'gap-2.5',
+        'md:flex-row',
+        'md:items-end',
+        'md:justify-between',
+      ]),
+    )
+    expect(head.classes()).not.toContain('justify-end')
+    expect(head.find('p').exists()).toBe(false)
+    expect(head.find('h2').text()).toBe('沙箱')
+    wrapper.unmount()
+  })
+
+  it('hides en subtitle and keeps Sandboxes + Clean up idle (g2.2)', async () => {
+    const { wrapper } = mountList('en')
+    await flushPromises()
+
+    const text = wrapper.text()
+    for (const s of subtitleEn) expect(text).not.toContain(s)
+    for (const s of demoReview) expect(text).not.toContain(s)
+    expect(text).toContain('Sandboxes')
+    expect(text).toContain('Clean up idle')
+    expect(pageHead(wrapper).find('h2').text()).toBe('Sandboxes')
+    wrapper.unmount()
+  })
+
+  it('language switch does not revive subtitle (g2.2)', async () => {
+    const { wrapper, i18n } = mountBilingual('zh-CN')
+    await flushPromises()
+
+    let text = wrapper.text()
+    for (const s of subtitleZh) expect(text).not.toContain(s)
+    expect(text).toContain('沙箱')
+    expect(text).toContain('清理空闲')
+
+    i18n.global.locale.value = 'en'
+    await flushPromises()
+    text = wrapper.text()
+    for (const s of subtitleZh) expect(text).not.toContain(s)
+    for (const s of subtitleEn) expect(text).not.toContain(s)
+    expect(text).toContain('Sandboxes')
+    expect(text).toContain('Clean up idle')
+    wrapper.unmount()
+  })
+
+  it('empty list still shows header without subtitle (g2.3)', async () => {
+    apiMocks.listSandboxes.mockResolvedValue([])
+    const { wrapper } = mountList('zh-CN')
+    await flushPromises()
+
+    const text = wrapper.text()
+    for (const s of subtitleZh) expect(text).not.toContain(s)
+    for (const s of demoReview) expect(text).not.toContain(s)
+    expect(text).toContain('沙箱')
+    expect(text).toContain('清理空闲')
+    expect(text).toContain('暂无沙箱')
+    expect(pageHead(wrapper).find('p').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})

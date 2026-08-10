@@ -390,7 +390,9 @@ test('Demo 对齐：紧凑主值 + 时长/四分量/算式 tip + focus', async (
   // bottoms:口径副文案 unchanged
   await expect(page.getByTestId('stats-kpi-wall')).toContainText('占比默认分母')
   await expect(page.getByTestId('stats-kpi-node-sum')).toContainText('各过程耗时之和')
-  await expect(page.getByTestId('stats-kpi-gap')).toContainText('总耗时')
+  await expect(page.getByTestId('stats-kpi-gap')).toContainText('空闲')
+  await expect(page.getByTestId('stats-kpi-gap')).toContainText('过程未占用的墙钟')
+  await expect(page.getByTestId('stats-kpi-gap')).not.toContainText('差额')
   await expect(page.getByTestId('stats-kpi-total-tokens')).toContainText('有用量环节合计')
   await expect(page.getByTestId('stats-kpi-token-rate')).toContainText('÷ 总耗时')
 

@@ -19,9 +19,13 @@ vi.mock('@/lib/locale', async () => {
 })
 
 import App from '@/App.vue'
+import { getAuthState, useAuth } from '@/lib/useAuth'
+import { resetRoutePending } from '@/lib/routePending'
 
 describe('App', () => {
-  it('mounts shell layout with router-view stub', () => {
+  it('mounts shell layout with router-view stub when auth is ready', () => {
+    useAuth().setUser({ username: 't', expiresAt: 't' })
+    resetRoutePending()
     const i18n = createI18n({
       legacy: false,
       locale: 'zh-CN',
@@ -41,6 +45,34 @@ describe('App', () => {
     })
     expect(wrapper.find('[data-testid="shell"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="toast-host"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="router-view"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('does not mount protected router-view while auth is not ready', () => {
+    const authState = getAuthState()
+    authState.user = null
+    authState.ready = false
+    resetRoutePending()
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const wrapper = mount(App, {
+      global: {
+        plugins: [i18n],
+        stubs: {
+          AppShell: defineComponent({
+            template: '<div data-testid="shell"><slot /></div>',
+          }),
+          ToastHost: defineComponent({ template: '<div data-testid="toast-host" />' }),
+          RouterView: defineComponent({ template: '<div data-testid="router-view" />' }),
+        },
+      },
+    })
+    expect(wrapper.find('[data-testid="shell"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="router-view"]').exists()).toBe(false)
     wrapper.unmount()
   })
 })

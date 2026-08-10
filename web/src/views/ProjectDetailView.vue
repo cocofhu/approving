@@ -1539,23 +1539,8 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Variables tab -->
+      <!-- Variables tab: no varsHint / merge-rules row (Demo after); sandbox tab keeps them -->
       <div v-else-if="tab === 'variables'" class="flex min-h-[420px] flex-col">
-
-        <div class="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
-          <p class="m-0 text-[13px] text-txt3">
-            {{ t('pages.projectDetail.varsHint') }}
-          </p>
-          <button
-            type="button"
-            class="p-0 text-[13px] text-accent-2 underline underline-offset-2 hover:text-txt"
-            data-testid="project-detail-merge-rules"
-            @click="helpOpen = true"
-          >
-            {{ t('pages.projectDetail.viewMergeRules') }}
-          </button>
-        </div>
-
         <!-- Empty: same shell as sandbox tab -->
         <div
           v-if="!varRows.length"

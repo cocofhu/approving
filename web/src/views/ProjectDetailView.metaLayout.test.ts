@@ -69,7 +69,7 @@ describe('ProjectDetailView meta tab keeps existing chrome and save semantics (g
 
   it('does not change AppShell height chain or other short tabs (g2.2)', () => {
     expect(shellSrc).toMatch(/class="relative flex h-screen w-screen overflow-hidden bg-base text-txt"/)
-    expect(shellSrc).toMatch(/<main class="relative min-h-0 flex-1 overflow-hidden">/)
+    expect(shellSrc).toMatch(/<main[\s\S]*class="relative min-h-0 flex-1 overflow-hidden"/)
     expect(detailSrc).toMatch(/tab === 'cronJobs'" class="flex min-h-\[420px\] flex-col"/)
     expect(detailSrc).toMatch(/tab === 'notify' && project" class="min-h-\[420px\]"/)
     expect(detailSrc).toMatch(/tab === 'sandboxEnv'" class="flex min-h-\[420px\] flex-col"/)

@@ -238,10 +238,110 @@ body {
   animation: admin-list-indet 1.15s ease-in-out infinite;
 }
 
+@keyframes app-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes app-skeleton-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes app-refresh-slide {
+  0% {
+    left: -32%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+.app-spinner {
+  animation: app-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+.app-skeleton__block {
+  background: rgb(var(--c-elevated));
+  position: relative;
+  overflow: hidden;
+}
+.app-skeleton__block::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgb(var(--c-accent) / 0.18), transparent);
+  animation: app-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+.app-skeleton__title {
+  height: 18px;
+  width: 40%;
+  margin-bottom: 12px;
+}
+.app-skeleton__card {
+  height: 72px;
+}
+.app-skeleton__row {
+  height: 36px;
+  margin-bottom: 6px;
+}
+
+.app-refresh-track {
+  height: 2px;
+  position: relative;
+  flex-shrink: 0;
+  background: rgb(var(--c-line));
+}
+.app-refresh-bar {
+  height: 2px;
+  width: 32%;
+  background: rgb(var(--c-accent));
+  position: absolute;
+  left: 0;
+  top: 0;
+  animation: app-refresh-slide 1.1s ease-in-out infinite;
+}
+.app-refresh-dim {
+  opacity: 0.92;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .brand-logo__name {
     animation: none;
     background-position: 0% 50%;
+  }
+
+  .animate-spin,
+  .animate-pulse,
+  .app-spinner,
+  .app-skeleton__block::after,
+  .app-refresh-bar {
+    animation: none !important;
+  }
+
+  .app-skeleton__block::after {
+    display: none;
+  }
+
+  .app-refresh-bar {
+    width: 100%;
+    left: 0;
+    opacity: 0.85;
+  }
+
+  .drawer-fade-enter-active,
+  .drawer-fade-leave-active,
+  .drawer-slide-enter-active,
+  .drawer-slide-leave-active,
+  .toast-enter-active,
+  .toast-leave-active {
+    transition: none !important;
   }
 }
 
