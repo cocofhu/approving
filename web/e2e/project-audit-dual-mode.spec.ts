@@ -419,7 +419,7 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
     await page.getByTestId('project-audit-caller').locator('button.audit-dd-trig').click()
     const callerPanel = page.locator('.audit-dd-panel').filter({ visible: true })
     await expect(callerPanel).toBeVisible()
-    await expect(callerPanel.locator('.audit-dd-opt', { hasText: 'PM' })).toBeVisible()
+    await expect(callerPanel.locator('.audit-dd-opt', { hasText: '项目管理' })).toBeVisible()
     await expect(callerPanel.locator('.audit-dd-opt', { hasText: '用户 API Key' })).toBeVisible()
     await expect(callerPanel.locator('.audit-dd-opt', { hasText: '系统' })).toBeVisible()
     await callerPanel.locator('.audit-dd-opt', { hasText: '系统' }).click()
@@ -537,7 +537,8 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
 
     await expect(page.getByTestId('project-audit-filter-summary')).toHaveCount(0)
     await expect(page.getByTestId('project-audit-list')).toHaveAttribute('data-layout', 'groups')
-    await expect(page.getByTestId('project-audit-list').locator('table')).toBeVisible()
+    // Collapsed groups keep tables in DOM but hidden; only fail-open groups show a table.
+    await expect(page.locator('[data-testid="project-audit-list"] .group[data-open="true"] table')).toBeVisible()
     await expect(page.getByTestId('project-audit-run')).toBeVisible()
     await expect(page.getByTestId('project-audit-search')).toBeVisible()
   })
