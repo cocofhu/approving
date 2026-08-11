@@ -178,6 +178,13 @@ func TestPrdManagerListFiltersAndProjection(t *testing.T) {
 	if len(items) != 3 {
 		t.Fatalf("want 3 current-project drafts, got %d raw=%s", len(items), raw)
 	}
+	st, result, isErr, raw = callPrdTool(t, fx.h, fx.proj.ID, fx.token, "pm_list_requirement_drafts", map[string]any{"status": "all"})
+	if st != 200 || isErr {
+		t.Fatalf("list status=all: status=%d isErr=%v raw=%s", st, isErr, raw)
+	}
+	if n := len(mustItems(t, result)); n != 3 {
+		t.Fatalf("status=all want 3 got %d raw=%s", n, raw)
+	}
 	for _, item := range items {
 		if _, ok := item["bodyMarkdown"]; ok {
 			t.Fatalf("list must not include bodyMarkdown: %#v", item)
