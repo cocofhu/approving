@@ -3,7 +3,7 @@ import { createI18n } from 'vue-i18n'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
-import { useToast } from '@/lib/useToast'
+import { useToast } from '@/lib/composables/useToast'
 import ToastHost from './ToastHost.vue'
 
 describe('ToastHost', () => {

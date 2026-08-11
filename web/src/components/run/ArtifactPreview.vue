@@ -6,21 +6,21 @@ import AppModal from '../ui/AppModal.vue'
 import AppButton from '../ui/AppButton.vue'
 import RefreshStrip from './RefreshStrip.vue'
 import HardLoadLayer from './HardLoadLayer.vue'
-import { isAbortError } from '@/lib/liveLogRehydrate'
+import { isAbortError } from '@/lib/run/liveLogRehydrate'
 import HtmlPreview from '../ui/HtmlPreview.vue'
 import StructuredArtifactView from './StructuredArtifactView.vue'
 import { isImagePreviewArtifact, resolveArtifactPreviewBranch } from './artifactPreviewBranch'
-import { renderMarkdown } from '@/lib/markdown'
-import { isJsonArtifact, parseJsonState } from '@/lib/highlightJson'
-import { fmtTime } from '@/lib/format'
-import { api } from '@/lib/api'
-import { copyToClipboard } from '@/lib/copyToClipboard'
-import { useToast } from '@/lib/useToast'
+import { renderMarkdown } from '@/lib/shared/markdown'
+import { isJsonArtifact, parseJsonState } from '@/lib/shared/highlightJson'
+import { fmtTime } from '@/lib/shared/format'
+import { api } from '@/lib/api/api'
+import { copyToClipboard } from '@/lib/shared/copyToClipboard'
+import { useToast } from '@/lib/composables/useToast'
 import {
   exportStructuredArtifact,
   type StructuredExportFormat,
-} from '@/lib/exportStructuredArtifact'
-import type { Artifact } from '@/lib/types'
+} from '@/lib/run/exportStructuredArtifact'
+import type { Artifact } from '@/lib/shared/types'
 
 const props = withDefaults(
   defineProps<{

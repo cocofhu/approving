@@ -7,13 +7,13 @@ import AppModal from '@/components/ui/AppModal.vue'
 import AppSwitch from '@/components/ui/AppSwitch.vue'
 import ParagraphInput from '@/components/ui/ParagraphInput.vue'
 import HardLoadLayer from '@/components/run/HardLoadLayer.vue'
-import { isAbortError } from '@/lib/liveLogRehydrate'
+import { isAbortError } from '@/lib/run/liveLogRehydrate'
 import ReposEditor, { type RepoRow } from '@/components/ReposEditor.vue'
 import PrioritySegmented, { type RunPriority } from '@/components/ui/PrioritySegmented.vue'
-import { api } from '@/lib/api'
-import { isCompositeFilled, normalizeCompositeSubmit } from '@/lib/compositeText'
-import { MAX_RUN_TAGS, MAX_TAG_RUNES, validateRunTag } from '@/lib/runTags'
-import type { ClarifyImage } from '@/lib/types'
+import { api } from '@/lib/api/api'
+import { isCompositeFilled, normalizeCompositeSubmit } from '@/lib/shared/compositeText'
+import { MAX_RUN_TAGS, MAX_TAG_RUNES, validateRunTag } from '@/lib/run/runTags'
+import type { ClarifyImage } from '@/lib/shared/types'
 
 export type InputField = {
   key: string

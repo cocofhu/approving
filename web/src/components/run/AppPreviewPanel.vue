@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { api, type PreviewPort } from '@/lib/api'
-import type { AppPreviewPickPayload } from '@/lib/previewPickUrl'
+import { api, type PreviewPort } from '@/lib/api/api'
+import type { AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
 import NovncPreviewPanel from './NovncPreviewPanel.vue'
 import PreviewFeedbackChat from './PreviewFeedbackChat.vue'
 import RefreshStrip from './RefreshStrip.vue'
 import HardLoadLayer from './HardLoadLayer.vue'
-import { isAbortError } from '@/lib/liveLogRehydrate'
+import { isAbortError } from '@/lib/run/liveLogRehydrate'
 
 const props = withDefaults(
   defineProps<{

@@ -5,8 +5,8 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
-import type { Gate, Run } from '@/lib/types'
-import { CONTENT_FIT_PREVIEW_MAX_VH } from '@/lib/htmlPreviewSandbox'
+import type { Gate, Run } from '@/lib/shared/types'
+import { CONTENT_FIT_PREVIEW_MAX_VH } from '@/lib/shared/htmlPreviewSandbox'
 
 vi.mock('@novnc/novnc/lib/rfb.js', () => ({
   default: class MockRFB {},
@@ -27,12 +27,12 @@ const breakpointMocks = vi.hoisted(() => ({
   isMobile: { value: false, __v_isRef: true as const },
 }))
 
-vi.mock('@/lib/useBreakpoint', () => ({
+vi.mock('@/lib/composables/useBreakpoint', () => ({
   useBreakpoint: () => ({ isMobile: breakpointMocks.isMobile }),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {

@@ -6,8 +6,8 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { relTime } from '@/lib/format'
-import { createStreamTextReveal } from '@/lib/streamTextReveal'
+import { relTime } from '@/lib/shared/format'
+import { createStreamTextReveal } from '@/lib/run/streamTextReveal'
 import ThoughtSummaryStatus from './ThoughtSummaryStatus.vue'
 
 const props = withDefaults(

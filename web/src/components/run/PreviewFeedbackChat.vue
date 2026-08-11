@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { api, type PreviewIssue } from '@/lib/api'
+import { api, type PreviewIssue } from '@/lib/api/api'
 import ParagraphInput from '@/components/ui/ParagraphInput.vue'
 import Icon from '@/components/ui/Icon.vue'
 import ChatImageThumb from '@/components/ui/ChatImageThumb.vue'
 import ChatImagePreviewModal from '@/components/ui/ChatImagePreviewModal.vue'
-import { imgSrc } from '@/lib/compositeText'
-import { useChatImagePreview } from '@/lib/useChatImagePreview'
-import { attachmentDisplayName, isImageAttachment } from '@/lib/attachments'
-import type { ClarifyImage } from '@/lib/types'
+import { imgSrc } from '@/lib/shared/compositeText'
+import { useChatImagePreview } from '@/lib/composables/useChatImagePreview'
+import { attachmentDisplayName, isImageAttachment } from '@/lib/shared/attachments'
+import type { ClarifyImage } from '@/lib/shared/types'
 
 const props = withDefaults(
   defineProps<{

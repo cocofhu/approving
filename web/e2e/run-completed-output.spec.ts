@@ -2,7 +2,7 @@
  * g6.2 / g6.3: completed deep link → output master-detail list / enlarge / Demo empty / mobile detail.
  */
 import { test, expect, type Page } from '@playwright/test'
-import type { Artifact, OutputCard } from '../src/lib/types'
+import type { Artifact, OutputCard } from '../src/lib/shared/types'
 
 const nodes = [
   { id: 'start', type: 'input', label: '开始', position: { x: 0, y: 0 }, config: {} },

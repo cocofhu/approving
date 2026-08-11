@@ -4,14 +4,14 @@ import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppSwitch from '@/components/ui/AppSwitch.vue'
 import Icon from '@/components/ui/Icon.vue'
-import { api, type ChannelConfig, type ChannelConfigInput } from '@/lib/api'
+import { api, type ChannelConfig, type ChannelConfigInput } from '@/lib/api/api'
 import {
   deriveRecentPushTargets,
   pushTargetPrimaryLabel,
   type PushTargetOption,
-} from '@/lib/cronDeliverTargets'
-import { useToast } from '@/lib/useToast'
-import type { Project, ProjectNotifyPolicy } from '@/lib/types'
+} from '@/lib/pm/cronDeliverTargets'
+import { useToast } from '@/lib/composables/useToast'
+import type { Project, ProjectNotifyPolicy } from '@/lib/shared/types'
 
 const props = defineProps<{
   projectId: string

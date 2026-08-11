@@ -4,8 +4,8 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import RunOutputPptModal from '@/components/shell/RunOutputPptModal.vue'
-import { relTime } from '@/lib/format'
-import { useRunTerminalNotifications } from '@/lib/useRunTerminalNotifications'
+import { relTime } from '@/lib/shared/format'
+import { useRunTerminalNotifications } from '@/lib/run/useRunTerminalNotifications'
 
 type ReadFilter = 'all' | 'unread' | 'read'
 

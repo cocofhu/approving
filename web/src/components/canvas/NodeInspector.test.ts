@@ -5,14 +5,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import nodes from '@/locales/zh-CN/nodes.json'
-import type { WFEdge, WFNode } from '@/lib/types'
+import type { WFEdge, WFNode } from '@/lib/shared/types'
 
 const apiMocks = vi.hoisted(() => ({
   listAgents: vi.fn(),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {

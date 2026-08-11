@@ -1,5 +1,5 @@
-import { inferArtifactKind, isReadonlyArtifactKind } from '@/lib/gateUpstream'
-import { isJsonArtifact } from '@/lib/highlightJson'
+import { inferArtifactKind, isReadonlyArtifactKind } from '@/lib/inbox/gateUpstream'
+import { isJsonArtifact } from '@/lib/shared/highlightJson'
 import { isStructuredArtifactName } from './StructuredArtifactView.vue'
 
 export type ArtifactPreviewBranch =

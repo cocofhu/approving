@@ -2,9 +2,9 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from './Icon.vue'
-import { api } from '@/lib/api'
-import { PIPELINE_FILTER_KEYS } from '@/lib/usePipelineFilter'
-import type { Workflow } from '@/lib/types'
+import { api } from '@/lib/api/api'
+import { PIPELINE_FILTER_KEYS } from '@/lib/composables/usePipelineFilter'
+import type { Workflow } from '@/lib/shared/types'
 
 // A polished, searchable pipeline (workflow) selector. `modelValue` is the
 // selected workflow id ('' = 全部流水线). `count` optionally shows how many

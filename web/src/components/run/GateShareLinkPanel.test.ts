@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import GateShareLinkPanel from './GateShareLinkPanel.vue'
-import type { GateInboxItem } from '@/lib/types'
-import { forgetShareUrl, rememberShareUrl } from '@/lib/gateShareLink'
+import type { GateInboxItem } from '@/lib/shared/types'
+import { forgetShareUrl, rememberShareUrl } from '@/lib/inbox/gateShareLink'
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -19,8 +19,8 @@ const mocks = vi.hoisted(() => ({
   toastShow: vi.fn(),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {
@@ -35,7 +35,7 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
-vi.mock('@/lib/useToast', () => ({
+vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => ({
     success: mocks.toastSuccess,
     show: mocks.toastShow,

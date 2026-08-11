@@ -1,16 +1,16 @@
 import '../src/styles/global.css'
 import { createApp, defineComponent, h, ref } from 'vue'
-import { i18n } from '../src/lib/i18n'
-import { initLocale } from '../src/lib/locale'
-import { setTheme } from '../src/lib/theme'
+import { i18n } from '../src/lib/shared/i18n'
+import { initLocale } from '../src/lib/shared/locale'
+import { setTheme } from '../src/lib/shared/theme'
 import PmLeaderChat from '../src/components/pm/PmLeaderChat.vue'
 import PreviewFeedbackChat from '../src/components/run/PreviewFeedbackChat.vue'
 import ParagraphInput from '../src/components/ui/ParagraphInput.vue'
 import AgentChatTester from '../src/components/agent/AgentChatTester.vue'
 import ChatImageThumb from '../src/components/ui/ChatImageThumb.vue'
 import ChatImagePreviewModal from '../src/components/ui/ChatImagePreviewModal.vue'
-import { useChatImagePreview } from '../src/lib/useChatImagePreview'
-import type { ClarifyImage } from '../src/lib/types'
+import { useChatImagePreview } from '../src/lib/composables/useChatImagePreview'
+import type { ClarifyImage } from '../src/lib/shared/types'
 
 initLocale()
 setTheme('light')

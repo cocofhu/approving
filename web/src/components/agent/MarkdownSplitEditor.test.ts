@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import pages from '@/locales/zh-CN/pages.json'
 import MarkdownSplitEditor from './MarkdownSplitEditor.vue'
 
-vi.mock('@/lib/markdown', () => ({
+vi.mock('@/lib/shared/markdown', () => ({
   renderMarkdown: (body: string) => `<p>${body}</p>`,
 }))
 

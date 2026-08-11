@@ -11,6 +11,11 @@ const shotDir = path.join(__dirname, '..', 'test-results', 'pm-citation-fp')
 async function openRunDetail(page: Page, id: string, mode: 'not_found' | 'network') {
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.route('**/api/**', async (route) => {
+    // Skip Vite module URLs like /@fs/.../src/lib/api/api.ts (pathname is not /api/...)
+    if (!new URL(route.request().url()).pathname.startsWith('/api/')) {
+      await route.continue()
+      return
+    }
     if (mode === 'network') {
       await route.abort('failed')
       return

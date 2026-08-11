@@ -5,12 +5,12 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
-import { api, type SandboxView } from '@/lib/api'
-import { httpStatusOf } from '@/lib/listRequestSeq'
-import { copyToClipboard } from '@/lib/copyToClipboard'
-import { sandboxPurposeLabelKey, sandboxSourceTextKey } from '@/lib/sandboxPurposeLabel'
-import { useBreakpoint } from '@/lib/useBreakpoint'
-import { useToast } from '@/lib/useToast'
+import { api, type SandboxView } from '@/lib/api/api'
+import { httpStatusOf } from '@/lib/shared/listRequestSeq'
+import { copyToClipboard } from '@/lib/shared/copyToClipboard'
+import { sandboxPurposeLabelKey, sandboxSourceTextKey } from '@/lib/agent/sandboxPurposeLabel'
+import { useBreakpoint } from '@/lib/composables/useBreakpoint'
+import { useToast } from '@/lib/composables/useToast'
 
 const SKELETON_ROWS = 6
 const SKELETON_CARDS = 4

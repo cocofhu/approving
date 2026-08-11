@@ -5,18 +5,18 @@ import Icon from '../ui/Icon.vue'
 import ChatImageThumb from '../ui/ChatImageThumb.vue'
 import ChatImagePreviewModal from '../ui/ChatImagePreviewModal.vue'
 import ClarifyDemoFrame from './ClarifyDemoFrame.vue'
-import { renderMarkdown } from '@/lib/markdown'
-import { createStreamMarkdownPreview } from '@/lib/streamMarkdownPreview'
-import { createStreamTextReveal } from '@/lib/streamTextReveal'
-import { mergePersistedAndLiveTurns } from '@/lib/mergeClarifyLiveTurns'
-import { relTime } from '@/lib/format'
+import { renderMarkdown } from '@/lib/shared/markdown'
+import { createStreamMarkdownPreview } from '@/lib/shared/streamMarkdownPreview'
+import { createStreamTextReveal } from '@/lib/run/streamTextReveal'
+import { mergePersistedAndLiveTurns } from '@/lib/inbox/mergeClarifyLiveTurns'
+import { relTime } from '@/lib/shared/format'
 import ThoughtSummaryStatus from './ThoughtSummaryStatus.vue'
 import {
   demoGridColsClass,
   demoOptionsOf,
   selectedDemoOption,
   useSideBySide,
-} from '@/lib/clarifyDemo'
+} from '@/lib/inbox/clarifyDemo'
 import type {
   ClarifyTurn,
   ClarifyImage,
@@ -24,7 +24,7 @@ import type {
   ReactOption,
   ReactAnnotation,
   AcpEvent,
-} from '@/lib/types'
+} from '@/lib/shared/types'
 import AnnotationChip from './AnnotationChip.vue'
 import {
   SITE_ATTACH_MAX_BYTES,
@@ -35,9 +35,9 @@ import {
   formatSelectRejectMessage,
   formatSendRejectMessage,
   isImageAttachment,
-} from '@/lib/attachments'
-import { imgSrc } from '@/lib/compositeText'
-import { useChatImagePreview } from '@/lib/useChatImagePreview'
+} from '@/lib/shared/attachments'
+import { imgSrc } from '@/lib/shared/compositeText'
+import { useChatImagePreview } from '@/lib/composables/useChatImagePreview'
 
 type QueueItem = {
   id?: string

@@ -2,12 +2,12 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import type { ProgressCitation } from '@/lib/types'
+import type { ProgressCitation } from '@/lib/shared/types'
 import {
   isBareExtractSnippet,
   isValidPmCitationShape,
   shortRunId,
-} from '@/lib/pmCitationShape'
+} from '@/lib/pm/pmCitationShape'
 
 const props = defineProps<{ citation: ProgressCitation }>()
 const { t } = useI18n()

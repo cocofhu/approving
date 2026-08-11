@@ -11,7 +11,7 @@ import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import ClarifyChat from './ClarifyChat.vue'
 import AnnotationChip from './AnnotationChip.vue'
-import type { ReactAnnotation } from '@/lib/types'
+import type { ReactAnnotation } from '@/lib/shared/types'
 
 function mountClarify(nodeId = 'clarify') {
   const i18n = createI18n({

@@ -5,17 +5,17 @@ import Icon from '../ui/Icon.vue'
 import StatusPill from '../ui/StatusPill.vue'
 import VarValueDisplay from '../ui/VarValueDisplay.vue'
 import TruncatedTextTooltip from '../ui/TruncatedTextTooltip.vue'
-import { fmtTime, fmtDuration } from '@/lib/format'
-import { formatVarChip, formatVarValue } from '@/lib/compositeText'
+import { fmtTime, fmtDuration } from '@/lib/shared/format'
+import { formatVarChip, formatVarValue } from '@/lib/shared/compositeText'
 import { NODE_DEFS, nodeColorHex } from '@/data/nodeRegistry'
-import { resolveNodeDisplayLabel } from '@/lib/resolveNodeDisplayLabel'
-import { compareTimelineOrder, resolveProcessDuration, resolveRunWallSec } from '@/lib/runStats'
+import { resolveNodeDisplayLabel } from '@/lib/run/resolveNodeDisplayLabel'
+import { compareTimelineOrder, resolveProcessDuration, resolveRunWallSec } from '@/lib/run/runStats'
 import {
   fmtTokenCount,
   summarizeTimelineUsage,
   tokenUsageTotal,
-} from '@/lib/tokenUsage'
-import type { NodeRun, NodeRunStatus, Run, TokenUsage, WFNode } from '@/lib/types'
+} from '@/lib/run/tokenUsage'
+import type { NodeRun, NodeRunStatus, Run, TokenUsage, WFNode } from '@/lib/shared/types'
 
 const props = withDefaults(
   defineProps<{

@@ -3,11 +3,11 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppSwitch from '@/components/ui/AppSwitch.vue'
-import { api } from '@/lib/api'
-import { useToast } from '@/lib/useToast'
-import type { Agent } from '@/lib/api'
-import type { PmLeaderBinding, Project } from '@/lib/types'
 import PmChannelMultiPanel from '@/components/pm/PmChannelMultiPanel.vue'
+import { api } from '@/lib/api/api'
+import { useToast } from '@/lib/composables/useToast'
+import type { Agent } from '@/lib/api/api'
+import type { PmLeaderBinding, Project } from '@/lib/shared/types'
 
 const props = defineProps<{ projectId: string; project?: Project | null }>()
 const emit = defineEmits<{

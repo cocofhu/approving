@@ -8,7 +8,7 @@ import shell from '@/locales/zh-CN/shell.json'
 import commonEn from '@/locales/en/common.json'
 import pagesEn from '@/locales/en/pages.json'
 import shellEn from '@/locales/en/shell.json'
-import { setTheme } from '@/lib/theme'
+import { setTheme } from '@/lib/shared/theme'
 
 const mocks = vi.hoisted(() => ({
   preview: vi.fn(),
@@ -18,8 +18,8 @@ const mocks = vi.hoisted(() => ({
   cancel: vi.fn(),
 }))
 
-vi.mock('@/lib/gateShareLink', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/gateShareLink')>('@/lib/gateShareLink')
+vi.mock('@/lib/inbox/gateShareLink', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/inbox/gateShareLink')>('@/lib/inbox/gateShareLink')
   return {
     ...actual,
     publicGateApi: {
@@ -32,8 +32,8 @@ vi.mock('@/lib/gateShareLink', async () => {
   }
 })
 
-vi.mock('@/lib/locale', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/locale')>('@/lib/locale')
+vi.mock('@/lib/shared/locale', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/shared/locale')>('@/lib/shared/locale')
   return {
     ...actual,
     applyPublicLocale: vi.fn().mockResolvedValue(undefined),

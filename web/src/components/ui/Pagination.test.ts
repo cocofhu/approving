@@ -14,7 +14,7 @@ const pagerSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'Pag
 
 const isMobile = ref(false)
 
-vi.mock('@/lib/useBreakpoint', () => ({
+vi.mock('@/lib/composables/useBreakpoint', () => ({
   useBreakpoint: () => ({ isMobile }),
 }))
 

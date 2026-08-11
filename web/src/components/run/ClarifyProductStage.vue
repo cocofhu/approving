@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import Icon from '@/components/ui/Icon.vue'
 import StructuredProductPanel from '@/components/run/StructuredProductPanel.vue'
-import type { ClarifyProductStageKind } from '@/lib/clarifyInboxStage'
-import type { NodeRun, Run, WFNode } from '@/lib/types'
+import type { ClarifyProductStageKind } from '@/lib/inbox/clarifyInboxStage'
+import type { NodeRun, Run, WFNode } from '@/lib/shared/types'
 
 defineProps<{
   productNodes: WFNode[]

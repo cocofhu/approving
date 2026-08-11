@@ -4,8 +4,8 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
-import type { AcpEvent, McpCall, NodeRunStatus } from '@/lib/types'
-import { BOOT_STAGE_TIMEOUT_MS } from '@/lib/liveLogBootPhase'
+import type { AcpEvent, McpCall, NodeRunStatus } from '@/lib/shared/types'
+import { BOOT_STAGE_TIMEOUT_MS } from '@/lib/run/liveLogBootPhase'
 import LiveLogPanel from './LiveLogPanel.vue'
 
 function mountPanel(props: {

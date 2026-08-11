@@ -4,9 +4,9 @@ import { useI18n } from 'vue-i18n'
 import { Handle, Position } from '@vue-flow/core'
 import Icon from '../ui/Icon.vue'
 import { nodeColorHex } from '@/data/nodeRegistry'
-import { useNodeDefs } from '@/lib/useNodeDefs'
-import { resolveNodeDisplayLabel } from '@/lib/resolveNodeDisplayLabel'
-import type { NodeType, NodeRunStatus } from '@/lib/types'
+import { useNodeDefs } from '@/lib/run/useNodeDefs'
+import { resolveNodeDisplayLabel } from '@/lib/run/resolveNodeDisplayLabel'
+import type { NodeType, NodeRunStatus } from '@/lib/shared/types'
 
 const { t, locale } = useI18n()
 const { NODE_DEFS } = useNodeDefs()

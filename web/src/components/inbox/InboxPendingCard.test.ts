@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import InboxPendingCard from './InboxPendingCard.vue'
-import type { ClarifyInboxItem, GateInboxItem } from '@/lib/types'
+import type { ClarifyInboxItem, GateInboxItem } from '@/lib/shared/types'
 
 const i18n = createI18n({
   legacy: false,

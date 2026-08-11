@@ -5,7 +5,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
-import type { WFEdge, WFNode } from '@/lib/types'
+import type { WFEdge, WFNode } from '@/lib/shared/types'
 
 vi.mock('@vue-flow/core', () => ({
   BaseEdge: defineComponent({ template: '<path />' }),

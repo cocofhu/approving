@@ -5,7 +5,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
-import { provideReviewAnnotate } from '@/lib/reviewAnnotate'
+import { provideReviewAnnotate } from '@/lib/inbox/reviewAnnotate'
 import ClarifiedRequirementView, { type ClarifiedRequirementDoc } from './ClarifiedRequirementView.vue'
 
 function mountView(doc: ClarifiedRequirementDoc, withAnnotate = false) {

@@ -7,8 +7,8 @@ import {
   mergeTokenUsageByModel,
   TOKEN_USAGE_SOURCE_BRIDGE,
   tokenUsageTotal,
-} from '@/lib/tokenUsage'
-import type { TokenUsage, TokenUsageByModel } from '@/lib/types'
+} from '@/lib/run/tokenUsage'
+import type { TokenUsage, TokenUsageByModel } from '@/lib/shared/types'
 
 const props = defineProps<{
   /** Merged run total (optional; derived from by-model when omitted). */

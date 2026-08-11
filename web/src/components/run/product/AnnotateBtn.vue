@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useReviewAnnotate } from '@/lib/reviewAnnotate'
+import { useReviewAnnotate } from '@/lib/inbox/reviewAnnotate'
 import Icon from '../../ui/Icon.vue'
 
 // A hover-revealed "⤴ 标注" affordance for one leaf field of a structured

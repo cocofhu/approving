@@ -2,8 +2,8 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
-import type { ReactAnnotation } from '@/lib/types'
-import { isQuoteAnnotation } from '@/lib/reviewQuote'
+import type { ReactAnnotation } from '@/lib/shared/types'
+import { isQuoteAnnotation } from '@/lib/inbox/reviewQuote'
 
 const props = withDefaults(
   defineProps<{

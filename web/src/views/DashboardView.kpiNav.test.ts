@@ -7,7 +7,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
-import { serializeStatusQuery } from '@/lib/useStatusFilter'
+import { serializeStatusQuery } from '@/lib/composables/useStatusFilter'
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -18,8 +18,8 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mocks.push }),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {
@@ -29,7 +29,7 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
-vi.mock('@/lib/useRunBoard', async () => {
+vi.mock('@/lib/run/useRunBoard', async () => {
   const { ref: vueRef } = await import('vue')
   return {
     useRunBoard: () => ({
@@ -42,7 +42,7 @@ vi.mock('@/lib/useRunBoard', async () => {
   }
 })
 
-vi.mock('@/lib/useProjectContext', () => ({
+vi.mock('@/lib/composables/useProjectContext', () => ({
   readStoredProjectId: () => '',
 }))
 

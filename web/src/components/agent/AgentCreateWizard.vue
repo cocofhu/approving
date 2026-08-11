@@ -5,7 +5,7 @@ import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AgentGitGuide from '@/components/agent/AgentGitGuide.vue'
 import EnvCredentialHelpModal from '@/components/agent/EnvCredentialHelpModal.vue'
-import { api, type Agent } from '@/lib/api'
+import { api, type Agent } from '@/lib/api/api'
 import {
   ACP_BACKENDS,
   WIZARD_STEPS,
@@ -18,10 +18,10 @@ import {
   type WizardBackendId,
   type WizardDraft,
   type WizardStepId,
-} from '@/lib/agentCreateWizard'
-import { authGuideFor, hasAuthKeyConfigured } from '@/lib/backendAuthGuide'
-import type { GitCredentialType } from '@/lib/gitCredentialAnalysis'
-import { getRegionPolicy, setRegion } from '@/lib/regionPolicy'
+} from '@/lib/agent/agentCreateWizard'
+import { authGuideFor, hasAuthKeyConfigured } from '@/lib/agent/backendAuthGuide'
+import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
+import { getRegionPolicy, setRegion } from '@/lib/shared/regionPolicy'
 
 const props = defineProps<{
   open: boolean

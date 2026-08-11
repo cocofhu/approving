@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { BUILTIN_MCPS } from './mcp'
-import { i18n } from '@/lib/i18n'
-import { loadLocaleMessages } from '@/lib/loadLocaleMessages'
+import { i18n } from '@/lib/shared/i18n'
+import { loadLocaleMessages } from '@/lib/shared/loadLocaleMessages'
 
 const ARTIFACT_TOOL_COUNT = 23
 const ARTIFACT_REQUIRED_TOOLS = ['list_run_history', 'get_history_detail', 'node_complete'] as const

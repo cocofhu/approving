@@ -1,12 +1,12 @@
 import '../src/styles/global.css'
 import { createApp, defineComponent, h, ref } from 'vue'
-import { i18n } from '../src/lib/i18n'
-import { initLocale, setLocale } from '../src/lib/locale'
-import { setTheme } from '../src/lib/theme'
-import { installIdleScrollbar } from '../src/lib/idleScrollbar'
+import { i18n } from '../src/lib/shared/i18n'
+import { initLocale, setLocale } from '../src/lib/shared/locale'
+import { setTheme } from '../src/lib/shared/theme'
+import { installIdleScrollbar } from '../src/lib/shared/idleScrollbar'
 import ArtifactPreview from '../src/components/run/ArtifactPreview.vue'
-import type { Artifact } from '../src/lib/types'
-import { api } from '../src/lib/api'
+import type { Artifact } from '../src/lib/shared/types'
+import { api } from '../src/lib/api/api'
 
 const params = new URLSearchParams(location.search)
 const scenario = params.get('scenario') || 'structured'

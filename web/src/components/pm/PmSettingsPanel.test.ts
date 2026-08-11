@@ -7,7 +7,7 @@ import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import enCommon from '@/locales/en/common.json'
 import enPages from '@/locales/en/pages.json'
-import type { PmLeaderBinding } from '@/lib/types'
+import type { PmLeaderBinding } from '@/lib/shared/types'
 import PmSettingsPanel from './PmSettingsPanel.vue'
 
 const apiMocks = vi.hoisted(() => ({
@@ -26,8 +26,8 @@ const toastMocks = vi.hoisted(() => ({
   error: vi.fn(),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {
@@ -44,7 +44,7 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
-vi.mock('@/lib/useToast', () => ({
+vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => toastMocks,
 }))
 

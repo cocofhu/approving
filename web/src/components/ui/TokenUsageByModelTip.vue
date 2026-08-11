@@ -11,8 +11,8 @@ import {
   fmtTokenCount,
   TOKEN_USAGE_SOURCE_BRIDGE,
   tokenUsageTotal,
-} from '@/lib/tokenUsage'
-import type { TokenUsage, TokenUsageByModel } from '@/lib/types'
+} from '@/lib/run/tokenUsage'
+import type { TokenUsage, TokenUsageByModel } from '@/lib/shared/types'
 
 /**
  * `open` uses runtime Boolean + default undefined so omitted prop is uncontrolled.

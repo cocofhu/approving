@@ -7,11 +7,11 @@ import AppModal from '@/components/ui/AppModal.vue'
 import ReviewShell from '@/components/run/ReviewShell.vue'
 import ClarifyChat from '@/components/run/ClarifyChat.vue'
 import StructuredArtifactView from '@/components/run/StructuredArtifactView.vue'
-import { applyPublicLocale } from '@/lib/locale'
-import { reapplyThemeChrome } from '@/lib/theme'
-import { useBreakpoint } from '@/lib/useBreakpoint'
-import { provideReviewAnnotate } from '@/lib/reviewAnnotate'
-import { isAbortError } from '@/lib/liveLogRehydrate'
+import { applyPublicLocale } from '@/lib/shared/locale'
+import { reapplyThemeChrome } from '@/lib/shared/theme'
+import { useBreakpoint } from '@/lib/composables/useBreakpoint'
+import { provideReviewAnnotate } from '@/lib/inbox/reviewAnnotate'
+import { isAbortError } from '@/lib/run/liveLogRehydrate'
 import {
   formatRemainingSec,
   mergePublicGatePreview,
@@ -21,8 +21,8 @@ import {
   type PublicGateDecideResult,
   type PublicGatePreview,
   type PublicGateQueueItem,
-} from '@/lib/gateShareLink'
-import type { ClarifyImage, ClarifyTurn, ReactAnnotation } from '@/lib/types'
+} from '@/lib/inbox/gateShareLink'
+import type { ClarifyImage, ClarifyTurn, ReactAnnotation } from '@/lib/shared/types'
 
 type PublicChatRef = {
   discardLastQueued?: () => void

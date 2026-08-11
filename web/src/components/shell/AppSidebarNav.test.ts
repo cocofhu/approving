@@ -24,7 +24,7 @@ const notifMocks = vi.hoisted(() => ({
   unreadCount: { value: 0 },
 }))
 
-vi.mock('@/lib/usePendingGates', () => ({
+vi.mock('@/lib/inbox/usePendingGates', () => ({
   usePendingGates: () => ({
     count: gateMocks.count,
     peek: gateMocks.peek,
@@ -32,7 +32,7 @@ vi.mock('@/lib/usePendingGates', () => ({
   }),
 }))
 
-vi.mock('@/lib/useRunTerminalNotifications', () => ({
+vi.mock('@/lib/run/useRunTerminalNotifications', () => ({
   useRunTerminalNotifications: () => ({
     unreadCount: notifMocks.unreadCount,
   }),

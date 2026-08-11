@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, watch, computed, onBeforeUnmount } from 'vue'
-import { isAbortError } from '@/lib/liveLogRehydrate'
+import { isAbortError } from '@/lib/run/liveLogRehydrate'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
-import { api } from '@/lib/api'
-import type { Workflow } from '@/lib/types'
+import { api } from '@/lib/api/api'
+import type { Workflow } from '@/lib/shared/types'
 
 const props = defineProps<{
   open: boolean

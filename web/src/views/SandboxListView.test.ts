@@ -10,15 +10,15 @@ import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import enCommon from '@/locales/en/common.json'
 import enPages from '@/locales/en/pages.json'
-import type { SandboxView } from '@/lib/api'
+import type { SandboxView } from '@/lib/api/api'
 
 const apiMocks = vi.hoisted(() => ({
   listSandboxes: vi.fn(),
   getSandbox: vi.fn(),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {
@@ -29,11 +29,11 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
-vi.mock('@/lib/useToast', () => ({
+vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn() }),
 }))
 
-vi.mock('@/lib/copyToClipboard', () => ({
+vi.mock('@/lib/shared/copyToClipboard', () => ({
   copyToClipboard: vi.fn(async () => true),
 }))
 

@@ -6,12 +6,12 @@ import Icon from '@/components/ui/Icon.vue'
 import TokenUsageHoverTip from '@/components/ui/TokenUsageHoverTip.vue'
 import RunBoardColumn from '@/components/board/RunBoardColumn.vue'
 import RunBoardPreviewDrawer from '@/components/board/RunBoardPreviewDrawer.vue'
-import { api, type DashboardStats } from '@/lib/api'
-import { fmtCompactTokenCount } from '@/lib/tokenUsage'
-import { readStoredProjectId } from '@/lib/useProjectContext'
-import { useRunBoard } from '@/lib/useRunBoard'
-import { serializeStatusQuery } from '@/lib/useStatusFilter'
-import type { Run } from '@/lib/types'
+import { api, type DashboardStats } from '@/lib/api/api'
+import { fmtCompactTokenCount } from '@/lib/run/tokenUsage'
+import { readStoredProjectId } from '@/lib/composables/useProjectContext'
+import { useRunBoard } from '@/lib/run/useRunBoard'
+import { serializeStatusQuery } from '@/lib/composables/useStatusFilter'
+import type { Run } from '@/lib/shared/types'
 
 type TokenSnapshot = {
   totalTokens: number | null

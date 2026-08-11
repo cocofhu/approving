@@ -17,10 +17,10 @@ import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import AppModal from '../ui/AppModal.vue'
 import StructuredArtifactView from './StructuredArtifactView.vue'
-import { api } from '@/lib/api'
-import { parseJsonState } from '@/lib/highlightJson'
-import { provideReviewAnnotate } from '@/lib/reviewAnnotate'
-import type { Artifact } from '@/lib/types'
+import { api } from '@/lib/api/api'
+import { parseJsonState } from '@/lib/shared/highlightJson'
+import { provideReviewAnnotate } from '@/lib/inbox/reviewAnnotate'
+import type { Artifact } from '@/lib/shared/types'
 
 const props = withDefaults(
   defineProps<{

@@ -15,13 +15,13 @@ import RunLaunchModal, { type InputField } from '@/components/workflow/RunLaunch
 import ExportVersionModal from '@/components/workflow/ExportVersionModal.vue'
 import WorkflowApiTab from '@/components/workflow/WorkflowApiTab.vue'
 import WorkflowRunHistoryTab from '@/components/workflow/WorkflowRunHistoryTab.vue'
-import { useWorkflowAskInputs } from '@/lib/useWorkflowAskInputs'
-import { api } from '@/lib/api'
-import { useWorkflowImport } from '@/lib/useWorkflowImport'
-import { cleanOutputConfigForSave, migrateAndCleanOutputNodes } from '@/lib/migrateOutputConfig'
-import { fmtTime } from '@/lib/format'
-import { clearRunDraft, mergeRunDraft, saveRunDraft } from '@/lib/runDraft'
-import { useToast } from '@/lib/useToast'
+import { useWorkflowAskInputs } from '@/lib/run/useWorkflowAskInputs'
+import { api } from '@/lib/api/api'
+import { useWorkflowImport } from '@/lib/run/useWorkflowImport'
+import { cleanOutputConfigForSave, migrateAndCleanOutputNodes } from '@/lib/shared/migrateOutputConfig'
+import { fmtTime } from '@/lib/shared/format'
+import { clearRunDraft, mergeRunDraft, saveRunDraft } from '@/lib/run/runDraft'
+import { useToast } from '@/lib/composables/useToast'
 import {
   isGraphDirty,
   isMetaDirty,
@@ -31,10 +31,10 @@ import {
   snapshotMeta,
   type GraphBaseline,
   type MetaBaseline,
-} from '@/lib/workflowEditorDirty'
+} from '@/lib/run/workflowEditorDirty'
 import { NODE_DEFS, syncHumanGateFormDefaults } from '@/data/nodeRegistry'
-import type { ClarifyImage, NodeType, WFNode, WFEdge, Workflow, WorkflowVersion } from '@/lib/types'
-import { readStoredProjectId } from '@/lib/useProjectContext'
+import type { ClarifyImage, NodeType, WFNode, WFEdge, Workflow, WorkflowVersion } from '@/lib/shared/types'
+import { readStoredProjectId } from '@/lib/composables/useProjectContext'
 
 const route = useRoute()
 const router = useRouter()

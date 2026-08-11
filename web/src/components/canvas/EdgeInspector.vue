@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
-import type { WFEdge, EdgeKind } from '@/lib/types'
+import type { WFEdge, EdgeKind } from '@/lib/shared/types'
 
 const { t } = useI18n()
 
