@@ -225,13 +225,32 @@ describe('AppTopbar notifications', () => {
     wrapper.unmount()
   })
 
-  it('clicking completed item marks read and opens output modal (empty artifacts)', async () => {
+  it('clicking completed item marks read and opens output modal (empty result cards)', async () => {
     seedBaseline()
     vi.mocked(api.listRuns).mockResolvedValue(
       paged([run({ id: 'ok-1', status: 'completed', title: 'done' })]),
     )
     vi.mocked(api.getRun).mockResolvedValue(
-      run({ id: 'ok-1', status: 'completed', artifacts: [] }),
+      run({
+        id: 'ok-1',
+        status: 'completed',
+        artifacts: [
+          {
+            id: 'a-nc',
+            name: 'node_complete.json',
+            kind: 'json',
+            nodeId: 'agent',
+            runId: 'ok-1',
+            workflowName: 'demo-wf',
+            sizeBytes: 32,
+            createdAt: '2026-08-10T12:00:00Z',
+          },
+        ],
+        nodes: [{ id: 'out-1', type: 'output', label: '输出', position: { x: 0, y: 0 }, config: {} }],
+        nodeRuns: {
+          'out-1': { nodeId: 'out-1', status: 'completed', outputs: { outputCards: [] } },
+        },
+      }),
     )
     const wrapper = mountTopbar()
     await flushPromises()
@@ -247,14 +266,16 @@ describe('AppTopbar notifications', () => {
     await vi.waitFor(() => {
       expect(document.body.querySelector('[data-testid="run-output-empty"]')).toBeTruthy()
     })
-    expect(document.body.querySelector('[data-testid="run-output-empty"]')?.textContent).toContain(
-      '本次运行暂无产出',
-    )
+    const emptyText = document.body.querySelector('[data-testid="run-output-empty"]')?.textContent || ''
+    expect(emptyText).toContain('暂无最终结果可预览')
+    expect(emptyText).not.toContain('node_complete.json')
+    expect(document.body.querySelector('[data-testid="run-output-empty-open-artifacts"]')).toBeTruthy()
+    expect(document.body.querySelector('[data-testid="run-output-list"]')).toBeNull()
     expect(wrapper.find('[data-testid="run-notifications-badge"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('completed with artifacts shows master-detail list+preview and download control', async () => {
+  it('completed with outputCards shows focus bar + OutputResultCards, not artifact list', async () => {
     seedBaseline()
     vi.mocked(api.listRuns).mockResolvedValue(
       paged([run({ id: 'ok-2', status: 'completed', title: 'done' })]),
@@ -263,6 +284,34 @@ describe('AppTopbar notifications', () => {
       run({
         id: 'ok-2',
         status: 'completed',
+        nodes: [{ id: 'out-1', type: 'output', label: '输出', position: { x: 0, y: 0 }, config: {} }],
+        nodeRuns: {
+          'out-1': {
+            nodeId: 'out-1',
+            status: 'completed',
+            startedAt: '2026-08-10T12:01:00Z',
+            outputs: {
+              outputCards: [
+                {
+                  index: 1,
+                  template: 'artifact("summary.md")',
+                  title: '摘要',
+                  typeTag: '自定义产物',
+                  status: 'ok',
+                  artifactName: 'summary.md',
+                },
+                {
+                  index: 2,
+                  template: 'artifact("result.json")',
+                  title: '结果 JSON',
+                  typeTag: '自定义产物',
+                  status: 'ok',
+                  artifactName: 'result.json',
+                },
+              ],
+            },
+          },
+        },
         artifacts: [
           {
             id: 'a1',
@@ -282,6 +331,16 @@ describe('AppTopbar notifications', () => {
             runId: 'ok-2',
             workflowName: 'demo-wf',
             sizeBytes: 20,
+            createdAt: '2026-08-10T12:00:00Z',
+          },
+          {
+            id: 'a-nc',
+            name: 'node_complete.json',
+            kind: 'json',
+            nodeId: 'submit_mr',
+            runId: 'ok-2',
+            workflowName: 'demo-wf',
+            sizeBytes: 40,
             createdAt: '2026-08-10T12:00:00Z',
           },
         ],
@@ -307,29 +366,16 @@ describe('AppTopbar notifications', () => {
     await nextTick()
     expect(wrapper.vm.outputOpen).toBe(true)
     await vi.waitFor(() => {
-      expect(document.body.querySelector('[data-testid="run-output-master-detail"]')).toBeTruthy()
+      expect(document.body.querySelector('[data-testid="run-output-result-cards"]')).toBeTruthy()
     })
-    expect(document.body.querySelector('[data-testid="run-output-deck"]')).toBeNull()
-    expect(document.body.querySelectorAll('[data-testid="run-output-row"]')).toHaveLength(2)
-    expect(document.body.querySelector('[data-testid="run-output-preview"]')).toBeTruthy()
-    expect(document.body.querySelector('[data-testid="run-output-list"]')).toBeTruthy()
-    // First row selected by default (g2.4)
-    expect(
-      document.body.querySelector('[data-testid="run-output-row"]')?.getAttribute('aria-selected'),
-    ).toBe('true')
-    // List fields: kind, name, nodeId, size (g2.3)
-    const firstRow = document.body.querySelector('[data-testid="run-output-row"]')
-    expect(firstRow?.textContent).toContain('markdown')
-    expect(firstRow?.textContent).toContain('summary.md')
-    expect(firstRow?.textContent).toContain('n1')
-    expect(firstRow?.textContent).toContain('10 B')
-    // Download available; delete/copy hidden in modal (g1.1 / g3.2)
-    expect(document.body.querySelector('[data-testid="artifact-preview-download-raw"]')).toBeTruthy()
-    expect(document.body.querySelector('[data-testid="artifact-preview-delete"]')).toBeNull()
-    expect(document.body.querySelector('[data-testid="artifact-preview-copy"]')).toBeNull()
+    expect(document.body.querySelector('[data-testid="run-output-focus-bar"]')).toBeTruthy()
+    expect(document.body.querySelector('[data-testid="output-result-cards"]')).toBeTruthy()
+    expect(document.body.querySelector('[data-testid="run-output-list"]')).toBeNull()
+    expect(document.body.querySelectorAll('[data-testid="run-output-row"]')).toHaveLength(0)
+    expect(document.body.textContent || '').toContain('摘要')
+    expect(document.body.textContent || '').not.toContain('node_complete.json')
     expect(document.body.querySelector('[data-testid="run-output-open-run"]')).toBeTruthy()
     expect(document.body.querySelector('[data-testid="run-output-done"]')).toBeTruthy()
-    // No PPT / slide metaphor
     expect(document.body.textContent || '').not.toMatch(/PPT|幻灯片|16:9/)
     wrapper.unmount()
   })

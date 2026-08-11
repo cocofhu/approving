@@ -120,11 +120,38 @@ test.describe('shell notification center (IA separation)', () => {
       .locator('[data-testid="run-notifications-item"][data-status="completed"]')
       .first()
       .click()
-    await expect(page.getByTestId('run-output-empty').or(page.getByTestId('run-output-deck'))).toBeVisible({
-      timeout: 10_000,
-    })
+    // run-new-ok has outputCards → result-cards path (not legacy artifact deck)
+    await expect(page.getByTestId('run-output-result-cards')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('run-output-focus-bar')).toContainText('聚焦输出节点')
+    await expect(page.getByTestId('output-result-cards')).toBeVisible()
+    await expect(page.getByTestId('run-output-result-cards')).toContainText('视觉 Demo')
+    await expect(page.getByTestId('run-output-result-cards')).not.toContainText('node_complete.json')
+    await expect(page.getByTestId('run-output-list')).toHaveCount(0)
     // badge should drop by 1 (3 → 2)
     await expect(page.getByTestId('run-notifications-badge')).toHaveText('2')
+  })
+
+  test('completed without outputCards shows empty dual exits, not full artifact list', async ({
+    page,
+  }) => {
+    await page.goto('/notifications-center.html?scene=with-items')
+    await expect(page.getByTestId('shell-main-dashboard')).toBeVisible({ timeout: 15_000 })
+    await settleAuth(page)
+    await page.getByTestId('run-notifications-bell').click()
+    // Second completed item is run-clean (empty cards)
+    await page
+      .locator('[data-testid="run-notifications-item"][data-status="completed"]')
+      .nth(1)
+      .click()
+    const empty = page.getByTestId('run-output-empty')
+    await expect(empty).toBeVisible({ timeout: 10_000 })
+    await expect(empty).toContainText('暂无最终结果可预览')
+    await expect(empty).toContainText('不会回退成全量产物列表')
+    await expect(page.getByTestId('run-output-empty-open-run')).toBeVisible()
+    await expect(page.getByTestId('run-output-empty-open-artifacts')).toBeVisible()
+    await expect(empty).not.toContainText('node_complete.json')
+    await expect(empty).not.toContainText('plan.json')
+    await expect(page.getByTestId('run-output-list')).toHaveCount(0)
   })
 
   test('auth settle: badge matches unread immediately after /auth/me (no focus needed)', async ({
