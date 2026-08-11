@@ -17,9 +17,12 @@ import {
   mergePublicGatePreview,
   parseShareTokenFromHash,
   publicGateApi,
+  publicGateContentKey,
+  remainingSecFromExpiresAt,
   type PublicGateActiveItem,
   type PublicGateDecideResult,
   type PublicGatePreview,
+  type PublicGatePreviewKnown,
   type PublicGateQueueItem,
 } from '@/lib/inbox/gateShareLink'
 import type { ClarifyImage, ClarifyTurn, ReactAnnotation } from '@/lib/shared/types'
@@ -36,6 +39,10 @@ type PublicChatRef = {
 }
 
 const POLL_MS = 2000
+const IDLE_POLL_MS = 10_000
+const REMAINING_TICK_MS = 15_000
+const NONCE_TTL_MS = 15 * 60 * 1000
+const NONCE_REFRESH_BEFORE_MS = 2 * 60 * 1000
 
 const { t } = useI18n()
 const { isMobile } = useBreakpoint()
@@ -66,6 +73,12 @@ const chatRef = ref<PublicChatRef | null>(null)
 const replyInFlight = ref(false)
 const pendingReplyText = ref('')
 
+let lastKeptNonce = ''
+let nonceIssuedAt = 0
+let lastAppliedIdleQueue = false
+let pollIntervalMs = POLL_MS
+let remainingTimer: ReturnType<typeof setInterval> | null = null
+
 let previewGen = 0
 let previewAbort: AbortController | null = null
 let decideAbort: AbortController | null = null
@@ -89,7 +102,7 @@ function abortPreview() {
 const isReview = computed(() => preview.value?.kind === 'review')
 const status = computed(() => preview.value?.status || (token.value ? 'invalid' : 'invalid'))
 const isActive = computed(() => status.value === 'active')
-const remainingLabel = computed(() => formatRemainingSec(preview.value?.remainingSec, t))
+const remainingLabel = ref('')
 const reactAlive = computed(() => !!preview.value?.reactSessionAlive)
 const sessionBusy = computed(() => !!preview.value?.sessionBusy)
 const canReply = computed(() => isActive.value && reactAlive.value && !!preview.value?.actions?.reply)
@@ -171,7 +184,57 @@ function structuredFallbackDoc(): Record<string, unknown> | null {
   return Object.keys(out).length ? out : null
 }
 
-async function loadPreview(opts?: { silent?: boolean }) {
+function refreshRemainingLabel() {
+  const p = preview.value
+  const next = formatRemainingSec(remainingSecFromExpiresAt(p?.expiresAt, p?.remainingSec), t)
+  if (next !== remainingLabel.value) remainingLabel.value = next
+}
+
+function noteNonceIssued(nonce?: string) {
+  if (nonce) nonceIssuedAt = Date.now()
+}
+
+function shouldRefreshNonce(): boolean {
+  const have = !!(preview.value?.nonce || lastKeptNonce)
+  if (!have) return true
+  if (!nonceIssuedAt) return true
+  return Date.now() - nonceIssuedAt >= NONCE_TTL_MS - NONCE_REFRESH_BEFORE_MS
+}
+
+function patchClockAndNonce(prev: PublicGatePreview, next: PublicGatePreview) {
+  if (next.nonce) {
+    prev.nonce = next.nonce
+    lastKeptNonce = next.nonce
+    noteNonceIssued(next.nonce)
+  }
+  if (next.expiresAt) prev.expiresAt = next.expiresAt
+  if (typeof next.remainingSec === 'number') prev.remainingSec = next.remainingSec
+  refreshRemainingLabel()
+}
+
+function applyPreviewPayload(next: PublicGatePreview, silent: boolean) {
+  const prev = preview.value
+  if (silent && prev) {
+    const merged = mergePublicGatePreview(prev, next)
+    if (publicGateContentKey(merged) === publicGateContentKey(prev)) {
+      patchClockAndNonce(prev, next)
+      noteIdlePoll(true)
+      return false
+    }
+    preview.value = merged
+  } else {
+    preview.value = next
+  }
+  if (preview.value?.nonce) {
+    lastKeptNonce = preview.value.nonce
+    noteNonceIssued(preview.value.nonce)
+  }
+  refreshRemainingLabel()
+  noteIdlePoll(false)
+  return true
+}
+
+async function loadPreview(opts?: { silent?: boolean; issueNonce?: boolean }) {
   if (doneKind.value) return
   const attemptGen = ++previewGen
   abortPreview()
@@ -196,32 +259,44 @@ async function loadPreview(opts?: { silent?: boolean }) {
     preview.value = { status: 'invalid' }
     loading.value = false
     clearStuckTimer()
+    refreshRemainingLabel()
     return
   }
   try {
-    const known =
+    const known: PublicGatePreviewKnown | undefined =
       opts?.silent && preview.value
         ? {
             visualHtmlHash: preview.value.visualHtmlHash,
             upstreamHash: preview.value.upstreamHash,
+            structuredHash: preview.value.structuredHash,
+            turnsHash: preview.value.turnsHash,
+            silent: true,
+            issueNonce: !!opts.issueNonce || shouldRefreshNonce(),
           }
-        : undefined
+        : opts?.issueNonce
+          ? { issueNonce: true }
+          : undefined
     const next = await publicGateApi.preview(tok, signal, known)
     if (attemptGen !== previewGen) return
-    if (opts?.silent && preview.value) {
-      preview.value = mergePublicGatePreview(preview.value, next)
-    } else {
-      preview.value = next
-    }
+    const wroteTree = applyPreviewPayload(next, !!opts?.silent)
     if (next.status === 'active') workbenchSeen.value = true
     noteWorkbenchLinkInvalid(preview.value)
     if (!opts?.silent && !linkInvalid.value) errorText.value = ''
+    if (!wroteTree) {
+      if (attemptGen === previewGen) {
+        loading.value = false
+        clearStuckTimer()
+      }
+      return
+    }
   } catch (e) {
     if (attemptGen !== previewGen || isAbortError(e)) return
     if (!opts?.silent) {
       preview.value = null
       networkFailed.value = true
       errorText.value = t('pages.publicGate.networkError')
+    } else {
+      noteIdlePoll(true)
     }
   } finally {
     if (attemptGen === previewGen) {
@@ -302,6 +377,7 @@ function syncChatQueueFromPreview() {
   const busy = !!p.sessionBusy || waiting > 0 || !!activeItem
 
   if (busy) {
+    lastAppliedIdleQueue = false
     chat.applyQueueState?.(waiting, items.length ? items : null, true, activeItem)
     if (pendingReplyText.value && (turnsIncludeHumanText(pendingReplyText.value) || activeItem?.text?.trim() === pendingReplyText.value)) {
       pendingReplyText.value = ''
@@ -316,6 +392,8 @@ function syncChatQueueFromPreview() {
     chat.discardLastQueued?.()
     pendingReplyText.value = ''
   }
+  if (lastAppliedIdleQueue && !chat.isSessionBusy?.()) return
+  lastAppliedIdleQueue = true
   chat.applyQueueState?.(0, [], false, null)
 }
 
@@ -466,7 +544,7 @@ async function submitFinal(kind: 'confirm' | 'reject') {
   }
   if (!auditReady() && kind === 'reject') return
   if (!isReview.value && !auditReady()) return
-  if (!preview.value.nonce) {
+  if (!(preview.value.nonce || lastKeptNonce)) {
     errorText.value = t('pages.publicGate.unavailable')
     return
   }
@@ -486,13 +564,13 @@ async function submitFinal(kind: 'confirm' | 'reject') {
   try {
     let res: PublicGateDecideResult
     try {
-      res = await decideOnce(kind, preview.value.nonce, signal)
+      res = await decideOnce(kind, preview.value.nonce || lastKeptNonce, signal)
     } catch (e) {
       if (isAbortError(e)) return
-      if (kind !== 'confirm' || !isNonceError(e)) throw e
-      await loadPreview({ silent: true })
+      if (!isNonceError(e)) throw e
+      await loadPreview({ silent: true, issueNonce: true })
       if (signal.aborted) return
-      const nextNonce = preview.value?.nonce
+      const nextNonce = preview.value?.nonce || lastKeptNonce
       if (!nextNonce) throw e
       res = await decideOnce(kind, nextNonce, signal)
     }
@@ -552,16 +630,35 @@ function onHtmlPick(payload: { selector: string; tagName: string }) {
 }
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
+function pageHidden(): boolean {
+  return typeof document !== 'undefined' && document.visibilityState === 'hidden'
+}
+function canPoll(): boolean {
+  return (
+    isActive.value &&
+    !doneKind.value &&
+    !submitting.value &&
+    !linkInvalid.value &&
+    !pageHidden()
+  )
+}
 function onHashChange() {
   if (doneKind.value || submitting.value) return
   void loadPreview()
 }
+function noteIdlePoll(sameContent: boolean) {
+  const next = sameContent ? IDLE_POLL_MS : POLL_MS
+  if (next === pollIntervalMs) return
+  pollIntervalMs = next
+  if (pollTimer && canPoll()) startPoll()
+}
 function startPoll() {
   stopPoll()
+  if (!canPoll()) return
   pollTimer = setInterval(() => {
-    if (!isActive.value || doneKind.value || !token.value || submitting.value || linkInvalid.value) return
+    if (!canPoll() || !token.value) return
     void loadPreview({ silent: true })
-  }, POLL_MS)
+  }, pollIntervalMs)
 }
 function stopPoll() {
   if (pollTimer) {
@@ -569,10 +666,41 @@ function stopPoll() {
     pollTimer = null
   }
 }
+function startRemainingTick() {
+  stopRemainingTick()
+  refreshRemainingLabel()
+  if (pageHidden() || !isActive.value || doneKind.value) return
+  remainingTimer = setInterval(refreshRemainingLabel, REMAINING_TICK_MS)
+}
+function stopRemainingTick() {
+  if (remainingTimer) {
+    clearInterval(remainingTimer)
+    remainingTimer = null
+  }
+}
+async function resumeFromForeground() {
+  if (!canPoll()) {
+    startRemainingTick()
+    return
+  }
+  startRemainingTick()
+  await loadPreview({ silent: true, issueNonce: true })
+  if (canPoll()) startPoll()
+}
+function onVisibilityChange() {
+  if (pageHidden()) {
+    stopPoll()
+    stopRemainingTick()
+    return
+  }
+  void resumeFromForeground()
+}
 
 watch([isActive, doneKind], () => {
-  if (isActive.value && !doneKind.value && !submitting.value && !linkInvalid.value) startPoll()
+  if (canPoll()) startPoll()
   else stopPoll()
+  if (isActive.value && !doneKind.value && !pageHidden()) startRemainingTick()
+  else stopRemainingTick()
 })
 
 watch(chatRef, (chat) => {
@@ -597,11 +725,15 @@ onMounted(async () => {
   ready.value = true
   await loadPreview()
   window.addEventListener('hashchange', onHashChange)
-  if (isActive.value) startPoll()
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  startRemainingTick()
+  if (canPoll()) startPoll()
 })
 onUnmounted(() => {
   stopPoll()
+  stopRemainingTick()
   window.removeEventListener('hashchange', onHashChange)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
   abortPreview()
   abortUpstream()
   decideAbort?.abort()
