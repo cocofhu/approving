@@ -338,7 +338,7 @@ describe('AgentStudio MCP PM leader prefills', () => {
     await openMcpTab(wrapper)
 
     expect(wrapper.text()).toContain('检测到旧约定名 pm-leader')
-    expect(wrapper.get('[data-test="mcp-legacy-pm-hint"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="mcp-legacy-pm-hint"]').exists()).toBe(true)
     await wrapper.get('[data-test="mcp-upgrade-legacy"]').trigger('click')
     await flushPromises()
 
@@ -366,7 +366,7 @@ describe('AgentStudio MCP PM leader prefills', () => {
     await flushPromises()
     await openMcpTab(wrapper)
 
-    expect(wrapper.get('[data-mcp-name="memory-store"] [data-test="mcp-scope-note"]').exists()).toBe(true)
+    expect(wrapper.find('[data-mcp-name="memory-store"] [data-test="mcp-scope-note"]').exists()).toBe(true)
     expect(wrapper.get('[data-mcp-name="memory-store"] [data-test="mcp-display-name"]').text()).toBe('长期记忆')
     await wrapper.findAll('button').find((item) => item.text() === '原始 JSON')!.trigger('click')
     await flushPromises()
@@ -385,7 +385,7 @@ describe('AgentStudio MCP PM leader prefills', () => {
     expect(wrapper.find('[data-mcp-name="memory-store"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="mcp-scope-note"]').exists()).toBe(false)
     expect(wrapper.get('[data-test="mcp-custom-name"]').element).toMatchObject({ value: 'memory_store' })
-    expect(wrapper.get('[data-test="mcp-help-link"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="mcp-help-link"]').exists()).toBe(true)
   })
 
   it('removing memory-store keeps artifact-store intact', async () => {
@@ -493,13 +493,13 @@ describe('AgentStudio MCP config help', () => {
     expect(modal.text()).toContain('整份 mcp.json 由你配置')
     expect(modal.text()).toContain('/root/.codebuddy/mcp.json')
     expect(modal.text()).toContain('APPROVING_ARTIFACT_URL')
-    expect(wrapper.get('[data-test="mcp-help-run"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="mcp-help-run"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="mcp-help-agent"]').exists()).toBe(false)
     expect(wrapper.get('[data-help-chip="run"]').classes().join(' ')).toContain('border-accent')
 
     await wrapper.get('[data-test="mcp-help-chip-agent"]').trigger('click')
     await flushPromises()
-    expect(wrapper.get('[data-test="mcp-help-agent"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="mcp-help-agent"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="mcp-help-run"]').exists()).toBe(false)
     expect(wrapper.get('[data-test="help-modal"]').text()).toContain('APPROVING_MEMORY_URL')
     expect(wrapper.get('[data-test="help-modal"]').text()).toContain('pm-progress')
@@ -532,7 +532,7 @@ describe('AgentStudio MCP config help', () => {
 
     await wrapper.findAll('button').find((item) => item.text() === '表单编辑')!.trigger('click')
     await flushPromises()
-    expect(wrapper.get('[data-test="mcp-help-link"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="mcp-help-link"]').exists()).toBe(true)
 
     await wrapper.get('[data-test="mcp-help-link"]').trigger('click')
     await flushPromises()
