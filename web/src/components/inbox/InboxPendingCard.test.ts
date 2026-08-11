@@ -44,7 +44,7 @@ function clarify(over: Partial<ClarifyInboxItem> = {}): ClarifyInboxItem {
 }
 
 describe('InboxPendingCard share entry', () => {
-  it('shows copy button and status for human_gate, kind=review, and kind=app_preview', async () => {
+  it('shows copy button and status for human_gate, default-kind clarify, kind=review, and kind=app_preview', async () => {
     const w = mount(InboxPendingCard, {
       props: { item: gate() },
       global: { plugins: [i18n] },
@@ -68,12 +68,26 @@ describe('InboxPendingCard share entry', () => {
     expect(review.get('[data-testid="gate-share-copy-btn"]').text()).toContain('复制临时链接')
     expect(review.get('[data-testid="gate-share-status"]').text()).toContain('尚未创建')
 
+    // Legacy Inbox 待澄清: missing kind is treated as clarify and must show share entry (F1).
     const c = mount(InboxPendingCard, {
-      props: { item: clarify() },
+      props: { item: clarify({ shareLink: { state: 'none', canCreate: true } }) },
       global: { plugins: [i18n] },
     })
-    expect(c.find('[data-testid="gate-share-copy-btn"]').exists()).toBe(false)
-    expect(c.find('[data-testid="gate-share-status"]').exists()).toBe(false)
+    expect(c.get('[data-testid="gate-share-copy-btn"]').text()).toContain('复制临时链接')
+    expect(c.get('[data-testid="gate-share-status"]').text()).toContain('尚未创建')
+    await c.get('[data-testid="gate-share-copy-btn"]').trigger('click')
+    expect(c.emitted('open-share')).toHaveLength(1)
+
+    const explicitClarify = mount(InboxPendingCard, {
+      props: {
+        item: clarify({
+          kind: 'clarify',
+          shareLink: { state: 'none', canCreate: true },
+        }),
+      },
+      global: { plugins: [i18n] },
+    })
+    expect(explicitClarify.get('[data-testid="gate-share-copy-btn"]').text()).toContain('复制临时链接')
 
     const preview = mount(InboxPendingCard, {
       props: {
