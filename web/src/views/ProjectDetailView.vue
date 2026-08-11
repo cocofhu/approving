@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -98,12 +98,23 @@ const showRefreshProgress = computed(
 const initialLegacyPmSettings = route.query.tab === LEGACY_PM_SETTINGS_TAB
 const initialLegacyPmMemory = route.query.tab === LEGACY_PM_MEMORY_TAB
 const tab = ref<Tab>(parseProjectTab(route.query.tab))
+const draftsPanelRef = ref<{ isDirty: boolean; requestLeave: () => Promise<boolean> } | null>(null)
+
+async function confirmDraftsLeave(): Promise<boolean> {
+  const panel = draftsPanelRef.value
+  if (!panel?.isDirty) return true
+  return panel.requestLeave()
+}
 /** Inline sub-view inside PM Leader; page-local, not a shareable URL param. */
 const pmView = ref<PmView>(initialLegacyPmSettings ? 'settings' : 'chat')
 /** Show once when landing via legacy ?tab=pmMemory. */
 const showPmMemoryMigration = ref(initialLegacyPmMemory)
 
-function setTab(id: Tab) {
+async function setTab(id: Tab) {
+  if (tab.value === 'requirementDrafts' && id !== 'requirementDrafts') {
+    const ok = await confirmDraftsLeave()
+    if (!ok) return
+  }
   if (id !== 'pmLeader') {
     pmView.value = 'chat'
   }
@@ -161,6 +172,21 @@ function syncTabFromRoute() {
   }
   const next = parseProjectTab(q)
   if (tab.value !== next) {
+    if (tab.value === 'requirementDrafts' && next !== 'requirementDrafts') {
+      void confirmDraftsLeave().then((ok) => {
+        if (!ok) {
+          if (route.query.tab !== 'requirementDrafts') {
+            void router.replace({ query: { ...route.query, tab: 'requirementDrafts' } })
+          }
+          return
+        }
+        if (next !== 'pmLeader') {
+          pmView.value = 'chat'
+        }
+        tab.value = next
+      })
+      return
+    }
     if (next !== 'pmLeader') {
       pmView.value = 'chat'
     }
@@ -792,6 +818,17 @@ onUnmounted(() => {
   document.removeEventListener('keydown', onKeydown)
   document.removeEventListener('scroll', onScrollClose, true)
 })
+
+onBeforeRouteLeave(async () => {
+  if (tab.value !== 'requirementDrafts') return true
+  return confirmDraftsLeave()
+})
+
+onBeforeRouteUpdate(async (to, from) => {
+  if (String(to.params.id) === String(from.params.id)) return true
+  if (tab.value !== 'requirementDrafts') return true
+  return confirmDraftsLeave()
+})
 </script>
 
 <template>
@@ -993,7 +1030,7 @@ onUnmounted(() => {
         class="min-w-0"
         data-testid="project-requirement-drafts-panel"
       >
-        <RequirementDraftsPanel :project-id="projectId" />
+        <RequirementDraftsPanel ref="draftsPanelRef" :project-id="projectId" />
       </div>
 
       <div
