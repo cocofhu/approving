@@ -2,6 +2,11 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/lib/api/api'
+import {
+  isVisualHtmlCard,
+  parseOutputCardDoc,
+  visualHtmlArtifactName,
+} from '@/lib/run/isVisualHtmlCard'
 import OutputResultCardBody from './OutputResultCardBody.vue'
 import AppModal from '../ui/AppModal.vue'
 import Icon from '../ui/Icon.vue'
@@ -54,7 +59,15 @@ watch(
   [selectedIndex, () => props.cards],
   () => {
     const c = props.cards[selectedIndex.value]
-    if (c?.typeTag === '自定义产物' && c.artifactName && !c.structuredArtifactName) {
+    if (!c) return
+    const parsed = parseDoc(c)
+    const name = visualHtmlArtifactName(c)
+    // Visual HTML (incl. legacy typeTag=结构化产物 + page.html): fetch when a name is resolvable.
+    if (isVisualHtmlCard(c, { parsedDoc: parsed }) && name) {
+      void loadArtifactContent(name)
+      return
+    }
+    if (c.typeTag === '自定义产物' && c.artifactName && !c.structuredArtifactName) {
       void loadArtifactContent(c.artifactName)
     }
   },
@@ -69,13 +82,7 @@ function selectCard(i: number) {
 }
 
 function parseDoc(card: OutputCard): unknown {
-  const raw = card.jsonSnapshot?.trim()
-  if (!raw) return null
-  try {
-    return JSON.parse(raw)
-  } catch {
-    return null
-  }
+  return parseOutputCardDoc(card)
 }
 
 const showList = computed(() => props.cards.length > 1)
@@ -85,8 +92,16 @@ const currentDoc = computed(() => (currentCard.value ? parseDoc(currentCard.valu
 /** F3: enlarge only for success cards that actually have renderable body (review v2). */
 function hasRenderableBody(card: OutputCard | undefined): boolean {
   if (!card || card.status === 'failed') return false
+  const parsed = parseDoc(card)
+  const artName = visualHtmlArtifactName(card)
+  const fetched = artName ? artifactContent(artName) : ''
+  if (isVisualHtmlCard(card, { artifactHtml: fetched, parsedDoc: parsed })) {
+    // Disable enlarge when preview is unavailable (load error or empty body).
+    const body = (fetched.trim() || card.markdown?.trim() || '')
+    return !!body
+  }
   if (card.typeTag === '结构化产物') {
-    if (card.structuredArtifactName && parseDoc(card) != null) return true
+    if (card.structuredArtifactName && parsed != null) return true
     return !!card.markdown?.trim()
   }
   if (card.typeTag === '自定义产物') return !!card.artifactName
@@ -100,28 +115,35 @@ function artifactContent(name: string): string {
   return contentCache.value[name] ?? ''
 }
 
-function isHtmlArtifact(name?: string): boolean {
-  return !!name && name.endsWith('.html')
+function resolvedArtifactName(card: OutputCard): string | undefined {
+  return visualHtmlArtifactName(card) || card.artifactName
 }
 
-/** Short list label: failed → 失败; else map typeTag (+ .html → HTML). */
+function resolvedArtifactHtml(card: OutputCard): string {
+  const name = resolvedArtifactName(card)
+  return name ? artifactContent(name) : ''
+}
+
+function cardVisualHtml(card: OutputCard): boolean {
+  const artName = visualHtmlArtifactName(card)
+  const fetched = artName ? artifactContent(artName) : ''
+  return isVisualHtmlCard(card, { artifactHtml: fetched, parsedDoc: parseDoc(card) })
+}
+
+/** Short list label: failed → 失败; visual HTML → HTML; else map typeTag. */
 function shortKindLabel(card: OutputCard): string {
   if (card.status === 'failed') return t('pages.nodeOutput.outputCards.kindFailed')
+  if (cardVisualHtml(card)) return t('pages.nodeOutput.outputCards.kindHtml')
   if (card.typeTag === '结构化产物') return t('pages.nodeOutput.outputCards.kindStructured')
   if (card.typeTag === 'Markdown') return t('pages.nodeOutput.outputCards.kindMarkdown')
-  if (card.typeTag === '自定义产物' && isHtmlArtifact(card.artifactName)) {
-    return t('pages.nodeOutput.outputCards.kindHtml')
-  }
   if (card.typeTag === '自定义产物') return t('pages.nodeOutput.outputCards.kindCustom')
   return card.typeTag
 }
 
-/** Detail bar kind: custom HTML shows「自定义产物 · HTML」per Demo / clarification. */
+/** Detail bar kind: visual HTML cards always show「自定义产物 · HTML」. */
 function detailKindLabel(card: OutputCard): string {
   if (card.status === 'failed') return card.typeTag
-  if (card.typeTag === '自定义产物' && isHtmlArtifact(card.artifactName)) {
-    return t('pages.nodeOutput.outputCards.kindCustomHtml')
-  }
+  if (cardVisualHtml(card)) return t('pages.nodeOutput.outputCards.kindCustomHtml')
   return card.typeTag
 }
 
@@ -221,8 +243,8 @@ function closeEnlarge() {
           :run="run"
           :doc="currentDoc"
           :loading="loading"
-          :artifact-html="currentCard.artifactName ? artifactContent(currentCard.artifactName) : ''"
-          :artifact-load-error="artifactLoadError(currentCard.artifactName)"
+          :artifact-html="resolvedArtifactHtml(currentCard)"
+          :artifact-load-error="artifactLoadError(resolvedArtifactName(currentCard))"
           variant="detail"
         />
       </div>
@@ -241,8 +263,8 @@ function closeEnlarge() {
           :run="run"
           :doc="currentDoc"
           :loading="loading"
-          :artifact-html="currentCard.artifactName ? artifactContent(currentCard.artifactName) : ''"
-          :artifact-load-error="artifactLoadError(currentCard.artifactName)"
+          :artifact-html="resolvedArtifactHtml(currentCard)"
+          :artifact-load-error="artifactLoadError(resolvedArtifactName(currentCard))"
           variant="enlarge"
         />
       </div>

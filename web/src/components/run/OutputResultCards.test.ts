@@ -364,7 +364,7 @@ describe('OutputResultCards master-detail list + enlarge (g4.1)', () => {
     wrapper.unmount()
   })
 
-  it('custom HTML empty/load-fail shows 无法预览, never Markdown source (g2.3)', async () => {
+  it('custom HTML load-fail shows 预览不可用 / 无法加载视觉网页, never Markdown source (g3.1/g3.2)', async () => {
     apiMocks.artifactContent.mockRejectedValue(new Error('fetch failed'))
     const emptyPage: OutputCard = {
       index: 1,
@@ -378,11 +378,42 @@ describe('OutputResultCards master-detail list + enlarge (g4.1)', () => {
     }
     const wrapper = mountCards([emptyPage])
     await flushPromises()
-    expect(wrapper.find('[data-testid="output-result-html-unavailable"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('无法预览')
+    expect(wrapper.find('[data-testid="output-result-html-load-error"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="output-result-html-load-error"]').text()).toContain('预览不可用')
+    expect(wrapper.get('[data-testid="output-result-html-load-error"]').text()).toContain(
+      '无法加载视觉网页',
+    )
+    expect(wrapper.find('[data-testid="output-result-html-empty"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="output-result-enlarge"]').exists()).toBe(false)
     expect(wrapper.find('.md').exists()).toBe(false)
     expect(wrapper.text()).not.toMatch(/<!doctype|<html|<body/)
+    wrapper.unmount()
+  })
+
+  it('custom HTML empty body (no fetch error) shows 空正文, never Markdown source (g3.1/g3.2)', async () => {
+    const emptyPage: OutputCard = {
+      index: 1,
+      template: '{{nodes.visual.outputs.page}}',
+      title: '网页预览 · 视觉网页',
+      status: 'ok',
+      typeTag: '自定义产物',
+      artifactName: 'gone.html',
+      nodeId: 'visual',
+      outputKey: 'page',
+    }
+    const wrapper = mountCards([emptyPage])
+    await flushPromises()
+    expect(wrapper.find('[data-testid="output-result-html-empty"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="output-result-html-empty"]').text()).toContain('空正文')
+    expect(wrapper.get('[data-testid="output-result-html-empty"]').text()).toContain(
+      '没有可预览的页面内容',
+    )
+    expect(wrapper.find('[data-testid="output-result-html-load-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="output-result-enlarge"]').exists()).toBe(false)
+    expect(wrapper.find('.md').exists()).toBe(false)
+    expect(wrapper.text()).not.toMatch(/<!doctype|<html|<div class=/)
     wrapper.unmount()
   })
 
@@ -402,6 +433,127 @@ describe('OutputResultCards master-detail list + enlarge (g4.1)', () => {
     expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="output-result-html-unavailable"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('<!doctype html>')
+    wrapper.unmount()
+  })
+
+  const legacyHtmlMarkdown = `<!doctype html>
+<html>
+<body>
+<div class="scenes" id="scenes">
+  <button class="scene-btn on" type="button">1. Inbox 待澄清</button>
+</div>
+</body>
+</html>`
+
+  it('legacy typeTag=结构化产物 + structuredArtifactName=page.html uses HtmlPreview (g2.1/g2.2/g2.3/g4.1)', async () => {
+    const legacy: OutputCard = {
+      index: 1,
+      template: '{{nodes.visual.outputs.page}}',
+      title: '网页预览 · 视觉网页',
+      status: 'ok',
+      typeTag: '结构化产物',
+      structuredArtifactName: 'page.html',
+      outputKey: 'page',
+      markdown: legacyHtmlMarkdown,
+    }
+    const wrapper = mountCards([legacy])
+    await flushPromises()
+    expect(wrapper.get('[data-testid="output-result-detail-kind"]').text()).toBe('自定义产物 · HTML')
+    expect(wrapper.text()).not.toContain('结构化产物')
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="structured-view"]').exists()).toBe(false)
+    expect(wrapper.find('.md').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('<div class="scenes"')
+    expect(wrapper.text()).not.toContain('scene-btn')
+    expect(wrapper.text()).not.toContain('<!doctype html>')
+    expect(wrapper.find('[data-testid="output-result-enlarge"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="output-result-enlarge"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="output-result-enlarge-html-viewport"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="output-result-enlarge-body"]').text()).not.toContain(
+      '<div class="scenes"',
+    )
+    expect(apiMocks.artifactContent).toHaveBeenCalledWith('a-page')
+    wrapper.unmount()
+  })
+
+  it('.htm artifactName is treated as visual HTML (g4.1)', async () => {
+    const htmCard: OutputCard = {
+      index: 1,
+      template: 'artifact("legacy.htm")',
+      title: '旧 HTM',
+      status: 'ok',
+      typeTag: '自定义产物',
+      artifactName: 'legacy.htm',
+      markdown: '<!doctype html><html><body><p>htm</p></body></html>',
+    }
+    const wrapper = mountCards([htmCard])
+    await flushPromises()
+    expect(wrapper.get('[data-testid="output-result-detail-kind"]').text()).toBe('自定义产物 · HTML')
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('<!doctype html>')
+    wrapper.unmount()
+  })
+
+  it('outputKey=page without html filename still uses HtmlPreview (g4.1)', async () => {
+    const pageKey: OutputCard = {
+      index: 1,
+      template: '{{nodes.visual.outputs.page}}',
+      title: '网页预览 · 视觉网页',
+      status: 'ok',
+      typeTag: '自定义产物',
+      artifactName: 'visual-page',
+      outputKey: 'page',
+      markdown: legacyHtmlMarkdown,
+    }
+    const wrapper = mountCards([pageKey])
+    await flushPromises()
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="output-result-detail-kind"]').text()).toBe('自定义产物 · HTML')
+    expect(wrapper.text()).not.toContain('scene-btn')
+    wrapper.unmount()
+  })
+
+  it('body sniff: full HTML markdown without page key / html name uses HtmlPreview (g4.1)', async () => {
+    const sniffed: OutputCard = {
+      index: 1,
+      template: 'custom',
+      title: '完整文档',
+      status: 'ok',
+      typeTag: '自定义产物',
+      artifactName: 'unnamed',
+      markdown: legacyHtmlMarkdown,
+    }
+    const wrapper = mountCards([sniffed])
+    await flushPromises()
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(true)
+    expect(wrapper.find('.md').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('<div class="scenes"')
+    wrapper.unmount()
+  })
+
+  it('real structured JSON is not misclassified as visual HTML (g4.1)', async () => {
+    const wrapper = mountCards([cards[0]])
+    await flushPromises()
+    expect(wrapper.find('[data-testid="structured-view"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="output-result-detail-kind"]').text()).toBe('结构化产物')
+    wrapper.unmount()
+  })
+
+  it('div-only fragment without page/.html name stays off HtmlPreview (g4.1)', async () => {
+    const frag: OutputCard = {
+      index: 1,
+      template: 'md',
+      title: '片段',
+      status: 'ok',
+      typeTag: 'Markdown',
+      markdown: '<div class="scenes">not a document</div>',
+    }
+    const wrapper = mountCards([frag])
+    await flushPromises()
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(false)
+    expect(wrapper.find('.md').exists()).toBe(true)
     wrapper.unmount()
   })
 })
