@@ -61,6 +61,7 @@ const AppModalStub = defineComponent({
         data-testid="modal-backdrop"
         @click="closeOnBackdrop && $emit('close')"
       />
+      <h2 data-testid="upstream-enlarge-modal-title">{{ title }}</h2>
       <button data-testid="modal-close" type="button" @click="$emit('close')">close</button>
       <slot />
       <slot name="footer" />
@@ -228,14 +229,16 @@ describe('UpstreamRequirementContext', () => {
     await flushPromises()
 
     expect(wrapper.find('[data-testid="upstream-enlarge-modal"]').exists()).toBe(true)
-    // Modal title stays 「上游上下文」; only the trigger button uses the new enlarge label.
-    expect(wrapper.find('[data-testid="upstream-enlarge-modal"]').text()).toContain('上游上下文')
+    // Modal title stays 「上游上下文」; enlarge label remains on the trigger, not a spec callout.
+    expect(wrapper.find('[data-testid="upstream-enlarge-modal-title"]').text()).toBe('上游上下文')
+    expect(wrapper.findComponent(AppModalStub).props('title')).toBe('上游上下文')
     expect(wrapper.find('[data-testid="upstream-context-body"]').exists()).toBe(false)
     expect(apiMocks.artifactContent).toHaveBeenCalledWith('a-req')
-    expect(wrapper.find('[data-testid="upstream-modal-callout"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="upstream-modal-callout"]').text()).toContain(
-      '放大上游上下文',
+    expect(wrapper.find('[data-testid="upstream-modal-callout"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="upstream-modal-body"]').text()).not.toContain(
+      '应用内模态大视口',
     )
+    expect(wrapper.find('[data-testid="upstream-modal-mode-structured"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="upstream-modal-readonly-footer"]').text()).toContain(
       '只读对照',
     )
@@ -364,6 +367,11 @@ describe('UpstreamRequirementContext', () => {
     expect(wrapper.find('[data-testid="upstream-enlarge-modal"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="upstream-context-body"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="structured-view"]').text()).toContain('需求')
+    expect(wrapper.find('[data-testid="upstream-modal-callout"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="upstream-bar-hint"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="upstream-bar-hint"]').text()).toContain(
+      '本 run 已有澄清需求文档',
+    )
     wrapper.unmount()
   })
 
