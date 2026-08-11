@@ -40,11 +40,11 @@ var (
 	// ErrPmCronJobNotFound is returned when a cron job is missing for the project.
 	ErrPmCronJobNotFound = errors.New("定时任务不存在")
 	// ErrPmChannelReadOnly is returned when a Web client tries to write/delete a channel thread.
-	ErrPmChannelReadOnly = errors.New("渠道会话不可在 Web 改写")
+	ErrPmChannelReadOnly = errors.New("渠道会话为只读，不可当普通 Web 线程编辑或删除")
 )
 
 // IsChannelUserID reports whether userID is a registered channel synthetic identity
-// (qq:… / wecom:…).
+// (qq:… / wecom:… / feishu:…).
 func IsChannelUserID(userID string) bool {
 	for _, typ := range models.RegisteredChannelTypes() {
 		if strings.HasPrefix(userID, typ+":") {
@@ -54,7 +54,12 @@ func IsChannelUserID(userID string) bool {
 	return false
 }
 
-// IsQQChannelUserID is kept as an alias of IsChannelUserID for existing callers.
+// IsChannelSyntheticUserID is kept for newer callers and aliases IsChannelUserID.
+func IsChannelSyntheticUserID(userID string) bool {
+	return IsChannelUserID(userID)
+}
+
+// IsQQChannelUserID is kept as a historical alias for existing callers.
 func IsQQChannelUserID(userID string) bool {
 	return IsChannelUserID(userID)
 }
@@ -621,8 +626,8 @@ func (s *PmService) RenameAgentScopedData(oldName, newName string) error {
 // ListThreads returns threads for the given user in the project.
 // For normal Web users this is their own threads ∪ project channel threads
 // (registered type prefixes), excluding cron: threads, ordered by updated_at desc.
-// For synthetic identities (qq:/wecom:/cron:) it stays owner-only so ChannelBridge
-// ensureThread continues to resolve a single conversation thread.
+// For synthetic identities (qq:/wecom:/feishu:/cron:) it stays owner-only so
+// ChannelBridge ensureThread continues to resolve a single conversation thread.
 func (s *PmService) ListThreads(projectID, userID string) ([]models.ChatThread, error) {
 	if _, ok := s.project(projectID); !ok {
 		return nil, ErrProjectNotFound
@@ -740,8 +745,8 @@ func (s *PmService) CreateCronThread(projectID, agentName, title string) (models
 	return s.CreateThread(projectID, "cron:"+agentName, title, agentName, models.ChatThreadKindCron)
 }
 
-// GetThread returns a thread the user may read: owned by userID, or a channel
-// thread in the same project (readable by any project member).
+// GetThread returns a thread the user may read: owned by userID, or a
+// registered channel thread in the same project (any project member).
 func (s *PmService) GetThread(projectID, threadID, userID string) (models.ChatThread, error) {
 	var t models.ChatThread
 	if err := s.db.Where("id = ? AND project_id = ?", threadID, projectID).First(&t).Error; err != nil {

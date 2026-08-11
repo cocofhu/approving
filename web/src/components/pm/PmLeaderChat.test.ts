@@ -1352,6 +1352,7 @@ describe('PmLeaderChat stick-to-bottom', () => {
     expect(wrapper.find('[data-testid="pm-chat-send"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('渠道会话不可在 Web 改写')
     expect(wrapper.text()).toContain('渠道会话在 Web 只读：不可发送、不可删除')
+    expect(wrapper.text()).toContain('禁止当普通 Web 线程编辑或删除')
     expect(wrapper.text()).toContain('可点击缩略图查看大图')
     expect(apiMocks.appendPmMessage).not.toHaveBeenCalled()
 
@@ -1387,7 +1388,35 @@ describe('PmLeaderChat stick-to-bottom', () => {
     expect(wrapper.find('[data-testid="pm-unspoken-tag"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="pm-chat-title"]').text()).toContain('wecom:c2c:zhangsan')
     expect(wrapper.find('[data-testid="pm-channel-subtitle"]').text()).toContain('来自企业微信 Channel')
-    expect(wrapper.find('[data-testid="pm-channel-readonly"]').text()).toContain('渠道会话不可在 Web 改写')
+    expect(wrapper.find('[data-testid="pm-channel-readonly"]').text()).toContain('来自企业微信，请在企业微信侧回复')
+    expect(wrapper.find('[data-testid="pm-chat-send"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('Feishu channel threads show cyan badge, readonly, no delete/send', async () => {
+    apiMocks.listPmThreads.mockResolvedValue({
+      items: [
+        {
+          id: 'thr-fs',
+          title: '飞书私聊',
+          userId: 'feishu:c2c:oc_zhang',
+          projectId: 'proj-1',
+          createdAt: '2026-01-02T00:00:00Z',
+          updatedAt: '2026-01-02T12:00:00Z',
+        },
+      ],
+    })
+    apiMocks.listPmMessages.mockResolvedValue({ items: [] })
+    const wrapper = mountChat()
+    await flushPromises()
+    const tag = wrapper.find('[data-testid="pm-qq-tag"]')
+    expect(tag.exists()).toBe(true)
+    expect(tag.text()).toBe('飞书')
+    expect(tag.attributes('data-channel-kind')).toBe('feishu')
+    expect(wrapper.find('[data-testid="pm-thread-delete"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="pm-channel-readonly"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('来自飞书，请在飞书侧回复')
+    expect(wrapper.text()).toContain('不可当普通 Web 线程编辑或删除')
     expect(wrapper.find('[data-testid="pm-chat-send"]').exists()).toBe(false)
     wrapper.unmount()
   })

@@ -236,13 +236,57 @@ async function copyAssistantText(ev: Event) {
 const showThreadsAside = computed(() => !isMobile.value || mobileView.value === 'threads')
 const showChatSection = computed(() => !isMobile.value || mobileView.value === 'chat')
 
-/** Channel synthetic user id, e.g. qq:guild:… / wecom:c2c:… */
+/** Channel synthetic user id, e.g. qq:guild:… / wecom:c2c:… / feishu:c2c:… */
+function channelTypeOf(th: ChatThread | undefined | null): string {
+  return parseChannelUserId(th?.userId || '')?.type || ''
+}
+
 function isChannelThread(th: ChatThread | undefined | null): boolean {
   return isChannelThreadUserId(th?.userId)
 }
 
-function channelTypeOf(th: ChatThread | undefined | null): string {
-  return parseChannelUserId(th?.userId || '')?.type || ''
+function channelBadgeLabel(th: ChatThread | undefined | null): string {
+  switch (channelTypeOf(th)) {
+    case 'wecom':
+      return t('pages.projectDetail.pm.channelBadgeWecom')
+    case 'feishu':
+      return t('pages.projectDetail.pm.channelBadgeFeishu')
+    default:
+      return t('pages.projectDetail.pm.channelBadgeQQ')
+  }
+}
+
+function channelBadgeClass(th: ChatThread | undefined | null): string {
+  switch (channelTypeOf(th)) {
+    case 'wecom':
+      return 'border-accent/55 bg-accent-dim text-accent-2'
+    case 'feishu':
+      return 'border-cyan-400/40 bg-cyan-400/10 text-cyan-300'
+    default:
+      return 'border-accent-2/35 bg-accent/15 text-accent-2'
+  }
+}
+
+function channelReadonlyTitle(th: ChatThread | undefined | null): string {
+  switch (channelTypeOf(th)) {
+    case 'wecom':
+      return t('pages.projectDetail.pm.channelReadonlyTitleWecom')
+    case 'feishu':
+      return t('pages.projectDetail.pm.channelReadonlyTitleFeishu')
+    default:
+      return t('pages.projectDetail.pm.channelReadonlyTitle')
+  }
+}
+
+function channelReadonlyHint(th: ChatThread | undefined | null): string {
+  switch (channelTypeOf(th)) {
+    case 'wecom':
+      return t('pages.projectDetail.pm.channelReadonlyHintWecom')
+    case 'feishu':
+      return t('pages.projectDetail.pm.channelReadonlyHintFeishu')
+    default:
+      return t('pages.projectDetail.pm.channelReadonlyHint')
+  }
 }
 
 function threadDisplayTitle(th: ChatThread | undefined | null): string {
@@ -260,7 +304,9 @@ function channelSourceLine(th: ChatThread | undefined | null): string {
   const src =
     kind === 'wecom'
       ? t('pages.projectDetail.pm.channelSourceWecom')
-      : t('pages.projectDetail.pm.channelSourceQq')
+      : kind === 'feishu'
+        ? t('pages.projectDetail.pm.channelSourceFeishu')
+        : t('pages.projectDetail.pm.channelSourceQq')
   const peer = channelPeerId(th?.userId || '')
   if (th?.unspoken) {
     return `${src} · ${t('pages.projectDetail.pm.unspoken')}${peer ? ` · ${peer}` : ''}`
@@ -1311,20 +1357,22 @@ onBeforeUnmount(() => {
             <span class="min-w-0 truncate font-mono text-[12px]">{{ threadDisplayTitle(th) }}</span>
             <span
               v-if="isChannelThread(th)"
-              class="inline-flex shrink-0 items-center border px-1 text-[9px] font-bold uppercase tracking-wide leading-4"
-              :class="
-                channelTypeOf(th) === 'wecom'
-                  ? 'border-accent/55 bg-accent-dim text-accent-2'
-                  : 'border-accent-2/35 bg-accent/15 text-accent-2'
-              "
+              class="inline-flex shrink-0 items-center border px-1 text-[9px] font-bold tracking-wide leading-4"
+              :class="channelBadgeClass(th)"
               data-testid="pm-qq-tag"
+              :data-channel-kind="channelTypeOf(th)"
               :title="channelSourceLine(th)"
-            >{{ channelTypeOf(th) === 'wecom' ? t('pages.projectDetail.pm.channel.typeWecom') : 'QQ' }}</span>
+            >{{ channelBadgeLabel(th) }}</span>
             <span
               v-if="th.unspoken"
               class="inline-flex shrink-0 items-center border border-warn/45 px-1 text-[9px] leading-4 text-warn"
               data-testid="pm-unspoken-tag"
             >{{ t('pages.projectDetail.pm.unspoken') }}</span>
+            <span
+              v-else
+              class="inline-flex shrink-0 items-center border border-line bg-elevated px-1 text-[9px] font-bold tracking-wide leading-4 text-txt3"
+              data-testid="pm-web-tag"
+            >{{ t('pages.projectDetail.pm.channelBadgeWeb') }}</span>
           </span>
           <span
             v-if="!turnBusy && !isChannelThread(th)"
@@ -1370,15 +1418,12 @@ onBeforeUnmount(() => {
             <span class="min-w-0 truncate text-sm font-medium text-txt">{{ activeThreadTitle }}</span>
             <span
               v-if="activeIsChannel"
-              class="inline-flex shrink-0 items-center border px-1 text-[9px] font-bold uppercase tracking-wide leading-4"
-              :class="
-                channelTypeOf(activeThread) === 'wecom'
-                  ? 'border-accent/55 bg-accent-dim text-accent-2'
-                  : 'border-accent-2/35 bg-accent/15 text-accent-2'
-              "
+              class="inline-flex shrink-0 items-center border px-1 text-[9px] font-bold tracking-wide leading-4"
+              :class="channelBadgeClass(activeThread)"
               data-testid="pm-qq-tag-header"
+              :data-channel-kind="channelTypeOf(activeThread)"
               :title="channelSourceLine(activeThread)"
-            >{{ channelTypeOf(activeThread) === 'wecom' ? t('pages.projectDetail.pm.channel.typeWecom') : 'QQ' }}</span>
+            >{{ channelBadgeLabel(activeThread) }}</span>
             <span
               v-if="activeThread?.unspoken"
               class="inline-flex shrink-0 items-center border border-warn/45 px-1 text-[9px] leading-4 text-warn"
@@ -1716,10 +1761,10 @@ onBeforeUnmount(() => {
           </div>
           <div class="min-w-0">
             <strong class="block text-[13px] font-semibold text-txt">
-              {{ t('pages.projectDetail.pm.channelReadonlyTitle') }}
+              {{ channelReadonlyTitle(activeThread) }}
             </strong>
             <p class="mt-0.5 text-xs text-txt3">
-              {{ t('pages.projectDetail.pm.channelReadonlyHint') }}
+              {{ channelReadonlyHint(activeThread) }}
             </p>
           </div>
         </div>

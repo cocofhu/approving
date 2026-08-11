@@ -546,6 +546,12 @@ func TestIsQQChannelUserID(t *testing.T) {
 	if !IsChannelUserID("wecom:c2c:zhangsan") || !IsChannelUserID("wecom:group:wr") {
 		t.Fatal("expected wecom: prefixes")
 	}
+	if !IsQQChannelUserID("feishu:c2c:oc_x") || !IsQQChannelUserID("feishu:group:oc_g") {
+		t.Fatal("expected feishu: prefixes to match")
+	}
+	if !IsChannelSyntheticUserID("feishu:c2c:oc_x") {
+		t.Fatal("IsChannelSyntheticUserID should cover feishu")
+	}
 	if IsQQChannelUserID("cron:agent") || IsQQChannelUserID("alice") || IsQQChannelUserID("") {
 		t.Fatal("unexpected channel match")
 	}
