@@ -275,13 +275,6 @@ watch(visible, (isVisible) => {
       @close="closeModal"
     >
       <div class="space-y-3" data-testid="upstream-modal-body">
-        <div
-          class="rounded-md border border-accent/25 bg-accent-dim/45 px-3 py-2 text-[11px] leading-relaxed text-txt2"
-          data-testid="upstream-modal-callout"
-        >
-          <strong class="font-semibold text-accent-2">{{ enlargeLabel }}</strong>
-          {{ t('pages.gateApproval.upstreamEnlargeHint') }}
-        </div>
         <div class="flex flex-wrap gap-1">
           <button
             type="button"
