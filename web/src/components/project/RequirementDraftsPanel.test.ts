@@ -110,7 +110,7 @@ describe('RequirementDraftsPanel', () => {
       status: 'open',
       q: undefined,
     })
-    expect(w.get('[data-testid="requirement-drafts-panel"]').exists()).toBe(true)
+    expect(w.find('[data-testid="requirement-drafts-panel"]').exists()).toBe(true)
     expect(w.get('[data-testid="requirement-drafts-empty-detail"]').text()).toContain('未选中草稿')
     await w.get('[data-testid="requirement-drafts-item-rd-1"]').trigger('click')
     await nextTick()
@@ -118,7 +118,7 @@ describe('RequirementDraftsPanel', () => {
       'value',
       '支付失败重试',
     )
-    expect(w.get('[data-testid="requirement-drafts-markdown-split"]').exists()).toBe(true)
+    expect(w.find('[data-testid="requirement-drafts-markdown-split"]').exists()).toBe(true)
     expect(w.get('[data-testid="requirement-drafts-status-pill"]').text()).toContain('未完成')
   })
 
