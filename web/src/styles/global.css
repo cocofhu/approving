@@ -398,6 +398,9 @@ body {
 /* markdown */
 .md {
   @apply text-sm leading-relaxed text-txt2;
+  /* Long unbroken strings (blob URLs, tokens) must wrap inside flex bubbles. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .md h1,
 .md h2,
@@ -445,6 +448,8 @@ body {
 }
 .md a {
   @apply text-accent-2 underline;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 @media (max-width: 768px) {
