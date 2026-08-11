@@ -333,4 +333,75 @@ describe('OutputResultCards master-detail list + enlarge (g4.1)', () => {
     )
     wrapper.unmount()
   })
+
+  it('nodes.*.outputs.page card: HtmlPreview + 自定义产物·HTML kind (g2.1/g2.2)', async () => {
+    const pageCard: OutputCard = {
+      index: 1,
+      template: '{{nodes.visual.outputs.page}}',
+      title: '网页预览 · 视觉网页',
+      status: 'ok',
+      typeTag: '自定义产物',
+      artifactName: 'page.html',
+      nodeId: 'visual',
+      outputKey: 'page',
+      markdown: '<!doctype html><html><body><h1>视觉网页</h1></body></html>',
+    }
+    const wrapper = mountCards([pageCard])
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('结构化产物')
+    expect(wrapper.get('[data-testid="output-result-detail-kind"]').text()).toBe('自定义产物 · HTML')
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="structured-view"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('<!doctype html>')
+    await wrapper.get('[data-testid="output-result-enlarge"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="output-result-enlarge-title"]').text()).toBe(
+      '网页预览 · 视觉网页',
+    )
+    expect(wrapper.find('[data-testid="output-result-enlarge-html-viewport"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('无法预览')
+    wrapper.unmount()
+  })
+
+  it('custom HTML empty/load-fail shows 无法预览, never Markdown source (g2.3)', async () => {
+    apiMocks.artifactContent.mockRejectedValue(new Error('fetch failed'))
+    const emptyPage: OutputCard = {
+      index: 1,
+      template: '{{nodes.visual.outputs.page}}',
+      title: '网页预览 · 视觉网页',
+      status: 'ok',
+      typeTag: '自定义产物',
+      artifactName: 'page.html',
+      nodeId: 'visual',
+      outputKey: 'page',
+    }
+    const wrapper = mountCards([emptyPage])
+    await flushPromises()
+    expect(wrapper.find('[data-testid="output-result-html-unavailable"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('无法预览')
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(false)
+    expect(wrapper.find('.md').exists()).toBe(false)
+    expect(wrapper.text()).not.toMatch(/<!doctype|<html|<body/)
+    wrapper.unmount()
+  })
+
+  it('custom HTML uses markdown fallback when artifact missing (no source leak)', async () => {
+    const pageOnlyMd: OutputCard = {
+      index: 1,
+      template: '{{nodes.visual.outputs.page}}',
+      title: '网页预览 · 视觉网页',
+      status: 'ok',
+      typeTag: '自定义产物',
+      artifactName: 'page.html',
+      markdown: '<!doctype html><html><body><p>from-markdown</p></body></html>',
+    }
+    const wrapper = mountCards([pageOnlyMd])
+    await flushPromises()
+    // No matching artifact in run → cache empty, markdown feeds HtmlPreview
+    expect(wrapper.find('[data-testid="html-preview"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="output-result-html-unavailable"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('<!doctype html>')
+    wrapper.unmount()
+  })
 })

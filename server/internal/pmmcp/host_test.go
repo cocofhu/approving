@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/platformmcp"
 	"github.com/cocofhu/approving/internal/services"
 
 	"gorm.io/driver/sqlite"
@@ -27,7 +28,8 @@ func TestPmMCPToolsAndAuth(t *testing.T) {
 	pm := services.NewPmService(db, nil)
 	progress := services.NewPmProgress(pm, services.NewRunService(db), services.NewArtifactService(db))
 	h := NewHost(pm, progress, nil, nil, services.NewArtifactService(db), nil)
-	tok := h.Register(p.ID, "thr-1", "alice", "agent")
+	tok := platformmcp.NewToken()
+	h.Restore(p.ID, "thr-1", "alice", "agent", tok)
 	if !h.Authorize(p.ID, tok) {
 		t.Fatal("authorize")
 	}
@@ -135,7 +137,8 @@ func TestPmWorkflowWriteWhenEnabled(t *testing.T) {
 		{name: "channel", userID: "qq:group:abc"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			tok := h.Register(p.ID, "thr-"+tc.name, tc.userID, agent)
+			tok := platformmcp.NewToken()
+			h.Restore(p.ID, "thr-"+tc.name, tc.userID, agent, tok)
 			body, _ := json.Marshal(map[string]any{
 				"jsonrpc": "2.0", "id": 1, "method": "tools/call",
 				"params": map[string]any{
@@ -171,7 +174,8 @@ func TestPmWorkflowWriteRejectedWhenDisabled(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := NewHost(pm, services.NewPmProgress(pm, nil, nil), services.NewWorkflowService(db), nil, services.NewArtifactService(db), nil)
-	tok := h.Register(p.ID, "thr", "alice", agent)
+	tok := platformmcp.NewToken()
+	h.Restore(p.ID, "thr", "alice", agent, tok)
 	body, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
 		"params": map[string]any{
@@ -195,7 +199,8 @@ func TestFilterSafeToolUnknown(t *testing.T) {
 	p, _ := ps.Create("X", "", nil, nil)
 	pm := services.NewPmService(db, nil)
 	h := NewHost(pm, services.NewPmProgress(pm, nil, nil), nil, nil, services.NewArtifactService(db), nil)
-	tok := h.Register(p.ID, "t", "u", "agent")
+	tok := platformmcp.NewToken()
+	h.Restore(p.ID, "t", "u", "agent", tok)
 	body, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
 		"params": map[string]any{"name": "write_artifact", "arguments": map[string]any{}},

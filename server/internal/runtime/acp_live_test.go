@@ -117,8 +117,8 @@ func TestCursorLiveRunAgent(t *testing.T) {
 
 	agentEnv := map[string]string{
 		"APPROVING_CURSOR_API_KEY": apiKey,
-		"CURSOR_API_KEY":          apiKey,
-		"ACP_BRIDGE_MODEL":        model,
+		"CURSOR_API_KEY":           apiKey,
+		"ACP_BRIDGE_MODEL":         model,
 	}
 	envJSON, _ := json.Marshal(agentEnv)
 	profiles := writeAgent(t, "backend-dev", `{"acpBackend":"cursor","mcp":[{"name":"artifact-store","url":"${APPROVING_ARTIFACT_URL}","headers":{"Authorization":"Bearer ${APPROVING_ARTIFACT_TOKEN}"}}],"env":`+string(envJSON)+`}`)

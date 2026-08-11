@@ -12,6 +12,7 @@ import (
 
 	"github.com/cocofhu/approving/internal/auth"
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/platformmcp"
 	"github.com/cocofhu/approving/internal/services"
 
 	"github.com/gin-gonic/gin"
@@ -79,13 +80,13 @@ func (h *Handlers) UpdatePmLeader(c *gin.Context) {
 		return
 	}
 	h.recordAudit(services.AuditRecord{
-		ProjectID:      c.Param("id"),
-		Actor:          h.auditActorFromContext(c),
-		Action:         models.AuditActionProjectConfig,
-		ResourceType:   "pm",
-		ResourceID:     c.Param("id"),
-		Outcome:        models.AuditOutcomeOK,
-		Summary:        "update PM Leader",
+		ProjectID:    c.Param("id"),
+		Actor:        h.auditActorFromContext(c),
+		Action:       models.AuditActionProjectConfig,
+		ResourceType: "pm",
+		ResourceID:   c.Param("id"),
+		Outcome:      models.AuditOutcomeOK,
+		Summary:      "update PM Leader",
 		Payload: map[string]any{
 			"enabled":        b.Enabled,
 			"agentConfigRef": b.AgentConfigRef,
@@ -913,7 +914,8 @@ func (h *Handlers) registerPmPlatformTokens(projectID, threadID, userID, agent s
 	_ = enabledMcps
 	// Authenticated PM consult: memory/scheduler writes on. Workflow write tools
 	// follow project EnabledMcps via BuildPmRoleMCPSpecs.
-	token := h.PMMCP.Register(projectID, threadID, userID, agent)
+	token := platformmcp.NewToken()
+	h.PMMCP.Restore(projectID, threadID, userID, agent, token)
 	if h.MemoryMCP != nil {
 		h.MemoryMCP.Restore(token, projectID, agent, threadID, userID, true)
 	}
@@ -1001,14 +1003,14 @@ func (h *Handlers) PatchProjectCronJob(c *gin.Context) {
 		return
 	}
 	h.recordAudit(services.AuditRecord{
-		ProjectID:      c.Param("id"),
-		Actor:          h.auditActorFromContext(c),
-		Action:         models.AuditActionCron,
-		ResourceType:   "cron",
-		ResourceID:     c.Param("jobId"),
-		Outcome:        models.AuditOutcomeOK,
-		Summary:        "patch cron job",
-		Payload:        map[string]any{"deliverToChannel": *body.DeliverToChannel},
+		ProjectID:    c.Param("id"),
+		Actor:        h.auditActorFromContext(c),
+		Action:       models.AuditActionCron,
+		ResourceType: "cron",
+		ResourceID:   c.Param("jobId"),
+		Outcome:      models.AuditOutcomeOK,
+		Summary:      "patch cron job",
+		Payload:      map[string]any{"deliverToChannel": *body.DeliverToChannel},
 	})
 	c.JSON(http.StatusOK, job)
 }
@@ -1029,14 +1031,14 @@ func (h *Handlers) DeleteProjectCronJob(c *gin.Context) {
 		return
 	}
 	h.recordAudit(services.AuditRecord{
-		ProjectID:      c.Param("id"),
-		Actor:          h.auditActorFromContext(c),
-		Action:         models.AuditActionCron,
-		ResourceType:   "cron",
-		ResourceID:     c.Param("jobId"),
-		Outcome:        models.AuditOutcomeOK,
-		Summary:        "delete cron job",
-		Payload:        map[string]any{"deleted": true},
+		ProjectID:    c.Param("id"),
+		Actor:        h.auditActorFromContext(c),
+		Action:       models.AuditActionCron,
+		ResourceType: "cron",
+		ResourceID:   c.Param("jobId"),
+		Outcome:      models.AuditOutcomeOK,
+		Summary:      "delete cron job",
+		Payload:      map[string]any{"deleted": true},
 	})
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 }

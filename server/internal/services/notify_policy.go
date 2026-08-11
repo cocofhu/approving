@@ -124,7 +124,7 @@ func normalizeStoredEvents(in []string) []string {
 
 // NotifyPoliciesEqual compares two project policies for change detection.
 // Template fields are included so "only change message body" still persists.
-func NotifyPoliciesEqual(a, b models.ProjectNotifyPolicy) bool {
+func notifyPoliciesEqual(a, b models.ProjectNotifyPolicy) bool {
 	a = NormalizeProjectNotifyPolicy(a)
 	b = NormalizeProjectNotifyPolicy(b)
 	if a.IsEnabled() != b.IsEnabled() {

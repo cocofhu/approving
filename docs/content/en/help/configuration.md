@@ -22,6 +22,10 @@ That document is generated/checked by `go run ./cmd/gen-configdoc`; CI runs `-ch
 
 Image tags / digests, gateway, and sandbox-related variables are in `.env.example`. Agent API keys, `GITHUB_*` / `GITLAB_*` / SSH, and similar belong in agent meta env (values may reference `${vars.<name>}`).
 
+## Database and attachment lifecycle
+
+In the release stack, SQLite (`./.localdata/db`) and app-data / default blobs (`./.localdata/app-data`, or a custom `APPROVING_BLOBS_ROOT`) must be **backed up and cleaned as a pair**; do not migrate only the database. Otherwise composite images can keep orphan `blob:` refs (GET `/api/blobs/:id` → 404). Historical orphans only get a permanent UI placeholder; this delivery does not add an inspection console. See [Quick start](../guide/quick-start.md#database-and-attachments-share-one-lifecycle-backup--cleanup).
+
 ## Related
 
 - [Gateway](../gateway/)

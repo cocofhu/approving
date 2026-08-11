@@ -7,8 +7,8 @@ import { useAuth } from '@/lib/composables/useAuth'
 
 /** Recent completed/failed runs that form the notification pool (plan: ~50). */
 export const RUN_TERMINAL_POOL_SIZE = 50
-/** Dropdown preview hard limit (~10 per clarified requirement). */
-export const RUN_TERMINAL_PANEL_LIMIT = 10
+/** Dropdown preview hard limit (5 per clarified requirement / Demo). */
+export const RUN_TERMINAL_PANEL_LIMIT = 5
 /** Align with AppSidebarNav pending-gates peek interval. */
 const RUN_TERMINAL_POLL_MS = 15_000
 
@@ -29,6 +29,13 @@ export interface RunTerminalNotification {
   startedAt: string
   /** Approx terminal time: startedAt + durationSec (ISO). */
   finishedApprox: string
+}
+
+/** Pool item enriched with unread + baseline-before flags for UI. */
+export type RunTerminalNotificationItem = RunTerminalNotification & {
+  unread: boolean
+  /** Finished at/before enable baseline — visible but never counts as unread. */
+  beforeBaseline: boolean
 }
 
 export type RunTerminalRefreshSource =
@@ -196,13 +203,31 @@ function resolveUsername(): { name: string; settled: boolean } {
   return { name: 'anonymous', settled: true }
 }
 
+function finishedMs(n: RunTerminalNotification): number {
+  const finished = n.finishedApprox || n.startedAt
+  if (!finished) return NaN
+  return Date.parse(finished)
+}
+
+/** True when terminal time is at/before enable baseline (history, not unread). */
+export function isBeforeBaseline(
+  n: Pick<RunTerminalNotification, 'finishedApprox' | 'startedAt'>,
+  baselineIso: string,
+): boolean {
+  if (!baselineIso) return false
+  const finished = n.finishedApprox || n.startedAt
+  if (!finished) return false
+  const ft = Date.parse(finished)
+  const bt = Date.parse(baselineIso)
+  if (Number.isNaN(ft) || Number.isNaN(bt)) return false
+  return ft <= bt
+}
+
 function isUnread(n: RunTerminalNotification): boolean {
   if (readIds.value.has(n.runId)) return false
   const baseline = enabledAt.value
   if (!baseline) return false
-  const finished = n.finishedApprox || n.startedAt
-  if (!finished) return false
-  const ft = Date.parse(finished)
+  const ft = finishedMs(n)
   const bt = Date.parse(baseline)
   if (Number.isNaN(ft) || Number.isNaN(bt)) return false
   // Only events that entered terminal after the enable baseline count as unread.
@@ -219,8 +244,12 @@ const hasUnreadFailed = computed(() =>
 
 const badgeLabel = computed(() => formatUnreadBadge(unreadCount.value))
 
-function withUnread(n: RunTerminalNotification) {
-  return { ...n, unread: isUnread(n) }
+function withUnread(n: RunTerminalNotification): RunTerminalNotificationItem {
+  return {
+    ...n,
+    unread: isUnread(n),
+    beforeBaseline: isBeforeBaseline(n, enabledAt.value),
+  }
 }
 
 const previewItems = computed(() =>

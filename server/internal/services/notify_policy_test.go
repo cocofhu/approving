@@ -91,22 +91,22 @@ func TestNotifyPoliciesEqual_includesTemplates(t *testing.T) {
 	base := models.ProjectNotifyPolicy{
 		Enabled: boolPtr(true), DefaultEvents: []string{"waiting_human", "failed"},
 	}
-	if !NotifyPoliciesEqual(base, base) {
+	if !notifyPoliciesEqual(base, base) {
 		t.Fatal("identical should equal")
 	}
 	changed := base
 	changed.WaitingHumanTemplate = "x"
-	if NotifyPoliciesEqual(base, changed) {
+	if notifyPoliciesEqual(base, changed) {
 		t.Fatal("template-only change must not equal")
 	}
 	blank := base
 	blank.WaitingHumanTemplate = "  \n"
-	if !NotifyPoliciesEqual(base, blank) {
+	if !notifyPoliciesEqual(base, blank) {
 		t.Fatal("whitespace-only template normalizes to empty")
 	}
 	completed := base
 	completed.CompletedTemplate = "DONE {title}"
-	if NotifyPoliciesEqual(base, completed) {
+	if notifyPoliciesEqual(base, completed) {
 		t.Fatal("completedTemplate-only change must not equal")
 	}
 }

@@ -26,7 +26,7 @@ func (e *Engine) consumeNodeOutcome(c *execCtx, node *models.Node, res *runtime.
 			outputMd: "节点失败:" + errMsg,
 			outputs:  res.Outputs,
 			events:   res.Events,
-			usage: res.Usage, usageByModel: res.UsageByModel,
+			usage:    res.Usage, usageByModel: res.UsageByModel,
 		}, false
 	}
 	res.Outputs = mcp.MergeOutcomeOutputs(res.Outputs, o)
@@ -48,7 +48,7 @@ func (e *Engine) consumeNodeOutcome(c *execCtx, node *models.Node, res *runtime.
 			outputMd: md,
 			outputs:  res.Outputs,
 			events:   res.Events,
-			usage: res.Usage, usageByModel: res.UsageByModel,
+			usage:    res.Usage, usageByModel: res.UsageByModel,
 		}, false
 	}
 	return nodeOutcome{}, true
@@ -120,7 +120,7 @@ func (e *Engine) withOutcome(c *execCtx, node *models.Node, res runtime.NodeResu
 			err:      "lost exec ownership",
 			outputMd: "dropped late outcome: lost exec ownership",
 			events:   res.Events,
-			usage: res.Usage, usageByModel: res.UsageByModel,
+			usage:    res.Usage, usageByModel: res.UsageByModel,
 		}
 	}
 	if fail, ok := e.consumeNodeOutcome(c, node, &res); !ok {

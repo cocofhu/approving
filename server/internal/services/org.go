@@ -472,7 +472,7 @@ func detectReportingCycles(agents map[string]OrgAgentMembership) error {
 // ApplyDeleteGroup returns a copy of org with groupID removed and cascade rules applied:
 // children groups promoted to the deleted group's parent; members lose that group
 // (and gain the parent group if the deleted group had a parent).
-func ApplyDeleteGroup(org AgentOrg, groupID string) (AgentOrg, error) {
+func applyDeleteGroup(org AgentOrg, groupID string) (AgentOrg, error) {
 	groupID = strings.TrimSpace(groupID)
 	var deleted *OrgGroup
 	for i := range org.Groups {
@@ -522,7 +522,7 @@ func ApplyDeleteGroup(org AgentOrg, groupID string) (AgentOrg, error) {
 
 // ApplyMoveAgent applies sidebar drag move semantics: remove sourceGroupID (if any),
 // add targetGroupID (if any). Empty target clears all groupIds (ungrouped drop).
-func ApplyMoveAgent(org AgentOrg, agentName, sourceGroupID, targetGroupID string) (AgentOrg, error) {
+func applyMoveAgent(org AgentOrg, agentName, sourceGroupID, targetGroupID string) (AgentOrg, error) {
 	agentName = strings.TrimSpace(agentName)
 	if agentName == "" {
 		return org, fmt.Errorf("%w: agent name required", ErrOrgValidation)

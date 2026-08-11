@@ -46,7 +46,7 @@ func (c *Config) ResolveSandboxImage(backend string) string {
 }
 
 // KnownSandboxBackends returns the acpBackend keys with dedicated images.
-func KnownSandboxBackends() []string {
+func knownSandboxBackendKeys() []string {
 	out := make([]string, len(knownSandboxBackends))
 	copy(out, knownSandboxBackends)
 	return out
