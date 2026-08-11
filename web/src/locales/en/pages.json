@@ -348,7 +348,7 @@
         "statFail": "Failed",
         "runCount": "{n} events in this run",
         "runCapped": "Showing the first {n} events. Narrow filters or switch to All logs.",
-        "groupEvents": "{n} events · click to expand/collapse",
+        "groupEvents": "{n}",
         "expandHint": "Click a row to expand",
         "expandHintCard": "Tap a card to expand",
         "filterExpand": "Expand filters",
