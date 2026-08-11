@@ -34,6 +34,16 @@ Then open:
 
 Agent / workspace / platform-rules and SQLite data live under `.localdata` at the repo root (bind mounts: `gateway` / `db` / `app-data`). `./start.sh restart` and `./start.sh down` keep that directory. To wipe: `./start.sh down && rm -rf .localdata`.
 
+### Database and attachments share one lifecycle (backup / cleanup)
+
+In the release stack (`compose.release.yaml`), **SQLite** is mounted at `./.localdata/db` and **app data (including default attachment blobs under `data/blobs` relative to `WORKDIR`)** at `./.localdata/app-data`. Composite variable images keep only `blob:{id}` refs in the DB / Run outputs; bytes live under the blobs directory. Backing up or cleaning only one side creates orphan refs (“ref still present, GET `/api/blobs/:id` → 404”), and Run detail shows **Cannot display / Attachment unavailable**.
+
+Ops rules:
+
+- **Paired backup**: every backup set must include both `./.localdata/db` and `./.localdata/app-data` (or the whole `.localdata` tree).
+- **Paired cleanup / migration / upgrade**: never move only SQLite or delete only the blobs directory; if you override `APPROVING_BLOBS_ROOT`, include that path in the same lifecycle as the database.
+- **Historical orphans**: broken refs are not guaranteed recoverable; the UI only shows a permanent-failure placeholder. This delivery does **not** add an orphan inspection console, bulk scan page, or startup/health-check alerts.
+
 ## Common commands
 
 ```bash
