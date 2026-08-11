@@ -701,7 +701,7 @@ describe('PublicGateApprovalView workbench', () => {
     })
     await flushPromises()
     expect(w.get('[data-testid="public-gate-visual"]').html()).toContain('keep-me')
-    expect(mocks.preview.mock.calls.at(-1)?.[2]).toEqual({
+    expect(mocks.preview.mock.calls[mocks.preview.mock.calls.length - 1]?.[2]).toEqual({
       visualHtmlHash: 'vh1',
       upstreamHash: 'up1',
     })
