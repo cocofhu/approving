@@ -1457,16 +1457,29 @@
         "artifactUrl": "本次运行隔离的产物 MCP 端点",
         "artifactToken": "绑定该 run 的访问令牌",
         "globalVar": "{'${vars.<全局变量名>}'} — 工作流全局变量,如 {'${vars.feature}'}",
-        "addArtifactStore": "+ 添加 artifact-store(预填变量)",
+        "addArtifactStore": "+ 添加产物存储",
         "agentVarsTitle": "Agent 通用平台 MCP",
         "agentScopeTag": "agent",
         "memoryVars": "长期记忆（归属 Agent 主项目）",
         "contextVars": "对话上下文（Chat 落库回看）",
         "schedulerVars": "定时任务（定义面；平台调度执行）",
         "agentScopeNote": "可在任意 Agent 的 mcp[] 声明。项目管理咨询沙箱也会自动注入这三项；pm-progress / pm-workflow-read / pm-workflow-write / pm-agent-fs 在项目的项目管理设置中启用，勿写在此处。",
-        "addMemoryStore": "+ memory-store",
-        "addContextStore": "+ context-store",
-        "addTaskScheduler": "+ task-scheduler",
+        "addMemoryStore": "+ 添加长期记忆",
+        "addContextStore": "+ 添加对话上下文",
+        "addTaskScheduler": "+ 添加定时任务",
+        "quickAddLabel": "快捷添加",
+        "displayName": {
+          "artifact": "产物存储",
+          "memory": "长期记忆",
+          "context": "对话上下文",
+          "scheduler": "定时任务"
+        },
+        "scopeNote": {
+          "artifact": "本次运行隔离的产物服务。",
+          "memory": "长期记忆，归属主项目。",
+          "context": "对话上下文，用于 Chat 落库回看。",
+          "scheduler": "定时任务由平台调度执行。"
+        },
         "agentMcpAlreadyExists": "已存在约定名 {name}，未新增重复条目",
         "agentScopeBadge": "Agent 级平台 MCP：测试沙箱与声明场景使用；项目管理咨询由平台自动注入同名端点。与 artifact-store（运行级）保持独立。",
         "legacyPmHint": "检测到旧约定名 pm-leader。平台已拆为 memory-store / context-store / task-scheduler；项目管理专用能力请在项目的项目管理设置启用。",
@@ -1507,6 +1520,15 @@
         "regionIntl": "国际站 (trae.ai)",
         "add": "添加环境变量",
         "parseError": "环境变量 JSON 无法解析:"
+      },
+      "mcpHelp": {
+        "link": "帮助",
+        "title": "MCP 配置帮助",
+        "gotIt": "知道了",
+        "chip": {
+          "run": "运行级变量",
+          "agent": "Agent 平台 MCP"
+        }
       },
       "envHelp": {
         "link": "帮助",

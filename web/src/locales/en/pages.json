@@ -1457,16 +1457,29 @@
         "artifactUrl": "run-scoped artifact MCP endpoint",
         "artifactToken": "run-bound access token",
         "globalVar": "{'${vars.<name>}'} — workflow global, e.g. {'${vars.feature}'}",
-        "addArtifactStore": "+ Add artifact-store (prefilled vars)",
+        "addArtifactStore": "+ Add artifact store",
         "agentVarsTitle": "Agent platform MCPs",
         "agentScopeTag": "agent",
         "memoryVars": "Long-term memory (Agent home project)",
         "contextVars": "Conversation context (persisted chat recall)",
         "schedulerVars": "Scheduled tasks (definition MCP; platform runs them)",
         "agentScopeNote": "Declare in any agent mcp[]. Project Management consult sandboxes also inject these three; enable pm-progress / pm-workflow-read / pm-workflow-write / pm-agent-fs in project Project Management settings, not here.",
-        "addMemoryStore": "+ memory-store",
-        "addContextStore": "+ context-store",
-        "addTaskScheduler": "+ task-scheduler",
+        "addMemoryStore": "+ Add long-term memory",
+        "addContextStore": "+ Add conversation context",
+        "addTaskScheduler": "+ Add scheduled tasks",
+        "quickAddLabel": "Quick add",
+        "displayName": {
+          "artifact": "Artifact store",
+          "memory": "Long-term memory",
+          "context": "Conversation context",
+          "scheduler": "Scheduled tasks"
+        },
+        "scopeNote": {
+          "artifact": "Run-isolated artifact service for this run.",
+          "memory": "Long-term memory, owned by the home project.",
+          "context": "Conversation context for persisted chat recall.",
+          "scheduler": "Scheduled tasks executed by the platform."
+        },
         "agentMcpAlreadyExists": "{name} already exists; no duplicate entry added",
         "agentScopeBadge": "Agent-scoped platform MCP: used in test sandboxes and declared scenes; Project Management consult injects the same endpoints automatically. Independent from artifact-store (run-scoped).",
         "legacyPmHint": "Legacy name pm-leader detected. Platform split it into memory-store / context-store / task-scheduler; enable Project Management-only tools in project Project Management settings.",
@@ -1507,6 +1520,15 @@
         "regionIntl": "International (trae.ai)",
         "add": "Add env var",
         "parseError": "Invalid env JSON:"
+      },
+      "mcpHelp": {
+        "link": "Help",
+        "title": "MCP config help",
+        "gotIt": "Got it",
+        "chip": {
+          "run": "Run-scoped vars",
+          "agent": "Agent platform MCP"
+        }
       },
       "envHelp": {
         "link": "Help",

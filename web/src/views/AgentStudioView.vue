@@ -15,6 +15,7 @@ import AgentGitGuide from '@/components/agent/AgentGitGuide.vue'
 import EnvCredentialHelpModal, {
   type EnvCredentialHelpSection,
 } from '@/components/agent/EnvCredentialHelpModal.vue'
+import McpConfigHelpModal from '@/components/agent/McpConfigHelpModal.vue'
 import AgentCreateWizard from '@/components/agent/AgentCreateWizard.vue'
 import CreateAgentTeamWizard from '@/components/agent/CreateAgentTeamWizard.vue'
 import TeamBootstrapPanel from '@/components/agent/TeamBootstrapPanel.vue'
@@ -359,10 +360,30 @@ const currentAuthHint = computed(() => BACKEND_AUTH_HINTS[draft.value?.acpBacken
 
 const envHelpOpen = ref(false)
 const envHelpSection = ref<EnvCredentialHelpSection>('inject')
+const mcpHelpOpen = ref(false)
 
 function openEnvHelp(section: EnvCredentialHelpSection) {
   envHelpSection.value = section
   envHelpOpen.value = true
+}
+
+function openMcpHelp() {
+  mcpHelpOpen.value = true
+}
+
+type PlatformPresetKind = 'artifact' | 'memory' | 'context' | 'scheduler'
+
+function platformPresetKind(name: string): PlatformPresetKind | null {
+  const n = name.trim()
+  if (n === ARTIFACT_STORE) return 'artifact'
+  if (n === MEMORY_STORE) return 'memory'
+  if (n === CONTEXT_STORE) return 'context'
+  if (n === TASK_SCHEDULER) return 'scheduler'
+  return null
+}
+
+function isPlatformPresetName(name: string) {
+  return platformPresetKind(name) !== null
 }
 
 function upsertEnv(key: string, value: string) {
@@ -1089,10 +1110,6 @@ const hasArtifactStore = computed(() => !!draft.value?.mcp.some((m) => m.name.tr
 const hasLegacyPmLeader = computed(() => !!draft.value?.mcp.some((m) => m.name.trim() === LEGACY_PM_LEADER))
 function isLegacyPmLeaderName(name: string) {
   return name.trim() === LEGACY_PM_LEADER
-}
-function isAgentPlatformMcpName(name: string) {
-  const n = name.trim()
-  return n === MEMORY_STORE || n === CONTEXT_STORE || n === TASK_SCHEDULER
 }
 function hasAgentPlatformMcp(name: string) {
   return !!draft.value?.mcp.some((m) => m.name.trim() === name)
@@ -2915,8 +2932,17 @@ onBeforeUnmount(() => {
         <!-- mcp -->
         <div v-else-if="tab === 'mcp'" class="flex min-h-0 flex-1 flex-col">
           <div class="flex items-center gap-2 border-b border-line px-4 py-2">
-            <p class="flex-1 text-[11px] text-txt3">{{ t('pages.agentStudio.mcp.hint', { configRoot: draft?.layout?.configRoot || DEFAULT_CONFIG_ROOT }) }}</p>
             <button class="rounded border border-line px-2 py-1 text-[11px] text-txt2 hover:border-line-strong" @click="toggleMcpRaw">{{ mcpRaw ? t('pages.agentStudio.mcp.formEdit') : t('pages.agentStudio.mcp.rawJson') }}</button>
+            <button
+              v-if="!mcpRaw"
+              type="button"
+              class="bg-transparent p-0 text-[12px] text-accent-2 underline underline-offset-[3px] hover:text-[#c4b5fd] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              data-test="mcp-help-link"
+              @click="openMcpHelp"
+            >
+              {{ t('pages.agentStudio.mcpHelp.link') }}
+            </button>
+            <span class="flex-1" />
           </div>
 
           <div v-if="mcpRaw" class="flex min-h-0 flex-1 flex-col">
@@ -2925,55 +2951,83 @@ onBeforeUnmount(() => {
           </div>
 
           <div v-else class="scroll-area flex-1 space-y-3 overflow-y-auto p-4">
-            <div class="rounded-md border border-accent/30 bg-accent-dim/40 p-2.5 text-[11px] leading-5 text-txt2">
-              <div class="mb-1 flex items-center gap-1.5 text-txt">
-                <Icon name="sparkles" :size="13" class="text-accent-2" />{{ t('pages.agentStudio.mcp.runVarsTitle') }}
-                <span class="rounded border border-info/35 px-1.5 py-px text-[10px] font-medium text-info">{{ t('pages.agentStudio.mcp.runScopeTag') }}</span>
-              </div>
-              <div class="grid gap-0.5 font-mono text-[10.5px] text-txt3">
-                <div><code class="text-accent-2">${APPROVING_ARTIFACT_URL}</code> — {{ t('pages.agentStudio.mcp.artifactUrl') }}</div>
-                <div><code class="text-accent-2">${APPROVING_ARTIFACT_TOKEN}</code> — {{ t('pages.agentStudio.mcp.artifactToken') }}</div>
-                <div><code class="text-accent-2">${APPROVING_RUN_ID}</code> · <code class="text-accent-2">${APPROVING_NODE_ID}</code></div>
-                <div><code class="text-accent-2">${vars.&lt;name&gt;}</code> — {{ t('pages.agentStudio.mcp.globalVar') }}</div>
-              </div>
-              <button v-if="!hasArtifactStore" class="mt-2 rounded border border-accent/40 px-2 py-1 text-accent-2 hover:bg-accent-dim" @click="addArtifactStore">{{ t('pages.agentStudio.mcp.addArtifactStore') }}</button>
+            <div class="flex flex-wrap items-center gap-1.5 border border-line bg-elevated p-2.5" data-test="mcp-ops-bar">
+              <span class="mr-1 text-[11px] text-txt3">{{ t('pages.agentStudio.mcp.quickAddLabel') }}</span>
+              <button
+                v-if="!hasArtifactStore"
+                class="rounded border border-accent/40 px-2 py-1 text-accent-2 hover:bg-accent-dim"
+                type="button"
+                data-test="mcp-add-artifact"
+                @click="addArtifactStore"
+              >{{ t('pages.agentStudio.mcp.addArtifactStore') }}</button>
+              <button
+                class="rounded border border-accent/40 px-2 py-1 text-accent-2 hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40"
+                type="button"
+                data-test="mcp-add-memory"
+                :disabled="!isProjectBound"
+                @click="addAgentPlatformMcp('memory-store')"
+              >{{ t('pages.agentStudio.mcp.addMemoryStore') }}</button>
+              <button
+                class="rounded border border-accent/40 px-2 py-1 text-accent-2 hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40"
+                type="button"
+                data-test="mcp-add-context"
+                :disabled="!isProjectBound"
+                @click="addAgentPlatformMcp('context-store')"
+              >{{ t('pages.agentStudio.mcp.addContextStore') }}</button>
+              <button
+                class="rounded border border-accent/40 px-2 py-1 text-accent-2 hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40"
+                type="button"
+                data-test="mcp-add-scheduler"
+                :disabled="!isProjectBound"
+                @click="addAgentPlatformMcp('task-scheduler')"
+              >{{ t('pages.agentStudio.mcp.addTaskScheduler') }}</button>
+            </div>
+            <div
+              v-if="!isProjectBound"
+              class="rounded border border-dashed border-warn/40 bg-warn/10 p-2 text-[10.5px] leading-5 text-warn"
+              data-test="mcp-project-required-warn"
+            >
+              {{ t('pages.agentStudio.mcp.projectRequiredForPlatformMcp') }}
+            </div>
+            <div
+              v-if="hasLegacyPmLeader"
+              class="rounded border border-dashed border-warn/40 bg-warn/10 p-2 text-[10.5px] leading-5 text-warn"
+              data-test="mcp-legacy-pm-hint"
+            >
+              <div>{{ t('pages.agentStudio.mcp.legacyPmHint') }}</div>
+              <button
+                class="mt-1.5 rounded border border-warn/40 px-2 py-1 text-warn hover:bg-warn/15"
+                type="button"
+                data-test="mcp-upgrade-legacy"
+                @click="upgradeLegacyPmLeader"
+              >{{ t('pages.agentStudio.mcp.upgradeLegacyPm') }}</button>
             </div>
 
-            <div class="rounded-md border border-ok/30 bg-ok/5 p-2.5 text-[11px] leading-5 text-txt2">
-              <div class="mb-1 flex items-center gap-1.5 text-txt">
-                <Icon name="clock" :size="13" class="text-ok" />{{ t('pages.agentStudio.mcp.agentVarsTitle') }}
-                <span class="rounded border border-ok/35 px-1.5 py-px text-[10px] font-medium text-ok">{{ t('pages.agentStudio.mcp.agentScopeTag') }}</span>
-              </div>
-              <div class="grid gap-0.5 font-mono text-[10.5px] text-txt3">
-                <div><code class="text-accent-2">${APPROVING_MEMORY_URL}</code> / <code class="text-accent-2">${APPROVING_MEMORY_TOKEN}</code> — {{ t('pages.agentStudio.mcp.memoryVars') }}</div>
-                <div><code class="text-accent-2">${APPROVING_CONTEXT_URL}</code> / <code class="text-accent-2">${APPROVING_CONTEXT_TOKEN}</code> — {{ t('pages.agentStudio.mcp.contextVars') }}</div>
-                <div><code class="text-accent-2">${APPROVING_SCHEDULER_URL}</code> / <code class="text-accent-2">${APPROVING_SCHEDULER_TOKEN}</code> — {{ t('pages.agentStudio.mcp.schedulerVars') }}</div>
-              </div>
-              <div class="mt-2 border-t border-line-strong/80 pt-2 text-[10.5px] leading-5 text-txt3">
-                <span class="font-medium text-ok">{{ t('pages.agentStudio.mcp.agentScopeNote') }}</span>
-              </div>
-              <div v-if="!isProjectBound" class="mt-2 rounded border border-dashed border-warn/40 bg-warn/10 p-2 text-[10.5px] leading-5 text-warn">
-                {{ t('pages.agentStudio.mcp.projectRequiredForPlatformMcp') }}
-              </div>
-              <div class="mt-2 flex flex-wrap gap-1.5">
-                <button class="rounded border border-accent/40 px-2 py-1 text-accent-2 hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40" type="button" :disabled="!isProjectBound" @click="addAgentPlatformMcp('memory-store')">{{ t('pages.agentStudio.mcp.addMemoryStore') }}</button>
-                <button class="rounded border border-accent/40 px-2 py-1 text-accent-2 hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40" type="button" :disabled="!isProjectBound" @click="addAgentPlatformMcp('context-store')">{{ t('pages.agentStudio.mcp.addContextStore') }}</button>
-                <button class="rounded border border-accent/40 px-2 py-1 text-accent-2 hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40" type="button" :disabled="!isProjectBound" @click="addAgentPlatformMcp('task-scheduler')">{{ t('pages.agentStudio.mcp.addTaskScheduler') }}</button>
-              </div>
-              <div v-if="hasLegacyPmLeader" class="mt-2 rounded border border-dashed border-warn/40 bg-warn/10 p-2 text-[10.5px] leading-5 text-warn">
-                <div>{{ t('pages.agentStudio.mcp.legacyPmHint') }}</div>
-                <button class="mt-1.5 rounded border border-warn/40 px-2 py-1 text-warn hover:bg-warn/15" type="button" @click="upgradeLegacyPmLeader">{{ t('pages.agentStudio.mcp.upgradeLegacyPm') }}</button>
-              </div>
-            </div>
-
-            <div v-for="(m, i) in draft.mcp" :key="i" class="rounded-md border bg-base p-3" :class="isAgentPlatformMcpName(m.name) || isLegacyPmLeaderName(m.name) ? 'border-ok/30' : 'border-line'">
+            <div
+              v-for="(m, i) in draft.mcp"
+              :key="i"
+              class="rounded-md border bg-base p-3"
+              :class="isPlatformPresetName(m.name) || isLegacyPmLeaderName(m.name) ? 'border-ok/30' : 'border-line'"
+              data-test="mcp-card"
+              :data-mcp-name="m.name.trim()"
+            >
               <div class="mb-2 flex items-center gap-2">
-                <input v-model="m.name" :placeholder="t('pages.agentStudio.mcp.serviceName')" class="flex-1 rounded border border-line bg-surface px-2 py-1 text-[12px] text-txt outline-none focus:border-accent" />
+                <div v-if="isPlatformPresetName(m.name)" class="min-w-0 flex-1">
+                  <div class="text-[12px] font-medium text-txt" data-test="mcp-display-name">{{ t(`pages.agentStudio.mcp.displayName.${platformPresetKind(m.name)}`) }}</div>
+                  <div class="font-mono text-[10.5px] text-txt3" data-test="mcp-preset-key">{{ m.name.trim() }}</div>
+                </div>
+                <input
+                  v-else
+                  v-model="m.name"
+                  :placeholder="t('pages.agentStudio.mcp.serviceName')"
+                  class="flex-1 rounded border border-line bg-surface px-2 py-1 text-[12px] text-txt outline-none focus:border-accent"
+                  data-test="mcp-custom-name"
+                />
                 <select v-model="m.transport" class="rounded border border-line bg-surface px-2 py-1 text-[12px] text-txt2 outline-none">
                   <option value="url">HTTP (url)</option>
                   <option value="command">{{ t('pages.agentStudio.mcp.transportCommand') }}</option>
                 </select>
-                <button class="text-txt3 hover:text-err" :title="t('pages.agentStudio.mcp.remove')" @click="removeMcp(i)"><Icon name="close" :size="14" /></button>
+                <button class="text-txt3 hover:text-err" :title="t('pages.agentStudio.mcp.remove')" data-test="mcp-remove" @click="removeMcp(i)"><Icon name="close" :size="14" /></button>
               </div>
 
               <template v-if="m.transport === 'url'">
@@ -3000,9 +3054,12 @@ onBeforeUnmount(() => {
                 <button class="mt-1.5 text-[11px] text-accent-2 hover:underline" @click="m.env.push({ k: '', v: '' })">{{ t('pages.agentStudio.mcp.addEnv') }}</button>
               </template>
 
-              <div v-if="isAgentPlatformMcpName(m.name)" class="mt-2.5 flex items-start gap-2 border border-dashed border-ok/35 bg-ok/5 p-2 text-[10.5px] leading-5 text-txt2">
-                <Icon name="alert" :size="14" class="mt-0.5 shrink-0 text-ok" />
-                <div>{{ t('pages.agentStudio.mcp.agentScopeBadge') }}</div>
+              <div
+                v-if="isPlatformPresetName(m.name)"
+                class="mt-2.5 border border-dashed border-ok/35 bg-ok/5 p-2 text-[10.5px] leading-5 text-txt2"
+                data-test="mcp-scope-note"
+              >
+                {{ t(`pages.agentStudio.mcp.scopeNote.${platformPresetKind(m.name)}`) }}
               </div>
               <div v-else-if="isLegacyPmLeaderName(m.name)" class="mt-2.5 flex items-start gap-2 border border-dashed border-warn/40 bg-warn/10 p-2 text-[10.5px] leading-5 text-warn">
                 <Icon name="alert" :size="14" class="mt-0.5 shrink-0 text-warn" />
@@ -4007,6 +4064,12 @@ onBeforeUnmount(() => {
       :section="envHelpSection"
       :backend="draft?.acpBackend || 'cursor'"
       @close="envHelpOpen = false"
+    />
+
+    <McpConfigHelpModal
+      :open="mcpHelpOpen"
+      :config-root="draft?.layout?.configRoot || DEFAULT_CONFIG_ROOT"
+      @close="mcpHelpOpen = false"
     />
 
     <AppModal :open="showProjectSwitch" :title="t('pages.agentStudio.project.switchTitle')" :width="460" @close="cancelProjectChange">
