@@ -110,7 +110,9 @@ test.describe('shell notification center (IA separation)', () => {
     await expect(page.getByTestId('nav-notifications-badge')).toHaveCount(0)
   })
 
-  test('completed click opens output modal and marks read', async ({ page }) => {
+  test('completed click opens output without marking read; mark-as-read then clears badge', async ({
+    page,
+  }) => {
     await page.goto('/notifications-center.html?scene=with-items')
     await expect(page.getByTestId('shell-main-dashboard')).toBeVisible({ timeout: 15_000 })
     await settleAuth(page)
@@ -127,7 +129,11 @@ test.describe('shell notification center (IA separation)', () => {
     await expect(page.getByTestId('run-output-result-cards')).toContainText('视觉 Demo')
     await expect(page.getByTestId('run-output-result-cards')).not.toContainText('node_complete.json')
     await expect(page.getByTestId('run-output-list')).toHaveCount(0)
-    // badge should drop by 1 (3 → 2)
+    // Opening alone must NOT drop unread (3 stays 3)
+    await expect(page.getByTestId('run-notifications-badge')).toHaveText('3')
+    await page.getByTestId('run-output-mark-read').click()
+    await expect(page.getByTestId('run-output-mark-read')).toHaveCount(0)
+    // badge should drop by 1 (3 → 2) only after mark-as-read
     await expect(page.getByTestId('run-notifications-badge')).toHaveText('2')
   })
 

@@ -82,13 +82,62 @@ func (h *Handlers) PublicGatePreview(c *gin.Context) {
 		visual, structName, structContent := h.publicReviewArtifacts(lookup)
 		extras := h.publicReviewExtras(lookup, visual, structName)
 		dto := gateshare.BuildReviewPreviewDTO(st, lookup, visual, structName, structContent, nonce, extras)
+		gateshare.ApplySparsePreview(&dto,
+			strings.TrimSpace(c.GetHeader(gateshare.HeaderKnownVisualHTMLHash)),
+			strings.TrimSpace(c.GetHeader(gateshare.HeaderKnownUpstreamHash)),
+		)
 		c.JSON(http.StatusOK, dto)
 		return
 	}
 	visual, structName, structContent := h.publicGateArtifacts(lookup)
 	extras := h.publicGateExtras(lookup, visual, structName)
 	dto := gateshare.BuildPreviewDTO(st, lookup, visual, structName, structContent, nonce, extras)
+	gateshare.ApplySparsePreview(&dto,
+		strings.TrimSpace(c.GetHeader(gateshare.HeaderKnownVisualHTMLHash)),
+		strings.TrimSpace(c.GetHeader(gateshare.HeaderKnownUpstreamHash)),
+	)
 	c.JSON(http.StatusOK, dto)
+}
+
+// PublicGateUpstream returns the sanitized full upstream doc (≤64KiB) on demand.
+// Open/poll preview never embeds upstream.doc; enlarge/expand uses this route.
+func (h *Handlers) PublicGateUpstream(c *gin.Context) {
+	applyPublicSecurityHeaders(c)
+	if !h.publicRateLimit(c, gateshare.RateBucketPreview) {
+		return
+	}
+	if h.GateShare == nil || h.Eng == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "unavailable"})
+		return
+	}
+	token := strings.TrimSpace(c.GetHeader(headerShareToken))
+	if token == "" || !gateshare.ValidTokenShape(token) {
+		c.JSON(http.StatusOK, gin.H{"status": "invalid"})
+		return
+	}
+	lookup, st, err := h.GateShare.LookupByToken(token)
+	if err != nil || lookup == nil || st == models.ShareLinkStateNone {
+		c.JSON(http.StatusOK, gin.H{"status": "invalid"})
+		return
+	}
+	if st != models.ShareLinkStateActive {
+		c.JSON(http.StatusOK, gin.H{"status": st})
+		return
+	}
+	kind := publicShareKind(lookup)
+	var structName string
+	if kind == models.ShareLinkKindReview {
+		_, structName, _ = h.publicReviewArtifacts(lookup)
+	} else {
+		_, structName, _ = h.publicGateArtifacts(lookup)
+	}
+	upName, upContent := h.publicUpstreamArtifact(lookup.Link.RunID, structName)
+	up := gateshare.SanitizeUpstream(upName, upContent)
+	if up == nil {
+		c.JSON(http.StatusOK, gin.H{"status": "active", "upstream": nil})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "active", "upstream": up})
 }
 
 func (h *Handlers) PublicGateReply(c *gin.Context) {

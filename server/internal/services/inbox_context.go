@@ -167,6 +167,8 @@ func ClarifySlimNodeIDs(node *models.Node, currentNodeID string, artifacts []mod
 
 // SlimNodeExecutions returns upstream node execution history with only
 // iteration + status + outputs (no events/mcpCalls/varsSnapshot).
+// Large *_json snapshot fields are omitted — clients load full structured
+// products via /api/artifacts/:id/content when needed.
 func (s *RunService) SlimNodeExecutions(runID string, nodeIDs []string) map[string][]map[string]any {
 	out := make(map[string][]map[string]any, len(nodeIDs))
 	for _, nodeID := range nodeIDs {
@@ -178,10 +180,27 @@ func (s *RunService) SlimNodeExecutions(runID string, nodeIDs []string) map[stri
 			execs = append(execs, map[string]any{
 				"iteration": st.Iteration,
 				"status":    st.Status,
-				"outputs":   st.Outputs,
+				"outputs":   OmitLargeJSONSnapshots(st.Outputs),
 			})
 		}
 		out[nodeID] = execs
+	}
+	return out
+}
+
+// OmitLargeJSONSnapshots drops keys ending in "_json" (inline structured
+// product snapshots such as clarified_requirement_json). Smaller rendered
+// markdown keys and page HTML snapshots are kept for this round.
+func OmitLargeJSONSnapshots(outputs map[string]any) map[string]any {
+	if outputs == nil {
+		return nil
+	}
+	out := make(map[string]any, len(outputs))
+	for k, v := range outputs {
+		if strings.HasSuffix(k, "_json") {
+			continue
+		}
+		out[k] = v
 	}
 	return out
 }
