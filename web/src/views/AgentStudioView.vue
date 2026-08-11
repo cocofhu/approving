@@ -2963,27 +2963,27 @@ onBeforeUnmount(() => {
               <span class="mr-1 text-[11px] text-txt3">{{ t('pages.agentStudio.mcp.quickAddLabel') }}</span>
               <button
                 v-if="!hasArtifactStore"
-                class="rounded border border-accent/40 px-2 py-1 text-accent-2 hover:bg-accent-dim"
+                class="rounded border border-accent/40 px-2 py-1 text-[11px] text-accent-2 hover:bg-accent-dim"
                 type="button"
                 data-test="mcp-add-artifact"
                 @click="addArtifactStore"
               >{{ t('pages.agentStudio.mcp.addArtifactStore') }}</button>
               <button
-                class="rounded border border-accent/40 px-2 py-1 text-accent-2 hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40"
+                class="rounded border border-accent/40 px-2 py-1 text-[11px] text-accent-2 hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
                 data-test="mcp-add-memory"
                 :disabled="!isProjectBound"
                 @click="addAgentPlatformMcp('memory-store')"
               >{{ t('pages.agentStudio.mcp.addMemoryStore') }}</button>
               <button
-                class="rounded border border-accent/40 px-2 py-1 text-accent-2 hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40"
+                class="rounded border border-accent/40 px-2 py-1 text-[11px] text-accent-2 hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
                 data-test="mcp-add-context"
                 :disabled="!isProjectBound"
                 @click="addAgentPlatformMcp('context-store')"
               >{{ t('pages.agentStudio.mcp.addContextStore') }}</button>
               <button
-                class="rounded border border-accent/40 px-2 py-1 text-accent-2 hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40"
+                class="rounded border border-accent/40 px-2 py-1 text-[11px] text-accent-2 hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
                 data-test="mcp-add-scheduler"
                 :disabled="!isProjectBound"
