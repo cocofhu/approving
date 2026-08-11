@@ -311,6 +311,7 @@ func main() {
 	wfSvc.SetSkills(skillSvc)
 	pmMCP := pmmcp.NewHost(pmSvc, pmProgress, wfSvc, runSvc, artifactSvc, eng)
 	pmMCP.SetOrgAndSkill(orgSvc, skillSvc)
+	pmMCP.SetRequirementDrafts(requirementDraftSvc)
 	memoryMCP := memorymcp.NewHost(pmSvc)
 	contextMCP := contextmcp.NewHost(pmSvc)
 	schedulerMCP := schedulermcp.NewHost(db, pmSvc)
