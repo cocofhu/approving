@@ -352,7 +352,7 @@ describe('UpstreamRequirementContext', () => {
     expect(wrapper.find('[data-testid="upstream-context-body"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="upstream-bar-hint"]').text()).toContain('上游上下文')
     expect(wrapper.find('[data-testid="upstream-bar-hint"]').text()).toContain(
-      '本 run 已有澄清需求文档',
+      '本工作流已有澄清需求文档',
     )
     expect(wrapper.find('[data-testid="upstream-enlarge"]').text()).toContain('放大上游上下文')
     expect(apiMocks.artifactContent).not.toHaveBeenCalled()
