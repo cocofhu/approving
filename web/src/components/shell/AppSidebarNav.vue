@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import { sidebarNavGroups } from '@/data/sidebarNav'
 import { usePendingGates } from '@/lib/usePendingGates'
+import { useRunTerminalNotifications } from '@/lib/useRunTerminalNotifications'
 
 defineProps<{ drawer?: boolean }>()
 const emit = defineEmits<{ (e: 'navigate'): void }>()
@@ -14,9 +15,13 @@ const route = useRoute()
 
 // Shared singleton source so approving a gate elsewhere updates the badge immediately.
 const { count: gateCount, peek, refresh } = usePendingGates()
+// Same unreadCount singleton as topbar bell — keep sidebar /notifications badge in sync.
+const { unreadCount } = useRunTerminalNotifications()
 let timer: number | undefined
 function badgeFor(to: string): number {
-  return to === '/gates' ? gateCount.value : 0
+  if (to === '/gates') return gateCount.value
+  if (to === '/notifications') return unreadCount.value
+  return 0
 }
 function pollRefresh() {
   return peek({ source: 'sidebar-poll' })
@@ -59,6 +64,7 @@ function onNavigate() {
         <span
           v-if="badgeFor(item.to)"
           class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-white"
+          :data-testid="item.to === '/notifications' ? 'nav-notifications-badge' : item.to === '/gates' ? 'nav-gates-badge' : undefined"
         >{{ badgeFor(item.to) }}</span>
       </RouterLink>
     </div>

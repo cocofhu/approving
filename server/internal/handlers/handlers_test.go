@@ -1824,7 +1824,7 @@ func TestDoctorArtifactSessionIsLoopbackAndTokenProtected(t *testing.T) {
 	}
 
 	w = request(http.MethodDelete, "/_internal/doctor/artifact-sessions/"+session["id"], map[string]string{
-		"Authorization":             "Bearer doctor-secret",
+		"Authorization":              "Bearer doctor-secret",
 		"X-Approving-Doctor-Cleanup": session["cleanup_token"],
 	}, "127.0.0.1:1234")
 	if w.Code != http.StatusNoContent {

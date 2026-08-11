@@ -270,27 +270,24 @@ func TestAgentPromptsTemplatesAndOverrides(t *testing.T) {
 	}
 }
 
-func TestSelectRecommendedOption(t *testing.T) {
-	// Recommended option wins over position.
+func TestSelectRecommendedOptions(t *testing.T) {
+	// Single-select: recommended option wins over position.
 	q := ReactQuestion{Options: []ReactOption{
 		{ID: "a", Label: "A"},
 		{ID: "b", Label: "B", Recommended: true},
 	}}
-	if o, ok := SelectRecommendedOption(q); !ok || o.ID != "b" {
-		t.Fatalf("recommended pick = %+v ok=%v", o, ok)
+	if opts, ok := SelectRecommendedOptions(q); !ok || len(opts) != 1 || opts[0].ID != "b" {
+		t.Fatalf("recommended pick = %+v ok=%v", opts, ok)
 	}
 	// No recommendation -> first option.
 	q2 := ReactQuestion{Options: []ReactOption{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}}}
-	if o, ok := SelectRecommendedOption(q2); !ok || o.ID != "a" {
-		t.Fatalf("fallback pick = %+v ok=%v", o, ok)
+	if opts, ok := SelectRecommendedOptions(q2); !ok || len(opts) != 1 || opts[0].ID != "a" {
+		t.Fatalf("fallback pick = %+v ok=%v", opts, ok)
 	}
 	// No options -> not ok.
-	if _, ok := SelectRecommendedOption(ReactQuestion{}); ok {
+	if _, ok := SelectRecommendedOptions(ReactQuestion{}); ok {
 		t.Fatal("empty options should not be ok")
 	}
-}
-
-func TestSelectRecommendedOptions(t *testing.T) {
 	// Multi-select: collect every recommended option.
 	multi := ReactQuestion{
 		AllowMultiple: true,

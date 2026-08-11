@@ -38,7 +38,7 @@ func TestCronSchedulerTickClaimsDueJob(t *testing.T) {
 		Unregister: func(token string) {},
 	}
 	s := NewCronScheduler(db, pm, nil, NewPmTurnRunner(pm, nil), hooks)
-	s.SetMaxParallel(2)
+	s.setMaxParallel(2)
 	s.tick(context.Background())
 
 	deadline := time.Now().Add(3 * time.Second)
@@ -54,7 +54,7 @@ func TestCronSchedulerTickClaimsDueJob(t *testing.T) {
 
 func TestCronSchedulerTryAcquireParallelSlots(t *testing.T) {
 	s := NewCronScheduler(nil, nil, nil, nil, CronTokenHooks{})
-	s.SetMaxParallel(1)
+	s.setMaxParallel(1)
 	if !s.tryAcquire() {
 		t.Fatal("first slot")
 	}

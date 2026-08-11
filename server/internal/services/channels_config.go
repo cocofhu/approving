@@ -320,7 +320,6 @@ func (s *ChannelConfigService) Update(id string, in ChannelConfigInput) (Channel
 	row.Enabled = in.Enabled
 	row.ProjectID = strings.TrimSpace(in.ProjectID)
 	row.AgentName = in.AgentName
-	row.IsPrimary = row.IsPrimary // unchanged except forbid demote above
 	if in.EnabledMcps == nil {
 		// keep existing
 	} else {
@@ -531,9 +530,9 @@ func (s *ChannelConfigService) removeNotifyChannelID(projectID, channelID string
 func (s *ChannelConfigService) syncProjectPmLeader(projectID, agentName string) error {
 	return s.db.Model(&models.Project{}).Where("id = ?", projectID).
 		Updates(map[string]any{
-			"pm_leader_agent":  agentName,
+			"pm_leader_agent":   agentName,
 			"pm_leader_enabled": true,
-			"updated_at":       time.Now(),
+			"updated_at":        time.Now(),
 		}).Error
 }
 

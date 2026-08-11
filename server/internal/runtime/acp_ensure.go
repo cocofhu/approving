@@ -1,0 +1,199 @@
+package runtime
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/nodereg"
+	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/rs/zerolog/log"
+)
+
+// ensureOutcome re-prompts the agent to call node_complete when the mark is
+// still missing (best-effort; engine fails closed if ultimately absent).
+// For react nodes, a pending ask_question raised during the re-prompt aborts
+// the completion push and returns those questions (caller must not discard).
+// Non-react callers keep the prior discard-and-continue semantics.
+func (c *acpProvider) ensureOutcome(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, events *[]models.AcpEvent, usage **models.TokenUsage, byModel *models.TokenUsageByModel) ([]models.ReactQuestion, error) {
+	if c.host.HasOutcome(req.RunID, req.NodeID) {
+		return nil, nil
+	}
+	for i := 0; i <= producesRetry; i++ {
+		if c.host.HasOutcome(req.RunID, req.NodeID) {
+			return nil, nil
+		}
+		if i == producesRetry {
+			log.Warn().Str("run", req.RunID).Str("node", req.NodeID).
+				Int("retries", producesRetry).
+				Msg("node_complete still missing after re-prompt; engine will fail closed")
+			return nil, nil
+		}
+		prompt := c.agentPrompts(str2(req.Config["skill_profile"])).OutcomeRetryText()
+		chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
+		res, err := c.streamChat(chatCtx, acp, req, prompt, nil)
+		cancel()
+		if err != nil {
+			if isChatTimeoutErr(err) {
+				return nil, fmt.Errorf("agent chat: %w", err)
+			}
+			log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
+				Msg("node_complete re-prompt failed")
+			return nil, nil
+		}
+		absorbChat(usage, byModel, events, res)
+		qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
+		if len(qs) > 0 && req.NodeType == "react" {
+			return qs, nil
+		}
+	}
+	return nil, nil
+}
+
+// ensureStructured makes a framework node's reserved structured product exist
+// before the node completes: it checks the run store and, while absent,
+// re-prompts the agent (same session) to call the naming set_* tool, looping up
+// to producesRetry times. Intermediate turns are folded into events. Unlike the
+// old produces path there is no workspace harvest — structured products are
+// written only through MCP.
+// For react nodes, a pending ask_question raised during the re-prompt aborts
+// the StructuredRetry push and returns those questions. Non-react callers keep
+// discard-and-continue semantics.
+func (c *acpProvider) ensureStructured(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, name, tool string, events *[]models.AcpEvent, usage **models.TokenUsage, byModel *models.TokenUsageByModel) ([]models.ReactQuestion, error) {
+	satisfied := func() bool {
+		_, err := c.host.ReadArtifact(req.RunID, req.Token, name)
+		return err == nil
+	}
+	for i := 0; i <= producesRetry; i++ {
+		if satisfied() {
+			return nil, nil
+		}
+		if i == producesRetry {
+			log.Warn().Str("run", req.RunID).Str("node", req.NodeID).
+				Str("artifact", name).Str("tool", tool).
+				Int("retries", producesRetry).
+				Msg("structured product still missing after re-prompt; engine will fail closed")
+			return nil, nil
+		}
+		prompt := c.agentPrompts(str2(req.Config["skill_profile"])).StructuredRetryFor(name, tool)
+		chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
+		res, err := c.streamChat(chatCtx, acp, req, prompt, nil)
+		cancel()
+		if err != nil {
+			if isChatTimeoutErr(err) {
+				return nil, fmt.Errorf("agent chat: %w", err)
+			}
+			log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
+				Str("artifact", name).Msg("structured product re-prompt failed")
+			return nil, nil
+		}
+		absorbChat(usage, byModel, events, res)
+		qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
+		if len(qs) > 0 && req.NodeType == "react" {
+			return qs, nil
+		}
+
+	}
+	return nil, nil
+}
+
+// structuredArtifactFor maps a framework node type to its reserved product
+// name and the set_* tool that writes it (see nodereg).
+func structuredArtifactFor(nodeType string) (name, tool string) {
+	return nodereg.StructuredProduct(nodeType)
+}
+
+// ensurePlanComplete drives an implement node's run plan to completion. It
+// reads the plan's outstanding items (host.PlanIncomplete); while any remain it
+// re-prompts the agent (same session) to finish them, up to max_rounds times.
+// A missing/unparseable plan is treated as "nothing to enforce" (nil). If items
+// still remain after the loop it returns an error so the engine fails the node.
+func (c *acpProvider) ensurePlanComplete(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, events *[]models.AcpEvent, usage **models.TokenUsage, byModel *models.TokenUsageByModel) error {
+	maxRounds := 3
+	if mr, ok := toInt(req.Config["max_rounds"]); ok && mr > 0 {
+		maxRounds = mr
+	}
+	for i := 0; i < maxRounds; i++ {
+		inc, err := c.host.PlanIncomplete(req.RunID, req.Token)
+		if err != nil {
+
+			if err.Error() != "mcp: no plan" {
+				log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
+					Msg("plan incomplete check failed; skipping enforce")
+			}
+			return nil
+		}
+		if len(inc) == 0 {
+			return nil
+		}
+		prompt := c.agentPrompts(str2(req.Config["skill_profile"])).PlanIncompleteRetryFor(inc)
+		chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
+		res, err := c.streamChat(chatCtx, acp, req, prompt, nil)
+		cancel()
+		if err != nil {
+			if isChatTimeoutErr(err) {
+				return fmt.Errorf("agent chat: %w", err)
+			}
+			log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
+				Msg("implement plan-complete re-prompt failed")
+			break
+		}
+		absorbChat(usage, byModel, events, res)
+	}
+	inc, err := c.host.PlanIncomplete(req.RunID, req.Token)
+	if err != nil {
+		if err.Error() != "mcp: no plan" {
+			log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
+				Msg("plan incomplete final check failed; skipping enforce")
+		}
+		return nil
+	}
+	if len(inc) > 0 {
+		return fmt.Errorf("计划未全部完成,仍有 %d 项未完成: %s", len(inc), strings.Join(inc, "; "))
+	}
+	return nil
+}
+
+// ensurePreviewRegistered drives an app_preview node to register at least one
+// preview port via set_preview, re-prompting up to max_rounds when absent.
+func (c *acpProvider) ensurePreviewRegistered(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, events *[]models.AcpEvent, usage **models.TokenUsage, byModel *models.TokenUsageByModel) error {
+	maxRounds := 3
+	if mr, ok := toInt(req.Config["max_rounds"]); ok && mr > 0 {
+		maxRounds = mr
+	}
+	for i := 0; i < maxRounds; i++ {
+		if c.host.HasPreviewPorts(req.RunID, req.NodeID) {
+			return nil
+		}
+		prompt := c.agentPrompts(str2(req.Config["skill_profile"])).PreviewRetryText()
+		chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
+		res, err := c.streamChat(chatCtx, acp, req, prompt, nil)
+		cancel()
+		if err != nil {
+			if isChatTimeoutErr(err) {
+				return fmt.Errorf("agent chat: %w", err)
+			}
+			log.Warn().Err(err).Str("node", req.NodeID).Msg("app_preview set_preview re-prompt failed")
+			break
+		}
+		absorbChat(usage, byModel, events, res)
+		c.host.TakePendingQuestions(req.RunID, req.NodeID)
+	}
+	if !c.host.HasPreviewPorts(req.RunID, req.NodeID) {
+		return fmt.Errorf("预览契约未满足:未调用 set_preview")
+	}
+	return nil
+}
+
+// nodeNeedsOutcome reports whether this node type must call node_complete.
+func nodeNeedsOutcome(nodeType string) bool {
+	switch nodeType {
+	case "agent", "plan", "implement", "react", "research", "proposal",
+		"test", "review", "submit_mr", "visual":
+		return true
+
+	default:
+		return false
+	}
+}

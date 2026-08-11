@@ -79,16 +79,16 @@ func TestBuildAgentAndPmMCPSpecs(t *testing.T) {
 	if len(pmSpecs) < 2 {
 		t.Fatalf("pm role specs=%v", pmSpecs)
 	}
-	all := BuildPmPlatformMCPSpecs("proj-1", "agent-a", "tok-1", []string{"pm-workflow-read"})
+	all := append(BuildAgentPlatformMCPSpecs("proj-1", "agent-a", "tok-1"), BuildPmRoleMCPSpecs("proj-1", "tok-1", []string{"pm-workflow-read"})...)
 	if len(all) == 0 {
 		t.Fatal("pm platform specs")
 	}
 }
 
-func TestNormalizePmEnabledMcpsDirect(t *testing.T) {
-	got := NormalizePmEnabledMcps([]string{"pm-workflow-read", "bogus"})
+func TestEffectivePmEnabledMcpsDirect(t *testing.T) {
+	got := EffectivePmEnabledMcps([]string{"pm-workflow-read", "bogus"})
 	if len(got) != 1 || got[0] != "pm-workflow-read" {
-		t.Fatalf("normalize=%v", got)
+		t.Fatalf("effective=%v", got)
 	}
 }
 

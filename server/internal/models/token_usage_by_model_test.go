@@ -49,10 +49,10 @@ func TestEffectiveUsageByModelLegacy(t *testing.T) {
 
 func TestSumTokenUsageByModel(t *testing.T) {
 	t.Parallel()
-	if SumTokenUsageByModel(nil) != nil {
+	if sumTokenUsageByModel(nil) != nil {
 		t.Fatal("nil")
 	}
-	s := SumTokenUsageByModel(TokenUsageByModel{
+	s := sumTokenUsageByModel(TokenUsageByModel{
 		"a": {InputTokens: 1, OutputTokens: 2},
 		"b": {CacheReadTokens: 3, CacheWriteTokens: 4},
 	})

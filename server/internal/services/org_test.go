@@ -205,7 +205,7 @@ func TestApplyDeleteGroup(t *testing.T) {
 			"carol": {GroupIDs: []string{"leaf"}},
 		},
 	}
-	out, err := ApplyDeleteGroup(org, "child")
+	out, err := applyDeleteGroup(org, "child")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +239,7 @@ func TestApplyDeleteRootGroup(t *testing.T) {
 			"alice": {GroupIDs: []string{"root"}},
 		},
 	}
-	out, err := ApplyDeleteGroup(org, "root")
+	out, err := applyDeleteGroup(org, "root")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +258,7 @@ func TestApplyMoveAgent(t *testing.T) {
 			"alice": {GroupIDs: []string{"a", "c"}},
 		},
 	}
-	out, err := ApplyMoveAgent(org, "alice", "a", "b")
+	out, err := applyMoveAgent(org, "alice", "a", "b")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +269,7 @@ func TestApplyMoveAgent(t *testing.T) {
 			t.Fatalf("move result: %+v", gids)
 		}
 	}
-	out, err = ApplyMoveAgent(out, "alice", "b", "")
+	out, err = applyMoveAgent(out, "alice", "b", "")
 	if err != nil {
 		t.Fatal(err)
 	}

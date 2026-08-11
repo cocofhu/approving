@@ -62,10 +62,10 @@ func TestResolveTrigger(t *testing.T) {
 }
 
 func TestValidTrigger(t *testing.T) {
-	if !ValidTrigger(TriggerManual) || !ValidTrigger(TriggerAPI) || !ValidTrigger(TriggerPMMCP) {
+	if !validTrigger(TriggerManual) || !validTrigger(TriggerAPI) || !validTrigger(TriggerPMMCP) {
 		t.Fatal("whitelist codes should be valid")
 	}
-	if ValidTrigger("手动触发") || ValidTrigger("Manual") || ValidTrigger("") {
+	if validTrigger("手动触发") || validTrigger("Manual") || validTrigger("") {
 		t.Fatal("non-whitelist values should be invalid")
 	}
 }
@@ -75,7 +75,7 @@ func TestAllowedTriggers(t *testing.T) {
 		t.Fatalf("len=%d want 3", len(AllowedTriggers))
 	}
 	for _, code := range AllowedTriggers {
-		if !ValidTrigger(code) {
+		if !validTrigger(code) {
 			t.Fatalf("%q in AllowedTriggers but not ValidTrigger", code)
 		}
 	}

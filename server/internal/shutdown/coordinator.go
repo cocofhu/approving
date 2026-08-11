@@ -44,7 +44,7 @@ func (c *Coordinator) IsDraining() bool {
 }
 
 // GracePeriod returns the configured grace upper bound.
-func (c *Coordinator) GracePeriod() time.Duration {
+func (c *Coordinator) gracePeriod() time.Duration {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.grace

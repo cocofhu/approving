@@ -48,12 +48,6 @@ func (s *Service) Login(username, password string) (*models.Session, error) {
 	return s.createSession(user.Username)
 }
 
-// CreateSession inserts a new session row with a fresh opaque token.
-func (s *Service) CreateSession(username string) (*models.Session, error) {
-	s.cleanupExpired()
-	return s.createSession(username)
-}
-
 func (s *Service) createSession(username string) (*models.Session, error) {
 	token, err := newToken()
 	if err != nil {
@@ -96,9 +90,6 @@ func (s *Service) DeleteSession(token string) error {
 	}
 	return s.db.Delete(&models.Session{}, "id = ?", token).Error
 }
-
-// RateLimiter returns the login rate limiter.
-func (s *Service) RateLimiter() *RateLimiter { return s.limit }
 
 func (s *Service) findUser(username string) (config.AuthUser, bool) {
 	for _, u := range s.cfg().Auth.Users {

@@ -44,18 +44,6 @@ func (h *Host) SetAuditRecorder(fn func(services.AuditRecord)) {
 	h.mu.Unlock()
 }
 
-// Register creates a session token.
-func (h *Host) Register(projectID, agentName, threadID, userID string) string {
-	tok := platformmcp.NewToken()
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.sessions[tok] = &Session{
-		Token: tok, ProjectID: projectID, AgentName: agentName,
-		ThreadID: threadID, UserID: userID,
-	}
-	return tok
-}
-
 // Restore rebinds a token.
 func (h *Host) Restore(tok, projectID, agentName, threadID, userID string) {
 	if strings.TrimSpace(tok) == "" {

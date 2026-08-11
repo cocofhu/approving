@@ -120,23 +120,6 @@ func (h *Host) recordAudit(rec services.AuditRecord) {
 	}
 }
 
-// Register creates (or replaces) a session for project+thread and returns the token.
-func (h *Host) Register(projectID, threadID, userID, agentName string) string {
-	return h.restore(projectID, threadID, userID, agentName, platformmcp.NewToken(), nil)
-}
-
-// RegisterWithMcps creates a session with an explicit AllowedMcps override
-// (used by IM channel turns so Channel.EnabledMcps gates ServeRPC).
-func (h *Host) RegisterWithMcps(projectID, threadID, userID, agentName string, enabledMcps []string) string {
-	allowed := services.EffectivePmEnabledMcps(enabledMcps)
-	// Store a non-nil slice even when empty so ServeRPC does not fall back to
-	// Project.PmEnabledMcps for channel turns that intentionally disable all.
-	if enabledMcps != nil && len(allowed) == 0 {
-		allowed = []string{}
-	}
-	return h.restore(projectID, threadID, userID, agentName, platformmcp.NewToken(), allowed)
-}
-
 // Restore re-binds an existing token.
 func (h *Host) Restore(projectID, threadID, userID, agentName, token string) {
 	if strings.TrimSpace(token) == "" {
