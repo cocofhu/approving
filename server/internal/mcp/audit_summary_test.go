@@ -245,3 +245,101 @@ func TestFormatMCPAuditSummary_FailWithoutReasonKeepsAction(t *testing.T) {
 		t.Fatalf("got %q, want action without empty fail suffix", got)
 	}
 }
+
+
+func TestFormatMCPAuditSummary_EdgeBranches(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		tool    string
+		args    map[string]any
+		result  string
+		isError bool
+		want    string
+	}{
+		{name: "empty tool becomes unknown", tool: "   ", want: "调用 unknown"},
+		{name: "node_complete without status", tool: "node_complete", want: "节点完成"},
+		{name: "set_preview bare", tool: "set_preview", want: "注册预览"},
+		{name: "update_plan_status bare", tool: "update_plan_status", want: "更新计划状态"},
+		{name: "get_proposal", tool: "get_proposal", want: "读取方案结论"},
+		{name: "set_proposal", tool: "set_proposal", want: "写入方案结论 proposal.json"},
+		{name: "unknown get stem", tool: "get_mystery", want: "调用 get_mystery"},
+		{name: "unknown set stem", tool: "set_mystery", want: "调用 set_mystery"},
+		{name: "join without name", tool: "read_artifact", args: map[string]any{}, want: "读取产物"},
+		{
+			name:    "error prefers message when error empty",
+			tool:    "list_artifacts",
+			args:    map[string]any{"message": "disk full"},
+			isError: true,
+			want:    "列出产物 失败 · disk full",
+		},
+		{
+			name:    "blob result ignored",
+			tool:    "list_artifacts",
+			result:  "{" + strings.Repeat("x", 200) + "}",
+			isError: true,
+			want:    "列出产物",
+		},
+		{
+			name:    "html blob ignored",
+			tool:    "list_artifacts",
+			result:  "<html>" + strings.Repeat("y", 200),
+			isError: true,
+			want:    "列出产物",
+		},
+		{
+			name:    "long plain text blob ignored",
+			tool:    "list_artifacts",
+			result:  strings.Repeat("z", 450),
+			isError: true,
+			want:    "列出产物",
+		},
+		{
+			name:    "clips long error and takes first sentence",
+			tool:    "ask_question",
+			args:    map[string]any{"error": strings.Repeat("错", 100) + "。后面不该出现"},
+			isError: true,
+			want:    "提出问题 失败 · " + strings.Repeat("错", 80) + "…",
+		},
+		{
+			name:    "english sentence split",
+			tool:    "ask_question",
+			args:    map[string]any{"error": "timeout waiting. more detail"},
+			isError: true,
+			want:    "提出问题 失败 · timeout waiting",
+		},
+		{
+			name:    "newline truncates reason",
+			tool:    "ask_question",
+			args:    map[string]any{"error": "line1\nline2"},
+			isError: true,
+			want:    "提出问题 失败 · line1",
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := FormatMCPAuditSummary(tc.tool, tc.args, tc.result, tc.isError)
+			if got != tc.want {
+				t.Fatalf("got %q want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestWhitelistArgAndClipHelpers(t *testing.T) {
+	t.Parallel()
+	if got := whitelistArg(nil, "name"); got != "" {
+		t.Fatalf("nil args: %q", got)
+	}
+	if got := whitelistArg(map[string]any{"content": "x"}, "content"); got != "" {
+		t.Fatalf("non-whitelist key: %q", got)
+	}
+	if got := clipAuditRunes("abc", 0); got != "abc" {
+		t.Fatalf("max<=0 should keep: %q", got)
+	}
+	if got := clipAuditRunes("  ", 10); got != "" {
+		t.Fatalf("blank: %q", got)
+	}
+}
