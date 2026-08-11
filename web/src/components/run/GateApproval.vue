@@ -795,8 +795,6 @@ async function loadProduct(opts?: { force?: boolean }) {
   }
 
   const isInitialLoad = !hasContent
-  const fingerprintChanged = fingerprint !== lastProductLoadFingerprint.value
-  const pending = resolved.value == null
   const showLoading = opts?.force || isInitialLoad
 
   productLoadAbort?.abort()
@@ -811,8 +809,8 @@ async function loadProduct(opts?: { force?: boolean }) {
     for (const p of products) {
       try {
         next[p.name] = await loadOneProductContent(p, {
-          // Pending follows live store; only resolved/history prefer frozen snap.
-          preferSnapshot: !pending && fingerprintChanged && !isInitialLoad,
+          // Inbox/Run omit large *_json snapshots — always prefer artifact content.
+          preferSnapshot: false,
           signal,
         })
       } catch (e: any) {
@@ -914,7 +912,7 @@ async function onProductRefresh(name: string) {
   // Keep GateProductEditor mounted: toggling productLoading would tear down
   // draft / mode / external-change UI in the content-fit shell.
   try {
-    const content = await loadOneProductContent(p, { preferSnapshot: true })
+    const content = await loadOneProductContent(p, { preferSnapshot: false })
     savedProductContent.value = { ...savedProductContent.value, [name]: content }
     if (name === 'page.html') {
       productHtml.value = content
