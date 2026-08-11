@@ -3,8 +3,8 @@ import { ref, computed, watch, nextTick, onBeforeUnmount, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import AcpStatusPill from './AcpStatusPill.vue'
-import type { AcpEvent, McpCall, NodeRunStatus } from '@/lib/types'
-import type { MergedAcpEvent } from '@/lib/mergeAcpEvents'
+import type { AcpEvent, McpCall, NodeRunStatus } from '@/lib/shared/types'
+import type { MergedAcpEvent } from '@/lib/run/mergeAcpEvents'
 import {
   BOOT_STAGE_ORDER,
   BOOT_STAGE_TIMEOUT_MS,
@@ -15,8 +15,8 @@ import {
   type BootStageId,
   type BootStageState,
   type LiveLogBootSession,
-} from '@/lib/liveLogBootPhase'
-import { allowBootEmptyState, type RehydrateStatus } from '@/lib/liveLogRehydrate'
+} from '@/lib/run/liveLogBootPhase'
+import { allowBootEmptyState, type RehydrateStatus } from '@/lib/run/liveLogRehydrate'
 
 // events are the canonical ACP timeline for the selected node — streamed
 // incrementally over the run WebSocket while the node runs (live), or the

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { TokenStatsComposition } from '@/lib/types'
-import { fmtCompactTokenCount, fmtTokenCount } from '@/lib/tokenUsage'
+import type { TokenStatsComposition } from '@/lib/shared/types'
+import { fmtCompactTokenCount, fmtTokenCount } from '@/lib/run/tokenUsage'
 import { TOKEN_PART_COLORS, TOKEN_PART_KEYS, type TokenPartKey } from './tokenStatsShared'
 
 const props = defineProps<{

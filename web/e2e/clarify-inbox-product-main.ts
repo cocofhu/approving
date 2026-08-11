@@ -1,20 +1,20 @@
 import '../src/styles/global.css'
 import { computed, createApp, defineComponent, h, ref, watch } from 'vue'
-import { i18n } from '../src/lib/i18n'
-import { initLocale, setLocale } from '../src/lib/locale'
-import { installIdleScrollbar } from '../src/lib/idleScrollbar'
-import { setTheme } from '../src/lib/theme'
+import { i18n } from '../src/lib/shared/i18n'
+import { initLocale, setLocale } from '../src/lib/shared/locale'
+import { installIdleScrollbar } from '../src/lib/shared/idleScrollbar'
+import { setTheme } from '../src/lib/shared/theme'
 import ArtifactLoadingPane from '../src/components/run/ArtifactLoadingPane.vue'
 import ClarifyProductStage from '../src/components/run/ClarifyProductStage.vue'
 import ReviewShell from '../src/components/run/ReviewShell.vue'
-import { api } from '../src/lib/api'
+import { api } from '../src/lib/api/api'
 import {
   defaultClarifyProductId,
   listClarifyProductNodes,
   pickClarifyNodeRun,
   resolveClarifyProductStage,
-} from '../src/lib/clarifyInboxStage'
-import type { NodeRun, Run, WFNode } from '../src/lib/types'
+} from '../src/lib/inbox/clarifyInboxStage'
+import type { NodeRun, Run, WFNode } from '../src/lib/shared/types'
 
 type Scenario =
   | 'research'

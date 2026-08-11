@@ -98,6 +98,11 @@ test.describe('Run 详情移动端单面板生产路径 (390×844)', () => {
   test('waiting_human 门禁：确认并流转吸底常显 (g3.2)', async ({ page }) => {
     // Review semantics: sticky 确认并流转; no 通过/打回 dual buttons.
     await page.route('**/api/**', async (route) => {
+    // Skip Vite module URLs like /@fs/.../src/lib/api/api.ts (pathname is not /api/...)
+    if (!new URL(route.request().url()).pathname.startsWith('/api/')) {
+      await route.continue()
+      return
+    }
       const url = new URL(route.request().url())
       if (url.pathname.includes('/preview-issues')) {
         await route.fulfill({ json: { issues: [] } })

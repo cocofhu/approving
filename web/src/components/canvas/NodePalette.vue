@@ -3,8 +3,8 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import { nodeColorHex } from '@/data/nodeRegistry'
-import { useNodeDefs, usePaletteGroups } from '@/lib/useNodeDefs'
-import type { NodeType } from '@/lib/types'
+import { useNodeDefs, usePaletteGroups } from '@/lib/run/useNodeDefs'
+import type { NodeType } from '@/lib/shared/types'
 
 const { t } = useI18n()
 const { NODE_DEFS } = useNodeDefs()

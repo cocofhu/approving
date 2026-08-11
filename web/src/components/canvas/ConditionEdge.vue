@@ -4,8 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, getSmoothStepPath, Position } from '@vue-flow/core'
 
 const { t } = useI18n()
-import type { EdgeKind } from '@/lib/types'
-import { coordsFinite, fallbackLinePath, roundedPolyline } from '@/lib/canvasPath'
+import type { EdgeKind } from '@/lib/shared/types'
+import { coordsFinite, fallbackLinePath, roundedPolyline } from '@/lib/run/canvasPath'
 
 const props = defineProps<{
   id: string

@@ -4,7 +4,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
-import { useAuth } from '@/lib/useAuth'
+import { useAuth } from '@/lib/composables/useAuth'
 import PmCronJobsPanel from './PmCronJobsPanel.vue'
 
 const toastSuccess = vi.fn()
@@ -16,8 +16,8 @@ const apiMocks = vi.hoisted(() => ({
   deleteProjectCronJob: vi.fn(),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {
@@ -29,7 +29,7 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
-vi.mock('@/lib/useToast', () => ({
+vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => ({ success: toastSuccess, error: toastError }),
 }))
 

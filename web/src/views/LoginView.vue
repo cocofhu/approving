@@ -5,9 +5,9 @@ import { useI18n } from 'vue-i18n'
 import BrandLogo from '@/components/shell/BrandLogo.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import Icon from '@/components/ui/Icon.vue'
-import { authApi } from '@/lib/api'
-import { useAuth } from '@/lib/useAuth'
-import { authRedirectPath } from '@/lib/useAuth'
+import { authApi } from '@/lib/api/api'
+import { useAuth } from '@/lib/composables/useAuth'
+import { authRedirectPath } from '@/lib/composables/useAuth'
 
 const route = useRoute()
 const router = useRouter()

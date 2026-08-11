@@ -2,7 +2,7 @@
 import { computed, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppSpinner from './AppSpinner.vue'
-import { compositeImages, imgSrc } from '@/lib/compositeText'
+import { compositeImages, imgSrc } from '@/lib/shared/compositeText'
 
 type ThumbStatus = 'loading' | 'ok' | 'failed'
 

@@ -1,7 +1,7 @@
 import '../src/styles/global.css'
 import { createApp } from 'vue'
-import { i18n } from '../src/lib/i18n'
-import { initLocale, setLocale } from '../src/lib/locale'
+import { i18n } from '../src/lib/shared/i18n'
+import { initLocale, setLocale } from '../src/lib/shared/locale'
 import AppPreviewPanel from '../src/components/run/AppPreviewPanel.vue'
 
 async function syncE2eOpts() {

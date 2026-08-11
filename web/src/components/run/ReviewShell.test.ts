@@ -7,7 +7,7 @@ import {
   REVIEW_SIDEBAR,
   REVIEW_SHELL_WIDTH_KEY_APPROVAL,
   REVIEW_SHELL_WIDTH_KEY_REVIEW,
-} from '@/lib/reviewLayoutBudget'
+} from '@/lib/inbox/reviewLayoutBudget'
 
 function mountShell(
   props: { mobile?: boolean; sidebarWidth?: number; storageKey?: string } = {},

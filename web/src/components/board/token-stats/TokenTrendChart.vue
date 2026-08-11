@@ -14,8 +14,8 @@ import {
   type Chart,
 } from 'chart.js'
 import { Line } from 'vue-chartjs'
-import type { TokenStatsBucket } from '@/lib/types'
-import { fmtTokenCount } from '@/lib/tokenUsage'
+import type { TokenStatsBucket } from '@/lib/shared/types'
+import { fmtTokenCount } from '@/lib/run/tokenUsage'
 import { TOKEN_SOURCE_COLORS, formatBucketLabel, placeTrendTooltipAfter } from './tokenStatsShared'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip)

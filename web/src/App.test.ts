@@ -10,8 +10,8 @@ vi.mock('vue-router', () => ({
   useRoute: () => ({ path: '/', meta: { bare: false, titleKey: 'shell.appName' } }),
 }))
 
-vi.mock('@/lib/locale', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/locale')>('@/lib/locale')
+vi.mock('@/lib/shared/locale', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/shared/locale')>('@/lib/shared/locale')
   return {
     ...actual,
     updateDocumentTitle: vi.fn(),
@@ -19,8 +19,8 @@ vi.mock('@/lib/locale', async () => {
 })
 
 import App from '@/App.vue'
-import { getAuthState, useAuth } from '@/lib/useAuth'
-import { resetRoutePending } from '@/lib/routePending'
+import { getAuthState, useAuth } from '@/lib/composables/useAuth'
+import { resetRoutePending } from '@/lib/shared/routePending'
 
 describe('App', () => {
   it('mounts shell layout with router-view stub when auth is ready', () => {

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { api } from '@/lib/api'
-import { PreviewVncChannel } from '@/lib/previewVncChannel'
-import { createPreviewFpsCounter } from '@/lib/previewFps'
-import type { AppPreviewPickPayload } from '@/lib/previewPickUrl'
+import { api } from '@/lib/api/api'
+import { PreviewVncChannel } from '@/lib/shared/previewVncChannel'
+import { createPreviewFpsCounter } from '@/lib/shared/previewFps'
+import type { AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
 // @ts-expect-error noVNC ships without bundled types
 // Pinned to exact 1.5.0 (see package.json). Official path is HTTP + x11vnc -nopw
 // (None auth) + PreviewVncChannel demux. noVNC's Secure Context Log.Error is

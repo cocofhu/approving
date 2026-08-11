@@ -26,13 +26,13 @@ import { ref, computed, watch, provide, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import ParagraphInput from '../ui/ParagraphInput.vue'
-import { renderMarkdown } from '@/lib/markdown'
-import { api, type PreviewIssue } from '@/lib/api'
-import { useToast } from '@/lib/useToast'
-import { isCompositeFilled, normalizeCompositeSubmit } from '@/lib/compositeText'
-import { useBreakpoint } from '@/lib/useBreakpoint'
-import { provideReviewAnnotate } from '@/lib/reviewAnnotate'
-import { pushAnnotationUnique } from '@/lib/reviewQuote'
+import { renderMarkdown } from '@/lib/shared/markdown'
+import { api, type PreviewIssue } from '@/lib/api/api'
+import { useToast } from '@/lib/composables/useToast'
+import { isCompositeFilled, normalizeCompositeSubmit } from '@/lib/shared/compositeText'
+import { useBreakpoint } from '@/lib/composables/useBreakpoint'
+import { provideReviewAnnotate } from '@/lib/inbox/reviewAnnotate'
+import { pushAnnotationUnique } from '@/lib/inbox/reviewQuote'
 import PlanView, { type PlanDoc } from './PlanView.vue'
 import ProposalSelectView, { type ProposalsDoc } from './ProposalSelectView.vue'
 import StructuredArtifactView, { isStructuredArtifactName } from './StructuredArtifactView.vue'
@@ -42,18 +42,18 @@ import AppPreviewPanel from './AppPreviewPanel.vue'
 import PreviewFeedbackChat from './PreviewFeedbackChat.vue'
 import ArtifactLoadingPane from './ArtifactLoadingPane.vue'
 import RefreshStrip from './RefreshStrip.vue'
-import { isAbortError } from '@/lib/liveLogRehydrate'
+import { isAbortError } from '@/lib/run/liveLogRehydrate'
 import UpstreamRequirementContext from './UpstreamRequirementContext.vue'
 import ReviewShell from './ReviewShell.vue'
 import ReviewComposer from './ReviewComposer.vue'
 import GateReactStreamPanel from './GateReactStreamPanel.vue'
-import { REVIEW_SHELL_WIDTH_KEY_APPROVAL } from '@/lib/reviewLayoutBudget'
-import { OUTPUT_KEY_TO_ARTIFACT } from '@/lib/structuredArtifacts'
+import { REVIEW_SHELL_WIDTH_KEY_APPROVAL } from '@/lib/inbox/reviewLayoutBudget'
+import { OUTPUT_KEY_TO_ARTIFACT } from '@/lib/run/structuredArtifacts'
 import {
   CONTENT_FIT_PREVIEW_MAX_VH,
   CONTENT_FIT_REVIEWING_STRIP_PX,
   dataUrlToImageParts,
-} from '@/lib/htmlPreviewSandbox'
+} from '@/lib/shared/htmlPreviewSandbox'
 import {
   listPrimaryProducts,
   listExcludedProduces,
@@ -63,10 +63,10 @@ import {
   inferArtifactKind,
   isReadonlyArtifactKind,
   type GatePrimaryProductRef,
-} from '@/lib/gateUpstream'
+} from '@/lib/inbox/gateUpstream'
 import GateProductEditor from './GateProductEditor.vue'
-import type { ClarifyImage, Gate, GateShareInboxStatus, Run, ReactAnnotation } from '@/lib/types'
-import { previewPickLabel } from '@/lib/previewPickUrl'
+import type { ClarifyImage, Gate, GateShareInboxStatus, Run, ReactAnnotation } from '@/lib/shared/types'
+import { previewPickLabel } from '@/lib/shared/previewPickUrl'
 
 const props = defineProps<{
   gate: Gate

@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref, watch, computed, onBeforeUnmount } from 'vue'
-import { isAbortError } from '@/lib/liveLogRehydrate'
+import { isAbortError } from '@/lib/run/liveLogRehydrate'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
-import { api } from '@/lib/api'
-import { buildEnvelope, downloadJson, sanitizeFilename, type WorkflowGraphPayload } from '@/lib/workflowIO'
-import { useToast } from '@/lib/useToast'
-import type { Workflow, WorkflowVersion } from '@/lib/types'
+import { api } from '@/lib/api/api'
+import { buildEnvelope, downloadJson, sanitizeFilename, type WorkflowGraphPayload } from '@/lib/run/workflowIO'
+import { useToast } from '@/lib/composables/useToast'
+import type { Workflow, WorkflowVersion } from '@/lib/shared/types'
 
 const props = defineProps<{
   open: boolean

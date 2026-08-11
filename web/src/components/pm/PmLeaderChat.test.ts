@@ -4,7 +4,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
-import { extractAgentMessageDelta } from '@/lib/acpUnpack'
+import { extractAgentMessageDelta } from '@/lib/run/acpUnpack'
 import PmLeaderChat from './PmLeaderChat.vue'
 
 const apiMocks = vi.hoisted(() => ({
@@ -21,8 +21,8 @@ const apiMocks = vi.hoisted(() => ({
   deletePmThread: vi.fn(),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {

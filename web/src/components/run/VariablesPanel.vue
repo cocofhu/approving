@@ -4,8 +4,8 @@ import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import VarValueDisplay from '../ui/VarValueDisplay.vue'
 import CompositeImageStrip from '../ui/CompositeImageStrip.vue'
-import { compositeImages } from '@/lib/compositeText'
-import type { RunVar } from '@/lib/types'
+import { compositeImages } from '@/lib/shared/compositeText'
+import type { RunVar } from '@/lib/shared/types'
 
 const props = defineProps<{ vars: RunVar[] }>()
 

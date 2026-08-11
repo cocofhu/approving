@@ -5,12 +5,12 @@ import Icon from '../ui/Icon.vue'
 import AppButton from '../ui/AppButton.vue'
 import AppSwitch from '../ui/AppSwitch.vue'
 import { nodeColorHex, syncHumanGateFormDefaults } from '@/data/nodeRegistry'
-import { useNodeDefs } from '@/lib/useNodeDefs'
-import { buildOutputSourceOptions } from '@/lib/outputSourceOptions'
+import { useNodeDefs } from '@/lib/run/useNodeDefs'
+import { buildOutputSourceOptions } from '@/lib/run/outputSourceOptions'
 import OutputSourcesEditor from './OutputSourcesEditor.vue'
-import { api } from '@/lib/api'
-import { renderMarkdown } from '@/lib/markdown'
-import type { WFNode, WFEdge, FieldSchema } from '@/lib/types'
+import { api } from '@/lib/api/api'
+import { renderMarkdown } from '@/lib/shared/markdown'
+import type { WFNode, WFEdge, FieldSchema } from '@/lib/shared/types'
 
 const { t } = useI18n()
 const { NODE_DEFS } = useNodeDefs()

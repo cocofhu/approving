@@ -1,8 +1,8 @@
 import '../src/styles/global.css'
 import { createApp, defineComponent, h, nextTick, onMounted, ref } from 'vue'
-import { i18n } from '../src/lib/i18n'
-import { initLocale } from '../src/lib/locale'
-import { setTheme } from '../src/lib/theme'
+import { i18n } from '../src/lib/shared/i18n'
+import { initLocale } from '../src/lib/shared/locale'
+import { setTheme } from '../src/lib/shared/theme'
 import ClarifyChat from '../src/components/run/ClarifyChat.vue'
 
 initLocale()

@@ -11,7 +11,7 @@ import {
   RESIZE_MESSAGE_TYPE,
   INSPECT_CANCELED_TYPE,
   contentFitPreviewCapPx,
-} from '@/lib/htmlPreviewSandbox'
+} from '@/lib/shared/htmlPreviewSandbox'
 import HtmlPreview from './HtmlPreview.vue'
 
 const FIXED_ID = 'html-preview-test-instance'

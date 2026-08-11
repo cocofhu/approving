@@ -3,9 +3,9 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppModal from '@/components/ui/AppModal.vue'
 import Icon from '@/components/ui/Icon.vue'
-import { api } from '@/lib/api'
-import { useToast } from '@/lib/useToast'
-import type { GateShareInboxStatus, ShareLinkTarget } from '@/lib/types'
+import { api } from '@/lib/api/api'
+import { useToast } from '@/lib/composables/useToast'
+import type { GateShareInboxStatus, ShareLinkTarget } from '@/lib/shared/types'
 import {
   DEFAULT_GATE_SHARE_TTL,
   GATE_SHARE_TTL_TIERS,
@@ -17,7 +17,7 @@ import {
   rememberShareUrl,
   shareApiErrorMessage,
   type GateShareTTLTier,
-} from '@/lib/gateShareLink'
+} from '@/lib/inbox/gateShareLink'
 
 const props = defineProps<{
   open: boolean

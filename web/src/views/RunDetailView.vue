@@ -30,38 +30,38 @@ import HardLoadLayer from '@/components/run/HardLoadLayer.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import AppDrawer from '@/components/ui/AppDrawer.vue'
 import AppModal from '@/components/ui/AppModal.vue'
-import { api } from '@/lib/api'
-import { useToast } from '@/lib/useToast'
+import { api } from '@/lib/api/api'
+import { useToast } from '@/lib/composables/useToast'
 import {
   REVIEW_CANVAS_MIN,
   REVIEW_SIDEBAR,
   REVIEW_SHELL_WIDTH_KEY_REVIEW,
   reviewRightPanelCssWidth,
-} from '@/lib/reviewLayoutBudget'
-import { useBreakpoint } from '@/lib/useBreakpoint'
-import { addClarifyAnnotation, useClarifyDraft } from '@/lib/useClarifyDraft'
-import { previewPickLabel, type AppPreviewPickPayload } from '@/lib/previewPickUrl'
+} from '@/lib/inbox/reviewLayoutBudget'
+import { useBreakpoint } from '@/lib/composables/useBreakpoint'
+import { addClarifyAnnotation, useClarifyDraft } from '@/lib/inbox/useClarifyDraft'
+import { previewPickLabel, type AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
 import { NODE_DEFS } from '@/data/nodeRegistry'
-import { resolveNodeDisplayLabelFromNode } from '@/lib/resolveNodeDisplayLabel'
-import { fmtTime, fmtDuration, formatTrigger } from '@/lib/format'
-import { resolveOutputFocusNodeId } from '@/lib/runOutputSelection'
-import { pickDefaultTimelineNodeId } from '@/lib/runStats'
-import { PRODUCT_NODE_TYPES } from '@/lib/productNodeArtifacts'
-import { applyLiveWsAcpPage } from '@/lib/applyLiveWsAcpPage'
-import { mergeAcpEvents, type MergedAcpEvent } from '@/lib/mergeAcpEvents'
-import { createPendingAcpBuffer, pickAcpRails } from '@/lib/pendingAcpBuffer'
-import { deliverOrBufferDialogueAcp } from '@/lib/dialogueAcpDelivery'
+import { resolveNodeDisplayLabelFromNode } from '@/lib/run/resolveNodeDisplayLabel'
+import { fmtTime, fmtDuration, formatTrigger } from '@/lib/shared/format'
+import { resolveOutputFocusNodeId } from '@/lib/run/runOutputSelection'
+import { pickDefaultTimelineNodeId } from '@/lib/run/runStats'
+import { PRODUCT_NODE_TYPES } from '@/lib/run/productNodeArtifacts'
+import { applyLiveWsAcpPage } from '@/lib/run/applyLiveWsAcpPage'
+import { mergeAcpEvents, type MergedAcpEvent } from '@/lib/run/mergeAcpEvents'
+import { createPendingAcpBuffer, pickAcpRails } from '@/lib/run/pendingAcpBuffer'
+import { deliverOrBufferDialogueAcp } from '@/lib/run/dialogueAcpDelivery'
 import {
   createBusySeedRetryController,
   runBusySeedRetry,
-} from '@/lib/busySeedRetry'
-import { createWsReconnectController } from '@/lib/wsReconnect'
-import type { LiveLogBootSession } from '@/lib/liveLogBootPhase'
+} from '@/lib/run/busySeedRetry'
+import { createWsReconnectController } from '@/lib/run/wsReconnect'
+import type { LiveLogBootSession } from '@/lib/run/liveLogBootPhase'
 import {
   isAbortError,
   RehydrateOrchestrator,
   type RehydrateStatus,
-} from '@/lib/liveLogRehydrate'
+} from '@/lib/run/liveLogRehydrate'
 import {
   clearLiveLogSnapshotsExceptRun,
   cloneEventPageSnapshot,
@@ -69,10 +69,10 @@ import {
   listLiveLogSnapshotsForRun,
   putLiveLogEventPage,
   putLiveLogMcpCalls,
-} from '@/lib/liveLogSnapshotCache'
-import type { AcpEvent, McpCall, NodeRun, NodeRunStatus, Run, Workflow } from '@/lib/types'
-import type { SandboxView } from '@/lib/api'
-import { isClearlyInvalidRunRouteId } from '@/lib/pmCitationShape'
+} from '@/lib/run/liveLogSnapshotCache'
+import type { AcpEvent, McpCall, NodeRun, NodeRunStatus, Run, Workflow } from '@/lib/shared/types'
+import type { SandboxView } from '@/lib/api/api'
+import { isClearlyInvalidRunRouteId } from '@/lib/pm/pmCitationShape'
 
 type RunLoadErrorKind = 'not_found' | 'network_or_server'
 
@@ -873,8 +873,8 @@ async function onGateResolve(action: string, form: Record<string, any> = {}) {
 }
 async function onClarifySend(
   text: string,
-  images: import('@/lib/types').ClarifyImage[] = [],
-  annotations: import('@/lib/types').ReactAnnotation[] = [],
+  images: import('@/lib/shared/types').ClarifyImage[] = [],
+  annotations: import('@/lib/shared/types').ReactAnnotation[] = [],
   force = false,
 ) {
   const conv = selClarify.value
@@ -1529,8 +1529,8 @@ function onAppPreviewReviewPick(payload: AppPreviewPickPayload) {
 }
 
 function mergeStagedAppPreviewPick(
-  annotations: import('@/lib/types').ReactAnnotation[],
-): import('@/lib/types').ReactAnnotation[] {
+  annotations: import('@/lib/shared/types').ReactAnnotation[],
+): import('@/lib/shared/types').ReactAnnotation[] {
   const staged = lastStagedAppPreviewPick.value
   if (!staged?.selector) return annotations
   const url = (staged.url || '').trim()

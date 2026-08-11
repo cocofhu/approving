@@ -7,7 +7,7 @@ import {
   compositeImages,
   formatVarValue,
   isCompositeText,
-} from '@/lib/compositeText'
+} from '@/lib/shared/compositeText'
 
 const props = withDefaults(
   defineProps<{

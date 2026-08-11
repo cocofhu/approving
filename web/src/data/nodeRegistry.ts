@@ -1,8 +1,8 @@
 // Node palette definitions for the workflow editor. Structured-product mappings
 // (artifact names, output keys) are generated from server/internal/nodereg —
-// see web/src/lib/structuredArtifacts.ts and nodeManifest.generated.json.
+// see web/src/lib/run/structuredArtifacts.ts and nodeManifest.generated.json.
 
-import type { NodeType, NodeTypeDef } from '@/lib/types'
+import type { NodeType, NodeTypeDef } from '@/lib/shared/types'
 
 export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
   input: {

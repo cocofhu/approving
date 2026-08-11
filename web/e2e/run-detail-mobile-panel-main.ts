@@ -5,17 +5,17 @@
  */
 import '../src/styles/global.css'
 import { createApp, computed, defineComponent, h, ref, watch, nextTick } from 'vue'
-import { i18n } from '../src/lib/i18n'
-import { initLocale, setLocale } from '../src/lib/locale'
-import { installIdleScrollbar } from '../src/lib/idleScrollbar'
-import { setTheme } from '../src/lib/theme'
+import { i18n } from '../src/lib/shared/i18n'
+import { initLocale, setLocale } from '../src/lib/shared/locale'
+import { installIdleScrollbar } from '../src/lib/shared/idleScrollbar'
+import { setTheme } from '../src/lib/shared/theme'
 import StatusPill from '../src/components/ui/StatusPill.vue'
 import Icon from '../src/components/ui/Icon.vue'
 import ExecutionTimeline from '../src/components/run/ExecutionTimeline.vue'
 import GateApproval from '../src/components/run/GateApproval.vue'
 import ReviewShell from '../src/components/run/ReviewShell.vue'
 import ReviewComposer from '../src/components/run/ReviewComposer.vue'
-import type { Gate, Run, WFNode } from '../src/lib/types'
+import type { Gate, Run, WFNode } from '../src/lib/shared/types'
 
 const params = new URLSearchParams(window.location.search)
 const scenario = (params.get('scenario') || 'completed') as 'completed' | 'gate' | 'review'

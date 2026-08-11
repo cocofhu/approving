@@ -25,7 +25,7 @@ import TestResultView from './product/TestResultView.vue'
 import ReviewView from './product/ReviewView.vue'
 import ImplementationResultView from './product/ImplementationResultView.vue'
 
-import type { Artifact } from '@/lib/types'
+import type { Artifact } from '@/lib/shared/types'
 
 // Shared dispatcher: given a reserved artifact file name and its parsed JSON,
 // render the matching structured view. Used by both the node "产物" tab and the

@@ -8,18 +8,18 @@ import ChatImagePreviewModal from '@/components/ui/ChatImagePreviewModal.vue'
 import CitationCard from '@/components/pm/CitationCard.vue'
 import ArtifactLoadingPane from '@/components/run/ArtifactLoadingPane.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
-import { relTime } from '@/lib/format'
-import { renderMarkdown } from '@/lib/markdown'
-import { createStreamMarkdownPreview } from '@/lib/streamMarkdownPreview'
-import { api } from '@/lib/api'
-import { imgSrc } from '@/lib/compositeText'
-import { useChatImagePreview } from '@/lib/useChatImagePreview'
-import { useImageAttachments } from '@/lib/useImageAttachments'
+import { relTime } from '@/lib/shared/format'
+import { renderMarkdown } from '@/lib/shared/markdown'
+import { createStreamMarkdownPreview } from '@/lib/shared/streamMarkdownPreview'
+import { api } from '@/lib/api/api'
+import { imgSrc } from '@/lib/shared/compositeText'
+import { useChatImagePreview } from '@/lib/composables/useChatImagePreview'
+import { useImageAttachments } from '@/lib/composables/useImageAttachments'
 import {
   attachmentDisplayName,
   isImageAttachment,
-} from '@/lib/attachments'
-import { useToast } from '@/lib/useToast'
+} from '@/lib/shared/attachments'
+import { useToast } from '@/lib/composables/useToast'
 import {
   classifyPmTurnError,
   findConvergableOrphanIds,
@@ -27,11 +27,11 @@ import {
   pmActiveThreadStorageKey,
   shouldApplyEventSeq,
   type PmFailKind,
-} from '@/lib/pmTurnState'
-import { extractAgentMessageDelta } from '@/lib/acpUnpack'
-import { useBreakpoint } from '@/lib/useBreakpoint'
+} from '@/lib/pm/pmTurnState'
+import { extractAgentMessageDelta } from '@/lib/run/acpUnpack'
+import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import TokenUsageByModelTip from '@/components/ui/TokenUsageByModelTip.vue'
-import type { ChatMessage, ChatThread, ClarifyImage, PmLeaderBinding } from '@/lib/types'
+import type { ChatMessage, ChatThread, ClarifyImage, PmLeaderBinding } from '@/lib/shared/types'
 
 type FailKind = PmFailKind
 

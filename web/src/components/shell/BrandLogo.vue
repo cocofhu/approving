@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { detectLocale } from '@/lib/locale'
+import { detectLocale } from '@/lib/shared/locale'
 
 const props = withDefaults(
   defineProps<{

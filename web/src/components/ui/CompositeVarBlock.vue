@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import VarValueDisplay from '@/components/ui/VarValueDisplay.vue'
 import CompositeImageStrip from '@/components/ui/CompositeImageStrip.vue'
-import { compositeImages } from '@/lib/compositeText'
+import { compositeImages } from '@/lib/shared/compositeText'
 
 const props = withDefaults(
   defineProps<{

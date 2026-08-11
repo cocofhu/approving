@@ -6,7 +6,7 @@ import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import enCommon from '@/locales/en/common.json'
 import enPages from '@/locales/en/pages.json'
-import type { Workflow } from '@/lib/types'
+import type { Workflow } from '@/lib/shared/types'
 
 const apiMocks = vi.hoisted(() => ({
   listAPIKeys: vi.fn(),
@@ -14,8 +14,8 @@ const apiMocks = vi.hoisted(() => ({
   revokeAPIKey: vi.fn(),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {

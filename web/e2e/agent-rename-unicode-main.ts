@@ -1,9 +1,9 @@
 import '../src/styles/global.css'
 import { computed, createApp, h, ref } from 'vue'
-import { i18n } from '../src/lib/i18n'
-import { initLocale, setLocale } from '../src/lib/locale'
-import { setTheme } from '../src/lib/theme'
-import { normalizeAgentName, validateAgentName } from '../src/lib/agentIO'
+import { i18n } from '../src/lib/shared/i18n'
+import { initLocale, setLocale } from '../src/lib/shared/locale'
+import { setTheme } from '../src/lib/shared/theme'
+import { normalizeAgentName, validateAgentName } from '../src/lib/agent/agentIO'
 import AppModal from '../src/components/ui/AppModal.vue'
 import AppButton from '../src/components/ui/AppButton.vue'
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { readStoredProjectId } from '@/lib/useProjectContext'
+import { readStoredProjectId } from '@/lib/composables/useProjectContext'
 
 /**
  * Legacy /board bookmark compatibility:

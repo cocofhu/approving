@@ -4,8 +4,8 @@ import { watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import { sidebarNavGroups } from '@/data/sidebarNav'
-import { usePendingGates } from '@/lib/usePendingGates'
-import { useRunTerminalNotifications } from '@/lib/useRunTerminalNotifications'
+import { usePendingGates } from '@/lib/inbox/usePendingGates'
+import { useRunTerminalNotifications } from '@/lib/run/useRunTerminalNotifications'
 
 defineProps<{ drawer?: boolean }>()
 const emit = defineEmits<{ (e: 'navigate'): void }>()

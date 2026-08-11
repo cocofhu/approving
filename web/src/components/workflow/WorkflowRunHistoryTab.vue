@@ -3,9 +3,9 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import StatusPill from '@/components/ui/StatusPill.vue'
-import { api, isPaginated } from '@/lib/api'
-import { fmtTime, fmtDuration, formatTrigger } from '@/lib/format'
-import type { Run } from '@/lib/types'
+import { api, isPaginated } from '@/lib/api/api'
+import { fmtTime, fmtDuration, formatTrigger } from '@/lib/shared/format'
+import type { Run } from '@/lib/shared/types'
 
 const SKELETON_ROWS = 5
 

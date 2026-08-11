@@ -1,10 +1,10 @@
 import '../src/styles/global.css'
 import { createApp, h, ref } from 'vue'
-import { i18n } from '../src/lib/i18n'
-import { initLocale, setLocale } from '../src/lib/locale'
-import { setTheme } from '../src/lib/theme'
+import { i18n } from '../src/lib/shared/i18n'
+import { initLocale, setLocale } from '../src/lib/shared/locale'
+import { setTheme } from '../src/lib/shared/theme'
 import AgentCreateWizard from '../src/components/agent/AgentCreateWizard.vue'
-import type { Agent } from '../src/lib/api'
+import type { Agent } from '../src/lib/api/api'
 
 async function boot() {
   await initLocale()

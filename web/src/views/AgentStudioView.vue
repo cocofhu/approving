@@ -18,9 +18,9 @@ import EnvCredentialHelpModal, {
 import AgentCreateWizard from '@/components/agent/AgentCreateWizard.vue'
 import CreateAgentTeamWizard from '@/components/agent/CreateAgentTeamWizard.vue'
 import TeamBootstrapPanel from '@/components/agent/TeamBootstrapPanel.vue'
-import { api, type Agent, type AgentOrg, type MCPServer, type AgentPrompts, type PlatformRuleMeta, type TeamBootstrapSession } from '@/lib/api'
-import { createListRequestSeq, httpStatusOf } from '@/lib/listRequestSeq'
-import { useBreakpoint } from '@/lib/useBreakpoint'
+import { api, type Agent, type AgentOrg, type MCPServer, type AgentPrompts, type PlatformRuleMeta, type TeamBootstrapSession } from '@/lib/api/api'
+import { createListRequestSeq, httpStatusOf } from '@/lib/shared/listRequestSeq'
+import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import {
   emptyOrg,
   groupPath,
@@ -40,10 +40,10 @@ import {
   shouldSyncDraftAfterAssign,
   isAgentInGroupSubtree,
   UNGROUPED_ID,
-} from '@/lib/agentOrg'
-import type { GitCredentialType } from '@/lib/gitCredentialAnalysis'
-import { downloadZip, validateAgentName, normalizeAgentName } from '@/lib/agentIO'
-import { useAgentImport } from '@/lib/useAgentImport'
+} from '@/lib/agent/agentOrg'
+import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
+import { downloadZip, validateAgentName, normalizeAgentName } from '@/lib/agent/agentIO'
+import { useAgentImport } from '@/lib/agent/useAgentImport'
 import {
   ACP_BACKENDS,
   getRegionPolicy,
@@ -52,8 +52,8 @@ import {
   setRegion,
   switchBackendRegions,
   type BackendId,
-} from '@/lib/regionPolicy'
-import { BACKEND_AUTH_HINTS } from '@/lib/backendAuthGuide'
+} from '@/lib/shared/regionPolicy'
+import { BACKEND_AUTH_HINTS } from '@/lib/agent/backendAuthGuide'
 
 const { t } = useI18n()
 const { isMobile } = useBreakpoint()

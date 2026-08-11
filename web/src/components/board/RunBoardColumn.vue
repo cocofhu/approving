@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import RunBoardCard from './RunBoardCard.vue'
-import type { Run } from '@/lib/types'
+import type { Run } from '@/lib/shared/types'
 
 const props = withDefaults(
   defineProps<{

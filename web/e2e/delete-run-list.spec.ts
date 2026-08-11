@@ -48,6 +48,11 @@ async function openRunList(
     ]
 
   await page.route('**/api/**', async (route) => {
+    // Skip Vite module URLs like /@fs/.../src/lib/api/api.ts (pathname is not /api/...)
+    if (!new URL(route.request().url()).pathname.startsWith('/api/')) {
+      await route.continue()
+      return
+    }
     const req = route.request()
     const url = new URL(req.url())
     const path = url.pathname

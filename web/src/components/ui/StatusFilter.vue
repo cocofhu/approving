@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from './Icon.vue'
-import { STATUS_FILTER_OPTIONS, normalizeStatuses } from '@/lib/useStatusFilter'
+import { STATUS_FILTER_OPTIONS, normalizeStatuses } from '@/lib/composables/useStatusFilter'
 
 const props = withDefaults(
   defineProps<{ modelValue: string[]; count?: number; open?: boolean }>(),
