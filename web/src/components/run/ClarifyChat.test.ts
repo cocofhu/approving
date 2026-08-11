@@ -1149,4 +1149,55 @@ describe('ClarifyChat', () => {
       wrapper.unmount()
     })
   })
+
+  /**
+   * Demo「修复后」长链折行：人类/Agent 走全局 .md；思考块单独补 anywhere。
+   * plan g3.1 / g3.2 — href 不变，思考容器带 [overflow-wrap:anywhere]。
+   */
+  describe('long URL wrap (Demo after / plan g3)', () => {
+    const LONG_URL =
+      'http://approving.k3s.cc/api/blobs/333932fedb2e4ce9a1b7c8d0e2f4567890abcdef1234567890abcdef1234'
+
+    it('human bubble uses .md; rendered link keeps full href (g3.1/f1)', () => {
+      const wrapper = mountChat({
+        turns: [{ role: 'human', text: LONG_URL, at: '2026-07-18T00:00:00Z' }],
+      })
+      const humanMd = wrapper.findAll('.md').find((n) => n.html().includes('/api/blobs/'))
+      expect(humanMd).toBeTruthy()
+      expect(humanMd!.classes()).toContain('md')
+      const anchor = humanMd!.find('a')
+      expect(anchor.exists()).toBe(true)
+      expect(anchor.attributes('href')).toBe(LONG_URL)
+      expect(anchor.text()).toBe(LONG_URL)
+      wrapper.unmount()
+    })
+
+    it('agent .md + thought body have wrap classes; thought shows full long url (g3.1/g3.2/f3)', () => {
+      const wrapper = mountChat({
+        turns: [
+          {
+            role: 'agent',
+            text: `产物地址：${LONG_URL}`,
+            thought: `url=${LONG_URL}\n无需改 API`,
+            at: '2026-07-18T00:00:00Z',
+          },
+        ],
+      })
+      const agentMsg = wrapper.find('[data-testid="clarify-agent-message"]')
+      expect(agentMsg.exists()).toBe(true)
+      expect(agentMsg.classes()).toContain('md')
+      const agentLink = agentMsg.find('a')
+      expect(agentLink.exists()).toBe(true)
+      expect(agentLink.attributes('href')).toBe(LONG_URL)
+
+      const thought = wrapper.find('[data-testid="clarify-thought"]')
+      expect(thought.exists()).toBe(true)
+      const thoughtBody = thought.find('.whitespace-pre-wrap')
+      expect(thoughtBody.exists()).toBe(true)
+      expect(thoughtBody.classes().join(' ')).toMatch(/overflow-wrap:anywhere/)
+      expect(thoughtBody.classes()).toContain('break-words')
+      expect(thoughtBody.text()).toContain(LONG_URL)
+      wrapper.unmount()
+    })
+  })
 })

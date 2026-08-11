@@ -1220,7 +1220,7 @@ defineExpose({
                   :interrupted="!!t.interrupted"
                 />
               </summary>
-              <div class="whitespace-pre-wrap border-t border-dashed border-line px-2.5 pb-2 pt-1.5 font-mono leading-5">{{ agentThoughtDisplay(t, i) }}</div>
+              <div class="whitespace-pre-wrap break-words border-t border-dashed border-line px-2.5 pb-2 pt-1.5 font-mono leading-5 [overflow-wrap:anywhere]">{{ agentThoughtDisplay(t, i) }}</div>
             </details>
             <!-- Message body + streaming caret -->
             <div
