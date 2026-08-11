@@ -1,6 +1,9 @@
 package gateshare
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -12,29 +15,36 @@ const (
 	ProductKindVisual     = "visual"
 	ProductKindStructured = "structured"
 	ProductKindAppPreview = "app_preview"
+
+	// HeaderKnownVisualHTMLHash / HeaderKnownUpstreamHash let silent pollers
+	// ask the server to omit unchanged large fields (field-level sparse update).
+	HeaderKnownVisualHTMLHash = "X-Gate-Known-Visual-Html-Hash"
+	HeaderKnownUpstreamHash   = "X-Gate-Known-Upstream-Hash"
 )
 
 // PreviewDTO is the leak-free public GET payload for the workbench-style page.
 type PreviewDTO struct {
-	Status            string           `json:"status"`
-	Kind              string           `json:"kind,omitempty"`
-	Title             string           `json:"title,omitempty"`
-	Description       string           `json:"description,omitempty"`
-	RemainingSec      *int64           `json:"remainingSec,omitempty"`
-	ExpiresAt         *time.Time       `json:"expiresAt,omitempty"`
+	Status            string            `json:"status"`
+	Kind              string            `json:"kind,omitempty"`
+	Title             string            `json:"title,omitempty"`
+	Description       string            `json:"description,omitempty"`
+	RemainingSec      *int64            `json:"remainingSec,omitempty"`
+	ExpiresAt         *time.Time        `json:"expiresAt,omitempty"`
 	Actions           map[string]string `json:"actions,omitempty"`
-	VisualHTML        string           `json:"visualHtml,omitempty"`
-	Structured        map[string]any   `json:"structured,omitempty"`
-	Nonce             string           `json:"nonce,omitempty"`
-	Turns             []PreviewTurn    `json:"turns,omitempty"`
-	Upstream          map[string]any   `json:"upstream,omitempty"`
-	ReactSessionAlive *bool              `json:"reactSessionAlive,omitempty"`
-	SessionBusy       bool               `json:"sessionBusy,omitempty"`
-	Waiting           int                `json:"waiting,omitempty"`
+	VisualHTML        string            `json:"visualHtml,omitempty"`
+	VisualHTMLHash    string            `json:"visualHtmlHash,omitempty"`
+	Structured        map[string]any    `json:"structured,omitempty"`
+	Nonce             string            `json:"nonce,omitempty"`
+	Turns             []PreviewTurn     `json:"turns,omitempty"`
+	Upstream          map[string]any    `json:"upstream,omitempty"`
+	UpstreamHash      string            `json:"upstreamHash,omitempty"`
+	ReactSessionAlive *bool             `json:"reactSessionAlive,omitempty"`
+	SessionBusy       bool              `json:"sessionBusy,omitempty"`
+	Waiting           int               `json:"waiting,omitempty"`
 	QueueItems        []PreviewQueueItem `json:"queueItems,omitempty"`
 	ActiveItem        *PreviewActiveItem `json:"activeItem,omitempty"`
-	ProductKind       string             `json:"productKind,omitempty"`
-	ProductName       string             `json:"productName,omitempty"`
+	ProductKind       string            `json:"productKind,omitempty"`
+	ProductName       string            `json:"productName,omitempty"`
 }
 
 // PreviewExtras carries workbench fields that are optional on inactive links.
@@ -151,7 +161,8 @@ func applyPreviewArtifacts(dto *PreviewDTO, visualHTML, structuredName, structur
 	if turns := SanitizeTurns(extras.Turns); len(turns) > 0 {
 		dto.Turns = turns
 	}
-	if up := SanitizeUpstream(extras.UpstreamName, extras.UpstreamContent); up != nil {
+	// Open/poll path: summary only (no doc). Full upstream is on-demand.
+	if up := SanitizeUpstreamSummary(extras.UpstreamName, extras.UpstreamContent); up != nil {
 		dto.Upstream = up
 	}
 	alive := extras.ReactSessionAlive
@@ -166,6 +177,50 @@ func applyPreviewArtifacts(dto *PreviewDTO, visualHTML, structuredName, structur
 		dto.Waiting = extras.Waiting
 	}
 	dto.SessionBusy = alive && (extras.SessionBusy || extras.Waiting > 0 || dto.ActiveItem != nil)
+	dto.VisualHTMLHash = ContentHash(dto.VisualHTML)
+	dto.UpstreamHash = HashUpstream(dto.Upstream)
+}
+
+// ContentHash returns a stable hex digest for sparse field comparison.
+func ContentHash(s string) string {
+	if s == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
+}
+
+// HashUpstream digests the summary upstream map (no doc) for poll sparse updates.
+func HashUpstream(up map[string]any) string {
+	if up == nil {
+		return ""
+	}
+	b, err := json.Marshal(up)
+	if err != nil || len(b) == 0 {
+		return ""
+	}
+	return ContentHash(string(b))
+}
+
+// ApplySparsePreview omits unchanged large fields when the client already holds
+// the same visualHtmlHash / upstreamHash. Hashes themselves are always returned
+// so clients can detect empty↔non-empty transitions even when bodies omit.
+func ApplySparsePreview(dto *PreviewDTO, knownVisualHash, knownUpstreamHash string) {
+	if dto == nil {
+		return
+	}
+	if dto.VisualHTMLHash == "" {
+		dto.VisualHTMLHash = ContentHash(dto.VisualHTML)
+	}
+	if dto.UpstreamHash == "" {
+		dto.UpstreamHash = HashUpstream(dto.Upstream)
+	}
+	if knownVisualHash != "" && knownVisualHash == dto.VisualHTMLHash {
+		dto.VisualHTML = ""
+	}
+	if knownUpstreamHash != "" && knownUpstreamHash == dto.UpstreamHash {
+		dto.Upstream = nil
+	}
 }
 
 func inferProductKind(visualHTML, structuredName, hinted string) (kind, name string) {

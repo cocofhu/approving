@@ -125,4 +125,38 @@ describe('gateShareLink helpers', () => {
       'pages.gatesInbox.share.errors.reviewBusy',
     )
   })
+
+  it('mergePublicGatePreview keeps omitted large fields and applies changes', async () => {
+    const { mergePublicGatePreview } = await import('./gateShareLink')
+    const prev = {
+      status: 'active',
+      visualHtml: '<p>old</p>',
+      visualHtmlHash: 'hash-old',
+      upstream: { name: 'clarified_requirement.json', title: '澄清', summary: '旧摘要' },
+      upstreamHash: 'up-old',
+      remainingSec: 100,
+    }
+    const same = mergePublicGatePreview(prev, {
+      status: 'active',
+      visualHtmlHash: 'hash-old',
+      upstreamHash: 'up-old',
+      remainingSec: 98,
+      nonce: 'n2',
+    })
+    expect(same.visualHtml).toBe('<p>old</p>')
+    expect(same.upstream?.summary).toBe('旧摘要')
+    expect(same.remainingSec).toBe(98)
+    expect(same.nonce).toBe('n2')
+
+    const changed = mergePublicGatePreview(prev, {
+      status: 'active',
+      visualHtml: '<p>new</p>',
+      visualHtmlHash: 'hash-new',
+      upstream: { name: 'clarified_requirement.json', title: '澄清', summary: '新摘要' },
+      upstreamHash: 'up-new',
+      remainingSec: 90,
+    })
+    expect(changed.visualHtml).toBe('<p>new</p>')
+    expect(changed.upstream?.summary).toBe('新摘要')
+  })
 })

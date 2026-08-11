@@ -38,6 +38,7 @@
       "outputHint": "Shows final result cards from the focused output node — same as the run detail Output tab, not the full artifact browser.",
       "noArtifacts": "This run has no outputs",
       "noArtifactsHint": "Open the run detail to inspect execution",
+      "markAsRead": "Mark as read",
       "noFinalResults": "No final results to preview",
       "noFinalResultsHint": "The output node has no final-result sources configured, or no result cards were produced.",
       "noFinalResultsNote": "This dialog will not fall back to the full artifact list. Use run detail or Artifacts for triage.",

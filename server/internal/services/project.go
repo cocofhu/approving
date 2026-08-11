@@ -422,6 +422,8 @@ func (s *ProjectService) Update(id string, name *string, description *string, en
 }
 
 // Delete removes a project when it has no workflows.
+// Requirement drafts for the project are hard-deleted in the same transaction
+// so they become unreachable after the project is gone.
 func (s *ProjectService) Delete(id string) error {
 	if _, ok := s.Get(id); !ok {
 		return ErrProjectNotFound
@@ -429,7 +431,12 @@ func (s *ProjectService) Delete(id string) error {
 	if s.WorkflowCount(id) > 0 {
 		return ErrProjectHasWorkflows
 	}
-	return s.db.Delete(&models.Project{}, "id = ?", id).Error
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("project_id = ?", id).Delete(&models.RequirementDraft{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.Project{}, "id = ?", id).Error
+	})
 }
 
 // SandboxEnvForWorkflow returns the owning project's sandbox env (plaintext).

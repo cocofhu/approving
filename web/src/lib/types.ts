@@ -270,6 +270,19 @@ export interface ProjectMemoryItem {
   updatedAt: string
 }
 
+/** Project-scoped requirement draft (「需求草稿」); status open|done. */
+export interface RequirementDraft {
+  id: string
+  projectId: string
+  title: string
+  bodyMarkdown: string
+  status: 'open' | 'done'
+  createdAt: string
+  updatedAt: string
+}
+
+export type RequirementDraftStatusFilter = 'open' | 'done' | 'all'
+
 export interface AgentCronJob {
   id: string
   agentName: string
