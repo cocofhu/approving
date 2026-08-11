@@ -182,15 +182,15 @@ func (e *Engine) resumeGateLocked(runID, nodeID, action string, form map[string]
 	// Project audit: gate decision with real Session actor when provided.
 	if projectID := services.ResolveProjectIDForRun(e.db, runID); projectID != "" {
 		rec := services.AuditRecord{
-			ProjectID:      projectID,
-			Actor:          services.ActorFromUsername(reviewer),
-			Action:         models.AuditActionGateDecide,
-			ResourceType:   "gate",
-			ResourceID:     nodeID,
-			RunID:          runID,
-			NodeID:         nodeID,
-			Outcome:        models.AuditOutcomeOK,
-			Summary:        "gate " + action,
+			ProjectID:    projectID,
+			Actor:        services.ActorFromUsername(reviewer),
+			Action:       models.AuditActionGateDecide,
+			ResourceType: "gate",
+			ResourceID:   nodeID,
+			RunID:        runID,
+			NodeID:       nodeID,
+			Outcome:      models.AuditOutcomeOK,
+			Summary:      "gate " + action,
 			Payload: map[string]any{
 				"runId":  runID,
 				"action": action,

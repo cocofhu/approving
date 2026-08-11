@@ -58,7 +58,7 @@ func IngestPromptImages(ctx context.Context, store Store, images []models.Prompt
 }
 
 // IngestBytes stores raw bytes and returns a PromptImage with Ref set.
-func IngestBytes(ctx context.Context, store Store, raw []byte, mimeType, name string) (models.PromptImage, error) {
+func ingestBytes(ctx context.Context, store Store, raw []byte, mimeType, name string) (models.PromptImage, error) {
 	if store == nil {
 		return models.PromptImage{}, fmt.Errorf("blob store not configured")
 	}

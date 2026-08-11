@@ -182,7 +182,7 @@ func TestTokenStatsAggregation(t *testing.T) {
 		if res.BucketWidth != TokenStatsBucketWeek {
 			t.Fatalf("bucketWidth=%s", res.BucketWidth)
 		}
-		tt := s.TotalTokens(proj.ID)
+		tt := s.totalTokens(proj.ID)
 		if tt == nil {
 			t.Fatal("TotalTokens nil")
 		}

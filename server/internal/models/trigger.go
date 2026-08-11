@@ -46,7 +46,7 @@ func ResolveTrigger(raw, sourceDefault string) (string, error) {
 }
 
 // ValidTrigger reports whether s is one of the three allowed codes.
-func ValidTrigger(s string) bool {
+func validTrigger(s string) bool {
 	switch s {
 	case TriggerManual, TriggerAPI, TriggerPMMCP:
 		return true

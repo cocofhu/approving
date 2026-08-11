@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/platformmcp"
 	"github.com/cocofhu/approving/internal/pmmcp"
 	"github.com/cocofhu/approving/internal/services"
 )
@@ -130,7 +131,8 @@ func TestResearchEarlyFailureThreeChannelsNonEmpty(t *testing.T) {
 	}
 
 	host := pmmcp.NewHost(pm, progress, services.NewWorkflowService(db), rs, arts, eng)
-	tok := host.Register(proj.ID, "thr-obs", "tester", "agent-a")
+	tok := platformmcp.NewToken()
+	host.Restore(proj.ID, "thr-obs", "tester", "agent-a", tok)
 	req, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
 		"params": map[string]any{

@@ -1,0 +1,408 @@
+package runtime
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"strings"
+
+	"github.com/cocofhu/approving/internal/mcp"
+	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/rs/zerolog/log"
+)
+
+// ReactOpen launches a sandbox, opens the dialogue and keeps the session
+// alive (stored in c.sessions) until the dialogue completes. The opening turn
+// can itself finish the node (e.g. the agent asks nothing) — handled uniformly
+// via finishReact.
+func (c *acpProvider) ReactOpen(ctx context.Context, req NodeReq) ReactTurn {
+	n := c.sandboxAttempts()
+	seeded := c.upstreamArtifacts(req)
+	for attempt := 1; ; attempt++ {
+
+		c.host.ClearOutcome(req.RunID, req.NodeID)
+		sb, acp, home, err := c.openSandbox(ctx, req)
+		if err == nil {
+			chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
+			var res *sandbox.ChatResult
+			res, err = c.streamChat(chatCtx, acp, req, c.buildReactOpenPrompt(req, seeded), req.PromptImages)
+			cancel()
+			if err == nil {
+				key := reactKey(req)
+				sess := &reactSession{sb: sb, acp: acp, home: home}
+				c.mu.Lock()
+				c.sessions[key] = sess
+				c.live[key] = sb
+				c.mu.Unlock()
+				qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
+				var usage *models.TokenUsage
+				var usageByModel models.TokenUsageByModel
+				var events []models.AcpEvent
+				absorbChat(&usage, &usageByModel, &events, res)
+
+				if len(qs) > 0 {
+					return ReactTurn{Msg: res.Narration, Questions: qs, Events: events, Usage: usage, UsageByModel: usageByModel}
+				}
+
+				return c.finishReact(ctx, req, key, sess, res.Narration, nil, events, usage, usageByModel)
+			}
+
+			if isRetryableSandboxErr(err) {
+				c.discardSandbox(ctx, req, sb, acp, home, nil)
+			} else {
+				c.retireRunSandbox(sb, acp, home)
+				log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
+					Msg("react open chat failed")
+				return ReactTurn{
+					Msg: "(澄清开场失败:" + err.Error() + ")",
+					Events: []models.AcpEvent{{
+						Kind: "message", Text: "react open chat failed: " + err.Error(),
+					}},
+				}
+			}
+		}
+
+		if isRetryableSandboxErr(err) && attempt < n && ctx.Err() == nil {
+			c.emitRetryNotice(req, attempt, n, err)
+			if c.backoff(ctx, attempt) {
+				continue
+			}
+		}
+		return ReactTurn{SetupErr: err, Msg: "(沙箱启动失败,无法开始澄清:" + err.Error() + ")",
+			Events: []models.AcpEvent{{Kind: "message", Text: "react open failed: " + err.Error()}}}
+	}
+}
+
+// rehydrateReact rebuilds a lost react session — server restart dropped the
+// in-memory session, or its sandbox/ACP died during the human's think-time — in
+// a fresh sandbox, re-priming the agent with the persisted Q&A transcript so it
+// can continue coherently (its private reasoning is gone, but the visible
+// dialogue is restored). Returns nil (sandbox cleaned up) when the rebuild
+// itself fails, so the caller surfaces a retryable state rather than silently
+// finishing the node with an empty deliverable.
+func (c *acpProvider) rehydrateReact(ctx context.Context, req NodeReq, history []models.ReactMessage) *reactSession {
+	n := c.sandboxAttempts()
+	seeded := c.upstreamArtifacts(req)
+	for attempt := 1; ; attempt++ {
+		sb, acp, home, err := c.openSandbox(ctx, req)
+		if err == nil {
+			chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
+			_, err = c.streamChat(chatCtx, acp, req, c.buildReactRehydratePrompt(req, seeded, history), req.PromptImages)
+			cancel()
+			if err == nil {
+
+				c.host.TakePendingQuestions(req.RunID, req.NodeID)
+				key := reactKey(req)
+				sess := &reactSession{sb: sb, acp: acp, home: home}
+				c.mu.Lock()
+				c.sessions[key] = sess
+				c.live[key] = sb
+				c.mu.Unlock()
+				log.Info().Str("run", req.RunID).Str("node", req.NodeID).
+					Msg("react session rehydrated in a fresh sandbox")
+				return sess
+			}
+			c.discardSandbox(ctx, req, sb, acp, home, nil)
+			if !isRetryableSandboxErr(err) {
+				log.Warn().Err(err).Str("node", req.NodeID).Msg("react rehydrate priming failed")
+				return nil
+			}
+		}
+		if isRetryableSandboxErr(err) && attempt < n && ctx.Err() == nil {
+			c.emitRetryNotice(req, attempt, n, err)
+			if c.backoff(ctx, attempt) {
+				continue
+			}
+		}
+		log.Warn().Err(err).Str("node", req.NodeID).Msg("react rehydrate failed")
+		return nil
+	}
+}
+
+// ReactReply advances the live dialogue. The clarification finishes when the
+// agent raises no further questions (pending ask_question always pauses, even
+// under force/max_rounds). Only then is the produces contract ensured (with
+// re-prompting) and the sandbox torn down.
+func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []models.ReactMessage, human string, images []models.PromptImage, force bool) ReactTurn {
+	key := reactKey(req)
+	c.mu.Lock()
+	sess := c.sessions[key]
+	c.mu.Unlock()
+
+	if sess == nil || sess.acp == nil || !sess.acp.IsConnected() {
+		if sess != nil {
+
+			c.mu.Lock()
+			delete(c.sessions, key)
+			c.mu.Unlock()
+			c.discardSandbox(ctx, req, sess.sb, sess.acp, sess.home, nil)
+		}
+
+		prior := history
+		if len(prior) > 0 && prior[len(prior)-1].Role == "human" {
+			prior = prior[:len(prior)-1]
+		}
+		sess = c.rehydrateReact(ctx, req, prior)
+		if sess == nil {
+
+			return ReactTurn{Msg: "(澄清会话已失效,自动重建沙箱失败,请稍后重试)", Done: false}
+		}
+	}
+
+	chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
+	defer cancel()
+	res, err := c.streamChat(chatCtx, sess.acp, req, human, images)
+	if err != nil {
+		log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
+			Msg("react reply chat failed")
+		return ReactTurn{
+			Msg: "(澄清回复失败:" + err.Error() + ")",
+			Events: []models.AcpEvent{{
+				Kind: "message", Text: "react reply chat failed: " + err.Error(),
+			}},
+		}
+	}
+	var usage *models.TokenUsage
+	var usageByModel models.TokenUsageByModel
+	var events []models.AcpEvent
+	absorbChat(&usage, &usageByModel, &events, res)
+
+	qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
+
+	if len(qs) > 0 {
+		return ReactTurn{Msg: res.Narration, Questions: qs, Events: events, Usage: usage, UsageByModel: usageByModel}
+	}
+
+	if !force && !reactCapReached(req, history) {
+		if gq, msg, ge, gu, gum, ok := c.enforceOpenQuestionsGate(ctx, req, sess); ok {
+			events = append(events, ge...)
+			usage = models.AddTokenUsage(usage, gu)
+			usageByModel = models.AddTokenUsageByModel(usageByModel, gum)
+			if strings.TrimSpace(msg) == "" {
+				msg = res.Narration
+			}
+			return ReactTurn{Msg: msg, Questions: gq, Events: events, Usage: usage, UsageByModel: usageByModel}
+		} else if gu != nil || gum != nil {
+			events = append(events, ge...)
+			usage = models.AddTokenUsage(usage, gu)
+			usageByModel = models.AddTokenUsageByModel(usageByModel, gum)
+		}
+	}
+	return c.finishReact(ctx, req, key, sess, res.Narration, history, events, usage, usageByModel)
+}
+
+// ReviseInPlace sends one review turn to the parked session and keeps it alive.
+// Unlike ReactReply it never finishes/closes the node: it streams the human's
+// annotated instruction, then re-prompts the agent to persist its structured
+// product (best-effort, same as the finish path) so the store reflects the
+// edit, and returns a non-Done turn. Used by both the node-inline review "send
+// (keep editing)" and the approval-gate ReAct reject (against the upstream
+// producer's parked session). A dead/lost session is rebuilt from the
+// transcript, mirroring ReactReply.
+func (c *acpProvider) ReviseInPlace(ctx context.Context, req NodeReq, history []models.ReactMessage, human string, images []models.PromptImage) ReactTurn {
+	key := reactKey(req)
+	c.mu.Lock()
+	sess := c.sessions[key]
+	c.mu.Unlock()
+	if sess == nil || sess.acp == nil || !sess.acp.IsConnected() {
+		if sess != nil {
+			c.mu.Lock()
+			delete(c.sessions, key)
+			c.mu.Unlock()
+			c.discardSandbox(ctx, req, sess.sb, sess.acp, sess.home, nil)
+		}
+		prior := history
+		if len(prior) > 0 && prior[len(prior)-1].Role == "human" {
+			prior = prior[:len(prior)-1]
+		}
+		sess = c.rehydrateReact(ctx, req, prior)
+		if sess == nil {
+			err := errors.New("复审会话已失效,自动重建沙箱失败,请稍后重试")
+			log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).Msg("review revise rehydrate failed")
+			return ReactTurn{Msg: "(" + err.Error() + ")", Done: false, Err: err}
+		}
+	}
+	chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
+	res, err := c.streamChat(chatCtx, sess.acp, req, human, images)
+	cancel()
+	if err != nil {
+		log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).Msg("review revise chat failed")
+		return ReactTurn{Msg: "(复审修改失败:" + err.Error() + ")", Err: err,
+			Events: []models.AcpEvent{{Kind: "message", Text: "review revise chat failed: " + err.Error()}}}
+	}
+	var usage *models.TokenUsage
+	var usageByModel models.TokenUsageByModel
+	var events []models.AcpEvent
+	absorbChat(&usage, &usageByModel, &events, res)
+
+	c.host.TakePendingQuestions(req.RunID, req.NodeID)
+
+	if name, tool := structuredArtifactFor(req.NodeType); name != "" {
+		if _, serr := c.ensureStructured(ctx, req, sess.acp, name, tool, &events, &usage, &usageByModel); serr != nil {
+			log.Warn().Err(serr).Str("node", req.NodeID).Msg("review revise ensure product failed")
+		}
+	}
+	events = c.snapshotEvents(ctx, sess.sb, events)
+	return ReactTurn{Msg: res.Narration, Done: false, Events: events, Usage: usage, UsageByModel: usageByModel}
+}
+
+// HasLiveSession reports whether a parked review session is held for the node.
+func (c *acpProvider) HasLiveSession(runID, nodeID string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	sess := c.sessions[runID+"|"+nodeID]
+	return sess != nil && sess.acp != nil && sess.acp.IsConnected()
+}
+
+// RetireSession closes and retires the parked session for the node, if any.
+func (c *acpProvider) RetireSession(runID, nodeID string) {
+	c.closeSession(runID + "|" + nodeID)
+}
+
+// CancelSessionTurn aborts the in-flight ACP turn on a parked review session
+// without retiring it. Bridge {op:cancel} also clears the sandbox PromptQueue
+// (dual-layer sync with the platform review FIFO).
+func (c *acpProvider) CancelSessionTurn(runID, nodeID string) {
+	c.mu.Lock()
+	sess := c.sessions[runID+"|"+nodeID]
+	c.mu.Unlock()
+	if sess != nil && sess.acp != nil {
+		_ = sess.acp.Cancel()
+	}
+}
+
+// enforceOpenQuestionsGate implements the clarification gate: when the agent
+// tries to finish (raised no ask_question this turn) but its clarified
+// requirement still lists unresolved open_questions, re-prompt it (same session)
+// to surface those as ask_question so the user resolves every one. Returns the
+// freshly raised questions, the wrap-up narration, the turn's events, and ok=true
+// when the gate held (i.e. new questions were raised and the node must keep
+// clarifying). ok=false lets the caller finish normally: no artifact yet, no
+// open questions, or the agent declined to ask again (avoids an infinite loop).
+func (c *acpProvider) enforceOpenQuestionsGate(ctx context.Context, req NodeReq, sess *reactSession) ([]models.ReactQuestion, string, []models.AcpEvent, *models.TokenUsage, models.TokenUsageByModel, bool) {
+	content, err := c.host.ReadArtifact(req.RunID, req.Token, mcp.ClarifiedRequirementArtifactName)
+	if err != nil {
+		return nil, "", nil, nil, nil, false
+	}
+	if !json.Valid([]byte(content)) {
+		log.Warn().Str("run", req.RunID).Str("node", req.NodeID).
+			Msg("react open-questions gate: clarified requirement unparseable; skipping")
+		return nil, "", nil, nil, nil, false
+	}
+	open := mcp.ClarifiedOpenQuestions(content)
+	if len(open) == 0 {
+		return nil, "", nil, nil, nil, false
+	}
+	prompt := c.agentPrompts(str2(req.Config["skill_profile"])).ClarifiedOpenQuestionsRetryFor(open)
+	chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
+	res, err := c.streamChat(chatCtx, sess.acp, req, prompt, nil)
+	cancel()
+	if err != nil {
+		log.Warn().Err(err).Str("node", req.NodeID).Msg("react open-questions gate re-prompt failed")
+		return nil, "", nil, nil, nil, false
+	}
+	var usage *models.TokenUsage
+	var usageByModel models.TokenUsageByModel
+	var events []models.AcpEvent
+	absorbChat(&usage, &usageByModel, &events, res)
+	qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
+	if len(qs) == 0 {
+
+		log.Warn().Str("run", req.RunID).Str("node", req.NodeID).
+			Int("open_questions", len(open)).
+			Msg("react open-questions gate: agent declined to ask; finishing with unresolved notes")
+		return nil, "", events, usage, usageByModel, false
+	}
+	return qs, res.Narration, events, usage, usageByModel, true
+}
+
+// finishReact runs the shared completion path for a react node: ensure the
+// declared produces artifact exists (re-prompting the agent to write it),
+// snapshot the event log, capture any code changes, tear the session down and
+// return a Done ReactTurn. If the agent raises ask_question during ensure*,
+// the session stays open and Questions are returned (Done=false) so the
+// engine can auto_clarify or wait for a human — never OutcomeRetry-mis-fail.
+func (c *acpProvider) finishReact(ctx context.Context, req NodeReq, key string, sess *reactSession, narration string, history []models.ReactMessage, events []models.AcpEvent, usage *models.TokenUsage, usageByModel models.TokenUsageByModel) ReactTurn {
+
+	if name, tool := structuredArtifactFor(req.NodeType); name != "" {
+		qs, err := c.ensureStructured(ctx, req, sess.acp, name, tool, &events, &usage, &usageByModel)
+		if len(qs) > 0 {
+			msg := narration
+			return ReactTurn{Msg: msg, Questions: qs, Done: false, Events: events, Usage: usage, UsageByModel: usageByModel}
+		}
+		if err != nil {
+			events = c.snapshotEvents(ctx, sess.sb, events)
+			c.closeSession(key)
+			return ReactTurn{Done: true, Err: err, Msg: err.Error(), Events: events, Usage: usage,
+				Result: NodeResult{Events: events, Usage: usage, UsageByModel: usageByModel}}
+		}
+	}
+	qs, err := c.ensureOutcome(ctx, req, sess.acp, &events, &usage, &usageByModel)
+	if len(qs) > 0 {
+		return ReactTurn{Msg: narration, Questions: qs, Done: false, Events: events, Usage: usage, UsageByModel: usageByModel}
+	}
+	if err != nil {
+		events = c.snapshotEvents(ctx, sess.sb, events)
+		c.closeSession(key)
+		return ReactTurn{Done: true, Err: err, Msg: err.Error(), Events: events, Usage: usage,
+			Result: NodeResult{Events: events, Usage: usage, UsageByModel: usageByModel}}
+	}
+	events = c.snapshotEvents(ctx, sess.sb, events)
+	out := map[string]any{"clarified_requirement": narration, "content": narration, "transcript": renderTranscript(history)}
+	git := c.captureChanges(ctx, sess.sb, req, out)
+	c.closeSession(key)
+	return ReactTurn{Msg: narration, Done: true, Events: events, Usage: usage,
+		Result: NodeResult{OutputMd: narration, Outputs: out, Events: events, Git: git, Usage: usage, UsageByModel: usageByModel}}
+}
+
+func (c *acpProvider) buildReactOpenPrompt(req NodeReq, seeded []string) string {
+	p := c.buildAgentPrompt(req, seeded)
+	return p + c.agentPrompts(str2(req.Config["skill_profile"])).ReactOpenSuffixText()
+}
+
+// buildReactRehydratePrompt re-opens a dialogue after a crash/restart: the base
+// open prompt plus the persisted Q&A transcript as recovery context, instructing
+// the agent to resume without re-asking and to await the next human reply.
+func (c *acpProvider) buildReactRehydratePrompt(req NodeReq, seeded []string, history []models.ReactMessage) string {
+	var b strings.Builder
+	b.WriteString(c.buildReactOpenPrompt(req, seeded))
+	b.WriteString("\n\n## 会话恢复(重要)\n之前的澄清对话因故中断,现在在新会话中恢复。以下是此前的完整问答记录,请据此恢复上下文并继续:不要重复已经问过的问题,先不要提出新问题,等待我接下来的回复。\n\n")
+	b.WriteString(renderTranscript(history))
+	return b.String()
+}
+
+func reactKey(req NodeReq) string { return req.RunID + "|" + req.NodeID }
+
+// ReactCapReached exposes the same max_rounds safety cap the provider enforces
+// so the engine's auto-clarify loop (auto_var) stops after the same number of
+// rounds instead of replying forever.
+func ReactCapReached(req NodeReq, history []models.ReactMessage) bool {
+	return reactCapReached(req, history)
+}
+
+// reactCapReached reports whether the max_rounds safety cap is hit (counting
+// the reply currently being processed). When true and there is no pending
+// ask_question, the dialogue finishes. Pending ask_question still outranks the
+// cap (ReactOpen/ReactReply return Questions). Completion is otherwise
+// agent-driven (no questions raised this turn).
+func reactCapReached(req NodeReq, history []models.ReactMessage) bool {
+	humanTurns := 1
+	for _, h := range history {
+		if h.Role == "human" {
+			humanTurns++
+		}
+	}
+	maxRounds := 3
+	if mr, ok := toInt(req.Config["max_rounds"]); ok && mr > 0 {
+		maxRounds = mr
+	}
+	return humanTurns >= maxRounds
+}
+
+// chatResultToEvents flattens a ChatResult into ordered AcpEvents for the run
+// timeline. Thin wrapper over the shared sandbox converter (single source of
+// truth for the event shape).
+func chatResultToEvents(res *sandbox.ChatResult) []models.AcpEvent {
+	return res.AcpEvents()
+}

@@ -48,20 +48,20 @@ type Capabilities struct {
 // SupportsChanges reports whether the sandbox declares a change-reporting
 // endpoint. A nil descriptor (older image without /api/capabilities) returns
 // false here; callers should still attempt the endpoint best-effort.
-func (c *Capabilities) SupportsChanges() bool {
+func (c *Capabilities) supportsChanges() bool {
 	return c != nil && c.Changes.Endpoint != ""
 }
 
 // SupportsPreview reports whether the sandbox declares an in-container VNC
 // preview desktop (CDP + websockify).
-func (c *Capabilities) SupportsPreview() bool {
+func (c *Capabilities) supportsPreview() bool {
 	return c != nil && c.Preview.VNC
 }
 
 // FetchCapabilities reads a live sandbox's capability descriptor. Best-effort:
 // a nil/error result means "descriptor unavailable" and the caller proceeds
 // with safe defaults.
-func FetchCapabilities(ctx context.Context, host string, port int) (*Capabilities, error) {
+func fetchCapabilities(ctx context.Context, host string, port int) (*Capabilities, error) {
 	if host == "" {
 		host = "127.0.0.1"
 	}

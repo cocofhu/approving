@@ -1,8 +1,9 @@
 package engine
 
 import (
-	"github.com/cocofhu/approving/internal/nodereg"
 	"testing"
+
+	"github.com/cocofhu/approving/internal/nodereg"
 )
 
 func TestIsKnownStructuredArtifact(t *testing.T) {

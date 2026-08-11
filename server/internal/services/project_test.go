@@ -437,7 +437,7 @@ func TestTotalTokensByProjectIDs(t *testing.T) {
 		Usage: &models.TokenUsage{CacheWriteTokens: 400},
 	})
 
-	got := s.TotalTokensByProjectIDs([]string{noRun.ID, noUsage.ID, partial.ID, zero.ID, large.ID})
+	got := s.totalTokensByProjectIDs([]string{noRun.ID, noUsage.ID, partial.ID, zero.ID, large.ID})
 
 	if _, ok := got[noRun.ID]; ok {
 		t.Fatalf("no-run project should be absent (null): %v", got[noRun.ID])
@@ -454,10 +454,10 @@ func TestTotalTokensByProjectIDs(t *testing.T) {
 	if got[large.ID] == nil || *got[large.ID] != 1_020_400 {
 		t.Fatalf("large = %v want 1020400", got[large.ID])
 	}
-	if single := s.TotalTokens(partial.ID); single == nil || *single != 128 {
+	if single := s.totalTokens(partial.ID); single == nil || *single != 128 {
 		t.Fatalf("TotalTokens(partial) = %v", single)
 	}
-	if s.TotalTokens(noRun.ID) != nil {
+	if s.totalTokens(noRun.ID) != nil {
 		t.Fatal("TotalTokens(noRun) should be nil")
 	}
 

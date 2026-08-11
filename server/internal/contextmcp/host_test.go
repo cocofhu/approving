@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/platformmcp"
 	"github.com/cocofhu/approving/internal/services"
 
 	"gorm.io/driver/sqlite"
@@ -91,7 +92,8 @@ func TestContextMCPAuthToolsAndIsolation(t *testing.T) {
 	}
 
 	h := NewHost(pm)
-	tokA := h.Register(p.ID, "agent-a", ta.ID, "alice")
+	tokA := platformmcp.NewToken()
+	h.Restore(tokA, p.ID, "agent-a", ta.ID, "alice")
 	if _, ok := h.Authorize(p.ID, tokA); !ok {
 		t.Fatal("authorize")
 	}
@@ -184,7 +186,8 @@ func TestContextMCPAuthToolsAndIsolation(t *testing.T) {
 func TestContextMCPRestoreAndUnregister(t *testing.T) {
 	_, pm, p := setupContextDB(t)
 	h := NewHost(pm)
-	tok := h.Register(p.ID, "agent-a", "thr-1", "alice")
+	tok := platformmcp.NewToken()
+	h.Restore(tok, p.ID, "agent-a", "thr-1", "alice")
 	h.Restore(tok, p.ID, "agent-a", "thr-1", "alice")
 	h.Restore("", p.ID, "agent-a", "thr-1", "alice")
 	if _, ok := h.Authorize(p.ID, tok); !ok {

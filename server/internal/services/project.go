@@ -86,7 +86,7 @@ type ProjectTokenBreakdown struct {
 // TotalTokens returns the summed project Token total (workflow + PM), or nil
 // when no Usage has been reported (UI "—"). A non-nil 0 means usage was
 // reported and totals to zero.
-func (s *ProjectService) TotalTokens(projectID string) *int64 {
+func (s *ProjectService) totalTokens(projectID string) *int64 {
 	return s.TokenBreakdownByProjectIDs([]string{projectID})[projectID].Total
 }
 
@@ -98,7 +98,7 @@ func (s *ProjectService) TokenBreakdown(projectID string) ProjectTokenBreakdown 
 // TotalTokensByProjectIDs batch-aggregates project Token totals (workflow
 // StateRun.Usage + assistant ChatMessage.Usage). Projects with no reported
 // usage are omitted (caller treats as null / "—"). Stdio is never counted.
-func (s *ProjectService) TotalTokensByProjectIDs(projectIDs []string) map[string]*int64 {
+func (s *ProjectService) totalTokensByProjectIDs(projectIDs []string) map[string]*int64 {
 	bd := s.TokenBreakdownByProjectIDs(projectIDs)
 	out := make(map[string]*int64, len(bd))
 	for pid, b := range bd {
