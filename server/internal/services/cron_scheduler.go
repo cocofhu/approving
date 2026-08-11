@@ -24,6 +24,9 @@ type CronTokenHooks struct {
 // egress (changed / unchanged / failed).
 type CronDelivery struct {
 	ProjectID string
+	// AgentName routes delivery to the Channel bound to this Agent (not
+	// "latest channel in project").
+	AgentName string
 	Category  string // job name / pr / daily — used for minimal templates
 	Kind      string // changed | unchanged | failed (empty → classify from Text)
 	Text      string
@@ -298,6 +301,7 @@ func (s *CronScheduler) deliverCronFailure(job *models.AgentCronJob, reason stri
 	}
 	d := CronDelivery{
 		ProjectID: job.ProjectID,
+		AgentName: job.AgentName,
 		Category:  category,
 		Kind:      "failed",
 		Text:      text,
@@ -338,12 +342,14 @@ func (s *CronScheduler) maybeDeliver(job *models.AgentCronJob, userMsg models.Ch
 	}
 	d := CronDelivery{
 		ProjectID: job.ProjectID,
+		AgentName: job.AgentName,
 		Category:  category,
 		Kind:      kind,
 		Text:      text,
 	}
 	if err := s.deliverer.DeliverCron(d); err != nil {
-		log.Warn().Err(err).Str("job", job.ID).Str("kind", kind).Msg("cron channel delivery failed")
+		log.Warn().Err(err).Str("job", job.ID).Str("kind", kind).Str("agent", job.AgentName).
+			Msg("cron channel delivery failed")
 	}
 }
 

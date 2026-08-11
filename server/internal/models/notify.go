@@ -28,11 +28,15 @@ const (
 // Enabled=nil means default ON (hard-close only when explicitly false).
 // DefaultEvents=nil means the product default [waiting_human, failed]; an
 // explicit empty slice means "no default events".
+// ChannelIDs is the explicit 0~N fan-out target list (may include primary).
+// Empty / nil ChannelIDs means do not deliver project notify to any channel
+// (independent of per-channel cron deliver targets).
 // WaitingHumanTemplate / FailedTemplate / CompletedTemplate are optional full
 // message bodies; trim-empty means fall back to FormatRunNotifyMessage.
 type ProjectNotifyPolicy struct {
 	Enabled              *bool    `json:"enabled"`
 	DefaultEvents        []string `json:"defaultEvents"`
+	ChannelIDs           []string `json:"channelIds,omitempty"`
 	WaitingHumanTemplate string   `json:"waitingHumanTemplate,omitempty"`
 	FailedTemplate       string   `json:"failedTemplate,omitempty"`
 	CompletedTemplate    string   `json:"completedTemplate,omitempty"`

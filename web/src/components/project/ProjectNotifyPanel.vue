@@ -67,13 +67,19 @@ function syncFromProject() {
 async function loadChannel() {
   loadingChannel.value = true
   try {
-    const res = await api.getProjectChannel(props.projectId)
-    const ch = res.channel
-    hasChannel.value = !!(
-      ch &&
-      ch.enabled &&
-      String(ch.cronDeliverTarget || '').trim()
-    )
+    const ids = Array.isArray(props.project.notifyPolicy?.channelIds)
+      ? props.project.notifyPolicy!.channelIds!.filter(Boolean)
+      : []
+    if (!ids.length) {
+      hasChannel.value = false
+      return
+    }
+    const res = await api.listProjectChannels(props.projectId)
+    const byId = new Map((res.items || []).map((c) => [c.id, c]))
+    hasChannel.value = ids.some((id) => {
+      const ch = byId.get(id)
+      return !!(ch && ch.enabled && String(ch.cronDeliverTarget || '').trim())
+    })
   } catch {
     hasChannel.value = false
   } finally {

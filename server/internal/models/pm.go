@@ -123,8 +123,9 @@ type AgentCronJob struct {
 	ScheduleExpr string `json:"scheduleExpr"`
 	Timezone     string `json:"timezone,omitempty"`
 	Enabled      bool   `gorm:"index" json:"enabled"`
-	// DeliverToChannel pushes the turn result to the project's bound channel
-	// (per-job switch). No-op when the project has no delivery channel.
+	// DeliverToChannel pushes the turn result to the channel bound to this
+	// job's AgentName (per-job switch). No-op when that Agent has no channel
+	// with CronDeliver enabled.
 	DeliverToChannel  bool       `json:"deliverToChannel"`
 	NextRunAt         *time.Time `gorm:"index" json:"nextRunAt,omitempty"`
 	LastRunAt         *time.Time `json:"lastRunAt,omitempty"`
@@ -138,10 +139,10 @@ type AgentCronJob struct {
 }
 
 // ChannelConfig is an external IM channel binding managed via the admin WebUI.
-// One bot account binds to exactly one project (and its PM Leader agent). The
-// design is channel-agnostic: Type selects the adapter, and Config carries any
-// adapter-specific extras so new platforms (Slack, Discord, Feishu…) reuse the
-// same table and management surface.
+// A project may have multiple QQ channels (one primary + zero or more secondary).
+// Each channel binds exactly one Agent for inbound turns; AppID stays globally
+// unique. The design is channel-agnostic: Type selects the adapter, and Config
+// carries adapter-specific extras.
 //
 // The app secret is stored AES-GCM encrypted (crypto.Encrypt) in AppSecretEnc
 // and never serialized to the client.
@@ -151,8 +152,19 @@ type ChannelConfig struct {
 	Name string `json:"name"`
 	// Enabled toggles whether the Manager starts an adapter for this row.
 	Enabled bool `gorm:"index" json:"enabled"`
-	// ProjectID is the single project this bot serves; its PM Leader answers.
+	// ProjectID is the project this bot serves.
 	ProjectID string `gorm:"index" json:"projectId"`
+	// AgentName is the PM Agent that answers inbound turns on this channel.
+	// At most one channel per Agent (enforced in service + partial unique index).
+	AgentName string `gorm:"index" json:"agentName"`
+	// IsPrimary marks the project's primary channel (at most one per project).
+	// Compatible with Project.PmLeader for Web/gate paths; secondary channels
+	// have equal channel capabilities.
+	IsPrimary bool `gorm:"index" json:"isPrimary"`
+	// EnabledMcps lists platform PM role MCP ids for channel turns only
+	// (pm-progress / pm-workflow-read / pm-workflow-write / pm-agent-fs).
+	// nil → defaults; explicit empty → none. Web/gate still use Project.PmEnabledMcps.
+	EnabledMcps []string `gorm:"serializer:json" json:"enabledMcps,omitempty"`
 	// AppID is the bot's public app id (unique across configs).
 	AppID string `gorm:"index" json:"appId"`
 	// AppSecretEnc is the AES-GCM encrypted app secret (never returned).
@@ -160,7 +172,8 @@ type ChannelConfig struct {
 	// TurnTimeoutSeconds overrides the PM turn deadline for this channel's turns
 	// (0 → platform default). Applies only to channel/cron turns, not workflow nodes.
 	TurnTimeoutSeconds int `json:"turnTimeoutSeconds"`
-	// CronDeliver marks this channel as the cron result push target for its project.
+	// CronDeliver marks this channel as the cron result push target for its
+	// bound Agent's jobs (not a project-wide singleton).
 	CronDeliver bool `json:"cronDeliver"`
 	// CronDeliverTarget is the push destination as "scene:conversationId"
 	// (e.g. "guild:123", "group:openid", "c2c:openid").

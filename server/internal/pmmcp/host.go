@@ -41,6 +41,9 @@ type Session struct {
 	UserID    string
 	AgentName string
 	Attached  *models.AttachedContext
+	// AllowedMcps, when non-nil, overrides Project.PmEnabledMcps for ServeRPC
+	// authorization (channel turns). nil keeps the Web/gate project binding check.
+	AllowedMcps []string
 }
 
 // Host manages project-scoped PM MCP sessions and tool dispatch.
@@ -122,10 +125,22 @@ func (h *Host) Restore(projectID, threadID, userID, agentName, token string) {
 	if strings.TrimSpace(token) == "" {
 		return
 	}
-	_ = h.restore(projectID, threadID, userID, agentName, token)
+	_ = h.restore(projectID, threadID, userID, agentName, token, nil)
 }
 
-func (h *Host) restore(projectID, threadID, userID, agentName, tok string) string {
+// RestoreWithMcps re-binds a token with an explicit AllowedMcps override.
+func (h *Host) RestoreWithMcps(projectID, threadID, userID, agentName, token string, enabledMcps []string) {
+	if strings.TrimSpace(token) == "" {
+		return
+	}
+	allowed := services.EffectivePmEnabledMcps(enabledMcps)
+	if enabledMcps != nil && len(allowed) == 0 {
+		allowed = []string{}
+	}
+	_ = h.restore(projectID, threadID, userID, agentName, token, allowed)
+}
+
+func (h *Host) restore(projectID, threadID, userID, agentName, tok string, allowedMcps []string) string {
 	key := projectID + "|" + threadID
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -134,6 +149,7 @@ func (h *Host) restore(projectID, threadID, userID, agentName, tok string) strin
 	}
 	h.sessions[tok] = &Session{
 		Token: tok, ProjectID: projectID, ThreadID: threadID, UserID: userID, AgentName: agentName,
+		AllowedMcps: allowedMcps,
 	}
 	h.byKey[key] = tok
 	return tok
@@ -213,9 +229,13 @@ func (h *Host) ServeRPC(projectID, mcpID, token string, body []byte) (status int
 			Error:   &platformmcp.RPCError{Code: -32004, Message: "unknown mcp: " + mcpID},
 		})
 	}
-	// Enforce project enabledMcps (empty list disables all). Fail closed when
-	// the binding cannot be loaded so a missing project never widens access.
-	if h.pm != nil {
+	// Enforce enabledMcps: channel sessions carry AllowedMcps; Web/gate fall
+	// back to Project.PmEnabledMcps. Fail closed when the binding cannot be
+	// loaded so a missing project never widens access.
+	var allowedList []string
+	if sess, ok := h.SessionFor(projectID, token); ok && sess.AllowedMcps != nil {
+		allowedList = sess.AllowedMcps
+	} else if h.pm != nil {
 		b, err := h.pm.GetBinding(projectID)
 		if err != nil {
 			return 404, platformmcp.MustJSON(platformmcp.RPCResponse{
@@ -223,8 +243,11 @@ func (h *Host) ServeRPC(projectID, mcpID, token string, body []byte) (status int
 				Error:   &platformmcp.RPCError{Code: -32004, Message: "mcp unavailable for project: " + mcpID},
 			})
 		}
+		allowedList = b.EnabledMcps
+	}
+	if allowedList != nil || h.pm != nil {
 		allowed := false
-		for _, id := range b.EnabledMcps {
+		for _, id := range allowedList {
 			if id == mcpID {
 				allowed = true
 				break

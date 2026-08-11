@@ -360,6 +360,7 @@ func main() {
 	}
 	channelBridge := channels.NewChannelBridge(pmSvc, sbxSvc, pmTurns, channelHooks)
 	channelSvc := services.NewChannelConfigService(db)
+	channelSvc.SetSkillService(skillSvc)
 	channelMgr := channels.NewManager(channelBridge, map[string]channels.AdapterFactory{
 		models.ChannelTypeQQ: qq.New,
 	}, crypto.Decrypt)

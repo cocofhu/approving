@@ -72,6 +72,8 @@ export interface Workflow {
 export interface ProjectNotifyPolicy {
   enabled?: boolean
   defaultEvents?: string[]
+  /** Explicit 0~N channel fan-out targets (may include primary). Empty = no deliver. */
+  channelIds?: string[]
   /** Full QQ body for waiting_human; trim-empty → legacy FormatRunNotifyMessage. */
   waitingHumanTemplate?: string
   /** Full QQ body for failed; trim-empty → legacy FormatRunNotifyMessage. */
