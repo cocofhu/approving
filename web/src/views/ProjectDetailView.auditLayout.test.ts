@@ -54,8 +54,10 @@ describe('ProjectAuditPanel fill layout + sticky header + tokens (g1.2–g4.2 / 
     expect(cssBlock(panelSrc, '.meta')).toMatch(/flex-shrink:\s*0/)
 
     expect(panelSrc).toMatch(/<Pagination[\s\S]*?class="shrink-0"/)
-    expect(panelSrc).toMatch(/v-if="!noRuns"/)
+    expect(panelSrc).toMatch(/v-if="mode === 'all' && !noRuns"/)
     expect(panelSrc).toMatch(/AUDIT_PAGE_SIZE_OPTIONS = \[5, 10, 20\]/)
+    expect(panelSrc).toMatch(/data-layout="groups"/)
+    expect(panelSrc).toMatch(/project-audit-run-count/)
   })
 
   it('desktop thead sticks with elevated bg and txt2 (not Demo txt3 / #fafafa)', () => {
