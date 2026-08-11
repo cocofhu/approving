@@ -213,7 +213,9 @@ func main() {
 			RunID:        runID,
 			NodeID:       node,
 			Outcome:      outcome,
-			Summary:      "mcp " + tool,
+			// Semantic summary from original args (before Record masks payload).
+			// History is not backfilled; export emits the stored Summary as-is.
+			Summary: mcp.FormatMCPAuditSummary(tool, args, resultText, isError),
 			Payload: map[string]any{
 				"tool":      tool,
 				"runId":     runID,

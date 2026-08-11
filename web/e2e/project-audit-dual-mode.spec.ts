@@ -48,9 +48,9 @@ const MOCK_EVENTS = [
     resourceId: 'read_artifact',
     resource: 'mcp/read_artifact',
     runId: RUN_A,
-    nodeId: 'research',
+    nodeId: 'research_2wn4',
     outcome: 'ok',
-    summary: '读取 research.json',
+    summary: '读取产物 research.json',
     payload: { tool: 'read_artifact', runId: RUN_A },
   },
   {
@@ -66,9 +66,9 @@ const MOCK_EVENTS = [
     resourceId: 'write_artifact',
     resource: 'mcp/write_artifact',
     runId: RUN_A,
-    nodeId: 'visual',
+    nodeId: 'visual_bqc5',
     outcome: 'ok',
-    summary: '写入 page.html',
+    summary: '写入产物 page.html',
     payload: { tool: 'write_artifact' },
   },
   {
@@ -84,10 +84,28 @@ const MOCK_EVENTS = [
     resourceId: 'visual',
     resource: 'gate/visual',
     runId: RUN_A,
-    nodeId: 'gate',
+    nodeId: 'gate_vis01',
     outcome: 'ok',
     summary: '门禁通过',
     payload: { decision: 'approve' },
+  },
+  {
+    id: 'e8',
+    projectId: 'proj-1',
+    occurredAt: '2026-07-26T10:43:20Z',
+    actor: 'system',
+    actorDisplay: '系统',
+    unattributable: true,
+    callerKind: 'system',
+    action: 'mcp.call',
+    resourceType: 'mcp',
+    resourceId: 'write_artifact',
+    resource: 'mcp/write_artifact',
+    runId: RUN_A,
+    nodeId: 'visual_bqc5',
+    outcome: 'fail',
+    summary: '写入产物 page.html 失败 · content too large',
+    payload: { tool: 'write_artifact', error: 'content too large' },
   },
   {
     id: 'e5',
@@ -120,9 +138,9 @@ const MOCK_EVENTS = [
     resourceId: 'read_artifact',
     resource: 'mcp/read_artifact',
     runId: RUN_B,
-    nodeId: 'research',
+    nodeId: 'research_2wn4',
     outcome: 'fail',
-    summary: '读取失败',
+    summary: '读取产物 research.json 失败 · not found',
     payload: { error: 'not_found' },
   },
   {
@@ -311,7 +329,7 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
     fs.mkdirSync(SHOT_DIR, { recursive: true })
   })
 
-  test('默认按 Run：无张三/无动作类型级联；可见 MCP；中文动作；单一导出', async ({ page }) => {
+  test('默认按 Run：三列分组；语义摘要辅行；无独立动作/资源/调用者列', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 })
     await stubProjectApis(page)
     await page.goto('/project-detail.html?tab=audit&theme=light')
@@ -320,50 +338,50 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
     const panel = page.getByTestId('project-audit-panel')
     await expect(panel).toBeVisible({ timeout: 15_000 })
 
-    // Dual mode present; no cascade / 张三 / 动作类型
     await expect(page.getByTestId('project-audit-mode-run')).toHaveClass(/on/)
     await expect(page.getByRole('button', { name: '按 Run 查看' })).toBeVisible()
     await expect(page.getByRole('button', { name: '全部日志' })).toBeVisible()
     await expect(page.locator('body')).not.toContainText('张三')
     await expect(page.locator('body')).not.toContainText('动作类型')
-    await expect(page.locator('body')).not.toContainText('请先选择动作类型')
-    await expect(page.locator('body')).not.toContainText('①')
-    // Filters use custom dropdowns (no cascade <select>); sole native select is Pagination pageSize
-    await expect(page.getByTestId('project-audit-pager-info')).toBeVisible()
-    await expect(page.getByTestId('project-audit-page-size')).toBeVisible()
-    await expect(panel.locator('select')).toHaveCount(1)
-    await expect(page.getByTestId('project-audit-page-size').locator('select')).toHaveCount(1)
+    await expect(page.locator('body')).not.toContainText('旧摘要')
 
-    // Preselect latest run + MCP rows in table
-    await expect(page.getByTestId('project-audit-list')).toBeVisible()
-    await expect(page.getByTestId('project-audit-list')).toHaveAttribute('data-layout', 'table')
-    await expect(page.getByText('MCP 调用').first()).toBeVisible()
+    // Run mode hides event pagination; shows run count instead
+    await expect(page.getByTestId('project-audit-run-count')).toBeVisible()
+    await expect(page.getByTestId('project-audit-page-size')).toHaveCount(0)
+    await expect(panel.locator('select')).toHaveCount(0)
+
+    const list = page.getByTestId('project-audit-list')
+    await expect(list).toBeVisible()
+    await expect(list).toHaveAttribute('data-layout', 'groups')
+    await expect(page.getByRole('columnheader', { name: '时间' })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: '摘要' })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: '结果' })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: '调用者' })).toHaveCount(0)
+    await expect(page.getByRole('columnheader', { name: '动作' })).toHaveCount(0)
+    await expect(page.getByRole('columnheader', { name: '资源' })).toHaveCount(0)
     await expect(page.getByText('mcp.call')).toHaveCount(0)
-    await expect(page.getByText('mcp/read_artifact').first()).toBeVisible()
     await expect(page.getByTestId('project-audit-stats')).toContainText('MCP')
+    await expect(page.getByTestId('project-audit-stats')).toContainText('成功')
 
-    // Label·value triggers
     await expect(page.getByTestId('project-audit-run')).toContainText('Run')
     await expect(page.getByTestId('project-audit-resource')).toContainText('资源')
     await expect(page.getByTestId('project-audit-time')).toContainText('时间')
 
-    // Single export button (not JSON+文本 pair)
     const exportBtn = page.getByTestId('project-audit-export')
     await expect(exportBtn).toHaveText('导出')
     await expect(page.getByRole('button', { name: '导出 JSON' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: '导出文本' })).toHaveCount(0)
 
     await page.screenshot({ path: path.join(SHOT_DIR, '01-run-mode-mcp.png'), fullPage: true })
 
-    // Narrow by resource mcp/read_artifact
     await page.getByTestId('project-audit-resource').locator('button.audit-dd-trig').click()
     const resPanel = page.locator('.audit-dd-panel').filter({ visible: true })
     await expect(resPanel).toBeVisible()
     await resPanel.locator('.audit-dd-opt', { hasText: 'mcp/read_artifact' }).first().click()
+    await page.getByTestId('project-audit-group-head-research_2wn4').click()
     await expect(page.getByTestId('project-audit-list').locator('tbody tr.row')).toHaveCount(1)
-    await expect(page.getByText('读取 research.json')).toBeVisible()
+    await expect(page.getByText('读取产物 research.json')).toBeVisible()
+    await expect(page.getByText('mcp/read_artifact').first()).toBeVisible()
 
-    // Row expand shows raw action code
     await page.getByTestId('project-audit-event-e2').click()
     await expect(page.getByTestId('project-audit-payload')).toBeVisible()
     await expect(page.locator('.detail-meta code').filter({ hasText: 'mcp.call' })).toBeVisible()
@@ -371,7 +389,7 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
     await page.screenshot({ path: path.join(SHOT_DIR, '01b-resource-narrow.png'), fullPage: true })
   })
 
-  test('全部日志：调用者三类；所属 Run 列；无节点筛选', async ({ page }) => {
+  test('全部日志：四列扁表时间/节点/摘要/结果；保留调用者筛选与分页', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 })
     await stubProjectApis(page)
     await page.goto('/project-detail.html?tab=audit&theme=light')
@@ -383,11 +401,20 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
     await expect(page.getByTestId('project-audit-caller')).toBeVisible()
     await expect(page.getByTestId('project-audit-run')).toHaveCount(0)
     await expect(page.getByTestId('project-audit-node')).toHaveCount(0)
+    await expect(page.getByTestId('project-audit-page-size')).toBeVisible()
+    await expect(page.getByTestId('project-audit-pager-info')).toBeVisible()
 
-    // Table shows 所属 Run header; node header hidden via CSS class
-    await expect(page.getByRole('columnheader', { name: '所属 Run' })).toBeVisible()
     const wrap = page.getByTestId('project-audit-list')
-    await expect(wrap).toHaveClass(/col-node-hide/)
+    await expect(wrap).toHaveAttribute('data-layout', 'table')
+    await expect(page.getByRole('columnheader', { name: '时间' })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: '节点' })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: '摘要' })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: '结果' })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: '所属 Run' })).toHaveCount(0)
+    await expect(page.getByRole('columnheader', { name: '调用者' })).toHaveCount(0)
+    await expect(page.getByRole('columnheader', { name: '动作' })).toHaveCount(0)
+    await expect(page.getByText('调研 · 2wn4').first()).toBeVisible()
+    await expect(page.getByText('读取产物 research.json').first()).toBeVisible()
 
     await page.getByTestId('project-audit-caller').locator('button.audit-dd-trig').click()
     const callerPanel = page.locator('.audit-dd-panel').filter({ visible: true })
@@ -509,9 +536,46 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
     await expect(page.getByTestId('project-audit-panel')).toBeVisible({ timeout: 15_000 })
 
     await expect(page.getByTestId('project-audit-filter-summary')).toHaveCount(0)
-    await expect(page.getByTestId('project-audit-list')).toHaveAttribute('data-layout', 'table')
+    await expect(page.getByTestId('project-audit-list')).toHaveAttribute('data-layout', 'groups')
     await expect(page.getByTestId('project-audit-list').locator('table')).toBeVisible()
     await expect(page.getByTestId('project-audit-run')).toBeVisible()
     await expect(page.getByTestId('project-audit-search')).toBeVisible()
+  })
+
+  test('组头可读名与失败组默认展开（g5.2）', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await stubProjectApis(page)
+    await page.goto('/project-detail.html?tab=audit&theme=light')
+    await dismissOnboardingIfOpen(page)
+    await expect(page.getByTestId('project-audit-panel')).toBeVisible({ timeout: 15_000 })
+
+    await expect(page.getByTestId('project-audit-group-head-research_2wn4')).toContainText('调研 · 2wn4')
+    await expect(page.getByTestId('project-audit-group-head-research_2wn4')).toContainText('research_2wn4')
+    await expect(page.getByTestId('project-audit-group-head-visual_bqc5')).toContainText('视觉 · bqc5')
+    await expect(page.getByTestId('project-audit-group-head-gate_vis01')).toContainText('门禁 · vis01')
+    await expect(page.getByTestId('project-audit-group-head-_system')).toContainText('系统/未归属')
+
+    await expect(page.getByTestId('project-audit-group-visual_bqc5')).toHaveAttribute('data-open', 'true')
+    await expect(page.getByTestId('project-audit-group-research_2wn4')).toHaveAttribute('data-open', 'false')
+    await expect(page.getByTestId('project-audit-group-gate_vis01')).toHaveAttribute('data-open', 'false')
+    await expect(page.getByTestId('project-audit-event-e8')).toBeVisible()
+    await expect(page.getByText('写入产物 page.html 失败 · content too large')).toBeVisible()
+    await expect(page.getByTestId('project-audit-group-visual_bqc5')).toContainText('失败')
+    await expect(page.getByTestId('project-audit-group-visual_bqc5')).toContainText('成功')
+
+    await page.getByTestId('project-audit-group-head-research_2wn4').click()
+    await expect(page.getByTestId('project-audit-group-research_2wn4')).toHaveAttribute('data-open', 'true')
+    await expect(page.getByTestId('project-audit-event-e2')).toBeVisible()
+
+    await page.getByTestId('project-audit-node').locator('button.audit-dd-trig').click()
+    const nodePanel = page.locator('.audit-dd-panel').filter({ visible: true })
+    await expect(nodePanel.locator('.audit-dd-opt', { hasText: '调研 · 2wn4' })).toBeVisible()
+    await page.keyboard.press('Escape')
+
+    await page.getByTestId('project-audit-mode-all').click()
+    await expect(page.getByTestId('project-audit-list')).toHaveAttribute('data-layout', 'table')
+    await page.getByTestId('project-audit-mode-run').click()
+    await expect(page.getByTestId('project-audit-list')).toHaveAttribute('data-layout', 'groups')
+    await expect(page.getByTestId('project-audit-export')).toBeVisible()
   })
 })
