@@ -93,8 +93,10 @@ describe('ProjectDetailView meta tab keeps existing chrome and save semantics (g
       expect(block).toMatch(/scroll-area flex min-h-0 flex-1 flex-col overflow-y-auto/)
       expect(block).toMatch(/flex shrink-0 flex-wrap gap-2 border-t border-line/)
       expect(block).not.toMatch(/min-h-\[420px\]/)
+      // g1.1 / g1.2: Tabs 下直接 empty/data shell，无 hintRow（envHint / varsHint + 合并规则）
+      expect(block).not.toMatch(/mb-3 flex shrink-0 flex-wrap items-baseline/)
+      expect(block).not.toMatch(/project-detail-merge-rules/)
     }
-    expect(sandbox).toMatch(/mb-3 flex shrink-0 flex-wrap items-baseline/)
     expect(sandbox).toMatch(/data-testid="sandbox-env-footer"/)
     expect(variables).toMatch(/data-testid="workflow-vars-footer"/)
   })

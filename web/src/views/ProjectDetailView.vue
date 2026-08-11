@@ -206,8 +206,6 @@ const varRows = ref<ProjectVariable[]>([])
 const showDelete = ref(false)
 const deleting = ref(false)
 const deleteError = ref('')
-const helpOpen = ref(false)
-
 const runTarget = ref<Workflow | null>(null)
 const runFields = ref<InputField[]>([])
 const runInputs = ref<Record<string, string>>({})
@@ -1408,20 +1406,8 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Sandbox env tab: fill remaining main area, no page void under card -->
+      <!-- Sandbox env tab: fill remaining main area; no envHint / merge-rules row -->
       <div v-else-if="tab === 'sandboxEnv'" class="flex min-h-0 flex-1 flex-col">
-        <div class="mb-3 flex shrink-0 flex-wrap items-baseline gap-x-3 gap-y-1.5">
-          <p class="m-0 text-[13px] text-txt3">{{ t('pages.projectDetail.envHint') }}</p>
-          <button
-            type="button"
-            class="p-0 text-[13px] text-accent-2 underline underline-offset-2 hover:text-txt"
-            data-testid="project-detail-merge-rules"
-            @click="helpOpen = true"
-          >
-            {{ t('pages.projectDetail.viewMergeRules') }}
-          </button>
-        </div>
-
         <!-- Empty: same shell as data panel, fill + centered CTA, no bottom border -->
         <div
           v-if="!envRows.length"
@@ -1870,28 +1856,6 @@ onUnmounted(() => {
         <AppButton variant="danger" :disabled="deleting" @click="confirmDelete">
           {{ t('common.buttons.delete') }}
         </AppButton>
-      </div>
-    </AppModal>
-
-    <AppModal
-      :open="helpOpen"
-      :title="t('pages.projectDetail.helpTitle')"
-      :width="480"
-      @close="helpOpen = false"
-    >
-      <div class="space-y-2 text-sm text-txt2">
-        <p>{{ t('pages.projectDetail.helpMerge') }}</p>
-        <p>{{ t('pages.projectDetail.helpNamespaces') }}</p>
-        <p>{{ t('pages.projectDetail.helpSecret') }}</p>
-        <div
-          class="border border-accent/40 bg-accent-dim px-3 py-2.5 text-txt"
-          data-testid="merge-rules-new-note"
-        >
-          <span class="mb-1 inline-flex border border-ok/35 bg-ok/10 px-2 py-0.5 text-[12px] text-ok">
-            {{ t('pages.projectDetail.helpNewBadge') }}
-          </span>
-          <p class="m-0 text-sm">{{ t('pages.projectDetail.helpDisableSave') }}</p>
-        </div>
       </div>
     </AppModal>
   </div>
