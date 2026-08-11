@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	pingInterval   = 30 * time.Second
+	pingInterval    = 30 * time.Second
 	minSubscribeGap = 2 * time.Second
-	reqIDTTL       = 24 * time.Hour
+	reqIDTTL        = 24 * time.Hour
 )
 
 // Adapter is the WeCom intelligent-bot long-connection adapter.
@@ -30,16 +30,17 @@ type Adapter struct {
 	online    atomic.Bool
 	hasSpoken func(scene channels.Scene, conversationID string) bool
 
-	mu        sync.Mutex
-	seen      map[string]time.Time
-	reqByMsg  map[string]reqEntry
-	reqByConv map[string]reqEntry
-	cancel    context.CancelFunc
-	conn      *websocket.Conn
-	writeMu   sync.Mutex
-	lastSub   time.Time
-	httpDo    func(*http.Request) (*http.Response, error)
-	pending   map[string]chan resultBody
+	mu         sync.Mutex
+	seen       map[string]time.Time
+	reqByMsg   map[string]reqEntry
+	reqByConv  map[string]reqEntry
+	cancel     context.CancelFunc
+	conn       *websocket.Conn
+	writeMu    sync.Mutex
+	lastSub    time.Time
+	httpDo     func(*http.Request) (*http.Response, error)
+	pending    map[string]chan resultBody
+	ackTimeout time.Duration
 }
 
 type reqEntry struct {
@@ -98,8 +99,8 @@ func (a *Adapter) Stop() error {
 // Send implements channels.Adapter.
 func (a *Adapter) Send(ctx context.Context, out channels.OutboundMessage) error {
 	text := TruncateMarkdown(out.Text)
-	chatType := chatTypeOf(out.Scene)
-	if chatType == "" {
+	chatType, ok := sendChatTypeOf(out.Scene)
+	if !ok {
 		return fmt.Errorf("wecom: 未知会话类型 %q", out.Scene)
 	}
 
@@ -129,15 +130,22 @@ func (a *Adapter) Send(ctx context.Context, out channels.OutboundMessage) error 
 	return err
 }
 
-func chatTypeOf(scene channels.Scene) string {
+func sendChatTypeOf(scene channels.Scene) (uint32, bool) {
 	switch scene {
 	case channels.SceneC2C:
-		return chatSingle
+		return sendChatTypeSingle, true
 	case channels.SceneGroup:
-		return chatGroup
+		return sendChatTypeGroup, true
 	default:
-		return ""
+		return 0, false
 	}
+}
+
+// connSession tracks subscribe ACK (by req_id, not cmd) and pre-subscribe callbacks.
+type connSession struct {
+	subReq     string
+	subscribed bool
+	buffered   []frame
 }
 
 func (a *Adapter) run(ctx context.Context, onInbound channels.InboundHandler) {
@@ -201,6 +209,18 @@ func (a *Adapter) connectOnce(ctx context.Context, onInbound channels.InboundHan
 	}()
 
 	subReq := newReqID()
+	a.mu.Lock()
+	if a.pending == nil {
+		a.pending = map[string]chan resultBody{}
+	}
+	a.pending[subReq] = make(chan resultBody, 1)
+	a.mu.Unlock()
+	defer func() {
+		a.mu.Lock()
+		delete(a.pending, subReq)
+		a.mu.Unlock()
+	}()
+
 	payload, err := encodeFrame(cmdSubscribe, subReq, subscribeBody{
 		BotID: a.cfg.AppID, Secret: a.cfg.AppSecret,
 	})
@@ -215,7 +235,7 @@ func (a *Adapter) connectOnce(ctx context.Context, onInbound channels.InboundHan
 	defer stopHB()
 	go a.pingLoop(hbCtx, conn)
 
-	subscribed := false
+	sess := &connSession{subReq: subReq}
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -224,33 +244,70 @@ func (a *Adapter) connectOnce(ctx context.Context, onInbound channels.InboundHan
 		if err := conn.ReadJSON(&f); err != nil {
 			return err
 		}
-		switch f.Cmd {
-		case cmdSubscribe:
-			if a.deliverPending(f) {
-				continue
-			}
-			code, msg := decodeResult(f)
-			if code != 0 {
-				a.online.Store(false)
-				return classifyWeComError(code, msg)
-			}
-			a.online.Store(true)
-			subscribed = true
-			log.Info().Str("bot", a.cfg.AppID).Msg("wecom: subscribed")
-		case cmdSend, cmdRespond:
-			a.deliverPending(f)
-		case cmdCallback:
-			if !subscribed {
-				continue
-			}
-			a.handleCallback(ctx, f, onInbound)
-		case cmdDisconnected:
-			a.online.Store(false)
-			return fmt.Errorf("wecom: disconnected_event")
-		default:
-			// ignore unknown / ping replies
+		if err := a.handleIncoming(ctx, f, sess, onInbound); err != nil {
+			return err
 		}
 	}
+}
+
+// handleIncoming processes one WS frame. Official subscribe ACK has req_id +
+// errcode and typically no cmd=aibot_subscribe; online is set only when errcode==0.
+func (a *Adapter) handleIncoming(ctx context.Context, f frame, sess *connSession, onInbound channels.InboundHandler) error {
+	reqID := strings.TrimSpace(f.Headers.ReqID)
+	if sess != nil && reqID != "" && reqID == sess.subReq && !sess.subscribed {
+		code, msg := decodeResult(f)
+		a.deliverPending(f)
+		if code != 0 {
+			a.online.Store(false)
+			return classifyWeComError(code, msg)
+		}
+		a.online.Store(true)
+		sess.subscribed = true
+		log.Info().Str("bot", a.cfg.AppID).Msg("wecom: subscribed")
+		for _, bf := range sess.buffered {
+			a.handleCallback(ctx, bf, onInbound)
+		}
+		sess.buffered = nil
+		return nil
+	}
+
+	if a.deliverPending(f) {
+		return nil
+	}
+
+	switch f.Cmd {
+	case cmdCallback:
+		if sess == nil || !sess.subscribed {
+			if sess != nil {
+				sess.buffered = append(sess.buffered, f)
+			}
+			return nil
+		}
+		a.handleCallback(ctx, f, onInbound)
+	case cmdDisconnected:
+		a.online.Store(false)
+		return fmt.Errorf("wecom: disconnected_event")
+	case cmdSubscribe:
+		// Fallback if cmd is present but req_id did not match sess.subReq.
+		code, msg := decodeResult(f)
+		if code != 0 {
+			a.online.Store(false)
+			return classifyWeComError(code, msg)
+		}
+		if sess != nil && !sess.subscribed {
+			a.online.Store(true)
+			sess.subscribed = true
+			for _, bf := range sess.buffered {
+				a.handleCallback(ctx, bf, onInbound)
+			}
+			sess.buffered = nil
+		}
+	case cmdPing, cmdSend, cmdRespond, "":
+		// ping reply / unmatched ack: ignore
+	default:
+		// ignore unknown
+	}
+	return nil
 }
 
 func (a *Adapter) pingLoop(ctx context.Context, conn *websocket.Conn) {
@@ -261,10 +318,13 @@ func (a *Adapter) pingLoop(ctx context.Context, conn *websocket.Conn) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			a.writeMu.Lock()
-			err := conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(5*time.Second))
-			a.writeMu.Unlock()
+			// Official heartbeat is an application-layer {"cmd":"ping"} frame.
+			// WS PingMessage is not recognized and the server will drop the connection.
+			payload, err := encodeFrame(cmdPing, newReqID(), nil)
 			if err != nil {
+				return
+			}
+			if err := a.writeRaw(conn, payload); err != nil {
 				return
 			}
 		}
@@ -333,14 +393,7 @@ func (a *Adapter) handleCallback(ctx context.Context, f frame, onInbound channel
 			return
 		}
 	case msgMixed:
-		if scene == channels.SceneC2C && body.Image != nil {
-			img, hint := a.downloadDecryptImage(ctx, body.Image)
-			if img != nil {
-				in.Images = []channels.Image{*img}
-			}
-			in.ChannelHint = hint
-		}
-		// group mixed: keep text only; drop image
+		a.applyMixedItems(ctx, scene, &body, &in)
 	default:
 		// voice / file / video: ignore
 		return
@@ -354,6 +407,60 @@ func (a *Adapter) handleCallback(ctx context.Context, f frame, onInbound channel
 	}
 	if onInbound != nil {
 		onInbound(ctx, in)
+	}
+}
+
+func (a *Adapter) applyMixedItems(ctx context.Context, scene channels.Scene, body *callbackBody, in *channels.InboundMessage) {
+	items := body.Mixed.items()
+	var texts []string
+	if in.Text != "" {
+		texts = append(texts, in.Text)
+	}
+	for _, it := range items {
+		kind := strings.TrimSpace(it.Type)
+		if kind == "" {
+			if it.Image != nil {
+				kind = msgImage
+			} else {
+				kind = msgText
+			}
+		}
+		switch kind {
+		case msgText:
+			if it.Text != nil {
+				if c := strings.TrimSpace(it.Text.Content); c != "" {
+					texts = append(texts, c)
+				}
+			}
+		case msgImage:
+			if scene != channels.SceneC2C {
+				continue
+			}
+			imgSrc := it.Image
+			if imgSrc == nil {
+				imgSrc = body.Image
+			}
+			img, hint := a.downloadDecryptImage(ctx, imgSrc)
+			if img != nil {
+				in.Images = append(in.Images, *img)
+			}
+			if hint != "" && in.ChannelHint == "" {
+				in.ChannelHint = hint
+			}
+		}
+	}
+	// Legacy sibling image (non-official) still accepted for C2C.
+	if scene == channels.SceneC2C && len(in.Images) == 0 && body.Image != nil {
+		img, hint := a.downloadDecryptImage(ctx, body.Image)
+		if img != nil {
+			in.Images = append(in.Images, *img)
+		}
+		if hint != "" && in.ChannelHint == "" {
+			in.ChannelHint = hint
+		}
+	}
+	if len(texts) > 0 {
+		in.Text = strings.Join(texts, "\n")
 	}
 }
 
@@ -393,7 +500,7 @@ func (a *Adapter) respondMsg(ctx context.Context, reqID, msgid, text string) err
 	})
 }
 
-func (a *Adapter) sendMsg(ctx context.Context, chatID, chatType, text string) error {
+func (a *Adapter) sendMsg(ctx context.Context, chatID string, chatType uint32, text string) error {
 	return a.roundTrip(ctx, cmdSend, newReqID(), sendBody{
 		ChatID: chatID, ChatType: chatType, MsgType: "markdown",
 		Markdown: markdownBody{Content: text},
@@ -424,13 +531,24 @@ func (a *Adapter) roundTrip(ctx context.Context, cmd, reqID string, body any) er
 	if err := a.writeRaw(conn, payload); err != nil {
 		return err
 	}
-	timer := time.NewTimer(15 * time.Second)
+	return waitOutboundAck(ctx, ch, a.outboundAckTimeout())
+}
+
+func (a *Adapter) outboundAckTimeout() time.Duration {
+	if a.ackTimeout > 0 {
+		return a.ackTimeout
+	}
+	return 15 * time.Second
+}
+
+func waitOutboundAck(ctx context.Context, ch <-chan resultBody, timeout time.Duration) error {
+	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-timer.C:
-		return nil // no ack within window: treat write as accepted
+		return ErrOutboundTimeout
 	case res := <-ch:
 		if res.ErrCode != 0 {
 			return classifyWeComError(res.ErrCode, res.ErrMsg)
@@ -534,3 +652,8 @@ func (a *Adapter) RememberReqIDForTest(msgid, reqID string, scene channels.Scene
 
 // SetOnlineForTest toggles the subscribe-success flag.
 func (a *Adapter) SetOnlineForTest(v bool) { a.online.Store(v) }
+
+// HandleIncomingForTest drives subscribe-ACK / callback dispatch (unit tests).
+func (a *Adapter) HandleIncomingForTest(ctx context.Context, f frame, sess *connSession, onInbound channels.InboundHandler) error {
+	return a.handleIncoming(ctx, f, sess, onInbound)
+}

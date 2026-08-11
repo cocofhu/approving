@@ -8,9 +8,10 @@ import (
 
 // Sentinel errors used by cron / run-notify visibility and tests.
 var (
-	ErrUnspoken    = errors.New("未发言：该会话尚未向机器人发送过消息")
-	ErrRateLimited = errors.New("限流：企业微信频率限制")
-	ErrOffline     = errors.New("企业微信长连接未在线")
+	ErrUnspoken        = errors.New("未发言：该会话尚未向机器人发送过消息")
+	ErrRateLimited     = errors.New("限流：企业微信频率限制")
+	ErrOffline         = errors.New("企业微信长连接未在线")
+	ErrOutboundTimeout = errors.New("企业微信出站超时无应答")
 )
 
 func classifyWeComError(errcode int, errmsg string) error {
