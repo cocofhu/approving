@@ -713,7 +713,7 @@ describe('AgentStudio mobile core path', () => {
     await wrapper.findAll('button').find((b) => b.text() === '丢弃修改')!.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('请在桌面端完成')
+    expect(wrapper.text()).toContain('建议在桌面使用')
   })
 
   it('shows desktop-only tip for non-core tabs including meta', async () => {
@@ -724,8 +724,12 @@ describe('AgentStudio mobile core path', () => {
     await wrapper.findAll('button').find((b) => b.text() === '元信息')!.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('请在桌面端完成')
+    expect(wrapper.text()).toContain('建议在桌面使用')
     expect(wrapper.text()).not.toContain('ACP 后端')
+    expect(wrapper.find('[data-testid="studio-mobile-back-files"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="studio-mobile-back-files"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('建议在桌面使用')
   })
 
   it('mounts data panel on mobile instead of desktop-only tip', async () => {
@@ -736,7 +740,7 @@ describe('AgentStudio mobile core path', () => {
     await wrapper.findAll('button').find((b) => b.text() === '数据')!.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).not.toContain('请在桌面端完成')
+    expect(wrapper.text()).not.toContain('建议在桌面使用')
     expect(wrapper.find('agent-data-panel-stub').exists()).toBe(true)
   })
 
@@ -750,7 +754,7 @@ describe('AgentStudio mobile core path', () => {
       expect(btn).toBeTruthy()
       await btn!.trigger('click')
       await flushPromises()
-      expect(wrapper.text()).toContain('请在桌面端完成')
+      expect(wrapper.text()).toContain('建议在桌面使用')
       expect(wrapper.find('agent-data-panel-stub').exists()).toBe(false)
     }
   })
@@ -785,10 +789,46 @@ describe('AgentStudio mobile core path', () => {
     )
     await flushPromises()
 
-    expect(wrapper.text()).not.toContain('请在桌面端完成')
+    expect(wrapper.text()).not.toContain('建议在桌面使用')
     const panel = wrapper.find('agent-data-panel-stub')
     expect(panel.exists()).toBe(true)
     expect(panel.attributes('sub-tab') || panel.attributes('subtab')).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  it('deep-links to platform-rules on mobile with desktop-only empty state and back to Files', async () => {
+    mocks.listAgents.mockResolvedValue([{ ...agentWithFiles(), name: 'alpha' }])
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const router = await createStudioRouter({ agent: 'alpha', tab: 'platform-rules' })
+    const wrapper = trackMount(
+      mount(AgentStudioView, {
+        global: {
+          plugins: [i18n, router],
+          stubs: {
+            AppButton: ButtonStub,
+            Icon: true,
+            AppModal: ModalStub,
+            CodeEditor: CodeEditorStub,
+            MarkdownSplitEditor: MdStub,
+            ExplorerContextMenu: true,
+            AgentChatTester: true,
+            AgentGitGuide: true,
+            AgentCreateWizard: true,
+            AgentOrgSidebar: true,
+            AgentDataPanel: true,
+          },
+        },
+      }),
+    )
+    await flushPromises()
+    expect(wrapper.text()).toContain('建议在桌面使用')
+    expect(wrapper.text()).toContain('不提供编辑 UI')
+    expect(wrapper.find('[data-testid="studio-mobile-back-files"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('运行时加载优先级')
     wrapper.unmount()
   })
 
@@ -809,7 +849,7 @@ describe('AgentStudio mobile core path', () => {
     expect(wrapper.text()).toContain('请在桌面端')
     expect(wrapper.text()).not.toContain('去绑定主项目')
     expect(wrapper.find('agent-data-panel-stub').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('请在桌面端完成')
+    expect(wrapper.text()).not.toContain('建议在桌面使用')
   })
 
   it('shows switch entry and opens org sheet with groups/ungrouped', async () => {

@@ -11,6 +11,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { api, type SandboxView } from '@/lib/api/api'
+import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import { copyToClipboard } from '@/lib/shared/copyToClipboard'
 import { useToast } from '@/lib/composables/useToast'
 
@@ -18,6 +19,9 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const toast = useToast()
+const { isMobile } = useBreakpoint()
+const showSessionPeek = ref(false)
+const metaLoading = ref(true)
 const id = Number(route.params.id)
 
 const CONSOLE_TABS = ['terminal', 'ide', 'acp', 'novnc', 'log'] as const
@@ -112,6 +116,7 @@ let lastCols = 0
 let lastRows = 0
 
 async function loadMeta() {
+  metaLoading.value = true
   try {
     // Prefer getSandbox so password is available even if list is filtered/cached.
     sandbox.value = await api.getSandbox(id)
@@ -122,8 +127,26 @@ async function loadMeta() {
     } catch {
       sandbox.value = null
     }
+  } finally {
+    metaLoading.value = false
   }
 }
+
+const sessionUptime = computed(() => {
+  const raw = sandbox.value?.createdAt
+  if (!raw) return ''
+  const ms = Date.now() - new Date(raw).getTime()
+  if (!Number.isFinite(ms) || ms < 0) return ''
+  const minutes = Math.floor(ms / 60_000)
+  if (minutes < 60) return `${minutes}m`
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+})
+
+const endpointPorts = computed(() => {
+  const ep = sandbox.value?.endpoints
+  if (!ep) return ''
+  return Object.keys(ep).filter(Boolean).join(', ')
+})
 
 function initTerminal() {
   if (term || !termHost.value) return
@@ -200,6 +223,10 @@ watch(tab, (t) => {
 
 onMounted(async () => {
   tab.value = initialConsoleTab()
+  if (isMobile.value) {
+    await loadMeta()
+    return
+  }
   if (tab.value === 'ide') ideMounted.value = true
   if (tab.value === 'acp') acpMounted.value = true
   if (tab.value === 'novnc') novncMounted.value = true
@@ -225,7 +252,55 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex h-full flex-col">
+  <div
+    v-if="isMobile"
+    class="flex h-full min-h-0 flex-col overflow-auto bg-base"
+    data-testid="sandbox-console-mobile"
+  >
+    <div class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2">
+      <button
+        type="button"
+        class="flex min-h-11 items-center gap-1 text-[13px] text-txt3 hover:text-txt"
+        @click="router.push('/sandboxes')"
+      >
+        <Icon name="arrow-left" :size="15" />{{ t('pages.sandboxConsole.back') }}
+      </button>
+      <span class="truncate text-[13px] font-medium text-txt">{{ sandboxTitle }}</span>
+    </div>
+    <div class="flex flex-1 flex-col items-center px-5 py-8 text-center">
+      <div class="mb-3 flex h-10 w-10 items-center justify-center border border-info/35 bg-info/10 text-info">⌁</div>
+      <h3 class="text-[14px] font-semibold text-txt">{{ t('pages.sandboxConsole.mobile.title') }}</h3>
+      <p class="mt-2 max-w-[32ch] text-[12.5px] leading-relaxed text-txt2">{{ t('pages.sandboxConsole.mobile.desc') }}</p>
+      <button
+        type="button"
+        class="mt-4 min-h-11 border border-line bg-transparent px-4 text-[13px] text-txt2 hover:border-accent hover:text-txt"
+        data-testid="sandbox-console-peek"
+        @click="showSessionPeek = !showSessionPeek"
+      >
+        {{ t('pages.sandboxConsole.mobile.peek') }}
+      </button>
+    </div>
+    <div
+      v-if="showSessionPeek"
+      class="mx-4 mb-6 border border-line bg-surface p-3 text-left"
+      data-testid="sandbox-console-summary"
+    >
+      <div class="mb-2 text-[11px] uppercase tracking-wider text-txt3">{{ t('pages.sandboxConsole.mobile.summaryLabel') }}</div>
+      <p v-if="metaLoading" class="text-[12px] text-txt3">{{ t('pages.sandboxConsole.mobile.loading') }}</p>
+      <p v-else-if="!sandbox" class="text-[12px] text-txt3">{{ t('pages.sandboxConsole.mobile.empty') }}</p>
+      <pre
+        v-else
+        class="whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-txt2"
+      >{{ t('pages.sandboxConsole.mobile.name') }}: {{ sandbox.name || sandboxTitle }}
+{{ t('pages.sandboxConsole.mobile.status') }}: {{ sandbox.status }}
+{{ t('pages.sandboxConsole.mobile.containerStatus') }}: {{ sandbox.containerStatus }}
+{{ t('pages.sandboxConsole.mobile.endpoints') }}: {{ endpointPorts || '—' }}
+{{ t('pages.sandboxConsole.mobile.uptime') }}: {{ sessionUptime || '—' }}
+
+{{ t('pages.sandboxConsole.mobile.desktopHint') }}</pre>
+    </div>
+  </div>
+  <div v-else class="flex h-full flex-col">
     <div class="flex h-12 shrink-0 items-center gap-3 border-b border-line px-4">
       <button class="flex items-center gap-1 text-[13px] text-txt3 hover:text-txt" @click="router.push('/sandboxes')">
         <Icon name="arrow-left" :size="15" />{{ t('pages.sandboxConsole.back') }}

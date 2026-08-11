@@ -37,6 +37,16 @@ vi.mock('@/lib/composables/useAuth', async () => {
   }
 })
 
+const breakpointMocks = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const vue = require('vue') as typeof import('vue')
+  return { isMobile: vue.ref(false) }
+})
+
+vi.mock('@/lib/composables/useBreakpoint', () => ({
+  useBreakpoint: () => ({ isMobile: breakpointMocks.isMobile }),
+}))
+
 import PlatformRulesView from './PlatformRulesView.vue'
 
 const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'PlatformRulesView.vue'), 'utf8')
@@ -101,6 +111,7 @@ describe('PlatformRulesView loading source lock', () => {
 describe('PlatformRulesView selectFile race + four-state', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    breakpointMocks.isMobile.value = false
   })
 
   it('shows grouped skeleton before rules arrive', async () => {
@@ -172,5 +183,62 @@ describe('PlatformRulesView selectFile race + four-state', () => {
     expect(w.text()).toContain('权限不足')
     expect(w.text()).toContain('重试')
     w.unmount()
+  })
+})
+
+describe('PlatformRulesView mobile list/detail step', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    breakpointMocks.isMobile.value = true
+  })
+
+  it('narrow screen is list/detail exclusive and does not mount the editor', async () => {
+    apiMocks.listPlatformRules.mockResolvedValue({
+      items: [{ ...FILE_A, mtime: '2026-08-01T00:00:00Z' }],
+    })
+    apiMocks.getPlatformRule.mockResolvedValue({ ...FILE_A, content: '# Title\n\nSummary line' })
+    const w = mountRules()
+    await flushPromises()
+
+    expect(w.find('[data-testid="platform-rules-list"]').exists()).toBe(true)
+    expect(w.find('[data-testid="platform-rules-mobile-detail"]').exists()).toBe(false)
+    expect(w.find('[data-testid="platform-rules-editor"]').exists()).toBe(false)
+    expect(w.text()).not.toContain('保存')
+    expect(w.text()).not.toContain('恢复内置默认')
+
+    await w.find('[data-testid="platform-rules-file"]').trigger('click')
+    await flushPromises()
+
+    expect(w.find('[data-testid="platform-rules-list"]').exists()).toBe(false)
+    expect(w.find('[data-testid="platform-rules-mobile-detail"]').exists()).toBe(true)
+    expect(w.find('[data-testid="platform-rules-editor"]').exists()).toBe(false)
+    expect(w.text()).toContain('a.md')
+    expect(w.text()).toContain('全局默认')
+    expect(w.text()).toContain('Title')
+    expect(w.text()).toContain('Summary line')
+
+    await w.find('[data-testid="platform-rules-back-list"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="platform-rules-list"]').exists()).toBe(true)
+    expect(w.find('[data-testid="platform-rules-mobile-detail"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('mobile skeleton is single-column and failure stays readable', async () => {
+    let releaseList!: (v: unknown) => void
+    apiMocks.listPlatformRules.mockReturnValue(new Promise((resolve) => { releaseList = resolve }))
+    const w = mountRules()
+    await flushPromises()
+    expect(w.find('[data-testid="platform-rules-skeleton"]').exists()).toBe(true)
+    expect(w.find('[data-testid="platform-rules-skeleton"]').classes()).not.toContain('grid-cols-[240px_1fr_280px]')
+    w.unmount()
+
+    apiMocks.listPlatformRules.mockRejectedValue(Object.assign(new Error('down'), { status: 500 }))
+    const failed = mountRules()
+    await flushPromises()
+    expect(failed.find('[data-testid="platform-rules-failed"]').exists()).toBe(true)
+    expect(failed.text()).toContain('重试')
+    failed.unmount()
+    void releaseList
   })
 })

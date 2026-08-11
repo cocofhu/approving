@@ -77,7 +77,7 @@ function cardIconClass(scope: McpServer['scope']): string {
       class="card mb-3 w-full p-4 text-left transition-colors hover:border-line-strong hover:bg-elevated"
       @click="openDetail(m)"
     >
-      <div class="flex items-start gap-3">
+      <div class="flex min-h-11 items-start gap-3">
         <div
           class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md"
           :class="cardIconClass(m.scope)"
@@ -89,16 +89,16 @@ function cardIconClass(scope: McpServer['scope']): string {
             <span class="font-medium text-txt">{{ m.name }}</span>
             <span class="chip">MCP</span>
             <span class="chip" :class="scopeChipClass(m.scope)">{{ t(scopeLabelKey(m.scope)) }}</span>
+            <span
+              class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]"
+              :class="availabilityBadgeClass(m.scope)"
+            >
+              <Icon :name="m.scope === 'run' ? 'check' : 'clock'" :size="11" />
+              {{ t(availabilityBadgeKey(m.scope)) }}
+            </span>
           </div>
           <div class="mt-0.5 text-[12px] text-txt3">{{ t(m.descKey) }}</div>
         </div>
-        <span
-          class="inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]"
-          :class="availabilityBadgeClass(m.scope)"
-        >
-          <Icon :name="m.scope === 'run' ? 'check' : 'clock'" :size="11" />
-          {{ t(availabilityBadgeKey(m.scope)) }}
-        </span>
       </div>
       <div class="mt-3 flex items-center justify-between border-t border-line pt-3 text-[12px] text-txt3">
         <span>{{ t('mcp.integrations.toolCount', { n: m.tools.length }) }}</span>

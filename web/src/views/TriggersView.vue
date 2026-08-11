@@ -20,17 +20,17 @@ const triggers = computed(() => [
       <p class="text-sm text-txt3">{{ t('pages.triggers.subtitle') }}</p>
     </div>
     <div class="space-y-3">
-      <div v-for="item in triggers" :key="item.type" class="card flex items-center gap-3 p-4" :class="item.available ? '' : 'opacity-70'">
-        <div class="flex h-10 w-10 items-center justify-center rounded-md" :class="item.available ? 'bg-accent-dim text-accent-2' : 'bg-elevated text-txt3'">
+      <div v-for="item in triggers" :key="item.type" class="card flex min-h-11 items-center gap-3 p-4" :class="item.available ? '' : 'opacity-70'">
+        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md" :class="item.available ? 'bg-accent-dim text-accent-2' : 'bg-elevated text-txt3'">
           <Icon :name="item.icon" :size="18" />
         </div>
-        <div class="flex-1">
-          <div class="flex items-center gap-2">
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2">
             <span class="font-medium text-txt">{{ item.type }}</span>
             <span v-if="item.available" class="chip border-ok/30 text-ok">{{ t('pages.triggers.available') }}</span>
             <span v-else class="chip">{{ t('pages.triggers.planned') }}</span>
           </div>
-          <div class="text-[12px] text-txt3">{{ item.desc }}</div>
+          <div class="break-words text-[12px] text-txt3">{{ item.desc }}</div>
         </div>
       </div>
     </div>

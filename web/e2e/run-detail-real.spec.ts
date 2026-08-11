@@ -301,6 +301,22 @@ test('390px：统计区域视觉回归', async ({ page }) => {
 })
 
 test.describe('主视图时间线移动端契约（生产路径）', () => {
+  test('767px 为移动单栏；768/769 为桌面并排（不断言 768=手机时间线）', async ({ page }) => {
+    await gotoRealRunMain(page, 767)
+    await expect(page.getByTestId('mobile-main-panel-tabs')).toBeVisible()
+    await expect(page.getByTestId('view-mode-canvas')).toHaveCount(0)
+
+    await page.setViewportSize({ width: 768, height: 900 })
+    await expect(page.getByTestId('mobile-main-panel-tabs')).toHaveCount(0)
+    await expect(page.getByTestId('view-mode-canvas')).toBeVisible()
+    await expect(page.getByTestId('run-timeline-pane')).toBeVisible()
+    await expect(page.getByTestId('run-detail-right-panel')).toBeVisible()
+
+    await page.setViewportSize({ width: 769, height: 900 })
+    await expect(page.getByTestId('mobile-main-panel-tabs')).toHaveCount(0)
+    await expect(page.getByTestId('view-mode-canvas')).toBeVisible()
+  })
+
   test('390px：默认时间线可见、无画布入口、预选最近节点', async ({ page }) => {
     await gotoRealRunMain(page, 390)
 

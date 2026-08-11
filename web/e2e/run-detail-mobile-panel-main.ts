@@ -1,6 +1,6 @@
 /**
  * Production-shaped mobile Run detail fixture (post single-panel fix).
- * Mirrors RunDetailView ≤768: page tabs, mutual timeline/detail, scroll footer,
+ * Mirrors RunDetailView ≤767: page tabs, mutual timeline/detail, scroll footer,
  * product default tab, and waiting_human gate/review sticky decisions.
  */
 import '../src/styles/global.css'
@@ -208,11 +208,11 @@ const reviewRun: Run = {
 } as Run
 
 function forceMobileMql() {
-  const mql = window.matchMedia('(max-width: 768px)')
+  const mql = window.matchMedia('(max-width: 767px)')
   Object.defineProperty(mql, 'matches', { configurable: true, get: () => true })
   const orig = window.matchMedia.bind(window)
   window.matchMedia = ((query: string) => {
-    if (String(query).includes('max-width: 768px')) return mql
+    if (String(query).includes('max-width: 767px')) return mql
     return orig(query)
   }) as typeof window.matchMedia
 }

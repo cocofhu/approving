@@ -637,6 +637,14 @@
       "descPlaceholder": "列表副文案 / 简要说明",
       "projectRequired": "请先选择所属项目后再新建流水线",
       "loadFailed": "加载工作流失败,后端可能未连接",
+      "mobile": {
+        "title": "推荐在桌面编辑",
+        "desc": "完整节点拖拽编排与属性面板需更大视口。此处仅支持有限查看。",
+        "peek": "查看流程概要",
+        "summaryLabel": "只读概要",
+        "empty": "当前流程没有节点",
+        "noEdit": "不可拖拽 · 无属性面板编辑"
+      },
       "publishFailed": "发布失败:",
       "rollbackFailed": "回滚失败,请重试",
       "runDraftHint": " · 启动前会先保存当前草稿",
@@ -1197,6 +1205,13 @@
       "title": "平台规则（全局默认）",
       "subtitle": "9 个规则文件 · 仅管理员可写 · 存 data/platform-rules/",
       "backToSettings": "返回设置",
+      "backToList": "返回列表",
+      "emptyList": "暂无平台规则文件",
+      "emptySummary": "暂无摘要",
+      "mtimeLabel": "更新时间",
+      "summaryTitle": "只读摘要",
+      "mobileStepChip": "单栏步进",
+      "mobileReadonlyHint": "桌面仍为三栏（列表 / 编辑器 / 元数据）。窄屏仅浏览步进，不提供编辑或保存。",
       "readOnlyHint": "只读模式（非管理员）",
       "resetEmbed": "恢复内置默认",
       "loadFailed": "加载平台规则失败",
@@ -1322,7 +1337,21 @@
       "logEmpty": "暂无日志(容器可能尚未产生输出或已回收且未归档)",
       "logFailed": "日志请求失败，请重试。",
       "logRefreshing": "正在刷新日志…",
-      "disconnected": "[连接已断开]"
+      "disconnected": "[连接已断开]",
+      "mobile": {
+        "title": "推荐在桌面操作",
+        "desc": "终端、IDE iframe 与 noVNC 依赖大视口。手机端不提供完整远程操作。",
+        "peek": "查看会话摘要",
+        "summaryLabel": "会话摘要（只读）",
+        "empty": "暂无会话数据",
+        "loading": "正在加载会话…",
+        "desktopHint": "终端 / IDE / noVNC 请使用桌面",
+        "name": "name",
+        "status": "status",
+        "containerStatus": "containerStatus",
+        "endpoints": "ports",
+        "uptime": "uptime"
+      }
     },
     "agentStudio": {
       "title": "Agent 管理",
@@ -1643,8 +1672,9 @@
         "switchAria": "打开 Agent 组织树",
         "orgSheetTitle": "Agent 组织树",
         "orgSheetHint": "只读浏览：支持折叠展开与切换；不提供分组创建 / 拖拽排序。可通过遮罩或关闭按钮收起。",
-        "desktopOnlyTitle": "请在桌面端完成",
-        "desktopOnlyDesc": "「{tab}」本期窄屏仅保留入口，请在桌面浏览器中完成完整配置。",
+        "desktopOnlyTitle": "建议在桌面使用",
+        "desktopOnlyDesc": "「{tab}」需要多栏编辑工作区。手机端仅提供引导，不提供编辑 UI。",
+        "backToFiles": "返回 Files",
         "fullNameLabel": "完整名称",
         "fullNameAria": "查看完整 Agent 名称"
       },

@@ -1502,7 +1502,7 @@ tr.detail td {
   font-size: 10px;
   color: rgb(var(--c-accent));
 }
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .filters:not(.filters-mobile) {
     flex-direction: column;
     align-items: stretch;

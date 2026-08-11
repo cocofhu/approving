@@ -37,6 +37,16 @@ vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn() }),
 }))
 
+const breakpointMocks = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const vue = require('vue') as typeof import('vue')
+  return { isMobile: vue.ref(false) }
+})
+
+vi.mock('@/lib/composables/useBreakpoint', () => ({
+  useBreakpoint: () => ({ isMobile: breakpointMocks.isMobile }),
+}))
+
 vi.mock('@xterm/xterm', () => {
   class Terminal {
     cols = 80
@@ -84,6 +94,8 @@ const MOCK_SANDBOX: SandboxView = {
   connected: true,
   hasCodeServer: true,
   hasAcp: true,
+  password: 'secret-password',
+  endpoints: { '5173': '127.0.0.1:5173', '8080': '127.0.0.1:8080' },
 }
 
 class MockWebSocket {
@@ -106,9 +118,14 @@ class MockWebSocket {
   }
 }
 
-async function mountConsole(tabQuery?: string): Promise<VueWrapper> {
-  apiMocks.getSandbox.mockResolvedValue(MOCK_SANDBOX)
-  apiMocks.listSandboxes.mockResolvedValue([MOCK_SANDBOX])
+async function mountConsole(tabQuery?: string, opts?: { empty?: boolean }): Promise<VueWrapper> {
+  if (opts?.empty) {
+    apiMocks.getSandbox.mockRejectedValue(new Error('missing'))
+    apiMocks.listSandboxes.mockResolvedValue([])
+  } else {
+    apiMocks.getSandbox.mockResolvedValue(MOCK_SANDBOX)
+    apiMocks.listSandboxes.mockResolvedValue([MOCK_SANDBOX])
+  }
   apiMocks.sandboxLog.mockResolvedValue({ content: '', live: false, found: false })
 
   const i18n = createI18n({
@@ -150,6 +167,7 @@ async function mountConsole(tabQuery?: string): Promise<VueWrapper> {
 
 describe('SandboxConsoleView IDE/ACP lazy mount', () => {
   beforeEach(() => {
+    breakpointMocks.isMobile.value = false
     vi.stubGlobal('WebSocket', MockWebSocket as unknown as typeof WebSocket)
     vi.stubGlobal(
       'ResizeObserver',
@@ -237,5 +255,53 @@ describe('SandboxConsoleView IDE/ACP lazy mount', () => {
     expect(legacy.find('iframe[title="ACP bridge"]').exists()).toBe(false)
     expect(legacy.find('iframe[title="code-server"]').exists()).toBe(false)
     legacy.unmount()
+  })
+})
+
+describe('SandboxConsoleView mobile desktop-recommend', () => {
+  beforeEach(() => {
+    breakpointMocks.isMobile.value = true
+    vi.stubGlobal('WebSocket', MockWebSocket as unknown as typeof WebSocket)
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+        unobserve() {}
+      },
+    )
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  it('shows desktop recommend first and expands a read-only summary without terminal/iframe', async () => {
+    const wrapper = await mountConsole()
+    expect(wrapper.find('[data-testid="sandbox-console-mobile"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('推荐在桌面操作')
+    expect(wrapper.find('iframe').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="novnc-stub"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('直连密码')
+
+    await wrapper.get('[data-testid="sandbox-console-peek"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sandbox-console-summary"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('sb-42')
+    expect(wrapper.text()).toContain('running')
+    expect(wrapper.text()).not.toContain('secret-password')
+    wrapper.unmount()
+  })
+
+  it('empty session still shows recommend plus readable empty summary', async () => {
+    const wrapper = await mountConsole(undefined, { empty: true })
+    expect(wrapper.text()).toContain('推荐在桌面操作')
+    await wrapper.get('[data-testid="sandbox-console-peek"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('暂无会话数据')
+    expect(wrapper.find('iframe').exists()).toBe(false)
+    wrapper.unmount()
   })
 })
