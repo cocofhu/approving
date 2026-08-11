@@ -152,7 +152,7 @@ describe('AppTopbar notifications', () => {
     wrapper.unmount()
   })
 
-  it('caps dropdown at 10 items; view-all goes to /notifications; mark-all clears badge', async () => {
+  it('caps dropdown at 5 items; view-all goes to /notifications; mark-all clears badge', async () => {
     seedBaseline()
     const items = Array.from({ length: 12 }, (_, i) =>
       run({
@@ -175,7 +175,9 @@ describe('AppTopbar notifications', () => {
     expect(wrapper.findAll('[data-testid="run-notifications-item"]')).toHaveLength(
       RUN_TERMINAL_PANEL_LIMIT,
     )
-    expect(wrapper.find('[data-testid="run-notifications-more"]').text()).toContain('还有 2 条')
+    expect(RUN_TERMINAL_PANEL_LIMIT).toBe(5)
+    expect(wrapper.find('[data-testid="run-notifications-more"]').text()).toContain('还有 7 条')
+    expect(wrapper.find('[data-testid="run-notifications-view-all"]').text()).toBe('查看全部通知')
 
     await wrapper.find('[data-testid="run-notifications-mark-all"]').trigger('click')
     await nextTick()
@@ -186,6 +188,23 @@ describe('AppTopbar notifications', () => {
     expect(push).not.toHaveBeenCalledWith(
       expect.objectContaining({ path: '/runs' }),
     )
+    wrapper.unmount()
+  })
+
+  it('shows before-baseline label on history items without counting them unread', async () => {
+    // First-enable baseline ≈ now; past fixtures → beforeBaseline, unread=false.
+    vi.mocked(api.listRuns).mockResolvedValue(
+      paged([run({ id: 'hist', status: 'completed', startedAt: '2026-08-01T12:00:00Z' })]),
+    )
+    const wrapper = mountTopbar()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="run-notifications-badge"]').exists()).toBe(false)
+    await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
+    await nextTick()
+    const item = wrapper.find('[data-testid="run-notifications-item"]')
+    expect(item.attributes('data-before-baseline')).toBe('true')
+    expect(item.attributes('data-unread')).toBe('false')
+    expect(item.text()).toContain('基线前·不计未读')
     wrapper.unmount()
   })
 
