@@ -93,6 +93,9 @@ type AdapterConfig struct {
 	AppID     string
 	AppSecret string // decrypted
 	Config    map[string]any
+	// HasSpoken reports whether the conversation has inbound channel history.
+	// Used by wecom proactive push to fail locally with 「未发言」.
+	HasSpoken func(scene Scene, conversationID string) bool
 }
 
 // AdapterFactory builds an Adapter for a resolved config. Registered in the

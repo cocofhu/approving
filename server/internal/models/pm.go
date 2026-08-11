@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // ProjectMemoryItem is one long-term memory entry scoped to a project + agent.
 // Human edits/clears go through Agent Studio (any authenticated user);
@@ -32,6 +35,8 @@ type ChatThread struct {
 	// Kind: user (interactive) | cron (scheduler-owned exclusive thread).
 	Kind  string `gorm:"index" json:"kind,omitempty"`
 	Title string `json:"title"`
+	// Unspoken is a computed flag: channel thread with no source=channel inbound.
+	Unspoken bool `json:"unspoken,omitempty" gorm:"-"`
 	// SandboxRef stores the bound models.Sandbox.ID as a decimal string when a
 	// PM consult sandbox is live for this thread. Empty means unbound.
 	SandboxRef string    `json:"sandboxRef,omitempty"`
@@ -186,8 +191,24 @@ type ChannelConfig struct {
 
 // Channel types.
 const (
-	ChannelTypeQQ = "qq"
+	ChannelTypeQQ    = "qq"
+	ChannelTypeWeCom = "wecom"
 )
+
+// RegisteredChannelTypes returns channel types the platform can persist/start.
+func RegisteredChannelTypes() []string {
+	return []string{ChannelTypeQQ, ChannelTypeWeCom}
+}
+
+// IsRegisteredChannelType reports whether typ is a known adapter type.
+func IsRegisteredChannelType(typ string) bool {
+	switch strings.TrimSpace(typ) {
+	case ChannelTypeQQ, ChannelTypeWeCom:
+		return true
+	default:
+		return false
+	}
+}
 
 // AgentCronRun is one execution record for an AgentCronJob.
 type AgentCronRun struct {

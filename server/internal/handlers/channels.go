@@ -13,6 +13,7 @@ import (
 )
 
 type channelBody struct {
+	Type               string         `json:"type"`
 	Name               string         `json:"name"`
 	Enabled            bool           `json:"enabled"`
 	AgentName          string         `json:"agentName"`
@@ -35,8 +36,13 @@ type channelDeleteBody struct {
 }
 
 func (b channelBody) toInput(projectID string) services.ChannelConfigInput {
+	typ := strings.TrimSpace(b.Type)
+	if typ == "" {
+		// Legacy clients omit type; keep QQ as the implicit default.
+		typ = models.ChannelTypeQQ
+	}
 	return services.ChannelConfigInput{
-		Type: models.ChannelTypeQQ, Name: b.Name, Enabled: b.Enabled, ProjectID: projectID,
+		Type: typ, Name: b.Name, Enabled: b.Enabled, ProjectID: projectID,
 		AgentName: b.AgentName, IsPrimary: b.IsPrimary, EnabledMcps: b.EnabledMcps,
 		AppID: b.AppID, AppSecret: b.AppSecret, TurnTimeoutSeconds: b.TurnTimeoutSeconds,
 		CronDeliver: b.CronDeliver, CronDeliverTarget: b.CronDeliverTarget, Config: b.Config,
@@ -240,6 +246,7 @@ func writeChannelErr(c *gin.Context, err error) {
 	case errors.Is(err, services.ErrChannelNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, services.ErrChannelAppIDExists),
+		errors.Is(err, services.ErrChannelBotIDExists),
 		errors.Is(err, services.ErrChannelAgentTaken),
 		errors.Is(err, services.ErrChannelDualPrimary),
 		errors.Is(err, services.ErrChannelLegacyDeleteMulti):
@@ -251,6 +258,8 @@ func writeChannelErr(c *gin.Context, err error) {
 		errors.Is(err, services.ErrChannelSecretKeyMissing),
 		errors.Is(err, services.ErrChannelSecretKeyInvalid),
 		errors.Is(err, services.ErrChannelTypeUnsupported),
+		errors.Is(err, services.ErrChannelTypeFrozen),
+		errors.Is(err, services.ErrChannelBotIDFrozen),
 		errors.Is(err, services.ErrChannelCronTargetRequired),
 		errors.Is(err, services.ErrChannelCronTargetInvalid),
 		errors.Is(err, services.ErrChannelAgentRequired),

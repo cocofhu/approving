@@ -18,6 +18,9 @@ import (
 var (
 	ErrChannelNotFound              = errors.New("渠道配置不存在")
 	ErrChannelAppIDExists           = errors.New("该 AppID 已被其它渠道占用")
+	ErrChannelBotIDExists           = errors.New("BotID 已被其它项目/渠道占用")
+	ErrChannelTypeFrozen            = errors.New("渠道类型保存后不可修改")
+	ErrChannelBotIDFrozen           = errors.New("BotID 保存后不可修改")
 	ErrChannelProjectRequired       = errors.New("必须绑定项目")
 	ErrChannelAppIDRequired         = errors.New("必须填写 AppID")
 	ErrChannelSecretRequired        = errors.New("必须填写 AppSecret")
@@ -42,7 +45,8 @@ var (
 
 // supportedChannelTypes gates the Type field. Extend as adapters are added.
 var supportedChannelTypes = map[string]bool{
-	models.ChannelTypeQQ: true,
+	models.ChannelTypeQQ:    true,
+	models.ChannelTypeWeCom: true,
 }
 
 // ChannelConfigInput is the create/update payload (plaintext AppSecret).
@@ -94,8 +98,11 @@ type ChannelConfigDTO struct {
 	CronDeliver        bool           `json:"cronDeliver"`
 	CronDeliverTarget  string         `json:"cronDeliverTarget,omitempty"`
 	Config             map[string]any `json:"config,omitempty"`
-	CreatedAt          time.Time      `json:"createdAt"`
-	UpdatedAt          time.Time      `json:"updatedAt"`
+	// Online is a computed field: long-connection subscribe succeeded.
+	// Injected by Manager via ChannelConfigService.onlineOf; false when unset.
+	Online    bool      `json:"online"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // ChannelConfigService manages persisted external channel configs. Writes
@@ -104,6 +111,8 @@ type ChannelConfigService struct {
 	db       *gorm.DB
 	skills   *SkillService
 	onChange func()
+	// onlineOf reports whether a running adapter is subscribed/online.
+	onlineOf func(channelID string) bool
 }
 
 // NewChannelConfigService builds the service.
@@ -116,6 +125,11 @@ func (s *ChannelConfigService) SetSkillService(skills *SkillService) { s.skills 
 
 // SetOnChange registers a callback fired after each successful write.
 func (s *ChannelConfigService) SetOnChange(fn func()) { s.onChange = fn }
+
+// SetOnlineLookup injects Manager.IsOnline so list/get DTOs can expose `online`.
+func (s *ChannelConfigService) SetOnlineLookup(fn func(channelID string) bool) {
+	s.onlineOf = fn
+}
 
 func (s *ChannelConfigService) notify() {
 	if s.onChange != nil {
@@ -142,7 +156,7 @@ func (s *ChannelConfigService) ListByProject(projectID string) ([]ChannelConfigD
 	}
 	out := make([]ChannelConfigDTO, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, toChannelDTO(r))
+		out = append(out, s.toChannelDTO(r))
 	}
 	return out, nil
 }
@@ -156,7 +170,7 @@ func (s *ChannelConfigService) GetByID(id string) (ChannelConfigDTO, error) {
 		}
 		return ChannelConfigDTO{}, err
 	}
-	return toChannelDTO(row), nil
+	return s.toChannelDTO(row), nil
 }
 
 // GetPrimaryByProject returns the primary channel, or nil when the project has none.
@@ -170,7 +184,7 @@ func (s *ChannelConfigService) GetPrimaryByProject(projectID string) (*ChannelCo
 	if err != nil {
 		return nil, err
 	}
-	dto := toChannelDTO(r)
+	dto := s.toChannelDTO(r)
 	return &dto, nil
 }
 
@@ -188,7 +202,7 @@ func (s *ChannelConfigService) GetByAgent(agentName string) (*ChannelConfigDTO, 
 	if err != nil {
 		return nil, err
 	}
-	dto := toChannelDTO(r)
+	dto := s.toChannelDTO(r)
 	return &dto, nil
 }
 
@@ -267,7 +281,7 @@ func (s *ChannelConfigService) Create(in ChannelConfigInput) (ChannelConfigDTO, 
 		if err := tx.Create(&row).Error; err != nil {
 			return mapChannelConstraintErr(err)
 		}
-		out = toChannelDTO(row)
+		out = s.toChannelDTO(row)
 		return nil
 	})
 	if err != nil {
@@ -293,6 +307,20 @@ func (s *ChannelConfigService) Update(id string, in ChannelConfigInput) (Channel
 	if in.AgentName == "" {
 		in.AgentName = row.AgentName
 	}
+	// Type is frozen after create. Empty type on update keeps the stored value
+	// so legacy clients that omit type still work.
+	if want := strings.TrimSpace(in.Type); want != "" && want != row.Type {
+		return ChannelConfigDTO{}, ErrChannelTypeFrozen
+	}
+	in.Type = row.Type
+	// WeCom BotID (AppID) is frozen after save.
+	if row.Type == models.ChannelTypeWeCom {
+		wantApp := strings.TrimSpace(in.AppID)
+		if wantApp != "" && wantApp != row.AppID {
+			return ChannelConfigDTO{}, ErrChannelBotIDFrozen
+		}
+		in.AppID = row.AppID
+	}
 	if err := s.validate(in, id); err != nil {
 		return ChannelConfigDTO{}, err
 	}
@@ -315,7 +343,6 @@ func (s *ChannelConfigService) Update(id string, in ChannelConfigInput) (Channel
 	}
 
 	oldAgent := row.AgentName
-	row.Type = in.Type
 	row.Name = strings.TrimSpace(in.Name)
 	row.Enabled = in.Enabled
 	row.ProjectID = strings.TrimSpace(in.ProjectID)
@@ -325,7 +352,9 @@ func (s *ChannelConfigService) Update(id string, in ChannelConfigInput) (Channel
 	} else {
 		row.EnabledMcps = FilterPmEnabledMcps(in.EnabledMcps)
 	}
-	row.AppID = strings.TrimSpace(in.AppID)
+	if row.Type != models.ChannelTypeWeCom {
+		row.AppID = strings.TrimSpace(in.AppID)
+	}
 	row.TurnTimeoutSeconds = in.TurnTimeoutSeconds
 	row.CronDeliver = in.CronDeliver
 	row.CronDeliverTarget = strings.TrimSpace(in.CronDeliverTarget)
@@ -365,7 +394,7 @@ func (s *ChannelConfigService) Update(id string, in ChannelConfigInput) (Channel
 	}
 
 	s.notify()
-	return toChannelDTO(row), nil
+	return s.toChannelDTO(row), nil
 }
 
 // GetByProject returns the primary channel bound to a project (legacy alias),
@@ -383,7 +412,7 @@ func (s *ChannelConfigService) GetByProject(projectID string) (*ChannelConfigDTO
 	if err != nil {
 		return nil, err
 	}
-	out := toChannelDTO(r)
+	out := s.toChannelDTO(r)
 	return &out, nil
 }
 
@@ -675,6 +704,9 @@ func (s *ChannelConfigService) validate(in ChannelConfigInput, selfID string) er
 		return err
 	}
 	if n > 0 {
+		if in.Type == models.ChannelTypeWeCom {
+			return ErrChannelBotIDExists
+		}
 		return ErrChannelAppIDExists
 	}
 	if in.CronDeliver {
@@ -727,6 +759,14 @@ func (s *ChannelConfigService) warnIfNoPmLeader(projectID string) {
 	if !p.PmLeaderEnabled || strings.TrimSpace(p.PmLeaderAgent) == "" {
 		log.Warn().Str("project", projectID).Msg("channel bound to a project without an enabled PM Leader; web/gate turns will fail until enabled")
 	}
+}
+
+func (s *ChannelConfigService) toChannelDTO(r models.ChannelConfig) ChannelConfigDTO {
+	dto := toChannelDTO(r)
+	if s != nil && s.onlineOf != nil {
+		dto.Online = s.onlineOf(r.ID)
+	}
+	return dto
 }
 
 func toChannelDTO(r models.ChannelConfig) ChannelConfigDTO {

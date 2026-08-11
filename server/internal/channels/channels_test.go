@@ -21,6 +21,9 @@ func TestSyntheticUserID(t *testing.T) {
 	if got != "qq:group:ABC" {
 		t.Fatalf("SyntheticUserID = %q", got)
 	}
+	if SyntheticUserID("wecom", SceneC2C, "zhangsan") != "wecom:c2c:zhangsan" {
+		t.Fatal("wecom synthetic id")
+	}
 	// Distinct scenes/conversations never collide.
 	if SyntheticUserID("qq", SceneC2C, "x") == SyntheticUserID("qq", SceneGroup, "x") {
 		t.Fatal("scene should disambiguate synthetic user id")
@@ -1354,6 +1357,16 @@ func TestChannelPreambleRequiresProgressMarkers(t *testing.T) {
 		if !strings.Contains(p, marker) {
 			t.Fatalf("preamble missing %s: %s", marker, p)
 		}
+	}
+	if !strings.Contains(p, "不要使用表格") {
+		t.Fatal("qq preamble must forbid tables")
+	}
+	w := ChannelPreamble("wecom")
+	if !strings.Contains(w, "可使用 Markdown 表格") {
+		t.Fatalf("wecom preamble must allow tables: %s", w)
+	}
+	if strings.Contains(w, "不要使用表格") {
+		t.Fatal("wecom preamble must not forbid tables")
 	}
 }
 

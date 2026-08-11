@@ -20,8 +20,8 @@ import (
 var ErrNoDeliveryChannel = errors.New("项目未配置定时任务推送渠道")
 
 // ErrNoRunNotifyTarget is returned by DeliverRunNotify when no enabled channel
-// has a usable QQ target session for the project (CronDeliver flag not required).
-var ErrNoRunNotifyTarget = errors.New("项目未配置可用的 QQ 推送目标")
+// has a usable IM target session for the project (CronDeliver flag not required).
+var ErrNoRunNotifyTarget = errors.New("项目未配置可用的渠道推送目标")
 
 // Reply/Work equivalent orchestration (physical dual sandbox NOT required):
 //
@@ -206,6 +206,9 @@ func (m *Manager) startChannel(cfg models.ChannelConfig) {
 	adapter, err := factory(AdapterConfig{
 		ID: cfg.ID, Type: cfg.Type, Name: cfg.Name, ProjectID: cfg.ProjectID,
 		AppID: cfg.AppID, AppSecret: secret, Config: cfg.Config,
+		HasSpoken: func(scene Scene, conversationID string) bool {
+			return m.bridge != nil && m.bridge.HasSpoken(cfg.ProjectID, SyntheticUserID(cfg.Type, scene, conversationID))
+		},
 	})
 	if err != nil {
 		log.Warn().Err(err).Str("id", cfg.ID).Msg("channel manager: build adapter failed")
@@ -428,8 +431,7 @@ func (m *Manager) DeliverCron(d services.CronDelivery) error {
 	// cron text ahead of the user turn (TOCTOU). Busy path stays silent — no
 	// "已入队"旁白. flushPushQueue re-checks busy before each Send.
 	m.enqueuePush(key, item)
-	m.flushPushQueue(key)
-	return nil
+	return m.flushPushQueue(key)
 }
 
 // DeliverRunNotify fans out a Run lifecycle notification to the explicit
@@ -444,6 +446,7 @@ func (m *Manager) DeliverRunNotify(projectID, text string, channelIDs []string) 
 		return services.ErrRunNotifyNoTarget
 	}
 	sent := 0
+	var lastErr error
 	for _, id := range channelIDs {
 		target, scene, conv, err := m.lookupRunNotifyTargetByID(projectID, id)
 		if err != nil {
@@ -464,13 +467,21 @@ func (m *Manager) DeliverRunNotify(projectID, text string, channelIDs []string) 
 			Enqueued:  time.Now(),
 		}
 		m.enqueuePush(key, item)
-		m.flushPushQueue(key)
+		if ferr := m.flushPushQueue(key); ferr != nil {
+			log.Warn().Err(ferr).Str("project", projectID).Str("channel", id).
+				Msg("run-notify: send failed")
+			lastErr = ferr
+			continue
+		}
 		sent++
 	}
 	if sent == 0 {
+		if lastErr != nil {
+			return lastErr
+		}
 		return services.ErrRunNotifyNoTarget
 	}
-	return nil
+	return lastErr
 }
 
 // HasRunNotifyTarget reports whether any of the listed channelIDs is an Enabled
@@ -484,17 +495,18 @@ func (m *Manager) HasRunNotifyTarget(projectID string, channelIDs []string) bool
 	return false
 }
 
-func (m *Manager) flushPushQueue(key string) {
+func (m *Manager) flushPushQueue(key string) error {
 	items := m.takePushQueue(key)
 	if len(items) == 0 {
-		return
+		return nil
 	}
+	var firstErr error
 	for i, item := range items {
 		// Re-check busy: a new user message may have arrived.
 		// Re-queue current AND all remaining — never drop the tail.
 		if m.IsConversationBusy(item.ChannelID, item.ProjectID, item.Scene, item.Conv) {
 			m.requeuePushAll(key, items[i:])
-			return
+			return firstErr
 		}
 		var target *runningChannel
 		var err error
@@ -511,6 +523,9 @@ func (m *Manager) flushPushQueue(key string) {
 			log.Warn().Err(err).Str("project", item.ProjectID).Str("category", item.Category).
 				Str("channel", item.ChannelID).Str("agent", item.AgentName).
 				Msg("push flush: no delivery channel")
+			if firstErr == nil {
+				firstErr = err
+			}
 			continue
 		}
 		stripped, urls := splitImageURLs(item.Text)
@@ -519,9 +534,37 @@ func (m *Manager) flushPushQueue(key string) {
 			Scene: item.Scene, ConversationID: item.Conv, Text: stripped, ImageURLs: urls,
 		}); err != nil {
 			log.Warn().Err(err).Str("project", item.ProjectID).Msg("cron push flush send failed")
+			if firstErr == nil {
+				firstErr = err
+			}
 		}
 		cancel()
 	}
+	return firstErr
+}
+
+// OnlineReporter is implemented by adapters that expose subscribe/handshake state.
+type OnlineReporter interface {
+	Online() bool
+}
+
+// IsOnline reports whether the running adapter has an established connection.
+// Missing adapters are offline. Adapters without OnlineReporter are online
+// once Start has succeeded (QQ gateway).
+func (m *Manager) IsOnline(channelID string) bool {
+	if m == nil {
+		return false
+	}
+	m.mu.Lock()
+	rc := m.running[channelID]
+	m.mu.Unlock()
+	if rc == nil || rc.adapter == nil {
+		return false
+	}
+	if r, ok := rc.adapter.(OnlineReporter); ok {
+		return r.Online()
+	}
+	return true
 }
 
 // requeuePushAll puts remaining flush items back ahead of anything that arrived

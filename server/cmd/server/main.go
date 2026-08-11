@@ -19,6 +19,7 @@ import (
 	"github.com/cocofhu/approving/internal/browser"
 	"github.com/cocofhu/approving/internal/channels"
 	"github.com/cocofhu/approving/internal/channels/qq"
+	"github.com/cocofhu/approving/internal/channels/wecom"
 	"github.com/cocofhu/approving/internal/config"
 	"github.com/cocofhu/approving/internal/contextmcp"
 	"github.com/cocofhu/approving/internal/crypto"
@@ -364,10 +365,12 @@ func main() {
 	channelSvc := services.NewChannelConfigService(db)
 	channelSvc.SetSkillService(skillSvc)
 	channelMgr := channels.NewManager(channelBridge, map[string]channels.AdapterFactory{
-		models.ChannelTypeQQ: qq.New,
+		models.ChannelTypeQQ:    qq.New,
+		models.ChannelTypeWeCom: wecom.New,
 	}, crypto.Decrypt)
 	channelMgr.SetLoader(channelSvc.ListRaw)
 	channelSvc.SetOnChange(channelMgr.Reload)
+	channelSvc.SetOnlineLookup(channelMgr.IsOnline)
 	channelMgr.ApplyOnBoot()
 	cronSched.SetChannelDeliverer(channelMgr)
 	runNotifySvc.SetDeliverer(channelMgr)
@@ -400,6 +403,7 @@ func main() {
 		Auth:              authSvc,
 		PlatformRules:     platformRuleSvc,
 		Channels:          channelSvc,
+		RunNotify:         runNotifySvc,
 		Browser:           browserSvc,
 		Audit:             auditSvc,
 		GateShare:         gateShareSvc,

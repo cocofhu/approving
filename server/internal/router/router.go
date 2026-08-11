@@ -93,6 +93,7 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.GET("/projects/:id/pm-leader", h.GetPmLeader)
 		api.PUT("/projects/:id/pm-leader", h.UpdatePmLeader)
 		api.GET("/projects/:id/cron-jobs", h.ListProjectCronJobs)
+		api.GET("/projects/:id/notify-receipts", h.ListProjectNotifyReceipts)
 		api.PATCH("/projects/:id/cron-jobs/:jobId", h.PatchProjectCronJob)
 		api.DELETE("/projects/:id/cron-jobs/:jobId", h.DeleteProjectCronJob)
 		// Plural multi-channel APIs (primary + secondary).
