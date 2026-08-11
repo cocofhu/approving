@@ -4,10 +4,10 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import AppModal from '@/components/ui/AppModal.vue'
 import OutputResultCards from '@/components/run/OutputResultCards.vue'
-import { api } from '@/lib/api'
-import { resolveOutputFocusNodeId } from '@/lib/runOutputSelection'
-import { resolveNodeDisplayLabelFromNode } from '@/lib/resolveNodeDisplayLabel'
-import type { OutputCard, Run, WFNode } from '@/lib/types'
+import { api } from '@/lib/api/api'
+import { resolveOutputFocusNodeId } from '@/lib/run/runOutputSelection'
+import { resolveNodeDisplayLabelFromNode } from '@/lib/run/resolveNodeDisplayLabel'
+import type { OutputCard, Run, WFNode } from '@/lib/shared/types'
 
 const props = defineProps<{
   open: boolean

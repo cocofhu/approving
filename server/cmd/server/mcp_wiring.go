@@ -104,7 +104,8 @@ func (w *platformMCPWire) registerCron(projectID, threadID, agent string) (strin
 
 // registerChannel mints a shared token for an IM channel turn. Memory/scheduler
 // write gates follow caps from ChannelConfig (default off for unauthenticated
-// channel senders).
+// channel senders). Platform PM role MCP specs + session AllowedMcps come from
+// the channel's EnabledMcps (not Project.PmEnabledMcps).
 func (w *platformMCPWire) registerChannel(projectID, threadID, userID, agent string, enabledMcps []string, caps channels.SessionCaps) (string, []sandbox.MCPServerSpec) {
 	if w.pm == nil {
 		return "", nil
@@ -115,7 +116,7 @@ func (w *platformMCPWire) registerChannel(projectID, threadID, userID, agent str
 		return "", nil
 	}
 	tok := platformmcp.NewToken()
-	w.pm.Restore(projectID, threadID, userID, agent, tok)
+	w.pm.RestoreWithMcps(projectID, threadID, userID, agent, tok, enabledMcps)
 	if w.memory != nil {
 		w.memory.Restore(tok, projectID, agent, threadID, userID, caps.AllowMemoryWrite)
 	}
@@ -125,22 +126,26 @@ func (w *platformMCPWire) registerChannel(projectID, threadID, userID, agent str
 	if w.scheduler != nil {
 		w.scheduler.Restore(tok, projectID, agent, threadID, userID, caps.AllowSchedulerWrite)
 	}
+	// Inject the full default PM role set so expanding Channel.EnabledMcps on a
+	// reused sandbox takes effect via session AllowedMcps without recreating
+	// the container; ServeRPC still gates by the channel list.
 	specs := append(
 		services.BuildAgentPlatformMCPSpecs(projectID, agent, tok),
-		services.BuildPmRoleMCPSpecs(projectID, tok, enabledMcps)...,
+		services.BuildPmRoleMCPSpecs(projectID, tok, nil)...,
 	)
 	return tok, specs
 }
 
 func (w *platformMCPWire) restoreChannel(projectID, threadID, userID, agent, token string, enabledMcps []string, caps channels.SessionCaps) {
-	_ = enabledMcps
 	if !w.agentBoundToProject(projectID, agent) {
 		log.Warn().Str("project", projectID).Str("agent", agent).
 			Msg("channel platform MCP restore skipped: agent home project mismatch or unbound")
 		return
 	}
 	if w.pm != nil {
-		w.pm.Restore(projectID, threadID, userID, agent, token)
+		// Re-bind AllowedMcps from the latest Channel.EnabledMcps so permission
+		// changes apply on the next reused-sandbox turn.
+		w.pm.RestoreWithMcps(projectID, threadID, userID, agent, token, enabledMcps)
 	}
 	if w.memory != nil {
 		w.memory.Restore(token, projectID, agent, threadID, userID, caps.AllowMemoryWrite)

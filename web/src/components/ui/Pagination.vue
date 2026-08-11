@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
-import { useBreakpoint } from '@/lib/useBreakpoint'
+import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 
 const props = withDefaults(
   defineProps<{

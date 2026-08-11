@@ -12,15 +12,15 @@ import RunLaunchModal, { type InputField } from '@/components/workflow/RunLaunch
 import CopyWorkflowModal from '@/components/workflow/CopyWorkflowModal.vue'
 import ExportVersionModal from '@/components/workflow/ExportVersionModal.vue'
 import BoardView from '@/views/BoardView.vue'
-import { api } from '@/lib/api'
-import { createListRequestSeq, httpStatusOf } from '@/lib/listRequestSeq'
-import { writeStoredProjectId } from '@/lib/useProjectContext'
-import { useToast } from '@/lib/useToast'
-import { fmtTime } from '@/lib/format'
-import { fmtCompactTokenCount } from '@/lib/tokenUsage'
-import { clearRunDraft, mergeRunDraft, saveRunDraft } from '@/lib/runDraft'
-import { useBreakpoint } from '@/lib/useBreakpoint'
-import { useWorkflowImport } from '@/lib/useWorkflowImport'
+import { api } from '@/lib/api/api'
+import { createListRequestSeq, httpStatusOf } from '@/lib/shared/listRequestSeq'
+import { writeStoredProjectId } from '@/lib/composables/useProjectContext'
+import { useToast } from '@/lib/composables/useToast'
+import { fmtTime } from '@/lib/shared/format'
+import { fmtCompactTokenCount } from '@/lib/run/tokenUsage'
+import { clearRunDraft, mergeRunDraft, saveRunDraft } from '@/lib/run/runDraft'
+import { useBreakpoint } from '@/lib/composables/useBreakpoint'
+import { useWorkflowImport } from '@/lib/run/useWorkflowImport'
 import PmLeaderChat from '@/components/pm/PmLeaderChat.vue'
 import PmCronJobsPanel from '@/components/pm/PmCronJobsPanel.vue'
 import PmSettingsPanel from '@/components/pm/PmSettingsPanel.vue'
@@ -37,12 +37,12 @@ import type {
   ProjectVariable,
   Workflow,
   WorkflowNotifyPolicy,
-} from '@/lib/types'
+} from '@/lib/shared/types'
 import {
   isEmptyProjectForOnboarding,
   shouldAutoOpenOnboarding,
   type OnboardingBootstrapResult,
-} from '@/lib/onboardingWizard'
+} from '@/lib/pm/onboardingWizard'
 
 const PROJECT_TABS = [
   'board',
@@ -1035,7 +1035,12 @@ onUnmounted(() => {
               {{ t('pages.projectDetail.pm.backToChat') }}
             </AppButton>
           </div>
-          <PmSettingsPanel :project-id="projectId" @changed="onPmBindingChanged" />
+          <PmSettingsPanel
+            :project-id="projectId"
+            :project="project"
+            @changed="onPmBindingChanged"
+            @project-updated="(p) => { project = p }"
+          />
         </div>
       </div>
 

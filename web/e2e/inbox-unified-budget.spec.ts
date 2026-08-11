@@ -7,6 +7,11 @@ const shotDir = path.join(__dirname, '..', '..', '..', 'test-screenshots')
 
 async function mockApi(page: Page) {
   await page.route('**/api/**', async (route) => {
+    // Skip Vite module URLs like /@fs/.../src/lib/api/api.ts (pathname is not /api/...)
+    if (!new URL(route.request().url()).pathname.startsWith('/api/')) {
+      await route.continue()
+      return
+    }
     const url = new URL(route.request().url())
     if (url.pathname.includes('/preview-issues')) {
       await route.fulfill({ json: { issues: [] } })

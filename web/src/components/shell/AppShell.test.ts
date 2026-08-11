@@ -11,7 +11,7 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
 }))
 
-vi.mock('@/lib/useShutdownState', () => ({
+vi.mock('@/lib/composables/useShutdownState', () => ({
   drainToast: { visible: false, text: '' },
   formatGrace: () => '',
   isDraining: () => false,

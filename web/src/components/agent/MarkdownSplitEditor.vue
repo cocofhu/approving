@@ -3,7 +3,7 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CodeEditor from '@/components/ui/CodeEditor.vue'
 import Icon from '@/components/ui/Icon.vue'
-import { renderMarkdown } from '@/lib/markdown'
+import { renderMarkdown } from '@/lib/shared/markdown'
 import {
   parseFrontmatter,
   buildFrontmatter,
@@ -11,7 +11,7 @@ import {
   hasFrontmatter,
   type FrontmatterFields,
   type FrontmatterType,
-} from '@/lib/frontmatter'
+} from '@/lib/shared/frontmatter'
 import type * as monaco from 'monaco-editor/esm/vs/editor/editor.api'
 
 const props = withDefaults(

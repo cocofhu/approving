@@ -5,9 +5,9 @@ import { useI18n } from 'vue-i18n'
 import RunBoardColumn from '@/components/board/RunBoardColumn.vue'
 import RunBoardPreviewDrawer from '@/components/board/RunBoardPreviewDrawer.vue'
 import TokenStatsPanel from '@/components/board/token-stats/TokenStatsPanel.vue'
-import { serializeStatusQuery } from '@/lib/useStatusFilter'
-import { useRunBoard, type BoardColumnKey } from '@/lib/useRunBoard'
-import type { Run } from '@/lib/types'
+import { serializeStatusQuery } from '@/lib/composables/useStatusFilter'
+import { useRunBoard, type BoardColumnKey } from '@/lib/run/useRunBoard'
+import type { Run } from '@/lib/shared/types'
 
 const props = defineProps<{
   /** Required project boundary — board never loads unfiltered platform runs. */

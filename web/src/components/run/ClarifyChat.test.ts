@@ -4,9 +4,9 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
-import { i18n } from '@/lib/i18n'
-import { loadLocaleMessages } from '@/lib/loadLocaleMessages'
-import type { ClarifyTurn, ReactAnnotation } from '@/lib/types'
+import { i18n } from '@/lib/shared/i18n'
+import { loadLocaleMessages } from '@/lib/shared/loadLocaleMessages'
+import type { ClarifyTurn, ReactAnnotation } from '@/lib/shared/types'
 import ClarifyChat from './ClarifyChat.vue'
 
 beforeAll(async () => {

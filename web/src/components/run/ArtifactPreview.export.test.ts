@@ -21,8 +21,8 @@ const exportMocks = vi.hoisted(() => ({
   exportStructuredArtifact: vi.fn(),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {
@@ -34,13 +34,13 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
-vi.mock('@/lib/useToast', () => ({
+vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => toastMocks,
 }))
 
-vi.mock('@/lib/exportStructuredArtifact', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/exportStructuredArtifact')>(
-    '@/lib/exportStructuredArtifact',
+vi.mock('@/lib/run/exportStructuredArtifact', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/run/exportStructuredArtifact')>(
+    '@/lib/run/exportStructuredArtifact',
   )
   return {
     ...actual,

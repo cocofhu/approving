@@ -1,11 +1,11 @@
 import '../src/styles/global.css'
 import { createApp, defineComponent, h, ref } from 'vue'
-import { i18n } from '../src/lib/i18n'
-import { initLocale, setLocale } from '../src/lib/locale'
-import { installIdleScrollbar } from '../src/lib/idleScrollbar'
-import { setTheme } from '../src/lib/theme'
+import { i18n } from '../src/lib/shared/i18n'
+import { initLocale, setLocale } from '../src/lib/shared/locale'
+import { installIdleScrollbar } from '../src/lib/shared/idleScrollbar'
+import { setTheme } from '../src/lib/shared/theme'
 import ClarifyChat from '../src/components/run/ClarifyChat.vue'
-import type { ClarifyTurn } from '../src/lib/types'
+import type { ClarifyTurn } from '../src/lib/shared/types'
 
 function seedTurns(): ClarifyTurn[] {
   const base = '2026-07-18T00:00:0'

@@ -2,9 +2,9 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppSwitch from '@/components/ui/AppSwitch.vue'
-import { buildOutputSourceOptions, labelForOutputTemplate } from '@/lib/outputSourceOptions'
-import { useToast } from '@/lib/useToast'
-import type { WFEdge, WFNode } from '@/lib/types'
+import { buildOutputSourceOptions, labelForOutputTemplate } from '@/lib/run/outputSourceOptions'
+import { useToast } from '@/lib/composables/useToast'
+import type { WFEdge, WFNode } from '@/lib/shared/types'
 
 const props = defineProps<{
   node: WFNode

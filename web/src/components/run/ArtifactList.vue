@@ -2,10 +2,10 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
-import { fmtTime } from '@/lib/format'
-import { runSectionTitle } from '@/lib/artifactGroups'
-import type { Artifact } from '@/lib/types'
-import type { RunSection } from '@/lib/artifactGroups'
+import { fmtTime } from '@/lib/shared/format'
+import { runSectionTitle } from '@/lib/run/artifactGroups'
+import type { Artifact } from '@/lib/shared/types'
+import type { RunSection } from '@/lib/run/artifactGroups'
 
 const props = withDefaults(
   defineProps<{

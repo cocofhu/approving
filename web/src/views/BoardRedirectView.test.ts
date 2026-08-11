@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import { PROJECT_CONTEXT_STORAGE_KEY } from '@/lib/useProjectContext'
+import { PROJECT_CONTEXT_STORAGE_KEY } from '@/lib/composables/useProjectContext'
 
 const replace = vi.fn()
 

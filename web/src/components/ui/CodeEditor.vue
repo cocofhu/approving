@@ -14,7 +14,7 @@ import 'monaco-editor/esm/vs/basic-languages/ini/ini.contribution'
 import 'monaco-editor/esm/vs/language/json/monaco.contribution'
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
-import { theme } from '@/lib/theme'
+import { theme } from '@/lib/shared/theme'
 
 // Wire Monaco web workers for Vite (only json + the base editor worker; other
 // languages fall back to the editor worker which is enough for highlighting).

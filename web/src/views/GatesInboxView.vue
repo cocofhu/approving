@@ -11,49 +11,49 @@ import GateApproval from '@/components/run/GateApproval.vue'
 import GateShareLinkPanel from '@/components/run/GateShareLinkPanel.vue'
 import InboxPendingCard from '@/components/inbox/InboxPendingCard.vue'
 import ReviewShell from '@/components/run/ReviewShell.vue'
-import { REVIEW_SHELL_WIDTH_KEY_APPROVAL } from '@/lib/reviewLayoutBudget'
+import { REVIEW_SHELL_WIDTH_KEY_APPROVAL } from '@/lib/inbox/reviewLayoutBudget'
 import ReviewComposer from '@/components/run/ReviewComposer.vue'
 import ArtifactLoadingPane from '@/components/run/ArtifactLoadingPane.vue'
 import ClarifyProductStage from '@/components/run/ClarifyProductStage.vue'
 import AppPreviewPanel from '@/components/run/AppPreviewPanel.vue'
 import Pagination from '@/components/ui/Pagination.vue'
-import { api, isPaginated } from '@/lib/api'
-import { adaptInboxContextToRun } from '@/lib/inboxContext'
+import { api, isPaginated } from '@/lib/api/api'
+import { adaptInboxContextToRun } from '@/lib/inbox/inboxContext'
 import {
   defaultClarifyProductId,
   listClarifyProductNodes,
   pickClarifyNodeRun,
   resolveClarifyProductStage,
-} from '@/lib/clarifyInboxStage'
-import { usePipelineFilter } from '@/lib/usePipelineFilter'
-import { useTagFilter } from '@/lib/useTagFilter'
-import { useProjectContext } from '@/lib/useProjectContext'
-import { usePendingGates } from '@/lib/usePendingGates'
-import { addClarifyAnnotation, useClarifyDraft } from '@/lib/useClarifyDraft'
-import { previewPickLabel, type AppPreviewPickPayload } from '@/lib/previewPickUrl'
-import { useBreakpoint } from '@/lib/useBreakpoint'
-import { inboxSecondaryLine } from '@/lib/inboxDisplay'
+} from '@/lib/inbox/clarifyInboxStage'
+import { usePipelineFilter } from '@/lib/composables/usePipelineFilter'
+import { useTagFilter } from '@/lib/composables/useTagFilter'
+import { useProjectContext } from '@/lib/composables/useProjectContext'
+import { usePendingGates } from '@/lib/inbox/usePendingGates'
+import { addClarifyAnnotation, useClarifyDraft } from '@/lib/inbox/useClarifyDraft'
+import { previewPickLabel, type AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
+import { useBreakpoint } from '@/lib/composables/useBreakpoint'
+import { inboxSecondaryLine } from '@/lib/inbox/inboxDisplay'
 import {
   inboxComposerMode,
   pickInboxClarifySession,
   resolveInboxReviewState,
-} from '@/lib/inboxReviewMode'
+} from '@/lib/inbox/inboxReviewMode'
 import {
   inboxTripleKey,
   isInboxLeftPendingError,
   pickNextActiveAfterRemove,
-} from '@/lib/inboxActiveSelection'
-import { isAbortError } from '@/lib/liveLogRehydrate'
-import { createPendingAcpBuffer, pickAcpRails } from '@/lib/pendingAcpBuffer'
-import { deliverOrBufferDialogueAcp } from '@/lib/dialogueAcpDelivery'
+} from '@/lib/inbox/inboxActiveSelection'
+import { isAbortError } from '@/lib/run/liveLogRehydrate'
+import { createPendingAcpBuffer, pickAcpRails } from '@/lib/run/pendingAcpBuffer'
+import { deliverOrBufferDialogueAcp } from '@/lib/run/dialogueAcpDelivery'
 import {
   createBusySeedRetryController,
   runBusySeedRetry,
-} from '@/lib/busySeedRetry'
-import { createWsReconnectController } from '@/lib/wsReconnect'
-import { useToast } from '@/lib/useToast'
-import { inboxShareKind, isHumanGateInboxItem, isShareableInboxItem } from '@/lib/gateShareLink'
-import type { AcpEvent, Gate, GateInboxItem, GateShareInboxStatus, InboxItem, Run } from '@/lib/types'
+} from '@/lib/run/busySeedRetry'
+import { createWsReconnectController } from '@/lib/run/wsReconnect'
+import { useToast } from '@/lib/composables/useToast'
+import { inboxShareKind, isHumanGateInboxItem, isShareableInboxItem } from '@/lib/inbox/gateShareLink'
+import type { AcpEvent, Gate, GateInboxItem, GateShareInboxStatus, InboxItem, Run } from '@/lib/shared/types'
 
 const router = useRouter()
 const route = useRoute()
@@ -407,8 +407,8 @@ function onAppPreviewReviewPick(payload: AppPreviewPickPayload) {
 }
 
 function mergeStagedAppPreviewPick(
-  annotations: import('@/lib/types').ReactAnnotation[],
-): import('@/lib/types').ReactAnnotation[] {
+  annotations: import('@/lib/shared/types').ReactAnnotation[],
+): import('@/lib/shared/types').ReactAnnotation[] {
   const staged = lastStagedAppPreviewPick.value
   if (!staged?.selector) return annotations
   const url = (staged.url || '').trim()
@@ -1242,8 +1242,8 @@ function backToList() {
 
 async function onClarifySend(
   text: string,
-  images: import('@/lib/types').ClarifyImage[] = [],
-  annotations: import('@/lib/types').ReactAnnotation[] = [],
+  images: import('@/lib/shared/types').ClarifyImage[] = [],
+  annotations: import('@/lib/shared/types').ReactAnnotation[] = [],
   force = false,
 ) {
   const it = active.value

@@ -1,16 +1,16 @@
 import '../src/styles/global.css'
 import { createApp, defineComponent, h, ref } from 'vue'
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
-import { i18n } from '../src/lib/i18n'
-import { initLocale, setLocale } from '../src/lib/locale'
-import { installIdleScrollbar } from '../src/lib/idleScrollbar'
-import { setTheme } from '../src/lib/theme'
+import { i18n } from '../src/lib/shared/i18n'
+import { initLocale, setLocale } from '../src/lib/shared/locale'
+import { installIdleScrollbar } from '../src/lib/shared/idleScrollbar'
+import { setTheme } from '../src/lib/shared/theme'
 import StatusPill from '../src/components/ui/StatusPill.vue'
 import AppButton from '../src/components/ui/AppButton.vue'
 import Icon from '../src/components/ui/Icon.vue'
 import ExecutionStatsPanel from '../src/components/run/ExecutionStatsPanel.vue'
 import ExecutionTimeline from '../src/components/run/ExecutionTimeline.vue'
-import type { Run, WFNode } from '../src/lib/types'
+import type { Run, WFNode } from '../src/lib/shared/types'
 
 const LONG_REPOS = {
   repos: [

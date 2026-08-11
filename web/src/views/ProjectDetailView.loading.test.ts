@@ -17,10 +17,11 @@ const apiMocks = vi.hoisted(() => ({
   getPmLeader: vi.fn(),
   listProjectCronJobs: vi.fn(),
   getProjectChannel: vi.fn(),
+  listProjectChannels: vi.fn(),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {
@@ -31,20 +32,21 @@ vi.mock('@/lib/api', async () => {
       getPmLeader: apiMocks.getPmLeader,
       listProjectCronJobs: apiMocks.listProjectCronJobs,
       getProjectChannel: apiMocks.getProjectChannel,
+      listProjectChannels: apiMocks.listProjectChannels,
     },
   }
 })
 
-vi.mock('@/lib/useBreakpoint', async () => {
+vi.mock('@/lib/composables/useBreakpoint', async () => {
   const { ref } = await import('vue')
   return { useBreakpoint: () => ({ isMobile: ref(false) }) }
 })
 
-vi.mock('@/lib/useToast', () => ({
+vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn() }),
 }))
 
-vi.mock('@/lib/useProjectContext', () => ({
+vi.mock('@/lib/composables/useProjectContext', () => ({
   writeStoredProjectId: vi.fn(),
 }))
 
@@ -116,6 +118,7 @@ describe('ProjectDetailView project switch race', () => {
     apiMocks.getPmLeader.mockResolvedValue({ enabled: false })
     apiMocks.listProjectCronJobs.mockResolvedValue({ items: [] })
     apiMocks.getProjectChannel.mockResolvedValue({})
+    apiMocks.listProjectChannels.mockResolvedValue({ items: [], freeAgents: [], secretsKeyConfigured: true })
   })
 
   async function mountDetail(id: string, query = '?tab=workflows') {

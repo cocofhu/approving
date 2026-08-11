@@ -1,4 +1,4 @@
-import type { TokenStatsModel } from '@/lib/types'
+import type { TokenStatsModel } from '@/lib/shared/types'
 
 export const MODEL_PALETTE = [
   '#7B61FF',

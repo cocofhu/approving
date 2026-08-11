@@ -12,21 +12,21 @@ import Pagination from '@/components/ui/Pagination.vue'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
-import { api, isPaginated } from '@/lib/api'
-import { useToast } from '@/lib/useToast'
-import { usePipelineFilter } from '@/lib/usePipelineFilter'
-import { useTagFilter } from '@/lib/useTagFilter'
-import { useProjectContext } from '@/lib/useProjectContext'
+import { api, isPaginated } from '@/lib/api/api'
+import { useToast } from '@/lib/composables/useToast'
+import { usePipelineFilter } from '@/lib/composables/usePipelineFilter'
+import { useTagFilter } from '@/lib/composables/useTagFilter'
+import { useProjectContext } from '@/lib/composables/useProjectContext'
 import {
   useStatusFilter,
   parseStatusQuery,
   serializeStatusQuery,
   normalizeStatuses,
   initStatusFilterFromStorage,
-} from '@/lib/useStatusFilter'
-import { useBreakpoint } from '@/lib/useBreakpoint'
-import { fmtTime, fmtDuration, truncateText, formatTrigger } from '@/lib/format'
-import type { Run } from '@/lib/types'
+} from '@/lib/composables/useStatusFilter'
+import { useBreakpoint } from '@/lib/composables/useBreakpoint'
+import { fmtTime, fmtDuration, truncateText, formatTrigger } from '@/lib/shared/format'
+import type { Run } from '@/lib/shared/types'
 
 const PAGE_SIZE = 20
 const SKELETON_ROWS = 6

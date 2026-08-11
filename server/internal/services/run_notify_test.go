@@ -19,9 +19,10 @@ type fakeRunDeliverer struct {
 	err   error
 }
 
-func (f *fakeRunDeliverer) DeliverRunNotify(projectID, text string) error {
+func (f *fakeRunDeliverer) DeliverRunNotify(projectID, text string, channelIDs []string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	_ = channelIDs
 	f.calls = append(f.calls, projectID+"|"+text)
 	return f.err
 }
@@ -55,6 +56,7 @@ func seedNotifyProject(t *testing.T, db *gorm.DB, enabled bool, events []string,
 		Name: "Demo",
 		NotifyPolicy: models.ProjectNotifyPolicy{
 			Enabled: boolPtr(enabled), DefaultEvents: events,
+			ChannelIDs: []string{"chn-primary"},
 		},
 	}
 	if err := db.Create(&p).Error; err != nil {
@@ -279,7 +281,7 @@ func TestAttemptDeliver_usesCustomTemplate(t *testing.T) {
 	p := models.Project{
 		ID: "proj-n1", Name: "Demo",
 		NotifyPolicy: models.ProjectNotifyPolicy{
-			Enabled:              boolPtr(true),
+			ChannelIDs: []string{"chn-primary"}, Enabled:              boolPtr(true),
 			DefaultEvents:        []string{"waiting_human", "failed"},
 			WaitingHumanTemplate: "WAIT {project} {run_id} {title}",
 			FailedTemplate:       "FAIL {workflow} {node}",
@@ -326,7 +328,7 @@ func TestAttemptDeliver_kindsIndependent(t *testing.T) {
 	p := models.Project{
 		ID: "proj-n1", Name: "Demo",
 		NotifyPolicy: models.ProjectNotifyPolicy{
-			Enabled:              boolPtr(true),
+			ChannelIDs: []string{"chn-primary"}, Enabled:              boolPtr(true),
 			DefaultEvents:        []string{"waiting_human", "failed"},
 			WaitingHumanTemplate: "CUSTOM_WAIT {run_id}",
 			// failed empty → default formatter
@@ -434,7 +436,7 @@ func TestAttemptDeliver_completedCustomTemplate(t *testing.T) {
 	p := models.Project{
 		ID: "proj-n1", Name: "Demo",
 		NotifyPolicy: models.ProjectNotifyPolicy{
-			Enabled:           boolPtr(true),
+			ChannelIDs: []string{"chn-primary"}, Enabled:           boolPtr(true),
 			DefaultEvents:     []string{"completed"},
 			CompletedTemplate: "DONE {title} {run_id} {node}",
 		},

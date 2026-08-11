@@ -5,16 +5,16 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
-import type { Artifact, NodeRun, Run, WFNode } from '@/lib/types'
-import { useReviewAnnotate } from '@/lib/reviewAnnotate'
+import type { Artifact, NodeRun, Run, WFNode } from '@/lib/shared/types'
+import { useReviewAnnotate } from '@/lib/inbox/reviewAnnotate'
 import StructuredProductPanel from './StructuredProductPanel.vue'
 
 const apiMocks = vi.hoisted(() => ({
   artifactContent: vi.fn(),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {

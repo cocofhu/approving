@@ -8,8 +8,8 @@ import ChatImageThumb from '@/components/ui/ChatImageThumb.vue'
 import ChatImagePreviewModal from '@/components/ui/ChatImagePreviewModal.vue'
 import ReposEditor, { type RepoRow } from '@/components/ReposEditor.vue'
 import AcpStatusPill from '@/components/run/AcpStatusPill.vue'
-import { renderMarkdown } from '@/lib/markdown'
-import { api, type SandboxView } from '@/lib/api'
+import { renderMarkdown } from '@/lib/shared/markdown'
+import { api, type SandboxView } from '@/lib/api/api'
 import {
   SITE_ATTACH_MAX_BYTES,
   SITE_ATTACH_MAX_MIB,
@@ -20,9 +20,9 @@ import {
   formatSendRejectMessage,
   inferImageMimeFromUrl,
   isImageAttachment,
-} from '@/lib/attachments'
-import { chatImageSrc } from '@/lib/compositeText'
-import { useChatImagePreview } from '@/lib/useChatImagePreview'
+} from '@/lib/shared/attachments'
+import { chatImageSrc } from '@/lib/shared/compositeText'
+import { useChatImagePreview } from '@/lib/composables/useChatImagePreview'
 
 // `attachId` attaches to an existing sandbox (skips the create flow) — used by
 // the sandbox console's ACP tab. `embedded` hides the internal header/controls

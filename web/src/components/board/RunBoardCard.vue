@@ -3,9 +3,9 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import PriorityBadge from '@/components/ui/PriorityBadge.vue'
-import { fmtDuration, truncateText } from '@/lib/format'
-import { runBoardTitle, runIdShort } from '@/lib/runBoard'
-import type { Run } from '@/lib/types'
+import { fmtDuration, truncateText } from '@/lib/shared/format'
+import { runBoardTitle, runIdShort } from '@/lib/run/runBoard'
+import type { Run } from '@/lib/shared/types'
 
 const props = defineProps<{ run: Run }>()
 const emit = defineEmits<{ (e: 'select', run: Run): void }>()

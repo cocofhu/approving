@@ -34,6 +34,8 @@ func isProtectedPush(p CronPushItem) bool {
 // CronPushItem is a timed push waiting for a conversation idle slot.
 type CronPushItem struct {
 	ProjectID string
+	AgentName string // cron: bound Agent for re-lookup
+	ChannelID string // explicit channel id for re-lookup on flush
 	Scene     Scene
 	Conv      string
 	Category  string

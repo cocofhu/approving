@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from './Icon.vue'
-import type { AppLocale } from '@/lib/locale'
+import type { AppLocale } from '@/lib/shared/locale'
 
 const LOCALE_LABELS: Record<AppLocale, string> = {
   en: 'English',

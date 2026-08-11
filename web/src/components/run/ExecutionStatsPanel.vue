@@ -4,10 +4,10 @@ import { useI18n } from 'vue-i18n'
 import StatsPieChart from './StatsPieChart.vue'
 import Icon from '../ui/Icon.vue'
 import TruncatedTextTooltip from '../ui/TruncatedTextTooltip.vue'
-import { api, isPaginated } from '@/lib/api'
+import { api, isPaginated } from '@/lib/api/api'
 import { NODE_DEFS } from '@/data/nodeRegistry'
-import { fmtCompactDuration, fmtDuration, fmtTime } from '@/lib/format'
-import { resolveNodeDisplayLabel } from '@/lib/resolveNodeDisplayLabel'
+import { fmtCompactDuration, fmtDuration, fmtTime } from '@/lib/shared/format'
+import { resolveNodeDisplayLabel } from '@/lib/run/resolveNodeDisplayLabel'
 import {
   aggregateMultiRuns,
   aggregateSingleRun,
@@ -16,15 +16,15 @@ import {
   resolveRunWallSec,
   type MultiDimension,
   type SingleDimension,
-} from '@/lib/runStats'
+} from '@/lib/run/runStats'
 import {
   fmtCompactTokenCount,
   fmtCompactTokenRate,
   fmtTokenCount,
   fmtTokenRate,
   mergeTokenUsage,
-} from '@/lib/tokenUsage'
-import type { Run, TokenUsage, WFNode } from '@/lib/types'
+} from '@/lib/run/tokenUsage'
+import type { Run, TokenUsage, WFNode } from '@/lib/shared/types'
 import TokenUsageByModelTable from './TokenUsageByModelTable.vue'
 
 type StatsTab = 'single' | 'multi'

@@ -3,10 +3,10 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
-import { api } from '@/lib/api'
-import { authGuideFor } from '@/lib/backendAuthGuide'
-import { ACP_BACKENDS, getRegionPolicy, type BackendId } from '@/lib/regionPolicy'
-import { useToast } from '@/lib/useToast'
+import { api } from '@/lib/api/api'
+import { authGuideFor } from '@/lib/agent/backendAuthGuide'
+import { ACP_BACKENDS, getRegionPolicy, type BackendId } from '@/lib/shared/regionPolicy'
+import { useToast } from '@/lib/composables/useToast'
 import {
   DEFAULT_ONBOARDING_FEATURE,
   DEFAULT_ONBOARDING_REPO,
@@ -22,7 +22,7 @@ import {
   reposInputFromFields,
   type OnboardingBootstrapResult,
   type OnboardingDraft,
-} from '@/lib/onboardingWizard'
+} from '@/lib/pm/onboardingWizard'
 
 const props = defineProps<{
   open: boolean

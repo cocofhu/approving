@@ -5,7 +5,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
-import type { InboxItem } from '@/lib/types'
+import type { InboxItem } from '@/lib/shared/types'
 
 const mocks = vi.hoisted(() => ({
   listGates: vi.fn(),
@@ -18,8 +18,8 @@ const mocks = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {
@@ -39,14 +39,14 @@ vi.mock('vue-router', () => ({
   useRoute: () => ({ query: {} }),
 }))
 
-vi.mock('@/lib/useBreakpoint', async () => {
+vi.mock('@/lib/composables/useBreakpoint', async () => {
   const { ref } = await import('vue')
   return {
     useBreakpoint: () => ({ isMobile: ref(false) }),
   }
 })
 
-vi.mock('@/lib/useToast', () => ({
+vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => ({
     error: mocks.toastError,
     success: mocks.toastSuccess,
@@ -60,7 +60,7 @@ const filterState = vi.hoisted(() => ({
   projectSelected: null as { value: string } | null,
 }))
 
-vi.mock('@/lib/usePipelineFilter', async () => {
+vi.mock('@/lib/composables/usePipelineFilter', async () => {
   const { ref } = await import('vue')
   filterState.pipelineSelected = ref('')
   return {
@@ -68,7 +68,7 @@ vi.mock('@/lib/usePipelineFilter', async () => {
   }
 })
 
-vi.mock('@/lib/useProjectContext', async () => {
+vi.mock('@/lib/composables/useProjectContext', async () => {
   const { ref } = await import('vue')
   filterState.projectSelected = ref('')
   return {
@@ -79,7 +79,7 @@ vi.mock('@/lib/useProjectContext', async () => {
   }
 })
 
-vi.mock('@/lib/useClarifyDraft', async () => {
+vi.mock('@/lib/inbox/useClarifyDraft', async () => {
   const { ref } = await import('vue')
   return {
     useClarifyDraft: () => ({
@@ -94,7 +94,7 @@ vi.mock('@/lib/useClarifyDraft', async () => {
 // races and sidebar totalCount stay covered — do not stub the composable away.
 
 import GatesInboxView from './GatesInboxView.vue'
-import { usePendingGates } from '@/lib/usePendingGates'
+import { usePendingGates } from '@/lib/inbox/usePendingGates'
 
 function paged(items: InboxItem[]) {
   return { items, total: items.length, page: 1, pageSize: 20 }

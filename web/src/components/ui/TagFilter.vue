@@ -2,8 +2,8 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from './Icon.vue'
-import { api } from '@/lib/api'
-import { MAX_TAG_RUNES, validateRunTag } from '@/lib/runTags'
+import { api } from '@/lib/api/api'
+import { MAX_TAG_RUNES, validateRunTag } from '@/lib/run/runTags'
 
 const props = withDefaults(
   defineProps<{

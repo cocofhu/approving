@@ -4,7 +4,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
-import type { Run } from '@/lib/types'
+import type { Run } from '@/lib/shared/types'
 import RunBoardCard from './RunBoardCard.vue'
 
 function sampleRun(): Run {

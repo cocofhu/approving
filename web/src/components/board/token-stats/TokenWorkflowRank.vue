@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { TokenStatsWorkflow } from '@/lib/types'
-import { fmtCompactTokenCount, fmtTokenCount } from '@/lib/tokenUsage'
+import type { TokenStatsWorkflow } from '@/lib/shared/types'
+import { fmtCompactTokenCount, fmtTokenCount } from '@/lib/run/tokenUsage'
 
 const props = defineProps<{
   workflows: TokenStatsWorkflow[]

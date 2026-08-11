@@ -16,8 +16,8 @@ const apiMocks = vi.hoisted(() => ({
   resetPlatformRule: vi.fn(),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {
@@ -30,7 +30,7 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
-vi.mock('@/lib/useAuth', async () => {
+vi.mock('@/lib/composables/useAuth', async () => {
   const { ref } = await import('vue')
   return {
     useAuth: () => ({ user: ref({ username: 'admin', isAdmin: true }) }),

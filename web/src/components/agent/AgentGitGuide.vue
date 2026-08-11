@@ -7,7 +7,7 @@ import {
   analyzeGitCredentials,
   type GitCredentialStatus,
   type GitCredentialType,
-} from '@/lib/gitCredentialAnalysis'
+} from '@/lib/agent/gitCredentialAnalysis'
 
 type KV = { k: string; v: string }
 

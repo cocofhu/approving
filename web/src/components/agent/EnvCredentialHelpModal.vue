@@ -3,8 +3,8 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
-import { BACKEND_AUTH_HINTS } from '@/lib/backendAuthGuide'
-import type { BackendId } from '@/lib/regionPolicy'
+import { BACKEND_AUTH_HINTS } from '@/lib/agent/backendAuthGuide'
+import type { BackendId } from '@/lib/shared/regionPolicy'
 
 export type EnvCredentialHelpSection = 'inject' | 'git' | 'acp'
 

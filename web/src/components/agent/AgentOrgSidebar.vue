@@ -2,14 +2,14 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
-import type { AgentOrg } from '@/lib/api'
+import type { AgentOrg } from '@/lib/api/api'
 import {
   UNGROUPED_ID,
   buildOrgTreeRows,
   type AgentProjectRef,
   type OrgTreeRow,
   type ProjectNameRef,
-} from '@/lib/agentOrg'
+} from '@/lib/agent/agentOrg'
 
 const props = defineProps<{
   org: AgentOrg

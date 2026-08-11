@@ -4,12 +4,12 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
-import type { ProjectTokenStats } from '@/lib/types'
+import type { ProjectTokenStats } from '@/lib/shared/types'
 import TokenStatsPanel from './TokenStatsPanel.vue'
 
 const getProjectTokenStats = vi.fn()
 
-vi.mock('@/lib/api', () => ({
+vi.mock('@/lib/api/api', () => ({
   api: {
     getProjectTokenStats: (...args: unknown[]) => getProjectTokenStats(...args),
   },

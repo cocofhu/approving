@@ -5,15 +5,15 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
-import type { OutputCard, Run } from '@/lib/types'
+import type { OutputCard, Run } from '@/lib/shared/types'
 import OutputResultCards from './OutputResultCards.vue'
 
 const apiMocks = vi.hoisted(() => ({
   artifactContent: vi.fn(),
 }))
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+vi.mock('@/lib/api/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
     ...actual,
     api: {

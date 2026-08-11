@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AgentGitGuide from '@/components/agent/AgentGitGuide.vue'
-import { api, type TeamBootstrapSession } from '@/lib/api'
+import { api, type TeamBootstrapSession } from '@/lib/api/api'
 import {
   ACP_BACKENDS,
   TEAM_ENGINEER_COUNT,
@@ -18,10 +18,10 @@ import {
   validateTeamBasics,
   type TeamWizardDraft,
   type WizardBackendId,
-} from '@/lib/agentTeamWizard'
-import { authGuideFor, hasAuthKeyConfigured } from '@/lib/backendAuthGuide'
-import type { GitCredentialType } from '@/lib/gitCredentialAnalysis'
-import { getRegionPolicy, setRegion } from '@/lib/regionPolicy'
+} from '@/lib/agent/agentTeamWizard'
+import { authGuideFor, hasAuthKeyConfigured } from '@/lib/agent/backendAuthGuide'
+import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
+import { getRegionPolicy, setRegion } from '@/lib/shared/regionPolicy'
 
 const props = defineProps<{
   open: boolean

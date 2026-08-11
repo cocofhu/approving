@@ -4,7 +4,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
-import type { Run, WFNode } from '@/lib/types'
+import type { Run, WFNode } from '@/lib/shared/types'
 import ExecutionTimeline from './ExecutionTimeline.vue'
 
 const nodes: WFNode[] = [

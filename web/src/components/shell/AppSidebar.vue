@@ -4,8 +4,8 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppSidebarNav from './AppSidebarNav.vue'
 import BrandLogo from './BrandLogo.vue'
-import { authApi } from '@/lib/api'
-import { useAuth } from '@/lib/useAuth'
+import { authApi } from '@/lib/api/api'
+import { useAuth } from '@/lib/composables/useAuth'
 
 const { t } = useI18n()
 const router = useRouter()

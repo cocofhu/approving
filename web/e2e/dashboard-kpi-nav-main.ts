@@ -1,14 +1,14 @@
 import '../src/styles/global.css'
 import { createApp, h, defineComponent } from 'vue'
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
-import { i18n } from '../src/lib/i18n'
-import { initLocale, setLocale } from '../src/lib/locale'
-import { installIdleScrollbar } from '../src/lib/idleScrollbar'
+import { i18n } from '../src/lib/shared/i18n'
+import { initLocale, setLocale } from '../src/lib/shared/locale'
+import { installIdleScrollbar } from '../src/lib/shared/idleScrollbar'
 import ToastHost from '../src/components/ui/ToastHost.vue'
 import DashboardView from '../src/views/DashboardView.vue'
 import RunListView from '../src/views/RunListView.vue'
-import { PROJECT_CONTEXT_STORAGE_KEY } from '../src/lib/useProjectContext'
-import { STATUS_FILTER_STORAGE_KEY } from '../src/lib/useStatusFilter'
+import { PROJECT_CONTEXT_STORAGE_KEY } from '../src/lib/composables/useProjectContext'
+import { STATUS_FILTER_STORAGE_KEY } from '../src/lib/composables/useStatusFilter'
 
 installIdleScrollbar()
 

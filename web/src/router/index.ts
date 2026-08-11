@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
-import { updateDocumentTitle } from '@/lib/locale'
-import { installAuthGuard } from '@/lib/authGuard'
-import { installRoutePendingGuards } from '@/lib/routePending'
+import { updateDocumentTitle } from '@/lib/shared/locale'
+import { installAuthGuard } from '@/lib/shared/authGuard'
+import { installRoutePendingGuards } from '@/lib/shared/routePending'
 import LoginView from '@/views/LoginView.vue'
 
 const routes: RouteRecordRaw[] = [

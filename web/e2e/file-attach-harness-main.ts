@@ -1,10 +1,10 @@
 import '../src/styles/global.css'
 import { createApp, defineComponent, h, ref } from 'vue'
-import { i18n } from '../src/lib/i18n'
-import { initLocale } from '../src/lib/locale'
-import { setTheme } from '../src/lib/theme'
+import { i18n } from '../src/lib/shared/i18n'
+import { initLocale } from '../src/lib/shared/locale'
+import { setTheme } from '../src/lib/shared/theme'
 import ClarifyChat from '../src/components/run/ClarifyChat.vue'
-import type { ClarifyImage, ClarifyTurn } from '../src/lib/types'
+import type { ClarifyImage, ClarifyTurn } from '../src/lib/shared/types'
 
 initLocale()
 setTheme('light')

@@ -157,7 +157,9 @@ func finalize(db *gorm.DB) (*gorm.DB, error) {
 		return nil, err
 	}
 	migrateProjectMemoryIndexes(db)
-	migrateChannelUniqueProject(db)
+	migrateChannelMultiPerProject(db)
+	backfillChannelPrimaryAndAgent(db)
+	backfillNotifyPolicyChannelIDs(db)
 	backfillLegacyProjectMemories(db)
 	backfillWorkflowIDs(db)
 	backfillGateShareLinkKind(db)
@@ -193,37 +195,196 @@ func migrateProjectMemoryIndexes(db *gorm.DB) {
 	}
 }
 
-// migrateChannelUniqueProject enforces the "one channel per project" model at
-// the DB level. Legacy rows (created when the old admin UI allowed several
-// channels per project) are collapsed to the earliest-created row before the
-// unique index is added, otherwise index creation would fail.
-func migrateChannelUniqueProject(db *gorm.DB) {
+// migrateChannelMultiPerProject drops the legacy "one channel per project"
+// unique index and adds multi-channel constraints. Must NOT collapse or
+// delete secondary rows (the old migrateChannelUniqueProject did that).
+func migrateChannelMultiPerProject(db *gorm.DB) {
+	switch db.Dialector.Name() {
+	case "mysql":
+		_ = db.Exec("DROP INDEX udx_channel_configs_project_id ON channel_configs").Error
+		// MySQL 8 functional unique indexes: NULL expression values do not
+		// collide, so secondaries (is_primary=0) and empty agent_name are free.
+		// Best-effort — older MySQL falls back to ChannelConfigService tx locks.
+		_ = db.Exec(`CREATE UNIQUE INDEX udx_channel_configs_primary ON channel_configs
+			((CASE WHEN is_primary = 1 THEN project_id ELSE NULL END))`).Error
+		_ = db.Exec(`CREATE UNIQUE INDEX udx_channel_configs_agent_name ON channel_configs
+			((CASE WHEN agent_name IS NOT NULL AND agent_name != '' THEN agent_name ELSE NULL END))`).Error
+	default:
+		_ = db.Exec("DROP INDEX IF EXISTS udx_channel_configs_project_id").Error
+		// Partial uniques: empty agent_name allowed during backfill; only one
+		// primary (is_primary=1) per project.
+		_ = db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS udx_channel_configs_agent_name
+			ON channel_configs (agent_name) WHERE agent_name != '' AND agent_name IS NOT NULL`).Error
+		_ = db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS udx_channel_configs_primary
+			ON channel_configs (project_id) WHERE is_primary = 1`).Error
+	}
+}
+
+// channelPmMCPAllowed mirrors services.FilterPmEnabledMcps without importing
+// services (database must not depend on that package).
+var channelPmMCPAllowed = map[string]bool{
+	"pm-progress": true, "pm-workflow-read": true, "pm-workflow-write": true,
+	"pm-agent-fs": true,
+}
+
+// snapshotChannelEnabledMcps copies Project.PmEnabledMcps onto a legacy Channel
+// whose EnabledMcps is still nil. nil project → nil channel (both mean
+// platform defaults). Non-nil project (incl. explicit empty) → filtered copy
+// so channel turns keep the pre-upgrade GetBinding() permission set.
+func snapshotChannelEnabledMcps(projectMcps []string) []string {
+	if projectMcps == nil {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, id := range projectMcps {
+		id = strings.TrimSpace(id)
+		if !channelPmMCPAllowed[id] || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	if out == nil {
+		return []string{}
+	}
+	return out
+}
+
+// backfillChannelPrimaryAndAgent marks each project's earliest channel as
+// primary (when none is marked), binds empty AgentName to the project's
+// PmLeaderAgent when available, and copies Project.PmEnabledMcps onto Channels
+// whose EnabledMcps is still nil (upgrade-compat for channel-turn MCP scope).
+// Existing credentials/fields are preserved.
+func backfillChannelPrimaryAndAgent(db *gorm.DB) {
 	var rows []models.ChannelConfig
 	if err := db.Order("project_id asc, created_at asc, id asc").Find(&rows).Error; err != nil {
 		return
 	}
-	seen := map[string]bool{}
-	var dupeIDs []string
+	type projState struct {
+		hasPrimary bool
+		firstID    string
+	}
+	byProj := map[string]*projState{}
 	for _, r := range rows {
-		if seen[r.ProjectID] {
-			dupeIDs = append(dupeIDs, r.ID)
+		st := byProj[r.ProjectID]
+		if st == nil {
+			st = &projState{firstID: r.ID}
+			byProj[r.ProjectID] = st
+		}
+		if r.IsPrimary {
+			st.hasPrimary = true
+		}
+	}
+	for pid, st := range byProj {
+		if st.hasPrimary || st.firstID == "" {
 			continue
 		}
-		seen[r.ProjectID] = true
-	}
-	if len(dupeIDs) > 0 {
-		if err := db.Where("id IN ?", dupeIDs).Delete(&models.ChannelConfig{}).Error; err != nil {
-			log.Warn().Err(err).Int("count", len(dupeIDs)).Msg("channel dedup: failed to drop duplicate per-project channels")
-			return
+		if err := db.Model(&models.ChannelConfig{}).Where("id = ?", st.firstID).
+			Update("is_primary", true).Error; err != nil {
+			log.Warn().Err(err).Str("channel", st.firstID).Str("project", pid).
+				Msg("channel backfill: failed to mark primary")
 		}
-		log.Warn().Int("count", len(dupeIDs)).Msg("channel dedup: collapsed duplicate per-project channels to the earliest-created row")
 	}
-	const stmt = "CREATE UNIQUE INDEX udx_channel_configs_project_id ON channel_configs (project_id)"
-	switch db.Dialector.Name() {
-	case "mysql":
-		_ = db.Exec(stmt).Error // no-op if it already exists
-	default:
-		_ = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS udx_channel_configs_project_id ON channel_configs (project_id)").Error
+	// Bind empty agent_name → project PmLeaderAgent and snapshot EnabledMcps.
+	var projects []models.Project
+	if err := db.Select("id", "pm_leader_agent", "pm_enabled_mcps").Find(&projects).Error; err != nil {
+		return
+	}
+	pmByID := map[string]string{}
+	mcpsByID := map[string][]string{}
+	for _, p := range projects {
+		if a := strings.TrimSpace(p.PmLeaderAgent); a != "" {
+			pmByID[p.ID] = a
+		}
+		// Preserve nil vs non-nil: only non-nil project lists are snapshotted.
+		if p.PmEnabledMcps != nil {
+			mcpsByID[p.ID] = snapshotChannelEnabledMcps(p.PmEnabledMcps)
+		}
+	}
+	// Track agents already claimed so we do not violate udx_channel_configs_agent_name.
+	claimed := map[string]bool{}
+	for _, r := range rows {
+		if a := strings.TrimSpace(r.AgentName); a != "" {
+			claimed[a] = true
+		}
+	}
+	for _, r := range rows {
+		if strings.TrimSpace(r.AgentName) != "" {
+			continue
+		}
+		agent := pmByID[r.ProjectID]
+		if agent == "" || claimed[agent] {
+			continue
+		}
+		if err := db.Model(&models.ChannelConfig{}).Where("id = ?", r.ID).
+			Update("agent_name", agent).Error; err != nil {
+			log.Warn().Err(err).Str("channel", r.ID).Str("agent", agent).
+				Msg("channel backfill: failed to bind default agent")
+			continue
+		}
+		claimed[agent] = true
+	}
+	// EnabledMcps nil → copy project PmEnabledMcps snapshot (at least primary;
+	// apply to every nil channel so secondary leftovers stay consistent).
+	for _, r := range rows {
+		if r.EnabledMcps != nil {
+			continue
+		}
+		snap, ok := mcpsByID[r.ProjectID]
+		if !ok {
+			// Project also nil → leave channel nil (Effective = defaults).
+			continue
+		}
+		// Must use Updates(struct) so serializer:json persists valid JSON
+		// (column Update with []string would store Go fmt text).
+		if err := db.Model(&models.ChannelConfig{}).Where("id = ?", r.ID).
+			Select("EnabledMcps").
+			Updates(models.ChannelConfig{EnabledMcps: snap}).Error; err != nil {
+			log.Warn().Err(err).Str("channel", r.ID).
+				Msg("channel backfill: failed to snapshot enabled_mcps")
+		}
+	}
+}
+
+// backfillNotifyPolicyChannelIDs migrates legacy single-target notify semantics:
+// enabled notify → select the primary channel; disabled → empty ChannelIDs.
+// Skips projects that already have an explicit ChannelIDs list (incl. empty
+// after a deliberate save — we only backfill when the JSON field is absent /
+// null-equivalent: ChannelIDs == nil).
+func backfillNotifyPolicyChannelIDs(db *gorm.DB) {
+	var projects []models.Project
+	if err := db.Find(&projects).Error; err != nil {
+		return
+	}
+	for _, p := range projects {
+		pol := p.NotifyPolicy
+		if pol.ChannelIDs != nil {
+			continue
+		}
+		if !pol.IsEnabled() {
+			empty := []string{}
+			pol.ChannelIDs = empty
+			_ = db.Model(&models.Project{}).Where("id = ?", p.ID).
+				Update("notify_policy", pol).Error
+			continue
+		}
+		var primary models.ChannelConfig
+		err := db.Where("project_id = ? AND is_primary = ?", p.ID, true).
+			Order("created_at asc").First(&primary).Error
+		if err != nil {
+			// Fall back to earliest channel when primary flag not yet set.
+			err = db.Where("project_id = ?", p.ID).Order("created_at asc").First(&primary).Error
+		}
+		if err != nil {
+			pol.ChannelIDs = []string{}
+		} else {
+			pol.ChannelIDs = []string{primary.ID}
+		}
+		if err := db.Model(&models.Project{}).Where("id = ?", p.ID).
+			Update("notify_policy", pol).Error; err != nil {
+			log.Warn().Err(err).Str("project", p.ID).Msg("notify policy channelIds backfill failed")
+		}
 	}
 }
 

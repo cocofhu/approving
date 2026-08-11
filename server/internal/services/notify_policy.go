@@ -64,6 +64,8 @@ func filterP0NotifyEvents(in []string) []string {
 // (completed is not added automatically). Known kinds including completed may be
 // stored; unknown kinds are stripped. Template fields: whitespace-only is trimmed
 // to ""; empty is NOT rewritten to the default QQ body.
+// ChannelIDs: nil stays nil (unmigrated / unset); non-nil is de-duped & trimmed
+// (explicit empty means "deliver to none").
 func NormalizeProjectNotifyPolicy(p models.ProjectNotifyPolicy) models.ProjectNotifyPolicy {
 	if p.Enabled == nil {
 		on := true
@@ -73,6 +75,9 @@ func NormalizeProjectNotifyPolicy(p models.ProjectNotifyPolicy) models.ProjectNo
 		p.DefaultEvents = []string{models.NotifyKindWaitingHuman, models.NotifyKindFailed}
 	} else {
 		p.DefaultEvents = normalizeStoredEvents(p.DefaultEvents)
+	}
+	if p.ChannelIDs != nil {
+		p.ChannelIDs = NormalizeNotifyChannelIDs(p.ChannelIDs)
 	}
 	if strings.TrimSpace(p.WaitingHumanTemplate) == "" {
 		p.WaitingHumanTemplate = ""
@@ -84,6 +89,24 @@ func NormalizeProjectNotifyPolicy(p models.ProjectNotifyPolicy) models.ProjectNo
 		p.CompletedTemplate = ""
 	}
 	return p
+}
+
+// NormalizeNotifyChannelIDs trims, drops empties, and de-duplicates channel ids.
+func NormalizeNotifyChannelIDs(in []string) []string {
+	if in == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, len(in))
+	for _, id := range in {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out
 }
 
 // NormalizeWorkflowNotifyPolicy sanitizes a workflow override for persistence.
@@ -131,6 +154,9 @@ func notifyPoliciesEqual(a, b models.ProjectNotifyPolicy) bool {
 		return false
 	}
 	if !stringSlicesEqual(a.DefaultEvents, b.DefaultEvents) {
+		return false
+	}
+	if !stringSlicesEqual(NormalizeNotifyChannelIDs(a.ChannelIDs), NormalizeNotifyChannelIDs(b.ChannelIDs)) {
 		return false
 	}
 	return a.WaitingHumanTemplate == b.WaitingHumanTemplate &&
