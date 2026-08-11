@@ -2341,7 +2341,7 @@
       "upstreamRetry": "Retry",
       "upstreamViewStructured": "Structured",
       "upstreamViewRaw": "Raw JSON",
-      "upstreamBarHint": "This run has a clarified requirement — open it to review against the current product",
+      "upstreamBarHint": "This workflow has a clarified requirement — open it to review against the current product",
       "primaryBadge": "Primary",
       "readonlyBadge": "Read-only",
       "readonlyHint": "Non-text artifact · read-only reference",

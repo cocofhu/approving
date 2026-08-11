@@ -2341,7 +2341,7 @@
       "upstreamRetry": "重试",
       "upstreamViewStructured": "结构化",
       "upstreamViewRaw": "原始 JSON",
-      "upstreamBarHint": "本 run 已有澄清需求文档，可对照审阅当前主产物",
+      "upstreamBarHint": "本工作流已有澄清需求文档，可对照审阅当前主产物",
       "primaryBadge": "主产物",
       "readonlyBadge": "只读",
       "readonlyHint": "非文本产物 · 只读引用",
