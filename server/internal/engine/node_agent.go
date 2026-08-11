@@ -66,6 +66,12 @@ func (e *Engine) finalizeVisual(c *execCtx, node *models.Node, r runtime.NodeRes
 	if _, serr := e.store.Save(c.run.ID, node.ID, visualPageName, "html", content); serr != nil {
 		log.Warn().Err(serr).Str("node", node.ID).Msg("visual page re-save failed")
 	}
+	// Node-scoped physical copy so a later visual node cannot overwrite an
+	// earlier source when Save keys on (run_id, name). page.html stays the
+	// latest/single-visual alias for gates and the Agent contract.
+	if _, serr := e.store.Save(c.run.ID, node.ID, visualNodePageName(node.ID), "html", content); serr != nil {
+		log.Warn().Err(serr).Str("node", node.ID).Msg("visual node-scoped page save failed")
+	}
 	outputs := r.Outputs
 	if outputs == nil {
 		outputs = map[string]any{}
