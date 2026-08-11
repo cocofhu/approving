@@ -324,8 +324,11 @@ func TestIsShareableReviewSession(t *testing.T) {
 	if clarifyInboxKind(&models.Node{Type: "app_preview"}) == "review" {
 		t.Fatal("inbox review kind must stay review-only; app_preview is a distinct kind")
 	}
-	if IsShareableReviewSession(&models.Node{Type: "react"}) {
-		t.Fatal("clarify react must not be shareable")
+	if !IsShareableReviewSession(&models.Node{Type: "react"}) {
+		t.Fatal("clarify react must be shareable (plan g1.1)")
+	}
+	if IsShareableReviewSession(&models.Node{Type: "proposal_select"}) {
+		t.Fatal("proposal_select must not be shareable via review session")
 	}
 	if IsShareableReviewSession(nil) {
 		t.Fatal("nil must not be shareable")

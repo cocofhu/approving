@@ -32,6 +32,9 @@ func (e *Engine) ResumeReviewExternal(share *gateshare.Service, token, action st
 		return &ExternalResumeResult{Status: "revoked", Link: &lookup.Link}, gateshare.ErrNotActive
 	case models.ShareLinkStateUsed:
 		if strings.TrimSpace(lookup.Link.UsedAction) != "" && isReviewConfirmAction(lookup.Link.UsedAction) && isReviewConfirmAction(action) {
+			if !shareConfirmSettled(e, lookup.Link.RunID, lookup.Link.NodeID, lookup.Link.Iteration) {
+				return &ExternalResumeResult{Status: "busy", Link: &lookup.Link}, gateshare.ErrReviewBusy
+			}
 			return &ExternalResumeResult{
 				Status: "confirmed", Action: lookup.Link.UsedAction, AlreadyProcessed: true,
 				Link: &lookup.Link,
@@ -48,7 +51,7 @@ func (e *Engine) ResumeReviewExternal(share *gateshare.Service, token, action st
 	if !isReviewConfirmAction(action) {
 		return nil, gateshare.ErrNoStandardAction
 	}
-	if lookup.Node == nil || !isReviewNode(lookup.Node.Type) {
+	if lookup.Node == nil || !isShareableReviewConfirmNode(lookup.Node) {
 		return nil, gateshare.ErrNotReviewSession
 	}
 
@@ -63,6 +66,9 @@ func (e *Engine) ResumeReviewExternal(share *gateshare.Service, token, action st
 	}
 	if !consumed {
 		if usedLink != nil && isReviewConfirmAction(usedLink.UsedAction) {
+			if !shareConfirmSettled(e, lookup.Link.RunID, lookup.Link.NodeID, lookup.Link.Iteration) {
+				return &ExternalResumeResult{Status: "busy", Link: usedLink}, gateshare.ErrReviewBusy
+			}
 			return &ExternalResumeResult{
 				Status: "confirmed", Action: usedLink.UsedAction, AlreadyProcessed: true,
 				Link: usedLink,
@@ -89,13 +95,43 @@ func (e *Engine) ResumeReviewExternal(share *gateshare.Service, token, action st
 			return &ExternalResumeResult{Status: "validation_failed", Link: usedLink}, gateshare.ErrReviewValidation
 		}
 		if strings.Contains(err.Error(), "already done") || strings.Contains(err.Error(), "react already done") {
+			if !shareConfirmSettled(e, lookup.Link.RunID, lookup.Link.NodeID, lookup.Link.Iteration) {
+				return &ExternalResumeResult{Status: "busy", Link: usedLink}, gateshare.ErrReviewBusy
+			}
 			return &ExternalResumeResult{
 				Status: "confirmed", Action: "confirm", AlreadyProcessed: true, Link: usedLink,
 			}, nil
 		}
 		return nil, err
 	}
+	if !shareConfirmSettled(e, lookup.Link.RunID, lookup.Link.NodeID, lookup.Link.Iteration) {
+		_ = share.RollbackConsume(usedLink.ID)
+		return &ExternalResumeResult{Status: "validation_failed", Link: usedLink}, gateshare.ErrReviewValidation
+	}
 	return &ExternalResumeResult{Status: "confirmed", Action: "confirm", Link: usedLink}, nil
+}
+
+// isShareableReviewConfirmNode allows Inbox review / app_preview producers and
+// classic react clarify. Must not flip isReviewNode (that would skip Agent wrap-up).
+func isShareableReviewConfirmNode(node *models.Node) bool {
+	if node == nil {
+		return false
+	}
+	return node.Type == "react" || isReviewNode(node.Type)
+}
+
+// shareConfirmSettled is the only success condition for burning a review share
+// link: the bound conversation must be Done and the node must have left waiting_human.
+func shareConfirmSettled(e *Engine, runID, nodeID string, iteration int) bool {
+	if stillWaitingHuman(e, runID, nodeID, iteration) {
+		return false
+	}
+	var conv models.ReactConversation
+	if err := e.db.Where("run_id = ? AND node_id = ?", runID, nodeID).
+		Order("iteration desc, id desc").First(&conv).Error; err != nil {
+		return false
+	}
+	return conv.Done
 }
 
 func normalizeLookupKind(lookup *gateshare.LookupResult) string {
@@ -121,7 +157,7 @@ func isReviewBusyError(err error) bool {
 		return false
 	}
 	msg := err.Error()
-	return strings.Contains(msg, "复审进行中") || strings.Contains(msg, "待发送队列")
+	return strings.Contains(msg, "复审进行中") || strings.Contains(msg, "待发送队列") || strings.Contains(msg, "澄清进行中")
 }
 
 func stillWaitingHuman(e *Engine, runID, nodeID string, iteration int) bool {

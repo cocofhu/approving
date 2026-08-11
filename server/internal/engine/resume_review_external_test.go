@@ -177,3 +177,118 @@ func TestReviewLoginForceRevokesUnusedShareLink(t *testing.T) {
 		t.Fatalf("recreate after login force: %v", err)
 	}
 }
+
+func TestResumeReviewExternalClarifyConfirmAndIncompleteRollback(t *testing.T) {
+	eng, db, provider := setupEngineGraphP(t, reactOnlyGraph())
+	share := gateshare.NewService(db, nil)
+	eng.SetShareRevoker(share)
+
+	run, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "clarify")
+	waitRunStatus(t, db, run.ID, "waiting_human")
+
+	created, err := share.CreateReview(run.ID, "clarify", "24h", "tester", "http://example.test")
+	if err != nil {
+		t.Fatalf("create clarify share: %v", err)
+	}
+	token := extractShareToken(t, created.URL)
+
+	provider.mu.Lock()
+	provider.reactForceStayOpen = true
+	provider.mu.Unlock()
+
+	res, err := eng.ResumeReviewExternal(share, token, "confirm")
+	if err != gateshare.ErrReviewValidation {
+		t.Fatalf("want ErrReviewValidation on unfinished clarify, got %v res=%+v", err, res)
+	}
+	if res == nil || res.Status != "validation_failed" {
+		t.Fatalf("unfinished status: %+v", res)
+	}
+	waitRunStatus(t, db, run.ID, "waiting_human")
+	_, st, lerr := share.LookupByToken(token)
+	if lerr != nil || st != models.ShareLinkStateActive {
+		t.Fatalf("unfinished confirm must not burn link: st=%s err=%v", st, lerr)
+	}
+
+	provider.mu.Lock()
+	provider.reactForceStayOpen = false
+	provider.mu.Unlock()
+	res2, err := eng.ResumeReviewExternal(share, token, "confirm")
+	if err != nil {
+		t.Fatalf("retry after wrap-up allowed: %v", err)
+	}
+	if res2.Status != "confirmed" {
+		t.Fatalf("retry status: %+v", res2)
+	}
+}
+
+func TestResumeReviewExternalAlreadyProcessedBusyWhileWaiting(t *testing.T) {
+	eng, db, _ := setupEngineGraphP(t, reactOnlyGraph())
+	share := gateshare.NewService(db, nil)
+	eng.SetShareRevoker(share)
+
+	run, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "clarify")
+	waitRunStatus(t, db, run.ID, "waiting_human")
+
+	created, err := share.CreateReview(run.ID, "clarify", "24h", "tester", "http://example.test")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	token := extractShareToken(t, created.URL)
+
+	consumed, used, err := share.ConsumeCAS(created.ID, "confirm")
+	if err != nil || !consumed || used == nil {
+		t.Fatalf("pre-consume: consumed=%v err=%v", consumed, err)
+	}
+
+	res, err := eng.ResumeReviewExternal(share, token, "confirm")
+	if err != gateshare.ErrReviewBusy {
+		t.Fatalf("want busy while still waiting_human, got %v res=%+v", err, res)
+	}
+	if res == nil || res.Status != "busy" || res.AlreadyProcessed {
+		t.Fatalf("alreadyProcessed must not report confirmed while waiting: %+v", res)
+	}
+}
+
+func TestCancelClarifyTurnKeepsQueueForPublicShare(t *testing.T) {
+	eng, db, _ := setupEngineGraphP(t, reactOnlyGraph())
+	share := gateshare.NewService(db, nil)
+	eng.SetShareRevoker(share)
+
+	run, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "clarify")
+
+	created, err := share.CreateReview(run.ID, "clarify", "24h", "tester", "http://example.test")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	token := extractShareToken(t, created.URL)
+
+	s := eng.getOrCreateReviewSession(run.ID, "clarify", sessionKindClarify)
+	s.mu.Lock()
+	s.queue = []*reviewQueueItem{{ID: "q1", Text: "已排队回复"}, {ID: "q2", Text: "第二条"}}
+	s.waiting = 2
+	s.mu.Unlock()
+
+	if err := eng.CancelClarifyTurn(run.ID, "clarify"); err != nil {
+		t.Fatalf("cancel clarify: %v", err)
+	}
+	waiting, _ := eng.ReviewSessionState(run.ID, "clarify")
+	if waiting != 2 {
+		t.Fatalf("CancelClarifyTurn must keep FIFO, waiting=%d", waiting)
+	}
+	_, st, lerr := share.LookupByToken(token)
+	if lerr != nil || st != models.ShareLinkStateActive {
+		t.Fatalf("cancel must not burn link: st=%s err=%v", st, lerr)
+	}
+}

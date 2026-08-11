@@ -141,9 +141,13 @@ type ClarifyInboxItem struct {
 }
 
 // IsShareableReviewSession reports whether the node can mint a ShareLinkKindReview
-// temp link (Inbox kind=review or kind=app_preview). Inbox badge kind=review stays
-// clarifyInboxKind == "review" (app_preview is a distinct kind).
+// temp link (Inbox kind=review, kind=app_preview, or kind=clarify / node.Type=react).
+// Badge kind stays clarifyInboxKind: react → clarify, app_preview stays distinct,
+// and proposal_select (default "clarify" kind but not Type=react) stays excluded.
 func IsShareableReviewSession(node *models.Node) bool {
+	if node != nil && node.Type == "react" {
+		return true
+	}
 	k := clarifyInboxKind(node)
 	return k == "review" || k == "app_preview"
 }

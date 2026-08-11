@@ -189,6 +189,61 @@ test.describe('human_gate 临时审批链接', () => {
     expect(copied).toContain('/public/gate-approvals#t=')
   })
 
+  test('待澄清 Inbox 三处入口可生成临时链接', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: async (text: string) => {
+            ;(window as unknown as { __copied?: string }).__copied = text
+          },
+        },
+      })
+    })
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/gate-share-link.html?scene=inbox-clarify')
+    await expect(page.getByTestId('gate-share-copy-btn')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('gate-share-copy-btn-detail')).toBeVisible()
+    await expect(page.getByTestId('review-composer-open-share')).toBeVisible()
+    await expect(page.getByTestId('html-preview-share-link')).toHaveCount(0)
+    await page.getByTestId('gate-share-copy-btn').click()
+    await expect(page.getByTestId('gate-share-panel-body')).toBeVisible()
+    await expect(page.getByTestId('gate-share-ttl')).toHaveCount(5)
+    await page.getByTestId('gate-share-create').click()
+    await expect(page.getByTestId('gate-share-url')).toBeVisible()
+    const copied = await page.evaluate(() => (window as unknown as { __copied?: string }).__copied || '')
+    expect(copied).toContain('/public/gate-approvals#t=')
+  })
+
+  test('未登录澄清页文案分叉、空产物、多轮与未结束确认不燃链', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/gate-share-link.html?scene=public-clarify&unfinishedConfirm=1')
+    await expect(page.getByTestId('public-gate-root')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('public-gate-badge')).toHaveText('待澄清')
+    await expect(page.getByTestId('public-gate-kind-hint')).toHaveText('外部澄清')
+    await expect(page.getByTestId('public-gate-root')).not.toContainText('外部复审')
+    await expect(page.getByTestId('public-gate-root')).not.toContainText('不触发 Agent')
+    await expect(page.getByTestId('public-gate-root')).not.toContainText('run-e2e')
+    await expect(page.getByTestId('public-gate-empty-product')).toContainText('暂无脱敏产物可审阅')
+    await expect(page.getByTestId('public-gate-name')).toHaveCount(0)
+    await expect(page.getByTestId('public-gate-reject')).toHaveCount(0)
+    await page.getByTestId('clarify-input').fill('验收标准是可生成临时链接')
+    await page.getByTestId('clarify-send-icon').click()
+    await expect(page.getByTestId('clarify-review-queue')).toContainText('验收标准是可生成临时链接')
+    await page.getByTestId('clarify-review-cancel').click()
+    await expect(page.getByTestId('clarify-review-queue')).toContainText('验收标准是可生成临时链接')
+    await page.evaluate(() => {
+      ;(window as unknown as { __idleReview?: () => void }).__idleReview?.()
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await page.getByTestId('public-gate-confirm').click()
+    await expect(page.getByTestId('public-gate-error')).toContainText('尚未结束')
+    await expect(page.getByTestId('public-gate-done')).toHaveCount(0)
+    await expect(page.getByTestId('public-gate-workbench')).toBeVisible()
+    await page.getByTestId('public-gate-confirm').click()
+    await expect(page.getByTestId('public-gate-done')).toContainText('已确认')
+  })
+
   test('公开应用预览页只读占位可确认且无取点', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 })
     await page.goto('/gate-share-link.html?scene=public-app-preview')

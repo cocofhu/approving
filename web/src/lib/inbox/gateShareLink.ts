@@ -63,14 +63,26 @@ function isAppPreviewInboxItem(item: InboxItem | null | undefined): item is Clar
   return !!item && item.type === 'clarify' && item.kind === 'app_preview'
 }
 
-/** Inbox share entry: human_gate, 待复审, or app_preview (review share API). */
-export function isShareableInboxItem(item: InboxItem | null | undefined): boolean {
-  return isHumanGateInboxItem(item) || isReviewInboxItem(item) || isAppPreviewInboxItem(item)
+/** Inbox 待澄清: kind=clarify, or legacy items with missing kind (not review/app_preview). */
+function isClarifyInboxItem(item: InboxItem | null | undefined): item is ClarifyInboxItem {
+  return !!item && item.type === 'clarify' && item.kind !== 'review' && item.kind !== 'app_preview'
 }
 
-/** App preview and Inbox review both mint ShareLinkKindReview links. */
+/** Inbox share entry: human_gate, 待复审, app_preview, or 待澄清 (review share API). */
+export function isShareableInboxItem(item: InboxItem | null | undefined): boolean {
+  return (
+    isHumanGateInboxItem(item) ||
+    isReviewInboxItem(item) ||
+    isAppPreviewInboxItem(item) ||
+    isClarifyInboxItem(item)
+  )
+}
+
+/** Clarify / app preview / Inbox review all mint ShareLinkKindReview links — never /gates. */
 export function inboxShareKind(item: InboxItem | null | undefined): 'human_gate' | 'review' {
-  return isReviewInboxItem(item) || isAppPreviewInboxItem(item) ? 'review' : 'human_gate'
+  return isReviewInboxItem(item) || isAppPreviewInboxItem(item) || isClarifyInboxItem(item)
+    ? 'review'
+    : 'human_gate'
 }
 
 const SHARE_API_ERROR_KEYS: Record<string, string> = {
@@ -220,6 +232,8 @@ export type PublicGatePreview = {
   activeItem?: PublicGateActiveItem | null
   productKind?: 'visual' | 'structured' | 'app_preview' | string
   productName?: string
+  /** Graph node type from preview DTO; react ⇒ 待澄清. Kind stays review. */
+  nodeType?: string
 }
 
 export type PublicGateUpstreamResult = {

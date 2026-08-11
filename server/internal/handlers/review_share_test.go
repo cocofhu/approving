@@ -178,8 +178,10 @@ func TestReviewShareKindIsolationAndHumanGateUnchanged(t *testing.T) {
 	if w := h.do(http.MethodPost, "/api/runs/run-rev-iso/reviews/hg-r/share-link", map[string]any{"ttlTier": "24h"}); w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "not_review_session") {
 		t.Fatalf("reviews API on human_gate: %d %s", w.Code, w.Body.String())
 	}
-	if w := h.do(http.MethodPost, "/api/runs/run-rev-iso/reviews/clarify/share-link", map[string]any{"ttlTier": "24h"}); w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "not_review_session") {
-		t.Fatalf("reviews API on react clarify: %d %s", w.Code, w.Body.String())
+	if w := h.do(http.MethodPost, "/api/runs/run-rev-iso/reviews/clarify/share-link", map[string]any{"ttlTier": "24h"}); strings.Contains(w.Body.String(), "not_review_session") {
+		t.Fatalf("clarify must be a shareable review session: %d %s", w.Code, w.Body.String())
+	} else if w.Code != http.StatusNotFound && w.Code != http.StatusBadRequest {
+		t.Fatalf("reviews API on react clarify without pending conv: %d %s", w.Code, w.Body.String())
 	}
 
 	revPrev := parseJSON(t, h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: revTok}))
@@ -448,5 +450,94 @@ func TestAppPreviewShareCreateAttachPreviewAndGateAPIRejected(t *testing.T) {
 	out := parseJSON(t, dec)
 	if dec.Code != 200 || (out["status"] != "confirmed" && out["status"] != "busy" && out["status"] != "validation_failed") {
 		t.Fatalf("decide app_preview: %d %s", dec.Code, dec.Body.String())
+	}
+}
+
+func seedInboxClarify(t *testing.T, h *harness, runID, nodeID string) {
+	t.Helper()
+	now := time.Now()
+	h.db.Create(&models.WorkflowDef{
+		ID: "wf-" + runID, ProjectID: models.DefaultProjectID, Name: "clarify-" + runID,
+		Status: "published", Version: 1,
+	})
+	h.db.Create(&models.Run{
+		ID: runID, WorkflowID: "wf-" + runID, WorkflowName: "clarify-" + runID, Status: "waiting_human",
+		StartedAt: now, Title: "澄清运行",
+		Graph: models.Graph{Nodes: []models.Node{
+			{ID: nodeID, Type: "react", Label: "需求澄清"},
+			{ID: "ps", Type: "proposal_select", Label: "方案选择"},
+		}},
+	})
+	h.db.Create(&models.ReactConversation{
+		RunID: runID, NodeID: nodeID, Iteration: 1, Done: false,
+		Messages: []models.ReactMessage{{Role: "agent", Text: "请补充验收标准", At: now.Format(time.RFC3339)}},
+	})
+	h.db.Create(&models.StateRun{
+		RunID: runID, NodeID: nodeID, Iteration: 1, Status: "waiting_human", NodeType: "react",
+	})
+}
+
+func TestClarifyShareCreatePreviewInboxAndPublicCancel(t *testing.T) {
+	h := newHarness(t)
+	seedInboxClarify(t, h, "run-clarify-share", "clarify1")
+
+	if w := h.do(http.MethodPost, "/api/runs/run-clarify-share/reviews/ps/share-link", map[string]any{"ttlTier": "24h"}); w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "not_review_session") {
+		t.Fatalf("proposal_select must stay excluded: %d %s", w.Code, w.Body.String())
+	}
+
+	w := h.do(http.MethodPost, "/api/runs/run-clarify-share/reviews/clarify1/share-link", map[string]any{"ttlTier": "24h"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("create clarify share: %d %s", w.Code, w.Body.String())
+	}
+	created := parseJSON(t, w)
+	url, _ := created["url"].(string)
+	token := strings.TrimPrefix(url[strings.Index(url, "#t="):], "#t=")
+	if !gateshare.ValidTokenShape(token) {
+		t.Fatalf("token: %s", token)
+	}
+
+	list := h.do(http.MethodGet, "/api/gates", nil)
+	body := list.Body.String()
+	if !strings.Contains(body, `"kind":"clarify"`) {
+		t.Fatalf("inbox missing clarify item: %s", body)
+	}
+	if !strings.Contains(body, `"shareLink"`) {
+		t.Fatalf("inbox clarify missing shareLink: %s", body)
+	}
+	if strings.Contains(body, token) {
+		t.Fatal("inbox leaked plaintext token")
+	}
+
+	prev := h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: token})
+	p := parseJSON(t, prev)
+	if p["status"] != models.ShareLinkStateActive {
+		t.Fatalf("preview: %s", prev.Body.String())
+	}
+	if p["kind"] != models.ShareLinkKindReview {
+		t.Fatalf("preview kind must stay review: %+v", p)
+	}
+	if p["nodeType"] != "react" {
+		t.Fatalf("preview nodeType: %+v", p)
+	}
+	desc, _ := p["description"].(string)
+	if !strings.Contains(desc, "外部澄清") {
+		t.Fatalf("preview description: %q", desc)
+	}
+	if strings.Contains(desc, "待复审") || strings.Contains(prev.Body.String(), "run-clarify-share") {
+		t.Fatalf("preview leak or review copy: %s", prev.Body.String())
+	}
+	if p["structured"] != nil {
+		t.Fatalf("first-round empty product expected: %+v", p["structured"])
+	}
+
+	cancel := h.doPublic(http.MethodPost, "/public/gate-approvals/cancel", map[string]any{
+		"token": token,
+	}, map[string]string{headerShareRequest: "1", "Origin": "http://" + publicHost})
+	if cancel.Code != 200 {
+		t.Fatalf("cancel: %d %s", cancel.Code, cancel.Body.String())
+	}
+	prev3 := h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: token})
+	if parseJSON(t, prev3)["status"] != models.ShareLinkStateActive {
+		t.Fatalf("cancel burned token: %s", prev3.Body.String())
 	}
 }
