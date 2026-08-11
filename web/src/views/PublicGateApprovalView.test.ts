@@ -41,6 +41,7 @@ vi.mock('@/lib/shared/locale', async () => {
 })
 
 import PublicGateApprovalView from './PublicGateApprovalView.vue'
+import ClarifyChat from '@/components/run/ClarifyChat.vue'
 import type { VueWrapper } from '@vue/test-utils'
 
 const mounted: VueWrapper[] = []
@@ -701,10 +702,14 @@ describe('PublicGateApprovalView workbench', () => {
     })
     await flushPromises()
     expect(w.get('[data-testid="public-gate-visual"]').html()).toContain('keep-me')
-    expect(mocks.preview.mock.calls[mocks.preview.mock.calls.length - 1]?.[2]).toEqual({
-      visualHtmlHash: 'vh1',
-      upstreamHash: 'up1',
-    })
+    expect(mocks.preview.mock.calls[mocks.preview.mock.calls.length - 1]?.[2]).toEqual(
+      expect.objectContaining({
+        visualHtmlHash: 'vh1',
+        upstreamHash: 'up1',
+        silent: true,
+        issueNonce: false,
+      }),
+    )
   })
 
   it('loads upstream doc on enlarge and retries on failure without blocking approve (plan g1.3)', async () => {
@@ -746,5 +751,200 @@ describe('PublicGateApprovalView workbench', () => {
     const docEl = document.body.querySelector('[data-testid="public-gate-upstream-doc"]')
     expect(docEl).toBeTruthy()
     expect(docEl?.textContent || '').toMatch(/g1|澄清/)
+  })
+
+  function setVisibility(state: DocumentVisibilityState) {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => state,
+    })
+    document.dispatchEvent(new Event('visibilitychange'))
+  }
+
+  it('stops polling while the tab is hidden and does not unmount preview (plan g1.1)', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'human_gate',
+      nonce: 'n-vis',
+      visualHtml: '<p>stay-mounted</p>',
+      visualHtmlHash: 'vh-stay',
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      remainingSec: 3600,
+      actions: { approve: 'approve', confirm: 'approve' },
+      productKind: 'visual',
+      productName: 'page.html',
+    })
+    const w = mountView()
+    await flushPromises()
+    expect(w.get('[data-testid="public-gate-visual"]').html()).toContain('stay-mounted')
+    const before = mocks.preview.mock.calls.length
+    setVisibility('hidden')
+    await flushPromises()
+    await new Promise((r) => setTimeout(r, 2500))
+    await flushPromises()
+    expect(mocks.preview.mock.calls.length).toBe(before)
+    expect(w.get('[data-testid="public-gate-visual"]').html()).toContain('stay-mounted')
+    expect(w.find('[data-testid="public-gate-workbench"]').exists()).toBe(true)
+    setVisibility('visible')
+  })
+
+  it('resumes with a silent refresh and keeps draft plus preview (plan g1.2 / g5.2)', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'human_gate',
+      nonce: 'n-resume',
+      visualHtml: '<p>keep-iframe</p>',
+      visualHtmlHash: 'vh-resume',
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      remainingSec: 3600,
+      reactSessionAlive: true,
+      actions: { approve: 'approve', confirm: 'approve', reply: 'reply' },
+      productKind: 'visual',
+      productName: 'page.html',
+      turns: [{ role: 'agent', text: '请审阅', at: '2026-08-01T00:00:00Z' }],
+    })
+    const w = mountView()
+    await flushPromises()
+    await w.get('[data-testid="clarify-input"]').setValue('未发送草稿')
+    setVisibility('hidden')
+    await flushPromises()
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'human_gate',
+      nonce: 'n-resume-2',
+      visualHtmlHash: 'vh-resume',
+      remainingSec: 3500,
+      reactSessionAlive: true,
+      actions: { approve: 'approve', confirm: 'approve', reply: 'reply' },
+      productKind: 'visual',
+      productName: 'page.html',
+    })
+    const before = mocks.preview.mock.calls.length
+    setVisibility('visible')
+    await flushPromises()
+    expect(mocks.preview.mock.calls.length).toBeGreaterThan(before)
+    const lastKnown = mocks.preview.mock.calls[mocks.preview.mock.calls.length - 1]?.[2]
+    expect(lastKnown).toEqual(expect.objectContaining({ silent: true, issueNonce: true }))
+    expect(w.get('[data-testid="clarify-input"]').element).toHaveProperty('value', '未发送草稿')
+    expect(w.get('[data-testid="public-gate-visual"]').html()).toContain('keep-iframe')
+    expect(w.find('[data-testid="public-gate-loading"]').exists()).toBe(false)
+  })
+
+  it('shows remaining time from expiresAt, not stale remainingSec (plan g2.1)', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'human_gate',
+      nonce: 'n-clock',
+      remainingSec: 30,
+      expiresAt: new Date(Date.now() + 90 * 60 * 1000).toISOString(),
+      actions: { approve: 'approve', confirm: 'approve' },
+    })
+    const w = mountView()
+    await flushPromises()
+    expect(w.get('[data-testid="public-gate-remaining"]').text()).toContain('1 小时')
+    expect(w.get('[data-testid="public-gate-remaining"]').text()).not.toContain('1 分钟')
+  })
+
+  it('identical silent polls do not drop visual or idle-apply queue (plan g3.1 / g3.2)', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    const base = {
+      status: 'active',
+      kind: 'human_gate',
+      visualHtml: '<p>stable</p>',
+      visualHtmlHash: 'vh-stable',
+      structuredHash: 'st-stable',
+      turnsHash: 'tn-stable',
+      upstreamHash: 'up-stable',
+      reactSessionAlive: true,
+      sessionBusy: false,
+      waiting: 0,
+      actions: { approve: 'approve', confirm: 'approve', reply: 'reply' },
+      productKind: 'visual',
+      productName: 'page.html',
+      turns: [{ role: 'agent', text: '请审阅', at: '2026-08-01T00:00:00Z' }],
+    }
+    mocks.preview.mockResolvedValue({ ...base, nonce: 'n0', remainingSec: 4000 })
+    const w = mountView()
+    await flushPromises()
+    await w.get('[data-testid="clarify-input"]').setValue('idle-draft')
+    const chat = w.getComponent(ClarifyChat)
+    const applySpy = vi.spyOn(chat.vm as unknown as { applyQueueState: (...args: unknown[]) => void }, 'applyQueueState')
+    for (let i = 1; i <= 8; i++) {
+      mocks.preview.mockResolvedValue({
+        ...base,
+        nonce: `n${i}`,
+        remainingSec: 4000 - i,
+      })
+      await (w.vm as unknown as { loadPreview: (opts?: { silent?: boolean }) => Promise<void> }).loadPreview({
+        silent: true,
+      })
+      await flushPromises()
+    }
+    expect(w.get('[data-testid="public-gate-visual"]').html()).toContain('stable')
+    expect(w.get('[data-testid="clarify-input"]').element).toHaveProperty('value', 'idle-draft')
+    expect(applySpy).not.toHaveBeenCalled()
+    applySpy.mockRestore()
+  })
+
+  it('retries nonce once on reject as well as confirm (plan g4.2)', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'human_gate',
+      nonce: 'n-old-rej',
+      actions: { approve: 'approve', reject: 'revise', confirm: 'approve' },
+    })
+    const w = mountView()
+    await flushPromises()
+    await w.get('[data-testid="public-gate-name"]').setValue('Jordan')
+    await w.get('[data-testid="public-gate-comment"]').setValue('需要驳回')
+    mocks.decide
+      .mockRejectedValueOnce(
+        Object.assign(new Error('nonce'), { status: 403, body: { error: 'nonce', message: 'nonce expired' } }),
+      )
+      .mockResolvedValueOnce({ status: 'rejected' })
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'human_gate',
+      nonce: 'n-new-rej',
+      actions: { approve: 'approve', reject: 'revise', confirm: 'approve' },
+    })
+    await w.get('[data-testid="public-gate-reject"]').trigger('click')
+    await flushPromises()
+    expect(mocks.decide).toHaveBeenCalledTimes(2)
+    expect(mocks.decide.mock.calls[0][0]).toEqual(expect.objectContaining({ nonce: 'n-old-rej', action: 'revise' }))
+    expect(mocks.decide.mock.calls[1][0]).toEqual(expect.objectContaining({ nonce: 'n-new-rej', action: 'revise' }))
+    expect(w.get('[data-testid="public-gate-done"]').text()).toContain('已驳回')
+  })
+
+  it('silent 429 does not clear draft or leave the workbench (plan g5.2)', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'human_gate',
+      nonce: 'n-429',
+      visualHtml: '<p>ok</p>',
+      reactSessionAlive: true,
+      actions: { approve: 'approve', confirm: 'approve', reply: 'reply' },
+      productKind: 'visual',
+      productName: 'page.html',
+    })
+    const w = mountView()
+    await flushPromises()
+    await w.get('[data-testid="clarify-input"]').setValue('keep-on-429')
+    mocks.preview.mockRejectedValueOnce(
+      Object.assign(new Error('rate_limited'), { status: 429, body: { error: 'rate_limited' } }),
+    )
+    await (w.vm as unknown as { loadPreview: (opts?: { silent?: boolean }) => Promise<void> }).loadPreview({
+      silent: true,
+    })
+    await flushPromises()
+    expect(w.get('[data-testid="clarify-input"]').element).toHaveProperty('value', 'keep-on-429')
+    expect(w.find('[data-testid="public-gate-workbench"]').exists()).toBe(true)
+    expect(w.find('[data-testid="public-gate-network-error"]').exists()).toBe(false)
+    expect(w.get('[data-testid="public-gate-visual"]').html()).toContain('ok')
   })
 })

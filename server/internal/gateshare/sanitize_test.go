@@ -90,7 +90,7 @@ func TestApplySparsePreviewOmitsUnchangedLargeFields(t *testing.T) {
 		Upstream:       up,
 		UpstreamHash:   HashUpstream(up),
 	}
-	ApplySparsePreview(&dto, dto.VisualHTMLHash, dto.UpstreamHash)
+	ApplySparsePreview(&dto, SparsePreviewKnown{VisualHTML: dto.VisualHTMLHash, Upstream: dto.UpstreamHash})
 	if dto.VisualHTML != "" {
 		t.Fatalf("expected visualHtml omitted, got %q", dto.VisualHTML)
 	}
@@ -108,12 +108,60 @@ func TestApplySparsePreviewOmitsUnchangedLargeFields(t *testing.T) {
 		Upstream:       up,
 		UpstreamHash:   HashUpstream(up),
 	}
-	ApplySparsePreview(&dto2, ContentHash(html), dto.UpstreamHash)
+	ApplySparsePreview(&dto2, SparsePreviewKnown{VisualHTML: ContentHash(html), Upstream: dto.UpstreamHash})
 	if dto2.VisualHTML != "<p>new</p>" {
 		t.Fatalf("changed visual must be returned: %q", dto2.VisualHTML)
 	}
 	if dto2.Upstream != nil {
 		t.Fatalf("unchanged upstream still omitted: %+v", dto2.Upstream)
+	}
+}
+
+func TestApplySparsePreviewOmitsUnchangedStructuredAndTurns(t *testing.T) {
+	st := map[string]any{"name": "research.json", "title": "调研"}
+	turns := []PreviewTurn{{Role: "agent", Text: "请复审", At: "2026-08-01T00:00:00Z"}}
+	dto := PreviewDTO{
+		Status:         "active",
+		Structured:     st,
+		StructuredHash: HashStructured(st),
+		Turns:          turns,
+		TurnsHash:      HashTurns(turns),
+	}
+	ApplySparsePreview(&dto, SparsePreviewKnown{Structured: dto.StructuredHash, Turns: dto.TurnsHash})
+	if dto.Structured != nil {
+		t.Fatalf("expected structured omitted, got %+v", dto.Structured)
+	}
+	if dto.Turns != nil {
+		t.Fatalf("expected turns omitted, got %+v", dto.Turns)
+	}
+	if dto.StructuredHash == "" || dto.TurnsHash == "" {
+		t.Fatal("structured/turns hashes must remain")
+	}
+	dto2 := PreviewDTO{
+		Status:         "active",
+		Structured:     map[string]any{"name": "research.json", "title": "新调研"},
+		StructuredHash: HashStructured(map[string]any{"name": "research.json", "title": "新调研"}),
+		Turns:          append(turns, PreviewTurn{Role: "human", Text: "改摘要", At: "2026-08-01T00:01:00Z"}),
+	}
+	dto2.TurnsHash = HashTurns(dto2.Turns)
+	ApplySparsePreview(&dto2, SparsePreviewKnown{Structured: HashStructured(st), Turns: HashTurns(turns)})
+	if dto2.Structured == nil || dto2.Structured["title"] != "新调研" {
+		t.Fatalf("changed structured must return: %+v", dto2.Structured)
+	}
+	if len(dto2.Turns) != 2 {
+		t.Fatalf("changed turns must return: %+v", dto2.Turns)
+	}
+}
+
+func TestWantPreviewNonce(t *testing.T) {
+	if !WantPreviewNonce(false, false) {
+		t.Fatal("first/non-silent load must issue")
+	}
+	if WantPreviewNonce(true, false) {
+		t.Fatal("silent poll must not issue by default")
+	}
+	if !WantPreviewNonce(true, true) {
+		t.Fatal("silent + issueNonce must issue (resume / near TTL)")
 	}
 }
 
@@ -180,8 +228,8 @@ func TestBuildReviewPreviewDTOIncludesQueueState(t *testing.T) {
 		Waiting:           1,
 		QueueItems:        []map[string]any{{"id": "q1", "text": "请改标题，勿访问 http://10.1.2.3/api/runs/x"}},
 		ActiveItem: map[string]any{
-			"id":   "q1",
-			"text": "请改标题，勿访问 http://10.1.2.3/api/runs/x",
+			"id":     "q1",
+			"text":   "请改标题，勿访问 http://10.1.2.3/api/runs/x",
 			"images": []any{map[string]any{"url": "blob:http://127.0.0.1/abc"}},
 		},
 		ProductKind: ProductKindStructured,

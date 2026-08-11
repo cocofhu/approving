@@ -4,6 +4,8 @@ import {
   maskShareUrl,
   parseShareTokenFromHash,
   formatRemainingSec,
+  remainingSecFromExpiresAt,
+  publicGateContentKey,
   shareStatusLabel,
   canCreateGateShare,
   isGateShareActive,
@@ -158,5 +160,48 @@ describe('gateShareLink helpers', () => {
     })
     expect(changed.visualHtml).toBe('<p>new</p>')
     expect(changed.upstream?.summary).toBe('新摘要')
+
+    const withBodies = {
+      ...prev,
+      structured: { name: 'research.json', title: '旧' },
+      structuredHash: 'st-old',
+      turns: [{ role: 'agent', text: '请复审' }],
+      turnsHash: 'tn-old',
+      nonce: 'keep-me',
+    }
+    const sparseBodies = mergePublicGatePreview(withBodies, {
+      status: 'active',
+      structuredHash: 'st-old',
+      turnsHash: 'tn-old',
+      remainingSec: 10,
+    })
+    expect(sparseBodies.structured?.title).toBe('旧')
+    expect(sparseBodies.turns?.[0]?.text).toBe('请复审')
+    expect(sparseBodies.nonce).toBe('keep-me')
+  })
+
+  it('remainingSecFromExpiresAt prefers expiresAt over stale remainingSec (plan g2.1)', () => {
+    const now = Date.parse('2026-08-11T15:00:00.000Z')
+    expect(remainingSecFromExpiresAt('2026-08-11T16:30:00.000Z', 30, now)).toBe(90 * 60)
+    expect(remainingSecFromExpiresAt(undefined, 45, now)).toBe(45)
+    expect(remainingSecFromExpiresAt('2026-08-11T14:00:00.000Z', 99, now)).toBe(0)
+  })
+
+  it('publicGateContentKey ignores clock and nonce (plan g3.1)', () => {
+    const base = {
+      status: 'active' as const,
+      visualHtmlHash: 'vh',
+      structuredHash: 'st',
+      turnsHash: 'tn',
+      upstreamHash: 'up',
+      remainingSec: 100,
+      expiresAt: '2026-08-11T16:00:00.000Z',
+      nonce: 'n1',
+      turns: [{ role: 'agent', text: '请复审' }],
+    }
+    expect(publicGateContentKey({ ...base, remainingSec: 1, nonce: 'n2', expiresAt: '2026-08-11T17:00:00.000Z' })).toBe(
+      publicGateContentKey(base),
+    )
+    expect(publicGateContentKey({ ...base, turnsHash: 'tn-new' })).not.toBe(publicGateContentKey(base))
   })
 })

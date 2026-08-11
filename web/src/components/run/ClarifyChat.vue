@@ -806,7 +806,7 @@ function applyQueueState(
   } | null,
 ) {
   if (waiting === 0 && !busy) {
-    queued.value = []
+    if (queued.value.length) queued.value = []
     if (liveAgentIdx.value < 0) thinking.value = false
   } else if (items) {
     const rebuilt: QueueItem[] = items.map((it) => {

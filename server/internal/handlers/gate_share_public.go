@@ -68,34 +68,44 @@ func (h *Handlers) PublicGatePreview(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "invalid"})
 		return
 	}
-	nonce, err := h.GateShareNonces.Issue(lookup.Link.TokenHash)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "unavailable"})
-		return
+	silentPoll := strings.EqualFold(strings.TrimSpace(c.GetHeader(gateshare.HeaderSilentPoll)), "1")
+	issueNonce := strings.EqualFold(strings.TrimSpace(c.GetHeader(gateshare.HeaderIssueNonce)), "1")
+	nonce := ""
+	if gateshare.WantPreviewNonce(silentPoll, issueNonce) {
+		var err error
+		nonce, err = h.GateShareNonces.Issue(lookup.Link.TokenHash)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "unavailable"})
+			return
+		}
 	}
 	kind := publicShareKind(lookup)
 	if st != models.ShareLinkStateActive {
-		c.JSON(http.StatusOK, gin.H{"status": st, "kind": kind, "nonce": nonce})
+		out := gin.H{"status": st, "kind": kind}
+		if nonce != "" {
+			out["nonce"] = nonce
+		}
+		c.JSON(http.StatusOK, out)
 		return
+	}
+	known := gateshare.SparsePreviewKnown{
+		VisualHTML: strings.TrimSpace(c.GetHeader(gateshare.HeaderKnownVisualHTMLHash)),
+		Upstream:   strings.TrimSpace(c.GetHeader(gateshare.HeaderKnownUpstreamHash)),
+		Structured: strings.TrimSpace(c.GetHeader(gateshare.HeaderKnownStructuredHash)),
+		Turns:      strings.TrimSpace(c.GetHeader(gateshare.HeaderKnownTurnsHash)),
 	}
 	if kind == models.ShareLinkKindReview {
 		visual, structName, structContent := h.publicReviewArtifacts(lookup)
 		extras := h.publicReviewExtras(lookup, visual, structName)
 		dto := gateshare.BuildReviewPreviewDTO(st, lookup, visual, structName, structContent, nonce, extras)
-		gateshare.ApplySparsePreview(&dto,
-			strings.TrimSpace(c.GetHeader(gateshare.HeaderKnownVisualHTMLHash)),
-			strings.TrimSpace(c.GetHeader(gateshare.HeaderKnownUpstreamHash)),
-		)
+		gateshare.ApplySparsePreview(&dto, known)
 		c.JSON(http.StatusOK, dto)
 		return
 	}
 	visual, structName, structContent := h.publicGateArtifacts(lookup)
 	extras := h.publicGateExtras(lookup, visual, structName)
 	dto := gateshare.BuildPreviewDTO(st, lookup, visual, structName, structContent, nonce, extras)
-	gateshare.ApplySparsePreview(&dto,
-		strings.TrimSpace(c.GetHeader(gateshare.HeaderKnownVisualHTMLHash)),
-		strings.TrimSpace(c.GetHeader(gateshare.HeaderKnownUpstreamHash)),
-	)
+	gateshare.ApplySparsePreview(&dto, known)
 	c.JSON(http.StatusOK, dto)
 }
 
