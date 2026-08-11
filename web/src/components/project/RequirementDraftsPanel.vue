@@ -3,11 +3,11 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
-import { api } from '@/lib/api'
-import { fmtTime } from '@/lib/format'
-import { renderMarkdown } from '@/lib/markdown'
-import { useToast } from '@/lib/useToast'
-import type { RequirementDraft, RequirementDraftStatusFilter } from '@/lib/types'
+import { api } from '@/lib/api/api'
+import { useToast } from '@/lib/composables/useToast'
+import { fmtTime } from '@/lib/shared/format'
+import { renderMarkdown } from '@/lib/shared/markdown'
+import type { RequirementDraft, RequirementDraftStatusFilter } from '@/lib/shared/types'
 
 const props = defineProps<{
   projectId: string
