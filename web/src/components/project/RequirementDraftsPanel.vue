@@ -63,7 +63,8 @@ const previewEl = ref<HTMLElement | null>(null)
 const splitEl = ref<HTMLElement | null>(null)
 const findInputEl = ref<HTMLInputElement | null>(null)
 
-const selected = computed(() => items.value.find((d) => d.id === selectedId.value) || null)
+/** 选中态跟 selectedId，不跟当前筛选 items。标记完成/搜索后项可能离开列表，仍须保留编辑区与 dirty 缓冲（g5.2）。 */
+const hasSelection = computed(() => Boolean(selectedId.value))
 const isDirty = computed(
   () => editTitle.value !== savedTitle.value || editBody.value !== savedBody.value,
 )
@@ -169,6 +170,7 @@ async function loadList(opts?: { preferId?: string | null; keepSelection?: boole
         updatedAtLabel.value = fmtTime(cur.updatedAt)
         selectedStatus.value = cur.status
       }
+      // 选中项不在当前筛选结果中（如 open 下列表不含刚标记完成的项）仍保留 selectedId 与本地缓冲
       return
     }
     if (selectedId.value && items.value.some((d) => d.id === selectedId.value)) {
@@ -276,7 +278,10 @@ async function onToggleStatus() {
   const next = selectedStatus.value === 'open' ? 'done' : 'open'
   statusBusy.value = true
   try {
-    await api.patchRequirementDraftStatus(props.projectId, id, next)
+    const patched = await api.patchRequirementDraftStatus(props.projectId, id, next)
+    selectedStatus.value = patched.status
+    createdAtLabel.value = fmtTime(patched.createdAt)
+    updatedAtLabel.value = fmtTime(patched.updatedAt)
     toast.success(
       next === 'done'
         ? t('pages.projectDetail.requirementDrafts.archivedToast')
@@ -635,7 +640,7 @@ defineExpose({
         @keydown="onDetailKeydown"
       >
         <div
-          v-if="!selected"
+          v-if="!hasSelection"
           class="px-5 py-8 text-center text-[13px] text-txt3"
           data-testid="requirement-drafts-empty-detail"
         >

@@ -251,21 +251,32 @@ describe('RequirementDraftsPanel', () => {
   })
 
   it('keeps dirty title after mark-done refresh (keepSelection)', async () => {
-    apiMocks.patchRequirementDraftStatus.mockResolvedValue({ ...draftOpen, status: 'done' })
+    const patched = {
+      ...draftOpen,
+      status: 'done' as const,
+      updatedAt: '2026-08-11T16:00:00Z',
+    }
+    apiMocks.patchRequirementDraftStatus.mockResolvedValue(patched)
+    // 真实 open 筛选：PATCH 后列表不再包含已完成项（g5.2 回归：不得因此卸掉编辑区）
     apiMocks.listRequirementDrafts
-      .mockResolvedValueOnce({ items: [draftOpen] })
-      .mockResolvedValueOnce({ items: [{ ...draftOpen, status: 'done' }] })
+      .mockResolvedValueOnce({ items: [draftOpen, draftOpen2] })
+      .mockResolvedValueOnce({ items: [draftOpen2] })
     const w = mountPanel()
     await flushPromises()
     await w.get('[data-testid="requirement-drafts-item-rd-1"]').trigger('click')
     await nextTick()
     await w.get('[data-testid="requirement-drafts-title"]').setValue('仍未保存')
+    expect(w.get('[data-testid="requirement-drafts-dirty-chip"]').text()).toContain('未保存')
     await w.get('[data-testid="requirement-drafts-toggle-status"]').trigger('click')
     await flushPromises()
-    expect(apiMocks.patchRequirementDraftStatus).toHaveBeenCalled()
+    expect(apiMocks.patchRequirementDraftStatus).toHaveBeenCalledWith('proj-a', 'rd-1', 'done')
+    expect(w.find('[data-testid="requirement-drafts-empty-detail"]').exists()).toBe(false)
     expect(w.get('[data-testid="requirement-drafts-title"]').element).toHaveProperty('value', '仍未保存')
     expect(w.find('[data-testid="requirement-drafts-dirty-chip"]').exists()).toBe(true)
     expect(w.get('[data-testid="requirement-drafts-status-pill"]').text()).toContain('已完成')
+    expect(w.find('[data-testid="requirement-drafts-item-rd-1"]').exists()).toBe(false)
+    expect(w.find('[data-testid="requirement-drafts-item-rd-2"]').exists()).toBe(true)
+    expect(w.get('[data-testid="requirement-drafts-toggle-status"]').text()).toContain('标记为未完成')
     w.unmount()
   })
 
