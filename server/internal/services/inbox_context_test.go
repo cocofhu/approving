@@ -140,3 +140,46 @@ func TestSlimNodeExecutions(t *testing.T) {
 		t.Fatal("iteration 2 outputs missing")
 	}
 }
+
+func TestSlimNodeExecutionsOmitsLargeJSONSnapshots(t *testing.T) {
+	db := newTestDB(t)
+	s := NewRunService(db)
+	db.Create(&models.StateRun{
+		RunID: "r-slim-json", NodeID: "up", Iteration: 1, Status: "completed",
+		Outputs: map[string]any{
+			"page":                         "<html/>",
+			"clarified_requirement":        "md",
+			"clarified_requirement_json":   `{"title":"big"}`,
+			"research_json":                `{"summary":"x"}`,
+		},
+	})
+	execs := s.SlimNodeExecutions("r-slim-json", []string{"up"})
+	outs := execs["up"][0]["outputs"].(map[string]any)
+	if _, ok := outs["clarified_requirement_json"]; ok {
+		t.Fatal("*_json snapshots must be omitted from SlimNodeExecutions")
+	}
+	if _, ok := outs["research_json"]; ok {
+		t.Fatal("research_json must be omitted")
+	}
+	if outs["page"] != "<html/>" {
+		t.Fatalf("page snapshot should remain: %+v", outs)
+	}
+	if outs["clarified_requirement"] != "md" {
+		t.Fatalf("rendered markdown key should remain: %+v", outs)
+	}
+}
+
+func TestOmitLargeJSONSnapshots(t *testing.T) {
+	got := OmitLargeJSONSnapshots(map[string]any{
+		"page": "<html/>", "plan_json": `{}`, "plan": "md",
+	})
+	if _, ok := got["plan_json"]; ok {
+		t.Fatal("plan_json should be omitted")
+	}
+	if got["page"] != "<html/>" || got["plan"] != "md" {
+		t.Fatalf("got %+v", got)
+	}
+	if OmitLargeJSONSnapshots(nil) != nil {
+		t.Fatal("nil in → nil out")
+	}
+}

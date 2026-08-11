@@ -12,6 +12,7 @@ import { setTheme } from '@/lib/shared/theme'
 
 const mocks = vi.hoisted(() => ({
   preview: vi.fn(),
+  upstream: vi.fn(),
   decide: vi.fn(),
   reply: vi.fn(),
   cancel: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock('@/lib/inbox/gateShareLink', async () => {
     ...actual,
     publicGateApi: {
       preview: mocks.preview,
+      upstream: mocks.upstream,
       decide: mocks.decide,
       reply: mocks.reply,
       cancel: mocks.cancel,
@@ -59,6 +61,7 @@ function mountView(locale: 'zh-CN' | 'en' = 'zh-CN') {
 
 beforeEach(() => {
   mocks.preview.mockReset()
+  mocks.upstream.mockReset()
   mocks.decide.mockReset()
   mocks.reply.mockReset()
   mocks.cancel.mockReset()
@@ -661,5 +664,87 @@ describe('PublicGateApprovalView workbench', () => {
     expect(w.get('[data-testid="public-gate-error"]').text()).toBe('链接失效，请重新打开复审链接')
     expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
     expect((w.get('[data-testid="public-gate-confirm"]').element as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('silent poll merge keeps visualHtml when server omits unchanged body (plan g2.2)', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'human_gate',
+      nonce: 'n-merge',
+      visualHtml: '<p>keep-me</p>',
+      visualHtmlHash: 'vh1',
+      upstream: { name: 'clarified_requirement.json', title: '澄清', summary: '摘要' },
+      upstreamHash: 'up1',
+      remainingSec: 100,
+      actions: { approve: 'approve', confirm: 'approve' },
+      productKind: 'visual',
+      productName: 'page.html',
+    })
+    const w = mountView()
+    await flushPromises()
+    expect(w.get('[data-testid="public-gate-visual"]').html()).toContain('keep-me')
+
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'human_gate',
+      nonce: 'n-merge-2',
+      visualHtmlHash: 'vh1',
+      upstreamHash: 'up1',
+      remainingSec: 98,
+      actions: { approve: 'approve', confirm: 'approve' },
+      productKind: 'visual',
+      productName: 'page.html',
+    })
+    await (w.vm as unknown as { loadPreview: (opts?: { silent?: boolean }) => Promise<void> }).loadPreview({
+      silent: true,
+    })
+    await flushPromises()
+    expect(w.get('[data-testid="public-gate-visual"]').html()).toContain('keep-me')
+    expect(mocks.preview.mock.calls[mocks.preview.mock.calls.length - 1]?.[2]).toEqual({
+      visualHtmlHash: 'vh1',
+      upstreamHash: 'up1',
+    })
+  })
+
+  it('loads upstream doc on enlarge and retries on failure without blocking approve (plan g1.3)', async () => {
+    window.location.hash = `#t=${'aa'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'human_gate',
+      nonce: 'n-up',
+      visualHtml: '<p>ok</p>',
+      reactSessionAlive: true,
+      upstream: { name: 'clarified_requirement.json', title: '澄清', summary: '仅摘要' },
+      actions: { approve: 'approve', reject: 'revise', confirm: 'approve' },
+      productKind: 'visual',
+      productName: 'page.html',
+    })
+    mocks.upstream.mockRejectedValueOnce(new Error('upstream_timeout'))
+    const w = mountView()
+    await flushPromises()
+    expect(mocks.upstream).not.toHaveBeenCalled()
+    await w.get('[data-testid="public-gate-upstream-enlarge"]').trigger('click')
+    await flushPromises()
+    expect(mocks.upstream).toHaveBeenCalledTimes(1)
+    const errEl = document.body.querySelector('[data-testid="public-gate-upstream-error"]')
+    expect(errEl?.textContent || '').toContain('upstream_timeout')
+    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
+
+    mocks.upstream.mockResolvedValueOnce({
+      status: 'active',
+      upstream: {
+        name: 'clarified_requirement.json',
+        title: '澄清',
+        doc: { title: '澄清全文', goals: ['g1'] },
+      },
+    })
+    const retryBtn = document.body.querySelector('[data-testid="public-gate-upstream-retry"]') as HTMLButtonElement | null
+    expect(retryBtn).toBeTruthy()
+    retryBtn!.click()
+    await flushPromises()
+    const docEl = document.body.querySelector('[data-testid="public-gate-upstream-doc"]')
+    expect(docEl).toBeTruthy()
+    expect(docEl?.textContent || '').toMatch(/g1|澄清/)
   })
 })

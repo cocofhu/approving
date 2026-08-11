@@ -17,6 +17,7 @@ import type {
   TokenStatsWindow,
   PmLeaderBinding,
   ProjectMemoryItem,
+  RequirementDraft,
   AgentCronJob,
   ChatThread,
   ChatMessage,
@@ -395,6 +396,51 @@ export const api = {
   updateProject: (id: string, body: Partial<Project>) =>
     req<Project>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteProject: (id: string) => req<{ status: string }>(`/projects/${id}`, { method: 'DELETE' }),
+
+  listRequirementDrafts: (
+    projectId: string,
+    params?: { status?: 'open' | 'done' | 'all'; q?: string },
+  ) => {
+    const q = new URLSearchParams()
+    if (params?.status) q.set('status', params.status)
+    if (params?.q) q.set('q', params.q)
+    const qs = q.toString()
+    return req<{ items: RequirementDraft[] }>(
+      `/projects/${encodeURIComponent(projectId)}/requirement-drafts${qs ? `?${qs}` : ''}`,
+    )
+  },
+  getRequirementDraft: (projectId: string, draftId: string) =>
+    req<RequirementDraft>(
+      `/projects/${encodeURIComponent(projectId)}/requirement-drafts/${encodeURIComponent(draftId)}`,
+    ),
+  createRequirementDraft: (projectId: string) =>
+    req<RequirementDraft>(
+      `/projects/${encodeURIComponent(projectId)}/requirement-drafts`,
+      { method: 'POST' },
+    ),
+  updateRequirementDraft: (
+    projectId: string,
+    draftId: string,
+    body: { title: string; bodyMarkdown?: string },
+  ) =>
+    req<RequirementDraft>(
+      `/projects/${encodeURIComponent(projectId)}/requirement-drafts/${encodeURIComponent(draftId)}`,
+      { method: 'PUT', body: JSON.stringify(body) },
+    ),
+  patchRequirementDraftStatus: (
+    projectId: string,
+    draftId: string,
+    status: 'open' | 'done',
+  ) =>
+    req<RequirementDraft>(
+      `/projects/${encodeURIComponent(projectId)}/requirement-drafts/${encodeURIComponent(draftId)}/status`,
+      { method: 'PATCH', body: JSON.stringify({ status }) },
+    ),
+  deleteRequirementDraft: (projectId: string, draftId: string) =>
+    req<{ status: string }>(
+      `/projects/${encodeURIComponent(projectId)}/requirement-drafts/${encodeURIComponent(draftId)}`,
+      { method: 'DELETE' },
+    ),
 
   /** Project audit timeline (paginated). Default time window: 24h. */
   listProjectAudit: (

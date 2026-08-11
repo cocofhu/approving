@@ -15,7 +15,10 @@ const props = defineProps<{
   contextLabel?: string
 }>()
 
-const emit = defineEmits<{ (e: 'close'): void }>()
+const emit = defineEmits<{
+  (e: 'close'): void
+  (e: 'mark-read'): void
+}>()
 
 const { t } = useI18n()
 const router = useRouter()
@@ -96,6 +99,10 @@ watch(
 
 function close() {
   emit('close')
+}
+
+function markRead() {
+  emit('mark-read')
 }
 
 function openRunDetail() {
@@ -200,19 +207,11 @@ function openArtifacts() {
     <template #footer>
       <button
         type="button"
-        class="border border-line bg-transparent px-3 py-2 text-[13px] text-txt2 hover:border-line-strong hover:text-txt"
-        data-testid="run-output-open-run"
-        @click="openRunDetail"
-      >
-        {{ t('shell.runNotifications.openRunDetail') }}
-      </button>
-      <button
-        type="button"
         class="border border-transparent bg-accent px-3 py-2 text-[13px] text-white hover:brightness-110"
-        data-testid="run-output-done"
-        @click="close"
+        data-testid="run-output-mark-read"
+        @click="markRead"
       >
-        {{ t('shell.runNotifications.done') }}
+        {{ t('shell.runNotifications.markAsRead') }}
       </button>
     </template>
   </AppModal>

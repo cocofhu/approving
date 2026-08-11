@@ -190,6 +190,8 @@ export type PublicGatePreview = {
   expiresAt?: string
   actions?: { approve?: string; reject?: string; confirm?: string; reply?: string; cancel?: string }
   visualHtml?: string
+  /** Content hash for sparse silent poll; always present when server computed it. */
+  visualHtmlHash?: string
   structured?: {
     name?: string
     title?: string
@@ -206,8 +208,11 @@ export type PublicGatePreview = {
     summary?: string
     description?: string
     text?: string
+    /** Present only on on-demand /upstream; open/poll preview never embeds doc. */
     doc?: Record<string, unknown>
   }
+  /** Summary upstream hash for sparse silent poll. */
+  upstreamHash?: string
   reactSessionAlive?: boolean
   sessionBusy?: boolean
   waiting?: number
@@ -215,6 +220,13 @@ export type PublicGatePreview = {
   activeItem?: PublicGateActiveItem | null
   productKind?: 'visual' | 'structured' | 'app_preview' | string
   productName?: string
+}
+
+export type PublicGateUpstreamResult = {
+  status: string
+  upstream?: PublicGatePreview['upstream'] | null
+  error?: string
+  message?: string
 }
 
 export type PublicGateDecideResult = {
@@ -241,10 +253,79 @@ async function readJson<T>(res: Response): Promise<T> {
   }
 }
 
+/** Merge sparse poll payloads: omitted large fields keep the previous client value. */
+export function mergePublicGatePreview(
+  prev: PublicGatePreview | null,
+  next: PublicGatePreview,
+): PublicGatePreview {
+  if (!prev) return next
+  const merged: PublicGatePreview = { ...prev, ...next }
+  const visualHashChanged =
+    typeof next.visualHtmlHash === 'string' &&
+    next.visualHtmlHash !== (prev.visualHtmlHash ?? '')
+  if (Object.prototype.hasOwnProperty.call(next, 'visualHtml')) {
+    merged.visualHtml = next.visualHtml
+  } else if (visualHashChanged) {
+    // Hash changed but body omitted (e.g. cleared) → drop stale HTML.
+    merged.visualHtml = next.visualHtml
+  } else if (prev.visualHtml != null) {
+    merged.visualHtml = prev.visualHtml
+  }
+  if (typeof next.visualHtmlHash === 'string') {
+    merged.visualHtmlHash = next.visualHtmlHash
+  } else if (prev.visualHtmlHash != null) {
+    merged.visualHtmlHash = prev.visualHtmlHash
+  }
+  const upstreamHashChanged =
+    typeof next.upstreamHash === 'string' && next.upstreamHash !== (prev.upstreamHash ?? '')
+  if (Object.prototype.hasOwnProperty.call(next, 'upstream')) {
+    merged.upstream = next.upstream
+  } else if (upstreamHashChanged) {
+    merged.upstream = next.upstream
+  } else if (prev.upstream != null) {
+    merged.upstream = prev.upstream
+  }
+  if (typeof next.upstreamHash === 'string') {
+    merged.upstreamHash = next.upstreamHash
+  } else if (prev.upstreamHash != null) {
+    merged.upstreamHash = prev.upstreamHash
+  }
+  return merged
+}
+
 /** Unauthenticated public gate APIs. Token never goes in path/query. */
 export const publicGateApi = {
-  preview(token: string, signal?: AbortSignal): Promise<PublicGatePreview> {
+  preview(
+    token: string,
+    signal?: AbortSignal,
+    known?: { visualHtmlHash?: string; upstreamHash?: string },
+  ): Promise<PublicGatePreview> {
+    const headers: Record<string, string> = {
+      [GATE_SHARE_TOKEN_HEADER]: token,
+      [GATE_SHARE_REQUEST_HEADER]: '1',
+    }
+    const vh = known?.visualHtmlHash?.trim()
+    const uh = known?.upstreamHash?.trim()
+    if (vh) headers['X-Gate-Known-Visual-Html-Hash'] = vh
+    if (uh) headers['X-Gate-Known-Upstream-Hash'] = uh
     return fetch('/public/gate-approvals/preview', {
+      method: 'GET',
+      credentials: 'omit',
+      signal,
+      headers,
+    }).then(async (res) => {
+      const body = await readJson<PublicGatePreview & { error?: string; message?: string }>(res)
+      if (!res.ok) {
+        throw Object.assign(new Error(body.message || body.error || `${res.status}`), {
+          status: res.status,
+          body,
+        })
+      }
+      return body
+    })
+  },
+  upstream(token: string, signal?: AbortSignal): Promise<PublicGateUpstreamResult> {
+    return fetch('/public/gate-approvals/upstream', {
       method: 'GET',
       credentials: 'omit',
       signal,
@@ -253,7 +334,7 @@ export const publicGateApi = {
         [GATE_SHARE_REQUEST_HEADER]: '1',
       },
     }).then(async (res) => {
-      const body = await readJson<PublicGatePreview & { error?: string; message?: string }>(res)
+      const body = await readJson<PublicGateUpstreamResult>(res)
       if (!res.ok) {
         throw Object.assign(new Error(body.message || body.error || `${res.status}`), {
           status: res.status,

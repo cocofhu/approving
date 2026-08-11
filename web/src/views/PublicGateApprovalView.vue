@@ -14,6 +14,7 @@ import { provideReviewAnnotate } from '@/lib/inbox/reviewAnnotate'
 import { isAbortError } from '@/lib/run/liveLogRehydrate'
 import {
   formatRemainingSec,
+  mergePublicGatePreview,
   parseShareTokenFromHash,
   publicGateApi,
   type PublicGateActiveItem,
@@ -54,6 +55,10 @@ const workbenchSeen = ref(false)
 const linkInvalid = ref(false)
 const doneKind = ref<'approved' | 'rejected' | 'confirmed' | null>(null)
 const upstreamOpen = ref(false)
+const upstreamDocFull = ref<Record<string, unknown> | null>(null)
+const upstreamLoading = ref(false)
+const upstreamLoadErr = ref('')
+const upstreamLoaded = ref(false)
 const draft = ref('')
 const attachments = ref<ClarifyImage[]>([])
 const annotations = ref<ReactAnnotation[]>([])
@@ -64,6 +69,7 @@ const pendingReplyText = ref('')
 let previewGen = 0
 let previewAbort: AbortController | null = null
 let decideAbort: AbortController | null = null
+let upstreamAbort: AbortController | null = null
 let stuckTimer: number | null = null
 
 function clearStuckTimer() {
@@ -113,7 +119,7 @@ const turns = computed<ClarifyTurn[]>(() =>
   })),
 )
 const structuredDoc = computed(() => preview.value?.structured?.doc || structuredFallbackDoc())
-const upstreamDoc = computed(() => preview.value?.upstream?.doc || null)
+const upstreamDoc = computed(() => upstreamDocFull.value)
 const hasUpstream = computed(() => !!preview.value?.upstream)
 const statusHint = computed(() => {
   if (status.value === 'expired') return t('pages.publicGate.expiredHint')
@@ -193,11 +199,22 @@ async function loadPreview(opts?: { silent?: boolean }) {
     return
   }
   try {
-    const next = await publicGateApi.preview(tok, signal)
+    const known =
+      opts?.silent && preview.value
+        ? {
+            visualHtmlHash: preview.value.visualHtmlHash,
+            upstreamHash: preview.value.upstreamHash,
+          }
+        : undefined
+    const next = await publicGateApi.preview(tok, signal, known)
     if (attemptGen !== previewGen) return
-    preview.value = next
+    if (opts?.silent && preview.value) {
+      preview.value = mergePublicGatePreview(preview.value, next)
+    } else {
+      preview.value = next
+    }
     if (next.status === 'active') workbenchSeen.value = true
-    noteWorkbenchLinkInvalid(next)
+    noteWorkbenchLinkInvalid(preview.value)
     if (!opts?.silent && !linkInvalid.value) errorText.value = ''
   } catch (e) {
     if (attemptGen !== previewGen || isAbortError(e)) return
@@ -215,6 +232,58 @@ async function loadPreview(opts?: { silent?: boolean }) {
   if (attemptGen !== previewGen) return
   await nextTick()
   syncChatQueueFromPreview()
+}
+
+function abortUpstream() {
+  upstreamAbort?.abort()
+  upstreamAbort = null
+}
+
+async function loadUpstreamFull() {
+  const tok = token.value || parseShareTokenFromHash(window.location.hash)
+  if (!tok || !hasUpstream.value) return
+  if (upstreamLoaded.value || upstreamLoading.value) return
+  abortUpstream()
+  upstreamAbort = new AbortController()
+  const signal = upstreamAbort.signal
+  upstreamLoading.value = true
+  upstreamLoadErr.value = ''
+  try {
+    const res = await publicGateApi.upstream(tok, signal)
+    if (signal.aborted) return
+    const doc = res.upstream?.doc
+    if (doc && typeof doc === 'object') {
+      upstreamDocFull.value = doc as Record<string, unknown>
+    } else {
+      // Fallback to summary fields when doc absent / truncated path.
+      const u = res.upstream || preview.value?.upstream
+      const fallback: Record<string, unknown> = {}
+      if (u?.title) fallback.title = u.title
+      if (u?.summary) fallback.summary = u.summary
+      if (u?.description) fallback.description = u.description
+      if (u?.text) fallback.summary = u.text
+      upstreamDocFull.value = Object.keys(fallback).length ? fallback : null
+    }
+    upstreamLoaded.value = true
+  } catch (e) {
+    if (isAbortError(e) || signal.aborted) return
+    upstreamLoadErr.value = e instanceof Error ? e.message : String(e || '')
+    upstreamDocFull.value = null
+  } finally {
+    if (!signal.aborted) upstreamLoading.value = false
+  }
+}
+
+function retryUpstreamLoad() {
+  upstreamLoaded.value = false
+  upstreamLoadErr.value = ''
+  upstreamDocFull.value = null
+  void loadUpstreamFull()
+}
+
+function openUpstreamModal() {
+  upstreamOpen.value = true
+  void loadUpstreamFull()
 }
 
 function turnsIncludeHumanText(text: string): boolean {
@@ -510,6 +579,19 @@ watch(chatRef, (chat) => {
   if (chat) syncChatQueueFromPreview()
 })
 
+// When silent poll brings a new upstream summary, drop cached full doc.
+watch(
+  () => preview.value?.upstreamHash,
+  (hash, prev) => {
+    if (prev != null && hash !== prev) {
+      upstreamLoaded.value = false
+      upstreamDocFull.value = null
+      upstreamLoadErr.value = ''
+      if (upstreamOpen.value) void loadUpstreamFull()
+    }
+  },
+)
+
 onMounted(async () => {
   await applyPublicLocale()
   ready.value = true
@@ -521,12 +603,13 @@ onUnmounted(() => {
   stopPoll()
   window.removeEventListener('hashchange', onHashChange)
   abortPreview()
+  abortUpstream()
   decideAbort?.abort()
   decideAbort = null
   reapplyThemeChrome()
 })
 
-defineExpose({ loadPreview })
+defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
 </script>
 
 <template>
@@ -723,7 +806,7 @@ defineExpose({ loadPreview })
             type="button"
             class="inline-flex items-center gap-1.5 bg-accent px-2.5 py-1 text-[11px] font-medium text-white hover:bg-accent-2"
             data-testid="public-gate-upstream-enlarge"
-            @click="upstreamOpen = true"
+            @click="openUpstreamModal"
           >
             <Icon name="expand" :size="14" />
             {{ t('pages.gateApproval.upstreamEnlarge') }}
@@ -789,10 +872,29 @@ defineExpose({ loadPreview })
       data-testid="public-gate-upstream-modal"
       @close="upstreamOpen = false"
     >
-      <div v-if="upstreamDoc" class="scroll-area max-h-[70vh] overflow-y-auto px-4 py-3">
+      <div v-if="upstreamLoading" class="px-4 py-6 text-sm text-txt2" data-testid="public-gate-upstream-loading">
+        {{ t('pages.publicGate.loading') }}
+      </div>
+      <div
+        v-else-if="upstreamLoadErr"
+        class="space-y-2 px-4 py-3 text-sm"
+        role="alert"
+        data-testid="public-gate-upstream-error"
+      >
+        <p class="text-err">{{ t('pages.gateApproval.upstreamLoadFailed', { error: upstreamLoadErr }) }}</p>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 bg-accent px-2.5 py-1 text-[11px] font-medium text-white hover:bg-accent-2"
+          data-testid="public-gate-upstream-retry"
+          @click="retryUpstreamLoad"
+        >
+          {{ t('pages.gateApproval.upstreamRetry') }}
+        </button>
+      </div>
+      <div v-else-if="upstreamDoc" class="scroll-area max-h-[70vh] overflow-y-auto px-4 py-3" data-testid="public-gate-upstream-doc">
         <StructuredArtifactView name="clarified_requirement.json" :doc="upstreamDoc" />
       </div>
-      <div v-else class="space-y-2 px-4 py-3 text-sm text-txt2">
+      <div v-else class="space-y-2 px-4 py-3 text-sm text-txt2" data-testid="public-gate-upstream-summary">
         <p v-if="preview?.upstream?.title" class="font-medium text-txt">{{ preview.upstream.title }}</p>
         <p v-if="preview?.upstream?.summary">{{ preview.upstream.summary }}</p>
         <p v-if="preview?.upstream?.description">{{ preview.upstream.description }}</p>
