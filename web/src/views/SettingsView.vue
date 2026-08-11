@@ -199,17 +199,17 @@ onBeforeUnmount(() => {
 
 <template>
   <div data-testid="settings-panel" :aria-busy="loading || saving ? 'true' : 'false'">
-    <div class="mb-5 flex items-end justify-between gap-3">
+    <div class="mb-5 flex flex-col items-stretch gap-3 md:flex-row md:items-end md:justify-between">
       <div>
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.settings.title') }}</h2>
         <p class="text-sm text-txt3">{{ t('pages.settings.subtitle') }}</p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-col gap-2 md:flex-row md:items-center">
         <span v-if="savedAt" class="text-xs text-ok">{{ t('pages.settings.saved') }}</span>
-        <AppButton variant="ghost" size="sm" icon="refresh" :disabled="loading || saving" @click="loadSettings">
+        <AppButton class="min-h-11 w-full md:w-auto" variant="ghost" size="sm" icon="refresh" :disabled="loading || saving" @click="loadSettings">
           {{ t('common.buttons.reset') }}
         </AppButton>
-        <AppButton variant="primary" size="sm" icon="check" :disabled="loading || saving || !dirty()" @click="save">
+        <AppButton class="min-h-11 w-full md:w-auto" variant="primary" size="sm" icon="check" :disabled="loading || saving || !dirty()" @click="save">
           {{ saving ? t('common.buttons.saving') : t('common.buttons.save') }}
         </AppButton>
       </div>

@@ -452,7 +452,7 @@ body {
   word-break: break-word;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .md {
     font-size: 13px;
     line-height: 1.625;

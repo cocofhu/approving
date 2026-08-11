@@ -295,7 +295,7 @@ describe('RunDetailView mobile timeline view contract', () => {
   })
 
   it('uses mobile single-panel mutual exclusion instead of dual-stack min-h', () => {
-    // Page-level tabs + back bar for ≤768 list-detail.
+    // Page-level tabs + back bar for ≤767 list-detail.
     expect(src).toMatch(/data-testid="mobile-main-panel-tabs"/)
     expect(src).toMatch(/data-testid="mobile-panel-timeline"/)
     expect(src).toMatch(/data-testid="mobile-panel-detail"/)

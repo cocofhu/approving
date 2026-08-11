@@ -2927,6 +2927,14 @@ onBeforeUnmount(() => {
           <p class="max-w-[28ch] text-[12.5px] leading-relaxed text-txt2">
             {{ t('pages.agentStudio.mobile.desktopOnlyDesc', { tab: studioTabLabel }) }}
           </p>
+          <button
+            type="button"
+            class="min-h-11 border border-line bg-transparent px-4 text-[13px] text-txt2 hover:border-accent hover:text-txt"
+            data-testid="studio-mobile-back-files"
+            @click="requestStudioTab('files')"
+          >
+            {{ t('pages.agentStudio.mobile.backToFiles') }}
+          </button>
         </div>
 
         <!-- mcp -->

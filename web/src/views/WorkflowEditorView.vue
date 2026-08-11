@@ -35,11 +35,14 @@ import {
 import { NODE_DEFS, syncHumanGateFormDefaults } from '@/data/nodeRegistry'
 import type { ClarifyImage, NodeType, WFNode, WFEdge, Workflow, WorkflowVersion } from '@/lib/shared/types'
 import { readStoredProjectId } from '@/lib/composables/useProjectContext'
+import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const toast = useToast()
+const { isMobile } = useBreakpoint()
+const showFlowPeek = ref(false)
 const routeId = route.params.id as string
 
 type EditorTab = 'canvas' | 'runs' | 'api'
@@ -470,7 +473,54 @@ function deleteEdge() {
 </script>
 
 <template>
-  <div class="flex h-full flex-col bg-base">
+  <div
+    v-if="isMobile"
+    class="flex h-full min-h-0 flex-col overflow-auto bg-base"
+    data-testid="workflow-editor-mobile"
+  >
+    <div class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2">
+      <button
+        type="button"
+        class="flex min-h-11 items-center gap-1 text-[13px] text-txt3 hover:text-txt"
+        @click="router.push(wf.projectId ? '/projects/' + wf.projectId : '/projects')"
+      >
+        <Icon name="arrow-left" :size="15" />{{ t('pages.sandboxConsole.back') }}
+      </button>
+      <span class="truncate text-[13px] font-medium text-txt">{{ wf.name }}</span>
+    </div>
+    <div class="flex flex-1 flex-col items-center px-5 py-8 text-center">
+      <div class="mb-3 flex h-10 w-10 items-center justify-center border border-info/35 bg-info/10 text-info">◇</div>
+      <h3 class="text-[14px] font-semibold text-txt">{{ t('pages.workflowEditor.mobile.title') }}</h3>
+      <p class="mt-2 max-w-[32ch] text-[12.5px] leading-relaxed text-txt2">{{ t('pages.workflowEditor.mobile.desc') }}</p>
+      <button
+        type="button"
+        class="mt-4 min-h-11 border border-line bg-transparent px-4 text-[13px] text-txt2 hover:border-accent hover:text-txt"
+        data-testid="workflow-editor-peek"
+        @click="showFlowPeek = !showFlowPeek"
+      >
+        {{ t('pages.workflowEditor.mobile.peek') }}
+      </button>
+    </div>
+    <div
+      v-if="showFlowPeek"
+      class="mx-4 mb-6 border border-line bg-surface p-3 text-left"
+      data-testid="workflow-editor-summary"
+    >
+      <div class="mb-2 text-[11px] uppercase tracking-wider text-txt3">{{ t('pages.workflowEditor.mobile.summaryLabel') }}</div>
+      <p v-if="!wf.nodes.length" class="text-[12px] text-txt3">{{ t('pages.workflowEditor.mobile.empty') }}</p>
+      <div
+        v-for="n in wf.nodes"
+        :key="n.id"
+        class="flex items-center gap-2 border-b border-line/60 py-2 last:border-b-0"
+        data-testid="workflow-editor-node-row"
+      >
+        <span class="h-2 w-2 shrink-0 bg-accent" :data-node-type="n.type" />
+        <span class="min-w-0 truncate text-[13px] text-txt">{{ n.type }} · {{ n.label }}</span>
+      </div>
+      <p class="mt-2 text-[11px] text-txt3">{{ t('pages.workflowEditor.mobile.noEdit') }}</p>
+    </div>
+  </div>
+  <div v-else class="flex h-full flex-col bg-base">
     <!-- toolbar -->
     <header class="flex min-h-14 shrink-0 items-center gap-3 border-b border-line bg-surface px-4 py-2">
       <button class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-txt2 hover:bg-elevated hover:text-txt" @click="router.push(wf.projectId ? '/projects/' + wf.projectId : '/projects')">

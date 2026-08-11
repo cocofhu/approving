@@ -175,7 +175,7 @@ test.describe('Agent Studio 窄屏数据 Tab', () => {
     await page.goto('/agent-studio-mobile-data.html?agent=ApprovingPM&tab=data&sub=memory')
     await expect(page.getByTestId('agent-studio-mobile-data-root')).toBeVisible({ timeout: 15_000 })
 
-    await expect(page.getByText('请在桌面端完成')).toHaveCount(0)
+    await expect(page.getByText('建议在桌面使用')).toHaveCount(0)
     await expect(page.getByRole('button', { name: '记忆', exact: true })).toBeVisible()
     await expect(page.getByText('项目约定')).toBeVisible()
 
@@ -196,14 +196,15 @@ test.describe('Agent Studio 窄屏数据 Tab', () => {
     await expect(deliver).toHaveAttribute('aria-checked', 'true')
 
     await page.getByRole('button', { name: /^MCP/ }).click()
-    await expect(page.getByText('请在桌面端完成')).toBeVisible()
+    await expect(page.getByText('建议在桌面使用')).toBeVisible()
+    await expect(page.getByTestId('studio-mobile-back-files')).toBeVisible()
   })
 
   test('深链 sub=jobs 直达卡片列表', async ({ page }) => {
     await mockStudioApi(page)
     await page.goto('/agent-studio-mobile-data.html?agent=ApprovingPM&tab=data&sub=jobs')
     await expect(page.getByTestId('agent-cron-mobile-cards')).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByText('请在桌面端完成')).toHaveCount(0)
+    await expect(page.getByText('建议在桌面使用')).toHaveCount(0)
     await expect(page.getByText('每日汇报')).toBeVisible()
   })
 
@@ -213,7 +214,7 @@ test.describe('Agent Studio 窄屏数据 Tab', () => {
     await expect(page.getByText('尚未绑定主项目')).toBeVisible({ timeout: 15_000 })
     await expect(page.getByText(/请在桌面端/)).toBeVisible()
     await expect(page.getByRole('button', { name: '去绑定主项目' })).toHaveCount(0)
-    await expect(page.getByText('请在桌面端完成')).toHaveCount(0)
+    await expect(page.getByText('建议在桌面使用')).toHaveCount(0)
   })
 
   test('记忆增删在窄屏可用', async ({ page }) => {

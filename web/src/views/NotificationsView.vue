@@ -95,7 +95,7 @@ onMounted(() => {
 
 <template>
   <div class="flex h-full min-h-0 flex-col" data-testid="notifications-page">
-    <div class="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-4 md:px-6">
+    <div class="flex flex-col items-stretch gap-3 border-b border-line px-4 py-4 md:flex-row md:flex-wrap md:items-start md:justify-between md:px-6">
       <div>
         <h1 class="m-0 text-base font-semibold text-txt">{{ t('pages.notifications.title') }}</h1>
         <p class="mt-1 text-xs text-txt3">{{ t('pages.notifications.subtitle') }}</p>
@@ -106,7 +106,7 @@ onMounted(() => {
         </span>
         <button
           type="button"
-          class="border border-line bg-transparent px-3 py-1.5 text-[12px] text-txt2 hover:border-accent hover:text-accent disabled:opacity-40"
+          class="min-h-11 border border-line bg-transparent px-3 text-[12px] text-txt2 hover:border-accent hover:text-accent disabled:opacity-40"
           data-testid="notifications-mark-all"
           :disabled="unreadCount === 0"
           @click="markAllRead()"
@@ -121,7 +121,7 @@ onMounted(() => {
         v-for="opt in (['all', 'unread', 'read'] as const)"
         :key="opt"
         type="button"
-        class="border px-2.5 py-1 text-[12px]"
+        class="min-h-11 border px-2.5 py-1 text-[12px]"
         :class="
           filter === opt
             ? 'border-accent/45 bg-accent-dim text-txt'

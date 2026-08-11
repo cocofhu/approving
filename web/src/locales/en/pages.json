@@ -641,6 +641,14 @@
       "descPlaceholder": "List subtitle / brief description",
       "projectRequired": "Pick a project before creating a pipeline",
       "loadFailed": "Failed to load workflow; backend may be offline",
+      "mobile": {
+        "title": "Edit on desktop",
+        "desc": "Full drag-and-drop editing and the inspector need a larger viewport. Only a limited read-only summary is available here.",
+        "peek": "View flow summary",
+        "summaryLabel": "Read-only summary",
+        "empty": "This workflow has no nodes",
+        "noEdit": "No drag · no inspector editing"
+      },
       "publishFailed": "Publish failed:",
       "rollbackFailed": "Rollback failed; try again",
       "runDraftHint": " · saves draft before start",
@@ -1201,6 +1209,13 @@
       "title": "Platform rules (global defaults)",
       "subtitle": "9 rule files · admin write only · stored in data/platform-rules/",
       "backToSettings": "Back to settings",
+      "backToList": "Back to list",
+      "emptyList": "No platform rule files",
+      "emptySummary": "No summary",
+      "mtimeLabel": "Updated",
+      "summaryTitle": "Read-only summary",
+      "mobileStepChip": "Single-column step",
+      "mobileReadonlyHint": "Desktop keeps the three-pane editor. Narrow screens are browse-only with no edit or save.",
       "readOnlyHint": "Read-only (non-admin)",
       "resetEmbed": "Restore embedded default",
       "loadFailed": "Failed to load platform rules",
@@ -1326,7 +1341,21 @@
       "logEmpty": "No log yet (no output or recycled without archive)",
       "logFailed": "Log request failed. Please retry.",
       "logRefreshing": "Refreshing logs…",
-      "disconnected": "[Disconnected]"
+      "disconnected": "[Disconnected]",
+      "mobile": {
+        "title": "Use on desktop",
+        "desc": "Terminal, IDE iframe, and noVNC need a larger viewport. Mobile does not offer full remote control.",
+        "peek": "View session summary",
+        "summaryLabel": "Session summary (read-only)",
+        "empty": "No session data",
+        "loading": "Loading session…",
+        "desktopHint": "Use desktop for terminal / IDE / noVNC",
+        "name": "name",
+        "status": "status",
+        "containerStatus": "containerStatus",
+        "endpoints": "ports",
+        "uptime": "uptime"
+      }
     },
     "agentStudio": {
       "title": "Agent Studio",
@@ -1669,8 +1698,9 @@
         "switchAria": "Open agent organization tree",
         "orgSheetTitle": "Agent organization",
         "orgSheetHint": "Read-only: expand groups and switch agents. No group create or drag reorder. Close via backdrop or the close button.",
-        "desktopOnlyTitle": "Please complete on desktop",
-        "desktopOnlyDesc": "\"{tab}\" keeps an entry on narrow screens only; please finish full configuration in a desktop browser.",
+        "desktopOnlyTitle": "Use on desktop",
+        "desktopOnlyDesc": "\"{tab}\" needs a multi-pane workspace. Mobile only shows this guide and does not provide an editing UI.",
+        "backToFiles": "Back to Files",
         "fullNameLabel": "Full name",
         "fullNameAria": "View full agent name"
       },
