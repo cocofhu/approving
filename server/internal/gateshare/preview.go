@@ -16,35 +16,43 @@ const (
 	ProductKindStructured = "structured"
 	ProductKindAppPreview = "app_preview"
 
-	// HeaderKnownVisualHTMLHash / HeaderKnownUpstreamHash let silent pollers
-	// ask the server to omit unchanged large fields (field-level sparse update).
+	// HeaderKnown* let silent pollers ask the server to omit unchanged large
+	// fields (field-level sparse update).
 	HeaderKnownVisualHTMLHash = "X-Gate-Known-Visual-Html-Hash"
 	HeaderKnownUpstreamHash   = "X-Gate-Known-Upstream-Hash"
+	HeaderKnownStructuredHash = "X-Gate-Known-Structured-Hash"
+	HeaderKnownTurnsHash      = "X-Gate-Known-Turns-Hash"
+	// HeaderSilentPoll marks a background poll. HeaderIssueNonce requests a
+	// fresh one-time nonce (first load, foreground resume, or near TTL).
+	HeaderSilentPoll = "X-Gate-Silent-Poll"
+	HeaderIssueNonce = "X-Gate-Issue-Nonce"
 )
 
 // PreviewDTO is the leak-free public GET payload for the workbench-style page.
 type PreviewDTO struct {
-	Status            string            `json:"status"`
-	Kind              string            `json:"kind,omitempty"`
-	Title             string            `json:"title,omitempty"`
-	Description       string            `json:"description,omitempty"`
-	RemainingSec      *int64            `json:"remainingSec,omitempty"`
-	ExpiresAt         *time.Time        `json:"expiresAt,omitempty"`
-	Actions           map[string]string `json:"actions,omitempty"`
-	VisualHTML        string            `json:"visualHtml,omitempty"`
-	VisualHTMLHash    string            `json:"visualHtmlHash,omitempty"`
-	Structured        map[string]any    `json:"structured,omitempty"`
-	Nonce             string            `json:"nonce,omitempty"`
-	Turns             []PreviewTurn     `json:"turns,omitempty"`
-	Upstream          map[string]any    `json:"upstream,omitempty"`
-	UpstreamHash      string            `json:"upstreamHash,omitempty"`
-	ReactSessionAlive *bool             `json:"reactSessionAlive,omitempty"`
-	SessionBusy       bool              `json:"sessionBusy,omitempty"`
-	Waiting           int               `json:"waiting,omitempty"`
+	Status            string             `json:"status"`
+	Kind              string             `json:"kind,omitempty"`
+	Title             string             `json:"title,omitempty"`
+	Description       string             `json:"description,omitempty"`
+	RemainingSec      *int64             `json:"remainingSec,omitempty"`
+	ExpiresAt         *time.Time         `json:"expiresAt,omitempty"`
+	Actions           map[string]string  `json:"actions,omitempty"`
+	VisualHTML        string             `json:"visualHtml,omitempty"`
+	VisualHTMLHash    string             `json:"visualHtmlHash,omitempty"`
+	Structured        map[string]any     `json:"structured,omitempty"`
+	StructuredHash    string             `json:"structuredHash,omitempty"`
+	Nonce             string             `json:"nonce,omitempty"`
+	Turns             []PreviewTurn      `json:"turns,omitempty"`
+	TurnsHash         string             `json:"turnsHash,omitempty"`
+	Upstream          map[string]any     `json:"upstream,omitempty"`
+	UpstreamHash      string             `json:"upstreamHash,omitempty"`
+	ReactSessionAlive *bool              `json:"reactSessionAlive,omitempty"`
+	SessionBusy       bool               `json:"sessionBusy,omitempty"`
+	Waiting           int                `json:"waiting,omitempty"`
 	QueueItems        []PreviewQueueItem `json:"queueItems,omitempty"`
 	ActiveItem        *PreviewActiveItem `json:"activeItem,omitempty"`
-	ProductKind       string            `json:"productKind,omitempty"`
-	ProductName       string            `json:"productName,omitempty"`
+	ProductKind       string             `json:"productKind,omitempty"`
+	ProductName       string             `json:"productName,omitempty"`
 	// NodeType is the graph node type (e.g. react / research / app_preview).
 	// Kind stays "review" for ShareLinkKindReview; clients use NodeType to
 	// distinguish Inbox 待澄清 from 待复审 without leaking Run#.
@@ -186,6 +194,8 @@ func applyPreviewArtifacts(dto *PreviewDTO, visualHTML, structuredName, structur
 	dto.SessionBusy = alive && (extras.SessionBusy || extras.Waiting > 0 || dto.ActiveItem != nil)
 	dto.VisualHTMLHash = ContentHash(dto.VisualHTML)
 	dto.UpstreamHash = HashUpstream(dto.Upstream)
+	dto.StructuredHash = HashStructured(dto.Structured)
+	dto.TurnsHash = HashTurns(dto.Turns)
 }
 
 // ContentHash returns a stable hex digest for sparse field comparison.
@@ -209,10 +219,35 @@ func HashUpstream(up map[string]any) string {
 	return ContentHash(string(b))
 }
 
+// HashStructured digests the sanitized structured map for sparse polls.
+func HashStructured(s map[string]any) string {
+	return HashUpstream(s)
+}
+
+// HashTurns digests sanitized turns for sparse polls.
+func HashTurns(turns []PreviewTurn) string {
+	if len(turns) == 0 {
+		return ""
+	}
+	b, err := json.Marshal(turns)
+	if err != nil || len(b) == 0 {
+		return ""
+	}
+	return ContentHash(string(b))
+}
+
+// SparsePreviewKnown is the set of client-held hashes for ApplySparsePreview.
+type SparsePreviewKnown struct {
+	VisualHTML string
+	Upstream   string
+	Structured string
+	Turns      string
+}
+
 // ApplySparsePreview omits unchanged large fields when the client already holds
-// the same visualHtmlHash / upstreamHash. Hashes themselves are always returned
-// so clients can detect empty↔non-empty transitions even when bodies omit.
-func ApplySparsePreview(dto *PreviewDTO, knownVisualHash, knownUpstreamHash string) {
+// matching hashes. Hashes themselves are always returned so clients can detect
+// empty↔non-empty transitions even when bodies omit.
+func ApplySparsePreview(dto *PreviewDTO, known SparsePreviewKnown) {
 	if dto == nil {
 		return
 	}
@@ -222,12 +257,33 @@ func ApplySparsePreview(dto *PreviewDTO, knownVisualHash, knownUpstreamHash stri
 	if dto.UpstreamHash == "" {
 		dto.UpstreamHash = HashUpstream(dto.Upstream)
 	}
-	if knownVisualHash != "" && knownVisualHash == dto.VisualHTMLHash {
+	if dto.StructuredHash == "" {
+		dto.StructuredHash = HashStructured(dto.Structured)
+	}
+	if dto.TurnsHash == "" {
+		dto.TurnsHash = HashTurns(dto.Turns)
+	}
+	if known.VisualHTML != "" && known.VisualHTML == dto.VisualHTMLHash {
 		dto.VisualHTML = ""
 	}
-	if knownUpstreamHash != "" && knownUpstreamHash == dto.UpstreamHash {
+	if known.Upstream != "" && known.Upstream == dto.UpstreamHash {
 		dto.Upstream = nil
 	}
+	if known.Structured != "" && known.Structured == dto.StructuredHash {
+		dto.Structured = nil
+	}
+	if known.Turns != "" && known.Turns == dto.TurnsHash {
+		dto.Turns = nil
+	}
+}
+
+// WantPreviewNonce reports whether this public preview request should Issue a nonce.
+// Silent polls skip Issue unless the client explicitly asks (resume / near TTL).
+func WantPreviewNonce(silentPoll, issueNonce bool) bool {
+	if issueNonce {
+		return true
+	}
+	return !silentPoll
 }
 
 func inferProductKind(visualHTML, structuredName, hinted string) (kind, name string) {

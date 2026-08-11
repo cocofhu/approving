@@ -1630,7 +1630,7 @@ function applyOutputDeepLinkFocus(): boolean {
 }
 
 /**
- * Mobile (≤768) list-detail: mutually exclusive timeline vs node detail.
+ * Mobile (≤767) list-detail: mutually exclusive timeline vs node detail.
  * Desktop keeps side-by-side panes; this state is ignored when !isMobile.
  * Defaults: waiting_human or deep-link tab=output → detail; else timeline.
  * Live running→completed also switches to detail (see status watch).
@@ -1875,7 +1875,7 @@ function selectExecution(nodeId: string, idx: number) {
 
 <template>
   <div data-testid="run-detail-root" class="flex h-full min-w-0 flex-col overflow-x-hidden bg-base">
-    <!-- top bar: ≤768 two rows (status full-text priority); md+ single row -->
+    <!-- top bar: ≤767 two rows (status full-text priority); md+ single row -->
     <header class="shrink-0 overflow-x-hidden border-b border-line bg-surface px-5 py-3">
       <div v-if="runLoading || loadError" class="flex min-w-0 items-center gap-3">
         <button class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-txt2 hover:bg-elevated hover:text-txt" @click="router.push('/runs')">
@@ -2197,7 +2197,7 @@ function selectExecution(nodeId: string, idx: number) {
         </div>
       </div>
 
-      <!-- Mobile ≤768: page-level timeline / detail tabs (Demo single-panel). -->
+      <!-- Mobile ≤767: page-level timeline / detail tabs (Demo single-panel). -->
       <div
         v-if="isMobile && viewMode === 'timeline'"
         data-testid="mobile-main-panel-tabs"

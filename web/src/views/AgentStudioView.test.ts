@@ -264,18 +264,29 @@ describe('AgentStudio MCP PM leader prefills', () => {
     await flushPromises()
     await openMcpTab(wrapper)
 
-    expect(wrapper.text()).toContain('Agent 通用平台 MCP')
-    expect(wrapper.text()).toContain('APPROVING_MEMORY_URL')
-    expect(wrapper.text()).toContain('pm-progress')
+    expect(wrapper.text()).not.toContain('Agent 通用平台 MCP')
+    expect(wrapper.text()).not.toContain('APPROVING_MEMORY_URL')
+    expect(wrapper.text()).not.toContain('pm-progress')
+    expect(wrapper.text()).not.toContain('整份 mcp.json 由你配置')
+    expect(wrapper.text()).not.toContain('运行级变量(运行时替换')
+    expect(wrapper.get('[data-test="mcp-help-link"]').text()).toBe('帮助')
+    expect(wrapper.get('[data-test="mcp-add-memory"]').text()).toContain('添加长期记忆')
+    expect(wrapper.get('[data-mcp-name="artifact-store"] [data-test="mcp-display-name"]').text()).toBe('产物存储')
+    expect(wrapper.get('[data-mcp-name="artifact-store"] [data-test="mcp-preset-key"]').text()).toBe('artifact-store')
+    expect(wrapper.get('[data-mcp-name="artifact-store"] [data-test="mcp-scope-note"]').text()).toContain('本次运行隔离的产物服务')
 
-    await wrapper.findAll('button').find((item) => item.text().includes('+ memory-store'))!.trigger('click')
+    await wrapper.get('[data-test="mcp-add-memory"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === 'memory-store')).toHaveLength(1)
+    expect(wrapper.find('[data-mcp-name="memory-store"]').exists()).toBe(true)
+    expect(wrapper.get('[data-mcp-name="memory-store"] [data-test="mcp-display-name"]').text()).toBe('长期记忆')
+    expect(wrapper.get('[data-mcp-name="memory-store"] [data-test="mcp-preset-key"]').text()).toBe('memory-store')
     expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === '${APPROVING_MEMORY_URL}')).toHaveLength(1)
     expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === 'Bearer ${APPROVING_MEMORY_TOKEN}')).toHaveLength(1)
-    expect(wrapper.text()).toContain('Agent 级平台 MCP')
-    expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === 'artifact-store')).toHaveLength(1)
+    expect(wrapper.get('[data-mcp-name="memory-store"] [data-test="mcp-scope-note"]').text()).toContain('长期记忆，归属主项目')
+    expect(wrapper.find('[data-mcp-name="artifact-store"]').exists()).toBe(true)
+    expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === 'memory-store')).toHaveLength(0)
+    expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === 'artifact-store')).toHaveLength(0)
   })
 
   it('toasts and keeps a single memory-store when adding again', async () => {
@@ -295,13 +306,13 @@ describe('AgentStudio MCP PM leader prefills', () => {
     await flushPromises()
     await openMcpTab(wrapper)
 
-    const addBtn = wrapper.findAll('button').find((item) => item.text().includes('+ memory-store'))!
-    expect(addBtn.exists()).toBe(true)
+    const addBtn = wrapper.get('[data-test="mcp-add-memory"]')
+    expect(addBtn.text()).toContain('添加长期记忆')
     await addBtn.trigger('click')
     await flushPromises()
 
     expect(document.body.textContent || '').toContain('已存在约定名 memory-store')
-    expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === 'memory-store')).toHaveLength(1)
+    expect(wrapper.findAll('[data-mcp-name="memory-store"]')).toHaveLength(1)
   })
 
   it('shows legacy upgrade hint for pm-leader and upgrades in place', async () => {
@@ -327,17 +338,18 @@ describe('AgentStudio MCP PM leader prefills', () => {
     await openMcpTab(wrapper)
 
     expect(wrapper.text()).toContain('检测到旧约定名 pm-leader')
-    await wrapper.findAll('button').find((item) => item.text().includes('一键升级'))!.trigger('click')
+    expect(wrapper.find('[data-test="mcp-legacy-pm-hint"]').exists()).toBe(true)
+    await wrapper.get('[data-test="mcp-upgrade-legacy"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === 'pm-leader')).toHaveLength(0)
-    expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === 'memory-store')).toHaveLength(1)
-    expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === 'context-store')).toHaveLength(1)
-    expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === 'task-scheduler')).toHaveLength(1)
-    expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === 'artifact-store')).toHaveLength(1)
+    expect(wrapper.find('[data-mcp-name="pm-leader"]').exists()).toBe(false)
+    expect(wrapper.find('[data-mcp-name="memory-store"]').exists()).toBe(true)
+    expect(wrapper.find('[data-mcp-name="context-store"]').exists()).toBe(true)
+    expect(wrapper.find('[data-mcp-name="task-scheduler"]').exists()).toBe(true)
+    expect(wrapper.find('[data-mcp-name="artifact-store"]').exists()).toBe(true)
   })
 
-  it('hides the agent scope badge after renaming away from memory-store', async () => {
+  it('drops platform display after renaming memory-store in raw JSON', async () => {
     mocks.listAgents.mockResolvedValue([
       {
         ...agent(),
@@ -354,11 +366,26 @@ describe('AgentStudio MCP PM leader prefills', () => {
     await flushPromises()
     await openMcpTab(wrapper)
 
-    expect(wrapper.text()).toContain('Agent 级平台 MCP')
-    const nameInput = wrapper.findAll('input').find((el) => (el.element as HTMLInputElement).value === 'memory-store')!
-    await nameInput.setValue('memory_store')
+    expect(wrapper.find('[data-mcp-name="memory-store"] [data-test="mcp-scope-note"]').exists()).toBe(true)
+    expect(wrapper.get('[data-mcp-name="memory-store"] [data-test="mcp-display-name"]').text()).toBe('长期记忆')
+    await wrapper.findAll('button').find((item) => item.text() === '原始 JSON')!.trigger('click')
     await flushPromises()
-    expect(wrapper.text()).not.toContain('Agent 级平台 MCP')
+    expect(wrapper.find('[data-test="mcp-help-link"]').exists()).toBe(false)
+    await wrapper.get('[data-test="code-editor"]').setValue(
+      JSON.stringify([
+        {
+          name: 'memory_store',
+          url: '${APPROVING_MEMORY_URL}',
+          headers: { Authorization: 'Bearer ${APPROVING_MEMORY_TOKEN}' },
+        },
+      ]),
+    )
+    await wrapper.findAll('button').find((item) => item.text() === '表单编辑')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-mcp-name="memory-store"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="mcp-scope-note"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="mcp-custom-name"]').element).toMatchObject({ value: 'memory_store' })
+    expect(wrapper.find('[data-test="mcp-help-link"]').exists()).toBe(true)
   })
 
   it('removing memory-store keeps artifact-store intact', async () => {
@@ -383,16 +410,138 @@ describe('AgentStudio MCP PM leader prefills', () => {
     await flushPromises()
     await openMcpTab(wrapper)
 
-    const nameInput = wrapper.findAll('input').find((el) => (el.element as HTMLInputElement).value === 'memory-store')!
-    const card = nameInput.element.closest('.rounded-md.border') as HTMLElement
-    const removeBtn = wrapper.findAll('button').find((item) => {
-      return item.attributes('title') === '移除' && item.element.closest('.rounded-md.border') === card
-    })!
-    await removeBtn.trigger('click')
+    await wrapper.get('[data-mcp-name="memory-store"] [data-test="mcp-remove"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === 'memory-store')).toHaveLength(0)
-    expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === 'artifact-store')).toHaveLength(1)
+    expect(wrapper.find('[data-mcp-name="memory-store"]').exists()).toBe(false)
+    expect(wrapper.find('[data-mcp-name="artifact-store"]').exists()).toBe(true)
+  })
+})
+
+describe('AgentStudio MCP config help', () => {
+  const HelpAppModalStub = defineComponent({
+    props: { open: Boolean, title: String, width: Number },
+    emits: ['close'],
+    template:
+      '<div v-if="open" data-test="help-modal" :data-width="width">' +
+      '<h2>{{ title }}</h2><div data-test="help-scroll"><slot /></div><slot name="footer" />' +
+      '</div>',
+  })
+
+  async function mountStudioWithMcpHelp() {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const router = await createStudioRouter()
+    return trackMount(
+      mount(AgentStudioView, {
+        global: {
+          plugins: [i18n, router],
+          stubs: {
+            AppButton: ButtonStub,
+            Icon: true,
+            AppModal: HelpAppModalStub,
+            CodeEditor: CodeEditorStub,
+            MarkdownSplitEditor: true,
+            ExplorerContextMenu: true,
+            AgentChatTester: true,
+            AgentGitGuide: true,
+            AgentCreateWizard: true,
+            AgentOrgSidebar: true,
+            AgentDataPanel: true,
+          },
+        },
+      }),
+    )
+  }
+
+  async function openMcpTab(wrapper: Awaited<ReturnType<typeof mountStudioWithMcpHelp>>) {
+    await wrapper.findAll('button').find((item) => item.text().startsWith('MCP'))!.trigger('click')
+    await flushPromises()
+  }
+
+  it('hides variable docs until help opens on run, then agent chip shows platform copy', async () => {
+    mocks.listAgents.mockResolvedValue([
+      {
+        ...agent(),
+        mcp: [
+          {
+            name: 'artifact-store',
+            url: '${APPROVING_ARTIFACT_URL}',
+            headers: { Authorization: 'Bearer ${APPROVING_ARTIFACT_TOKEN}' },
+          },
+        ],
+      },
+    ])
+    const wrapper = await mountStudioWithMcpHelp()
+    await flushPromises()
+    await openMcpTab(wrapper)
+
+    expect(wrapper.get('[data-test="mcp-help-link"]').text()).toBe('帮助')
+    expect(wrapper.text()).not.toContain('整份 mcp.json 由你配置')
+    expect(wrapper.text()).not.toContain('Agent 通用平台 MCP')
+    expect(wrapper.text()).not.toContain('APPROVING_MEMORY_URL')
+    expect(wrapper.text()).not.toContain('pm-progress')
+
+    await wrapper.get('[data-test="mcp-help-link"]').trigger('click')
+    await flushPromises()
+    const modal = wrapper.get('[data-test="help-modal"]')
+    expect(modal.attributes('data-width')).toBe('640')
+    expect(modal.text()).toContain('MCP 配置帮助')
+    expect(modal.text()).toContain('整份 mcp.json 由你配置')
+    expect(modal.text()).toContain('/root/.codebuddy/mcp.json')
+    expect(modal.text()).toContain('APPROVING_ARTIFACT_URL')
+    expect(wrapper.find('[data-test="mcp-help-run"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="mcp-help-agent"]').exists()).toBe(false)
+    expect(wrapper.get('[data-help-chip="run"]').classes().join(' ')).toContain('border-accent')
+
+    await wrapper.get('[data-test="mcp-help-chip-agent"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="mcp-help-agent"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="mcp-help-run"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="help-modal"]').text()).toContain('APPROVING_MEMORY_URL')
+    expect(wrapper.get('[data-test="help-modal"]').text()).toContain('pm-progress')
+    expect(wrapper.get('[data-test="help-modal"]').text()).not.toContain('+ 添加长期记忆')
+  })
+
+  it('hides help in raw JSON and keeps mcp draft after closing help', async () => {
+    mocks.listAgents.mockResolvedValue([
+      {
+        ...agent(),
+        mcp: [
+          {
+            name: 'custom-draft',
+            url: 'https://example.test/sse',
+          },
+        ],
+      },
+    ])
+    const wrapper = await mountStudioWithMcpHelp()
+    await flushPromises()
+    await openMcpTab(wrapper)
+
+    const nameInput = wrapper.get('[data-test="mcp-custom-name"]')
+    await nameInput.setValue('custom-kept')
+    expect((nameInput.element as HTMLInputElement).value).toBe('custom-kept')
+
+    await wrapper.findAll('button').find((item) => item.text() === '原始 JSON')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="mcp-help-link"]').exists()).toBe(false)
+
+    await wrapper.findAll('button').find((item) => item.text() === '表单编辑')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="mcp-help-link"]').exists()).toBe(true)
+
+    await wrapper.get('[data-test="mcp-help-link"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="help-modal"]').exists()).toBe(true)
+    await wrapper.get('[data-test="mcp-help-got-it"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="help-modal"]').exists()).toBe(false)
+    expect((wrapper.get('[data-test="mcp-custom-name"]').element as HTMLInputElement).value).toBe('custom-kept')
   })
 })
 
@@ -713,7 +862,7 @@ describe('AgentStudio mobile core path', () => {
     await wrapper.findAll('button').find((b) => b.text() === '丢弃修改')!.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('请在桌面端完成')
+    expect(wrapper.text()).toContain('建议在桌面使用')
   })
 
   it('shows desktop-only tip for non-core tabs including meta', async () => {
@@ -724,8 +873,12 @@ describe('AgentStudio mobile core path', () => {
     await wrapper.findAll('button').find((b) => b.text() === '元信息')!.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('请在桌面端完成')
+    expect(wrapper.text()).toContain('建议在桌面使用')
     expect(wrapper.text()).not.toContain('ACP 后端')
+    expect(wrapper.find('[data-testid="studio-mobile-back-files"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="studio-mobile-back-files"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('建议在桌面使用')
   })
 
   it('mounts data panel on mobile instead of desktop-only tip', async () => {
@@ -736,7 +889,7 @@ describe('AgentStudio mobile core path', () => {
     await wrapper.findAll('button').find((b) => b.text() === '数据')!.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).not.toContain('请在桌面端完成')
+    expect(wrapper.text()).not.toContain('建议在桌面使用')
     expect(wrapper.find('agent-data-panel-stub').exists()).toBe(true)
   })
 
@@ -750,7 +903,7 @@ describe('AgentStudio mobile core path', () => {
       expect(btn).toBeTruthy()
       await btn!.trigger('click')
       await flushPromises()
-      expect(wrapper.text()).toContain('请在桌面端完成')
+      expect(wrapper.text()).toContain('建议在桌面使用')
       expect(wrapper.find('agent-data-panel-stub').exists()).toBe(false)
     }
   })
@@ -785,10 +938,46 @@ describe('AgentStudio mobile core path', () => {
     )
     await flushPromises()
 
-    expect(wrapper.text()).not.toContain('请在桌面端完成')
+    expect(wrapper.text()).not.toContain('建议在桌面使用')
     const panel = wrapper.find('agent-data-panel-stub')
     expect(panel.exists()).toBe(true)
     expect(panel.attributes('sub-tab') || panel.attributes('subtab')).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  it('deep-links to platform-rules on mobile with desktop-only empty state and back to Files', async () => {
+    mocks.listAgents.mockResolvedValue([{ ...agentWithFiles(), name: 'alpha' }])
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const router = await createStudioRouter({ agent: 'alpha', tab: 'platform-rules' })
+    const wrapper = trackMount(
+      mount(AgentStudioView, {
+        global: {
+          plugins: [i18n, router],
+          stubs: {
+            AppButton: ButtonStub,
+            Icon: true,
+            AppModal: ModalStub,
+            CodeEditor: CodeEditorStub,
+            MarkdownSplitEditor: MdStub,
+            ExplorerContextMenu: true,
+            AgentChatTester: true,
+            AgentGitGuide: true,
+            AgentCreateWizard: true,
+            AgentOrgSidebar: true,
+            AgentDataPanel: true,
+          },
+        },
+      }),
+    )
+    await flushPromises()
+    expect(wrapper.text()).toContain('建议在桌面使用')
+    expect(wrapper.text()).toContain('不提供编辑 UI')
+    expect(wrapper.find('[data-testid="studio-mobile-back-files"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('运行时加载优先级')
     wrapper.unmount()
   })
 
@@ -809,7 +998,7 @@ describe('AgentStudio mobile core path', () => {
     expect(wrapper.text()).toContain('请在桌面端')
     expect(wrapper.text()).not.toContain('去绑定主项目')
     expect(wrapper.find('agent-data-panel-stub').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('请在桌面端完成')
+    expect(wrapper.text()).not.toContain('建议在桌面使用')
   })
 
   it('shows switch entry and opens org sheet with groups/ungrouped', async () => {
@@ -1442,8 +1631,9 @@ describe('AgentStudio org toast and remaining hints', () => {
 
     await wrapper.findAll('button').find((item) => item.text().startsWith('MCP'))!.trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('整份 mcp.json 由你配置')
-    expect(wrapper.text()).toContain('/root/.codebuddy/mcp.json')
+    expect(wrapper.get('[data-test="mcp-help-link"]').text()).toBe('帮助')
+    expect(wrapper.text()).not.toContain('整份 mcp.json 由你配置')
+    expect(wrapper.text()).not.toContain('/root/.codebuddy/mcp.json')
 
     await wrapper.findAll('button').find((item) => item.text() === '平台规则')!.trigger('click')
     await flushPromises()

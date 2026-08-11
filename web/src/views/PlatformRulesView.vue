@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { api, authApi, type PlatformRuleMeta } from '@/lib/api/api'
 import { useAuth } from '@/lib/composables/useAuth'
+import { useBreakpoint } from '@/lib/composables/useBreakpoint'
+import { fmtTime } from '@/lib/shared/format'
 import { createListRequestSeq, httpStatusOf } from '@/lib/shared/listRequestSeq'
 import AppButton from '@/components/ui/AppButton.vue'
 import Icon from '@/components/ui/Icon.vue'
@@ -12,6 +14,8 @@ import MarkdownSplitEditor from '@/components/agent/MarkdownSplitEditor.vue'
 const { t } = useI18n()
 const router = useRouter()
 const { user } = useAuth()
+const { isMobile } = useBreakpoint()
+const mobileStep = ref<'list' | 'detail'>('list')
 
 const items = ref<PlatformRuleMeta[]>([])
 const activeFile = ref('')
@@ -106,6 +110,7 @@ async function selectFile(file: string) {
   const localSeq = rulesSeq.beginListRequest()
   activeFile.value = file
   error.value = ''
+  if (isMobile.value) mobileStep.value = 'detail'
   try {
     const data = await fetchRuleFile(file)
     if (!rulesSeq.isCurrentSeq(localSeq)) return
@@ -116,6 +121,35 @@ async function selectFile(file: string) {
     error.value = e?.message || t('pages.platformRules.loadFailed')
   }
 }
+
+function backToRuleList() {
+  mobileStep.value = 'list'
+}
+
+const activeMeta = computed(() => items.value.find((it) => it.file === activeFile.value))
+
+function ruleSummary(text: string): string {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^#+\s*/, '').trim())
+    .filter(Boolean)
+  return lines.slice(0, 4).join('\n')
+}
+
+const mobileSummary = computed(() => ruleSummary(content.value))
+
+function formatRuleMtime(raw?: string): string {
+  if (!raw) return ''
+  try {
+    return fmtTime(raw)
+  } catch {
+    return raw
+  }
+}
+
+watch(isMobile, (mobile) => {
+  if (!mobile) mobileStep.value = 'list'
+})
 
 async function save() {
   if (!canWrite.value || !activeFile.value) return
@@ -162,17 +196,17 @@ onMounted(loadAll)
 
 <template>
   <div class="flex h-full min-h-0 flex-col" data-testid="platform-rules-panel" :aria-busy="loading || saving || resetting ? 'true' : 'false'">
-    <div class="mb-4 flex items-end justify-between gap-3">
+    <div class="mb-4 flex flex-col items-stretch gap-3 md:flex-row md:items-end md:justify-between">
       <div>
         <div class="mb-1 flex items-center gap-2">
-          <button class="text-xs text-txt3 hover:text-txt2" @click="router.push('/settings')">
+          <button class="min-h-11 text-xs text-txt3 hover:text-txt2 md:min-h-0" @click="router.push('/settings')">
             ← {{ t('pages.platformRules.backToSettings') }}
           </button>
         </div>
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.platformRules.title') }}</h2>
         <p class="text-sm text-txt3">{{ t('pages.platformRules.subtitle') }}</p>
       </div>
-      <div class="flex items-center gap-2">
+      <div v-if="!isMobile" class="flex items-center gap-2">
         <span v-if="!canWrite" class="text-xs text-warn">{{ t('pages.platformRules.readOnlyHint') }}</span>
         <span v-if="savedAt" class="text-xs text-ok">{{ t('pages.settings.saved') }}</span>
         <AppButton
@@ -212,19 +246,20 @@ onMounted(loadAll)
 
     <div
       v-if="showSkeleton"
-      class="card grid min-h-0 flex-1 grid-cols-[240px_1fr_280px] overflow-hidden"
+      class="card min-h-0 flex-1 overflow-hidden"
+      :class="isMobile ? 'flex flex-col' : 'grid grid-cols-[240px_1fr_280px]'"
       data-testid="platform-rules-skeleton"
       aria-hidden="true"
     >
-      <aside class="border-r border-line p-3">
+      <aside class="p-3" :class="isMobile ? '' : 'border-r border-line'">
         <div class="mb-3 h-3 w-24 bg-elevated animate-pulse" />
         <div v-for="n in 6" :key="'pr-file-' + n" class="mb-1.5 h-8 bg-elevated animate-pulse" />
       </aside>
-      <section class="space-y-3 p-4">
+      <section v-if="!isMobile" class="space-y-3 p-4">
         <div class="h-4 w-48 bg-elevated animate-pulse" />
         <div class="h-48 w-full bg-elevated animate-pulse" />
       </section>
-      <aside class="border-l border-line p-3">
+      <aside v-if="!isMobile" class="border-l border-line p-3">
         <div class="h-3 w-20 bg-elevated animate-pulse" />
         <div class="mt-3 h-24 w-full bg-elevated animate-pulse" />
       </aside>
@@ -242,6 +277,15 @@ onMounted(loadAll)
       <AppButton class="mt-4" variant="outline" data-testid="platform-rules-retry" @click="loadAll">
         {{ t('common.buttons.retry') }}
       </AppButton>
+      <button
+        v-if="isMobile && mobileStep === 'detail'"
+        type="button"
+        class="mt-3 min-h-11 text-xs text-txt3 hover:text-txt2"
+        data-testid="platform-rules-back-list"
+        @click="backToRuleList"
+      >
+        ← {{ t('pages.platformRules.backToList') }}
+      </button>
     </div>
 
     <div
@@ -255,20 +299,48 @@ onMounted(loadAll)
       <AppButton class="mt-4" variant="outline" data-testid="platform-rules-retry" @click="loadAll">
         {{ t('common.buttons.retry') }}
       </AppButton>
+      <button
+        v-if="isMobile && mobileStep === 'detail'"
+        type="button"
+        class="mt-3 min-h-11 text-xs text-txt3 hover:text-txt2"
+        data-testid="platform-rules-back-list"
+        @click="backToRuleList"
+      >
+        ← {{ t('pages.platformRules.backToList') }}
+      </button>
     </div>
 
-    <div v-else class="card grid min-h-0 flex-1 grid-cols-[240px_1fr_280px] overflow-hidden" :class="showRefreshProgress ? 'opacity-[0.55]' : ''">
-      <aside class="flex min-h-0 flex-col border-r border-line bg-base/30">
+    <div
+      v-else
+      class="card min-h-0 flex-1 overflow-hidden"
+      :class="[
+        isMobile ? 'flex flex-col' : 'grid grid-cols-[240px_1fr_280px]',
+        showRefreshProgress ? 'opacity-[0.55]' : '',
+      ]"
+    >
+      <aside
+        v-if="!isMobile || mobileStep === 'list'"
+        class="flex min-h-0 flex-col bg-base/30"
+        :class="isMobile ? '' : 'border-r border-line'"
+        data-testid="platform-rules-list"
+      >
         <div class="border-b border-line px-3 py-3">
           <h3 class="text-[13px] font-semibold text-txt">{{ t('pages.platformRules.fileListTitle') }}</h3>
           <p class="mt-1 text-[11px] leading-relaxed text-txt3">{{ t('pages.platformRules.fileListDesc') }}</p>
         </div>
         <div class="scroll-area flex-1 overflow-y-auto p-2">
+          <p v-if="!items.length" class="px-2 py-6 text-center text-[12px] text-txt3" data-testid="platform-rules-empty">
+            {{ t('pages.platformRules.emptyList') }}
+          </p>
           <button
             v-for="item in items"
             :key="item.file"
             class="mb-0.5 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[12px] transition"
-            :class="activeFile === item.file ? 'bg-accent-dim text-txt' : 'text-txt3 hover:bg-elevated hover:text-txt2'"
+            :class="[
+              activeFile === item.file ? 'bg-accent-dim text-txt' : 'text-txt3 hover:bg-elevated hover:text-txt2',
+              isMobile ? 'min-h-11' : '',
+            ]"
+            data-testid="platform-rules-file"
             @click="selectFile(item.file)"
           >
             <Icon name="file" :size="14" class="shrink-0 opacity-70" />
@@ -283,7 +355,43 @@ onMounted(loadAll)
         </div>
       </aside>
 
-      <section class="flex min-h-0 min-w-0 flex-col">
+      <section
+        v-if="isMobile && mobileStep === 'detail'"
+        class="flex min-h-0 min-w-0 flex-1 flex-col"
+        data-testid="platform-rules-mobile-detail"
+      >
+        <div class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2">
+          <button
+            type="button"
+            class="min-h-11 text-[12px] text-txt2 hover:text-txt"
+            data-testid="platform-rules-back-list"
+            @click="backToRuleList"
+          >
+            ← {{ t('pages.platformRules.backToList') }}
+          </button>
+          <span class="chip">{{ t('pages.platformRules.mobileStepChip') }}</span>
+        </div>
+        <div class="scroll-area min-h-0 flex-1 overflow-y-auto p-4">
+          <h3 class="font-mono text-[14px] font-semibold text-txt">{{ activeFile || '—' }}</h3>
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            <span class="rounded border border-info/30 bg-info/10 px-2 py-0.5 text-[10px] text-info">
+              {{ source === 'embed' ? t('pages.platformRules.sourceEmbed') : t('pages.platformRules.sourceGlobal') }}
+            </span>
+            <span v-if="formatRuleMtime(activeMeta?.mtime)" class="text-[11px] text-txt3">
+              {{ t('pages.platformRules.mtimeLabel') }}: {{ formatRuleMtime(activeMeta?.mtime) }}
+            </span>
+          </div>
+          <p class="mt-3 text-[12px] leading-relaxed text-txt3">{{ t('pages.platformRules.mobileReadonlyHint') }}</p>
+          <div v-if="error" class="mt-3 border border-err/30 bg-err/10 px-3 py-2 text-sm text-err">{{ error }}</div>
+          <div v-else-if="mobileSummary" class="mt-4 border border-line bg-base px-3 py-2">
+            <div class="mb-1 text-[11px] uppercase tracking-wider text-txt3">{{ t('pages.platformRules.summaryTitle') }}</div>
+            <pre class="whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-txt2">{{ mobileSummary }}</pre>
+          </div>
+          <p v-else class="mt-4 text-[12px] text-txt3">{{ t('pages.platformRules.emptySummary') }}</p>
+        </div>
+      </section>
+
+      <section v-if="!isMobile" class="flex min-h-0 min-w-0 flex-col">
         <div class="flex items-center gap-2 border-b border-line px-4 py-2">
           <span class="font-mono text-[12px] text-txt2">data/platform-rules/{{ activeFile }}</span>
           <span class="rounded border border-info/30 bg-info/10 px-2 py-0.5 text-[10px] text-info">
@@ -300,7 +408,7 @@ onMounted(loadAll)
         </div>
       </section>
 
-      <aside class="scroll-area min-h-0 overflow-y-auto border-l border-line bg-base/20">
+      <aside v-if="!isMobile" class="scroll-area min-h-0 overflow-y-auto border-l border-line bg-base/20">
         <div class="border-b border-line px-3 py-3">
           <h4 class="text-[11px] font-semibold uppercase tracking-wider text-txt3">{{ t('pages.platformRules.priorityTitle') }}</h4>
           <ol class="mt-3 space-y-3 text-[12px]">

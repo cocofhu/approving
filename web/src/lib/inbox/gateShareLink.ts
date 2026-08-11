@@ -138,6 +138,20 @@ export function canCreateGateShare(st?: GateShareInboxStatus | null): boolean {
   return st.state === 'none' || st.state === 'revoked' || st.state === 'expired'
 }
 
+/** Seconds left until expiresAt; falls back to remainingSec snapshot. */
+export function remainingSecFromExpiresAt(
+  expiresAt?: string,
+  remainingSec?: number,
+  nowMs: number = Date.now(),
+): number | undefined {
+  if (expiresAt) {
+    const ms = Date.parse(expiresAt)
+    if (!Number.isNaN(ms)) return Math.max(0, Math.floor((ms - nowMs) / 1000))
+  }
+  if (typeof remainingSec === 'number') return Math.max(0, Math.floor(remainingSec))
+  return undefined
+}
+
 export function formatRemainingSec(
   sec: number | undefined,
   t: (key: string, values?: Record<string, unknown>) => string,
@@ -204,6 +218,10 @@ export type PublicGatePreview = {
   visualHtml?: string
   /** Content hash for sparse silent poll; always present when server computed it. */
   visualHtmlHash?: string
+  /** Structured-doc hash for sparse silent poll (bodies may be omitted). */
+  structuredHash?: string
+  /** Turns hash for sparse silent poll (bodies may be omitted). */
+  turnsHash?: string
   structured?: {
     name?: string
     title?: string
@@ -267,6 +285,28 @@ async function readJson<T>(res: Response): Promise<T> {
   }
 }
 
+function keepSparseField<K extends keyof PublicGatePreview>(
+  merged: PublicGatePreview,
+  prev: PublicGatePreview,
+  next: PublicGatePreview,
+  bodyKey: K,
+  hashKey: 'visualHtmlHash' | 'upstreamHash' | 'structuredHash' | 'turnsHash',
+) {
+  const hashChanged = typeof next[hashKey] === 'string' && next[hashKey] !== (prev[hashKey] ?? '')
+  if (Object.prototype.hasOwnProperty.call(next, bodyKey)) {
+    merged[bodyKey] = next[bodyKey]
+  } else if (hashChanged) {
+    merged[bodyKey] = next[bodyKey]
+  } else if (prev[bodyKey] != null) {
+    merged[bodyKey] = prev[bodyKey]
+  }
+  if (typeof next[hashKey] === 'string') {
+    merged[hashKey] = next[hashKey]
+  } else if (prev[hashKey] != null) {
+    merged[hashKey] = prev[hashKey]
+  }
+}
+
 /** Merge sparse poll payloads: omitted large fields keep the previous client value. */
 export function mergePublicGatePreview(
   prev: PublicGatePreview | null,
@@ -274,37 +314,51 @@ export function mergePublicGatePreview(
 ): PublicGatePreview {
   if (!prev) return next
   const merged: PublicGatePreview = { ...prev, ...next }
-  const visualHashChanged =
-    typeof next.visualHtmlHash === 'string' &&
-    next.visualHtmlHash !== (prev.visualHtmlHash ?? '')
-  if (Object.prototype.hasOwnProperty.call(next, 'visualHtml')) {
-    merged.visualHtml = next.visualHtml
-  } else if (visualHashChanged) {
-    // Hash changed but body omitted (e.g. cleared) → drop stale HTML.
-    merged.visualHtml = next.visualHtml
-  } else if (prev.visualHtml != null) {
-    merged.visualHtml = prev.visualHtml
-  }
-  if (typeof next.visualHtmlHash === 'string') {
-    merged.visualHtmlHash = next.visualHtmlHash
-  } else if (prev.visualHtmlHash != null) {
-    merged.visualHtmlHash = prev.visualHtmlHash
-  }
-  const upstreamHashChanged =
-    typeof next.upstreamHash === 'string' && next.upstreamHash !== (prev.upstreamHash ?? '')
-  if (Object.prototype.hasOwnProperty.call(next, 'upstream')) {
-    merged.upstream = next.upstream
-  } else if (upstreamHashChanged) {
-    merged.upstream = next.upstream
-  } else if (prev.upstream != null) {
-    merged.upstream = prev.upstream
-  }
-  if (typeof next.upstreamHash === 'string') {
-    merged.upstreamHash = next.upstreamHash
-  } else if (prev.upstreamHash != null) {
-    merged.upstreamHash = prev.upstreamHash
-  }
+  keepSparseField(merged, prev, next, 'visualHtml', 'visualHtmlHash')
+  keepSparseField(merged, prev, next, 'upstream', 'upstreamHash')
+  keepSparseField(merged, prev, next, 'structured', 'structuredHash')
+  keepSparseField(merged, prev, next, 'turns', 'turnsHash')
+  // Silent polls may omit nonce; never drop the last usable one.
+  if (!next.nonce && prev.nonce) merged.nonce = prev.nonce
   return merged
+}
+
+/**
+ * Content fingerprint for silent-poll short-circuit.
+ * Excludes remainingSec / expiresAt clock drift and nonce rotation.
+ */
+export function publicGateContentKey(p: PublicGatePreview | null | undefined): string {
+  if (!p) return ''
+  return JSON.stringify({
+    status: p.status,
+    kind: p.kind || '',
+    title: p.title || '',
+    description: p.description || '',
+    actions: p.actions || null,
+    visualHtmlHash: p.visualHtmlHash || '',
+    visualHtml: p.visualHtmlHash ? '' : p.visualHtml || '',
+    structuredHash: p.structuredHash || '',
+    structured: p.structuredHash ? null : p.structured || null,
+    turnsHash: p.turnsHash || '',
+    turns: p.turnsHash ? null : p.turns || null,
+    upstreamHash: p.upstreamHash || '',
+    reactSessionAlive: !!p.reactSessionAlive,
+    sessionBusy: !!p.sessionBusy,
+    waiting: p.waiting || 0,
+    queueItems: p.queueItems || [],
+    activeItem: p.activeItem || null,
+    productKind: p.productKind || '',
+    productName: p.productName || '',
+  })
+}
+
+export type PublicGatePreviewKnown = {
+  visualHtmlHash?: string
+  upstreamHash?: string
+  structuredHash?: string
+  turnsHash?: string
+  silent?: boolean
+  issueNonce?: boolean
 }
 
 /** Unauthenticated public gate APIs. Token never goes in path/query. */
@@ -312,7 +366,7 @@ export const publicGateApi = {
   preview(
     token: string,
     signal?: AbortSignal,
-    known?: { visualHtmlHash?: string; upstreamHash?: string },
+    known?: PublicGatePreviewKnown,
   ): Promise<PublicGatePreview> {
     const headers: Record<string, string> = {
       [GATE_SHARE_TOKEN_HEADER]: token,
@@ -320,8 +374,14 @@ export const publicGateApi = {
     }
     const vh = known?.visualHtmlHash?.trim()
     const uh = known?.upstreamHash?.trim()
+    const sh = known?.structuredHash?.trim()
+    const th = known?.turnsHash?.trim()
     if (vh) headers['X-Gate-Known-Visual-Html-Hash'] = vh
     if (uh) headers['X-Gate-Known-Upstream-Hash'] = uh
+    if (sh) headers['X-Gate-Known-Structured-Hash'] = sh
+    if (th) headers['X-Gate-Known-Turns-Hash'] = th
+    if (known?.silent) headers['X-Gate-Silent-Poll'] = '1'
+    if (known?.issueNonce) headers['X-Gate-Issue-Nonce'] = '1'
     return fetch('/public/gate-approvals/preview', {
       method: 'GET',
       credentials: 'omit',

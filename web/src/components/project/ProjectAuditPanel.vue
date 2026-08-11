@@ -6,6 +6,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import Pagination from '@/components/ui/Pagination.vue'
 import { api, isPaginated, type PaginatedResponse } from '@/lib/api/api'
 import { prettyAuditPayload } from '@/lib/shared/auditPayload'
+import { AUDIT_SYSTEM_LABEL, formatAuditNodeName, formatAuditNodeTitle } from '@/lib/shared/auditNodeLabel'
 import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import { useToast } from '@/lib/composables/useToast'
 import { fmtTime } from '@/lib/shared/format'
@@ -38,6 +39,14 @@ const pageSize = ref(10)
 const openId = ref<string | null>(null)
 const mode = ref<Mode>('run')
 const initialized = ref(false)
+/** User overrides for Run group expand; missing key = default (fail groups open). */
+const groupOpen = ref<Record<string, boolean>>({})
+const runCapped = ref(false)
+const runFetched = ref(0)
+
+const RUN_FETCH_PAGE_SIZE = 100
+const RUN_FETCH_MAX_PAGES = 5
+const RUN_FETCH_HARD_CAP = 500
 /** Mobile filter editor: default collapsed (plan g2 / Demo). */
 const filtersExpanded = ref(false)
 
@@ -52,34 +61,7 @@ const runOptions = ref<ProjectAuditFacetRun[]>([])
 const nodeOptions = ref<{ nodeId: string; label: string }[]>([])
 const resourceOptions = ref<ProjectAuditFacetResource[]>([])
 
-const ACTION_CLASS: Record<string, string> = {
-  'mcp.call': 'mcp',
-  'run.start': 'run',
-  'run.cancel': 'run',
-  'run.completed': 'run',
-  'run.failed': 'run',
-  'run.cancelled': 'run',
-  'gate.decide': 'gate',
-  'workflow.create': 'cfg',
-  'workflow.update': 'cfg',
-  'workflow.delete': 'cfg',
-  'workflow.publish': 'cfg',
-  'project.config': 'cfg',
-  'audit.export': 'exp',
-}
-
-const NODE_LABEL: Record<string, string> = {
-  research: '代码调研',
-  react: '需求澄清',
-  visual: '视觉网页',
-  gate: '门禁',
-  plan: '计划',
-  proposal: '方案',
-  implement: '实现',
-  test: '测试',
-  review: '评审',
-  app_preview: '预览',
-}
+const AUDIT_PAGE_SIZE_OPTIONS = [5, 10, 20]
 
 const CALLER_LABEL_KEYS: Record<string, string> = {
   pm: 'pages.projectDetail.audit.callerPm',
@@ -87,8 +69,6 @@ const CALLER_LABEL_KEYS: Record<string, string> = {
   system: 'pages.projectDetail.audit.callerSystem',
   external: 'pages.projectDetail.audit.callerExternal',
 }
-
-const AUDIT_PAGE_SIZE_OPTIONS = [5, 10, 20]
 
 const runDdOptions = computed<AuditDdOption[]>(() =>
   runOptions.value.map((r) => ({
@@ -104,7 +84,7 @@ const nodeDdOptions = computed<AuditDdOption[]>(() => [
   { value: '', label: t('pages.projectDetail.audit.filterAll') },
   ...nodeOptions.value.map((n) => ({
     value: n.nodeId,
-    label: NODE_LABEL[n.nodeId] || n.label || n.nodeId,
+    label: formatAuditNodeTitle(n.nodeId),
     sub: n.nodeId,
   })),
 ])
@@ -155,7 +135,7 @@ const chips = computed<Chip[]>(() => {
       list.push({
         key: 'node',
         label: t('pages.projectDetail.audit.colNode'),
-        value: NODE_LABEL[nodeId.value] || nodeId.value,
+        value: formatAuditNodeTitle(nodeId.value),
         clearable: true,
       })
     }
@@ -216,7 +196,7 @@ const filterSummaryText = computed(() => {
     const runLab = runId.value
       ? runOptions.value.find((r) => r.runId === runId.value)?.label || shortRun(runId.value)
       : t('pages.projectDetail.audit.noRun')
-    const nodeLab = nodeId.value ? NODE_LABEL[nodeId.value] || nodeId.value : all
+    const nodeLab = nodeId.value ? formatAuditNodeTitle(nodeId.value) : all
     return `Run · ${runLab} · ${timeLab} · ${t('pages.projectDetail.audit.colNode')} ${nodeLab} / ${t('pages.projectDetail.audit.colResource')} ${resLab}`
   }
   const callerLab = callerKind.value
@@ -251,39 +231,6 @@ function shortRun(id: string) {
   return s.length > 8 ? s.slice(0, 8) : s
 }
 
-function actionLabel(action: string) {
-  const known: Record<string, string> = {
-    'mcp.call': t('pages.projectDetail.audit.actionMcp'),
-    'run.start': t('pages.projectDetail.audit.actionRun'),
-    'run.cancel': t('pages.projectDetail.audit.actionRun'),
-    'run.completed': t('pages.projectDetail.audit.actionRun'),
-    'run.failed': t('pages.projectDetail.audit.actionRun'),
-    'run.cancelled': t('pages.projectDetail.audit.actionRun'),
-    'gate.decide': t('pages.projectDetail.audit.actionGate'),
-    'workflow.create': t('pages.projectDetail.audit.actionWorkflow'),
-    'workflow.update': t('pages.projectDetail.audit.actionWorkflow'),
-    'workflow.delete': t('pages.projectDetail.audit.actionWorkflow'),
-    'workflow.publish': t('pages.projectDetail.audit.actionWorkflow'),
-    'project.config': t('pages.projectDetail.audit.actionProjectConfig'),
-    'audit.export': t('pages.projectDetail.audit.actionExport'),
-  }
-  if (known[action]) return known[action]
-  const prefix = action.split('.')[0]
-  const byPrefix: Record<string, string> = {
-    mcp: t('pages.projectDetail.audit.actionMcp'),
-    run: t('pages.projectDetail.audit.actionRun'),
-    gate: t('pages.projectDetail.audit.actionGate'),
-    workflow: t('pages.projectDetail.audit.actionWorkflow'),
-    project: t('pages.projectDetail.audit.actionProjectConfig'),
-    audit: t('pages.projectDetail.audit.actionExport'),
-  }
-  return byPrefix[prefix || ''] || action
-}
-
-function actionClass(action: string) {
-  return ACTION_CLASS[action] || 'run'
-}
-
 function callerLabel(ev: ProjectAuditEvent) {
   const kind = ev.callerKind || (ev.unattributable || ev.actor === 'system' ? 'system' : 'pm')
   const key = CALLER_LABEL_KEYS[kind]
@@ -291,8 +238,70 @@ function callerLabel(ev: ProjectAuditEvent) {
 }
 
 function nodeLabel(id?: string) {
-  if (!id) return '—'
-  return NODE_LABEL[id] || id
+  if (!id) return AUDIT_SYSTEM_LABEL
+  return formatAuditNodeTitle(id)
+}
+
+function resourceAux(ev: ProjectAuditEvent) {
+  const res = resourceText(ev)
+  return res && res !== '—' ? res : ev.action
+}
+
+type RunGroup = {
+  id: string
+  title: string
+  type: string
+  fullId: string
+  events: ProjectAuditEvent[]
+  ok: number
+  fail: number
+}
+
+const runGroups = computed<RunGroup[]>(() => {
+  if (mode.value !== 'run') return []
+  const chronological = events.value.slice().sort((a, b) => {
+    if (a.occurredAt === b.occurredAt) return a.id < b.id ? -1 : 1
+    return a.occurredAt < b.occurredAt ? -1 : 1
+  })
+  const order: string[] = []
+  const map = new Map<string, ProjectAuditEvent[]>()
+  for (const ev of chronological) {
+    const key = ev.nodeId?.trim() || '_system'
+    if (!map.has(key)) {
+      map.set(key, [])
+      order.push(key)
+    }
+    map.get(key)!.push(ev)
+  }
+  return order.map((id) => {
+    const list = map.get(id) || []
+    const fail = list.filter((e) => e.outcome === 'fail').length
+    const meta = id === '_system' ? formatAuditNodeName('') : formatAuditNodeName(id)
+    return {
+      id,
+      title: meta.title,
+      type: meta.type,
+      fullId: id === '_system' ? '' : id,
+      events: list,
+      ok: list.length - fail,
+      fail,
+    }
+  })
+})
+
+const statOk = computed(() => Math.max(0, (stats.value.total || 0) - (stats.value.fail || 0)))
+
+function isGroupOpen(g: RunGroup) {
+  if (Object.prototype.hasOwnProperty.call(groupOpen.value, g.id)) {
+    return groupOpen.value[g.id]
+  }
+  return g.fail > 0
+}
+
+function toggleGroup(id: string) {
+  const g = runGroups.value.find((x) => x.id === id)
+  if (!g) return
+  groupOpen.value = { ...groupOpen.value, [id]: !isGroupOpen(g) }
 }
 
 function outcomeLabel(ev: ProjectAuditEvent) {
@@ -309,13 +318,13 @@ function prettyPayload(payload: Record<string, unknown> | undefined) {
   return prettyAuditPayload(payload)
 }
 
-function buildParams(extra?: { page?: number }) {
+function buildParams(extra?: { page?: number; pageSize?: number }) {
   const params: Record<string, string | number | undefined> = {
     time: timeWindow.value,
     resource: resource.value || undefined,
     search: search.value.trim() || undefined,
     page: extra?.page ?? page.value,
-    pageSize: pageSize.value,
+    pageSize: extra?.pageSize ?? pageSize.value,
   }
   if (mode.value === 'run') {
     params.runId = runId.value || undefined
@@ -352,6 +361,47 @@ async function loadFacets(selectedRun?: string) {
   }
 }
 
+async function loadRunAligned() {
+  const collected: ProjectAuditEvent[] = []
+  let nextPage = 1
+  let hasMore = true
+  let pageStats: ProjectAuditStats | undefined
+  let fullTotal = 0
+  while (hasMore && nextPage <= RUN_FETCH_MAX_PAGES && collected.length < RUN_FETCH_HARD_CAP) {
+    const res = await api.listProjectAudit(
+      props.projectId,
+      buildParams({ page: nextPage, pageSize: RUN_FETCH_PAGE_SIZE }),
+    )
+    const pageData: PaginatedResponse<ProjectAuditEvent> & { stats?: ProjectAuditStats } = isPaginated(res)
+      ? res
+      : {
+          items: res as ProjectAuditEvent[],
+          total: (res as ProjectAuditEvent[]).length,
+          page: nextPage,
+          pageSize: RUN_FETCH_PAGE_SIZE,
+          hasMore: false,
+        }
+    const items = pageData.items || []
+    collected.push(...items)
+    fullTotal = pageData.total
+    if (!pageStats && pageData.stats) pageStats = pageData.stats
+    hasMore = Boolean(pageData.hasMore) && items.length > 0
+    nextPage += 1
+    if (collected.length >= RUN_FETCH_HARD_CAP) break
+  }
+  const sliced = collected.slice(0, RUN_FETCH_HARD_CAP)
+  events.value = sliced
+  runFetched.value = sliced.length
+  total.value = fullTotal
+  page.value = 1
+  runCapped.value = hasMore || sliced.length < fullTotal
+  stats.value = pageStats || {
+    total: fullTotal,
+    mcp: sliced.filter((e) => e.action.startsWith('mcp')).length,
+    fail: sliced.filter((e) => e.outcome === 'fail').length,
+  }
+}
+
 async function load(resetPage = false) {
   if (props.forceDenied) {
     denied.value = true
@@ -364,6 +414,9 @@ async function load(resetPage = false) {
     events.value = []
     total.value = 0
     stats.value = { total: 0, mcp: 0, fail: 0 }
+    runCapped.value = false
+    runFetched.value = 0
+    groupOpen.value = {}
     loading.value = false
     return
   }
@@ -371,23 +424,29 @@ async function load(resetPage = false) {
   loading.value = true
   denied.value = false
   try {
-    const res = await api.listProjectAudit(props.projectId, buildParams())
-    const pageData: PaginatedResponse<ProjectAuditEvent> & { stats?: ProjectAuditStats } = isPaginated(res)
-      ? res
-      : {
-          items: res as ProjectAuditEvent[],
-          total: (res as ProjectAuditEvent[]).length,
-          page: 1,
-          pageSize: pageSize.value,
-          hasMore: false,
-        }
-    events.value = pageData.items || []
-    total.value = pageData.total
-    page.value = pageData.page
-    stats.value = pageData.stats || {
-      total: pageData.total,
-      mcp: events.value.filter((e) => e.action.startsWith('mcp')).length,
-      fail: events.value.filter((e) => e.outcome === 'fail').length,
+    if (mode.value === 'run') {
+      await loadRunAligned()
+    } else {
+      runCapped.value = false
+      runFetched.value = 0
+      const res = await api.listProjectAudit(props.projectId, buildParams())
+      const pageData: PaginatedResponse<ProjectAuditEvent> & { stats?: ProjectAuditStats } = isPaginated(res)
+        ? res
+        : {
+            items: res as ProjectAuditEvent[],
+            total: (res as ProjectAuditEvent[]).length,
+            page: 1,
+            pageSize: pageSize.value,
+            hasMore: false,
+          }
+      events.value = pageData.items || []
+      total.value = pageData.total
+      page.value = pageData.page
+      stats.value = pageData.stats || {
+        total: pageData.total,
+        mcp: events.value.filter((e) => e.action.startsWith('mcp')).length,
+        fail: events.value.filter((e) => e.outcome === 'fail').length,
+      }
     }
   } catch (e: any) {
     if (e?.status === 403) {
@@ -427,6 +486,7 @@ async function setMode(next: Mode) {
   if (mode.value === next) return
   mode.value = next
   openId.value = null
+  groupOpen.value = {}
   page.value = 1
   nodeId.value = ''
   callerKind.value = ''
@@ -448,12 +508,14 @@ async function onRunChange(v: string) {
   nodeId.value = ''
   resource.value = ''
   openId.value = null
+  groupOpen.value = {}
   await loadFacets(v)
   await load(true)
 }
 
 function onFilterChange() {
   openId.value = null
+  groupOpen.value = {}
   void load(true)
 }
 
@@ -793,19 +855,24 @@ onMounted(() => {
 
       <div v-if="!isMobile" class="meta">
         <div class="meta-l" data-testid="project-audit-stats">
-          <span>{{ t('pages.projectDetail.audit.statTotal') }} <b>{{ stats.total }}</b></span>
-          <span>MCP <b>{{ stats.mcp }}</b></span>
-          <span>{{ t('pages.projectDetail.audit.statFail') }} <b>{{ stats.fail }}</b></span>
+          <span class="stat-chip">{{ t('pages.projectDetail.audit.statTotal') }} <b>{{ stats.total }}</b></span>
+          <span class="stat-chip ok">{{ t('pages.projectDetail.audit.statOk') }} <b>{{ statOk }}</b></span>
+          <span class="stat-chip" :class="{ fail: stats.fail }">{{ t('pages.projectDetail.audit.statFail') }} <b>{{ stats.fail }}</b></span>
+          <span class="stat-chip">MCP <b>{{ stats.mcp }}</b></span>
           <span v-if="mode === 'run' && runId">Run <b>{{ shortRun(runId) }}</b></span>
         </div>
         <div>{{ t('pages.projectDetail.audit.expandHint') }}</div>
       </div>
       <div v-else class="meta meta-mobile" data-testid="project-audit-stats">
-        <span>{{ t('pages.projectDetail.audit.statTotal') }} <b>{{ stats.total }}</b></span>
-        <span>MCP <b>{{ stats.mcp }}</b></span>
-        <span>{{ t('pages.projectDetail.audit.statFail') }} <b>{{ stats.fail }}</b></span>
+        <span class="stat-chip">{{ t('pages.projectDetail.audit.statTotal') }} <b>{{ stats.total }}</b></span>
+        <span class="stat-chip ok">{{ t('pages.projectDetail.audit.statOk') }} <b>{{ statOk }}</b></span>
+        <span class="stat-chip" :class="{ fail: stats.fail }">{{ t('pages.projectDetail.audit.statFail') }} <b>{{ stats.fail }}</b></span>
+        <span class="stat-chip">MCP <b>{{ stats.mcp }}</b></span>
         <span v-if="mode === 'run' && runId">Run <b>{{ shortRun(runId) }}</b></span>
       </div>
+      <p v-if="mode === 'run' && runCapped && !loading" class="cap-hint" data-testid="project-audit-capped">
+        {{ t('pages.projectDetail.audit.runCapped', { n: runFetched }) }}
+      </p>
 
       <div v-if="loading" class="list-placeholder text-[13px] text-txt2">
         {{ t('pages.projectDetail.audit.loading') }}
@@ -850,14 +917,12 @@ onMounted(() => {
             <span class="ec-time mono">{{ fmtTime(ev.occurredAt) }}</span>
             <span :class="ev.outcome === 'fail' ? 'bad' : 'ok'">{{ outcomeLabel(ev) }}</span>
           </div>
+          <div class="ec-sum" :class="{ open: openId === ev.id }">{{ ev.summary }}</div>
           <div class="ec-row">
             <span class="k">{{ t('pages.projectDetail.audit.colNode') }}</span>
             {{ nodeLabel(ev.nodeId) }}
-            ·
-            <span class="k">{{ t('pages.projectDetail.audit.colAction') }}</span>
-            <span class="act" :class="actionClass(ev.action)">{{ actionLabel(ev.action) }}</span>
+            <span class="ec-aux">{{ resourceAux(ev) }}</span>
           </div>
-          <div class="ec-sum" :class="{ open: openId === ev.id }">{{ ev.summary }}</div>
           <div v-if="openId === ev.id" class="ec-detail" @click.stop>
             <div>
               <span class="k">{{ t('pages.projectDetail.audit.colCaller') }}</span>
@@ -890,11 +955,98 @@ onMounted(() => {
           </div>
         </button>
       </div>
-      <!-- Desktop wide table (plan g4.1) -->
+      <!-- Desktop: Run groups (g3/g4.1) or all-logs 4-col table (g4.2) -->
+      <div
+        v-else-if="mode === 'run'"
+        class="groups-wrap"
+        data-testid="project-audit-list"
+        data-layout="groups"
+      >
+        <div
+          v-for="g in runGroups"
+          :key="g.id"
+          class="group"
+          :class="{ open: isGroupOpen(g) }"
+          :data-testid="`project-audit-group-${g.id}`"
+          :data-open="isGroupOpen(g) ? 'true' : 'false'"
+        >
+          <button
+            type="button"
+            class="group-head"
+            :data-testid="`project-audit-group-head-${g.id}`"
+            @click="toggleGroup(g.id)"
+          >
+            <span class="chev" aria-hidden="true" />
+            <span class="group-meta">
+              <span class="group-name">
+                <span class="node-dot" :class="g.type" />
+                {{ g.title }}
+                <span v-if="g.fullId" class="nid">{{ g.fullId }}</span>
+              </span>
+              <span class="group-sub">
+                {{ t('pages.projectDetail.audit.groupEvents', { n: g.events.length }) }}
+              </span>
+            </span>
+            <span class="group-counts">
+              <span class="stat-chip ok">{{ t('pages.projectDetail.audit.statOk') }} <strong>{{ g.ok }}</strong></span>
+              <span class="stat-chip" :class="{ fail: g.fail }">{{ t('pages.projectDetail.audit.statFail') }} <strong>{{ g.fail }}</strong></span>
+            </span>
+          </button>
+          <div v-show="isGroupOpen(g)" class="group-body">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 148px">{{ t('pages.projectDetail.audit.colTime') }}</th>
+                  <th>{{ t('pages.projectDetail.audit.colSummary') }}</th>
+                  <th style="width: 72px">{{ t('pages.projectDetail.audit.colOutcome') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template v-for="ev in g.events" :key="ev.id">
+                  <tr
+                    class="row"
+                    :class="{ open: openId === ev.id, fail: ev.outcome === 'fail' }"
+                    :data-testid="`project-audit-event-${ev.id}`"
+                    @click="toggleOpen(ev.id)"
+                  >
+                    <td>
+                      <div class="time-main mono">{{ fmtTime(ev.occurredAt) }}</div>
+                    </td>
+                    <td class="summary">
+                      <div class="summary-main">{{ ev.summary }}</div>
+                      <div class="summary-aux">{{ resourceAux(ev) }}</div>
+                    </td>
+                    <td>
+                      <span :class="ev.outcome === 'fail' ? 'bad' : 'ok'">{{ outcomeLabel(ev) }}</span>
+                    </td>
+                  </tr>
+                  <tr v-if="openId === ev.id" class="detail">
+                    <td colspan="3">
+                      <div class="detail-inner" @click.stop>
+                        <div class="detail-meta">
+                          <span>action <code>{{ ev.action }}</code></span>
+                          <span v-if="ev.nodeId">{{ t('pages.projectDetail.audit.colNode') }} <code>{{ ev.nodeId }}</code></span>
+                          <span>{{ t('pages.projectDetail.audit.colResource') }} <code>{{ resourceText(ev) }}</code></span>
+                          <span v-if="ev.runId">Run <code>{{ ev.runId }}</code></span>
+                          <span>{{ t('pages.projectDetail.audit.colCaller') }} <code>{{ callerLabel(ev) }}</code></span>
+                        </div>
+                        <pre
+                          class="payload"
+                          data-testid="project-audit-payload"
+                          v-html="prettyPayload(ev.payload)"
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
       <div
         v-else
         class="table-wrap"
-        :class="{ 'col-run-hide': mode === 'run', 'col-node-hide': mode !== 'run' }"
         data-testid="project-audit-list"
         data-layout="table"
       >
@@ -902,13 +1054,9 @@ onMounted(() => {
           <thead>
             <tr>
               <th style="width: 148px">{{ t('pages.projectDetail.audit.colTime') }}</th>
-              <th class="col-node" style="width: 88px">{{ t('pages.projectDetail.audit.colNode') }}</th>
-              <th style="width: 100px">{{ t('pages.projectDetail.audit.colCaller') }}</th>
-              <th style="width: 88px">{{ t('pages.projectDetail.audit.colAction') }}</th>
-              <th style="width: 180px">{{ t('pages.projectDetail.audit.colResource') }}</th>
-              <th class="col-run" style="width: 88px">{{ t('pages.projectDetail.audit.colRun') }}</th>
-              <th style="width: 56px">{{ t('pages.projectDetail.audit.colOutcome') }}</th>
+              <th style="width: 140px">{{ t('pages.projectDetail.audit.colNode') }}</th>
               <th>{{ t('pages.projectDetail.audit.colSummary') }}</th>
+              <th style="width: 72px">{{ t('pages.projectDetail.audit.colOutcome') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -922,28 +1070,26 @@ onMounted(() => {
                 <td>
                   <div class="time-main mono">{{ fmtTime(ev.occurredAt) }}</div>
                 </td>
-                <td class="col-node">
+                <td>
                   <span class="node">{{ nodeLabel(ev.nodeId) }}</span>
                 </td>
-                <td><span class="who">{{ callerLabel(ev) }}</span></td>
-                <td>
-                  <span class="act" :class="actionClass(ev.action)">{{ actionLabel(ev.action) }}</span>
+                <td class="summary">
+                  <div class="summary-main">{{ ev.summary }}</div>
+                  <div class="summary-aux">{{ resourceAux(ev) }}</div>
                 </td>
-                <td><span class="res">{{ resourceText(ev) }}</span></td>
-                <td class="col-run mono">{{ ev.runId ? shortRun(ev.runId) : '—' }}</td>
                 <td>
                   <span :class="ev.outcome === 'fail' ? 'bad' : 'ok'">{{ outcomeLabel(ev) }}</span>
                 </td>
-                <td class="summary">{{ ev.summary }}</td>
               </tr>
               <tr v-if="openId === ev.id" class="detail">
-                <td colspan="8">
+                <td colspan="4">
                   <div class="detail-inner" @click.stop>
                     <div class="detail-meta">
                       <span>action <code>{{ ev.action }}</code></span>
                       <span v-if="ev.nodeId">{{ t('pages.projectDetail.audit.colNode') }} <code>{{ ev.nodeId }}</code></span>
                       <span>{{ t('pages.projectDetail.audit.colResource') }} <code>{{ resourceText(ev) }}</code></span>
                       <span v-if="ev.runId">Run <code>{{ ev.runId }}</code></span>
+                      <span>{{ t('pages.projectDetail.audit.colCaller') }} <code>{{ callerLabel(ev) }}</code></span>
                     </div>
                     <pre
                       class="payload"
@@ -958,8 +1104,15 @@ onMounted(() => {
         </table>
       </div>
 
+      <div
+        v-if="mode === 'run' && !noRuns && !loading"
+        class="run-count shrink-0"
+        data-testid="project-audit-run-count"
+      >
+        {{ t('pages.projectDetail.audit.runCount', { n: stats.total }) }}
+      </div>
       <Pagination
-        v-if="!noRuns"
+        v-if="mode === 'all' && !noRuns"
         class="shrink-0"
         :page="page"
         :page-size="pageSize"
@@ -1169,9 +1322,47 @@ onMounted(() => {
 }
 .meta-l {
   display: flex;
-  gap: 12px;
+  gap: 8px 12px;
   flex-wrap: wrap;
   align-items: center;
+}
+.stat-chip {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  border: 1px solid rgb(var(--c-line));
+  background: rgb(var(--c-elevated));
+  padding: 2px 8px;
+  font-size: 12px;
+  color: rgb(var(--c-txt2));
+}
+.stat-chip b,
+.stat-chip strong {
+  color: rgb(var(--c-txt));
+  font-weight: 600;
+}
+.stat-chip.ok b,
+.stat-chip.ok strong {
+  color: rgb(var(--c-ok));
+}
+.stat-chip.fail b,
+.stat-chip.fail strong {
+  color: #f87171;
+}
+.cap-hint {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: rgb(var(--c-txt2));
+  border-bottom: 1px dashed rgb(var(--c-line-strong));
+  background: rgb(var(--c-accent-dim));
+  flex-shrink: 0;
+}
+.run-count {
+  padding: 10px 16px;
+  font-size: 12px;
+  color: rgb(var(--c-txt3));
+  border-top: 1px solid rgb(var(--c-line));
 }
 .meta-mobile {
   gap: 10px;
@@ -1186,6 +1377,119 @@ onMounted(() => {
   flex: 1;
   min-height: 0;
   overflow: auto;
+}
+.groups-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: rgb(var(--c-base));
+}
+.group {
+  border-bottom: 1px solid rgb(var(--c-line));
+}
+.group-head {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgb(var(--c-elevated));
+  border: none;
+  text-align: left;
+  color: rgb(var(--c-txt));
+  cursor: pointer;
+  font: inherit;
+}
+.group-head:hover {
+  background: rgb(var(--c-overlay));
+}
+.chev {
+  width: 0;
+  height: 0;
+  border-left: 5px solid rgb(var(--c-txt3));
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.15s ease;
+  transform-origin: 40% 50%;
+}
+.group.open .chev {
+  transform: rotate(90deg);
+  border-left-color: #7b61ff;
+}
+.group-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.group-name {
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.group-name .nid {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 400;
+  font-size: 11px;
+  color: rgb(var(--c-txt3));
+}
+.node-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  background: rgb(var(--c-txt3));
+}
+.node-dot.research {
+  background: #22d3ee;
+}
+.node-dot.proposal,
+.node-dot.proposal_select {
+  background: #60a5fa;
+}
+.node-dot.gate,
+.node-dot.human_gate {
+  background: #fbbf24;
+}
+.node-dot.visual {
+  background: #f59e0b;
+}
+.node-dot.react {
+  background: #22d3ee;
+}
+.node-dot.implement,
+.node-dot.plan,
+.node-dot.test,
+.node-dot.review {
+  background: #60a5fa;
+}
+.node-dot.app_preview {
+  background: #f59e0b;
+}
+.group-sub {
+  font-size: 11.5px;
+  color: rgb(var(--c-txt3));
+}
+.group-counts {
+  display: flex;
+  gap: 6px;
+}
+.group-body {
+  background: rgb(var(--c-base));
+}
+.summary-main {
+  color: rgb(var(--c-txt));
+  font-size: 13px;
+  line-height: 1.4;
+}
+.summary-aux,
+.ec-aux {
+  color: rgb(var(--c-txt3));
+  font-size: 11.5px;
+  margin-top: 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 table {
   width: 100%;
@@ -1502,7 +1806,7 @@ tr.detail td {
   font-size: 10px;
   color: rgb(var(--c-accent));
 }
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .filters:not(.filters-mobile) {
     flex-direction: column;
     align-items: stretch;

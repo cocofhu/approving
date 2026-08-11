@@ -128,14 +128,33 @@ async function gotoRealRunMain(page: Page, width: number, height = 900) {
   await expect(page.getByTestId('status-pill')).toContainText('已完成')
 }
 
+/** True if child lies inside parent's scrollable content (not the visible clip). */
 async function expectContained(child: Locator, parent: Locator) {
-  const [childBox, parentBox] = await Promise.all([child.boundingBox(), parent.boundingBox()])
-  expect(childBox).toBeTruthy()
-  expect(parentBox).toBeTruthy()
-  expect(childBox!.x).toBeGreaterThanOrEqual(parentBox!.x - 1)
-  expect(childBox!.y).toBeGreaterThanOrEqual(parentBox!.y - 1)
-  expect(childBox!.x + childBox!.width).toBeLessThanOrEqual(parentBox!.x + parentBox!.width + 1)
-  expect(childBox!.y + childBox!.height).toBeLessThanOrEqual(parentBox!.y + parentBox!.height + 1)
+  const report = await child.evaluate((el, parentEl) => {
+    if (!(parentEl instanceof HTMLElement) || !parentEl.contains(el)) {
+      return { ok: false, reason: 'not-descendant' }
+    }
+    const cr = el.getBoundingClientRect()
+    const pr = parentEl.getBoundingClientRect()
+    const left = cr.left - pr.left + parentEl.scrollLeft
+    const top = cr.top - pr.top + parentEl.scrollTop
+    const pad = 1
+    const ok =
+      left >= -pad &&
+      top >= -pad &&
+      left + cr.width <= parentEl.scrollWidth + pad &&
+      top + cr.height <= parentEl.scrollHeight + pad
+    return {
+      ok,
+      left,
+      top,
+      cw: cr.width,
+      ch: cr.height,
+      sw: parentEl.scrollWidth,
+      sh: parentEl.scrollHeight,
+    }
+  }, await parent.elementHandle())
+  expect(report.ok, JSON.stringify(report)).toBe(true)
 }
 
 async function expectNoHorizontalOverflow(page: Page) {
@@ -301,6 +320,22 @@ test('390px：统计区域视觉回归', async ({ page }) => {
 })
 
 test.describe('主视图时间线移动端契约（生产路径）', () => {
+  test('767px 为移动单栏；768/769 为桌面并排（不断言 768=手机时间线）', async ({ page }) => {
+    await gotoRealRunMain(page, 767)
+    await expect(page.getByTestId('mobile-main-panel-tabs')).toBeVisible()
+    await expect(page.getByTestId('view-mode-canvas')).toHaveCount(0)
+
+    await page.setViewportSize({ width: 768, height: 900 })
+    await expect(page.getByTestId('mobile-main-panel-tabs')).toHaveCount(0)
+    await expect(page.getByTestId('view-mode-canvas')).toBeVisible()
+    await expect(page.getByTestId('run-timeline-pane')).toBeVisible()
+    await expect(page.getByTestId('run-detail-right-panel')).toBeVisible()
+
+    await page.setViewportSize({ width: 769, height: 900 })
+    await expect(page.getByTestId('mobile-main-panel-tabs')).toHaveCount(0)
+    await expect(page.getByTestId('view-mode-canvas')).toBeVisible()
+  })
+
   test('390px：默认时间线可见、无画布入口、预选最近节点', async ({ page }) => {
     await gotoRealRunMain(page, 390)
 

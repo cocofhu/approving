@@ -836,9 +836,9 @@ func TestPublicGatePreviewOmitsUpstreamDocAndSupportsOnDemandUpstream(t *testing
 	}
 
 	sparse := parseJSON(t, h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{
-		headerShareToken:                       token,
-		gateshare.HeaderKnownVisualHTMLHash:    vhHash,
-		gateshare.HeaderKnownUpstreamHash:      upHash,
+		headerShareToken:                    token,
+		gateshare.HeaderKnownVisualHTMLHash: vhHash,
+		gateshare.HeaderKnownUpstreamHash:   upHash,
 	}))
 	if sparse["visualHtml"] != nil && sparse["visualHtml"] != "" {
 		t.Fatalf("unchanged visualHtml must be omitted: %+v", sparse)
@@ -864,5 +864,54 @@ func TestPublicGatePreviewOmitsUpstreamDocAndSupportsOnDemandUpstream(t *testing
 	raw, _ := json.Marshal(fullUp)
 	if strings.Contains(string(raw), "should-hide") || strings.Contains(string(raw), "projectId") {
 		t.Fatalf("on-demand upstream leaked: %s", raw)
+	}
+}
+
+func countShareNonces(t *testing.T, h *harness) int64 {
+	t.Helper()
+	var n int64
+	if err := h.db.Model(&models.GateShareNonce{}).Count(&n).Error; err != nil {
+		t.Fatalf("count nonces: %v", err)
+	}
+	return n
+}
+
+func TestPublicGatePreviewSilentSkipsNonceUnlessRequested(t *testing.T) {
+	h := newHarness(t)
+	seedHumanGate(t, h, "run-share-nonce-idle", "hg-nonce-idle", nil)
+	created := parseJSON(t, h.do(http.MethodPost, "/api/runs/run-share-nonce-idle/gates/hg-nonce-idle/share-link", map[string]any{"ttlTier": "24h"}))
+	url, _ := created["url"].(string)
+	token := strings.TrimPrefix(url[strings.Index(url, "#t="):], "#t=")
+
+	first := parseJSON(t, h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: token}))
+	if first["nonce"] == nil || first["nonce"] == "" {
+		t.Fatalf("first preview must issue nonce: %+v", first)
+	}
+	afterFirst := countShareNonces(t, h)
+	if afterFirst < 1 {
+		t.Fatalf("expected at least one nonce row, got %d", afterFirst)
+	}
+
+	silent := parseJSON(t, h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{
+		headerShareToken:           token,
+		gateshare.HeaderSilentPoll: "1",
+	}))
+	if silent["nonce"] != nil && silent["nonce"] != "" {
+		t.Fatalf("silent poll must omit nonce: %+v", silent)
+	}
+	if got := countShareNonces(t, h); got != afterFirst {
+		t.Fatalf("silent poll must not Issue, rows %d → %d", afterFirst, got)
+	}
+
+	refresh := parseJSON(t, h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{
+		headerShareToken:           token,
+		gateshare.HeaderSilentPoll: "1",
+		gateshare.HeaderIssueNonce: "1",
+	}))
+	if refresh["nonce"] == nil || refresh["nonce"] == "" {
+		t.Fatalf("silent+issueNonce must return nonce: %+v", refresh)
+	}
+	if got := countShareNonces(t, h); got <= afterFirst {
+		t.Fatalf("issueNonce must Issue a new row, before=%d after=%d", afterFirst, got)
 	}
 }

@@ -70,10 +70,10 @@ const Fixture = defineComponent({
   name: 'GateMobileFillFixture',
   setup() {
     // Force mobile breakpoint so GateApproval takes the fill-remaining branch.
-    const mql = window.matchMedia('(max-width: 768px)')
+    const mql = window.matchMedia('(max-width: 767px)')
     Object.defineProperty(mql, 'matches', { configurable: true, get: () => true })
     window.matchMedia = ((query: string) => {
-      if (query.includes('max-width: 768px')) return mql
+      if (query.includes('max-width: 767px')) return mql
       return {
         matches: false,
         media: query,

@@ -79,6 +79,8 @@ describe('SettingsView loading source lock', () => {
     expect(src).not.toMatch(/pages\.settings\.loadingTitle/)
     expect(src).toMatch(/admin-list-thin-bar bg-accent/)
     expect(src).toMatch(/opacity-\[0\.55\]/)
+    expect(src).toMatch(/flex-col items-stretch gap-3 md:flex-row md:items-end md:justify-between/)
+    expect(src).toMatch(/min-h-11 w-full md:w-auto/)
   })
 })
 
