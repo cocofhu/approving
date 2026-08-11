@@ -13,6 +13,8 @@ const props = withDefaults(
     disabled?: boolean
     /** When provided (non-empty), render per-page elevated select. */
     pageSizeOptions?: number[]
+    /** Optional summary text; omit to keep common.pagination.rangeSummary. */
+    summaryOverride?: string
     summaryTestId?: string
     pageSizeTestId?: string
   }>(),
@@ -20,6 +22,7 @@ const props = withDefaults(
     loading: false,
     disabled: false,
     pageSizeOptions: undefined,
+    summaryOverride: undefined,
     summaryTestId: undefined,
     pageSizeTestId: undefined,
   },
@@ -48,6 +51,7 @@ const rangeTo = computed(() => {
 })
 
 const summaryText = computed(() => {
+  if (props.summaryOverride !== undefined) return props.summaryOverride
   if (props.total <= 0) return t('common.pagination.emptySummary')
   return t('common.pagination.rangeSummary', {
     from: rangeFrom.value,
@@ -96,7 +100,7 @@ function onPageSizeChange(event: Event) {
     :aria-busy="loading ? 'true' : undefined"
   >
     <div class="pg-summary" :data-testid="summaryTestId || undefined">
-      {{ summaryText }}
+      <slot name="summary">{{ summaryText }}</slot>
     </div>
     <div class="pg-nav">
       <button

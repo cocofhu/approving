@@ -113,13 +113,12 @@ test.describe('shell notification center (IA separation)', () => {
   test('completed click opens output without marking read; mark-as-read then clears badge', async ({
     page,
   }) => {
-    await page.goto('/notifications-center.html?scene=with-items')
-    await expect(page.getByTestId('shell-main-dashboard')).toBeVisible({ timeout: 15_000 })
+    await page.goto('/notifications-center.html?scene=with-items&start=notifications')
+    await expect(page.getByTestId('notifications-page')).toBeVisible({ timeout: 15_000 })
     await settleAuth(page)
     await expect(page.getByTestId('run-notifications-badge')).toHaveText('3')
-    await page.getByTestId('run-notifications-bell').click()
     await page
-      .locator('[data-testid="run-notifications-item"][data-status="completed"]')
+      .locator('[data-testid="notifications-item"][data-status="completed"]')
       .first()
       .click()
     // run-new-ok has outputCards → result-cards path (not legacy artifact deck)
@@ -140,13 +139,12 @@ test.describe('shell notification center (IA separation)', () => {
   test('completed without outputCards shows empty dual exits, not full artifact list', async ({
     page,
   }) => {
-    await page.goto('/notifications-center.html?scene=with-items')
-    await expect(page.getByTestId('shell-main-dashboard')).toBeVisible({ timeout: 15_000 })
+    await page.goto('/notifications-center.html?scene=with-items&start=notifications')
+    await expect(page.getByTestId('notifications-page')).toBeVisible({ timeout: 15_000 })
     await settleAuth(page)
-    await page.getByTestId('run-notifications-bell').click()
     // Second completed item is run-clean (empty cards)
     await page
-      .locator('[data-testid="run-notifications-item"][data-status="completed"]')
+      .locator('[data-testid="notifications-item"][data-status="completed"]')
       .nth(1)
       .click()
     const empty = page.getByTestId('run-output-empty')
@@ -168,5 +166,47 @@ test.describe('shell notification center (IA separation)', () => {
     await expect(page.getByText('e2e', { exact: true })).toBeVisible({ timeout: 15_000 })
     // Must not under-count until focus/15s poll — auth watch rehydrates prefs sync.
     await expect(page.getByTestId('run-notifications-badge')).toHaveText('3', { timeout: 5_000 })
+  })
+
+  test('independent page paginates at 20; filter and topbar entry reset to page 1 (g4.3)', async ({
+    page,
+  }) => {
+    await page.goto('/notifications-center.html?scene=paged&start=notifications')
+    await expect(page.getByTestId('notifications-page')).toBeVisible({ timeout: 15_000 })
+    await settleAuth(page)
+
+    await expect(page.getByTestId('notifications-item')).toHaveCount(20)
+    await expect(page.getByTestId('notifications-page-range')).toContainText('第 1 页 · 1–20 / 25')
+    const pager = page.getByTestId('notifications-pagination')
+    await expect(pager).toBeVisible()
+    await expect(page.getByTestId('notifications-pager-summary')).toHaveText('共 25 条 · 每页 20')
+
+    await pager.getByRole('button', { name: '下一页' }).click()
+    await expect(page.getByTestId('notifications-item')).toHaveCount(5)
+    await expect(page.getByTestId('notifications-page-range')).toContainText('第 2 页 · 21–25 / 25')
+    await expect(page).not.toHaveURL(/[?&]page=/)
+
+    await page.getByTestId('notifications-filter-read').click()
+    await expect(page.getByTestId('notifications-pagination')).toHaveCount(0)
+    await expect(page.getByTestId('notifications-page-range')).toHaveCount(0)
+
+    await page.getByTestId('notifications-filter-all').click()
+    await expect(page.getByTestId('notifications-item')).toHaveCount(20)
+    await expect(page.getByTestId('notifications-page-range')).toContainText('第 1 页')
+
+    await pager.getByRole('button', { name: '下一页' }).click()
+    await expect(page.getByTestId('notifications-page-range')).toContainText('第 2 页')
+    await page.getByTestId('run-notifications-bell').click()
+    await expect(page.getByTestId('run-notifications-item')).toHaveCount(5)
+    await page.getByTestId('run-notifications-view-all').click()
+    await expect(page.getByTestId('notifications-page-range')).toContainText('第 1 页 · 1–20 / 25')
+    await expect(page.getByTestId('notifications-item')).toHaveCount(20)
+
+    await pager.getByRole('button', { name: '下一页' }).click()
+    await page.getByTestId('run-notifications-bell').click()
+    await page.getByTestId('run-notifications-item').first().click()
+    await expect(page.getByTestId('notifications-page')).toBeVisible()
+    await expect(page.getByTestId('notifications-page-range')).toContainText('第 1 页')
+    await expect(page.getByTestId('notifications-item')).toHaveCount(20)
   })
 })
