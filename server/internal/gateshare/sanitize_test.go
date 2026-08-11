@@ -185,6 +185,9 @@ func TestBuildReviewPreviewDTOIncludesWorkbenchFields(t *testing.T) {
 	if dto.Kind != models.ShareLinkKindReview {
 		t.Fatalf("kind=%s", dto.Kind)
 	}
+	if dto.NodeType != "research" {
+		t.Fatalf("nodeType=%s want research", dto.NodeType)
+	}
 	if dto.Actions["confirm"] != "confirm" || dto.Actions["reply"] != "reply" || dto.Actions["cancel"] != "cancel" {
 		t.Fatalf("actions=%+v", dto.Actions)
 	}
@@ -244,5 +247,54 @@ func TestBuildReviewPreviewDTOIncludesQueueState(t *testing.T) {
 	raw, _ := json.Marshal(dto)
 	if strings.Contains(string(raw), "blob:") || strings.Contains(string(raw), "127.0.0.1") {
 		t.Fatalf("activeItem leaked images/host: %s", raw)
+	}
+}
+
+func TestBuildReviewPreviewDTOClarifyCopyAndEmptyProduct(t *testing.T) {
+	lookup := &LookupResult{
+		Kind: models.ShareLinkKindReview,
+		Link: models.GateShareLink{ExpiresAt: mustFuture()},
+		Node: &models.Node{ID: "clarify", Type: "react", Label: "需求澄清"},
+	}
+	dto := BuildReviewPreviewDTO(models.ShareLinkStateActive, lookup, "", "", "", "nonce-c", PreviewExtras{
+		Turns: []models.ReactMessage{
+			{Role: "agent", Text: "请补充验收标准", At: "2026-08-01T00:00:00Z"},
+		},
+		ReactSessionAlive: true,
+	})
+	if dto.Kind != models.ShareLinkKindReview {
+		t.Fatalf("kind must stay review: %s", dto.Kind)
+	}
+	if dto.NodeType != "react" {
+		t.Fatalf("nodeType=%s", dto.NodeType)
+	}
+	if dto.Title != "需求澄清" {
+		t.Fatalf("title=%q", dto.Title)
+	}
+	if !strings.Contains(dto.Description, "外部澄清") {
+		t.Fatalf("description=%q", dto.Description)
+	}
+	if strings.Contains(dto.Description, "待复审") || strings.Contains(dto.Description, "不触发 Agent") {
+		t.Fatalf("clarify copy leaked review wording: %q", dto.Description)
+	}
+	if dto.Structured != nil || dto.VisualHTML != "" {
+		t.Fatalf("first-round empty product expected, got structured=%v visual=%q", dto.Structured, dto.VisualHTML)
+	}
+	raw, _ := json.Marshal(dto)
+	if strings.Contains(string(raw), "run-") || strings.Contains(string(raw), "Run#") {
+		t.Fatalf("preview leak: %s", raw)
+	}
+
+	reviewLookup := &LookupResult{
+		Kind: models.ShareLinkKindReview,
+		Link: models.GateShareLink{ExpiresAt: mustFuture()},
+		Node: &models.Node{ID: "research1", Type: "research", Label: "调研"},
+	}
+	rev := BuildReviewPreviewDTO(models.ShareLinkStateActive, reviewLookup, "", "research.json", `{"title":"调研"}`, "n2", PreviewExtras{})
+	if !strings.Contains(rev.Description, "待复审") {
+		t.Fatalf("review copy must stay 待复审: %q", rev.Description)
+	}
+	if strings.Contains(rev.Description, "外部澄清") {
+		t.Fatalf("review copy must not use clarify wording: %q", rev.Description)
 	}
 }

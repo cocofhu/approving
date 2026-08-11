@@ -37,6 +37,8 @@ type fakeProvider struct {
 	// the produces contract fails and routeFailure is exercised.
 	reactPending      int
 	reactSkipProduces bool
+	// reactForceStayOpen: force=true still returns Done:false (pending ask_question).
+	reactForceStayOpen bool
 	// reactSetupErr, when set, makes ReactOpen fail with a sandbox setup error.
 	reactSetupErr error
 
@@ -398,6 +400,7 @@ func (f *fakeProvider) ReactReply(ctx context.Context, req runtime.NodeReq, hist
 		f.reactPending--
 	}
 	skip := f.reactSkipProduces
+	stayOpen := f.reactForceStayOpen
 	hold := f.reactHold
 	f.mu.Unlock()
 	if hold != nil {
@@ -407,6 +410,16 @@ func (f *fakeProvider) ReactReply(ctx context.Context, req runtime.NodeReq, hist
 			return runtime.ReactTurn{Msg: "(已中断)", Done: false, Err: ctx.Err(),
 				Events: []models.AcpEvent{{Kind: "message", Text: "clarify-cancelled"}}}
 		}
+	}
+	if stayOpen {
+		if f.recordCalls {
+			f.emitAsk(req)
+		} else {
+			f.host.SetPendingQuestions(req.RunID, req.NodeID, []models.ReactQuestion{{ID: "q-open", Prompt: "仍有待拍板问题。"}})
+		}
+		qs := f.host.TakePendingQuestions(req.RunID, req.NodeID)
+		return runtime.ReactTurn{Msg: "仍有待拍板问题。", Questions: qs, Done: false,
+			Events: []models.AcpEvent{{Kind: "message", Text: "force-stay-open"}}}
 	}
 	// Still gathering info: keep the dialogue open with another question.
 	if pending > 0 && !force {

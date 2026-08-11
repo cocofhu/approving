@@ -100,6 +100,7 @@ function abortPreview() {
 }
 
 const isReview = computed(() => preview.value?.kind === 'review')
+const isClarify = computed(() => preview.value?.nodeType === 'react')
 const status = computed(() => preview.value?.status || (token.value ? 'invalid' : 'invalid'))
 const isActive = computed(() => status.value === 'active')
 const remainingLabel = ref('')
@@ -504,7 +505,9 @@ async function applyDecideResult(kind: 'confirm' | 'reject', res: PublicGateDeci
     return
   }
   if (res.status === 'validation_failed' || res.error === 'review_validation_failed') {
-    errorText.value = t('pages.publicGate.validationFailed')
+    errorText.value = isClarify.value
+      ? t('pages.publicGate.clarifyNotFinished')
+      : t('pages.publicGate.validationFailed')
     await loadPreview({ silent: true })
     return
   }
@@ -759,7 +762,20 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
           class="border border-line bg-elevated px-2 py-0.5 text-[11px] text-txt2"
           data-testid="public-gate-badge"
         >
-          {{ isReview ? t('pages.publicGate.badgeReview') : t('pages.publicGate.badge') }}
+          {{
+            isClarify
+              ? t('pages.publicGate.badgeClarify')
+              : isReview
+                ? t('pages.publicGate.badgeReview')
+                : t('pages.publicGate.badge')
+          }}
+        </span>
+        <span
+          v-if="isClarify && isActive && !doneKind"
+          class="text-[11px] text-txt3"
+          data-testid="public-gate-kind-hint"
+        >
+          {{ t('pages.publicGate.kindHintClarify') }}
         </span>
         <span
           v-if="isActive && !doneKind && !reactAlive"
@@ -963,7 +979,9 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
             />
           </template>
           <span class="hidden text-[11px] text-txt3 md:inline" data-testid="public-gate-confirm-hint">
-            {{ t('pages.publicGate.confirmHint') }}
+            {{
+              isClarify ? t('pages.publicGate.confirmHintClarify') : t('pages.publicGate.confirmHint')
+            }}
           </span>
           <p v-if="errorText" class="text-xs text-err" role="alert" data-testid="public-gate-error">{{ errorText }}</p>
           <button

@@ -1018,7 +1018,7 @@
         "errors": {
           "noStandardAction": "Add a standard approve or reject action before creating a temp link",
           "notHumanGate": "Temp approval links are only available for human_gate",
-          "notReviewSession": "Temp review links are only available for pending Inbox reviews or app preview sessions",
+          "notReviewSession": "Temp review links are only available for pending Inbox reviews, app preview, or clarification sessions",
           "usedReadonly": "Approval already finished. A new link cannot be created",
           "runEnded": "This run has ended. A link cannot be created",
           "gateNotPending": "No pending gate",
@@ -1035,6 +1035,8 @@
     "publicGate": {
       "badge": "One-time external decision",
       "badgeReview": "External review",
+      "badgeClarify": "Pending clarification",
+      "kindHintClarify": "External clarification",
       "heading": "Approval workbench",
       "visualProduct": "Visual page artifact",
       "structuredProduct": "Structured artifact",
@@ -1053,6 +1055,8 @@
       "rejectAria": "Reject and explain why",
       "confirmAria": "Confirm and advance this review",
       "confirmHint": "Accept the current persisted product and continue (no Agent)",
+      "confirmHintClarify": "The system will wrap up, write the structured requirement, then advance. This may wait on the Agent.",
+      "clarifyNotFinished": "Clarification is not finished. Keep answering, then confirm again. The link remains valid.",
       "upstreamEmpty": "No upstream context to compare",
       "nameLabel": "Your name (required, audit only)",
       "namePh": "Enter your name",

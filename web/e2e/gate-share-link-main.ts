@@ -6,6 +6,7 @@ import { installIdleScrollbar } from '../src/lib/shared/idleScrollbar'
 import { setTheme } from '../src/lib/shared/theme'
 import InboxPendingCard from '../src/components/inbox/InboxPendingCard.vue'
 import GateShareLinkPanel from '../src/components/run/GateShareLinkPanel.vue'
+import ReviewComposer from '../src/components/run/ReviewComposer.vue'
 import PublicGateApprovalView from '../src/views/PublicGateApprovalView.vue'
 import { api } from '../src/lib/api/api'
 import { rememberShareUrl } from '../src/lib/inbox/gateShareLink'
@@ -22,6 +23,9 @@ let reviewPreviewBusy = false
 let reviewPreviewTurns: Array<{ role: string; text: string; at: string }> = [
   { role: 'agent', text: '请复审 research.json', at: '2026-08-01T00:00:00Z' },
 ]
+let clarifyQueue: Array<{ id: string; text: string }> = []
+let clarifyConfirmUnfinished = false
+let clarifyLinkUsed = false
 
 ;(window as unknown as { __idleReview?: () => void }).__idleReview = () => {
   reviewPreviewBusy = false
@@ -70,6 +74,33 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const scene = params.get('scene') || ''
     if (params.get('slowPreview')) {
       await new Promise((resolve) => setTimeout(resolve, 800))
+    }
+    if (scene === 'public-clarify') {
+      if (!reviewPreviewTurns.length || reviewPreviewTurns[0]?.text === '请复审 research.json') {
+        reviewPreviewTurns = [{ role: 'agent', text: '请补充验收标准', at: '2026-08-01T00:00:00Z' }]
+      }
+      return new Response(
+        JSON.stringify({
+          status: clarifyLinkUsed ? 'used' : 'active',
+          kind: 'review',
+          nodeType: 'react',
+          title: '需求澄清',
+          description: '外部澄清。请回答问题，信息足够后确认并流转。',
+          remainingSec: 3600,
+          nonce: 'nonce-e2e-clarify',
+          reactSessionAlive: true,
+          sessionBusy: reviewPreviewBusy,
+          waiting: clarifyQueue.length,
+          queueItems: clarifyQueue,
+          productKind: '',
+          productName: '',
+          actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
+          turns: reviewPreviewTurns.length
+            ? reviewPreviewTurns
+            : [{ role: 'agent', text: '请补充验收标准', at: '2026-08-01T00:00:00Z' }],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      )
     }
     if (scene === 'public-review') {
       return new Response(
@@ -152,12 +183,22 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   if (url.includes('/public/gate-approvals/reply')) {
     reviewPreviewBusy = true
+    const body = init?.body ? JSON.parse(String(init.body)) : {}
+    const text = String(body.text || '').trim()
+    if (text) {
+      clarifyQueue = [...clarifyQueue, { id: `q-${clarifyQueue.length + 1}`, text }]
+      reviewPreviewTurns = [
+        ...reviewPreviewTurns,
+        { role: 'human', text, at: new Date().toISOString() },
+      ]
+    }
     return new Response(JSON.stringify({ status: 'accepted' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     })
   }
   if (url.includes('/public/gate-approvals/cancel')) {
+    reviewPreviewBusy = false
     return new Response(JSON.stringify({ status: 'ok' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -169,7 +210,20 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     }
     const body = init?.body ? JSON.parse(String(init.body)) : {}
     if (body.action === 'confirm') {
+      const scene = new URLSearchParams(location.search).get('scene') || ''
+      if (scene === 'public-clarify' && new URLSearchParams(location.search).get('unfinishedConfirm') === '1' && !clarifyConfirmUnfinished) {
+        clarifyConfirmUnfinished = true
+        return new Response(
+          JSON.stringify({
+            status: 'validation_failed',
+            error: 'review_validation_failed',
+            message: '澄清尚未结束',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
       reviewPreviewBusy = false
+      clarifyLinkUsed = true
       return new Response(JSON.stringify({ status: 'confirmed', action: 'confirm' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -223,6 +277,20 @@ const reviewItem: ClarifyInboxItem = {
   shareLink: { state: 'none', canCreate: true },
 }
 
+const clarifyItem: ClarifyInboxItem = {
+  type: 'clarify',
+  kind: 'clarify',
+  runId: 'run-e2e-clarify',
+  nodeId: 'react-e2e',
+  iteration: 1,
+  workflowName: 'wf',
+  label: '需求澄清',
+  done: false,
+  requestedAt: '2026-08-01T00:00:00Z',
+  updatedAt: '2026-08-01T00:00:00Z',
+  shareLink: { state: 'none', canCreate: true },
+}
+
 const appPreviewItem: ClarifyInboxItem = {
   type: 'clarify',
   kind: 'app_preview',
@@ -261,12 +329,21 @@ const Fixture = defineComponent({
         ? { ...reviewItem }
         : scene === 'inbox-app-preview'
           ? { ...appPreviewItem }
-          : { ...gate },
+          : scene === 'inbox-clarify'
+            ? { ...clarifyItem }
+            : { ...gate },
     )
     const kind =
-      scene === 'inbox-review' || scene === 'inbox-app-preview' ? 'review' : 'human_gate'
+      scene === 'inbox-review' || scene === 'inbox-app-preview' || scene === 'inbox-clarify'
+        ? 'review'
+        : 'human_gate'
 
-    if (scene === 'public' || scene === 'public-review' || scene === 'public-app-preview') {
+    if (
+      scene === 'public' ||
+      scene === 'public-review' ||
+      scene === 'public-app-preview' ||
+      scene === 'public-clarify'
+    ) {
       if (!location.hash) location.hash = `#t=${TOKEN}`
       return () => h('div', { 'data-testid': 'gate-share-e2e-root' }, [h(PublicGateApprovalView)])
     }
@@ -283,6 +360,35 @@ const Fixture = defineComponent({
           },
         }),
         scene === 'inbox' ? h(ToolbarHost) : null,
+        scene === 'inbox-clarify'
+          ? h('div', { class: 'mt-3 flex flex-col gap-2' }, [
+              h(
+                'button',
+                {
+                  type: 'button',
+                  class: 'text-xs text-accent-2',
+                  'data-testid': 'gate-share-copy-btn-detail',
+                  onClick: () => {
+                    open.value = true
+                  },
+                },
+                '复制临时链接',
+              ),
+              h(ReviewComposer, {
+                mode: 'clarify',
+                runId: item.value.runId,
+                nodeId: item.value.nodeId,
+                iteration: item.value.iteration,
+                turns: [],
+                done: false,
+                active: true,
+                showSharePanel: true,
+                onOpenShare: () => {
+                  open.value = true
+                },
+              }),
+            ])
+          : null,
         h(GateShareLinkPanel, {
           open: open.value,
           target: {

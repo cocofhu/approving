@@ -1018,7 +1018,7 @@
         "errors": {
           "noStandardAction": "需要配置标准批准或驳回动作后才能创建临时链接",
           "notHumanGate": "仅 human_gate 支持临时审批链接",
-          "notReviewSession": "仅 Inbox 待复审或应用预览会话支持临时复审链接",
+          "notReviewSession": "仅 Inbox 待复审、应用预览或待澄清会话支持临时链接",
           "usedReadonly": "审批已完成，不能再创建链接",
           "runEnded": "运行已结束，不能创建链接",
           "gateNotPending": "没有待审批的门禁",
@@ -1035,6 +1035,8 @@
     "publicGate": {
       "badge": "外部一次决策",
       "badgeReview": "外部复审",
+      "badgeClarify": "待澄清",
+      "kindHintClarify": "外部澄清",
       "heading": "审批工作台",
       "visualProduct": "视觉网页产物",
       "structuredProduct": "结构化产物",
@@ -1053,6 +1055,8 @@
       "rejectAria": "驳回并说明原因",
       "confirmAria": "确认并流转此复审",
       "confirmHint": "接受当前已落盘产物并流转（不触发 Agent）",
+      "confirmHintClarify": "由系统收尾写入结构化需求后流转，可能需要等待 Agent",
+      "clarifyNotFinished": "澄清尚未结束，请继续回答问题后再确认。链接仍有效。",
       "upstreamEmpty": "暂无上游上下文可对照",
       "nameLabel": "你的姓名（必填，仅用于审计）",
       "namePh": "请填写姓名",

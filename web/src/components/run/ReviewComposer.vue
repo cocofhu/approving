@@ -59,7 +59,7 @@ const props = withDefaults(
     interrupted?: boolean
     /** ISO when turn completed normally — drives restrained「已完成」footnote. */
     streamCompletedAt?: string | null
-    /** App preview Inbox: show「打开分享面板」entry above composer body. */
+    /** Inbox 待澄清 / 待复审 / 应用预览: show「打开分享面板」above composer body. */
     showSharePanel?: boolean
   }>(),
   {

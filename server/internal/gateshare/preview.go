@@ -53,6 +53,10 @@ type PreviewDTO struct {
 	ActiveItem        *PreviewActiveItem `json:"activeItem,omitempty"`
 	ProductKind       string             `json:"productKind,omitempty"`
 	ProductName       string             `json:"productName,omitempty"`
+	// NodeType is the graph node type (e.g. react / research / app_preview).
+	// Kind stays "review" for ShareLinkKindReview; clients use NodeType to
+	// distinguish Inbox 待澄清 from 待复审 without leaking Run#.
+	NodeType string `json:"nodeType,omitempty"`
 }
 
 // PreviewExtras carries workbench fields that are optional on inactive links.
@@ -115,6 +119,9 @@ func BuildReviewPreviewDTO(st string, lookup *LookupResult, visualHTML, structur
 			dto.Status = models.ShareLinkStateNone
 		}
 		return dto
+	}
+	if lookup.Node != nil {
+		dto.NodeType = strings.TrimSpace(lookup.Node.Type)
 	}
 	title, desc := reviewPreviewCopy(lookup.Node)
 	dto.Title = title
@@ -293,6 +300,18 @@ func inferProductKind(visualHTML, structuredName, hinted string) (kind, name str
 }
 
 func reviewPreviewCopy(node *models.Node) (title, description string) {
+	if node != nil && node.Type == "react" {
+		title = strings.TrimSpace(node.Label)
+		if title == "" {
+			if spec, ok := nodereg.Get(node.Type); ok {
+				title = strings.TrimSpace(spec.Label)
+			}
+		}
+		if title == "" {
+			title = "待澄清"
+		}
+		return title, "外部澄清。请回答问题，信息足够后确认并流转。"
+	}
 	typeLabel := ""
 	if node != nil {
 		if spec, ok := nodereg.Get(node.Type); ok {

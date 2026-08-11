@@ -59,7 +59,7 @@ describe('gateShareLink helpers', () => {
     expect(isGateShareActive({ state: 'active' })).toBe(true)
   })
 
-  it('isHumanGateInboxItem only matches human_gate; isShareableInboxItem matches review and app_preview', () => {
+  it('isHumanGateInboxItem only matches human_gate; isShareableInboxItem matches review, app_preview and clarify', () => {
     const humanGate = {
       type: 'gate' as const,
       nodeType: 'human_gate',
@@ -97,7 +97,10 @@ describe('gateShareLink helpers', () => {
       updatedAt: '',
     }
     expect(isHumanGateInboxItem(clarify)).toBe(false)
-    expect(isShareableInboxItem(clarify)).toBe(false)
+    expect(isShareableInboxItem(clarify)).toBe(true)
+    expect(inboxShareKind(clarify)).toBe('review')
+    expect(isShareableInboxItem({ ...clarify, kind: 'clarify' })).toBe(true)
+    expect(inboxShareKind({ ...clarify, kind: 'clarify' })).toBe('review')
     expect(isShareableInboxItem({ ...clarify, kind: 'review' })).toBe(true)
     expect(isShareableInboxItem({ ...clarify, kind: 'app_preview' })).toBe(true)
     expect(inboxShareKind({ ...clarify, kind: 'app_preview' })).toBe('review')
