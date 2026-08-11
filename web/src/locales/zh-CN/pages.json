@@ -2340,7 +2340,10 @@
         "kindMarkdown": "Markdown",
         "kindHtml": "HTML",
         "kindCustom": "自定义",
-        "kindFailed": "失败"
+        "kindCustomHtml": "自定义产物 · HTML",
+        "kindFailed": "失败",
+        "previewUnavailableTitle": "无法预览",
+        "previewUnavailableBody": "page.html 内容不可用或预览加载失败。不会回退为 Markdown 源码展示。"
       },
       "nodeNotRun": "该节点尚未执行",
       "nodeNoOutput": "该节点尚未产生输出"

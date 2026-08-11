@@ -146,7 +146,10 @@ func (e *Engine) buildOutputCard(c *execCtx, idx int, tmpl string) map[string]an
 			card["errorReason"] = fmt.Sprintf("上游输出键 %q 不存在", ref.outputKey)
 			return card
 		}
-		if artName := structuredArtifactForKey(ref.outputKey); artName != "" {
+		// page→page.html is in OutputKeyToArtifact for artifact naming, but it is a
+		// custom HTML product (no *_json). Exclude it so the dedicated branch below
+		// is reachable and ends up as 自定义产物 + artifactName=page.html.
+		if artName := structuredArtifactForKey(ref.outputKey); artName != "" && ref.outputKey != "page" {
 			card["typeTag"] = "结构化产物"
 			card["structuredArtifactName"] = artName
 			m := nodereg.BuildManifest()
