@@ -12,19 +12,19 @@ import (
 func TestCronSchedulerSettingsClamp(t *testing.T) {
 	db := setupPmDB(t)
 	s := NewCronScheduler(db, NewPmService(db, nil), nil, nil, CronTokenHooks{})
-	s.SetMaxParallel(0)
+	s.setMaxParallel(0)
 	if s.parallel.Load() != 1 {
 		t.Fatalf("parallel min want 1 got %d", s.parallel.Load())
 	}
-	s.SetMaxParallel(100)
+	s.setMaxParallel(100)
 	if s.parallel.Load() != 16 {
 		t.Fatalf("parallel max want 16 got %d", s.parallel.Load())
 	}
-	s.SetClaimStaleMinutes(1)
+	s.setClaimStaleMinutes(1)
 	if s.staleMin.Load() != 30 {
 		t.Fatalf("stale min want 30 got %d", s.staleMin.Load())
 	}
-	s.SetClaimStaleMinutes(9999)
+	s.setClaimStaleMinutes(9999)
 	if s.staleMin.Load() != 1440 {
 		t.Fatalf("stale max want 1440 got %d", s.staleMin.Load())
 	}
@@ -90,7 +90,7 @@ func TestCronSchedulerStaleClaimReclaim(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := NewCronScheduler(db, pm, nil, nil, CronTokenHooks{})
-	s.SetClaimStaleMinutes(30)
+	s.setClaimStaleMinutes(30)
 	if !s.tryClaim(&job, now) {
 		t.Fatal("stale claim should be reclaimable")
 	}

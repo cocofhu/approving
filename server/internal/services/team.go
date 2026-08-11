@@ -667,41 +667,6 @@ func (s *TeamService) SetOrgMembership(args SetOrgMembershipArgs) error {
 	return err
 }
 
-// EnsureChildGroup ensures a child group under parent (scoped).
-func (s *TeamService) EnsureChildGroup(sessionID, parentGroupID, name string) (OrgGroup, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return OrgGroup{}, fmt.Errorf("%w: group name required", ErrTeamValidation)
-	}
-	sess, err := s.GetSession(sessionID)
-	if err != nil {
-		return OrgGroup{}, err
-	}
-	if parentGroupID != sess.RootGroupID {
-		return OrgGroup{}, fmt.Errorf("%w: parent must be session root group", ErrTeamScopeDenied)
-	}
-	org, err := s.Org.Get()
-	if err != nil {
-		return OrgGroup{}, err
-	}
-	for _, g := range org.Groups {
-		if g.ParentGroupID == parentGroupID && g.Name == name {
-			return g, nil
-		}
-	}
-	g := OrgGroup{ID: NewGroupID(), Name: name, ParentGroupID: parentGroupID}
-	org.Groups = append(org.Groups, g)
-	if _, err := s.Org.Put(org, org.Revision); err != nil {
-		return OrgGroup{}, err
-	}
-	s.patchSession(sessionID, func(sess *TeamBootstrapSession) {
-		sess.AllowedGroupIDs = append(sess.AllowedGroupIDs, g.ID)
-		if sess.PipelineGroupID == "" {
-			sess.PipelineGroupID = g.ID
-		}
-	})
-	return g, nil
-}
 
 func (s *TeamService) buildPMAgent(req normalizedTeamReq, projectID string) (Agent, error) {
 	tmpl, err := loadTeamAgentTemplate(TeamPMEmbedName)

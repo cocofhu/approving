@@ -269,6 +269,62 @@ test.describe('completed 深链输出视图 (g6.2/g6.3)', () => {
     expect(box?.height ?? 0).toBeGreaterThan(400)
   })
 
+  test('nodes.visual.outputs.page：HtmlPreview + 自定义产物·HTML，无源码泄露', async ({ page }) => {
+    const nodePageCard: OutputCard = {
+      index: 1,
+      template: '{{nodes.visual.outputs.page}}',
+      title: '网页预览 · 视觉网页',
+      typeTag: '自定义产物',
+      status: 'ok',
+      artifactName: 'page.html',
+      nodeId: 'visual',
+      outputKey: 'page',
+      markdown: tallHtmlPage,
+    }
+    await gotoDeepLink(page, {
+      cards: [nodePageCard],
+      artifacts: [htmlArtifact],
+      artifactContents: { 'a-page': tallHtmlPage },
+    })
+    await expect(page.getByTestId('output-result-detail-kind')).toHaveText('自定义产物 · HTML')
+    await expect(page.getByTestId('run-detail-right-panel')).not.toContainText('结构化产物')
+    // Real HtmlPreview exposes toolbar/iframe (not stub testid "html-preview").
+    await expect(page.getByTestId('html-preview-toolbar')).toBeVisible()
+    await expect(page.locator('iframe').first()).toBeVisible()
+    await expect(page.getByTestId('run-detail-right-panel')).not.toContainText('<!doctype')
+    await page.getByTestId('output-result-enlarge').click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toContainText('网页预览 · 视觉网页')
+    await expect(page.getByTestId('output-result-enlarge-html-viewport')).toBeVisible()
+    await expect(dialog.getByTestId('html-preview-toolbar')).toBeVisible()
+    await expect(dialog).not.toContainText('<!doctype')
+    await expect(dialog).not.toContainText('无法预览')
+  })
+
+  test('page.html 加载失败：展示无法预览且不回退 Markdown 源码', async ({ page }) => {
+    const nodePageCard: OutputCard = {
+      index: 1,
+      template: '{{nodes.visual.outputs.page}}',
+      title: '网页预览 · 视觉网页',
+      typeTag: '自定义产物',
+      status: 'ok',
+      artifactName: 'page.html',
+      nodeId: 'visual',
+      outputKey: 'page',
+    }
+    await gotoDeepLink(page, {
+      cards: [nodePageCard],
+      artifacts: [htmlArtifact],
+      // no artifactContents → content fetch 404
+    })
+    await expect(page.getByTestId('output-result-html-unavailable')).toBeVisible()
+    await expect(page.getByTestId('output-result-html-unavailable')).toContainText('无法预览')
+    await expect(page.getByTestId('html-preview-toolbar')).toHaveCount(0)
+    await expect(page.getByTestId('run-detail-right-panel')).not.toContainText('<!doctype')
+    await expect(page.getByTestId('run-detail-right-panel')).not.toContainText('<html')
+  })
+
   test('移动端深链首屏为详情面板，可返回时间线', async ({ page }) => {
     await gotoDeepLink(page, { width: 390 })
     await expect(page.getByTestId('mobile-main-panel-tabs')).toBeVisible()

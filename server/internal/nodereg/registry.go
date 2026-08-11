@@ -214,7 +214,7 @@ func Get(nodeType string) (Spec, bool) {
 }
 
 // KnownTypes returns all registered node type ids.
-func KnownTypes() []string {
+func knownTypes() []string {
 	out := make([]string, 0, len(registry))
 	for t := range registry {
 		out = append(out, t)

@@ -56,7 +56,7 @@ var frontendNodeTypes = []string{
 
 func TestRegistryCoversFrontendNodeTypes(t *testing.T) {
 	known := map[string]bool{}
-	for _, t := range KnownTypes() {
+	for _, t := range knownTypes() {
 		known[t] = true
 	}
 	for _, typ := range frontendNodeTypes {
@@ -64,8 +64,8 @@ func TestRegistryCoversFrontendNodeTypes(t *testing.T) {
 			t.Fatalf("backend registry missing frontend node type %q", typ)
 		}
 	}
-	if len(KnownTypes()) != len(frontendNodeTypes) {
-		t.Fatalf("registry has %d types, frontend expects %d", len(KnownTypes()), len(frontendNodeTypes))
+	if len(knownTypes()) != len(frontendNodeTypes) {
+		t.Fatalf("registry has %d types, frontend expects %d", len(knownTypes()), len(frontendNodeTypes))
 	}
 }
 

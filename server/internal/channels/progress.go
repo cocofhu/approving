@@ -115,7 +115,7 @@ func classifyProgressMarker(text string) (ProgressEvent, bool) {
 // ClassifyProgressFromACP extracts agent_message_chunk text from a raw ACP
 // frame and classifies a single chunk. Prefer progressAccumulator for live
 // streaming paths where chunks are short deltas.
-func ClassifyProgressFromACP(raw json.RawMessage, extract func(json.RawMessage) string) (ProgressEvent, bool) {
+func classifyProgressFromACP(raw json.RawMessage, extract func(json.RawMessage) string) (ProgressEvent, bool) {
 	if extract == nil || len(raw) == 0 {
 		return ProgressEvent{}, false
 	}

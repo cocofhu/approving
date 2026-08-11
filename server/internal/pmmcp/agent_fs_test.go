@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/platformmcp"
 	"github.com/cocofhu/approving/internal/services"
 
 	"gorm.io/driver/sqlite"
@@ -42,9 +43,9 @@ func setupAgentFSHost(t *testing.T) (projectID, token string, h *Host, skill *se
 	}
 	if _, err := org.Put(services.AgentOrg{
 		Agents: map[string]services.OrgAgentMembership{
-			"leader": {},
-			"alice":  {ParentAgent: "leader"},
-			"bob":    {ParentAgent: "alice"}, // indirect
+			"leader":   {},
+			"alice":    {ParentAgent: "leader"},
+			"bob":      {ParentAgent: "alice"}, // indirect
 			"outsider": {},
 		},
 	}, 0); err != nil {
@@ -59,7 +60,8 @@ func setupAgentFSHost(t *testing.T) (projectID, token string, h *Host, skill *se
 	}
 	h = NewHost(pm, services.NewPmProgress(pm, nil, nil), nil, nil, services.NewArtifactService(db), nil)
 	h.SetOrgAndSkill(org, skill)
-	tok := h.Register(p.ID, "thr-fs", "alice-user", "leader")
+	tok := platformmcp.NewToken()
+	h.Restore(p.ID, "thr-fs", "alice-user", "leader", tok)
 	return p.ID, tok, h, skill, org
 }
 
@@ -192,7 +194,8 @@ func TestPmFSDisabledMCP(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := NewHost(pm, services.NewPmProgress(pm, nil, nil), nil, nil, services.NewArtifactService(db), nil)
-	tok := h.Register(p.ID, "t", "u", agent)
+	tok := platformmcp.NewToken()
+	h.Restore(p.ID, "t", "u", agent, tok)
 	body, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
 		"params": map[string]any{"name": "pm_get_org", "arguments": map[string]any{}},

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/platformmcp"
 	"github.com/cocofhu/approving/internal/services"
 
 	"gorm.io/driver/sqlite"
@@ -62,7 +63,8 @@ func parseToolText(t *testing.T, resp []byte) (text string, isErr bool) {
 func TestMemoryMCPAuthAndTools(t *testing.T) {
 	_, pm, p := setupMemoryDB(t)
 	h := NewHost(pm)
-	tok := h.Register(p.ID, "agent-a", "thr-1", "alice", true)
+	tok := platformmcp.NewToken()
+	h.Restore(tok, p.ID, "agent-a", "thr-1", "alice", true)
 	if _, ok := h.Authorize(p.ID, tok); !ok {
 		t.Fatal("authorize")
 	}
@@ -119,7 +121,8 @@ func TestMemoryMCPRestoreToken(t *testing.T) {
 func TestMemoryMCPWriteAllowedGate(t *testing.T) {
 	_, pm, p := setupMemoryDB(t)
 	h := NewHost(pm)
-	tok := h.Register(p.ID, "agent-a", "thr", "u", false)
+	tok := platformmcp.NewToken()
+	h.Restore(tok, p.ID, "agent-a", "thr", "u", false)
 	st, resp := h.ServeRPC(p.ID, tok, toolCallBody(1, "upsert_memory", map[string]any{
 		"title": "t", "content": "c",
 	}))
@@ -143,9 +146,10 @@ func TestMemoryMCPWriteAllowedGate(t *testing.T) {
 func TestMemoryMCPAgentIsolationAndCRUD(t *testing.T) {
 	_, pm, p := setupMemoryDB(t)
 	h := NewHost(pm)
-	tokA := h.Register(p.ID, "agent-a", "thr-a", "alice", true)
-	tokB := h.Register(p.ID, "agent-b", "thr-b", "bob", true)
-
+	tokA := platformmcp.NewToken()
+	h.Restore(tokA, p.ID, "agent-a", "thr-a", "alice", true)
+	tokB := platformmcp.NewToken()
+	h.Restore(tokB, p.ID, "agent-b", "thr-b", "bob", true)
 	st, resp := h.ServeRPC(p.ID, tokA, toolCallBody(1, "upsert_memory", map[string]any{
 		"title": "共享标题", "content": "secret-a",
 	}))

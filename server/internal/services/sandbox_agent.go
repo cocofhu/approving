@@ -461,10 +461,3 @@ func BuildPmRoleMCPSpecs(projectID, sharedToken string, enabledMcps []string) []
 	return out
 }
 
-// BuildPmPlatformMCPSpecs builds agent platform MCPs plus enabled PM role MCPs.
-// Prefer composing BuildAgentPlatformMCPSpecs + BuildPmRoleMCPSpecs at call sites.
-func BuildPmPlatformMCPSpecs(projectID, agentName, sharedToken string, enabledMcps []string) []sandbox.MCPServerSpec {
-	specs := BuildAgentPlatformMCPSpecs(projectID, agentName, sharedToken)
-	specs = append(specs, BuildPmRoleMCPSpecs(projectID, sharedToken, enabledMcps)...)
-	return dedupeMCPByName(specs)
-}

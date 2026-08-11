@@ -114,7 +114,8 @@ func (w *platformMCPWire) registerChannel(projectID, threadID, userID, agent str
 			Msg("channel platform MCP skipped: agent home project mismatch or unbound")
 		return "", nil
 	}
-	tok := w.pm.Register(projectID, threadID, userID, agent)
+	tok := platformmcp.NewToken()
+	w.pm.Restore(projectID, threadID, userID, agent, tok)
 	if w.memory != nil {
 		w.memory.Restore(tok, projectID, agent, threadID, userID, caps.AllowMemoryWrite)
 	}

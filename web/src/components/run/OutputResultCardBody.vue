@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { renderMarkdown } from '@/lib/markdown'
 import StructuredArtifactView from './StructuredArtifactView.vue'
@@ -11,6 +12,8 @@ const props = defineProps<{
   doc: unknown
   loading: boolean
   artifactHtml: string
+  /** True when artifact fetch failed (network/404). Empty content without error is separate. */
+  artifactLoadError?: boolean
   /** detail: narrow pane (fitContent HTML). enlarge: card-level modal (fixed viewport). */
   variant: 'detail' | 'enlarge'
 }>()
@@ -20,6 +23,31 @@ const { t } = useI18n()
 function isHtmlArtifact(name?: string): boolean {
   return !!name && name.endsWith('.html')
 }
+
+const isCustomHtml = computed(
+  () => props.card.typeTag === '自定义产物' && isHtmlArtifact(props.card.artifactName),
+)
+
+/** Prefer fetched artifact body; fall back to inline markdown (HTML from node output). */
+const htmlBody = computed(() => {
+  const fromArt = props.artifactHtml?.trim() ?? ''
+  if (fromArt) return fromArt
+  return props.card.markdown?.trim() ?? ''
+})
+
+/**
+ * Custom HTML preview state — align with GateProductEditor empty/error:
+ * never fall through to renderMarkdown for *.html custom cards.
+ */
+const htmlPreviewState = computed<'loading' | 'unavailable' | 'ready'>(() => {
+  if (!isCustomHtml.value) return 'ready'
+  if (props.loading && !htmlBody.value) return 'loading'
+  if (!htmlBody.value) return 'unavailable'
+  if (props.artifactLoadError && !props.artifactHtml?.trim() && !props.card.markdown?.trim()) {
+    return 'unavailable'
+  }
+  return 'ready'
+})
 </script>
 
 <template>
@@ -42,22 +70,44 @@ function isHtmlArtifact(name?: string): boolean {
     <div class="md text-[12px] leading-relaxed text-txt2" v-html="renderMarkdown(card.markdown)" />
   </template>
   <template v-else-if="card.typeTag === '自定义产物' && card.artifactName">
-    <div v-if="loading && !artifactHtml" class="text-[12px] text-txt3">…</div>
+    <div v-if="loading && !htmlBody && !isCustomHtml" class="text-[12px] text-txt3">…</div>
     <template v-else-if="isHtmlArtifact(card.artifactName)">
-      <!-- Enlarge: determinate 70vh so iframe h-full works (F4 / review v1). Detail: fitContent, scroll with right pane (F7). -->
       <div
-        v-if="variant === 'enlarge'"
-        class="h-[70vh] min-h-0"
-        data-testid="output-result-enlarge-html-viewport"
+        v-if="htmlPreviewState === 'loading'"
+        class="flex min-h-[160px] flex-col items-center justify-center gap-2 px-4 py-8 text-center"
+        data-testid="output-result-html-loading"
       >
-        <HtmlPreview :html="artifactHtml || card.markdown || ''" :enlargeable="false" />
+        <p class="text-[12px] text-txt3">…</p>
       </div>
-      <HtmlPreview
-        v-else
-        :html="artifactHtml || card.markdown || ''"
-        :enlargeable="false"
-        :fit-content="true"
-      />
+      <div
+        v-else-if="htmlPreviewState === 'unavailable'"
+        class="flex min-h-[160px] flex-col items-center justify-center gap-2 px-4 py-8 text-center"
+        data-testid="output-result-html-unavailable"
+        role="alert"
+      >
+        <p class="text-[13px] font-medium text-txt">
+          {{ t('pages.nodeOutput.outputCards.previewUnavailableTitle') }}
+        </p>
+        <p class="max-w-[36ch] text-[12px] text-txt3">
+          {{ t('pages.nodeOutput.outputCards.previewUnavailableBody') }}
+        </p>
+      </div>
+      <template v-else>
+        <!-- Enlarge: determinate 70vh so iframe h-full works (F4 / review v1). Detail: fitContent, scroll with right pane (F7). -->
+        <div
+          v-if="variant === 'enlarge'"
+          class="h-[70vh] min-h-0"
+          data-testid="output-result-enlarge-html-viewport"
+        >
+          <HtmlPreview :html="htmlBody" :enlargeable="false" />
+        </div>
+        <HtmlPreview
+          v-else
+          :html="htmlBody"
+          :enlargeable="false"
+          :fit-content="true"
+        />
+      </template>
     </template>
     <pre
       v-else

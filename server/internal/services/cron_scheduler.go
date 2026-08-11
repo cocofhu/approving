@@ -70,7 +70,7 @@ func NewCronScheduler(db *gorm.DB, pm *PmService, sbx *SandboxService, turns *Pm
 }
 
 // SetMaxParallel updates concurrency (1–16).
-func (s *CronScheduler) SetMaxParallel(n int) {
+func (s *CronScheduler) setMaxParallel(n int) {
 	if n < 1 {
 		n = 1
 	}
@@ -81,7 +81,7 @@ func (s *CronScheduler) SetMaxParallel(n int) {
 }
 
 // SetClaimStaleMinutes updates reclaim window (30–1440).
-func (s *CronScheduler) SetClaimStaleMinutes(n int) {
+func (s *CronScheduler) setClaimStaleMinutes(n int) {
 	if n < 30 {
 		n = 30
 	}

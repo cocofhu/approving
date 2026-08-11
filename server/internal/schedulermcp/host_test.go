@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/platformmcp"
 	"github.com/cocofhu/approving/internal/services"
 
 	"gorm.io/driver/sqlite"
@@ -62,8 +63,8 @@ func schedToolText(t *testing.T, resp []byte) (string, bool) {
 func TestSchedulerMCPAuthAndWriteGate(t *testing.T) {
 	db, pm, p := setupSchedDB(t)
 	h := NewHost(db, pm)
-	tok := h.Register(p.ID, "agent-a", "thr", "u", false)
-
+	tok := platformmcp.NewToken()
+	h.Restore(tok, p.ID, "agent-a", "thr", "u", false)
 	st, resp := h.ServeRPC("agent-b", tok, schedToolCall(1, "list_jobs", nil))
 	if st != 401 {
 		t.Fatalf("wrong agent want 401 got %d %s", st, resp)
@@ -83,9 +84,10 @@ func TestSchedulerMCPAuthAndWriteGate(t *testing.T) {
 func TestSchedulerMCPCRUDAndCrossAgent(t *testing.T) {
 	db, pm, p := setupSchedDB(t)
 	h := NewHost(db, pm)
-	tokA := h.Register(p.ID, "agent-a", "thr-a", "alice", true)
-	tokB := h.Register(p.ID, "agent-b", "thr-b", "bob", true)
-
+	tokA := platformmcp.NewToken()
+	h.Restore(tokA, p.ID, "agent-a", "thr-a", "alice", true)
+	tokB := platformmcp.NewToken()
+	h.Restore(tokB, p.ID, "agent-b", "thr-b", "bob", true)
 	st, resp := h.ServeRPC("agent-a", tokA, schedToolCall(1, "create_job", map[string]any{
 		"name": "daily", "prompt": "做日报",
 		"scheduleKind": "cron", "scheduleExpr": "0 9 * * *",
@@ -155,8 +157,8 @@ func TestSchedulerMCPCRUDAndCrossAgent(t *testing.T) {
 func TestSchedulerMCPUpdateRunNowAndRuns(t *testing.T) {
 	db, pm, p := setupSchedDB(t)
 	h := NewHost(db, pm)
-	tok := h.Register(p.ID, "agent-a", "thr-a", "alice", true)
-
+	tok := platformmcp.NewToken()
+	h.Restore(tok, p.ID, "agent-a", "thr-a", "alice", true)
 	_, resp := h.ServeRPC("agent-a", tok, schedToolCall(1, "create_job", map[string]any{
 		"name": "hourly", "prompt": "巡检",
 		"scheduleKind": "every", "scheduleExpr": "1h",
@@ -211,7 +213,9 @@ func TestSchedulerMCPUpdateRunNowAndRuns(t *testing.T) {
 		t.Fatalf("list_job_runs: %s", text)
 	}
 
-	tokB := h.Register(p.ID, "agent-b", "thr-b", "bob", true)
+	tokB := platformmcp.NewToken()
+
+	h.Restore(tokB, p.ID, "agent-b", "thr-b", "bob", true)
 	_, resp = h.ServeRPC("agent-b", tokB, schedToolCall(5, "list_job_runs", map[string]any{"jobId": job.ID}))
 	text, isErr = schedToolText(t, resp)
 	if !isErr || !strings.Contains(text, "not found") {

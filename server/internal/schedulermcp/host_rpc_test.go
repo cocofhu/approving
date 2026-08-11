@@ -2,6 +2,7 @@ package schedulermcp
 
 import (
 	"encoding/json"
+	"github.com/cocofhu/approving/internal/platformmcp"
 	"strings"
 	"testing"
 )
@@ -9,7 +10,8 @@ import (
 func TestSchedulerMCPSessionAndMetaRPC(t *testing.T) {
 	db, pm, p := setupSchedDB(t)
 	h := NewHost(db, pm)
-	tok := h.Register(p.ID, "agent-a", "thr", "u", true)
+	tok := platformmcp.NewToken()
+	h.Restore(tok, p.ID, "agent-a", "thr", "u", true)
 	h.Restore(tok, p.ID, "agent-a", "thr", "u", true)
 	if _, ok := h.authorize("agent-a", tok); !ok {
 		t.Fatal("authorize restored")
@@ -18,7 +20,8 @@ func TestSchedulerMCPSessionAndMetaRPC(t *testing.T) {
 	if _, ok := h.authorize("agent-a", tok); ok {
 		t.Fatal("unregistered")
 	}
-	tok = h.Register(p.ID, "agent-a", "thr", "u", true)
+	tok = platformmcp.NewToken()
+	h.Restore(tok, p.ID, "agent-a", "thr", "u", true)
 
 	st, _ := h.ServeRPC("agent-b", tok, []byte(`{}`))
 	if st != 401 {

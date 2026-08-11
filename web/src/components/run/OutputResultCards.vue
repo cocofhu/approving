@@ -16,6 +16,8 @@ const selectedIndex = ref(0)
 const enlargeOpen = ref(false)
 
 const contentCache = ref<Record<string, string>>({})
+/** Artifact names whose content fetch failed (network / 404). Missing artifact uses markdown fallback when present. */
+const loadErrors = ref<Record<string, boolean>>({})
 const loading = ref(false)
 
 async function loadArtifactContent(name: string) {
@@ -23,14 +25,18 @@ async function loadArtifactContent(name: string) {
   const art = props.run.artifacts.find((a) => a.name === name)
   if (!art) {
     contentCache.value[name] = ''
+    // Not a fetch error — node markdown may still render via HtmlPreview.
+    loadErrors.value[name] = false
     return
   }
   loading.value = true
   try {
     const full = await api.artifactContent(art.id)
     contentCache.value[name] = full.content ?? ''
+    loadErrors.value[name] = false
   } catch {
     contentCache.value[name] = ''
+    loadErrors.value[name] = true
   } finally {
     loading.value = false
   }
@@ -110,6 +116,19 @@ function shortKindLabel(card: OutputCard): string {
   return card.typeTag
 }
 
+/** Detail bar kind: custom HTML shows「自定义产物 · HTML」per Demo / clarification. */
+function detailKindLabel(card: OutputCard): string {
+  if (card.status === 'failed') return card.typeTag
+  if (card.typeTag === '自定义产物' && isHtmlArtifact(card.artifactName)) {
+    return t('pages.nodeOutput.outputCards.kindCustomHtml')
+  }
+  return card.typeTag
+}
+
+function artifactLoadError(name?: string): boolean {
+  return !!name && !!loadErrors.value[name]
+}
+
 function openEnlarge() {
   if (!canEnlarge.value) return
   enlargeOpen.value = true
@@ -181,7 +200,10 @@ function closeEnlarge() {
           class="min-w-0 flex-1 truncate text-[12px] font-semibold"
           :class="currentCard.status === 'failed' ? 'text-err' : 'text-txt'"
         >{{ currentCard.title }}</span>
-        <span class="shrink-0 border border-line px-1.5 py-0.5 text-[10px] text-txt3">{{ currentCard.typeTag }}</span>
+        <span
+          class="shrink-0 border border-line px-1.5 py-0.5 text-[10px] text-txt3"
+          data-testid="output-result-detail-kind"
+        >{{ detailKindLabel(currentCard) }}</span>
         <button
           v-if="canEnlarge"
           type="button"
@@ -200,6 +222,7 @@ function closeEnlarge() {
           :doc="currentDoc"
           :loading="loading"
           :artifact-html="currentCard.artifactName ? artifactContent(currentCard.artifactName) : ''"
+          :artifact-load-error="artifactLoadError(currentCard.artifactName)"
           variant="detail"
         />
       </div>
@@ -219,6 +242,7 @@ function closeEnlarge() {
           :doc="currentDoc"
           :loading="loading"
           :artifact-html="currentCard.artifactName ? artifactContent(currentCard.artifactName) : ''"
+          :artifact-load-error="artifactLoadError(currentCard.artifactName)"
           variant="enlarge"
         />
       </div>

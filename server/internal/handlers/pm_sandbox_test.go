@@ -12,6 +12,7 @@ import (
 	"github.com/cocofhu/approving/internal/contextmcp"
 	"github.com/cocofhu/approving/internal/handlers"
 	"github.com/cocofhu/approving/internal/memorymcp"
+	"github.com/cocofhu/approving/internal/platformmcp"
 	"github.com/cocofhu/approving/internal/pmmcp"
 	"github.com/cocofhu/approving/internal/schedulermcp"
 	"github.com/cocofhu/approving/internal/services"
@@ -67,7 +68,8 @@ func TestPmMCPRPCPostInitialize(t *testing.T) {
 	progress := services.NewPmProgress(hn.h.Pm, hn.h.Runs, hn.h.Arts)
 	hn.h.PmProgress = progress
 	hn.h.PMMCP = pmmcp.NewHost(hn.h.Pm, progress, hn.h.WF, hn.h.Runs, hn.h.Arts, nil)
-	tok := hn.h.PMMCP.Register(pid, "thr-rpc", "admin", "pm-agent")
+	tok := platformmcp.NewToken()
+	hn.h.PMMCP.Restore(pid, "thr-rpc", "admin", "pm-agent", tok)
 	body, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "initialize",
 		"params": map[string]any{"protocolVersion": "2024-11-05"},
@@ -245,7 +247,8 @@ func TestPmDeleteThreadUnregistersPlatformMCP(t *testing.T) {
 func TestSchedulerMCPRPCHandler(t *testing.T) {
 	hn, pid := setupPmMCPStack(t)
 	agent := "pm-agent"
-	tok := hn.h.SchedulerMCP.Register(pid, agent, "thr-s", "admin", true)
+	tok := platformmcp.NewToken()
+	hn.h.SchedulerMCP.Restore(tok, pid, agent, "thr-s", "admin", true)
 
 	w := doRaw(hn.r, http.MethodGet, "/mcp/task-scheduler/"+agent, "", "")
 	if w.Code != http.StatusOK {
@@ -272,7 +275,8 @@ func TestSchedulerMCPRPCHandler(t *testing.T) {
 
 func TestContextMCPRPCPostInitialize(t *testing.T) {
 	hn, pid := setupPmMCPStack(t)
-	tok := hn.h.ContextMCP.Register(pid, "pm-agent", "thr-ctx", "admin")
+	tok := platformmcp.NewToken()
+	hn.h.ContextMCP.Restore(tok, pid, "pm-agent", "thr-ctx", "admin")
 	body, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "initialize",
 	})

@@ -112,7 +112,7 @@ func CloneTokenUsageByModel(src TokenUsageByModel) TokenUsageByModel {
 
 // SumTokenUsageByModel returns the component-wise total across buckets.
 // nil byModel → nil; non-nil (incl. empty) → non-nil total (reported).
-func SumTokenUsageByModel(byModel TokenUsageByModel) *TokenUsage {
+func sumTokenUsageByModel(byModel TokenUsageByModel) *TokenUsage {
 	if byModel == nil {
 		return nil
 	}

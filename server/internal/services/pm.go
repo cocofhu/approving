@@ -140,11 +140,6 @@ func EffectivePmEnabledMcps(stored []string) []string {
 	return FilterPmEnabledMcps(stored)
 }
 
-// NormalizePmEnabledMcps is kept for callers that want the effective list.
-func NormalizePmEnabledMcps(in []string) []string {
-	return EffectivePmEnabledMcps(in)
-}
-
 const pmLeaderAclNote = "记忆请在已绑定主项目的 Agent Studio「数据 → 记忆」中管理；任意已登录用户可编辑。"
 
 // GetBinding returns the PM Leader binding for a project.

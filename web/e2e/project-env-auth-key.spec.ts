@@ -65,7 +65,7 @@ async function gotoProjectDetail(page: import('@playwright/test').Page) {
 }
 
 test.describe('项目 env 官方 ACP 鉴权键 UI', () => {
-  test('CURSOR_API_KEY 显示强制 Secret 且不可切明文；帮助文案含项目底噪', async ({ page }) => {
+  test('CURSOR_API_KEY 显示强制 Secret 且不可切明文；行内强制徽标可见', async ({ page }) => {
     await gotoProjectDetail(page)
     await page.getByRole('button', { name: '沙箱环境变量' }).click()
 
@@ -81,13 +81,11 @@ test.describe('项目 env 官方 ACP 鉴权键 UI', () => {
     await expect(cursorRow.getByRole('button', { name: '密钥' })).toBeDisabled()
     await expect(panel.getByRole('button', { name: '明文' })).toBeEnabled()
 
-    await page.getByRole('button', { name: '合并规则' }).click()
-    await expect(page.getByText('环境变量与工作流变量')).toBeVisible({ timeout: 5_000 })
-    await expect(page.getByText(/官方 ACP 鉴权键可写入项目 env 作为流水线底噪/)).toBeVisible()
-    await expect(page.getByText(/Agent Studio 不继承项目 env/)).toBeVisible()
-    await expect(page.getByText(/平台级 env 不注入官方鉴权键/)).toBeVisible()
-    await expect(page.getByText(/自动强制为密钥并打码/)).toBeVisible()
-    await expect(page.getByText(/不可经项目 env/)).toHaveCount(0)
+    // g3.2: 不再经「合并规则」弹窗断言帮助文案；行内强制 Secret UI 已覆盖鉴权键约束
+    await expect(page.getByRole('button', { name: '合并规则' })).toHaveCount(0)
+    await expect(page.getByTestId('project-detail-merge-rules')).toHaveCount(0)
+    await expect(page.getByText('注入流水线节点沙箱的 OS 环境变量。')).toHaveCount(0)
+    await expect(cursorRow.getByText('强制', { exact: true })).toBeVisible()
   })
 
   test('输入 CURSOR_API_KEY 时自动锁定 Secret', async ({ page }) => {

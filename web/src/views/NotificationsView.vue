@@ -164,6 +164,7 @@ onMounted(() => {
         :data-run-id="item.runId"
         :data-status="item.status"
         :data-unread="item.unread ? 'true' : 'false'"
+        :data-before-baseline="item.beforeBaseline ? 'true' : 'false'"
         @click="onItemClick(item)"
       >
         <span
@@ -189,6 +190,12 @@ onMounted(() => {
             · {{ t('shell.runNotifications.clickForDetail') }}
           </template>
           · {{ relTime(item.finishedApprox || item.startedAt) }}
+          <template v-if="item.beforeBaseline">
+            ·
+            <span data-testid="notifications-before-baseline">{{
+              t('shell.runNotifications.beforeBaseline')
+            }}</span>
+          </template>
         </div>
       </button>
     </div>

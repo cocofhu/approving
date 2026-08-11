@@ -31,6 +31,7 @@ import {
   formatUnreadBadge,
   isNoisyNotificationTitle,
   mapRunToNotification,
+  isBeforeBaseline,
   prefsKeyForUser,
   RUN_TERMINAL_PANEL_LIMIT,
   RUN_TERMINAL_POOL_SIZE,
@@ -171,6 +172,14 @@ describe('useRunTerminalNotifications', () => {
     expect(n.unreadCount.value).toBe(0)
     expect(n.badgeLabel.value).toBe('')
     expect(n.listItems.value.every((x) => x.unread === false)).toBe(true)
+    // History before enable baseline stays visible and is marked beforeBaseline.
+    expect(n.listItems.value.every((x) => x.beforeBaseline === true)).toBe(true)
+    expect(
+      isBeforeBaseline(
+        { finishedApprox: '2026-08-01T12:00:00Z', startedAt: '2026-08-01T12:00:00Z' },
+        n.enabledAt.value,
+      ),
+    ).toBe(true)
   })
 
   it('computes unread from per-user prefs read set after baseline', async () => {
@@ -227,7 +236,7 @@ describe('useRunTerminalNotifications', () => {
     expect(prefs.readIds).toEqual(expect.arrayContaining(['a', 'b']))
   })
 
-  it('previewItems caps at 10 and remainingCount is T-10', async () => {
+  it('previewItems caps at 5 and remainingCount is T-5', async () => {
     seedBaseline()
     const items = Array.from({ length: 12 }, (_, i) =>
       run({ id: `r${i}`, status: i % 2 === 0 ? 'completed' : 'failed' }),
@@ -236,9 +245,30 @@ describe('useRunTerminalNotifications', () => {
     const n = useRunTerminalNotifications()
     await n.refresh({ source: 'manual' })
     expect(n.previewItems.value).toHaveLength(RUN_TERMINAL_PANEL_LIMIT)
-    expect(RUN_TERMINAL_PANEL_LIMIT).toBe(10)
-    expect(n.remainingCount.value).toBe(2)
+    expect(RUN_TERMINAL_PANEL_LIMIT).toBe(5)
+    expect(n.remainingCount.value).toBe(7)
     expect(n.poolTotal.value).toBe(12)
+  })
+
+  it('marks post-baseline items without beforeBaseline and keeps them unread until read', async () => {
+    seedBaseline('2020-01-01T00:00:00Z')
+    vi.mocked(api.listRuns).mockResolvedValue(
+      paged([
+        run({ id: 'new', status: 'completed', startedAt: '2026-08-10T12:00:00Z' }),
+        run({ id: 'old', status: 'completed', startedAt: '2019-06-01T12:00:00Z' }),
+      ]),
+    )
+    const n = useRunTerminalNotifications()
+    await n.refresh({ source: 'mount' })
+    const newer = n.listItems.value.find((x) => x.runId === 'new')
+    const older = n.listItems.value.find((x) => x.runId === 'old')
+    expect(newer?.beforeBaseline).toBe(false)
+    expect(newer?.unread).toBe(true)
+    expect(older?.beforeBaseline).toBe(true)
+    expect(older?.unread).toBe(false)
+    expect(n.unreadCount.value).toBe(1)
+    // beforeBaseline items still appear in preview/list
+    expect(n.listItems.value.map((x) => x.runId)).toEqual(expect.arrayContaining(['new', 'old']))
   })
 
   it('badge is empty when unread is 0', async () => {

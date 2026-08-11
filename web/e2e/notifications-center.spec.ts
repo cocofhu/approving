@@ -29,16 +29,23 @@ test.describe('shell notification center (IA separation)', () => {
     await expect(empty.locator('button')).toHaveCount(0)
   })
 
-  test('history-only enable: badge not inventory; list items are read', async ({ page }) => {
+  test('history-only enable: badge not inventory; list items are read with before-baseline label', async ({
+    page,
+  }) => {
     await page.goto('/notifications-center.html?scene=history-only&start=notifications')
     await expect(page.getByTestId('notifications-page')).toBeVisible({ timeout: 15_000 })
     await settleAuth(page)
     await expect(page.getByTestId('run-notifications-badge')).toHaveCount(0)
+    await expect(page.getByTestId('nav-notifications-badge')).toHaveCount(0)
     const items = page.getByTestId('notifications-item')
     await expect(items).toHaveCount(2)
     for (const el of await items.all()) {
       await expect(el).toHaveAttribute('data-unread', 'false')
+      await expect(el).toHaveAttribute('data-before-baseline', 'true')
     }
+    await expect(page.getByTestId('notifications-before-baseline').first()).toContainText(
+      '基线前·不计未读',
+    )
   })
 
   test('cleans noisy titles; view-all and sidebar land on /notifications; failed goes to detail', async ({
@@ -51,6 +58,8 @@ test.describe('shell notification center (IA separation)', () => {
     const badge = page.getByTestId('run-notifications-badge')
     await expect(badge).toBeVisible()
     await expect(badge).toHaveText('3')
+    // Sidebar notifications badge shares the same unreadCount.
+    await expect(page.getByTestId('nav-notifications-badge')).toHaveText('3')
 
     await page.getByTestId('run-notifications-bell').click()
     const panel = page.getByTestId('run-notifications-panel')
@@ -61,10 +70,15 @@ test.describe('shell notification center (IA separation)', () => {
     const items = panel.getByTestId('run-notifications-item')
     await expect(items).toHaveCount(3)
 
-    await page.getByTestId('run-notifications-view-all').click()
+    const viewAll = page.getByTestId('run-notifications-view-all')
+    await expect(viewAll).toHaveText('查看全部通知')
+    await viewAll.click()
     await expect(page.getByTestId('notifications-page')).toBeVisible()
     await expect(page.getByRole('heading', { name: '通知' })).toBeVisible()
     await expect(page.getByTestId('shell-main-runs')).toHaveCount(0)
+    // Entering the page must NOT auto mark-all-read.
+    await expect(page.getByTestId('nav-notifications-badge')).toHaveText('3')
+    await expect(page.getByTestId('run-notifications-badge')).toHaveText('3')
 
     // Sidebar dual entry still present alongside runs/gates
     await expect(page.getByRole('link', { name: '通知' })).toBeVisible()
@@ -76,6 +90,24 @@ test.describe('shell notification center (IA separation)', () => {
 
     await page.locator('[data-testid="notifications-item"][data-status="failed"]').click()
     await expect(page.getByTestId('shell-main-run-detail')).toContainText('run-new-fail')
+  })
+
+  test('dropdown caps at 5; more-hint; dual-entry mark-all clears whole pool', async ({ page }) => {
+    await page.goto('/notifications-center.html?scene=capped')
+    await expect(page.getByTestId('shell-main-dashboard')).toBeVisible({ timeout: 15_000 })
+    await settleAuth(page)
+
+    await expect(page.getByTestId('run-notifications-badge')).toHaveText('7')
+    await expect(page.getByTestId('nav-notifications-badge')).toHaveText('7')
+
+    await page.getByTestId('run-notifications-bell').click()
+    const panel = page.getByTestId('run-notifications-panel')
+    await expect(panel.getByTestId('run-notifications-item')).toHaveCount(5)
+    await expect(page.getByTestId('run-notifications-more')).toContainText('还有 2 条未展示')
+
+    await page.getByTestId('run-notifications-mark-all').click()
+    await expect(page.getByTestId('run-notifications-badge')).toHaveCount(0)
+    await expect(page.getByTestId('nav-notifications-badge')).toHaveCount(0)
   })
 
   test('completed click opens output without marking read; mark-as-read then clears badge', async ({
@@ -90,15 +122,42 @@ test.describe('shell notification center (IA separation)', () => {
       .locator('[data-testid="run-notifications-item"][data-status="completed"]')
       .first()
       .click()
-    await expect(page.getByTestId('run-output-empty').or(page.getByTestId('run-output-master-detail'))).toBeVisible({
-      timeout: 10_000,
-    })
+    // run-new-ok has outputCards → result-cards path (not legacy artifact deck)
+    await expect(page.getByTestId('run-output-result-cards')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('run-output-focus-bar')).toContainText('聚焦输出节点')
+    await expect(page.getByTestId('output-result-cards')).toBeVisible()
+    await expect(page.getByTestId('run-output-result-cards')).toContainText('视觉 Demo')
+    await expect(page.getByTestId('run-output-result-cards')).not.toContainText('node_complete.json')
+    await expect(page.getByTestId('run-output-list')).toHaveCount(0)
     // Opening alone must NOT drop unread (3 stays 3)
     await expect(page.getByTestId('run-notifications-badge')).toHaveText('3')
     await page.getByTestId('run-output-mark-read').click()
     await expect(page.getByTestId('run-output-mark-read')).toHaveCount(0)
     // badge should drop by 1 (3 → 2) only after mark-as-read
     await expect(page.getByTestId('run-notifications-badge')).toHaveText('2')
+  })
+
+  test('completed without outputCards shows empty dual exits, not full artifact list', async ({
+    page,
+  }) => {
+    await page.goto('/notifications-center.html?scene=with-items')
+    await expect(page.getByTestId('shell-main-dashboard')).toBeVisible({ timeout: 15_000 })
+    await settleAuth(page)
+    await page.getByTestId('run-notifications-bell').click()
+    // Second completed item is run-clean (empty cards)
+    await page
+      .locator('[data-testid="run-notifications-item"][data-status="completed"]')
+      .nth(1)
+      .click()
+    const empty = page.getByTestId('run-output-empty')
+    await expect(empty).toBeVisible({ timeout: 10_000 })
+    await expect(empty).toContainText('暂无最终结果可预览')
+    await expect(empty).toContainText('不会回退成全量产物列表')
+    await expect(page.getByTestId('run-output-empty-open-run')).toBeVisible()
+    await expect(page.getByTestId('run-output-empty-open-artifacts')).toBeVisible()
+    await expect(empty).not.toContainText('node_complete.json')
+    await expect(empty).not.toContainText('plan.json')
+    await expect(page.getByTestId('run-output-list')).toHaveCount(0)
   })
 
   test('auth settle: badge matches unread immediately after /auth/me (no focus needed)', async ({

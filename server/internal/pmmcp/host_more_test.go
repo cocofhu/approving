@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/platformmcp"
 	"github.com/cocofhu/approving/internal/services"
 
 	"gorm.io/driver/sqlite"
@@ -41,7 +42,8 @@ func setupPmMCPHost(t *testing.T) (*gorm.DB, *services.PmService, *Host, models.
 
 func TestPmMCPSessionHelpers(t *testing.T) {
 	_, _, h, p := setupPmMCPHost(t)
-	tok := h.Register(p.ID, "thr-1", "alice", "agent-a")
+	tok := platformmcp.NewToken()
+	h.Restore(p.ID, "thr-1", "alice", "agent-a", tok)
 	h.Restore(p.ID, "thr-1", "alice", "agent-a", tok)
 	got, ok := h.TokenForThread(p.ID, "thr-1")
 	if !ok || got != tok {
@@ -61,8 +63,8 @@ func TestPmMCPSessionHelpers(t *testing.T) {
 
 func TestPmMCPServeRPCBranches(t *testing.T) {
 	db, pm, h, p := setupPmMCPHost(t)
-	tok := h.Register(p.ID, "thr-rpc", "alice", "agent-a")
-
+	tok := platformmcp.NewToken()
+	h.Restore(p.ID, "thr-rpc", "alice", "agent-a", tok)
 	st, _ := h.ServeRPC(p.ID, MCPProgress, "bad", []byte(`{}`))
 	if st != 401 {
 		t.Fatalf("unauth: %d", st)
@@ -80,7 +82,8 @@ func TestPmMCPServeRPCBranches(t *testing.T) {
 	if _, err := pm.UpdateBinding(disabled.ID, nil, nil, empty, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	tok2 := h.Register(disabled.ID, "t", "u", "agent-a")
+	tok2 := platformmcp.NewToken()
+	h.Restore(disabled.ID, "t", "u", "agent-a", tok2)
 	st, body = h.ServeRPC(disabled.ID, MCPProgress, tok2, []byte(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
 	if st != 404 || !strings.Contains(string(body), "disabled") {
 		t.Fatalf("disabled mcp: %d %s", st, body)
@@ -123,7 +126,8 @@ func TestPmMCPServeRPCBranches(t *testing.T) {
 
 func TestPmMCPProgressTools(t *testing.T) {
 	_, _, h, p := setupPmMCPHost(t)
-	tok := h.Register(p.ID, "thr-tools", "alice", "agent-a")
+	tok := platformmcp.NewToken()
+	h.Restore(p.ID, "thr-tools", "alice", "agent-a", tok)
 	call := func(name string, args map[string]any) (int, []byte) {
 		b, _ := json.Marshal(map[string]any{
 			"jsonrpc": "2.0", "id": 1, "method": "tools/call",
@@ -148,7 +152,8 @@ func TestPmMCPProgressTools(t *testing.T) {
 
 func TestPmMCPWorkflowList(t *testing.T) {
 	_, _, h, p := setupPmMCPHost(t)
-	tok := h.Register(p.ID, "thr-wf", "alice", "agent-a")
+	tok := platformmcp.NewToken()
+	h.Restore(p.ID, "thr-wf", "alice", "agent-a", tok)
 	body, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
 		"params": map[string]any{"name": "pm_list_workflows", "arguments": map[string]any{}},
@@ -219,7 +224,8 @@ func TestPmMCPWorkflowToolsWithEngine(t *testing.T) {
 	eng := &fakePmEngine{}
 	rs := services.NewRunService(db)
 	h := NewHost(pm, services.NewPmProgress(pm, rs, nil), wf, rs, services.NewArtifactService(db), eng)
-	tok := h.Register(p.ID, "thr-wf2", "alice", "agent-a")
+	tok := platformmcp.NewToken()
+	h.Restore(p.ID, "thr-wf2", "alice", "agent-a", tok)
 	call := func(mcpID, name string, args map[string]any) (int, []byte) {
 		b, _ := json.Marshal(map[string]any{
 			"jsonrpc": "2.0", "id": 1, "method": "tools/call",
@@ -358,7 +364,8 @@ func TestPmMCPGetArtifactAndReactReply(t *testing.T) {
 
 	eng := &fakePmEngine{waiting: 2}
 	h := NewHost(pm, services.NewPmProgress(pm, rs, arts), wf, rs, arts, eng)
-	tok := h.Register(p.ID, "thr-react", "alice", "agent-a")
+	tok := platformmcp.NewToken()
+	h.Restore(p.ID, "thr-react", "alice", "agent-a", tok)
 	call := func(mcpID, name string, args map[string]any) (int, []byte) {
 		b, _ := json.Marshal(map[string]any{
 			"jsonrpc": "2.0", "id": 1, "method": "tools/call",
@@ -524,8 +531,8 @@ func TestPmMCPStartCancelWritesRunAudit(t *testing.T) {
 	rs := services.NewRunService(db)
 	h := NewHost(pm, services.NewPmProgress(pm, rs, nil), wf, rs, services.NewArtifactService(db), eng)
 	h.SetAuditRecorder(auditSvc.Record)
-	tok := h.Register(p.ID, "thr-audit", "alice", "agent-a")
-
+	tok := platformmcp.NewToken()
+	h.Restore(p.ID, "thr-audit", "alice", "agent-a", tok)
 	call := func(name string, args map[string]any) {
 		t.Helper()
 		b, _ := json.Marshal(map[string]any{

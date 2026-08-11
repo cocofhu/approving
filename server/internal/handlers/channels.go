@@ -70,13 +70,13 @@ func (h *Handlers) PutProjectChannel(c *gin.Context) {
 		return
 	}
 	h.recordAudit(services.AuditRecord{
-		ProjectID:      c.Param("id"),
-		Actor:          h.auditActorFromContext(c),
-		Action:         models.AuditActionChannel,
-		ResourceType:   "channel",
-		ResourceID:     c.Param("id"),
-		Outcome:        models.AuditOutcomeOK,
-		Summary:        "upsert project channel",
+		ProjectID:    c.Param("id"),
+		Actor:        h.auditActorFromContext(c),
+		Action:       models.AuditActionChannel,
+		ResourceType: "channel",
+		ResourceID:   c.Param("id"),
+		Outcome:      models.AuditOutcomeOK,
+		Summary:      "upsert project channel",
 		Payload: map[string]any{
 			"type":    dto.Type,
 			"enabled": dto.Enabled,
@@ -97,14 +97,14 @@ func (h *Handlers) DeleteProjectChannel(c *gin.Context) {
 		return
 	}
 	h.recordAudit(services.AuditRecord{
-		ProjectID:      c.Param("id"),
-		Actor:          h.auditActorFromContext(c),
-		Action:         models.AuditActionChannel,
-		ResourceType:   "channel",
-		ResourceID:     c.Param("id"),
-		Outcome:        models.AuditOutcomeOK,
-		Summary:        "delete project channel",
-		Payload:        map[string]any{"deleted": true},
+		ProjectID:    c.Param("id"),
+		Actor:        h.auditActorFromContext(c),
+		Action:       models.AuditActionChannel,
+		ResourceType: "channel",
+		ResourceID:   c.Param("id"),
+		Outcome:      models.AuditOutcomeOK,
+		Summary:      "delete project channel",
+		Payload:      map[string]any{"deleted": true},
 	})
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 }
