@@ -655,11 +655,11 @@ func TestAdmissionCrossPriorityIgnoresHumanGate(t *testing.T) {
 	}
 	waitRunStatus(t, db, hold.ID, "running")
 
-	normalGate, err := eng.StartRunWithPriority("wf-gate", nil, "test", "normal")
+	normalGate, err := eng.StartRunWithPriority("wf-gate", nil, "test", "normal", nil, nil)
 	if err != nil {
 		t.Fatalf("StartRun normal gate: %v", err)
 	}
-	highNoGate, err := eng.StartRunWithPriority("wf", nil, "test", "high")
+	highNoGate, err := eng.StartRunWithPriority("wf", nil, "test", "high", nil, nil)
 	if err != nil {
 		t.Fatalf("StartRun high no-gate: %v", err)
 	}
