@@ -75,7 +75,7 @@ describe('GatesInboxView empty inbox fill (plan g1 / g2.1 / g1.3)', () => {
   it('pipeline-filter empty and global empty share the same fill wrappers (g1.3)', () => {
     const blocks = [
       ...src.matchAll(
-        /<div v-else class="card flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto">[\s\S]*?<\/div>/g,
+        /<div v-else(?:-if="!isMobile")? class="card flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto">[\s\S]*?<\/div>/g,
       ),
     ]
     expect(blocks.length).toBe(2)

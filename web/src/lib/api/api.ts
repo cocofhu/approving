@@ -647,11 +647,11 @@ export const api = {
     wsUrl(`/projects/${projectId}/pm/threads/${tid}/chat`),
 
   // workflows
-  listWorkflows: (params?: { projectId?: string }) => {
+  listWorkflows: (params?: { projectId?: string; signal?: AbortSignal }) => {
     const qs = new URLSearchParams()
     if (params?.projectId) qs.set('projectId', params.projectId)
     const q = qs.toString()
-    return req<Workflow[]>(q ? `/workflows?${q}` : '/workflows')
+    return req<Workflow[]>(q ? `/workflows?${q}` : '/workflows', params?.signal ? { signal: params.signal } : undefined)
   },
   getWorkflow: (id: string, opts?: { signal?: AbortSignal }) =>
     req<Workflow>(`/workflows/${id}`, opts?.signal ? { signal: opts.signal } : undefined),

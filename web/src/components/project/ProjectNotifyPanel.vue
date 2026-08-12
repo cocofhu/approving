@@ -12,6 +12,7 @@ import {
 } from '@/lib/run/runNotifyTemplate'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppSwitch from '@/components/ui/AppSwitch.vue'
+import AppInlineError from '@/components/ui/AppInlineError.vue'
 
 const props = defineProps<{
   projectId: string
@@ -36,6 +37,7 @@ const completedTemplate = ref('')
 const templateKind = ref<RunNotifyKind>('waiting_human')
 const hasChannel = ref(false)
 const loadingChannel = ref(true)
+const channelError = ref<string | null>(null)
 const saving = ref(false)
 const tplInput = ref<HTMLTextAreaElement | null>(null)
 
@@ -66,6 +68,7 @@ function syncFromProject() {
 
 async function loadChannel() {
   loadingChannel.value = true
+  channelError.value = null
   try {
     const ids = Array.isArray(props.project.notifyPolicy?.channelIds)
       ? props.project.notifyPolicy!.channelIds!.filter(Boolean)
@@ -80,8 +83,12 @@ async function loadChannel() {
       const ch = byId.get(id)
       return !!(ch && ch.enabled && String(ch.cronDeliverTarget || '').trim())
     })
-  } catch {
+  } catch (err) {
     hasChannel.value = false
+    channelError.value =
+      err instanceof Error && err.message
+        ? err.message
+        : String(t('pages.projectDetail.notify.loadChannelFailed'))
   } finally {
     loadingChannel.value = false
   }
@@ -98,10 +105,14 @@ onMounted(() => {
 })
 
 const statusLabel = computed(() => {
+  if (loadingChannel.value) return t('common.loading.inProgress')
+  if (channelError.value) return t('common.loading.failed')
   if (!enabled.value) return t('pages.projectDetail.notify.statusOff')
   if (!hasChannel.value) return t('pages.projectDetail.notify.statusNoChannel')
   return t('pages.projectDetail.notify.statusOn')
 })
+
+const controlsDisabled = computed(() => loadingChannel.value || !!channelError.value || saving.value)
 
 const currentTemplate = computed({
   get() {
@@ -185,13 +196,14 @@ function goChannelSettings() {
 </script>
 
 <template>
-  <div class="mx-auto max-w-2xl" data-testid="project-notify-panel">
+  <div class="mx-auto max-w-2xl" data-testid="project-notify-panel" :aria-busy="loadingChannel ? 'true' : 'false'">
     <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
       <div>
         <h3 class="text-sm font-semibold text-txt">{{ t('pages.projectDetail.notify.title') }}</h3>
         <p class="mt-1 text-[12px] text-txt3">{{ t('pages.projectDetail.notify.lead') }}</p>
       </div>
       <span
+        v-if="!loadingChannel && !channelError"
         class="inline-flex items-center rounded border px-2 py-0.5 text-[11px] font-medium"
         :class="
           !enabled
@@ -207,7 +219,32 @@ function goChannelSettings() {
     </div>
 
     <div
-      v-if="!loadingChannel && !hasChannel"
+      v-if="loadingChannel"
+      class="mb-4 space-y-3 rounded-lg border border-line bg-surface p-4"
+      data-testid="notify-channel-skeleton"
+      aria-hidden="true"
+    >
+      <div class="h-4 w-1/3 bg-elevated animate-pulse" />
+      <div class="h-3 w-2/3 bg-elevated animate-pulse" />
+      <div class="h-10 w-full bg-elevated animate-pulse" />
+      <div class="h-10 w-full bg-elevated animate-pulse" />
+    </div>
+
+    <div
+      v-else-if="channelError"
+      class="mb-4"
+      data-testid="notify-channel-error"
+    >
+      <AppInlineError
+        :title="t('pages.projectDetail.notify.loadChannelFailed')"
+        :message="channelError"
+        @retry="loadChannel"
+      />
+    </div>
+
+    <template v-if="!loadingChannel && !channelError">
+    <div
+      v-if="!hasChannel"
       class="mb-4 rounded border border-warn/35 bg-warn/10 px-3 py-2.5 text-[12px] text-txt2"
       data-testid="notify-no-channel-hint"
     >
@@ -228,6 +265,7 @@ function goChannelSettings() {
           v-model="enabled"
           class="mt-0.5"
           data-testid="notify-master-toggle"
+          :disabled="controlsDisabled"
           :aria-label="t('pages.projectDetail.notify.master')"
         />
         <span>
@@ -245,6 +283,7 @@ function goChannelSettings() {
               v-model="waitingHuman"
               class="mt-0.5"
               data-testid="notify-ev-waiting-human"
+              :disabled="controlsDisabled"
               :aria-label="t('pages.projectDetail.notify.evWaitingHumanLabel')"
             />
             <span>
@@ -261,6 +300,7 @@ function goChannelSettings() {
               v-model="failed"
               class="mt-0.5"
               data-testid="notify-ev-failed"
+              :disabled="controlsDisabled"
               :aria-label="t('pages.projectDetail.notify.evFailedLabel')"
             />
             <span>
@@ -277,6 +317,7 @@ function goChannelSettings() {
               v-model="completed"
               class="mt-0.5"
               data-testid="notify-ev-completed"
+              :disabled="controlsDisabled"
               :aria-label="t('pages.projectDetail.notify.evCompletedLabel')"
             />
             <span>
@@ -411,12 +452,13 @@ function goChannelSettings() {
     <div class="mt-4 flex justify-end">
       <AppButton
         variant="primary"
-        :disabled="saving"
+        :disabled="controlsDisabled"
         data-testid="notify-save"
         @click="save"
       >
         {{ saving ? t('common.buttons.saving') : t('common.buttons.save') }}
       </AppButton>
     </div>
+    </template>
   </div>
 </template>

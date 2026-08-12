@@ -15,6 +15,7 @@ import RunLaunchModal, { type InputField } from '@/components/workflow/RunLaunch
 import ExportVersionModal from '@/components/workflow/ExportVersionModal.vue'
 import WorkflowApiTab from '@/components/workflow/WorkflowApiTab.vue'
 import WorkflowRunHistoryTab from '@/components/workflow/WorkflowRunHistoryTab.vue'
+import HardLoadLayer from '@/components/run/HardLoadLayer.vue'
 import { useWorkflowAskInputs } from '@/lib/run/useWorkflowAskInputs'
 import { api } from '@/lib/api/api'
 import { useWorkflowImport } from '@/lib/run/useWorkflowImport'
@@ -70,6 +71,9 @@ const { fields: askFieldsComputed } = useWorkflowAskInputs(wf)
 const saving = ref(false)
 const running = ref(false)
 const errorMsg = ref('')
+/** Non-new route hydrate gate — HardLoadLayer until getWorkflow settles (plan g3). */
+const hydrating = ref(routeId !== 'new')
+const hydrateFailed = ref(false)
 
 const selectedNode = ref<string | null>(null)
 const selectedEdge = ref<string | null>(null)
@@ -109,8 +113,25 @@ function prepareWorkflowForSave() {
   }
 }
 
+async function loadExistingWorkflow() {
+  hydrating.value = true
+  hydrateFailed.value = false
+  errorMsg.value = ''
+  try {
+    await hydrate(() => api.getWorkflow(routeId))
+    hydrateFailed.value = false
+  } catch {
+    hydrateFailed.value = true
+    // Do not captureBaseline as an editable empty graph on hydrate failure (plan g3.2).
+    errorMsg.value = t('pages.workflowEditor.loadFailed')
+  } finally {
+    hydrating.value = false
+  }
+}
+
 onMounted(async () => {
   if (routeId === 'new') {
+    hydrating.value = false
     if (!wf.projectId) {
       // No project context — send user to pick/create a project first.
       errorMsg.value = t('pages.workflowEditor.projectRequired')
@@ -122,12 +143,7 @@ onMounted(async () => {
     captureBaseline()
     return
   }
-  try {
-    await hydrate(() => api.getWorkflow(routeId))
-  } catch {
-    captureBaseline()
-    errorMsg.value = t('pages.workflowEditor.loadFailed')
-  }
+  await loadExistingWorkflow()
 })
 
 async function saveDraft() {
@@ -549,14 +565,23 @@ function deleteEdge() {
       <AppButton variant="ghost" size="sm" icon="download" :disabled="!wf.id" @click="showExport = true">{{ t('common.buttons.export') }}</AppButton>
       <AppButton variant="ghost" size="sm" icon="doc" :disabled="!wf.nodes.length" @click="showOverview = true">{{ t('common.buttons.details') }}</AppButton>
       <AppButton variant="ghost" size="sm" icon="history" :disabled="!wf.id" @click="openVersions">{{ t('pages.workflowEditor.versions.title') }}</AppButton>
-      <AppButton variant="outline" size="sm" icon="save" :disabled="saving" @click="saveDraft">{{ t('common.buttons.saveDraft') }}</AppButton>
-      <AppButton variant="ghost" size="sm" icon="play" :disabled="running || saving" @click="openRun">{{ running ? t('common.buttons.starting') : t('common.buttons.run') }}</AppButton>
-      <AppButton variant="primary" size="sm" icon="check" :disabled="saving" @click="openPublish">{{ t('pages.workflowEditor.publish.toolbar', { version: wf.version + 1 }) }}</AppButton>
+      <AppButton variant="outline" size="sm" icon="save" :disabled="saving || hydrating || hydrateFailed" @click="saveDraft">{{ t('common.buttons.saveDraft') }}</AppButton>
+      <AppButton variant="ghost" size="sm" icon="play" :disabled="running || saving || hydrating || hydrateFailed" @click="openRun">{{ running ? t('common.buttons.starting') : t('common.buttons.run') }}</AppButton>
+      <AppButton variant="primary" size="sm" icon="check" :disabled="saving || hydrating || hydrateFailed" @click="openPublish">{{ t('pages.workflowEditor.publish.toolbar', { version: wf.version + 1 }) }}</AppButton>
     </header>
 
     <div v-if="errorMsg" class="flex shrink-0 items-center gap-2 border-b border-err/30 bg-err/10 px-4 py-2 text-[12px] text-err">
       <Icon name="alert" :size="14" class="shrink-0" />{{ errorMsg }}
-      <button class="ml-auto text-err/70 hover:text-err" @click="errorMsg = ''"><Icon name="close" :size="14" /></button>
+      <button
+        v-if="hydrateFailed"
+        type="button"
+        class="ml-auto border border-err/40 px-2.5 py-1 text-xs text-err hover:bg-err/10"
+        data-testid="workflow-editor-hydrate-retry"
+        @click="loadExistingWorkflow"
+      >
+        {{ t('common.loading.retry') }}
+      </button>
+      <button v-else class="ml-auto text-err/70 hover:text-err" @click="errorMsg = ''"><Icon name="close" :size="14" /></button>
     </div>
 
     <!-- editor tabs -->
@@ -592,8 +617,9 @@ function deleteEdge() {
     <!-- canvas tab -->
     <div v-show="activeTab === 'canvas'" class="flex min-h-0 flex-1">
       <NodePalette />
-      <div class="relative min-w-0 flex-1">
+      <div class="relative min-w-0 flex-1" data-testid="workflow-editor-canvas-host">
         <WorkflowCanvas
+          v-if="!hydrating && !hydrateFailed"
           :nodes="wf.nodes"
           :edges="wf.edges"
           mode="edit"
@@ -609,7 +635,32 @@ function deleteEdge() {
           @remove-edge="removeEdgeById"
           @clear-structured-goto="clearStructuredGoto"
         />
-        <div v-if="!wf.nodes.length" class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+        <HardLoadLayer
+          v-if="hydrating"
+          :stage="t('pages.workflowEditor.loading')"
+          data-testid="workflow-editor-hydrate-layer"
+          :show-retry="false"
+        />
+        <div
+          v-else-if="hydrateFailed"
+          class="absolute inset-0 z-[2] flex flex-col items-center justify-center gap-3 bg-base/92 px-4 text-center"
+          data-testid="workflow-editor-hydrate-failed"
+          role="alert"
+        >
+          <p class="text-[13px] text-err">{{ t('pages.workflowEditor.loadFailed') }}</p>
+          <button
+            type="button"
+            class="inline-flex min-h-11 items-center border border-line bg-surface px-3 text-[12px] font-medium text-txt hover:bg-elevated"
+            data-testid="workflow-editor-hydrate-retry-canvas"
+            @click="loadExistingWorkflow"
+          >
+            {{ t('common.loading.retry') }}
+          </button>
+        </div>
+        <div
+          v-else-if="!wf.nodes.length"
+          class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center"
+        >
           <div class="mb-3 flex h-14 w-14 items-center justify-center rounded-xl border border-dashed border-line-strong text-txt3">
             <Icon name="workflow" :size="26" />
           </div>

@@ -2,7 +2,11 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from './Icon.vue'
+import AppInlineError from './AppInlineError.vue'
+import AppSpinner from './AppSpinner.vue'
 import { api } from '@/lib/api/api'
+import { createTimeoutController, isAbortError } from '@/lib/shared/loadingRequest'
+import { DEFAULT_LOADING_TIMEOUT_MS } from '@/lib/shared/loadingTypes'
 import { PIPELINE_FILTER_KEYS } from '@/lib/composables/usePipelineFilter'
 import type { Workflow } from '@/lib/shared/types'
 
@@ -23,6 +27,8 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const workflows = ref<Workflow[]>([])
+const loading = ref(false)
+const loadError = ref<string | null>(null)
 const internalOpen = ref(false)
 const search = ref('')
 const root = ref<HTMLElement | null>(null)
@@ -62,19 +68,35 @@ function onDocClick(e: MouseEvent) {
   if (open.value && root.value && !root.value.contains(e.target as Node)) open.value = false
 }
 
-onMounted(async () => {
-  document.addEventListener('click', onDocClick)
+async function loadWorkflows() {
+  loading.value = true
+  loadError.value = null
+  const tc = createTimeoutController(DEFAULT_LOADING_TIMEOUT_MS)
   try {
-    workflows.value = await api.listWorkflows()
-  } catch {
-    workflows.value = []
+    workflows.value = await api.listWorkflows({ signal: tc.signal })
+  } catch (err) {
+    if (isAbortError(err) && !tc.timedOut) return
+    // Do not swallow into empty list — surface error + retry (plan g4.2).
+    loadError.value = tc.timedOut
+      ? String(t('common.loading.timeout'))
+      : err instanceof Error && err.message
+        ? err.message
+        : String(t('common.pipelineFilter.loadFailed'))
+  } finally {
+    tc.clear()
+    loading.value = false
   }
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+  void loadWorkflows()
 })
 onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 </script>
 
 <template>
-  <div ref="root" class="relative w-full md:w-auto">
+  <div ref="root" class="relative w-full md:w-auto" data-testid="pipeline-filter">
     <button
       type="button"
       class="flex w-full min-h-[44px] items-center gap-2 border border-line bg-surface px-3 py-1.5 text-sm text-txt2 transition hover:bg-elevated md:min-h-0 md:w-auto"
@@ -90,38 +112,60 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
     <div
       v-if="open"
       class="card absolute left-0 right-0 z-30 mt-1.5 overflow-hidden md:left-auto md:right-0 md:w-64"
+      data-testid="pipeline-filter-panel"
     >
-      <div class="border-b border-line p-2">
-        <div class="relative">
-          <Icon name="search" :size="14" class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-txt3" />
-          <input v-model="search" class="input pl-8" :placeholder="t(PIPELINE_FILTER_KEYS.searchPlaceholder)" @click.stop />
+      <template v-if="loadError">
+        <div class="p-2">
+          <AppInlineError
+            :title="t('common.pipelineFilter.loadFailed')"
+            :message="loadError"
+            @retry="loadWorkflows"
+          />
         </div>
+      </template>
+      <div
+        v-else-if="loading"
+        class="flex flex-col items-center justify-center gap-2 px-2 py-8 text-[12px] text-txt3"
+        role="status"
+        aria-busy="true"
+        data-testid="pipeline-filter-loading"
+      >
+        <AppSpinner :size="16" class="animate-spin text-accent" />
+        <span>{{ t('common.loading.inProgress') }}</span>
       </div>
-      <div class="scroll-area max-h-64 overflow-y-auto p-1">
-        <button
-          type="button"
-          class="flex w-full items-center gap-2 px-2.5 py-2.5 text-left text-sm transition hover:bg-elevated md:py-2"
-          :class="!modelValue ? 'bg-accent-dim text-txt' : 'text-txt2'"
-          @click.stop="choose('')"
-        >
-          <Icon name="branch" :size="14" class="text-txt3" />
-          <span class="flex-1 truncate">{{ t(PIPELINE_FILTER_KEYS.all) }}</span>
-          <Icon v-if="!modelValue" name="check" :size="14" class="text-accent-2" />
-        </button>
-        <button
-          v-for="w in filtered"
-          :key="w.id"
-          type="button"
-          class="flex w-full items-center gap-2 px-2.5 py-2.5 text-left text-sm transition hover:bg-elevated md:py-2"
-          :class="modelValue === w.id ? 'bg-accent-dim text-txt' : 'text-txt2'"
-          @click.stop="choose(w.id)"
-        >
-          <Icon name="branch" :size="14" class="text-txt3" />
-          <span class="flex-1 truncate">{{ w.name }}</span>
-          <Icon v-if="modelValue === w.id" name="check" :size="14" class="text-accent-2" />
-        </button>
-        <div v-if="!filtered.length" class="px-2.5 py-6 text-center text-[12px] text-txt3">{{ t(PIPELINE_FILTER_KEYS.noMatch) }}</div>
-      </div>
+      <template v-else>
+        <div class="border-b border-line p-2">
+          <div class="relative">
+            <Icon name="search" :size="14" class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-txt3" />
+            <input v-model="search" class="input pl-8" :placeholder="t(PIPELINE_FILTER_KEYS.searchPlaceholder)" @click.stop />
+          </div>
+        </div>
+        <div class="scroll-area max-h-64 overflow-y-auto p-1">
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 px-2.5 py-2.5 text-left text-sm transition hover:bg-elevated md:py-2"
+            :class="!modelValue ? 'bg-accent-dim text-txt' : 'text-txt2'"
+            @click.stop="choose('')"
+          >
+            <Icon name="branch" :size="14" class="text-txt3" />
+            <span class="flex-1 truncate">{{ t(PIPELINE_FILTER_KEYS.all) }}</span>
+            <Icon v-if="!modelValue" name="check" :size="14" class="text-accent-2" />
+          </button>
+          <button
+            v-for="w in filtered"
+            :key="w.id"
+            type="button"
+            class="flex w-full items-center gap-2 px-2.5 py-2.5 text-left text-sm transition hover:bg-elevated md:py-2"
+            :class="modelValue === w.id ? 'bg-accent-dim text-txt' : 'text-txt2'"
+            @click.stop="choose(w.id)"
+          >
+            <Icon name="branch" :size="14" class="text-txt3" />
+            <span class="flex-1 truncate">{{ w.name }}</span>
+            <Icon v-if="modelValue === w.id" name="check" :size="14" class="text-accent-2" />
+          </button>
+          <div v-if="!filtered.length" class="px-2.5 py-6 text-center text-[12px] text-txt3">{{ t(PIPELINE_FILTER_KEYS.noMatch) }}</div>
+        </div>
+      </template>
     </div>
   </div>
 </template>

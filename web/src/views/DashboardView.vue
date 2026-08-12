@@ -23,6 +23,7 @@ const router = useRouter()
 const { t } = useI18n()
 const stats = ref<DashboardStats | null>(null)
 const statsError = ref<string | null>(null)
+const statsLoading = ref(true)
 const storedProjectId = ref(readStoredProjectId())
 
 /** Last successful Token snapshot for stale-while-revalidate (never flash to 0). */
@@ -43,32 +44,35 @@ const kpis = computed(() => [
   {
     status: 'running',
     label: t('pages.dashboard.kpi.running'),
-    value: stats.value?.running ?? 0,
+    value: stats.value?.running,
     icon: 'runs',
     cls: 'text-info',
   },
   {
     status: 'waiting_human',
     label: t('pages.dashboard.kpi.waitingHuman'),
-    value: stats.value?.waitingHuman ?? 0,
+    value: stats.value?.waitingHuman,
     icon: 'gate',
     cls: 'text-warn',
   },
   {
     status: 'failed',
     label: t('pages.dashboard.kpi.failed'),
-    value: stats.value?.failed ?? 0,
+    value: stats.value?.failed,
     icon: 'alert',
     cls: 'text-err',
   },
   {
     status: 'completed',
     label: t('pages.dashboard.kpi.completed'),
-    value: stats.value?.completed ?? 0,
+    value: stats.value?.completed,
     icon: 'check',
     cls: 'text-ok',
   },
 ])
+
+const statsReady = computed(() => stats.value != null && !statsError.value)
+const showKpiSkeleton = computed(() => statsLoading.value && stats.value == null && !statsError.value)
 
 const displayTokens = computed<TokenSnapshot | null>(() => lastSuccessTokens.value)
 
@@ -120,6 +124,8 @@ function closePreview() {
 }
 
 function goKpiRuns(status: string) {
+  // Do not navigate as if count were 0 while stats are still loading/failed (plan g5.2).
+  if (!statsReady.value) return
   void router.push({
     path: '/runs',
     query: { status: serializeStatusQuery([status]) },
@@ -148,8 +154,10 @@ function snapshotTokens(s: DashboardStats): TokenSnapshot {
 }
 
 async function refreshStats() {
+  const hadStats = stats.value != null
   const hadSuccess = lastSuccessTokens.value != null
   tokensRefreshing.value = true
+  statsLoading.value = true
   try {
     const next = await api.dashboard()
     stats.value = next
@@ -158,12 +166,14 @@ async function refreshStats() {
   } catch (err) {
     console.warn('[DashboardView] dashboard stats failed', err)
     statsError.value = err instanceof Error ? err.message : String(err || 'stats failed')
-    // Keep lastSuccessTokens on failure so we never flash a fake 0.
+    // Keep last successful stats/tokens; never invent a fake 0 (plan g5).
+    if (!hadStats) stats.value = null
     if (!hadSuccess) {
-      // First load failed: still do not invent 0; leave snapshot null.
+      // First load failed: leave token snapshot null.
     }
   } finally {
     tokensRefreshing.value = false
+    statsLoading.value = false
   }
 }
 
@@ -223,21 +233,47 @@ onUnmounted(() => {
     <div
       class="mb-6 grid shrink-0 grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5"
       data-testid="dashboard-kpi-grid"
+      :aria-busy="statsLoading && !statsReady ? 'true' : 'false'"
     >
       <button
         v-for="k in kpis"
         :key="k.status"
         type="button"
-        class="card w-full cursor-pointer p-4 text-left transition hover:border-line-strong hover:bg-elevated focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/35"
+        class="card w-full p-4 text-left transition focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/35"
+        :class="
+          statsReady
+            ? 'cursor-pointer hover:border-line-strong hover:bg-elevated'
+            : 'cursor-default opacity-90'
+        "
         :data-testid="`dashboard-kpi-${k.status}`"
-        :aria-label="t('pages.dashboard.kpi.ariaNav', { label: k.label, count: k.value })"
+        :aria-label="
+          statsReady
+            ? t('pages.dashboard.kpi.ariaNav', { label: k.label, count: k.value ?? 0 })
+            : k.label
+        "
+        :disabled="!statsReady"
         @click="goKpiRuns(k.status)"
       >
         <div class="flex items-center justify-between">
           <span class="text-[13px] text-txt2">{{ k.label }}</span>
           <Icon :name="k.icon" :size="18" :class="k.cls" />
         </div>
-        <div class="mt-2 text-3xl font-semibold text-txt">{{ k.value }}</div>
+        <div
+          v-if="showKpiSkeleton"
+          class="mt-2 h-9 w-16 bg-elevated animate-pulse"
+          data-testid="dashboard-kpi-value-skeleton"
+          aria-hidden="true"
+        />
+        <div
+          v-else-if="k.value == null"
+          class="mt-2 text-3xl font-semibold text-txt3"
+          data-testid="dashboard-kpi-value-pending"
+        >
+          —
+        </div>
+        <div v-else class="mt-2 text-3xl font-semibold text-txt" data-testid="dashboard-kpi-value">
+          {{ k.value }}
+        </div>
       </button>
 
       <div

@@ -31,6 +31,11 @@ describe('loading/pending Demo-locked locale keys', () => {
     ['buttons.copying', '复制中…', 'Copying…'],
     ['buttons.creating', '创建中…', 'Creating…'],
     ['buttons.starting', '启动中…', 'Starting…'],
+    ['loading.inProgress', '加载中', 'Loading'],
+    ['loading.refreshing', '正在刷新', 'Refreshing'],
+    ['loading.retry', '重试', 'Retry'],
+    ['loading.timeout', '请求超时', 'Request timed out'],
+    ['loading.failed', '加载失败', 'Failed to load'],
     ['loading.label', '加载中', 'Loading'],
     ['loading.stuck', '可能卡死 · 请求仍在进行，可继续等待或重试', 'May be stuck · request still running; wait or retry'],
   ]
@@ -42,7 +47,15 @@ describe('loading/pending Demo-locked locale keys', () => {
     const zhLoad = leafKeys((zhCommon as { common: { loading: unknown } }).common.loading)
     const enLoad = leafKeys((enCommon as { common: { loading: unknown } }).common.loading)
     expect(zhLoad.sort()).toEqual(enLoad.sort())
-    expect(zhLoad.sort()).toEqual(['label', 'stuck'])
+    expect(zhLoad.sort()).toEqual([
+      'failed',
+      'inProgress',
+      'label',
+      'refreshing',
+      'retry',
+      'stuck',
+      'timeout',
+    ])
     expect(atPath(zhCommon.common, 'loading.elapsed')).toBeUndefined()
     expect(atPath(enCommon.common, 'loading.elapsed')).toBeUndefined()
   })
