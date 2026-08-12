@@ -156,12 +156,14 @@ describe('TokenModelRank unknown vs other (g3.3)', () => {
     wrapper.unmount()
   })
 
-  it('shows configured alias with unknown badge; color uses unknown flag not name literal', () => {
+  it('configured alias: no unknown badge and not #71717A; data-unknown keeps distinction (g4.1)', () => {
     const models = [
       { modelKey: 'gpt-5', name: 'gpt-5', total: 100 },
       { modelKey: '未知/未分桶', name: 'gpt-5', total: 80, unknown: true },
     ]
-    expect(colorForModel(models[1]!, 1)).toBe('#71717A')
+    // Alias removes unknown-gray; falls through to palette (idx 1 → #60A5FA).
+    expect(colorForModel(models[1]!, 1)).toBe('#60A5FA')
+    expect(colorForModel(models[1]!, 1)).not.toBe('#71717A')
     expect(colorForModel({ name: 'gpt-5', unknown: false }, 0)).not.toBe('#71717A')
 
     const wrapper = mount(TokenModelRank, {
@@ -170,10 +172,35 @@ describe('TokenModelRank unknown vs other (g3.3)', () => {
     })
     const unk = wrapper.find('[data-unknown="1"]')
     expect(unk.text()).toContain('gpt-5')
-    expect(unk.find('[data-testid="unknown-model-badge"]').exists()).toBe(true)
-    expect(unk.find('.h-full').attributes('style')).toMatch(/#71717A/i)
+    expect(unk.find('[data-testid="unknown-model-badge"]').exists()).toBe(false)
+    const nameRow = unk.find('.flex.min-w-0.items-center')
+    expect(nameRow.classes()).not.toContain('text-txt3')
+    expect(nameRow.classes()).toContain('text-txt')
+    expect(unk.find('.h-full').attributes('style')).not.toMatch(/#71717A/i)
+    expect(unk.find('.h-full').attributes('style')).toMatch(/#60A5FA/i)
     // Two rows with same display text stay distinct via data-unknown.
     expect(wrapper.findAll('[data-testid="token-model-rank"] > li')).toHaveLength(2)
+    wrapper.unmount()
+  })
+
+  it('configured alias + filled: main name and bar use #34D399, no badge (g4.1)', () => {
+    const models = [
+      { modelKey: '未知/未分桶', name: 'Auto', total: 400, unknown: true, filled: true },
+      { modelKey: 'cursor-grok-4.5-high-fast', name: 'cursor-grok-4.5-high-fast', total: 200, filled: true },
+    ]
+    expect(colorForModel(models[0]!, 0)).toBe('#34D399')
+
+    const wrapper = mount(TokenModelRank, {
+      props: { models },
+      global: { plugins: [i18nZh()] },
+    })
+    const unk = wrapper.find('[data-unknown="1"]')
+    expect(unk.text()).toContain('Auto')
+    expect(unk.text()).not.toContain('未知/未分桶')
+    expect(unk.find('[data-testid="unknown-model-badge"]').exists()).toBe(false)
+    expect(unk.find('.text-ok').exists()).toBe(true)
+    expect(unk.find('.h-full').attributes('style')).toMatch(/#34D399/i)
+    expect(unk.find('.h-full').attributes('style')).not.toMatch(/#71717A/i)
     wrapper.unmount()
   })
 })

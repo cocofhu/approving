@@ -188,20 +188,48 @@ describe('TokenModelComposition hides filledTag (g2.1)', () => {
     wrapper.unmount()
   })
 
-  it('alias name still shows unknown badge and grey color via unknown flag', () => {
+  it('configured alias: no unknown badge and not #71717A; same-name rows stay distinct (g4.1)', () => {
     const models = [
       { modelKey: '未知/未分桶', name: 'gpt-5', total: 100, unknown: true },
       { modelKey: 'gpt-5', name: 'gpt-5', total: 80 },
     ]
-    expect(colorForModel(models[0]!, 0)).toBe('#71717A')
+    expect(colorForModel(models[0]!, 0)).toBe('#7B61FF')
+    expect(colorForModel(models[0]!, 0)).not.toBe('#71717A')
     const wrapper = mount(TokenModelComposition, {
       props: { models },
       global: { plugins: [i18n()] },
     })
     const legend = wrapper.find('[data-testid="token-model-legend"]')
     expect(legend.text()).toContain('gpt-5')
-    expect(legend.find('[data-testid="unknown-model-badge"]').exists()).toBe(true)
+    expect(legend.find('[data-testid="unknown-model-badge"]').exists()).toBe(false)
+    const nameSpan = legend.findAll('li')[0]!.findAll('span')[1]!
+    expect(nameSpan.classes()).not.toContain('text-txt3')
+    expect(nameSpan.classes()).toContain('text-txt')
+    const fills = wrapper.findAll('[data-testid="token-model-pie-slice"]').map((p) => p.attributes('fill'))
+    expect(fills[0]).toBe('#7B61FF')
+    expect(fills[0]).not.toBe('#71717A')
     expect(legend.findAll('li')).toHaveLength(2)
+    wrapper.unmount()
+  })
+
+  it('configured alias + filled: sector/legend #34D399 and no badge (g4.1)', () => {
+    const models = [
+      { modelKey: '未知/未分桶', name: 'Auto', total: 100, unknown: true, filled: true },
+      { modelKey: 'cursor-grok', name: 'cursor-grok-4.5-high-fast', total: 80, filled: true },
+    ]
+    expect(colorForModel(models[0]!, 0)).toBe('#34D399')
+    const wrapper = mount(TokenModelComposition, {
+      props: { models },
+      global: { plugins: [i18n()] },
+    })
+    const legend = wrapper.find('[data-testid="token-model-legend"]')
+    expect(legend.text()).toContain('Auto')
+    expect(legend.find('[data-testid="unknown-model-badge"]').exists()).toBe(false)
+    const nameSpan = legend.findAll('li')[0]!.findAll('span')[1]!
+    expect(nameSpan.classes()).toContain('text-ok')
+    expect(nameSpan.classes()).not.toContain('text-txt3')
+    const fills = wrapper.findAll('[data-testid="token-model-pie-slice"]').map((p) => p.attributes('fill'))
+    expect(fills).toEqual(['#34D399', '#34D399'])
     wrapper.unmount()
   })
 

@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { TokenStatsModel } from '@/lib/shared/types'
-import { fmtCompactTokenCount, fmtTokenCount } from '@/lib/run/tokenUsage'
+import { fmtCompactTokenCount, fmtTokenCount, shouldShowUnknownVisual } from '@/lib/run/tokenUsage'
 import { MODEL_PALETTE, colorForModel } from './tokenModelColors'
 import UnknownModelBadge from '@/components/ui/UnknownModelBadge.vue'
 
@@ -122,11 +122,11 @@ const slices = computed(() => {
         <span class="h-2.5 w-2.5" :style="{ background: r.color || MODEL_PALETTE[0] }" />
         <span
           class="flex min-w-0 items-center gap-1.5 truncate"
-          :class="r.unknown ? 'text-txt3' : r.filled ? 'text-ok' : 'text-txt'"
+          :class="shouldShowUnknownVisual(r.unknown, r.name) ? 'text-txt3' : r.filled ? 'text-ok' : 'text-txt'"
           :title="r.name"
         >
           <span class="min-w-0 truncate">{{ r.name }}</span>
-          <UnknownModelBadge v-if="r.unknown" />
+          <UnknownModelBadge v-if="shouldShowUnknownVisual(r.unknown, r.name)" />
         </span>
         <span class="tabular-nums text-txt3" :title="fmtTokenCount(r.total)">
           {{ r.pct }}% · {{ fmtCompactTokenCount(r.total) }}
