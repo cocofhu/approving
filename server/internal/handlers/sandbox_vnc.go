@@ -138,7 +138,7 @@ func (h *Handlers) SandboxVNC(c *gin.Context) {
 				var m vncClientMsg
 				if json.Unmarshal(data, &m) == nil {
 					sess.Touch()
-					h.applyVncMsg(sess.Page(), m)
+					h.applyVncMsg(sess.Page(), m, pushJSON)
 					continue
 				}
 			}
