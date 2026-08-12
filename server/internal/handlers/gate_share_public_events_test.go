@@ -64,8 +64,10 @@ func TestPublicGateEventsWSStreamsSanitizedAcp(t *testing.T) {
 		"item":   map[string]any{"text": "改成绿的"},
 	}))
 
+	deadline := time.Now().Add(3 * time.Second)
 	sawAcp, sawReview := false, false
-	for i := 0; i < 6; i++ {
+	for time.Now().Before(deadline) && (!sawAcp || !sawReview) {
+		_ = c.SetReadDeadline(time.Now().Add(time.Until(deadline) + 50*time.Millisecond))
 		_, msg, err := c.ReadMessage()
 		if err != nil {
 			break
