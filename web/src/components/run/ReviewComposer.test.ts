@@ -291,8 +291,8 @@ describe('ReviewComposer gate review semantics (send + confirm)', () => {
   })
 })
 
-describe('ReviewComposer app_preview share panel entry', () => {
-  it('shows open-share when showSharePanel is true (plan g2.4)', async () => {
+describe('ReviewComposer share panel entry removed', () => {
+  it('does not render Agent-area open-share entry (plan g1.1 / g3.1)', async () => {
     const i18n = createI18n({
       legacy: false,
       locale: 'zh-CN',
@@ -307,7 +307,6 @@ describe('ReviewComposer app_preview share panel entry', () => {
         turns: [],
         done: false,
         active: true,
-        showSharePanel: true,
       },
       global: {
         plugins: [i18n],
@@ -315,16 +314,15 @@ describe('ReviewComposer app_preview share panel entry', () => {
       },
     })
     await flushPromises()
-    expect(wrapper.find('[data-testid="review-composer-share-panel"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="review-composer-open-share"]').text()).toContain('打开分享面板')
-    await wrapper.get('[data-testid="review-composer-open-share"]').trigger('click')
-    expect(wrapper.emitted('open-share')).toHaveLength(1)
+    expect(wrapper.find('[data-testid="review-composer-share-panel"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="review-composer-open-share"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('hides share panel for clarify without showSharePanel', async () => {
+  it('clarify mode also has no Agent-area share entry', async () => {
     const wrapper = mountClarify()
     await flushPromises()
+    expect(wrapper.find('[data-testid="review-composer-share-panel"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="review-composer-open-share"]').exists()).toBe(false)
     wrapper.unmount()
   })

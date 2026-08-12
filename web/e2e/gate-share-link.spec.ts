@@ -189,7 +189,7 @@ test.describe('human_gate 临时审批链接', () => {
     expect(copied).toContain('/public/gate-approvals#t=')
   })
 
-  test('待澄清 Inbox 三处入口可生成临时链接', async ({ page }) => {
+  test('待澄清 Inbox 两处入口可生成临时链接', async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'clipboard', {
         configurable: true,
@@ -204,7 +204,7 @@ test.describe('human_gate 临时审批链接', () => {
     await page.goto('/gate-share-link.html?scene=inbox-clarify')
     await expect(page.getByTestId('gate-share-copy-btn')).toBeVisible({ timeout: 10_000 })
     await expect(page.getByTestId('gate-share-copy-btn-detail')).toBeVisible()
-    await expect(page.getByTestId('review-composer-open-share')).toBeVisible()
+    await expect(page.getByTestId('review-composer-open-share')).toHaveCount(0)
     await expect(page.getByTestId('html-preview-share-link')).toHaveCount(0)
     await page.getByTestId('gate-share-copy-btn').click()
     await expect(page.getByTestId('gate-share-panel-body')).toBeVisible()
