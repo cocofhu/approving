@@ -142,6 +142,8 @@ describe('TokenModelRank unknown vs other (g3.3)', () => {
     expect(unk.exists()).toBe(true)
     expect(unk.attributes('data-other')).toBe('0')
     expect(unk.text()).toContain('未知/未分桶')
+    expect(unk.text()).toContain('未知')
+    expect(unk.find('[data-testid="unknown-model-badge"]').exists()).toBe(true)
     expect(unk.text()).not.toContain('other（其余模型）')
     expect(unk.find('.text-txt3').exists()).toBe(true)
     expect(unk.find('.h-full').attributes('style')).toMatch(/#71717A/i)
@@ -151,6 +153,27 @@ describe('TokenModelRank unknown vs other (g3.3)', () => {
     expect(other.attributes('data-unknown')).toBe('0')
     expect(other.text()).toContain('other（其余模型）')
     expect(other.find('.h-full').attributes('style')).toMatch(/#A1A1AA/i)
+    wrapper.unmount()
+  })
+
+  it('shows configured alias with unknown badge; color uses unknown flag not name literal', () => {
+    const models = [
+      { modelKey: 'gpt-5', name: 'gpt-5', total: 100 },
+      { modelKey: '未知/未分桶', name: 'gpt-5', total: 80, unknown: true },
+    ]
+    expect(colorForModel(models[1]!, 1)).toBe('#71717A')
+    expect(colorForModel({ name: 'gpt-5', unknown: false }, 0)).not.toBe('#71717A')
+
+    const wrapper = mount(TokenModelRank, {
+      props: { models },
+      global: { plugins: [i18nZh()] },
+    })
+    const unk = wrapper.find('[data-unknown="1"]')
+    expect(unk.text()).toContain('gpt-5')
+    expect(unk.find('[data-testid="unknown-model-badge"]').exists()).toBe(true)
+    expect(unk.find('.h-full').attributes('style')).toMatch(/#71717A/i)
+    // Two rows with same display text stay distinct via data-unknown.
+    expect(wrapper.findAll('[data-testid="token-model-rank"] > li')).toHaveLength(2)
     wrapper.unmount()
   })
 })

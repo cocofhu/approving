@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/runtime"
@@ -28,7 +29,34 @@ var (
 	ErrProjectHasWorkflows = errors.New("项目下仍有流水线，请先删除全部流水线")
 	// ErrSecretPlaceholderOnNewKey is returned when a new/renamed key is saved with only the mask.
 	ErrSecretPlaceholderOnNewKey = errors.New("新密钥或重命名的键不能使用打码占位值，请重新填写明文")
+	// ErrUnknownModelDisplayNameTooLong is returned when the alias exceeds 64 runes.
+	ErrUnknownModelDisplayNameTooLong = errors.New("显示名最多 64 个字符，请缩短后再保存。")
 )
+
+// UnknownModelDisplayNameMaxLen is the max rune length for UnknownModelDisplayName.
+const UnknownModelDisplayNameMaxLen = 64
+
+// NormalizeUnknownModelDisplayName trims input; empty / whitespace-only / equal to
+// the default 「未知/未分桶」 label become "" (unset). Over-length rejects.
+func NormalizeUnknownModelDisplayName(raw string) (string, error) {
+	v := strings.TrimSpace(raw)
+	if v == "" || v == models.TokenUsageModelUnknown {
+		return "", nil
+	}
+	if utf8.RuneCountInString(v) > UnknownModelDisplayNameMaxLen {
+		return "", ErrUnknownModelDisplayNameTooLong
+	}
+	return v, nil
+}
+
+// ResolveUnknownModelDisplayName returns the configured alias or the default label.
+func ResolveUnknownModelDisplayName(alias string) string {
+	v := strings.TrimSpace(alias)
+	if v == "" || v == models.TokenUsageModelUnknown {
+		return models.TokenUsageModelUnknown
+	}
+	return v
+}
 
 // ProjectService manages project CRUD and secret-aware config updates.
 type ProjectService struct{ db *gorm.DB }
@@ -376,10 +404,12 @@ func (s *ProjectService) Create(name, description string, env []models.EnvEntry,
 	return p, nil
 }
 
-// Update patches name/description/sandboxEnv/variables/notifyPolicy. Nil
-// pointers mean "leave unchanged"; non-nil slices replace the whole list with
-// secret-preserving merge. Non-nil notifyPolicy replaces the whole policy.
-func (s *ProjectService) Update(id string, name *string, description *string, env *[]models.EnvEntry, vars *[]models.ProjectVariable, notify *models.ProjectNotifyPolicy) (models.Project, error) {
+// Update patches name/description/sandboxEnv/variables/notifyPolicy/
+// unknownModelDisplayName. Nil pointers mean "leave unchanged"; non-nil
+// slices replace the whole list with secret-preserving merge. Non-nil
+// notifyPolicy replaces the whole policy. Non-nil unknownModelDisplayName is
+// normalized (trim; empty/default label → unset; >64 runes → error).
+func (s *ProjectService) Update(id string, name *string, description *string, env *[]models.EnvEntry, vars *[]models.ProjectVariable, notify *models.ProjectNotifyPolicy, unknownModelDisplayName *string) (models.Project, error) {
 	var p models.Project
 	if err := s.db.First(&p, "id = ?", id).Error; err != nil {
 		return models.Project{}, ErrProjectNotFound
@@ -413,6 +443,13 @@ func (s *ProjectService) Update(id string, name *string, description *string, en
 	}
 	if notify != nil {
 		p.NotifyPolicy = NormalizeProjectNotifyPolicy(*notify)
+	}
+	if unknownModelDisplayName != nil {
+		normalized, err := NormalizeUnknownModelDisplayName(*unknownModelDisplayName)
+		if err != nil {
+			return models.Project{}, err
+		}
+		p.UnknownModelDisplayName = normalized
 	}
 	p.UpdatedAt = time.Now()
 	if err := s.db.Save(&p).Error; err != nil {

@@ -148,6 +148,22 @@ describe('user-facing copy remediation keys', () => {
     expect(zh.global.t('pages.board.tokenStats.filledTag')).not.toMatch(/回填/)
   })
 
+  it('unknown model display name settings copy avoids 分桶 jargon', () => {
+    const keys = [
+      'pages.projectDetail.unknownModelDisplayNameLabel',
+      'pages.projectDetail.unknownModelDisplayNamePlaceholder',
+      'pages.projectDetail.unknownModelDisplayNameHelp',
+      'pages.projectDetail.unknownModelDisplayNameClear',
+      'pages.projectDetail.metaHint',
+    ]
+    for (const k of keys) {
+      expect(zh.global.t(k)).not.toMatch(/分桶/)
+      expect(en.global.t(k)).not.toMatch(/unbucket/i)
+    }
+    expect(zh.global.t('pages.projectDetail.unknownModelDisplayNameLabel')).toBe('未知模型显示名')
+    expect(zh.global.t('pages.tokenByModel.unknownBadge')).toBe('未知')
+  })
+
   it('model rank card copy has no unknown≠other hint (g1.3)', () => {
     expect(zh.global.te('pages.board.tokenStats.modelRankHint')).toBe(false)
     expect(en.global.te('pages.board.tokenStats.modelRankHint')).toBe(false)

@@ -128,6 +128,11 @@ export interface Project {
   pmTokens?: number | null
   pmLeaderEnabled?: boolean
   pmLeaderAgent?: string
+  /**
+   * Optional display alias for the 「未知/未分桶」token bucket.
+   * Empty/omitted → show the default label. Does not change persisted keys.
+   */
+  unknownModelDisplayName?: string
   notifyPolicy?: ProjectNotifyPolicy
   createdAt?: string
   updatedAt?: string
