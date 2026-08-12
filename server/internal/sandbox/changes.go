@@ -62,6 +62,9 @@ type RepoChanges struct {
 // relative to the session baseline, via the protocol endpoint GET /api/changes.
 // Best-effort: callers treat a nil/error result as "no change report available"
 // and degrade gracefully (the platform never shells git itself).
+//
+// Unwired protocol stub: written against GET /api/changes but not yet wired
+// into Manager / live session paths; keep in-tree, do not treat as dead code.
 func fetchChanges(ctx context.Context, host string, port int) (*Changes, error) {
 	if host == "" {
 		host = "127.0.0.1"

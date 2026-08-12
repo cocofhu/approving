@@ -175,15 +175,6 @@ func (s *RequirementDraftService) Delete(projectID, id string) error {
 	return nil
 }
 
-// DeleteByProject hard-removes all drafts for a project (cascade helper).
-func (s *RequirementDraftService) DeleteByProject(tx *gorm.DB, projectID string) error {
-	db := s.db
-	if tx != nil {
-		db = tx
-	}
-	return db.Where("project_id = ?", projectID).Delete(&models.RequirementDraft{}).Error
-}
-
 func (s *RequirementDraftService) requireProject(projectID string) error {
 	var n int64
 	if err := s.db.Model(&models.Project{}).Where("id = ?", projectID).Count(&n).Error; err != nil {

@@ -3,6 +3,8 @@ package runtime
 import (
 	"strings"
 	"testing"
+
+	"github.com/cocofhu/approving/internal/envauth"
 )
 
 func TestNormalizeBackend(t *testing.T) {
@@ -393,12 +395,12 @@ func TestMergeRegionEnv_Trae(t *testing.T) {
 
 func TestIsPlatformAuthEnvKey(t *testing.T) {
 	for _, k := range []string{"CURSOR_API_KEY", "ANTHROPIC_API_KEY", "CODEBUDDY_API_KEY", "TRAE_API_KEY", EnvTraeCLIToken} {
-		if !IsPlatformAuthEnvKey(k) {
+		if !envauth.IsPlatformAuthEnvKey(k) {
 			t.Fatalf("%s should be platform auth key", k)
 		}
 	}
 	for _, k := range []string{"GITLAB_TOKEN", "APPROVING_CURSOR_API_KEY", "APPROVING_TRAE_API_KEY", EnvCodeBuddyRegion, EnvTraeRegion} {
-		if IsPlatformAuthEnvKey(k) {
+		if envauth.IsPlatformAuthEnvKey(k) {
 			t.Fatalf("%s must not be filtered as platform auth", k)
 		}
 	}

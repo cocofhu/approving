@@ -57,29 +57,6 @@ func IngestPromptImages(ctx context.Context, store Store, images []models.Prompt
 	return out, nil
 }
 
-// IngestBytes stores raw bytes and returns a PromptImage with Ref set.
-func ingestBytes(ctx context.Context, store Store, raw []byte, mimeType, name string) (models.PromptImage, error) {
-	if store == nil {
-		return models.PromptImage{}, fmt.Errorf("blob store not configured")
-	}
-	if len(raw) == 0 {
-		return models.PromptImage{}, fmt.Errorf("empty attachment")
-	}
-	ref, err := store.Put(ctx, bytes.NewReader(raw), Meta{MimeType: mimeType, Name: name})
-	if err != nil {
-		return models.PromptImage{}, err
-	}
-	if mimeType == "" {
-		mimeType = "application/octet-stream"
-	}
-	return models.PromptImage{
-		Ref:       ref.String(),
-		MimeType:  mimeType,
-		Name:      name,
-		SizeBytes: int64(len(raw)),
-	}, nil
-}
-
 // IngestCompositeInputs walks a launch inputs map and externalizes any
 // composite {text, images[]} values in place. Returns the same map.
 func IngestCompositeInputs(ctx context.Context, store Store, inputs map[string]any) (map[string]any, error) {

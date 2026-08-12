@@ -42,11 +42,6 @@ func bucketKey(ip, bucket string) string {
 	return ip + "\x00" + bucket
 }
 
-// Allow reports whether ip may proceed on the preview bucket. false → over limit.
-func (l *IPLimiter) Allow(ip string) bool {
-	return l.AllowBucket(ip, RateBucketPreview)
-}
-
 // AllowBucket reports whether ip may proceed on the named bucket.
 func (l *IPLimiter) AllowBucket(ip, bucket string) bool {
 	key := bucketKey(ip, bucket)
@@ -74,11 +69,4 @@ func (l *IPLimiter) gcExpiredLocked(now time.Time) {
 			delete(l.byKey, k)
 		}
 	}
-}
-
-// LenForTest returns the number of tracked IP+bucket keys (tests / diagnostics).
-func (l *IPLimiter) LenForTest() int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return len(l.byKey)
 }

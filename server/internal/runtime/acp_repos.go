@@ -25,21 +25,6 @@ func gitBaseURL(repo string) string {
 	return u.Scheme + "://" + u.Host
 }
 
-// gitRepoScheme classifies a repo URL as https, ssh, or "".
-func gitRepoScheme(repo string) string {
-	repo = strings.TrimSpace(repo)
-	switch {
-	case strings.HasPrefix(repo, "http://"), strings.HasPrefix(repo, "https://"):
-		return "https"
-	case strings.HasPrefix(repo, "ssh://"):
-		return "ssh"
-	case strings.Contains(repo, "@") && strings.Contains(repo, ":"):
-		return "ssh"
-	default:
-		return ""
-	}
-}
-
 // gitRepoHost extracts the hostname from https, ssh://, or SCP-style repo URLs.
 func gitRepoHost(repo string) string {
 	repo = strings.TrimSpace(repo)

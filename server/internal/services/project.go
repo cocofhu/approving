@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cocofhu/approving/internal/envauth"
 	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/runtime"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -83,30 +83,9 @@ type ProjectTokenBreakdown struct {
 	PM       *int64
 }
 
-// TotalTokens returns the summed project Token total (workflow + PM), or nil
-// when no Usage has been reported (UI "—"). A non-nil 0 means usage was
-// reported and totals to zero.
-func (s *ProjectService) totalTokens(projectID string) *int64 {
-	return s.TokenBreakdownByProjectIDs([]string{projectID})[projectID].Total
-}
-
 // TokenBreakdown returns workflow/pm/total split for one project.
 func (s *ProjectService) TokenBreakdown(projectID string) ProjectTokenBreakdown {
 	return s.TokenBreakdownByProjectIDs([]string{projectID})[projectID]
-}
-
-// TotalTokensByProjectIDs batch-aggregates project Token totals (workflow
-// StateRun.Usage + assistant ChatMessage.Usage). Projects with no reported
-// usage are omitted (caller treats as null / "—"). Stdio is never counted.
-func (s *ProjectService) totalTokensByProjectIDs(projectIDs []string) map[string]*int64 {
-	bd := s.TokenBreakdownByProjectIDs(projectIDs)
-	out := make(map[string]*int64, len(bd))
-	for pid, b := range bd {
-		if b.Total != nil {
-			out[pid] = b.Total
-		}
-	}
-	return out
 }
 
 // TokenBreakdownByProjectIDs batch-aggregates Project→WorkflowDef→Run→StateRun
@@ -494,7 +473,7 @@ func sanitizeEnvEntries(in []models.EnvEntry) ([]models.EnvEntry, error) {
 			return nil, ErrSecretPlaceholderOnNewKey
 		}
 		// Official ACP auth keys may be stored as project baseline; always force Secret.
-		secret := e.Secret || runtime.IsPlatformAuthEnvKey(k)
+		secret := e.Secret || envauth.IsPlatformAuthEnvKey(k)
 		out = append(out, models.EnvEntry{Key: k, Value: e.Value, Secret: secret, Enabled: e.Enabled})
 	}
 	return out, nil
@@ -551,7 +530,7 @@ func mergeEnvEntries(existing, incoming []models.EnvEntry) ([]models.EnvEntry, e
 			}
 		}
 		// Official ACP auth keys may be stored as project baseline; always force Secret.
-		secret := e.Secret || runtime.IsPlatformAuthEnvKey(k)
+		secret := e.Secret || envauth.IsPlatformAuthEnvKey(k)
 		out = append(out, models.EnvEntry{Key: k, Value: e.Value, Secret: secret, Enabled: e.Enabled})
 	}
 	return out, nil

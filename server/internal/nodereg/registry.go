@@ -213,15 +213,6 @@ func Get(nodeType string) (Spec, bool) {
 	return s, ok
 }
 
-// KnownTypes returns all registered node type ids.
-func knownTypes() []string {
-	out := make([]string, 0, len(registry))
-	for t := range registry {
-		out = append(out, t)
-	}
-	return out
-}
-
 // StructuredProduct returns the reserved artifact name and set_* tool for a
 // node type that declares a structured deliverable. Empty strings when none.
 func StructuredProduct(nodeType string) (artifactName, setTool string) {

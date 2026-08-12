@@ -13,7 +13,7 @@ func TestIPLimiterGCExpired(t *testing.T) {
 		l.byKey[fmt.Sprintf("10.2.0.%d\x00%s", i, RateBucketPreview)] = &ipWindow{start: time.Now().Add(-2 * time.Minute), count: 1}
 	}
 	l.mu.Unlock()
-	if !l.Allow("10.9.9.9") {
+	if !l.AllowBucket("10.9.9.9", RateBucketPreview) {
 		t.Fatal("fresh IP should allow")
 	}
 	if n := l.LenForTest(); n > 2 {

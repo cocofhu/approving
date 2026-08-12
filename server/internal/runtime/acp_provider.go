@@ -131,10 +131,6 @@ type reactSession struct {
 	home string // temp /root/.cursor host dir to clean up
 }
 
-func newACPProvider(host *mcp.Host, opts Options) ExecProvider {
-	return newBaseACPProvider(host, opts, BackendCursor)
-}
-
 func newBaseACPProvider(host *mcp.Host, opts Options, backend AcpBackend) ExecProvider {
 	backend = NormalizeBackend(string(backend))
 	image := resolveProviderImage(opts, backend)
