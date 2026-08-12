@@ -260,6 +260,35 @@ describe('ReviewComposer gate review semantics (send + confirm)', () => {
     expect(wrapper.findComponent({ name: 'ParagraphInput' }).exists()).toBe(true)
     wrapper.unmount()
   })
+
+  it('emits send/finish only (no reject/pass dual-channel)', async () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const w = mount(ReviewComposer, {
+      props: {
+        mode: 'gate',
+        canReject: true,
+        canPass: true,
+        rejectAllowEmpty: true,
+        draft: '',
+      },
+      global: {
+        plugins: [i18n],
+        stubs: { Icon: true, ParagraphInput: true, AnnotationChip: true, ClarifyChat: true },
+      },
+    })
+    await flushPromises()
+    await w.find('[data-testid="review-composer-send"]').trigger('click')
+    expect(w.emitted('send')).toBeTruthy()
+    expect(w.emitted('reject')).toBeFalsy()
+    await w.find('[data-testid="review-composer-pass"]').trigger('click')
+    expect(w.emitted('finish')).toBeTruthy()
+    expect(w.emitted('pass')).toBeFalsy()
+    w.unmount()
+  })
 })
 
 describe('ReviewComposer app_preview share panel entry', () => {

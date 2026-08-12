@@ -120,9 +120,3 @@ export function skillProfileIssues(
   }
   return out
 }
-
-/** @deprecated Prefer skillProfileIssues; kept for name-only missing checks in tests. */
-export function missingSkillProfiles(nodes: WFNode[], knownAgents: string[]): string[] {
-  const known = new Set(knownAgents)
-  return collectSkillProfiles(nodes).filter((p) => !known.has(p))
-}

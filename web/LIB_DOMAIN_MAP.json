@@ -20,6 +20,7 @@
     ],
     "shared": [
       "attachments.ts",
+      "auditNodeLabel.ts",
       "auditPayload.ts",
       "authGuard.ts",
       "compositeText.ts",
@@ -78,6 +79,9 @@
       "useArtifactGroupSelection.ts",
       "useNodeDefs.ts",
       "useRunBoard.ts",
+      "useRunDetailLiveLog.ts",
+      "useRunDetailSelection.ts",
+      "useRunDetailWs.ts",
       "useRunTerminalNotifications.ts",
       "useWorkflowAskInputs.ts",
       "useWorkflowImport.ts",
@@ -90,6 +94,7 @@
       "agentCreateWizard.ts",
       "agentIO.ts",
       "agentOrg.ts",
+      "agentStudioDraft.ts",
       "agentTeamWizard.ts",
       "backendAuthGuide.ts",
       "gitCredentialAnalysis.ts",
@@ -123,9 +128,9 @@
   "totals": {
     "api": 1,
     "composables": 12,
-    "shared": 29,
-    "run": 35,
-    "agent": 8,
+    "shared": 30,
+    "run": 38,
+    "agent": 9,
     "inbox": 15,
     "pm": 4
   }

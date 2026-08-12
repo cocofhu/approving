@@ -396,7 +396,7 @@ export function isPageHtmlGateBody(bodyTemplate: unknown): boolean {
   return /\.outputs\.page\b/.test(s) || s.includes('page.html')
 }
 
-export const HUMAN_GATE_COMMENT_FORM = [{ key: 'comment', label: '评审意见', required: false }] as const
+const HUMAN_GATE_COMMENT_FORM = [{ key: 'comment', label: '评审意见', required: false }] as const
 
 /** Default form for human_gate: empty on page.html path, comment form otherwise. */
 export function defaultHumanGateForm(bodyTemplate: unknown) {

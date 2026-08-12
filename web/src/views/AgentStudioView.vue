@@ -5,21 +5,19 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
-import CodeEditor from '@/components/ui/CodeEditor.vue'
-import MarkdownSplitEditor from '@/components/agent/MarkdownSplitEditor.vue'
-import ExplorerContextMenu, { type CtxTarget } from '@/components/agent/ExplorerContextMenu.vue'
 import AgentOrgSidebar from '@/components/agent/AgentOrgSidebar.vue'
 import AgentChatTester from '@/components/agent/AgentChatTester.vue'
 import AgentDataPanel, { type DataSubTab } from '@/components/agent/AgentDataPanel.vue'
-import AgentGitGuide from '@/components/agent/AgentGitGuide.vue'
-import EnvCredentialHelpModal, {
-  type EnvCredentialHelpSection,
-} from '@/components/agent/EnvCredentialHelpModal.vue'
-import McpConfigHelpModal from '@/components/agent/McpConfigHelpModal.vue'
+import AgentFilesPanel from '@/components/agent/AgentFilesPanel.vue'
+import AgentMcpPanel from '@/components/agent/AgentMcpPanel.vue'
+import AgentEnvPanel from '@/components/agent/AgentEnvPanel.vue'
+import AgentPromptsPanel from '@/components/agent/AgentPromptsPanel.vue'
+import AgentPlatformRulesPanel from '@/components/agent/AgentPlatformRulesPanel.vue'
+import AgentMetaPanel from '@/components/agent/AgentMetaPanel.vue'
 import AgentCreateWizard from '@/components/agent/AgentCreateWizard.vue'
 import CreateAgentTeamWizard from '@/components/agent/CreateAgentTeamWizard.vue'
 import TeamBootstrapPanel from '@/components/agent/TeamBootstrapPanel.vue'
-import { api, type Agent, type AgentOrg, type MCPServer, type AgentPrompts, type PlatformRuleMeta, type TeamBootstrapSession } from '@/lib/api/api'
+import { api, type Agent, type AgentOrg, type TeamBootstrapSession } from '@/lib/api/api'
 import { createListRequestSeq, httpStatusOf } from '@/lib/shared/listRequestSeq'
 import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import {
@@ -29,11 +27,7 @@ import {
   applyDeleteGroup,
   applyMoveAgent,
   applyRemoveAgentFromGroup,
-  setAgentMembership,
-  groupIdsOf,
-  parentOf,
   wouldCreateGroupCycle,
-  wouldCreateReportingCycle,
   buildOrgTreeRows,
   recursiveMemberNames,
   classifyAssignTargets,
@@ -42,19 +36,17 @@ import {
   isAgentInGroupSubtree,
   UNGROUPED_ID,
 } from '@/lib/agent/agentOrg'
-import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
 import { downloadZip, validateAgentName, normalizeAgentName } from '@/lib/agent/agentIO'
 import { useAgentImport } from '@/lib/agent/useAgentImport'
+import { isManagedRegionKey } from '@/lib/shared/regionPolicy'
 import {
-  ACP_BACKENDS,
-  getRegionPolicy,
-  isManagedRegionKey,
-  normalizeRegions,
-  setRegion,
-  switchBackendRegions,
-  type BackendId,
-} from '@/lib/shared/regionPolicy'
-import { BACKEND_AUTH_HINTS } from '@/lib/agent/backendAuthGuide'
+  PROMPT_KEYS,
+  toDraft,
+  fromDraft,
+  fromDraftRaw,
+  normalizeDraftRegions,
+  type AgentStudioDraft as Draft,
+} from '@/lib/agent/agentStudioDraft'
 
 const { t } = useI18n()
 const { isMobile } = useBreakpoint()
@@ -73,56 +65,7 @@ function parseDataSub(q: unknown): DataSubTab {
   return 'memory'
 }
 
-type KV = { k: string; v: string }
-type PromptKey = keyof AgentPrompts
-type PromptDraft = Record<PromptKey, string>
-type DraftMCP = {
-  name: string
-  transport: 'url' | 'command'
-  url: string
-  headers: KV[]
-  command: string
-  args: string
-  env: KV[]
-}
-type DraftFile = { path: string; content: string }
-type Draft = {
-  name: string
-  projectId: string
-  acpBackend: BackendId
-  gitCredentialType?: GitCredentialType
-  files: DraftFile[]
-  mcp: DraftMCP[]
-  env: KV[]
-  layout: { configRoot: string; workspaceDir: string }
-  prompts: PromptDraft
-}
-
-const ARTIFACT_STORE = 'artifact-store'
-const LEGACY_PM_LEADER = 'pm-leader'
-const MEMORY_STORE = 'memory-store'
-const CONTEXT_STORE = 'context-store'
-const TASK_SCHEDULER = 'task-scheduler'
-const AGENT_PLATFORM_MCPS = [
-  {
-    name: MEMORY_STORE,
-    url: '${APPROVING_MEMORY_URL}',
-    token: '${APPROVING_MEMORY_TOKEN}',
-  },
-  {
-    name: CONTEXT_STORE,
-    url: '${APPROVING_CONTEXT_URL}',
-    token: '${APPROVING_CONTEXT_TOKEN}',
-  },
-  {
-    name: TASK_SCHEDULER,
-    url: '${APPROVING_SCHEDULER_URL}',
-    token: '${APPROVING_SCHEDULER_TOKEN}',
-  },
-] as const
 const AGENT_LIST_COLLAPSED_KEY = 'agent-studio-agent-list-collapsed'
-const EXPLORER_COLLAPSED_KEY = 'agent-studio-explorer-collapsed'
-const SIDEBAR_EXPANDED_W = '240px'
 const ORG_SIDEBAR_EXPANDED_W = '280px'
 const SIDEBAR_COLLAPSED_W = '28px'
 
@@ -145,16 +88,9 @@ function writeCollapsedState(key: string, collapsed: boolean) {
 }
 
 const agentListCollapsed = ref(false)
-const explorerCollapsed = ref(false)
-
 function toggleAgentListCollapsed() {
   agentListCollapsed.value = !agentListCollapsed.value
   writeCollapsedState(AGENT_LIST_COLLAPSED_KEY, agentListCollapsed.value)
-}
-
-function toggleExplorerCollapsed() {
-  explorerCollapsed.value = !explorerCollapsed.value
-  writeCollapsedState(EXPLORER_COLLAPSED_KEY, explorerCollapsed.value)
 }
 
 const cardGridStyle = computed(() => {
@@ -164,17 +100,9 @@ const cardGridStyle = computed(() => {
   }
 })
 
-const workspaceGridStyle = computed(() => {
-  if (isMobile.value) return { gridTemplateColumns: '1fr' }
-  return {
-    gridTemplateColumns: `${explorerCollapsed.value ? SIDEBAR_COLLAPSED_W : SIDEBAR_EXPANDED_W} 1fr`,
-  }
-})
-
-/** Narrow-screen workspace step: resource list → full-screen edit. */
-type FilesStep = 'list' | 'edit'
-const filesStep = ref<FilesStep>('list')
+const filesStep = ref<'list' | 'edit'>('list')
 const justSaved = ref(false)
+const filesPanelRef = ref<InstanceType<typeof AgentFilesPanel> | null>(null)
 
 const TAB_FADE_THRESHOLD = 4
 const agentNameEl = ref<HTMLElement | null>(null)
@@ -185,24 +113,15 @@ const fullNameTipStyle = ref<Record<string, string>>({})
 const tabFadeLeft = ref(false)
 const tabFadeRight = ref(false)
 
-type ExplorerMoreTarget = { dir: boolean; path: string; name: string }
-const explorerMore = ref<ExplorerMoreTarget | null>(null)
-const explorerMoreStyle = ref<Record<string, string>>({})
-const explorerMoreAnchor = ref<HTMLElement | null>(null)
 let tabStripObserver: ResizeObserver | null = null
 
 function closeFullNameTip() {
   showFullNameTip.value = false
 }
 
-function closeExplorerMore() {
-  explorerMore.value = null
-  explorerMoreAnchor.value = null
-}
-
 function closeMobileChromeOverlays() {
   closeFullNameTip()
-  closeExplorerMore()
+  filesPanelRef.value?.closeExplorerMore()
 }
 
 /** Narrow-screen agent org tree bottom sheet (≈70vh). */
@@ -220,45 +139,6 @@ type LeaveConfirmCfg = {
 }
 const leaveConfirmCfg = ref<LeaveConfirmCfg | null>(null)
 
-const collapseBtnClass =
-  'flex shrink-0 items-center justify-center rounded w-[22px] h-[22px] text-txt3 transition hover:bg-elevated hover:text-accent-2 focus-visible:shadow-[inset_0_0_0_2px_rgba(99,102,241,0.35)] outline-none'
-
-// Ordered prompt-override fields. Empty value = platform default; the field
-// placeholder shows the actual default. Rule files (rules/*.md) are NOT here —
-// they live in the Agent working directory (files tab).
-const PROMPT_KEYS: PromptKey[] = [
-  'upstreamArtifactsHeader', 'producesContract', 'reactOpenSuffix', 'producesRetry',
-]
-const PROMPT_FRAGMENTS = computed(() => [
-  {
-    key: 'upstreamArtifactsHeader' as PromptKey,
-    label: t('pages.agentStudio.promptFields.upstreamHeader.label'),
-    hint: t('pages.agentStudio.promptFields.upstreamHeader.hint'),
-    placeholder: t('pages.agentStudio.promptFields.upstreamHeader.placeholder'),
-  },
-  {
-    key: 'producesContract' as PromptKey,
-    label: t('pages.agentStudio.promptFields.producesContract.label'),
-    hint: t('pages.agentStudio.promptFields.producesContract.hint'),
-    placeholder: t('pages.agentStudio.promptFields.producesContract.placeholder'),
-  },
-  {
-    key: 'reactOpenSuffix' as PromptKey,
-    label: t('pages.agentStudio.promptFields.reactOpening.label'),
-    hint: t('pages.agentStudio.promptFields.reactOpening.hint'),
-    placeholder: t('pages.agentStudio.promptFields.reactOpening.placeholder'),
-  },
-  {
-    key: 'producesRetry' as PromptKey,
-    label: t('pages.agentStudio.promptFields.reactMissingArtifact.label'),
-    hint: t('pages.agentStudio.promptFields.reactMissingArtifact.hint'),
-    placeholder: t('pages.agentStudio.promptFields.reactMissingArtifact.placeholder'),
-  },
-])
-function emptyPrompts(): PromptDraft {
-  return { upstreamArtifactsHeader: '', producesContract: '', reactOpenSuffix: '', producesRetry: '' }
-}
-
 const agents = ref<Agent[]>([])
 const projects = ref<{ id: string; name: string }[]>([])
 const org = ref<AgentOrg>(emptyOrg())
@@ -268,7 +148,6 @@ const draft = ref<Draft | null>(null)
 const originalJson = ref('')
 const tab = ref<StudioTab>('files')
 const dataSubTab = ref<DataSubTab>('memory')
-const parentDropdownOpen = ref(false)
 const orgSaving = ref(false)
 /** Skip one URL write while applying deep-link query on load. */
 let applyingStudioQuery = false
@@ -302,144 +181,6 @@ const draftBindingDirty = computed(() => {
 function projectNameById(id: string): string {
   return projects.value.find((p) => p.id === id)?.name || id
 }
-const pendingProjectId = ref<string | null>(null)
-const showProjectSwitch = ref(false)
-const projectSelectValue = computed<string>({
-  get: () => draft.value?.projectId || '',
-  set: (val) => {
-    if (!draft.value) return
-    const old = draft.value.projectId || ''
-    if (val === old) return
-    if (old) {
-      pendingProjectId.value = val
-      showProjectSwitch.value = true
-      return
-    }
-    draft.value.projectId = val
-  },
-})
-const pendingProjectLabel = computed(() =>
-  pendingProjectId.value ? projectNameById(pendingProjectId.value) : '',
-)
-function confirmProjectChange() {
-  if (draft.value && pendingProjectId.value !== null) {
-    draft.value.projectId = pendingProjectId.value
-  }
-  pendingProjectId.value = null
-  showProjectSwitch.value = false
-}
-function cancelProjectChange() {
-  pendingProjectId.value = null
-  showProjectSwitch.value = false
-}
-
-// Sandbox-protocol layout defaults (WSP/1). configRoot / workspaceDir are
-// per-Agent, persisted (agent.json) and consumed at sandbox creation to drive
-// the bind-mount target + WORKSPACE_DIR. mcp.json / rules/ / skills/ are
-// protocol-fixed sub-paths under configRoot, shown derived (read-only).
-const DEFAULT_CONFIG_ROOT = '/root/.cursor'
-const DEFAULT_WORKSPACE_DIR = '/root/workspace'
-
-let configRootTouched = false
-
-function defaultConfigRootFor(backend: BackendId): string {
-  return ACP_BACKENDS.find((b) => b.id === backend)?.configRoot || DEFAULT_CONFIG_ROOT
-}
-
-function selectAcpBackend(id: BackendId) {
-  if (!draft.value) return
-  const prev = draft.value.acpBackend
-  draft.value.acpBackend = id
-  if (!configRootTouched) {
-    draft.value.layout.configRoot = defaultConfigRootFor(id)
-  }
-  if (prev !== id) draft.value.env = recToKV(switchBackendRegions(kvToRec(draft.value.env), id))
-}
-
-const currentAuthHint = computed(() => BACKEND_AUTH_HINTS[draft.value?.acpBackend || 'cursor'])
-
-const envHelpOpen = ref(false)
-const envHelpSection = ref<EnvCredentialHelpSection>('inject')
-const mcpHelpOpen = ref(false)
-
-function openEnvHelp(section: EnvCredentialHelpSection) {
-  envHelpSection.value = section
-  envHelpOpen.value = true
-}
-
-function openMcpHelp() {
-  mcpHelpOpen.value = true
-}
-
-type PlatformPresetKind = 'artifact' | 'memory' | 'context' | 'scheduler'
-
-function platformPresetKind(name: string): PlatformPresetKind | null {
-  const n = name.trim()
-  if (n === ARTIFACT_STORE) return 'artifact'
-  if (n === MEMORY_STORE) return 'memory'
-  if (n === CONTEXT_STORE) return 'context'
-  if (n === TASK_SCHEDULER) return 'scheduler'
-  return null
-}
-
-function isPlatformPresetName(name: string) {
-  return platformPresetKind(name) !== null
-}
-
-function upsertEnv(key: string, value: string) {
-  if (!draft.value) return
-  const row = draft.value.env.find((e) => e.k === key)
-  if (row) row.v = value
-  else draft.value.env.push({ k: key, v: value })
-}
-
-function storedRegion(): string {
-  if (!draft.value) return ''
-  const policy = getRegionPolicy(draft.value.acpBackend)
-  if (!policy) return ''
-  return draft.value.env.find((e) => e.k === policy.regionEnvKey)?.v || ''
-}
-
-const currentRegionPolicy = computed(() =>
-  draft.value ? getRegionPolicy(draft.value.acpBackend) : undefined,
-)
-const showMetaRegionBlock = computed(() => !!currentRegionPolicy.value)
-
-const metaRegionOptions = computed(() => currentRegionPolicy.value?.options || [])
-
-const displayRegion = computed(() => {
-  const backend = draft.value?.acpBackend
-  if (!backend) return ''
-  const normalized = normalizeRegions(kvToRec(draft.value!.env), backend, 'preserve-special')
-  return normalized.special ? '' : normalized.region
-})
-const specialRegion = computed(() => {
-  const backend = draft.value?.acpBackend
-  if (!backend) return ''
-  const normalized = normalizeRegions(kvToRec(draft.value!.env), backend, 'preserve-special')
-  return normalized.special ? normalized.region : ''
-})
-
-function selectRegion(id: string) {
-  if (!draft.value) return
-  draft.value.env = recToKV(setRegion(kvToRec(draft.value.env), draft.value.acpBackend, id))
-}
-
-function joinConfigPath(root: string, sub: string): string {
-  return (root || DEFAULT_CONFIG_ROOT).replace(/\/+$/, '') + '/' + sub
-}
-
-// Derived (read-only) sub-paths under the current configRoot, for the meta tab.
-const derivedPaths = computed(() => {
-  const root = draft.value?.layout.configRoot || DEFAULT_CONFIG_ROOT
-  return [
-    { label: t('pages.agentStudio.configPaths.mcp'), path: joinConfigPath(root, 'mcp.json'), note: t('pages.agentStudio.configPaths.mcpNote') },
-    { label: t('pages.agentStudio.configPaths.rules'), path: joinConfigPath(root, 'rules/'), note: t('pages.agentStudio.configPaths.rulesNote') },
-    { label: t('pages.agentStudio.configPaths.skills'), path: joinConfigPath(root, 'skills/'), note: t('pages.agentStudio.configPaths.skillsNote') },
-    { label: t('pages.agentStudio.configPaths.commands'), path: joinConfigPath(root, 'commands/'), note: t('pages.agentStudio.configPaths.commandsNote') },
-    { label: t('pages.agentStudio.configPaths.env'), path: 'container-env', note: t('pages.agentStudio.configPaths.envNote') },
-  ]
-})
 const loading = ref(true)
 const hasInitialLoaded = ref(false)
 const loadFailed = ref(false)
@@ -452,42 +193,8 @@ const showRefreshProgress = computed(
   () => loading.value && hasInitialLoaded.value && agents.value.length > 0,
 )
 
-// working-dir file tree state. The active/open files are tracked by object
-// reference (not path) so renaming a file's path never drops the selection.
-const activeFile = ref<DraftFile | null>(null)
-const openTabs = ref<DraftFile[]>([])
-const expanded = ref<Set<string>>(new Set())
-const emptyDirs = ref<Set<string>>(new Set())
-const renamingPath = ref('')
-const renameInput = ref('')
-// VSCode-style inline new entry: an input row rendered in the tree under the
-// target directory (dir==='' is root) instead of a modal prompt.
-const creating = ref<{ dir: string; kind: 'file' | 'folder' } | null>(null)
-const createInput = ref('')
-const mcpRaw = ref(false)
-const envRaw = ref(false)
-const mcpRawText = ref('')
-const envRawText = ref('')
-const rawError = ref('')
-
-const folderInput = ref<HTMLInputElement | null>(null)
-const uploadTargetDir = ref('')
-const selectedTreeRow = ref<TreeRow | null>(null)
-const ctxMenu = ref<{ open: boolean; x: number; y: number; target: CtxTarget | null }>({
-  open: false,
-  x: 0,
-  y: 0,
-  target: null,
-})
 const toastMsg = ref('')
 let toastTimer: ReturnType<typeof setTimeout> | null = null
-
-const platformRuleItems = ref<PlatformRuleMeta[]>([])
-const platformRuleFile = ref('')
-const platformRuleContent = ref('')
-const platformRuleLoading = ref(false)
-const platformRuleSaving = ref(false)
-const platformRuleError = ref('')
 
 // generic dialogs
 type PromptCfg = {
@@ -610,90 +317,6 @@ const {
   confirmBatchOverwrite,
 } = agentImport
 
-function recToKV(rec?: Record<string, string>): KV[] {
-  return Object.entries(rec || {}).map(([k, v]) => ({ k, v }))
-}
-function kvToRec(kvs: KV[]): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const { k, v } of kvs) if (k.trim()) out[k.trim()] = v
-  return out
-}
-function normalizeDraftRegions(d: Draft): void {
-  d.env = recToKV(normalizeRegions(kvToRec(d.env), d.acpBackend, 'preserve-special').env)
-}
-function apiMcpToDraft(m: MCPServer): DraftMCP {
-  return {
-    name: m.name,
-    transport: m.command ? 'command' : 'url',
-    url: m.url ?? '',
-    headers: recToKV(m.headers),
-    command: m.command ?? '',
-    args: (m.args || []).join('\n'),
-    env: recToKV(m.env),
-  }
-}
-function draftMcpToApi(m: DraftMCP): MCPServer {
-  if (m.transport === 'command') {
-    return { name: m.name.trim(), command: m.command.trim(), args: m.args.split('\n').map((s) => s.trim()).filter(Boolean), env: kvToRec(m.env) }
-  }
-  return { name: m.name.trim(), url: m.url.trim(), headers: kvToRec(m.headers) }
-}
-
-function toDraft(a: Agent): Draft {
-  const prompts = emptyPrompts()
-  for (const k of PROMPT_KEYS) prompts[k] = a.prompts?.[k] ?? ''
-  return {
-    name: a.name,
-    projectId: a.projectId || '',
-    acpBackend: (a.acpBackend as BackendId) || 'cursor',
-    gitCredentialType: a.gitCredentialType,
-    files: (a.files || []).map((f) => ({ path: f.path, content: f.content })),
-    mcp: (a.mcp || []).map(apiMcpToDraft),
-    env: recToKV(a.env),
-    layout: {
-      configRoot: a.layout?.configRoot || DEFAULT_CONFIG_ROOT,
-      workspaceDir: a.layout?.workspaceDir || DEFAULT_WORKSPACE_DIR,
-    },
-    prompts,
-  }
-}
-// Collapse the prompt draft to only non-empty fields; return undefined when the
-// Agent uses platform defaults for everything (keeps agent.json clean).
-function draftPromptsToApi(p: PromptDraft): AgentPrompts | undefined {
-  const out: AgentPrompts = {}
-  let any = false
-  for (const k of PROMPT_KEYS) {
-    if (p[k].trim()) {
-      out[k] = p[k]
-      any = true
-    }
-  }
-  return any ? out : undefined
-}
-function fromDraftRaw(d: Draft): Agent {
-  return {
-    name: d.name,
-    // Always send projectId (including "") so unbind is explicit; omitted field
-    // is preserved server-side and must not be used for intentional clear.
-    projectId: d.projectId?.trim() || '',
-    acpBackend: d.acpBackend || 'cursor',
-    ...(d.gitCredentialType ? { gitCredentialType: d.gitCredentialType } : {}),
-    files: d.files.filter((f) => f.path.trim()).map((f) => ({ path: f.path.trim(), content: f.content })),
-    mcp: d.mcp.filter((m) => m.name.trim()).map(draftMcpToApi),
-    env: kvToRec(d.env),
-    layout: {
-      configRoot: d.layout.configRoot.trim() || DEFAULT_CONFIG_ROOT,
-      workspaceDir: d.layout.workspaceDir.trim() || DEFAULT_WORKSPACE_DIR,
-    },
-    prompts: draftPromptsToApi(d.prompts),
-  }
-}
-function fromDraft(d: Draft): Agent {
-  const payload = fromDraftRaw(d)
-  payload.env = normalizeRegions(payload.env || {}, d.acpBackend, 'preserve-special').env
-  return payload
-}
-
 function orgSnapshot(o: AgentOrg): string {
   return JSON.stringify({
     revision: o.revision,
@@ -713,11 +336,7 @@ watch(dirty, (d) => {
 })
 
 watch(isMobile, (mobile) => {
-  if (mobile) {
-    // Keep file context when crossing the breakpoint; default to list if none open.
-    filesStep.value = activeFile.value ? 'edit' : 'list'
-  } else {
-    // Desktop sidebar owns org navigation — close sheet to avoid dual entry.
+  if (!mobile) {
     showOrgSheet.value = false
     closeMobileChromeOverlays()
   }
@@ -907,47 +526,6 @@ function orgSheetPadStyle(depth: number) {
   return { paddingLeft: `${6 + depth * 14}px` }
 }
 
-const metaGroupTiles = computed(() => {
-  const list = [...(org.value.groups || [])]
-  list.sort((a, b) => groupPath(org.value, a.id).localeCompare(groupPath(org.value, b.id)))
-  return list.map((g) => ({
-    id: g.id,
-    name: g.name,
-    path: groupPath(org.value, g.id),
-    selected: activeName.value ? groupIdsOf(org.value, activeName.value).includes(g.id) : false,
-  }))
-})
-
-const metaParentOptions = computed(() =>
-  agentNames.value.filter((n) => n !== activeName.value),
-)
-
-const metaParentAgent = computed(() => (activeName.value ? parentOf(org.value, activeName.value) : ''))
-
-function toggleMetaGroup(groupId: string) {
-  if (!activeName.value) return
-  const cur = groupIdsOf(org.value, activeName.value)
-  const next = cur.includes(groupId) ? cur.filter((id) => id !== groupId) : [...cur, groupId]
-  org.value = setAgentMembership(org.value, activeName.value, next, parentOf(org.value, activeName.value))
-}
-
-function setMetaParent(parent: string) {
-  if (!activeName.value) return
-  if (parent && wouldCreateReportingCycle(org.value, activeName.value, parent)) {
-    error.value = t('pages.agentStudio.org.reportingCycle')
-    parentDropdownOpen.value = false
-    return
-  }
-  error.value = ''
-  org.value = setAgentMembership(
-    org.value,
-    activeName.value,
-    groupIdsOf(org.value, activeName.value),
-    parent,
-  )
-  parentDropdownOpen.value = false
-}
-
 async function persistOrg(next: AgentOrg): Promise<boolean> {
   orgSaving.value = true
   error.value = ''
@@ -1106,119 +684,6 @@ const studioTabLabel = computed(() => {
   const item = studioTabs.value.find((x) => x.k === tab.value)
   return item?.l || tab.value
 })
-const hasArtifactStore = computed(() => !!draft.value?.mcp.some((m) => m.name.trim() === ARTIFACT_STORE))
-const hasLegacyPmLeader = computed(() => !!draft.value?.mcp.some((m) => m.name.trim() === LEGACY_PM_LEADER))
-function isLegacyPmLeaderName(name: string) {
-  return name.trim() === LEGACY_PM_LEADER
-}
-function hasAgentPlatformMcp(name: string) {
-  return !!draft.value?.mcp.some((m) => m.name.trim() === name)
-}
-const currentFile = computed(() => activeFile.value)
-const activePath = computed(() => activeFile.value?.path || '')
-const breadcrumb = computed(() => activePath.value.split('/').filter(Boolean))
-
-function langForPath(p: string): string {
-  const ext = p.split('.').pop()?.toLowerCase() || ''
-  return ({ md: 'markdown', markdown: 'markdown', json: 'json', sh: 'shell', bash: 'shell', zsh: 'shell', js: 'javascript', mjs: 'javascript', ts: 'typescript', py: 'python', yml: 'yaml', yaml: 'yaml', toml: 'ini', txt: 'plaintext' } as Record<string, string>)[ext] || 'plaintext'
-}
-
-function isMdPath(p: string): boolean {
-  return p.toLowerCase().endsWith('.md')
-}
-
-const activePlatformRule = computed(() => platformRuleItems.value.find((x) => x.file === platformRuleFile.value))
-const platformRuleOverridden = computed(() => activePlatformRule.value?.source === 'override')
-const platformRuleOverrideCount = computed(() => platformRuleItems.value.filter((x) => x.source === 'override').length)
-
-async function loadPlatformRules() {
-  if (!activeName.value) return
-  platformRuleLoading.value = true
-  platformRuleError.value = ''
-  try {
-    const res = await api.listAgentPlatformRules(activeName.value)
-    platformRuleItems.value = res.items
-    if (!platformRuleFile.value && res.items.length) {
-      platformRuleFile.value = res.items[0].file
-    }
-    if (platformRuleFile.value) {
-      const item = await api.getAgentPlatformRule(activeName.value, platformRuleFile.value)
-      platformRuleContent.value = item.content
-    }
-  } catch (e: any) {
-    platformRuleError.value = e?.message || t('pages.agentStudio.platformRules.loadFailed')
-  } finally {
-    platformRuleLoading.value = false
-  }
-}
-
-async function selectPlatformRuleFile(file: string) {
-  if (!activeName.value) return
-  platformRuleFile.value = file
-  platformRuleError.value = ''
-  try {
-    const item = await api.getAgentPlatformRule(activeName.value, file)
-    platformRuleContent.value = item.content
-  } catch (e: any) {
-    platformRuleError.value = e?.message || t('pages.agentStudio.platformRules.loadFailed')
-  }
-}
-
-async function createPlatformRuleOverride() {
-  if (!activeName.value || !platformRuleFile.value) return
-  platformRuleSaving.value = true
-  platformRuleError.value = ''
-  try {
-    const item = await api.saveAgentPlatformRule(activeName.value, platformRuleFile.value, platformRuleContent.value)
-    platformRuleContent.value = item.content
-    await loadPlatformRules()
-    showToast(t('pages.agentStudio.platformRules.overrideCreated'))
-  } catch (e: any) {
-    platformRuleError.value = e?.message || t('pages.agentStudio.platformRules.saveFailed')
-  } finally {
-    platformRuleSaving.value = false
-  }
-}
-
-async function savePlatformRuleOverride() {
-  if (!activeName.value || !platformRuleFile.value || !platformRuleOverridden.value) return
-  platformRuleSaving.value = true
-  platformRuleError.value = ''
-  try {
-    const item = await api.saveAgentPlatformRule(activeName.value, platformRuleFile.value, platformRuleContent.value)
-    platformRuleContent.value = item.content
-    await loadPlatformRules()
-    showToast(t('pages.agentStudio.platformRules.saved'))
-  } catch (e: any) {
-    platformRuleError.value = e?.message || t('pages.agentStudio.platformRules.saveFailed')
-  } finally {
-    platformRuleSaving.value = false
-  }
-}
-
-async function deletePlatformRuleOverride() {
-  if (!activeName.value || !platformRuleFile.value || !platformRuleOverridden.value) return
-  platformRuleSaving.value = true
-  platformRuleError.value = ''
-  try {
-    await api.deleteAgentPlatformRule(activeName.value, platformRuleFile.value)
-    await loadPlatformRules()
-    if (platformRuleFile.value) {
-      const item = await api.getAgentPlatformRule(activeName.value, platformRuleFile.value)
-      platformRuleContent.value = item.content
-    }
-    showToast(t('pages.agentStudio.platformRules.overrideDeleted'))
-  } catch (e: any) {
-    platformRuleError.value = e?.message || t('pages.agentStudio.platformRules.deleteFailed')
-  } finally {
-    platformRuleSaving.value = false
-  }
-}
-
-function onPlatformRulesTab() {
-  if (tab.value === 'platform-rules') loadPlatformRules()
-}
-
 function showToast(msg: string) {
   toastMsg.value = msg
   if (toastTimer) clearTimeout(toastTimer)
@@ -1227,141 +692,8 @@ function showToast(msg: string) {
   }, 2800)
 }
 
-function hideCtxMenu() {
-  ctxMenu.value.open = false
-  ctxMenu.value.target = null
-}
-
-function openCtxMenu(e: MouseEvent, target: CtxTarget) {
-  e.preventDefault()
-  e.stopPropagation()
-  selectedTreeRow.value = target.blank || target.dir
-    ? null
-    : { name: target.name, path: target.path, dir: false, depth: 0 }
-  ctxMenu.value = { open: true, x: e.clientX, y: e.clientY, target }
-  nextTick(() => {
-    const menu = document.querySelector('.explorer-ctx-menu') as HTMLElement | null
-    if (!menu) return
-    const rect = menu.getBoundingClientRect()
-    ctxMenu.value.x = Math.min(e.clientX, window.innerWidth - rect.width - 8)
-    ctxMenu.value.y = Math.min(e.clientY, window.innerHeight - rect.height - 8)
-  })
-}
-
-function onExplorerBlankCtx(e: MouseEvent) {
-  openCtxMenu(e, { dir: true, path: '', name: t('pages.agentStudio.configPaths.root'), blank: true })
-}
-
-function onCtxAction(action: string) {
-  const target = ctxMenu.value.target
-  if (!target) return
-  const parentDir = target.path.includes('/') ? target.path.slice(0, target.path.lastIndexOf('/')) : ''
-  const row: TreeRow = { name: target.name, path: target.path, dir: target.dir, depth: 0 }
-
-  switch (action) {
-    case 'newFile':
-      newFile(target.blank ? '' : target.dir ? target.path : parentDir)
-      break
-    case 'newFolder':
-      newFolder(target.blank ? '' : target.dir ? target.path : parentDir)
-      break
-    case 'uploadFolder':
-      if (!target.dir || target.blank) return
-      uploadTargetDir.value = target.path
-      folderInput.value?.click()
-      break
-    case 'rename':
-      if (target.blank) return
-      startRename(row)
-      break
-    case 'copyPath':
-      if (target.dir) return
-      navigator.clipboard?.writeText(target.path).then(
-        () => showToast(t('common.toast.pathCopied', { path: target.path })),
-        () => showToast(t('common.toast.copyPathFailed')),
-      )
-      break
-    case 'delete':
-      if (target.path === 'rules' || target.path === 'skills') return
-      deleteEntry(row)
-      break
-  }
-  hideCtxMenu()
-}
-
-function onExplorerKeydown(e: KeyboardEvent) {
-  if (e.key === 'F2' && selectedTreeRow.value && !selectedTreeRow.value.dir) {
-    e.preventDefault()
-    startRename(selectedTreeRow.value)
-  }
-  if (e.key === 'Escape') hideCtxMenu()
-}
-
-// --- working-dir file tree -------------------------------------------------
-type TreeNode = { name: string; path: string; dir: boolean; children: Record<string, TreeNode> }
-type TreeRow = { name: string; path: string; dir: boolean; depth: number }
-
-function joinPath(dir: string, name: string): string {
-  return [dir, name].filter(Boolean).join('/').split('/').map((s) => s.trim()).filter(Boolean).join('/')
-}
-function expandParents(p: string) {
-  const segs = p.split('/').filter(Boolean)
-  let acc = ''
-  for (let i = 0; i < segs.length - 1; i++) {
-    acc = acc ? `${acc}/${segs[i]}` : segs[i]
-    expanded.value.add(acc)
-  }
-}
-
-const tree = computed<TreeNode>(() => {
-  const root: TreeNode = { name: '', path: '', dir: true, children: {} }
-  const add = (path: string, isFile: boolean) => {
-    const segs = path.split('/').filter(Boolean)
-    let cur = root
-    let acc = ''
-    segs.forEach((seg, i) => {
-      acc = acc ? `${acc}/${seg}` : seg
-      const leaf = isFile && i === segs.length - 1
-      if (!cur.children[seg]) cur.children[seg] = { name: seg, path: acc, dir: !leaf, children: {} }
-      cur = cur.children[seg]
-    })
-  }
-  for (const f of draft.value?.files || []) add(f.path, true)
-  for (const d of emptyDirs.value) add(d, false)
-  return root
-})
-
-const rows = computed<TreeRow[]>(() => {
-  const out: TreeRow[] = []
-  const walk = (node: TreeNode, depth: number) => {
-    const kids = Object.values(node.children).sort((a, b) =>
-      a.dir === b.dir ? a.name.localeCompare(b.name) : a.dir ? -1 : 1,
-    )
-    for (const k of kids) {
-      out.push({ name: k.name, path: k.path, dir: k.dir, depth })
-      if (k.dir && expanded.value.has(k.path)) walk(k, depth + 1)
-    }
-  }
-  walk(tree.value, 0)
-  return out
-})
-
-// open a file in the editor (and as a tab), tracking it by reference.
-function openFile(f: DraftFile) {
-  activeFile.value = f
-  if (!openTabs.value.includes(f)) openTabs.value.push(f)
-  expandParents(f.path)
-  selectedTreeRow.value = { name: f.path.split('/').pop() || f.path, path: f.path, dir: false, depth: 0 }
-  if (isMobile.value) filesStep.value = 'edit'
-}
-function openPath(path: string) {
-  const f = draft.value?.files.find((x) => x.path === path)
-  if (f) openFile(f)
-}
-
 function discardUnsavedChanges() {
-  const path = activeFile.value?.path || ''
-  const openPaths = openTabs.value.map((f) => f.path)
+  const snap = filesPanelRef.value?.snapshot() || { path: '', openPaths: [] as string[] }
   resetOrgFromBaseline()
   const a = agents.value.find((x) => x.name === activeName.value)
   if (!a) return
@@ -1369,49 +701,20 @@ function discardUnsavedChanges() {
   originalJson.value = JSON.stringify(fromDraftRaw(loaded))
   normalizeDraftRegions(loaded)
   draft.value = loaded
-  openTabs.value = openPaths
-    .map((p) => loaded.files.find((f) => f.path === p))
-    .filter((f): f is DraftFile => !!f)
-  activeFile.value = path ? loaded.files.find((f) => f.path === path) || null : null
+  nextTick(() => filesPanelRef.value?.restoreAfterDiscard(snap))
   justSaved.value = false
   error.value = ''
 }
 
-function goFilesList() {
-  filesStep.value = 'list'
-}
-
-function tryBackToList() {
-  if (!dirty.value) {
-    goFilesList()
-    return
-  }
-  leaveConfirmCfg.value = {
-    title: t('pages.agentStudio.dialogs.leaveUnsavedTitle'),
-    message: t('pages.agentStudio.dialogs.leaveUnsavedBackMessage'),
-    saveText: t('pages.agentStudio.dialogs.saveAndBack'),
-    discardText: t('pages.agentStudio.dialogs.discardChanges'),
-    onSave: async () => {
-      const ok = await save()
-      if (!ok) return false
-      justSaved.value = true
-      goFilesList()
-      return true
-    },
-    onDiscard: () => {
-      discardUnsavedChanges()
-      goFilesList()
-    },
-  }
-}
-
 function requestStudioTab(next: StudioTab) {
-  if (next === tab.value) {
-    if (next === 'platform-rules') onPlatformRulesTab()
-    return
-  }
+  if (next === tab.value) return
+  const exposedStep = filesPanelRef.value?.filesStep as unknown
+  const panelStep =
+    exposedStep && typeof exposedStep === 'object' && exposedStep !== null && 'value' in exposedStep
+      ? (exposedStep as { value: 'list' | 'edit' }).value
+      : ((exposedStep as 'list' | 'edit' | undefined) ?? filesStep.value)
   const leavingDirtyEdit =
-    isMobile.value && tab.value === 'files' && filesStep.value === 'edit' && dirty.value
+    isMobile.value && tab.value === 'files' && panelStep === 'edit' && dirty.value
   if (leavingDirtyEdit) {
     leaveConfirmCfg.value = {
       title: t('pages.agentStudio.dialogs.leaveUnsavedTitle'),
@@ -1423,21 +726,18 @@ function requestStudioTab(next: StudioTab) {
         if (!ok) return false
         justSaved.value = true
         tab.value = next
-        if (next === 'platform-rules') onPlatformRulesTab()
         syncStudioQuery()
         return true
       },
       onDiscard: () => {
         discardUnsavedChanges()
         tab.value = next
-        if (next === 'platform-rules') onPlatformRulesTab()
         syncStudioQuery()
       },
     }
     return
   }
   tab.value = next
-  if (next === 'platform-rules') onPlatformRulesTab()
   syncStudioQuery()
 }
 
@@ -1469,57 +769,6 @@ function leaveConfirmDiscard() {
 function leaveConfirmCancel() {
   leaveConfirmCfg.value = null
 }
-function closeTab(f: DraftFile) {
-  const i = openTabs.value.indexOf(f)
-  if (i < 0) return
-  openTabs.value.splice(i, 1)
-  if (activeFile.value === f) activeFile.value = openTabs.value[i] || openTabs.value[i - 1] || openTabs.value[openTabs.value.length - 1] || null
-}
-
-// inline rename (VSCode F2): edits the leaf name in place; folders rewrite the
-// prefix of every contained file.
-function startRename(row: TreeRow) {
-  renamingPath.value = row.path
-  renameInput.value = row.name
-  nextTick(() => {
-    const el = document.querySelector<HTMLInputElement>('input[data-rename]')
-    el?.focus()
-    el?.select()
-  })
-}
-function cancelRename() {
-  renamingPath.value = ''
-}
-function commitRename(row: TreeRow) {
-  if (renamingPath.value !== row.path) return
-  const leaf = renameInput.value.trim().replace(/\//g, '')
-  renamingPath.value = ''
-  if (!leaf || leaf === row.name) return
-  const parent = row.path.includes('/') ? row.path.slice(0, row.path.lastIndexOf('/')) : ''
-  const np = joinPath(parent, leaf)
-  if (np === row.path) return
-  if (draft.value!.files.some((f) => f.path === np)) {
-    error.value = t('pages.agentStudio.dialogs.pathExists', { path: np })
-    return
-  }
-  if (row.dir) {
-    const pref = row.path + '/'
-    draft.value!.files.forEach((f) => {
-      if (f.path === row.path || f.path.startsWith(pref)) f.path = np + f.path.slice(row.path.length)
-    })
-    const ed = new Set<string>()
-    expanded.value.forEach((d) => ed.add(d === row.path || d.startsWith(pref) ? np + d.slice(row.path.length) : d))
-    expanded.value = ed
-    const ned = new Set<string>()
-    emptyDirs.value.forEach((d) => ned.add(d === row.path || d.startsWith(pref) ? np + d.slice(row.path.length) : d))
-    emptyDirs.value = ned
-  } else {
-    const f = draft.value!.files.find((x) => x.path === row.path)
-    if (f) f.path = np
-  }
-  expandParents(np)
-}
-
 async function load() {
   const localSeq = studioSeq.beginListRequest()
   const keepStale = agents.value.length > 0
@@ -1569,7 +818,6 @@ function select(
   name: string,
   opts?: { tab?: StudioTab; dataSub?: DataSubTab; skipQuerySync?: boolean },
 ) {
-  configRootTouched = false
   const a = agents.value.find((x) => x.name === name)
   if (!a) return
   activeName.value = name
@@ -1583,33 +831,8 @@ function select(
   filesStep.value = 'list'
   justSaved.value = false
   leaveConfirmCfg.value = null
-  expanded.value = new Set()
-  emptyDirs.value = new Set()
-  openTabs.value = []
-  activeFile.value = null
-  renamingPath.value = ''
-  platformRuleFile.value = ''
-  platformRuleItems.value = []
-  platformRuleContent.value = ''
-  platformRuleError.value = ''
-  creating.value = null
-  selectDefaultFile()
-  mcpRaw.value = envRaw.value = false
+  nextTick(() => filesPanelRef.value?.resetForSelect())
   if (!opts?.skipQuerySync) syncStudioQuery()
-}
-
-function selectDefaultFile() {
-  // Narrow screen starts on the resource list step; do not auto-enter edit.
-  if (isMobile.value) {
-    activeFile.value = null
-    openTabs.value = []
-    filesStep.value = 'list'
-    return
-  }
-  const files = [...(draft.value?.files || [])].sort((a, b) => a.path.localeCompare(b.path))
-  const target = files.find((f) => f.path.toLowerCase().endsWith('.md')) || files[0]
-  if (target) openFile(target)
-  else activeFile.value = null
 }
 
 function resetOrgFromBaseline() {
@@ -1977,230 +1200,6 @@ async function confirmOk() {
 }
 
 // --- working-dir file operations ------------------------------------------
-function toggleDir(path: string) {
-  if (expanded.value.has(path)) expanded.value.delete(path)
-  else expanded.value.add(path)
-}
-function newFile(dir = '') { startCreate('file', dir) }
-function newFolder(dir = '') { startCreate('folder', dir) }
-
-// open an inline input row in the tree (VSCode New File / New Folder).
-function startCreate(kind: 'file' | 'folder', dir = '') {
-  renamingPath.value = ''
-  error.value = ''
-  createInput.value = ''
-  creating.value = { dir, kind }
-  if (dir) {
-    expandParents(dir)
-    expanded.value.add(dir)
-  }
-  nextTick(() => {
-    const el = document.querySelector<HTMLInputElement>('input[data-create]')
-    el?.focus()
-  })
-}
-function cancelCreate() {
-  creating.value = null
-  createInput.value = ''
-}
-function commitCreate() {
-  const c = creating.value
-  if (!c) return
-  const leaf = createInput.value.trim().replace(/^\/+|\/+$/g, '')
-  if (!leaf) { cancelCreate(); return }
-  const full = joinPath(c.dir, leaf)
-  if (!full) { cancelCreate(); return }
-  if (c.kind === 'file') {
-    if (draft.value!.files.some((f) => f.path === full)) { error.value = t('pages.agentStudio.dialogs.pathExists', { path: full }); return }
-    const f = { path: full, content: '' }
-    draft.value!.files.push(f)
-    emptyDirs.value.delete(c.dir)
-    expandParents(full)
-    tab.value = 'files'
-    openFile(f)
-  } else {
-    emptyDirs.value.add(full)
-    expandParents(full)
-    expanded.value.add(full)
-  }
-  creating.value = null
-  createInput.value = ''
-}
-function isProtectedDir(path: string) {
-  return path === 'rules' || path === 'skills'
-}
-
-function deleteEntry(row: TreeRow) {
-  if (row.dir && isProtectedDir(row.path)) return
-  confirmCfg.value = {
-    title: row.dir ? t('pages.agentStudio.dialogs.deleteFolderTitle') : t('pages.agentStudio.dialogs.deleteFileTitle'),
-    message: row.dir ? t('pages.agentStudio.dialogs.deleteFolderMessage', { path: row.path }) : t('pages.agentStudio.dialogs.deleteFileMessage', { path: row.path }),
-    confirmText: t('pages.agentStudio.dialogs.delete'),
-    danger: true,
-    ok: () => {
-      const gone = row.dir
-        ? draft.value!.files.filter((f) => f.path === row.path || f.path.startsWith(row.path + '/'))
-        : draft.value!.files.filter((f) => f.path === row.path)
-      draft.value!.files = draft.value!.files.filter((f) => !gone.includes(f))
-      openTabs.value = openTabs.value.filter((f) => !gone.includes(f))
-      if (activeFile.value && gone.includes(activeFile.value)) activeFile.value = openTabs.value[openTabs.value.length - 1] || null
-      if (row.dir) {
-        const pref = row.path + '/'
-        const ed = new Set<string>()
-        emptyDirs.value.forEach((d) => { if (!(d === row.path || d.startsWith(pref))) ed.add(d) })
-        emptyDirs.value = ed
-      }
-      if (!activeFile.value) selectDefaultFile()
-    },
-  }
-}
-
-async function onFolderPick(e: Event) {
-  const input = e.target as HTMLInputElement
-  const files = Array.from(input.files || [])
-  input.value = ''
-  if (!files.length || !draft.value) return
-  const targetDir = uploadTargetDir.value
-  uploadTargetDir.value = ''
-  let added = 0
-  let first = ''
-  for (const f of files) {
-    if (f.size > 512 * 1024) continue
-    const parts = (f.webkitRelativePath || f.name).split('/').map((s) => s.trim()).filter(Boolean)
-    const rel = parts.slice(1).join('/') || parts.join('/')
-    if (!rel) continue
-    const path = targetDir ? joinPath(targetDir, rel) : rel
-    try {
-      const content = await f.text()
-      const at = draft.value.files.findIndex((x) => x.path === path)
-      if (at >= 0) draft.value.files[at].content = content
-      else draft.value.files.push({ path, content })
-      if (!first) first = path
-      added++
-    } catch {
-      /* skip unreadable/binary */
-    }
-  }
-  if (!added) {
-    error.value = t('pages.agentStudio.dialogs.importNoText')
-    return
-  }
-  draft.value.files.sort((a, b) => a.path.localeCompare(b.path))
-  tab.value = 'files'
-  if (first) openPath(first)
-  showToast(t('common.toast.importedFiles', { count: added, dir: targetDir ? targetDir + '/' : t('pages.agentStudio.configPaths.root') }))
-}
-
-// --- mcp / env ------------------------------------------------------------
-function addMcp() {
-  draft.value?.mcp.push({ name: '', transport: 'url', url: '', headers: [], command: '', args: '', env: [] })
-}
-function updateEnvKey(i: number, value: string) {
-  if (!draft.value) return
-  if (isManagedRegionKey(value)) {
-    draft.value.env[i].k = ''
-    showToast(t('pages.agentStudio.region.managedConflict'))
-    return
-  }
-  draft.value.env[i].k = value
-}
-function removeMcp(i: number) {
-  draft.value?.mcp.splice(i, 1)
-}
-function addArtifactStore() {
-  if (!draft.value || hasArtifactStore.value) return
-  draft.value.mcp.unshift({
-    name: ARTIFACT_STORE,
-    transport: 'url',
-    url: '${APPROVING_ARTIFACT_URL}',
-    headers: [{ k: 'Authorization', v: 'Bearer ${APPROVING_ARTIFACT_TOKEN}' }],
-    command: '',
-    args: '',
-    env: [],
-  })
-}
-function addAgentPlatformMcp(name: (typeof AGENT_PLATFORM_MCPS)[number]['name']) {
-  if (!draft.value) return
-  if (!isProjectBound.value) {
-    showToast(t('pages.agentStudio.mcp.projectRequiredForPlatformMcp'))
-    return
-  }
-  const spec = AGENT_PLATFORM_MCPS.find((m) => m.name === name)
-  if (!spec) return
-  if (hasAgentPlatformMcp(name)) {
-    showToast(t('pages.agentStudio.mcp.agentMcpAlreadyExists', { name }))
-    return
-  }
-  draft.value.mcp.push({
-    name: spec.name,
-    transport: 'url',
-    url: spec.url,
-    headers: [{ k: 'Authorization', v: `Bearer ${spec.token}` }],
-    command: '',
-    args: '',
-    env: [],
-  })
-}
-function upgradeLegacyPmLeader() {
-  if (!draft.value) return
-  draft.value.mcp = draft.value.mcp.filter((m) => m.name.trim() !== LEGACY_PM_LEADER)
-  for (const spec of AGENT_PLATFORM_MCPS) {
-    if (!hasAgentPlatformMcp(spec.name)) {
-      addAgentPlatformMcp(spec.name)
-    }
-  }
-  showToast(t('pages.agentStudio.mcp.legacyPmUpgraded'))
-}
-function toggleMcpRaw() {
-  if (!draft.value) return
-  mcpRaw.value = !mcpRaw.value
-  rawError.value = ''
-  if (mcpRaw.value) mcpRawText.value = JSON.stringify(draft.value.mcp.map(draftMcpToApi), null, 2)
-}
-function onMcpRaw(text: string) {
-  mcpRawText.value = text
-  if (!draft.value) return
-  try {
-    const arr = JSON.parse(text)
-    if (!Array.isArray(arr)) throw new Error(t('pages.agentStudio.dialogs.jsonArray'))
-    draft.value.mcp = (arr as MCPServer[]).map(apiMcpToDraft)
-    rawError.value = ''
-  } catch (e: any) {
-    rawError.value = t('pages.agentStudio.mcp.parseError') + (e?.message || e)
-  }
-}
-function toggleEnvRaw() {
-  if (!draft.value) return
-  envRaw.value = !envRaw.value
-  rawError.value = ''
-  if (envRaw.value) envRawText.value = JSON.stringify(kvToRec(draft.value.env), null, 2)
-}
-function onEnvRaw(text: string) {
-  envRawText.value = text
-  if (!draft.value) return
-  try {
-    const obj = JSON.parse(text)
-    if (typeof obj !== 'object' || Array.isArray(obj)) throw new Error(t('pages.agentStudio.dialogs.jsonObject'))
-    const incoming = obj as Record<string, string>
-    const policy = getRegionPolicy(draft.value.acpBackend)
-    if (policy) incoming[policy.regionEnvKey] = storedRegion()
-    draft.value.env = recToKV(
-      normalizeRegions(
-        incoming,
-        draft.value.acpBackend,
-        'preserve-special',
-      ).env,
-    )
-    rawError.value = ''
-  } catch (e: any) {
-    rawError.value = t('pages.agentStudio.env.parseError') + (e?.message || e)
-  }
-}
-
-function onDocumentClick() {
-  hideCtxMenu()
-}
-
 function measureAgentNameTruncation() {
   const el = agentNameEl.value
   if (!el) {
@@ -2225,7 +1224,7 @@ function placeFullNameTip() {
 function onAgentNameClick() {
   measureAgentNameTruncation()
   if (!agentNameTruncated.value) return
-  closeExplorerMore()
+  filesPanelRef.value?.closeExplorerMore()
   showFullNameTip.value = !showFullNameTip.value
   if (showFullNameTip.value) nextTick(placeFullNameTip)
 }
@@ -2251,65 +1250,14 @@ function bindTabStripObserver() {
   tabStripObserver.observe(tabStripEl.value)
 }
 
-function explorerMoreItemCount(target: ExplorerMoreTarget) {
-  if (target.dir) return isProtectedDir(target.path) ? 3 : 4
-  return 2
-}
-
-function placeExplorerMore() {
-  const anchor = explorerMoreAnchor.value
-  const target = explorerMore.value
-  if (!anchor || !target) return
-  const rect = anchor.getBoundingClientRect()
-  const margin = 8
-  const menuWidth = Math.min(220, Math.max(160, window.innerWidth - margin * 2))
-  const menuHeight = explorerMoreItemCount(target) * 44 + 8
-  let left = rect.right - menuWidth
-  left = Math.max(margin, Math.min(left, window.innerWidth - margin - menuWidth))
-  let top = rect.bottom + 4
-  if (top + menuHeight > window.innerHeight - margin) {
-    top = Math.max(margin, rect.top - menuHeight - 4)
-  }
-  explorerMoreStyle.value = {
-    top: `${Math.round(top)}px`,
-    left: `${Math.round(left)}px`,
-    width: `${Math.round(menuWidth)}px`,
-  }
-}
-
-function toggleExplorerMore(e: MouseEvent, row: TreeRow) {
-  const el = e.currentTarget as HTMLElement
-  if (explorerMore.value?.path === row.path) {
-    closeExplorerMore()
-    return
-  }
-  closeFullNameTip()
-  hideCtxMenu()
-  explorerMore.value = { dir: row.dir, path: row.path, name: row.name }
-  explorerMoreAnchor.value = el
-  nextTick(placeExplorerMore)
-}
-
-function onExplorerMoreAction(action: 'newFile' | 'newFolder' | 'rename' | 'delete') {
-  const target = explorerMore.value
-  if (!target) return
-  const row: TreeRow = { name: target.name, path: target.path, dir: target.dir, depth: 0 }
-  closeExplorerMore()
-  if (action === 'newFile' && target.dir) newFile(target.path)
-  else if (action === 'newFolder' && target.dir) newFolder(target.path)
-  else if (action === 'rename') startRename(row)
-  else if (action === 'delete' && !(target.dir && isProtectedDir(target.path))) deleteEntry(row)
-}
-
 function onChromeReposition() {
   if (showFullNameTip.value) placeFullNameTip()
-  if (explorerMore.value) placeExplorerMore()
   syncTabFade()
 }
 
 function onChromeKeydown(e: KeyboardEvent) {
   if (e.key !== 'Escape') return
-  if (showFullNameTip.value || explorerMore.value) closeMobileChromeOverlays()
+  if (showFullNameTip.value) closeMobileChromeOverlays()
 }
 
 watch(activeName, () => {
@@ -2324,10 +1272,7 @@ watch(tabStripEl, () => {
 
 onMounted(() => {
   agentListCollapsed.value = readCollapsedState(AGENT_LIST_COLLAPSED_KEY)
-  explorerCollapsed.value = readCollapsedState(EXPLORER_COLLAPSED_KEY)
   load()
-  document.addEventListener('click', onDocumentClick)
-  document.addEventListener('keydown', onExplorerKeydown)
   document.addEventListener('keydown', onChromeKeydown)
   window.addEventListener('resize', onChromeReposition)
   window.addEventListener('scroll', onChromeReposition, true)
@@ -2339,8 +1284,6 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  document.removeEventListener('click', onDocumentClick)
-  document.removeEventListener('keydown', onExplorerKeydown)
   document.removeEventListener('keydown', onChromeKeydown)
   window.removeEventListener('resize', onChromeReposition)
   window.removeEventListener('scroll', onChromeReposition, true)
@@ -2349,7 +1292,6 @@ onBeforeUnmount(() => {
   if (toastTimer) clearTimeout(toastTimer)
 })
 </script>
-
 <template>
   <div
     class="flex h-full min-h-0 flex-col overflow-hidden"
@@ -2643,281 +1585,23 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <!-- agent working directory (VSCode-style explorer + tabs + editor) -->
-        <div
-          v-if="tab === 'files'"
-          class="min-h-0 flex-1 overflow-hidden transition-[grid-template-columns] duration-[220ms] ease-in-out"
-          :class="isMobile ? 'flex flex-col' : 'grid'"
-          :style="isMobile ? undefined : workspaceGridStyle"
-        >
-          <!-- explorer (list step on mobile) -->
-          <div
-            v-if="!isMobile || filesStep === 'list'"
-            class="flex min-h-0 min-w-0 flex-col bg-base/30"
-            :class="isMobile ? 'flex-1' : 'border-r border-line'"
-          >
-            <div
-              class="flex shrink-0 items-center gap-0.5 border-b border-line px-2 py-1.5"
-              :class="[
-                isMobile ? 'min-h-11' : 'min-h-8',
-                explorerCollapsed && !isMobile ? 'justify-center px-[3px]' : '',
-              ]"
-            >
-              <span
-                v-if="!explorerCollapsed || isMobile"
-                class="flex-1 truncate px-1 text-[10.5px] font-semibold uppercase tracking-wider text-txt3"
-              >{{ t('pages.agentStudio.explorer.title') }}</span>
-              <template v-if="!explorerCollapsed || isMobile">
-                <button
-                  class="rounded p-1 text-txt3 hover:bg-elevated hover:text-accent-2 focus-visible:shadow-[inset_0_0_0_2px_rgba(99,102,241,0.35)] outline-none"
-                  :class="isMobile ? 'min-h-11 min-w-11' : ''"
-                  :title="t('pages.agentStudio.explorer.newFile')"
-                  @click="newFile('')"
-                ><Icon name="doc" :size="13" /></button>
-                <button
-                  class="rounded p-1 text-txt3 hover:bg-elevated hover:text-accent-2 focus-visible:shadow-[inset_0_0_0_2px_rgba(99,102,241,0.35)] outline-none"
-                  :class="isMobile ? 'min-h-11 min-w-11' : ''"
-                  :title="t('pages.agentStudio.explorer.newFolder')"
-                  @click="newFolder('')"
-                ><Icon name="folder" :size="13" /></button>
-                <input ref="folderInput" type="file" webkitdirectory directory multiple class="hidden" @change="onFolderPick" />
-                <button
-                  v-if="!isMobile"
-                  type="button"
-                  :class="collapseBtnClass"
-                  :title="t('pages.agentStudio.explorer.collapse')"
-                  :aria-label="t('pages.agentStudio.explorer.collapse')"
-                  @click="toggleExplorerCollapsed"
-                >
-                  <Icon name="chevron-right" :size="14" class="rotate-180" />
-                </button>
-              </template>
-              <button
-                v-if="explorerCollapsed && !isMobile"
-                type="button"
-                :class="collapseBtnClass"
-                :title="t('pages.agentStudio.explorer.expand')"
-                :aria-label="t('pages.agentStudio.explorer.expand')"
-                @click="toggleExplorerCollapsed"
-              >
-                <Icon name="chevron-right" :size="14" />
-              </button>
-            </div>
-            <div
-              v-if="!explorerCollapsed || isMobile"
-              class="scroll-area min-h-0 flex-1 overflow-y-auto py-1"
-              @contextmenu="onExplorerBlankCtx"
-            >
-              <div v-if="!rows.length && !creating" class="px-3 py-6 text-center text-[11px] leading-5 text-txt3">{{ t('pages.agentStudio.explorer.empty') }}</div>
-
-              <!-- inline new entry at root (VSCode-style) -->
-              <div v-if="creating && creating.dir === ''" class="flex w-full items-center gap-1 py-[3px] pr-1.5">
-                <span class="flex shrink-0" :style="{ width: '8px' }" />
-                <Icon :name="creating.kind === 'folder' ? 'folder' : 'doc'" :size="13" class="shrink-0" :class="creating.kind === 'folder' ? 'text-accent-2' : 'text-txt3'" />
-                <input
-                  data-create
-                  v-model="createInput"
-                  class="min-w-0 flex-1 rounded border border-accent bg-surface px-1 py-0 font-mono text-[12px] text-txt outline-none"
-                  :placeholder="creating.kind === 'folder' ? t('pages.agentStudio.explorer.folderPlaceholder') : t('pages.agentStudio.explorer.filePlaceholder')"
-                  @keyup.enter="commitCreate"
-                  @keyup.esc="cancelCreate"
-                  @blur="commitCreate"
-                  @click.stop
-                />
-              </div>
-
-              <template v-for="row in rows" :key="(row.dir ? 'd:' : 'f:') + row.path">
-              <div
-                class="group relative flex w-full items-center gap-1 pr-1.5 text-left text-[12px] transition"
-                :class="[
-                  isMobile ? 'min-h-11 py-2' : 'py-[3px]',
-                  !row.dir && activePath === row.path ? 'bg-accent-dim text-txt' : 'text-txt2 hover:bg-elevated',
-                  ctxMenu.target?.path === row.path ? 'bg-overlay outline outline-1 outline-accent/35' : '',
-                ]"
-                @dblclick="startRename(row)"
-                @contextmenu="openCtxMenu($event, { dir: row.dir, path: row.path, name: row.name })"
-              >
-                <span
-                  v-if="!row.dir && activePath === row.path"
-                  class="absolute inset-y-0 left-0 w-0.5 bg-accent"
-                />
-                <!-- indent guides -->
-                <span class="flex shrink-0" :style="{ width: 8 + row.depth * 12 + 'px' }">
-                  <span v-for="d in row.depth" :key="d" class="ml-[5px] w-[7px] border-l border-line/60" />
-                </span>
-
-                <template v-if="renamingPath === row.path">
-                  <Icon :name="row.dir ? 'folder' : 'doc'" :size="13" class="shrink-0" :class="row.dir ? 'text-accent-2' : 'text-txt3'" />
-                  <input
-                    data-rename
-                    v-model="renameInput"
-                    class="min-w-0 flex-1 rounded border border-accent bg-surface px-1 py-0 font-mono text-[12px] text-txt outline-none"
-                    @keyup.enter="commitRename(row)"
-                    @keyup.esc="cancelRename"
-                    @blur="commitRename(row)"
-                    @click.stop
-                  />
-                </template>
-
-                <template v-else>
-                  <button v-if="row.dir" class="flex min-w-0 flex-1 items-center gap-1" @click="toggleDir(row.path)">
-                    <Icon :name="expanded.has(row.path) ? 'chevron-down' : 'chevron-right'" :size="12" class="shrink-0 text-txt3" />
-                    <Icon name="folder" :size="13" class="shrink-0 text-accent-2" />
-                    <span class="truncate font-mono">{{ row.name }}</span>
-                  </button>
-                  <button v-else class="flex min-w-0 flex-1 items-center gap-1 pl-[15px]" @click="openPath(row.path); selectedTreeRow = row">
-                    <Icon name="doc" :size="13" class="shrink-0 text-txt3" />
-                    <span class="truncate font-mono">{{ row.name }}</span>
-                  </button>
-                  <button
-                    v-if="isMobile"
-                    type="button"
-                    data-test="file-row-more"
-                    :data-path="row.path"
-                    class="flex min-h-11 min-w-11 shrink-0 items-center justify-center text-txt3 hover:text-accent-2"
-                    :title="t('pages.agentStudio.explorer.more')"
-                    :aria-label="t('pages.agentStudio.explorer.more')"
-                    :aria-expanded="explorerMore?.path === row.path"
-                    @click.stop="toggleExplorerMore($event, row)"
-                  ><Icon name="more" :size="16" /></button>
-                  <template v-else>
-                    <button
-                      v-if="row.dir"
-                      data-test="file-row-action"
-                      class="shrink-0 text-txt3 opacity-0 hover:text-accent-2 group-hover:opacity-100"
-                      :title="t('pages.agentStudio.explorer.newFileInFolder')"
-                      @click.stop="newFile(row.path)"
-                    ><Icon name="doc" :size="12" /></button>
-                    <button
-                      v-if="row.dir"
-                      data-test="file-row-action"
-                      class="shrink-0 text-txt3 opacity-0 hover:text-accent-2 group-hover:opacity-100"
-                      :title="t('pages.agentStudio.explorer.newFolderInFolder')"
-                      @click.stop="newFolder(row.path)"
-                    ><Icon name="folder" :size="12" /></button>
-                    <button
-                      data-test="file-row-action"
-                      class="shrink-0 text-txt3 opacity-0 hover:text-accent-2 group-hover:opacity-100"
-                      :title="t('pages.agentStudio.explorer.rename')"
-                      @click.stop="startRename(row)"
-                    ><Icon name="edit" :size="12" /></button>
-                    <button
-                      v-if="!row.dir || !isProtectedDir(row.path)"
-                      data-test="file-row-action"
-                      class="shrink-0 text-txt3 opacity-0 hover:text-err group-hover:opacity-100"
-                      :title="t('pages.agentStudio.explorer.delete')"
-                      @click.stop="deleteEntry(row)"
-                    ><Icon name="close" :size="12" /></button>
-                  </template>
-                </template>
-              </div>
-
-              <!-- inline new entry under this folder (VSCode-style) -->
-              <div v-if="creating && creating.dir === row.path" class="flex w-full items-center gap-1 py-[3px] pr-1.5">
-                <span class="flex shrink-0" :style="{ width: 8 + (row.depth + 1) * 12 + 'px' }">
-                  <span v-for="d in (row.depth + 1)" :key="d" class="ml-[5px] w-[7px] border-l border-line/60" />
-                </span>
-                <Icon :name="creating.kind === 'folder' ? 'folder' : 'doc'" :size="13" class="shrink-0" :class="creating.kind === 'folder' ? 'text-accent-2' : 'text-txt3'" />
-                <input
-                  data-create
-                  v-model="createInput"
-                  class="min-w-0 flex-1 rounded border border-accent bg-surface px-1 py-0 font-mono text-[12px] text-txt outline-none"
-                  :placeholder="creating.kind === 'folder' ? t('pages.agentStudio.explorer.folderName') : t('pages.agentStudio.explorer.fileName')"
-                  @keyup.enter="commitCreate"
-                  @keyup.esc="cancelCreate"
-                  @blur="commitCreate"
-                  @click.stop
-                />
-              </div>
-              </template>
-            </div>
-          </div>
-
-          <!-- editor pane (edit step on mobile) -->
-          <div
-            v-if="!isMobile || filesStep === 'edit'"
-            class="flex min-h-0 min-w-0 flex-col overflow-hidden"
-            :class="isMobile ? 'flex-1' : ''"
-          >
-            <!-- mobile edit chrome: back + path -->
-            <div
-              v-if="isMobile"
-              class="flex shrink-0 items-center gap-2 border-b border-line bg-base/25 px-2.5 py-2 min-h-12"
-            >
-              <button
-                type="button"
-                class="inline-flex min-h-11 items-center gap-1 px-2 text-[12px] text-txt2 hover:text-txt"
-                @click="tryBackToList"
-              >
-                <Icon name="chevron-right" :size="14" class="rotate-180" />
-                {{ t('pages.agentStudio.mobile.back') }}
-              </button>
-              <span class="min-w-0 flex-1 truncate font-mono text-[12px] text-txt">{{ activePath }}</span>
-            </div>
-
-            <!-- open-file tabs (desktop only; mobile uses single-file full-screen edit) -->
-            <div
-              v-if="!isMobile && openTabs.length"
-              class="scroll-area flex shrink-0 items-stretch overflow-x-auto border-b border-line bg-base/40"
-            >
-              <div
-                v-for="tabFile in openTabs"
-                :key="tabFile.path"
-                class="group flex shrink-0 cursor-pointer items-center gap-1.5 border-r border-line px-3 py-1.5 text-[12px] transition"
-                :class="activeFile === tabFile ? 'bg-surface text-txt' : 'text-txt3 hover:bg-elevated'"
-                @click="activeFile = tabFile"
-              >
-                <Icon name="doc" :size="12" class="shrink-0" />
-                <span class="max-w-[160px] truncate font-mono">{{ tabFile.path.split('/').pop() }}</span>
-                <button class="shrink-0 rounded text-txt3 opacity-0 hover:bg-overlay hover:text-txt group-hover:opacity-100" :class="activeFile === tabFile ? 'opacity-60' : ''" :title="t('pages.agentStudio.explorer.close')" @click.stop="closeTab(tabFile)"><Icon name="close" :size="12" /></button>
-              </div>
-            </div>
-
-            <template v-if="currentFile">
-              <!-- breadcrumb (desktop) -->
-              <div
-                v-if="!isMobile"
-                class="flex shrink-0 items-center gap-1 border-b border-line px-3 py-1 text-[11px] text-txt3"
-              >
-                <Icon name="folder" :size="11" class="text-accent-2/70" />
-                <template v-for="(seg, i) in breadcrumb" :key="i">
-                  <Icon v-if="i > 0" name="chevron-right" :size="10" class="text-txt3/60" />
-                  <span :class="i === breadcrumb.length - 1 ? 'font-mono text-txt2' : 'font-mono'">{{ seg }}</span>
-                </template>
-              </div>
-              <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-                <MarkdownSplitEditor
-                  v-if="isMdPath(currentFile.path)"
-                  v-model="currentFile.content"
-                  :file-path="currentFile.path"
-                  :variant="isMobile ? 'stack' : 'split'"
-                />
-                <CodeEditor v-else v-model="currentFile.content" :language="langForPath(currentFile.path)" />
-              </div>
-              <!-- status bar -->
-              <div
-                class="flex shrink-0 items-center gap-3 border-t border-line bg-base/40 px-3 py-1 text-[10.5px] text-txt3"
-              >
-                <span class="uppercase">{{ langForPath(currentFile.path) }}</span>
-                <span>{{ t('common.format.lines', { n: currentFile.content.split('\n').length }) }}</span>
-                <span>{{ t('common.format.chars', { n: currentFile.content.length }) }}</span>
-                <span
-                  v-if="!isMobile && isMdPath(currentFile.path)"
-                  class="border border-line bg-elevated px-1.5 text-[10px] text-txt2"
-                >{{ t('pages.agentStudio.explorer.markdownBadge') }}</span>
-                <span class="ml-auto truncate font-mono">{{ currentFile.path }}</span>
-              </div>
-            </template>
-            <div v-else class="flex flex-1 flex-col items-center justify-center gap-2 text-sm text-txt3">
-              <Icon name="doc" :size="28" class="text-line-strong" />
-              {{ t('pages.agentStudio.explorer.selectOrCreate') }}
-            </div>
-          </div>
-        </div>
+        <AgentFilesPanel
+          v-if="draft"
+          v-show="tab === 'files'"
+          ref="filesPanelRef"
+          :draft="draft"
+          :dirty="dirty"
+          :is-mobile="isMobile"
+          :save="save"
+          @error="error = $event"
+          @toast="showToast"
+          @update:just-saved="justSaved = $event"
+          @discard="discardUnsavedChanges"
+        />
 
         <!-- narrow-screen: non-whitelist tabs show desktop-only tip (files+data allowed) -->
         <div
-          v-else-if="isMobile && tab !== 'data'"
+          v-if="tab !== 'files' && isMobile && tab !== 'data'"
           class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-5 py-8 text-center"
         >
           <div class="flex h-10 w-10 items-center justify-center border border-info/35 bg-info/10 text-info">
@@ -2937,321 +1621,30 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
-        <!-- mcp -->
-        <div v-else-if="tab === 'mcp'" class="flex min-h-0 flex-1 flex-col">
-          <div class="flex items-center gap-2 border-b border-line px-4 py-2">
-            <button class="rounded border border-line px-2 py-1 text-[11px] text-txt2 hover:border-line-strong" @click="toggleMcpRaw">{{ mcpRaw ? t('pages.agentStudio.mcp.formEdit') : t('pages.agentStudio.mcp.rawJson') }}</button>
-            <button
-              v-if="!mcpRaw"
-              type="button"
-              class="bg-transparent p-0 text-[12px] text-accent-2 underline underline-offset-[3px] hover:text-[#c4b5fd] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              data-test="mcp-help-link"
-              @click="openMcpHelp"
-            >
-              {{ t('pages.agentStudio.mcpHelp.link') }}
-            </button>
-            <span class="flex-1" />
-          </div>
+        <AgentMcpPanel
+          v-if="tab === 'mcp' && draft && !isMobile"
+          :draft="draft"
+          :is-project-bound="isProjectBound"
+          @toast="showToast"
+        />
 
-          <div v-if="mcpRaw" class="flex min-h-0 flex-1 flex-col">
-            <div v-if="rawError" class="border-b border-err/30 bg-err/10 px-4 py-1.5 text-[11px] text-err">{{ rawError }}</div>
-            <div class="min-h-0 flex-1"><CodeEditor :model-value="mcpRawText" language="json" @update:model-value="onMcpRaw" /></div>
-          </div>
+        <AgentEnvPanel
+          v-if="tab === 'env' && draft && !isMobile"
+          :draft="draft"
+          @toast="showToast"
+        />
 
-          <div v-else class="scroll-area flex-1 space-y-3 overflow-y-auto p-4">
-            <div class="flex flex-wrap items-center gap-1.5 border border-line bg-elevated p-2.5" data-test="mcp-ops-bar">
-              <span class="mr-1 text-[11px] text-txt3">{{ t('pages.agentStudio.mcp.quickAddLabel') }}</span>
-              <button
-                v-if="!hasArtifactStore"
-                class="rounded border border-accent/40 px-2 py-1 text-accent-2 hover:bg-accent-dim"
-                type="button"
-                data-test="mcp-add-artifact"
-                @click="addArtifactStore"
-              >{{ t('pages.agentStudio.mcp.addArtifactStore') }}</button>
-              <button
-                class="rounded border border-accent/40 px-2 py-1 text-accent-2 hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40"
-                type="button"
-                data-test="mcp-add-memory"
-                :disabled="!isProjectBound"
-                @click="addAgentPlatformMcp('memory-store')"
-              >{{ t('pages.agentStudio.mcp.addMemoryStore') }}</button>
-              <button
-                class="rounded border border-accent/40 px-2 py-1 text-accent-2 hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40"
-                type="button"
-                data-test="mcp-add-context"
-                :disabled="!isProjectBound"
-                @click="addAgentPlatformMcp('context-store')"
-              >{{ t('pages.agentStudio.mcp.addContextStore') }}</button>
-              <button
-                class="rounded border border-accent/40 px-2 py-1 text-accent-2 hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40"
-                type="button"
-                data-test="mcp-add-scheduler"
-                :disabled="!isProjectBound"
-                @click="addAgentPlatformMcp('task-scheduler')"
-              >{{ t('pages.agentStudio.mcp.addTaskScheduler') }}</button>
-            </div>
-            <div
-              v-if="!isProjectBound"
-              class="rounded border border-dashed border-warn/40 bg-warn/10 p-2 text-[10.5px] leading-5 text-warn"
-              data-test="mcp-project-required-warn"
-            >
-              {{ t('pages.agentStudio.mcp.projectRequiredForPlatformMcp') }}
-            </div>
-            <div
-              v-if="hasLegacyPmLeader"
-              class="rounded border border-dashed border-warn/40 bg-warn/10 p-2 text-[10.5px] leading-5 text-warn"
-              data-test="mcp-legacy-pm-hint"
-            >
-              <div>{{ t('pages.agentStudio.mcp.legacyPmHint') }}</div>
-              <button
-                class="mt-1.5 rounded border border-warn/40 px-2 py-1 text-warn hover:bg-warn/15"
-                type="button"
-                data-test="mcp-upgrade-legacy"
-                @click="upgradeLegacyPmLeader"
-              >{{ t('pages.agentStudio.mcp.upgradeLegacyPm') }}</button>
-            </div>
+        <AgentPromptsPanel
+          v-if="tab === 'prompts' && draft && !isMobile"
+          :draft="draft"
+        />
 
-            <div
-              v-for="(m, i) in draft.mcp"
-              :key="i"
-              class="rounded-md border bg-base p-3"
-              :class="isPlatformPresetName(m.name) || isLegacyPmLeaderName(m.name) ? 'border-ok/30' : 'border-line'"
-              data-test="mcp-card"
-              :data-mcp-name="m.name.trim()"
-            >
-              <div class="mb-2 flex items-center gap-2">
-                <div v-if="isPlatformPresetName(m.name)" class="min-w-0 flex-1">
-                  <div class="text-[12px] font-medium text-txt" data-test="mcp-display-name">{{ t(`pages.agentStudio.mcp.displayName.${platformPresetKind(m.name)}`) }}</div>
-                  <div class="font-mono text-[10.5px] text-txt3" data-test="mcp-preset-key">{{ m.name.trim() }}</div>
-                </div>
-                <input
-                  v-else
-                  v-model="m.name"
-                  :placeholder="t('pages.agentStudio.mcp.serviceName')"
-                  class="flex-1 rounded border border-line bg-surface px-2 py-1 text-[12px] text-txt outline-none focus:border-accent"
-                  data-test="mcp-custom-name"
-                />
-                <select v-model="m.transport" class="rounded border border-line bg-surface px-2 py-1 text-[12px] text-txt2 outline-none">
-                  <option value="url">HTTP (url)</option>
-                  <option value="command">{{ t('pages.agentStudio.mcp.transportCommand') }}</option>
-                </select>
-                <button class="text-txt3 hover:text-err" :title="t('pages.agentStudio.mcp.remove')" data-test="mcp-remove" @click="removeMcp(i)"><Icon name="close" :size="14" /></button>
-              </div>
-
-              <template v-if="m.transport === 'url'">
-                <input v-model="m.url" placeholder="https://mcp.example.com/sse" class="mb-2 w-full rounded border border-line bg-surface px-2 py-1 font-mono text-[11px] text-txt outline-none focus:border-accent" />
-                <div class="text-[11px] text-txt3">{{ t('pages.agentStudio.mcp.headers') }}</div>
-                <div v-for="(h, hi) in m.headers" :key="hi" class="mt-1 flex items-center gap-1.5">
-                  <input v-model="h.k" placeholder="Authorization" class="w-1/3 rounded border border-line bg-surface px-2 py-1 font-mono text-[11px] text-txt2 outline-none" />
-                  <input v-model="h.v" placeholder="Bearer …" class="flex-1 rounded border border-line bg-surface px-2 py-1 font-mono text-[11px] text-txt2 outline-none" />
-                  <button class="text-txt3 hover:text-err" @click="m.headers.splice(hi, 1)"><Icon name="close" :size="12" /></button>
-                </div>
-                <button class="mt-1.5 text-[11px] text-accent-2 hover:underline" @click="m.headers.push({ k: '', v: '' })">{{ t('pages.agentStudio.mcp.addHeader') }}</button>
-              </template>
-
-              <template v-else>
-                <input v-model="m.command" placeholder="npx" class="mb-2 w-full rounded border border-line bg-surface px-2 py-1 font-mono text-[11px] text-txt outline-none focus:border-accent" />
-                <div class="text-[11px] text-txt3">{{ t('pages.agentStudio.mcp.args') }}</div>
-                <textarea v-model="m.args" rows="2" placeholder="-y&#10;@upstash/context7-mcp" class="mt-1 w-full resize-y rounded border border-line bg-surface px-2 py-1 font-mono text-[11px] text-txt2 outline-none" />
-                <div class="mt-2 text-[11px] text-txt3">{{ t('pages.agentStudio.mcp.env') }}</div>
-                <div v-for="(e, ei) in m.env" :key="ei" class="mt-1 flex items-center gap-1.5">
-                  <input v-model="e.k" placeholder="KEY" class="w-1/3 rounded border border-line bg-surface px-2 py-1 font-mono text-[11px] text-txt2 outline-none" />
-                  <input v-model="e.v" placeholder="value" class="flex-1 rounded border border-line bg-surface px-2 py-1 font-mono text-[11px] text-txt2 outline-none" />
-                  <button class="text-txt3 hover:text-err" @click="m.env.splice(ei, 1)"><Icon name="close" :size="12" /></button>
-                </div>
-                <button class="mt-1.5 text-[11px] text-accent-2 hover:underline" @click="m.env.push({ k: '', v: '' })">{{ t('pages.agentStudio.mcp.addEnv') }}</button>
-              </template>
-
-              <div
-                v-if="isPlatformPresetName(m.name)"
-                class="mt-2.5 border border-dashed border-ok/35 bg-ok/5 p-2 text-[10.5px] leading-5 text-txt2"
-                data-test="mcp-scope-note"
-              >
-                {{ t(`pages.agentStudio.mcp.scopeNote.${platformPresetKind(m.name)}`) }}
-              </div>
-              <div v-else-if="isLegacyPmLeaderName(m.name)" class="mt-2.5 flex items-start gap-2 border border-dashed border-warn/40 bg-warn/10 p-2 text-[10.5px] leading-5 text-warn">
-                <Icon name="alert" :size="14" class="mt-0.5 shrink-0 text-warn" />
-                <div>{{ t('pages.agentStudio.mcp.legacyPmEntryBadge') }}</div>
-              </div>
-            </div>
-            <AppButton size="sm" variant="outline" icon="plus" @click="addMcp">{{ t('pages.agentStudio.mcp.addService') }}</AppButton>
-          </div>
-        </div>
-
-        <!-- env -->
-        <div v-else-if="tab === 'env'" class="flex min-h-0 flex-1 flex-col">
-          <div class="flex items-center gap-2 border-b border-line px-4 py-2">
-            <button
-              type="button"
-              class="bg-transparent p-0 text-[12px] text-accent-2 underline underline-offset-[3px] hover:text-[#c4b5fd] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              data-test="env-help-inject"
-              @click="openEnvHelp('inject')"
-            >
-              {{ t('pages.agentStudio.envHelp.link') }}
-            </button>
-            <span class="flex-1" />
-            <button class="rounded border border-line px-2 py-1 text-[11px] text-txt2 hover:border-line-strong" @click="toggleEnvRaw">{{ envRaw ? t('pages.agentStudio.mcp.formEdit') : t('pages.agentStudio.mcp.rawJson') }}</button>
-          </div>
-
-          <div v-if="envRaw" class="flex min-h-0 flex-1 flex-col">
-            <div v-if="rawError" class="border-b border-err/30 bg-err/10 px-4 py-1.5 text-[11px] text-err">{{ rawError }}</div>
-            <div class="min-h-0 flex-1"><CodeEditor :model-value="envRawText" language="json" @update:model-value="onEnvRaw" /></div>
-          </div>
-          <div v-else class="scroll-area flex-1 space-y-2 overflow-y-auto p-4">
-            <AgentGitGuide
-              :env="draft.env"
-              :upsert-env="upsertEnv"
-              :credential-type="draft.gitCredentialType"
-              @update:credential-type="draft.gitCredentialType = $event"
-              @help="openEnvHelp('git')"
-            />
-            <div class="mb-3 rounded-lg border border-line bg-base/50 p-3 text-[11px] leading-6 text-txt3">
-              <div class="mb-1 flex items-center justify-between gap-2">
-                <div class="font-medium text-txt2">{{ t('pages.agentStudio.env.backendAuthTitle') }}</div>
-                <button
-                  type="button"
-                  class="bg-transparent p-0 text-[12px] text-accent-2 underline underline-offset-[3px] hover:text-[#c4b5fd] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                  data-test="env-help-acp"
-                  @click="openEnvHelp('acp')"
-                >
-                  {{ t('pages.agentStudio.envHelp.link') }}
-                </button>
-              </div>
-              <p class="font-mono text-accent-2">{{ currentAuthHint.key }}<span v-if="currentAuthHint.alt"> / {{ currentAuthHint.alt }}</span></p>
-            </div>
-            <template v-for="(e, i) in draft.env" :key="i">
-              <div v-if="!isManagedRegionKey(e.k)" class="flex items-center gap-1.5">
-                <input :value="e.k" placeholder="KEY" class="w-1/3 rounded border border-line bg-surface px-2 py-1.5 font-mono text-[12px] text-txt outline-none focus:border-accent" @input="updateEnvKey(i, ($event.target as HTMLInputElement).value)" />
-                <input v-model="e.v" placeholder="value" class="flex-1 rounded border border-line bg-surface px-2 py-1.5 font-mono text-[12px] text-txt2 outline-none focus:border-accent" />
-                <button class="text-txt3 hover:text-err" @click="draft.env.splice(i, 1)"><Icon name="close" :size="14" /></button>
-              </div>
-            </template>
-            <div v-if="currentRegionPolicy" class="border border-accent/30 bg-accent-dim/40 p-3">
-              <div class="mb-2 text-[11px] text-txt3">{{ t('pages.agentStudio.region.managedByAcp') }}</div>
-              <div class="flex items-center gap-1.5">
-                <input :value="currentRegionPolicy.regionEnvKey" readonly :aria-label="t('pages.agentStudio.region.managedKey')" class="w-1/3 rounded border border-line bg-elevated px-2 py-1.5 font-mono text-[12px] text-txt3" />
-                <input :value="storedRegion()" readonly :aria-label="t('pages.agentStudio.region.managedValue')" class="flex-1 rounded border border-line bg-elevated px-2 py-1.5 font-mono text-[12px] text-txt3" />
-              </div>
-            </div>
-            <AppButton size="sm" variant="outline" icon="plus" @click="draft.env.push({ k: '', v: '' })">{{ t('pages.agentStudio.env.add') }}</AppButton>
-          </div>
-        </div>
-
-        <!-- prompts: per-Agent overrides of platform-injected prompt text + rule files -->
-        <div v-else-if="tab === 'prompts' && draft" class="scroll-area min-h-0 flex-1 overflow-y-auto p-4">
-          <div class="mb-4 max-w-3xl">
-            <h3 class="text-sm font-semibold text-txt">{{ t('pages.agentStudio.prompts.title') }}</h3>
-            <p class="mt-1 text-[12px] leading-6 text-txt3" v-html="t('pages.agentStudio.prompts.intro')" />
-          </div>
-
-          <div class="max-w-3xl space-y-4">
-            <label v-for="f in PROMPT_FRAGMENTS" :key="f.key" class="block">
-              <span class="text-[12px] font-medium text-txt2">{{ f.label }}</span>
-              <p class="mb-1.5 text-[11px] text-txt3">{{ f.hint }}</p>
-              <textarea
-                v-model="draft.prompts[f.key]"
-                rows="3"
-                spellcheck="false"
-                :placeholder="t('pages.agentStudio.prompts.defaultPrefix') + f.placeholder"
-                class="w-full resize-y rounded-md border border-line bg-base px-3 py-2 font-mono text-[12px] leading-6 text-txt outline-none focus:border-accent"
-              />
-            </label>
-          </div>
-
-          <p class="mt-4 max-w-3xl text-[11px] leading-5 text-txt3">
-            {{ t('pages.agentStudio.prompts.rulesNote') }}
-          </p>
-        </div>
-
-        <!-- platform rules override -->
-        <div v-if="tab === 'platform-rules' && !isMobile" class="grid min-h-0 flex-1 grid-cols-[240px_1fr_260px] overflow-hidden">
-          <aside class="flex min-h-0 flex-col border-r border-line bg-base/30">
-            <div class="border-b border-line px-3 py-3">
-              <h3 class="text-[13px] font-semibold text-txt">{{ t('pages.agentStudio.platformRules.title') }}</h3>
-              <p class="mt-1 text-[11px] leading-relaxed text-txt3">{{ t('pages.agentStudio.platformRules.subtitle', { agent: activeName }) }}</p>
-            </div>
-            <div v-if="platformRuleLoading" class="p-4 text-xs text-txt3">{{ t('common.buttons.loading') }}</div>
-            <div v-else class="scroll-area flex-1 overflow-y-auto p-2">
-              <button
-                v-for="item in platformRuleItems"
-                :key="item.file"
-                class="mb-0.5 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[12px] transition"
-                :class="platformRuleFile === item.file ? 'bg-accent-dim text-txt' : 'text-txt3 hover:bg-elevated hover:text-txt2'"
-                @click="selectPlatformRuleFile(item.file)"
-              >
-                <Icon name="file" :size="14" class="shrink-0 opacity-70" />
-                <span class="min-w-0 flex-1 truncate font-mono text-[11px]">{{ item.file }}</span>
-                <span
-                  class="shrink-0 rounded border px-1.5 py-0.5 text-[10px]"
-                  :class="item.source === 'override' ? 'border-warn/30 bg-warn/10 text-warn' : 'border-info/30 bg-info/10 text-info'"
-                >
-                  {{ item.source === 'override' ? t('pages.agentStudio.platformRules.overridden') : t('pages.agentStudio.platformRules.inherited') }}
-                </span>
-              </button>
-            </div>
-          </aside>
-
-          <section class="flex min-h-0 min-w-0 flex-col">
-            <div class="flex items-center justify-between gap-2 border-b border-line px-4 py-2">
-              <div class="flex min-w-0 items-center gap-2">
-                <span class="truncate font-mono text-[12px] text-txt2">
-                  {{ platformRuleOverridden ? `profiles/${activeName}/platform-rules/${platformRuleFile}` : t('pages.agentStudio.platformRules.inheritPath', { file: platformRuleFile }) }}
-                </span>
-                <span
-                  class="shrink-0 rounded border px-2 py-0.5 text-[10px]"
-                  :class="platformRuleOverridden ? 'border-warn/30 bg-warn/10 text-warn' : 'border-info/30 bg-info/10 text-info'"
-                >
-                  {{ platformRuleOverridden ? t('pages.agentStudio.platformRules.overridden') : t('pages.agentStudio.platformRules.inherited') }}
-                </span>
-              </div>
-              <div class="flex shrink-0 items-center gap-2">
-                <AppButton
-                  v-if="!platformRuleOverridden"
-                  variant="primary"
-                  size="sm"
-                  icon="plus"
-                  :disabled="platformRuleSaving || !platformRuleFile"
-                  @click="createPlatformRuleOverride"
-                >
-                  {{ t('pages.agentStudio.platformRules.createOverride') }}
-                </AppButton>
-                <template v-else>
-                  <AppButton variant="ghost" size="sm" icon="trash" :disabled="platformRuleSaving" @click="deletePlatformRuleOverride">
-                    {{ t('pages.agentStudio.platformRules.deleteOverride') }}
-                  </AppButton>
-                  <AppButton variant="primary" size="sm" icon="check" :disabled="platformRuleSaving" @click="savePlatformRuleOverride">
-                    {{ platformRuleSaving ? t('common.buttons.saving') : t('common.buttons.save') }}
-                  </AppButton>
-                </template>
-              </div>
-            </div>
-            <div v-if="platformRuleError" class="border-b border-err/30 bg-err/10 px-4 py-2 text-[12px] text-err">{{ platformRuleError }}</div>
-            <div class="min-h-0 flex-1">
-              <MarkdownSplitEditor
-                v-if="platformRuleFile"
-                v-model="platformRuleContent"
-                :file-path="`rules/${platformRuleFile}`"
-                :readonly="!platformRuleOverridden"
-              />
-            </div>
-          </section>
-
-          <aside class="scroll-area min-h-0 overflow-y-auto border-l border-line bg-base/20 p-3">
-            <h4 class="text-[11px] font-semibold uppercase tracking-wider text-txt3">{{ t('pages.agentStudio.platformRules.statusTitle') }}</h4>
-            <div class="mt-2 flex flex-wrap gap-2 text-[10px]">
-              <span class="rounded border border-warn/30 bg-warn/10 px-2 py-1 text-warn">
-                {{ t('pages.agentStudio.platformRules.overriddenCount', { n: platformRuleOverrideCount }) }}
-              </span>
-              <span class="rounded border border-info/30 bg-info/10 px-2 py-1 text-info">
-                {{ t('pages.agentStudio.platformRules.inheritedCount', { n: platformRuleItems.length - platformRuleOverrideCount }) }}
-              </span>
-            </div>
-            <p v-if="platformRuleOverridden" class="mt-3 text-[11px] leading-relaxed text-warn">
-              {{ t('pages.agentStudio.platformRules.diffHint') }}
-            </p>
-            <p class="mt-3 text-[11px] leading-relaxed text-txt3">{{ t('pages.agentStudio.platformRules.promptsNote') }}</p>
-          </aside>
-        </div>
+        <AgentPlatformRulesPanel
+          v-if="tab === 'platform-rules' && !isMobile"
+          :agent-name="activeName"
+          :active="tab === 'platform-rules'"
+          @toast="showToast"
+        />
 
         <!-- data: Agent-scoped memory / context / cron-job management (whitelist on mobile) -->
         <div v-if="tab === 'data' && draft" class="min-h-0 flex-1 overflow-hidden">
@@ -3269,7 +1662,6 @@ onBeforeUnmount(() => {
             <div class="max-w-lg rounded border border-dashed border-line bg-base p-6 text-center">
               <p class="text-[13px] font-medium text-txt">{{ t('pages.agentStudio.data.emptyTitle') }}</p>
               <p class="mt-1.5 text-[12px] leading-6 text-txt3">{{ t('pages.agentStudio.data.emptyDesc') }}</p>
-              <!-- Mobile: meta is desktop-only — avoid dead-link to bind -->
               <button
                 v-if="!isMobile"
                 class="mt-3 rounded border border-accent/40 px-3 py-1.5 text-[12px] text-accent-2 hover:bg-accent-dim"
@@ -3287,208 +1679,18 @@ onBeforeUnmount(() => {
           <AgentChatTester :profile="activeName" :home-project-id="savedProjectId" />
         </div>
 
-        <!-- meta: per-Agent sandbox-injection layout (persisted; drives creation) -->
-        <div v-if="tab === 'meta' && draft && !isMobile" class="scroll-area min-h-0 flex-1 overflow-auto p-4">
-          <div class="mb-4 max-w-3xl">
-            <h3 class="text-sm font-semibold text-txt">{{ t('pages.agentStudio.org.metaTitle') }}</h3>
-            <p class="mt-1 text-[12px] leading-6 text-txt3">{{ t('pages.agentStudio.org.metaIntro') }}</p>
-            <p class="mt-2 border-l-2 border-accent-2 bg-accent-dim px-2.5 py-1.5 text-[11px] leading-5 text-txt2">
-              {{ t('pages.agentStudio.org.metaRenameHint') }}
-            </p>
-          </div>
+        <AgentMetaPanel
+          v-if="tab === 'meta' && draft && !isMobile"
+          :draft="draft"
+          :org="org"
+          :agent-name="activeName"
+          :agent-names="agentNames"
+          :projects="projects"
+          :is-project-bound="isProjectBound"
+          @update:org="org = $event"
+          @error="(msg) => (error = msg)"
+        />
 
-          <div class="mb-8 max-w-3xl">
-            <div class="mb-1 text-[12px] font-medium text-txt2">{{ t('pages.agentStudio.project.label') }}</div>
-            <p class="mb-2.5 text-[11px] leading-5 text-txt3">{{ t('pages.agentStudio.project.hint') }}</p>
-            <select
-              v-model="projectSelectValue"
-              data-test="agent-project-select"
-              class="max-w-sm w-full rounded border border-line bg-surface px-2 py-1.5 text-[12px] text-txt outline-none focus:border-accent"
-            >
-              <option value="">{{ t('pages.agentStudio.project.unbound') }}</option>
-              <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
-            </select>
-            <p v-if="!isProjectBound" class="mt-2 rounded border border-dashed border-warn/40 bg-warn/10 px-2.5 py-1.5 text-[11px] leading-5 text-warn">
-              {{ t('pages.agentStudio.project.unboundWarn') }}
-            </p>
-          </div>
-
-          <div class="mb-8 max-w-3xl space-y-5">
-            <div>
-              <div class="mb-1 flex items-center justify-between gap-2 text-[12px] font-medium text-txt2">
-                <span>{{ t('pages.agentStudio.org.groupsLabel') }}</span>
-                <span class="text-[11px] font-normal text-txt3">{{ t('pages.agentStudio.org.groupsMeta') }}</span>
-              </div>
-              <p class="mb-2.5 text-[11px] leading-5 text-txt3">{{ t('pages.agentStudio.org.groupsHint') }}</p>
-              <div v-if="metaGroupTiles.length" class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <button
-                  v-for="tile in metaGroupTiles"
-                  :key="tile.id"
-                  type="button"
-                  class="flex min-h-[56px] items-start gap-2.5 border px-3 py-2.5 text-left transition"
-                  :class="tile.selected
-                    ? 'border-accent bg-accent-dim text-txt shadow-[inset_0_0_0_1px_rgba(99,102,241,0.25)]'
-                    : 'border-line bg-base text-txt2 hover:border-line-strong hover:bg-elevated hover:text-txt'"
-                  @click="toggleMetaGroup(tile.id)"
-                >
-                  <span
-                    class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center border"
-                    :class="tile.selected ? 'border-accent bg-accent text-white' : 'border-line-strong bg-surface'"
-                  >
-                    <Icon v-if="tile.selected" name="check" :size="11" />
-                  </span>
-                  <span class="min-w-0 flex-1">
-                    <span class="block truncate text-[12.5px] font-semibold">{{ tile.name }}</span>
-                    <span
-                      class="mt-0.5 block truncate text-[10.5px]"
-                      :class="tile.selected ? 'text-accent-2/80' : 'text-txt3'"
-                    >{{ tile.path }}</span>
-                  </span>
-                </button>
-              </div>
-              <p v-else class="border border-dashed border-line px-3 py-3 text-[12px] text-txt3">
-                {{ t('pages.agentStudio.org.noGroups') }}
-              </p>
-            </div>
-
-            <div>
-              <div class="mb-1 flex items-center justify-between gap-2 text-[12px] font-medium text-txt2">
-                <span>{{ t('pages.agentStudio.org.parentLabel') }}</span>
-                <span class="text-[11px] font-normal text-txt3">{{ t('pages.agentStudio.org.parentMeta') }}</span>
-              </div>
-              <p class="mb-2.5 text-[11px] leading-5 text-txt3">{{ t('pages.agentStudio.org.parentHint') }}</p>
-              <div class="relative max-w-sm">
-                <button
-                  type="button"
-                  class="flex w-full items-center gap-2 border border-line bg-base px-3 py-2.5 text-left text-[12.5px] text-txt transition hover:border-line-strong"
-                  :class="parentDropdownOpen ? 'border-accent shadow-[0_0_0_1px_rgba(99,102,241,0.25)]' : ''"
-                  @click="parentDropdownOpen = !parentDropdownOpen"
-                >
-                  <span class="min-w-0 flex-1 truncate" :class="metaParentAgent ? '' : 'text-txt3'">
-                    {{ metaParentAgent || t('pages.agentStudio.org.parentNone') }}
-                  </span>
-                  <Icon name="chevron-right" :size="14" class="shrink-0 text-txt3 transition" :class="parentDropdownOpen ? 'rotate-90' : 'rotate-90'" />
-                </button>
-                <div
-                  v-if="parentDropdownOpen"
-                  class="absolute left-0 right-0 top-[calc(100%+4px)] z-20 max-h-56 overflow-auto border border-line-strong bg-elevated p-1 shadow-card"
-                >
-                  <button
-                    type="button"
-                    class="flex w-full items-center gap-2 px-2.5 py-2 text-left text-[12.5px] transition"
-                    :class="!metaParentAgent ? 'bg-accent-dim text-txt' : 'text-txt2 hover:bg-overlay hover:text-txt'"
-                    @click="setMetaParent('')"
-                  >
-                    {{ t('pages.agentStudio.org.parentNone') }}
-                  </button>
-                  <button
-                    v-for="opt in metaParentOptions"
-                    :key="opt"
-                    type="button"
-                    class="flex w-full items-center gap-2 px-2.5 py-2 text-left text-[12.5px] transition"
-                    :class="metaParentAgent === opt ? 'bg-accent-dim text-txt' : 'text-txt2 hover:bg-overlay hover:text-txt'"
-                    @click="setMetaParent(opt)"
-                  >
-                    <Icon name="robot" :size="13" class="shrink-0 text-accent-2" />
-                    <span class="truncate">{{ opt }}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="mb-4 max-w-3xl border-t border-line pt-5">
-            <h3 class="text-sm font-semibold text-txt">{{ t('pages.agentStudio.meta.layoutTitle') }}</h3>
-            <p class="mt-1 text-[12px] leading-6 text-txt3" v-html="t('pages.agentStudio.meta.layoutIntro')" />
-          </div>
-
-          <div class="max-w-3xl space-y-4">
-            <div>
-              <div class="text-[12px] font-medium text-txt2">{{ t('pages.agentStudio.meta.acpBackend') }}</div>
-              <p class="mb-2 text-[11px] text-txt3">{{ t('pages.agentStudio.meta.acpBackendDesc') }}</p>
-              <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <button
-                  v-for="b in ACP_BACKENDS"
-                  :key="b.id"
-                  type="button"
-                  class="border px-2 py-3 text-center transition"
-                  :class="draft.acpBackend === b.id ? 'border-accent bg-accent-dim text-txt' : 'border-line bg-base text-txt2 hover:border-line-strong'"
-                  @click="selectAcpBackend(b.id)"
-                >
-                  <div class="text-[12px] font-semibold">{{ b.label }}</div>
-                  <div class="mt-0.5 font-mono text-[10px] text-txt3">{{ b.id }}</div>
-                </button>
-              </div>
-            </div>
-            <div v-if="showMetaRegionBlock" class="border-t border-dashed border-line pt-4">
-              <div class="text-[12px] font-medium text-txt2">
-                {{ t('pages.agentStudio.meta.regionTitle') }}
-                <span class="ml-1.5 inline-block border border-accent/30 bg-accent-dim px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-accent-2">{{ t('pages.agentStudio.meta.regionNewBadge') }}</span>
-              </div>
-              <p class="mb-2 text-[11px] text-txt3">{{ t('pages.agentStudio.meta.regionDesc') }}</p>
-              <p v-if="specialRegion" class="mb-2 border border-warn/35 bg-warn/10 px-2.5 py-2 font-mono text-[11px] text-warn">
-                {{ t('pages.agentStudio.region.special', { value: specialRegion }) }}
-              </p>
-              <div class="grid max-w-md grid-cols-2 gap-2" role="radiogroup" :aria-label="t('pages.agentStudio.region.title')">
-                <button
-                  v-for="r in metaRegionOptions"
-                  :key="r.id"
-                  type="button"
-                  class="border px-2 py-3 text-center transition"
-                  :class="displayRegion === r.id ? 'border-accent bg-accent-dim text-txt' : 'border-line bg-base text-txt2 hover:border-line-strong'"
-                  role="radio"
-                  :aria-checked="displayRegion === r.id"
-                  :aria-label="`${t(r.labelKey)} (${r.id})`"
-                  @click="selectRegion(r.id)"
-                >
-                  <div class="text-[12px] font-semibold">{{ t(r.labelKey) }}</div>
-                  <div class="mt-0.5 font-mono text-[10px] text-txt3">{{ r.id }}</div>
-                  <div class="mt-1.5 text-[10px] leading-snug" :class="displayRegion === r.id ? 'text-accent-2' : 'text-txt3'">{{ t(r.hintKey) }}</div>
-                </button>
-              </div>
-            </div>
-            <label class="block">
-              <span class="text-[12px] font-medium text-txt2">{{ t('pages.agentStudio.meta.configRoot') }}</span>
-              <p class="mb-1.5 text-[11px] text-txt3">{{ t('pages.agentStudio.meta.configRootDesc') }}</p>
-              <input
-                v-model="draft.layout.configRoot"
-                :placeholder="defaultConfigRootFor(draft.acpBackend)"
-                spellcheck="false"
-                class="w-full rounded-md border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
-                @input="configRootTouched = true"
-              />
-            </label>
-            <label class="block">
-              <span class="text-[12px] font-medium text-txt2">{{ t('pages.agentStudio.meta.workspaceDir') }}</span>
-              <p class="mb-1.5 text-[11px] text-txt3">{{ t('pages.agentStudio.meta.workspaceDirDesc') }}</p>
-              <input
-                v-model="draft.layout.workspaceDir"
-                :placeholder="DEFAULT_WORKSPACE_DIR"
-                spellcheck="false"
-                class="w-full rounded-md border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
-              />
-            </label>
-          </div>
-
-          <div class="mt-5 max-w-3xl">
-            <div class="mb-1.5 text-[11px] uppercase tracking-wider text-txt3">{{ t('pages.agentStudio.meta.derivedPaths') }}</div>
-            <div class="overflow-hidden rounded-lg border border-line">
-              <table class="w-full text-left text-[12px]">
-                <tbody>
-                  <tr v-for="(e, i) in derivedPaths" :key="e.label" :class="i % 2 ? 'bg-base/40' : ''">
-                    <td class="px-3 py-2 text-txt2">{{ e.label }}</td>
-                    <td class="px-3 py-2"><code class="rounded bg-base px-1.5 py-0.5 font-mono text-accent-2">{{ e.path }}</code></td>
-                    <td class="px-3 py-2 text-txt3">{{ e.note }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <p class="mt-3 max-w-3xl text-[11px] leading-5 text-txt3">
-            {{ t('pages.agentStudio.meta.capabilitiesNote') }}
-          </p>
-        </div>
       </div>
       <div
         v-else
@@ -3890,61 +2092,7 @@ onBeforeUnmount(() => {
         <small class="mb-1 block text-[11px] text-txt3">{{ t('pages.agentStudio.mobile.fullNameLabel') }}</small>
         <b class="break-all font-semibold">{{ activeName }}</b>
       </div>
-      <div
-        v-if="isMobile && explorerMore"
-        data-test="explorer-more-backdrop"
-        class="fixed inset-0 z-[9998]"
-        @click="closeExplorerMore"
-      />
-      <div
-        v-if="isMobile && explorerMore"
-        data-test="explorer-more-menu"
-        class="fixed z-[9999] min-w-[180px] border border-line bg-elevated py-1 shadow-card"
-        :style="explorerMoreStyle"
-        @click.stop
-      >
-        <button
-          v-if="explorerMore.dir"
-          type="button"
-          data-test="explorer-more-item"
-          data-action="newFile"
-          class="flex min-h-11 w-full items-center px-3.5 text-left text-[13px] text-txt hover:bg-overlay"
-          @click="onExplorerMoreAction('newFile')"
-        >{{ t('pages.agentStudio.explorer.newFile') }}</button>
-        <button
-          v-if="explorerMore.dir"
-          type="button"
-          data-test="explorer-more-item"
-          data-action="newFolder"
-          class="flex min-h-11 w-full items-center px-3.5 text-left text-[13px] text-txt hover:bg-overlay"
-          @click="onExplorerMoreAction('newFolder')"
-        >{{ t('pages.agentStudio.explorer.newFolder') }}</button>
-        <button
-          type="button"
-          data-test="explorer-more-item"
-          data-action="rename"
-          class="flex min-h-11 w-full items-center px-3.5 text-left text-[13px] text-txt hover:bg-overlay"
-          @click="onExplorerMoreAction('rename')"
-        >{{ t('pages.agentStudio.explorer.rename') }}</button>
-        <button
-          v-if="!explorerMore.dir || !isProtectedDir(explorerMore.path)"
-          type="button"
-          data-test="explorer-more-item"
-          data-action="delete"
-          class="flex min-h-11 w-full items-center px-3.5 text-left text-[13px] text-err hover:bg-err/10"
-          @click="onExplorerMoreAction('delete')"
-        >{{ t('pages.agentStudio.explorer.delete') }}</button>
-      </div>
     </Teleport>
-
-    <ExplorerContextMenu
-      :open="ctxMenu.open"
-      :x="ctxMenu.x"
-      :y="ctxMenu.y"
-      :target="ctxMenu.target"
-      @close="hideCtxMenu"
-      @action="onCtxAction"
-    />
 
     <AgentCreateWizard
       :open="showCreateWizard"
@@ -4067,37 +2215,6 @@ onBeforeUnmount(() => {
       </template>
     </AppModal>
 
-    <EnvCredentialHelpModal
-      :open="envHelpOpen"
-      :section="envHelpSection"
-      :backend="draft?.acpBackend || 'cursor'"
-      @close="envHelpOpen = false"
-    />
-
-    <McpConfigHelpModal
-      :open="mcpHelpOpen"
-      :config-root="draft?.layout?.configRoot || DEFAULT_CONFIG_ROOT"
-      @close="mcpHelpOpen = false"
-    />
-
-    <AppModal :open="showProjectSwitch" :title="t('pages.agentStudio.project.switchTitle')" :width="460" @close="cancelProjectChange">
-      <div class="space-y-2 text-[13px] leading-6 text-txt2">
-        <p>{{ t('pages.agentStudio.project.switchWarn') }}</p>
-        <ul class="list-disc space-y-1 pl-5 text-[12px]">
-          <li>{{ t('pages.agentStudio.project.switchItemMemory') }}</li>
-          <li>{{ t('pages.agentStudio.project.switchItemContext') }}</li>
-          <li>{{ t('pages.agentStudio.project.switchItemJobs') }}</li>
-          <li>{{ t('pages.agentStudio.project.switchItemPm') }}</li>
-        </ul>
-        <p class="mt-2 text-[11.5px] text-txt3">{{ t('pages.agentStudio.project.switchApplyHint') }}</p>
-      </div>
-      <template #footer>
-        <AppButton size="sm" variant="ghost" @click="cancelProjectChange">{{ t('common.buttons.cancel') }}</AppButton>
-        <AppButton size="sm" variant="danger" @click="confirmProjectChange">
-          {{ pendingProjectLabel ? t('pages.agentStudio.project.switchConfirm', { name: pendingProjectLabel }) : t('pages.agentStudio.project.unbindConfirm') }}
-        </AppButton>
-      </template>
-    </AppModal>
 
     <Teleport to="body">
       <div

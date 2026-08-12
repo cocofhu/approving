@@ -244,7 +244,6 @@ describe('api req helpers', () => {
     expect(api.sandboxTerminalWsUrl(1)).toMatch(/\/sandboxes\/1\/terminal$/)
     expect(api.sandboxIdeUrl(1)).toContain('/sandbox/1/')
     expect(api.sandboxBridgeUrl(1)).toContain('/sandbox-bridge/1/')
-    expect(api.sandboxAcpUrl(1)).toContain('/sandbox-bridge/1/')
 
     await expect(api.listArtifacts()).resolves.toEqual([{ id: 'art' }])
     await expect(

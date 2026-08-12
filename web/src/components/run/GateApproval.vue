@@ -1,31 +1,16 @@
 <script lang="ts">
-export type ActionIconName = 'check' | 'arrow-left' | 'refresh'
-export type ActionVariant = 'ok' | 'neutral'
-
-const POSITIVE_ACTION_IDS = new Set(['pass', 'approve'])
-const REVERT_ACTION_IDS = new Set(['fail', 'revise', 'limit'])
-
-export function actionIcon(id: string): ActionIconName {
-  if (POSITIVE_ACTION_IDS.has(id)) return 'check'
-  if (REVERT_ACTION_IDS.has(id)) return 'arrow-left'
-  return 'refresh'
-}
-
-export function actionVariant(id: string): ActionVariant {
-  return POSITIVE_ACTION_IDS.has(id) ? 'ok' : 'neutral'
-}
-
-export function actionVariantClasses(variant: ActionVariant): string {
-  if (variant === 'ok') return 'bg-ok/15 text-ok hover:bg-ok/25'
-  return 'border border-line text-txt2 hover:bg-elevated hover:text-txt'
-}
+export {
+  actionIcon,
+  actionVariant,
+  actionVariantClasses,
+  type ActionIconName,
+  type ActionVariant,
+} from './gateApproval/gateApprovalActions'
 </script>
 
 <script setup lang="ts">
-import { ref, computed, watch, provide, onUnmounted } from 'vue'
+import { ref, computed, watch, provide, onUnmounted, reactive, toRef } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Icon from '../ui/Icon.vue'
-import ParagraphInput from '../ui/ParagraphInput.vue'
 import { renderMarkdown } from '@/lib/shared/markdown'
 import { api, type PreviewIssue } from '@/lib/api/api'
 import { useToast } from '@/lib/composables/useToast'
@@ -33,20 +18,11 @@ import { isCompositeFilled, normalizeCompositeSubmit } from '@/lib/shared/compos
 import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import { provideReviewAnnotate } from '@/lib/inbox/reviewAnnotate'
 import { pushAnnotationUnique } from '@/lib/inbox/reviewQuote'
-import PlanView, { type PlanDoc } from './PlanView.vue'
-import ProposalSelectView, { type ProposalsDoc } from './ProposalSelectView.vue'
-import StructuredArtifactView, { isStructuredArtifactName } from './StructuredArtifactView.vue'
+import { type PlanDoc } from './PlanView.vue'
+import { type ProposalsDoc } from './ProposalSelectView.vue'
+import { isStructuredArtifactName } from './StructuredArtifactView.vue'
 import SelectionAddToChat from './SelectionAddToChat.vue'
-import HtmlPreview from '../ui/HtmlPreview.vue'
-import AppPreviewPanel from './AppPreviewPanel.vue'
-import PreviewFeedbackChat from './PreviewFeedbackChat.vue'
-import ArtifactLoadingPane from './ArtifactLoadingPane.vue'
-import RefreshStrip from './RefreshStrip.vue'
 import { isAbortError } from '@/lib/run/liveLogRehydrate'
-import UpstreamRequirementContext from './UpstreamRequirementContext.vue'
-import ReviewShell from './ReviewShell.vue'
-import ReviewComposer from './ReviewComposer.vue'
-import GateReactStreamPanel from './GateReactStreamPanel.vue'
 import { REVIEW_SHELL_WIDTH_KEY_APPROVAL } from '@/lib/inbox/reviewLayoutBudget'
 import { OUTPUT_KEY_TO_ARTIFACT } from '@/lib/run/structuredArtifacts'
 import {
@@ -64,9 +40,14 @@ import {
   isReadonlyArtifactKind,
   type GatePrimaryProductRef,
 } from '@/lib/inbox/gateUpstream'
-import GateProductEditor from './GateProductEditor.vue'
 import type { ClarifyImage, Gate, GateShareInboxStatus, Run, ReactAnnotation } from '@/lib/shared/types'
 import { previewPickLabel } from '@/lib/shared/previewPickUrl'
+import { REVERT_ACTION_IDS, POSITIVE_ACTION_IDS } from './gateApproval/gateApprovalActions'
+import { gateApprovalKey } from './gateApproval/gateApprovalContext'
+import GateApprovalTitle from './gateApproval/GateApprovalTitle.vue'
+import GateApprovalMobileFill from './gateApproval/GateApprovalMobileFill.vue'
+import GateApprovalContentFit from './gateApproval/GateApprovalContentFit.vue'
+import GateApprovalDesktopBody from './gateApproval/GateApprovalDesktopBody.vue'
 
 const props = defineProps<{
   gate: Gate
@@ -877,9 +858,9 @@ onUnmounted(() => {
 function onProductSaved(payload: {
   name: string
   content: string
-  etag: string
-  updatedAt: string
-  sizeBytes: number
+  etag?: string
+  updatedAt?: string
+  sizeBytes?: number
 }) {
   savedProductContent.value = { ...savedProductContent.value, [payload.name]: payload.content }
   savedProductMeta.value = {
@@ -1467,1041 +1448,112 @@ function onComposerReject() {
   }
   void sendReactRevise()
 }
+
+provide(gateApprovalKey, {
+  s: reactive({
+    gate: toRef(props, 'gate'),
+    run: toRef(props, 'run'),
+    isMobile,
+    t,
+    formText,
+    formImages,
+    resolved,
+    formError,
+    actionSubmitting,
+    productDirty,
+    savedProductContent,
+    savedProductMeta,
+    primaryProducts,
+    excludedProduces,
+    productName,
+    canEditProducts,
+    isVisualBody,
+    isProposalSelect,
+    isAppPreview,
+    bodyTemplate,
+    usesPreviewIssues,
+    openPreviewIssueCount,
+    previewIssuesLoading,
+    previewIssuesError,
+    pickedSelector,
+    pickedElementImage,
+    proposalsDoc,
+    proposalsLoading,
+    planDoc,
+    planLoading,
+    productDoc,
+    productHtml,
+    productLoading,
+    productLoadError,
+    productHasSavedContent,
+    reviewingIteration,
+    previewFromArtifactFallback,
+    shouldFillPreview,
+    shouldFitStructured,
+    shouldFillAppPreview,
+    useFillLayout,
+    useUnifiedPreviewBudget,
+    contentFitChromeOffsetPx,
+    CONTENT_FIT_PREVIEW_MAX_VH,
+    REVIEW_SHELL_WIDTH_KEY_APPROVAL,
+    shouldHideGateForm,
+    footerActions,
+    isColdSession,
+    helpColdText,
+    helpReviseDetailNoIssuesText,
+    helpReviseWithIssuesText,
+    canReactRevise,
+    canRecordIssue,
+    canSubmitReact,
+    showHotPass,
+    showHotReject,
+    hotRejectAllowEmpty,
+    composerRejectLabel,
+    composerPassDisabled,
+    passAction,
+    reactText,
+    reactImages,
+    reactAnnotations,
+    reactSending,
+    reactError,
+    reactQueued,
+    reactThinking,
+    reactStreamText,
+    reactStreamThought,
+    reactInterrupted,
+    reactStreamCompletedAt,
+    isActionDisabled,
+    actionPendingLabel,
+    actionButtonTitle,
+    onProductSaved,
+    onProductRefresh,
+    retryLoadProduct,
+    onHtmlPreviewPick,
+    onAppPreviewPick,
+    clearHtmlPreviewPick,
+    loadPreviewIssues,
+    choose,
+    recordFeedbackIssue,
+    sendHotReject,
+    onComposerPass,
+    onComposerReject,
+    cancelReactRevise,
+    onSidebarAction,
+    renderMarkdown,
+  }),
+  productEditorRef,
+  feedbackChatRef,
+  gateStageEl,
+})
+
 </script>
 
 <template>
   <div class="flex h-full min-h-0 flex-col">
-    <div v-if="!compact" class="shrink-0 border-b border-line px-4 py-3">
-      <div class="flex items-center gap-2">
-        <Icon name="gate" :size="16" class="text-warn" />
-        <span class="text-sm font-semibold text-txt">{{ gate.title }}</span>
-      </div>
-      <div class="mt-1 text-[11px] text-txt3">{{ t('pages.gateApproval.subtitle') }}</div>
-    </div>
-
-    <!-- Run-detail mobile visual: ReviewShell stage (fillParent) + drawer composer (f9). -->
-    <div
-      v-if="useMobileFillRemaining"
-      class="flex min-h-0 flex-1 flex-col overflow-hidden"
-      data-testid="mobile-fill-remaining"
-    >
-      <ReviewShell
-        class="min-h-0 flex-1"
-        mobile
-        :sidebar-width="400"
-        :drawer-height="340"
-        :storage-key="REVIEW_SHELL_WIDTH_KEY_APPROVAL"
-      >
-        <template #stage>
-          <div
-            class="flex h-full min-h-0 flex-col overflow-hidden"
-            data-testid="mobile-fill-scroll"
-          >
-            <div
-              class="flex min-h-0 flex-1 flex-col overflow-hidden border border-line"
-              data-testid="mobile-fill-preview"
-            >
-              <div
-                v-if="reviewingIteration != null"
-                class="shrink-0 border-b border-line bg-elevated/60 px-3 py-1.5 text-[11px] text-txt3"
-              >
-                {{ t('pages.gateApproval.reviewingUpstream', { n: reviewingIteration }) }}
-                <span v-if="previewFromArtifactFallback" class="ml-2 text-warn">
-                  {{ t('pages.gateApproval.reviewingUpstreamFallback') }}
-                </span>
-              </div>
-              <RefreshStrip v-if="productLoading && productHasSavedContent" />
-              <GateProductEditor
-                v-if="canEditProducts && run"
-                ref="productEditorRef"
-                class="min-h-0 flex-1"
-                :run-id="run.id"
-                :gate-node-id="gate.nodeId"
-                :products="primaryProducts"
-                :saved-content="savedProductContent"
-                :saved-meta="savedProductMeta"
-                :artifacts="run.artifacts"
-                :run-status="run.status"
-                :can-edit="canEditProducts"
-                :content-loading="productLoading"
-                :load-error="productLoadError"
-                :excluded-names="excludedProduces"
-                fill-parent
-                :enlargeable="false"
-                :inspectable="isVisualBody"
-                @saved="onProductSaved"
-                @dirty-change="productDirty = $event"
-                @refresh-request="onProductRefresh"
-                @retry-load="retryLoadProduct"
-                @pick="onHtmlPreviewPick"
-              />
-              <div
-                v-else-if="productLoadError"
-                class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2.5 px-6 py-8 text-center"
-                data-testid="mobile-fill-product-error"
-                role="alert"
-              >
-                <p class="text-[13px] font-medium text-txt">{{ t('pages.gateApproval.previewLoadFailedTitle') }}</p>
-                <p class="max-w-[36ch] text-[12px] text-txt3">
-                  {{ t('pages.gateApproval.previewLoadFailedBody') }}
-                </p>
-                <p class="max-w-[42ch] text-[11px] text-err">{{ productLoadError }}</p>
-                <button
-                  type="button"
-                  class="mt-1 bg-accent px-3.5 py-1.5 text-xs font-medium text-white hover:bg-accent-2"
-                  data-testid="mobile-fill-product-retry"
-                  @click="retryLoadProduct"
-                >
-                  {{ t('pages.gateApproval.previewRetry') }}
-                </button>
-              </div>
-              <HtmlPreview
-                v-else-if="shouldFillPreview"
-                class="min-h-0 flex-1"
-                :html="productHtml"
-                mode="inline"
-                :enlargeable="false"
-                fill-parent
-                inspectable
-                @pick="onHtmlPreviewPick"
-              />
-              <div
-                v-else
-                class="flex min-h-0 flex-1 items-center justify-center text-[12px] text-txt3"
-                data-testid="mobile-fill-product-loading"
-              >
-                <Icon name="spinner" :size="20" class="mr-2 animate-spin text-accent" />
-                {{ t('pages.gateApproval.loadingArtifact') }}
-              </div>
-            </div>
-            <UpstreamRequirementContext
-              :artifacts="run?.artifacts"
-              :run-id="run?.id"
-              :run-status="run?.status"
-              :product-name="productName"
-              :body-template="bodyTemplate"
-            />
-          </div>
-        </template>
-        <template #sidebar>
-          <div
-            class="flex h-full min-h-0 flex-col overflow-hidden p-3 safe-area-bottom"
-            data-testid="mobile-fill-sticky-actions"
-          >
-            <!-- Cold gate.form only (hidden when preview feedback / hot unified input owns the draft). -->
-            <div v-if="gate.form?.length && !shouldHideGateForm" class="mb-3 shrink-0 space-y-3">
-              <div v-for="f in gate.form" :key="f.key">
-                <label class="label">{{ f.label }} <span v-if="f.required" class="text-err">*</span></label>
-                <ParagraphInput
-                  v-model:text="formText[f.key]"
-                  v-model:images="formImages[f.key]"
-                  text-only
-                  :placeholder="t('pages.gateApproval.formPlaceholder', { label: f.label })"
-                />
-              </div>
-            </div>
-            <div v-if="formError" class="mb-2 shrink-0 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-xs text-err" role="alert">
-              {{ formError }}
-            </div>
-            <div v-if="resolved && !actionSubmitting" class="rounded-md border border-ok/30 bg-ok/10 px-3 py-2 text-xs text-ok">
-              {{ t('pages.gateApproval.submitted', { label: gate.actions.find((a) => a.id === resolved)?.label }) }}
-            </div>
-            <div
-              v-else-if="usesPreviewIssues && previewIssuesLoading"
-              class="flex items-center justify-center gap-2 py-2 text-xs text-txt3"
-              data-testid="mobile-fill-preview-issues-loading"
-            >
-              <Icon name="spinner" :size="14" class="animate-spin text-accent" />
-              {{ t('pages.gateApproval.loadingPreviewIssues') }}
-            </div>
-            <div v-else class="flex min-h-0 flex-1 flex-col">
-              <p
-                v-if="isColdSession"
-                class="mb-2 shrink-0 text-[11px] leading-relaxed text-txt3"
-                data-testid="gate-cold-help"
-              >
-                {{ helpColdText }}
-              </p>
-              <p
-                v-else-if="usesPreviewIssues && openPreviewIssueCount === 0"
-                class="mb-2 shrink-0 text-[11px] leading-relaxed text-txt3"
-              >
-                <b class="font-medium text-txt2">{{ t('pages.clarify.confirmFlow') }}</b>
-                {{ t('pages.gateApproval.helpApproveDetail') }}
-                <span class="mx-1">·</span>
-                <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
-                {{ helpReviseDetailNoIssuesText }}
-              </p>
-              <p
-                v-else-if="usesPreviewIssues && openPreviewIssueCount >= 1"
-                class="mb-2 shrink-0 text-[11px] leading-relaxed text-txt3"
-              >
-                <template v-if="canReactRevise">
-                  <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
-                  {{ t('pages.gateApproval.helpReviseWithIssuesDetail') }}
-                  <span class="mx-1">·</span>
-                  {{ t('pages.reviewComposer.openIssuesConfirmHint') }}
-                </template>
-                <template v-else>{{ helpReviseWithIssuesText }}</template>
-              </p>
-              <div
-                v-if="previewIssuesError"
-                class="mb-2 shrink-0 rounded-md border border-warn/30 bg-warn/10 px-2.5 py-2 text-[11px] text-warn"
-                data-testid="mobile-fill-preview-issues-error"
-              >
-                {{ t('pages.gateApproval.loadPreviewIssuesFailed') }}
-                <button
-                  type="button"
-                  class="ml-2 underline"
-                  @click="loadPreviewIssues()"
-                >
-                  {{ t('pages.gateApproval.previewRetry') }}
-                </button>
-              </div>
-              <!-- Help → scrollable feedback → sticky decisions -->
-              <div
-                v-if="usesPreviewIssues && run"
-                class="flex min-h-0 flex-1 flex-col"
-                data-testid="mobile-fill-feedback"
-              >
-                <PreviewFeedbackChat
-                  ref="feedbackChatRef"
-                  class="min-h-0 flex-1"
-                  :run-id="run.id"
-                  :node-id="gate.nodeId"
-                  :selector="pickedSelector"
-                  :element-image="pickedElementImage"
-                  v-model:text="reactText"
-                  v-model:images="reactImages"
-                  copy-variant="review"
-                  fill-sidebar
-                  :hide-submit="canReactRevise"
-                  @clear-selector="clearHtmlPreviewPick"
-                  @issues-changed="loadPreviewIssues()"
-                />
-              </div>
-              <div
-                v-if="canReactRevise && usesPreviewIssues"
-                class="mt-2 shrink-0"
-                data-testid="review-composer-gate"
-              >
-                <div v-if="reactError" class="mb-1.5 text-[11px] text-err">{{ reactError }}</div>
-                <!-- review semantics: 记入 + 发送 + 确认并流转 -->
-                <div class="mb-2 flex justify-end">
-                  <button
-                    type="button"
-                    class="inline-flex min-h-[36px] items-center justify-center rounded-md border border-line px-3 text-xs font-medium text-txt2 transition hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-50"
-                    data-testid="review-record-issue"
-                    :disabled="!canRecordIssue"
-                    @click="recordFeedbackIssue"
-                  >
-                    {{ t('pages.gateApproval.reviewFeedback.record') }}
-                  </button>
-                </div>
-                <div class="flex flex-wrap gap-2" data-testid="review-composer-actions">
-                  <button
-                    v-if="showHotReject"
-                    type="button"
-                    class="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 bg-accent/15 px-3 text-sm font-medium text-accent-2 transition hover:bg-accent/25 disabled:cursor-not-allowed disabled:opacity-50"
-                    data-testid="review-composer-send"
-                    :disabled="reactSending || (!hotRejectAllowEmpty && !canSubmitReact)"
-                    @click="sendHotReject"
-                  >
-                    <Icon name="arrow-left" :size="14" />
-                    {{ reactSending ? t('pages.gateApproval.reactRevise.sending') : composerRejectLabel }}
-                  </button>
-                  <button
-                    v-if="showHotPass"
-                    type="button"
-                    class="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 bg-ok/15 px-3 text-sm font-medium text-ok transition hover:bg-ok/25 disabled:cursor-not-allowed disabled:opacity-50"
-                    data-testid="review-composer-pass"
-                    :disabled="composerPassDisabled"
-                    :title="passAction ? actionButtonTitle(passAction.id) : ''"
-                    @click="onComposerPass"
-                  >
-                    <Icon name="check" :size="14" />
-                    {{ t('pages.clarify.confirmFlow') }}
-                  </button>
-                  <button
-                    v-if="canReactRevise && (reactThinking || reactQueued.length)"
-                    type="button"
-                    class="inline-flex min-h-[44px] items-center justify-center gap-1.5 border border-line bg-elevated px-3 text-sm font-medium text-txt2"
-                    data-testid="gate-react-cancel"
-                    title="Cancel"
-                    @click="cancelReactRevise"
-                  >
-                    Cancel
-                  </button>
-                </div>
-                <div
-                  v-if="reactQueued.length"
-                  class="mt-2 rounded border border-line bg-base/40 px-2 py-1.5"
-                  data-testid="gate-react-queue"
-                >
-                  <div class="mb-1 text-[11px] text-txt3">
-                    {{ t('pages.agentChatTester.queue', { n: reactQueued.length }) }}
-                  </div>
-                  <div
-                    v-for="(q, qi) in reactQueued"
-                    :key="qi"
-                    class="truncate text-[12px] text-txt2"
-                  >
-                    {{ qi + 1 }}. {{ q.text }}
-                  </div>
-                </div>
-                <GateReactStreamPanel
-                  :thinking="reactThinking"
-                  :stream-text="reactStreamText"
-                  :stream-thought="reactStreamThought"
-                  :interrupted="reactInterrupted"
-                  :completed-at="reactStreamCompletedAt"
-                />
-              </div>
-              <div v-else class="mt-2 flex shrink-0 flex-col gap-2">
-                <div class="flex flex-wrap gap-3">
-                  <button
-                    v-for="a in footerActions"
-                    :key="a.id"
-                    class="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-md px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50"
-                    :class="actionVariantClasses(actionVariant(a.id))"
-                    :disabled="isActionDisabled(a.id) || reactSending"
-                    :aria-busy="actionSubmitting && resolved === a.id ? 'true' : undefined"
-                    :title="actionButtonTitle(a.id)"
-                    data-testid="review-composer-pass"
-                    @click="onSidebarAction(a.id)"
-                  >
-                    <Icon
-                      :name="actionSubmitting && resolved === a.id ? 'spinner' : actionIcon(a.id)"
-                      :size="14"
-                      :class="actionSubmitting && resolved === a.id ? 'animate-spin' : ''"
-                      aria-hidden="true"
-                    />
-                    {{ actionSubmitting && resolved === a.id ? actionPendingLabel(a.id) : a.label }}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </template>
-      </ReviewShell>
-    </div>
-
-    <!-- fillPreview ReviewShell (stage | sidebar); desktop visual uses fillParent + 60vh shell. -->
-    <div
-      v-else-if="useReviewShellLayout"
-      class="flex min-h-0 flex-1 flex-col overflow-hidden"
-      data-testid="content-fit-scroll"
-    >
-      <ReviewShell
-        class="min-h-0 flex-1"
-        :mobile="isMobile"
-        :sidebar-width="400"
-        :storage-key="REVIEW_SHELL_WIDTH_KEY_APPROVAL"
-      >
-        <template #stage>
-          <div class="flex h-full min-h-0 flex-col overflow-hidden">
-            <!-- Inbox: budget fills stage so upstream sits on card bottom (no 60vh free-space void). -->
-            <div
-              :class="
-                useUnifiedPreviewBudget
-                  ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
-                  : 'contents'
-              "
-              :data-testid="useUnifiedPreviewBudget ? 'content-fit-budget' : undefined"
-            >
-              <div
-                ref="gateStageEl"
-                class="border border-line"
-                :class="
-                  isMobile
-                    ? 'scroll-area min-h-0 overflow-x-hidden overflow-y-auto'
-                    : 'flex min-h-0 flex-1 flex-col overflow-hidden'
-                "
-                data-testid="content-fit-preview"
-                data-review-annotate-stage
-                :style="
-                  useUnifiedPreviewBudget
-                    ? undefined
-                    : { maxHeight: `${CONTENT_FIT_PREVIEW_MAX_VH}vh` }
-                "
-              >
-                <div
-                  v-if="reviewingIteration != null"
-                  class="shrink-0 border-b border-line bg-elevated/60 px-3 py-1.5 text-[11px] text-txt3"
-                >
-                  {{ t('pages.gateApproval.reviewingUpstream', { n: reviewingIteration }) }}
-                  <span v-if="previewFromArtifactFallback" class="ml-2 text-warn">
-                    {{ t('pages.gateApproval.reviewingUpstreamFallback') }}
-                  </span>
-                </div>
-                <RefreshStrip v-if="productLoading && productHasSavedContent" />
-                <GateProductEditor
-                  v-if="canEditProducts && run"
-                  ref="productEditorRef"
-                  :class="isMobile ? undefined : 'min-h-0 flex-1'"
-                  :run-id="run.id"
-                  :gate-node-id="gate.nodeId"
-                  :products="primaryProducts"
-                  :saved-content="savedProductContent"
-                  :saved-meta="savedProductMeta"
-                  :artifacts="run.artifacts"
-                  :run-status="run.status"
-                  :can-edit="canEditProducts"
-                  :content-loading="productLoading"
-                  :load-error="productLoadError"
-                  :excluded-names="excludedProduces"
-                  :fill-parent="!isMobile"
-                  :fit-content="false"
-                  :max-content-height-vh="
-                    isMobile || useUnifiedPreviewBudget ? undefined : CONTENT_FIT_PREVIEW_MAX_VH
-                  "
-                  :content-height-offset-px="isMobile ? 0 : contentFitChromeOffsetPx"
-                  :enlargeable="!isMobile"
-                  :inspectable="isVisualBody"
-                  @saved="onProductSaved"
-                  @dirty-change="productDirty = $event"
-                  @refresh-request="onProductRefresh"
-                  @retry-load="retryLoadProduct"
-                  @pick="onHtmlPreviewPick"
-                />
-                <div
-                  v-else-if="productLoadError"
-                  class="flex flex-col items-center justify-center gap-2.5 px-6 py-8 text-center"
-                  :class="isMobile ? 'min-h-[200px]' : 'min-h-0 flex-1'"
-                  data-testid="content-fit-product-error"
-                  role="alert"
-                >
-                  <p class="text-[13px] font-medium text-txt">{{ t('pages.gateApproval.previewLoadFailedTitle') }}</p>
-                  <p class="max-w-[36ch] text-[12px] text-txt3">
-                    {{ t('pages.gateApproval.previewLoadFailedBody') }}
-                  </p>
-                  <p class="max-w-[42ch] text-[11px] text-err">{{ productLoadError }}</p>
-                  <button
-                    type="button"
-                    class="mt-1 bg-accent px-3.5 py-1.5 text-xs font-medium text-white hover:bg-accent-2"
-                    data-testid="content-fit-product-retry"
-                    @click="retryLoadProduct"
-                  >
-                    {{ t('pages.gateApproval.previewRetry') }}
-                  </button>
-                </div>
-                <HtmlPreview
-                  v-else-if="shouldFillPreview"
-                  :class="isMobile ? undefined : 'min-h-0 flex-1'"
-                  :html="productHtml"
-                  :mode="isMobile ? 'inline' : 'default'"
-                  :enlargeable="!isMobile"
-                  :fill-parent="!isMobile"
-                  :fit-content="false"
-                  inspectable
-                  @pick="onHtmlPreviewPick"
-                />
-                <div
-                  v-else-if="shouldFitStructured && productName"
-                  class="p-4"
-                  :class="isMobile ? undefined : 'min-h-0 flex-1 overflow-y-auto'"
-                >
-                  <StructuredArtifactView
-                    :name="productName"
-                    :doc="productDoc"
-                    :artifacts="run?.artifacts"
-                    :run-id="run?.id"
-                    :run-status="run?.status"
-                  />
-                </div>
-              </div>
-              <UpstreamRequirementContext
-                :artifacts="run?.artifacts"
-                :run-id="run?.id"
-                :run-status="run?.status"
-                :product-name="productName"
-                :body-template="bodyTemplate"
-              />
-            </div>
-          </div>
-        </template>
-        <template #sidebar>
-          <div
-            class="flex h-full min-h-0 flex-col overflow-hidden border-t border-line p-3 safe-area-bottom"
-            data-testid="content-fit-form"
-          >
-            <div v-if="gate.form?.length && !shouldHideGateForm" class="mb-3 shrink-0 space-y-3">
-              <div v-for="f in gate.form" :key="f.key">
-                <label class="label">{{ f.label }} <span v-if="f.required" class="text-err">*</span></label>
-                <ParagraphInput
-                  v-model:text="formText[f.key]"
-                  v-model:images="formImages[f.key]"
-                  :text-only="isMobile"
-                  :placeholder="t('pages.gateApproval.formPlaceholder', { label: f.label })"
-                />
-              </div>
-            </div>
-            <div v-if="formError" class="mb-2 shrink-0 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-xs text-err" role="alert">
-              {{ formError }}
-            </div>
-            <div v-if="resolved && !actionSubmitting" class="rounded-md border border-ok/30 bg-ok/10 px-3 py-2 text-xs text-ok">
-              {{ t('pages.gateApproval.submitted', { label: gate.actions.find((a) => a.id === resolved)?.label }) }}
-            </div>
-            <div
-              v-else-if="usesPreviewIssues && previewIssuesLoading"
-              class="flex items-center justify-center gap-2 py-2 text-xs text-txt3"
-              data-testid="content-fit-preview-issues-loading"
-            >
-              <Icon name="spinner" :size="14" class="animate-spin text-accent" />
-              {{ t('pages.gateApproval.loadingPreviewIssues') }}
-            </div>
-            <div v-else class="flex min-h-0 flex-1 flex-col">
-              <p
-                v-if="isColdSession"
-                class="mb-2 shrink-0 text-[11px] leading-relaxed text-txt3"
-                data-testid="gate-cold-help"
-              >
-                {{ helpColdText }}
-              </p>
-              <p
-                v-else-if="usesPreviewIssues && openPreviewIssueCount === 0"
-                class="mb-2 shrink-0 text-[11px] leading-relaxed text-txt3"
-              >
-                <b class="font-medium text-txt2">{{ t('pages.clarify.confirmFlow') }}</b>
-                {{ t('pages.gateApproval.helpApproveDetail') }}
-                <span class="mx-1">·</span>
-                <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
-                {{ helpReviseDetailNoIssuesText }}
-              </p>
-              <p
-                v-else-if="usesPreviewIssues && openPreviewIssueCount >= 1"
-                class="mb-2 shrink-0 text-[11px] leading-relaxed text-txt3"
-              >
-                <template v-if="canReactRevise">
-                  <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
-                  {{ t('pages.gateApproval.helpReviseWithIssuesDetail') }}
-                  <span class="mx-1">·</span>
-                  {{ t('pages.reviewComposer.openIssuesConfirmHint') }}
-                </template>
-                <template v-else>{{ helpReviseWithIssuesText }}</template>
-              </p>
-              <p v-else-if="canEditProducts" class="mb-2 shrink-0 text-[11px] leading-relaxed text-txt3">
-                <b class="font-medium text-txt2">{{ t('pages.clarify.confirmFlow') }}</b>
-                {{ t('pages.gateApproval.helpApproveDetail') }}
-                <span class="mx-1">·</span>
-                <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
-                {{ t('pages.gateApproval.helpReviseDetail') }}
-              </p>
-              <div
-                v-if="previewIssuesError"
-                class="mb-2 shrink-0 rounded-md border border-warn/30 bg-warn/10 px-2.5 py-2 text-[11px] text-warn"
-                data-testid="content-fit-preview-issues-error"
-              >
-                {{ t('pages.gateApproval.loadPreviewIssuesFailed') }}
-                <button
-                  type="button"
-                  class="ml-2 underline"
-                  @click="loadPreviewIssues()"
-                >
-                  {{ t('pages.gateApproval.previewRetry') }}
-                </button>
-              </div>
-              <!-- Preview path: unified feedback in sidebar (hot hides built-in submit). -->
-              <div
-                v-if="usesPreviewIssues && run"
-                class="flex min-h-0 flex-1 flex-col"
-                data-testid="content-fit-feedback"
-              >
-                <PreviewFeedbackChat
-                  ref="feedbackChatRef"
-                  class="min-h-0 flex-1"
-                  :run-id="run.id"
-                  :node-id="gate.nodeId"
-                  :selector="pickedSelector"
-                  :element-image="pickedElementImage"
-                  v-model:text="reactText"
-                  v-model:images="reactImages"
-                  copy-variant="review"
-                  fill-sidebar
-                  :hide-submit="canReactRevise"
-                  @clear-selector="clearHtmlPreviewPick"
-                  @issues-changed="loadPreviewIssues()"
-                />
-              </div>
-              <!-- Hot unified actions (no ReviewComposer input): 记入 + 发送 + 确认并流转. -->
-              <div
-                v-if="canReactRevise && usesPreviewIssues"
-                class="mt-auto shrink-0 pt-2"
-                data-testid="review-composer-gate"
-              >
-                <div v-if="reactError" class="mb-1.5 text-[11px] text-err">{{ reactError }}</div>
-                <div class="mb-2 flex justify-end">
-                  <button
-                    type="button"
-                    class="inline-flex items-center justify-center rounded-md border border-line px-3 py-1.5 text-xs font-medium text-txt2 transition hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-50"
-                    :class="isMobile ? 'min-h-[36px]' : ''"
-                    data-testid="review-record-issue"
-                    :disabled="!canRecordIssue"
-                    @click="recordFeedbackIssue"
-                  >
-                    {{ t('pages.gateApproval.reviewFeedback.record') }}
-                  </button>
-                </div>
-                <div class="flex flex-wrap gap-2" data-testid="review-composer-actions">
-                  <button
-                    v-if="showHotReject"
-                    type="button"
-                    class="inline-flex flex-1 items-center justify-center gap-1.5 bg-accent/15 px-3 py-2 text-sm font-medium text-accent-2 transition hover:bg-accent/25 disabled:cursor-not-allowed disabled:opacity-50"
-                    :class="isMobile ? 'min-h-[44px]' : ''"
-                    data-testid="review-composer-send"
-                    :disabled="reactSending || (!hotRejectAllowEmpty && !canSubmitReact)"
-                    @click="sendHotReject"
-                  >
-                    <Icon name="arrow-left" :size="14" />
-                    {{ reactSending ? t('pages.gateApproval.reactRevise.sending') : composerRejectLabel }}
-                  </button>
-                  <button
-                    v-if="showHotPass"
-                    type="button"
-                    class="inline-flex flex-1 items-center justify-center gap-1.5 bg-ok/15 px-3 py-2 text-sm font-medium text-ok transition hover:bg-ok/25 disabled:cursor-not-allowed disabled:opacity-50"
-                    :class="isMobile ? 'min-h-[44px]' : ''"
-                    data-testid="review-composer-pass"
-                    :disabled="composerPassDisabled"
-                    :title="passAction ? actionButtonTitle(passAction.id) : ''"
-                    @click="onComposerPass"
-                  >
-                    <Icon name="check" :size="14" />
-                    {{ t('pages.clarify.confirmFlow') }}
-                  </button>
-                  <button
-                    v-if="canReactRevise && (reactThinking || reactQueued.length)"
-                    type="button"
-                    class="inline-flex items-center justify-center gap-1.5 border border-line bg-elevated px-3 py-2 text-sm font-medium text-txt2"
-                    :class="isMobile ? 'min-h-[44px]' : ''"
-                    data-testid="gate-react-cancel"
-                    title="Cancel"
-                    @click="cancelReactRevise"
-                  >
-                    Cancel
-                  </button>
-                </div>
-                <div
-                  v-if="reactQueued.length"
-                  class="mt-2 rounded border border-line bg-base/40 px-2 py-1.5"
-                  data-testid="gate-react-queue"
-                >
-                  <div class="mb-1 text-[11px] text-txt3">
-                    {{ t('pages.agentChatTester.queue', { n: reactQueued.length }) }}
-                  </div>
-                  <div
-                    v-for="(q, qi) in reactQueued"
-                    :key="qi"
-                    class="truncate text-[12px] text-txt2"
-                  >
-                    {{ qi + 1 }}. {{ q.text }}
-                  </div>
-                </div>
-                <GateReactStreamPanel
-                  :thinking="reactThinking"
-                  :stream-text="reactStreamText"
-                  :stream-thought="reactStreamThought"
-                  :interrupted="reactInterrupted"
-                  :completed-at="reactStreamCompletedAt"
-                />
-              </div>
-              <!-- Non-preview hot (structured etc.): ReviewComposer review semantics. -->
-              <ReviewComposer
-                v-else-if="canReactRevise"
-                class="min-h-0 flex-1"
-                mode="gate"
-                v-model:draft="reactText"
-                v-model:attachments="reactImages"
-                v-model:annotations="reactAnnotations"
-                :can-reject="showHotReject"
-                :can-pass="showHotPass"
-                :reject-allow-empty="hotRejectAllowEmpty"
-                :rejecting="reactSending"
-                :reject-error="reactError"
-                :pass-disabled="composerPassDisabled"
-                :pass-title="passAction ? actionButtonTitle(passAction.id) : ''"
-                :pass-label="t('pages.clarify.confirmFlow')"
-                :reject-label="composerRejectLabel"
-                :queued="reactQueued"
-                :thinking="reactThinking"
-                :stream-text="reactStreamText"
-                :stream-thought="reactStreamThought"
-                :interrupted="reactInterrupted"
-                :stream-completed-at="reactStreamCompletedAt"
-                @reject="onComposerReject"
-                @pass="onComposerPass"
-                @cancel="cancelReactRevise"
-              />
-              <div
-                v-else
-                class="mt-auto flex shrink-0 flex-col gap-2 pt-2"
-              >
-                <div class="flex flex-wrap gap-2" :class="isMobile ? 'gap-3' : ''">
-                  <button
-                    v-for="a in footerActions"
-                    :key="a.id"
-                    class="inline-flex items-center justify-center gap-1.5 rounded-md px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50"
-                    :class="[
-                      actionVariantClasses(actionVariant(a.id)),
-                      isMobile ? 'min-h-[44px] flex-1' : 'py-2',
-                    ]"
-                    :disabled="isActionDisabled(a.id) || reactSending"
-                    :aria-busy="actionSubmitting && resolved === a.id ? 'true' : undefined"
-                    :title="actionButtonTitle(a.id)"
-                    data-testid="review-composer-pass"
-                    @click="onSidebarAction(a.id)"
-                  >
-                    <Icon
-                      :name="actionSubmitting && resolved === a.id ? 'spinner' : actionIcon(a.id)"
-                      :size="14"
-                      :class="actionSubmitting && resolved === a.id ? 'animate-spin' : ''"
-                      aria-hidden="true"
-                    />
-                    {{ actionSubmitting && resolved === a.id ? actionPendingLabel(a.id) : a.label }}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </template>
-      </ReviewShell>
-    </div>
-
-    <template v-else>
-      <div
-        class="min-h-0 flex-1"
-        :class="
-          useFillLayout && !(isMobile && isVisualBody)
-            ? 'flex flex-col overflow-hidden'
-            : isMobile
-              ? 'scroll-area overflow-y-auto overflow-x-hidden'
-              : 'scroll-area overflow-y-auto p-4'
-        "
-      >
-        <ArtifactLoadingPane
-          v-if="proposalsLoading"
-          message-key="pages.gateApproval.loadingArtifact"
-          :class="useFillLayout ? 'min-h-0 flex-1' : ''"
-        />
-        <div
-          v-else-if="isProposalSelect && proposalsDoc"
-          :class="useFillLayout ? 'scroll-area min-h-0 flex-1 overflow-y-auto p-4' : ''"
-        >
-          <GateProductEditor
-            v-if="canEditProducts && run"
-            ref="productEditorRef"
-            class="mb-4"
-            :run-id="run.id"
-            :gate-node-id="gate.nodeId"
-            :products="primaryProducts"
-            :saved-content="savedProductContent"
-            :saved-meta="savedProductMeta"
-            :artifacts="run.artifacts"
-            :run-status="run.status"
-            :can-edit="canEditProducts"
-            :load-error="productLoadError"
-            :excluded-names="excludedProduces"
-            :enlargeable="!isMobile"
-            @saved="onProductSaved"
-            @dirty-change="productDirty = $event"
-            @refresh-request="onProductRefresh"
-            @retry-load="retryLoadProduct"
-          />
-          <ProposalSelectView
-            :doc="proposalsDoc"
-            :resolved-id="resolved"
-            @select="choose"
-          />
-          <div v-if="canReactRevise" class="mt-4">
-            <ReviewComposer
-              mode="gate"
-              v-model:draft="reactText"
-              v-model:attachments="reactImages"
-              v-model:annotations="reactAnnotations"
-              :can-reject="showHotReject"
-              :can-pass="showHotPass"
-              :reject-allow-empty="hotRejectAllowEmpty"
-              :rejecting="reactSending"
-              :reject-error="reactError"
-              :pass-disabled="composerPassDisabled"
-              :pass-title="passAction ? actionButtonTitle(passAction.id) : ''"
-              :pass-label="t('pages.clarify.confirmFlow')"
-              :reject-label="composerRejectLabel"
-              :queued="reactQueued"
-              :thinking="reactThinking"
-              :stream-text="reactStreamText"
-              :stream-thought="reactStreamThought"
-              :interrupted="reactInterrupted"
-              :stream-completed-at="reactStreamCompletedAt"
-              @reject="onComposerReject"
-              @pass="onComposerPass"
-              @cancel="cancelReactRevise"
-            />
-          </div>
-        </div>
-        <div
-          v-else-if="canEditProducts && run"
-          ref="gateStageEl"
-          data-review-annotate-stage
-          :class="useFillLayout ? 'scroll-area min-h-0 flex-1 overflow-y-auto' : ''"
-        >
-          <div
-            v-if="reviewingIteration != null"
-            class="shrink-0 border-b border-line bg-elevated/60 px-3 py-1.5 text-[11px] text-txt3"
-          >
-            {{ t('pages.gateApproval.reviewingUpstream', { n: reviewingIteration }) }}
-            <span v-if="previewFromArtifactFallback" class="ml-2 text-warn">
-              {{ t('pages.gateApproval.reviewingUpstreamFallback') }}
-            </span>
-          </div>
-          <RefreshStrip v-if="productLoading && productHasSavedContent" />
-          <GateProductEditor
-            ref="productEditorRef"
-            :run-id="run.id"
-            :gate-node-id="gate.nodeId"
-            :products="primaryProducts"
-            :saved-content="savedProductContent"
-            :saved-meta="savedProductMeta"
-            :artifacts="run.artifacts"
-            :run-status="run.status"
-            :can-edit="canEditProducts"
-            :content-loading="productLoading"
-            :load-error="productLoadError"
-            :excluded-names="excludedProduces"
-            :enlargeable="!isMobile"
-            :inspectable="isVisualBody"
-            @saved="onProductSaved"
-            @dirty-change="productDirty = $event"
-            @refresh-request="onProductRefresh"
-            @retry-load="retryLoadProduct"
-            @pick="onHtmlPreviewPick"
-          />
-          <div
-            v-if="isVisualBody"
-            class="border-t border-line px-3 pb-3"
-            data-testid="editable-visual-feedback"
-          >
-            <PreviewFeedbackChat
-              :run-id="run.id"
-              :node-id="gate.nodeId"
-              :selector="pickedSelector"
-              :element-image="pickedElementImage"
-              copy-variant="review"
-              @clear-selector="clearHtmlPreviewPick"
-              @issues-changed="loadPreviewIssues()"
-            />
-          </div>
-        </div>
-        <div
-          v-else-if="isVisualBody && productHtml"
-          class="overflow-x-hidden border border-line"
-        >
-          <div
-            v-if="reviewingIteration != null"
-            class="shrink-0 border-b border-line bg-elevated/60 px-3 py-1.5 text-[11px] text-txt3"
-          >
-            {{ t('pages.gateApproval.reviewingUpstream', { n: reviewingIteration }) }}
-            <span v-if="previewFromArtifactFallback" class="ml-2 text-warn">
-              {{ t('pages.gateApproval.reviewingUpstreamFallback') }}
-            </span>
-          </div>
-          <HtmlPreview
-            :html="productHtml"
-            :mode="isMobile ? 'inline' : 'default'"
-            :enlargeable="!isMobile"
-            inspectable
-            @pick="onHtmlPreviewPick"
-          />
-          <div v-if="run" class="border-t border-line px-3 pb-3">
-            <PreviewFeedbackChat
-              :run-id="run.id"
-              :node-id="gate.nodeId"
-              :selector="pickedSelector"
-              :element-image="pickedElementImage"
-              copy-variant="review"
-              @clear-selector="clearHtmlPreviewPick"
-              @issues-changed="loadPreviewIssues()"
-            />
-          </div>
-        </div>
-        <div
-          v-else-if="isAppPreview && run"
-          :class="shouldFillAppPreview ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-4' : 'p-4'"
-          data-testid="app-preview-host"
-        >
-          <AppPreviewPanel
-            :run-id="run.id"
-            :node-id="gate.nodeId"
-            :fill="shouldFillAppPreview"
-            :show-feedback="!canReactRevise"
-            @issues-changed="loadPreviewIssues()"
-            @pick="onAppPreviewPick"
-          />
-        </div>
-        <ArtifactLoadingPane
-          v-else-if="planLoading"
-          message-key="pages.gateApproval.loadingArtifact"
-          :class="useFillLayout ? 'min-h-0 flex-1' : ''"
-        />
-        <div
-          v-else
-          ref="gateStageEl"
-          data-review-annotate-stage
-          :class="[
-            useFillLayout ? 'scroll-area min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4' : 'card p-4',
-            isMobile && !useFillLayout ? 'overflow-x-hidden' : '',
-          ]"
-        >
-          <template v-if="productName && productDoc">
-            <div
-              v-if="reviewingIteration != null"
-              class="mb-2 text-[11px] text-txt3"
-            >
-              {{ t('pages.gateApproval.reviewingUpstream', { n: reviewingIteration }) }}
-              <span v-if="previewFromArtifactFallback" class="ml-2 text-warn">
-                {{ t('pages.gateApproval.reviewingUpstreamFallback') }}
-              </span>
-            </div>
-            <StructuredArtifactView
-              :name="productName"
-              :doc="productDoc"
-              :artifacts="run?.artifacts"
-              :run-id="run?.id"
-              :run-status="run?.status"
-            />
-          </template>
-          <PlanView v-else-if="planDoc" :doc="planDoc" />
-          <div v-else class="md max-md:text-[13px] max-md:leading-relaxed" v-html="renderMarkdown(gate.bodyMd)" />
-        </div>
-      </div>
-
-      <UpstreamRequirementContext
-        :artifacts="run?.artifacts"
-        :run-id="run?.id"
-        :run-status="run?.status"
-        :product-name="productName"
-        :body-template="bodyTemplate"
-      />
-
-      <div
-        v-if="!(isProposalSelect && proposalsDoc)"
-        class="shrink-0 border-t border-line p-4 safe-area-bottom"
-        :class="isMobile ? 'sticky bottom-0 z-10 bg-surface/95 backdrop-blur' : ''"
-      >
-        <div v-if="gate.form?.length && !shouldHideGateForm" class="mb-3 space-y-3">
-          <div v-for="f in gate.form" :key="f.key">
-            <label class="label">{{ f.label }} <span v-if="f.required" class="text-err">*</span></label>
-            <ParagraphInput
-              v-model:text="formText[f.key]"
-              v-model:images="formImages[f.key]"
-              :text-only="isMobile"
-              :placeholder="t('pages.gateApproval.formPlaceholder', { label: f.label })"
-            />
-          </div>
-        </div>
-        <div v-if="formError" class="mb-2 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-xs text-err" role="alert">
-          {{ formError }}
-        </div>
-        <div v-if="resolved && !actionSubmitting" class="rounded-md border border-ok/30 bg-ok/10 px-3 py-2 text-xs text-ok">
-          {{ t('pages.gateApproval.submitted', { label: gate.actions.find((a) => a.id === resolved)?.label }) }}
-        </div>
-        <div
-          v-else-if="usesPreviewIssues && previewIssuesLoading"
-          class="flex items-center justify-center gap-2 py-2 text-xs text-txt3"
-        >
-          <Icon name="spinner" :size="14" class="animate-spin text-accent" />
-          {{ t('pages.gateApproval.loadingPreviewIssues') }}
-        </div>
-        <div v-else>
-          <p
-            v-if="isColdSession"
-            class="mb-2 text-[11px] leading-relaxed text-txt3"
-            data-testid="gate-cold-help"
-          >
-            {{ helpColdText }}
-          </p>
-          <p
-            v-else-if="usesPreviewIssues && openPreviewIssueCount === 0"
-            class="mb-2 text-[11px] leading-relaxed text-txt3"
-          >
-            <b class="font-medium text-txt2">{{ t('pages.clarify.confirmFlow') }}</b>
-            {{ t('pages.gateApproval.helpApproveDetail') }}
-            <span class="mx-1">·</span>
-            <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
-            {{ helpReviseDetailNoIssuesText }}
-          </p>
-          <p
-            v-else-if="usesPreviewIssues && openPreviewIssueCount >= 1"
-            class="mb-2 text-[11px] leading-relaxed text-txt3"
-          >
-            <template v-if="canReactRevise">
-              <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
-              {{ t('pages.gateApproval.helpReviseWithIssuesDetail') }}
-              <span class="mx-1">·</span>
-              {{ t('pages.reviewComposer.openIssuesConfirmHint') }}
-            </template>
-            <template v-else>{{ helpReviseWithIssuesText }}</template>
-          </p>
-          <p v-else-if="canEditProducts" class="mb-2 text-[11px] leading-relaxed text-txt3">
-            <b class="font-medium text-txt2">{{ t('pages.clarify.confirmFlow') }}</b>
-            {{ t('pages.gateApproval.helpApproveDetail') }}
-            <span class="mx-1">·</span>
-            <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
-            {{ t('pages.gateApproval.helpReviseDetail') }}
-          </p>
-          <ReviewComposer
-            v-if="canReactRevise"
-            class="mb-3"
-            mode="gate"
-            v-model:draft="reactText"
-            v-model:attachments="reactImages"
-            v-model:annotations="reactAnnotations"
-            :can-reject="showHotReject"
-            :can-pass="showHotPass"
-            :reject-allow-empty="hotRejectAllowEmpty"
-            :rejecting="reactSending"
-            :reject-error="reactError"
-            :pass-disabled="composerPassDisabled"
-            :pass-title="passAction ? actionButtonTitle(passAction.id) : ''"
-            :pass-label="t('pages.clarify.confirmFlow')"
-            :reject-label="composerRejectLabel"
-            :queued="reactQueued"
-            :thinking="reactThinking"
-            :stream-text="reactStreamText"
-            :stream-thought="reactStreamThought"
-            :interrupted="reactInterrupted"
-            :stream-completed-at="reactStreamCompletedAt"
-            @reject="onComposerReject"
-            @pass="onComposerPass"
-            @cancel="cancelReactRevise"
-          />
-          <div v-else class="flex flex-wrap gap-2" :class="isMobile ? 'gap-3' : ''">
-            <button
-              v-for="a in footerActions"
-              :key="a.id"
-              class="inline-flex items-center justify-center gap-1.5 rounded-md px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50"
-              :class="[
-                actionVariantClasses(actionVariant(a.id)),
-                isMobile ? 'min-h-[44px] flex-1' : 'py-2',
-              ]"
-              :disabled="isActionDisabled(a.id) || reactSending"
-              :aria-busy="actionSubmitting && resolved === a.id ? 'true' : undefined"
-              :title="actionButtonTitle(a.id)"
-              data-testid="review-composer-pass"
-              @click="onSidebarAction(a.id)"
-            >
-              <Icon
-                :name="actionSubmitting && resolved === a.id ? 'spinner' : actionIcon(a.id)"
-                :size="14"
-                :class="actionSubmitting && resolved === a.id ? 'animate-spin' : ''"
-                aria-hidden="true"
-              />
-              {{ actionSubmitting && resolved === a.id ? actionPendingLabel(a.id) : a.label }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </template>
-
+    <GateApprovalTitle v-if="!compact" />
+    <GateApprovalMobileFill v-if="useMobileFillRemaining" />
+    <GateApprovalContentFit v-else-if="useReviewShellLayout" />
+    <GateApprovalDesktopBody v-else />
     <SelectionAddToChat
       v-if="selectionQuoteEnabled"
       :enabled="selectionQuoteEnabled"
