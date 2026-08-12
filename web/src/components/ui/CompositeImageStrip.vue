@@ -3,6 +3,16 @@ import { computed, nextTick, onBeforeUnmount, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppSpinner from './AppSpinner.vue'
 import { compositeImages, imgSrc } from '@/lib/shared/compositeText'
+import {
+  beginAutoLoad,
+  isKnownLoaded,
+  isKnownMissing,
+  markLoaded,
+  markMissing,
+  parseBlobId,
+  subscribe,
+} from '@/lib/shared/blobMissingCache'
+import type { ClarifyImage } from '@/lib/shared/types'
 
 type ThumbStatus = 'loading' | 'ok' | 'failed'
 
@@ -36,29 +46,41 @@ const images = computed(() => compositeImages(props.value))
 const sizeClass = computed(() => SIZE_CLS[props.size] ?? SIZE_CLS.sm)
 const cardClass = computed(() => CARD_CLS[props.size] ?? CARD_CLS.sm)
 
-type SlotState = { src: string; status: ThumbStatus }
+type SlotState = {
+  src: string
+  status: ThumbStatus
+  showImg: boolean
+}
 
-/** Per-index slot keyed by last known src so same-src poll refreshes keep ok/failed. */
-const slots = reactive<Record<number, SlotState>>({})
-const loadTimers = new Map<number, ReturnType<typeof setTimeout>>()
-const imgEls = new Map<number, HTMLImageElement>()
+/** Per stable blob-id / src fingerprint slot; survives poll object replacement. */
+const slots = reactive<Record<string, SlotState>>({})
+const loadTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const imgEls = new Map<string, HTMLImageElement>()
 
-const items = computed(() =>
-  images.value.map((im, index) => {
-    const src = imgSrc(im)
-    const slot = slots[index]
-    const status: ThumbStatus = !src
-      ? 'failed'
-      : (slot?.status ?? 'loading')
-    return { index, src, status }
-  }),
-)
+function stableKey(im: ClarifyImage, index: number): string {
+  const ref = (im.ref || '').trim()
+  if (ref.startsWith('blob:')) {
+    const id = parseBlobId(ref)
+    if (id) return `blob:${id}`
+  }
+  const src = imgSrc(im)
+  if (src) {
+    const id = parseBlobId(src)
+    if (id) return `blob:${id}`
+    return `src:${src}`
+  }
+  return `idx:${index}`
+}
 
-function clearTimer(index: number) {
-  const timer = loadTimers.get(index)
+function resolveBlobId(im: ClarifyImage, src: string): string | null {
+  return parseBlobId((im.ref || '').trim()) || parseBlobId(src)
+}
+
+function clearTimer(key: string) {
+  const timer = loadTimers.get(key)
   if (timer != null) {
     clearTimeout(timer)
-    loadTimers.delete(index)
+    loadTimers.delete(key)
   }
 }
 
@@ -67,115 +89,161 @@ function clearAllTimers() {
   loadTimers.clear()
 }
 
-function setStatus(index: number, status: ThumbStatus) {
-  const slot = slots[index]
-  if (!slot) return
-  if (status === 'ok' || status === 'failed') clearTimer(index)
-  slot.status = status
-}
+function upsertSlot(key: string, src: string, status: ThumbStatus, showImg: boolean) {
+  const slot = slots[key]
+  if (slot) {
+    slot.src = src
+    slot.status = status
+    slot.showImg = showImg
+  } else {
+    slots[key] = { src, status, showImg }
+  }
 
-function startLoadTimeout(index: number) {
-  clearTimer(index)
-  loadTimers.set(
-    index,
-    setTimeout(() => {
-      loadTimers.delete(index)
-      if (slots[index]?.status === 'loading') {
-        slots[index].status = 'failed'
-      }
-    }, LOAD_TIMEOUT_MS),
-  )
+  if (status === 'loading' && showImg && src) {
+    clearTimer(key)
+    loadTimers.set(
+      key,
+      setTimeout(() => {
+        loadTimers.delete(key)
+        const current = slots[key]
+        if (current?.status === 'loading' && current.showImg && current.src) {
+          onError(key, current.src)
+        }
+      }, LOAD_TIMEOUT_MS),
+    )
+    return
+  }
+
+  clearTimer(key)
 }
 
 /** Cache hit / sync decode: leave loading without waiting for a late @load. */
-function syncFromImg(index: number, img: HTMLImageElement) {
-  const slot = slots[index]
-  if (!slot || slot.status !== 'loading' || !slot.src) return
-  // Ignore stale complete from a previous src on the same element (before remount).
+function syncFromImg(key: string, img: HTMLImageElement) {
+  const slot = slots[key]
+  if (!slot || slot.status !== 'loading' || !slot.showImg || !slot.src) return
   const shown = img.getAttribute('src') || ''
   if (shown && shown !== slot.src) return
   if (!img.complete) return
   if (img.naturalWidth > 0) {
-    setStatus(index, 'ok')
+    onLoad(key, slot.src)
     return
   }
-  // complete with no dimensions → broken resource
-  setStatus(index, 'failed')
+  onError(key, slot.src)
 }
 
-function bindImg(el: unknown, index: number) {
+function bindImg(el: unknown, key: string) {
   if (el instanceof HTMLImageElement) {
-    imgEls.set(index, el)
-    syncFromImg(index, el)
+    imgEls.set(key, el)
+    syncFromImg(key, el)
     return
   }
-  imgEls.delete(index)
+  imgEls.delete(key)
 }
 
-watch(
-  images,
-  (imgs) => {
-    const alive = new Set<number>()
-    imgs.forEach((im, index) => {
-      alive.add(index)
-      const src = imgSrc(im)
-      const prev = slots[index]
+function reconcile() {
+  const alive = new Set<string>()
 
-      if (!src) {
-        clearTimer(index)
-        slots[index] = { src: '', status: 'failed' }
+  images.value.forEach((im, index) => {
+    const key = stableKey(im, index)
+    alive.add(key)
+
+    const src = imgSrc(im)
+    if (!src) {
+      upsertSlot(key, '', 'failed', false)
+      return
+    }
+
+    const blobId = resolveBlobId(im, src)
+    if (blobId && isKnownLoaded(blobId)) {
+      upsertSlot(key, src, 'ok', true)
+      return
+    }
+    if (blobId && isKnownMissing(blobId)) {
+      upsertSlot(key, src, 'failed', false)
+      return
+    }
+
+    const prev = slots[key]
+    if (prev && prev.src === src) {
+      if (prev.status === 'ok') {
+        upsertSlot(key, src, 'ok', true)
         return
       }
-
-      // Same src: keep terminal ok/failed (Run detail 2s poll replaces value objects).
-      if (prev && prev.src === src) {
-        if (prev.status === 'loading' && !loadTimers.has(index)) {
-          startLoadTimeout(index)
-        }
+      if (prev.status === 'failed') {
+        upsertSlot(key, src, 'failed', false)
         return
       }
+      upsertSlot(key, src, 'loading', blobId ? prev.showImg : true)
+      return
+    }
 
-      // Empty→src or src change: new loading transition.
-      slots[index] = { src, status: 'loading' }
-      startLoadTimeout(index)
-    })
-
-    for (const key of Object.keys(slots)) {
-      const index = Number(key)
-      if (!alive.has(index)) {
-        clearTimer(index)
-        imgEls.delete(index)
-        delete slots[index]
+    if (blobId) {
+      const decision = beginAutoLoad(blobId)
+      if (decision === 'blocked_missing') {
+        upsertSlot(key, src, 'failed', false)
+        return
+      }
+      if (decision === 'blocked_pending') {
+        upsertSlot(key, src, 'loading', false)
+        return
       }
     }
 
-    void nextTick(() => {
-      for (const [index, img] of imgEls) {
-        syncFromImg(index, img)
-      }
-    })
-  },
-  { immediate: true, deep: true },
-)
+    upsertSlot(key, src, 'loading', true)
+  })
+
+  for (const key of Object.keys(slots)) {
+    if (!alive.has(key)) {
+      clearTimer(key)
+      imgEls.delete(key)
+      delete slots[key]
+    }
+  }
+  void nextTick(() => {
+    for (const [key, img] of imgEls) {
+      syncFromImg(key, img)
+    }
+  })
+}
+
+watch(images, reconcile, { immediate: true, deep: true })
+
+const unsub = subscribe(reconcile)
 
 onBeforeUnmount(() => {
   clearAllTimers()
   imgEls.clear()
+  unsub()
 })
 
-function onLoad(index: number) {
-  setStatus(index, 'ok')
+const items = computed(() =>
+  images.value.map((im, index) => {
+    const key = stableKey(im, index)
+    const src = imgSrc(im)
+    const slot = slots[key]
+    const status: ThumbStatus = !src ? 'failed' : (slot?.status ?? 'loading')
+    const showImg = !!src && status !== 'failed' && (slot?.showImg ?? true)
+    return { key, src, status, showImg }
+  }),
+)
+
+function onLoad(key: string, src: string) {
+  upsertSlot(key, src, 'ok', true)
+  const id = parseBlobId(src)
+  if (id) markLoaded(id)
 }
 
-function onError(index: number) {
-  setStatus(index, 'failed')
+function onError(key: string, src: string) {
+  upsertSlot(key, src, 'failed', false)
+  const id = parseBlobId(src)
+  if (id) markMissing(id)
 }
 </script>
 
 <template>
   <div v-if="items.length" class="flex flex-wrap gap-1.5" data-testid="composite-image-strip">
-    <template v-for="item in items" :key="item.index">
-      <!-- Permanent failure: empty src or blob/@error/timeout; no retry, no HTTP/path details -->
+    <template v-for="item in items" :key="item.key">
+      <!-- Permanent failure: empty src, known-missing, or @error; no retry, no HTTP/path details -->
       <div
         v-if="item.status === 'failed'"
         class="flex flex-col items-center justify-center gap-1 border border-err/35 bg-err/[0.06] px-2 py-2 text-center"
@@ -193,7 +261,7 @@ function onError(index: number) {
         </div>
       </div>
 
-      <!-- Has src: loading overlay until load/complete/timeout; @error → failed -->
+      <!-- Has src: loading overlay until load/complete/timeout; showImg gates orphan auto GET. -->
       <div
         v-else
         class="relative overflow-hidden border border-line"
@@ -211,14 +279,15 @@ function onError(index: number) {
           <span>{{ t('common.compositeImage.loading') }}</span>
         </div>
         <img
+          v-if="item.showImg"
           :key="item.src"
-          :ref="(el) => bindImg(el, item.index)"
+          :ref="(el) => bindImg(el, item.key)"
           :src="item.src"
           class="h-full w-full object-cover"
           :class="item.status === 'loading' ? 'opacity-0' : ''"
           alt=""
-          @load="onLoad(item.index)"
-          @error="onError(item.index)"
+          @load="onLoad(item.key, item.src)"
+          @error="onError(item.key, item.src)"
         />
       </div>
     </template>

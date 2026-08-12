@@ -1,9 +1,19 @@
 // @vitest-environment happy-dom
 import { createI18n } from 'vue-i18n'
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
+import {
+  beginAutoLoad,
+  isKnownMissing,
+  markMissing,
+  resetBlobMissingCacheForTests,
+} from '@/lib/shared/blobMissingCache'
 import ChatImageThumb from './ChatImageThumb.vue'
+
+beforeEach(() => {
+  resetBlobMissingCacheForTests()
+})
 
 function mountThumb(props: Record<string, unknown> = {}) {
   const i18n = createI18n({
@@ -81,7 +91,9 @@ describe('ChatImageThumb', () => {
       testId: 'thumb-retry',
     })
     await wrapper.find('img').trigger('error')
+    expect(isKnownMissing('abc123')).toBe(true)
     await wrapper.find('[data-testid="thumb-retry-retry"]').trigger('click')
+    expect(isKnownMissing('abc123')).toBe(false)
     const img = wrapper.find('img')
     expect(img.exists()).toBe(true)
     expect(img.attributes('src')).toMatch(/\/api\/blobs\/abc123\?_r=1$/)
@@ -90,6 +102,59 @@ describe('ChatImageThumb', () => {
     expect(wrapper.text()).not.toContain('图片加载失败')
     await wrapper.find('[data-testid="thumb-retry"]').trigger('click')
     expect(wrapper.emitted('preview')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('knownMissing on mount: placeholder without img GET (g3.1 / g4.1)', () => {
+    markMissing('deadbeef01')
+    const wrapper = mountThumb({
+      src: '/api/blobs/deadbeef01',
+      label: 'orphan.png',
+      testId: 'thumb-miss',
+    })
+    expect(wrapper.find('img').exists()).toBe(false)
+    expect(wrapper.text()).toContain('图片加载失败')
+    expect(wrapper.text()).toContain('重试')
+    wrapper.unmount()
+  })
+
+  it('subscribe: markLoaded remounts thumb when peer retry succeeds (g3.3)', async () => {
+    markMissing('sync001')
+    const wrapper = mountThumb({
+      src: '/api/blobs/sync001',
+      label: 'sync.png',
+      testId: 'thumb-sync',
+    })
+    expect(wrapper.find('img').exists()).toBe(false)
+    const { markLoaded } = await import('@/lib/shared/blobMissingCache')
+    markLoaded('sync001')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('img').exists()).toBe(true)
+    await wrapper.find('img').trigger('load')
+    expect(wrapper.text()).toContain('点击放大')
+    wrapper.unmount()
+  })
+
+  it('subscribe: peer markMissing(other id) must not open blocked_pending img (g1.2)', async () => {
+    const id = '5b32f70529a64bdebafade19ca497a35'
+    // Strip (or peer) already owns the single auto GET slot.
+    expect(beginAutoLoad(id)).toBe('proceed')
+    const wrapper = mountThumb({
+      src: `/api/blobs/${id}`,
+      label: 'orphan-b.png',
+      testId: 'thumb-race',
+    })
+    // Thumb lost the race → blocked_pending → no requesting img.
+    expect(wrapper.find('img').exists()).toBe(false)
+    // Unrelated orphan finishes → notify must NOT flip allowImg for this id.
+    markMissing('e54381fb9ce8471dbe0765d99fc0239f')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('img').exists()).toBe(false)
+    // Same-id peer failure → placeholder, still no second auto GET.
+    markMissing(id)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('img').exists()).toBe(false)
+    expect(wrapper.text()).toContain('图片加载失败')
     wrapper.unmount()
   })
 })
