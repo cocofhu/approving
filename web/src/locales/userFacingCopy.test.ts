@@ -66,6 +66,23 @@ describe('user-facing copy remediation keys', () => {
     expect(zh.global.t('pages.workflowEditor.canvas.humanGateSubtitle')).not.toMatch(/ReAct/)
   })
 
+  it('inbox first-load hint is distinct from empty and run-loading copy', () => {
+    expect(zh.global.t('pages.gatesInbox.listLoadingHint')).toBe('列表加载后可选择一项')
+    expect(en.global.t('pages.gatesInbox.listLoadingHint')).toBe('Select an item after the list loads')
+    expect(zh.global.t('pages.gatesInbox.listLoadingHint')).not.toBe(zh.global.t('common.empty.noPendingGates'))
+    expect(zh.global.t('pages.gatesInbox.listLoadingHint')).not.toBe(zh.global.t('pages.gatesInbox.loadingRun'))
+    expect(zh.global.t('pages.gatesInbox.detailPane')).toBe('详情')
+    expect(en.global.t('pages.gatesInbox.detailPane')).toBe('Details')
+    expect(zh.global.t('common.empty.noPendingGates')).toBe('没有待审批项')
+    expect(zh.global.t('common.empty.noPendingGatesForPipeline')).toBe('该流水线没有待审批项')
+    expect(zh.global.t('common.empty.noPendingGatesDesc')).toBe(
+      '当工作流到达人工门禁或需求澄清节点时会出现在这里',
+    )
+    expect(zh.global.t('common.empty.noPendingGatesPipelineDesc')).toBe(
+      '试试选择其他流水线,或查看全部流水线',
+    )
+  })
+
   it('gate share-link copy is bilingual without hardcoded jargon', () => {
     expect(zh.global.t('pages.gatesInbox.share.copyLink')).toBe('复制临时链接')
     expect(en.global.t('pages.gatesInbox.share.copyLink')).toBe('Copy temp link')

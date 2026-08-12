@@ -972,6 +972,8 @@
       "reviewType": "Needs review",
       "previewType": "App Preview",
       "loadingRun": "Loading run details…",
+      "listLoadingHint": "Select an item after the list loads",
+      "detailPane": "Details",
       "reviewFinished": "Confirmed and advanced",
       "reviewFinishedPending": "Confirmed and advanced; list not updated yet — refresh shortly",
       "reviewFinishFailed": "Failed to confirm and advance; please retry",
