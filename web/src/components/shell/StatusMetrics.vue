@@ -23,28 +23,11 @@ function fmtFiveMinuteRate(n: number | null | undefined): string {
   return `${fmtCompactTokenCount(n)}/5m`
 }
 
-function fmtBucketRange(start?: string | null, end?: string | null): string {
-  if (!start || !end) return ''
-  const a = new Date(start)
-  const b = new Date(end)
-  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return ''
-  const p = (d: Date) =>
-    `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-  return `${p(a)}–${p(b)}`
-}
-
 const cumulative = computed(() => metrics.value?.cumulativeTokens ?? null)
 const rate = computed(() => metrics.value?.current5mBucketTokens ?? null)
 const peak = computed(() => metrics.value?.todayMaxCompleted5mTokens ?? null)
 const running = computed(() => metrics.value?.runningCount ?? 0)
 const queued = computed(() => metrics.value?.queuedCount ?? 0)
-
-const rateBucketLabel = computed(() =>
-  fmtBucketRange(metrics.value?.currentBucketStart, metrics.value?.currentBucketEnd),
-)
-const peakBucketLabel = computed(() =>
-  fmtBucketRange(metrics.value?.peakBucketStart, metrics.value?.peakBucketEnd),
-)
 
 function toggleTip(id: string, ev: Event) {
   ev.preventDefault()
@@ -83,13 +66,10 @@ function onBlurTip(id: string) {
         </svg>
         <span class="sm-val text-xs leading-none text-txt">{{ fmtCompactTokenCount(cumulative) }}</span>
         <span
-          class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden min-w-[210px] max-w-[290px] -translate-x-1/2 border border-line-strong bg-overlay px-2.5 py-2 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
+          class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden -translate-x-1/2 whitespace-nowrap border border-line-strong bg-overlay px-2.5 py-1.5 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
           role="tooltip"
         >
-          <strong class="mb-1 block font-semibold text-txt">{{ t('shell.statusMetrics.tokens') }}</strong>
-          {{ t('shell.statusMetrics.tokensTip') }}
-          {{ t('shell.statusMetrics.fullValue') }}
-          <span class="font-mono">{{ fmtFull(cumulative) }}</span>
+          {{ t('shell.statusMetrics.tokens') }}: <span class="font-mono">{{ fmtFull(cumulative) }}</span>
         </span>
       </button>
       <span class="mx-0.5 h-3.5 w-px shrink-0 bg-line-strong" aria-hidden="true" />
@@ -108,14 +88,10 @@ function onBlurTip(id: string) {
         </svg>
         <span class="sm-val text-xs leading-none text-txt">{{ fmtFiveMinuteRate(rate) }}</span>
         <span
-          class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden min-w-[210px] max-w-[290px] -translate-x-1/2 border border-line-strong bg-overlay px-2.5 py-2 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
+          class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden -translate-x-1/2 whitespace-nowrap border border-line-strong bg-overlay px-2.5 py-1.5 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
           role="tooltip"
         >
-          <strong class="mb-1 block font-semibold text-txt">{{ t('shell.statusMetrics.rate') }}</strong>
-          {{ t('shell.statusMetrics.rateTip') }}
-          {{ t('shell.statusMetrics.fullValue') }}
-          <span class="font-mono">{{ fmtFull(rate) }}</span>
-          <template v-if="rateBucketLabel"> · {{ t('shell.statusMetrics.bucket') }} {{ rateBucketLabel }}</template>
+          {{ t('shell.statusMetrics.rate') }}: <span class="font-mono">{{ fmtFull(rate) }}</span>
         </span>
       </button>
       <span class="mx-0.5 h-3.5 w-px shrink-0 bg-line-strong" aria-hidden="true" />
@@ -135,14 +111,10 @@ function onBlurTip(id: string) {
         </svg>
         <span class="sm-val text-xs leading-none text-txt">{{ fmtCompactTokenCount(peak) }}</span>
         <span
-          class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden min-w-[210px] max-w-[290px] -translate-x-1/2 border border-line-strong bg-overlay px-2.5 py-2 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
+          class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden -translate-x-1/2 whitespace-nowrap border border-line-strong bg-overlay px-2.5 py-1.5 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
           role="tooltip"
         >
-          <strong class="mb-1 block font-semibold text-txt">{{ t('shell.statusMetrics.peak') }}</strong>
-          {{ t('shell.statusMetrics.peakTip') }}
-          {{ t('shell.statusMetrics.fullValue') }}
-          <span class="font-mono">{{ fmtFull(peak) }}</span>
-          <template v-if="peakBucketLabel"> · {{ peakBucketLabel }}</template>
+          {{ t('shell.statusMetrics.peak') }}: <span class="font-mono">{{ fmtFull(peak) }}</span>
         </span>
       </button>
       <span class="mx-0.5 h-3.5 w-px shrink-0 bg-line-strong" aria-hidden="true" />
@@ -162,11 +134,10 @@ function onBlurTip(id: string) {
         </svg>
         <span class="sm-val text-xs leading-none text-txt">{{ running }}</span>
         <span
-          class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden min-w-[210px] max-w-[290px] -translate-x-1/2 border border-line-strong bg-overlay px-2.5 py-2 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
+          class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden -translate-x-1/2 whitespace-nowrap border border-line-strong bg-overlay px-2.5 py-1.5 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
           role="tooltip"
         >
-          <strong class="mb-1 block font-semibold text-txt">{{ t('shell.statusMetrics.running') }}</strong>
-          {{ t('shell.statusMetrics.runningTip') }}
+          {{ t('shell.statusMetrics.running') }}: <span class="font-mono">{{ running }}</span>
         </span>
       </button>
       <span class="mx-0.5 h-3.5 w-px shrink-0 bg-line-strong" aria-hidden="true" />
@@ -185,11 +156,10 @@ function onBlurTip(id: string) {
         </svg>
         <span class="sm-val text-xs leading-none text-txt">{{ queued }}</span>
         <span
-          class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden min-w-[210px] max-w-[290px] -translate-x-1/2 border border-line-strong bg-overlay px-2.5 py-2 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
+          class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden -translate-x-1/2 whitespace-nowrap border border-line-strong bg-overlay px-2.5 py-1.5 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
           role="tooltip"
         >
-          <strong class="mb-1 block font-semibold text-txt">{{ t('shell.statusMetrics.queued') }}</strong>
-          {{ t('shell.statusMetrics.queuedTip') }}
+          {{ t('shell.statusMetrics.queued') }}: <span class="font-mono">{{ queued }}</span>
         </span>
       </button>
     </template>
@@ -226,16 +196,14 @@ function onBlurTip(id: string) {
         <span class="sm-val text-xs leading-none text-txt">{{ queued }}</span>
       </span>
       <span
-        class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden min-w-[210px] max-w-[290px] -translate-x-1/2 border border-line-strong bg-overlay px-2.5 py-2 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
+        class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden min-w-[180px] -translate-x-1/2 border border-line-strong bg-overlay px-2.5 py-2 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
         role="tooltip"
       >
-        <strong class="mb-1 block font-semibold text-txt">{{ t('shell.statusMetrics.compactTitle') }}</strong>
-        {{ t('shell.statusMetrics.compactTip') }}
-        <br />
-        {{ t('shell.statusMetrics.rate') }}
-        <span class="font-mono">{{ fmtFiveMinuteRate(rate) }}</span>
-        · {{ t('shell.statusMetrics.peak') }}
-        <span class="font-mono">{{ fmtCompactTokenCount(peak) }}</span>
+        <div>{{ t('shell.statusMetrics.tokens') }}: <span class="font-mono">{{ fmtFull(cumulative) }}</span></div>
+        <div>{{ t('shell.statusMetrics.rate') }}: <span class="font-mono">{{ fmtFull(rate) }}</span></div>
+        <div>{{ t('shell.statusMetrics.peak') }}: <span class="font-mono">{{ fmtFull(peak) }}</span></div>
+        <div>{{ t('shell.statusMetrics.running') }}: <span class="font-mono">{{ running }}</span></div>
+        <div>{{ t('shell.statusMetrics.queued') }}: <span class="font-mono">{{ queued }}</span></div>
       </span>
     </button>
   </div>

@@ -39,9 +39,26 @@ test.describe('StatusMetrics topbar E2E', () => {
     expect(smIdx).toBeGreaterThanOrEqual(0)
     expect(langIdx).toBeGreaterThan(smIdx)
 
+    const tokensTip = page.getByTestId('status-metrics-tokens').locator('.sm-tip')
     await page.getByTestId('status-metrics-tokens').hover()
-    await expect(page.getByTestId('status-metrics-tokens').locator('.sm-tip')).toBeVisible()
-    await expect(page.getByTestId('status-metrics-tokens').locator('.sm-tip')).toContainText('累计')
+    await expect(tokensTip).toBeVisible()
+    await expect(tokensTip).toContainText('累计')
+    await expect(tokensTip).toContainText('1,240,582')
+    await expect(tokensTip).not.toContainText('完整值')
+    await expect(tokensTip).not.toContainText('/5m')
+
+    const rateTip = page.getByTestId('status-metrics-rate').locator('.sm-tip')
+    await page.getByTestId('status-metrics-rate').hover()
+    await expect(rateTip).toBeVisible()
+    await expect(rateTip).toContainText('速率')
+    await expect(rateTip).toContainText('4,812')
+    await expect(rateTip).not.toContainText('/5m')
+
+    // Click pin (tip-open) still works.
+    await page.getByTestId('status-metrics-running').click()
+    await expect(page.getByTestId('status-metrics-running')).toHaveClass(/tip-open/)
+    await expect(page.getByTestId('status-metrics-running').locator('.sm-tip')).toBeVisible()
+    await expect(page.getByTestId('status-metrics-running').locator('.sm-tip')).toContainText(/执行中:\s*3/)
 
     const shot = path.join(testInfo.outputDir, 'desktop-five-metrics.png')
     await page.locator('header').screenshot({ path: shot })
@@ -51,7 +68,7 @@ test.describe('StatusMetrics topbar E2E', () => {
     })
   })
 
-  test('narrow: Token·RUN/Q summary; rate/peak via tip', async ({ page }) => {
+  test('narrow: Token·RUN/Q summary; compact tip five label:value rows', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/status-metrics-topbar.html')
     await expect(page.getByTestId('status-metrics-compact')).toBeVisible({ timeout: 15_000 })
@@ -62,8 +79,15 @@ test.describe('StatusMetrics topbar E2E', () => {
     await expect(compact).toContainText('5')
 
     await compact.click()
-    await expect(compact.locator('.sm-tip')).toBeVisible()
-    await expect(compact.locator('.sm-tip')).toContainText('/5m')
+    const tip = compact.locator('.sm-tip')
+    await expect(tip).toBeVisible()
+    await expect(tip).toContainText(/累计 Token:\s*1,240,582/)
+    await expect(tip).toContainText(/速率:\s*4,812/)
+    await expect(tip).toContainText(/峰值:\s*12,104/)
+    await expect(tip).toContainText(/执行中:\s*3/)
+    await expect(tip).toContainText(/排队:\s*5/)
+    await expect(tip).not.toContainText('/5m')
+    await expect(tip).not.toContainText('完整值')
 
     await page.screenshot({
       path: path.join(OUT, '02-narrow-status-metrics.png'),

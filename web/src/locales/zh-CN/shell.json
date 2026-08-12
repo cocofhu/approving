@@ -56,20 +56,11 @@
     "statusMetrics": {
       "aria": "平台状态指标",
       "tokens": "累计 Token",
-      "tokensTip": "全平台 totalTokens。",
       "rate": "当前 5 分钟速率",
-      "rateTip": "对齐桶内累计（非 token/s）。",
       "peak": "今日 5 分钟峰值",
-      "peakTip": "今日已完整桶 max。",
       "running": "执行中",
-      "runningTip": "runs.status = running（不含 waiting_human）。",
       "queued": "排队",
-      "queuedTip": "runs.status = queued（引擎准入前）。",
-      "fullValue": "完整值：",
-      "bucket": "桶",
-      "compactAria": "平台状态摘要",
-      "compactTitle": "窄屏摘要",
-      "compactTip": "累计 Token · 执行中 / 排队。"
+      "compactAria": "平台状态摘要"
     }
   }
 }
