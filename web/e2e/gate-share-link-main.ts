@@ -17,7 +17,16 @@ installIdleScrollbar()
 setTheme('dark')
 
 const TOKEN = 'ab'.repeat(32)
-const SHARE_URL = `http://127.0.0.1:5174/public/gate-approvals#t=${TOKEN}`
+/** Non-loopback mint: covers auto-copy / clipboard assertions (g2.3 / g3.1). */
+const SHARE_URL_REACHABLE = `https://approving.example.com/public/gate-approvals#t=${TOKEN}`
+/** Loopback mint: covers warning + disabled copy (no clipboard write). */
+const SHARE_URL_LOOPBACK = `http://127.0.0.1:5174/public/gate-approvals#t=${TOKEN}`
+
+function fixtureShareUrl(token = TOKEN): string {
+  const host = new URLSearchParams(location.search).get('shareHost')
+  const base = host === 'loopback' ? SHARE_URL_LOOPBACK : SHARE_URL_REACHABLE
+  return base.replace(TOKEN, token)
+}
 
 let reviewPreviewBusy = false
 let reviewPreviewTurns: Array<{ role: string; text: string; at: string }> = [
@@ -37,14 +46,14 @@ let clarifyLinkUsed = false
 
 ;(api as any).createGateShareLink = async (_runId: string, _nodeId: string, ttlTier = '24h') => ({
   id: 'gsl-e2e',
-  url: SHARE_URL,
+  url: fixtureShareUrl(),
   ttlTier,
   expiresAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
   state: 'active',
 })
 ;(api as any).regenGateShareLink = async () => ({
   id: 'gsl-e2e-2',
-  url: SHARE_URL.replace(TOKEN, 'cd'.repeat(32)),
+  url: fixtureShareUrl('cd'.repeat(32)),
   ttlTier: '24h',
   expiresAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
   state: 'active',
@@ -52,14 +61,14 @@ let clarifyLinkUsed = false
 ;(api as any).revokeGateShareLink = async () => ({ status: 'revoked' })
 ;(api as any).createReviewShareLink = async (_runId: string, _nodeId: string, ttlTier = '24h') => ({
   id: 'gsl-e2e-review',
-  url: SHARE_URL,
+  url: fixtureShareUrl(),
   ttlTier,
   expiresAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
   state: 'active',
 })
 ;(api as any).regenReviewShareLink = async () => ({
   id: 'gsl-e2e-review-2',
-  url: SHARE_URL.replace(TOKEN, 'cd'.repeat(32)),
+  url: fixtureShareUrl('cd'.repeat(32)),
   ttlTier: '24h',
   expiresAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
   state: 'active',
