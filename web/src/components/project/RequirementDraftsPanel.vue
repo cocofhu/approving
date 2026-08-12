@@ -821,11 +821,10 @@ defineExpose({
   >
     <!-- Top toolbar -->
     <div class="flex flex-wrap items-center gap-2 border-b border-line p-3">
-      <div class="seg flex border border-line" data-testid="requirement-drafts-view-segment">
+      <div class="seg" data-testid="requirement-drafts-view-segment">
         <button
           type="button"
-          class="bg-transparent px-3 py-1.5 text-xs text-txt2"
-          :class="viewMode === 'edit' ? 'bg-accent-dim text-txt' : ''"
+          :class="{ on: viewMode === 'edit' }"
           data-testid="requirement-drafts-view-edit"
           @click="setViewMode('edit')"
         >
@@ -833,8 +832,7 @@ defineExpose({
         </button>
         <button
           type="button"
-          class="border-l border-line bg-transparent px-3 py-1.5 text-xs text-txt2"
-          :class="viewMode === 'gantt' ? 'bg-accent-dim text-txt' : ''"
+          :class="{ on: viewMode === 'gantt' }"
           data-testid="requirement-drafts-view-gantt"
           @click="setViewMode('gantt')"
         >
@@ -842,8 +840,7 @@ defineExpose({
         </button>
         <button
           type="button"
-          class="border-l border-line bg-transparent px-3 py-1.5 text-xs text-txt2"
-          :class="viewMode === 'milestones' ? 'bg-accent-dim text-txt' : ''"
+          :class="{ on: viewMode === 'milestones' }"
           data-testid="requirement-drafts-view-milestones"
           @click="setViewMode('milestones')"
         >
@@ -851,11 +848,10 @@ defineExpose({
         </button>
       </div>
 
-      <div class="seg flex border border-line" data-testid="requirement-drafts-filter">
+      <div class="seg" data-testid="requirement-drafts-filter">
         <button
           type="button"
-          class="flex-1 bg-transparent px-2 py-1.5 text-xs text-txt2"
-          :class="filter === 'open' ? 'bg-accent-dim text-txt' : ''"
+          :class="{ on: filter === 'open' }"
           data-testid="requirement-drafts-filter-open"
           @click="setFilter('open')"
         >
@@ -863,8 +859,7 @@ defineExpose({
         </button>
         <button
           type="button"
-          class="flex-1 border-l border-line bg-transparent px-2 py-1.5 text-xs text-txt2"
-          :class="filter === 'done' ? 'bg-accent-dim text-txt' : ''"
+          :class="{ on: filter === 'done' }"
           data-testid="requirement-drafts-filter-done"
           @click="setFilter('done')"
         >
@@ -872,8 +867,7 @@ defineExpose({
         </button>
         <button
           type="button"
-          class="flex-1 border-l border-line bg-transparent px-2 py-1.5 text-xs text-txt2"
-          :class="filter === 'all' ? 'bg-accent-dim text-txt' : ''"
+          :class="{ on: filter === 'all' }"
           data-testid="requirement-drafts-filter-all"
           @click="setFilter('all')"
         >
@@ -1437,11 +1431,10 @@ defineExpose({
         data-testid="requirement-drafts-gantt"
       >
         <div class="flex items-center gap-2 border-b border-line px-3 py-2">
-          <div class="seg flex border border-line">
+          <div class="seg" data-testid="requirement-drafts-scale-segment">
             <button
               type="button"
-              class="bg-transparent px-2.5 py-1 text-xs text-txt2"
-              :class="ganttScale === 'day' ? 'bg-accent-dim text-txt' : ''"
+              :class="{ on: ganttScale === 'day' }"
               data-testid="requirement-drafts-scale-day"
               @click="setGanttScale('day')"
             >
@@ -1449,8 +1442,7 @@ defineExpose({
             </button>
             <button
               type="button"
-              class="border-l border-line bg-transparent px-2.5 py-1 text-xs text-txt2"
-              :class="ganttScale === 'week' ? 'bg-accent-dim text-txt' : ''"
+              :class="{ on: ganttScale === 'week' }"
               data-testid="requirement-drafts-scale-week"
               @click="setGanttScale('week')"
             >
@@ -1458,8 +1450,7 @@ defineExpose({
             </button>
             <button
               type="button"
-              class="border-l border-line bg-transparent px-2.5 py-1 text-xs text-txt2"
-              :class="ganttScale === 'month' ? 'bg-accent-dim text-txt' : ''"
+              :class="{ on: ganttScale === 'month' }"
               data-testid="requirement-drafts-scale-month"
               @click="setGanttScale('month')"
             >
@@ -1900,6 +1891,37 @@ defineExpose({
 </template>
 
 <style scoped>
+/* 分段控件：对齐 ProjectAuditPanel / page.html Demo（浅底 track + 选中浮起） */
+.seg {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 3px;
+  background: rgb(var(--c-elevated));
+  border: 1px solid rgb(var(--c-line));
+}
+.seg button {
+  border: 0;
+  background: transparent;
+  height: 28px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.3;
+  color: rgb(var(--c-txt2));
+  cursor: pointer;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.seg button:hover {
+  color: rgb(var(--c-txt));
+}
+.seg button.on {
+  background: rgb(var(--c-surface));
+  color: rgb(var(--c-txt));
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
 .rd-tb {
   min-width: 28px;
   border: 1px solid transparent;
