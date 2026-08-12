@@ -74,7 +74,7 @@ func (h *Host) pmCreateRequirementDraft(drafts *services.RequirementDraftService
 	}
 	needUpdate := title != "" || body != ""
 
-	row, err := drafts.Create(projectID)
+	row, err := drafts.Create(projectID, services.RequirementDraftCreateInput{})
 	if err != nil {
 		return requirementDraftToolError(err)
 	}

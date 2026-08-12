@@ -14,9 +14,32 @@ import {
   syncScrollTop,
   type DraftInsertCmd,
 } from '@/lib/project/requirementDraftMarkdown'
+import {
+  barStyle,
+  buildGanttRows,
+  clampProgress,
+  computeTimelineWindow,
+  diamondStyle,
+  draftBarRange,
+  draftHasChildren,
+  normalizeDraft,
+  parentCandidates,
+  sortMilestones,
+  tickLabel,
+  todayLocalISO,
+  withContextualParents,
+  type GanttRow,
+  type GanttScale,
+} from '@/lib/project/requirementDraftSchedule'
 import { fmtTime } from '@/lib/shared/format'
 import { renderMarkdown } from '@/lib/shared/markdown'
-import type { RequirementDraft, RequirementDraftStatusFilter } from '@/lib/shared/types'
+import type {
+  RequirementDraft,
+  RequirementDraftKind,
+  RequirementDraftSchedulePatch,
+  RequirementDraftStatusFilter,
+  RequirementDraftViewMode,
+} from '@/lib/shared/types'
 
 const props = defineProps<{
   projectId: string
@@ -26,23 +49,39 @@ const { t } = useI18n()
 const toast = useToast()
 const { isMobile } = useBreakpoint()
 
+const viewMode = ref<RequirementDraftViewMode>('gantt')
 const filter = ref<RequirementDraftStatusFilter>('open')
 const query = ref('')
 const items = ref<RequirementDraft[]>([])
+const catalog = ref<RequirementDraft[]>([])
 const loading = ref(false)
 const selectedId = ref<string | null>(null)
 const creating = ref(false)
 const saving = ref(false)
 const statusBusy = ref(false)
 const deleting = ref(false)
+const scheduleBusy = ref(false)
 const showDelete = ref(false)
 const showLeave = ref(false)
+const showNewModal = ref(false)
+
+const newModalKind = ref<RequirementDraftKind>('requirement')
+const newModalDueAt = ref('')
+const newModalError = ref('')
+
+const ganttScale = ref<GanttScale>('week')
 
 const editTitle = ref('')
 const editBody = ref('')
 const savedTitle = ref('')
 const savedBody = ref('')
 const titleError = ref('')
+const scheduleError = ref('')
+const editKind = ref<RequirementDraftKind>('requirement')
+const editStartAt = ref('')
+const editDueAt = ref('')
+const editProgress = ref(0)
+const editParentId = ref<string | null>(null)
 const createdAtLabel = ref('—')
 const updatedAtLabel = ref('—')
 const selectedStatus = ref<'open' | 'done'>('open')
@@ -63,7 +102,6 @@ const previewEl = ref<HTMLElement | null>(null)
 const splitEl = ref<HTMLElement | null>(null)
 const findInputEl = ref<HTMLInputElement | null>(null)
 
-/** 选中态跟 selectedId，不跟当前筛选 items。标记完成/搜索后项可能离开列表，仍须保留编辑区与 dirty 缓冲（g5.2）。 */
 const hasSelection = computed(() => Boolean(selectedId.value))
 const isDirty = computed(
   () => editTitle.value !== savedTitle.value || editBody.value !== savedBody.value,
@@ -85,6 +123,70 @@ const sourceWidthStyle = computed(() => {
     return { width: '100%' }
   }
   return { width: `${splitRatio.value * 100}%` }
+})
+
+const catalogById = computed(() => new Map(catalog.value.map((d) => [d.id, d])))
+
+const contextualDisplay = computed(() => {
+  const matched = items.value
+  if (!query.value.trim()) {
+    return matched.map((draft) => ({ draft, contextual: false }))
+  }
+  return withContextualParents(matched, catalogById.value)
+})
+
+const contextualIds = computed(
+  () => new Set(contextualDisplay.value.filter((x) => x.contextual).map((x) => x.draft.id)),
+)
+
+const ganttRows = computed(() =>
+  buildGanttRows(
+    contextualDisplay.value.map((x) => x.draft),
+    { contextualIds: contextualIds.value },
+  ),
+)
+
+const timelineDrafts = computed(() => {
+  const seen = new Set<string>()
+  const out: RequirementDraft[] = []
+  for (const row of [...ganttRows.value.unscheduled, ...ganttRows.value.scheduled]) {
+    if (seen.has(row.draft.id)) continue
+    if (draftBarRange(row.draft)) {
+      seen.add(row.draft.id)
+      out.push(row.draft)
+    }
+  }
+  return out
+})
+
+const timelineWindow = computed(() => computeTimelineWindow(timelineDrafts.value, ganttScale.value))
+
+const todayLineStyle = computed(() => {
+  const today = todayLocalISO()
+  return { left: barStyle(today, today, timelineWindow.value).left }
+})
+
+const milestoneItems = computed(() => sortMilestones(items.value))
+
+const selectedDraft = computed(() => {
+  if (!selectedId.value) return null
+  return (
+    items.value.find((d) => d.id === selectedId.value) ||
+    catalog.value.find((d) => d.id === selectedId.value) ||
+    null
+  )
+})
+
+const parentOptions = computed(() => {
+  const id = selectedId.value
+  if (!id) return []
+  return parentCandidates(catalog.value, id)
+})
+
+const canEditParent = computed(() => {
+  const id = selectedId.value
+  if (!id) return false
+  return !draftHasChildren(catalog.value, id)
 })
 
 let leaveWaiter: ((ok: boolean) => void) | null = null
@@ -123,6 +225,54 @@ function discardLocalBuffer() {
   titleError.value = ''
 }
 
+function applyScheduleFromDraft(d: RequirementDraft) {
+  const n = normalizeDraft(d)
+  editKind.value = n.kind
+  editStartAt.value = n.startAt
+  editDueAt.value = n.dueAt
+  editProgress.value = n.progress
+  editParentId.value = n.parentId
+  scheduleError.value = ''
+}
+
+function mergeScheduleIntoItems(updated: RequirementDraft) {
+  const norm = normalizeDraft(updated)
+  const patch = (list: RequirementDraft[]) => {
+    const i = list.findIndex((d) => d.id === norm.id)
+    if (i >= 0) list[i] = norm
+  }
+  patch(items.value)
+  patch(catalog.value)
+}
+
+function mapScheduleApiError(msg: string): string {
+  const m = String(msg || '').toLowerCase()
+  if (m.includes('due') && m.includes('before') && m.includes('start')) {
+    return t('pages.projectDetail.requirementDrafts.errDueBeforeStart')
+  }
+  if (m.includes('invalid date') || m.includes('yyyy-mm-dd')) {
+    return t('pages.projectDetail.requirementDrafts.errInvalidDate')
+  }
+  if (m.includes('milestone') && (m.includes('due') || m.includes('date'))) {
+    return t('pages.projectDetail.requirementDrafts.errMilestoneDue')
+  }
+  if (m.includes('parent')) return t('pages.projectDetail.requirementDrafts.errInvalidParent')
+  if (m.includes('children') || m.includes('child')) {
+    return t('pages.projectDetail.requirementDrafts.errHasChildren')
+  }
+  if (m.includes('kind') && m.includes('date')) {
+    return t('pages.projectDetail.requirementDrafts.errKindNeedsDate')
+  }
+  if (m.includes('progress')) return t('pages.projectDetail.requirementDrafts.errInvalidProgress')
+  if (m.includes('kind')) return t('pages.projectDetail.requirementDrafts.errInvalidKind')
+  return msg || t('pages.projectDetail.requirementDrafts.scheduleFailed')
+}
+
+function revertScheduleFields() {
+  const d = selectedDraft.value
+  if (d) applyScheduleFromDraft(d)
+}
+
 function requestLeave(): Promise<boolean> {
   if (!isDirty.value) return Promise.resolve(true)
   if (leaveWaiter) {
@@ -148,40 +298,55 @@ function resolveLeave(ok: boolean) {
   done?.(ok)
 }
 
+async function loadCatalog() {
+  const res = await api.listRequirementDrafts(props.projectId, { status: filter.value })
+  catalog.value = (Array.isArray(res.items) ? res.items : []).map(normalizeDraft)
+}
+
 async function loadList(opts?: { preferId?: string | null; keepSelection?: boolean }) {
   const seq = ++loadSeq
   loading.value = true
   try {
-    const res = await api.listRequirementDrafts(props.projectId, {
-      status: filter.value,
-      q: query.value.trim() || undefined,
-    })
+    const [res] = await Promise.all([
+      api.listRequirementDrafts(props.projectId, {
+        status: filter.value,
+        q: query.value.trim() || undefined,
+      }),
+      loadCatalog(),
+    ])
     if (seq !== loadSeq) return
-    items.value = Array.isArray(res.items) ? res.items : []
+    items.value = (Array.isArray(res.items) ? res.items : []).map(normalizeDraft)
     const prefer = opts?.preferId
     if (prefer && items.value.some((d) => d.id === prefer)) {
       selectDraft(prefer, { discardBuffer: opts?.keepSelection ? false : true })
       return
     }
     if (opts?.keepSelection && selectedId.value) {
-      const cur = items.value.find((d) => d.id === selectedId.value)
+      const cur =
+        items.value.find((d) => d.id === selectedId.value) ||
+        catalog.value.find((d) => d.id === selectedId.value)
       if (cur) {
         createdAtLabel.value = fmtTime(cur.createdAt)
         updatedAtLabel.value = fmtTime(cur.updatedAt)
         selectedStatus.value = cur.status
+        applyScheduleFromDraft(cur)
       }
-      // 选中项不在当前筛选结果中（如 open 下列表不含刚标记完成的项）仍保留 selectedId 与本地缓冲
       return
     }
-    if (selectedId.value && items.value.some((d) => d.id === selectedId.value)) {
-      selectDraft(selectedId.value, { discardBuffer: true })
-      return
+    if (selectedId.value) {
+      const inItems = items.value.some((d) => d.id === selectedId.value)
+      const inCatalog = catalog.value.some((d) => d.id === selectedId.value)
+      if (inItems || inCatalog) {
+        selectDraft(selectedId.value, { discardBuffer: false })
+        return
+      }
     }
     selectedId.value = null
   } catch (e: any) {
     if (seq !== loadSeq) return
     toast.error(e?.message || t('pages.projectDetail.requirementDrafts.loadFailed'))
     items.value = []
+    catalog.value = []
     selectedId.value = null
   } finally {
     if (seq === loadSeq) loading.value = false
@@ -189,7 +354,8 @@ async function loadList(opts?: { preferId?: string | null; keepSelection?: boole
 }
 
 function selectDraft(id: string, opts?: { discardBuffer?: boolean }) {
-  const d = items.value.find((x) => x.id === id)
+  const d =
+    items.value.find((x) => x.id === id) || catalog.value.find((x) => x.id === id)
   if (!d) {
     selectedId.value = null
     return
@@ -201,6 +367,7 @@ function selectDraft(id: string, opts?: { discardBuffer?: boolean }) {
     titleError.value = ''
     applySavedBaseline(d.title, d.bodyMarkdown || '')
   }
+  applyScheduleFromDraft(d)
   createdAtLabel.value = fmtTime(d.createdAt)
   updatedAtLabel.value = fmtTime(d.updatedAt)
   selectedStatus.value = d.status
@@ -215,24 +382,123 @@ async function onPickDraft(id: string) {
   selectDraft(id, { discardBuffer: true })
 }
 
-async function onCreate() {
+async function onSelectFromGantt(id: string) {
+  await onPickDraft(id)
+}
+
+function setViewMode(mode: RequirementDraftViewMode) {
+  viewMode.value = mode
+}
+
+function setGanttScale(scale: GanttScale) {
+  ganttScale.value = scale
+}
+
+function openNewModal() {
+  newModalKind.value = 'requirement'
+  newModalDueAt.value = ''
+  newModalError.value = ''
+  showNewModal.value = true
+}
+
+function closeNewModal() {
+  showNewModal.value = false
+  newModalError.value = ''
+}
+
+async function onNewClick() {
   if (creating.value) return
   if (isDirty.value) {
     const ok = await requestLeave()
     if (!ok) return
   }
+  openNewModal()
+}
+
+async function onConfirmCreate() {
+  newModalError.value = ''
+  if (newModalKind.value === 'milestone' && !newModalDueAt.value.trim()) {
+    newModalError.value = t('pages.projectDetail.requirementDrafts.milestoneDueRequired')
+    return
+  }
   creating.value = true
   try {
-    const created = await api.createRequirementDraft(props.projectId)
+    const body =
+      newModalKind.value === 'milestone'
+        ? { kind: 'milestone' as const, dueAt: newModalDueAt.value.trim() }
+        : { kind: 'requirement' as const }
+    const created = await api.createRequirementDraft(props.projectId, body)
+    closeNewModal()
     filter.value = 'open'
     query.value = ''
-    await loadList({ preferId: created.id })
+    const norm = normalizeDraft(created)
+    if (newModalKind.value === 'requirement' && viewMode.value === 'milestones') {
+      viewMode.value = 'edit'
+    } else if (newModalKind.value === 'requirement') {
+      viewMode.value = 'edit'
+    }
+    await loadList({ preferId: norm.id })
     toast.success(t('pages.projectDetail.requirementDrafts.createdToast'))
   } catch (e: any) {
     toast.error(e?.message || t('pages.projectDetail.requirementDrafts.createFailed'))
   } finally {
     creating.value = false
   }
+}
+
+async function patchSchedule(body: RequirementDraftSchedulePatch) {
+  const id = selectedId.value
+  if (!id || scheduleBusy.value) return
+  scheduleBusy.value = true
+  scheduleError.value = ''
+  try {
+    const updated = await api.patchRequirementDraftSchedule(props.projectId, id, body)
+    mergeScheduleIntoItems(updated)
+    applyScheduleFromDraft(updated)
+    await loadList({ keepSelection: true })
+    toast.success(t('pages.projectDetail.requirementDrafts.scheduleSaved'))
+  } catch (e: any) {
+    scheduleError.value = mapScheduleApiError(e?.message || '')
+    revertScheduleFields()
+    toast.error(scheduleError.value)
+  } finally {
+    scheduleBusy.value = false
+  }
+}
+
+function onScheduleKindChange() {
+  const kind = editKind.value
+  void patchSchedule({ kind })
+}
+
+function onScheduleStartChange() {
+  void patchSchedule({ startAt: editStartAt.value })
+}
+
+function onScheduleDueChange() {
+  void patchSchedule({ dueAt: editDueAt.value })
+}
+
+function onScheduleProgressChange() {
+  editProgress.value = clampProgress(editProgress.value)
+  void patchSchedule({ progress: editProgress.value })
+}
+
+function onScheduleParentChange() {
+  void patchSchedule({ parentId: editParentId.value })
+}
+
+async function openBody(id?: string) {
+  const targetId = id || selectedId.value
+  if (!targetId) return
+  if (targetId !== selectedId.value && isDirty.value) {
+    const ok = await requestLeave()
+    if (!ok) return
+  }
+  if (targetId !== selectedId.value) {
+    selectDraft(targetId, { discardBuffer: true })
+  }
+  viewMode.value = 'edit'
 }
 
 async function onSave() {
@@ -471,11 +737,29 @@ function onBeforeUnload(e: BeforeUnloadEvent) {
   e.returnValue = ''
 }
 
+function kindLabel(kind: RequirementDraftKind) {
+  return kind === 'milestone'
+    ? t('pages.projectDetail.requirementDrafts.kindMilestone')
+    : t('pages.projectDetail.requirementDrafts.kindRequirement')
+}
+
+function rowBarStyle(row: GanttRow) {
+  const range = draftBarRange(row.draft)
+  if (!range) return null
+  return barStyle(range.start, range.end, timelineWindow.value)
+}
+
+function isRowSelected(id: string) {
+  return selectedId.value === id
+}
+
 watch(
   () => props.projectId,
   () => {
     filter.value = 'open'
     query.value = ''
+    viewMode.value = 'gantt'
+    ganttScale.value = 'week'
     selectedId.value = null
     editTitle.value = ''
     editBody.value = ''
@@ -494,9 +778,7 @@ watch(editBody, () => {
 })
 
 watch(isMobile, (narrow) => {
-  if (narrow) {
-    mobilePane.value = 'src'
-  }
+  if (narrow) mobilePane.value = 'src'
 })
 
 onMounted(() => {
@@ -530,63 +812,99 @@ defineExpose({
     class="requirement-drafts flex min-h-[520px] flex-col border border-line bg-base"
     data-testid="requirement-drafts-panel"
   >
-    <div class="draft-layout grid min-h-[520px] flex-1 grid-cols-1 md:grid-cols-[280px_1fr]">
-      <aside class="flex min-h-[520px] flex-col border-b border-line md:border-b-0 md:border-r">
-        <div class="flex flex-col gap-2 border-b border-line p-3">
-          <div class="flex gap-2">
-            <div class="seg flex flex-1 border border-line" data-testid="requirement-drafts-filter">
-              <button
-                type="button"
-                class="flex-1 bg-transparent px-2 py-1.5 text-xs text-txt2"
-                :class="filter === 'open' ? 'bg-accent-dim text-txt' : ''"
-                data-testid="requirement-drafts-filter-open"
-                @click="setFilter('open')"
-              >
-                {{ t('pages.projectDetail.requirementDrafts.filterOpen') }}
-              </button>
-              <button
-                type="button"
-                class="flex-1 border-l border-line bg-transparent px-2 py-1.5 text-xs text-txt2"
-                :class="filter === 'done' ? 'bg-accent-dim text-txt' : ''"
-                data-testid="requirement-drafts-filter-done"
-                @click="setFilter('done')"
-              >
-                {{ t('pages.projectDetail.requirementDrafts.filterDone') }}
-              </button>
-              <button
-                type="button"
-                class="flex-1 border-l border-line bg-transparent px-2 py-1.5 text-xs text-txt2"
-                :class="filter === 'all' ? 'bg-accent-dim text-txt' : ''"
-                data-testid="requirement-drafts-filter-all"
-                @click="setFilter('all')"
-              >
-                {{ t('pages.projectDetail.requirementDrafts.filterAll') }}
-              </button>
-            </div>
-            <AppButton
-              variant="primary"
-              size="sm"
-              :disabled="creating"
-              data-testid="requirement-drafts-new"
-              @click="onCreate"
-            >
-              {{ t('pages.projectDetail.requirementDrafts.new') }}
-            </AppButton>
-          </div>
-          <input
-            v-model="query"
-            type="search"
-            class="w-full border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent focus:shadow-[0_0_0_2px_rgba(123,97,255,0.3)]"
-            data-testid="requirement-drafts-search"
-            :placeholder="t('pages.projectDetail.requirementDrafts.searchPh')"
-            @input="onSearchInput"
-          />
-        </div>
-        <div class="min-h-0 flex-1 space-y-1.5 overflow-auto p-2" data-testid="requirement-drafts-list">
-          <div
-            v-if="loading && !items.length"
-            class="px-5 py-8 text-center text-[13px] text-txt3"
-          >
+    <!-- Top toolbar -->
+    <div class="flex flex-wrap items-center gap-2 border-b border-line p-3">
+      <div class="seg flex border border-line" data-testid="requirement-drafts-view-segment">
+        <button
+          type="button"
+          class="bg-transparent px-3 py-1.5 text-xs text-txt2"
+          :class="viewMode === 'edit' ? 'bg-accent-dim text-txt' : ''"
+          data-testid="requirement-drafts-view-edit"
+          @click="setViewMode('edit')"
+        >
+          {{ t('pages.projectDetail.requirementDrafts.viewEdit') }}
+        </button>
+        <button
+          type="button"
+          class="border-l border-line bg-transparent px-3 py-1.5 text-xs text-txt2"
+          :class="viewMode === 'gantt' ? 'bg-accent-dim text-txt' : ''"
+          data-testid="requirement-drafts-view-gantt"
+          @click="setViewMode('gantt')"
+        >
+          {{ t('pages.projectDetail.requirementDrafts.viewGantt') }}
+        </button>
+        <button
+          type="button"
+          class="border-l border-line bg-transparent px-3 py-1.5 text-xs text-txt2"
+          :class="viewMode === 'milestones' ? 'bg-accent-dim text-txt' : ''"
+          data-testid="requirement-drafts-view-milestones"
+          @click="setViewMode('milestones')"
+        >
+          {{ t('pages.projectDetail.requirementDrafts.viewMilestones') }}
+        </button>
+      </div>
+
+      <div class="seg flex border border-line" data-testid="requirement-drafts-filter">
+        <button
+          type="button"
+          class="flex-1 bg-transparent px-2 py-1.5 text-xs text-txt2"
+          :class="filter === 'open' ? 'bg-accent-dim text-txt' : ''"
+          data-testid="requirement-drafts-filter-open"
+          @click="setFilter('open')"
+        >
+          {{ t('pages.projectDetail.requirementDrafts.filterOpen') }}
+        </button>
+        <button
+          type="button"
+          class="flex-1 border-l border-line bg-transparent px-2 py-1.5 text-xs text-txt2"
+          :class="filter === 'done' ? 'bg-accent-dim text-txt' : ''"
+          data-testid="requirement-drafts-filter-done"
+          @click="setFilter('done')"
+        >
+          {{ t('pages.projectDetail.requirementDrafts.filterDone') }}
+        </button>
+        <button
+          type="button"
+          class="flex-1 border-l border-line bg-transparent px-2 py-1.5 text-xs text-txt2"
+          :class="filter === 'all' ? 'bg-accent-dim text-txt' : ''"
+          data-testid="requirement-drafts-filter-all"
+          @click="setFilter('all')"
+        >
+          {{ t('pages.projectDetail.requirementDrafts.filterAll') }}
+        </button>
+      </div>
+
+      <AppButton
+        variant="primary"
+        size="sm"
+        :disabled="creating"
+        data-testid="requirement-drafts-new"
+        @click="onNewClick"
+      >
+        {{ t('pages.projectDetail.requirementDrafts.new') }}
+      </AppButton>
+
+      <input
+        v-model="query"
+        type="search"
+        class="min-w-[160px] flex-1 border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent focus:shadow-[0_0_0_2px_rgba(123,97,255,0.3)]"
+        data-testid="requirement-drafts-search"
+        :placeholder="t('pages.projectDetail.requirementDrafts.searchPh')"
+        @input="onSearchInput"
+      />
+    </div>
+
+    <!-- Edit view -->
+    <div
+      v-if="viewMode === 'edit'"
+      class="draft-layout grid min-h-[480px] flex-1 grid-cols-1 md:grid-cols-[280px_1fr]"
+    >
+      <aside class="flex min-h-[480px] flex-col border-b border-line md:border-b-0 md:border-r">
+        <div
+          class="min-h-0 flex-1 space-y-1.5 overflow-auto p-2"
+          data-testid="requirement-drafts-list"
+        >
+          <div v-if="loading && !items.length" class="px-5 py-8 text-center text-[13px] text-txt3">
             {{ t('common.loading.label') }}
           </div>
           <div
@@ -614,6 +932,9 @@ defineExpose({
               <span class="min-w-0 truncate">{{ d.title }}</span>
             </div>
             <div class="flex flex-wrap items-center gap-2 text-[11px] text-txt3">
+              <span class="border border-line bg-elevated px-1.5 py-px text-txt2">
+                {{ kindLabel(d.kind) }}
+              </span>
               <span
                 class="border px-1.5 py-px"
                 :class="
@@ -635,7 +956,7 @@ defineExpose({
       </aside>
 
       <div
-        class="flex min-h-[520px] min-w-0 flex-col"
+        class="flex min-h-[480px] min-w-0 flex-col"
         data-testid="requirement-drafts-detail"
         @keydown="onDetailKeydown"
       >
@@ -738,6 +1059,98 @@ defineExpose({
                 {{ titleError }}
               </div>
             </div>
+
+            <!-- Schedule block (edit view) -->
+            <div
+              class="rd-schedule mb-4 border border-accent bg-surface p-3"
+              data-testid="requirement-drafts-schedule-block"
+            >
+              <div class="mb-2 text-[13px] font-medium text-txt">
+                {{ t('pages.projectDetail.requirementDrafts.scheduleBlockTitle') }}
+              </div>
+              <p class="mb-3 text-[11px] text-txt3">
+                {{ t('pages.projectDetail.requirementDrafts.scheduleHint') }}
+              </p>
+              <div class="grid gap-3 sm:grid-cols-2">
+                <label class="block text-xs text-txt2">
+                  {{ t('pages.projectDetail.requirementDrafts.kindLabel') }}
+                  <select
+                    v-model="editKind"
+                    class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                    data-testid="requirement-drafts-schedule-kind"
+                    :disabled="scheduleBusy"
+                    @change="onScheduleKindChange"
+                  >
+                    <option value="requirement">
+                      {{ t('pages.projectDetail.requirementDrafts.kindRequirement') }}
+                    </option>
+                    <option value="milestone">
+                      {{ t('pages.projectDetail.requirementDrafts.kindMilestone') }}
+                    </option>
+                  </select>
+                </label>
+                <label v-if="editKind !== 'milestone'" class="block text-xs text-txt2">
+                  {{ t('pages.projectDetail.requirementDrafts.startAtLabel') }}
+                  <input
+                    v-model="editStartAt"
+                    type="date"
+                    class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                    data-testid="requirement-drafts-schedule-start"
+                    :disabled="scheduleBusy"
+                    @change="onScheduleStartChange"
+                  />
+                </label>
+                <label class="block text-xs text-txt2">
+                  {{ t('pages.projectDetail.requirementDrafts.dueAtLabel') }}
+                  <input
+                    v-model="editDueAt"
+                    type="date"
+                    class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                    data-testid="requirement-drafts-schedule-due"
+                    :disabled="scheduleBusy"
+                    @change="onScheduleDueChange"
+                  />
+                </label>
+                <label class="block text-xs text-txt2">
+                  {{ t('pages.projectDetail.requirementDrafts.progressLabel') }}
+                  <input
+                    v-model.number="editProgress"
+                    type="number"
+                    min="0"
+                    max="100"
+                    class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                    data-testid="requirement-drafts-schedule-progress"
+                    :disabled="scheduleBusy"
+                    @change="onScheduleProgressChange"
+                  />
+                </label>
+                <label v-if="canEditParent" class="block text-xs text-txt2 sm:col-span-2">
+                  {{ t('pages.projectDetail.requirementDrafts.parentLabel') }}
+                  <select
+                    v-model="editParentId"
+                    class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                    data-testid="requirement-drafts-schedule-parent"
+                    :disabled="scheduleBusy"
+                    @change="onScheduleParentChange"
+                  >
+                    <option :value="null">
+                      {{ t('pages.projectDetail.requirementDrafts.parentNone') }}
+                    </option>
+                    <option v-for="p in parentOptions" :key="p.id" :value="p.id">
+                      {{ p.title }}
+                    </option>
+                  </select>
+                </label>
+              </div>
+              <div
+                v-if="scheduleError"
+                class="mt-2 text-xs text-err"
+                data-testid="requirement-drafts-schedule-error"
+              >
+                {{ scheduleError }}
+              </div>
+            </div>
+
             <div class="flex min-h-0 flex-1 flex-col">
               <label class="mb-1.5 block text-xs text-txt2">
                 {{ t('pages.projectDetail.requirementDrafts.bodyLabel') }}
@@ -1007,6 +1420,415 @@ defineExpose({
       </div>
     </div>
 
+    <!-- Gantt view -->
+    <div
+      v-else-if="viewMode === 'gantt'"
+      class="flex min-h-[480px] flex-1 flex-col lg:flex-row"
+    >
+      <div
+        class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+        data-testid="requirement-drafts-gantt"
+      >
+        <div class="flex items-center gap-2 border-b border-line px-3 py-2">
+          <div class="seg flex border border-line">
+            <button
+              type="button"
+              class="bg-transparent px-2.5 py-1 text-xs text-txt2"
+              :class="ganttScale === 'day' ? 'bg-accent-dim text-txt' : ''"
+              data-testid="requirement-drafts-scale-day"
+              @click="setGanttScale('day')"
+            >
+              {{ t('pages.projectDetail.requirementDrafts.scaleDay') }}
+            </button>
+            <button
+              type="button"
+              class="border-l border-line bg-transparent px-2.5 py-1 text-xs text-txt2"
+              :class="ganttScale === 'week' ? 'bg-accent-dim text-txt' : ''"
+              data-testid="requirement-drafts-scale-week"
+              @click="setGanttScale('week')"
+            >
+              {{ t('pages.projectDetail.requirementDrafts.scaleWeek') }}
+            </button>
+            <button
+              type="button"
+              class="border-l border-line bg-transparent px-2.5 py-1 text-xs text-txt2"
+              :class="ganttScale === 'month' ? 'bg-accent-dim text-txt' : ''"
+              data-testid="requirement-drafts-scale-month"
+              @click="setGanttScale('month')"
+            >
+              {{ t('pages.projectDetail.requirementDrafts.scaleMonth') }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="loading && !items.length" class="px-5 py-8 text-center text-[13px] text-txt3">
+          {{ t('common.loading.label') }}
+        </div>
+
+        <div v-else class="min-h-0 flex-1 overflow-auto">
+          <!-- Unscheduled zone -->
+          <div
+            v-if="ganttRows.unscheduled.length"
+            class="border-b border-line bg-elevated"
+            data-testid="requirement-drafts-unscheduled"
+          >
+            <div class="border-b border-line px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-txt3">
+              {{ t('pages.projectDetail.requirementDrafts.unscheduledTitle') }}
+            </div>
+            <div
+              v-for="row in ganttRows.unscheduled"
+              :key="'u-' + row.draft.id"
+              class="rd-gantt-row flex cursor-pointer border-b border-line hover:bg-surface"
+              :class="isRowSelected(row.draft.id) ? 'bg-accent-dim' : ''"
+              @click="onSelectFromGantt(row.draft.id)"
+            >
+              <div class="rd-gantt-name sticky left-0 z-[2] shrink-0 border-r border-line bg-elevated px-3 py-2 text-[13px] text-txt">
+                <span v-if="row.contextual" class="mr-1 text-[10px] text-txt3">
+                  {{ t('pages.projectDetail.requirementDrafts.contextualParentHint') }}
+                </span>
+                {{ row.draft.title }}
+              </div>
+              <div class="min-w-[200px] flex-1 px-2 py-2 text-[11px] text-txt3">—</div>
+            </div>
+          </div>
+
+          <!-- Scheduled timeline -->
+          <div class="rd-gantt-scroll relative min-w-[640px]">
+            <div class="rd-gantt-header flex border-b border-line bg-surface">
+              <div class="rd-gantt-name sticky left-0 z-[3] shrink-0 border-r border-line bg-surface px-3 py-2 text-[11px] text-txt3">
+                &nbsp;
+              </div>
+              <div class="relative min-w-0 flex-1">
+                <div class="flex">
+                  <div
+                    v-for="tick in timelineWindow.ticks"
+                    :key="tick"
+                    class="rd-gantt-tick flex-1 border-r border-line px-1 py-2 text-center text-[10px] text-txt3"
+                  >
+                    {{ tickLabel(tick, ganttScale) }}
+                  </div>
+                </div>
+                <div
+                  class="rd-gantt-today pointer-events-none absolute bottom-0 top-0 z-[1] w-px bg-warn"
+                  :style="todayLineStyle"
+                  :title="t('pages.projectDetail.requirementDrafts.todayLabel')"
+                />
+              </div>
+            </div>
+
+            <div
+              v-if="!ganttRows.scheduled.length && !ganttRows.unscheduled.length"
+              class="px-5 py-8 text-center text-[13px] text-txt3"
+            >
+              {{ t('pages.projectDetail.requirementDrafts.listEmpty') }}
+            </div>
+            <div
+              v-else-if="!ganttRows.scheduled.length"
+              class="px-5 py-6 text-center text-[13px] text-txt3"
+            >
+              {{ t('pages.projectDetail.requirementDrafts.ganttEmptyScheduled') }}
+            </div>
+
+            <div
+              v-for="row in ganttRows.scheduled"
+              :key="'s-' + row.draft.id"
+              class="rd-gantt-row relative flex cursor-pointer border-b border-line hover:bg-elevated"
+              :class="isRowSelected(row.draft.id) ? 'bg-accent-dim' : ''"
+              @click="onSelectFromGantt(row.draft.id)"
+            >
+              <div
+                class="rd-gantt-name sticky left-0 z-[2] shrink-0 border-r border-line bg-base px-3 py-2 text-[13px] text-txt"
+                :class="row.indent ? 'pl-6' : ''"
+              >
+                <span v-if="row.contextual" class="mr-1 text-[10px] text-txt3">
+                  {{ t('pages.projectDetail.requirementDrafts.contextualParentHint') }}
+                </span>
+                <span
+                  v-if="row.rowKind === 'group'"
+                  class="text-[11px] text-txt3"
+                  :title="t('pages.projectDetail.requirementDrafts.groupRowHint')"
+                >
+                  {{ row.draft.title }}
+                </span>
+                <span v-else>{{ row.draft.title }}</span>
+              </div>
+              <div class="relative min-w-0 flex-1 py-2">
+                <div
+                  class="rd-gantt-today pointer-events-none absolute bottom-0 top-0 z-[1] w-px bg-warn"
+                  :style="todayLineStyle"
+                />
+                <template v-if="row.rowKind === 'bar' && rowBarStyle(row)">
+                  <div
+                    class="rd-gantt-bar absolute top-1/2 h-[18px] -translate-y-1/2 cursor-pointer"
+                    :style="rowBarStyle(row)!"
+                    @click.stop="onSelectFromGantt(row.draft.id)"
+                  >
+                    <div
+                      class="rd-gantt-bar-fill h-full"
+                      :style="{ width: clampProgress(row.draft.progress) + '%' }"
+                    />
+                  </div>
+                </template>
+                <template v-else-if="row.rowKind === 'milestone' && row.draft.dueAt">
+                  <div
+                    class="rd-gantt-diamond absolute top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 cursor-pointer"
+                    :style="diamondStyle(row.draft.dueAt, timelineWindow)"
+                    @click.stop="onSelectFromGantt(row.draft.id)"
+                  />
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inspector -->
+      <aside
+        class="flex w-full shrink-0 flex-col border-t border-line bg-surface lg:w-[300px] lg:border-l lg:border-t-0"
+        data-testid="requirement-drafts-inspector"
+      >
+        <div class="border-b border-line px-3 py-2.5 text-[13px] font-medium text-txt">
+          {{ t('pages.projectDetail.requirementDrafts.inspectorTitle') }}
+        </div>
+        <div v-if="!hasSelection" class="flex-1 px-3 py-6 text-[13px] text-txt3">
+          {{ t('pages.projectDetail.requirementDrafts.inspectorEmpty') }}
+        </div>
+        <div v-else class="flex flex-1 flex-col gap-3 overflow-auto p-3">
+          <div class="text-[13px] font-medium text-txt">{{ selectedDraft?.title }}</div>
+          <div class="grid gap-3">
+            <label class="block text-xs text-txt2">
+              {{ t('pages.projectDetail.requirementDrafts.kindLabel') }}
+              <select
+                v-model="editKind"
+                class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                data-testid="requirement-drafts-inspector-kind"
+                :disabled="scheduleBusy"
+                @change="onScheduleKindChange"
+              >
+                <option value="requirement">
+                  {{ t('pages.projectDetail.requirementDrafts.kindRequirement') }}
+                </option>
+                <option value="milestone">
+                  {{ t('pages.projectDetail.requirementDrafts.kindMilestone') }}
+                </option>
+              </select>
+            </label>
+            <label v-if="editKind !== 'milestone'" class="block text-xs text-txt2">
+              {{ t('pages.projectDetail.requirementDrafts.startAtLabel') }}
+              <input
+                v-model="editStartAt"
+                type="date"
+                class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                data-testid="requirement-drafts-inspector-start"
+                :disabled="scheduleBusy"
+                @change="onScheduleStartChange"
+              />
+            </label>
+            <label class="block text-xs text-txt2">
+              {{ t('pages.projectDetail.requirementDrafts.dueAtLabel') }}
+              <input
+                v-model="editDueAt"
+                type="date"
+                class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                data-testid="requirement-drafts-inspector-due"
+                :disabled="scheduleBusy"
+                @change="onScheduleDueChange"
+              />
+            </label>
+            <label class="block text-xs text-txt2">
+              {{ t('pages.projectDetail.requirementDrafts.progressLabel') }}
+              <input
+                v-model.number="editProgress"
+                type="number"
+                min="0"
+                max="100"
+                class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                data-testid="requirement-drafts-inspector-progress"
+                :disabled="scheduleBusy"
+                @change="onScheduleProgressChange"
+              />
+            </label>
+            <label v-if="canEditParent" class="block text-xs text-txt2">
+              {{ t('pages.projectDetail.requirementDrafts.parentLabel') }}
+              <select
+                v-model="editParentId"
+                class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                data-testid="requirement-drafts-inspector-parent"
+                :disabled="scheduleBusy"
+                @change="onScheduleParentChange"
+              >
+                <option :value="null">
+                  {{ t('pages.projectDetail.requirementDrafts.parentNone') }}
+                </option>
+                <option v-for="p in parentOptions" :key="p.id" :value="p.id">
+                  {{ p.title }}
+                </option>
+              </select>
+            </label>
+          </div>
+          <div v-if="scheduleError" class="text-xs text-err" data-testid="requirement-drafts-inspector-error">
+            {{ scheduleError }}
+          </div>
+          <AppButton
+            variant="outline"
+            size="sm"
+            data-testid="requirement-drafts-open-body"
+            @click="openBody()"
+          >
+            {{ t('pages.projectDetail.requirementDrafts.openBody') }}
+          </AppButton>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Milestones view -->
+    <div v-else class="min-h-[480px] flex-1 overflow-auto p-4">
+      <div v-if="loading && !items.length" class="px-5 py-8 text-center text-[13px] text-txt3">
+        {{ t('common.loading.label') }}
+      </div>
+      <div
+        v-else-if="!milestoneItems.length"
+        class="px-5 py-8 text-center text-[13px] text-txt3"
+        data-testid="requirement-drafts-milestones-empty"
+      >
+        {{ t('pages.projectDetail.requirementDrafts.milestonesEmpty') }}
+      </div>
+      <div v-else class="mx-auto max-w-xl">
+        <div
+          v-for="(m, idx) in milestoneItems"
+          :key="m.id"
+          class="rd-milestone-row flex cursor-pointer gap-4 border-l-2 border-line py-3 pl-4"
+          :class="isRowSelected(m.id) ? 'border-accent bg-accent-dim' : 'hover:bg-elevated'"
+          :data-testid="`requirement-drafts-milestone-${m.id}`"
+          @click="onPickDraft(m.id)"
+        >
+          <div class="flex w-6 shrink-0 flex-col items-center pt-1">
+            <div class="h-3 w-3 rotate-45 bg-[#34D399]" />
+            <div v-if="idx < milestoneItems.length - 1" class="mt-1 w-px flex-1 bg-line" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[13px] font-medium text-txt">{{ m.title }}</div>
+            <div class="mt-1 text-[11px] text-txt3">{{ m.dueAt || '—' }} · {{ m.progress }}%</div>
+            <div v-if="isRowSelected(m.id)" class="mt-3 grid gap-2 border border-line bg-surface p-3">
+              <label class="block text-xs text-txt2">
+                {{ t('pages.projectDetail.requirementDrafts.dueAtLabel') }}
+                <input
+                  v-model="editDueAt"
+                  type="date"
+                  class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                  data-testid="requirement-drafts-milestone-due"
+                  :disabled="scheduleBusy"
+                  @change="onScheduleDueChange"
+                  @click.stop
+                />
+              </label>
+              <label class="block text-xs text-txt2">
+                {{ t('pages.projectDetail.requirementDrafts.progressLabel') }}
+                <input
+                  v-model.number="editProgress"
+                  type="number"
+                  min="0"
+                  max="100"
+                  class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                  data-testid="requirement-drafts-milestone-progress"
+                  :disabled="scheduleBusy"
+                  @change="onScheduleProgressChange"
+                  @click.stop
+                />
+              </label>
+              <div v-if="scheduleError" class="text-xs text-err">{{ scheduleError }}</div>
+              <AppButton
+                variant="outline"
+                size="sm"
+                data-testid="requirement-drafts-open-body"
+                @click.stop="openBody(m.id)"
+              >
+                {{ t('pages.projectDetail.requirementDrafts.openBody') }}
+              </AppButton>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- New draft modal -->
+    <AppModal
+      :open="showNewModal"
+      :title="t('pages.projectDetail.requirementDrafts.newModalTitle')"
+      :width="440"
+      close-on-esc
+      data-testid="requirement-drafts-new-modal"
+      @close="closeNewModal"
+    >
+      <p class="mb-4 text-[13px] text-txt2">
+        {{ t('pages.projectDetail.requirementDrafts.newModalHint') }}
+      </p>
+      <div class="mb-4 flex gap-2">
+        <button
+          type="button"
+          class="flex-1 border px-3 py-2 text-[13px]"
+          :class="
+            newModalKind === 'requirement'
+              ? 'border-accent bg-accent-dim text-txt'
+              : 'border-line text-txt2'
+          "
+          data-testid="requirement-drafts-new-kind-requirement"
+          @click="newModalKind = 'requirement'"
+        >
+          {{ t('pages.projectDetail.requirementDrafts.kindRequirement') }}
+        </button>
+        <button
+          type="button"
+          class="flex-1 border px-3 py-2 text-[13px]"
+          :class="
+            newModalKind === 'milestone'
+              ? 'border-accent bg-accent-dim text-txt'
+              : 'border-line text-txt2'
+          "
+          data-testid="requirement-drafts-new-kind-milestone"
+          @click="newModalKind = 'milestone'"
+        >
+          {{ t('pages.projectDetail.requirementDrafts.kindMilestone') }}
+        </button>
+      </div>
+      <label
+        v-if="newModalKind === 'milestone'"
+        class="mb-2 block text-xs text-txt2"
+      >
+        {{ t('pages.projectDetail.requirementDrafts.milestoneDueLabel') }}
+        <input
+          v-model="newModalDueAt"
+          type="date"
+          class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+          data-testid="requirement-drafts-new-milestone-due"
+        />
+      </label>
+      <div v-if="newModalError" class="text-xs text-err" data-testid="requirement-drafts-new-modal-error">
+        {{ newModalError }}
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <AppButton
+            variant="outline"
+            size="sm"
+            data-testid="requirement-drafts-new-cancel"
+            @click="closeNewModal"
+          >
+            {{ t('common.buttons.cancel') }}
+          </AppButton>
+          <AppButton
+            variant="primary"
+            size="sm"
+            :disabled="creating"
+            data-testid="requirement-drafts-new-confirm"
+            @click="onConfirmCreate"
+          >
+            {{ t('pages.projectDetail.requirementDrafts.newModalContinue') }}
+          </AppButton>
+        </div>
+      </template>
+    </AppModal>
+
     <AppModal
       :open="showDelete"
       :title="t('pages.projectDetail.requirementDrafts.deleteTitle')"
@@ -1074,6 +1896,7 @@ defineExpose({
 .rd-tb {
   min-width: 28px;
   border: 1px solid transparent;
+  border-radius: 0;
   background: transparent;
   padding: 4px 7px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -1108,6 +1931,30 @@ defineExpose({
 }
 .rd-src::placeholder {
   color: rgb(var(--c-txt3));
+}
+.rd-schedule {
+  border-radius: 0;
+}
+.rd-gantt-name {
+  width: 220px;
+  min-width: 220px;
+}
+.rd-gantt-bar {
+  border-radius: 0;
+  background: #7b61ff;
+  min-width: 4px;
+}
+.rd-gantt-bar-fill {
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+}
+.rd-gantt-diamond {
+  border-radius: 0;
+  background: #34d399;
+}
+.rd-gantt-today {
+  background: #fbbf24;
 }
 :deep(.rd-tok-head) {
   color: rgb(var(--c-accent-2));

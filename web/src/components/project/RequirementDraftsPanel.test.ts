@@ -11,6 +11,7 @@ const apiMocks = vi.hoisted(() => ({
   createRequirementDraft: vi.fn(),
   updateRequirementDraft: vi.fn(),
   patchRequirementDraftStatus: vi.fn(),
+  patchRequirementDraftSchedule: vi.fn(),
   deleteRequirementDraft: vi.fn(),
 }))
 
@@ -24,6 +25,7 @@ vi.mock('@/lib/api/api', async () => {
       createRequirementDraft: apiMocks.createRequirementDraft,
       updateRequirementDraft: apiMocks.updateRequirementDraft,
       patchRequirementDraftStatus: apiMocks.patchRequirementDraftStatus,
+      patchRequirementDraftSchedule: apiMocks.patchRequirementDraftSchedule,
       deleteRequirementDraft: apiMocks.deleteRequirementDraft,
     },
   }
@@ -47,6 +49,11 @@ const draftOpen = {
   title: '支付失败重试',
   bodyMarkdown: '## 要点',
   status: 'open' as const,
+  kind: 'requirement' as const,
+  startAt: '2026-08-01',
+  dueAt: '2026-08-15',
+  progress: 30,
+  parentId: null,
   createdAt: '2026-08-08T10:12:00Z',
   updatedAt: '2026-08-10T14:22:00Z',
 }
@@ -56,6 +63,9 @@ const draftOpen2 = {
   id: 'rd-2',
   title: '另一条草稿',
   bodyMarkdown: '旧正文',
+  startAt: '',
+  dueAt: '',
+  progress: 0,
 }
 
 function mockMatchMedia(isNarrow: boolean) {
@@ -105,20 +115,29 @@ function mountPanel() {
         AppModal: defineComponent({
           props: ['open', 'title'],
           emits: ['close'],
-          setup(p, { slots }) {
+          setup(p, { slots, attrs }) {
             return () =>
               p.open
-                ? h('div', { 'data-testid': 'app-modal' }, [
-                    h('div', p.title),
-                    slots.default?.(),
-                    slots.footer?.(),
-                  ])
+                ? h(
+                    'div',
+                    {
+                      'data-testid':
+                        attrs['data-testid'] ||
+                        (String(p.title || '').includes('新建') ? 'requirement-drafts-new-modal' : 'app-modal'),
+                    },
+                    [h('div', p.title), slots.default?.(), slots.footer?.()],
+                  )
                 : null
           },
         }),
       },
     },
   })
+}
+
+async function switchToEdit(w: ReturnType<typeof mountPanel>) {
+  await w.get('[data-testid="requirement-drafts-view-edit"]').trigger('click')
+  await nextTick()
 }
 
 describe('RequirementDraftsPanel', () => {
@@ -130,14 +149,23 @@ describe('RequirementDraftsPanel', () => {
       return 1
     })
     vi.stubGlobal('cancelAnimationFrame', () => {})
-    apiMocks.listRequirementDrafts.mockResolvedValue({ items: [draftOpen] })
+    apiMocks.listRequirementDrafts.mockResolvedValue({ items: [draftOpen, draftOpen2] })
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
-  it('loads open drafts by default and shows master-detail', async () => {
+  it('defaults to gantt view on mount', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.find('[data-testid="requirement-drafts-gantt"]').exists()).toBe(true)
+    expect(w.get('[data-testid="requirement-drafts-view-gantt"]').classes()).toContain('bg-accent-dim')
+    expect(w.find('[data-testid="requirement-drafts-empty-detail"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('loads open drafts by default and shows master-detail in edit view', async () => {
     const w = mountPanel()
     await flushPromises()
     expect(apiMocks.listRequirementDrafts).toHaveBeenCalledWith('proj-a', {
@@ -145,6 +173,7 @@ describe('RequirementDraftsPanel', () => {
       q: undefined,
     })
     expect(w.find('[data-testid="requirement-drafts-panel"]').exists()).toBe(true)
+    await switchToEdit(w)
     expect(w.get('[data-testid="requirement-drafts-empty-detail"]').text()).toContain('未选中草稿')
     await w.get('[data-testid="requirement-drafts-item-rd-1"]').trigger('click')
     await nextTick()
@@ -159,32 +188,112 @@ describe('RequirementDraftsPanel', () => {
     w.unmount()
   })
 
-  it('creates unnamed draft then selects it', async () => {
+  it('switches gantt scale day/week/month', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.get('[data-testid="requirement-drafts-scale-week"]').classes()).toContain('bg-accent-dim')
+    await w.get('[data-testid="requirement-drafts-scale-day"]').trigger('click')
+    await nextTick()
+    expect(w.get('[data-testid="requirement-drafts-scale-day"]').classes()).toContain('bg-accent-dim')
+    await w.get('[data-testid="requirement-drafts-scale-month"]').trigger('click')
+    await nextTick()
+    expect(w.get('[data-testid="requirement-drafts-scale-month"]').classes()).toContain('bg-accent-dim')
+    w.unmount()
+  })
+
+  it('schedule patch does not clear dirty title/body', async () => {
+    apiMocks.patchRequirementDraftSchedule.mockResolvedValue({
+      ...draftOpen,
+      progress: 50,
+    })
+    const w = mountPanel()
+    await flushPromises()
+    await switchToEdit(w)
+    await w.get('[data-testid="requirement-drafts-item-rd-1"]').trigger('click')
+    await nextTick()
+    await w.get('[data-testid="requirement-drafts-title"]').setValue('未保存标题')
+    expect(w.get('[data-testid="requirement-drafts-dirty-chip"]').text()).toContain('未保存')
+    await w.get('[data-testid="requirement-drafts-schedule-progress"]').setValue('50')
+    await w.get('[data-testid="requirement-drafts-schedule-progress"]').trigger('change')
+    await flushPromises()
+    expect(apiMocks.patchRequirementDraftSchedule).toHaveBeenCalled()
+    expect(w.get('[data-testid="requirement-drafts-title"]').element).toHaveProperty('value', '未保存标题')
+    expect(w.find('[data-testid="requirement-drafts-dirty-chip"]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('openBody switches to edit view', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    const scheduledRows = w.findAll('.rd-gantt-scroll .rd-gantt-row')
+    expect(scheduledRows.length).toBeGreaterThan(0)
+    await scheduledRows[0].trigger('click')
+    await nextTick()
+    await w.get('[data-testid="requirement-drafts-open-body"]').trigger('click')
+    await nextTick()
+    expect(w.find('[data-testid="requirement-drafts-markdown-split"]').exists()).toBe(true)
+    expect(w.get('[data-testid="requirement-drafts-view-edit"]').classes()).toContain('bg-accent-dim')
+    w.unmount()
+  })
+
+  it('create modal cancel does not call create', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    await w.get('[data-testid="requirement-drafts-new"]').trigger('click')
+    await nextTick()
+    expect(w.find('[data-testid="requirement-drafts-new-modal"]').exists()).toBe(true)
+    await w.get('[data-testid="requirement-drafts-new-cancel"]').trigger('click')
+    await nextTick()
+    expect(apiMocks.createRequirementDraft).not.toHaveBeenCalled()
+    w.unmount()
+  })
+
+  it('milestone create without date shows error and no create', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    await w.get('[data-testid="requirement-drafts-new"]').trigger('click')
+    await nextTick()
+    await w.get('[data-testid="requirement-drafts-new-kind-milestone"]').trigger('click')
+    await nextTick()
+    await w.get('[data-testid="requirement-drafts-new-confirm"]').trigger('click')
+    await nextTick()
+    expect(apiMocks.createRequirementDraft).not.toHaveBeenCalled()
+    expect(w.get('[data-testid="requirement-drafts-new-modal-error"]').text()).toContain('必须填写日期')
+    w.unmount()
+  })
+
+  it('creates requirement draft via modal then selects it in edit view', async () => {
     const created = {
       ...draftOpen,
       id: 'rd-new',
       title: '未命名需求',
       bodyMarkdown: '',
+      startAt: '',
+      dueAt: '',
     }
     apiMocks.createRequirementDraft.mockResolvedValue(created)
     apiMocks.listRequirementDrafts
       .mockResolvedValueOnce({ items: [draftOpen] })
-      .mockResolvedValueOnce({ items: [created, draftOpen] })
+      .mockResolvedValue({ items: [created, draftOpen] })
     const w = mountPanel()
     await flushPromises()
     await w.get('[data-testid="requirement-drafts-new"]').trigger('click')
+    await nextTick()
+    await w.get('[data-testid="requirement-drafts-new-confirm"]').trigger('click')
     await flushPromises()
-    expect(apiMocks.createRequirementDraft).toHaveBeenCalledWith('proj-a')
+    expect(apiMocks.createRequirementDraft).toHaveBeenCalledWith('proj-a', { kind: 'requirement' })
     expect(w.get('[data-testid="requirement-drafts-title"]').element).toHaveProperty(
       'value',
       '未命名需求',
     )
+    expect(w.get('[data-testid="requirement-drafts-view-edit"]').classes()).toContain('bg-accent-dim')
     w.unmount()
   })
 
   it('rejects empty title on save', async () => {
     const w = mountPanel()
     await flushPromises()
+    await switchToEdit(w)
     await w.get('[data-testid="requirement-drafts-item-rd-1"]').trigger('click')
     await nextTick()
     const title = w.get('[data-testid="requirement-drafts-title"]')
@@ -199,6 +308,7 @@ describe('RequirementDraftsPanel', () => {
   it('inserts Demo wrap syntax from the cross-pane toolbar', async () => {
     const w = mountPanel()
     await flushPromises()
+    await switchToEdit(w)
     await w.get('[data-testid="requirement-drafts-item-rd-1"]').trigger('click')
     await nextTick()
     expect(w.get('[data-testid="requirement-drafts-toolbar"]').text()).toContain('H1')
@@ -217,9 +327,9 @@ describe('RequirementDraftsPanel', () => {
   })
 
   it('keeps the buffer when canceling a dirty draft switch', async () => {
-    apiMocks.listRequirementDrafts.mockResolvedValue({ items: [draftOpen, draftOpen2] })
     const w = mountPanel()
     await flushPromises()
+    await switchToEdit(w)
     await w.get('[data-testid="requirement-drafts-item-rd-1"]').trigger('click')
     await nextTick()
     await w.get('[data-testid="requirement-drafts-title"]').setValue('未保存标题')
@@ -237,6 +347,7 @@ describe('RequirementDraftsPanel', () => {
   it('asks before create when dirty and keeps buffer on cancel', async () => {
     const w = mountPanel()
     await flushPromises()
+    await switchToEdit(w)
     await w.get('[data-testid="requirement-drafts-item-rd-1"]').trigger('click')
     await nextTick()
     await w.get('[data-testid="requirement-drafts-title"]').setValue('本地标题')
@@ -257,12 +368,12 @@ describe('RequirementDraftsPanel', () => {
       updatedAt: '2026-08-11T16:00:00Z',
     }
     apiMocks.patchRequirementDraftStatus.mockResolvedValue(patched)
-    // 真实 open 筛选：PATCH 后列表不再包含已完成项（g5.2 回归：不得因此卸掉编辑区）
     apiMocks.listRequirementDrafts
       .mockResolvedValueOnce({ items: [draftOpen, draftOpen2] })
-      .mockResolvedValueOnce({ items: [draftOpen2] })
+      .mockResolvedValue({ items: [draftOpen2] })
     const w = mountPanel()
     await flushPromises()
+    await switchToEdit(w)
     await w.get('[data-testid="requirement-drafts-item-rd-1"]').trigger('click')
     await nextTick()
     await w.get('[data-testid="requirement-drafts-title"]').setValue('仍未保存')
@@ -284,6 +395,7 @@ describe('RequirementDraftsPanel', () => {
     mockMatchMedia(true)
     const w = mountPanel()
     await flushPromises()
+    await switchToEdit(w)
     await w.get('[data-testid="requirement-drafts-item-rd-1"]').trigger('click')
     await nextTick()
     expect(w.find('[data-testid="requirement-drafts-mobile-switch"]').exists()).toBe(true)
@@ -308,11 +420,12 @@ describe('RequirementDraftsPanel', () => {
     })
     apiMocks.listRequirementDrafts
       .mockResolvedValueOnce({ items: [draftOpen] })
-      .mockResolvedValueOnce({
+      .mockResolvedValue({
         items: [{ ...draftOpen, title: '快捷键保存' }],
       })
     const w = mountPanel()
     await flushPromises()
+    await switchToEdit(w)
     await w.get('[data-testid="requirement-drafts-item-rd-1"]').trigger('click')
     await nextTick()
     await w.get('[data-testid="requirement-drafts-title"]').setValue('快捷键保存')
@@ -333,6 +446,7 @@ describe('RequirementDraftsPanel', () => {
   it('opens the in-pane find bar from the toolbar', async () => {
     const w = mountPanel()
     await flushPromises()
+    await switchToEdit(w)
     await w.get('[data-testid="requirement-drafts-item-rd-1"]').trigger('click')
     await nextTick()
     expect(w.find('[data-testid="requirement-drafts-findbar"]').isVisible()).toBe(false)
