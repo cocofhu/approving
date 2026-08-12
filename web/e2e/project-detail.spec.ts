@@ -1494,13 +1494,13 @@ test.describe('ProjectDetailView PM Leader QQ Channel 侧栏', () => {
 
     const channelItem = page.locator('[data-channel="1"]')
     await expect(channelItem).toBeVisible()
-    await expect(channelItem).toContainText('未命名会话')
+    await expect(channelItem).toContainText('qq:c2c:u1')
     await expect(channelItem.getByTestId('pm-qq-tag')).toBeVisible()
     await expect(channelItem.getByTestId('pm-thread-delete')).toHaveCount(0)
 
     await expect(page.getByTestId('pm-qq-tag-header')).toBeVisible()
     await expect(page.getByTestId('pm-channel-readonly')).toBeVisible()
-    await expect(page.getByTestId('pm-channel-readonly')).toContainText('来自 QQ，请在 QQ 侧回复')
+    await expect(page.getByTestId('pm-channel-readonly')).toContainText('渠道会话不可在 Web 改写')
     await expect(page.getByTestId('pm-channel-readonly')).toContainText('可点击缩略图查看大图')
     await expect(page.getByTestId('pm-chat-send')).toHaveCount(0)
 
@@ -1508,8 +1508,8 @@ test.describe('ProjectDetailView PM Leader QQ Channel 侧栏', () => {
     await expect(page.getByTestId('pm-channel-ctx-menu')).toBeVisible()
     await expect(page.getByTestId('pm-channel-ctx-menu')).toContainText('查看详情')
     await page.getByTestId('pm-channel-ctx-detail').click()
-    await expect(page.getByTestId('pm-channel-detail-title')).toHaveText('未命名会话')
-    await expect(page.getByTestId('pm-channel-detail-source')).toHaveText('来自 QQ Channel')
+    await expect(page.getByTestId('pm-channel-detail-title')).toHaveText('qq:c2c:u1')
+    await expect(page.getByTestId('pm-channel-detail-source')).toContainText('来自 QQ Channel')
     await page.getByTestId('pm-channel-detail-ok').click()
 
     await page.locator('[data-channel="0"]').click()

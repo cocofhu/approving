@@ -975,6 +975,24 @@ func (h *Handlers) ListProjectCronJobs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": items})
 }
 
+// ListProjectNotifyReceipts handles GET /api/projects/:id/notify-receipts.
+func (h *Handlers) ListProjectNotifyReceipts(c *gin.Context) {
+	if h.RunNotify == nil {
+		c.JSON(http.StatusOK, gin.H{"items": []any{}})
+		return
+	}
+	if _, ok := h.sessionUser(c); !ok {
+		return
+	}
+	items, err := h.RunNotify.ListReceipts(c.Param("id"))
+	if err != nil {
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
 // PatchProjectCronJob handles PATCH /api/projects/:id/cron-jobs/:jobId.
 // Any authenticated user may toggle deliverToChannel (APIMiddleware / sessionUser);
 // memory writes stay admin-only.

@@ -444,6 +444,10 @@ func TestPmChannelThreadListMergeAndACL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	wecom, err := pm.CreateThread(p.ID, "wecom:c2c:zhangsan", "企微会话", "agent", "user")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := pm.CreateCronThread(p.ID, "agent", "cron job"); err != nil {
 		t.Fatal(err)
 	}
@@ -458,6 +462,7 @@ func TestPmChannelThreadListMergeAndACL(t *testing.T) {
 		guild.ID:    base.Add(2 * time.Hour),
 		group.ID:    base.Add(90 * time.Minute),
 		c2c.ID:      base.Add(time.Hour),
+		wecom.ID:    base.Add(50 * time.Minute),
 		webOlder.ID: base,
 	}
 	for id, ts := range stamps {
@@ -470,10 +475,22 @@ func TestPmChannelThreadListMergeAndACL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(listed) != 5 {
-		t.Fatalf("want 2 web + 3 channel (no cron), got %d: %+v", len(listed), listed)
+	if len(listed) != 6 {
+		t.Fatalf("want 2 web + 4 channel (no cron), got %d: %+v", len(listed), listed)
 	}
-	if listed[0].ID != webNewer.ID || listed[1].ID != guild.ID || listed[4].ID != webOlder.ID {
+	foundWecom := false
+	for _, th := range listed {
+		if th.UserID == "wecom:c2c:zhangsan" {
+			foundWecom = true
+			if !th.Unspoken {
+				t.Fatal("wecom thread without channel inbound must be unspoken")
+			}
+		}
+	}
+	if !foundWecom {
+		t.Fatal("wecom thread missing from list")
+	}
+	if listed[0].ID != webNewer.ID || listed[1].ID != guild.ID || listed[5].ID != webOlder.ID {
 		ids := make([]string, len(listed))
 		for i, th := range listed {
 			ids[i] = th.ID
@@ -526,7 +543,13 @@ func TestIsQQChannelUserID(t *testing.T) {
 	if !IsQQChannelUserID("qq:guild:x") || !IsQQChannelUserID("qq:group:y") || !IsQQChannelUserID("qq:c2c:z") {
 		t.Fatal("expected qq: prefixes")
 	}
+	if !IsChannelUserID("wecom:c2c:zhangsan") || !IsChannelUserID("wecom:group:wr") {
+		t.Fatal("expected wecom: prefixes")
+	}
 	if IsQQChannelUserID("cron:agent") || IsQQChannelUserID("alice") || IsQQChannelUserID("") {
 		t.Fatal("unexpected channel match")
+	}
+	if ChannelPeerID("wecom:c2c:zhangsan") != "zhangsan" {
+		t.Fatalf("peer=%q", ChannelPeerID("wecom:c2c:zhangsan"))
 	}
 }

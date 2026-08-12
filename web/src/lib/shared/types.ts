@@ -324,6 +324,8 @@ export interface ChatThread {
   projectId: string
   userId: string
   title: string
+  /** Channel thread with no source=channel inbound. */
+  unspoken?: boolean
   /** user | cron | channel…; omitted on older rows */
   kind?: string
   sandboxRef?: string
