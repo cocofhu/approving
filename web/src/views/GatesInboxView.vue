@@ -144,6 +144,8 @@ const manualRefreshing = ref(false)
 const showListSkeleton = computed(
   () => (listLoading.value || manualRefreshing.value) && !listItems.value.length && !listLoadError.value,
 )
+/** First-screen error when load failed and nothing to show. */
+const showListError = computed(() => !!listLoadError.value && !listItems.value.length)
 /** Keep old rows + RefreshStrip/fade on user refresh or filter reload (plan g2.2). */
 const showListRefresh = computed(
   () => (listLoading.value || manualRefreshing.value) && listItems.value.length > 0,
@@ -1538,14 +1540,14 @@ function itemSecondary(it: InboxItem) {
         </div>
       </div>
       <div
-        v-else-if="listLoadError && !listItems.length"
+        v-else-if="showListError"
         class="card flex min-h-0 flex-1 flex-col items-stretch justify-center overflow-auto p-4"
         data-testid="gates-inbox-list-error"
       >
         <AppInlineError
           :title="t('common.asyncState.loadFailedTitle')"
           :message="listLoadError"
-          @retry="loadList({ showLoading: true })"
+          @retry="retryListLoad"
         />
       </div>
       <div
@@ -1821,14 +1823,14 @@ function itemSecondary(it: InboxItem) {
     </div>
 
     <div
-      v-else-if="!isMobile && listLoadError && !listItems.length"
+      v-else-if="!isMobile && showListError"
       class="card flex min-h-0 flex-1 flex-col items-stretch justify-center overflow-auto p-4"
       data-testid="gates-inbox-list-error"
     >
       <AppInlineError
         :title="t('common.asyncState.loadFailedTitle')"
         :message="listLoadError"
-        @retry="loadList({ showLoading: true })"
+        @retry="retryListLoad"
       />
     </div>
 
