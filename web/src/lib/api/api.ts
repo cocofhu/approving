@@ -756,11 +756,17 @@ export const api = {
     trigger = 'manual',
     priority = 'normal',
     tags: string[] = [],
-    opts?: { signal?: AbortSignal },
+    opts?: { signal?: AbortSignal; env?: { key: string; value: string; secret?: boolean }[] },
   ) =>
     req<{ id: string; status: string; priority?: string }>(`/workflows/${workflowId}/runs`, {
       method: 'POST',
-      body: JSON.stringify({ inputs, trigger, priority, tags }),
+      body: JSON.stringify({
+        inputs,
+        trigger,
+        priority,
+        tags,
+        ...(opts?.env && opts.env.length ? { env: opts.env } : {}),
+      }),
       ...(opts?.signal ? { signal: opts.signal } : {}),
     }),
   updateRunPriority: (id: string, priority: string) =>

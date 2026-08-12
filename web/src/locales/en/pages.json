@@ -935,7 +935,18 @@
         "sandbox": "Sandbox log",
         "trace": "State trace",
         "vars": "Global variables",
+        "sandboxEnv": "Run env",
         "artifacts": "Artifacts"
+      },
+      "sandboxEnv": {
+        "title": "Run sandbox env snapshot",
+        "hint": "Bound at start, read-only; secrets are masked.",
+        "empty": "This Run has no run-level sandbox env.",
+        "key": "Key",
+        "value": "Value",
+        "secret": "Secret",
+        "plain": "Plain",
+        "secretBadge": "Secret"
       },
       "gateRemoved": "Gate has been removed",
       "clarifyFailed": {
@@ -2146,6 +2157,17 @@
       "triggerManual": "Trigger: manual",
       "priorityLabel": "Priority",
       "priorityHint": "Affects queue admission only; does not interrupt a running run.",
+      "envLabel": "Run sandbox env",
+      "envHint": "Optional. Snapshotted onto this Run at start; secret flag only affects detail/audit masking. Rows with both Key and Value empty are ignored.",
+      "envAdd": "+ Add row",
+      "envKey": "Key",
+      "envValue": "Value",
+      "envSecret": "Secret",
+      "envSecretOn": "Secret",
+      "envSecretOff": "Plain",
+      "envRemove": "Remove row",
+      "envEmpty": "No run-level env (same as before this feature).",
+      "envInvalid": "Start rejected: {keys}",
       "repos": {
         "itemLabel": "Repository {n}",
         "namePlaceholder": "name (blank = from URL)",

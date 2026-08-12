@@ -277,6 +277,18 @@ func (c *acpProvider) spec(req NodeReq) (sandbox.Spec, error) {
 	for k, v := range agentCfg.Env {
 		env[k] = substVars(v, vars)
 	}
+	// Run-scoped StartRun snapshot overlays project + Agent for user-可控 keys.
+	// Empty string values intentionally override. Must stay before mergeAuthEnv /
+	// mcpVars / CONFIG_ROOT / ApplyPasswords so reserved platform keys win later.
+	if c.opts.RunSandboxEnvForRun != nil && req.RunID != "" {
+		for _, e := range c.opts.RunSandboxEnvForRun(req.RunID) {
+			k := strings.TrimSpace(e.Key)
+			if k == "" {
+				continue
+			}
+			env[k] = e.Value
+		}
+	}
 	merged, err := mergeAuthEnv(c.backend, env)
 	if err != nil {
 		return sandbox.Spec{}, err

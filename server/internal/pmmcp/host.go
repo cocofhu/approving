@@ -67,7 +67,7 @@ type Host struct {
 // engineOps covers the run operations exposed through pm-workflow-write
 // (narrow interface to avoid handler coupling).
 type engineOps interface {
-	StartRunWithPriority(workflowID string, inputs map[string]any, trigger, priority string, tags ...[]string) (*models.Run, error)
+	StartRunWithPriority(workflowID string, inputs map[string]any, trigger, priority string, tags []string, env []models.EnvEntry) (*models.Run, error)
 	ResumeGate(runID, nodeID, action string, form map[string]any) error
 	ReactReply(runID, nodeID, humanText string, images []models.PromptImage, annotations []models.ReactAnnotation, force bool) error
 	ReviewSessionState(runID, nodeID string) (waiting int, thinking bool)
@@ -723,13 +723,27 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 		if err != nil {
 			return map[string]any{"error": err.Error()}, true
 		}
-		run, err := h.eng.StartRunWithPriority(w.ID, platformmcp.MapArg(args, "inputs"), trigger, priority, tags)
+		env, err := platformmcp.EnvEntriesArg(args, "env")
+		if err != nil {
+			return map[string]any{"error": err.Error()}, true
+		}
+		run, err := h.eng.StartRunWithPriority(w.ID, platformmcp.MapArg(args, "inputs"), trigger, priority, tags, env)
 		if err != nil {
 			return map[string]any{"error": err.Error()}, true
 		}
 		actor := services.SystemActor()
 		if sess, ok := h.SessionFor(projectID, token); ok {
 			actor = services.ActorFromUsername(sess.UserID)
+		}
+		payload := map[string]any{
+			"workflowId": w.ID,
+			"trigger":    trigger,
+			"priority":   priority,
+			"source":     "pm_mcp",
+			"runId":      run.ID,
+		}
+		if len(run.SandboxEnv) > 0 {
+			payload["env"] = services.MaskSandboxEnvForAudit(run.SandboxEnv)
 		}
 		h.recordAudit(services.AuditRecord{
 			ProjectID:    projectID,
@@ -740,13 +754,7 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 			RunID:        run.ID,
 			Outcome:      models.AuditOutcomeOK,
 			Summary:      "start run (pm_mcp)",
-			Payload: map[string]any{
-				"workflowId": w.ID,
-				"trigger":    trigger,
-				"priority":   priority,
-				"source":     "pm_mcp",
-				"runId":      run.ID,
-			},
+			Payload:      payload,
 		})
 		return map[string]any{"id": run.ID, "status": run.Status}, false
 	case "pm_resume_gate":
@@ -938,6 +946,18 @@ func toolSchemas(mcpID string) []map[string]any {
 				"inputs":   map[string]any{"type": "object"},
 				"priority": map[string]any{"type": "string", "description": "high|normal|low"},
 				"tags":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				"env": map[string]any{
+					"type":        "array",
+					"description": "Optional run-scoped sandbox env entries: [{key,value,secret?}]",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"key":    map[string]any{"type": "string"},
+							"value":  map[string]any{"type": "string"},
+							"secret": map[string]any{"type": "boolean"},
+						},
+					},
+				},
 			}),
 			platformmcp.Tool("pm_resume_gate", "审批/推进某个待人工门禁。", map[string]any{
 				"runId":  map[string]any{"type": "string"},

@@ -713,6 +713,8 @@ export interface Run {
   /** Admission priority: high | normal | low (default normal). */
   priority?: 'high' | 'normal' | 'low'
   tags?: string[]
+  /** Immutable StartRun sandbox env snapshot (secrets masked as ****). */
+  sandboxEnv?: ProjectEnvEntry[]
   attempt?: number
   // The graph snapshot this run executed (pinned at start). Lets the run detail
   // canvas render against exactly what ran, independent of later edits/deletion
