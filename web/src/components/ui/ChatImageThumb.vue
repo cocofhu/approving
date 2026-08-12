@@ -1,6 +1,16 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import {
+  beginAutoLoad,
+  beginManualRetry,
+  isKnownLoaded,
+  isKnownMissing,
+  markLoaded,
+  markMissing,
+  parseBlobId,
+  subscribe,
+} from '@/lib/shared/blobMissingCache'
 
 const props = withDefaults(
   defineProps<{
@@ -22,6 +32,11 @@ const { t } = useI18n()
 
 const loadFailed = ref(false)
 const retryNonce = ref(0)
+/** When false, do not mount requesting <img> (known missing / peer inflight). */
+const allowImg = ref(true)
+const cacheTick = ref(0)
+
+const blobId = computed(() => parseBlobId(props.src))
 
 const sizeClass = computed(() => {
   if (props.size === 'sm') return 'h-14 w-14'
@@ -51,25 +66,86 @@ const retryTestId = computed(() =>
   props.testId ? `${props.testId}-retry` : 'chat-image-retry',
 )
 
+function syncFromCache() {
+  void cacheTick.value
+  const id = blobId.value
+  if (!id) {
+    allowImg.value = !!props.src
+    return
+  }
+  if (isKnownMissing(id)) {
+    loadFailed.value = true
+    allowImg.value = false
+    return
+  }
+  if (retryNonce.value > 0) {
+    // Manual retry path owns the next GET.
+    allowImg.value = true
+    return
+  }
+  const decision = beginAutoLoad(id)
+  if (decision === 'blocked_missing') {
+    loadFailed.value = true
+    allowImg.value = false
+    return
+  }
+  if (decision === 'blocked_pending') {
+    allowImg.value = false
+    return
+  }
+  allowImg.value = true
+}
+
 watch(
   () => props.src,
   () => {
     loadFailed.value = false
     retryNonce.value = 0
+    syncFromCache()
   },
+  { immediate: true },
 )
+
+const unsub = subscribe(() => {
+  cacheTick.value += 1
+  const id = blobId.value
+  if (id && isKnownMissing(id)) {
+    loadFailed.value = true
+    allowImg.value = false
+    return
+  }
+  if (id && loadFailed.value && isKnownLoaded(id)) {
+    // Peer chat retry succeeded — show via browser cache; no extra auto GET budget.
+    loadFailed.value = false
+    allowImg.value = true
+    return
+  }
+  if (!allowImg.value && id && !isKnownMissing(id) && !loadFailed.value) {
+    allowImg.value = true
+  }
+})
+onUnmounted(unsub)
 
 function onImgError() {
   loadFailed.value = true
+  allowImg.value = false
+  const id = blobId.value
+  if (id) markMissing(id)
 }
 
 function onImgLoad() {
   loadFailed.value = false
+  allowImg.value = true
+  const id = blobId.value
+  if (id) markLoaded(id)
 }
 
 function retryLoad() {
+  const id = blobId.value
+  if (id) beginManualRetry(id)
   retryNonce.value += 1
   loadFailed.value = false
+  allowImg.value = true
 }
 
 function onPreviewClick() {
@@ -120,6 +196,7 @@ function onPreviewClick() {
     @click="onPreviewClick"
   >
     <img
+      v-if="allowImg"
       :src="displaySrc"
       class="h-full w-full object-cover"
       :alt="alt"
@@ -138,6 +215,7 @@ function onPreviewClick() {
     :data-testid="testId"
   >
     <img
+      v-if="allowImg"
       :src="displaySrc"
       class="h-full w-full object-cover"
       :alt="alt"

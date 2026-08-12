@@ -1,8 +1,18 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppSpinner from './AppSpinner.vue'
 import { compositeImages, imgSrc } from '@/lib/shared/compositeText'
+import {
+  beginAutoLoad,
+  isKnownLoaded,
+  isKnownMissing,
+  markLoaded,
+  markMissing,
+  parseBlobId,
+  subscribe,
+} from '@/lib/shared/blobMissingCache'
+import type { ClarifyImage } from '@/lib/shared/types'
 
 type ThumbStatus = 'loading' | 'ok' | 'failed'
 
@@ -33,43 +43,135 @@ const images = computed(() => compositeImages(props.value))
 const sizeClass = computed(() => SIZE_CLS[props.size] ?? SIZE_CLS.sm)
 const cardClass = computed(() => CARD_CLS[props.size] ?? CARD_CLS.sm)
 
-/** Per-index status after mount; empty src never enters loading. */
-const statuses = reactive<Record<number, ThumbStatus>>({})
+/** Per stable blob-id / src fingerprint status; survives poll object replacement. */
+const statuses = reactive<Record<string, ThumbStatus>>({})
+/** When false, do not mount <img> (known missing or waiting on another surface's inflight). */
+const allowImg = reactive<Record<string, boolean>>({})
+const cacheTick = ref(0)
 
-const items = computed(() =>
-  images.value.map((im, index) => {
-    const src = imgSrc(im)
-    const status: ThumbStatus = !src ? 'failed' : (statuses[index] ?? 'loading')
-    return { index, src, status }
-  }),
-)
-
-watch(
-  images,
-  (imgs) => {
-    for (const key of Object.keys(statuses)) {
-      delete statuses[Number(key)]
-    }
-    imgs.forEach((im, index) => {
-      statuses[index] = imgSrc(im) ? 'loading' : 'failed'
-    })
-  },
-  { immediate: true, deep: true },
-)
-
-function onLoad(index: number) {
-  statuses[index] = 'ok'
+function stableKey(im: ClarifyImage, index: number): string {
+  const ref = (im.ref || '').trim()
+  if (ref.startsWith('blob:')) {
+    const id = parseBlobId(ref)
+    if (id) return `blob:${id}`
+  }
+  const src = imgSrc(im)
+  if (src) {
+    const id = parseBlobId(src)
+    if (id) return `blob:${id}`
+    return `src:${src}`
+  }
+  return `idx:${index}`
 }
 
-function onError(index: number) {
-  statuses[index] = 'failed'
+function resolveBlobId(im: ClarifyImage, src: string): string | null {
+  return parseBlobId((im.ref || '').trim()) || parseBlobId(src)
+}
+
+function applyImage(im: ClarifyImage, index: number) {
+  const key = stableKey(im, index)
+  const src = imgSrc(im)
+  if (!src) {
+    statuses[key] = 'failed'
+    allowImg[key] = false
+    return
+  }
+  const blobId = resolveBlobId(im, src)
+
+  if (blobId && isKnownMissing(blobId)) {
+    statuses[key] = 'failed'
+    allowImg[key] = false
+    return
+  }
+
+  // Stable reconcile: keep ok/failed across poll unless chat retry succeeded (knownLoaded).
+  if (statuses[key] === 'ok') {
+    allowImg[key] = true
+    return
+  }
+  if (statuses[key] === 'failed') {
+    if (blobId && isKnownLoaded(blobId)) {
+      statuses[key] = 'ok'
+      allowImg[key] = true
+      return
+    }
+    allowImg[key] = false
+    return
+  }
+
+  // New key or still loading
+  if (blobId) {
+    const decision = beginAutoLoad(blobId)
+    if (decision === 'blocked_missing') {
+      statuses[key] = 'failed'
+      allowImg[key] = false
+      return
+    }
+    if (decision === 'blocked_pending') {
+      statuses[key] = 'loading'
+      allowImg[key] = false
+      return
+    }
+  }
+  statuses[key] = 'loading'
+  allowImg[key] = true
+}
+
+function reconcile() {
+  void cacheTick.value
+  const imgs = images.value
+  const nextKeys = new Set<string>()
+  imgs.forEach((im, index) => {
+    const key = stableKey(im, index)
+    nextKeys.add(key)
+    applyImage(im, index)
+  })
+  for (const key of Object.keys(statuses)) {
+    if (!nextKeys.has(key)) {
+      delete statuses[key]
+      delete allowImg[key]
+    }
+  }
+}
+
+watch(images, reconcile, { immediate: true, deep: true })
+
+const unsub = subscribe(() => {
+  cacheTick.value += 1
+  reconcile()
+})
+onUnmounted(unsub)
+
+const items = computed(() => {
+  void cacheTick.value
+  return images.value.map((im, index) => {
+    const key = stableKey(im, index)
+    const src = imgSrc(im)
+    const status: ThumbStatus = !src ? 'failed' : (statuses[key] ?? 'loading')
+    const showImg = !!src && status !== 'failed' && allowImg[key] !== false
+    return { key, src, status, showImg }
+  })
+})
+
+function onLoad(key: string, src: string) {
+  statuses[key] = 'ok'
+  allowImg[key] = true
+  const id = parseBlobId(src)
+  if (id) markLoaded(id)
+}
+
+function onError(key: string, src: string) {
+  statuses[key] = 'failed'
+  allowImg[key] = false
+  const id = parseBlobId(src)
+  if (id) markMissing(id)
 }
 </script>
 
 <template>
   <div v-if="items.length" class="flex flex-wrap gap-1.5" data-testid="composite-image-strip">
-    <template v-for="item in items" :key="item.index">
-      <!-- Permanent failure: empty src or blob/@error; no retry, no HTTP/path details -->
+    <template v-for="item in items" :key="item.key">
+      <!-- Permanent failure: empty src, known-missing, or @error; no retry, no HTTP/path details -->
       <div
         v-if="item.status === 'failed'"
         class="flex flex-col items-center justify-center gap-1 border border-err/35 bg-err/[0.06] px-2 py-2 text-center"
@@ -87,7 +189,7 @@ function onError(index: number) {
         </div>
       </div>
 
-      <!-- Has src: loading overlay until @load; @error → failed -->
+      <!-- Has src: loading overlay until @load; @error → failed. showImg gates orphan auto GET. -->
       <div
         v-else
         class="relative overflow-hidden border border-line"
@@ -105,12 +207,13 @@ function onError(index: number) {
           <span>{{ t('common.compositeImage.loading') }}</span>
         </div>
         <img
+          v-if="item.showImg"
           :src="item.src"
           class="h-full w-full object-cover"
           :class="item.status === 'loading' ? 'opacity-0' : ''"
           alt=""
-          @load="onLoad(item.index)"
-          @error="onError(item.index)"
+          @load="onLoad(item.key, item.src)"
+          @error="onError(item.key, item.src)"
         />
       </div>
     </template>

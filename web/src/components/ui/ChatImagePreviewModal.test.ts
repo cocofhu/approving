@@ -1,9 +1,14 @@
 // @vitest-environment happy-dom
 import { createI18n } from 'vue-i18n'
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
+import { markMissing, resetBlobMissingCacheForTests } from '@/lib/shared/blobMissingCache'
 import ChatImagePreviewModal from './ChatImagePreviewModal.vue'
+
+beforeEach(() => {
+  resetBlobMissingCacheForTests()
+})
 
 function mountPreview(props: Record<string, unknown> = {}) {
   const i18n = createI18n({
@@ -77,6 +82,22 @@ describe('ChatImagePreviewModal', () => {
     const closeBtn = document.body.querySelector('.fixed.inset-0.z-50 .h-14 button') as HTMLButtonElement
     closeBtn.click()
     expect(wrapper.emitted('close')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('knownMissing: no requesting img, placeholder without retry (g3.2)', async () => {
+    markMissing('e54381fb9ce8471dbe0765d99fc0239f')
+    const wrapper = mountPreview({
+      src: '/api/blobs/e54381fb9ce8471dbe0765d99fc0239f',
+      label: 'orphan.png',
+    })
+    await wrapper.vm.$nextTick()
+    expect(document.body.querySelector('[data-testid="chat-image-preview-img"]')).toBeNull()
+    const failed = document.body.querySelector('[data-testid="chat-image-preview-failed"]')
+    expect(failed).toBeTruthy()
+    expect(failed?.textContent).toContain('图片加载失败')
+    expect(failed?.textContent).toContain('附件不可用')
+    expect(document.body.querySelector('button[data-testid$="-retry"]')).toBeNull()
     wrapper.unmount()
   })
 })
