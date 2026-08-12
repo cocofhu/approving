@@ -153,7 +153,7 @@ type AgentCronJob struct {
 // and never serialized to the client.
 type ChannelConfig struct {
 	ID   string `gorm:"primaryKey" json:"id"`
-	Type string `gorm:"index" json:"type"` // qq | (future: slack | discord | feishu…)
+	Type string `gorm:"index" json:"type"` // qq | wecom | feishu
 	Name string `json:"name"`
 	// Enabled toggles whether the Manager starts an adapter for this row.
 	Enabled bool `gorm:"index" json:"enabled"`
@@ -191,19 +191,20 @@ type ChannelConfig struct {
 
 // Channel types.
 const (
-	ChannelTypeQQ    = "qq"
-	ChannelTypeWeCom = "wecom"
+	ChannelTypeQQ     = "qq"
+	ChannelTypeWeCom  = "wecom"
+	ChannelTypeFeishu = "feishu"
 )
 
 // RegisteredChannelTypes returns channel types the platform can persist/start.
 func RegisteredChannelTypes() []string {
-	return []string{ChannelTypeQQ, ChannelTypeWeCom}
+	return []string{ChannelTypeQQ, ChannelTypeWeCom, ChannelTypeFeishu}
 }
 
 // IsRegisteredChannelType reports whether typ is a known adapter type.
 func IsRegisteredChannelType(typ string) bool {
 	switch strings.TrimSpace(typ) {
-	case ChannelTypeQQ, ChannelTypeWeCom:
+	case ChannelTypeQQ, ChannelTypeWeCom, ChannelTypeFeishu:
 		return true
 	default:
 		return false

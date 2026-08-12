@@ -81,6 +81,9 @@ type Manager struct {
 
 	baseCtx context.Context
 
+	runtimeMu sync.Mutex
+	runtime   map[string]runtimeInfo
+
 	// Test hooks (production leaves these nil/zero):
 	// handleFunc overrides bridge.Handle when set (no progress callback).
 	handleFunc func(ctx context.Context, rc ResolvedChannel, in InboundMessage) (Reply, error)
@@ -105,8 +108,34 @@ func NewManager(bridge *ChannelBridge, factories map[string]AdapterFactory, decr
 		running:    map[string]*runningChannel{},
 		convQueues: map[string]*convQueue{},
 		pushQueues: map[string]*pushQueue{},
+		runtime:    map[string]runtimeInfo{},
 		baseCtx:    context.Background(),
 	}
+}
+
+type runtimeInfo struct {
+	State  string
+	Detail string
+}
+
+// RuntimeState returns the process-local connection state for a channel id.
+func (m *Manager) RuntimeState(id string) (state, detail string) {
+	if m == nil {
+		return "", ""
+	}
+	m.runtimeMu.Lock()
+	defer m.runtimeMu.Unlock()
+	info := m.runtime[id]
+	return info.State, info.Detail
+}
+
+func (m *Manager) setRuntime(id, state, detail string) {
+	if m == nil || strings.TrimSpace(id) == "" {
+		return
+	}
+	m.runtimeMu.Lock()
+	m.runtime[id] = runtimeInfo{State: state, Detail: detail}
+	m.runtimeMu.Unlock()
 }
 
 // SetLoader registers the DB-backed config source used by Reload/ApplyOnBoot.
@@ -199,6 +228,7 @@ func (m *Manager) startChannel(cfg models.ChannelConfig) {
 		dec, err := m.decrypt(cfg.AppSecretEnc)
 		if err != nil {
 			log.Warn().Err(err).Str("id", cfg.ID).Msg("channel manager: decrypt secret failed; skipping")
+			m.setRuntime(cfg.ID, ConnStateAuthFailed, "凭证解密失败，无法建立长连接。")
 			return
 		}
 		secret = dec
@@ -212,7 +242,13 @@ func (m *Manager) startChannel(cfg models.ChannelConfig) {
 	})
 	if err != nil {
 		log.Warn().Err(err).Str("id", cfg.ID).Msg("channel manager: build adapter failed")
+		m.setRuntime(cfg.ID, ConnStateAuthFailed, "App ID / App Secret 校验失败，长连接未建立。")
 		return
+	}
+	if sa, ok := adapter.(StatefulAdapter); ok {
+		sa.SetStateHandler(func(state, detail string) {
+			m.setRuntime(cfg.ID, state, detail)
+		})
 	}
 	ctx, cancel := context.WithCancel(m.baseCtx)
 	rc := &runningChannel{cfg: cfg, fingerprint: fingerprint(cfg), adapter: adapter, cancel: cancel}
@@ -232,8 +268,15 @@ func (m *Manager) startChannel(cfg models.ChannelConfig) {
 				delete(m.running, cfg.ID)
 			}
 			m.mu.Unlock()
+			if errors.Is(err, ErrAdapterAuth) {
+				m.setRuntime(cfg.ID, ConnStateAuthFailed, "App ID / App Secret 校验失败，长连接未建立。")
+			} else {
+				m.setRuntime(cfg.ID, ConnStateDisconnected,
+					"长连接已断开。请确认自建应用在线且同一 App ID 无第二条连接互踢。")
+			}
 			return
 		}
+		m.setRuntime(cfg.ID, ConnStateConnected, "长连接在线")
 		log.Info().Str("id", cfg.ID).Str("type", cfg.Type).Str("project", cfg.ProjectID).Msg("channel adapter started")
 	}()
 }
@@ -246,6 +289,7 @@ func (m *Manager) stopChannel(rc *runningChannel) {
 	if err := rc.adapter.Stop(); err != nil {
 		log.Warn().Err(err).Str("id", rc.cfg.ID).Msg("channel adapter stop error")
 	}
+	m.setRuntime(rc.cfg.ID, ConnStateDisconnected, "长连接已断开。请确认自建应用在线且同一 App ID 无第二条连接互踢。")
 	log.Info().Str("id", rc.cfg.ID).Str("type", rc.cfg.Type).Msg("channel adapter stopped")
 }
 
@@ -326,7 +370,7 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 	if withProcessingAck {
 		m.sendOutbound(ctx, rc, OutboundMessage{
 			Scene: in.Scene, ConversationID: in.ConversationID,
-			ReplyToMessageID: in.MessageID, Text: processingAckText(in.Text),
+			ReplyToMessageID: in.MessageID, Text: processingAckTextFor(rc.cfg.Type, in.Text),
 		})
 	}
 
@@ -338,7 +382,7 @@ func (m *Manager) runTurn(ctx context.Context, rc *runningChannel, in InboundMes
 		Caps:        SessionCapsFromConfig(rc.cfg.Config),
 	}
 	onProgress := func(ev ProgressEvent) {
-		text := FormatProgressText(ev)
+		text := FormatProgressTextFor(rc.cfg.Type, ev)
 		if text == "" {
 			return
 		}
@@ -662,6 +706,13 @@ func (m *Manager) convQueueFor(key string) *convQueue {
 
 func processingAckText(userText string) string {
 	return ackProcessingPrefix + truncateRunes(userText, ackSummaryRunes)
+}
+
+func processingAckTextFor(channelType, userText string) string {
+	if channelType == "feishu" {
+		return "已收到，正在处理：" + truncateRunes(userText, ackSummaryRunes)
+	}
+	return processingAckText(userText)
 }
 
 func queueAckTextFor(ahead int, userText string) string {

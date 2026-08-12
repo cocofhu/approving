@@ -287,7 +287,7 @@ describe.skip('PmSettingsPanel session capabilities', () => {
     expect(sch.attributes('aria-checked')).toBe('false')
 
     await setSwitch(mem, true)
-    const saveBtns = w.findAll('button').filter((b) => b.text().includes('保存渠道配置'))
+    const saveBtns = w.findAll('button').filter((b) => b.text().includes('保存并连接'))
     await saveBtns[0].trigger('click')
     await flushPromises()
 
@@ -341,7 +341,7 @@ describe.skip('PmSettingsPanel session capabilities', () => {
     expect(sch.attributes('aria-checked')).toBe('false')
 
     await setSwitch(sch, true)
-    const saveBtns = w.findAll('button').filter((b) => b.text().includes('保存渠道配置'))
+    const saveBtns = w.findAll('button').filter((b) => b.text().includes('保存并连接'))
     await saveBtns[0].trigger('click')
     await flushPromises()
 
@@ -458,7 +458,7 @@ describe.skip('PmSettingsPanel cron deliver target Combobox', () => {
     const input = w.find('[data-testid="cron-deliver-target-input"]')
     expect((input.element as HTMLInputElement).value).toBe('group:ABC')
     await input.setValue('group:ABC-edited')
-    const saveBtns = w.findAll('button').filter((b) => b.text().includes('保存渠道配置'))
+    const saveBtns = w.findAll('button').filter((b) => b.text().includes('保存并连接'))
     await saveBtns[0].trigger('click')
     await flushPromises()
     const body = apiMocks.putProjectChannel.mock.calls[0][1] as { cronDeliverTarget: string }
@@ -520,7 +520,7 @@ describe.skip('PmSettingsPanel cron deliver target Combobox', () => {
     expect(toastMsg).toContain('最近目标加载失败')
     expect(toastMsg).toContain('network down')
     await w.find('[data-testid="cron-deliver-target-input"]').setValue('guild:hand')
-    const saveBtns = w.findAll('button').filter((b) => b.text().includes('保存渠道配置'))
+    const saveBtns = w.findAll('button').filter((b) => b.text().includes('保存并连接'))
     await saveBtns[0].trigger('click')
     await flushPromises()
     expect(apiMocks.putProjectChannel).toHaveBeenCalled()

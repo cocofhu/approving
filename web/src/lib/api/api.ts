@@ -376,9 +376,12 @@ export interface ChannelConfig {
   online?: boolean
   createdAt: string
   updatedAt: string
+  connectionState?: string
+  connectionDetail?: string
 }
 
 // Channel create/update payload. projectId is implied by the request path.
+// Empty type still defaults to "qq" server-side.
 export interface ChannelConfigInput {
   type?: string
   name: string

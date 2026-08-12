@@ -17,7 +17,7 @@ type ThreadLike = {
 }
 
 const VALID_SCENES = new Set(['c2c', 'group', 'guild'])
-const CHANNEL_TYPES = new Set(['qq', 'wecom'])
+const CHANNEL_TYPES = new Set(['qq', 'wecom', 'feishu'])
 
 export function parseChannelUserId(userId: string): { type: string; remainder: string } | null {
   const uid = String(userId || '')
@@ -44,17 +44,21 @@ function isValidPushTargetValue(value: string): boolean {
 
 /**
  * Derive up to 10 recent push targets from PM threads:
- * - keep registered channel prefixes (qq: / wecom:)
- * - value = userId without the type prefix
+ * - keep only userId matching the editing Channel type prefix
+ * - value = userId without that prefix
  * - keep only legal scene:conversationId (scene ∈ {c2c,group,guild})
  * - dedupe by value, keep the newest updatedAt
  * - sort by updatedAt descending, take first 10
  */
-export function deriveRecentPushTargets(threads: ThreadLike[]): PushTargetOption[] {
+export function deriveRecentPushTargets(
+  threads: ThreadLike[],
+  channelType: string = 'qq',
+): PushTargetOption[] {
   const best = new Map<string, PushTargetOption>()
   for (const thr of threads) {
     const parsed = parseChannelUserId(String(thr.userId || ''))
     if (!parsed) continue
+    if (parsed.type !== channelType) continue
     const value = parsed.remainder
     if (!isValidPushTargetValue(value)) continue
     const next: PushTargetOption = {

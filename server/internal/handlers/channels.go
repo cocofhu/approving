@@ -17,7 +17,7 @@ type channelBody struct {
 	Name               string         `json:"name"`
 	Enabled            bool           `json:"enabled"`
 	AgentName          string         `json:"agentName"`
-	IsPrimary          bool           `json:"isPrimary"`
+	IsPrimary          *bool          `json:"isPrimary"`
 	EnabledMcps        []string       `json:"enabledMcps"`
 	AppID              string         `json:"appId"`
 	AppSecret          string         `json:"appSecret"`
@@ -36,18 +36,22 @@ type channelDeleteBody struct {
 }
 
 func (b channelBody) toInput(projectID string) services.ChannelConfigInput {
-	typ := strings.TrimSpace(b.Type)
+	typ := strings.TrimSpace(strings.ToLower(b.Type))
 	if typ == "" {
-		// Legacy clients omit type; keep QQ as the implicit default.
 		typ = models.ChannelTypeQQ
 	}
-	return services.ChannelConfigInput{
+	in := services.ChannelConfigInput{
 		Type: typ, Name: b.Name, Enabled: b.Enabled, ProjectID: projectID,
-		AgentName: b.AgentName, IsPrimary: b.IsPrimary, EnabledMcps: b.EnabledMcps,
+		AgentName: b.AgentName, EnabledMcps: b.EnabledMcps,
 		AppID: b.AppID, AppSecret: b.AppSecret, TurnTimeoutSeconds: b.TurnTimeoutSeconds,
 		CronDeliver: b.CronDeliver, CronDeliverTarget: b.CronDeliverTarget, Config: b.Config,
 		SyncPmLeader: b.SyncPmLeader,
 	}
+	if b.IsPrimary != nil {
+		in.IsPrimary = *b.IsPrimary
+		in.IsPrimarySet = true
+	}
+	return in
 }
 
 // ListProjectChannels handles GET /api/projects/:id/channels.
@@ -258,6 +262,9 @@ func writeChannelErr(c *gin.Context, err error) {
 		errors.Is(err, services.ErrChannelSecretKeyMissing),
 		errors.Is(err, services.ErrChannelSecretKeyInvalid),
 		errors.Is(err, services.ErrChannelTypeUnsupported),
+		errors.Is(err, services.ErrChannelTypeFrozen),
+		errors.Is(err, services.ErrChannelBotIDFrozen),
+		errors.Is(err, services.ErrChannelNameRequired),
 		errors.Is(err, services.ErrChannelTypeFrozen),
 		errors.Is(err, services.ErrChannelBotIDFrozen),
 		errors.Is(err, services.ErrChannelCronTargetRequired),

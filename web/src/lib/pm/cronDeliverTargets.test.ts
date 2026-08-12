@@ -48,6 +48,18 @@ describe('deriveRecentPushTargets', () => {
     expect(deriveRecentPushTargets([{ userId: 'qq:', title: 'x', updatedAt: '2026-01-01T00:00:00Z' }])).toEqual([])
   })
 
+  it('filters by current channel type and does not mix QQ into feishu', () => {
+    const out = deriveRecentPushTargets(
+      [
+        { userId: 'feishu:c2c:oc_zhang', title: '张三', updatedAt: '2026-01-03T00:00:00Z' },
+        { userId: 'qq:group:222', title: 'QQ群', updatedAt: '2026-01-04T00:00:00Z' },
+        { userId: 'feishu:group:oc_review', title: '评审', updatedAt: '2026-01-02T00:00:00Z' },
+      ],
+      'feishu',
+    )
+    expect(out.map((o) => o.value)).toEqual(['c2c:oc_zhang', 'group:oc_review'])
+  })
+
   it('drops invalid scene or empty conversationId', () => {
     const out = deriveRecentPushTargets([
       { userId: 'qq:channel:999', title: 'bad scene', updatedAt: '2026-01-03T00:00:00Z' },
