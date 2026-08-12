@@ -396,6 +396,8 @@ export interface OutputCard {
   typeTag: OutputCardTypeTag
   status: 'ok' | 'failed'
   errorReason?: string
+  /** Server-issued fail heading (e.g. 缺少可展示产出 / 来源状态失败). */
+  failTitle?: string
   /** Parsed JSON snapshot for structured framework products. */
   jsonSnapshot?: string
   /** Markdown body for agent content or rendered structured product. */

@@ -38,6 +38,13 @@ func TestVisualNode(t *testing.T) {
 	if art.Kind != "html" {
 		t.Fatalf("artifact kind = %q, want html", art.Kind)
 	}
+	var nodeCopy models.Artifact
+	if err := db.Where("run_id = ? AND name = ?", run.ID, "page.page.html").First(&nodeCopy).Error; err != nil {
+		t.Fatalf("node-scoped page.page.html not stored: %v", err)
+	}
+	if nodeCopy.Kind != "html" || nodeCopy.NodeID != "page" {
+		t.Fatalf("node copy = kind=%q node=%q", nodeCopy.Kind, nodeCopy.NodeID)
+	}
 
 	// Missing page.html -> failed (no failure edge -> routeFailure ends failed).
 	eng2, db2, p2 := setupEngineGraphP(t, visualGraph())

@@ -68,6 +68,9 @@ type fakeProvider struct {
 	// visual control (test-only): when true a visual node finishes without
 	// writing page.html, so execVisual's contract-miss path is exercised.
 	visualSkipProduces bool
+	// visualBodyByNode optionally overrides the HTML written for a visual node
+	// so dual-visual independence tests can assert distinct pages.
+	visualBodyByNode map[string]string
 
 	// structuredSkipProduces (test-only): when true a framework node finishes
 	// without writing its reserved structured JSON, so finalizeStructured's
@@ -302,6 +305,11 @@ func (f *fakeProvider) RunAgent(ctx context.Context, req runtime.NodeReq) (runti
 	// the contract-miss path.
 	if req.NodeType == "visual" && !f.visualSkipProduces {
 		body := "<!doctype html><html><head><style>body{color:red}</style></head><body><h1>demo</h1></body></html>"
+		if f.visualBodyByNode != nil {
+			if custom, ok := f.visualBodyByNode[req.NodeID]; ok && custom != "" {
+				body = custom
+			}
+		}
 		id, err := f.host.WriteArtifact(req.RunID, req.Token, req.NodeID, visualPageName, body, "html")
 		if err != nil {
 			return runtime.NodeResult{}, err

@@ -20,23 +20,41 @@ const contentCache = ref<Record<string, string>>({})
 const loadErrors = ref<Record<string, boolean>>({})
 const loading = ref(false)
 
-async function loadArtifactContent(name: string) {
-  if (contentCache.value[name] !== undefined) return
-  const art = props.run.artifacts.find((a) => a.name === name)
+function artifactCacheKey(card: OutputCard): string {
+  return `${card.nodeId || ''}:${card.artifactName || ''}`
+}
+
+function findCardArtifact(card: OutputCard) {
+  const name = card.artifactName
+  if (!name) return undefined
+  const matches = props.run.artifacts.filter((a) => a.name === name)
+  if (card.nodeId) {
+    const scoped = matches.find((a) => a.nodeId === card.nodeId)
+    if (scoped) return scoped
+  }
+  return matches[0]
+}
+
+async function loadArtifactContent(card: OutputCard) {
+  const name = card.artifactName
+  if (!name) return
+  const key = artifactCacheKey(card)
+  if (contentCache.value[key] !== undefined) return
+  const art = findCardArtifact(card)
   if (!art) {
-    contentCache.value[name] = ''
+    contentCache.value[key] = ''
     // Not a fetch error — node markdown may still render via HtmlPreview.
-    loadErrors.value[name] = false
+    loadErrors.value[key] = false
     return
   }
   loading.value = true
   try {
     const full = await api.artifactContent(art.id)
-    contentCache.value[name] = full.content ?? ''
-    loadErrors.value[name] = false
+    contentCache.value[key] = full.content ?? ''
+    loadErrors.value[key] = false
   } catch {
-    contentCache.value[name] = ''
-    loadErrors.value[name] = true
+    contentCache.value[key] = ''
+    loadErrors.value[key] = true
   } finally {
     loading.value = false
   }
@@ -55,7 +73,7 @@ watch(
   () => {
     const c = props.cards[selectedIndex.value]
     if (c?.typeTag === '自定义产物' && c.artifactName && !c.structuredArtifactName) {
-      void loadArtifactContent(c.artifactName)
+      void loadArtifactContent(c)
     }
   },
   { immediate: true },
@@ -96,8 +114,9 @@ function hasRenderableBody(card: OutputCard | undefined): boolean {
 
 const canEnlarge = computed(() => hasRenderableBody(currentCard.value))
 
-function artifactContent(name: string): string {
-  return contentCache.value[name] ?? ''
+function artifactContent(card: OutputCard | undefined): string {
+  if (!card?.artifactName) return ''
+  return contentCache.value[artifactCacheKey(card)] ?? ''
 }
 
 function isHtmlArtifact(name?: string): boolean {
@@ -125,8 +144,9 @@ function detailKindLabel(card: OutputCard): string {
   return card.typeTag
 }
 
-function artifactLoadError(name?: string): boolean {
-  return !!name && !!loadErrors.value[name]
+function artifactLoadError(card: OutputCard | undefined): boolean {
+  if (!card?.artifactName) return false
+  return !!loadErrors.value[artifactCacheKey(card)]
 }
 
 function openEnlarge() {
@@ -221,8 +241,8 @@ function closeEnlarge() {
           :run="run"
           :doc="currentDoc"
           :loading="loading"
-          :artifact-html="currentCard.artifactName ? artifactContent(currentCard.artifactName) : ''"
-          :artifact-load-error="artifactLoadError(currentCard.artifactName)"
+          :artifact-html="artifactContent(currentCard)"
+          :artifact-load-error="artifactLoadError(currentCard)"
           variant="detail"
         />
       </div>
@@ -241,8 +261,8 @@ function closeEnlarge() {
           :run="run"
           :doc="currentDoc"
           :loading="loading"
-          :artifact-html="currentCard.artifactName ? artifactContent(currentCard.artifactName) : ''"
-          :artifact-load-error="artifactLoadError(currentCard.artifactName)"
+          :artifact-html="artifactContent(currentCard)"
+          :artifact-load-error="artifactLoadError(currentCard)"
           variant="enlarge"
         />
       </div>

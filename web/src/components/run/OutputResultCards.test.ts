@@ -386,6 +386,124 @@ describe('OutputResultCards master-detail list + enlarge (g4.1)', () => {
     wrapper.unmount()
   })
 
+  it('failed card uses server failTitle instead of hardcoded 来源节点失败 / 无产物 (g3.1)', async () => {
+    const wrapper = mountCards([
+      {
+        index: 1,
+        template: '{{nodes.visual.outputs.page}}',
+        title: '网页预览 · 视觉网页',
+        status: 'failed',
+        typeTag: '来源失败',
+        failTitle: '缺少可展示产出',
+        errorReason: '来源已执行完成但没有可供展示的产出',
+      },
+    ])
+    await flushPromises()
+    expect(wrapper.get('[data-testid="output-result-fail-title"]').text()).toBe('缺少可展示产出')
+    expect(wrapper.text()).toContain('来源已执行完成但没有可供展示的产出')
+    expect(wrapper.text()).not.toContain('来源节点失败 / 无产物')
+    expect(wrapper.text()).not.toContain('上游节点无输出')
+    wrapper.unmount()
+  })
+
+  it('loads HTML by artifactName + nodeId; two visual cards stay independent (g3.2)', async () => {
+    apiMocks.artifactContent.mockImplementation(async (id: string) => {
+      if (id === 'a-va') return { content: '<html>from-art-a</html>' }
+      if (id === 'a-vb') return { content: '<html>from-art-b</html>' }
+      return { content: '<html>WRONG-GLOBAL</html>' }
+    })
+    const dualRun = {
+      ...run,
+      artifacts: [
+        {
+          id: 'a-global',
+          name: 'page.html',
+          kind: 'html',
+          nodeId: 'visual_b',
+          runId: 'run-1',
+          workflowName: 'wf',
+          sizeBytes: 8,
+          createdAt: '2026-07-18T00:00:00Z',
+        },
+        {
+          id: 'a-va',
+          name: 'visual_a.page.html',
+          kind: 'html',
+          nodeId: 'visual_a',
+          runId: 'run-1',
+          workflowName: 'wf',
+          sizeBytes: 8,
+          createdAt: '2026-07-18T00:00:00Z',
+        },
+        {
+          id: 'a-vb',
+          name: 'visual_b.page.html',
+          kind: 'html',
+          nodeId: 'visual_b',
+          runId: 'run-1',
+          workflowName: 'wf',
+          sizeBytes: 8,
+          createdAt: '2026-07-18T00:00:00Z',
+        },
+      ],
+    } as Run
+    const dual: OutputCard[] = [
+      {
+        index: 1,
+        template: '{{nodes.visual_a.outputs.page}}',
+        title: '网页预览 · 视觉A',
+        status: 'ok',
+        typeTag: '自定义产物',
+        artifactName: 'visual_a.page.html',
+        nodeId: 'visual_a',
+        outputKey: 'page',
+        markdown: '<!doctype html><html><body><h1>snap-a</h1></body></html>',
+      },
+      {
+        index: 2,
+        template: '{{nodes.visual_b.outputs.page}}',
+        title: '网页预览 · 视觉B',
+        status: 'ok',
+        typeTag: '自定义产物',
+        artifactName: 'visual_b.page.html',
+        nodeId: 'visual_b',
+        outputKey: 'page',
+        markdown: '<!doctype html><html><body><h1>snap-b</h1></body></html>',
+      },
+    ]
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const wrapper = mount(OutputResultCards, {
+      props: { cards: dual, run: dualRun },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          StructuredArtifactView: StructuredStub,
+          HtmlPreview: HtmlPreviewStub,
+          AppModal: AppModalStub,
+          Icon: true,
+        },
+      },
+    })
+    await flushPromises()
+    const first = wrapper.getComponent({ name: 'HtmlPreview' })
+    expect(first.props('html')).toContain('snap-a')
+    expect(first.props('html')).not.toContain('snap-b')
+    expect(first.props('html')).not.toContain('WRONG-GLOBAL')
+    await wrapper.get('[data-testid="output-result-card-toggle-1"]').trigger('click')
+    await flushPromises()
+    const second = wrapper.getComponent({ name: 'HtmlPreview' })
+    expect(second.props('html')).toContain('snap-b')
+    expect(second.props('html')).not.toContain('snap-a')
+    expect(apiMocks.artifactContent).toHaveBeenCalledWith('a-va')
+    expect(apiMocks.artifactContent).toHaveBeenCalledWith('a-vb')
+    expect(apiMocks.artifactContent).not.toHaveBeenCalledWith('a-global')
+    wrapper.unmount()
+  })
+
   it('custom HTML uses markdown fallback when artifact missing (no source leak)', async () => {
     const pageOnlyMd: OutputCard = {
       index: 1,
