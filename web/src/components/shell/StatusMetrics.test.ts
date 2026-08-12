@@ -134,4 +134,66 @@ describe('StatusMetrics', () => {
     expect(text).toMatch(/5/)
     w.unmount()
   })
+
+  it('desktop tips are single-line label: value with exact counts (plan g1.1/g1.2)', async () => {
+    const w = mountMetrics()
+    await flushPromises()
+    const tips = {
+      tokens: w.find('[data-testid="status-metrics-tokens"] .sm-tip').text(),
+      rate: w.find('[data-testid="status-metrics-rate"] .sm-tip').text(),
+      peak: w.find('[data-testid="status-metrics-peak"] .sm-tip').text(),
+      running: w.find('[data-testid="status-metrics-running"] .sm-tip').text(),
+      queued: w.find('[data-testid="status-metrics-queued"] .sm-tip').text(),
+    }
+    expect(tips.tokens).toMatch(/累计 Token:\s*1,240,582/)
+    expect(tips.rate).toMatch(/当前 5 分钟速率:\s*4,812/)
+    expect(tips.peak).toMatch(/今日 5 分钟峰值:\s*12,104/)
+    expect(tips.running).toMatch(/执行中:\s*3/)
+    expect(tips.queued).toMatch(/排队:\s*5/)
+    for (const tip of Object.values(tips)) {
+      expect(tip).not.toMatch(/完整值/)
+      expect(tip).not.toMatch(/totalTokens/i)
+      expect(tip).not.toContain('/5m')
+      expect(tip).not.toMatch(/\d{2}:\d{2}/)
+    }
+    expect(w.find('[data-testid="status-metrics-tokens"] .sm-tip').classes()).not.toContain('min-w-[210px]')
+    w.unmount()
+  })
+
+  it('compact tip is five label: value rows aligned with desktop (plan g1.3)', async () => {
+    isMobile.value = true
+    const w = mountMetrics()
+    await flushPromises()
+    const tip = w.find('[data-testid="status-metrics-compact"] .sm-tip')
+    const lines = tip.findAll('div').map((d) => d.text())
+    expect(lines).toHaveLength(5)
+    expect(lines[0]).toMatch(/累计 Token:\s*1,240,582/)
+    expect(lines[1]).toMatch(/当前 5 分钟速率:\s*4,812/)
+    expect(lines[2]).toMatch(/今日 5 分钟峰值:\s*12,104/)
+    expect(lines[3]).toMatch(/执行中:\s*3/)
+    expect(lines[4]).toMatch(/排队:\s*5/)
+    const tipText = tip.text()
+    expect(tipText).not.toMatch(/完整值/)
+    expect(tipText).not.toContain('/5m')
+    expect(tipText).not.toMatch(/窄屏摘要|完整值|totalTokens/i)
+    w.unmount()
+  })
+
+  it('zero counts still show label: 0 in tip', async () => {
+    platformStatus.mockResolvedValue({
+      cumulativeTokens: 0,
+      current5mBucketTokens: 0,
+      todayMaxCompleted5mTokens: 0,
+      runningCount: 0,
+      queuedCount: 0,
+      asOf: '2026-08-12T00:00:00Z',
+      timezone: 'UTC',
+    })
+    const w = mountMetrics()
+    await flushPromises()
+    expect(w.find('[data-testid="status-metrics-running"] .sm-tip').text()).toMatch(/执行中:\s*0/)
+    expect(w.find('[data-testid="status-metrics-queued"] .sm-tip').text()).toMatch(/排队:\s*0/)
+    expect(w.find('[data-testid="status-metrics-tokens"] .sm-tip').text()).toMatch(/累计 Token:\s*0/)
+    w.unmount()
+  })
 })
