@@ -70,12 +70,15 @@ describe('deriveRecentPushTargets', () => {
   })
 
   it('keeps wecom: threads and marks unspoken', () => {
-    const out = deriveRecentPushTargets([
-      { userId: 'wecom:c2c:zhangsan', title: '企微', updatedAt: '2026-01-04T00:00:00Z' },
-      { userId: 'wecom:c2c:silent', title: '', updatedAt: '2026-01-03T00:00:00Z', unspoken: true },
-      { userId: 'qq:c2c:u1', title: 'QQ', updatedAt: '2026-01-02T00:00:00Z' },
-    ])
-    expect(out.map((o) => o.value)).toEqual(['c2c:zhangsan', 'c2c:silent', 'c2c:u1'])
+    const out = deriveRecentPushTargets(
+      [
+        { userId: 'wecom:c2c:zhangsan', title: '企微', updatedAt: '2026-01-04T00:00:00Z' },
+        { userId: 'wecom:c2c:silent', title: '', updatedAt: '2026-01-03T00:00:00Z', unspoken: true },
+        { userId: 'qq:c2c:u1', title: 'QQ', updatedAt: '2026-01-02T00:00:00Z' },
+      ],
+      'wecom',
+    )
+    expect(out.map((o) => o.value)).toEqual(['c2c:zhangsan', 'c2c:silent'])
     expect(out[0].channelType).toBe('wecom')
     expect(pushTargetPrimaryLabel(out[1])).toContain('未发言')
   })

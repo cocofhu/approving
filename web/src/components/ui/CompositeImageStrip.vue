@@ -117,18 +117,17 @@ function upsertSlot(key: string, src: string, status: ThumbStatus, showImg: bool
   clearTimer(key)
 }
 
-/** Cache hit / sync decode: leave loading without waiting for a late @load. */
+/** Cache hit / sync decode: promote ok without waiting for a late @load. */
 function syncFromImg(key: string, img: HTMLImageElement) {
   const slot = slots[key]
   if (!slot || slot.status !== 'loading' || !slot.showImg || !slot.src) return
   const shown = img.getAttribute('src') || ''
   if (shown && shown !== slot.src) return
-  if (!img.complete) return
-  if (img.naturalWidth > 0) {
+  // Only success here. complete+naturalWidth===0 is not authoritative failure
+  // (happy-dom and some browsers report it before @error); @error/timeout own fail.
+  if (img.complete && img.naturalWidth > 0) {
     onLoad(key, slot.src)
-    return
   }
-  onError(key, slot.src)
 }
 
 function bindImg(el: unknown, key: string) {

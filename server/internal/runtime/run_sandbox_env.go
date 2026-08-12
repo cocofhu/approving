@@ -1,6 +1,10 @@
 package runtime
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/cocofhu/approving/internal/envauth"
+)
 
 // IsDeniedRunSandboxEnvKey reports keys that must not appear in a StartRun
 // run-scoped sandbox env snapshot. Aligns with platform auth keys, APPROVING_*
@@ -12,7 +16,7 @@ func IsDeniedRunSandboxEnvKey(k string) bool {
 	if k == "" {
 		return false
 	}
-	if IsPlatformAuthEnvKey(k) {
+	if envauth.IsPlatformAuthEnvKey(k) {
 		return true
 	}
 	switch k {
