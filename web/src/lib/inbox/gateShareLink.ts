@@ -119,6 +119,27 @@ export function maskShareUrl(url: string): string {
   return `${url.slice(0, i + 3)}••••••••`
 }
 
+/**
+ * Loopback hosts that must not be one-click copied for external share.
+ * Only localhost / 127.0.0.1 / ::1 (with or without port); general LAN is allowed.
+ */
+export function isLoopbackHostname(hostname: string): boolean {
+  const host = hostname.trim().toLowerCase().replace(/^\[|\]$/g, '')
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1'
+}
+
+/** True when a share URL (or host:port) resolves to a loopback hostname. */
+export function isLoopbackShareHost(urlOrHost: string): boolean {
+  const raw = urlOrHost.trim()
+  if (!raw) return false
+  try {
+    const u = raw.includes('://') ? new URL(raw) : new URL(`http://${raw}`)
+    return isLoopbackHostname(u.hostname)
+  } catch {
+    return false
+  }
+}
+
 /** Read token from `#t=…` only — never from path/query. */
 export function parseShareTokenFromHash(hash: string): string {
   const raw = (hash || '').startsWith('#') ? hash.slice(1) : hash || ''

@@ -12,6 +12,7 @@ import {
   canCreateGateShare,
   forgetShareUrl,
   isGateShareActive,
+  isLoopbackShareHost,
   maskShareUrl,
   recallShareUrl,
   rememberShareUrl,
@@ -57,6 +58,16 @@ const displayUrl = computed(() => {
   return revealUrl.value ? fullUrl.value : maskShareUrl(fullUrl.value)
 })
 
+/** Prefer minted URL hostname; fall back to current admin entry for create-mode hints. */
+const loopbackBlocked = computed(() => {
+  if (fullUrl.value) return isLoopbackShareHost(fullUrl.value)
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    return isLoopbackShareHost(window.location.hostname)
+  }
+  return false
+})
+const copyAllowed = computed(() => !!fullUrl.value && !loopbackBlocked.value)
+
 watch(
   () => [props.open, props.target?.runId, props.target?.nodeId, shareKind.value] as const,
   () => {
@@ -79,6 +90,7 @@ watch(
 )
 
 async function copyText(text: string) {
+  if (isLoopbackShareHost(text)) return false
   try {
     await navigator.clipboard.writeText(text)
     toast.success(t('pages.gatesInbox.share.copied'))
@@ -113,7 +125,9 @@ async function createAndCopy() {
     }
     localStatus.value = next
     emit('updated', next, res.url)
-    await copyText(res.url)
+    if (!isLoopbackShareHost(res.url)) {
+      await copyText(res.url)
+    }
   } catch (e) {
     errorText.value = shareApiErrorMessage(e, t)
   } finally {
@@ -125,6 +139,10 @@ async function createAndCopy() {
 async function copyExisting() {
   if (!fullUrl.value) {
     errorText.value = t('pages.gatesInbox.share.copyUnavailable')
+    return
+  }
+  if (isLoopbackShareHost(fullUrl.value)) {
+    errorText.value = t('pages.gatesInbox.share.loopbackCopyBlocked')
     return
   }
   if (busy.value) return
@@ -160,7 +178,9 @@ async function confirmRegen() {
     }
     localStatus.value = next
     emit('updated', next, res.url)
-    await copyText(res.url)
+    if (!isLoopbackShareHost(res.url)) {
+      await copyText(res.url)
+    }
   } catch (e) {
     errorText.value = shareApiErrorMessage(e, t)
   } finally {
@@ -214,6 +234,23 @@ function close() {
         {{ t('pages.gatesInbox.share.safetyHint') }}
       </p>
 
+      <p
+        v-if="loopbackBlocked"
+        class="border border-err/40 bg-err/10 px-3 py-2 text-[13px] text-err"
+        role="alert"
+        data-testid="gate-share-loopback-warning"
+      >
+        {{ t('pages.gatesInbox.share.loopbackWarning') }}
+      </p>
+      <p
+        v-else
+        class="border border-ok/35 bg-ok/10 px-3 py-2 text-[13px] text-ok"
+        role="note"
+        data-testid="gate-share-origin-hint"
+      >
+        {{ t('pages.gatesInbox.share.originFromAccessHint') }}
+      </p>
+
       <div v-if="mode === 'readonly'" class="space-y-2" role="status">
         <p class="text-txt2">{{ t('pages.gatesInbox.share.usedReadonly') }}</p>
       </div>
@@ -244,18 +281,25 @@ function close() {
           data-testid="gate-share-create"
           :disabled="busy"
           :aria-busy="busy ? 'true' : undefined"
-          :aria-label="t('pages.gatesInbox.share.createCopyAria')"
+          :aria-label="loopbackBlocked ? t('pages.gatesInbox.share.createOnlyAria') : t('pages.gatesInbox.share.createCopyAria')"
           @click="createAndCopy"
         >
           <Icon :name="busy ? 'spinner' : 'copy'" :size="16" :class="busy ? 'animate-spin' : ''" aria-hidden="true" />
-          {{ busy ? t('common.buttons.creating') : t('pages.gatesInbox.share.createCopy') }}
+          {{
+            busy
+              ? t('common.buttons.creating')
+              : loopbackBlocked
+                ? t('pages.gatesInbox.share.createOnly')
+                : t('pages.gatesInbox.share.createCopy')
+          }}
         </button>
       </div>
 
       <div v-else class="space-y-3">
         <label class="block text-xs font-medium text-txt2">{{ t('pages.gatesInbox.share.linkLabel') }}</label>
         <textarea
-          class="w-full border border-line bg-elevated px-3 py-2 font-mono text-[12px] text-txt"
+          class="w-full border bg-elevated px-3 py-2 font-mono text-[12px] text-txt"
+          :class="loopbackBlocked ? 'border-err/45' : 'border-line'"
           rows="3"
           readonly
           data-testid="gate-share-url"
@@ -265,12 +309,20 @@ function close() {
         <p v-if="!fullUrl" class="text-xs text-txt3" role="status" data-testid="gate-share-copy-unavailable">
           {{ t('pages.gatesInbox.share.copyUnavailable') }}
         </p>
+        <p
+          v-else-if="loopbackBlocked"
+          class="text-xs text-err"
+          role="status"
+          data-testid="gate-share-loopback-copy-hint"
+        >
+          {{ t('pages.gatesInbox.share.loopbackCopyBlocked') }}
+        </p>
         <div class="flex flex-wrap gap-2">
           <button
             type="button"
             class="inline-flex min-h-11 items-center gap-1.5 bg-accent px-3 text-xs font-medium text-white hover:bg-accent-2 disabled:opacity-45"
             data-testid="gate-share-copy"
-            :disabled="busy || !fullUrl"
+            :disabled="busy || !copyAllowed"
             :aria-busy="busy ? 'true' : undefined"
             @click="copyExisting"
           >

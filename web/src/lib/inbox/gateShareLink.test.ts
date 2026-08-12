@@ -16,6 +16,8 @@ import {
   isShareableInboxItem,
   inboxShareKind,
   shareApiErrorMessage,
+  isLoopbackHostname,
+  isLoopbackShareHost,
 } from './gateShareLink'
 
 const t = (key: string, values?: Record<string, unknown>) => {
@@ -40,6 +42,17 @@ describe('gateShareLink helpers', () => {
     expect(parseShareTokenFromHash(`#t=${token}`)).toBe(token)
     expect(parseShareTokenFromHash('?token=abc')).toBe('')
     expect(parseShareTokenFromHash('')).toBe('')
+  })
+
+  it('detects loopback share hosts only (not general LAN)', () => {
+    expect(isLoopbackShareHost('http://localhost:8080/public/gate-approvals#t=x')).toBe(true)
+    expect(isLoopbackShareHost('http://127.0.0.1:8080/public/gate-approvals#t=x')).toBe(true)
+    expect(isLoopbackShareHost('http://[::1]:8080/public/gate-approvals#t=x')).toBe(true)
+    expect(isLoopbackHostname('localhost')).toBe(true)
+    expect(isLoopbackHostname('::1')).toBe(true)
+    expect(isLoopbackShareHost('https://approving.example.com/public/gate-approvals#t=x')).toBe(false)
+    expect(isLoopbackShareHost('http://192.168.1.10:8080/public/gate-approvals#t=x')).toBe(false)
+    expect(isLoopbackShareHost('http://10.0.0.5/public/gate-approvals#t=x')).toBe(false)
   })
 
   it('formats remaining time and status chips', () => {
