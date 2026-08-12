@@ -207,6 +207,7 @@ func (s *Service) RegenerateReview(runID, nodeID, createdBy, publicOrigin string
 	}); err != nil {
 		return nil, err
 	}
+	s.notifyInvalidated([]string{latest.TokenHash})
 	s.recordShareAudit(run, models.Gate{NodeID: nodeID, Iteration: conv.Iteration}, models.AuditActionGateShareRegen, createdBy, map[string]any{
 		"ttlTier":   tier,
 		"expiresAt": link.ExpiresAt,
@@ -253,6 +254,7 @@ func (s *Service) RevokeReview(runID, nodeID, actor string) error {
 		Update("revoked_at", now).Error; err != nil {
 		return err
 	}
+	s.notifyInvalidated([]string{latest.TokenHash})
 	s.recordShareAudit(run, models.Gate{NodeID: nodeID, Iteration: conv.Iteration}, models.AuditActionGateShareRevoke, actor, map[string]any{
 		"revokedAt": now,
 		"expiresAt": latest.ExpiresAt,

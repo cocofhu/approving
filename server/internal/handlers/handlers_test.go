@@ -81,6 +81,14 @@ func newHarness(t *testing.T) *harness {
 		auditSvc.Record(rec)
 	})
 	gateShareSvc := gateshare.NewService(db, auditSvc)
+	gateShareTickets := gateshare.NewTicketStore(db)
+	gateShareSessions := gateshare.NewPreviewSessionHub()
+	gateShareSvc.SetInvalidationHook(func(tokenHashes []string) {
+		for _, th := range tokenHashes {
+			gateShareTickets.InvalidateByTokenHash(th)
+		}
+		gateShareSessions.KickMany(tokenHashes)
+	})
 	eng.SetShareRevoker(gateShareSvc)
 	t.Cleanup(func() {
 		eng.Close()
@@ -118,10 +126,12 @@ func newHarness(t *testing.T) *harness {
 		Issues:           services.NewIssueService(db),
 		Audit:            auditSvc,
 		Onboarding:       services.NewOnboardingService(projectSvc, skills, wfSvc),
-		GateShare:        gateShareSvc,
-		GateShareNonces:  gateshare.NewNonceStore(db),
-		GateShareLimiter: gateshare.NewIPLimiter(),
-		PublicAdvertise:  "http://example.test",
+		GateShare:         gateShareSvc,
+		GateShareNonces:   gateshare.NewNonceStore(db),
+		GateShareTickets:  gateShareTickets,
+		GateShareSessions: gateShareSessions,
+		GateShareLimiter:  gateshare.NewIPLimiter(),
+		PublicAdvertise:   "http://example.test",
 	}
 	hn := &harness{r: router.New(h), h: h, db: db, host: host, auth: authSvc, fg: fg}
 	hn.cookie = hn.login(t)

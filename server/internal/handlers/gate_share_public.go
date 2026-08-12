@@ -483,6 +483,7 @@ func (h *Handlers) publicReviewExtras(lookup *gateshare.LookupResult, visualHTML
 	if lookup.Node != nil && lookup.Node.Type == "app_preview" {
 		ex.ProductKind = gateshare.ProductKindAppPreview
 		ex.ProductName = "app_preview"
+		ex.Ports = h.publicAppPreviewPorts(runID, nodeID)
 	} else if strings.TrimSpace(visualHTML) != "" {
 		ex.ProductKind = gateshare.ProductKindVisual
 		ex.ProductName = "page.html"

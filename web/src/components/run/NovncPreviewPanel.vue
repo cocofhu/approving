@@ -25,6 +25,8 @@ const props = withDefaults(
     runId?: string
     nodeId?: string
     port?: number
+    /** Optional absolute ws(s) URL (public ticket channel); overrides run/node/port. */
+    wsUrl?: string
     /** Console mode: sandbox-scoped WS (mutually exclusive with preview triple). */
     sandboxId?: number
     fill?: boolean
@@ -184,6 +186,8 @@ function setInspect(on: boolean) {
 }
 
 function resolveWsUrl(): string | null {
+  const custom = (props.wsUrl || '').trim()
+  if (custom) return custom
   if (consoleMode.value) {
     return api.sandboxVncWsUrl(props.sandboxId!)
   }
@@ -370,7 +374,7 @@ async function toggleFullscreen() {
 }
 
 watch(
-  () => [props.runId, props.nodeId, props.port, props.sandboxId],
+  () => [props.runId, props.nodeId, props.port, props.sandboxId, props.wsUrl],
   () => reconnect(),
 )
 

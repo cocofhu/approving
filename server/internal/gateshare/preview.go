@@ -53,10 +53,20 @@ type PreviewDTO struct {
 	ActiveItem        *PreviewActiveItem `json:"activeItem,omitempty"`
 	ProductKind       string             `json:"productKind,omitempty"`
 	ProductName       string             `json:"productName,omitempty"`
+	// Ports is the desensitized public app_preview port list (no runId/nodeId/paths).
+	Ports []PublicPreviewPort `json:"ports,omitempty"`
 	// NodeType is the graph node type (e.g. react / research / app_preview).
 	// Kind stays "review" for ShareLinkKindReview; clients use NodeType to
 	// distinguish Inbox 待澄清 from 待复审 without leaking Run#.
 	NodeType string `json:"nodeType,omitempty"`
+}
+
+// PublicPreviewPort is the leak-free port entry for public app_preview remote / API iframe.
+type PublicPreviewPort struct {
+	Port  int    `json:"port"`
+	Label string `json:"label,omitempty"`
+	// Mode is "vnc" (remote + pick) or "api" (same-origin iframe, no pick).
+	Mode string `json:"mode"`
 }
 
 // PreviewExtras carries workbench fields that are optional on inactive links.
@@ -71,6 +81,7 @@ type PreviewExtras struct {
 	ActiveItem        map[string]any
 	ProductKind       string
 	ProductName       string
+	Ports             []PublicPreviewPort
 }
 
 // BuildPreviewDTO builds a whitelist human_gate preview from lookup + artifacts.
@@ -164,13 +175,12 @@ func applyPreviewArtifacts(dto *PreviewDTO, visualHTML, structuredName, structur
 	}
 	dto.ProductKind = kind
 	dto.ProductName = name
-	if kind == ProductKindAppPreview && dto.VisualHTML == "" && dto.Structured == nil {
-		dto.Structured = map[string]any{
-			"name": "app_preview",
-			"text": "公开页仅支持只读预览，不提供远程桌面或取点。",
-		}
+	if kind == ProductKindAppPreview {
 		if dto.ProductName == "" {
 			dto.ProductName = "app_preview"
+		}
+		if len(extras.Ports) > 0 {
+			dto.Ports = append([]PublicPreviewPort(nil), extras.Ports...)
 		}
 	}
 	if turns := SanitizeTurns(extras.Turns); len(turns) > 0 {

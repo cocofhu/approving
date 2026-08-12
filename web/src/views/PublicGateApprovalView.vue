@@ -7,10 +7,13 @@ import AppModal from '@/components/ui/AppModal.vue'
 import ReviewShell from '@/components/run/ReviewShell.vue'
 import ClarifyChat from '@/components/run/ClarifyChat.vue'
 import StructuredArtifactView from '@/components/run/StructuredArtifactView.vue'
+import PublicAppPreviewPanel from '@/components/run/PublicAppPreviewPanel.vue'
 import { applyPublicLocale } from '@/lib/shared/locale'
 import { reapplyThemeChrome } from '@/lib/shared/theme'
 import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import { provideReviewAnnotate } from '@/lib/inbox/reviewAnnotate'
+import { previewPickLabel } from '@/lib/shared/previewPickUrl'
+import type { AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
 import { isAbortError } from '@/lib/run/liveLogRehydrate'
 import {
   formatRemainingSec,
@@ -116,7 +119,13 @@ const canConfirm = computed(() => {
 })
 const productKind = computed(() => preview.value?.productKind || inferProductKind())
 const productName = computed(() => preview.value?.productName || preview.value?.structured?.name || '')
-const inspectable = computed(() => isActive.value && reactAlive.value && productKind.value === 'visual')
+const inspectable = computed(
+  () =>
+    isActive.value &&
+    reactAlive.value &&
+    (productKind.value === 'visual' || productKind.value === 'app_preview'),
+)
+const appPreviewPorts = computed(() => preview.value?.ports || [])
 const turns = computed<ClarifyTurn[]>(() =>
   (preview.value?.turns || []).map((turn) => ({
     role: turn.role === 'human' ? 'human' : 'agent',
@@ -632,6 +641,18 @@ function onHtmlPick(payload: { selector: string; tagName: string }) {
   annotations.value = [...annotations.value, next]
 }
 
+function onAppPreviewPick(payload: AppPreviewPickPayload) {
+  if (!isActive.value || !reactAlive.value) return
+  const label = previewPickLabel(payload.url || '', payload.selector, payload.tagName)
+  const next: ReactAnnotation = {
+    selector: payload.selector,
+    label,
+    quote: payload.outerHTML?.slice?.(0, 240) || undefined,
+  }
+  if (annotations.value.some((a) => a.selector === next.selector && a.label === next.label)) return
+  annotations.value = [...annotations.value, next]
+}
+
 let pollTimer: ReturnType<typeof setInterval> | null = null
 function pageHidden(): boolean {
   return typeof document !== 'undefined' && document.visibilityState === 'hidden'
@@ -880,14 +901,15 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
                   @pick="onHtmlPick"
                 />
               </div>
-              <div
+              <PublicAppPreviewPanel
                 v-else-if="productKind === 'app_preview'"
-                class="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-txt3"
-                data-testid="public-gate-app-preview"
-              >
-                <Icon name="monitor" :size="22" class="text-txt3" />
-                <p>{{ t('pages.publicGate.appPreviewHint') }}</p>
-              </div>
+                :token="token"
+                :ports="appPreviewPorts"
+                :active="isActive"
+                :mobile="isMobile"
+                fill
+                @pick="onAppPreviewPick"
+              />
               <div
                 v-else-if="structuredDoc"
                 class="scroll-area h-full overflow-y-auto px-4 py-3"

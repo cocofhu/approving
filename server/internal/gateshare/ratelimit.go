@@ -12,6 +12,7 @@ const (
 
 	RateBucketPreview = "preview"
 	RateBucketDecide  = "decide"
+	RateBucketTicket  = "ticket"
 )
 
 type ipWindow struct {

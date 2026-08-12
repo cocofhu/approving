@@ -55,6 +55,8 @@ type Handlers struct {
 	Onboarding        *services.OnboardingService
 	GateShare         *gateshare.Service
 	GateShareNonces   *gateshare.NonceStore
+	GateShareTickets  *gateshare.TicketStore
+	GateShareSessions *gateshare.PreviewSessionHub
 	GateShareLimiter  *gateshare.IPLimiter
 	// PublicAdvertise is the browser-facing origin for share URLs.
 	// Public CSRF compares Origin/Referer to this request's Host (never client
