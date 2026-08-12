@@ -192,6 +192,8 @@ describe('user-facing copy remediation keys', () => {
       'mcp.pmWorkflowWrite.convention',
       'mcp.pmAgentFs.desc',
       'mcp.pmAgentFs.convention',
+      'mcp.pmPrdManager.desc',
+      'mcp.pmPrdManager.convention',
     ] as const
     for (const key of zhKeys) {
       const text = zh.global.t(key)
@@ -215,6 +217,8 @@ describe('user-facing copy remediation keys', () => {
       'mcp.pmWorkflowWrite.convention',
       'mcp.pmAgentFs.desc',
       'mcp.pmAgentFs.convention',
+      'mcp.pmPrdManager.desc',
+      'mcp.pmPrdManager.convention',
     ] as const
     for (const key of enKeys) {
       const text = en.global.t(key)

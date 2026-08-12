@@ -67,6 +67,12 @@ const CATALOG = [
       'pm_ensure_child_group',
     ],
   },
+  {
+    id: 'pm-prd-manager',
+    scope: 'project' as const,
+    toolCount: 3,
+    writeTools: ['pm_create_requirement_draft'],
+  },
 ] as const
 
 const INTEGRATIONS_SCOPE_KEYS = [

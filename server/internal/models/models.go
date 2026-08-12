@@ -56,7 +56,7 @@ type Project struct {
 	// PmLeaderAgent is the bound Agent config name (skill_profile). Empty when
 	// unbound. Enabling requires a non-empty, existing agent name.
 	PmLeaderAgent string `json:"pmLeaderAgent,omitempty"`
-	// PmEnabledMcps lists enabled PM-only MCP ids (pm-progress, pm-workflow-read, pm-workflow-write, pm-agent-fs).
+	// PmEnabledMcps lists enabled PM-only MCP ids (pm-progress, pm-workflow-read, pm-workflow-write, pm-agent-fs, pm-prd-manager).
 	// nil/omitted → defaults; explicit empty slice → none.
 	// nil/unset means both enabled by default; explicit empty disables all.
 	PmEnabledMcps []string `gorm:"serializer:json" json:"pmEnabledMcps,omitempty"`

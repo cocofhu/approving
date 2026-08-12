@@ -167,7 +167,7 @@ type ChannelConfig struct {
 	// have equal channel capabilities.
 	IsPrimary bool `gorm:"index" json:"isPrimary"`
 	// EnabledMcps lists platform PM role MCP ids for channel turns only
-	// (pm-progress / pm-workflow-read / pm-workflow-write / pm-agent-fs).
+	// (pm-progress / pm-workflow-read / pm-workflow-write / pm-agent-fs / pm-prd-manager).
 	// nil → defaults; explicit empty → none. Web/gate still use Project.PmEnabledMcps.
 	EnabledMcps []string `gorm:"serializer:json" json:"enabledMcps,omitempty"`
 	// AppID is the bot's public app id (unique across configs).

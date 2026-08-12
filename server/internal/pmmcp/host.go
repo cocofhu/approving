@@ -1,6 +1,6 @@
 // Package pmmcp implements PM-only MCP hosts: pm-progress, pm-workflow-read,
-// pm-workflow-write and pm-agent-fs. Memory and conversation context live in
-// memory-store / context-store.
+// pm-workflow-write, pm-agent-fs and pm-prd-manager. Memory and conversation
+// context live in memory-store / context-store.
 package pmmcp
 
 import (
@@ -20,12 +20,14 @@ import (
 
 // MCP ids. Workflow tools are split into a read-only surface and a write
 // surface so a project can grant one without the other. pm-agent-fs exposes
-// org read + host-side agent workspace FS (not Run sandbox).
+// org read + host-side agent workspace FS (not Run sandbox). pm-prd-manager
+// exposes project requirement drafts (list / get / create in the first cut).
 const (
 	MCPProgress      = "pm-progress"
 	MCPWorkflowRead  = "pm-workflow-read"
 	MCPWorkflowWrite = "pm-workflow-write"
 	MCPAgentFS       = "pm-agent-fs"
+	MCPPrdManager    = "pm-prd-manager"
 
 	// pm_get_artifact paging: default page size is also the hard ceiling so a
 	// caller cannot pull an unbounded artifact in one MCP response.
@@ -60,6 +62,7 @@ type Host struct {
 	org      *services.OrgService
 	skill    *services.SkillService
 	team     *services.TeamService
+	drafts   *services.RequirementDraftService
 	eng      engineOps
 	audit    func(services.AuditRecord)
 }
@@ -101,6 +104,14 @@ func (h *Host) SetOrgAndSkill(org *services.OrgService, skill *services.SkillSer
 func (h *Host) SetTeam(team *services.TeamService) {
 	h.mu.Lock()
 	h.team = team
+	h.mu.Unlock()
+}
+
+// SetRequirementDrafts wires RequirementDraftService for pm-prd-manager tools.
+// Safe to call after NewHost (main wiring); nil leaves draft tools unavailable.
+func (h *Host) SetRequirementDrafts(drafts *services.RequirementDraftService) {
+	h.mu.Lock()
+	h.drafts = drafts
 	h.mu.Unlock()
 }
 
@@ -214,7 +225,7 @@ func (h *Host) SessionFor(projectID, token string) (*Session, bool) {
 }
 
 // ServeRPC handles one JSON-RPC message for mcpId
-// (pm-progress | pm-workflow-read | pm-workflow-write | pm-agent-fs).
+// (pm-progress | pm-workflow-read | pm-workflow-write | pm-agent-fs | pm-prd-manager).
 func (h *Host) ServeRPC(projectID, mcpID, token string, body []byte) (status int, resp []byte) {
 	if !h.Authorize(projectID, token) {
 		return platformmcp.Unauthorized()
@@ -223,7 +234,7 @@ func (h *Host) ServeRPC(projectID, mcpID, token string, body []byte) (status int
 	if mcpID == "" {
 		mcpID = MCPProgress // legacy /mcp/pm/:projectId
 	}
-	if mcpID != MCPProgress && mcpID != MCPWorkflowRead && mcpID != MCPWorkflowWrite && mcpID != MCPAgentFS {
+	if mcpID != MCPProgress && mcpID != MCPWorkflowRead && mcpID != MCPWorkflowWrite && mcpID != MCPAgentFS && mcpID != MCPPrdManager {
 		return 404, platformmcp.MustJSON(platformmcp.RPCResponse{
 			JSONRPC: "2.0",
 			Error:   &platformmcp.RPCError{Code: -32004, Message: "unknown mcp: " + mcpID},
@@ -317,6 +328,8 @@ func (h *Host) callTool(projectID, token, mcpID, name string, args map[string]an
 		return h.callWorkflowWrite(projectID, token, name, args)
 	case MCPAgentFS:
 		return h.callAgentFS(projectID, token, name, args)
+	case MCPPrdManager:
+		return h.callPrdManager(projectID, token, name, args)
 	default:
 		return map[string]any{"error": "unknown mcp"}, true
 	}
@@ -828,6 +841,20 @@ func (h *Host) callWorkflowWrite(projectID, token, name string, args map[string]
 
 func toolSchemas(mcpID string) []map[string]any {
 	switch mcpID {
+	case MCPPrdManager:
+		return []map[string]any{
+			platformmcp.Tool("pm_list_requirement_drafts", "列出当前项目需求草稿摘要（不含正文）。可选 status：open|done|all（未传等价全部）；可选 query 按标题子串过滤。", map[string]any{
+				"status": map[string]any{"type": "string", "description": "open|done|all；省略或 all 返回全部"},
+				"query":  map[string]any{"type": "string", "description": "标题子串（不搜正文）"},
+			}),
+			platformmcp.Tool("pm_get_requirement_draft", "按 draftId 读取当前项目需求草稿全文（含 bodyMarkdown）。", map[string]any{
+				"draftId": map[string]any{"type": "string", "description": "需求草稿 id"},
+			}),
+			platformmcp.Tool("pm_create_requirement_draft", "在当前项目创建一条 open 需求草稿。可选 title / bodyMarkdown；缺省或空白标题为「未命名需求」。", map[string]any{
+				"title":        map[string]any{"type": "string", "description": "标题；省略、空或仅空白时使用「未命名需求」"},
+				"bodyMarkdown": map[string]any{"type": "string", "description": "Markdown 正文；可省略"},
+			}),
+		}
 	case MCPAgentFS:
 		return []map[string]any{
 			platformmcp.Tool("pm_get_org", "读取组织架构：全量 groups/agents（含相对当前 Leader 的 self/direct/indirect/other 标注）以及以 Leader 为根的下属树与直接/间接列表。只读，不可改 parent/groups。", nil),
