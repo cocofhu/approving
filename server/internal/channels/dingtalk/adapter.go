@@ -259,33 +259,32 @@ func (a *Adapter) sendOutboundImages(ctx context.Context, out channels.OutboundM
 		return
 	}
 	for _, u := range out.ImageURLs {
-		data, _, err := downloadPublic(ctx, u)
-		if err != nil {
-			log.Warn().Err(err).Str("url", u).Msg("dingtalk: outbound image download failed")
+		u = strings.TrimSpace(u)
+		if u == "" {
 			continue
 		}
-		if len(data) > maxInboundImageBytes {
-			log.Warn().Str("url", u).Msg("dingtalk: outbound image too large")
+		// Prefer public URL as sampleImageMsg.photoURL — never stuff media_id into photoURL.
+		if !isPublicHTTPURL(u) {
+			log.Warn().Str("url", u).Msg("dingtalk: outbound image requires public http(s) photoURL")
 			continue
 		}
-		mediaID, err := uploadMedia(ctx, token, data, "image.png")
-		if err != nil {
-			// Fallback: embed public URL in markdown when media upload fails.
-			md := fmt.Sprintf("![](%s)", u)
-			if viaWebhookOK {
-				if entry, ok := a.webhooks.get(out.Scene, out.ConversationID); ok && entry.URL != "" {
-					_ = replySessionWebhook(ctx, entry.URL, "markdown", "image", md)
+		if viaWebhookOK {
+			if entry, ok := a.webhooks.get(out.Scene, out.ConversationID); ok && entry.URL != "" {
+				if err := replySessionWebhookImage(ctx, entry.URL, u); err == nil {
 					continue
 				}
+				log.Warn().Err(err).Str("url", u).Msg("dingtalk: webhook image failed; trying OpenAPI")
 			}
-			_ = sendOpenAPI(ctx, token, a.robotCode, out.Scene, out.ConversationID, staffID,
-				"sampleMarkdown", markdownMsgParam("image", md))
-			log.Warn().Err(err).Str("url", u).Msg("dingtalk: media upload failed; used markdown url fallback")
-			continue
 		}
 		if err := sendOpenAPI(ctx, token, a.robotCode, out.Scene, out.ConversationID, staffID,
-			"sampleImageMsg", imageMsgParam(mediaID)); err != nil {
-			log.Warn().Err(err).Str("url", u).Msg("dingtalk: outbound image send failed")
+			"sampleImageMsg", imageMsgParam(u)); err != nil {
+			md := fmt.Sprintf("![](%s)", u)
+			if mdErr := sendOpenAPI(ctx, token, a.robotCode, out.Scene, out.ConversationID, staffID,
+				"sampleMarkdown", markdownMsgParam("image", md)); mdErr != nil {
+				log.Warn().Err(err).Err(mdErr).Str("url", u).Msg("dingtalk: outbound image send failed")
+			} else {
+				log.Warn().Err(err).Str("url", u).Msg("dingtalk: sampleImageMsg failed; used markdown url fallback")
+			}
 		}
 	}
 }
@@ -322,15 +321,17 @@ func (a *Adapter) handleReceive(ctx context.Context, data *chatbot.BotCallbackDa
 		return
 	}
 
-	a.webhooks.put(scene, ev.ConversationID, ev.SessionWebhook, ev.WebhookExpiredMs, senderUserID(ev))
-	if sid := senderUserID(ev); sid != "" {
-		a.webhooks.rememberStaff(scene, ev.ConversationID, sid)
+	peer := senderUserID(ev)
+	convID := conversationRef(scene, ev.ConversationID, peer)
+	a.webhooks.put(scene, convID, ev.SessionWebhook, ev.WebhookExpiredMs, peer)
+	if peer != "" {
+		a.webhooks.rememberStaff(scene, convID, peer)
 	}
 
 	in := channels.InboundMessage{
 		Scene:          scene,
-		ConversationID: ev.ConversationID,
-		UserID:         senderUserID(ev),
+		ConversationID: convID,
+		UserID:         peer,
 		Text:           extractText(ev),
 		MessageID:      ev.MessageID,
 		Timestamp:      time.Now(),
@@ -372,7 +373,7 @@ func (a *Adapter) handleReceive(ctx context.Context, data *chatbot.BotCallbackDa
 		}
 		if len(in.Images) == 0 && strings.TrimSpace(extractText(ev)) == "" {
 			if err := a.Send(ctx, channels.OutboundMessage{
-				Scene: scene, ConversationID: ev.ConversationID, ReplyToMessageID: ev.MessageID, Text: tip,
+				Scene: scene, ConversationID: convID, ReplyToMessageID: ev.MessageID, Text: tip,
 			}); err != nil {
 				log.Warn().Err(err).Msg("dingtalk: oversize tip failed")
 			}

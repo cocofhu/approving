@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"strings"
 	"sync"
@@ -17,7 +16,6 @@ import (
 
 const (
 	openAPIHost = "https://api.dingtalk.com"
-	oapiHost    = "https://oapi.dingtalk.com"
 )
 
 var httpClient = &http.Client{Timeout: 20 * time.Second}
@@ -105,6 +103,26 @@ func replySessionWebhook(ctx context.Context, webhook, msgType, title, text stri
 			"text":    map[string]string{"content": text},
 		}
 	}
+	return postSessionWebhook(ctx, webhook, msgType, body)
+}
+
+func replySessionWebhookImage(ctx context.Context, webhook, photoURL string) error {
+	webhook = strings.TrimSpace(webhook)
+	photoURL = strings.TrimSpace(photoURL)
+	if webhook == "" {
+		return fmt.Errorf("dingtalk: empty sessionWebhook")
+	}
+	if photoURL == "" {
+		return fmt.Errorf("dingtalk: empty photoURL")
+	}
+	body := map[string]any{
+		"msgtype": "image",
+		"image":   map[string]string{"picURL": photoURL},
+	}
+	return postSessionWebhook(ctx, webhook, "image", body)
+}
+
+func postSessionWebhook(ctx context.Context, webhook, label string, body map[string]any) error {
 	raw, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhook, bytes.NewReader(raw))
 	if err != nil {
@@ -118,9 +136,24 @@ func replySessionWebhook(ctx context.Context, webhook, msgType, title, text stri
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("dingtalk webhook %s: status=%d body=%s", msgType, resp.StatusCode, truncateErr(respBody))
+		return fmt.Errorf("dingtalk webhook %s: status=%d body=%s", label, resp.StatusCode, truncateErr(respBody))
 	}
 	return nil
+}
+
+// resolveC2CUserID returns the OpenAPI userIds value for a c2c send.
+// ConversationID for c2c is the peer staffId (see conversationRef); never treat a
+// raw Stream conversationId as userId when an explicit staff override is empty
+// but conversationID is also empty.
+func resolveC2CUserID(conversationID, staffID string) (string, error) {
+	if uid := strings.TrimSpace(staffID); uid != "" {
+		return uid, nil
+	}
+	if uid := strings.TrimSpace(conversationID); uid != "" {
+		// After inbound mapping, ConversationID === staffId for c2c.
+		return uid, nil
+	}
+	return "", fmt.Errorf("dingtalk: missing userId for c2c OpenAPI (no staffId)")
 }
 
 func sendOpenAPI(ctx context.Context, token, robotCode string, scene channels.Scene, conversationID, staffID, msgKey, msgParam string) error {
@@ -129,12 +162,12 @@ func sendOpenAPI(ctx context.Context, token, robotCode string, scene channels.Sc
 		return fmt.Errorf("dingtalk: empty robotCode")
 	}
 	var (
-		url  string
-		body map[string]any
+		endpoint string
+		body     map[string]any
 	)
 	switch scene {
 	case channels.SceneGroup:
-		url = openAPIHost + "/v1.0/robot/groupMessages/send"
+		endpoint = openAPIHost + "/v1.0/robot/groupMessages/send"
 		body = map[string]any{
 			"robotCode":          robotCode,
 			"openConversationId": conversationID,
@@ -142,14 +175,11 @@ func sendOpenAPI(ctx context.Context, token, robotCode string, scene channels.Sc
 			"msgParam":           msgParam,
 		}
 	case channels.SceneC2C:
-		uid := strings.TrimSpace(staffID)
-		if uid == "" {
-			uid = strings.TrimSpace(conversationID)
+		uid, err := resolveC2CUserID(conversationID, staffID)
+		if err != nil {
+			return err
 		}
-		if uid == "" {
-			return fmt.Errorf("dingtalk: missing staffId for c2c OpenAPI")
-		}
-		url = openAPIHost + "/v1.0/robot/oToMessages/batchSend"
+		endpoint = openAPIHost + "/v1.0/robot/oToMessages/batchSend"
 		body = map[string]any{
 			"robotCode": robotCode,
 			"userIds":   []string{uid},
@@ -160,7 +190,7 @@ func sendOpenAPI(ctx context.Context, token, robotCode string, scene channels.Sc
 		return fmt.Errorf("dingtalk: unsupported scene %q for OpenAPI", scene)
 	}
 	raw, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(raw))
 	if err != nil {
 		return err
 	}
@@ -244,46 +274,6 @@ func downloadPublic(ctx context.Context, rawURL string) ([]byte, string, error) 
 	return data, mime, nil
 }
 
-func uploadMedia(ctx context.Context, token string, data []byte, filename string) (string, error) {
-	if filename == "" {
-		filename = "image.png"
-	}
-	var buf bytes.Buffer
-	w := multipart.NewWriter(&buf)
-	part, err := w.CreateFormFile("media", filename)
-	if err != nil {
-		return "", err
-	}
-	if _, err := part.Write(data); err != nil {
-		return "", err
-	}
-	_ = w.Close()
-	url := fmt.Sprintf("%s/media/upload?access_token=%s&type=image", oapiHost, token)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, &buf)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", w.FormDataContentType())
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	var out struct {
-		ErrCode int    `json:"errcode"`
-		ErrMsg  string `json:"errmsg"`
-		MediaID string `json:"media_id"`
-	}
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return "", err
-	}
-	if out.ErrCode != 0 || strings.TrimSpace(out.MediaID) == "" {
-		return "", fmt.Errorf("dingtalk upload media: %d %s", out.ErrCode, out.ErrMsg)
-	}
-	return out.MediaID, nil
-}
-
 func markdownMsgParam(title, text string) string {
 	b, _ := json.Marshal(map[string]string{
 		"title": firstNonEmpty(title, "Approving"),
@@ -297,9 +287,16 @@ func textMsgParam(text string) string {
 	return string(b)
 }
 
-func imageMsgParam(mediaID string) string {
-	b, _ := json.Marshal(map[string]string{"photoURL": mediaID})
+// imageMsgParam builds sampleImageMsg msgParam. photoURL must be a public HTTP(S)
+// image URL — never a bare media_id (clients show placeholders for that misuse).
+func imageMsgParam(photoURL string) string {
+	b, _ := json.Marshal(map[string]string{"photoURL": strings.TrimSpace(photoURL)})
 	return string(b)
+}
+
+func isPublicHTTPURL(u string) bool {
+	u = strings.TrimSpace(u)
+	return strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "http://")
 }
 
 func firstNonEmpty(vals ...string) string {

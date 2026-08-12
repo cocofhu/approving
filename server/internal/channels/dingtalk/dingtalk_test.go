@@ -1,6 +1,7 @@
 package dingtalk
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -108,5 +109,65 @@ func TestSenderUserID(t *testing.T) {
 	}
 	if got := senderUserID(inboundEvent{SenderID: "id"}); got != "id" {
 		t.Fatalf("fallback senderId, got %q", got)
+	}
+}
+
+func TestConversationRefC2CUsesStaffID(t *testing.T) {
+	// Align with wecom: c2c session key === peer staffId for OpenAPI userIds / cron / SyntheticUserID.
+	got := conversationRef(channels.SceneC2C, "cid$stream$xxx", "staff_peer")
+	if got != "staff_peer" {
+		t.Fatalf("c2c ref=%q, want staff_peer", got)
+	}
+	got = conversationRef(channels.SceneGroup, "open_cid_group", "staff_peer")
+	if got != "open_cid_group" {
+		t.Fatalf("group keeps openConversationId, got %q", got)
+	}
+	got = conversationRef(channels.SceneC2C, "cid$only", "")
+	if got != "cid$only" {
+		t.Fatalf("c2c without peer falls back to stream id, got %q", got)
+	}
+}
+
+func TestResolveC2CUserID(t *testing.T) {
+	uid, err := resolveC2CUserID("staff_from_conv", "")
+	if err != nil || uid != "staff_from_conv" {
+		t.Fatalf("conversationID as peer after mapping: uid=%q err=%v", uid, err)
+	}
+	uid, err = resolveC2CUserID("should_not_win", "explicit_staff")
+	if err != nil || uid != "explicit_staff" {
+		t.Fatalf("staff override: uid=%q err=%v", uid, err)
+	}
+	if _, err := resolveC2CUserID("", ""); err == nil {
+		t.Fatal("empty c2c userId must error (no conversationId masquerade without peer)")
+	}
+}
+
+func TestImageMsgParamUsesPhotoURLNotMediaID(t *testing.T) {
+	const public = "https://cdn.example.com/a.png"
+	raw := imageMsgParam(public)
+	var m map[string]string
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["photoURL"] != public {
+		t.Fatalf("photoURL=%q", m["photoURL"])
+	}
+	if _, ok := m["mediaId"]; ok {
+		t.Fatal("must not use mediaId key for sampleImageMsg when sending public URL")
+	}
+	// Guard regression: media_id must never be stuffed into photoURL by helpers.
+	if strings.Contains(raw, "media_id") || strings.HasPrefix(m["photoURL"], "@") {
+		t.Fatalf("unexpected media-id shaped photoURL: %s", raw)
+	}
+	if !isPublicHTTPURL(public) || isPublicHTTPURL("@lADOADmaWMzazQKA") {
+		t.Fatal("isPublicHTTPURL")
+	}
+}
+
+func TestOpenAPIPayloadImageKey(t *testing.T) {
+	// openAPIPayload is for text/markdown; image uses imageMsgParam separately.
+	key, param := openAPIPayload("markdown", "t", "body")
+	if key != "sampleMarkdown" || !strings.Contains(param, "body") {
+		t.Fatalf("%s %s", key, param)
 	}
 }

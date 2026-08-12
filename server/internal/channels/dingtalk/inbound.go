@@ -74,6 +74,18 @@ func senderUserID(ev inboundEvent) string {
 	return strings.TrimSpace(ev.SenderID)
 }
 
+// conversationRef returns the stable session key used for SyntheticUserID / cron
+// targets / OpenAPI. Align with wecom: c2c uses peer staffId/userId (not Stream
+// conversationId), so oToMessages userIds remain valid after restart/webhook TTL.
+func conversationRef(scene channels.Scene, streamConversationID, peerUserID string) string {
+	if scene == channels.SceneC2C {
+		if peer := strings.TrimSpace(peerUserID); peer != "" {
+			return peer
+		}
+	}
+	return strings.TrimSpace(streamConversationID)
+}
+
 func extractText(ev inboundEvent) string {
 	msgType := strings.ToLower(strings.TrimSpace(ev.MsgType))
 	switch msgType {
