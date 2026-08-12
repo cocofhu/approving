@@ -1546,7 +1546,7 @@ function itemSecondary(it: InboxItem) {
       >
         <AppInlineError
           :title="t('common.asyncState.loadFailedTitle')"
-          :message="listLoadError"
+          :message="listLoadError ?? undefined"
           @retry="retryListLoad"
         />
       </div>
@@ -1829,7 +1829,7 @@ function itemSecondary(it: InboxItem) {
     >
       <AppInlineError
         :title="t('common.asyncState.loadFailedTitle')"
-        :message="listLoadError"
+        :message="listLoadError ?? undefined"
         @retry="retryListLoad"
       />
     </div>
