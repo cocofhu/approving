@@ -377,6 +377,38 @@ func TestChannelCreateDefaultFeishuRegionCN(t *testing.T) {
 	}
 }
 
+func TestChannelCreateDingTalkStripsWebhookAndRobotCode(t *testing.T) {
+	setChannelKey(t)
+	svc, pid := newChannelSvc(t)
+	in := validInput(pid)
+	in.Type = "dingtalk"
+	in.Name = "钉钉 Channel"
+	in.AppID = "ding-app-1"
+	in.IsPrimary = false
+	in.IsPrimarySet = true
+	in.Config = map[string]any{
+		"token":           "should-drop",
+		"robotCode":       "should-drop",
+		"allowMemoryWrite": true,
+	}
+	dto, err := svc.Create(in)
+	if err != nil {
+		t.Fatalf("create dingtalk: %v", err)
+	}
+	if dto.Type != "dingtalk" {
+		t.Fatalf("type=%q", dto.Type)
+	}
+	if _, ok := dto.Config["token"]; ok {
+		t.Fatal("webhook token must not be stored")
+	}
+	if _, ok := dto.Config["robotCode"]; ok {
+		t.Fatal("independent robotCode must not be stored")
+	}
+	if dto.Config["allowMemoryWrite"] != true {
+		t.Fatalf("session caps must remain: %v", dto.Config)
+	}
+}
+
 func TestChannelMultiPrimarySecondary(t *testing.T) {
 	setChannelKey(t)
 	svc, pid := newChannelSvc(t)
