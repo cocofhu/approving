@@ -71,13 +71,14 @@ func (h *Handlers) PublicGateEvents(c *gin.Context) {
 		return
 	}
 	_ = conn.SetReadDeadline(time.Time{})
-	if err := conn.WriteJSON(gin.H{"type": "ready"}); err != nil {
-		return
-	}
-
+	// Subscribe before advertising ready so events published right after the
+	// client sees ready are not lost to a subscribe race.
 	runID := lookup.Link.RunID
 	ch, unsub := h.Eng.Broker().Subscribe(runID)
 	defer unsub()
+	if err := conn.WriteJSON(gin.H{"type": "ready"}); err != nil {
+		return
+	}
 	h.seedPublicDialogue(conn, lookup, producerID)
 
 	ping := time.NewTicker(25 * time.Second)
