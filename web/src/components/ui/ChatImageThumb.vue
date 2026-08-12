@@ -120,8 +120,10 @@ const unsub = subscribe(() => {
     allowImg.value = true
     return
   }
-  if (!allowImg.value && id && !isKnownMissing(id) && !loadFailed.value) {
-    allowImg.value = true
+  // Waiting on peer inflight / gate: re-run beginAutoLoad for THIS id only.
+  // Never flip allowImg=true on an unrelated peer notify (g1.2 race).
+  if (!allowImg.value && id && !loadFailed.value) {
+    syncFromCache()
   }
 })
 onUnmounted(unsub)

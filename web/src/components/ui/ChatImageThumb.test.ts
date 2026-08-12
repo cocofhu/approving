@@ -4,6 +4,7 @@ import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import {
+  beginAutoLoad,
   isKnownMissing,
   markMissing,
   resetBlobMissingCacheForTests,
@@ -131,6 +132,29 @@ describe('ChatImageThumb', () => {
     expect(wrapper.find('img').exists()).toBe(true)
     await wrapper.find('img').trigger('load')
     expect(wrapper.text()).toContain('点击放大')
+    wrapper.unmount()
+  })
+
+  it('subscribe: peer markMissing(other id) must not open blocked_pending img (g1.2)', async () => {
+    const id = '5b32f70529a64bdebafade19ca497a35'
+    // Strip (or peer) already owns the single auto GET slot.
+    expect(beginAutoLoad(id)).toBe('proceed')
+    const wrapper = mountThumb({
+      src: `/api/blobs/${id}`,
+      label: 'orphan-b.png',
+      testId: 'thumb-race',
+    })
+    // Thumb lost the race → blocked_pending → no requesting img.
+    expect(wrapper.find('img').exists()).toBe(false)
+    // Unrelated orphan finishes → notify must NOT flip allowImg for this id.
+    markMissing('e54381fb9ce8471dbe0765d99fc0239f')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('img').exists()).toBe(false)
+    // Same-id peer failure → placeholder, still no second auto GET.
+    markMissing(id)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('img').exists()).toBe(false)
+    expect(wrapper.text()).toContain('图片加载失败')
     wrapper.unmount()
   })
 })
