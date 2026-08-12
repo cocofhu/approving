@@ -552,6 +552,12 @@ func TestIsQQChannelUserID(t *testing.T) {
 	if !IsChannelSyntheticUserID("feishu:c2c:oc_x") {
 		t.Fatal("IsChannelSyntheticUserID should cover feishu")
 	}
+	if !IsQQChannelUserID("dingtalk:c2c:staff1") || !IsQQChannelUserID("dingtalk:group:cid") {
+		t.Fatal("expected dingtalk: prefixes to match")
+	}
+	if !IsChannelSyntheticUserID("dingtalk:group:cid") {
+		t.Fatal("IsChannelSyntheticUserID should cover dingtalk")
+	}
 	if IsQQChannelUserID("cron:agent") || IsQQChannelUserID("alice") || IsQQChannelUserID("") {
 		t.Fatal("unexpected channel match")
 	}

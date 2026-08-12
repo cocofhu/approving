@@ -18,6 +18,7 @@ import (
 	"github.com/cocofhu/approving/internal/blob"
 	"github.com/cocofhu/approving/internal/browser"
 	"github.com/cocofhu/approving/internal/channels"
+	"github.com/cocofhu/approving/internal/channels/dingtalk"
 	"github.com/cocofhu/approving/internal/channels/feishu"
 	"github.com/cocofhu/approving/internal/channels/qq"
 	"github.com/cocofhu/approving/internal/channels/wecom"
@@ -374,9 +375,10 @@ func main() {
 	channelSvc := services.NewChannelConfigService(db)
 	channelSvc.SetSkillService(skillSvc)
 	channelMgr := channels.NewManager(channelBridge, map[string]channels.AdapterFactory{
-		models.ChannelTypeQQ:     qq.New,
-		models.ChannelTypeWeCom:  wecom.New,
-		models.ChannelTypeFeishu: feishu.New,
+		models.ChannelTypeQQ:       qq.New,
+		models.ChannelTypeWeCom:    wecom.New,
+		models.ChannelTypeFeishu:   feishu.New,
+		models.ChannelTypeDingTalk: dingtalk.New,
 	}, crypto.Decrypt)
 	channelMgr.SetLoader(channelSvc.ListRaw)
 	channelSvc.SetRuntimeLookup(channelMgr.RuntimeState)

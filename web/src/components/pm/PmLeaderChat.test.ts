@@ -1421,6 +1421,32 @@ describe('PmLeaderChat stick-to-bottom', () => {
     wrapper.unmount()
   })
 
+  it('DingTalk channel threads show badge and readonly source copy', async () => {
+    apiMocks.listPmThreads.mockResolvedValue({
+      items: [
+        {
+          id: 'thr-dt',
+          title: '钉钉群',
+          userId: 'dingtalk:group:cid_review',
+          projectId: 'proj-1',
+          createdAt: '2026-01-02T00:00:00Z',
+          updatedAt: '2026-01-02T12:00:00Z',
+        },
+      ],
+    })
+    apiMocks.listPmMessages.mockResolvedValue({ items: [] })
+    const wrapper = mountChat()
+    await flushPromises()
+    const tag = wrapper.find('[data-testid="pm-qq-tag"]')
+    expect(tag.exists()).toBe(true)
+    expect(tag.text()).toBe('钉钉')
+    expect(tag.attributes('data-channel-kind')).toBe('dingtalk')
+    expect(wrapper.find('[data-testid="pm-channel-readonly"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('来自钉钉，请在钉钉侧回复')
+    expect(wrapper.find('[data-testid="pm-chat-send"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('renders yellow channel hint for system+channel source only (g5.4)', async () => {
     apiMocks.listPmThreads.mockResolvedValue({
       items: [

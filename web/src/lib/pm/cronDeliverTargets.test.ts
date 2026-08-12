@@ -48,7 +48,7 @@ describe('deriveRecentPushTargets', () => {
     expect(deriveRecentPushTargets([{ userId: 'qq:', title: 'x', updatedAt: '2026-01-01T00:00:00Z' }])).toEqual([])
   })
 
-  it('filters by current channel type and does not mix QQ into feishu', () => {
+	it('filters by current channel type and does not mix QQ into feishu', () => {
     const out = deriveRecentPushTargets(
       [
         { userId: 'feishu:c2c:oc_zhang', title: '张三', updatedAt: '2026-01-03T00:00:00Z' },
@@ -58,6 +58,19 @@ describe('deriveRecentPushTargets', () => {
       'feishu',
     )
     expect(out.map((o) => o.value)).toEqual(['c2c:oc_zhang', 'group:oc_review'])
+  })
+
+  it('filters dingtalk threads without mixing other channel types', () => {
+    const out = deriveRecentPushTargets(
+      [
+        { userId: 'dingtalk:c2c:staff1', title: '钉钉私聊', updatedAt: '2026-01-03T00:00:00Z' },
+        { userId: 'feishu:group:oc_x', title: '飞书群', updatedAt: '2026-01-04T00:00:00Z' },
+        { userId: 'dingtalk:group:cid_g', title: '钉钉群', updatedAt: '2026-01-02T00:00:00Z' },
+      ],
+      'dingtalk',
+    )
+    expect(out.map((o) => o.value)).toEqual(['c2c:staff1', 'group:cid_g'])
+    expect(out.every((o) => o.channelType === 'dingtalk')).toBe(true)
   })
 
   it('drops invalid scene or empty conversationId', () => {

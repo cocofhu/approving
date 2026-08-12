@@ -195,7 +195,9 @@ test.describe('QQ multi-channel primary/secondary UI', () => {
     await expect(page.getByTestId('channel-tab-edit')).toBeVisible()
     await expect(page.getByTestId('channel-tab-notify')).toBeVisible()
     await expect(page.getByText('每个项目一个渠道')).toHaveCount(0)
-    await expect(page.getByText('同一项目可配置多个 Channel（QQ / 飞书，主+副）')).toBeVisible()
+    await expect(
+      page.getByText('同一项目可配置多个 Channel（QQ / 企业微信 / 飞书 / 钉钉，主+副）'),
+    ).toBeVisible()
 
     // list shows primary/secondary
     await expect(page.getByTestId('channel-panel-list')).toBeVisible()
@@ -277,5 +279,52 @@ test.describe('QQ multi-channel primary/secondary UI', () => {
     await expect(page.getByTestId('channel-add')).toContainText('新增主 Channel')
     await expect(page.getByText('设为主')).toHaveCount(0)
     await page.screenshot({ path: path.join(shotDir, '07-add-primary-cta.png'), fullPage: true })
+  })
+
+  test('dingtalk type form: AppID/AppSecret only + Stream hint + connection states', async ({
+    page,
+  }) => {
+    channels = [
+      {
+        ...structuredClone(primary),
+        type: 'dingtalk',
+        name: '钉钉主 Channel',
+        connectionState: 'connected',
+        connectionDetail: 'Stream 长连接正常',
+      },
+      {
+        ...structuredClone(secondary),
+        type: 'dingtalk',
+        name: '钉钉副 Channel',
+        connectionState: 'auth_failed',
+        connectionDetail: '鉴权失败',
+      },
+    ]
+    freeAgents = ['agent-free']
+    await page.setViewportSize({ width: 1200, height: 900 })
+    await mockApis(page)
+    await page.goto('/pm-channel-multi.html')
+    await expect(page.getByTestId('pm-channel-multi')).toBeVisible({ timeout: 20_000 })
+
+    const rows = page.getByTestId('channel-row')
+    await expect(rows.nth(0)).toContainText('钉钉')
+    await expect(rows.nth(0).getByTestId('channel-conn-state')).toContainText('已连接')
+    await expect(rows.nth(1).getByTestId('channel-conn-state')).toContainText('凭证失败')
+    await page.screenshot({ path: path.join(shotDir, '08-dingtalk-list-conn.png'), fullPage: true })
+
+    await page.getByTestId('channel-add').click()
+    await expect(page.getByTestId('channel-panel-edit')).toBeVisible()
+    await page.getByTestId('channel-type-dingtalk').click()
+    await expect(page.getByTestId('channel-dingtalk-hint')).toBeVisible()
+    await expect(page.getByTestId('channel-dingtalk-hint')).toContainText('Stream')
+    await expect(page.getByTestId('channel-dingtalk-hint')).toContainText('Webhook')
+    await expect(page.getByTestId('channel-dingtalk-hint')).toContainText('robotCode')
+    await expect(page.getByTestId('channel-appid')).toBeVisible()
+    await expect(page.getByTestId('channel-secret')).toBeVisible()
+    await expect(page.getByTestId('channel-region')).toHaveCount(0)
+    // No separate robotCode / Webhook Token form fields (hint text may mention robotCode=AppID).
+    await expect(page.locator('#ch-multi-robotcode, [data-testid="channel-robotcode"], [data-testid="channel-webhook-token"]')).toHaveCount(0)
+    await expect(page.getByLabel(/Webhook Token|Encrypt Key|robotCode/i)).toHaveCount(0)
+    await page.screenshot({ path: path.join(shotDir, '09-dingtalk-new-form.png'), fullPage: true })
   })
 })
