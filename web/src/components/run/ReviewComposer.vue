@@ -59,8 +59,6 @@ const props = withDefaults(
     interrupted?: boolean
     /** ISO when turn completed normally — drives restrained「已完成」footnote. */
     streamCompletedAt?: string | null
-    /** Inbox 待澄清 / 待复审 / 应用预览: show「打开分享面板」above composer body. */
-    showSharePanel?: boolean
   }>(),
   {
     iteration: 1,
@@ -84,7 +82,6 @@ const props = withDefaults(
     streamThought: '',
     interrupted: false,
     streamCompletedAt: null,
-    showSharePanel: false,
   },
 )
 
@@ -92,7 +89,6 @@ const emit = defineEmits<{
   (e: 'send', text: string, images: ClarifyImage[], annotations: ReactAnnotation[]): void
   (e: 'finish'): void
   (e: 'cancel'): void
-  (e: 'open-share'): void
 }>()
 
 const chatRef = ref<{
@@ -184,24 +180,6 @@ function onConfirm() {
     class="flex h-full min-h-0 flex-col"
     data-testid="review-composer-shell"
   >
-    <div
-      v-if="showSharePanel"
-      class="shrink-0 border-b border-line bg-elevated/40 px-3 py-2"
-      data-testid="review-composer-share-panel"
-    >
-      <p class="mb-2 text-[11px] text-txt3">
-        {{ t('pages.gatesInbox.share.appPreviewShareHint') }}
-      </p>
-      <button
-        type="button"
-        class="inline-flex min-h-9 w-full items-center justify-center border border-accent/40 bg-accent/10 px-3 py-1.5 text-[12px] font-medium text-accent-2 hover:bg-accent/20"
-        data-testid="review-composer-open-share"
-        :aria-label="t('pages.gatesInbox.share.openSharePanelAria')"
-        @click="emit('open-share')"
-      >
-        {{ t('pages.gatesInbox.share.openSharePanel') }}
-      </button>
-    </div>
     <ClarifyChat
       ref="chatRef"
       class="min-h-0 flex-1"

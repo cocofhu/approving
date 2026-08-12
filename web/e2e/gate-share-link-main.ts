@@ -382,10 +382,6 @@ const Fixture = defineComponent({
                 turns: [],
                 done: false,
                 active: true,
-                showSharePanel: true,
-                onOpenShare: () => {
-                  open.value = true
-                },
               }),
             ])
           : null,
