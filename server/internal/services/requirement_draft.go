@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -15,6 +16,8 @@ import (
 const (
 	// DefaultRequirementDraftTitle is created on「新建」before the user edits.
 	DefaultRequirementDraftTitle = "未命名需求"
+	// DefaultRequirementDraftMilestoneTitle is the default title for new milestones.
+	DefaultRequirementDraftMilestoneTitle = "未命名里程碑"
 	// MaxRequirementDraftTitleRunes caps the trimmed title length.
 	MaxRequirementDraftTitleRunes = 200
 	// MaxRequirementDraftBodyRunes caps Markdown body size (reasonable TEXT upper bound).
@@ -32,7 +35,25 @@ var (
 	ErrRequirementDraftTitleTooLong = errors.New("title too long")
 	// ErrRequirementDraftBodyTooLong is returned when body exceeds the rune cap.
 	ErrRequirementDraftBodyTooLong = errors.New("body too long")
+	// ErrRequirementDraftInvalidKind is returned for kind outside requirement|milestone.
+	ErrRequirementDraftInvalidKind = errors.New("invalid kind")
+	// ErrRequirementDraftInvalidDate is returned for non YYYY-MM-DD date strings.
+	ErrRequirementDraftInvalidDate = errors.New("invalid date")
+	// ErrRequirementDraftDueBeforeStart is returned when dueAt < startAt.
+	ErrRequirementDraftDueBeforeStart = errors.New("due date must not be before start date")
+	// ErrRequirementDraftMilestoneDueRequired is returned when milestone lacks dueAt.
+	ErrRequirementDraftMilestoneDueRequired = errors.New("milestone due date required")
+	// ErrRequirementDraftInvalidProgress is returned when progress is outside 0–100.
+	ErrRequirementDraftInvalidProgress = errors.New("progress must be 0-100")
+	// ErrRequirementDraftInvalidParent is returned when parentId violates one-level rules.
+	ErrRequirementDraftInvalidParent = errors.New("invalid parent")
+	// ErrRequirementDraftHasChildren is returned when an operation is blocked by children.
+	ErrRequirementDraftHasChildren = errors.New("draft has children")
+	// ErrRequirementDraftKindNeedsDate is returned when converting to milestone without a date.
+	ErrRequirementDraftKindNeedsDate = errors.New("milestone conversion requires a date")
 )
+
+var dateOnlyRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
 // RequirementDraftService persists project-scoped requirement drafts.
 type RequirementDraftService struct {
@@ -50,6 +71,26 @@ type RequirementDraftListFilter struct {
 	Status string
 	// Query is a case-insensitive title substring filter (empty = no filter).
 	Query string
+}
+
+// RequirementDraftCreateInput optionally sets kind and schedule on create.
+type RequirementDraftCreateInput struct {
+	Kind     string
+	Title    string
+	StartAt  string
+	DueAt    string
+	Progress *int
+	ParentID *string
+}
+
+// RequirementDraftScheduleInput updates schedule metadata (independent of title/body).
+// Pointer nil = leave unchanged; empty string / "" for dates clears (when allowed).
+type RequirementDraftScheduleInput struct {
+	Kind     *string
+	StartAt  *string
+	DueAt    *string
+	Progress *int
+	ParentID **string // nil = unchanged; *nil = clear; *id = set
 }
 
 // List returns drafts for a project ordered by updated_at DESC.
@@ -77,6 +118,7 @@ func (s *RequirementDraftService) List(projectID string, f RequirementDraftListF
 	if rows == nil {
 		rows = []models.RequirementDraft{}
 	}
+	normalizeDraftRows(rows)
 	return rows, nil
 }
 
@@ -93,27 +135,89 @@ func (s *RequirementDraftService) Get(projectID, id string) (models.RequirementD
 	if err != nil {
 		return models.RequirementDraft{}, err
 	}
+	normalizeDraft(&row)
 	return row, nil
 }
 
-// Create inserts a new open draft with default title and empty body.
-func (s *RequirementDraftService) Create(projectID string) (models.RequirementDraft, error) {
+// Create inserts a new open draft. Empty input creates an unscheduled requirement.
+func (s *RequirementDraftService) Create(projectID string, in RequirementDraftCreateInput) (models.RequirementDraft, error) {
 	if err := s.requireProject(projectID); err != nil {
 		return models.RequirementDraft{}, err
 	}
+	kind := strings.TrimSpace(in.Kind)
+	if kind == "" {
+		kind = models.RequirementDraftKindRequirement
+	}
+	if kind != models.RequirementDraftKindRequirement && kind != models.RequirementDraftKindMilestone {
+		return models.RequirementDraft{}, ErrRequirementDraftInvalidKind
+	}
+
+	startAt := strings.TrimSpace(in.StartAt)
+	dueAt := strings.TrimSpace(in.DueAt)
+	if kind == models.RequirementDraftKindMilestone {
+		if dueAt == "" {
+			return models.RequirementDraft{}, ErrRequirementDraftMilestoneDueRequired
+		}
+		startAt = "" // milestones only use dueAt
+	}
+	if err := validateDateOptional(startAt); err != nil {
+		return models.RequirementDraft{}, err
+	}
+	if err := validateDateOptional(dueAt); err != nil {
+		return models.RequirementDraft{}, err
+	}
+	if startAt != "" && dueAt != "" && dueAt < startAt {
+		return models.RequirementDraft{}, ErrRequirementDraftDueBeforeStart
+	}
+
+	progress := 0
+	if in.Progress != nil {
+		if *in.Progress < 0 || *in.Progress > 100 {
+			return models.RequirementDraft{}, ErrRequirementDraftInvalidProgress
+		}
+		progress = *in.Progress
+	}
+
+	var parentID *string
+	if in.ParentID != nil && strings.TrimSpace(*in.ParentID) != "" {
+		pid := strings.TrimSpace(*in.ParentID)
+		parentID = &pid
+	}
+
+	title := strings.TrimSpace(in.Title)
+	if title == "" {
+		if kind == models.RequirementDraftKindMilestone {
+			title = DefaultRequirementDraftMilestoneTitle
+		} else {
+			title = DefaultRequirementDraftTitle
+		}
+	}
+	if utf8.RuneCountInString(title) > MaxRequirementDraftTitleRunes {
+		return models.RequirementDraft{}, ErrRequirementDraftTitleTooLong
+	}
+
 	now := time.Now()
 	row := models.RequirementDraft{
 		ID:           "rd-" + uuid.NewString()[:8],
 		ProjectID:    projectID,
-		Title:        DefaultRequirementDraftTitle,
+		Title:        title,
 		BodyMarkdown: "",
 		Status:       models.RequirementDraftStatusOpen,
+		Kind:         kind,
+		StartAt:      startAt,
+		DueAt:        dueAt,
+		Progress:     progress,
+		ParentID:     parentID,
 		CreatedAt:    now,
 		UpdatedAt:    now,
+	}
+	if err := s.validateParentAssignment(projectID, row.ID, parentID, false); err != nil {
+		return models.RequirementDraft{}, err
 	}
 	if err := s.db.Create(&row).Error; err != nil {
 		return models.RequirementDraft{}, err
 	}
+	normalizeDraft(&row)
 	return row, nil
 }
 
@@ -139,10 +243,12 @@ func (s *RequirementDraftService) UpdateContent(projectID, id, title, body strin
 	if err := s.db.Save(&row).Error; err != nil {
 		return models.RequirementDraft{}, err
 	}
+	normalizeDraft(&row)
 	return row, nil
 }
 
 // UpdateStatus toggles or sets status to open|done and refreshes updatedAt.
+// Does not change progress.
 func (s *RequirementDraftService) UpdateStatus(projectID, id, status string) (models.RequirementDraft, error) {
 	row, err := s.Get(projectID, id)
 	if err != nil {
@@ -157,22 +263,221 @@ func (s *RequirementDraftService) UpdateStatus(projectID, id, status string) (mo
 	if err := s.db.Save(&row).Error; err != nil {
 		return models.RequirementDraft{}, err
 	}
+	normalizeDraft(&row)
 	return row, nil
 }
 
-// Delete hard-removes a draft within the project scope.
+// UpdateSchedule writes kind / dates / progress / parent without touching title/body/status.
+func (s *RequirementDraftService) UpdateSchedule(projectID, id string, in RequirementDraftScheduleInput) (models.RequirementDraft, error) {
+	row, err := s.Get(projectID, id)
+	if err != nil {
+		return models.RequirementDraft{}, err
+	}
+
+	kind := row.Kind
+	if in.Kind != nil {
+		k := strings.TrimSpace(*in.Kind)
+		if k != models.RequirementDraftKindRequirement && k != models.RequirementDraftKindMilestone {
+			return models.RequirementDraft{}, ErrRequirementDraftInvalidKind
+		}
+		kind = k
+	}
+
+	startAt := row.StartAt
+	dueAt := row.DueAt
+	if in.StartAt != nil {
+		startAt = strings.TrimSpace(*in.StartAt)
+	}
+	if in.DueAt != nil {
+		dueAt = strings.TrimSpace(*in.DueAt)
+	}
+
+	progress := row.Progress
+	if in.Progress != nil {
+		if *in.Progress < 0 || *in.Progress > 100 {
+			return models.RequirementDraft{}, ErrRequirementDraftInvalidProgress
+		}
+		progress = *in.Progress
+	}
+
+	parentID := row.ParentID
+	if in.ParentID != nil {
+		if *in.ParentID == nil || strings.TrimSpace(**in.ParentID) == "" {
+			parentID = nil
+		} else {
+			pid := strings.TrimSpace(**in.ParentID)
+			parentID = &pid
+		}
+	}
+
+	// Kind conversion date mapping (clarified rules).
+	if kind != row.Kind {
+		hasChildren, err := s.hasChildren(projectID, row.ID)
+		if err != nil {
+			return models.RequirementDraft{}, err
+		}
+		if hasChildren && kind == models.RequirementDraftKindMilestone {
+			return models.RequirementDraft{}, ErrRequirementDraftHasChildren
+		}
+		if row.Kind == models.RequirementDraftKindRequirement && kind == models.RequirementDraftKindMilestone {
+			// Prefer dueAt; else startAt; else reject.
+			mapped := dueAt
+			if mapped == "" {
+				mapped = startAt
+			}
+			if mapped == "" {
+				return models.RequirementDraft{}, ErrRequirementDraftKindNeedsDate
+			}
+			dueAt = mapped
+			startAt = ""
+		} else if row.Kind == models.RequirementDraftKindMilestone && kind == models.RequirementDraftKindRequirement {
+			// Milestone date becomes dueAt; startAt empty.
+			if dueAt == "" {
+				dueAt = row.DueAt
+			}
+			startAt = ""
+		}
+	}
+
+	if kind == models.RequirementDraftKindMilestone {
+		if dueAt == "" {
+			return models.RequirementDraft{}, ErrRequirementDraftMilestoneDueRequired
+		}
+		startAt = ""
+	}
+	if err := validateDateOptional(startAt); err != nil {
+		return models.RequirementDraft{}, err
+	}
+	if err := validateDateOptional(dueAt); err != nil {
+		return models.RequirementDraft{}, err
+	}
+	if startAt != "" && dueAt != "" && dueAt < startAt {
+		return models.RequirementDraft{}, ErrRequirementDraftDueBeforeStart
+	}
+
+	if err := s.validateParentAssignment(projectID, row.ID, parentID, true); err != nil {
+		return models.RequirementDraft{}, err
+	}
+
+	row.Kind = kind
+	row.StartAt = startAt
+	row.DueAt = dueAt
+	row.Progress = progress
+	row.ParentID = parentID
+	row.UpdatedAt = time.Now()
+	if err := s.db.Save(&row).Error; err != nil {
+		return models.RequirementDraft{}, err
+	}
+	normalizeDraft(&row)
+	return row, nil
+}
+
+// Delete hard-removes a draft; children are promoted to top-level (parent_id cleared).
 func (s *RequirementDraftService) Delete(projectID, id string) error {
 	if err := s.requireProject(projectID); err != nil {
 		return err
 	}
-	res := s.db.Where("id = ? AND project_id = ?", id, projectID).Delete(&models.RequirementDraft{})
-	if res.Error != nil {
-		return res.Error
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var row models.RequirementDraft
+		err := tx.Where("id = ? AND project_id = ?", id, projectID).First(&row).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrRequirementDraftNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if err := tx.Model(&models.RequirementDraft{}).
+			Where("project_id = ? AND parent_id = ?", projectID, id).
+			Update("parent_id", nil).Error; err != nil {
+			return err
+		}
+		res := tx.Where("id = ? AND project_id = ?", id, projectID).Delete(&models.RequirementDraft{})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return ErrRequirementDraftNotFound
+		}
+		return nil
+	})
+}
+
+func (s *RequirementDraftService) hasChildren(projectID, id string) (bool, error) {
+	var n int64
+	err := s.db.Model(&models.RequirementDraft{}).
+		Where("project_id = ? AND parent_id = ?", projectID, id).
+		Count(&n).Error
+	return n > 0, err
+}
+
+func (s *RequirementDraftService) validateParentAssignment(projectID, selfID string, parentID *string, checkSelfChildren bool) error {
+	if parentID == nil || strings.TrimSpace(*parentID) == "" {
+		return nil
 	}
-	if res.RowsAffected == 0 {
-		return ErrRequirementDraftNotFound
+	pid := strings.TrimSpace(*parentID)
+	if pid == selfID {
+		return ErrRequirementDraftInvalidParent
+	}
+	if checkSelfChildren {
+		hasChildren, err := s.hasChildren(projectID, selfID)
+		if err != nil {
+			return err
+		}
+		if hasChildren {
+			// already a parent → cannot hang under another parent (no grandparent / no depth>1)
+			return ErrRequirementDraftHasChildren
+		}
+	}
+	var parent models.RequirementDraft
+	err := s.db.Where("id = ? AND project_id = ?", pid, projectID).First(&parent).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return ErrRequirementDraftInvalidParent
+	}
+	if err != nil {
+		return err
+	}
+	normalizeDraft(&parent)
+	if parent.Kind != models.RequirementDraftKindRequirement {
+		return ErrRequirementDraftInvalidParent
+	}
+	if parent.ParentID != nil && strings.TrimSpace(*parent.ParentID) != "" {
+		return ErrRequirementDraftInvalidParent
 	}
 	return nil
+}
+
+func validateDateOptional(v string) error {
+	if v == "" {
+		return nil
+	}
+	if !dateOnlyRe.MatchString(v) {
+		return ErrRequirementDraftInvalidDate
+	}
+	if _, err := time.ParseInLocation("2006-01-02", v, time.UTC); err != nil {
+		return ErrRequirementDraftInvalidDate
+	}
+	return nil
+}
+
+func normalizeDraftRows(rows []models.RequirementDraft) {
+	for i := range rows {
+		normalizeDraft(&rows[i])
+	}
+}
+
+func normalizeDraft(row *models.RequirementDraft) {
+	if row == nil {
+		return
+	}
+	if strings.TrimSpace(row.Kind) == "" {
+		row.Kind = models.RequirementDraftKindRequirement
+	}
+	if row.Progress < 0 {
+		row.Progress = 0
+	}
+	if row.Progress > 100 {
+		row.Progress = 100
+	}
 }
 
 func (s *RequirementDraftService) requireProject(projectID string) error {

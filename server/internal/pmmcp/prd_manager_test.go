@@ -138,21 +138,21 @@ func TestPrdManagerToolsList(t *testing.T) {
 
 func TestPrdManagerListFiltersAndProjection(t *testing.T) {
 	fx := setupPrdManagerHost(t, []string{MCPPrdManager})
-	openA, err := fx.drafts.Create(fx.proj.ID)
+	openA, err := fx.drafts.Create(fx.proj.ID, services.RequirementDraftCreateInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := fx.drafts.UpdateContent(fx.proj.ID, openA.ID, "Alpha open", "BODY-ALPHA"); err != nil {
 		t.Fatal(err)
 	}
-	openB, err := fx.drafts.Create(fx.proj.ID)
+	openB, err := fx.drafts.Create(fx.proj.ID, services.RequirementDraftCreateInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := fx.drafts.UpdateContent(fx.proj.ID, openB.ID, "Beta open", "BODY-BETA"); err != nil {
 		t.Fatal(err)
 	}
-	done, err := fx.drafts.Create(fx.proj.ID)
+	done, err := fx.drafts.Create(fx.proj.ID, services.RequirementDraftCreateInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ func TestPrdManagerListFiltersAndProjection(t *testing.T) {
 	if _, err := fx.drafts.UpdateStatus(fx.proj.ID, done.ID, models.RequirementDraftStatusDone); err != nil {
 		t.Fatal(err)
 	}
-	otherDraft, err := fx.drafts.Create(fx.other.ID)
+	otherDraft, err := fx.drafts.Create(fx.other.ID, services.RequirementDraftCreateInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,14 +241,14 @@ func TestPrdManagerListFiltersAndProjection(t *testing.T) {
 
 func TestPrdManagerGetAndIsolation(t *testing.T) {
 	fx := setupPrdManagerHost(t, []string{MCPPrdManager})
-	row, err := fx.drafts.Create(fx.proj.ID)
+	row, err := fx.drafts.Create(fx.proj.ID, services.RequirementDraftCreateInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := fx.drafts.UpdateContent(fx.proj.ID, row.ID, "Mine", "FULL-BODY"); err != nil {
 		t.Fatal(err)
 	}
-	foreign, err := fx.drafts.Create(fx.other.ID)
+	foreign, err := fx.drafts.Create(fx.other.ID, services.RequirementDraftCreateInput{})
 	if err != nil {
 		t.Fatal(err)
 	}

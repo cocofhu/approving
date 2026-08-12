@@ -18,6 +18,8 @@ import type {
   PmLeaderBinding,
   ProjectMemoryItem,
   RequirementDraft,
+  RequirementDraftCreateBody,
+  RequirementDraftSchedulePatch,
   AgentCronJob,
   ChatThread,
   ChatMessage,
@@ -443,10 +445,13 @@ export const api = {
     req<RequirementDraft>(
       `/projects/${encodeURIComponent(projectId)}/requirement-drafts/${encodeURIComponent(draftId)}`,
     ),
-  createRequirementDraft: (projectId: string) =>
+  createRequirementDraft: (projectId: string, body?: RequirementDraftCreateBody) =>
     req<RequirementDraft>(
       `/projects/${encodeURIComponent(projectId)}/requirement-drafts`,
-      { method: 'POST' },
+      {
+        method: 'POST',
+        body: body ? JSON.stringify(body) : undefined,
+      },
     ),
   updateRequirementDraft: (
     projectId: string,
@@ -466,6 +471,24 @@ export const api = {
       `/projects/${encodeURIComponent(projectId)}/requirement-drafts/${encodeURIComponent(draftId)}/status`,
       { method: 'PATCH', body: JSON.stringify({ status }) },
     ),
+  patchRequirementDraftSchedule: (
+    projectId: string,
+    draftId: string,
+    body: RequirementDraftSchedulePatch,
+  ) => {
+    const payload: Record<string, unknown> = {}
+    if (body.kind !== undefined) payload.kind = body.kind
+    if (body.startAt !== undefined) payload.startAt = body.startAt
+    if (body.dueAt !== undefined) payload.dueAt = body.dueAt
+    if (body.progress !== undefined) payload.progress = body.progress
+    if (body.parentId !== undefined) {
+      payload.parentId = body.parentId == null ? '' : body.parentId
+    }
+    return req<RequirementDraft>(
+      `/projects/${encodeURIComponent(projectId)}/requirement-drafts/${encodeURIComponent(draftId)}/schedule`,
+      { method: 'PATCH', body: JSON.stringify(payload) },
+    )
+  },
   deleteRequirementDraft: (projectId: string, draftId: string) =>
     req<{ status: string }>(
       `/projects/${encodeURIComponent(projectId)}/requirement-drafts/${encodeURIComponent(draftId)}`,

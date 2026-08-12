@@ -83,6 +83,7 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.PUT("/projects/:id/requirement-drafts/:draftId", h.UpdateRequirementDraft)
 		api.PATCH("/projects/:id/requirement-drafts/:draftId", h.UpdateRequirementDraft)
 		api.PATCH("/projects/:id/requirement-drafts/:draftId/status", h.PatchRequirementDraftStatus)
+		api.PATCH("/projects/:id/requirement-drafts/:draftId/schedule", h.PatchRequirementDraftSchedule)
 		api.DELETE("/projects/:id/requirement-drafts/:draftId", h.DeleteRequirementDraft)
 
 		api.GET("/agent-teams/templates", h.ListAgentTeamTemplates)
