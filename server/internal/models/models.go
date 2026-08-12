@@ -117,7 +117,9 @@ type Run struct {
 	Inputs          map[string]any `gorm:"serializer:json" json:"inputs"`
 	Tags            []string       `gorm:"serializer:json" json:"tags"`
 	// Priority is the admission weight: high=3, normal=2, low=1 (default 2).
-	// API/frontend expose string labels; claim sorts by Priority DESC then FIFO.
+	// API/frontend expose string labels; claim sorts by Priority DESC then
+	// remaining-human_gate then FIFO (see engine.claimNextQueued). List UI order
+	// is independent and must not follow the claim secondary key.
 	Priority int `gorm:"not null;default:2;index" json:"-"`
 	// McpToken is the run-scoped artifact-store MCP token, persisted so a run
 	// paused for human input (gate / react) can be resumed after a server
