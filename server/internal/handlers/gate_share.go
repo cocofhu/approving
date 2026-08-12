@@ -15,11 +15,10 @@ type createShareBody struct {
 	TTLTier string `json:"ttlTier"`
 }
 
+// shareOrigin mints gate/review share URL origins from this request's Host.
+// Never prefer public_advertise (that remains for QQ/preview deep links) and
+// never trust client X-Forwarded-Host. Scheme uses TLS / X-Forwarded-Proto.
 func (h *Handlers) shareOrigin(c *gin.Context) string {
-	if origin, _ := gateshare.ParsePublicAdvertise(h.PublicAdvertise); origin != "" {
-		return origin
-	}
-	// Fallback: request Host only. Never trust client X-Forwarded-Host.
 	scheme := "http"
 	if c.Request.TLS != nil {
 		scheme = "https"
@@ -31,8 +30,8 @@ func (h *Handlers) shareOrigin(c *gin.Context) string {
 }
 
 // trustedPublicHost is the CSRF comparison host: this request's Host.
-// X-Forwarded-Host is ignored (untrusted). public_advertise is only used to
-// mint share URLs, never to compare CSRF origins.
+// X-Forwarded-Host is ignored (untrusted). public_advertise is never used
+// for CSRF origin comparison.
 func (h *Handlers) trustedPublicHost(c *gin.Context) string {
 	return strings.TrimSpace(c.Request.Host)
 }

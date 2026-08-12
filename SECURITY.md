@@ -41,10 +41,15 @@ Inbox operators can mint a one-shot external approval URL for a single pending
   and a strict CSP. The `/public/gate-approvals` prefix does **not** emit
   `Access-Control-Allow-Origin`. POST decide requires Origin/Referer + custom
   header + one-time nonce, and is per-IP rate limited.
-- Share URLs use `server.public_advertise`. Public CSRF compares Origin/Referer
-  host to this request's `Host` (never client `X-Forwarded-Host`, and not the
-  advertise host). Third-party Origin still fails. External preview only returns
-  this `human_gate`'s primary products — it does not scan other nodes in the Run.
+- Share URLs mint from this request's `Host` (plus TLS /
+  `X-Forwarded-Proto` for scheme). Client `X-Forwarded-Host` is never trusted
+  for minting or Public CSRF Origin/Referer checks. Reverse proxies must
+  preserve the browser's original Host (for example nginx
+  `proxy_set_header Host $host`); when TLS terminates upstream, forward
+  `X-Forwarded-Proto` correctly. `server.public_advertise` remains for QQ /
+  preview deep links and is **not** the gate-share mint source. Third-party
+  Origin still fails. External preview only returns this `human_gate`'s
+  primary products — it does not scan other nodes in the Run.
 - Preview nonces live in the GateShare database (same DB as share links), keyed
   by token hash, last few unused nonces, 15-minute TTL, no plaintext token.
   Multi-replica preview→decide share the same bucket. The public IP limiter
