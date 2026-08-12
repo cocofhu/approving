@@ -43,7 +43,9 @@
       "refreshing": "Refreshing",
       "retry": "Retry",
       "timeout": "Request timed out",
-      "failed": "Failed to load"
+      "failed": "Failed to load",
+      "label": "Loading",
+      "stuck": "May be stuck · request still running; wait or retry"
     },
     "buttons": {
       "cancel": "Cancel",
@@ -250,7 +252,8 @@
     },
     "pipelineFilter": {
       "all": "All pipelines",
-      "noMatch": "No matching pipelines"
+      "noMatch": "No matching pipelines",
+      "loadFailed": "Failed to load pipelines"
     },
     "projectFilter": {
       "all": "All projects",
@@ -270,7 +273,8 @@
       "noMatchHint": "No matching suggestions; press Enter to add “{tag}” if valid",
       "tagInvalid": "Tags allow letters, numbers, _ - . /, including Chinese",
       "tagTooLong": "Each tag can be at most {max} characters",
-      "removeTag": "Remove tag {tag}"
+      "removeTag": "Remove tag {tag}",
+      "loadFailed": "Failed to load tag suggestions"
     },
     "bool": {
       "yes": "Yes",
@@ -327,10 +331,6 @@
       "addImage": "Add attachment",
       "placeholderTextOnly": "Enter text…",
       "placeholderWithImages": "Paste files here (≤50 MiB)…"
-    },
-    "loading": {
-      "label": "Loading",
-      "stuck": "May be stuck · request still running; wait or retry"
     },
     "chatImage": {
       "clickToEnlarge": "Click to enlarge",

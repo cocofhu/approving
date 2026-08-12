@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import StatusPill from '@/components/ui/StatusPill.vue'
+import AppInlineError from '@/components/ui/AppInlineError.vue'
 import { api, isPaginated } from '@/lib/api/api'
 import { fmtTime, fmtDuration, formatTrigger } from '@/lib/shared/format'
 import type { Run } from '@/lib/shared/types'
@@ -13,7 +14,9 @@ const props = defineProps<{ workflowId: string }>()
 const router = useRouter()
 const { t } = useI18n()
 const runs = ref<Run[]>([])
-const initialLoading = ref(false)
+const initialLoading = ref(true)
+const loadError = ref<string | null>(null)
+const hasLoadedOnce = ref(false)
 let timer: number | undefined
 
 function runIdShort(id: string) {
@@ -24,9 +27,24 @@ async function load() {
   try {
     const data = await api.listRuns({ wf: props.workflowId })
     runs.value = isPaginated(data) ? data.items : data
-  } catch {
-    /* keep previous list */
+    loadError.value = null
+    hasLoadedOnce.value = true
+  } catch (err) {
+    // Silent poll / refresh: keep previous list. First failure must not look empty (plan g7.1).
+    if (!hasLoadedOnce.value) {
+      loadError.value =
+        err instanceof Error && err.message
+          ? err.message
+          : String(t('common.asyncState.loadFailedDesc'))
+    }
   }
+}
+
+async function retryLoad() {
+  initialLoading.value = true
+  loadError.value = null
+  await load()
+  initialLoading.value = false
 }
 
 onMounted(async () => {
@@ -42,9 +60,13 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex h-full flex-col overflow-hidden bg-base">
+  <div
+    class="flex h-full flex-col overflow-hidden bg-base"
+    data-testid="workflow-run-history"
+    :aria-busy="initialLoading ? 'true' : 'false'"
+  >
     <div class="card m-4 flex-1 overflow-hidden">
-      <table class="w-full text-sm">
+      <table class="w-full text-sm" :class="{ 'table-loading': initialLoading && runs.length }">
         <thead>
           <tr class="text-left text-[11px] uppercase tracking-wider text-txt3">
             <th class="px-5 py-2.5 font-medium">{{ t('common.table.run') }}</th>
@@ -55,7 +77,7 @@ onUnmounted(() => {
           </tr>
         </thead>
         <tbody>
-          <template v-if="initialLoading">
+          <template v-if="initialLoading && !runs.length && !loadError">
             <tr v-for="n in SKELETON_ROWS" :key="'skel-' + n" class="border-t border-line">
               <td class="px-5 py-3">
                 <div class="h-3.5 w-[80px] rounded bg-elevated animate-pulse" />
@@ -74,8 +96,17 @@ onUnmounted(() => {
               </td>
             </tr>
           </template>
+          <tr v-else-if="loadError && !runs.length">
+            <td colspan="5" class="px-5 py-6" data-testid="workflow-run-history-error">
+              <AppInlineError
+                :title="t('common.asyncState.loadFailedTitle')"
+                :message="loadError"
+                @retry="retryLoad"
+              />
+            </td>
+          </tr>
           <tr v-else-if="!runs.length">
-            <td colspan="5" class="px-5 py-10 text-center text-[13px] text-txt3">
+            <td colspan="5" class="px-5 py-10 text-center text-[13px] text-txt3" data-testid="workflow-run-history-empty">
               {{ t('common.empty.noRuns') }}
             </td>
           </tr>

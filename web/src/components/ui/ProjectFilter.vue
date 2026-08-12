@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from './Icon.vue'
 import EmptyState from './EmptyState.vue'
 import AppInlineError from './AppInlineError.vue'
+import AppSpinner from './AppSpinner.vue'
 import { api } from '@/lib/api/api'
 import { createTimeoutController, isAbortError } from '@/lib/shared/loadingRequest'
 import { DEFAULT_LOADING_TIMEOUT_MS } from '@/lib/shared/loadingTypes'
@@ -23,6 +24,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const projects = ref<Project[]>([])
+const loading = ref(false)
 const loadError = ref<string | null>(null)
 const internalOpen = ref(false)
 const search = ref('')
@@ -64,6 +66,7 @@ function onDocClick(e: MouseEvent) {
 }
 
 async function loadProjects() {
+  loading.value = true
   loadError.value = null
   const tc = createTimeoutController(DEFAULT_LOADING_TIMEOUT_MS)
   try {
@@ -77,6 +80,7 @@ async function loadProjects() {
         : String(t('common.projectFilter.loadFailed'))
   } finally {
     tc.clear()
+    loading.value = false
   }
 }
 
@@ -88,7 +92,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 </script>
 
 <template>
-  <div ref="root" class="relative w-full md:w-auto">
+  <div ref="root" class="relative w-full md:w-auto" data-testid="project-filter">
     <button
       type="button"
       class="flex w-full min-h-[44px] items-center gap-2 border border-line bg-surface px-3 py-1.5 text-sm text-txt2 transition hover:bg-elevated md:min-h-0 md:w-auto"
@@ -103,11 +107,22 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
     <div
       v-if="open"
       class="scroll-area absolute left-0 right-0 z-40 mt-1 max-h-72 overflow-auto rounded-md border border-line-strong bg-surface p-1 shadow-lg md:left-auto md:right-0 md:w-64"
+      data-testid="project-filter-panel"
       @click.stop
     >
       <template v-if="loadError">
         <AppInlineError :title="t('common.projectFilter.loadFailed')" :message="loadError" @retry="loadProjects" />
       </template>
+      <div
+        v-else-if="loading"
+        class="flex flex-col items-center justify-center gap-2 px-2 py-8 text-[12px] text-txt3"
+        role="status"
+        aria-busy="true"
+        data-testid="project-filter-loading"
+      >
+        <AppSpinner :size="16" class="animate-spin text-accent" />
+        <span>{{ t('common.loading.inProgress') }}</span>
+      </div>
       <template v-else>
         <input
           v-model="search"

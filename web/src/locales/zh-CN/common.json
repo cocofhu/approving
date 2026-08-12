@@ -43,7 +43,9 @@
       "refreshing": "正在刷新",
       "retry": "重试",
       "timeout": "请求超时",
-      "failed": "加载失败"
+      "failed": "加载失败",
+      "label": "加载中",
+      "stuck": "可能卡死 · 请求仍在进行，可继续等待或重试"
     },
     "buttons": {
       "cancel": "取消",
@@ -250,7 +252,8 @@
     },
     "pipelineFilter": {
       "all": "全部流水线",
-      "noMatch": "无匹配流水线"
+      "noMatch": "无匹配流水线",
+      "loadFailed": "流水线列表加载失败"
     },
     "projectFilter": {
       "all": "全部项目",
@@ -270,7 +273,8 @@
       "noMatchHint": "无匹配建议，回车可将「{tag}」加入筛选（须合法）",
       "tagInvalid": "标签仅允许字母、数字、_ - . /，支持中文",
       "tagTooLong": "单个标签最多 {max} 个字符",
-      "removeTag": "移除标签 {tag}"
+      "removeTag": "移除标签 {tag}",
+      "loadFailed": "标签建议加载失败"
     },
     "bool": {
       "yes": "是",
@@ -327,10 +331,6 @@
       "addImage": "添加附件",
       "placeholderTextOnly": "请输入…",
       "placeholderWithImages": "可粘贴附件（≤50 MiB）…"
-    },
-    "loading": {
-      "label": "加载中",
-      "stuck": "可能卡死 · 请求仍在进行，可继续等待或重试"
     },
     "chatImage": {
       "clickToEnlarge": "点击放大",

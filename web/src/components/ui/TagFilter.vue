@@ -2,6 +2,8 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from './Icon.vue'
+import AppInlineError from './AppInlineError.vue'
+import AppSpinner from './AppSpinner.vue'
 import { api } from '@/lib/api/api'
 import { MAX_TAG_RUNES, validateRunTag } from '@/lib/run/runTags'
 
@@ -30,6 +32,7 @@ const draft = ref('')
 const submitError = ref('')
 const stockTags = ref<string[]>([])
 const stockLoading = ref(false)
+const stockError = ref<string | null>(null)
 
 const isControlled = computed(() => props.open !== undefined)
 const open = computed({
@@ -51,7 +54,7 @@ const filteredStock = computed(() => {
 
 const emptyHint = computed(() => {
   if (!props.projectId) return t('common.tagFilter.needProject')
-  if (stockLoading.value) return ''
+  if (stockLoading.value || stockError.value) return ''
   const q = draft.value.trim()
   if (!filteredStock.value.length) {
     if (q) return t('common.tagFilter.noMatchHint', { tag: q })
@@ -70,14 +73,20 @@ async function loadStock(projectId: string) {
   if (!projectId) {
     stockTags.value = []
     stockLoading.value = false
+    stockError.value = null
     return
   }
   stockLoading.value = true
+  stockError.value = null
   try {
     const res = await api.listProjectRunTags(projectId)
     stockTags.value = Array.isArray(res.tags) ? res.tags : []
-  } catch {
+  } catch (err) {
     stockTags.value = []
+    stockError.value =
+      err instanceof Error && err.message
+        ? err.message
+        : String(t('common.tagFilter.loadFailed'))
   } finally {
     stockLoading.value = false
   }
@@ -243,7 +252,30 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
       </div>
 
       <div
-        v-if="emptyHint"
+        v-if="stockError"
+        class="mt-1.5"
+        data-testid="tag-filter-stock-error"
+      >
+        <AppInlineError
+          :title="t('common.tagFilter.loadFailed')"
+          :message="stockError"
+          @retry="loadStock(projectId || '')"
+        />
+      </div>
+
+      <div
+        v-else-if="stockLoading"
+        class="mt-1.5 flex flex-col items-center justify-center gap-2 rounded-md bg-elevated px-2.5 py-6 text-[12px] text-txt3"
+        role="status"
+        aria-busy="true"
+        data-testid="tag-filter-loading"
+      >
+        <AppSpinner :size="16" class="text-accent" />
+        <span>{{ t('common.loading.inProgress') }}</span>
+      </div>
+
+      <div
+        v-else-if="emptyHint"
         class="mt-1.5 rounded-md bg-elevated px-2.5 py-2 text-[12px] text-txt3"
         data-testid="tag-filter-empty"
       >
