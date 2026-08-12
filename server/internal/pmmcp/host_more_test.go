@@ -180,14 +180,11 @@ type fakePmEngine struct {
 	thinking    bool
 }
 
-func (f *fakePmEngine) StartRunWithPriority(workflowID string, inputs map[string]any, trigger, priority string, tags ...[]string) (*models.Run, error) {
+func (f *fakePmEngine) StartRunWithPriority(workflowID string, inputs map[string]any, trigger, priority string, tags []string, env []models.EnvEntry) (*models.Run, error) {
 	f.lastTrigger = trigger
 	f.startCalls++
-	var normalized []string
-	if len(tags) > 0 {
-		normalized = append([]string{}, tags[0]...)
-	}
-	return &models.Run{ID: "run-pm-mcp", WorkflowID: workflowID, Status: "queued", Trigger: trigger, Tags: normalized}, nil
+	normalized := append([]string{}, tags...)
+	return &models.Run{ID: "run-pm-mcp", WorkflowID: workflowID, Status: "queued", Trigger: trigger, Tags: normalized, SandboxEnv: env}, nil
 }
 
 func (f *fakePmEngine) ResumeGate(runID, nodeID, action string, form map[string]any) error {

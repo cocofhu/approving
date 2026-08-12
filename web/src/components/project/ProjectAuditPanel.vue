@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AuditFilterDropdown, { type AuditDdOption } from '@/components/project/AuditFilterDropdown.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -39,7 +39,7 @@ const pageSize = ref(10)
 const openId = ref<string | null>(null)
 const mode = ref<Mode>('run')
 const initialized = ref(false)
-/** User overrides for Run group expand; missing key = default (fail groups open). */
+/** User overrides for Run group expand; missing key = Demo defaultOpen. */
 const groupOpen = ref<Record<string, boolean>>({})
 const runCapped = ref(false)
 const runFetched = ref(0)
@@ -75,7 +75,6 @@ const runDdOptions = computed<AuditDdOption[]>(() =>
     value: r.runId,
     label: r.label,
     sub: r.sub,
-    short: r.runId.replace(/^run-/, '').slice(0, 8),
     dot: 'run',
   })),
 )
@@ -122,15 +121,6 @@ type Chip = { key: string; label: string; value: string; clearable: boolean }
 const chips = computed<Chip[]>(() => {
   const list: Chip[] = []
   if (mode.value === 'run') {
-    if (runId.value) {
-      const hit = runOptions.value.find((r) => r.runId === runId.value)
-      list.push({
-        key: 'run',
-        label: 'Run',
-        value: hit?.label || shortRun(runId.value),
-        clearable: false,
-      })
-    }
     if (nodeId.value) {
       list.push({
         key: 'node',
@@ -242,9 +232,18 @@ function nodeLabel(id?: string) {
   return formatAuditNodeTitle(id)
 }
 
+/** Demo「类别 / 标识」辅行；缺字段则空，不回退到 action。 */
 function resourceAux(ev: ProjectAuditEvent) {
-  const res = resourceText(ev)
-  return res && res !== '—' ? res : ev.action
+  const type = (ev.resourceType || '').trim()
+  const id = (ev.resourceId || '').trim()
+  if (type && id) return `${type} / ${id}`
+  const raw = (ev.resource || '').trim()
+  if (!raw || raw === '—') return ''
+  const i = raw.indexOf('/')
+  if (i > 0 && i < raw.length - 1) {
+    return `${raw.slice(0, i)} / ${raw.slice(i + 1)}`
+  }
+  return ''
 }
 
 type RunGroup = {
@@ -291,11 +290,36 @@ const runGroups = computed<RunGroup[]>(() => {
 
 const statOk = computed(() => Math.max(0, (stats.value.total || 0) - (stats.value.fail || 0)))
 
+const listFailCount = computed(
+  () => events.value.filter((e) => e.outcome === 'fail').length,
+)
+
+function defaultGroupOpen(g: RunGroup) {
+  if (runGroups.value.length === 1 || listFailCount.value === 0) return true
+  return g.fail > 0
+}
+
 function isGroupOpen(g: RunGroup) {
   if (Object.prototype.hasOwnProperty.call(groupOpen.value, g.id)) {
     return groupOpen.value[g.id]
   }
-  return g.fail > 0
+  return defaultGroupOpen(g)
+}
+
+function pruneGroupOpen() {
+  const ids = new Set(runGroups.value.map((g) => g.id))
+  const cur = groupOpen.value
+  const keys = Object.keys(cur)
+  if (!keys.some((k) => !ids.has(k))) return
+  const next: Record<string, boolean> = {}
+  for (const k of keys) {
+    if (ids.has(k)) next[k] = cur[k]!
+  }
+  groupOpen.value = next
+}
+
+function resetGroupOpen() {
+  groupOpen.value = {}
 }
 
 function toggleGroup(id: string) {
@@ -416,7 +440,7 @@ async function load(resetPage = false) {
     stats.value = { total: 0, mcp: 0, fail: 0 }
     runCapped.value = false
     runFetched.value = 0
-    groupOpen.value = {}
+    resetGroupOpen()
     loading.value = false
     return
   }
@@ -462,6 +486,7 @@ async function load(resetPage = false) {
 }
 
 async function bootstrap() {
+  resetGroupOpen()
   if (props.forceDenied) {
     denied.value = true
     initialized.value = true
@@ -486,7 +511,7 @@ async function setMode(next: Mode) {
   if (mode.value === next) return
   mode.value = next
   openId.value = null
-  groupOpen.value = {}
+  resetGroupOpen()
   page.value = 1
   nodeId.value = ''
   callerKind.value = ''
@@ -508,14 +533,13 @@ async function onRunChange(v: string) {
   nodeId.value = ''
   resource.value = ''
   openId.value = null
-  groupOpen.value = {}
+  resetGroupOpen()
   await loadFacets(v)
   await load(true)
 }
 
 function onFilterChange() {
   openId.value = null
-  groupOpen.value = {}
   void load(true)
 }
 
@@ -600,13 +624,19 @@ function onPageSizeChange(size: number) {
 async function onTimeChange(v: string) {
   timeWindow.value = v as '24h' | '7d' | '30d'
   openId.value = null
+  const prevRun = runId.value
   await loadFacets(mode.value === 'run' ? runId.value : undefined)
   if (mode.value === 'run' && runId.value && !runOptions.value.some((r) => r.runId === runId.value)) {
     runId.value = runOptions.value[0]?.runId || ''
     if (runId.value) await loadFacets(runId.value)
   }
+  if (runId.value !== prevRun) resetGroupOpen()
   await load(true)
 }
+
+watch(runGroups, () => {
+  pruneGroupOpen()
+})
 
 watch(
   () => [props.projectId, props.forceDenied],
@@ -618,6 +648,10 @@ watch(
 
 onMounted(() => {
   void bootstrap()
+})
+
+onUnmounted(() => {
+  resetGroupOpen()
 })
 </script>
 
@@ -633,28 +667,6 @@ onMounted(() => {
     </div>
 
     <template v-else>
-      <div class="panel-hd">
-        <h4>{{ t('pages.projectDetail.audit.title') }}</h4>
-        <div class="seg" role="tablist" data-testid="project-audit-mode">
-          <button
-            type="button"
-            :class="{ on: mode === 'run' }"
-            data-testid="project-audit-mode-run"
-            @click="setMode('run')"
-          >
-            {{ t('pages.projectDetail.audit.modeRun') }}
-          </button>
-          <button
-            type="button"
-            :class="{ on: mode === 'all' }"
-            data-testid="project-audit-mode-all"
-            @click="setMode('all')"
-          >
-            {{ t('pages.projectDetail.audit.modeAll') }}
-          </button>
-        </div>
-      </div>
-
       <div class="filters" :class="{ 'filters-mobile': isMobile }" data-testid="project-audit-filters">
         <!-- Mobile: collapsible filter summary (plan g2); search/export stay outside fold -->
         <template v-if="isMobile">
@@ -747,7 +759,33 @@ onMounted(() => {
               @input="onSearchInput"
             />
           </div>
-          <div class="filters-actions">
+          <div class="seg" role="tablist" data-testid="project-audit-mode">
+            <button
+              type="button"
+              :class="{ on: mode === 'run' }"
+              data-testid="project-audit-mode-run"
+              @click="setMode('run')"
+            >
+              {{ t('pages.projectDetail.audit.modeRun') }}
+            </button>
+            <button
+              type="button"
+              :class="{ on: mode === 'all' }"
+              data-testid="project-audit-mode-all"
+              @click="setMode('all')"
+            >
+              {{ t('pages.projectDetail.audit.modeAll') }}
+            </button>
+          </div>
+          <div class="toolbar-end">
+            <div class="toolbar-stats" data-testid="project-audit-stats">
+              <span class="stat-chip" data-testid="project-audit-run-count">
+                {{ t('pages.projectDetail.audit.statTotal') }} <b>{{ stats.total }}</b>
+              </span>
+              <span class="stat-chip ok">{{ t('pages.projectDetail.audit.statOk') }} <b>{{ statOk }}</b></span>
+              <span class="stat-chip" :class="{ fail: stats.fail }">{{ t('pages.projectDetail.audit.statFail') }} <b>{{ stats.fail }}</b></span>
+              <span class="stat-chip">MCP <b>{{ stats.mcp }}</b></span>
+            </div>
             <button type="button" class="btn" data-testid="project-audit-export" @click="exportAudit">
               {{ t('pages.projectDetail.audit.export') }}
             </button>
@@ -820,7 +858,33 @@ onMounted(() => {
             @update:model-value="onTimeChange"
           />
 
-          <div class="filters-actions">
+          <div class="seg" role="tablist" data-testid="project-audit-mode">
+            <button
+              type="button"
+              :class="{ on: mode === 'run' }"
+              data-testid="project-audit-mode-run"
+              @click="setMode('run')"
+            >
+              {{ t('pages.projectDetail.audit.modeRun') }}
+            </button>
+            <button
+              type="button"
+              :class="{ on: mode === 'all' }"
+              data-testid="project-audit-mode-all"
+              @click="setMode('all')"
+            >
+              {{ t('pages.projectDetail.audit.modeAll') }}
+            </button>
+          </div>
+          <div class="toolbar-end">
+            <div class="toolbar-stats" data-testid="project-audit-stats">
+              <span class="stat-chip" data-testid="project-audit-run-count">
+                {{ t('pages.projectDetail.audit.statTotal') }} <b>{{ stats.total }}</b>
+              </span>
+              <span class="stat-chip ok">{{ t('pages.projectDetail.audit.statOk') }} <b>{{ statOk }}</b></span>
+              <span class="stat-chip" :class="{ fail: stats.fail }">{{ t('pages.projectDetail.audit.statFail') }} <b>{{ stats.fail }}</b></span>
+              <span class="stat-chip">MCP <b>{{ stats.mcp }}</b></span>
+            </div>
             <button type="button" class="btn" data-testid="project-audit-export" @click="exportAudit">
               {{ t('pages.projectDetail.audit.export') }}
             </button>
@@ -853,23 +917,6 @@ onMounted(() => {
         </button>
       </div>
 
-      <div v-if="!isMobile" class="meta">
-        <div class="meta-l" data-testid="project-audit-stats">
-          <span class="stat-chip">{{ t('pages.projectDetail.audit.statTotal') }} <b>{{ stats.total }}</b></span>
-          <span class="stat-chip ok">{{ t('pages.projectDetail.audit.statOk') }} <b>{{ statOk }}</b></span>
-          <span class="stat-chip" :class="{ fail: stats.fail }">{{ t('pages.projectDetail.audit.statFail') }} <b>{{ stats.fail }}</b></span>
-          <span class="stat-chip">MCP <b>{{ stats.mcp }}</b></span>
-          <span v-if="mode === 'run' && runId">Run <b>{{ shortRun(runId) }}</b></span>
-        </div>
-        <div>{{ t('pages.projectDetail.audit.expandHint') }}</div>
-      </div>
-      <div v-else class="meta meta-mobile" data-testid="project-audit-stats">
-        <span class="stat-chip">{{ t('pages.projectDetail.audit.statTotal') }} <b>{{ stats.total }}</b></span>
-        <span class="stat-chip ok">{{ t('pages.projectDetail.audit.statOk') }} <b>{{ statOk }}</b></span>
-        <span class="stat-chip" :class="{ fail: stats.fail }">{{ t('pages.projectDetail.audit.statFail') }} <b>{{ stats.fail }}</b></span>
-        <span class="stat-chip">MCP <b>{{ stats.mcp }}</b></span>
-        <span v-if="mode === 'run' && runId">Run <b>{{ shortRun(runId) }}</b></span>
-      </div>
       <p v-if="mode === 'run' && runCapped && !loading" class="cap-hint" data-testid="project-audit-capped">
         {{ t('pages.projectDetail.audit.runCapped', { n: runFetched }) }}
       </p>
@@ -896,7 +943,17 @@ onMounted(() => {
         data-testid="project-audit-empty"
         :title="t('pages.projectDetail.audit.emptyTitle')"
         :desc="t('pages.projectDetail.audit.emptyDesc')"
-      />
+      >
+        <button
+          v-if="mode === 'run'"
+          type="button"
+          class="linkish"
+          data-testid="project-audit-empty-all"
+          @click="setMode('all')"
+        >
+          {{ t('pages.projectDetail.audit.modeAll') }}
+        </button>
+      </EmptyState>
       <!-- Mobile event cards (plan g3); shared by run + all modes -->
       <div
         v-else-if="isMobile"
@@ -921,7 +978,7 @@ onMounted(() => {
           <div class="ec-row">
             <span class="k">{{ t('pages.projectDetail.audit.colNode') }}</span>
             {{ nodeLabel(ev.nodeId) }}
-            <span class="ec-aux">{{ resourceAux(ev) }}</span>
+            <span v-if="resourceAux(ev)" class="ec-aux">{{ resourceAux(ev) }}</span>
           </div>
           <div v-if="openId === ev.id" class="ec-detail" @click.stop>
             <div>
@@ -1014,7 +1071,7 @@ onMounted(() => {
                     </td>
                     <td class="summary">
                       <div class="summary-main">{{ ev.summary }}</div>
-                      <div class="summary-aux">{{ resourceAux(ev) }}</div>
+                      <div v-if="resourceAux(ev)" class="summary-aux">{{ resourceAux(ev) }}</div>
                     </td>
                     <td>
                       <span :class="ev.outcome === 'fail' ? 'bad' : 'ok'">{{ outcomeLabel(ev) }}</span>
@@ -1075,7 +1132,7 @@ onMounted(() => {
                 </td>
                 <td class="summary">
                   <div class="summary-main">{{ ev.summary }}</div>
-                  <div class="summary-aux">{{ resourceAux(ev) }}</div>
+                  <div v-if="resourceAux(ev)" class="summary-aux">{{ resourceAux(ev) }}</div>
                 </td>
                 <td>
                   <span :class="ev.outcome === 'fail' ? 'bad' : 'ok'">{{ outcomeLabel(ev) }}</span>
@@ -1104,13 +1161,6 @@ onMounted(() => {
         </table>
       </div>
 
-      <div
-        v-if="mode === 'run' && !noRuns && !loading"
-        class="run-count shrink-0"
-        data-testid="project-audit-run-count"
-      >
-        {{ t('pages.projectDetail.audit.runCount', { n: stats.total }) }}
-      </div>
       <Pagination
         v-if="mode === 'all' && !noRuns"
         class="shrink-0"
@@ -1137,23 +1187,6 @@ onMounted(() => {
   overflow: hidden;
   border: 1px solid rgb(var(--c-line));
   background: rgb(var(--c-surface));
-}
-.panel-hd {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-  padding: 14px 16px 12px;
-  border-bottom: 1px solid rgb(var(--c-line));
-}
-.panel-hd h4 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  color: rgb(var(--c-txt));
 }
 .seg {
   display: inline-flex;
@@ -1198,17 +1231,18 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid #e4e4e7;
-  background: #fff;
+  border: 1px solid rgb(var(--c-line));
+  background: rgb(var(--c-surface));
   padding: 0 10px;
 }
 .search:focus-within {
-  border-color: #c4b5fd;
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+  border-color: rgb(var(--c-accent));
+  box-shadow: 0 0 0 3px rgb(var(--c-accent) / 0.12);
 }
 .search svg {
   opacity: 0.4;
   flex: 0 0 auto;
+  color: rgb(var(--c-txt2));
 }
 .search input {
   flex: 1;
@@ -1219,21 +1253,29 @@ onMounted(() => {
   min-width: 0;
   height: 30px;
   font-size: 12px;
+  color: rgb(var(--c-txt));
 }
 .search input::placeholder {
-  color: #a1a1aa;
+  color: rgb(var(--c-txt3));
 }
-.filters-actions {
+.toolbar-end {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-left: auto;
+  flex-wrap: wrap;
+}
+.toolbar-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 .btn {
   height: 32px;
   padding: 0 12px;
-  border: 1px solid #e4e4e7;
-  background: #fff;
+  border: 1px solid rgb(var(--c-line));
+  background: rgb(var(--c-surface));
   color: rgb(var(--c-txt));
   font: inherit;
   font-size: 12px;
@@ -1242,8 +1284,8 @@ onMounted(() => {
   white-space: nowrap;
 }
 .btn:hover:not(:disabled) {
-  background: #fafafa;
-  border-color: #d4d4d8;
+  background: rgb(var(--c-elevated));
+  border-color: rgb(var(--c-line-strong));
 }
 .btn:disabled {
   opacity: 0.35;
@@ -1264,8 +1306,8 @@ onMounted(() => {
   gap: 4px;
   height: 24px;
   padding: 0 4px 0 8px;
-  background: #f4f4f5;
-  border: 1px solid #e4e4e7;
+  background: rgb(var(--c-elevated));
+  border: 1px solid rgb(var(--c-line));
   font-size: 11px;
   color: rgb(var(--c-txt));
 }
@@ -1289,7 +1331,7 @@ onMounted(() => {
 }
 .chip .x:hover {
   color: rgb(var(--c-txt));
-  background: #e4e4e7;
+  background: rgb(var(--c-overlay));
 }
 .linkish {
   border: 0;
@@ -1302,29 +1344,6 @@ onMounted(() => {
 }
 .linkish:hover {
   color: rgb(var(--c-accent));
-}
-.meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-  padding: 8px 16px;
-  font-size: 12px;
-  color: rgb(var(--c-txt2));
-  border-bottom: 1px solid rgb(var(--c-line));
-}
-.meta b {
-  color: rgb(var(--c-txt));
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.meta-l {
-  display: flex;
-  gap: 8px 12px;
-  flex-wrap: wrap;
-  align-items: center;
 }
 .stat-chip {
   display: inline-flex;
@@ -1347,7 +1366,7 @@ onMounted(() => {
 }
 .stat-chip.fail b,
 .stat-chip.fail strong {
-  color: #f87171;
+  color: rgb(var(--c-err));
 }
 .cap-hint {
   margin: 0;
@@ -1357,21 +1376,6 @@ onMounted(() => {
   border-bottom: 1px dashed rgb(var(--c-line-strong));
   background: rgb(var(--c-accent-dim));
   flex-shrink: 0;
-}
-.run-count {
-  padding: 10px 16px;
-  font-size: 12px;
-  color: rgb(var(--c-txt3));
-  border-top: 1px solid rgb(var(--c-line));
-}
-.meta-mobile {
-  gap: 10px;
-  padding: 6px 16px;
-}
-.meta-mobile b {
-  color: rgb(var(--c-txt));
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
 }
 .table-wrap {
   flex: 1;
@@ -1415,7 +1419,7 @@ onMounted(() => {
 }
 .group.open .chev {
   transform: rotate(90deg);
-  border-left-color: #7b61ff;
+  border-left-color: rgb(var(--c-accent));
 }
 .group-meta {
   display: flex;
@@ -1442,31 +1446,34 @@ onMounted(() => {
   flex-shrink: 0;
   background: rgb(var(--c-txt3));
 }
-.node-dot.research {
-  background: #22d3ee;
+.node-dot.research,
+.node-dot.react,
+.node-dot.input,
+.node-dot.output {
+  background: rgb(var(--c-info));
 }
 .node-dot.proposal,
-.node-dot.proposal_select {
-  background: #60a5fa;
-}
-.node-dot.gate,
-.node-dot.human_gate {
-  background: #fbbf24;
-}
-.node-dot.visual {
-  background: #f59e0b;
-}
-.node-dot.react {
-  background: #22d3ee;
-}
+.node-dot.proposal_select,
 .node-dot.implement,
 .node-dot.plan,
 .node-dot.test,
-.node-dot.review {
-  background: #60a5fa;
+.node-dot.review,
+.node-dot.submit_mr {
+  background: rgb(var(--c-info));
 }
+.node-dot.gate,
+.node-dot.human_gate,
+.node-dot.visual,
 .node-dot.app_preview {
-  background: #f59e0b;
+  background: rgb(var(--c-warn));
+}
+.node-dot.agent,
+.node-dot.branch,
+.node-dot.set_var {
+  background: rgb(var(--c-accent));
+}
+.node-dot.system {
+  background: rgb(var(--c-ok));
 }
 .group-sub {
   font-size: 11.5px;
@@ -1519,17 +1526,17 @@ tr.row {
   cursor: pointer;
 }
 tr.row:hover td {
-  background: #fafafa;
+  background: rgb(var(--c-elevated));
 }
 tr.row.open td {
-  background: #f5f3ff;
+  background: rgb(var(--c-accent-dim));
 }
 tr.row.fail td:first-child {
-  box-shadow: inset 2px 0 0 #dc2626;
+  box-shadow: inset 2px 0 0 rgb(var(--c-err));
 }
 tr.detail td {
   padding: 0;
-  background: #fafafa;
+  background: rgb(var(--c-elevated));
   border-bottom: 1px solid rgb(var(--c-line));
 }
 .detail-inner {
@@ -1549,7 +1556,7 @@ tr.detail td {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
   color: rgb(var(--c-txt));
-  background: #fff;
+  background: rgb(var(--c-surface));
   border: 1px solid rgb(var(--c-line));
   padding: 1px 5px;
 }
@@ -1557,21 +1564,21 @@ tr.detail td {
   margin: 0;
   padding: 10px 12px;
   border: 1px solid rgb(var(--c-line));
-  background: #fff;
+  background: rgb(var(--c-surface));
   font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #3f3f46;
+  color: rgb(var(--c-txt2));
   overflow-x: auto;
 }
 .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
-  color: #52525b;
+  color: rgb(var(--c-txt2));
 }
 .time-main {
   font-variant-numeric: tabular-nums;
-  color: #3f3f46;
+  color: rgb(var(--c-txt));
   font-size: 12px;
 }
 .who {
@@ -1607,17 +1614,17 @@ tr.detail td {
   font-size: 12px;
 }
 .ok {
-  color: #16a34a;
+  color: rgb(var(--c-ok));
   font-size: 12px;
   font-weight: 500;
 }
 .bad {
-  color: #dc2626;
+  color: rgb(var(--c-err));
   font-size: 12px;
   font-weight: 500;
 }
 .summary {
-  color: #3f3f46;
+  color: rgb(var(--c-txt));
 }
 .list-placeholder {
   flex: 1;
@@ -1652,8 +1659,8 @@ tr.detail td {
   gap: 8px;
   width: 100%;
   min-height: 44px;
-  border: 1px solid #e4e4e7;
-  background: #fafafa;
+  border: 1px solid rgb(var(--c-line));
+  background: rgb(var(--c-elevated));
   padding: 10px 12px;
   font: inherit;
   text-align: left;
@@ -1683,9 +1690,9 @@ tr.detail td {
   width: 100%;
   /* 与搜索同宽（f1/g2.3）：仅纵向内边距，避免左右 inset 缩窄触发器 */
   padding: 10px 0;
-  border-top: 1px solid #eee;
-  border-bottom: 1px solid #eee;
-  background: #fcfcfc;
+  border-top: 1px solid rgb(var(--c-line));
+  border-bottom: 1px solid rgb(var(--c-line));
+  background: rgb(var(--c-base));
 }
 .filters-mobile {
   flex-direction: column;
@@ -1701,16 +1708,19 @@ tr.detail td {
 .filters-mobile .search input {
   height: 42px;
 }
-.filters-mobile .filters-actions {
+.filters-mobile .toolbar-end {
   margin-left: 0;
   width: 100%;
   flex: 0 0 auto;
 }
-.filters-mobile .filters-actions .btn {
+.filters-mobile .toolbar-end .btn {
   flex: 1;
   width: 100%;
   min-height: 44px;
   height: auto;
+}
+.filters-mobile .toolbar-stats {
+  width: 100%;
 }
 .filters-mobile .filter-summary {
   flex: 0 0 auto;
@@ -1727,8 +1737,8 @@ tr.detail td {
 .event-card {
   display: block;
   width: 100%;
-  border: 1px solid #e5e5e5;
-  background: #fff;
+  border: 1px solid rgb(var(--c-line));
+  background: rgb(var(--c-surface));
   padding: 10px;
   text-align: left;
   font: inherit;
@@ -1737,14 +1747,14 @@ tr.detail td {
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 .event-card:hover {
-  border-color: #c4b5fd;
+  border-color: rgb(var(--c-accent));
 }
 .event-card.open {
   border-color: rgb(var(--c-accent));
-  background: #faf8ff;
+  background: rgb(var(--c-accent-dim));
 }
 .event-card.fail {
-  box-shadow: inset 2px 0 0 #dc2626;
+  box-shadow: inset 2px 0 0 rgb(var(--c-err));
 }
 .ec-top {
   display: flex;
@@ -1815,11 +1825,11 @@ tr.detail td {
     max-width: none;
     width: 100%;
   }
-  .filters:not(.filters-mobile) .filters-actions {
+  .filters:not(.filters-mobile) .toolbar-end {
     margin-left: 0;
     width: 100%;
   }
-  .filters:not(.filters-mobile) .filters-actions .btn {
+  .filters:not(.filters-mobile) .toolbar-end .btn {
     flex: 1;
     width: 100%;
   }

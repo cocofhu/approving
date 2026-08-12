@@ -13,6 +13,10 @@ import PrioritySegmented, { type RunPriority } from '@/components/ui/PrioritySeg
 import { api } from '@/lib/api/api'
 import { isCompositeFilled, normalizeCompositeSubmit } from '@/lib/shared/compositeText'
 import { MAX_RUN_TAGS, MAX_TAG_RUNES, validateRunTag } from '@/lib/run/runTags'
+import {
+  type RunSandboxEnvEntry,
+  validateRunSandboxEnvRows,
+} from '@/lib/run/runSandboxEnv'
 import type { ClarifyImage } from '@/lib/shared/types'
 
 export type InputField = {
@@ -71,6 +75,7 @@ const tagSuggestions = ref<string[]>([])
 const maxTags = MAX_RUN_TAGS
 const maxTagRunes = MAX_TAG_RUNES
 const reposDraft = ref<Record<string, RepoRow[]>>({})
+const envRows = ref<RunSandboxEnvEntry[]>([])
 let startAbort: AbortController | null = null
 let startGen = 0
 /** loading 可见层显式高度：≥ max(捕获高度, 200)，捕获为空也至少 200px */
@@ -108,6 +113,7 @@ watch(
       tags.value = []
       tagInput.value = ''
       tagSuggestions.value = []
+      envRows.value = []
       emit('update:loading', false)
       resetScrollTop()
       if (props.projectId) {
@@ -276,6 +282,20 @@ function removeTag(tag: string) {
   tags.value = tags.value.filter((item) => item !== tag)
 }
 
+function addEnvRow() {
+  envRows.value = [...envRows.value, { key: '', value: '', secret: false }]
+}
+
+function removeEnvRow(i: number) {
+  envRows.value = envRows.value.filter((_, idx) => idx !== i)
+}
+
+function setEnvSecret(i: number, secret: boolean) {
+  const row = envRows.value[i]
+  if (!row) return
+  envRows.value[i] = { ...row, secret }
+}
+
 function onTagKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter' || e.key === ',') {
     e.preventDefault()
@@ -296,6 +316,13 @@ async function startRun() {
   if (missing) {
     phase.value = 'error'
     startError.value = t('pages.runLaunch.requiredMissing', { field: missing.desc || missing.key })
+    return
+  }
+
+  const { entries: envEntries, problems: envProblems } = validateRunSandboxEnvRows(envRows.value)
+  if (envProblems.length) {
+    phase.value = 'error'
+    startError.value = t('pages.runLaunch.envInvalid', { keys: envProblems.join(', ') })
     return
   }
 
@@ -320,11 +347,14 @@ async function startRun() {
     if (props.beforeStart) await props.beforeStart()
     const res = await api.startRun(props.workflowId, inputs, 'manual', priority.value, tags.value, {
       signal: startAbort.signal,
+      env: envEntries.length ? envEntries : undefined,
     })
     if (gen !== startGen) return
     successRunId.value = res.id
     emit('started', res.id)
-    phase.value = 'success'
+    // Clarified UX: close modal and navigate to Run detail (skip stay-on-page success).
+    emit('view-run', res.id)
+    emit('close')
   } catch (e: any) {
     if (gen !== startGen || isAbortError(e) || startAbort.signal.aborted) return
     phase.value = 'error'
@@ -437,6 +467,58 @@ async function startRun() {
             class="input min-h-[72px] disabled:opacity-60"
             :placeholder="fieldPlaceholder(f)"
           />
+        </div>
+        <div class="space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <label class="block text-[12px] font-medium text-txt2">{{ t('pages.runLaunch.envLabel') }}</label>
+            <AppButton variant="ghost" class="!px-2 !py-1 text-[12px]" @click="addEnvRow">
+              {{ t('pages.runLaunch.envAdd') }}
+            </AppButton>
+          </div>
+          <p class="text-[11px] leading-relaxed text-txt3">{{ t('pages.runLaunch.envHint') }}</p>
+          <div v-if="envRows.length" class="overflow-hidden border border-line bg-base">
+            <div class="hidden gap-2 border-b border-line bg-elevated/55 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-txt3 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_72px_36px]">
+              <span>{{ t('pages.runLaunch.envKey') }}</span>
+              <span>{{ t('pages.runLaunch.envValue') }}</span>
+              <span>{{ t('pages.runLaunch.envSecret') }}</span>
+              <span />
+            </div>
+            <div
+              v-for="(row, i) in envRows"
+              :key="i"
+              class="grid grid-cols-1 gap-2 border-b border-line px-2 py-2 last:border-b-0 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_72px_36px] sm:items-center"
+              data-testid="run-launch-env-row"
+            >
+              <input
+                v-model="row.key"
+                class="input px-2.5 py-1.5 font-mono text-xs"
+                :placeholder="t('pages.runLaunch.envKey')"
+              />
+              <input
+                v-model="row.value"
+                class="input min-w-0 px-2.5 py-1.5 text-xs"
+                :type="row.secret ? 'password' : 'text'"
+                :placeholder="t('pages.runLaunch.envValue')"
+              />
+              <button
+                type="button"
+                class="chip w-full justify-center"
+                :class="row.secret ? 'border-accent/50 text-accent-2' : 'text-txt3'"
+                @click="setEnvSecret(i, !row.secret)"
+              >
+                {{ row.secret ? t('pages.runLaunch.envSecretOn') : t('pages.runLaunch.envSecretOff') }}
+              </button>
+              <button
+                type="button"
+                class="chip justify-center text-txt3"
+                :aria-label="t('pages.runLaunch.envRemove')"
+                @click="removeEnvRow(i)"
+              >
+                <Icon name="close" :size="12" />
+              </button>
+            </div>
+          </div>
+          <p v-else class="text-[11px] text-txt3">{{ t('pages.runLaunch.envEmpty') }}</p>
         </div>
         <div v-if="startError" class="flex items-start gap-2 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-[12px] text-err">
           <Icon name="alert" :size="14" class="mt-0.5" />{{ startError }}

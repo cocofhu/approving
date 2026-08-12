@@ -56,7 +56,7 @@ type Project struct {
 	// PmLeaderAgent is the bound Agent config name (skill_profile). Empty when
 	// unbound. Enabling requires a non-empty, existing agent name.
 	PmLeaderAgent string `json:"pmLeaderAgent,omitempty"`
-	// PmEnabledMcps lists enabled PM-only MCP ids (pm-progress, pm-workflow-read, pm-workflow-write, pm-agent-fs).
+	// PmEnabledMcps lists enabled PM-only MCP ids (pm-progress, pm-workflow-read, pm-workflow-write, pm-agent-fs, pm-prd-manager).
 	// nil/omitted → defaults; explicit empty slice → none.
 	// nil/unset means both enabled by default; explicit empty disables all.
 	PmEnabledMcps []string `gorm:"serializer:json" json:"pmEnabledMcps,omitempty"`
@@ -71,8 +71,12 @@ type Project struct {
 	// NotifyPolicy is the project-level Run→IM notification default
 	// (enabled kill-switch + defaultEvents). See ProjectNotifyPolicy.
 	NotifyPolicy ProjectNotifyPolicy `gorm:"serializer:json" json:"notifyPolicy"`
-	CreatedAt    time.Time           `json:"createdAt"`
-	UpdatedAt    time.Time           `json:"updatedAt"`
+	// UnknownModelDisplayName is an optional project-level display alias for the
+	// 「未知/未分桶」token bucket. Empty means use the default label. Does not
+	// change persisted UsageByModel keys or merge with real model buckets.
+	UnknownModelDisplayName string `json:"unknownModelDisplayName,omitempty"`
+	CreatedAt               time.Time `json:"createdAt"`
+	UpdatedAt               time.Time `json:"updatedAt"`
 }
 
 // WorkflowDef is the editable workflow (draft or published head).
@@ -117,18 +121,25 @@ type Run struct {
 	Inputs          map[string]any `gorm:"serializer:json" json:"inputs"`
 	Tags            []string       `gorm:"serializer:json" json:"tags"`
 	// Priority is the admission weight: high=3, normal=2, low=1 (default 2).
-	// API/frontend expose string labels; claim sorts by Priority DESC then FIFO.
+	// API/frontend expose string labels; claim sorts by Priority DESC then
+	// remaining-human_gate then FIFO (see engine.claimNextQueued). List UI order
+	// is independent and must not follow the claim secondary key.
 	Priority int `gorm:"not null;default:2;index" json:"-"`
 	// McpToken is the run-scoped artifact-store MCP token, persisted so a run
 	// paused for human input (gate / react) can be resumed after a server
 	// restart: loadCtx re-registers it with the MCP host from here instead of
 	// failing every subsequent artifact write with ErrUnauthorized.
-	McpToken string       `json:"-"`
-	Attempt  int          `json:"attempt"`
-	Progress float64      `json:"progress"`
-	Branch   string       `json:"branch,omitempty"`
-	Title    string       `json:"title,omitempty"`
-	Trace    []TraceEntry `gorm:"serializer:json" json:"trace"`
+	McpToken string `json:"-"`
+	// SandboxEnv is the immutable run-scoped sandbox OS env snapshot taken at
+	// StartRun (optional). Injected into this Run's pipeline node sandboxes
+	// after Agent env and before platform reserved/auth write-backs. Plaintext
+	// in DB for injection; GET/audit must mask Secret entries.
+	SandboxEnv []EnvEntry   `gorm:"serializer:json" json:"sandboxEnv,omitempty"`
+	Attempt    int          `json:"attempt"`
+	Progress   float64      `json:"progress"`
+	Branch     string       `json:"branch,omitempty"`
+	Title      string       `json:"title,omitempty"`
+	Trace      []TraceEntry `gorm:"serializer:json" json:"trace"`
 	// Checkpoints holds variable snapshots keyed by checkpoint node id, used
 	// to restore state on rollback.
 	Checkpoints map[string]map[string]any `gorm:"serializer:json" json:"-"`
@@ -139,8 +150,8 @@ type Run struct {
 }
 
 const (
-	MaxRunTags       = 8
-	MaxRunTagRunes   = 32
+	MaxRunTags     = 8
+	MaxRunTagRunes = 32
 )
 
 var ErrInvalidRunTag = errors.New("invalid run tag")
@@ -644,8 +655,8 @@ type RunPreviewPort struct {
 	// "http://172.17.0.5:9090". Persisting it decouples the proxy read-path from
 	// the co-located sandbox manager so the preview proxy can later be split into
 	// a standalone service that only reads the DB (or a control-plane API).
-	Host         string    `json:"-"`
-	Healthy      bool      `json:"healthy"`
+	Host    string `json:"-"`
+	Healthy bool   `json:"healthy"`
 	// KeepalivePID is the setsid-detached listener pid recorded by KeepalivePort
 	// so Cancel/Abort session cleanup can whitelist it (sandbox Destroy still
 	// reclaims the whole container with the Run/gate lifecycle).

@@ -20,6 +20,7 @@ import RunOutputPanel from '@/components/run/RunOutputPanel.vue'
 import StateTracePanel from '@/components/run/StateTracePanel.vue'
 import VariablesPanel from '@/components/run/VariablesPanel.vue'
 import ArtifactPanel from '@/components/run/ArtifactPanel.vue'
+import RunSandboxEnvPanel from '@/components/run/RunSandboxEnvPanel.vue'
 import ExecutionTimeline from '@/components/run/ExecutionTimeline.vue'
 import ExecutionStatsPanel from '@/components/run/ExecutionStatsPanel.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -67,6 +68,19 @@ function emptyWorkflow(): Workflow {
 
 const run = ref<Run>(emptyRun(runId.value))
 const wf = ref<Workflow>(emptyWorkflow())
+/** Project alias for 「未知/未分桶」display on Run token table. */
+const unknownModelDisplayName = ref('')
+
+async function loadUnknownModelDisplayName(projectId?: string | null) {
+  unknownModelDisplayName.value = ''
+  if (!projectId) return
+  try {
+    const p = await api.getProject(projectId)
+    unknownModelDisplayName.value = p.unknownModelDisplayName || ''
+  } catch {
+    // Keep default label when project cannot be loaded.
+  }
+}
 const runLoading = ref(false)
 const loadError = ref(false)
 const loadErrorKind = ref<RunLoadErrorKind | null>(null)
@@ -390,9 +404,19 @@ async function fetchRunData(): Promise<true | RunLoadErrorKind> {
         id: r.workflowId, name: r.workflowName, description: '', status: 'published',
         version: r.workflowVersion || 1, updatedAt: '', needsRepo: false, nodes: r.nodes, edges: r.edges || [],
       }
+      // Still resolve projectId for unknown-model display alias when graph is pinned.
+      if (r.workflowId) {
+        try {
+          const live = await api.getWorkflow(r.workflowId)
+          if (live.projectId) wf.value.projectId = live.projectId
+        } catch {
+          // Workflow may have been deleted; alias stays unset → default label.
+        }
+      }
     } else if (r.workflowId) {
       wf.value = await api.getWorkflow(r.workflowId)
     }
+    await loadUnknownModelDisplayName(wf.value.projectId)
     // Refresh-resume: wait for dialogue surfaces to mount, then project busy/queue.
     void projectDialogueAfterLoad(r)
     return true
@@ -932,6 +956,8 @@ const detailTab = ref('trace')
 const detailTabs = computed(() => {
   const tabs = [{ id: 'trace', label: t('pages.runDetail.tabs.trace') }]
   if (run.value.vars?.length) tabs.push({ id: 'vars', label: t('pages.runDetail.tabs.vars') })
+  // Always offer the run-level env tab so empty snapshot shows an empty state (no error).
+  tabs.push({ id: 'sandboxEnv', label: t('pages.runDetail.tabs.sandboxEnv') })
   tabs.push({ id: 'artifacts', label: t('pages.runDetail.tabs.artifacts') })
   return tabs
 })
@@ -1281,6 +1307,7 @@ function selectExecution(nodeId: string, idx: number) {
                 :wall-sec="elapsedSec"
                 :now-ms="nowMs"
                 :stats-tab="statsTab"
+                :unknown-model-display-name="unknownModelDisplayName"
                 @update:stats-tab="statsTab = $event"
               />
             </div>
@@ -1562,6 +1589,10 @@ function selectExecution(nodeId: string, idx: number) {
         <div class="min-h-0 flex-1">
           <StateTracePanel v-if="detailTab === 'trace'" :trace="run.trace || []" />
           <VariablesPanel v-else-if="detailTab === 'vars'" :vars="run.vars || []" />
+          <RunSandboxEnvPanel
+            v-else-if="detailTab === 'sandboxEnv'"
+            :entries="run.sandboxEnv || []"
+          />
           <ArtifactPanel
             v-else-if="detailTab === 'artifacts'"
             :artifacts="run.artifacts"

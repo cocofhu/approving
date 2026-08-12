@@ -286,6 +286,26 @@ func FormatProgressText(ev ProgressEvent) string {
 	}
 }
 
+// FormatProgressTextFor forks Feishu Demo copy ([进度] prefix) without
+// changing existing QQ wording.
+func FormatProgressTextFor(channelType string, ev ProgressEvent) string {
+	if channelType != "feishu" {
+		return FormatProgressText(ev)
+	}
+	sum := strings.TrimSpace(ev.Summary)
+	if sum == "" {
+		return ""
+	}
+	switch ev.Kind {
+	case ProgressBlocker:
+		return "[阻塞] " + sum
+	case ProgressConfirm:
+		return "[确认] " + sum
+	default:
+		return "[进度] " + sum
+	}
+}
+
 func isProgressNoise(text string) bool {
 	// Extremely short token-like fragments and tool dump markers.
 	if utf8.RuneCountInString(text) < 4 {

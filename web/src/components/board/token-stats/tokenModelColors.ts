@@ -18,7 +18,7 @@ const OTHER = '#A1A1AA'
 const FILLED = '#34D399'
 
 export function colorForModel(m: Pick<TokenStatsModel, 'name' | 'unknown' | 'other' | 'filled'>, idx: number): string {
-  if (m.unknown || m.name === '未知/未分桶') return UNK
+  if (m.unknown) return UNK
   if (m.other || m.name === 'other') return OTHER
   if (m.filled) return FILLED
   return MODEL_PALETTE[idx % MODEL_PALETTE.length]!

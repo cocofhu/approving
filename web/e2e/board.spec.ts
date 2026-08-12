@@ -364,4 +364,231 @@ test.describe('需求进度看板（项目级）', () => {
     await viewMore.click()
     await expect(page.getByTestId('runs-page')).toBeVisible({ timeout: 5_000 })
   })
+
+  test('三主列列头打开状态列表模态：加载更多、关闭三件套、点行进详情、空态', async ({ page }) => {
+    test.setTimeout(60_000)
+    const listCalls: { status: string; page: string; pageSize: string }[] = []
+
+    await page.setViewportSize({ width: 1280, height: 800 })
+
+    await page.route('**/api/stats/dashboard', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ running: 5, waitingHuman: 0, failed: 0, completed: 45 }),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.route('**/api/projects/*/token-stats**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          window: '30d',
+          bucketWidth: 'day',
+          timezone: 'UTC',
+          empty: true,
+          trend: [],
+          composition: {
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            total: 0,
+          },
+          workflows: [],
+        }),
+      })
+    })
+
+    await page.route('**/api/runs**', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.continue()
+        return
+      }
+      const url = new URL(route.request().url())
+      if (!url.searchParams.get('projectId')) {
+        await route.fulfill({
+          status: 400,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'projectId required in e2e mock' }),
+        })
+        return
+      }
+      const status = url.searchParams.get('status') || ''
+      const pageNum = Number(url.searchParams.get('page') || 1)
+      const pageSize = Number(url.searchParams.get('pageSize') || 20)
+      listCalls.push({ status, page: String(pageNum), pageSize: String(pageSize) })
+
+      // Modal lists always use pageSize=20; running/waiting columns use 100.
+      const isModalList =
+        pageSize === 20 && (status === 'running' || status === 'waiting_human' || (status === 'completed' && pageNum >= 1))
+
+      // Prefer modal-shaped payloads when pageSize=20 (column completed also uses 20 — shared OK).
+      if (status === 'completed' && pageSize === 20) {
+        const start = (pageNum - 1) * pageSize
+        const items = Array.from({ length: Math.min(20, Math.max(0, 45 - start)) }, (_, i) =>
+          stubRun({
+            id: `run-modal-done-${start + i}`,
+            status: 'completed',
+            title: `模态已完成-${start + i}`,
+            progress: 100,
+            durationSec: 90,
+          }),
+        )
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            items,
+            total: 45,
+            page: pageNum,
+            pageSize,
+            hasMore: start + items.length < 45,
+          }),
+        })
+        return
+      }
+
+      if (status === 'waiting_human' && pageSize === 20) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ items: [], total: 0, page: 1, pageSize, hasMore: false }),
+        })
+        return
+      }
+
+      if (status === 'running' && pageSize === 20) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            items: [
+              stubRun({ id: 'run-modal-running-1', status: 'running', title: '模态运行中-1', progress: 40 }),
+            ],
+            total: 1,
+            page: 1,
+            pageSize,
+            hasMore: false,
+          }),
+        })
+        return
+      }
+
+      void isModalList
+
+      // Column cache loads for the board itself (running/waiting pageSize=100).
+      let items: ReturnType<typeof stubRun>[] = []
+      let total = 0
+      if (status === 'running') {
+        items = Array.from({ length: 5 }, (_, i) =>
+          stubRun({ id: `run-running-${i}`, status: 'running', title: `看板运行中-${i}` }),
+        )
+        total = 5
+      } else if (status === 'waiting_human') {
+        items = []
+        total = 0
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items,
+          total,
+          page: 1,
+          pageSize,
+          hasMore: false,
+        }),
+      })
+    })
+
+    await page.goto('/board.html?start=project-board&memory=1&projectId=proj-1')
+    await expect(page.getByTestId('board-view')).toBeVisible({ timeout: 10_000 })
+
+    const headers = page.getByTestId('run-board-column-header')
+    await expect(headers).toHaveCount(3)
+
+    // --- completed: open + load more ---
+    await headers.nth(2).click()
+    await expect(page.getByTestId('board-status-list-body')).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByTestId('board-status-list-subtitle')).toContainText('已完成')
+    await expect(page.getByTestId('board-status-list-row-run-modal-done-0')).toBeVisible()
+    await expect(page.getByTestId('board-status-list-range')).toContainText('已展示 20 / 45')
+    await page.getByTestId('board-status-list-load-more').click()
+    await expect(page.getByTestId('board-status-list-row-run-modal-done-20')).toBeVisible()
+    await expect(page.getByTestId('board-status-list-range')).toContainText('已展示 40 / 45')
+
+    // Esc closes and stays on board
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('board-status-list-body')).toHaveCount(0)
+    await expect(page.getByTestId('board-view')).toBeVisible()
+    await expect(page.getByTestId('run-detail-page')).toHaveCount(0)
+
+    // --- running: open then backdrop close (click overlay corner, not dialog center) ---
+    await headers.nth(0).click()
+    await expect(page.getByTestId('board-status-list-row-run-modal-running-1')).toBeVisible()
+    await page.locator('.fixed.inset-0.z-50 > .absolute.inset-0').click({ position: { x: 8, y: 8 } })
+    await expect(page.getByTestId('board-status-list-body')).toHaveCount(0)
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByTestId('board-view')).toBeVisible()
+    await expect(page.getByTestId('run-detail-page')).toHaveCount(0)
+
+    // --- waiting_human empty state + explicit close button ---
+    await headers.nth(1).click()
+    await expect(page.getByTestId('board-status-list-empty')).toBeVisible()
+    await expect(page.getByTestId('board-status-list-empty')).toContainText('该状态暂无运行')
+    // AppModal chrome close (first button in the teleported shell)
+    await page.locator('.fixed.inset-0.z-50 button').first().click()
+    await expect(page.getByTestId('board-status-list-body')).toHaveCount(0)
+
+    // --- row click → detail (no drawer) ---
+    await headers.nth(2).click()
+    await expect(page.getByTestId('board-status-list-row-run-modal-done-0')).toBeVisible()
+    await page.getByTestId('board-status-list-row-run-modal-done-0').click()
+    await expect(page.getByTestId('run-detail-page')).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByText('运行摘要')).toHaveCount(0)
+
+    // Modal list used pageSize=20 with page param (independent of column cache).
+    expect(listCalls.some((c) => c.status === 'completed' && c.pageSize === '20' && c.page === '1')).toBe(true)
+    expect(listCalls.some((c) => c.status === 'completed' && c.pageSize === '20' && c.page === '2')).toBe(true)
+  })
+
+  test('列头模态与侧滑互斥；Dashboard 列头不可激活', async ({ page }) => {
+    await gotoBoardHarness(page, { width: 1280, start: 'project-board', memory: '1', projectId: 'proj-1' })
+    await expect(page.getByTestId('board-view')).toBeVisible({ timeout: 10_000 })
+
+    // Open card drawer first
+    await page.getByText('看板需求-运行中').click()
+    await expect(page.getByText('运行摘要')).toBeVisible({ timeout: 5_000 })
+
+    // Drawer overlay blocks board chrome hit-testing; click the header element
+    // directly so openStatusList runs (closes drawer, opens list modal).
+    await page.getByTestId('run-board-column-header').nth(0).evaluate((el: HTMLElement) => el.click())
+    await expect(page.getByText('运行摘要')).toHaveCount(0)
+    await expect(page.getByTestId('board-status-list-body')).toBeVisible({ timeout: 5_000 })
+
+    // Close modal, open drawer again — modal must stay closed
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('board-status-list-body')).toHaveCount(0)
+    await page.getByText('看板需求-运行中').click()
+    await expect(page.getByText('运行摘要')).toBeVisible()
+    await expect(page.getByTestId('board-status-list-body')).toHaveCount(0)
+
+    // Dismiss drawer, then confirm headers still work
+    await page.getByRole('button', { name: '继续浏览' }).click()
+    await expect(page.getByText('运行摘要')).toHaveCount(0)
+
+    // Dashboard mini board: headers not activatable
+    await gotoBoardHarness(page, { width: 1280, start: 'dashboard', memory: '1', projectId: 'proj-1' })
+    await expect(page.getByTestId('dashboard-view')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('run-board-column')).toHaveCount(2)
+    await expect(page.getByTestId('run-board-column-header')).toHaveCount(0)
+  })
 })

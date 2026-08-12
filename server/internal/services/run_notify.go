@@ -144,7 +144,8 @@ func (s *RunNotifyService) AttemptDeliver(ev RunNotifyEvent) {
 		return
 	}
 	if err := s.deliver.DeliverRunNotify(project.ID, text, channelIDs); err != nil {
-		// P0: claim already held; log and do not retry.
+		// P0: claim already held; persist visible reason and do not retry.
+		s.markReceipt(ev.RunID, ev.NodeID, ev.Iteration, kind, "failed", err.Error())
 		if errors.Is(err, ErrRunNotifyNoTarget) {
 			log.Info().Str("run_id", ev.RunID).Str("project", project.ID).
 				Msg("run-notify: no channel target — no-op after claim")
@@ -152,7 +153,32 @@ func (s *RunNotifyService) AttemptDeliver(ev RunNotifyEvent) {
 		}
 		log.Warn().Err(err).Str("run_id", ev.RunID).Str("project", project.ID).
 			Msg("run-notify: send failed after claim (no retry)")
+		return
 	}
+	s.markReceipt(ev.RunID, ev.NodeID, ev.Iteration, kind, "ok", "")
+}
+
+func (s *RunNotifyService) markReceipt(runID, nodeID string, iteration int, kind, status, errText string) {
+	if s == nil || s.db == nil {
+		return
+	}
+	_ = s.db.Model(&models.NotifyDeliveryReceipt{}).
+		Where("run_id = ? AND node_id = ? AND iteration = ? AND kind = ?", runID, nodeID, iteration, kind).
+		Updates(map[string]any{"status": status, "error": errText}).Error
+}
+
+// ListReceipts returns recent run-notify delivery records for a project
+// (matched via runs.project_id). Newest first, capped at 50.
+func (s *RunNotifyService) ListReceipts(projectID string) ([]models.NotifyDeliveryReceipt, error) {
+	if s == nil || s.db == nil {
+		return nil, nil
+	}
+	var rows []models.NotifyDeliveryReceipt
+	err := s.db.Joins("JOIN runs ON runs.id = notify_delivery_receipts.run_id").
+		Joins("JOIN workflow_defs ON workflow_defs.id = runs.workflow_id").
+		Where("workflow_defs.project_id = ?", strings.TrimSpace(projectID)).
+		Order("notify_delivery_receipts.created_at desc").Limit(50).Find(&rows).Error
+	return rows, err
 }
 
 func (s *RunNotifyService) deepLinkBase(ev RunNotifyEvent) string {

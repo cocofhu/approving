@@ -72,6 +72,14 @@ func SyntheticUserID(channelType string, scene Scene, conversationID string) str
 	return channelType + ":" + string(scene) + ":" + conversationID
 }
 
+// HasSpoken reports whether the synthetic identity has source=channel inbound.
+func (b *ChannelBridge) HasSpoken(projectID, syntheticUserID string) bool {
+	if b == nil || b.pm == nil {
+		return false
+	}
+	return b.pm.HasChannelInbound(projectID, syntheticUserID)
+}
+
 // Handle runs one full Work turn and returns the assistant reply for Reply to
 // send as the terminal report. onProgress may be nil; when set, only classified
 // ProgressEvents are forwarded (tool/token noise suppressed).
