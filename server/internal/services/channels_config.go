@@ -189,7 +189,6 @@ func (s *ChannelConfigService) GetByID(id string) (ChannelConfigDTO, error) {
 	}
 	return s.attachRuntime(s.toChannelDTO(row)), nil
 }
-
 // GetPrimaryByProject returns the primary channel, or nil when the project has none.
 func (s *ChannelConfigService) GetPrimaryByProject(projectID string) (*ChannelConfigDTO, error) {
 	var r models.ChannelConfig
@@ -204,25 +203,6 @@ func (s *ChannelConfigService) GetPrimaryByProject(projectID string) (*ChannelCo
 	dto := s.attachRuntime(s.toChannelDTO(r))
 	return &dto, nil
 }
-
-// GetByAgent returns the channel bound to agentName, or nil.
-func (s *ChannelConfigService) GetByAgent(agentName string) (*ChannelConfigDTO, error) {
-	agentName = strings.TrimSpace(agentName)
-	if agentName == "" {
-		return nil, nil
-	}
-	var r models.ChannelConfig
-	err := s.db.Where("agent_name = ?", agentName).First(&r).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	dto := s.attachRuntime(s.toChannelDTO(r))
-	return &dto, nil
-}
-
 // Create inserts a new config. First channel (or first while no primary) becomes
 // primary; when a primary already exists the new row is secondary.
 // Primary election and agent uniqueness run inside a transaction with row locks
@@ -585,15 +565,6 @@ func (s *ChannelConfigService) syncProjectPmLeader(projectID, agentName string) 
 			"pm_leader_enabled": true,
 			"updated_at":        time.Now(),
 		}).Error
-}
-
-func (s *ChannelConfigService) projectHasPrimary(projectID string) (bool, error) {
-	var n int64
-	if err := s.db.Model(&models.ChannelConfig{}).
-		Where("project_id = ? AND is_primary = ?", projectID, true).Count(&n).Error; err != nil {
-		return false, err
-	}
-	return n > 0, nil
 }
 
 func (s *ChannelConfigService) defaultPrimaryAgent(projectID string) string {

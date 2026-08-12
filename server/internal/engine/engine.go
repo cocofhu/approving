@@ -84,7 +84,7 @@ type Engine struct {
 
 	// issues resolves preview-issue lifecycle on gate resume. Optional in tests
 	// (nil falls back to a short-lived IssueService on e.db).
-	issues *services.IssueService
+	issues IssueResolver
 
 	// gateAuto is an optional async observer for human_gate / proposal_select /
 	// app_preview pauses (PM auto-invoke). Engine never blocks on it.
@@ -103,7 +103,7 @@ type Engine struct {
 	reviewSess map[string]*reviewSession // key: runID|producerNodeID
 
 	// skills looks up Agents for same-project skill_profile runtime gate.
-	skills *services.SkillService
+	skills SkillLookup
 
 	// blobs externalizes PromptImage bytes (optional in unit tests).
 	blobs blob.Store
@@ -145,8 +145,20 @@ func (e *Engine) SetMaxConcurrent(n int) {
 	e.signalDispatch()
 }
 
+// SkillLookup is the narrow Agent catalog port used by the skill_profile
+// project gate. Composition root injects *services.SkillService.
+type SkillLookup interface {
+	Get(name string) (services.Agent, bool)
+}
+
+// IssueResolver is the narrow preview-issue port used on gate resume.
+// Composition root injects *services.IssueService.
+type IssueResolver interface {
+	MarkResolvedByNode(runID, nodeID string) error
+}
+
 // SetSkills wires the Agent catalog used by the skill_profile project gate.
-func (e *Engine) SetSkills(skills *services.SkillService) { e.skills = skills }
+func (e *Engine) SetSkills(skills SkillLookup) { e.skills = skills }
 
 // MaxConcurrent returns the current concurrency cap.
 func (e *Engine) MaxConcurrent() int { return e.sem.Limit() }
@@ -182,11 +194,11 @@ func (e *Engine) recordAudit(rec services.AuditRecord) {
 }
 
 // SetIssueService wires the preview-issue service used on gate resume.
-func (e *Engine) SetIssueService(s *services.IssueService) {
+func (e *Engine) SetIssueService(s IssueResolver) {
 	e.issues = s
 }
 
-func (e *Engine) issueService() *services.IssueService {
+func (e *Engine) issueService() IssueResolver {
 	if e.issues != nil {
 		return e.issues
 	}

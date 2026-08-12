@@ -145,25 +145,6 @@ func normalizeStoredEvents(in []string) []string {
 	return out
 }
 
-// NotifyPoliciesEqual compares two project policies for change detection.
-// Template fields are included so "only change message body" still persists.
-func notifyPoliciesEqual(a, b models.ProjectNotifyPolicy) bool {
-	a = NormalizeProjectNotifyPolicy(a)
-	b = NormalizeProjectNotifyPolicy(b)
-	if a.IsEnabled() != b.IsEnabled() {
-		return false
-	}
-	if !stringSlicesEqual(a.DefaultEvents, b.DefaultEvents) {
-		return false
-	}
-	if !stringSlicesEqual(NormalizeNotifyChannelIDs(a.ChannelIDs), NormalizeNotifyChannelIDs(b.ChannelIDs)) {
-		return false
-	}
-	return a.WaitingHumanTemplate == b.WaitingHumanTemplate &&
-		a.FailedTemplate == b.FailedTemplate &&
-		a.CompletedTemplate == b.CompletedTemplate
-}
-
 // WorkflowNotifyPoliciesEqual compares workflow overrides.
 func WorkflowNotifyPoliciesEqual(a, b models.WorkflowNotifyPolicy) bool {
 	a = NormalizeWorkflowNotifyPolicy(a)

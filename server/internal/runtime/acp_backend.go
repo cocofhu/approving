@@ -234,19 +234,6 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-// IsPlatformAuthEnvKey reports official ACP CLI auth keys that must not be
-// injected via platform-level sandbox.env / opts.Env. Project sandbox env may
-// store them as a workflow baseline (forced Secret); Agent env overrides.
-func IsPlatformAuthEnvKey(k string) bool {
-	switch k {
-	case "CURSOR_API_KEY", "ANTHROPIC_API_KEY", "CODEBUDDY_API_KEY",
-		"TRAE_API_KEY", EnvTraeCLIToken:
-		return true
-	default:
-		return false
-	}
-}
-
 // AgentRuntimeLabel is the capabilities.agent.runtime string for logging.
 func AgentRuntimeLabel(b AcpBackend) string {
 	switch b {

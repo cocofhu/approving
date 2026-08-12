@@ -48,12 +48,18 @@ type Capabilities struct {
 // SupportsChanges reports whether the sandbox declares a change-reporting
 // endpoint. A nil descriptor (older image without /api/capabilities) returns
 // false here; callers should still attempt the endpoint best-effort.
+//
+// Unwired protocol stub: not yet called from Manager / live session paths;
+// retained for Workflow Sandbox Protocol completeness and unit tests.
 func (c *Capabilities) supportsChanges() bool {
 	return c != nil && c.Changes.Endpoint != ""
 }
 
 // SupportsPreview reports whether the sandbox declares an in-container VNC
 // preview desktop (CDP + websockify).
+//
+// Unwired protocol stub: not yet called from Manager / live session paths;
+// retained for Workflow Sandbox Protocol completeness and unit tests.
 func (c *Capabilities) supportsPreview() bool {
 	return c != nil && c.Preview.VNC
 }
@@ -61,6 +67,9 @@ func (c *Capabilities) supportsPreview() bool {
 // FetchCapabilities reads a live sandbox's capability descriptor. Best-effort:
 // a nil/error result means "descriptor unavailable" and the caller proceeds
 // with safe defaults.
+//
+// Unwired protocol stub: written against GET /api/capabilities but not yet
+// wired into Manager session setup; keep in-tree, do not treat as dead code.
 func fetchCapabilities(ctx context.Context, host string, port int) (*Capabilities, error) {
 	if host == "" {
 		host = "127.0.0.1"

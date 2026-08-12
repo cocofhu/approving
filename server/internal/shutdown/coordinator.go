@@ -43,13 +43,6 @@ func (c *Coordinator) IsDraining() bool {
 	return c.draining
 }
 
-// GracePeriod returns the configured grace upper bound.
-func (c *Coordinator) gracePeriod() time.Duration {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.grace
-}
-
 // Deadline is startedAt + grace; waiting loops should stop at this instant.
 func (c *Coordinator) Deadline() time.Time {
 	c.mu.RLock()

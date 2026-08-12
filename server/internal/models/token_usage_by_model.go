@@ -110,22 +110,6 @@ func CloneTokenUsageByModel(src TokenUsageByModel) TokenUsageByModel {
 	return out
 }
 
-// SumTokenUsageByModel returns the component-wise total across buckets.
-// nil byModel → nil; non-nil (incl. empty) → non-nil total (reported).
-func sumTokenUsageByModel(byModel TokenUsageByModel) *TokenUsage {
-	if byModel == nil {
-		return nil
-	}
-	out := &TokenUsage{}
-	for _, u := range byModel {
-		out.InputTokens += u.InputTokens
-		out.OutputTokens += u.OutputTokens
-		out.CacheReadTokens += u.CacheReadTokens
-		out.CacheWriteTokens += u.CacheWriteTokens
-	}
-	return out
-}
-
 // EffectiveUsageByModel returns by-model buckets for aggregation/display.
 // When byModel is present it is returned as-is. When only a legacy flattened
 // Usage exists, it is mapped to a single 「未知/未分桶」 bucket (no guessing

@@ -817,16 +817,6 @@ func validateShellArg(s string) error {
 	return nil
 }
 
-// shellQuote POSIX-single-quotes a trusted fragment. For user-influenced paths
-// use quoteShellPath so disallowed characters are rejected before quoting.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
-// quoteShellPath validates then POSIX-quotes a remote filesystem path.
-func quoteShellPath(path string) (string, error) {
-	if err := validateShellArg(path); err != nil {
-		return "", err
-	}
-	return shellQuote(path), nil
 }

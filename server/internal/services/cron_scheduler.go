@@ -72,28 +72,6 @@ func NewCronScheduler(db *gorm.DB, pm *PmService, sbx *SandboxService, turns *Pm
 	return s
 }
 
-// SetMaxParallel updates concurrency (1–16).
-func (s *CronScheduler) setMaxParallel(n int) {
-	if n < 1 {
-		n = 1
-	}
-	if n > 16 {
-		n = 16
-	}
-	s.parallel.Store(int64(n))
-}
-
-// SetClaimStaleMinutes updates reclaim window (30–1440).
-func (s *CronScheduler) setClaimStaleMinutes(n int) {
-	if n < 30 {
-		n = 30
-	}
-	if n > 1440 {
-		n = 1440
-	}
-	s.staleMin.Store(int64(n))
-}
-
 // Start runs the poll loop until ctx is cancelled.
 func (s *CronScheduler) Start(ctx context.Context) {
 	go func() {

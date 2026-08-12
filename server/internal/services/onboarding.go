@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cocofhu/approving/internal/envauth"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/runtime"
 	"github.com/cocofhu/approving/internal/sandbox"
@@ -198,7 +199,7 @@ func (s *OnboardingService) writeProjectAuth(projectID, backend, apiKey, region 
 		if _, seen := byKey[key]; !seen {
 			order = append(order, key)
 		}
-		byKey[key] = models.EnvEntry{Key: key, Value: value, Secret: secret || runtime.IsPlatformAuthEnvKey(key)}
+		byKey[key] = models.EnvEntry{Key: key, Value: value, Secret: secret || envauth.IsPlatformAuthEnvKey(key)}
 	}
 	upsert(primaryAuthEnvKey(backend), apiKey, true)
 	switch backend {

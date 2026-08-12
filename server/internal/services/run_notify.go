@@ -385,16 +385,6 @@ func runDeepLink(base, runID, kind, nodeID string) string {
 	return base + path
 }
 
-// FormatRunDeepLinkForTest exposes runDeepLink for unit tests.
-func FormatRunDeepLinkForTest(base, runID string) string {
-	return runDeepLink(base, runID, "", "")
-}
-
-// FormatCompletedRunDeepLinkForTest exposes completed deep links for unit tests.
-func FormatCompletedRunDeepLinkForTest(base, runID, nodeID string) string {
-	return runDeepLink(base, runID, models.NotifyKindCompleted, nodeID)
-}
-
 // ClaimReceiptForTest exposes claimReceipt for unit tests.
 func (s *RunNotifyService) ClaimReceiptForTest(runID, nodeID string, iteration int, kind string) (bool, error) {
 	return s.claimReceipt(runID, nodeID, iteration, kind)

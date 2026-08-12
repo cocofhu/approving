@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cocofhu/approving/internal/config"
+	"github.com/cocofhu/approving/internal/envauth"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/runtime"
 	"github.com/cocofhu/approving/internal/sandbox"
@@ -200,7 +201,7 @@ func (s *SandboxService) startAgentContainer(id uint, name, profile, projectID, 
 
 	env := map[string]string{}
 	for k, v := range s.env {
-		if runtime.IsPlatformAuthEnvKey(k) {
+		if envauth.IsPlatformAuthEnvKey(k) {
 			continue
 		}
 		env[k] = v

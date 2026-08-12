@@ -1,7 +1,6 @@
 package channels
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -110,16 +109,6 @@ func classifyProgressMarker(text string) (ProgressEvent, bool) {
 		return ProgressEvent{Kind: m.kind, Summary: truncateRunes(rest, progressSummaryRunes), At: time.Now()}, true
 	}
 	return ProgressEvent{}, false
-}
-
-// ClassifyProgressFromACP extracts agent_message_chunk text from a raw ACP
-// frame and classifies a single chunk. Prefer progressAccumulator for live
-// streaming paths where chunks are short deltas.
-func classifyProgressFromACP(raw json.RawMessage, extract func(json.RawMessage) string) (ProgressEvent, bool) {
-	if extract == nil || len(raw) == 0 {
-		return ProgressEvent{}, false
-	}
-	return ClassifyProgressText(extract(raw))
 }
 
 // progressAccumulator coalesces ACP agent_message_chunk deltas (or Status

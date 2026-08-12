@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cocofhu/approving/internal/envauth"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/sandbox"
 )
@@ -260,7 +261,7 @@ func (c *acpProvider) spec(req NodeReq) (sandbox.Spec, error) {
 	env := map[string]string{}
 
 	for k, v := range c.opts.Env {
-		if IsPlatformAuthEnvKey(k) {
+		if envauth.IsPlatformAuthEnvKey(k) {
 			continue
 		}
 		env[k] = v
