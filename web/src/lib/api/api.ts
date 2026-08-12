@@ -1107,8 +1107,6 @@ export const api = {
   // trailing slash matters so the UI resolves its relative assets/WS against
   // this subpath (document.baseURI).
   sandboxBridgeUrl: (id: number) => `${origin()}/sandbox-bridge/${id}/`,
-  /** @deprecated Use sandboxBridgeUrl. Remove in 0.2.0. */
-  sandboxAcpUrl: (id: number) => `${origin()}/sandbox-bridge/${id}/`,
 
   // misc
   listArtifacts: (params?: {

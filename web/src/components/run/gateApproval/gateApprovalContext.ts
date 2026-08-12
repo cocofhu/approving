@@ -1,0 +1,149 @@
+import { inject, type InjectionKey, type Ref } from 'vue'
+import type { ClarifyImage, Gate, ReactAnnotation, Run } from '@/lib/shared/types'
+import type { GatePrimaryProductRef } from '@/lib/inbox/gateUpstream'
+import type { PlanDoc } from '../PlanView.vue'
+import type { ProposalsDoc } from '../ProposalSelectView.vue'
+
+export type GateApprovalProductEditorExpose = {
+  isDirty: { value: boolean }
+  discard: () => void
+}
+
+export type GateApprovalFeedbackChatExpose = {
+  flushDraft?: () => Promise<boolean>
+  recordIssue?: (payload: {
+    body: string
+    images?: ClarifyImage[]
+    selector?: string
+  }) => Promise<unknown>
+  reload?: () => Promise<void>
+}
+
+/**
+ * Reactive gate-approval UI bag for subviews.
+ * Provided via reactive() so nested refs/computeds auto-unwrap when read as s.xxx.
+ */
+export type GateApprovalState = {
+  gate: Gate
+  run: Run | undefined
+  isMobile: boolean
+  t: (key: string, params?: Record<string, unknown>) => string
+
+  formText: Record<string, string>
+  formImages: Record<string, ClarifyImage[]>
+  resolved: string | null
+  formError: string | null
+  actionSubmitting: boolean
+  productDirty: boolean
+  savedProductContent: Record<string, string>
+  savedProductMeta: Record<string, { etag?: string; updatedAt?: string; sizeBytes?: number }>
+
+  primaryProducts: GatePrimaryProductRef[]
+  excludedProduces: string[]
+  productName: string | null
+  canEditProducts: boolean
+  isVisualBody: boolean
+  isProposalSelect: boolean
+  isAppPreview: boolean
+  bodyTemplate: string
+  usesPreviewIssues: boolean
+  openPreviewIssueCount: number
+  previewIssuesLoading: boolean
+  previewIssuesError: string | null
+  pickedSelector: string
+  pickedElementImage: ClarifyImage | null
+
+  proposalsDoc: ProposalsDoc | null
+  proposalsLoading: boolean
+  planDoc: PlanDoc | null
+  planLoading: boolean
+  productDoc: unknown
+  productHtml: string
+  productLoading: boolean
+  productLoadError: string | null
+  productHasSavedContent: boolean
+
+  reviewingIteration: number | null
+  previewFromArtifactFallback: boolean
+  shouldFillPreview: boolean
+  shouldFitStructured: boolean
+  shouldFillAppPreview: boolean
+  useFillLayout: boolean
+  useUnifiedPreviewBudget: boolean
+  contentFitChromeOffsetPx: number
+  CONTENT_FIT_PREVIEW_MAX_VH: number
+  REVIEW_SHELL_WIDTH_KEY_APPROVAL: string
+
+  shouldHideGateForm: boolean
+  footerActions: NonNullable<Gate['actions']>
+  isColdSession: boolean
+  helpColdText: string
+  helpReviseDetailNoIssuesText: string
+  helpReviseWithIssuesText: string
+  canReactRevise: boolean
+  canRecordIssue: boolean
+  canSubmitReact: boolean
+  showHotPass: boolean
+  showHotReject: boolean
+  hotRejectAllowEmpty: boolean
+  composerRejectLabel: string
+  composerPassDisabled: boolean
+  passAction: NonNullable<Gate['actions']>[number] | undefined
+
+  reactText: string
+  reactImages: ClarifyImage[]
+  reactAnnotations: ReactAnnotation[]
+  reactSending: boolean
+  reactError: string | null
+  reactQueued: { text: string }[]
+  reactThinking: boolean
+  reactStreamText: string
+  reactStreamThought: string
+  reactInterrupted: boolean
+  reactStreamCompletedAt: string | null
+
+  isActionDisabled: (actionId: string) => boolean
+  actionPendingLabel: (id: string) => string
+  actionButtonTitle: (actionId: string) => string
+  onProductSaved: (payload: {
+    name: string
+    content: string
+    etag?: string
+    updatedAt?: string
+    sizeBytes?: number
+  }) => void
+  onProductRefresh: (name: string) => void | Promise<void>
+  retryLoadProduct: () => void
+  onHtmlPreviewPick: (payload: { selector: string; tagName: string; imageDataUrl: string }) => void
+  onAppPreviewPick: (payload: {
+    selector: string
+    tagName: string
+    outerHTML: string
+    url?: string
+  }) => void
+  clearHtmlPreviewPick: () => void
+  loadPreviewIssues: () => void | Promise<void>
+  choose: (id: string) => void
+  recordFeedbackIssue: () => void | Promise<void>
+  sendHotReject: () => void | Promise<void>
+  onComposerPass: () => void
+  onComposerReject: () => void
+  cancelReactRevise: () => void | Promise<void>
+  onSidebarAction: (id: string) => void | Promise<void>
+  renderMarkdown: (md: string) => string
+}
+
+export type GateApprovalContext = {
+  s: GateApprovalState
+  productEditorRef: Ref<GateApprovalProductEditorExpose | null>
+  feedbackChatRef: Ref<GateApprovalFeedbackChatExpose | null>
+  gateStageEl: Ref<HTMLElement | null>
+}
+
+export const gateApprovalKey: InjectionKey<GateApprovalContext> = Symbol('gateApproval')
+
+export function useGateApprovalCtx(): GateApprovalContext {
+  const ctx = inject(gateApprovalKey)
+  if (!ctx) throw new Error('GateApproval context missing')
+  return ctx
+}

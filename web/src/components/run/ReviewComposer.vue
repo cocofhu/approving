@@ -93,10 +93,6 @@ const emit = defineEmits<{
   (e: 'finish'): void
   (e: 'cancel'): void
   (e: 'open-share'): void
-  /** @deprecated Prefer `send`; kept for GateApproval wiring during review-semantics migrate. */
-  (e: 'reject'): void
-  /** @deprecated Prefer `finish`; kept for GateApproval wiring during review-semantics migrate. */
-  (e: 'pass'): void
 }>()
 
 const chatRef = ref<{
@@ -174,12 +170,10 @@ function removeAnnotation(i: number) {
 function onSend() {
   if (!canSubmitGate.value || !props.canReject) return
   emit('send', draft.value, attachments.value, annotations.value)
-  emit('reject')
 }
 function onConfirm() {
   if (!props.canPass || props.passDisabled) return
   emit('finish')
-  emit('pass')
 }
 </script>
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildEnvelope, sanitizeFilename, collectSkillProfiles, missingSkillProfiles, skillProfileIssues } from './workflowIO'
+import { buildEnvelope, sanitizeFilename, collectSkillProfiles, skillProfileIssues } from './workflowIO'
 import type { WFNode } from '../shared/types'
 
 describe('sanitizeFilename', () => {
@@ -43,8 +43,11 @@ describe('skill profile helpers', () => {
     expect(collectSkillProfiles(nodes).sort()).toEqual(['ImplementAgent', 'PreviewAgent'].sort())
   })
 
-  it('reports missing profiles by name', () => {
-    expect(missingSkillProfiles(nodes, ['Other'])).toEqual(['ImplementAgent', 'PreviewAgent'])
+  it('reports missing profiles by name via skillProfileIssues', () => {
+    const issues = skillProfileIssues(nodes, [{ name: 'Other', projectId: 'p' }], 'p')
+    expect(issues.filter((i) => i.reason === 'missing').map((i) => i.name).sort()).toEqual(
+      ['ImplementAgent', 'PreviewAgent'].sort(),
+    )
   })
 
   it('reports missing or foreign skill profiles for import warn', () => {

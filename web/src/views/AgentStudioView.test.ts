@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineComponent, h, nextTick } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
@@ -1985,6 +1988,52 @@ describe('AgentStudioView loading / four-state', () => {
     expect(wrapper.text()).toContain('加载失败')
     expect(wrapper.text()).toContain('重试')
     expect(wrapper.text()).not.toContain('用一个入口拉起整支团队')
+    wrapper.unmount()
+  })
+})
+
+describe('AgentStudioView entry assembly (g3 / Demo main path)', () => {
+  it('assembles Demo tabs via independent panels and keeps route/tab wiring', () => {
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'AgentStudioView.vue'), 'utf8')
+    for (const panel of [
+      'AgentOrgSidebar',
+      'AgentFilesPanel',
+      'AgentMcpPanel',
+      'AgentEnvPanel',
+      'AgentPromptsPanel',
+      'AgentPlatformRulesPanel',
+      'AgentDataPanel',
+      'AgentChatTester',
+      'AgentMetaPanel',
+    ]) {
+      expect(src).toContain(panel)
+    }
+    expect(src).toMatch(/STUDIO_TABS/)
+    expect(src).toMatch(/requestStudioTab/)
+    // Demo main path: files kept alive across tabs; other panels gated by tab.
+    expect(src).toMatch(/v-show="tab === 'files'"/)
+    expect(src).toMatch(/v-if="tab === 'mcp'/)
+    expect(src).toMatch(/v-if="tab === 'env'/)
+    expect(src).toMatch(/v-if="tab === 'prompts'/)
+    expect(src).toMatch(/tab === 'platform-rules'/)
+    expect(src).toMatch(/v-show="tab === 'test'/)
+    expect(src).toMatch(/tab === 'meta'/)
+  })
+
+  it('switches Demo main-path tabs via tab strip without changing labels', async () => {
+    mocks.listAgents.mockResolvedValue([agent()])
+    const wrapper = await mountStudio({ agent: 'legacy' })
+    await flushPromises()
+    const mcpBtn = wrapper.findAll('button').find((b) => /MCP/i.test(b.text()))
+    expect(mcpBtn).toBeTruthy()
+    await mcpBtn!.trigger('click')
+    await flushPromises()
+    expect(wrapper.exists()).toBe(true)
+    const envBtn = wrapper.findAll('button').find((b) => b.text().includes('环境'))
+    expect(envBtn).toBeTruthy()
+    await envBtn!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toMatch(/环境|MCP|文件/)
     wrapper.unmount()
   })
 })

@@ -18,4 +18,19 @@ export default defineConfigWithVueTs(
       'vue/no-mutating-props': 'off',
     },
   },
+  // Dead-symbol anti-churn: warn only under src/lib (not views). Keep as warn —
+  // do not promote to error or enable for views/knip.
+  {
+    files: ['src/lib/**/*.{ts,vue}'],
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+    },
+  },
 )

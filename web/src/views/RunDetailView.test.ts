@@ -4,7 +4,33 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'RunDetailView.vue'), 'utf8')
+const here = dirname(fileURLToPath(import.meta.url))
+const webSrc = join(here, '..')
+
+function read(...parts: string[]) {
+  return readFileSync(join(webSrc, ...parts), 'utf8')
+}
+
+/** Entry + panel shells + orchestration composables (Demo「入口只装配」拆分后的源码图). */
+const viewSrc = read('views/RunDetailView.vue')
+const gatePanelSrc = read('components/run/RunGatePanel.vue')
+const logPanelSrc = read('components/run/RunLogPanel.vue')
+const sandboxPanelSrc = read('components/run/RunSandboxPanel.vue')
+const reviewPanelSrc = read('components/run/RunReviewPanel.vue')
+const liveLogSrc = read('lib/run/useRunDetailLiveLog.ts')
+const wsSrc = read('lib/run/useRunDetailWs.ts')
+const selectionSrc = read('lib/run/useRunDetailSelection.ts')
+
+const src = [
+  viewSrc,
+  gatePanelSrc,
+  logPanelSrc,
+  sandboxPanelSrc,
+  reviewPanelSrc,
+  liveLogSrc,
+  wsSrc,
+  selectionSrc,
+].join('\n')
 
 describe('RunDetailView delete run', () => {
   it('exposes delete button, disabled hint, and confirm modal wiring', () => {
@@ -58,16 +84,16 @@ describe('RunDetailView cancel run', () => {
 
 describe('RunDetailView GateApproval fill-preview', () => {
   it('always passes fill-preview=true (desktop content-fit), not isMobile', () => {
-    expect(src).toMatch(/<GateApproval[\s\S]*?:fill-preview="true"/)
+    expect(gatePanelSrc).toMatch(/<GateApproval[\s\S]*?:fill-preview="true"/)
     expect(src).not.toMatch(/:fill-preview="isMobile"/)
     expect(src).not.toMatch(/fit-visual-preview/)
     expect(src).not.toMatch(/fitVisualPreview/)
   })
 
   it('passes mobile-fill-remaining for Run-detail visual layout isolation', () => {
-    expect(src).toMatch(/<GateApproval[\s\S]*?:mobile-fill-remaining="true"/)
-    expect(src).toMatch(/data-testid="run-detail-right-panel"/)
-    expect(src).toMatch(/min-h-0 flex-1/)
+    expect(gatePanelSrc).toMatch(/<GateApproval[\s\S]*?:mobile-fill-remaining="true"/)
+    expect(viewSrc).toMatch(/data-testid="run-detail-right-panel"/)
+    expect(viewSrc).toMatch(/min-h-0 flex-1/)
   })
 })
 
@@ -227,7 +253,7 @@ describe('RunDetailView ACP log rehydrate state machine', () => {
     // Hard remount restores cache after clearing reactive pages.
     expect(src).toMatch(/clearReactiveRecord\(eventPages\)[\s\S]*restoreEventPagesFromCache\(id\)/)
     // Empty WS frames must not rewrite timeline / sync empty cache.
-    expect(src).toMatch(/applyLiveWsAcpPage\(eventPages\[m\.nodeId\], wsEvents\)/)
+    expect(src).toMatch(/applyLiveWsAcpPage\(eventPages\[m\.nodeId\], wsEvents\)|applyLiveWsAcpPage\(eventPages\[nodeId\], wsEvents\)/)
     expect(src).toMatch(/if \(mergedPage\)/)
     // WS merge must not promote rehydrate / clear soft warn.
     expect(src).toMatch(/WS only merges into the snapshot/)
@@ -268,8 +294,8 @@ describe('RunDetailView desktop review layout budget', () => {
   })
 
   it('passes sidebar-width=REVIEW_SIDEBAR only on Run Detail review ReviewShell', () => {
-    expect(src).toMatch(
-      /nodeTab === 'review'[\s\S]*?<ReviewShell[\s\S]*?:sidebar-width="REVIEW_SIDEBAR"[\s\S]*?:storage-key="REVIEW_SHELL_WIDTH_KEY_REVIEW"/,
+    expect(reviewPanelSrc).toMatch(
+      /<ReviewShell[\s\S]*?:sidebar-width="REVIEW_SIDEBAR"[\s\S]*?:storage-key="REVIEW_SHELL_WIDTH_KEY_REVIEW"/,
     )
     // Default ReviewShell width stays 400 elsewhere — this file must not change the default.
     expect(src).not.toMatch(/sidebarWidth:\s*300/)
@@ -383,5 +409,28 @@ describe('RunDetailView clarify session narrow update (g3.2)', () => {
     expect(src).toMatch(/if \(isClarifySessionBusy\(\)\) return/)
     expect(src).toMatch(/liveBusy\[m\.nodeId\] = true/)
     expect(src).toMatch(/m\.event === 'turn_begin'/)
+  })
+})
+
+describe('RunDetailView entry assembly (g4)', () => {
+  it('assembles major panels via Run*Panel shells and useRunDetail* orchestration', () => {
+    expect(viewSrc).toMatch(/RunGatePanel/)
+    expect(viewSrc).toMatch(/RunOutputPanel/)
+    expect(viewSrc).toMatch(/RunLogPanel/)
+    expect(viewSrc).toMatch(/RunSandboxPanel/)
+    expect(viewSrc).toMatch(/useRunDetailLiveLog/)
+    expect(viewSrc).toMatch(/useRunDetailWs/)
+    expect(viewSrc).toMatch(/useRunDetailSelection/)
+    expect(viewSrc).toMatch(/<AppTabs :tabs="nodeTabs" v-model="nodeTab"/)
+  })
+
+  it('keeps Demo main-path nodeTab switching for gate/log/sandbox/output', () => {
+    expect(selectionSrc).toMatch(/nodeTabs/)
+    expect(selectionSrc).toMatch(/nodeTab/)
+    expect(viewSrc).toMatch(/nodeTab === 'gate'/)
+    expect(viewSrc).toMatch(/nodeTab === 'log'/)
+    expect(viewSrc).toMatch(/nodeTab === 'sandbox'/)
+    expect(viewSrc).toMatch(/RunOutputPanel/)
+    expect(gatePanelSrc).toMatch(/GateApproval/)
   })
 })
