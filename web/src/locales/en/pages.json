@@ -110,6 +110,21 @@
         "hint": "Cards open a summary first; open the full run detail when ready. Closing keeps you on the board.",
         "dismiss": "Keep browsing",
         "openDetail": "Open run detail"
+      },
+      "statusList": {
+        "subtitle": "This project · {title} · {total} total",
+        "subtitleFailed": "{title} · Failed to load — retry available",
+        "range": "Showing {shown} / {total}",
+        "rangeComplete": "All loaded {shown} / {total} · no more",
+        "rangeInitialFailed": "First page not loaded",
+        "rangeMoreFailed": "Showing {shown} / {total} · next page failed",
+        "loadMore": "Load more",
+        "loading": "Loading…",
+        "retry": "Retry",
+        "emptyTitle": "No runs in this status",
+        "emptyHint": "There are no \"{title}\" runs in this project. This is not a load failure.",
+        "errorTitle": "Failed to load",
+        "errorHint": "Could not fetch runs for this status. This is not an empty list."
       }
     },
     "projectList": {
