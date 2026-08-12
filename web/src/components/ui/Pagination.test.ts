@@ -26,6 +26,7 @@ function mountPager(
     loading: boolean
     disabled: boolean
     pageSizeOptions: number[]
+    summaryOverride: string
     summaryTestId: string
     pageSizeTestId: string
   }> = {},
