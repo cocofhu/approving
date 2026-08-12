@@ -45,7 +45,7 @@ const secretsKeyConfigured = ref<boolean | undefined>(undefined)
 
 const editingId = ref<string | null>(null)
 const isNew = ref(false)
-const chType = ref<'qq' | 'wecom' | 'feishu'>('qq')
+const chType = ref<'qq' | 'wecom' | 'feishu' | 'dingtalk'>('qq')
 const saveError = ref('')
 const notifyReceipts = ref<{ runId: string; kind: string; status?: string; error?: string; createdAt: string }[]>([])
 const chRegion = ref<'cn' | 'lark'>('cn')
@@ -179,12 +179,14 @@ function toggleChMcp(id: string) {
   chEnabledMcps.value = PM_MCP_OPTIONS.map((o) => o.id).filter((x) => set.has(x))
 }
 
-function defaultChannelName(type: 'qq' | 'wecom' | 'feishu'): string {
+function defaultChannelName(type: 'qq' | 'wecom' | 'feishu' | 'dingtalk'): string {
   switch (type) {
     case 'wecom':
       return t('pages.projectDetail.pm.channel.defaultNameWecom')
     case 'feishu':
       return t('pages.projectDetail.pm.channel.defaultNameFeishu')
+    case 'dingtalk':
+      return t('pages.projectDetail.pm.channel.defaultNameDingTalk')
     default:
       return t('pages.projectDetail.pm.channel.defaultNameQQ')
   }
@@ -222,7 +224,7 @@ function resetForm() {
 function applyForm(ch: ChannelConfig) {
   editingId.value = ch.id
   isNew.value = false
-  chType.value = ch.type === 'feishu' ? 'feishu' : ch.type === 'wecom' ? 'wecom' : 'qq'
+  chType.value = ch.type === 'dingtalk' ? 'dingtalk' : ch.type === 'feishu' ? 'feishu' : ch.type === 'wecom' ? 'wecom' : 'qq'
   saveError.value = ''
   chEnabled.value = ch.enabled
   chName.value = ch.name || ''
@@ -312,13 +314,14 @@ function cancelEdit() {
   tab.value = 'list'
 }
 
-function setChannelType(next: 'qq' | 'wecom' | 'feishu') {
+function setChannelType(next: 'qq' | 'wecom' | 'feishu' | 'dingtalk') {
   chType.value = next
   if (!isNew.value) return
   const defaults = [
     t('pages.projectDetail.pm.channel.defaultNameQQ'),
     t('pages.projectDetail.pm.channel.defaultNameWecom'),
     t('pages.projectDetail.pm.channel.defaultNameFeishu'),
+    t('pages.projectDetail.pm.channel.defaultNameDingTalk'),
   ]
   if (!chName.value.trim() || defaults.includes(chName.value)) {
     chName.value = defaultChannelName(next)
@@ -670,7 +673,9 @@ onUnmounted(() => {
                     ? 'border-accent/55 bg-accent-dim text-accent-2'
                     : ch.type === 'feishu'
                       ? 'border-cyan-400/40 bg-cyan-400/10 text-cyan-300'
-                      : 'border-sky-400/40 bg-sky-400/10 text-sky-300'
+                      : ch.type === 'dingtalk'
+                        ? 'border-blue-400/40 bg-blue-400/10 text-blue-300'
+                        : 'border-sky-400/40 bg-sky-400/10 text-sky-300'
                 "
               >
                 {{
@@ -678,7 +683,9 @@ onUnmounted(() => {
                     ? t('pages.projectDetail.pm.channel.typeWecom')
                     : ch.type === 'feishu'
                       ? t('pages.projectDetail.pm.channel.badgeFeishu')
-                      : t('pages.projectDetail.pm.channel.badgeQQ')
+                      : ch.type === 'dingtalk'
+                        ? t('pages.projectDetail.pm.channel.badgeDingTalk')
+                        : t('pages.projectDetail.pm.channel.badgeQQ')
                 }}
               </span>
               <span class="truncate">{{ ch.name || ch.appId }}</span>
@@ -815,6 +822,16 @@ onUnmounted(() => {
                 >
                   {{ t('pages.projectDetail.pm.channel.typeFeishu') }}
                 </button>
+                <button
+                  type="button"
+                  class="flex-1 border-l border-line px-3 py-2 text-[13px]"
+                  :class="chType === 'dingtalk' ? 'bg-accent-dim text-txt' : 'bg-base text-txt2'"
+                  :disabled="!isNew"
+                  data-testid="channel-type-dingtalk"
+                  @click="isNew && setChannelType('dingtalk')"
+                >
+                  {{ t('pages.projectDetail.pm.channel.typeDingTalk') }}
+                </button>
               </div>
               <p v-if="!isNew" class="mt-1 text-[11px] text-txt3">
                 {{ t('pages.projectDetail.pm.channel.typeFrozen') }}
@@ -950,6 +967,13 @@ onUnmounted(() => {
                 <AppSwitch v-model="chMarkdown" :aria-label="t('pages.projectDetail.pm.channel.qqMarkdown')" />
               </label>
             </div>
+            <p
+              v-else-if="chType === 'dingtalk'"
+              class="mt-3 text-[11px] leading-snug text-txt3"
+              data-testid="channel-dingtalk-hint"
+            >
+              {{ t('pages.projectDetail.pm.channel.dingTalkHint') }}
+            </p>
             <p v-else class="mt-3 text-[11px] leading-snug text-txt3" data-testid="channel-feishu-hint">
               {{ t('pages.projectDetail.pm.channel.longConnHint') }}
             </p>

@@ -236,7 +236,7 @@ async function copyAssistantText(ev: Event) {
 const showThreadsAside = computed(() => !isMobile.value || mobileView.value === 'threads')
 const showChatSection = computed(() => !isMobile.value || mobileView.value === 'chat')
 
-/** Channel synthetic user id, e.g. qq:guild:… / wecom:c2c:… / feishu:c2c:… */
+/** Channel synthetic user id, e.g. qq:guild:… / wecom:c2c:… / feishu:c2c:… / dingtalk:c2c:… */
 function channelTypeOf(th: ChatThread | undefined | null): string {
   return parseChannelUserId(th?.userId || '')?.type || ''
 }
@@ -251,6 +251,8 @@ function channelBadgeLabel(th: ChatThread | undefined | null): string {
       return t('pages.projectDetail.pm.channelBadgeWecom')
     case 'feishu':
       return t('pages.projectDetail.pm.channelBadgeFeishu')
+    case 'dingtalk':
+      return t('pages.projectDetail.pm.channelBadgeDingTalk')
     default:
       return t('pages.projectDetail.pm.channelBadgeQQ')
   }
@@ -262,6 +264,8 @@ function channelBadgeClass(th: ChatThread | undefined | null): string {
       return 'border-accent/55 bg-accent-dim text-accent-2'
     case 'feishu':
       return 'border-cyan-400/40 bg-cyan-400/10 text-cyan-300'
+    case 'dingtalk':
+      return 'border-blue-400/40 bg-blue-400/10 text-blue-300'
     default:
       return 'border-accent-2/35 bg-accent/15 text-accent-2'
   }
@@ -273,6 +277,8 @@ function channelReadonlyTitle(th: ChatThread | undefined | null): string {
       return t('pages.projectDetail.pm.channelReadonlyTitleWecom')
     case 'feishu':
       return t('pages.projectDetail.pm.channelReadonlyTitleFeishu')
+    case 'dingtalk':
+      return t('pages.projectDetail.pm.channelReadonlyTitleDingTalk')
     default:
       return t('pages.projectDetail.pm.channelReadonlyTitle')
   }
@@ -284,6 +290,8 @@ function channelReadonlyHint(th: ChatThread | undefined | null): string {
       return t('pages.projectDetail.pm.channelReadonlyHintWecom')
     case 'feishu':
       return t('pages.projectDetail.pm.channelReadonlyHintFeishu')
+    case 'dingtalk':
+      return t('pages.projectDetail.pm.channelReadonlyHintDingTalk')
     default:
       return t('pages.projectDetail.pm.channelReadonlyHint')
   }
@@ -306,7 +314,9 @@ function channelSourceLine(th: ChatThread | undefined | null): string {
       ? t('pages.projectDetail.pm.channelSourceWecom')
       : kind === 'feishu'
         ? t('pages.projectDetail.pm.channelSourceFeishu')
-        : t('pages.projectDetail.pm.channelSourceQq')
+        : kind === 'dingtalk'
+          ? t('pages.projectDetail.pm.channelSourceDingTalk')
+          : t('pages.projectDetail.pm.channelSourceQq')
   const peer = channelPeerId(th?.userId || '')
   if (th?.unspoken) {
     return `${src} · ${t('pages.projectDetail.pm.unspoken')}${peer ? ` · ${peer}` : ''}`

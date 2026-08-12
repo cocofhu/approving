@@ -709,7 +709,7 @@ func processingAckText(userText string) string {
 }
 
 func processingAckTextFor(channelType, userText string) string {
-	if channelType == "feishu" {
+	if channelType == "feishu" || channelType == "dingtalk" {
 		return "已收到，正在处理：" + truncateRunes(userText, ackSummaryRunes)
 	}
 	return processingAckText(userText)

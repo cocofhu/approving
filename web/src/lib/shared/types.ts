@@ -278,17 +278,49 @@ export interface ProjectMemoryItem {
 }
 
 /** Project-scoped requirement draft (「需求草稿」); status open|done. */
+export type RequirementDraftKind = 'requirement' | 'milestone'
+
 export interface RequirementDraft {
   id: string
   projectId: string
   title: string
   bodyMarkdown: string
   status: 'open' | 'done'
+  /** requirement|milestone; legacy rows default to requirement. */
+  kind: RequirementDraftKind
+  /** YYYY-MM-DD begin date (requirements); empty when unscheduled. */
+  startAt: string
+  /** YYYY-MM-DD end date or milestone date; empty when unscheduled. */
+  dueAt: string
+  /** 0–100; independent of status. */
+  progress: number
+  /** Optional top-level requirement id (one-level grouping). */
+  parentId: string | null
   createdAt: string
   updatedAt: string
 }
 
 export type RequirementDraftStatusFilter = 'open' | 'done' | 'all'
+
+export type RequirementDraftViewMode = 'edit' | 'gantt' | 'milestones'
+
+export interface RequirementDraftSchedulePatch {
+  kind?: RequirementDraftKind
+  startAt?: string
+  dueAt?: string
+  progress?: number
+  /** Omit to leave unchanged; null or '' clears parent. */
+  parentId?: string | null
+}
+
+export interface RequirementDraftCreateBody {
+  kind?: RequirementDraftKind
+  title?: string
+  startAt?: string
+  dueAt?: string
+  progress?: number
+  parentId?: string | null
+}
 
 export interface AgentCronJob {
   id: string

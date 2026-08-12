@@ -1,15 +1,25 @@
 package services
 
 import (
+	"sync"
+
 	"github.com/cocofhu/approving/internal/models"
 
 	"gorm.io/gorm"
 )
 
-// DashboardService computes summary statistics for the dashboard.
+// DashboardService computes summary statistics for the dashboard
+// and the lightweight platform-status payload for AppTopbar.
 type DashboardService struct {
 	db       *gorm.DB
 	projects *ProjectService
+
+	// Process-local cache for 5m token buckets (platform-status hot path).
+	statusMu       sync.Mutex
+	statusCache    map[string]platformStatusCacheEntry
+	statusInflight map[string]*platformStatusCall
+	// loadPlatformUsageHook is optional; tests inject to observe singleflight.
+	loadPlatformUsageHook func()
 }
 
 // NewDashboardService builds the service. projects may be nil (Token fields stay null).

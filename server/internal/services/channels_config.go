@@ -46,9 +46,10 @@ var (
 
 // supportedChannelTypes gates the Type field. Extend as adapters are added.
 var supportedChannelTypes = map[string]bool{
-	models.ChannelTypeQQ:     true,
-	models.ChannelTypeWeCom:  true,
-	models.ChannelTypeFeishu: true,
+	models.ChannelTypeQQ:       true,
+	models.ChannelTypeWeCom:    true,
+	models.ChannelTypeFeishu:   true,
+	models.ChannelTypeDingTalk: true,
 }
 
 // ChannelConfigInput is the create/update payload (plaintext AppSecret).
@@ -766,26 +767,47 @@ func (s *ChannelConfigService) toChannelDTO(r models.ChannelConfig) ChannelConfi
 }
 
 // normalizeChannelConfig stores Feishu region in Config (cn default / lark)
-// and never introduces Webhook Token / Encrypt Key fields.
+// and never introduces Webhook Token / Encrypt Key / independent robotCode fields.
 func normalizeChannelConfig(channelType string, cfg map[string]any) map[string]any {
-	if channelType != models.ChannelTypeFeishu {
+	switch channelType {
+	case models.ChannelTypeDingTalk:
+		out := map[string]any{}
+		for k, v := range cfg {
+			if isDingTalkStrippedConfigKey(k) {
+				continue
+			}
+			out[k] = v
+		}
+		return out
+	case models.ChannelTypeFeishu:
+		out := map[string]any{}
+		for k, v := range cfg {
+			if k == "token" || k == "encryptKey" || k == "encrypt_key" || k == "verificationToken" {
+				continue
+			}
+			out[k] = v
+		}
+		region := strings.ToLower(strings.TrimSpace(StrFromAny(out["region"])))
+		switch region {
+		case "lark", "international", "intl", "global":
+			out["region"] = "lark"
+		default:
+			out["region"] = "cn"
+		}
+		return out
+	default:
 		return cfg
 	}
-	out := map[string]any{}
-	for k, v := range cfg {
-		if k == "token" || k == "encryptKey" || k == "encrypt_key" || k == "verificationToken" {
-			continue
-		}
-		out[k] = v
-	}
-	region := strings.ToLower(strings.TrimSpace(StrFromAny(out["region"])))
-	switch region {
-	case "lark", "international", "intl", "global":
-		out["region"] = "lark"
+}
+
+func isDingTalkStrippedConfigKey(k string) bool {
+	switch k {
+	case "token", "encryptKey", "encrypt_key", "verificationToken",
+		"robotCode", "robot_code", "webhook", "sessionWebhook":
+		return true
 	default:
-		out["region"] = "cn"
+		return false
 	}
-	return out
 }
 
 // StrFromAny stringifies a Config map value.

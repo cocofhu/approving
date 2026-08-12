@@ -53,6 +53,7 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.GET("/live", h.Live)
 		api.GET("/node-registry", h.NodeRegistry)
 		api.GET("/stats/dashboard", h.DashboardStats)
+		api.GET("/stats/platform-status", h.PlatformStatus)
 
 		api.GET("/settings", h.GetSettings)
 		api.PUT("/settings", h.UpdateSettings)
@@ -83,6 +84,7 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.PUT("/projects/:id/requirement-drafts/:draftId", h.UpdateRequirementDraft)
 		api.PATCH("/projects/:id/requirement-drafts/:draftId", h.UpdateRequirementDraft)
 		api.PATCH("/projects/:id/requirement-drafts/:draftId/status", h.PatchRequirementDraftStatus)
+		api.PATCH("/projects/:id/requirement-drafts/:draftId/schedule", h.PatchRequirementDraftSchedule)
 		api.DELETE("/projects/:id/requirement-drafts/:draftId", h.DeleteRequirementDraft)
 
 		api.GET("/agent-teams/templates", h.ListAgentTeamTemplates)

@@ -278,7 +278,7 @@ func FormatProgressText(ev ProgressEvent) string {
 // FormatProgressTextFor forks Feishu Demo copy ([进度] prefix) without
 // changing existing QQ wording.
 func FormatProgressTextFor(channelType string, ev ProgressEvent) string {
-	if channelType != "feishu" {
+	if channelType != "feishu" && channelType != "dingtalk" {
 		return FormatProgressText(ev)
 	}
 	sum := strings.TrimSpace(ev.Summary)

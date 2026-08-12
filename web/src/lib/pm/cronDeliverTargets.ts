@@ -17,7 +17,7 @@ type ThreadLike = {
 }
 
 const VALID_SCENES = new Set(['c2c', 'group', 'guild'])
-const CHANNEL_TYPES = new Set(['qq', 'wecom', 'feishu'])
+const CHANNEL_TYPES = new Set(['qq', 'wecom', 'feishu', 'dingtalk'])
 
 export function parseChannelUserId(userId: string): { type: string; remainder: string } | null {
   const uid = String(userId || '')

@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/cocofhu/approving/internal/nodereg"
+	"github.com/cocofhu/approving/internal/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -84,4 +87,35 @@ func (h *Handlers) NodeRegistry(c *gin.Context) {
 // DashboardStats returns summary counters.
 func (h *Handlers) DashboardStats(c *gin.Context) {
 	c.JSON(http.StatusOK, h.Dash.Compute())
+}
+
+// PlatformStatus returns AppTopbar StatusMetrics (Auth-protected via /api group).
+// Query: timezone=IANA (preferred), utcOffsetMinutes=int (fallback, east of UTC positive).
+func (h *Handlers) PlatformStatus(c *gin.Context) {
+	if h.Dash == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "dashboard unavailable"})
+		return
+	}
+	q := services.PlatformStatusQuery{
+		Timezone: c.Query("timezone"),
+	}
+	if raw := strings.TrimSpace(c.Query("utcOffsetMinutes")); raw != "" {
+		mins, err := strconv.Atoi(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid utcOffsetMinutes"})
+			return
+		}
+		q.UTCOffsetMinutes = &mins
+	}
+	st, err := h.Dash.PlatformStatus(c.Request.Context(), q)
+	if err != nil {
+		if errors.Is(err, services.ErrInvalidTokenStatsTimezone) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, st)
 }

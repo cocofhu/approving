@@ -16,6 +16,9 @@ func ChannelPreamble(channelType string) string {
 	case models.ChannelTypeFeishu:
 		imHint = "系统会按需转发到飞书，勿刷屏"
 		tableRule = "可使用 Markdown 表格提升结构化表达。"
+	case models.ChannelTypeDingTalk:
+		imHint = "系统会按需转发到钉钉，勿刷屏"
+		tableRule = "可使用 Markdown 表格提升结构化表达。"
 	case models.ChannelTypeQQ:
 		imHint = "系统会按需转发到 QQ，勿刷屏"
 	}

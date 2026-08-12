@@ -1378,11 +1378,21 @@ func TestChannelPreambleRequiresProgressMarkers(t *testing.T) {
 	if !strings.Contains(fs, "可使用 Markdown 表格") {
 		t.Fatalf("feishu preamble must allow tables: %s", fs)
 	}
+	dt := ChannelPreamble("dingtalk")
+	if strings.Contains(dt, "转发到 QQ") || !strings.Contains(dt, "钉钉") {
+		t.Fatalf("dingtalk preamble: %s", dt)
+	}
+	if !strings.Contains(dt, "可使用 Markdown 表格") {
+		t.Fatalf("dingtalk preamble must allow tables: %s", dt)
+	}
 }
 
 func TestFeishuAckAndProgressCopy(t *testing.T) {
 	if !strings.HasPrefix(processingAckTextFor("feishu", "hi"), "已收到，正在处理") {
 		t.Fatal("feishu ACK copy")
+	}
+	if !strings.HasPrefix(processingAckTextFor("dingtalk", "hi"), "已收到，正在处理") {
+		t.Fatal("dingtalk ACK copy")
 	}
 	if !strings.HasPrefix(processingAckTextFor("qq", "hi"), "收到，正在处理") {
 		t.Fatal("qq ACK must stay unchanged")
@@ -1390,6 +1400,9 @@ func TestFeishuAckAndProgressCopy(t *testing.T) {
 	ev := ProgressEvent{Kind: ProgressMilestone, Summary: "已汇总"}
 	if FormatProgressTextFor("feishu", ev) != "[进度] 已汇总" {
 		t.Fatalf("feishu progress=%q", FormatProgressTextFor("feishu", ev))
+	}
+	if FormatProgressTextFor("dingtalk", ev) != "[进度] 已汇总" {
+		t.Fatalf("dingtalk progress=%q", FormatProgressTextFor("dingtalk", ev))
 	}
 	if FormatProgressTextFor("qq", ev) != "进度：已汇总" {
 		t.Fatalf("qq progress=%q", FormatProgressTextFor("qq", ev))
