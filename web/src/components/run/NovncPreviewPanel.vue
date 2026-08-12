@@ -17,6 +17,8 @@ const emit = defineEmits<{
   /** Element picked in inspect mode but not yet added to chat (last staged). */
   (e: 'staged-pick', payload: AppPreviewPickPayload | null): void
   (e: 'open-share'): void
+  /** Public ticket channel: parent must re-exchange ticket before reconnecting. */
+  (e: 'reconnect-request'): void
 }>()
 
 const props = withDefaults(
@@ -311,6 +313,12 @@ function connect() {
 }
 
 function reconnect() {
+  // Short-lived public tickets expire; reusing the first wsUrl fails after TTL.
+  // Ask parent (PublicAppPreviewPanel) to exchange a fresh ticket and remount.
+  if ((props.wsUrl || '').trim()) {
+    emit('reconnect-request')
+    return
+  }
   connect()
 }
 

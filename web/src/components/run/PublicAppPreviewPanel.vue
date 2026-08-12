@@ -232,6 +232,7 @@ function retry() {
           fill
           @pick="onPick"
           @staged-pick="onStagedPick"
+          @reconnect-request="retry"
         />
         <iframe
           v-else-if="activeIsApi && apiIframeUrl"

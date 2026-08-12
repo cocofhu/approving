@@ -155,10 +155,6 @@ func (h *Handlers) PublicPreviewVNC(c *gin.Context) {
 	}
 	defer unregister()
 
-	linkWatchDone := make(chan struct{})
-	defer close(linkWatchDone)
-	go h.watchPublicPreviewLink(claims.TokenHash, conn, linkWatchDone)
-
 	var wmu sync.Mutex
 	writeJSON := func(v any) error {
 		wmu.Lock()
@@ -173,6 +169,11 @@ func (h *Handlers) PublicPreviewVNC(c *gin.Context) {
 	pushJSON := func(v any) {
 		_ = writeJSON(v)
 	}
+
+	linkWatchDone := make(chan struct{})
+	defer close(linkWatchDone)
+	// Share write lock with RFB path — gorilla/websocket forbids concurrent writers.
+	go h.watchPublicPreviewLink(claims.TokenHash, writeJSON, conn.Close, linkWatchDone)
 
 	openCtx, cancel := context.WithTimeout(c.Request.Context(), 90*time.Second)
 	defer cancel()
@@ -249,8 +250,9 @@ func (h *Handlers) PublicPreviewVNC(c *gin.Context) {
 }
 
 // PublicPreviewAPIProxy reverse-proxies API ports via opaque ticket path (leak-free).
+// Must remain embeddable in same-origin public-page iframes (no DENY / frame-ancestors none).
 func (h *Handlers) PublicPreviewAPIProxy(c *gin.Context) {
-	applyPublicSecurityHeaders(c)
+	applyPublicPreviewAPIHeaders(c)
 	if h.GateShare == nil || h.GateShareTickets == nil || h.MCP == nil || h.Preview == nil {
 		c.String(http.StatusServiceUnavailable, "preview unavailable")
 		return
@@ -309,7 +311,7 @@ func (h *Handlers) PublicPreviewAPIProxy(c *gin.Context) {
 	prefix := fmt.Sprintf("/public/gate-approvals/preview-api/%s/", ticket)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.FlushInterval = 100 * time.Millisecond
-	proxy.ModifyResponse = previewModifyResponse(prefix)
+	proxy.ModifyResponse = publicPreviewAPIModifyResponse(prefix)
 	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
 		log.Warn().Err(err).Int("port", port).Msg("public preview-api upstream unreachable")
 		w.WriteHeader(http.StatusBadGateway)
@@ -377,7 +379,12 @@ func (h *Handlers) publicTicketLinkActive(tokenHash string) bool {
 	return link.UsedAt == nil && link.RevokedAt == nil && time.Now().Before(link.ExpiresAt)
 }
 
-func (h *Handlers) watchPublicPreviewLink(tokenHash string, conn *websocket.Conn, done <-chan struct{}) {
+func (h *Handlers) watchPublicPreviewLink(
+	tokenHash string,
+	writeJSON func(any) error,
+	closeFn func() error,
+	done <-chan struct{},
+) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -388,9 +395,66 @@ func (h *Handlers) watchPublicPreviewLink(tokenHash string, conn *websocket.Conn
 			if h.publicTicketLinkActive(tokenHash) {
 				continue
 			}
-			_ = conn.WriteJSON(gin.H{"type": "closed", "reason": "share_link_inactive"})
-			_ = conn.Close()
+			if writeJSON != nil {
+				_ = writeJSON(gin.H{"type": "closed", "reason": "share_link_inactive"})
+			}
+			if closeFn != nil {
+				_ = closeFn()
+			}
 			return
 		}
 	}
+}
+
+// applyPublicPreviewAPIHeaders sets cache/referrer/nosniff only and clears any
+// framing deny headers that middleware may have applied. Unlike
+// applyPublicSecurityHeaders, this path must remain embeddable same-origin.
+func applyPublicPreviewAPIHeaders(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	c.Header("Pragma", "no-cache")
+	c.Header("Referrer-Policy", "no-referrer")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Writer.Header().Del("X-Frame-Options")
+	c.Writer.Header().Del("Content-Security-Policy")
+	c.Writer.Header().Del("Access-Control-Allow-Origin")
+	c.Writer.Header().Del("Access-Control-Allow-Methods")
+	c.Writer.Header().Del("Access-Control-Allow-Headers")
+}
+
+// publicPreviewAPIModifyResponse rewrites HTML under the opaque ticket prefix and
+// strips upstream framing headers that would block same-origin iframe embedding.
+func publicPreviewAPIModifyResponse(prefix string) func(*http.Response) error {
+	inner := previewModifyResponse(prefix)
+	return func(resp *http.Response) error {
+		if err := inner(resp); err != nil {
+			return err
+		}
+		resp.Header.Del("X-Frame-Options")
+		csp := resp.Header.Get("Content-Security-Policy")
+		cleaned := stripCSPDirective(csp, "frame-ancestors")
+		if cleaned == "" {
+			resp.Header.Set("Content-Security-Policy", "frame-ancestors 'self'")
+		} else {
+			resp.Header.Set("Content-Security-Policy", cleaned+"; frame-ancestors 'self'")
+		}
+		return nil
+	}
+}
+
+func stripCSPDirective(csp, name string) string {
+	parts := strings.Split(csp, ";")
+	out := make([]string, 0, len(parts))
+	prefix := strings.ToLower(strings.TrimSpace(name))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		lower := strings.ToLower(p)
+		if lower == prefix || strings.HasPrefix(lower, prefix+" ") {
+			continue
+		}
+		out = append(out, p)
+	}
+	return strings.Join(out, "; ")
 }
