@@ -78,7 +78,12 @@ let clarifyLinkUsed = false
 const originalFetch = window.fetch.bind(window)
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-  if (url.includes('/public/gate-approvals/preview')) {
+  if (
+    url.includes('/public/gate-approvals/preview') &&
+    !url.includes('/preview-ticket') &&
+    !url.includes('/preview-vnc') &&
+    !url.includes('/preview-api')
+  ) {
     const params = new URLSearchParams(location.search)
     const scene = params.get('scene') || ''
     if (params.get('slowPreview')) {
@@ -149,7 +154,11 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
           productKind: 'app_preview',
           productName: 'app_preview',
           actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
-          turns: [{ role: 'agent', text: '应用预览已就绪（set_preview 可达）。公开页为只读占位。', at: '2026-08-01T00:00:00Z' }],
+          ports: [
+            { port: 5173, label: 'Web · 5173', mode: 'vnc' },
+            { port: 8080, label: 'API · 8080', mode: 'api' },
+          ],
+          turns: [{ role: 'agent', text: '应用预览已就绪（set_preview 可达）。公开页可远程与取点。', at: '2026-08-01T00:00:00Z' }],
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       )
@@ -172,6 +181,29 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
         upstream: { name: 'clarified_requirement.json', title: '澄清', summary: '已有澄清需求文档，可对照审阅当前主产物' },
         visualHtmlHash: 'e2e-vh',
         upstreamHash: 'e2e-up',
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+  if (url.includes('/public/gate-approvals/preview-ticket')) {
+    let port = 5173
+    try {
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
+      if (typeof body.port === 'number') port = body.port
+    } catch {
+      /* ignore */
+    }
+    const mode = port === 8080 ? 'api' : 'vnc'
+    const ticket = `e2e-ticket-${port}`
+    return new Response(
+      JSON.stringify({
+        status: 'active',
+        ticket,
+        expiresAt: new Date(Date.now() + 120_000).toISOString(),
+        port,
+        mode,
+        wsPath: mode === 'vnc' ? '/public/gate-approvals/preview-vnc/ws' : undefined,
+        iframePath: mode === 'api' ? `/public/gate-approvals/preview-api/${ticket}/` : undefined,
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     )

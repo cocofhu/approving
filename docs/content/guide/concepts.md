@@ -31,7 +31,7 @@ Approving 把 coding agent 变成工作流里的步骤。你在有限状态机�
 
 ### 待复审临时链接（Inbox kind=review / app_preview / clarify）
 
-Inbox **待复审**、**应用预览**与 **待澄清**卡片使用同一套管理面板与令牌规则（`ShareLinkKindReview`），认证 API 走 `/api/runs/:id/reviews/:nodeId/share-link*`，不复用 `/gates/...`，也不伪造 Gate 行。站内入口：卡片「复制临时链接」、移动端详情顶栏同名按钮、应用预览工作台工具栏「分享审批」。公开页：待复审标识为「外部复审」；待澄清标识为「待澄清 / 外部澄清」。热态可多轮 ReAct（发送 / 流式轮询 / 取消）；`productKind=app_preview` 时产物区为只读占位说明，**不提供 noVNC / 取点**（登录态同一项仍可远程桌面与取点）。底栏仅「确认并流转」（无驳回、无姓名意见）。澄清确认走 Agent 收尾写入结构化需求，取消仅清当前轮并保留队列。运行详情澄清/复审 Tab / 登录侧复审面板 / 产物预览工具条不提供临时链接入口；`proposal_select` 没有此入口。
+Inbox **待复审**、**应用预览**与 **待澄清**卡片使用同一套管理面板与令牌规则（`ShareLinkKindReview`），认证 API 走 `/api/runs/:id/reviews/:nodeId/share-link*`，不复用 `/gates/...`，也不伪造 Gate 行。站内入口：卡片「复制临时链接」、移动端详情顶栏同名按钮、应用预览工作台工具栏「分享审批」。公开页：待复审标识为「外部复审」；待澄清标识为「待澄清 / 外部澄清」。热态可多轮 ReAct（发送 / 流式轮询 / 取消）；`productKind=app_preview` 时公开页默认提供远程桌面与取点（短时 ticket 通道，脱敏 ports；API 端口同源 iframe）；移动端仅降级提示。底栏仅「确认并流转」（无驳回、无姓名意见）。澄清确认走 Agent 收尾写入结构化需求，取消仅清当前轮并保留队列。运行详情澄清/复审 Tab / 登录侧复审面板 / 产物预览工具条不提供临时链接入口；`proposal_select` 没有此入口。
 
 ## 真实 Docker 沙箱
 

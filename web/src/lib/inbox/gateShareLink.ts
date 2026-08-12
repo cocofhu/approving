@@ -271,8 +271,29 @@ export type PublicGatePreview = {
   activeItem?: PublicGateActiveItem | null
   productKind?: 'visual' | 'structured' | 'app_preview' | string
   productName?: string
+  /** Desensitized app_preview ports for public remote / API iframe. */
+  ports?: PublicPreviewPort[]
   /** Graph node type from preview DTO; react ⇒ 待澄清. Kind stays review. */
   nodeType?: string
+}
+
+export type PublicPreviewPort = {
+  port: number
+  label?: string
+  /** vnc = remote+pick; api = same-origin iframe (no pick). */
+  mode?: 'vnc' | 'api' | string
+}
+
+export type PublicPreviewTicketResult = {
+  status: string
+  ticket?: string
+  expiresAt?: string
+  port?: number
+  mode?: string
+  wsPath?: string
+  iframePath?: string
+  error?: string
+  message?: string
 }
 
 export type PublicGateUpstreamResult = {
@@ -370,6 +391,7 @@ export function publicGateContentKey(p: PublicGatePreview | null | undefined): s
     activeItem: p.activeItem || null,
     productKind: p.productKind || '',
     productName: p.productName || '',
+    ports: (p.ports || []).map((x) => ({ port: x.port, label: x.label || '', mode: x.mode || '' })),
   })
 }
 
@@ -520,4 +542,43 @@ export const publicGateApi = {
       return body
     })
   },
+  /**
+   * Exchange share token for a short-lived preview ticket (VNC or API iframe).
+   * Share token stays in header; ticket may appear in WS query / iframe path.
+   */
+  previewTicket(
+    token: string,
+    port: number,
+    purpose?: 'vnc' | 'api' | string,
+    signal?: AbortSignal,
+  ): Promise<PublicPreviewTicketResult> {
+    return fetch('/public/gate-approvals/preview-ticket', {
+      method: 'POST',
+      credentials: 'omit',
+      signal,
+      headers: {
+        'Content-Type': 'application/json',
+        [GATE_SHARE_TOKEN_HEADER]: token,
+        [GATE_SHARE_REQUEST_HEADER]: '1',
+      },
+      body: JSON.stringify({ port, purpose: purpose || 'vnc' }),
+    }).then(async (res) => {
+      const body = await readJson<PublicPreviewTicketResult>(res)
+      if (!res.ok) {
+        throw Object.assign(new Error(body.message || body.error || `${res.status}`), {
+          status: res.status,
+          body,
+        })
+      }
+      return body
+    })
+  },
+}
+
+/** Build a site-root ws(s) URL for the public preview-vnc channel. */
+export function publicPreviewVncWsUrl(ticket: string, wsPath?: string): string {
+  const path = (wsPath || '/public/gate-approvals/preview-vnc/ws').trim() || '/public/gate-approvals/preview-vnc/ws'
+  const q = `ticket=${encodeURIComponent(ticket)}`
+  const base = path.includes('?') ? `${path}&${q}` : `${path}?${q}`
+  return window.location.origin.replace(/^http/, 'ws') + base
 }

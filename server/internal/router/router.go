@@ -303,11 +303,15 @@ func New(h *handlers.Handlers) *gin.Engine {
 		pub.GET("/", h.PublicGateApprovalPage)
 		pub.GET("/preview", h.PublicGatePreview)
 		pub.GET("/upstream", h.PublicGateUpstream)
+		pub.POST("/preview-ticket", h.PublicPreviewTicket)
+		pub.GET("/preview-vnc/ws", h.PublicPreviewVNC)
+		pub.Any("/preview-api/:ticket/*path", h.PublicPreviewAPIProxy)
 		pub.POST("/decide", h.PublicGateDecide)
 		pub.POST("/reply", h.PublicGateReply)
 		pub.POST("/cancel", h.PublicGateCancel)
 		pub.OPTIONS("/preview", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 		pub.OPTIONS("/upstream", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+		pub.OPTIONS("/preview-ticket", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 		pub.OPTIONS("/decide", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 		pub.OPTIONS("/reply", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 		pub.OPTIONS("/cancel", func(c *gin.Context) { c.Status(http.StatusNoContent) })
@@ -394,8 +398,12 @@ func publicGateMiddleware() gin.HandlerFunc {
 		c.Header("Pragma", "no-cache")
 		c.Header("Referrer-Policy", "no-referrer")
 		c.Header("X-Content-Type-Options", "nosniff")
-		c.Header("X-Frame-Options", "DENY")
-		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+		// Opaque preview-api reverse-proxy is framed by the public page (same origin).
+		// Do not apply DENY / frame-ancestors 'none' on that path.
+		if !strings.Contains(c.Request.URL.Path, "/preview-api/") {
+			c.Header("X-Frame-Options", "DENY")
+			c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+		}
 		c.Writer.Header().Del("Access-Control-Allow-Origin")
 		c.Writer.Header().Del("Access-Control-Allow-Methods")
 		c.Writer.Header().Del("Access-Control-Allow-Headers")

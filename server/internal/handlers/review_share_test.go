@@ -364,7 +364,7 @@ func seedAppPreviewReview(t *testing.T, h *harness, runID, nodeID string) {
 
 // TestAppPreviewShareCreateAttachPreviewAndGateAPIRejected covers plan g1/g3/g4.2:
 // waiting_human app_preview can mint review share links, inbox attaches shareLink,
-// public preview is productKind=app_preview (read-only), and gates API must fail.
+// public preview is productKind=app_preview (remote-capable, leak-free), and gates API must fail.
 func TestAppPreviewShareCreateAttachPreviewAndGateAPIRejected(t *testing.T) {
 	h := newHarness(t)
 	seedAppPreviewReview(t, h, "run-ap-share", "app_preview1")
@@ -425,8 +425,15 @@ func TestAppPreviewShareCreateAttachPreviewAndGateAPIRejected(t *testing.T) {
 	if p["productKind"] != "app_preview" {
 		t.Fatalf("productKind=%v want app_preview", p["productKind"])
 	}
-	if strings.Contains(prev.Body.String(), "novnc") || strings.Contains(prev.Body.String(), "inspect") {
-		t.Fatalf("public preview must not expose novnc/inspect: %s", prev.Body.String())
+	prevBody := prev.Body.String()
+	if strings.Contains(prevBody, "run-ap-share") || strings.Contains(prevBody, "app_preview1") {
+		t.Fatalf("public preview leaked runId/nodeId: %s", prevBody)
+	}
+	if strings.Contains(prevBody, "/preview/") || strings.Contains(prevBody, "proxyUrl") {
+		t.Fatalf("public preview leaked internal preview path: %s", prevBody)
+	}
+	if strings.Contains(prevBody, "公开页仅支持只读预览") || strings.Contains(prevBody, "不提供远程桌面或取点") {
+		t.Fatalf("public preview must not use legacy read-only success copy: %s", prevBody)
 	}
 	actions, _ := p["actions"].(map[string]any)
 	if actions["confirm"] != "confirm" {

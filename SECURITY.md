@@ -56,6 +56,15 @@ Inbox operators can mint a one-shot external approval URL for a single pending
   remains in-process; GET preview and POST decide use separate per-IP buckets so
   polling cannot starve confirm. The store keeps the last few nonces per link so
   multiple tabs can submit after refresh.
+- Public `app_preview` remote desktop uses a **separate** short-lived ticket
+  (not the long-lived share token): clients exchange via
+  `POST /public/gate-approvals/preview-ticket` with `X-Gate-Share-Token`, then
+  connect `GET /public/gate-approvals/preview-vnc/ws?ticket=…` or load a
+  same-origin `/public/gate-approvals/preview-api/:ticket/…` iframe. Tickets are
+  ~2 minutes, keyed by token hash + run/node/port; share-token lifetime rules
+  still apply and revocation/decide kicks live sessions. Preview DTO ports are
+  desensitized (no `runId`/`nodeId`/internal paths). Logged-in
+  `/preview-vnc/:runId/:nodeId/:port/ws` remains Session-gated and unchanged.
 - Audit records create / regen / revoke / use with `callerKind=external` on
   use, optional self-reported name, masked IP (last octet/group), and
   browser/OS UA only — still without the plaintext token.

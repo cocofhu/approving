@@ -61,15 +61,44 @@ func gateIDPtr(id uint) *uint {
 	return &v
 }
 
+// LinkInvalidationHook is notified with token hashes when share links are
+// revoked/consumed so preview tickets and live sessions can be cut.
+type LinkInvalidationHook func(tokenHashes []string)
+
 // Service manages GateShareLink lifecycle.
 type Service struct {
-	db    *gorm.DB
-	audit *services.ProjectAuditService
+	db               *gorm.DB
+	audit            *services.ProjectAuditService
+	onInvalidate     LinkInvalidationHook
 }
 
 // NewService builds the share-link service.
 func NewService(db *gorm.DB, audit *services.ProjectAuditService) *Service {
 	return &Service{db: db, audit: audit}
+}
+
+// SetInvalidationHook registers a callback invoked after links are revoked.
+func (s *Service) SetInvalidationHook(h LinkInvalidationHook) {
+	if s == nil {
+		return
+	}
+	s.onInvalidate = h
+}
+
+func (s *Service) notifyInvalidated(tokenHashes []string) {
+	if s == nil || s.onInvalidate == nil || len(tokenHashes) == 0 {
+		return
+	}
+	s.onInvalidate(tokenHashes)
+}
+
+func (s *Service) pluckTokenHashes(where string, args ...any) []string {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	var hashes []string
+	_ = s.db.Model(&models.GateShareLink{}).Where(where, args...).Pluck("token_hash", &hashes).Error
+	return hashes
 }
 
 func newShareID() string {
@@ -311,6 +340,7 @@ func (s *Service) Regenerate(runID, nodeID, createdBy, publicOrigin string) (*Cr
 	}); err != nil {
 		return nil, err
 	}
+	s.notifyInvalidated([]string{latest.TokenHash})
 	s.recordShareAudit(run, gate, models.AuditActionGateShareRegen, createdBy, map[string]any{
 		"ttlTier":   tier,
 		"expiresAt": link.ExpiresAt,
@@ -356,6 +386,7 @@ func (s *Service) Revoke(runID, nodeID, actor string) error {
 		Update("revoked_at", now).Error; err != nil {
 		return err
 	}
+	s.notifyInvalidated([]string{latest.TokenHash})
 	s.recordShareAudit(run, gate, models.AuditActionGateShareRevoke, actor, map[string]any{
 		"revokedAt": now,
 		"expiresAt": latest.ExpiresAt,
@@ -382,9 +413,10 @@ func (s *Service) RevokeUnusedForRun(runID string) {
 		return
 	}
 	now := time.Now()
-	_ = s.db.Model(&models.GateShareLink{}).
-		Where("run_id = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?", runID, now).
-		Update("revoked_at", now).Error
+	where := "run_id = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?"
+	hashes := s.pluckTokenHashes(where, runID, now)
+	_ = s.db.Model(&models.GateShareLink{}).Where(where, runID, now).Update("revoked_at", now).Error
+	s.notifyInvalidated(hashes)
 }
 
 // RevokeUnusedForGate invalidates unused active links for one gate instance.
@@ -393,10 +425,10 @@ func (s *Service) RevokeUnusedForGate(runID, nodeID string, iteration int) {
 		return
 	}
 	now := time.Now()
-	_ = s.db.Model(&models.GateShareLink{}).
-		Where("run_id = ? AND node_id = ? AND iteration = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?",
-			runID, nodeID, iteration, now).
-		Update("revoked_at", now).Error
+	where := "run_id = ? AND node_id = ? AND iteration = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?"
+	hashes := s.pluckTokenHashes(where, runID, nodeID, iteration, now)
+	_ = s.db.Model(&models.GateShareLink{}).Where(where, runID, nodeID, iteration, now).Update("revoked_at", now).Error
+	s.notifyInvalidated(hashes)
 }
 
 // RevokeUnusedForNode invalidates unused active links for a node (any iteration).
@@ -405,10 +437,10 @@ func (s *Service) RevokeUnusedForNode(runID, nodeID string) {
 		return
 	}
 	now := time.Now()
-	_ = s.db.Model(&models.GateShareLink{}).
-		Where("run_id = ? AND node_id = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?",
-			runID, nodeID, now).
-		Update("revoked_at", now).Error
+	where := "run_id = ? AND node_id = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?"
+	hashes := s.pluckTokenHashes(where, runID, nodeID, now)
+	_ = s.db.Model(&models.GateShareLink{}).Where(where, runID, nodeID, now).Update("revoked_at", now).Error
+	s.notifyInvalidated(hashes)
 }
 
 // LookupByToken hashes the token, loads by unique hash, then constant-time compares.
@@ -493,6 +525,9 @@ func (s *Service) ConsumeCAS(linkID, action string) (bool, *models.GateShareLink
 	if err := s.db.First(&link, "id = ?", linkID).Error; err != nil {
 		return false, nil, err
 	}
+	if res.RowsAffected == 1 {
+		s.notifyInvalidated([]string{link.TokenHash})
+	}
 	return res.RowsAffected == 1, &link, nil
 }
 
@@ -508,6 +543,22 @@ func (s *Service) RollbackConsume(linkID string) error {
 			"used_action": "",
 		})
 	return res.Error
+}
+
+// LoadLinkByTokenHash loads a share link by its stored token hash.
+func (s *Service) LoadLinkByTokenHash(tokenHash string) (*models.GateShareLink, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("share service unavailable")
+	}
+	tokenHash = strings.TrimSpace(tokenHash)
+	if tokenHash == "" {
+		return nil, ErrNotFound
+	}
+	var link models.GateShareLink
+	if err := s.db.Where("token_hash = ?", tokenHash).First(&link).Error; err != nil {
+		return nil, err
+	}
+	return &link, nil
 }
 
 // LoadLinkByID loads a share link row.

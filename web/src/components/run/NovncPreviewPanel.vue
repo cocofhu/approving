@@ -17,6 +17,8 @@ const emit = defineEmits<{
   /** Element picked in inspect mode but not yet added to chat (last staged). */
   (e: 'staged-pick', payload: AppPreviewPickPayload | null): void
   (e: 'open-share'): void
+  /** Public ticket channel: parent must re-exchange ticket before reconnecting. */
+  (e: 'reconnect-request'): void
 }>()
 
 const props = withDefaults(
@@ -25,6 +27,8 @@ const props = withDefaults(
     runId?: string
     nodeId?: string
     port?: number
+    /** Optional absolute ws(s) URL (public ticket channel); overrides run/node/port. */
+    wsUrl?: string
     /** Console mode: sandbox-scoped WS (mutually exclusive with preview triple). */
     sandboxId?: number
     fill?: boolean
@@ -206,6 +210,8 @@ function setInspect(on: boolean) {
 }
 
 function resolveWsUrl(): string | null {
+  const custom = (props.wsUrl || '').trim()
+  if (custom) return custom
   if (consoleMode.value) {
     return api.sandboxVncWsUrl(props.sandboxId!)
   }
@@ -330,6 +336,12 @@ function connect() {
 }
 
 function reconnect() {
+  // Short-lived public tickets expire; reusing the first wsUrl fails after TTL.
+  // Ask parent (PublicAppPreviewPanel) to exchange a fresh ticket and remount.
+  if ((props.wsUrl || '').trim()) {
+    emit('reconnect-request')
+    return
+  }
   connect()
 }
 
@@ -394,7 +406,7 @@ async function toggleFullscreen() {
 }
 
 watch(
-  () => [props.runId, props.nodeId, props.port, props.sandboxId],
+  () => [props.runId, props.nodeId, props.port, props.sandboxId, props.wsUrl],
   () => reconnect(),
 )
 

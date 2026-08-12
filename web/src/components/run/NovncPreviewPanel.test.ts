@@ -105,6 +105,8 @@ function lastInspectCtrl(): { type: string; on: boolean } | null {
 describe('NovncPreviewPanel', () => {
   beforeEach(() => {
     MockWebSocket.reset()
+    apiMocks.previewVncWsUrl.mockClear()
+    apiMocks.sandboxVncWsUrl.mockClear()
     vi.stubGlobal('WebSocket', MockWebSocket)
   })
 
@@ -234,6 +236,32 @@ describe('NovncPreviewPanel', () => {
     expect(wrapper.find('[data-testid="novnc-inline-tip"]').exists()).toBe(false)
     // Remote already off — do not echo another inspect on:false
     expect(ws.sent.slice(beforeLen)).toEqual([])
+    wrapper.unmount()
+  })
+
+  it('public wsUrl reconnect emits reconnect-request instead of reusing ticket', async () => {
+    const before = MockWebSocket.instances.length
+    const wrapper = mountNovnc({
+      wsUrl: 'wss://example.test/public/gate-approvals/preview-vnc/ws?ticket=old',
+      runId: undefined,
+      nodeId: undefined,
+      port: 5173,
+    })
+    await flushPromises()
+    expect(apiMocks.previewVncWsUrl).not.toHaveBeenCalled()
+    expect(MockWebSocket.instances.length).toBeGreaterThan(before)
+
+    // Force error banner with reconnect button.
+    const ws = MockWebSocket.instances[MockWebSocket.instances.length - 1]!
+    ws.onmessage?.({ data: JSON.stringify({ type: 'error', message: 'ticket expired' }) })
+    await flushPromises()
+    const btn = wrapper.findAll('button').find((b) => b.text().includes('重新连接') || b.text().includes('reconnect'))
+    expect(btn).toBeTruthy()
+    const socketsBeforeClick = MockWebSocket.instances.length
+    await btn!.trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('reconnect-request')?.length).toBe(1)
+    expect(MockWebSocket.instances.length).toBe(socketsBeforeClick)
     wrapper.unmount()
   })
 

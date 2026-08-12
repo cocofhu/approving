@@ -55,6 +55,8 @@ type Handlers struct {
 	Onboarding        *services.OnboardingService
 	GateShare         *gateshare.Service
 	GateShareNonces   *gateshare.NonceStore
+	GateShareTickets  *gateshare.TicketStore
+	GateShareSessions *gateshare.PreviewSessionHub
 	GateShareLimiter  *gateshare.IPLimiter
 	// PublicAdvertise is the browser-facing base for QQ/preview deep links.
 	// Gate/review share URLs mint from Request.Host instead. Public CSRF

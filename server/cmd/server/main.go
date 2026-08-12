@@ -194,6 +194,14 @@ func main() {
 		auditSvc.Record(rec)
 	})
 	gateShareSvc := gateshare.NewService(db, auditSvc)
+	gateShareTickets := gateshare.NewTicketStore(db)
+	gateShareSessions := gateshare.NewPreviewSessionHub()
+	gateShareSvc.SetInvalidationHook(func(tokenHashes []string) {
+		for _, th := range tokenHashes {
+			gateShareTickets.InvalidateByTokenHash(th)
+		}
+		gateShareSessions.KickMany(tokenHashes)
+	})
 	eng.SetShareRevoker(gateShareSvc)
 	host.SetProjectAuditHook(func(runID, nodeID, tool string, args map[string]any, resultText string, isError bool) {
 		projectID := services.ResolveProjectIDForRun(db, runID)
@@ -421,6 +429,8 @@ func main() {
 		Audit:             auditSvc,
 		GateShare:         gateShareSvc,
 		GateShareNonces:   gateshare.NewNonceStore(db),
+		GateShareTickets:  gateShareTickets,
+		GateShareSessions: gateShareSessions,
 		GateShareLimiter:  gateshare.NewIPLimiter(),
 		PublicAdvertise:   cfg.Server.PublicAdvertise,
 		InjectBundles:     injectStore,

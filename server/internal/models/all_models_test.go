@@ -9,6 +9,7 @@ func TestAllModelsAndComposite(t *testing.T) {
 	}
 	foundShare := false
 	foundNonce := false
+	foundTicket := false
 	for _, m := range ms {
 		if _, ok := m.(*GateShareLink); ok {
 			foundShare = true
@@ -16,12 +17,18 @@ func TestAllModelsAndComposite(t *testing.T) {
 		if _, ok := m.(*GateShareNonce); ok {
 			foundNonce = true
 		}
+		if _, ok := m.(*GateSharePreviewTicket); ok {
+			foundTicket = true
+		}
 	}
 	if !foundShare {
 		t.Fatal("AllModels missing GateShareLink")
 	}
 	if !foundNonce {
 		t.Fatal("AllModels missing GateShareNonce")
+	}
+	if !foundTicket {
+		t.Fatal("AllModels missing GateSharePreviewTicket")
 	}
 	if IsCompositeText("x") || !IsCompositeText(map[string]any{"text": "hi"}) {
 		t.Fatal("IsCompositeText")
