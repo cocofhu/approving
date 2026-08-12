@@ -18,6 +18,29 @@ const mocks = vi.hoisted(() => ({
   cancel: vi.fn(),
 }))
 
+class FakeWebSocket {
+  static instances: FakeWebSocket[] = []
+  url: string
+  onopen: ((ev?: unknown) => void) | null = null
+  onmessage: ((ev: { data: string }) => void) | null = null
+  onclose: (() => void) | null = null
+  sent: string[] = []
+  constructor(url: string) {
+    this.url = url
+    FakeWebSocket.instances.push(this)
+    queueMicrotask(() => this.onopen?.())
+  }
+  send(data: string) {
+    this.sent.push(data)
+  }
+  close() {
+    this.onclose?.()
+  }
+  emit(obj: unknown) {
+    this.onmessage?.({ data: JSON.stringify(obj) })
+  }
+}
+
 vi.mock('@/lib/inbox/gateShareLink', async () => {
   const actual = await vi.importActual<typeof import('@/lib/inbox/gateShareLink')>('@/lib/inbox/gateShareLink')
   return {
@@ -28,6 +51,7 @@ vi.mock('@/lib/inbox/gateShareLink', async () => {
       decide: mocks.decide,
       reply: mocks.reply,
       cancel: mocks.cancel,
+      eventsWsUrl: () => 'ws://test/public/gate-approvals/events',
     },
   }
 })
@@ -66,6 +90,8 @@ beforeEach(() => {
   mocks.decide.mockReset()
   mocks.reply.mockReset()
   mocks.cancel.mockReset()
+  FakeWebSocket.instances = []
+  vi.stubGlobal('WebSocket', FakeWebSocket)
   window.location.hash = ''
   localStorage.clear()
   setTheme('dark')
@@ -74,6 +100,7 @@ beforeEach(() => {
 afterEach(() => {
   while (mounted.length) mounted.pop()?.unmount()
   document.documentElement.classList.remove('light')
+  vi.unstubAllGlobals()
 })
 
 describe('PublicGateApprovalView workbench', () => {
@@ -339,6 +366,82 @@ describe('PublicGateApprovalView workbench', () => {
     expect(w.find('[data-testid="clarify-review-cancel"]').exists()).toBe(true)
     expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(false)
     expect(w.find('[data-testid="public-gate-done"]').exists()).toBe(false)
+  })
+
+  it('applies preview liveEvents as streaming agent text (poll fallback)', async () => {
+    window.location.hash = `#t=${'dd'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-live',
+      reactSessionAlive: true,
+      sessionBusy: true,
+      waiting: 0,
+      activeItem: { text: '改成绿的' },
+      actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
+      turns: [{ role: 'agent', text: '请复审', at: '2026-08-01T00:00:00Z' }],
+      liveEvents: [{ kind: 'message', text: '标题已改为绿色（#16a34a）' }],
+    })
+    const w = mountView()
+    await flushPromises()
+    await flushPromises()
+    expect((w.text().match(/改成绿的/g) || []).length).toBe(1)
+    expect(w.text()).toContain('标题已改为绿色')
+    expect(w.find('[data-testid="clarify-stream-caret"]').exists()).toBe(true)
+    expect(w.find('[data-testid="clarify-busy-status"]').text()).toContain('输出中')
+  })
+
+  it('does not duplicate human when turns already completed the busy activeItem', async () => {
+    window.location.hash = `#t=${'dd'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-dup',
+      reactSessionAlive: true,
+      sessionBusy: true,
+      waiting: 0,
+      activeItem: { text: '改成绿的' },
+      actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
+      turns: [
+        { role: 'human', text: '改成绿的', at: '2026-08-01T00:01:00Z' },
+        { role: 'agent', text: '标题已改为绿色（#16a34a）', at: '2026-08-01T00:02:00Z' },
+      ],
+    })
+    const w = mountView()
+    await flushPromises()
+    await flushPromises()
+    expect((w.text().match(/改成绿的/g) || []).length).toBe(1)
+    expect(w.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(false)
+    expect(w.text()).toContain('标题已改为绿色')
+  })
+
+  it('public events WS auth then ACP frame streams into the chat', async () => {
+    window.location.hash = `#t=${'dd'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-ws',
+      reactSessionAlive: true,
+      sessionBusy: true,
+      waiting: 0,
+      activeItem: { text: '改成绿的' },
+      actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
+      turns: [{ role: 'agent', text: '请复审', at: '2026-08-01T00:00:00Z' }],
+    })
+    const w = mountView()
+    await flushPromises()
+    await flushPromises()
+    const sock = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]
+    expect(sock).toBeTruthy()
+    expect(sock.sent.some((s) => s.includes('dd'.repeat(32)))).toBe(true)
+    sock.emit({
+      type: 'acp',
+      nodeId: 'public-gate',
+      events: [{ kind: 'message', text: '流式产出正文' }],
+    })
+    await flushPromises()
+    expect(w.text()).toContain('流式产出正文')
+    expect(w.find('[data-testid="clarify-stream-caret"]').exists()).toBe(true)
   })
 
   it('unavailable states keep dark chrome without confirm/send', async () => {

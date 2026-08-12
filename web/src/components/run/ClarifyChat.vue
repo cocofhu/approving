@@ -8,7 +8,7 @@ import ClarifyDemoFrame from './ClarifyDemoFrame.vue'
 import { renderMarkdown } from '@/lib/shared/markdown'
 import { createStreamMarkdownPreview } from '@/lib/shared/streamMarkdownPreview'
 import { createStreamTextReveal } from '@/lib/run/streamTextReveal'
-import { mergePersistedAndLiveTurns } from '@/lib/inbox/mergeClarifyLiveTurns'
+import { mergePersistedAndLiveTurns, persistedCompletedLiveHuman } from '@/lib/inbox/mergeClarifyLiveTurns'
 import { relTime } from '@/lib/shared/format'
 import ThoughtSummaryStatus from './ThoughtSummaryStatus.vue'
 import {
@@ -390,8 +390,14 @@ watch(
     if (prevKey !== undefined && key === prevKey) return
     const turnList = props.turns
     pending.value = null
-    // Clear live bubbles once persisted transcript includes them (not while streaming).
-    if (liveTurns.value.length && !liveTurns.value.some((t) => t.streaming)) {
+    const liveHumanText = liveTurns.value[0]?.role === 'human' ? liveTurns.value[0].text || '' : ''
+    const persistedCaughtUp = persistedCompletedLiveHuman(turnList, liveHumanText)
+    // Clear live bubbles once persisted transcript includes them (not while streaming),
+    // or when poll/refresh already persisted the completed human+agent pair.
+    if (
+      liveTurns.value.length &&
+      (persistedCaughtUp || !liveTurns.value.some((t) => t.streaming))
+    ) {
       liveTurns.value = []
       liveAgentIdx.value = -1
       messageReveal.reset()
@@ -835,7 +841,14 @@ function applyQueueState(
     }
   }
   // Refresh resume: recreate streaming agent bubble from activeItem when busy.
-  if (busy && activeItem && liveAgentIdx.value < 0) {
+  // Skip when persisted turns already completed this human — otherwise poll
+  // resume duplicates the bubble and leaves a stuck「思考中…」placeholder.
+  if (
+    busy &&
+    activeItem &&
+    liveAgentIdx.value < 0 &&
+    !persistedCompletedLiveHuman(props.turns, activeItem.text ?? '')
+  ) {
     const text = activeItem.text ?? ''
     liveTurns.value = [
       {
