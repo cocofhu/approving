@@ -225,13 +225,18 @@ function discardLocalBuffer() {
   titleError.value = ''
 }
 
-function applyScheduleFromDraft(d: RequirementDraft) {
+/** Restore schedule form fields from a draft without touching scheduleError. */
+function applyScheduleFieldsFromDraft(d: RequirementDraft) {
   const n = normalizeDraft(d)
   editKind.value = n.kind
   editStartAt.value = n.startAt
   editDueAt.value = n.dueAt
   editProgress.value = n.progress
   editParentId.value = n.parentId
+}
+
+function applyScheduleFromDraft(d: RequirementDraft) {
+  applyScheduleFieldsFromDraft(d)
   scheduleError.value = ''
 }
 
@@ -270,7 +275,8 @@ function mapScheduleApiError(msg: string): string {
 
 function revertScheduleFields() {
   const d = selectedDraft.value
-  if (d) applyScheduleFromDraft(d)
+  // Keep scheduleError so near-field inline hints survive failed PATCH (NFR n2 / g3.3).
+  if (d) applyScheduleFieldsFromDraft(d)
 }
 
 function requestLeave(): Promise<boolean> {
@@ -458,8 +464,9 @@ async function patchSchedule(body: RequirementDraftSchedulePatch) {
     await loadList({ keepSelection: true })
     toast.success(t('pages.projectDetail.requirementDrafts.scheduleSaved'))
   } catch (e: any) {
-    scheduleError.value = mapScheduleApiError(e?.message || '')
+    // Revert inputs first, then set error (revert must not clear scheduleError).
     revertScheduleFields()
+    scheduleError.value = mapScheduleApiError(e?.message || '')
     toast.error(scheduleError.value)
   } finally {
     scheduleBusy.value = false

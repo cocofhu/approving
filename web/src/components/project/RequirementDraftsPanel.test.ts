@@ -222,6 +222,60 @@ describe('RequirementDraftsPanel', () => {
     w.unmount()
   })
 
+  it('keeps near-field schedule error after invalid due date (edit view, g3.3)', async () => {
+    apiMocks.patchRequirementDraftSchedule.mockRejectedValue(
+      new Error('due date must not be before start date'),
+    )
+    const w = mountPanel()
+    await flushPromises()
+    await switchToEdit(w)
+    await w.get('[data-testid="requirement-drafts-item-rd-1"]').trigger('click')
+    await nextTick()
+    await w.get('[data-testid="requirement-drafts-title"]').setValue('未保存标题')
+    await w.get('[data-testid="requirement-drafts-schedule-due"]').setValue('2026-07-01')
+    await w.get('[data-testid="requirement-drafts-schedule-due"]').trigger('change')
+    await flushPromises()
+    expect(apiMocks.patchRequirementDraftSchedule).toHaveBeenCalledWith('proj-a', 'rd-1', {
+      dueAt: '2026-07-01',
+    })
+    // Fields revert to server values; inline error must remain visible (not cleared by revert).
+    expect(w.get('[data-testid="requirement-drafts-schedule-due"]').element).toHaveProperty(
+      'value',
+      '2026-08-15',
+    )
+    expect(w.get('[data-testid="requirement-drafts-schedule-error"]').text()).toContain(
+      '截止日不能早于开始日',
+    )
+    expect(w.get('[data-testid="requirement-drafts-title"]').element).toHaveProperty('value', '未保存标题')
+    expect(toastMocks.error).toHaveBeenCalled()
+    w.unmount()
+  })
+
+  it('keeps near-field inspector error after invalid due date (gantt, g3.3/g6.1)', async () => {
+    apiMocks.patchRequirementDraftSchedule.mockRejectedValue(
+      new Error('due date must not be before start date'),
+    )
+    const w = mountPanel()
+    await flushPromises()
+    const scheduledRows = w.findAll('.rd-gantt-scroll .rd-gantt-row')
+    expect(scheduledRows.length).toBeGreaterThan(0)
+    await scheduledRows[0].trigger('click')
+    await nextTick()
+    expect(w.find('[data-testid="requirement-drafts-inspector"]').exists()).toBe(true)
+    await w.get('[data-testid="requirement-drafts-inspector-due"]').setValue('2026-07-01')
+    await w.get('[data-testid="requirement-drafts-inspector-due"]').trigger('change')
+    await flushPromises()
+    expect(w.get('[data-testid="requirement-drafts-inspector-due"]').element).toHaveProperty(
+      'value',
+      '2026-08-15',
+    )
+    expect(w.get('[data-testid="requirement-drafts-inspector-error"]').text()).toContain(
+      '截止日不能早于开始日',
+    )
+    expect(toastMocks.error).toHaveBeenCalled()
+    w.unmount()
+  })
+
   it('openBody switches to edit view', async () => {
     const w = mountPanel()
     await flushPromises()
