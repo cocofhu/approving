@@ -129,12 +129,17 @@ type Run struct {
 	// paused for human input (gate / react) can be resumed after a server
 	// restart: loadCtx re-registers it with the MCP host from here instead of
 	// failing every subsequent artifact write with ErrUnauthorized.
-	McpToken string       `json:"-"`
-	Attempt  int          `json:"attempt"`
-	Progress float64      `json:"progress"`
-	Branch   string       `json:"branch,omitempty"`
-	Title    string       `json:"title,omitempty"`
-	Trace    []TraceEntry `gorm:"serializer:json" json:"trace"`
+	McpToken string `json:"-"`
+	// SandboxEnv is the immutable run-scoped sandbox OS env snapshot taken at
+	// StartRun (optional). Injected into this Run's pipeline node sandboxes
+	// after Agent env and before platform reserved/auth write-backs. Plaintext
+	// in DB for injection; GET/audit must mask Secret entries.
+	SandboxEnv []EnvEntry   `gorm:"serializer:json" json:"sandboxEnv,omitempty"`
+	Attempt    int          `json:"attempt"`
+	Progress   float64      `json:"progress"`
+	Branch     string       `json:"branch,omitempty"`
+	Title      string       `json:"title,omitempty"`
+	Trace      []TraceEntry `gorm:"serializer:json" json:"trace"`
 	// Checkpoints holds variable snapshots keyed by checkpoint node id, used
 	// to restore state on rollback.
 	Checkpoints map[string]map[string]any `gorm:"serializer:json" json:"-"`
@@ -145,8 +150,8 @@ type Run struct {
 }
 
 const (
-	MaxRunTags       = 8
-	MaxRunTagRunes   = 32
+	MaxRunTags     = 8
+	MaxRunTagRunes = 32
 )
 
 var ErrInvalidRunTag = errors.New("invalid run tag")
@@ -650,8 +655,8 @@ type RunPreviewPort struct {
 	// "http://172.17.0.5:9090". Persisting it decouples the proxy read-path from
 	// the co-located sandbox manager so the preview proxy can later be split into
 	// a standalone service that only reads the DB (or a control-plane API).
-	Host         string    `json:"-"`
-	Healthy      bool      `json:"healthy"`
+	Host    string `json:"-"`
+	Healthy bool   `json:"healthy"`
 	// KeepalivePID is the setsid-detached listener pid recorded by KeepalivePort
 	// so Cancel/Abort session cleanup can whitelist it (sandbox Destroy still
 	// reclaims the whole container with the Run/gate lifecycle).

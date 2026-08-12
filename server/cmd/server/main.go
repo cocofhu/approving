@@ -175,6 +175,13 @@ func main() {
 		ProjectEnvForWorkflow: func(workflowID string) map[string]string {
 			return services.ProjectEnvMap(projectSvc.SandboxEnvForWorkflow(workflowID))
 		},
+		RunSandboxEnvForRun: func(runID string) []models.EnvEntry {
+			var run models.Run
+			if err := db.Select("sandbox_env").First(&run, "id = ?", runID).Error; err != nil {
+				return nil
+			}
+			return run.SandboxEnv
+		},
 	})
 	eng := engine.New(db, provider, host, artifactSvc, cfg.Engine.MaxConcurrentRuns)
 	eng.SetBlobStore(blobStore)

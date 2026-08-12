@@ -129,7 +129,7 @@ describe('RunLaunchModal', () => {
     wrapper.unmount()
   })
 
-  it('calls startRun and switches to success phase', async () => {
+  it('calls startRun and navigates to run detail', async () => {
     apiMocks.startRun.mockResolvedValue({ id: 'run-99' })
     const wrapper = mountModal(true)
     await flushPromises()
@@ -145,6 +145,54 @@ describe('RunLaunchModal', () => {
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
     expect(wrapper.emitted('started')?.[0]?.[0]).toBe('run-99')
+    expect(wrapper.emitted('view-run')?.[0]?.[0]).toBe('run-99')
+    expect(wrapper.emitted('close')).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  it('rejects reserved env keys in modal without calling API', async () => {
+    const wrapper = mountModal(true)
+    await flushPromises()
+    const addBtn = wrapper.findAll('button').find((b) => b.text().includes('添加行'))
+    expect(addBtn).toBeTruthy()
+    await addBtn!.trigger('click')
+    await flushPromises()
+    const row = wrapper.find('[data-testid="run-launch-env-row"]')
+    const inputs = row.findAll('input')
+    await inputs[0].setValue('CURSOR_API_KEY')
+    await inputs[1].setValue('x')
+    const startBtn = findStartButton(wrapper)
+    await startBtn!.trigger('click')
+    await flushPromises()
+    expect(apiMocks.startRun).not.toHaveBeenCalled()
+    expect(wrapper.text()).toMatch(/CURSOR_API_KEY/)
+    wrapper.unmount()
+  })
+
+  it('passes env entries to startRun when valid', async () => {
+    apiMocks.startRun.mockResolvedValue({ id: 'run-env' })
+    const wrapper = mountModal(true)
+    await flushPromises()
+    const addBtn = wrapper.findAll('button').find((b) => b.text().includes('添加行'))
+    await addBtn!.trigger('click')
+    await flushPromises()
+    const row = wrapper.find('[data-testid="run-launch-env-row"]')
+    const inputs = row.findAll('input')
+    await inputs[0].setValue('LOG_LEVEL')
+    await inputs[1].setValue('debug')
+    const startBtn = findStartButton(wrapper)
+    await startBtn!.trigger('click')
+    await flushPromises()
+    expect(apiMocks.startRun).toHaveBeenCalledWith(
+      'wf-1',
+      expect.anything(),
+      'manual',
+      'normal',
+      [],
+      expect.objectContaining({
+        env: [{ key: 'LOG_LEVEL', value: 'debug', secret: false }],
+      }),
+    )
     wrapper.unmount()
   })
 

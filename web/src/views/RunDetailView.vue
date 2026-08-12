@@ -14,6 +14,7 @@ import LiveLogPanel from '@/components/run/LiveLogPanel.vue'
 import ArtifactPanel from '@/components/run/ArtifactPanel.vue'
 import StateTracePanel from '@/components/run/StateTracePanel.vue'
 import VariablesPanel from '@/components/run/VariablesPanel.vue'
+import RunSandboxEnvPanel from '@/components/run/RunSandboxEnvPanel.vue'
 import ClarifyChat from '@/components/run/ClarifyChat.vue'
 import ClarifyBootLoader from '@/components/run/ClarifyBootLoader.vue'
 import GateApproval from '@/components/run/GateApproval.vue'
@@ -1838,6 +1839,8 @@ const detailTab = ref('trace')
 const detailTabs = computed(() => {
   const tabs = [{ id: 'trace', label: t('pages.runDetail.tabs.trace') }]
   if (run.value.vars?.length) tabs.push({ id: 'vars', label: t('pages.runDetail.tabs.vars') })
+  // Always offer the run-level env tab so empty snapshot shows an empty state (no error).
+  tabs.push({ id: 'sandboxEnv', label: t('pages.runDetail.tabs.sandboxEnv') })
   tabs.push({ id: 'artifacts', label: t('pages.runDetail.tabs.artifacts') })
   return tabs
 })
@@ -2581,6 +2584,10 @@ function selectExecution(nodeId: string, idx: number) {
         <div class="min-h-0 flex-1">
           <StateTracePanel v-if="detailTab === 'trace'" :trace="run.trace || []" />
           <VariablesPanel v-else-if="detailTab === 'vars'" :vars="run.vars || []" />
+          <RunSandboxEnvPanel
+            v-else-if="detailTab === 'sandboxEnv'"
+            :entries="run.sandboxEnv || []"
+          />
           <ArtifactPanel
             v-else-if="detailTab === 'artifacts'"
             :artifacts="run.artifacts"

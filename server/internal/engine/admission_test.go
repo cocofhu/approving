@@ -428,17 +428,17 @@ func TestExecuteEarlyExitRequeuesRun(t *testing.T) {
 func TestAdmissionMixedPriority(t *testing.T) {
 	eng, db, p := setupBlockingEngine(t, slowGraph(), 1)
 
-	runLow, err := eng.StartRunWithPriority("wf", nil, "test", "low")
+	runLow, err := eng.StartRunWithPriority("wf", nil, "test", "low", nil, nil)
 	if err != nil {
 		t.Fatalf("StartRun low: %v", err)
 	}
 	waitRunStatus(t, db, runLow.ID, "running")
 
-	runNormal, err := eng.StartRunWithPriority("wf", nil, "test", "normal")
+	runNormal, err := eng.StartRunWithPriority("wf", nil, "test", "normal", nil, nil)
 	if err != nil {
 		t.Fatalf("StartRun normal: %v", err)
 	}
-	runHigh, err := eng.StartRunWithPriority("wf", nil, "test", "high")
+	runHigh, err := eng.StartRunWithPriority("wf", nil, "test", "high", nil, nil)
 	if err != nil {
 		t.Fatalf("StartRun high: %v", err)
 	}
@@ -483,11 +483,11 @@ func TestAdmissionRequeueUsesUpdatedPriority(t *testing.T) {
 	}
 	waitRunStatus(t, db, runHold.ID, "running")
 
-	runEarly, err := eng.StartRunWithPriority("wf", nil, "test", "low")
+	runEarly, err := eng.StartRunWithPriority("wf", nil, "test", "low", nil, nil)
 	if err != nil {
 		t.Fatalf("StartRun early low: %v", err)
 	}
-	runLate, err := eng.StartRunWithPriority("wf", nil, "test", "low")
+	runLate, err := eng.StartRunWithPriority("wf", nil, "test", "low", nil, nil)
 	if err != nil {
 		t.Fatalf("StartRun late low: %v", err)
 	}
@@ -585,7 +585,7 @@ func TestStartRunFromPublishedForcesNormal(t *testing.T) {
 	if err := db.Create(&models.WorkflowVersion{WorkflowID: "wf", Version: 1, Graph: slowGraph()}).Error; err != nil {
 		t.Fatalf("version: %v", err)
 	}
-	run, err := eng.StartRunFromPublished("wf", nil, "")
+	run, err := eng.StartRunFromPublished("wf", nil, "", nil, nil)
 	if err != nil {
 		t.Fatalf("StartRunFromPublished: %v", err)
 	}

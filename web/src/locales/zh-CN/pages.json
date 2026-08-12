@@ -1000,7 +1000,18 @@
         "sandbox": "沙箱日志",
         "trace": "状态轨迹",
         "vars": "全局变量",
+        "sandboxEnv": "运行级 env",
         "artifacts": "产物"
+      },
+      "sandboxEnv": {
+        "title": "运行级环境变量快照",
+        "hint": "启动瞬间绑定，只读；密钥已掩码。",
+        "empty": "本次 Run 未声明运行级 env。",
+        "key": "键",
+        "value": "值",
+        "secret": "密钥",
+        "plain": "明文",
+        "secretBadge": "密钥"
       },
       "gateRemoved": "Gate 已移除",
       "clarifyFailed": {
@@ -2215,6 +2226,17 @@
       "triggerManual": "触发方式:手动触发",
       "priorityLabel": "优先级",
       "priorityHint": "仅影响排队准入顺序，不会打断正在执行的运行。",
+      "envLabel": "运行级环境变量",
+      "envHint": "可选。启动瞬间快照到本次 Run；密钥标记仅影响详情/审计展示。Key 与 Value 皆空的行会被忽略。",
+      "envAdd": "+ 添加行",
+      "envKey": "Key",
+      "envValue": "Value",
+      "envSecret": "密钥",
+      "envSecretOn": "密钥",
+      "envSecretOff": "明文",
+      "envRemove": "删除行",
+      "envEmpty": "未填写运行级 env（与上线前行为一致）。",
+      "envInvalid": "拒绝启动：{keys}",
       "repos": {
         "itemLabel": "仓库 {n}",
         "namePlaceholder": "仓名(留空自动用地址名)",

@@ -12,10 +12,11 @@ import (
 )
 
 type startRunBody struct {
-	Inputs   map[string]any `json:"inputs"`
-	Trigger  string         `json:"trigger"`
-	Priority string         `json:"priority"` // high|normal|low; empty → normal
-	Tags     []string       `json:"tags"`
+	Inputs   map[string]any    `json:"inputs"`
+	Trigger  string            `json:"trigger"`
+	Priority string            `json:"priority"` // high|normal|low; empty → normal
+	Tags     []string          `json:"tags"`
+	Env      []models.EnvEntry `json:"env"` // optional run-scoped sandbox env snapshot
 }
 
 func (h *Handlers) StartRun(c *gin.Context) {
@@ -34,13 +35,22 @@ func (h *Handlers) StartRun(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	run, err := h.Eng.StartRunWithPriority(c.Param("id"), b.Inputs, trigger, b.Priority, tags)
+	run, err := h.Eng.StartRunWithPriority(c.Param("id"), b.Inputs, trigger, b.Priority, tags, b.Env)
 	if err != nil {
 		_ = c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	if wf, ok := h.WF.Get(c.Param("id")); ok && wf.ProjectID != "" {
+		payload := map[string]any{
+			"workflowId": c.Param("id"),
+			"trigger":    trigger,
+			"priority":   models.PriorityLabel(run.Priority),
+			"runId":      run.ID,
+		}
+		if len(run.SandboxEnv) > 0 {
+			payload["env"] = services.MaskSandboxEnvForAudit(run.SandboxEnv)
+		}
 		h.recordAudit(services.AuditRecord{
 			ProjectID:    wf.ProjectID,
 			Actor:        h.auditActorFromContext(c),
@@ -50,12 +60,7 @@ func (h *Handlers) StartRun(c *gin.Context) {
 			RunID:        run.ID,
 			Outcome:      models.AuditOutcomeOK,
 			Summary:      "start run",
-			Payload: map[string]any{
-				"workflowId": c.Param("id"),
-				"trigger":    trigger,
-				"priority":   models.PriorityLabel(run.Priority),
-				"runId":      run.ID,
-			},
+			Payload:      payload,
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{"id": run.ID, "status": run.Status, "priority": models.PriorityLabel(run.Priority)})
