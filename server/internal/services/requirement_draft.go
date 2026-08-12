@@ -211,7 +211,7 @@ func (s *RequirementDraftService) Create(projectID string, in RequirementDraftCr
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
-	if err := s.validateParentAssignment(projectID, row.ID, row.Kind, parentID, false); err != nil {
+	if err := s.validateParentAssignment(projectID, row.ID, parentID, false); err != nil {
 		return models.RequirementDraft{}, err
 	}
 	if err := s.db.Create(&row).Error; err != nil {
@@ -355,7 +355,7 @@ func (s *RequirementDraftService) UpdateSchedule(projectID, id string, in Requir
 		return models.RequirementDraft{}, ErrRequirementDraftDueBeforeStart
 	}
 
-	if err := s.validateParentAssignment(projectID, row.ID, kind, parentID, true); err != nil {
+	if err := s.validateParentAssignment(projectID, row.ID, parentID, true); err != nil {
 		return models.RequirementDraft{}, err
 	}
 
@@ -410,16 +410,13 @@ func (s *RequirementDraftService) hasChildren(projectID, id string) (bool, error
 	return n > 0, err
 }
 
-func (s *RequirementDraftService) validateParentAssignment(projectID, selfID, kind string, parentID *string, checkSelfChildren bool) error {
+func (s *RequirementDraftService) validateParentAssignment(projectID, selfID string, parentID *string, checkSelfChildren bool) error {
 	if parentID == nil || strings.TrimSpace(*parentID) == "" {
 		return nil
 	}
 	pid := strings.TrimSpace(*parentID)
 	if pid == selfID {
 		return ErrRequirementDraftInvalidParent
-	}
-	if kind == models.RequirementDraftKindMilestone {
-		// milestones may be children; OK
 	}
 	if checkSelfChildren {
 		hasChildren, err := s.hasChildren(projectID, selfID)
