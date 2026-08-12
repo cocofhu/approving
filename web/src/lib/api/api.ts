@@ -335,6 +335,24 @@ export interface DashboardStats {
   pmTokens?: number | null
 }
 
+/** GET /stats/platform-status — AppTopbar StatusMetrics snapshot. */
+export interface PlatformStatusMetrics {
+  /** Platform cumulative tokens; null = never reported (UI "—"). */
+  cumulativeTokens: number | null
+  /** Current calendar-aligned 5m bucket sum; null when unavailable. */
+  current5mBucketTokens: number | null
+  /** Max among today's completed 5m buckets; null when none. */
+  todayMaxCompleted5mTokens: number | null
+  runningCount: number
+  queuedCount: number
+  currentBucketStart?: string | null
+  currentBucketEnd?: string | null
+  peakBucketStart?: string | null
+  peakBucketEnd?: string | null
+  asOf: string
+  timezone?: string
+}
+
 // SettingItem is one platform scheduling knob: its effective value, where it
 // came from (env|db|config) and whether it's pinned by an env var (read-only).
 export interface SettingItem {
@@ -1323,6 +1341,15 @@ export const api = {
     return req<InboxItem[]>(path, init)
   },
   dashboard: () => req<DashboardStats>('/stats/dashboard'),
+  platformStatus: (params?: { timezone?: string; utcOffsetMinutes?: number }) => {
+    const q = new URLSearchParams()
+    if (params?.timezone) q.set('timezone', params.timezone)
+    if (params?.utcOffsetMinutes != null && Number.isFinite(params.utcOffsetMinutes)) {
+      q.set('utcOffsetMinutes', String(Math.round(params.utcOffsetMinutes)))
+    }
+    const qs = q.toString()
+    return req<PlatformStatusMetrics>(qs ? `/stats/platform-status?${qs}` : '/stats/platform-status')
+  },
   // platform settings (scheduling params)
   getSettings: () => req<{ items: SettingItem[] }>('/settings'),
   updateSettings: (patch: Record<string, number>) =>

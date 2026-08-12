@@ -52,6 +52,24 @@
       "previewLabel": "Preview",
       "loadingOutputs": "Loading outputs…",
       "listAria": "Artifacts from this run"
+    },
+    "statusMetrics": {
+      "aria": "Platform status metrics",
+      "tokens": "Cumulative tokens",
+      "tokensTip": "Platform-wide totalTokens.",
+      "rate": "Current 5-minute rate",
+      "rateTip": "Aligned-bucket cumulative (not token/s).",
+      "peak": "Today's 5-minute peak",
+      "peakTip": "Max of today's completed buckets.",
+      "running": "Running",
+      "runningTip": "runs.status = running (excludes waiting_human).",
+      "queued": "Queued",
+      "queuedTip": "runs.status = queued (pre-admission).",
+      "fullValue": "Exact: ",
+      "bucket": "bucket",
+      "compactAria": "Platform status summary",
+      "compactTitle": "Compact summary",
+      "compactTip": "Cumulative tokens · running / queued."
     }
   }
 }
