@@ -114,6 +114,55 @@ function makeCompletedWithCards(partial: Record<string, unknown>) {
   })
 }
 
+/** Legacy persisted card: typeTag=结构化产物 + structuredArtifactName=page.html + HTML markdown. */
+function makeCompletedLegacyStructuredPage(partial: Record<string, unknown>) {
+  return makeRun({
+    nodes: [{ id: 'out-1', type: 'output', label: '输出', position: { x: 0, y: 0 }, config: {} }],
+    nodeRuns: {
+      'out-1': {
+        nodeId: 'out-1',
+        status: 'completed',
+        startedAt: '2026-08-10T16:01:00Z',
+        outputs: {
+          outputCards: [
+            {
+              index: 1,
+              title: '网页预览 · 视觉网页',
+              template: '{{nodes.visual.outputs.page}}',
+              typeTag: '结构化产物',
+              status: 'ok',
+              structuredArtifactName: 'page.html',
+              outputKey: 'page',
+              markdown: `<!doctype html>
+<html>
+<body>
+<div class="scenes" id="scenes">
+  <button class="scene-btn on" type="button" data-scene="inbox">1. Inbox 待澄清</button>
+</div>
+<h1>视觉网页预览</h1>
+</body>
+</html>`,
+            },
+          ],
+        },
+      },
+    },
+    artifacts: [
+      {
+        id: 'a-page',
+        name: 'page.html',
+        kind: 'html',
+        nodeId: 'visual',
+        runId: partial.id || 'run',
+        workflowName: '自我迭代',
+        sizeBytes: 20800,
+        createdAt: '2026-08-10T16:00:30Z',
+      },
+    ],
+    ...partial,
+  })
+}
+
 /** Completed run with output node but empty cards → empty dual-exit path. */
 function makeCompletedEmptyCards(partial: Record<string, unknown>) {
   return makeRun({
@@ -225,6 +274,18 @@ function poolForScene() {
   if (scene === 'history-only') return historyItems
   if (scene === 'post-enable') return [...postEnableItems, ...historyItems]
   if (scene === 'capped') return cappedItems
+  if (scene === 'legacy-structured-page') {
+    return [
+      makeCompletedLegacyStructuredPage({
+        id: 'run-legacy-page',
+        status: 'completed',
+        title: '旧结构化 page 卡',
+        workflowName: '自我迭代',
+        startedAt: '2026-08-10T16:00:00Z',
+        durationSec: 90,
+      }),
+    ]
+  }
   if (scene === 'paged') return pagedItems
   return postEnableItems
 }
@@ -305,7 +366,13 @@ async function bootstrap() {
 
   // Seed enable baseline: for post-enable / with-items / capped, baseline in past so items unread;
   // for history-only, leave unset so first enable treats history as read.
-  if (scene === 'post-enable' || scene === 'with-items' || scene === 'capped' || scene === 'paged') {
+  if (
+    scene === 'post-enable' ||
+    scene === 'with-items' ||
+    scene === 'capped' ||
+    scene === 'legacy-structured-page' ||
+    scene === 'paged'
+  ) {
     localStorage.setItem(
       'approving.notifications.prefs.e2e',
       JSON.stringify({ enabledAt: '2020-01-01T00:00:00Z', readIds: [] }),

@@ -2584,7 +2584,13 @@
         "kindCustomHtml": "Custom · HTML",
         "kindFailed": "Failed",
         "previewUnavailableTitle": "Unable to preview",
-        "previewUnavailableBody": "page.html content is unavailable or the preview failed to load. It will not fall back to Markdown source."
+        "previewUnavailableBody": "page.html content is unavailable or the preview failed to load. It will not fall back to Markdown source.",
+        "previewLoadErrorLabel": "Preview unavailable",
+        "previewLoadErrorTitle": "Unable to load visual page",
+        "previewLoadErrorBody": "Artifact fetch failed. Markdown source fallback is disabled.",
+        "previewEmptyLabel": "Empty body",
+        "previewEmptyTitle": "No page content to preview",
+        "previewEmptyBody": "page.html body is empty. Check whether the visual node wrote the artifact."
       },
       "nodeNotRun": "This node has not run yet",
       "nodeNoOutput": "This node produced no output yet"
