@@ -48,7 +48,9 @@ describe('stream resume acceptance (g5.2 three surfaces × four scenarios)', () 
 
   it('g2.1: Inbox/Run restore order is queue_state → seed → flush', () => {
     const inbox = readSrc('views/GatesInboxView.vue')
-    const run = readSrc('views/RunDetailView.vue')
+    // Run detail: seed/flush live in useRunDetailWs (entry only assembles the composable).
+    const runWs = readSrc('lib/run/useRunDetailWs.ts')
+    const runEntry = readSrc('views/RunDetailView.vue')
     const projectStart = inbox.indexOf('async function projectClarifySessionAfterLoad')
     expect(projectStart).toBeGreaterThan(-1)
     const projectSlice = inbox.slice(projectStart, projectStart + 1200)
@@ -60,9 +62,10 @@ describe('stream resume acceptance (g5.2 three surfaces × four scenarios)', () 
     expect(inboxIdx.every((i) => i >= 0)).toBe(true)
     expect(inboxIdx[0]).toBeLessThan(inboxIdx[1]!)
     expect(inboxIdx[1]).toBeLessThan(inboxIdx[2]!)
-    expect(run).toMatch(/seedDialogueNodeOnce/)
-    expect(run.indexOf('seedDialogueAcpAfterRestore')).toBeGreaterThan(-1)
-    expect(run.indexOf('flushPendingDialogueAcp')).toBeGreaterThan(-1)
+    expect(runEntry).toMatch(/useRunDetailWs/)
+    expect(runWs).toMatch(/seedDialogueNodeOnce/)
+    expect(runWs.indexOf('seedDialogueAcpAfterRestore')).toBeGreaterThan(-1)
+    expect(runWs.indexOf('flushPendingDialogueAcp')).toBeGreaterThan(-1)
   })
 
   it('g2.3: soft refresh path and thinkingBusy copy untouched', () => {
@@ -118,13 +121,16 @@ describe('stream resume acceptance (g5.2 three surfaces × four scenarios)', () 
 
   it('Inbox + Run wire busySeedRetry and wsReconnect (g3/g4)', () => {
     const inbox = readSrc('views/GatesInboxView.vue')
-    const run = readSrc('views/RunDetailView.vue')
-    for (const src of [inbox, run]) {
+    const runWs = readSrc('lib/run/useRunDetailWs.ts')
+    const runEntry = readSrc('views/RunDetailView.vue')
+    for (const src of [inbox, runWs]) {
       expect(src).toMatch(/createBusySeedRetryController/)
       expect(src).toMatch(/createWsReconnectController/)
       expect(src).toMatch(/fromReconnect/)
     }
     expect(inbox).toMatch(/projectClarifySessionAfterLoad/)
-    expect(run).toMatch(/projectDialogueAfterLoad/)
+    expect(runEntry).toMatch(/useRunDetailWs/)
+    expect(runEntry).toMatch(/projectDialogueAfterLoad/)
+    expect(runWs).toMatch(/projectDialogueAfterLoad/)
   })
 })
