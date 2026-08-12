@@ -205,6 +205,9 @@ func (h *Handlers) PublicPreviewVNC(c *gin.Context) {
 	sess.Page().OnInspectCanceled(func() {
 		pushJSON(gin.H{"type": "inspect-canceled"})
 	})
+	sess.Page().OnDescribeFailed(func() {
+		pushJSON(gin.H{"type": "describe-failed"})
+	})
 	pushJSON(gin.H{"type": "ready", "url": navigateURL})
 
 	go func() {
@@ -228,7 +231,7 @@ func (h *Handlers) PublicPreviewVNC(c *gin.Context) {
 				var m vncClientMsg
 				if json.Unmarshal(data, &m) == nil {
 					sess.Touch()
-					h.applyVncMsg(sess.Page(), m)
+					h.applyVncMsg(sess.Page(), m, pushJSON)
 					continue
 				}
 			}
