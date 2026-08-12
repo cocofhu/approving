@@ -110,6 +110,21 @@
         "hint": "点击卡片先预览摘要，确认后再进入完整运行详情；关闭后仍停留在原看板视图。",
         "dismiss": "继续浏览",
         "openDetail": "进入运行详情"
+      },
+      "statusList": {
+        "subtitle": "当前项目 · {title} · 共 {total} 条",
+        "subtitleFailed": "{title} · 加载失败，可重试",
+        "range": "已展示 {shown} / {total}",
+        "rangeComplete": "已全部加载 {shown} / {total} · 没有更多",
+        "rangeInitialFailed": "首批未载入",
+        "rangeMoreFailed": "已展示 {shown} / {total} · 下一批失败",
+        "loadMore": "加载更多",
+        "loading": "加载中…",
+        "retry": "重试",
+        "emptyTitle": "该状态暂无运行",
+        "emptyHint": "当前项目下没有「{title}」的运行。这不是加载失败。",
+        "errorTitle": "加载失败",
+        "errorHint": "无法拉取该状态运行列表。这不是空列表。"
       }
     },
     "projectList": {
