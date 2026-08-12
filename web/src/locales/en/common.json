@@ -60,6 +60,8 @@
       "refresh": "Refresh",
       "edit": "Edit",
       "run": "Run",
+      "favorite": "Favorite",
+      "unfavorite": "Favorited",
       "copy": "Copy",
       "export": "Export",
       "import": "Import",
@@ -186,7 +188,11 @@
       "pathCopied": "Path copied: {path}",
       "copyPathFailed": "Copy failed",
       "copyFailed": "Copy failed",
-      "importedFiles": "Imported {count} file(s) into {dir}"
+      "importedFiles": "Imported {count} file(s) into {dir}",
+      "favoriteAdded": "Favorited \"{name}\" — pinned to the sidebar",
+      "favoriteRemoved": "Removed \"{name}\" from favorites",
+      "favoriteFull": "Limit of {max} reached — unfavorite another shortcut first",
+      "favoriteLaunchFailed": "Could not launch this pipeline; try again"
     },
     "action": "Action",
     "optional": "Optional",

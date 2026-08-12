@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppSidebar from './AppSidebar.vue'
@@ -7,6 +7,7 @@ import AppTopbar from './AppTopbar.vue'
 import AppSidebarNav from './AppSidebarNav.vue'
 import BrandLogo from './BrandLogo.vue'
 import Icon from '../ui/Icon.vue'
+import RunLaunchModal from '@/components/workflow/RunLaunchModal.vue'
 import {
   drainToast,
   formatGrace,
@@ -19,8 +20,10 @@ import {
 import { useAuth } from '@/lib/composables/useAuth'
 import { useRefreshChrome } from '@/lib/shared/refreshChrome'
 import { useRoutePending } from '@/lib/shared/routePending'
+import { useWorkflowRunLaunch } from '@/lib/run/useWorkflowRunLaunch'
 
 const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
 const full = computed(() => route.meta.full === true)
 const draining = computed(() => isDraining())
@@ -28,6 +31,18 @@ const offline = computed(() => isOffline())
 const auth = useAuth()
 const refresh = useRefreshChrome()
 const routePending = useRoutePending()
+const launch = useWorkflowRunLaunch()
+const {
+  open: launchOpen,
+  target: launchTarget,
+  runFields: launchFields,
+  runInputs: launchInputs,
+  runImages: launchImages,
+  draftRestored: launchDraftRestored,
+  closeLaunch,
+  saveRunDraftClick: saveShellRunDraft,
+  onStarted: onShellRunStarted,
+} = launch
 
 const showRefreshBar = computed(() => refresh.showTopBar.value)
 const dimContent = computed(() => refresh.dimContent.value)
@@ -52,6 +67,10 @@ function closeDrawer() {
 
 function toggleDrawer() {
   drawerOpen.value = !drawerOpen.value
+}
+
+function onShellViewRun(runId: string) {
+  void router.push('/runs/' + runId)
 }
 
 onMounted(() => startShutdownPolling(4000))
@@ -157,6 +176,23 @@ onUnmounted(() => stopShutdownPolling())
         </aside>
       </Transition>
     </Teleport>
+
+    <!-- Shell singleton: sidebar quick-launch opens the same RunLaunchModal as list「运行」 -->
+    <RunLaunchModal
+      v-if="launchTarget"
+      :open="launchOpen"
+      :workflow-id="launchTarget.id"
+      :project-id="launchTarget.projectId"
+      :workflow-name="launchTarget.name"
+      :fields="launchFields"
+      :run-inputs="launchInputs"
+      :run-images="launchImages"
+      :draft-restored="launchDraftRestored"
+      @close="closeLaunch()"
+      @view-run="onShellViewRun"
+      @save-draft="saveShellRunDraft()"
+      @started="onShellRunStarted()"
+    />
   </div>
 </template>
 

@@ -21,6 +21,7 @@ import { fmtCompactTokenCount } from '@/lib/run/tokenUsage'
 import { clearRunDraft, mergeRunDraft, saveRunDraft } from '@/lib/run/runDraft'
 import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import { useWorkflowImport } from '@/lib/run/useWorkflowImport'
+import { useWorkflowFavorites } from '@/lib/run/useWorkflowFavorites'
 import PmLeaderChat from '@/components/pm/PmLeaderChat.vue'
 import PmCronJobsPanel from '@/components/pm/PmCronJobsPanel.vue'
 import PmSettingsPanel from '@/components/pm/PmSettingsPanel.vue'
@@ -78,6 +79,11 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const toast = useToast()
+const { isFavorite, toggleFavorite } = useWorkflowFavorites()
+
+function toggleWorkflowFavorite(w: Workflow) {
+  toggleFavorite(w.id, { name: w.name })
+}
 const { isMobile } = useBreakpoint()
 const projectId = computed(() => route.params.id as string)
 
@@ -1246,6 +1252,16 @@ onBeforeRouteUpdate(async (to, from) => {
               </button>
               <button
                 type="button"
+                class="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-md border border-line bg-surface px-3 text-sm font-medium text-txt2 transition hover:border-line-strong hover:bg-elevated hover:text-txt"
+                :class="{ 'border-warn/40 text-warn': isFavorite(w.id) }"
+                data-testid="workflow-favorite-btn"
+                @click="toggleWorkflowFavorite(w)"
+              >
+                <Icon :name="isFavorite(w.id) ? 'star-filled' : 'star'" :size="14" />
+                {{ isFavorite(w.id) ? t('common.buttons.unfavorite') : t('common.buttons.favorite') }}
+              </button>
+              <button
+                type="button"
                 class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-line bg-surface text-txt2 transition hover:border-line-strong hover:bg-elevated hover:text-txt"
                 :class="{ 'border-line-strong bg-elevated text-txt': openMenuId === w.id }"
                 :aria-label="t('pages.workflowList.moreActions')"
@@ -1425,6 +1441,19 @@ onBeforeRouteUpdate(async (to, from) => {
                         @click="openRun(w)"
                       >
                         <Icon name="play" :size="13" class="mr-1 inline" />{{ t('common.buttons.run') }}
+                      </button>
+                      <button
+                        type="button"
+                        class="whitespace-nowrap rounded-md px-2 py-1 text-xs text-txt2 hover:bg-overlay hover:text-txt"
+                        :class="{ 'text-warn hover:bg-warn/10': isFavorite(w.id) }"
+                        data-testid="workflow-favorite-btn"
+                        @click="toggleWorkflowFavorite(w)"
+                      >
+                        <Icon
+                          :name="isFavorite(w.id) ? 'star-filled' : 'star'"
+                          :size="13"
+                          class="mr-1 inline"
+                        />{{ isFavorite(w.id) ? t('common.buttons.unfavorite') : t('common.buttons.favorite') }}
                       </button>
                       <button
                         type="button"
