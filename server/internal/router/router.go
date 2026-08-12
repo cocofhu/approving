@@ -303,6 +303,7 @@ func New(h *handlers.Handlers) *gin.Engine {
 		pub.GET("/", h.PublicGateApprovalPage)
 		pub.GET("/preview", h.PublicGatePreview)
 		pub.GET("/upstream", h.PublicGateUpstream)
+		pub.GET("/events", h.PublicGateEvents)
 		pub.POST("/preview-ticket", h.PublicPreviewTicket)
 		pub.GET("/preview-vnc/ws", h.PublicPreviewVNC)
 		pub.Any("/preview-api/:ticket/*path", h.PublicPreviewAPIProxy)

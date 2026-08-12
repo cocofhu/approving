@@ -15,6 +15,7 @@ import { provideReviewAnnotate } from '@/lib/inbox/reviewAnnotate'
 import { previewPickLabel } from '@/lib/shared/previewPickUrl'
 import type { AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
 import { isAbortError } from '@/lib/run/liveLogRehydrate'
+import { createWsReconnectController } from '@/lib/run/wsReconnect'
 import {
   formatRemainingSec,
   mergePublicGatePreview,
@@ -28,7 +29,7 @@ import {
   type PublicGatePreviewKnown,
   type PublicGateQueueItem,
 } from '@/lib/inbox/gateShareLink'
-import type { ClarifyImage, ClarifyTurn, ReactAnnotation } from '@/lib/shared/types'
+import type { AcpEvent, ClarifyImage, ClarifyTurn, ReactAnnotation } from '@/lib/shared/types'
 
 type PublicChatRef = {
   discardLastQueued?: () => void
@@ -38,6 +39,8 @@ type PublicChatRef = {
     busy?: boolean,
     activeItem?: PublicGateActiveItem | null,
   ) => void
+  applyReviewFrame?: (frame: Record<string, unknown>) => boolean | void
+  applyAcpEvents?: (events: AcpEvent[] | undefined, nodeId?: string) => boolean | void
   isSessionBusy?: () => boolean
 }
 
@@ -392,19 +395,121 @@ function syncChatQueueFromPreview() {
     if (pendingReplyText.value && (turnsIncludeHumanText(pendingReplyText.value) || activeItem?.text?.trim() === pendingReplyText.value)) {
       pendingReplyText.value = ''
     }
+  } else if (!replyInFlight.value && !(pendingReplyText.value && !turnsIncludeHumanText(pendingReplyText.value))) {
+    if (pendingReplyText.value && turnsIncludeHumanText(pendingReplyText.value)) {
+      chat.discardLastQueued?.()
+      pendingReplyText.value = ''
+    }
+    if (!(lastAppliedIdleQueue && !chat.isSessionBusy?.())) {
+      lastAppliedIdleQueue = true
+      chat.applyQueueState?.(0, [], false, null)
+    }
+  }
+  applyPreviewLiveEvents()
+  flushPendingPublicAcp()
+}
+
+function toAcpEvents(
+  events: { kind?: string; text?: string }[] | undefined,
+): AcpEvent[] {
+  if (!events?.length) return []
+  return events
+    .filter((e) => (e.kind === 'message' || e.kind === 'thought') && e.text)
+    .map((e) => ({ t: 0, kind: e.kind as AcpEvent['kind'], text: e.text }))
+}
+
+let pendingPublicAcp: AcpEvent[] | null = null
+let publicWs: WebSocket | undefined
+
+function deliverPublicAcp(events: AcpEvent[] | undefined): boolean {
+  if (!events?.length) return true
+  const chat = chatRef.value
+  if (!chat?.applyAcpEvents) {
+    pendingPublicAcp = events
+    return false
+  }
+  if (chat.applyAcpEvents(events) === false) {
+    pendingPublicAcp = events
+    return false
+  }
+  pendingPublicAcp = null
+  return true
+}
+
+function flushPendingPublicAcp() {
+  if (pendingPublicAcp) deliverPublicAcp(pendingPublicAcp)
+}
+
+function applyPreviewLiveEvents() {
+  deliverPublicAcp(toAcpEvents(preview.value?.liveEvents))
+}
+
+function handlePublicWsMessage(raw: string) {
+  let m: Record<string, unknown>
+  try {
+    m = JSON.parse(raw) as Record<string, unknown>
+  } catch {
     return
   }
-
-  if (replyInFlight.value) return
-  if (pendingReplyText.value && !turnsIncludeHumanText(pendingReplyText.value)) return
-
-  if (pendingReplyText.value && turnsIncludeHumanText(pendingReplyText.value)) {
-    chat.discardLastQueued?.()
-    pendingReplyText.value = ''
+  const typ = String(m.type || '')
+  if (typ === 'ready' || typ === 'error') return
+  if (typ === 'review') {
+    chatRef.value?.applyReviewFrame?.(m)
+    flushPendingPublicAcp()
+    return
   }
-  if (lastAppliedIdleQueue && !chat.isSessionBusy?.()) return
-  lastAppliedIdleQueue = true
-  chat.applyQueueState?.(0, [], false, null)
+  if (typ === 'acp') {
+    const events = Array.isArray(m.events) ? (m.events as AcpEvent[]) : []
+    deliverPublicAcp(events)
+  }
+}
+
+const publicWsReconnect = createWsReconnectController({
+  connect: () => connectPublicEvents(),
+  shouldReconnect: () => isActive.value && !doneKind.value && !linkInvalid.value && !!token.value,
+})
+
+function connectPublicEvents() {
+  if (!isActive.value || doneKind.value || linkInvalid.value || !token.value) return
+  const prev = publicWs
+  if (prev) {
+    publicWsReconnect.markIntentionalClose()
+    prev.close()
+    if (publicWs === prev) publicWs = undefined
+  }
+  let socket: WebSocket
+  try {
+    socket = new WebSocket(publicGateApi.eventsWsUrl())
+    publicWs = socket
+  } catch {
+    publicWsReconnect.onClose()
+    return
+  }
+  socket.onopen = () => {
+    if (publicWs !== socket) return
+    publicWsReconnect.markOpened()
+    try {
+      socket.send(JSON.stringify({ token: token.value }))
+    } catch {
+      socket.close()
+    }
+  }
+  socket.onmessage = (ev) => {
+    if (publicWs !== socket) return
+    handlePublicWsMessage(String(ev.data || ''))
+  }
+  socket.onclose = () => {
+    if (publicWs !== socket) return
+    publicWs = undefined
+    publicWsReconnect.onClose()
+  }
+}
+
+function stopPublicEvents() {
+  publicWsReconnect.markIntentionalClose()
+  publicWs?.close()
+  publicWs = undefined
+  pendingPublicAcp = null
 }
 
 function clearHash() {
@@ -721,10 +826,19 @@ function onVisibilityChange() {
 }
 
 watch([isActive, doneKind], () => {
-  if (canPoll()) startPoll()
-  else stopPoll()
+  if (canPoll()) {
+    startPoll()
+    connectPublicEvents()
+  } else {
+    stopPoll()
+    stopPublicEvents()
+  }
   if (isActive.value && !doneKind.value && !pageHidden()) startRemainingTick()
   else stopRemainingTick()
+})
+
+watch(token, (tok, prev) => {
+  if (tok && tok !== prev && isActive.value && !doneKind.value && !linkInvalid.value) connectPublicEvents()
 })
 
 watch(chatRef, (chat) => {
@@ -752,10 +866,12 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', onVisibilityChange)
   startRemainingTick()
   if (canPoll()) startPoll()
+  connectPublicEvents()
 })
 onUnmounted(() => {
   stopPoll()
   stopRemainingTick()
+  stopPublicEvents()
   window.removeEventListener('hashchange', onHashChange)
   document.removeEventListener('visibilitychange', onVisibilityChange)
   abortPreview()

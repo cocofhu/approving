@@ -16,6 +16,36 @@ import HtmlPreview from '../src/components/ui/HtmlPreview.vue'
 installIdleScrollbar()
 setTheme('dark')
 
+/** Fixture WS: public workbench must not hit a real /events socket in e2e. */
+class E2ePublicWebSocket {
+  url: string
+  onopen: ((ev?: unknown) => void) | null = null
+  onmessage: ((ev: { data: string }) => void) | null = null
+  onclose: (() => void) | null = null
+  onerror: ((ev?: unknown) => void) | null = null
+  readyState = 1
+  constructor(url: string) {
+    this.url = url
+    queueMicrotask(() => this.onopen?.())
+  }
+  send(data: string) {
+    try {
+      const m = JSON.parse(String(data || '')) as { token?: string }
+      if (m.token) {
+        queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: 'ready' }) }))
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  close() {
+    this.readyState = 3
+    this.onclose?.()
+  }
+}
+;(window as unknown as { WebSocket: typeof WebSocket }).WebSocket =
+  E2ePublicWebSocket as unknown as typeof WebSocket
+
 const TOKEN = 'ab'.repeat(32)
 /** Non-loopback mint: covers auto-copy / clipboard assertions (g2.3 / g3.1). */
 const SHARE_URL_REACHABLE = `https://approving.example.com/public/gate-approvals#t=${TOKEN}`

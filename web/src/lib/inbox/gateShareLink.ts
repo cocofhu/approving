@@ -275,6 +275,13 @@ export type PublicGatePreview = {
   ports?: PublicPreviewPort[]
   /** Graph node type from preview DTO; react ⇒ 待澄清. Kind stays review. */
   nodeType?: string
+  /** In-flight ACP rails (message/thought) while sessionBusy — poll fallback. */
+  liveEvents?: PublicGateLiveEvent[]
+}
+
+export type PublicGateLiveEvent = {
+  kind: 'message' | 'thought' | string
+  text?: string
 }
 
 export type PublicPreviewPort = {
@@ -362,6 +369,9 @@ export function mergePublicGatePreview(
   keepSparseField(merged, prev, next, 'turns', 'turnsHash')
   // Silent polls may omit nonce; never drop the last usable one.
   if (!next.nonce && prev.nonce) merged.nonce = prev.nonce
+  if (!next.sessionBusy) {
+    merged.liveEvents = undefined
+  }
   return merged
 }
 
@@ -392,6 +402,7 @@ export function publicGateContentKey(p: PublicGatePreview | null | undefined): s
     productKind: p.productKind || '',
     productName: p.productName || '',
     ports: (p.ports || []).map((x) => ({ port: x.port, label: x.label || '', mode: x.mode || '' })),
+    liveEvents: p.liveEvents || null,
   })
 }
 
@@ -406,6 +417,9 @@ export type PublicGatePreviewKnown = {
 
 /** Unauthenticated public gate APIs. Token never goes in path/query. */
 export const publicGateApi = {
+  eventsWsUrl(): string {
+    return window.location.origin.replace(/^http/, 'ws') + '/public/gate-approvals/events'
+  },
   preview(
     token: string,
     signal?: AbortSignal,

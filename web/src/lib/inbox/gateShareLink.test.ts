@@ -194,6 +194,12 @@ describe('gateShareLink helpers', () => {
     expect(sparseBodies.structured?.title).toBe('旧')
     expect(sparseBodies.turns?.[0]?.text).toBe('请复审')
     expect(sparseBodies.nonce).toBe('keep-me')
+
+    const idle = mergePublicGatePreview(
+      { ...prev, sessionBusy: true, liveEvents: [{ kind: 'message', text: '流式正文' }] },
+      { status: 'active', sessionBusy: false, remainingSec: 1 },
+    )
+    expect(idle.liveEvents).toBeUndefined()
   })
 
   it('remainingSecFromExpiresAt prefers expiresAt over stale remainingSec (plan g2.1)', () => {
@@ -219,5 +225,8 @@ describe('gateShareLink helpers', () => {
       publicGateContentKey(base),
     )
     expect(publicGateContentKey({ ...base, turnsHash: 'tn-new' })).not.toBe(publicGateContentKey(base))
+    expect(publicGateContentKey({ ...base, liveEvents: [{ kind: 'message', text: '流' }] })).not.toBe(
+      publicGateContentKey(base),
+    )
   })
 })
