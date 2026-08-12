@@ -380,6 +380,26 @@
           "desc": "同 workspace 内重命名/移动"
         }
       }
+    },
+    "pmPrdManager": {
+      "name": "pm-prd-manager",
+      "desc": "项目管理专用 · 查看与创建需求草稿",
+      "overview": "按当前项目管理会话项目列出需求草稿摘要、读取全文，并创建 open 草稿。列表不含正文；创建缺省标题为「未命名需求」。本轮不提供更新/改状态/删除。",
+      "convention": "项目详情 → 项目管理设置或渠道 MCP 勾选中启用 pm-prd-manager（新项目默认启用；旧项目若已显式保存 EnabledMcps 需手动勾选）。未启用时调用返回 mcp disabled。",
+      "tools": {
+        "pm_list_requirement_drafts": {
+          "signature": "pm_list_requirement_drafts(status?, query?)",
+          "desc": "列出当前项目需求草稿摘要（id/title/status/updatedAt/createdAt，不含正文）"
+        },
+        "pm_get_requirement_draft": {
+          "signature": "pm_get_requirement_draft(draftId)",
+          "desc": "读取单条需求草稿全文（含 bodyMarkdown）"
+        },
+        "pm_create_requirement_draft": {
+          "signature": "pm_create_requirement_draft(title?, bodyMarkdown?)",
+          "desc": "创建 open 需求草稿；缺省标题为「未命名需求」"
+        }
+      }
     }
   }
 }

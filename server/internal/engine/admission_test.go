@@ -128,6 +128,27 @@ func gateThenWorkGraph() models.Graph {
 	}
 }
 
+// workThenGateGraph keeps the run on blocked "work" after claim while still
+// having a remaining human_gate ahead — so admission tests can observe claim
+// order without waiting_human releasing the slot.
+func workThenGateGraph() models.Graph {
+	return models.Graph{
+		Nodes: []models.Node{
+			{ID: "input", Type: "input"},
+			{ID: "work", Type: "agent", Config: map[string]any{"skill_profile": "t", "prompt": "work"}},
+			{ID: "gate", Type: "human_gate", Config: map[string]any{
+				"actions": []any{map[string]any{"id": "ok", "label": "OK"}},
+			}},
+			{ID: "output", Type: "output"},
+		},
+		Edges: []models.Edge{
+			{ID: "e1", Source: "input", Target: "work"},
+			{ID: "e2", Source: "work", Target: "gate", Kind: models.EdgeSuccess},
+			{ID: "e3", Source: "gate", Target: "output", Kind: models.EdgeSuccess},
+		},
+	}
+}
+
 func countRunsByStatus(t *testing.T, db *gorm.DB, status string) int64 {
 	t.Helper()
 	var n int64
@@ -157,6 +178,14 @@ func setupBlockingEngineDual(t *testing.T, maxRuns int) (*Engine, *gorm.DB, *blo
 	}
 	if err := db.Create(&models.WorkflowVersion{WorkflowID: "wf-gate", Version: 1, Graph: gateThenWorkGraph()}).Error; err != nil {
 		t.Fatalf("create gate version: %v", err)
+	}
+	if err := db.Create(&models.WorkflowDef{
+		ID: "wf-work-gate", Name: "wf-work-gate", Status: "published", Version: 1, Graph: workThenGateGraph(),
+	}).Error; err != nil {
+		t.Fatalf("create work-then-gate workflow: %v", err)
+	}
+	if err := db.Create(&models.WorkflowVersion{WorkflowID: "wf-work-gate", Version: 1, Graph: workThenGateGraph()}).Error; err != nil {
+		t.Fatalf("create work-then-gate version: %v", err)
 	}
 	p := newBlockingFake(eng.host)
 	p.blockNode("work")
@@ -399,17 +428,17 @@ func TestExecuteEarlyExitRequeuesRun(t *testing.T) {
 func TestAdmissionMixedPriority(t *testing.T) {
 	eng, db, p := setupBlockingEngine(t, slowGraph(), 1)
 
-	runLow, err := eng.StartRunWithPriority("wf", nil, "test", "low")
+	runLow, err := eng.StartRunWithPriority("wf", nil, "test", "low", nil, nil)
 	if err != nil {
 		t.Fatalf("StartRun low: %v", err)
 	}
 	waitRunStatus(t, db, runLow.ID, "running")
 
-	runNormal, err := eng.StartRunWithPriority("wf", nil, "test", "normal")
+	runNormal, err := eng.StartRunWithPriority("wf", nil, "test", "normal", nil, nil)
 	if err != nil {
 		t.Fatalf("StartRun normal: %v", err)
 	}
-	runHigh, err := eng.StartRunWithPriority("wf", nil, "test", "high")
+	runHigh, err := eng.StartRunWithPriority("wf", nil, "test", "high", nil, nil)
 	if err != nil {
 		t.Fatalf("StartRun high: %v", err)
 	}
@@ -454,11 +483,11 @@ func TestAdmissionRequeueUsesUpdatedPriority(t *testing.T) {
 	}
 	waitRunStatus(t, db, runHold.ID, "running")
 
-	runEarly, err := eng.StartRunWithPriority("wf", nil, "test", "low")
+	runEarly, err := eng.StartRunWithPriority("wf", nil, "test", "low", nil, nil)
 	if err != nil {
 		t.Fatalf("StartRun early low: %v", err)
 	}
-	runLate, err := eng.StartRunWithPriority("wf", nil, "test", "low")
+	runLate, err := eng.StartRunWithPriority("wf", nil, "test", "low", nil, nil)
 	if err != nil {
 		t.Fatalf("StartRun late low: %v", err)
 	}
@@ -556,7 +585,7 @@ func TestStartRunFromPublishedForcesNormal(t *testing.T) {
 	if err := db.Create(&models.WorkflowVersion{WorkflowID: "wf", Version: 1, Graph: slowGraph()}).Error; err != nil {
 		t.Fatalf("version: %v", err)
 	}
-	run, err := eng.StartRunFromPublished("wf", nil, "")
+	run, err := eng.StartRunFromPublished("wf", nil, "", nil, nil)
 	if err != nil {
 		t.Fatalf("StartRunFromPublished: %v", err)
 	}
@@ -567,4 +596,219 @@ func TestStartRunFromPublishedForcesNormal(t *testing.T) {
 		t.Fatalf("trigger = %q, want api", run.Trigger)
 	}
 	p.ReleaseAll()
+}
+
+// Demo s1: same-band claim prefers remaining human_gate over earlier FIFO no-gate.
+func TestAdmissionSamePriorityHumanGatePreferred(t *testing.T) {
+	eng, db, p := setupBlockingEngineDual(t, 1)
+
+	hold, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("StartRun hold: %v", err)
+	}
+	waitRunStatus(t, db, hold.ID, "running")
+
+	earlyNoGate, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("StartRun early no-gate: %v", err)
+	}
+	// work→gate keeps the claimed run running (blocked on work) so the slot is
+	// not freed by waiting_human before we observe claim order.
+	lateWithGate, err := eng.StartRun("wf-work-gate", nil, "test")
+	if err != nil {
+		t.Fatalf("StartRun late with-gate: %v", err)
+	}
+	waitAdmissionUntil(t, func() bool {
+		return countRunsByStatus(t, db, "queued") == 2
+	}, 3*time.Second)
+
+	p.releaseRun(hold.ID)
+	waitAdmissionUntil(t, func() bool {
+		var r models.Run
+		db.First(&r, "id = ?", hold.ID)
+		return r.Status == "completed"
+	}, 5*time.Second)
+	waitAdmissionUntil(t, func() bool {
+		var r models.Run
+		db.First(&r, "id = ?", lateWithGate.ID)
+		return r.Status == "running"
+	}, 5*time.Second)
+
+	var early models.Run
+	db.First(&early, "id = ?", earlyNoGate.ID)
+	if early.Status != "queued" {
+		t.Fatalf("early no-gate status = %q, want queued (late with-gate claimed first)", early.Status)
+	}
+	if early.Priority != models.PriorityNormal {
+		t.Fatalf("priority mutated: %d", early.Priority)
+	}
+	p.ReleaseAll()
+}
+
+// Demo s2: higher Priority band still wins even when lower band has remaining human_gate.
+func TestAdmissionCrossPriorityIgnoresHumanGate(t *testing.T) {
+	eng, db, p := setupBlockingEngineDual(t, 1)
+
+	hold, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("StartRun hold: %v", err)
+	}
+	waitRunStatus(t, db, hold.ID, "running")
+
+	normalGate, err := eng.StartRunWithPriority("wf-gate", nil, "test", "normal")
+	if err != nil {
+		t.Fatalf("StartRun normal gate: %v", err)
+	}
+	highNoGate, err := eng.StartRunWithPriority("wf", nil, "test", "high")
+	if err != nil {
+		t.Fatalf("StartRun high no-gate: %v", err)
+	}
+	waitAdmissionUntil(t, func() bool {
+		return countRunsByStatus(t, db, "queued") == 2
+	}, 3*time.Second)
+
+	p.releaseRun(hold.ID)
+	waitAdmissionUntil(t, func() bool {
+		var r models.Run
+		db.First(&r, "id = ?", hold.ID)
+		return r.Status == "completed"
+	}, 5*time.Second)
+	waitAdmissionUntil(t, func() bool {
+		var r models.Run
+		db.First(&r, "id = ?", highNoGate.ID)
+		return r.Status == "running"
+	}, 5*time.Second)
+
+	var normal models.Run
+	db.First(&normal, "id = ?", normalGate.ID)
+	if normal.Status != "queued" {
+		t.Fatalf("normal+gate status = %q, want queued (high band first)", normal.Status)
+	}
+	p.ReleaseAll()
+}
+
+// Demo s3: after human_gate passes and requeues with no remaining gate, yield to
+// same-band queued runs that still have a remaining human_gate.
+func TestAdmissionYieldAfterHumanGatePassed(t *testing.T) {
+	eng, db, p := setupBlockingEngineDual(t, 1)
+
+	pastGate, err := eng.StartRun("wf-gate", nil, "test")
+	if err != nil {
+		t.Fatalf("StartRun past-gate: %v", err)
+	}
+	waitRunStatus(t, db, pastGate.ID, "waiting_human")
+
+	hold, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("StartRun hold: %v", err)
+	}
+	waitRunStatus(t, db, hold.ID, "running")
+
+	if err := eng.ResumeGate(pastGate.ID, "gate", "ok", nil); err != nil {
+		t.Fatalf("ResumeGate: %v", err)
+	}
+	waitAdmissionUntil(t, func() bool {
+		var r models.Run
+		db.First(&r, "id = ?", pastGate.ID)
+		return r.Status == "queued"
+	}, 3*time.Second)
+	if from := admissionFromInDB(t, db, pastGate.ID); from != "work" {
+		t.Fatalf("admission from = %q, want work", from)
+	}
+
+	stillHasGate, err := eng.StartRun("wf-work-gate", nil, "test")
+	if err != nil {
+		t.Fatalf("StartRun still-has-gate: %v", err)
+	}
+	waitAdmissionUntil(t, func() bool {
+		return countRunsByStatus(t, db, "queued") == 2
+	}, 3*time.Second)
+
+	p.releaseRun(hold.ID)
+	waitAdmissionUntil(t, func() bool {
+		var r models.Run
+		db.First(&r, "id = ?", hold.ID)
+		return r.Status == "completed"
+	}, 5*time.Second)
+	waitAdmissionUntil(t, func() bool {
+		var r models.Run
+		db.First(&r, "id = ?", stillHasGate.ID)
+		return r.Status == "running"
+	}, 5*time.Second)
+
+	var past models.Run
+	db.First(&past, "id = ?", pastGate.ID)
+	if past.Status != "queued" {
+		t.Fatalf("past-gate status = %q, want queued (yielded to remaining gate)", past.Status)
+	}
+	p.ReleaseAll()
+}
+
+// Demo s4/s5 constraints: Priority/list semantics unchanged; empty-slot passthrough;
+// running not kicked back to queued when a gated peer arrives.
+func TestAdmissionHumanGateConstraintsNoPreemptNoStarve(t *testing.T) {
+	eng, db, p := setupBlockingEngineDual(t, 2)
+
+	noGate, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("StartRun no-gate: %v", err)
+	}
+	waitRunStatus(t, db, noGate.ID, "running")
+
+	withGate, err := eng.StartRun("wf-gate", nil, "test")
+	if err != nil {
+		t.Fatalf("StartRun with-gate: %v", err)
+	}
+	// Empty slot: gated run must admit immediately (no intentional idle wait).
+	waitAdmissionUntil(t, func() bool {
+		var r models.Run
+		db.First(&r, "id = ?", withGate.ID)
+		return r.Status == "running" || r.Status == "waiting_human"
+	}, 3*time.Second)
+
+	var hold models.Run
+	db.First(&hold, "id = ?", noGate.ID)
+	if hold.Status != "running" {
+		t.Fatalf("running no-gate status = %q, want running (must not preempt)", hold.Status)
+	}
+	if hold.Priority != models.PriorityNormal {
+		t.Fatalf("stored priority mutated: %d", hold.Priority)
+	}
+	if models.PriorityLabel(hold.Priority) != models.PriorityLabelNormal {
+		t.Fatalf("badge label mutated: %q", models.PriorityLabel(hold.Priority))
+	}
+	p.ReleaseAll()
+}
+
+func TestPickQueuedByRemainingHumanGate(t *testing.T) {
+	noGate := models.Run{
+		ID: "a", Priority: models.PriorityNormal,
+		Graph: slowGraph(),
+	}
+	withGate := models.Run{
+		ID: "b", Priority: models.PriorityNormal,
+		Graph: workThenGateGraph(),
+	}
+	// FIFO order: noGate first; picker must still prefer withGate.
+	got := pickQueuedByRemainingHumanGate([]models.Run{noGate, withGate})
+	if got.ID != "b" {
+		t.Fatalf("pick = %q, want b (remaining human_gate)", got.ID)
+	}
+	// Both no-gate → FIFO head.
+	got = pickQueuedByRemainingHumanGate([]models.Run{noGate, {ID: "c", Graph: slowGraph()}})
+	if got.ID != "a" {
+		t.Fatalf("pick = %q, want a (FIFO when gate tie)", got.ID)
+	}
+	// Past gate via admission-from → yield to remaining gate.
+	past := models.Run{
+		ID: "past", Priority: models.PriorityNormal,
+		Graph: gateThenWorkGraph(),
+		Checkpoints: map[string]map[string]any{
+			admissionFromCheckpoint: {"node": "work"},
+		},
+	}
+	got = pickQueuedByRemainingHumanGate([]models.Run{past, withGate})
+	if got.ID != "b" {
+		t.Fatalf("pick = %q, want b after past-gate yield", got.ID)
+	}
 }

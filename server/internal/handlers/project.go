@@ -20,11 +20,12 @@ type projectCreateBody struct {
 }
 
 type projectUpdateBody struct {
-	Name         *string                     `json:"name"`
-	Description  *string                     `json:"description"`
-	SandboxEnv   *[]models.EnvEntry          `json:"sandboxEnv"`
-	Variables    *[]models.ProjectVariable   `json:"variables"`
-	NotifyPolicy *models.ProjectNotifyPolicy `json:"notifyPolicy"`
+	Name                    *string                     `json:"name"`
+	Description             *string                     `json:"description"`
+	SandboxEnv              *[]models.EnvEntry          `json:"sandboxEnv"`
+	Variables               *[]models.ProjectVariable   `json:"variables"`
+	NotifyPolicy            *models.ProjectNotifyPolicy `json:"notifyPolicy"`
+	UnknownModelDisplayName *string                     `json:"unknownModelDisplayName"`
 }
 
 func (h *Handlers) ListProjects(c *gin.Context) {
@@ -114,7 +115,7 @@ func (h *Handlers) UpdateProject(c *gin.Context) {
 		return
 	}
 	id := c.Param("id")
-	p, err := h.Projects.Update(id, b.Name, b.Description, b.SandboxEnv, b.Variables, b.NotifyPolicy)
+	p, err := h.Projects.Update(id, b.Name, b.Description, b.SandboxEnv, b.Variables, b.NotifyPolicy, b.UnknownModelDisplayName)
 	if err != nil {
 		writeProjectErr(c, err)
 		return
@@ -134,6 +135,9 @@ func (h *Handlers) UpdateProject(c *gin.Context) {
 	}
 	if b.NotifyPolicy != nil {
 		changed = append(changed, "notifyPolicy")
+	}
+	if b.UnknownModelDisplayName != nil {
+		changed = append(changed, "unknownModelDisplayName")
 	}
 	payload := map[string]any{"changed": changed, "name": p.Name}
 	if b.SandboxEnv != nil {
@@ -234,7 +238,8 @@ func (h *Handlers) GetProjectTokenStats(c *gin.Context) {
 func writeProjectErr(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, services.ErrEmptyProjectName),
-		errors.Is(err, services.ErrSecretPlaceholderOnNewKey):
+		errors.Is(err, services.ErrSecretPlaceholderOnNewKey),
+		errors.Is(err, services.ErrUnknownModelDisplayNameTooLong):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, services.ErrProjectNameExists):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})

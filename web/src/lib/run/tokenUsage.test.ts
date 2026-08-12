@@ -6,12 +6,14 @@ import {
   fmtTokenCount,
   fmtTokenRate,
   mergeTokenUsage,
+  normalizeUnknownModelDisplayNameInput,
   summarizeMultiRunUsage,
   summarizeTimelineUsage,
   sumTotalTokens,
   TOKEN_USAGE_UNKNOWN_MODEL,
   tokenUsageTotal,
   totalTokensOrNull,
+  unknownDisplayName,
 } from './tokenUsage'
 
 describe('tokenUsage', () => {
@@ -175,5 +177,23 @@ describe('tokenUsage', () => {
     )
     expect(rows[0]?.modelKey).toBe('claude-sonnet-4')
     expect(rows[0]?.filled).toBe(true)
+  })
+
+  it('unknownDisplayName covers alias / empty / default-name / non-unknown keys', () => {
+    expect(unknownDisplayName(TOKEN_USAGE_UNKNOWN_MODEL, 'gpt-5')).toBe('gpt-5')
+    expect(unknownDisplayName(TOKEN_USAGE_UNKNOWN_MODEL, '  ')).toBe(TOKEN_USAGE_UNKNOWN_MODEL)
+    expect(unknownDisplayName(TOKEN_USAGE_UNKNOWN_MODEL, TOKEN_USAGE_UNKNOWN_MODEL)).toBe(
+      TOKEN_USAGE_UNKNOWN_MODEL,
+    )
+    expect(unknownDisplayName(TOKEN_USAGE_UNKNOWN_MODEL, null)).toBe(TOKEN_USAGE_UNKNOWN_MODEL)
+    expect(unknownDisplayName('gpt-5', 'alias')).toBe('gpt-5')
+  })
+
+  it('normalizeUnknownModelDisplayNameInput trims, clears default, rejects >64', () => {
+    expect(normalizeUnknownModelDisplayNameInput(' gpt-5 ')).toEqual({ value: 'gpt-5' })
+    expect(normalizeUnknownModelDisplayNameInput('   ')).toEqual({ value: '' })
+    expect(normalizeUnknownModelDisplayNameInput(TOKEN_USAGE_UNKNOWN_MODEL)).toEqual({ value: '' })
+    const tooLong = 'a'.repeat(65)
+    expect(normalizeUnknownModelDisplayNameInput(tooLong).error).toMatch(/64/)
   })
 })

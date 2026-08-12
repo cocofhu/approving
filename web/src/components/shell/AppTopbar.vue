@@ -4,9 +4,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import LangSelect from '../ui/LangSelect.vue'
-import RunOutputPptModal from './RunOutputPptModal.vue'
 import { theme, toggleTheme } from '@/lib/shared/theme'
 import { isDraining } from '@/lib/composables/useShutdownState'
+import { requestNotificationsPageReset } from '@/lib/composables/useNotificationsPageEntry'
 import { locale, setLocale, type AppLocale } from '@/lib/shared/locale'
 import { relTime } from '@/lib/shared/format'
 import { useRunTerminalNotifications } from '@/lib/run/useRunTerminalNotifications'
@@ -26,15 +26,10 @@ const {
   unreadCount,
   hasUnreadFailed,
   badgeLabel,
-  markRead,
   markAllRead,
   startPolling,
   stopPolling,
 } = useRunTerminalNotifications()
-
-const outputOpen = ref(false)
-const outputRunId = ref<string | null>(null)
-const outputContext = ref('')
 
 const themeTitle = computed(() =>
   t(theme.value === 'dark' ? 'shell.theme.toLight' : 'shell.theme.toDark'),
@@ -105,33 +100,11 @@ function itemContext(item: { workflowName: string; runId: string; title: string 
   return wf ? `${wf} · ${item.runId}` : item.runId
 }
 
-async function onItemClick(item: {
-  runId: string
-  status: 'completed' | 'failed'
-  title: string
-  workflowName: string
-}) {
+async function onItemClick() {
+  // Demo / f5: preview click enters /notifications page 1, no locate/highlight.
   closePanel()
-  if (item.status === 'failed') {
-    markRead(item.runId)
-    await router.push(`/runs/${item.runId}`)
-    return
-  }
-  // completed: defer markRead until user clicks「标记已读」in the output modal
-  outputContext.value = itemContext(item)
-  outputRunId.value = item.runId
-  outputOpen.value = true
-}
-
-function closeOutputModal() {
-  outputOpen.value = false
-  outputRunId.value = null
-  outputContext.value = ''
-}
-
-function onOutputMarkRead() {
-  if (outputRunId.value) markRead(outputRunId.value)
-  closeOutputModal()
+  requestNotificationsPageReset()
+  await router.push({ path: '/notifications' })
 }
 
 function onMarkAllRead() {
@@ -141,6 +114,7 @@ function onMarkAllRead() {
 function viewAll() {
   // Opening "view all" must NOT batch-mark read; goes to independent notifications page.
   closePanel()
+  requestNotificationsPageReset()
   void router.push({ path: '/notifications' })
 }
 
@@ -161,8 +135,6 @@ defineExpose({
   toggleMenu,
   panelOpen,
   togglePanel,
-  outputOpen,
-  outputRunId,
 })
 </script>
 
@@ -259,7 +231,7 @@ defineExpose({
             :data-status="item.status"
             :data-unread="item.unread ? 'true' : 'false'"
             :data-before-baseline="item.beforeBaseline ? 'true' : 'false'"
-            @click="onItemClick(item)"
+            @click="onItemClick()"
           >
             <span
               v-if="item.unread"
@@ -316,12 +288,5 @@ defineExpose({
       </div>
     </div>
 
-    <RunOutputPptModal
-      :open="outputOpen"
-      :run-id="outputRunId"
-      :context-label="outputContext"
-      @close="closeOutputModal"
-      @mark-read="onOutputMarkRead"
-    />
   </header>
 </template>

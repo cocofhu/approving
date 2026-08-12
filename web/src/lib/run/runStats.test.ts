@@ -4,6 +4,7 @@ import {
   aggregateSingleRun,
   flattenProcesses,
   hasHumanWait,
+  isInvalidStart,
   mergeByNode,
   mergeByType,
   pickDefaultTimelineNodeId,
@@ -87,6 +88,68 @@ describe('resolveProcessDuration / hasHumanWait', () => {
         now,
       ),
     ).toBe(42)
+  })
+})
+
+describe('isInvalidStart / resolveRunWallSec sentinels (F1/F7)', () => {
+  const now = Date.parse('2026-08-11T21:17:00Z')
+  const goZero = '0001-01-01T00:00:00Z'
+
+  it('treats empty, unparseable, pre-epoch, and year-1 as invalid', () => {
+    expect(isInvalidStart(undefined)).toBe(true)
+    expect(isInvalidStart(null)).toBe(true)
+    expect(isInvalidStart('')).toBe(true)
+    expect(isInvalidStart('   ')).toBe(true)
+    expect(isInvalidStart('not-a-date')).toBe(true)
+    expect(isInvalidStart('1969-12-31T23:59:59Z')).toBe(true)
+    expect(isInvalidStart(goZero)).toBe(true)
+    expect(isInvalidStart('0001-01-01T00:00:00+00:00')).toBe(true)
+    expect(isInvalidStart('2026-07-18T00:00:00Z')).toBe(false)
+    expect(isInvalidStart('1970-01-01T00:00:00Z')).toBe(false)
+  })
+
+  it('queued / running / waiting_human with Go-zero start contribute 0 (no now-start)', () => {
+    for (const status of ['queued', 'running', 'waiting_human'] as const) {
+      expect(resolveRunWallSec({ status, startedAt: goZero, durationSec: 0 }, now)).toBe(0)
+      expect(resolveRunWallSec({ status, startedAt: '', durationSec: 99 }, now)).toBe(0)
+      expect(resolveRunWallSec({ status, startedAt: 'bogus', durationSec: 0 }, now)).toBe(0)
+    }
+  })
+
+  it('does not zero a running run with a recent valid startedAt', () => {
+    const start = '2026-08-11T21:16:00Z'
+    expect(
+      resolveRunWallSec({ status: 'running', startedAt: start, durationSec: 0 }, now),
+    ).toBe(60)
+  })
+
+  it('keeps terminal duration even when startedAt is Go zero', () => {
+    expect(
+      resolveRunWallSec(
+        { status: 'completed', startedAt: goZero, durationSec: 744 },
+        now,
+      ),
+    ).toBe(744)
+  })
+
+  it('queued+0001 mean stays minute-scale, not million hours (F7 inflation lock)', () => {
+    const queued = resolveRunWallSec(
+      { status: 'queued', startedAt: goZero, durationSec: 0 },
+      now,
+    )
+    const a = resolveRunWallSec(
+      { status: 'completed', startedAt: '2026-08-12T00:00:00Z', durationSec: 744 },
+      now,
+    )
+    const b = resolveRunWallSec(
+      { status: 'completed', startedAt: '2026-08-12T01:00:00Z', durationSec: 1936 },
+      now,
+    )
+    const avg = (queued + queued + a + b) / 4
+    expect(queued).toBe(0)
+    expect(avg).toBe((744 + 1936) / 4)
+    expect(avg).toBeLessThan(3600)
+    expect(avg / 3600).toBeLessThan(1_000_000)
   })
 })
 

@@ -1039,7 +1039,7 @@ func TestPmChannelThreadWriteDeleteForbidden(t *testing.T) {
 		if code != http.StatusForbidden {
 			t.Fatalf("%s want 403 got %d %s", label, code, body)
 		}
-		if !strings.Contains(body, "渠道") || !strings.Contains(body, "只读") {
+		if !strings.Contains(body, "渠道会话") || (!strings.Contains(body, "只读") && !strings.Contains(body, "不可在 Web 改写")) {
 			t.Fatalf("%s want channel read-only error, got %s", label, body)
 		}
 	}

@@ -112,7 +112,59 @@ func eNodeLabel(c *execCtx, nodeID string) string {
 	return nodeID
 }
 
-func (e *Engine) buildOutputCard(c *execCtx, idx int, tmpl string) map[string]any {
+const (
+	failTitleSourceFailed = "来源状态失败"
+	failTitleCancelled    = "来源已取消"
+	failTitleMissingOut   = "缺少可展示产出"
+)
+
+// visualNodePageName is the per-source physical copy of page.html so two visual
+// nodes in one run stay independently addressable. The logical alias page.html
+// is unchanged (Agent write_artifact + gate / single-visual fallback).
+func visualNodePageName(nodeID string) string {
+	return nodeID + "." + visualPageName
+}
+
+func markFailCard(card map[string]any, failTitle, reason string) map[string]any {
+	card["typeTag"] = "来源失败"
+	card["status"] = "failed"
+	card["failTitle"] = failTitle
+	card["errorReason"] = reason
+	return card
+}
+
+func isNonTerminalNodeStatus(st string) bool {
+	return st == "running" || st == "waiting_human"
+}
+
+func hasDisplayableNodeOutput(outs map[string]any, key string) bool {
+	if outs == nil {
+		return false
+	}
+	val, ok := outs[key]
+	if !ok {
+		return false
+	}
+	if strings.TrimSpace(models.VarDisplayText(val)) != "" {
+		return true
+	}
+	if artName := structuredArtifactForKey(key); artName != "" && key != "page" {
+		m := nodereg.BuildManifest()
+		if jsonKey, mapped := m.ArtifactToOutputJSON[artName]; mapped {
+			if snap, exists := outs[jsonKey]; exists {
+				if s, isStr := snap.(string); isStr && strings.TrimSpace(s) != "" {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// buildOutputCard returns the card and whether execOutput should append it.
+// Unexecuted (no StateRun), skipped, and non-terminal sources with nothing to
+// show are hidden — they must not become failed cards.
+func (e *Engine) buildOutputCard(c *execCtx, idx int, tmpl string) (map[string]any, bool) {
 	ref := parseOutputSourceRef(tmpl)
 	card := map[string]any{
 		"index":    idx,
@@ -126,29 +178,29 @@ func (e *Engine) buildOutputCard(c *execCtx, idx int, tmpl string) map[string]an
 		card["outputKey"] = ref.outputKey
 		card["title"] = cardTitleForNodeRef(c, ref)
 		st := e.nodeLatestStatus(c, ref.nodeID)
-		if st == "failed" || st == "skipped" || st == "cancelled" {
-			card["typeTag"] = "来源失败"
-			card["status"] = "failed"
-			card["errorReason"] = fmt.Sprintf("上游节点状态：%s", st)
-			return card
-		}
 		outs := c.nodeOutputs[ref.nodeID]
+		if st == "" || st == "skipped" {
+			return nil, false
+		}
+		if isNonTerminalNodeStatus(st) && !hasDisplayableNodeOutput(outs, ref.outputKey) {
+			return nil, false
+		}
+		if st == "failed" {
+			return markFailCard(card, failTitleSourceFailed, fmt.Sprintf("上游节点状态：%s", st)), true
+		}
+		if st == "cancelled" {
+			return markFailCard(card, failTitleCancelled, fmt.Sprintf("上游节点状态：%s", st)), true
+		}
 		if outs == nil {
-			card["typeTag"] = "来源失败"
-			card["status"] = "failed"
-			card["errorReason"] = "上游节点无输出"
-			return card
+			return markFailCard(card, failTitleMissingOut, "来源已执行完成但没有可供展示的产出"), true
 		}
 		val, ok := outs[ref.outputKey]
 		if !ok {
-			card["typeTag"] = "来源失败"
-			card["status"] = "failed"
-			card["errorReason"] = fmt.Sprintf("上游输出键 %q 不存在", ref.outputKey)
-			return card
+			return markFailCard(card, failTitleMissingOut, fmt.Sprintf("上游输出键 %q 不存在", ref.outputKey)), true
 		}
 		// page→page.html is in OutputKeyToArtifact for artifact naming, but it is a
 		// custom HTML product (no *_json). Exclude it so the dedicated branch below
-		// is reachable and ends up as 自定义产物 + artifactName=page.html.
+		// is reachable and ends up as 自定义产物 + artifactName={nodeId}.page.html.
 		if artName := structuredArtifactForKey(ref.outputKey); artName != "" && ref.outputKey != "page" {
 			card["typeTag"] = "结构化产物"
 			card["structuredArtifactName"] = artName
@@ -166,66 +218,52 @@ func (e *Engine) buildOutputCard(c *execCtx, idx int, tmpl string) map[string]an
 				card["markdown"] = md
 			}
 			if card["jsonSnapshot"] == nil && (card["markdown"] == nil || card["markdown"] == "") {
-				card["typeTag"] = "来源失败"
-				card["status"] = "failed"
-				card["errorReason"] = "结构化产物缺失或为空"
+				return markFailCard(card, failTitleMissingOut, "结构化产物缺失或为空"), true
 			}
-			return card
+			return card, true
 		}
 		if ref.outputKey == "content" || ref.outputKey == "page" {
 			md := models.VarDisplayText(val)
 			if strings.TrimSpace(md) == "" {
-				card["typeTag"] = "来源失败"
-				card["status"] = "failed"
-				card["errorReason"] = "文本输出为空"
-				return card
+				return markFailCard(card, failTitleMissingOut, "来源已执行完成但没有可供展示的产出"), true
 			}
 			if ref.outputKey == "page" {
 				card["typeTag"] = "自定义产物"
-				card["artifactName"] = "page.html"
+				card["artifactName"] = visualNodePageName(ref.nodeID)
 				card["markdown"] = md
 			} else {
 				card["typeTag"] = "Markdown"
 				card["markdown"] = md
 			}
-			return card
+			return card, true
 		}
 		md := models.VarDisplayText(val)
 		if strings.TrimSpace(md) == "" {
-			card["typeTag"] = "来源失败"
-			card["status"] = "failed"
-			card["errorReason"] = "来源内容为空"
-			return card
+			return markFailCard(card, failTitleMissingOut, "来源已执行完成但没有可供展示的产出"), true
 		}
 		card["typeTag"] = "Markdown"
 		card["markdown"] = md
-		return card
+		return card, true
 
 	case "artifact":
 		card["title"] = "产物 · " + ref.artifact
 		card["artifactName"] = ref.artifact
 		content, ok := e.store.Get(c.run.ID, ref.artifact)
 		if !ok || strings.TrimSpace(content) == "" {
-			card["typeTag"] = "来源失败"
-			card["status"] = "failed"
-			card["errorReason"] = fmt.Sprintf("产物 %q 不存在或为空", ref.artifact)
-			return card
+			return markFailCard(card, failTitleMissingOut, fmt.Sprintf("产物 %q 不存在或为空", ref.artifact)), true
 		}
 		if isKnownStructuredArtifact(ref.artifact) {
 			card["typeTag"] = "结构化产物"
 			card["structuredArtifactName"] = ref.artifact
 			card["jsonSnapshot"] = content
-			return card
+			return card, true
 		}
 		card["typeTag"] = "自定义产物"
-		return card
+		return card, true
 
 	default:
 		card["title"] = "自定义 · " + tmpl
-		card["typeTag"] = "来源失败"
-		card["status"] = "failed"
-		card["errorReason"] = "无法解析的来源模板"
-		return card
+		return markFailCard(card, failTitleMissingOut, "无法解析的来源模板"), true
 	}
 }
 
@@ -238,8 +276,12 @@ func isKnownStructuredArtifact(name string) bool {
 func (e *Engine) execOutput(c *execCtx, node *models.Node) nodeOutcome {
 	templates := resolveOutputResults(node.Config)
 	cards := make([]map[string]any, 0, len(templates))
-	for i, tmpl := range templates {
-		cards = append(cards, e.buildOutputCard(c, i+1, tmpl))
+	for _, tmpl := range templates {
+		card, include := e.buildOutputCard(c, len(cards)+1, tmpl)
+		if !include {
+			continue
+		}
+		cards = append(cards, card)
 	}
 	outputs := map[string]any{
 		"outputCards": cards,

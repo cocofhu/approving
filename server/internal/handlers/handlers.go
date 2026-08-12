@@ -49,6 +49,7 @@ type Handlers struct {
 	Auth              *auth.Service
 	PlatformRules     *services.PlatformRuleService
 	Channels          *services.ChannelConfigService
+	RunNotify         *services.RunNotifyService
 	Browser           *browser.Service
 	Audit             *services.ProjectAuditService
 	Onboarding        *services.OnboardingService

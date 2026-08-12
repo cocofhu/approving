@@ -2,6 +2,7 @@ package services
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,5 +31,23 @@ func TestRunListPage(t *testing.T) {
 	page2, total2 := s.ListPage(nil, "wf", "", 2, 2)
 	if total2 != 3 || len(page2) != 1 {
 		t.Fatalf("page2=%d total2=%d", len(page2), total2)
+	}
+}
+
+// Demo s4: claim remaining-human_gate tie-break must not alter list ORDER BY.
+func TestRunListOrderIndependentOfClaimHumanGate(t *testing.T) {
+	got := runListOrderBy("", "")
+	if got != defaultRunListOrder {
+		t.Fatalf("default list order = %q, want %q", got, defaultRunListOrder)
+	}
+	if !strings.Contains(defaultRunListOrder, "created_at") {
+		t.Fatalf("expected created_at in list order: %q", defaultRunListOrder)
+	}
+	if strings.Contains(strings.ToLower(defaultRunListOrder), "human_gate") {
+		t.Fatalf("list order must not include claim human_gate key: %q", defaultRunListOrder)
+	}
+	// Whitelist still only started_at|priority — no gate secondary key.
+	if got := runListOrderBy("priority", "desc"); got != "priority DESC, id DESC" {
+		t.Fatalf("priority sort = %q", got)
 	}
 }

@@ -48,6 +48,18 @@ describe('deriveRecentPushTargets', () => {
     expect(deriveRecentPushTargets([{ userId: 'qq:', title: 'x', updatedAt: '2026-01-01T00:00:00Z' }])).toEqual([])
   })
 
+  it('filters by current channel type and does not mix QQ into feishu', () => {
+    const out = deriveRecentPushTargets(
+      [
+        { userId: 'feishu:c2c:oc_zhang', title: '张三', updatedAt: '2026-01-03T00:00:00Z' },
+        { userId: 'qq:group:222', title: 'QQ群', updatedAt: '2026-01-04T00:00:00Z' },
+        { userId: 'feishu:group:oc_review', title: '评审', updatedAt: '2026-01-02T00:00:00Z' },
+      ],
+      'feishu',
+    )
+    expect(out.map((o) => o.value)).toEqual(['c2c:oc_zhang', 'group:oc_review'])
+  })
+
   it('drops invalid scene or empty conversationId', () => {
     const out = deriveRecentPushTargets([
       { userId: 'qq:channel:999', title: 'bad scene', updatedAt: '2026-01-03T00:00:00Z' },
@@ -55,6 +67,17 @@ describe('deriveRecentPushTargets', () => {
       { userId: 'qq:group:ok', title: 'keep', updatedAt: '2026-01-01T00:00:00Z' },
     ])
     expect(out.map((o) => o.value)).toEqual(['group:ok'])
+  })
+
+  it('keeps wecom: threads and marks unspoken', () => {
+    const out = deriveRecentPushTargets([
+      { userId: 'wecom:c2c:zhangsan', title: '企微', updatedAt: '2026-01-04T00:00:00Z' },
+      { userId: 'wecom:c2c:silent', title: '', updatedAt: '2026-01-03T00:00:00Z', unspoken: true },
+      { userId: 'qq:c2c:u1', title: 'QQ', updatedAt: '2026-01-02T00:00:00Z' },
+    ])
+    expect(out.map((o) => o.value)).toEqual(['c2c:zhangsan', 'c2c:silent', 'c2c:u1'])
+    expect(out[0].channelType).toBe('wecom')
+    expect(pushTargetPrimaryLabel(out[1])).toContain('未发言')
   })
 })
 

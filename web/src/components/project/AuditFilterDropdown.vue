@@ -52,7 +52,7 @@ const displayValue = computed(() => {
   if (!c || c.value === '') {
     return c?.label || props.emptyLabel || '全部'
   }
-  return c.short || c.label
+  return c.label
 })
 
 const muted = computed(() => !current.value || current.value.value === '')
@@ -220,7 +220,7 @@ defineExpose({ close })
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  max-width: 220px;
+  max-width: 280px;
   border: 1px solid rgb(var(--c-line));
   background: rgb(var(--c-surface));
   padding: 0 8px 0 10px;
@@ -262,7 +262,7 @@ defineExpose({ close })
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 500;
-  max-width: 140px;
+  max-width: 200px;
 }
 .audit-dd.block .audit-dd-trig .v {
   flex: 1 1 auto;
@@ -294,30 +294,31 @@ defineExpose({ close })
   display: flex;
   flex-direction: column;
   max-width: calc(100vw - 24px);
-  background: #fff;
-  border: 1px solid #e4e4e7;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 12px 32px rgba(0, 0, 0, 0.12);
+  background: rgb(var(--c-surface));
+  border: 1px solid rgb(var(--c-line));
+  box-shadow: 0 0 0 1px rgb(var(--c-line) / 0.6), 0 12px 32px rgba(0, 0, 0, 0.12);
   border-radius: 0;
 }
 .audit-dd-find {
   padding: 8px;
-  border-bottom: 1px solid #ececef;
+  border-bottom: 1px solid rgb(var(--c-line));
   flex: 0 0 auto;
 }
 .audit-dd-find input {
   width: 100%;
   height: 30px;
-  border: 1px solid #e4e4e7;
+  border: 1px solid rgb(var(--c-line));
   padding: 0 9px;
   font: inherit;
   font-size: 12px;
   outline: none;
-  background: #fafafa;
+  background: rgb(var(--c-elevated));
+  color: rgb(var(--c-txt));
   border-radius: 0;
 }
 .audit-dd-find input:focus {
-  border-color: #c4b5fd;
-  background: #fff;
+  border-color: rgb(var(--c-accent));
+  background: rgb(var(--c-surface));
 }
 .audit-dd-list {
   overflow: auto;
@@ -329,7 +330,7 @@ defineExpose({ close })
   padding: 8px 8px 4px;
   font-size: 10px;
   font-weight: 650;
-  color: #a1a1aa;
+  color: rgb(var(--c-txt3));
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -345,39 +346,39 @@ defineExpose({ close })
   font-size: 12px;
   text-align: left;
   cursor: pointer;
-  color: #18181b;
+  color: rgb(var(--c-txt));
   border-radius: 0;
 }
 .audit-dd-opt:hover {
-  background: #f4f4f5;
+  background: rgb(var(--c-elevated));
 }
 .audit-dd-opt.on {
-  background: #f5f3ff;
-  color: #7c3aed;
+  background: rgb(var(--c-accent-dim));
+  color: rgb(var(--c-accent));
 }
 .audit-dd-opt .dot {
   width: 6px;
   height: 6px;
   flex: 0 0 auto;
-  background: #d4d4d8;
+  background: rgb(var(--c-txt3));
 }
 .audit-dd-opt .dot.mcp {
-  background: #8b5cf6;
+  background: rgb(var(--c-accent));
 }
 .audit-dd-opt .dot.run {
-  background: #71717a;
+  background: rgb(var(--c-txt2));
 }
 .audit-dd-opt .dot.gate {
-  background: #d97706;
+  background: rgb(var(--c-warn));
 }
 .audit-dd-opt .dot.wf {
-  background: #2563eb;
+  background: rgb(var(--c-info));
 }
 .audit-dd-opt .dot.prj {
-  background: #16a34a;
+  background: rgb(var(--c-ok));
 }
 .audit-dd-opt .dot.aud {
-  background: #db2777;
+  background: rgb(var(--c-err));
 }
 .audit-dd-opt .main {
   flex: 1;
@@ -393,7 +394,7 @@ defineExpose({ close })
 .audit-dd-opt .main .s {
   display: block;
   font-size: 11px;
-  color: #71717a;
+  color: rgb(var(--c-txt3));
   margin-top: 1px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -402,7 +403,7 @@ defineExpose({ close })
 .audit-dd-opt .tick {
   width: 14px;
   opacity: 0;
-  color: #7c3aed;
+  color: rgb(var(--c-accent));
   font-size: 12px;
   font-weight: 700;
 }
@@ -412,7 +413,7 @@ defineExpose({ close })
 .audit-dd-empty {
   padding: 20px 12px;
   text-align: center;
-  color: #a1a1aa;
+  color: rgb(var(--c-txt3));
   font-size: 12px;
 }
 </style>

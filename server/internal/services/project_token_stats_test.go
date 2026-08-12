@@ -563,7 +563,7 @@ func TestBuildModelStatsDemoScenes(t *testing.T) {
 		totals[models.TokenUsageModelUnknown] = &tokenModelAgg{total: 95, source: models.TokenUsageSourceUnknown}
 		totals["bridge-m"] = &tokenModelAgg{total: 94, filled: true, source: models.TokenUsageSourceBridge}
 
-		comp, rank := buildModelStats(totals)
+		comp, rank := buildModelStats(totals, "")
 		if len(comp) != 14 {
 			t.Fatalf("composition len=%d", len(comp))
 		}
@@ -633,7 +633,7 @@ func TestBuildModelStatsDemoScenes(t *testing.T) {
 		unkTotal := int64(5)
 		totals[models.TokenUsageModelUnknown] = &tokenModelAgg{total: unkTotal, source: models.TokenUsageSourceUnknown}
 
-		comp, rank := buildModelStats(totals)
+		comp, rank := buildModelStats(totals, "")
 		if len(comp) != 13 {
 			t.Fatalf("composition len=%d", len(comp))
 		}
@@ -674,7 +674,7 @@ func TestBuildModelStatsDemoScenes(t *testing.T) {
 			"m02":                         {total: 30, source: models.TokenUsageSourceUpstream},
 			models.TokenUsageModelUnknown: {total: 20, source: models.TokenUsageSourceUnknown},
 		}
-		comp, rank := buildModelStats(totals)
+		comp, rank := buildModelStats(totals, "")
 		if len(comp) != 4 || len(rank) != 4 {
 			t.Fatalf("comp=%d rank=%d want 4", len(comp), len(rank))
 		}
@@ -739,4 +739,52 @@ func TestTokenStatsLegacyMapsToUnknown(t *testing.T) {
 	if res.ModelComposition[0].Total != 50 || !res.ModelComposition[0].Unknown {
 		t.Fatalf("unknown bucket=%+v", res.ModelComposition[0])
 	}
+}
+
+func TestBuildModelStatsUnknownAlias(t *testing.T) {
+	t.Parallel()
+	totals := map[string]*tokenModelAgg{
+		"gpt-5":                       {total: 100, source: models.TokenUsageSourceUpstream},
+		models.TokenUsageModelUnknown: {total: 50, source: models.TokenUsageSourceUnknown},
+	}
+
+	t.Run("alias_replaces_name_keeps_key_and_unknown", func(t *testing.T) {
+		comp, rank := buildModelStats(totals, "gpt-5")
+		var unkComp, unkRank *TokenStatsModel
+		for i := range comp {
+			if comp[i].Unknown {
+				unkComp = &comp[i]
+			}
+		}
+		for i := range rank {
+			if rank[i].Unknown {
+				unkRank = &rank[i]
+			}
+		}
+		if unkComp == nil || unkRank == nil {
+			t.Fatal("expected unknown row")
+		}
+		if unkComp.ModelKey != models.TokenUsageModelUnknown || unkRank.ModelKey != models.TokenUsageModelUnknown {
+			t.Fatalf("ModelKey mutated: %q / %q", unkComp.ModelKey, unkRank.ModelKey)
+		}
+		if !unkComp.Unknown || !unkRank.Unknown {
+			t.Fatal("Unknown flag cleared")
+		}
+		if unkComp.Name != "gpt-5" || unkRank.Name != "gpt-5" {
+			t.Fatalf("alias Name want gpt-5 got %q / %q", unkComp.Name, unkRank.Name)
+		}
+		// Same display name as real bucket → two rows, not merged.
+		if len(comp) != 2 || len(rank) != 2 {
+			t.Fatalf("must keep two rows: comp=%d rank=%d", len(comp), len(rank))
+		}
+	})
+
+	t.Run("empty_alias_keeps_default_name", func(t *testing.T) {
+		comp, _ := buildModelStats(totals, "  ")
+		for _, r := range comp {
+			if r.Unknown && r.Name != models.TokenUsageModelUnknown {
+				t.Fatalf("empty alias Name=%q", r.Name)
+			}
+		}
+	})
 }

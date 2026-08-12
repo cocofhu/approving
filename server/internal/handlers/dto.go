@@ -76,16 +76,17 @@ func projectDTO(p models.Project, workflowCount int64, tokens services.ProjectTo
 	policy := services.NormalizeProjectNotifyPolicy(p.NotifyPolicy)
 	return gin.H{
 		"id": p.ID, "name": p.Name, "description": p.Description,
-		"sandboxEnv":      services.MaskedSandboxEnv(p.SandboxEnv),
-		"variables":       services.MaskedProjectVars(p.Variables),
-		"workflowCount":   workflowCount,
-		"totalTokens":     tokens.Total,
-		"workflowTokens":  tokens.Workflow,
-		"pmTokens":        tokens.PM,
-		"pmLeaderEnabled": p.PmLeaderEnabled,
-		"pmLeaderAgent":   p.PmLeaderAgent,
-		"notifyPolicy":    policy,
-		"createdAt":       p.CreatedAt, "updatedAt": p.UpdatedAt,
+		"sandboxEnv":                services.MaskedSandboxEnv(p.SandboxEnv),
+		"variables":                 services.MaskedProjectVars(p.Variables),
+		"workflowCount":             workflowCount,
+		"totalTokens":               tokens.Total,
+		"workflowTokens":            tokens.Workflow,
+		"pmTokens":                  tokens.PM,
+		"pmLeaderEnabled":           p.PmLeaderEnabled,
+		"pmLeaderAgent":             p.PmLeaderAgent,
+		"unknownModelDisplayName":   p.UnknownModelDisplayName,
+		"notifyPolicy":              policy,
+		"createdAt":                 p.CreatedAt, "updatedAt": p.UpdatedAt,
 	}
 }
 
@@ -180,8 +181,9 @@ func (h *Handlers) runDetailDTO(r models.Run) gin.H {
 		"durationSec": effectiveRunDuration(r), "progress": r.Progress, "branch": r.Branch,
 		"attempt": r.Attempt, "nodeRuns": nodeRuns, "nodeExecutions": nodeExecutions, "artifacts": arts,
 		"vars": vars, "trace": r.Trace,
-		"priority": models.PriorityLabel(r.Priority),
-		"tags":     runTagsDTO(r.Tags),
+		"priority":   models.PriorityLabel(r.Priority),
+		"tags":       runTagsDTO(r.Tags),
+		"sandboxEnv": services.MaskedSandboxEnv(r.SandboxEnv),
 		// The graph snapshot this run executed (pinned at start). The run detail
 		// canvas renders against this rather than the live workflow definition,
 		// so details survive the workflow being edited, re-published, or deleted.

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -17,10 +17,11 @@ import { createListRequestSeq, httpStatusOf } from '@/lib/shared/listRequestSeq'
 import { writeStoredProjectId } from '@/lib/composables/useProjectContext'
 import { useToast } from '@/lib/composables/useToast'
 import { fmtTime } from '@/lib/shared/format'
-import { fmtCompactTokenCount } from '@/lib/run/tokenUsage'
+import { fmtCompactTokenCount, normalizeUnknownModelDisplayNameInput } from '@/lib/run/tokenUsage'
 import { clearRunDraft, mergeRunDraft, saveRunDraft } from '@/lib/run/runDraft'
 import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import { useWorkflowImport } from '@/lib/run/useWorkflowImport'
+import { useWorkflowFavorites } from '@/lib/run/useWorkflowFavorites'
 import PmLeaderChat from '@/components/pm/PmLeaderChat.vue'
 import PmCronJobsPanel from '@/components/pm/PmCronJobsPanel.vue'
 import PmSettingsPanel from '@/components/pm/PmSettingsPanel.vue'
@@ -78,6 +79,11 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const toast = useToast()
+const { isFavorite, toggleFavorite } = useWorkflowFavorites()
+
+function toggleWorkflowFavorite(w: Workflow) {
+  toggleFavorite(w.id, { name: w.name })
+}
 const { isMobile } = useBreakpoint()
 const projectId = computed(() => route.params.id as string)
 
@@ -98,12 +104,23 @@ const showRefreshProgress = computed(
 const initialLegacyPmSettings = route.query.tab === LEGACY_PM_SETTINGS_TAB
 const initialLegacyPmMemory = route.query.tab === LEGACY_PM_MEMORY_TAB
 const tab = ref<Tab>(parseProjectTab(route.query.tab))
+const draftsPanelRef = ref<{ isDirty: boolean; requestLeave: () => Promise<boolean> } | null>(null)
+
+async function confirmDraftsLeave(): Promise<boolean> {
+  const panel = draftsPanelRef.value
+  if (!panel?.isDirty) return true
+  return panel.requestLeave()
+}
 /** Inline sub-view inside PM Leader; page-local, not a shareable URL param. */
 const pmView = ref<PmView>(initialLegacyPmSettings ? 'settings' : 'chat')
 /** Show once when landing via legacy ?tab=pmMemory. */
 const showPmMemoryMigration = ref(initialLegacyPmMemory)
 
-function setTab(id: Tab) {
+async function setTab(id: Tab) {
+  if (tab.value === 'requirementDrafts' && id !== 'requirementDrafts') {
+    const ok = await confirmDraftsLeave()
+    if (!ok) return
+  }
   if (id !== 'pmLeader') {
     pmView.value = 'chat'
   }
@@ -161,6 +178,21 @@ function syncTabFromRoute() {
   }
   const next = parseProjectTab(q)
   if (tab.value !== next) {
+    if (tab.value === 'requirementDrafts' && next !== 'requirementDrafts') {
+      void confirmDraftsLeave().then((ok) => {
+        if (!ok) {
+          if (route.query.tab !== 'requirementDrafts') {
+            void router.replace({ query: { ...route.query, tab: 'requirementDrafts' } })
+          }
+          return
+        }
+        if (next !== 'pmLeader') {
+          pmView.value = 'chat'
+        }
+        tab.value = next
+      })
+      return
+    }
     if (next !== 'pmLeader') {
       pmView.value = 'chat'
     }
@@ -203,6 +235,8 @@ const savingEnv = ref(false)
 const savingVars = ref(false)
 const editName = ref('')
 const editDesc = ref('')
+const editUnknownModelDisplayName = ref('')
+const unknownModelDisplayNameError = ref('')
 const envRows = ref<ProjectEnvEntry[]>([])
 const varRows = ref<ProjectVariable[]>([])
 const showDelete = ref(false)
@@ -404,6 +438,8 @@ async function load() {
     writeStoredProjectId(p.id)
     editName.value = p.name
     editDesc.value = p.description || ''
+    editUnknownModelDisplayName.value = p.unknownModelDisplayName || ''
+    unknownModelDisplayNameError.value = ''
     envRows.value = (p.sandboxEnv || []).map((e) => ({ ...e }))
     // Spread-copy preserves server-side ask/required/editable (and options/desc).
     varRows.value = (p.variables || []).map((v) => ({ ...v }))
@@ -465,18 +501,32 @@ async function reloadWorkflows() {
 
 async function saveMeta() {
   if (!project.value) return
+  unknownModelDisplayNameError.value = ''
+  const normalized = normalizeUnknownModelDisplayNameInput(editUnknownModelDisplayName.value)
+  if (normalized.error) {
+    unknownModelDisplayNameError.value = t('pages.projectDetail.unknownModelDisplayNameTooLong')
+    return
+  }
   savingMeta.value = true
   try {
     project.value = await api.updateProject(project.value.id, {
       name: editName.value.trim(),
       description: editDesc.value,
+      unknownModelDisplayName: normalized.value,
     })
+    editUnknownModelDisplayName.value = project.value.unknownModelDisplayName || ''
     toast.success(t('pages.projectDetail.saved'))
   } catch (e: any) {
     toast.error(String(e?.message || e))
   } finally {
     savingMeta.value = false
   }
+}
+
+function clearUnknownModelDisplayName() {
+  editUnknownModelDisplayName.value = ''
+  unknownModelDisplayNameError.value = ''
+  void saveMeta()
 }
 
 async function saveEnv() {
@@ -792,6 +842,17 @@ onUnmounted(() => {
   document.removeEventListener('keydown', onKeydown)
   document.removeEventListener('scroll', onScrollClose, true)
 })
+
+onBeforeRouteLeave(async () => {
+  if (tab.value !== 'requirementDrafts') return true
+  return confirmDraftsLeave()
+})
+
+onBeforeRouteUpdate(async (to, from) => {
+  if (String(to.params.id) === String(from.params.id)) return true
+  if (tab.value !== 'requirementDrafts') return true
+  return confirmDraftsLeave()
+})
 </script>
 
 <template>
@@ -993,7 +1054,7 @@ onUnmounted(() => {
         class="min-w-0"
         data-testid="project-requirement-drafts-panel"
       >
-        <RequirementDraftsPanel :project-id="projectId" />
+        <RequirementDraftsPanel ref="draftsPanelRef" :project-id="projectId" />
       </div>
 
       <div
@@ -1006,6 +1067,7 @@ onUnmounted(() => {
           :project-id="projectId"
           :binding="pmBinding"
           :restore-mobile-chat="pmRestoreMobileChat"
+          :unknown-model-display-name="project?.unknownModelDisplayName"
           @open-settings="openPmSettings"
           @restored-mobile-chat="pmRestoreMobileChat = false"
         />
@@ -1209,6 +1271,16 @@ onUnmounted(() => {
               </button>
               <button
                 type="button"
+                class="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-md border border-line bg-surface px-3 text-sm font-medium text-txt2 transition hover:border-line-strong hover:bg-elevated hover:text-txt"
+                :class="{ 'border-warn/40 text-warn': isFavorite(w.id) }"
+                data-testid="workflow-favorite-btn"
+                @click="toggleWorkflowFavorite(w)"
+              >
+                <Icon :name="isFavorite(w.id) ? 'star-filled' : 'star'" :size="14" />
+                {{ isFavorite(w.id) ? t('common.buttons.unfavorite') : t('common.buttons.favorite') }}
+              </button>
+              <button
+                type="button"
                 class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-line bg-surface text-txt2 transition hover:border-line-strong hover:bg-elevated hover:text-txt"
                 :class="{ 'border-line-strong bg-elevated text-txt': openMenuId === w.id }"
                 :aria-label="t('pages.workflowList.moreActions')"
@@ -1388,6 +1460,19 @@ onUnmounted(() => {
                         @click="openRun(w)"
                       >
                         <Icon name="play" :size="13" class="mr-1 inline" />{{ t('common.buttons.run') }}
+                      </button>
+                      <button
+                        type="button"
+                        class="whitespace-nowrap rounded-md px-2 py-1 text-xs text-txt2 hover:bg-overlay hover:text-txt"
+                        :class="{ 'text-warn hover:bg-warn/10': isFavorite(w.id) }"
+                        data-testid="workflow-favorite-btn"
+                        @click="toggleWorkflowFavorite(w)"
+                      >
+                        <Icon
+                          :name="isFavorite(w.id) ? 'star-filled' : 'star'"
+                          :size="13"
+                          class="mr-1 inline"
+                        />{{ isFavorite(w.id) ? t('common.buttons.unfavorite') : t('common.buttons.favorite') }}
                       </button>
                       <button
                         type="button"
@@ -1758,6 +1843,31 @@ onUnmounted(() => {
                 :placeholder="t('pages.projectDetail.metaDescPlaceholder')"
               />
             </div>
+            <div>
+              <label class="label" for="project-meta-unknown-display">
+                {{ t('pages.projectDetail.unknownModelDisplayNameLabel') }}
+              </label>
+              <input
+                id="project-meta-unknown-display"
+                v-model="editUnknownModelDisplayName"
+                class="input"
+                maxlength="80"
+                autocomplete="off"
+                data-testid="project-meta-unknown-display"
+                :placeholder="t('pages.projectDetail.unknownModelDisplayNamePlaceholder')"
+                @input="unknownModelDisplayNameError = ''"
+              />
+              <p class="m-0 mt-1.5 text-[11px] leading-snug text-txt3">
+                {{ t('pages.projectDetail.unknownModelDisplayNameHelp') }}
+              </p>
+              <p
+                v-if="unknownModelDisplayNameError"
+                class="m-0 mt-1.5 text-xs text-err"
+                data-testid="project-meta-unknown-display-error"
+              >
+                {{ unknownModelDisplayNameError }}
+              </p>
+            </div>
           </div>
 
           <div
@@ -1773,9 +1883,20 @@ onUnmounted(() => {
             >
               {{ t('common.buttons.delete') }}
             </AppButton>
-            <AppButton variant="primary" :disabled="savingMeta" @click="saveMeta">
-              {{ savingMeta ? t('common.buttons.saving') : t('common.buttons.save') }}
-            </AppButton>
+            <div class="flex flex-wrap items-center gap-2">
+              <AppButton
+                variant="outline"
+                size="sm"
+                data-testid="project-meta-unknown-display-clear"
+                :disabled="savingMeta"
+                @click="clearUnknownModelDisplayName"
+              >
+                {{ t('pages.projectDetail.unknownModelDisplayNameClear') }}
+              </AppButton>
+              <AppButton variant="primary" :disabled="savingMeta" @click="saveMeta">
+                {{ savingMeta ? t('common.buttons.saving') : t('common.buttons.save') }}
+              </AppButton>
+            </div>
           </div>
         </div>
       </div>

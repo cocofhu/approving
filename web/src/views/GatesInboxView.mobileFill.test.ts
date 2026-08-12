@@ -95,6 +95,53 @@ describe('GatesInboxView empty inbox fill (plan g1 / g2.1 / g1.3)', () => {
   })
 })
 
+describe('GatesInboxView list first-load tri-state (plan g1 / g2 / g3.2)', () => {
+  it('listLoading starts true and template consumes listLoading + listLoadFailed', () => {
+    expect(src).toMatch(/const listLoading = ref\(true\)/)
+    expect(src).toMatch(/const listLoadFailed = ref\(false\)/)
+    expect(src).toMatch(/showListSkeleton/)
+    expect(src).toMatch(/showListError/)
+    expect(src).toMatch(/listLoadFailed\.value = true/)
+    expect(src).toMatch(/listLoadFailed\.value = false/)
+    expect(src).toMatch(/retryListLoad/)
+    expect(src).toMatch(/t\('pages\.gatesInbox\.listLoadingHint'\)/)
+    expect(src).toMatch(/t\('common\.asyncState\.loadFailedTitle'\)/)
+    expect(src).toMatch(/t\('common\.asyncState\.loadFailedDesc'\)/)
+    expect(src).toMatch(/t\('common\.buttons\.retry'\)/)
+    expect(src).toMatch(/data-testid="inbox-list-skeleton"/)
+    expect(src).toMatch(/data-testid="inbox-list-failed"/)
+    expect(src).toMatch(/data-testid="inbox-pending-card-skeleton"/)
+    expect(src).toMatch(/aria-busy="true"/)
+    expect(src).toMatch(/LIST_SKELETON_COUNT = 6/)
+    expect(src).toMatch(/app-skeleton__block h-9 w-9/)
+    expect(src).not.toMatch(/<AppSkeleton/)
+    expect(src).not.toMatch(/InboxPendingCardSkeleton/)
+  })
+
+  it('branch order is loading∧empty → error∧empty → EmptyState; empty wrappers stay two', () => {
+    const mobileList = src.slice(src.indexOf('<!-- Mobile list view -->'), src.indexOf('<!-- Mobile detail view -->'))
+    expect(mobileList.indexOf('v-else-if="showListSkeleton"')).toBeGreaterThan(-1)
+    expect(mobileList.indexOf('v-else-if="showListError"')).toBeGreaterThan(
+      mobileList.indexOf('v-else-if="showListSkeleton"'),
+    )
+    expect(mobileList.indexOf('v-else class="card flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto"')).toBeGreaterThan(
+      mobileList.indexOf('v-else-if="showListError"'),
+    )
+
+    const desktop = src.slice(src.indexOf('<!-- Desktop loading'))
+    expect(desktop.indexOf('v-else-if="!isMobile && showListSkeleton"')).toBeGreaterThan(-1)
+    expect(desktop.indexOf('v-else-if="!isMobile && showListError"')).toBeGreaterThan(
+      desktop.indexOf('v-else-if="!isMobile && showListSkeleton"'),
+    )
+    expect(desktop.indexOf('v-else-if="!isMobile && listItems.length"')).toBeGreaterThan(
+      desktop.indexOf('v-else-if="!isMobile && showListError"'),
+    )
+    expect(desktop).toMatch(/grid-cols-\[320px_1fr\] items-stretch/)
+    expect(src).toMatch(/loadList\(\{ showLoading: listItems\.value\.length === 0 \}\)/)
+    expect(src).toMatch(/void loadList\(\{ showLoading: true \}\)/)
+  })
+})
+
 describe('GatesInboxView app_preview stage (g2.2)', () => {
   it('mounts AppPreviewPanel with fill + pick wiring on both ReviewShell stages', () => {
     expect(src).toMatch(/import AppPreviewPanel/)

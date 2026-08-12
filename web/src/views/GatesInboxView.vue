@@ -338,6 +338,7 @@ function handleLeftInboxContext(it: InboxItem) {
 
 async function loadList({ showLoading = false }: { showLoading?: boolean } = {}) {
   const gen = ++listLoadGeneration
+  listLoadError.value = null
   if (showLoading) listLoading.value = true
   try {
     const data = await api.listGates({
@@ -371,6 +372,10 @@ async function loadList({ showLoading = false }: { showLoading?: boolean } = {})
   } finally {
     if (gen === listLoadGeneration) listLoading.value = false
   }
+}
+
+function retryListLoad() {
+  void loadList({ showLoading: true })
 }
 
 watch(selected, () => {
@@ -1173,7 +1178,7 @@ async function onManualRefresh() {
     } else {
       const prevKey = active.value ? itemKey(active.value) : null
       await refresh({ source: 'manual', mode: 'force' })
-      await loadList()
+      await loadList({ showLoading: listItems.value.length === 0 })
       syncActiveAfterApply(listItems.value, prevKey)
       await loadActiveRun(isEditing.value ? false : true)
       checkProcessedWhileEditing()

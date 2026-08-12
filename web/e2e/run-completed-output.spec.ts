@@ -302,7 +302,7 @@ test.describe('completed 深链输出视图 (g6.2/g6.3)', () => {
     await expect(dialog).not.toContainText('无法预览')
   })
 
-  test('page.html 加载失败：展示无法预览且不回退 Markdown 源码', async ({ page }) => {
+  test('page.html 加载失败：展示预览不可用且不回退 Markdown 源码', async ({ page }) => {
     const nodePageCard: OutputCard = {
       index: 1,
       template: '{{nodes.visual.outputs.page}}',
@@ -318,8 +318,10 @@ test.describe('completed 深链输出视图 (g6.2/g6.3)', () => {
       artifacts: [htmlArtifact],
       // no artifactContents → content fetch 404
     })
-    await expect(page.getByTestId('output-result-html-unavailable')).toBeVisible()
-    await expect(page.getByTestId('output-result-html-unavailable')).toContainText('无法预览')
+    await expect(page.getByTestId('output-result-html-load-error')).toBeVisible()
+    await expect(page.getByTestId('output-result-html-load-error')).toContainText('预览不可用')
+    await expect(page.getByTestId('output-result-html-load-error')).toContainText('无法加载视觉网页')
+    await expect(page.getByTestId('output-result-enlarge')).toHaveCount(0)
     await expect(page.getByTestId('html-preview-toolbar')).toHaveCount(0)
     await expect(page.getByTestId('run-detail-right-panel')).not.toContainText('<!doctype')
     await expect(page.getByTestId('run-detail-right-panel')).not.toContainText('<html')

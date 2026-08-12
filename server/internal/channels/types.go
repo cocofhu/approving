@@ -14,6 +14,7 @@ package channels
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -68,6 +69,21 @@ type OutboundMessage struct {
 // InboundHandler is invoked by an adapter for each received message.
 type InboundHandler func(ctx context.Context, in InboundMessage)
 
+// Connection runtime states exposed on ChannelConfigDTO (process-local).
+const (
+	ConnStateConnected    = "connected"
+	ConnStateAuthFailed   = "auth_failed"
+	ConnStateDisconnected = "disconnected"
+)
+
+// ErrAdapterAuth marks a credential / tenant_access_token failure.
+var ErrAdapterAuth = errors.New("channel adapter authentication failed")
+
+// StatefulAdapter is an optional Adapter that reports long-connection lifecycle.
+type StatefulAdapter interface {
+	SetStateHandler(fn func(state, detail string))
+}
+
 // Adapter is a transport for one external channel account. Implementations are
 // created per ChannelConfig and are responsible only for receiving/sending;
 // PM orchestration lives in ChannelBridge.
@@ -93,6 +109,9 @@ type AdapterConfig struct {
 	AppID     string
 	AppSecret string // decrypted
 	Config    map[string]any
+	// HasSpoken reports whether the conversation has inbound channel history.
+	// Used by wecom proactive push to fail locally with 「未发言」.
+	HasSpoken func(scene Scene, conversationID string) bool
 }
 
 // AdapterFactory builds an Adapter for a resolved config. Registered in the

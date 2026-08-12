@@ -21,6 +21,9 @@ func TestSyntheticUserID(t *testing.T) {
 	if got != "qq:group:ABC" {
 		t.Fatalf("SyntheticUserID = %q", got)
 	}
+	if SyntheticUserID("wecom", SceneC2C, "zhangsan") != "wecom:c2c:zhangsan" {
+		t.Fatal("wecom synthetic id")
+	}
 	// Distinct scenes/conversations never collide.
 	if SyntheticUserID("qq", SceneC2C, "x") == SyntheticUserID("qq", SceneGroup, "x") {
 		t.Fatal("scene should disambiguate synthetic user id")
@@ -1354,6 +1357,42 @@ func TestChannelPreambleRequiresProgressMarkers(t *testing.T) {
 		if !strings.Contains(p, marker) {
 			t.Fatalf("preamble missing %s: %s", marker, p)
 		}
+	}
+	if !strings.Contains(p, "不要使用表格") {
+		t.Fatal("qq preamble must forbid tables")
+	}
+	w := ChannelPreamble("wecom")
+	if !strings.Contains(w, "可使用 Markdown 表格") {
+		t.Fatalf("wecom preamble must allow tables: %s", w)
+	}
+	if strings.Contains(w, "不要使用表格") {
+		t.Fatal("wecom preamble must not forbid tables")
+	}
+	fs := ChannelPreamble("feishu")
+	if strings.Contains(fs, "转发到 QQ") {
+		t.Fatalf("feishu preamble must not mention 转发到 QQ: %s", fs)
+	}
+	if !strings.Contains(fs, "[进度]") {
+		t.Fatal("feishu preamble still needs progress markers")
+	}
+	if !strings.Contains(fs, "可使用 Markdown 表格") {
+		t.Fatalf("feishu preamble must allow tables: %s", fs)
+	}
+}
+
+func TestFeishuAckAndProgressCopy(t *testing.T) {
+	if !strings.HasPrefix(processingAckTextFor("feishu", "hi"), "已收到，正在处理") {
+		t.Fatal("feishu ACK copy")
+	}
+	if !strings.HasPrefix(processingAckTextFor("qq", "hi"), "收到，正在处理") {
+		t.Fatal("qq ACK must stay unchanged")
+	}
+	ev := ProgressEvent{Kind: ProgressMilestone, Summary: "已汇总"}
+	if FormatProgressTextFor("feishu", ev) != "[进度] 已汇总" {
+		t.Fatalf("feishu progress=%q", FormatProgressTextFor("feishu", ev))
+	}
+	if FormatProgressTextFor("qq", ev) != "进度：已汇总" {
+		t.Fatalf("qq progress=%q", FormatProgressTextFor("qq", ev))
 	}
 }
 

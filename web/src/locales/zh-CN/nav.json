@@ -8,6 +8,8 @@
     "gates": "待审批",
     "artifacts": "产物",
     "notifications": "通知",
+    "quickPipelines": "快捷流水线",
+    "quickPipelinesEmpty": "在流水线上点星标即可收藏",
     "groupConfig": "配置",
     "agents": "Agent 管理",
     "sandboxes": "沙箱",

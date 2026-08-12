@@ -43,6 +43,18 @@ export function fmtCompactDuration(sec: number): string {
   return `${(n / 60).toFixed(1)}m`
 }
 
+/**
+ * Multi-run「平均总耗时」main value (F2): under 1h → mm:ss; ≥1h → x.xxh; 0 → 00:00.
+ * Do not reuse fmtCompactDuration (x.xm / 0s) for this KPI.
+ */
+export function fmtMultiAvgDuration(sec: number): string {
+  if (sec == null || !Number.isFinite(sec)) return '00:00'
+  const n = Math.max(0, sec)
+  if (n <= 0) return '00:00'
+  if (n >= 3600) return `${(n / 3600).toFixed(2)}h`
+  return fmtDuration(Math.round(n))
+}
+
 export function truncateText(s: string, maxLen: number): string {
   if (!s || s.length <= maxLen) return s
   return s.slice(0, maxLen) + '…'

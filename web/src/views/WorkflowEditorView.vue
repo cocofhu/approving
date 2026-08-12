@@ -23,6 +23,7 @@ import { cleanOutputConfigForSave, migrateAndCleanOutputNodes } from '@/lib/shar
 import { fmtTime } from '@/lib/shared/format'
 import { clearRunDraft, mergeRunDraft, saveRunDraft } from '@/lib/run/runDraft'
 import { useToast } from '@/lib/composables/useToast'
+import { useWorkflowFavorites } from '@/lib/run/useWorkflowFavorites'
 import {
   isGraphDirty,
   isMetaDirty,
@@ -42,9 +43,15 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const toast = useToast()
+const { isFavorite, toggleFavorite } = useWorkflowFavorites()
 const { isMobile } = useBreakpoint()
 const showFlowPeek = ref(false)
 const routeId = route.params.id as string
+
+function toggleCurrentFavorite() {
+  if (!wf.id) return
+  toggleFavorite(wf.id, { name: wf.name })
+}
 
 type EditorTab = 'canvas' | 'runs' | 'api'
 const activeTab = ref<EditorTab>('canvas')
@@ -566,6 +573,15 @@ function deleteEdge() {
       <AppButton variant="ghost" size="sm" icon="doc" :disabled="!wf.nodes.length" @click="showOverview = true">{{ t('common.buttons.details') }}</AppButton>
       <AppButton variant="ghost" size="sm" icon="history" :disabled="!wf.id" @click="openVersions">{{ t('pages.workflowEditor.versions.title') }}</AppButton>
       <AppButton variant="outline" size="sm" icon="save" :disabled="saving || hydrating || hydrateFailed" @click="saveDraft">{{ t('common.buttons.saveDraft') }}</AppButton>
+      <AppButton
+        variant="ghost"
+        size="sm"
+        :icon="isFavorite(wf.id) ? 'star-filled' : 'star'"
+        :disabled="!wf.id || hydrating || hydrateFailed"
+        data-testid="editor-favorite-btn"
+        :class="{ 'text-warn': isFavorite(wf.id) }"
+        @click="toggleCurrentFavorite"
+      >{{ isFavorite(wf.id) ? t('common.buttons.unfavorite') : t('common.buttons.favorite') }}</AppButton>
       <AppButton variant="ghost" size="sm" icon="play" :disabled="running || saving || hydrating || hydrateFailed" @click="openRun">{{ running ? t('common.buttons.starting') : t('common.buttons.run') }}</AppButton>
       <AppButton variant="primary" size="sm" icon="check" :disabled="saving || hydrating || hydrateFailed" @click="openPublish">{{ t('pages.workflowEditor.publish.toolbar', { version: wf.version + 1 }) }}</AppButton>
     </header>

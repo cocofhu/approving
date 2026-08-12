@@ -62,6 +62,8 @@
       "refresh": "刷新",
       "edit": "编辑",
       "run": "运行",
+      "favorite": "收藏",
+      "unfavorite": "已收藏",
       "copy": "复制",
       "export": "导出",
       "import": "导入",
@@ -188,7 +190,11 @@
       "pathCopied": "已复制路径：{path}",
       "copyPathFailed": "复制失败",
       "copyFailed": "复制失败",
-      "importedFiles": "已从文件夹导入 {count} 个文件到 {dir}"
+      "importedFiles": "已从文件夹导入 {count} 个文件到 {dir}",
+      "favoriteAdded": "已收藏「{name}」，已置顶到侧栏",
+      "favoriteRemoved": "已取消收藏「{name}」",
+      "favoriteFull": "已达 {max} 条上限，请先取消其它快捷",
+      "favoriteLaunchFailed": "无法启动该流水线，请稍后重试"
     },
     "action": "动作",
     "optional": "可选",

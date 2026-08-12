@@ -123,4 +123,32 @@ describe('RunBoardColumn', () => {
 
     wrapper.unmount()
   })
+
+  it('keeps non-activatable header as a plain div (Dashboard default)', () => {
+    const wrapper = mountColumn()
+    expect(wrapper.find('[data-testid="run-board-column-header"]').exists()).toBe(false)
+    const header = wrapper.find('[data-testid="run-board-column"] > div')
+    expect(header.element.tagName.toLowerCase()).toBe('div')
+    expect(header.attributes('aria-haspopup')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('activatable header is a focusable button that emits activate-header with status', async () => {
+    const wrapper = mountColumn({
+      headerActivatable: true,
+      status: 'completed',
+      items: [stubRun({ id: 'run-1', status: 'completed', title: '完成-1' })],
+      total: 1,
+    })
+    const header = wrapper.find('[data-testid="run-board-column-header"]')
+    expect(header.exists()).toBe(true)
+    expect(header.element.tagName.toLowerCase()).toBe('button')
+    expect(header.attributes('type')).toBe('button')
+    expect(header.attributes('aria-haspopup')).toBe('dialog')
+
+    await header.trigger('click')
+    expect(wrapper.emitted('activate-header')).toEqual([['completed']])
+    expect(wrapper.emitted('select')).toBeUndefined()
+    wrapper.unmount()
+  })
 })

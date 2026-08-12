@@ -23,13 +23,14 @@ const PM_MCP_OPTIONS = [
   { id: 'pm-workflow-read', labelKey: 'pages.projectDetail.pm.mcpWorkflowRead' },
   { id: 'pm-workflow-write', labelKey: 'pages.projectDetail.pm.mcpWorkflowWrite' },
   { id: 'pm-agent-fs', labelKey: 'pages.projectDetail.pm.mcpAgentFs' },
+  { id: 'pm-prd-manager', labelKey: 'pages.projectDetail.pm.mcpPrdManager' },
 ] as const
 
 const binding = ref<PmLeaderBinding | null>(null)
 const agents = ref<Agent[]>([])
 const selectedAgent = ref('')
 const enabled = ref(false)
-const enabledMcps = ref<string[]>(['pm-progress', 'pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs'])
+const enabledMcps = ref<string[]>(['pm-progress', 'pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs', 'pm-prd-manager'])
 const gateAutoVar = ref('')
 const gateAutoPrompt = ref('')
 const loading = ref(true)
@@ -143,7 +144,7 @@ async function load() {
     enabled.value = agents.value.length === 0 ? false : b.enabled
     enabledMcps.value = Array.isArray(b.enabledMcps)
       ? [...b.enabledMcps]
-      : ['pm-progress', 'pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs']
+      : ['pm-progress', 'pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs', 'pm-prd-manager']
     gateAutoVar.value = b.gateAutoVar || ''
     gateAutoPrompt.value = b.gateAutoPrompt || ''
     if (proj) localProject.value = proj
@@ -176,7 +177,7 @@ async function save() {
     selectedAgent.value = binding.value.agentConfigRef || ''
     enabledMcps.value = Array.isArray(binding.value.enabledMcps)
       ? [...binding.value.enabledMcps]
-      : ['pm-progress', 'pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs']
+      : ['pm-progress', 'pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs', 'pm-prd-manager']
     gateAutoVar.value = binding.value.gateAutoVar || ''
     gateAutoPrompt.value = binding.value.gateAutoPrompt || ''
     emit('changed', binding.value)
