@@ -745,6 +745,57 @@ describe('ClarifyChat', () => {
       expect(wrapper.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(false)
       wrapper.unmount()
     })
+
+    it('does not duplicate human when persisted already completed the live turn', async () => {
+      const wrapper = mountChat({
+        reviewMode: true,
+        turns: [
+          { role: 'human', text: '改成绿的', at: '2026-08-01T00:01:00Z' },
+          { role: 'agent', text: '标题已改为绿色（#16a34a）', at: '2026-08-01T00:02:00Z' },
+        ],
+      })
+      const vm = wrapper.vm as unknown as {
+        applyQueueState: (
+          waiting: number,
+          items: unknown[] | null,
+          busy?: boolean,
+          activeItem?: { text?: string } | null,
+        ) => void
+      }
+      vm.applyQueueState(0, [], true, { text: '改成绿的' })
+      await flushPromises()
+      expect((wrapper.text().match(/改成绿的/g) || []).length).toBe(1)
+      expect(wrapper.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(false)
+      expect(wrapper.text()).toContain('标题已改为绿色')
+      wrapper.unmount()
+    })
+
+    it('tears down streaming placeholder when persisted catches up mid-stream', async () => {
+      const wrapper = mountChat({ reviewMode: true, turns: [{ role: 'agent', text: '请复审', at: 't0' }] })
+      const vm = wrapper.vm as unknown as {
+        applyQueueState: (
+          waiting: number,
+          items: unknown[] | null,
+          busy?: boolean,
+          activeItem?: { text?: string } | null,
+        ) => void
+      }
+      vm.applyQueueState(0, [], true, { text: '改成绿的' })
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(true)
+      await wrapper.setProps({
+        turns: [
+          { role: 'agent', text: '请复审', at: 't0' },
+          { role: 'human', text: '改成绿的', at: 't1' },
+          { role: 'agent', text: '标题已改为绿色', at: 't2' },
+        ],
+      })
+      await flushPromises()
+      expect((wrapper.text().match(/改成绿的/g) || []).length).toBe(1)
+      expect(wrapper.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(false)
+      expect(wrapper.text()).toContain('标题已改为绿色')
+      wrapper.unmount()
+    })
   })
 
   describe('busy status C-tier (no air bubble)', () => {

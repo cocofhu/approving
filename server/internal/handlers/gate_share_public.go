@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/url"
@@ -506,6 +507,9 @@ func (h *Handlers) publicReviewExtras(lookup *gateshare.LookupResult, visualHTML
 			ex.Waiting = waiting
 			ex.SessionBusy = thinking || waiting > 0 || !h.Eng.ReviewSessionReady(runID, nodeID)
 		}
+		if ex.SessionBusy {
+			ex.LiveEvents = h.publicLiveACP(runID, nodeID)
+		}
 	}
 	ex.UpstreamName, ex.UpstreamContent = h.publicUpstreamArtifact(runID, structName)
 	return ex
@@ -554,6 +558,9 @@ func (h *Handlers) publicGateExtras(lookup *gateshare.LookupResult, visualHTML, 
 			ex.Waiting = waiting
 			ex.SessionBusy = thinking || waiting > 0 || !h.Eng.ReviewSessionReady(runID, producerID)
 		}
+		if ex.SessionBusy {
+			ex.LiveEvents = h.publicLiveACP(runID, producerID)
+		}
 	}
 	ex.UpstreamName, ex.UpstreamContent = h.publicUpstreamArtifact(runID, structName)
 	return ex
@@ -568,6 +575,32 @@ func (h *Handlers) publicGateProducerID(lookup *gateshare.LookupResult) string {
 		return up
 	}
 	return ""
+}
+
+func (h *Handlers) publicDialogueProducerID(lookup *gateshare.LookupResult) string {
+	if lookup == nil {
+		return ""
+	}
+	if publicShareKind(lookup) == models.ShareLinkKindReview {
+		return strings.TrimSpace(lookup.Link.NodeID)
+	}
+	if h.Eng != nil {
+		if id, _ := h.Eng.GateReactInfo(lookup.Link.RunID, lookup.Link.NodeID); strings.TrimSpace(id) != "" {
+			return strings.TrimSpace(id)
+		}
+	}
+	return h.publicGateProducerID(lookup)
+}
+
+func (h *Handlers) publicLiveACP(runID, nodeID string) []models.AcpEvent {
+	if h.Eng == nil || strings.TrimSpace(runID) == "" || strings.TrimSpace(nodeID) == "" {
+		return nil
+	}
+	ev, ok, err := h.Eng.LiveNodeEvents(context.Background(), runID, nodeID)
+	if err != nil || !ok || len(ev) == 0 {
+		return nil
+	}
+	return ev
 }
 
 func (h *Handlers) publicConversation(runID, nodeID string) *models.ReactConversation {

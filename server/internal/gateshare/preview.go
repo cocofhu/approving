@@ -59,6 +59,15 @@ type PreviewDTO struct {
 	// Kind stays "review" for ShareLinkKindReview; clients use NodeType to
 	// distinguish Inbox 待澄清 from 待复审 without leaking Run#.
 	NodeType string `json:"nodeType,omitempty"`
+	// LiveEvents is a leak-free in-flight ACP snapshot (message/thought only)
+	// while sessionBusy. Poll fallback when the public events WS is down.
+	LiveEvents []PreviewLiveEvent `json:"liveEvents,omitempty"`
+}
+
+// PreviewLiveEvent is a leak-free ACP rail for public streaming / poll seed.
+type PreviewLiveEvent struct {
+	Kind string `json:"kind"`
+	Text string `json:"text,omitempty"`
 }
 
 // PublicPreviewPort is the leak-free port entry for public app_preview remote / API iframe.
@@ -82,6 +91,7 @@ type PreviewExtras struct {
 	ProductKind       string
 	ProductName       string
 	Ports             []PublicPreviewPort
+	LiveEvents        []models.AcpEvent
 }
 
 // BuildPreviewDTO builds a whitelist human_gate preview from lookup + artifacts.
@@ -202,6 +212,11 @@ func applyPreviewArtifacts(dto *PreviewDTO, visualHTML, structuredName, structur
 		dto.Waiting = extras.Waiting
 	}
 	dto.SessionBusy = alive && (extras.SessionBusy || extras.Waiting > 0 || dto.ActiveItem != nil)
+	if dto.SessionBusy {
+		if ev := SanitizeLiveEvents(extras.LiveEvents); len(ev) > 0 {
+			dto.LiveEvents = ev
+		}
+	}
 	dto.VisualHTMLHash = ContentHash(dto.VisualHTML)
 	dto.UpstreamHash = HashUpstream(dto.Upstream)
 	dto.StructuredHash = HashStructured(dto.Structured)
