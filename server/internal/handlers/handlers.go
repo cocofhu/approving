@@ -58,8 +58,9 @@ type Handlers struct {
 	GateShareTickets  *gateshare.TicketStore
 	GateShareSessions *gateshare.PreviewSessionHub
 	GateShareLimiter  *gateshare.IPLimiter
-	// PublicAdvertise is the browser-facing origin for share URLs.
-	// Public CSRF compares Origin/Referer to this request's Host (never client
+	// PublicAdvertise is the browser-facing base for QQ/preview deep links.
+	// Gate/review share URLs mint from Request.Host instead. Public CSRF
+	// compares Origin/Referer to this request's Host (never client
 	// X-Forwarded-Host; advertise host is not used for CSRF).
 	PublicAdvertise string
 	Team            *services.TeamService

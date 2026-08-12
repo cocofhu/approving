@@ -40,9 +40,41 @@ test.describe('human_gate 临时审批链接', () => {
     await page.getByTestId('gate-share-create').click()
     await expect(page.getByTestId('gate-share-url')).toBeVisible()
     await expect(page.getByTestId('gate-share-url')).toHaveValue(/#t=••••/)
+    await expect(page.getByTestId('gate-share-origin-hint')).toBeVisible()
+    await expect(page.getByTestId('gate-share-loopback-warning')).toHaveCount(0)
     const copied = await page.evaluate(() => (window as unknown as { __copied?: string }).__copied || '')
-    expect(copied).toContain('/public/gate-approvals#t=')
+    // plan g3.1 / g2.3: non-loopback fixture (approving.example.com) auto-copies
+    expect(copied).toContain('https://approving.example.com/public/gate-approvals#t=')
     expect(copied).toMatch(/#t=[0-9a-f]{64}$/)
+  })
+
+  test('环回铸造告警并禁自动复制', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: async (text: string) => {
+            ;(window as unknown as { __copied?: string }).__copied = text
+          },
+        },
+      })
+    })
+    await page.setViewportSize({ width: 1280, height: 800 })
+    // shareHost=loopback → fixture mints 127.0.0.1 (plan g2.2 / g2.3)
+    await page.goto('/gate-share-link.html?scene=inbox&shareHost=loopback')
+    await expect(page.getByTestId('gate-share-e2e-root')).toBeVisible({ timeout: 10_000 })
+    await page.getByTestId('gate-share-copy-btn').click()
+    await expect(page.getByTestId('gate-share-panel-body')).toBeVisible()
+    await page.getByTestId('gate-share-create').click()
+    await expect(page.getByTestId('gate-share-url')).toBeVisible()
+    await expect(page.getByTestId('gate-share-loopback-warning')).toBeVisible()
+    await expect(page.getByTestId('gate-share-loopback-warning')).toContainText(/环回|外部不可达/)
+    await expect(page.getByTestId('gate-share-copy')).toBeDisabled()
+    await expect(page.getByTestId('gate-share-loopback-copy-hint')).toContainText(/不可复制/)
+    await expect(page.getByTestId('gate-share-regen')).toBeEnabled()
+    await expect(page.getByTestId('gate-share-revoke')).toBeEnabled()
+    const copied = await page.evaluate(() => (window as unknown as { __copied?: string }).__copied || '')
+    expect(copied).toBe('')
   })
 
   test('未登录外部页提交中文案且加载不泄露内部标识', async ({ page }) => {
@@ -135,7 +167,7 @@ test.describe('human_gate 临时审批链接', () => {
     await page.getByTestId('gate-share-create').click()
     await expect(page.getByTestId('gate-share-url')).toBeVisible()
     const copied = await page.evaluate(() => (window as unknown as { __copied?: string }).__copied || '')
-    expect(copied).toContain('/public/gate-approvals#t=')
+    expect(copied).toContain('https://approving.example.com/public/gate-approvals#t=')
   })
 
   test('未登录复审页三区可发送并底栏确认', async ({ page }) => {
@@ -186,10 +218,10 @@ test.describe('human_gate 临时审批链接', () => {
     await page.getByTestId('gate-share-create').click()
     await expect(page.getByTestId('gate-share-url')).toBeVisible()
     const copied = await page.evaluate(() => (window as unknown as { __copied?: string }).__copied || '')
-    expect(copied).toContain('/public/gate-approvals#t=')
+    expect(copied).toContain('https://approving.example.com/public/gate-approvals#t=')
   })
 
-  test('待澄清 Inbox 三处入口可生成临时链接', async ({ page }) => {
+  test('待澄清 Inbox 两处入口可生成临时链接', async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'clipboard', {
         configurable: true,
@@ -204,7 +236,7 @@ test.describe('human_gate 临时审批链接', () => {
     await page.goto('/gate-share-link.html?scene=inbox-clarify')
     await expect(page.getByTestId('gate-share-copy-btn')).toBeVisible({ timeout: 10_000 })
     await expect(page.getByTestId('gate-share-copy-btn-detail')).toBeVisible()
-    await expect(page.getByTestId('review-composer-open-share')).toBeVisible()
+    await expect(page.getByTestId('review-composer-open-share')).toHaveCount(0)
     await expect(page.getByTestId('html-preview-share-link')).toHaveCount(0)
     await page.getByTestId('gate-share-copy-btn').click()
     await expect(page.getByTestId('gate-share-panel-body')).toBeVisible()
@@ -212,7 +244,7 @@ test.describe('human_gate 临时审批链接', () => {
     await page.getByTestId('gate-share-create').click()
     await expect(page.getByTestId('gate-share-url')).toBeVisible()
     const copied = await page.evaluate(() => (window as unknown as { __copied?: string }).__copied || '')
-    expect(copied).toContain('/public/gate-approvals#t=')
+    expect(copied).toContain('https://approving.example.com/public/gate-approvals#t=')
   })
 
   test('未登录澄清页文案分叉、空产物、多轮与未结束确认不燃链', async ({ page }) => {

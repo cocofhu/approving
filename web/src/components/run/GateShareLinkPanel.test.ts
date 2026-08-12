@@ -292,4 +292,72 @@ describe('GateShareLinkPanel', () => {
     expect(mocks.createReview).toHaveBeenCalledWith('run-1', 'research1', '24h')
     expect(mocks.create).not.toHaveBeenCalled()
   })
+
+  it('blocks copy and skips auto-copy for loopback share URLs', async () => {
+    const token = 'lb'.repeat(32)
+    const url = `http://localhost:8080/public/gate-approvals#t=${token}`
+    mocks.create.mockResolvedValue({ id: 'gsl-lb', url, ttlTier: '24h', expiresAt: '2026-08-10T00:00:00Z', state: 'active' })
+    mockClipboard(vi.fn().mockResolvedValue(undefined))
+
+    const w = mount(GateShareLinkPanel, {
+      props: { open: true, target: item() },
+      global: { plugins: [i18n], stubs: { Teleport: true } },
+    })
+    await flushPromises()
+    expect(w.get('[data-testid="gate-share-loopback-warning"]').text()).toMatch(/环回|外部不可达/)
+    expect(w.find('[data-testid="gate-share-origin-hint"]').exists()).toBe(false)
+
+    await w.get('[data-testid="gate-share-create"]').trigger('click')
+    await flushPromises()
+    expect(mocks.create).toHaveBeenCalled()
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
+    expect((w.get('[data-testid="gate-share-copy"]').element as HTMLButtonElement).disabled).toBe(true)
+    expect(w.get('[data-testid="gate-share-loopback-copy-hint"]').text()).toMatch(/不可复制/)
+    expect((w.get('[data-testid="gate-share-regen"]').element as HTMLButtonElement).disabled).toBe(false)
+    expect((w.get('[data-testid="gate-share-revoke"]').element as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('shows origin-from-access hint and allows copy for non-loopback URLs', async () => {
+    const token = 'pub'.repeat(32)
+    const url = `https://approving.example.com/public/gate-approvals#t=${token}`
+    rememberShareUrl('run-1', 'hg1', 1, url)
+    mockClipboard(vi.fn().mockResolvedValue(undefined))
+
+    const w = mount(GateShareLinkPanel, {
+      props: {
+        open: true,
+        target: item({ shareLink: { state: 'active', ttlTier: '24h', canManage: true, canCreate: false } }),
+      },
+      global: { plugins: [i18n], stubs: { Teleport: true } },
+    })
+    await flushPromises()
+    expect(w.get('[data-testid="gate-share-origin-hint"]').text()).toMatch(/当前访问|公开基址/)
+    expect(w.find('[data-testid="gate-share-loopback-warning"]').exists()).toBe(false)
+    await w.get('[data-testid="gate-share-copy"]').trigger('click')
+    await flushPromises()
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(url)
+  })
+
+  it('skips auto-copy after regenerating a loopback URL', async () => {
+    const token = 'rg'.repeat(32)
+    const url = `http://127.0.0.1:8080/public/gate-approvals#t=${token}`
+    rememberShareUrl('run-1', 'hg1', 1, url)
+    mocks.regen.mockResolvedValue({ id: 'gsl-rg', url, ttlTier: '24h', expiresAt: '2026-08-10T00:00:00Z', state: 'active' })
+    mockClipboard(vi.fn().mockResolvedValue(undefined))
+
+    const w = mount(GateShareLinkPanel, {
+      props: {
+        open: true,
+        target: item({ shareLink: { state: 'active', ttlTier: '24h', canManage: true, canCreate: false } }),
+      },
+      global: { plugins: [i18n], stubs: { Teleport: true } },
+    })
+    await flushPromises()
+    await w.get('[data-testid="gate-share-regen"]').trigger('click')
+    await w.get('[data-testid="gate-share-confirm-ok"]').trigger('click')
+    await flushPromises()
+    expect(mocks.regen).toHaveBeenCalled()
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
+    expect((w.get('[data-testid="gate-share-copy"]').element as HTMLButtonElement).disabled).toBe(true)
+  })
 })

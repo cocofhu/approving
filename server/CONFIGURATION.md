@@ -14,7 +14,7 @@ configured on Agent meta env, not in this platform config table.
 | `APPROVING_PORT` | `server.port` | integer | `8080` | Public | HTTP listen port |
 | `APPROVING_DEPLOYMENT_MODE` | `server.deployment_mode` | string | `development` | Public | Deployment trust boundary; local-demo is loopback-only |
 | `APPROVING_MCP_ADVERTISE` | `server.mcp_advertise` | URL | `derived` | Public | API base URL used by sandboxes for artifact-store MCP |
-| `APPROVING_PUBLIC_ADVERTISE` | `server.public_advertise` | URL | `derived` | Public | Public base URL for browser preview proxy links |
+| `APPROVING_PUBLIC_ADVERTISE` | `server.public_advertise` | URL | `derived` | Public | Public base URL for browser preview proxy and Run→QQ deep links (not used to mint gate share URLs) |
 | `APPROVING_DB` | `database.path` | path | `approving.db` | Public | SQLite database file |
 | `APPROVING_DB_DRIVER` | `database.driver` | enum | `sqlite` | Public | Database driver: sqlite or mysql |
 | `APPROVING_DB_DSN` | `database.dsn` | string | `Not set` | Sensitive | MySQL DSN |

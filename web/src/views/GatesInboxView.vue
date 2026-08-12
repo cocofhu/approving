@@ -1116,9 +1116,6 @@ const inboxAppPreviewActive = computed(() => {
   return n?.type === 'app_preview'
 })
 
-/** Inbox composer share entry: 待澄清 / 待复审 / 应用预览 (plan g1.3). */
-const inboxShowSharePanel = computed(() => isShareableInboxItem(active.value))
-
 // Mirror RunDetailView.reviewActive: post-run product review on a non-react
 // producer (backend only seeds clarify sessions for ReviewCapable nodes).
 // Inbox API type stays "clarify"; mode is decided from the loaded graph.
@@ -1661,11 +1658,9 @@ function itemSecondary(it: InboxItem) {
               :done="activeClarify.done"
               :active="clarifyInputActive"
               :confirm-error="clarifyConfirmError"
-              :show-share-panel="inboxShowSharePanel"
               @send="onClarifySend"
               @finish="onClarifyFinish"
               @cancel="onClarifyCancel"
-              @open-share="openSharePanel(active)"
             />
           </template>
         </ReviewShell>
@@ -1777,11 +1772,9 @@ function itemSecondary(it: InboxItem) {
                   :done="activeClarify.done"
                   :active="clarifyInputActive"
                   :confirm-error="clarifyConfirmError"
-                  :show-share-panel="inboxShowSharePanel"
                   @send="onClarifySend"
                   @finish="onClarifyFinish"
                   @cancel="onClarifyCancel"
-                  @open-share="openSharePanel(active)"
                 />
               </template>
             </ReviewShell>

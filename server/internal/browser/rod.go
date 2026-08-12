@@ -2,8 +2,10 @@ package browser
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
@@ -19,7 +21,19 @@ import (
 const (
 	ViewportWidth  = 1920
 	ViewportHeight = 1080
+
+	// desktopBoundsSlackPx: getWindowForTarget may report slightly under the
+	// requested outer size (chrome frame / rounding). Below this, Overlay
+	// hit-testing on Xvfb is unreliable → refuse inspect.
+	desktopBoundsSlackPx = 80
+	desktopBoundsRetries = 3
+	desktopBoundsRetry   = 80 * time.Millisecond
 )
+
+// ErrDesktopNotReady means the headed Chromium window is not ≈ the Xvfb desktop
+// after SetWindow; Overlay inspect would mis-hit (click-through). Callers must
+// refuse entering inspect and surface a not-ready control message.
+var ErrDesktopNotReady = errors.New("desktop window not ready for inspect")
 
 // dialRod connects to a Chromium container's CDP endpoint (http://ip:9222) and
 // returns an Engine. The browser is NOT bound to the caller's request context so
@@ -54,7 +68,10 @@ func (e *rodEngine) NewTab(_ context.Context, url string) (Page, error) {
 	// Headed Chromium on Xvfb (no window manager) opens NewTab as a second,
 	// often undersized window — leaving a black desktop strip in noVNC and
 	// breaking Overlay inspect hit-testing. Fill + focus before viewport pin.
-	rp.presentDesktop()
+	// Tab open stays best-effort; SetInspect(on) hard-gates on readiness.
+	if err := rp.presentDesktop(); err != nil {
+		log.Debug().Err(err).Msg("preview NewTab presentDesktop not ready yet")
+	}
 	// Pin the CSS viewport to 1920x1080 at DSF 1 so layout matches the outer
 	// window we just sized (VNC mouse ↔ Overlay coordinates stay aligned).
 	_ = rp.SetViewport(ViewportWidth, ViewportHeight, 1)
@@ -72,19 +89,73 @@ func desktopWindowBounds() *proto.BrowserBounds {
 	}
 }
 
-// presentDesktop focuses the tab and forces the headed window to cover Xvfb.
-// Best-effort: failures are logged but do not fail tab open / inspect toggle.
-func (rp *rodPage) presentDesktop() {
+// windowBoundsReady reports whether CDP window bounds are ≈ the Xvfb desktop.
+func windowBoundsReady(b *proto.BrowserBounds) bool {
+	if b == nil || b.Width == nil || b.Height == nil {
+		return false
+	}
+	minW := ViewportWidth - desktopBoundsSlackPx
+	minH := ViewportHeight - desktopBoundsSlackPx
+	return *b.Width >= minW && *b.Height >= minH
+}
+
+// readWindowBounds uses Browser.getWindowForTarget (includes Bounds).
+func (rp *rodPage) readWindowBounds() (*proto.BrowserBounds, error) {
+	res, err := proto.BrowserGetWindowForTarget{TargetID: rp.page.TargetID}.Call(rp.page)
+	if err != nil {
+		return nil, err
+	}
+	if res == nil {
+		return nil, fmt.Errorf("getWindowForTarget: empty result")
+	}
+	return res.Bounds, nil
+}
+
+// presentDesktop focuses the tab, forces the headed window to cover Xvfb, then
+// reads back bounds. Returns ErrDesktopNotReady when geometry is still wrong
+// after short retries (inspect must not enter Overlay searchForNode).
+func (rp *rodPage) presentDesktop() error {
 	if rp == nil || rp.page == nil {
-		return
+		return fmt.Errorf("%w: nil page", ErrDesktopNotReady)
 	}
 	_ = proto.PageBringToFront{}.Call(rp.page)
 	if _, err := rp.page.Activate(); err != nil {
 		log.Debug().Err(err).Msg("preview presentDesktop Activate")
 	}
-	if err := rp.page.SetWindow(desktopWindowBounds()); err != nil {
-		log.Debug().Err(err).Msg("preview presentDesktop SetWindow")
+
+	var lastErr error
+	for attempt := 0; attempt < desktopBoundsRetries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(desktopBoundsRetry)
+		}
+		if err := rp.page.SetWindow(desktopWindowBounds()); err != nil {
+			lastErr = err
+			log.Debug().Err(err).Int("attempt", attempt).Msg("preview presentDesktop SetWindow")
+			continue
+		}
+		bounds, err := rp.readWindowBounds()
+		if err != nil {
+			lastErr = err
+			log.Debug().Err(err).Int("attempt", attempt).Msg("preview presentDesktop getWindowForTarget")
+			continue
+		}
+		if windowBoundsReady(bounds) {
+			return nil
+		}
+		w, h := 0, 0
+		if bounds.Width != nil {
+			w = *bounds.Width
+		}
+		if bounds.Height != nil {
+			h = *bounds.Height
+		}
+		lastErr = fmt.Errorf("bounds %dx%d want ~%dx%d", w, h, ViewportWidth, ViewportHeight)
+		log.Debug().Int("w", w).Int("h", h).Int("attempt", attempt).Msg("preview presentDesktop bounds not ready")
 	}
+	if lastErr == nil {
+		lastErr = errors.New("unknown")
+	}
+	return fmt.Errorf("%w: %v", ErrDesktopNotReady, lastErr)
 }
 
 func (e *rodEngine) Close() error { return e.browser.Close() }
@@ -97,6 +168,7 @@ type rodPage struct {
 	mu                sync.Mutex
 	onPick            func(Pick)
 	onInspectCanceled func()
+	onDescribeFailed  func()
 }
 
 func (rp *rodPage) OnPick(cb func(Pick)) {
@@ -121,6 +193,18 @@ func (rp *rodPage) getInspectCanceled() func() {
 	rp.mu.Lock()
 	defer rp.mu.Unlock()
 	return rp.onInspectCanceled
+}
+
+func (rp *rodPage) OnDescribeFailed(cb func()) {
+	rp.mu.Lock()
+	rp.onDescribeFailed = cb
+	rp.mu.Unlock()
+}
+
+func (rp *rodPage) getDescribeFailed() func() {
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+	return rp.onDescribeFailed
 }
 
 func (rp *rodPage) StartScreencast(onFrame func(Frame)) error {
@@ -209,9 +293,11 @@ func (rp *rodPage) SetInspect(on bool) error {
 		_ = proto.OverlayDisable{}.Call(rp.page)
 		return nil
 	}
-	// Re-assert focus/geometry so VNC clicks land on this tab's Overlay, not a
-	// leftover bootstrap about:blank window or an undersized cascade window.
-	rp.presentDesktop()
+	// Hard gate: refuse Overlay searchForNode when geometry is still wrong —
+	// otherwise VNC clicks hit the page (focus/input) instead of inspect.
+	if err := rp.presentDesktop(); err != nil {
+		return err
+	}
 	_ = proto.DOMEnable{}.Call(rp.page)
 	_ = proto.OverlayEnable{}.Call(rp.page)
 	content, border := 0.4, 1.0
@@ -263,10 +349,10 @@ func (rp *rodPage) installPickListener() {
 			// One-shot: leave inspect mode after a pick attempt.
 			_ = rp.SetInspect(false)
 			if err != nil {
-				// Previously silent: server left inspect while UI stayed pressed.
+				// Distinct from Esc cancel so the UI can show describe-failed tip.
 				log.Warn().Err(err).Msg("preview describeBackendNode failed")
-				if cancel := rp.getInspectCanceled(); cancel != nil {
-					cancel()
+				if fail := rp.getDescribeFailed(); fail != nil {
+					fail()
 				}
 				return
 			}

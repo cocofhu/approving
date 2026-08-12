@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -11,21 +12,29 @@ import (
 )
 
 type vncRecPage struct {
-	inspect *bool
-	navs    []string
-	gotos   []string
+	inspect    *bool
+	inspectErr error
+	navs       []string
+	gotos      []string
 }
 
 func (p *vncRecPage) StartScreencast(func(browser.Frame)) error { return nil }
 func (p *vncRecPage) DispatchMouse(browser.MouseEvent) error    { return nil }
 func (p *vncRecPage) DispatchKey(browser.KeyEvent) error        { return nil }
 func (p *vncRecPage) SetViewport(int, int, float64) error       { return nil }
-func (p *vncRecPage) SetInspect(on bool) error                  { p.inspect = &on; return nil }
-func (p *vncRecPage) OnPick(func(browser.Pick))                 {}
-func (p *vncRecPage) OnInspectCanceled(func())                  {}
-func (p *vncRecPage) Navigate(a string) error                   { p.navs = append(p.navs, a); return nil }
-func (p *vncRecPage) Goto(u string) error                       { p.gotos = append(p.gotos, u); return nil }
-func (p *vncRecPage) Close() error                              { return nil }
+func (p *vncRecPage) SetInspect(on bool) error {
+	if p.inspectErr != nil && on {
+		return p.inspectErr
+	}
+	p.inspect = &on
+	return nil
+}
+func (p *vncRecPage) OnPick(func(browser.Pick))                {}
+func (p *vncRecPage) OnInspectCanceled(func())                 {}
+func (p *vncRecPage) OnDescribeFailed(func())                  {}
+func (p *vncRecPage) Navigate(a string) error                  { p.navs = append(p.navs, a); return nil }
+func (p *vncRecPage) Goto(u string) error                      { p.gotos = append(p.gotos, u); return nil }
+func (p *vncRecPage) Close() error                             { return nil }
 
 func decodeVnc(t *testing.T, raw string) vncClientMsg {
 	t.Helper()
@@ -39,20 +48,20 @@ func decodeVnc(t *testing.T, raw string) vncClientMsg {
 func TestApplyVncMsgInspectNavigate(t *testing.T) {
 	h := &Handlers{}
 	p := &vncRecPage{}
-	h.applyVncMsg(p, decodeVnc(t, `{"type":"inspect","on":true}`))
+	h.applyVncMsg(p, decodeVnc(t, `{"type":"inspect","on":true}`), nil)
 	if p.inspect == nil || !*p.inspect {
 		t.Fatal("inspect should be enabled")
 	}
-	h.applyVncMsg(p, decodeVnc(t, `{"type":"inspect","on":false}`))
+	h.applyVncMsg(p, decodeVnc(t, `{"type":"inspect","on":false}`), nil)
 	if p.inspect == nil || *p.inspect {
 		t.Fatal("inspect should be disabled on on:false")
 	}
-	h.applyVncMsg(p, decodeVnc(t, `{"type":"navigate","action":"reload"}`))
+	h.applyVncMsg(p, decodeVnc(t, `{"type":"navigate","action":"reload"}`), nil)
 	if len(p.navs) != 1 || p.navs[0] != "reload" {
 		t.Fatalf("navigate wrong: %v", p.navs)
 	}
-	h.applyVncMsg(p, decodeVnc(t, `{"type":"navigate","action":"back"}`))
-	h.applyVncMsg(p, decodeVnc(t, `{"type":"navigate","action":"forward"}`))
+	h.applyVncMsg(p, decodeVnc(t, `{"type":"navigate","action":"back"}`), nil)
+	h.applyVncMsg(p, decodeVnc(t, `{"type":"navigate","action":"forward"}`), nil)
 	if len(p.navs) != 3 || p.navs[1] != "back" || p.navs[2] != "forward" {
 		t.Fatalf("back/forward wrong: %v", p.navs)
 	}
@@ -61,7 +70,7 @@ func TestApplyVncMsgInspectNavigate(t *testing.T) {
 func TestApplyVncMsgIgnoresUnknown(t *testing.T) {
 	h := &Handlers{}
 	p := &vncRecPage{}
-	h.applyVncMsg(p, decodeVnc(t, `{"type":"bogus"}`))
+	h.applyVncMsg(p, decodeVnc(t, `{"type":"bogus"}`), nil)
 	if p.inspect != nil || len(p.navs) != 0 {
 		t.Fatalf("unknown type should be no-op: inspect=%v navs=%v", p.inspect, p.navs)
 	}
@@ -70,13 +79,37 @@ func TestApplyVncMsgIgnoresUnknown(t *testing.T) {
 func TestApplyVncMsgGoto(t *testing.T) {
 	h := &Handlers{}
 	p := &vncRecPage{}
-	h.applyVncMsg(p, decodeVnc(t, `{"type":"navigate","action":"goto","url":"https://example.com/"}`))
+	h.applyVncMsg(p, decodeVnc(t, `{"type":"navigate","action":"goto","url":"https://example.com/"}`), nil)
 	if len(p.gotos) != 1 || p.gotos[0] != "https://example.com/" {
 		t.Fatalf("goto wrong: %v", p.gotos)
 	}
-	h.applyVncMsg(p, decodeVnc(t, `{"type":"navigate","action":"goto"}`))
+	h.applyVncMsg(p, decodeVnc(t, `{"type":"navigate","action":"goto"}`), nil)
 	if len(p.gotos) != 2 || p.gotos[1] != "about:blank" {
 		t.Fatalf("empty goto should open about:blank: %v", p.gotos)
+	}
+}
+
+func TestApplyVncMsgInspectNotReadyPushes(t *testing.T) {
+	h := &Handlers{}
+	p := &vncRecPage{inspectErr: fmt.Errorf("wrap: %w", browser.ErrDesktopNotReady)}
+	var pushed []string
+	h.applyVncMsg(p, decodeVnc(t, `{"type":"inspect","on":true}`), func(v any) {
+		b, _ := json.Marshal(v)
+		pushed = append(pushed, string(b))
+	})
+	if p.inspect != nil {
+		t.Fatalf("inspect should not stick when not-ready, got %v", p.inspect)
+	}
+	if len(pushed) != 1 || pushed[0] != `{"type":"not-ready"}` {
+		t.Fatalf("want not-ready push, got %v", pushed)
+	}
+	// Closing inspect must not push not-ready even if SetInspect errors.
+	p.inspectErr = browser.ErrDesktopNotReady
+	h.applyVncMsg(p, decodeVnc(t, `{"type":"inspect","on":false}`), func(v any) {
+		pushed = append(pushed, "unexpected")
+	})
+	if len(pushed) != 1 {
+		t.Fatalf("on:false should not push not-ready: %v", pushed)
 	}
 }
 

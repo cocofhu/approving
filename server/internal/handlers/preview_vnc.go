@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -124,6 +125,10 @@ func (h *Handlers) PreviewVNC(c *gin.Context) {
 		// Remote Esc left CDP inspect; frontend must clear button pressed state.
 		pushJSON(gin.H{"type": "inspect-canceled"})
 	})
+	sess.Page().OnDescribeFailed(func() {
+		// Node describe failed after Overlay pick — distinct from Esc cancel.
+		pushJSON(gin.H{"type": "describe-failed"})
+	})
 
 	pushJSON(gin.H{"type": "ready", "url": navigateURL})
 
@@ -149,7 +154,7 @@ func (h *Handlers) PreviewVNC(c *gin.Context) {
 				var m vncClientMsg
 				if json.Unmarshal(data, &m) == nil {
 					sess.Touch()
-					h.applyVncMsg(sess.Page(), m)
+					h.applyVncMsg(sess.Page(), m, pushJSON)
 					continue
 				}
 			}
@@ -171,11 +176,14 @@ func (h *Handlers) PreviewVNC(c *gin.Context) {
 	}
 }
 
-func (h *Handlers) applyVncMsg(page browser.Page, m vncClientMsg) {
+func (h *Handlers) applyVncMsg(page browser.Page, m vncClientMsg, pushJSON func(any)) {
 	switch m.Type {
 	case "inspect":
 		if err := page.SetInspect(m.On); err != nil {
 			log.Warn().Err(err).Bool("on", m.On).Msg("preview-vnc SetInspect failed")
+			if m.On && pushJSON != nil && errors.Is(err, browser.ErrDesktopNotReady) {
+				pushJSON(gin.H{"type": "not-ready"})
+			}
 		}
 	case "navigate":
 		if m.Action == "goto" || m.URL != "" {

@@ -180,6 +180,7 @@ Module-specific lint, test, coverage, and E2E commands are documented in [`AGENT
 - Keep ACP API keys and Git credentials in project or Agent env; never commit them.
 - Pin production images by digest; see [Release images and smoke](CONTRIBUTING.md#release-images-and-smoke).
 - Approving is still beta software. Perform your own security review, backups, and capacity validation before production use.
+- **Reverse proxy Host:** temporary approval share links mint from this request's `Host` (never client `X-Forwarded-Host`). Preserve the browser Host (for example nginx `proxy_set_header Host $host`) and forward `X-Forwarded-Proto` when TLS terminates upstream. See [`SECURITY.md`](SECURITY.md).
 - **DB ↔ attachment lifecycle:** release Compose separates SQLite (`./.localdata/db`) from app-data/blobs (`./.localdata/app-data`). Backup and clean them as a pair (and include a custom `APPROVING_BLOBS_ROOT` if set); otherwise Run inputs can keep `blob:` refs while `GET /api/blobs/:id` returns 404. Historical orphans are shown as permanent UI placeholders only—this release does not ship an orphan scanner. See [Quick start · Database and attachments](docs/content/en/guide/quick-start.md#database-and-attachments-share-one-lifecycle-backup--cleanup).
 
 ## Documentation

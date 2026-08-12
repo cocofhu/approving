@@ -233,6 +233,7 @@ describe('NovncPreviewPanel', () => {
     await flushPromises()
     expect(inspectButton(wrapper).attributes('aria-pressed')).toBe('false')
     expect(wrapper.text()).toContain('#keep')
+    expect(wrapper.find('[data-testid="novnc-inline-tip"]').exists()).toBe(false)
     // Remote already off — do not echo another inspect on:false
     expect(ws.sent.slice(beforeLen)).toEqual([])
     wrapper.unmount()
@@ -261,6 +262,84 @@ describe('NovncPreviewPanel', () => {
     await flushPromises()
     expect(wrapper.emitted('reconnect-request')?.length).toBe(1)
     expect(MockWebSocket.instances.length).toBe(socketsBeforeClick)
+    wrapper.unmount()
+  })
+
+  it('not-ready clears sticky inspect and shows Demo intercept tip (g3.1/S2)', async () => {
+    const wrapper = mountNovnc()
+    await flushPromises()
+    const ws = MockWebSocket.instances[0]!
+
+    await inspectButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(inspectButton(wrapper).attributes('aria-pressed')).toBe('true')
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'not-ready' }) })
+    await flushPromises()
+    expect(inspectButton(wrapper).attributes('aria-pressed')).toBe('false')
+    const tip = wrapper.find('[data-testid="novnc-inline-tip"]')
+    expect(tip.exists()).toBe(true)
+    expect(tip.text()).toContain('窗口未就绪，无法可靠取点')
+    expect(wrapper.find('[data-testid="novnc-pick-result"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('describe-failed shows tip, clears sticky, no pick result (g3.2/S3)', async () => {
+    const wrapper = mountNovnc()
+    await flushPromises()
+    const ws = MockWebSocket.instances[0]!
+
+    await inspectButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(inspectButton(wrapper).attributes('aria-pressed')).toBe('true')
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'describe-failed' }) })
+    await flushPromises()
+    expect(inspectButton(wrapper).attributes('aria-pressed')).toBe('false')
+    const tip = wrapper.find('[data-testid="novnc-inline-tip"]')
+    expect(tip.exists()).toBe(true)
+    expect(tip.text()).toContain('未能识别该元素，请重试')
+    expect(wrapper.find('[data-testid="novnc-pick-result"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('picked result bar shows selector and url then exits inspect (g3.3/S1)', async () => {
+    const wrapper = mountNovnc()
+    await flushPromises()
+    const ws = MockWebSocket.instances[0]!
+
+    await inspectButton(wrapper).trigger('click')
+    await flushPromises()
+    ws.onmessage?.({
+      data: JSON.stringify({
+        type: 'picked',
+        pick: {
+          selector: 'textarea#msg',
+          tagName: 'textarea',
+          outerHTML: '<textarea id="msg"></textarea>',
+          url: 'http://127.0.0.1:8080/',
+        },
+      }),
+    })
+    await flushPromises()
+    expect(inspectButton(wrapper).attributes('aria-pressed')).toBe('false')
+    expect(wrapper.find('[data-testid="novnc-inline-tip"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="novnc-pick-selector"]').text()).toBe('textarea#msg')
+    expect(wrapper.find('[data-testid="novnc-pick-url"]').text()).toBe('http://127.0.0.1:8080/')
+    expect(wrapper.text()).toContain('selector')
+    expect(wrapper.text()).toContain('url')
+    wrapper.unmount()
+  })
+
+  it('Esc while inspecting does not show failure tip (S3 cancel path)', async () => {
+    const wrapper = mountNovnc()
+    await flushPromises()
+    await inspectButton(wrapper).trigger('click')
+    await flushPromises()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(inspectButton(wrapper).attributes('aria-pressed')).toBe('false')
+    expect(wrapper.find('[data-testid="novnc-inline-tip"]').exists()).toBe(false)
     wrapper.unmount()
   })
 })

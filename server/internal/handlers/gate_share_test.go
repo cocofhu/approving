@@ -482,9 +482,10 @@ func TestGateShareIgnoresForwardedHostOnCreate(t *testing.T) {
 	seedHumanGate(t, h, "run-share-xfh", "hg-xfh", nil)
 	b, _ := json.Marshal(map[string]any{"ttlTier": "24h"})
 	req := httptest.NewRequest(http.MethodPost, "/api/runs/run-share-xfh/gates/hg-xfh/share-link", bytes.NewReader(b))
-	req.Host = "ignored.invalid"
+	req.Host = "approving.example.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Forwarded-Host", "evil.example")
+	req.Header.Set("X-Forwarded-Proto", "https")
 	req.AddCookie(&http.Cookie{Name: auth.CookieName, Value: h.cookie})
 	w := httptest.NewRecorder()
 	h.r.ServeHTTP(w, req)
@@ -493,11 +494,95 @@ func TestGateShareIgnoresForwardedHostOnCreate(t *testing.T) {
 	}
 	created := parseJSON(t, w)
 	url, _ := created["url"].(string)
-	if strings.Contains(url, "evil.example") || strings.Contains(url, "ignored.invalid") {
-		t.Fatalf("share URL trusted request/forwarded host: %s", url)
+	if strings.Contains(url, "evil.example") {
+		t.Fatalf("share URL must ignore X-Forwarded-Host: %s", url)
 	}
-	if !strings.Contains(url, "example.test/public/gate-approvals#t=") {
-		t.Fatalf("expected PublicAdvertise origin, got %s", url)
+	if strings.Contains(url, "example.test") {
+		t.Fatalf("share URL must not use PublicAdvertise: %s", url)
+	}
+	if !strings.Contains(url, "https://approving.example.com/public/gate-approvals#t=") {
+		t.Fatalf("expected Request.Host origin, got %s", url)
+	}
+}
+
+func TestGateShareMintsFromRequestHostPublicAndLoopback(t *testing.T) {
+	h := newHarness(t)
+
+	cases := []struct {
+		name   string
+		runID  string
+		nodeID string
+		host   string
+		want   string
+	}{
+		{name: "public", runID: "run-share-host-pub", nodeID: "hg-host-pub", host: "approving.example.com", want: "http://approving.example.com/public/gate-approvals#t="},
+		{name: "loopback", runID: "run-share-host-lb", nodeID: "hg-host-lb", host: "localhost:8080", want: "http://localhost:8080/public/gate-approvals#t="},
+		{name: "ipv6-loopback", runID: "run-share-host-v6", nodeID: "hg-host-v6", host: "[::1]:8080", want: "http://[::1]:8080/public/gate-approvals#t="},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			seedHumanGate(t, h, tc.runID, tc.nodeID, nil)
+			b, _ := json.Marshal(map[string]any{"ttlTier": "24h"})
+			req := httptest.NewRequest(http.MethodPost, "/api/runs/"+tc.runID+"/gates/"+tc.nodeID+"/share-link", bytes.NewReader(b))
+			req.Host = tc.host
+			req.Header.Set("Content-Type", "application/json")
+			req.AddCookie(&http.Cookie{Name: auth.CookieName, Value: h.cookie})
+			w := httptest.NewRecorder()
+			h.r.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("mint: %d %s", w.Code, w.Body.String())
+			}
+			url, _ := parseJSON(t, w)["url"].(string)
+			if !strings.Contains(url, tc.want) {
+				t.Fatalf("expected origin %q in %s", tc.want, url)
+			}
+			if strings.Contains(url, "example.test") {
+				t.Fatalf("must not mint from PublicAdvertise: %s", url)
+			}
+		})
+	}
+}
+
+func TestGateShareRegenFollowsCurrentHostWithoutRewritingStatus(t *testing.T) {
+	h := newHarness(t)
+	seedHumanGate(t, h, "run-share-host-switch", "hg-host-sw", nil)
+
+	createBody, _ := json.Marshal(map[string]any{"ttlTier": "24h"})
+	createReq := httptest.NewRequest(http.MethodPost, "/api/runs/run-share-host-switch/gates/hg-host-sw/share-link", bytes.NewReader(createBody))
+	createReq.Host = "localhost:8080"
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.AddCookie(&http.Cookie{Name: auth.CookieName, Value: h.cookie})
+	createW := httptest.NewRecorder()
+	h.r.ServeHTTP(createW, createReq)
+	if createW.Code != http.StatusOK {
+		t.Fatalf("create: %d %s", createW.Code, createW.Body.String())
+	}
+	oldURL, _ := parseJSON(t, createW)["url"].(string)
+	if !strings.Contains(oldURL, "http://localhost:8080/public/gate-approvals#t=") {
+		t.Fatalf("loopback create: %s", oldURL)
+	}
+
+	st := parseJSON(t, h.do(http.MethodGet, "/api/runs/run-share-host-switch/gates/hg-host-sw/share-link", nil))
+	if _, ok := st["url"]; ok {
+		t.Fatalf("status must not rewrite/leak url: %+v", st)
+	}
+
+	regenReq := httptest.NewRequest(http.MethodPost, "/api/runs/run-share-host-switch/gates/hg-host-sw/share-link/regen", nil)
+	regenReq.Host = "approving.example.com"
+	regenReq.Header.Set("Content-Type", "application/json")
+	regenReq.Header.Set("X-Forwarded-Proto", "https")
+	regenReq.AddCookie(&http.Cookie{Name: auth.CookieName, Value: h.cookie})
+	regenW := httptest.NewRecorder()
+	h.r.ServeHTTP(regenW, regenReq)
+	if regenW.Code != http.StatusOK {
+		t.Fatalf("regen: %d %s", regenW.Code, regenW.Body.String())
+	}
+	newURL, _ := parseJSON(t, regenW)["url"].(string)
+	if !strings.Contains(newURL, "https://approving.example.com/public/gate-approvals#t=") {
+		t.Fatalf("regen must follow current Host: %s", newURL)
+	}
+	if newURL == oldURL {
+		t.Fatal("regen returned same url")
 	}
 }
 
