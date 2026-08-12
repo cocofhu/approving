@@ -334,7 +334,7 @@ func (s *GateAutoInvokeService) resolveMainThread(projectID string) (models.Chat
 		if t.Kind != "" && t.Kind != models.ChatThreadKindUser {
 			continue
 		}
-		if IsQQChannelUserID(t.UserID) || strings.HasPrefix(t.UserID, "cron:") {
+		if IsChannelUserID(t.UserID) || strings.HasPrefix(t.UserID, "cron:") {
 			continue
 		}
 		return t, nil // ListThreadsForAgent is updated_at desc

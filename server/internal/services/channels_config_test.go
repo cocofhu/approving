@@ -3,6 +3,7 @@ package services
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"strings"
 	"testing"
 
 	"github.com/cocofhu/approving/internal/crypto"
@@ -111,6 +112,70 @@ func TestChannelCreateRejectsBadInput(t *testing.T) {
 	noSecret.AppSecret = ""
 	if _, err := svc.Create(noSecret); err != ErrChannelSecretRequired {
 		t.Errorf("missing secret: got %v", err)
+	}
+
+	blankName := validInput(pid)
+	blankName.Name = "   "
+	if _, err := svc.Create(blankName); err != ErrChannelNameRequired {
+		t.Errorf("blank name: got %v", err)
+	}
+}
+
+func TestChannelCreateWeComAndFreeze(t *testing.T) {
+	setChannelKey(t)
+	svc, pid := newChannelSvc(t)
+	in := validInput(pid)
+	in.Type = "wecom"
+	in.AppID = "aibot_omega_01"
+	dto, err := svc.Create(in)
+	if err != nil {
+		t.Fatalf("create wecom: %v", err)
+	}
+	if dto.Type != "wecom" || dto.AppID != "aibot_omega_01" || dto.AppSecretSet != true {
+		t.Fatalf("dto=%+v", dto)
+	}
+
+	upd := in
+	upd.Type = "qq"
+	if _, err := svc.Update(dto.ID, upd); err != ErrChannelTypeFrozen {
+		t.Fatalf("type change: got %v want ErrChannelTypeFrozen", err)
+	}
+	upd.Type = "wecom"
+	upd.AppID = "aibot_other"
+	if _, err := svc.Update(dto.ID, upd); err != ErrChannelBotIDFrozen {
+		t.Fatalf("botid change: got %v want ErrChannelBotIDFrozen", err)
+	}
+	upd.AppID = "aibot_omega_01"
+	upd.Name = "renamed-wecom"
+	upd.AppSecret = ""
+	got, err := svc.Update(dto.ID, upd)
+	if err != nil {
+		t.Fatalf("allowed update: %v", err)
+	}
+	if got.Name != "renamed-wecom" || got.Type != "wecom" || got.AppID != "aibot_omega_01" {
+		t.Fatalf("after update %+v", got)
+	}
+}
+
+func TestChannelWeComBotIDConflict(t *testing.T) {
+	setChannelKey(t)
+	svc, pid := newChannelSvc(t)
+	in := validInput(pid)
+	in.Type = "wecom"
+	in.AppID = "aibot_taken_global"
+	in.AgentName = "agent-a"
+	if _, err := svc.Create(in); err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	in2 := validInput(pid)
+	in2.Type = "wecom"
+	in2.AppID = "aibot_taken_global"
+	in2.AgentName = "agent-b"
+	if _, err := svc.Create(in2); err != ErrChannelBotIDExists {
+		t.Fatalf("dup botid: got %v want ErrChannelBotIDExists", err)
+	}
+	if !strings.Contains(ErrChannelBotIDExists.Error(), "BotID 已被其它项目/渠道占用") {
+		t.Fatalf("copy=%q", ErrChannelBotIDExists.Error())
 	}
 }
 
@@ -266,6 +331,49 @@ func TestValidCronDeliverTarget(t *testing.T) {
 		if got := validCronDeliverTarget(c.in); got != c.want {
 			t.Errorf("validCronDeliverTarget(%q) = %v want %v", c.in, got, c.want)
 		}
+	}
+}
+
+func TestChannelCreateFeishuTypeAndRegion(t *testing.T) {
+	setChannelKey(t)
+	svc, pid := newChannelSvc(t)
+
+	in := validInput(pid)
+	in.Type = "feishu"
+	in.Name = "飞书 Channel"
+	in.IsPrimary = false
+	in.IsPrimarySet = true
+	in.Config = map[string]any{"region": "lark", "token": "should-drop"}
+	dto, err := svc.Create(in)
+	if err != nil {
+		t.Fatalf("create feishu: %v", err)
+	}
+	if dto.Type != "feishu" {
+		t.Fatalf("type=%q", dto.Type)
+	}
+	if dto.IsPrimary {
+		t.Fatal("explicit IsPrimary=false must stay secondary even with no primary")
+	}
+	if dto.Config["region"] != "lark" {
+		t.Fatalf("region=%v", dto.Config["region"])
+	}
+	if _, ok := dto.Config["token"]; ok {
+		t.Fatal("webhook token must not be stored")
+	}
+}
+
+func TestChannelCreateDefaultFeishuRegionCN(t *testing.T) {
+	setChannelKey(t)
+	svc, pid := newChannelSvc(t)
+	in := validInput(pid)
+	in.Type = "feishu"
+	in.Name = "飞书 Channel"
+	dto, err := svc.Create(in)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if dto.Config["region"] != "cn" {
+		t.Fatalf("default region=%v want cn", dto.Config["region"])
 	}
 }
 

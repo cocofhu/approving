@@ -204,6 +204,7 @@ onMounted(() => void load())
                 <th class="px-3 py-2 font-medium">{{ t('pages.projectDetail.cron.colNextRun') }}</th>
                 <th class="px-3 py-2 font-medium">{{ t('pages.projectDetail.cron.colLastRun') }}</th>
                 <th class="px-3 py-2 font-medium">{{ t('pages.projectDetail.cron.colStatus') }}</th>
+                <th class="px-3 py-2 font-medium">{{ t('pages.projectDetail.cron.colLastError') }}</th>
                 <th class="px-3 py-2 font-medium">{{ t('pages.projectDetail.cron.colActions') }}</th>
               </tr>
             </thead>
@@ -239,6 +240,9 @@ onMounted(() => void load())
                 <td class="px-3 py-2.5">
                   <StatusPill v-if="job.lastStatus" :status="job.lastStatus" size="sm" />
                   <span v-else class="text-txt3">—</span>
+                </td>
+                <td class="px-3 py-2.5 text-[11px] text-err" data-testid="cron-last-error">
+                  {{ job.lastError || '—' }}
                 </td>
                 <td class="px-3 py-2.5 text-right">
                   <button

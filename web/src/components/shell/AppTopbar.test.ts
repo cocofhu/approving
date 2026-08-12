@@ -38,6 +38,7 @@ vi.mock('@/lib/api/api', () => ({
 }))
 
 import { api } from '@/lib/api/api'
+import { __resetNotificationsPageEntryForTests } from '@/lib/composables/useNotificationsPageEntry'
 import {
   __resetRunTerminalNotificationsForTests,
   prefsKeyForUser,
@@ -92,6 +93,7 @@ describe('AppTopbar notifications', () => {
   beforeEach(() => {
     localStorage.clear()
     __resetRunTerminalNotificationsForTests()
+    __resetNotificationsPageEntryForTests()
     push.mockReset()
     vi.mocked(api.listRuns).mockReset()
     vi.mocked(api.getRun).mockReset()
@@ -113,6 +115,7 @@ describe('AppTopbar notifications', () => {
 
   afterEach(() => {
     __resetRunTerminalNotificationsForTests()
+    __resetNotificationsPageEntryForTests()
   })
 
   it('renders header with theme toggle and bell aria titled 通知', async () => {
@@ -208,24 +211,26 @@ describe('AppTopbar notifications', () => {
     wrapper.unmount()
   })
 
-  it('clicking failed item marks read and navigates to run detail without output modal', async () => {
+  it('clicking a preview item enters /notifications page 1 without locating (g3.2)', async () => {
     seedBaseline()
     vi.mocked(api.listRuns).mockResolvedValue(
       paged([run({ id: 'fail-1', status: 'failed', title: 'boom' })]),
     )
     const wrapper = mountTopbar()
     await flushPromises()
+    expect(wrapper.find('[data-testid="run-notifications-badge"]').text()).toBe('1')
     await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
     await nextTick()
     await wrapper.find('[data-testid="run-notifications-item"]').trigger('click')
     await flushPromises()
-    expect(push).toHaveBeenCalledWith('/runs/fail-1')
-    expect(wrapper.find('[data-testid="run-notifications-badge"]').exists()).toBe(false)
+    expect(push).toHaveBeenCalledWith({ path: '/notifications' })
+    expect(push).not.toHaveBeenCalledWith('/runs/fail-1')
+    expect(wrapper.find('[data-testid="run-notifications-badge"]').text()).toBe('1')
     expect(wrapper.find('[data-testid="run-output-empty"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('clicking completed item opens output modal without marking read (g2.1)', async () => {
+  it('clicking completed preview also goes to /notifications and does not open output modal (g3.2)', async () => {
     seedBaseline()
     vi.mocked(api.listRuns).mockResolvedValue(
       paged([run({ id: 'ok-1', status: 'completed', title: 'done' })]),
@@ -260,175 +265,10 @@ describe('AppTopbar notifications', () => {
     await wrapper.find('[data-testid="run-notifications-item"]').trigger('click')
     await flushPromises()
     await nextTick()
-    expect(push).not.toHaveBeenCalled()
-    expect(api.getRun).toHaveBeenCalledWith('ok-1')
-    expect(wrapper.vm.outputOpen).toBe(true)
-    expect(wrapper.vm.outputRunId).toBe('ok-1')
-    await vi.waitFor(() => {
-      expect(document.body.querySelector('[data-testid="run-output-empty"]')).toBeTruthy()
-    })
-    const emptyText = document.body.querySelector('[data-testid="run-output-empty"]')?.textContent || ''
-    expect(emptyText).toContain('暂无最终结果可预览')
-    expect(emptyText).not.toContain('node_complete.json')
-    expect(document.body.querySelector('[data-testid="run-output-empty-open-artifacts"]')).toBeTruthy()
-    expect(document.body.querySelector('[data-testid="run-output-list"]')).toBeNull()
-    // Opening must NOT clear unread (g2.1 / f3)
-    expect(wrapper.find('[data-testid="run-notifications-badge"]').exists()).toBe(true)
+    expect(push).toHaveBeenCalledWith({ path: '/notifications' })
+    expect(api.getRun).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="run-output-empty"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="run-notifications-badge"]').text()).toBe('1')
-    wrapper.unmount()
-  })
-
-  it('mark-as-read marks read and closes modal; Esc close keeps unread (g3.2)', async () => {
-    seedBaseline()
-    vi.mocked(api.listRuns).mockResolvedValue(
-      paged([run({ id: 'ok-1', status: 'completed', title: 'done' })]),
-    )
-    vi.mocked(api.getRun).mockResolvedValue(
-      run({ id: 'ok-1', status: 'completed', artifacts: [] }),
-    )
-    const wrapper = mountTopbar()
-    await flushPromises()
-    await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
-    await nextTick()
-    await wrapper.find('[data-testid="run-notifications-item"]').trigger('click')
-    await flushPromises()
-    await vi.waitFor(() => {
-      expect(document.body.querySelector('[data-testid="run-output-mark-read"]')).toBeTruthy()
-    })
-    expect(wrapper.find('[data-testid="run-notifications-badge"]').text()).toBe('1')
-
-    // Passive close via AppModal close (Esc/X/mask) keeps unread
-    const modal = wrapper.findComponent({ name: 'AppModal' })
-    modal.vm.$emit('close')
-    await nextTick()
-    expect(wrapper.vm.outputOpen).toBe(false)
-    expect(wrapper.find('[data-testid="run-notifications-badge"]').text()).toBe('1')
-
-    // Re-open and mark as read
-    await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
-    await nextTick()
-    await wrapper.find('[data-testid="run-notifications-item"]').trigger('click')
-    await flushPromises()
-    await vi.waitFor(() => {
-      expect(document.body.querySelector('[data-testid="run-output-mark-read"]')).toBeTruthy()
-    })
-    const markBtn = document.body.querySelector(
-      '[data-testid="run-output-mark-read"]',
-    ) as HTMLButtonElement
-    markBtn.click()
-    await nextTick()
-    expect(wrapper.vm.outputOpen).toBe(false)
-    expect(wrapper.find('[data-testid="run-notifications-badge"]').exists()).toBe(false)
-    wrapper.unmount()
-  })
-
-  it('completed with outputCards shows focus bar + OutputResultCards, not artifact list', async () => {
-    seedBaseline()
-    vi.mocked(api.listRuns).mockResolvedValue(
-      paged([run({ id: 'ok-2', status: 'completed', title: 'done' })]),
-    )
-    vi.mocked(api.getRun).mockResolvedValue(
-      run({
-        id: 'ok-2',
-        status: 'completed',
-        nodes: [{ id: 'out-1', type: 'output', label: '输出', position: { x: 0, y: 0 }, config: {} }],
-        nodeRuns: {
-          'out-1': {
-            nodeId: 'out-1',
-            status: 'completed',
-            startedAt: '2026-08-10T12:01:00Z',
-            outputs: {
-              outputCards: [
-                {
-                  index: 1,
-                  template: 'artifact("summary.md")',
-                  title: '摘要',
-                  typeTag: '自定义产物',
-                  status: 'ok',
-                  artifactName: 'summary.md',
-                },
-                {
-                  index: 2,
-                  template: 'artifact("result.json")',
-                  title: '结果 JSON',
-                  typeTag: '自定义产物',
-                  status: 'ok',
-                  artifactName: 'result.json',
-                },
-              ],
-            },
-          },
-        },
-        artifacts: [
-          {
-            id: 'a1',
-            name: 'summary.md',
-            kind: 'markdown',
-            nodeId: 'n1',
-            runId: 'ok-2',
-            workflowName: 'demo-wf',
-            sizeBytes: 10,
-            createdAt: '2026-08-10T12:00:00Z',
-          },
-          {
-            id: 'a2',
-            name: 'result.json',
-            kind: 'json',
-            nodeId: 'n1',
-            runId: 'ok-2',
-            workflowName: 'demo-wf',
-            sizeBytes: 20,
-            createdAt: '2026-08-10T12:00:00Z',
-          },
-          {
-            id: 'a-nc',
-            name: 'node_complete.json',
-            kind: 'json',
-            nodeId: 'submit_mr',
-            runId: 'ok-2',
-            workflowName: 'demo-wf',
-            sizeBytes: 40,
-            createdAt: '2026-08-10T12:00:00Z',
-          },
-        ],
-      }),
-    )
-    vi.mocked(api.artifactContent).mockResolvedValue({
-      id: 'a1',
-      name: 'summary.md',
-      kind: 'markdown',
-      nodeId: 'n1',
-      runId: 'ok-2',
-      workflowName: 'demo-wf',
-      sizeBytes: 10,
-      createdAt: '2026-08-10T12:00:00Z',
-      content: '# summary',
-    })
-    const wrapper = mountTopbar()
-    await flushPromises()
-    await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
-    await nextTick()
-    await wrapper.find('[data-testid="run-notifications-item"]').trigger('click')
-    await flushPromises()
-    await nextTick()
-    expect(wrapper.vm.outputOpen).toBe(true)
-    await vi.waitFor(() => {
-      expect(document.body.querySelector('[data-testid="run-output-result-cards"]')).toBeTruthy()
-    })
-    expect(document.body.querySelector('[data-testid="run-output-focus-bar"]')).toBeTruthy()
-    expect(document.body.querySelector('[data-testid="output-result-cards"]')).toBeTruthy()
-    expect(document.body.querySelector('[data-testid="run-output-list"]')).toBeNull()
-    expect(document.body.querySelectorAll('[data-testid="run-output-row"]')).toHaveLength(0)
-    expect(document.body.textContent || '').toContain('摘要')
-    expect(document.body.textContent || '').not.toContain('node_complete.json')
-    expect(document.body.querySelector('[data-testid="run-output-open-run"]')).toBeNull()
-    expect(document.body.querySelector('[data-testid="run-output-done"]')).toBeNull()
-    const markBtn = document.body.querySelector('[data-testid="run-output-mark-read"]')
-    expect(markBtn).toBeTruthy()
-    expect(markBtn?.textContent).toContain('标记已读')
-    // Opening completed item must keep unread badge (g2.1)
-    expect(wrapper.find('[data-testid="run-notifications-badge"]').exists()).toBe(true)
-    expect(document.body.textContent || '').not.toMatch(/PPT|幻灯片|16:9/)
     wrapper.unmount()
   })
 

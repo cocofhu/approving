@@ -75,9 +75,10 @@ func (h *Handlers) RevokeAPIKey(c *gin.Context) {
 // --- /v1 external API (Bearer API Key auth) --------------------------------
 
 type v1StartRunBody struct {
-	Inputs  map[string]any `json:"inputs"`
-	Trigger string         `json:"trigger"` // optional; empty → api; must be manual|api|pm_mcp
-	Tags    []string       `json:"tags"`
+	Inputs  map[string]any    `json:"inputs"`
+	Trigger string            `json:"trigger"` // optional; empty → api; must be manual|api|pm_mcp
+	Tags    []string          `json:"tags"`
+	Env     []models.EnvEntry `json:"env"` // optional run-scoped sandbox env snapshot
 }
 
 func (h *Handlers) V1StartRun(c *gin.Context) {
@@ -101,7 +102,7 @@ func (h *Handlers) V1StartRun(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	run, err := h.Eng.StartRunFromPublished(wfID, b.Inputs, b.Trigger, tags)
+	run, err := h.Eng.StartRunFromPublished(wfID, b.Inputs, b.Trigger, tags, b.Env)
 	if err != nil {
 		msg := err.Error()
 		if strings.Contains(msg, "not published") {
@@ -117,6 +118,15 @@ func (h *Handlers) V1StartRun(c *gin.Context) {
 			if trigger == "" {
 				trigger = b.Trigger
 			}
+			payload := map[string]any{
+				"workflowId": wfID,
+				"trigger":    trigger,
+				"source":     "v1_api",
+				"runId":      run.ID,
+			}
+			if len(run.SandboxEnv) > 0 {
+				payload["env"] = services.MaskSandboxEnvForAudit(run.SandboxEnv)
+			}
 			h.recordAudit(services.AuditRecord{
 				ProjectID:    wf.ProjectID,
 				Actor:        services.SystemActor(), // V1 API Key path has no Session
@@ -127,12 +137,7 @@ func (h *Handlers) V1StartRun(c *gin.Context) {
 				RunID:        run.ID,
 				Outcome:      models.AuditOutcomeOK,
 				Summary:      "start run (v1 api)",
-				Payload: map[string]any{
-					"workflowId": wfID,
-					"trigger":    trigger,
-					"source":     "v1_api",
-					"runId":      run.ID,
-				},
+				Payload:      payload,
 			})
 		}
 	}

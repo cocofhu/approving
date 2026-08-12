@@ -181,9 +181,27 @@ describe('TokenModelComposition hides filledTag (g2.1)', () => {
     expect(nameSpans[0]!.classes()).toContain('text-txt3')
     expect(nameSpans[1]!.classes()).toContain('text-ok')
     expect(nameSpans[2]!.classes()).toContain('text-ok')
+    expect(items[0]!.find('[data-testid="unknown-model-badge"]').exists()).toBe(true)
 
     const fills = wrapper.findAll('[data-testid="token-model-pie-slice"]').map((p) => p.attributes('fill'))
     expect(fills).toEqual(['#71717A', '#34D399', '#34D399'])
+    wrapper.unmount()
+  })
+
+  it('alias name still shows unknown badge and grey color via unknown flag', () => {
+    const models = [
+      { modelKey: '未知/未分桶', name: 'gpt-5', total: 100, unknown: true },
+      { modelKey: 'gpt-5', name: 'gpt-5', total: 80 },
+    ]
+    expect(colorForModel(models[0]!, 0)).toBe('#71717A')
+    const wrapper = mount(TokenModelComposition, {
+      props: { models },
+      global: { plugins: [i18n()] },
+    })
+    const legend = wrapper.find('[data-testid="token-model-legend"]')
+    expect(legend.text()).toContain('gpt-5')
+    expect(legend.find('[data-testid="unknown-model-badge"]').exists()).toBe(true)
+    expect(legend.findAll('li')).toHaveLength(2)
     wrapper.unmount()
   })
 

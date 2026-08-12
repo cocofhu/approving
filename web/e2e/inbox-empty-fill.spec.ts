@@ -19,7 +19,10 @@ const MOCK_WORKFLOWS = [
   },
 ]
 
-async function mockApi(page: Page, opts: { filterEmpty?: boolean } = {}) {
+async function mockApi(
+  page: Page,
+  opts: { filterEmpty?: boolean; gatesDelayMs?: number; failGates?: { current: boolean } } = {},
+) {
   await page.route('**/api/**', async (route) => {
     // Skip Vite module URLs like /@fs/.../src/lib/api/api.ts (pathname is not /api/...)
     if (!new URL(route.request().url()).pathname.startsWith('/api/')) {
@@ -29,6 +32,13 @@ async function mockApi(page: Page, opts: { filterEmpty?: boolean } = {}) {
     const url = new URL(route.request().url())
     const p = url.pathname
     if (p.includes('/gates')) {
+      if (opts.failGates?.current) {
+        await route.fulfill({ status: 500, json: { error: 'gates boom' } })
+        return
+      }
+      if (opts.gatesDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, opts.gatesDelayMs))
+      }
       const filtered = opts.filterEmpty || !!url.searchParams.get('wf')
       await route.fulfill({
         json: filtered ? { items: [], total: 5 } : { items: [], total: 0 },
@@ -203,5 +213,44 @@ test.describe('Inbox empty fill layout (plan g2.3)', () => {
     expect(m.cardBox!.top).toBeGreaterThan(m.headingBox!.bottom - 1)
     // overflow-auto allows internal scroll when EmptyState exceeds card height.
     expect(['auto', 'overlay', 'scroll']).toContain(m.cardOverflow)
+  })
+})
+
+test.describe('Inbox first-load skeleton / fail (plan g3.3)', () => {
+  test('delayed GET /gates shows 6 skeletons and never flashes empty copy (g3.3)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await mockApi(page, { gatesDelayMs: 1800 })
+    await page.goto('/inbox-empty-fill.html?theme=light')
+    await expect(page.getByRole('heading', { name: '待审批' })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('inbox-list-skeleton')).toBeVisible()
+    await expect(page.getByTestId('inbox-pending-card-skeleton')).toHaveCount(6)
+    await expect(page.getByText('列表加载后可选择一项')).toBeVisible()
+    await expect(page.getByText('没有待审批项')).toHaveCount(0)
+    await expect(page.getByText('该流水线没有待审批项')).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: '待审批' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '刷新' })).toBeVisible()
+
+    await expect(page.getByText('没有待审批项')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('inbox-list-skeleton')).toHaveCount(0)
+    await expectEmptyCardClasses(page)
+  })
+
+  test('first GET /gates 500 shows load-failed + retry, not empty copy (g3.3)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    const failGates = { current: true }
+    await mockApi(page, { failGates })
+    await page.goto('/inbox-empty-fill.html?theme=light')
+    await expect(page.getByRole('heading', { name: '待审批' })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('inbox-list-failed')).toBeVisible()
+    await expect(page.getByText('加载失败')).toBeVisible()
+    await expect(page.getByText('无法获取列表，请稍后重试')).toBeVisible()
+    await expect(page.getByTestId('inbox-list-retry')).toBeVisible()
+    await expect(page.getByText('没有待审批项')).toHaveCount(0)
+
+    failGates.current = false
+    await page.getByTestId('inbox-list-retry').click()
+    await expect(page.getByText('没有待审批项')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('inbox-list-failed')).toHaveCount(0)
+    await expectEmptyCardClasses(page)
   })
 })

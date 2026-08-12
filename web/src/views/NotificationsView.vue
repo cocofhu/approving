@@ -1,16 +1,21 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import EmptyState from '@/components/ui/EmptyState.vue'
+import Pagination from '@/components/ui/Pagination.vue'
 import RunOutputPptModal from '@/components/shell/RunOutputPptModal.vue'
+import { useNotificationsPageEntry } from '@/lib/composables/useNotificationsPageEntry'
 import { relTime } from '@/lib/shared/format'
 import { useRunTerminalNotifications } from '@/lib/run/useRunTerminalNotifications'
 
 type ReadFilter = 'all' | 'unread' | 'read'
 
+const PAGE_SIZE = 20
+
 const { t } = useI18n()
 const router = useRouter()
+const { enterNonce } = useNotificationsPageEntry()
 
 const {
   listItems,
@@ -23,6 +28,7 @@ const {
 } = useRunTerminalNotifications()
 
 const filter = ref<ReadFilter>('all')
+const page = ref(1)
 const outputOpen = ref(false)
 const outputRunId = ref<string | null>(null)
 const outputContext = ref('')
@@ -32,6 +38,56 @@ const filteredItems = computed(() => {
   if (filter.value === 'unread') return items.filter((n) => n.unread)
   if (filter.value === 'read') return items.filter((n) => !n.unread)
   return items
+})
+
+const filteredTotal = computed(() => filteredItems.value.length)
+
+const pagedItems = computed(() => {
+  const start = (page.value - 1) * PAGE_SIZE
+  return filteredItems.value.slice(start, start + PAGE_SIZE)
+})
+
+const pageRangeText = computed(() => {
+  const n = filteredTotal.value
+  if (n <= 0) return ''
+  const k = page.value
+  const from = (k - 1) * PAGE_SIZE + 1
+  const to = Math.min(k * PAGE_SIZE, n)
+  return t('pages.notifications.pageRange', { page: k, from, to, total: n })
+})
+
+const pagerSummary = computed(() =>
+  t('pages.notifications.pagerSummary', { total: filteredTotal.value, pageSize: PAGE_SIZE }),
+)
+
+function setFilter(next: ReadFilter) {
+  filter.value = next
+  page.value = 1
+}
+
+function resetToAllFirstPage() {
+  filter.value = 'all'
+  page.value = 1
+}
+
+function clampPage() {
+  const n = filteredTotal.value
+  if (n <= 0) {
+    page.value = 1
+    return
+  }
+  const last = Math.ceil(n / PAGE_SIZE)
+  if (page.value > last || pagedItems.value.length === 0) {
+    page.value = last
+  }
+}
+
+watch(enterNonce, () => {
+  resetToAllFirstPage()
+})
+
+watch(filteredTotal, () => {
+  clampPage()
 })
 
 function statusLabel(status: string) {
@@ -91,6 +147,12 @@ onMounted(() => {
   ensureUsername()
   void refresh({ source: 'manual' })
 })
+
+defineExpose({
+  page,
+  filter,
+  PAGE_SIZE,
+})
 </script>
 
 <template>
@@ -99,9 +161,16 @@ onMounted(() => {
       <div>
         <h1 class="m-0 text-base font-semibold text-txt">{{ t('pages.notifications.title') }}</h1>
         <p class="mt-1 text-xs text-txt3">{{ t('pages.notifications.subtitle') }}</p>
+        <p
+          v-if="pageRangeText"
+          class="mt-1 text-xs text-txt3"
+          data-testid="notifications-page-range"
+        >
+          {{ pageRangeText }}
+        </p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
-        <span class="text-xs text-txt3">
+        <span class="text-xs text-txt3" data-testid="notifications-unread-count">
           {{ t('shell.runNotifications.unreadCount', { n: unreadCount }) }}
         </span>
         <button
@@ -128,7 +197,7 @@ onMounted(() => {
             : 'border-line bg-transparent text-txt2 hover:border-line-strong hover:text-txt'
         "
         :data-testid="`notifications-filter-${opt}`"
-        @click="filter = opt"
+        @click="setFilter(opt)"
       >
         {{ t(`pages.notifications.filter.${opt}`) }}
       </button>
@@ -155,7 +224,7 @@ onMounted(() => {
         :desc="t('pages.notifications.filterEmptyHint')"
       />
       <button
-        v-for="item in filteredItems"
+        v-for="item in pagedItems"
         :key="item.runId"
         type="button"
         class="relative block w-full border-b border-line px-4 py-3.5 text-left hover:bg-elevated md:px-6"
@@ -199,6 +268,17 @@ onMounted(() => {
         </div>
       </button>
     </div>
+
+    <Pagination
+      v-if="filteredTotal > PAGE_SIZE"
+      v-model:page="page"
+      class="shrink-0"
+      data-testid="notifications-pagination"
+      :page-size="PAGE_SIZE"
+      :total="filteredTotal"
+      :summary-override="pagerSummary"
+      summary-test-id="notifications-pager-summary"
+    />
 
     <RunOutputPptModal
       :open="outputOpen"

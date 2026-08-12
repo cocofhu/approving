@@ -7,8 +7,10 @@ import {
   mergeTokenUsageByModel,
   TOKEN_USAGE_SOURCE_BRIDGE,
   tokenUsageTotal,
+  unknownDisplayName,
 } from '@/lib/run/tokenUsage'
 import type { TokenUsage, TokenUsageByModel } from '@/lib/shared/types'
+import UnknownModelBadge from '@/components/ui/UnknownModelBadge.vue'
 
 const props = defineProps<{
   /** Merged run total (optional; derived from by-model when omitted). */
@@ -16,6 +18,8 @@ const props = defineProps<{
   usageByModel?: TokenUsageByModel | null
   /** Merge multiple process-level by-model maps (StateRun rows). */
   parts?: Array<{ usage?: TokenUsage | null; usageByModel?: TokenUsageByModel | null }>
+  /** Project-level alias for the unknown token bucket. */
+  unknownModelDisplayName?: string | null
 }>()
 
 const { t } = useI18n()
@@ -54,6 +58,11 @@ function sourceLabel(source: string, filled: boolean): string {
   if (source === 'unknown') return t('pages.tokenByModel.sourceUnknown')
   return t('pages.tokenByModel.sourceUpstream')
 }
+
+function modelLabel(modelKey: string, unknown: boolean): string {
+  if (!unknown) return modelKey
+  return unknownDisplayName(modelKey, props.unknownModelDisplayName)
+}
 </script>
 
 <template>
@@ -85,11 +94,17 @@ function sourceLabel(source: string, filled: boolean): string {
             class="border-b border-line/70"
             :data-model="row.modelKey"
             :data-filled="row.filled ? '1' : '0'"
+            :data-unknown="row.unknown ? '1' : '0'"
           >
             <td
               class="px-3 py-2 font-medium"
               :class="row.unknown ? 'text-txt3' : row.filled ? 'text-ok' : 'text-txt'"
-            >{{ row.modelKey }}</td>
+            >
+              <span class="inline-flex max-w-full items-center gap-1.5">
+                <span class="min-w-0 truncate">{{ modelLabel(row.modelKey, row.unknown) }}</span>
+                <UnknownModelBadge v-if="row.unknown" />
+              </span>
+            </td>
             <td class="px-3 py-2 text-txt3">{{ sourceLabel(row.source, row.filled) }}</td>
             <td class="px-3 py-2 font-mono tabular-nums">{{ fmtTokenCount(row.inputTokens) }}</td>
             <td class="px-3 py-2 font-mono tabular-nums">{{ fmtTokenCount(row.outputTokens) }}</td>
