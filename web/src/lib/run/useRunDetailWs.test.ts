@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { computed, ref } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AcpEvent, Run } from '@/lib/shared/types'
