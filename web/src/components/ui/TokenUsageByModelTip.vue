@@ -9,6 +9,7 @@ import {
   effectiveModelUsageRows,
   fmtCompactTokenCount,
   fmtTokenCount,
+  shouldShowUnknownVisual,
   TOKEN_USAGE_SOURCE_BRIDGE,
   tokenUsageTotal,
   unknownDisplayName,
@@ -76,6 +77,10 @@ function modelLabel(modelKey: string, unknown: boolean): string {
   return unknownDisplayName(modelKey, props.unknownModelDisplayName)
 }
 
+function showUnknownVisual(modelKey: string, unknown: boolean): boolean {
+  return shouldShowUnknownVisual(unknown, modelLabel(modelKey, unknown))
+}
+
 defineExpose({ toggle, close, isOpen })
 </script>
 
@@ -125,7 +130,7 @@ defineExpose({ toggle, close, isOpen })
           <div class="mb-1 flex items-center justify-between gap-2 text-xs">
             <strong
               class="min-w-0 truncate font-semibold"
-              :class="row.unknown ? 'text-[#a1a1aa]' : row.filled ? 'text-[#6ee7b7]' : 'text-[#f9fafb]'"
+              :class="showUnknownVisual(row.modelKey, row.unknown) ? 'text-[#a1a1aa]' : row.filled ? 'text-[#6ee7b7]' : 'text-[#f9fafb]'"
             >{{ modelLabel(row.modelKey, row.unknown) }}</strong>
             <span class="shrink-0 font-mono tabular-nums text-[#c7cbd4]">{{ fmtTokenCount(row.total) }}</span>
           </div>

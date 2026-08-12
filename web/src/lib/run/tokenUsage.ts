@@ -18,6 +18,20 @@ export function unknownDisplayName(modelKey: string, alias?: string | null): str
 }
 
 /**
+ * Whether to apply unknown-bucket visuals (「未知」badge + unknown-gray).
+ * Only when the row is an unknown bucket AND the resolved display name is still
+ * the default 「未知/未分桶」. A configured alias (e.g. Auto) keeps Unknown=true
+ * for identity but must not show the unknown badge or #71717A gray.
+ */
+export function shouldShowUnknownVisual(
+  unknown: boolean | undefined,
+  displayName: string | null | undefined,
+): boolean {
+  if (!unknown) return false
+  return (displayName ?? '').trim() === TOKEN_USAGE_UNKNOWN_MODEL
+}
+
+/**
  * Client-side normalize for save: trim; empty/default → ''; over max → error message.
  * Returns { value, error } where error is a user-facing message when invalid.
  */

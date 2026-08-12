@@ -180,7 +180,7 @@ test.describe('未知模型显示名', () => {
     await expect(input).toHaveValue('')
   })
 
-  test('看板排行/构成：别名 + 未知角标，同名两行不合并', async ({ page }) => {
+  test('看板排行/构成：别名无未知角标、非未知灰，同名两行不合并', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 })
     await seedOnboardingDismissed(page, 'proj-1')
 
@@ -218,24 +218,84 @@ test.describe('未知模型显示名', () => {
     await expect(rank).toBeVisible()
     const rankRows = rank.locator('> li')
     await expect(rankRows).toHaveCount(2)
-    // 两行都显示 gpt-5（真实桶 + 未知别名），未知行带角标
+    // 两行都显示 gpt-5（真实桶 + 未知别名）；已设名后未知行无「未知」角标
     await expect(rank).toContainText('gpt-5')
-    await expect(rank.getByTestId('unknown-model-badge')).toHaveCount(1)
+    await expect(rank.getByTestId('unknown-model-badge')).toHaveCount(0)
     await expect(rank).not.toContainText('未知/未分桶')
+    const unkRank = rank.locator('[data-unknown="1"]')
+    await expect(unkRank).toHaveCount(1)
+    // 条色非未知灰 #71717A
+    await expect(unkRank.locator('.h-full')).not.toHaveCSS('background-color', 'rgb(113, 113, 122)')
 
     const legend = page.getByTestId('token-model-legend')
     await expect(legend).toBeVisible()
     await expect(legend).toContainText('gpt-5')
-    await expect(legend.getByTestId('unknown-model-badge')).toHaveCount(1)
+    await expect(legend.getByTestId('unknown-model-badge')).toHaveCount(0)
     await expect(legend).not.toContainText('未知/未分桶')
 
     await page.screenshot({
-      path: path.join(shotDir, '03-board-alias-badge.png'),
+      path: path.join(shotDir, '03-board-alias-no-badge.png'),
       fullPage: false,
     })
   })
 
-  test('Run 按模型明细：显示别名 + 未知角标，来源列仍为未知/未分桶', async ({ page }) => {
+  test('看板：未设显示名时未知桶仍有角标与灰色', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await seedOnboardingDismissed(page, 'proj-1')
+
+    const unnamedStats = {
+      ...aliasedTokenStats(),
+      modelComposition: [
+        { modelKey: 'gpt-5', name: 'gpt-5', total: 100 },
+        { modelKey: '未知/未分桶', name: '未知/未分桶', total: 80, unknown: true },
+      ],
+      modelRanking: [
+        { modelKey: 'gpt-5', name: 'gpt-5', total: 100 },
+        { modelKey: '未知/未分桶', name: '未知/未分桶', total: 80, unknown: true },
+      ],
+    }
+
+    await page.route('**/api/stats/dashboard', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ running: 0, waitingHuman: 0, failed: 0, completed: 1 }),
+      })
+    })
+    await page.route('**/api/runs**', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.continue()
+        return
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20, hasMore: false }),
+      })
+    })
+    await page.route('**/api/projects/*/token-stats**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(unnamedStats),
+      })
+    })
+
+    await page.goto('/board.html?start=project-board&memory=1&projectId=proj-1')
+    await expect(page.getByTestId('token-model-rank')).toBeVisible({ timeout: 15_000 })
+
+    const rank = page.getByTestId('token-model-rank')
+    const unkRank = rank.locator('[data-unknown="1"]')
+    await expect(unkRank).toContainText('未知/未分桶')
+    await expect(unkRank.getByTestId('unknown-model-badge')).toHaveCount(1)
+    await expect(unkRank.locator('.h-full')).toHaveCSS('background-color', 'rgb(113, 113, 122)')
+
+    const legend = page.getByTestId('token-model-legend')
+    await expect(legend.getByTestId('unknown-model-badge')).toHaveCount(1)
+    await expect(legend).toContainText('未知/未分桶')
+  })
+
+  test('Run 按模型明细：显示别名且无未知角标，来源列仍为未知/未分桶', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 })
 
     const nodes = [
@@ -370,7 +430,8 @@ test.describe('未知模型显示名', () => {
     const unkRow = table.locator('tr[data-unknown="1"]')
     await expect(unkRow).toHaveCount(1)
     await expect(unkRow).toContainText('gpt-5')
-    await expect(unkRow.getByTestId('unknown-model-badge')).toBeVisible()
+    // 已设名：模型列无「未知」角标
+    await expect(unkRow.getByTestId('unknown-model-badge')).toHaveCount(0)
     // 来源列属性标签不随显示名改变
     await expect(unkRow).toContainText('未知/未分桶')
     // 模型列不显示默认桶名（已被别名覆盖）

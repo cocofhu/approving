@@ -5,6 +5,7 @@ import {
   effectiveModelUsageRows,
   fmtTokenCount,
   mergeTokenUsageByModel,
+  shouldShowUnknownVisual,
   TOKEN_USAGE_SOURCE_BRIDGE,
   tokenUsageTotal,
   unknownDisplayName,
@@ -63,6 +64,10 @@ function modelLabel(modelKey: string, unknown: boolean): string {
   if (!unknown) return modelKey
   return unknownDisplayName(modelKey, props.unknownModelDisplayName)
 }
+
+function showUnknownVisual(modelKey: string, unknown: boolean): boolean {
+  return shouldShowUnknownVisual(unknown, modelLabel(modelKey, unknown))
+}
 </script>
 
 <template>
@@ -98,11 +103,11 @@ function modelLabel(modelKey: string, unknown: boolean): string {
           >
             <td
               class="px-3 py-2 font-medium"
-              :class="row.unknown ? 'text-txt3' : row.filled ? 'text-ok' : 'text-txt'"
+              :class="showUnknownVisual(row.modelKey, row.unknown) ? 'text-txt3' : row.filled ? 'text-ok' : 'text-txt'"
             >
               <span class="inline-flex max-w-full items-center gap-1.5">
                 <span class="min-w-0 truncate">{{ modelLabel(row.modelKey, row.unknown) }}</span>
-                <UnknownModelBadge v-if="row.unknown" />
+                <UnknownModelBadge v-if="showUnknownVisual(row.modelKey, row.unknown)" />
               </span>
             </td>
             <td class="px-3 py-2 text-txt3">{{ sourceLabel(row.source, row.filled) }}</td>

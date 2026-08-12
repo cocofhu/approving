@@ -13,6 +13,7 @@ import {
   TOKEN_USAGE_UNKNOWN_MODEL,
   tokenUsageTotal,
   totalTokensOrNull,
+  shouldShowUnknownVisual,
   unknownDisplayName,
 } from './tokenUsage'
 
@@ -187,6 +188,15 @@ describe('tokenUsage', () => {
     )
     expect(unknownDisplayName(TOKEN_USAGE_UNKNOWN_MODEL, null)).toBe(TOKEN_USAGE_UNKNOWN_MODEL)
     expect(unknownDisplayName('gpt-5', 'alias')).toBe('gpt-5')
+  })
+
+  it('shouldShowUnknownVisual: only unknown + default label', () => {
+    expect(shouldShowUnknownVisual(true, TOKEN_USAGE_UNKNOWN_MODEL)).toBe(true)
+    expect(shouldShowUnknownVisual(true, ' 未知/未分桶 ')).toBe(true)
+    expect(shouldShowUnknownVisual(true, 'Auto')).toBe(false)
+    expect(shouldShowUnknownVisual(true, 'gpt-5')).toBe(false)
+    expect(shouldShowUnknownVisual(false, TOKEN_USAGE_UNKNOWN_MODEL)).toBe(false)
+    expect(shouldShowUnknownVisual(undefined, 'Auto')).toBe(false)
   })
 
   it('normalizeUnknownModelDisplayNameInput trims, clears default, rejects >64', () => {

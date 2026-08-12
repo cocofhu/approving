@@ -1,4 +1,5 @@
 import type { TokenStatsModel } from '@/lib/shared/types'
+import { shouldShowUnknownVisual } from '@/lib/run/tokenUsage'
 
 export const MODEL_PALETTE = [
   '#7B61FF',
@@ -18,7 +19,9 @@ const OTHER = '#A1A1AA'
 const FILLED = '#34D399'
 
 export function colorForModel(m: Pick<TokenStatsModel, 'name' | 'unknown' | 'other' | 'filled'>, idx: number): string {
-  if (m.unknown) return UNK
+  // Unknown gray only when display name is still the default 「未知/未分桶」.
+  // Configured alias keeps Unknown=true for identity but uses filled/palette colors.
+  if (shouldShowUnknownVisual(m.unknown, m.name)) return UNK
   if (m.other || m.name === 'other') return OTHER
   if (m.filled) return FILLED
   return MODEL_PALETTE[idx % MODEL_PALETTE.length]!
