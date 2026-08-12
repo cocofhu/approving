@@ -66,11 +66,17 @@ type Page interface {
 	DispatchKey(KeyEvent) error
 	SetViewport(width, height int, dpr float64) error
 	// SetInspect toggles element-pick (inspect) mode; picks fire the OnPick cb.
+	// When enabling, the implementation must refuse if the headed window is not
+	// ready for Overlay hit-testing (see ErrDesktopNotReady).
 	SetInspect(on bool) error
 	OnPick(func(Pick))
 	// OnInspectCanceled is invoked when the user cancels CDP inspect mode
 	// (e.g. Esc → Overlay.inspectModeCanceled). Callers sync UI button state.
+	// Describe/recognition failures use OnDescribeFailed instead.
 	OnInspectCanceled(func())
+	// OnDescribeFailed is invoked when Overlay pick fires but describing the
+	// backend node fails — distinct from user Esc cancel.
+	OnDescribeFailed(func())
 	// Navigate performs "reload" | "back" | "forward".
 	Navigate(action string) error
 	// Goto navigates the tab to url (e.g. about:blank or http://…).

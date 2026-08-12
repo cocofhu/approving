@@ -51,6 +51,8 @@ const PREVIEW_STUCK_MS = 20_000
 const inspect = ref(false)
 const picked = ref<AppPreviewPickPayload | null>(null)
 const address = ref('about:blank')
+/** Toolbar inline tip (Demo S2/S3): not-ready warn vs describe-failed err. */
+const inlineTip = ref<{ text: string; err: boolean } | null>(null)
 
 let rfb: InstanceType<typeof RFB> | null = null
 let channel: PreviewVncChannel | null = null
@@ -126,6 +128,7 @@ function handleCtrlText(data: string) {
       if (typeof msg.url === 'string' && msg.url) address.value = msg.url
       break
     case 'picked':
+      inlineTip.value = null
       picked.value = msg.pick
       if (typeof msg.pick?.url === 'string' && msg.pick.url) {
         address.value = msg.pick.url
@@ -134,8 +137,25 @@ function handleCtrlText(data: string) {
       clearInspect('picked', { syncRemote: false })
       if (msg.pick) emit('staged-pick', msg.pick)
       break
+    case 'not-ready':
+      // S2: refuse sticky inspect; show Demo intercept copy near toolbar.
+      clearInspect('not-ready', { syncRemote: false })
+      inlineTip.value = {
+        text: t('pages.appPreview.novnc.windowNotReady'),
+        err: false,
+      }
+      break
+    case 'describe-failed':
+      // S3: recognition failed — tip + clear sticky; no pick result.
+      clearInspect('describe-failed', { syncRemote: false })
+      inlineTip.value = {
+        text: t('pages.appPreview.novnc.describeFailed'),
+        err: true,
+      }
+      break
     case 'inspect-canceled':
-      // Remote Esc (Overlay.inspectModeCanceled) — keep staged pick.
+      // Remote Esc (Overlay.inspectModeCanceled) — keep staged pick; no failure tip.
+      inlineTip.value = null
       clearInspect('remote-esc', { syncRemote: false })
       break
     case 'closed':
@@ -176,10 +196,12 @@ function clearInspect(_reason: string, opts?: { syncRemote?: boolean }) {
 
 function setInspect(on: boolean) {
   if (on) {
+    inlineTip.value = null
     inspect.value = true
     sendCtrl({ type: 'inspect', on: true })
     return
   }
+  inlineTip.value = null
   clearInspect('setInspect')
 }
 
@@ -199,6 +221,7 @@ function connect() {
   statusMsg.value = ''
   picked.value = null
   inspect.value = false
+  inlineTip.value = null
   if (consoleMode.value) address.value = 'about:blank'
 
   const host = canvasHost.value
@@ -351,6 +374,7 @@ function onKeydown(ev: KeyboardEvent) {
   // Inspect Esc: exit mode only (keep staged). Non-inspect Esc clears staged pick.
   if (inspect.value) {
     ev.preventDefault()
+    inlineTip.value = null
     clearInspect('host-esc')
     return
   }
@@ -397,7 +421,7 @@ onBeforeUnmount(() => {
     <!-- Preview toolbar: back/forward/reload + Pick + fullscreen + FPS -->
     <div
       v-if="!consoleMode"
-      class="flex shrink-0 items-center gap-2 border-b border-line bg-elevated px-3 py-1.5"
+      class="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-elevated px-3 py-1.5"
     >
       <button
         type="button"
@@ -485,6 +509,19 @@ onBeforeUnmount(() => {
           <span class="text-txt3">{{ t(`pages.appPreview.novnc.status.${status}`) }}</span>
         </span>
       </span>
+      <div
+        v-if="inlineTip"
+        class="basis-full border px-2.5 py-1.5 text-[11px] leading-snug"
+        :class="
+          inlineTip.err
+            ? 'border-err/40 bg-err/10 text-err'
+            : 'border-warn/40 bg-warn/10 text-warn'
+        "
+        role="status"
+        data-testid="novnc-inline-tip"
+      >
+        {{ inlineTip.text }}
+      </div>
     </div>
 
     <!-- Console toolbar: back/forward/reload + address + Open (no Pick/FPS) -->
@@ -618,24 +655,40 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-if="!consoleMode && picked" class="shrink-0 border-t border-line bg-elevated px-3 py-2">
-      <div class="flex items-center gap-2">
-        <code class="min-w-0 flex-1 truncate text-[11px] text-ok">{{ picked.selector }}</code>
-        <button
-          type="button"
-          class="shrink-0 rounded bg-ok/15 px-2 py-1 text-[11px] font-medium text-ok hover:bg-ok/25"
-          @click="usePick"
-        >
-          {{ t('pages.appPreview.novnc.usePick') }}
-        </button>
-        <button
-          type="button"
-          class="shrink-0 rounded px-2 py-1 text-[11px] text-txt2 hover:bg-overlay hover:text-txt"
-          :title="t('pages.appPreview.novnc.clearPick')"
-          @click="clearPick"
-        >
-          {{ t('pages.appPreview.novnc.clearPick') }}
-        </button>
+    <div
+      v-if="!consoleMode && picked"
+      class="shrink-0 border-t border-line bg-elevated px-3 py-2"
+      data-testid="novnc-pick-result"
+    >
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-[11px] text-txt2">{{ t('pages.appPreview.novnc.pickedLabel') }}</span>
+        <span class="text-[10px] lowercase text-txt3">{{
+          t('pages.appPreview.novnc.selectorLabel')
+        }}</span>
+        <code class="max-w-full break-all text-[11px] text-ok" data-testid="novnc-pick-selector">{{
+          picked.selector
+        }}</code>
+        <span class="text-[10px] lowercase text-txt3">{{ t('pages.appPreview.novnc.urlLabel') }}</span>
+        <code class="max-w-full break-all text-[11px] text-info" data-testid="novnc-pick-url">{{
+          picked.url || ''
+        }}</code>
+        <span class="ml-auto flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            class="rounded bg-ok/15 px-2 py-1 text-[11px] font-medium text-ok hover:bg-ok/25"
+            @click="usePick"
+          >
+            {{ t('pages.appPreview.novnc.usePick') }}
+          </button>
+          <button
+            type="button"
+            class="rounded px-2 py-1 text-[11px] text-txt2 hover:bg-overlay hover:text-txt"
+            :title="t('pages.appPreview.novnc.clearPick')"
+            @click="clearPick"
+          >
+            {{ t('pages.appPreview.novnc.clearPick') }}
+          </button>
+        </span>
       </div>
     </div>
   </div>

@@ -22,6 +22,7 @@ func (p *fakePage) SetViewport(int, int, float64) error { return nil }
 func (p *fakePage) SetInspect(on bool) error            { p.inspect = on; return nil }
 func (p *fakePage) OnPick(cb func(Pick))                { p.onPick = cb }
 func (p *fakePage) OnInspectCanceled(func())            {}
+func (p *fakePage) OnDescribeFailed(func())             {}
 func (p *fakePage) Navigate(string) error               { return nil }
 func (p *fakePage) Goto(string) error                   { return nil }
 func (p *fakePage) Close() error                        { p.closed = true; return nil }
