@@ -14,6 +14,8 @@ import (
 
 // defaultRunListOrder is the production default: hybrid time DESC + id DESC.
 // Queued runs use created_at; all others use started_at.
+// Claim order (Priority → remaining human_gate → FIFO) is independent — do not
+// change this clause to mirror claim (Demo s4 / clarified f7).
 const defaultRunListOrder = "CASE WHEN status = 'queued' THEN created_at ELSE started_at END DESC, id DESC"
 
 // runListOrderBy maps whitelist sort/order to a fixed ORDER BY clause.

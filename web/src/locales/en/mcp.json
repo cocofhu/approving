@@ -380,6 +380,26 @@
           "desc": "Rename/move within the same workspace"
         }
       }
+    },
+    "pmPrdManager": {
+      "name": "pm-prd-manager",
+      "desc": "Project Management only · list / get / create requirement drafts",
+      "overview": "List requirement-draft summaries for the current Project Management session project, read a draft body, and create an open draft. List results omit the markdown body; the default title is the unnamed-draft label. This release does not update, change status, or delete drafts.",
+      "convention": "Enable pm-prd-manager under Project → Project Management settings or channel MCP checkboxes (on by default for new projects; older projects with an explicit EnabledMcps list must opt in). Calls fail with mcp disabled when the MCP is not enabled.",
+      "tools": {
+        "pm_list_requirement_drafts": {
+          "signature": "pm_list_requirement_drafts(status?, query?)",
+          "desc": "List current-project requirement draft summaries (id/title/status/updatedAt/createdAt, no body)"
+        },
+        "pm_get_requirement_draft": {
+          "signature": "pm_get_requirement_draft(draftId)",
+          "desc": "Read one requirement draft including bodyMarkdown"
+        },
+        "pm_create_requirement_draft": {
+          "signature": "pm_create_requirement_draft(title?, bodyMarkdown?)",
+          "desc": "Create an open requirement draft; blank title uses the default unnamed title"
+        }
+      }
     }
   }
 }

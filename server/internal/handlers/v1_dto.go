@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -9,9 +10,10 @@ import (
 // v1RunDTO shapes a run for external /v1 API (snake_case, minimal fields).
 func v1RunDTO(r models.Run, currentNode string, errMsg string) gin.H {
 	out := gin.H{
-		"run_id":  r.ID,
-		"status":  r.Status,
-		"trigger": r.Trigger,
+		"run_id":      r.ID,
+		"status":      r.Status,
+		"trigger":     r.Trigger,
+		"sandbox_env": services.MaskedSandboxEnv(r.SandboxEnv),
 	}
 	if currentNode != "" {
 		out["current_node"] = currentNode

@@ -31,6 +31,7 @@ const PM_MCP_OPTIONS = [
   { id: 'pm-workflow-read', labelKey: 'pages.projectDetail.pm.mcpWorkflowRead' },
   { id: 'pm-workflow-write', labelKey: 'pages.projectDetail.pm.mcpWorkflowWrite' },
   { id: 'pm-agent-fs', labelKey: 'pages.projectDetail.pm.mcpAgentFs' },
+  { id: 'pm-prd-manager', labelKey: 'pages.projectDetail.pm.mcpPrdManager' },
 ] as const
 
 type Tab = 'list' | 'edit' | 'notify'
@@ -44,6 +45,12 @@ const secretsKeyConfigured = ref<boolean | undefined>(undefined)
 
 const editingId = ref<string | null>(null)
 const isNew = ref(false)
+const chType = ref<'qq' | 'wecom' | 'feishu'>('qq')
+const saveError = ref('')
+const notifyReceipts = ref<{ runId: string; kind: string; status?: string; error?: string; createdAt: string }[]>([])
+const chRegion = ref<'cn' | 'lark'>('cn')
+const chMarkdown = ref(true)
+const chIntents = ref('')
 const chEnabled = ref(true)
 const chName = ref('')
 const chAgent = ref('')
@@ -52,8 +59,8 @@ const chAppSecret = ref('')
 const chAppSecretSet = ref(false)
 const chTurnTimeout = ref(0)
 const chSandbox = ref(false)
-const chAllowMemoryWrite = ref(false)
-const chAllowSchedulerWrite = ref(false)
+const chAllowMemoryWrite = ref(true)
+const chAllowSchedulerWrite = ref(true)
 const chCronDeliver = ref(false)
 const chCronDeliverTarget = ref('')
 const chEnabledMcps = ref<string[]>([
@@ -61,6 +68,7 @@ const chEnabledMcps = ref<string[]>([
   'pm-workflow-read',
   'pm-workflow-write',
   'pm-agent-fs',
+  'pm-prd-manager',
 ])
 const chIsPrimary = ref(false)
 
@@ -112,7 +120,7 @@ async function ensureRecentTargets() {
   recentTargetsLoading.value = true
   try {
     const res = await api.listPmThreads(props.projectId)
-    recentTargets.value = deriveRecentPushTargets(res.items || [])
+    recentTargets.value = deriveRecentPushTargets(res.items || [], chType.value)
     recentTargetsLoaded.value = true
   } catch {
     recentTargets.value = []
@@ -171,17 +179,33 @@ function toggleChMcp(id: string) {
   chEnabledMcps.value = PM_MCP_OPTIONS.map((o) => o.id).filter((x) => set.has(x))
 }
 
+function defaultChannelName(type: 'qq' | 'wecom' | 'feishu'): string {
+  switch (type) {
+    case 'wecom':
+      return t('pages.projectDetail.pm.channel.defaultNameWecom')
+    case 'feishu':
+      return t('pages.projectDetail.pm.channel.defaultNameFeishu')
+    default:
+      return t('pages.projectDetail.pm.channel.defaultNameQQ')
+  }
+}
+
 function resetForm() {
+  chType.value = 'qq'
+  saveError.value = ''
+  chRegion.value = 'cn'
+  chMarkdown.value = true
+  chIntents.value = ''
   chEnabled.value = true
-  chName.value = ''
+  chName.value = defaultChannelName('qq')
   chAgent.value = ''
   chAppId.value = ''
   chAppSecret.value = ''
   chAppSecretSet.value = false
   chTurnTimeout.value = 0
   chSandbox.value = false
-  chAllowMemoryWrite.value = false
-  chAllowSchedulerWrite.value = false
+  chAllowMemoryWrite.value = true
+  chAllowSchedulerWrite.value = true
   chCronDeliver.value = false
   chCronDeliverTarget.value = ''
   chEnabledMcps.value = [
@@ -189,6 +213,7 @@ function resetForm() {
     'pm-workflow-read',
     'pm-workflow-write',
     'pm-agent-fs',
+    'pm-prd-manager',
   ]
   chIsPrimary.value = false
   clearRecentTargetsCache()
@@ -197,6 +222,8 @@ function resetForm() {
 function applyForm(ch: ChannelConfig) {
   editingId.value = ch.id
   isNew.value = false
+  chType.value = ch.type === 'feishu' ? 'feishu' : ch.type === 'wecom' ? 'wecom' : 'qq'
+  saveError.value = ''
   chEnabled.value = ch.enabled
   chName.value = ch.name || ''
   chAgent.value = ch.agentName || ''
@@ -206,13 +233,16 @@ function applyForm(ch: ChannelConfig) {
   chTurnTimeout.value = ch.turnTimeoutSeconds || 0
   const cfg = (ch.config || {}) as Record<string, unknown>
   chSandbox.value = !!cfg.sandbox
+  chMarkdown.value = cfg.markdown !== false
+  chIntents.value = typeof cfg.intents === 'number' || typeof cfg.intents === 'string' ? String(cfg.intents) : ''
+  chRegion.value = cfg.region === 'lark' ? 'lark' : 'cn'
   chAllowMemoryWrite.value = !!cfg.allowMemoryWrite
   chAllowSchedulerWrite.value = !!cfg.allowSchedulerWrite
   chCronDeliver.value = !!ch.cronDeliver
   chCronDeliverTarget.value = ch.cronDeliverTarget || ''
   chEnabledMcps.value = Array.isArray(ch.enabledMcps)
     ? [...ch.enabledMcps]
-    : ['pm-progress', 'pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs']
+    : ['pm-progress', 'pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs', 'pm-prd-manager']
   chIsPrimary.value = !!ch.isPrimary
   clearRecentTargetsCache()
   if (chCronDeliver.value) void ensureRecentTargets()
@@ -234,6 +264,12 @@ async function load() {
         ? [...(props.project.notifyPolicy!.channelIds || [])]
         : []
     notifySelected.value = ids
+    try {
+      const rec = await api.listProjectNotifyReceipts(props.projectId)
+      notifyReceipts.value = rec.items || []
+    } catch {
+      notifyReceipts.value = []
+    }
   } catch (e: any) {
     toast.error(String(e?.message || e) || t('pages.projectDetail.pm.channel.loadFailed'))
   } finally {
@@ -249,7 +285,12 @@ function openAdd() {
   resetForm()
   isNew.value = true
   editingId.value = null
-  chIsPrimary.value = !hasPrimary.value
+  chType.value = 'feishu'
+  chRegion.value = 'cn'
+  chName.value = defaultChannelName('feishu')
+  chIsPrimary.value = false
+  chAllowMemoryWrite.value = true
+  chAllowSchedulerWrite.value = true
   const prefer = props.pmLeaderAgent || ''
   if (chIsPrimary.value && prefer && freeAgents.value.includes(prefer)) {
     chAgent.value = prefer
@@ -271,32 +312,131 @@ function cancelEdit() {
   tab.value = 'list'
 }
 
+function setChannelType(next: 'qq' | 'wecom' | 'feishu') {
+  chType.value = next
+  if (!isNew.value) return
+  const defaults = [
+    t('pages.projectDetail.pm.channel.defaultNameQQ'),
+    t('pages.projectDetail.pm.channel.defaultNameWecom'),
+    t('pages.projectDetail.pm.channel.defaultNameFeishu'),
+  ]
+  if (!chName.value.trim() || defaults.includes(chName.value)) {
+    chName.value = defaultChannelName(next)
+  }
+  clearRecentTargetsCache()
+  if (chCronDeliver.value) void ensureRecentTargets()
+}
+
 function buildInput(): ChannelConfigInput {
+  const config: Record<string, unknown> = {
+    allowMemoryWrite: chAllowMemoryWrite.value,
+    allowSchedulerWrite: chAllowSchedulerWrite.value,
+  }
+  if (chType.value === 'feishu') {
+    config.region = chRegion.value === 'lark' ? 'lark' : 'cn'
+  } else if (chType.value === 'qq') {
+    config.sandbox = chSandbox.value
+    config.markdown = chMarkdown.value
+    const intents = Number(chIntents.value)
+    if (Number.isFinite(intents) && intents > 0) config.intents = intents
+  }
   return {
+    type: chType.value,
     name: chName.value.trim(),
     enabled: chEnabled.value,
     agentName: chAgent.value.trim(),
+    isPrimary: chIsPrimary.value,
     enabledMcps: [...chEnabledMcps.value],
     appId: chAppId.value.trim(),
     appSecret: chAppSecret.value,
     turnTimeoutSeconds: Number(chTurnTimeout.value) || 0,
     cronDeliver: chCronDeliver.value,
     cronDeliverTarget: chCronDeliverTarget.value.trim(),
-    config: {
-      sandbox: chSandbox.value,
-      allowMemoryWrite: chAllowMemoryWrite.value,
-      allowSchedulerWrite: chAllowSchedulerWrite.value,
-    },
+    config,
   }
 }
 
+function connectionLabel(ch: ChannelConfig): string {
+  switch (ch.connectionState) {
+    case 'connected':
+      return t('pages.projectDetail.pm.channel.connConnected')
+    case 'auth_failed':
+      return t('pages.projectDetail.pm.channel.connAuthFailed')
+    case 'disconnected':
+      return t('pages.projectDetail.pm.channel.connDisconnected')
+    default:
+      if (typeof ch.online === 'boolean') {
+        return ch.online
+          ? t('pages.projectDetail.pm.channel.online')
+          : t('pages.projectDetail.pm.channel.offline')
+      }
+      return ch.enabled ? t('pages.projectDetail.pm.channel.connUnknown') : t('pages.projectDetail.pm.channel.statusOff')
+  }
+}
+
+function connectionClass(ch: ChannelConfig): string {
+  switch (ch.connectionState) {
+    case 'connected':
+      return 'text-ok'
+    case 'auth_failed':
+      return 'text-err'
+    case 'disconnected':
+      return 'text-warn'
+    default:
+      if (typeof ch.online === 'boolean') return ch.online ? 'text-ok' : 'text-txt3'
+      return ch.enabled ? 'text-txt3' : 'text-txt3'
+  }
+}
+
+function connectionDotClass(ch: ChannelConfig): string {
+  switch (ch.connectionState) {
+    case 'connected':
+      return 'bg-ok'
+    case 'auth_failed':
+      return 'bg-err'
+    case 'disconnected':
+      return 'bg-warn'
+    default:
+      if (typeof ch.online === 'boolean') return ch.online ? 'bg-ok' : 'bg-txt3'
+      return 'bg-txt3'
+  }
+}
+
+function formConnectionHint(): { kind: 'ok' | 'err' | 'warn'; text: string } | null {
+  const ch = editingChannel.value
+  if (!ch) return null
+  if (ch.connectionState === 'connected') {
+    return { kind: 'ok', text: ch.connectionDetail || t('pages.projectDetail.pm.channel.connHintConnected') }
+  }
+  if (ch.connectionState === 'auth_failed') {
+    return { kind: 'err', text: ch.connectionDetail || t('pages.projectDetail.pm.channel.connHintAuthFailed') }
+  }
+  if (ch.connectionState === 'disconnected') {
+    return { kind: 'warn', text: ch.connectionDetail || t('pages.projectDetail.pm.channel.connHintDisconnected') }
+  }
+  return null
+}
+
 async function saveChannel() {
+  saveError.value = ''
+  if (!chName.value.trim()) {
+    toast.error(t('pages.projectDetail.pm.channel.needName'))
+    return
+  }
   if (!chAgent.value.trim()) {
     toast.error(t('pages.projectDetail.pm.channel.needAgent'))
     return
   }
   if (!chAppId.value.trim()) {
-    toast.error(t('pages.projectDetail.pm.channel.needAppId'))
+    toast.error(
+      chType.value === 'wecom'
+        ? t('pages.projectDetail.pm.channel.needBotId')
+        : t('pages.projectDetail.pm.channel.needAppId'),
+    )
+    return
+  }
+  if (isNew.value && !chAppSecret.value.trim()) {
+    toast.error(t('pages.projectDetail.pm.channel.needSecret'))
     return
   }
   const input = buildInput()
@@ -322,7 +462,9 @@ async function saveChannel() {
     isNew.value = false
     editingId.value = null
   } catch (e: any) {
-    toast.error(String(e?.message || e) || t('pages.projectDetail.pm.channel.saveFailed'))
+    const msg = String(e?.message || e) || t('pages.projectDetail.pm.channel.saveFailed')
+    saveError.value = msg
+    toast.error(msg)
   } finally {
     saving.value = false
   }
@@ -520,6 +662,25 @@ onUnmounted(() => {
         >
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2 text-[13px] font-medium text-txt">
+              <span
+                class="border px-2 py-0.5 text-[11px]"
+                data-testid="channel-type-badge"
+                :class="
+                  ch.type === 'wecom'
+                    ? 'border-accent/55 bg-accent-dim text-accent-2'
+                    : ch.type === 'feishu'
+                      ? 'border-cyan-400/40 bg-cyan-400/10 text-cyan-300'
+                      : 'border-sky-400/40 bg-sky-400/10 text-sky-300'
+                "
+              >
+                {{
+                  ch.type === 'wecom'
+                    ? t('pages.projectDetail.pm.channel.typeWecom')
+                    : ch.type === 'feishu'
+                      ? t('pages.projectDetail.pm.channel.badgeFeishu')
+                      : t('pages.projectDetail.pm.channel.badgeQQ')
+                }}
+              </span>
               <span class="truncate">{{ ch.name || ch.appId }}</span>
               <span
                 v-if="ch.isPrimary"
@@ -540,12 +701,21 @@ onUnmounted(() => {
           <div class="truncate font-mono text-[12px] text-txt2 max-md:hidden">
             {{ ch.agentName || '—' }}
           </div>
-          <div class="text-[12px] max-md:hidden" :class="ch.enabled ? 'text-ok' : 'text-txt3'">
-            {{
-              ch.enabled
-                ? t('pages.projectDetail.pm.channel.statusOn')
-                : t('pages.projectDetail.pm.channel.statusOff')
-            }}
+          <div class="flex flex-col gap-1 text-[12px] max-md:hidden">
+            <span :class="ch.enabled ? 'text-ok' : 'text-txt3'">
+              {{
+                ch.enabled
+                  ? t('pages.projectDetail.pm.channel.statusOn')
+                  : t('pages.projectDetail.pm.channel.statusOff')
+              }}
+            </span>
+            <span class="inline-flex items-center gap-1.5" :class="connectionClass(ch)" data-testid="channel-conn-state">
+              <span
+                class="inline-block h-1.5 w-1.5"
+                :class="connectionDotClass(ch)"
+              />
+              {{ connectionLabel(ch) }}
+            </span>
           </div>
           <div class="flex flex-wrap gap-1.5">
             <AppButton variant="ghost" class="!px-2 !py-1 text-[12px]" @click="openEdit(ch)">
@@ -582,7 +752,7 @@ onUnmounted(() => {
           </strong>
           <p class="m-0 mt-1 text-xs text-txt2">
             {{
-              chIsPrimary || (isNew && !hasPrimary)
+              chIsPrimary
                 ? t('pages.projectDetail.pm.channel.editPrimaryHint')
                 : t('pages.projectDetail.pm.channel.editSecondaryHint')
             }}
@@ -613,6 +783,62 @@ onUnmounted(() => {
             </label>
 
             <div class="mt-3">
+              <span class="label">{{ t('pages.projectDetail.pm.channel.typeLabel') }}</span>
+              <div class="mt-1 flex border border-line" role="group" data-testid="channel-type-seg">
+                <button
+                  type="button"
+                  class="flex-1 px-3 py-2 text-[13px]"
+                  :class="chType === 'qq' ? 'bg-accent-dim text-txt' : 'bg-base text-txt2'"
+                  :disabled="!isNew"
+                  data-testid="channel-type-qq"
+                  @click="isNew && setChannelType('qq')"
+                >
+                  {{ t('pages.projectDetail.pm.channel.typeQQ') }}
+                </button>
+                <button
+                  type="button"
+                  class="flex-1 border-l border-line px-3 py-2 text-[13px]"
+                  :class="chType === 'wecom' ? 'bg-accent-dim text-txt' : 'bg-base text-txt2'"
+                  :disabled="!isNew"
+                  data-testid="channel-type-wecom"
+                  @click="isNew && setChannelType('wecom')"
+                >
+                  {{ t('pages.projectDetail.pm.channel.typeWecom') }}
+                </button>
+                <button
+                  type="button"
+                  class="flex-1 border-l border-line px-3 py-2 text-[13px]"
+                  :class="chType === 'feishu' ? 'bg-accent-dim text-txt' : 'bg-base text-txt2'"
+                  :disabled="!isNew"
+                  data-testid="channel-type-feishu"
+                  @click="isNew && setChannelType('feishu')"
+                >
+                  {{ t('pages.projectDetail.pm.channel.typeFeishu') }}
+                </button>
+              </div>
+              <p v-if="!isNew" class="mt-1 text-[11px] text-txt3">
+                {{ t('pages.projectDetail.pm.channel.typeFrozen') }}
+              </p>
+              <p class="mt-1 text-[11px] text-txt3">{{ t('pages.projectDetail.pm.channel.typeHint') }}</p>
+            </div>
+
+            <div v-if="isNew" class="mt-3">
+              <label class="label" for="ch-multi-role">{{ t('pages.projectDetail.pm.channel.colRole') }}</label>
+              <select
+                id="ch-multi-role"
+                class="input max-w-md"
+                data-testid="channel-role"
+                :value="chIsPrimary ? 'primary' : 'secondary'"
+                @change="chIsPrimary = ($event.target as HTMLSelectElement).value === 'primary'"
+              >
+                <option value="secondary">{{ t('pages.projectDetail.pm.channel.roleSecondary') }}</option>
+                <option value="primary" :disabled="hasPrimary">
+                  {{ t('pages.projectDetail.pm.channel.rolePrimary') }}
+                </option>
+              </select>
+            </div>
+
+            <div class="mt-3">
               <label class="label" for="ch-multi-name">{{ t('pages.projectDetail.pm.channel.name') }}</label>
               <input
                 id="ch-multi-name"
@@ -637,23 +863,49 @@ onUnmounted(() => {
 
             <div class="mt-3 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
               <div>
-                <label class="label" for="ch-multi-appid">{{ t('pages.projectDetail.pm.channel.appId') }}</label>
-                <input id="ch-multi-appid" v-model="chAppId" class="input w-full" />
+                <label class="label" for="ch-multi-appid">
+                  {{
+                    chType === 'wecom'
+                      ? t('pages.projectDetail.pm.channel.botId')
+                      : t('pages.projectDetail.pm.channel.appId')
+                  }}
+                </label>
+                <input
+                  id="ch-multi-appid"
+                  v-model="chAppId"
+                  class="input w-full"
+                  :disabled="!isNew && chType === 'wecom'"
+                  data-testid="channel-appid"
+                />
               </div>
               <div>
-                <label class="label" for="ch-multi-secret">{{ t('pages.projectDetail.pm.channel.appSecret') }}</label>
+                <label class="label" for="ch-multi-secret">
+                  {{
+                    chType === 'wecom'
+                      ? t('pages.projectDetail.pm.channel.secret')
+                      : t('pages.projectDetail.pm.channel.appSecret')
+                  }}
+                </label>
                 <input
                   id="ch-multi-secret"
                   v-model="chAppSecret"
                   type="password"
                   class="input w-full"
                   :placeholder="chAppSecretSet ? t('pages.projectDetail.pm.channel.appSecretKeep') : ''"
+                  data-testid="channel-secret"
                 />
                 <p v-if="chAppSecretSet" class="mt-1 text-[11px] text-txt3">
                   {{ t('pages.projectDetail.pm.channel.appSecretSet') }}
                 </p>
               </div>
             </div>
+            <p
+              v-if="saveError"
+              class="mt-2 border border-err/45 bg-err/10 px-3 py-2 text-xs text-err"
+              data-testid="channel-save-error"
+            >
+              {{ saveError }}
+            </p>
 
             <div class="mt-3 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
               <div>
@@ -671,11 +923,36 @@ onUnmounted(() => {
                   {{ t('pages.projectDetail.pm.channel.turnTimeoutHint') }}
                 </p>
               </div>
-              <label class="flex items-center justify-between gap-3 pt-6 text-[13px] text-txt">
+              <div v-if="chType === 'feishu'">
+                <label class="label" for="ch-multi-region">{{ t('pages.projectDetail.pm.channel.region') }}</label>
+                <select id="ch-multi-region" v-model="chRegion" class="input w-full" data-testid="channel-region">
+                  <option value="cn">{{ t('pages.projectDetail.pm.channel.regionCN') }}</option>
+                  <option value="lark">{{ t('pages.projectDetail.pm.channel.regionLark') }}</option>
+                </select>
+              </div>
+              <label
+                v-else-if="chType === 'qq'"
+                class="flex items-center justify-between gap-3 pt-6 text-[13px] text-txt"
+                data-testid="channel-sandbox"
+              >
                 <span>{{ t('pages.projectDetail.pm.channel.sandbox') }}</span>
                 <AppSwitch v-model="chSandbox" :aria-label="t('pages.projectDetail.pm.channel.sandbox')" />
               </label>
             </div>
+
+            <div v-if="chType === 'qq'" class="mt-3 grid grid-cols-2 gap-3 max-sm:grid-cols-1" data-testid="channel-qq-only">
+              <div>
+                <label class="label" for="ch-multi-intents">{{ t('pages.projectDetail.pm.channel.intents') }}</label>
+                <input id="ch-multi-intents" v-model="chIntents" class="input w-full" />
+              </div>
+              <label class="flex items-center justify-between gap-3 pt-6 text-[13px] text-txt">
+                <span>{{ t('pages.projectDetail.pm.channel.qqMarkdown') }}</span>
+                <AppSwitch v-model="chMarkdown" :aria-label="t('pages.projectDetail.pm.channel.qqMarkdown')" />
+              </label>
+            </div>
+            <p v-else class="mt-3 text-[11px] leading-snug text-txt3" data-testid="channel-feishu-hint">
+              {{ t('pages.projectDetail.pm.channel.longConnHint') }}
+            </p>
 
             <div class="mt-3 border border-line p-3">
               <label class="flex cursor-pointer items-center gap-2.5 text-[13px] text-txt">
@@ -732,7 +1009,10 @@ onUnmounted(() => {
                         <span class="block truncate text-[12px] text-txt">
                           {{ pushTargetPrimaryLabel(opt) }}
                         </span>
-                        <span class="mt-0.5 block font-mono text-[11px] text-txt3">{{ opt.value }}</span>
+                        <span class="mt-0.5 block font-mono text-[11px] text-txt3">
+                          {{ opt.value }}
+                          <template v-if="opt.unspoken"> · {{ t('pages.projectDetail.pm.unspoken') }}</template>
+                        </span>
                       </button>
                     </template>
                     <p v-else class="px-3 py-2 text-[11px] text-txt3">
@@ -809,9 +1089,24 @@ onUnmounted(() => {
           {{ t('pages.projectDetail.pm.channel.secretKeyHint') }}
         </p>
 
+        <div
+          v-if="formConnectionHint()"
+          class="mt-3 px-3 py-2 text-xs leading-snug"
+          :class="
+            formConnectionHint()!.kind === 'ok'
+              ? 'border border-ok/35 bg-ok/10 text-ok'
+              : formConnectionHint()!.kind === 'warn'
+                ? 'border border-warn/35 bg-warn/10 text-warn'
+                : 'border border-err/35 bg-err/10 text-err'
+          "
+          data-testid="channel-conn-hint"
+        >
+          {{ formConnectionHint()!.text }}
+        </div>
+
         <div class="mt-3 flex flex-wrap gap-2">
           <AppButton variant="primary" :disabled="saving" data-testid="channel-save" @click="saveChannel">
-            {{ saving ? t('common.buttons.saving') : t('pages.projectDetail.pm.channel.saveButton') }}
+            {{ saving ? t('common.buttons.saving') : t('pages.projectDetail.pm.channel.saveAndConnect') }}
           </AppButton>
           <AppButton variant="ghost" :disabled="saving" @click="cancelEdit">
             {{ t('common.buttons.cancel') }}
@@ -912,6 +1207,31 @@ onUnmounted(() => {
         data-testid="notify-empty-hint"
       >
         {{ t('pages.projectDetail.pm.channel.notifyEmpty') }}
+      </div>
+
+      <div class="mt-4 border border-line" data-testid="channel-deliver-log">
+        <div class="border-b border-line bg-elevated px-3.5 py-2 text-[13px] font-medium text-txt">
+          {{ t('pages.projectDetail.pm.channel.deliverLogTitle') }}
+        </div>
+        <div v-if="!notifyReceipts.length" class="px-3.5 py-3 text-xs text-txt3">
+          {{ t('pages.projectDetail.pm.channel.deliverLogEmpty') }}
+        </div>
+        <div
+          v-for="(rec, idx) in notifyReceipts"
+          :key="idx"
+          class="flex items-start gap-2 border-b border-line px-3.5 py-2.5 last:border-b-0"
+        >
+          <span
+            class="shrink-0 border px-2 py-0.5 text-[11px]"
+            :class="rec.status === 'ok' ? 'border-ok/40 text-ok' : 'border-err/45 text-err'"
+          >
+            {{ rec.status === 'ok' ? t('pages.projectDetail.pm.channel.deliverOk') : t('pages.projectDetail.pm.channel.deliverFail') }}
+          </span>
+          <div class="min-w-0">
+            <div class="font-mono text-[12px] text-txt">{{ rec.kind }} · {{ rec.runId }}</div>
+            <div v-if="rec.error" class="mt-0.5 text-[11px] text-err">{{ rec.error }}</div>
+          </div>
+        </div>
       </div>
 
       <div class="mt-3 border border-warn/40 bg-warn/10 px-3 py-2.5 text-xs leading-snug text-txt2">

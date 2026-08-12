@@ -5,6 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+
+	"github.com/cocofhu/approving/internal/models"
 )
 
 const ProtocolVersion = "2024-11-05"
@@ -191,6 +194,48 @@ func StringSliceArg(args map[string]any, key string) []string {
 		out = append(out, s)
 	}
 	return out
+}
+
+// EnvEntriesArg reads optional [{key,value,secret?}] env entries for StartRun.
+// Missing/nil → nil,nil. Malformed array items → error (reject start).
+func EnvEntriesArg(args map[string]any, key string) ([]models.EnvEntry, error) {
+	if args == nil {
+		return nil, nil
+	}
+	v, ok := args[key]
+	if !ok || v == nil {
+		return nil, nil
+	}
+	arr, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("env must be an array")
+	}
+	out := make([]models.EnvEntry, 0, len(arr))
+	for i, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("env[%d] must be an object", i)
+		}
+		e := models.EnvEntry{
+			Key:   strAny(m["key"]),
+			Value: strAny(m["value"]),
+		}
+		if b, ok := m["secret"].(bool); ok {
+			e.Secret = b
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
+
+func strAny(v any) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return fmt.Sprint(v)
 }
 
 // NewToken returns a random hex token.

@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { TokenStatsModel } from '@/lib/shared/types'
 import { fmtCompactTokenCount, fmtTokenCount } from '@/lib/run/tokenUsage'
+import UnknownModelBadge from '@/components/ui/UnknownModelBadge.vue'
 import { colorForModel } from './tokenModelColors'
 
 const props = defineProps<{
@@ -34,11 +35,12 @@ function barWidth(total: number): string {
     >
       <div class="min-w-0">
         <div
-          class="truncate text-xs font-medium"
+          class="flex min-w-0 items-center gap-1.5 text-xs font-medium"
           :class="m.unknown ? 'text-txt3' : m.filled ? 'text-ok' : 'text-txt'"
           :title="displayName(m)"
         >
-          {{ displayName(m) }}
+          <span class="min-w-0 truncate">{{ displayName(m) }}</span>
+          <UnknownModelBadge v-if="m.unknown" />
         </div>
         <div class="mt-1 h-2 overflow-hidden bg-elevated">
           <div

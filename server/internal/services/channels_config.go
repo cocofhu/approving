@@ -18,12 +18,16 @@ import (
 var (
 	ErrChannelNotFound              = errors.New("渠道配置不存在")
 	ErrChannelAppIDExists           = errors.New("该 AppID 已被其它渠道占用")
+	ErrChannelBotIDExists           = errors.New("BotID 已被其它项目/渠道占用")
+	ErrChannelTypeFrozen            = errors.New("渠道类型保存后不可修改")
+	ErrChannelBotIDFrozen           = errors.New("BotID 保存后不可修改")
 	ErrChannelProjectRequired       = errors.New("必须绑定项目")
 	ErrChannelAppIDRequired         = errors.New("必须填写 AppID")
 	ErrChannelSecretRequired        = errors.New("必须填写 AppSecret")
 	ErrChannelSecretKeyMissing      = errors.New("未配置加密主密钥，无法加密保存渠道凭据（config: security.secrets_key 或 APPROVING_SECRETS_KEY）")
 	ErrChannelSecretKeyInvalid      = errors.New("加密主密钥无效，无法加密保存渠道凭据（需 base64 编码的 32 字节；config: security.secrets_key 或 APPROVING_SECRETS_KEY）")
 	ErrChannelTypeUnsupported       = errors.New("不支持的渠道类型")
+	ErrChannelNameRequired          = errors.New("必须填写显示名称")
 	ErrChannelCronTargetRequired    = errors.New("开启定时投递时必须填写投递目标（c2c:/group:/guild:）")
 	ErrChannelCronTargetInvalid     = errors.New("投递目标格式无效，应为 c2c:<id> / group:<id> / guild:<id>")
 	ErrChannelAgentRequired         = errors.New("必须绑定 Agent")
@@ -42,18 +46,24 @@ var (
 
 // supportedChannelTypes gates the Type field. Extend as adapters are added.
 var supportedChannelTypes = map[string]bool{
-	models.ChannelTypeQQ: true,
+	models.ChannelTypeQQ:     true,
+	models.ChannelTypeWeCom:  true,
+	models.ChannelTypeFeishu: true,
 }
 
 // ChannelConfigInput is the create/update payload (plaintext AppSecret).
 // For updates, an empty or masked AppSecret keeps the stored value.
 type ChannelConfigInput struct {
-	Type               string
-	Name               string
-	Enabled            bool
-	ProjectID          string
-	AgentName          string
-	IsPrimary          bool
+	Type      string
+	Name      string
+	Enabled   bool
+	ProjectID string
+	AgentName string
+	IsPrimary bool
+	// IsPrimarySet is true when the client explicitly sent isPrimary
+	// (including false). Omitted values keep legacy auto-primary when
+	// the project has no primary yet.
+	IsPrimarySet       bool
 	EnabledMcps        []string
 	AppID              string
 	AppSecret          string
@@ -94,16 +104,27 @@ type ChannelConfigDTO struct {
 	CronDeliver        bool           `json:"cronDeliver"`
 	CronDeliverTarget  string         `json:"cronDeliverTarget,omitempty"`
 	Config             map[string]any `json:"config,omitempty"`
-	CreatedAt          time.Time      `json:"createdAt"`
-	UpdatedAt          time.Time      `json:"updatedAt"`
+	// Online is a computed field: long-connection subscribe succeeded.
+	// Injected by Manager via ChannelConfigService.onlineOf; false when unset.
+	Online    bool      `json:"online"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+	// ConnectionState is process-local runtime (not persisted):
+	// connected | auth_failed | disconnected. Empty when never started.
+	ConnectionState string `json:"connectionState,omitempty"`
+	// ConnectionDetail is a human-readable explanation for the runtime state.
+	ConnectionDetail string `json:"connectionDetail,omitempty"`
 }
 
 // ChannelConfigService manages persisted external channel configs. Writes
 // trigger onChange so the channels Manager hot-reloads adapters.
 type ChannelConfigService struct {
-	db       *gorm.DB
-	skills   *SkillService
-	onChange func()
+	db            *gorm.DB
+	skills        *SkillService
+	onChange      func()
+	runtimeLookup func(id string) (state, detail string)
+	// onlineOf reports whether a running adapter is subscribed/online.
+	onlineOf func(channelID string) bool
 }
 
 // NewChannelConfigService builds the service.
@@ -116,6 +137,16 @@ func (s *ChannelConfigService) SetSkillService(skills *SkillService) { s.skills 
 
 // SetOnChange registers a callback fired after each successful write.
 func (s *ChannelConfigService) SetOnChange(fn func()) { s.onChange = fn }
+
+// SetOnlineLookup injects Manager.IsOnline so list/get DTOs can expose `online`.
+func (s *ChannelConfigService) SetOnlineLookup(fn func(channelID string) bool) {
+	s.onlineOf = fn
+}
+
+// SetRuntimeLookup attaches process-local connection state (Manager memory).
+func (s *ChannelConfigService) SetRuntimeLookup(fn func(id string) (state, detail string)) {
+	s.runtimeLookup = fn
+}
 
 func (s *ChannelConfigService) notify() {
 	if s.onChange != nil {
@@ -142,11 +173,22 @@ func (s *ChannelConfigService) ListByProject(projectID string) ([]ChannelConfigD
 	}
 	out := make([]ChannelConfigDTO, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, toChannelDTO(r))
+		out = append(out, s.attachRuntime(s.toChannelDTO(r)))
 	}
 	return out, nil
 }
 
+// GetByID returns one channel DTO or ErrChannelNotFound.
+func (s *ChannelConfigService) GetByID(id string) (ChannelConfigDTO, error) {
+	var row models.ChannelConfig
+	if err := s.db.First(&row, "id = ?", strings.TrimSpace(id)).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ChannelConfigDTO{}, ErrChannelNotFound
+		}
+		return ChannelConfigDTO{}, err
+	}
+	return s.attachRuntime(s.toChannelDTO(row)), nil
+}
 // GetPrimaryByProject returns the primary channel, or nil when the project has none.
 func (s *ChannelConfigService) GetPrimaryByProject(projectID string) (*ChannelConfigDTO, error) {
 	var r models.ChannelConfig
@@ -158,10 +200,9 @@ func (s *ChannelConfigService) GetPrimaryByProject(projectID string) (*ChannelCo
 	if err != nil {
 		return nil, err
 	}
-	dto := toChannelDTO(r)
+	dto := s.attachRuntime(s.toChannelDTO(r))
 	return &dto, nil
 }
-
 // Create inserts a new config. First channel (or first while no primary) becomes
 // primary; when a primary already exists the new row is secondary.
 // Primary election and agent uniqueness run inside a transaction with row locks
@@ -201,9 +242,14 @@ func (s *ChannelConfigService) Create(in ChannelConfigInput) (ChannelConfigDTO, 
 				break
 			}
 		}
-		isPrimary := !hasPrimary
 		if in.IsPrimary && hasPrimary {
 			return ErrChannelDualPrimary
+		}
+		// Legacy clients omit isPrimary → auto-primary when none exists.
+		// Explicit IsPrimary=false must be honored (new Feishu default).
+		isPrimary := !hasPrimary
+		if in.IsPrimarySet {
+			isPrimary = in.IsPrimary
 		}
 
 		agent := in.AgentName
@@ -232,12 +278,12 @@ func (s *ChannelConfigService) Create(in ChannelConfigInput) (ChannelConfigDTO, 
 			AppID:       strings.TrimSpace(in.AppID), AppSecretEnc: enc,
 			TurnTimeoutSeconds: in.TurnTimeoutSeconds,
 			CronDeliver:        in.CronDeliver, CronDeliverTarget: strings.TrimSpace(in.CronDeliverTarget),
-			Config: in.Config, CreatedAt: now, UpdatedAt: now,
+			Config: normalizeChannelConfig(in.Type, in.Config), CreatedAt: now, UpdatedAt: now,
 		}
 		if err := tx.Create(&row).Error; err != nil {
 			return mapChannelConstraintErr(err)
 		}
-		out = toChannelDTO(row)
+		out = s.toChannelDTO(row)
 		return nil
 	})
 	if err != nil {
@@ -245,7 +291,7 @@ func (s *ChannelConfigService) Create(in ChannelConfigInput) (ChannelConfigDTO, 
 	}
 	s.warnIfNoPmLeader(in.ProjectID)
 	s.notify()
-	return out, nil
+	return s.attachRuntime(out), nil
 }
 
 // Update patches an existing config. Empty/masked AppSecret keeps the stored one.
@@ -262,6 +308,20 @@ func (s *ChannelConfigService) Update(id string, in ChannelConfigInput) (Channel
 	in.AgentName = strings.TrimSpace(in.AgentName)
 	if in.AgentName == "" {
 		in.AgentName = row.AgentName
+	}
+	// Type is frozen after create. Empty type on update keeps the stored value
+	// so legacy clients that omit type still work.
+	if want := strings.TrimSpace(in.Type); want != "" && want != row.Type {
+		return ChannelConfigDTO{}, ErrChannelTypeFrozen
+	}
+	in.Type = row.Type
+	// WeCom BotID (AppID) is frozen after save.
+	if row.Type == models.ChannelTypeWeCom {
+		wantApp := strings.TrimSpace(in.AppID)
+		if wantApp != "" && wantApp != row.AppID {
+			return ChannelConfigDTO{}, ErrChannelBotIDFrozen
+		}
+		in.AppID = row.AppID
 	}
 	if err := s.validate(in, id); err != nil {
 		return ChannelConfigDTO{}, err
@@ -285,7 +345,6 @@ func (s *ChannelConfigService) Update(id string, in ChannelConfigInput) (Channel
 	}
 
 	oldAgent := row.AgentName
-	row.Type = in.Type
 	row.Name = strings.TrimSpace(in.Name)
 	row.Enabled = in.Enabled
 	row.ProjectID = strings.TrimSpace(in.ProjectID)
@@ -295,11 +354,13 @@ func (s *ChannelConfigService) Update(id string, in ChannelConfigInput) (Channel
 	} else {
 		row.EnabledMcps = FilterPmEnabledMcps(in.EnabledMcps)
 	}
-	row.AppID = strings.TrimSpace(in.AppID)
+	if row.Type != models.ChannelTypeWeCom {
+		row.AppID = strings.TrimSpace(in.AppID)
+	}
 	row.TurnTimeoutSeconds = in.TurnTimeoutSeconds
 	row.CronDeliver = in.CronDeliver
 	row.CronDeliverTarget = strings.TrimSpace(in.CronDeliverTarget)
-	row.Config = in.Config
+	row.Config = normalizeChannelConfig(in.Type, in.Config)
 	if secret := strings.TrimSpace(in.AppSecret); secret != "" && secret != SecretMask {
 		enc, err := crypto.Encrypt(secret)
 		if err != nil {
@@ -335,7 +396,7 @@ func (s *ChannelConfigService) Update(id string, in ChannelConfigInput) (Channel
 	}
 
 	s.notify()
-	return toChannelDTO(row), nil
+	return s.attachRuntime(s.toChannelDTO(row)), nil
 }
 
 // GetByProject returns the primary channel bound to a project (legacy alias),
@@ -353,7 +414,7 @@ func (s *ChannelConfigService) GetByProject(projectID string) (*ChannelConfigDTO
 	if err != nil {
 		return nil, err
 	}
-	out := toChannelDTO(r)
+	out := s.attachRuntime(s.toChannelDTO(r))
 	return &out, nil
 }
 
@@ -616,6 +677,9 @@ func (s *ChannelConfigService) validate(in ChannelConfigInput, selfID string) er
 	if !supportedChannelTypes[in.Type] {
 		return ErrChannelTypeUnsupported
 	}
+	if strings.TrimSpace(in.Name) == "" {
+		return ErrChannelNameRequired
+	}
 	if strings.TrimSpace(in.ProjectID) == "" {
 		return ErrChannelProjectRequired
 	}
@@ -636,6 +700,9 @@ func (s *ChannelConfigService) validate(in ChannelConfigInput, selfID string) er
 		return err
 	}
 	if n > 0 {
+		if in.Type == models.ChannelTypeWeCom {
+			return ErrChannelBotIDExists
+		}
 		return ErrChannelAppIDExists
 	}
 	if in.CronDeliver {
@@ -690,6 +757,48 @@ func (s *ChannelConfigService) warnIfNoPmLeader(projectID string) {
 	}
 }
 
+func (s *ChannelConfigService) toChannelDTO(r models.ChannelConfig) ChannelConfigDTO {
+	dto := toChannelDTO(r)
+	if s != nil && s.onlineOf != nil {
+		dto.Online = s.onlineOf(r.ID)
+	}
+	return dto
+}
+
+// normalizeChannelConfig stores Feishu region in Config (cn default / lark)
+// and never introduces Webhook Token / Encrypt Key fields.
+func normalizeChannelConfig(channelType string, cfg map[string]any) map[string]any {
+	if channelType != models.ChannelTypeFeishu {
+		return cfg
+	}
+	out := map[string]any{}
+	for k, v := range cfg {
+		if k == "token" || k == "encryptKey" || k == "encrypt_key" || k == "verificationToken" {
+			continue
+		}
+		out[k] = v
+	}
+	region := strings.ToLower(strings.TrimSpace(StrFromAny(out["region"])))
+	switch region {
+	case "lark", "international", "intl", "global":
+		out["region"] = "lark"
+	default:
+		out["region"] = "cn"
+	}
+	return out
+}
+
+// StrFromAny stringifies a Config map value.
+func StrFromAny(v any) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
 func toChannelDTO(r models.ChannelConfig) ChannelConfigDTO {
 	mcps := r.EnabledMcps
 	if mcps == nil {
@@ -697,7 +806,7 @@ func toChannelDTO(r models.ChannelConfig) ChannelConfigDTO {
 	} else {
 		mcps = FilterPmEnabledMcps(mcps)
 	}
-	return ChannelConfigDTO{
+	dto := ChannelConfigDTO{
 		ID: r.ID, Type: r.Type, Name: r.Name, Enabled: r.Enabled, ProjectID: r.ProjectID,
 		AgentName: r.AgentName, IsPrimary: r.IsPrimary, EnabledMcps: mcps,
 		AppID: r.AppID, AppSecretSet: strings.TrimSpace(r.AppSecretEnc) != "",
@@ -705,4 +814,13 @@ func toChannelDTO(r models.ChannelConfig) ChannelConfigDTO {
 		CronDeliverTarget: r.CronDeliverTarget, Config: r.Config,
 		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 	}
+	return dto
+}
+
+func (s *ChannelConfigService) attachRuntime(dto ChannelConfigDTO) ChannelConfigDTO {
+	if s == nil || s.runtimeLookup == nil || strings.TrimSpace(dto.ID) == "" {
+		return dto
+	}
+	dto.ConnectionState, dto.ConnectionDetail = s.runtimeLookup(dto.ID)
+	return dto
 }

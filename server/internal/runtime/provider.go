@@ -67,6 +67,16 @@ type Options struct {
 	// after platform env and before Agent env. Agent Studio (startContainer)
 	// must NOT call this — interactive sandboxes do not inherit project env.
 	ProjectEnvForWorkflow func(workflowID string) map[string]string
+	// RunSandboxEnvForRun, when set, returns the immutable StartRun sandbox env
+	// snapshot for this Run (plaintext). Applied in acpProvider.spec after Agent
+	// env and before mergeAuthEnv / mcpVars / passwords / CONFIG_ROOT so run-level
+	// keys overlay project+Agent but never win over platform reserved write-backs.
+	// Only pipeline openSandbox paths should wire this; Agent Studio / interactive
+	// test / PM chat / Cron must leave it nil so run env does not leak.
+	// KeepAliveForReview reuses an already-created sandbox and therefore keeps
+	// the environ from create time (no hot update); a later new sandbox for the
+	// same Run re-reads this snapshot.
+	RunSandboxEnvForRun func(runID string) []models.EnvEntry
 }
 
 // NodeReq is the resolved request to execute one agent/react node.

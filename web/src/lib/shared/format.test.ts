@@ -1,5 +1,5 @@
 import { beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { formatTrigger, fmtCompactDuration, fmtDuration, relTime } from './format'
+import { formatTrigger, fmtCompactDuration, fmtDuration, fmtMultiAvgDuration, relTime } from './format'
 import { i18n } from './i18n'
 import { loadLocaleMessages } from './loadLocaleMessages'
 
@@ -30,6 +30,22 @@ describe('fmtCompactDuration', () => {
     expect(fmtDuration(3458)).toBe('57:38')
     expect(fmtDuration(245)).toBe('04:05')
     expect(fmtDuration(0)).toBe('00:00')
+  })
+})
+
+describe('fmtMultiAvgDuration', () => {
+  it('uses mm:ss under 1h, x.xxh at/above 1h, and 00:00 for zero (F2)', () => {
+    expect(fmtMultiAvgDuration(0)).toBe('00:00')
+    expect(fmtMultiAvgDuration(105)).toBe('01:45')
+    expect(fmtMultiAvgDuration(715)).toBe('11:55')
+    expect(fmtMultiAvgDuration(3600)).toBe('1.00h')
+    expect(fmtMultiAvgDuration(3703)).toBe('1.03h')
+    expect(fmtMultiAvgDuration(Number.NaN)).toBe('00:00')
+  })
+
+  it('does not reuse compact x.xm / 0s for the multi avg main', () => {
+    expect(fmtMultiAvgDuration(105)).not.toBe(fmtCompactDuration(105))
+    expect(fmtMultiAvgDuration(0)).not.toBe('0s')
   })
 })
 

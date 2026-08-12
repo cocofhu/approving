@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import RunBoardColumn from '@/components/board/RunBoardColumn.vue'
 import RunBoardPreviewDrawer from '@/components/board/RunBoardPreviewDrawer.vue'
+import RunBoardStatusListModal from '@/components/board/RunBoardStatusListModal.vue'
 import TokenStatsPanel from '@/components/board/token-stats/TokenStatsPanel.vue'
 import { serializeStatusQuery } from '@/lib/composables/useStatusFilter'
 import { useRunBoard, type BoardColumnKey } from '@/lib/run/useRunBoard'
@@ -47,6 +48,11 @@ watch(projectIdRef, () => {
 const selected = ref<Run | null>(null)
 const drawerOpen = ref(false)
 
+/** Column-header status list modal (independent of useRunBoard column cache). */
+const listModalOpen = ref(false)
+const listModalStatus = ref<string>('')
+const listModalTitle = ref('')
+
 const mainCols: { key: BoardColumnKey; accent: 'running' | 'waiting' | 'done'; titleKey: string; hintKey: string; emptyKey: string }[] = [
   { key: 'running', accent: 'running', titleKey: 'pages.board.columns.running', hintKey: 'pages.board.hints.inProgress', emptyKey: 'pages.board.empty.running' },
   { key: 'waiting_human', accent: 'waiting', titleKey: 'pages.board.columns.waitingHuman', hintKey: 'pages.board.hints.inReview', emptyKey: 'pages.board.empty.waitingHuman' },
@@ -72,7 +78,13 @@ function truncatedHint(key: BoardColumnKey): string {
   return ''
 }
 
+function closeListModal() {
+  listModalOpen.value = false
+}
+
 function openPreview(run: Run) {
+  // Mutual exclusion with column-header list modal (f6).
+  closeListModal()
   selected.value = run
   drawerOpen.value = true
 }
@@ -80,6 +92,21 @@ function openPreview(run: Run) {
 function closePreview() {
   drawerOpen.value = false
   selected.value = null
+}
+
+function openStatusList(status: string) {
+  const col = mainCols.find((c) => c.key === status)
+  if (!col) return
+  // Mutual exclusion with card preview drawer (f6).
+  closePreview()
+  listModalStatus.value = status
+  listModalTitle.value = t(col.titleKey)
+  listModalOpen.value = true
+}
+
+function onListSelect(run: Run) {
+  closeListModal()
+  router.push('/runs/' + run.id)
 }
 
 function goMoreCompleted() {
@@ -185,7 +212,10 @@ onUnmounted(() => {
         :loading-text="t('pages.board.loading')"
         :empty-text="t(col.emptyKey)"
         :truncated-hint="truncatedHint(col.key)"
+        header-activatable
+        :status="col.key"
         @select="openPreview"
+        @activate-header="openStatusList"
       >
         <template v-if="col.key === 'completed'" #footer>
           <button
@@ -222,5 +252,14 @@ onUnmounted(() => {
     </div>
 
     <RunBoardPreviewDrawer :open="drawerOpen" :run="selected" @close="closePreview" />
+
+    <RunBoardStatusListModal
+      :open="listModalOpen"
+      :project-id="projectId"
+      :status="listModalStatus"
+      :title="listModalTitle"
+      @close="closeListModal"
+      @select="onListSelect"
+    />
   </div>
 </template>

@@ -73,14 +73,25 @@ const {
   itemKey,
 } = usePendingGates()
 const PAGE_SIZE = 20
+/** InboxPendingCard-density placeholders; only when list is empty and still fetching. */
+const LIST_SKELETON_COUNT = 6
 const listItems = ref<InboxItem[]>([])
 /** Snapshot before the latest list mutation — used for neighbor active selection. */
 let listSnapshotForNeighbor: InboxItem[] = []
 const listTotal = ref(0)
 const listPage = ref(1)
-const listLoading = ref(false)
+/** true on first frame so mount cannot flash EmptyState before onMounted loadList. */
+const listLoading = ref(true)
+/** Set only by the current listLoadGeneration; cleared when a new request starts. */
+const listLoadFailed = ref(false)
 /** Monotonic generation: stale listGates responses must not overwrite local converge. */
 let listLoadGeneration = 0
+const showListSkeleton = computed(
+  () => listLoading.value && listItems.value.length === 0,
+)
+const showListError = computed(
+  () => !listLoading.value && listLoadFailed.value && listItems.value.length === 0,
+)
 const { isMobile } = useBreakpoint()
 const active = ref<InboxItem | null>(null)
 const mobileView = ref<'list' | 'detail'>('list')
@@ -320,6 +331,7 @@ function handleLeftInboxContext(it: InboxItem) {
 
 async function loadList({ showLoading = false }: { showLoading?: boolean } = {}) {
   const gen = ++listLoadGeneration
+  listLoadFailed.value = false
   if (showLoading) listLoading.value = true
   try {
     const data = await api.listGates({
@@ -343,10 +355,17 @@ async function loadList({ showLoading = false }: { showLoading?: boolean } = {})
     // Independent loadList success path: repair invalid selection (no Run # - shell).
     if (!processingLock.value) ensureValidActive()
   } catch {
+    // Stale failure must not flip a newer loading/empty/error state.
+    if (gen !== listLoadGeneration) return
+    listLoadFailed.value = true
     /* keep previous list on transient failure */
   } finally {
     if (gen === listLoadGeneration) listLoading.value = false
   }
+}
+
+function retryListLoad() {
+  void loadList({ showLoading: true })
 }
 
 watch(selected, () => {
@@ -1149,7 +1168,7 @@ async function onManualRefresh() {
     } else {
       const prevKey = active.value ? itemKey(active.value) : null
       await refresh({ source: 'manual', mode: 'force' })
-      await loadList()
+      await loadList({ showLoading: listItems.value.length === 0 })
       syncActiveAfterApply(listItems.value, prevKey)
       await loadActiveRun(isEditing.value ? false : true)
       checkProcessedWhileEditing()
@@ -1498,6 +1517,47 @@ function itemSecondary(it: InboxItem) {
         </div>
         <Pagination v-if="listTotal > PAGE_SIZE" v-model:page="listPage" :page-size="PAGE_SIZE" :total="listTotal" />
       </div>
+      <div
+        v-else-if="showListSkeleton"
+        class="flex min-h-0 flex-1 flex-col"
+        data-testid="inbox-list-skeleton"
+        aria-busy="true"
+      >
+        <div class="scroll-area flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+          <div
+            v-for="n in LIST_SKELETON_COUNT"
+            :key="'inbox-skel-m-' + n"
+            class="flex w-full shrink-0 items-start gap-3 border border-line bg-surface p-3"
+            data-testid="inbox-pending-card-skeleton"
+            aria-hidden="true"
+          >
+            <div class="app-skeleton__block h-9 w-9 shrink-0" />
+            <div class="flex min-w-0 flex-1 flex-col gap-2">
+              <div class="app-skeleton__block h-2.5 w-4/5" />
+              <div class="app-skeleton__block h-2.5 w-[55%]" />
+              <div class="app-skeleton__block h-2 w-[30%]" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div
+        v-else-if="showListError"
+        class="card flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-5 py-10 text-center"
+        role="status"
+        data-testid="inbox-list-failed"
+      >
+        <Icon name="alert" :size="22" class="mb-3 text-err" />
+        <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.loadFailedTitle') }}</h3>
+        <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.loadFailedDesc') }}</p>
+        <button
+          type="button"
+          class="mt-4 inline-flex items-center rounded-md border border-line bg-surface px-3.5 py-2 text-sm font-medium text-txt transition hover:border-line-strong hover:bg-elevated"
+          data-testid="inbox-list-retry"
+          @click="retryListLoad"
+        >
+          {{ t('common.buttons.retry') }}
+        </button>
+      </div>
       <div v-else class="card flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto">
         <EmptyState
           icon="gate"
@@ -1610,6 +1670,63 @@ function itemSecondary(it: InboxItem) {
           @retry="retryActiveRun"
         />
       </div>
+    </div>
+
+    <!-- Desktop loading∧empty: keep 320px list + weak detail hint (no EmptyState, no detail skeleton). -->
+    <div
+      v-else-if="!isMobile && showListSkeleton"
+      class="grid min-h-0 flex-1 grid-cols-[320px_1fr] items-stretch gap-4"
+      data-testid="inbox-list-skeleton"
+      aria-busy="true"
+    >
+      <div class="flex h-full min-h-0 flex-col overflow-hidden">
+        <div class="scroll-area flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+          <div
+            v-for="n in LIST_SKELETON_COUNT"
+            :key="'inbox-skel-d-' + n"
+            class="flex w-full shrink-0 items-start gap-3 border border-line bg-surface p-3"
+            data-testid="inbox-pending-card-skeleton"
+            aria-hidden="true"
+          >
+            <div class="app-skeleton__block h-9 w-9 shrink-0" />
+            <div class="flex min-w-0 flex-1 flex-col gap-2">
+              <div class="app-skeleton__block h-2.5 w-4/5" />
+              <div class="app-skeleton__block h-2.5 w-[55%]" />
+              <div class="app-skeleton__block h-2 w-[30%]" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="flex h-full min-h-0 min-w-0 flex-col">
+        <div class="card flex h-full min-h-0 w-full flex-col overflow-hidden">
+          <div class="flex shrink-0 items-center justify-between border-b border-line px-4 py-2.5">
+            <span class="text-xs text-txt3">{{ t('pages.gatesInbox.detailPane') }}</span>
+          </div>
+          <div class="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
+            <p class="text-sm text-txt2">{{ t('pages.gatesInbox.listLoadingHint') }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Desktop error∧empty: single-column retry fills former list+detail area. -->
+    <div
+      v-else-if="!isMobile && showListError"
+      class="card flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-5 py-10 text-center"
+      role="status"
+      data-testid="inbox-list-failed"
+    >
+      <Icon name="alert" :size="22" class="mb-3 text-err" />
+      <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.loadFailedTitle') }}</h3>
+      <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.loadFailedDesc') }}</p>
+      <button
+        type="button"
+        class="mt-4 inline-flex items-center rounded-md border border-line bg-surface px-3.5 py-2 text-sm font-medium text-txt transition hover:border-line-strong hover:bg-elevated"
+        data-testid="inbox-list-retry"
+        @click="retryListLoad"
+      >
+        {{ t('common.buttons.retry') }}
+      </button>
     </div>
 
     <!-- Desktop three-zone: list | product stage + review sidebar (via GateApproval/ReviewShell).

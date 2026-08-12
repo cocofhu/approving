@@ -8,6 +8,8 @@
     "gates": "Pending gates",
     "artifacts": "Artifacts",
     "notifications": "Notifications",
+    "quickPipelines": "Quick pipelines",
+    "quickPipelinesEmpty": "Star a pipeline to save a shortcut",
     "groupConfig": "Configuration",
     "agents": "Agent studio",
     "sandboxes": "Sandboxes",

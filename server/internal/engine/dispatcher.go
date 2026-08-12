@@ -22,8 +22,9 @@ const dispatchPoll = 5 * time.Second
 const admissionFromCheckpoint = "__admission_from__"
 
 // dispatch is the single scheduler goroutine. It admits queued runs up to the
-// concurrency limit (priority DESC, then FIFO), blocking on the wake channel
-// between drains. Being the sole admitter keeps admission strictly ordered.
+// concurrency limit (Priority DESC → remaining human_gate → FIFO), blocking on
+// the wake channel between drains. Being the sole admitter keeps admission
+// strictly ordered.
 func (e *Engine) dispatch() {
 	for {
 		e.drainQueue()
@@ -37,8 +38,8 @@ func (e *Engine) dispatch() {
 }
 
 // drainQueue admits as many queued runs as free concurrency slots allow, in
-// priority-then-FIFO order, then returns (either at capacity or with the queue
-// empty).
+// Priority DESC → hasRemainingHumanGate DESC → created_at ASC → id ASC order,
+// then returns (either at capacity or with the queue empty).
 func (e *Engine) drainQueue() {
 	if e.IsHalted() {
 		return
@@ -57,17 +58,23 @@ func (e *Engine) drainQueue() {
 }
 
 // claimNextQueued atomically promotes the next queued run to running and
-// returns its start node. Selection order: higher Priority first, then FIFO
-// (created_at ASC, id ASC) within the same priority — covering first enqueue
-// and re-queue after waiting_human / execute early-exit. The claim is a guarded
-// UPDATE so a run cancelled (or otherwise moved off "queued") between the read
-// and the write is skipped (RowsAffected == 0) rather than double-run. Returns
-// ok=false when there is nothing to admit; the caller then releases the
+// returns its continue node. Selection order (do NOT rewrite Run.Priority to
+// implement same-band tilt — Priority is the stored/badge band):
+//
+//	Priority DESC → hasRemainingHumanGate DESC → created_at ASC → id ASC
+//
+// Implementation: load all queued runs in the current highest Priority band,
+// score remaining human_gate reachability in memory (from __admission_from__
+// or StartNode), pick the head, then CAS UPDATE queued→running. Covering first
+// enqueue and re-queue after waiting_human / execute early-exit. The claim is a
+// guarded UPDATE so a run cancelled (or otherwise moved off "queued") between
+// the read and the write is skipped (RowsAffected == 0) rather than double-run.
+// Returns ok=false when there is nothing to admit; the caller then releases the
 // tentatively-taken slot.
 func (e *Engine) claimNextQueued() (runID, fromNodeID string, ok bool) {
-	var run models.Run
+	var head models.Run
 	if err := e.db.Where("status = ?", "queued").
-		Order("priority desc, created_at asc, id asc").First(&run).Error; err != nil {
+		Order("priority desc, created_at asc, id asc").First(&head).Error; err != nil {
 		// ErrRecordNotFound simply means the queue is empty (expected, silent).
 		// Any other error is a transient DB fault: the run stays "queued" and
 		// the 5s poll retries, but surface it so a persistent fault (which would
@@ -77,6 +84,18 @@ func (e *Engine) claimNextQueued() (runID, fromNodeID string, ok bool) {
 		}
 		return "", "", false
 	}
+
+	var candidates []models.Run
+	if err := e.db.Where("status = ? AND priority = ?", "queued", head.Priority).
+		Order("created_at asc, id asc").Find(&candidates).Error; err != nil {
+		log.Error().Err(err).Msg("dispatcher: load same-priority queued runs failed (will retry)")
+		return "", "", false
+	}
+	if len(candidates) == 0 {
+		return "", "", false
+	}
+
+	run := pickQueuedByRemainingHumanGate(candidates)
 	updates := map[string]any{"status": "running"}
 	if run.StartedAt.IsZero() {
 		updates["started_at"] = time.Now()
@@ -109,10 +128,35 @@ func (e *Engine) claimNextQueued() (runID, fromNodeID string, ok bool) {
 	return run.ID, fromNodeID, true
 }
 
+// pickQueuedByRemainingHumanGate chooses among same-priority queued candidates
+// (already ordered created_at ASC, id ASC): prefer the first with remaining
+// human_gate reachability; otherwise the FIFO head. Does not mutate Priority.
+func pickQueuedByRemainingHumanGate(candidates []models.Run) models.Run {
+	var fallback models.Run
+	haveFallback := false
+	for i := range candidates {
+		from, ok := continueFromNodeID(candidates[i])
+		hasGate := ok && hasRemainingHumanGate(&candidates[i].Graph, from)
+		if hasGate {
+			return candidates[i]
+		}
+		if !haveFallback {
+			fallback = candidates[i]
+			haveFallback = true
+		}
+	}
+	if haveFallback {
+		return fallback
+	}
+	return candidates[0]
+}
+
 // scheduleRunAdmission is the unified entry for resuming or re-driving a run
-// from a specific node. It TryAcquires a slot synchronously; when at capacity
-// the run is persisted as queued (with fromNodeID) and the dispatcher promotes
-// it later by priority then FIFO — never writing "running" before a slot is held.
+// from a specific node. It TryAcquires a slot synchronously (admitRunDirect —
+// empty-slot passthrough; does not wait for a future human_gate run). When at
+// capacity the run is persisted as queued (with fromNodeID) and the dispatcher
+// promotes it later by Priority → remaining human_gate → FIFO — never writing
+// "running" before a slot is held. Already-running runs are never preempted.
 func (e *Engine) scheduleRunAdmission(runID, fromNodeID string) {
 	if !e.sem.TryAcquire() {
 		e.queueForAdmission(runID, fromNodeID)

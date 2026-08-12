@@ -370,7 +370,7 @@ describe('UpstreamRequirementContext', () => {
     expect(wrapper.find('[data-testid="upstream-modal-callout"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="upstream-bar-hint"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="upstream-bar-hint"]').text()).toContain(
-      '本 run 已有澄清需求文档',
+      '本工作流已有澄清需求文档',
     )
     wrapper.unmount()
   })

@@ -2,12 +2,12 @@ import '../src/styles/global.css'
 import { createApp, h, ref } from 'vue'
 import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { i18n } from '../src/lib/i18n'
-import { initLocale, setLocale } from '../src/lib/locale'
-import { installIdleScrollbar } from '../src/lib/idleScrollbar'
-import { setTheme } from '../src/lib/theme'
+import { i18n } from '../src/lib/shared/i18n'
+import { initLocale, setLocale } from '../src/lib/shared/locale'
+import { installIdleScrollbar } from '../src/lib/shared/idleScrollbar'
+import { setTheme } from '../src/lib/shared/theme'
 import PmChannelMultiPanel from '../src/components/pm/PmChannelMultiPanel.vue'
-import type { Project } from '../src/lib/types'
+import type { Project } from '../src/lib/shared/types'
 
 installIdleScrollbar()
 

@@ -39,18 +39,53 @@ var (
 	ErrPmAdminRequired = errors.New("需要平台管理员权限")
 	// ErrPmCronJobNotFound is returned when a cron job is missing for the project.
 	ErrPmCronJobNotFound = errors.New("定时任务不存在")
-	// ErrPmChannelReadOnly is returned when a Web client tries to write/delete a QQ channel thread.
-	ErrPmChannelReadOnly = errors.New("渠道会话为只读，不可在 Web 发送或删除")
+	// ErrPmChannelReadOnly is returned when a Web client tries to write/delete a channel thread.
+	ErrPmChannelReadOnly = errors.New("渠道会话为只读，不可当普通 Web 线程编辑或删除")
 )
 
-// IsQQChannelUserID reports whether userID is a QQ Channel synthetic identity (qq:…).
+// IsChannelUserID reports whether userID is a registered channel synthetic identity
+// (qq:… / wecom:… / feishu:…).
+func IsChannelUserID(userID string) bool {
+	for _, typ := range models.RegisteredChannelTypes() {
+		if strings.HasPrefix(userID, typ+":") {
+			return true
+		}
+	}
+	return false
+}
+
+// IsChannelSyntheticUserID is kept for newer callers and aliases IsChannelUserID.
+func IsChannelSyntheticUserID(userID string) bool {
+	return IsChannelUserID(userID)
+}
+
+// IsQQChannelUserID is kept as a historical alias for existing callers.
 func IsQQChannelUserID(userID string) bool {
-	return strings.HasPrefix(userID, "qq:")
+	return IsChannelUserID(userID)
+}
+
+// ChannelTypeFromUserID returns the registered channel type prefix, or "".
+func ChannelTypeFromUserID(userID string) string {
+	for _, typ := range models.RegisteredChannelTypes() {
+		if strings.HasPrefix(userID, typ+":") {
+			return typ
+		}
+	}
+	return ""
+}
+
+// ChannelPeerID extracts the conversation/user id after type:scene:.
+func ChannelPeerID(userID string) string {
+	parts := strings.SplitN(userID, ":", 3)
+	if len(parts) < 3 {
+		return ""
+	}
+	return parts[2]
 }
 
 // IsSyntheticThreadUserID reports cron/channel synthetic owners that must not trigger UI merge.
 func IsSyntheticThreadUserID(userID string) bool {
-	return IsQQChannelUserID(userID) || strings.HasPrefix(userID, "cron:")
+	return IsChannelUserID(userID) || strings.HasPrefix(userID, "cron:")
 }
 
 // Valid PM chat fail kinds (product-level categories).
@@ -73,7 +108,7 @@ func validPmFailKind(kind string) bool {
 
 // PmService manages project PM Leader binding, memory, and chat persistence.
 type PmService struct {
-	blobs blob.Store
+	blobs  blob.Store
 	db     *gorm.DB
 	skills *SkillService
 }
@@ -95,7 +130,7 @@ type PmLeaderBinding struct {
 	AgentAvailable bool   `json:"agentAvailable"`
 	AgentError     string `json:"agentError,omitempty"`
 	// EnabledMcps lists PM-only MCP ids (pm-progress, pm-workflow-read,
-	// pm-workflow-write, pm-agent-fs). nil/omitted on disk means defaults; explicit empty means none.
+	// pm-workflow-write, pm-agent-fs, pm-prd-manager). nil/omitted on disk means defaults; explicit empty means none.
 	EnabledMcps []string `json:"enabledMcps"`
 	// GateAutoVar is the run variable name that enables auto-invoking PM on
 	// gate pauses when present and truthy. Empty = capability off.
@@ -108,13 +143,13 @@ type PmLeaderBinding struct {
 }
 
 // DefaultPmEnabledMcps is the default PM-only MCP set.
-var DefaultPmEnabledMcps = []string{"pm-progress", "pm-workflow-read", "pm-workflow-write", "pm-agent-fs"}
+var DefaultPmEnabledMcps = []string{"pm-progress", "pm-workflow-read", "pm-workflow-write", "pm-agent-fs", "pm-prd-manager"}
 
 // FilterPmEnabledMcps returns validated unique PM MCP ids (may be empty).
 func FilterPmEnabledMcps(in []string) []string {
 	allowed := map[string]bool{
 		"pm-progress": true, "pm-workflow-read": true, "pm-workflow-write": true,
-		"pm-agent-fs": true,
+		"pm-agent-fs": true, "pm-prd-manager": true,
 	}
 	var out []string
 	seen := map[string]bool{}
@@ -589,10 +624,10 @@ func (s *PmService) RenameAgentScopedData(oldName, newName string) error {
 // --- chat threads / messages ------------------------------------------------
 
 // ListThreads returns threads for the given user in the project.
-// For normal Web users this is their own threads ∪ project QQ channel threads
-// (user_id prefix qq:), excluding cron: threads, ordered by updated_at desc.
-// For synthetic identities (qq:/cron:) it stays owner-only so ChannelBridge
-// ensureThread continues to resolve a single conversation thread.
+// For normal Web users this is their own threads ∪ project channel threads
+// (registered type prefixes), excluding cron: threads, ordered by updated_at desc.
+// For synthetic identities (qq:/wecom:/feishu:/cron:) it stays owner-only so
+// ChannelBridge ensureThread continues to resolve a single conversation thread.
 func (s *PmService) ListThreads(projectID, userID string) ([]models.ChatThread, error) {
 	if _, ok := s.project(projectID); !ok {
 		return nil, ErrProjectNotFound
@@ -602,13 +637,78 @@ func (s *PmService) ListThreads(projectID, userID string) ([]models.ChatThread, 
 	if IsSyntheticThreadUserID(userID) {
 		q = q.Where("user_id = ?", userID)
 	} else {
-		// Own Web sessions ∪ qq: channel sessions; cron: never matches either arm.
-		q = q.Where("user_id = ? OR user_id LIKE ?", userID, "qq:%")
+		// Own Web sessions ∪ registered channel sessions; cron: never matches.
+		q = q.Where("user_id = ? OR "+channelUserIDLikeSQL(), append([]any{userID}, channelUserIDLikeArgs()...)...)
 	}
 	if err := q.Order("updated_at desc").Find(&threads).Error; err != nil {
 		return nil, err
 	}
+	s.annotateUnspoken(threads)
 	return threads, nil
+}
+
+func channelUserIDLikeSQL() string {
+	parts := make([]string, 0, len(models.RegisteredChannelTypes()))
+	for range models.RegisteredChannelTypes() {
+		parts = append(parts, "user_id LIKE ?")
+	}
+	return strings.Join(parts, " OR ")
+}
+
+func channelUserIDLikeArgs() []any {
+	args := make([]any, 0, len(models.RegisteredChannelTypes()))
+	for _, typ := range models.RegisteredChannelTypes() {
+		args = append(args, typ+":%")
+	}
+	return args
+}
+
+// HasChannelInbound reports whether a synthetic channel identity has at least
+// one persisted source=channel inbound message in this project.
+func (s *PmService) HasChannelInbound(projectID, syntheticUserID string) bool {
+	projectID = strings.TrimSpace(projectID)
+	syntheticUserID = strings.TrimSpace(syntheticUserID)
+	if projectID == "" || syntheticUserID == "" || !IsChannelUserID(syntheticUserID) {
+		return false
+	}
+	var threadIDs []string
+	if err := s.db.Model(&models.ChatThread{}).
+		Where("project_id = ? AND user_id = ?", projectID, syntheticUserID).
+		Pluck("id", &threadIDs).Error; err != nil || len(threadIDs) == 0 {
+		return false
+	}
+	var n int64
+	if err := s.db.Model(&models.ChatMessage{}).
+		Where("thread_id IN ? AND source = ? AND role = ?", threadIDs, "channel", "user").
+		Count(&n).Error; err != nil {
+		return false
+	}
+	return n > 0
+}
+
+func (s *PmService) annotateUnspoken(threads []models.ChatThread) {
+	ids := make([]string, 0, len(threads))
+	for _, th := range threads {
+		if IsChannelUserID(th.UserID) {
+			ids = append(ids, th.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	var spokenIDs []string
+	_ = s.db.Model(&models.ChatMessage{}).
+		Where("thread_id IN ? AND source = ? AND role = ?", ids, "channel", "user").
+		Distinct("thread_id").Pluck("thread_id", &spokenIDs).Error
+	spoken := map[string]bool{}
+	for _, id := range spokenIDs {
+		spoken[id] = true
+	}
+	for i := range threads {
+		if IsChannelUserID(threads[i].UserID) && !spoken[threads[i].ID] {
+			threads[i].Unspoken = true
+		}
+	}
 }
 
 // CreateThread inserts a new private thread for the user.
@@ -645,27 +745,27 @@ func (s *PmService) CreateCronThread(projectID, agentName, title string) (models
 	return s.CreateThread(projectID, "cron:"+agentName, title, agentName, models.ChatThreadKindCron)
 }
 
-// GetThread returns a thread the user may read: owned by userID, or a QQ
-// channel thread in the same project (readable by any project member).
+// GetThread returns a thread the user may read: owned by userID, or a
+// registered channel thread in the same project (any project member).
 func (s *PmService) GetThread(projectID, threadID, userID string) (models.ChatThread, error) {
 	var t models.ChatThread
 	if err := s.db.Where("id = ? AND project_id = ?", threadID, projectID).First(&t).Error; err != nil {
 		return models.ChatThread{}, ErrPmThreadNotFound
 	}
-	if t.UserID == userID || IsQQChannelUserID(t.UserID) {
+	if t.UserID == userID || IsChannelUserID(t.UserID) {
 		return t, nil
 	}
 	return models.ChatThread{}, ErrPmThreadNotFound
 }
 
-// RequireWritableThread loads a readable thread and rejects QQ channel threads
+// RequireWritableThread loads a readable thread and rejects channel threads
 // for Web write/delete/turn paths.
 func (s *PmService) RequireWritableThread(projectID, threadID, userID string) (models.ChatThread, error) {
 	t, err := s.GetThread(projectID, threadID, userID)
 	if err != nil {
 		return models.ChatThread{}, err
 	}
-	if IsQQChannelUserID(t.UserID) {
+	if IsChannelUserID(t.UserID) {
 		return models.ChatThread{}, ErrPmChannelReadOnly
 	}
 	return t, nil

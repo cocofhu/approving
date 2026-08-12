@@ -15,6 +15,8 @@ const MOCK_PROJECT = {
 
 const RUN_A = 'run-8f2a1111'
 const RUN_B = 'run-3c911111'
+const RUN_C = 'run-aa11cccc'
+const RUN_D = 'run-bb22dddd'
 
 const MOCK_EVENTS = [
   {
@@ -161,6 +163,96 @@ const MOCK_EVENTS = [
     summary: '修改可见性',
     payload: {},
   },
+  {
+    id: 'e10',
+    projectId: 'proj-1',
+    occurredAt: '2026-07-26T08:10:00Z',
+    actor: 'system',
+    actorDisplay: '系统',
+    unattributable: true,
+    callerKind: 'system',
+    action: 'run.start',
+    resourceType: 'run',
+    resourceId: RUN_C,
+    resource: `run/${RUN_C}`,
+    runId: RUN_C,
+    nodeId: '',
+    outcome: 'ok',
+    summary: 'Run C 开始',
+    payload: { runId: RUN_C },
+  },
+  {
+    id: 'e11',
+    projectId: 'proj-1',
+    occurredAt: '2026-07-26T08:10:08Z',
+    actor: 'system',
+    actorDisplay: '系统',
+    unattributable: true,
+    callerKind: 'system',
+    action: 'mcp.call',
+    resourceType: 'mcp',
+    resourceId: 'read_artifact',
+    resource: 'mcp/read_artifact',
+    runId: RUN_C,
+    nodeId: 'research_2wn4',
+    outcome: 'ok',
+    summary: '读取产物 research.json',
+    payload: { tool: 'read_artifact', runId: RUN_C },
+  },
+  {
+    id: 'e12',
+    projectId: 'proj-1',
+    occurredAt: '2026-07-26T08:10:16Z',
+    actor: 'system',
+    actorDisplay: '系统',
+    unattributable: true,
+    callerKind: 'system',
+    action: 'mcp.call',
+    resourceType: 'mcp',
+    resourceId: 'write_artifact',
+    resource: 'mcp/write_artifact',
+    runId: RUN_C,
+    nodeId: 'visual_bqc5',
+    outcome: 'ok',
+    summary: '写入产物 page.html',
+    payload: { tool: 'write_artifact' },
+  },
+  {
+    id: 'e20',
+    projectId: 'proj-1',
+    occurredAt: '2026-07-26T09:00:00Z',
+    actor: 'system',
+    actorDisplay: '系统',
+    unattributable: true,
+    callerKind: 'system',
+    action: 'run.start',
+    resourceType: 'run',
+    resourceId: RUN_D,
+    resource: `run/${RUN_D}`,
+    runId: RUN_D,
+    nodeId: '',
+    outcome: 'ok',
+    summary: 'Run D 开始',
+    payload: { runId: RUN_D },
+  },
+  {
+    id: 'e21',
+    projectId: 'proj-1',
+    occurredAt: '2026-07-26T09:00:04Z',
+    actor: 'system',
+    actorDisplay: '系统',
+    unattributable: true,
+    callerKind: 'system',
+    action: 'project.config',
+    resourceType: 'project',
+    resourceId: 'proj-1',
+    resource: 'project/proj-1',
+    runId: RUN_D,
+    nodeId: '',
+    outcome: 'ok',
+    summary: '单分组配置变更',
+    payload: {},
+  },
 ]
 
 function facetsFor(runId?: string | null) {
@@ -174,6 +266,16 @@ function facetsFor(runId?: string | null) {
       runId: RUN_B,
       label: '2026-07-26 14:05 · 3c911111',
       sub: '失败 · 含 MCP',
+    },
+    {
+      runId: RUN_C,
+      label: '2026-07-26 16:10 · aa11cccc',
+      sub: '成功 · 含 MCP',
+    },
+    {
+      runId: RUN_D,
+      label: '2026-07-26 17:00 · bb22dddd',
+      sub: '成功',
     },
   ]
   const inRun = runId
@@ -345,8 +447,8 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
     await expect(page.locator('body')).not.toContainText('动作类型')
     await expect(page.locator('body')).not.toContainText('旧摘要')
 
-    // Run mode hides event pagination; shows run count instead
-    await expect(page.getByTestId('project-audit-run-count')).toBeVisible()
+    // Run mode hides event pagination; count lives on the toolbar (not a dedicated strip)
+    await expect(page.getByTestId('project-audit-stats')).toBeVisible()
     await expect(page.getByTestId('project-audit-page-size')).toHaveCount(0)
     await expect(panel.locator('select')).toHaveCount(0)
 
@@ -364,8 +466,11 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
     await expect(page.getByTestId('project-audit-stats')).toContainText('成功')
 
     await expect(page.getByTestId('project-audit-run')).toContainText('Run')
+    await expect(page.getByTestId('project-audit-run')).toContainText('2026-07-26 18:42 · 8f2a1111')
     await expect(page.getByTestId('project-audit-resource')).toContainText('资源')
     await expect(page.getByTestId('project-audit-time')).toContainText('时间')
+    await expect(panel.locator('h4')).toHaveCount(0)
+    await expect(panel.locator('.chip').filter({ hasText: /^Run\b/ })).toHaveCount(0)
 
     const exportBtn = page.getByTestId('project-audit-export')
     await expect(exportBtn).toHaveText('导出')
@@ -377,10 +482,11 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
     const resPanel = page.locator('.audit-dd-panel').filter({ visible: true })
     await expect(resPanel).toBeVisible()
     await resPanel.locator('.audit-dd-opt', { hasText: 'mcp/read_artifact' }).first().click()
-    await page.getByTestId('project-audit-group-head-research_2wn4').click()
+    await expect(page.getByTestId('project-audit-group-research_2wn4')).toHaveAttribute('data-open', 'true')
     await expect(page.getByTestId('project-audit-list').locator('tbody tr.row')).toHaveCount(1)
     await expect(page.getByText('读取产物 research.json')).toBeVisible()
-    await expect(page.getByText('mcp/read_artifact').first()).toBeVisible()
+    await expect(page.getByText('mcp / read_artifact').first()).toBeVisible()
+    await expect(page.getByTestId('project-audit-chips')).toContainText('mcp/read_artifact')
 
     await page.getByTestId('project-audit-event-e2').click()
     await expect(page.getByTestId('project-audit-payload')).toBeVisible()
@@ -578,5 +684,63 @@ test.describe('审计 Tab 双模式 Demo 验收', () => {
     await page.getByTestId('project-audit-mode-run').click()
     await expect(page.getByTestId('project-audit-list')).toHaveAttribute('data-layout', 'groups')
     await expect(page.getByTestId('project-audit-export')).toBeVisible()
+  })
+
+  test('全成功 Run：单分组与多分组均默认全展开且事件行可见', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await stubProjectApis(page)
+    await page.goto('/project-detail.html?tab=audit&theme=light')
+    await dismissOnboardingIfOpen(page)
+    await expect(page.getByTestId('project-audit-panel')).toBeVisible({ timeout: 15_000 })
+
+    async function pickRun(label: string) {
+      await page.getByTestId('project-audit-run').locator('button.audit-dd-trig').click()
+      const panel = page.locator('.audit-dd-panel').filter({ visible: true })
+      await expect(panel).toBeVisible()
+      await panel.locator('.audit-dd-opt', { hasText: label }).first().click()
+    }
+
+    await pickRun('2026-07-26 16:10 · aa11cccc')
+    await expect(page.getByTestId('project-audit-group-_system')).toHaveAttribute('data-open', 'true')
+    await expect(page.getByTestId('project-audit-group-research_2wn4')).toHaveAttribute('data-open', 'true')
+    await expect(page.getByTestId('project-audit-group-visual_bqc5')).toHaveAttribute('data-open', 'true')
+    await expect(page.getByTestId('project-audit-event-e10')).toBeVisible()
+    await expect(page.getByTestId('project-audit-event-e11')).toBeVisible()
+    await expect(page.getByTestId('project-audit-event-e12')).toBeVisible()
+    await expect(page.getByText('Run C 开始')).toBeVisible()
+
+    await pickRun('2026-07-26 17:00 · bb22dddd')
+    await expect(page.getByTestId('project-audit-group-_system')).toHaveAttribute('data-open', 'true')
+    await expect(page.getByTestId('project-audit-event-e20')).toBeVisible()
+    await expect(page.getByTestId('project-audit-event-e21')).toBeVisible()
+    await expect(page.getByText('单分组配置变更')).toBeVisible()
+    await expect(page.getByTestId('project-audit-panel').locator('h4')).toHaveCount(0)
+    await expect(page.getByTestId('project-audit-panel').locator('.chip').filter({ hasText: /^Run\b/ })).toHaveCount(0)
+  })
+
+  test('有权但 0 条事件时空态可切全部日志', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await stubProjectApis(page)
+    await page.route('**/api/projects/proj-1/audit?**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [],
+          total: 0,
+          page: 1,
+          pageSize: 10,
+          hasMore: false,
+          stats: { total: 0, mcp: 0, fail: 0 },
+        }),
+      })
+    })
+    await page.goto('/project-detail.html?tab=audit&theme=light')
+    await dismissOnboardingIfOpen(page)
+    await expect(page.getByTestId('project-audit-empty')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('project-audit-empty-all')).toBeVisible()
+    await expect(page.getByTestId('project-audit-list')).toHaveCount(0)
+    await page.getByTestId('project-audit-empty-all').click()
+    await expect(page.getByTestId('project-audit-mode-all')).toHaveClass(/on/)
   })
 })

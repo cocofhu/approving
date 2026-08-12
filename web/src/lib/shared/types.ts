@@ -128,6 +128,11 @@ export interface Project {
   pmTokens?: number | null
   pmLeaderEnabled?: boolean
   pmLeaderAgent?: string
+  /**
+   * Optional display alias for the 「未知/未分桶」token bucket.
+   * Empty/omitted → show the default label. Does not change persisted keys.
+   */
+  unknownModelDisplayName?: string
   notifyPolicy?: ProjectNotifyPolicy
   createdAt?: string
   updatedAt?: string
@@ -324,6 +329,8 @@ export interface ChatThread {
   projectId: string
   userId: string
   title: string
+  /** Channel thread with no source=channel inbound. */
+  unspoken?: boolean
   /** user | cron | channel…; omitted on older rows */
   kind?: string
   sandboxRef?: string
@@ -396,6 +403,8 @@ export interface OutputCard {
   typeTag: OutputCardTypeTag
   status: 'ok' | 'failed'
   errorReason?: string
+  /** Server-issued fail heading (e.g. 缺少可展示产出 / 来源状态失败). */
+  failTitle?: string
   /** Parsed JSON snapshot for structured framework products. */
   jsonSnapshot?: string
   /** Markdown body for agent content or rendered structured product. */
@@ -713,6 +722,8 @@ export interface Run {
   /** Admission priority: high | normal | low (default normal). */
   priority?: 'high' | 'normal' | 'low'
   tags?: string[]
+  /** Immutable StartRun sandbox env snapshot (secrets masked as ****). */
+  sandboxEnv?: ProjectEnvEntry[]
   attempt?: number
   // The graph snapshot this run executed (pinned at start). Lets the run detail
   // canvas render against exactly what ran, independent of later edits/deletion

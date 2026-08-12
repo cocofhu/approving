@@ -372,13 +372,18 @@ export interface ChannelConfig {
   cronDeliver: boolean
   cronDeliverTarget?: string
   config?: Record<string, unknown>
+  /** Long-connection subscribe success (computed). */
+  online?: boolean
   createdAt: string
   updatedAt: string
+  connectionState?: string
+  connectionDetail?: string
 }
 
-// Channel create/update payload. type is fixed to "qq" server-side and
-// projectId is implied by the request path.
+// Channel create/update payload. projectId is implied by the request path.
+// Empty type still defaults to "qq" server-side.
 export interface ChannelConfigInput {
+  type?: string
   name: string
   enabled: boolean
   agentName: string
@@ -392,6 +397,17 @@ export interface ChannelConfigInput {
   config?: Record<string, unknown>
   /** Confirm syncing Project.PmLeaderAgent when rebinding primary. */
   syncPmLeader?: boolean
+}
+
+export interface NotifyDeliveryReceipt {
+  id?: number
+  runId: string
+  nodeId: string
+  iteration: number
+  kind: string
+  status?: string
+  error?: string
+  createdAt: string
 }
 
 export interface ChannelDeleteOpts {
@@ -756,11 +772,17 @@ export const api = {
     trigger = 'manual',
     priority = 'normal',
     tags: string[] = [],
-    opts?: { signal?: AbortSignal },
+    opts?: { signal?: AbortSignal; env?: { key: string; value: string; secret?: boolean }[] },
   ) =>
     req<{ id: string; status: string; priority?: string }>(`/workflows/${workflowId}/runs`, {
       method: 'POST',
-      body: JSON.stringify({ inputs, trigger, priority, tags }),
+      body: JSON.stringify({
+        inputs,
+        trigger,
+        priority,
+        tags,
+        ...(opts?.env && opts.env.length ? { env: opts.env } : {}),
+      }),
       ...(opts?.signal ? { signal: opts.signal } : {}),
     }),
   updateRunPriority: (id: string, priority: string) =>
@@ -1315,6 +1337,10 @@ export const api = {
     }),
 
   // multi-channel QQ APIs (primary + secondary)
+  listProjectNotifyReceipts: (projectId: string) =>
+    req<{ items: NotifyDeliveryReceipt[] }>(
+      `/projects/${encodeURIComponent(projectId)}/notify-receipts`,
+    ),
   listProjectChannels: (projectId: string) =>
     req<{ items: ChannelConfig[]; secretsKeyConfigured?: boolean; freeAgents?: string[] }>(
       `/projects/${encodeURIComponent(projectId)}/channels`,

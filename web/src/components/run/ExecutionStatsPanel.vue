@@ -6,13 +6,14 @@ import Icon from '../ui/Icon.vue'
 import TruncatedTextTooltip from '../ui/TruncatedTextTooltip.vue'
 import { api, isPaginated } from '@/lib/api/api'
 import { NODE_DEFS } from '@/data/nodeRegistry'
-import { fmtCompactDuration, fmtDuration, fmtTime } from '@/lib/shared/format'
+import { fmtCompactDuration, fmtDuration, fmtMultiAvgDuration, fmtTime } from '@/lib/shared/format'
 import { resolveNodeDisplayLabel } from '@/lib/run/resolveNodeDisplayLabel'
 import {
   aggregateMultiRuns,
   aggregateSingleRun,
   bottleneckDisplayName,
   flattenProcesses,
+  isInvalidStart,
   resolveRunWallSec,
   type MultiDimension,
   type SingleDimension,
@@ -49,8 +50,10 @@ const props = withDefaults(
     nowMs: number
     /** Controlled by RunDetailView top tab bar when provided. */
     statsTab?: StatsTab
+    /** Project-level alias for the unknown token bucket. */
+    unknownModelDisplayName?: string | null
   }>(),
-  { statsTab: undefined },
+  { statsTab: undefined, unknownModelDisplayName: null },
 )
 
 const emit = defineEmits<{ (e: 'update:statsTab', tab: StatsTab): void }>()
@@ -180,6 +183,13 @@ function compactRateMain(totalTokens: number | null, wallSec: number): string {
   return fmtCompactTokenRate(totalTokens, wallSec)
 }
 
+/** Multi token/s main: same formula as compactRateMain, but 0 wall → 0.00/s (F3). */
+function multiRateMain(totalTokens: number | null, wallSec: number): string {
+  if (totalTokens == null) return t('pages.executionStats.dash')
+  if (wallSec <= 0) return '0.00/s'
+  return fmtCompactTokenRate(totalTokens, wallSec)
+}
+
 function tokenRateTipText(totalTokens: number | null, wallSec: number): string {
   if (wallSec <= 0) return t('pages.executionStats.tipTokenRateZeroWall')
   const tokens = totalTokens ?? 0
@@ -210,6 +220,7 @@ interface Candidate {
   label: string
   listWallSec: number
   startedAt: string
+  status?: Run['status']
 }
 
 const candidates = ref<Candidate[]>([])
@@ -234,21 +245,27 @@ function localYmd(d: Date): string {
 }
 
 function startedAtYmd(iso: string): string | null {
-  if (!iso) return null
+  if (isInvalidStart(iso)) return null
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return null
   return localYmd(d)
 }
 
-/** Large start clock HH:mm from startedAt (local); missing → —. */
+/** Large start clock HH:mm from startedAt (local); invalid / missing → 时间未知. */
 function fmtStartHm(iso: string): string {
-  if (!iso) return t('pages.executionStats.dash')
+  if (isInvalidStart(iso)) return t('pages.executionStats.unknownTime')
   const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return t('pages.executionStats.dash')
+  if (Number.isNaN(d.getTime())) return t('pages.executionStats.unknownTime')
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
 }
 
+function fmtCandidateTime(iso: string): string {
+  if (isInvalidStart(iso)) return t('pages.executionStats.unknownTime')
+  return fmtTime(iso)
+}
+
 function fmtOlderDateLabel(iso: string): string {
+  if (isInvalidStart(iso)) return t('pages.executionStats.unknownTime')
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return t('pages.executionStats.unknownTime')
   const loc = String(locale.value || 'zh-CN')
@@ -270,8 +287,23 @@ function dayGroupLabel(iso: string): string {
   return fmtOlderDateLabel(iso)
 }
 
+function wallSourceForId(id: string): Pick<Run, 'status' | 'startedAt' | 'durationSec'> {
+  if (id === props.run.id) return props.run
+  const cached = detailCache.value[id]
+  if (cached) return cached
+  const c = candidates.value.find((item) => item.id === id)
+  return {
+    status: c?.status ?? 'completed',
+    startedAt: c?.startedAt ?? '',
+    durationSec: c?.listWallSec ?? 0,
+  }
+}
+
+/** Candidate / list duration uses the same validated wall as KPI contribution. */
 function candidateWallSec(c: Candidate): number {
-  return c.id === props.run.id ? props.wallSec : c.listWallSec
+  const wall = resolveRunWallSec(wallSourceForId(c.id), props.nowMs)
+  if (wall > 0) return wall
+  return c.listWallSec > 0 ? c.listWallSec : 0
 }
 
 function durationWithPrefix(sec: number): string {
@@ -307,7 +339,8 @@ async function loadCandidates() {
       id: r.id,
       label: '#' + r.id.replace(/^run-/, ''),
       listWallSec: r.durationSec || 0,
-      startedAt: r.startedAt || r.createdAt || '',
+      startedAt: r.startedAt || '',
+      status: r.status,
     }))
     // If current run missing from page, still keep it selected.
     if (!nextCandidates.some((c) => c.id === props.run.id)) {
@@ -315,8 +348,9 @@ async function loadCandidates() {
         {
           id: props.run.id,
           label: '#' + props.run.id.replace(/^run-/, ''),
-          listWallSec: props.wallSec,
+          listWallSec: props.run.durationSec || 0,
           startedAt: props.run.startedAt,
+          status: props.run.status,
         },
         ...nextCandidates,
       ].slice(0, 20)
@@ -465,14 +499,16 @@ const multiInputs = computed(() => {
   const out: { run: Run; wallSec: number; nodes?: WFNode[] }[] = []
   for (const id of selectedIds.value) {
     if (id === props.run.id) {
-      out.push({ run: props.run, wallSec: props.wallSec, nodes: props.nodes })
+      // Never trust props.wallSec (elapsedSec) — clamp year-1 / unset starts to 0.
+      out.push({ run: props.run, wallSec: resolveRunWallSec(props.run, props.nowMs), nodes: props.nodes })
       continue
     }
     const r = detailCache.value[id]
     if (!r) continue
     let wall = resolveRunWallSec(r, props.nowMs)
     if (wall <= 0) {
-      wall = candidates.value.find((c) => c.id === id)?.listWallSec || r.durationSec || 0
+      const listWall = candidates.value.find((c) => c.id === id)?.listWallSec || 0
+      if (listWall > 0) wall = listWall
     }
     out.push({ run: r, wallSec: wall, nodes: r.nodes })
   }
@@ -909,6 +945,7 @@ html.light .stats-panel {
           v-if="statsTab === 'single' && singleSummary.totalTokens != null"
           class="mb-3.5"
           :parts="modelUsageParts"
+          :unknown-model-display-name="unknownModelDisplayName"
         />
 
         <div
@@ -1128,7 +1165,7 @@ html.light .stats-panel {
               <span class="block text-[22px] font-semibold tabular-nums tracking-tight text-txt sm:text-[24px]">
                 {{ fmtStartHm(c.startedAt) }}
               </span>
-              <div class="mt-1 text-[12px] text-txt3">{{ c.startedAt ? fmtTime(c.startedAt) : t('pages.executionStats.dash') }}</div>
+              <div class="mt-1 text-[12px] text-txt3">{{ fmtCandidateTime(c.startedAt) }}</div>
               <div class="stats-kpi-time mt-0.5 text-[12px]">{{ durationWithPrefix(candidateWallSec(c)) }}</div>
               <span class="mt-1.5 block font-mono text-[11px] text-txt3">{{ c.label }}</span>
             </div>
@@ -1167,7 +1204,7 @@ html.light .stats-panel {
                   {{ isCurrentRun(c.id) ? t('pages.executionStats.current') : '' }}
                 </span>
                 <span class="truncate tabular-nums">
-                  {{ c.startedAt ? fmtTime(c.startedAt) : t('pages.executionStats.dash') }}
+                  {{ fmtCandidateTime(c.startedAt) }}
                 </span>
                 <span class="stats-kpi-time truncate">{{ durationWithPrefix(candidateWallSec(c)) }}</span>
                 <span class="font-mono text-[11px] text-txt3">{{ c.label }}</span>
@@ -1211,7 +1248,7 @@ html.light .stats-panel {
               >
                 {{
                   multiReady && multiSummary.selectedCount
-                    ? fmtCompactDuration(multiAvgWallSec)
+                    ? fmtMultiAvgDuration(multiAvgWallSec)
                     : t('pages.executionStats.dash')
                 }}
               </div>
@@ -1315,7 +1352,7 @@ html.light .stats-panel {
               >
                 {{
                   multiReady
-                    ? compactRateMain(multiSummary.totalTokens, multiSummary.wallSumSec)
+                    ? multiRateMain(multiSummary.totalTokens, multiSummary.wallSumSec)
                     : t('pages.executionStats.dash')
                 }}
               </div>
