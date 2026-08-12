@@ -224,7 +224,7 @@ func migrateChannelMultiPerProject(db *gorm.DB) {
 // services (database must not depend on that package).
 var channelPmMCPAllowed = map[string]bool{
 	"pm-progress": true, "pm-workflow-read": true, "pm-workflow-write": true,
-	"pm-agent-fs": true,
+	"pm-agent-fs": true, "pm-prd-manager": true,
 }
 
 // snapshotChannelEnabledMcps copies Project.PmEnabledMcps onto a legacy Channel

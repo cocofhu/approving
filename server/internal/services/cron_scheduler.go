@@ -272,7 +272,9 @@ func (s *CronScheduler) execute(ctx context.Context, job *models.AgentCronJob) {
 	for time.Now().Before(turnDeadline) {
 		if !s.turns.Active(job.ThreadID) {
 			run.Status = "ok"
-			s.maybeDeliver(job, userMsg)
+			if err := s.maybeDeliver(job, userMsg); err != nil {
+				run.Error = err.Error()
+			}
 			s.destroyCronSandbox(ctx, row.ID, job.ID)
 			return
 		}
@@ -323,17 +325,17 @@ func (s *CronScheduler) destroyCronSandbox(ctx context.Context, id uint, jobID s
 // maybeDeliver classifies the turn's assistant reply and routes it through the
 // coordinated channel egress (DeliverCron). Cron Work must not auto-merge PRs
 // or start workflows; this path only pushes a short status report.
-func (s *CronScheduler) maybeDeliver(job *models.AgentCronJob, userMsg models.ChatMessage) {
+func (s *CronScheduler) maybeDeliver(job *models.AgentCronJob, userMsg models.ChatMessage) error {
 	if !job.DeliverToChannel || s.deliverer == nil {
-		return
+		return nil
 	}
 	has, err := s.pm.HasAssistantAfter(job.ThreadID, userMsg.ID)
 	if err != nil || !has {
-		return
+		return nil
 	}
 	text := s.lastAssistantReply(job.ThreadID, userMsg.CreatedAt)
 	if strings.TrimSpace(text) == "" {
-		return
+		return nil
 	}
 	kind := ClassifyCronDeliveryText(text)
 	category := strings.TrimSpace(job.Name)
@@ -350,7 +352,9 @@ func (s *CronScheduler) maybeDeliver(job *models.AgentCronJob, userMsg models.Ch
 	if err := s.deliverer.DeliverCron(d); err != nil {
 		log.Warn().Err(err).Str("job", job.ID).Str("kind", kind).Str("agent", job.AgentName).
 			Msg("cron channel delivery failed")
+		return err
 	}
+	return nil
 }
 
 // ClassifyCronDeliveryText maps assistant cron text into changed/unchanged/failed.

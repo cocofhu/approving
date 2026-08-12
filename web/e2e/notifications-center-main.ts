@@ -257,6 +257,18 @@ const cappedItems = Array.from({ length: 7 }, (_, i) =>
   }),
 )
 
+/** 25 post-baseline items → independent page has 2 pages (20 + 5). */
+const pagedItems = Array.from({ length: 25 }, (_, i) =>
+  makeRun({
+    id: `run-page-${i}`,
+    status: i === 0 ? 'failed' : 'completed',
+    title: `分页条目 ${i}`,
+    workflowName: '自我迭代',
+    startedAt: `2026-08-10T${String(8 + Math.floor(i / 10)).padStart(2, '0')}:${String((i * 2) % 60).padStart(2, '0')}:00Z`,
+    durationSec: 30,
+  }),
+)
+
 function poolForScene() {
   if (scene === 'empty') return []
   if (scene === 'history-only') return historyItems
@@ -274,6 +286,7 @@ function poolForScene() {
       }),
     ]
   }
+  if (scene === 'paged') return pagedItems
   return postEnableItems
 }
 
@@ -357,7 +370,8 @@ async function bootstrap() {
     scene === 'post-enable' ||
     scene === 'with-items' ||
     scene === 'capped' ||
-    scene === 'legacy-structured-page'
+    scene === 'legacy-structured-page' ||
+    scene === 'paged'
   ) {
     localStorage.setItem(
       'approving.notifications.prefs.e2e',

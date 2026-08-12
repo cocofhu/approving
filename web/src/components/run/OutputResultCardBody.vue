@@ -28,11 +28,17 @@ const isVisualHtml = computed(() =>
   }),
 )
 
-/** Prefer fetched artifact body; fall back to inline markdown (HTML from node output). */
+/**
+ * Prefer the card's outputs.page snapshot for visual pages so two cards never
+ * share a stale global page.html fetch. Otherwise use the artifact loaded by
+ * artifactName + nodeId, then markdown.
+ */
 const htmlBody = computed(() => {
+  const fromMd = props.card.markdown?.trim() ?? ''
+  if (fromMd && props.card.outputKey === 'page') return fromMd
   const fromArt = props.artifactHtml?.trim() ?? ''
   if (fromArt) return fromArt
-  return props.card.markdown?.trim() ?? ''
+  return fromMd
 })
 
 /**
@@ -51,7 +57,9 @@ const htmlPreviewState = computed<'loading' | 'load-error' | 'empty' | 'ready'>(
 <template>
   <template v-if="card.status === 'failed'">
     <p class="text-[12px] text-txt2">
-      <strong class="text-err">{{ t('pages.nodeOutput.outputCards.sourceFailedTitle') }}</strong><br />
+      <strong class="text-err" data-testid="output-result-fail-title">{{
+        card.failTitle || t('pages.nodeOutput.outputCards.sourceFailedTitle')
+      }}</strong><br />
       {{ card.errorReason || t('pages.nodeOutput.outputCards.invalidSource') }}
     </p>
   </template>

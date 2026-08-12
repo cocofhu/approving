@@ -31,6 +31,7 @@ const PM_MCP_OPTIONS = [
   { id: 'pm-workflow-read', labelKey: 'pages.projectDetail.pm.mcpWorkflowRead' },
   { id: 'pm-workflow-write', labelKey: 'pages.projectDetail.pm.mcpWorkflowWrite' },
   { id: 'pm-agent-fs', labelKey: 'pages.projectDetail.pm.mcpAgentFs' },
+  { id: 'pm-prd-manager', labelKey: 'pages.projectDetail.pm.mcpPrdManager' },
 ] as const
 
 type Tab = 'list' | 'edit' | 'notify'
@@ -44,6 +45,9 @@ const secretsKeyConfigured = ref<boolean | undefined>(undefined)
 
 const editingId = ref<string | null>(null)
 const isNew = ref(false)
+const chType = ref<'qq' | 'wecom'>('qq')
+const saveError = ref('')
+const notifyReceipts = ref<{ runId: string; kind: string; status?: string; error?: string; createdAt: string }[]>([])
 const chEnabled = ref(true)
 const chName = ref('')
 const chAgent = ref('')
@@ -61,6 +65,7 @@ const chEnabledMcps = ref<string[]>([
   'pm-workflow-read',
   'pm-workflow-write',
   'pm-agent-fs',
+  'pm-prd-manager',
 ])
 const chIsPrimary = ref(false)
 
@@ -172,6 +177,8 @@ function toggleChMcp(id: string) {
 }
 
 function resetForm() {
+  chType.value = 'qq'
+  saveError.value = ''
   chEnabled.value = true
   chName.value = ''
   chAgent.value = ''
@@ -189,6 +196,7 @@ function resetForm() {
     'pm-workflow-read',
     'pm-workflow-write',
     'pm-agent-fs',
+    'pm-prd-manager',
   ]
   chIsPrimary.value = false
   clearRecentTargetsCache()
@@ -197,6 +205,8 @@ function resetForm() {
 function applyForm(ch: ChannelConfig) {
   editingId.value = ch.id
   isNew.value = false
+  chType.value = ch.type === 'wecom' ? 'wecom' : 'qq'
+  saveError.value = ''
   chEnabled.value = ch.enabled
   chName.value = ch.name || ''
   chAgent.value = ch.agentName || ''
@@ -212,7 +222,7 @@ function applyForm(ch: ChannelConfig) {
   chCronDeliverTarget.value = ch.cronDeliverTarget || ''
   chEnabledMcps.value = Array.isArray(ch.enabledMcps)
     ? [...ch.enabledMcps]
-    : ['pm-progress', 'pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs']
+    : ['pm-progress', 'pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs', 'pm-prd-manager']
   chIsPrimary.value = !!ch.isPrimary
   clearRecentTargetsCache()
   if (chCronDeliver.value) void ensureRecentTargets()
@@ -234,6 +244,12 @@ async function load() {
         ? [...(props.project.notifyPolicy!.channelIds || [])]
         : []
     notifySelected.value = ids
+    try {
+      const rec = await api.listProjectNotifyReceipts(props.projectId)
+      notifyReceipts.value = rec.items || []
+    } catch {
+      notifyReceipts.value = []
+    }
   } catch (e: any) {
     toast.error(String(e?.message || e) || t('pages.projectDetail.pm.channel.loadFailed'))
   } finally {
@@ -273,6 +289,7 @@ function cancelEdit() {
 
 function buildInput(): ChannelConfigInput {
   return {
+    type: chType.value,
     name: chName.value.trim(),
     enabled: chEnabled.value,
     agentName: chAgent.value.trim(),
@@ -291,12 +308,21 @@ function buildInput(): ChannelConfigInput {
 }
 
 async function saveChannel() {
+  saveError.value = ''
   if (!chAgent.value.trim()) {
     toast.error(t('pages.projectDetail.pm.channel.needAgent'))
     return
   }
   if (!chAppId.value.trim()) {
-    toast.error(t('pages.projectDetail.pm.channel.needAppId'))
+    toast.error(
+      chType.value === 'wecom'
+        ? t('pages.projectDetail.pm.channel.needBotId')
+        : t('pages.projectDetail.pm.channel.needAppId'),
+    )
+    return
+  }
+  if (isNew.value && chType.value === 'wecom' && !chAppSecret.value.trim()) {
+    toast.error(t('pages.projectDetail.pm.channel.needSecret'))
     return
   }
   const input = buildInput()
@@ -322,7 +348,9 @@ async function saveChannel() {
     isNew.value = false
     editingId.value = null
   } catch (e: any) {
-    toast.error(String(e?.message || e) || t('pages.projectDetail.pm.channel.saveFailed'))
+    const msg = String(e?.message || e) || t('pages.projectDetail.pm.channel.saveFailed')
+    saveError.value = msg
+    toast.error(msg)
   } finally {
     saving.value = false
   }
@@ -520,6 +548,21 @@ onUnmounted(() => {
         >
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2 text-[13px] font-medium text-txt">
+              <span
+                class="border px-2 py-0.5 text-[11px]"
+                data-testid="channel-type-badge"
+                :class="
+                  ch.type === 'wecom'
+                    ? 'border-accent/55 bg-accent-dim text-accent-2'
+                    : 'border-info/45 text-info'
+                "
+              >
+                {{
+                  ch.type === 'wecom'
+                    ? t('pages.projectDetail.pm.channel.typeWecom')
+                    : t('pages.projectDetail.pm.channel.typeQq')
+                }}
+              </span>
               <span class="truncate">{{ ch.name || ch.appId }}</span>
               <span
                 v-if="ch.isPrimary"
@@ -540,12 +583,25 @@ onUnmounted(() => {
           <div class="truncate font-mono text-[12px] text-txt2 max-md:hidden">
             {{ ch.agentName || '—' }}
           </div>
-          <div class="text-[12px] max-md:hidden" :class="ch.enabled ? 'text-ok' : 'text-txt3'">
-            {{
-              ch.enabled
-                ? t('pages.projectDetail.pm.channel.statusOn')
-                : t('pages.projectDetail.pm.channel.statusOff')
-            }}
+          <div class="flex flex-col gap-1 text-[12px] max-md:hidden">
+            <span :class="ch.enabled ? 'text-ok' : 'text-txt3'">
+              {{
+                ch.enabled
+                  ? t('pages.projectDetail.pm.channel.statusOn')
+                  : t('pages.projectDetail.pm.channel.statusOff')
+              }}
+            </span>
+            <span class="inline-flex items-center gap-1.5" data-testid="channel-online">
+              <span
+                class="inline-block h-1.5 w-1.5"
+                :class="ch.online ? 'bg-ok' : 'bg-txt3'"
+              />
+              {{
+                ch.online
+                  ? t('pages.projectDetail.pm.channel.online')
+                  : t('pages.projectDetail.pm.channel.offline')
+              }}
+            </span>
           </div>
           <div class="flex flex-wrap gap-1.5">
             <AppButton variant="ghost" class="!px-2 !py-1 text-[12px]" @click="openEdit(ch)">
@@ -607,6 +663,35 @@ onUnmounted(() => {
               {{ t('pages.projectDetail.pm.channel.basicsHint') }}
             </p>
 
+            <div class="mb-3">
+              <span class="label">{{ t('pages.projectDetail.pm.channel.typeLabel') }}</span>
+              <div class="mt-1 flex border border-line" data-testid="channel-type-switch">
+                <button
+                  type="button"
+                  class="flex-1 px-3 py-2 text-[13px]"
+                  :class="chType === 'qq' ? 'bg-accent-dim text-txt' : 'bg-base text-txt2'"
+                  :disabled="!isNew"
+                  data-testid="channel-type-qq"
+                  @click="isNew && (chType = 'qq')"
+                >
+                  {{ t('pages.projectDetail.pm.channel.typeQq') }}
+                </button>
+                <button
+                  type="button"
+                  class="flex-1 border-l border-line px-3 py-2 text-[13px]"
+                  :class="chType === 'wecom' ? 'bg-accent-dim text-txt' : 'bg-base text-txt2'"
+                  :disabled="!isNew"
+                  data-testid="channel-type-wecom"
+                  @click="isNew && (chType = 'wecom')"
+                >
+                  {{ t('pages.projectDetail.pm.channel.typeWecom') }}
+                </button>
+              </div>
+              <p v-if="!isNew" class="mt-1 text-[11px] text-txt3">
+                {{ t('pages.projectDetail.pm.channel.typeFrozen') }}
+              </p>
+            </div>
+
             <label class="flex items-center justify-between gap-3 text-[13px] text-txt">
               <span>{{ t('pages.projectDetail.pm.channel.enable') }}</span>
               <AppSwitch v-model="chEnabled" :aria-label="t('pages.projectDetail.pm.channel.enable')" />
@@ -637,23 +722,49 @@ onUnmounted(() => {
 
             <div class="mt-3 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
               <div>
-                <label class="label" for="ch-multi-appid">{{ t('pages.projectDetail.pm.channel.appId') }}</label>
-                <input id="ch-multi-appid" v-model="chAppId" class="input w-full" />
+                <label class="label" for="ch-multi-appid">
+                  {{
+                    chType === 'wecom'
+                      ? t('pages.projectDetail.pm.channel.botId')
+                      : t('pages.projectDetail.pm.channel.appId')
+                  }}
+                </label>
+                <input
+                  id="ch-multi-appid"
+                  v-model="chAppId"
+                  class="input w-full"
+                  :disabled="!isNew && chType === 'wecom'"
+                  data-testid="channel-appid"
+                />
               </div>
               <div>
-                <label class="label" for="ch-multi-secret">{{ t('pages.projectDetail.pm.channel.appSecret') }}</label>
+                <label class="label" for="ch-multi-secret">
+                  {{
+                    chType === 'wecom'
+                      ? t('pages.projectDetail.pm.channel.secret')
+                      : t('pages.projectDetail.pm.channel.appSecret')
+                  }}
+                </label>
                 <input
                   id="ch-multi-secret"
                   v-model="chAppSecret"
                   type="password"
                   class="input w-full"
                   :placeholder="chAppSecretSet ? t('pages.projectDetail.pm.channel.appSecretKeep') : ''"
+                  data-testid="channel-secret"
                 />
                 <p v-if="chAppSecretSet" class="mt-1 text-[11px] text-txt3">
                   {{ t('pages.projectDetail.pm.channel.appSecretSet') }}
                 </p>
               </div>
             </div>
+            <p
+              v-if="saveError"
+              class="mt-2 border border-err/45 bg-err/10 px-3 py-2 text-xs text-err"
+              data-testid="channel-save-error"
+            >
+              {{ saveError }}
+            </p>
 
             <div class="mt-3 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
               <div>
@@ -671,7 +782,11 @@ onUnmounted(() => {
                   {{ t('pages.projectDetail.pm.channel.turnTimeoutHint') }}
                 </p>
               </div>
-              <label class="flex items-center justify-between gap-3 pt-6 text-[13px] text-txt">
+              <label
+                v-if="chType === 'qq'"
+                class="flex items-center justify-between gap-3 pt-6 text-[13px] text-txt"
+                data-testid="channel-sandbox"
+              >
                 <span>{{ t('pages.projectDetail.pm.channel.sandbox') }}</span>
                 <AppSwitch v-model="chSandbox" :aria-label="t('pages.projectDetail.pm.channel.sandbox')" />
               </label>
@@ -732,7 +847,10 @@ onUnmounted(() => {
                         <span class="block truncate text-[12px] text-txt">
                           {{ pushTargetPrimaryLabel(opt) }}
                         </span>
-                        <span class="mt-0.5 block font-mono text-[11px] text-txt3">{{ opt.value }}</span>
+                        <span class="mt-0.5 block font-mono text-[11px] text-txt3">
+                          {{ opt.value }}
+                          <template v-if="opt.unspoken"> · {{ t('pages.projectDetail.pm.unspoken') }}</template>
+                        </span>
                       </button>
                     </template>
                     <p v-else class="px-3 py-2 text-[11px] text-txt3">
@@ -912,6 +1030,31 @@ onUnmounted(() => {
         data-testid="notify-empty-hint"
       >
         {{ t('pages.projectDetail.pm.channel.notifyEmpty') }}
+      </div>
+
+      <div class="mt-4 border border-line" data-testid="channel-deliver-log">
+        <div class="border-b border-line bg-elevated px-3.5 py-2 text-[13px] font-medium text-txt">
+          {{ t('pages.projectDetail.pm.channel.deliverLogTitle') }}
+        </div>
+        <div v-if="!notifyReceipts.length" class="px-3.5 py-3 text-xs text-txt3">
+          {{ t('pages.projectDetail.pm.channel.deliverLogEmpty') }}
+        </div>
+        <div
+          v-for="(rec, idx) in notifyReceipts"
+          :key="idx"
+          class="flex items-start gap-2 border-b border-line px-3.5 py-2.5 last:border-b-0"
+        >
+          <span
+            class="shrink-0 border px-2 py-0.5 text-[11px]"
+            :class="rec.status === 'ok' ? 'border-ok/40 text-ok' : 'border-err/45 text-err'"
+          >
+            {{ rec.status === 'ok' ? t('pages.projectDetail.pm.channel.deliverOk') : t('pages.projectDetail.pm.channel.deliverFail') }}
+          </span>
+          <div class="min-w-0">
+            <div class="font-mono text-[12px] text-txt">{{ rec.kind }} · {{ rec.runId }}</div>
+            <div v-if="rec.error" class="mt-0.5 text-[11px] text-err">{{ rec.error }}</div>
+          </div>
+        </div>
       </div>
 
       <div class="mt-3 border border-warn/40 bg-warn/10 px-3 py-2.5 text-xs leading-snug text-txt2">

@@ -31,6 +31,11 @@ import {
 import { extractAgentMessageDelta } from '@/lib/run/acpUnpack'
 import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import TokenUsageByModelTip from '@/components/ui/TokenUsageByModelTip.vue'
+import {
+  channelPeerId,
+  isChannelThreadUserId,
+  parseChannelUserId,
+} from '@/lib/pm/cronDeliverTargets'
 import type { ChatMessage, ChatThread, ClarifyImage, PmLeaderBinding } from '@/lib/shared/types'
 
 type FailKind = PmFailKind
@@ -39,6 +44,8 @@ const props = defineProps<{
   projectId: string
   binding: PmLeaderBinding | null
   restoreMobileChat?: boolean
+  /** Project-level alias for the unknown token bucket. */
+  unknownModelDisplayName?: string | null
 }>()
 const emit = defineEmits<{ openSettings: []; restoredMobileChat: [] }>()
 
@@ -229,16 +236,36 @@ async function copyAssistantText(ev: Event) {
 const showThreadsAside = computed(() => !isMobile.value || mobileView.value === 'threads')
 const showChatSection = computed(() => !isMobile.value || mobileView.value === 'chat')
 
-/** QQ Channel synthetic user id, e.g. qq:guild:… / qq:group:… / qq:c2c:… */
+/** Channel synthetic user id, e.g. qq:guild:… / wecom:c2c:… */
 function isChannelThread(th: ChatThread | undefined | null): boolean {
-  return !!th?.userId?.startsWith('qq:')
+  return isChannelThreadUserId(th?.userId)
+}
+
+function channelTypeOf(th: ChatThread | undefined | null): string {
+  return parseChannelUserId(th?.userId || '')?.type || ''
 }
 
 function threadDisplayTitle(th: ChatThread | undefined | null): string {
+  if (isChannelThread(th) && th?.userId) {
+    // g3.2: channel thread primary title is the synthetic identity.
+    return th.userId
+  }
   const title = (th?.title || '').trim()
   if (title) return title
-  if (isChannelThread(th)) return t('pages.projectDetail.pm.channelUntitled')
   return t('pages.projectDetail.pm.untitled')
+}
+
+function channelSourceLine(th: ChatThread | undefined | null): string {
+  const kind = channelTypeOf(th)
+  const src =
+    kind === 'wecom'
+      ? t('pages.projectDetail.pm.channelSourceWecom')
+      : t('pages.projectDetail.pm.channelSourceQq')
+  const peer = channelPeerId(th?.userId || '')
+  if (th?.unspoken) {
+    return `${src} · ${t('pages.projectDetail.pm.unspoken')}${peer ? ` · ${peer}` : ''}`
+  }
+  return peer ? `${src} · ${peer}` : src
 }
 
 const activeThread = computed(() => threads.value.find((x) => x.id === activeId.value))
@@ -281,6 +308,7 @@ type ChannelCtx = { open: true; x: number; y: number; threadId: string }
 const channelCtx = ref<ChannelCtx | null>(null)
 const channelDetailOpen = ref(false)
 const channelDetailTitle = ref('')
+const channelDetailSource = ref('')
 
 function closeChannelCtx() {
   channelCtx.value = null
@@ -297,6 +325,7 @@ function openChannelDetail() {
   if (!channelCtx.value) return
   const th = threads.value.find((x) => x.id === channelCtx.value!.threadId)
   channelDetailTitle.value = threadDisplayTitle(th)
+  channelDetailSource.value = channelSourceLine(th)
   channelDetailOpen.value = true
   closeChannelCtx()
 }
@@ -1279,13 +1308,23 @@ onBeforeUnmount(() => {
           @contextmenu="openChannelCtx($event, th)"
         >
           <span class="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-            <span class="min-w-0 truncate">{{ threadDisplayTitle(th) }}</span>
+            <span class="min-w-0 truncate font-mono text-[12px]">{{ threadDisplayTitle(th) }}</span>
             <span
               v-if="isChannelThread(th)"
-              class="inline-flex shrink-0 items-center border border-accent-2/35 bg-accent/15 px-1 text-[9px] font-bold uppercase tracking-wide leading-4 text-accent-2"
+              class="inline-flex shrink-0 items-center border px-1 text-[9px] font-bold uppercase tracking-wide leading-4"
+              :class="
+                channelTypeOf(th) === 'wecom'
+                  ? 'border-accent/55 bg-accent-dim text-accent-2'
+                  : 'border-accent-2/35 bg-accent/15 text-accent-2'
+              "
               data-testid="pm-qq-tag"
-              :title="t('pages.projectDetail.pm.channelSource')"
-            >QQ</span>
+              :title="channelSourceLine(th)"
+            >{{ channelTypeOf(th) === 'wecom' ? t('pages.projectDetail.pm.channel.typeWecom') : 'QQ' }}</span>
+            <span
+              v-if="th.unspoken"
+              class="inline-flex shrink-0 items-center border border-warn/45 px-1 text-[9px] leading-4 text-warn"
+              data-testid="pm-unspoken-tag"
+            >{{ t('pages.projectDetail.pm.unspoken') }}</span>
           </span>
           <span
             v-if="!turnBusy && !isChannelThread(th)"
@@ -1324,16 +1363,35 @@ onBeforeUnmount(() => {
         </button>
         <div
           v-if="activeId"
-          class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden"
+          class="flex min-w-0 flex-1 flex-col overflow-hidden"
           data-testid="pm-chat-title"
         >
-          <span class="min-w-0 truncate text-sm font-medium text-txt">{{ activeThreadTitle }}</span>
-          <span
+          <div class="flex min-w-0 items-center gap-2 overflow-hidden">
+            <span class="min-w-0 truncate text-sm font-medium text-txt">{{ activeThreadTitle }}</span>
+            <span
+              v-if="activeIsChannel"
+              class="inline-flex shrink-0 items-center border px-1 text-[9px] font-bold uppercase tracking-wide leading-4"
+              :class="
+                channelTypeOf(activeThread) === 'wecom'
+                  ? 'border-accent/55 bg-accent-dim text-accent-2'
+                  : 'border-accent-2/35 bg-accent/15 text-accent-2'
+              "
+              data-testid="pm-qq-tag-header"
+              :title="channelSourceLine(activeThread)"
+            >{{ channelTypeOf(activeThread) === 'wecom' ? t('pages.projectDetail.pm.channel.typeWecom') : 'QQ' }}</span>
+            <span
+              v-if="activeThread?.unspoken"
+              class="inline-flex shrink-0 items-center border border-warn/45 px-1 text-[9px] leading-4 text-warn"
+              data-testid="pm-unspoken-tag-header"
+            >{{ t('pages.projectDetail.pm.unspoken') }}</span>
+          </div>
+          <div
             v-if="activeIsChannel"
-            class="inline-flex shrink-0 items-center border border-accent-2/35 bg-accent/15 px-1 text-[9px] font-bold uppercase tracking-wide leading-4 text-accent-2"
-            data-testid="pm-qq-tag-header"
-            :title="t('pages.projectDetail.pm.channelSource')"
-          >QQ</span>
+            class="truncate text-[11px] text-txt3"
+            data-testid="pm-channel-subtitle"
+          >
+            {{ channelSourceLine(activeThread) }}
+          </div>
         </div>
         <span v-else class="min-w-0 flex-1" />
         <AppButton
@@ -1482,6 +1540,7 @@ onBeforeUnmount(() => {
                     v-if="m.usage != null"
                     :usage="m.usage"
                     :usage-by-model="m.usageByModel"
+                    :unknown-model-display-name="unknownModelDisplayName"
                   />
                   <button
                     v-if="m.content?.trim()"
@@ -1812,7 +1871,7 @@ onBeforeUnmount(() => {
         <div>
           <div class="mb-1 text-[11px] text-txt3">{{ t('pages.projectDetail.pm.channelDetailLabelSource') }}</div>
           <div class="border border-line bg-base px-2.5 py-2 text-[13px] text-txt" data-testid="pm-channel-detail-source">
-            {{ t('pages.projectDetail.pm.channelSource') }}
+            {{ channelDetailSource }}
           </div>
         </div>
       </div>

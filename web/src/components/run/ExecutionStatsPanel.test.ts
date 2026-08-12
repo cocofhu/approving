@@ -414,8 +414,8 @@ describe('ExecutionStatsPanel', () => {
     await multiBtn!.trigger('click')
     await flushPromises()
 
-    // avg wall of 120 + 90 = 105s → 1.8m; tip exact clock
-    expect(wrapper.find('[data-testid="stats-kpi-avg-wall-value"]').text()).toBe('1.8m')
+    // avg wall of 120 + 90 = 105s → 01:45 (F2 mm:ss, not compact 1.8m)
+    expect(wrapper.find('[data-testid="stats-kpi-avg-wall-value"]').text()).toBe('01:45')
     await wrapper.find('[data-testid="stats-kpi-avg-wall-value"]').trigger('mouseenter')
     expect(wrapper.find('[data-testid="stats-kpi-avg-wall-tip"]').text()).toContain('01:45')
     await wrapper.find('[data-testid="stats-kpi-avg-wall-value"]').trigger('mouseleave')
@@ -432,6 +432,149 @@ describe('ExecutionStatsPanel', () => {
     expect(wrapper.text()).toContain('合计')
     expect(wrapper.text()).toContain('对所选 Run 中同一维度的条目合计耗时')
     expect(wrapper.text()).not.toContain('Σ')
+    wrapper.unmount()
+  })
+
+  it('F7: queued+0001 does not inflate avg wall; list wall equals KPI; unknown time (g2/g3/g5.1)', async () => {
+    const goZero = '0001-01-01T00:00:00Z'
+    const queued = {
+      ...baseRun(false),
+      id: 'run-1',
+      status: 'queued',
+      startedAt: goZero,
+      durationSec: 0,
+      nodeExecutions: {},
+    } as Run
+    const doneA = {
+      ...baseRun(true),
+      id: 'run-2',
+      status: 'completed',
+      startedAt: '2026-08-12T02:00:00Z',
+      durationSec: 744,
+    } as Run
+    const doneB = {
+      ...baseRun(false),
+      id: 'run-3',
+      status: 'completed',
+      startedAt: '2026-08-12T03:00:00Z',
+      durationSec: 120,
+    } as Run
+    apiMocks.listRuns.mockResolvedValue({
+      items: [
+        { id: 'run-1', status: 'queued', durationSec: 0, startedAt: goZero },
+        { id: 'run-2', status: 'completed', durationSec: 744, startedAt: '2026-08-12T02:00:00Z' },
+        { id: 'run-3', status: 'completed', durationSec: 120, startedAt: '2026-08-12T03:00:00Z' },
+      ],
+      total: 3,
+    })
+    apiMocks.getRun.mockImplementation(async (id: string) => {
+      if (id === 'run-2') return doneA
+      if (id === 'run-3') return doneB
+      return queued
+    })
+
+    const wrapper = mount(ExecutionStatsPanel, {
+      props: {
+        run: queued,
+        nodes,
+        wallSec: 63_922_000_000,
+        nowMs: Date.parse('2026-08-12T04:00:00Z'),
+      },
+      global: {
+        plugins: [
+          createI18n({
+            legacy: false,
+            locale: 'zh-CN',
+            messages: { 'zh-CN': { ...common, ...pages } },
+          }),
+        ],
+        stubs: { Icon: true, TruncatedTextTooltip: true, StatsPieChart: false },
+      },
+    })
+    await flushPromises()
+    const multiBtn = wrapper.findAll('button').find((b) => b.text().includes('多次执行聚合'))
+    await multiBtn!.trigger('click')
+    await flushPromises()
+
+    const avgText = wrapper.find('[data-testid="stats-kpi-avg-wall-value"]').text()
+    expect(avgText).not.toMatch(/h$/)
+    expect(avgText).toBe('04:48')
+    const avgHours = 288 / 3600
+    expect(avgHours).toBeLessThan(1_000_000)
+
+    const queuedCell = wrapper.find('[data-testid="stats-multi-compare-cell"][data-run-id="run-1"]')
+    expect(queuedCell.text()).toContain('时间未知')
+    expect(queuedCell.text()).toContain('耗时 00:00')
+    expect(queuedCell.text()).not.toMatch(/1-01-01|0001|1 月 1 日/)
+
+    const doneCell = wrapper.find('[data-testid="stats-multi-compare-cell"][data-run-id="run-2"]')
+    expect(doneCell.text()).toContain('耗时 12:24')
+    expect(doneCell.text()).not.toContain('时间未知')
+
+    await wrapper.find('[data-testid="stats-multi-picker-toggle"]').trigger('click')
+    await flushPromises()
+    const groupText = wrapper
+      .findAll('[data-testid="stats-multi-day-group"]')
+      .map((g) => g.text())
+      .join(' | ')
+    expect(groupText).toContain('时间未知')
+    expect(groupText).not.toMatch(/1 月 1 日/)
+
+    const rate = wrapper.find('[data-testid="stats-kpi-multi-token-rate-value"]').text()
+    expect(rate).toMatch(/\/s/)
+    expect(rate).not.toBe('0.00/s')
+    expect(rate).not.toBe('—')
+
+    expect(wrapper.find('[data-testid="stats-kpi-selected"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="stats-kpi-avg-wall"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="stats-kpi-process-count"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="stats-kpi-sum-tokens"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="stats-kpi-avg-tokens"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="stats-kpi-multi-token-rate"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('修复前')
+    expect(wrapper.text()).not.toContain('修复后')
+    expect(wrapper.text()).not.toContain('验收要点')
+    wrapper.unmount()
+  })
+
+  it('F7: all-zero validated walls show 00:00 and 0.00/s; waiting_human tokens still count', async () => {
+    const goZero = '0001-01-01T00:00:00Z'
+    const waiting = {
+      ...baseRun(true),
+      id: 'run-1',
+      status: 'waiting_human',
+      startedAt: goZero,
+      durationSec: 0,
+    } as Run
+    const queued = {
+      ...baseRun(false),
+      id: 'run-2',
+      status: 'queued',
+      startedAt: goZero,
+      durationSec: 0,
+      nodeExecutions: {},
+    } as Run
+    apiMocks.listRuns.mockResolvedValue({
+      items: [
+        { id: 'run-1', status: 'waiting_human', durationSec: 0, startedAt: goZero },
+        { id: 'run-2', status: 'queued', durationSec: 0, startedAt: goZero },
+      ],
+      total: 2,
+    })
+    apiMocks.getRun.mockImplementation(async (id: string) => (id === 'run-2' ? queued : waiting))
+
+    const wrapper = mountPanel(waiting)
+    await wrapper.setProps({ wallSec: 99_999_999, nowMs: Date.parse('2026-08-12T04:00:00Z') })
+    await flushPromises()
+    const multiBtn = wrapper.findAll('button').find((b) => b.text().includes('多次执行聚合'))
+    await multiBtn!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="stats-kpi-avg-wall-value"]').text()).toBe('00:00')
+    expect(wrapper.find('[data-testid="stats-kpi-multi-token-rate-value"]').text()).toBe('0.00/s')
+    expect(wrapper.find('[data-testid="stats-kpi-sum-tokens-value"]').text()).toContain('token')
+    expect(wrapper.find('[data-testid="stats-kpi-avg-tokens-value"]').text()).toContain('token')
+    expect(wrapper.text()).toContain('时间未知')
     wrapper.unmount()
   })
 })

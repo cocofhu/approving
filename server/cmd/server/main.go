@@ -19,6 +19,7 @@ import (
 	"github.com/cocofhu/approving/internal/browser"
 	"github.com/cocofhu/approving/internal/channels"
 	"github.com/cocofhu/approving/internal/channels/qq"
+	"github.com/cocofhu/approving/internal/channels/wecom"
 	"github.com/cocofhu/approving/internal/config"
 	"github.com/cocofhu/approving/internal/contextmcp"
 	"github.com/cocofhu/approving/internal/crypto"
@@ -174,6 +175,13 @@ func main() {
 		ProjectEnvForWorkflow: func(workflowID string) map[string]string {
 			return services.ProjectEnvMap(projectSvc.SandboxEnvForWorkflow(workflowID))
 		},
+		RunSandboxEnvForRun: func(runID string) []models.EnvEntry {
+			var run models.Run
+			if err := db.Select("sandbox_env").First(&run, "id = ?", runID).Error; err != nil {
+				return nil
+			}
+			return run.SandboxEnv
+		},
 	})
 	eng := engine.New(db, provider, host, artifactSvc, cfg.Engine.MaxConcurrentRuns)
 	eng.SetBlobStore(blobStore)
@@ -311,6 +319,7 @@ func main() {
 	wfSvc.SetSkills(skillSvc)
 	pmMCP := pmmcp.NewHost(pmSvc, pmProgress, wfSvc, runSvc, artifactSvc, eng)
 	pmMCP.SetOrgAndSkill(orgSvc, skillSvc)
+	pmMCP.SetRequirementDrafts(requirementDraftSvc)
 	memoryMCP := memorymcp.NewHost(pmSvc)
 	contextMCP := contextmcp.NewHost(pmSvc)
 	schedulerMCP := schedulermcp.NewHost(db, pmSvc)
@@ -364,10 +373,12 @@ func main() {
 	channelSvc := services.NewChannelConfigService(db)
 	channelSvc.SetSkillService(skillSvc)
 	channelMgr := channels.NewManager(channelBridge, map[string]channels.AdapterFactory{
-		models.ChannelTypeQQ: qq.New,
+		models.ChannelTypeQQ:    qq.New,
+		models.ChannelTypeWeCom: wecom.New,
 	}, crypto.Decrypt)
 	channelMgr.SetLoader(channelSvc.ListRaw)
 	channelSvc.SetOnChange(channelMgr.Reload)
+	channelSvc.SetOnlineLookup(channelMgr.IsOnline)
 	channelMgr.ApplyOnBoot()
 	cronSched.SetChannelDeliverer(channelMgr)
 	runNotifySvc.SetDeliverer(channelMgr)
@@ -400,6 +411,7 @@ func main() {
 		Auth:              authSvc,
 		PlatformRules:     platformRuleSvc,
 		Channels:          channelSvc,
+		RunNotify:         runNotifySvc,
 		Browser:           browserSvc,
 		Audit:             auditSvc,
 		GateShare:         gateShareSvc,

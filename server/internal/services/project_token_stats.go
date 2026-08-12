@@ -301,7 +301,11 @@ func (s *ProjectService) TokenStats(ctx context.Context, projectID string, q Tok
 	}
 
 	out.Workflows = buildConsumptionRank(wfTotals, wfNames, pmTotal, hasPM)
-	out.ModelComposition, out.ModelRanking = buildModelStats(modelTotals)
+	unknownAlias := ""
+	if proj, ok := s.Get(projectID); ok {
+		unknownAlias = proj.UnknownModelDisplayName
+	}
+	out.ModelComposition, out.ModelRanking = buildModelStats(modelTotals, unknownAlias)
 	return out, nil
 }
 
@@ -443,7 +447,10 @@ type tokenModelAgg struct {
 // Top10 + other ranking. 「未知/未分桶」is a normal bucket: it competes by
 // total, appears in ranking only when it ranks in Top10, and is otherwise
 // folded into other. other.Unknown is always false.
-func buildModelStats(totals map[string]*tokenModelAgg) (composition []TokenStatsModel, ranking []TokenStatsModel) {
+// unknownAlias (project UnknownModelDisplayName) only replaces Name for the
+// unknown row; ModelKey stays TokenUsageModelUnknown and Unknown stays true.
+func buildModelStats(totals map[string]*tokenModelAgg, unknownAlias string) (composition []TokenStatsModel, ranking []TokenStatsModel) {
+	unknownName := ResolveUnknownModelDisplayName(unknownAlias)
 	type item struct {
 		key    string
 		total  int64
@@ -473,9 +480,13 @@ func buildModelStats(totals map[string]*tokenModelAgg) (composition []TokenStats
 
 	composition = make([]TokenStatsModel, 0, len(list))
 	for _, it := range list {
+		name := it.key
+		if it.unk {
+			name = unknownName
+		}
 		composition = append(composition, TokenStatsModel{
 			ModelKey: it.key,
-			Name:     it.key,
+			Name:     name,
 			Total:    it.total,
 			Unknown:  it.unk,
 			Filled:   it.filled,
@@ -488,9 +499,13 @@ func buildModelStats(totals map[string]*tokenModelAgg) (composition []TokenStats
 	var other int64
 	for i, it := range list {
 		if i < topN {
+			name := it.key
+			if it.unk {
+				name = unknownName
+			}
 			ranking = append(ranking, TokenStatsModel{
 				ModelKey: it.key,
-				Name:     it.key,
+				Name:     name,
 				Total:    it.total,
 				Unknown:  it.unk,
 				Filled:   it.filled,

@@ -91,6 +91,23 @@ const TERMINAL_DUR: ReadonlySet<string> = new Set([
   'skipped',
   'cancelled',
 ])
+const UNIX_EPOCH_MS = Date.parse('1970-01-01T00:00:00Z')
+
+/**
+ * Demo-aligned sentinel for a missing run start.
+ * Treats empty values, unparseable strings, pre-Unix timestamps, and Go
+ * zero-time (0001-01-01 / UTC year ≤ 1) as unset — never a real origin.
+ */
+export function isInvalidStart(startedAt?: string | null): boolean {
+  if (startedAt == null) return true
+  const raw = String(startedAt).trim()
+  if (!raw) return true
+  const ms = Date.parse(raw)
+  if (Number.isNaN(ms)) return true
+  if (ms < UNIX_EPOCH_MS) return true
+  if (new Date(ms).getUTCFullYear() <= 1) return true
+  return false
+}
 
 /** Share = duration / max(denominator, 1); null when denominator ≤ 0. */
 export function sharePct(durationSec: number, denominatorSec: number): number | null {
@@ -121,20 +138,21 @@ export function resolveProcessDuration(
   return ex.durationSec != null ? Math.max(0, Math.floor(ex.durationSec)) : 0
 }
 
-/** Wall-clock for a run: live elapsed from startedAt, else durationSec. */
+/**
+ * Wall-clock for a run: live elapsed from a valid startedAt, else durationSec.
+ * Invalid / Go-zero starts never use now-start (queued and active alike → 0).
+ */
 export function resolveRunWallSec(
   run: Pick<Run, 'status' | 'startedAt' | 'durationSec'>,
   nowMs: number,
 ): number {
-  const start = Date.parse(run.startedAt)
-  if (ACTIVE_NODE.has(run.status) || run.status === 'queued') {
-    if (!isNaN(start)) return Math.max(0, Math.floor((nowMs - start) / 1000))
+  const live = ACTIVE_NODE.has(run.status) || run.status === 'queued'
+  if (live) {
+    if (isInvalidStart(run.startedAt)) return 0
+    const start = Date.parse(run.startedAt)
+    return Math.max(0, Math.floor((nowMs - start) / 1000))
   }
   if (run.durationSec > 0) return Math.floor(run.durationSec)
-  if (!isNaN(start)) {
-    // Fallback already handled by callers via elapsedSec; keep 0 here.
-    return 0
-  }
   return 0
 }
 

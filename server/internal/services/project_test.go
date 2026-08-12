@@ -32,7 +32,7 @@ func TestProjectCRUDAndDeleteConstraint(t *testing.T) {
 
 	name := "Alpha2"
 	desc := "d2"
-	p, err = s.Update(p.ID, &name, &desc, nil, nil, nil)
+	p, err = s.Update(p.ID, &name, &desc, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestProjectSecretMergeAndMask(t *testing.T) {
 		{Name: "api_key", Type: "string", Value: "", Secret: true},
 		{Name: "region", Type: "string", Value: "us", Secret: true}, // become secret with new value
 	}
-	p, err = s.Update(p.ID, nil, nil, &env, &vars, nil)
+	p, err = s.Update(p.ID, nil, nil, &env, &vars, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestProjectSecretMergeAndMask(t *testing.T) {
 
 	// Explicit new secret value.
 	env2 := []models.EnvEntry{{Key: "TOKEN", Value: "rotated", Secret: true}}
-	p, err = s.Update(p.ID, nil, nil, &env2, nil, nil)
+	p, err = s.Update(p.ID, nil, nil, &env2, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestProjectSecretTogglePreservesPlaintext(t *testing.T) {
 	// secret → non-secret with masked value must keep plaintext (not store ****).
 	env := []models.EnvEntry{{Key: "TOKEN", Value: SecretMask, Secret: false}}
 	vars := []models.ProjectVariable{{Name: "api_key", Type: "string", Value: SecretMask, Secret: false}}
-	p, err = s.Update(p.ID, nil, nil, &env, &vars, nil)
+	p, err = s.Update(p.ID, nil, nil, &env, &vars, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestProjectSecretTogglePreservesPlaintext(t *testing.T) {
 	// non-secret → secret with mask/empty keeps plaintext and flips flag.
 	env2 := []models.EnvEntry{{Key: "TOKEN", Value: "", Secret: true}}
 	vars2 := []models.ProjectVariable{{Name: "api_key", Type: "string", Value: SecretMask, Secret: true}}
-	p, err = s.Update(p.ID, nil, nil, &env2, &vars2, nil)
+	p, err = s.Update(p.ID, nil, nil, &env2, &vars2, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestProjectAcceptsPlatformAuthEnvKeyForcedSecret(t *testing.T) {
 		{Key: "CURSOR_API_KEY", Value: SecretMask, Secret: false},
 		{Key: "ANTHROPIC_API_KEY", Value: "anthropic-secret", Secret: false},
 	}
-	p, err = s.Update(p.ID, nil, nil, &env, nil, nil)
+	p, err = s.Update(p.ID, nil, nil, &env, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("update auth key: %v", err)
 	}
@@ -261,7 +261,7 @@ func TestProjectRejectsMaskOnRenamedKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	env := []models.EnvEntry{{Key: "TOKEN2", Value: SecretMask, Secret: true}}
-	if _, err := s.Update(p.ID, nil, nil, &env, nil, nil); !errors.Is(err, ErrSecretPlaceholderOnNewKey) {
+	if _, err := s.Update(p.ID, nil, nil, &env, nil, nil, nil); !errors.Is(err, ErrSecretPlaceholderOnNewKey) {
 		t.Fatalf("rename with mask: %v", err)
 	}
 }
@@ -601,7 +601,7 @@ func TestProjectEnvEnabledRoundTrip(t *testing.T) {
 		{Key: "B", Value: SecretMask, Secret: true, Enabled: boolPtr(false)},
 		{Key: "C", Value: "3", Secret: false, Enabled: boolPtr(true)},
 	}
-	p, err = s.Update(p.ID, nil, nil, &env, nil, nil)
+	p, err = s.Update(p.ID, nil, nil, &env, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -621,5 +621,74 @@ func TestProjectEnvEnabledRoundTrip(t *testing.T) {
 	m = ProjectEnvMap(p.SandboxEnv)
 	if len(m) != 1 || m["C"] != "3" {
 		t.Fatalf("inject after disable A = %+v", m)
+	}
+}
+
+func TestNormalizeUnknownModelDisplayName(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		in      string
+		want    string
+		wantErr bool
+	}{
+		{"", "", false},
+		{"  ", "", false},
+		{models.TokenUsageModelUnknown, "", false},
+		{" gpt-5 ", "gpt-5", false},
+		{strings.Repeat("a", 65), "", true},
+		{strings.Repeat("中", 64), strings.Repeat("中", 64), false},
+		{strings.Repeat("中", 65), "", true},
+	}
+	for _, tc := range cases {
+		got, err := NormalizeUnknownModelDisplayName(tc.in)
+		if tc.wantErr {
+			if !errors.Is(err, ErrUnknownModelDisplayNameTooLong) {
+				t.Fatalf("in=%q err=%v", tc.in, err)
+			}
+			continue
+		}
+		if err != nil || got != tc.want {
+			t.Fatalf("in=%q got=%q err=%v want=%q", tc.in, got, err, tc.want)
+		}
+	}
+}
+
+func TestProjectUpdateUnknownModelDisplayName(t *testing.T) {
+	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "proj_unk.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewProjectService(db)
+	p, err := s.Create("UnkAlias", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alias := "gpt-5"
+	p, err = s.Update(p.ID, nil, nil, nil, nil, nil, &alias)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.UnknownModelDisplayName != "gpt-5" {
+		t.Fatalf("alias=%q", p.UnknownModelDisplayName)
+	}
+	sameAsDefault := models.TokenUsageModelUnknown
+	p, err = s.Update(p.ID, nil, nil, nil, nil, nil, &sameAsDefault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.UnknownModelDisplayName != "" {
+		t.Fatalf("default name should clear, got %q", p.UnknownModelDisplayName)
+	}
+	tooLong := strings.Repeat("x", 65)
+	if _, err := s.Update(p.ID, nil, nil, nil, nil, nil, &tooLong); !errors.Is(err, ErrUnknownModelDisplayNameTooLong) {
+		t.Fatalf("want too-long err, got %v", err)
+	}
+	blank := "   "
+	p, err = s.Update(p.ID, nil, nil, nil, nil, nil, &blank)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.UnknownModelDisplayName != "" {
+		t.Fatalf("blank should clear, got %q", p.UnknownModelDisplayName)
 	}
 }

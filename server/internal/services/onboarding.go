@@ -217,7 +217,7 @@ func (s *OnboardingService) writeProjectAuth(projectID, backend, apiKey, region 
 	for _, k := range order {
 		out = append(out, byKey[k])
 	}
-	_, err := s.Projects.Update(projectID, nil, nil, &out, nil, nil)
+	_, err := s.Projects.Update(projectID, nil, nil, &out, nil, nil, nil)
 	return err
 }
 

@@ -48,16 +48,24 @@ describe('ProjectAuditPanel fill layout + sticky header + tokens (g1.2–g4.2 / 
     expect(cards).toMatch(/min-height:\s*0/)
     expect(cards).toMatch(/overflow:\s*auto/)
 
-    expect(cssBlock(panelSrc, '.panel-hd')).toMatch(/flex-shrink:\s*0/)
     expect(cssBlock(panelSrc, '.filters')).toMatch(/flex-shrink:\s*0/)
     expect(cssBlock(panelSrc, '.chips')).toMatch(/flex-shrink:\s*0/)
-    expect(cssBlock(panelSrc, '.meta')).toMatch(/flex-shrink:\s*0/)
+    expect(cssBlock(panelSrc, '.groups-wrap')).toMatch(/flex:\s*1/)
+    expect(cssBlock(panelSrc, '.groups-wrap')).toMatch(/min-height:\s*0/)
+    expect(cssBlock(panelSrc, '.groups-wrap')).toMatch(/overflow:\s*auto/)
 
     expect(panelSrc).toMatch(/<Pagination[\s\S]*?class="shrink-0"/)
     expect(panelSrc).toMatch(/v-if="mode === 'all' && !noRuns"/)
     expect(panelSrc).toMatch(/AUDIT_PAGE_SIZE_OPTIONS = \[5, 10, 20\]/)
     expect(panelSrc).toMatch(/data-layout="groups"/)
+    expect(panelSrc).toMatch(/class="toolbar-end"/)
+    expect(panelSrc).toMatch(/class="toolbar-stats"/)
     expect(panelSrc).toMatch(/project-audit-run-count/)
+    expect(panelSrc).not.toMatch(/<h4>/)
+    expect(panelSrc).not.toMatch(/class="meta/)
+    expect(panelSrc).not.toMatch(/class="run-count/)
+    expect(panelSrc).not.toMatch(/class="panel-hd/)
+    expect(panelSrc).not.toMatch(/class="filters-actions"/)
   })
 
   it('desktop thead sticks with elevated bg and txt2 (not Demo txt3 / #fafafa)', () => {
@@ -72,9 +80,12 @@ describe('ProjectAuditPanel fill layout + sticky header + tokens (g1.2–g4.2 / 
     expect(cssBlock(panelSrc, 'table')).toMatch(/border-spacing:\s*0/)
   })
 
-  it('title / stats / filter trigger use global --c-* tokens', () => {
-    expect(cssBlock(panelSrc, '.panel-hd h4')).toMatch(/color:\s*rgb\(var\(--c-txt\)\)/)
-    expect(cssBlock(panelSrc, '.meta')).toMatch(/color:\s*rgb\(var\(--c-txt2\)\)/)
+  it('toolbar / stats / filter trigger use global --c-* tokens', () => {
+    expect(cssBlock(panelSrc, '.filters')).toMatch(/border-bottom:\s*1px solid rgb\(var\(--c-line\)\)/)
+    expect(cssBlock(panelSrc, '.search')).toMatch(/background:\s*rgb\(var\(--c-surface\)\)/)
+    expect(cssBlock(panelSrc, '.search')).toMatch(/border:\s*1px solid rgb\(var\(--c-line\)\)/)
+    expect(cssBlock(panelSrc, '.btn')).toMatch(/background:\s*rgb\(var\(--c-surface\)\)/)
+    expect(cssBlock(panelSrc, '.chip')).toMatch(/background:\s*rgb\(var\(--c-elevated\)\)/)
     expect(cssBlock(panelSrc, '.audit-panel')).toMatch(/background:\s*rgb\(var\(--c-surface\)\)/)
     expect(cssBlock(panelSrc, '.audit-panel')).toMatch(/border:\s*1px solid rgb\(var\(--c-line\)\)/)
     expect(cssBlock(panelSrc, '.seg')).toMatch(/background:\s*rgb\(var\(--c-elevated\)\)/)
@@ -92,6 +103,9 @@ describe('ProjectAuditPanel fill layout + sticky header + tokens (g1.2–g4.2 / 
     expect(filterSrc).not.toMatch(/var\(--card/)
     expect(filterSrc).not.toMatch(/var\(--line/)
     expect(filterSrc).not.toMatch(/var\(--accent/)
+    expect(filterSrc).not.toMatch(/background:\s*#fff/)
+    expect(filterSrc).not.toMatch(/#e4e4e7/)
+    expect(filterSrc).not.toMatch(/#fafafa/)
   })
 
   it('loading / noRuns / empty / denied occupy remaining slot and center', () => {

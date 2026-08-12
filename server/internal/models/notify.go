@@ -95,5 +95,7 @@ type NotifyDeliveryReceipt struct {
 	NodeID    string    `gorm:"size:128;uniqueIndex:idx_notify_receipt" json:"nodeId"`
 	Iteration int       `gorm:"uniqueIndex:idx_notify_receipt" json:"iteration"`
 	Kind      string    `gorm:"size:32;uniqueIndex:idx_notify_receipt" json:"kind"`
+	Status    string    `gorm:"size:16" json:"status,omitempty"` // ok | failed | skipped
+	Error     string    `json:"error,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }

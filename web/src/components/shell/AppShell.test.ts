@@ -21,6 +21,24 @@ vi.mock('@/lib/composables/useShutdownState', () => ({
   stopShutdownPolling: vi.fn(),
 }))
 
+vi.mock('@/lib/run/useWorkflowRunLaunch', async () => {
+  const { ref } = await import('vue')
+  return {
+    useWorkflowRunLaunch: () => ({
+      open: ref(false),
+      target: ref(null),
+      runFields: ref([]),
+      runInputs: ref({}),
+      runImages: ref({}),
+      draftRestored: ref(false),
+      openLaunch: vi.fn(),
+      closeLaunch: vi.fn(),
+      saveRunDraftClick: vi.fn(),
+      onStarted: vi.fn(),
+    }),
+  }
+})
+
 import AppShell from './AppShell.vue'
 
 describe('AppShell', () => {
@@ -40,6 +58,7 @@ describe('AppShell', () => {
           AppSidebarNav: true,
           BrandLogo: true,
           Icon: true,
+          RunLaunchModal: true,
         },
       },
     })

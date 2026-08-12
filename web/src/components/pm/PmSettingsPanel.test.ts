@@ -52,7 +52,7 @@ const BINDING: PmLeaderBinding = {
   enabled: true,
   agentAvailable: true,
   agentConfigRef: 'agent-1',
-  enabledMcps: ['pm-progress', 'pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs'],
+  enabledMcps: ['pm-progress', 'pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs', 'pm-prd-manager'],
   aclNote: 'note',
 }
 
@@ -82,7 +82,7 @@ async function mountPanel(
           projectId: 'proj-1',
           agentName: 'agent-1',
           isPrimary: true,
-          enabledMcps: ['pm-progress', 'pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs'],
+          enabledMcps: ['pm-progress', 'pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs', 'pm-prd-manager'],
           appId: String((channelFixture.channel as any).appId || 'app'),
           appSecretSet: !!(channelFixture.channel as any).appSecretSet,
           turnTimeoutSeconds: Number((channelFixture.channel as any).turnTimeoutSeconds || 0),
@@ -144,7 +144,7 @@ async function setSwitch(
 }
 
 function mcpSwitches(w: Awaited<ReturnType<typeof mountPanel>>) {
-  return ['pm-progress', 'pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs'].map((id) =>
+  return ['pm-progress', 'pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs', 'pm-prd-manager'].map((id) =>
     w.get(`[aria-label="${id}"]`),
   )
 }
@@ -161,15 +161,16 @@ describe('PmSettingsPanel enabledMcps', () => {
       enabledMcps: ['pm-progress'],
     })
     const mcpCodes = w.findAll('code').map((c) => c.text())
-    expect(mcpCodes).toEqual(['pm-progress', 'pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs'])
+    expect(mcpCodes).toEqual(['pm-progress', 'pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs', 'pm-prd-manager'])
 
     // PM MCP toggles are AppSwitch (role=switch); channel section has more switches after them.
     const boxes = mcpSwitches(w)
-    expect(boxes).toHaveLength(4)
+    expect(boxes).toHaveLength(5)
     expect(boxes[0].attributes('aria-checked')).toBe('true')
     expect(boxes[1].attributes('aria-checked')).toBe('false')
     expect(boxes[2].attributes('aria-checked')).toBe('false')
     expect(boxes[3].attributes('aria-checked')).toBe('false')
+    expect(boxes[4].attributes('aria-checked')).toBe('false')
 
     await boxes[1].trigger('click')
     const saveBtn = w.find('[data-testid="pm-leader-save"]')
@@ -189,6 +190,7 @@ describe('PmSettingsPanel enabledMcps', () => {
     expect(boxes[1].attributes('aria-checked')).toBe('true')
     expect(boxes[2].attributes('aria-checked')).toBe('true')
     expect(boxes[3].attributes('aria-checked')).toBe('true')
+    expect(boxes[4].attributes('aria-checked')).toBe('true')
   })
 
   it('can toggle off a PM mcp and persist only the remaining ids', async () => {
@@ -198,6 +200,7 @@ describe('PmSettingsPanel enabledMcps', () => {
     expect(boxes[1].attributes('aria-checked')).toBe('true')
     expect(boxes[2].attributes('aria-checked')).toBe('true')
     expect(boxes[3].attributes('aria-checked')).toBe('true')
+    expect(boxes[4].attributes('aria-checked')).toBe('true')
 
     await boxes[0].trigger('click') // uncheck pm-progress
     const saveBtn = w.find('[data-testid="pm-leader-save"]')
@@ -205,7 +208,7 @@ describe('PmSettingsPanel enabledMcps', () => {
     await flushPromises()
 
     const body = apiMocks.updatePmLeader.mock.calls[0][1] as { enabledMcps: string[] }
-    expect(body.enabledMcps).toEqual(['pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs'])
+    expect(body.enabledMcps).toEqual(['pm-workflow-read', 'pm-workflow-write', 'pm-agent-fs', 'pm-prd-manager'])
   })
 
   it('preserves explicit empty enabledMcps from the API', async () => {
@@ -218,6 +221,7 @@ describe('PmSettingsPanel enabledMcps', () => {
     expect(boxes[1].attributes('aria-checked')).toBe('false')
     expect(boxes[2].attributes('aria-checked')).toBe('false')
     expect(boxes[3].attributes('aria-checked')).toBe('false')
+    expect(boxes[4].attributes('aria-checked')).toBe('false')
 
     const saveBtn = w.find('[data-testid="pm-leader-save"]')
     await saveBtn!.trigger('click')

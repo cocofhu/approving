@@ -46,6 +46,11 @@ let lastDeleteBody: Record<string, unknown> | null = null
 
 async function mockApis(page: Page) {
   await page.route('**/api/**', async (route) => {
+    // Skip Vite module URLs like /@fs/.../src/lib/api/api.ts (pathname is not /api/...)
+    if (!new URL(route.request().url()).pathname.startsWith('/api/')) {
+      await route.continue()
+      return
+    }
     const url = new URL(route.request().url())
     const method = route.request().method()
     const p = url.pathname
