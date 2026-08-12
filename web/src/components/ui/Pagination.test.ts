@@ -26,6 +26,7 @@ function mountPager(
     loading: boolean
     disabled: boolean
     pageSizeOptions: number[]
+    summaryOverride: string
     summaryTestId: string
     pageSizeTestId: string
   }> = {},
@@ -164,6 +165,45 @@ describe('Pagination', () => {
     expect(wrapper.findAll('button.pg-btn').length).toBe(2)
     expect(wrapper.classes()).toContain('is-mobile')
     wrapper.unmount()
+  })
+
+  it('keeps default rangeSummary when summaryOverride is omitted (g4.2)', () => {
+    const wrapper = mountPager({ page: 2, pageSize: 10, total: 50 })
+    expect(wrapper.text()).toContain('11–20 / 50')
+    expect(wrapper.text()).not.toContain('共 50 条 · 每页 10')
+    wrapper.unmount()
+  })
+
+  it('uses summaryOverride when provided and still supports summary slot (g2.2 / g4.2)', async () => {
+    const overridden = mountPager({
+      page: 1,
+      pageSize: 20,
+      total: 21,
+      summaryOverride: '共 21 条 · 每页 20',
+      summaryTestId: 'notifications-pager-summary',
+    })
+    expect(overridden.find('[data-testid="notifications-pager-summary"]').text()).toBe(
+      '共 21 条 · 每页 20',
+    )
+    expect(overridden.text()).not.toContain('1–20 / 21')
+    overridden.unmount()
+
+    const slotted = mount(Pagination, {
+      props: { page: 1, pageSize: 20, total: 21 },
+      slots: { summary: 'slot-summary' },
+      global: {
+        plugins: [
+          createI18n({
+            legacy: false,
+            locale: 'zh-CN',
+            messages: { 'zh-CN': { ...commonZh } },
+          }),
+        ],
+      },
+    })
+    expect(slotted.text()).toContain('slot-summary')
+    expect(slotted.text()).not.toContain('1–20 / 21')
+    slotted.unmount()
   })
 
   it('forwards summary test id', () => {

@@ -1097,6 +1097,8 @@
       "loading": "正在加载通知…",
       "filterEmpty": "没有符合筛选的通知",
       "filterEmptyHint": "试试切换全部 / 未读 / 已读",
+      "pageRange": "第 {page} 页 · {from}–{to} / {total}",
+      "pagerSummary": "共 {total} 条 · 每页 {pageSize}",
       "filter": {
         "all": "全部",
         "unread": "未读",
