@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import LangSelect from '../ui/LangSelect.vue'
+import StatusMetrics from './StatusMetrics.vue'
 import { theme, toggleTheme } from '@/lib/shared/theme'
 import { isDraining } from '@/lib/composables/useShutdownState'
 import { requestNotificationsPageReset } from '@/lib/composables/useNotificationsPageEntry'
@@ -148,6 +149,7 @@ defineExpose({
       <Icon name="menu" :size="20" />
     </button>
     <div class="flex-1" />
+    <StatusMetrics />
     <span
       v-if="isDraining()"
       class="inline-flex items-center gap-1.5 rounded-md border border-warn/45 bg-warn/10 px-2.5 py-1 text-xs font-medium text-warn"

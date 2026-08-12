@@ -53,6 +53,7 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.GET("/live", h.Live)
 		api.GET("/node-registry", h.NodeRegistry)
 		api.GET("/stats/dashboard", h.DashboardStats)
+		api.GET("/stats/platform-status", h.PlatformStatus)
 
 		api.GET("/settings", h.GetSettings)
 		api.PUT("/settings", h.UpdateSettings)

@@ -32,6 +32,15 @@ vi.mock('@/lib/api/api', () => ({
     getRun: vi.fn(),
     artifactContent: vi.fn(),
     artifactDownloadUrl: vi.fn((id: string) => `http://test/api/artifacts/${id}/download`),
+    platformStatus: vi.fn().mockResolvedValue({
+      cumulativeTokens: null,
+      current5mBucketTokens: null,
+      todayMaxCompleted5mTokens: null,
+      runningCount: 0,
+      queuedCount: 0,
+      asOf: '2026-08-12T00:00:00Z',
+      timezone: 'UTC',
+    }),
   },
   isPaginated: (data: unknown): data is { items: unknown[]; total: number } =>
     data != null && typeof data === 'object' && !Array.isArray(data) && 'items' in data,
@@ -82,6 +91,7 @@ function mountTopbar() {
       stubs: {
         Icon: true,
         LangSelect: { template: '<div data-testid="lang" />' },
+        StatusMetrics: { template: '<div data-testid="status-metrics" />' },
         Transition: false,
       },
     },

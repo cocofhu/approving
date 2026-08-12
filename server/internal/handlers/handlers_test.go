@@ -182,6 +182,23 @@ func TestHealthAndDashboard(t *testing.T) {
 	if w := h.do("GET", "/api/stats/dashboard", nil); w.Code != 200 {
 		t.Fatalf("dashboard: %d", w.Code)
 	}
+	w := h.do("GET", "/api/stats/platform-status?utcOffsetMinutes=480", nil)
+	if w.Code != 200 {
+		t.Fatalf("platform-status: %d %s", w.Code, w.Body.String())
+	}
+	var st map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"runningCount", "queuedCount", "asOf", "timezone"} {
+		if _, ok := st[key]; !ok {
+			t.Fatalf("platform-status missing %s: %v", key, st)
+		}
+	}
+	// Token fields may be null; keys should still be present as JSON null.
+	if _, ok := st["cumulativeTokens"]; !ok {
+		t.Fatalf("missing cumulativeTokens: %v", st)
+	}
 }
 
 func TestAuthEndpoints(t *testing.T) {
