@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineComponent, h, nextTick } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
@@ -1966,9 +1969,6 @@ describe('AgentStudioView loading / four-state', () => {
 
 describe('AgentStudioView entry assembly (g3 / Demo main path)', () => {
   it('assembles Demo tabs via independent panels and keeps route/tab wiring', () => {
-    const { readFileSync } = require('node:fs') as typeof import('node:fs')
-    const { dirname, join } = require('node:path') as typeof import('node:path')
-    const { fileURLToPath } = require('node:url') as typeof import('node:url')
     const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'AgentStudioView.vue'), 'utf8')
     for (const panel of [
       'AgentOrgSidebar',
