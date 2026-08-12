@@ -39,6 +39,8 @@ const props = defineProps<{
   projectId: string
   binding: PmLeaderBinding | null
   restoreMobileChat?: boolean
+  /** Project-level alias for the unknown token bucket. */
+  unknownModelDisplayName?: string | null
 }>()
 const emit = defineEmits<{ openSettings: []; restoredMobileChat: [] }>()
 
@@ -1482,6 +1484,7 @@ onBeforeUnmount(() => {
                     v-if="m.usage != null"
                     :usage="m.usage"
                     :usage-by-model="m.usageByModel"
+                    :unknown-model-display-name="unknownModelDisplayName"
                   />
                   <button
                     v-if="m.content?.trim()"

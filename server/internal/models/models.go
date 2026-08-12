@@ -71,8 +71,12 @@ type Project struct {
 	// NotifyPolicy is the project-level Run→IM notification default
 	// (enabled kill-switch + defaultEvents). See ProjectNotifyPolicy.
 	NotifyPolicy ProjectNotifyPolicy `gorm:"serializer:json" json:"notifyPolicy"`
-	CreatedAt    time.Time           `json:"createdAt"`
-	UpdatedAt    time.Time           `json:"updatedAt"`
+	// UnknownModelDisplayName is an optional project-level display alias for the
+	// 「未知/未分桶」token bucket. Empty means use the default label. Does not
+	// change persisted UsageByModel keys or merge with real model buckets.
+	UnknownModelDisplayName string `json:"unknownModelDisplayName,omitempty"`
+	CreatedAt               time.Time `json:"createdAt"`
+	UpdatedAt               time.Time `json:"updatedAt"`
 }
 
 // WorkflowDef is the editable workflow (draft or published head).

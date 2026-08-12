@@ -49,8 +49,10 @@ const props = withDefaults(
     nowMs: number
     /** Controlled by RunDetailView top tab bar when provided. */
     statsTab?: StatsTab
+    /** Project-level alias for the unknown token bucket. */
+    unknownModelDisplayName?: string | null
   }>(),
-  { statsTab: undefined },
+  { statsTab: undefined, unknownModelDisplayName: null },
 )
 
 const emit = defineEmits<{ (e: 'update:statsTab', tab: StatsTab): void }>()
@@ -909,6 +911,7 @@ html.light .stats-panel {
           v-if="statsTab === 'single' && singleSummary.totalTokens != null"
           class="mb-3.5"
           :parts="modelUsageParts"
+          :unknown-model-display-name="unknownModelDisplayName"
         />
 
         <div

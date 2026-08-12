@@ -17,7 +17,7 @@ import { createListRequestSeq, httpStatusOf } from '@/lib/shared/listRequestSeq'
 import { writeStoredProjectId } from '@/lib/composables/useProjectContext'
 import { useToast } from '@/lib/composables/useToast'
 import { fmtTime } from '@/lib/shared/format'
-import { fmtCompactTokenCount } from '@/lib/run/tokenUsage'
+import { fmtCompactTokenCount, normalizeUnknownModelDisplayNameInput } from '@/lib/run/tokenUsage'
 import { clearRunDraft, mergeRunDraft, saveRunDraft } from '@/lib/run/runDraft'
 import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import { useWorkflowImport } from '@/lib/run/useWorkflowImport'
@@ -203,6 +203,8 @@ const savingEnv = ref(false)
 const savingVars = ref(false)
 const editName = ref('')
 const editDesc = ref('')
+const editUnknownModelDisplayName = ref('')
+const unknownModelDisplayNameError = ref('')
 const envRows = ref<ProjectEnvEntry[]>([])
 const varRows = ref<ProjectVariable[]>([])
 const showDelete = ref(false)
@@ -404,6 +406,8 @@ async function load() {
     writeStoredProjectId(p.id)
     editName.value = p.name
     editDesc.value = p.description || ''
+    editUnknownModelDisplayName.value = p.unknownModelDisplayName || ''
+    unknownModelDisplayNameError.value = ''
     envRows.value = (p.sandboxEnv || []).map((e) => ({ ...e }))
     // Spread-copy preserves server-side ask/required/editable (and options/desc).
     varRows.value = (p.variables || []).map((v) => ({ ...v }))
@@ -465,18 +469,32 @@ async function reloadWorkflows() {
 
 async function saveMeta() {
   if (!project.value) return
+  unknownModelDisplayNameError.value = ''
+  const normalized = normalizeUnknownModelDisplayNameInput(editUnknownModelDisplayName.value)
+  if (normalized.error) {
+    unknownModelDisplayNameError.value = t('pages.projectDetail.unknownModelDisplayNameTooLong')
+    return
+  }
   savingMeta.value = true
   try {
     project.value = await api.updateProject(project.value.id, {
       name: editName.value.trim(),
       description: editDesc.value,
+      unknownModelDisplayName: normalized.value,
     })
+    editUnknownModelDisplayName.value = project.value.unknownModelDisplayName || ''
     toast.success(t('pages.projectDetail.saved'))
   } catch (e: any) {
     toast.error(String(e?.message || e))
   } finally {
     savingMeta.value = false
   }
+}
+
+function clearUnknownModelDisplayName() {
+  editUnknownModelDisplayName.value = ''
+  unknownModelDisplayNameError.value = ''
+  void saveMeta()
 }
 
 async function saveEnv() {
@@ -1006,6 +1024,7 @@ onUnmounted(() => {
           :project-id="projectId"
           :binding="pmBinding"
           :restore-mobile-chat="pmRestoreMobileChat"
+          :unknown-model-display-name="project?.unknownModelDisplayName"
           @open-settings="openPmSettings"
           @restored-mobile-chat="pmRestoreMobileChat = false"
         />
@@ -1758,6 +1777,31 @@ onUnmounted(() => {
                 :placeholder="t('pages.projectDetail.metaDescPlaceholder')"
               />
             </div>
+            <div>
+              <label class="label" for="project-meta-unknown-display">
+                {{ t('pages.projectDetail.unknownModelDisplayNameLabel') }}
+              </label>
+              <input
+                id="project-meta-unknown-display"
+                v-model="editUnknownModelDisplayName"
+                class="input"
+                maxlength="80"
+                autocomplete="off"
+                data-testid="project-meta-unknown-display"
+                :placeholder="t('pages.projectDetail.unknownModelDisplayNamePlaceholder')"
+                @input="unknownModelDisplayNameError = ''"
+              />
+              <p class="m-0 mt-1.5 text-[11px] leading-snug text-txt3">
+                {{ t('pages.projectDetail.unknownModelDisplayNameHelp') }}
+              </p>
+              <p
+                v-if="unknownModelDisplayNameError"
+                class="m-0 mt-1.5 text-xs text-err"
+                data-testid="project-meta-unknown-display-error"
+              >
+                {{ unknownModelDisplayNameError }}
+              </p>
+            </div>
           </div>
 
           <div
@@ -1773,9 +1817,20 @@ onUnmounted(() => {
             >
               {{ t('common.buttons.delete') }}
             </AppButton>
-            <AppButton variant="primary" :disabled="savingMeta" @click="saveMeta">
-              {{ savingMeta ? t('common.buttons.saving') : t('common.buttons.save') }}
-            </AppButton>
+            <div class="flex flex-wrap items-center gap-2">
+              <AppButton
+                variant="outline"
+                size="sm"
+                data-testid="project-meta-unknown-display-clear"
+                :disabled="savingMeta"
+                @click="clearUnknownModelDisplayName"
+              >
+                {{ t('pages.projectDetail.unknownModelDisplayNameClear') }}
+              </AppButton>
+              <AppButton variant="primary" :disabled="savingMeta" @click="saveMeta">
+                {{ savingMeta ? t('common.buttons.saving') : t('common.buttons.save') }}
+              </AppButton>
+            </div>
           </div>
         </div>
       </div>

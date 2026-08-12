@@ -11,6 +11,7 @@ import {
   fmtTokenCount,
   TOKEN_USAGE_SOURCE_BRIDGE,
   tokenUsageTotal,
+  unknownDisplayName,
 } from '@/lib/run/tokenUsage'
 import type { TokenUsage, TokenUsageByModel } from '@/lib/shared/types'
 
@@ -23,6 +24,7 @@ const props = defineProps({
   usage: { type: Object as PropType<TokenUsage | null>, default: null },
   usageByModel: { type: Object as PropType<TokenUsageByModel | null>, default: null },
   open: { type: Boolean, default: undefined },
+  unknownModelDisplayName: { type: String as PropType<string | null>, default: null },
 })
 
 const emit = defineEmits<{
@@ -67,6 +69,11 @@ function sourceLabel(source: string, filled: boolean): string {
   }
   if (source === 'unknown') return t('pages.tokenByModel.sourceUnknown')
   return t('pages.tokenByModel.sourceUpstream')
+}
+
+function modelLabel(modelKey: string, unknown: boolean): string {
+  if (!unknown) return modelKey
+  return unknownDisplayName(modelKey, props.unknownModelDisplayName)
 }
 
 defineExpose({ toggle, close, isOpen })
@@ -119,7 +126,7 @@ defineExpose({ toggle, close, isOpen })
             <strong
               class="min-w-0 truncate font-semibold"
               :class="row.unknown ? 'text-[#a1a1aa]' : row.filled ? 'text-[#6ee7b7]' : 'text-[#f9fafb]'"
-            >{{ row.modelKey }}</strong>
+            >{{ modelLabel(row.modelKey, row.unknown) }}</strong>
             <span class="shrink-0 font-mono tabular-nums text-[#c7cbd4]">{{ fmtTokenCount(row.total) }}</span>
           </div>
           <div class="mb-1 text-[10px] text-[#9ca3af]">{{ sourceLabel(row.source, row.filled) }}</div>

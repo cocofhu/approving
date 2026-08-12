@@ -97,6 +97,19 @@ function emptyWorkflow(): Workflow {
 
 const run = ref<Run>(emptyRun(runId.value))
 const wf = ref<Workflow>(emptyWorkflow())
+/** Project alias for 「未知/未分桶」display on Run token table. */
+const unknownModelDisplayName = ref('')
+
+async function loadUnknownModelDisplayName(projectId?: string | null) {
+  unknownModelDisplayName.value = ''
+  if (!projectId) return
+  try {
+    const p = await api.getProject(projectId)
+    unknownModelDisplayName.value = p.unknownModelDisplayName || ''
+  } catch {
+    // Keep default label when project cannot be loaded.
+  }
+}
 const runLoading = ref(false)
 const loadError = ref(false)
 const loadErrorKind = ref<RunLoadErrorKind | null>(null)
@@ -429,9 +442,19 @@ async function fetchRunData(): Promise<true | RunLoadErrorKind> {
         id: r.workflowId, name: r.workflowName, description: '', status: 'published',
         version: r.workflowVersion || 1, updatedAt: '', needsRepo: false, nodes: r.nodes, edges: r.edges || [],
       }
+      // Still resolve projectId for unknown-model display alias when graph is pinned.
+      if (r.workflowId) {
+        try {
+          const live = await api.getWorkflow(r.workflowId)
+          if (live.projectId) wf.value.projectId = live.projectId
+        } catch {
+          // Workflow may have been deleted; alias stays unset → default label.
+        }
+      }
     } else if (r.workflowId) {
       wf.value = await api.getWorkflow(r.workflowId)
     }
+    await loadUnknownModelDisplayName(wf.value.projectId)
     // Refresh-resume: wait for dialogue surfaces to mount, then project busy/queue.
     void projectDialogueAfterLoad(r)
     return true
@@ -2169,6 +2192,7 @@ function selectExecution(nodeId: string, idx: number) {
                 :wall-sec="elapsedSec"
                 :now-ms="nowMs"
                 :stats-tab="statsTab"
+                :unknown-model-display-name="unknownModelDisplayName"
                 @update:stats-tab="statsTab = $event"
               />
             </div>

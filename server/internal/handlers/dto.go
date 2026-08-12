@@ -76,16 +76,17 @@ func projectDTO(p models.Project, workflowCount int64, tokens services.ProjectTo
 	policy := services.NormalizeProjectNotifyPolicy(p.NotifyPolicy)
 	return gin.H{
 		"id": p.ID, "name": p.Name, "description": p.Description,
-		"sandboxEnv":      services.MaskedSandboxEnv(p.SandboxEnv),
-		"variables":       services.MaskedProjectVars(p.Variables),
-		"workflowCount":   workflowCount,
-		"totalTokens":     tokens.Total,
-		"workflowTokens":  tokens.Workflow,
-		"pmTokens":        tokens.PM,
-		"pmLeaderEnabled": p.PmLeaderEnabled,
-		"pmLeaderAgent":   p.PmLeaderAgent,
-		"notifyPolicy":    policy,
-		"createdAt":       p.CreatedAt, "updatedAt": p.UpdatedAt,
+		"sandboxEnv":                services.MaskedSandboxEnv(p.SandboxEnv),
+		"variables":                 services.MaskedProjectVars(p.Variables),
+		"workflowCount":             workflowCount,
+		"totalTokens":               tokens.Total,
+		"workflowTokens":            tokens.Workflow,
+		"pmTokens":                  tokens.PM,
+		"pmLeaderEnabled":           p.PmLeaderEnabled,
+		"pmLeaderAgent":             p.PmLeaderAgent,
+		"unknownModelDisplayName":   p.UnknownModelDisplayName,
+		"notifyPolicy":              policy,
+		"createdAt":                 p.CreatedAt, "updatedAt": p.UpdatedAt,
 	}
 }
 

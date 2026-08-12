@@ -3,6 +3,40 @@ import type { ModelTokenUsage, TokenUsage, TokenUsageByModel } from '../shared/t
 /** Display key for legacy / unbucketed usage (matches server). */
 export const TOKEN_USAGE_UNKNOWN_MODEL = '未知/未分桶'
 
+/** Max rune/char length for project unknown-model display name (matches server). */
+export const UNKNOWN_MODEL_DISPLAY_NAME_MAX_LEN = 64
+
+/**
+ * Resolve display text for the unknown token bucket.
+ * Empty / whitespace / equal to the default label → default 「未知/未分桶」.
+ */
+export function unknownDisplayName(modelKey: string, alias?: string | null): string {
+  if (modelKey !== TOKEN_USAGE_UNKNOWN_MODEL) return modelKey
+  const v = (alias ?? '').trim()
+  if (!v || v === TOKEN_USAGE_UNKNOWN_MODEL) return TOKEN_USAGE_UNKNOWN_MODEL
+  return v
+}
+
+/**
+ * Client-side normalize for save: trim; empty/default → ''; over max → error message.
+ * Returns { value, error } where error is a user-facing message when invalid.
+ */
+export function normalizeUnknownModelDisplayNameInput(
+  raw: string,
+): { value: string; error?: string } {
+  const trimmed = raw.trim()
+  if (trimmed.length > UNKNOWN_MODEL_DISPLAY_NAME_MAX_LEN) {
+    return {
+      value: raw,
+      error: `显示名最多 ${UNKNOWN_MODEL_DISPLAY_NAME_MAX_LEN} 个字符，请缩短后再保存。`,
+    }
+  }
+  if (!trimmed || trimmed === TOKEN_USAGE_UNKNOWN_MODEL) {
+    return { value: '' }
+  }
+  return { value: trimmed }
+}
+
 export const TOKEN_USAGE_SOURCE_BRIDGE = 'via ACP_BRIDGE_MODEL'
 
 /** Sum of the four usage components. */
