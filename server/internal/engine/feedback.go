@@ -117,7 +117,7 @@ func priorRoundsFor(events []models.FeedbackEvent, i int) []models.FeedbackEvent
 // The enqueue path (WS review_chat) carries no identity today, so the round is
 // recorded as unattributable rather than inventing a reviewer name.
 func (e *Engine) reviewFeedbackEvent(s *reviewSession, item *reviewQueueItem, iteration int,
-	human, agent models.ReactMessage, targets []models.FeedbackTarget, interrupted bool) models.FeedbackEvent {
+	human, agent models.ReactMessage, targets []models.FeedbackTarget, interrupted bool, agentSummary string) models.FeedbackEvent {
 	ev := models.FeedbackEvent{
 		RunID:          s.runID,
 		Kind:           models.FeedbackKindReview,
@@ -127,6 +127,7 @@ func (e *Engine) reviewFeedbackEvent(s *reviewSession, item *reviewQueueItem, it
 		Unattributable: true,
 		Action:         "revise",
 		Text:           item.Text,
+		AgentSummary:   strings.TrimSpace(agentSummary),
 		Annotations:    item.Annotations,
 		Attachments:    item.Images,
 		Turns:          []models.ReactMessage{human, agent},
@@ -147,7 +148,7 @@ func (e *Engine) reviewFeedbackEvent(s *reviewSession, item *reviewQueueItem, it
 // The questions being answered ride along in Detail so the round is readable on
 // its own instead of as a dangling reply.
 func (e *Engine) clarifyFeedbackEvent(s *reviewSession, item *reviewQueueItem, iteration int,
-	answered []models.ReactQuestion, human, agent models.ReactMessage, interrupted bool) models.FeedbackEvent {
+	answered []models.ReactQuestion, human, agent models.ReactMessage, interrupted bool, agentSummary string) models.FeedbackEvent {
 	ev := models.FeedbackEvent{
 		RunID:          s.runID,
 		Kind:           models.FeedbackKindClarify,
@@ -157,6 +158,7 @@ func (e *Engine) clarifyFeedbackEvent(s *reviewSession, item *reviewQueueItem, i
 		Unattributable: true,
 		Action:         "answer",
 		Text:           item.Text,
+		AgentSummary:   strings.TrimSpace(agentSummary),
 		Annotations:    item.Annotations,
 		Attachments:    item.Images,
 		Turns:          []models.ReactMessage{human, agent},

@@ -142,6 +142,33 @@ describe('FeedbackLedgerView', () => {
     expect(w.text()).toContain('要求补充竞品对比')
     // Attachments are references, never inlined bytes.
     expect(w.findComponent(ChatImageThumb).props('src')).toBe('/api/blobs/9f2c')
+    // Legacy / no-summary rounds must not render the Agent summary section.
+    expect(w.find('[data-testid="feedback-agent-summary"]').exists()).toBe(false)
+    expect(w.text()).not.toContain(pages.pages.product.feedback.agentSummary)
+    w.unmount()
+  })
+
+  it('places Agent summary before full text and transcript when present', () => {
+    const withSummary = {
+      ...roundDoc,
+      agentSummary: '用户希望在聊天记录前增加 Agent 对反馈的总结。',
+    }
+    const w = mountLedger('feedback.review.research-1.i2r3.json', withSummary)
+    const summary = w.get('[data-testid="feedback-agent-summary"]')
+    expect(summary.text()).toContain(pages.pages.product.feedback.agentSummary)
+    expect(summary.text()).toContain(pages.pages.product.feedback.agentSummaryTag)
+    expect(summary.text()).toContain('用户希望在聊天记录前增加 Agent 对反馈的总结。')
+    // Must not use index gist as the card summary body.
+    expect(summary.text()).not.toContain('第 3 条结论证据不足')
+    const root = summary.element.parentElement
+    expect(root).toBeTruthy()
+    const kids = Array.from(root!.children)
+    const iSummary = kids.indexOf(summary.element)
+    const iFull = kids.findIndex((el) => el.textContent?.includes(pages.pages.product.feedback.fullText))
+    const iTranscript = kids.findIndex((el) => el.textContent?.includes(pages.pages.product.feedback.transcript))
+    expect(iSummary).toBeGreaterThanOrEqual(0)
+    expect(iFull).toBeGreaterThan(iSummary)
+    expect(iTranscript).toBeGreaterThan(iFull)
     w.unmount()
   })
 
