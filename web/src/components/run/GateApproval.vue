@@ -1007,7 +1007,7 @@ const reactText = ref('')
 const reactImages = ref<ClarifyImage[]>([])
 const reactSending = ref(false)
 /** Sandbox-aligned: pending-send queue + in-flight turn (HTTP returns on enqueue). */
-const reactQueued = ref<{ text: string }[]>([])
+const reactQueued = ref<{ id?: string; text: string }[]>([])
 const reactThinking = ref(false)
 /** True between turn_begin and turn_done/error (mirrors ClarifyChat liveAgentIdx). */
 const reactInFlight = ref(false)
@@ -1041,16 +1041,45 @@ const canSubmitReact = computed(
       !!pickedElementImage.value?.data),
 )
 
+function forceReactAuthoritativeIdle() {
+  if (reactQueued.value.length) reactQueued.value = []
+  if (reactInFlight.value) {
+    reactInFlight.value = false
+    if (
+      (reactStreamText.value || reactStreamThought.value) &&
+      !reactStreamCompletedAt.value &&
+      !reactInterrupted.value
+    ) {
+      reactStreamCompletedAt.value = new Date().toISOString()
+    }
+  }
+  reactThinking.value = false
+}
+
+/**
+ * After turn_done/error: drop only ghost optimistic rows (no server id).
+ * Keep authoritative waiters so multi-turn does not briefly unlock confirm.
+ */
+function settleReactAfterTurnEnd() {
+  if (reactInFlight.value) {
+    reactInFlight.value = false
+  }
+  if (reactQueued.value.some((q) => !q.id)) {
+    reactQueued.value = reactQueued.value.filter((q) => !!q.id)
+  }
+  reactThinking.value = reactQueued.value.length > 0
+}
+
 function applyReviewFrame(frame: {
   event?: string
   nodeId?: string
-  item?: { text?: string }
+  item?: { id?: string; text?: string }
   interrupted?: boolean
   message?: string
   waiting?: number
-  items?: { text?: string }[]
+  items?: { id?: string; text?: string }[]
   busy?: boolean
-  activeItem?: { text?: string } | null
+  activeItem?: { id?: string; text?: string } | null
 }) {
   const producer = props.gate.reactUpstreamNodeId
   if (producer && frame.nodeId && frame.nodeId !== producer) return
@@ -1065,21 +1094,20 @@ function applyReviewFrame(frame: {
       reactStreamCompletedAt.value = null
       break
     case 'turn_done':
-      reactInFlight.value = false
-      reactThinking.value = reactQueued.value.length > 0
       if (frame.interrupted) {
         reactInterrupted.value = true
         reactStreamCompletedAt.value = null
       } else if (reactStreamText.value || reactStreamThought.value) {
         reactStreamCompletedAt.value = new Date().toISOString()
       }
+      // Ghosts only; keep real id waiters (review v1 / ClarifyChat settleAfterTurnEnd).
+      settleReactAfterTurnEnd()
       break
     case 'error':
-      reactInFlight.value = false
-      reactThinking.value = reactQueued.value.length > 0
       reactError.value = frame.message || reactError.value
       reactStreamCompletedAt.value = null
       if (frame.interrupted) reactInterrupted.value = true
+      settleReactAfterTurnEnd()
       break
     case 'queue_state': {
       // Platform-authoritative: remote Cancel / cross-entry must clear ghost rows.
@@ -1088,6 +1116,11 @@ function applyReviewFrame(frame: {
       const items = Array.isArray(frame.items) ? frame.items : null
       const busy = !!frame.busy
       const activeItem = frame.activeItem
+      const authoritativeIdle = waiting === 0 && !busy && !activeItem
+      if (authoritativeIdle) {
+        forceReactAuthoritativeIdle()
+        break
+      }
       if (busy && activeItem && !reactInFlight.value) {
         reactInFlight.value = true
         reactThinking.value = true
@@ -1098,7 +1131,7 @@ function applyReviewFrame(frame: {
           reactStreamThought.value = ''
         }
       }
-      // Authority idle (f3): tear down empty streaming placeholder.
+      // Authority !busy: end unfinished inFlight (keep completed footnote when content exists).
       if (!busy) {
         const emptyRails = !reactStreamText.value && !reactStreamThought.value
         if (emptyRails) {
@@ -1118,7 +1151,16 @@ function applyReviewFrame(frame: {
         break
       }
       if (items) {
-        const rebuilt = items.map((it) => ({ text: it.text ?? '' }))
+        // Preserve server id so turn_done can distinguish ghost vs real waiters.
+        const rebuilt = items.map((it) => {
+          const text = it.text ?? ''
+          const id = typeof it.id === 'string' && it.id ? it.id : undefined
+          const local = id
+            ? reactQueued.value.find((q) => q.id === id) ??
+              reactQueued.value.find((q) => !q.id && q.text === text)
+            : reactQueued.value.find((q) => q.text === text)
+          return { id: id ?? local?.id, text }
+        })
         const maxLocal = reactInFlight.value || busy ? rebuilt.length : rebuilt.length + 1
         if (reactQueued.value.length > maxLocal) {
           const optimistic = reactQueued.value

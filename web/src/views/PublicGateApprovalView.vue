@@ -111,12 +111,17 @@ const status = computed(() => preview.value?.status || (token.value ? 'invalid' 
 const isActive = computed(() => status.value === 'active')
 const remainingLabel = ref('')
 const reactAlive = computed(() => !!preview.value?.reactSessionAlive)
-const sessionBusy = computed(() => !!preview.value?.sessionBusy)
+/** ClarifyChat local session busy (thinking/queued/live); authoritative for confirm. */
+const localChatBusy = ref(false)
+function refreshLocalChatBusy() {
+  localChatBusy.value = !!chatRef.value?.isSessionBusy?.()
+}
 const canReply = computed(() => isActive.value && reactAlive.value && !!preview.value?.actions?.reply)
 const canReject = computed(() => !isReview.value && !!preview.value?.actions?.reject)
 const canConfirm = computed(() => {
   if (!isActive.value || doneKind.value) return false
-  if (sessionBusy.value || replyInFlight.value) return false
+  // f3: confirm gated on local !sessionBusy, not lagged preview.sessionBusy.
+  if (localChatBusy.value || replyInFlight.value) return false
   if (isReview.value) return !!preview.value?.actions?.confirm
   return !!preview.value?.actions?.approve || !!preview.value?.actions?.confirm
 })
@@ -300,6 +305,11 @@ async function loadPreview(opts?: { silent?: boolean; issueNonce?: boolean }) {
         loading.value = false
         clearStuckTimer()
       }
+      // Content unchanged (often already idle) must still reconcile local sticky busy.
+      if (attemptGen === previewGen) {
+        await nextTick()
+        syncChatQueueFromPreview()
+      }
       return
     }
   } catch (e) {
@@ -387,7 +397,9 @@ function syncChatQueueFromPreview() {
   const waiting = typeof p.waiting === 'number' ? p.waiting : 0
   const items = p.queueItems || []
   const activeItem = p.activeItem || null
-  const busy = !!p.sessionBusy || waiting > 0 || !!activeItem
+  // sessionBusy/waiting are authoritative; do not let a stale merged activeItem
+  // keep the chat sticky-busy after the server has gone idle.
+  const busy = !!p.sessionBusy || waiting > 0
 
   if (busy) {
     lastAppliedIdleQueue = false
@@ -400,6 +412,7 @@ function syncChatQueueFromPreview() {
       chat.discardLastQueued?.()
       pendingReplyText.value = ''
     }
+    // Re-apply when local still sticky-busy even if we already applied idle once.
     if (!(lastAppliedIdleQueue && !chat.isSessionBusy?.())) {
       lastAppliedIdleQueue = true
       chat.applyQueueState?.(0, [], false, null)
@@ -407,6 +420,7 @@ function syncChatQueueFromPreview() {
   }
   applyPreviewLiveEvents()
   flushPendingPublicAcp()
+  refreshLocalChatBusy()
 }
 
 function toAcpEvents(
@@ -456,11 +470,13 @@ function handlePublicWsMessage(raw: string) {
   if (typ === 'review') {
     chatRef.value?.applyReviewFrame?.(m)
     flushPendingPublicAcp()
+    refreshLocalChatBusy()
     return
   }
   if (typ === 'acp') {
     const events = Array.isArray(m.events) ? (m.events as AcpEvent[]) : []
     deliverPublicAcp(events)
+    refreshLocalChatBusy()
   }
 }
 
@@ -655,7 +671,7 @@ async function decideOnce(
 
 async function submitFinal(kind: 'confirm' | 'reject') {
   if (!preview.value || submitting.value || (linkInvalid.value && kind === 'confirm')) return
-  if (sessionBusy.value && kind === 'confirm') {
+  if (localChatBusy.value && kind === 'confirm') {
     errorText.value = t('pages.publicGate.busy')
     return
   }
@@ -708,6 +724,7 @@ async function submitFinal(kind: 'confirm' | 'reject') {
 
 async function onSend(text: string, images: ClarifyImage[], anns: ReactAnnotation[]) {
   errorText.value = ''
+  refreshLocalChatBusy()
   replyInFlight.value = true
   pendingReplyText.value = text.trim()
   try {
@@ -1142,7 +1159,7 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
             type="button"
             class="inline-flex min-h-9 min-w-[8rem] items-center justify-center gap-2 bg-ok px-4 text-sm font-medium text-white disabled:opacity-45"
             data-testid="public-gate-confirm"
-            :disabled="submitting || sessionBusy || replyInFlight || linkInvalid || !canConfirm"
+            :disabled="submitting || localChatBusy || replyInFlight || linkInvalid || !canConfirm"
             :aria-busy="pendingKind === 'confirm' && submitting ? 'true' : 'false'"
             :aria-label="t('pages.publicGate.confirmAria')"
             @click="submitFinal('confirm')"

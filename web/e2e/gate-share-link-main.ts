@@ -67,7 +67,10 @@ let clarifyConfirmUnfinished = false
 let clarifyLinkUsed = false
 
 ;(window as unknown as { __idleReview?: () => void }).__idleReview = () => {
+  // Authoritative idle: clear busy + pending queue so public-clarify waiting=0
+  // matches product poll (confirm gated on local !sessionBusy).
   reviewPreviewBusy = false
+  clarifyQueue = []
   reviewPreviewTurns = [
     { role: 'agent', text: '请复审 research.json', at: '2026-08-01T00:00:00Z' },
     { role: 'human', text: '请改标题', at: '2026-08-01T00:02:00Z' },

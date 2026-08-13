@@ -343,7 +343,9 @@ describe('PublicGateApprovalView workbench', () => {
     resolveReply?.({ status: 'accepted' })
     await flushPromises()
     expect(w.find('[data-testid="clarify-review-queue"]').exists()).toBe(true)
-    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
+    // f3: confirm follows local sessionBusy — optimistic queue keeps confirm gated.
+    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(false)
+    expect(w.find('[data-testid="clarify-review-cancel"]').exists()).toBe(true)
   })
 
   it('sessionBusy preview restores thinking placeholder and cancel', async () => {
@@ -1049,5 +1051,135 @@ describe('PublicGateApprovalView workbench', () => {
     expect(w.find('[data-testid="public-gate-workbench"]').exists()).toBe(true)
     expect(w.find('[data-testid="public-gate-network-error"]').exists()).toBe(false)
     expect(w.get('[data-testid="public-gate-visual"]').html()).toContain('ok')
+  })
+
+  it('plan g4.3: poll authoritative idle clears thinking/Cancel; confirm uses local !sessionBusy', async () => {
+    window.location.hash = `#t=${'ee'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-sticky',
+      reactSessionAlive: true,
+      sessionBusy: true,
+      waiting: 0,
+      activeItem: { text: '改成绿的' },
+      actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
+      turns: [{ role: 'agent', text: '请复审', at: '2026-08-01T00:00:00Z' }],
+    })
+    const w = mountView()
+    await flushPromises()
+    await flushPromises()
+    expect(w.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(true)
+    expect(w.find('[data-testid="clarify-review-cancel"]').exists()).toBe(true)
+    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(false)
+
+    // Authoritative idle poll — clear stale activeItem explicitly (sparse merge).
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-idle',
+      reactSessionAlive: true,
+      sessionBusy: false,
+      waiting: 0,
+      activeItem: null,
+      actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
+      turns: [
+        { role: 'agent', text: '请复审', at: '2026-08-01T00:00:00Z' },
+        { role: 'human', text: '改成绿的', at: '2026-08-01T00:01:00Z' },
+        { role: 'agent', text: '标题已改为绿色', at: '2026-08-01T00:02:00Z' },
+      ],
+    })
+    await (w.vm as unknown as { loadPreview: (opts?: { silent?: boolean }) => Promise<void> }).loadPreview({
+      silent: true,
+    })
+    await flushPromises()
+    await flushPromises()
+
+    expect(w.text()).not.toContain('Agent 正在思考下一轮')
+    expect(w.find('[data-testid="clarify-review-cancel"]').exists()).toBe(false)
+    expect(w.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(false)
+    const confirm = w.find('[data-testid="public-gate-confirm"]')
+    expect(confirm.exists()).toBe(true)
+    expect((confirm.element as HTMLButtonElement).disabled).toBe(false)
+
+    // Lagged preview.sessionBusy must not re-disable confirm when local already idle.
+    const preview = (w.vm as unknown as { preview: { sessionBusy?: boolean } }).preview
+    if (preview) preview.sessionBusy = true
+    await flushPromises()
+    expect((w.find('[data-testid="public-gate-confirm"]').element as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('plan g4.3: ghost queued + turn_done synthesizes idle; confirm follows local busy', async () => {
+    window.location.hash = `#t=${'ff'.repeat(32)}`
+    mocks.reply.mockResolvedValue({ status: 'accepted' })
+    const base = {
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-ws-idle',
+      reactSessionAlive: true,
+      sessionBusy: false,
+      waiting: 0,
+      activeItem: null as null,
+      actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
+      turns: [{ role: 'agent', text: '请复审', at: '2026-08-01T00:00:00Z' }],
+    }
+    mocks.preview.mockResolvedValue({ ...base })
+    const w = mountView()
+    await flushPromises()
+    await flushPromises()
+
+    const chat = w.getComponent(ClarifyChat)
+    const vm = chat.vm as unknown as {
+      applyReviewFrame: (f: Record<string, unknown>) => void
+      applyAcpEvents: (e: { kind: string; text: string }[], nodeId?: string) => void
+      isSessionBusy: () => boolean
+    }
+    await w.get('[data-testid="clarify-input"]').setValue('请改验收')
+    const send = w.find('[data-testid="clarify-send-label"]')
+    if (send.exists()) await send.trigger('click')
+    else await w.find('[data-testid="clarify-send-icon"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="clarify-review-queue"]').exists()).toBe(true)
+    expect(w.text()).toContain('Agent 正在思考下一轮')
+
+    // Optimistic no-id ghost + turn_begin with id (no text fallback).
+    vm.applyReviewFrame({
+      event: 'turn_begin',
+      nodeId: 'public-gate',
+      item: { id: 'srv-p1', text: '请改验收' },
+    })
+    vm.applyAcpEvents([{ kind: 'message', text: '验收已更新' }], 'public-gate')
+    await flushPromises()
+    vm.applyReviewFrame({ event: 'turn_done', nodeId: 'public-gate' })
+    await flushPromises()
+    expect(vm.isSessionBusy()).toBe(false)
+    expect(w.text()).not.toContain('Agent 正在思考下一轮')
+    expect(w.find('[data-testid="clarify-review-cancel"]').exists()).toBe(false)
+
+    // Persist turns so pendingReplyText clears; WS turn_done refreshes parent localChatBusy.
+    mocks.preview.mockResolvedValue({
+      ...base,
+      nonce: 'n-ws-idle-2',
+      turns: [
+        { role: 'agent', text: '请复审', at: '2026-08-01T00:00:00Z' },
+        { role: 'human', text: '请改验收', at: '2026-08-01T00:01:00Z' },
+        { role: 'agent', text: '验收已更新', at: '2026-08-01T00:02:00Z' },
+      ],
+    })
+    const sock = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]
+    sock.emit({ type: 'review', event: 'turn_done', nodeId: 'public-gate' })
+    await (w.vm as unknown as { loadPreview: (opts?: { silent?: boolean }) => Promise<void> }).loadPreview({
+      silent: true,
+    })
+    await flushPromises()
+
+    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
+    expect((w.find('[data-testid="public-gate-confirm"]').element as HTMLButtonElement).disabled).toBe(false)
+
+    // Even if preview.sessionBusy lags true, local idle keeps confirm clickable.
+    const preview = (w.vm as unknown as { preview: { sessionBusy?: boolean } }).preview
+    if (preview) preview.sessionBusy = true
+    await flushPromises()
+    expect((w.find('[data-testid="public-gate-confirm"]').element as HTMLButtonElement).disabled).toBe(false)
   })
 })

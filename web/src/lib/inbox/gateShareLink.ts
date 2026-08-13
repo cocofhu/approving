@@ -371,6 +371,8 @@ export function mergePublicGatePreview(
   if (!next.nonce && prev.nonce) merged.nonce = prev.nonce
   if (!next.sessionBusy) {
     merged.liveEvents = undefined
+    // Sparse idle payloads often omit activeItem; drop stale in-flight pointer.
+    if (next.activeItem == null) merged.activeItem = undefined
   }
   return merged
 }

@@ -795,6 +795,45 @@ function discardLastQueued() {
 }
 
 /**
+ * Authoritative idle (waiting=0 ∧ !busy ∧ no activeItem): force-clear local
+ * sticky busy — ghost queued, unfinished live slot (incl. body + streaming===false),
+ * and thinking. Used by queue_state/poll idle (not turn_done — that must keep
+ * real server-id waiters).
+ */
+function forceAuthoritativeIdle() {
+  if (queued.value.length) queued.value = []
+  if (liveAgentIdx.value >= 0) {
+    const agent = liveTurns.value[liveAgentIdx.value]
+    const empty = !!agent && !agent.text && !agent.thought
+    if (empty) {
+      liveTurns.value = []
+      streamPreview.reset()
+      thoughtPreview.reset()
+    } else if (agent) {
+      if (agent.streaming) {
+        agent.streaming = false
+        streamPreview.flush()
+        thoughtPreview.flush()
+      }
+    }
+    liveAgentIdx.value = -1
+  }
+  thinking.value = false
+}
+
+/**
+ * After turn_done/error: drop only ghost optimistic rows (no server id).
+ * Keep authoritative waiters so multi-turn queue does not briefly unlock
+ * confirm before the next queue_state. Empty after filter ⇒ synthesized idle.
+ */
+function settleAfterTurnEnd() {
+  if (queued.value.some((q) => !q.id)) {
+    queued.value = queued.value.filter((q) => !!q.id)
+  }
+  thinking.value = queued.value.length > 0 || liveAgentIdx.value >= 0
+}
+
+/**
  * Reconcile local pending-send panel with platform-authoritative queue_state.
  * waiting===0 clears ghost rows after remote Cancel; items[] rebuilds/trims
  * while allowing at most one local-ahead item when no live turn (HTTP ack /
@@ -811,6 +850,11 @@ function applyQueueState(
     annotations?: ReactAnnotation[]
   } | null,
 ) {
+  const authoritativeIdle = waiting === 0 && !busy && !activeItem
+  if (authoritativeIdle) {
+    forceAuthoritativeIdle()
+    return
+  }
   if (waiting === 0 && !busy) {
     if (queued.value.length) queued.value = []
     if (liveAgentIdx.value < 0) thinking.value = false
@@ -873,7 +917,8 @@ function applyQueueState(
     streamPreview.reset()
     thoughtPreview.reset()
   }
-  // Authority idle (f3): tear down empty streaming placeholder — do not keep「思考中…」.
+  // Authority idle / !busy: tear down live slot — empty placeholder or finished
+  // body with streaming===false must not keep thinking stuck true.
   if (!busy && liveAgentIdx.value >= 0) {
     const agent = liveTurns.value[liveAgentIdx.value]
     const empty = !!agent && !agent.text && !agent.thought
@@ -882,11 +927,13 @@ function applyQueueState(
       liveAgentIdx.value = -1
       streamPreview.reset()
       thoughtPreview.reset()
-    } else if (agent?.streaming) {
-      agent.streaming = false
+    } else {
+      if (agent?.streaming) {
+        agent.streaming = false
+        streamPreview.flush()
+        thoughtPreview.flush()
+      }
       liveAgentIdx.value = -1
-      streamPreview.flush()
-      thoughtPreview.flush()
     }
   }
   thinking.value = liveAgentIdx.value >= 0 || queued.value.length > 0 || !!busy
@@ -976,7 +1023,9 @@ function applyReviewFrame(frame: {
         thoughtPreview.flush()
       }
       liveAgentIdx.value = -1
-      thinking.value = queued.value.length > 0
+      // Pump may omit idle queue_state; clear ghost optimistic rows only.
+      // Real id waiters stay busy until authoritative idle (review v1).
+      settleAfterTurnEnd()
       break
     }
     case 'error': {
@@ -992,7 +1041,8 @@ function applyReviewFrame(frame: {
         thoughtPreview.flush()
       }
       liveAgentIdx.value = -1
-      thinking.value = queued.value.length > 0
+      // Same as turn_done: ghosts only; keep real remaining waiters.
+      settleAfterTurnEnd()
       break
     }
     case 'queue_state':
