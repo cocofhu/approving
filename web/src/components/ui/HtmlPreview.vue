@@ -92,6 +92,9 @@ const heightStable = ref(false)
 /** First inline/content-fit convergence from fallback height. */
 const isFirstHeightConvergence = ref(true)
 const inspecting = ref(false)
+const inspectToggleLabel = computed(() =>
+  t(inspecting.value ? 'pages.appPreview.novnc.cancelInspect' : 'pages.appPreview.novnc.inspect'),
+)
 const instanceId = createInstanceId()
 let resizeTimeout: ReturnType<typeof setTimeout> | undefined
 let pendingResizeHeight: number | null = null
@@ -427,12 +430,12 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
             : 'border-line text-txt2 hover:text-txt'
         "
         :aria-pressed="inspecting ? 'true' : 'false'"
-        :title="t('pages.appPreview.novnc.inspect')"
+        :title="inspectToggleLabel"
         data-testid="html-preview-inspect-toggle"
         @click="toggleInspect"
       >
         <Icon name="crosshair" :size="13" />
-        {{ t('pages.appPreview.novnc.inspect') }}
+        {{ inspectToggleLabel }}
       </button>
       <button
         v-if="showGateShare"
@@ -543,12 +546,12 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
             : 'border-line text-txt2 hover:text-txt'
         "
         :aria-pressed="inspecting ? 'true' : 'false'"
-        :title="t('pages.appPreview.novnc.inspect')"
+        :title="inspectToggleLabel"
         data-testid="html-preview-inspect-toggle"
         @click="toggleInspect"
       >
         <Icon name="crosshair" :size="13" />
-        {{ t('pages.appPreview.novnc.inspect') }}
+        {{ inspectToggleLabel }}
       </button>
       <button
         v-if="showGateShare"
