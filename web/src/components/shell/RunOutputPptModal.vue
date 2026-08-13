@@ -136,7 +136,6 @@ function openArtifacts() {
     @close="close"
   >
     <p class="mb-2 text-xs text-txt3">{{ subtitle || '—' }}</p>
-    <p class="mb-3 text-xs text-txt2">{{ t('shell.runNotifications.outputHint') }}</p>
 
     <div v-if="loading" class="py-10 text-center text-sm text-txt2" data-testid="run-output-loading">
       {{ t('shell.runNotifications.loadingOutputs') }}
