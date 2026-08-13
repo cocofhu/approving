@@ -4016,4 +4016,80 @@ describe('GateApproval cold footer pending + loadProduct gen (专项三 g4)', ()
     }
     wrapper.unmount()
   })
+
+  it('plan g4.2: output done + turn_done synthesizes idle — Cancel/thinking clear; confirm ready', async () => {
+    breakpointMocks.isMobile.value = false
+    apiMocks.listPreviewIssues.mockResolvedValue({ issues: [] })
+    apiMocks.gateReactRevise.mockResolvedValue({ status: 'accepted', waiting: 1 })
+    const pageHtml = '<!doctype html><html><body><h1>idle sticky</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      mobileFillRemaining: false,
+      gate: { ...gate, reactSessionAlive: true, reactUpstreamNodeId: 'visual' },
+      run,
+    })
+    await flushPromises()
+
+    const form = wrapper.find('[data-testid="content-fit-form"]')
+    await form.find('[data-testid="paragraph-input"]').setValue('请改验收口径')
+    await flushPromises()
+    await form.find('[data-testid="review-composer-send"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-react-cancel"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-react-queue"]').exists()).toBe(true)
+
+    const vm = wrapper.vm as any
+    // busy+activeItem resume leaves optimistic queue head (ghost) — no turn_begin shift.
+    vm.applyReviewFrame?.({
+      event: 'queue_state',
+      nodeId: 'visual',
+      waiting: 0,
+      items: [],
+      busy: true,
+      activeItem: { text: '请改验收口径' },
+    })
+    vm.applyAcpEvents?.([{ kind: 'message', text: '已更新验收口径与回归清单' }])
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-react-stream"]').text()).toContain('已更新验收口径')
+
+    vm.applyReviewFrame?.({ event: 'turn_done', nodeId: 'visual' })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="gate-react-cancel"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="gate-react-queue"]').exists()).toBe(false)
+    const pass = wrapper.find('[data-testid="review-composer-pass"]')
+    expect(pass.exists()).toBe(true)
+    expect((pass.element as HTMLButtonElement).disabled).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('plan g4.2: real remaining queue after idle restore keeps Cancel/busy', async () => {
+    breakpointMocks.isMobile.value = false
+    apiMocks.listPreviewIssues.mockResolvedValue({ issues: [] })
+    const pageHtml = '<!doctype html><html><body><h1>keep queue</h1></body></html>'
+    const { gate, run } = visualGateRun(pageHtml)
+    const wrapper = mountApproval({
+      fillPreview: true,
+      mobileFillRemaining: false,
+      gate: { ...gate, reactSessionAlive: true, reactUpstreamNodeId: 'visual' },
+      run,
+    })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.applyReviewFrame?.({
+      event: 'queue_state',
+      nodeId: 'visual',
+      waiting: 1,
+      items: [{ text: '下一条热修' }],
+      busy: false,
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-react-queue"]').text()).toContain('下一条热修')
+    expect(wrapper.find('[data-testid="gate-react-cancel"]').exists()).toBe(true)
+    const pass = wrapper.find('[data-testid="review-composer-pass"]')
+    expect(pass.exists()).toBe(true)
+    expect((pass.element as HTMLButtonElement).disabled).toBe(true)
+    wrapper.unmount()
+  })
 })

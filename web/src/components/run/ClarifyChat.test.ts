@@ -1251,4 +1251,96 @@ describe('ClarifyChat', () => {
       wrapper.unmount()
     })
   })
+
+  describe('authoritative idle clears sticky thinking (plan g1/g4.1)', () => {
+    it('ghost queued + turn_begin(with id) + turn_done → thinking/Cancel/confirm idle', async () => {
+      const wrapper = mountChat({ reviewMode: true, draft: '请按意见修改' })
+      await wrapper.find('textarea').setValue('请按意见修改')
+      await clickSend(wrapper)
+      expect(wrapper.find('[data-testid="clarify-review-cancel"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="clarify-review-queue"]').exists()).toBe(true)
+      expect(wrapper.text()).toContain('Agent 正在思考下一轮')
+
+      const vm = wrapper.vm as unknown as {
+        applyReviewFrame: (f: Record<string, unknown>) => void
+        applyAcpEvents: (e: { kind: string; text: string }[], nodeId?: string) => void
+        isSessionBusy: () => boolean
+      }
+      // Server id present → no text fallback; optimistic no-id row stays as ghost.
+      vm.applyReviewFrame({
+        event: 'turn_begin',
+        nodeId: 'react-1',
+        item: { id: 'srv-1', text: '请按意见修改' },
+      })
+      vm.applyAcpEvents([{ kind: 'message', text: '已按意见改完' }], 'react-1')
+      await flushPromises()
+      expect(wrapper.text()).toContain('已按意见改完')
+      // Live turn hides「思考下一轮」(condition requires liveAgentIdx < 0).
+      expect(wrapper.text()).not.toContain('Agent 正在思考下一轮')
+
+      vm.applyReviewFrame({ event: 'turn_done', nodeId: 'react-1' })
+      await flushPromises()
+
+      expect(wrapper.text()).not.toContain('Agent 正在思考下一轮')
+      expect(wrapper.find('[data-testid="clarify-review-cancel"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="clarify-review-queue"]').exists()).toBe(false)
+      expect(vm.isSessionBusy()).toBe(false)
+      const confirm = wrapper.find('[data-testid="clarify-confirm-flow"]')
+      expect(confirm.exists()).toBe(true)
+      expect((confirm.element as HTMLButtonElement).disabled).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('applyQueueState idle tears down live slot with body even when streaming===false', async () => {
+      const wrapper = mountChat({ reviewMode: true })
+      const vm = wrapper.vm as unknown as {
+        applyQueueState: (
+          waiting: number,
+          items: unknown[] | null,
+          busy?: boolean,
+          activeItem?: { text?: string } | null,
+        ) => void
+        applyAcpEvents: (e: { kind: string; text: string }[], nodeId?: string) => boolean
+        isSessionBusy: () => boolean
+      }
+      vm.applyQueueState(0, [], true, { text: '改标题' })
+      await flushPromises()
+      expect(vm.applyAcpEvents([{ kind: 'message', text: '标题已改' }], 'react-1')).toBe(true)
+      await flushPromises()
+      // Authoritative idle must clear live occupancy (incl. body + streaming===false path).
+      vm.applyQueueState(0, [], false, null)
+      await flushPromises()
+      expect(wrapper.text()).not.toContain('Agent 正在思考下一轮')
+      expect(wrapper.find('[data-testid="clarify-review-cancel"]').exists()).toBe(false)
+      expect(vm.isSessionBusy()).toBe(false)
+      expect((wrapper.find('[data-testid="clarify-confirm-flow"]').element as HTMLButtonElement).disabled).toBe(
+        false,
+      )
+      wrapper.unmount()
+    })
+
+    it('real remaining queue via queue_state keeps busy (no false idle)', async () => {
+      const wrapper = mountChat({ reviewMode: true })
+      const vm = wrapper.vm as unknown as {
+        applyReviewFrame: (f: Record<string, unknown>) => void
+        isSessionBusy: () => boolean
+      }
+      vm.applyReviewFrame({
+        event: 'queue_state',
+        nodeId: 'react-1',
+        waiting: 1,
+        items: [{ id: 'q2', text: '第二条意见' }],
+        busy: false,
+      })
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-review-queue"]').text()).toContain('第二条意见')
+      expect(wrapper.text()).toContain('Agent 正在思考下一轮')
+      expect(wrapper.find('[data-testid="clarify-review-cancel"]').exists()).toBe(true)
+      expect(vm.isSessionBusy()).toBe(true)
+      expect((wrapper.find('[data-testid="clarify-confirm-flow"]').element as HTMLButtonElement).disabled).toBe(
+        true,
+      )
+      wrapper.unmount()
+    })
+  })
 })

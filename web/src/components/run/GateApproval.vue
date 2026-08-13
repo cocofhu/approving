@@ -1041,6 +1041,21 @@ const canSubmitReact = computed(
       !!pickedElementImage.value?.data),
 )
 
+function forceReactAuthoritativeIdle() {
+  if (reactQueued.value.length) reactQueued.value = []
+  if (reactInFlight.value) {
+    reactInFlight.value = false
+    if (
+      (reactStreamText.value || reactStreamThought.value) &&
+      !reactStreamCompletedAt.value &&
+      !reactInterrupted.value
+    ) {
+      reactStreamCompletedAt.value = new Date().toISOString()
+    }
+  }
+  reactThinking.value = false
+}
+
 function applyReviewFrame(frame: {
   event?: string
   nodeId?: string
@@ -1065,21 +1080,22 @@ function applyReviewFrame(frame: {
       reactStreamCompletedAt.value = null
       break
     case 'turn_done':
-      reactInFlight.value = false
-      reactThinking.value = reactQueued.value.length > 0
       if (frame.interrupted) {
         reactInterrupted.value = true
         reactStreamCompletedAt.value = null
       } else if (reactStreamText.value || reactStreamThought.value) {
         reactStreamCompletedAt.value = new Date().toISOString()
       }
+      // Pump omits terminal idle queue_state; synthesize authoritative idle so
+      // ghost reactQueued cannot keep Cancel/confirm sticky. Real remaining
+      // waiters are restored by the next queue_state before turn_begin.
+      forceReactAuthoritativeIdle()
       break
     case 'error':
-      reactInFlight.value = false
-      reactThinking.value = reactQueued.value.length > 0
       reactError.value = frame.message || reactError.value
       reactStreamCompletedAt.value = null
       if (frame.interrupted) reactInterrupted.value = true
+      forceReactAuthoritativeIdle()
       break
     case 'queue_state': {
       // Platform-authoritative: remote Cancel / cross-entry must clear ghost rows.
@@ -1088,6 +1104,11 @@ function applyReviewFrame(frame: {
       const items = Array.isArray(frame.items) ? frame.items : null
       const busy = !!frame.busy
       const activeItem = frame.activeItem
+      const authoritativeIdle = waiting === 0 && !busy && !activeItem
+      if (authoritativeIdle) {
+        forceReactAuthoritativeIdle()
+        break
+      }
       if (busy && activeItem && !reactInFlight.value) {
         reactInFlight.value = true
         reactThinking.value = true
@@ -1098,7 +1119,7 @@ function applyReviewFrame(frame: {
           reactStreamThought.value = ''
         }
       }
-      // Authority idle (f3): tear down empty streaming placeholder.
+      // Authority !busy: end unfinished inFlight (keep completed footnote when content exists).
       if (!busy) {
         const emptyRails = !reactStreamText.value && !reactStreamThought.value
         if (emptyRails) {
