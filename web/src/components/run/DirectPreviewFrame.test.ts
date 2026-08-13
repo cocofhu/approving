@@ -47,7 +47,7 @@ describe('DirectPreviewFrame', () => {
     expect((wrapper.get('[data-testid="direct-preview-address"]').element as HTMLInputElement).value).toBe(
       DIRECT,
     )
-    expect(wrapper.get('[data-testid="direct-preview-inspect"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="direct-preview-inspect"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="app-preview-direct-frame"]').attributes('src')).toBe(DIRECT)
     wrapper.unmount()
   })
