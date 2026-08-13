@@ -845,29 +845,29 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ action, form }),
     }),
-  createGateShareLink: (runId: string, nodeId: string, ttlTier = '24h') =>
-    req<{ id: string; url: string; ttlTier: string; expiresAt: string; state: string }>(
+  createGateShareLink: (runId: string, nodeId: string, ttlTier = '24h', permissionPreset = 'full') =>
+    req<{ id: string; url: string; ttlTier: string; permissionPreset: string; expiresAt: string; state: string }>(
       `/runs/${runId}/gates/${nodeId}/share-link`,
-      { method: 'POST', body: JSON.stringify({ ttlTier }) },
+      { method: 'POST', body: JSON.stringify({ ttlTier, permissionPreset }) },
     ),
   getGateShareLink: (runId: string, nodeId: string) =>
     req<GateShareInboxStatus>(`/runs/${runId}/gates/${nodeId}/share-link`),
   regenGateShareLink: (runId: string, nodeId: string) =>
-    req<{ id: string; url: string; ttlTier: string; expiresAt: string; state: string }>(
+    req<{ id: string; url: string; ttlTier: string; permissionPreset: string; expiresAt: string; state: string }>(
       `/runs/${runId}/gates/${nodeId}/share-link/regen`,
       { method: 'POST' },
     ),
   revokeGateShareLink: (runId: string, nodeId: string) =>
     req<{ status: string }>(`/runs/${runId}/gates/${nodeId}/share-link/revoke`, { method: 'POST' }),
-  createReviewShareLink: (runId: string, nodeId: string, ttlTier = '24h') =>
-    req<{ id: string; url: string; ttlTier: string; expiresAt: string; state: string }>(
+  createReviewShareLink: (runId: string, nodeId: string, ttlTier = '24h', permissionPreset = 'full') =>
+    req<{ id: string; url: string; ttlTier: string; permissionPreset: string; expiresAt: string; state: string }>(
       `/runs/${runId}/reviews/${nodeId}/share-link`,
-      { method: 'POST', body: JSON.stringify({ ttlTier }) },
+      { method: 'POST', body: JSON.stringify({ ttlTier, permissionPreset }) },
     ),
   getReviewShareLink: (runId: string, nodeId: string) =>
     req<GateShareInboxStatus>(`/runs/${runId}/reviews/${nodeId}/share-link`),
   regenReviewShareLink: (runId: string, nodeId: string) =>
-    req<{ id: string; url: string; ttlTier: string; expiresAt: string; state: string }>(
+    req<{ id: string; url: string; ttlTier: string; permissionPreset: string; expiresAt: string; state: string }>(
       `/runs/${runId}/reviews/${nodeId}/share-link/regen`,
       { method: 'POST' },
     ),

@@ -36,6 +36,7 @@ type PreviewDTO struct {
 	Description       string             `json:"description,omitempty"`
 	RemainingSec      *int64             `json:"remainingSec,omitempty"`
 	ExpiresAt         *time.Time         `json:"expiresAt,omitempty"`
+	PermissionPreset  string             `json:"permissionPreset,omitempty"`
 	Actions           map[string]string  `json:"actions,omitempty"`
 	VisualHTML        string             `json:"visualHtml,omitempty"`
 	VisualHTMLHash    string             `json:"visualHtmlHash,omitempty"`
@@ -115,6 +116,8 @@ func BuildPreviewDTO(st string, lookup *LookupResult, visualHTML, structuredName
 		rem = 0
 	}
 	dto.RemainingSec = &rem
+	preset := NormalizePermissionPreset(lookup.Link.PermissionPreset)
+	dto.PermissionPreset = preset
 	dto.Actions = map[string]string{}
 	if p := ResolvePassAction(lookup.Gate.Actions); p != "" {
 		dto.Actions["approve"] = p
@@ -127,6 +130,7 @@ func BuildPreviewDTO(st string, lookup *LookupResult, visualHTML, structuredName
 		dto.Actions["reply"] = "reply"
 		dto.Actions["cancel"] = "cancel"
 	}
+	dto.Actions = FilterActionsByPreset(dto.Actions, preset)
 	applyPreviewArtifacts(&dto, visualHTML, structuredName, structuredContent, extras)
 	dto.Nonce = nonce
 	return dto
@@ -154,11 +158,14 @@ func BuildReviewPreviewDTO(st string, lookup *LookupResult, visualHTML, structur
 		rem = 0
 	}
 	dto.RemainingSec = &rem
+	preset := NormalizePermissionPreset(lookup.Link.PermissionPreset)
+	dto.PermissionPreset = preset
 	dto.Actions = map[string]string{"confirm": "confirm"}
 	if extras.ReactSessionAlive {
 		dto.Actions["reply"] = "reply"
 		dto.Actions["cancel"] = "cancel"
 	}
+	dto.Actions = FilterActionsByPreset(dto.Actions, preset)
 	applyPreviewArtifacts(&dto, visualHTML, structuredName, structuredContent, extras)
 	dto.Nonce = nonce
 	return dto

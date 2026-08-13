@@ -33,10 +33,17 @@ Inbox operators can mint a one-shot external approval URL for a single pending
 - Scope is one Run + one `human_gate` node + the current pending iteration.
   Holders cannot open projects, other runs/nodes, or authenticated `/api/*`.
 - Default TTL is 24h (1h / 8h / 24h / 72h / 7d). One active link per instance.
-  Regenerating immediately revokes the previous URL and reuses the same TTL
-  tier from the new mint time. Revoke, expiry, successful decide, login-side
-  resume, run cancel/complete, or a new gate iteration all invalidate unused
-  links immediately.
+  Minting also stores a link-level `permissionPreset` (`full` default, or
+  `react_only`). Preview.actions and public decide/reply/cancel share the same
+  Allow(preset, action) check: `react_only` may reply/cancel but every decide
+  is rejected with `403 permission_denied` **before** ConsumeCAS, so the
+  one-shot token is not marked used and the gate does not advance. Empty /
+  missing presets on legacy rows mean `full`. Regenerating immediately revokes
+  the previous URL and reuses the same TTL tier **and** permission preset from
+  the new mint time (change permission only via Create). Revoke, expiry,
+  successful decide, login-side resume, run cancel/complete, or a new gate
+  iteration all invalidate unused links immediately. ReAct-only links that
+  never successfully decide still expire via TTL / revoke / login-side finish.
 - Public responses set `Cache-Control: no-store`, `Referrer-Policy: no-referrer`,
   and a strict CSP. The `/public/gate-approvals` prefix does **not** emit
   `Access-Control-Allow-Origin`. POST decide requires Origin/Referer + custom

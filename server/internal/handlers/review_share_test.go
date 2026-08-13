@@ -548,3 +548,39 @@ func TestClarifyShareCreatePreviewInboxAndPublicCancel(t *testing.T) {
 		t.Fatalf("cancel burned token: %s", prev3.Body.String())
 	}
 }
+
+func TestReviewSharePermissionPresetReactOnly(t *testing.T) {
+	h := newHarness(t)
+	seedInboxReview(t, h, "run-rev-preset", "research-preset", true)
+
+	created := parseJSON(t, h.do(http.MethodPost, "/api/runs/run-rev-preset/reviews/research-preset/share-link", map[string]any{
+		"ttlTier": "24h", "permissionPreset": "react_only",
+	}))
+	if created["permissionPreset"] != models.SharePermissionReactOnly {
+		t.Fatalf("create: %+v", created)
+	}
+	url, _ := created["url"].(string)
+	token := strings.TrimPrefix(url[strings.Index(url, "#t="):], "#t=")
+
+	prev := parseJSON(t, h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: token}))
+	actions, _ := prev["actions"].(map[string]any)
+	if _, ok := actions["confirm"]; ok {
+		t.Fatalf("review react_only preview still has confirm: %+v", actions)
+	}
+
+	nonce := publicPreviewNonce(t, h, token)
+	dec := h.doPublic(http.MethodPost, "/public/gate-approvals/decide", map[string]any{
+		"token": token, "action": "confirm", "nonce": nonce,
+	}, map[string]string{headerShareRequest: "1", "Origin": "http://" + publicHost})
+	if dec.Code != http.StatusForbidden || !strings.Contains(dec.Body.String(), "permission_denied") {
+		t.Fatalf("decide: %d %s", dec.Code, dec.Body.String())
+	}
+	var link models.GateShareLink
+	if err := h.db.Where("run_id = ? AND node_id = ?", "run-rev-preset", "research-preset").
+		Order("created_at desc").First(&link).Error; err != nil {
+		t.Fatalf("link: %v", err)
+	}
+	if link.UsedAt != nil {
+		t.Fatal("must not consume on denied decide")
+	}
+}

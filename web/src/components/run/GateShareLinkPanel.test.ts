@@ -106,9 +106,13 @@ describe('GateShareLinkPanel', () => {
     const ttl24 = w.findAll('[data-testid="gate-share-ttl"]').find((b) => b.attributes('data-tier') === '24h')
     expect(ttl24).toBeTruthy()
 
+    expect(w.findAll('[data-testid="gate-share-permission"]')).toHaveLength(2)
+    const fullOpt = w.findAll('[data-testid="gate-share-permission"]').find((b) => b.attributes('data-preset') === 'full')
+    expect(fullOpt?.attributes('aria-checked')).toBe('true')
+
     await w.get('[data-testid="gate-share-create"]').trigger('click')
     await flushPromises()
-    expect(mocks.create).toHaveBeenCalledWith('run-1', 'hg1', '24h')
+    expect(mocks.create).toHaveBeenCalledWith('run-1', 'hg1', '24h', 'full')
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(url)
     const shown = (w.get('[data-testid="gate-share-url"]').element as HTMLTextAreaElement).value
     expect(shown).toContain('••••')
@@ -289,8 +293,36 @@ describe('GateShareLinkPanel', () => {
     expect(createBtn.classes().join(' ')).toContain('min-h-11')
     await createBtn.trigger('click')
     await flushPromises()
-    expect(mocks.createReview).toHaveBeenCalledWith('run-1', 'research1', '24h')
+    expect(mocks.createReview).toHaveBeenCalledWith('run-1', 'research1', '24h', 'full')
     expect(mocks.create).not.toHaveBeenCalled()
+  })
+
+  it('creates react_only preset and shows chip + regen inherit hint when active', async () => {
+    const token = 'ro'.repeat(32)
+    const url = `https://app.example/public/gate-approvals#t=${token}`
+    mocks.create.mockResolvedValue({
+      id: 'gsl-ro',
+      url,
+      ttlTier: '24h',
+      permissionPreset: 'react_only',
+      expiresAt: '2026-08-10T00:00:00Z',
+      state: 'active',
+    })
+    mockClipboard(vi.fn().mockResolvedValue(undefined))
+    const w = mount(GateShareLinkPanel, {
+      props: { open: true, target: item() },
+      global: { plugins: [i18n], stubs: { Teleport: true } },
+    })
+    const reactOnly = w
+      .findAll('[data-testid="gate-share-permission"]')
+      .find((b) => b.attributes('data-preset') === 'react_only')
+    await reactOnly!.trigger('click')
+    await w.get('[data-testid="gate-share-create"]').trigger('click')
+    await flushPromises()
+    expect(mocks.create).toHaveBeenCalledWith('run-1', 'hg1', '24h', 'react_only')
+    expect(w.get('[data-testid="gate-share-preset-chip"]').text()).toContain('仅 ReAct')
+    expect(w.get('[data-testid="gate-share-regen-inherit-hint"]').text()).toContain('继承')
+    expect(w.get('[data-testid="gate-share-regen"]').text()).toContain('继承预设')
   })
 
   it('blocks copy and skips auto-copy for loopback share URLs', async () => {

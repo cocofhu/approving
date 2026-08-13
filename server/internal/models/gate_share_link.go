@@ -21,12 +21,21 @@ type GateShareLink struct {
 	GateID    *uint  `gorm:"index" json:"gateId,omitempty"`
 	CreatedBy string `gorm:"size:128" json:"createdBy"`
 	TTLTier   string `gorm:"size:8" json:"ttlTier"`
+	// PermissionPreset is the link-level capability preset (full|react_only).
+	// Empty / missing rows are treated as full for backward compatibility.
+	PermissionPreset string `gorm:"size:32" json:"permissionPreset,omitempty"`
 	ExpiresAt time.Time  `gorm:"index" json:"expiresAt"`
 	RevokedAt *time.Time `json:"revokedAt,omitempty"`
 	UsedAt    *time.Time `json:"usedAt,omitempty"`
 	UsedAction string    `gorm:"size:64" json:"usedAction,omitempty"`
 	CreatedAt time.Time  `json:"createdAt"`
 }
+
+// Share-link permission presets (product: default full).
+const (
+	SharePermissionFull      = "full"
+	SharePermissionReactOnly = "react_only"
+)
 
 // Share-link TTL tiers (product: default 24h).
 const (

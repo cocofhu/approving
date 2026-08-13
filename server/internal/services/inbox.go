@@ -72,16 +72,17 @@ func latestMessageAt(msgs []models.ReactMessage, fallback time.Time) time.Time {
 
 // GateShareInboxStatus is leak-free share-link state for Inbox chips (no token).
 type GateShareInboxStatus struct {
-	State        string     `json:"state"`
-	TTLTier      string     `json:"ttlTier,omitempty"`
-	ExpiresAt    *time.Time `json:"expiresAt,omitempty"`
-	RemainingSec *int64     `json:"remainingSec,omitempty"`
-	UsedAt       *time.Time `json:"usedAt,omitempty"`
-	RevokedAt    *time.Time `json:"revokedAt,omitempty"`
-	CanCreate    bool       `json:"canCreate"`
-	CanManage    bool       `json:"canManage"`
-	HasPass      bool       `json:"hasPass"`
-	HasFail      bool       `json:"hasFail"`
+	State            string     `json:"state"`
+	TTLTier          string     `json:"ttlTier,omitempty"`
+	PermissionPreset string     `json:"permissionPreset,omitempty"`
+	ExpiresAt        *time.Time `json:"expiresAt,omitempty"`
+	RemainingSec     *int64     `json:"remainingSec,omitempty"`
+	UsedAt           *time.Time `json:"usedAt,omitempty"`
+	RevokedAt        *time.Time `json:"revokedAt,omitempty"`
+	CanCreate        bool       `json:"canCreate"`
+	CanManage        bool       `json:"canManage"`
+	HasPass          bool       `json:"hasPass"`
+	HasFail          bool       `json:"hasFail"`
 }
 
 // GateInboxItem is a pending gate in the unified inbox (GET /gates).

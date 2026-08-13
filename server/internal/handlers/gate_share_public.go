@@ -182,6 +182,10 @@ func (h *Handlers) PublicGateReply(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": st})
 		return
 	}
+	if !gateshare.Allow(lookup.Link.PermissionPreset, gateshare.ActionReply) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "permission_denied", "message": "当前链接权限不允许回复"})
+		return
+	}
 	text := strings.TrimSpace(body.Text)
 	if text == "" && len(body.Annotations) == 0 && len(body.Images) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "empty_reply", "message": "请填写修订意见或标注后再发送"})
@@ -232,6 +236,10 @@ func (h *Handlers) PublicGateCancel(c *gin.Context) {
 			st = "invalid"
 		}
 		c.JSON(http.StatusOK, gin.H{"status": st})
+		return
+	}
+	if !gateshare.Allow(lookup.Link.PermissionPreset, gateshare.ActionCancel) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "permission_denied", "message": "当前链接权限不允许取消会话"})
 		return
 	}
 	kind := publicShareKind(lookup)
@@ -308,6 +316,15 @@ func (h *Handlers) PublicGateDecide(c *gin.Context) {
 	}
 	if st != models.ShareLinkStateActive && st != models.ShareLinkStateUsed {
 		c.JSON(http.StatusOK, gin.H{"status": st})
+		return
+	}
+	// Enforce link preset before nonce CAS / ConsumeCAS so react_only cannot
+	// burn the one-shot token or advance the gate via direct decide.
+	if st == models.ShareLinkStateActive && !gateshare.Allow(lookup.Link.PermissionPreset, gateshare.ActionDecide) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error":   "permission_denied",
+			"message": "当前链接权限为仅 ReAct，禁止确认或驳回流转",
+		})
 		return
 	}
 	kind := publicShareKind(lookup)
