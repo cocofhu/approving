@@ -267,6 +267,7 @@ func TestCancelClarifyTurnKeepsQueueForPublicShare(t *testing.T) {
 		t.Fatalf("start: %v", err)
 	}
 	waitReactPause(t, db, run.ID, "clarify")
+	waitRunStatus(t, db, run.ID, "waiting_human")
 
 	created, err := share.CreateReview(run.ID, "clarify", "24h", "", "tester", "http://example.test")
 	if err != nil {

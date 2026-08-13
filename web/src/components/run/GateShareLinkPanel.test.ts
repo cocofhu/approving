@@ -352,7 +352,6 @@ describe('GateShareLinkPanel', () => {
       expiresAt: '2026-08-10T00:00:00Z',
       state: 'active',
     })
-    mockClipboard(vi.fn().mockResolvedValue(undefined))
     const w = mount(GateShareLinkPanel, {
       props: { open: true, target: item() },
       global: { plugins: [i18n], stubs: { Teleport: true } },
