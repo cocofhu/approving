@@ -16,7 +16,7 @@ func (h *Handlers) CreateReviewShareLink(c *gin.Context) {
 	}
 	var body createShareBody
 	_ = c.ShouldBindJSON(&body)
-	res, err := h.GateShare.CreateReview(c.Param("id"), c.Param("nodeId"), body.TTLTier, h.shareActor(c), h.shareOrigin(c))
+	res, err := h.GateShare.CreateReview(c.Param("id"), c.Param("nodeId"), body.TTLTier, body.PermissionPreset, h.shareActor(c), h.shareOrigin(c))
 	if err != nil {
 		writeShareErr(c, err)
 		return

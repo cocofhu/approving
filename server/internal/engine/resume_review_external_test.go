@@ -29,7 +29,7 @@ func TestResumeReviewExternalConfirmAndLoginRevoke(t *testing.T) {
 	waitReactPause(t, db, run.ID, "prop")
 	waitRunStatus(t, db, run.ID, "waiting_human")
 
-	created, err := share.CreateReview(run.ID, "prop", "24h", "tester", "http://example.test")
+	created, err := share.CreateReview(run.ID, "prop", "24h", "", "tester", "http://example.test")
 	if err != nil {
 		t.Fatalf("create review share: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestResumeReviewExternalBusyDoesNotBurnLink(t *testing.T) {
 	waitReactPause(t, db, run.ID, "prop")
 	waitRunStatus(t, db, run.ID, "waiting_human")
 
-	created, err := share.CreateReview(run.ID, "prop", "24h", "tester", "http://example.test")
+	created, err := share.CreateReview(run.ID, "prop", "24h", "", "tester", "http://example.test")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestResumeReviewExternalValidationFailureDoesNotBurnLink(t *testing.T) {
 	waitReactPause(t, db, run.ID, "prop")
 	waitRunStatus(t, db, run.ID, "waiting_human")
 
-	created, err := share.CreateReview(run.ID, "prop", "24h", "tester", "http://example.test")
+	created, err := share.CreateReview(run.ID, "prop", "24h", "", "tester", "http://example.test")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestReviewLoginForceRevokesUnusedShareLink(t *testing.T) {
 	waitReactPause(t, db, run.ID, "prop")
 	waitRunStatus(t, db, run.ID, "waiting_human")
 
-	created, err := share.CreateReview(run.ID, "prop", "24h", "tester", "http://example.test")
+	created, err := share.CreateReview(run.ID, "prop", "24h", "", "tester", "http://example.test")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestReviewLoginForceRevokesUnusedShareLink(t *testing.T) {
 	if st != models.ShareLinkStateRevoked && st != models.ShareLinkStateUsed {
 		t.Fatalf("after login force st=%s", st)
 	}
-	if _, err := share.CreateReview(run.ID, "prop", "24h", "tester", "http://example.test"); err != gateshare.ErrUsedReadonly && err != gateshare.ErrReviewNotPending && err != gateshare.ErrRunEnded {
+	if _, err := share.CreateReview(run.ID, "prop", "24h", "", "tester", "http://example.test"); err != gateshare.ErrUsedReadonly && err != gateshare.ErrReviewNotPending && err != gateshare.ErrRunEnded {
 		t.Fatalf("recreate after login force: %v", err)
 	}
 }
@@ -190,7 +190,7 @@ func TestResumeReviewExternalClarifyConfirmAndIncompleteRollback(t *testing.T) {
 	waitReactPause(t, db, run.ID, "clarify")
 	waitRunStatus(t, db, run.ID, "waiting_human")
 
-	created, err := share.CreateReview(run.ID, "clarify", "24h", "tester", "http://example.test")
+	created, err := share.CreateReview(run.ID, "clarify", "24h", "", "tester", "http://example.test")
 	if err != nil {
 		t.Fatalf("create clarify share: %v", err)
 	}
@@ -237,7 +237,7 @@ func TestResumeReviewExternalAlreadyProcessedBusyWhileWaiting(t *testing.T) {
 	waitReactPause(t, db, run.ID, "clarify")
 	waitRunStatus(t, db, run.ID, "waiting_human")
 
-	created, err := share.CreateReview(run.ID, "clarify", "24h", "tester", "http://example.test")
+	created, err := share.CreateReview(run.ID, "clarify", "24h", "", "tester", "http://example.test")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -267,8 +267,9 @@ func TestCancelClarifyTurnKeepsQueueForPublicShare(t *testing.T) {
 		t.Fatalf("start: %v", err)
 	}
 	waitReactPause(t, db, run.ID, "clarify")
+	waitRunStatus(t, db, run.ID, "waiting_human")
 
-	created, err := share.CreateReview(run.ID, "clarify", "24h", "tester", "http://example.test")
+	created, err := share.CreateReview(run.ID, "clarify", "24h", "", "tester", "http://example.test")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}

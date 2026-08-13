@@ -8,16 +8,20 @@ import { useToast } from '@/lib/composables/useToast'
 import { copyToClipboard } from '@/lib/shared/copyToClipboard'
 import type { GateShareInboxStatus, ShareLinkTarget } from '@/lib/shared/types'
 import {
+  DEFAULT_GATE_SHARE_PERMISSION,
   DEFAULT_GATE_SHARE_TTL,
+  GATE_SHARE_PERMISSION_PRESETS,
   GATE_SHARE_TTL_TIERS,
   canCreateGateShare,
   forgetShareUrl,
   isGateShareActive,
   isLoopbackShareHost,
   maskShareUrl,
+  normalizePermissionPreset,
   recallShareUrl,
   rememberShareUrl,
   shareApiErrorMessage,
+  type GateSharePermissionPreset,
   type GateShareTTLTier,
 } from '@/lib/inbox/gateShareLink'
 
@@ -37,6 +41,7 @@ const { t } = useI18n()
 const toast = useToast()
 
 const ttlTier = ref<GateShareTTLTier>(DEFAULT_GATE_SHARE_TTL)
+const permissionPreset = ref<GateSharePermissionPreset>(DEFAULT_GATE_SHARE_PERMISSION)
 const fullUrl = ref('')
 const revealUrl = ref(false)
 const busy = ref(false)
@@ -58,6 +63,12 @@ const displayUrl = computed(() => {
   if (!fullUrl.value) return ''
   return revealUrl.value ? fullUrl.value : maskShareUrl(fullUrl.value)
 })
+const activePreset = computed(() => normalizePermissionPreset(status.value.permissionPreset))
+const activePresetChip = computed(() =>
+  activePreset.value === 'react_only'
+    ? t('pages.gatesInbox.share.permission.reactOnlyChip')
+    : t('pages.gatesInbox.share.permission.fullChip'),
+)
 
 /** Prefer minted URL hostname; fall back to current admin entry for create-mode hints. */
 const loopbackBlocked = computed(() => {
@@ -82,6 +93,7 @@ watch(
     localStatus.value = props.target?.shareLink || { state: 'none' }
     ttlTier.value =
       (props.target?.shareLink?.ttlTier as GateShareTTLTier) || DEFAULT_GATE_SHARE_TTL
+    permissionPreset.value = normalizePermissionPreset(props.target?.shareLink?.permissionPreset)
     revealUrl.value = false
     fullUrl.value = recallShareUrl(props.target?.runId || '', props.target?.nodeId || '', props.target?.iteration)
     confirmKind.value = null
@@ -126,13 +138,24 @@ async function createAndCopy() {
   try {
     const res =
       shareKind.value === 'review'
-        ? await api.createReviewShareLink(props.target.runId, props.target.nodeId, ttlTier.value)
-        : await api.createGateShareLink(props.target.runId, props.target.nodeId, ttlTier.value)
+        ? await api.createReviewShareLink(
+            props.target.runId,
+            props.target.nodeId,
+            ttlTier.value,
+            permissionPreset.value,
+          )
+        : await api.createGateShareLink(
+            props.target.runId,
+            props.target.nodeId,
+            ttlTier.value,
+            permissionPreset.value,
+          )
     fullUrl.value = res.url
     rememberShareUrl(props.target.runId, props.target.nodeId, props.target.iteration, res.url)
     const next: GateShareInboxStatus = {
       state: res.state || 'active',
       ttlTier: res.ttlTier,
+      permissionPreset: normalizePermissionPreset(res.permissionPreset || permissionPreset.value),
       expiresAt: res.expiresAt,
       canCreate: false,
       canManage: true,
@@ -187,6 +210,7 @@ async function confirmRegen() {
     const next: GateShareInboxStatus = {
       state: res.state || 'active',
       ttlTier: res.ttlTier,
+      permissionPreset: normalizePermissionPreset(res.permissionPreset || activePreset.value),
       expiresAt: res.expiresAt,
       canCreate: false,
       canManage: true,
@@ -292,6 +316,53 @@ function close() {
             {{ t(`pages.gatesInbox.share.ttl.${tier}`) }}
           </button>
         </div>
+
+        <label class="block text-xs font-medium text-txt2" id="gate-share-permission-label">
+          {{ t('pages.gatesInbox.share.permissionLabel') }}
+        </label>
+        <div
+          class="flex flex-col gap-2"
+          role="radiogroup"
+          aria-labelledby="gate-share-permission-label"
+          data-testid="gate-share-permission-group"
+        >
+          <button
+            v-for="preset in GATE_SHARE_PERMISSION_PRESETS"
+            :key="preset"
+            type="button"
+            class="flex min-h-11 items-start gap-3 border px-3 py-2.5 text-left"
+            :class="
+              permissionPreset === preset
+                ? 'border-accent bg-accent/10'
+                : 'border-line bg-base text-txt2 hover:border-line-strong hover:bg-elevated'
+            "
+            :aria-checked="permissionPreset === preset ? 'true' : 'false'"
+            role="radio"
+            data-testid="gate-share-permission"
+            :data-preset="preset"
+            @click="permissionPreset = preset"
+          >
+            <span
+              class="mt-0.5 grid h-3.5 w-3.5 shrink-0 place-items-center border"
+              :class="permissionPreset === preset ? 'border-accent' : 'border-line-strong'"
+              aria-hidden="true"
+            >
+              <span
+                v-if="permissionPreset === preset"
+                class="h-2 w-2 bg-accent"
+              />
+            </span>
+            <span class="min-w-0">
+              <span class="block text-[13px] font-semibold text-txt">
+                {{ t(`pages.gatesInbox.share.permission.${preset}`) }}
+              </span>
+              <span class="mt-0.5 block text-xs text-txt3">
+                {{ t(`pages.gatesInbox.share.permission.${preset}Desc`) }}
+              </span>
+            </span>
+          </button>
+        </div>
+
         <button
           type="button"
           class="inline-flex min-h-11 w-full items-center justify-center gap-2 bg-accent px-3 text-sm font-medium text-white hover:bg-accent-2 disabled:opacity-45"
@@ -313,6 +384,17 @@ function close() {
       </div>
 
       <div v-else class="space-y-3">
+        <div class="flex flex-wrap items-center gap-2" data-testid="gate-share-active-meta">
+          <span
+            class="border border-accent/45 bg-accent/10 px-2 py-0.5 text-[11px] text-accent-2"
+            data-testid="gate-share-preset-chip"
+          >
+            {{ activePresetChip }}
+          </span>
+          <span class="text-xs text-txt3" data-testid="gate-share-regen-inherit-hint">
+            {{ t('pages.gatesInbox.share.regenInheritsHint') }}
+          </span>
+        </div>
         <label class="block text-xs font-medium text-txt2">{{ t('pages.gatesInbox.share.linkLabel') }}</label>
         <textarea
           class="w-full border bg-elevated px-3 py-2 font-mono text-[12px] text-txt"

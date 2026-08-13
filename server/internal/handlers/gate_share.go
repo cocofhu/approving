@@ -12,7 +12,8 @@ import (
 )
 
 type createShareBody struct {
-	TTLTier string `json:"ttlTier"`
+	TTLTier          string `json:"ttlTier"`
+	PermissionPreset string `json:"permissionPreset"`
 }
 
 // shareOrigin mints gate/review share URL origins from this request's Host.
@@ -51,7 +52,7 @@ func (h *Handlers) CreateGateShareLink(c *gin.Context) {
 	}
 	var body createShareBody
 	_ = c.ShouldBindJSON(&body)
-	res, err := h.GateShare.Create(c.Param("id"), c.Param("nodeId"), body.TTLTier, h.shareActor(c), h.shareOrigin(c))
+	res, err := h.GateShare.Create(c.Param("id"), c.Param("nodeId"), body.TTLTier, body.PermissionPreset, h.shareActor(c), h.shareOrigin(c))
 	if err != nil {
 		writeShareErr(c, err)
 		return
@@ -111,6 +112,10 @@ func writeShareErr(c *gin.Context, err error) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "gate_not_pending"})
 	case errors.Is(err, gateshare.ErrInvalidTTL):
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_ttl"})
+	case errors.Is(err, gateshare.ErrInvalidPermissionPreset):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_permission_preset"})
+	case errors.Is(err, gateshare.ErrPermissionDenied):
+		c.JSON(http.StatusForbidden, gin.H{"error": "permission_denied"})
 	case errors.Is(err, gateshare.ErrNotActive):
 		c.JSON(http.StatusConflict, gin.H{"error": "not_active"})
 	case errors.Is(err, gateshare.ErrNotFound):

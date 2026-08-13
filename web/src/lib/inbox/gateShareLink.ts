@@ -4,6 +4,17 @@ export const GATE_SHARE_TTL_TIERS = ['1h', '8h', '24h', '72h', '7d'] as const
 export type GateShareTTLTier = (typeof GATE_SHARE_TTL_TIERS)[number]
 export const DEFAULT_GATE_SHARE_TTL: GateShareTTLTier = '24h'
 
+export const GATE_SHARE_PERMISSION_PRESETS = ['full', 'react_only'] as const
+export type GateSharePermissionPreset = (typeof GATE_SHARE_PERMISSION_PRESETS)[number]
+export const DEFAULT_GATE_SHARE_PERMISSION: GateSharePermissionPreset = 'full'
+
+/** Normalize API / stored preset; empty/unknown ⇒ full (legacy compatible). */
+export function normalizePermissionPreset(
+  raw?: string | null,
+): GateSharePermissionPreset {
+  return raw === 'react_only' ? 'react_only' : 'full'
+}
+
 const GATE_SHARE_TOKEN_HEADER = 'X-Gate-Share-Token'
 const GATE_SHARE_REQUEST_HEADER = 'X-Gate-Share-Requested'
 
@@ -96,6 +107,8 @@ const SHARE_API_ERROR_KEYS: Record<string, string> = {
   review_busy: 'pages.gatesInbox.share.errors.reviewBusy',
   review_validation_failed: 'pages.gatesInbox.share.errors.reviewValidationFailed',
   invalid_ttl: 'pages.gatesInbox.share.errors.invalidTtl',
+  invalid_permission_preset: 'pages.gatesInbox.share.errors.invalidPermissionPreset',
+  permission_denied: 'pages.gatesInbox.share.errors.permissionDenied',
   not_active: 'pages.gatesInbox.share.errors.notActive',
   not_found: 'pages.gatesInbox.share.errors.notFound',
   share_failed: 'pages.gatesInbox.share.errors.shareFailed',
@@ -235,6 +248,8 @@ export type PublicGatePreview = {
   description?: string
   remainingSec?: number
   expiresAt?: string
+  /** Link-level capability: full | react_only. Absent/empty ⇒ full. */
+  permissionPreset?: 'full' | 'react_only' | string
   actions?: { approve?: string; reject?: string; confirm?: string; reply?: string; cancel?: string }
   visualHtml?: string
   /** Content hash for sparse silent poll; always present when server computed it. */

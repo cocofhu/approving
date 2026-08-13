@@ -78,10 +78,16 @@ let clarifyLinkUsed = false
   ]
 }
 
-;(api as any).createGateShareLink = async (_runId: string, _nodeId: string, ttlTier = '24h') => ({
+;(api as any).createGateShareLink = async (
+  _runId: string,
+  _nodeId: string,
+  ttlTier = '24h',
+  permissionPreset = 'full',
+) => ({
   id: 'gsl-e2e',
   url: fixtureShareUrl(),
   ttlTier,
+  permissionPreset,
   expiresAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
   state: 'active',
 })
@@ -89,14 +95,21 @@ let clarifyLinkUsed = false
   id: 'gsl-e2e-2',
   url: fixtureShareUrl('cd'.repeat(32)),
   ttlTier: '24h',
+  permissionPreset: 'full',
   expiresAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
   state: 'active',
 })
 ;(api as any).revokeGateShareLink = async () => ({ status: 'revoked' })
-;(api as any).createReviewShareLink = async (_runId: string, _nodeId: string, ttlTier = '24h') => ({
+;(api as any).createReviewShareLink = async (
+  _runId: string,
+  _nodeId: string,
+  ttlTier = '24h',
+  permissionPreset = 'full',
+) => ({
   id: 'gsl-e2e-review',
   url: fixtureShareUrl(),
   ttlTier,
+  permissionPreset,
   expiresAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
   state: 'active',
 })
@@ -104,6 +117,7 @@ let clarifyLinkUsed = false
   id: 'gsl-e2e-review-2',
   url: fixtureShareUrl('cd'.repeat(32)),
   ttlTier: '24h',
+  permissionPreset: 'full',
   expiresAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
   state: 'active',
 })

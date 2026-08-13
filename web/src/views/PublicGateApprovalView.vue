@@ -22,6 +22,7 @@ import {
   parseShareTokenFromHash,
   publicGateApi,
   publicGateContentKey,
+  normalizePermissionPreset,
   remainingSecFromExpiresAt,
   type PublicGateActiveItem,
   type PublicGateDecideResult,
@@ -124,6 +125,20 @@ const showConfirm = computed(() => {
   if (isReview.value) return !!preview.value?.actions?.confirm
   return !!preview.value?.actions?.approve || !!preview.value?.actions?.confirm
 })
+const permissionPreset = computed(() => normalizePermissionPreset(preview.value?.permissionPreset))
+const isReactOnly = computed(() => permissionPreset.value === 'react_only')
+const showReactOnlyDeadend = computed(
+  () => isActive.value && !doneKind.value && isReactOnly.value && !reactAlive.value,
+)
+const coldHintText = computed(() => {
+  if (isReactOnly.value) return t('pages.publicGate.sessionEndedHintReactOnly')
+  return isReview.value ? t('pages.publicGate.sessionEndedHint') : t('pages.publicGate.sessionEndedHintGate')
+})
+const presetChipLabel = computed(() =>
+  isReactOnly.value
+    ? t('pages.publicGate.presetChipReactOnly')
+    : t('pages.publicGate.presetChipFull'),
+)
 /** Clickability: busy / in-flight / submitting / linkInvalid disable (align GateApproval). */
 const confirmDisabled = computed(
   () =>
@@ -133,6 +148,7 @@ const confirmDisabled = computed(
     linkInvalid.value ||
     !showConfirm.value,
 )
+const showDecideFields = computed(() => showConfirm.value || canReject.value || linkInvalid.value)
 const productKind = computed(() => preview.value?.productKind || inferProductKind())
 const productName = computed(() => preview.value?.productName || preview.value?.structured?.name || '')
 const inspectable = computed(
@@ -946,6 +962,13 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
         >
           {{ t('pages.publicGate.sessionEnded') }}
         </span>
+        <span
+          v-if="isActive && !doneKind"
+          class="border border-accent/45 bg-accent/10 px-2 py-0.5 text-[11px] text-accent-2"
+          data-testid="public-gate-preset-chip"
+        >
+          {{ presetChipLabel }}
+        </span>
       </div>
       <span v-if="isActive && !doneKind" class="text-[12px] text-txt3" data-testid="public-gate-remaining">
         {{ t('pages.publicGate.remaining', { remaining: remainingLabel }) }}
@@ -1069,33 +1092,44 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
         </template>
         <template #sidebar>
           <div class="flex h-full min-h-0 flex-col" data-testid="public-gate-sidebar">
-            <p
-              v-if="!reactAlive"
-              class="shrink-0 border-b border-line px-4 py-2 text-[11px] text-txt3"
-              data-testid="public-gate-cold-hint"
+            <div
+              v-if="showReactOnlyDeadend"
+              class="flex flex-1 flex-col items-center justify-center gap-2 border border-dashed border-line-strong bg-elevated px-6 py-10 text-center"
+              data-testid="public-gate-react-only-deadend"
+              role="status"
             >
-              {{ isReview ? t('pages.publicGate.sessionEndedHint') : t('pages.publicGate.sessionEndedHintGate') }}
-            </p>
-            <!-- Wrapper supplies min-h-0 flex-1: ClarifyChat is multi-root so fallthrough class is ignored. -->
-            <div class="flex min-h-0 flex-1 flex-col" data-testid="public-gate-chat-host">
-              <ClarifyChat
-                ref="chatRef"
-                run-id="public-share"
-                node-id="public-gate"
-                :iteration="1"
-                v-model:draft="draft"
-                v-model:attachments="attachments"
-                v-model:annotations="annotations"
-                :turns="turns"
-                :done="false"
-                :active="canReply"
-                review-mode
-                annotate-enabled
-                hide-finish
-                @send="onSend"
-                @cancel="onCancel"
-              />
+              <h2 class="text-sm font-semibold text-txt">{{ t('pages.publicGate.reactOnlyDeadendTitle') }}</h2>
+              <p class="max-w-[42ch] text-xs text-txt2">{{ t('pages.publicGate.reactOnlyDeadendBody') }}</p>
             </div>
+            <template v-else>
+              <p
+                v-if="!reactAlive"
+                class="shrink-0 border-b border-line px-4 py-2 text-[11px] text-txt3"
+                data-testid="public-gate-cold-hint"
+              >
+                {{ coldHintText }}
+              </p>
+              <!-- Wrapper supplies min-h-0 flex-1: ClarifyChat is multi-root so fallthrough class is ignored. -->
+              <div class="flex min-h-0 flex-1 flex-col" data-testid="public-gate-chat-host">
+                <ClarifyChat
+                  ref="chatRef"
+                  run-id="public-share"
+                  node-id="public-gate"
+                  :iteration="1"
+                  v-model:draft="draft"
+                  v-model:attachments="attachments"
+                  v-model:annotations="annotations"
+                  :turns="turns"
+                  :done="false"
+                  :active="canReply"
+                  review-mode
+                  annotate-enabled
+                  hide-finish
+                  @send="onSend"
+                  @cancel="onCancel"
+                />
+              </div>
+            </template>
           </div>
         </template>
       </ReviewShell>
@@ -1124,7 +1158,7 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
             <Icon name="expand" :size="14" />
             {{ t('pages.gateApproval.upstreamEnlarge') }}
           </button>
-          <template v-if="!isReview">
+          <template v-if="!isReview && showDecideFields">
             <input
               v-model="reviewerName"
               type="text"
@@ -1143,7 +1177,11 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
               :placeholder="t('pages.publicGate.commentPh')"
             />
           </template>
-          <span class="hidden text-[11px] text-txt3 md:inline" data-testid="public-gate-confirm-hint">
+          <span
+            v-if="showDecideFields"
+            class="hidden text-[11px] text-txt3 md:inline"
+            data-testid="public-gate-confirm-hint"
+          >
             {{
               isClarify ? t('pages.publicGate.confirmHintClarify') : t('pages.publicGate.confirmHint')
             }}

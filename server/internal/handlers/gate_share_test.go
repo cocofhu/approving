@@ -1000,3 +1000,102 @@ func TestPublicGatePreviewSilentSkipsNonceUnlessRequested(t *testing.T) {
 		t.Fatalf("issueNonce must Issue a new row, before=%d after=%d", afterFirst, got)
 	}
 }
+
+func TestGateSharePermissionPresetReactOnlyDecideDenied(t *testing.T) {
+	h := newHarness(t)
+	seedHumanGate(t, h, "run-share-preset", "hg-preset", nil)
+
+	created := parseJSON(t, h.do(http.MethodPost, "/api/runs/run-share-preset/gates/hg-preset/share-link", map[string]any{
+		"ttlTier": "24h", "permissionPreset": "react_only",
+	}))
+	if created["permissionPreset"] != models.SharePermissionReactOnly {
+		t.Fatalf("create result preset: %+v", created)
+	}
+	url, _ := created["url"].(string)
+	token := strings.TrimPrefix(url[strings.Index(url, "#t="):], "#t=")
+
+	st := parseJSON(t, h.do(http.MethodGet, "/api/runs/run-share-preset/gates/hg-preset/share-link", nil))
+	if st["permissionPreset"] != models.SharePermissionReactOnly {
+		t.Fatalf("status preset: %+v", st)
+	}
+
+	prev := parseJSON(t, h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: token}))
+	if prev["permissionPreset"] != models.SharePermissionReactOnly {
+		t.Fatalf("preview preset: %+v", prev)
+	}
+	actions, _ := prev["actions"].(map[string]any)
+	if _, ok := actions["confirm"]; ok {
+		t.Fatalf("react_only preview still has confirm: %+v", actions)
+	}
+	if _, ok := actions["approve"]; ok {
+		t.Fatalf("react_only preview still has approve: %+v", actions)
+	}
+	if _, ok := actions["reject"]; ok {
+		t.Fatalf("react_only preview still has reject: %+v", actions)
+	}
+
+	nonce := publicPreviewNonce(t, h, token)
+	dec := h.doPublic(http.MethodPost, "/public/gate-approvals/decide", map[string]any{
+		"token": token, "action": "approve", "comment": "绕过", "name": "Eve", "nonce": nonce,
+	}, map[string]string{
+		headerShareRequest: "1",
+		"Origin":           "http://" + publicHost,
+	})
+	if dec.Code != http.StatusForbidden {
+		t.Fatalf("decide should 403: %d %s", dec.Code, dec.Body.String())
+	}
+	if !strings.Contains(dec.Body.String(), "permission_denied") {
+		t.Fatalf("decide body: %s", dec.Body.String())
+	}
+
+	var link models.GateShareLink
+	if err := h.db.Where("run_id = ? AND node_id = ?", "run-share-preset", "hg-preset").
+		Order("created_at desc").First(&link).Error; err != nil {
+		t.Fatalf("load link: %v", err)
+	}
+	if link.UsedAt != nil {
+		t.Fatalf("react_only decide must not consume link: usedAt=%v", link.UsedAt)
+	}
+	var gate models.Gate
+	if err := h.db.Where("run_id = ? AND node_id = ?", "run-share-preset", "hg-preset").First(&gate).Error; err != nil {
+		t.Fatalf("load gate: %v", err)
+	}
+	if gate.Resolved {
+		t.Fatal("react_only decide must not resolve gate")
+	}
+
+	regen := parseJSON(t, h.do(http.MethodPost, "/api/runs/run-share-preset/gates/hg-preset/share-link/regen", nil))
+	if regen["permissionPreset"] != models.SharePermissionReactOnly {
+		t.Fatalf("regen must inherit preset: %+v", regen)
+	}
+}
+
+func TestGateSharePermissionPresetLegacyEmptyIsFull(t *testing.T) {
+	h := newHarness(t)
+	seedHumanGate(t, h, "run-share-legacy", "hg-legacy", nil)
+	created := parseJSON(t, h.do(http.MethodPost, "/api/runs/run-share-legacy/gates/hg-legacy/share-link", map[string]any{"ttlTier": "24h"}))
+	if created["permissionPreset"] != models.SharePermissionFull {
+		t.Fatalf("default create preset: %+v", created)
+	}
+	url, _ := created["url"].(string)
+	token := strings.TrimPrefix(url[strings.Index(url, "#t="):], "#t=")
+
+	// Simulate a legacy row with empty permission_preset.
+	if err := h.db.Model(&models.GateShareLink{}).
+		Where("run_id = ? AND node_id = ?", "run-share-legacy", "hg-legacy").
+		Update("permission_preset", "").Error; err != nil {
+		t.Fatalf("clear preset: %v", err)
+	}
+	prev := parseJSON(t, h.doPublic(http.MethodGet, "/public/gate-approvals/preview", nil, map[string]string{headerShareToken: token}))
+	if prev["permissionPreset"] != models.SharePermissionFull {
+		t.Fatalf("legacy preview preset: %+v", prev)
+	}
+	actions, _ := prev["actions"].(map[string]any)
+	if actions["confirm"] == nil && actions["approve"] == nil {
+		t.Fatalf("legacy full missing decide: %+v", actions)
+	}
+	st := parseJSON(t, h.do(http.MethodGet, "/api/runs/run-share-legacy/gates/hg-legacy/share-link", nil))
+	if st["permissionPreset"] != models.SharePermissionFull {
+		t.Fatalf("legacy status preset: %+v", st)
+	}
+}

@@ -187,6 +187,7 @@ describe('PublicGateApprovalView workbench', () => {
       reactSessionAlive: false,
       productKind: 'visual',
       productName: 'page.html',
+      permissionPreset: 'full',
       actions: { confirm: 'confirm' },
       visualHtml: '<p>ok</p>',
       turns: [{ role: 'agent', text: '历史回合', at: '2026-08-01T00:00:00Z' }],
@@ -200,6 +201,41 @@ describe('PublicGateApprovalView workbench', () => {
     expect(w.find('[data-testid="html-preview-inspect-toggle"]').exists()).toBe(false)
     expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
     expect(w.get('[data-testid="public-gate-sidebar"]').text()).toContain('历史回合')
+  })
+
+  it('react_only hot: reply only, no decide buttons; cold shows deadend', async () => {
+    window.location.hash = `#t=${'ro'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'human_gate',
+      nonce: 'n-ro',
+      reactSessionAlive: true,
+      permissionPreset: 'react_only',
+      actions: { reply: 'reply', cancel: 'cancel' },
+      turns: [{ role: 'agent', text: '请协作修改', at: '2026-08-01T00:00:00Z' }],
+    })
+    const w = mountView()
+    await flushPromises()
+    expect(w.get('[data-testid="public-gate-preset-chip"]').text()).toContain('仅 ReAct')
+    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(false)
+    expect(w.find('[data-testid="public-gate-reject"]').exists()).toBe(false)
+    expect(w.find('[data-testid="public-gate-name"]').exists()).toBe(false)
+
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'human_gate',
+      nonce: 'n-ro-cold',
+      reactSessionAlive: false,
+      permissionPreset: 'react_only',
+      actions: {},
+      turns: [{ role: 'agent', text: '历史', at: '2026-08-01T00:00:00Z' }],
+    })
+    await (w.vm as any).loadPreview?.()
+    await flushPromises()
+    expect(w.get('[data-testid="public-gate-react-only-deadend"]').text()).toContain('无法继续操作')
+    expect(w.get('[data-testid="public-gate-react-only-deadend"]').text()).toContain('禁止确认')
+    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(false)
+    expect(w.find('[data-testid="public-gate-cold-hint"]').exists()).toBe(false)
   })
 
   it('human_gate requires name and comment before confirm or reject', async () => {

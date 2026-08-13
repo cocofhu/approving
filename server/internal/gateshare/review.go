@@ -23,6 +23,7 @@ func (s *Service) statusFromReview(link *models.GateShareLink, convDone bool, ru
 		st.UsedAt = link.UsedAt
 		st.RevokedAt = link.RevokedAt
 		if st.State == models.ShareLinkStateActive {
+			st.PermissionPreset = NormalizePermissionPreset(link.PermissionPreset)
 			rem := int64(time.Until(link.ExpiresAt).Seconds())
 			if rem < 0 {
 				rem = 0
@@ -104,7 +105,7 @@ func (s *Service) StatusReview(runID, nodeID string) (InboxShareStatus, error) {
 }
 
 // CreateReview mints a review share link bound to the pending ReactConversation.
-func (s *Service) CreateReview(runID, nodeID, ttlTier, createdBy, publicOrigin string) (*CreateResult, error) {
+func (s *Service) CreateReview(runID, nodeID, ttlTier, permissionPreset, createdBy, publicOrigin string) (*CreateResult, error) {
 	conv, run, err := s.currentPendingReview(runID, nodeID)
 	if err != nil {
 		if conv.ID != 0 && conv.Done {
@@ -115,6 +116,10 @@ func (s *Service) CreateReview(runID, nodeID, ttlTier, createdBy, publicOrigin s
 	tier, dur, ok := ParseTTLTier(ttlTier)
 	if !ok {
 		return nil, ErrInvalidTTL
+	}
+	preset, ok := ParsePermissionPreset(permissionPreset)
+	if !ok {
+		return nil, ErrInvalidPermissionPreset
 	}
 	latest, err := s.latestLink(runID, nodeID, conv.Iteration, models.ShareLinkKindReview)
 	if err != nil {
@@ -129,16 +134,17 @@ func (s *Service) CreateReview(runID, nodeID, ttlTier, createdBy, publicOrigin s
 	}
 	now := time.Now()
 	link := models.GateShareLink{
-		ID:        newShareID(),
-		TokenHash: HashToken(token),
-		Kind:      models.ShareLinkKindReview,
-		RunID:     runID,
-		NodeID:    nodeID,
-		Iteration: conv.Iteration,
-		CreatedBy: strings.TrimSpace(createdBy),
-		TTLTier:   tier,
-		ExpiresAt: now.Add(dur),
-		CreatedAt: now,
+		ID:               newShareID(),
+		TokenHash:        HashToken(token),
+		Kind:             models.ShareLinkKindReview,
+		RunID:            runID,
+		NodeID:           nodeID,
+		Iteration:        conv.Iteration,
+		CreatedBy:        strings.TrimSpace(createdBy),
+		TTLTier:          tier,
+		PermissionPreset: preset,
+		ExpiresAt:        now.Add(dur),
+		CreatedAt:        now,
 	}
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		if err := revokeActiveInTx(tx, runID, nodeID, conv.Iteration, now, models.ShareLinkKindReview); err != nil {
@@ -149,18 +155,20 @@ func (s *Service) CreateReview(runID, nodeID, ttlTier, createdBy, publicOrigin s
 		return nil, err
 	}
 	s.recordShareAudit(run, models.Gate{NodeID: nodeID, Iteration: conv.Iteration}, models.AuditActionGateShareCreate, createdBy, map[string]any{
-		"ttlTier":   tier,
-		"expiresAt": link.ExpiresAt,
-		"createdAt": link.CreatedAt,
-		"linkId":    link.ID,
-		"kind":      models.ShareLinkKindReview,
+		"ttlTier":          tier,
+		"permissionPreset": preset,
+		"expiresAt":        link.ExpiresAt,
+		"createdAt":        link.CreatedAt,
+		"linkId":           link.ID,
+		"kind":             models.ShareLinkKindReview,
 	})
 	return &CreateResult{
-		ID:        link.ID,
-		URL:       ShareURL(publicOrigin, token),
-		TTLTier:   tier,
-		ExpiresAt: link.ExpiresAt,
-		State:     models.ShareLinkStateActive,
+		ID:               link.ID,
+		URL:              ShareURL(publicOrigin, token),
+		TTLTier:          tier,
+		PermissionPreset: preset,
+		ExpiresAt:        link.ExpiresAt,
+		State:            models.ShareLinkStateActive,
 	}, nil
 }
 
@@ -178,6 +186,7 @@ func (s *Service) RegenerateReview(runID, nodeID, createdBy, publicOrigin string
 		return nil, ErrNotActive
 	}
 	tier := latest.TTLTier
+	preset := NormalizePermissionPreset(latest.PermissionPreset)
 	token, err := GenerateToken()
 	if err != nil {
 		return nil, err
@@ -188,16 +197,17 @@ func (s *Service) RegenerateReview(runID, nodeID, createdBy, publicOrigin string
 	}
 	now := time.Now()
 	link := models.GateShareLink{
-		ID:        newShareID(),
-		TokenHash: HashToken(token),
-		Kind:      models.ShareLinkKindReview,
-		RunID:     runID,
-		NodeID:    nodeID,
-		Iteration: conv.Iteration,
-		CreatedBy: strings.TrimSpace(createdBy),
-		TTLTier:   tier,
-		ExpiresAt: now.Add(dur),
-		CreatedAt: now,
+		ID:               newShareID(),
+		TokenHash:        HashToken(token),
+		Kind:             models.ShareLinkKindReview,
+		RunID:            runID,
+		NodeID:           nodeID,
+		Iteration:        conv.Iteration,
+		CreatedBy:        strings.TrimSpace(createdBy),
+		TTLTier:          tier,
+		PermissionPreset: preset,
+		ExpiresAt:        now.Add(dur),
+		CreatedAt:        now,
 	}
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		if err := revokeActiveInTx(tx, runID, nodeID, conv.Iteration, now, models.ShareLinkKindReview); err != nil {
@@ -209,19 +219,21 @@ func (s *Service) RegenerateReview(runID, nodeID, createdBy, publicOrigin string
 	}
 	s.notifyInvalidated([]string{latest.TokenHash})
 	s.recordShareAudit(run, models.Gate{NodeID: nodeID, Iteration: conv.Iteration}, models.AuditActionGateShareRegen, createdBy, map[string]any{
-		"ttlTier":   tier,
-		"expiresAt": link.ExpiresAt,
-		"createdAt": link.CreatedAt,
-		"linkId":    link.ID,
-		"revokedAt": now,
-		"kind":      models.ShareLinkKindReview,
+		"ttlTier":          tier,
+		"permissionPreset": preset,
+		"expiresAt":        link.ExpiresAt,
+		"createdAt":        link.CreatedAt,
+		"linkId":           link.ID,
+		"revokedAt":        now,
+		"kind":             models.ShareLinkKindReview,
 	})
 	return &CreateResult{
-		ID:        link.ID,
-		URL:       ShareURL(publicOrigin, token),
-		TTLTier:   tier,
-		ExpiresAt: link.ExpiresAt,
-		State:     models.ShareLinkStateActive,
+		ID:               link.ID,
+		URL:              ShareURL(publicOrigin, token),
+		TTLTier:          tier,
+		PermissionPreset: preset,
+		ExpiresAt:        link.ExpiresAt,
+		State:            models.ShareLinkStateActive,
 	}, nil
 }
 
@@ -256,12 +268,13 @@ func (s *Service) RevokeReview(runID, nodeID, actor string) error {
 	}
 	s.notifyInvalidated([]string{latest.TokenHash})
 	s.recordShareAudit(run, models.Gate{NodeID: nodeID, Iteration: conv.Iteration}, models.AuditActionGateShareRevoke, actor, map[string]any{
-		"revokedAt": now,
-		"expiresAt": latest.ExpiresAt,
-		"createdAt": latest.CreatedAt,
-		"linkId":    latest.ID,
-		"ttlTier":   latest.TTLTier,
-		"kind":      models.ShareLinkKindReview,
+		"revokedAt":        now,
+		"expiresAt":        latest.ExpiresAt,
+		"createdAt":        latest.CreatedAt,
+		"linkId":           latest.ID,
+		"ttlTier":          latest.TTLTier,
+		"permissionPreset": NormalizePermissionPreset(latest.PermissionPreset),
+		"kind":             models.ShareLinkKindReview,
 	})
 	return nil
 }

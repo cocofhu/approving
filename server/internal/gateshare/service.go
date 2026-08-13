@@ -15,25 +15,27 @@ import (
 
 // InboxShareStatus is the leak-free share-link chip DTO (no plaintext token).
 type InboxShareStatus struct {
-	State        string     `json:"state"`
-	TTLTier      string     `json:"ttlTier,omitempty"`
-	ExpiresAt    *time.Time `json:"expiresAt,omitempty"`
-	RemainingSec *int64     `json:"remainingSec,omitempty"`
-	UsedAt       *time.Time `json:"usedAt,omitempty"`
-	RevokedAt    *time.Time `json:"revokedAt,omitempty"`
-	CanCreate    bool       `json:"canCreate"`
-	CanManage    bool       `json:"canManage"`
-	HasPass      bool       `json:"hasPass"`
-	HasFail      bool       `json:"hasFail"`
+	State            string     `json:"state"`
+	TTLTier          string     `json:"ttlTier,omitempty"`
+	PermissionPreset string     `json:"permissionPreset,omitempty"`
+	ExpiresAt        *time.Time `json:"expiresAt,omitempty"`
+	RemainingSec     *int64     `json:"remainingSec,omitempty"`
+	UsedAt           *time.Time `json:"usedAt,omitempty"`
+	RevokedAt        *time.Time `json:"revokedAt,omitempty"`
+	CanCreate        bool       `json:"canCreate"`
+	CanManage        bool       `json:"canManage"`
+	HasPass          bool       `json:"hasPass"`
+	HasFail          bool       `json:"hasFail"`
 }
 
 // CreateResult is returned only to the management surface (may include fragment URL).
 type CreateResult struct {
-	ID        string    `json:"id"`
-	URL       string    `json:"url"`
-	TTLTier   string    `json:"ttlTier"`
-	ExpiresAt time.Time `json:"expiresAt"`
-	State     string    `json:"state"`
+	ID               string    `json:"id"`
+	URL              string    `json:"url"`
+	TTLTier          string    `json:"ttlTier"`
+	PermissionPreset string    `json:"permissionPreset"`
+	ExpiresAt        time.Time `json:"expiresAt"`
+	State            string    `json:"state"`
 }
 
 // LookupResult is a validated share link plus its bound instance (no plaintext token).
@@ -209,6 +211,7 @@ func (s *Service) statusFrom(link *models.GateShareLink, gate models.Gate, run m
 		st.UsedAt = link.UsedAt
 		st.RevokedAt = link.RevokedAt
 		if st.State == models.ShareLinkStateActive {
+			st.PermissionPreset = NormalizePermissionPreset(link.PermissionPreset)
 			rem := int64(time.Until(link.ExpiresAt).Seconds())
 			if rem < 0 {
 				rem = 0
@@ -233,7 +236,7 @@ func (s *Service) statusFrom(link *models.GateShareLink, gate models.Gate, run m
 }
 
 // Create mints a new active link (revoking any prior active for the instance).
-func (s *Service) Create(runID, nodeID, ttlTier, createdBy, publicOrigin string) (*CreateResult, error) {
+func (s *Service) Create(runID, nodeID, ttlTier, permissionPreset, createdBy, publicOrigin string) (*CreateResult, error) {
 	gate, run, err := s.currentPendingGate(runID, nodeID)
 	if err != nil {
 		if gate.ID != 0 && gate.Resolved {
@@ -248,6 +251,10 @@ func (s *Service) Create(runID, nodeID, ttlTier, createdBy, publicOrigin string)
 	if !ok {
 		return nil, ErrInvalidTTL
 	}
+	preset, ok := ParsePermissionPreset(permissionPreset)
+	if !ok {
+		return nil, ErrInvalidPermissionPreset
+	}
 	latest, err := s.latestLink(runID, nodeID, gate.Iteration, models.ShareLinkKindHumanGate)
 	if err != nil {
 		return nil, err
@@ -261,17 +268,18 @@ func (s *Service) Create(runID, nodeID, ttlTier, createdBy, publicOrigin string)
 	}
 	now := time.Now()
 	link := models.GateShareLink{
-		ID:        newShareID(),
-		TokenHash: HashToken(token),
-		Kind:      models.ShareLinkKindHumanGate,
-		RunID:     runID,
-		NodeID:    nodeID,
-		Iteration: gate.Iteration,
-		GateID:    gateIDPtr(gate.ID),
-		CreatedBy: strings.TrimSpace(createdBy),
-		TTLTier:   tier,
-		ExpiresAt: now.Add(dur),
-		CreatedAt: now,
+		ID:               newShareID(),
+		TokenHash:        HashToken(token),
+		Kind:             models.ShareLinkKindHumanGate,
+		RunID:            runID,
+		NodeID:           nodeID,
+		Iteration:        gate.Iteration,
+		GateID:           gateIDPtr(gate.ID),
+		CreatedBy:        strings.TrimSpace(createdBy),
+		TTLTier:          tier,
+		PermissionPreset: preset,
+		ExpiresAt:        now.Add(dur),
+		CreatedAt:        now,
 	}
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		if err := revokeActiveInTx(tx, runID, nodeID, gate.Iteration, now, models.ShareLinkKindHumanGate); err != nil {
@@ -282,17 +290,19 @@ func (s *Service) Create(runID, nodeID, ttlTier, createdBy, publicOrigin string)
 		return nil, err
 	}
 	s.recordShareAudit(run, gate, models.AuditActionGateShareCreate, createdBy, map[string]any{
-		"ttlTier":   tier,
-		"expiresAt": link.ExpiresAt,
-		"createdAt": link.CreatedAt,
-		"linkId":    link.ID,
+		"ttlTier":          tier,
+		"permissionPreset": preset,
+		"expiresAt":        link.ExpiresAt,
+		"createdAt":        link.CreatedAt,
+		"linkId":           link.ID,
 	})
 	return &CreateResult{
-		ID:        link.ID,
-		URL:       ShareURL(publicOrigin, token),
-		TTLTier:   tier,
-		ExpiresAt: link.ExpiresAt,
-		State:     models.ShareLinkStateActive,
+		ID:               link.ID,
+		URL:              ShareURL(publicOrigin, token),
+		TTLTier:          tier,
+		PermissionPreset: preset,
+		ExpiresAt:        link.ExpiresAt,
+		State:            models.ShareLinkStateActive,
 	}, nil
 }
 
@@ -310,6 +320,7 @@ func (s *Service) Regenerate(runID, nodeID, createdBy, publicOrigin string) (*Cr
 		return nil, ErrNotActive
 	}
 	tier := latest.TTLTier
+	preset := NormalizePermissionPreset(latest.PermissionPreset)
 	token, err := GenerateToken()
 	if err != nil {
 		return nil, err
@@ -320,17 +331,18 @@ func (s *Service) Regenerate(runID, nodeID, createdBy, publicOrigin string) (*Cr
 	}
 	now := time.Now()
 	link := models.GateShareLink{
-		ID:        newShareID(),
-		TokenHash: HashToken(token),
-		Kind:      models.ShareLinkKindHumanGate,
-		RunID:     runID,
-		NodeID:    nodeID,
-		Iteration: gate.Iteration,
-		GateID:    gateIDPtr(gate.ID),
-		CreatedBy: strings.TrimSpace(createdBy),
-		TTLTier:   tier,
-		ExpiresAt: now.Add(dur),
-		CreatedAt: now,
+		ID:               newShareID(),
+		TokenHash:        HashToken(token),
+		Kind:             models.ShareLinkKindHumanGate,
+		RunID:            runID,
+		NodeID:           nodeID,
+		Iteration:        gate.Iteration,
+		GateID:           gateIDPtr(gate.ID),
+		CreatedBy:        strings.TrimSpace(createdBy),
+		TTLTier:          tier,
+		PermissionPreset: preset,
+		ExpiresAt:        now.Add(dur),
+		CreatedAt:        now,
 	}
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		if err := revokeActiveInTx(tx, runID, nodeID, gate.Iteration, now, models.ShareLinkKindHumanGate); err != nil {
@@ -342,18 +354,20 @@ func (s *Service) Regenerate(runID, nodeID, createdBy, publicOrigin string) (*Cr
 	}
 	s.notifyInvalidated([]string{latest.TokenHash})
 	s.recordShareAudit(run, gate, models.AuditActionGateShareRegen, createdBy, map[string]any{
-		"ttlTier":   tier,
-		"expiresAt": link.ExpiresAt,
-		"createdAt": link.CreatedAt,
-		"linkId":    link.ID,
-		"revokedAt": now,
+		"ttlTier":          tier,
+		"permissionPreset": preset,
+		"expiresAt":        link.ExpiresAt,
+		"createdAt":        link.CreatedAt,
+		"linkId":           link.ID,
+		"revokedAt":        now,
 	})
 	return &CreateResult{
-		ID:        link.ID,
-		URL:       ShareURL(publicOrigin, token),
-		TTLTier:   tier,
-		ExpiresAt: link.ExpiresAt,
-		State:     models.ShareLinkStateActive,
+		ID:               link.ID,
+		URL:              ShareURL(publicOrigin, token),
+		TTLTier:          tier,
+		PermissionPreset: preset,
+		ExpiresAt:        link.ExpiresAt,
+		State:            models.ShareLinkStateActive,
 	}, nil
 }
 
@@ -388,11 +402,12 @@ func (s *Service) Revoke(runID, nodeID, actor string) error {
 	}
 	s.notifyInvalidated([]string{latest.TokenHash})
 	s.recordShareAudit(run, gate, models.AuditActionGateShareRevoke, actor, map[string]any{
-		"revokedAt": now,
-		"expiresAt": latest.ExpiresAt,
-		"createdAt": latest.CreatedAt,
-		"linkId":    latest.ID,
-		"ttlTier":   latest.TTLTier,
+		"revokedAt":        now,
+		"expiresAt":        latest.ExpiresAt,
+		"createdAt":        latest.CreatedAt,
+		"linkId":           latest.ID,
+		"ttlTier":          latest.TTLTier,
+		"permissionPreset": NormalizePermissionPreset(latest.PermissionPreset),
 	})
 	return nil
 }
@@ -664,16 +679,17 @@ func (s *Service) AttachInboxStatus(items []any) {
 
 func inboxStatusPtr(st InboxShareStatus) *services.GateShareInboxStatus {
 	return &services.GateShareInboxStatus{
-		State:        st.State,
-		TTLTier:      st.TTLTier,
-		ExpiresAt:    st.ExpiresAt,
-		RemainingSec: st.RemainingSec,
-		UsedAt:       st.UsedAt,
-		RevokedAt:    st.RevokedAt,
-		CanCreate:    st.CanCreate,
-		CanManage:    st.CanManage,
-		HasPass:      st.HasPass,
-		HasFail:      st.HasFail,
+		State:            st.State,
+		TTLTier:          st.TTLTier,
+		PermissionPreset: st.PermissionPreset,
+		ExpiresAt:        st.ExpiresAt,
+		RemainingSec:     st.RemainingSec,
+		UsedAt:           st.UsedAt,
+		RevokedAt:        st.RevokedAt,
+		CanCreate:        st.CanCreate,
+		CanManage:        st.CanManage,
+		HasPass:          st.HasPass,
+		HasFail:          st.HasFail,
 	}
 }
 

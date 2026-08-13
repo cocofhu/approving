@@ -662,6 +662,8 @@ export interface Gate {
 export interface GateShareInboxStatus {
   state: 'none' | 'active' | 'used' | 'revoked' | 'expired' | string
   ttlTier?: string
+  /** Link-level capability: full | react_only. Absent/empty ⇒ full. */
+  permissionPreset?: 'full' | 'react_only' | string
   expiresAt?: string
   remainingSec?: number
   usedAt?: string
