@@ -49,19 +49,19 @@ set +a
 : "${APPROVING_GATEWAY_PORT:=8899}"
 : "${APPROVING_SANDBOX_GATEWAY_URL:=http://127.0.0.1:${APPROVING_GATEWAY_PORT}}"
 : "${APPROVING_DEPLOYMENT_MODE:=local-demo}"
-: "${APPROVING_IMAGE:=ghcr.io/cocofhu/approving:0.1.2-beta}"
-: "${SANDBOX_GATEWAY_IMAGE:=ghcr.io/cocofhu/sandbox-gateway:0.1.2-beta}"
+: "${APPROVING_IMAGE:=ghcr.io/cocofhu/approving:0.2.0-beta}"
+: "${SANDBOX_GATEWAY_IMAGE:=ghcr.io/cocofhu/sandbox-gateway:0.2.0-beta}"
 : "${SANDBOX_GATEWAY_API_KEY:=approving-local-demo}"
 
 # Optional global force: capture user-set SANDBOX_IMAGE BEFORE applying the
 # cursor fallback default, so a bare default does not re-force all backends.
 _user_sandbox_image="${SANDBOX_IMAGE-}"
-: "${SANDBOX_IMAGE:=ghcr.io/cocofhu/universal-sandbox-cursor:0.1.2-beta}"
-: "${APPROVING_SANDBOX_IMAGE_CURSOR:=ghcr.io/cocofhu/universal-sandbox-cursor:0.1.2-beta}"
-: "${APPROVING_SANDBOX_IMAGE_CLAUDE_CODE:=ghcr.io/cocofhu/universal-sandbox-claude_code:0.1.2-beta}"
-: "${APPROVING_SANDBOX_IMAGE_CODEBUDDY:=ghcr.io/cocofhu/universal-sandbox-codebuddy:0.1.2-beta}"
-: "${APPROVING_SANDBOX_IMAGE_TRAE:=ghcr.io/cocofhu/universal-sandbox-trae:0.1.2-beta}"
-: "${SBGW_IMAGE_TEMPLATE:=ghcr.io/cocofhu/universal-sandbox-{provider}:0.1.2-beta}"
+: "${SANDBOX_IMAGE:=ghcr.io/cocofhu/universal-sandbox-cursor:0.2.0-beta}"
+: "${APPROVING_SANDBOX_IMAGE_CURSOR:=ghcr.io/cocofhu/universal-sandbox-cursor:0.2.0-beta}"
+: "${APPROVING_SANDBOX_IMAGE_CLAUDE_CODE:=ghcr.io/cocofhu/universal-sandbox-claude_code:0.2.0-beta}"
+: "${APPROVING_SANDBOX_IMAGE_CODEBUDDY:=ghcr.io/cocofhu/universal-sandbox-codebuddy:0.2.0-beta}"
+: "${APPROVING_SANDBOX_IMAGE_TRAE:=ghcr.io/cocofhu/universal-sandbox-trae:0.2.0-beta}"
+: "${SBGW_IMAGE_TEMPLATE:=ghcr.io/cocofhu/universal-sandbox-{provider}:0.2.0-beta}"
 # Explicit SANDBOX_IMAGE (or APPROVING_SANDBOX_IMAGE) → global force; default path leaves it empty.
 if [[ -z "${APPROVING_SANDBOX_IMAGE:-}" && -n "${_user_sandbox_image}" ]]; then
   APPROVING_SANDBOX_IMAGE="${_user_sandbox_image}"

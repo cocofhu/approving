@@ -4,6 +4,15 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.2.0-beta — 2026-08-13
+
+- Public beta follow-up on [`v0.2.0-beta`](https://github.com/cocofhu/approving/releases/tag/v0.2.0-beta)
+  (relative to `v0.1.2-beta`: ~385 commits, PRs through #309). Full notes on the GitHub Release.
+- Pin `./start.sh`, `.env.example`, and `compose.release.yaml` defaults to GHCR
+  `*:0.2.0-beta` (tag publish does not rewrite these files).
+- Highlights: QQ/企微/飞书/钉钉等多渠道与 live 接话；公开审批与分享链路；需求草稿/PRD；
+  通知中心与顶栏指标；应用预览/noVNC；工作流收藏与团队模板；大量 Web Loading/布局打磨。
+
 ## 0.1.2-beta — 2026-07-31
 
 - Public beta follow-up on [`v0.1.2-beta`](https://github.com/cocofhu/approving/releases/tag/v0.1.2-beta)
