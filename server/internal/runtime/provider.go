@@ -77,6 +77,8 @@ type Options struct {
 	// the environ from create time (no hot update); a later new sandbox for the
 	// same Run re-reads this snapshot.
 	RunSandboxEnvForRun func(runID string) []models.EnvEntry
+	// PublicAdvertise is the browser-facing base URL (preview proxy / pick.js).
+	PublicAdvertise string
 }
 
 // NodeReq is the resolved request to execute one agent/react node.

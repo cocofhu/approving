@@ -1,0 +1,154 @@
+// @vitest-environment happy-dom
+import { createI18n } from 'vue-i18n'
+import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import common from '@/locales/zh-CN/common.json'
+import pages from '@/locales/zh-CN/pages.json'
+import DirectPreviewFrame from './DirectPreviewFrame.vue'
+
+const DIRECT = 'http://127.0.0.1:18081/'
+
+function mountFrame() {
+  const i18n = createI18n({
+    legacy: false,
+    locale: 'zh-CN',
+    messages: { 'zh-CN': { ...common, ...pages } },
+  })
+  const posted: unknown[] = []
+  const fakeWin = {
+    postMessage: (msg: unknown) => {
+      posted.push(msg)
+    },
+  }
+  const wrapper = mount(DirectPreviewFrame, {
+    props: { directUrl: DIRECT, title: '前端' },
+    global: { plugins: [i18n] },
+  })
+  const iframe = wrapper.get('[data-testid="app-preview-direct-frame"]').element as HTMLIFrameElement
+  Object.defineProperty(iframe, 'contentWindow', { value: fakeWin, configurable: true })
+  return { wrapper, posted, fakeWin }
+}
+
+function dispatchFromPreview(data: unknown, origin = 'http://127.0.0.1:18081') {
+  window.dispatchEvent(new MessageEvent('message', { data, origin }))
+}
+
+describe('DirectPreviewFrame', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('shows address bar and inspect control', () => {
+    const { wrapper } = mountFrame()
+    expect(wrapper.get('[data-testid="direct-preview-address"]').element).toBeTruthy()
+    expect((wrapper.get('[data-testid="direct-preview-address"]').element as HTMLInputElement).value).toBe(
+      DIRECT,
+    )
+    expect(wrapper.find('[data-testid="direct-preview-inspect"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="app-preview-direct-frame"]').attributes('src')).toBe(DIRECT)
+    wrapper.unmount()
+  })
+
+  it('rejects cross-origin address bar goto', async () => {
+    const { wrapper } = mountFrame()
+    const input = wrapper.get('[data-testid="direct-preview-address"]')
+    await input.setValue('https://evil.example.com/phish')
+    expect((input.element as HTMLInputElement).value).toBe('https://evil.example.com/phish')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    const tip = wrapper.get('[data-testid="direct-preview-tip"]')
+    expect(tip.text()).toMatch(/同一预览 origin/)
+    expect(wrapper.get('[data-testid="app-preview-direct-frame"]').attributes('src')).toBe(DIRECT)
+    wrapper.unmount()
+  })
+
+  it('navigates iframe src for same-origin goto', async () => {
+    const { wrapper } = mountFrame()
+    await wrapper.get('[data-testid="direct-preview-address"]').setValue('/dash')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="app-preview-direct-frame"]').attributes('src')).toBe(
+      'http://127.0.0.1:18081/dash',
+    )
+    wrapper.unmount()
+  })
+
+  it('updates address from cooperative ready message', async () => {
+    const { wrapper } = mountFrame()
+    dispatchFromPreview({ type: 'direct-preview-ready', url: 'http://127.0.0.1:18081/home' })
+    await flushPromises()
+    expect((wrapper.get('[data-testid="direct-preview-address"]').element as HTMLInputElement).value).toBe(
+      'http://127.0.0.1:18081/home',
+    )
+    wrapper.unmount()
+  })
+
+  it('ignores pick messages from other origins', async () => {
+    const { wrapper } = mountFrame()
+    dispatchFromPreview(
+      { type: 'direct-preview-picked', selector: 'button', tagName: 'button', outerHTML: '<button>' },
+      'http://evil.example',
+    )
+    await flushPromises()
+    expect(wrapper.find('[data-testid="direct-preview-pick-result"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('stages pick and emits on use', async () => {
+    const { wrapper } = mountFrame()
+    dispatchFromPreview({
+      type: 'direct-preview-picked',
+      selector: '#ok',
+      tagName: 'button',
+      outerHTML: '<button id="ok">',
+      url: 'http://127.0.0.1:18081/a',
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="direct-preview-pick-selector"]').text()).toBe('#ok')
+    expect(wrapper.emitted('staged-pick')?.[0]?.[0]).toMatchObject({ selector: '#ok' })
+    await wrapper.get('[data-testid="direct-preview-use-pick"]').trigger('click')
+    expect(wrapper.emitted('pick')?.[0]?.[0]).toMatchObject({ selector: '#ok', url: 'http://127.0.0.1:18081/a' })
+    wrapper.unmount()
+  })
+
+  it('shows script-missing tip after wait without ready', async () => {
+    const { wrapper } = mountFrame()
+    vi.advanceTimersByTime(2500)
+    await flushPromises()
+    expect(wrapper.get('[data-testid="direct-preview-tip"]').text()).toMatch(/未加载取点脚本/)
+    wrapper.unmount()
+  })
+
+  it('inspect without script shows missing-script tip', async () => {
+    const { wrapper, posted } = mountFrame()
+    await wrapper.get('[data-testid="direct-preview-inspect"]').trigger('click')
+    expect(wrapper.get('[data-testid="direct-preview-tip"]').text()).toMatch(/未加载取点脚本/)
+    expect(posted).toEqual([])
+    wrapper.unmount()
+  })
+
+  it('inspect after ready posts inspect command', async () => {
+    const { wrapper, posted } = mountFrame()
+    dispatchFromPreview({ type: 'direct-preview-ready', url: DIRECT })
+    await flushPromises()
+    await wrapper.get('[data-testid="direct-preview-inspect"]').trigger('click')
+    expect(posted).toEqual([{ type: 'direct-preview-inspect', on: true }])
+    wrapper.unmount()
+  })
+
+  it('nav buttons post nav actions', async () => {
+    const { wrapper, posted } = mountFrame()
+    dispatchFromPreview({ type: 'direct-preview-ready', url: DIRECT })
+    await flushPromises()
+    await wrapper.get('[data-testid="direct-preview-back"]').trigger('click')
+    await wrapper.get('[data-testid="direct-preview-reload"]').trigger('click')
+    expect(posted).toEqual([
+      { type: 'direct-preview-nav', action: 'back' },
+      { type: 'direct-preview-nav', action: 'reload' },
+    ])
+    wrapper.unmount()
+  })
+})

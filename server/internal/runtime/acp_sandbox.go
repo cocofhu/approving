@@ -309,7 +309,7 @@ func (c *acpProvider) spec(req NodeReq) (sandbox.Spec, error) {
 	}
 	env = merged
 	env["ACP_BACKEND"] = string(c.backend)
-	applyAppPreviewEnv(env, req.NodeType, req.Config)
+	applyAppPreviewEnv(env, req.NodeType, req.Config, c.opts.PublicAdvertise)
 
 	for k, v := range vars {
 		if strings.HasPrefix(k, "vars.") || v == "" {
@@ -344,15 +344,25 @@ func (c *acpProvider) spec(req NodeReq) (sandbox.Spec, error) {
 // applyAppPreviewEnv sets VNC_PREVIEW by default. When the node switch
 // direct_preview is on, skip the VNC stack and ask the gateway to 1:1-map a
 // PREVIEW_PORT instead (PREVIEW_DIRECT=1).
-func applyAppPreviewEnv(env map[string]string, nodeType string, cfg map[string]any) {
+func applyAppPreviewEnv(env map[string]string, nodeType string, cfg map[string]any, publicAdvertise string) {
 	if env == nil || nodeType != "app_preview" {
 		return
 	}
 	if configTruthy(cfg["direct_preview"]) {
 		env["PREVIEW_DIRECT"] = "1"
+		if u := previewPickScriptURL(publicAdvertise); u != "" {
+			env["PREVIEW_PICK_SCRIPT_URL"] = u
+		}
 		return
 	}
 	env["VNC_PREVIEW"] = "1"
 	env["APPROVING_VNC_PREVIEW"] = "1"
 }
 
+func previewPickScriptURL(base string) string {
+	b := strings.TrimRight(strings.TrimSpace(base), "/")
+	if b == "" {
+		return ""
+	}
+	return b + "/preview-pick.js"
+}

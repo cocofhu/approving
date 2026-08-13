@@ -184,6 +184,7 @@ func main() {
 			}
 			return run.SandboxEnv
 		},
+		PublicAdvertise: cfg.Server.PublicAdvertise,
 	})
 	eng := engine.New(db, provider, host, artifactSvc, cfg.Engine.MaxConcurrentRuns)
 	eng.SetBlobStore(blobStore)

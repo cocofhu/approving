@@ -1,0 +1,285 @@
+<script setup lang="ts">
+import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import type { AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
+import {
+  DIRECT_PREVIEW_INSPECT,
+  DIRECT_PREVIEW_NAV,
+  iframeOrigin,
+  isDirectPreviewOrigin,
+  parseDirectPreviewMessage,
+  resolveDirectPreviewGoto,
+  type DirectPreviewNavAction,
+} from '@/lib/shared/directPreviewPick'
+
+const SCRIPT_WAIT_MS = 2500
+
+const props = withDefaults(
+  defineProps<{
+    directUrl: string
+    title?: string
+  }>(),
+  { title: 'preview' },
+)
+
+const emit = defineEmits<{
+  (e: 'pick', payload: AppPreviewPickPayload): void
+  (e: 'staged-pick', payload: AppPreviewPickPayload | null): void
+}>()
+
+const { t } = useI18n()
+const frameSrc = ref(props.directUrl)
+const address = ref(props.directUrl)
+const inspect = ref(false)
+const scriptReady = ref(false)
+const scriptTip = ref(false)
+const inlineTip = ref<string | null>(null)
+const picked = ref<AppPreviewPickPayload | null>(null)
+const iframeRef = ref<HTMLIFrameElement | null>(null)
+let waitTimer: ReturnType<typeof setTimeout> | null = null
+
+function originOf(): string {
+  return iframeOrigin(props.directUrl)
+}
+
+function postToFrame(msg: Record<string, unknown>) {
+  const win = iframeRef.value?.contentWindow
+  const origin = originOf()
+  if (!win || !origin) return
+  win.postMessage(msg, origin)
+}
+
+function clearWait() {
+  if (waitTimer) {
+    clearTimeout(waitTimer)
+    waitTimer = null
+  }
+}
+
+function armScriptWait() {
+  clearWait()
+  scriptReady.value = false
+  scriptTip.value = false
+  inspect.value = false
+  waitTimer = setTimeout(() => {
+    if (!scriptReady.value) scriptTip.value = true
+  }, SCRIPT_WAIT_MS)
+}
+
+function onIframeLoad() {
+  armScriptWait()
+}
+
+function onMessage(event: MessageEvent) {
+  if (!isDirectPreviewOrigin(props.directUrl, event.origin)) return
+  const parsed = parseDirectPreviewMessage(event.data)
+  if (!parsed) return
+  if (parsed.type === 'direct-preview-ready' || parsed.type === 'direct-preview-url') {
+    scriptReady.value = true
+    scriptTip.value = false
+    clearWait()
+    address.value = parsed.url
+    return
+  }
+  if (parsed.type === 'direct-preview-canceled') {
+    inspect.value = false
+    return
+  }
+  if (parsed.type === 'direct-preview-picked') {
+    inspect.value = false
+    const payload: AppPreviewPickPayload = {
+      selector: parsed.selector,
+      tagName: parsed.tagName,
+      outerHTML: parsed.outerHTML,
+      url: parsed.url,
+    }
+    picked.value = payload
+    emit('staged-pick', payload)
+  }
+}
+
+function nav(action: DirectPreviewNavAction) {
+  postToFrame({ type: DIRECT_PREVIEW_NAV, action })
+}
+
+function openAddress() {
+  inlineTip.value = null
+  const next = resolveDirectPreviewGoto(props.directUrl, address.value)
+  if (!next) {
+    inlineTip.value = t('pages.appPreview.directGotoInvalid')
+    return
+  }
+  if (next === frameSrc.value) {
+    postToFrame({ type: DIRECT_PREVIEW_NAV, action: 'reload' })
+    return
+  }
+  armScriptWait()
+  frameSrc.value = next
+}
+
+function toggleInspect() {
+  inlineTip.value = null
+  if (!scriptReady.value) {
+    scriptTip.value = true
+    inlineTip.value = t('pages.appPreview.directScriptMissing')
+    return
+  }
+  const next = !inspect.value
+  inspect.value = next
+  postToFrame({ type: DIRECT_PREVIEW_INSPECT, on: next })
+}
+
+function usePick() {
+  if (!picked.value) return
+  emit('pick', picked.value)
+}
+
+function clearPick() {
+  picked.value = null
+  emit('staged-pick', null)
+}
+
+watch(
+  () => props.directUrl,
+  (url) => {
+    frameSrc.value = url
+    address.value = url
+    picked.value = null
+    armScriptWait()
+  },
+)
+
+onMounted(() => {
+  window.addEventListener('message', onMessage)
+  armScriptWait()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('message', onMessage)
+  clearWait()
+})
+</script>
+
+<template>
+  <div class="flex h-full min-h-0 flex-col" data-testid="app-preview-direct">
+    <form
+      class="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-elevated px-3 py-1.5"
+      @submit.prevent="openAddress"
+    >
+      <button
+        type="button"
+        class="rounded px-1.5 py-0.5 text-[11px] text-txt2 hover:bg-overlay"
+        :title="t('pages.appPreview.novnc.back')"
+        data-testid="direct-preview-back"
+        @click="nav('back')"
+      >
+        ←
+      </button>
+      <button
+        type="button"
+        class="rounded px-1.5 py-0.5 text-[11px] text-txt2 hover:bg-overlay"
+        :title="t('pages.appPreview.novnc.forward')"
+        data-testid="direct-preview-forward"
+        @click="nav('forward')"
+      >
+        →
+      </button>
+      <button
+        type="button"
+        class="rounded px-1.5 py-0.5 text-[11px] text-txt2 hover:bg-overlay"
+        :title="t('pages.appPreview.novnc.reload')"
+        data-testid="direct-preview-reload"
+        @click="nav('reload')"
+      >
+        ⟳
+      </button>
+      <input
+        v-model="address"
+        type="text"
+        class="min-w-0 flex-1 rounded border border-line bg-base px-2 py-1 font-mono text-[11px] text-txt outline-none focus:border-accent"
+        :placeholder="t('pages.appPreview.directAddressPlaceholder')"
+        spellcheck="false"
+        autocomplete="off"
+        data-testid="direct-preview-address"
+      />
+      <button
+        type="submit"
+        class="shrink-0 rounded bg-accent-dim px-2.5 py-1 text-[11px] text-txt hover:bg-accent/25"
+        data-testid="direct-preview-go"
+      >
+        {{ t('pages.sandboxConsole.novncOpen') }}
+      </button>
+      <button
+        type="button"
+        class="rounded px-2 py-0.5 text-[11px] transition"
+        :class="inspect ? 'bg-ok/20 text-ok' : 'text-txt2 hover:bg-overlay'"
+        :title="t(inspect ? 'pages.appPreview.novnc.cancelInspect' : 'pages.appPreview.novnc.inspect')"
+        :aria-pressed="inspect ? 'true' : 'false'"
+        data-testid="direct-preview-inspect"
+        @click="toggleInspect"
+      >
+        {{ t('pages.appPreview.novnc.inspect') }}
+      </button>
+      <a
+        :href="frameSrc"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-[11px] text-accent hover:underline"
+        data-testid="app-preview-direct-open"
+      >{{ t('pages.appPreview.directOpenTab') }}</a>
+      <div
+        v-if="inlineTip || scriptTip"
+        class="basis-full border px-2.5 py-1.5 text-[11px] leading-snug"
+        :class="inlineTip ? 'border-err/40 bg-err/10 text-err' : 'border-warn/40 bg-warn/10 text-warn'"
+        role="status"
+        data-testid="direct-preview-tip"
+      >
+        {{ inlineTip || t('pages.appPreview.directScriptMissing') }}
+      </div>
+    </form>
+    <iframe
+      ref="iframeRef"
+      :src="frameSrc"
+      class="min-h-0 w-full flex-1 border-0 bg-base"
+      :title="title"
+      data-testid="app-preview-direct-frame"
+      @load="onIframeLoad"
+    />
+    <div
+      v-if="picked"
+      class="shrink-0 border-t border-line bg-elevated px-3 py-2"
+      data-testid="direct-preview-pick-result"
+    >
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-[11px] text-txt2">{{ t('pages.appPreview.novnc.pickedLabel') }}</span>
+        <span class="text-[10px] lowercase text-txt3">{{ t('pages.appPreview.novnc.selectorLabel') }}</span>
+        <code class="max-w-full break-all text-[11px] text-ok" data-testid="direct-preview-pick-selector">{{
+          picked.selector
+        }}</code>
+        <span class="text-[10px] lowercase text-txt3">{{ t('pages.appPreview.novnc.urlLabel') }}</span>
+        <code class="max-w-full break-all text-[11px] text-info" data-testid="direct-preview-pick-url">{{
+          picked.url || ''
+        }}</code>
+        <span class="ml-auto flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            class="rounded bg-ok/15 px-2 py-1 text-[11px] font-medium text-ok hover:bg-ok/25"
+            data-testid="direct-preview-use-pick"
+            @click="usePick"
+          >
+            {{ t('pages.appPreview.novnc.usePick') }}
+          </button>
+          <button
+            type="button"
+            class="rounded px-2 py-1 text-[11px] text-txt2 hover:bg-overlay hover:text-txt"
+            :title="t('pages.appPreview.novnc.clearPick')"
+            data-testid="direct-preview-clear-pick"
+            @click="clearPick"
+          >
+            {{ t('pages.appPreview.novnc.clearPick') }}
+          </button>
+        </span>
+      </div>
+    </div>
+  </div>
+</template>
