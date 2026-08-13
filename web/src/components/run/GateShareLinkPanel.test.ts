@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => {
     createReview: vi.fn(),
     regenReview: vi.fn(),
     revokeReview: vi.fn(),
-    copyToClipboard: vi.fn(async () => true),
+    copyToClipboard: vi.fn(async (_text: string) => true),
     toasts,
     toastSuccess: vi.fn((message: string) => {
       const id = ++toastId
@@ -57,7 +57,7 @@ vi.mock('@/lib/api/api', async () => {
 })
 
 vi.mock('@/lib/shared/copyToClipboard', () => ({
-  copyToClipboard: (...args: unknown[]) => mocks.copyToClipboard(...args),
+  copyToClipboard: (text: string) => mocks.copyToClipboard(text),
 }))
 
 vi.mock('@/lib/composables/useToast', () => ({
