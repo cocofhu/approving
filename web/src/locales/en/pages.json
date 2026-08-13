@@ -1153,6 +1153,8 @@
         "ttlLabel": "Expires in",
         "linkLabel": "Share link",
         "copied": "Copied to clipboard",
+        "autoCopied": "New link copied automatically",
+        "regenerated": "Link regenerated",
         "clipboardFallback": "Clipboard unavailable. Select the URL below and copy it manually.",
         "urlHiddenUntilCopy": "The full link can be copied after create. Refreshing this tab still lets you copy the same URL.",
         "copyUnavailable": "Cannot copy the same URL again. You can only regenerate or revoke (regenerate immediately revokes the old link).",

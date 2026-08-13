@@ -5,6 +5,7 @@ import AppModal from '@/components/ui/AppModal.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { api } from '@/lib/api/api'
 import { useToast } from '@/lib/composables/useToast'
+import { copyToClipboard } from '@/lib/shared/copyToClipboard'
 import type { GateShareInboxStatus, ShareLinkTarget } from '@/lib/shared/types'
 import {
   DEFAULT_GATE_SHARE_TTL,
@@ -89,18 +90,32 @@ watch(
   { immediate: true },
 )
 
-async function copyText(text: string) {
+/** Dismiss same-message clipboardFallback toasts so rapid retries do not stack (plan g3.2). */
+function showClipboardFallbackToast() {
+  const msg = t('pages.gatesInbox.share.clipboardFallback')
+  for (const item of [...toast.toasts.value]) {
+    if (item.message === msg) toast.dismiss(item.id)
+  }
+  toast.show(msg)
+}
+
+/**
+ * Write share URL via shared helper (secure API + non-secure execCommand fallback).
+ * @param opts.auto — create/regen auto-copy uses autoCopied; manual copy uses copied (plan g1/g2).
+ */
+async function copyText(text: string, opts?: { auto?: boolean }) {
   if (isLoopbackShareHost(text)) return false
-  try {
-    await navigator.clipboard.writeText(text)
-    toast.success(t('pages.gatesInbox.share.copied'))
+  const ok = await copyToClipboard(text)
+  if (ok) {
+    toast.success(
+      t(opts?.auto ? 'pages.gatesInbox.share.autoCopied' : 'pages.gatesInbox.share.copied'),
+    )
     revealUrl.value = false
     return true
-  } catch {
-    revealUrl.value = true
-    toast.show(t('pages.gatesInbox.share.clipboardFallback'))
-    return false
   }
+  revealUrl.value = true
+  showClipboardFallbackToast()
+  return false
 }
 
 async function createAndCopy() {
@@ -126,7 +141,7 @@ async function createAndCopy() {
     localStatus.value = next
     emit('updated', next, res.url)
     if (!isLoopbackShareHost(res.url)) {
-      await copyText(res.url)
+      await copyText(res.url, { auto: true })
     }
   } catch (e) {
     errorText.value = shareApiErrorMessage(e, t)
@@ -178,8 +193,10 @@ async function confirmRegen() {
     }
     localStatus.value = next
     emit('updated', next, res.url)
+    // plan g2.3: regenerate feedback first, then auto-copy result (success or fallback)
+    toast.success(t('pages.gatesInbox.share.regenerated'))
     if (!isLoopbackShareHost(res.url)) {
-      await copyText(res.url)
+      await copyText(res.url, { auto: true })
     }
   } catch (e) {
     errorText.value = shareApiErrorMessage(e, t)
