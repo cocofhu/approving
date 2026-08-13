@@ -476,12 +476,17 @@ func (e *Engine) executeClarifyTurn(ctx context.Context, s *reviewSession, item 
 		return false, errors.New("react already done")
 	}
 
+	// The questions this answer responds to, captured before the human turn is
+	// appended — without them the recorded answer reads as a bare fragment.
+	answered := lastAgentQuestions(conv.Messages)
+
 	now := time.Now().Format(time.RFC3339)
 	conv.Messages = append(conv.Messages, models.ReactMessage{
 		Role: "human", Text: item.Text, At: now,
 		Images: item.Images, Annotations: item.Annotations,
 	})
 	logDB(e.db.Save(&conv), s.runID, "save clarify human turn (turn_begin)")
+	humanMsg := conv.Messages[len(conv.Messages)-1]
 	e.broker.Publish(s.runID, jsonMsg("react", s.runID, s.producerID))
 
 	req := e.nodeReq(c, node)
@@ -503,6 +508,7 @@ func (e *Engine) executeClarifyTurn(ctx context.Context, s *reviewSession, item 
 		agentMsg.Text = "(已中断)"
 	}
 	conv.Messages = append(conv.Messages, agentMsg)
+	e.recordFeedback(e.clarifyFeedbackEvent(s, item, conv.Iteration, answered, humanMsg, agentMsg, interrupted))
 
 	if interrupted {
 		logDB(e.db.Save(&conv), s.runID, "save clarify agent turn (interrupted)")
@@ -620,11 +626,17 @@ func (e *Engine) executeReviewTurn(ctx context.Context, s *reviewSession, item *
 	})
 	logDB(e.db.Save(&conv), s.runID, "save review human turn (turn_begin)")
 
+	humanMsg := conv.Messages[len(conv.Messages)-1]
+
 	req := e.nodeReq(c, producer)
 	e.host.SetActiveReview(s.runID, true)
 
 	// Publish react so UIs that refetch on turn_begin see the human bubble.
 	e.broker.Publish(s.runID, jsonMsg("react", s.runID, s.producerID))
+
+	// Snapshot before the agent edits so the ledger can state which products
+	// this specific push-back moved.
+	beforeDigests := e.artifactDigests(s.runID, s.producerID)
 
 	t := rp.ReviseInPlace(ctx, req, conv.Messages, item.Effective, item.Images)
 
@@ -658,11 +670,16 @@ func (e *Engine) executeReviewTurn(ctx context.Context, s *reviewSession, item *
 			log.Warn().Err(t.Err).Str("run_id", s.runID).Str("producer", s.producerID).
 				Msg("review revise turn failed (session kept for retry)")
 		}
+		// The opinion was still given, so the round is recorded — only without
+		// targets, because nothing landed.
+		e.recordFeedback(e.reviewFeedbackEvent(s, item, iter, humanMsg, agentMsg, nil, true))
 		e.broker.Publish(s.runID, jsonMsg("react", s.runID, s.producerID))
 		return true, nil
 	}
 
 	e.refreshProducerOutputs(c, producer)
+	e.recordFeedback(e.reviewFeedbackEvent(s, item, iter, humanMsg, agentMsg,
+		diffDigests(beforeDigests, e.artifactDigests(s.runID, s.producerID)), false))
 	if item.Source == "gate" && item.GateNodeID != "" {
 		e.refreshGateBodyAfterRevise(c, item.GateNodeID)
 		e.appendTrace(c, models.TraceEntry{NodeID: item.GateNodeID, Event: "resume",

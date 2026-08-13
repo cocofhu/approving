@@ -1,6 +1,9 @@
 package models
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // AgentPrompts holds a per-Agent override of the platform-injected prompt text
 // and sandbox rule files. It is persisted in the Agent's agent.json under the
@@ -103,7 +106,18 @@ const (
 	DefaultPreviewRetry                 = "【必须完成】你尚未成功调用 `set_preview` 注册**可达**的预览端口。请在沙箱内用 `setsid`/`nohup` **真后台**原生启动应用(不要用 docker、不要前台占会话),监听 `0.0.0.0:<port>`(不能只绑 127.0.0.1;服务在根路径 `/`),确认端口可访问后再调用 `set_preview(port, label?)`。端口不可达时 set_preview 会失败,修复后可重试。"
 	DefaultOutcomeContract              = "\n\n## 完成标记契约(强制)\n结束本节点前**必须**调用 `node_complete` 标记结果:`status` 取 `success` 或 `failed`;可选 `summary` / `error` / `outputs` / `checks`。写完产物(`set_*` / `write_artifact`)后再调用。未标记将被判定为节点失败。平台先做默认校验(产物/门禁等),通过后才可能做业务 RPC 校验。\n"
 	DefaultOutcomeRetry                 = "【必须完成】你尚未调用 `node_complete` 标记本节点完成结果,这是强制要求。现在立即调用 `node_complete(status=\"success\"|\"failed\", summary?, error?, outputs?)`,不要再提问或输出其它内容——只需完成这次调用。\n"
+
+	// DefaultFeedbackHeader is injected only when this node actually has human
+	// feedback in scope. Storing feedback that no agent ever reads is the same
+	// as not storing it, and a node's first execution has nothing to read, so
+	// the clause must not appear there as noise.
+	DefaultFeedbackHeader = "\n\n## 历史人工反馈(强制先读)\n本节点此前已收到 {n} 轮人工反馈。**开工前必须先调用 `list_run_history` 通读**,再用 `read_artifact` 逐个读取下列反馈产物的完整内容(含原文、标注与附件)。历次已确认的意见务必遵守,不得在新一轮里回退:\n"
 )
+
+// FeedbackHeaderFor renders the history-feedback clause for n rounds.
+func FeedbackHeaderFor(n int) string {
+	return strings.ReplaceAll(DefaultFeedbackHeader, "{n}", strconv.Itoa(n))
+}
 
 // UpstreamHeader returns the configured upstream-artifacts header or the
 // built-in default. Nil-safe.

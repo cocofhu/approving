@@ -72,4 +72,35 @@ describe('ArtifactList', () => {
     expect(wrapper.text()).toMatch(/暂无|没有/)
     wrapper.unmount()
   })
+
+  // A long review produces one product per round; listing them all inline would
+  // bury the deliverables the list exists to show.
+  it('folds the feedback ledger into one collapsed group', async () => {
+    const wrapper = mountList({
+      artifacts: [
+        artifact('research.json'),
+        artifact('feedback_index.json', 'f0'),
+        artifact('feedback.review.research.i1r1.json', 'f1'),
+        artifact('feedback.review.research.i1r2.json', 'f2'),
+      ],
+    })
+    const rowFor = (name: string) =>
+      wrapper.findAll('button').find((b) => b.text().includes(name))!
+    const ledgerRows = () => wrapper.get('[data-testid="artifact-feedback-group"] + div')
+
+    expect(rowFor('research.json').isVisible()).toBe(true)
+    expect(ledgerRows().attributes('style')).toContain('display: none')
+
+    const group = wrapper.get('[data-testid="artifact-feedback-group"]')
+    expect(group.text()).toContain('3')
+
+    await group.trigger('click')
+    expect(ledgerRows().attributes('style') || '').not.toContain('display: none')
+    expect(ledgerRows().text()).toContain('feedback_index.json')
+    expect(ledgerRows().text()).toContain('feedback.review.research.i1r2.json')
+
+    await rowFor('feedback_index.json').trigger('click')
+    expect((wrapper.emitted('select')![0][0] as Artifact).name).toBe('feedback_index.json')
+    wrapper.unmount()
+  })
 })

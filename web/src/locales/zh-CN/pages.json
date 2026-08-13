@@ -2909,7 +2909,8 @@
       "matchCount": "（匹配 {n} 个 Run）",
       "noMatchingArtifacts": "无匹配产物",
       "expandAll": "展开",
-      "collapseAll": "折叠"
+      "collapseAll": "折叠",
+      "feedbackGroup": "人工反馈台账"
     },
     "artifactPreview": {
       "emptyHint": "选择左侧产物查看内容(平台存储,可下载)",
@@ -2986,6 +2987,31 @@
         "tests": "测试",
         "breakingChanges": "破坏性变更",
         "followUps": "后续"
+      },
+      "feedback": {
+        "total": "共 {n} 轮人工反馈",
+        "empty": "暂无人工反馈",
+        "iterRound": "第 {i} 次执行 · 第 {r} 轮",
+        "roundN": "第 {n} 轮",
+        "annotationCount": "标注 {n}",
+        "attachmentCount": "附件 {n}",
+        "attachments": "附件 ({n})",
+        "targets": "受影响产物",
+        "transcript": "本轮对话",
+        "priorRounds": "此前各轮",
+        "roleHuman": "人工",
+        "roleAgent": "Agent",
+        "interrupted": "本轮未落地",
+        "indexOnly": "该轮为平台自动采纳，无独立产物",
+        "loading": "加载中…",
+        "loadFailed": "无法加载 {name}",
+        "seeIndex": "全部轮次见 {name}",
+        "kind": {
+          "clarify": "澄清",
+          "review": "复审",
+          "gate": "门禁",
+          "preview": "预览问题单"
+        }
       },
       "review": {
         "verdict": "评审结论",

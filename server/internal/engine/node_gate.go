@@ -8,6 +8,7 @@ import (
 	"github.com/cocofhu/approving/internal/models"
 	gatenode "github.com/cocofhu/approving/internal/models/nodereg"
 	"github.com/cocofhu/approving/internal/runtime"
+	"github.com/cocofhu/approving/internal/services"
 	"github.com/rs/zerolog/log"
 )
 
@@ -71,7 +72,12 @@ func (e *Engine) captureDeliverable(c *execCtx, node *models.Node, res runtime.N
 		return
 	}
 	for _, a := range e.store.List(c.run.ID) {
-		if a.Node == node.ID && a.Name != mcp.NodeOutcomeArtifactName {
+		// Feedback ledger products hang off the real node id so the UI can group
+		// them, but they are platform-written side records — treating one as
+		// "this node already produced something" would suppress the node's
+		// actual deliverable the moment a reviewer pushes back.
+		if a.Node == node.ID && a.Name != mcp.NodeOutcomeArtifactName &&
+			!services.IsFeedbackArtifactName(a.Name) {
 			return
 		}
 	}
