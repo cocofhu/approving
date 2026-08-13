@@ -147,6 +147,30 @@ func TestPreviewServiceWithFakeGateway(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 }
 
+func TestPreviewServiceDirectPreview(t *testing.T) {
+	db := newTestDB(t)
+	svc := NewPreviewService(db, nil)
+	run := models.Run{
+		ID: "run-d", Status: "running",
+		Graph: models.Graph{Nodes: []models.Node{
+			{ID: "n1", Type: "app_preview", Config: map[string]any{"direct_preview": true}},
+			{ID: "n2", Type: "app_preview", Config: map[string]any{}},
+		}},
+	}
+	if err := db.Create(&run).Error; err != nil {
+		t.Fatal(err)
+	}
+	if !svc.DirectPreview("run-d", "n1") {
+		t.Fatal("n1 should be direct")
+	}
+	if svc.DirectPreview("run-d", "n2") {
+		t.Fatal("n2 default off")
+	}
+	if svc.DirectPreview("missing", "n1") {
+		t.Fatal("missing run")
+	}
+}
+
 type previewSbxExec struct{}
 
 func (previewSbxExec) Exec(context.Context, string, time.Duration, ...string) (string, error) {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"sandbox-gateway/internal/config"
@@ -444,6 +445,47 @@ func (s *SandboxService) Host(ctx context.Context, id string, port int) (string,
 	addr := eps[port]
 	if addr == "" {
 		return "", fmt.Errorf("%w %d", ErrEndpointNotFound, port)
+	}
+	return addr, nil
+}
+
+// portPublisher is implemented by drivers that can add a public port after create (kubernetes).
+type portPublisher interface {
+	PublishPort(ctx context.Context, id string, port int) error
+}
+
+// PublishPort ensures port is on the sandbox publish surface and returns its address.
+// Docker cannot add -p after create; missing ports stay ErrEndpointNotFound.
+func (s *SandboxService) PublishPort(ctx context.Context, id string, port int) (string, error) {
+	if addr, err := s.Host(ctx, id, port); err == nil && strings.TrimSpace(addr) != "" {
+		return addr, nil
+	}
+	pub, ok := s.drv.(portPublisher)
+	if !ok {
+		return "", fmt.Errorf("%w %d", ErrEndpointNotFound, port)
+	}
+	if err := pub.PublishPort(ctx, id, port); err != nil {
+		return "", err
+	}
+	eps, err := s.drv.Endpoints(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	addr := eps[port]
+	if addr == "" {
+		return "", fmt.Errorf("%w %d", ErrEndpointNotFound, port)
+	}
+	sb, err := s.store.Get(context.Background(), id)
+	if err == nil {
+		merged := sb.Endpoints()
+		if merged == nil {
+			merged = map[int]string{}
+		}
+		for p, a := range eps {
+			merged[p] = a
+		}
+		sb.SetEndpoints(merged)
+		s.persist(sb, "persist published port endpoints")
 	}
 	return addr, nil
 }

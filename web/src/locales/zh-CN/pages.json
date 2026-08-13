@@ -851,7 +851,6 @@
         "checkpointTitle": "可回滚检查点",
         "gateActionFallback": "未设 goto → 按 when 路由",
         "structuredExitFallback": "未设 goto → 按 when 路由",
-        "reviewBadge": "复审",
         "appPreviewSubtitle": "取点标注 · 等待人工确认",
         "appPreviewBody": "确认并流转 · 待审批",
         "humanGateSubtitle": "人工审批",
@@ -2442,6 +2441,8 @@
       "unavailable": "预览服务暂不可用",
       "connectionLost": "预览连接已断开",
       "sandboxRecycled": "沙箱已回收,预览不可用",
+      "directOpenTab": "新标签打开",
+      "directNoPick": "IP 直连预览不支持取点标注，请用对话说明要改哪里。",
       "novnc": {
         "back": "后退",
         "forward": "前进",
