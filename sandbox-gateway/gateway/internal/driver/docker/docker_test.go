@@ -760,3 +760,145 @@ func TestLogsTailAndEmpty(t *testing.T) {
 		t.Fatalf("want not found, got %v", err)
 	}
 }
+
+func TestCreatePreviewDirectOneToOnePublish(t *testing.T) {
+	m := newMock()
+	m.on("run", "cid", nil)
+	m.on("inspect", "18081", nil)
+	d := New(Options{BindIP: "10.0.0.8", NamePrefix: "sbx-"})
+	d.run = m.run
+	d.pickPreviewPort = func() (int, error) { return 18081, nil }
+
+	_, err := d.Create(context.Background(), driver.Spec{
+		ID:    "p1",
+		Image: "img",
+		Ports: []int{8765},
+		Env:   map[string]string{driver.EnvPreviewDirect: "1"},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	runs := m.callsWith("run")
+	if len(runs) != 1 {
+		t.Fatalf("want 1 run, got %d", len(runs))
+	}
+	args := runs[0]
+	if !containsPair(args, "-p", "10.0.0.8:18081:18081") {
+		t.Fatalf("missing 1:1 publish: %v", args)
+	}
+	if !containsPair(args, "-p", "10.0.0.8::8765") {
+		t.Fatalf("session port should stay ephemeral: %v", args)
+	}
+	if !containsPair(args, "-e", "PREVIEW_PORT=18081") {
+		t.Fatalf("missing PREVIEW_PORT: %v", args)
+	}
+	if !containsPair(args, "-e", "PREVIEW_PUBLIC_URL=http://10.0.0.8:18081") {
+		t.Fatalf("missing PREVIEW_PUBLIC_URL: %v", args)
+	}
+}
+
+func TestCreatePreviewDirectUsesExistingPort(t *testing.T) {
+	m := newMock()
+	m.on("run", "cid", nil)
+	m.on("inspect", "18090", nil)
+	d := New(Options{BindIP: "10.0.0.8", NamePrefix: "sbx-"})
+	d.run = m.run
+
+	_, err := d.Create(context.Background(), driver.Spec{
+		ID:    "p2",
+		Image: "img",
+		Ports: []int{8765},
+		Env: map[string]string{
+			driver.EnvPreviewDirect:    "1",
+			driver.EnvPreviewPort:      "18090",
+			driver.EnvPreviewPublicURL: "http://custom:18090",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	args := m.callsWith("run")[0]
+	if !containsPair(args, "-p", "10.0.0.8:18090:18090") {
+		t.Fatalf("missing 1:1 for existing port: %v", args)
+	}
+	if !containsPair(args, "-e", "PREVIEW_PUBLIC_URL=http://custom:18090") {
+		t.Fatalf("must keep caller PREVIEW_PUBLIC_URL: %v", args)
+	}
+}
+
+func TestCreatePreviewDirectAllocateError(t *testing.T) {
+	d := New(Options{BindIP: "10.0.0.8"})
+	d.pickPreviewPort = func() (int, error) { return 0, errors.New("pool empty") }
+	_, err := d.Create(context.Background(), driver.Spec{
+		ID: "p3", Image: "img", Ports: []int{80},
+		Env: map[string]string{driver.EnvPreviewDirect: "1"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "pool empty") {
+		t.Fatalf("want allocate error, got %v", err)
+	}
+}
+
+func TestCreatePreviewDirectOffKeepsEphemeralPublish(t *testing.T) {
+	m := newMock()
+	m.on("run", "cid", nil)
+	m.on("inspect", "32768", nil)
+	d := New(Options{BindIP: "127.0.0.1", NamePrefix: "sbx-"})
+	d.run = m.run
+	_, err := d.Create(context.Background(), driver.Spec{
+		ID: "p4", Image: "img", Ports: []int{8765},
+		Env: map[string]string{"VNC_PREVIEW": "1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := m.callsWith("run")[0]
+	if containsPair(args, "-p", "127.0.0.1:18080:18080") {
+		t.Fatalf("off must not 1:1 map preview port: %v", args)
+	}
+	if !containsPair(args, "-p", "127.0.0.1::8765") {
+		t.Fatalf("session port should stay ephemeral: %v", args)
+	}
+}
+
+func TestPreviewExactPort(t *testing.T) {
+	if previewExactPort(driver.Spec{}) != 0 {
+		t.Fatal("empty spec")
+	}
+	off := driver.Spec{Env: map[string]string{driver.EnvPreviewPort: "18081"}}
+	if previewExactPort(off) != 0 {
+		t.Fatal("off must ignore PREVIEW_PORT")
+	}
+	bad := driver.Spec{Env: map[string]string{driver.EnvPreviewDirect: "1", driver.EnvPreviewPort: "nope"}}
+	if previewExactPort(bad) != 0 {
+		t.Fatal("invalid port")
+	}
+	ok := driver.Spec{Env: map[string]string{driver.EnvPreviewDirect: "1", driver.EnvPreviewPort: "18081"}}
+	if previewExactPort(ok) != 18081 {
+		t.Fatalf("got %d", previewExactPort(ok))
+	}
+}
+
+func TestAllocatePreviewPortExhausted(t *testing.T) {
+	d := New(Options{BindIP: "not-a-bind-ip"})
+	if _, err := d.allocatePreviewPort(); err == nil {
+		t.Fatal("want pool exhausted")
+	}
+}
+
+func TestAllocatePreviewPortPicksFree(t *testing.T) {
+	d := New(Options{BindIP: "127.0.0.1"})
+	p, err := d.allocatePreviewPort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p < driver.PreviewPortMin || p > driver.PreviewPortMax {
+		t.Fatalf("port %d out of pool", p)
+	}
+}
+
+func TestApplyPreviewDirectNilSpec(t *testing.T) {
+	d := New(Options{})
+	if err := d.applyPreviewDirect(nil); err != nil {
+		t.Fatal(err)
+	}
+}

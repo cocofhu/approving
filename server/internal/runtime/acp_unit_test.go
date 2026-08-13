@@ -269,6 +269,65 @@ func TestTestNodePromptExtras(t *testing.T) {
 			t.Errorf("expected block_on_skipped injection: %q", got)
 		}
 	})
+
+	t.Run("direct_preview extras", func(t *testing.T) {
+		got := p.buildAgentPrompt(NodeReq{
+			NodeType: "app_preview",
+			Config:   map[string]any{"prompt": "P", "direct_preview": true},
+		}, nil)
+		if !strings.Contains(got, "direct_preview") || !strings.Contains(got, "PREVIEW_PORT") {
+			t.Errorf("expected direct_preview injection: %q", got)
+		}
+	})
+
+	t.Run("direct_preview off no extras", func(t *testing.T) {
+		got := p.buildAgentPrompt(NodeReq{
+			NodeType: "app_preview",
+			Config:   map[string]any{"prompt": "P"},
+		}, nil)
+		if strings.Contains(got, "节点配置:direct_preview") {
+			t.Errorf("default must not inject direct_preview: %q", got)
+		}
+	})
+}
+
+func TestPreviewNodePromptExtras(t *testing.T) {
+	host := mcp.NewHost(newMemStore())
+	p := newACPProvider(host, Options{}).(*acpProvider)
+
+	got := p.buildAgentPrompt(NodeReq{
+		NodeType: "app_preview",
+		Config:   map[string]any{"prompt": "P", "direct_preview": true},
+	}, nil)
+	if !strings.Contains(got, "direct_preview") || !strings.Contains(got, "PREVIEW_PORT") {
+		t.Errorf("expected direct_preview injection: %q", got)
+	}
+
+	off := p.buildAgentPrompt(NodeReq{
+		NodeType: "app_preview",
+		Config:   map[string]any{"prompt": "P"},
+	}, nil)
+	if strings.Contains(off, "节点配置:direct_preview") {
+		t.Errorf("default must not inject direct_preview: %q", off)
+	}
+}
+
+func TestApplyAppPreviewEnv(t *testing.T) {
+	vnc := map[string]string{}
+	applyAppPreviewEnv(vnc, "app_preview", nil)
+	if vnc["VNC_PREVIEW"] != "1" || vnc["PREVIEW_DIRECT"] != "" {
+		t.Fatalf("default vnc: %v", vnc)
+	}
+	direct := map[string]string{}
+	applyAppPreviewEnv(direct, "app_preview", map[string]any{"direct_preview": true})
+	if direct["PREVIEW_DIRECT"] != "1" || direct["VNC_PREVIEW"] != "" {
+		t.Fatalf("direct: %v", direct)
+	}
+	other := map[string]string{}
+	applyAppPreviewEnv(other, "implement", map[string]any{"direct_preview": true})
+	if other["PREVIEW_DIRECT"] != "" || other["VNC_PREVIEW"] != "" {
+		t.Fatalf("other node: %v", other)
+	}
 }
 
 func TestProviderWiringAndAbort(t *testing.T) {

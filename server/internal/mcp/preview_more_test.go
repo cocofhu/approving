@@ -52,6 +52,7 @@ type fakePreviewOps struct {
 	healthy bool
 	up      string
 	warmed  []string
+	direct  bool
 }
 
 func (f *fakePreviewOps) SandboxForRunNode(string, string) (string, bool) { return f.name, f.ok }
@@ -68,6 +69,7 @@ func (f *fakePreviewOps) PreviewUpstream(context.Context, string, int) (string, 
 func (f *fakePreviewOps) WarmPreviewVNC(sandboxName string) {
 	f.warmed = append(f.warmed, sandboxName)
 }
+func (f *fakePreviewOps) DirectPreview(string, string) bool { return f.direct }
 
 func TestParsePreviewPortTypes(t *testing.T) {
 	cases := []struct {
@@ -157,5 +159,21 @@ func TestPreviewReadySignalAndKeepalivePID(t *testing.T) {
 	}
 	if h.IsPreviewKeepalivePID("r", 1) {
 		t.Fatal("unexpected whitelist hit")
+	}
+}
+
+func TestSetPreviewDirectSkipsVNCWarmAndSetsDirectURL(t *testing.T) {
+	h := NewHost(&memStore{})
+	h.SetPreviewSandboxOps(&fakePreviewOps{name: "sb", ok: true, healthy: true, up: "http://10.0.0.8:18081", direct: true})
+	if _, err := h.setPreviewPort("r", "n", 18081, "web"); err != nil {
+		t.Fatal(err)
+	}
+	ops := h.previewOps.(*fakePreviewOps)
+	if len(ops.warmed) != 0 {
+		t.Fatalf("direct mode must not warm VNC: %v", ops.warmed)
+	}
+	ports := h.ListPreviewPorts("r", "n")
+	if len(ports) != 1 || ports[0].Mode != "direct" || ports[0].DirectURL != "http://10.0.0.8:18081/" {
+		t.Fatalf("ports=%+v", ports)
 	}
 }

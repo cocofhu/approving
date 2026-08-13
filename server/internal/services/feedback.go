@@ -17,9 +17,10 @@ import (
 // keeps what they wrote, the product keeps a bounded version so one verbose
 // round cannot dominate the ledger or an Agent's context window.
 const (
-	feedbackTextMax    = 8 * 1024
-	feedbackTurnMax    = 4 * 1024
-	feedbackSummaryMax = 240
+	feedbackTextMax         = 8 * 1024
+	feedbackTurnMax         = 4 * 1024
+	feedbackSummaryMax      = 240
+	feedbackAgentSummaryMax = 4 * 1024
 )
 
 // ErrFeedbackNoSubstance is returned by Append when the event carries no human
@@ -89,6 +90,7 @@ func (s *FeedbackService) Events(runID string) []models.FeedbackEvent {
 // refs only (never base64), and free text is bounded.
 func normalizeFeedbackEvent(ev *models.FeedbackEvent) {
 	ev.Text = truncateStr(strings.TrimSpace(ev.Text), feedbackTextMax)
+	ev.AgentSummary = truncateStr(strings.TrimSpace(ev.AgentSummary), feedbackAgentSummaryMax)
 	ev.Attachments = stripAttachmentData(ev.Attachments)
 	for i := range ev.Turns {
 		ev.Turns[i].Text = truncateStr(strings.TrimSpace(ev.Turns[i].Text), feedbackTurnMax)
@@ -174,6 +176,10 @@ func MarshalRoundJSON(ev models.FeedbackEvent, prior []models.FeedbackEvent, run
 	}
 	if ev.Interrupted {
 		payload["interrupted"] = true
+	}
+	// agentSummary is Agent-authored card copy, never FeedbackSummary (index gist).
+	if s := strings.TrimSpace(ev.AgentSummary); s != "" {
+		payload["agentSummary"] = s
 	}
 
 	fb := map[string]any{"text": ev.Text}

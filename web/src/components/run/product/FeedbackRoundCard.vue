@@ -43,6 +43,8 @@ export type FeedbackRoundDoc = {
   actor?: { name?: string; callerKind?: string; unattributable?: boolean }
   action?: string
   interrupted?: boolean
+  /** Agent-authored induction for this round; absent on legacy / no-summary rounds. */
+  agentSummary?: string
   feedback?: {
     text?: string
     annotations?: FeedbackAnnotation[]
@@ -69,6 +71,7 @@ const props = defineProps<{ doc: FeedbackRoundDoc }>()
 
 const { t } = useI18n()
 
+const agentSummary = computed(() => (props.doc.agentSummary || '').trim())
 const body = computed(() => (props.doc.feedback?.text || '').trim())
 const annotations = computed(() => props.doc.feedback?.annotations || [])
 const attachments = computed(() => props.doc.feedback?.attachments || [])
@@ -92,11 +95,32 @@ function asAnnotation(a: FeedbackAnnotation): ReactAnnotation {
 
 <template>
   <div class="space-y-3">
-    <p v-if="body" class="whitespace-pre-wrap text-[12px] leading-relaxed text-txt">{{ body }}</p>
+    <!-- Order (Demo): Agent 总结 → 全文 → 附件/受影响产物 → 本轮对话 → 此前各轮 -->
+    <section
+      v-if="agentSummary"
+      data-testid="feedback-agent-summary"
+      class="border border-line border-l-2 border-l-info bg-info/10 px-3 py-2.5"
+    >
+      <div class="mb-1.5 flex flex-wrap items-center gap-2">
+        <div class="text-[10px] font-semibold uppercase tracking-wider text-txt3">
+          {{ t('pages.product.feedback.agentSummary') }}
+        </div>
+        <span class="border border-info/40 bg-info/10 px-1.5 py-0.5 text-[10px] text-info">
+          {{ t('pages.product.feedback.agentSummaryTag') }}
+        </span>
+      </div>
+      <p class="whitespace-pre-wrap text-[12px] leading-relaxed text-txt">{{ agentSummary }}</p>
+    </section>
 
-    <div v-if="annotations.length" class="flex flex-wrap gap-1.5">
-      <AnnotationChip v-for="(a, i) in annotations" :key="i" :ann="asAnnotation(a)" />
-    </div>
+    <section v-if="body || annotations.length">
+      <div v-if="agentSummary && body" class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-txt3">
+        {{ t('pages.product.feedback.fullText') }}
+      </div>
+      <p v-if="body" class="whitespace-pre-wrap text-[12px] leading-relaxed text-txt">{{ body }}</p>
+      <div v-if="annotations.length" class="mt-1.5 flex flex-wrap gap-1.5">
+        <AnnotationChip v-for="(a, i) in annotations" :key="i" :ann="asAnnotation(a)" />
+      </div>
+    </section>
 
     <section v-if="attachments.length">
       <div class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-txt3">

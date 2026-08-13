@@ -47,7 +47,9 @@ describe('visual HtmlPreview Issue loop defaults (g4)', () => {
     expect(fieldKeys).not.toContain('actions')
     expect(fieldKeys).not.toContain('output_var')
     expect(fieldKeys).not.toContain('form')
+    expect(fieldKeys).toContain('direct_preview')
     const defaults = NODE_DEFS.app_preview.defaults as Record<string, unknown>
+    expect(defaults.direct_preview).toBe(false)
     expect(defaults.actions).toBeUndefined()
     expect(defaults.output_var).toBeUndefined()
   })

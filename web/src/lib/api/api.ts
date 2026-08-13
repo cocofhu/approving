@@ -135,6 +135,10 @@ export interface PreviewPort {
   proxyUrl: string
   healthy: boolean
   registeredAt?: string
+  /** "direct" when node switch direct_preview is on. */
+  mode?: 'direct' | 'vnc' | string
+  /** Browser-facing http://IP:port/ when mode=direct. */
+  directUrl?: string
 }
 
 export interface PreviewIssue {

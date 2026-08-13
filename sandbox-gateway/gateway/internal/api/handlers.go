@@ -307,6 +307,27 @@ func (h *Handler) Host(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"port": port, "address": addr})
 }
 
+// PublishPort handles POST /sandboxes/:id/ports {port:N} — k8s Service mapping.
+func (h *Handler) PublishPort(c *gin.Context) {
+	var req struct {
+		Port int `json:"port"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Port < 1 || req.Port > 65535 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid port"})
+		return
+	}
+	addr, err := h.svc.PublishPort(c.Request.Context(), c.Param("id"), req.Port)
+	if err != nil {
+		if errors.Is(err, service.ErrEndpointNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		h.notFoundOr500(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"port": req.Port, "address": addr})
+}
+
 // Logs handles GET /sandboxes/:id/logs?tail= — synchronous PID1 stdout/stderr.
 func (h *Handler) Logs(c *gin.Context) {
 	tail := 5000

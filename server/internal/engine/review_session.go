@@ -508,7 +508,7 @@ func (e *Engine) executeClarifyTurn(ctx context.Context, s *reviewSession, item 
 		agentMsg.Text = "(已中断)"
 	}
 	conv.Messages = append(conv.Messages, agentMsg)
-	e.recordFeedback(e.clarifyFeedbackEvent(s, item, conv.Iteration, answered, humanMsg, agentMsg, interrupted))
+	e.recordFeedback(e.clarifyFeedbackEvent(s, item, conv.Iteration, answered, humanMsg, agentMsg, interrupted, t.AgentSummary))
 
 	if interrupted {
 		logDB(e.db.Save(&conv), s.runID, "save clarify agent turn (interrupted)")
@@ -671,15 +671,16 @@ func (e *Engine) executeReviewTurn(ctx context.Context, s *reviewSession, item *
 				Msg("review revise turn failed (session kept for retry)")
 		}
 		// The opinion was still given, so the round is recorded — only without
-		// targets, because nothing landed.
-		e.recordFeedback(e.reviewFeedbackEvent(s, item, iter, humanMsg, agentMsg, nil, true))
+		// targets, because nothing landed. Interrupted rounds usually omit
+		// agentSummary; empty field keeps the card summary section hidden.
+		e.recordFeedback(e.reviewFeedbackEvent(s, item, iter, humanMsg, agentMsg, nil, true, t.AgentSummary))
 		e.broker.Publish(s.runID, jsonMsg("react", s.runID, s.producerID))
 		return true, nil
 	}
 
 	e.refreshProducerOutputs(c, producer)
 	e.recordFeedback(e.reviewFeedbackEvent(s, item, iter, humanMsg, agentMsg,
-		diffDigests(beforeDigests, e.artifactDigests(s.runID, s.producerID)), false))
+		diffDigests(beforeDigests, e.artifactDigests(s.runID, s.producerID)), false, t.AgentSummary))
 	if item.Source == "gate" && item.GateNodeID != "" {
 		e.refreshGateBodyAfterRevise(c, item.GateNodeID)
 		e.appendTrace(c, models.TraceEntry{NodeID: item.GateNodeID, Event: "resume",

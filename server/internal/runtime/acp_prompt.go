@@ -46,6 +46,9 @@ func (c *acpProvider) buildAgentPrompt(req NodeReq, seeded []string) string {
 	if extra := testNodePromptExtras(req); extra != "" {
 		b.WriteString(extra)
 	}
+	if extra := previewNodePromptExtras(req); extra != "" {
+		b.WriteString(extra)
+	}
 
 	if nodeTouchesRepos(req.NodeType) {
 		if layout := multiRepoLayoutText(req); layout != "" {
@@ -177,3 +180,12 @@ func submitMRRepoNote(req NodeReq) string {
 	}
 	return fmt.Sprintf("\n\n## 多仓 MR 目标仓\n本节点针对仓 `%s`:所有 `git` 与对应 CLI（`glab`/`gh`）操作前先 `cd %s`,仅在该仓目录内 push 源分支并建合并请求。\n", repo, repoWorkspacePath(repo))
 }
+
+// previewNodePromptExtras overrides proxy/noVNC instructions when IP-direct is on.
+func previewNodePromptExtras(req NodeReq) string {
+	if req.NodeType != "app_preview" || !configTruthy(req.Config["direct_preview"]) {
+		return ""
+	}
+	return models.DefaultPreviewDirectContract
+}
+

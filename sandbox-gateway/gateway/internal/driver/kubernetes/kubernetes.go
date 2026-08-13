@@ -173,6 +173,7 @@ func (d *Driver) selector(id string) map[string]string {
 func (d *Driver) Create(ctx context.Context, spec driver.Spec) (*driver.Handle, error) {
 	ns := d.opts.Namespace
 	id := spec.ID
+	driver.ApplyK8sPreviewDirect(&spec)
 	res := d.resolveResources(spec.Resources)
 	step := func(name string, fn func() error) error {
 		start := time.Now()
@@ -680,6 +681,7 @@ func (d *Driver) Destroy(ctx context.Context, id string) error {
 // on this driver; ConfigInject rides through env/SANDBOX_INJECT on recreate.
 func (d *Driver) Reinstall(ctx context.Context, spec driver.Spec, preserveData bool) error {
 	id := spec.ID
+	driver.ApplyK8sPreviewDirect(&spec)
 	res := d.resolveResources(spec.Resources)
 
 	if err := d.deleteDeployment(ctx, id); err != nil {
@@ -711,6 +713,50 @@ func (d *Driver) Reinstall(ctx context.Context, spec driver.Spec, preserveData b
 		}
 	}
 	return nil
+}
+
+// PublishPort adds port to ClusterIP and (when enabled) LoadBalancer Services
+// so set_preview can map an app port that was not in the create-time app[] list.
+func (d *Driver) PublishPort(ctx context.Context, id string, port int) error {
+	if strings.TrimSpace(id) == "" {
+		return fmt.Errorf("empty sandbox id")
+	}
+	if port < 1 || port > 65535 {
+		return fmt.Errorf("invalid port %d", port)
+	}
+	cip, err := d.cs.CoreV1().Services(d.opts.Namespace).Get(ctx, d.resourceName(id), metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	listen := portsFromService(cip)
+	listen = driver.AppendPort(listen, port)
+	if err := d.ensureClusterIPService(ctx, id, listen); err != nil {
+		return err
+	}
+	if !d.opts.EnableLoadBalancer {
+		return nil
+	}
+	lb, err := d.cs.CoreV1().Services(d.opts.Namespace).Get(ctx, d.lbName(id), metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return d.ensureLoadBalancer(ctx, id, []int{port})
+		}
+		return err
+	}
+	public := portsFromService(lb)
+	public = driver.AppendPort(public, port)
+	return d.ensureLoadBalancer(ctx, id, public)
+}
+
+func portsFromService(svc *corev1.Service) []int {
+	if svc == nil {
+		return nil
+	}
+	out := make([]int, 0, len(svc.Spec.Ports))
+	for _, p := range svc.Spec.Ports {
+		out = append(out, int(p.Port))
+	}
+	return out
 }
 
 func (d *Driver) deleteDeployment(ctx context.Context, id string) error {

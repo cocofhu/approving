@@ -77,6 +77,8 @@ type PublicPreviewPort struct {
 	Label string `json:"label,omitempty"`
 	// Mode is "vnc" (remote + pick) or "api" (same-origin iframe, no pick).
 	Mode string `json:"mode"`
+	// DirectURL is set when the node uses IP-direct preview (browser iframe target).
+	DirectURL string `json:"directUrl,omitempty"`
 }
 
 // PreviewExtras carries workbench fields that are optional on inactive links.
