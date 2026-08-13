@@ -1219,6 +1219,117 @@ func TestPublishPortAddsToLB(t *testing.T) {
 	}
 }
 
+func TestPublishPortValidationAndMissing(t *testing.T) {
+	d := testDriver(t, true)
+	ctx := context.Background()
+	if err := d.PublishPort(ctx, "", 80); err == nil {
+		t.Fatal("empty id")
+	}
+	if err := d.PublishPort(ctx, "x", 0); err == nil {
+		t.Fatal("port 0")
+	}
+	if err := d.PublishPort(ctx, "x", 70000); err == nil {
+		t.Fatal("port high")
+	}
+	if err := d.PublishPort(ctx, "missing", 80); err == nil {
+		t.Fatal("missing sandbox")
+	}
+}
+
+func TestPublishPortWithoutLBAddsClusterIP(t *testing.T) {
+	d := testDriver(t, false)
+	ctx := context.Background()
+	if _, err := d.Create(ctx, driver.Spec{ID: "nl1", Image: "img", Ports: []int{8765}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.PublishPort(ctx, "nl1", 3000); err != nil {
+		t.Fatal(err)
+	}
+	cip, err := d.cs.CoreV1().Services("sandboxes").Get(ctx, "sbx-nl1", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, p := range cip.Spec.Ports {
+		if int(p.Port) == 3000 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("ClusterIP missing 3000: %+v", cip.Spec.Ports)
+	}
+}
+
+func TestPublishPortRecreatesMissingLB(t *testing.T) {
+	d := testDriver(t, true)
+	ctx := context.Background()
+	if _, err := d.Create(ctx, driver.Spec{ID: "rl1", Image: "img", Ports: []int{8765}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.cs.CoreV1().Services("sandboxes").Delete(ctx, "sbx-rl1-lb", metav1.DeleteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.PublishPort(ctx, "rl1", 5173); err != nil {
+		t.Fatal(err)
+	}
+	lb, err := d.cs.CoreV1().Services("sandboxes").Get(ctx, "sbx-rl1-lb", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, p := range lb.Spec.Ports {
+		if int(p.Port) == 5173 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("recreated LB missing 5173: %+v", lb.Spec.Ports)
+	}
+}
+
+func TestPublishPortIdempotent(t *testing.T) {
+	d := testDriver(t, true)
+	ctx := context.Background()
+	if _, err := d.Create(ctx, driver.Spec{ID: "id1", Image: "img", Ports: []int{8765, 5173}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.PublishPort(ctx, "id1", 5173); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPortsFromServiceNil(t *testing.T) {
+	if portsFromService(nil) != nil {
+		t.Fatal("nil service")
+	}
+}
+
+func TestReinstallPreviewDirectAddsServicePort(t *testing.T) {
+	d := testDriver(t, true)
+	ctx := context.Background()
+	spec := driver.Spec{ID: "ri-pd", Image: "img", Ports: []int{8765, 22}}
+	if _, err := d.Create(ctx, spec); err != nil {
+		t.Fatal(err)
+	}
+	spec.Env = map[string]string{driver.EnvPreviewDirect: "1"}
+	if err := d.Reinstall(ctx, spec, true); err != nil {
+		t.Fatal(err)
+	}
+	lb, err := d.cs.CoreV1().Services("sandboxes").Get(ctx, "sbx-ri-pd-lb", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, p := range lb.Spec.Ports {
+		if int(p.Port) == 18080 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("reinstall LB missing 18080: %+v", lb.Spec.Ports)
+	}
+}
+
 func TestEndpointsMergesInternalClusterDNSWhenLBEnabled(t *testing.T) {
 	d := testDriver(t, true)
 	ctx := context.Background()

@@ -55,4 +55,20 @@ func TestApplyK8sPreviewDirect(t *testing.T) {
 	if off.Env[EnvPreviewPort] != "" {
 		t.Fatal("off must not set PREVIEW_PORT")
 	}
+
+	ApplyK8sPreviewDirect(nil)
+
+	custom := Spec{Ports: []int{80}, Env: map[string]string{EnvPreviewDirect: "1", EnvPreviewPort: "19000"}}
+	ApplyK8sPreviewDirect(&custom)
+	if custom.Env[EnvPreviewPort] != "19000" {
+		t.Fatalf("custom PREVIEW_PORT=%q", custom.Env[EnvPreviewPort])
+	}
+	bad := Spec{Env: map[string]string{EnvPreviewDirect: "1", EnvPreviewPort: "nope"}}
+	ApplyK8sPreviewDirect(&bad)
+	if bad.Env[EnvPreviewPort] != "18080" {
+		t.Fatalf("invalid PREVIEW_PORT should fall back, got %q", bad.Env[EnvPreviewPort])
+	}
+	if AppendPort(nil, 70000) != nil {
+		t.Fatal("port > 65535 must be skipped")
+	}
 }

@@ -3,11 +3,11 @@ package driver
 import "strconv"
 
 const (
-	EnvPreviewDirect    = "PREVIEW_DIRECT"
-	EnvPreviewPort      = "PREVIEW_PORT"
-	EnvPreviewPublicURL = "PREVIEW_PUBLIC_URL"
-	PreviewPortMin      = 18080
-	PreviewPortMax      = 18999
+	EnvPreviewDirect      = "PREVIEW_DIRECT"
+	EnvPreviewPort        = "PREVIEW_PORT"
+	EnvPreviewPublicURL   = "PREVIEW_PUBLIC_URL"
+	PreviewPortMin        = 18080
+	PreviewPortMax        = 18999
 	DefaultK8sPreviewPort = 18080
 )
 
@@ -34,9 +34,6 @@ func AppendPort(ports []int, p int) []int {
 func ApplyK8sPreviewDirect(spec *Spec) {
 	if spec == nil || !PreviewDirectEnabled(spec.Env) {
 		return
-	}
-	if spec.Env == nil {
-		spec.Env = map[string]string{}
 	}
 	p := DefaultK8sPreviewPort
 	if raw := spec.Env[EnvPreviewPort]; raw != "" {

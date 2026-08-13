@@ -462,9 +462,6 @@ func (d *Driver) applyPreviewDirect(spec *driver.Spec) error {
 	if spec == nil || !driver.PreviewDirectEnabled(spec.Env) {
 		return nil
 	}
-	if spec.Env == nil {
-		spec.Env = map[string]string{}
-	}
 	p, _ := strconv.Atoi(strings.TrimSpace(spec.Env[driver.EnvPreviewPort]))
 	if p <= 0 {
 		var err error
