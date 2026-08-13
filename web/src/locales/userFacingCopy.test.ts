@@ -265,6 +265,12 @@ describe('user-facing copy remediation keys', () => {
     expect(en.global.t('pages.board.tokenStats.workflow')).not.toBe('workflow')
     expect(en.global.t('pages.projectDetail.tokenTipWorkflow')).not.toBe('workflow')
 
+    expect(zh.global.t('pages.appPreview.novnc.inspect')).toBe('取点标注')
+    expect(zh.global.t('pages.appPreview.novnc.cancelInspect')).toBe('取消标注')
+    expect(en.global.t('pages.appPreview.novnc.inspect')).toBe('Pick to annotate')
+    expect(en.global.t('pages.appPreview.novnc.cancelInspect')).toBe('Cancel annotation')
+    expect(zh.global.t('pages.appPreview.novnc.cancelInspect')).not.toMatch(/取消取点/)
+
     const tokenSourceNoPmKeys = [
       'pages.board.tokenStats.workflow',
       'pages.projectDetail.tokenTipWorkflow',

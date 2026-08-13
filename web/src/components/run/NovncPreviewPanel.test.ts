@@ -154,25 +154,26 @@ describe('NovncPreviewPanel', () => {
     consoleWrap.unmount()
   })
 
-  it('toggles inspect with stable label and aria-pressed; second click sends on:false', async () => {
+  it('toggles inspect label to 取消标注; second click sends on:false', async () => {
     const wrapper = mountNovnc()
     await flushPromises()
     const btn = inspectButton(wrapper)
     expect(btn.attributes('aria-pressed')).toBe('false')
     expect(btn.text()).toContain('取点标注')
-    expect(wrapper.text()).not.toContain('取消取点')
+    expect(wrapper.text()).not.toContain('取消标注')
 
     await btn.trigger('click')
     await flushPromises()
     expect(btn.attributes('aria-pressed')).toBe('true')
-    expect(btn.text()).toContain('取点标注')
-    expect(wrapper.text()).not.toContain('取消取点')
+    expect(btn.text()).toContain('取消标注')
+    expect(btn.text()).not.toContain('取点标注')
     expect(lastInspectCtrl()).toEqual({ type: 'inspect', on: true })
 
     await btn.trigger('click')
     await flushPromises()
     expect(btn.attributes('aria-pressed')).toBe('false')
     expect(btn.text()).toContain('取点标注')
+    expect(wrapper.text()).not.toContain('取消标注')
     expect(lastInspectCtrl()).toEqual({ type: 'inspect', on: false })
     wrapper.unmount()
   })
