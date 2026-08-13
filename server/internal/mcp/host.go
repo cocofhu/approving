@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/cocofhu/approving/internal/models"
@@ -27,6 +28,22 @@ type ArtifactInfo struct {
 	Name string `json:"name"`
 	Node string `json:"node"`
 	Size int    `json:"size"`
+	// Note explains a synthesized entry (currently only the folded feedback
+	// ledger), so a listing that stands in for many products says so.
+	Note string `json:"note,omitempty"`
+}
+
+// Feedback ledger product names. Per-round products are written by the
+// platform, never by an agent, and are folded behind the index in listings.
+const (
+	FeedbackIndexArtifactName = "feedback_index.json"
+	FeedbackArtifactPrefix    = "feedback."
+)
+
+// IsFeedbackArtifactName reports whether name belongs to the feedback ledger.
+func IsFeedbackArtifactName(name string) bool {
+	name = strings.TrimSpace(name)
+	return name == FeedbackIndexArtifactName || strings.HasPrefix(name, FeedbackArtifactPrefix)
 }
 
 // Store is the persistence backend the MCP writes through. Implemented by
@@ -425,12 +442,48 @@ func (h *Host) ReadArtifact(runID, token, name string) (string, error) {
 	return content, nil
 }
 
-// ListArtifacts lists products of the current run only.
+// ListArtifacts lists products of the current run only, with the per-round
+// feedback ledger folded behind its index.
 func (h *Host) ListArtifacts(runID, token string) ([]ArtifactInfo, error) {
 	if !h.authorize(runID, token) {
 		return nil, ErrUnauthorized
 	}
-	return h.store.List(runID), nil
+	return foldFeedbackArtifacts(h.store.List(runID)), nil
+}
+
+// foldFeedbackArtifacts collapses feedback.* into the index entry.
+//
+// A long review can produce dozens of rounds; listing each one would bury the
+// actual deliverables in bookkeeping. The index is the documented entry point,
+// and it names every round for read_artifact, so nothing becomes unreachable.
+func foldFeedbackArtifacts(in []ArtifactInfo) []ArtifactInfo {
+	out := make([]ArtifactInfo, 0, len(in))
+	folded, indexAt := 0, -1
+	for _, a := range in {
+		switch {
+		case a.Name == FeedbackIndexArtifactName:
+			indexAt = len(out)
+			out = append(out, a)
+		case strings.HasPrefix(a.Name, FeedbackArtifactPrefix):
+			folded++
+		default:
+			out = append(out, a)
+		}
+	}
+	if folded == 0 {
+		return out
+	}
+	entry := ArtifactInfo{
+		Name: FeedbackIndexArtifactName,
+		Note: fmt.Sprintf("人工反馈台账:已折叠 %d 轮单轮产物,读本索引取轮次清单与产物名", folded),
+	}
+	if indexAt >= 0 {
+		entry.Node = out[indexAt].Node
+		entry.Size = out[indexAt].Size
+		out[indexAt] = entry
+		return out
+	}
+	return append(out, entry)
 }
 
 // PlanIncomplete returns descriptions of the run plan's not-yet-done leaf items

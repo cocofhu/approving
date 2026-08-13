@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isStructuredArtifactName } from './StructuredArtifactView.vue'
+import { isFeedbackArtifactName, isStructuredArtifactName } from './StructuredArtifactView.vue'
 
 describe('isStructuredArtifactName', () => {
   it('matches the 8 reserved structured JSON artifact names', () => {
@@ -23,5 +23,22 @@ describe('isStructuredArtifactName', () => {
     expect(isStructuredArtifactName('page.html')).toBe(false)
     expect(isStructuredArtifactName('design.md')).toBe(false)
     expect(isStructuredArtifactName('result.json')).toBe(false)
+  })
+
+  // Round names are generated per node and iteration, so the ledger can only be
+  // recognized by prefix — an exact-name whitelist would drop every round into
+  // the raw JSON fallback.
+  it('recognizes the ledger by prefix, not by an exact name', () => {
+    const names = [
+      'feedback_index.json',
+      'feedback.review.research-1.i2r3.json',
+      'feedback.gate.approve.i1r1.json',
+    ]
+    for (const name of names) {
+      expect(isFeedbackArtifactName(name)).toBe(true)
+      expect(isStructuredArtifactName(name)).toBe(true)
+    }
+    expect(isFeedbackArtifactName('feedbackish.json')).toBe(false)
+    expect(isFeedbackArtifactName('research.json')).toBe(false)
   })
 })

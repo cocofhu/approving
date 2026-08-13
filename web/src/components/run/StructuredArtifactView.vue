@@ -10,8 +10,18 @@ const STRUCTURED_ARTIFACT_NAMES = new Set([
   'review.json',
 ])
 
+// Feedback ledger products are matched by prefix, not by exact name: each round
+// gets its own file (feedback.<kind>.<node>.i<n>r<n>.json) so rounds never
+// overwrite each other, which makes the set of names unbounded.
+const FEEDBACK_INDEX_NAME = 'feedback_index.json'
+const FEEDBACK_PREFIX = 'feedback.'
+
+export function isFeedbackArtifactName(name: string): boolean {
+  return name === FEEDBACK_INDEX_NAME || name.startsWith(FEEDBACK_PREFIX)
+}
+
 export function isStructuredArtifactName(name: string): boolean {
-  return STRUCTURED_ARTIFACT_NAMES.has(name)
+  return STRUCTURED_ARTIFACT_NAMES.has(name) || isFeedbackArtifactName(name)
 }
 </script>
 
@@ -24,6 +34,7 @@ import ResearchView from './product/ResearchView.vue'
 import TestResultView from './product/TestResultView.vue'
 import ReviewView from './product/ReviewView.vue'
 import ImplementationResultView from './product/ImplementationResultView.vue'
+import FeedbackLedgerView from './product/FeedbackLedgerView.vue'
 
 import type { Artifact } from '@/lib/shared/types'
 
@@ -43,6 +54,7 @@ const props = defineProps<{
 // proposal.json is a single accepted proposal; adapt it to the proposals card
 // list (one item) and highlight it as the selected one.
 const asProposals = computed(() => ({ context: props.doc?.context, proposals: props.doc ? [props.doc] : [] }))
+const isFeedback = computed(() => isFeedbackArtifactName(props.name))
 </script>
 
 <template>
@@ -61,4 +73,11 @@ const asProposals = computed(() => ({ context: props.doc?.context, proposals: pr
   <ReviewView v-else-if="name === 'review.json'" :doc="doc" />
   <ProposalSelectView v-else-if="name === 'proposals.json'" :doc="doc" readonly />
   <ProposalSelectView v-else-if="name === 'proposal.json'" :doc="asProposals" :resolved-id="doc?.id" readonly />
+  <FeedbackLedgerView
+    v-else-if="isFeedback"
+    :name="name"
+    :doc="doc"
+    :run-id="runId"
+    :artifacts="artifacts"
+  />
 </template>

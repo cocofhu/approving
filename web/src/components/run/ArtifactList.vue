@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import { fmtTime } from '@/lib/shared/format'
 import { runSectionTitle } from '@/lib/run/artifactGroups'
+import { isFeedbackArtifactName } from './StructuredArtifactView.vue'
 import type { Artifact } from '@/lib/shared/types'
 import type { RunSection } from '@/lib/run/artifactGroups'
 
@@ -45,6 +46,12 @@ const { t } = useI18n()
 const artFilter = ref('')
 const collapsedRuns = ref<Set<string>>(new Set())
 const scrollEl = ref<HTMLElement | null>(null)
+// A long review produces one product per round; left flat they would bury the
+// actual deliverables, so the ledger gets its own collapsed group.
+const feedbackOpen = ref(false)
+
+const feedbackItems = computed(() => props.artifacts.filter((a) => isFeedbackArtifactName(a.name)))
+const plainItems = computed(() => props.artifacts.filter((a) => !isFeedbackArtifactName(a.name)))
 
 const kindIcon: Record<string, string> = { markdown: 'doc', json: 'doc', yaml: 'doc', html: 'dashboard' }
 
@@ -290,7 +297,7 @@ watch(
 
       <template v-else>
         <button
-          v-for="a in artifacts"
+          v-for="a in plainItems"
           :key="a.id"
           class="mb-1.5 flex w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left transition"
           :class="activeId === a.id ? 'border-accent/50 bg-accent-dim/40' : 'border-line hover:bg-elevated'"
@@ -308,6 +315,42 @@ watch(
           </div>
           <Icon name="chevron-right" :size="14" class="text-txt3" />
         </button>
+
+        <div v-if="feedbackItems.length" class="mb-1.5">
+          <button
+            type="button"
+            class="flex w-full items-center gap-1.5 px-2 py-1 text-left text-[12px] font-normal text-txt3 transition hover:text-txt2"
+            data-testid="artifact-feedback-group"
+            @click="feedbackOpen = !feedbackOpen"
+          >
+            <Icon
+              name="chevron-down"
+              :size="12"
+              class="shrink-0 text-txt3 transition-transform"
+              :class="feedbackOpen ? '' : '-rotate-90'"
+            />
+            <span class="min-w-0 flex-1 truncate">{{ t('pages.artifactList.feedbackGroup') }}</span>
+            <span class="shrink-0 text-[10px] tabular-nums text-txt3">{{ feedbackItems.length }}</span>
+          </button>
+          <div v-show="feedbackOpen" class="mt-1">
+            <button
+              v-for="a in feedbackItems"
+              :key="a.id"
+              class="mb-1.5 flex w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left transition"
+              :class="activeId === a.id ? 'border-accent/50 bg-accent-dim/40' : 'border-line hover:bg-elevated'"
+              @click="emit('select', a)"
+            >
+              <div class="flex h-8 w-8 items-center justify-center rounded-md bg-n-artifact/15 text-n-artifact">
+                <Icon name="doc" :size="16" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-[13px] font-medium text-txt">{{ a.name }}</div>
+                <div class="truncate text-[10px] text-txt3">{{ a.nodeId }} · {{ fmtTime(a.createdAt) }}</div>
+              </div>
+              <Icon name="chevron-right" :size="14" class="text-txt3" />
+            </button>
+          </div>
+        </div>
       </template>
     </div>
   </div>

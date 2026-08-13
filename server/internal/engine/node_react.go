@@ -86,15 +86,18 @@ func (e *Engine) autoAdvanceReact(c *execCtx, node *models.Node, conv *models.Re
 		if humanText == "" {
 			break
 		}
-		conv.Messages = append(conv.Messages, models.ReactMessage{Role: "human", Text: humanText,
-			At: time.Now().Format(time.RFC3339)})
+		humanMsg := models.ReactMessage{Role: "human", Text: humanText,
+			At: time.Now().Format(time.RFC3339)}
+		conv.Messages = append(conv.Messages, humanMsg)
 		t = e.provider.ReactReply(context.Background(), req, conv.Messages, humanText, nil, false)
 		acc = models.AddTokenUsage(acc, t.Usage)
 		accBy = models.AddTokenUsageByModel(accBy, t.UsageByModel)
-		conv.Messages = append(conv.Messages, models.ReactMessage{Role: "agent", Text: t.Msg,
-			At: time.Now().Format(time.RFC3339), Questions: t.Questions})
+		agentMsg := models.ReactMessage{Role: "agent", Text: t.Msg,
+			At: time.Now().Format(time.RFC3339), Questions: t.Questions}
+		conv.Messages = append(conv.Messages, agentMsg)
 		conv.Done = t.Done
 		logDB(e.db.Save(conv), c.run.ID, "auto react round")
+		e.recordAutoClarifyRound(c.run.ID, node.ID, conv.Iteration, humanMsg, agentMsg)
 	}
 	t.Usage = acc
 	t.UsageByModel = accBy

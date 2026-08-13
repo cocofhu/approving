@@ -211,6 +211,8 @@ func (e *Engine) resumeGateLocked(runID, nodeID, action string, form map[string]
 		e.recordAudit(rec)
 	}
 
+	e.recordGateFeedback(c, node, gate, action, form, reviewer, opts)
+
 	if e.shareRevoker != nil && node.Type == "human_gate" {
 		e.shareRevoker.RevokeUnusedForGate(runID, nodeID, gate.Iteration)
 	}
@@ -345,6 +347,8 @@ func (e *Engine) snapshotPreviewIssues(c *execCtx, runID, nodeID string) error {
 	e.persistVar(runID, "preview_issues", value)
 	c.setVar("preview_issues_count", len(issues))
 	e.persistVar(runID, "preview_issues_count", len(issues))
+
+	e.recordPreviewFeedback(c, nodeID, issues)
 
 	// Snapshot succeeded — close the lifecycle for this node's open issues.
 	return e.markPreviewIssuesResolvedByNode(runID, nodeID)

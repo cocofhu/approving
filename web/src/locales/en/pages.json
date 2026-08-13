@@ -2909,7 +2909,8 @@
       "matchCount": "({n} runs matched)",
       "noMatchingArtifacts": "No matching artifacts",
       "expandAll": "Expand",
-      "collapseAll": "Collapse"
+      "collapseAll": "Collapse",
+      "feedbackGroup": "Human feedback ledger"
     },
     "artifactPreview": {
       "emptyHint": "Select an artifact on the left to view (platform storage, downloadable)",
@@ -2986,6 +2987,31 @@
         "tests": "Tests",
         "breakingChanges": "Breaking changes",
         "followUps": "Follow-ups"
+      },
+      "feedback": {
+        "total": "{n} rounds of human feedback",
+        "empty": "No human feedback yet",
+        "iterRound": "Run {i} · round {r}",
+        "roundN": "Round {n}",
+        "annotationCount": "{n} annotations",
+        "attachmentCount": "{n} attachments",
+        "attachments": "Attachments ({n})",
+        "targets": "Affected artifacts",
+        "transcript": "Dialogue this round",
+        "priorRounds": "Earlier rounds",
+        "roleHuman": "Human",
+        "roleAgent": "Agent",
+        "interrupted": "Not applied",
+        "indexOnly": "Auto-accepted by the platform; no standalone artifact",
+        "loading": "Loading…",
+        "loadFailed": "Cannot load {name}",
+        "seeIndex": "All rounds are listed in {name}",
+        "kind": {
+          "clarify": "Clarify",
+          "review": "Revise",
+          "gate": "Gate",
+          "preview": "Preview issues"
+        }
       },
       "review": {
         "verdict": "Review verdict",
