@@ -65,6 +65,7 @@ import AnnotationChip from '../AnnotationChip.vue'
 import ChatImageThumb from '../../ui/ChatImageThumb.vue'
 import { blobContentUrl } from '@/lib/api/api'
 import { fmtTime } from '@/lib/shared/format'
+import { renderMarkdown } from '@/lib/shared/markdown'
 import type { ReactAnnotation } from '@/lib/shared/types'
 
 const props = defineProps<{ doc: FeedbackRoundDoc }>()
@@ -91,6 +92,11 @@ function attachmentLabel(a: FeedbackAttachment, i: number): string {
 function asAnnotation(a: FeedbackAnnotation): ReactAnnotation {
   return a as ReactAnnotation
 }
+
+/** Same empty-body gate as ClarifyChat: blank / whitespace-only produces no md block. */
+function turnBody(text: string | undefined): string {
+  return (text || '').trim()
+}
 </script>
 
 <template>
@@ -116,7 +122,12 @@ function asAnnotation(a: FeedbackAnnotation): ReactAnnotation {
       <div v-if="agentSummary && body" class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-txt3">
         {{ t('pages.product.feedback.fullText') }}
       </div>
-      <p v-if="body" class="whitespace-pre-wrap text-[12px] leading-relaxed text-txt">{{ body }}</p>
+      <div
+        v-if="body"
+        class="md break-words text-[12px] leading-relaxed text-txt"
+        data-testid="feedback-round-body"
+        v-html="renderMarkdown(body)"
+      />
       <div v-if="annotations.length" class="mt-1.5 flex flex-wrap gap-1.5">
         <AnnotationChip v-for="(a, i) in annotations" :key="i" :ann="asAnnotation(a)" />
       </div>
@@ -159,6 +170,7 @@ function asAnnotation(a: FeedbackAnnotation): ReactAnnotation {
           :key="i"
           class="rounded-md border p-2"
           :class="turn.role === 'human' ? 'border-accent/40 bg-accent-dim/25' : 'border-line bg-base/40'"
+          :data-testid="`feedback-turn-${i}`"
         >
           <div class="mb-0.5 flex items-center gap-2">
             <span class="text-[10px] font-medium uppercase tracking-wide" :class="turn.role === 'human' ? 'text-accent-2' : 'text-txt3'">
@@ -167,7 +179,12 @@ function asAnnotation(a: FeedbackAnnotation): ReactAnnotation {
             <span v-if="turn.interrupted" class="text-[10px] text-warn">{{ t('pages.product.feedback.interrupted') }}</span>
             <span v-if="turn.at" class="ml-auto text-[10px] text-txt3">{{ fmtTime(turn.at) }}</span>
           </div>
-          <p class="whitespace-pre-wrap text-[11px] leading-relaxed text-txt2">{{ turn.text }}</p>
+          <div
+            v-if="turnBody(turn.text)"
+            class="md break-words text-[11px] leading-relaxed text-txt2"
+            data-testid="feedback-turn-body"
+            v-html="renderMarkdown(turn.text || '')"
+          />
         </div>
       </div>
     </section>
