@@ -77,9 +77,14 @@ function parseProjectTab(q: unknown): Tab {
 
 const route = useRoute()
 const router = useRouter()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const toast = useToast()
 const { isFavorite, toggleFavorite } = useWorkflowFavorites()
+
+/** Desktop ops-column favorite btn: stable min-width by longer label (Demo: zh 4.75rem / en 5.75rem). */
+const favoriteBtnMinWidth = computed(() =>
+  String(locale.value).startsWith('zh') ? '4.75rem' : '5.75rem',
+)
 
 function toggleWorkflowFavorite(w: Workflow) {
   toggleFavorite(w.id, { name: w.name })
@@ -1463,15 +1468,15 @@ onBeforeRouteUpdate(async (to, from) => {
                       </button>
                       <button
                         type="button"
-                        class="whitespace-nowrap rounded-md px-2 py-1 text-xs text-txt2 hover:bg-overlay hover:text-txt"
+                        class="inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-xs text-txt2 hover:bg-overlay hover:text-txt"
                         :class="{ 'text-warn hover:bg-warn/10': isFavorite(w.id) }"
+                        :style="{ minWidth: favoriteBtnMinWidth }"
                         data-testid="workflow-favorite-btn"
                         @click="toggleWorkflowFavorite(w)"
                       >
                         <Icon
                           :name="isFavorite(w.id) ? 'star-filled' : 'star'"
                           :size="13"
-                          class="mr-1 inline"
                         />{{ isFavorite(w.id) ? t('common.buttons.unfavorite') : t('common.buttons.favorite') }}
                       </button>
                       <button
