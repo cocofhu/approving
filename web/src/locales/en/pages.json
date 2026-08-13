@@ -2449,7 +2449,7 @@
         "fullscreen": "Fullscreen",
         "exitFullscreen": "Exit fullscreen",
         "inspect": "Pick to annotate",
-        "cancelInspect": "Cancel pick",
+        "cancelInspect": "Cancel annotation",
         "usePick": "Add to chat ⤴",
         "clearPick": "Clear",
         "pickedLabel": "Picked",
