@@ -2449,7 +2449,7 @@
         "fullscreen": "全屏",
         "exitFullscreen": "退出全屏",
         "inspect": "取点标注",
-        "cancelInspect": "取消取点",
+        "cancelInspect": "取消标注",
         "usePick": "添加到聊天 ⤴",
         "clearPick": "清除",
         "pickedLabel": "已选出",

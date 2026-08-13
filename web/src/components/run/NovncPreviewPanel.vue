@@ -53,6 +53,9 @@ const previewStuck = ref(false)
 let previewWarnTimer: ReturnType<typeof setTimeout> | null = null
 const PREVIEW_STUCK_MS = 20_000
 const inspect = ref(false)
+const inspectToggleLabel = computed(() =>
+  t(inspect.value ? 'pages.appPreview.novnc.cancelInspect' : 'pages.appPreview.novnc.inspect'),
+)
 const picked = ref<AppPreviewPickPayload | null>(null)
 const address = ref('about:blank')
 /** Toolbar inline tip (Demo S2/S3): not-ready warn vs describe-failed err. */
@@ -463,12 +466,12 @@ onBeforeUnmount(() => {
         type="button"
         class="rounded px-2 py-0.5 text-[11px] transition"
         :class="inspect ? 'bg-ok/20 text-ok' : 'text-txt2 hover:bg-overlay'"
-        :title="t('pages.appPreview.novnc.inspect')"
+        :title="inspectToggleLabel"
         :aria-pressed="inspect ? 'true' : 'false'"
         data-testid="novnc-inspect-toggle"
         @click="toggleInspect"
       >
-        {{ t('pages.appPreview.novnc.inspect') }}
+        {{ inspectToggleLabel }}
       </button>
       <button
         type="button"

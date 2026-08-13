@@ -169,6 +169,7 @@ type rodPage struct {
 	onPick            func(Pick)
 	onInspectCanceled func()
 	onDescribeFailed  func()
+	inspectCancel     inspectCancelFilter
 }
 
 func (rp *rodPage) OnPick(cb func(Pick)) {
@@ -285,6 +286,7 @@ func (rp *rodPage) SetViewport(width, height int, dpr float64) error {
 
 func (rp *rodPage) SetInspect(on bool) error {
 	if !on {
+		rp.inspectCancel.set(false)
 		_ = proto.OverlayHideHighlight{}.Call(rp.page)
 		err := proto.OverlaySetInspectMode{Mode: proto.OverlayInspectModeNone}.Call(rp.page)
 		if err != nil {
@@ -298,6 +300,7 @@ func (rp *rodPage) SetInspect(on bool) error {
 	if err := rp.presentDesktop(); err != nil {
 		return err
 	}
+	rp.inspectCancel.set(true)
 	_ = proto.DOMEnable{}.Call(rp.page)
 	_ = proto.OverlayEnable{}.Call(rp.page)
 	content, border := 0.4, 1.0
@@ -329,6 +332,7 @@ func (rp *rodPage) Goto(url string) error {
 }
 
 func (rp *rodPage) Close() error {
+	rp.inspectCancel.stop()
 	err := rp.page.Close()
 	// Dispose the isolated browser context so it doesn't leak in a long-lived
 	// container.
@@ -359,7 +363,11 @@ func (rp *rodPage) installPickListener() {
 			cb(pick)
 		},
 		func(_ *proto.OverlayInspectModeCanceled) {
-			// User Esc (or equivalent) canceled SearchForNode — notify UI to clear sticky toggle.
+			// Enabling inspect often fires this for the previous mode; ignore that
+			// or the UI toggle desyncs and cancel never sticks.
+			if !rp.inspectCancel.onCanceled() {
+				return
+			}
 			if cb := rp.getInspectCanceled(); cb != nil {
 				cb()
 			}
