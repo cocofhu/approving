@@ -363,9 +363,10 @@ func (h *Handlers) publicAppPreviewPorts(runID, nodeID string) []gateshare.Publi
 		}
 		label := strings.TrimSpace(p.Label)
 		out = append(out, gateshare.PublicPreviewPort{
-			Port:  p.Port,
-			Label: label,
-			Mode:  gateshare.InferPreviewMode(label),
+			Port:      p.Port,
+			Label:     label,
+			Mode:      gateshare.InferPreviewMode(label),
+			DirectURL: strings.TrimSpace(p.DirectURL),
 		})
 	}
 	return out

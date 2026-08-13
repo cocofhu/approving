@@ -630,6 +630,24 @@ func (m *Manager) HostForPort(ctx context.Context, id string, port int) (string,
 	return out.Address, nil
 }
 
+// PublishPort asks the gateway to expose an extra public port (k8s Service mapping).
+func (m *Manager) PublishPort(ctx context.Context, id string, port int) (string, error) {
+	if m.gw == nil {
+		return "", fmt.Errorf("no gateway client")
+	}
+	if strings.TrimSpace(id) == "" || port <= 0 {
+		return "", fmt.Errorf("invalid sandbox or port")
+	}
+	var out struct {
+		Address string `json:"address"`
+	}
+	body := map[string]int{"port": port}
+	if err := m.gw.do(ctx, "POST", fmt.Sprintf("/api/v1/sandboxes/%s/ports", id), body, &out); err != nil {
+		return "", err
+	}
+	return out.Address, nil
+}
+
 // EndpointAddr returns the gateway-published reachable "host:port" for a named
 // endpoint key (session / ide / ssh / …). Prefer this for IDE/ACP reverse
 // proxies so dial targets track gateway endpoints rather than hard-coded

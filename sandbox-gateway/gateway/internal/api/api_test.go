@@ -411,3 +411,44 @@ func TestSandboxLogsEndpoint(t *testing.T) {
 		t.Fatalf("bad tail want 400 got %d", w.Code)
 	}
 }
+
+func TestPublishPortEndpoint(t *testing.T) {
+	r, _, svc := testRouter(t, nil)
+	id := createSandbox(t, r)
+	waitRunning(t, svc, id)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes/"+id+"/ports",
+		bytes.NewBufferString(`{"port":8765}`)))
+	if w.Code != 200 {
+		t.Fatalf("existing port=%d %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes/"+id+"/ports",
+		bytes.NewBufferString(`{"port":5173}`)))
+	if w.Code != 404 {
+		t.Fatalf("unpublished port want 404 got %d %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes/"+id+"/ports",
+		bytes.NewBufferString(`{"port":0}`)))
+	if w.Code != 400 {
+		t.Fatalf("port 0 want 400 got %d", w.Code)
+	}
+
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes/"+id+"/ports",
+		bytes.NewBufferString(`{`)))
+	if w.Code != 400 {
+		t.Fatalf("bad json want 400 got %d", w.Code)
+	}
+
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes/missing/ports",
+		bytes.NewBufferString(`{"port":80}`)))
+	if w.Code != 404 {
+		t.Fatalf("missing sandbox want 404 got %d", w.Code)
+	}
+}

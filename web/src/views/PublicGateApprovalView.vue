@@ -118,13 +118,21 @@ function refreshLocalChatBusy() {
 }
 const canReply = computed(() => isActive.value && reactAlive.value && !!preview.value?.actions?.reply)
 const canReject = computed(() => !isReview.value && !!preview.value?.actions?.reject)
-const canConfirm = computed(() => {
+/** Business mountability only — busy/submitting must not hide the confirm control. */
+const showConfirm = computed(() => {
   if (!isActive.value || doneKind.value) return false
-  // f3: confirm gated on local !sessionBusy, not lagged preview.sessionBusy.
-  if (localChatBusy.value || replyInFlight.value) return false
   if (isReview.value) return !!preview.value?.actions?.confirm
   return !!preview.value?.actions?.approve || !!preview.value?.actions?.confirm
 })
+/** Clickability: busy / in-flight / submitting / linkInvalid disable (align GateApproval). */
+const confirmDisabled = computed(
+  () =>
+    submitting.value ||
+    localChatBusy.value ||
+    replyInFlight.value ||
+    linkInvalid.value ||
+    !showConfirm.value,
+)
 const productKind = computed(() => preview.value?.productKind || inferProductKind())
 const productName = computed(() => preview.value?.productName || preview.value?.structured?.name || '')
 const inspectable = computed(
@@ -1155,11 +1163,11 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
             {{ submitting ? t('pages.publicGate.submitting') : t('pages.publicGate.reject') }}
           </button>
           <button
-            v-if="canConfirm || linkInvalid"
+            v-if="showConfirm || linkInvalid"
             type="button"
             class="inline-flex min-h-9 min-w-[8rem] items-center justify-center gap-2 bg-ok px-4 text-sm font-medium text-white disabled:opacity-45"
             data-testid="public-gate-confirm"
-            :disabled="submitting || localChatBusy || replyInFlight || linkInvalid || !canConfirm"
+            :disabled="confirmDisabled"
             :aria-busy="pendingKind === 'confirm' && submitting ? 'true' : 'false'"
             :aria-label="t('pages.publicGate.confirmAria')"
             @click="submitFinal('confirm')"

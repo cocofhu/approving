@@ -128,6 +128,10 @@ test.describe('shell notification center (IA separation)', () => {
     await expect(page.getByTestId('run-output-result-cards')).toContainText('视觉 Demo')
     await expect(page.getByTestId('run-output-result-cards')).not.toContainText('node_complete.json')
     await expect(page.getByTestId('run-output-list')).toHaveCount(0)
+    // plan g3.1: removed outputHint must not reappear
+    await expect(page.getByRole('dialog')).not.toContainText(
+      '展示聚焦输出节点的最终结果卡；与 Run 详情输出 Tab 一致，不是全量产物列表。',
+    )
     // Opening alone must NOT drop unread (3 stays 3)
     await expect(page.getByTestId('run-notifications-badge')).toHaveText('3')
     await page.getByTestId('run-output-mark-read').click()
@@ -156,6 +160,10 @@ test.describe('shell notification center (IA separation)', () => {
     await expect(empty).not.toContainText('node_complete.json')
     await expect(empty).not.toContainText('plan.json')
     await expect(page.getByTestId('run-output-list')).toHaveCount(0)
+    // plan g3.1: removed outputHint must not reappear on empty path
+    await expect(page.getByRole('dialog')).not.toContainText(
+      '展示聚焦输出节点的最终结果卡；与 Run 详情输出 Tab 一致，不是全量产物列表。',
+    )
   })
 
   test('legacy structured page card: iframe visible, no source leak, kind=自定义产物 · HTML (g4.3)', async ({

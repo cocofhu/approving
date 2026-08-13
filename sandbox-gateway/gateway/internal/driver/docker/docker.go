@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,12 +21,13 @@ type cmdRunner func(ctx context.Context, timeout time.Duration, args ...string) 
 // public ports on the host (bindIP:ephemeral). CDP/noVNC stay on the container
 // network and are reported via the container IP (not -p).
 type Driver struct {
-	bindIP        string
-	network       string
-	namePrefix    string
-	shmSize       string
-	internalPorts []int
-	run           cmdRunner
+	bindIP          string
+	network         string
+	namePrefix      string
+	shmSize         string
+	internalPorts   []int
+	run             cmdRunner
+	pickPreviewPort func() (int, error)
 }
 
 // Options configures the docker driver.
@@ -64,6 +67,9 @@ func (d *Driver) containerName(id string) string { return d.namePrefix + id }
 
 func (d *Driver) Create(ctx context.Context, spec driver.Spec) (*driver.Handle, error) {
 	name := d.containerName(spec.ID)
+	if err := d.applyPreviewDirect(&spec); err != nil {
+		return nil, err
+	}
 
 	// --privileged is required for the sandbox image's inner dockerd (DinD).
 	// Without it startup.sh fails unless SKIP_INNER_DOCKER=1.
@@ -83,7 +89,14 @@ func (d *Driver) Create(ctx context.Context, spec driver.Spec) (*driver.Handle, 
 	}
 	// Publish only public ports on bindIP. Internal CDP/noVNC stay unpublished
 	// even when bindIP is 127.0.0.1 (host-side unauthenticated access must fail).
+	// PREVIEW_DIRECT ports use 1:1 host:container mapping so the app origin port
+	// matches what the browser hits.
+	exact := previewExactPort(spec)
 	for _, p := range spec.Ports {
+		if exact > 0 && p == exact {
+			args = append(args, "-p", fmt.Sprintf("%s:%d:%d", d.bindIP, p, p))
+			continue
+		}
 		args = append(args, "-p", fmt.Sprintf("%s::%d", d.bindIP, p))
 	}
 	if d.network != "" {
@@ -432,6 +445,52 @@ func mapState(s string) driver.Status {
 	default:
 		return driver.StatusStopped
 	}
+}
+
+func previewExactPort(spec driver.Spec) int {
+	if !driver.PreviewDirectEnabled(spec.Env) {
+		return 0
+	}
+	p, _ := strconv.Atoi(strings.TrimSpace(spec.Env[driver.EnvPreviewPort]))
+	if p < 1 || p > 65535 {
+		return 0
+	}
+	return p
+}
+
+func (d *Driver) applyPreviewDirect(spec *driver.Spec) error {
+	if spec == nil || !driver.PreviewDirectEnabled(spec.Env) {
+		return nil
+	}
+	p, _ := strconv.Atoi(strings.TrimSpace(spec.Env[driver.EnvPreviewPort]))
+	if p <= 0 {
+		var err error
+		p, err = d.allocatePreviewPort()
+		if err != nil {
+			return err
+		}
+	}
+	spec.Env[driver.EnvPreviewPort] = strconv.Itoa(p)
+	if strings.TrimSpace(spec.Env[driver.EnvPreviewPublicURL]) == "" {
+		spec.Env[driver.EnvPreviewPublicURL] = fmt.Sprintf("http://%s:%d", d.bindIP, p)
+	}
+	spec.Ports = driver.AppendPort(spec.Ports, p)
+	return nil
+}
+
+func (d *Driver) allocatePreviewPort() (int, error) {
+	if d.pickPreviewPort != nil {
+		return d.pickPreviewPort()
+	}
+	for p := driver.PreviewPortMin; p <= driver.PreviewPortMax; p++ {
+		ln, err := net.Listen("tcp", net.JoinHostPort(d.bindIP, strconv.Itoa(p)))
+		if err != nil {
+			continue
+		}
+		_ = ln.Close()
+		return p, nil
+	}
+	return 0, fmt.Errorf("preview port pool exhausted (%d-%d)", driver.PreviewPortMin, driver.PreviewPortMax)
 }
 
 // run executes a docker CLI command with a timeout, returning trimmed stdout.

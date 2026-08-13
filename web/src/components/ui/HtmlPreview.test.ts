@@ -347,7 +347,7 @@ describe('HtmlPreview inspect toggle', () => {
     vi.unstubAllGlobals()
   })
 
-  it('toggles with stable 取点标注 label and aria-pressed round-trip', async () => {
+  it('toggles label to 取消标注 and aria-pressed round-trip', async () => {
     const wrapper = mountPreview({
       mode: 'inline',
       fitContent: false,
@@ -360,18 +360,19 @@ describe('HtmlPreview inspect toggle', () => {
     expect(btn.exists()).toBe(true)
     expect(btn.text()).toContain('取点标注')
     expect(btn.attributes('aria-pressed')).toBe('false')
-    expect(wrapper.text()).not.toContain('取消取点')
+    expect(wrapper.text()).not.toContain('取消标注')
 
     await btn.trigger('click')
     await nextTick()
     expect(btn.attributes('aria-pressed')).toBe('true')
-    expect(btn.text()).toContain('取点标注')
-    expect(wrapper.text()).not.toContain('取消取点')
+    expect(btn.text()).toContain('取消标注')
+    expect(btn.text()).not.toContain('取点标注')
 
     await btn.trigger('click')
     await nextTick()
     expect(btn.attributes('aria-pressed')).toBe('false')
     expect(btn.text()).toContain('取点标注')
+    expect(wrapper.text()).not.toContain('取消标注')
     wrapper.unmount()
   })
 
