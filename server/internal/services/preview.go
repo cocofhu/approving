@@ -144,6 +144,51 @@ func (s *PreviewService) PreviewUpstream(ctx context.Context, sandboxName string
 	return "http://" + addr, true
 }
 
+func previewConfigTruthy(v any) bool {
+	switch t := v.(type) {
+	case bool:
+		return t
+	case string:
+		s := strings.ToLower(strings.TrimSpace(t))
+		return s == "true" || s == "1" || s == "yes"
+	case float64:
+		return t != 0
+	case int:
+		return t != 0
+	default:
+		return false
+	}
+}
+
+// DirectPreview reports whether the app_preview node has direct_preview enabled.
+func (s *PreviewService) DirectPreview(runID, nodeID string) bool {
+	if s.db == nil || runID == "" || nodeID == "" {
+		return false
+	}
+	var run models.Run
+	if err := s.db.Select("graph").Where("id = ?", runID).First(&run).Error; err != nil {
+		return false
+	}
+	n := run.Graph.FindNode(nodeID)
+	if n == nil || n.Config == nil {
+		return false
+	}
+	return previewConfigTruthy(n.Config["direct_preview"])
+}
+
+// EnsurePublishedPort asks the gateway to map port onto the K8s Service/LB
+// (no-op / not found on Docker after create). Returns http://host:port.
+func (s *PreviewService) EnsurePublishedPort(ctx context.Context, sandboxName string, port int) (string, bool) {
+	if s.mgr == nil || sandboxName == "" || port <= 0 {
+		return "", false
+	}
+	addr, err := s.mgr.PublishPort(ctx, sandboxName, port)
+	if err != nil || strings.TrimSpace(addr) == "" {
+		return "", false
+	}
+	return "http://" + addr, true
+}
+
 // ProbeHTTPPort reports whether the preview is actually reachable the way the
 // reverse proxy reaches it: an HTTP request from the platform to the gateway-
 // published app address. Probing that path — rather than an in-container curl

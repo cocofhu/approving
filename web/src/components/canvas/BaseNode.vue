@@ -21,7 +21,7 @@ const props = defineProps<{
     branches?: { id: string; label: string; isDefault?: boolean }[]
     /** Legacy: action handles (prefer structuredExits for human_gate). */
     gateActions?: { id: string; label: string }[]
-    /** app_preview pure ReAct review: badge + single success exit (no action handles). */
+    /** app_preview: subtitle/body + single success exit (no action handles). */
     appPreviewReview?: boolean
     structuredExits?: { id: string; label: string; tone: 'ok' | 'bad' }[]
   }
@@ -163,13 +163,7 @@ const subtitle = computed(() => {
     </div>
 
     <div
-      v-if="isAppPreviewReview"
-      class="absolute -right-2 -top-2 z-10 border border-base bg-ok px-1.5 py-0.5 text-[10px] font-bold text-base"
-    >
-      {{ t('pages.workflowEditor.canvas.reviewBadge') }}
-    </div>
-    <div
-      v-else-if="statusBadge"
+      v-if="statusBadge"
       class="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full border-2 border-base"
       :class="statusBadge.cls"
     >

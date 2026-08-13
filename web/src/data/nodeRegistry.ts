@@ -343,6 +343,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
       { key: 'timeout', label: 'nodes.app_preview.fields.timeout.label', type: 'duration', optional: true },
       { key: 'conditional_prompt', label: 'nodes.app_preview.fields.conditional_prompt.label', type: 'conditional', optional: true },
       { key: 'review_var', label: 'nodes.shared.reviewVar.label', type: 'text', placeholder: 'nodes.shared.reviewVar.placeholder', optional: true },
+      { key: 'direct_preview', label: 'nodes.app_preview.fields.direct_preview.label', type: 'switch', optional: true },
       { key: 'title', label: 'nodes.app_preview.fields.title.label', type: 'text', placeholder: 'nodes.app_preview.fields.title.placeholder', optional: true },
     ],
     outputs: [
@@ -352,6 +353,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
     ],
     defaults: {
       max_rounds: 3,
+      direct_preview: false,
       title: '应用预览',
       prompt: '在沙箱内构建并启动上游实现的应用,调用 set_preview(port, label?) 注册预览端口,供人工在 noVNC 中取点标注并复审确认。',
     },

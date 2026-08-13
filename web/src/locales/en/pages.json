@@ -851,7 +851,6 @@
         "checkpointTitle": "Rollback checkpoint",
         "gateActionFallback": "No goto → route by when",
         "structuredExitFallback": "No goto → route by when",
-        "reviewBadge": "Review",
         "appPreviewSubtitle": "Pick annotate · Await confirmation",
         "appPreviewBody": "Confirm & continue · inbox",
         "humanGateSubtitle": "Human approval",
@@ -2442,6 +2441,8 @@
       "unavailable": "Preview service unavailable",
       "connectionLost": "Preview connection lost",
       "sandboxRecycled": "Sandbox recycled; preview unavailable",
+      "directOpenTab": "Open in new tab",
+      "directNoPick": "Direct IP preview does not support pick-annotate. Describe changes in chat.",
       "novnc": {
         "back": "Back",
         "forward": "Forward",

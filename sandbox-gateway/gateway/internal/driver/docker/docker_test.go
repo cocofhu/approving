@@ -760,3 +760,40 @@ func TestLogsTailAndEmpty(t *testing.T) {
 		t.Fatalf("want not found, got %v", err)
 	}
 }
+
+func TestCreatePreviewDirectOneToOnePublish(t *testing.T) {
+	m := newMock()
+	m.on("run", "cid", nil)
+	m.on("inspect", "18081", nil)
+	d := New(Options{BindIP: "10.0.0.8", NamePrefix: "sbx-"})
+	d.run = m.run
+	d.pickPreviewPort = func() (int, error) { return 18081, nil }
+
+	_, err := d.Create(context.Background(), driver.Spec{
+		ID:    "p1",
+		Image: "img",
+		Ports: []int{8765},
+		Env:   map[string]string{driver.EnvPreviewDirect: "1"},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	runs := m.callsWith("run")
+	if len(runs) != 1 {
+		t.Fatalf("want 1 run, got %d", len(runs))
+	}
+	args := runs[0]
+	if !containsPair(args, "-p", "10.0.0.8:18081:18081") {
+		t.Fatalf("missing 1:1 publish: %v", args)
+	}
+	if !containsPair(args, "-p", "10.0.0.8::8765") {
+		t.Fatalf("session port should stay ephemeral: %v", args)
+	}
+	if !containsPair(args, "-e", "PREVIEW_PORT=18081") {
+		t.Fatalf("missing PREVIEW_PORT: %v", args)
+	}
+	if !containsPair(args, "-e", "PREVIEW_PUBLIC_URL=http://10.0.0.8:18081") {
+		t.Fatalf("missing PREVIEW_PUBLIC_URL: %v", args)
+	}
+}
+

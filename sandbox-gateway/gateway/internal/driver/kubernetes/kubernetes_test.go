@@ -1153,6 +1153,72 @@ func TestCreateLBOmitsInternalPortsClusterIPKeepsThem(t *testing.T) {
 	}
 }
 
+func TestCreatePreviewDirectAddsServicePort(t *testing.T) {
+	d := testDriver(t, true)
+	ctx := context.Background()
+	env := map[string]string{driver.EnvPreviewDirect: "1"}
+	_, err := d.Create(ctx, driver.Spec{
+		ID:    "pd1",
+		Image: "img",
+		Ports: []int{8765, 22},
+		Env:   env,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if env[driver.EnvPreviewPort] != "18080" {
+		t.Fatalf("PREVIEW_PORT=%q", env[driver.EnvPreviewPort])
+	}
+	lb, err := d.cs.CoreV1().Services("sandboxes").Get(ctx, "sbx-pd1-lb", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, p := range lb.Spec.Ports {
+		if int(p.Port) == 18080 && int(p.TargetPort.IntVal) == 18080 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("LB missing 18080: %+v", lb.Spec.Ports)
+	}
+	sec, err := d.cs.CoreV1().Secrets("sandboxes").Get(ctx, "sbx-pd1-env", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotPort := string(sec.Data["PREVIEW_PORT"])
+	if gotPort == "" {
+		gotPort = sec.StringData["PREVIEW_PORT"]
+	}
+	if gotPort != "18080" {
+		t.Fatalf("secret PREVIEW_PORT=%q data=%v stringData=%v", gotPort, sec.Data, sec.StringData)
+	}
+}
+
+func TestPublishPortAddsToLB(t *testing.T) {
+	d := testDriver(t, true)
+	ctx := context.Background()
+	if _, err := d.Create(ctx, driver.Spec{ID: "pp1", Image: "img", Ports: []int{8765, 22}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.PublishPort(ctx, "pp1", 5173); err != nil {
+		t.Fatal(err)
+	}
+	lb, err := d.cs.CoreV1().Services("sandboxes").Get(ctx, "sbx-pp1-lb", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, p := range lb.Spec.Ports {
+		if int(p.Port) == 5173 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("LB missing 5173 after PublishPort: %+v", lb.Spec.Ports)
+	}
+}
+
 func TestEndpointsMergesInternalClusterDNSWhenLBEnabled(t *testing.T) {
 	d := testDriver(t, true)
 	ctx := context.Background()

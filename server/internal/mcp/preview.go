@@ -22,6 +22,10 @@ type PreviewPort struct {
 	// "http://172.17.0.5:9090"), persisted so the proxy needn't re-resolve the
 	// container IP through the sandbox manager on every request.
 	Host string `json:"-"`
+	// Mode is "direct" when the node switch direct_preview is on; empty/vnc otherwise.
+	Mode string `json:"mode,omitempty"`
+	// DirectURL is the browser-facing http://IP:port/ when Mode=direct.
+	DirectURL string `json:"directUrl,omitempty"`
 	// Healthy is true when ProbeHTTPPort succeeded at registration time.
 	// set_preview only succeeds when Healthy; HasHealthyPreviewPorts gates
 	// production-phase completion / early park into review.
@@ -50,6 +54,16 @@ type PreviewSandboxOps interface {
 	// in-sandbox app port via the gateway, so the registration can persist an
 	// upstream host for the proxy to dial.
 	PreviewUpstream(ctx context.Context, sandboxName string, port int) (string, bool)
+}
+
+// previewDirectChecker is optionally implemented by PreviewSandboxOps.
+type previewDirectChecker interface {
+	DirectPreview(runID, nodeID string) bool
+}
+
+// previewPortPublisher is optionally implemented to PATCH k8s Services for unpublished ports.
+type previewPortPublisher interface {
+	EnsurePublishedPort(ctx context.Context, sandboxName string, port int) (string, bool)
 }
 
 // PreviewVNCWarmer optionally warms the in-sandbox VNC stack after set_preview.
@@ -199,19 +213,19 @@ func (h *Host) ListPreviewPorts(runID, nodeID string) []PreviewPort {
 	store := h.previewStore
 	h.mu.RUnlock()
 	if store == nil {
-		return mem
+		return h.annotatePreviewTransport(runID, nodeID, mem)
 	}
 	dbPorts, err := store.ListPreviewPorts(runID, nodeID)
 	if err != nil {
 		log.Warn().Err(err).Str("run_id", runID).Str("node_id", nodeID).
 			Msg("list preview ports from store failed; using memory")
-		return mem
+		return h.annotatePreviewTransport(runID, nodeID, mem)
 	}
 	if len(dbPorts) == 0 {
-		return mem
+		return h.annotatePreviewTransport(runID, nodeID, mem)
 	}
 	if len(mem) == 0 {
-		return dbPorts
+		return h.annotatePreviewTransport(runID, nodeID, dbPorts)
 	}
 	byPort := map[int]PreviewPort{}
 	for _, p := range dbPorts {
@@ -224,7 +238,7 @@ func (h *Host) ListPreviewPorts(runID, nodeID string) []PreviewPort {
 	for _, p := range byPort {
 		out = append(out, p)
 	}
-	return out
+	return h.annotatePreviewTransport(runID, nodeID, out)
 }
 
 func (h *Host) setPreviewPort(runID, nodeID string, port int, label string) (string, error) {
@@ -246,6 +260,12 @@ func (h *Host) setPreviewPort(runID, nodeID string, port int, label string) (str
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
+	direct := h.previewDirect(runID, nodeID)
+	if direct {
+		if pub, ok := ops.(previewPortPublisher); ok {
+			_, _ = pub.EnsurePublishedPort(ctx, sandboxName, port)
+		}
+	}
 	keepalivePID, err := ops.KeepalivePort(ctx, sandboxName, port)
 	if err != nil {
 		log.Warn().Err(err).Str("run_id", runID).Str("node_id", nodeID).
@@ -290,9 +310,10 @@ func (h *Host) setPreviewPort(runID, nodeID string, port int, label string) (str
 			return "", err
 		}
 	}
-	// Warm in-sandbox VNC early so PreviewVNC can attach without a cold start.
-	if warmer, ok := ops.(PreviewVNCWarmer); ok && sandboxName != "" {
-		warmer.WarmPreviewVNC(sandboxName)
+	if !direct {
+		if warmer, ok := ops.(PreviewVNCWarmer); ok && sandboxName != "" {
+			warmer.WarmPreviewVNC(sandboxName)
+		}
 	}
 	h.SignalPreviewReady(runID, nodeID)
 	return proxyURL, nil
@@ -338,4 +359,27 @@ func parsePreviewPort(v any) (int, error) {
 	default:
 		return 0, fmt.Errorf("port is required")
 	}
+}
+
+func (h *Host) previewDirect(runID, nodeID string) bool {
+	h.mu.RLock()
+	ops := h.previewOps
+	h.mu.RUnlock()
+	c, ok := ops.(previewDirectChecker)
+	return ok && c.DirectPreview(runID, nodeID)
+}
+
+func (h *Host) annotatePreviewTransport(runID, nodeID string, ports []PreviewPort) []PreviewPort {
+	if !h.previewDirect(runID, nodeID) {
+		return ports
+	}
+	out := make([]PreviewPort, len(ports))
+	copy(out, ports)
+	for i := range out {
+		out[i].Mode = "direct"
+		if out[i].Host != "" {
+			out[i].DirectURL = strings.TrimRight(out[i].Host, "/") + "/"
+		}
+	}
+	return out
 }
