@@ -67,6 +67,9 @@ func (e *Engine) startNodeRun(c *execCtx, node *models.Node) {
 	for k, v := range c.vars {
 		before[k] = v
 	}
+	// New visit / new iteration: drop stale Host outcome + audit artifact so a
+	// prior attempt's mark cannot satisfy this visit (CAPA A7 / FR4).
+	e.host.ClearOutcome(c.run.ID, node.ID)
 	logDB(e.db.Create(&models.StateRun{
 		RunID: c.run.ID, NodeID: node.ID, NodeType: node.Type,
 		Iteration: c.iter[node.ID], Status: "running", StartedAt: &now, Attempt: c.run.Attempt,

@@ -252,7 +252,7 @@ func (e *Engine) reviewReply(c *execCtx, node *models.Node, conv *models.ReactCo
 	runID, nodeID := c.run.ID, node.ID
 	_ = human
 	_ = images
-	_ = e.nodeReq(c, node) // SetActiveNode + KeepAliveForReview + ClearOutcome
+	_ = e.nodeReq(c, node) // SetActiveNode + KeepAliveForReview (no ClearOutcome)
 	e.host.SetActiveReview(runID, true)
 
 	if !force {

@@ -13,15 +13,23 @@ import (
 
 // ensureOutcome re-prompts the agent to call node_complete when the mark is
 // still missing (best-effort; engine fails closed if ultimately absent).
+// Aligns with ensureStructured: when Host memory HasOutcome is false, first
+// adopt a parseable node_complete.json before re-prompting / fail-closed.
 // For react nodes, a pending ask_question raised during the re-prompt aborts
 // the completion push and returns those questions (caller must not discard).
 // Non-react callers keep the prior discard-and-continue semantics.
 func (c *acpProvider) ensureOutcome(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, events *[]models.AcpEvent, usage **models.TokenUsage, byModel *models.TokenUsageByModel) ([]models.ReactQuestion, error) {
-	if c.host.HasOutcome(req.RunID, req.NodeID) {
+	outcomeReady := func() bool {
+		if c.host.HasOutcome(req.RunID, req.NodeID) {
+			return true
+		}
+		return c.host.RestoreOutcomeFromArtifact(req.RunID, req.NodeID)
+	}
+	if outcomeReady() {
 		return nil, nil
 	}
 	for i := 0; i <= producesRetry; i++ {
-		if c.host.HasOutcome(req.RunID, req.NodeID) {
+		if outcomeReady() {
 			return nil, nil
 		}
 		if i == producesRetry {

@@ -168,8 +168,11 @@ func (h *Host) TakeOutcome(runID, nodeID string) (NodeOutcome, bool) {
 }
 
 // ClearOutcome drops any buffered node_complete mark for (runID, nodeID).
-// Call at the start of each agent attempt so a mark from a failed/retried
-// turn cannot satisfy ensureOutcome or TakeOutcome on a later attempt.
+// Call only at a new attempt / new iteration (or equivalent fresh node visit)
+// so a mark from a failed/retried turn cannot satisfy ensureOutcome or
+// TakeOutcome later. Same-visit react multi-round replies must NOT call this.
+// Best-effort: also deletes the audit node_complete.json so artifact adoption
+// cannot revive a stale mark across attempts.
 func (h *Host) ClearOutcome(runID, nodeID string) {
 	h.mu.Lock()
 	var (
@@ -188,6 +191,82 @@ func (h *Host) ClearOutcome(runID, nodeID string) {
 			Str("status", o.Status).Str("summary", o.Summary).
 			Msg("cleared stale node_complete mark before new attempt")
 	}
+	h.clearOutcomeArtifact(runID)
+}
+
+// clearOutcomeArtifact drops the audit node_complete.json when the store
+// supports deletion (production ArtifactService). No-op for stores that do not.
+func (h *Host) clearOutcomeArtifact(runID string) {
+	if h == nil || h.store == nil || runID == "" {
+		return
+	}
+	d, ok := h.store.(ArtifactDeleter)
+	if !ok {
+		return
+	}
+	if err := d.Delete(runID, NodeOutcomeArtifactName); err != nil {
+		log.Warn().Err(err).Str("run_id", runID).
+			Msg("clear node_complete.json before new attempt failed")
+	}
+}
+
+// PeekOutcomeArtifact reads and classifies the audit node_complete.json for a
+// run without authorizing a token (engine / ensure paths). Missing → absent.
+func (h *Host) PeekOutcomeArtifact(runID string) (NodeOutcome, OutcomeArtifactState) {
+	if h == nil || h.store == nil || runID == "" {
+		return NodeOutcome{}, OutcomeArtifactAbsent
+	}
+	content, ok := h.store.Get(runID, NodeOutcomeArtifactName)
+	if !ok {
+		return NodeOutcome{}, OutcomeArtifactAbsent
+	}
+	return ClassifyOutcomeArtifact(content)
+}
+
+// RestoreOutcomeFromArtifact adopts a parseable node_complete.json into the
+// Host outcome buffer when memory mark is missing. Returns true when restored.
+func (h *Host) RestoreOutcomeFromArtifact(runID, nodeID string) bool {
+	o, state := h.PeekOutcomeArtifact(runID)
+	if state != OutcomeArtifactAdoptable {
+		return false
+	}
+	if nodeID == "" {
+		nodeID = h.ActiveNode(runID)
+	}
+	if nodeID == "" || nodeID == "mcp" {
+		return false
+	}
+	h.storeOutcome(runID, nodeID, o)
+	log.Info().Str("run_id", runID).Str("node_id", nodeID).
+		Str("status", o.Status).
+		Msg("restored node_complete mark from artifact")
+	return true
+}
+
+// OutcomeArtifactState classifies node_complete.json for CAPA A7 evidence.
+type OutcomeArtifactState int
+
+const (
+	OutcomeArtifactAbsent OutcomeArtifactState = iota
+	OutcomeArtifactAdoptable
+	OutcomeArtifactCorrupt
+)
+
+// ClassifyOutcomeArtifact parses audit JSON. Only status success|failed is adoptable.
+func ClassifyOutcomeArtifact(content string) (NodeOutcome, OutcomeArtifactState) {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return NodeOutcome{}, OutcomeArtifactAbsent
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(content), &raw); err != nil {
+		return NodeOutcome{}, OutcomeArtifactCorrupt
+	}
+	o, err := ParseNodeOutcome(raw)
+	if err != nil {
+		return NodeOutcome{}, OutcomeArtifactCorrupt
+	}
+	return o, OutcomeArtifactAdoptable
 }
 
 // HasOutcome reports whether a non-cleared outcome exists for the node.

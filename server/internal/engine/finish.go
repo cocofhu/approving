@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"time"
@@ -235,12 +236,19 @@ func (e *Engine) finish(runID, status string) bool {
 
 // persistRunErrorArtifact writes run_error.json via the artifact store so empty
 // product failures remain queryable. Best-effort: store failures are logged and
-// do not change finish control flow.
+// do not change finish control flow. Before aggregating, forces sandbox log
+// archive/pull so CAPA mis-fires after retire still get logs or a degrade note.
 func (e *Engine) persistRunErrorArtifact(runID string) {
 	if e.store == nil {
 		return
 	}
-	info := services.NewRunService(e.db).AggregateRunFailure(runID)
+	degrade := ""
+	if a, ok := e.provider.(runtime.RunSandboxLogArchiver); ok {
+		if n, note := a.ArchiveRunSandboxLogs(context.Background(), runID); n == 0 && note != "" {
+			degrade = note
+		}
+	}
+	info := services.NewRunService(e.db).AggregateRunFailure(runID, degrade)
 	body, err := services.MarshalRunErrorJSON(info)
 	if err != nil {
 		log.Warn().Str("run_id", runID).Err(err).Msg("marshal run_error.json failed")

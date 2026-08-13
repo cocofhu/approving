@@ -16,6 +16,9 @@ const RunErrorArtifactName = "run_error.json"
 const (
 	DefaultRunFailureReason = "运行失败，未记录具体错误原因"
 	NoSandboxLogMarker      = "无可用沙箱日志"
+	// SandboxLogDegradeMarker distinguishes "archive/pull failed" from a bare
+	// no-log flag so operators know why logs are missing (FR6 / Demo S5).
+	SandboxLogDegradeMarker = "无可用沙箱日志（未能归档或拉取 live logs）"
 )
 
 // Log summary caps for run_error.json (tail of archived sandbox logs).
@@ -31,6 +34,9 @@ type RunFailureInfo struct {
 	FailedNode      string `json:"failedNode,omitempty"`
 	LogSummaryOrRef string `json:"logSummaryOrRef,omitempty"`
 	NoSandboxLog    bool   `json:"noSandboxLog,omitempty"`
+	// SandboxLogNote explains why logs are missing when NoSandboxLog is true
+	// (archive/pull degrade). Empty when logs are present or never attempted.
+	SandboxLogNote string `json:"sandboxLogNote,omitempty"`
 }
 
 // AggregateRunFailure builds RunFailureInfo from the latest non-empty failed
@@ -38,11 +44,16 @@ type RunFailureInfo struct {
 // empty: early-exit / panic paths without StateRun.error fall back to a
 // human-readable default. Call after finalizeActiveStateRuns when possible so
 // in-flight nodes that were force-failed contribute their error text.
-func (s *RunService) AggregateRunFailure(runID string) RunFailureInfo {
+//
+// optDegradeNote, when non-empty and no archived log is found, is stored on
+// SandboxLogNote so DisplayReason can distinguish archive failure from "never
+// produced logs".
+func (s *RunService) AggregateRunFailure(runID string, optDegradeNote ...string) RunFailureInfo {
 	info := RunFailureInfo{}
 	if runID == "" || s == nil || s.db == nil {
 		info.Reason = DefaultRunFailureReason
 		info.NoSandboxLog = true
+		info.SandboxLogNote = SandboxLogDegradeMarker
 		return info
 	}
 
@@ -72,6 +83,15 @@ func (s *RunService) AggregateRunFailure(runID string) RunFailureInfo {
 		info.NoSandboxLog = false
 	} else {
 		info.NoSandboxLog = true
+		note := ""
+		if len(optDegradeNote) > 0 {
+			note = strings.TrimSpace(optDegradeNote[0])
+		}
+		if note != "" {
+			info.SandboxLogNote = note
+		} else {
+			info.SandboxLogNote = SandboxLogDegradeMarker
+		}
 	}
 	return info
 }
@@ -86,8 +106,14 @@ func (info RunFailureInfo) DisplayReason() string {
 	if info.FailedNode != "" && !strings.Contains(reason, info.FailedNode) {
 		reason = fmt.Sprintf("%s（节点 %s）", reason, info.FailedNode)
 	}
-	if info.NoSandboxLog && !strings.Contains(reason, NoSandboxLogMarker) {
-		reason = reason + " · " + NoSandboxLogMarker
+	if info.NoSandboxLog {
+		marker := strings.TrimSpace(info.SandboxLogNote)
+		if marker == "" {
+			marker = SandboxLogDegradeMarker
+		}
+		if !strings.Contains(reason, NoSandboxLogMarker) && !strings.Contains(reason, marker) {
+			reason = reason + " · " + marker
+		}
 	}
 	return reason
 }
@@ -110,6 +136,9 @@ func MarshalRunErrorJSON(info RunFailureInfo) (string, error) {
 	}
 	if info.LogSummaryOrRef != "" {
 		payload["logSummaryOrRef"] = info.LogSummaryOrRef
+	}
+	if info.NoSandboxLog && strings.TrimSpace(info.SandboxLogNote) != "" {
+		payload["sandboxLogNote"] = info.SandboxLogNote
 	}
 	b, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {

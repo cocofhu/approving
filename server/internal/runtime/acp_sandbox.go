@@ -107,6 +107,19 @@ func (c *acpProvider) SetSandboxRegistry(r SandboxRegistry) {
 	c.registry = r
 }
 
+// ArchiveRunSandboxLogs best-effort archives live logs via the platform
+// SandboxService when wired as registry.
+func (c *acpProvider) ArchiveRunSandboxLogs(ctx context.Context, runID string) (int, string) {
+	if c == nil || c.registry == nil {
+		return 0, "未接线沙箱注册表，未能拉取 live logs"
+	}
+	a, ok := c.registry.(RunSandboxLogArchiver)
+	if !ok {
+		return 0, "沙箱注册表不支持归档 live logs"
+	}
+	return a.ArchiveRunSandboxLogs(ctx, runID)
+}
+
 // beginRunSandbox records a "creating" placeholder row for a node sandbox before
 // the (slow) gateway provisioning, so it shows up in the sandbox list / node
 // live log as "starting" instead of a 404. No-op when the registry is absent or

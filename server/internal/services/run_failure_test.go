@@ -29,6 +29,9 @@ func TestAggregateRunFailureFromStateRun(t *testing.T) {
 	if !strings.Contains(display, "research") || !strings.Contains(display, NoSandboxLogMarker) {
 		t.Fatalf("display=%q", display)
 	}
+	if info.SandboxLogNote == "" {
+		t.Fatal("expected SandboxLogNote degrade explanation")
+	}
 }
 
 func TestAggregateRunFailureLastErrorFallback(t *testing.T) {
@@ -70,7 +73,7 @@ func TestAggregateRunFailureWithSandboxLog(t *testing.T) {
 	}
 	db.Create(&models.SandboxLog{
 		Name: "sbx-rf4", RunID: "rf4", NodeID: "research",
-		Content: strings.Join(lines, "\n") + "\nTAIL_MARKER",
+		Content:   strings.Join(lines, "\n") + "\nTAIL_MARKER",
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	})
 
