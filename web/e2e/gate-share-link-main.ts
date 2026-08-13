@@ -8,6 +8,7 @@ import InboxPendingCard from '../src/components/inbox/InboxPendingCard.vue'
 import GateShareLinkPanel from '../src/components/run/GateShareLinkPanel.vue'
 import ReviewComposer from '../src/components/run/ReviewComposer.vue'
 import PublicGateApprovalView from '../src/views/PublicGateApprovalView.vue'
+import ToastHost from '../src/components/ui/ToastHost.vue'
 import { api } from '../src/lib/api/api'
 import { rememberShareUrl } from '../src/lib/inbox/gateShareLink'
 import type { ClarifyInboxItem, GateInboxItem, InboxItem } from '../src/lib/shared/types'
@@ -439,6 +440,7 @@ const Fixture = defineComponent({
     rememberShareUrl(item.value.runId, item.value.nodeId, item.value.iteration, '')
     return () =>
       h('div', { class: 'mx-auto max-w-md p-4', 'data-testid': 'gate-share-e2e-root' }, [
+        h(ToastHost),
         h(InboxPendingCard, {
           item: item.value,
           active: true,

@@ -55,9 +55,17 @@ test('RunLaunchModal 与 Run 快照面板浏览器验收', async ({ page }) => {
   await row.locator('input').nth(0).fill('LOG_LEVEL')
   await row.locator('input').nth(1).fill('debug')
   await page.getByRole('button', { name: /开始运行|Start/i }).click()
+  // plan g2.2: sandbox env start still lands on success phase before navigation
+  await expect(page.getByText(/工作流已启动|Workflow started/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /查看运行|View run/i })).toBeVisible()
+  await expect(page.getByRole('button', { name: /留在当前页|Stay on this page/i })).toBeVisible()
+  await expect(page.getByTestId('last-start')).toContainText('started:run-env-e2e')
+  await page.screenshot({ path: path.join(OUT, '03-success-phase.png'), fullPage: true })
+
+  await page.getByRole('button', { name: /查看运行|View run/i }).click()
   await expect(page.getByTestId('last-start')).toContainText('view-run:run-env-e2e')
   await expect(page.getByTestId('run-sandbox-env-panel')).toBeVisible()
   await expect(page.getByText('••••••••')).toBeVisible()
   await expect(page.getByText('编辑')).toHaveCount(0)
-  await page.screenshot({ path: path.join(OUT, '03-run-detail-snapshot.png'), fullPage: true })
+  await page.screenshot({ path: path.join(OUT, '04-run-detail-snapshot.png'), fullPage: true })
 })

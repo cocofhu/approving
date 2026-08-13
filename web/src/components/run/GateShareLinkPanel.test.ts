@@ -8,16 +8,37 @@ import GateShareLinkPanel from './GateShareLinkPanel.vue'
 import type { GateInboxItem } from '@/lib/shared/types'
 import { forgetShareUrl, rememberShareUrl } from '@/lib/inbox/gateShareLink'
 
-const mocks = vi.hoisted(() => ({
-  create: vi.fn(),
-  regen: vi.fn(),
-  revoke: vi.fn(),
-  createReview: vi.fn(),
-  regenReview: vi.fn(),
-  revokeReview: vi.fn(),
-  toastSuccess: vi.fn(),
-  toastShow: vi.fn(),
-}))
+const mocks = vi.hoisted(() => {
+  const toasts = { value: [] as Array<{ id: number; message: string; type?: string }> }
+  let toastId = 0
+  return {
+    create: vi.fn(),
+    regen: vi.fn(),
+    revoke: vi.fn(),
+    createReview: vi.fn(),
+    regenReview: vi.fn(),
+    revokeReview: vi.fn(),
+    copyToClipboard: vi.fn(async (_text: string) => true),
+    toasts,
+    toastSuccess: vi.fn((message: string) => {
+      const id = ++toastId
+      toasts.value.push({ id, message, type: 'success' })
+      return id
+    }),
+    toastShow: vi.fn((message: string) => {
+      const id = ++toastId
+      toasts.value.push({ id, message })
+      return id
+    }),
+    toastDismiss: vi.fn((id: number) => {
+      toasts.value = toasts.value.filter((t) => t.id !== id)
+    }),
+    resetToasts() {
+      toasts.value = []
+      toastId = 0
+    },
+  }
+})
 
 vi.mock('@/lib/api/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
@@ -35,10 +56,16 @@ vi.mock('@/lib/api/api', async () => {
   }
 })
 
+vi.mock('@/lib/shared/copyToClipboard', () => ({
+  copyToClipboard: (text: string) => mocks.copyToClipboard(text),
+}))
+
 vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => ({
+    toasts: mocks.toasts,
     success: mocks.toastSuccess,
     show: mocks.toastShow,
+    dismiss: mocks.toastDismiss,
     error: vi.fn(),
     warn: vi.fn(),
   }),
@@ -67,13 +94,6 @@ function item(over: Partial<GateInboxItem> = {}): GateInboxItem {
   }
 }
 
-function mockClipboard(writeText: ReturnType<typeof vi.fn>) {
-  Object.defineProperty(navigator, 'clipboard', {
-    configurable: true,
-    value: { writeText },
-  })
-}
-
 beforeEach(() => {
   mocks.create.mockReset()
   mocks.regen.mockReset()
@@ -81,18 +101,21 @@ beforeEach(() => {
   mocks.createReview.mockReset()
   mocks.regenReview.mockReset()
   mocks.revokeReview.mockReset()
-  mocks.toastSuccess.mockReset()
-  mocks.toastShow.mockReset()
+  mocks.copyToClipboard.mockReset()
+  mocks.copyToClipboard.mockResolvedValue(true)
+  mocks.toastSuccess.mockClear()
+  mocks.toastShow.mockClear()
+  mocks.toastDismiss.mockClear()
+  mocks.resetToasts()
   forgetShareUrl('run-1', 'hg1', 1)
   forgetShareUrl('run-1', 'research1', 1)
 })
 
 describe('GateShareLinkPanel', () => {
-  it('creates with default 24h, masks URL, copies full link', async () => {
+  it('creates with default 24h, masks URL, auto-copies full link (plan g1.1 / g2.2)', async () => {
     const token = 'ab'.repeat(32)
     const url = `https://app.example/public/gate-approvals#t=${token}`
     mocks.create.mockResolvedValue({ id: 'gsl-1', url, ttlTier: '24h', expiresAt: '2026-08-10T00:00:00Z', state: 'active' })
-    mockClipboard(vi.fn().mockResolvedValue(undefined))
 
     const w = mount(GateShareLinkPanel, {
       props: { open: true, target: item() },
@@ -113,17 +136,18 @@ describe('GateShareLinkPanel', () => {
     await w.get('[data-testid="gate-share-create"]').trigger('click')
     await flushPromises()
     expect(mocks.create).toHaveBeenCalledWith('run-1', 'hg1', '24h', 'full')
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(url)
+    expect(mocks.copyToClipboard).toHaveBeenCalledWith(url)
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('已自动复制新链接')
     const shown = (w.get('[data-testid="gate-share-url"]').element as HTMLTextAreaElement).value
     expect(shown).toContain('••••')
     expect(shown).not.toContain(token)
   })
 
-  it('reveals full URL when clipboard fails', async () => {
+  it('reveals full URL when clipboard fails (plan g3.1)', async () => {
     const token = 'cd'.repeat(32)
     const url = `https://app.example/public/gate-approvals#t=${token}`
     mocks.create.mockResolvedValue({ id: 'gsl-2', url, ttlTier: '24h', expiresAt: '2026-08-10T00:00:00Z', state: 'active' })
-    mockClipboard(vi.fn().mockRejectedValue(new Error('denied')))
+    mocks.copyToClipboard.mockResolvedValue(false)
 
     const w = mount(GateShareLinkPanel, {
       props: { open: true, target: item() },
@@ -133,21 +157,47 @@ describe('GateShareLinkPanel', () => {
     await flushPromises()
     const shown = (w.get('[data-testid="gate-share-url"]').element as HTMLTextAreaElement).value
     expect(shown).toBe(url)
-    expect(mocks.toastShow).toHaveBeenCalled()
+    expect(mocks.toastShow).toHaveBeenCalledWith('无法写入剪贴板，请全选下方链接手动复制')
   })
 
-  it('copyExisting sets busy and ignores double click', async () => {
+  it('dedupes clipboardFallback toast on repeated failure (plan g3.2)', async () => {
+    const token = 'ff'.repeat(32)
+    const url = `https://app.example/public/gate-approvals#t=${token}`
+    rememberShareUrl('run-1', 'hg1', 1, url)
+    mocks.copyToClipboard.mockResolvedValue(false)
+
+    const w = mount(GateShareLinkPanel, {
+      props: {
+        open: true,
+        target: item({ shareLink: { state: 'active', ttlTier: '24h', canManage: true, canCreate: false } }),
+      },
+      global: { plugins: [i18n], stubs: { Teleport: true } },
+    })
+    await flushPromises()
+    await w.get('[data-testid="gate-share-copy"]').trigger('click')
+    await flushPromises()
+    await w.get('[data-testid="gate-share-copy"]').trigger('click')
+    await flushPromises()
+    await w.get('[data-testid="gate-share-copy"]').trigger('click')
+    await flushPromises()
+
+    const fallback = '无法写入剪贴板，请全选下方链接手动复制'
+    expect(mocks.copyToClipboard).toHaveBeenCalledTimes(3)
+    expect(mocks.toastShow).toHaveBeenCalledTimes(3)
+    expect(mocks.toastDismiss).toHaveBeenCalled()
+    expect(mocks.toasts.value.filter((t) => t.message === fallback)).toHaveLength(1)
+  })
+
+  it('manual copy success uses copied toast (plan g1.2 / g2.2)', async () => {
     const token = 'ef'.repeat(32)
     const url = `https://app.example/public/gate-approvals#t=${token}`
     rememberShareUrl('run-1', 'hg1', 1, url)
-    let resolveWrite!: () => void
-    mockClipboard(
-      vi.fn(
-        () =>
-          new Promise<void>((resolve) => {
-            resolveWrite = resolve
-          }),
-      ),
+    let resolveCopy!: (v: boolean) => void
+    mocks.copyToClipboard.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveCopy = resolve
+        }),
     )
 
     const w = mount(GateShareLinkPanel, {
@@ -164,10 +214,10 @@ describe('GateShareLinkPanel', () => {
     expect(copyBtn.attributes('disabled')).toBeDefined()
     expect(copyBtn.attributes('aria-busy')).toBe('true')
     expect(copyBtn.text()).toMatch(/复制中/)
-    expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1)
-    resolveWrite()
+    expect(mocks.copyToClipboard).toHaveBeenCalledTimes(1)
+    resolveCopy(true)
     await flushPromises()
-    expect(mocks.toastSuccess).toHaveBeenCalled()
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('已复制到剪贴板')
     w.unmount()
   })
 
@@ -181,7 +231,6 @@ describe('GateShareLinkPanel', () => {
           resolveCreate = resolve
         }),
     )
-    mockClipboard(vi.fn().mockResolvedValue(undefined))
     const w = mount(GateShareLinkPanel, {
       props: { open: true, target: item() },
       global: { plugins: [i18n], stubs: { Teleport: true } },
@@ -201,7 +250,6 @@ describe('GateShareLinkPanel', () => {
     const token = 'ef'.repeat(32)
     const url = `https://app.example/public/gate-approvals#t=${token}`
     rememberShareUrl('run-1', 'hg1', 1, url)
-    mockClipboard(vi.fn().mockResolvedValue(undefined))
 
     const w = mount(GateShareLinkPanel, {
       props: {
@@ -215,7 +263,7 @@ describe('GateShareLinkPanel', () => {
     await w.get('[data-testid="gate-share-copy"]').trigger('click')
     await flushPromises()
     expect(mocks.regen).not.toHaveBeenCalled()
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(url)
+    expect(mocks.copyToClipboard).toHaveBeenCalledWith(url)
   })
 
   it('recalls URL from sessionStorage after in-memory miss (refresh)', async () => {
@@ -224,7 +272,6 @@ describe('GateShareLinkPanel', () => {
     rememberShareUrl('run-1', 'hg1', 1, url)
     forgetShareUrl('run-1', 'hg1', 1)
     sessionStorage.setItem('approving.gateShareUrl.run-1:hg1:1', url)
-    mockClipboard(vi.fn().mockResolvedValue(undefined))
 
     const w = mount(GateShareLinkPanel, {
       props: {
@@ -237,13 +284,12 @@ describe('GateShareLinkPanel', () => {
     await w.get('[data-testid="gate-share-copy"]').trigger('click')
     await flushPromises()
     expect(mocks.regen).not.toHaveBeenCalled()
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(url)
+    expect(mocks.copyToClipboard).toHaveBeenCalledWith(url)
   })
 
   it('disables copy when active URL cannot be recalled', async () => {
     sessionStorage.clear()
     forgetShareUrl('run-1', 'hg1', 1)
-    mockClipboard(vi.fn().mockResolvedValue(undefined))
 
     const w = mount(GateShareLinkPanel, {
       props: {
@@ -260,7 +306,6 @@ describe('GateShareLinkPanel', () => {
 
   it('maps API error codes to locale text', async () => {
     mocks.create.mockRejectedValue(new Error('no_standard_action'))
-    mockClipboard(vi.fn().mockResolvedValue(undefined))
     const w = mount(GateShareLinkPanel, {
       props: { open: true, target: item() },
       global: { plugins: [i18n], stubs: { Teleport: true } },
@@ -274,7 +319,6 @@ describe('GateShareLinkPanel', () => {
     const token = 'ab'.repeat(32)
     const url = `https://app.example/public/gate-approvals#t=${token}`
     mocks.createReview.mockResolvedValue({ id: 'gsl-r1', url, ttlTier: '24h', expiresAt: '2026-08-10T00:00:00Z', state: 'active' })
-    mockClipboard(vi.fn().mockResolvedValue(undefined))
     const w = mount(GateShareLinkPanel, {
       props: {
         open: true,
@@ -329,7 +373,6 @@ describe('GateShareLinkPanel', () => {
     const token = 'lb'.repeat(32)
     const url = `http://localhost:8080/public/gate-approvals#t=${token}`
     mocks.create.mockResolvedValue({ id: 'gsl-lb', url, ttlTier: '24h', expiresAt: '2026-08-10T00:00:00Z', state: 'active' })
-    mockClipboard(vi.fn().mockResolvedValue(undefined))
 
     const w = mount(GateShareLinkPanel, {
       props: { open: true, target: item() },
@@ -342,7 +385,7 @@ describe('GateShareLinkPanel', () => {
     await w.get('[data-testid="gate-share-create"]').trigger('click')
     await flushPromises()
     expect(mocks.create).toHaveBeenCalled()
-    expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
+    expect(mocks.copyToClipboard).not.toHaveBeenCalled()
     expect((w.get('[data-testid="gate-share-copy"]').element as HTMLButtonElement).disabled).toBe(true)
     expect(w.get('[data-testid="gate-share-loopback-copy-hint"]').text()).toMatch(/不可复制/)
     expect((w.get('[data-testid="gate-share-regen"]').element as HTMLButtonElement).disabled).toBe(false)
@@ -353,7 +396,6 @@ describe('GateShareLinkPanel', () => {
     const token = 'pub'.repeat(32)
     const url = `https://approving.example.com/public/gate-approvals#t=${token}`
     rememberShareUrl('run-1', 'hg1', 1, url)
-    mockClipboard(vi.fn().mockResolvedValue(undefined))
 
     const w = mount(GateShareLinkPanel, {
       props: {
@@ -367,15 +409,16 @@ describe('GateShareLinkPanel', () => {
     expect(w.find('[data-testid="gate-share-loopback-warning"]').exists()).toBe(false)
     await w.get('[data-testid="gate-share-copy"]').trigger('click')
     await flushPromises()
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(url)
+    expect(mocks.copyToClipboard).toHaveBeenCalledWith(url)
   })
 
-  it('skips auto-copy after regenerating a loopback URL', async () => {
+  it('regen shows regenerated then autoCopied toasts (plan g2.3)', async () => {
     const token = 'rg'.repeat(32)
-    const url = `http://127.0.0.1:8080/public/gate-approvals#t=${token}`
+    const url = `https://approving.example.com/public/gate-approvals#t=${token}`
+    const nextToken = 'nh'.repeat(32)
+    const nextUrl = `https://approving.example.com/public/gate-approvals#t=${nextToken}`
     rememberShareUrl('run-1', 'hg1', 1, url)
-    mocks.regen.mockResolvedValue({ id: 'gsl-rg', url, ttlTier: '24h', expiresAt: '2026-08-10T00:00:00Z', state: 'active' })
-    mockClipboard(vi.fn().mockResolvedValue(undefined))
+    mocks.regen.mockResolvedValue({ id: 'gsl-rg', url: nextUrl, ttlTier: '24h', expiresAt: '2026-08-10T00:00:00Z', state: 'active' })
 
     const w = mount(GateShareLinkPanel, {
       props: {
@@ -389,7 +432,33 @@ describe('GateShareLinkPanel', () => {
     await w.get('[data-testid="gate-share-confirm-ok"]').trigger('click')
     await flushPromises()
     expect(mocks.regen).toHaveBeenCalled()
-    expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
+    expect(mocks.copyToClipboard).toHaveBeenCalledWith(nextUrl)
+    expect(mocks.toastSuccess.mock.calls.map((c) => c[0])).toEqual(['链接已重新生成', '已自动复制新链接'])
+    const shown = (w.get('[data-testid="gate-share-url"]').element as HTMLTextAreaElement).value
+    expect(shown).toContain('••••')
+    expect(shown).not.toContain(nextToken)
+  })
+
+  it('skips auto-copy after regenerating a loopback URL but still toasts regenerated', async () => {
+    const token = 'rg'.repeat(32)
+    const url = `http://127.0.0.1:8080/public/gate-approvals#t=${token}`
+    rememberShareUrl('run-1', 'hg1', 1, url)
+    mocks.regen.mockResolvedValue({ id: 'gsl-rg', url, ttlTier: '24h', expiresAt: '2026-08-10T00:00:00Z', state: 'active' })
+
+    const w = mount(GateShareLinkPanel, {
+      props: {
+        open: true,
+        target: item({ shareLink: { state: 'active', ttlTier: '24h', canManage: true, canCreate: false } }),
+      },
+      global: { plugins: [i18n], stubs: { Teleport: true } },
+    })
+    await flushPromises()
+    await w.get('[data-testid="gate-share-regen"]').trigger('click')
+    await w.get('[data-testid="gate-share-confirm-ok"]').trigger('click')
+    await flushPromises()
+    expect(mocks.regen).toHaveBeenCalled()
+    expect(mocks.copyToClipboard).not.toHaveBeenCalled()
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('链接已重新生成')
     expect((w.get('[data-testid="gate-share-copy"]').element as HTMLButtonElement).disabled).toBe(true)
   })
 })

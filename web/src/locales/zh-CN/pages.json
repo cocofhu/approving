@@ -1162,6 +1162,8 @@
         "regenInheritsHint": "Regen 将继承当前预设",
         "linkLabel": "分享链接",
         "copied": "已复制到剪贴板",
+        "autoCopied": "已自动复制新链接",
+        "regenerated": "链接已重新生成",
         "clipboardFallback": "无法写入剪贴板，请全选下方链接手动复制",
         "urlHiddenUntilCopy": "创建后可复制完整链接。同一浏览器标签刷新后仍可再复制。",
         "copyUnavailable": "无法再次复制同一链接。仅可重新生成或撤销（重新生成会立刻作废旧链接）。",

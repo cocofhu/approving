@@ -352,9 +352,7 @@ async function startRun() {
     if (gen !== startGen) return
     successRunId.value = res.id
     emit('started', res.id)
-    // Clarified UX: close modal and navigate to Run detail (skip stay-on-page success).
-    emit('view-run', res.id)
-    emit('close')
+    phase.value = 'success'
   } catch (e: any) {
     if (gen !== startGen || isAbortError(e) || startAbort.signal.aborted) return
     phase.value = 'error'

@@ -46,6 +46,109 @@ test.describe('human_gate 临时审批链接', () => {
     // plan g3.1 / g2.3: non-loopback fixture (approving.example.com) auto-copies
     expect(copied).toContain('https://approving.example.com/public/gate-approvals#t=')
     expect(copied).toMatch(/#t=[0-9a-f]{64}$/)
+    // plan g2.2: auto-copy success uses distinct toast
+    await expect(page.getByTestId('toast-host')).toContainText('已自动复制新链接')
+  })
+
+  test('非安全上下文走 legacy 复制且不堆叠失败 toast (plan g4.2 / g1 / g3)', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'isSecureContext', {
+        configurable: true,
+        get: () => false,
+      })
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: async () => {
+            throw new Error('Clipboard API blocked in insecure context')
+          },
+        },
+      })
+      document.execCommand = ((cmd: string) => {
+        if (cmd === 'copy') {
+          const el = document.activeElement as HTMLTextAreaElement | null
+          if (el && typeof el.value === 'string') {
+            ;(window as unknown as { __copied?: string }).__copied = el.value
+          }
+          return true
+        }
+        return false
+      }) as typeof document.execCommand
+    })
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/gate-share-link.html?scene=inbox')
+    await expect(page.getByTestId('gate-share-e2e-root')).toBeVisible({ timeout: 10_000 })
+    await page.getByTestId('gate-share-copy-btn').click()
+    await expect(page.getByTestId('gate-share-panel-body')).toBeVisible()
+    await page.getByTestId('gate-share-create').click()
+    await expect(page.getByTestId('gate-share-url')).toHaveValue(/#t=••••/)
+    const copied = await page.evaluate(() => (window as unknown as { __copied?: string }).__copied || '')
+    expect(copied).toContain('https://approving.example.com/public/gate-approvals#t=')
+    await expect(page.getByTestId('toast-host')).toContainText('已自动复制新链接')
+
+    await page.getByTestId('gate-share-copy').click()
+    await expect(page.getByTestId('toast-host')).toContainText('已复制到剪贴板')
+  })
+
+  test('复制失败展开全文且同文案 toast 仅一条 (plan g4.2 / g3)', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'isSecureContext', {
+        configurable: true,
+        get: () => false,
+      })
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: async () => {
+            throw new Error('denied')
+          },
+        },
+      })
+      document.execCommand = (() => false) as typeof document.execCommand
+    })
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/gate-share-link.html?scene=inbox')
+    await expect(page.getByTestId('gate-share-e2e-root')).toBeVisible({ timeout: 10_000 })
+    await page.getByTestId('gate-share-copy-btn').click()
+    await page.getByTestId('gate-share-create').click()
+    await expect(page.getByTestId('gate-share-url')).toHaveValue(/#t=[0-9a-f]{64}/)
+    await expect(page.getByTestId('toast-host')).toContainText('无法写入剪贴板，请全选下方链接手动复制')
+
+    await page.getByTestId('gate-share-copy').click()
+    await page.getByTestId('gate-share-copy').click()
+    await page.getByTestId('gate-share-copy').click()
+    // Exclude TransitionGroup leave-active nodes so DOM count matches visible toasts (plan g3.2)
+    const fallback = page
+      .getByTestId('toast-host')
+      .locator('div:not(.toast-leave-active):not(.toast-leave-to)')
+      .filter({ hasText: '无法写入剪贴板，请全选下方链接手动复制' })
+    await expect(fallback).toHaveCount(1)
+  })
+
+  test('重新生成两段反馈：已重新生成 + 已自动复制 (plan g4.2 / g2.3)', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: async (text: string) => {
+            ;(window as unknown as { __copied?: string }).__copied = text
+          },
+        },
+      })
+    })
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/gate-share-link.html?scene=inbox')
+    await expect(page.getByTestId('gate-share-e2e-root')).toBeVisible({ timeout: 10_000 })
+    await page.getByTestId('gate-share-copy-btn').click()
+    await page.getByTestId('gate-share-create').click()
+    await expect(page.getByTestId('gate-share-url')).toBeVisible()
+    await page.getByTestId('gate-share-regen').click()
+    await page.getByTestId('gate-share-confirm-ok').click()
+    await expect(page.getByTestId('toast-host')).toContainText('链接已重新生成')
+    await expect(page.getByTestId('toast-host')).toContainText('已自动复制新链接')
+    const copied = await page.evaluate(() => (window as unknown as { __copied?: string }).__copied || '')
+    expect(copied).toContain('https://approving.example.com/public/gate-approvals#t=')
+    expect(copied).toMatch(/#t=[0-9a-f]{64}$/)
   })
 
   test('环回铸造告警并禁自动复制', async ({ page }) => {
