@@ -151,4 +151,68 @@ describe('FeedbackLedgerView', () => {
     expect(w.findAll('li')).toHaveLength(0)
     w.unmount()
   })
+
+  // Structured UI must render Markdown like ClarifyChat (not literal **…** / - lists).
+  it('renders feedback.text and transcript Markdown as rich HTML (g3.1)', () => {
+    const mdRound = {
+      ...roundDoc,
+      feedback: {
+        text: '主意见含 **粗体** 与列表：\n\n- 第一项\n- 第二项',
+        annotations: [],
+        attachments: [],
+      },
+      transcript: [
+        {
+          role: 'human',
+          at: '2026-08-13T15:07:22+08:00',
+          text: '感觉不太行，**左右对照**读不动',
+        },
+        {
+          role: 'agent',
+          at: '2026-08-13T15:08:02+08:00',
+          text: '已按反馈重做：\n\n- **左右对照**：修复前 vs 修复后\n- **虚线对齐参考**：复制按钮左缘',
+        },
+      ],
+    }
+    const w = mountLedger('feedback.review.research-1.i2r3.json', mdRound)
+    const body = w.get('[data-testid="feedback-round-body"]')
+    expect(body.classes()).toContain('md')
+    expect(body.html()).toContain('<strong>')
+    expect(body.html()).toMatch(/<ul[\s>]/)
+    expect(body.text()).toContain('粗体')
+    expect(body.html()).not.toContain('**粗体**')
+
+    const turns = w.findAll('[data-testid="feedback-turn-body"]')
+    expect(turns).toHaveLength(2)
+    expect(turns[0].html()).toContain('<strong>')
+    expect(turns[0].html()).not.toContain('**左右对照**')
+    expect(turns[1].html()).toMatch(/<ul[\s>]/)
+    expect(turns[1].html()).toContain('<strong>')
+    expect(turns[1].html()).not.toContain('**左右对照**')
+    // priorRounds.summary stays plain text (out of scope)
+    expect(w.text()).toContain('要求补充竞品对比')
+    w.unmount()
+  })
+
+  it('omits empty or whitespace-only Markdown bodies (g3.1)', () => {
+    const emptyRound = {
+      ...roundDoc,
+      feedback: { text: '   \n\t  ', annotations: [], attachments: [] },
+      transcript: [
+        { role: 'human', at: '2026-08-13T15:07:22+08:00', text: '' },
+        { role: 'agent', at: '2026-08-13T15:08:02+08:00', text: '   ' },
+        { role: 'agent', at: '2026-08-13T15:09:00+08:00', text: '正常回复' },
+      ],
+    }
+    const w = mountLedger('feedback.review.research-1.i2r3.json', emptyRound)
+    expect(w.find('[data-testid="feedback-round-body"]').exists()).toBe(false)
+    const turns = w.findAll('[data-testid="feedback-turn-body"]')
+    expect(turns).toHaveLength(1)
+    expect(turns[0].text()).toContain('正常回复')
+    // Three transcript bubbles remain (role headers); only non-blank bodies render.
+    expect(w.findAll('[data-testid="feedback-turn-0"]')).toHaveLength(1)
+    expect(w.findAll('[data-testid="feedback-turn-1"]')).toHaveLength(1)
+    expect(w.findAll('[data-testid="feedback-turn-2"]')).toHaveLength(1)
+    w.unmount()
+  })
 })
