@@ -886,7 +886,7 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
 
 <template>
   <div
-    class="flex min-h-screen flex-col bg-base text-txt"
+    class="flex h-screen flex-col overflow-hidden bg-base text-txt"
     data-testid="public-gate-root"
     :aria-busy="(!ready || loading || submitting) ? 'true' : 'false'"
   >
@@ -1051,24 +1051,26 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
             >
               {{ isReview ? t('pages.publicGate.sessionEndedHint') : t('pages.publicGate.sessionEndedHintGate') }}
             </p>
-            <ClarifyChat
-              ref="chatRef"
-              class="min-h-0 flex-1"
-              run-id="public-share"
-              node-id="public-gate"
-              :iteration="1"
-              v-model:draft="draft"
-              v-model:attachments="attachments"
-              v-model:annotations="annotations"
-              :turns="turns"
-              :done="false"
-              :active="canReply"
-              review-mode
-              annotate-enabled
-              hide-finish
-              @send="onSend"
-              @cancel="onCancel"
-            />
+            <!-- Wrapper supplies min-h-0 flex-1: ClarifyChat is multi-root so fallthrough class is ignored. -->
+            <div class="flex min-h-0 flex-1 flex-col" data-testid="public-gate-chat-host">
+              <ClarifyChat
+                ref="chatRef"
+                run-id="public-share"
+                node-id="public-gate"
+                :iteration="1"
+                v-model:draft="draft"
+                v-model:attachments="attachments"
+                v-model:annotations="annotations"
+                :turns="turns"
+                :done="false"
+                :active="canReply"
+                review-mode
+                annotate-enabled
+                hide-finish
+                @send="onSend"
+                @cancel="onCancel"
+              />
+            </div>
           </div>
         </template>
       </ReviewShell>
