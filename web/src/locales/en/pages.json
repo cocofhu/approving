@@ -2461,7 +2461,9 @@
       "connectionLost": "Preview connection lost",
       "sandboxRecycled": "Sandbox recycled; preview unavailable",
       "directOpenTab": "Open in new tab",
-      "directNoPick": "Direct IP preview does not support pick-annotate. Describe changes in chat.",
+      "directScriptMissing": "Pick script is not loaded. Add preview-pick.js from PREVIEW_PICK_SCRIPT_URL to the HTML entry.",
+      "directGotoInvalid": "Navigation is limited to the same preview origin.",
+      "directAddressPlaceholder": "http://IP:port/",
       "novnc": {
         "back": "Back",
         "forward": "Forward",

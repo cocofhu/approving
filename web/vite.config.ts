@@ -81,6 +81,7 @@ export default defineConfig(({ command }) => {
         // /api). Without this, Vite dev swallows iframe requests and returns SPA HTML.
         '/preview/': { target: process.env.VITE_API_PROXY || 'http://localhost:8080', changeOrigin: true, ws: true },
         '/preview-vnc/': { target: process.env.VITE_API_PROXY || 'http://localhost:8080', changeOrigin: true, ws: true },
+        '/preview-pick.js': { target: process.env.VITE_API_PROXY || 'http://localhost:8080', changeOrigin: true },
       },
     },
     // Mirror host/port for `vite preview` (static build) so a production-build

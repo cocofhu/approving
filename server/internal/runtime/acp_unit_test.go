@@ -275,7 +275,7 @@ func TestTestNodePromptExtras(t *testing.T) {
 			NodeType: "app_preview",
 			Config:   map[string]any{"prompt": "P", "direct_preview": true},
 		}, nil)
-		if !strings.Contains(got, "direct_preview") || !strings.Contains(got, "PREVIEW_PORT") {
+		if !strings.Contains(got, "direct_preview") || !strings.Contains(got, "PREVIEW_PORT") || !strings.Contains(got, "PREVIEW_PICK_SCRIPT_URL") {
 			t.Errorf("expected direct_preview injection: %q", got)
 		}
 	})
@@ -299,8 +299,11 @@ func TestPreviewNodePromptExtras(t *testing.T) {
 		NodeType: "app_preview",
 		Config:   map[string]any{"prompt": "P", "direct_preview": true},
 	}, nil)
-	if !strings.Contains(got, "direct_preview") || !strings.Contains(got, "PREVIEW_PORT") {
+	if !strings.Contains(got, "direct_preview") || !strings.Contains(got, "PREVIEW_PORT") || !strings.Contains(got, "PREVIEW_PICK_SCRIPT_URL") {
 		t.Errorf("expected direct_preview injection: %q", got)
+	}
+	if !strings.Contains(got, `<script src="$PREVIEW_PICK_SCRIPT_URL"></script>`) {
+		t.Errorf("expected pick script contract: %q", got)
 	}
 
 	off := p.buildAgentPrompt(NodeReq{
@@ -314,19 +317,27 @@ func TestPreviewNodePromptExtras(t *testing.T) {
 
 func TestApplyAppPreviewEnv(t *testing.T) {
 	vnc := map[string]string{}
-	applyAppPreviewEnv(vnc, "app_preview", nil)
+	applyAppPreviewEnv(vnc, "app_preview", nil, "http://app.example")
 	if vnc["VNC_PREVIEW"] != "1" || vnc["PREVIEW_DIRECT"] != "" {
 		t.Fatalf("default vnc: %v", vnc)
 	}
 	direct := map[string]string{}
-	applyAppPreviewEnv(direct, "app_preview", map[string]any{"direct_preview": true})
+	applyAppPreviewEnv(direct, "app_preview", map[string]any{"direct_preview": true}, "http://app.example/")
 	if direct["PREVIEW_DIRECT"] != "1" || direct["VNC_PREVIEW"] != "" {
 		t.Fatalf("direct: %v", direct)
 	}
+	if direct["PREVIEW_PICK_SCRIPT_URL"] != "http://app.example/preview-pick.js" {
+		t.Fatalf("pick script: %v", direct)
+	}
 	other := map[string]string{}
-	applyAppPreviewEnv(other, "implement", map[string]any{"direct_preview": true})
-	if other["PREVIEW_DIRECT"] != "" || other["VNC_PREVIEW"] != "" {
+	applyAppPreviewEnv(other, "implement", map[string]any{"direct_preview": true}, "http://app.example")
+	if other["PREVIEW_DIRECT"] != "" || other["VNC_PREVIEW"] != "" || other["PREVIEW_PICK_SCRIPT_URL"] != "" {
 		t.Fatalf("other node: %v", other)
+	}
+	empty := map[string]string{}
+	applyAppPreviewEnv(empty, "app_preview", map[string]any{"direct_preview": true}, "")
+	if empty["PREVIEW_PICK_SCRIPT_URL"] != "" {
+		t.Fatalf("empty advertise must not set script url: %v", empty)
 	}
 }
 

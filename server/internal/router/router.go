@@ -289,6 +289,9 @@ func New(h *handlers.Handlers) *gin.Engine {
 	// requests cannot carry cf_session; runId+nodeId+port acts as the credential.
 	r.Any("/preview/:runId/:nodeId/:port/*path", h.PreviewProxy)
 
+	// Cooperative pick.js for IP-direct iframe preview (public static).
+	r.GET("/preview-pick.js", h.PreviewPickScript)
+
 	// VNC preview (WebSocket): noVNC RFB proxy + CDP Pick/navigate control.
 	r.GET("/preview-vnc/:runId/:nodeId/:port/ws", h.PreviewVNC)
 

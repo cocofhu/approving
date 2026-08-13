@@ -2,6 +2,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import NovncPreviewPanel from '@/components/run/NovncPreviewPanel.vue'
+import DirectPreviewFrame from '@/components/run/DirectPreviewFrame.vue'
 import {
   publicGateApi,
   publicPreviewVncWsUrl,
@@ -234,28 +235,13 @@ function retry() {
           </button>
         </div>
 
-        <div
+        <DirectPreviewFrame
           v-if="activeIsDirect && activeDirectUrl"
-          class="flex h-full min-h-0 flex-col"
-          data-testid="public-gate-app-preview-direct"
-        >
-          <div class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
-            <a
-              :href="activeDirectUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="text-[11px] text-accent hover:underline"
-            >{{ t('pages.appPreview.directOpenTab') }}</a>
-            <span class="text-[11px] text-txt3">{{ t('pages.appPreview.directNoPick') }}</span>
-          </div>
-          <iframe
-            :src="activeDirectUrl"
-            class="min-h-0 w-full flex-1 border-0 bg-base"
-            :title="activeMeta ? tabLabel(activeMeta) : 'preview'"
-            referrerpolicy="no-referrer"
-            data-testid="public-gate-app-preview-direct-frame"
-          />
-        </div>
+          :direct-url="activeDirectUrl"
+          :title="activeMeta ? tabLabel(activeMeta) : 'preview'"
+          @pick="onPick"
+          @staged-pick="onStagedPick"
+        />
         <NovncPreviewPanel
           v-else-if="!activeIsApi && vncWsUrl"
           :key="`public-vnc-${activePort}-${vncWsUrl}`"
