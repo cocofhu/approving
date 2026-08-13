@@ -55,7 +55,7 @@ function mountModal(open = true, extraProps: Record<string, unknown> = {}) {
           props: ['open', 'title'],
           emits: ['close'],
           template:
-            '<div v-if="open" data-testid="modal"><button data-testid="modal-close" @click="$emit(\'close\')" /><slot /><slot name="footer" /></div>',
+            '<div v-if="open" data-testid="modal"><button data-testid="modal-close" @click="$emit(\'close\')" /><slot name="header" /><slot /><slot name="footer" /></div>',
         },
         ParagraphInput: {
           props: ['text'],
@@ -129,7 +129,7 @@ describe('RunLaunchModal', () => {
     wrapper.unmount()
   })
 
-  it('calls startRun and navigates to run detail', async () => {
+  it('calls startRun and switches to success phase', async () => {
     apiMocks.startRun.mockResolvedValue({ id: 'run-99' })
     const wrapper = mountModal(true)
     await flushPromises()
@@ -145,8 +145,12 @@ describe('RunLaunchModal', () => {
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
     expect(wrapper.emitted('started')?.[0]?.[0]).toBe('run-99')
-    expect(wrapper.emitted('view-run')?.[0]?.[0]).toBe('run-99')
-    expect(wrapper.emitted('close')).toBeTruthy()
+    // plan g2.1: success phase first — no auto view-run/close
+    expect(wrapper.emitted('view-run')).toBeFalsy()
+    expect(wrapper.emitted('close')).toBeFalsy()
+    expect(wrapper.text()).toMatch(/工作流已启动|Workflow started/)
+    expect(wrapper.text()).toMatch(/查看运行|View run/)
+    expect(wrapper.text()).toMatch(/留在当前页|Stay on this page/)
     wrapper.unmount()
   })
 
@@ -193,6 +197,11 @@ describe('RunLaunchModal', () => {
         env: [{ key: 'LOG_LEVEL', value: 'debug', secret: false }],
       }),
     )
+    // plan g1.3 / g2.1: sandbox env start still reaches success phase (no auto navigate)
+    expect(wrapper.emitted('view-run')).toBeFalsy()
+    expect(wrapper.emitted('close')).toBeFalsy()
+    expect(wrapper.text()).toMatch(/工作流已启动|Workflow started/)
+    expect(wrapper.text()).toMatch(/查看运行|View run/)
     wrapper.unmount()
   })
 
