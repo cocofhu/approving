@@ -40,12 +40,12 @@ type KeyEvent struct {
 
 // Pick is a DOM element the user selected in inspect mode.
 type Pick struct {
-	Selector  string     `json:"selector"`
-	TagName   string     `json:"tagName"`
-	OuterHTML string     `json:"outerHTML"`
+	Selector  string `json:"selector"`
+	TagName   string `json:"tagName"`
+	OuterHTML string `json:"outerHTML"`
 	// URL is location.href at pick time (SPA navigations included).
-	URL       string     `json:"url,omitempty"`
-	Box       [4]float64 `json:"box"` // x, y, width, height (CSS px)
+	URL string     `json:"url,omitempty"`
+	Box [4]float64 `json:"box"` // x, y, width, height (CSS px)
 }
 
 // Engine is one Chromium instance (one container) we can open tabs in.
@@ -72,6 +72,8 @@ type Page interface {
 	OnPick(func(Pick))
 	// OnInspectCanceled is invoked when the user cancels CDP inspect mode
 	// (e.g. Esc → Overlay.inspectModeCanceled). Callers sync UI button state.
+	// Enabling inspect may itself emit inspectModeCanceled for the previous
+	// mode; implementations must not invoke this callback for that side effect.
 	// Describe/recognition failures use OnDescribeFailed instead.
 	OnInspectCanceled(func())
 	// OnDescribeFailed is invoked when Overlay pick fires but describing the

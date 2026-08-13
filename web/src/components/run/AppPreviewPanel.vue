@@ -45,6 +45,10 @@ function isApiPort(p: PreviewPort): boolean {
   return label.includes('api')
 }
 
+function isDirectPort(p: PreviewPort): boolean {
+  return p.mode === 'direct' && !!(p.directUrl || '').trim()
+}
+
 function onPick(payload: AppPreviewPickPayload) {
   pickedSelector.value = payload.selector
   emit('pick', payload)
@@ -154,9 +158,34 @@ function selectPort(port: number) {
         class="flex min-h-0 flex-col overflow-hidden rounded-md border border-line bg-surface"
         :class="fill ? 'flex-1' : compact ? 'h-[280px]' : 'h-[420px]'"
       >
+        <template v-for="p in ports" :key="p.port">
+          <div
+            v-show="activePort === p.port && isDirectPort(p)"
+            class="flex h-full min-h-0 flex-col"
+            data-testid="app-preview-direct"
+          >
+            <div class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
+              <a
+                :href="p.directUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-[11px] text-accent hover:underline"
+                data-testid="app-preview-direct-open"
+              >{{ t('pages.appPreview.directOpenTab') }}</a>
+              <span class="text-[11px] text-txt3">{{ t('pages.appPreview.directNoPick') }}</span>
+            </div>
+            <iframe
+              :src="p.directUrl"
+              class="min-h-0 w-full flex-1 border-0 bg-base"
+              :title="tabLabel(p)"
+              referrerpolicy="no-referrer"
+              data-testid="app-preview-direct-frame"
+            />
+          </div>
+        </template>
         <keep-alive :max="ports.length">
           <NovncPreviewPanel
-            v-for="p in ports.filter((x) => !isApiPort(x))"
+            v-for="p in ports.filter((x) => !isApiPort(x) && !isDirectPort(x))"
             v-show="activePort === p.port"
             :key="`vnc-${p.port}`"
             :run-id="runId"
@@ -171,7 +200,7 @@ function selectPort(port: number) {
           />
         </keep-alive>
         <iframe
-          v-for="p in ports.filter((x) => isApiPort(x))"
+          v-for="p in ports.filter((x) => isApiPort(x) && !isDirectPort(x))"
           v-show="activePort === p.port"
           :key="`api-${p.port}`"
           :src="p.proxyUrl"

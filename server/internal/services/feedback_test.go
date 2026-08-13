@@ -183,6 +183,69 @@ func TestAppendTruncatesOversizeText(t *testing.T) {
 	}
 }
 
+func TestMarshalRoundJSONWritesAgentSummaryWhenPresent(t *testing.T) {
+	at := time.Date(2026, 8, 13, 15, 7, 22, 0, time.UTC)
+	cur := models.FeedbackEvent{
+		RunID: "run-1", Kind: models.FeedbackKindReview, NodeID: "research-1", Iteration: 1, Round: 1, Seq: 1,
+		OccurredAt: at, Action: "revise", Text: "除了聊天记录上面需要总结一下",
+		AgentSummary: "用户希望在单轮卡片最前增加 Agent 对反馈的总结。",
+		Turns:        []models.ReactMessage{{Role: "human", Text: "需要总结"}, {Role: "agent", Text: "已加总结区"}},
+	}
+	body, err := MarshalRoundJSON(cur, nil, "run-1", NodeRef{Label: "调研", Type: "research"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal([]byte(body), &doc); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if doc["agentSummary"] != "用户希望在单轮卡片最前增加 Agent 对反馈的总结。" {
+		t.Fatalf("agentSummary = %v", doc["agentSummary"])
+	}
+	// Must not confuse with index gist (FeedbackSummary).
+	if FeedbackSummary(cur) == doc["agentSummary"] {
+		t.Fatal("agentSummary must stay distinct from FeedbackSummary gist")
+	}
+}
+
+func TestMarshalRoundJSONOmitsEmptyAgentSummary(t *testing.T) {
+	at := time.Now()
+	cur := models.FeedbackEvent{
+		RunID: "run-1", Kind: models.FeedbackKindClarify, NodeID: "c1", Iteration: 1, Round: 1, Seq: 1,
+		OccurredAt: at, Text: "选 Redis",
+	}
+	body, err := MarshalRoundJSON(cur, nil, "run-1", NodeRef{})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal([]byte(body), &doc); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if _, ok := doc["agentSummary"]; ok {
+		t.Fatalf("empty agentSummary must be omitted, got %v", doc["agentSummary"])
+	}
+}
+
+func TestMarshalIndexJSONStillUsesFeedbackSummaryNotAgentSummary(t *testing.T) {
+	at := time.Now()
+	events := []models.FeedbackEvent{{
+		Seq: 1, Round: 1, Kind: models.FeedbackKindReview, NodeID: "n1", Iteration: 1, OccurredAt: at,
+		Text: "第一行正文\n第二行", AgentSummary: "这是卡片 Agent 总结,不应进索引",
+		ArtifactName: "feedback.review.n1.i1r1.json",
+	}}
+	body, err := MarshalIndexJSON("run-1", events)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(body, "这是卡片 Agent 总结") {
+		t.Fatalf("index must keep FeedbackSummary gist, not agentSummary:\n%s", body)
+	}
+	if !strings.Contains(body, "第一行正文") {
+		t.Fatalf("index gist missing:\n%s", body)
+	}
+}
+
 func TestMarshalRoundJSONCarriesPriorRoundsAndPrevPointer(t *testing.T) {
 	at := time.Date(2026, 8, 13, 15, 7, 22, 0, time.UTC)
 	prior := []models.FeedbackEvent{

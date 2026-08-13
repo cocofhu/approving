@@ -309,11 +309,7 @@ func (c *acpProvider) spec(req NodeReq) (sandbox.Spec, error) {
 	}
 	env = merged
 	env["ACP_BACKEND"] = string(c.backend)
-	if req.NodeType == "app_preview" {
-
-		env["VNC_PREVIEW"] = "1"
-		env["APPROVING_VNC_PREVIEW"] = "1"
-	}
+	applyAppPreviewEnv(env, req.NodeType, req.Config)
 
 	for k, v := range vars {
 		if strings.HasPrefix(k, "vars.") || v == "" {
@@ -344,3 +340,19 @@ func (c *acpProvider) spec(req NodeReq) (sandbox.Spec, error) {
 	}
 	return spec, nil
 }
+
+// applyAppPreviewEnv sets VNC_PREVIEW by default. When the node switch
+// direct_preview is on, skip the VNC stack and ask the gateway to 1:1-map a
+// PREVIEW_PORT instead (PREVIEW_DIRECT=1).
+func applyAppPreviewEnv(env map[string]string, nodeType string, cfg map[string]any) {
+	if env == nil || nodeType != "app_preview" {
+		return
+	}
+	if configTruthy(cfg["direct_preview"]) {
+		env["PREVIEW_DIRECT"] = "1"
+		return
+	}
+	env["VNC_PREVIEW"] = "1"
+	env["APPROVING_VNC_PREVIEW"] = "1"
+}
+

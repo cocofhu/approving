@@ -343,8 +343,10 @@ describe('PublicGateApprovalView workbench', () => {
     resolveReply?.({ status: 'accepted' })
     await flushPromises()
     expect(w.find('[data-testid="clarify-review-queue"]').exists()).toBe(true)
-    // f3: confirm follows local sessionBusy — optimistic queue keeps confirm gated.
-    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(false)
+    // plan g1/g2: busy keeps confirm mounted and disabled (not unmounted).
+    const confirmBusy = w.find('[data-testid="public-gate-confirm"]')
+    expect(confirmBusy.exists()).toBe(true)
+    expect((confirmBusy.element as HTMLButtonElement).disabled).toBe(true)
     expect(w.find('[data-testid="clarify-review-cancel"]').exists()).toBe(true)
   })
 
@@ -366,7 +368,10 @@ describe('PublicGateApprovalView workbench', () => {
     await flushPromises()
     expect(w.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(true)
     expect(w.find('[data-testid="clarify-review-cancel"]').exists()).toBe(true)
-    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(false)
+    // plan g1/g2: sessionBusy resume keeps confirm visible + disabled.
+    const confirmResume = w.find('[data-testid="public-gate-confirm"]')
+    expect(confirmResume.exists()).toBe(true)
+    expect((confirmResume.element as HTMLButtonElement).disabled).toBe(true)
     expect(w.find('[data-testid="public-gate-done"]').exists()).toBe(false)
   })
 
@@ -1071,7 +1076,10 @@ describe('PublicGateApprovalView workbench', () => {
     await flushPromises()
     expect(w.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(true)
     expect(w.find('[data-testid="clarify-review-cancel"]').exists()).toBe(true)
-    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(false)
+    // plan g1/g2: sticky busy keeps confirm visible + disabled until idle.
+    const confirmSticky = w.find('[data-testid="public-gate-confirm"]')
+    expect(confirmSticky.exists()).toBe(true)
+    expect((confirmSticky.element as HTMLButtonElement).disabled).toBe(true)
 
     // Authoritative idle poll — clear stale activeItem explicitly (sparse merge).
     mocks.preview.mockResolvedValue({

@@ -289,6 +289,8 @@ export type PublicPreviewPort = {
   label?: string
   /** vnc = remote+pick; api = same-origin iframe (no pick). */
   mode?: 'vnc' | 'api' | string
+  /** IP-direct iframe target when the node switch is on. */
+  directUrl?: string
 }
 
 export type PublicPreviewTicketResult = {

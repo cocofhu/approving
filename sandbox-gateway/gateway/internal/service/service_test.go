@@ -952,3 +952,126 @@ func TestSubtractPorts(t *testing.T) {
 		t.Fatalf("nil ports changed: %v", got)
 	}
 }
+
+type publishDriver struct {
+	*fake.Driver
+	publishErr   error
+	skipRegister bool
+	epErr        error
+}
+
+func (p *publishDriver) PublishPort(ctx context.Context, id string, port int) error {
+	if p.publishErr != nil {
+		return p.publishErr
+	}
+	if p.skipRegister {
+		return nil
+	}
+	spec, ok := p.SpecOf(id)
+	if !ok {
+		return fmt.Errorf("not found")
+	}
+	spec.Ports = append(append([]int{}, spec.Ports...), port)
+	return p.Reinstall(ctx, spec, true)
+}
+
+func (p *publishDriver) Endpoints(ctx context.Context, id string) (map[int]string, error) {
+	if p.epErr != nil {
+		return nil, p.epErr
+	}
+	return p.Driver.Endpoints(ctx, id)
+}
+
+func TestPublishPortExistingHost(t *testing.T) {
+	svc, _, _ := testService(t)
+	sb, err := svc.Create(context.Background(), CreateRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitSvcRunning(t, svc, sb.ID)
+	addr, err := svc.PublishPort(context.Background(), sb.ID, 8765)
+	if err != nil || strings.TrimSpace(addr) == "" {
+		t.Fatalf("existing host: %v %q", err, addr)
+	}
+}
+
+func TestPublishPortFakeCannotAdd(t *testing.T) {
+	svc, _, _ := testService(t)
+	sb, err := svc.Create(context.Background(), CreateRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitSvcRunning(t, svc, sb.ID)
+	_, err = svc.PublishPort(context.Background(), sb.ID, 5173)
+	if !errors.Is(err, ErrEndpointNotFound) {
+		t.Fatalf("want ErrEndpointNotFound, got %v", err)
+	}
+}
+
+func TestPublishPortDriverMapsAndPersists(t *testing.T) {
+	st := testDB(t)
+	base := fake.New()
+	if err := base.WithSessionListener(8765); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(base.Close)
+	drv := &publishDriver{Driver: base}
+	svc := New(drv, st, Config{
+		Image: "test-image:local", Ports: []int{8765, 22}, SessionPort: 8765,
+		WorkspaceDir: "/root/workspace", FinalizeTimeout: 2 * time.Second, Resources: testResources(),
+	})
+	sb, err := svc.Create(context.Background(), CreateRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitSvcRunning(t, svc, sb.ID)
+	addr, err := svc.PublishPort(context.Background(), sb.ID, 5173)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(addr, "5173") {
+		t.Fatalf("addr=%q", addr)
+	}
+	got, err := st.Get(context.Background(), sb.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Endpoints()[5173] == "" {
+		t.Fatalf("store missing 5173: %v", got.Endpoints())
+	}
+}
+
+func TestPublishPortDriverErrorAndEmptyAddr(t *testing.T) {
+	st := testDB(t)
+	base := fake.New()
+	if err := base.WithSessionListener(8765); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(base.Close)
+	drv := &publishDriver{Driver: base, publishErr: fmt.Errorf("patch failed")}
+	svc := New(drv, st, Config{
+		Image: "test-image:local", Ports: []int{8765}, SessionPort: 8765,
+		WorkspaceDir: "/root/workspace", FinalizeTimeout: 2 * time.Second, Resources: testResources(),
+	})
+	sb, err := svc.Create(context.Background(), CreateRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitSvcRunning(t, svc, sb.ID)
+	if _, err := svc.PublishPort(context.Background(), sb.ID, 3000); err == nil {
+		t.Fatal("want publish error")
+	}
+
+	drv.publishErr = nil
+	drv.skipRegister = true
+	_, err = svc.PublishPort(context.Background(), sb.ID, 3000)
+	if !errors.Is(err, ErrEndpointNotFound) {
+		t.Fatalf("empty addr want not found, got %v", err)
+	}
+
+	drv.skipRegister = false
+	drv.epErr = fmt.Errorf("endpoints down")
+	if _, err := svc.PublishPort(context.Background(), sb.ID, 3001); err == nil {
+		t.Fatal("want endpoints error")
+	}
+}

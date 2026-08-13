@@ -47,6 +47,10 @@ type FeedbackEvent struct {
 	Action string `json:"action,omitempty"`
 	// Text is the human's verbatim opinion.
 	Text string `json:"text,omitempty"`
+	// AgentSummary is an optional Agent-authored induction of this round's
+	// feedback, distinct from FeedbackSummary (index gist) and from any
+	// transcript bubble. Empty means the round has no card-level summary.
+	AgentSummary string `json:"agentSummary,omitempty"`
 	// Interrupted marks a revise turn whose agent reply was cancelled or
 	// failed. The opinion was still given, so the round is kept — only its
 	// Targets are absent because nothing landed.

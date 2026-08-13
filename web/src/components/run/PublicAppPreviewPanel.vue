@@ -45,12 +45,18 @@ function isApiPort(p: PublicPreviewPort): boolean {
   return (p.label || '').toLowerCase().includes('api')
 }
 
+function isDirectPort(p: PublicPreviewPort): boolean {
+  return !!(p.directUrl || '').trim()
+}
+
 function tabLabel(p: PublicPreviewPort): string {
   return (p.label || '').trim() || String(p.port)
 }
 
 const activeMeta = computed(() => sortedPorts.value.find((p) => p.port === activePort.value) || null)
 const activeIsApi = computed(() => (activeMeta.value ? isApiPort(activeMeta.value) : false))
+const activeIsDirect = computed(() => (activeMeta.value ? isDirectPort(activeMeta.value) : false))
+const activeDirectUrl = computed(() => (activeMeta.value?.directUrl || '').trim())
 
 function selectPort(port: number) {
   activePort.value = port
@@ -74,6 +80,10 @@ async function exchangeTicket() {
   if (port == null) return
   const meta = sortedPorts.value.find((p) => p.port === port)
   if (!meta) return
+  if (isDirectPort(meta)) {
+    ticketBusy.value = false
+    return
+  }
 
   ticketBusy.value = true
   try {
@@ -209,7 +219,7 @@ function retry() {
           <p>{{ t('pages.publicGate.appPreviewLinkInactive') }}</p>
         </div>
         <div
-          v-else-if="ticketError && !vncWsUrl && !apiIframeUrl"
+          v-else-if="ticketError && !vncWsUrl && !apiIframeUrl && !activeIsDirect"
           class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-base/90 px-6 text-center text-sm text-txt3"
           data-testid="public-gate-app-preview-error"
         >
@@ -224,8 +234,30 @@ function retry() {
           </button>
         </div>
 
+        <div
+          v-if="activeIsDirect && activeDirectUrl"
+          class="flex h-full min-h-0 flex-col"
+          data-testid="public-gate-app-preview-direct"
+        >
+          <div class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
+            <a
+              :href="activeDirectUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-[11px] text-accent hover:underline"
+            >{{ t('pages.appPreview.directOpenTab') }}</a>
+            <span class="text-[11px] text-txt3">{{ t('pages.appPreview.directNoPick') }}</span>
+          </div>
+          <iframe
+            :src="activeDirectUrl"
+            class="min-h-0 w-full flex-1 border-0 bg-base"
+            :title="activeMeta ? tabLabel(activeMeta) : 'preview'"
+            referrerpolicy="no-referrer"
+            data-testid="public-gate-app-preview-direct-frame"
+          />
+        </div>
         <NovncPreviewPanel
-          v-if="!activeIsApi && vncWsUrl"
+          v-else-if="!activeIsApi && vncWsUrl"
           :key="`public-vnc-${activePort}-${vncWsUrl}`"
           :ws-url="vncWsUrl"
           :port="activePort ?? undefined"

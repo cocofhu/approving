@@ -54,14 +54,14 @@ describe('BaseNode', () => {
     wrapper.unmount()
   })
 
-  it('app_preview review: badge + subtitle + Demo body, no action handles', () => {
+  it('app_preview review: subtitle + Demo body, no action handles', () => {
     const wrapper = mountNode({
       type: 'app_preview',
       label: '应用预览',
       appPreviewReview: true,
       status: undefined,
     })
-    expect(wrapper.text()).toContain('复审')
+    expect(wrapper.text()).not.toContain('复审')
     expect(wrapper.text()).toContain('取点标注 · 等待人工确认')
     expect(wrapper.text()).not.toContain('ReAct')
     expect(wrapper.text()).toContain('确认并流转 · 待审批')

@@ -145,4 +145,24 @@ describe('AppPreviewPanel', () => {
     expect(wrapper.text()).toMatch(/失败|retry|重试/i)
     wrapper.unmount()
   })
+
+  it('direct mode iframes directUrl and skips noVNC', async () => {
+    apiMocks.nodePreviews.mockResolvedValue({
+      ports: [
+        {
+          port: 18081,
+          label: '前端',
+          mode: 'direct',
+          directUrl: 'http://127.0.0.1:18081/',
+        },
+      ],
+    })
+    const wrapper = mountPanel()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="novnc-stub"]').exists()).toBe(false)
+    const frame = wrapper.get('[data-testid="app-preview-direct-frame"]')
+    expect(frame.attributes('src')).toBe('http://127.0.0.1:18081/')
+    expect(wrapper.text()).toContain('IP 直连预览不支持取点标注')
+    wrapper.unmount()
+  })
 })
