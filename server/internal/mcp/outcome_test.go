@@ -26,6 +26,12 @@ func (m *memOutcomeStore) Get(runID, name string) (string, bool) {
 	return c, ok
 }
 func (m *memOutcomeStore) List(runID string) []ArtifactInfo { return nil }
+func (m *memOutcomeStore) Delete(runID, name string) error {
+	if m.data != nil && m.data[runID] != nil {
+		delete(m.data[runID], name)
+	}
+	return nil
+}
 
 type countingValidator struct {
 	calls  int
@@ -156,7 +162,8 @@ func TestNodeCompleteTool(t *testing.T) {
 }
 
 func TestClearOutcome(t *testing.T) {
-	h := NewHost(&memOutcomeStore{})
+	store := &memOutcomeStore{}
+	h := NewHost(store)
 	tok := h.RegisterRun("r1")
 	h.SetActiveNode("r1", "n1", "agent")
 	if msg, isErr := h.runTool("r1", tok, "node_complete", map[string]any{
@@ -167,11 +174,44 @@ func TestClearOutcome(t *testing.T) {
 	if !h.HasOutcome("r1", "n1") {
 		t.Fatal("expected buffered outcome")
 	}
+	if _, ok := store.Get("r1", NodeOutcomeArtifactName); !ok {
+		t.Fatal("expected audit artifact")
+	}
 	h.ClearOutcome("r1", "n1")
 	if h.HasOutcome("r1", "n1") {
 		t.Fatal("ClearOutcome should drop the mark")
 	}
+	if _, ok := store.Get("r1", NodeOutcomeArtifactName); ok {
+		t.Fatal("ClearOutcome should delete audit artifact")
+	}
 	h.ClearOutcome("r1", "n1") // idempotent
+}
+
+func TestClassifyAndRestoreOutcomeArtifact(t *testing.T) {
+	store := &memOutcomeStore{}
+	h := NewHost(store)
+	h.RegisterRun("r1")
+	h.SetActiveNode("r1", "n1", "agent")
+	_, _ = store.Save("r1", "n1", NodeOutcomeArtifactName, "json",
+		OutcomeJSON(NodeOutcome{Status: OutcomeSuccess, Summary: "from art"}))
+	if h.HasOutcome("r1", "n1") {
+		t.Fatal("memory should be empty before restore")
+	}
+	if !h.RestoreOutcomeFromArtifact("r1", "n1") {
+		t.Fatal("restore failed")
+	}
+	o, ok := h.PeekOutcome("r1", "n1")
+	if !ok || o.Status != OutcomeSuccess || o.Summary != "from art" {
+		t.Fatalf("restored=%v ok=%v", o, ok)
+	}
+	_, st := ClassifyOutcomeArtifact("{bad")
+	if st != OutcomeArtifactCorrupt {
+		t.Fatalf("corrupt state=%v", st)
+	}
+	_, st = ClassifyOutcomeArtifact(`{"status":"nope"}`)
+	if st != OutcomeArtifactCorrupt {
+		t.Fatalf("bad status state=%v", st)
+	}
 }
 
 func TestSetRPCOutcomeValidator(t *testing.T) {

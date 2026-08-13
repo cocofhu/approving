@@ -68,7 +68,10 @@ func (e *Engine) nodeReq(c *execCtx, node *models.Node) runtime.NodeReq {
 
 	e.host.SetActiveNode(c.run.ID, node.ID, node.Type)
 
-	e.host.ClearOutcome(c.run.ID, node.ID)
+	// ClearOutcome is intentionally NOT called here: same-visit react multi-round
+	// replies rebuild NodeReq via this helper and must keep a legal Host mark.
+	// New visit/iteration clears in startNodeRun; sandbox retries clear in
+	// ReactOpen / runAgentOnce.
 	if node.Type == "app_preview" {
 		e.host.ResetPreviewReady(c.run.ID, node.ID)
 	}

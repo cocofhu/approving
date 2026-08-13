@@ -285,10 +285,15 @@ func (s *SandboxService) RegisterRunSandbox(info runtime.RunSandboxInfo) {
 // an idle deadline so the sweeper reclaims it later, while it remains browsable
 // (terminal / IDE / ACP / container logs) in the sandbox UI. Implements
 // runtime.RunSandboxRetirer.
+//
+// Always best-effort archives container logs before idle retention so a later
+// CAPA / AggregateRunFailure path still has sandbox_logs even when the engine
+// mis-fires after retire (eliminates noSandboxLog:true with no explanation).
 func (s *SandboxService) RetireRunSandbox(name string) {
 	if name == "" {
 		return
 	}
+	s.archiveLog(context.Background(), name)
 	s.mu.Lock()
 	delete(s.runActive, name)
 	s.mu.Unlock()
@@ -299,6 +304,46 @@ func (s *SandboxService) RetireRunSandbox(name string) {
 		return
 	}
 	log.Info().Str("name", name).Dur("ttl", s.RunTTL()).Msg("run sandbox retired for debugging (idle ttl)")
+}
+
+// ArchiveRunSandboxLogs best-effort archives live logs for every per-run node
+// sandbox still recorded for runID. Returns how many containers were archived
+// and a non-empty note when none could be captured (for DisplayReason degrade).
+func (s *SandboxService) ArchiveRunSandboxLogs(ctx context.Context, runID string) (archived int, degradeNote string) {
+	if s == nil || runID == "" {
+		return 0, "无沙箱服务，未能拉取 live logs"
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	var rows []models.Sandbox
+	if err := s.db.Where("run_id = ? AND purpose = ?", runID, "run").Find(&rows).Error; err != nil {
+		return 0, "查询沙箱失败，未能拉取 live logs"
+	}
+	if len(rows) == 0 {
+		return 0, "无存活沙箱记录，未能拉取 live logs"
+	}
+	for _, row := range rows {
+		s.archiveLog(ctx, row.Name)
+		if s.hasArchivedLog(row.Name) {
+			archived++
+		}
+	}
+	if archived == 0 {
+		return 0, "容器已销毁或日志为空，未能归档 live logs"
+	}
+	return archived, ""
+}
+
+func (s *SandboxService) hasArchivedLog(name string) bool {
+	if name == "" || s == nil || s.db == nil {
+		return false
+	}
+	var rec models.SandboxLog
+	if err := s.db.Where("name = ?", name).First(&rec).Error; err != nil {
+		return false
+	}
+	return strings.TrimSpace(rec.Content) != ""
 }
 
 // UnregisterRunSandbox clears a per-run node sandbox record once the runtime

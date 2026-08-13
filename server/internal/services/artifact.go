@@ -99,6 +99,17 @@ func (s *ArtifactService) List(runID string) []mcp.ArtifactInfo {
 	return out
 }
 
+// Delete removes a named artifact within a run (idempotent). Used to drop stale
+// node_complete.json when ClearOutcome starts a new attempt/iteration.
+func (s *ArtifactService) Delete(runID, name string) error {
+	if runID == "" || name == "" {
+		return nil
+	}
+	return s.db.Where("run_id = ? AND name = ?", runID, name).Delete(&models.Artifact{}).Error
+}
+
+var _ mcp.ArtifactDeleter = (*ArtifactService)(nil)
+
 // ByRun returns artifact records for a run (for the API). Content is omitted.
 func (s *ArtifactService) ByRun(runID string) []models.Artifact {
 	var arts []models.Artifact

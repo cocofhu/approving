@@ -190,3 +190,14 @@ func (r *ProviderRegistry) SetSandboxRegistry(reg SandboxRegistry) {
 		}
 	}
 }
+
+// ArchiveRunSandboxLogs forwards to the shared sandbox registry when it
+// implements RunSandboxLogArchiver (production SandboxService).
+func (r *ProviderRegistry) ArchiveRunSandboxLogs(ctx context.Context, runID string) (int, string) {
+	for _, p := range r.providers {
+		if a, ok := p.(RunSandboxLogArchiver); ok {
+			return a.ArchiveRunSandboxLogs(ctx, runID)
+		}
+	}
+	return 0, "执行后端未暴露沙箱日志归档"
+}

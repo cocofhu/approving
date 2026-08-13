@@ -279,6 +279,13 @@ type RunSandboxRetirer interface {
 	RetireRunSandbox(name string)
 }
 
+// RunSandboxLogArchiver is an optional capability (SandboxService / provider
+// forwarder): before AggregateRunFailure, best-effort archive live container
+// logs so CAPA failures after retire still have sandbox_logs.
+type RunSandboxLogArchiver interface {
+	ArchiveRunSandboxLogs(ctx context.Context, runID string) (archived int, degradeNote string)
+}
+
 // SandboxRegistrar is the optional provider capability used to inject the
 // registry after construction (the SandboxService is built after the
 // provider in main). main type-asserts the provider for it.

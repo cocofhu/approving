@@ -165,7 +165,8 @@ func TestAutoRetryDisabledByDefault(t *testing.T) {
 
 // TestStaleNodeCompleteNotReusedAfterRunAgentError: a failed attempt that
 // already called node_complete must not let the next attempt complete without
-// a fresh mark (nodeReq clears the buffer before each RunAgent).
+// a fresh mark (startNodeRun ClearOutcome drops Host mark + audit artifact
+// before each new visit/iteration).
 func TestStaleNodeCompleteNotReusedAfterRunAgentError(t *testing.T) {
 	autoRetryBackoff = 0
 	eng, db, p := setupEngineGraphP(t, autoRetryGraph())

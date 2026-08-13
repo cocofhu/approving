@@ -54,6 +54,12 @@ type Store interface {
 	List(runID string) []ArtifactInfo
 }
 
+// ArtifactDeleter is an optional Store capability used to drop stale
+// node_complete.json when ClearOutcome runs for a new attempt/iteration.
+type ArtifactDeleter interface {
+	Delete(runID, name string) error
+}
+
 // Host manages per-run scoped endpoints and tokens.
 type Host struct {
 	mu         sync.RWMutex
