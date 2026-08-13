@@ -39,6 +39,12 @@ vi.mock('@/lib/composables/useToast', () => ({
 
 import RunOutputPptModal from './RunOutputPptModal.vue'
 
+/** Removed outputHint full sentence — must not reappear in modal (plan g3.1). */
+const FORBIDDEN_OUTPUT_HINT_ZH =
+  '展示聚焦输出节点的最终结果卡；与 Run 详情输出 Tab 一致，不是全量产物列表。'
+const FORBIDDEN_OUTPUT_HINT_EN =
+  'Shows final result cards from the focused output node — same as the run detail Output tab, not the full artifact browser.'
+
 function artifact(partial: Partial<Artifact> & Pick<Artifact, 'id' | 'name' | 'kind'>): Artifact {
   return {
     nodeId: partial.nodeId ?? 'out-1',
@@ -160,6 +166,9 @@ describe('RunOutputPptModal output result cards (g1/g2)', () => {
     expect(wrapper.findAll('[data-testid="run-output-row"]')).toHaveLength(0)
     expect(wrapper.text()).not.toContain('node_complete.json')
     expect(wrapper.text()).not.toContain('plan.json')
+    // plan g3.1: no removed outputHint on empty path
+    expect(wrapper.text()).not.toContain(FORBIDDEN_OUTPUT_HINT_ZH)
+    expect(wrapper.text()).not.toContain(FORBIDDEN_OUTPUT_HINT_EN)
 
     await wrapper.find('[data-testid="run-output-empty-open-artifacts"]').trigger('click')
     expect(push).toHaveBeenCalledWith({ path: '/runs/run-1', query: { detail: 'artifacts' } })
@@ -237,6 +246,7 @@ describe('RunOutputPptModal output result cards (g1/g2)', () => {
     expect(wrapper.find('[data-testid="run-output-focus-bar"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="run-output-focus-bar"]').text()).toContain('聚焦输出节点')
     expect(wrapper.find('[data-testid="run-output-focus-bar"]').text()).toContain('type: output')
+    expect(wrapper.find('[data-testid="run-output-focus-bar"]').text()).toContain('与 Run 详情一致')
     expect(wrapper.find('[data-testid="output-result-cards"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="output-result-list"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('视觉 Demo')
@@ -246,6 +256,9 @@ describe('RunOutputPptModal output result cards (g1/g2)', () => {
     expect(wrapper.findAll('[data-testid="run-output-row"]')).toHaveLength(0)
     expect(wrapper.text()).not.toContain('node_complete.json')
     expect(wrapper.text()).not.toMatch(/PPT|幻灯片|16:9/)
+    // plan g3.1: no removed outputHint on cards path (full sentence only)
+    expect(wrapper.text()).not.toContain(FORBIDDEN_OUTPUT_HINT_ZH)
+    expect(wrapper.text()).not.toContain(FORBIDDEN_OUTPUT_HINT_EN)
 
     expect(wrapper.find('[data-testid="run-output-open-run"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="run-output-mark-read"]').exists()).toBe(true)

@@ -35,7 +35,6 @@
       "clickForDetail": "Click to view details",
       "neutralTitle": "{name} · {status}",
       "outputTitle": "Run outputs",
-      "outputHint": "Shows final result cards from the focused output node — same as the run detail Output tab, not the full artifact browser.",
       "noArtifacts": "This run has no outputs",
       "noArtifactsHint": "Open the run detail to inspect execution",
       "markAsRead": "Mark as read",
