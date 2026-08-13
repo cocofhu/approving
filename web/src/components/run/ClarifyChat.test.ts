@@ -1342,5 +1342,58 @@ describe('ClarifyChat', () => {
       )
       wrapper.unmount()
     })
+
+    it('real remaining id waiter + turn_done keeps busy until authoritative idle', async () => {
+      const wrapper = mountChat({ reviewMode: true })
+      const vm = wrapper.vm as unknown as {
+        applyReviewFrame: (f: Record<string, unknown>) => void
+        applyAcpEvents: (e: { kind: string; text: string }[], nodeId?: string) => void
+        isSessionBusy: () => boolean
+      }
+      // Seed next waiter with server id, then start current turn.
+      vm.applyReviewFrame({
+        event: 'queue_state',
+        nodeId: 'react-1',
+        waiting: 1,
+        items: [{ id: 'q2', text: '第二条意见' }],
+        busy: false,
+      })
+      vm.applyReviewFrame({
+        event: 'turn_begin',
+        nodeId: 'react-1',
+        item: { id: 'srv-1', text: '第一条意见' },
+      })
+      vm.applyAcpEvents([{ kind: 'message', text: '第一轮已改完' }], 'react-1')
+      await flushPromises()
+
+      vm.applyReviewFrame({ event: 'turn_done', nodeId: 'react-1' })
+      await flushPromises()
+
+      // Must NOT synthesize idle while real id waiter remains (review v1/v2).
+      expect(wrapper.find('[data-testid="clarify-review-queue"]').text()).toContain('第二条意见')
+      expect(wrapper.text()).toContain('Agent 正在思考下一轮')
+      expect(wrapper.find('[data-testid="clarify-review-cancel"]').exists()).toBe(true)
+      expect(vm.isSessionBusy()).toBe(true)
+      expect((wrapper.find('[data-testid="clarify-confirm-flow"]').element as HTMLButtonElement).disabled).toBe(
+        true,
+      )
+
+      vm.applyReviewFrame({
+        event: 'queue_state',
+        nodeId: 'react-1',
+        waiting: 0,
+        items: [],
+        busy: false,
+        activeItem: null,
+      })
+      await flushPromises()
+      expect(wrapper.text()).not.toContain('Agent 正在思考下一轮')
+      expect(wrapper.find('[data-testid="clarify-review-cancel"]').exists()).toBe(false)
+      expect(vm.isSessionBusy()).toBe(false)
+      expect((wrapper.find('[data-testid="clarify-confirm-flow"]').element as HTMLButtonElement).disabled).toBe(
+        false,
+      )
+      wrapper.unmount()
+    })
   })
 })

@@ -1007,7 +1007,7 @@ const reactText = ref('')
 const reactImages = ref<ClarifyImage[]>([])
 const reactSending = ref(false)
 /** Sandbox-aligned: pending-send queue + in-flight turn (HTTP returns on enqueue). */
-const reactQueued = ref<{ text: string }[]>([])
+const reactQueued = ref<{ id?: string; text: string }[]>([])
 const reactThinking = ref(false)
 /** True between turn_begin and turn_done/error (mirrors ClarifyChat liveAgentIdx). */
 const reactInFlight = ref(false)
@@ -1056,16 +1056,30 @@ function forceReactAuthoritativeIdle() {
   reactThinking.value = false
 }
 
+/**
+ * After turn_done/error: drop only ghost optimistic rows (no server id).
+ * Keep authoritative waiters so multi-turn does not briefly unlock confirm.
+ */
+function settleReactAfterTurnEnd() {
+  if (reactInFlight.value) {
+    reactInFlight.value = false
+  }
+  if (reactQueued.value.some((q) => !q.id)) {
+    reactQueued.value = reactQueued.value.filter((q) => !!q.id)
+  }
+  reactThinking.value = reactQueued.value.length > 0
+}
+
 function applyReviewFrame(frame: {
   event?: string
   nodeId?: string
-  item?: { text?: string }
+  item?: { id?: string; text?: string }
   interrupted?: boolean
   message?: string
   waiting?: number
-  items?: { text?: string }[]
+  items?: { id?: string; text?: string }[]
   busy?: boolean
-  activeItem?: { text?: string } | null
+  activeItem?: { id?: string; text?: string } | null
 }) {
   const producer = props.gate.reactUpstreamNodeId
   if (producer && frame.nodeId && frame.nodeId !== producer) return
@@ -1086,16 +1100,14 @@ function applyReviewFrame(frame: {
       } else if (reactStreamText.value || reactStreamThought.value) {
         reactStreamCompletedAt.value = new Date().toISOString()
       }
-      // Pump omits terminal idle queue_state; synthesize authoritative idle so
-      // ghost reactQueued cannot keep Cancel/confirm sticky. Real remaining
-      // waiters are restored by the next queue_state before turn_begin.
-      forceReactAuthoritativeIdle()
+      // Ghosts only; keep real id waiters (review v1 / ClarifyChat settleAfterTurnEnd).
+      settleReactAfterTurnEnd()
       break
     case 'error':
       reactError.value = frame.message || reactError.value
       reactStreamCompletedAt.value = null
       if (frame.interrupted) reactInterrupted.value = true
-      forceReactAuthoritativeIdle()
+      settleReactAfterTurnEnd()
       break
     case 'queue_state': {
       // Platform-authoritative: remote Cancel / cross-entry must clear ghost rows.
@@ -1139,7 +1151,16 @@ function applyReviewFrame(frame: {
         break
       }
       if (items) {
-        const rebuilt = items.map((it) => ({ text: it.text ?? '' }))
+        // Preserve server id so turn_done can distinguish ghost vs real waiters.
+        const rebuilt = items.map((it) => {
+          const text = it.text ?? ''
+          const id = typeof it.id === 'string' && it.id ? it.id : undefined
+          const local = id
+            ? reactQueued.value.find((q) => q.id === id) ??
+              reactQueued.value.find((q) => !q.id && q.text === text)
+            : reactQueued.value.find((q) => q.text === text)
+          return { id: id ?? local?.id, text }
+        })
         const maxLocal = reactInFlight.value || busy ? rebuilt.length : rebuilt.length + 1
         if (reactQueued.value.length > maxLocal) {
           const optimistic = reactQueued.value

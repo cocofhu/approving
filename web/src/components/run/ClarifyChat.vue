@@ -797,7 +797,8 @@ function discardLastQueued() {
 /**
  * Authoritative idle (waiting=0 ∧ !busy ∧ no activeItem): force-clear local
  * sticky busy — ghost queued, unfinished live slot (incl. body + streaming===false),
- * and thinking. Used by turn_done/error synthesis and queue_state/poll idle.
+ * and thinking. Used by queue_state/poll idle (not turn_done — that must keep
+ * real server-id waiters).
  */
 function forceAuthoritativeIdle() {
   if (queued.value.length) queued.value = []
@@ -818,6 +819,18 @@ function forceAuthoritativeIdle() {
     liveAgentIdx.value = -1
   }
   thinking.value = false
+}
+
+/**
+ * After turn_done/error: drop only ghost optimistic rows (no server id).
+ * Keep authoritative waiters so multi-turn queue does not briefly unlock
+ * confirm before the next queue_state. Empty after filter ⇒ synthesized idle.
+ */
+function settleAfterTurnEnd() {
+  if (queued.value.some((q) => !q.id)) {
+    queued.value = queued.value.filter((q) => !!q.id)
+  }
+  thinking.value = queued.value.length > 0 || liveAgentIdx.value >= 0
 }
 
 /**
@@ -1010,10 +1023,9 @@ function applyReviewFrame(frame: {
         thoughtPreview.flush()
       }
       liveAgentIdx.value = -1
-      // Pump omits terminal idle queue_state; synthesize authoritative idle so
-      // ghost optimistic queued (unmatched turn_begin id) cannot keep
-      //「思考下一轮」. Real remaining waiters are restored by the next queue_state.
-      forceAuthoritativeIdle()
+      // Pump may omit idle queue_state; clear ghost optimistic rows only.
+      // Real id waiters stay busy until authoritative idle (review v1).
+      settleAfterTurnEnd()
       break
     }
     case 'error': {
@@ -1029,8 +1041,8 @@ function applyReviewFrame(frame: {
         thoughtPreview.flush()
       }
       liveAgentIdx.value = -1
-      // Same idle synthesis as turn_done (ghost queued must not stick).
-      forceAuthoritativeIdle()
+      // Same as turn_done: ghosts only; keep real remaining waiters.
+      settleAfterTurnEnd()
       break
     }
     case 'queue_state':
