@@ -147,6 +147,11 @@ type ReactTurn struct {
 	Done      bool
 	Result    NodeResult        // populated when Done (outputs/git)
 	Events    []models.AcpEvent // this turn's event log (live/persisted timeline)
+	// AgentSummary is an optional induction of this round's human feedback,
+	// parsed from the dual-write turn output. Distinct from Msg (transcript
+	// narration). Empty means the model omitted it — callers must not fall
+	// back to FeedbackSummary / first line / bubble text.
+	AgentSummary string
 	// Usage is this provider call's token delta (open/reply/finish chats).
 	// Engine adds it onto the StateRun so mid-turn pauses still surface usage.
 	Usage *models.TokenUsage

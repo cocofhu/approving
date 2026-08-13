@@ -152,7 +152,8 @@ func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []mod
 
 	chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
 	defer cancel()
-	res, err := c.streamChat(chatCtx, sess.acp, req, human, images)
+	// Clarify feedback turns dual-write agentSummary alongside narration.
+	res, err := c.streamChat(chatCtx, sess.acp, req, withDualWriteContract(human), images)
 	if err != nil {
 		log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
 			Msg("react reply chat failed")
@@ -167,11 +168,12 @@ func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []mod
 	var usageByModel models.TokenUsageByModel
 	var events []models.AcpEvent
 	absorbChat(&usage, &usageByModel, &events, res)
+	narration, agentSummary := applyDualWrite(res.Narration)
 
 	qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
 
 	if len(qs) > 0 {
-		return ReactTurn{Msg: res.Narration, Questions: qs, Events: events, Usage: usage, UsageByModel: usageByModel}
+		return ReactTurn{Msg: narration, AgentSummary: agentSummary, Questions: qs, Events: events, Usage: usage, UsageByModel: usageByModel}
 	}
 
 	if !force && !reactCapReached(req, history) {
@@ -180,16 +182,18 @@ func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []mod
 			usage = models.AddTokenUsage(usage, gu)
 			usageByModel = models.AddTokenUsageByModel(usageByModel, gum)
 			if strings.TrimSpace(msg) == "" {
-				msg = res.Narration
+				msg = narration
 			}
-			return ReactTurn{Msg: msg, Questions: gq, Events: events, Usage: usage, UsageByModel: usageByModel}
+			return ReactTurn{Msg: msg, AgentSummary: agentSummary, Questions: gq, Events: events, Usage: usage, UsageByModel: usageByModel}
 		} else if gu != nil || gum != nil {
 			events = append(events, ge...)
 			usage = models.AddTokenUsage(usage, gu)
 			usageByModel = models.AddTokenUsageByModel(usageByModel, gum)
 		}
 	}
-	return c.finishReact(ctx, req, key, sess, res.Narration, history, events, usage, usageByModel)
+	turn := c.finishReact(ctx, req, key, sess, narration, history, events, usage, usageByModel)
+	turn.AgentSummary = agentSummary
+	return turn
 }
 
 // ReviseInPlace sends one review turn to the parked session and keeps it alive.
@@ -224,7 +228,8 @@ func (c *acpProvider) ReviseInPlace(ctx context.Context, req NodeReq, history []
 		}
 	}
 	chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
-	res, err := c.streamChat(chatCtx, sess.acp, req, human, images)
+	// Review feedback turns dual-write agentSummary alongside narration.
+	res, err := c.streamChat(chatCtx, sess.acp, req, withDualWriteContract(human), images)
 	cancel()
 	if err != nil {
 		log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).Msg("review revise chat failed")
@@ -235,6 +240,7 @@ func (c *acpProvider) ReviseInPlace(ctx context.Context, req NodeReq, history []
 	var usageByModel models.TokenUsageByModel
 	var events []models.AcpEvent
 	absorbChat(&usage, &usageByModel, &events, res)
+	narration, agentSummary := applyDualWrite(res.Narration)
 
 	c.host.TakePendingQuestions(req.RunID, req.NodeID)
 
@@ -244,7 +250,7 @@ func (c *acpProvider) ReviseInPlace(ctx context.Context, req NodeReq, history []
 		}
 	}
 	events = c.snapshotEvents(ctx, sess.sb, events)
-	return ReactTurn{Msg: res.Narration, Done: false, Events: events, Usage: usage, UsageByModel: usageByModel}
+	return ReactTurn{Msg: narration, AgentSummary: agentSummary, Done: false, Events: events, Usage: usage, UsageByModel: usageByModel}
 }
 
 // HasLiveSession reports whether a parked review session is held for the node.
