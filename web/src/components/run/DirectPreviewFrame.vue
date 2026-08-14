@@ -67,6 +67,13 @@ function armScriptWait() {
 }
 
 function onIframeLoad() {
+  // Classic <script> runs before the iframe "load" event, so ready may already
+  // have arrived. Resetting here races and leaves the tip stuck forever.
+  if (scriptReady.value) {
+    scriptTip.value = false
+    clearWait()
+    return
+  }
   armScriptWait()
 }
 

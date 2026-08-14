@@ -86,6 +86,20 @@ describe('DirectPreviewFrame', () => {
     wrapper.unmount()
   })
 
+  it('keeps ready after iframe load that races past the script', async () => {
+    const { wrapper } = mountFrame()
+    dispatchFromPreview({ type: 'direct-preview-ready', url: DIRECT })
+    await flushPromises()
+    await wrapper.get('[data-testid="app-preview-direct-frame"]').trigger('load')
+    await flushPromises()
+    vi.advanceTimersByTime(2500)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="direct-preview-tip"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="direct-preview-inspect"]').trigger('click')
+    expect(wrapper.find('[data-testid="direct-preview-tip"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('ignores pick messages from other origins', async () => {
     const { wrapper } = mountFrame()
     dispatchFromPreview(
