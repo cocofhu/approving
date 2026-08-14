@@ -48,8 +48,10 @@ describe('visual HtmlPreview Issue loop defaults (g4)', () => {
     expect(fieldKeys).not.toContain('output_var')
     expect(fieldKeys).not.toContain('form')
     expect(fieldKeys).toContain('direct_preview')
+    expect(fieldKeys).toContain('auto_inject')
     const defaults = NODE_DEFS.app_preview.defaults as Record<string, unknown>
     expect(defaults.direct_preview).toBe(false)
+    expect(defaults.auto_inject).toBe(true)
     expect(defaults.actions).toBeUndefined()
     expect(defaults.output_var).toBeUndefined()
   })

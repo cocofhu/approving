@@ -186,6 +186,9 @@ func previewNodePromptExtras(req NodeReq) string {
 	if req.NodeType != "app_preview" || !configTruthy(req.Config["direct_preview"]) {
 		return ""
 	}
+	if !configDefaultOn(req.Config["auto_inject"]) {
+		return models.DefaultPreviewDirectManualContract
+	}
 	return models.DefaultPreviewDirectContract
 }
 

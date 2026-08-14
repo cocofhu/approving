@@ -97,6 +97,21 @@ func TestPreviewInjectSh_DryRunIdempotent(t *testing.T) {
 	}
 }
 
+func TestPreviewInjectSh_AutoInjectOff(t *testing.T) {
+	out, err := runScript(t, []string{
+		"PREVIEW_DIRECT=1",
+		"PREVIEW_AUTO_INJECT=0",
+		"PREVIEW_PORT=18080",
+		"PREVIEW_PICK_SCRIPT_URL=http://x/preview-pick.js",
+	})
+	if err != nil {
+		t.Fatalf("exit: %v out=%s", err, out)
+	}
+	if !strings.Contains(out, "PREVIEW_AUTO_INJECT off") {
+		t.Fatalf("out=%s", out)
+	}
+}
+
 func TestPreviewInjectSh_SamePortSkip(t *testing.T) {
 	out, err := runScript(t, []string{
 		"PREVIEW_DIRECT=1",

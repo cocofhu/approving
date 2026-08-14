@@ -162,6 +162,7 @@ docker run --privileged -d \
 | --- | --- | --- |
 | `VNC_PREVIEW` | 空 | `1` / `true` 启动 headed Chromium on Xvfb + x11vnc + websockify（CDP `9222` / noVNC `6080`）；`ENABLE_VNC_PREVIEW` 同义 |
 | `PREVIEW_DIRECT` | 空 | `1` / `true` 启动直连预览 HTML 注入（`preview-inject` 听 `17980` + iptables REDIRECT `$PREVIEW_PORT`）。须同时有 `PREVIEW_PORT`、`PREVIEW_PICK_SCRIPT_URL` |
+| `PREVIEW_AUTO_INJECT` | `1`（直连时） | `0` / `false` 时不启动注入（节点开关「自动注入」关闭） |
 | `PREVIEW_PORT` | 空 | 应用监听口（与 Docker/K8s 发布同号）。注入进程**不得**占用此口 |
 | `PREVIEW_PICK_SCRIPT_URL` | 空 | 取点脚本绝对 URL（Approving `/preview-pick.js`） |
 | `BROWSER_MCP` | 空 | `1` / `true` 把沙箱内 Chromium 经 CDP 注册为 `chrome-devtools` MCP（合并进 `$CONFIG_ROOT/mcp.json`），并隐含开启预览栈。见[浏览器 MCP](#浏览器-mcp可选) |

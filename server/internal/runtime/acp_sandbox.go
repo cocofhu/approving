@@ -353,6 +353,11 @@ func applyAppPreviewEnv(env map[string]string, nodeType string, cfg map[string]a
 		if u := previewPickScriptURL(publicAdvertise); u != "" {
 			env["PREVIEW_PICK_SCRIPT_URL"] = u
 		}
+		if configDefaultOn(cfg["auto_inject"]) {
+			env["PREVIEW_AUTO_INJECT"] = "1"
+		} else {
+			env["PREVIEW_AUTO_INJECT"] = "0"
+		}
 		return
 	}
 	env["VNC_PREVIEW"] = "1"

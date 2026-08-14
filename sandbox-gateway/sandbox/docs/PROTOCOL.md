@@ -255,6 +255,7 @@ IP 直连预览时审批页 iframe 的 origin 是 `http://<sandbox-ip>:$PREVIEW_
 不改应用监听口、不加 `<base>`:
 
 - 平台注入 `PREVIEW_DIRECT=1`、`PREVIEW_PORT`、`PREVIEW_PICK_SCRIPT_URL`。
+  节点开关「自动注入」(`auto_inject`,默认开)对应 `PREVIEW_AUTO_INJECT`;显式 `0` 时不启动注入。
 - `startup.sh` 后台执行 `preview-inject.sh`:先让 `preview-inject` 听 `17980`,
   再在自有 nat 链 `APPROVING-PREVIEW` 上
   `REDIRECT --dport $PREVIEW_PORT --to-ports 17980`。
