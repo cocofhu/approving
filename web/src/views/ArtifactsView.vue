@@ -34,7 +34,8 @@ let pageLoadGen = 0
 const workflows = ref<Workflow[]>([])
 const workflowsMap = computed(() => {
   const map = new Map<string, { name: string }>()
-  for (const wf of workflows.value) map.set(wf.id, { name: wf.name })
+  const list = Array.isArray(workflows.value) ? workflows.value : []
+  for (const wf of list) map.set(wf.id, { name: wf.name })
   return map
 })
 
@@ -123,11 +124,11 @@ async function loadPageArtifacts({ showLoading = false }: { showLoading?: boolea
     })
     if (gen !== pageLoadGen) return
     if (isPaginated(data)) {
-      pageArtifacts.value = data.items ?? []
+      pageArtifacts.value = Array.isArray(data.items) ? data.items : []
       pageTotal.value = data.total
     } else {
-      pageArtifacts.value = data
-      pageTotal.value = data.length
+      pageArtifacts.value = Array.isArray(data) ? data : []
+      pageTotal.value = pageArtifacts.value.length
     }
   } catch {
     if (gen !== pageLoadGen) return
@@ -203,7 +204,7 @@ watch(
     if (!runId) return
     try {
       const run = await api.getRun(runId)
-      previewArtifacts.value = run.artifacts
+      previewArtifacts.value = Array.isArray(run.artifacts) ? run.artifacts : []
     } catch {
       previewArtifacts.value = pageArtifacts.value.filter((a) => a.runId === runId)
     }
@@ -287,8 +288,11 @@ async function reloadGroups() {
       api.listArtifacts({ projectId: pid }),
       api.listWorkflows({ projectId: pid }),
     ])
-    groupArtifacts.value = isPaginated(arts) ? arts.items : arts
-    workflows.value = wfs
+    groupArtifacts.value = isPaginated(arts)
+      ? (Array.isArray(arts.items) ? arts.items : [])
+      : (Array.isArray(arts) ? arts : [])
+    // Defend for…of in workflowsMap: never assign a non-array (e.g. unexpected payload shape)
+    workflows.value = Array.isArray(wfs) ? wfs : []
   } catch {
     groupArtifacts.value = []
     workflows.value = []

@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   getAgentsOrg: vi.fn(),
   saveAgentsOrg: vi.fn(),
   renameAgent: vi.fn(),
+  listProjectRunTags: vi.fn(),
 }))
 
 const breakpointMocks = vi.hoisted(() => {
@@ -42,6 +43,7 @@ vi.mock('@/lib/api/api', async () => {
       getAgentsOrg: mocks.getAgentsOrg,
       saveAgentsOrg: mocks.saveAgentsOrg,
       renameAgent: mocks.renameAgent,
+      listProjectRunTags: mocks.listProjectRunTags,
     },
   }
 })
@@ -137,6 +139,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   breakpointMocks.isMobile.value = false
   mocks.listProjects.mockResolvedValue([{ id: 'proj-default', name: 'Default' }])
+  mocks.listProjectRunTags.mockResolvedValue({ tags: [] })
   mocks.saveAgent.mockImplementation(async (payload: Agent) => payload)
   mocks.patchAgentProject.mockImplementation(async (name: string, projectId: string) => ({
     status: 'saved',
@@ -1780,6 +1783,23 @@ describe('AgentStudio env credential help', () => {
     expect(wrapper.find('[data-test="env-help-modal"]').exists()).toBe(false)
     const kept = wrapper.findAll('input').find((el) => (el.element as HTMLInputElement).value === 'MY_DRAFT_KEY')
     expect(kept).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  it('opens Git credential help when run-tags rejects (404 noise)', async () => {
+    mocks.listAgents.mockResolvedValue([agent('public')])
+    mocks.listProjectRunTags.mockRejectedValue(new Error('not found'))
+    const wrapper = await mountStudioWithHelp()
+    await flushPromises()
+    await openEnvTab(wrapper)
+
+    void mocks.listProjectRunTags('proj-28d13430').catch(() => {})
+    await wrapper.get('[data-test="git-help-emit"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="env-help-modal"]').exists()).toBe(true)
+    expect(wrapper.get('[data-test="env-help-modal"]').text()).toContain('环境变量与凭据')
+    expect(wrapper.get('[data-help-chip="git"]').classes().join(' ')).toContain('border-accent')
     wrapper.unmount()
   })
 })

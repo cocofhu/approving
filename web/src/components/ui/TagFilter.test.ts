@@ -134,4 +134,22 @@ describe('TagFilter', () => {
     expect(suggestions[0]!.text()).toContain('canary')
     wrapper.unmount()
   })
+
+  it('degrades to empty stock and shows error when listProjectRunTags rejects (404)', async () => {
+    apiMocks.listProjectRunTags.mockRejectedValue(new Error('not found'))
+    const wrapper = mountFilter({ projectId: 'proj-missing', open: true })
+    await flushPromises()
+    expect(apiMocks.listProjectRunTags).toHaveBeenCalledWith('proj-missing')
+    expect(wrapper.find('[data-testid="tag-filter-stock-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="tag-filter-suggestions"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('degrades to empty stock when tags is a non-array payload', async () => {
+    apiMocks.listProjectRunTags.mockResolvedValue({ tags: { items: ['x'] } as unknown as string[] })
+    const wrapper = mountFilter({ projectId: 'p1', open: true })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="tag-filter-empty"]').text()).toMatch(/暂无存量/)
+    wrapper.unmount()
+  })
 })
