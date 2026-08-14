@@ -10,21 +10,13 @@
   var hoverEl = null;
   var styleEl = null;
 
-  function parentOrigin() {
-    try {
-      if (document.referrer) return new URL(document.referrer).origin;
-    } catch (e) {}
-    return '*';
-  }
-
   function post(msg) {
+    // Always '*' : HTTPS Approving embedding http://IP:port often strips
+    // document.referrer (strict-origin-when-cross-origin), and a wrong
+    // targetOrigin fails silently with no exception.
     try {
-      parent.postMessage(msg, parentOrigin());
-    } catch (e) {
-      try {
-        parent.postMessage(msg, '*');
-      } catch (e2) {}
-    }
+      parent.postMessage(msg, '*');
+    } catch (e) {}
   }
 
   function currentUrl() {
@@ -181,4 +173,13 @@
   } catch (e) {}
 
   postUrl(READY);
+  // Parent may arm its wait on iframe "load", which fires after this script.
+  // Re-announce so a late listener still clears the missing-script tip.
+  if (document.readyState === 'complete') {
+    postUrl(READY);
+  } else {
+    window.addEventListener('load', function () {
+      postUrl(READY);
+    });
+  }
 })();
