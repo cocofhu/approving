@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/flate"
 	"compress/gzip"
+	_ "embed"
 	"errors"
 	"io"
 	"net/http"
@@ -13,6 +14,9 @@ import (
 	"strings"
 	"time"
 )
+
+//go:embed preview-pick.js
+var pickScript []byte
 
 var errUnsupportedEncoding = errors.New("unsupported content-encoding")
 
@@ -34,8 +38,8 @@ func NewHandler(upstream *url.URL, scriptURL string) http.Handler {
 	if upstream == nil {
 		panic("previewinject: nil upstream")
 	}
-	scriptURL = strings.TrimSpace(scriptURL)
-	origin := ScriptOrigin(scriptURL)
+	scriptURL = ResolveScriptURL(scriptURL)
+	token := CSPToken(scriptURL)
 
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
@@ -44,11 +48,24 @@ func NewHandler(upstream *url.URL, scriptURL string) http.Handler {
 			r.Out.Host = inHost
 			r.Out.Header.Set("Accept-Encoding", "identity")
 		},
-		ModifyResponse: modifyResponse(scriptURL, origin),
+		ModifyResponse: modifyResponse(scriptURL, token),
 		FlushInterval:  flushInterval,
 		ErrorHandler:   closeOnUpstreamError,
 	}
-	return proxy
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == ScriptPath {
+			servePickScript(w, r)
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	})
+}
+
+func servePickScript(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(pickScript)
 }
 
 func closeOnUpstreamError(w http.ResponseWriter, _ *http.Request, _ error) {
@@ -62,15 +79,12 @@ func closeOnUpstreamError(w http.ResponseWriter, _ *http.Request, _ error) {
 	w.WriteHeader(http.StatusBadGateway)
 }
 
-func modifyResponse(scriptURL, scriptOrigin string) func(*http.Response) error {
+func modifyResponse(scriptURL, cspToken string) func(*http.Response) error {
 	return func(resp *http.Response) error {
 		if resp.StatusCode == http.StatusSwitchingProtocols {
 			return nil
 		}
 		if !strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/html") {
-			return nil
-		}
-		if scriptURL == "" {
 			return nil
 		}
 
@@ -88,10 +102,10 @@ func modifyResponse(scriptURL, scriptOrigin string) func(*http.Response) error {
 		}
 
 		rewritten := InjectHTML(body, scriptURL)
-		if scriptOrigin != "" {
+		if cspToken != "" {
 			for _, h := range []string{"Content-Security-Policy", "Content-Security-Policy-Report-Only"} {
 				if csp := resp.Header.Get(h); csp != "" {
-					resp.Header.Set(h, RelaxCSP(csp, scriptOrigin))
+					resp.Header.Set(h, RelaxCSP(csp, cspToken))
 				}
 			}
 		}

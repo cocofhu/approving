@@ -48,7 +48,7 @@ func TestProxy_InjectsHTML(t *testing.T) {
 func TestProxy_IdempotentUpstreamScript(t *testing.T) {
 	proxy, _ := testProxy(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		_, _ = w.Write([]byte(`<html><body><script src="` + scriptURL + `"></script></body></html>`))
+		_, _ = w.Write([]byte(`<html><body><script src="` + ScriptPath + `"></script></body></html>`))
 	}))
 	resp, err := http.Get(proxy.URL + "/")
 	if err != nil {
@@ -58,6 +58,47 @@ func TestProxy_IdempotentUpstreamScript(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if n := strings.Count(string(body), "preview-pick.js"); n != 1 {
 		t.Fatalf("count=%d body=%s", n, body)
+	}
+}
+
+func TestProxy_InjectsSameOriginBesideLocalhostTag(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><script src="http://localhost:8080/preview-pick.js"></script></body></html>`))
+	}))
+	t.Cleanup(up.Close)
+	u, err := url.Parse(up.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy := httptest.NewServer(NewHandler(u, ""))
+	t.Cleanup(proxy.Close)
+	resp, err := http.Get(proxy.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), `src="`+ScriptPath+`"`) {
+		t.Fatalf("must inject same-origin beside localhost tag: %s", body)
+	}
+}
+
+func TestProxy_ServesSameOriginScript(t *testing.T) {
+	proxy, _ := testProxy(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("script path must not hit upstream")
+	}))
+	resp, err := http.Get(proxy.URL + ScriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "direct-preview-ready") {
+		t.Fatalf("script body: %s", body[:min(len(body), 80)])
 	}
 }
 

@@ -50,8 +50,23 @@ func TestParseOptions_EnvFallback(t *testing.T) {
 	if opt.Upstream != "http://127.0.0.1:18100" {
 		t.Fatalf("upstream from PREVIEW_PORT=%q", opt.Upstream)
 	}
-	if opt.ScriptURL != "http://h/preview-pick.js" {
-		t.Fatalf("script=%q", opt.ScriptURL)
+	if opt.ScriptURL != previewinject.ScriptPath {
+		t.Fatalf("env pick URL must not override same-origin script: %q", opt.ScriptURL)
+	}
+}
+
+func TestParseOptions_DefaultSameOriginScript(t *testing.T) {
+	opt, err := parseOptions(nil, func(k string) string {
+		if k == "PREVIEW_PORT" {
+			return "18100"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opt.ScriptURL != previewinject.ScriptPath {
+		t.Fatalf("default script=%q", opt.ScriptURL)
 	}
 }
 
@@ -79,11 +94,7 @@ func TestParseOptions_Missing(t *testing.T) {
 	if _, err := parseOptions(nil, func(string) string { return "" }); err == nil {
 		t.Fatal("expected error")
 	}
-	env := map[string]string{"PREVIEW_PORT": "18080"}
-	if _, err := parseOptions(nil, func(k string) string { return env[k] }); err == nil {
-		t.Fatal("missing script")
-	}
-	env = map[string]string{"PREVIEW_PICK_SCRIPT_URL": "http://x/preview-pick.js"}
+	env := map[string]string{"PREVIEW_PICK_SCRIPT_URL": "http://x/preview-pick.js"}
 	if _, err := parseOptions(nil, func(k string) string { return env[k] }); err == nil {
 		t.Fatal("missing upstream")
 	}

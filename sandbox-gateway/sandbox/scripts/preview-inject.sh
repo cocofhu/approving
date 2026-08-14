@@ -27,8 +27,8 @@ preview_inject_missing_env() {
     echo "preview-inject: PREVIEW_AUTO_INJECT off, skip"
     return 0
   fi
-  if [ -z "${PREVIEW_PORT:-}" ] || [ -z "${PREVIEW_PICK_SCRIPT_URL:-}" ]; then
-    echo "preview-inject: PREVIEW_PORT / PREVIEW_PICK_SCRIPT_URL missing, skip" >&2
+  if [ -z "${PREVIEW_PORT:-}" ]; then
+    echo "preview-inject: PREVIEW_PORT missing, skip" >&2
     return 0
   fi
   return 1
@@ -89,7 +89,6 @@ start_bin() {
   "$BIN" \
     --listen "0.0.0.0:${LISTEN_PORT}" \
     --upstream "http://127.0.0.1:${PREVIEW_PORT}" \
-    --script-url "${PREVIEW_PICK_SCRIPT_URL}" \
     >>"$LOG" 2>&1 &
   echo $! >"${PID_DIR}/preview-inject.pid"
 }

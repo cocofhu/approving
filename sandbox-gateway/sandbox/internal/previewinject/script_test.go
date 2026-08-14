@@ -57,7 +57,6 @@ func TestPreviewInjectSh_DryRunRules(t *testing.T) {
 	out, err := runScript(t, []string{
 		"PREVIEW_DIRECT=1",
 		"PREVIEW_PORT=18080",
-		"PREVIEW_PICK_SCRIPT_URL=http://x/preview-pick.js",
 		"PREVIEW_INJECT_DRY_RUN=1",
 	})
 	if err != nil {

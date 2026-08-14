@@ -254,11 +254,16 @@ IP 直连预览时审批页 iframe 的 origin 是 `http://<sandbox-ip>:$PREVIEW_
 父页无法跨源注入脚本。参考实现在**沙箱内**做入站 HTML 注入,不改网关发布面、
 不改应用监听口、不加 `<base>`:
 
-- 平台注入 `PREVIEW_DIRECT=1`、`PREVIEW_PORT`、`PREVIEW_PICK_SCRIPT_URL`。
+- 平台注入 `PREVIEW_DIRECT=1`、`PREVIEW_PORT`。自动注入开启时
+  `PREVIEW_PICK_SCRIPT_URL=/__approving/preview-pick.js`(同域相对路径)。
   节点开关「自动注入」(`auto_inject`,默认开)对应 `PREVIEW_AUTO_INJECT`;显式 `0` 时不启动注入。
 - `startup.sh` 后台执行 `preview-inject.sh`:先让 `preview-inject` 听 `17980`,
   再在自有 nat 链 `APPROVING-PREVIEW` 上
   `REDIRECT --dport $PREVIEW_PORT --to-ports 17980`。
+- 注入层在 `/__approving/preview-pick.js` 直接返回脚本,HTML 插入同域
+  `<script src="/__approving/preview-pick.js">`。不得注入
+  `http://localhost:8080/preview-pick.js`:审批人浏览器 origin 是
+  `http://IP:PREVIEW_PORT/`,打不开 Approving 的 loopback。
 - 回环(应用 ← 注入进程)走 OUTPUT,不进 PREROUTING,不会环。
 - 注入进程**不得**听 `PREVIEW_PORT`(平台 `KeepalivePort` 按该口找应用进程)。
 - 进程挂了必须拆规则或立刻拉起:箱外 `ProbeHTTPPort` 打的是发布口,会走 REDIRECT;

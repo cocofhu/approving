@@ -7,6 +7,19 @@ import (
 
 const scriptURL = "http://app.example/preview-pick.js"
 
+func TestCSPToken(t *testing.T) {
+	t.Parallel()
+	if got := CSPToken(ScriptPath); got != "'self'" {
+		t.Fatalf("same-origin token=%q", got)
+	}
+	if got := CSPToken("http://app.example/preview-pick.js"); got != "http://app.example" {
+		t.Fatalf("absolute token=%q", got)
+	}
+	if got := CSPToken(""); got != "" {
+		t.Fatalf("empty token=%q", got)
+	}
+}
+
 func TestScriptOrigin(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -56,23 +69,32 @@ func TestInjectHTML_AppendFragment(t *testing.T) {
 	}
 }
 
-func TestInjectHTML_Idempotent(t *testing.T) {
+func TestInjectHTML_IdempotentSameOrigin(t *testing.T) {
 	t.Parallel()
-	in := []byte(`<html><body><script src="http://other/preview-pick.js"></script></body></html>`)
-	got := InjectHTML(in, scriptURL)
+	in := []byte(`<html><body><script src="` + ScriptPath + `"></script></body></html>`)
+	got := InjectHTML(in, ScriptPath)
 	if string(got) != string(in) {
-		t.Fatalf("already present must be unchanged:\n%s", got)
+		t.Fatalf("same-origin already present must be unchanged:\n%s", got)
 	}
-	if n := strings.Count(string(InjectHTML(InjectHTML([]byte("<body></body>"), scriptURL), scriptURL)), "preview-pick.js"); n != 1 {
+	if n := strings.Count(string(InjectHTML(InjectHTML([]byte("<body></body>"), ScriptPath), ScriptPath)), ScriptPath); n != 1 {
 		t.Fatalf("double inject count=%d", n)
 	}
 }
 
-func TestInjectHTML_EmptyURL(t *testing.T) {
+func TestInjectHTML_StillInjectsWhenLocalhostTagExists(t *testing.T) {
 	t.Parallel()
-	in := []byte("<body></body>")
-	if string(InjectHTML(in, "  ")) != string(in) {
-		t.Fatal("empty url must be no-op")
+	in := []byte(`<html><body><script src="http://localhost:8080/preview-pick.js"></script></body></html>`)
+	got := string(InjectHTML(in, ""))
+	if !strings.Contains(got, `src="`+ScriptPath+`"`) {
+		t.Fatalf("must add same-origin script beside unreachable localhost tag: %s", got)
+	}
+}
+
+func TestInjectHTML_EmptyURLUsesSameOrigin(t *testing.T) {
+	t.Parallel()
+	got := string(InjectHTML([]byte("<body></body>"), "  "))
+	if !strings.Contains(got, `src="`+ScriptPath+`"`) {
+		t.Fatalf("empty url should default to ScriptPath: %s", got)
 	}
 }
 

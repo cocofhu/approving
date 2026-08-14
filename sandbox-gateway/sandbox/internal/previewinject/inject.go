@@ -14,17 +14,32 @@ import (
 // process for the app (the app still binds PREVIEW_PORT).
 const ListenPort = 17980
 
+// ScriptPath is the same-origin URL the forwarder serves and injects.
+// Reviewers load the app at http://IP:PREVIEW_PORT/; a localhost Approving
+// URL is unreachable from their browser.
+const ScriptPath = "/__approving/preview-pick.js"
+
 var (
-	reBodyClose  = regexp.MustCompile(`(?i)</body>`)
-	reHTMLClose  = regexp.MustCompile(`(?i)</html>`)
-	rePickScript = regexp.MustCompile(`(?i)preview-pick\.js`)
-	reScriptSrc  = regexp.MustCompile(`(?i)^script-src\b`)
-	reDefaultSrc = regexp.MustCompile(`(?i)^default-src\b`)
+	reBodyClose      = regexp.MustCompile(`(?i)</body>`)
+	reHTMLClose      = regexp.MustCompile(`(?i)</html>`)
+	reSameOriginPick = regexp.MustCompile(`(?i)__approving/preview-pick\.js`)
+	reScriptSrc      = regexp.MustCompile(`(?i)^script-src\b`)
+	reDefaultSrc     = regexp.MustCompile(`(?i)^default-src\b`)
 )
 
-// AlreadyHasPickScript reports whether html already references preview-pick.js.
+// ResolveScriptURL returns scriptURL, or ScriptPath when empty.
+func ResolveScriptURL(scriptURL string) string {
+	if s := strings.TrimSpace(scriptURL); s != "" {
+		return s
+	}
+	return ScriptPath
+}
+
+// AlreadyHasPickScript reports whether html already has the same-origin
+// inject path. A leftover Agent tag like http://localhost:8080/preview-pick.js
+// does not count — that URL is unreachable from the reviewer's browser.
 func AlreadyHasPickScript(html []byte) bool {
-	return rePickScript.Match(html)
+	return reSameOriginPick.Match(html)
 }
 
 // ScriptOrigin returns scheme://host[:port] for scriptURL, or empty if unusable.
@@ -36,12 +51,25 @@ func ScriptOrigin(scriptURL string) string {
 	return u.Scheme + "://" + u.Host
 }
 
+// CSPToken is the CSP source to allow for scriptURL: an absolute origin, or
+// 'self' for a same-origin path.
+func CSPToken(scriptURL string) string {
+	if o := ScriptOrigin(scriptURL); o != "" {
+		return o
+	}
+	if strings.HasPrefix(strings.TrimSpace(scriptURL), "/") {
+		return "'self'"
+	}
+	return ""
+}
+
 // InjectHTML inserts <script src="scriptURL"> before </body> (else </html>,
-// else append). It is a no-op when the document already has preview-pick.js
-// or scriptURL is empty. Paths and <base> are left untouched.
+// else append). Empty scriptURL becomes ScriptPath. It is a no-op only when
+// the document already has the same-origin ScriptPath tag. A leftover
+// localhost Approving URL does not count. Paths and <base> are left untouched.
 func InjectHTML(doc []byte, scriptURL string) []byte {
-	scriptURL = strings.TrimSpace(scriptURL)
-	if scriptURL == "" || AlreadyHasPickScript(doc) {
+	scriptURL = ResolveScriptURL(scriptURL)
+	if AlreadyHasPickScript(doc) {
 		return doc
 	}
 	tag := []byte(`<script src="` + html.EscapeString(scriptURL) + `"></script>`)
