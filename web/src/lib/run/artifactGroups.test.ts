@@ -292,3 +292,22 @@ describe('groupByRun', () => {
     expect(runIdShort('run-abc123')).toBe('#abc123')
   })
 })
+
+/** g1.1/g1.2: non-array payloads previously threw TypeError: x is not iterable (ArtifactsView/ArtifactPreview stack). */
+describe('non-array artifact list hardening', () => {
+  it('buildGroups returns [] for null/undefined/object without throwing', () => {
+    expect(buildGroups(null as unknown as Artifact[])).toEqual([])
+    expect(buildGroups(undefined as unknown as Artifact[])).toEqual([])
+    expect(buildGroups({ items: [] } as unknown as Artifact[])).toEqual([])
+  })
+
+  it('groupByRun returns [] for non-array without throwing', () => {
+    expect(groupByRun(null as unknown as Artifact[])).toEqual([])
+    expect(groupByRun({ items: [] } as unknown as Artifact[])).toEqual([])
+  })
+
+  it('countUnnamedArtifacts returns 0 for non-array', () => {
+    expect(countUnnamedArtifacts(null as unknown as Artifact[])).toBe(0)
+    expect(countUnnamedArtifacts({} as unknown as Artifact[])).toBe(0)
+  })
+})

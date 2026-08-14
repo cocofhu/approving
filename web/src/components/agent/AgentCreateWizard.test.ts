@@ -10,9 +10,14 @@ import AgentCreateWizard from './AgentCreateWizard.vue'
 import { WIZARD_STEPS } from '@/lib/agent/agentCreateWizard'
 
 const createAgent = vi.fn(async (payload: unknown) => payload)
+/** Concurrent noise: run-tags 404 must not break git help (g3/g4). */
+const listProjectRunTags = vi.fn(async (_projectId: string) => {
+  throw Object.assign(new Error('not found'), { status: 404 })
+})
 vi.mock('@/lib/api/api', () => ({
   api: {
     createAgent: (payload: unknown) => createAgent(payload),
+    listProjectRunTags: (projectId: string) => listProjectRunTags(projectId),
   },
 }))
 
@@ -176,6 +181,39 @@ describe('AgentCreateWizard 5-step IA', () => {
     expect(document.body.querySelector('.wiz-root')).toBeTruthy()
     expect(document.body.textContent).toContain('Git')
     expect(railLabels()).toEqual(['基础信息', 'Agent', 'API Key', 'Git', '确认创建'])
+    wrapper.unmount()
+  })
+
+  it('opens Git credential help even when listProjectRunTags would 404', async () => {
+    listProjectRunTags.mockRejectedValue(new Error('not found'))
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => {
+      unhandled.push(reason)
+    }
+    process.on('unhandledRejection', onUnhandled)
+
+    const wrapper = mountWizard()
+    fillName('help-under-404')
+    await wrapper.vm.$nextTick()
+    buttonByText('下一步').click()
+    await wrapper.vm.$nextTick()
+    buttonByText('下一步').click()
+    await wrapper.vm.$nextTick()
+    buttonByText('跳过').click()
+    await wrapper.vm.$nextTick()
+
+    // Simulate concurrent TagFilter-style call while user opens help
+    void listProjectRunTags('proj-28d13430').catch(() => {})
+    const helpLink = document.body.querySelector('[data-test="git-help-link"]') as HTMLButtonElement
+    helpLink.click()
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+
+    expect(document.body.textContent).toContain('环境变量与凭据')
+    expect(document.body.querySelector('[data-test="env-credential-help"]')).toBeTruthy()
+    expect(unhandled.some((e) => String(e).includes('is not iterable'))).toBe(false)
+
+    process.off('unhandledRejection', onUnhandled)
     wrapper.unmount()
   })
 

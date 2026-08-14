@@ -108,7 +108,8 @@ function parseCaseRepo(name?: string): { repo: string | null; displayName: strin
 }
 
 const caseGroups = computed((): CaseGroup[] => {
-  const cases = props.doc.cases || []
+  // truthy non-array (e.g. paginated object) must not enter for…of
+  const cases = Array.isArray(props.doc.cases) ? props.doc.cases : []
   if (!cases.length) return []
   const hasRepoPrefix = cases.some(c => REPO_PREFIX.test(c.name || ''))
   if (!hasRepoPrefix) return [{ repo: null, cases }]

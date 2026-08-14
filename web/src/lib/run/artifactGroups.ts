@@ -33,7 +33,8 @@ export function groupKey(a: Artifact): string {
 }
 
 function sortByCreatedAtDesc(artifacts: Artifact[]): Artifact[] {
-  return [...artifacts].sort((x, y) => new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime())
+  const list = Array.isArray(artifacts) ? artifacts : []
+  return [...list].sort((x, y) => new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime())
 }
 
 function resolveGroupTitle(
@@ -49,12 +50,13 @@ function resolveGroupTitle(
 }
 
 export function buildGroups(artifacts: Artifact[], workflows?: WorkflowMap): ArtifactGroup[] {
+  const list = Array.isArray(artifacts) ? artifacts : []
   const map = new Map<
     string,
     { key: string; workflowId: string | null; artifacts: Artifact[]; latest: Artifact }
   >()
 
-  for (const a of artifacts) {
+  for (const a of list) {
     const key = groupKey(a)
     if (!map.has(key)) {
       map.set(key, {
@@ -107,7 +109,8 @@ export function resolveDefaultGroup(
 }
 
 export function countUnnamedArtifacts(artifacts: Artifact[]): number {
-  return artifacts.filter(isUnnamed).length
+  const list = Array.isArray(artifacts) ? artifacts : []
+  return list.filter(isUnnamed).length
 }
 
 /** Short run id for section titles: run-abc123 → #abc123 (matches RunListView strip + #). */
@@ -120,8 +123,9 @@ export function runSectionTitle(runTitle: string | undefined, runId: string): st
 }
 
 export function groupByRun(artifacts: Artifact[]): RunSection[] {
+  const list = Array.isArray(artifacts) ? artifacts : []
   const map = new Map<string, RunSection>()
-  for (const a of artifacts) {
+  for (const a of list) {
     if (!map.has(a.runId)) {
       map.set(a.runId, { runId: a.runId, runTitle: a.runTitle, items: [], latestAt: 0 })
     }

@@ -266,4 +266,21 @@ describe('RunLaunchModal', () => {
     expect(apiMocks.listProjectRunTags).not.toHaveBeenCalled()
     wrapper.unmount()
   })
+
+  it('keeps empty tag suggestions when listProjectRunTags rejects', async () => {
+    apiMocks.listProjectRunTags.mockRejectedValue(new Error('not found'))
+    const wrapper = mountModal(true, { projectId: 'proj-gone' })
+    await flushPromises()
+    expect(apiMocks.listProjectRunTags).toHaveBeenCalledWith('proj-gone')
+    expect(wrapper.text()).not.toMatch(/is not iterable/i)
+    wrapper.unmount()
+  })
+
+  it('keeps empty tag suggestions when tags is non-array', async () => {
+    apiMocks.listProjectRunTags.mockResolvedValue({ tags: { foo: 1 } as unknown as string[] })
+    const wrapper = mountModal(true, { projectId: 'proj-1' })
+    await flushPromises()
+    expect(apiMocks.listProjectRunTags).toHaveBeenCalled()
+    wrapper.unmount()
+  })
 })

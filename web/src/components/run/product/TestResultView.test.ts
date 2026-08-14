@@ -61,6 +61,16 @@ describe('TestResultView', () => {
     wrapper.unmount()
   })
 
+  it('treats truthy non-array cases as empty without throwing', () => {
+    const wrapper = mountView({
+      summary: '坏形态',
+      cases: { items: [{ name: 'x', status: 'passed' }] } as unknown as TestResultDoc['cases'],
+    })
+    expect(wrapper.text()).toContain('坏形态')
+    expect(wrapper.text()).not.toContain('x')
+    wrapper.unmount()
+  })
+
   it('exposes AnnotateBtn for variances', () => {
     const wrapper = mountView(
       { summary: '有偏差', variances: '跳过了 E2E 慢测' },
