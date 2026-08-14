@@ -123,7 +123,12 @@ func waitGatePending(t *testing.T, db *gorm.DB, runID, nodeID string) {
 	for time.Now().Before(deadline) {
 		var g models.Gate
 		if err := db.Where("run_id = ? AND node_id = ? AND resolved = ?", runID, nodeID, false).First(&g).Error; err == nil {
-			return
+			// Gate row can appear before run status flips to waiting_human;
+			// loadPendingGate / ListGatePrimaryProducts require the latter.
+			var r models.Run
+			if err := db.First(&r, "id = ?", runID).Error; err == nil && r.Status == "waiting_human" {
+				return
+			}
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

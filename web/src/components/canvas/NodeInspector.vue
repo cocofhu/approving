@@ -330,6 +330,20 @@ function addAssignment() {
   if (!props.node.config.assignments) props.node.config.assignments = []
   props.node.config.assignments.push({ var: '', expr: '' })
 }
+
+/** auto_inject defaults on when the key is missing (legacy graphs). */
+function switchOn(f: FieldSchema): boolean {
+  const v = props.node.config?.[f.key]
+  if (f.key === 'auto_inject' && (v === undefined || v === null || v === '')) {
+    return true
+  }
+  return !!v
+}
+
+function setSwitch(key: string, on: boolean) {
+  if (!props.node.config) props.node.config = {}
+  props.node.config[key] = on
+}
 </script>
 
 <template>
@@ -469,18 +483,17 @@ function addAssignment() {
           :show-migration="outputMigration && node.type === 'output'"
         />
 
-        <p v-if="f.help" class="mt-1 text-[11px] leading-4 text-txt3">{{ f.help }}</p>
-
         <div
           v-else-if="f.type === 'switch'"
           class="flex items-center gap-2"
         >
           <AppSwitch
-            :model-value="!!node.config[f.key]"
+            :model-value="switchOn(f)"
             :aria-label="f.label || f.key"
-            @update:model-value="node.config[f.key] = $event"
+            :data-testid="'node-switch-' + f.key"
+            @update:model-value="setSwitch(f.key, $event)"
           />
-          <span class="text-xs text-txt2">{{ node.config[f.key] ? t('common.switchOn') : t('common.switchOff') }}</span>
+          <span class="text-xs text-txt2">{{ switchOn(f) ? t('common.switchOn') : t('common.switchOff') }}</span>
         </div>
 
         <template v-else-if="f.type === 'textarea' || f.type === 'prompt'">
@@ -651,6 +664,8 @@ function addAssignment() {
           <AppButton size="sm" variant="subtle" icon="plus" @click="addAssignment">{{ t('pages.workflowEditor.inspector.assignments.add') }}</AppButton>
           <p v-if="!globalVars.length" class="text-[10px] leading-4 text-warn">{{ t('pages.workflowEditor.inspector.assignments.noVars') }}</p>
         </div>
+
+        <p v-if="f.help" class="mt-1 text-[11px] leading-4 text-txt3">{{ f.help }}</p>
       </div>
 
       <div class="mt-6 border-t border-line pt-4">

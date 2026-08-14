@@ -350,8 +350,17 @@ func applyAppPreviewEnv(env map[string]string, nodeType string, cfg map[string]a
 	}
 	if configTruthy(cfg["direct_preview"]) {
 		env["PREVIEW_DIRECT"] = "1"
-		if u := previewPickScriptURL(publicAdvertise); u != "" {
-			env["PREVIEW_PICK_SCRIPT_URL"] = u
+		if configDefaultOn(cfg["auto_inject"]) {
+			env["PREVIEW_AUTO_INJECT"] = "1"
+			// Same-origin path served by the in-sandbox injector. PublicAdvertise
+			// is often http://localhost:8080, which the reviewer's browser cannot
+			// load from an iframe at http://IP:PREVIEW_PORT/.
+			env["PREVIEW_PICK_SCRIPT_URL"] = "/__approving/preview-pick.js"
+		} else {
+			env["PREVIEW_AUTO_INJECT"] = "0"
+			if u := previewPickScriptURL(publicAdvertise); u != "" {
+				env["PREVIEW_PICK_SCRIPT_URL"] = u
+			}
 		}
 		return
 	}

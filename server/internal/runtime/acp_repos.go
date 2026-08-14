@@ -296,6 +296,18 @@ func configTruthy(v any) bool {
 	}
 }
 
+// configDefaultOn is true when v is missing/empty or truthy. Used by
+// app_preview auto_inject so legacy graphs (no key) keep injecting.
+func configDefaultOn(v any) bool {
+	if v == nil {
+		return true
+	}
+	if s, ok := v.(string); ok && strings.TrimSpace(s) == "" {
+		return true
+	}
+	return configTruthy(v)
+}
+
 func str2(v any) string {
 	if v == nil {
 		return ""

@@ -246,6 +246,26 @@ describe('NodeInspector', () => {
     wrapper.unmount()
   })
 
+  it('app_preview card shows auto_inject on by default', async () => {
+    const node: WFNode = {
+      id: 'preview',
+      type: 'app_preview',
+      label: '应用预览',
+      position: { x: 0, y: 0 },
+      config: { direct_preview: true },
+    }
+    const wrapper = mountInspector(node)
+    await flushPromises()
+    expect(wrapper.text()).toContain('自动注入')
+    const sw = wrapper.find('[data-testid="node-switch-auto_inject"]')
+    expect(sw.exists()).toBe(true)
+    expect(sw.attributes('aria-checked')).toBe('true')
+    await sw.trigger('click')
+    expect(node.config.auto_inject).toBe(false)
+    expect(sw.attributes('aria-checked')).toBe('false')
+    wrapper.unmount()
+  })
+
   it('addAction appends gate action row', async () => {
     const node = sampleGateNode()
     const wrapper = mountInspector(node)

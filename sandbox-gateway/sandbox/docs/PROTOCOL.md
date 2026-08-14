@@ -248,6 +248,33 @@ http://127.0.0.1:<port>/
 仍须监听 `0.0.0.0:<port>`(不能只绑 loopback),否则代理 502 —— 这与预览桌面的
 loopback 导航是两条路径,互不替代。
 
+### 5.5 直连预览 HTML 注入(可选,`PREVIEW_DIRECT`)
+
+IP 直连预览时审批页 iframe 的 origin 是 `http://<sandbox-ip>:$PREVIEW_PORT/`,
+父页无法跨源注入脚本。参考实现在**沙箱内**做入站 HTML 注入,不改网关发布面、
+不改应用监听口、不加 `<base>`:
+
+- 平台注入 `PREVIEW_DIRECT=1`、`PREVIEW_PORT`。自动注入开启时
+  `PREVIEW_PICK_SCRIPT_URL=/__approving/preview-pick.js`(同域相对路径)。
+  节点开关「自动注入」(`auto_inject`,默认开)对应 `PREVIEW_AUTO_INJECT`;显式 `0` 时不启动注入。
+- `startup.sh` 后台执行 `preview-inject.sh`:先让 `preview-inject` 听 `17980`,
+  再在自有 nat 链 `APPROVING-PREVIEW` 上
+  `REDIRECT --dport $PREVIEW_PORT --to-ports 17980`。
+- 注入层在 `/__approving/preview-pick.js` 直接返回脚本,HTML 插入同域
+  `<script src="/__approving/preview-pick.js">`。不得注入
+  `http://localhost:8080/preview-pick.js`:审批人浏览器 origin 是
+  `http://IP:PREVIEW_PORT/`,打不开 Approving 的 loopback。
+- 回环(应用 ← 注入进程)走 OUTPUT,不进 PREROUTING,不会环。
+- 注入进程**不得**听 `PREVIEW_PORT`(平台 `KeepalivePort` 按该口找应用进程)。
+- 进程挂了必须拆规则或立刻拉起:箱外 `ProbeHTTPPort` 打的是发布口,会走 REDIRECT;
+  规则在而进程死 = 应用其实活着也会探失败。上游不可达时注入层不写 HTTP 状态
+  (避免探活把 502 当成健康)。
+- 只改 `text/html`; WebSocket `101` / 非 HTML 原样转发;保留 `Host`;不改 `Location`。
+- 已知限制:明文 HTTP; brotli 响应不改写; CSP nonce / `strict-dynamic` 仍可能挡脚本;
+  仅 IPv4 `iptables`; 只覆盖 `PREVIEW_PORT`。无 `iptables` / 非 privileged 时跳过。
+- 旧镜像没有该进程时,Agent 在 HTML 入口手写
+  `<script src="$PREVIEW_PICK_SCRIPT_URL"></script>` 兜底。
+
 ### 5.4 生命周期
 
 - 预览桌面随沙箱 Create/Destroy;销毁后 CDP/websockify 不可达,平台应断开预览 WS。
@@ -263,6 +290,7 @@ loopback 导航是两条路径,互不替代。
 | 会话 | ACP agent 经 backend 桥接(ACP/JSON-RPC) |
 | IDE | `code-server`(8744) |
 | 预览桌面 | `vnc-preview.sh`(Xvfb + Chromium + x11vnc + websockify);`VNC_PREVIEW=1` |
+| 直连预览注入 | `preview-inject` + `preview-inject.sh`;`PREVIEW_DIRECT=1` |
 | 鉴权密钥 | `CURSOR_API_KEY`、`GITLAB_TOKEN` 等仅参考实现需要 |
 
 ---

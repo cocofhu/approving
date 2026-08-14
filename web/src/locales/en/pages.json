@@ -2463,7 +2463,7 @@
       "connectionLost": "Preview connection lost",
       "sandboxRecycled": "Sandbox recycled; preview unavailable",
       "directOpenTab": "Open in new tab",
-      "directScriptMissing": "Pick script is not loaded. Add preview-pick.js from PREVIEW_PICK_SCRIPT_URL to the HTML entry.",
+      "directScriptMissing": "Pick script is not loaded. Direct preview needs same-origin /__approving/preview-pick.js (rebuild the sandbox image that includes preview-inject).",
       "directGotoInvalid": "Navigation is limited to the same preview origin.",
       "directAddressPlaceholder": "http://IP:port/",
       "novnc": {

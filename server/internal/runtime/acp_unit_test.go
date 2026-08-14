@@ -305,6 +305,23 @@ func TestPreviewNodePromptExtras(t *testing.T) {
 	if !strings.Contains(got, `<script src="$PREVIEW_PICK_SCRIPT_URL"></script>`) {
 		t.Errorf("expected pick script contract: %q", got)
 	}
+	if !strings.Contains(got, "自动向 HTML 注入") {
+		t.Errorf("expected platform auto-inject: %q", got)
+	}
+	if !strings.Contains(got, "旧沙箱镜像") {
+		t.Errorf("expected old-image fallback: %q", got)
+	}
+
+	manual := p.buildAgentPrompt(NodeReq{
+		NodeType: "app_preview",
+		Config:   map[string]any{"prompt": "P", "direct_preview": true, "auto_inject": false},
+	}, nil)
+	if !strings.Contains(manual, "已关闭自动注入") {
+		t.Errorf("expected manual script contract: %q", manual)
+	}
+	if strings.Contains(manual, "自动向 HTML 注入") {
+		t.Errorf("manual must not claim auto-inject: %q", manual)
+	}
 
 	off := p.buildAgentPrompt(NodeReq{
 		NodeType: "app_preview",
@@ -326,8 +343,19 @@ func TestApplyAppPreviewEnv(t *testing.T) {
 	if direct["PREVIEW_DIRECT"] != "1" || direct["VNC_PREVIEW"] != "" {
 		t.Fatalf("direct: %v", direct)
 	}
-	if direct["PREVIEW_PICK_SCRIPT_URL"] != "http://app.example/preview-pick.js" {
+	if direct["PREVIEW_PICK_SCRIPT_URL"] != "/__approving/preview-pick.js" {
 		t.Fatalf("pick script: %v", direct)
+	}
+	if direct["PREVIEW_AUTO_INJECT"] != "1" {
+		t.Fatalf("auto inject default on: %v", direct)
+	}
+	manualEnv := map[string]string{}
+	applyAppPreviewEnv(manualEnv, "app_preview", map[string]any{"direct_preview": true, "auto_inject": false}, "http://app.example")
+	if manualEnv["PREVIEW_DIRECT"] != "1" || manualEnv["PREVIEW_AUTO_INJECT"] != "0" {
+		t.Fatalf("auto inject off: %v", manualEnv)
+	}
+	if manualEnv["PREVIEW_PICK_SCRIPT_URL"] != "http://app.example/preview-pick.js" {
+		t.Fatalf("manual pick script: %v", manualEnv)
 	}
 	other := map[string]string{}
 	applyAppPreviewEnv(other, "implement", map[string]any{"direct_preview": true}, "http://app.example")
@@ -336,8 +364,8 @@ func TestApplyAppPreviewEnv(t *testing.T) {
 	}
 	empty := map[string]string{}
 	applyAppPreviewEnv(empty, "app_preview", map[string]any{"direct_preview": true}, "")
-	if empty["PREVIEW_PICK_SCRIPT_URL"] != "" {
-		t.Fatalf("empty advertise must not set script url: %v", empty)
+	if empty["PREVIEW_PICK_SCRIPT_URL"] != "/__approving/preview-pick.js" {
+		t.Fatalf("auto-inject uses same-origin path without advertise: %v", empty)
 	}
 }
 
