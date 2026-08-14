@@ -26,11 +26,15 @@ vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), warn: vi.fn(), show: vi.fn() }),
 }))
 
-vi.mock('vue-i18n', () => ({
-  useI18n: () => ({
-    t: (k: string) => k,
-  }),
-}))
+vi.mock('vue-i18n', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('vue-i18n')>()
+  return {
+    ...actual,
+    useI18n: () => ({
+      t: (k: string) => k,
+    }),
+  }
+})
 
 describe('OnboardingWizard', () => {
   beforeEach(() => {

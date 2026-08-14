@@ -155,7 +155,8 @@
       "startRun": "启动示例 Run",
       "cta": "开始上手引导",
       "emptyTitle": "空项目，开始上手引导",
-      "emptyDesc": "配置后端与 API Key，一键生成 5 个 Agent 与「快速上手·轻量」工作流。默认使用 Heroku 公开示例仓。",
+      "emptyDesc": "将发布「快速上手·轻量」工作流并启动示例 Run。",
+      "workflowName": "快速上手·轻量",
       "head": {
         "overview": "看看这次会生成什么",
         "acp": "选择运行后端",
@@ -200,7 +201,7 @@
       "review": {
         "meta": "确认下列信息。若项目中已有同名资源，将复用并更新，不会重复创建。",
         "needKey": "尚未配置 API Key，请返回上一步填写后再生成。",
-        "featureHint": "示例需求（无需填写）：把首页欢迎文案与主按钮改得更清晰友好。",
+        "featureHint": "用轻量快速上手示例走完澄清 → 门禁 → Agent 路径。",
         "agentsChip": "Agents · 5",
         "wfChip": "工作流 · 快速上手·轻量"
       },
@@ -209,7 +210,8 @@
         "desc": "已写入项目鉴权，并生成 5 个 Agent 与已发布的「快速上手·轻量」工作流。",
         "repo": "示例代码仓",
         "limit": "公开仓通常无法 push；Preview 未必看到 Implement 改动。引导成败以 Agent/工作流是否生成为准。",
-        "runStarted": "已启动示例 Run"
+        "runStarted": "已启动示例 Run",
+        "publishedLine": "快速上手·轻量（已发布）"
       },
       "toastOk": "生成成功，未自动开跑",
       "toastNeedKey": "请先填写 API Key",

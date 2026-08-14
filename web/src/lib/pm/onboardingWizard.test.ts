@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, beforeEach } from 'vitest'
+import { describe, expect, it, beforeEach, beforeAll } from 'vitest'
 import {
   DEFAULT_ONBOARDING_REPOS_LITERAL,
   assembleBootstrapBody,
@@ -13,10 +13,23 @@ import {
   reposInputFromFields,
   shouldAutoOpenOnboarding,
 } from './onboardingWizard'
+import { i18n } from '@/lib/shared/i18n'
+import { loadLocaleMessages } from '@/lib/shared/loadLocaleMessages'
+
+const EN_FEATURE_HINT =
+  'Add a lightweight quick-start sample so the team can walk the clarify → gate → agent path.'
+const ZH_FEATURE_HINT = '用轻量快速上手示例走完澄清 → 门禁 → Agent 路径。'
+
+beforeAll(async () => {
+  const [zh, en] = await Promise.all([loadLocaleMessages('zh-CN'), loadLocaleMessages('en')])
+  i18n.global.setLocaleMessage('zh-CN', zh)
+  i18n.global.setLocaleMessage('en', en)
+})
 
 describe('onboardingWizard', () => {
   beforeEach(() => {
     localStorage.clear()
+    i18n.global.locale.value = 'zh-CN'
   })
 
   it('encodes default heroku well-known repos literal', () => {
@@ -50,6 +63,19 @@ describe('onboardingWizard', () => {
     expect(body.apiKey).toBe('cb-key')
     expect(body.region).toBe('public')
     expect(body.repos).toContain('heroku/nodejs-getting-started')
+  })
+
+  it('assembles featureHint from zh locale (Demo gold)', () => {
+    i18n.global.locale.value = 'zh-CN'
+    const body = assembleBootstrapBody(freshOnboardingDraft())
+    expect(body.featureHint).toBe(ZH_FEATURE_HINT)
+  })
+
+  it('assembles featureHint from en locale (Demo gold)', () => {
+    i18n.global.locale.value = 'en'
+    const body = assembleBootstrapBody(freshOnboardingDraft())
+    expect(body.featureHint).toBe(EN_FEATURE_HINT)
+    expect(body.featureHint).not.toContain('快速上手·轻量')
   })
 
   it('detects empty project by 0 workflows and 0 bound agents', () => {

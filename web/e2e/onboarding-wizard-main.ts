@@ -7,7 +7,8 @@ import OnboardingWizard from '../src/components/onboarding/OnboardingWizard.vue'
 
 async function boot() {
   await initLocale()
-  await setLocale('zh-CN')
+  const params = new URLSearchParams(window.location.search)
+  await setLocale(params.get('lang') === 'en' ? 'en' : 'zh-CN')
   setTheme('dark')
 
   const open = ref(true)
@@ -15,6 +16,12 @@ async function boot() {
     setup() {
       return () =>
         h('div', [
+          // Mirrors ProjectDetailView empty CTA copy for shell i18n e2e assertions.
+          h(
+            'p',
+            { 'data-testid': 'onboarding-empty-desc' },
+            String(i18n.global.t('pages.onboarding.emptyDesc')),
+          ),
           h(OnboardingWizard, {
             open: open.value,
             projectId: 'e2e-project',

@@ -1,5 +1,6 @@
 import type { BackendId } from '@/lib/shared/regionPolicy'
 import { getRegionPolicy } from '@/lib/shared/regionPolicy'
+import { i18n } from '@/lib/shared/i18n'
 
 export const ONBOARDING_WORKFLOW_NAME = '快速上手·轻量'
 
@@ -58,6 +59,8 @@ export type OnboardingBootstrapBody = {
   apiKey: string
   region?: string
   repos?: string
+  /** Locale-aware sample feature; server falls back to Chinese default when omitted. */
+  featureHint?: string
 }
 
 export type OnboardingBootstrapResult = {
@@ -173,10 +176,14 @@ export function reposInputFromFields(repo: OnboardingRepoFields): Array<{ name: 
 }
 
 export function assembleBootstrapBody(draft: OnboardingDraft): OnboardingBootstrapBody {
+  const featureHint = String(i18n.global.t('pages.onboarding.review.featureHint')).trim()
   const body: OnboardingBootstrapBody = {
     acpBackend: draft.acpBackend,
     apiKey: draft.apiKey.trim(),
     repos: encodeReposLiteral(draft.repo),
+  }
+  if (featureHint && !featureHint.startsWith('pages.onboarding.')) {
+    body.featureHint = featureHint
   }
   const policy = getRegionPolicy(draft.acpBackend)
   if (policy && draft.region.trim()) {
