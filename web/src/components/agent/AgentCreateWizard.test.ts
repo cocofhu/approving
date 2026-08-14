@@ -11,7 +11,7 @@ import { WIZARD_STEPS } from '@/lib/agent/agentCreateWizard'
 
 const createAgent = vi.fn(async (payload: unknown) => payload)
 /** Concurrent noise: run-tags 404 must not break git help (g3/g4). */
-const listProjectRunTags = vi.fn(async () => {
+const listProjectRunTags = vi.fn(async (_projectId: string) => {
   throw Object.assign(new Error('not found'), { status: 404 })
 })
 vi.mock('@/lib/api/api', () => ({
