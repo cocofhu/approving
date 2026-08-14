@@ -519,6 +519,17 @@ if [ "$_vnc_flag" = "1" ] || [ "$_vnc_flag" = "true" ]; then
   fi
 fi
 
+# 直连预览 HTML 注入：应用仍听 PREVIEW_PORT；入站经 iptables REDIRECT 到 17980。
+# 与 noVNC 互斥由 Approving 保证（direct_preview 不设 VNC_PREVIEW）。
+if [ "${PREVIEW_DIRECT:-}" = "1" ] || [ "${PREVIEW_DIRECT:-}" = "true" ]; then
+  if [ -x /usr/local/bin/preview-inject.sh ]; then
+    echo "启动直连预览 HTML 注入（PREVIEW_DIRECT=1）…"
+    /usr/local/bin/preview-inject.sh &
+  else
+    echo "未找到 preview-inject.sh，跳过直连预览注入" >&2
+  fi
+fi
+
 # backend（网关）：按 AGENT_PROVIDER 单活启动对应 provider，监听 8765（AGENT_PROVIDER / CONFIG_ROOT 已在前面解析）。
 # ACP_BRIDGE_* 为主环境变量；CURSOR_ACP_* 为 deprecated 兼容别名
 ACP_BRIDGE_PORT=${ACP_BRIDGE_PORT:-${CURSOR_ACP_PORT:-8765}}

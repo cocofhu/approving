@@ -305,6 +305,12 @@ func TestPreviewNodePromptExtras(t *testing.T) {
 	if !strings.Contains(got, `<script src="$PREVIEW_PICK_SCRIPT_URL"></script>`) {
 		t.Errorf("expected pick script contract: %q", got)
 	}
+	if !strings.Contains(got, "自动向 HTML 注入") {
+		t.Errorf("expected platform auto-inject: %q", got)
+	}
+	if !strings.Contains(got, "旧沙箱镜像") {
+		t.Errorf("expected old-image fallback: %q", got)
+	}
 
 	off := p.buildAgentPrompt(NodeReq{
 		NodeType: "app_preview",

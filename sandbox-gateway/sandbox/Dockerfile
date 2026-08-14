@@ -294,6 +294,7 @@ COPY internal /tmp/backend-src/internal
 COPY web /tmp/backend-src/web
 RUN cd /tmp/backend-src && \
     go build -ldflags="-s -w" -o /usr/local/bin/backend ./cmd/backend && \
+    go build -ldflags="-s -w" -o /usr/local/bin/preview-inject ./cmd/preview-inject && \
     ln -sf /usr/local/bin/backend /usr/local/bin/acp-bridge && \
     ln -sf /usr/local/bin/backend /usr/local/bin/acp-gateway && \
     ln -sf /usr/local/bin/backend /usr/local/bin/cursor-acp && \
@@ -309,6 +310,10 @@ ENV ACP_BRIDGE_PORT=8765
 # noVNC 预览栈脚本（headed Chromium on Xvfb + x11vnc + websockify）；VNC_PREVIEW=1 时启动
 COPY scripts/vnc-preview.sh /usr/local/bin/vnc-preview.sh
 RUN chmod +x /usr/local/bin/vnc-preview.sh
+
+# 直连预览 HTML 注入（PREVIEW_DIRECT=1）：听 17980，iptables REDIRECT PREVIEW_PORT
+COPY scripts/preview-inject.sh /usr/local/bin/preview-inject.sh
+RUN chmod +x /usr/local/bin/preview-inject.sh
 
 COPY scripts/startup.sh /startup.sh
 RUN chmod +x /startup.sh

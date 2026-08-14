@@ -14,9 +14,10 @@ sandbox/
 ├── Dockerfile / .dockerignore / docker-compose.yml   # 镜像构建
 ├── go.mod / go.sum / .gitignore                       # ACP 桥接服务（module: backend）
 ├── cmd/backend/        # 服务入口
-├── internal/           # acp(ACP 协议传输层) + backend(后端选择/实现) + service/handler/router/...
+├── cmd/preview-inject/ # 直连预览 HTML 注入进程（听 17980）
+├── internal/           # acp(ACP 协议传输层) + backend(...) + previewinject + service/handler/router/...
 ├── web/                # 前端静态资源（打进镜像）
-├── scripts/            # 运行时脚本（打进镜像）：startup.sh / vnc-preview.sh / claude-env.sh
+├── scripts/            # 运行时脚本（打进镜像）：startup.sh / vnc-preview.sh / preview-inject.sh / claude-env.sh
 ├── docs/               # PROTOCOL.md / ARCHITECTURE.md / BACKEND.md
 └── README.md           # 本文（镜像总览）
 ```
@@ -35,6 +36,7 @@ sandbox/
 
 - 镜像预装 **Playwright Chromium**（`PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`，版本 `1.61.1`）及系统依赖与 CJK 字体，`npx playwright test` / 无头浏览器验收开箱即用；项目 pin 其它版本时 `npx playwright install chromium` 会按需再拉。
 - 设 `VNC_PREVIEW=1` 启动 **headed Chromium on Xvfb + x11vnc + websockify** 预览栈：箱内 CDP `9222`、noVNC `6080`（无应用层鉴权，**不** publish 到宿主/LB）。用户经 Approving `/sandbox-vnc/:id/ws` 与 `/preview-vnc/.../ws`（Auth 开启时须 Session）。默认关闭，避免普通场景吃 headed Chromium 资源。
+- 设 `PREVIEW_DIRECT=1`（且有 `PREVIEW_PORT`、`PREVIEW_PICK_SCRIPT_URL`）启动 **直连预览 HTML 注入**：应用仍听 `0.0.0.0:$PREVIEW_PORT`，入站经 iptables REDIRECT 到箱内 `17980` 的 `preview-inject`，只给 `text/html` 插入取点脚本。浏览器 origin 仍是 `http://IP:PREVIEW_PORT/`。无 iptables / 非 privileged 时打日志跳过，不拖垮启动。旧镜像没有该进程时，Agent 仍可手写 script 兜底。仅覆盖 `PREVIEW_PORT`，额外 `set_preview` 口不会注入。HTTPS / CSP nonce / `strict-dynamic` / 仅 IPv6 不在此层处理。
 
 ## 浏览器 MCP（可选）
 
@@ -159,6 +161,9 @@ docker run --privileged -d \
 | 变量 | 默认值 | 作用 |
 | --- | --- | --- |
 | `VNC_PREVIEW` | 空 | `1` / `true` 启动 headed Chromium on Xvfb + x11vnc + websockify（CDP `9222` / noVNC `6080`）；`ENABLE_VNC_PREVIEW` 同义 |
+| `PREVIEW_DIRECT` | 空 | `1` / `true` 启动直连预览 HTML 注入（`preview-inject` 听 `17980` + iptables REDIRECT `$PREVIEW_PORT`）。须同时有 `PREVIEW_PORT`、`PREVIEW_PICK_SCRIPT_URL` |
+| `PREVIEW_PORT` | 空 | 应用监听口（与 Docker/K8s 发布同号）。注入进程**不得**占用此口 |
+| `PREVIEW_PICK_SCRIPT_URL` | 空 | 取点脚本绝对 URL（Approving `/preview-pick.js`） |
 | `BROWSER_MCP` | 空 | `1` / `true` 把沙箱内 Chromium 经 CDP 注册为 `chrome-devtools` MCP（合并进 `$CONFIG_ROOT/mcp.json`），并隐含开启预览栈。见[浏览器 MCP](#浏览器-mcp可选) |
 | `CDP_PORT` | `9222` | 箱内 Chromium CDP 监听端口（浏览器 MCP attach 目标；仅容器网可达，不对外发布） |
 | `WS_PORT` | `6080` | 箱内 noVNC websockify 端口（仅容器网可达；用户走平台 VNC WS） |
