@@ -12,7 +12,6 @@ import {
   DEFAULT_ONBOARDING_REPO,
   ONBOARDING_AGENT_NAMES,
   ONBOARDING_STEPS,
-  ONBOARDING_WORKFLOW_NAME,
   assembleBootstrapBody,
   dismissOnboarding,
   encodeReposLiteral,
@@ -219,7 +218,7 @@ async function startSampleRun() {
           <p class="mt-2 text-[13px] text-txt2">{{ t('pages.onboarding.success.desc') }}</p>
           <ul class="mt-4 space-y-1.5 text-[13px] text-txt2">
             <li v-for="n in ONBOARDING_AGENT_NAMES" :key="n">· {{ n }}</li>
-            <li>· {{ ONBOARDING_WORKFLOW_NAME }}（published）</li>
+            <li>· {{ t('pages.onboarding.success.publishedLine') }}</li>
           </ul>
           <div
             class="mt-4 border border-line bg-elevated px-3 py-3 text-[13px] text-txt2"
