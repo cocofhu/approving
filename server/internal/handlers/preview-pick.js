@@ -6,6 +6,7 @@
   var CANCELED = 'direct-preview-canceled';
   var INSPECT = 'direct-preview-inspect';
   var NAV = 'direct-preview-nav';
+  var PING = 'direct-preview-ping';
   var enabled = false;
   var hoverEl = null;
   var styleEl = null;
@@ -133,6 +134,10 @@
   window.addEventListener('message', function (ev) {
     var data = ev.data;
     if (!data || typeof data !== 'object') return;
+    if (data.type === PING) {
+      postUrl(READY);
+      return;
+    }
     if (data.type === INSPECT) {
       setEnabled(!!data.on);
       return;

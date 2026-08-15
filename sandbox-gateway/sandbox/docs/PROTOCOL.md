@@ -264,6 +264,10 @@ IP 直连预览时审批页 iframe 的 origin 是 `http://<sandbox-ip>:$PREVIEW_
   `<script src="/__approving/preview-pick.js">`。不得注入
   `http://localhost:8080/preview-pick.js`:审批人浏览器 origin 是
   `http://IP:PREVIEW_PORT/`,打不开 Approving 的 loopback。
+- 脚本用 `postMessage` 向父页发 `direct-preview-ready`(每次文档加载一次,
+  经典 `<script>` 早于 iframe `load` 事件),SPA 跳转再发 `direct-preview-url`。
+  父页可发 `direct-preview-ping` 要求重播 ready;判定「未加载脚本」须以
+  ping 也无应答为准,不能只看 `load` 时序。
 - 回环(应用 ← 注入进程)走 OUTPUT,不进 PREROUTING,不会环。
 - 注入进程**不得**听 `PREVIEW_PORT`(平台 `KeepalivePort` 按该口找应用进程)。
 - 进程挂了必须拆规则或立刻拉起:箱外 `ProbeHTTPPort` 打的是发布口,会走 REDIRECT;

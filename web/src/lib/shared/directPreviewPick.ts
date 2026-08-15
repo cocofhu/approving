@@ -6,6 +6,8 @@ export const DIRECT_PREVIEW_PICKED = 'direct-preview-picked'
 export const DIRECT_PREVIEW_CANCELED = 'direct-preview-canceled'
 export const DIRECT_PREVIEW_INSPECT = 'direct-preview-inspect'
 export const DIRECT_PREVIEW_NAV = 'direct-preview-nav'
+/** Parent asks the page to re-announce ready; answers with DIRECT_PREVIEW_READY. */
+export const DIRECT_PREVIEW_PING = 'direct-preview-ping'
 
 export type DirectPreviewNavAction = 'back' | 'forward' | 'reload'
 

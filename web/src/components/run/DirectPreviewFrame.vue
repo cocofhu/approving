@@ -5,6 +5,7 @@ import type { AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
 import {
   DIRECT_PREVIEW_INSPECT,
   DIRECT_PREVIEW_NAV,
+  DIRECT_PREVIEW_PING,
   iframeOrigin,
   isDirectPreviewOrigin,
   parseDirectPreviewMessage,
@@ -13,6 +14,7 @@ import {
 } from '@/lib/shared/directPreviewPick'
 
 const SCRIPT_WAIT_MS = 2500
+const PING_GRACE_MS = 500
 
 const props = withDefaults(
   defineProps<{
@@ -37,6 +39,8 @@ const inlineTip = ref<string | null>(null)
 const picked = ref<AppPreviewPickPayload | null>(null)
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 let waitTimer: ReturnType<typeof setTimeout> | null = null
+let readySeq = 0
+let loadedSeq = 0
 
 function originOf(): string {
   return iframeOrigin(props.directUrl)
@@ -56,25 +60,43 @@ function clearWait() {
   }
 }
 
+function pingFrame() {
+  postToFrame({ type: DIRECT_PREVIEW_PING })
+}
+
 function armScriptWait() {
   clearWait()
-  scriptReady.value = false
+  // Anything announced from here on belongs to the document being waited for.
+  loadedSeq = readySeq
   scriptTip.value = false
   inspect.value = false
+  const armed = readySeq
   waitTimer = setTimeout(() => {
-    if (!scriptReady.value) scriptTip.value = true
+    if (readySeq !== armed) return
+    pingFrame()
+    waitTimer = setTimeout(() => {
+      if (readySeq !== armed) return
+      scriptReady.value = false
+      scriptTip.value = true
+    }, PING_GRACE_MS)
   }, SCRIPT_WAIT_MS)
 }
 
+// A classic <script> runs before the iframe "load" event, so a page carrying
+// the script has already announced by now. Comparing against the previous load
+// tells announced-for-this-document apart from a stale flag left by the page we
+// just navigated away from.
 function onIframeLoad() {
-  // Classic <script> runs before the iframe "load" event, so ready may already
-  // have arrived. Resetting here races and leaves the tip stuck forever.
-  if (scriptReady.value) {
+  if (readySeq > loadedSeq) {
+    loadedSeq = readySeq
+    scriptReady.value = true
     scriptTip.value = false
     clearWait()
     return
   }
+  scriptReady.value = false
   armScriptWait()
+  pingFrame()
 }
 
 function onMessage(event: MessageEvent) {
@@ -82,6 +104,7 @@ function onMessage(event: MessageEvent) {
   const parsed = parseDirectPreviewMessage(event.data)
   if (!parsed) return
   if (parsed.type === 'direct-preview-ready' || parsed.type === 'direct-preview-url') {
+    readySeq += 1
     scriptReady.value = true
     scriptTip.value = false
     clearWait()
