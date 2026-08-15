@@ -24,7 +24,7 @@ test.describe('workflow favorites quick-launch', () => {
     await expect(page.getByTestId('nav-quick-pipeline-item').first()).toBeVisible({ timeout: 15_000 })
     const items = page.getByTestId('nav-quick-pipeline-item')
     await expect(items).toHaveCount(3)
-    // Newest favoritedAt first: wf-night
+    // Legacy favorites migrate once to newest-first as the initial manual order.
     await expect(items.nth(0)).toContainText('夜间回归')
     await expect(items.nth(0)).toContainText('checkout-service')
     await expect(items.nth(0)).toContainText('草稿')
@@ -49,6 +49,30 @@ test.describe('workflow favorites quick-launch', () => {
     await expect(page.getByTestId('nav-quick-pipeline-item')).toHaveCount(2)
     await expect(page.getByTestId('nav-quick-pipeline-item').first()).not.toContainText('夜间回归')
     await page.screenshot({ path: path.join(shotDir, 'fav-unfavorite.png'), fullPage: true })
+  })
+
+  test('desktop handle pointer drag reorders and survives reload without a toast', async ({ page }) => {
+    await page.goto('/workflow-favorites.html?scene=with-items')
+    const items = page.getByTestId('nav-quick-pipeline-item')
+    await expect(items).toHaveCount(3)
+    const handles = page.getByTestId('nav-quick-pipeline-drag-handle')
+    await expect(handles).toHaveCount(3)
+    const firstBox = await handles.nth(0).boundingBox()
+    const lastBox = await handles.nth(2).boundingBox()
+    if (!firstBox || !lastBox) throw new Error('quick-pipeline drag handles are not visible')
+
+    await page.mouse.move(firstBox.x + firstBox.width / 2, firstBox.y + firstBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(lastBox.x + lastBox.width / 2, lastBox.y + lastBox.height + 12, { steps: 4 })
+    await expect(page.getByTestId('nav-quick-pipeline-placeholder')).toBeVisible()
+    await page.mouse.up()
+
+    await expect(items.nth(0)).toContainText('热修回滚')
+    await expect(items.nth(2)).toContainText('夜间回归')
+    await expect(page.getByTestId('toast-host')).not.toContainText('已调整')
+    await page.reload()
+    await expect(page.getByTestId('nav-quick-pipeline-item').nth(2)).toContainText('夜间回归')
+    await page.screenshot({ path: path.join(shotDir, 'fav-reorder.png'), fullPage: true })
   })
 
   test('no-ask fields still open confirm modal from quick item', async ({ page }) => {

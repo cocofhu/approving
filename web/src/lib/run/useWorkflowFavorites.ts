@@ -11,7 +11,7 @@ export const WORKFLOW_FAVORITES_MAX = 8
 
 export type WorkflowFavoriteEntry = {
   workflowId: string
-  /** Epoch ms; newer favorites sort first. */
+  /** Epoch ms; retained as favorite metadata and for the one-time legacy-order migration. */
   favoritedAt: number
 }
 
@@ -27,6 +27,10 @@ export type FavoriteWorkflowDisplay = {
 
 export function favoritesKeyForUser(username: string): string {
   return `approving.workflowFavorites.${username || 'anonymous'}`
+}
+
+function favoritesOrderMigrationKeyForUser(username: string): string {
+  return `${favoritesKeyForUser(username)}.order-v2`
 }
 
 function resolveUsername(): { name: string; settled: boolean } {
@@ -99,7 +103,24 @@ export function hydrateFromStorage() {
   const { name, settled } = resolveUsername()
   if (!settled) return
   usernameKey.value = name
-  entries.value = loadFavoriteEntries(name)
+  const loaded = loadFavoriteEntries(name)
+  const migrationKey = favoritesOrderMigrationKeyForUser(name)
+  const needsLegacyOrderMigration =
+    typeof localStorage !== 'undefined' && localStorage.getItem(migrationKey) !== '1'
+
+  // Existing entries previously displayed by newest favorite first. Persist that as
+  // the initial manual order once, then treat the stored array order as authoritative.
+  entries.value = needsLegacyOrderMigration
+    ? loaded.slice().sort((a, b) => b.favoritedAt - a.favoritedAt || a.workflowId.localeCompare(b.workflowId))
+    : loaded
+  if (needsLegacyOrderMigration && typeof localStorage !== 'undefined') {
+    persistEntries(name, entries.value)
+    try {
+      localStorage.setItem(migrationKey, '1')
+    } catch {
+      // Private mode/quota: retain the in-memory initial order.
+    }
+  }
   prefsHydrated = true
 }
 
@@ -107,9 +128,8 @@ function ensureHydrated() {
   if (!prefsHydrated) hydrateFromStorage()
 }
 
-const listSorted = computed(() =>
-  entries.value.slice().sort((a, b) => b.favoritedAt - a.favoritedAt || a.workflowId.localeCompare(b.workflowId)),
-)
+/** Stored array order is the user's manual sidebar order. */
+const listSorted = computed(() => entries.value.slice())
 
 function isFavorite(workflowId: string): boolean {
   ensureHydrated()
@@ -136,8 +156,8 @@ function removeIds(ids: string[]) {
 export async function hydrateDisplay(): Promise<void> {
   ensureHydrated()
   const gen = ++hydrateGeneration
-  const sorted = listSorted.value
-  if (!sorted.length) {
+  const orderedEntries = listSorted.value
+  if (!orderedEntries.length) {
     displayItems.value = []
     displayError.value = null
     return
@@ -160,7 +180,7 @@ export async function hydrateDisplay(): Promise<void> {
     const rows: FavoriteWorkflowDisplay[] = []
 
     await Promise.all(
-      sorted.map(async (entry) => {
+      orderedEntries.map(async (entry) => {
         try {
           const wf = await api.getWorkflow(entry.workflowId)
           if (gen !== hydrateGeneration) return
@@ -188,8 +208,10 @@ export async function hydrateDisplay(): Promise<void> {
       removeIds(missing)
     }
 
-    rows.sort((a, b) => b.favoritedAt - a.favoritedAt || a.workflowId.localeCompare(b.workflowId))
-    displayItems.value = rows
+    const rowsByWorkflowId = new Map(rows.map((row) => [row.workflowId, row]))
+    displayItems.value = orderedEntries
+      .map((entry) => rowsByWorkflowId.get(entry.workflowId))
+      .filter((row): row is FavoriteWorkflowDisplay => !!row)
   } finally {
     if (gen === hydrateGeneration) {
       hydrating.value = false
@@ -248,7 +270,7 @@ export function useWorkflowFavorites() {
       return false
     }
 
-    writeBack([...entries.value, { workflowId: id, favoritedAt: Date.now() }])
+    writeBack([{ workflowId: id, favoritedAt: Date.now() }, ...entries.value])
     if (!opts?.silent) {
       const label = opts?.name?.trim() || id
       toast.success(t('common.toast.favoriteAdded', { name: label }))
@@ -265,6 +287,31 @@ export function useWorkflowFavorites() {
     toggleFavorite(id, opts)
   }
 
+  /** Persist a manual move. Invalid/same-index moves are intentionally no-ops. */
+  function reorderFavorites(from: number, to: number): void {
+    ensureHydrated()
+    if (
+      !Number.isInteger(from) ||
+      !Number.isInteger(to) ||
+      from < 0 ||
+      to < 0 ||
+      from >= entries.value.length ||
+      to >= entries.value.length ||
+      from === to
+    ) {
+      return
+    }
+
+    const next = entries.value.slice()
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    writeBack(next)
+    const displayByWorkflowId = new Map(displayItems.value.map((item) => [item.workflowId, item]))
+    displayItems.value = next
+      .map((entry) => displayByWorkflowId.get(entry.workflowId))
+      .filter((item): item is FavoriteWorkflowDisplay => !!item)
+  }
+
   return {
     entries,
     listSorted,
@@ -274,6 +321,7 @@ export function useWorkflowFavorites() {
     isFavorite,
     toggleFavorite,
     unfavorite,
+    reorderFavorites,
     hydrateDisplay,
     hydrateFromStorage,
     getFavoriteWorkflow,

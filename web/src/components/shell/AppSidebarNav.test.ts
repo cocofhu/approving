@@ -41,8 +41,13 @@ const favMocks = vi.hoisted(() => {
     hydrateDisplay: vi.fn(async () => undefined),
     unfavorite: vi.fn(),
     getFavoriteWorkflow: vi.fn(),
+    reorderFavorites: vi.fn(),
   }
 })
+
+const breakpointMocks = vi.hoisted(() => ({
+  isMobile: { __v_isRef: true, value: false },
+}))
 
 const launchMocks = vi.hoisted(() => ({
   openLaunch: vi.fn(),
@@ -71,9 +76,14 @@ vi.mock('@/lib/run/useWorkflowFavorites', async () => {
       hydrateDisplay: favMocks.hydrateDisplay,
       unfavorite: favMocks.unfavorite,
       getFavoriteWorkflow: favMocks.getFavoriteWorkflow,
+      reorderFavorites: favMocks.reorderFavorites,
     }),
   }
 })
+
+vi.mock('@/lib/composables/useBreakpoint', () => ({
+  useBreakpoint: () => breakpointMocks,
+}))
 
 vi.mock('@/lib/run/useWorkflowRunLaunch', () => ({
   useWorkflowRunLaunch: () => ({
@@ -91,6 +101,7 @@ beforeEach(() => {
   notifMocks.unreadCount.value = 0
   favMocks.displayItems.value = []
   favMocks.hydrateDisplay.mockResolvedValue(undefined)
+  breakpointMocks.isMobile.value = false
   vi.useFakeTimers()
 })
 
@@ -176,6 +187,36 @@ describe('AppSidebarNav', () => {
     await flushPromises()
     expect(favMocks.getFavoriteWorkflow).toHaveBeenCalledWith('wf-1')
     expect(launchMocks.openLaunch).toHaveBeenCalled()
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
+  it('shows desktop-only independent drag handles without changing the item click target', async () => {
+    favMocks.displayItems.value = [
+      { workflowId: 'wf-1', favoritedAt: 2, name: '夜间回归', projectId: 'p1', projectName: 'checkout', status: 'draft' },
+      { workflowId: 'wf-2', favoritedAt: 1, name: '发布预检', projectId: 'p1', projectName: 'billing', status: 'published' },
+    ]
+    const wrapper = mountNav()
+    await flushPromises()
+    const handles = wrapper.findAll('[data-testid="nav-quick-pipeline-drag-handle"]')
+    expect(handles).toHaveLength(2)
+    await wrapper.find('[data-testid="nav-quick-pipeline-item"]').trigger('click')
+    expect(favMocks.getFavoriteWorkflow).toHaveBeenCalledWith('wf-1')
+    expect(favMocks.reorderFavorites).not.toHaveBeenCalled()
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
+  it('hides the handle on mobile while retaining quick-item actions', async () => {
+    breakpointMocks.isMobile.value = true
+    favMocks.displayItems.value = [
+      { workflowId: 'wf-1', favoritedAt: 1, name: '夜间回归', projectId: 'p1', projectName: 'checkout', status: 'published' },
+    ]
+    const wrapper = mountNav()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="nav-quick-pipeline-drag-handle"]').exists()).toBe(false)
+    await wrapper.find('[data-testid="nav-quick-pipeline-item"]').trigger('click')
+    expect(favMocks.getFavoriteWorkflow).toHaveBeenCalledWith('wf-1')
     wrapper.unmount()
     vi.useRealTimers()
   })
