@@ -347,6 +347,29 @@ watch(isMobile, (mobile) => {
 })
 
 const agentNames = computed(() => agents.value.map((a) => a.name))
+const manageSearch = ref('')
+const manageSearchQuery = computed(() => manageSearch.value.trim().toLowerCase())
+const filteredManageNames = computed(() => {
+  const query = manageSearchQuery.value
+  return query ? agentNames.value.filter((name) => name.toLowerCase().includes(query)) : agentNames.value
+})
+const manageSearchActive = computed(() => !!manageSearchQuery.value)
+
+type ManageNameHighlight = { before: string; hit: string; after: string }
+function manageNameHighlight(name: string): ManageNameHighlight {
+  const query = manageSearchQuery.value
+  const index = query ? name.toLowerCase().indexOf(query) : -1
+  if (index < 0) return { before: name, hit: '', after: '' }
+  return {
+    before: name.slice(0, index),
+    hit: name.slice(index, index + query.length),
+    after: name.slice(index + query.length),
+  }
+}
+
+function clearManageSearch() {
+  manageSearch.value = ''
+}
 
 const orgSheetRows = computed(() =>
   buildOrgTreeRows(org.value, agentNames.value, orgSheetCollapsed.value, agents.value, projects.value),
@@ -1076,6 +1099,7 @@ function onTeamBootstrapDone() {
 }
 
 function openAgentManage(focusAgentName?: string) {
+  clearManageSearch()
   manageFocusAgent.value = focusAgentName || ''
   showAgentManage.value = true
   if (focusAgentName) {
@@ -1090,6 +1114,7 @@ function openAgentManage(focusAgentName?: string) {
 
 function closeAgentManage() {
   showAgentManage.value = false
+  clearManageSearch()
   manageFocusAgent.value = ''
 }
 
@@ -1711,9 +1736,46 @@ onBeforeUnmount(() => {
     >
       <p class="mb-3 text-[12.5px] leading-relaxed text-txt2">{{ t('pages.agentStudio.org.manageIntro') }}</p>
       <div v-if="!agentNames.length" class="text-[13px] text-txt3">{{ t('pages.agentStudio.org.manageEmpty') }}</div>
-      <div v-else class="flex flex-col gap-0.5">
+      <template v-else>
+        <div class="relative mb-2">
+          <Icon name="search" :size="15" class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-txt3" />
+          <input
+            v-model="manageSearch"
+            type="text"
+            autocomplete="off"
+            :placeholder="t('pages.agentStudio.org.manageSearchPlaceholder')"
+            class="w-full border border-line bg-base py-2 pl-8 pr-8 text-[13px] text-txt outline-none transition focus:border-accent"
+            data-test="manage-search"
+          />
+          <button
+            v-if="manageSearch"
+            type="button"
+            class="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center text-txt3 hover:bg-elevated hover:text-txt"
+            :aria-label="t('pages.agentStudio.org.manageClearSearch')"
+            data-test="manage-search-clear"
+            @click="clearManageSearch"
+          >
+            <Icon name="close" :size="14" />
+          </button>
+        </div>
+        <p class="mb-2 text-[12px] tabular-nums text-txt3" data-test="manage-search-count">
+          {{
+            manageSearchActive
+              ? t('pages.agentStudio.org.manageSearchCount', { matched: filteredManageNames.length, total: agentNames.length })
+              : t('pages.agentStudio.org.manageTotalCount', { total: agentNames.length })
+          }}
+        </p>
+        <div v-if="manageSearchActive && !filteredManageNames.length" class="border border-dashed border-line px-4 py-8 text-center">
+          <Icon name="search" :size="20" class="mx-auto mb-2 text-txt3" />
+          <p class="text-[13px] font-medium text-txt">{{ t('pages.agentStudio.org.manageNoMatchTitle') }}</p>
+          <p class="mt-1 text-[12px] text-txt3">{{ t('pages.agentStudio.org.manageNoMatchDesc') }}</p>
+          <AppButton class="mt-3" size="sm" variant="outline" @click="clearManageSearch">
+            {{ t('pages.agentStudio.org.manageClearSearch') }}
+          </AppButton>
+        </div>
+        <div v-else class="flex flex-col gap-0.5">
         <div
-          v-for="name in agentNames"
+          v-for="name in filteredManageNames"
           :key="name"
           :data-manage-agent="name"
           class="flex items-center gap-2 border px-2.5 py-2 transition"
@@ -1724,7 +1786,12 @@ onBeforeUnmount(() => {
           "
         >
           <Icon name="robot" :size="14" class="shrink-0 text-accent-2" />
-          <span class="min-w-0 flex-1 truncate text-[13px] text-txt">{{ name }}</span>
+          <span class="min-w-0 flex-1 truncate text-[13px] text-txt">
+            <template v-if="manageNameHighlight(name).hit">
+              {{ manageNameHighlight(name).before }}<mark class="bg-warn/25 px-0 text-inherit">{{ manageNameHighlight(name).hit }}</mark>{{ manageNameHighlight(name).after }}
+            </template>
+            <template v-else>{{ name }}</template>
+          </span>
           <div class="flex shrink-0 gap-1.5">
             <AppButton size="sm" variant="outline" icon="edit" @click="openRenameAgent(name)">
               {{ t('pages.agentStudio.org.manageRename') }}
@@ -1734,7 +1801,8 @@ onBeforeUnmount(() => {
             </AppButton>
           </div>
         </div>
-      </div>
+        </div>
+      </template>
       <template #footer>
         <AppButton size="sm" variant="ghost" @click="closeAgentManage">{{ t('common.buttons.close') }}</AppButton>
       </template>

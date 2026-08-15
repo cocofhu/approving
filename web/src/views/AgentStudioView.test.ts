@@ -648,6 +648,62 @@ describe('AgentStudio rename entry migration', () => {
     const focused = wrapper.find('[data-manage-agent="legacy"]')
     expect(focused.exists()).toBe(true)
     expect(focused.classes().join(' ')).toMatch(/accent/)
+    expect((wrapper.get('[data-test="manage-search"]').element as HTMLInputElement).value).toBe('')
+  })
+
+  it('filters managed agents with a case-insensitive trimmed query, count, and safe highlight', async () => {
+    mocks.listAgents.mockResolvedValue([
+      { ...agent('public'), name: 'Approving Review Engineer' },
+      { ...agent('public'), name: 'HarnessPlugin Reviewer' },
+    ])
+    const wrapper = await mountRenameStudio()
+    await flushPromises()
+
+    await wrapper.get('[data-test="manage"]').trigger('click')
+    await wrapper.get('[data-test="manage-search"]').setValue('  approving  ')
+    await nextTick()
+
+    expect(wrapper.find('[data-manage-agent="Approving Review Engineer"]').exists()).toBe(true)
+    expect(wrapper.find('[data-manage-agent="HarnessPlugin Reviewer"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="manage-search-count"]').text()).toBe('匹配 1 / 共 2')
+    expect(wrapper.get('[data-manage-agent="Approving Review Engineer"] mark').text()).toBe('Approving')
+  })
+
+  it('shows a distinct no-match state and clears the management search from either entry point', async () => {
+    mocks.listAgents.mockResolvedValue([
+      { ...agent('public'), name: 'Approving Review Engineer' },
+      { ...agent('public'), name: 'HarnessPlugin Reviewer' },
+    ])
+    const wrapper = await mountRenameStudio()
+    await flushPromises()
+
+    await wrapper.get('[data-test="manage"]').trigger('click')
+    await wrapper.get('[data-test="manage-search"]').setValue('missing')
+    await nextTick()
+    expect(wrapper.text()).toContain('没有匹配的 Agent')
+    expect(wrapper.findAll('[data-manage-agent]')).toHaveLength(0)
+
+    await wrapper.findAll('button').find((button) => button.text() === '清空搜索')!.trigger('click')
+    await nextTick()
+    expect(wrapper.findAll('[data-manage-agent]')).toHaveLength(2)
+
+    await wrapper.get('[data-test="manage-search"]').setValue('review')
+    await wrapper.get('[data-test="manage-search-clear"]').trigger('click')
+    expect((wrapper.get('[data-test="manage-search"]').element as HTMLInputElement).value).toBe('')
+    expect(wrapper.findAll('[data-manage-agent]')).toHaveLength(2)
+  })
+
+  it('resets management search after closing before the next open', async () => {
+    mocks.listAgents.mockResolvedValue([agent('public')])
+    const wrapper = await mountRenameStudio()
+    await flushPromises()
+
+    await wrapper.get('[data-test="manage"]').trigger('click')
+    await wrapper.get('[data-test="manage-search"]').setValue('legacy')
+    await wrapper.findAll('button').find((button) => button.text() === '关闭')!.trigger('click')
+    await wrapper.get('[data-test="manage"]').trigger('click')
+
+    expect((wrapper.get('[data-test="manage-search"]').element as HTMLInputElement).value).toBe('')
   })
 
   it('shows Metadata rename hint and keeps header name read-only', async () => {
