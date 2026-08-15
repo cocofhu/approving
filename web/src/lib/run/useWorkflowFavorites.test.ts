@@ -76,7 +76,7 @@ describe('useWorkflowFavorites', () => {
     expect(fav2.isFavorite('wf-a')).toBe(false)
   })
 
-  it('sorts by favoritedAt desc and refreshes on re-favorite', async () => {
+  it('uses persisted array order, puts new favorites first, and persists reorder', async () => {
     vi.useFakeTimers()
     const fav = withSetup(() => useWorkflowFavorites())
     vi.setSystemTime(1000)
@@ -84,11 +84,38 @@ describe('useWorkflowFavorites', () => {
     vi.setSystemTime(2000)
     fav.toggleFavorite('wf-b', { silent: true })
     expect(fav.listSorted.value.map((e) => e.workflowId)).toEqual(['wf-b', 'wf-a'])
-    fav.toggleFavorite('wf-a', { silent: true }) // unfavorite
-    vi.setSystemTime(3000)
-    fav.toggleFavorite('wf-a', { silent: true }) // re-favorite → top
+    fav.reorderFavorites(0, 1)
     expect(fav.listSorted.value.map((e) => e.workflowId)).toEqual(['wf-a', 'wf-b'])
+    expect(loadFavoriteEntries('dev.li').map((e) => e.workflowId)).toEqual(['wf-a', 'wf-b'])
+    vi.setSystemTime(3000)
+    fav.toggleFavorite('wf-c', { silent: true })
+    expect(fav.listSorted.value.map((e) => e.workflowId)).toEqual(['wf-c', 'wf-a', 'wf-b'])
     vi.useRealTimers()
+  })
+
+  it('migrates legacy favorites once to the former newest-first initial order', () => {
+    localStorage.removeItem(`${favoritesKeyForUser('dev.li')}.order-v2`)
+    localStorage.setItem(
+      favoritesKeyForUser('dev.li'),
+      JSON.stringify([
+        { workflowId: 'wf-old', favoritedAt: 1000 },
+        { workflowId: 'wf-new', favoritedAt: 2000 },
+      ]),
+    )
+    hydrateFromStorage()
+    const fav = withSetup(() => useWorkflowFavorites())
+    expect(fav.listSorted.value.map((entry) => entry.workflowId)).toEqual(['wf-new', 'wf-old'])
+    expect(loadFavoriteEntries('dev.li').map((entry) => entry.workflowId)).toEqual(['wf-new', 'wf-old'])
+
+    localStorage.setItem(
+      favoritesKeyForUser('dev.li'),
+      JSON.stringify([
+        { workflowId: 'wf-old', favoritedAt: 1000 },
+        { workflowId: 'wf-new', favoritedAt: 2000 },
+      ]),
+    )
+    hydrateFromStorage()
+    expect(fav.listSorted.value.map((entry) => entry.workflowId)).toEqual(['wf-old', 'wf-new'])
   })
 
   it('rejects the 9th favorite without LRU eviction', () => {
@@ -118,8 +145,8 @@ describe('useWorkflowFavorites', () => {
     fav.toggleFavorite('gone', { silent: true })
     await fav.hydrateDisplay()
     await nextTick()
-    expect(fav.displayItems.value.map((d) => d.workflowId)).toEqual(['gone', 'wf-ok'].filter((id) => id !== 'gone'))
-    // After strip, only wf-ok remains in storage (gone was favorited later so would be first before strip)
+    expect(fav.displayItems.value.map((d) => d.workflowId)).toEqual(['wf-ok'])
+    // After strip, only wf-ok remains in storage.
     expect(fav.isFavorite('gone')).toBe(false)
     expect(fav.isFavorite('wf-ok')).toBe(true)
     expect(fav.displayItems.value[0]?.name).toBe('WF wf-ok')
