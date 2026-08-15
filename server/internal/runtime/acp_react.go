@@ -169,6 +169,7 @@ func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []mod
 	var events []models.AcpEvent
 	absorbChat(&usage, &usageByModel, &events, res)
 	narration, agentSummary := applyDualWrite(res.Narration)
+	logDualWriteMiss(req, res.Narration, agentSummary)
 
 	qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
 
@@ -241,6 +242,7 @@ func (c *acpProvider) ReviseInPlace(ctx context.Context, req NodeReq, history []
 	var events []models.AcpEvent
 	absorbChat(&usage, &usageByModel, &events, res)
 	narration, agentSummary := applyDualWrite(res.Narration)
+	logDualWriteMiss(req, res.Narration, agentSummary)
 
 	c.host.TakePendingQuestions(req.RunID, req.NodeID)
 
@@ -276,6 +278,17 @@ func (c *acpProvider) CancelSessionTurn(runID, nodeID string) {
 	if sess != nil && sess.acp != nil {
 		_ = sess.acp.Cancel()
 	}
+}
+
+// logDualWriteMiss records a parse miss without logging the agent response,
+// which can contain user feedback. It gives operators a denominator for the
+// non-empty agentSummary rate on review and clarify human turns.
+func logDualWriteMiss(req NodeReq, raw, agentSummary string) {
+	if strings.TrimSpace(raw) == "" || strings.TrimSpace(agentSummary) != "" {
+		return
+	}
+	log.Debug().Str("run", req.RunID).Str("node", req.NodeID).Str("node_type", req.NodeType).
+		Msg("dual-write agentSummary missing or unparseable")
 }
 
 // enforceOpenQuestionsGate implements the clarification gate: when the agent
