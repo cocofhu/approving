@@ -21,12 +21,14 @@ const dualWriteTurnContract = `
 规则:
 - agentSummary 是供反馈账本卡片最前展示的「Agent 总结」,须归纳本轮反馈意图/要点,与叙述分离。
 - 禁止把索引规则 gist、正文首行或对话气泡原文原样当作 agentSummary。
-- 若无法归纳,可省略该 JSON 代码块(平台将隐藏总结区);不要写空字符串占位。
+- 除非确实无法归纳,请始终产出一段非空的 agentSummary；它应确认用户本轮反馈意图,而非复述叙述回复。
+- 仅在确实无法归纳时才省略整个 JSON 代码块(平台将隐藏总结区);禁止输出空键、空字符串或模板占位。
 - JSON 只出现在文末代码块中,不要把 JSON 写进叙述正文。
 `
 
-// Match the last fenced code block (optional language tag) at end of text.
-var dualWriteJSONFence = regexp.MustCompile("(?s)```(?:json)?\\s*\\n(\\{[\\s\\S]*?\\})\\s*\\n```\\s*$")
+// Match fenced JSON objects so we can recover the final valid dual-write
+// payload when an agent appends harmless prose after its contract fence.
+var dualWriteJSONFence = regexp.MustCompile("(?s)```(?:json)?\\s*\\n(\\{[\\s\\S]*?\\})\\s*\\n```")
 
 type dualWritePayload struct {
 	AgentSummary string `json:"agentSummary"`
@@ -55,17 +57,27 @@ func splitTurnDualWrite(raw string) (narration, agentSummary string) {
 		return "", ""
 	}
 
-	if loc := dualWriteJSONFence.FindStringSubmatchIndex(raw); len(loc) >= 4 {
-		jsonBody := raw[loc[2]:loc[3]]
-		prefix := strings.TrimSpace(raw[:loc[0]])
-		if sum, narr, ok := parseDualWriteJSON(jsonBody); ok {
-			if narr != "" {
-				return narr, sum
-			}
-			return prefix, sum
+	matches := dualWriteJSONFence.FindAllStringSubmatchIndex(raw, -1)
+	var emptyNarration string
+	for i := len(matches) - 1; i >= 0; i-- {
+		loc := matches[i]
+		sum, narr, ok := parseDualWriteJSON(raw[loc[2]:loc[3]])
+		if !ok || !hasLightweightTrailingNoise(raw[loc[1]:]) {
+			continue
 		}
-		// Fence present but not our dual-write shape: keep raw intact.
-		return raw, ""
+		if sum == "" {
+			if emptyNarration == "" {
+				emptyNarration = withoutDualWriteFence(raw, loc)
+			}
+			continue
+		}
+		if narr != "" {
+			return narr, sum
+		}
+		return withoutDualWriteFence(raw, loc), sum
+	}
+	if emptyNarration != "" {
+		return emptyNarration, ""
 	}
 
 	if strings.HasPrefix(raw, "{") && strings.HasSuffix(raw, "}") {
@@ -78,6 +90,26 @@ func splitTurnDualWrite(raw string) (narration, agentSummary string) {
 		}
 	}
 	return raw, ""
+}
+
+// hasLightweightTrailingNoise permits a short, plain-text postscript after a
+// valid final fence. It deliberately rejects another fence or a long body so
+// an unrelated JSON example in the middle of narration cannot be absorbed.
+func hasLightweightTrailingNoise(suffix string) bool {
+	suffix = strings.TrimSpace(suffix)
+	return len(suffix) <= 160 && !strings.Contains(suffix, "```")
+}
+
+func withoutDualWriteFence(raw string, loc []int) string {
+	prefix := strings.TrimSpace(raw[:loc[0]])
+	suffix := strings.TrimSpace(raw[loc[1]:])
+	if prefix == "" {
+		return suffix
+	}
+	if suffix == "" {
+		return prefix
+	}
+	return prefix + "\n\n" + suffix
 }
 
 func parseDualWriteJSON(body string) (summary, narration string, ok bool) {
