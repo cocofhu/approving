@@ -8,7 +8,7 @@ import DirectPreviewFrame from './DirectPreviewFrame.vue'
 
 const DIRECT = 'http://127.0.0.1:18081/'
 
-function mountFrame() {
+function mountFrame(opts: { answerPing?: boolean } = {}) {
   const i18n = createI18n({
     legacy: false,
     locale: 'zh-CN',
@@ -18,6 +18,9 @@ function mountFrame() {
   const fakeWin = {
     postMessage: (msg: unknown) => {
       posted.push(msg)
+      if (opts.answerPing && (msg as { type?: string })?.type === 'direct-preview-ping') {
+        dispatchFromPreview({ type: 'direct-preview-ready', url: DIRECT })
+      }
     },
   }
   const wrapper = mount(DirectPreviewFrame, {
@@ -86,6 +89,65 @@ describe('DirectPreviewFrame', () => {
     wrapper.unmount()
   })
 
+  it('keeps ready across iframe load without needing a ping', async () => {
+    const { wrapper, posted } = mountFrame()
+    dispatchFromPreview({ type: 'direct-preview-ready', url: DIRECT })
+    await flushPromises()
+    await wrapper.get('[data-testid="app-preview-direct-frame"]').trigger('load')
+    await flushPromises()
+    vi.advanceTimersByTime(3000)
+    await flushPromises()
+    expect(posted).toEqual([])
+    expect(wrapper.find('[data-testid="direct-preview-tip"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="direct-preview-inspect"]').trigger('click')
+    expect(wrapper.find('[data-testid="direct-preview-tip"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('recovers via ping when the announcement was missed', async () => {
+    const { wrapper, posted } = mountFrame({ answerPing: true })
+    await wrapper.get('[data-testid="app-preview-direct-frame"]').trigger('load')
+    await flushPromises()
+    expect(posted).toEqual([{ type: 'direct-preview-ping' }])
+    vi.advanceTimersByTime(3000)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="direct-preview-tip"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="direct-preview-inspect"]').trigger('click')
+    expect(posted).toContainEqual({ type: 'direct-preview-inspect', on: true })
+    wrapper.unmount()
+  })
+
+  it('pings again before reporting a missing script', async () => {
+    const { wrapper, posted } = mountFrame()
+    vi.advanceTimersByTime(2500)
+    await flushPromises()
+    expect(posted).toEqual([{ type: 'direct-preview-ping' }])
+    expect(wrapper.find('[data-testid="direct-preview-tip"]').exists()).toBe(false)
+    dispatchFromPreview({ type: 'direct-preview-ready', url: DIRECT })
+    await flushPromises()
+    vi.advanceTimersByTime(500)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="direct-preview-tip"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('drops stale ready when a later page has no script', async () => {
+    const { wrapper } = mountFrame()
+    dispatchFromPreview({ type: 'direct-preview-ready', url: DIRECT })
+    await flushPromises()
+    await wrapper.get('[data-testid="app-preview-direct-frame"]').trigger('load')
+    await flushPromises()
+    await wrapper.get('[data-testid="direct-preview-address"]').setValue('/no-script')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    await wrapper.get('[data-testid="app-preview-direct-frame"]').trigger('load')
+    await flushPromises()
+    vi.advanceTimersByTime(3000)
+    await flushPromises()
+    expect(wrapper.get('[data-testid="direct-preview-tip"]').text()).toMatch(/未加载取点脚本/)
+    wrapper.unmount()
+  })
+
   it('ignores pick messages from other origins', async () => {
     const { wrapper } = mountFrame()
     dispatchFromPreview(
@@ -116,7 +178,7 @@ describe('DirectPreviewFrame', () => {
 
   it('shows script-missing tip after wait without ready', async () => {
     const { wrapper } = mountFrame()
-    vi.advanceTimersByTime(2500)
+    vi.advanceTimersByTime(3000)
     await flushPromises()
     expect(wrapper.get('[data-testid="direct-preview-tip"]').text()).toMatch(/未加载取点脚本/)
     wrapper.unmount()

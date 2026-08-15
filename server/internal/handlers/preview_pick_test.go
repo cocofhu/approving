@@ -1,8 +1,12 @@
 package handlers
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -37,9 +41,32 @@ func TestPreviewPickScript(t *testing.T) {
 		"direct-preview-canceled",
 		"direct-preview-inspect",
 		"direct-preview-nav",
+		"direct-preview-ping",
 	} {
 		if !strings.Contains(body, needle) {
 			t.Fatalf("script missing %q", needle)
+		}
+	}
+}
+
+// The script is embedded three times: here, in the web dev/static bundle, and
+// in the sandbox injector. Drift means one preview surface silently loses pick.
+func TestPreviewPickScriptCopiesInSync(t *testing.T) {
+	_, self, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller")
+	}
+	root := filepath.Join(filepath.Dir(self), "..", "..", "..")
+	for _, rel := range []string{
+		filepath.Join("web", "public", "preview-pick.js"),
+		filepath.Join("sandbox-gateway", "sandbox", "internal", "previewinject", "preview-pick.js"),
+	} {
+		copyBytes, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		if !bytes.Equal(copyBytes, previewPickJS) {
+			t.Errorf("%s drifted from server/internal/handlers/preview-pick.js", rel)
 		}
 	}
 }

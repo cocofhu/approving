@@ -51,8 +51,8 @@ func parseOptions(args []string, getenv func(string) string) (options, error) {
 	}
 
 	opt := options{
-		Listen:    firstNonEmpty(*listen, getenv("PREVIEW_INJECT_LISTEN"), fmt.Sprintf(":%d", previewinject.ListenPort)),
-		Upstream:  firstNonEmpty(*upstream, getenv("PREVIEW_INJECT_UPSTREAM")),
+		Listen:   firstNonEmpty(*listen, getenv("PREVIEW_INJECT_LISTEN"), fmt.Sprintf(":%d", previewinject.ListenPort)),
+		Upstream: firstNonEmpty(*upstream, getenv("PREVIEW_INJECT_UPSTREAM")),
 		// Always default to the same-origin path. PREVIEW_PICK_SCRIPT_URL is
 		// for the Agent HTML fallback; Approving often sets it to
 		// http://localhost:8080/preview-pick.js, which the reviewer's
