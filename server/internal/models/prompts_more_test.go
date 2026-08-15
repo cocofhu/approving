@@ -43,6 +43,20 @@ func TestAgentPromptsRemainingContracts(t *testing.T) {
 	}
 }
 
+func TestDefaultOutcomeContractDetachesLongRunningServices(t *testing.T) {
+	got := DefaultOutcomeContract
+	for _, want := range []string{
+		"setsid",
+		"nohup",
+		"禁止前台或未脱钩的命令占住 Agent 回合",
+		"不要为收尾杀掉这些进程",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("DefaultOutcomeContract missing %q\n---\n%s", want, got)
+		}
+	}
+}
+
 func TestDefaultMRContractHostRoutingAndFailurePhrases(t *testing.T) {
 	got := (&AgentPrompts{}).MRContractFor("feat/x", "main")
 	mustContain := []string{
