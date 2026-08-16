@@ -43,6 +43,10 @@ export type FeedbackRoundDoc = {
   actor?: { name?: string; callerKind?: string; unattributable?: boolean }
   action?: string
   interrupted?: boolean
+  /** Cumulative ReAct conclusion, covering every recorded round in this execution. */
+  summary?: string
+  roundCount?: number
+  latestRound?: number
   /** Agent-authored induction for this round; absent on legacy / no-summary rounds. */
   agentSummary?: string
   feedback?: {
@@ -73,7 +77,7 @@ const props = defineProps<{ doc: FeedbackRoundDoc }>()
 const { t } = useI18n()
 
 const agentSummary = computed(() => (props.doc.agentSummary || '').trim())
-const body = computed(() => (props.doc.feedback?.text || '').trim())
+const body = computed(() => (props.doc.summary || props.doc.feedback?.text || '').trim())
 const annotations = computed(() => props.doc.feedback?.annotations || [])
 const attachments = computed(() => props.doc.feedback?.attachments || [])
 const transcript = computed(() => props.doc.transcript || [])

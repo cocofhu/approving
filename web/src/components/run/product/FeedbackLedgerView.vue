@@ -35,9 +35,10 @@ import type { Artifact } from '@/lib/shared/types'
 
 // Renders the human-feedback ledger. The same component handles both shapes the
 // ledger produces: feedback_index.json (a timeline over every round) and a
-// single feedback.<kind>.<node>.i<n>r<n>.json round. Rows start collapsed and
-// fetch their round product on demand — the point of one file per round is that
-// depth stays optional.
+// single feedback product. New ReAct products use
+// feedback.<kind>.<node>.i<n>.json and show a cumulative conclusion; legacy
+// and gate/preview products may retain the i<n>r<n> form. The index stays the
+// expandable per-round audit timeline.
 const props = defineProps<{
   name: string
   doc: any
@@ -133,7 +134,7 @@ const countEntries = computed(() =>
       </span>
       <code v-if="doc?.node?.id" class="font-mono text-[12px] text-txt">{{ doc.node.id }}</code>
       <span class="text-[11px] text-txt3">
-        {{ t('pages.product.feedback.iterRound', { i: doc?.iteration, r: doc?.round }) }}
+        {{ t('pages.product.feedback.iterRound', { i: doc?.iteration, r: doc?.latestRound ?? doc?.round }) }}
       </span>
       <span v-if="doc?.actor?.name" class="text-[11px] text-txt3">{{ doc.actor.name }}</span>
       <span v-if="doc?.at" class="ml-auto text-[10px] text-txt3">{{ fmtTime(doc.at) }}</span>

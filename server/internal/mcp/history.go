@@ -143,9 +143,8 @@ func reviewedLabel(g models.Graph, ids []string) string {
 // human feedback. Each line is self-labeled with the node + iteration so an
 // agent can never confuse which gate/stage a piece of feedback came from.
 //
-// Depth is what stays on demand: every feedback round cites its own product, so
-// the verbatim text, annotations, attachments and product diff are one
-// read_artifact away instead of being inlined here.
+// Depth is what stays on demand. ReAct rounds cite their shared cumulative
+// conclusion; gate and preview rounds continue to cite their own product.
 func (h *Host) RunHistory(runID, currentNode string, all, onlyFeedback bool) (string, error) {
 	if h.history == nil {
 		return "", errors.New("history unavailable")
@@ -259,7 +258,7 @@ func (h *Host) feedbackLines(runID string, g models.Graph, currentNode string, a
 			line += " · (该轮修改被中断,未落地)"
 		}
 		if ev.ArtifactName != "" {
-			line += "\n      (细节: read_artifact " + ev.ArtifactName + ")"
+			line += "\n      (结论: read_artifact " + ev.ArtifactName + ")"
 		}
 		out = append(out, line)
 	}
@@ -457,7 +456,8 @@ func (h *Host) ExecutionDetail(runID, nodeID string, iteration int, includeLog b
 }
 
 // FeedbackBrief returns the number of feedback rounds in scope for a node and
-// a one-line citation per round that has a product.
+// one citation per distinct product. ReAct rounds share a cumulative product,
+// so repeating its citation once per audit event is noise.
 //
 // This is what puts the ledger in front of an agent: list_run_history existed
 // long before anything told an agent to call it, so a node re-run after a
@@ -470,6 +470,7 @@ func (h *Host) FeedbackBrief(runID, nodeID string) (int, []string) {
 	run, _ := h.history.Get(runID)
 	count := 0
 	var lines []string
+	cited := map[string]bool{}
 	for _, ev := range h.history.FeedbackEvents(runID) {
 		if !feedbackInScope(run.Graph, ev, nodeID) {
 			continue
@@ -478,15 +479,19 @@ func (h *Host) FeedbackBrief(runID, nodeID string) (int, []string) {
 		if ev.ArtifactName == "" {
 			continue
 		}
-		lines = append(lines, fmt.Sprintf("`%s` — 第%d次执行第%d轮 %s: %s",
+		if cited[ev.ArtifactName] {
+			continue
+		}
+		cited[ev.ArtifactName] = true
+		lines = append(lines, fmt.Sprintf("`%s` — 第%d次执行截至第%d轮的%s结论: %s",
 			ev.ArtifactName, ev.Iteration, ev.Round, feedbackKindLabel(ev.Kind),
 			trunc(feedbackGist(ev), 120)))
 	}
 	return count, lines
 }
 
-// renderExecutionFeedback lists the feedback rounds recorded against one node
-// execution, pointing at each round's product for the full text.
+// renderExecutionFeedback lists the feedback audit trail for one node
+// execution, pointing at the current cumulative conclusion where available.
 func renderExecutionFeedback(events []models.FeedbackEvent, nodeID string, iteration int) string {
 	var b strings.Builder
 	for _, ev := range events {
@@ -496,7 +501,7 @@ func renderExecutionFeedback(events []models.FeedbackEvent, nodeID string, itera
 		fmt.Fprintf(&b, "- 第%d轮 %s %s: %s\n", ev.Round, feedbackKindLabel(ev.Kind),
 			feedbackActionLabel(ev), trunc(feedbackGist(ev), 400))
 		if ev.ArtifactName != "" {
-			b.WriteString("  (完整内容: read_artifact " + ev.ArtifactName + ")\n")
+			b.WriteString("  (全轮结论: read_artifact " + ev.ArtifactName + ")\n")
 		}
 	}
 	if b.Len() == 0 {

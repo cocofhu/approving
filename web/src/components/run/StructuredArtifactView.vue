@@ -10,9 +10,9 @@ const STRUCTURED_ARTIFACT_NAMES = new Set([
   'review.json',
 ])
 
-// Feedback ledger products are matched by prefix, not by exact name: each round
-// gets its own file (feedback.<kind>.<node>.i<n>r<n>.json) so rounds never
-// overwrite each other, which makes the set of names unbounded.
+// Feedback ledger products are matched by prefix. New ReAct products use one
+// stable feedback.<kind>.<node>.i<n>.json name per execution while legacy and
+// gate/preview products may retain their i<n>r<n> form.
 const FEEDBACK_INDEX_NAME = 'feedback_index.json'
 const FEEDBACK_PREFIX = 'feedback.'
 
