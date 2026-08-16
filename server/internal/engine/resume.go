@@ -501,7 +501,8 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 	logDB(e.db.Save(&conv), runID, "finish react conversation")
 
 	if t.Err != nil {
-		outcome := nodeOutcome{status: "failed", err: t.Err.Error(), outputMd: t.Msg, events: t.Events, usage: t.Usage, usageByModel: t.UsageByModel}
+		outcome := nodeOutcome{status: "failed", err: t.Err.Error(), outputMd: t.Msg,
+			retryable: true, events: t.Events, usage: t.Usage, usageByModel: t.UsageByModel}
 		e.saveState(c, node, outcome)
 		e.appendTrace(c, models.TraceEntry{NodeID: nodeID, Event: "resume", Detail: "react 失败"})
 		next := e.routeFailure(c, node, outcome)

@@ -207,6 +207,39 @@ func TestEnsureOutcomeNudgeTimeout(t *testing.T) {
 	}
 }
 
+// TestEnsureStructuredRepromptTransportError propagates Cursor API / ACP
+// transport faults from the structured-product nudge instead of fail-closing
+// as a silent contract miss (so the engine can auto-retry the node).
+func TestEnsureStructuredRepromptTransportError(t *testing.T) {
+	turn := 0
+	store := newMemStore()
+	host := mcp.NewHost(store)
+	tok := host.RegisterRun("r")
+	t.Cleanup(func() { host.UnregisterRun("r") })
+	mgr := newFakeManager(t, host, "r", "n", tok, func(int) chatFunc {
+		return func(int) turnAction {
+			turn++
+			if turn == 1 {
+				return turnAction{narration: "researching"}
+			}
+			return turnAction{sendError: "Failed to reach the Cursor API. If you are behind a corporate proxy, set the HTTPS_PROXY environment variable."}
+		}
+	})
+	p, _ := newTestProvider(t, host, testOpts(), mgr)
+	req := reqWithProfile(NodeReq{RunID: "r", NodeID: "n", NodeType: "research", Token: tok,
+		Config: map[string]any{"prompt": "research"}, Vars: map[string]any{}})
+	_, err := p.RunAgent(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected transport error from structured re-prompt")
+	}
+	if !strings.Contains(err.Error(), "Failed to reach the Cursor API") {
+		t.Fatalf("want Cursor API transport error, got %v", err)
+	}
+	if isRetryableSandboxErr(err) != true {
+		t.Fatalf("Cursor API fault must classify as retryable sandbox err, got %v", err)
+	}
+}
+
 // TestRunAgentChatFailurePersistsEvents best-effort snapshots ACP events when
 // streamChat fails; the NodeResult must carry an Events slice (possibly empty
 // when the sandbox produced none) instead of a zero-value NodeResult{}.

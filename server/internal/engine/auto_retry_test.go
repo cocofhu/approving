@@ -105,6 +105,28 @@ func TestAutoRetryExhaustsBudget(t *testing.T) {
 	}
 }
 
+// TestAutoRetryEmptyMCPSurfaceRecovers: CAPA A7 empty MCP surface (no tool
+// traffic + no node_complete) is retryable. After two empty attempts the fake
+// emits a mark and the run completes without manual resume.
+func TestAutoRetryEmptyMCPSurfaceRecovers(t *testing.T) {
+	autoRetryBackoff = 0
+	eng, db, p := setupEngineGraphP(t, autoRetryGraph())
+	eng.SetAutoRetryMax(3)
+	p.skipOutcomeLeft = 2 // two empty-surface failures, then success
+
+	run, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitRunStatus(t, db, run.ID, "completed")
+
+	var n int64
+	db.Model(&models.StateRun{}).Where("run_id = ? AND node_id = ?", run.ID, "risky").Count(&n)
+	if n != 3 {
+		t.Errorf("risky execution rows = %d, want 3 (2 empty-MCP + 1 recovered)", n)
+	}
+}
+
 // TestAutoRetryContractFinalizeNotRetried: finalizeStructured contract miss
 // carries the old marker text but leaves retryable=false, so it is never
 // auto-retried even with a cap set.

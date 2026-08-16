@@ -45,7 +45,8 @@ func (e *Engine) execReactEnter(c *execCtx, node *models.Node) nodeOutcome {
 		}
 		if t.Done {
 			if t.Err != nil {
-				return nodeOutcome{status: "failed", err: t.Err.Error(), outputMd: t.Msg, events: t.Events, usage: t.Usage, usageByModel: t.UsageByModel}
+				return nodeOutcome{status: "failed", err: t.Err.Error(), outputMd: t.Msg,
+					retryable: true, events: t.Events, usage: t.Usage, usageByModel: t.UsageByModel}
 			}
 			return e.finishAgentOutcome(c, node, t.Result, func(r runtime.NodeResult) nodeOutcome {
 				return e.completeProduces(c, node, r)

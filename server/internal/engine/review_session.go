@@ -538,7 +538,8 @@ func (e *Engine) executeClarifyTurn(ctx context.Context, s *reviewSession, item 
 	logDB(e.db.Save(&conv), s.runID, "finish clarify conversation")
 
 	if t.Err != nil {
-		outcome := nodeOutcome{status: "failed", err: t.Err.Error(), outputMd: t.Msg, events: t.Events, usage: t.Usage, usageByModel: t.UsageByModel}
+		outcome := nodeOutcome{status: "failed", err: t.Err.Error(), outputMd: t.Msg,
+			retryable: true, events: t.Events, usage: t.Usage, usageByModel: t.UsageByModel}
 		e.saveState(c, node, outcome)
 		e.appendTrace(c, models.TraceEntry{NodeID: s.producerID, Event: "resume", Detail: "react 失败"})
 		next := e.routeFailure(c, node, outcome)

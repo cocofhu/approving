@@ -58,6 +58,10 @@ type fakeProvider struct {
 	// skipOutcome (test-only): when true, do not call node_complete so the
 	// engine's missing-mark path can be exercised.
 	skipOutcome bool
+	// skipOutcomeLeft (test-only): when > 0, skip node_complete for that many
+	// RunAgent calls (decrementing), then resume normal emitOutcome. Used to
+	// exercise empty-MCP-surface auto-retry recovery.
+	skipOutcomeLeft int
 	// outcomeFailed (test-only): node_complete with status=failed.
 	outcomeFailed bool
 	// outcomeBeforeFail (test-only): when a forced failLeft failure fires,
@@ -160,10 +164,15 @@ func (f *fakeProvider) emitAsk(req runtime.NodeReq) {
 		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ask_question","arguments":{"questions":[{"prompt":"补充?","options":["A","B"]}]}}}`))
 }
 
-// emitOutcome records node_complete for the active node (unless skipOutcome).
+// emitOutcome records node_complete for the active node (unless skipOutcome /
+// skipOutcomeLeft suppress it).
 func (f *fakeProvider) emitOutcome(req runtime.NodeReq, outputs map[string]any) {
 	f.mu.Lock()
 	skip := f.skipOutcome
+	if !skip && f.skipOutcomeLeft > 0 {
+		f.skipOutcomeLeft--
+		skip = true
+	}
 	failed := f.outcomeFailed
 	f.mu.Unlock()
 	if skip {
