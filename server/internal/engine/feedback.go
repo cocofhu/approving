@@ -13,9 +13,9 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// recordFeedback appends one round of human feedback and renders it into
-// products: a brand-new per-round file that is never touched again, plus a
-// full rewrite of feedback_index.json.
+// recordFeedback appends one feedback event and renders the derived products.
+// ReAct review/clarify products are rewritten as a single cumulative conclusion
+// for the node execution; the feedback index remains the append-only timeline.
 //
 // It writes nothing at all when the event carries no human input — no opinion,
 // no annotation, no attachment, no ReAct turn. A gate approval clicked through
@@ -48,12 +48,9 @@ func (e *Engine) recordFeedback(ev models.FeedbackEvent) {
 	e.renderFeedbackProducts(ev.RunID, svc)
 }
 
-// renderFeedbackProducts rewrites the index from the table and backfills any
-// per-round product the index references but the store is missing.
-//
-// Deriving the index from the table on every round makes it self-healing: a
-// write that failed once is picked up by the next round's rewrite. Per-round
-// files do not heal on their own, hence the explicit backfill pass here.
+// renderFeedbackProducts rewrites the index from the table. ReAct products are
+// current-state summaries and are deliberately saved on every render; discrete
+// gate/preview products retain their historical write-once backfill behavior.
 func (e *Engine) renderFeedbackProducts(runID string, svc *services.FeedbackService) {
 	if e.store == nil {
 		return
@@ -64,18 +61,36 @@ func (e *Engine) renderFeedbackProducts(runID string, svc *services.FeedbackServ
 	}
 
 	labels, types := e.nodeMeta(runID)
+	rendered := map[string]bool{}
 	for i, ev := range events {
 		if ev.ArtifactName == "" {
 			continue
 		}
-		if _, ok := e.store.Get(runID, ev.ArtifactName); ok {
+		if rendered[ev.ArtifactName] {
 			continue
 		}
-		body, err := services.MarshalRoundJSON(ev, priorRoundsFor(events, i), runID,
-			services.NodeRef{Label: labels[ev.NodeID], Type: types[ev.NodeID]})
+		rendered[ev.ArtifactName] = true
+
+		isReact := ev.Kind == models.FeedbackKindReview || ev.Kind == models.FeedbackKindClarify
+		if !isReact {
+			if _, ok := e.store.Get(runID, ev.ArtifactName); ok {
+				continue
+			}
+		}
+
+		var (
+			body string
+			err  error
+		)
+		node := services.NodeRef{Label: labels[ev.NodeID], Type: types[ev.NodeID]}
+		if isReact {
+			body, err = services.MarshalFeedbackSummaryJSON(eventsForExecution(events, ev), runID, node)
+		} else {
+			body, err = services.MarshalRoundJSON(ev, priorRoundsFor(events, i), runID, node)
+		}
 		if err != nil {
 			log.Warn().Str("run_id", runID).Str("artifact", ev.ArtifactName).Err(err).
-				Msg("marshal feedback round failed")
+				Msg("marshal feedback product failed")
 			continue
 		}
 		// The real node id keeps the product grouped under its node in the UI;
@@ -83,7 +98,7 @@ func (e *Engine) renderFeedbackProducts(runID string, svc *services.FeedbackServ
 		// node's own deliverable capture.
 		if _, err := e.store.Save(runID, ev.NodeID, ev.ArtifactName, "json", body); err != nil {
 			log.Warn().Str("run_id", runID).Str("artifact", ev.ArtifactName).Err(err).
-				Msg("save feedback round failed")
+				Msg("save feedback product failed")
 		}
 	}
 
@@ -97,6 +112,19 @@ func (e *Engine) renderFeedbackProducts(runID string, svc *services.FeedbackServ
 	if _, err := e.store.Save(runID, "", services.FeedbackIndexArtifactName, "json", body); err != nil {
 		log.Warn().Str("run_id", runID).Err(err).Msg("save feedback index failed")
 	}
+}
+
+// eventsForExecution returns the complete append-only audit trail that feeds a
+// ReAct summary. Index-only auto-answers are included so an interrupted or
+// dual-write-free path cannot erase earlier dialogue context.
+func eventsForExecution(events []models.FeedbackEvent, current models.FeedbackEvent) []models.FeedbackEvent {
+	out := make([]models.FeedbackEvent, 0)
+	for _, ev := range events {
+		if ev.NodeID == current.NodeID && ev.Iteration == current.Iteration {
+			out = append(out, ev)
+		}
+	}
+	return out
 }
 
 // priorRoundsFor returns the rounds of the same node+iteration that precede

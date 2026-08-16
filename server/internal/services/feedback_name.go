@@ -30,13 +30,11 @@ const feedbackSlugMax = 40
 // (a per-round product or the index).
 func IsFeedbackArtifactName(name string) bool { return mcp.IsFeedbackArtifactName(name) }
 
-// FeedbackArtifactName builds the per-round product name.
-//
-// Uniqueness is the whole point: the artifact store upserts on (run_id, name),
-// so a name that varies per round is what keeps every round's feedback instead
-// of overwriting the previous one. The shape stays flat and dotted because
-// gateshare.safeArtifactName truncates at the last "/" — a path-style name
-// would collapse to its basename and start colliding.
+// FeedbackArtifactName builds a feedback product name. ReAct feedback
+// (review/clarify) is a current-state document, so every round of one
+// node+iteration intentionally shares the same name and upserts its cumulative
+// conclusion. Gate and preview feedback retain their historical per-round
+// names: they are discrete submissions rather than a dialogue.
 //
 // The result always satisfies the citation name shape
 // ^[a-z0-9][a-z0-9._-]*\.[a-z0-9]{1,16}$.
@@ -47,8 +45,13 @@ func FeedbackArtifactName(kind, nodeID string, iteration, round int) string {
 	if round < 1 {
 		round = 1
 	}
+	kind = feedbackKindSlug(kind)
+	if kind == "review" || kind == "clarify" {
+		return fmt.Sprintf("%s%s.%s.i%d.json",
+			FeedbackArtifactPrefix, kind, feedbackNodeSlug(nodeID), iteration)
+	}
 	return fmt.Sprintf("%s%s.%s.i%dr%d.json",
-		FeedbackArtifactPrefix, feedbackKindSlug(kind), feedbackNodeSlug(nodeID), iteration, round)
+		FeedbackArtifactPrefix, kind, feedbackNodeSlug(nodeID), iteration, round)
 }
 
 // feedbackKindSlug keeps the kind segment inside the known set so a malformed

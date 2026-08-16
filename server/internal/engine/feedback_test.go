@@ -38,10 +38,9 @@ func decodeIndex(t *testing.T, db *gorm.DB, runID string) map[string]any {
 	return doc
 }
 
-// Three push-backs on one execution must leave three separate products behind.
-// Overwriting would erase the reasoning of the earlier rounds, which is the
-// whole reason the ledger exists.
-func TestReviseRoundsEachProduceTheirOwnArtifact(t *testing.T) {
+// Three push-backs on one execution must converge on one cumulative product.
+// The individual reasoning remains in FeedbackEvent and feedback_index.json.
+func TestReviseRoundsProduceOneCumulativeArtifact(t *testing.T) {
 	eng, db, _ := setupReviewEngine(t, true)
 
 	run, err := eng.StartRun("review-wf", map[string]any{"idea": "登录"}, "test")
@@ -63,25 +62,23 @@ func TestReviseRoundsEachProduceTheirOwnArtifact(t *testing.T) {
 	}
 
 	rounds := feedbackArtifacts(db, run.ID)
-	if len(rounds) != 3 {
-		t.Fatalf("want 3 per-round products, got %d: %+v", len(rounds), rounds)
+	if len(rounds) != 1 {
+		t.Fatalf("want 1 cumulative product, got %d: %+v", len(rounds), rounds)
 	}
-	seen := map[string]bool{}
-	for i, a := range rounds {
-		if seen[a.Name] {
-			t.Fatalf("duplicate product name %q", a.Name)
-		}
-		seen[a.Name] = true
-		if !strings.Contains(a.Content, opinions[i]) {
-			t.Fatalf("%s does not carry its own round's opinion:\n%s", a.Name, a.Content)
-		}
-		if a.NodeID != "prop" {
-			t.Fatalf("%s should hang off the producer node, got %q", a.Name, a.NodeID)
+	a := rounds[0]
+	if a.Name != "feedback.review.prop.i1.json" {
+		t.Fatalf("unexpected cumulative name %q", a.Name)
+	}
+	for _, opinion := range opinions {
+		if !strings.Contains(a.Content, opinion) {
+			t.Fatalf("%s does not carry all rounds' conclusions:\n%s", a.Name, a.Content)
 		}
 	}
-	// Each round only carries its own body; earlier rounds are one-line refs.
-	if strings.Contains(rounds[0].Content, opinions[2]) {
-		t.Fatalf("round 1 must not contain round 3's body:\n%s", rounds[0].Content)
+	if a.NodeID != "prop" {
+		t.Fatalf("%s should hang off the producer node, got %q", a.Name, a.NodeID)
+	}
+	if !strings.Contains(a.Content, `"roundCount": 3`) {
+		t.Fatalf("cumulative product must record all rounds:\n%s", a.Content)
 	}
 
 	idx := decodeIndex(t, db, run.ID)
@@ -93,6 +90,9 @@ func TestReviseRoundsEachProduceTheirOwnArtifact(t *testing.T) {
 		m := r.(map[string]any)
 		if m["artifact"] == "" || m["artifact"] == nil {
 			t.Fatalf("index row missing artifact pointer: %+v", m)
+		}
+		if m["artifact"] != a.Name {
+			t.Fatalf("index must point every ReAct round at the shared product: %+v", m)
 		}
 	}
 	// The producer's own deliverable survived: feedback products must not be

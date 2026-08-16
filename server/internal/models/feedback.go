@@ -17,7 +17,7 @@ const (
 
 // FeedbackEvent is one round of human feedback on a run, persisted append-only.
 //
-// It is the source of truth from which the per-round feedback artifacts and
+// It is the source of truth from which feedback artifacts and
 // feedback_index.json are rendered, mirroring how run_error.json is derived
 // from StateRun. Rows are only ever INSERTed: a node visited N times with M
 // revise turns each keeps every one of them, because losing a round loses the
@@ -26,8 +26,8 @@ const (
 // Two ordinals are carried on purpose. Seq is the run-global order. Round is
 // the ordinal within (NodeID, Iteration) — one execution can hold many revise
 // turns, so Iteration alone cannot address "the 3rd push-back of the 2nd run".
-// Round is what makes the artifact name unique, and therefore what makes the
-// artifact store's (run_id, name) upsert non-destructive.
+// Round remains the audit ordinal. ReAct artifacts intentionally do not include
+// it: they are upserted cumulative conclusions keyed by node and iteration.
 type FeedbackEvent struct {
 	ID    uint   `gorm:"primaryKey" json:"-"`
 	RunID string `gorm:"index" json:"runId"`
@@ -56,7 +56,8 @@ type FeedbackEvent struct {
 	// Targets are absent because nothing landed.
 	Interrupted bool `json:"interrupted,omitempty"`
 
-	// ArtifactName is the per-round product this event rendered to. Empty when
+	// ArtifactName is the product this event rendered to. ReAct rounds in one
+	// execution share it; gate/preview rounds retain distinct names. Empty when
 	// IndexOnly is set.
 	ArtifactName string `json:"artifactName,omitempty"`
 	// IndexOnly marks a round that is listed in the index but gets no
@@ -89,7 +90,7 @@ type FeedbackTarget struct {
 	Changed bool   `json:"changed"`
 }
 
-// WantsArtifact reports whether this round gets its own product file.
+// WantsArtifact reports whether this event participates in a product file.
 func (e FeedbackEvent) WantsArtifact() bool { return !e.IndexOnly }
 
 // HasSubstance reports whether the event carries actual human input worth

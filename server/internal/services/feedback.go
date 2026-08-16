@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -153,7 +154,8 @@ func FeedbackDigest(content string) string {
 	return hex.EncodeToString(sum[:])[:16]
 }
 
-// MarshalRoundJSON renders one round's standalone product.
+// MarshalRoundJSON renders one round's standalone product. It remains the
+// legacy/discrete-product representation used by gate and preview feedback.
 //
 // The body holds only this round's increment. Prior rounds appear as one-line
 // summaries plus a pointer to the previous product, so the file is
@@ -208,6 +210,58 @@ func MarshalRoundJSON(ev models.FeedbackEvent, prior []models.FeedbackEvent, run
 		payload["prev"] = prev
 	}
 
+	b, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// MarshalFeedbackSummaryJSON renders the one current-state product for a ReAct
+// node execution. Its primary content is a conclusion over every event already
+// recorded for that node+iteration; round-level transcript and raw detail stay
+// in the append-only event table and feedback_index.json.
+func MarshalFeedbackSummaryJSON(events []models.FeedbackEvent, runID string, node NodeRef) (string, error) {
+	if len(events) == 0 {
+		return "", errors.New("cannot summarize empty feedback events")
+	}
+	latest := events[len(events)-1]
+	conclusions := make([]string, 0, len(events))
+	var annotations []models.ReactAnnotation
+	var attachments []models.PromptImage
+	for _, ev := range events {
+		part := strings.TrimSpace(ev.AgentSummary)
+		if part == "" {
+			part = FeedbackSummary(ev)
+		}
+		conclusions = append(conclusions, fmt.Sprintf("第%d轮：%s", ev.Round, part))
+		annotations = append(annotations, ev.Annotations...)
+		attachments = append(attachments, ev.Attachments...)
+	}
+	payload := map[string]any{
+		"runId":       runID,
+		"kind":        latest.Kind,
+		"node":        node.toMap(latest.NodeID),
+		"iteration":   latest.Iteration,
+		"roundCount":  len(events),
+		"latestRound": latest.Round,
+		"at":          latest.OccurredAt.Format(time.RFC3339),
+		"index":       FeedbackIndexArtifactName,
+		"summary":     "截至第" + fmt.Sprint(latest.Round) + "轮的归纳结论：" + strings.Join(conclusions, "；"),
+	}
+	if latest.Interrupted {
+		payload["interrupted"] = true
+	}
+	if len(annotations) > 0 || len(attachments) > 0 {
+		feedback := map[string]any{}
+		if len(annotations) > 0 {
+			feedback["annotations"] = annotations
+		}
+		if len(attachments) > 0 {
+			feedback["attachments"] = attachments
+		}
+		payload["feedback"] = feedback
+	}
 	b, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return "", err

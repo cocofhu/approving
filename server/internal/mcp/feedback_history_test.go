@@ -15,14 +15,13 @@ func reviewEvent(node string, iter, round int, text, artifact string) models.Fee
 	}
 }
 
-// Every round in scope must show up, each citing its own product — that pointer
-// is what makes the overview a table of contents instead of a summary.
-func TestRunHistoryListsEveryFeedbackRoundWithArtifactCitation(t *testing.T) {
+// Every audit round stays visible while ReAct rounds cite one shared conclusion.
+func TestRunHistoryListsEveryFeedbackRoundWithSharedArtifactCitation(t *testing.T) {
 	fh := twoGateRun()
 	fh.feedback = []models.FeedbackEvent{
-		reviewEvent("design", 2, 1, "证据不足", "feedback.review.design.i2r1.json"),
-		reviewEvent("design", 2, 2, "图表改柱状图", "feedback.review.design.i2r2.json"),
-		reviewEvent("design", 2, 3, "补上原始链接", "feedback.review.design.i2r3.json"),
+		reviewEvent("design", 2, 1, "证据不足", "feedback.review.design.i2.json"),
+		reviewEvent("design", 2, 2, "图表改柱状图", "feedback.review.design.i2.json"),
+		reviewEvent("design", 2, 3, "补上原始链接", "feedback.review.design.i2.json"),
 	}
 	h := NewHost(&memStore{})
 	h.SetHistoryProvider(fh)
@@ -36,11 +35,12 @@ func TestRunHistoryListsEveryFeedbackRoundWithArtifactCitation(t *testing.T) {
 			t.Fatalf("round %q missing from overview:\n%s", want, out)
 		}
 	}
-	for i := 1; i <= 3; i++ {
-		cite := fmt.Sprintf("read_artifact feedback.review.design.i2r%d.json", i)
-		if !strings.Contains(out, cite) {
-			t.Fatalf("missing drill-down %q:\n%s", cite, out)
-		}
+	cite := "read_artifact feedback.review.design.i2.json"
+	if !strings.Contains(out, cite) {
+		t.Fatalf("missing shared conclusion citation %q:\n%s", cite, out)
+	}
+	if strings.Contains(out, "i2r") {
+		t.Fatalf("ReAct history must not require per-round artifact names:\n%s", out)
 	}
 	if !strings.Contains(out, "#2.3") {
 		t.Fatalf("rounds must be addressable as iteration.round:\n%s", out)
@@ -141,7 +141,7 @@ func TestExecutionDetailRendersFeedbackRounds(t *testing.T) {
 func TestFeedbackBriefOnlyReportsInScopeRounds(t *testing.T) {
 	fh := twoGateRun()
 	fh.feedback = []models.FeedbackEvent{
-		reviewEvent("design", 1, 1, "用直角", "feedback.review.design.i1r1.json"),
+		reviewEvent("design", 1, 1, "用直角", "feedback.review.design.i1.json"),
 		{RunID: "r", Seq: 2, Round: 1, Kind: models.FeedbackKindClarify, NodeID: "design", Iteration: 1,
 			Text: "自动采纳", IndexOnly: true},
 	}
@@ -152,7 +152,7 @@ func TestFeedbackBriefOnlyReportsInScopeRounds(t *testing.T) {
 	if n != 2 {
 		t.Fatalf("count = %d, want 2", n)
 	}
-	if len(cites) != 1 || !strings.Contains(cites[0], "feedback.review.design.i1r1.json") {
+	if len(cites) != 1 || !strings.Contains(cites[0], "feedback.review.design.i1.json") {
 		t.Fatalf("only rounds with products can be cited: %v", cites)
 	}
 	if n, _ := h.FeedbackBrief("r", "code"); n != 0 {

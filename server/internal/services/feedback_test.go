@@ -14,7 +14,7 @@ import (
 // platform's citation name shape or it cannot be cited or read back.
 var nameShape = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*\.[a-z0-9]{1,16}$`)
 
-func TestFeedbackArtifactNameShapeAndUniqueness(t *testing.T) {
+func TestFeedbackArtifactNameShapeAndNodeIterationUniqueness(t *testing.T) {
 	cases := []struct{ kind, node string }{
 		{"review", "research-1"},
 		{"clarify", "clarify_1"},
@@ -38,8 +38,14 @@ func TestFeedbackArtifactNameShapeAndUniqueness(t *testing.T) {
 	}
 
 	// The readable case stays readable — no digest suffix when nothing is lost.
-	if got := FeedbackArtifactName("review", "research-1", 2, 3); got != "feedback.review.research-1.i2r3.json" {
+	if got := FeedbackArtifactName("review", "research-1", 2, 3); got != "feedback.review.research-1.i2.json" {
 		t.Fatalf("clean node id should not be mangled, got %q", got)
+	}
+	if FeedbackArtifactName("review", "research-1", 2, 1) != FeedbackArtifactName("review", "research-1", 2, 3) {
+		t.Fatal("ReAct rounds in one iteration must share one product name")
+	}
+	if FeedbackArtifactName("gate", "research-1", 2, 1) == FeedbackArtifactName("gate", "research-1", 2, 3) {
+		t.Fatal("gate rounds must keep their distinct product names")
 	}
 	// Case folding and separator replacement must not merge distinct ids.
 	if FeedbackArtifactName("review", "Foo", 1, 1) == FeedbackArtifactName("review", "foo", 1, 1) {
@@ -51,11 +57,14 @@ func TestFeedbackArtifactNameShapeAndUniqueness(t *testing.T) {
 }
 
 func TestFeedbackArtifactNameNormalizesOrdinals(t *testing.T) {
-	if got := FeedbackArtifactName("review", "n", 0, 0); got != "feedback.review.n.i1r1.json" {
+	if got := FeedbackArtifactName("review", "n", 0, 0); got != "feedback.review.n.i1.json" {
 		t.Fatalf("non-positive ordinals should floor to 1, got %q", got)
 	}
 	if !IsFeedbackArtifactName(FeedbackIndexArtifactName) {
 		t.Fatal("index must be recognized as a ledger name")
+	}
+	if !IsFeedbackArtifactName("feedback.review.n.i1r1.json") {
+		t.Fatal("legacy per-round feedback must remain readable")
 	}
 	if IsFeedbackArtifactName("research.json") {
 		t.Fatal("a normal product must not be treated as ledger")
@@ -114,9 +123,9 @@ func TestAppendAssignsSeqAndRoundPerNodeIteration(t *testing.T) {
 	if events[3].Round != 1 {
 		t.Fatalf("a different node starts a fresh round counter, got %d", events[3].Round)
 	}
-	// Three consecutive rounds must produce three distinct products, all kept.
-	if len(names) != 4 {
-		t.Fatalf("want 4 distinct artifact names, got %d: %v", len(names), names)
+	// ReAct rounds share a node+iteration product; another node gets its own.
+	if len(names) != 2 {
+		t.Fatalf("want 2 distinct artifact names, got %d: %v", len(names), names)
 	}
 }
 
@@ -224,6 +233,36 @@ func TestMarshalRoundJSONOmitsEmptyAgentSummary(t *testing.T) {
 	}
 	if _, ok := doc["agentSummary"]; ok {
 		t.Fatalf("empty agentSummary must be omitted, got %v", doc["agentSummary"])
+	}
+}
+
+func TestMarshalFeedbackSummaryJSONCoversAllRoundsWithoutTranscript(t *testing.T) {
+	at := time.Date(2026, 8, 13, 15, 7, 22, 0, time.UTC)
+	events := []models.FeedbackEvent{
+		{RunID: "run-1", Kind: models.FeedbackKindReview, NodeID: "research-1", Iteration: 1, Round: 1,
+			OccurredAt: at, Text: "补充竞品对比", Turns: []models.ReactMessage{{Role: "human", Text: "补充竞品对比"}}},
+		{RunID: "run-1", Kind: models.FeedbackKindReview, NodeID: "research-1", Iteration: 1, Round: 2,
+			OccurredAt: at.Add(time.Minute), AgentSummary: "图表改为柱状图"},
+	}
+	body, err := MarshalFeedbackSummaryJSON(events, "run-1", NodeRef{Label: "调研", Type: "research"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal([]byte(body), &doc); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	summary, _ := doc["summary"].(string)
+	for _, want := range []string{"补充竞品对比", "图表改为柱状图"} {
+		if !strings.Contains(summary, want) {
+			t.Fatalf("summary missing %q: %s", want, summary)
+		}
+	}
+	if doc["roundCount"] != float64(2) || doc["latestRound"] != float64(2) {
+		t.Fatalf("round coverage = %#v", doc)
+	}
+	if _, ok := doc["transcript"]; ok {
+		t.Fatalf("cumulative product must not force a full transcript: %s", body)
 	}
 }
 
