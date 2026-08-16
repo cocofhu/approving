@@ -30,6 +30,9 @@ func TestIsRetryableSandboxErr(t *testing.T) {
 		{"deadline", context.DeadlineExceeded, false},
 		{"canceled", context.Canceled, false},
 		{"agent-error", errors.New("acp error: model refused"), false},
+		{"cursor-api", errors.New("acp error: exit status 1; stderr: Failed to reach the Cursor API"), true},
+		{"tls-abort", errors.New("acp error: exit status 1; stderr: Error: [aborted] Client network socket disconnected before secure TLS connection was established"), true},
+		{"econnreset", errors.New("agent chat: read: connection reset by peer: ECONNRESET"), true},
 	}
 	for _, tc := range cases {
 		if got := isRetryableSandboxErr(tc.err); got != tc.want {

@@ -10,11 +10,13 @@ import (
 )
 
 // isAutoRetryable reports whether a failed node's outcome may be auto-retried
-// from the failure position. It reads only oc.retryable — callers (execAgent /
-// execStructuredAgent) set that flag on RunAgent failures. Contract finalize
-// misses, structured-gate rejects, and other deterministic faults leave the
-// zero value false and are not auto-retried. Note: "计划未全部完成" returned as a
-// RunAgent error still goes through execAgent and is therefore retryable.
+// from the failure position. It reads only oc.retryable — callers set that
+// flag on RunAgent / finish-path transport faults and on CAPA A7 empty MCP
+// surfaces (tools unreachable). Contract finalize misses (agent wrote other
+// MCP traffic but skipped the reserved product), structured-gate rejects, and
+// other deterministic faults leave the zero value false and are not
+// auto-retried. Note: "计划未全部完成" returned as a RunAgent error still goes
+// through execAgent and is therefore retryable.
 func isAutoRetryable(oc nodeOutcome) bool {
 	return oc.retryable
 }

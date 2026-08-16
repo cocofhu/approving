@@ -46,7 +46,8 @@ func (e *Engine) execVisual(c *execCtx, node *models.Node) nodeOutcome {
 	req := e.nodeReq(c, node)
 	res, err := e.provider.RunAgent(context.Background(), req)
 	if err != nil {
-		return nodeOutcome{status: "failed", err: err.Error(), outputMd: "视觉网页节点执行失败:" + err.Error(), events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
+		return nodeOutcome{status: "failed", err: err.Error(), outputMd: "视觉网页节点执行失败:" + err.Error(),
+			retryable: true, events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
 	}
 	return e.withOutcome(c, node, res, func(r runtime.NodeResult) nodeOutcome {
 		return e.finalizeVisual(c, node, r)
@@ -92,7 +93,8 @@ func (e *Engine) execPlan(c *execCtx, node *models.Node) nodeOutcome {
 	req := e.nodeReq(c, node)
 	res, err := e.provider.RunAgent(context.Background(), req)
 	if err != nil {
-		return nodeOutcome{status: "failed", err: err.Error(), outputMd: "计划节点执行失败:" + err.Error(), events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
+		return nodeOutcome{status: "failed", err: err.Error(), outputMd: "计划节点执行失败:" + err.Error(),
+			retryable: true, events: res.Events, usage: res.Usage, usageByModel: res.UsageByModel}
 	}
 	return e.withOutcome(c, node, res, func(r runtime.NodeResult) nodeOutcome {
 		return e.finalizePlan(c, node, r)

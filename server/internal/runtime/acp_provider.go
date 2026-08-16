@@ -31,16 +31,33 @@ var errSandboxSetup = errors.New("sandbox setup failed")
 
 // isRetryableSandboxErr reports whether err is a transient sandbox/ACP fault
 // worth retrying in a fresh container: setup failures, a connection that
-// dropped mid-turn, or an idle (stuck) turn. Agent-reported errors, the hard
-// chat deadline (DeadlineExceeded), and contract misses are NOT retryable —
-// re-running them would just waste a sandbox and likely fail identically.
+// dropped mid-turn, an idle (stuck) turn, or Cursor CLI transport/reachability
+// faults. Agent-reported logic errors, the hard chat deadline
+// (DeadlineExceeded), and contract misses are NOT retryable — re-running them
+// would just waste a sandbox and likely fail identically.
 func isRetryableSandboxErr(err error) bool {
 	if err == nil {
 		return false
 	}
 	return errors.Is(err, errSandboxSetup) ||
 		errors.Is(err, sandbox.ErrConnClosed) ||
-		errors.Is(err, sandbox.ErrChatIdle)
+		errors.Is(err, sandbox.ErrChatIdle) ||
+		isTransientACPTransportErr(err)
+}
+
+// isTransientACPTransportErr matches Cursor CLI / TLS reachability faults that
+// surface as agent-process exit errors (not typed ErrConnClosed). A fresh
+// sandbox often recovers once the upstream blip clears.
+func isTransientACPTransportErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "Failed to reach the Cursor API") ||
+		strings.Contains(msg, "Client network socket disconnected before secure TLS connection was established") ||
+		strings.Contains(msg, "ECONNRESET") ||
+		strings.Contains(msg, "ETIMEDOUT") ||
+		strings.Contains(msg, "ENETUNREACH")
 }
 
 // isChatTimeoutErr reports whether err is the per-turn chat deadline (context

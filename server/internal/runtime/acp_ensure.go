@@ -43,12 +43,12 @@ func (c *acpProvider) ensureOutcome(ctx context.Context, req NodeReq, acp *sandb
 		res, err := c.streamChat(chatCtx, acp, req, prompt, nil)
 		cancel()
 		if err != nil {
-			if isChatTimeoutErr(err) {
-				return nil, fmt.Errorf("agent chat: %w", err)
-			}
+			// Propagate transport/API faults so the engine can auto-retry the
+			// node; only a successful but empty re-prompt round falls through
+			// to fail-closed below.
 			log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
 				Msg("node_complete re-prompt failed")
-			return nil, nil
+			return nil, fmt.Errorf("agent chat: %w", err)
 		}
 		absorbChat(usage, byModel, events, res)
 		qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
@@ -89,12 +89,9 @@ func (c *acpProvider) ensureStructured(ctx context.Context, req NodeReq, acp *sa
 		res, err := c.streamChat(chatCtx, acp, req, prompt, nil)
 		cancel()
 		if err != nil {
-			if isChatTimeoutErr(err) {
-				return nil, fmt.Errorf("agent chat: %w", err)
-			}
 			log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
 				Str("artifact", name).Msg("structured product re-prompt failed")
-			return nil, nil
+			return nil, fmt.Errorf("agent chat: %w", err)
 		}
 		absorbChat(usage, byModel, events, res)
 		qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
@@ -140,12 +137,9 @@ func (c *acpProvider) ensurePlanComplete(ctx context.Context, req NodeReq, acp *
 		res, err := c.streamChat(chatCtx, acp, req, prompt, nil)
 		cancel()
 		if err != nil {
-			if isChatTimeoutErr(err) {
-				return fmt.Errorf("agent chat: %w", err)
-			}
 			log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
 				Msg("implement plan-complete re-prompt failed")
-			break
+			return fmt.Errorf("agent chat: %w", err)
 		}
 		absorbChat(usage, byModel, events, res)
 	}
@@ -179,11 +173,8 @@ func (c *acpProvider) ensurePreviewRegistered(ctx context.Context, req NodeReq, 
 		res, err := c.streamChat(chatCtx, acp, req, prompt, nil)
 		cancel()
 		if err != nil {
-			if isChatTimeoutErr(err) {
-				return fmt.Errorf("agent chat: %w", err)
-			}
 			log.Warn().Err(err).Str("node", req.NodeID).Msg("app_preview set_preview re-prompt failed")
-			break
+			return fmt.Errorf("agent chat: %w", err)
 		}
 		absorbChat(usage, byModel, events, res)
 		c.host.TakePendingQuestions(req.RunID, req.NodeID)

@@ -35,13 +35,18 @@ func (e *Engine) consumeNodeOutcome(c *execCtx, node *models.Node, res *runtime.
 	}
 	if !ok {
 		errMsg := e.missingOutcomeErr(c, node)
+		// True-zero MCP + no artifact usually means the tool surface was
+		// unreachable (API/transport blip), not that the agent forgot a call —
+		// mark retryable so NodeAutoRetryMax can recover with a fresh attempt.
+		retryable := errMsg == errMCPSurfaceEmpty
 		return nodeOutcome{
-			status:   "failed",
-			err:      errMsg,
-			outputMd: "节点失败:" + errMsg,
-			outputs:  res.Outputs,
-			events:   res.Events,
-			usage:    res.Usage, usageByModel: res.UsageByModel,
+			status:    "failed",
+			err:       errMsg,
+			outputMd:  "节点失败:" + errMsg,
+			outputs:   res.Outputs,
+			events:    res.Events,
+			usage:     res.Usage, usageByModel: res.UsageByModel,
+			retryable: retryable,
 		}, false
 	}
 	res.Outputs = mcp.MergeOutcomeOutputs(res.Outputs, o)

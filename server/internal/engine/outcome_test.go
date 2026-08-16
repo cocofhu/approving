@@ -72,6 +72,9 @@ func TestConsumeNodeOutcomeEmptyMCPSurface(t *testing.T) {
 	if fail.err != errMCPSurfaceEmpty {
 		t.Fatalf("err=%q want %q", fail.err, errMCPSurfaceEmpty)
 	}
+	if !fail.retryable {
+		t.Fatal("empty MCP surface must be retryable for NodeAutoRetryMax")
+	}
 	if !strings.Contains(fail.outputMd, errMCPSurfaceEmpty) {
 		t.Fatalf("outputMd=%q", fail.outputMd)
 	}
@@ -104,6 +107,9 @@ func TestConsumeNodeOutcomeMissingNodeComplete(t *testing.T) {
 	}
 	if fail.err != errMissingNodeComplete {
 		t.Fatalf("err=%q want %q", fail.err, errMissingNodeComplete)
+	}
+	if fail.retryable {
+		t.Fatal("missing node_complete with MCP evidence must not be auto-retryable")
 	}
 	if strings.Contains(fail.err, "工具面为空") {
 		t.Fatalf("must not use empty-surface wording when MCP traffic exists: %q", fail.err)
