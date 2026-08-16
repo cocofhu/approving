@@ -943,14 +943,14 @@ html.light .stats-panel {
 
         <TokenUsageByModelTable
           v-if="statsTab === 'single' && singleSummary.totalTokens != null"
-          class="mb-3.5"
+          class="mb-3"
           :parts="modelUsageParts"
           :unknown-model-display-name="unknownModelDisplayName"
         />
 
         <div
           v-if="singleBottleneck"
-          class="mb-3.5 border border-err/35 bg-err/6 px-3 py-2.5"
+          class="mb-3 border border-err/35 bg-err/6 px-3 py-2.5"
         >
           <div class="mb-1.5 flex items-center justify-between gap-2">
             <span class="text-[11px] font-semibold uppercase tracking-wide text-err">
