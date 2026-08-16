@@ -177,6 +177,11 @@ test.describe('shell notification center (IA separation)', () => {
       .locator('[data-testid="run-notifications-item"][data-status="completed"]')
       .first()
       .click()
+    await expect(page.getByTestId('notifications-page')).toBeVisible()
+    await page
+      .locator('[data-testid="notifications-item"][data-status="completed"]')
+      .first()
+      .click()
     await expect(page.getByTestId('run-output-result-cards')).toBeVisible({ timeout: 10_000 })
     await expect(page.getByTestId('output-result-detail-kind')).toHaveText('自定义产物 · HTML')
     await expect(page.getByTestId('output-result-detail-kind')).not.toHaveText('结构化产物')

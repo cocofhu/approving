@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import EmptyState from '@/components/ui/EmptyState.vue'
+import Icon from '@/components/ui/Icon.vue'
 import Pagination from '@/components/ui/Pagination.vue'
 import RunOutputPptModal from '@/components/shell/RunOutputPptModal.vue'
 import { useNotificationsPageEntry } from '@/lib/composables/useNotificationsPageEntry'
@@ -157,128 +158,150 @@ defineExpose({
 
 <template>
   <div class="flex h-full min-h-0 flex-col" data-testid="notifications-page">
-    <div class="flex flex-col items-stretch gap-3 border-b border-line px-4 py-4 md:flex-row md:flex-wrap md:items-start md:justify-between md:px-6">
-      <div>
-        <h1 class="m-0 text-base font-semibold text-txt">{{ t('pages.notifications.title') }}</h1>
-        <p class="mt-1 text-xs text-txt3">{{ t('pages.notifications.subtitle') }}</p>
-        <p
-          v-if="pageRangeText"
-          class="mt-1 text-xs text-txt3"
-          data-testid="notifications-page-range"
-        >
-          {{ pageRangeText }}
-        </p>
-      </div>
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="text-xs text-txt3" data-testid="notifications-unread-count">
-          {{ t('shell.runNotifications.unreadCount', { n: unreadCount }) }}
-        </span>
-        <button
-          type="button"
-          class="min-h-11 border border-line bg-transparent px-3 text-[12px] text-txt2 hover:border-accent hover:text-accent disabled:opacity-40"
-          data-testid="notifications-mark-all"
-          :disabled="unreadCount === 0"
-          @click="markAllRead()"
-        >
-          {{ t('shell.runNotifications.markAllRead') }}
-        </button>
-      </div>
-    </div>
-
-    <div class="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5 md:px-6">
-      <button
-        v-for="opt in (['all', 'unread', 'read'] as const)"
-        :key="opt"
-        type="button"
-        class="min-h-11 border px-2.5 py-1 text-[12px]"
-        :class="
-          filter === opt
-            ? 'border-accent/45 bg-accent-dim text-txt'
-            : 'border-line bg-transparent text-txt2 hover:border-line-strong hover:text-txt'
-        "
-        :data-testid="`notifications-filter-${opt}`"
-        @click="setFilter(opt)"
-      >
-        {{ t(`pages.notifications.filter.${opt}`) }}
-      </button>
-    </div>
-
     <div class="min-h-0 flex-1 overflow-auto">
-      <div
-        v-if="loading && !listItems.length"
-        class="px-6 py-14 text-center text-sm text-txt3"
-        data-testid="notifications-loading"
-      >
-        {{ t('pages.notifications.loading') }}
-      </div>
-      <EmptyState
-        v-else-if="!filteredItems.length && filter === 'all'"
-        icon="bell"
-        :title="t('shell.runNotifications.empty')"
-        :desc="`${t('shell.runNotifications.emptyHint')} ${t('shell.runNotifications.emptyRunsHint')}`"
-      />
-      <EmptyState
-        v-else-if="!filteredItems.length"
-        icon="bell"
-        :title="t('pages.notifications.filterEmpty')"
-        :desc="t('pages.notifications.filterEmptyHint')"
-      />
-      <button
-        v-for="item in pagedItems"
-        :key="item.runId"
-        type="button"
-        class="relative block w-full border-b border-line px-4 py-3.5 text-left hover:bg-elevated md:px-6"
-        :class="item.unread ? 'bg-accent/5' : ''"
-        data-testid="notifications-item"
-        :data-run-id="item.runId"
-        :data-status="item.status"
-        :data-unread="item.unread ? 'true' : 'false'"
-        :data-before-baseline="item.beforeBaseline ? 'true' : 'false'"
-        @click="onItemClick(item)"
-      >
-        <span
-          v-if="item.unread"
-          class="absolute bottom-0 left-0 top-0 w-0.5 bg-accent"
-          aria-hidden="true"
-        />
-        <div class="mb-1 flex items-center gap-2">
-          <span
-            class="shrink-0 border px-1.5 py-0.5 text-[10px] font-semibold"
-            :class="
-              item.status === 'failed' ? 'border-err/45 text-err' : 'border-ok/40 text-ok'
-            "
-          >{{ statusLabel(item.status) }}</span>
-          <span class="truncate text-[13px] font-medium text-txt">{{ itemTitle(item) }}</span>
-        </div>
-        <div class="truncate text-xs text-txt3">
-          {{ itemContext(item) }}
-          <template v-if="item.status === 'completed'">
-            · {{ t('shell.runNotifications.clickForOutput') }}
-          </template>
-          <template v-else>
-            · {{ t('shell.runNotifications.clickForDetail') }}
-          </template>
-          · {{ relTime(item.finishedApprox || item.startedAt) }}
-          <template v-if="item.beforeBaseline">
-            ·
-            <span data-testid="notifications-before-baseline">{{
-              t('shell.runNotifications.beforeBaseline')
-            }}</span>
-          </template>
-        </div>
-      </button>
-    </div>
+      <div class="mx-auto w-full max-w-[880px] px-4 py-4 md:px-6 md:py-6">
+        <header class="flex flex-col items-stretch gap-3 border-b border-line pb-4 md:flex-row md:flex-wrap md:items-start md:justify-between">
+          <div>
+            <h1 class="m-0 text-lg font-semibold tracking-tight text-txt">{{ t('pages.notifications.title') }}</h1>
+            <p class="mt-1 text-xs text-txt3">{{ t('pages.notifications.subtitle') }}</p>
+            <p
+              v-if="pageRangeText"
+              class="mt-1 text-xs text-txt3"
+              data-testid="notifications-page-range"
+            >
+              {{ pageRangeText }}
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs text-txt3" data-testid="notifications-unread-count">
+              {{ t('shell.runNotifications.unreadCount', { n: unreadCount }) }}
+            </span>
+            <button
+              type="button"
+              class="min-h-11 border border-line bg-transparent px-3 text-[12px] text-txt2 hover:border-accent hover:text-accent disabled:opacity-40"
+              data-testid="notifications-mark-all"
+              :disabled="unreadCount === 0"
+              @click="markAllRead()"
+            >
+              {{ t('shell.runNotifications.markAllRead') }}
+            </button>
+          </div>
+        </header>
 
-    <Pagination
-      v-if="filteredTotal > PAGE_SIZE"
-      v-model:page="page"
-      class="shrink-0"
-      data-testid="notifications-pagination"
-      :page-size="PAGE_SIZE"
-      :total="filteredTotal"
-      :summary-override="pagerSummary"
-      summary-test-id="notifications-pager-summary"
-    />
+        <div class="flex flex-wrap items-center gap-2 py-3">
+          <button
+            v-for="opt in (['all', 'unread', 'read'] as const)"
+            :key="opt"
+            type="button"
+            class="min-h-11 border px-2.5 py-1 text-[12px]"
+            :class="
+              filter === opt
+                ? 'border-accent/45 bg-accent-dim text-txt'
+                : 'border-line bg-transparent text-txt2 hover:border-line-strong hover:text-txt'
+            "
+            :data-testid="`notifications-filter-${opt}`"
+            @click="setFilter(opt)"
+          >
+            {{ t(`pages.notifications.filter.${opt}`) }}
+          </button>
+        </div>
+
+        <div
+          v-if="loading && !listItems.length"
+          class="border border-line bg-surface px-6 py-14 text-center text-sm text-txt3 shadow-card"
+          data-testid="notifications-loading"
+        >
+          {{ t('pages.notifications.loading') }}
+        </div>
+        <EmptyState
+          v-else-if="!filteredItems.length && filter === 'all'"
+          icon="bell"
+          :title="t('shell.runNotifications.empty')"
+          :desc="`${t('shell.runNotifications.emptyHint')} ${t('shell.runNotifications.emptyRunsHint')}`"
+        />
+        <EmptyState
+          v-else-if="!filteredItems.length"
+          icon="bell"
+          :title="t('pages.notifications.filterEmpty')"
+          :desc="t('pages.notifications.filterEmptyHint')"
+        />
+        <div v-else class="border border-line bg-surface shadow-card">
+          <button
+            v-for="item in pagedItems"
+            :key="item.runId"
+            type="button"
+            class="group relative flex w-full items-start gap-3 border-b border-line px-4 py-3 text-left last:border-b-0 hover:bg-elevated md:px-4"
+            :class="item.unread ? 'bg-accent/5' : ''"
+            data-testid="notifications-item"
+            :data-run-id="item.runId"
+            :data-status="item.status"
+            :data-unread="item.unread ? 'true' : 'false'"
+            :data-before-baseline="item.beforeBaseline ? 'true' : 'false'"
+            @click="onItemClick(item)"
+          >
+            <span
+              v-if="item.unread"
+              class="absolute bottom-0 left-0 top-0 w-0.5 bg-accent"
+              aria-hidden="true"
+            />
+            <span
+              class="mt-0.5 inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center border"
+              :class="
+                item.status === 'failed'
+                  ? 'border-err/45 bg-err/10 text-err'
+                  : 'border-ok/40 bg-ok/10 text-ok'
+              "
+              aria-hidden="true"
+            >
+              <Icon :name="item.status === 'failed' ? 'close' : 'check'" :size="13" />
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="flex items-center gap-2">
+                <span class="truncate text-[13px] font-medium text-txt">{{ itemTitle(item) }}</span>
+                <span
+                  class="shrink-0 border px-1.5 py-0.5 text-[10px] font-semibold"
+                  :class="
+                    item.status === 'failed' ? 'border-err/45 text-err' : 'border-ok/40 text-ok'
+                  "
+                >{{ statusLabel(item.status) }}</span>
+              </span>
+              <span class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-txt3">
+                <span class="truncate text-txt2">{{ item.workflowName || item.title }}</span>
+                <span aria-hidden="true">·</span>
+                <span class="font-mono text-[11px]">{{ item.runId }}</span>
+                <template v-if="item.beforeBaseline">
+                  <span aria-hidden="true">·</span>
+                  <span data-testid="notifications-before-baseline">{{
+                    t('shell.runNotifications.beforeBaseline')
+                  }}</span>
+                </template>
+              </span>
+            </span>
+            <span class="hidden w-32 shrink-0 flex-col items-end gap-1 text-right sm:flex">
+              <span class="text-xs tabular-nums text-txt3">{{ relTime(item.finishedApprox || item.startedAt) }}</span>
+              <span class="text-[11px] text-accent-2 opacity-0 transition-opacity group-hover:opacity-100">
+                {{
+                  item.status === 'completed'
+                    ? t('shell.runNotifications.clickForOutput')
+                    : t('shell.runNotifications.clickForDetail')
+                }}
+              </span>
+            </span>
+          </button>
+        </div>
+
+        <Pagination
+          v-if="filteredTotal > PAGE_SIZE"
+          v-model:page="page"
+          class="shrink-0"
+          data-testid="notifications-pagination"
+          :page-size="PAGE_SIZE"
+          :total="filteredTotal"
+          :summary-override="pagerSummary"
+          summary-test-id="notifications-pager-summary"
+        />
+      </div>
+    </div>
 
     <RunOutputPptModal
       :open="outputOpen"
