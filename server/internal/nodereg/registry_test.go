@@ -29,6 +29,12 @@ func TestBuildManifestMatchesRegistry(t *testing.T) {
 	if m.OutputKeyToArtifact["research"] != mcp.ResearchArtifactName {
 		t.Fatal("research mapping")
 	}
+	if m.OutputKeyToArtifact["proposal"] != mcp.ProposalArtifactName {
+		t.Fatal("selected proposal mapping")
+	}
+	if m.ArtifactToOutputJSON[mcp.ProposalArtifactName] != "proposal_json" {
+		t.Fatal("selected proposal json key")
+	}
 	if m.ArtifactToOutputJSON[mcp.TestResultArtifactName] != "test_result_json" {
 		t.Fatal("test json key")
 	}

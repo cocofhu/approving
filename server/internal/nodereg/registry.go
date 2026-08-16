@@ -186,6 +186,7 @@ var registry = map[string]Spec{
 	},
 	"proposal_select": {
 		Type: "proposal_select", Label: "方案确认", Category: "门禁", Exec: ExecProposalSelect,
+		ArtifactName: mcp.ProposalArtifactName, OutputKey: "proposal",
 	},
 	"submit_mr": {
 		Type: "submit_mr", Label: "提交 MR", Category: "Agent", Exec: ExecSubmitMR,
