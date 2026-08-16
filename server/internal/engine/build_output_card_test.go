@@ -129,6 +129,44 @@ func TestBuildOutputCardBranches(t *testing.T) {
 	}
 }
 
+func TestBuildOutputCardSelectedProposalIsStructured(t *testing.T) {
+	e, db := setupEngine(t)
+	run := &models.Run{ID: "run-proposal-card", WorkflowID: "wf", Status: "running", Graph: models.Graph{
+		Nodes: []models.Node{{ID: "proposal_select", Label: "确认方案"}},
+	}}
+	if err := db.Create(run).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.StateRun{
+		RunID: run.ID, NodeID: "proposal_select", Status: "succeeded", Iteration: 1,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	const snapshot = `{"id":"p1","title":"已选方案","summary":"结构化快照","status":"accepted"}`
+	c := &execCtx{
+		run:   run,
+		graph: run.Graph,
+		nodeOutputs: map[string]map[string]any{
+			"proposal_select": {
+				"proposal":      "### 已选方案",
+				"proposal_json": snapshot,
+			},
+		},
+	}
+
+	card := mustBuildCard(t, e, c, "{{nodes.proposal_select.outputs.proposal}}")
+	if card["typeTag"] != "结构化产物" {
+		t.Fatalf("proposal type tag = %v, card=%+v", card["typeTag"], card)
+	}
+	if card["structuredArtifactName"] != "proposal.json" {
+		t.Fatalf("proposal artifact = %v, card=%+v", card["structuredArtifactName"], card)
+	}
+	if card["jsonSnapshot"] != snapshot {
+		t.Fatalf("proposal snapshot = %v, card=%+v", card["jsonSnapshot"], card)
+	}
+}
+
 func TestBuildOutputCardHidesUnexecutedAndSkipped(t *testing.T) {
 	e, db := setupEngine(t)
 	run := &models.Run{ID: "run-hide", WorkflowID: "wf", Status: "running", Graph: models.Graph{
