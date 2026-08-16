@@ -72,9 +72,13 @@ if ! curl -fsS "http://127.0.0.1:${CDP_LOOPBACK_PORT}/json/version" >/dev/null 2
 
   # No window manager on Xvfb: pin geometry explicitly. Approving NewTab windows
   # are re-sized via CDP (presentDesktop); this covers the bootstrap window.
+  # --disable-infobars: suppress Chrome for Testing non-interactive product info
+  # bar ("…is only for automated testing…") so it never paints into the VNC
+  # framebuffer and does not reserve top viewport height (Chromium CfT switch).
   "$CHROME_BIN" \
     --no-sandbox \
     --disable-dev-shm-usage \
+    --disable-infobars \
     --remote-debugging-port="${CDP_LOOPBACK_PORT}" \
     --window-size=1920,1080 \
     --window-position=0,0 \
