@@ -82,7 +82,7 @@ const eligibleVersions = computed(() =>
   (props.run.nodeExecutions?.[props.node.id] || [])
     .filter(
       (nodeRun) =>
-        nodeRun.status === 'completed' &&
+        (nodeRun.status === 'completed' || nodeRun.status === 'waiting_human') &&
         typeof nodeRun.outputs?.page === 'string' &&
         nodeRun.outputs.page.trim().length > 0,
     )
@@ -92,6 +92,7 @@ const latestEligibleIteration = computed(
   () => eligibleVersions.value[eligibleVersions.value.length - 1]?.iteration ?? null,
 )
 const selectedIteration = ref<number | null>(null)
+const followingLatest = ref(true)
 const selectedVersion = computed(
   () => eligibleVersions.value.find((nodeRun) => nodeRun.iteration === selectedIteration.value) || null,
 )
@@ -111,10 +112,16 @@ watch(
       !eligibleVersions.value.some((nodeRun) => nodeRun.iteration === selectedIteration.value)
     ) {
       selectedIteration.value = latestEligibleIteration.value
+      followingLatest.value = true
+    } else if (followingLatest.value) {
+      selectedIteration.value = latestEligibleIteration.value
     }
   },
   { immediate: true },
 )
+function onVersionChange() {
+  followingLatest.value = selectedIteration.value === latestEligibleIteration.value
+}
 watch(
   isHistoricalPreview,
   (historical) => emit('update:historicalPreview', historical),
@@ -266,6 +273,7 @@ const pending = computed(() => props.nodeRun.status === 'pending')
           <select
             v-if="isVisual && eligibleVersions.length >= 2"
             v-model="selectedIteration"
+            @change="onVersionChange"
             class="border border-line bg-elevated px-2 py-1 text-xs text-txt outline-none focus:border-accent"
             data-testid="structured-product-version-select"
             aria-label="选择视觉产物版本"

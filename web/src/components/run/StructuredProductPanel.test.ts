@@ -355,7 +355,7 @@ describe('StructuredProductPanel', () => {
           {
             nodeId: 'visual',
             iteration: 4,
-            status: 'completed',
+            status: 'waiting_human',
             outputs: { page: '<!doctype html><html><body>frozen-v4</body></html>' },
           },
         ],
@@ -384,6 +384,47 @@ describe('StructuredProductPanel', () => {
     expect(wrapper.find('[data-testid="html-preview"]').text()).toContain('live-latest')
     expect(wrapper.find('[data-testid="structured-product-historical-banner"]').exists()).toBe(false)
     expect(wrapper.emitted('update:historicalPreview')?.slice(-1)[0]).toEqual([false])
+    wrapper.unmount()
+  })
+
+  it('includes the current waiting-for-review snapshot and follows a newly added latest version', async () => {
+    const firstVersion: NodeRun = {
+      nodeId: 'visual',
+      iteration: 1,
+      status: 'completed',
+      outputs: { page: '<!doctype html><html><body>frozen-v1</body></html>' },
+    }
+    const reviewVersion: NodeRun = {
+      nodeId: 'visual',
+      iteration: 2,
+      status: 'waiting_human',
+      outputs: { page: '<!doctype html><html><body>review-v2</body></html>' },
+    }
+    const run = runWithArtifacts([], {
+      nodeExecutions: { visual: [firstVersion, reviewVersion] },
+    })
+    const wrapper = mountPanel(visualNode(), reviewVersion, run, { annotatable: true })
+    await flushPromises()
+
+    const select = wrapper.find('[data-testid="structured-product-version-select"]')
+    expect(select.exists()).toBe(true)
+    expect(select.findAll('option')).toHaveLength(2)
+    expect(select.text()).toContain('第 2 次 · 最新')
+    expect(wrapper.find('[data-testid="html-preview"]').text()).toContain('review-v2')
+
+    const newestVersion: NodeRun = {
+      nodeId: 'visual',
+      iteration: 3,
+      status: 'completed',
+      outputs: { page: '<!doctype html><html><body>frozen-v3</body></html>' },
+    }
+    await wrapper.setProps({
+      nodeRun: newestVersion,
+      run: runWithArtifacts([], { nodeExecutions: { visual: [firstVersion, reviewVersion, newestVersion] } }),
+    })
+    await flushPromises()
+    expect((select.element as HTMLSelectElement).value).toBe('3')
+    expect(wrapper.find('[data-testid="html-preview"]').text()).toContain('frozen-v3')
     wrapper.unmount()
   })
 
