@@ -48,6 +48,7 @@ const emit = defineEmits<{
   stagedPick: [payload: AppPreviewPickPayload | null]
 }>()
 
+const historicalPreview = ref(false)
 const reviewChatRef = ref<{
   applyReviewFrame?: (frame: any) => boolean | void
   applyAcpEvents?: (events: any[] | undefined, nodeId?: string) => boolean | void
@@ -85,7 +86,14 @@ defineExpose({
           @staged-pick="emit('stagedPick', $event)"
         />
       </div>
-      <StructuredProductPanel v-else :node="node" :node-run="nodeRun" :run="run" annotatable />
+      <StructuredProductPanel
+        v-else
+        :node="node"
+        :node-run="nodeRun"
+        :run="run"
+        annotatable
+        @update:historical-preview="historicalPreview = $event"
+      />
     </template>
     <template #sidebar>
       <ReviewComposer
@@ -100,7 +108,7 @@ defineExpose({
         :annotations="annotations"
         :turns="clarify.turns"
         :done="clarify.done"
-        :active="inputActive"
+        :active="inputActive && !historicalPreview"
         :confirm-error="confirmError"
         @update:draft="emit('update:draft', $event)"
         @update:attachments="emit('update:attachments', $event)"

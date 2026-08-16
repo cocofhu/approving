@@ -16,6 +16,7 @@ defineProps<{
 
 const emit = defineEmits<{
   'update:selectedProductId': [id: string]
+  'update:historicalPreview': [historical: boolean]
   retry: []
 }>()
 </script>
@@ -51,6 +52,7 @@ const emit = defineEmits<{
       :node-run="selectedNodeRun"
       :run="run"
       annotatable
+      @update:historical-preview="emit('update:historicalPreview', $event)"
     />
     <div
       v-else
