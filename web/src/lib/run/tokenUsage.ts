@@ -71,7 +71,8 @@ export function fmtTokenCount(n: number): string {
 /**
  * Compact K/M format (Demo-aligned).
  * null/undefined → "—"; 0 → "0"; under 1000 plain; ≥1000 K (1 decimal); ≥1e6 M (2 decimals).
- * Allowed for project totals and single-run stats KPI main values.
+ * Allowed for project totals, single-run stats KPI main values, and TokenUsageByModelTable
+ * row figures (pair with fmtTokenCount in title for exact hover values).
  * Do not use for Run detail timeline / other out-of-scope surfaces (keep fmtTokenCount there).
  */
 export function fmtCompactTokenCount(n: number | null | undefined): string {

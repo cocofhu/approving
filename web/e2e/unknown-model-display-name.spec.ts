@@ -427,17 +427,16 @@ test.describe('未知模型显示名', () => {
 
     const table = page.getByTestId('run-token-by-model')
     await expect(table).toBeVisible({ timeout: 10_000 })
-    const unkRow = table.locator('tr[data-unknown="1"]')
+    const unkRow = table.locator('[data-unknown="1"]')
     await expect(unkRow).toHaveCount(1)
     await expect(unkRow).toContainText('gpt-5')
     // 已设名：模型列无「未知」角标
     await expect(unkRow.getByTestId('unknown-model-badge')).toHaveCount(0)
-    // 来源列属性标签不随显示名改变
+    // 来源徽章属性标签不随显示名改变
     await expect(unkRow).toContainText('未知/未分桶')
-    // 模型列不显示默认桶名（已被别名覆盖）
-    const modelCell = unkRow.locator('td').first()
-    await expect(modelCell).toContainText('gpt-5')
-    await expect(modelCell).not.toContainText('未知/未分桶')
+    // 模型名区域不显示默认桶名（已被别名覆盖）；来源徽章可含「未知/未分桶」
+    await expect(unkRow.locator('[title="gpt-5"]')).toContainText('gpt-5')
+    await expect(unkRow.locator('[title="gpt-5"]')).not.toContainText('未知/未分桶')
 
     await page.screenshot({
       path: path.join(shotDir, '04-run-table-alias.png'),
