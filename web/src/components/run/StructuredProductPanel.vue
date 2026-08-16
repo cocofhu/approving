@@ -21,13 +21,16 @@ import type { NodeRun, WFNode, Run, ReactAnnotation } from '@/lib/shared/types'
 const props = withDefaults(defineProps<{ node: WFNode; nodeRun: NodeRun; run: Run; annotatable?: boolean }>(), {
   annotatable: false,
 })
+const emit = defineEmits<{
+  'update:historicalPreview': [historical: boolean]
+}>()
 
 const { t } = useI18n()
 const toast = useToast()
 const stageEl = ref<HTMLElement | null>(null)
 
 function stageAnnotation(ann: ReactAnnotation) {
-  if (!props.annotatable) return
+  if (!props.annotatable || isHistoricalPreview.value) return
   const result = addClarifyAnnotation(props.run.id, props.node.id, ann)
   if (result === 'duplicate') toast.warn(t('pages.reviewComposer.alreadyAdded'))
 }
@@ -37,7 +40,7 @@ function stageAnnotation(ann: ReactAnnotation) {
 // Use a getter so `enabled` tracks the prop if the panel is reused.
 provideReviewAnnotate({
   get enabled() {
-    return !!props.annotatable
+    return !!props.annotatable && !isHistoricalPreview.value
   },
   annotate: (ann) => {
     stageAnnotation(ann)
@@ -46,7 +49,7 @@ provideReviewAnnotate({
 
 /** HTML toolbar pick → same annotations store as structured ⤴ chips (g3). */
 function onHtmlPick(payload: { selector: string; tagName: string; imageDataUrl: string }) {
-  if (!props.annotatable) return
+  if (!props.annotatable || isHistoricalPreview.value) return
   stageAnnotation({
     selector: payload.selector,
     label: payload.selector || payload.tagName,
@@ -75,6 +78,48 @@ const doc = ref<any>(null)
 const rawHtml = ref('')
 const isVisual = computed(() => props.node.type === 'visual')
 const loading = ref(false)
+const eligibleVersions = computed(() =>
+  (props.run.nodeExecutions?.[props.node.id] || [])
+    .filter(
+      (nodeRun) =>
+        nodeRun.status === 'completed' &&
+        typeof nodeRun.outputs?.page === 'string' &&
+        nodeRun.outputs.page.trim().length > 0,
+    )
+    .sort((a, b) => (a.iteration ?? 0) - (b.iteration ?? 0)),
+)
+const latestEligibleIteration = computed(
+  () => eligibleVersions.value[eligibleVersions.value.length - 1]?.iteration ?? null,
+)
+const selectedIteration = ref<number | null>(null)
+const selectedVersion = computed(
+  () => eligibleVersions.value.find((nodeRun) => nodeRun.iteration === selectedIteration.value) || null,
+)
+const isHistoricalPreview = computed(
+  () =>
+    isVisual.value &&
+    selectedIteration.value !== null &&
+    latestEligibleIteration.value !== null &&
+    selectedIteration.value !== latestEligibleIteration.value,
+)
+
+watch(
+  () => eligibleVersions.value.map((nodeRun) => nodeRun.iteration).join(','),
+  () => {
+    if (
+      selectedIteration.value === null ||
+      !eligibleVersions.value.some((nodeRun) => nodeRun.iteration === selectedIteration.value)
+    ) {
+      selectedIteration.value = latestEligibleIteration.value
+    }
+  },
+  { immediate: true },
+)
+watch(
+  isHistoricalPreview,
+  (historical) => emit('update:historicalPreview', historical),
+  { immediate: true },
+)
 function parseDoc(raw: string) {
   try {
     doc.value = JSON.parse(raw || '{}')
@@ -92,6 +137,20 @@ const followLive = computed(
     props.nodeRun.status === 'running' ||
     props.nodeRun.status === 'pending',
 )
+const previewNodeRun = computed(() => {
+  if (!isVisual.value || !selectedVersion.value) return props.nodeRun
+  // The run-detail execution timeline may supply an older nodeRun. The picker
+  // remains independent of that selection and therefore still defaults to the
+  // newest eligible page. An active execution is the sole case that keeps the
+  // live nodeRun as the preview source.
+  if (
+    isHistoricalPreview.value ||
+    (!followLive.value && props.nodeRun.iteration !== selectedVersion.value.iteration)
+  ) {
+    return selectedVersion.value
+  }
+  return props.nodeRun
+})
 
 async function load() {
   const name = spec.value?.name
@@ -110,9 +169,9 @@ async function load() {
   if (isVisual.value) {
     const priorHtml = rawHtml.value
     doc.value = null
-    const snap = props.nodeRun.outputs?.page
+    const snap = previewNodeRun.value.outputs?.page
     const a = artifact.value
-    if (followLive.value && a) {
+    if (!isHistoricalPreview.value && followLive.value && a) {
       loading.value = true
       try {
         const full = await api.artifactContent(a.id)
@@ -175,15 +234,15 @@ watch(
     const snap = jsonKey ? props.nodeRun.outputs?.[jsonKey] : ''
     // The visual node keeps its per-iteration HTML under outputs.page; include a
     // fingerprint so switching execution tabs reloads the right page.
-    const page = isVisual.value ? props.nodeRun.outputs?.page : ''
+    const page = isVisual.value ? previewNodeRun.value.outputs?.page : ''
     const pageKey = typeof page === 'string' ? `${page.length}` : ''
     const a = artifact.value
     // followLive also keys on updatedAt so interactive writes reload even when
     // sizeBytes is unchanged (rare) or snap has not yet been synced.
-    const liveKey = followLive.value
+    const liveKey = !isHistoricalPreview.value && followLive.value
       ? `${a?.sizeBytes ?? ''}:${a?.updatedAt ?? ''}:${props.annotatable ? 1 : 0}:${props.nodeRun.status || ''}`
       : ''
-    return `${props.nodeRun.iteration ?? 0}:${jsonKey}:${snap}:${pageKey}:${a ? `${a.id}:${a.sizeBytes}` : ''}:${liveKey}`
+    return `${previewNodeRun.value.iteration ?? 0}:${selectedIteration.value ?? ''}:${isHistoricalPreview.value ? 1 : 0}:${jsonKey}:${snap}:${pageKey}:${a ? `${a.id}:${a.sizeBytes}` : ''}:${liveKey}`
   },
   load,
   { immediate: true },
@@ -202,7 +261,20 @@ const pending = computed(() => props.nodeRun.status === 'pending')
         <Icon :name="def.icon" :size="16" />
       </div>
       <div class="min-w-0 flex-1">
-        <div class="text-sm font-semibold text-txt">{{ def.label }}{{ t('pages.structuredProduct.titleSuffix') }}</div>
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="text-sm font-semibold text-txt">{{ def.label }}{{ t('pages.structuredProduct.titleSuffix') }}</div>
+          <select
+            v-if="isVisual && eligibleVersions.length >= 2"
+            v-model="selectedIteration"
+            class="border border-line bg-elevated px-2 py-1 text-xs text-txt outline-none focus:border-accent"
+            data-testid="structured-product-version-select"
+            aria-label="选择视觉产物版本"
+          >
+            <option v-for="version in eligibleVersions" :key="version.iteration" :value="version.iteration">
+              第 {{ version.iteration }} 次{{ version.iteration === latestEligibleIteration ? ' · 最新' : '' }}
+            </option>
+          </select>
+        </div>
         <div class="text-[11px] text-txt3" data-testid="structured-product-name">{{ spec?.name }}</div>
       </div>
     </div>
@@ -212,10 +284,17 @@ const pending = computed(() => props.nodeRun.status === 'pending')
       :class="isVisual && rawHtml ? 'flex flex-col overflow-hidden px-4' : 'overflow-y-auto px-4 pb-4'"
       data-testid="structured-product-preview"
     >
-      <div v-if="isVisual && rawHtml" class="min-h-0 flex-1 border border-line">
+      <div v-if="isVisual && rawHtml" class="relative min-h-0 flex-1 border border-line">
+        <div
+          v-if="isHistoricalPreview"
+          class="absolute left-2 top-2 z-10 border border-warn/50 bg-base/95 px-2 py-1 text-xs text-warn"
+          data-testid="structured-product-historical-banner"
+        >
+          历史版本 · 只读
+        </div>
         <HtmlPreview
           :html="rawHtml"
-          :inspectable="annotatable"
+          :inspectable="annotatable && !isHistoricalPreview"
           fill-parent
           @pick="onHtmlPick"
         />
@@ -243,7 +322,7 @@ const pending = computed(() => props.nodeRun.status === 'pending')
 
       <SelectionAddToChat
         v-if="annotatable && !isVisual"
-        :enabled="annotatable"
+        :enabled="annotatable && !isHistoricalPreview"
         :root="stageEl"
         @add="onQuoteAdd"
       />

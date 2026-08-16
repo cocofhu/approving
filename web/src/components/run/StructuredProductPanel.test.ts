@@ -318,6 +318,125 @@ describe('StructuredProductPanel', () => {
     wrapper.unmount()
   })
 
+  it('switches only eligible visual snapshots and makes historical preview read-only', async () => {
+    apiMocks.artifactContent.mockResolvedValue({
+      content: '<!doctype html><html><body>live-latest</body></html>',
+    })
+    const nodeRun: NodeRun = {
+      nodeId: 'visual',
+      iteration: 4,
+      status: 'waiting_human',
+      outputs: { page: '<!doctype html><html><body>latest-snapshot</body></html>' },
+    }
+    const run = {
+      id: 'run-1',
+      artifacts: [
+        {
+          id: 'a-page',
+          name: 'page.html',
+          kind: 'html',
+          nodeId: 'visual',
+          runId: 'run-1',
+          workflowName: 'wf',
+          sizeBytes: 50,
+          createdAt: '2026-07-18T00:00:00Z',
+        },
+      ],
+      nodeExecutions: {
+        visual: [
+          {
+            nodeId: 'visual',
+            iteration: 1,
+            status: 'completed',
+            outputs: { page: '<!doctype html><html><body>frozen-v1</body></html>' },
+          },
+          { nodeId: 'visual', iteration: 2, status: 'failed', outputs: { page: '<html>failed</html>' } },
+          { nodeId: 'visual', iteration: 3, status: 'completed', outputs: {} },
+          {
+            nodeId: 'visual',
+            iteration: 4,
+            status: 'completed',
+            outputs: { page: '<!doctype html><html><body>frozen-v4</body></html>' },
+          },
+        ],
+      },
+    } as unknown as Run
+    const wrapper = mountPanel(visualNode(), nodeRun, run, { annotatable: true })
+    await flushPromises()
+
+    const select = wrapper.find('[data-testid="structured-product-version-select"]')
+    expect(select.exists()).toBe(true)
+    expect(select.findAll('option')).toHaveLength(2)
+    expect(select.text()).toContain('第 4 次 · 最新')
+    expect(wrapper.find('[data-testid="html-preview"]').text()).toContain('live-latest')
+
+    await select.setValue('1')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="html-preview"]').text()).toContain('frozen-v1')
+    expect(wrapper.find('[data-testid="html-preview"]').attributes('data-inspectable')).toBe('0')
+    expect(wrapper.find('[data-testid="structured-product-historical-banner"]').text()).toContain(
+      '历史版本 · 只读',
+    )
+    expect(wrapper.emitted('update:historicalPreview')?.slice(-1)[0]).toEqual([true])
+
+    await select.setValue('4')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="html-preview"]').text()).toContain('live-latest')
+    expect(wrapper.find('[data-testid="structured-product-historical-banner"]').exists()).toBe(false)
+    expect(wrapper.emitted('update:historicalPreview')?.slice(-1)[0]).toEqual([false])
+    wrapper.unmount()
+  })
+
+  it('hides the visual version picker when only one snapshot is eligible', async () => {
+    const nodeRun: NodeRun = {
+      nodeId: 'visual',
+      iteration: 1,
+      status: 'completed',
+      outputs: { page: '<!doctype html><html><body>only</body></html>' },
+    }
+    const run = {
+      id: 'run-1',
+      artifacts: [],
+      nodeExecutions: { visual: [nodeRun] },
+    } as unknown as Run
+    const wrapper = mountPanel(visualNode(), nodeRun, run)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="structured-product-version-select"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="html-preview"]').text()).toContain('only')
+    wrapper.unmount()
+  })
+
+  it('defaults to the latest eligible page instead of the run-detail execution selection', async () => {
+    const historicalNodeRun: NodeRun = {
+      nodeId: 'visual',
+      iteration: 1,
+      status: 'completed',
+      outputs: { page: '<!doctype html><html><body>selected-execution-v1</body></html>' },
+    }
+    const run = {
+      id: 'run-1',
+      artifacts: [],
+      nodeExecutions: {
+        visual: [
+          historicalNodeRun,
+          {
+            nodeId: 'visual',
+            iteration: 2,
+            status: 'completed',
+            outputs: { page: '<!doctype html><html><body>latest-v2</body></html>' },
+          },
+        ],
+      },
+    } as unknown as Run
+    const wrapper = mountPanel(visualNode(), historicalNodeRun, run)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="html-preview"]').text()).toContain('latest-v2')
+    expect(
+      (wrapper.find('[data-testid="structured-product-version-select"]').element as HTMLSelectElement).value,
+    ).toBe('2')
+    wrapper.unmount()
+  })
+
   it('shows persistent upstream bar when run has clarified_requirement.json and main is page.html', async () => {
     apiMocks.artifactContent.mockImplementation(async (id: string) => {
       if (id === 'a-req') return { content: JSON.stringify(REQ_DOC) }

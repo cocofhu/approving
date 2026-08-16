@@ -1059,13 +1059,18 @@ const clarifyProductNodes = computed(() =>
   active.value?.type === 'clarify' ? listClarifyProductNodes(activeRun.value) : [],
 )
 const selectedClarifyProductId = ref<string | null>(null)
+const historicalPreview = ref(false)
 
 watch(
   () => active.value && itemKey(active.value),
   () => {
     selectedClarifyProductId.value = null
+    historicalPreview.value = false
   },
 )
+watch(selectedClarifyProductId, () => {
+  historicalPreview.value = false
+})
 
 watch(
   clarifyProductNodes,
@@ -1641,6 +1646,7 @@ function itemSecondary(it: InboxItem) {
               :run="activeRun"
               :loading="activeRunLoading"
               @update:selected-product-id="selectedClarifyProductId = $event"
+              @update:historical-preview="historicalPreview = $event"
               @retry="retryActiveRun"
             />
           </template>
@@ -1656,7 +1662,7 @@ function itemSecondary(it: InboxItem) {
               v-model:annotations="clarifyAnnotations"
               :turns="activeClarify.turns"
               :done="activeClarify.done"
-              :active="clarifyInputActive"
+              :active="clarifyInputActive && !historicalPreview"
               :confirm-error="clarifyConfirmError"
               @send="onClarifySend"
               @finish="onClarifyFinish"
@@ -1755,6 +1761,7 @@ function itemSecondary(it: InboxItem) {
                   :run="activeRun"
                   :loading="activeRunLoading"
                   @update:selected-product-id="selectedClarifyProductId = $event"
+                  @update:historical-preview="historicalPreview = $event"
                   @retry="retryActiveRun"
                 />
               </template>
@@ -1770,7 +1777,7 @@ function itemSecondary(it: InboxItem) {
                   v-model:annotations="clarifyAnnotations"
                   :turns="activeClarify.turns"
                   :done="activeClarify.done"
-                  :active="clarifyInputActive"
+                  :active="clarifyInputActive && !historicalPreview"
                   :confirm-error="clarifyConfirmError"
                   @send="onClarifySend"
                   @finish="onClarifyFinish"
