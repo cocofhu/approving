@@ -1195,7 +1195,7 @@ onBeforeRouteUpdate(async (to, from) => {
                 <div class="inline-flex overflow-hidden rounded-md border border-line text-[11px]">
                   <button
                     type="button"
-                    class="px-2 py-1 transition"
+                    class="shrink-0 whitespace-nowrap px-2 py-1 transition"
                     :class="
                       wfNotifyMode(w) === 'off'
                         ? 'bg-err/15 text-err'
@@ -1208,7 +1208,7 @@ onBeforeRouteUpdate(async (to, from) => {
                   </button>
                   <button
                     type="button"
-                    class="border-l border-line px-2 py-1 transition"
+                    class="shrink-0 whitespace-nowrap border-l border-line px-2 py-1 transition"
                     :class="
                       wfNotifyMode(w) === 'inherit'
                         ? 'bg-accent-dim text-accent-2'
@@ -1221,7 +1221,7 @@ onBeforeRouteUpdate(async (to, from) => {
                   </button>
                   <button
                     type="button"
-                    class="border-l border-line px-2 py-1 transition"
+                    class="shrink-0 whitespace-nowrap border-l border-line px-2 py-1 transition"
                     :class="
                       wfNotifyMode(w) === 'custom'
                         ? 'bg-accent-dim text-accent-2'
@@ -1375,7 +1375,7 @@ onBeforeRouteUpdate(async (to, from) => {
                     <div class="inline-flex overflow-hidden rounded-md border border-line text-[11px]">
                       <button
                         type="button"
-                        class="px-2 py-1 transition"
+                        class="shrink-0 whitespace-nowrap px-2 py-1 transition"
                         :class="
                           wfNotifyMode(w) === 'off'
                             ? 'bg-err/15 text-err'
@@ -1388,7 +1388,7 @@ onBeforeRouteUpdate(async (to, from) => {
                       </button>
                       <button
                         type="button"
-                        class="border-l border-line px-2 py-1 transition"
+                        class="shrink-0 whitespace-nowrap border-l border-line px-2 py-1 transition"
                         :class="
                           wfNotifyMode(w) === 'inherit'
                             ? 'bg-accent-dim text-accent-2'
@@ -1401,7 +1401,7 @@ onBeforeRouteUpdate(async (to, from) => {
                       </button>
                       <button
                         type="button"
-                        class="border-l border-line px-2 py-1 transition"
+                        class="shrink-0 whitespace-nowrap border-l border-line px-2 py-1 transition"
                         :class="
                           wfNotifyMode(w) === 'custom'
                             ? 'bg-accent-dim text-accent-2'

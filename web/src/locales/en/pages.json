@@ -364,7 +364,7 @@
         "master": "Project notification master switch",
         "masterHint": "When off, no run notifications are sent for this project (including workflow custom settings)",
         "defaultEvents": "Default notification triggers",
-        "defaultEventsHint": "Used when workflows choose “Follow project”; we recommend only “Waiting for human” and “Run failed”",
+        "defaultEventsHint": "Used when workflows choose “Inherit”; we recommend only “Waiting for human” and “Run failed”",
         "evWaitingHumanLabel": "Waiting for human",
         "evFailedLabel": "Run failed",
         "evCompletedLabel": "Run completed",
@@ -386,7 +386,7 @@
         "saved": "Notify settings saved",
         "colPolicy": "Notify policy",
         "modeOff": "Off",
-        "modeInherit": "Follow project",
+        "modeInherit": "Inherit",
         "modeCustom": "Custom",
         "wfUpdated": "Updated"
       },
