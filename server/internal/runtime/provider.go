@@ -193,6 +193,12 @@ type ReviewProvider interface {
 	// returned turn is never Done — finishing is a separate force step handled
 	// by ReactReply.
 	ReviseInPlace(ctx context.Context, req NodeReq, history []models.ReactMessage, human string, images []models.PromptImage) ReactTurn
+	// OfferCommitOnConfirm inspects the parked sandbox working trees before
+	// RetireSession. If any repo is dirty it prompts the agent to selectively
+	// commit meaningful changes (skip temp files) and then pushes already-
+	// committed working branches. Best-effort: never fails the confirm.
+	// Msg is non-empty only when the agent was actually asked to decide.
+	OfferCommitOnConfirm(ctx context.Context, req NodeReq) ReactTurn
 	// HasLiveSession reports whether a parked session is currently held for
 	// (runID, nodeID) — used to decide whether an approval gate can offer the
 	// ReAct reject entry (upstream session still alive).

@@ -41,6 +41,19 @@ func TestAgentPromptsRemainingContracts(t *testing.T) {
 	if p.OutcomeContractText() != "OC" || p.OutcomeRetryText() != "OR" {
 		t.Fatal("outcome overrides")
 	}
+	if nilP.ReviewCommitWrapUpFor("a.go") == "" {
+		t.Fatal("nil review commit wrap-up")
+	}
+	p.ReviewCommitWrapUp = "FILES:{files}"
+	if got := p.ReviewCommitWrapUpFor("- untracked tmp.log"); got != "FILES:- untracked tmp.log" {
+		t.Fatalf("wrap-up=%q", got)
+	}
+	got := (&AgentPrompts{}).ReviewCommitWrapUpFor("- untracked tmp.log")
+	for _, want := range []string{"禁止 `git add -A`", "tmp.log", "临时文件", "git status"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("DefaultReviewCommitWrapUp missing %q\n%s", want, got)
+		}
+	}
 }
 
 func TestDefaultOutcomeContractDetachesLongRunningServices(t *testing.T) {

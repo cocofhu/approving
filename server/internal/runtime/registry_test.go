@@ -176,4 +176,9 @@ func TestProviderRegistryReviewProviderForwarding(t *testing.T) {
 	if turn.Err == nil && turn.Msg == "" {
 		t.Fatal("expected a revise turn message or error when no session exists")
 	}
+
+	wrap := reg.OfferCommitOnConfirm(context.Background(), NodeReq{RunID: "r", NodeID: "n"})
+	if wrap.Done {
+		t.Fatal("OfferCommitOnConfirm must not mark Done")
+	}
 }

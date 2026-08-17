@@ -78,6 +78,9 @@ type AgentPrompts struct {
 	OutcomeContract string `json:"outcomeContract,omitempty"`
 	// OutcomeRetry is the re-prompt when the agent finished without node_complete.
 	OutcomeRetry string `json:"outcomeRetry,omitempty"`
+	// ReviewCommitWrapUp is sent on ReAct「确认并流转」when the parked sandbox
+	// still has uncommitted working-tree changes. Supports `{files}`.
+	ReviewCommitWrapUp string `json:"reviewCommitWrapUp,omitempty"`
 }
 
 // Built-in default prompt fragments. These are the exact strings the platform
@@ -108,6 +111,7 @@ const (
 	DefaultPreviewRetry                 = "【必须完成】你尚未成功调用 `set_preview` 注册**可达**的预览端口。请在沙箱内用 `setsid`/`nohup` **真后台**原生启动应用(不要用 docker、不要前台占会话),监听 `0.0.0.0:<port>`(不能只绑 127.0.0.1;服务在根路径 `/`),确认端口可访问后再调用 `set_preview(port, label?)`。端口不可达时 set_preview 会失败,修复后可重试。"
 	DefaultOutcomeContract              = "\n\n## 完成标记契约(强制)\n结束本节点前**必须**调用 `node_complete` 标记结果:`status` 取 `success` 或 `failed`;可选 `summary` / `error` / `outputs` / `checks`。写完产物(`set_*` / `write_artifact`)后再调用。未标记将被判定为节点失败。平台先做默认校验(产物/门禁等),通过后才可能做业务 RPC 校验。若需启动长期服务(web / dsh / Harness / 被测应用等),必须用 `setsid`/`nohup` 放入独立会话并重定向日志,禁止前台或未脱钩的命令占住 Agent 回合;不要为收尾杀掉这些进程。\n"
 	DefaultOutcomeRetry                 = "【必须完成】你尚未调用 `node_complete` 标记本节点完成结果,这是强制要求。现在立即调用 `node_complete(status=\"success\"|\"failed\", summary?, error?, outputs?)`,不要再提问或输出其它内容——只需完成这次调用。\n"
+	DefaultReviewCommitWrapUp           = "【流转收尾】用户已确认本节点,即将进入下一步。工作区仍有未提交改动:\n{files}\n\n以上列表可能含已相对基线提交的文件,请以各仓 `git status` 为准,只处理未暂存/未提交的内容。\n\n请你自行决定要不要提交:\n- 有意义的源码/配置改动:按仓 `cd` 进 `/root/workspace/<name>/`,用 `git add` **点名文件**(禁止 `git add -A` / `git add .`),再 `git commit`(写清 why)并 `git push` 当前工作分支。下游节点在全新克隆里工作,不推送就拿不到这些改动。\n- 临时文件、日志、缓存、构建产物、本地密钥、调试垃圾:**不要提交**,保持未跟踪即可。\n- 若全部都是临时文件:什么都不要做,不要空提交。\n- 禁止在 main/master/develop/release-* 上提交或推送。\n- 不要提问、不要改产物、不要调用 node_complete。做完后用一两句话说明提交了什么、跳过了什么即可。\n"
 
 	// DefaultFeedbackHeader is injected only when this node actually has human
 	// feedback in scope. Storing feedback that no agent ever reads is the same
@@ -326,4 +330,17 @@ func (p *AgentPrompts) OutcomeRetryText() string {
 		return p.OutcomeRetry
 	}
 	return DefaultOutcomeRetry
+}
+
+// ReviewCommitWrapUpFor returns the confirm-time git wrap-up prompt with the
+// dirty-file list substituted for {files}. Nil-safe.
+func (p *AgentPrompts) ReviewCommitWrapUpFor(files string) string {
+	tmpl := DefaultReviewCommitWrapUp
+	if p != nil && strings.TrimSpace(p.ReviewCommitWrapUp) != "" {
+		tmpl = p.ReviewCommitWrapUp
+	}
+	if strings.TrimSpace(files) == "" {
+		files = "(工作区 git status 为 dirty,未能列出文件)"
+	}
+	return strings.ReplaceAll(tmpl, "{files}", files)
 }

@@ -105,6 +105,11 @@ type fakeProvider struct {
 	// retired records nodes whose parked session was released.
 	reviseCalls map[string]int
 	retired     map[string]bool
+	// wrapUpCalls counts OfferCommitOnConfirm per node id; wrapUpAfterRetire
+	// is set if wrap-up ran after RetireSession (ordering bug).
+	wrapUpCalls       map[string]int
+	wrapUpAfterRetire bool
+	wrapUpMsg         string
 	// reactReplyCalls counts ReactReply invocations per node id (assert review
 	// force no longer routes through Agent wrap-up).
 	reactReplyCalls map[string]int
@@ -525,6 +530,19 @@ func (f *fakeProvider) ReviseInPlace(ctx context.Context, req runtime.NodeReq, h
 	f.mu.Unlock()
 	return runtime.ReactTurn{Msg: msg, Done: false, Err: revErr, Usage: usage,
 		Events: []models.AcpEvent{{Kind: "message", Text: "revise-in-place"}}}
+}
+
+func (f *fakeProvider) OfferCommitOnConfirm(ctx context.Context, req runtime.NodeReq) runtime.ReactTurn {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.retired[f.parkKey(req.RunID, req.NodeID)] {
+		f.wrapUpAfterRetire = true
+	}
+	if f.wrapUpCalls == nil {
+		f.wrapUpCalls = map[string]int{}
+	}
+	f.wrapUpCalls[req.NodeID]++
+	return runtime.ReactTurn{Msg: f.wrapUpMsg}
 }
 
 func (f *fakeProvider) HasLiveSession(runID, nodeID string) bool {

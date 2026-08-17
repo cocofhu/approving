@@ -359,8 +359,19 @@ func (c *acpProvider) harvest(ctx context.Context, sb *sandbox.Sandbox, req Node
 // downstream sandboxes (fresh clones) can check it out. It commits any leftover
 // changes the agent didn't commit, then pushes the current branch. Fully
 // best-effort: no repo / no remote / no credentials → silent no-op (never fails
-// the node).
+// the node). Review confirm uses pushWorkingBranches instead so leftover temp
+// files are not auto-committed.
 func (c *acpProvider) ensurePushed(ctx context.Context, sb *sandbox.Sandbox, req NodeReq) {
+	c.pushRepos(ctx, sb, req, true)
+}
+
+// pushWorkingBranches pushes already-committed working branches without
+// git add/commit, so confirm-time leftover temp files stay untracked.
+func (c *acpProvider) pushWorkingBranches(ctx context.Context, sb *sandbox.Sandbox, req NodeReq) {
+	c.pushRepos(ctx, sb, req, false)
+}
+
+func (c *acpProvider) pushRepos(ctx context.Context, sb *sandbox.Sandbox, req NodeReq, autoCommit bool) {
 	repos := resolveRepos(req)
 	if len(repos) == 0 {
 		return
@@ -376,9 +387,13 @@ if [ -z "$branch" ] || [ "$branch" = "HEAD" ]; then exit 0; fi
 case "$branch" in
   main|master|develop|release-*) echo "on protected branch $branch; skip auto push"; exit 0;;
 esac
-git add -A 2>/dev/null || true
+`
+		if autoCommit {
+			script += `git add -A 2>/dev/null || true
 git diff --cached --quiet 2>/dev/null || git commit -m "chore(approving): implement 收尾自动提交" >/dev/null 2>&1 || true
-git push -u origin "$branch" 2>&1 || true`
+`
+		}
+		script += `git push -u origin "$branch" 2>&1 || true`
 		if out, err := sb.ExecScript(ctx, 90*time.Second, "bash", script); err != nil {
 			log.Debug().Err(err).Str("repo", r.Name).Str("out", strings.TrimSpace(out)).Msg("implement ensurePushed (best-effort)")
 		}
