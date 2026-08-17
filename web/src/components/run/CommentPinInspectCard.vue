@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
+import type { InspectElementStyle } from '@/lib/shared/htmlPreviewSandbox'
 
 const props = defineProps<{
   open: boolean
@@ -15,11 +16,14 @@ const props = defineProps<{
    */
   anchor?: { left: number; top: number; width: number; height: number } | null
   containerEl?: HTMLElement | null
+  /** Computed style from inspect pick (Open Design Size/Color/Font/Line rows). */
+  styleInfo?: InspectElementStyle | null
 }>()
 
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'save', comment: string): void
+  (e: 'send-chat', comment: string): void
 }>()
 
 const { t } = useI18n()
@@ -27,6 +31,57 @@ const cardRef = ref<HTMLElement | null>(null)
 const comment = ref('')
 const top = ref(8)
 const left = ref(8)
+
+const canSubmit = computed(() => comment.value.trim().length > 0)
+
+type StyleRow = { label: string; value: string; swatch?: string }
+
+function cssColorToHex(value: string | undefined): string | null {
+  if (!value) return null
+  const raw = value.trim()
+  if (!raw || raw === 'transparent' || raw === 'rgba(0, 0, 0, 0)') return null
+  if (/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(raw)) {
+    if (raw.length === 4) {
+      return '#' + raw.slice(1).split('').map((char) => char + char).join('').toUpperCase()
+    }
+    return raw.toUpperCase()
+  }
+  const match = raw.match(/rgba?\(\s*([0-9.]+)[ ,]+([0-9.]+)[ ,]+([0-9.]+)/i)
+  if (!match) return raw
+  const toHex = (part: string | undefined) => {
+    const n = Math.max(0, Math.min(255, Math.round(Number(part ?? 0))))
+    return n.toString(16).padStart(2, '0').toUpperCase()
+  }
+  return `#${toHex(match[1])}${toHex(match[2])}${toHex(match[3])}`
+}
+
+function compactFontFamily(value: string | undefined): string | null {
+  if (!value) return null
+  const first = value.split(',')[0]?.trim().replace(/^["']|["']$/g, '')
+  return first || null
+}
+
+const styleRows = computed((): StyleRow[] => {
+  const rows: StyleRow[] = []
+  const a = props.anchor
+  if (a && a.width > 0 && a.height > 0) {
+    rows.push({ label: 'Size', value: `${Math.round(a.width)}x${Math.round(a.height)}` })
+  }
+  const st = props.styleInfo
+  if (!st) return rows
+  const color = cssColorToHex(st.color)
+  if (color) rows.push({ label: 'Color', value: color, swatch: color })
+  const fontParts = [
+    st.fontSize,
+    st.fontWeight && st.fontWeight !== '400' ? st.fontWeight : null,
+    compactFontFamily(st.fontFamily),
+  ].filter((part): part is string => Boolean(part))
+  if (fontParts.length > 0) {
+    rows.push({ label: 'Font', value: fontParts.join(' ') })
+  }
+  if (st.lineHeight) rows.push({ label: 'Line', value: st.lineHeight })
+  return rows
+})
 
 watch(
   () => props.open,
@@ -53,7 +108,7 @@ function placeCardNear() {
   if (!card || !wrap) return
   const wrapRect = wrap.getBoundingClientRect()
   const cardH = card.offsetHeight || 280
-  const cardW = card.offsetWidth || 280
+  const cardW = card.offsetWidth || 320
   const a = props.anchor
   let below = 8
   let aboveCandidate = 8
@@ -74,10 +129,24 @@ function placeCardNear() {
   left.value = nextLeft
 }
 
+function trimmedBody(): string {
+  return comment.value.trim()
+}
+
 function onSave() {
-  const body = comment.value.trim()
+  const body = trimmedBody()
   if (!body) return
   emit('save', body)
+}
+
+function onSendChat() {
+  const body = trimmedBody()
+  if (!body) return
+  emit('send-chat', body)
+}
+
+function onComposerEnter() {
+  if (canSubmit.value) onSave()
 }
 
 function onKeydown(ev: KeyboardEvent) {
@@ -104,7 +173,7 @@ defineExpose({ placeCardNear })
   <div
     v-show="open"
     ref="cardRef"
-    class="absolute z-20 flex max-h-[calc(100%-24px)] w-[280px] flex-col border border-line-strong bg-elevated shadow-[var(--shadow-card)]"
+    class="absolute z-20 flex max-h-[calc(100%-24px)] w-[320px] flex-col border border-line-strong bg-elevated shadow-[var(--shadow-card)]"
     :style="{ top: top + 'px', left: left + 'px' }"
     data-testid="comment-pin-inspect-card"
     role="dialog"
@@ -112,16 +181,28 @@ defineExpose({ placeCardNear })
   >
     <div class="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2.5">
       <div class="min-w-0">
-        <div class="text-xs font-semibold text-txt">
-          {{ t('pages.gateApproval.commentPins.inspectTitle') }}
-        </div>
-        <div class="truncate font-mono text-[11px] text-txt3" :title="selector">
+        <div class="truncate font-mono text-[12px] font-semibold text-txt" :title="selector">
           {{ selector || '—' }}
+        </div>
+        <div v-if="styleRows.length" class="mt-1 flex flex-col gap-0.5" data-testid="comment-pin-style-rows">
+          <div
+            v-for="row in styleRows"
+            :key="row.label"
+            class="flex items-center gap-1.5 text-[11px] text-txt3"
+          >
+            <span class="w-9 shrink-0 text-txt3">{{ row.label }}</span>
+            <span
+              v-if="row.swatch"
+              class="inline-block h-2.5 w-2.5 shrink-0 border border-line"
+              :style="{ background: row.swatch }"
+            />
+            <span class="min-w-0 truncate text-txt2">{{ row.value }}</span>
+          </div>
         </div>
       </div>
       <button
         type="button"
-        class="border border-line px-2 py-1 text-[11px] text-txt2 hover:text-txt"
+        class="shrink-0 border border-line px-2 py-1 text-[11px] text-txt2 hover:text-txt"
         data-testid="comment-pin-card-close"
         @click="emit('close')"
       >
@@ -157,16 +238,23 @@ defineExpose({ placeCardNear })
         rows="3"
         :placeholder="t('pages.gateApproval.commentPins.placeholder')"
         data-testid="comment-pin-input"
+        @keydown.enter.exact.prevent="onComposerEnter"
       />
-      <p class="text-[11px] text-txt3">
-        {{ t('pages.gateApproval.commentPins.hint') }}
-      </p>
     </div>
-    <div class="shrink-0 border-t border-line bg-elevated px-3 py-2.5">
+    <div class="flex shrink-0 items-center justify-end gap-1.5 border-t border-line bg-elevated px-3 py-2.5">
       <button
         type="button"
-        class="w-full bg-accent px-3 py-2 text-xs font-medium text-white hover:bg-accent-2 disabled:cursor-not-allowed disabled:opacity-45"
-        :disabled="!comment.trim()"
+        class="border border-line px-3 py-1.5 text-xs font-medium text-txt2 hover:text-txt disabled:cursor-not-allowed disabled:opacity-45"
+        :disabled="!canSubmit"
+        data-testid="comment-pin-send-chat"
+        @click="onSendChat"
+      >
+        {{ t('pages.gateApproval.commentPins.sendToChat') }}
+      </button>
+      <button
+        type="button"
+        class="bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-2 disabled:cursor-not-allowed disabled:opacity-45"
+        :disabled="!canSubmit"
         data-testid="comment-pin-save"
         @click="onSave"
       >
