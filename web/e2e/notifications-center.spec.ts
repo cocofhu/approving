@@ -214,14 +214,14 @@ test.describe('shell notification center (IA separation)', () => {
     await settleAuth(page)
 
     await expect(page.getByTestId('notifications-item')).toHaveCount(20)
-    await expect(page.getByTestId('notifications-page-range')).toContainText('第 1 页 · 1–20 / 25')
+    await expect(page.getByTestId('notifications-page-range')).toHaveCount(0)
     const pager = page.getByTestId('notifications-pagination')
     await expect(pager).toBeVisible()
     await expect(page.getByTestId('notifications-pager-summary')).toHaveText('共 25 条 · 每页 20')
 
     await pager.getByRole('button', { name: '下一页' }).click()
     await expect(page.getByTestId('notifications-item')).toHaveCount(5)
-    await expect(page.getByTestId('notifications-page-range')).toContainText('第 2 页 · 21–25 / 25')
+    await expect(page.getByTestId('notifications-page-range')).toHaveCount(0)
     await expect(page).not.toHaveURL(/[?&]page=/)
 
     await page.getByTestId('notifications-filter-read').click()
@@ -230,21 +230,21 @@ test.describe('shell notification center (IA separation)', () => {
 
     await page.getByTestId('notifications-filter-all').click()
     await expect(page.getByTestId('notifications-item')).toHaveCount(20)
-    await expect(page.getByTestId('notifications-page-range')).toContainText('第 1 页')
+    await expect(page.getByTestId('notifications-page-range')).toHaveCount(0)
 
     await pager.getByRole('button', { name: '下一页' }).click()
-    await expect(page.getByTestId('notifications-page-range')).toContainText('第 2 页')
+    await expect(page.getByTestId('notifications-page-range')).toHaveCount(0)
     await page.getByTestId('run-notifications-bell').click()
     await expect(page.getByTestId('run-notifications-item')).toHaveCount(5)
     await page.getByTestId('run-notifications-view-all').click()
-    await expect(page.getByTestId('notifications-page-range')).toContainText('第 1 页 · 1–20 / 25')
+    await expect(page.getByTestId('notifications-page-range')).toHaveCount(0)
     await expect(page.getByTestId('notifications-item')).toHaveCount(20)
 
     await pager.getByRole('button', { name: '下一页' }).click()
     await page.getByTestId('run-notifications-bell').click()
     await page.getByTestId('run-notifications-item').first().click()
     await expect(page.getByTestId('notifications-page')).toBeVisible()
-    await expect(page.getByTestId('notifications-page-range')).toContainText('第 1 页')
+    await expect(page.getByTestId('notifications-page-range')).toHaveCount(0)
     await expect(page.getByTestId('notifications-item')).toHaveCount(20)
   })
 })
