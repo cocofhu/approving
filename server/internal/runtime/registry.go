@@ -102,6 +102,17 @@ func (r *ProviderRegistry) ReviseInPlace(ctx context.Context, req NodeReq, histo
 	return rp.ReviseInPlace(ctx, req, history, human, images)
 }
 
+// OfferCommitOnConfirm forwards confirm-time git wrap-up to the backend that
+// owns the parked session (same skill_profile routing as ReviseInPlace).
+func (r *ProviderRegistry) OfferCommitOnConfirm(ctx context.Context, req NodeReq) ReactTurn {
+	p := r.providerFor(req)
+	rp, ok := p.(ReviewProvider)
+	if !ok {
+		return ReactTurn{}
+	}
+	return rp.OfferCommitOnConfirm(ctx, req)
+}
+
 // HasLiveSession reports whether any backend holds a parked review session for
 // (runID, nodeID). Sessions are parked on the backend that ran the producer, so
 // we fan out like LiveNodeEvents.

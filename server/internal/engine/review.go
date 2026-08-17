@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"time"
@@ -242,9 +243,10 @@ func isReviewNode(nodeType string) bool {
 	return nodeType != "react" && nodereg.ReviewCapable(nodeType)
 }
 
-// reviewReply finalizes a post-run review dialogue when force=true: accepts the
-// current store snapshot without Agent wrap-up, re-validates the product
-// contract, then Done+RetireSession+routeSuccess (or keep paused on failure).
+// reviewReply finalizes a post-run review dialogue when force=true: if the
+// parked sandbox still has uncommitted code, the agent decides what to commit
+// (skipping temp files); then the store snapshot is re-validated and the FSM
+// advances (Done+RetireSession+routeSuccess, or keep paused on failure).
 // Non-force revise turns are handled by EnqueueReviewTurn / pumpReviewSession
 // (platform FIFO + turn_begin materialization). The caller (ReactReply) already
 // appended the human turn to conv and holds the per-conversation lock.
@@ -252,19 +254,29 @@ func (e *Engine) reviewReply(c *execCtx, node *models.Node, conv *models.ReactCo
 	runID, nodeID := c.run.ID, node.ID
 	_ = human
 	_ = images
-	_ = e.nodeReq(c, node) // SetActiveNode + KeepAliveForReview (no ClearOutcome)
+	req := e.nodeReq(c, node) // SetActiveNode + KeepAliveForReview (no ClearOutcome)
 	e.host.SetActiveReview(runID, true)
 
 	if !force {
 		return errors.New("internal: review non-force must use EnqueueReviewTurn")
 	}
 
-	// Force finish (no Agent): retire parked session, finalize from the store
-	// snapshot, run afterDefaultChecks, then Done only on success.
+	// Force finish: optional git wrap-up (agent decides commits), then retire
+	// the parked session, finalize from the store snapshot, run afterDefaultChecks,
+	// then Done only on success.
 	// Must not call ReactReply / finishAgentOutcome / TakeOutcome / routeFailure.
-	// Human turn is already persisted by ReactReply; no Agent prompt is sent.
+	// Human turn is already persisted by ReactReply.
 	// Ready-gate is enforced by ReactReply before taking the lock.
 	if rp, ok := e.provider.(runtime.ReviewProvider); ok {
+		t := rp.OfferCommitOnConfirm(context.Background(), req)
+		if strings.TrimSpace(t.Msg) != "" {
+			conv.Messages = append(conv.Messages, models.ReactMessage{
+				Role: "agent", Text: t.Msg, At: time.Now().Format(time.RFC3339),
+			})
+			logDB(e.db.Save(conv), runID, "save review git wrap-up")
+		}
+		e.flushMcpCalls(runID, nodeID)
+		e.flushTokenUsage(runID, nodeID, t.Usage, t.UsageByModel)
 		rp.RetireSession(runID, nodeID)
 	}
 
@@ -381,14 +393,24 @@ func (e *Engine) GateReactInfo(runID, gateNodeID string) (producerID string, ali
 
 // retireGateUpstreamSession releases the parked review session of a gate's
 // upstream producer once the gate is resolved (approve/select/reject decided).
+// If the producer still has uncommitted code, the agent decides what to commit
+// first so gate-ReAct edits are not dropped with the sandbox.
 func (e *Engine) retireGateUpstreamSession(c *execCtx, gateNode *models.Node) {
 	rp, ok := e.provider.(runtime.ReviewProvider)
 	if !ok {
 		return
 	}
-	if producerID := e.gateProducerNodeID(c, gateNode); producerID != "" {
-		rp.RetireSession(c.run.ID, producerID)
+	producerID := e.gateProducerNodeID(c, gateNode)
+	if producerID == "" {
+		return
 	}
+	if producer := c.graph.FindNode(producerID); producer != nil {
+		req := e.nodeReq(c, producer)
+		t := rp.OfferCommitOnConfirm(context.Background(), req)
+		e.flushMcpCalls(c.run.ID, producerID)
+		e.flushTokenUsage(c.run.ID, producerID, t.Usage, t.UsageByModel)
+	}
+	rp.RetireSession(c.run.ID, producerID)
 }
 
 // refreshProducerOutputs re-derives a producer node's outputs from its (edited)
