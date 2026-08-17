@@ -31,6 +31,14 @@ import {
   dataUrlToImageParts,
 } from '@/lib/shared/htmlPreviewSandbox'
 import {
+  saveCommentPin,
+  deleteCommentPin,
+  getCommentPinRound,
+  markCommentPinsCommitted,
+  buildAnnotationArtifactPayload,
+  type CommentPin,
+} from '@/lib/inbox/useCommentPins'
+import {
   listPrimaryProducts,
   listExcludedProduces,
   pickProductRef,
@@ -161,6 +169,33 @@ const pickedElementImage = ref<ClarifyImage | null>(null)
 const reactAnnotations = ref<ReactAnnotation[]>([])
 const gateStageEl = ref<HTMLElement | null>(null)
 
+/** CommentPin MVP: session pins for current gate iteration (not PreviewIssue). */
+const commentPins = ref<CommentPin[]>([])
+const commentPinSelectedId = ref<string | null>(null)
+const commentArtifactCommitted = ref(false)
+const commentArtifactWriting = ref(false)
+const commentArtifactWriteError = ref<string | null>(null)
+const annotateDraft = ref<{
+  selector: string
+  imageDataUrl?: string
+  screenshotMissing?: boolean
+  initialComment?: string
+  bounds?: { left: number; top: number; width: number; height: number } | null
+  currentText?: string
+  editingId?: string | null
+} | null>(null)
+
+const gateIteration = computed(() => props.gate.iteration || 1)
+
+const commentPinBadges = computed(() =>
+  commentPins.value.map((p) => ({
+    id: p.id,
+    seq: p.seq,
+    bounds: p.bounds,
+    active: p.id === commentPinSelectedId.value,
+  })),
+)
+
 function pushReactAnnotation(ann: ReactAnnotation) {
   const result = pushAnnotationUnique(reactAnnotations.value, ann)
   if (result === 'duplicate') toast.warn(t('pages.reviewComposer.alreadyAdded'))
@@ -186,12 +221,20 @@ function onQuoteAdd(ann: ReactAnnotation) {
   pushReactAnnotation(ann)
 }
 
-function onHtmlPreviewPick(payload: { selector: string; tagName: string; imageDataUrl: string }) {
+function onHtmlPreviewPick(payload: {
+  selector: string
+  tagName: string
+  imageDataUrl: string
+  bounds?: { left: number; top: number; width: number; height: number }
+  currentText?: string
+}) {
   pickedSelector.value = payload.selector
   const parts = dataUrlToImageParts(payload.imageDataUrl)
   pickedElementImage.value = parts
-  if (!parts) {
-    toast.error(t('pages.appPreview.feedback.requireScreenshot'))
+  const missingShot = !parts
+  if (missingShot) {
+    // Annotation path: warn only — never drop selector. PreviewIssue chat rules unchanged.
+    toast.warn(t('pages.gateApproval.commentPins.screenshotWarn'))
   }
   // Dual-channel: PreviewIssue path keeps selector/screenshot; ReAct annotations
   // get the same selector chip for hot gateReactRevise.
@@ -200,6 +243,85 @@ function onHtmlPreviewPick(payload: { selector: string; tagName: string; imageDa
       selector: payload.selector,
       label: payload.selector || payload.tagName,
     })
+  }
+  // OpenDesign annotate card (CommentPin) — visual HtmlPreview only.
+  if (isVisualBody.value) {
+    annotateDraft.value = {
+      selector: payload.selector,
+      imageDataUrl: missingShot ? undefined : payload.imageDataUrl,
+      screenshotMissing: missingShot,
+      initialComment: '',
+      bounds: payload.bounds || null,
+      currentText: payload.currentText,
+      editingId: null,
+    }
+  }
+}
+
+function onAnnotateClose() {
+  annotateDraft.value = null
+}
+
+function onAnnotateSave(comment: string) {
+  if (!props.run?.id || !annotateDraft.value) return
+  const draft = annotateDraft.value
+  const pin = saveCommentPin(props.run.id, props.gate.nodeId, gateIteration.value, {
+    selector: draft.selector,
+    comment,
+    currentText: draft.currentText,
+    imageDataUrl: draft.imageDataUrl,
+    bounds: draft.bounds || undefined,
+    editingId: draft.editingId,
+  })
+  if (!pin) return
+  reloadCommentPins()
+  commentPinSelectedId.value = pin.id
+  annotateDraft.value = null
+  toast.success(t('pages.gateApproval.commentPins.savedToast', { n: pin.seq }))
+}
+
+function onCommentPinSelect(pinId: string) {
+  commentPinSelectedId.value = pinId
+  const pin = commentPins.value.find((p) => p.id === pinId)
+  if (!pin) return
+  annotateDraft.value = {
+    selector: pin.selector,
+    imageDataUrl: pin.imageDataUrl,
+    screenshotMissing: pin.screenshot === 'MISSING',
+    initialComment: pin.comment,
+    bounds: pin.bounds || null,
+    currentText: pin.currentText,
+    editingId: pin.id,
+  }
+}
+
+function onCommentPinDelete(pinId: string) {
+  if (!props.run?.id) return
+  const pin = commentPins.value.find((p) => p.id === pinId)
+  if (!pin) return
+  deleteCommentPin(props.run.id, props.gate.nodeId, gateIteration.value, pinId)
+  if (commentPinSelectedId.value === pinId) commentPinSelectedId.value = null
+  if (annotateDraft.value?.editingId === pinId) annotateDraft.value = null
+  reloadCommentPins()
+  toast.success(t('pages.gateApproval.commentPins.deletedToast', { n: pin.seq }))
+}
+
+async function onWriteCommentArtifact() {
+  if (!props.run?.id || !commentPins.value.length) return
+  commentArtifactWriting.value = true
+  commentArtifactWriteError.value = null
+  try {
+    const body = buildAnnotationArtifactPayload(commentPins.value)
+    await api.saveAnnotationArtifact(props.run.id, props.gate.nodeId, body)
+    markCommentPinsCommitted(props.run.id, props.gate.nodeId, gateIteration.value)
+    reloadCommentPins()
+    toast.success(t('pages.gateApproval.commentPins.writtenToast'))
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : t('pages.gateApproval.commentPins.writeFailed')
+    commentArtifactWriteError.value = msg
+    toast.error(t('pages.gateApproval.commentPins.writeFailed'))
+  } finally {
+    commentArtifactWriting.value = false
   }
 }
 
@@ -388,6 +510,29 @@ const canEditProducts = computed(
 // The visual node's product is a raw HTML page: preview it in an iframe instead
 // of parsing it as a structured JSON doc.
 const isVisualBody = computed(() => productName.value === 'page.html')
+
+function reloadCommentPins() {
+  if (!props.run?.id || !isVisualBody.value) {
+    commentPins.value = []
+    commentArtifactCommitted.value = false
+    return
+  }
+  const round = getCommentPinRound(props.run.id, props.gate.nodeId, gateIteration.value)
+  commentPins.value = round.pins
+  commentArtifactCommitted.value = round.artifactCommitted
+}
+
+watch(
+  () => [props.run?.id, props.gate.nodeId, gateIteration.value, isVisualBody.value] as const,
+  () => {
+    annotateDraft.value = null
+    commentPinSelectedId.value = null
+    commentArtifactWriteError.value = null
+    reloadCommentPins()
+  },
+  { immediate: true },
+)
+
 /** Paragraph quote float: structured products only (HTML keeps pick-to-annotate). */
 const selectionQuoteEnabled = computed(
   () =>
@@ -1519,6 +1664,13 @@ provide(gateApprovalKey, {
     previewIssuesError,
     pickedSelector,
     pickedElementImage,
+    commentPins,
+    commentPinBadges,
+    commentPinSelectedId,
+    commentArtifactCommitted,
+    commentArtifactWriting,
+    commentArtifactWriteError,
+    annotateDraft,
     proposalsDoc,
     proposalsLoading,
     planDoc,
@@ -1573,6 +1725,11 @@ provide(gateApprovalKey, {
     onHtmlPreviewPick,
     onAppPreviewPick,
     clearHtmlPreviewPick,
+    onAnnotateSave,
+    onAnnotateClose,
+    onCommentPinSelect,
+    onCommentPinDelete,
+    onWriteCommentArtifact,
     loadPreviewIssues,
     choose,
     recordFeedbackIssue,

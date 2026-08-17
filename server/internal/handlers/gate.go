@@ -80,6 +80,28 @@ func (h *Handlers) SaveGateArtifact(c *gin.Context) {
 	})
 }
 
+// SaveAnnotationArtifact upserts the CommentPin package (preview_annotations.json).
+// Independent of SaveGateArtifact whitelist and PreviewIssue lifecycle.
+func (h *Handlers) SaveAnnotationArtifact(c *gin.Context) {
+	var doc engine.AnnotationArtifactDoc
+	if err := c.ShouldBindJSON(&doc); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	res, err := h.Eng.SaveAnnotationArtifact(c.Param("id"), c.Param("nodeId"), doc)
+	if err != nil {
+		_ = c.Error(err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.Header("ETag", res.ETag)
+	c.JSON(http.StatusOK, gin.H{
+		"id": res.ID, "name": res.Name, "kind": res.Kind, "sizeBytes": res.SizeBytes,
+		"updatedAt": res.UpdatedAt, "etag": res.ETag, "nodeId": res.NodeID,
+		"content": res.Content,
+	})
+}
+
 type reactReplyBody struct {
 	Text   string               `json:"text"`
 	Images []models.PromptImage `json:"images"`

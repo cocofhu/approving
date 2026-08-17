@@ -11,6 +11,7 @@ import PreviewFeedbackChat from '../PreviewFeedbackChat.vue'
 import GateProductEditor from '../GateProductEditor.vue'
 import GateHotUnifiedActions from './GateHotUnifiedActions.vue'
 import GateApprovalColdActions from './GateApprovalColdActions.vue'
+import CommentArtifactSidebar from '../CommentArtifactSidebar.vue'
 
 const ctx = useGateApprovalCtx()
 const s = ctx.s
@@ -42,6 +43,13 @@ const {
   previewIssuesError,
   pickedSelector,
   pickedElementImage,
+  commentPins,
+  commentPinBadges,
+  commentPinSelectedId,
+  commentArtifactCommitted,
+  commentArtifactWriting,
+  commentArtifactWriteError,
+  annotateDraft,
   proposalsDoc,
   proposalsLoading,
   planDoc,
@@ -99,6 +107,11 @@ const {
   onHtmlPreviewPick,
   onAppPreviewPick,
   clearHtmlPreviewPick,
+  onAnnotateSave,
+  onAnnotateClose,
+  onCommentPinSelect,
+  onCommentPinDelete,
+  onWriteCommentArtifact,
   loadPreviewIssues,
   choose,
   recordFeedbackIssue,
@@ -160,11 +173,16 @@ const {
                 fill-parent
                 :enlargeable="false"
                 :inspectable="isVisualBody"
+                :comment-pins="isVisualBody ? commentPinBadges : []"
+                :annotate-draft="isVisualBody ? annotateDraft : null"
                 @saved="onProductSaved"
                 @dirty-change="productDirty = $event"
                 @refresh-request="onProductRefresh"
                 @retry-load="retryLoadProduct"
                 @pick="onHtmlPreviewPick"
+                @pin-select="onCommentPinSelect"
+                @annotate-save="onAnnotateSave"
+                @annotate-close="onAnnotateClose"
               />
               <div
                 v-else-if="productLoadError"
@@ -194,7 +212,12 @@ const {
                 :enlargeable="false"
                 fill-parent
                 inspectable
+                :comment-pins="commentPinBadges"
+                :annotate-draft="annotateDraft"
                 @pick="onHtmlPreviewPick"
+                @pin-select="onCommentPinSelect"
+                @annotate-save="onAnnotateSave"
+                @annotate-close="onAnnotateClose"
               />
               <div
                 v-else
@@ -290,6 +313,19 @@ const {
                 </button>
               </div>
               <!-- Help → scrollable feedback → sticky decisions -->
+              <CommentArtifactSidebar
+                v-if="isVisualBody"
+                class="mb-2 max-h-[36%] shrink-0"
+                :pins="commentPins"
+                :selected-id="commentPinSelectedId"
+                :artifact-committed="commentArtifactCommitted"
+                :writing="commentArtifactWriting"
+                :write-error="commentArtifactWriteError"
+                @select="onCommentPinSelect"
+                @edit="onCommentPinSelect"
+                @delete="onCommentPinDelete"
+                @write="onWriteCommentArtifact"
+              />
               <div
                 v-if="usesPreviewIssues && run"
                 class="flex min-h-0 flex-1 flex-col"

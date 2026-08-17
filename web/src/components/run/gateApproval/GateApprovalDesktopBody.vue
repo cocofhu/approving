@@ -15,6 +15,7 @@ import ProposalSelectView from '../ProposalSelectView.vue'
 import StructuredArtifactView from '../StructuredArtifactView.vue'
 import GateApprovalComposer from './GateApprovalComposer.vue'
 import GateApprovalColdActions from './GateApprovalColdActions.vue'
+import CommentArtifactSidebar from '../CommentArtifactSidebar.vue'
 
 const ctx = useGateApprovalCtx()
 const s = ctx.s
@@ -46,6 +47,13 @@ const {
   previewIssuesError,
   pickedSelector,
   pickedElementImage,
+  commentPins,
+  commentPinBadges,
+  commentPinSelectedId,
+  commentArtifactCommitted,
+  commentArtifactWriting,
+  commentArtifactWriteError,
+  annotateDraft,
   proposalsDoc,
   proposalsLoading,
   planDoc,
@@ -103,6 +111,11 @@ const {
   onHtmlPreviewPick,
   onAppPreviewPick,
   clearHtmlPreviewPick,
+  onAnnotateSave,
+  onAnnotateClose,
+  onCommentPinSelect,
+  onCommentPinDelete,
+  onWriteCommentArtifact,
   loadPreviewIssues,
   choose,
   recordFeedbackIssue,
@@ -196,17 +209,34 @@ const {
             :excluded-names="excludedProduces"
             :enlargeable="!isMobile"
             :inspectable="isVisualBody"
+            :comment-pins="isVisualBody ? commentPinBadges : []"
+            :annotate-draft="isVisualBody ? annotateDraft : null"
             @saved="onProductSaved"
             @dirty-change="productDirty = $event"
             @refresh-request="onProductRefresh"
             @retry-load="retryLoadProduct"
             @pick="onHtmlPreviewPick"
+            @pin-select="onCommentPinSelect"
+            @annotate-save="onAnnotateSave"
+            @annotate-close="onAnnotateClose"
           />
           <div
             v-if="isVisualBody"
             class="border-t border-line px-3 pb-3"
             data-testid="editable-visual-feedback"
           >
+            <CommentArtifactSidebar
+              class="mb-3 max-h-[320px]"
+              :pins="commentPins"
+              :selected-id="commentPinSelectedId"
+              :artifact-committed="commentArtifactCommitted"
+              :writing="commentArtifactWriting"
+              :write-error="commentArtifactWriteError"
+              @select="onCommentPinSelect"
+              @edit="onCommentPinSelect"
+              @delete="onCommentPinDelete"
+              @write="onWriteCommentArtifact"
+            />
             <PreviewFeedbackChat
               :run-id="run.id"
               :node-id="gate.nodeId"
@@ -236,9 +266,26 @@ const {
             :mode="isMobile ? 'inline' : 'default'"
             :enlargeable="!isMobile"
             inspectable
+            :comment-pins="commentPinBadges"
+            :annotate-draft="annotateDraft"
             @pick="onHtmlPreviewPick"
+            @pin-select="onCommentPinSelect"
+            @annotate-save="onAnnotateSave"
+            @annotate-close="onAnnotateClose"
           />
           <div v-if="run" class="border-t border-line px-3 pb-3">
+            <CommentArtifactSidebar
+              class="mb-3 max-h-[320px]"
+              :pins="commentPins"
+              :selected-id="commentPinSelectedId"
+              :artifact-committed="commentArtifactCommitted"
+              :writing="commentArtifactWriting"
+              :write-error="commentArtifactWriteError"
+              @select="onCommentPinSelect"
+              @edit="onCommentPinSelect"
+              @delete="onCommentPinDelete"
+              @write="onWriteCommentArtifact"
+            />
             <PreviewFeedbackChat
               :run-id="run.id"
               :node-id="gate.nodeId"

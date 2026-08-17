@@ -20,6 +20,38 @@ import {
 } from '@/lib/shared/htmlPreviewSandbox'
 import Icon from './Icon.vue'
 import AppModal from './AppModal.vue'
+import CommentPinInspectCard from '../run/CommentPinInspectCard.vue'
+
+const emit = defineEmits<{
+  (
+    e: 'pick',
+    payload: {
+      selector: string
+      tagName: string
+      imageDataUrl: string
+      bounds?: { left: number; top: number; width: number; height: number }
+      currentText?: string
+    },
+  ): void
+  (e: 'pin-select', pinId: string): void
+  (e: 'annotate-save', comment: string): void
+  (e: 'annotate-close'): void
+}>()
+
+export type HtmlPreviewCommentPinBadge = {
+  id: string
+  seq: number
+  bounds?: { left: number; top: number; width: number; height: number }
+  active?: boolean
+}
+
+export type HtmlPreviewAnnotateDraft = {
+  selector: string
+  imageDataUrl?: string
+  screenshotMissing?: boolean
+  initialComment?: string
+  bounds?: { left: number; top: number; width: number; height: number } | null
+}
 
 const props = withDefaults(
   defineProps<{
@@ -56,6 +88,10 @@ const props = withDefaults(
      * short docs leave blank space inside the frame (top-aligned).
      */
     fillParent?: boolean
+    /** CommentPin badges overlaid on the iframe viewport (opaque-origin bounds). */
+    commentPins?: HtmlPreviewCommentPinBadge[]
+    /** Open OD annotate card over the preview (parent owns pin persistence). */
+    annotateDraft?: HtmlPreviewAnnotateDraft | null
   }>(),
   {
     enlargeable: true,
@@ -64,15 +100,10 @@ const props = withDefaults(
     contentHeightOffsetPx: 0,
     inspectable: false,
     fillParent: false,
+    commentPins: () => [],
+    annotateDraft: null,
   },
 )
-
-const emit = defineEmits<{
-  (
-    e: 'pick',
-    payload: { selector: string; tagName: string; imageDataUrl: string },
-  ): void
-}>()
 
 const { t } = useI18n()
 const gateShareOpen = inject<(() => void) | undefined>('gateShareOpen', undefined)
@@ -83,6 +114,7 @@ const big = ref(false)
 const modalHtml = ref('')
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const toolbarRef = ref<HTMLElement | null>(null)
+const pinHostRef = ref<HTMLElement | null>(null)
 const contentHeight = ref(INLINE_FALLBACK_HEIGHT)
 const contentDegraded = ref(false)
 /** True when measured height was clamped to maxContentHeightVh. */
@@ -99,6 +131,21 @@ const instanceId = createInstanceId()
 let resizeTimeout: ReturnType<typeof setTimeout> | undefined
 let pendingResizeHeight: number | null = null
 let resizeRafId: number | null = null
+
+function pinBadgeStyle(pin: HtmlPreviewCommentPinBadge, index: number): Record<string, string> {
+  const b = pin.bounds
+  const offset = index * 18
+  if (!b || !(b.width > 0 || b.height > 0)) {
+    return { top: `${8 + offset}px`, right: '8px' }
+  }
+  // Anchor near top-right of the picked element rect (iframe viewport coords).
+  const top = Math.max(0, b.top - 8)
+  const left = Math.max(0, b.left + Math.max(b.width - 12, 0) + offset)
+  return {
+    top: `${top}px`,
+    left: `${left}px`,
+  }
+}
 
 function computeHtmlHash(html: string): string {
   let hash = 0
@@ -321,6 +368,8 @@ function handlePreviewMessage(event: MessageEvent) {
       selector: parsed.selector,
       tagName: parsed.tagName,
       imageDataUrl: parsed.imageDataUrl,
+      bounds: parsed.bounds,
+      currentText: parsed.currentText,
     })
   }
 }
@@ -581,36 +630,80 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
         device === 'mobile' ? 'flex justify-center p-4' : '',
       ]"
     >
-      <iframe
-        v-if="device === 'desktop'"
-        :key="iframeMountKey + '-desktop'"
-        ref="iframeRef"
-        :srcdoc="inspectable || fitContent ? previewSrcdoc : html"
-        :sandbox="sandboxAttr"
-        referrerpolicy="no-referrer"
-        :scrolling="fitContent || fillParent ? iframeScrolling : undefined"
-        class="w-full border-0 bg-white"
-        :class="fitContent && !fillParent ? '' : 'h-full'"
-        :style="fitContent && !fillParent ? { height: contentHeight + 'px' } : undefined"
-        :title="t('common.htmlPreview.title')"
-        @load="onPreviewLoad"
-      />
       <div
-        v-else
-        class="w-[390px] shrink-0 overflow-hidden border border-line bg-white shadow-lg"
-        :class="fitContent && !fillParent ? '' : 'h-full'"
-        :style="fitContent && !fillParent ? { height: contentHeight + 'px' } : undefined"
+        ref="pinHostRef"
+        class="relative overflow-hidden"
+        :class="[
+          device === 'desktop' ? 'h-full w-full' : '',
+          device === 'mobile'
+            ? fitContent && !fillParent
+              ? ''
+              : 'h-full'
+            : '',
+        ]"
+        data-testid="html-preview-pin-host"
       >
         <iframe
-          :key="iframeMountKey + '-mobile'"
+          v-if="device === 'desktop'"
+          :key="iframeMountKey + '-desktop'"
           ref="iframeRef"
           :srcdoc="inspectable || fitContent ? previewSrcdoc : html"
           :sandbox="sandboxAttr"
           referrerpolicy="no-referrer"
           :scrolling="fitContent || fillParent ? iframeScrolling : undefined"
-          class="h-full w-full border-0 bg-white"
-          :title="t('common.htmlPreview.mobilePreview')"
+          class="w-full border-0 bg-white"
+          :class="fitContent && !fillParent ? '' : 'h-full'"
+          :style="fitContent && !fillParent ? { height: contentHeight + 'px' } : undefined"
+          :title="t('common.htmlPreview.title')"
           @load="onPreviewLoad"
+        />
+        <div
+          v-else
+          class="w-[390px] shrink-0 overflow-hidden border border-line bg-white shadow-lg"
+          :class="fitContent && !fillParent ? '' : 'h-full'"
+          :style="fitContent && !fillParent ? { height: contentHeight + 'px' } : undefined"
+        >
+          <iframe
+            :key="iframeMountKey + '-mobile'"
+            ref="iframeRef"
+            :srcdoc="inspectable || fitContent ? previewSrcdoc : html"
+            :sandbox="sandboxAttr"
+            referrerpolicy="no-referrer"
+            :scrolling="fitContent || fillParent ? iframeScrolling : undefined"
+            class="h-full w-full border-0 bg-white"
+            :title="t('common.htmlPreview.mobilePreview')"
+            @load="onPreviewLoad"
+          />
+        </div>
+        <div
+          v-if="commentPins.length"
+          class="pointer-events-none absolute inset-0 z-10 overflow-hidden"
+          data-testid="html-preview-pin-layer"
+        >
+          <button
+            v-for="(pin, pinIdx) in commentPins"
+            :key="pin.id"
+            type="button"
+            class="pointer-events-auto absolute inline-flex h-5 min-w-5 items-center justify-center bg-accent px-1 font-mono text-[11px] font-semibold text-white shadow-[0_0_0_2px_rgb(10,10,11)]"
+            :class="pin.active ? 'ring-2 ring-accent/60 ring-offset-1 ring-offset-base' : ''"
+            :style="pinBadgeStyle(pin, pinIdx)"
+            :title="'#' + pin.seq"
+            :data-testid="'html-preview-pin-' + pin.seq"
+            @click.stop="emit('pin-select', pin.id)"
+          >
+            {{ pin.seq }}
+          </button>
+        </div>
+        <CommentPinInspectCard
+          :open="!!annotateDraft"
+          :selector="annotateDraft?.selector || ''"
+          :image-data-url="annotateDraft?.imageDataUrl"
+          :screenshot-missing="!!annotateDraft?.screenshotMissing"
+          :initial-comment="annotateDraft?.initialComment"
+          :anchor="annotateDraft?.bounds || null"
+          :container-el="pinHostRef"
+          @close="emit('annotate-close')"
+          @save="emit('annotate-save', $event)"
         />
       </div>
     </div>
