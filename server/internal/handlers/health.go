@@ -9,6 +9,7 @@ import (
 
 	"github.com/cocofhu/approving/internal/nodereg"
 	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/approving/internal/version"
 	"github.com/gin-gonic/gin"
 )
 
@@ -70,7 +71,11 @@ func (h *Handlers) Health(c *gin.Context) {
 		})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "ok", "ready": true, "vnc_preview": h.Browser != nil})
+	body := gin.H{"status": "ok", "ready": true, "vnc_preview": h.Browser != nil}
+	if sha := version.ShortSHA(); sha != "" {
+		body["commit"] = sha
+	}
+	c.JSON(http.StatusOK, body)
 }
 
 // Live is the liveness probe: always 200 while the process is up.

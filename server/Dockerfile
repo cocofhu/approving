@@ -28,7 +28,15 @@ RUN go mod download
 COPY server/ .
 # 前端产物随二进制由 Go 进程从文件系统服务(非 go:embed)。
 COPY --from=web-builder /web/dist ./web/dist
-RUN CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o /out/approving-server ./cmd/server
+# Optional revision stamp for the overview-page service commit badge.
+# Production images have no .git (root .dockerignore); pass GIT_COMMIT or
+# GITHUB_SHA as build-arg. Empty args still produce a working binary.
+ARG GIT_COMMIT=""
+ARG GITHUB_SHA=""
+RUN COMMIT_SHA="${GIT_COMMIT:-$GITHUB_SHA}" && \
+    CGO_ENABLED=1 go build -trimpath \
+      -ldflags="-s -w -X github.com/cocofhu/approving/internal/version.commit=${COMMIT_SHA}" \
+      -o /out/approving-server ./cmd/server
 RUN CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o /out/approving ./cmd/doctor
 
 # --- 运行 ---

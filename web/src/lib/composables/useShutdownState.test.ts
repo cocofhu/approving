@@ -13,6 +13,7 @@ import {
   startShutdownPolling,
   stopShutdownPolling,
 } from './useShutdownState'
+import { serviceCommit } from './useServiceCommit'
 
 describe('useShutdownState', () => {
   beforeEach(() => {
@@ -22,6 +23,7 @@ describe('useShutdownState', () => {
     shutdownState.graceRemainingSeconds = 0
     shutdownState.checked = false
     drainToast.visible = false
+    serviceCommit.value = ''
     vi.useFakeTimers()
   })
 
@@ -68,6 +70,20 @@ describe('useShutdownState', () => {
     fetchMock.mockRejectedValueOnce(new Error('net'))
     await pollShutdownHealth()
     expect(shutdownState.mode).toBe('offline')
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ status: 'ok', ready: true, commit: 'B01BB39deadbeef' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    await pollShutdownHealth()
+    expect(shutdownState.mode).toBe('normal')
+    expect(serviceCommit.value).toBe('b01bb39')
+
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ status: 'ok', ready: true }), { status: 200 }))
+    await pollShutdownHealth()
+    expect(serviceCommit.value).toBe('')
 
     showDrainToast('blocked')
     expect(drainToast.visible).toBe(true)

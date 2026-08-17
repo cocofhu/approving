@@ -89,6 +89,13 @@ export APPROVING_SANDBOX_IMAGE="${APPROVING_SANDBOX_IMAGE:-}"
 export APPROVING_SANDBOX_GATEWAY_API_KEY="${APPROVING_SANDBOX_GATEWAY_API_KEY:-$SANDBOX_GATEWAY_API_KEY}"
 export SBGW_API_KEYS="${SBGW_API_KEYS:-$SANDBOX_GATEWAY_API_KEY}"
 
+# Optional stamp for the source stack (`go run` + Dockerfile.dev ldflags).
+# Unset / failed rev-parse → empty; overview badge stays hidden (allowed).
+if [[ -z "${GIT_COMMIT:-}" ]] && command -v git >/dev/null 2>&1; then
+  GIT_COMMIT="$(git -C "$HOST_REPO_DIR" rev-parse HEAD 2>/dev/null || true)"
+fi
+export GIT_COMMIT="${GIT_COMMIT:-}"
+
 RELEASE_COMPOSE_FILE="${COMPOSE_FILE:-compose.release.yaml}"
 DEV_COMPOSE_FILE="docker-compose.yml"
 

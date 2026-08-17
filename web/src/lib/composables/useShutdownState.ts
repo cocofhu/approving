@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import { i18n } from '../shared/i18n'
+import { applyHealthCommit } from './useServiceCommit'
 
 const BASE = ((import.meta as any).env?.VITE_API_BASE ?? '/api').replace(/\/$/, '')
 
@@ -72,6 +73,12 @@ export async function pollShutdownHealth(): Promise<void> {
       shutdownState.mode = 'normal'
       shutdownState.graceRemainingSeconds = 0
       shutdownState.message = ''
+      try {
+        const body = (await res.json()) as { commit?: unknown }
+        applyHealthCommit(body.commit)
+      } catch {
+        applyHealthCommit('')
+      }
       return
     }
     shutdownState.mode = 'offline'

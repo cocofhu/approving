@@ -14,4 +14,6 @@ ENV GOPROXY=https://goproxy.cn,direct \
 WORKDIR /app
 EXPOSE 8080
 
-CMD ["go", "run", "./cmd/server"]
+# Stamp the overview-page service commit when GIT_COMMIT is provided by compose.
+# Empty GIT_COMMIT still starts; the health `commit` field is then omitted.
+CMD ["sh", "-c", "exec go run -ldflags=\"-X github.com/cocofhu/approving/internal/version.commit=${GIT_COMMIT}\" ./cmd/server"]
