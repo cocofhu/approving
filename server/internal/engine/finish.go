@@ -190,6 +190,12 @@ func (e *Engine) finish(runID, status string) bool {
 		e.finalizeActiveStateRuns(runID, status)
 		e.supersedePendingGates(runID, status)
 	}
+	// Persist run_error.json before AbortRun so (1) DB pollers that see
+	// status=failed already have the product, and (2) live sandbox logs can
+	// still be archived. AbortRun tears containers down.
+	if status == "failed" {
+		e.persistRunErrorArtifact(runID)
+	}
 	if status == "completed" || status == "failed" || status == "cancelled" {
 		if e.shareRevoker != nil {
 			e.shareRevoker.RevokeUnusedForRun(runID)
@@ -197,9 +203,6 @@ func (e *Engine) finish(runID, status string) bool {
 
 		if ab, ok := e.provider.(runtime.RunAborter); ok {
 			ab.AbortRun(runID)
-		}
-		if status == "failed" {
-			e.persistRunErrorArtifact(runID)
 		}
 		e.host.UnregisterRun(runID)
 		e.mu.Lock()
