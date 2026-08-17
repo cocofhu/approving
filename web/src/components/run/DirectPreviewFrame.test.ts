@@ -201,6 +201,30 @@ describe('DirectPreviewFrame', () => {
     wrapper.unmount()
   })
 
+  it('toggles label to 取消标注; second click posts on:false', async () => {
+    const { wrapper, posted } = mountFrame()
+    dispatchFromPreview({ type: 'direct-preview-ready', url: DIRECT })
+    await flushPromises()
+    const btn = wrapper.get('[data-testid="direct-preview-inspect"]')
+    expect(btn.text()).toContain('取点标注')
+    expect(btn.attributes('aria-pressed')).toBe('false')
+
+    await btn.trigger('click')
+    await flushPromises()
+    expect(btn.attributes('aria-pressed')).toBe('true')
+    expect(btn.text()).toContain('取消标注')
+    expect(btn.text()).not.toContain('取点标注')
+    expect(posted).toContainEqual({ type: 'direct-preview-inspect', on: true })
+
+    await btn.trigger('click')
+    await flushPromises()
+    expect(btn.attributes('aria-pressed')).toBe('false')
+    expect(btn.text()).toContain('取点标注')
+    expect(wrapper.text()).not.toContain('取消标注')
+    expect(posted).toContainEqual({ type: 'direct-preview-inspect', on: false })
+    wrapper.unmount()
+  })
+
   it('nav buttons post nav actions', async () => {
     const { wrapper, posted } = mountFrame()
     dispatchFromPreview({ type: 'direct-preview-ready', url: DIRECT })

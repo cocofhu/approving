@@ -6,8 +6,10 @@ import (
 )
 
 // Overlay.setInspectMode(searchForNode) often emits inspectModeCanceled for the
-// previous mode. If that event reaches the UI, the toggle looks off while
-// Overlay is still on — the next click re-enters inspect and cancel never sticks.
+// previous mode — sometimes more than once. If any of those reach the UI, the
+// toggle looks off while Overlay is still on — the next click re-enters inspect
+// and cancel never sticks. Swallow every cancel for the skip window, not just
+// the first one.
 const inspectCancelSkip = 300 * time.Millisecond
 
 // inspectCancelFilter decides whether Overlay.inspectModeCanceled should notify
@@ -58,7 +60,6 @@ func (f *inspectCancelFilter) onCanceled() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.skip {
-		f.skip = false
 		return false
 	}
 	if !f.wanted {

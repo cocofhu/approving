@@ -8,8 +8,26 @@ func TestInspectCancelFilterEscAfterEnableSideEffect(t *testing.T) {
 	if f.onCanceled() {
 		t.Fatal("enable-side inspectModeCanceled must not notify UI")
 	}
+	if f.onCanceled() {
+		t.Fatal("second enable-side cancel in the skip window must not notify UI")
+	}
+	f.expireSkipNow()
 	if !f.onCanceled() {
-		t.Fatal("Esc after the skipped enable-side cancel must notify UI")
+		t.Fatal("Esc after the skip window must notify UI")
+	}
+}
+
+func TestInspectCancelFilterSwallowsAllCancelsDuringSkip(t *testing.T) {
+	var f inspectCancelFilter
+	f.set(true)
+	for i := 0; i < 3; i++ {
+		if f.onCanceled() {
+			t.Fatalf("enable-side cancel %d must not notify UI", i)
+		}
+	}
+	f.expireSkipNow()
+	if !f.onCanceled() {
+		t.Fatal("Esc after skip window must notify UI")
 	}
 }
 
