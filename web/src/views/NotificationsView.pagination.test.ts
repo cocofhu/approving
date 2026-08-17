@@ -131,11 +131,11 @@ describe('NotificationsView pagination (g1/g2/g4)', () => {
     __resetNotificationsPageEntryForTests()
   })
 
-  it('N=20 has no pager and shows page-1 range 1–20 / 20 (g1.2 / g2.1 / g4.1)', async () => {
+  it('N=20 has no pager and no duplicated page range in the header (g1.2 / g2.1 / g4.1)', async () => {
     const { wrapper } = await mountView(makeItems(20))
     expect(wrapper.findAll('[data-testid="notifications-item"]')).toHaveLength(20)
     expect(wrapper.find('[data-testid="notifications-pagination"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="notifications-page-range"]').text()).toBe('第 1 页 · 1–20 / 20')
+    expect(wrapper.find('[data-testid="notifications-page-range"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -145,13 +145,13 @@ describe('NotificationsView pagination (g1/g2/g4)', () => {
     const pager = wrapper.find('[data-testid="notifications-pagination"]')
     expect(pager.exists()).toBe(true)
     expect(wrapper.find('[data-testid="notifications-pager-summary"]').text()).toBe('共 21 条 · 每页 20')
-    expect(wrapper.find('[data-testid="notifications-page-range"]').text()).toBe('第 1 页 · 1–20 / 21')
+    expect(wrapper.find('[data-testid="notifications-page-range"]').exists()).toBe(false)
 
     const next = pager.findAll('button.pg-btn')[1]!
     await next.trigger('click')
     await nextTick()
     expect(wrapper.findAll('[data-testid="notifications-item"]')).toHaveLength(1)
-    expect(wrapper.find('[data-testid="notifications-page-range"]').text()).toBe('第 2 页 · 21–21 / 21')
+    expect(wrapper.find('[data-testid="notifications-page-range"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -160,11 +160,10 @@ describe('NotificationsView pagination (g1/g2/g4)', () => {
     const { wrapper } = await mountView(items, items.slice(0, 18).map((r) => r.id))
     await wrapper.find('[data-testid="notifications-pagination"]').findAll('button.pg-btn')[1]!.trigger('click')
     await nextTick()
-    expect(wrapper.find('[data-testid="notifications-page-range"]').text()).toMatch(/第 2 页/)
 
     await wrapper.find('[data-testid="notifications-filter-unread"]').trigger('click')
     await nextTick()
-    expect(wrapper.find('[data-testid="notifications-page-range"]').text()).toMatch(/第 1 页/)
+    expect(wrapper.find('[data-testid="notifications-page-range"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="notifications-pagination"]').exists()).toBe(false)
     expect(wrapper.findAll('[data-testid="notifications-item"]').length).toBeLessThanOrEqual(20)
     wrapper.unmount()
@@ -182,7 +181,7 @@ describe('NotificationsView pagination (g1/g2/g4)', () => {
     await nextTick()
     await nextTick()
     expect(wrapper.find('[data-testid="notifications-pagination"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="notifications-page-range"]').text()).toMatch(/第 1 页/)
+    expect(wrapper.find('[data-testid="notifications-page-range"]').exists()).toBe(false)
     expect(wrapper.findAll('[data-testid="notifications-item"]')).toHaveLength(20)
     wrapper.unmount()
   })
@@ -192,11 +191,11 @@ describe('NotificationsView pagination (g1/g2/g4)', () => {
     const { wrapper } = await mountView(items)
     await wrapper.find('[data-testid="notifications-pagination"]').findAll('button.pg-btn')[1]!.trigger('click')
     await nextTick()
-    expect(wrapper.find('[data-testid="notifications-page-range"]').text()).toBe('第 2 页 · 21–25 / 25')
+    expect(wrapper.find('[data-testid="notifications-page-range"]').exists()).toBe(false)
     const firstOnPage = wrapper.find('[data-testid="notifications-item"]').attributes('data-run-id')!
     useRunTerminalNotifications().markRead(firstOnPage)
     await nextTick()
-    expect(wrapper.find('[data-testid="notifications-page-range"]').text()).toMatch(/第 2 页/)
+    expect(wrapper.find('[data-testid="notifications-page-range"]').exists()).toBe(false)
     expect(wrapper.findAll('[data-testid="notifications-item"]').length).toBeGreaterThan(0)
     wrapper.unmount()
   })
@@ -245,7 +244,7 @@ describe('NotificationsView pagination (g1/g2/g4)', () => {
     await nextTick()
     requestNotificationsPageReset()
     await nextTick()
-    expect(wrapper.find('[data-testid="notifications-page-range"]').text()).toMatch(/第 1 页/)
+    expect(wrapper.find('[data-testid="notifications-page-range"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="notifications-filter-all"]').classes().join(' ')).toMatch(/border-accent/)
     expect(router.currentRoute.value.fullPath).not.toContain('page=')
     wrapper.unmount()
@@ -262,9 +261,9 @@ describe('NotificationsView pagination (g1/g2/g4)', () => {
 })
 
 describe('NotificationsView pagination conventions (g4.4 / g1.5)', () => {
-  it('keeps min-h-11 on filter and mark-all', () => {
+  it('keeps min-h-11 on tabs and mark-all', () => {
     expect(viewSrc).toMatch(/min-h-11 border border-line bg-transparent/)
-    expect(viewSrc).toMatch(/min-h-11 border px-2.5/)
+    expect(viewSrc).toMatch(/min-h-11 border-b-2 border-transparent px-4/)
   })
 
   it('gates Pagination on filteredTotal > PAGE_SIZE with shrink-0 and no pageSizeOptions', () => {
