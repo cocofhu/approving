@@ -24,9 +24,9 @@ describe('settings-family narrow-screen stacking (g3)', () => {
     expect(src).toMatch(/min-h-11 items-start gap-3/)
   })
 
-  it('Triggers chips wrap and Notifications mark-all is min-h-11', () => {
+  it('Triggers chips wrap and Notifications controls keep touch height', () => {
     expect(read('TriggersView.vue')).toMatch(/flex flex-wrap items-center gap-2/)
     expect(read('NotificationsView.vue')).toMatch(/min-h-11 border border-line bg-transparent/)
-    expect(read('NotificationsView.vue')).toMatch(/min-h-11 border px-2.5/)
+    expect(read('NotificationsView.vue')).toMatch(/min-h-11 border-b-2 border-transparent px-4/)
   })
 })
