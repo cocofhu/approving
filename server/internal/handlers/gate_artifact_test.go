@@ -91,3 +91,77 @@ func TestSaveGateArtifactHTTP(t *testing.T) {
 		t.Fatalf("non-primary want 400, got %d", bad.Code)
 	}
 }
+
+func TestSaveAnnotationArtifactHTTP(t *testing.T) {
+	h := newHarness(t)
+	runID := "run-http-ann"
+	now := time.Now()
+	g := models.Graph{
+		Nodes: []models.Node{
+			{ID: "visual", Type: "visual"},
+			{ID: "gate", Type: "human_gate", Config: map[string]any{
+				"title":         "审阅",
+				"body_template": "{{nodes.visual.outputs.page}}",
+				"actions":       []any{map[string]any{"id": "pass", "label": "通过"}},
+			}},
+		},
+	}
+	h.db.Create(&models.Run{
+		ID: runID, WorkflowID: "w", WorkflowName: "w", Status: "waiting_human",
+		Graph: g, StartedAt: now, CreatedAt: now,
+	})
+	h.db.Create(&models.Gate{
+		RunID: runID, NodeID: "gate", Iteration: 2, Title: "审阅", RequestedAt: now,
+		UpstreamNodeID: "visual", UpstreamIteration: 1,
+		Actions: []models.GateAction{{ID: "pass", Label: "通过"}},
+	})
+
+	w := h.do(http.MethodPut, "/api/runs/"+runID+"/gates/gate/annotation-artifact", map[string]any{
+		"annotations": []map[string]any{
+			{
+				"seq": 1, "selector": "h1.title", "comment": "字号过大",
+				"screenshot": "MISSING", "markKind": "click",
+			},
+		},
+	})
+	if w.Code != 200 {
+		t.Fatalf("save ann: %d %s", w.Code, w.Body.String())
+	}
+	var saved struct {
+		Name    string `json:"name"`
+		Kind    string `json:"kind"`
+		Content string `json:"content"`
+		ETag    string `json:"etag"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &saved); err != nil {
+		t.Fatal(err)
+	}
+	if saved.Name != "preview_annotations.json" || saved.Kind != "preview_annotations" || saved.ETag == "" {
+		t.Fatalf("saved=%+v", saved)
+	}
+	if !strings.Contains(saved.Content, "仅改标中区域") || !strings.Contains(saved.Content, "h1.title") {
+		t.Fatalf("content=%s", saved.Content)
+	}
+	content, ok := h.h.Arts.Get(runID, "preview_annotations.json")
+	if !ok || content == "" {
+		t.Fatal("artifact missing in store")
+	}
+
+	// Empty annotations clears delivery (f4 dirty invalidate).
+	cleared := h.do(http.MethodPut, "/api/runs/"+runID+"/gates/gate/annotation-artifact", map[string]any{
+		"annotations": []any{},
+	})
+	if cleared.Code != 200 {
+		t.Fatalf("empty clear want 200, got %d %s", cleared.Code, cleared.Body.String())
+	}
+	var clearBody struct {
+		Cleared bool   `json:"cleared"`
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(cleared.Body.Bytes(), &clearBody); err != nil {
+		t.Fatal(err)
+	}
+	if !clearBody.Cleared || !strings.Contains(clearBody.Content, `"status": "cleared"`) {
+		t.Fatalf("clear body=%+v", clearBody)
+	}
+}

@@ -218,6 +218,20 @@ describe('isValidInspectPickMessage / parseInspectPickMessage', () => {
     expect(parseInspectPickMessage(msg)).toEqual(msg)
   })
 
+  it('accepts optional bounds and currentText', () => {
+    const msg = {
+      type: INSPECT_MESSAGE_TYPE,
+      id: TEST_ID,
+      selector: 'div.hero',
+      tagName: 'div',
+      imageDataUrl: '',
+      bounds: { left: 1, top: 2, width: 3, height: 4 },
+      currentText: 'hello',
+    }
+    expect(isValidInspectPickMessage(msg)).toBe(true)
+    expect(parseInspectPickMessage(msg)).toEqual(msg)
+  })
+
   it('rejects empty selector or missing imageDataUrl field', () => {
     expect(
       isValidInspectPickMessage({

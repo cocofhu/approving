@@ -13,6 +13,7 @@ import GateHotUnifiedActions from './GateHotUnifiedActions.vue'
 import GateApprovalColdActions from './GateApprovalColdActions.vue'
 import StructuredArtifactView from '../StructuredArtifactView.vue'
 import GateApprovalComposer from './GateApprovalComposer.vue'
+import CommentArtifactSidebar from '../CommentArtifactSidebar.vue'
 
 const ctx = useGateApprovalCtx()
 const s = ctx.s
@@ -45,6 +46,13 @@ const {
   previewIssuesError,
   pickedSelector,
   pickedElementImage,
+  commentPins,
+  commentPinBadges,
+  commentPinSelectedId,
+  commentArtifactCommitted,
+  commentArtifactWriting,
+  commentArtifactWriteError,
+  annotateDraft,
   proposalsDoc,
   proposalsLoading,
   planDoc,
@@ -102,6 +110,11 @@ const {
   onHtmlPreviewPick,
   onAppPreviewPick,
   clearHtmlPreviewPick,
+  onAnnotateSave,
+  onAnnotateClose,
+  onCommentPinSelect,
+  onCommentPinDelete,
+  onWriteCommentArtifact,
   loadPreviewIssues,
   choose,
   recordFeedbackIssue,
@@ -185,11 +198,16 @@ const {
                   :content-height-offset-px="isMobile ? 0 : contentFitChromeOffsetPx"
                   :enlargeable="!isMobile"
                   :inspectable="isVisualBody"
+                  :comment-pins="isVisualBody ? commentPinBadges : []"
+                  :annotate-draft="isVisualBody ? annotateDraft : null"
                   @saved="onProductSaved"
                   @dirty-change="productDirty = $event"
                   @refresh-request="onProductRefresh"
                   @retry-load="retryLoadProduct"
                   @pick="onHtmlPreviewPick"
+                  @pin-select="onCommentPinSelect"
+                  @annotate-save="onAnnotateSave"
+                  @annotate-close="onAnnotateClose"
                 />
                 <div
                   v-else-if="productLoadError"
@@ -221,7 +239,12 @@ const {
                   :fill-parent="!isMobile"
                   :fit-content="false"
                   inspectable
+                  :comment-pins="commentPinBadges"
+                  :annotate-draft="annotateDraft"
                   @pick="onHtmlPreviewPick"
+                  @pin-select="onCommentPinSelect"
+                  @annotate-save="onAnnotateSave"
+                  @annotate-close="onAnnotateClose"
                 />
                 <div
                   v-else-if="shouldFitStructured && productName"
@@ -328,6 +351,20 @@ const {
                   {{ t('pages.gateApproval.previewRetry') }}
                 </button>
               </div>
+              <!-- CommentPin MVP: 评论|产物 tabs (parallel to PreviewIssue chat below). -->
+              <CommentArtifactSidebar
+                v-if="isVisualBody"
+                class="mb-2 min-h-[200px] max-h-[48%] shrink-0"
+                :pins="commentPins"
+                :selected-id="commentPinSelectedId"
+                :artifact-committed="commentArtifactCommitted"
+                :writing="commentArtifactWriting"
+                :write-error="commentArtifactWriteError"
+                @select="onCommentPinSelect"
+                @edit="onCommentPinSelect"
+                @delete="onCommentPinDelete"
+                @write="onWriteCommentArtifact"
+              />
               <!-- Preview path: unified feedback in sidebar (hot hides built-in submit). -->
               <div
                 v-if="usesPreviewIssues && run"

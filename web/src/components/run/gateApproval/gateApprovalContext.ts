@@ -1,6 +1,7 @@
 import { inject, type InjectionKey, type Ref } from 'vue'
 import type { ClarifyImage, Gate, ReactAnnotation, Run } from '@/lib/shared/types'
 import type { GatePrimaryProductRef } from '@/lib/inbox/gateUpstream'
+import type { CommentPin } from '@/lib/inbox/useCommentPins'
 import type { PlanDoc } from '../PlanView.vue'
 import type { ProposalsDoc } from '../ProposalSelectView.vue'
 
@@ -52,6 +53,26 @@ export type GateApprovalState = {
   previewIssuesError: string | null
   pickedSelector: string
   pickedElementImage: ClarifyImage | null
+  commentPins: CommentPin[]
+  commentPinBadges: {
+    id: string
+    seq: number
+    bounds?: { left: number; top: number; width: number; height: number }
+    active?: boolean
+  }[]
+  commentPinSelectedId: string | null
+  commentArtifactCommitted: boolean
+  commentArtifactWriting: boolean
+  commentArtifactWriteError: string | null
+  annotateDraft: {
+    selector: string
+    imageDataUrl?: string
+    screenshotMissing?: boolean
+    initialComment?: string
+    bounds?: { left: number; top: number; width: number; height: number } | null
+    currentText?: string
+    editingId?: string | null
+  } | null
 
   proposalsDoc: ProposalsDoc | null
   proposalsLoading: boolean
@@ -114,7 +135,13 @@ export type GateApprovalState = {
   }) => void
   onProductRefresh: (name: string) => void | Promise<void>
   retryLoadProduct: () => void
-  onHtmlPreviewPick: (payload: { selector: string; tagName: string; imageDataUrl: string }) => void
+  onHtmlPreviewPick: (payload: {
+    selector: string
+    tagName: string
+    imageDataUrl: string
+    bounds?: { left: number; top: number; width: number; height: number }
+    currentText?: string
+  }) => void
   onAppPreviewPick: (payload: {
     selector: string
     tagName: string
@@ -122,6 +149,11 @@ export type GateApprovalState = {
     url?: string
   }) => void
   clearHtmlPreviewPick: () => void
+  onAnnotateSave: (comment: string) => void
+  onAnnotateClose: () => void
+  onCommentPinSelect: (pinId: string) => void
+  onCommentPinDelete: (pinId: string) => void
+  onWriteCommentArtifact: () => void | Promise<void>
   loadPreviewIssues: () => void | Promise<void>
   choose: (id: string) => void
   recordFeedbackIssue: () => void | Promise<void>

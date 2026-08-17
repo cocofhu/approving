@@ -911,6 +911,42 @@ export const api = {
       body: JSON.stringify({ content }),
     })
   },
+  /** Explicit CommentPin package write (preview_annotations.json); not primary whitelist. */
+  saveAnnotationArtifact: (
+    runId: string,
+    nodeId: string,
+    body: {
+      kind?: string
+      consumer?: string
+      route?: string
+      hardScope?: string
+      count?: number
+      annotations: Array<{
+        seq: number
+        selector: string
+        comment: string
+        currentText?: string
+        screenshot: 'present' | 'MISSING'
+        imageDataUrl?: string
+        markKind?: string
+        bounds?: { left: number; top: number; width: number; height: number }
+      }>
+    },
+  ) =>
+    req<{
+      id: string
+      name: string
+      kind: string
+      sizeBytes: number
+      updatedAt: string
+      etag: string
+      nodeId: string
+      content: string
+      cleared?: boolean
+    }>(`/runs/${runId}/gates/${nodeId}/annotation-artifact`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
   reactReply: (
     runId: string,
     nodeId: string,

@@ -43,6 +43,20 @@ const props = withDefaults(
      * Used by page.html human_gate Issue feedback; parent forwards `pick`.
      */
     inspectable?: boolean
+    /** CommentPin badges for visual gate annotate MVP. */
+    commentPins?: {
+      id: string
+      seq: number
+      bounds?: { left: number; top: number; width: number; height: number }
+      active?: boolean
+    }[]
+    annotateDraft?: {
+      selector: string
+      imageDataUrl?: string
+      screenshotMissing?: boolean
+      initialComment?: string
+      bounds?: { left: number; top: number; width: number; height: number } | null
+    } | null
     /**
      * Desktop: allow HTML main-product enlarge modal (inline/fillParent included).
      * Mobile approval keeps false so enlarge stays desktop-only.
@@ -58,6 +72,8 @@ const props = withDefaults(
     contentLoading: false,
     loadError: null,
     inspectable: false,
+    commentPins: () => [],
+    annotateDraft: null,
     enlargeable: true,
   },
 )
@@ -69,8 +85,17 @@ const emit = defineEmits<{
   (e: 'retry-load'): void
   (
     e: 'pick',
-    payload: { selector: string; tagName: string; imageDataUrl: string },
+    payload: {
+      selector: string
+      tagName: string
+      imageDataUrl: string
+      bounds?: { left: number; top: number; width: number; height: number }
+      currentText?: string
+    },
   ): void
+  (e: 'pin-select', pinId: string): void
+  (e: 'annotate-save', comment: string): void
+  (e: 'annotate-close'): void
 }>()
 
 const { t } = useI18n()
@@ -744,7 +769,12 @@ defineExpose({
             :inspectable="inspectable"
             :enlargeable="enlargeable"
             :modal-title="activeProduct?.name || ''"
+            :comment-pins="commentPins"
+            :annotate-draft="annotateDraft"
             @pick="emit('pick', $event)"
+            @pin-select="emit('pin-select', $event)"
+            @annotate-save="emit('annotate-save', $event)"
+            @annotate-close="emit('annotate-close')"
           />
         </template>
         <StructuredArtifactView

@@ -93,6 +93,10 @@ export interface InspectPickMessage {
   selector: string
   tagName: string
   imageDataUrl: string
+  /** Element rect inside the opaque iframe viewport at pick time (for parent pin overlay). */
+  bounds?: { left: number; top: number; width: number; height: number }
+  /** Truncated visible text at pick time (optional). */
+  currentText?: string
 }
 
 export interface InspectCanceledMessage {
@@ -269,6 +273,12 @@ function onClick(ev){
   if(!t||t.nodeType!==1)return;
   var selector=path(t);
   var tagName=t.tagName.toLowerCase();
+  var rect=t.getBoundingClientRect();
+  var bounds={left:rect.left,top:rect.top,width:rect.width,height:rect.height};
+  var currentText='';
+  try{
+    currentText=String(t.innerText||t.textContent||'').replace(/\\s+/g,' ').trim().slice(0,240);
+  }catch(e){}
   clearHover();
   // One-shot: leave inspect after pick (parent also clears button state).
   setEnabled(false);
@@ -278,7 +288,9 @@ function onClick(ev){
       id:instanceId,
       selector:selector,
       tagName:tagName,
-      imageDataUrl:imageDataUrl||''
+      imageDataUrl:imageDataUrl||'',
+      bounds:bounds,
+      currentText:currentText
     },'*');
   });
 }
@@ -374,18 +386,38 @@ export function isValidInspectPickMessage(data: unknown): data is InspectPickMes
   if (typeof msg.selector !== 'string' || !msg.selector.trim()) return false
   if (typeof msg.tagName !== 'string' || !msg.tagName) return false
   if (typeof msg.imageDataUrl !== 'string') return false
+  if (msg.bounds !== undefined) {
+    if (!msg.bounds || typeof msg.bounds !== 'object') return false
+    const b = msg.bounds as Record<string, unknown>
+    for (const k of ['left', 'top', 'width', 'height'] as const) {
+      if (typeof b[k] !== 'number' || !Number.isFinite(b[k])) return false
+    }
+  }
+  if (msg.currentText !== undefined && typeof msg.currentText !== 'string') return false
   return true
 }
 
 export function parseInspectPickMessage(data: unknown): InspectPickMessage | null {
   if (!isValidInspectPickMessage(data)) return null
-  return {
+  const out: InspectPickMessage = {
     type: INSPECT_MESSAGE_TYPE,
     id: data.id,
     selector: data.selector.trim(),
     tagName: data.tagName,
     imageDataUrl: data.imageDataUrl,
   }
+  if (data.bounds) {
+    out.bounds = {
+      left: data.bounds.left,
+      top: data.bounds.top,
+      width: data.bounds.width,
+      height: data.bounds.height,
+    }
+  }
+  if (typeof data.currentText === 'string' && data.currentText.trim()) {
+    out.currentText = data.currentText.trim()
+  }
+  return out
 }
 
 export function isValidInspectCanceledMessage(data: unknown): data is InspectCanceledMessage {
