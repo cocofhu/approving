@@ -84,10 +84,7 @@ func TestResearchEarlyFailureThreeChannelsNonEmpty(t *testing.T) {
 
 	// (b) run_error.json product
 	arts := services.NewArtifactService(db)
-	body, ok := arts.Get(run.ID, services.RunErrorArtifactName)
-	if !ok || body == "" {
-		t.Fatal("expected run_error.json artifact")
-	}
+	body := waitRunErrorArtifact(t, db, run.ID)
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(body), &parsed); err != nil {
 		t.Fatalf("parse run_error.json: %v\n%s", err, body)
@@ -201,10 +198,7 @@ func TestResearchEarlyFailureNoSandboxLogBoundary(t *testing.T) {
 	if !strings.Contains(info.DisplayReason(), services.NoSandboxLogMarker) {
 		t.Fatalf("display=%q", info.DisplayReason())
 	}
-	body, ok := services.NewArtifactService(db).Get(run.ID, services.RunErrorArtifactName)
-	if !ok {
-		t.Fatal("missing run_error.json")
-	}
+	body := waitRunErrorArtifact(t, db, run.ID)
 	if !strings.Contains(body, services.NoSandboxLogMarker) && !strings.Contains(body, `"noSandboxLog": true`) {
 		t.Fatalf("run_error.json missing no-log signal: %s", body)
 	}
@@ -257,7 +251,5 @@ func TestFailRunEarlyExitPersistsReason(t *testing.T) {
 	if !strings.Contains(info.DisplayReason(), "加载运行上下文失败") {
 		t.Fatalf("display=%q", info.DisplayReason())
 	}
-	if _, ok := services.NewArtifactService(db).Get(stubID, services.RunErrorArtifactName); !ok {
-		t.Fatal("expected run_error.json from failRun")
-	}
+	waitRunErrorArtifact(t, db, stubID)
 }

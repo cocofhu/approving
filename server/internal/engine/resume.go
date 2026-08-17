@@ -358,8 +358,9 @@ func (e *Engine) snapshotPreviewIssues(c *execCtx, runID, nodeID string) error {
 // dialogue. For a clarify (react) node completion is agent-driven (finishes
 // when the agent raises no further questions, force, or the round cap). For a
 // review node the two actions are explicit: force=false does one in-place edit
-// and STAYS paused ("继续改"); force=true accepts the current store snapshot
-// without Agent wrap-up, re-validates, and advances the FSM ("确认并流转").
+// and STAYS paused ("继续改"); force=true asks the agent to wrap up leftover
+// dirty git (if any), re-validates the store snapshot, and advances the FSM
+// ("确认并流转").
 // Annotations are folded into the human instruction so the agent edits the
 // exact cited spots on revise turns.
 //
@@ -448,7 +449,7 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 		return errors.New("react already done")
 	}
 
-	// Review force: human turn is recorded, then finalize without Agent wrap-up.
+	// Review force: human turn is recorded, then git wrap-up + finalize.
 	// Review !force already returned via EnqueueReviewTurn above.
 	if isReviewNode(node.Type) {
 		if !force {

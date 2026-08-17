@@ -104,6 +104,22 @@ func waitRunStatus(t *testing.T, db *gorm.DB, runID, status string) {
 	t.Fatalf("run %s did not reach %q (got %q)", runID, status, r.Status)
 }
 
+// waitRunErrorArtifact polls until finish() has written run_error.json.
+// Run.status can flip to failed a few statements before the artifact lands.
+func waitRunErrorArtifact(t *testing.T, db *gorm.DB, runID string) string {
+	t.Helper()
+	arts := services.NewArtifactService(db)
+	deadline := time.Now().Add(waitPollTimeout)
+	for time.Now().Before(deadline) {
+		if body, ok := arts.Get(runID, services.RunErrorArtifactName); ok && body != "" {
+			return body
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("expected run_error.json artifact")
+	return ""
+}
+
 func waitReactPause(t *testing.T, db *gorm.DB, runID, nodeID string) {
 	t.Helper()
 	deadline := time.Now().Add(waitPollTimeout)

@@ -156,6 +156,12 @@ func TestReviewEnterReviseFinish(t *testing.T) {
 	if !provider.retired[provider.parkKey(run.ID, "prop")] {
 		t.Fatal("expected RetireSession on review force success")
 	}
+	if provider.wrapUpCalls["prop"] != 1 {
+		t.Fatalf("expected OfferCommitOnConfirm once before retire, got %d", provider.wrapUpCalls["prop"])
+	}
+	if provider.wrapUpAfterRetire {
+		t.Fatal("OfferCommitOnConfirm must run before RetireSession")
+	}
 	waitRunStatus(t, db, run.ID, "completed")
 
 	db.Where("run_id = ? AND node_id = ?", run.ID, "prop").First(&conv)
@@ -166,6 +172,41 @@ func TestReviewEnterReviseFinish(t *testing.T) {
 	// The reserved product survived the review and remains in the store.
 	if _, ok := arts(db, run.ID, mcp.ProposalsArtifactName); !ok {
 		t.Fatalf("proposals.json missing after review finish")
+	}
+}
+
+// TestReviewForcePersistsGitWrapUp: confirm-time OfferCommitOnConfirm narration
+// is stored as the agent turn answering the human「确认」.
+func TestReviewForcePersistsGitWrapUp(t *testing.T) {
+	eng, db, provider := setupReviewEngine(t, true)
+	provider.wrapUpMsg = "已提交 src/a.go,跳过 tmp.log"
+
+	run, err := eng.StartRun("review-wf", map[string]any{"idea": "登录"}, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "prop")
+
+	if err := eng.ReactReply(run.ID, "prop", "确认", nil, nil, true); err != nil {
+		t.Fatalf("finish reply: %v", err)
+	}
+	waitRunStatus(t, db, run.ID, "completed")
+
+	var conv models.ReactConversation
+	if err := db.Where("run_id = ? AND node_id = ?", run.ID, "prop").First(&conv).Error; err != nil {
+		t.Fatalf("load conv: %v", err)
+	}
+	if !conv.Done {
+		t.Fatal("expected Done")
+	}
+	var saw bool
+	for _, m := range conv.Messages {
+		if m.Role == "agent" && m.Text == provider.wrapUpMsg {
+			saw = true
+		}
+	}
+	if !saw {
+		t.Fatalf("git wrap-up narration not persisted: %+v", conv.Messages)
 	}
 }
 
