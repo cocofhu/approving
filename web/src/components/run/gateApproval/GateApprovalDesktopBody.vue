@@ -112,6 +112,7 @@ const {
   onAppPreviewPick,
   clearHtmlPreviewPick,
   onAnnotateSave,
+  onAnnotateSendChat,
   onAnnotateClose,
   onCommentPinSelect,
   onCommentPinDelete,
@@ -227,6 +228,7 @@ const {
                 @pick="onHtmlPreviewPick"
                 @pin-select="onCommentPinSelect"
                 @annotate-save="onAnnotateSave"
+                @annotate-send-chat="onAnnotateSendChat"
                 @annotate-close="onAnnotateClose"
               />
             </div>
@@ -253,6 +255,8 @@ const {
                   :node-id="gate.nodeId"
                   :selector="pickedSelector"
                   :element-image="pickedElementImage"
+                  v-model:text="reactText"
+                  v-model:images="reactImages"
                   copy-variant="review"
                   @clear-selector="clearHtmlPreviewPick"
                   @issues-changed="loadPreviewIssues()"
@@ -287,6 +291,7 @@ const {
                 @pick="onHtmlPreviewPick"
                 @pin-select="onCommentPinSelect"
                 @annotate-save="onAnnotateSave"
+                @annotate-send-chat="onAnnotateSendChat"
                 @annotate-close="onAnnotateClose"
               />
             </div>
@@ -312,6 +317,8 @@ const {
                   :node-id="gate.nodeId"
                   :selector="pickedSelector"
                   :element-image="pickedElementImage"
+                  v-model:text="reactText"
+                  v-model:images="reactImages"
                   copy-variant="review"
                   @clear-selector="clearHtmlPreviewPick"
                   @issues-changed="loadPreviewIssues()"

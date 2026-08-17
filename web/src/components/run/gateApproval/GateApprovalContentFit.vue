@@ -111,6 +111,7 @@ const {
   onAppPreviewPick,
   clearHtmlPreviewPick,
   onAnnotateSave,
+  onAnnotateSendChat,
   onAnnotateClose,
   onCommentPinSelect,
   onCommentPinDelete,
@@ -207,6 +208,7 @@ const {
                   @pick="onHtmlPreviewPick"
                   @pin-select="onCommentPinSelect"
                   @annotate-save="onAnnotateSave"
+                  @annotate-send-chat="onAnnotateSendChat"
                   @annotate-close="onAnnotateClose"
                 />
                 <div
@@ -244,6 +246,7 @@ const {
                   @pick="onHtmlPreviewPick"
                   @pin-select="onCommentPinSelect"
                   @annotate-save="onAnnotateSave"
+                  @annotate-send-chat="onAnnotateSendChat"
                   @annotate-close="onAnnotateClose"
                 />
                 <div

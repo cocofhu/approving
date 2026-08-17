@@ -17,6 +17,7 @@ import {
   parseInspectPickMessage,
   isValidInspectCanceledMessage,
   buildInspectCommand,
+  type InspectElementStyle,
 } from '@/lib/shared/htmlPreviewSandbox'
 import Icon from './Icon.vue'
 import AppModal from './AppModal.vue'
@@ -31,10 +32,12 @@ const emit = defineEmits<{
       imageDataUrl: string
       bounds?: { left: number; top: number; width: number; height: number }
       currentText?: string
+      style?: InspectElementStyle
     },
   ): void
   (e: 'pin-select', pinId: string): void
   (e: 'annotate-save', comment: string): void
+  (e: 'annotate-send-chat', comment: string): void
   (e: 'annotate-close'): void
 }>()
 
@@ -51,6 +54,7 @@ export type HtmlPreviewAnnotateDraft = {
   screenshotMissing?: boolean
   initialComment?: string
   bounds?: { left: number; top: number; width: number; height: number } | null
+  style?: InspectElementStyle | null
 }
 
 const props = withDefaults(
@@ -363,13 +367,14 @@ function handlePreviewMessage(event: MessageEvent) {
   if (props.inspectable && isValidInspectPickMessage(event.data)) {
     const parsed = parseInspectPickMessage(event.data)
     if (!parsed) return
-    clearInspect('picked', { syncIframe: true })
+    // Keep inspect on after pick so the user can pin another element (OD comment mode).
     emit('pick', {
       selector: parsed.selector,
       tagName: parsed.tagName,
       imageDataUrl: parsed.imageDataUrl,
       bounds: parsed.bounds,
       currentText: parsed.currentText,
+      style: parsed.style,
     })
   }
 }
@@ -508,22 +513,61 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
       </button>
     </div>
     <div :class="fillParent ? 'min-h-0 flex-1' : ''">
-      <iframe
-        :key="iframeMountKey"
-        ref="iframeRef"
-        :srcdoc="previewSrcdoc"
-        :sandbox="sandboxAttr"
-        referrerpolicy="no-referrer"
-        :scrolling="iframeScrolling"
-        class="w-full border-0 bg-white"
-        :class="[
-          fillParent ? 'h-full' : '',
-          { 'html-preview-height-transition': needsContentHeight && !heightStable },
-        ]"
-        :style="fillParent ? undefined : { height: contentHeight + 'px' }"
-        :title="t('common.htmlPreview.title')"
-        @load="onPreviewLoad"
-      />
+      <div
+        ref="pinHostRef"
+        class="relative overflow-hidden"
+        :class="fillParent ? 'h-full' : ''"
+        data-testid="html-preview-pin-host"
+      >
+        <iframe
+          :key="iframeMountKey"
+          ref="iframeRef"
+          :srcdoc="previewSrcdoc"
+          :sandbox="sandboxAttr"
+          referrerpolicy="no-referrer"
+          :scrolling="iframeScrolling"
+          class="w-full border-0 bg-white"
+          :class="[
+            fillParent ? 'h-full' : '',
+            { 'html-preview-height-transition': needsContentHeight && !heightStable },
+          ]"
+          :style="fillParent ? undefined : { height: contentHeight + 'px' }"
+          :title="t('common.htmlPreview.title')"
+          @load="onPreviewLoad"
+        />
+        <div
+          v-if="commentPins.length"
+          class="pointer-events-none absolute inset-0 z-10 overflow-hidden"
+          data-testid="html-preview-pin-layer"
+        >
+          <button
+            v-for="(pin, pinIdx) in commentPins"
+            :key="pin.id"
+            type="button"
+            class="pointer-events-auto absolute inline-flex h-5 min-w-5 items-center justify-center bg-accent px-1 font-mono text-[11px] font-semibold text-white shadow-[0_0_0_2px_rgb(10,10,11)]"
+            :class="pin.active ? 'ring-2 ring-accent/60 ring-offset-1 ring-offset-base' : ''"
+            :style="pinBadgeStyle(pin, pinIdx)"
+            :title="'#' + pin.seq"
+            :data-testid="'html-preview-pin-' + pin.seq"
+            @click.stop="emit('pin-select', pin.id)"
+          >
+            {{ pin.seq }}
+          </button>
+        </div>
+        <CommentPinInspectCard
+          :open="!!annotateDraft"
+          :selector="annotateDraft?.selector || ''"
+          :image-data-url="annotateDraft?.imageDataUrl"
+          :screenshot-missing="!!annotateDraft?.screenshotMissing"
+          :initial-comment="annotateDraft?.initialComment"
+          :anchor="annotateDraft?.bounds || null"
+          :style-info="annotateDraft?.style || null"
+          :container-el="pinHostRef"
+          @close="emit('annotate-close')"
+          @save="emit('annotate-save', $event)"
+          @send-chat="emit('annotate-send-chat', $event)"
+        />
+      </div>
     </div>
   </div>
 
@@ -701,9 +745,11 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
           :screenshot-missing="!!annotateDraft?.screenshotMissing"
           :initial-comment="annotateDraft?.initialComment"
           :anchor="annotateDraft?.bounds || null"
+          :style-info="annotateDraft?.style || null"
           :container-el="pinHostRef"
           @close="emit('annotate-close')"
           @save="emit('annotate-save', $event)"
+          @send-chat="emit('annotate-send-chat', $event)"
         />
       </div>
     </div>

@@ -56,6 +56,13 @@ const props = withDefaults(
       screenshotMissing?: boolean
       initialComment?: string
       bounds?: { left: number; top: number; width: number; height: number } | null
+      style?: {
+        color?: string
+        fontSize?: string
+        fontWeight?: string
+        fontFamily?: string
+        lineHeight?: string
+      } | null
     } | null
     /**
      * Desktop: allow HTML main-product enlarge modal (inline/fillParent included).
@@ -91,10 +98,18 @@ const emit = defineEmits<{
       imageDataUrl: string
       bounds?: { left: number; top: number; width: number; height: number }
       currentText?: string
+      style?: {
+        color?: string
+        fontSize?: string
+        fontWeight?: string
+        fontFamily?: string
+        lineHeight?: string
+      }
     },
   ): void
   (e: 'pin-select', pinId: string): void
   (e: 'annotate-save', comment: string): void
+  (e: 'annotate-send-chat', comment: string): void
   (e: 'annotate-close'): void
 }>()
 
@@ -774,6 +789,7 @@ defineExpose({
             @pick="emit('pick', $event)"
             @pin-select="emit('pin-select', $event)"
             @annotate-save="emit('annotate-save', $event)"
+            @annotate-send-chat="emit('annotate-send-chat', $event)"
             @annotate-close="emit('annotate-close')"
           />
         </template>
