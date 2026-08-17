@@ -193,6 +193,8 @@ describe('injectInlineInspectScript', () => {
     expect(result).toContain(TEST_ID)
     expect(result).toContain('nth-of-type')
     expect(result).toContain('foreignObject')
+    expect(result).toContain('getComputedStyle')
+    expect(result).toContain('Stay in inspect after pick')
     expect(result.indexOf(TEST_ID)).toBeLessThan(result.toLowerCase().indexOf('</body>'))
   })
 })
@@ -218,7 +220,7 @@ describe('isValidInspectPickMessage / parseInspectPickMessage', () => {
     expect(parseInspectPickMessage(msg)).toEqual(msg)
   })
 
-  it('accepts optional bounds and currentText', () => {
+  it('accepts optional bounds, currentText, and style', () => {
     const msg = {
       type: INSPECT_MESSAGE_TYPE,
       id: TEST_ID,
@@ -227,6 +229,13 @@ describe('isValidInspectPickMessage / parseInspectPickMessage', () => {
       imageDataUrl: '',
       bounds: { left: 1, top: 2, width: 3, height: 4 },
       currentText: 'hello',
+      style: {
+        color: 'rgb(26, 26, 26)',
+        fontSize: '118px',
+        fontWeight: '700',
+        fontFamily: '"Bodoni Moda", serif',
+        lineHeight: '159.3px',
+      },
     }
     expect(isValidInspectPickMessage(msg)).toBe(true)
     expect(parseInspectPickMessage(msg)).toEqual(msg)

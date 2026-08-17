@@ -29,6 +29,7 @@ import {
   CONTENT_FIT_PREVIEW_MAX_VH,
   CONTENT_FIT_REVIEWING_STRIP_PX,
   dataUrlToImageParts,
+  type InspectElementStyle,
 } from '@/lib/shared/htmlPreviewSandbox'
 import {
   saveCommentPin,
@@ -183,6 +184,7 @@ const annotateDraft = ref<{
   bounds?: { left: number; top: number; width: number; height: number } | null
   currentText?: string
   editingId?: string | null
+  style?: InspectElementStyle | null
 } | null>(null)
 
 const gateIteration = computed(() => props.gate.iteration || 1)
@@ -227,6 +229,7 @@ function onHtmlPreviewPick(payload: {
   imageDataUrl: string
   bounds?: { left: number; top: number; width: number; height: number }
   currentText?: string
+  style?: InspectElementStyle
 }) {
   pickedSelector.value = payload.selector
   const parts = dataUrlToImageParts(payload.imageDataUrl)
@@ -254,16 +257,13 @@ function onHtmlPreviewPick(payload: {
       bounds: payload.bounds || null,
       currentText: payload.currentText,
       editingId: null,
+      style: payload.style || null,
     }
   }
 }
 
-function onAnnotateClose() {
-  annotateDraft.value = null
-}
-
-function onAnnotateSave(comment: string) {
-  if (!props.run?.id || !annotateDraft.value) return
+function persistAnnotateComment(comment: string) {
+  if (!props.run?.id || !annotateDraft.value) return null
   const draft = annotateDraft.value
   const result = saveCommentPin(props.run.id, props.gate.nodeId, gateIteration.value, {
     selector: draft.selector,
@@ -273,14 +273,32 @@ function onAnnotateSave(comment: string) {
     bounds: draft.bounds || undefined,
     editingId: draft.editingId,
   })
-  if (!result) return
+  if (!result) return null
   reloadCommentPins()
   commentPinSelectedId.value = result.pin.id
   annotateDraft.value = null
-  toast.success(t('pages.gateApproval.commentPins.savedToast', { n: result.pin.seq }))
   if (result.needsServerInvalidate) {
     void invalidateServerAnnotationArtifact()
   }
+  return result
+}
+
+function onAnnotateClose() {
+  annotateDraft.value = null
+}
+
+function onAnnotateSave(comment: string) {
+  const result = persistAnnotateComment(comment)
+  if (!result) return
+  toast.success(t('pages.gateApproval.commentPins.savedToast', { n: result.pin.seq }))
+}
+
+function onAnnotateSendChat(comment: string) {
+  const result = persistAnnotateComment(comment)
+  if (!result) return
+  const existing = reactText.value.trim()
+  reactText.value = existing ? `${existing}\n${comment}` : comment
+  toast.success(t('pages.gateApproval.commentPins.sentToChatToast', { n: result.pin.seq }))
 }
 
 function onCommentPinSelect(pinId: string) {
@@ -1757,6 +1775,7 @@ provide(gateApprovalKey, {
     onAppPreviewPick,
     clearHtmlPreviewPick,
     onAnnotateSave,
+    onAnnotateSendChat,
     onAnnotateClose,
     onCommentPinSelect,
     onCommentPinDelete,

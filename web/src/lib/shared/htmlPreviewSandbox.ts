@@ -87,6 +87,15 @@ export interface InspectCommandMessage {
   enabled: boolean
 }
 
+/** Computed style snapshot for Open Design-style annotate cards (Size/Color/Font/Line). */
+export interface InspectElementStyle {
+  color?: string
+  fontSize?: string
+  fontWeight?: string
+  fontFamily?: string
+  lineHeight?: string
+}
+
 export interface InspectPickMessage {
   type: typeof INSPECT_MESSAGE_TYPE
   id: string
@@ -97,6 +106,8 @@ export interface InspectPickMessage {
   bounds?: { left: number; top: number; width: number; height: number }
   /** Truncated visible text at pick time (optional). */
   currentText?: string
+  /** Optional computed style at pick time (parent formats Size/Color/Font/Line). */
+  style?: InspectElementStyle
 }
 
 export interface InspectCanceledMessage {
@@ -265,6 +276,18 @@ function onMove(ev){
   hoverEl=t;
   hoverEl.classList.add('__hp-inspect-hover');
 }
+function readStyle(el){
+  try{
+    var cs=window.getComputedStyle(el);
+    return {
+      color:cs.color||'',
+      fontSize:cs.fontSize||'',
+      fontWeight:cs.fontWeight||'',
+      fontFamily:cs.fontFamily||'',
+      lineHeight:cs.lineHeight||''
+    };
+  }catch(e){return null;}
+}
 function onClick(ev){
   if(!enabled)return;
   ev.preventDefault();
@@ -279,11 +302,11 @@ function onClick(ev){
   try{
     currentText=String(t.innerText||t.textContent||'').replace(/\\s+/g,' ').trim().slice(0,240);
   }catch(e){}
+  var style=readStyle(t);
   clearHover();
-  // One-shot: leave inspect after pick (parent also clears button state).
-  setEnabled(false);
+  // Stay in inspect after pick so the user can pin another element (OD comment mode).
   captureElement(t).then(function(imageDataUrl){
-    parent.postMessage({
+    var payload={
       type:pickType,
       id:instanceId,
       selector:selector,
@@ -291,7 +314,9 @@ function onClick(ev){
       imageDataUrl:imageDataUrl||'',
       bounds:bounds,
       currentText:currentText
-    },'*');
+    };
+    if(style)payload.style=style;
+    parent.postMessage(payload,'*');
   });
 }
 function onKeydown(ev){
@@ -394,6 +419,13 @@ export function isValidInspectPickMessage(data: unknown): data is InspectPickMes
     }
   }
   if (msg.currentText !== undefined && typeof msg.currentText !== 'string') return false
+  if (msg.style !== undefined) {
+    if (!msg.style || typeof msg.style !== 'object') return false
+    const st = msg.style as Record<string, unknown>
+    for (const k of ['color', 'fontSize', 'fontWeight', 'fontFamily', 'lineHeight'] as const) {
+      if (st[k] !== undefined && typeof st[k] !== 'string') return false
+    }
+  }
   return true
 }
 
@@ -416,6 +448,16 @@ export function parseInspectPickMessage(data: unknown): InspectPickMessage | nul
   }
   if (typeof data.currentText === 'string' && data.currentText.trim()) {
     out.currentText = data.currentText.trim()
+  }
+  if (data.style) {
+    const st = data.style
+    out.style = {
+      color: typeof st.color === 'string' ? st.color : undefined,
+      fontSize: typeof st.fontSize === 'string' ? st.fontSize : undefined,
+      fontWeight: typeof st.fontWeight === 'string' ? st.fontWeight : undefined,
+      fontFamily: typeof st.fontFamily === 'string' ? st.fontFamily : undefined,
+      lineHeight: typeof st.lineHeight === 'string' ? st.lineHeight : undefined,
+    }
   }
   return out
 }

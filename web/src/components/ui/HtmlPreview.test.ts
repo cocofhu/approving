@@ -10,6 +10,7 @@ import {
   RESIZE_HEIGHT_EPSILON,
   RESIZE_MESSAGE_TYPE,
   INSPECT_CANCELED_TYPE,
+  INSPECT_MESSAGE_TYPE,
   contentFitPreviewCapPx,
 } from '@/lib/shared/htmlPreviewSandbox'
 import HtmlPreview from './HtmlPreview.vue'
@@ -376,6 +377,54 @@ describe('HtmlPreview inspect toggle', () => {
     wrapper.unmount()
   })
 
+  it('keeps inspect pressed after iframe pick (comment mode stays on)', async () => {
+    const wrapper = mountPreview({
+      mode: 'inline',
+      fitContent: false,
+      fillParent: true,
+      inspectable: true,
+      enlargeable: false,
+    })
+    await flushPromises()
+
+    const iframe = wrapper.find('iframe')
+    const el = iframe.element as HTMLIFrameElement
+    Object.defineProperty(el, 'contentWindow', {
+      value: window,
+      configurable: true,
+    })
+
+    const btn = wrapper.find('[data-testid="html-preview-inspect-toggle"]')
+    await btn.trigger('click')
+    await nextTick()
+    expect(btn.attributes('aria-pressed')).toBe('true')
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          type: INSPECT_MESSAGE_TYPE,
+          id: FIXED_ID,
+          selector: 'h1.display',
+          tagName: 'h1',
+          imageDataUrl: '',
+          bounds: { left: 10, top: 20, width: 100, height: 40 },
+          currentText: 'title',
+          style: { color: 'rgb(26, 26, 26)', fontSize: '118px', fontWeight: '700' },
+        },
+        source: window,
+      }),
+    )
+    await nextTick()
+    await flushPromises()
+    expect(btn.attributes('aria-pressed')).toBe('true')
+    expect(wrapper.emitted('pick')?.[0]?.[0]).toMatchObject({
+      selector: 'h1.display',
+      tagName: 'h1',
+      style: { color: 'rgb(26, 26, 26)', fontSize: '118px', fontWeight: '700' },
+    })
+    wrapper.unmount()
+  })
+
   it('clears pressed state when iframe posts inspect-canceled (Esc)', async () => {
     const wrapper = mountPreview({
       mode: 'inline',
@@ -407,6 +456,87 @@ describe('HtmlPreview inspect toggle', () => {
     await nextTick()
     await flushPromises()
     expect(btn.attributes('aria-pressed')).toBe('false')
+    wrapper.unmount()
+  })
+})
+
+describe('HtmlPreview comment pin overlay', () => {
+  beforeEach(() => {
+    vi.stubGlobal('crypto', { randomUUID: () => FIXED_ID })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const draft = {
+    selector: 'h1.display.reveal',
+    initialComment: '',
+    bounds: { left: 8, top: 8, width: 200, height: 40 },
+    screenshotMissing: true,
+    style: { color: 'rgb(26, 26, 26)', fontSize: '118px', fontWeight: '700', fontFamily: 'Bodoni Moda' },
+  }
+
+  it('shows inspect card in mode=inline + fillParent when annotateDraft is set', async () => {
+    const wrapper = mountPreview({
+      mode: 'inline',
+      fitContent: false,
+      fillParent: true,
+      inspectable: true,
+      enlargeable: false,
+      annotateDraft: draft,
+      commentPins: [{ id: 'pin-1', seq: 1, bounds: draft.bounds, active: true }],
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="html-preview-pin-host"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="html-preview-pin-layer"]').exists()).toBe(true)
+    const card = wrapper.find('[data-testid="comment-pin-inspect-card"]')
+    expect(card.exists()).toBe(true)
+    expect(card.isVisible()).toBe(true)
+    expect(card.text()).toContain('h1.display.reveal')
+    expect(card.text()).toContain('Size')
+    expect(card.text()).toContain('Color')
+    expect(card.text()).toContain('Font')
+    wrapper.unmount()
+  })
+
+  it('emits annotate-save from inline card after typing', async () => {
+    const wrapper = mountPreview({
+      mode: 'inline',
+      fillParent: true,
+      inspectable: true,
+      enlargeable: false,
+      annotateDraft: draft,
+    })
+    await flushPromises()
+    const save = wrapper.find('[data-testid="comment-pin-save"]')
+    const send = wrapper.find('[data-testid="comment-pin-send-chat"]')
+    expect(save.attributes('disabled')).toBeDefined()
+    expect(send.attributes('disabled')).toBeDefined()
+
+    await wrapper.find('[data-testid="comment-pin-input"]').setValue('标题加大')
+    await nextTick()
+    expect(save.attributes('disabled')).toBeUndefined()
+    expect(send.attributes('disabled')).toBeUndefined()
+
+    await save.trigger('click')
+    expect(wrapper.emitted('annotate-save')?.[0]).toEqual(['标题加大'])
+    wrapper.unmount()
+  })
+
+  it('emits annotate-send-chat from inline card', async () => {
+    const wrapper = mountPreview({
+      mode: 'inline',
+      fillParent: true,
+      inspectable: true,
+      enlargeable: false,
+      annotateDraft: draft,
+    })
+    await flushPromises()
+    await wrapper.find('[data-testid="comment-pin-input"]').setValue('发给评审')
+    await nextTick()
+    await wrapper.find('[data-testid="comment-pin-send-chat"]').trigger('click')
+    expect(wrapper.emitted('annotate-send-chat')?.[0]).toEqual(['发给评审'])
     wrapper.unmount()
   })
 })
