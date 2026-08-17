@@ -128,18 +128,36 @@ export type SaveCommentPinInput = {
   editingId?: string | null
 }
 
+/** True when the round's pin set matches the last successful artifact write. */
+export function isCommentPinsCommitted(
+  runId: string,
+  gateNodeId: string,
+  iteration: number,
+): boolean {
+  return getCommentPinRound(runId, gateNodeId, iteration).artifactCommitted
+}
+
+export type SaveCommentPinResult = {
+  pin: CommentPin
+  /** True when this mutate cancelled a prior committed write (server must clear). */
+  needsServerInvalidate: boolean
+}
+
 /** Create or update a pin. Seq is assigned on create and never recycled on delete. */
 export function saveCommentPin(
   runId: string,
   gateNodeId: string,
   iteration: number,
   input: SaveCommentPinInput,
-): CommentPin | null {
+): SaveCommentPinResult | null {
   const comment = (input.comment || '').trim()
   const selector = (input.selector || '').trim()
   if (!comment || !selector) return null
 
-  const state = { ...ensure(runId, gateNodeId, iteration), pins: [...ensure(runId, gateNodeId, iteration).pins] }
+  const prevRound = ensure(runId, gateNodeId, iteration)
+  const wasCommitted =
+    !!prevRound.artifactCommitted && prevRound.committedFingerprint === fingerprint(prevRound.pins)
+  const state = { ...prevRound, pins: [...prevRound.pins] }
   const now = new Date().toISOString()
   const hasShot = !!(input.imageDataUrl && input.imageDataUrl.startsWith('data:'))
   const screenshot: CommentPinScreenshot = hasShot ? 'present' : 'MISSING'
@@ -183,7 +201,13 @@ export function saveCommentPin(
   state.artifactCommitted = false
   state.committedFingerprint = ''
   persist(runId, gateNodeId, iteration, state)
-  return pin
+  return { pin, needsServerInvalidate: wasCommitted }
+}
+
+export type DeleteCommentPinResult = {
+  deleted: boolean
+  /** True when this mutate cancelled a prior committed write (server must clear). */
+  needsServerInvalidate: boolean
 }
 
 export function deleteCommentPin(
@@ -191,17 +215,21 @@ export function deleteCommentPin(
   gateNodeId: string,
   iteration: number,
   pinId: string,
-): boolean {
+): DeleteCommentPinResult {
   const prev = ensure(runId, gateNodeId, iteration)
+  const wasCommitted =
+    !!prev.artifactCommitted && prev.committedFingerprint === fingerprint(prev.pins)
   const pins = prev.pins.filter((p) => p.id !== pinId)
-  if (pins.length === prev.pins.length) return false
+  if (pins.length === prev.pins.length) {
+    return { deleted: false, needsServerInvalidate: false }
+  }
   persist(runId, gateNodeId, iteration, {
     ...prev,
     pins,
     artifactCommitted: false,
     committedFingerprint: '',
   })
-  return true
+  return { deleted: true, needsServerInvalidate: wasCommitted }
 }
 
 export function listCommentPins(

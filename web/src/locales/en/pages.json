@@ -2632,6 +2632,7 @@
         "deletedToast": "Deleted annotation #{n} (draft synced; seq not reused)",
         "writtenToast": "Artifact written for next node (not sent to Agent)",
         "writeFailed": "Failed to write annotation artifact",
+        "invalidateFailed": "Local commit cleared, but clearing the server artifact failed; retry or write again",
         "screenshotWarn": "Screenshot failed; you can still annotate (no image)"
       },
       "reviewFeedback": {

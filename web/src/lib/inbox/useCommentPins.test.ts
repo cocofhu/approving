@@ -28,14 +28,14 @@ describe('useCommentPins', () => {
       selector: 'div.a',
       comment: 'two',
     })
-    expect(a?.seq).toBe(1)
-    expect(b?.seq).toBe(2)
-    deleteCommentPin(runId, nodeId, iter, a!.id)
+    expect(a?.pin.seq).toBe(1)
+    expect(b?.pin.seq).toBe(2)
+    deleteCommentPin(runId, nodeId, iter, a!.pin.id)
     const c = saveCommentPin(runId, nodeId, iter, {
       selector: 'div.b',
       comment: 'three',
     })
-    expect(c?.seq).toBe(3)
+    expect(c?.pin.seq).toBe(3)
     const list = listCommentPins(runId, nodeId, iter)
     expect(list.map((p) => p.seq)).toEqual([2, 3])
   })
@@ -44,7 +44,7 @@ describe('useCommentPins', () => {
     const pin = saveCommentPin(runId, nodeId, iter + 1, {
       selector: 'h1',
       comment: '无图也可',
-    })
+    })?.pin
     expect(pin?.screenshot).toBe('MISSING')
     expect(pin?.selector).toBe('h1')
     expect(pin?.imageDataUrl).toBeUndefined()
@@ -54,20 +54,34 @@ describe('useCommentPins', () => {
     saveCommentPin(runId, nodeId, iter + 2, { selector: 'x', comment: 'a' })
     markCommentPinsCommitted(runId, nodeId, iter + 2)
     expect(getCommentPinRound(runId, nodeId, iter + 2).artifactCommitted).toBe(true)
-    saveCommentPin(runId, nodeId, iter + 2, { selector: 'y', comment: 'b' })
+    const saved = saveCommentPin(runId, nodeId, iter + 2, { selector: 'y', comment: 'b' })
+    expect(saved?.needsServerInvalidate).toBe(true)
     expect(getCommentPinRound(runId, nodeId, iter + 2).artifactCommitted).toBe(false)
   })
 
-  it('buildAnnotationArtifactPayload includes hardScope and MISSING', () => {
+  it('signals needsServerInvalidate when deleting after commit', () => {
+    const a = saveCommentPin(runId, nodeId, iter + 4, { selector: 'a', comment: 'keep' })!
+    const b = saveCommentPin(runId, nodeId, iter + 4, { selector: 'b', comment: 'drop' })!
+    markCommentPinsCommitted(runId, nodeId, iter + 4)
+    const del = deleteCommentPin(runId, nodeId, iter + 4, b.pin.id)
+    expect(del.deleted).toBe(true)
+    expect(del.needsServerInvalidate).toBe(true)
+    expect(listCommentPins(runId, nodeId, iter + 4).map((p) => p.id)).toEqual([a.pin.id])
+  })
+
+  it('buildAnnotationArtifactPayload includes hardScope and MISSING; empty clears', () => {
     const pin = saveCommentPin(runId, nodeId, iter + 3, {
       selector: '.cta',
       comment: '按钮文案',
-    })!
+    })!.pin
     const payload = buildAnnotationArtifactPayload([pin])
     expect(payload.hardScope).toContain('仅改标中区域')
     expect(payload.route).toBe('artifact_only')
     expect(payload.annotations[0].screenshot).toBe('MISSING')
     expect(formatAnnotationArtifactPreview([pin])).toContain('MISSING')
+    const empty = buildAnnotationArtifactPayload([])
+    expect(empty.count).toBe(0)
+    expect(empty.annotations).toEqual([])
   })
 
   it('isolates rounds by iteration', () => {

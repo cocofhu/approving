@@ -942,6 +942,7 @@ export const api = {
       etag: string
       nodeId: string
       content: string
+      cleared?: boolean
     }>(`/runs/${runId}/gates/${nodeId}/annotation-artifact`, {
       method: 'PUT',
       body: JSON.stringify(body),

@@ -147,11 +147,21 @@ func TestSaveAnnotationArtifactHTTP(t *testing.T) {
 		t.Fatal("artifact missing in store")
 	}
 
-	// Empty annotations rejected
-	bad := h.do(http.MethodPut, "/api/runs/"+runID+"/gates/gate/annotation-artifact", map[string]any{
+	// Empty annotations clears delivery (f4 dirty invalidate).
+	cleared := h.do(http.MethodPut, "/api/runs/"+runID+"/gates/gate/annotation-artifact", map[string]any{
 		"annotations": []any{},
 	})
-	if bad.Code != 400 {
-		t.Fatalf("empty want 400, got %d %s", bad.Code, bad.Body.String())
+	if cleared.Code != 200 {
+		t.Fatalf("empty clear want 200, got %d %s", cleared.Code, cleared.Body.String())
+	}
+	var clearBody struct {
+		Cleared bool   `json:"cleared"`
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(cleared.Body.Bytes(), &clearBody); err != nil {
+		t.Fatal(err)
+	}
+	if !clearBody.Cleared || !strings.Contains(clearBody.Content, `"status": "cleared"`) {
+		t.Fatalf("clear body=%+v", clearBody)
 	}
 }

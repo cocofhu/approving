@@ -115,10 +115,33 @@ func TestSaveAnnotationArtifactUpsertAndIsolation(t *testing.T) {
 		}
 	}
 
-	// Reject empty package.
-	if _, err := eng.SaveAnnotationArtifact(runID, "gate", AnnotationArtifactDoc{}); err == nil {
-		t.Fatal("empty annotations should fail")
+	// Empty package clears delivery (f4 dirty / delete-all).
+	clearRes, err := eng.SaveAnnotationArtifact(runID, "gate", AnnotationArtifactDoc{})
+	if err != nil || clearRes == nil || !clearRes.Cleared {
+		t.Fatalf("empty clear: res=%+v err=%v", clearRes, err)
 	}
+	contentCleared, _ := eng.store.Get(runID, PreviewAnnotationsArtifactName)
+	if !strings.Contains(contentCleared, `"status": "cleared"`) || !strings.Contains(contentCleared, `"count": 0`) {
+		t.Fatalf("cleared package: %q", contentCleared)
+	}
+	var clearedVar models.RunVariable
+	if err := db.Where("run_id = ? AND name = ?", runID, "preview_annotations").First(&clearedVar).Error; err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := clearedVar.Value.(string); s != "" {
+		t.Fatalf("vars.preview_annotations should be empty after clear, got %q", s)
+	}
+	var sr models.StateRun
+	if err := db.Where("run_id = ? AND node_id = ?", runID, "gate").First(&sr).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := sr.Outputs["preview_annotations"]; ok {
+		t.Fatalf("gate outputs should drop preview_annotations after clear: %+v", sr.Outputs)
+	}
+	if _, ok := sr.Outputs["preview_annotations_count"]; ok {
+		t.Fatalf("gate outputs should drop count after clear: %+v", sr.Outputs)
+	}
+
 	// Reject missing selector.
 	if _, err := eng.SaveAnnotationArtifact(runID, "gate", AnnotationArtifactDoc{
 		Annotations: []AnnotationPinEntry{{Seq: 1, Comment: "x", Screenshot: "MISSING"}},
@@ -129,6 +152,56 @@ func TestSaveAnnotationArtifactUpsertAndIsolation(t *testing.T) {
 	// Primary whitelist still rejects this name via SaveGateArtifact.
 	if _, err := eng.SaveGateArtifact(runID, "gate", PreviewAnnotationsArtifactName, `{}`, ""); err == nil {
 		t.Fatal("SaveGateArtifact must not allow annotation sidecar via primary path")
+	}
+}
+
+func TestSaveAnnotationArtifactOversizedScreenshotBecomesMissing(t *testing.T) {
+	eng, db := setupEngine(t)
+	runID := "run-ann-oversize"
+	now := time.Now()
+	g := models.Graph{
+		Nodes: []models.Node{
+			{ID: "gate", Type: "human_gate", Config: map[string]any{
+				"title": "审阅", "actions": []any{map[string]any{"id": "pass", "label": "通过"}},
+			}},
+		},
+	}
+	if err := db.Create(&models.Run{
+		ID: runID, WorkflowID: "w", WorkflowName: "w", Status: "waiting_human",
+		Graph: g, StartedAt: now, CreatedAt: now,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	db.Create(&models.StateRun{
+		RunID: runID, NodeID: "gate", NodeType: "human_gate", Iteration: 1, Status: "waiting_human",
+		Outputs: map[string]any{},
+	})
+	db.Create(&models.Gate{
+		RunID: runID, NodeID: "gate", Iteration: 1, Title: "审阅", RequestedAt: now,
+		Actions: []models.GateAction{{ID: "pass", Label: "通过"}},
+	})
+
+	huge := "data:image/png;base64," + strings.Repeat("A", maxAnnotationImageBytes*2)
+	res, err := eng.SaveAnnotationArtifact(runID, "gate", AnnotationArtifactDoc{
+		Annotations: []AnnotationPinEntry{{
+			Seq: 1, Selector: "div.big", Comment: "超大图",
+			Screenshot: "present", ImageDataUrl: huge, MarkKind: "click",
+		}},
+	})
+	if err != nil || res == nil {
+		t.Fatalf("save: %v", err)
+	}
+	if strings.Contains(res.Content, `"screenshot": "present"`) {
+		t.Fatalf("oversized must not stay present: %s", res.Content)
+	}
+	if !strings.Contains(res.Content, `"screenshot": "MISSING"`) {
+		t.Fatalf("expected MISSING: %s", res.Content)
+	}
+	if !strings.Contains(res.Content, `"screenshotReason": "oversized"`) {
+		t.Fatalf("expected oversized reason: %s", res.Content)
+	}
+	if strings.Contains(res.Content, "imageDataUrl") {
+		t.Fatalf("oversized must drop imageDataUrl: %s", res.Content)
 	}
 }
 

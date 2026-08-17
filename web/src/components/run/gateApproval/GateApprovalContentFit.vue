@@ -354,7 +354,7 @@ const {
               <!-- CommentPin MVP: 评论|产物 tabs (parallel to PreviewIssue chat below). -->
               <CommentArtifactSidebar
                 v-if="isVisualBody"
-                class="mb-2 max-h-[42%] shrink-0"
+                class="mb-2 min-h-[200px] max-h-[48%] shrink-0"
                 :pins="commentPins"
                 :selected-id="commentPinSelectedId"
                 :artifact-committed="commentArtifactCommitted"

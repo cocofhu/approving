@@ -2632,6 +2632,7 @@
         "deletedToast": "已删标注 #{n}（产物草稿已同步；序号不回收）",
         "writtenToast": "已写入产物 · 交给下一节点（未发给 Agent）",
         "writeFailed": "写入标注产物失败",
+        "invalidateFailed": "已取消本地已写入态，但清空服务端产物失败；请重试或再次写入",
         "screenshotWarn": "元素截图失败，仍可标注（无截图）"
       },
       "reviewFeedback": {

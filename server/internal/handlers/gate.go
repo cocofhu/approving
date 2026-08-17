@@ -98,7 +98,7 @@ func (h *Handlers) SaveAnnotationArtifact(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"id": res.ID, "name": res.Name, "kind": res.Kind, "sizeBytes": res.SizeBytes,
 		"updatedAt": res.UpdatedAt, "etag": res.ETag, "nodeId": res.NodeID,
-		"content": res.Content,
+		"content": res.Content, "cleared": res.Cleared,
 	})
 }
 

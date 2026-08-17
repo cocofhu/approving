@@ -24,31 +24,36 @@ const PreviewAnnotationsKind = "preview_annotations"
 const AnnotationHardScope = "仅改标中区域；越界先问"
 
 // AnnotationArtifactDoc is the upsert payload for preview_annotations.json.
+// Empty Annotations is allowed and means "clear delivery" (f4 dirty/delete-all):
+// vars/outputs no longer expose a consumable package to the next node.
 type AnnotationArtifactDoc struct {
-	Kind         string               `json:"kind"`
-	Consumer     string               `json:"consumer"`
-	Route        string               `json:"route"`
-	HardScope    string               `json:"hardScope"`
-	Count        int                  `json:"count"`
-	Annotations  []AnnotationPinEntry `json:"annotations"`
-	WrittenAt    string               `json:"writtenAt,omitempty"`
-	GateNodeID   string               `json:"gateNodeId,omitempty"`
-	GateIter     int                  `json:"gateIteration,omitempty"`
+	Kind        string               `json:"kind"`
+	Consumer    string               `json:"consumer"`
+	Route       string               `json:"route"`
+	HardScope   string               `json:"hardScope"`
+	Count       int                  `json:"count"`
+	Annotations []AnnotationPinEntry `json:"annotations"`
+	WrittenAt   string               `json:"writtenAt,omitempty"`
+	GateNodeID  string               `json:"gateNodeId,omitempty"`
+	GateIter    int                  `json:"gateIteration,omitempty"`
+	// Status is "cleared" when Annotations is empty (explicit empty overwrite).
+	Status string `json:"status,omitempty"`
 }
 
 // AnnotationPinEntry is one CommentPin in the delivered package.
-// Screenshot is always "present" or "MISSING". ImageDataUrl is optional:
-// when omitted but Screenshot==present, downstream still knows a shot existed
-// at pin time; when Screenshot==MISSING, ImageDataUrl must be empty.
+// Screenshot is always "present" or "MISSING". ImageDataUrl is only kept when
+// Screenshot==present and within the volume cap; oversized shots become MISSING
+// with ScreenshotReason=oversized so downstream never assumes readable bytes.
 type AnnotationPinEntry struct {
-	Seq            int               `json:"seq"`
-	Selector       string            `json:"selector"`
-	Comment        string            `json:"comment"`
-	CurrentText    string            `json:"currentText,omitempty"`
-	Screenshot     string            `json:"screenshot"` // present | MISSING
-	ImageDataUrl   string            `json:"imageDataUrl,omitempty"`
-	MarkKind       string            `json:"markKind"`
-	Bounds         *AnnotationBounds `json:"bounds,omitempty"`
+	Seq              int               `json:"seq"`
+	Selector         string            `json:"selector"`
+	Comment          string            `json:"comment"`
+	CurrentText      string            `json:"currentText,omitempty"`
+	Screenshot       string            `json:"screenshot"` // present | MISSING
+	ScreenshotReason string            `json:"screenshotReason,omitempty"`
+	ImageDataUrl     string            `json:"imageDataUrl,omitempty"`
+	MarkKind         string            `json:"markKind"`
+	Bounds           *AnnotationBounds `json:"bounds,omitempty"`
 }
 
 // AnnotationBounds is the pick-time element rect inside the opaque iframe.
@@ -69,15 +74,17 @@ type SaveAnnotationArtifactResult struct {
 	ETag      string    `json:"etag"`
 	NodeID    string    `json:"nodeId"`
 	Content   string    `json:"content"`
+	Cleared   bool      `json:"cleared,omitempty"`
 }
 
 // maxAnnotationImageBytes caps optional inline screenshots (~384KB raw ≈
-// ~512KB base64). Oversized shots are dropped to status-only "present".
+// ~512KB base64). Oversized shots are degraded to screenshot=MISSING.
 const maxAnnotationImageBytes = 384 * 1024
 
 // SaveAnnotationArtifact upserts preview_annotations.json for a pending gate.
 // It does not touch PreviewIssue / openPreviewIssueCount / SaveGateArtifact
 // primary whitelist. Downstream reads the artifact and/or vars.preview_annotations.
+// Empty annotations[] clears delivery (vars emptied, gate outputs keys removed).
 func (e *Engine) SaveAnnotationArtifact(runID, gateNodeID string, doc AnnotationArtifactDoc) (*SaveAnnotationArtifactResult, error) {
 	if e.IsHalted() {
 		return nil, errors.New("server is shutting down")
@@ -99,32 +106,37 @@ func (e *Engine) SaveAnnotationArtifact(runID, gateNodeID string, doc Annotation
 		return nil, err
 	}
 	content := string(raw)
+	cleared := normalized.Count == 0 || normalized.Status == "cleared"
 
 	id, err := e.store.Save(runID, gateNodeID, PreviewAnnotationsArtifactName, PreviewAnnotationsKind, content)
 	if err != nil {
 		return nil, err
 	}
 
-	// Downstream-readable vars (full package; optional imageDataUrl kept for
-	// MCP/artifact consumers that also read the store). Not a PreviewIssue path.
-	c.setVar("preview_annotations", content)
-	e.persistVar(runID, "preview_annotations", content)
-	c.setVar("preview_annotations_count", normalized.Count)
-	e.persistVar(runID, "preview_annotations_count", normalized.Count)
-
-	// Mirror onto the pending gate's StateRun outputs when present so
-	// {{nodes.<gate>.outputs.preview_annotations}} works after resume too.
-	e.syncGateAnnotationOutputs(c, gateNodeID, gate.Iteration, content, normalized.Count)
+	if cleared {
+		// f4: dirty/delete-all must not leave a consumable package for Pass.
+		c.setVar("preview_annotations", "")
+		e.persistVar(runID, "preview_annotations", "")
+		c.setVar("preview_annotations_count", 0)
+		e.persistVar(runID, "preview_annotations_count", 0)
+		e.clearGateAnnotationOutputs(c, gateNodeID, gate.Iteration)
+	} else {
+		c.setVar("preview_annotations", content)
+		e.persistVar(runID, "preview_annotations", content)
+		c.setVar("preview_annotations_count", normalized.Count)
+		e.persistVar(runID, "preview_annotations_count", normalized.Count)
+		e.syncGateAnnotationOutputs(c, gateNodeID, gate.Iteration, content, normalized.Count)
+	}
 
 	detail := fmt.Sprintf(
-		"annotation artifact name=%s count=%d route=artifact_only reviewer=operator",
-		PreviewAnnotationsArtifactName, normalized.Count,
+		"annotation artifact name=%s count=%d cleared=%v route=artifact_only reviewer=operator",
+		PreviewAnnotationsArtifactName, normalized.Count, cleared,
 	)
 	e.appendTrace(c, models.TraceEntry{NodeID: gateNodeID, Event: "annotation_artifact_write", Detail: detail})
 
 	msg, _ := json.Marshal(map[string]any{
 		"type": "annotation_artifact", "runId": runID, "nodeId": gateNodeID,
-		"name": PreviewAnnotationsArtifactName, "count": normalized.Count,
+		"name": PreviewAnnotationsArtifactName, "count": normalized.Count, "cleared": cleared,
 	})
 	e.broker.Publish(runID, msg)
 
@@ -141,13 +153,15 @@ func (e *Engine) SaveAnnotationArtifact(runID, gateNodeID string, doc Annotation
 		id = a.ID
 	}
 	etag := artifactETagWithTime(content, updatedAt)
-	log.Info().Str("run_id", runID).Str("gate", gateNodeID).Int("count", normalized.Count).Int("size", size).
+	log.Info().Str("run_id", runID).Str("gate", gateNodeID).Int("count", normalized.Count).
+		Bool("cleared", cleared).Int("size", size).
 		Msg("human gate annotation artifact saved")
 
 	_ = node // pending gate already validated
 	return &SaveAnnotationArtifactResult{
 		ID: id, Name: PreviewAnnotationsArtifactName, Kind: PreviewAnnotationsKind,
 		SizeBytes: size, UpdatedAt: updatedAt, ETag: etag, NodeID: gateNodeID, Content: content,
+		Cleared: cleared,
 	}, nil
 }
 
@@ -162,7 +176,10 @@ func normalizeAnnotationDoc(doc AnnotationArtifactDoc, gateNodeID string, gateIt
 		GateIter:   gateIter,
 	}
 	if len(doc.Annotations) == 0 {
-		return out, errors.New("annotations 不能为空")
+		out.Count = 0
+		out.Annotations = []AnnotationPinEntry{}
+		out.Status = "cleared"
+		return out, nil
 	}
 	seenSeq := map[int]bool{}
 	for i, a := range doc.Annotations {
@@ -214,9 +231,13 @@ func normalizeAnnotationDoc(doc AnnotationArtifactDoc, gateNodeID string, gateIt
 			img := strings.TrimSpace(a.ImageDataUrl)
 			if img != "" {
 				// Volume policy: keep data URL when reasonably small; otherwise
-				// status-only present (selector + comment still delivered).
+				// degrade to MISSING + reason=oversized (never present-without-bytes).
 				if len(img) <= maxAnnotationImageBytes*4/3+64 {
 					entry.ImageDataUrl = img
+				} else {
+					entry.Screenshot = "MISSING"
+					entry.ScreenshotReason = "oversized"
+					entry.ImageDataUrl = ""
 				}
 			}
 		}
@@ -227,18 +248,8 @@ func normalizeAnnotationDoc(doc AnnotationArtifactDoc, gateNodeID string, gateIt
 }
 
 func (e *Engine) syncGateAnnotationOutputs(c *execCtx, gateNodeID string, gateIter int, content string, count int) {
-	if gateIter <= 0 {
-		gateIter = c.iter[gateNodeID]
-	}
-	q := e.db.Where("run_id = ? AND node_id = ?", c.run.ID, gateNodeID)
-	if gateIter > 0 {
-		q = q.Where("iteration = ?", gateIter)
-	} else {
-		q = q.Order("iteration desc, id desc")
-	}
-	var sr models.StateRun
-	if err := q.First(&sr).Error; err != nil {
-		// Pending gates may not yet have a StateRun row; vars + artifact suffice.
+	sr, ok := e.loadGateStateRun(c, gateNodeID, gateIter)
+	if !ok {
 		return
 	}
 	outs := sr.Outputs
@@ -251,4 +262,41 @@ func (e *Engine) syncGateAnnotationOutputs(c *execCtx, gateNodeID string, gateIt
 	sr.Outputs = outs
 	logDB(e.db.Save(&sr), c.run.ID, "sync gate outputs after annotation artifact write")
 	c.nodeOutputs[gateNodeID] = outs
+}
+
+// clearGateAnnotationOutputs removes delivery keys so Pass does not hand a
+// stale package to the next node after an empty overwrite / dirty invalidate.
+func (e *Engine) clearGateAnnotationOutputs(c *execCtx, gateNodeID string, gateIter int) {
+	sr, ok := e.loadGateStateRun(c, gateNodeID, gateIter)
+	if !ok {
+		return
+	}
+	outs := sr.Outputs
+	if outs == nil {
+		outs = map[string]any{}
+	}
+	delete(outs, "preview_annotations")
+	delete(outs, "preview_annotations_json")
+	delete(outs, "preview_annotations_count")
+	sr.Outputs = outs
+	logDB(e.db.Save(&sr), c.run.ID, "clear gate outputs after annotation artifact clear")
+	c.nodeOutputs[gateNodeID] = outs
+}
+
+func (e *Engine) loadGateStateRun(c *execCtx, gateNodeID string, gateIter int) (models.StateRun, bool) {
+	if gateIter <= 0 {
+		gateIter = c.iter[gateNodeID]
+	}
+	q := e.db.Where("run_id = ? AND node_id = ?", c.run.ID, gateNodeID)
+	if gateIter > 0 {
+		q = q.Where("iteration = ?", gateIter)
+	} else {
+		q = q.Order("iteration desc, id desc")
+	}
+	var sr models.StateRun
+	if err := q.First(&sr).Error; err != nil {
+		// Pending gates may not yet have a StateRun row; vars + artifact suffice.
+		return models.StateRun{}, false
+	}
+	return sr, true
 }

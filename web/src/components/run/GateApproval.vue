@@ -265,7 +265,7 @@ function onAnnotateClose() {
 function onAnnotateSave(comment: string) {
   if (!props.run?.id || !annotateDraft.value) return
   const draft = annotateDraft.value
-  const pin = saveCommentPin(props.run.id, props.gate.nodeId, gateIteration.value, {
+  const result = saveCommentPin(props.run.id, props.gate.nodeId, gateIteration.value, {
     selector: draft.selector,
     comment,
     currentText: draft.currentText,
@@ -273,11 +273,14 @@ function onAnnotateSave(comment: string) {
     bounds: draft.bounds || undefined,
     editingId: draft.editingId,
   })
-  if (!pin) return
+  if (!result) return
   reloadCommentPins()
-  commentPinSelectedId.value = pin.id
+  commentPinSelectedId.value = result.pin.id
   annotateDraft.value = null
-  toast.success(t('pages.gateApproval.commentPins.savedToast', { n: pin.seq }))
+  toast.success(t('pages.gateApproval.commentPins.savedToast', { n: result.pin.seq }))
+  if (result.needsServerInvalidate) {
+    void invalidateServerAnnotationArtifact()
+  }
 }
 
 function onCommentPinSelect(pinId: string) {
@@ -299,24 +302,52 @@ function onCommentPinDelete(pinId: string) {
   if (!props.run?.id) return
   const pin = commentPins.value.find((p) => p.id === pinId)
   if (!pin) return
-  deleteCommentPin(props.run.id, props.gate.nodeId, gateIteration.value, pinId)
+  const result = deleteCommentPin(props.run.id, props.gate.nodeId, gateIteration.value, pinId)
+  if (!result.deleted) return
   if (commentPinSelectedId.value === pinId) commentPinSelectedId.value = null
   if (annotateDraft.value?.editingId === pinId) annotateDraft.value = null
   reloadCommentPins()
   toast.success(t('pages.gateApproval.commentPins.deletedToast', { n: pin.seq }))
+  if (result.needsServerInvalidate) {
+    void invalidateServerAnnotationArtifact()
+  }
+}
+
+/** f4: after a committed write, any mutate must clear server delivery so Pass
+ * cannot hand a stale package while UI shows draft / empty. */
+let annotationArtifactWriteGen = 0
+async function invalidateServerAnnotationArtifact() {
+  if (!props.run?.id) return
+  const gen = ++annotationArtifactWriteGen
+  try {
+    await api.saveAnnotationArtifact(
+      props.run.id,
+      props.gate.nodeId,
+      buildAnnotationArtifactPayload([]),
+    )
+    if (gen !== annotationArtifactWriteGen) return
+  } catch (e: unknown) {
+    if (gen !== annotationArtifactWriteGen) return
+    const msg = e instanceof Error ? e.message : t('pages.gateApproval.commentPins.writeFailed')
+    commentArtifactWriteError.value = msg
+    toast.warn(t('pages.gateApproval.commentPins.invalidateFailed'))
+  }
 }
 
 async function onWriteCommentArtifact() {
   if (!props.run?.id || !commentPins.value.length) return
   commentArtifactWriting.value = true
   commentArtifactWriteError.value = null
+  const gen = ++annotationArtifactWriteGen
   try {
     const body = buildAnnotationArtifactPayload(commentPins.value)
     await api.saveAnnotationArtifact(props.run.id, props.gate.nodeId, body)
+    if (gen !== annotationArtifactWriteGen) return
     markCommentPinsCommitted(props.run.id, props.gate.nodeId, gateIteration.value)
     reloadCommentPins()
     toast.success(t('pages.gateApproval.commentPins.writtenToast'))
   } catch (e: unknown) {
+    if (gen !== annotationArtifactWriteGen) return
     const msg = e instanceof Error ? e.message : t('pages.gateApproval.commentPins.writeFailed')
     commentArtifactWriteError.value = msg
     toast.error(t('pages.gateApproval.commentPins.writeFailed'))

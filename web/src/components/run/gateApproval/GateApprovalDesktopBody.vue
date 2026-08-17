@@ -194,63 +194,77 @@ const {
             </span>
           </div>
           <RefreshStrip v-if="productLoading && productHasSavedContent" />
-          <GateProductEditor
-            ref="productEditorRef"
-            :run-id="run.id"
-            :gate-node-id="gate.nodeId"
-            :products="primaryProducts"
-            :saved-content="savedProductContent"
-            :saved-meta="savedProductMeta"
-            :artifacts="run.artifacts"
-            :run-status="run.status"
-            :can-edit="canEditProducts"
-            :content-loading="productLoading"
-            :load-error="productLoadError"
-            :excluded-names="excludedProduces"
-            :enlargeable="!isMobile"
-            :inspectable="isVisualBody"
-            :comment-pins="isVisualBody ? commentPinBadges : []"
-            :annotate-draft="isVisualBody ? annotateDraft : null"
-            @saved="onProductSaved"
-            @dirty-change="productDirty = $event"
-            @refresh-request="onProductRefresh"
-            @retry-load="retryLoadProduct"
-            @pick="onHtmlPreviewPick"
-            @pin-select="onCommentPinSelect"
-            @annotate-save="onAnnotateSave"
-            @annotate-close="onAnnotateClose"
-          />
           <div
-            v-if="isVisualBody"
-            class="border-t border-line px-3 pb-3"
-            data-testid="editable-visual-feedback"
+            :class="
+              isVisualBody
+                ? 'flex min-h-0 flex-col gap-0 lg:flex-row lg:items-stretch'
+                : 'contents'
+            "
+            :data-testid="isVisualBody ? 'comment-pin-desktop-split' : undefined"
           >
-            <CommentArtifactSidebar
-              class="mb-3 max-h-[320px]"
-              :pins="commentPins"
-              :selected-id="commentPinSelectedId"
-              :artifact-committed="commentArtifactCommitted"
-              :writing="commentArtifactWriting"
-              :write-error="commentArtifactWriteError"
-              @select="onCommentPinSelect"
-              @edit="onCommentPinSelect"
-              @delete="onCommentPinDelete"
-              @write="onWriteCommentArtifact"
-            />
-            <PreviewFeedbackChat
-              :run-id="run.id"
-              :node-id="gate.nodeId"
-              :selector="pickedSelector"
-              :element-image="pickedElementImage"
-              copy-variant="review"
-              @clear-selector="clearHtmlPreviewPick"
-              @issues-changed="loadPreviewIssues()"
-            />
+            <div :class="isVisualBody ? 'min-w-0 flex-1' : 'contents'">
+              <GateProductEditor
+                ref="productEditorRef"
+                :run-id="run.id"
+                :gate-node-id="gate.nodeId"
+                :products="primaryProducts"
+                :saved-content="savedProductContent"
+                :saved-meta="savedProductMeta"
+                :artifacts="run.artifacts"
+                :run-status="run.status"
+                :can-edit="canEditProducts"
+                :content-loading="productLoading"
+                :load-error="productLoadError"
+                :excluded-names="excludedProduces"
+                :enlargeable="!isMobile"
+                :inspectable="isVisualBody"
+                :comment-pins="isVisualBody ? commentPinBadges : []"
+                :annotate-draft="isVisualBody ? annotateDraft : null"
+                @saved="onProductSaved"
+                @dirty-change="productDirty = $event"
+                @refresh-request="onProductRefresh"
+                @retry-load="retryLoadProduct"
+                @pick="onHtmlPreviewPick"
+                @pin-select="onCommentPinSelect"
+                @annotate-save="onAnnotateSave"
+                @annotate-close="onAnnotateClose"
+              />
+            </div>
+            <aside
+              v-if="isVisualBody"
+              class="flex w-full shrink-0 flex-col border-t border-line lg:w-[300px] lg:border-l lg:border-t-0"
+              data-testid="editable-visual-feedback"
+            >
+              <CommentArtifactSidebar
+                class="min-h-[240px] flex-1 lg:min-h-[420px]"
+                :pins="commentPins"
+                :selected-id="commentPinSelectedId"
+                :artifact-committed="commentArtifactCommitted"
+                :writing="commentArtifactWriting"
+                :write-error="commentArtifactWriteError"
+                @select="onCommentPinSelect"
+                @edit="onCommentPinSelect"
+                @delete="onCommentPinDelete"
+                @write="onWriteCommentArtifact"
+              />
+              <div class="shrink-0 border-t border-line px-3 pb-3 pt-2">
+                <PreviewFeedbackChat
+                  :run-id="run.id"
+                  :node-id="gate.nodeId"
+                  :selector="pickedSelector"
+                  :element-image="pickedElementImage"
+                  copy-variant="review"
+                  @clear-selector="clearHtmlPreviewPick"
+                  @issues-changed="loadPreviewIssues()"
+                />
+              </div>
+            </aside>
           </div>
         </div>
         <div
           v-else-if="isVisualBody && productHtml"
           class="overflow-x-hidden border border-line"
+          data-testid="comment-pin-desktop-split"
         >
           <div
             v-if="reviewingIteration != null"
@@ -261,40 +275,49 @@ const {
               {{ t('pages.gateApproval.reviewingUpstreamFallback') }}
             </span>
           </div>
-          <HtmlPreview
-            :html="productHtml"
-            :mode="isMobile ? 'inline' : 'default'"
-            :enlargeable="!isMobile"
-            inspectable
-            :comment-pins="commentPinBadges"
-            :annotate-draft="annotateDraft"
-            @pick="onHtmlPreviewPick"
-            @pin-select="onCommentPinSelect"
-            @annotate-save="onAnnotateSave"
-            @annotate-close="onAnnotateClose"
-          />
-          <div v-if="run" class="border-t border-line px-3 pb-3">
-            <CommentArtifactSidebar
-              class="mb-3 max-h-[320px]"
-              :pins="commentPins"
-              :selected-id="commentPinSelectedId"
-              :artifact-committed="commentArtifactCommitted"
-              :writing="commentArtifactWriting"
-              :write-error="commentArtifactWriteError"
-              @select="onCommentPinSelect"
-              @edit="onCommentPinSelect"
-              @delete="onCommentPinDelete"
-              @write="onWriteCommentArtifact"
-            />
-            <PreviewFeedbackChat
-              :run-id="run.id"
-              :node-id="gate.nodeId"
-              :selector="pickedSelector"
-              :element-image="pickedElementImage"
-              copy-variant="review"
-              @clear-selector="clearHtmlPreviewPick"
-              @issues-changed="loadPreviewIssues()"
-            />
+          <div class="flex min-h-0 flex-col lg:flex-row lg:items-stretch">
+            <div class="min-w-0 flex-1">
+              <HtmlPreview
+                :html="productHtml"
+                :mode="isMobile ? 'inline' : 'default'"
+                :enlargeable="!isMobile"
+                inspectable
+                :comment-pins="commentPinBadges"
+                :annotate-draft="annotateDraft"
+                @pick="onHtmlPreviewPick"
+                @pin-select="onCommentPinSelect"
+                @annotate-save="onAnnotateSave"
+                @annotate-close="onAnnotateClose"
+              />
+            </div>
+            <aside
+              v-if="run"
+              class="flex w-full shrink-0 flex-col border-t border-line lg:w-[300px] lg:border-l lg:border-t-0"
+            >
+              <CommentArtifactSidebar
+                class="min-h-[240px] flex-1 lg:min-h-[420px]"
+                :pins="commentPins"
+                :selected-id="commentPinSelectedId"
+                :artifact-committed="commentArtifactCommitted"
+                :writing="commentArtifactWriting"
+                :write-error="commentArtifactWriteError"
+                @select="onCommentPinSelect"
+                @edit="onCommentPinSelect"
+                @delete="onCommentPinDelete"
+                @write="onWriteCommentArtifact"
+              />
+              <div class="shrink-0 border-t border-line px-3 pb-3 pt-2">
+                <PreviewFeedbackChat
+                  :run-id="run.id"
+                  :node-id="gate.nodeId"
+                  :selector="pickedSelector"
+                  :element-image="pickedElementImage"
+                  copy-variant="review"
+                  @clear-selector="clearHtmlPreviewPick"
+                  @issues-changed="loadPreviewIssues()"
+                />
+              </div>
+            </aside>
           </div>
         </div>
         <div
