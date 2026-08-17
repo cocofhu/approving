@@ -72,6 +72,7 @@ export type GateApprovalState = {
     bounds?: { left: number; top: number; width: number; height: number } | null
     currentText?: string
     editingId?: string | null
+    style?: { color?: string; fontSize?: string; fontWeight?: string; fontFamily?: string; lineHeight?: string } | null
   } | null
 
   proposalsDoc: ProposalsDoc | null
@@ -141,6 +142,7 @@ export type GateApprovalState = {
     imageDataUrl: string
     bounds?: { left: number; top: number; width: number; height: number }
     currentText?: string
+    style?: { color?: string; fontSize?: string; fontWeight?: string; fontFamily?: string; lineHeight?: string }
   }) => void
   onAppPreviewPick: (payload: {
     selector: string
@@ -150,6 +152,7 @@ export type GateApprovalState = {
   }) => void
   clearHtmlPreviewPick: () => void
   onAnnotateSave: (comment: string) => void
+  onAnnotateSendChat: (comment: string) => void
   onAnnotateClose: () => void
   onCommentPinSelect: (pinId: string) => void
   onCommentPinDelete: (pinId: string) => void
