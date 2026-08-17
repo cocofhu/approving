@@ -1185,14 +1185,19 @@ onBeforeRouteUpdate(async (to, from) => {
               <StatusPill :status="w.status" size="sm" />
             </button>
 
-            <div class="relative flex items-center gap-2" data-wf-menu @click.stop>
-              <div class="flex min-w-0 flex-1 flex-col gap-1.5" data-testid="wf-notify-inline">
-                <span
-                  v-if="savingNotifyWfId === w.id"
-                  class="text-[11px] text-txt3"
-                  data-testid="wf-notify-saving"
-                >{{ t('common.buttons.saving') }}</span>
-                <div class="inline-flex overflow-hidden rounded-md border border-line text-[11px]">
+            <!-- Own row: nowrap Off/Inherit/Custom must not share flex-1 with Run/Favorite (overflow-hidden clip). -->
+            <div
+              class="flex min-w-0 w-full flex-col gap-1.5"
+              data-testid="wf-notify-inline"
+              @click.stop
+            >
+              <span
+                v-if="savingNotifyWfId === w.id"
+                class="text-[11px] text-txt3"
+                data-testid="wf-notify-saving"
+              >{{ t('common.buttons.saving') }}</span>
+              <div class="max-w-full overflow-x-auto">
+                <div class="inline-flex w-max max-w-none border border-line text-[11px]">
                   <button
                     type="button"
                     class="shrink-0 whitespace-nowrap px-2 py-1 transition"
@@ -1233,39 +1238,41 @@ onBeforeRouteUpdate(async (to, from) => {
                     {{ t('pages.projectDetail.notify.modeCustom') }}
                   </button>
                 </div>
-                <div v-if="wfNotifyMode(w) === 'custom'" class="flex flex-wrap gap-2 text-[11px] text-txt2">
-                  <label class="inline-flex items-center gap-1">
-                    <input
-                      type="checkbox"
-                      class="accent-accent"
-                      :checked="wfNotifyHas(w, 'waiting_human')"
-                      :disabled="savingNotifyWfId === w.id"
-                      @change="toggleWorkflowNotifyEvent(w, 'waiting_human')"
-                    />
-                    <span>{{ t('pages.projectDetail.notify.segWaitingHuman') }}</span>
-                  </label>
-                  <label class="inline-flex items-center gap-1">
-                    <input
-                      type="checkbox"
-                      class="accent-accent"
-                      :checked="wfNotifyHas(w, 'failed')"
-                      :disabled="savingNotifyWfId === w.id"
-                      @change="toggleWorkflowNotifyEvent(w, 'failed')"
-                    />
-                    <span>{{ t('pages.projectDetail.notify.segFailed') }}</span>
-                  </label>
-                  <label class="inline-flex items-center gap-1">
-                    <input
-                      type="checkbox"
-                      class="accent-accent"
-                      :checked="wfNotifyHas(w, 'completed')"
-                      :disabled="savingNotifyWfId === w.id"
-                      @change="toggleWorkflowNotifyEvent(w, 'completed')"
-                    />
-                    <span>{{ t('pages.projectDetail.notify.segCompleted') }}</span>
-                  </label>
-                </div>
               </div>
+              <div v-if="wfNotifyMode(w) === 'custom'" class="flex flex-wrap gap-2 text-[11px] text-txt2">
+                <label class="inline-flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    class="accent-accent"
+                    :checked="wfNotifyHas(w, 'waiting_human')"
+                    :disabled="savingNotifyWfId === w.id"
+                    @change="toggleWorkflowNotifyEvent(w, 'waiting_human')"
+                  />
+                  <span>{{ t('pages.projectDetail.notify.segWaitingHuman') }}</span>
+                </label>
+                <label class="inline-flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    class="accent-accent"
+                    :checked="wfNotifyHas(w, 'failed')"
+                    :disabled="savingNotifyWfId === w.id"
+                    @change="toggleWorkflowNotifyEvent(w, 'failed')"
+                  />
+                  <span>{{ t('pages.projectDetail.notify.segFailed') }}</span>
+                </label>
+                <label class="inline-flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    class="accent-accent"
+                    :checked="wfNotifyHas(w, 'completed')"
+                    :disabled="savingNotifyWfId === w.id"
+                    @change="toggleWorkflowNotifyEvent(w, 'completed')"
+                  />
+                  <span>{{ t('pages.projectDetail.notify.segCompleted') }}</span>
+                </label>
+              </div>
+            </div>
+            <div class="relative flex items-center gap-2" data-wf-menu @click.stop>
               <button
                 type="button"
                 class="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-md bg-accent-dim px-3.5 text-sm font-medium text-accent-2 transition hover:brightness-110"

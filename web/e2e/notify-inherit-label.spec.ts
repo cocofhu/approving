@@ -242,10 +242,56 @@ test.describe('Notify Inherit label acceptance', () => {
     const inline = page.getByTestId('wf-notify-inline').first()
     await expect(inline).toBeVisible({ timeout: 10_000 })
 
+    const offBtn = inline.getByRole('button', { name: /^Off$/ })
     const inheritBtn = inline.getByRole('button', { name: /^Inherit$/ })
+    const customBtn = inline.getByRole('button', { name: /^Custom$/ })
+    await expect(offBtn).toBeVisible()
     await expect(inheritBtn).toBeVisible()
+    await expect(customBtn).toBeVisible()
     assertSingleLine(await inheritBtn.boundingBox(), 'mobile Inherit')
+    assertSingleLine(await customBtn.boundingBox(), 'mobile Custom')
     await expect(page.locator('body')).not.toContainText('Follow project')
+
+    const metrics = await inline.evaluate((root) => {
+      const seg = root.querySelector('div.inline-flex') as HTMLElement | null
+      const buttons = [...root.querySelectorAll('button')].map((b) => {
+        const el = b as HTMLElement
+        const r = el.getBoundingClientRect()
+        return {
+          text: (el.textContent || '').trim(),
+          clientWidth: el.clientWidth,
+          scrollWidth: el.scrollWidth,
+          whiteSpace: getComputedStyle(el).whiteSpace,
+          left: r.left,
+          right: r.right,
+          width: r.width,
+        }
+      })
+      return {
+        overflow: seg ? getComputedStyle(seg).overflow : null,
+        overflowX: seg ? getComputedStyle(seg).overflowX : null,
+        clientWidth: seg?.clientWidth ?? 0,
+        scrollWidth: seg?.scrollWidth ?? 0,
+        buttons,
+      }
+    })
+
+    const clipped = metrics.clientWidth + 1 < metrics.scrollWidth
+    if (clipped) {
+      expect(['auto', 'scroll'], 'segment may scroll but must not silently clip').toContain(
+        metrics.overflowX,
+      )
+    } else {
+      expect(metrics.clientWidth, 'segment fully visible').toBeGreaterThanOrEqual(metrics.scrollWidth - 1)
+    }
+    expect(metrics.overflow === 'hidden' && clipped, 'must not overflow-hidden clip Inherit/Custom').toBe(false)
+
+    for (const btn of metrics.buttons) {
+      expect(btn.whiteSpace, `${btn.text} nowrap`).toBe('nowrap')
+      expect(btn.width, `${btn.text} visible width`).toBeGreaterThan(12)
+      expect(btn.right, `${btn.text} within 390 viewport`).toBeLessThanOrEqual(391)
+      expect(btn.left, `${btn.text} not clipped left`).toBeGreaterThanOrEqual(-1)
+    }
 
     await page.screenshot({
       path: path.join(shotDir, '03-en-mobile-inherit.png'),
