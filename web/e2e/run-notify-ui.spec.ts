@@ -249,7 +249,7 @@ test.describe('Run NotifyPolicy UI (P0)', () => {
   test('通知 Tab：总开关/默认事件/completed 可勾/无渠道提示/可保存', async ({ page }) => {
     const harness = await setupNotifyHarness(page, { hasChannel: false })
 
-    await expect(page.getByRole('button', { name: '通知' })).toBeVisible()
+    await expect(page.getByTestId('project-tab-notify')).toBeVisible()
     await expect(page.getByTestId('project-notify-panel')).toBeVisible()
     await expect(page.getByTestId('notify-no-channel-hint')).toBeVisible()
     await expect(page.getByTestId('notify-go-channel')).toBeVisible()
