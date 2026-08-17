@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
 import {
@@ -33,6 +33,9 @@ const { t } = useI18n()
 const frameSrc = ref(props.directUrl)
 const address = ref(props.directUrl)
 const inspect = ref(false)
+const inspectToggleLabel = computed(() =>
+  t(inspect.value ? 'pages.appPreview.novnc.cancelInspect' : 'pages.appPreview.novnc.inspect'),
+)
 const scriptReady = ref(false)
 const scriptTip = ref(false)
 const inlineTip = ref<string | null>(null)
@@ -243,12 +246,12 @@ onUnmounted(() => {
         type="button"
         class="rounded px-2 py-0.5 text-[11px] transition"
         :class="inspect ? 'bg-ok/20 text-ok' : 'text-txt2 hover:bg-overlay'"
-        :title="t(inspect ? 'pages.appPreview.novnc.cancelInspect' : 'pages.appPreview.novnc.inspect')"
+        :title="inspectToggleLabel"
         :aria-pressed="inspect ? 'true' : 'false'"
         data-testid="direct-preview-inspect"
         @click="toggleInspect"
       >
-        {{ t('pages.appPreview.novnc.inspect') }}
+        {{ inspectToggleLabel }}
       </button>
       <a
         :href="frameSrc"

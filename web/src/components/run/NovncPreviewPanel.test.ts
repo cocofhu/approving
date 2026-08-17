@@ -235,8 +235,38 @@ describe('NovncPreviewPanel', () => {
     expect(inspectButton(wrapper).attributes('aria-pressed')).toBe('false')
     expect(wrapper.text()).toContain('#keep')
     expect(wrapper.find('[data-testid="novnc-inline-tip"]').exists()).toBe(false)
-    // Remote already off — do not echo another inspect on:false
-    expect(ws.sent.slice(beforeLen)).toEqual([])
+    // Overlay.inspectModeCanceled does not leave searchForNode; echo on:false.
+    expect(lastInspectCtrl()).toEqual({ type: 'inspect', on: false })
+    expect(ws.sent.slice(beforeLen).some((s) => s.includes('"on":false'))).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('after remote cancel, toolbar click can turn inspect on then off again', async () => {
+    const wrapper = mountNovnc()
+    await flushPromises()
+    const ws = MockWebSocket.instances[0]!
+    const btn = inspectButton(wrapper)
+
+    await btn.trigger('click')
+    await flushPromises()
+    expect(btn.attributes('aria-pressed')).toBe('true')
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'inspect-canceled' }) })
+    await flushPromises()
+    expect(btn.attributes('aria-pressed')).toBe('false')
+    expect(btn.text()).toContain('取点标注')
+
+    await btn.trigger('click')
+    await flushPromises()
+    expect(btn.attributes('aria-pressed')).toBe('true')
+    expect(btn.text()).toContain('取消标注')
+    expect(lastInspectCtrl()).toEqual({ type: 'inspect', on: true })
+
+    await btn.trigger('click')
+    await flushPromises()
+    expect(btn.attributes('aria-pressed')).toBe('false')
+    expect(btn.text()).toContain('取点标注')
+    expect(lastInspectCtrl()).toEqual({ type: 'inspect', on: false })
     wrapper.unmount()
   })
 

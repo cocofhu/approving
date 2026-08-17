@@ -162,8 +162,11 @@ function handleCtrlText(data: string) {
       break
     case 'inspect-canceled':
       // Remote Esc (Overlay.inspectModeCanceled) — keep staged pick; no failure tip.
+      // Chromium does not leave searchForNode on this event; echo on:false so
+      // overlay actually turns off. Otherwise the button looks idle while
+      // inspect stays armed and the next click only re-enters.
       inlineTip.value = null
-      clearInspect('remote-esc', { syncRemote: false })
+      clearInspect('remote-esc', { syncRemote: true })
       break
     case 'closed':
       status.value = 'closed'

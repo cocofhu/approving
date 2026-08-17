@@ -74,6 +74,8 @@ type Page interface {
 	// (e.g. Esc → Overlay.inspectModeCanceled). Callers sync UI button state.
 	// Enabling inspect may itself emit inspectModeCanceled for the previous
 	// mode; implementations must not invoke this callback for that side effect.
+	// Chromium does not leave searchForNode on this event — implementations
+	// must SetInspect(false) before invoking the callback so cancel sticks.
 	// Describe/recognition failures use OnDescribeFailed instead.
 	OnInspectCanceled(func())
 	// OnDescribeFailed is invoked when Overlay pick fires but describing the

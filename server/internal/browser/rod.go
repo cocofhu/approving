@@ -368,6 +368,10 @@ func (rp *rodPage) installPickListener() {
 			if !rp.inspectCancel.onCanceled() {
 				return
 			}
+			// Chromium only *notifies* on Esc; searchForNode stays armed until we
+			// set mode none. Leave inspect here so the next toolbar click can
+			// cancel instead of re-entering.
+			_ = rp.SetInspect(false)
 			if cb := rp.getInspectCanceled(); cb != nil {
 				cb()
 			}
