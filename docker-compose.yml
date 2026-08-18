@@ -44,6 +44,9 @@ services:
       # 内置兜底);在 .env 里设 GOPROXY/GOSUMDB 可覆盖。
       GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
       GOSUMDB: ${GOSUMDB:-sum.golang.google.cn}
+      # Optional host revision for `go run -ldflags -X` (see Dockerfile.dev).
+      # ./start.sh dev fills this from `git rev-parse HEAD` when unset.
+      GIT_COMMIT: ${GIT_COMMIT:-}
     volumes:
       - ./server:/app
       # data 里放 skill profiles(agent.json 等),UI 保存 Agent 时要写回,故可写。

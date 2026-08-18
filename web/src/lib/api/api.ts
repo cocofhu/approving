@@ -440,6 +440,14 @@ export interface ChannelDeleteOpts {
   syncPmLeader?: boolean
 }
 
+export type HealthResponse = {
+  status: string
+  ready: boolean
+  vnc_preview?: boolean
+  /** Optional 7-char (or longer) service-program SHA; omitted when unavailable. */
+  commit?: string
+}
+
 export const api = {
   // projects
   listProjects: (opts?: { signal?: AbortSignal }) =>
@@ -1351,8 +1359,7 @@ export const api = {
     req<{ status: string }>(`/runs/${runId}/nodes/${nodeId}/preview-issues/${issueId}`, {
       method: 'DELETE',
     }),
-  health: () =>
-    req<{ status: string; ready: boolean; vnc_preview?: boolean }>(`/health`),
+  health: () => req<HealthResponse>(`/health`),
   previewVncWsUrl: (runId: string, nodeId: string, port: number) =>
     rootWsUrl(`/preview-vnc/${runId}/${nodeId}/${port}/ws`),
   /** Console noVNC: sandbox-scoped WS (not preview runId/nodeId/port). */

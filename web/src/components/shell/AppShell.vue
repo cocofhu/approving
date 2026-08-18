@@ -21,6 +21,7 @@ import { useAuth } from '@/lib/composables/useAuth'
 import { useRefreshChrome } from '@/lib/shared/refreshChrome'
 import { useRoutePending } from '@/lib/shared/routePending'
 import { useWorkflowRunLaunch } from '@/lib/run/useWorkflowRunLaunch'
+import ServiceCommitBadge from './ServiceCommitBadge.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -126,6 +127,8 @@ onUnmounted(() => stopShutdownPolling())
             <slot />
           </div>
         </div>
+
+        <ServiceCommitBadge />
 
         <div
           v-if="offline"

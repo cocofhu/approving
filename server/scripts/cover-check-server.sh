@@ -13,6 +13,7 @@ PKGS=(
   ./internal/config
   ./internal/crypto
   ./internal/textutil
+  ./internal/version
   ./internal/logging
   ./internal/nodereg
   ./internal/models/...
