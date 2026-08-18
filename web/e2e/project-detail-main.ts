@@ -11,10 +11,11 @@ import ProjectDetailView from '../src/views/ProjectDetailView.vue'
 installIdleScrollbar()
 
 async function bootstrap() {
-  await initLocale()
-  await setLocale('zh-CN')
-
   const params = new URLSearchParams(window.location.search)
+  await initLocale()
+  // Match project-list / sandbox-list harnesses: ?lang=en for English UI acceptance.
+  await setLocale(params.get('lang') === 'en' ? 'en' : 'zh-CN')
+
   if (params.get('theme') === 'light') {
     setTheme('light')
   }
