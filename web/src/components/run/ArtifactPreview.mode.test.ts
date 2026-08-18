@@ -29,6 +29,7 @@ vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), warn: vi.fn() }),
 }))
 
+import type { Artifact } from '@/lib/shared/types'
 import ArtifactPreview from './ArtifactPreview.vue'
 
 const clarifiedDoc = {
@@ -62,7 +63,7 @@ const artB = {
 }
 
 function mountPreview(
-  artifact: typeof artA | null,
+  artifact: Artifact | null,
   extra: Record<string, unknown> = {},
 ) {
   const i18n = createI18n({

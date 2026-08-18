@@ -865,6 +865,8 @@ function connectActiveRunWs(runId: string, opts?: { fromReconnect?: boolean }) {
       events?: any[]
       busy?: boolean
       run?: { reactSessions?: Run['reactSessions'] }
+      previewArtifact?: string
+      name?: string
     }
     try {
       m = JSON.parse(String(ev.data))

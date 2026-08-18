@@ -142,9 +142,9 @@ describe('Run detail panel shells (Demo entry assembly)', () => {
         },
       },
     })
-    expect(clarify.get('[data-testid="react-artifact-tab-grid"]').exists()).toBe(true)
+    expect(clarify.find('[data-testid="react-artifact-tab-grid"]').exists()).toBe(true)
     expect(clarify.find('[data-testid="react-artifact-tab-preview"]').exists()).toBe(false)
-    expect(clarify.get('[data-testid="react-artifact-card-novnc"]').exists()).toBe(true)
+    expect(clarify.find('[data-testid="react-artifact-card-novnc"]').exists()).toBe(true)
     const stage = clarify.findComponent(ReactArtifactStage)
     expect(stage.props('annotatable')).toBe(true)
     expect(stage.props('nodeId')).toBe('c1')
