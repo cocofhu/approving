@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -158,4 +159,24 @@ func (e *Engine) execAppPreview(c *execCtx, node *models.Node) nodeOutcome {
 	}
 	paused := nodeOutcome{status: "paused", outputMd: "等待人工预览复审…", events: res.Events, outputs: res.Outputs, usage: res.Usage, usageByModel: res.UsageByModel}
 	return e.enterReview(c, node, paused)
+}
+
+// setReactPreviewArtifact pins an existing artifact onto the latest react conversation
+// and notifies UIs so the preview tab switches / hot-updates.
+func (e *Engine) setReactPreviewArtifact(runID, nodeID, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" || nodeID == "" {
+		return fmt.Errorf("invalid preview artifact")
+	}
+	var conv models.ReactConversation
+	err := e.db.Where("run_id = ? AND node_id = ?", runID, nodeID).
+		Order("iteration desc").First(&conv).Error
+	if err != nil {
+		return fmt.Errorf("react conversation not found")
+	}
+	if err := e.db.Model(&conv).Update("preview_artifact", name).Error; err != nil {
+		return err
+	}
+	e.broker.Publish(runID, artifactEditMsg(runID, nodeID, name, name))
+	return nil
 }

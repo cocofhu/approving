@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/cocofhu/approving/internal/services"
 
@@ -121,19 +122,23 @@ func (h *Handlers) inboxContextClarify(c *gin.Context, runID, nodeID string, ite
 		}
 	}
 
+	clarify := gin.H{
+		"nodeId":    conv.NodeID,
+		"iteration": conv.Iteration,
+		"turns":     conv.Messages,
+		"done":      conv.Done,
+		"label":     services.ClarifyLabel(run.Graph, conv.NodeID),
+	}
+	if name := strings.TrimSpace(conv.PreviewArtifact); name != "" {
+		clarify["previewArtifact"] = name
+	}
 	out := gin.H{
 		"type":           "clarify",
 		"status":         run.Status,
 		"nodes":          graphNodesDTO(run.Graph),
 		"artifacts":      artsDTO,
 		"nodeExecutions": slimExecs,
-		"clarify": gin.H{
-			"nodeId":    conv.NodeID,
-			"iteration": conv.Iteration,
-			"turns":     conv.Messages,
-			"done":      conv.Done,
-			"label":     services.ClarifyLabel(run.Graph, conv.NodeID),
-		},
+		"clarify":        clarify,
 	}
 	// Authoritative busy/queue for GatesInbox refresh-resume (parity with runDetailDTO).
 	if h.Eng != nil {

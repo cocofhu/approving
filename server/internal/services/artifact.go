@@ -53,6 +53,10 @@ func (s *ArtifactService) Save(runID, nodeID, name, kind, content string) (strin
 		existing.NodeID = nodeID
 		existing.SizeBytes = len(content)
 		existing.UpdatedAt = now
+		if existing.Revision < 1 {
+			existing.Revision = 1
+		}
+		existing.Revision++
 		if err := s.db.Save(&existing).Error; err != nil {
 			return "", err
 		}
@@ -62,7 +66,7 @@ func (s *ArtifactService) Save(runID, nodeID, name, kind, content string) (strin
 	a := models.Artifact{
 		ID: "art-" + uuid.NewString()[:8], RunID: runID, NodeID: nodeID,
 		WorkflowID: run.WorkflowID, WorkflowName: run.WorkflowName, Name: name, Kind: kind,
-		SizeBytes: len(content), Content: content, CreatedAt: now, UpdatedAt: now,
+		SizeBytes: len(content), Content: content, CreatedAt: now, UpdatedAt: now, Revision: 1,
 	}
 	if err := s.db.Create(&a).Error; err != nil {
 		return "", err
@@ -129,7 +133,7 @@ func (s *ArtifactService) DeleteForRuns(runIDs ...string) error {
 func (s *ArtifactService) allQuery(wf, projectID, q string) *gorm.DB {
 	query := s.db.Table("artifacts").
 		Select(`artifacts.id, artifacts.run_id, artifacts.node_id, artifacts.workflow_id, artifacts.workflow_name,
-			artifacts.name, artifacts.kind, artifacts.size_bytes, artifacts.created_at, artifacts.updated_at,
+			artifacts.name, artifacts.kind, artifacts.size_bytes, artifacts.created_at, artifacts.updated_at, artifacts.revision,
 			runs.title as run_title`).
 		Joins("LEFT JOIN runs ON runs.id = artifacts.run_id")
 	if wf == unnamedGroupKey {

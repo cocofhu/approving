@@ -111,6 +111,10 @@
           "signature": "set_preview(port, label?)",
           "desc": "仅 app_preview 节点:注册沙箱内预览端口,返回完整代理 URL"
         },
+        "set_artifact_preview": {
+          "signature": "set_artifact_preview(name)",
+          "desc": "仅澄清(react)节点:把已写入的产物钉到预览 Tab;选项对比用 demoHtml,独立成稿用本工具"
+        },
         "node_complete": {
           "signature": "node_complete(status, summary?, error?, outputs?, checks?)",
           "desc": "所有 Agent 节点:结束前标记 success|failed;平台先跑默认校验,通过后才可能做业务 RPC"

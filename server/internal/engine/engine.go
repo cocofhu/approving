@@ -132,6 +132,7 @@ func New(db *gorm.DB, provider runtime.ExecProvider, host *mcp.Host, store mcp.S
 	}
 
 	host.SetAfterWriteArtifact(e.syncAfterPrimaryArtifactWrite)
+	host.SetArtifactPreviewHook(e.setReactPreviewArtifact)
 	e.reconcileInterrupted()
 
 	go e.dispatch()

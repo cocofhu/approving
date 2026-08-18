@@ -137,6 +137,21 @@ describe('NovncPreviewPanel', () => {
     await flushPromises()
     expect(apiMocks.sandboxVncWsUrl).toHaveBeenCalledWith(42)
     expect(wrapper.find('form').exists()).toBe(true)
+    expect(inspectButton(wrapper).exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('shows inspect on console noVNC when inspectable', async () => {
+    const wrapper = mountNovnc({
+      sandboxId: 42,
+      runId: undefined,
+      nodeId: undefined,
+      port: undefined,
+      inspectable: true,
+    })
+    await flushPromises()
+    expect(inspectButton(wrapper).exists()).toBe(true)
+    expect(inspectButton(wrapper).text()).toContain('取点标注')
     wrapper.unmount()
   })
 

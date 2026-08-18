@@ -9,7 +9,11 @@ import HardLoadLayer from './HardLoadLayer.vue'
 import { isAbortError } from '@/lib/run/liveLogRehydrate'
 import HtmlPreview from '../ui/HtmlPreview.vue'
 import StructuredArtifactView from './StructuredArtifactView.vue'
+import SelectionAddToChat from './SelectionAddToChat.vue'
+import { useReviewAnnotate } from '@/lib/inbox/reviewAnnotate'
+import type { ReactAnnotation } from '@/lib/shared/types'
 import { isImagePreviewArtifact, resolveArtifactPreviewBranch } from './artifactPreviewBranch'
+import { artifactFingerprint } from '@/lib/run/reactArtifactPreview'
 import { renderMarkdown } from '@/lib/shared/markdown'
 import { isJsonArtifact, parseJsonState } from '@/lib/shared/highlightJson'
 import { fmtTime } from '@/lib/shared/format'
@@ -37,6 +41,8 @@ const props = withDefaults(
     hideZoom?: boolean
     /** Hide structured PNG/PDF export buttons. */
     hideExport?: boolean
+    /** Enable HTML 取点 / 划选 / 结构化 ⤴ 标注 (parent must provide reviewAnnotate). */
+    annotatable?: boolean
   }>(),
   {
     scope: 'run',
@@ -46,6 +52,7 @@ const props = withDefaults(
     hideCopy: false,
     hideZoom: false,
     hideExport: false,
+    annotatable: false,
   },
 )
 
@@ -55,6 +62,8 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const toast = useToast()
+const annotateChannel = useReviewAnnotate()
+const stageEl = ref<HTMLElement | null>(null)
 
 const zoom = ref(false)
 const loading = ref(false)
@@ -121,6 +130,28 @@ const structuredDoc = computed(() =>
 
 const isImageBranch = computed(() => previewBranch.value.kind === 'image')
 
+const canAnnotate = computed(() => !!props.annotatable && !!annotateChannel?.enabled)
+const quoteAnnotate = computed(
+  () => canAnnotate.value && !isImageBranch.value && previewBranch.value.kind !== 'html',
+)
+const blockZoomGesture = computed(() => props.hideZoom || canAnnotate.value)
+
+function stageAnnotation(ann: ReactAnnotation) {
+  if (!canAnnotate.value) return
+  annotateChannel?.annotate(ann)
+}
+
+function onHtmlPick(payload: { selector: string; tagName: string }) {
+  stageAnnotation({
+    selector: payload.selector,
+    label: payload.selector || payload.tagName,
+  })
+}
+
+function onQuoteAdd(ann: ReactAnnotation) {
+  stageAnnotation(ann)
+}
+
 /** Disable style export while content is loading, errored, or already exporting. */
 const exportDisabled = computed(
   () =>
@@ -180,6 +211,12 @@ function handleImageLoadError() {
 
 async function loadContent(a: Artifact, opts?: { force?: boolean }) {
   if (!opts?.force && contentCache.value[a.id] !== undefined) return
+  if (typeof a.content === 'string') {
+    contentCache.value[a.id] = a.content
+    loading.value = false
+    loadErr.value = ''
+    return
+  }
   contentLoadAbort?.abort()
   const gen = ++contentLoadGen
   contentLoadAbort = new AbortController()
@@ -291,13 +328,22 @@ async function confirmDelete() {
 }
 
 watch(
-  () => props.artifact?.id,
-  (id) => {
-    // Do not remember raw across products — always default structured UI.
-    structuredMode.value = 'structured'
-    resetImageDownloadState()
+  () => {
+    const a = props.artifact
+    if (!a) return ''
+    return artifactFingerprint(a)
+  },
+  (fp, prev) => {
+    const id = props.artifact?.id
+    const sameId = !!prev && !!fp && prev.split(':')[0] === fp.split(':')[0]
+    if (!sameId) {
+      // Do not remember raw across products — always default structured UI.
+      structuredMode.value = 'structured'
+      resetImageDownloadState()
+    }
     if (props.artifact) {
-      void loadContent(props.artifact)
+      if (sameId) delete contentCache.value[props.artifact.id]
+      void loadContent(props.artifact, { force: sameId })
       if (isImagePreviewArtifact(props.artifact.name, props.artifact.kind)) {
         void loadImageDownload(props.artifact)
       }
@@ -413,8 +459,10 @@ onBeforeUnmount(() => {
       </button>
     </div>
     <div
+      ref="stageEl"
       class="flex-1 overflow-hidden"
-      :class="activeIsHtml && activeContent && !loading && !loadErr ? '' : 'scroll-area overflow-y-auto p-4'"
+      data-review-annotate-stage
+      :class="activeIsHtml && activeContent && !loading && !loadErr ? 'flex min-h-0 flex-col' : 'scroll-area overflow-y-auto p-4'"
     >
       <template v-if="artifact && isImageBranch">
         <div v-if="loadErr" class="flex h-full items-center justify-center text-center text-[12px] text-err" role="alert">
@@ -474,7 +522,14 @@ onBeforeUnmount(() => {
             {{ t('pages.artifactPreview.retry') }}
           </button>
         </div>
-        <HtmlPreview v-if="previewBranch.kind === 'html' && activeContent" :html="activeContent" />
+        <HtmlPreview
+          v-if="previewBranch.kind === 'html' && activeContent"
+          :html="activeContent"
+          fill-parent
+          :inspectable="canAnnotate"
+          class="h-full min-h-0"
+          @pick="onHtmlPick"
+        />
         <div
           v-else-if="showStructuredUi"
           ref="structuredExportRootInline"
@@ -491,9 +546,9 @@ onBeforeUnmount(() => {
         <div
           v-else-if="showRawJson && jsonState"
           class="json-code-view scroll-area"
-          :class="hideZoom ? '' : 'cursor-zoom-in'"
+          :class="blockZoomGesture ? '' : 'cursor-zoom-in'"
           data-testid="artifact-preview-raw-json"
-          @dblclick="!hideZoom && (zoom = true)"
+          @dblclick="!blockZoomGesture && (zoom = true)"
         >
           <div v-if="!jsonState.ok" class="fallback-tag">{{ t('pages.artifactPreview.fallbackPlainText') }}</div>
           <pre v-html="jsonState.html" />
@@ -501,9 +556,9 @@ onBeforeUnmount(() => {
         <div
           v-else-if="previewBranch.kind === 'markdown' && activeContent"
           class="md"
-          :class="hideZoom ? '' : 'cursor-zoom-in'"
+          :class="blockZoomGesture ? '' : 'cursor-zoom-in'"
           v-html="renderMarkdown(activeContent)"
-          @dblclick="!hideZoom && (zoom = true)"
+          @dblclick="!blockZoomGesture && (zoom = true)"
         />
         <div
           v-else-if="!loading && !loadErr"
@@ -517,6 +572,13 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </div>
+
+  <SelectionAddToChat
+    v-if="quoteAnnotate"
+    :enabled="quoteAnnotate"
+    :root="stageEl"
+    @add="onQuoteAdd"
+  />
 
   <AppModal :open="zoom" :title="artifact?.name" :width="960" @close="zoom = false">
     <div

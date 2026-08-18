@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   resumeGate: vi.fn(),
   reactReply: vi.fn(),
   nodeEvents: vi.fn(),
+  runArtifacts: vi.fn(),
   runEventsWsUrl: vi.fn((id: string) => `ws://test/runs/${id}/events`),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock('@/lib/api/api', async () => {
       resumeGate: mocks.resumeGate,
       reactReply: mocks.reactReply,
       nodeEvents: mocks.nodeEvents,
+      runArtifacts: mocks.runArtifacts,
       runEventsWsUrl: mocks.runEventsWsUrl,
     },
   }
@@ -239,6 +241,7 @@ function mountInbox() {
         }),
         ReviewComposer: ReviewComposerStub,
         ClarifyProductStage: true,
+        ReactArtifactStage: true,
       },
     },
   })
@@ -260,6 +263,7 @@ beforeEach(async () => {
   mocks.resumeGate.mockResolvedValue({ status: 'ok' })
   mocks.reactReply.mockResolvedValue({ status: 'ok' })
   mocks.nodeEvents.mockResolvedValue({ events: [], live: false })
+  mocks.runArtifacts.mockResolvedValue([])
   if (filterState.pipelineSelected) filterState.pipelineSelected.value = ''
   if (filterState.projectSelected) filterState.projectSelected.value = ''
   // Reset singleton so each test starts from an empty pending badge/list.
@@ -780,9 +784,10 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     await flushPromises()
     expect(inboxCallsFor('run-a', 'clarify-a', 1).length).toBe(afterBegin)
     // artifact_edit mid-busy must also skip softRefresh (review v4).
-    ws!.emit('artifact_edit')
+    ws!.emit('artifact_edit', { previewArtifact: 'page.html' })
     await flushPromises()
     expect(inboxCallsFor('run-a', 'clarify-a', 1).length).toBe(afterBegin)
+    expect(mocks.runArtifacts).toHaveBeenCalledWith('run-a')
 
     // Idle react (no busy) may softRefresh.
     ws!.emit('review', { event: 'turn_done', nodeId: 'clarify-a' })

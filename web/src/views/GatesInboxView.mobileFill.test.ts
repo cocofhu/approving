@@ -24,9 +24,12 @@ describe('GatesInboxView GateApproval isolation', () => {
     expect(unifiedBindings.length).toBe(1)
   })
 
-  it('clarify stage uses loading pane, product panel, and load-failed retry', () => {
+  it('clarify stage uses loading pane, product panel, react stage, and load-failed retry', () => {
     expect(src).toMatch(/ArtifactLoadingPane/)
     expect(src).toMatch(/ClarifyProductStage/)
+    expect(src).toMatch(/ReactArtifactStage/)
+    expect(src).toMatch(/inboxReactActive/)
+    expect(src).toMatch(/v-else-if="inboxReactActive"/)
     expect(src).toMatch(/clarifyStageKind/)
     expect(src).toMatch(/retryActiveRun/)
     expect(src).toMatch(/clarifyProductNodes/)
@@ -153,5 +156,17 @@ describe('GatesInboxView app_preview stage (g2.2)', () => {
     expect(panelBlocks.length).toBe(2)
     expect(src).toMatch(/@pick="onAppPreviewReviewPick"/)
     expect(src).toMatch(/@staged-pick="onAppPreviewStagedPick"/)
+  })
+})
+
+describe('GatesInboxView react artifact stage', () => {
+  it('wires annotatable + node-id on both ReviewShell stages', () => {
+    const stages = src.match(/<ReactArtifactStage[\s\S]*?\/>/g) || []
+    expect(stages.length).toBe(2)
+    for (const block of stages) {
+      expect(block).toMatch(/:node-id="active\.nodeId"/)
+      expect(block).toMatch(/:annotatable="clarifyInputActive && !historicalPreview"/)
+      expect(block).toMatch(/:preview-artifact="activeClarify\?\.previewArtifact"/)
+    }
   })
 })

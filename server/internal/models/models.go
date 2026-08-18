@@ -309,6 +309,8 @@ type Artifact struct {
 	// UpdatedAt bumps on every Save upsert so clients can detect external edits
 	// (ETag / concurrency banners) without a content hash round-trip.
 	UpdatedAt time.Time `json:"updatedAt"`
+	// Revision counts same-name overwrites (1 on first write).
+	Revision int `json:"revision"`
 	// RunTitle is populated by list queries that LEFT JOIN runs (read-only).
 	RunTitle string `gorm:"->;column:run_title" json:"runTitle,omitempty"`
 }
@@ -367,6 +369,8 @@ type ReactConversation struct {
 	Iteration int            `json:"iteration"`
 	Done      bool           `json:"done"`
 	Messages  []ReactMessage `gorm:"serializer:json" json:"turns"`
+	// PreviewArtifact is the artifact name pinned by set_artifact_preview for the ReAct UI.
+	PreviewArtifact string `json:"previewArtifact,omitempty"`
 }
 
 // ReactMessage is one turn in a react conversation.

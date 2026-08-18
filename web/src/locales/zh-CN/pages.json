@@ -2456,6 +2456,27 @@
       "chipTruncated": "已截断",
       "removeChip": "移除引用"
     },
+    "reactArtifactStage": {
+      "pipelineTab": "流水线产物",
+      "previewTab": "产物预览",
+      "closeTab": "关闭",
+      "novncTab": "noVNC",
+      "novncCardTitle": "远程桌面",
+      "novncCardMeta": "沙箱浏览器 · 可取点标注",
+      "novncMissing": "当前节点没有可用沙箱，无法打开 noVNC。",
+      "previewEmptyTitle": "尚未选择产物",
+      "previewEmpty": "从「流水线产物」点选一张卡片，或等 Agent 调用 set_artifact_preview 钉到预览。",
+      "gridEmpty": "本次运行还没有产物",
+      "kindHtml": "HTML 页面",
+      "kindJson": "JSON",
+      "kindMarkdown": "Markdown",
+      "kindYaml": "YAML",
+      "kindImage": "图片",
+      "kindText": "文本",
+      "kindFile": "文件",
+      "revision": "v{n}",
+      "meta": "{kind} · v{n} · {time}"
+    },
     "reviewShell": {
       "drawerHandle": "复审抽屉 · 可拖高",
       "resizeSash": "拖动调整侧栏宽度 · 双击恢复默认"

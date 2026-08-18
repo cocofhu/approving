@@ -29,12 +29,14 @@ describe('adaptInboxContextToRun', () => {
           turns: [{ role: 'agent', text: 'hi', at: '2026-01-01T00:00:00Z' }],
           done: false,
           label: '澄清',
+          previewArtifact: 'page.html',
         },
       },
       'r2',
     )
     expect(run.status).toBe('waiting_human')
     expect(run.clarifyByNode?.react.turns).toHaveLength(1)
+    expect(run.clarifyByNode?.react.previewArtifact).toBe('page.html')
     expect(run.artifacts).toEqual([])
   })
 

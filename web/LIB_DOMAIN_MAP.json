@@ -71,6 +71,7 @@
       "runDraft.ts",
       "runNotifyTemplate.ts",
       "runOutputSelection.ts",
+      "reactArtifactPreview.ts",
       "runStats.ts",
       "runTags.ts",
       "streamTextReveal.ts",
@@ -129,7 +130,7 @@
     "api": 1,
     "composables": 12,
     "shared": 30,
-    "run": 38,
+    "run": 39,
     "agent": 9,
     "inbox": 15,
     "pm": 4

@@ -1332,14 +1332,15 @@ func TestRunDetailRichBranches(t *testing.T) {
 	h.db.Create(&models.Gate{RunID: "rd", NodeID: "gate", Title: "审批", RequestedAt: time.Now()})
 	// A react conversation -> clarify + clarifyByNode blocks.
 	h.db.Create(&models.ReactConversation{RunID: "rd", NodeID: "impl", Iteration: 1,
-		Messages: []models.ReactMessage{{Role: "human", Text: "hi"}}})
+		PreviewArtifact: "page.html",
+		Messages:        []models.ReactMessage{{Role: "human", Text: "hi"}}})
 
 	w := h.do("GET", "/api/runs/rd", nil)
 	if w.Code != 200 {
 		t.Fatalf("get run: %d", w.Code)
 	}
 	body := w.Body.String()
-	for _, want := range []string{`"git"`, "abc123", `"gate"`, `"clarify"`, `"clarifyByNode"`, "docker pull registry.example"} {
+	for _, want := range []string{`"git"`, "abc123", `"gate"`, `"clarify"`, `"clarifyByNode"`, "docker pull registry.example", `"previewArtifact":"page.html"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("run detail missing %q", want)
 		}
@@ -1347,7 +1348,7 @@ func TestRunDetailRichBranches(t *testing.T) {
 	// Artifacts must be metadata-only (no inlined content).
 	h.db.Create(&models.Artifact{
 		ID: "art-rd", RunID: "rd", NodeID: "impl", Name: "plan.json", Kind: "json",
-		Content: `{"secret":"big-body"}`, SizeBytes: 99,
+		Content: `{"secret":"big-body"}`, SizeBytes: 99, Revision: 2,
 	})
 	w = h.do("GET", "/api/runs/rd", nil)
 	if w.Code != 200 {
@@ -1359,6 +1360,9 @@ func TestRunDetailRichBranches(t *testing.T) {
 	}
 	if !strings.Contains(body, `"artifacts"`) || !strings.Contains(body, "plan.json") {
 		t.Error("run detail should still list artifact metadata")
+	}
+	if !strings.Contains(body, `"revision":2`) {
+		t.Error("run detail artifacts should include revision")
 	}
 }
 

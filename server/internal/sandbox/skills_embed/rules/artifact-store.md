@@ -42,7 +42,7 @@ alwaysApply: true
 
 | 节点 | 写入 | 读取 |
 | --- | --- | --- |
-| 澄清 react | `set_clarified_requirement`(完整需求规格:背景/目标/范围/FR+验收/假设依赖约束等) | `get_clarified_requirement` |
+| 澄清 react | `set_clarified_requirement`(完整需求规格:背景/目标/范围/FR+验收/假设依赖约束等)。给人看的页面/文案可另 `write_artifact` + `set_artifact_preview` | `get_clarified_requirement` |
 | 计划 plan | `set_plan` | `get_plan` |
 | 调研 research | `set_research` | `get_research` |
 | 方案 proposal | `set_proposals` | `get_proposals` |

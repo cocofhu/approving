@@ -47,6 +47,11 @@ func (h *Handlers) ArtifactContent(c *gin.Context) {
 		"name": a.Name, "kind": a.Kind, "sizeBytes": a.SizeBytes,
 		"createdAt": a.CreatedAt, "content": content, "etag": etag,
 	}
+	rev := a.Revision
+	if rev < 1 {
+		rev = 1
+	}
+	out["revision"] = rev
 	if !a.UpdatedAt.IsZero() {
 		out["updatedAt"] = a.UpdatedAt
 	}

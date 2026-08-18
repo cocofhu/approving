@@ -15,6 +15,7 @@ import { REVIEW_SHELL_WIDTH_KEY_APPROVAL } from '@/lib/inbox/reviewLayoutBudget'
 import ReviewComposer from '@/components/run/ReviewComposer.vue'
 import ArtifactLoadingPane from '@/components/run/ArtifactLoadingPane.vue'
 import ClarifyProductStage from '@/components/run/ClarifyProductStage.vue'
+import ReactArtifactStage from '@/components/run/ReactArtifactStage.vue'
 import AppPreviewPanel from '@/components/run/AppPreviewPanel.vue'
 import RefreshStrip from '@/components/run/RefreshStrip.vue'
 import AppInlineError from '@/components/ui/AppInlineError.vue'
@@ -46,6 +47,7 @@ import {
   pickNextActiveAfterRemove,
 } from '@/lib/inbox/inboxActiveSelection'
 import { isAbortError } from '@/lib/run/liveLogRehydrate'
+import { isReactGraphNode, applyPreviewArtifactName } from '@/lib/run/reactArtifactPreview'
 import { createPendingAcpBuffer, pickAcpRails } from '@/lib/run/pendingAcpBuffer'
 import { deliverOrBufferDialogueAcp } from '@/lib/run/dialogueAcpDelivery'
 import {
@@ -929,6 +931,7 @@ function connectActiveRunWs(runId: string, opts?: { fromReconnect?: boolean }) {
         if (m.type === 'artifact_edit' || m.type === 'react') {
           // Gate on live WS busy / sessionBusy — not stale reactSessions snapshot.
           if (!isClarifySoftRefreshBlocked()) void softRefreshActiveRun()
+          else if (m.type === 'artifact_edit') void patchActiveRunArtifacts(m)
         }
       }
     }
@@ -939,6 +942,21 @@ function connectActiveRunWs(runId: string, opts?: { fromReconnect?: boolean }) {
     activeRunWs = undefined
     activeRunWsRunId = ''
     activeRunWsReconnect.onClose()
+  }
+}
+
+async function patchActiveRunArtifacts(frame?: { previewArtifact?: string; name?: string }) {
+  if (!active.value || !activeRun.value) return
+  const name = String(frame?.previewArtifact || '').trim()
+  if (name) {
+    activeRun.value = applyPreviewArtifactName(activeRun.value, active.value.nodeId, name)
+  }
+  try {
+    const arts = await api.runArtifacts(active.value.runId)
+    if (!active.value || !activeRun.value) return
+    activeRun.value = { ...activeRun.value, artifacts: Array.isArray(arts) ? arts : activeRun.value.artifacts }
+  } catch {
+    /* keep last known artifacts */
   }
 }
 
@@ -1119,6 +1137,11 @@ const inboxAppPreviewActive = computed(() => {
   if (active.value.kind === 'app_preview') return true
   const n = activeRun.value?.nodes?.find((node) => node.id === active.value!.nodeId)
   return n?.type === 'app_preview'
+})
+
+const inboxReactActive = computed(() => {
+  if (active.value?.type !== 'clarify' || inboxAppPreviewActive.value) return false
+  return isReactGraphNode(activeRun.value, active.value.nodeId)
 })
 
 // Mirror RunDetailView.reviewActive: post-run product review on a non-react
@@ -1636,6 +1659,14 @@ function itemSecondary(it: InboxItem) {
                 @open-share="openSharePanel(active)"
               />
             </div>
+            <ReactArtifactStage
+              v-else-if="inboxReactActive"
+              :artifacts="activeRun?.artifacts || []"
+              :preview-artifact="activeClarify?.previewArtifact"
+              :run-id="active.runId"
+              :node-id="active.nodeId"
+              :annotatable="clarifyInputActive && !historicalPreview"
+            />
             <ClarifyProductStage
               v-else
               :product-nodes="clarifyProductNodes"
@@ -1751,6 +1782,14 @@ function itemSecondary(it: InboxItem) {
                     @open-share="openSharePanel(active)"
                   />
                 </div>
+                <ReactArtifactStage
+                  v-else-if="inboxReactActive"
+                  :artifacts="activeRun?.artifacts || []"
+                  :preview-artifact="activeClarify?.previewArtifact"
+                  :run-id="active.runId"
+                  :node-id="active.nodeId"
+                  :annotatable="clarifyInputActive && !historicalPreview"
+                />
                 <ClarifyProductStage
                   v-else
                   :product-nodes="clarifyProductNodes"

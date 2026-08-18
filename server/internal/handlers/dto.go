@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"strings"
 	"time"
 
 	"github.com/cocofhu/approving/internal/models"
@@ -99,13 +100,27 @@ func graphDTO(g models.Graph) gin.H {
 // artifactMetaDTO shapes one artifact's metadata for list/run/inbox responses
 // (content is loaded on demand via GET /api/artifacts/:id/content).
 func artifactMetaDTO(a models.Artifact) gin.H {
+	rev := a.Revision
+	if rev < 1 {
+		rev = 1
+	}
 	out := gin.H{
 		"id": a.ID, "name": a.Name, "kind": a.Kind, "nodeId": a.NodeID,
 		"runId": a.RunID, "workflowId": a.WorkflowID, "workflowName": a.WorkflowName, "sizeBytes": a.SizeBytes,
-		"createdAt": a.CreatedAt,
+		"createdAt": a.CreatedAt, "revision": rev,
 	}
 	if !a.UpdatedAt.IsZero() {
 		out["updatedAt"] = a.UpdatedAt
+	}
+	return out
+}
+
+func reactConversationDTO(conv models.ReactConversation) gin.H {
+	out := gin.H{
+		"nodeId": conv.NodeID, "iteration": conv.Iteration, "turns": conv.Messages, "done": conv.Done,
+	}
+	if name := strings.TrimSpace(conv.PreviewArtifact); name != "" {
+		out["previewArtifact"] = name
 	}
 	return out
 }
@@ -208,13 +223,13 @@ func (h *Handlers) runDetailDTO(r models.Run) gin.H {
 		out["gate"] = gateDTO
 	}
 	if conv, ok := h.Runs.Conversation(r.ID); ok {
-		out["clarify"] = gin.H{"nodeId": conv.NodeID, "iteration": conv.Iteration, "turns": conv.Messages, "done": conv.Done}
+		out["clarify"] = reactConversationDTO(conv)
 	}
 	// Per-node conversations so each react node renders its own dialogue history
 	// (a run may have several react nodes).
 	clarifyByNode := gin.H{}
 	for _, conv := range h.Runs.Conversations(r.ID) {
-		clarifyByNode[conv.NodeID] = gin.H{"nodeId": conv.NodeID, "iteration": conv.Iteration, "turns": conv.Messages, "done": conv.Done}
+		clarifyByNode[conv.NodeID] = reactConversationDTO(conv)
 	}
 	out["clarifyByNode"] = clarifyByNode
 	// Authoritative busy/queue for refresh resume (clarify + review sessions).

@@ -2,6 +2,7 @@
 /**
  * Smoke-mount Demo「入口只装配」抽离的 Run* 面板壳，计入 coverage 分母。
  */
+import { defineComponent } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
@@ -16,6 +17,7 @@ import RunOutputPanel from './RunOutputPanel.vue'
 import RunPreviewPanel from './RunPreviewPanel.vue'
 import RunProductPanel from './RunProductPanel.vue'
 import RunReviewPanel from './RunReviewPanel.vue'
+import ReactArtifactStage from './ReactArtifactStage.vue'
 
 function i18n() {
   return createI18n({
@@ -67,6 +69,7 @@ const heavyStubs = {
   ClarifyChat: true,
   ClarifyBootLoader: true,
   ReviewShell: true,
+  ReactArtifactStage: true,
   ReviewComposer: true,
   AppPreviewPanel: true,
   StructuredProductPanel: true,
@@ -115,14 +118,38 @@ describe('Run detail panel shells (Demo entry assembly)', () => {
         nodeId: 'c1',
         clarify: { nodeId: 'c1', turns: [], done: false },
         runId: 'run-1',
+        run: stubRun,
         draft: '',
         attachments: [],
         inputActive: true,
         selStatus: 'waiting_human',
       },
-      global,
+      global: {
+        plugins,
+        stubs: {
+          ...heavyStubs,
+          ReviewShell: defineComponent({
+            template: '<div data-testid="clarify-review-shell"><slot name="stage" /><slot name="sidebar" /></div>',
+          }),
+          ReactArtifactStage: false,
+          HtmlPreview: true,
+          ArtifactPreview: true,
+          ClarifyChat: defineComponent({
+            emits: ['send', 'finish', 'cancel'],
+            template:
+              '<button data-testid="clarify-send" @click="$emit(\'send\', \'hi\', [], [])">send</button>',
+          }),
+        },
+      },
     })
-    expect(clarify.exists()).toBe(true)
+    expect(clarify.get('[data-testid="react-artifact-tab-grid"]').exists()).toBe(true)
+    expect(clarify.find('[data-testid="react-artifact-tab-preview"]').exists()).toBe(false)
+    expect(clarify.get('[data-testid="react-artifact-card-novnc"]').exists()).toBe(true)
+    const stage = clarify.findComponent(ReactArtifactStage)
+    expect(stage.props('annotatable')).toBe(true)
+    expect(stage.props('nodeId')).toBe('c1')
+    await clarify.get('[data-testid="clarify-send"]').trigger('click')
+    expect(clarify.emitted('send')?.[0]).toEqual(['hi', [], []])
     clarify.unmount()
 
     const output = mount(RunOutputPanel, {

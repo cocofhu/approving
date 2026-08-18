@@ -81,3 +81,14 @@ describe('PublicGateApproval height chain to clarify-scroller (g1.2 / g2)', () =
     expect(chatSrc).toMatch(/border-t border-line p-3/)
   })
 })
+
+describe('PublicGateApproval react artifact stage', () => {
+  it('uses ReactArtifactStage with inspectable annotate for nodeType=react', () => {
+    expect(viewSrc).toMatch(/const isPublicReact = computed\(\(\) => preview\.value\?\.nodeType === 'react'\)/)
+    expect(viewSrc).toMatch(/data-testid="public-gate-react-stage"/)
+    expect(viewSrc).toMatch(/v-if="isPublicReact"/)
+    expect(viewSrc).toMatch(/:annotatable="inspectable"/)
+    expect(viewSrc).toMatch(/:preview-artifact="publicPreviewName"/)
+    expect(viewSrc).toMatch(/inline-content/)
+  })
+})

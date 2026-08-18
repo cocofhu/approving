@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cocofhu/approving/internal/browser"
+
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
@@ -114,6 +116,16 @@ func (h *Handlers) SandboxVNC(c *gin.Context) {
 
 	done := make(chan struct{})
 	defer close(done)
+
+	sess.Page().OnPick(func(p browser.Pick) {
+		pushJSON(gin.H{"type": "picked", "pick": p})
+	})
+	sess.Page().OnInspectCanceled(func() {
+		pushJSON(gin.H{"type": "inspect-canceled"})
+	})
+	sess.Page().OnDescribeFailed(func() {
+		pushJSON(gin.H{"type": "describe-failed"})
+	})
 
 	pushJSON(gin.H{"type": "ready", "url": navigateURL})
 
