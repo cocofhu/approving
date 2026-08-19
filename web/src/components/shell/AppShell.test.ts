@@ -173,6 +173,7 @@ describe('AppShell', () => {
     await wrapper.find('[data-testid="desktop-nav-hide"]').trigger('click')
     expect((aside.element as HTMLElement).style.display).not.toBe('none')
     expect(aside.classes()).toContain('w-0')
+    expect(aside.classes()).toContain('border-r-0')
     expect(wrapper.find('[data-testid="shell-nav"]').exists()).toBe(true)
     expect(aside.classes()).toContain('hidden')
     expect(aside.classes()).toContain('md:flex')

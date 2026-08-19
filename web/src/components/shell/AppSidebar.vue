@@ -41,8 +41,8 @@ async function onHideNav() {
 <template>
   <aside
     id="app-desktop-sidebar"
-    class="app-desktop-sidebar hidden h-full shrink-0 flex-col overflow-hidden border-r bg-surface md:flex"
-    :class="sidebarHidden ? 'w-0 border-transparent' : 'w-[232px] border-line'"
+    class="app-desktop-sidebar hidden h-full min-w-0 shrink-0 flex-col overflow-hidden bg-surface md:flex"
+    :class="sidebarHidden ? 'w-0 border-r-0' : 'w-[232px] border-r border-line'"
     data-testid="app-desktop-sidebar"
     :aria-hidden="sidebarHidden ? 'true' : undefined"
     :inert="sidebarHidden"

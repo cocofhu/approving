@@ -349,7 +349,7 @@ body {
   overflow: hidden;
   transition:
     width 0.32s cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+    border-right-width 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
