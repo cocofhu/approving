@@ -8,11 +8,19 @@ import pages from '@/locales/zh-CN/pages.json'
 import type { Artifact } from '@/lib/shared/types'
 import ReactArtifactStage from './ReactArtifactStage.vue'
 
+const { mockAddClarifyAnnotation } = vi.hoisted(() => ({
+  mockAddClarifyAnnotation: vi.fn(() => 'added'),
+}))
+
 vi.mock('@/lib/api/api', () => ({
   api: {
     artifactContent: vi.fn(async () => ({ content: '<html>thumb</html>' })),
     getRunNodeSandbox: vi.fn(async () => ({ id: 42 })),
   },
+}))
+
+vi.mock('@/lib/inbox/useClarifyDraft', () => ({
+  addClarifyAnnotation: mockAddClarifyAnnotation,
 }))
 
 function i18n() {
@@ -49,7 +57,11 @@ const stubs = {
   }),
   AppPreviewPanel: defineComponent({
     props: { runId: String, nodeId: String, shareEnabled: Boolean },
-    template: '<div data-testid="app-preview-stub" :data-share="shareEnabled ? \'1\' : \'0\'" />',
+    emits: ['pick', 'stagedPick', 'openShare'],
+    template:
+      '<div data-testid="app-preview-stub" :data-share="shareEnabled ? \'1\' : \'0\'">' +
+      '<button type="button" data-testid="app-preview-pick" @click="$emit(\'pick\', { selector: \'#hero\', tagName: \'DIV\', outerHTML: \'<div id=hero></div>\', url: \'http://app/\' })">pick</button>' +
+      '</div>',
   }),
   PublicAppPreviewPanel: defineComponent({
     template: '<div data-testid="public-app-preview-stub" />',
@@ -295,6 +307,62 @@ describe('ReactArtifactStage', () => {
     expect(wrapper.find('[data-testid="novnc-stub"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="app-preview-stub"]').attributes('data-share')).toBe('1')
     expect(wrapper.get('[data-testid="react-artifact-tab-novnc"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="react-artifact-tab-novnc"]').text()).toContain('应用预览')
+    wrapper.unmount()
+  })
+
+  it('emits remote pick once without staging a local annotation', async () => {
+    mockAddClarifyAnnotation.mockClear()
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [],
+        runId: 'run-1',
+        nodeId: 'preview',
+        annotatable: true,
+        remoteKind: 'app',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    await wrapper.get('[data-testid="app-preview-pick"]').trigger('click')
+    expect(wrapper.emitted('pick')).toEqual([
+      [{ selector: '#hero', tagName: 'DIV', outerHTML: '<div id=hero></div>', url: 'http://app/' }],
+    ])
+    expect(mockAddClarifyAnnotation).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('shows historical visual pages as readonly cards beside live page.html', async () => {
+    const live = art({ id: 'live', name: 'page.html', kind: 'html', nodeId: 'visual_1', content: '<p>new</p>' })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [live],
+        runId: 'run-1',
+        run: {
+          id: 'run-1',
+          nodes: [{ id: 'visual_1', type: 'visual', label: '视觉', position: { x: 0, y: 0 }, config: {} }],
+          nodeExecutions: {
+            visual_1: [
+              { nodeId: 'visual_1', iteration: 1, status: 'completed', outputs: { page: '<p>old</p>' } },
+              { nodeId: 'visual_1', iteration: 2, status: 'waiting_human', outputs: { page: '<p>new</p>' } },
+            ],
+          },
+        } as any,
+        nodeId: 'visual_1',
+        annotatable: true,
+        remoteKind: 'off',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-card-iteration"]').text()).toContain('第 1 次')
+    expect(wrapper.findAll('[data-testid="react-artifact-card-readonly"]').length).toBe(1)
+    await wrapper.get('[data-testid="react-artifact-card-page.html#iter-1"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-tab-grid"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-card-page.html"]').trigger('click')
+    await flushPromises()
+    const previews = wrapper.findAll('[data-testid="artifact-preview"]')
+    expect(previews.map((n) => n.text())).toEqual(['page.html#iter-1|off', 'page.html|on'])
     wrapper.unmount()
   })
 })

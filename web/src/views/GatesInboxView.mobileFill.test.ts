@@ -30,6 +30,8 @@ describe('GatesInboxView GateApproval isolation', () => {
     expect(src).toMatch(/ReactArtifactStage/)
     expect(src).not.toMatch(/inboxReactActive/)
     expect(src).toMatch(/retryActiveRun/)
+    expect(src).toMatch(/inboxClarifyStageKind/)
+    expect(src).toMatch(/:stage-kind="inboxClarifyStageKind"/)
   })
 })
 
@@ -151,8 +153,9 @@ describe('GatesInboxView app_preview stage (g2.2)', () => {
     const stages = src.match(/<ReactArtifactStage[\s\S]*?\/>/g) || []
     expect(stages.length).toBe(2)
     for (const block of stages) {
-      expect(block).toMatch(/:remote-kind="inboxAppPreviewActive \? 'app' : 'sandbox'"/)
+      expect(block).toMatch(/:remote-kind="inboxRemoteKind"/)
       expect(block).toMatch(/:share-enabled="inboxAppPreviewActive"/)
+      expect(block).toMatch(/:run="activeRun \|\| undefined"/)
     }
     expect(src).toMatch(/@pick="onAppPreviewReviewPick"/)
     expect(src).toMatch(/@staged-pick="onAppPreviewStagedPick"/)
@@ -173,7 +176,7 @@ describe('GatesInboxView react artifact stage', () => {
   })
 
   it('mounts the artifact stage for every clarify session, including visual/research review', () => {
-    expect(src).not.toMatch(/isReactGraphNode/)
+    expect(src).toMatch(/inboxStageRemoteKind/)
     expect(src).not.toMatch(/v-else-if="inboxReactActive"/)
     const desktop = src.slice(src.indexOf('<!-- Desktop three-zone'))
     const shell = desktop.slice(

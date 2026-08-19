@@ -15,7 +15,7 @@ import { useToast } from '@/lib/composables/useToast'
 import { provideReviewAnnotate, useReviewAnnotate } from '@/lib/inbox/reviewAnnotate'
 import { addClarifyAnnotation } from '@/lib/inbox/useClarifyDraft'
 import type { AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
-import type { Artifact, ReactAnnotation } from '@/lib/shared/types'
+import type { Artifact, ReactAnnotation, Run } from '@/lib/shared/types'
 import {
   REACT_STAGE_TAB_GRID,
   REACT_STAGE_TAB_NOVNC,
@@ -29,7 +29,10 @@ import {
   previewTabName,
   artifactFingerprint,
   canAnnotateStageArtifact,
+  expandStageArtifacts,
+  isHistoricalStageArtifact,
   isOwnNodeArtifact,
+  parseHistoricalStageArtifact,
   resolveStageRemoteKind,
   shouldActivatePinnedPreview,
   type ReactStageRemoteKind,
@@ -40,6 +43,7 @@ const props = withDefaults(
     artifacts: Artifact[]
     previewArtifact?: string | null
     runId?: string
+    run?: Run | null
     nodeId?: string
     /** When true, ArtifactPreview will not fetch (content already inlined). */
     inlineContent?: boolean
@@ -55,6 +59,7 @@ const props = withDefaults(
   {
     previewArtifact: '',
     runId: '',
+    run: null,
     nodeId: '',
     inlineContent: false,
     annotatable: false,
@@ -115,13 +120,25 @@ const resolvedRemoteKind = computed(() =>
     inlineContent: props.inlineContent,
   }),
 )
+const stageNode = computed(() => props.run?.nodes?.find((n) => n.id === props.nodeId) || null)
+const stageArtifacts = computed(() => expandStageArtifacts(props.artifacts, props.run, stageNode.value))
 const canOpenNovnc = computed(() => resolvedRemoteKind.value !== 'off')
 const showingNovnc = computed(() => activeTab.value === REACT_STAGE_TAB_NOVNC)
-const showGridCards = computed(() => props.artifacts.length > 0 || canOpenNovnc.value)
+const showGridCards = computed(() => stageArtifacts.value.length > 0 || canOpenNovnc.value)
+const remoteCardTitle = computed(() =>
+  resolvedRemoteKind.value === 'sandbox'
+    ? t('pages.reactArtifactStage.novncCardTitle')
+    : t('pages.reactArtifactStage.appCardTitle'),
+)
 const remoteCardMeta = computed(() =>
   resolvedRemoteKind.value === 'sandbox'
     ? t('pages.reactArtifactStage.novncCardMeta')
     : t('pages.reactArtifactStage.appCardMeta'),
+)
+const remoteTabLabel = computed(() =>
+  resolvedRemoteKind.value === 'sandbox'
+    ? t('pages.reactArtifactStage.novncTab')
+    : t('pages.reactArtifactStage.appTab'),
 )
 
 function artifactAnnotatable(a: Artifact | null): boolean {
@@ -129,7 +146,19 @@ function artifactAnnotatable(a: Artifact | null): boolean {
 }
 
 function artifactReadonly(a: Artifact): boolean {
-  return !isOwnNodeArtifact(a, props.nodeId)
+  return !isOwnNodeArtifact(a, props.nodeId) || isHistoricalStageArtifact(a)
+}
+
+function artifactTitle(a: Artifact | null | undefined): string {
+  if (!a) return ''
+  const hist = parseHistoricalStageArtifact(a)
+  if (!hist) return a.name
+  const base = a.name.replace(/#iter-\d+$/, '') || a.name
+  return t('pages.reactArtifactStage.iterationName', { name: base, n: hist.iteration })
+}
+
+function historicalIteration(a: Artifact): number | null {
+  return parseHistoricalStageArtifact(a)?.iteration ?? null
 }
 
 const kindIcon: Record<string, string> = {
@@ -150,11 +179,11 @@ function metaLine(a: Artifact): string {
 }
 
 function artifactByName(name: string): Artifact | null {
-  return findArtifactByName(props.artifacts, name)
+  return findArtifactByName(stageArtifacts.value, name)
 }
 
 function activatePreview(name: string) {
-  const art = findArtifactByName(props.artifacts, name)
+  const art = findArtifactByName(stageArtifacts.value, name)
   if (!art) return
   openNames.value = openStagePreviewTab(openNames.value, art.name)
   activeTab.value = previewTabId(art.name)
@@ -187,18 +216,13 @@ function closeNovnc() {
 
 function onRemotePick(payload: AppPreviewPickPayload) {
   emit('pick', payload)
-  stageAnnotation({
-    selector: payload.selector,
-    url: payload.url,
-    label: payload.selector || payload.tagName,
-  })
 }
 
 const showingGrid = computed(() => activeTab.value === REACT_STAGE_TAB_GRID)
 const activePreviewName = computed(() => previewTabName(activeTab.value))
 
 watch(
-  () => [String(props.previewArtifact || '').trim(), props.artifacts.map((a) => a.name)] as const,
+  () => [String(props.previewArtifact || '').trim(), stageArtifacts.value.map((a) => a.name)] as const,
   ([pin, names], prev) => {
     const nameSet = new Set(names)
     const kept = openNames.value.filter((n) => nameSet.has(n))
@@ -218,7 +242,7 @@ watch(
 
 watch(
   () =>
-    props.artifacts
+    stageArtifacts.value
       .filter((a) => a.kind === 'html')
       .map((a) => artifactFingerprint(a))
       .join('|'),
@@ -227,7 +251,7 @@ watch(
     htmlThumbAbort?.abort()
     const ac = new AbortController()
     htmlThumbAbort = ac
-    const htmlArts = props.artifacts.filter((a) => a.kind === 'html')
+    const htmlArts = stageArtifacts.value.filter((a) => a.kind === 'html')
     const next: Record<string, string> = {}
     for (const a of htmlArts) {
       const fp = artifactFingerprint(a)
@@ -337,7 +361,7 @@ onBeforeUnmount(() => {
           @click="activeTab = previewTabId(name)"
         >
           <Icon :name="kindIcon[artifactByName(name)?.kind || ''] || 'doc'" :size="13" />
-          <span class="truncate">{{ name }}</span>
+          <span class="truncate">{{ artifactTitle(artifactByName(name)) }}</span>
         </button>
         <button
           type="button"
@@ -368,7 +392,7 @@ onBeforeUnmount(() => {
           @click="activeTab = REACT_STAGE_TAB_NOVNC"
         >
           <Icon name="globe" :size="13" />
-          <span class="truncate">{{ t('pages.reactArtifactStage.novncTab') }}</span>
+          <span class="truncate">{{ remoteTabLabel }}</span>
         </button>
         <button
           type="button"
@@ -407,12 +431,12 @@ onBeforeUnmount(() => {
             <Icon name="globe" :size="28" class="opacity-50" />
           </div>
           <div class="px-2.5 py-2">
-            <div class="truncate text-[12px] font-medium text-txt">{{ t('pages.reactArtifactStage.novncCardTitle') }}</div>
+            <div class="truncate text-[12px] font-medium text-txt">{{ remoteCardTitle }}</div>
             <div class="mt-0.5 truncate text-[11px] text-txt3">{{ remoteCardMeta }}</div>
           </div>
         </button>
         <button
-          v-for="a in artifacts"
+          v-for="a in stageArtifacts"
           :key="a.id"
           type="button"
           class="overflow-hidden rounded-lg border border-line bg-surface text-left transition hover:border-line-strong"
@@ -433,7 +457,12 @@ onBeforeUnmount(() => {
           </div>
           <div class="px-2.5 py-2">
             <div class="flex items-center gap-1.5">
-              <div class="min-w-0 truncate text-[12px] font-medium text-txt" :title="a.name">{{ a.name }}</div>
+              <div class="min-w-0 truncate text-[12px] font-medium text-txt" :title="artifactTitle(a)">{{ artifactTitle(a) }}</div>
+              <span
+                v-if="historicalIteration(a)"
+                class="shrink-0 rounded border border-line px-1 py-px text-[10px] text-txt3"
+                data-testid="react-artifact-card-iteration"
+              >{{ t('pages.reactArtifactStage.iterationBadge', { n: historicalIteration(a) }) }}</span>
               <span
                 v-if="artifactReadonly(a)"
                 class="shrink-0 rounded border border-line px-1 py-px text-[10px] text-txt3"
@@ -456,7 +485,7 @@ onBeforeUnmount(() => {
       <ArtifactPreview
         v-if="artifactByName(name)"
         :artifact="artifactByName(name)"
-        :artifacts="artifacts"
+        :artifacts="stageArtifacts"
         :run-id="runId"
         hide-delete
         :annotatable="artifactAnnotatable(artifactByName(name))"

@@ -61,7 +61,7 @@ const reviewChatRef = ref<{
   isChatReady?: () => boolean
 } | null>(null)
 
-const remoteKind = computed(() => (props.node.type === 'app_preview' ? 'app' : 'sandbox'))
+const remoteKind = computed(() => (props.node.type === 'app_preview' ? 'app' : 'off'))
 
 defineExpose({
   applyReviewFrame: (frame: any) => reviewChatRef.value?.applyReviewFrame?.(frame),
@@ -85,6 +85,7 @@ defineExpose({
         :artifacts="run.artifacts || []"
         :preview-artifact="clarify?.previewArtifact"
         :run-id="run.id"
+        :run="run"
         :node-id="node.id"
         :annotatable="inputActive"
         :remote-kind="remoteKind"

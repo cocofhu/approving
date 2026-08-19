@@ -40,7 +40,7 @@ import {
   pickNextActiveAfterRemove,
 } from '@/lib/inbox/inboxActiveSelection'
 import { isAbortError } from '@/lib/run/liveLogRehydrate'
-import { applyPreviewArtifactName } from '@/lib/run/reactArtifactPreview'
+import { applyPreviewArtifactName, inboxStageRemoteKind } from '@/lib/run/reactArtifactPreview'
 import { createPendingAcpBuffer, pickAcpRails } from '@/lib/run/pendingAcpBuffer'
 import { deliverOrBufferDialogueAcp } from '@/lib/run/dialogueAcpDelivery'
 import {
@@ -1080,6 +1080,16 @@ const inboxAppPreviewActive = computed(() => {
   return n?.type === 'app_preview'
 })
 
+const inboxRemoteKind = computed(() =>
+  inboxStageRemoteKind({
+    appPreview: inboxAppPreviewActive.value,
+    run: activeRun.value,
+    nodeId: active.value?.type === 'clarify' ? active.value.nodeId : '',
+  }),
+)
+
+const inboxClarifyStageKind = computed(() => (activeRunLoadError.value ? 'loadFailed' : 'pending'))
+
 // Mirror RunDetailView.reviewActive: post-run product review on a non-react
 // producer (backend only seeds clarify sessions for ReviewCapable nodes).
 // Inbox API type stays "clarify"; mode is decided from the loaded graph.
@@ -1587,9 +1597,10 @@ function itemSecondary(it: InboxItem) {
               :artifacts="activeRun?.artifacts || []"
               :preview-artifact="activeClarify?.previewArtifact"
               :run-id="active.runId"
+              :run="activeRun || undefined"
               :node-id="active.nodeId"
               :annotatable="clarifyInputActive"
-              :remote-kind="inboxAppPreviewActive ? 'app' : 'sandbox'"
+              :remote-kind="inboxRemoteKind"
               :share-enabled="inboxAppPreviewActive"
               @pick="onAppPreviewReviewPick"
               @staged-pick="onAppPreviewStagedPick"
@@ -1620,7 +1631,7 @@ function itemSecondary(it: InboxItem) {
           v-else-if="active.type === 'clarify'"
           :product-nodes="[]"
           :selected-product-id="null"
-          stage-kind="loadFailed"
+          :stage-kind="inboxClarifyStageKind"
           :selected-node="null"
           :selected-node-run="null"
           :run="null"
@@ -1689,9 +1700,10 @@ function itemSecondary(it: InboxItem) {
                   :artifacts="activeRun?.artifacts || []"
                   :preview-artifact="activeClarify?.previewArtifact"
                   :run-id="active.runId"
+                  :run="activeRun || undefined"
                   :node-id="active.nodeId"
                   :annotatable="clarifyInputActive"
-                  :remote-kind="inboxAppPreviewActive ? 'app' : 'sandbox'"
+                  :remote-kind="inboxRemoteKind"
                   :share-enabled="inboxAppPreviewActive"
                   @pick="onAppPreviewReviewPick"
                   @staged-pick="onAppPreviewStagedPick"
@@ -1722,7 +1734,7 @@ function itemSecondary(it: InboxItem) {
               v-else-if="active.type === 'clarify'"
               :product-nodes="[]"
               :selected-product-id="null"
-              stage-kind="loadFailed"
+              :stage-kind="inboxClarifyStageKind"
               :selected-node="null"
               :selected-node-run="null"
               :run="null"
