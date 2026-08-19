@@ -38,6 +38,7 @@ import {
 import { addClarifyAnnotation, useClarifyDraft } from '@/lib/inbox/useClarifyDraft'
 import { previewPickLabel, type AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
 import { resolveNodeDisplayLabelFromNode } from '@/lib/run/resolveNodeDisplayLabel'
+import { applyPreviewArtifactName } from '@/lib/run/reactArtifactPreview'
 import { fmtTime, fmtDuration, formatTrigger } from '@/lib/shared/format'
 import { pickDefaultTimelineNodeId } from '@/lib/run/runStats'
 import { useRunDetailLiveLog } from '@/lib/run/useRunDetailLiveLog'
@@ -335,6 +336,20 @@ function isClarifySessionBusy(): boolean {
   return false
 }
 
+async function refreshArtifactPreviewState(frame?: { previewArtifact?: string }) {
+  const name = String(frame?.previewArtifact || '').trim()
+  const nodeId = selClarify.value?.nodeId || selected.value
+  if (name && nodeId) {
+    run.value = applyPreviewArtifactName(run.value, nodeId, name)
+  }
+  try {
+    const arts = await api.runArtifacts(runId.value)
+    if (Array.isArray(arts)) run.value = { ...run.value, artifacts: arts }
+  } catch {
+    /* keep last known artifacts */
+  }
+}
+
 const wsApi = useRunDetailWs({
   runId,
   run,
@@ -355,6 +370,9 @@ const wsApi = useRunDetailWs({
   maybePollSandboxForBoot,
   isClarifySessionBusy,
   loadRun: (hard = false) => loadRun(hard),
+  refreshArtifactPreview: (frame) => {
+    void refreshArtifactPreviewState(frame)
+  },
 })
 const {
   projectDialogueAfterLoad,
@@ -1475,8 +1493,11 @@ function selectExecution(nodeId: string, idx: number) {
               :node-error="selRun?.error"
               :clarify="selClarify"
               :run-id="run.id"
+              :run="run"
+              :mobile="isMobile"
               v-model:draft="clarifyDraft"
               v-model:attachments="clarifyAttachments"
+              v-model:annotations="clarifyAnnotations"
               :input-active="clarifyInputActive"
               :sel-status="selStatus"
               @send="onClarifySend"

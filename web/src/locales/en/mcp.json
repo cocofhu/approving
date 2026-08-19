@@ -111,6 +111,10 @@
           "signature": "set_preview(port, label?)",
           "desc": "app_preview only: register preview port; returns full proxy URL"
         },
+        "set_artifact_preview": {
+          "signature": "set_artifact_preview(name)",
+          "desc": "react clarify only: pin an existing artifact to the preview tab (use demoHtml for option-by-option compare)"
+        },
         "node_complete": {
           "signature": "node_complete(status, summary?, error?, outputs?, checks?)",
           "desc": "All agent nodes: mark success|failed before finishing; default checks run first, then optional business RPC"

@@ -116,6 +116,8 @@ type Host struct {
 	// WriteArtifact (e.g. engine syncs mapped primary outputs + pending BodyMd).
 	// Nil ⇒ no-op. Must not call back into WriteArtifact.
 	afterWrite AfterWriteFunc
+	// artifactPreview pins a run artifact onto the react conversation (set_artifact_preview).
+	artifactPreview ArtifactPreviewFunc
 	// projectAudit records structured, redacted MCP tool calls into project audit.
 	// Nil ⇒ no project audit (debug McpCalls still recorded separately).
 	projectAudit ProjectAuditHook
@@ -124,6 +126,9 @@ type Host struct {
 // AfterWriteFunc is called after WriteArtifact successfully persists content.
 // runID/nodeID/name/content/kind mirror the Save arguments.
 type AfterWriteFunc func(runID, nodeID, name, content, kind string)
+
+// ArtifactPreviewFunc pins an existing artifact name onto a react conversation.
+type ArtifactPreviewFunc func(runID, nodeID, name string) error
 
 // ProjectAuditHook records a project-scoped MCP tool invocation (already
 // intended for redaction by the implementation). nodeID is ActiveNode at call time.
@@ -171,6 +176,13 @@ func (h *Host) SetActiveNodeSource(src ActiveNodeSource) { h.activeSrc = src }
 func (h *Host) SetAfterWriteArtifact(fn AfterWriteFunc) {
 	h.mu.Lock()
 	h.afterWrite = fn
+	h.mu.Unlock()
+}
+
+// SetArtifactPreviewHook wires persistence + WS notify for set_artifact_preview.
+func (h *Host) SetArtifactPreviewHook(fn ArtifactPreviewFunc) {
+	h.mu.Lock()
+	h.artifactPreview = fn
 	h.mu.Unlock()
 }
 

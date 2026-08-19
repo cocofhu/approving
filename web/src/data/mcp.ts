@@ -49,6 +49,7 @@ export const BUILTIN_MCPS: McpServer[] = [
       { name: 'set_implementation_result', signatureKey: 'mcp.artifactStore.tools.set_implementation_result.signature', descKey: 'mcp.artifactStore.tools.set_implementation_result.desc', io: 'write' },
       { name: 'get_implementation_result', signatureKey: 'mcp.artifactStore.tools.get_implementation_result.signature', descKey: 'mcp.artifactStore.tools.get_implementation_result.desc', io: 'read' },
       { name: 'set_preview', signatureKey: 'mcp.artifactStore.tools.set_preview.signature', descKey: 'mcp.artifactStore.tools.set_preview.desc', io: 'write' },
+      { name: 'set_artifact_preview', signatureKey: 'mcp.artifactStore.tools.set_artifact_preview.signature', descKey: 'mcp.artifactStore.tools.set_artifact_preview.desc', io: 'write' },
       { name: 'node_complete', signatureKey: 'mcp.artifactStore.tools.node_complete.signature', descKey: 'mcp.artifactStore.tools.node_complete.desc', io: 'write' },
       { name: 'list_run_history', signatureKey: 'mcp.artifactStore.tools.list_run_history.signature', descKey: 'mcp.artifactStore.tools.list_run_history.desc', io: 'read' },
       { name: 'get_history_detail', signatureKey: 'mcp.artifactStore.tools.get_history_detail.signature', descKey: 'mcp.artifactStore.tools.get_history_detail.desc', io: 'read' },

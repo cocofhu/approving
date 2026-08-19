@@ -35,9 +35,16 @@ describe('pickInboxClarifySession', () => {
 
   it('falls back to top-level clarify when node matches', () => {
     const run = runFixture({
-      clarify: { nodeId: 'research', turns: [], done: false },
+      clarify: { nodeId: 'research', turns: [], done: false, previewArtifact: 'note.md' },
     })
     expect(pickInboxClarifySession(run, 'research')?.done).toBe(false)
+    expect(pickInboxClarifySession(run, 'research')?.previewArtifact).toBe('note.md')
+  })
+
+  it('returns null when node does not match', () => {
+    const run = runFixture({
+      clarify: { nodeId: 'research', turns: [], done: false },
+    })
     expect(pickInboxClarifySession(run, 'other')).toBeNull()
   })
 })

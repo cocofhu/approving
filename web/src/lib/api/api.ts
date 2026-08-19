@@ -807,6 +807,7 @@ export const api = {
     return req<Run[]>(path, init)
   },
   getRun: (id: string) => req<Run>(`/runs/${id}`),
+  runArtifacts: (id: string) => req<Artifact[]>(`/runs/${id}/artifacts`),
   inboxContext: (
     runId: string,
     nodeId: string,

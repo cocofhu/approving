@@ -12,6 +12,7 @@ export const REVIEW_CANVAS_MIN = 200
 /** localStorage keys for ReviewShell desktop sidebar width (scene-isolated). */
 export const REVIEW_SHELL_WIDTH_KEY_REVIEW = 'review-shell-sidebar-width:review'
 export const REVIEW_SHELL_WIDTH_KEY_APPROVAL = 'review-shell-sidebar-width:approval'
+export const REVIEW_SHELL_WIDTH_KEY_CLARIFY = 'review-shell-sidebar-width:clarify'
 
 /** CSS width for the right panel when desktop review tab is active. */
 export function reviewRightPanelCssWidth(

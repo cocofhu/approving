@@ -35,14 +35,17 @@ const props = withDefaults(
     compact?: boolean
     /** When true, preview toolbar shows share-approval entry (Gates Inbox). */
     shareEnabled?: boolean
+    /** Console mode: show 取点标注 (sandbox-vnc already proxies inspect/pick). */
+    inspectable?: boolean
   }>(),
-  { fill: false, compact: false, shareEnabled: false },
+  { fill: false, compact: false, shareEnabled: false, inspectable: false },
 )
 
 const { t } = useI18n()
 const fpsCounter = createPreviewFpsCounter()
 
 const consoleMode = computed(() => props.sandboxId != null && props.sandboxId > 0)
+const showInspect = computed(() => !consoleMode.value || props.inspectable)
 
 const canvasHost = ref<HTMLDivElement | null>(null)
 const rootEl = ref<HTMLDivElement | null>(null)
@@ -586,6 +589,18 @@ onBeforeUnmount(() => {
       >
         {{ t('pages.sandboxConsole.novncOpen') }}
       </button>
+      <button
+        v-if="inspectable"
+        type="button"
+        class="shrink-0 rounded px-2 py-0.5 text-[11px] transition"
+        :class="inspect ? 'bg-ok/20 text-ok' : 'text-txt2 hover:bg-overlay'"
+        :title="inspectToggleLabel"
+        :aria-pressed="inspect ? 'true' : 'false'"
+        data-testid="novnc-inspect-toggle"
+        @click="toggleInspect"
+      >
+        {{ inspectToggleLabel }}
+      </button>
     </form>
 
     <div
@@ -602,7 +617,7 @@ onBeforeUnmount(() => {
       class="novnc-fs-viewport relative flex min-h-0 items-center justify-center overflow-hidden bg-base"
       :class="[
         fill ? 'flex-1' : compact ? 'h-[280px]' : 'h-[420px]',
-        !consoleMode && inspect ? 'cursor-crosshair' : '',
+        showInspect && inspect ? 'cursor-crosshair' : '',
       ]"
     >
       <!-- Console connecting / unavailable overlays (panel-local, no toast loop) -->
@@ -674,7 +689,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div
-      v-if="!consoleMode && picked"
+      v-if="showInspect && picked"
       class="shrink-0 border-t border-line bg-elevated px-3 py-2"
       data-testid="novnc-pick-result"
     >

@@ -772,3 +772,14 @@ func jsonMsg(typ, runID, nodeID string) []byte {
 	}{typ, runID, nodeID})
 	return b
 }
+
+func artifactEditMsg(runID, nodeID, name, previewArtifact string) []byte {
+	b, _ := json.Marshal(struct {
+		Type            string `json:"type"`
+		RunID           string `json:"runId"`
+		NodeID          string `json:"nodeId"`
+		Name            string `json:"name,omitempty"`
+		PreviewArtifact string `json:"previewArtifact,omitempty"`
+	}{"artifact_edit", runID, nodeID, name, previewArtifact})
+	return b
+}

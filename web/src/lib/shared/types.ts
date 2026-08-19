@@ -554,6 +554,8 @@ export interface Artifact {
   updatedAt?: string
   /** Concurrency token from GET /content or gate save; send as If-Match on save. */
   etag?: string
+  /** Same-name write_artifact overwrite count (1 on first write). */
+  revision?: number
   /** Omitted in run/inbox list responses; load via GET /api/artifacts/:id/content. */
   content?: string
 }
@@ -770,10 +772,19 @@ export interface Run {
   nodeExecutions?: Record<string, NodeRun[]>
   artifacts: Artifact[]
   gate?: Gate
-  clarify?: { nodeId: string; iteration?: number; turns: ClarifyTurn[]; done: boolean }
+  clarify?: {
+    nodeId: string
+    iteration?: number
+    turns: ClarifyTurn[]
+    done: boolean
+    previewArtifact?: string
+  }
   // Per-node react conversations, keyed by node id (a run may have several
   // react nodes). Lets each react node show its own dialogue immediately.
-  clarifyByNode?: Record<string, { nodeId: string; iteration?: number; turns: ClarifyTurn[]; done: boolean }>
+  clarifyByNode?: Record<
+    string,
+    { nodeId: string; iteration?: number; turns: ClarifyTurn[]; done: boolean; previewArtifact?: string }
+  >
   /** Authoritative busy/queue snapshots for refresh-resume (clarify + review). */
   reactSessions?: Record<
     string,

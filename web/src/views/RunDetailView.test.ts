@@ -17,6 +17,7 @@ const gatePanelSrc = read('components/run/RunGatePanel.vue')
 const logPanelSrc = read('components/run/RunLogPanel.vue')
 const sandboxPanelSrc = read('components/run/RunSandboxPanel.vue')
 const reviewPanelSrc = read('components/run/RunReviewPanel.vue')
+const clarifyPanelSrc = read('components/run/RunClarifyPanel.vue')
 const liveLogSrc = read('lib/run/useRunDetailLiveLog.ts')
 const wsSrc = read('lib/run/useRunDetailWs.ts')
 const selectionSrc = read('lib/run/useRunDetailSelection.ts')
@@ -404,11 +405,23 @@ describe('RunDetailView clarify session narrow update (g3.2)', () => {
     expect(src).toMatch(/function isClarifySessionBusy\(/)
     // All four event types share one busy gate (review v3) — not react-only.
     expect(src).toMatch(
-      /m\.type === 'trace'[\s\S]*?m\.type === 'status'[\s\S]*?m\.type === 'react'[\s\S]*?m\.type === 'artifact_edit'[\s\S]*?if \(isClarifySessionBusy\(\)\) return/,
+      /m\.type === 'trace'[\s\S]*?m\.type === 'status'[\s\S]*?m\.type === 'react'[\s\S]*?m\.type === 'artifact_edit'[\s\S]*?if \(isClarifySessionBusy\(\)/,
     )
+    expect(src).toMatch(/if \(m\.type === 'artifact_edit'\) refreshArtifactPreview/)
     expect(src).toMatch(/if \(isClarifySessionBusy\(\)\) return/)
     expect(src).toMatch(/liveBusy\[m\.nodeId\] = true/)
     expect(src).toMatch(/m\.event === 'turn_begin'/)
+  })
+})
+
+describe('RunDetailView react artifact stage', () => {
+  it('keeps clarify annotations on the panel and stage annotatable while input is active', () => {
+    expect(viewSrc).toMatch(/v-model:annotations="clarifyAnnotations"/)
+    expect(clarifyPanelSrc).toMatch(/:annotatable="inputActive"/)
+    expect(clarifyPanelSrc).toMatch(/:node-id="nodeId"/)
+    expect(clarifyPanelSrc).toMatch(/annotate-enabled/)
+    expect(clarifyPanelSrc).toMatch(/v-model:annotations="annotations"/)
+    expect(clarifyPanelSrc).toMatch(/ReactArtifactStage/)
   })
 })
 

@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/cocofhu/approving/internal/mcp"
@@ -91,6 +92,9 @@ func TestArtifactContentReturnsETag(t *testing.T) {
 	}
 	if w.Header().Get("ETag") == "" {
 		t.Fatal("missing ETag header")
+	}
+	if !strings.Contains(w.Body.String(), `"revision":1`) {
+		t.Fatalf("artifact content should include revision, got %s", w.Body.String())
 	}
 }
 

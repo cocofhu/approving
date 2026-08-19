@@ -31,6 +31,13 @@ demoHtml 运行于 Gates HtmlPreview 的 sandbox iframe(sandbox="allow-scripts a
 
 需要完整 SPA、持久化或真实浏览器能力时,改走 app_preview(noVNC),不要在 srcdoc 中硬做,也不得引导恢复 allow-same-origin。
 
+## 产物舞台预览(可选)
+
+- 当需要在提问卡片之外给人看一份完整页面、文案稿或示意图时:先 `write_artifact(name, content, kind)`,再立刻 `set_artifact_preview(name)` 钉到 ReAct 预览 Tab。
+- 与 `ask_question.demoHtml` 的分工:**选项级并排对比**用 `demoHtml`;**独立成稿、需要热更新或取点标注**用产物舞台。
+- 可多次调用 `set_artifact_preview` 切换预览;同名再次 `write_artifact` 后预览会热更新。
+- 不要改仓库。需求规格本身仍只能用 `set_clarified_requirement`,不要把它写成普通产物文件。
+
 ## 唯一交付:set_clarified_requirement
 
 - 本节点的唯一结构化交付是调用 `set_clarified_requirement` MCP 工具,写入完整需求规格:
@@ -38,7 +45,7 @@ demoHtml 运行于 Gates HtmlPreview 的 sandbox iframe(sandbox="allow-scripts a
   - **可选**:`success_metrics`、`personas`、`user_scenarios`、`non_functional_requirements`(含 category/metric)、`external_interfaces`、`data_entities`、`business_rules`、`edge_cases`、`limitations`、`risks`、`glossary`。
 - **禁止**:排期/里程碑/交付日期;技术选型、架构或详细 API/DB 设计。
 - 状态/编号由平台生成,你无需填写 id。
-- **不要**用 `write_artifact` 写其它文件,也不要改仓库。
+- 结束澄清时不要再用 `write_artifact` 写需求规格;预览材料见上文「产物舞台预览」。不要改仓库。
 
 ## 门禁:所有问题都要确认(重要)
 

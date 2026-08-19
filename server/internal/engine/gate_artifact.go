@@ -301,12 +301,17 @@ func IsArtifactConflict(err error) bool {
 }
 
 // syncAfterPrimaryArtifactWrite is the MCP WriteArtifact post-Save hook.
-// For mapped primary products (page.html, research.json, …) during review or
-// waiting_human, it syncs the bound iteration's StateRun.outputs, refreshes
-// pending gate BodyMd, and publishes artifact_edit — symmetric with
-// SaveGateArtifact. Non-primary names and in-flight first runs are ignored.
-// Save failures never reach this hook (Host only calls it after successful Save).
+// Every successful write publishes artifact_edit (name included) so the ReAct
+// preview tab can hot-reload. Mapped primary products (page.html, research.json, …)
+// during review or waiting_human additionally sync StateRun.outputs and refresh
+// pending gate BodyMd — symmetric with SaveGateArtifact. Non-primary names and
+// in-flight first runs skip that output sync. Save failures never reach this hook.
+// The opening Publish is the only artifact_edit for this write (do not emit a
+// second nameless frame — busy UIs would refetch the artifact list twice).
 func (e *Engine) syncAfterPrimaryArtifactWrite(runID, nodeID, name, content, kind string) {
+	if nodeID != "" {
+		e.broker.Publish(runID, artifactEditMsg(runID, nodeID, name, ""))
+	}
 	outKey, mapped := gatenode.ArtifactToOutputKey[name]
 	if !mapped || nodeID == "" {
 		return
@@ -353,7 +358,6 @@ func (e *Engine) syncAfterPrimaryArtifactWrite(runID, nodeID, name, content, kin
 	}
 	c.nodeOutputs[nodeID] = outs
 	e.refreshPendingGatesForProducer(c, nodeID)
-	e.broker.Publish(runID, jsonMsg("artifact_edit", runID, nodeID))
 	_ = kind // kind reserved for future etag/content-type signals
 }
 

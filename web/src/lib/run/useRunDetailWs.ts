@@ -46,6 +46,7 @@ export function useRunDetailWs(opts: {
   maybePollSandboxForBoot: () => void
   isClarifySessionBusy: () => boolean
   loadRun: (hard?: boolean) => Promise<void> | void
+  refreshArtifactPreview?: (frame?: { previewArtifact?: string }) => void
 }) {
   const {
     runId,
@@ -67,6 +68,7 @@ export function useRunDetailWs(opts: {
     maybePollSandboxForBoot,
     isClarifySessionBusy,
     loadRun,
+    refreshArtifactPreview,
   } = opts
 
   /**
@@ -431,7 +433,10 @@ export function useRunDetailWs(opts: {
         // Mid-clarify: review/acp frames project the session — skip full-page rebind for
         // react/status/trace/artifact_edit alike (g3.2 / review v3).
         // Soft-refresh path unchanged (g2.3).
-        if (isClarifySessionBusy()) return
+        if (isClarifySessionBusy()) {
+          if (m.type === 'artifact_edit') refreshArtifactPreview?.(m)
+          return
+        }
         if (m.type === 'status') liveNode.value = null
         loadRun(false)
       }

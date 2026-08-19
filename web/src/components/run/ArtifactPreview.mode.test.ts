@@ -29,6 +29,7 @@ vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), warn: vi.fn() }),
 }))
 
+import type { Artifact } from '@/lib/shared/types'
 import ArtifactPreview from './ArtifactPreview.vue'
 
 const clarifiedDoc = {
@@ -62,7 +63,7 @@ const artB = {
 }
 
 function mountPreview(
-  artifact: typeof artA | null,
+  artifact: Artifact | null,
   extra: Record<string, unknown> = {},
 ) {
   const i18n = createI18n({
@@ -76,7 +77,10 @@ function mountPreview(
       plugins: [i18n],
       stubs: {
         Icon: true,
-        HtmlPreview: true,
+        HtmlPreview: {
+          props: ['html', 'inspectable'],
+          template: '<div data-testid="html-preview-stub" :data-inspectable="inspectable ? \'1\' : \'0\'" />',
+        },
         StructuredArtifactView: {
           props: ['name', 'doc'],
           template: '<div data-testid="structured-stub">{{ doc?.title }}</div>',
@@ -171,5 +175,138 @@ describe('ArtifactPreview structured mode + capability trim', () => {
     expect(wrapper.find('[data-testid="artifact-preview-copy"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="artifact-preview-zoom"]').exists()).toBe(true)
     wrapper.unmount()
+  })
+})
+
+describe('ArtifactPreview annotate', () => {
+  it('turns on HTML inspect when annotatable and a review channel is provided', async () => {
+    const { defineComponent, h } = await import('vue')
+    const { provideReviewAnnotate } = await import('@/lib/inbox/reviewAnnotate')
+    const annotate = vi.fn()
+    const htmlArt = {
+      ...artA,
+      id: 'art-html',
+      name: 'page.html',
+      kind: 'html' as const,
+      content: '<!doctype html><html><body>hi</body></html>',
+    }
+    const Host = defineComponent({
+      setup() {
+        provideReviewAnnotate({
+          get enabled() {
+            return true
+          },
+          annotate,
+        })
+        return () =>
+          h(ArtifactPreview, {
+            artifact: htmlArt,
+            annotatable: true,
+            hideDelete: true,
+          })
+      },
+    })
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const wrapper = mount(Host, {
+      global: {
+        plugins: [i18n],
+        stubs: {
+          Icon: true,
+          HtmlPreview: {
+            props: ['html', 'inspectable'],
+            template: '<div data-testid="html-preview-stub" :data-inspectable="inspectable ? \'1\' : \'0\'" />',
+          },
+          AppModal: true,
+          AppButton: true,
+          SelectionAddToChat: true,
+        },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="html-preview-stub"]').attributes('data-inspectable')).toBe('1')
+    wrapper.unmount()
+  })
+
+  it('keeps HTML inspect off without annotatable', async () => {
+    const htmlArt = {
+      ...artA,
+      id: 'art-html-2',
+      name: 'page.html',
+      kind: 'html' as const,
+      content: '<!doctype html><html><body>hi</body></html>',
+    }
+    const wrapper = mountPreview(htmlArt)
+    await flushPromises()
+    expect(wrapper.get('[data-testid="html-preview-stub"]').attributes('data-inspectable')).toBe('0')
+    wrapper.unmount()
+  })
+
+  it('turns on markdown/json quote annotate when annotatable', async () => {
+    const { defineComponent, h } = await import('vue')
+    const { provideReviewAnnotate } = await import('@/lib/inbox/reviewAnnotate')
+    const mdArt = {
+      ...artA,
+      id: 'art-md',
+      name: 'copy.md',
+      kind: 'markdown' as const,
+      content: '# hello\n\nworld',
+    }
+    const jsonArt = {
+      ...artA,
+      id: 'art-json',
+      name: 'notes.json',
+      kind: 'json' as const,
+      content: '{"title":"notes"}',
+    }
+    const Host = defineComponent({
+      props: { artifact: { type: Object, required: true } },
+      setup(p) {
+        provideReviewAnnotate({
+          get enabled() {
+            return true
+          },
+          annotate: vi.fn(),
+        })
+        return () =>
+          h(ArtifactPreview, {
+            artifact: p.artifact as typeof mdArt,
+            annotatable: true,
+            hideDelete: true,
+          })
+      },
+    })
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const stubs = {
+      Icon: true,
+      HtmlPreview: true,
+      StructuredArtifactView: true,
+      SelectionAddToChat: {
+        props: ['enabled'],
+        template: '<div data-testid="quote-annotate-stub" :data-enabled="enabled ? \'1\' : \'0\'" />',
+      },
+    }
+    const md = mount(Host, {
+      props: { artifact: mdArt },
+      global: { plugins: [i18n], stubs },
+    })
+    await flushPromises()
+    expect(md.get('[data-testid="quote-annotate-stub"]').attributes('data-enabled')).toBe('1')
+    md.unmount()
+
+    const json = mount(Host, {
+      props: { artifact: jsonArt },
+      global: { plugins: [i18n], stubs },
+    })
+    await flushPromises()
+    expect(json.get('[data-testid="quote-annotate-stub"]').attributes('data-enabled')).toBe('1')
+    json.unmount()
   })
 })

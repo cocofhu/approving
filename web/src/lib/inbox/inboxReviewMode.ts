@@ -5,6 +5,7 @@ export type InboxClarifySession = {
   iteration?: number
   turns: ClarifyTurn[]
   done: boolean
+  previewArtifact?: string
 }
 
 /** Resolve the open clarify/review session for an inbox item's node. */

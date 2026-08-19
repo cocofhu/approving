@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/cocofhu/approving/internal/mcp/structured"
 	"github.com/cocofhu/approving/internal/models"
@@ -215,6 +216,30 @@ func (h *Host) runTool(runID, token, name string, args map[string]any) (string, 
 			return "set_preview failed: " + err.Error(), true
 		}
 		return fmt.Sprintf("ok: 预览已注册,代理 URL: %s", url), false
+	case "set_artifact_preview":
+		if !h.authorize(runID, token) {
+			return "set_artifact_preview failed: " + ErrUnauthorized.Error(), true
+		}
+		if h.ActiveNodeType(runID) != "react" {
+			return "set_artifact_preview 仅在澄清(react)节点可用,当前节点不支持。", true
+		}
+		aname := strings.TrimSpace(asString(args["name"]))
+		if aname == "" {
+			return "set_artifact_preview failed: 'name' is required", true
+		}
+		if _, ok := h.store.Get(runID, aname); !ok {
+			return "set_artifact_preview failed: 产物不存在: " + aname, true
+		}
+		nodeID := h.ActiveNode(runID)
+		h.mu.RLock()
+		hook := h.artifactPreview
+		h.mu.RUnlock()
+		if hook != nil {
+			if err := hook(runID, nodeID, aname); err != nil {
+				return "set_artifact_preview failed: " + err.Error(), true
+			}
+		}
+		return fmt.Sprintf("ok: 已设置产物预览 %q", aname), false
 	case "node_complete":
 		return h.nodeComplete(runID, token, args)
 	default:
@@ -599,7 +624,8 @@ func artifactTools() []map[string]any {
 		{
 			"name": "set_clarified_requirement",
 			"description": "仅澄清(react)节点可用:写入结构化需求规格(对齐 ISO/IEC/IEEE 29148 SRS 与 PRD 子集,澄清阶段产物)。" +
-				"这是澄清节点的唯一交付,信息充分后调用它结束澄清,不要再写其它产物。" +
+				"这是澄清节点的唯一结构化交付,信息充分后调用它结束澄清。" +
+				"视觉/文案预览材料应 write_artifact 后立刻 set_artifact_preview,不要把需求规格写成普通产物文件。" +
 				"澄清是门禁:调用前所有不确定的点都应已通过 ask_question 让用户确认,open_questions 必须为空,否则平台会驳回并要求继续澄清。" +
 				"禁止写入排期/里程碑/交付日期,禁止写入技术选型、架构或详细 API/DB 设计(留给调研/方案节点)。",
 			"inputSchema": map[string]any{
@@ -812,6 +838,19 @@ func artifactTools() []map[string]any {
 					"label": strProp("可选:UI 标签,如「前端」「API」"),
 				},
 				"required": []string{"port"},
+			},
+		},
+		{
+			"name": "set_artifact_preview",
+			"description": "仅澄清(react)节点可用:把已写入的产物钉到 ReAct 界面预览 Tab。" +
+				"参数 name 为 list_artifacts / write_artifact 中的产物名,必须已存在。可多次调用切换预览;同名再次 write_artifact 后预览会热更新。" +
+				"与 ask_question.demoHtml 分工:选项级并排对比用 demoHtml;独立成稿、需热更新或取点标注用本工具。",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"name": strProp("要预览的产物名(必填,须已存在)"),
+				},
+				"required": []string{"name"},
 			},
 		},
 		{

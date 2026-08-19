@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -60,11 +61,11 @@ func TestMCPDispatcher(t *testing.T) {
 		t.Fatalf("initialize result missing protocolVersion: %v", init)
 	}
 
-	// tools/list: 7 core + 2 history + 12 structured + set_preview.
+	// tools/list: 7 core + 2 history + 12 structured + set_preview + set_artifact_preview.
 	list := call(t, h, runID, tok, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
 	tools, _ := list["result"].(map[string]any)["tools"].([]any)
-	if len(tools) != 23 {
-		t.Fatalf("expected 23 tools, got %d", len(tools))
+	if len(tools) != 24 {
+		t.Fatalf("expected 24 tools, got %d", len(tools))
 	}
 
 	// tools/call write_artifact
@@ -336,5 +337,52 @@ func TestStructuredTools(t *testing.T) {
 	revF0, _ := findings[0].(map[string]any)
 	if revF0["severity"] != "critical" {
 		t.Fatalf("review findings not severity-sorted: %+v", findings)
+	}
+}
+
+func TestSetArtifactPreview(t *testing.T) {
+	store := &memStore{}
+	h := NewHost(store)
+	runID := "run-preview"
+	tok := h.RegisterRun(runID)
+
+	h.SetActiveNode(runID, "n", "agent")
+	if _, isErr := toolText(t, call(t, h, runID, tok, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"set_artifact_preview","arguments":{"name":"page.html"}}}`)); !isErr {
+		t.Fatal("set_artifact_preview on non-react node should fail")
+	}
+
+	h.SetActiveNode(runID, "c1", "react")
+	if _, isErr := toolText(t, call(t, h, runID, tok, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"set_artifact_preview","arguments":{}}}`)); !isErr {
+		t.Fatal("set_artifact_preview without name should fail")
+	}
+	if _, isErr := toolText(t, call(t, h, runID, tok, `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"set_artifact_preview","arguments":{"name":"missing.html"}}}`)); !isErr {
+		t.Fatal("set_artifact_preview for missing artifact should fail")
+	}
+
+	call(t, h, runID, tok, `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"write_artifact","arguments":{"name":"page.html","content":"<html/>","kind":"html"}}}`)
+	got := ""
+	h.SetArtifactPreviewHook(func(rid, nodeID, name string) error {
+		got = rid + "|" + nodeID + "|" + name
+		return nil
+	})
+	txt, isErr := toolText(t, call(t, h, runID, tok, `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"set_artifact_preview","arguments":{"name":"page.html"}}}`))
+	if isErr {
+		t.Fatalf("set_artifact_preview should succeed: %s", txt)
+	}
+	if got != "run-preview|c1|page.html" {
+		t.Fatalf("hook got %q", got)
+	}
+
+	if _, isErr := toolText(t, call(t, h, runID, tok, `{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"set_artifact_preview","arguments":{"name":"   "}}}`)); !isErr {
+		t.Fatal("set_artifact_preview with blank name should fail")
+	}
+
+	h.SetArtifactPreviewHook(func(rid, nodeID, name string) error {
+		return fmt.Errorf("pin failed")
+	})
+	if txt, isErr := toolText(t, call(t, h, runID, tok, `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"set_artifact_preview","arguments":{"name":"page.html"}}}`)); !isErr {
+		t.Fatal("set_artifact_preview should surface hook errors")
+	} else if !strings.Contains(txt, "pin failed") {
+		t.Fatalf("hook error text=%q", txt)
 	}
 }

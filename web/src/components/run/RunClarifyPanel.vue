@@ -1,27 +1,42 @@
 <script setup lang="ts">
 /**
- * Run 详情「澄清」面板壳：失败态 / ClarifyChat / BootLoader。
+ * Run 详情「澄清」面板壳：OpenDesign 产物舞台 + ReAct 聊天。
  */
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import ClarifyChat from '@/components/run/ClarifyChat.vue'
 import ClarifyBootLoader from '@/components/run/ClarifyBootLoader.vue'
+import ReviewShell from '@/components/run/ReviewShell.vue'
+import ReactArtifactStage from '@/components/run/ReactArtifactStage.vue'
+import {
+  REVIEW_SIDEBAR,
+  REVIEW_SHELL_WIDTH_KEY_CLARIFY,
+} from '@/lib/inbox/reviewLayoutBudget'
 import type {
   ClarifyImage,
   ClarifyTurn,
   NodeRunStatus,
   ReactAnnotation,
+  Run,
 } from '@/lib/shared/types'
 
-defineProps<{
+const props = defineProps<{
   sandboxFailed: boolean
   nodeLabel: string
   nodeId: string
   nodeError?: string | null
-  clarify: { nodeId: string; iteration?: number; turns: ClarifyTurn[]; done: boolean } | null
+  clarify: {
+    nodeId: string
+    iteration?: number
+    turns: ClarifyTurn[]
+    done: boolean
+    previewArtifact?: string
+  } | null
   runId: string
+  run?: Run | null
+  mobile?: boolean
   draft: string
   attachments: ClarifyImage[]
   inputActive: boolean
@@ -36,6 +51,8 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
+const annotations = defineModel<ReactAnnotation[]>('annotations', { default: () => [] })
+
 const { t } = useI18n()
 
 const reviewChatRef = ref<{
@@ -45,6 +62,9 @@ const reviewChatRef = ref<{
   isSessionBusy?: () => boolean
   isChatReady?: () => boolean
 } | null>(null)
+
+const artifacts = computed(() => props.run?.artifacts || [])
+const previewArtifact = computed(() => props.clarify?.previewArtifact || '')
 
 defineExpose({
   applyReviewFrame: (frame: any) => reviewChatRef.value?.applyReviewFrame?.(frame),
@@ -77,22 +97,43 @@ defineExpose({
     </div>
     <p class="text-[11px] text-txt3">{{ t('pages.runDetail.clarifyFailed.hint') }}</p>
   </div>
-  <ClarifyChat
-    v-else-if="clarify"
-    ref="reviewChatRef"
-    :run-id="runId"
-    :node-id="clarify.nodeId"
-    :iteration="clarify.iteration ?? 1"
-    :draft="draft"
-    :attachments="attachments"
-    :turns="clarify.turns"
-    :done="clarify.done"
-    :active="inputActive"
-    @update:draft="emit('update:draft', $event)"
-    @update:attachments="emit('update:attachments', $event)"
-    @send="(text: string, images: ClarifyImage[], anns: ReactAnnotation[]) => emit('send', text, images, anns)"
-    @finish="emit('finish')"
-    @cancel="emit('cancel')"
-  />
-  <ClarifyBootLoader v-else :phase="selStatus === 'pending' ? 'pending' : 'starting'" />
+  <ReviewShell
+    v-else
+    class="h-full min-h-0"
+    :mobile="mobile"
+    :sidebar-width="REVIEW_SIDEBAR"
+    :storage-key="REVIEW_SHELL_WIDTH_KEY_CLARIFY"
+  >
+    <template #stage>
+      <ReactArtifactStage
+        :artifacts="artifacts"
+        :preview-artifact="previewArtifact"
+        :run-id="runId"
+        :node-id="nodeId"
+        :annotatable="inputActive"
+      />
+    </template>
+    <template #sidebar>
+      <ClarifyChat
+        v-if="clarify"
+        ref="reviewChatRef"
+        :run-id="runId"
+        :node-id="clarify.nodeId"
+        :iteration="clarify.iteration ?? 1"
+        :draft="draft"
+        :attachments="attachments"
+        :turns="clarify.turns"
+        :done="clarify.done"
+        :active="inputActive"
+        annotate-enabled
+        v-model:annotations="annotations"
+        @update:draft="emit('update:draft', $event)"
+        @update:attachments="emit('update:attachments', $event)"
+        @send="(text: string, images: ClarifyImage[], anns: ReactAnnotation[]) => emit('send', text, images, anns)"
+        @finish="emit('finish')"
+        @cancel="emit('cancel')"
+      />
+      <ClarifyBootLoader v-else :phase="selStatus === 'pending' ? 'pending' : 'starting'" />
+    </template>
+  </ReviewShell>
 </template>

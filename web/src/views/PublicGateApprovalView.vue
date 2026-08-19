@@ -7,6 +7,7 @@ import AppModal from '@/components/ui/AppModal.vue'
 import ReviewShell from '@/components/run/ReviewShell.vue'
 import ClarifyChat from '@/components/run/ClarifyChat.vue'
 import StructuredArtifactView from '@/components/run/StructuredArtifactView.vue'
+import ReactArtifactStage from '@/components/run/ReactArtifactStage.vue'
 import PublicAppPreviewPanel from '@/components/run/PublicAppPreviewPanel.vue'
 import { applyPublicLocale } from '@/lib/shared/locale'
 import { reapplyThemeChrome } from '@/lib/shared/theme'
@@ -30,7 +31,7 @@ import {
   type PublicGatePreviewKnown,
   type PublicGateQueueItem,
 } from '@/lib/inbox/gateShareLink'
-import type { AcpEvent, ClarifyImage, ClarifyTurn, ReactAnnotation } from '@/lib/shared/types'
+import type { AcpEvent, Artifact, ClarifyImage, ClarifyTurn, ReactAnnotation } from '@/lib/shared/types'
 
 type PublicChatRef = {
   discardLastQueued?: () => void
@@ -150,12 +151,49 @@ const confirmDisabled = computed(
 )
 const showDecideFields = computed(() => showConfirm.value || canReject.value || linkInvalid.value)
 const productKind = computed(() => preview.value?.productKind || inferProductKind())
+const isPublicReact = computed(() => preview.value?.nodeType === 'react')
+const publicReactArtifacts = computed<Artifact[]>(() => {
+  const p = preview.value
+  if (!p) return []
+  const out: Artifact[] = []
+  if (p.visualHtml) {
+    out.push({
+      id: 'public-visual',
+      name: p.productKind === 'visual' && p.productName ? p.productName : 'page.html',
+      kind: 'html',
+      nodeId: 'public',
+      runId: 'public-share',
+      workflowName: '',
+      sizeBytes: p.visualHtml.length,
+      createdAt: '',
+      content: p.visualHtml,
+      revision: 1,
+    })
+  }
+  if (p.structured?.doc || p.structured?.name) {
+    const raw = JSON.stringify(p.structured.doc || {})
+    out.push({
+      id: 'public-structured',
+      name: p.structured?.name || p.productName || 'clarified_requirement.json',
+      kind: 'json',
+      nodeId: 'public',
+      runId: 'public-share',
+      workflowName: '',
+      sizeBytes: raw.length,
+      createdAt: '',
+      content: raw,
+      revision: 1,
+    })
+  }
+  return out
+})
+const publicPreviewName = computed(() => publicReactArtifacts.value[0]?.name || '')
 const productName = computed(() => preview.value?.productName || preview.value?.structured?.name || '')
 const inspectable = computed(
   () =>
     isActive.value &&
     reactAlive.value &&
-    (productKind.value === 'visual' || productKind.value === 'app_preview'),
+    (productKind.value === 'visual' || productKind.value === 'app_preview' || isPublicReact.value),
 )
 const appPreviewPorts = computed(() => preview.value?.ports || [])
 const turns = computed<ClarifyTurn[]>(() =>
@@ -1049,7 +1087,15 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
     <div v-else class="flex min-h-0 flex-1 flex-col" data-testid="public-gate-workbench">
       <ReviewShell class="min-h-0 flex-1" :mobile="isMobile">
         <template #stage>
-          <section class="flex min-h-0 flex-1 flex-col" data-testid="public-gate-stage">
+          <ReactArtifactStage
+            v-if="isPublicReact"
+            :artifacts="publicReactArtifacts"
+            :preview-artifact="publicPreviewName"
+            inline-content
+            :annotatable="inspectable"
+            data-testid="public-gate-react-stage"
+          />
+          <section v-else class="flex min-h-0 flex-1 flex-col" data-testid="public-gate-stage">
             <div class="flex shrink-0 items-baseline gap-2 border-b border-line px-4 py-2">
               <h2 class="text-sm font-semibold" data-testid="public-gate-product-label">{{ productLabel }}</h2>
               <span v-if="productName" class="text-[11px] text-txt3" data-testid="public-gate-product-name">{{ productName }}</span>

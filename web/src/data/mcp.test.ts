@@ -3,8 +3,8 @@ import { BUILTIN_MCPS } from './mcp'
 import { i18n } from '@/lib/shared/i18n'
 import { loadLocaleMessages } from '@/lib/shared/loadLocaleMessages'
 
-const ARTIFACT_TOOL_COUNT = 23
-const ARTIFACT_REQUIRED_TOOLS = ['list_run_history', 'get_history_detail', 'node_complete'] as const
+const ARTIFACT_TOOL_COUNT = 24
+const ARTIFACT_REQUIRED_TOOLS = ['list_run_history', 'get_history_detail', 'node_complete', 'set_artifact_preview'] as const
 
 const CATALOG = [
   {
@@ -105,7 +105,7 @@ beforeAll(async () => {
 describe('BUILTIN_MCPS artifact-store catalog', () => {
   const store = BUILTIN_MCPS.find((m) => m.id === 'artifact-store')
 
-  it('exposes artifact-store with N=23 tools including history and node_complete', () => {
+  it('exposes artifact-store with N=24 tools including history and node_complete', () => {
     expect(store).toBeDefined()
     expect(store!.scope).toBe('run')
     expect(store!.tools).toHaveLength(ARTIFACT_TOOL_COUNT)

@@ -28,6 +28,7 @@ export type ClarifyInboxContext = {
     turns: ClarifyTurn[]
     done: boolean
     label: string
+    previewArtifact?: string
   }
 }
 
@@ -72,6 +73,7 @@ export function adaptInboxContextToRun(ctx: InboxContextResponse, runId: string)
         iteration: ctx.clarify.iteration,
         turns: ctx.clarify.turns,
         done: ctx.clarify.done,
+        previewArtifact: ctx.clarify.previewArtifact,
       },
     },
   }

@@ -2456,6 +2456,27 @@
       "chipTruncated": "Truncated",
       "removeChip": "Remove reference"
     },
+    "reactArtifactStage": {
+      "pipelineTab": "Pipeline artifacts",
+      "previewTab": "Artifact preview",
+      "closeTab": "Close",
+      "novncTab": "noVNC",
+      "novncCardTitle": "Remote desktop",
+      "novncCardMeta": "Sandbox browser · pick to annotate",
+      "novncMissing": "This node has no sandbox, so noVNC cannot open.",
+      "previewEmptyTitle": "No artifact selected",
+      "previewEmpty": "Pick a card in Pipeline artifacts, or wait for the agent to pin one with set_artifact_preview.",
+      "gridEmpty": "This run has no artifacts yet",
+      "kindHtml": "HTML page",
+      "kindJson": "JSON",
+      "kindMarkdown": "Markdown",
+      "kindYaml": "YAML",
+      "kindImage": "Image",
+      "kindText": "Text",
+      "kindFile": "File",
+      "revision": "v{n}",
+      "meta": "{kind} · v{n} · {time}"
+    },
     "reviewShell": {
       "drawerHandle": "Review drawer · drag to resize",
       "resizeSash": "Drag to resize sidebar · double-click to reset"
