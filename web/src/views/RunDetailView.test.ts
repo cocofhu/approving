@@ -325,6 +325,13 @@ describe('RunDetailView desktop outer sash layout (clarify|review)', () => {
     expect(viewSrc).toMatch(/outerSashStorageKey/)
     expect(viewSrc).toMatch(/fullOpen/)
   })
+
+  it('moves view-mode switcher off the outer sash hit target when full-open', () => {
+    expect(viewSrc).toMatch(/data-testid="run-detail-view-mode-switcher"/)
+    expect(viewSrc).toMatch(/outerFullOpen/)
+    expect(viewSrc).toMatch(/md:left-5 md:z-\[1\]/)
+    expect(viewSrc).toMatch(/md:left-3 md:z-10/)
+  })
 })
 
 describe('RunDetailView mobile timeline view contract', () => {

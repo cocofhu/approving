@@ -1408,7 +1408,13 @@ function selectExecution(nodeId: string, idx: number) {
       >
       <!-- View mode switcher: always visible so mobile can open stats. -->
       <div
-        class="flex shrink-0 items-center gap-2 border-b border-line bg-surface px-3 py-2 md:absolute md:left-3 md:top-3 md:z-10 md:border-0 md:bg-transparent md:p-0"
+        data-testid="run-detail-view-mode-switcher"
+        class="flex shrink-0 items-center gap-2 border-b border-line bg-surface px-3 py-2 md:absolute md:top-3 md:border-0 md:bg-transparent md:p-0"
+        :class="
+          outerFullOpen
+            ? 'md:left-5 md:z-[1]'
+            : 'md:left-3 md:z-10'
+        "
       >
         <div class="inline-flex rounded-lg border border-line bg-surface/90 p-0.5 text-[12px] backdrop-blur">
           <button
