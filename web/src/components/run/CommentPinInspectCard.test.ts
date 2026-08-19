@@ -72,4 +72,40 @@ describe('CommentPinInspectCard', () => {
     expect(rows.text()).toContain('159.3px')
     wrapper.unmount()
   })
+
+  it('locks Demo dark elevated tokens even when html.light is set (g1.1/g1.3)', () => {
+    document.documentElement.classList.add('light')
+    const lightOverride = document.createElement('style')
+    lightOverride.textContent =
+      'html.light{--c-elevated:244 244 245;--c-base:250 250 251;--c-txt:24 24 27;--c-txt2:82 82 91;--c-txt3:161 161 170;}'
+    document.head.appendChild(lightOverride)
+    const wrapper = mountCard()
+    const card = wrapper.get('[data-testid="comment-pin-inspect-card"]').element as HTMLElement
+    expect(card.classList.contains('comment-pin-inspect-card')).toBe(true)
+    expect(card.style.getPropertyValue('--c-elevated').trim()).toBe('28 28 33')
+    expect(card.style.getPropertyValue('--c-base').trim()).toBe('10 10 11')
+    expect(card.style.getPropertyValue('--c-txt').trim()).toBe('237 237 240')
+    expect(card.style.getPropertyValue('--c-txt2').trim()).toBe('161 161 170')
+    expect(card.style.getPropertyValue('--c-txt3').trim()).toBe('110 110 120')
+    expect(card.style.getPropertyValue('--c-line').trim()).toBe('38 38 43')
+    expect(card.style.getPropertyValue('--c-line-strong').trim()).toBe('54 54 62')
+    expect(wrapper.find('[data-testid="comment-pin-save"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="comment-pin-send-chat"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="comment-pin-input"]').exists()).toBe(true)
+    wrapper.unmount()
+    lightOverride.remove()
+    document.documentElement.classList.remove('light')
+  })
+
+  it('keeps dashed thumb at h-11 and allows pin without screenshot (g2.3/g3.2)', async () => {
+    const wrapper = mountCard({ screenshotMissing: true, imageDataUrl: '' })
+    const thumb = wrapper.get('[data-testid="comment-pin-thumb"]')
+    expect(thumb.classes()).toContain('h-11')
+    expect(thumb.classes()).toContain('border-dashed')
+    expect(thumb.text()).toContain('无截图')
+    await wrapper.find('[data-testid="comment-pin-input"]').setValue('仍可落钉')
+    await wrapper.find('[data-testid="comment-pin-save"]').trigger('click')
+    expect(wrapper.emitted('save')?.[0]).toEqual(['仍可落钉'])
+    wrapper.unmount()
+  })
 })

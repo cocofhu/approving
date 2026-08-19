@@ -34,6 +34,25 @@ const left = ref(8)
 
 const canSubmit = computed(() => comment.value.trim().length > 0)
 
+/** Demo dark elevated surface; wins over html.light token inheritance. */
+const DEMO_DARK_SURFACE_VARS = {
+  '--c-base': '10 10 11',
+  '--c-elevated': '28 28 33',
+  '--c-line': '38 38 43',
+  '--c-line-strong': '54 54 62',
+  '--c-txt': '237 237 240',
+  '--c-txt2': '161 161 170',
+  '--c-txt3': '110 110 120',
+  '--shadow-card': '0 1px 2px 0 rgba(0, 0, 0, 0.4), 0 1px 3px 0 rgba(0, 0, 0, 0.25)',
+} as const
+
+const cardStyle = computed(() => ({
+  top: `${top.value}px`,
+  left: `${left.value}px`,
+  colorScheme: 'dark' as const,
+  ...DEMO_DARK_SURFACE_VARS,
+}))
+
 type StyleRow = { label: string; value: string; swatch?: string }
 
 function cssColorToHex(value: string | undefined): string | null {
@@ -173,8 +192,8 @@ defineExpose({ placeCardNear })
   <div
     v-show="open"
     ref="cardRef"
-    class="absolute z-20 flex max-h-[calc(100%-24px)] w-[320px] flex-col border border-line-strong bg-elevated shadow-[var(--shadow-card)]"
-    :style="{ top: top + 'px', left: left + 'px' }"
+    class="comment-pin-inspect-card absolute z-20 flex max-h-[calc(100%-24px)] w-[320px] flex-col border border-line-strong bg-elevated shadow-[var(--shadow-card)]"
+    :style="cardStyle"
     data-testid="comment-pin-inspect-card"
     role="dialog"
     :aria-label="t('pages.gateApproval.commentPins.inspectTitle')"

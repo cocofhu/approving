@@ -197,6 +197,21 @@ describe('injectInlineInspectScript', () => {
     expect(result).toContain('Stay in inspect after pick')
     expect(result.indexOf(TEST_ID)).toBeLessThan(result.toLowerCase().indexOf('</body>'))
   })
+
+  it('derives opaque ancestor fill and does not hardcode wrapper/canvas #fff (g2.1/g2.2/g3.1)', () => {
+    const result = injectInlineInspectScript('<body></body>', TEST_ID)
+    expect(result).toContain('function resolveOpaqueFillColor')
+    expect(result).toContain('function isOpaqueFillColor')
+    expect(result).toContain('backgroundImage')
+    expect(result).toContain('var pad=6')
+    expect(result).toContain('innerW+2*pad')
+    expect(result).toContain('ctx.fillStyle=fill')
+    expect(result).toContain("background:'+fill")
+    expect(result).not.toContain('background:#fff')
+    expect(result).not.toContain("fillStyle='#fff'")
+    expect(result).not.toContain('fillStyle="#fff"')
+    expect(result).toContain('wrapper.appendChild(clone)')
+  })
 })
 
 describe('injectPreviewScripts', () => {
