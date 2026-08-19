@@ -6,6 +6,11 @@ import Icon from '../ui/Icon.vue'
 import LangSelect from '../ui/LangSelect.vue'
 import StatusMetrics from './StatusMetrics.vue'
 import { theme, toggleTheme } from '@/lib/shared/theme'
+import {
+  focusDesktopNavControl,
+  showDesktopSidebar,
+  sidebarHidden,
+} from '@/lib/shared/sidebarHidden'
 import { isDraining } from '@/lib/composables/useShutdownState'
 import { requestNotificationsPageReset } from '@/lib/composables/useNotificationsPageEntry'
 import { locale, setLocale, type AppLocale } from '@/lib/shared/locale'
@@ -47,6 +52,11 @@ watch(
 function toggleMenu() {
   menuOpen.value = !menuOpen.value
   emit('toggle-menu')
+}
+
+async function openDesktopNav() {
+  showDesktopSidebar()
+  await focusDesktopNavControl('hide')
 }
 
 function onLocaleSelect(v: AppLocale) {
@@ -142,9 +152,24 @@ defineExpose({
 <template>
   <header class="safe-area-top relative z-20 flex h-14 shrink-0 items-center gap-3 border-b border-line bg-surface/80 px-4 backdrop-blur md:px-6">
     <button
+      type="button"
       class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-txt2 hover:bg-elevated hover:text-txt md:hidden"
+      data-testid="mobile-nav-toggle"
       :aria-label="t('shell.aria.openNav')"
       @click="toggleMenu"
+    >
+      <Icon name="menu" :size="20" />
+    </button>
+    <button
+      v-if="sidebarHidden"
+      type="button"
+      class="hidden h-11 w-11 shrink-0 items-center justify-center rounded-md text-txt2 hover:bg-elevated hover:text-txt md:flex"
+      data-testid="desktop-nav-open"
+      :aria-label="t('shell.aria.showNav')"
+      :title="t('shell.aria.showNav')"
+      aria-expanded="false"
+      aria-controls="app-desktop-sidebar"
+      @click="openDesktopNav"
     >
       <Icon name="menu" :size="20" />
     </button>

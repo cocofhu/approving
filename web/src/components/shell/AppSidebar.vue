@@ -4,8 +4,14 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppSidebarNav from './AppSidebarNav.vue'
 import BrandLogo from './BrandLogo.vue'
+import Icon from '../ui/Icon.vue'
 import { authApi } from '@/lib/api/api'
 import { useAuth } from '@/lib/composables/useAuth'
+import {
+  focusDesktopNavControl,
+  hideDesktopSidebar,
+  sidebarHidden,
+} from '@/lib/shared/sidebarHidden'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -25,12 +31,34 @@ async function logout() {
   clearUser()
   await router.push('/login')
 }
+
+async function onHideNav() {
+  hideDesktopSidebar()
+  await focusDesktopNavControl('show')
+}
 </script>
 
 <template>
-  <aside class="hidden h-full w-[232px] shrink-0 flex-col border-r border-line bg-surface md:flex">
-    <div class="flex h-14 items-center justify-center px-4">
-      <BrandLogo size="md" align="center" />
+  <aside
+    id="app-desktop-sidebar"
+    v-show="!sidebarHidden"
+    class="hidden h-full w-[232px] shrink-0 flex-col border-r border-line bg-surface md:flex"
+    data-testid="app-desktop-sidebar"
+  >
+    <div class="flex h-14 items-center justify-between gap-2 px-3">
+      <BrandLogo size="md" align="start" />
+      <button
+        type="button"
+        class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-txt2 hover:bg-elevated hover:text-txt"
+        data-testid="desktop-nav-hide"
+        :aria-label="t('shell.aria.hideNav')"
+        :title="t('shell.aria.hideNav')"
+        aria-expanded="true"
+        aria-controls="app-desktop-sidebar"
+        @click="onHideNav"
+      >
+        <Icon name="panel-left" :size="18" />
+      </button>
     </div>
 
     <AppSidebarNav />

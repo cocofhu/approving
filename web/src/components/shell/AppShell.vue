@@ -22,6 +22,11 @@ import { useRefreshChrome } from '@/lib/shared/refreshChrome'
 import { useRoutePending } from '@/lib/shared/routePending'
 import { useWorkflowRunLaunch } from '@/lib/run/useWorkflowRunLaunch'
 import ServiceCommitBadge from './ServiceCommitBadge.vue'
+import {
+  focusDesktopNavControl,
+  showDesktopSidebar,
+  sidebarHidden,
+} from '@/lib/shared/sidebarHidden'
 
 const route = useRoute()
 const router = useRouter()
@@ -70,6 +75,11 @@ function toggleDrawer() {
   drawerOpen.value = !drawerOpen.value
 }
 
+async function openDesktopNavFromEdge() {
+  showDesktopSidebar()
+  await focusDesktopNavControl('hide')
+}
+
 function onShellViewRun(runId: string) {
   void router.push('/runs/' + runId)
 }
@@ -108,6 +118,22 @@ onUnmounted(() => stopShutdownPolling())
         class="relative min-h-0 flex-1 overflow-hidden"
         :aria-busy="mainAriaBusy ? 'true' : 'false'"
       >
+        <span class="sr-only" aria-live="polite">{{
+          sidebarHidden ? t('shell.aria.navHidden') : t('shell.aria.navShown')
+        }}</span>
+        <button
+          v-if="full && sidebarHidden"
+          type="button"
+          class="absolute left-0 top-3 z-20 flex h-11 w-11 items-center justify-center rounded-md border border-line bg-surface text-txt2 hover:bg-elevated hover:text-txt"
+          data-testid="desktop-nav-edge-open"
+          :aria-label="t('shell.aria.showNav')"
+          :title="t('shell.aria.showNav')"
+          aria-expanded="false"
+          aria-controls="app-desktop-sidebar"
+          @click="openDesktopNavFromEdge"
+        >
+          <Icon name="menu" :size="20" />
+        </button>
         <div
           v-if="full && showRefreshBar"
           class="app-refresh-track"
@@ -116,7 +142,12 @@ onUnmounted(() => stopShutdownPolling())
         >
           <div class="app-refresh-bar" />
         </div>
-        <div v-if="full" class="h-full" :class="{ 'app-refresh-dim': dimContent }">
+        <div
+          v-if="full"
+          class="h-full"
+          data-testid="app-full-main"
+          :class="{ 'app-refresh-dim': dimContent, 'pl-11': sidebarHidden }"
+        >
           <slot />
         </div>
         <div v-else class="scroll-area safe-area-bottom h-full min-h-0 overflow-y-auto bg-base">

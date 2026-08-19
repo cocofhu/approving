@@ -19,6 +19,10 @@
     "aria": {
       "openNav": "Open navigation menu",
       "closeNav": "Close navigation menu",
+      "hideNav": "Hide navigation",
+      "showNav": "Show navigation",
+      "navHidden": "Navigation hidden",
+      "navShown": "Navigation shown",
       "backToList": "Back to list"
     },
     "runNotifications": {
