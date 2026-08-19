@@ -1,0 +1,163 @@
+import { expect, test, type Page } from '@playwright/test'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const shotDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../../test-screenshots')
+
+async function mockApi(page: Page) {
+  await page.route('**/api/**', async (route) => {
+    if (!new URL(route.request().url()).pathname.startsWith('/api/')) {
+      await route.continue()
+      return
+    }
+    const p = new URL(route.request().url()).pathname
+    if (p.includes('/gates')) {
+      await route.fulfill({ json: { items: [], total: 0 } })
+      return
+    }
+    if (p.includes('/workflows')) {
+      await route.fulfill({ json: [] })
+      return
+    }
+    if (p.includes('/runs')) {
+      await route.fulfill({ json: { items: [], total: 0, page: 1, pageSize: 20, hasMore: false } })
+      return
+    }
+    if (p.includes('/health') || p.includes('/live')) {
+      await route.fulfill({ json: { status: 'ok', ready: true } })
+      return
+    }
+    if (p.includes('/platform') || p.includes('/status')) {
+      await route.fulfill({
+        json: {
+          cumulativeTokens: null,
+          current5mBucketTokens: null,
+          todayMaxCompleted5mTokens: null,
+          runningCount: 0,
+          queuedCount: 0,
+          asOf: '2026-08-19T00:00:00Z',
+          timezone: 'UTC',
+        },
+      })
+      return
+    }
+    await route.fulfill({ json: {} })
+  })
+}
+
+async function openGates(page: Page) {
+  await mockApi(page)
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/desktop-sidebar-hide.html?start=/gates')
+  await expect(page.getByTestId('page-gates')).toBeVisible({ timeout: 15_000 })
+}
+
+function sidebar(page: Page) {
+  return page.getByTestId('app-desktop-sidebar')
+}
+
+test.describe('desktop sidebar hide', () => {
+  test('hide from brand, open from topbar, persist, no toast', async ({ page }) => {
+    await openGates(page)
+    const aside = sidebar(page)
+    await expect(aside).toBeVisible()
+    const expandedWidth = await page.locator('main').evaluate((el) => el.getBoundingClientRect().width)
+
+    await page.screenshot({ path: path.join(shotDir, '01-desktop-expanded.png') })
+
+    const hide = page.getByTestId('desktop-nav-hide')
+    await expect(hide).toBeVisible()
+    const hideBox = await hide.boundingBox()
+    expect(hideBox?.width).toBeGreaterThanOrEqual(44)
+    expect(hideBox?.height).toBeGreaterThanOrEqual(44)
+    await expect(hide).toHaveAttribute('aria-label', '隐藏导航')
+
+    await hide.click()
+    await expect(aside).toBeHidden()
+    await expect(page.getByTestId('desktop-nav-open')).toBeVisible()
+    await expect(page.getByTestId('desktop-nav-edge-open')).toHaveCount(0)
+    const hiddenWidth = await page.locator('main').evaluate((el) => el.getBoundingClientRect().width)
+    expect(hiddenWidth).toBeGreaterThan(expandedWidth + 200)
+
+    const toast = page.locator('[class*="toast"], [data-testid*="toast"]')
+    await expect(toast).toHaveCount(0)
+
+    await page.screenshot({ path: path.join(shotDir, '02-desktop-hidden-topbar.png') })
+
+    const openBtn = page.getByTestId('desktop-nav-open')
+    const openBox = await openBtn.boundingBox()
+    expect(openBox?.width).toBeGreaterThanOrEqual(44)
+    await expect(openBtn).toHaveAttribute('aria-label', '打开导航')
+    await openBtn.click()
+    await expect(aside).toBeVisible()
+    await expect(page.getByTestId('desktop-nav-open')).toHaveCount(0)
+
+    await hide.click()
+    expect(await page.evaluate(() => localStorage.getItem('approving-sidebar-hidden'))).toBe('true')
+    await page.reload()
+    await expect(page.getByTestId('page-gates')).toBeVisible({ timeout: 15_000 })
+    await expect(sidebar(page)).toBeHidden()
+    await expect(page.getByTestId('desktop-nav-open')).toBeVisible()
+  })
+
+  test('full pages use 44px edge open and pl-11; leaving full drops edge', async ({ page }) => {
+    await mockApi(page)
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/desktop-sidebar-hide.html?start=/runs/r1')
+    await expect(page.getByTestId('page-run')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('desktop-nav-hide')).toBeVisible()
+    await page.getByTestId('desktop-nav-hide').click()
+    const edge = page.getByTestId('desktop-nav-edge-open')
+    await expect(edge).toBeVisible()
+    const box = await edge.boundingBox()
+    expect(box?.width).toBeGreaterThanOrEqual(44)
+    expect(box?.height).toBeGreaterThanOrEqual(44)
+    expect(box?.x ?? 99).toBeLessThan(8)
+    await expect(page.getByTestId('app-full-main')).toHaveClass(/pl-11/)
+    await expect(page.getByTestId('desktop-nav-open')).toHaveCount(0)
+    await page.screenshot({ path: path.join(shotDir, '03-full-run-hidden-edge.png') })
+
+    await edge.click()
+    await expect(sidebar(page)).toBeVisible()
+    await expect(edge).toHaveCount(0)
+
+    await page.getByTestId('desktop-nav-hide').click()
+    await page.goto('/desktop-sidebar-hide.html?start=/workflows/wf-1/edit')
+    await expect(page.getByTestId('page-editor')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('desktop-nav-edge-open')).toBeVisible()
+    await page.screenshot({ path: path.join(shotDir, '04-full-editor-hidden-edge.png') })
+
+    await page.goto('/desktop-sidebar-hide.html?start=/sandboxes/42/console')
+    await expect(page.getByTestId('page-console')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('desktop-nav-edge-open')).toBeVisible()
+    await page.screenshot({ path: path.join(shotDir, '05-full-console-hidden-edge.png') })
+
+    await page.goto('/desktop-sidebar-hide.html?start=/gates')
+    await expect(page.getByTestId('page-gates')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('desktop-nav-edge-open')).toHaveCount(0)
+    await expect(page.getByTestId('desktop-nav-open')).toBeVisible()
+    await page.screenshot({ path: path.join(shotDir, '06-back-to-topbar-no-edge.png') })
+  })
+
+  test('mobile drawer is independent; returning to desktop keeps remembered hide', async ({ page }) => {
+    await openGates(page)
+    await page.getByTestId('desktop-nav-hide').click()
+    await expect(sidebar(page)).toBeHidden()
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(page.getByTestId('mobile-nav-toggle')).toBeVisible()
+    await expect(page.getByTestId('desktop-nav-open')).toBeHidden()
+    await expect(page.locator('.bg-black\\/50')).toHaveCount(0)
+    await page.screenshot({ path: path.join(shotDir, '07-mobile-after-desktop-hide.png') })
+
+    await page.getByTestId('mobile-nav-toggle').click()
+    await expect(page.locator('.bg-black\\/50')).toBeVisible()
+    await page.screenshot({ path: path.join(shotDir, '08-mobile-drawer-open.png') })
+
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await expect(sidebar(page)).toBeHidden()
+    await expect(page.getByTestId('desktop-nav-open')).toBeVisible()
+    await expect(page.locator('.bg-black\\/50')).not.toBeVisible()
+    await page.screenshot({ path: path.join(shotDir, '09-desktop-still-hidden.png') })
+  })
+})
