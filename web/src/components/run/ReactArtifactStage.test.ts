@@ -139,24 +139,24 @@ describe('ReactArtifactStage', () => {
     const wrapper = mount(ReactArtifactStage, {
       props: {
         artifacts: [first, note],
+        previewArtifact: 'page.html',
         runId: 'run-1',
       },
       global: { plugins: [i18n()], stubs },
     })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tab-page.html"]').attributes('aria-selected')).toBe('true')
     await wrapper.get('[data-testid="react-artifact-card-note.md"]').trigger('click')
-    await wrapper.setProps({
-      artifacts: [first, note],
-      previewArtifact: 'page.html',
-    })
     await flushPromises()
     expect(wrapper.find('[data-testid="react-artifact-tab-note.md"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="react-artifact-tab-page.html"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="react-artifact-tab-note.md"]').attributes('aria-selected')).toBe('true')
     await wrapper.setProps({
       artifacts: [{ ...first, revision: 2, updatedAt: 't2', sizeBytes: 99 }, note],
       previewArtifact: 'page.html',
     })
     await flushPromises()
-    expect(wrapper.find('[data-testid="react-artifact-tab-note.md"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-artifact-tab-page.html"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="react-artifact-tab-note.md"]').attributes('aria-selected')).toBe('true')
     expect(wrapper.get('[data-testid="react-artifact-preview-page.html"]').text()).toContain('page.html')
     wrapper.unmount()
   })
@@ -179,7 +179,27 @@ describe('ReactArtifactStage', () => {
     wrapper.unmount()
   })
 
-  it('opens a pinned tab when the artifact arrives after previewArtifact', async () => {
+  it('opens a pinned tab when the artifact arrives after previewArtifact while still on the grid', async () => {
+    const note = art({ id: 'a2', name: 'note.md', kind: 'markdown' })
+    const page = art({ id: 'a1', name: 'page.html', kind: 'html', revision: 1 })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [note],
+        previewArtifact: 'page.html',
+        runId: 'run-1',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tab-grid"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-testid="react-artifact-tab-page.html"]').exists()).toBe(false)
+    await wrapper.setProps({ artifacts: [note, page], previewArtifact: 'page.html' })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tab-page.html"]').attributes('aria-selected')).toBe('true')
+    wrapper.unmount()
+  })
+
+  it('does not steal focus when a pinned artifact arrives after the user opened another tab', async () => {
     const note = art({ id: 'a2', name: 'note.md', kind: 'markdown' })
     const page = art({ id: 'a1', name: 'page.html', kind: 'html', revision: 1 })
     const wrapper = mount(ReactArtifactStage, {
@@ -192,11 +212,11 @@ describe('ReactArtifactStage', () => {
     })
     await wrapper.get('[data-testid="react-artifact-card-note.md"]').trigger('click')
     await flushPromises()
-    expect(wrapper.find('[data-testid="react-artifact-tab-page.html"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="react-artifact-tab-note.md"]').attributes('aria-selected')).toBe('true')
     await wrapper.setProps({ artifacts: [note, page], previewArtifact: 'page.html' })
     await flushPromises()
-    expect(wrapper.find('[data-testid="react-artifact-tab-note.md"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="react-artifact-tab-page.html"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-testid="react-artifact-tab-page.html"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="react-artifact-tab-note.md"]').attributes('aria-selected')).toBe('true')
     wrapper.unmount()
   })
 
@@ -488,6 +508,157 @@ describe('ReactArtifactStage', () => {
     await wrapper.get('[data-testid="react-artifact-version-option-v1"]').trigger('click')
     await flushPromises()
     expect(wrapper.get('[data-testid="artifact-preview"]').text()).toBe('visual_1.page.html|off|<p>old</p>')
+    wrapper.unmount()
+  })
+
+  it('defaults to page.html preview for visual nodes and does not open visual_*.page.html (s1)', async () => {
+    const live = art({ id: 'live', name: 'page.html', kind: 'html', nodeId: 'visual_bqc5' })
+    const copy = art({ id: 'copy', name: 'visual_bqc5.page.html', kind: 'html', nodeId: 'visual_bqc5' })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [copy, live],
+        runId: 'run-1',
+        nodeId: 'visual_bqc5',
+        nodeType: 'visual',
+        remoteKind: 'off',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tab-page.html"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-testid="react-artifact-tab-visual_bqc5.page.html"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="react-artifact-tab-grid"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="react-artifact-tab-grid"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-card-visual_bqc5.page.html"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tab-visual_bqc5.page.html"]').attributes('aria-selected')).toBe(
+      'true',
+    )
+    wrapper.unmount()
+  })
+
+  it('defaults to the newest own-node HTML for unpinned react and ignores upstream page.html (s2)', async () => {
+    const upstream = art({
+      id: 'up',
+      name: 'page.html',
+      kind: 'html',
+      nodeId: 'visual_bqc5',
+      updatedAt: '2026-08-19T20:00:00Z',
+    })
+    const older = art({
+      id: 'old',
+      name: 'a.html',
+      kind: 'html',
+      nodeId: 'react_ymx0',
+      updatedAt: '2026-08-19T10:00:00Z',
+    })
+    const newer = art({
+      id: 'new',
+      name: 'brand-row-preview.html',
+      kind: 'html',
+      nodeId: 'react_ymx0',
+      updatedAt: '2026-08-19T12:00:00Z',
+    })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [upstream, older, newer],
+        runId: 'run-1',
+        nodeId: 'react_ymx0',
+        nodeType: 'react',
+        remoteKind: 'off',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tab-brand-row-preview.html"]').attributes('aria-selected')).toBe(
+      'true',
+    )
+    expect(wrapper.find('[data-testid="react-artifact-tab-page.html"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('keeps a react pin ahead of newest-HTML fallback (s2)', async () => {
+    const html = art({ id: 'h', name: 'brand-row-preview.html', kind: 'html', nodeId: 'react_ymx0' })
+    const md = art({ id: 'm', name: 'note.md', kind: 'markdown', nodeId: 'react_ymx0' })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [html, md],
+        previewArtifact: 'note.md',
+        runId: 'run-1',
+        nodeId: 'react_ymx0',
+        nodeType: 'react',
+        remoteKind: 'off',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tab-note.md"]').attributes('aria-selected')).toBe('true')
+    wrapper.unmount()
+  })
+
+  it('stays on the pipeline grid when only JSON is on stage and still opens on click (s4)', async () => {
+    const json = art({ id: 'j', name: 'research.json', kind: 'json', nodeId: 'research' })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [json],
+        runId: 'run-1',
+        nodeId: 'research',
+        nodeType: 'research',
+        remoteKind: 'off',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tab-grid"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-testid="react-artifact-tab-research.json"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="react-artifact-card-research.json"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tab-research.json"]').attributes('aria-selected')).toBe('true')
+    wrapper.unmount()
+  })
+
+  it('opens page.html once when it arrives while the user is still on the default grid (s5)', async () => {
+    const json = art({ id: 'j', name: 'research.json', kind: 'json', nodeId: 'visual_bqc5' })
+    const page = art({ id: 'p', name: 'page.html', kind: 'html', nodeId: 'visual_bqc5' })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [json],
+        runId: 'run-1',
+        nodeId: 'visual_bqc5',
+        nodeType: 'visual',
+        remoteKind: 'off',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tab-grid"]').attributes('aria-selected')).toBe('true')
+    await wrapper.setProps({ artifacts: [json, page] })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tab-page.html"]').attributes('aria-selected')).toBe('true')
+    wrapper.unmount()
+  })
+
+  it('does not steal focus after the user leaves the default tab, including same-name revisions (s3)', async () => {
+    const page = art({ id: 'p', name: 'page.html', kind: 'html', nodeId: 'visual_bqc5', revision: 1, updatedAt: 't1' })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [page],
+        runId: 'run-1',
+        nodeId: 'visual_bqc5',
+        nodeType: 'visual',
+        remoteKind: 'off',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tab-page.html"]').attributes('aria-selected')).toBe('true')
+    await wrapper.get('[data-testid="react-artifact-tab-grid"]').trigger('click')
+    await wrapper.setProps({
+      artifacts: [{ ...page, revision: 2, updatedAt: 't2', sizeBytes: 80 }],
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tab-grid"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="react-artifact-preview-page.html"]').text()).toContain('page.html')
     wrapper.unmount()
   })
 })
