@@ -16,18 +16,11 @@ import ReviewComposer from '@/components/run/ReviewComposer.vue'
 import ArtifactLoadingPane from '@/components/run/ArtifactLoadingPane.vue'
 import ClarifyProductStage from '@/components/run/ClarifyProductStage.vue'
 import ReactArtifactStage from '@/components/run/ReactArtifactStage.vue'
-import AppPreviewPanel from '@/components/run/AppPreviewPanel.vue'
 import RefreshStrip from '@/components/run/RefreshStrip.vue'
 import AppInlineError from '@/components/ui/AppInlineError.vue'
 import Pagination from '@/components/ui/Pagination.vue'
 import { api, isPaginated } from '@/lib/api/api'
 import { adaptInboxContextToRun } from '@/lib/inbox/inboxContext'
-import {
-  defaultClarifyProductId,
-  listClarifyProductNodes,
-  pickClarifyNodeRun,
-  resolveClarifyProductStage,
-} from '@/lib/inbox/clarifyInboxStage'
 import { usePipelineFilter } from '@/lib/composables/usePipelineFilter'
 import { useTagFilter } from '@/lib/composables/useTagFilter'
 import { useProjectContext } from '@/lib/composables/useProjectContext'
@@ -47,7 +40,7 @@ import {
   pickNextActiveAfterRemove,
 } from '@/lib/inbox/inboxActiveSelection'
 import { isAbortError } from '@/lib/run/liveLogRehydrate'
-import { isReactGraphNode, applyPreviewArtifactName } from '@/lib/run/reactArtifactPreview'
+import { applyPreviewArtifactName, inboxStageRemoteKind } from '@/lib/run/reactArtifactPreview'
 import { createPendingAcpBuffer, pickAcpRails } from '@/lib/run/pendingAcpBuffer'
 import { deliverOrBufferDialogueAcp } from '@/lib/run/dialogueAcpDelivery'
 import {
@@ -1074,60 +1067,6 @@ function retryActiveRun() {
   return loadActiveRun(true)
 }
 
-/** Clarify inbox: PRODUCT nodes in the slim context range (default = current node). */
-const clarifyProductNodes = computed(() =>
-  active.value?.type === 'clarify' ? listClarifyProductNodes(activeRun.value) : [],
-)
-const selectedClarifyProductId = ref<string | null>(null)
-const historicalPreview = ref(false)
-
-watch(
-  () => active.value && itemKey(active.value),
-  () => {
-    selectedClarifyProductId.value = null
-    historicalPreview.value = false
-  },
-)
-watch(selectedClarifyProductId, () => {
-  historicalPreview.value = false
-})
-
-watch(
-  clarifyProductNodes,
-  (nodes) => {
-    if (!nodes.length) {
-      selectedClarifyProductId.value = null
-      return
-    }
-    if (selectedClarifyProductId.value && nodes.some((n) => n.id === selectedClarifyProductId.value)) {
-      return
-    }
-    selectedClarifyProductId.value = defaultClarifyProductId(active.value?.nodeId || '', nodes)
-  },
-  { immediate: true },
-)
-
-const activeClarifyNode = computed(() => {
-  if (active.value?.type !== 'clarify' || !activeRun.value || !selectedClarifyProductId.value) return null
-  return activeRun.value.nodes?.find((n) => n.id === selectedClarifyProductId.value) || null
-})
-const activeClarifyNodeRun = computed(() => {
-  if (!activeClarifyNode.value || !activeRun.value) return null
-  return pickClarifyNodeRun(activeRun.value, activeClarifyNode.value.id, active.value?.iteration ?? 1)
-})
-
-const clarifyStageKind = computed(() => {
-  if (active.value?.type !== 'clarify') return 'panel' as const
-  return resolveClarifyProductStage({
-    loadError: activeRunLoadError.value,
-    run: activeRun.value,
-    inboxNodeId: active.value.nodeId,
-    inboxIteration: active.value.iteration ?? 1,
-    selectedNode: activeClarifyNode.value,
-    selectedNodeRun: activeClarifyNodeRun.value,
-  })
-})
-
 const activeClarify = computed(() => {
   if (active.value?.type !== 'clarify' || !activeRun.value) return null
   return pickInboxClarifySession(activeRun.value, active.value.nodeId)
@@ -1141,10 +1080,15 @@ const inboxAppPreviewActive = computed(() => {
   return n?.type === 'app_preview'
 })
 
-const inboxReactActive = computed(() => {
-  if (active.value?.type !== 'clarify' || inboxAppPreviewActive.value) return false
-  return isReactGraphNode(activeRun.value, active.value.nodeId)
-})
+const inboxRemoteKind = computed(() =>
+  inboxStageRemoteKind({
+    appPreview: inboxAppPreviewActive.value,
+    run: activeRun.value,
+    nodeId: active.value?.type === 'clarify' ? active.value.nodeId : '',
+  }),
+)
+
+const inboxClarifyStageKind = computed(() => (activeRunLoadError.value ? 'loadFailed' : 'pending'))
 
 // Mirror RunDetailView.reviewActive: post-run product review on a non-react
 // producer (backend only seeds clarify sessions for ReviewCapable nodes).
@@ -1649,38 +1593,18 @@ function itemSecondary(it: InboxItem) {
           :storage-key="REVIEW_SHELL_WIDTH_KEY_APPROVAL"
         >
           <template #stage>
-            <div v-if="inboxAppPreviewActive" class="flex h-full min-h-0 flex-col p-3">
-              <AppPreviewPanel
-                :run-id="active.runId"
-                :node-id="active.nodeId"
-                fill
-                :show-feedback="false"
-                share-enabled
-                @pick="onAppPreviewReviewPick"
-                @staged-pick="onAppPreviewStagedPick"
-                @open-share="openSharePanel(active)"
-              />
-            </div>
             <ReactArtifactStage
-              v-else-if="inboxReactActive"
               :artifacts="activeRun?.artifacts || []"
               :preview-artifact="activeClarify?.previewArtifact"
               :run-id="active.runId"
+              :run="activeRun || undefined"
               :node-id="active.nodeId"
-              :annotatable="clarifyInputActive && !historicalPreview"
-            />
-            <ClarifyProductStage
-              v-else
-              :product-nodes="clarifyProductNodes"
-              :selected-product-id="selectedClarifyProductId"
-              :stage-kind="clarifyStageKind"
-              :selected-node="activeClarifyNode"
-              :selected-node-run="activeClarifyNodeRun"
-              :run="activeRun"
-              :loading="activeRunLoading"
-              @update:selected-product-id="selectedClarifyProductId = $event"
-              @update:historical-preview="historicalPreview = $event"
-              @retry="retryActiveRun"
+              :annotatable="clarifyInputActive"
+              :remote-kind="inboxRemoteKind"
+              :share-enabled="inboxAppPreviewActive"
+              @pick="onAppPreviewReviewPick"
+              @staged-pick="onAppPreviewStagedPick"
+              @open-share="openSharePanel(active)"
             />
           </template>
           <template #sidebar>
@@ -1695,7 +1619,7 @@ function itemSecondary(it: InboxItem) {
               v-model:annotations="clarifyAnnotations"
               :turns="activeClarify.turns"
               :done="activeClarify.done"
-              :active="clarifyInputActive && !historicalPreview"
+              :active="clarifyInputActive"
               :confirm-error="clarifyConfirmError"
               @send="onClarifySend"
               @finish="onClarifyFinish"
@@ -1707,7 +1631,7 @@ function itemSecondary(it: InboxItem) {
           v-else-if="active.type === 'clarify'"
           :product-nodes="[]"
           :selected-product-id="null"
-          stage-kind="loadFailed"
+          :stage-kind="inboxClarifyStageKind"
           :selected-node="null"
           :selected-node-run="null"
           :run="null"
@@ -1772,38 +1696,18 @@ function itemSecondary(it: InboxItem) {
               :storage-key="REVIEW_SHELL_WIDTH_KEY_APPROVAL"
             >
               <template #stage>
-                <div v-if="inboxAppPreviewActive" class="flex h-full min-h-0 flex-col p-3">
-                  <AppPreviewPanel
-                    :run-id="active.runId"
-                    :node-id="active.nodeId"
-                    fill
-                    :show-feedback="false"
-                    share-enabled
-                    @pick="onAppPreviewReviewPick"
-                    @staged-pick="onAppPreviewStagedPick"
-                    @open-share="openSharePanel(active)"
-                  />
-                </div>
                 <ReactArtifactStage
-                  v-else-if="inboxReactActive"
                   :artifacts="activeRun?.artifacts || []"
                   :preview-artifact="activeClarify?.previewArtifact"
                   :run-id="active.runId"
+                  :run="activeRun || undefined"
                   :node-id="active.nodeId"
-                  :annotatable="clarifyInputActive && !historicalPreview"
-                />
-                <ClarifyProductStage
-                  v-else
-                  :product-nodes="clarifyProductNodes"
-                  :selected-product-id="selectedClarifyProductId"
-                  :stage-kind="clarifyStageKind"
-                  :selected-node="activeClarifyNode"
-                  :selected-node-run="activeClarifyNodeRun"
-                  :run="activeRun"
-                  :loading="activeRunLoading"
-                  @update:selected-product-id="selectedClarifyProductId = $event"
-                  @update:historical-preview="historicalPreview = $event"
-                  @retry="retryActiveRun"
+                  :annotatable="clarifyInputActive"
+                  :remote-kind="inboxRemoteKind"
+                  :share-enabled="inboxAppPreviewActive"
+                  @pick="onAppPreviewReviewPick"
+                  @staged-pick="onAppPreviewStagedPick"
+                  @open-share="openSharePanel(active)"
                 />
               </template>
               <template #sidebar>
@@ -1818,7 +1722,7 @@ function itemSecondary(it: InboxItem) {
                   v-model:annotations="clarifyAnnotations"
                   :turns="activeClarify.turns"
                   :done="activeClarify.done"
-                  :active="clarifyInputActive && !historicalPreview"
+                  :active="clarifyInputActive"
                   :confirm-error="clarifyConfirmError"
                   @send="onClarifySend"
                   @finish="onClarifyFinish"
@@ -1830,7 +1734,7 @@ function itemSecondary(it: InboxItem) {
               v-else-if="active.type === 'clarify'"
               :product-nodes="[]"
               :selected-product-id="null"
-              stage-kind="loadFailed"
+              :stage-kind="inboxClarifyStageKind"
               :selected-node="null"
               :selected-node-run="null"
               :run="null"

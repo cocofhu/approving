@@ -6,15 +6,23 @@ import {
   applyPreviewArtifactFromRun,
   applyPreviewArtifactName,
   artifactFingerprint,
+  canAnnotateStageArtifact,
+  expandStageArtifacts,
+  historicalStageArtifactId,
+  historicalStageArtifactName,
+  inboxStageRemoteKind,
+  isHistoricalStageArtifact,
   shouldActivatePinnedPreview,
   artifactKindLabelKey,
   artifactRevision,
   closeStagePreviewTab,
   findArtifactByName,
+  isOwnNodeArtifact,
   isReactGraphNode,
   nextTabAfterClose,
   openStagePreviewTab,
   previewTabId,
+  resolveStageRemoteKind,
 } from './reactArtifactPreview'
 
 function art(partial: Partial<Artifact> & Pick<Artifact, 'id' | 'name'>): Artifact {
@@ -54,6 +62,58 @@ describe('reactArtifactPreview helpers', () => {
     } as Run
     expect(isReactGraphNode(run, 'c1')).toBe(true)
     expect(isReactGraphNode(run, 'other')).toBe(false)
+  })
+
+  it('treats foreign-node artifacts as read-only unless nodeId is empty', () => {
+    expect(isOwnNodeArtifact({ nodeId: 'research' }, '')).toBe(true)
+    expect(isOwnNodeArtifact({ nodeId: 'research' }, 'research')).toBe(true)
+    expect(isOwnNodeArtifact({ nodeId: 'plan' }, 'research')).toBe(false)
+    expect(isOwnNodeArtifact({ nodeId: '' }, 'research')).toBe(true)
+    expect(canAnnotateStageArtifact(true, { nodeId: 'plan' }, 'research')).toBe(false)
+    expect(canAnnotateStageArtifact(true, { nodeId: 'research' }, 'research')).toBe(true)
+    expect(canAnnotateStageArtifact(false, { nodeId: 'research' }, 'research')).toBe(false)
+    expect(canAnnotateStageArtifact(true, { id: historicalStageArtifactId('visual', 1), nodeId: 'visual' }, 'visual')).toBe(false)
+    expect(isHistoricalStageArtifact({ id: historicalStageArtifactId('visual', 1) })).toBe(true)
+  })
+
+  it('expands earlier visual outputs.page snapshots beside live page.html', () => {
+    const live = art({ id: 'live', name: 'page.html', nodeId: 'visual_1', content: '<p>new</p>' })
+    const run = {
+      id: 'r1',
+      nodes: [{ id: 'visual_1', type: 'visual', label: '视觉', position: { x: 0, y: 0 }, config: {} }],
+      nodeExecutions: {
+        visual_1: [
+          { nodeId: 'visual_1', iteration: 1, status: 'completed', outputs: { page: '<p>old</p>' } },
+          { nodeId: 'visual_1', iteration: 2, status: 'waiting_human', outputs: { page: '<p>new</p>' } },
+        ],
+      },
+    } as unknown as Run
+    const node = run.nodes![0]
+    const expanded = expandStageArtifacts([live], run, node)
+    expect(expanded.map((a) => a.name)).toEqual([historicalStageArtifactName('page.html', 1), 'page.html'])
+    expect(expanded[0].content).toBe('<p>old</p>')
+    expect(expanded[0].id).toBe(historicalStageArtifactId('visual_1', 1))
+    expect(expandStageArtifacts([live], run, { ...node, type: 'research' })).toEqual([live])
+  })
+
+  it('uses sandbox remote only for ReAct inbox nodes', () => {
+    const run = {
+      nodes: [
+        { id: 'c1', type: 'react', label: '澄清', position: { x: 0, y: 0 }, config: {} },
+        { id: 'visual', type: 'visual', label: '视觉', position: { x: 0, y: 0 }, config: {} },
+      ],
+    } as unknown as Run
+    expect(inboxStageRemoteKind({ appPreview: true, run, nodeId: 'preview' })).toBe('app')
+    expect(inboxStageRemoteKind({ appPreview: false, run, nodeId: 'c1' })).toBe('sandbox')
+    expect(inboxStageRemoteKind({ appPreview: false, run, nodeId: 'visual' })).toBe('off')
+  })
+
+  it('resolves remoteKind with explicit override over sandbox default', () => {
+    expect(resolveStageRemoteKind({ runId: 'r', nodeId: 'n' })).toBe('sandbox')
+    expect(resolveStageRemoteKind({ runId: 'r', nodeId: 'n', inlineContent: true })).toBe('off')
+    expect(resolveStageRemoteKind({ runId: 'r', nodeId: 'n', remoteKind: 'app' })).toBe('app')
+    expect(resolveStageRemoteKind({ inlineContent: true, remoteKind: 'public' })).toBe('public')
+    expect(resolveStageRemoteKind({})).toBe('off')
   })
 
   it('opens preview tabs without replacing already-open ones', () => {

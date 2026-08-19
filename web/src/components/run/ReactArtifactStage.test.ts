@@ -8,11 +8,19 @@ import pages from '@/locales/zh-CN/pages.json'
 import type { Artifact } from '@/lib/shared/types'
 import ReactArtifactStage from './ReactArtifactStage.vue'
 
+const { mockAddClarifyAnnotation } = vi.hoisted(() => ({
+  mockAddClarifyAnnotation: vi.fn(() => 'added'),
+}))
+
 vi.mock('@/lib/api/api', () => ({
   api: {
     artifactContent: vi.fn(async () => ({ content: '<html>thumb</html>' })),
     getRunNodeSandbox: vi.fn(async () => ({ id: 42 })),
   },
+}))
+
+vi.mock('@/lib/inbox/useClarifyDraft', () => ({
+  addClarifyAnnotation: mockAddClarifyAnnotation,
 }))
 
 function i18n() {
@@ -46,6 +54,17 @@ const stubs = {
   ArtifactPreview: defineComponent({
     props: { artifact: Object, annotatable: Boolean },
     template: '<div data-testid="artifact-preview">{{ artifact?.name }}|{{ annotatable ? \'on\' : \'off\' }}</div>',
+  }),
+  AppPreviewPanel: defineComponent({
+    props: { runId: String, nodeId: String, shareEnabled: Boolean },
+    emits: ['pick', 'stagedPick', 'openShare'],
+    template:
+      '<div data-testid="app-preview-stub" :data-share="shareEnabled ? \'1\' : \'0\'">' +
+      '<button type="button" data-testid="app-preview-pick" @click="$emit(\'pick\', { selector: \'#hero\', tagName: \'DIV\', outerHTML: \'<div id=hero></div>\', url: \'http://app/\' })">pick</button>' +
+      '</div>',
+  }),
+  PublicAppPreviewPanel: defineComponent({
+    template: '<div data-testid="public-app-preview-stub" />',
   }),
 }
 
@@ -96,8 +115,8 @@ describe('ReactArtifactStage', () => {
     const wrapper = mount(ReactArtifactStage, {
       props: {
         artifacts: [
-          art({ id: 'a1', name: 'homepage-preview.html', kind: 'html' }),
-          art({ id: 'a2', name: 'copy-variants.md', kind: 'markdown' }),
+          art({ id: 'a1', name: 'homepage-preview.html', kind: 'html', nodeId: 'clarify' }),
+          art({ id: 'a2', name: 'copy-variants.md', kind: 'markdown', nodeId: 'clarify' }),
         ],
         runId: 'run-1',
         nodeId: 'clarify',
@@ -139,6 +158,24 @@ describe('ReactArtifactStage', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="react-artifact-tab-note.md"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="react-artifact-preview-page.html"]').text()).toContain('page.html')
+    wrapper.unmount()
+  })
+
+  it('keeps the tab bar when a single visual page is pinned', async () => {
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [art({ id: 'a1', name: 'page.html', kind: 'html', nodeId: 'visual_bqc5' })],
+        previewArtifact: 'page.html',
+        runId: 'run-1',
+        nodeId: 'visual_bqc5',
+        annotatable: true,
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tabs"]').isVisible()).toBe(true)
+    expect(wrapper.get('[data-testid="react-artifact-tab-grid"]').text()).toContain('流水线产物')
+    expect(wrapper.get('[data-testid="react-artifact-tab-page.html"]').attributes('aria-selected')).toBe('true')
     wrapper.unmount()
   })
 
@@ -228,6 +265,104 @@ describe('ReactArtifactStage', () => {
     await wrapper.get('[data-testid="react-artifact-tab-close-novnc"]').trigger('click')
     expect(wrapper.find('[data-testid="react-artifact-tab-novnc"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="react-artifact-tab-note.md"]').attributes('aria-selected')).toBe('true')
+    wrapper.unmount()
+  })
+
+  it('keeps foreign-node artifacts previewable but not annotatable', async () => {
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [
+          art({ id: 'own', name: 'research.json', kind: 'json', nodeId: 'research' }),
+          art({ id: 'other', name: 'plan.json', kind: 'json', nodeId: 'plan' }),
+        ],
+        runId: 'run-1',
+        nodeId: 'research',
+        annotatable: true,
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    expect(wrapper.findAll('[data-testid="react-artifact-card-readonly"]').length).toBe(1)
+    await wrapper.get('[data-testid="react-artifact-card-research.json"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-tab-grid"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-card-plan.json"]').trigger('click')
+    await flushPromises()
+    const previews = wrapper.findAll('[data-testid="artifact-preview"]')
+    expect(previews.map((n) => n.text())).toEqual(['research.json|on', 'plan.json|off'])
+    wrapper.unmount()
+  })
+
+  it('opens app preview inside the remote tab without sandbox noVNC', async () => {
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [art({ id: 'a1', name: 'note.md', kind: 'markdown' })],
+        runId: 'run-1',
+        nodeId: 'preview',
+        annotatable: true,
+        remoteKind: 'app',
+        shareEnabled: true,
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="novnc-stub"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="app-preview-stub"]').attributes('data-share')).toBe('1')
+    expect(wrapper.get('[data-testid="react-artifact-tab-novnc"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="react-artifact-tab-novnc"]').text()).toContain('应用预览')
+    wrapper.unmount()
+  })
+
+  it('emits remote pick once without staging a local annotation', async () => {
+    mockAddClarifyAnnotation.mockClear()
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [],
+        runId: 'run-1',
+        nodeId: 'preview',
+        annotatable: true,
+        remoteKind: 'app',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    await wrapper.get('[data-testid="app-preview-pick"]').trigger('click')
+    expect(wrapper.emitted('pick')).toEqual([
+      [{ selector: '#hero', tagName: 'DIV', outerHTML: '<div id=hero></div>', url: 'http://app/' }],
+    ])
+    expect(mockAddClarifyAnnotation).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('shows historical visual pages as readonly cards beside live page.html', async () => {
+    const live = art({ id: 'live', name: 'page.html', kind: 'html', nodeId: 'visual_1', content: '<p>new</p>' })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [live],
+        runId: 'run-1',
+        run: {
+          id: 'run-1',
+          nodes: [{ id: 'visual_1', type: 'visual', label: '视觉', position: { x: 0, y: 0 }, config: {} }],
+          nodeExecutions: {
+            visual_1: [
+              { nodeId: 'visual_1', iteration: 1, status: 'completed', outputs: { page: '<p>old</p>' } },
+              { nodeId: 'visual_1', iteration: 2, status: 'waiting_human', outputs: { page: '<p>new</p>' } },
+            ],
+          },
+        } as any,
+        nodeId: 'visual_1',
+        annotatable: true,
+        remoteKind: 'off',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-card-iteration"]').text()).toContain('第 1 次')
+    expect(wrapper.findAll('[data-testid="react-artifact-card-readonly"]').length).toBe(1)
+    await wrapper.get('[data-testid="react-artifact-card-page.html#iter-1"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-tab-grid"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-card-page.html"]').trigger('click')
+    await flushPromises()
+    const previews = wrapper.findAll('[data-testid="artifact-preview"]')
+    expect(previews.map((n) => n.text())).toEqual(['page.html#iter-1|off', 'page.html|on'])
     wrapper.unmount()
   })
 })

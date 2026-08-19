@@ -14,6 +14,9 @@ import {
   REVIEW_SIDEBAR,
   REVIEW_SHELL_WIDTH_KEY_CLARIFY,
 } from '@/lib/inbox/reviewLayoutBudget'
+import { addClarifyAnnotation } from '@/lib/inbox/useClarifyDraft'
+import { useToast } from '@/lib/composables/useToast'
+import { previewPickLabel, type AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
 import type {
   ClarifyImage,
   ClarifyTurn,
@@ -54,6 +57,7 @@ const emit = defineEmits<{
 const annotations = defineModel<ReactAnnotation[]>('annotations', { default: () => [] })
 
 const { t } = useI18n()
+const toast = useToast()
 
 const reviewChatRef = ref<{
   applyReviewFrame?: (frame: any) => boolean | void
@@ -65,6 +69,17 @@ const reviewChatRef = ref<{
 
 const artifacts = computed(() => props.run?.artifacts || [])
 const previewArtifact = computed(() => props.clarify?.previewArtifact || '')
+
+function onRemotePick(payload: AppPreviewPickPayload) {
+  if (!props.inputActive) return
+  const url = (payload.url || '').trim()
+  const result = addClarifyAnnotation(props.runId, props.nodeId, {
+    selector: payload.selector,
+    url: url || undefined,
+    label: previewPickLabel(url, payload.selector, payload.tagName),
+  })
+  if (result === 'duplicate') toast.warn(t('pages.reviewComposer.alreadyAdded'))
+}
 
 defineExpose({
   applyReviewFrame: (frame: any) => reviewChatRef.value?.applyReviewFrame?.(frame),
@@ -109,8 +124,11 @@ defineExpose({
         :artifacts="artifacts"
         :preview-artifact="previewArtifact"
         :run-id="runId"
+        :run="run || undefined"
         :node-id="nodeId"
         :annotatable="inputActive"
+        remote-kind="sandbox"
+        @pick="onRemotePick"
       />
     </template>
     <template #sidebar>
