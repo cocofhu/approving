@@ -166,12 +166,13 @@ describe('AppShell', () => {
     expect(src).toMatch(/shadow-drawer md:hidden/)
   })
 
-  it('desktop hide uses v-show not a mobile drawer (g2.2 / g3.2)', async () => {
+  it('desktop hide uses width 0 not a mobile drawer (g2.2 / g3.2)', async () => {
     const wrapper = mountShell({ stubSidebar: false })
     const aside = wrapper.find('[data-testid="app-desktop-sidebar"]')
     expect(aside.exists()).toBe(true)
     await wrapper.find('[data-testid="desktop-nav-hide"]').trigger('click')
-    expect((aside.element as HTMLElement).style.display).toBe('none')
+    expect((aside.element as HTMLElement).style.display).not.toBe('none')
+    expect(aside.classes()).toContain('w-0')
     expect(wrapper.find('[data-testid="shell-nav"]').exists()).toBe(true)
     expect(aside.classes()).toContain('hidden')
     expect(aside.classes()).toContain('md:flex')

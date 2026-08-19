@@ -16,5 +16,7 @@ describe('global loading reduced-motion (g4.4)', () => {
     expect(css).toMatch(/\.drawer-fade-enter-active/)
     expect(css).toMatch(/\.toast-enter-active/)
     expect(css).toMatch(/width:\s*100%/)
+    expect(css).toMatch(/\.app-desktop-sidebar/)
+    expect(css).toMatch(/transition:\s*none/)
   })
 })

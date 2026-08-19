@@ -26,7 +26,8 @@ describe('Icon', () => {
   it('renders panel-left glyph used to hide desktop nav (g2.1 / g5.1)', () => {
     const wrapper = mount(Icon, { props: { name: 'panel-left', size: 18 } })
     expect(wrapper.find('svg').exists()).toBe(true)
-    expect(wrapper.html()).toMatch(/rect|M9 4v16/)
+    expect(wrapper.html()).toMatch(/rx="2"|M9 3v18|m16 15-3-3 3-3/)
+    expect(wrapper.html()).not.toMatch(/M9 4v16/)
     wrapper.unmount()
   })
 })
