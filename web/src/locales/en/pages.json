@@ -2482,7 +2482,11 @@
       "kindText": "Text",
       "kindFile": "File",
       "revision": "v{n}",
-      "meta": "{kind} · v{n} · {time}"
+      "meta": "{kind} · v{n} · {time}",
+      "metaKindTime": "{kind} · {time}",
+      "versionChip": "v{n}",
+      "versionChipLatest": "v{n} · latest",
+      "versionMenu": "Choose version"
     },
     "reviewShell": {
       "drawerHandle": "Review drawer · drag to resize",

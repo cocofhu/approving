@@ -9,8 +9,11 @@ import {
   canAnnotateStageArtifact,
   expandStageArtifacts,
   historicalStageArtifactId,
-  historicalStageArtifactName,
   inboxStageRemoteKind,
+  isSamePreviewVisualCopy,
+  listVisualPageVersionChoices,
+  resolveVisualPagePreviewArtifact,
+  visualNodePageName,
   isHistoricalStageArtifact,
   shouldActivatePinnedPreview,
   artifactKindLabelKey,
@@ -76,7 +79,7 @@ describe('reactArtifactPreview helpers', () => {
     expect(isHistoricalStageArtifact({ id: historicalStageArtifactId('visual', 1) })).toBe(true)
   })
 
-  it('expands earlier visual outputs.page snapshots beside live page.html', () => {
+  it('does not flatten historical visual snapshots into extra grid cards', () => {
     const live = art({ id: 'live', name: 'page.html', nodeId: 'visual_1', content: '<p>new</p>' })
     const run = {
       id: 'r1',
@@ -89,11 +92,50 @@ describe('reactArtifactPreview helpers', () => {
       },
     } as unknown as Run
     const node = run.nodes![0]
-    const expanded = expandStageArtifacts([live], run, node)
-    expect(expanded.map((a) => a.name)).toEqual([historicalStageArtifactName('page.html', 1), 'page.html'])
-    expect(expanded[0].content).toBe('<p>old</p>')
-    expect(expanded[0].id).toBe(historicalStageArtifactId('visual_1', 1))
-    expect(expandStageArtifacts([live], run, { ...node, type: 'research' })).toEqual([live])
+    expect(expandStageArtifacts([live], run, node).map((a) => a.name)).toEqual(['page.html'])
+    expect(expandStageArtifacts([live], run, { ...node, type: 'research' }).map((a) => a.name)).toEqual(['page.html'])
+  })
+
+  it('hides the same-preview visual node page copy when page.html is present', () => {
+    const page = art({ id: 'p', name: 'page.html', nodeId: 'visual_bqc5', content: '<p>same</p>' })
+    const alias = art({ id: 'a', name: visualNodePageName('visual_bqc5'), nodeId: 'visual_bqc5', content: '<p>same</p>' })
+    const other = art({ id: 'o', name: visualNodePageName('visual_other'), nodeId: 'visual_other', content: '<p>diff</p>' })
+    const json = art({ id: 'j', name: 'node_complete.json', kind: 'json', nodeId: 'visual_bqc5' })
+    const collapsed = expandStageArtifacts([page, alias, other, json])
+    expect(collapsed.map((a) => a.name)).toEqual(['page.html', visualNodePageName('visual_other'), 'node_complete.json'])
+    expect(isSamePreviewVisualCopy(alias, [page, alias])).toBe(true)
+    expect(isSamePreviewVisualCopy(other, [page, alias, other])).toBe(false)
+  })
+
+  it('keeps a visual_*.page.html card when page.html is absent', () => {
+    const alias = art({ id: 'a', name: visualNodePageName('visual_1'), nodeId: 'visual_1' })
+    expect(expandStageArtifacts([alias]).map((a) => a.name)).toEqual([visualNodePageName('visual_1')])
+  })
+
+  it('maps v-axis to outputs.page and does not substitute latest html for missing snapshots', () => {
+    const live = art({ id: 'live', name: 'page.html', nodeId: 'visual_1', content: '<p>new</p>' })
+    const run = {
+      nodeExecutions: {
+        visual_1: [
+          { nodeId: 'visual_1', iteration: 1, status: 'completed', outputs: {} },
+          { nodeId: 'visual_1', iteration: 2, status: 'completed', outputs: { page: '<p>mid</p>' } },
+          { nodeId: 'visual_1', iteration: 3, status: 'waiting_human', outputs: { page: '<p>new</p>' } },
+        ],
+      },
+    } as unknown as Run
+    const choices = listVisualPageVersionChoices(run, live)
+    expect(choices).toHaveLength(3)
+    expect(choices[0]).toMatchObject({ index: 1, latest: false, available: false, html: '' })
+    expect(choices[1]).toMatchObject({ index: 2, latest: false, available: true, html: '<p>mid</p>' })
+    expect(choices[2]).toMatchObject({ index: 3, latest: true, available: true, html: '' })
+    const v2 = resolveVisualPagePreviewArtifact(live, choices[1])
+    expect(v2.content).toBe('<p>mid</p>')
+    expect(v2.id).toBe(historicalStageArtifactId('visual_1', 2))
+    const missing = resolveVisualPagePreviewArtifact(live, choices[0])
+    expect(missing).toBe(live)
+    const latest = resolveVisualPagePreviewArtifact(live, choices[2])
+    expect(latest).toBe(live)
+    expect(listVisualPageVersionChoices(run, art({ id: 'j', name: 'node_complete.json', kind: 'json', nodeId: 'visual_1' }))).toEqual([])
   })
 
   it('uses sandbox remote only for ReAct inbox nodes', () => {

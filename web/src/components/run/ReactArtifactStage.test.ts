@@ -53,7 +53,7 @@ const stubs = {
   }),
   ArtifactPreview: defineComponent({
     props: { artifact: Object, annotatable: Boolean },
-    template: '<div data-testid="artifact-preview">{{ artifact?.name }}|{{ annotatable ? \'on\' : \'off\' }}</div>',
+    template: '<div data-testid="artifact-preview">{{ artifact?.name }}|{{ annotatable ? \'on\' : \'off\' }}{{ artifact?.content ? \'|\' + artifact.content : \'\' }}</div>',
   }),
   AppPreviewPanel: defineComponent({
     props: { runId: String, nodeId: String, shareEnabled: Boolean },
@@ -332,15 +332,33 @@ describe('ReactArtifactStage', () => {
     wrapper.unmount()
   })
 
-  it('shows historical visual pages as readonly cards beside live page.html', async () => {
+  it('merges visual page snapshots onto one page.html card with a footer version chip', async () => {
     const live = art({ id: 'live', name: 'page.html', kind: 'html', nodeId: 'visual_1', content: '<p>new</p>' })
+    const alias = art({
+      id: 'alias',
+      name: 'visual_1.page.html',
+      kind: 'html',
+      nodeId: 'visual_1',
+      content: '<p>new</p>',
+    })
+    const json = art({ id: 'json', name: 'node_complete.json', kind: 'json', nodeId: 'visual_1' })
+    const other = art({
+      id: 'other',
+      name: 'visual_other.page.html',
+      kind: 'html',
+      nodeId: 'visual_other',
+      content: '<p>other</p>',
+    })
     const wrapper = mount(ReactArtifactStage, {
       props: {
-        artifacts: [live],
+        artifacts: [live, alias, json, other],
         runId: 'run-1',
         run: {
           id: 'run-1',
-          nodes: [{ id: 'visual_1', type: 'visual', label: '视觉', position: { x: 0, y: 0 }, config: {} }],
+          nodes: [
+            { id: 'visual_1', type: 'visual', label: '视觉', position: { x: 0, y: 0 }, config: {} },
+            { id: 'visual_other', type: 'visual', label: '另一页', position: { x: 0, y: 0 }, config: {} },
+          ],
           nodeExecutions: {
             visual_1: [
               { nodeId: 'visual_1', iteration: 1, status: 'completed', outputs: { page: '<p>old</p>' } },
@@ -355,14 +373,121 @@ describe('ReactArtifactStage', () => {
       global: { plugins: [i18n()], stubs },
     })
     await flushPromises()
-    expect(wrapper.get('[data-testid="react-artifact-card-iteration"]').text()).toContain('第 1 次')
-    expect(wrapper.findAll('[data-testid="react-artifact-card-readonly"]').length).toBe(1)
-    await wrapper.get('[data-testid="react-artifact-card-page.html#iter-1"]').trigger('click')
-    await wrapper.get('[data-testid="react-artifact-tab-grid"]').trigger('click')
-    await wrapper.get('[data-testid="react-artifact-card-page.html"]').trigger('click')
+    expect(wrapper.find('[data-testid="react-artifact-card-page.html"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-artifact-card-visual_1.page.html"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="react-artifact-card-page.html#iter-1"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="react-artifact-card-node_complete.json"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-artifact-card-visual_other.page.html"]').exists()).toBe(true)
+    expect(wrapper.findAll('[data-testid="react-artifact-card-page.html"]').length).toBe(1)
+    expect(wrapper.get('[data-testid="react-artifact-version-chip-btn-page.html"]').text()).toContain('v2 · 最新')
+    expect(wrapper.find('[data-testid="react-artifact-card-iteration"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="react-artifact-version-chip-btn-page.html"]').trigger('click')
     await flushPromises()
-    const previews = wrapper.findAll('[data-testid="artifact-preview"]')
-    expect(previews.map((n) => n.text())).toEqual(['page.html#iter-1|off', 'page.html|on'])
+    expect(wrapper.get('[data-testid="react-artifact-version-option-v1"]').text()).toBe('v1')
+    expect(wrapper.get('[data-testid="react-artifact-version-option-v2"]').text()).toContain('v2 · 最新')
+    await wrapper.get('[data-testid="react-artifact-version-option-v1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid="react-artifact-card-page.html"]').length).toBe(1)
+    expect(wrapper.get('[data-testid="artifact-preview"]').text()).toBe('page.html|off|<p>old</p>')
+    await wrapper.get('[data-testid="react-artifact-tab-grid"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-version-chip-btn-page.html"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-version-option-v2"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="artifact-preview"]').text()).toBe('page.html|on|<p>new</p>')
+    wrapper.unmount()
+  })
+
+  it('hides the version chip for a single snapshot and still shows json cards', async () => {
+    const live = art({ id: 'live', name: 'page.html', kind: 'html', nodeId: 'visual_1', content: '<p>only</p>' })
+    const json = art({ id: 'json', name: 'node_complete.json', kind: 'json', nodeId: 'visual_1' })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [live, json],
+        runId: 'run-1',
+        run: {
+          id: 'run-1',
+          nodes: [{ id: 'visual_1', type: 'visual', label: '视觉', position: { x: 0, y: 0 }, config: {} }],
+          nodeExecutions: {
+            visual_1: [{ nodeId: 'visual_1', iteration: 1, status: 'completed', outputs: { page: '<p>only</p>' } }],
+          },
+        } as any,
+        nodeId: 'visual_1',
+        remoteKind: 'off',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="react-artifact-version-chip"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="react-artifact-card-node_complete.json"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('disables a missing snapshot menu item instead of previewing latest html', async () => {
+    const live = art({ id: 'live', name: 'page.html', kind: 'html', nodeId: 'visual_1', content: '<p>new</p>' })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [live],
+        runId: 'run-1',
+        run: {
+          id: 'run-1',
+          nodes: [{ id: 'visual_1', type: 'visual', label: '视觉', position: { x: 0, y: 0 }, config: {} }],
+          nodeExecutions: {
+            visual_1: [
+              { nodeId: 'visual_1', iteration: 1, status: 'completed', outputs: {} },
+              { nodeId: 'visual_1', iteration: 2, status: 'waiting_human', outputs: { page: '<p>new</p>' } },
+            ],
+          },
+        } as any,
+        nodeId: 'visual_1',
+        annotatable: true,
+        remoteKind: 'off',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    await wrapper.get('[data-testid="react-artifact-version-chip-btn-page.html"]').trigger('click')
+    const missing = wrapper.get('[data-testid="react-artifact-version-option-v1"]')
+    expect(missing.attributes('disabled')).toBeDefined()
+    await missing.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="artifact-preview"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('uses a footer chip on a standalone visual_*.page.html card when page.html is absent', async () => {
+    const alias = art({
+      id: 'alias',
+      name: 'visual_1.page.html',
+      kind: 'html',
+      nodeId: 'visual_1',
+      content: '<p>new</p>',
+    })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [alias],
+        runId: 'run-1',
+        run: {
+          id: 'run-1',
+          nodes: [{ id: 'visual_1', type: 'visual', label: '视觉', position: { x: 0, y: 0 }, config: {} }],
+          nodeExecutions: {
+            visual_1: [
+              { nodeId: 'visual_1', iteration: 1, status: 'completed', outputs: { page: '<p>old</p>' } },
+              { nodeId: 'visual_1', iteration: 2, status: 'waiting_human', outputs: { page: '<p>new</p>' } },
+            ],
+          },
+        } as any,
+        nodeId: 'visual_1',
+        remoteKind: 'off',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="react-artifact-card-page.html"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="react-artifact-card-visual_1.page.html"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="react-artifact-version-chip-btn-visual_1.page.html"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-version-option-v1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="artifact-preview"]').text()).toBe('visual_1.page.html|off|<p>old</p>')
     wrapper.unmount()
   })
 })

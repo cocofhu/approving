@@ -46,52 +46,120 @@ export function historicalStageArtifactName(baseName: string, iteration: number)
   return `${baseName}#iter-${iteration}`
 }
 
-export function listVisualPageVersions(run: Run | null | undefined, nodeId: string | null | undefined): NodeRun[] {
+export function visualProductPageName(): string {
+  return productArtifactName('visual') || 'page.html'
+}
+
+/** Physical copy written by finalizeVisual: `{nodeId}.page.html`. */
+export function visualNodePageName(nodeId: string): string {
+  return `${String(nodeId || '').trim()}.page.html`
+}
+
+export function parseVisualNodePageName(name: string | null | undefined): string | null {
+  const n = String(name || '')
+  const suffix = '.page.html'
+  if (!n.endsWith(suffix)) return null
+  const nodeId = n.slice(0, -suffix.length)
+  if (!nodeId || n === visualProductPageName()) return null
+  return nodeId
+}
+
+export function visualPageOwnerNodeId(artifact: Pick<Artifact, 'name' | 'nodeId'> | null | undefined): string {
+  if (!artifact) return ''
+  const fromName = parseVisualNodePageName(artifact.name)
+  if (fromName) return fromName
+  if (artifact.name === visualProductPageName()) return String(artifact.nodeId || '').trim()
+  return ''
+}
+
+/** Hide `{nodeId}.page.html` when page.html from the same visual node is also in the grid. */
+export function isSamePreviewVisualCopy(
+  artifact: Pick<Artifact, 'name' | 'nodeId'>,
+  artifacts: Pick<Artifact, 'name' | 'nodeId'>[],
+): boolean {
+  const owner = parseVisualNodePageName(artifact.name)
+  if (!owner) return false
+  const page = artifacts.find((a) => a.name === visualProductPageName())
+  if (!page) return false
+  return String(page.nodeId || '').trim() === owner
+}
+
+export function listVisualNodeRuns(run: Run | null | undefined, nodeId: string | null | undefined): NodeRun[] {
   if (!run || !nodeId) return []
   return (run.nodeExecutions?.[nodeId] || [])
-    .filter(
-      (nodeRun) =>
-        (nodeRun.status === 'completed' || nodeRun.status === 'waiting_human') &&
-        typeof nodeRun.outputs?.page === 'string' &&
-        nodeRun.outputs.page.trim().length > 0,
-    )
+    .filter((nodeRun) => nodeRun.status === 'completed' || nodeRun.status === 'waiting_human')
     .sort((a, b) => (a.iteration ?? 0) - (b.iteration ?? 0))
 }
 
-/** Visual review: keep live page.html, plus readonly snapshots of earlier outputs.page. */
+export function listVisualPageVersions(run: Run | null | undefined, nodeId: string | null | undefined): NodeRun[] {
+  return listVisualNodeRuns(run, nodeId).filter(
+    (nodeRun) => typeof nodeRun.outputs?.page === 'string' && nodeRun.outputs.page.trim().length > 0,
+  )
+}
+
+export type VisualPageVersionChoice = {
+  index: number
+  iteration: number
+  latest: boolean
+  available: boolean
+  html: string
+}
+
+/** User-visible v1..vN mapped to visual nodeExecutions; latest follows live artifact bytes. */
+export function listVisualPageVersionChoices(
+  run: Run | null | undefined,
+  artifact: Pick<Artifact, 'name' | 'nodeId' | 'kind'> | null | undefined,
+): VisualPageVersionChoice[] {
+  if (!run || !artifact) return []
+  if (artifact.kind && artifact.kind !== 'html') return []
+  const nodeId = visualPageOwnerNodeId(artifact)
+  if (!nodeId) return []
+  const runs = listVisualNodeRuns(run, nodeId)
+  if (!runs.length) return []
+  return runs.map((nodeRun, i) => {
+    const latest = i === runs.length - 1
+    const html = String(nodeRun.outputs?.page || '')
+    const available = latest || html.trim().length > 0
+    return {
+      index: i + 1,
+      iteration: nodeRun.iteration ?? i + 1,
+      latest,
+      available,
+      html: latest ? '' : html,
+    }
+  })
+}
+
+export function resolveVisualPagePreviewArtifact(
+  artifact: Artifact,
+  choice: VisualPageVersionChoice | null | undefined,
+): Artifact {
+  if (!choice || choice.latest || !choice.available) return artifact
+  const nodeId = visualPageOwnerNodeId(artifact)
+  return {
+    ...artifact,
+    id: historicalStageArtifactId(nodeId || artifact.nodeId, choice.iteration),
+    content: choice.html,
+    sizeBytes: choice.html.length,
+  }
+}
+
+/**
+ * Grid display list: never flatten page.html#iter-N into extra cards.
+ * Hide same-preview visual_{nodeId}.page.html when page.html is present.
+ */
 export function expandStageArtifacts(
   artifacts: Artifact[],
-  run?: Run | null,
-  node?: WFNode | null,
+  _run?: Run | null,
+  _node?: WFNode | null,
 ): Artifact[] {
-  if (!run || !node || node.type !== 'visual') return artifacts
-  const versions = listVisualPageVersions(run, node.id)
-  if (versions.length < 2) return artifacts
-  const latestIter = versions[versions.length - 1]?.iteration
-  const baseName = productArtifactName('visual') || 'page.html'
-  const liveIdx = artifacts.findIndex((a) => a.name === baseName && isOwnNodeArtifact(a, node.id))
-  const live = liveIdx >= 0 ? artifacts[liveIdx] : undefined
-  const historical: Artifact[] = versions
-    .filter((v) => v.iteration !== latestIter)
-    .map((v) => {
-      const html = String(v.outputs?.page || '')
-      const iteration = v.iteration ?? 0
-      return {
-        id: historicalStageArtifactId(node.id, iteration),
-        name: historicalStageArtifactName(baseName, iteration),
-        kind: 'html',
-        nodeId: node.id,
-        runId: live?.runId || run.id || '',
-        workflowName: live?.workflowName || '',
-        sizeBytes: html.length,
-        createdAt: live?.createdAt || '',
-        content: html,
-        revision: Math.max(1, iteration),
-      }
-    })
-  if (!historical.length) return artifacts
-  if (liveIdx < 0) return [...historical, ...artifacts]
-  return [...artifacts.slice(0, liveIdx), ...historical, artifacts[liveIdx], ...artifacts.slice(liveIdx + 1)]
+  const list = artifacts.filter((a) => !isHistoricalStageArtifact(a))
+  const page = list.find((a) => a.name === visualProductPageName())
+  if (!page) return list
+  const owner = String(page.nodeId || '').trim()
+  if (!owner) return list
+  const alias = visualNodePageName(owner)
+  return list.filter((a) => a.name !== alias)
 }
 
 export function resolveStageRemoteKind(opts: {
