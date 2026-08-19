@@ -177,6 +177,76 @@ export function findArtifactByName(artifacts: Artifact[], name: string | null | 
   return artifacts.find((a) => a.name === n) || null
 }
 
+const VISUAL_LIVE_PAGE = productArtifactName('visual') || 'page.html'
+
+/** HTML kind, or .html/.htm name (runtime.artifactKind). History cards excluded by name. */
+export function isHtmlStageArtifact(artifact: Pick<Artifact, 'kind' | 'name'> | null | undefined): boolean {
+  if (!artifact) return false
+  if (artifact.kind === 'html') return true
+  const n = String(artifact.name || '').toLowerCase()
+  return n.endsWith('.html') || n.endsWith('.htm')
+}
+
+export function isIterSnapshotName(name: string | null | undefined): boolean {
+  return String(name || '').includes('#iter-')
+}
+
+function artifactTimeMs(a: Pick<Artifact, 'updatedAt' | 'createdAt'>): number {
+  const t = Date.parse(String(a.updatedAt || a.createdAt || ''))
+  return Number.isFinite(t) ? t : 0
+}
+
+/** Clarify fallback: newest own-node live HTML. Empty nodeId → no guess (avoid upstream page.html). */
+export function latestOwnNodeHtmlName(artifacts: Artifact[], nodeId?: string | null): string {
+  const own = String(nodeId || '').trim()
+  if (!own) return ''
+  const candidates = artifacts.filter((a) => {
+    if (!isOwnNodeArtifact(a, own)) return false
+    if (isHistoricalStageArtifact(a)) return false
+    if (isIterSnapshotName(a.name)) return false
+    return isHtmlStageArtifact(a)
+  })
+  if (!candidates.length) return ''
+  candidates.sort((a, b) => {
+    const dt = artifactTimeMs(b) - artifactTimeMs(a)
+    if (dt !== 0) return dt
+    return artifactRevision(b) - artifactRevision(a)
+  })
+  return String(candidates[0]?.name || '').trim()
+}
+
+/**
+ * Effective default pin for Inbox / RunClarify / RunReview:
+ * 1. previewArtifact if the name is already on the stage
+ * 2. visual → live page.html only (never visual_*.page.html or #iter- snapshots)
+ * 3. react → newest own-node HTML
+ * 4. else empty (stay on pipeline grid)
+ */
+export function resolveEffectivePreviewPin(opts: {
+  previewArtifact?: string | null
+  artifacts: Artifact[]
+  nodeType?: string | null
+  nodeId?: string | null
+}): string {
+  const artifacts = opts.artifacts || []
+  const names = artifacts.map((a) => a.name)
+  const pin = String(opts.previewArtifact || '').trim()
+  if (pin) {
+    return names.includes(pin) ? pin : ''
+  }
+  const nodeType = String(opts.nodeType || '').trim()
+  if (nodeType === 'visual') {
+    const live = artifacts.find(
+      (a) => a.name === VISUAL_LIVE_PAGE && isOwnNodeArtifact(a, opts.nodeId) && !isHistoricalStageArtifact(a),
+    )
+    return live ? VISUAL_LIVE_PAGE : ''
+  }
+  if (nodeType === 'react') {
+    return latestOwnNodeHtmlName(artifacts, opts.nodeId)
+  }
+  return ''
+}
+
 export function isReactGraphNode(run: Run | null | undefined, nodeId: string | null | undefined): boolean {
   if (!run?.nodes?.length || !nodeId) return false
   return run.nodes.some((n: WFNode) => n.id === nodeId && n.type === 'react')
@@ -228,7 +298,9 @@ export function shouldActivatePinnedPreview(
   names: string[],
   prevPin?: string,
   prevNames?: string[],
+  userMoved = false,
 ): boolean {
+  if (userMoved) return false
   const n = String(pin || '').trim()
   if (!n || !names.includes(n)) return false
   if (prevPin === undefined || prevNames === undefined) return true

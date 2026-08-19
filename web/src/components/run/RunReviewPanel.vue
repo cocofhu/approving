@@ -87,6 +87,7 @@ defineExpose({
         :run-id="run.id"
         :run="run"
         :node-id="node.id"
+        :node-type="node.type"
         :annotatable="inputActive"
         :remote-kind="remoteKind"
         @pick="emit('pick', $event)"

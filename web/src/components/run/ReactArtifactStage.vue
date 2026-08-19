@@ -33,6 +33,7 @@ import {
   isHistoricalStageArtifact,
   isOwnNodeArtifact,
   parseHistoricalStageArtifact,
+  resolveEffectivePreviewPin,
   resolveStageRemoteKind,
   shouldActivatePinnedPreview,
   type ReactStageRemoteKind,
@@ -45,6 +46,8 @@ const props = withDefaults(
     runId?: string
     run?: Run | null
     nodeId?: string
+    /** Graph node type (visual/react/…). Fallback: run.nodes lookup by nodeId. */
+    nodeType?: string
     /** When true, ArtifactPreview will not fetch (content already inlined). */
     inlineContent?: boolean
     /** Enable 取点 / 划选 / ⤴ 标注 on the current node's artifacts. */
@@ -61,6 +64,7 @@ const props = withDefaults(
     runId: '',
     run: null,
     nodeId: '',
+    nodeType: '',
     inlineContent: false,
     annotatable: false,
     shareEnabled: false,
@@ -103,6 +107,8 @@ provideReviewAnnotate({
 })
 
 const activeTab = ref(REACT_STAGE_TAB_GRID)
+/** True after the user picks a grid tab, card, preview tab, or noVNC — auto-open must not steal focus. */
+const userMoved = ref(false)
 const openNames = ref<string[]>([])
 const htmlThumbs = ref<Record<string, string>>({})
 const novncOpen = ref(false)
@@ -121,6 +127,7 @@ const resolvedRemoteKind = computed(() =>
   }),
 )
 const stageNode = computed(() => props.run?.nodes?.find((n) => n.id === props.nodeId) || null)
+const resolvedNodeType = computed(() => String(props.nodeType || stageNode.value?.type || '').trim())
 const stageArtifacts = computed(() => expandStageArtifacts(props.artifacts, props.run, stageNode.value))
 const canOpenNovnc = computed(() => resolvedRemoteKind.value !== 'off')
 const showingNovnc = computed(() => activeTab.value === REACT_STAGE_TAB_NOVNC)
@@ -182,6 +189,10 @@ function artifactByName(name: string): Artifact | null {
   return findArtifactByName(stageArtifacts.value, name)
 }
 
+function markUserMoved() {
+  userMoved.value = true
+}
+
 function activatePreview(name: string) {
   const art = findArtifactByName(stageArtifacts.value, name)
   if (!art) return
@@ -190,10 +201,22 @@ function activatePreview(name: string) {
 }
 
 function openArtifact(a: Artifact) {
+  markUserMoved()
   activatePreview(a.name)
 }
 
+function selectGridTab() {
+  markUserMoved()
+  activeTab.value = REACT_STAGE_TAB_GRID
+}
+
+function selectPreviewTab(name: string) {
+  markUserMoved()
+  activeTab.value = previewTabId(name)
+}
+
 function closePreview(name: string) {
+  markUserMoved()
   const next = nextTabAfterClose(openNames.value, name, activeTab.value, novncOpen.value)
   openNames.value = closeStagePreviewTab(openNames.value, name)
   activeTab.value = next
@@ -201,11 +224,18 @@ function closePreview(name: string) {
 
 function openNovnc() {
   if (!canOpenNovnc.value) return
+  markUserMoved()
   novncOpen.value = true
   activeTab.value = REACT_STAGE_TAB_NOVNC
 }
 
+function selectNovncTab() {
+  markUserMoved()
+  activeTab.value = REACT_STAGE_TAB_NOVNC
+}
+
 function closeNovnc() {
+  markUserMoved()
   novncOpen.value = false
   if (openNames.value.length) {
     activeTab.value = previewTabId(openNames.value[openNames.value.length - 1])
@@ -222,7 +252,16 @@ const showingGrid = computed(() => activeTab.value === REACT_STAGE_TAB_GRID)
 const activePreviewName = computed(() => previewTabName(activeTab.value))
 
 watch(
-  () => [String(props.previewArtifact || '').trim(), stageArtifacts.value.map((a) => a.name)] as const,
+  () => {
+    const arts = stageArtifacts.value
+    const pin = resolveEffectivePreviewPin({
+      previewArtifact: props.previewArtifact,
+      artifacts: arts,
+      nodeType: resolvedNodeType.value,
+      nodeId: props.nodeId,
+    })
+    return [pin, arts.map((a) => a.name)] as const
+  },
   ([pin, names], prev) => {
     const nameSet = new Set(names)
     const kept = openNames.value.filter((n) => nameSet.has(n))
@@ -233,7 +272,15 @@ watch(
       }
       openNames.value = kept
     }
-    if (shouldActivatePinnedPreview(pin, names, prev?.[0], prev?.[1] !== undefined ? [...prev[1]] : undefined)) {
+    if (
+      shouldActivatePinnedPreview(
+        pin,
+        names,
+        prev?.[0],
+        prev?.[1] !== undefined ? [...prev[1]] : undefined,
+        userMoved.value,
+      )
+    ) {
       activatePreview(pin)
     }
   },
@@ -337,7 +384,7 @@ onBeforeUnmount(() => {
         "
         :aria-selected="showingGrid ? 'true' : 'false'"
         data-testid="react-artifact-tab-grid"
-        @click="activeTab = REACT_STAGE_TAB_GRID"
+        @click="selectGridTab"
       >
         <Icon name="dashboard" :size="13" />
         <span class="truncate">{{ t('pages.reactArtifactStage.pipelineTab') }}</span>
@@ -358,7 +405,7 @@ onBeforeUnmount(() => {
           class="inline-flex min-w-0 items-center gap-1.5 py-1 pl-2.5 pr-1"
           :aria-selected="activePreviewName === name ? 'true' : 'false'"
           :data-testid="'react-artifact-tab-' + name"
-          @click="activeTab = previewTabId(name)"
+          @click="selectPreviewTab(name)"
         >
           <Icon :name="kindIcon[artifactByName(name)?.kind || ''] || 'doc'" :size="13" />
           <span class="truncate">{{ artifactTitle(artifactByName(name)) }}</span>
@@ -389,7 +436,7 @@ onBeforeUnmount(() => {
           class="inline-flex min-w-0 items-center gap-1.5 py-1 pl-2.5 pr-1"
           :aria-selected="showingNovnc ? 'true' : 'false'"
           data-testid="react-artifact-tab-novnc"
-          @click="activeTab = REACT_STAGE_TAB_NOVNC"
+          @click="selectNovncTab"
         >
           <Icon name="globe" :size="13" />
           <span class="truncate">{{ remoteTabLabel }}</span>
