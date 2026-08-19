@@ -468,6 +468,12 @@ describe('ReactArtifactStage', () => {
     await wrapper.get('[data-testid="react-artifact-version-chip-btn-page.html"]').trigger('click')
     const missing = wrapper.get('[data-testid="react-artifact-version-option-v1"]')
     expect(missing.attributes('disabled')).toBeDefined()
+    // default-open may already show latest page.html; close it first so we only
+    // assert the disabled option cannot open a preview on its own.
+    if (wrapper.find('[data-testid="react-artifact-tab-close-page.html"]').exists()) {
+      await wrapper.get('[data-testid="react-artifact-tab-close-page.html"]').trigger('click')
+      await flushPromises()
+    }
     await missing.trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="artifact-preview"]').exists()).toBe(false)
@@ -511,7 +517,7 @@ describe('ReactArtifactStage', () => {
     wrapper.unmount()
   })
 
-  it('defaults to page.html preview for visual nodes and does not open visual_*.page.html (s1)', async () => {
+  it('defaults to page.html preview for visual nodes and hides duplicate visual_*.page.html (s1)', async () => {
     const live = art({ id: 'live', name: 'page.html', kind: 'html', nodeId: 'visual_bqc5' })
     const copy = art({ id: 'copy', name: 'visual_bqc5.page.html', kind: 'html', nodeId: 'visual_bqc5' })
     const wrapper = mount(ReactArtifactStage, {
@@ -529,11 +535,10 @@ describe('ReactArtifactStage', () => {
     expect(wrapper.find('[data-testid="react-artifact-tab-visual_bqc5.page.html"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="react-artifact-tab-grid"]').exists()).toBe(true)
     await wrapper.get('[data-testid="react-artifact-tab-grid"]').trigger('click')
-    await wrapper.get('[data-testid="react-artifact-card-visual_bqc5.page.html"]').trigger('click')
     await flushPromises()
-    expect(wrapper.get('[data-testid="react-artifact-tab-visual_bqc5.page.html"]').attributes('aria-selected')).toBe(
-      'true',
-    )
+    // #356 merges/hides same-node visual_*.page.html when page.html is present
+    expect(wrapper.find('[data-testid="react-artifact-card-visual_bqc5.page.html"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="react-artifact-card-page.html"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
