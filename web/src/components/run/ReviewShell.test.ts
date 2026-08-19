@@ -223,6 +223,59 @@ describe('ReviewShell sidebar width', () => {
     huge.unmount()
   })
 
+  it('reclamps when parent shell shrinks without window.resize (outer sash F3)', async () => {
+    const observers: ResizeObserverCallback[] = []
+    class MockResizeObserver {
+      constructor(cb: ResizeObserverCallback) {
+        observers.push(cb)
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', MockResizeObserver)
+
+    localStorage.setItem(REVIEW_SHELL_WIDTH_KEY_REVIEW, '300')
+    const w = mountShell({
+      sidebarWidth: REVIEW_SIDEBAR,
+      storageKey: REVIEW_SHELL_WIDTH_KEY_REVIEW,
+    })
+    expect(sidebarWidthStyle(w)).toMatch(/width:\s*300px/)
+
+    Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value() {
+        // OUTER_RIGHT_MIN 324: room = 324 - STAGE_MIN 160 - sash 4 = 160
+        return {
+          x: 0,
+          y: 0,
+          top: 0,
+          left: 0,
+          bottom: 600,
+          right: 324,
+          width: 324,
+          height: 600,
+          toJSON() {
+            return {}
+          },
+        }
+      },
+    })
+    expect(observers.length).toBeGreaterThan(0)
+    for (const cb of observers) {
+      cb([], {} as ResizeObserver)
+    }
+    await w.vm.$nextTick()
+    expect(sidebarWidthStyle(w)).toMatch(/width:\s*160px/)
+    expect(w.get('[data-testid="review-shell-stage"]').classes()).toContain(
+      'review-shell-stage',
+    )
+    const sash = w.get('[data-testid="review-shell-sash"]')
+    expect(sash.attributes('aria-valuemax')).toBe('160')
+    expect(sash.attributes('aria-valuemin')).toBe('160')
+    w.unmount()
+  })
+
   it('reclamps on window resize when shell shrinks', async () => {
     localStorage.setItem(REVIEW_SHELL_WIDTH_KEY_REVIEW, '480')
     const w = mountShell({

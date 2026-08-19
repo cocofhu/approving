@@ -103,8 +103,12 @@ function initWidth() {
 
 const width = ref(clampSidebar(readStored() ?? props.sidebarWidth))
 
-function onWindowResize() {
-  if (props.mobile) return
+/**
+ * Reclamp when the shell box changes — including parent-driven shrink
+ * (Run Detail outer sash) which does not fire window.resize.
+ */
+function onShellSizeChange() {
+  if (props.mobile || sashDragging.value) return
   width.value = clampSidebar(width.value)
 }
 
@@ -173,16 +177,24 @@ watch(
   },
 )
 
+let shellObserver: ResizeObserver | undefined
+
 onMounted(() => {
   if (!props.mobile) initWidth()
-  window.addEventListener('resize', onWindowResize)
+  window.addEventListener('resize', onShellSizeChange)
+  if (!props.mobile && typeof ResizeObserver !== 'undefined' && shellRef.value) {
+    shellObserver = new ResizeObserver(() => onShellSizeChange())
+    shellObserver.observe(shellRef.value)
+  }
 })
 
 onBeforeUnmount(() => {
   drawerDragging = false
   sashDragging.value = false
   setSashDraggingUi(false)
-  window.removeEventListener('resize', onWindowResize)
+  shellObserver?.disconnect()
+  shellObserver = undefined
+  window.removeEventListener('resize', onShellSizeChange)
 })
 </script>
 

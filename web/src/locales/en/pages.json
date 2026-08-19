@@ -1038,6 +1038,7 @@
       "stats": "Stats",
       "backToTimeline": "Back to timeline",
       "canvasHint": "Execution canvas · click a node for output/logs",
+      "resizeOuterSash": "Drag to resize canvas vs right panel · double-click to reset",
       "detailTitle": "Run details",
       "executionHistory": "Executions",
       "executionN": "Run {n}",
