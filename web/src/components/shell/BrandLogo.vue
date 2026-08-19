@@ -7,10 +7,13 @@ const props = withDefaults(
   defineProps<{
     size?: 'sm' | 'md' | 'lg'
     align?: 'start' | 'center'
+    /** Desktop AppSidebar only: 28px square purple A mark. */
+    showMark?: boolean
   }>(),
   {
     size: 'sm',
     align: 'start',
+    showMark: false,
   },
 )
 
@@ -20,6 +23,7 @@ const rootClass = computed(() => [
   'brand-logo',
   { sm: 'brand-logo--sm', md: 'brand-logo--md', lg: 'brand-logo--lg' }[props.size],
   props.align === 'center' ? 'items-center text-center' : '',
+  props.showMark ? 'brand-logo--with-mark' : '',
 ])
 
 /** Both locales use "Approving"; keep literal fallback so brand paints before locale JSON. */
@@ -35,7 +39,10 @@ const tagline = computed(() =>
 
 <template>
   <div :class="rootClass">
-    <span class="brand-logo__name">{{ appName }}</span>
-    <span class="brand-logo__tagline">{{ tagline }}</span>
+    <span v-if="showMark" class="brand-logo__mark" aria-hidden="true">A</span>
+    <div class="brand-logo__text">
+      <span class="brand-logo__name">{{ appName }}</span>
+      <span class="brand-logo__tagline">{{ tagline }}</span>
+    </div>
   </div>
 </template>

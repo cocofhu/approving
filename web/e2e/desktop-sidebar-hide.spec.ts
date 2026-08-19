@@ -56,6 +56,16 @@ function sidebar(page: Page) {
   return page.getByTestId('app-desktop-sidebar')
 }
 
+/** Wait for 232→0 width transition so toBeHidden / edge.x are not sampled mid-animation. */
+async function expectSidebarCollapsed(page: Page) {
+  const aside = sidebar(page)
+  await expect(aside).toHaveCSS('width', '0px')
+  await expect
+    .poll(async () => aside.evaluate((el) => el.getBoundingClientRect().width))
+    .toBe(0)
+  await expect(aside).toBeHidden()
+}
+
 test.describe('desktop sidebar hide', () => {
   test('hide from brand, open from topbar, persist, no toast', async ({ page }) => {
     await openGates(page)
@@ -73,7 +83,7 @@ test.describe('desktop sidebar hide', () => {
     await expect(hide).toHaveAttribute('aria-label', '隐藏导航')
 
     await hide.click()
-    await expect(aside).toBeHidden()
+    await expectSidebarCollapsed(page)
     await expect(page.getByTestId('desktop-nav-open')).toBeVisible()
     await expect(page.getByTestId('desktop-nav-edge-open')).toHaveCount(0)
     const hiddenWidth = await page.locator('main').evaluate((el) => el.getBoundingClientRect().width)
@@ -96,7 +106,7 @@ test.describe('desktop sidebar hide', () => {
     expect(await page.evaluate(() => localStorage.getItem('approving-sidebar-hidden'))).toBe('true')
     await page.reload()
     await expect(page.getByTestId('page-gates')).toBeVisible({ timeout: 15_000 })
-    await expect(sidebar(page)).toBeHidden()
+    await expectSidebarCollapsed(page)
     await expect(page.getByTestId('desktop-nav-open')).toBeVisible()
   })
 
@@ -107,6 +117,7 @@ test.describe('desktop sidebar hide', () => {
     await expect(page.getByTestId('page-run')).toBeVisible({ timeout: 15_000 })
     await expect(page.getByTestId('desktop-nav-hide')).toBeVisible()
     await page.getByTestId('desktop-nav-hide').click()
+    await expectSidebarCollapsed(page)
     const edge = page.getByTestId('desktop-nav-edge-open')
     await expect(edge).toBeVisible()
     const box = await edge.boundingBox()
@@ -142,7 +153,7 @@ test.describe('desktop sidebar hide', () => {
   test('mobile drawer is independent; returning to desktop keeps remembered hide', async ({ page }) => {
     await openGates(page)
     await page.getByTestId('desktop-nav-hide').click()
-    await expect(sidebar(page)).toBeHidden()
+    await expectSidebarCollapsed(page)
 
     await page.setViewportSize({ width: 390, height: 844 })
     await expect(page.getByTestId('mobile-nav-toggle')).toBeVisible()
@@ -155,7 +166,7 @@ test.describe('desktop sidebar hide', () => {
     await page.screenshot({ path: path.join(shotDir, '08-mobile-drawer-open.png') })
 
     await page.setViewportSize({ width: 1280, height: 800 })
-    await expect(sidebar(page)).toBeHidden()
+    await expectSidebarCollapsed(page)
     await expect(page.getByTestId('desktop-nav-open')).toBeVisible()
     await expect(page.locator('.bg-black\\/50')).not.toBeVisible()
     await page.screenshot({ path: path.join(shotDir, '09-desktop-still-hidden.png') })
