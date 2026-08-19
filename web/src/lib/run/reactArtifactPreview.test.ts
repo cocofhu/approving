@@ -19,9 +19,11 @@ import {
   findArtifactByName,
   isOwnNodeArtifact,
   isReactGraphNode,
+  latestOwnNodeHtmlName,
   nextTabAfterClose,
   openStagePreviewTab,
   previewTabId,
+  resolveEffectivePreviewPin,
   resolveStageRemoteKind,
 } from './reactArtifactPreview'
 
@@ -168,5 +170,108 @@ describe('reactArtifactPreview helpers', () => {
     expect(shouldActivatePinnedPreview('page.html', ['page.html', 'extra.md'], 'page.html', ['page.html'])).toBe(
       false,
     )
+    expect(shouldActivatePinnedPreview('page.html', ['page.html'], '', [], true)).toBe(false)
+    expect(shouldActivatePinnedPreview('page.html', ['page.html'], undefined, undefined, true)).toBe(false)
+  })
+
+  it('prefers an on-stage pin, then visual page.html, then newest own-node HTML', () => {
+    const pin = art({ id: 'pin', name: 'brief.md', kind: 'markdown', nodeId: 'react' })
+    const live = art({ id: 'live', name: 'page.html', kind: 'html', nodeId: 'visual_bqc5' })
+    const copy = art({ id: 'copy', name: 'visual_bqc5.page.html', kind: 'html', nodeId: 'visual_bqc5' })
+    const hist = art({ id: 'hist', name: 'page.html#iter-1', kind: 'html', nodeId: 'visual_bqc5' })
+    expect(
+      resolveEffectivePreviewPin({
+        previewArtifact: 'brief.md',
+        artifacts: [live, pin],
+        nodeType: 'visual',
+        nodeId: 'visual_bqc5',
+      }),
+    ).toBe('brief.md')
+    expect(
+      resolveEffectivePreviewPin({
+        previewArtifact: 'missing.html',
+        artifacts: [live],
+        nodeType: 'visual',
+        nodeId: 'visual_bqc5',
+      }),
+    ).toBe('')
+    expect(
+      resolveEffectivePreviewPin({
+        previewArtifact: '',
+        artifacts: [copy, hist, live],
+        nodeType: 'visual',
+        nodeId: 'visual_bqc5',
+      }),
+    ).toBe('page.html')
+    expect(
+      resolveEffectivePreviewPin({
+        previewArtifact: '',
+        artifacts: [copy],
+        nodeType: 'visual',
+        nodeId: 'visual_bqc5',
+      }),
+    ).toBe('')
+  })
+
+  it('picks the newest own-node HTML for unpinned react and ignores upstream page.html', () => {
+    const upstream = art({
+      id: 'up',
+      name: 'page.html',
+      kind: 'html',
+      nodeId: 'visual_bqc5',
+      updatedAt: '2026-08-19T20:00:00Z',
+      revision: 9,
+    })
+    const older = art({
+      id: 'old',
+      name: 'a.html',
+      kind: 'html',
+      nodeId: 'react_ymx0',
+      updatedAt: '2026-08-19T10:00:00Z',
+      revision: 2,
+    })
+    const newer = art({
+      id: 'new',
+      name: 'brand-row-preview.html',
+      kind: 'html',
+      nodeId: 'react_ymx0',
+      updatedAt: '2026-08-19T12:00:00Z',
+      revision: 1,
+    })
+    const json = art({ id: 'j', name: 'research.json', kind: 'json', nodeId: 'react_ymx0' })
+    expect(latestOwnNodeHtmlName([upstream, older, newer, json], 'react_ymx0')).toBe('brand-row-preview.html')
+    expect(
+      resolveEffectivePreviewPin({
+        previewArtifact: '',
+        artifacts: [upstream, older, newer, json],
+        nodeType: 'react',
+        nodeId: 'react_ymx0',
+      }),
+    ).toBe('brand-row-preview.html')
+    expect(
+      resolveEffectivePreviewPin({
+        previewArtifact: 'research.json',
+        artifacts: [upstream, older, newer, json],
+        nodeType: 'react',
+        nodeId: 'react_ymx0',
+      }),
+    ).toBe('research.json')
+    expect(
+      resolveEffectivePreviewPin({
+        previewArtifact: '',
+        artifacts: [json],
+        nodeType: 'react',
+        nodeId: 'react_ymx0',
+      }),
+    ).toBe('')
+    expect(
+      resolveEffectivePreviewPin({
+        previewArtifact: '',
+        artifacts: [newer],
+        nodeType: 'research',
+        nodeId: 'research',
+      }),
+    ).toBe('')
+    expect(latestOwnNodeHtmlName([newer], '')).toBe('')
   })
 })

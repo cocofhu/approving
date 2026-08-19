@@ -1088,6 +1088,12 @@ const inboxRemoteKind = computed(() =>
   }),
 )
 
+const inboxStageNodeType = computed(() => {
+  const id = active.value?.type === 'clarify' ? active.value.nodeId : ''
+  if (!id) return ''
+  return activeRun.value?.nodes?.find((node) => node.id === id)?.type || ''
+})
+
 const inboxClarifyStageKind = computed(() => (activeRunLoadError.value ? 'loadFailed' : 'pending'))
 
 // Mirror RunDetailView.reviewActive: post-run product review on a non-react
@@ -1599,6 +1605,7 @@ function itemSecondary(it: InboxItem) {
               :run-id="active.runId"
               :run="activeRun || undefined"
               :node-id="active.nodeId"
+              :node-type="inboxStageNodeType"
               :annotatable="clarifyInputActive"
               :remote-kind="inboxRemoteKind"
               :share-enabled="inboxAppPreviewActive"
@@ -1702,6 +1709,7 @@ function itemSecondary(it: InboxItem) {
                   :run-id="active.runId"
                   :run="activeRun || undefined"
                   :node-id="active.nodeId"
+                  :node-type="inboxStageNodeType"
                   :annotatable="clarifyInputActive"
                   :remote-kind="inboxRemoteKind"
                   :share-enabled="inboxAppPreviewActive"

@@ -170,6 +170,7 @@ describe('GatesInboxView react artifact stage', () => {
     expect(stages.length).toBe(2)
     for (const block of stages) {
       expect(block).toMatch(/:node-id="active\.nodeId"/)
+      expect(block).toMatch(/:node-type="inboxStageNodeType"/)
       expect(block).toMatch(/:annotatable="clarifyInputActive"/)
       expect(block).toMatch(/:preview-artifact="activeClarify\?\.previewArtifact"/)
     }
