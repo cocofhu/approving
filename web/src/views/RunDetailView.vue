@@ -32,8 +32,17 @@ import AppModal from '@/components/ui/AppModal.vue'
 import { api } from '@/lib/api/api'
 import { useToast } from '@/lib/composables/useToast'
 import {
-  REVIEW_CANVAS_MIN,
+  applyOuterSashMem,
+  clampOuterRight,
+  isOuterSashTab,
+  outerRightMax,
+  outerRightMin,
+  outerSashStorageKey,
+  parseOuterSashMem,
+  reviewDefaultRightPx,
   reviewRightPanelCssWidth,
+  type OuterSashMem,
+  type OuterSashTab,
 } from '@/lib/inbox/reviewLayoutBudget'
 import { addClarifyAnnotation, useClarifyDraft } from '@/lib/inbox/useClarifyDraft'
 import { previewPickLabel, type AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
@@ -959,14 +968,176 @@ const activePath = computed(() => {
   return ids
 })
 
-/** Desktop「复审」Tab: widen right panel + canvas floor (see reviewLayoutBudget). */
-const desktopReviewLayout = computed(() => !isMobile.value && nodeTab.value === 'review')
-const reviewRightPanelStyle = computed(() =>
-  desktopReviewLayout.value ? { width: reviewRightPanelCssWidth() } : undefined,
+/**
+ * Desktop Agent交互 + 复审: outer sash (canvas/timeline vs whole right panel).
+ * Other tabs stay locked md:w-[520px] and do not render the outer sash.
+ * REVIEW_CANVAS_MIN is default reserve only — drag canvas min is 0.
+ */
+const desktopOuterSashLayout = computed(
+  () => !isMobile.value && isOuterSashTab(nodeTab.value),
 )
-const canvasPaneStyle = computed(() =>
-  desktopReviewLayout.value ? { minWidth: `${REVIEW_CANVAS_MIN}px` } : undefined,
+const splitRootRef = ref<HTMLElement | null>(null)
+const workspacePx = ref(0)
+const outerRightPx = ref(0)
+const outerFullOpen = ref(false)
+const outerSashDragging = ref(false)
+let outerSashStartX = 0
+let outerSashStartW = 0
+let outerSashDidDrag = false
+const OUTER_SASH_DRAG_THRESHOLD_PX = 3
+
+function measureWorkspace(): number {
+  const w = splitRootRef.value?.getBoundingClientRect().width
+  return w && w > 0 ? w : 0
+}
+
+function readOuterMem(tab: OuterSashTab): OuterSashMem | null {
+  try {
+    return parseOuterSashMem(localStorage.getItem(outerSashStorageKey(tab)))
+  } catch {
+    return null
+  }
+}
+
+function writeOuterMem(tab: OuterSashTab, mem: OuterSashMem) {
+  try {
+    localStorage.setItem(outerSashStorageKey(tab), JSON.stringify(mem))
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+function applyOuterLayout() {
+  if (!desktopOuterSashLayout.value) return
+  const ws = measureWorkspace()
+  if (ws <= 0) return
+  workspacePx.value = ws
+  const tab = nodeTab.value as OuterSashTab
+  const next = applyOuterSashMem(readOuterMem(tab), ws)
+  outerRightPx.value = next.width
+  outerFullOpen.value = next.fullOpen
+}
+
+function persistOuterLayout() {
+  if (!desktopOuterSashLayout.value || !isOuterSashTab(nodeTab.value)) return
+  writeOuterMem(nodeTab.value, {
+    width: outerRightPx.value,
+    fullOpen: outerFullOpen.value,
+  })
+}
+
+function setOuterSashDraggingUi(on: boolean) {
+  if (typeof document === 'undefined') return
+  document.body.classList.toggle('run-detail-outer-sash-dragging', on)
+}
+
+function onOuterSashPointerDown(e: PointerEvent) {
+  if (!desktopOuterSashLayout.value) return
+  e.stopPropagation()
+  e.preventDefault()
+  outerSashDragging.value = true
+  outerSashDidDrag = false
+  outerSashStartX = e.clientX
+  outerSashStartW = outerRightPx.value
+  setOuterSashDraggingUi(true)
+  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+}
+
+function onOuterSashPointerMove(e: PointerEvent) {
+  if (!outerSashDragging.value) return
+  e.preventDefault()
+  const ws = measureWorkspace()
+  if (ws <= 0) return
+  workspacePx.value = ws
+  const dx = outerSashStartX - e.clientX
+  if (Math.abs(dx) > OUTER_SASH_DRAG_THRESHOLD_PX) outerSashDidDrag = true
+  const next = clampOuterRight(outerSashStartW + dx, ws, true)
+  outerRightPx.value = next.width
+  outerFullOpen.value = next.fullOpen
+}
+
+function onOuterSashPointerUp() {
+  if (!outerSashDragging.value) return
+  outerSashDragging.value = false
+  setOuterSashDraggingUi(false)
+  if (outerSashDidDrag) persistOuterLayout()
+}
+
+function onOuterSashDblClick() {
+  if (!desktopOuterSashLayout.value || outerSashDidDrag) return
+  const ws = measureWorkspace()
+  if (ws <= 0) return
+  workspacePx.value = ws
+  outerFullOpen.value = false
+  outerRightPx.value = reviewDefaultRightPx(ws)
+  persistOuterLayout()
+}
+
+function onOuterSashWindowResize() {
+  if (!desktopOuterSashLayout.value || outerSashDragging.value) return
+  const ws = measureWorkspace()
+  if (ws <= 0) return
+  workspacePx.value = ws
+  if (outerFullOpen.value) {
+    const max = outerRightMax(ws)
+    outerRightPx.value = max
+    return
+  }
+  const next = clampOuterRight(outerRightPx.value, ws, false)
+  outerRightPx.value = next.width
+  outerFullOpen.value = next.fullOpen
+}
+
+const reviewRightPanelStyle = computed(() => {
+  if (!desktopOuterSashLayout.value) return undefined
+  if (outerRightPx.value > 0) return { width: `${outerRightPx.value}px` }
+  return { width: reviewRightPanelCssWidth() }
+})
+
+const outerAriaMin = computed(() => outerRightMin(workspacePx.value))
+const outerAriaMax = computed(() => outerRightMax(workspacePx.value))
+
+const leftPaneStyle = computed(() => {
+  if (!desktopOuterSashLayout.value) return undefined
+  if (outerFullOpen.value) {
+    return {
+      minWidth: '0px',
+      width: '0px',
+      flexBasis: '0px',
+      flexGrow: 0,
+      flexShrink: 0,
+      overflow: 'hidden',
+    }
+  }
+  return { minWidth: '0px', overflow: 'hidden' }
+})
+
+watch(
+  () => [desktopOuterSashLayout.value, nodeTab.value] as const,
+  () => {
+    nextTick(() => applyOuterLayout())
+  },
 )
+
+let splitRootObserver: ResizeObserver | undefined
+
+onMounted(() => {
+  window.addEventListener('resize', onOuterSashWindowResize)
+  nextTick(() => {
+    applyOuterLayout()
+    if (typeof ResizeObserver !== 'undefined' && splitRootRef.value) {
+      splitRootObserver = new ResizeObserver(() => onOuterSashWindowResize())
+      splitRootObserver.observe(splitRootRef.value)
+    }
+  })
+})
+onUnmounted(() => {
+  splitRootObserver?.disconnect()
+  splitRootObserver = undefined
+  window.removeEventListener('resize', onOuterSashWindowResize)
+  outerSashDragging.value = false
+  setOuterSashDraggingUi(false)
+})
 
 // Overall run detail drawer: cross-node info not tied to a single node.
 const showDetail = ref(false)
@@ -1231,6 +1402,7 @@ function selectExecution(nodeId: string, idx: number) {
     <div data-testid="run-detail-main" class="relative flex min-h-0 min-w-0 w-full max-w-full flex-1">
       <div
         v-show="!runLoading && !loadError"
+        ref="splitRootRef"
         data-testid="run-detail-content"
         class="flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col md:flex-row"
       >
@@ -1338,7 +1510,8 @@ function selectExecution(nodeId: string, idx: number) {
       <div
         v-if="viewMode === 'canvas'"
         class="relative hidden min-w-0 flex-1 border-r border-line md:block"
-        :style="canvasPaneStyle"
+        :class="outerFullOpen ? 'pointer-events-none' : ''"
+        :style="leftPaneStyle"
       >
         <WorkflowCanvas
           :nodes="wf.nodes"
@@ -1394,7 +1567,8 @@ function selectExecution(nodeId: string, idx: number) {
         v-show="!isMobile || mobileMainPanel === 'timeline'"
         data-testid="run-timeline-pane"
         class="relative min-h-0 min-w-0 flex-1 border-b border-line md:border-b-0 md:border-r md:pt-12"
-        :class="isMobile ? 'border-b-0' : ''"
+        :class="[isMobile ? 'border-b-0' : '', outerFullOpen ? 'pointer-events-none' : '']"
+        :style="leftPaneStyle"
       >
         <ExecutionTimeline
           :run="run"
@@ -1407,13 +1581,36 @@ function selectExecution(nodeId: string, idx: number) {
         />
       </div>
 
+      <!-- Outer sash: Agent交互 + 复审 desktop only. Hidden on narrow (no horizontal drag). -->
+      <div
+        v-if="desktopOuterSashLayout"
+        class="run-detail-outer-sash relative hidden shrink-0 cursor-col-resize bg-line md:block"
+        :class="[
+          outerSashDragging || outerFullOpen ? 'bg-accent' : 'hover:bg-accent',
+          outerFullOpen ? 'is-full' : '',
+        ]"
+        role="separator"
+        aria-orientation="vertical"
+        :aria-valuemin="outerAriaMin"
+        :aria-valuemax="outerAriaMax"
+        :aria-valuenow="outerRightPx"
+        :aria-label="t('pages.runDetail.resizeOuterSash')"
+        :title="t('pages.runDetail.resizeOuterSash')"
+        data-testid="run-detail-outer-sash"
+        @pointerdown="onOuterSashPointerDown"
+        @pointermove="onOuterSashPointerMove"
+        @pointerup="onOuterSashPointerUp"
+        @pointercancel="onOuterSashPointerUp"
+        @dblclick="onOuterSashDblClick"
+      />
+
       <!-- right panel: scoped to the selected node; mobile fills main area when active -->
       <div
         v-show="!isMobile || mobileMainPanel === 'detail' || viewMode !== 'timeline'"
         data-testid="run-detail-right-panel"
         class="flex min-h-0 min-w-0 w-full max-w-full flex-col bg-surface"
         :class="[
-          desktopReviewLayout ? '' : 'md:w-[520px]',
+          desktopOuterSashLayout ? '' : 'md:w-[520px]',
           isMobile && viewMode === 'timeline' ? 'flex-1' : 'shrink-0 md:shrink-0',
         ]"
         :style="reviewRightPanelStyle"
@@ -1697,3 +1894,27 @@ function selectExecution(nodeId: string, idx: number) {
     </AppModal>
   </div>
 </template>
+
+<style scoped>
+.run-detail-outer-sash {
+  width: 4px;
+  flex-shrink: 0;
+  touch-action: none;
+  z-index: 20;
+}
+.run-detail-outer-sash::before {
+  content: '';
+  position: absolute;
+  inset: 0 -4px;
+}
+.run-detail-outer-sash.is-full {
+  box-shadow: 8px 0 12px rgb(var(--c-accent) / 0.45);
+}
+</style>
+
+<style>
+body.run-detail-outer-sash-dragging {
+  cursor: col-resize;
+  user-select: none;
+}
+</style>

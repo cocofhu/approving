@@ -278,20 +278,21 @@ describe('RunDetailView ACP log rehydrate state machine', () => {
 })
 
 
-describe('RunDetailView desktop review layout budget', () => {
-  it('guards review widen to desktop review tab and restores ~520 otherwise', () => {
+describe('RunDetailView desktop outer sash layout (clarify|review)', () => {
+  it('enables outer sash only for desktop clarify|review and restores ~520 otherwise', () => {
     expect(src).toMatch(/from '@\/lib\/inbox\/reviewLayoutBudget'/)
-    expect(src).toMatch(/REVIEW_CANVAS_MIN/)
-    expect(src).toMatch(/REVIEW_SIDEBAR/)
     expect(src).toMatch(/reviewRightPanelCssWidth/)
+    expect(src).toMatch(/isOuterSashTab/)
     expect(src).toMatch(
-      /desktopReviewLayout = computed\(\(\) => !isMobile\.value && nodeTab\.value === 'review'\)/,
+      /desktopOuterSashLayout = computed\(\s*\(\) => !isMobile\.value && isOuterSashTab\(nodeTab\.value\),/,
     )
     expect(src).toMatch(/:style="reviewRightPanelStyle"/)
-    expect(src).toMatch(/:style="canvasPaneStyle"/)
-    // Non-review keeps md:w-[520px]; review uses bound budget width instead.
-    expect(src).toMatch(/desktopReviewLayout \? '' : 'md:w-\[520px\]'/)
+    expect(src).toMatch(/:style="leftPaneStyle"/)
+    expect(src).toMatch(/data-testid="run-detail-outer-sash"/)
+    // Non-sash tabs keep md:w-[520px]; clarify|review use bound width instead.
+    expect(src).toMatch(/desktopOuterSashLayout \? '' : 'md:w-\[520px\]'/)
     expect(src).toMatch(/md:w-\[520px\]/)
+    expect(viewSrc).toMatch(/v-if="desktopOuterSashLayout"/)
   })
 
   it('passes sidebar-width=REVIEW_SIDEBAR only on Run Detail review ReviewShell', () => {
@@ -302,13 +303,27 @@ describe('RunDetailView desktop review layout budget', () => {
     expect(src).not.toMatch(/sidebarWidth:\s*300/)
   })
 
-  it('binds review right width and canvas min only via desktopReviewLayout styles', () => {
-    expect(src).toMatch(
-      /reviewRightPanelStyle = computed\(\(\) =>\s*desktopReviewLayout\.value \? \{ width: reviewRightPanelCssWidth\(\) \} : undefined,/,
-    )
-    expect(src).toMatch(
-      /canvasPaneStyle = computed\(\(\) =>\s*desktopReviewLayout\.value \? \{ minWidth: `\$\{REVIEW_CANVAS_MIN\}px` \} : undefined,/,
-    )
+  it('does not bind REVIEW_CANVAS_MIN as drag canvas minWidth; canvas may go to 0', () => {
+    expect(viewSrc).not.toMatch(/minWidth: `\$\{REVIEW_CANVAS_MIN\}px`/)
+    expect(viewSrc).not.toMatch(/canvasPaneStyle/)
+    expect(viewSrc).toMatch(/minWidth: '0px'/)
+    expect(viewSrc).toMatch(/width: '0px'/)
+    expect(viewSrc).toMatch(/flexBasis: '0px'/)
+    expect(viewSrc).toMatch(/overflow: 'hidden'/)
+  })
+
+  it('outer sash uses pointer capture, isolated dragging class, clamp, snap, dblclick reset', () => {
+    expect(viewSrc).toMatch(/setPointerCapture/)
+    expect(viewSrc).toMatch(/e\.stopPropagation\(\)/)
+    expect(viewSrc).toMatch(/run-detail-outer-sash-dragging/)
+    expect(viewSrc).not.toMatch(/review-shell-sash-dragging/)
+    expect(viewSrc).toMatch(/clampOuterRight/)
+    expect(viewSrc).toMatch(/reviewDefaultRightPx/)
+    expect(viewSrc).toMatch(/onOuterSashDblClick/)
+    expect(viewSrc).toMatch(/role="separator"/)
+    expect(viewSrc).toMatch(/aria-orientation="vertical"/)
+    expect(viewSrc).toMatch(/outerSashStorageKey/)
+    expect(viewSrc).toMatch(/fullOpen/)
   })
 })
 

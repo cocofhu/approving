@@ -1,13 +1,27 @@
 import { describe, expect, it } from 'vitest'
 import {
+  OUTER_CHAT_FLOOR,
+  OUTER_RIGHT_MIN,
+  OUTER_SASH_SNAP,
+  OUTER_SASH_WIDTH,
+  OUTER_SASH_WIDTH_KEY_CLARIFY,
+  OUTER_SASH_WIDTH_KEY_REVIEW,
+  OUTER_STAGE_MIN,
   REVIEW_CANVAS_MIN,
   REVIEW_GAP,
   REVIEW_RIGHT_BUDGET,
   REVIEW_SIDEBAR,
   REVIEW_SHELL_WIDTH_KEY_APPROVAL,
+  REVIEW_SHELL_WIDTH_KEY_CLARIFY,
   REVIEW_SHELL_WIDTH_KEY_REVIEW,
   REVIEW_STAGE_TARGET,
+  applyOuterSashMem,
+  clampOuterRight,
   computeDesktopReviewSplit,
+  isOuterSashTab,
+  outerRightMax,
+  parseOuterSashMem,
+  reviewDefaultRightPx,
   reviewRightPanelCssWidth,
 } from './reviewLayoutBudget'
 
@@ -24,7 +38,19 @@ describe('reviewLayoutBudget constants', () => {
   it('exposes distinct ReviewShell width storage keys', () => {
     expect(REVIEW_SHELL_WIDTH_KEY_REVIEW).toBe('review-shell-sidebar-width:review')
     expect(REVIEW_SHELL_WIDTH_KEY_APPROVAL).toBe('review-shell-sidebar-width:approval')
+    expect(REVIEW_SHELL_WIDTH_KEY_CLARIFY).toBe('review-shell-sidebar-width:clarify')
     expect(REVIEW_SHELL_WIDTH_KEY_REVIEW).not.toBe(REVIEW_SHELL_WIDTH_KEY_APPROVAL)
+  })
+
+  it('isolates outer sash storage from inner ReviewShell keys', () => {
+    expect(OUTER_SASH_WIDTH_KEY_CLARIFY).toBe('run-detail-outer-sash:clarify')
+    expect(OUTER_SASH_WIDTH_KEY_REVIEW).toBe('run-detail-outer-sash:review')
+    expect(OUTER_SASH_WIDTH_KEY_CLARIFY).not.toBe(REVIEW_SHELL_WIDTH_KEY_CLARIFY)
+    expect(OUTER_SASH_WIDTH_KEY_REVIEW).not.toBe(REVIEW_SHELL_WIDTH_KEY_REVIEW)
+    expect(isOuterSashTab('clarify')).toBe(true)
+    expect(isOuterSashTab('review')).toBe(true)
+    expect(isOuterSashTab('log')).toBe(false)
+    expect(isOuterSashTab('product')).toBe(false)
   })
 })
 
@@ -68,10 +94,73 @@ describe('computeDesktopReviewSplit vs page.html viewports', () => {
     expect(atFloor.canvas).toBe(REVIEW_CANVAS_MIN)
     expect(atFloor.stage).toBe(REVIEW_STAGE_TARGET)
 
-    // Below floor+budget: canvas stays at floor, stage compresses but ≫120.
+    // Below default-reserve+budget: default formula still pins canvas at 200 (not a drag floor).
     const tight = computeDesktopReviewSplit(REVIEW_CANVAS_MIN + REVIEW_RIGHT_BUDGET - 100)
     expect(tight.canvas).toBe(REVIEW_CANVAS_MIN)
     expect(tight.stage).toBeLessThan(REVIEW_STAGE_TARGET)
     expect(tight.stage).toBeGreaterThan(120)
+  })
+})
+
+describe('outer sash drag clamp (canvas minWidth is 0, not REVIEW_CANVAS_MIN)', () => {
+  it('rightMin is 324 (stage 160 + sash 4 + depressed chat 160), not CHAT_MIN 240', () => {
+    expect(OUTER_SASH_WIDTH).toBe(4)
+    expect(OUTER_SASH_SNAP).toBe(16)
+    expect(OUTER_STAGE_MIN).toBe(160)
+    expect(OUTER_CHAT_FLOOR).toBe(160)
+    expect(OUTER_RIGHT_MIN).toBe(324)
+    expect(OUTER_RIGHT_MIN).not.toBe(160 + 4 + 240)
+  })
+
+  it('left limit: rightMax = workspace-4 so canvas visible width can be 0', () => {
+    const ws = 1000
+    expect(outerRightMax(ws)).toBe(996)
+    const full = clampOuterRight(996, ws, true)
+    expect(full.width).toBe(996)
+    expect(full.fullOpen).toBe(true)
+    expect(ws - OUTER_SASH_WIDTH - full.width).toBe(0)
+  })
+
+  it('right limit: cannot drag the right panel below ~324', () => {
+    const ws = 1200
+    const squeezed = clampOuterRight(100, ws, false)
+    expect(squeezed.width).toBe(324)
+    expect(squeezed.fullOpen).toBe(false)
+  })
+
+  it('near-full SNAP=16 adsorbs to canvas=0', () => {
+    const ws = 1000
+    const almost = clampOuterRight(996 - 16, ws, true)
+    expect(almost.width).toBe(996)
+    expect(almost.fullOpen).toBe(true)
+    const notYet = clampOuterRight(996 - 17, ws, true)
+    expect(notYet.fullOpen).toBe(false)
+    expect(notYet.width).toBe(979)
+  })
+
+  it('default px matches review formula and is not full-open', () => {
+    const ws = 1280
+    const def = reviewDefaultRightPx(ws)
+    expect(def).toBe(781)
+    expect(def).toBe(computeDesktopReviewSplit(ws).right)
+    expect(def).toBeLessThan(outerRightMax(ws))
+  })
+
+  it('fullOpen flag wins over stale pixels when the window grows', () => {
+    const grown = applyOuterSashMem({ width: 996, fullOpen: true }, 1400)
+    expect(grown.fullOpen).toBe(true)
+    expect(grown.width).toBe(outerRightMax(1400))
+    const pixelsOnly = applyOuterSashMem({ width: 996, fullOpen: false }, 1400)
+    expect(pixelsOnly.fullOpen).toBe(false)
+    expect(pixelsOnly.width).toBe(996)
+  })
+
+  it('parseOuterSashMem reads width+fullOpen JSON', () => {
+    expect(parseOuterSashMem('{"width":900,"fullOpen":true}')).toEqual({
+      width: 900,
+      fullOpen: true,
+    })
+    expect(parseOuterSashMem('not-json')).toBeNull()
+    expect(applyOuterSashMem(null, 1280).width).toBe(781)
   })
 })

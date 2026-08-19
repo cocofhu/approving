@@ -1038,6 +1038,7 @@
       "stats": "执行统计",
       "backToTimeline": "返回时间线",
       "canvasHint": "执行态画布 · 状态投影到节点(点选查看输出/日志)",
+      "resizeOuterSash": "拖动调整画布与右侧整栏 · 双击恢复默认",
       "detailTitle": "运行详情",
       "executionHistory": "执行记录",
       "executionN": "第{n}次",
