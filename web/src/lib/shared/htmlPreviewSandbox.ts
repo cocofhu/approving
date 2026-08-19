@@ -230,12 +230,62 @@ function inlineClone(el){
   walk(el,clone);
   return clone;
 }
+function parseCssColorAlpha(color){
+  if(!color)return 0;
+  var c=String(color).trim().toLowerCase();
+  if(c==='transparent')return 0;
+  if(c.indexOf('rgba(')===0){
+    var parts=c.slice(5,-1).split(',');
+    if(parts.length<4)return 1;
+    var a=parseFloat(parts[3]);
+    return isNaN(a)?0:a;
+  }
+  if(c.charAt(0)==='#'){
+    if(c.length===9)return parseInt(c.slice(7,9),16)/255;
+    if(c.length===5)return parseInt(c.charAt(4)+c.charAt(4),16)/255;
+    return 1;
+  }
+  return 1;
+}
+function isOpaqueFillColor(color){
+  return parseCssColorAlpha(color)>=0.99;
+}
+function resolveOpaqueFillColor(el){
+  var node=el;
+  while(node&&node.nodeType===1){
+    try{
+      var cs=window.getComputedStyle(node);
+      var img=cs.backgroundImage;
+      if(!img||img==='none'){
+        var bg=cs.backgroundColor;
+        if(isOpaqueFillColor(bg))return bg;
+      }
+    }catch(e){}
+    if(node===document.documentElement)break;
+    node=node.parentElement;
+  }
+  try{
+    var root=document.documentElement;
+    var body=document.body;
+    var rootBg=root?window.getComputedStyle(root).backgroundColor:'';
+    if(isOpaqueFillColor(rootBg))return rootBg;
+    var bodyBg=body?window.getComputedStyle(body).backgroundColor:'';
+    if(isOpaqueFillColor(bodyBg))return bodyBg;
+    if(rootBg)return rootBg;
+    if(bodyBg)return bodyBg;
+  }catch(e){}
+  return 'rgba(0, 0, 0, 0)';
+}
 function captureElement(el){
   return new Promise(function(resolve){
     try{
+      var pad=6;
       var rect=el.getBoundingClientRect();
-      var w=Math.max(1,Math.ceil(rect.width));
-      var h=Math.max(1,Math.ceil(rect.height));
+      var innerW=Math.max(1,Math.ceil(rect.width));
+      var innerH=Math.max(1,Math.ceil(rect.height));
+      var w=innerW+2*pad;
+      var h=innerH+2*pad;
+      var fill=resolveOpaqueFillColor(el);
       var maxSide=2048;
       var scale=Math.min(2,window.devicePixelRatio||1,maxSide/Math.max(w,h,1));
       var cw=Math.max(1,Math.ceil(w*scale));
@@ -243,7 +293,7 @@ function captureElement(el){
       var clone=inlineClone(el);
       var wrapper=document.createElement('div');
       wrapper.setAttribute('xmlns','http://www.w3.org/1999/xhtml');
-      wrapper.style.cssText='width:'+w+'px;height:'+h+'px;margin:0;padding:0;box-sizing:border-box;overflow:hidden;background:#fff;';
+      wrapper.style.cssText='width:'+w+'px;height:'+h+'px;margin:0;padding:'+pad+'px;box-sizing:border-box;overflow:hidden;background:'+fill+';';
       wrapper.appendChild(clone);
       var serialized=new XMLSerializer().serializeToString(wrapper);
       var svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+cw+'" height="'+ch+'">'+
@@ -256,7 +306,7 @@ function captureElement(el){
           canvas.width=cw;canvas.height=ch;
           var ctx=canvas.getContext('2d');
           if(!ctx){resolve('');return;}
-          ctx.fillStyle='#fff';
+          ctx.fillStyle=fill;
           ctx.fillRect(0,0,cw,ch);
           ctx.drawImage(img,0,0);
           resolve(canvas.toDataURL('image/png'));
