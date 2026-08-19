@@ -22,4 +22,11 @@ describe('Icon', () => {
     expect(wrapper.html()).toMatch(/rect|M8 11V8/)
     wrapper.unmount()
   })
+
+  it('renders panel-left glyph used to hide desktop nav (g2.1 / g5.1)', () => {
+    const wrapper = mount(Icon, { props: { name: 'panel-left', size: 18 } })
+    expect(wrapper.find('svg').exists()).toBe(true)
+    expect(wrapper.html()).toMatch(/rect|M9 4v16/)
+    wrapper.unmount()
+  })
 })

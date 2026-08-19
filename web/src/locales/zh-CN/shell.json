@@ -19,6 +19,10 @@
     "aria": {
       "openNav": "打开导航菜单",
       "closeNav": "关闭导航菜单",
+      "hideNav": "隐藏导航",
+      "showNav": "打开导航",
+      "navHidden": "导航已隐藏",
+      "navShown": "导航已展开",
       "backToList": "返回列表"
     },
     "runNotifications": {

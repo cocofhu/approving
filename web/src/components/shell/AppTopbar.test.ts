@@ -54,6 +54,7 @@ import {
   RUN_TERMINAL_PANEL_LIMIT,
   RUN_TERMINAL_POOL_SIZE,
 } from '@/lib/run/useRunTerminalNotifications'
+import { __resetSidebarHiddenForTests, setSidebarHidden } from '@/lib/shared/sidebarHidden'
 import AppTopbar from './AppTopbar.vue'
 
 function run(partial: Partial<Run> & Pick<Run, 'id' | 'status'>): Run {
@@ -102,6 +103,7 @@ function mountTopbar() {
 describe('AppTopbar notifications', () => {
   beforeEach(() => {
     localStorage.clear()
+    __resetSidebarHiddenForTests()
     __resetRunTerminalNotificationsForTests()
     __resetNotificationsPageEntryForTests()
     push.mockReset()
@@ -126,6 +128,7 @@ describe('AppTopbar notifications', () => {
   afterEach(() => {
     __resetRunTerminalNotificationsForTests()
     __resetNotificationsPageEntryForTests()
+    __resetSidebarHiddenForTests()
   })
 
   it('renders header with theme toggle and bell aria titled 通知', async () => {
@@ -142,10 +145,31 @@ describe('AppTopbar notifications', () => {
     wrapper.unmount()
   })
 
-  it('emits toggle-menu from mobile menu button', async () => {
+  it('emits toggle-menu from mobile menu button (g3.2)', async () => {
     const wrapper = mountTopbar()
     await flushPromises()
-    await wrapper.find('button').trigger('click')
+    await wrapper.find('[data-testid="mobile-nav-toggle"]').trigger('click')
+    expect(wrapper.emitted('toggle-menu')).toHaveLength(1)
+    expect(wrapper.find('[data-testid="desktop-nav-open"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('desktop open hamburger does not emit toggle-menu (g3.1)', async () => {
+    setSidebarHidden(true)
+    const wrapper = mountTopbar()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="desktop-nav-open"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="desktop-nav-open"]').trigger('click')
+    expect(wrapper.emitted('toggle-menu')).toBeUndefined()
+    expect(wrapper.find('[data-testid="desktop-nav-open"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('mobile toggle still emits when desktop nav is hidden (g3.2)', async () => {
+    setSidebarHidden(true)
+    const wrapper = mountTopbar()
+    await flushPromises()
+    await wrapper.find('[data-testid="mobile-nav-toggle"]').trigger('click')
     expect(wrapper.emitted('toggle-menu')).toHaveLength(1)
     wrapper.unmount()
   })
