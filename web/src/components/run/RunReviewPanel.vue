@@ -2,12 +2,11 @@
 /**
  * Run 详情「复审」面板壳：ReviewShell + 产物舞台 + ReviewComposer。
  */
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import ReviewShell from '@/components/run/ReviewShell.vue'
 import ReviewComposer from '@/components/run/ReviewComposer.vue'
 import ClarifyBootLoader from '@/components/run/ClarifyBootLoader.vue'
-import AppPreviewPanel from '@/components/run/AppPreviewPanel.vue'
-import StructuredProductPanel from '@/components/run/StructuredProductPanel.vue'
+import ReactArtifactStage from '@/components/run/ReactArtifactStage.vue'
 import {
   REVIEW_SIDEBAR,
   REVIEW_SHELL_WIDTH_KEY_REVIEW,
@@ -23,12 +22,18 @@ import type {
 } from '@/lib/shared/types'
 import type { AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
 
-defineProps<{
+const props = defineProps<{
   mobile: boolean
   node: WFNode
   nodeRun: NodeRun
   run: Run
-  clarify: { nodeId: string; iteration?: number; turns: ClarifyTurn[]; done: boolean } | null
+  clarify: {
+    nodeId: string
+    iteration?: number
+    turns: ClarifyTurn[]
+    done: boolean
+    previewArtifact?: string
+  } | null
   draft: string
   attachments: ClarifyImage[]
   annotations: ReactAnnotation[]
@@ -48,7 +53,6 @@ const emit = defineEmits<{
   stagedPick: [payload: AppPreviewPickPayload | null]
 }>()
 
-const historicalPreview = ref(false)
 const reviewChatRef = ref<{
   applyReviewFrame?: (frame: any) => boolean | void
   applyAcpEvents?: (events: any[] | undefined, nodeId?: string) => boolean | void
@@ -56,6 +60,8 @@ const reviewChatRef = ref<{
   isSessionBusy?: () => boolean
   isChatReady?: () => boolean
 } | null>(null)
+
+const remoteKind = computed(() => (props.node.type === 'app_preview' ? 'app' : 'sandbox'))
 
 defineExpose({
   applyReviewFrame: (frame: any) => reviewChatRef.value?.applyReviewFrame?.(frame),
@@ -68,7 +74,6 @@ defineExpose({
 </script>
 
 <template>
-  <!-- Left product stage + right review sidebar (page.html RUN 复审 / app_preview VNC) -->
   <ReviewShell
     class="h-full min-h-0"
     :mobile="mobile"
@@ -76,23 +81,15 @@ defineExpose({
     :storage-key="REVIEW_SHELL_WIDTH_KEY_REVIEW"
   >
     <template #stage>
-      <div v-if="node.type === 'app_preview'" class="flex h-full min-h-0 flex-col p-3">
-        <AppPreviewPanel
-          :run-id="run.id"
-          :node-id="node.id"
-          fill
-          :show-feedback="false"
-          @pick="emit('pick', $event)"
-          @staged-pick="emit('stagedPick', $event)"
-        />
-      </div>
-      <StructuredProductPanel
-        v-else
-        :node="node"
-        :node-run="nodeRun"
-        :run="run"
-        annotatable
-        @update:historical-preview="historicalPreview = $event"
+      <ReactArtifactStage
+        :artifacts="run.artifacts || []"
+        :preview-artifact="clarify?.previewArtifact"
+        :run-id="run.id"
+        :node-id="node.id"
+        :annotatable="inputActive"
+        :remote-kind="remoteKind"
+        @pick="emit('pick', $event)"
+        @staged-pick="emit('stagedPick', $event)"
       />
     </template>
     <template #sidebar>
@@ -108,7 +105,7 @@ defineExpose({
         :annotations="annotations"
         :turns="clarify.turns"
         :done="clarify.done"
-        :active="inputActive && !historicalPreview"
+        :active="inputActive"
         :confirm-error="confirmError"
         @update:draft="emit('update:draft', $event)"
         @update:attachments="emit('update:attachments', $event)"

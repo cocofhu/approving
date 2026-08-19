@@ -47,6 +47,13 @@ const stubs = {
     props: { artifact: Object, annotatable: Boolean },
     template: '<div data-testid="artifact-preview">{{ artifact?.name }}|{{ annotatable ? \'on\' : \'off\' }}</div>',
   }),
+  AppPreviewPanel: defineComponent({
+    props: { runId: String, nodeId: String, shareEnabled: Boolean },
+    template: '<div data-testid="app-preview-stub" :data-share="shareEnabled ? \'1\' : \'0\'" />',
+  }),
+  PublicAppPreviewPanel: defineComponent({
+    template: '<div data-testid="public-app-preview-stub" />',
+  }),
 }
 
 describe('ReactArtifactStage', () => {
@@ -96,8 +103,8 @@ describe('ReactArtifactStage', () => {
     const wrapper = mount(ReactArtifactStage, {
       props: {
         artifacts: [
-          art({ id: 'a1', name: 'homepage-preview.html', kind: 'html' }),
-          art({ id: 'a2', name: 'copy-variants.md', kind: 'markdown' }),
+          art({ id: 'a1', name: 'homepage-preview.html', kind: 'html', nodeId: 'clarify' }),
+          art({ id: 'a2', name: 'copy-variants.md', kind: 'markdown', nodeId: 'clarify' }),
         ],
         runId: 'run-1',
         nodeId: 'clarify',
@@ -139,6 +146,24 @@ describe('ReactArtifactStage', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="react-artifact-tab-note.md"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="react-artifact-preview-page.html"]').text()).toContain('page.html')
+    wrapper.unmount()
+  })
+
+  it('keeps the tab bar when a single visual page is pinned', async () => {
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [art({ id: 'a1', name: 'page.html', kind: 'html', nodeId: 'visual_bqc5' })],
+        previewArtifact: 'page.html',
+        runId: 'run-1',
+        nodeId: 'visual_bqc5',
+        annotatable: true,
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tabs"]').isVisible()).toBe(true)
+    expect(wrapper.get('[data-testid="react-artifact-tab-grid"]').text()).toContain('流水线产物')
+    expect(wrapper.get('[data-testid="react-artifact-tab-page.html"]').attributes('aria-selected')).toBe('true')
     wrapper.unmount()
   })
 
@@ -228,6 +253,48 @@ describe('ReactArtifactStage', () => {
     await wrapper.get('[data-testid="react-artifact-tab-close-novnc"]').trigger('click')
     expect(wrapper.find('[data-testid="react-artifact-tab-novnc"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="react-artifact-tab-note.md"]').attributes('aria-selected')).toBe('true')
+    wrapper.unmount()
+  })
+
+  it('keeps foreign-node artifacts previewable but not annotatable', async () => {
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [
+          art({ id: 'own', name: 'research.json', kind: 'json', nodeId: 'research' }),
+          art({ id: 'other', name: 'plan.json', kind: 'json', nodeId: 'plan' }),
+        ],
+        runId: 'run-1',
+        nodeId: 'research',
+        annotatable: true,
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    expect(wrapper.findAll('[data-testid="react-artifact-card-readonly"]').length).toBe(1)
+    await wrapper.get('[data-testid="react-artifact-card-research.json"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-tab-grid"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-card-plan.json"]').trigger('click')
+    await flushPromises()
+    const previews = wrapper.findAll('[data-testid="artifact-preview"]')
+    expect(previews.map((n) => n.text())).toEqual(['research.json|on', 'plan.json|off'])
+    wrapper.unmount()
+  })
+
+  it('opens app preview inside the remote tab without sandbox noVNC', async () => {
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [art({ id: 'a1', name: 'note.md', kind: 'markdown' })],
+        runId: 'run-1',
+        nodeId: 'preview',
+        annotatable: true,
+        remoteKind: 'app',
+        shareEnabled: true,
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="novnc-stub"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="app-preview-stub"]').attributes('data-share')).toBe('1')
+    expect(wrapper.get('[data-testid="react-artifact-tab-novnc"]').attributes('aria-selected')).toBe('true')
     wrapper.unmount()
   })
 })

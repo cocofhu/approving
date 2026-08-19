@@ -161,6 +161,8 @@ describe('PublicGateApprovalView workbench', () => {
     const w = mountView()
     await flushPromises()
     expect(w.get('[data-testid="public-gate-badge"]').text()).toBe('外部复审')
+    expect(w.find('[data-testid="public-gate-react-stage"]').exists()).toBe(true)
+    expect(w.find('[data-testid="react-artifact-tab-grid"]').exists()).toBe(true)
     expect(w.get('[data-testid="public-gate-sidebar"]').text()).toContain('共 2 条')
     expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
     expect(w.find('[data-testid="public-gate-reject"]').exists()).toBe(false)

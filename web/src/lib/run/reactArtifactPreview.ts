@@ -4,6 +4,37 @@ export const REACT_STAGE_TAB_GRID = 'grid'
 export const REACT_STAGE_TAB_NOVNC = 'novnc'
 export const PREVIEW_TAB_PREFIX = 'preview:'
 
+export type ReactStageRemoteKind = 'sandbox' | 'app' | 'public' | 'off'
+
+/** Own-node artifacts can be annotated; foreign / unnamed-own stay view-only. */
+export function isOwnNodeArtifact(artifact: Pick<Artifact, 'nodeId'> | null | undefined, nodeId?: string | null): boolean {
+  const own = String(nodeId || '').trim()
+  if (!own) return true
+  const artNode = String(artifact?.nodeId || '').trim()
+  if (!artNode) return true
+  return artNode === own
+}
+
+export function canAnnotateStageArtifact(
+  annotatable: boolean,
+  artifact: Pick<Artifact, 'nodeId'> | null | undefined,
+  nodeId?: string | null,
+): boolean {
+  return !!annotatable && isOwnNodeArtifact(artifact, nodeId)
+}
+
+export function resolveStageRemoteKind(opts: {
+  remoteKind?: ReactStageRemoteKind | null
+  runId?: string | null
+  nodeId?: string | null
+  inlineContent?: boolean
+}): ReactStageRemoteKind {
+  if (opts.remoteKind) return opts.remoteKind
+  if (opts.inlineContent) return 'off'
+  if (opts.runId && opts.nodeId) return 'sandbox'
+  return 'off'
+}
+
 export type ReactStageTab = typeof REACT_STAGE_TAB_GRID | string
 
 export function previewTabId(name: string): string {

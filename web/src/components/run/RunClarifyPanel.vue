@@ -111,6 +111,7 @@ defineExpose({
         :run-id="runId"
         :node-id="nodeId"
         :annotatable="inputActive"
+        remote-kind="sandbox"
       />
     </template>
     <template #sidebar>

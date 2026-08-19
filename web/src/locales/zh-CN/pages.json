@@ -2463,6 +2463,8 @@
       "novncTab": "noVNC",
       "novncCardTitle": "远程桌面",
       "novncCardMeta": "沙箱浏览器 · 可取点标注",
+      "appCardMeta": "应用预览 · 可取点标注",
+      "readonlyBadge": "只读",
       "novncMissing": "当前节点没有可用沙箱，无法打开 noVNC。",
       "previewEmptyTitle": "尚未选择产物",
       "previewEmpty": "从「流水线产物」点选一张卡片，或等 Agent 调用 set_artifact_preview 钉到预览。",

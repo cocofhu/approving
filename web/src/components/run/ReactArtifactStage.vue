@@ -5,7 +5,10 @@ import Icon from '@/components/ui/Icon.vue'
 import HtmlPreview from '@/components/ui/HtmlPreview.vue'
 import ArtifactPreview from '@/components/run/ArtifactPreview.vue'
 import NovncPreviewPanel from '@/components/run/NovncPreviewPanel.vue'
+import AppPreviewPanel from '@/components/run/AppPreviewPanel.vue'
+import PublicAppPreviewPanel from '@/components/run/PublicAppPreviewPanel.vue'
 import { api } from '@/lib/api/api'
+import type { PublicPreviewPort } from '@/lib/inbox/gateShareLink'
 import { relTime } from '@/lib/shared/format'
 import { isAbortError } from '@/lib/run/liveLogRehydrate'
 import { useToast } from '@/lib/composables/useToast'
@@ -25,7 +28,11 @@ import {
   previewTabId,
   previewTabName,
   artifactFingerprint,
+  canAnnotateStageArtifact,
+  isOwnNodeArtifact,
+  resolveStageRemoteKind,
   shouldActivatePinnedPreview,
+  type ReactStageRemoteKind,
 } from '@/lib/run/reactArtifactPreview'
 
 const props = withDefaults(
@@ -36,8 +43,14 @@ const props = withDefaults(
     nodeId?: string
     /** When true, ArtifactPreview will not fetch (content already inlined). */
     inlineContent?: boolean
-    /** Enable 取点 / 划选 / ⤴ 标注 on every open preview tab. */
+    /** Enable 取点 / 划选 / ⤴ 标注 on the current node's artifacts. */
     annotatable?: boolean
+    remoteKind?: ReactStageRemoteKind
+    shareEnabled?: boolean
+    token?: string
+    ports?: PublicPreviewPort[]
+    publicActive?: boolean
+    publicMobile?: boolean
   }>(),
   {
     previewArtifact: '',
@@ -45,8 +58,19 @@ const props = withDefaults(
     nodeId: '',
     inlineContent: false,
     annotatable: false,
+    shareEnabled: false,
+    token: '',
+    ports: () => [],
+    publicActive: true,
+    publicMobile: false,
   },
 )
+
+const emit = defineEmits<{
+  pick: [payload: AppPreviewPickPayload]
+  stagedPick: [payload: AppPreviewPickPayload | null]
+  openShare: []
+}>()
 
 const { t } = useI18n()
 const toast = useToast()
@@ -83,9 +107,30 @@ let htmlThumbGen = 0
 let htmlThumbAbort: AbortController | null = null
 const htmlThumbFp: Record<string, string> = {}
 
-const canOpenNovnc = computed(() => !!props.runId && !!props.nodeId && !props.inlineContent)
+const resolvedRemoteKind = computed(() =>
+  resolveStageRemoteKind({
+    remoteKind: props.remoteKind,
+    runId: props.runId,
+    nodeId: props.nodeId,
+    inlineContent: props.inlineContent,
+  }),
+)
+const canOpenNovnc = computed(() => resolvedRemoteKind.value !== 'off')
 const showingNovnc = computed(() => activeTab.value === REACT_STAGE_TAB_NOVNC)
 const showGridCards = computed(() => props.artifacts.length > 0 || canOpenNovnc.value)
+const remoteCardMeta = computed(() =>
+  resolvedRemoteKind.value === 'sandbox'
+    ? t('pages.reactArtifactStage.novncCardMeta')
+    : t('pages.reactArtifactStage.appCardMeta'),
+)
+
+function artifactAnnotatable(a: Artifact | null): boolean {
+  return canAnnotateStageArtifact(!!props.annotatable, a, props.nodeId)
+}
+
+function artifactReadonly(a: Artifact): boolean {
+  return !isOwnNodeArtifact(a, props.nodeId)
+}
 
 const kindIcon: Record<string, string> = {
   html: 'dashboard',
@@ -140,7 +185,8 @@ function closeNovnc() {
   activeTab.value = REACT_STAGE_TAB_GRID
 }
 
-function onNovncPick(payload: AppPreviewPickPayload) {
+function onRemotePick(payload: AppPreviewPickPayload) {
+  emit('pick', payload)
   stageAnnotation({
     selector: payload.selector,
     url: payload.url,
@@ -215,10 +261,20 @@ watch(
 )
 
 watch(
-  () => `${props.runId}|${props.nodeId}|${props.inlineContent}`,
+  () => resolvedRemoteKind.value,
+  (kind) => {
+    if (kind !== 'app' && kind !== 'public') return
+    novncOpen.value = true
+    if (activeTab.value === REACT_STAGE_TAB_GRID) activeTab.value = REACT_STAGE_TAB_NOVNC
+  },
+  { immediate: true },
+)
+
+watch(
+  () => `${props.runId}|${props.nodeId}|${resolvedRemoteKind.value}`,
   async () => {
     sandboxId.value = null
-    if (!canOpenNovnc.value) return
+    if (resolvedRemoteKind.value !== 'sandbox') return
     sandboxLoading.value = true
     try {
       const sbx = await api.getRunNodeSandbox(props.runId, props.nodeId)
@@ -352,7 +408,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="px-2.5 py-2">
             <div class="truncate text-[12px] font-medium text-txt">{{ t('pages.reactArtifactStage.novncCardTitle') }}</div>
-            <div class="mt-0.5 truncate text-[11px] text-txt3">{{ t('pages.reactArtifactStage.novncCardMeta') }}</div>
+            <div class="mt-0.5 truncate text-[11px] text-txt3">{{ remoteCardMeta }}</div>
           </div>
         </button>
         <button
@@ -376,7 +432,14 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div class="px-2.5 py-2">
-            <div class="truncate text-[12px] font-medium text-txt" :title="a.name">{{ a.name }}</div>
+            <div class="flex items-center gap-1.5">
+              <div class="min-w-0 truncate text-[12px] font-medium text-txt" :title="a.name">{{ a.name }}</div>
+              <span
+                v-if="artifactReadonly(a)"
+                class="shrink-0 rounded border border-line px-1 py-px text-[10px] text-txt3"
+                data-testid="react-artifact-card-readonly"
+              >{{ t('pages.reactArtifactStage.readonlyBadge') }}</span>
+            </div>
             <div class="mt-0.5 truncate text-[11px] text-txt3">{{ metaLine(a) }}</div>
           </div>
         </button>
@@ -396,7 +459,7 @@ onBeforeUnmount(() => {
         :artifacts="artifacts"
         :run-id="runId"
         hide-delete
-        :annotatable="annotatable"
+        :annotatable="artifactAnnotatable(artifactByName(name))"
         class="min-h-0 flex-1"
       />
     </div>
@@ -407,15 +470,36 @@ onBeforeUnmount(() => {
       class="flex min-h-0 flex-1 flex-col"
       data-testid="react-artifact-preview-novnc"
     >
+      <AppPreviewPanel
+        v-if="resolvedRemoteKind === 'app'"
+        :run-id="runId"
+        :node-id="nodeId"
+        fill
+        :show-feedback="false"
+        :share-enabled="shareEnabled"
+        @pick="onRemotePick"
+        @staged-pick="emit('stagedPick', $event)"
+        @open-share="emit('openShare')"
+      />
+      <PublicAppPreviewPanel
+        v-else-if="resolvedRemoteKind === 'public'"
+        :token="token"
+        :ports="ports"
+        :active="publicActive"
+        :mobile="publicMobile"
+        fill
+        @pick="onRemotePick"
+        @staged-pick="emit('stagedPick', $event)"
+      />
       <NovncPreviewPanel
-        v-if="sandboxId"
+        v-else-if="sandboxId"
         :sandbox-id="sandboxId"
         fill
         :inspectable="annotatable"
-        @pick="onNovncPick"
+        @pick="onRemotePick"
       />
       <div
-        v-else
+        v-else-if="resolvedRemoteKind === 'sandbox'"
         class="flex h-full flex-col items-center justify-center p-6 text-center text-[12px] text-txt3"
         data-testid="react-artifact-novnc-missing"
       >

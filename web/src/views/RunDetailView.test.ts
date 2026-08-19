@@ -423,6 +423,14 @@ describe('RunDetailView react artifact stage', () => {
     expect(clarifyPanelSrc).toMatch(/v-model:annotations="annotations"/)
     expect(clarifyPanelSrc).toMatch(/ReactArtifactStage/)
   })
+
+  it('uses the same artifact stage for review, not StructuredProductPanel', () => {
+    expect(reviewPanelSrc).toMatch(/ReactArtifactStage/)
+    expect(reviewPanelSrc).toMatch(/:remote-kind="remoteKind"/)
+    expect(reviewPanelSrc).not.toMatch(/StructuredProductPanel/)
+    expect(reviewPanelSrc).not.toMatch(/AppPreviewPanel/)
+    expect(gatePanelSrc).toMatch(/GateApproval/)
+  })
 })
 
 describe('RunDetailView entry assembly (g4)', () => {

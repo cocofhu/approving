@@ -24,15 +24,12 @@ describe('GatesInboxView GateApproval isolation', () => {
     expect(unifiedBindings.length).toBe(1)
   })
 
-  it('clarify stage uses loading pane, product panel, react stage, and load-failed retry', () => {
+  it('clarify stage uses loading pane, product retry, and react stage for all ReAct sessions', () => {
     expect(src).toMatch(/ArtifactLoadingPane/)
     expect(src).toMatch(/ClarifyProductStage/)
     expect(src).toMatch(/ReactArtifactStage/)
-    expect(src).toMatch(/inboxReactActive/)
-    expect(src).toMatch(/v-else-if="inboxReactActive"/)
-    expect(src).toMatch(/clarifyStageKind/)
+    expect(src).not.toMatch(/inboxReactActive/)
     expect(src).toMatch(/retryActiveRun/)
-    expect(src).toMatch(/clarifyProductNodes/)
   })
 })
 
@@ -147,15 +144,20 @@ describe('GatesInboxView list first-load tri-state (plan g1 / g2 / g3.2)', () =>
 })
 
 describe('GatesInboxView app_preview stage (g2.2)', () => {
-  it('mounts AppPreviewPanel with fill + pick wiring on both ReviewShell stages', () => {
-    expect(src).toMatch(/import AppPreviewPanel/)
+  it('mounts the shared artifact stage with app remoteKind and pick wiring on both ReviewShell stages', () => {
     expect(src).toMatch(/inboxAppPreviewActive/)
     expect(src).toMatch(/addClarifyAnnotation/)
     expect(src).toMatch(/mergeStagedAppPreviewPick/)
-    const panelBlocks = src.match(/<AppPreviewPanel[\s\S]*?:show-feedback="false"/g) || []
-    expect(panelBlocks.length).toBe(2)
+    const stages = src.match(/<ReactArtifactStage[\s\S]*?\/>/g) || []
+    expect(stages.length).toBe(2)
+    for (const block of stages) {
+      expect(block).toMatch(/:remote-kind="inboxAppPreviewActive \? 'app' : 'sandbox'"/)
+      expect(block).toMatch(/:share-enabled="inboxAppPreviewActive"/)
+    }
     expect(src).toMatch(/@pick="onAppPreviewReviewPick"/)
     expect(src).toMatch(/@staged-pick="onAppPreviewStagedPick"/)
+    expect(src).toMatch(/@open-share="openSharePanel\(active\)"/)
+    expect(src).not.toMatch(/<AppPreviewPanel/)
   })
 })
 
@@ -165,8 +167,22 @@ describe('GatesInboxView react artifact stage', () => {
     expect(stages.length).toBe(2)
     for (const block of stages) {
       expect(block).toMatch(/:node-id="active\.nodeId"/)
-      expect(block).toMatch(/:annotatable="clarifyInputActive && !historicalPreview"/)
+      expect(block).toMatch(/:annotatable="clarifyInputActive"/)
       expect(block).toMatch(/:preview-artifact="activeClarify\?\.previewArtifact"/)
     }
+  })
+
+  it('mounts the artifact stage for every clarify session, including visual/research review', () => {
+    expect(src).not.toMatch(/isReactGraphNode/)
+    expect(src).not.toMatch(/v-else-if="inboxReactActive"/)
+    const desktop = src.slice(src.indexOf('<!-- Desktop three-zone'))
+    const shell = desktop.slice(
+      desktop.indexOf('<ReviewShell'),
+      desktop.indexOf('</ReviewShell>') + '</ReviewShell>'.length,
+    )
+    expect(shell).toMatch(/active\.type === 'clarify' && activeClarify/)
+    expect(shell).toMatch(/<ReactArtifactStage/)
+    expect(shell).not.toMatch(/stage-kind="panel"/)
+    expect(src).toMatch(/GateApproval/)
   })
 })

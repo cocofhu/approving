@@ -6,15 +6,18 @@ import {
   applyPreviewArtifactFromRun,
   applyPreviewArtifactName,
   artifactFingerprint,
+  canAnnotateStageArtifact,
   shouldActivatePinnedPreview,
   artifactKindLabelKey,
   artifactRevision,
   closeStagePreviewTab,
   findArtifactByName,
+  isOwnNodeArtifact,
   isReactGraphNode,
   nextTabAfterClose,
   openStagePreviewTab,
   previewTabId,
+  resolveStageRemoteKind,
 } from './reactArtifactPreview'
 
 function art(partial: Partial<Artifact> & Pick<Artifact, 'id' | 'name'>): Artifact {
@@ -54,6 +57,24 @@ describe('reactArtifactPreview helpers', () => {
     } as Run
     expect(isReactGraphNode(run, 'c1')).toBe(true)
     expect(isReactGraphNode(run, 'other')).toBe(false)
+  })
+
+  it('treats foreign-node artifacts as read-only unless nodeId is empty', () => {
+    expect(isOwnNodeArtifact({ nodeId: 'research' }, '')).toBe(true)
+    expect(isOwnNodeArtifact({ nodeId: 'research' }, 'research')).toBe(true)
+    expect(isOwnNodeArtifact({ nodeId: 'plan' }, 'research')).toBe(false)
+    expect(isOwnNodeArtifact({ nodeId: '' }, 'research')).toBe(true)
+    expect(canAnnotateStageArtifact(true, { nodeId: 'plan' }, 'research')).toBe(false)
+    expect(canAnnotateStageArtifact(true, { nodeId: 'research' }, 'research')).toBe(true)
+    expect(canAnnotateStageArtifact(false, { nodeId: 'research' }, 'research')).toBe(false)
+  })
+
+  it('resolves remoteKind with explicit override over sandbox default', () => {
+    expect(resolveStageRemoteKind({ runId: 'r', nodeId: 'n' })).toBe('sandbox')
+    expect(resolveStageRemoteKind({ runId: 'r', nodeId: 'n', inlineContent: true })).toBe('off')
+    expect(resolveStageRemoteKind({ runId: 'r', nodeId: 'n', remoteKind: 'app' })).toBe('app')
+    expect(resolveStageRemoteKind({ inlineContent: true, remoteKind: 'public' })).toBe('public')
+    expect(resolveStageRemoteKind({})).toBe('off')
   })
 
   it('opens preview tabs without replacing already-open ones', () => {

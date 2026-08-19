@@ -151,8 +151,7 @@ const confirmDisabled = computed(
 )
 const showDecideFields = computed(() => showConfirm.value || canReject.value || linkInvalid.value)
 const productKind = computed(() => preview.value?.productKind || inferProductKind())
-const isPublicReact = computed(() => preview.value?.nodeType === 'react')
-const publicReactArtifacts = computed<Artifact[]>(() => {
+const publicStageArtifacts = computed<Artifact[]>(() => {
   const p = preview.value
   if (!p) return []
   const out: Artifact[] = []
@@ -187,14 +186,15 @@ const publicReactArtifacts = computed<Artifact[]>(() => {
   }
   return out
 })
-const publicPreviewName = computed(() => publicReactArtifacts.value[0]?.name || '')
+const publicPreviewName = computed(() => publicStageArtifacts.value[0]?.name || '')
 const productName = computed(() => preview.value?.productName || preview.value?.structured?.name || '')
 const inspectable = computed(
   () =>
     isActive.value &&
     reactAlive.value &&
-    (productKind.value === 'visual' || productKind.value === 'app_preview' || isPublicReact.value),
+    (isReview.value || productKind.value === 'visual' || productKind.value === 'app_preview'),
 )
+const usePublicArtifactStage = computed(() => isReview.value)
 const appPreviewPorts = computed(() => preview.value?.ports || [])
 const turns = computed<ClarifyTurn[]>(() =>
   (preview.value?.turns || []).map((turn) => ({
@@ -1087,14 +1087,24 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
     <div v-else class="flex min-h-0 flex-1 flex-col" data-testid="public-gate-workbench">
       <ReviewShell class="min-h-0 flex-1" :mobile="isMobile">
         <template #stage>
-          <ReactArtifactStage
-            v-if="isPublicReact"
-            :artifacts="publicReactArtifacts"
-            :preview-artifact="publicPreviewName"
-            inline-content
-            :annotatable="inspectable"
+          <div
+            v-if="usePublicArtifactStage"
+            class="flex h-full min-h-0 flex-1 flex-col"
             data-testid="public-gate-react-stage"
-          />
+          >
+            <ReactArtifactStage
+              :artifacts="publicStageArtifacts"
+              :preview-artifact="publicPreviewName"
+              inline-content
+              :annotatable="inspectable"
+              :remote-kind="productKind === 'app_preview' ? 'public' : 'off'"
+              :token="token"
+              :ports="appPreviewPorts"
+              :public-active="isActive"
+              :public-mobile="isMobile"
+              @pick="onAppPreviewPick"
+            />
+          </div>
           <section v-else class="flex min-h-0 flex-1 flex-col" data-testid="public-gate-stage">
             <div class="flex shrink-0 items-baseline gap-2 border-b border-line px-4 py-2">
               <h2 class="text-sm font-semibold" data-testid="public-gate-product-label">{{ productLabel }}</h2>
