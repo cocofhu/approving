@@ -4,6 +4,7 @@ import {
   peekHomeApproveHandoff,
   setHomeApproveHandoff,
   takeHomeApproveHandoff,
+  updateHomeApproveHandoffNode,
 } from './homeApproveHandoff'
 
 describe('homeApproveHandoff', () => {
@@ -32,5 +33,26 @@ describe('homeApproveHandoff', () => {
     expect(peekHomeApproveHandoff()?.runId).toBe('run-1')
     expect(consumeHomeApproveHandoff('run-1', 'ap')?.text).toBe('做登录')
     expect(peekHomeApproveHandoff()).toBeNull()
+  })
+
+  it('delivers attachments on the same run when node id is still empty', () => {
+    setHomeApproveHandoff({
+      runId: 'run-1',
+      nodeId: '',
+      text: '附图',
+      images: [{ mimeType: 'application/pdf', data: 'QQ==', name: 'a.pdf' }],
+    })
+    const got = consumeHomeApproveHandoff('run-1', 'ap')
+    expect(got?.images).toEqual([{ mimeType: 'application/pdf', data: 'QQ==', name: 'a.pdf' }])
+    expect(got?.nodeId).toBe('ap')
+  })
+
+  it('updates the parked node id only while the slot is still held', () => {
+    setHomeApproveHandoff({ runId: 'run-1', nodeId: '', text: '附图', images: [] })
+    expect(updateHomeApproveHandoffNode('run-other', 'ap')).toBe(false)
+    expect(updateHomeApproveHandoffNode('run-1', 'ap')).toBe(true)
+    expect(peekHomeApproveHandoff()?.nodeId).toBe('ap')
+    takeHomeApproveHandoff()
+    expect(updateHomeApproveHandoffNode('run-1', 'ap')).toBe(false)
   })
 })

@@ -1376,6 +1376,43 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     )
     const seedProp = wrapper.findComponent({ name: 'ReviewComposer' }).props('seedHumanText')
     expect(seedProp).toBe('把登录做清楚')
+    expect(wrapper.findComponent({ name: 'ReviewComposer' }).props('seedHumanImages')).toEqual([
+      { data: 'abc', mimeType: 'image/png', name: 'shot.png' },
+    ])
+    wrapper.unmount()
+  })
+
+  it('applies home handoff seed when the parked node id is still empty', async () => {
+    const item = {
+      ...clarifyItem('ap'),
+      runId: 'run-home',
+      nodeId: 'ap',
+      label: '开发前澄清',
+    }
+    routeState.query = { run: 'run-home' }
+    setHomeApproveHandoff({
+      runId: 'run-home',
+      nodeId: '',
+      text: '附图',
+      images: [{ data: 'QQ==', mimeType: 'application/pdf', name: 'brief.pdf' }],
+    })
+    mocks.listGates.mockResolvedValue(paged([item]))
+    mocks.inboxContext.mockResolvedValue({
+      type: 'clarify',
+      status: 'waiting_human',
+      nodes: [{ id: 'ap', type: 'approve', label: '澄清' }],
+      artifacts: [],
+      nodeExecutions: {},
+      clarify: { nodeId: 'ap', iteration: 1, turns: [], done: false, label: '澄清' },
+    })
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+    expect(wrapper.findComponent({ name: 'ReviewComposer' }).props('seedHumanText')).toBe('附图')
+    expect(wrapper.findComponent({ name: 'ReviewComposer' }).props('seedHumanImages')).toEqual([
+      { data: 'QQ==', mimeType: 'application/pdf', name: 'brief.pdf' },
+    ])
     wrapper.unmount()
   })
 })

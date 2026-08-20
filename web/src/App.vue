@@ -45,9 +45,11 @@ watch(locale, () => {
   <AppShell v-if="!bareLayout">
     <AppSkeleton v-if="showShellSkeleton" />
     <router-view v-else-if="canShowProtected" v-slot="{ Component }">
-      <transition :name="routeViewTransition || undefined">
-        <component :is="Component" :key="String(route.name || route.path)" />
-      </transition>
+      <div class="route-view-wrap">
+        <transition :name="routeViewTransition || undefined">
+          <component :is="Component" :key="String(route.name || route.path)" />
+        </transition>
+      </div>
     </router-view>
   </AppShell>
   <router-view v-else />

@@ -21,6 +21,18 @@ export function findInboxItemByKey<T extends Pick<InboxItem, 'runId' | 'nodeId'>
   return list.find((it) => inboxItemKey(it) === key)
 }
 
+/** Prefer run+node; if the parked node id is still empty, take the first card on that run. */
+export function findInboxItemForHandoff<T extends Pick<InboxItem, 'runId' | 'nodeId'>>(
+  list: T[],
+  handoff: Pick<InboxItem, 'runId' | 'nodeId'>,
+): T | undefined {
+  if (handoff.nodeId) {
+    const hit = findInboxItemByKey(list, inboxItemKey(handoff))
+    if (hit) return hit
+  }
+  return list.find((it) => it.runId === handoff.runId)
+}
+
 /** Triple used for inbox-context fetch / processed short-circuit. */
 export function inboxTripleKey(
   it: Pick<InboxItem, 'runId' | 'nodeId' | 'iteration'>,

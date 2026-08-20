@@ -126,11 +126,43 @@ const showApproveEmptyHint = computed(
     props.nodeType === 'approve' &&
     persistedTurns.value.length === 0 &&
     liveTurns.value.length === 0 &&
-    queued.value.length === 0,
+    queued.value.length === 0 &&
+    !seedHumanTurn.value,
 )
 const useConfirmFlowAction = computed(
   () => props.reviewMode || props.nodeType === 'approve',
 )
+
+function humanMatchesSeed(t: ClarifyTurn, seed: ClarifyTurn): boolean {
+  if (t.role !== 'human') return false
+  const want = (seed.text || '').trim()
+  if (want) return (t.text || '').trim() === want
+  return (seed.images?.length || 0) > 0 && (t.images?.length || 0) > 0
+}
+
+const seedHumanTurn = computed<ClarifyTurn | null>(() => {
+  const text = String(props.seedHumanText || '').trim()
+  const images = props.seedHumanImages || []
+  if (!text && images.length === 0) return null
+  return { role: 'human', text, images, at: '' }
+})
+
+function prependSeedHuman(list: ClarifyTurn[]): ClarifyTurn[] {
+  const seed = seedHumanTurn.value
+  if (!seed) return list
+  const seedImgs = seed.images || []
+  const idx = list.findIndex((t) => humanMatchesSeed(t, seed))
+  if (idx >= 0) {
+    const t = list[idx]
+    if (seedImgs.length && !(t.images && t.images.length)) {
+      const next = list.slice()
+      next[idx] = { ...t, images: seedImgs }
+      return next
+    }
+    return list
+  }
+  return [seed, ...list]
+}
 const liveAgentIdx = ref(-1)
 /** Coalesced markdown HTML for the live streaming agent bubble. */
 const liveStreamHtml = ref('')
@@ -352,7 +384,7 @@ const displayTurns = computed<ClarifyTurn[]>(() => {
   // Session UX: live in-flight bubbles until persisted transcript catches up.
   // Dedupe against persisted turns so mid-stream softRefresh/loadRun human does not double-render.
   if (liveTurns.value.length) {
-    return mergePersistedAndLiveTurns(list, liveTurns.value)
+    return prependSeedHuman(mergePersistedAndLiveTurns(list, liveTurns.value))
   }
   // Choice-card sessionStorage echo only (not used for free-text send).
   if (pending.value) {
@@ -376,7 +408,7 @@ const displayTurns = computed<ClarifyTurn[]>(() => {
       }
     }
   }
-  return list
+  return prependSeedHuman(list)
 })
 
 /** Single-image lightbox for human history attachments (no gallery / Esc). */
@@ -414,11 +446,11 @@ watch(
     pending.value = null
     const liveHumanText = liveTurns.value[0]?.role === 'human' ? liveTurns.value[0].text || '' : ''
     const persistedCaughtUp = persistedCompletedLiveHuman(turnList, liveHumanText)
-    // Clear live bubbles once persisted transcript includes them (not while streaming),
-    // or when poll/refresh already persisted the completed human+agent pair.
+    // Clear live bubbles once persisted transcript includes them (not while streaming).
+    // Empty persisted must not wipe an in-flight / seed-only human bubble.
     if (
       liveTurns.value.length &&
-      (persistedCaughtUp || !liveTurns.value.some((t) => t.streaming))
+      (persistedCaughtUp || (turnList.length > 0 && !liveTurns.value.some((t) => t.streaming)))
     ) {
       liveTurns.value = []
       liveAgentIdx.value = -1
@@ -543,17 +575,6 @@ function onPaste(e: ClipboardEvent) {
 }
 
 watch(draft, () => nextTick(autoGrow), { immediate: true })
-watch(
-  () => [props.seedHumanText, props.seedHumanImages] as const,
-  () => {
-    if (persistedTurns.value.length > 0 || liveTurns.value.length > 0) return
-    const text = String(props.seedHumanText || '').trim()
-    const images = props.seedHumanImages || []
-    if (!text && images.length === 0) return
-    liveTurns.value = [{ role: 'human', text, images, at: new Date().toISOString() }]
-  },
-  { immediate: true },
-)
 onMounted(() => {
   nextTick(autoGrow)
   // Mount with historical turns: force enter stick (parent v-if remounts on leave/re-enter).

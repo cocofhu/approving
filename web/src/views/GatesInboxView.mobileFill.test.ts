@@ -56,11 +56,13 @@ describe('GatesInboxView review/clarify composer mode', () => {
     expect(src).toMatch(/inboxQueryKey/)
     expect(src).toMatch(/findInboxItemByKey/)
     expect(src).toMatch(/consumeHomeApproveHandoff/)
+    expect(src).toMatch(/findInboxItemForHandoff/)
     expect(src).toMatch(/waitForQueryItem/)
     const seedText = src.match(/:seed-human-text="activeHomeSeed\?\.text"/g) || []
-    const seedImages = src.match(/:seed-human-images="activeHomeSeed\?\.images"/g) || []
+    const seedImages = src.match(/:seed-human-images="activeHomeSeed\?\.images \?\? \[\]"/g) || []
     expect(seedText.length).toBe(2)
     expect(seedImages.length).toBe(2)
+    expect(src).toMatch(/showClarifyReviewShell/)
   })
 
   it('finish uses confirmFlowPrompt with force=true and success/error toasts', () => {
@@ -195,7 +197,7 @@ describe('GatesInboxView react artifact stage', () => {
       desktop.indexOf('<ReviewShell'),
       desktop.indexOf('</ReviewShell>') + '</ReviewShell>'.length,
     )
-    expect(shell).toMatch(/active\.type === 'clarify' && activeClarify/)
+    expect(shell).toMatch(/showClarifyReviewShell/)
     expect(shell).toMatch(/<ReactArtifactStage/)
     expect(shell).not.toMatch(/stage-kind="panel"/)
     expect(src).toMatch(/GateApproval/)
