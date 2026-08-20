@@ -52,6 +52,7 @@ const (
 	PromptSubmitMR
 	PromptVisual
 	PromptAppPreview
+	PromptApprove
 )
 
 // RenderKind selects the markdown renderer for a structured product.
@@ -65,6 +66,7 @@ const (
 	RenderTestResult
 	RenderReview
 	RenderImplementationResult
+	RenderPlan
 )
 
 // Spec describes one workflow node type.
@@ -95,6 +97,10 @@ type Spec struct {
 	// Empty ⇒ the node type has no review phase (e.g. react has its own
 	// multi-turn path; gates/control nodes never review).
 	ReviewVar string
+
+	// Products lists reserved deliverables when a node writes more than one
+	// (Approve). Empty ⇒ fall back to ArtifactName/SetTool/OutputKey/Render.
+	Products []ProductRef
 }
 
 // defaultReviewVar is the conventional control variable name for the post-run
@@ -116,6 +122,12 @@ var registry = map[string]Spec{
 	},
 	"agent": {
 		Type: "agent", Label: "通用", Category: "Agent", Exec: ExecAgent,
+	},
+	"approve": {
+		Type: "approve", Label: "Approve", Category: "Agent", Exec: ExecReact,
+		EmbeddedRules: []string{"rules/approve.md"},
+		Prompt:        PromptApprove,
+		Products:      approveProducts(),
 	},
 	"plan": {
 		Type: "plan", Label: "计划", Category: "Agent", Exec: ExecPlan,
@@ -265,6 +277,8 @@ func Renderer(kind RenderKind) func(string) string {
 		return mcp.RenderReviewMarkdown
 	case RenderImplementationResult:
 		return mcp.RenderImplementationResultMarkdown
+	case RenderPlan:
+		return mcp.RenderPlanMarkdown
 	default:
 		return nil
 	}
@@ -297,6 +311,8 @@ func PromptContractText(p *models.AgentPrompts, nodeType, sourceBranch, targetBr
 		return p.VisualContractText()
 	case PromptAppPreview:
 		return p.PreviewContractText()
+	case PromptApprove:
+		return p.ApproveContractText()
 	default:
 		return ""
 	}

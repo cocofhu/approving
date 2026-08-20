@@ -75,6 +75,10 @@ func TestNodeChatTimeout(t *testing.T) {
 	if d := c.nodeChatTimeout(both); d != 300*time.Second {
 		t.Errorf("chat_timeout should win = %v, want 300s", d)
 	}
+	approve := NodeReq{NodeType: "approve", Config: map[string]any{"timeout": 20, "chat_timeout": 300}}
+	if d := c.nodeChatTimeout(approve); d != 90*time.Second {
+		t.Errorf("approve leftover timeout must fall back to global = %v, want 90s", d)
+	}
 }
 
 // TestNodeChatTimeoutNudgeInheritance documents that re-prompt (nudge) paths

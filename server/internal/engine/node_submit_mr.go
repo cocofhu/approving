@@ -251,18 +251,18 @@ func firstNonEmptyStr(a, b string) string {
 	return b
 }
 
-// completeProduces finalizes a successful agent/react node: it enforces the
-// produces contract when one is declared, auto-captures the deliverable when
-// one is not, and records any branch the node pushed. A declared-but-missing
-// produces artifact yields a failed outcome — this is a last-resort guard; the
-// react provider already re-prompts the agent to write it before finishing.
-// When no produces is declared the check is skipped entirely and the node just
-// flows through.
-func (e *Engine) completeProduces(c *execCtx, node *models.Node, res runtime.NodeResult) nodeOutcome {
+// finalizeAgentProducts finalizes a successful agent/react/approve node: it
+// enforces reserved product contracts (and optional extras) when declared,
+// auto-captures a generic deliverable when they are not, and records any
+// branch the node pushed. A required-but-missing product yields a failed
+// outcome — this is a last-resort guard; the provider already re-prompts the
+// agent to write it before finishing. When no product contract applies the
+// check is skipped entirely and the node just flows through.
+func (e *Engine) finalizeAgentProducts(c *execCtx, node *models.Node, res runtime.NodeResult) nodeOutcome {
 
-	if spec, ok := nodereg.Get(node.Type); ok && spec.Render != nodereg.RenderNone {
-		oc := e.finalizeStructured(c, node, res, spec.ArtifactName, spec.OutputKey, nodereg.Renderer(spec.Render))
-		if spec.Type == "implement" && oc.status == "completed" {
+	if required := nodereg.RequiredProducts(node.Type); len(required) > 0 {
+		oc := e.finalizeProducts(c, node, res, required, nodereg.OptionalProducts(node.Type))
+		if node.Type == "implement" && oc.status == "completed" {
 			e.exportBranchVar(c, oc.outputs)
 		}
 		return oc

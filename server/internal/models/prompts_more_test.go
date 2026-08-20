@@ -16,6 +16,9 @@ func TestAgentPromptsRemainingContracts(t *testing.T) {
 	if nilP.VisualContractText() == "" || nilP.PreviewContractText() == "" || nilP.PreviewRetryText() == "" {
 		t.Fatal("nil visual/preview")
 	}
+	if nilP.ApproveContractText() == "" {
+		t.Fatal("nil approve contract")
+	}
 
 	p := &AgentPrompts{
 		ClarifiedOpenQuestionsRetry: "Q:{items}",
@@ -32,6 +35,19 @@ func TestAgentPromptsRemainingContracts(t *testing.T) {
 	}
 	if p.VisualContractText() != "V" || p.PreviewContractText() != "P" || p.PreviewRetryText() != "R" {
 		t.Fatal("overrides")
+	}
+	p.ApproveContract = "AC"
+	if p.ApproveContractText() != "AC" {
+		t.Fatal("approve override")
+	}
+	gotApprove := (&AgentPrompts{}).ApproveContractText()
+	for _, want := range []string{"两份强制交付", "set_clarified_requirement", "set_plan", "不是「唯一交付」"} {
+		if !strings.Contains(gotApprove, want) {
+			t.Fatalf("DefaultApproveContract missing %q\n%s", want, gotApprove)
+		}
+	}
+	if !strings.Contains(DefaultApproveOpenSuffix, "第一回合必须调用 ask_question") {
+		t.Fatal("DefaultApproveOpenSuffix")
 	}
 	if nilP.OutcomeContractText() == "" || nilP.OutcomeRetryText() == "" {
 		t.Fatal("nil outcome")

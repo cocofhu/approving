@@ -41,6 +41,21 @@ func TestBuildManifestMatchesRegistry(t *testing.T) {
 	if _, ok := Get("nope"); ok {
 		t.Fatal("unknown type")
 	}
+	for i := 1; i < len(m.Products); i++ {
+		if m.Products[i-1].Type > m.Products[i].Type {
+			t.Fatalf("products not sorted: %q after %q", m.Products[i].Type, m.Products[i-1].Type)
+		}
+	}
+	// Rebuilding must keep the same stable product order (map iteration noise).
+	again := BuildManifest()
+	if len(again.Products) != len(m.Products) {
+		t.Fatalf("rebuild len=%d want %d", len(again.Products), len(m.Products))
+	}
+	for i := range m.Products {
+		if again.Products[i].Type != m.Products[i].Type {
+			t.Fatalf("rebuild order drift at %d: %q vs %q", i, again.Products[i].Type, m.Products[i].Type)
+		}
+	}
 }
 
 func TestEmbeddedRules(t *testing.T) {
@@ -51,11 +66,41 @@ func TestEmbeddedRules(t *testing.T) {
 	if len(EmbeddedRuleFiles("branch")) != 0 {
 		t.Fatal("branch should have no embedded rules")
 	}
+	approve := EmbeddedRuleFiles("approve")
+	if len(approve) != 1 || approve[0] != "rules/approve.md" {
+		t.Fatalf("approve rules: %v", approve)
+	}
+}
+
+func TestClarifyInteractive(t *testing.T) {
+	if !ClarifyInteractive("react") || !ClarifyInteractive("approve") {
+		t.Fatal("react and approve should be clarify-interactive")
+	}
+	if ClarifyInteractive("agent") || ClarifyInteractive("plan") || ClarifyInteractive("research") {
+		t.Fatal("agent/plan/research must not be clarify-interactive")
+	}
+}
+
+func TestRequiredProductsApprove(t *testing.T) {
+	req := RequiredProducts("approve")
+	if len(req) != 2 {
+		t.Fatalf("RequiredProducts(approve) len=%d want 2", len(req))
+	}
+	if req[0].ArtifactName != mcp.ClarifiedRequirementArtifactName || req[0].SetTool != "set_clarified_requirement" {
+		t.Fatalf("first required = %+v", req[0])
+	}
+	if req[1].ArtifactName != mcp.PlanArtifactName || req[1].SetTool != "set_plan" {
+		t.Fatalf("second required = %+v", req[1])
+	}
+	opt := OptionalProducts("approve")
+	if len(opt) != 3 {
+		t.Fatalf("OptionalProducts(approve) len=%d want 3", len(opt))
+	}
 }
 
 // frontendNodeTypes mirrors web/src/lib/types.ts NodeType union.
 var frontendNodeTypes = []string{
-	"input", "output", "react", "agent", "plan", "implement",
+	"input", "output", "react", "agent", "approve", "plan", "implement",
 	"research", "test", "review", "proposal", "proposal_select",
 	"submit_mr", "visual", "human_gate", "app_preview", "branch", "set_var",
 }
@@ -103,6 +148,9 @@ func TestPromptContractText(t *testing.T) {
 	if PromptContractText(nil, "research", "", "") == "" {
 		t.Fatal("research contract")
 	}
+	if PromptContractText(nil, "approve", "", "") == "" {
+		t.Fatal("approve contract")
+	}
 	if PromptContractText(nil, "agent", "", "") != "" {
 		t.Fatal("agent should have no fixed contract")
 	}
@@ -119,7 +167,7 @@ func TestReviewCapableDefaults(t *testing.T) {
 			t.Fatalf("%s DefaultReviewVar = %q, want review", typ, DefaultReviewVar(typ))
 		}
 	}
-	for _, typ := range []string{"test", "react", "agent", "human_gate", "proposal_select", "input", "nope"} {
+	for _, typ := range []string{"test", "react", "agent", "approve", "human_gate", "proposal_select", "input", "nope"} {
 		if ReviewCapable(typ) {
 			t.Fatalf("%s must not be review-capable", typ)
 		}

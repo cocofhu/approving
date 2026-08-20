@@ -83,6 +83,14 @@ func TestReactCapReached(t *testing.T) {
 	if reactCapReached(NodeReq{Config: map[string]any{"max_rounds": 5}}, hist) {
 		t.Error("with max_rounds=5, 3 turns should not reach cap")
 	}
+	// Approve never caps, even with leftover config.max_rounds and many turns.
+	many := make([]models.ReactMessage, 0, 40)
+	for i := 0; i < 20; i++ {
+		many = append(many, models.ReactMessage{Role: "human"}, models.ReactMessage{Role: "agent"})
+	}
+	if reactCapReached(NodeReq{NodeType: "approve", Config: map[string]any{"max_rounds": 1}}, many) {
+		t.Error("approve must ignore max_rounds and never reach cap")
+	}
 }
 
 func TestTruncateText(t *testing.T) {

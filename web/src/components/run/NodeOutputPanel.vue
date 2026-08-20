@@ -14,6 +14,7 @@ import PlanView, { type PlanDoc } from './PlanView.vue'
 import AppPreviewPanel from './AppPreviewPanel.vue'
 import OutputResultCards from './OutputResultCards.vue'
 import type { NodeRun, WFNode, Run, OutputCard } from '@/lib/shared/types'
+import { isClarifyInteractive } from '@/lib/shared/clarifyInteractive'
 
 const props = defineProps<{ node: WFNode; nodeRun: NodeRun; run: Run }>()
 
@@ -240,7 +241,7 @@ function fileStatusClass(s: string): string {
     </div>
 
     <!-- agent / plan / implement + framework cards: which agent ran + summary -->
-    <div v-else-if="['agent', 'plan', 'implement', 'app_preview', 'research', 'test', 'review', 'proposal'].includes(node.type)" class="card mb-3 p-3">
+    <div v-else-if="['agent', 'plan', 'implement', 'research', 'test', 'review', 'proposal'].includes(node.type)" class="card mb-3 p-3">
       <div class="mb-2 flex items-center gap-1.5 text-xs font-semibold text-txt2"><Icon name="robot" :size="13" :style="{ color: hex }" /> {{ t('pages.nodeOutput.agentInfo') }}</div>
       <div class="space-y-1.5 text-[12px]">
         <div class="flex min-w-0 max-w-full items-center gap-2"><span class="w-20 shrink-0 text-txt3">Agent</span><code class="min-w-0 max-w-full flex-1 overflow-x-auto whitespace-nowrap rounded bg-base px-1.5 py-0.5 font-mono text-accent-2">{{ agentProfile || '—' }}</code></div>
@@ -252,8 +253,8 @@ function fileStatusClass(s: string): string {
       </div>
     </div>
 
-    <!-- react: clarification dialogue summary -->
-    <div v-else-if="node.type === 'react'" class="card mb-3 p-3">
+    <!-- react / approve: clarification dialogue summary -->
+    <div v-else-if="isClarifyInteractive(node.type)" class="card mb-3 p-3">
       <div class="mb-2 flex items-center gap-1.5 text-xs font-semibold text-txt2"><Icon name="chat" :size="13" :style="{ color: hex }" /> {{ t('pages.nodeOutput.reactInteraction') }}</div>
       <div class="space-y-1.5 text-[12px]">
         <div class="flex min-w-0 max-w-full items-center gap-2"><span class="w-20 shrink-0 text-txt3">Agent</span><code class="min-w-0 max-w-full flex-1 overflow-x-auto whitespace-nowrap rounded bg-base px-1.5 py-0.5 font-mono text-accent-2">{{ node.config?.skill_profile || '—' }}</code></div>

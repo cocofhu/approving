@@ -334,7 +334,7 @@ func inferProductKind(visualHTML, structuredName, hinted string) (kind, name str
 }
 
 func reviewPreviewCopy(node *models.Node) (title, description string) {
-	if node != nil && node.Type == "react" {
+	if node != nil && nodereg.ClarifyInteractive(node.Type) {
 		title = strings.TrimSpace(node.Label)
 		if title == "" {
 			if spec, ok := nodereg.Get(node.Type); ok {

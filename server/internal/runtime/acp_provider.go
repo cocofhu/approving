@@ -201,12 +201,15 @@ func (c *acpProvider) chatTimeout() time.Duration {
 // implement) get more headroom than a quick research. Two override keys are
 // accepted: the editor card field `timeout` (minutes) and the legacy
 // `chat_timeout` (seconds); `chat_timeout` wins when both are set.
+// Approve has no timeout field; leftover config is ignored.
 func (c *acpProvider) nodeChatTimeout(req NodeReq) time.Duration {
-	if v, ok := toInt(req.Config["chat_timeout"]); ok && v > 0 {
-		return time.Duration(v) * time.Second
-	}
-	if v, ok := toInt(req.Config["timeout"]); ok && v > 0 {
-		return time.Duration(v) * time.Minute
+	if req.NodeType != "approve" {
+		if v, ok := toInt(req.Config["chat_timeout"]); ok && v > 0 {
+			return time.Duration(v) * time.Second
+		}
+		if v, ok := toInt(req.Config["timeout"]); ok && v > 0 {
+			return time.Duration(v) * time.Minute
+		}
 	}
 	return c.chatTimeout()
 }

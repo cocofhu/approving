@@ -77,6 +77,19 @@ describe('resolveInboxReviewState', () => {
     expect(inboxComposerMode(false)).toBe('clarify')
   })
 
+  it('approve + open session → clarify (not review)', () => {
+    const run = runFixture({
+      nodes: [{ id: 'predev', type: 'approve', label: 'Approve', position: { x: 0, y: 0 }, config: {} }],
+    })
+    expect(
+      resolveInboxReviewState(
+        { type: 'clarify', nodeId: 'predev' },
+        run,
+        { nodeId: 'predev', turns: [], done: false },
+      ),
+    ).toEqual({ reviewActive: false, nodeMissing: false })
+  })
+
   it('done session → not review', () => {
     const run = runFixture({
       nodes: [{ id: 'plan', type: 'plan', label: 'Plan', position: { x: 0, y: 0 }, config: {} }],

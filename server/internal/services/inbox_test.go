@@ -297,6 +297,9 @@ func TestClarifyInboxKind(t *testing.T) {
 	if got := clarifyInboxKind(&models.Node{Type: "react"}); got != "clarify" {
 		t.Fatalf("react → %q", got)
 	}
+	if got := clarifyInboxKind(&models.Node{Type: "approve"}); got != "clarify" {
+		t.Fatalf("approve → %q", got)
+	}
 	if got := clarifyInboxKind(&models.Node{Type: "research"}); got != "review" {
 		t.Fatalf("research → %q", got)
 	}
@@ -326,6 +329,9 @@ func TestIsShareableReviewSession(t *testing.T) {
 	}
 	if !IsShareableReviewSession(&models.Node{Type: "react"}) {
 		t.Fatal("clarify react must be shareable (plan g1.1)")
+	}
+	if !IsShareableReviewSession(&models.Node{Type: "approve"}) {
+		t.Fatal("approve must be shareable")
 	}
 	if IsShareableReviewSession(&models.Node{Type: "proposal_select"}) {
 		t.Fatal("proposal_select must not be shareable via review session")
@@ -441,6 +447,10 @@ func TestReactAutoEnabled(t *testing.T) {
 	}
 	if reactAutoEnabled(&models.Node{Config: map[string]any{}}, nil) != false {
 		t.Fatal("empty auto_var")
+	}
+	approve := &models.Node{Type: "approve", Config: map[string]any{"auto_var": "auto_flag"}}
+	if reactAutoEnabled(approve, map[string]any{"auto_flag": true}) {
+		t.Fatal("approve leftover auto_var must not auto-clarify")
 	}
 }
 

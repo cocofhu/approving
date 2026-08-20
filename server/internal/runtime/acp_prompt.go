@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/cocofhu/approving/internal/models"
@@ -14,7 +15,11 @@ func (c *acpProvider) buildAgentPrompt(req NodeReq, seeded []string) string {
 	if sys := str2(req.Config["system"]); sys != "" {
 		b.WriteString(sys + "\n\n")
 	}
-	b.WriteString(str2(req.Config["prompt"]))
+	if req.NodeType == "approve" {
+		b.WriteString(approveInputSeed(req))
+	} else {
+		b.WriteString(str2(req.Config["prompt"]))
+	}
 	prompts := c.agentPrompts(profile)
 	if len(seeded) > 0 {
 		b.WriteString(prompts.UpstreamHeader())
@@ -61,6 +66,38 @@ func (c *acpProvider) buildAgentPrompt(req NodeReq, seeded []string) string {
 	return strings.TrimSpace(b.String())
 }
 
+// approveInputSeed replaces the user prompt template for Approve: the node has
+// no inspector prompt, so run vars are the only opening context.
+func approveInputSeed(req NodeReq) string {
+	var b strings.Builder
+	b.WriteString("请基于下列运行输入,用 ask_question 开始澄清。")
+	names := make([]string, 0, len(req.Vars))
+	for name := range req.Vars {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	wrote := false
+	for _, name := range names {
+		v := req.Vars[name]
+		if models.IsBlankVar(v) {
+			continue
+		}
+		text := strings.TrimSpace(models.VarDisplayText(v))
+		if text == "" || text == "false" {
+			continue
+		}
+		if !wrote {
+			b.WriteString("\n")
+			wrote = true
+		}
+		fmt.Fprintf(&b, "- %s: %s\n", name, text)
+	}
+	if !wrote {
+		b.WriteString("当前没有可用的输入变量。\n")
+	}
+	return b.String()
+}
+
 // nodeTouchesRepos reports whether a node type operates on the cloned repos
 // (and thus benefits from the flat multi-repo layout description).
 func nodeTouchesRepos(nodeType string) bool {
@@ -75,7 +112,11 @@ func nodeTouchesRepos(nodeType string) bool {
 // conditionalInjection returns the node's conditional_prompt text when its
 // when_var global variable is present and non-empty; otherwise "". The text is
 // already interpolated by the engine (nodeReq) before reaching here.
+// Approve has no conditional injection; leftover config is ignored.
 func conditionalInjection(req NodeReq) string {
+	if req.NodeType == "approve" {
+		return ""
+	}
 	cp, ok := req.Config["conditional_prompt"].(map[string]any)
 	if !ok {
 		return ""

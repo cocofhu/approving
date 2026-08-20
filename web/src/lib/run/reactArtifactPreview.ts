@@ -1,6 +1,7 @@
 import type { Artifact, NodeRun, Run, WFNode } from '@/lib/shared/types'
 import { productArtifactName } from '@/lib/run/productNodeArtifacts'
 import { OUTPUT_KEY_TO_ARTIFACT } from '@/lib/run/structuredArtifacts'
+import { isClarifyInteractive } from '@/lib/shared/clarifyInteractive'
 
 const KNOWN_STAGE_GRID_NAMES = new Set(Object.values(OUTPUT_KEY_TO_ARTIFACT))
 const NODE_COMPLETE_ARTIFACT = 'node_complete.json'
@@ -385,15 +386,15 @@ export function resolveEffectivePreviewPin(opts: {
     )
     return live ? VISUAL_LIVE_PAGE : ''
   }
-  if (nodeType === 'react') {
+  if (isClarifyInteractive(nodeType)) {
     return latestOwnNodeHtmlName(artifacts, opts.nodeId)
   }
   return ''
 }
 
-export function isReactGraphNode(run: Run | null | undefined, nodeId: string | null | undefined): boolean {
+export function isClarifyInteractiveGraphNode(run: Run | null | undefined, nodeId: string | null | undefined): boolean {
   if (!run?.nodes?.length || !nodeId) return false
-  return run.nodes.some((n: WFNode) => n.id === nodeId && n.type === 'react')
+  return run.nodes.some((n: WFNode) => n.id === nodeId && isClarifyInteractive(n.type))
 }
 
 export function inboxStageRemoteKind(opts: {
@@ -402,7 +403,7 @@ export function inboxStageRemoteKind(opts: {
   nodeId?: string | null
 }): ReactStageRemoteKind {
   if (opts.appPreview) return 'app'
-  if (isReactGraphNode(opts.run, opts.nodeId)) return 'sandbox'
+  if (isClarifyInteractiveGraphNode(opts.run, opts.nodeId)) return 'sandbox'
   return 'off'
 }
 

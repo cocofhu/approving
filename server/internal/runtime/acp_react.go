@@ -41,6 +41,20 @@ func (c *acpProvider) ReactOpen(ctx context.Context, req NodeReq) ReactTurn {
 				var events []models.AcpEvent
 				absorbChat(&usage, &usageByModel, &events, res)
 
+				if len(qs) == 0 && req.NodeType == "approve" {
+					nudgeCtx, nudgeCancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
+					nudge, nudgeErr := c.streamChat(nudgeCtx, acp, req, models.DefaultApproveOpenRetry, nil)
+					nudgeCancel()
+					if nudgeErr == nil {
+						absorbChat(&usage, &usageByModel, &events, nudge)
+						qs = c.host.TakePendingQuestions(req.RunID, req.NodeID)
+						if strings.TrimSpace(nudge.Narration) != "" {
+							res.Narration = nudge.Narration
+						}
+					} else {
+						log.Warn().Err(nudgeErr).Str("node", req.NodeID).Msg("approve open ask_question nudge failed")
+					}
+				}
 				if len(qs) > 0 {
 					return ReactTurn{Msg: res.Narration, Questions: qs, Events: events, Usage: usage, UsageByModel: usageByModel}
 				}
@@ -246,10 +260,8 @@ func (c *acpProvider) ReviseInPlace(ctx context.Context, req NodeReq, history []
 
 	c.host.TakePendingQuestions(req.RunID, req.NodeID)
 
-	if name, tool := structuredArtifactFor(req.NodeType); name != "" {
-		if _, serr := c.ensureStructured(ctx, req, sess.acp, name, tool, &events, &usage, &usageByModel); serr != nil {
-			log.Warn().Err(serr).Str("node", req.NodeID).Msg("review revise ensure product failed")
-		}
+	if _, serr := c.ensureRequiredProducts(ctx, req, sess.acp, &events, &usage, &usageByModel); serr != nil {
+		log.Warn().Err(serr).Str("node", req.NodeID).Msg("review revise ensure product failed")
 	}
 	events = c.snapshotEvents(ctx, sess.sb, events)
 	return ReactTurn{Msg: narration, AgentSummary: agentSummary, Done: false, Events: events, Usage: usage, UsageByModel: usageByModel}
@@ -344,18 +356,14 @@ func (c *acpProvider) enforceOpenQuestionsGate(ctx context.Context, req NodeReq,
 // engine can auto_clarify or wait for a human — never OutcomeRetry-mis-fail.
 func (c *acpProvider) finishReact(ctx context.Context, req NodeReq, key string, sess *reactSession, narration string, history []models.ReactMessage, events []models.AcpEvent, usage *models.TokenUsage, usageByModel models.TokenUsageByModel) ReactTurn {
 
-	if name, tool := structuredArtifactFor(req.NodeType); name != "" {
-		qs, err := c.ensureStructured(ctx, req, sess.acp, name, tool, &events, &usage, &usageByModel)
-		if len(qs) > 0 {
-			msg := narration
-			return ReactTurn{Msg: msg, Questions: qs, Done: false, Events: events, Usage: usage, UsageByModel: usageByModel}
-		}
-		if err != nil {
-			events = c.snapshotEvents(ctx, sess.sb, events)
-			c.closeSession(key)
-			return ReactTurn{Done: true, Err: err, Msg: err.Error(), Events: events, Usage: usage,
-				Result: NodeResult{Events: events, Usage: usage, UsageByModel: usageByModel}}
-		}
+	if qs, err := c.ensureRequiredProducts(ctx, req, sess.acp, &events, &usage, &usageByModel); len(qs) > 0 {
+		msg := narration
+		return ReactTurn{Msg: msg, Questions: qs, Done: false, Events: events, Usage: usage, UsageByModel: usageByModel}
+	} else if err != nil {
+		events = c.snapshotEvents(ctx, sess.sb, events)
+		c.closeSession(key)
+		return ReactTurn{Done: true, Err: err, Msg: err.Error(), Events: events, Usage: usage,
+			Result: NodeResult{Events: events, Usage: usage, UsageByModel: usageByModel}}
 	}
 	qs, err := c.ensureOutcome(ctx, req, sess.acp, &events, &usage, &usageByModel)
 	if len(qs) > 0 {
@@ -377,6 +385,9 @@ func (c *acpProvider) finishReact(ctx context.Context, req NodeReq, key string, 
 
 func (c *acpProvider) buildReactOpenPrompt(req NodeReq, seeded []string) string {
 	p := c.buildAgentPrompt(req, seeded)
+	if req.NodeType == "approve" {
+		return p + models.DefaultApproveOpenSuffix
+	}
 	return p + c.agentPrompts(str2(req.Config["skill_profile"])).ReactOpenSuffixText()
 }
 
@@ -395,7 +406,7 @@ func reactKey(req NodeReq) string { return req.RunID + "|" + req.NodeID }
 
 // ReactCapReached exposes the same max_rounds safety cap the provider enforces
 // so the engine's auto-clarify loop (auto_var) stops after the same number of
-// rounds instead of replying forever.
+// rounds instead of replying forever. Approve dialogues have no round cap.
 func ReactCapReached(req NodeReq, history []models.ReactMessage) bool {
 	return reactCapReached(req, history)
 }
@@ -405,7 +416,14 @@ func ReactCapReached(req NodeReq, history []models.ReactMessage) bool {
 // ask_question, the dialogue finishes. Pending ask_question still outranks the
 // cap (ReactOpen/ReactReply return Questions). Completion is otherwise
 // agent-driven (no questions raised this turn).
+//
+// Approve never hits the cap (unlimited human / auto-clarify turns). Leftover
+// config.max_rounds on old graphs is ignored. Product write retries in
+// ensureRequiredProducts still use their own default and are unrelated.
 func reactCapReached(req NodeReq, history []models.ReactMessage) bool {
+	if req.NodeType == "approve" {
+		return false
+	}
 	humanTurns := 1
 	for _, h := range history {
 		if h.Role == "human" {

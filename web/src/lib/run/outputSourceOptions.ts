@@ -1,20 +1,22 @@
 import type { WFEdge, WFNode } from '../shared/types'
+import { productArtifactsForType } from './productNodeArtifacts'
 
 export interface OutputSourceOption {
   value: string
   label: string
 }
 
-const STRUCTURED_OUT: Partial<Record<string, { key: string; labelKey: string }>> = {
-  plan: { key: 'plan', labelKey: 'common.gateBodyLabels.plan' },
-  react: { key: 'clarified_requirement', labelKey: 'common.gateBodyLabels.clarifiedRequirement' },
-  research: { key: 'research', labelKey: 'common.gateBodyLabels.research' },
-  proposal: { key: 'proposals', labelKey: 'common.gateBodyLabels.proposals' },
-  proposal_select: { key: 'proposal', labelKey: 'common.gateBodyLabels.proposal' },
-  test: { key: 'test_result', labelKey: 'common.gateBodyLabels.testResult' },
-  review: { key: 'review', labelKey: 'common.gateBodyLabels.review' },
-  implement: { key: 'implementation_result', labelKey: 'common.gateBodyLabels.implementationResult' },
-  visual: { key: 'page', labelKey: 'common.gateBodyLabels.pagePreview' },
+/** i18n keys for manifest outputKey → gate-body labels. */
+const OUTPUT_LABEL_KEY: Record<string, string> = {
+  clarified_requirement: 'common.gateBodyLabels.clarifiedRequirement',
+  plan: 'common.gateBodyLabels.plan',
+  research: 'common.gateBodyLabels.research',
+  proposals: 'common.gateBodyLabels.proposals',
+  proposal: 'common.gateBodyLabels.proposal',
+  test_result: 'common.gateBodyLabels.testResult',
+  review: 'common.gateBodyLabels.review',
+  implementation_result: 'common.gateBodyLabels.implementationResult',
+  page: 'common.gateBodyLabels.pagePreview',
 }
 
 function addPred(preds: Record<string, string[]>, source: string, target: string) {
@@ -61,6 +63,26 @@ export function upstreamNodeIds(nodeId: string, edges: WFEdge[], nodes: WFNode[]
   return seen
 }
 
+/** Structured output templates for a node type, derived from the nodereg manifest. */
+function structuredOutputOptions(
+  n: WFNode,
+  t: (key: string, params?: Record<string, unknown>) => string,
+): { value: string; label: string }[] {
+  const opts: { value: string; label: string }[] = []
+  const seen = new Set<string>()
+  for (const a of productArtifactsForType(n.type)) {
+    if (!a.outputKey || seen.has(a.outputKey)) continue
+    const labelKey = OUTPUT_LABEL_KEY[a.outputKey]
+    if (!labelKey) continue
+    seen.add(a.outputKey)
+    opts.push({
+      value: `{{nodes.${n.id}.outputs.${a.outputKey}}}`,
+      label: `${t(labelKey)} · ${n.label}`,
+    })
+  }
+  return opts
+}
+
 /** Build selectable output source options for an output / human_gate node. */
 export function buildOutputSourceOptions(
   allNodes: WFNode[],
@@ -78,8 +100,7 @@ export function buildOutputSourceOptions(
   const upstreamIds = upstreamNodeIds(targetNodeId, edges, allNodes)
   for (const n of allNodes) {
     if (!upstreamIds.has(n.id)) continue
-    const so = STRUCTURED_OUT[n.type]
-    if (so) add(`{{nodes.${n.id}.outputs.${so.key}}}`, `${t(so.labelKey)} · ${n.label}`)
+    for (const so of structuredOutputOptions(n, t)) add(so.value, so.label)
     const produces = (n.config?.produces || '').toString().trim()
     if (produces) add(`{{artifact("${produces}")}}`, `${t('common.gateBodyLabels.artifact')} · ${produces}`)
     if (n.type === 'agent') add(`{{nodes.${n.id}.outputs.content}}`, `${n.label} · ${t('common.gateBodyLabels.textOutput')}`)

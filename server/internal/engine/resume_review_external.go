@@ -6,6 +6,7 @@ import (
 
 	"github.com/cocofhu/approving/internal/gateshare"
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/nodereg"
 )
 
 // ResumeReviewExternal consumes a review share link (CAS) then force-confirms
@@ -117,7 +118,7 @@ func isShareableReviewConfirmNode(node *models.Node) bool {
 	if node == nil {
 		return false
 	}
-	return node.Type == "react" || isReviewNode(node.Type)
+	return nodereg.ClarifyInteractive(node.Type) || isReviewNode(node.Type)
 }
 
 // shareConfirmSettled is the only success condition for burning a review share

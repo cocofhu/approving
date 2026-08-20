@@ -245,7 +245,7 @@ func (h *Handlers) PublicGateCancel(c *gin.Context) {
 	kind := publicShareKind(lookup)
 	if kind == models.ShareLinkKindReview {
 		var err error
-		if lookup.Node != nil && lookup.Node.Type == "react" {
+		if lookup.Node != nil && nodereg.ClarifyInteractive(lookup.Node.Type) {
 			err = h.Eng.CancelClarifyTurn(lookup.Link.RunID, lookup.Link.NodeID)
 		} else {
 			err = h.Eng.CancelReviewSession(lookup.Link.RunID, lookup.Link.NodeID)

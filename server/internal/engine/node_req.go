@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -66,6 +67,15 @@ func (e *Engine) nodeReq(c *execCtx, node *models.Node) runtime.NodeReq {
 		cfg["conditional_prompt"] = merged
 	}
 
+	if node.Type == "approve" {
+		delete(cfg, "prompt")
+		delete(cfg, "max_rounds")
+		delete(cfg, "auto_var")
+		delete(cfg, "timeout")
+		delete(cfg, "chat_timeout")
+		delete(cfg, "conditional_prompt")
+	}
+
 	e.host.SetActiveNode(c.run.ID, node.ID, node.Type)
 
 	// ClearOutcome is intentionally NOT called here: same-visit react multi-round
@@ -76,6 +86,9 @@ func (e *Engine) nodeReq(c *execCtx, node *models.Node) runtime.NodeReq {
 		e.host.ResetPreviewReady(c.run.ID, node.ID)
 	}
 	promptImages := collectPromptVarImages(c, promptScanTemplates(node.Config)...)
+	if node.Type == "approve" {
+		promptImages = collectAllVarImages(c)
+	}
 	req := runtime.NodeReq{RunID: c.run.ID, WorkflowID: c.run.WorkflowID, WorkflowName: c.run.WorkflowName,
 		Token: c.token, NodeID: node.ID, NodeType: node.Type, Config: cfg, Vars: c.vars,
 		PromptImages: promptImages}
@@ -123,6 +136,19 @@ func collectPromptVarImages(c *execCtx, templates ...string) []models.PromptImag
 				out = append(out, models.ExtractImages(v)...)
 			}
 		}
+	}
+	return out
+}
+
+func collectAllVarImages(c *execCtx) []models.PromptImage {
+	names := make([]string, 0, len(c.vars))
+	for name := range c.vars {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var out []models.PromptImage
+	for _, name := range names {
+		out = append(out, models.ExtractImages(c.vars[name])...)
 	}
 	return out
 }

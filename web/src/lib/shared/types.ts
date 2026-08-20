@@ -2,6 +2,7 @@ export type NodeType =
   | 'input'
   | 'output'
   | 'react'
+  | 'approve'
   | 'agent'
   | 'plan'
   | 'implement'

@@ -6,6 +6,7 @@ import (
 
 	"github.com/cocofhu/approving/internal/engine"
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/nodereg"
 	"github.com/gin-gonic/gin"
 )
 
@@ -142,7 +143,7 @@ func (h *Handlers) ReactCancel(c *gin.Context) {
 	runID, nodeID := c.Param("id"), c.Param("nodeId")
 	clearQueue := true
 	if run, ok := h.Runs.Get(runID); ok {
-		if n := run.Graph.FindNode(nodeID); n != nil && n.Type == "react" {
+		if n := run.Graph.FindNode(nodeID); n != nil && nodereg.ClarifyInteractive(n.Type) {
 			clearQueue = false
 		}
 	}

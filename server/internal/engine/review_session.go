@@ -12,6 +12,7 @@ import (
 	"github.com/cocofhu/approving/internal/blob"
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/nodereg"
 	"github.com/cocofhu/approving/internal/runtime"
 
 	"github.com/google/uuid"
@@ -463,7 +464,7 @@ func (e *Engine) executeClarifyTurn(ctx context.Context, s *reviewSession, item 
 		return false, loadErr
 	}
 	node := c.graph.FindNode(s.producerID)
-	if node == nil || node.Type != "react" {
+	if node == nil || !nodereg.ClarifyInteractive(node.Type) {
 		return false, errors.New("react node not found")
 	}
 
@@ -552,7 +553,7 @@ func (e *Engine) executeClarifyTurn(ctx context.Context, s *reviewSession, item 
 	}
 
 	outcome := e.finishAgentOutcome(c, node, t.Result, func(r runtime.NodeResult) nodeOutcome {
-		return e.completeProduces(c, node, r)
+		return e.finalizeAgentProducts(c, node, r)
 	})
 	e.saveState(c, node, outcome)
 	e.appendTrace(c, models.TraceEntry{NodeID: s.producerID, Event: "resume", Detail: "react 完成"})

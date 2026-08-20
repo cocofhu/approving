@@ -7,6 +7,7 @@ const AUDIT_STAGE_LABEL: Record<string, string> = {
   gate: '门禁',
   visual: '视觉',
   react: '需求澄清',
+  approve: 'Approve',
   plan: '计划',
   implement: '实现',
   test: '测试',

@@ -50,7 +50,7 @@ func (e *Engine) execReactEnter(c *execCtx, node *models.Node) nodeOutcome {
 					retryable: true, events: t.Events, usage: t.Usage, usageByModel: t.UsageByModel}
 			}
 			return e.finishAgentOutcome(c, node, t.Result, func(r runtime.NodeResult) nodeOutcome {
-				return e.completeProduces(c, node, r)
+				return e.finalizeAgentProducts(c, node, r)
 			})
 		}
 		return nodeOutcome{status: "paused", outputMd: "等待人工回复(ReAct 澄清)…", events: t.Events, usage: t.Usage, usageByModel: t.UsageByModel}
@@ -60,8 +60,12 @@ func (e *Engine) execReactEnter(c *execCtx, node *models.Node) nodeOutcome {
 
 // autoReactEnabled reports whether this react node should self-answer without
 // waiting for a human, i.e. its configured auto var resolves truthy. The var
-// name is optional; when unset the node is always interactive.
+// name is optional; when unset the node is always interactive. Approve has no
+// auto-clarify config; leftover auto_var on old graphs is ignored.
 func (e *Engine) autoReactEnabled(c *execCtx, node *models.Node) bool {
+	if node != nil && node.Type == "approve" {
+		return false
+	}
 	autoVar := strings.TrimSpace(str(node.Config["auto_var"]))
 	if autoVar == "" {
 		return false
@@ -73,7 +77,8 @@ func (e *Engine) autoReactEnabled(c *execCtx, node *models.Node) bool {
 // every round it replies with FormatChoiceReply (recommended option set —
 // multi-select may pick several, joined with "、" — or the first as fallback)
 // and appends both turns to conv, stopping when the agent concludes (Done),
-// stops asking questions, or the max_rounds cap is reached.
+// stops asking questions, or the max_rounds cap is reached (Approve has no
+// round cap — the agent must stop asking on its own).
 // It persists conv as it goes so the transcript reflects every auto round, and
 // returns the final ReactTurn for the caller to finalize (Done) or pause on.
 func (e *Engine) autoAdvanceReact(c *execCtx, node *models.Node, conv *models.ReactConversation, req runtime.NodeReq, t runtime.ReactTurn) runtime.ReactTurn {
