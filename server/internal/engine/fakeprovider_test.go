@@ -464,6 +464,10 @@ func (f *fakeProvider) ReactReply(ctx context.Context, req runtime.NodeReq, hist
 	}
 	content := "## 结论\n\n" + human
 	if skip {
+		if req.NodeType == "approve" && !force {
+			return runtime.ReactTurn{Msg: "完成(缺产物)。", Done: false,
+				Result: runtime.NodeResult{OutputMd: content, Outputs: map[string]any{}}}
+		}
 		// Finish without writing the reserved product -> contract miss.
 		// Still mark outcome so the engine reaches the produces check.
 		f.emitOutcome(req, nil)
@@ -504,6 +508,9 @@ func (f *fakeProvider) ReactReply(ctx context.Context, req runtime.NodeReq, hist
 					Result: runtime.NodeResult{OutputMd: content, Outputs: out}}
 			}
 		}
+	}
+	if req.NodeType == "approve" && !force {
+		return runtime.ReactTurn{Msg: "信息已充分。", Done: false, Result: runtime.NodeResult{OutputMd: content, Outputs: out}}
 	}
 	f.emitOutcome(req, nil)
 	return runtime.ReactTurn{Msg: "信息已充分。", Done: true, Result: runtime.NodeResult{OutputMd: content, Outputs: out}}

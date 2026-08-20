@@ -10,7 +10,7 @@ import AnnotationChip from './AnnotationChip.vue'
 
 /**
  * Thin mode wrapper around ClarifyChat / a gate-local composer.
- * - clarify: chips + attachments +「发送澄清回复」(no finish)
+ * - clarify: chips + attachments +「发送澄清回复」(classic react hides finish; Approve shows 确认并流转)
  * - review: ClarifyChat chips + attachments + send +「确认并流转」
  * - gate: local composer with the same review semantics —「发送」+「确认并流转」
  *   (no 打回修改 / 通过并流转). Send → GateReactRevise; confirm → ResumeGate(approve/pass).
@@ -48,6 +48,9 @@ const props = withDefaults(
     rejectLabel?: string
     /** Review confirm failure (bottom status bar via ClarifyChat). */
     confirmError?: string | null
+    /** Home-chat first bubble before transcript lands. */
+    seedHumanText?: string
+    seedHumanImages?: ClarifyImage[]
     /**
      * Gate sandbox-aligned session UX (same surface as GateApproval mobile-fill /
      * content-fit): pending-send queue, streaming agent text, Cancel.
@@ -78,6 +81,8 @@ const props = withDefaults(
     passLabel: '',
     rejectLabel: '',
     confirmError: null,
+    seedHumanText: '',
+    seedHumanImages: () => [],
     queued: () => [],
     thinking: false,
     streamText: '',
@@ -197,7 +202,9 @@ function onConfirm() {
       :active="active"
       :review-mode="mode === 'review'"
       :annotate-enabled="mode === 'clarify' || mode === 'review'"
-      :hide-finish="mode === 'clarify'"
+      :hide-finish="mode === 'clarify' && nodeType !== 'approve'"
+      :seed-human-text="seedHumanText"
+      :seed-human-images="seedHumanImages"
       :send-label="mode === 'clarify' ? t('pages.reviewComposer.sendClarify') : undefined"
       :confirm-error="confirmError"
       @send="(text, images, anns) => emit('send', text, images, anns)"

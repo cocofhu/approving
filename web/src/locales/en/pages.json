@@ -3,7 +3,7 @@
     "dashboard": {
       "title": "Start a pre-dev clarification in one sentence",
       "subtitle": "Pick an Approve pipeline; the first message becomes the Run title",
-      "placeholder": "Describe the goal first…",
+      "placeholder": "Describe the goal, or paste/attach images and files…",
       "filterHint": "Only published pipelines whose first node after start is Approve",
       "selectProject": "Select a project",
       "noProject": "No project selected. Pick a project to start an Approve pipeline from Home.",
@@ -11,11 +11,10 @@
       "goCanvas": "Open the canvas and connect Approve after start",
       "pickPipeline": "Select a pipeline first",
       "noPipelineShort": "No pipeline",
-      "needText": "Describe the goal first",
+      "needText": "Describe the goal or attach a file first",
       "send": "Send",
-      "attachSoon": "Attachments will come in a later version",
       "missingRequired": "Fill required launch fields before starting",
-      "parkTimeout": "Run started, but Approve is not ready yet. Opening run detail.",
+      "parkTimeout": "Run started, but Approve is not ready yet. Opening Inbox.",
       "cardFallback": "Approve pre-dev clarification"
     },
     "board": {

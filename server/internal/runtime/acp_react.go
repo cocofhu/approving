@@ -200,6 +200,11 @@ func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []mod
 			usageByModel = models.AddTokenUsageByModel(usageByModel, gum)
 		}
 	}
+	if !force && req.NodeType == "approve" {
+		c.host.ClearOutcome(req.RunID, req.NodeID)
+		events = c.snapshotEvents(ctx, sess.sb, events)
+		return ReactTurn{Msg: narration, AgentSummary: agentSummary, Done: false, Events: events, Usage: usage, UsageByModel: usageByModel}
+	}
 	turn := c.finishReact(ctx, req, key, sess, narration, history, events, usage, usageByModel)
 	turn.AgentSummary = agentSummary
 	return turn

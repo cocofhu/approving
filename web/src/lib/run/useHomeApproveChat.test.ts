@@ -126,7 +126,7 @@ describe('useHomeApproveChat', () => {
     expect(chat.selected.value?.id).toBe('wf-ap')
   })
 
-  it('starts a run with the first message as title, replies, then opens the run', async () => {
+  it('starts a run with the first message as title, replies, then opens inbox', async () => {
     const chat = withSetup(() => useHomeApproveChat())
     await chat.load()
     chat.draft.value = '  把登录做清楚  '
@@ -135,8 +135,48 @@ describe('useHomeApproveChat', () => {
     expect(mocks.startRun).toHaveBeenCalledWith('wf-ap', {}, 'manual', 'normal', [], {
       title: '把登录做清楚',
     })
-    expect(mocks.reactReply).toHaveBeenCalledWith('run-1', 'ap', '把登录做清楚')
-    expect(mocks.push).toHaveBeenCalledWith({ path: '/runs/run-1', query: { node: 'ap' } })
+    expect(mocks.reactReply).toHaveBeenCalledWith('run-1', 'ap', '把登录做清楚', [])
+    expect(mocks.push).toHaveBeenCalledWith({ path: '/gates', query: { run: 'run-1', node: 'ap' } })
+  })
+
+  it('passes attachments on reactReply and still navigates to inbox', async () => {
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    chat.attachments.value = [{ data: 'abc', mimeType: 'image/png', name: 'shot.png' }]
+    await chat.send()
+    await nextTick()
+    expect(mocks.startRun).toHaveBeenCalledWith('wf-ap', {}, 'manual', 'normal', [], {
+      title: 'shot.png',
+    })
+    expect(mocks.reactReply).toHaveBeenCalledWith('run-1', 'ap', '', [
+      { data: 'abc', mimeType: 'image/png', name: 'shot.png' },
+    ])
+    expect(mocks.push).toHaveBeenCalledWith({ path: '/gates', query: { run: 'run-1', node: 'ap' } })
+  })
+
+  it('still replies after the home view unmounts', async () => {
+    let result!: ReturnType<typeof useHomeApproveChat>
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const Comp = defineComponent({
+      setup() {
+        result = useHomeApproveChat()
+        return () => null
+      },
+    })
+    const app = createApp(Comp)
+    app.use(i18n)
+    app.mount(document.createElement('div'))
+    await result.load()
+    result.draft.value = '卸载后仍要回复'
+    const sendPromise = result.send()
+    app.unmount()
+    await sendPromise
+    expect(mocks.reactReply).toHaveBeenCalledWith('run-1', 'ap', '卸载后仍要回复', [])
+    expect(mocks.push).toHaveBeenCalledWith({ path: '/gates', query: { run: 'run-1', node: 'ap' } })
   })
 
   it('opens the launch modal when required ask fields are empty', async () => {

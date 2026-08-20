@@ -2,8 +2,11 @@
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
+import ChatImageThumb from '@/components/ui/ChatImageThumb.vue'
 import RunLaunchModal from '@/components/workflow/RunLaunchModal.vue'
 import { useHomeApproveChat } from '@/lib/run/useHomeApproveChat'
+import { attachmentDisplayName, isImageAttachment } from '@/lib/shared/attachments'
+import { imgSrc } from '@/lib/shared/compositeText'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -15,6 +18,7 @@ const {
   selectedId,
   draft,
   sending,
+  canSend,
   loading,
   loadError,
   launchOpen,
@@ -24,6 +28,12 @@ const {
   runInputs,
   runImages,
   draftRestored,
+  attachments,
+  fileInput,
+  attachNotice,
+  onPickFiles,
+  onPaste,
+  removeAttachment,
   load,
   selectPipeline,
   send,
@@ -53,6 +63,10 @@ function onComposerSubmit(e: Event) {
   e.preventDefault()
   void send()
 }
+
+function openFilePicker() {
+  fileInput.value?.click()
+}
 </script>
 
 <template>
@@ -66,50 +80,107 @@ function onComposerSubmit(e: Event) {
         {{ t('pages.dashboard.subtitle') }}
       </p>
 
-      <form
-        class="mt-8 flex w-full items-center gap-2 rounded-full border border-line bg-surface px-2 py-1.5"
-        data-testid="home-composer"
-        @submit="onComposerSubmit"
-      >
-        <button
-          type="button"
-          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-txt3"
-          disabled
-          :title="t('pages.dashboard.attachSoon')"
-          data-testid="home-composer-plus"
+      <div class="mt-8 w-full">
+        <p
+          v-if="attachNotice"
+          class="mb-2 border border-err/40 bg-err/10 px-3 py-1.5 text-[12px] text-err"
+          data-testid="home-attach-notice"
+          role="alert"
         >
-          <Icon name="plus" :size="16" />
-        </button>
-        <label class="sr-only" for="home-pipeline-select">{{ t('pages.dashboard.pickPipeline') }}</label>
-        <select
-          id="home-pipeline-select"
-          class="max-w-[10rem] shrink-0 cursor-pointer appearance-none rounded-full bg-accent/15 px-3 py-1 text-xs font-medium text-accent outline-none disabled:cursor-default disabled:bg-elevated disabled:text-txt3"
-          data-testid="home-pipeline-select"
-          :disabled="!pipelines.length || sending"
-          :value="selectedId"
-          @change="onPipelineChange"
+          {{ attachNotice.text }}
+        </p>
+        <div
+          v-if="attachments.length"
+          class="mb-2 flex flex-wrap gap-1.5"
+          data-testid="home-attach-chips"
         >
-          <option v-if="!pipelines.length" value="">{{ t('pages.dashboard.noPipelineShort') }}</option>
-          <option v-for="p in pipelines" :key="p.id" :value="p.id">{{ p.name }}</option>
-        </select>
-        <input
-          v-model="draft"
-          class="min-w-0 flex-1 bg-transparent px-1 text-sm text-txt outline-none placeholder:text-txt3"
-          data-testid="home-composer-input"
-          :placeholder="t('pages.dashboard.placeholder')"
-          :disabled="sending"
-          autocomplete="off"
-        />
-        <button
-          type="submit"
-          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-txt text-base disabled:opacity-40"
-          data-testid="home-composer-send"
-          :disabled="sending"
-          :aria-label="t('pages.dashboard.send')"
+          <div v-for="(im, ii) in attachments" :key="ii" class="relative">
+            <ChatImageThumb
+              v-if="isImageAttachment(im)"
+              mode="locked"
+              size="sm"
+              thumb-class="rounded-md"
+              :src="imgSrc(im)"
+              :label="attachmentDisplayName(im, ii)"
+              :alt="attachmentDisplayName(im, ii)"
+              test-id="home-draft-image-thumb"
+            />
+            <div
+              v-else
+              class="flex h-14 max-w-[160px] items-center gap-1.5 border border-line bg-elevated px-2"
+              :title="attachmentDisplayName(im, ii)"
+              data-testid="home-pending-file-chip"
+            >
+              <span class="shrink-0 text-[9px] font-medium uppercase text-info">DOC</span>
+              <span class="min-w-0 truncate text-[11px] text-txt2">{{
+                attachmentDisplayName(im, ii)
+              }}</span>
+            </div>
+            <button
+              type="button"
+              class="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-err text-white"
+              data-testid="home-attach-remove"
+              @click.stop="removeAttachment(ii)"
+            >
+              <Icon name="close" :size="9" />
+            </button>
+          </div>
+        </div>
+        <form
+          class="flex w-full items-center gap-2 rounded-full border border-line bg-surface px-2 py-1.5"
+          data-testid="home-composer"
+          @submit="onComposerSubmit"
         >
-          <Icon name="arrow-up" :size="16" />
-        </button>
-      </form>
+          <input
+            ref="fileInput"
+            type="file"
+            multiple
+            class="hidden"
+            data-testid="home-composer-file"
+            @change="onPickFiles"
+          />
+          <button
+            type="button"
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-txt3 hover:text-txt disabled:opacity-40"
+            :disabled="sending"
+            :title="t('pages.clarify.addImage')"
+            data-testid="home-composer-plus"
+            @click="openFilePicker"
+          >
+            <Icon name="plus" :size="16" />
+          </button>
+          <label class="sr-only" for="home-pipeline-select">{{ t('pages.dashboard.pickPipeline') }}</label>
+          <select
+            id="home-pipeline-select"
+            class="max-w-[10rem] shrink-0 cursor-pointer appearance-none rounded-full bg-accent/15 px-3 py-1 text-xs font-medium text-accent outline-none disabled:cursor-default disabled:bg-elevated disabled:text-txt3"
+            data-testid="home-pipeline-select"
+            :disabled="!pipelines.length || sending"
+            :value="selectedId"
+            @change="onPipelineChange"
+          >
+            <option v-if="!pipelines.length" value="">{{ t('pages.dashboard.noPipelineShort') }}</option>
+            <option v-for="p in pipelines" :key="p.id" :value="p.id">{{ p.name }}</option>
+          </select>
+          <input
+            v-model="draft"
+            class="min-w-0 flex-1 bg-transparent px-1 text-sm text-txt outline-none placeholder:text-txt3"
+            data-testid="home-composer-input"
+            :placeholder="t('pages.dashboard.placeholder')"
+            :disabled="sending"
+            autocomplete="off"
+            @paste="onPaste"
+          />
+          <button
+            type="submit"
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-txt text-base disabled:opacity-40"
+            data-testid="home-composer-send"
+            :disabled="sending || !canSend"
+            :aria-label="t('pages.dashboard.send')"
+          >
+            <Icon name="arrow-up" :size="16" />
+          </button>
+        </form>
+      </div>
       <p class="mt-2 text-center text-[12px] text-txt3" data-testid="home-filter-hint">
         {{ t('pages.dashboard.filterHint') }}
       </p>

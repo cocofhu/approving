@@ -35,6 +35,8 @@ import {
   resolveInboxReviewState,
 } from '@/lib/inbox/inboxReviewMode'
 import {
+  findInboxItemByKey,
+  inboxQueryKey,
   inboxTripleKey,
   isInboxLeftPendingError,
   pickNextActiveAfterRemove,
@@ -50,6 +52,7 @@ import {
 import { createWsReconnectController } from '@/lib/run/wsReconnect'
 import { useToast } from '@/lib/composables/useToast'
 import { inboxShareKind, isHumanGateInboxItem, isShareableInboxItem } from '@/lib/inbox/gateShareLink'
+import { consumeHomeApproveHandoff, type HomeApproveHandoff } from '@/lib/run/homeApproveHandoff'
 import type { AcpEvent, Gate, GateInboxItem, GateShareInboxStatus, InboxItem, Run } from '@/lib/shared/types'
 
 const router = useRouter()
@@ -84,6 +87,14 @@ const listLoadError = ref<string | null>(null)
 let listLoadGeneration = 0
 const { isMobile } = useBreakpoint()
 const active = ref<InboxItem | null>(null)
+const homeSeed = ref<HomeApproveHandoff | null>(null)
+const activeHomeSeed = computed(() => {
+  const it = active.value
+  const s = homeSeed.value
+  if (!it || !s) return null
+  if (s.runId !== it.runId || s.nodeId !== it.nodeId) return null
+  return s
+})
 const mobileView = ref<'list' | 'detail'>('list')
 const listScrollTop = ref(0)
 const listEl = ref<HTMLElement | null>(null)
@@ -274,12 +285,50 @@ function removeListItemLocally(removedKey: string) {
   removeItemLocally(removedKey)
 }
 
+function queryInboxKey(): string {
+  return inboxQueryKey(route.query.run, route.query.node)
+}
+
+function selectFromQuery(): boolean {
+  const hit = findInboxItemByKey(listItems.value, queryInboxKey())
+  if (!hit) return false
+  active.value = hit
+  return true
+}
+
+function applyHomeHandoff() {
+  const it = active.value
+  if (!it) return
+  const h = consumeHomeApproveHandoff(it.runId, it.nodeId)
+  if (h) homeSeed.value = h
+}
+
+let queryWaitGen = 0
+async function waitForQueryItem() {
+  const gen = ++queryWaitGen
+  if (!queryInboxKey()) return
+  for (let i = 0; i < 8; i++) {
+    if (gen !== queryWaitGen) return
+    if (selectFromQuery()) {
+      applyHomeHandoff()
+      return
+    }
+    await new Promise((r) => setTimeout(r, 400))
+    if (gen !== queryWaitGen) return
+    await loadList()
+  }
+}
+
 /**
  * List non-empty + invalid/missing active → pick first valid item.
  * Empty list → clear active (full empty inbox). Never leave a Run # - shell.
  */
 function ensureValidActive() {
   if (processingLock.value) return
+  if (selectFromQuery()) {
+    applyHomeHandoff()
+    return
+  }
   const list = listItems.value
   if (!list.length) {
     if (active.value) active.value = null
@@ -1353,9 +1402,17 @@ function onVisible() {
   if (document.visibilityState === 'visible') peek({ source: 'visibility' })
 }
 
+watch(() => [route.query.run, route.query.node], () => {
+  void waitForQueryItem()
+})
+
 onMounted(() => {
   hydrateProject()
   loadList({ showLoading: true }).then(() => {
+    if (queryInboxKey()) {
+      void waitForQueryItem()
+      return
+    }
     if (!active.value) active.value = listItems.value[0] || null
   })
   peek({ source: 'mount' })
@@ -1363,6 +1420,7 @@ onMounted(() => {
   window.addEventListener('focus', onFocus)
 })
 onUnmounted(() => {
+  queryWaitGen++
   document.removeEventListener('visibilitychange', onVisible)
   window.removeEventListener('focus', onFocus)
   closeActiveRunWs()
@@ -1626,6 +1684,8 @@ function itemSecondary(it: InboxItem) {
               v-model:annotations="clarifyAnnotations"
               :turns="activeClarify.turns ?? []"
               :node-type="inboxStageNodeType"
+              :seed-human-text="activeHomeSeed?.text"
+              :seed-human-images="activeHomeSeed?.images"
               :done="activeClarify.done"
               :active="clarifyInputActive"
               :confirm-error="clarifyConfirmError"
@@ -1731,6 +1791,8 @@ function itemSecondary(it: InboxItem) {
                   v-model:annotations="clarifyAnnotations"
                   :turns="activeClarify.turns ?? []"
                   :node-type="inboxStageNodeType"
+                  :seed-human-text="activeHomeSeed?.text"
+                  :seed-human-images="activeHomeSeed?.images"
                   :done="activeClarify.done"
                   :active="clarifyInputActive"
                   :confirm-error="clarifyConfirmError"

@@ -27,6 +27,9 @@ function mountChat(opts: {
   annotateEnabled?: boolean
   annotations?: ReactAnnotation[]
   attachments?: { data: string; mimeType: string }[]
+  seedHumanText?: string
+  seedHumanImages?: { data: string; mimeType: string; name?: string }[]
+  hideFinish?: boolean
 } = {}) {
   const i18n = createI18n({
     legacy: false,
@@ -48,6 +51,9 @@ function mountChat(opts: {
       annotateEnabled: opts.annotateEnabled ?? false,
       annotations: opts.annotations ?? [],
       attachments: opts.attachments ?? [],
+      seedHumanText: opts.seedHumanText ?? '',
+      seedHumanImages: opts.seedHumanImages ?? [],
+      hideFinish: opts.hideFinish ?? false,
     },
     global: {
       plugins: [i18n],
@@ -280,6 +286,20 @@ describe('ClarifyChat', () => {
     )
     expect(wrapper.find('[data-testid="clarify-approve-empty-hint"]').text()).toContain('先说明本次要做的目标')
     expect(wrapper.find('[data-testid="clarify-scroller"]').text()).toContain('共 0 条')
+    wrapper.unmount()
+  })
+
+  it('seeds the first human bubble and hides the approve empty hint', () => {
+    const wrapper = mountChat({
+      nodeType: 'approve',
+      turns: [],
+      seedHumanText: '把登录做清楚',
+      seedHumanImages: [{ data: 'abc', mimeType: 'image/png', name: 'shot.png' }],
+    })
+    expect(wrapper.find('[data-testid="clarify-approve-empty-hint"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="clarify-scroller"]').text()).toContain('把登录做清楚')
+    expect(wrapper.find('[data-testid="clarify-history-image-thumb"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="clarify-confirm-flow"]').text()).toContain('确认并流转')
     wrapper.unmount()
   })
 

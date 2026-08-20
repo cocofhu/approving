@@ -4,7 +4,9 @@ import {
   beginRoutePending,
   endRoutePending,
   installRoutePendingGuards,
+  isHomeToGatesNav,
   resetRoutePending,
+  routeViewTransition,
   useRoutePending,
 } from './routePending'
 import { resetLoadingAnnouncer, useLoadingAnnouncer } from './loadingAnnouncer'
@@ -53,5 +55,26 @@ describe('routePending engine', () => {
     expect(useLoadingAnnouncer().liveMessage.value).toBeTruthy()
     endRoutePending()
     vi.useRealTimers()
+  })
+
+  it('skips the skeleton and names the transition for dashboard → gates', async () => {
+    resetRoutePending()
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/dashboard', name: 'dashboard', component: { template: '<div />' } },
+        { path: '/gates', name: 'gates', component: { template: '<div />' } },
+        { path: '/other', name: 'other', component: { template: '<div />' } },
+      ],
+    })
+    installRoutePendingGuards(router)
+    await router.push('/dashboard')
+    expect(isHomeToGatesNav('gates', 'dashboard')).toBe(true)
+    await router.push('/gates')
+    expect(routeViewTransition.value).toBe('home-to-gates')
+    expect(useRoutePending().pending.value).toBe(false)
+    expect(useRoutePending().showUi.value).toBe(false)
+    await router.push('/other')
+    expect(routeViewTransition.value).toBe('')
   })
 })

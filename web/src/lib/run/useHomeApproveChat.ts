@@ -4,17 +4,28 @@ import { useI18n } from 'vue-i18n'
 import type { InputField } from '@/components/workflow/RunLaunchModal.vue'
 import { api } from '@/lib/api/api'
 import { useToast } from '@/lib/composables/useToast'
+import { useImageAttachments } from '@/lib/composables/useImageAttachments'
 import { readStoredProjectId } from '@/lib/composables/useProjectContext'
 import { isPublishedApproveFirst } from '@/lib/run/approveFirstPipeline'
 import { ApproveParkTimeout, waitForApprovePark } from '@/lib/run/homeApproveChat'
+import { setHomeApproveHandoff } from '@/lib/run/homeApproveHandoff'
 import { clipRunTitle } from '@/lib/run/runTitle'
 import { missingRequiredAskField, seedAskLaunchFields } from '@/lib/run/useWorkflowAskInputs'
+import { attachmentDisplayName } from '@/lib/shared/attachments'
 import type { ClarifyImage, Workflow } from '@/lib/shared/types'
+
+function titleFromDraft(text: string, images: ClarifyImage[]): string {
+  const clipped = clipRunTitle(text)
+  if (clipped) return clipped
+  const name = images[0] ? attachmentDisplayName(images[0], 0) : ''
+  return clipRunTitle(name)
+}
 
 export function useHomeApproveChat() {
   const router = useRouter()
   const toast = useToast()
   const { t } = useI18n()
+  const attach = useImageAttachments()
 
   const projectId = ref(readStoredProjectId())
   const workflows = ref<Workflow[]>([])
@@ -24,6 +35,7 @@ export function useHomeApproveChat() {
   const draft = ref('')
   const sending = ref(false)
   const pendingText = ref('')
+  const pendingImages = ref<ClarifyImage[]>([])
 
   const launchOpen = ref(false)
   const launchTarget = ref<Workflow | null>(null)
@@ -40,7 +52,8 @@ export function useHomeApproveChat() {
   const selected = computed(
     () => pipelines.value.find((w) => w.id === selectedId.value) || pipelines.value[0] || null,
   )
-  const launchTitle = computed(() => clipRunTitle(pendingText.value))
+  const launchTitle = computed(() => titleFromDraft(pendingText.value, pendingImages.value))
+  const canSend = computed(() => !!draft.value.trim() || attach.attachments.value.length > 0)
 
   watch(
     pipelines,
@@ -96,40 +109,52 @@ export function useHomeApproveChat() {
     launchOpen.value = false
   }
 
-  async function afterStart(runId: string, text: string) {
+  function goGates(runId: string, nodeId?: string) {
+    return router.push({
+      path: '/gates',
+      query: nodeId ? { run: runId, node: nodeId } : { run: runId },
+    })
+  }
+
+  async function afterStart(runId: string, text: string, images: ClarifyImage[]) {
     parkAbort?.abort()
     const ac = new AbortController()
     parkAbort = ac
     try {
       const { nodeId } = await waitForApprovePark(runId, { signal: ac.signal })
-      await api.reactReply(runId, nodeId, text)
-      await router.push({ path: `/runs/${runId}`, query: { node: nodeId } })
+      if (ac.signal.aborted) return
+      setHomeApproveHandoff({ runId, nodeId, text, images })
+      await api.reactReply(runId, nodeId, text, images)
+      await goGates(runId, nodeId)
     } catch (e: any) {
       if (ac.signal.aborted || e?.name === 'AbortError') return
       if (e instanceof ApproveParkTimeout) {
         toast.warn(t('pages.dashboard.parkTimeout'))
-        await router.push({ path: `/runs/${runId}` })
+        await goGates(runId)
         return
       }
       toast.error(String(e?.message || e))
-      await router.push({ path: `/runs/${runId}` })
+      await goGates(runId)
     }
   }
 
   async function send() {
     const wf = selected.value
     const text = draft.value.trim()
+    const images = attach.attachments.value.slice()
     if (!wf) {
       toast.warn(t('pages.dashboard.pickPipeline'))
       return
     }
-    if (!text) {
+    if (!text && images.length === 0) {
       toast.warn(t('pages.dashboard.needText'))
       return
     }
+    if (attach.blockSendIfOversized(images)) return
     if (sending.value) return
     sending.value = true
     pendingText.value = text
+    pendingImages.value = images
     try {
       const missing = missingRequiredAskField(wf)
       if (missing) {
@@ -137,9 +162,12 @@ export function useHomeApproveChat() {
         seedLaunch(wf)
         return
       }
-      const res = await api.startRun(wf.id, {}, 'manual', 'normal', [], { title: clipRunTitle(text) })
+      const res = await api.startRun(wf.id, {}, 'manual', 'normal', [], {
+        title: titleFromDraft(text, images),
+      })
       draft.value = ''
-      await afterStart(res.id, text)
+      attach.clearAttachments()
+      await afterStart(res.id, text, images)
     } catch (e: any) {
       const msg = String(e?.message || e)
       if (msg.includes('缺少必填项')) {
@@ -156,10 +184,12 @@ export function useHomeApproveChat() {
   async function onLaunchStarted(runId: string) {
     launchOpen.value = false
     const text = pendingText.value
+    const images = pendingImages.value.slice()
     sending.value = true
     try {
       draft.value = ''
-      await afterStart(runId, text)
+      attach.clearAttachments()
+      await afterStart(runId, text, images)
     } finally {
       sending.value = false
     }
@@ -170,7 +200,6 @@ export function useHomeApproveChat() {
   })
   onUnmounted(() => {
     loadAbort?.abort()
-    parkAbort?.abort()
   })
 
   return {
@@ -181,6 +210,7 @@ export function useHomeApproveChat() {
     selectedId,
     draft,
     sending,
+    canSend,
     loading,
     loadError,
     launchOpen,
@@ -190,6 +220,12 @@ export function useHomeApproveChat() {
     runInputs,
     runImages,
     draftRestored,
+    attachments: attach.attachments,
+    fileInput: attach.fileInput,
+    attachNotice: attach.notice,
+    onPickFiles: attach.onPickFiles,
+    onPaste: attach.onPaste,
+    removeAttachment: attach.removeAttachment,
     load,
     selectPipeline,
     send,

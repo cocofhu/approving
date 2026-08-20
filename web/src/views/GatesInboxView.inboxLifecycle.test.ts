@@ -19,6 +19,10 @@ const mocks = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
 }))
 
+const routeState = vi.hoisted(() => ({
+  query: {} as Record<string, string>,
+}))
+
 vi.mock('@/lib/api/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api/api')>('@/lib/api/api')
   return {
@@ -38,7 +42,7 @@ vi.mock('@/lib/api/api', async () => {
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
-  useRoute: () => ({ query: {} }),
+  useRoute: () => ({ query: routeState.query }),
 }))
 
 vi.mock('@/lib/composables/useBreakpoint', async () => {
@@ -97,6 +101,7 @@ vi.mock('@/lib/inbox/useClarifyDraft', async () => {
 
 import GatesInboxView from './GatesInboxView.vue'
 import { usePendingGates } from '@/lib/inbox/usePendingGates'
+import { setHomeApproveHandoff, takeHomeApproveHandoff } from '@/lib/run/homeApproveHandoff'
 
 function paged(items: InboxItem[]) {
   return { items, total: items.length, page: 1, pageSize: 20 }
@@ -181,6 +186,12 @@ const composerFrames = vi.hoisted(() => ({
 
 const ReviewComposerStub = defineComponent({
   name: 'ReviewComposer',
+  props: {
+    seedHumanText: { type: String, default: '' },
+    seedHumanImages: { type: Array, default: () => [] },
+    nodeType: { type: String, default: '' },
+    mode: { type: String, default: 'clarify' },
+  },
   emits: ['send', 'finish', 'cancel'],
   setup(_, { expose }) {
     expose({
@@ -255,6 +266,7 @@ function inboxCallsFor(runId: string, nodeId: string, iteration = 1) {
 
 beforeEach(async () => {
   vi.clearAllMocks()
+  routeState.query = {}
   composerFrames.applied = []
   composerFrames.acp = []
   composerFrames.busy = false
@@ -290,6 +302,7 @@ beforeEach(async () => {
 })
 
 afterEach(() => {
+  takeHomeApproveHandoff()
   vi.unstubAllGlobals()
 })
 
@@ -1311,6 +1324,58 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     )
     const queueFrames = composerFrames.applied.filter((f) => f.event === 'queue_state')
     expect(queueFrames.length).toBeGreaterThanOrEqual(1)
+    wrapper.unmount()
+  })
+
+  it('selects the inbox card matching ?run&node instead of the first item', async () => {
+    const a = clarifyItem('a')
+    const b = clarifyItem('b')
+    routeState.query = { run: 'run-b', node: 'clarify-b' }
+    mocks.listGates.mockResolvedValue(paged([a, b]))
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+    const cards = wrapper.findAll('[data-testid="inbox-item-card"]')
+    expect(cards).toHaveLength(2)
+    expect(cards[0].find('button').attributes('aria-pressed')).toBe('false')
+    expect(cards[1].find('button').attributes('aria-pressed')).toBe('true')
+    expect(inboxCallsFor('run-b', 'clarify-b', 1).length).toBeGreaterThan(0)
+    wrapper.unmount()
+  })
+
+  it('applies home handoff seed onto the matching Approve card', async () => {
+    const item = {
+      ...clarifyItem('ap'),
+      runId: 'run-home',
+      nodeId: 'ap',
+      label: '开发前澄清',
+    }
+    routeState.query = { run: 'run-home', node: 'ap' }
+    setHomeApproveHandoff({
+      runId: 'run-home',
+      nodeId: 'ap',
+      text: '把登录做清楚',
+      images: [{ data: 'abc', mimeType: 'image/png', name: 'shot.png' }],
+    })
+    mocks.listGates.mockResolvedValue(paged([item]))
+    mocks.inboxContext.mockResolvedValue({
+      type: 'clarify',
+      status: 'waiting_human',
+      nodes: [{ id: 'ap', type: 'approve', label: '澄清' }],
+      artifacts: [],
+      nodeExecutions: {},
+      clarify: { nodeId: 'ap', iteration: 1, turns: [], done: false, label: '澄清' },
+    })
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="inbox-item-card"] button').attributes('aria-pressed')).toBe(
+      'true',
+    )
+    const seedProp = wrapper.findComponent({ name: 'ReviewComposer' }).props('seedHumanText')
+    expect(seedProp).toBe('把登录做清楚')
     wrapper.unmount()
   })
 })

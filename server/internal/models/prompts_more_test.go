@@ -52,6 +52,12 @@ func TestAgentPromptsRemainingContracts(t *testing.T) {
 	if strings.Contains(DefaultApproveOpenSuffix, "第一回合必须调用 ask_question") {
 		t.Fatal("DefaultApproveOpenSuffix must not force first-turn ask_question")
 	}
+	if strings.Contains(DefaultApproveOpenSuffix, "可直接 set_* 并 node_complete") {
+		t.Fatal("DefaultApproveOpenSuffix must not auto node_complete")
+	}
+	if !strings.Contains(DefaultApproveOpenSuffix, "确认并流转") {
+		t.Fatal("DefaultApproveOpenSuffix must wait for human confirm")
+	}
 	if nilP.OutcomeContractText() == "" || nilP.OutcomeRetryText() == "" {
 		t.Fatal("nil outcome")
 	}

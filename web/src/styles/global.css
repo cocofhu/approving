@@ -385,9 +385,24 @@ body {
   .drawer-slide-enter-active,
   .drawer-slide-leave-active,
   .toast-enter-active,
-  .toast-leave-active {
+  .toast-leave-active,
+  .home-to-gates-enter-active,
+  .home-to-gates-leave-active {
     transition: none !important;
   }
+}
+
+.home-to-gates-enter-active,
+.home-to-gates-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+.home-to-gates-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+.home-to-gates-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 /* ---------- Vue Flow theme overrides ---------- */

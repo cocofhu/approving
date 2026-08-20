@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  findInboxItemByKey,
   inboxItemKey,
+  inboxQueryKey,
   inboxTripleKey,
   isInboxLeftPendingError,
   pickNextActiveAfterRemove,
@@ -49,6 +51,15 @@ describe('inbox keys', () => {
     expect(inboxItemKey(it)).toBe('run-x:node-x')
     expect(inboxTripleKey(it)).toBe('run-x:node-x:2')
     expect(inboxTripleKey({ runId: 'r', nodeId: 'n' })).toBe('r:n:1')
+  })
+
+  it('builds query keys and finds the matching card', () => {
+    expect(inboxQueryKey(' run-x ', ' node-x ')).toBe('run-x:node-x')
+    expect(inboxQueryKey('', 'node-x')).toBe('')
+    expect(inboxQueryKey('run-x', '')).toBe('')
+    const list = [item('a'), item('b')]
+    expect(findInboxItemByKey(list, 'run-b:node-b')?.label).toBe('b')
+    expect(findInboxItemByKey(list, '')).toBeUndefined()
   })
 })
 

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { createI18n } from 'vue-i18n'
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import type { Workflow } from '@/lib/shared/types'
@@ -91,6 +91,10 @@ describe('DashboardView home composer', () => {
     mocks.reactReply.mockResolvedValue({ status: 'ok' })
   })
 
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('renders composer and approve-first cards when a project is selected', async () => {
     const wrapper = mountDashboard()
     await flushPromises()
@@ -129,7 +133,7 @@ describe('DashboardView home composer', () => {
     wrapper.unmount()
   })
 
-  it('sending the first message starts the run and opens clarify', async () => {
+  it('sending the first message starts the run and opens inbox', async () => {
     const wrapper = mountDashboard()
     await flushPromises()
     await wrapper.get('[data-testid="home-composer-input"]').setValue('把登录做清楚')
@@ -138,8 +142,87 @@ describe('DashboardView home composer', () => {
     expect(mocks.startRun).toHaveBeenCalledWith('wf-ap', {}, 'manual', 'normal', [], {
       title: '把登录做清楚',
     })
-    expect(mocks.reactReply).toHaveBeenCalledWith('run-9', 'ap', '把登录做清楚')
-    expect(mocks.push).toHaveBeenCalledWith({ path: '/runs/run-9', query: { node: 'ap' } })
+    expect(mocks.reactReply).toHaveBeenCalledWith('run-9', 'ap', '把登录做清楚', [])
+    expect(mocks.push).toHaveBeenCalledWith({ path: '/gates', query: { run: 'run-9', node: 'ap' } })
     wrapper.unmount()
+  })
+
+  it('plus opens the file picker; paste and attach-only send work', async () => {
+    class FakeReader {
+      result: string | ArrayBuffer | null = null
+      onload: null | (() => void) = null
+      readAsDataURL(file: File) {
+        this.result = `data:${file.type || 'application/octet-stream'};base64,QUJD`
+        queueMicrotask(() => this.onload?.())
+      }
+    }
+    vi.stubGlobal('FileReader', FakeReader as unknown as typeof FileReader)
+
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const plus = wrapper.get('[data-testid="home-composer-plus"]')
+    expect((plus.element as HTMLButtonElement).disabled).toBe(false)
+    const fileInput = wrapper.get('[data-testid="home-composer-file"]').element as HTMLInputElement
+    expect(fileInput.multiple).toBe(true)
+    expect(fileInput.getAttribute('accept')).toBeNull()
+    const clickSpy = vi.spyOn(fileInput, 'click')
+    await plus.trigger('click')
+    expect(clickSpy).toHaveBeenCalled()
+
+    const note = new File(['ABC'], 'note.txt', { type: 'text/plain' })
+    const dt = new DataTransfer()
+    dt.items.add(note)
+    Object.defineProperty(fileInput, 'files', { configurable: true, value: dt.files })
+    await wrapper.get('[data-testid="home-composer-file"]').trigger('change')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-pending-file-chip"]').text()).toContain('note.txt')
+
+    const img = new File(['ABC'], 'clip.png', { type: 'image/png' })
+    const pasteDt = new DataTransfer()
+    pasteDt.items.add(img)
+    const pasteEv = new Event('paste', { bubbles: true, cancelable: true })
+    Object.defineProperty(pasteEv, 'clipboardData', { value: pasteDt })
+    wrapper.get('[data-testid="home-composer-input"]').element.dispatchEvent(pasteEv)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-draft-image-thumb"]').exists()).toBe(true)
+
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+  })
+
+  it('sends with attachments only and uses the first filename as title', async () => {
+    class FakeReader {
+      result: string | ArrayBuffer | null = null
+      onload: null | (() => void) = null
+      readAsDataURL(file: File) {
+        this.result = `data:${file.type || 'application/octet-stream'};base64,QUJD`
+        queueMicrotask(() => this.onload?.())
+      }
+    }
+    vi.stubGlobal('FileReader', FakeReader as unknown as typeof FileReader)
+
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const fileInput = wrapper.get('[data-testid="home-composer-file"]').element as HTMLInputElement
+    const note = new File(['ABC'], 'brief.pdf', { type: 'application/pdf' })
+    const dt = new DataTransfer()
+    dt.items.add(note)
+    Object.defineProperty(fileInput, 'files', { configurable: true, value: dt.files })
+    await wrapper.get('[data-testid="home-composer-file"]').trigger('change')
+    await flushPromises()
+    await wrapper.get('[data-testid="home-composer"]').trigger('submit')
+    await flushPromises()
+    expect(mocks.startRun).toHaveBeenCalledWith('wf-ap', {}, 'manual', 'normal', [], {
+      title: 'brief.pdf',
+    })
+    expect(mocks.reactReply).toHaveBeenCalledWith(
+      'run-9',
+      'ap',
+      '',
+      expect.arrayContaining([expect.objectContaining({ name: 'brief.pdf', mimeType: 'application/pdf' })]),
+    )
+    expect(mocks.push).toHaveBeenCalledWith({ path: '/gates', query: { run: 'run-9', node: 'ap' } })
+    wrapper.unmount()
+    vi.unstubAllGlobals()
   })
 })
