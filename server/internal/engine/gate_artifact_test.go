@@ -9,6 +9,36 @@ import (
 	"github.com/cocofhu/approving/internal/models"
 )
 
+func TestRecordPageRevision(t *testing.T) {
+	outs := map[string]any{"page": "<p>v1</p>"}
+	recordPageRevision(outs, "<p>v2</p>")
+	hist, _ := outs[pageHistoryOutputKey].([]string)
+	if len(hist) != 1 || hist[0] != "<p>v1</p>" {
+		t.Fatalf("first overwrite history=%v", outs[pageHistoryOutputKey])
+	}
+	if got, _ := outs["page"].(string); got != "<p>v2</p>" {
+		t.Fatalf("page=%q", got)
+	}
+
+	recordPageRevision(outs, "<p>v2</p>")
+	hist, _ = outs[pageHistoryOutputKey].([]string)
+	if len(hist) != 1 {
+		t.Fatalf("identical write must not mint a version: %v", hist)
+	}
+
+	recordPageRevision(outs, "<p>v3</p>")
+	hist, _ = outs[pageHistoryOutputKey].([]string)
+	if len(hist) != 2 || hist[0] != "<p>v1</p>" || hist[1] != "<p>v2</p>" {
+		t.Fatalf("second overwrite history=%v", hist)
+	}
+
+	empty := map[string]any{}
+	recordPageRevision(empty, "<p>first</p>")
+	if empty[pageHistoryOutputKey] != nil {
+		t.Fatalf("empty previous must not create history: %v", empty)
+	}
+}
+
 func TestArtifactETagWithAndWithoutUpdatedAt(t *testing.T) {
 	withTime := ArtifactETag("body", 4, time.Unix(100, 0))
 	if withTime == "" || withTime == ArtifactETag("body", 4, time.Time{}) {
@@ -106,5 +136,55 @@ func TestGateArtifactErrorsAndHalt(t *testing.T) {
 	eng.Halt()
 	if _, err := eng.SaveGateArtifact(runID, "gate", "nope.json", "{}", ""); err == nil {
 		t.Fatal("halted engine should reject save")
+	}
+}
+
+func TestSaveGateArtifactRecordsPageHistory(t *testing.T) {
+	eng, db := setupEngine(t)
+	runID := "run-gate-page-hist"
+	now := time.Now()
+	oldHTML := "<!doctype html><html><body>v1</body></html>"
+	newHTML := "<!doctype html><html><body>v2</body></html>"
+	g := models.Graph{
+		Nodes: []models.Node{
+			{ID: "page", Type: "visual"},
+			{ID: "gate", Type: "human_gate", Config: map[string]any{
+				"title":         "审阅",
+				"body_template": "{{nodes.page.outputs.page}}",
+				"actions":       []any{map[string]any{"id": "approve", "label": "批准"}},
+			}},
+		},
+	}
+	if err := db.Create(&models.Run{
+		ID: runID, WorkflowID: "w", WorkflowName: "w", Status: "waiting_human",
+		Graph: g, StartedAt: now, CreatedAt: now,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	db.Create(&models.StateRun{
+		RunID: runID, NodeID: "page", NodeType: "visual", Iteration: 1, Status: "completed",
+		Outputs: map[string]any{"page": oldHTML},
+	})
+	db.Create(&models.Gate{
+		RunID: runID, NodeID: "gate", Iteration: 1, Title: "审阅", RequestedAt: now,
+		UpstreamNodeID: "page", UpstreamIteration: 1, BodyMd: oldHTML,
+		Actions: []models.GateAction{{ID: "approve", Label: "批准"}},
+	})
+	if _, err := eng.store.Save(runID, "page", visualPageName, "html", oldHTML); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := eng.SaveGateArtifact(runID, "gate", visualPageName, newHTML, ""); err != nil {
+		t.Fatalf("save page: %v", err)
+	}
+	var sr models.StateRun
+	if err := db.Where("run_id = ? AND node_id = ?", runID, "page").First(&sr).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := sr.Outputs["page"].(string); got != newHTML {
+		t.Fatalf("outputs.page=%q", got)
+	}
+	hist := pageHistorySlice(sr.Outputs[pageHistoryOutputKey])
+	if len(hist) != 1 || hist[0] != oldHTML {
+		t.Fatalf("page_history=%v", sr.Outputs[pageHistoryOutputKey])
 	}
 }
