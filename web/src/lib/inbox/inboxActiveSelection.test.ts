@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   findInboxItemByKey,
+  findInboxItemForHandoff,
   inboxItemKey,
   inboxQueryKey,
   inboxTripleKey,
@@ -60,6 +61,13 @@ describe('inbox keys', () => {
     const list = [item('a'), item('b')]
     expect(findInboxItemByKey(list, 'run-b:node-b')?.label).toBe('b')
     expect(findInboxItemByKey(list, '')).toBeUndefined()
+  })
+
+  it('finds a handoff card by run+node, or by run when node id is empty', () => {
+    const list = [item('a'), item('b')]
+    expect(findInboxItemForHandoff(list, { runId: 'run-b', nodeId: 'node-b' })?.label).toBe('b')
+    expect(findInboxItemForHandoff(list, { runId: 'run-a', nodeId: '' })?.label).toBe('a')
+    expect(findInboxItemForHandoff(list, { runId: 'missing', nodeId: '' })).toBeUndefined()
   })
 })
 

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { createI18n } from 'vue-i18n'
 import { createApp, defineComponent, nextTick } from 'vue'
+import { flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
@@ -152,6 +153,18 @@ describe('useHomeApproveChat', () => {
       { data: 'abc', mimeType: 'image/png', name: 'shot.png' },
     ])
     expect(mocks.push).toHaveBeenCalledWith({ path: '/gates', query: { run: 'run-1', node: 'ap' } })
+  })
+
+  it('opens inbox immediately with attachments, before Approve finishes parking', async () => {
+    mocks.getRun.mockImplementation(() => new Promise(() => {}))
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    chat.attachments.value = [{ data: 'abc', mimeType: 'image/png', name: 'shot.png' }]
+    chat.draft.value = '附图说明'
+    void chat.send()
+    await flushPromises()
+    expect(mocks.push).toHaveBeenCalledWith({ path: '/gates', query: { run: 'run-1', node: 'ap' } })
+    expect(mocks.reactReply).not.toHaveBeenCalled()
   })
 
   it('still replies after the home view unmounts', async () => {

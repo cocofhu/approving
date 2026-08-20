@@ -303,6 +303,50 @@ describe('ClarifyChat', () => {
     wrapper.unmount()
   })
 
+  it('seeds file chips with the first bubble and keeps them after idle queue_state', async () => {
+    const wrapper = mountChat({
+      nodeType: 'approve',
+      turns: [],
+      seedHumanText: '把登录做清楚',
+      seedHumanImages: [
+        { data: 'abc', mimeType: 'image/png', name: 'shot.png' },
+        { data: 'QQ==', mimeType: 'application/pdf', name: 'brief.pdf' },
+      ],
+    })
+    expect(wrapper.find('[data-testid="clarify-history-image-thumb"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="clarify-history-file-chip"]').text()).toContain('brief.pdf')
+    const vm = wrapper.vm as unknown as { applyReviewFrame: (f: Record<string, unknown>) => void }
+    vm.applyReviewFrame({
+      event: 'queue_state',
+      nodeId: 'react-1',
+      waiting: 0,
+      items: [],
+      busy: false,
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="clarify-history-image-thumb"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="clarify-history-file-chip"]').text()).toContain('brief.pdf')
+    await wrapper.setProps({
+      turns: [{ role: 'human', text: '把登录做清楚', at: '2026-08-21T00:00:00Z' }],
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="clarify-history-image-thumb"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="clarify-history-file-chip"]').text()).toContain('brief.pdf')
+    wrapper.unmount()
+  })
+
+  it('does not duplicate an image-only seed once the persisted human turn lands', async () => {
+    const shot = { data: 'abc', mimeType: 'image/png', name: 'shot.png' }
+    const wrapper = mountChat({
+      nodeType: 'approve',
+      turns: [{ role: 'human', text: '', at: '2026-08-21T00:00:00Z', images: [shot] }],
+      seedHumanText: '',
+      seedHumanImages: [shot],
+    })
+    expect(wrapper.findAll('[data-testid="clarify-history-image-thumb"]')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
   function mockScrollHeight(el: HTMLTextAreaElement, height: number) {
     Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => height })
   }

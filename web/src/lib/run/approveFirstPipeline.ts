@@ -22,12 +22,17 @@ function inputSuccessTargetId(graph: GraphLike): string | null {
   return picked?.target || null
 }
 
+/** Node id of the Approve that sits on the input success path, if any. */
+export function approveFirstNodeId(graph: GraphLike): string | null {
+  const targetId = inputSuccessTargetId(graph)
+  if (!targetId) return null
+  const target = (graph.nodes || []).find((n) => n.id === targetId)
+  return target?.type === 'approve' ? target.id : null
+}
+
 /** True when the node after input (success path) is an Approve node. */
 export function isApproveFirstPipeline(graph: GraphLike): boolean {
-  const targetId = inputSuccessTargetId(graph)
-  if (!targetId) return false
-  const target = (graph.nodes || []).find((n) => n.id === targetId)
-  return target?.type === 'approve'
+  return !!approveFirstNodeId(graph)
 }
 
 export function isPublishedApproveFirst(wf: Pick<Workflow, 'status'> & GraphLike): boolean {

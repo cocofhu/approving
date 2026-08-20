@@ -6,9 +6,9 @@ import { api } from '@/lib/api/api'
 import { useToast } from '@/lib/composables/useToast'
 import { useImageAttachments } from '@/lib/composables/useImageAttachments'
 import { readStoredProjectId } from '@/lib/composables/useProjectContext'
-import { isPublishedApproveFirst } from '@/lib/run/approveFirstPipeline'
+import { approveFirstNodeId, isPublishedApproveFirst } from '@/lib/run/approveFirstPipeline'
 import { ApproveParkTimeout, waitForApprovePark } from '@/lib/run/homeApproveChat'
-import { setHomeApproveHandoff } from '@/lib/run/homeApproveHandoff'
+import { setHomeApproveHandoff, updateHomeApproveHandoffNode } from '@/lib/run/homeApproveHandoff'
 import { clipRunTitle } from '@/lib/run/runTitle'
 import { missingRequiredAskField, seedAskLaunchFields } from '@/lib/run/useWorkflowAskInputs'
 import { attachmentDisplayName } from '@/lib/shared/attachments'
@@ -117,31 +117,35 @@ export function useHomeApproveChat() {
   }
 
   async function afterStart(runId: string, text: string, images: ClarifyImage[]) {
+    const wf = selected.value || launchTarget.value
+    const knownNodeId = wf ? approveFirstNodeId(wf) || '' : ''
+    setHomeApproveHandoff({ runId, nodeId: knownNodeId, text, images })
+    const nav = goGates(runId, knownNodeId || undefined)
+
     parkAbort?.abort()
     const ac = new AbortController()
     parkAbort = ac
     try {
+      await nav
       const { nodeId } = await waitForApprovePark(runId, { signal: ac.signal })
       if (ac.signal.aborted) return
-      setHomeApproveHandoff({ runId, nodeId, text, images })
+      if (nodeId !== knownNodeId) updateHomeApproveHandoffNode(runId, nodeId)
       await api.reactReply(runId, nodeId, text, images)
-      await goGates(runId, nodeId)
+      if (nodeId !== knownNodeId) await goGates(runId, nodeId)
     } catch (e: any) {
       if (ac.signal.aborted || e?.name === 'AbortError') return
       if (e instanceof ApproveParkTimeout) {
         toast.warn(t('pages.dashboard.parkTimeout'))
-        await goGates(runId)
         return
       }
       toast.error(String(e?.message || e))
-      await goGates(runId)
     }
   }
 
   async function send() {
     const wf = selected.value
     const text = draft.value.trim()
-    const images = attach.attachments.value.slice()
+    const images = attach.attachments.value.map((im) => ({ ...im }))
     if (!wf) {
       toast.warn(t('pages.dashboard.pickPipeline'))
       return
@@ -184,7 +188,7 @@ export function useHomeApproveChat() {
   async function onLaunchStarted(runId: string) {
     launchOpen.value = false
     const text = pendingText.value
-    const images = pendingImages.value.slice()
+    const images = pendingImages.value.map((im) => ({ ...im }))
     sending.value = true
     try {
       draft.value = ''

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isApproveFirstPipeline, isPublishedApproveFirst } from './approveFirstPipeline'
+import { isApproveFirstPipeline, isPublishedApproveFirst, approveFirstNodeId } from './approveFirstPipeline'
 import type { WFEdge, WFNode } from '@/lib/shared/types'
 
 function graph(nodes: Partial<WFNode>[], edges: Partial<WFEdge>[]) {
@@ -122,5 +122,6 @@ describe('isApproveFirstPipeline', () => {
     )
     expect(isPublishedApproveFirst({ status: 'draft', ...g })).toBe(false)
     expect(isPublishedApproveFirst({ status: 'published', ...g })).toBe(true)
+    expect(approveFirstNodeId(g)).toBe('ap')
   })
 })

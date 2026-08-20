@@ -36,6 +36,7 @@ import {
 } from '@/lib/inbox/inboxReviewMode'
 import {
   findInboxItemByKey,
+  findInboxItemForHandoff,
   inboxQueryKey,
   inboxTripleKey,
   isInboxLeftPendingError,
@@ -52,7 +53,7 @@ import {
 import { createWsReconnectController } from '@/lib/run/wsReconnect'
 import { useToast } from '@/lib/composables/useToast'
 import { inboxShareKind, isHumanGateInboxItem, isShareableInboxItem } from '@/lib/inbox/gateShareLink'
-import { consumeHomeApproveHandoff, type HomeApproveHandoff } from '@/lib/run/homeApproveHandoff'
+import { consumeHomeApproveHandoff, peekHomeApproveHandoff, type HomeApproveHandoff } from '@/lib/run/homeApproveHandoff'
 import type { AcpEvent, Gate, GateInboxItem, GateShareInboxStatus, InboxItem, Run } from '@/lib/shared/types'
 
 const router = useRouter()
@@ -303,16 +304,27 @@ function applyHomeHandoff() {
   if (h) homeSeed.value = h
 }
 
+function selectFromHandoff(): boolean {
+  const h = peekHomeApproveHandoff()
+  if (!h) return false
+  const hit = findInboxItemForHandoff(listItems.value, h)
+  if (!hit) return false
+  active.value = hit
+  applyHomeHandoff()
+  return true
+}
+
 let queryWaitGen = 0
 async function waitForQueryItem() {
   const gen = ++queryWaitGen
-  if (!queryInboxKey()) return
+  if (!queryInboxKey() && !peekHomeApproveHandoff()) return
   for (let i = 0; i < 8; i++) {
     if (gen !== queryWaitGen) return
     if (selectFromQuery()) {
       applyHomeHandoff()
       return
     }
+    if (selectFromHandoff()) return
     await new Promise((r) => setTimeout(r, 400))
     if (gen !== queryWaitGen) return
     await loadList()
@@ -329,6 +341,7 @@ function ensureValidActive() {
     applyHomeHandoff()
     return
   }
+  if (selectFromHandoff()) return
   const list = listItems.value
   if (!list.length) {
     if (active.value) active.value = null
@@ -1143,6 +1156,23 @@ const inboxStageNodeType = computed(() => {
   return activeRun.value?.nodes?.find((node) => node.id === id)?.type || ''
 })
 
+/** Keep the chat (and home-chat attachments) up while the product stage is still loading. */
+const showClarifyReviewShell = computed(
+  () =>
+    !!active.value &&
+    active.value.type === 'clarify' &&
+    (!!activeClarify.value || !!activeHomeSeed.value),
+)
+const clarifyComposerNodeId = computed(
+  () => activeClarify.value?.nodeId || active.value?.nodeId || '',
+)
+const clarifyComposerIteration = computed(() => activeClarify.value?.iteration ?? 1)
+const clarifyComposerTurns = computed(() => activeClarify.value?.turns ?? [])
+const clarifyComposerDone = computed(() => activeClarify.value?.done ?? false)
+const clarifyComposerNodeType = computed(
+  () => inboxStageNodeType.value || (activeHomeSeed.value ? 'approve' : ''),
+)
+
 const inboxClarifyStageKind = computed(() => (activeRunLoadError.value ? 'loadFailed' : 'pending'))
 
 // Mirror RunDetailView.reviewActive: post-run product review on a non-react
@@ -1409,7 +1439,7 @@ watch(() => [route.query.run, route.query.node], () => {
 onMounted(() => {
   hydrateProject()
   loadList({ showLoading: true }).then(() => {
-    if (queryInboxKey()) {
+    if (queryInboxKey() || peekHomeApproveHandoff()) {
       void waitForQueryItem()
       return
     }
@@ -1635,7 +1665,7 @@ function itemSecondary(it: InboxItem) {
         </button>
       </div>
       <div class="flex min-h-0 flex-1 flex-col">
-        <ArtifactLoadingPane v-if="activeRunLoading" message-key="pages.gatesInbox.loadingRun" />
+        <ArtifactLoadingPane v-if="activeRunLoading && active.type === 'gate'" message-key="pages.gatesInbox.loadingRun" />
             <GateApproval
           v-else-if="active.type === 'gate'"
           ref="gateApprovalRef"
@@ -1649,7 +1679,7 @@ function itemSecondary(it: InboxItem) {
           @open-share="openSharePanel(active)"
         />
         <ReviewShell
-          v-else-if="active.type === 'clarify' && activeClarify"
+          v-else-if="showClarifyReviewShell"
           :key="active.runId + active.nodeId"
           class="min-h-0 flex-1"
           mobile
@@ -1657,7 +1687,9 @@ function itemSecondary(it: InboxItem) {
           :storage-key="REVIEW_SHELL_WIDTH_KEY_APPROVAL"
         >
           <template #stage>
+            <ArtifactLoadingPane v-if="activeRunLoading" message-key="pages.gatesInbox.loadingRun" />
             <ReactArtifactStage
+              v-else
               :artifacts="activeRun?.artifacts || []"
               :preview-artifact="activeClarify?.previewArtifact"
               :run-id="active.runId"
@@ -1677,16 +1709,16 @@ function itemSecondary(it: InboxItem) {
               ref="reviewChatRef"
               :mode="composerMode"
               :run-id="active.runId"
-              :node-id="activeClarify.nodeId"
-              :iteration="activeClarify.iteration ?? 1"
+              :node-id="clarifyComposerNodeId"
+              :iteration="clarifyComposerIteration"
               v-model:draft="clarifyDraft"
               v-model:attachments="clarifyAttachments"
               v-model:annotations="clarifyAnnotations"
-              :turns="activeClarify.turns ?? []"
-              :node-type="inboxStageNodeType"
+              :turns="clarifyComposerTurns"
+              :node-type="clarifyComposerNodeType"
               :seed-human-text="activeHomeSeed?.text"
-              :seed-human-images="activeHomeSeed?.images"
-              :done="activeClarify.done"
+              :seed-human-images="activeHomeSeed?.images ?? []"
+              :done="clarifyComposerDone"
               :active="clarifyInputActive"
               :confirm-error="clarifyConfirmError"
               @send="onClarifySend"
@@ -1741,7 +1773,7 @@ function itemSecondary(it: InboxItem) {
             </button>
           </div>
           <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <ArtifactLoadingPane v-if="activeRunLoading" message-key="pages.gatesInbox.loadingRun" />
+            <ArtifactLoadingPane v-if="activeRunLoading && active.type === 'gate'" message-key="pages.gatesInbox.loadingRun" />
             <GateApproval
               v-else-if="active.type === 'gate'"
               ref="gateApprovalRef"
@@ -1757,14 +1789,16 @@ function itemSecondary(it: InboxItem) {
               @open-share="openSharePanel(active)"
             />
             <ReviewShell
-              v-else-if="active.type === 'clarify' && activeClarify"
+              v-else-if="showClarifyReviewShell"
               :key="active.runId + active.nodeId"
               class="min-h-0 flex-1"
               :sidebar-width="400"
               :storage-key="REVIEW_SHELL_WIDTH_KEY_APPROVAL"
             >
               <template #stage>
+                <ArtifactLoadingPane v-if="activeRunLoading" message-key="pages.gatesInbox.loadingRun" />
                 <ReactArtifactStage
+                  v-else
                   :artifacts="activeRun?.artifacts || []"
                   :preview-artifact="activeClarify?.previewArtifact"
                   :run-id="active.runId"
@@ -1784,16 +1818,16 @@ function itemSecondary(it: InboxItem) {
                   ref="reviewChatRef"
                   :mode="composerMode"
                   :run-id="active.runId"
-                  :node-id="activeClarify.nodeId"
-                  :iteration="activeClarify.iteration ?? 1"
+                  :node-id="clarifyComposerNodeId"
+                  :iteration="clarifyComposerIteration"
                   v-model:draft="clarifyDraft"
                   v-model:attachments="clarifyAttachments"
                   v-model:annotations="clarifyAnnotations"
-                  :turns="activeClarify.turns ?? []"
-                  :node-type="inboxStageNodeType"
+                  :turns="clarifyComposerTurns"
+                  :node-type="clarifyComposerNodeType"
                   :seed-human-text="activeHomeSeed?.text"
-                  :seed-human-images="activeHomeSeed?.images"
-                  :done="activeClarify.done"
+                  :seed-human-images="activeHomeSeed?.images ?? []"
+                  :done="clarifyComposerDone"
                   :active="clarifyInputActive"
                   :confirm-error="clarifyConfirmError"
                   @send="onClarifySend"
