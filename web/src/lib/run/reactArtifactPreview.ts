@@ -441,3 +441,276 @@ export function artifactFingerprint(a: Artifact | null | undefined): string {
   if (!a) return ''
   return `${a.id}:${a.updatedAt || ''}:${a.revision ?? ''}:${a.sizeBytes}:${a.content?.length ?? ''}`
 }
+
+/** Card thumb: text peep for known JSON / visual HTML; HtmlPreview for other grid HTML. */
+export type StageCardThumb =
+  | { kind: 'text'; title: string; summary: string }
+  | { kind: 'html'; html: string }
+
+const FRIENDLY_NAME_KEYS: Record<string, string> = {
+  'research.json': 'pages.reactArtifactStage.friendlyResearch',
+  'clarified_requirement.json': 'pages.reactArtifactStage.friendlyClarified',
+}
+
+/** page.html and same-content visual_{node}.page.html share one friendly label. */
+export function isVisualPreviewArtifactName(name: string | null | undefined): boolean {
+  const base = gridArtifactBaseName(String(name || '').trim())
+  if (!base) return false
+  if (base === visualProductPageName()) return true
+  return parseVisualNodePageName(base) != null
+}
+
+/** i18n key for the three named friendly display names; null → keep technical file name. */
+export function artifactFriendlyNameKey(name: string | null | undefined): string | null {
+  const base = gridArtifactBaseName(String(name || '').trim())
+  if (!base) return null
+  if (FRIENDLY_NAME_KEYS[base]) return FRIENDLY_NAME_KEYS[base]
+  if (isVisualPreviewArtifactName(base)) return 'pages.reactArtifactStage.friendlyVisual'
+  return null
+}
+
+/** Technical file name shown in meta (strip historical #iter-N suffix for display). */
+export function artifactTechnicalDisplayName(name: string | null | undefined): string {
+  const n = String(name || '').trim()
+  if (!n) return ''
+  return gridArtifactBaseName(n) || n
+}
+
+function nonemptyText(v: unknown): string {
+  return typeof v === 'string' ? v.trim() : ''
+}
+
+/** Root-level title/summary from known contract JSON; either field is enough. */
+export function parseStructuredArtifactSummary(content: string | null | undefined): {
+  title: string
+  summary: string
+} | null {
+  const raw = String(content || '').trim()
+  if (!raw) return null
+  try {
+    const data = JSON.parse(raw) as Record<string, unknown>
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+    const title = nonemptyText(data.title)
+    const summary = nonemptyText(data.summary)
+    if (!title && !summary) return null
+    return { title, summary }
+  } catch {
+    return null
+  }
+}
+
+function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+}
+
+function stripTags(html: string): string {
+  return decodeHtmlEntities(html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
+}
+
+/**
+ * Light HTML peep for visual preview pages: title/h1 + meta description / banner p.
+ * Returns null when neither title nor summary can be extracted.
+ */
+export function extractVisualHtmlSummary(html: string | null | undefined): {
+  title: string
+  summary: string
+} | null {
+  const raw = String(html || '')
+  if (!raw.trim()) return null
+
+  let title = ''
+  const titleMatch = raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
+  if (titleMatch) title = stripTags(titleMatch[1])
+  if (!title) {
+    const h1Match = raw.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
+    if (h1Match) title = stripTags(h1Match[1])
+  }
+
+  let summary = ''
+  const metaMatch = raw.match(
+    /<meta[^>]+name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i,
+  ) || raw.match(
+    /<meta[^>]+content=["']([^"']*)["'][^>]*name=["']description["'][^>]*>/i,
+  )
+  if (metaMatch) summary = decodeHtmlEntities(metaMatch[1]).trim()
+  if (!summary) {
+    const bannerP = raw.match(/<div[^>]*class=["'][^"']*\bbanner\b[^"']*["'][^>]*>[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/i)
+    if (bannerP) summary = stripTags(bannerP[1])
+  }
+  if (!summary) {
+    const pMatch = raw.match(/<p[^>]*>([\s\S]*?)<\/p>/i)
+    if (pMatch) {
+      const t = stripTags(pMatch[1])
+      if (t && t !== title) summary = t
+    }
+  }
+
+  if (!title && !summary) return null
+  return { title, summary }
+}
+
+/** Whether this grid card should try text summary peep (vs HtmlPreview / icon). */
+export function wantsTextSummaryThumb(artifact: Pick<Artifact, 'kind' | 'name'> | null | undefined): boolean {
+  if (!artifact) return false
+  if (artifact.kind === 'json') return true
+  if (isVisualPreviewArtifactName(artifact.name)) return true
+  return false
+}
+
+/** Build StageCardThumb from fetched content; null → keep document icon. */
+export function buildStageCardThumb(
+  artifact: Pick<Artifact, 'kind' | 'name'> | null | undefined,
+  content: string | null | undefined,
+): StageCardThumb | null {
+  if (!artifact) return null
+  const body = content ?? ''
+  if (wantsTextSummaryThumb(artifact)) {
+    const peep =
+      artifact.kind === 'json'
+        ? parseStructuredArtifactSummary(body)
+        : extractVisualHtmlSummary(body)
+    if (!peep) return null
+    return { kind: 'text', title: peep.title, summary: peep.summary }
+  }
+  if (artifact.kind === 'html' || isHtmlStageArtifact(artifact)) {
+    if (!String(body).trim()) return null
+    return { kind: 'html', html: body }
+  }
+  return null
+}
+
+export type StageOpenState = {
+  openNames: string[]
+  activeTab: string
+  novncOpen: boolean
+}
+
+const STAGE_OPEN_PREFIX = 'appr.reactStageOpen:'
+const stageOpenMemory = new Map<string, StageOpenState>()
+
+export function stageOpenStateStorageKey(runId?: string | null, nodeId?: string | null): string {
+  return `${STAGE_OPEN_PREFIX}${String(runId || '').trim()}:${String(nodeId || '').trim()}`
+}
+
+export function loadStageOpenState(runId?: string | null, nodeId?: string | null): StageOpenState | null {
+  const rid = String(runId || '').trim()
+  const nid = String(nodeId || '').trim()
+  if (!rid || !nid) return null
+  const key = stageOpenStateStorageKey(rid, nid)
+  const mem = stageOpenMemory.get(key)
+  if (mem) {
+    return {
+      openNames: [...mem.openNames],
+      activeTab: mem.activeTab,
+      novncOpen: mem.novncOpen,
+    }
+  }
+  if (typeof sessionStorage === 'undefined') return null
+  try {
+    const raw = sessionStorage.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<StageOpenState>
+    if (!parsed || !Array.isArray(parsed.openNames)) return null
+    const openNames = parsed.openNames.map((n) => String(n || '').trim()).filter(Boolean)
+    const activeTab = String(parsed.activeTab || REACT_STAGE_TAB_GRID).trim() || REACT_STAGE_TAB_GRID
+    const state: StageOpenState = {
+      openNames,
+      activeTab,
+      novncOpen: !!parsed.novncOpen,
+    }
+    stageOpenMemory.set(key, state)
+    return {
+      openNames: [...state.openNames],
+      activeTab: state.activeTab,
+      novncOpen: state.novncOpen,
+    }
+  } catch {
+    return null
+  }
+}
+
+export function saveStageOpenState(
+  runId: string | null | undefined,
+  nodeId: string | null | undefined,
+  state: StageOpenState,
+): void {
+  const rid = String(runId || '').trim()
+  const nid = String(nodeId || '').trim()
+  if (!rid || !nid) return
+  const key = stageOpenStateStorageKey(rid, nid)
+  const next: StageOpenState = {
+    openNames: [...state.openNames],
+    activeTab: state.activeTab,
+    novncOpen: !!state.novncOpen,
+  }
+  stageOpenMemory.set(key, next)
+  if (typeof sessionStorage === 'undefined') return
+  try {
+    sessionStorage.setItem(key, JSON.stringify(next))
+  } catch {
+    // quota / private mode — memory still holds refresh-within-SPA; hard reload needs storage
+  }
+}
+
+/** Apply persisted open state against currently available artifact names. */
+export function restoreStageOpenState(
+  saved: StageOpenState | null | undefined,
+  availableNames: string[],
+): StageOpenState | null {
+  if (!saved) return null
+  const hasAny = saved.openNames.length > 0 || !!saved.novncOpen
+  if (!hasAny && (!saved.activeTab || saved.activeTab === REACT_STAGE_TAB_GRID)) return null
+
+  // Artifacts may not be loaded on first paint — keep names; gone-filter watch prunes later.
+  if (!availableNames.length) {
+    return {
+      openNames: [...saved.openNames],
+      activeTab: String(saved.activeTab || REACT_STAGE_TAB_GRID) || REACT_STAGE_TAB_GRID,
+      novncOpen: !!saved.novncOpen,
+    }
+  }
+
+  const nameSet = new Set(availableNames)
+  const openNames = saved.openNames.filter((n) => nameSet.has(n))
+  let activeTab = String(saved.activeTab || REACT_STAGE_TAB_GRID) || REACT_STAGE_TAB_GRID
+  const activeName = previewTabName(activeTab)
+  if (activeName && !openNames.includes(activeName)) {
+    activeTab = openNames.length
+      ? previewTabId(openNames[openNames.length - 1])
+      : saved.novncOpen
+        ? REACT_STAGE_TAB_NOVNC
+        : REACT_STAGE_TAB_GRID
+  } else if (activeTab === REACT_STAGE_TAB_NOVNC && !saved.novncOpen) {
+    activeTab = openNames.length ? previewTabId(openNames[openNames.length - 1]) : REACT_STAGE_TAB_GRID
+  }
+  if (!openNames.length && !saved.novncOpen && activeTab === REACT_STAGE_TAB_GRID) return null
+  return {
+    openNames,
+    activeTab,
+    novncOpen: !!saved.novncOpen,
+  }
+}
+
+/** Test-only: clear stage open session keys. Optional needle limits which keys are removed. */
+export function resetStageOpenStateForTests(needle?: string): void {
+  const match = String(needle || '').trim()
+  for (const key of [...stageOpenMemory.keys()]) {
+    if (!match || key.includes(match)) stageOpenMemory.delete(key)
+  }
+  if (typeof sessionStorage === 'undefined') return
+  const keys: string[] = []
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const k = sessionStorage.key(i)
+    if (!k?.startsWith(STAGE_OPEN_PREFIX)) continue
+    if (match && !k.includes(match)) continue
+    keys.push(k)
+  }
+  for (const k of keys) sessionStorage.removeItem(k)
+}

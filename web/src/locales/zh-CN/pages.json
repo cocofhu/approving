@@ -2484,6 +2484,10 @@
       "revision": "v{n}",
       "meta": "{kind} · v{n} · {time}",
       "metaKindTime": "{kind} · {time}",
+      "metaNameKindTime": "{name} · {kind} · {time}",
+      "friendlyResearch": "调研结论",
+      "friendlyClarified": "需求澄清文件",
+      "friendlyVisual": "视觉预览文件",
       "versionChip": "v{n}",
       "versionChipLatest": "v{n} · 最新",
       "versionMenu": "选择版本"
