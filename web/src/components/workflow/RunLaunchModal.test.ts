@@ -154,6 +154,25 @@ describe('RunLaunchModal', () => {
     wrapper.unmount()
   })
 
+  it('passes runTitle through to startRun', async () => {
+    apiMocks.startRun.mockResolvedValue({ id: 'run-title' })
+    const wrapper = mountModal(true, { runTitle: '  用户第一句话  ' })
+    await flushPromises()
+    const startBtn = findStartButton(wrapper)
+    await startBtn!.trigger('click')
+    await flushPromises()
+    expect(apiMocks.startRun).toHaveBeenCalledWith(
+      'wf-1',
+      expect.anything(),
+      'manual',
+      'normal',
+      [],
+      expect.objectContaining({ title: '用户第一句话' }),
+    )
+    expect(wrapper.emitted('started')?.[0]?.[0]).toBe('run-title')
+    wrapper.unmount()
+  })
+
   it('rejects reserved env keys in modal without calling API', async () => {
     const wrapper = mountModal(true)
     await flushPromises()

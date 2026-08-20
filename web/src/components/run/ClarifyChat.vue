@@ -61,7 +61,7 @@ const props = withDefaults(
     runId: string
     nodeId: string
     iteration: number
-    turns: ClarifyTurn[]
+    turns?: ClarifyTurn[] | null
     done: boolean
     active?: boolean
     reviewMode?: boolean
@@ -71,6 +71,8 @@ const props = withDefaults(
     sendLabel?: string
     /** Review confirm failure message (bottom status bar). */
     confirmError?: string | null
+    /** Graph node type; Approve uses a first-speaker empty state. */
+    nodeType?: string
   }>(),
   {
     active: true,
@@ -79,6 +81,8 @@ const props = withDefaults(
     annotateEnabled: false,
     hideFinish: false,
     confirmError: null,
+    nodeType: '',
+    turns: () => [],
   },
 )
 
@@ -92,11 +96,13 @@ const emit = defineEmits<{
 
 const { t: translate, locale } = useI18n()
 
-const inputPlaceholder = computed(() =>
-  props.reviewMode
-    ? translate('pages.clarify.reviewInputPlaceholder')
-    : translate('pages.clarify.inputPlaceholder'),
-)
+const persistedTurns = computed(() => props.turns ?? [])
+
+const inputPlaceholder = computed(() => {
+  if (props.reviewMode) return translate('pages.clarify.reviewInputPlaceholder')
+  if (props.nodeType === 'approve') return translate('pages.clarify.approveInputPlaceholder')
+  return translate('pages.clarify.inputPlaceholder')
+})
 
 const draft = defineModel<string>('draft', { default: '' })
 const attachments = defineModel<ClarifyImage[]>('attachments', { default: () => [] })
@@ -109,6 +115,13 @@ const validating = ref(false)
 const queued = ref<QueueItem[]>([])
 /** In-flight turn bubbles (human + streaming agent) before props.turns catch up. */
 const liveTurns = ref<ClarifyTurn[]>([])
+const showApproveEmptyHint = computed(
+  () =>
+    !props.reviewMode &&
+    props.nodeType === 'approve' &&
+    persistedTurns.value.length === 0 &&
+    liveTurns.value.length === 0,
+)
 const liveAgentIdx = ref(-1)
 /** Coalesced markdown HTML for the live streaming agent bubble. */
 const liveStreamHtml = ref('')
@@ -310,25 +323,25 @@ function hasHumanReplyAfter(turnList: ClarifyTurn[], qIdx: number): boolean {
   return false
 }
 
-const latestQuestionIdx = computed(() => latestQuestionTurnIndex(props.turns))
+const latestQuestionIdx = computed(() => latestQuestionTurnIndex(persistedTurns.value))
 
 const latestQuestions = computed<ReactQuestion[]>(() => {
   const idx = latestQuestionIdx.value
   if (idx < 0) return []
-  return props.turns[idx].questions ?? []
+  return persistedTurns.value[idx].questions ?? []
 })
 
 const latestQuestionAnswered = computed(() => {
   const qs = latestQuestions.value
   if (!qs.length) return true
-  if (hasHumanReplyAfter(props.turns, latestQuestionIdx.value)) return true
+  if (hasHumanReplyAfter(persistedTurns.value, latestQuestionIdx.value)) return true
   return !!readSessionChoice(qs)
 })
 
-const turns = computed<ClarifyTurn[]>(() => {
-  let list = props.turns
+const displayTurns = computed<ClarifyTurn[]>(() => {
+  let list = persistedTurns.value
   // Session UX: live in-flight bubbles until persisted transcript catches up.
-  // Dedupe against props.turns so mid-stream softRefresh/loadRun human does not double-render.
+  // Dedupe against persisted turns so mid-stream softRefresh/loadRun human does not double-render.
   if (liveTurns.value.length) {
     return mergePersistedAndLiveTurns(list, liveTurns.value)
   }
@@ -347,7 +360,7 @@ const turns = computed<ClarifyTurn[]>(() => {
   } else {
     const qIdx = latestQuestionIdx.value
     const qs = latestQuestions.value
-    if (qIdx >= 0 && qs.length && !hasHumanReplyAfter(props.turns, qIdx)) {
+    if (qIdx >= 0 && qs.length && !hasHumanReplyAfter(persistedTurns.value, qIdx)) {
       const sessionText = readSessionChoice(qs)
       if (sessionText) {
         list = [...list, { role: 'human', text: sessionText, at: new Date().toISOString() }]
@@ -385,10 +398,10 @@ function turnsSemanticKey(turnList: ClarifyTurn[]): string {
 // Real turns streamed back from the run: drop optimistic choice echo + clear
 // settled live bubbles. Scroll only when stuck to bottom.
 watch(
-  () => turnsSemanticKey(props.turns),
+  () => turnsSemanticKey(persistedTurns.value),
   (key, prevKey) => {
     if (prevKey !== undefined && key === prevKey) return
-    const turnList = props.turns
+    const turnList = persistedTurns.value
     pending.value = null
     const liveHumanText = liveTurns.value[0]?.role === 'human' ? liveTurns.value[0].text || '' : ''
     const persistedCaughtUp = persistedCompletedLiveHuman(turnList, liveHumanText)
@@ -417,7 +430,7 @@ watch(
 
 // Exact unread from props.turns length deltas (ignores optimistic pending / thinking).
 watch(
-  () => props.turns.length,
+  () => persistedTurns.value.length,
   (len, prevLen) => {
     if (prevLen === undefined) return
     const delta = len - prevLen
@@ -711,8 +724,8 @@ function parseChoiceSummary(text: string): ChoiceRow[] | null {
 }
 
 function choiceRowsForAgentTurn(turnIndex: number): ChoiceRow[] | null {
-  for (let j = turnIndex + 1; j < turns.value.length; j++) {
-    const turn = turns.value[j]
+  for (let j = turnIndex + 1; j < displayTurns.value.length; j++) {
+    const turn = displayTurns.value[j]
     if (turn.role === 'human') {
       const parsed = parseChoiceSummary(turn.text)
       if (parsed) return parsed
@@ -891,7 +904,7 @@ function applyQueueState(
     busy &&
     activeItem &&
     liveAgentIdx.value < 0 &&
-    !persistedCompletedLiveHuman(props.turns, activeItem.text ?? '')
+    !persistedCompletedLiveHuman(persistedTurns.value, activeItem.text ?? '')
   ) {
     const text = activeItem.text ?? ''
     liveTurns.value = [
@@ -1146,9 +1159,16 @@ defineExpose({
     >
       <div class="flex items-center gap-2 text-[11px] text-txt3">
         <Icon name="chat" :size="13" />
-        {{ translate('pages.clarify.header', { n: turns.length }) }}
+        {{ translate('pages.clarify.header', { n: displayTurns.length }) }}
       </div>
-      <div v-for="(t, i) in turns" :key="i" class="flex gap-2.5" :class="t.role === 'human' ? 'flex-row-reverse' : ''">
+      <p
+        v-if="showApproveEmptyHint"
+        class="text-[12px] leading-relaxed text-txt2"
+        data-testid="clarify-approve-empty-hint"
+      >
+        {{ translate('pages.clarify.approveEmptyHint') }}
+      </p>
+      <div v-for="(t, i) in displayTurns" :key="i" class="flex gap-2.5" :class="t.role === 'human' ? 'flex-row-reverse' : ''">
         <div
           class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
           :class="t.role === 'agent' ? 'bg-n-clarify/15 text-n-clarify' : 'bg-accent-dim text-accent-2'"

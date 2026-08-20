@@ -1,26 +1,22 @@
 {
   "pages": {
     "dashboard": {
-      "title": "Dashboard",
-      "subtitle": "Dev workflow orchestration · system overview",
-      "kpi": {
-        "running": "Running",
-        "waitingHuman": "Waiting for human",
-        "failed": "Failed",
-        "completed": "Completed",
-        "ariaNav": "View {label} runs, currently {count}",
-        "totalTokens": "Total Tokens",
-        "totalTokensScope": "Platform · all-time",
-        "totalTokensUnreported": "Platform · no usage reported yet",
-        "totalTokensZero": "Platform · reported total is 0",
-        "totalTokensUpdating": "Updating",
-        "totalTokensAria": "Platform total Token usage, currently {count}",
-        "totalTokensAriaUnreported": "Platform total Token usage, not reported yet"
-      },
-      "boardTitle": "Requirement progress board",
-      "viewFullBoard": "View full board →",
+      "title": "Start a pre-dev clarification in one sentence",
+      "subtitle": "Pick an Approve pipeline; the first message becomes the Run title",
+      "placeholder": "Describe the goal first…",
+      "filterHint": "Only published pipelines whose first node after start is Approve",
       "selectProject": "Select a project",
-      "noProjectBoard": "No project selected. Pick a project to see its requirement progress."
+      "noProject": "No project selected. Pick a project to start an Approve pipeline from Home.",
+      "noPipelines": "This project has no published pipeline whose first node after start is Approve.",
+      "goCanvas": "Open the canvas and connect Approve after start",
+      "pickPipeline": "Select a pipeline first",
+      "noPipelineShort": "No pipeline",
+      "needText": "Describe the goal first",
+      "send": "Send",
+      "attachSoon": "Attachments will come in a later version",
+      "missingRequired": "Fill required launch fields before starting",
+      "parkTimeout": "Run started, but Approve is not ready yet. Opening run detail.",
+      "cardFallback": "Approve pre-dev clarification"
     },
     "board": {
       "title": "Requirement progress board",
@@ -1003,8 +999,8 @@
       }
     },
     "runList": {
-      "title": "Runs",
-      "subtitle": "Run history for all workflows",
+      "title": "Run history",
+      "subtitle": "Filter by project, pipeline, and status",
       "tagsLabel": "Tags",
       "queued": "queued",
       "cancelConfirm": "Only this run is stopped; the list row status will refresh after success.",
@@ -2421,6 +2417,8 @@
       "closed": "Run ended — interaction closed",
       "addImage": "Add attachment",
       "inputPlaceholder": "Add details…",
+      "approveInputPlaceholder": "Describe the goal first…",
+      "approveEmptyHint": "State the goal first. The agent will use tools to align requirements and only ask when a real decision is needed.",
       "reviewInputPlaceholder": "Add annotations or change notes…",
       "finishEarly": "End interaction",
       "finishEarlyTitle": "Enough info — ask agent to wrap up now",

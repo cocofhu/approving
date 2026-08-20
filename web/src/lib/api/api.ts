@@ -826,7 +826,7 @@ export const api = {
     trigger = 'manual',
     priority = 'normal',
     tags: string[] = [],
-    opts?: { signal?: AbortSignal; env?: { key: string; value: string; secret?: boolean }[] },
+    opts?: { signal?: AbortSignal; env?: { key: string; value: string; secret?: boolean }[]; title?: string },
   ) =>
     req<{ id: string; status: string; priority?: string }>(`/workflows/${workflowId}/runs`, {
       method: 'POST',
@@ -836,6 +836,7 @@ export const api = {
         priority,
         tags,
         ...(opts?.env && opts.env.length ? { env: opts.env } : {}),
+        ...(opts?.title && opts.title.trim() ? { title: opts.title.trim() } : {}),
       }),
       ...(opts?.signal ? { signal: opts.signal } : {}),
     }),

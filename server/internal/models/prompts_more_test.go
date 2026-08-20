@@ -41,13 +41,16 @@ func TestAgentPromptsRemainingContracts(t *testing.T) {
 		t.Fatal("approve override")
 	}
 	gotApprove := (&AgentPrompts{}).ApproveContractText()
-	for _, want := range []string{"两份强制交付", "set_clarified_requirement", "set_plan", "不是「唯一交付」"} {
+	for _, want := range []string{"两份强制交付", "set_clarified_requirement", "set_plan", "不是「唯一交付」", "用户先说明目标"} {
 		if !strings.Contains(gotApprove, want) {
 			t.Fatalf("DefaultApproveContract missing %q\n%s", want, gotApprove)
 		}
 	}
-	if !strings.Contains(DefaultApproveOpenSuffix, "第一回合必须调用 ask_question") {
+	if !strings.Contains(DefaultApproveOpenSuffix, "真实分歧") {
 		t.Fatal("DefaultApproveOpenSuffix")
+	}
+	if strings.Contains(DefaultApproveOpenSuffix, "第一回合必须调用 ask_question") {
+		t.Fatal("DefaultApproveOpenSuffix must not force first-turn ask_question")
 	}
 	if nilP.OutcomeContractText() == "" || nilP.OutcomeRetryText() == "" {
 		t.Fatal("nil outcome")

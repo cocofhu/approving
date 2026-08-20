@@ -12,10 +12,10 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// ReactOpen launches a sandbox, opens the dialogue and keeps the session
-// alive (stored in c.sessions) until the dialogue completes. The opening turn
-// can itself finish the node (e.g. the agent asks nothing) — handled uniformly
-// via finishReact.
+// ReactOpen launches a sandbox and parks the session. React nodes also run an
+// opening LLM turn (which can itself finish via finishReact when the agent
+// asks nothing). Approve parks without chatting — the first LLM turn is the
+// user's first message, injected in ReactReply.
 func (c *acpProvider) ReactOpen(ctx context.Context, req NodeReq) ReactTurn {
 	n := c.sandboxAttempts()
 	seeded := c.upstreamArtifacts(req)
@@ -24,42 +24,27 @@ func (c *acpProvider) ReactOpen(ctx context.Context, req NodeReq) ReactTurn {
 		c.host.ClearOutcome(req.RunID, req.NodeID)
 		sb, acp, home, err := c.openSandbox(ctx, req)
 		if err == nil {
+			if req.NodeType == "approve" {
+				c.parkReactSession(req, sb, acp, home)
+				return ReactTurn{}
+			}
 			chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
 			var res *sandbox.ChatResult
 			res, err = c.streamChat(chatCtx, acp, req, c.buildReactOpenPrompt(req, seeded), req.PromptImages)
 			cancel()
 			if err == nil {
-				key := reactKey(req)
-				sess := &reactSession{sb: sb, acp: acp, home: home}
-				c.mu.Lock()
-				c.sessions[key] = sess
-				c.live[key] = sb
-				c.mu.Unlock()
+				sess := c.parkReactSession(req, sb, acp, home)
 				qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
 				var usage *models.TokenUsage
 				var usageByModel models.TokenUsageByModel
 				var events []models.AcpEvent
 				absorbChat(&usage, &usageByModel, &events, res)
 
-				if len(qs) == 0 && req.NodeType == "approve" {
-					nudgeCtx, nudgeCancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
-					nudge, nudgeErr := c.streamChat(nudgeCtx, acp, req, models.DefaultApproveOpenRetry, nil)
-					nudgeCancel()
-					if nudgeErr == nil {
-						absorbChat(&usage, &usageByModel, &events, nudge)
-						qs = c.host.TakePendingQuestions(req.RunID, req.NodeID)
-						if strings.TrimSpace(nudge.Narration) != "" {
-							res.Narration = nudge.Narration
-						}
-					} else {
-						log.Warn().Err(nudgeErr).Str("node", req.NodeID).Msg("approve open ask_question nudge failed")
-					}
-				}
 				if len(qs) > 0 {
 					return ReactTurn{Msg: res.Narration, Questions: qs, Events: events, Usage: usage, UsageByModel: usageByModel}
 				}
 
-				return c.finishReact(ctx, req, key, sess, res.Narration, nil, events, usage, usageByModel)
+				return c.finishReact(ctx, req, reactKey(req), sess, res.Narration, nil, events, usage, usageByModel)
 			}
 
 			if isRetryableSandboxErr(err) {
@@ -101,18 +86,20 @@ func (c *acpProvider) rehydrateReact(ctx context.Context, req NodeReq, history [
 	for attempt := 1; ; attempt++ {
 		sb, acp, home, err := c.openSandbox(ctx, req)
 		if err == nil {
+			if req.NodeType == "approve" && !approveHasOpenedTurn(history) {
+				c.host.TakePendingQuestions(req.RunID, req.NodeID)
+				sess := c.parkReactSession(req, sb, acp, home)
+				log.Info().Str("run", req.RunID).Str("node", req.NodeID).
+					Msg("approve session rehydrated without priming chat")
+				return sess
+			}
 			chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
 			_, err = c.streamChat(chatCtx, acp, req, c.buildReactRehydratePrompt(req, seeded, history), req.PromptImages)
 			cancel()
 			if err == nil {
 
 				c.host.TakePendingQuestions(req.RunID, req.NodeID)
-				key := reactKey(req)
-				sess := &reactSession{sb: sb, acp: acp, home: home}
-				c.mu.Lock()
-				c.sessions[key] = sess
-				c.live[key] = sb
-				c.mu.Unlock()
+				sess := c.parkReactSession(req, sb, acp, home)
 				log.Info().Str("run", req.RunID).Str("node", req.NodeID).
 					Msg("react session rehydrated in a fresh sandbox")
 				return sess
@@ -166,8 +153,15 @@ func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []mod
 
 	chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
 	defer cancel()
+	prompt := withDualWriteContract(human)
+	chatImages := images
+	if approveInjectOpenPrompt(req, history) {
+		// Opening goal is not review feedback — skip the dual-write contract.
+		prompt = c.buildReactOpenPrompt(req, c.upstreamArtifacts(req)) + "\n\n## 用户消息\n" + strings.TrimRight(human, "\n")
+		chatImages = mergePromptImages(req.PromptImages, images)
+	}
 	// Clarify feedback turns dual-write agentSummary alongside narration.
-	res, err := c.streamChat(chatCtx, sess.acp, req, withDualWriteContract(human), images)
+	res, err := c.streamChat(chatCtx, sess.acp, req, prompt, chatImages)
 	if err != nil {
 		log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
 			Msg("react reply chat failed")
@@ -403,6 +397,88 @@ func (c *acpProvider) buildReactRehydratePrompt(req NodeReq, seeded []string, hi
 }
 
 func reactKey(req NodeReq) string { return req.RunID + "|" + req.NodeID }
+
+// parkReactSession stores a live sandbox+ACP session for later ReactReply.
+func (c *acpProvider) parkReactSession(req NodeReq, sb *sandbox.Sandbox, acp *sandbox.ACPClient, home string) *reactSession {
+	key := reactKey(req)
+	sess := &reactSession{sb: sb, acp: acp, home: home}
+	c.mu.Lock()
+	c.sessions[key] = sess
+	c.live[key] = sb
+	c.mu.Unlock()
+	return sess
+}
+
+// reactHistoryHasDialogue reports whether history contains a real turn
+// (non-empty text, questions, or images). An Approve session parked for the
+// user's first message has none.
+func reactHistoryHasDialogue(history []models.ReactMessage) bool {
+	for _, m := range history {
+		if strings.TrimSpace(m.Text) != "" || len(m.Questions) > 0 || len(m.Images) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// approveInjectOpenPrompt is true until Approve has completed a real opening
+// LLM turn. Failed / interrupted agent bubbles do not count — retry must still
+// receive the open contract (ReactOpen never chatted).
+func approveInjectOpenPrompt(req NodeReq, history []models.ReactMessage) bool {
+	if req.NodeType != "approve" {
+		return false
+	}
+	prior := history
+	if len(prior) > 0 && prior[len(prior)-1].Role == "human" {
+		prior = prior[:len(prior)-1]
+	}
+	return !approveHasOpenedTurn(prior)
+}
+
+// approveHasOpenedTurn reports a successful Approve agent turn (not a
+// platform failure / interrupt placeholder). Used to decide open-prompt
+// injection and whether rehydrate may skip priming.
+func approveHasOpenedTurn(history []models.ReactMessage) bool {
+	for _, m := range history {
+		if m.Role != "agent" {
+			continue
+		}
+		if m.Interrupted || isApproveFailedOpenText(m.Text) {
+			continue
+		}
+		if strings.TrimSpace(m.Text) != "" || len(m.Questions) > 0 || len(m.Images) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func isApproveFailedOpenText(text string) bool {
+	s := strings.TrimSpace(text)
+	switch {
+	case s == "(已中断)":
+		return true
+	case strings.HasPrefix(s, "(澄清回复失败:"):
+		return true
+	case strings.HasPrefix(s, "(澄清会话已失效"):
+		return true
+	default:
+		return false
+	}
+}
+
+func mergePromptImages(a, b []models.PromptImage) []models.PromptImage {
+	if len(a) == 0 {
+		return b
+	}
+	if len(b) == 0 {
+		return a
+	}
+	out := make([]models.PromptImage, 0, len(a)+len(b))
+	out = append(out, a...)
+	out = append(out, b...)
+	return out
+}
 
 // ReactCapReached exposes the same max_rounds safety cap the provider enforces
 // so the engine's auto-clarify loop (auto_var) stops after the same number of

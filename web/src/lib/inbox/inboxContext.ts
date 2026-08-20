@@ -71,7 +71,7 @@ export function adaptInboxContextToRun(ctx: InboxContextResponse, runId: string)
       [ctx.clarify.nodeId]: {
         nodeId: ctx.clarify.nodeId,
         iteration: ctx.clarify.iteration,
-        turns: ctx.clarify.turns,
+        turns: ctx.clarify.turns ?? [],
         done: ctx.clarify.done,
         previewArtifact: ctx.clarify.previewArtifact,
       },

@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/cocofhu/approving/internal/engine"
+	"github.com/cocofhu/approving/internal/models"
 	"github.com/gin-gonic/gin"
 )
 
@@ -47,4 +49,24 @@ func TestReactSessionsDTO(t *testing.T) {
 	if active["text"] != "甲" {
 		t.Fatalf("activeItem.text=%v", active["text"])
 	}
+}
+
+func TestReactConversationDTONilTurns(t *testing.T) {
+	out := reactConversationDTO(models.ReactConversation{NodeID: "predev", Iteration: 1})
+	raw, err := json.Marshal(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !json.Valid(raw) || !containsJSONArray(raw, "turns") {
+		t.Fatalf("turns must be [] not null: %s", raw)
+	}
+}
+
+func containsJSONArray(raw []byte, key string) bool {
+	var m map[string]any
+	if json.Unmarshal(raw, &m) != nil {
+		return false
+	}
+	_, ok := m[key].([]any)
+	return ok
 }

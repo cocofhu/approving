@@ -400,6 +400,9 @@ func (f *fakeProvider) ReactOpen(ctx context.Context, req runtime.NodeReq) runti
 			Events:   []models.AcpEvent{{Kind: "message", Text: "react open failed: " + setupErr.Error()}},
 		}
 	}
+	if req.NodeType == "approve" {
+		return runtime.ReactTurn{}
+	}
 	if f.recordCalls {
 		f.emitAsk(req) // records the call + sets the pending questions
 	} else {

@@ -213,16 +213,22 @@ func TestApprovePromptIgnoresTemplateAndInjectsVars(t *testing.T) {
 	if !strings.Contains(got, "邮箱验证码登录") {
 		t.Fatalf("approve should inject feature var:\n%s", got)
 	}
-	if !strings.Contains(got, "ask_question") {
-		t.Fatalf("approve seed should start with ask_question:\n%s", got)
+	if strings.Contains(got, "用 ask_question 开始") {
+		t.Fatal("approve seed must not start with ask_question")
+	}
+	if !strings.Contains(got, "以下是本次运行输入") {
+		t.Fatalf("approve seed should present run inputs:\n%s", got)
 	}
 	open := p.buildReactOpenPrompt(req, nil)
-	if !strings.Contains(open, "第一回合必须调用 ask_question") {
+	if strings.Contains(open, "第一回合必须调用 ask_question") {
+		t.Fatalf("approve must not force first-turn ask_question:\n%s", open)
+	}
+	if !strings.Contains(open, "真实分歧") {
 		t.Fatalf("approve open suffix missing:\n%s", open)
 	}
 	leftover := req
 	leftover.Config = map[string]any{
-		"prompt": "UNIQUE_USER_PROMPT_XYZ",
+		"prompt":             "UNIQUE_USER_PROMPT_XYZ",
 		"conditional_prompt": map[string]any{"when_var": "feature", "text": "CONDITIONAL_INJECT_XYZ"},
 	}
 	got = p.buildAgentPrompt(leftover, nil)
@@ -923,5 +929,62 @@ func TestDebugFetchPage(t *testing.T) {
 	if page != nil {
 		ev := sandbox.AggregateFrames(page.Events)
 		t.Logf("events=%+v", ev)
+	}
+}
+
+func TestApproveInjectOpenPrompt(t *testing.T) {
+	req := NodeReq{NodeType: "approve"}
+	if !approveInjectOpenPrompt(req, nil) {
+		t.Fatal("empty history is first turn")
+	}
+	if !approveInjectOpenPrompt(req, []models.ReactMessage{{Role: "human", Text: "做登录"}}) {
+		t.Fatal("sole human message is first turn")
+	}
+	if approveInjectOpenPrompt(req, []models.ReactMessage{
+		{Role: "agent", Text: "请补充"},
+		{Role: "human", Text: "做登录"},
+	}) {
+		t.Fatal("prior agent text is not first turn")
+	}
+	if !approveInjectOpenPrompt(req, []models.ReactMessage{
+		{Role: "human", Text: "做登录"},
+		{Role: "agent", Text: "(澄清回复失败:boom)"},
+		{Role: "human", Text: "再试"},
+	}) {
+		t.Fatal("failed open bubble must still inject")
+	}
+	if !approveInjectOpenPrompt(req, []models.ReactMessage{
+		{Role: "human", Text: "做登录"},
+		{Role: "agent", Text: "(已中断)", Interrupted: true},
+		{Role: "human", Text: "再试"},
+	}) {
+		t.Fatal("interrupted open bubble must still inject")
+	}
+	if approveInjectOpenPrompt(NodeReq{NodeType: "react"}, []models.ReactMessage{{Role: "human", Text: "x"}}) {
+		t.Fatal("react must not inject approve open prompt")
+	}
+}
+
+func TestReactHistoryHasDialogue(t *testing.T) {
+	if reactHistoryHasDialogue(nil) || reactHistoryHasDialogue([]models.ReactMessage{{Role: "agent"}}) {
+		t.Fatal("empty parked session is not dialogue")
+	}
+	if !reactHistoryHasDialogue([]models.ReactMessage{{Role: "human", Text: "hi"}}) {
+		t.Fatal("human text is dialogue")
+	}
+	if !reactHistoryHasDialogue([]models.ReactMessage{{Role: "agent", Questions: []models.ReactQuestion{{ID: "q1"}}}}) {
+		t.Fatal("questions are dialogue")
+	}
+}
+
+func TestMergePromptImages(t *testing.T) {
+	a := []models.PromptImage{{Name: "a.png"}}
+	b := []models.PromptImage{{Name: "b.png"}}
+	got := mergePromptImages(a, b)
+	if len(got) != 2 || got[0].Name != "a.png" || got[1].Name != "b.png" {
+		t.Fatalf("merge = %+v", got)
+	}
+	if mergePromptImages(nil, b)[0].Name != "b.png" {
+		t.Fatal("nil a")
 	}
 }

@@ -131,6 +131,7 @@
     },
     "table": {
       "run": "Run",
+      "title": "Title",
       "workflow": "Workflow",
       "trigger": "Trigger",
       "start": "Started",

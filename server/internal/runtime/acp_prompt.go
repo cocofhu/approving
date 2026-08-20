@@ -70,7 +70,7 @@ func (c *acpProvider) buildAgentPrompt(req NodeReq, seeded []string) string {
 // no inspector prompt, so run vars are the only opening context.
 func approveInputSeed(req NodeReq) string {
 	var b strings.Builder
-	b.WriteString("请基于下列运行输入,用 ask_question 开始澄清。")
+	b.WriteString("以下是本次运行输入,供对齐需求时参考。")
 	names := make([]string, 0, len(req.Vars))
 	for name := range req.Vars {
 		names = append(names, name)
@@ -102,7 +102,7 @@ func approveInputSeed(req NodeReq) string {
 // (and thus benefits from the flat multi-repo layout description).
 func nodeTouchesRepos(nodeType string) bool {
 	switch nodeType {
-	case "agent", "implement", "review", "test", "submit_mr", "research", "app_preview":
+	case "agent", "implement", "review", "test", "submit_mr", "research", "app_preview", "approve":
 		return true
 	default:
 		return false
@@ -232,4 +232,3 @@ func previewNodePromptExtras(req NodeReq) string {
 	}
 	return models.DefaultPreviewDirectContract
 }
-

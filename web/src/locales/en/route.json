@@ -1,12 +1,12 @@
 {
   "route": {
-    "dashboard": "Dashboard",
+    "dashboard": "Home",
     "board": "Board",
     "projects": "Projects",
     "projectDetail": "Project detail",
     "workflows": "Workflows",
     "workflowEditor": "Canvas editor",
-    "runs": "Runs",
+    "runs": "Run history",
     "runDetail": "Run detail",
     "gates": "Pending gates",
     "artifacts": "Artifacts",

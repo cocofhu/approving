@@ -23,6 +23,7 @@ const props = withDefaults(
     nodeId?: string
     iteration?: number
     turns?: ClarifyTurn[]
+    nodeType?: string
     done?: boolean
     active?: boolean
     /** Gate: hot ReAct send/revise available (unmount send when false / cold). */
@@ -63,6 +64,7 @@ const props = withDefaults(
   {
     iteration: 1,
     turns: () => [],
+    nodeType: '',
     done: false,
     active: true,
     canReject: true,
@@ -189,7 +191,8 @@ function onConfirm() {
       v-model:draft="draft"
       v-model:attachments="attachments"
       v-model:annotations="annotations"
-      :turns="turns"
+      :turns="turns ?? []"
+      :node-type="nodeType"
       :done="done"
       :active="active"
       :review-mode="mode === 'review'"

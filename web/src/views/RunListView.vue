@@ -26,6 +26,7 @@ import {
 } from '@/lib/composables/useStatusFilter'
 import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import { fmtTime, fmtDuration, truncateText, formatTrigger } from '@/lib/shared/format'
+import { displayRunTitle } from '@/lib/run/runTitle'
 import type { Run } from '@/lib/shared/types'
 
 const PAGE_SIZE = 20
@@ -133,6 +134,10 @@ function prefetchRunDetail() {
 
 function runHref(id: string) {
   return '/runs/' + id
+}
+
+function runTitle(r: Run): string {
+  return displayRunTitle(r.title)
 }
 
 /** Display fields compared before poll/list assignment to skip no-op re-renders. */
@@ -543,13 +548,13 @@ onUnmounted(() => {
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0 flex-1">
                 <div
-                  v-if="r.title"
+                  v-if="runTitle(r)"
                   class="truncate text-sm font-semibold text-txt"
-                  :title="r.title.length > 60 ? r.title : undefined"
-                >{{ truncateText(r.title, 60) }}</div>
+                  :title="runTitle(r).length > 60 ? runTitle(r) : undefined"
+                >{{ truncateText(runTitle(r), 60) }}</div>
                 <div
                   class="font-mono text-xs text-txt3"
-                  :class="r.title ? 'mt-0.5' : 'text-[13px] font-medium'"
+                  :class="runTitle(r) ? 'mt-0.5' : 'text-[13px] font-medium'"
                 >#{{ runIdShort(r.id) }}</div>
               </div>
               <StatusPill :status="r.status" size="sm" />
@@ -639,7 +644,7 @@ onUnmounted(() => {
       <table class="w-full text-sm">
         <thead>
           <tr class="text-left text-[11px] uppercase tracking-wider text-txt3">
-            <th class="px-5 py-2.5 font-medium">{{ t('common.table.run') }}</th>
+            <th class="px-5 py-2.5 font-medium">{{ t('common.table.title') }}</th>
             <th class="px-5 py-2.5 font-medium">{{ t('common.table.workflow') }}</th>
             <th class="px-5 py-2.5 font-medium">{{ t('common.table.trigger') }}</th>
             <th
@@ -742,11 +747,11 @@ onUnmounted(() => {
                 @pointerdown="prefetchRunDetail"
               >
                 <td class="max-w-[340px] px-5 py-3">
-                  <template v-if="r.title">
+                  <template v-if="runTitle(r)">
                     <div
                       class="max-w-[320px] truncate font-semibold text-txt"
-                      :title="r.title.length > 60 ? r.title : undefined"
-                    >{{ truncateText(r.title, 60) }}</div>
+                      :title="runTitle(r).length > 60 ? runTitle(r) : undefined"
+                    >{{ truncateText(runTitle(r), 60) }}</div>
                     <div class="mt-0.5 font-mono text-xs text-txt3">#{{ runIdShort(r.id) }}</div>
                   </template>
                   <span v-else class="font-mono text-[13px] font-medium text-txt3">#{{ runIdShort(r.id) }}</span>

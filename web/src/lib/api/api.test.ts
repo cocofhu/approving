@@ -385,4 +385,12 @@ describe('api.patchWorkflowNotifyPolicy', () => {
     expect(body.nodes).toBeUndefined()
     expect(body.edges).toBeUndefined()
   })
+
+  it('startRun sends title when provided', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'r1', status: 'queued' }))
+    await api.startRun('w1', { a: 1 }, 'manual', 'normal', [], { title: '  用户第一句话  ' })
+    const call = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]
+    const body = JSON.parse(String(call?.[1]?.body))
+    expect(body.title).toBe('用户第一句话')
+  })
 })

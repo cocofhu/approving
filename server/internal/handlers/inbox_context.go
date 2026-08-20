@@ -125,7 +125,7 @@ func (h *Handlers) inboxContextClarify(c *gin.Context, runID, nodeID string, ite
 	clarify := gin.H{
 		"nodeId":    conv.NodeID,
 		"iteration": conv.Iteration,
-		"turns":     conv.Messages,
+		"turns":     conv.Turns(),
 		"done":      conv.Done,
 		"label":     services.ClarifyLabel(run.Graph, conv.NodeID),
 	}

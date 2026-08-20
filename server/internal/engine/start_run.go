@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -28,6 +29,13 @@ func (e *Engine) StartRun(workflowID string, inputs map[string]any, trigger stri
 // tags and env are optional (nil/empty = unchanged legacy behavior).
 // env is validated then snapshotted onto Run.SandboxEnv (immutable after start).
 func (e *Engine) StartRunWithPriority(workflowID string, inputs map[string]any, trigger, priorityLabel string, tags []string, env []models.EnvEntry) (*models.Run, error) {
+	return e.StartRunWithTitle(workflowID, inputs, trigger, priorityLabel, tags, env, "")
+}
+
+// StartRunWithTitle is StartRunWithPriority plus an optional title override.
+// Trimmed empty titles still fall back to computeRunTitle; non-empty titles
+// are clipped to 80 runes.
+func (e *Engine) StartRunWithTitle(workflowID string, inputs map[string]any, trigger, priorityLabel string, tags []string, env []models.EnvEntry, title string) (*models.Run, error) {
 	if e.IsHalted() {
 		return nil, fmt.Errorf("server is shutting down")
 	}
@@ -50,7 +58,7 @@ func (e *Engine) StartRunWithPriority(workflowID string, inputs map[string]any, 
 	// stale graph — the "改了之后历史流水线对不上" bug. def.Graph is always the
 	// graph the user just saved; for an unedited published head it equals the
 	// published snapshot anyway.
-	return e.startRun(def, def.Graph, inputs, trigger, pri, tags, env)
+	return e.startRun(def, def.Graph, inputs, trigger, pri, tags, env, title)
 }
 
 // StartRunFromPublished creates a run using the published WorkflowVersion
@@ -77,10 +85,10 @@ func (e *Engine) StartRunFromPublished(workflowID string, inputs map[string]any,
 	if err := e.db.Where("workflow_id = ? AND version = ?", def.ID, def.Version).First(&snap).Error; err != nil {
 		return nil, fmt.Errorf("published version not found: %w", err)
 	}
-	return e.startRun(def, snap.Graph, inputs, resolved, models.PriorityNormal, tags, env)
+	return e.startRun(def, snap.Graph, inputs, resolved, models.PriorityNormal, tags, env, "")
 }
 
-func (e *Engine) startRun(def models.WorkflowDef, graph models.Graph, inputs map[string]any, trigger string, priority int, tags []string, env []models.EnvEntry) (*models.Run, error) {
+func (e *Engine) startRun(def models.WorkflowDef, graph models.Graph, inputs map[string]any, trigger string, priority int, tags []string, env []models.EnvEntry, titleOverride string) (*models.Run, error) {
 
 	if err := graph.Validate(); err != nil {
 		return nil, err
@@ -120,7 +128,7 @@ func (e *Engine) startRun(def models.WorkflowDef, graph models.Graph, inputs map
 		}
 		seeded[i].Value = nv[seeded[i].Name]
 	}
-	title := computeRunTitle(graph, seeded)
+	title := applyRunTitleOverride(computeRunTitle(graph, seeded), titleOverride)
 
 	run := models.Run{
 		ID: runID, WorkflowID: def.ID, WorkflowName: def.Name, WorkflowVersion: def.Version,
@@ -246,6 +254,22 @@ func resolveStartVars(g models.Graph, submitted map[string]any, projectVars []mo
 	return out, nil
 }
 
+const maxRunTitleRunes = 80
+
+// applyRunTitleOverride returns the trimmed override (capped at 80 runes)
+// when non-empty; otherwise the computed title.
+func applyRunTitleOverride(computed, override string) string {
+	s := strings.TrimSpace(override)
+	if s == "" {
+		return computed
+	}
+	runes := []rune(s)
+	if len(runes) > maxRunTitleRunes {
+		return string(runes[:maxRunTitleRunes])
+	}
+	return s
+}
+
 // computeRunTitle returns the string title for a run: the coerced value of the
 // first ask=true global variable (by Graph.Variables order), or "" if none.
 func computeRunTitle(g models.Graph, seeded []models.RunVariable) string {
@@ -261,13 +285,17 @@ func computeRunTitle(g models.Graph, seeded []models.RunVariable) string {
 		if !ok || isBlank(rv.Value) {
 			return ""
 		}
-		return varValueToTitleString(rv.Value, v.Type)
+		if title := varValueToTitleString(rv.Value, v.Type); title != "" {
+			return title
+		}
 	}
 	return ""
 }
 
 func varValueToTitleString(val any, typ string) string {
 	switch typ {
+	case "repos":
+		return reposTitleString(val)
 	case "bool":
 		if b, ok := val.(bool); ok {
 			return strconv.FormatBool(b)
@@ -290,7 +318,64 @@ func varValueToTitleString(val any, typ string) string {
 		}
 		return t
 	}
-	return fmt.Sprint(val)
+	s := strings.TrimSpace(fmt.Sprint(val))
+	if s == "" || strings.HasPrefix(s, "[") || strings.HasPrefix(s, "{") || strings.HasPrefix(s, "map[") {
+		return ""
+	}
+	return s
+}
+
+func reposTitleString(val any) string {
+	names := repoNamesFromVar(val)
+	switch len(names) {
+	case 0:
+		return ""
+	case 1:
+		return names[0]
+	case 2:
+		return names[0] + " · " + names[1]
+	default:
+		return fmt.Sprintf("%s · %s 等 %d 个仓库", names[0], names[1], len(names))
+	}
+}
+
+func repoNamesFromVar(val any) []string {
+	var items []any
+	switch t := val.(type) {
+	case string:
+		s := strings.TrimSpace(t)
+		if s == "" || !strings.HasPrefix(s, "[") {
+			return nil
+		}
+		if json.Unmarshal([]byte(s), &items) != nil {
+			return nil
+		}
+	case []any:
+		items = t
+	default:
+		raw, err := json.Marshal(val)
+		if err != nil || json.Unmarshal(raw, &items) != nil {
+			return nil
+		}
+	}
+	names := make([]string, 0, len(items))
+	for _, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		name := strings.TrimSpace(fmt.Sprint(m["name"]))
+		if name == "" || name == "<nil>" {
+			url := strings.TrimSpace(fmt.Sprint(m["url"]))
+			if i := strings.LastIndex(url, "/"); i >= 0 {
+				name = strings.TrimSuffix(url[i+1:], ".git")
+			}
+		}
+		if name != "" && name != "<nil>" {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 func isBlank(v any) bool {

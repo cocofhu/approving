@@ -17,11 +17,12 @@ beforeAll(async () => {
 })
 
 function mountChat(opts: {
-  turns?: ClarifyTurn[]
+  turns?: ClarifyTurn[] | null
   done?: boolean
   active?: boolean
   draft?: string
   reviewMode?: boolean
+  nodeType?: string
   confirmError?: string | null
   annotateEnabled?: boolean
   annotations?: ReactAnnotation[]
@@ -37,11 +38,12 @@ function mountChat(opts: {
       runId: 'run-1',
       nodeId: 'react-1',
       iteration: 1,
-      turns: opts.turns ?? [],
+      turns: opts.turns === undefined ? [] : opts.turns,
       done: opts.done ?? false,
       active: opts.active ?? true,
       draft: opts.draft ?? '',
       reviewMode: opts.reviewMode ?? false,
+      nodeType: opts.nodeType ?? '',
       confirmError: opts.confirmError ?? null,
       annotateEnabled: opts.annotateEnabled ?? false,
       annotations: opts.annotations ?? [],
@@ -268,6 +270,16 @@ describe('ClarifyChat', () => {
     expect(wrapper.find('[data-testid="clarify-input"]').attributes('placeholder')).toBe(
       '补充批注或修改说明…',
     )
+    wrapper.unmount()
+  })
+
+  it('uses approve first-speaker placeholder and empty hint', () => {
+    const wrapper = mountChat({ nodeType: 'approve', turns: null })
+    expect(wrapper.find('[data-testid="clarify-input"]').attributes('placeholder')).toBe(
+      '请先描述目标…',
+    )
+    expect(wrapper.find('[data-testid="clarify-approve-empty-hint"]').text()).toContain('先说明本次要做的目标')
+    expect(wrapper.find('[data-testid="clarify-scroller"]').text()).toContain('共 0 条')
     wrapper.unmount()
   })
 

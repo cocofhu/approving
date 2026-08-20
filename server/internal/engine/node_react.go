@@ -36,9 +36,14 @@ func (e *Engine) execReactEnter(c *execCtx, node *models.Node) nodeOutcome {
 				events: t.Events, usage: t.Usage, usageByModel: t.UsageByModel, sandboxSetup: true,
 			}
 		}
+		msgs := []models.ReactMessage{}
+		skipEmpty := node.Type == "approve" && strings.TrimSpace(t.Msg) == "" && len(t.Questions) == 0
+		if !skipEmpty {
+			msgs = []models.ReactMessage{{Role: "agent", Text: t.Msg,
+				At: time.Now().Format(time.RFC3339), Questions: t.Questions}}
+		}
 		conv = models.ReactConversation{RunID: c.run.ID, NodeID: node.ID, Iteration: iter, Done: t.Done,
-			Messages: []models.ReactMessage{{Role: "agent", Text: t.Msg,
-				At: time.Now().Format(time.RFC3339), Questions: t.Questions}}}
+			Messages: msgs}
 		logDB(e.db.Create(&conv), c.run.ID, "create react conversation")
 
 		if !t.Done && len(t.Questions) > 0 && e.autoReactEnabled(c, node) {

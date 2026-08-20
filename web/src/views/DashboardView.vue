@@ -1,389 +1,205 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
-import TokenUsageHoverTip from '@/components/ui/TokenUsageHoverTip.vue'
-import RunBoardColumn from '@/components/board/RunBoardColumn.vue'
-import RunBoardPreviewDrawer from '@/components/board/RunBoardPreviewDrawer.vue'
-import { api, type DashboardStats } from '@/lib/api/api'
-import { fmtCompactTokenCount } from '@/lib/run/tokenUsage'
-import { readStoredProjectId } from '@/lib/composables/useProjectContext'
-import { useRunBoard } from '@/lib/run/useRunBoard'
-import { serializeStatusQuery } from '@/lib/composables/useStatusFilter'
-import type { Run } from '@/lib/shared/types'
-
-type TokenSnapshot = {
-  totalTokens: number | null
-  workflowTokens: number | null
-  pmTokens: number | null
-}
+import RunLaunchModal from '@/components/workflow/RunLaunchModal.vue'
+import { useHomeApproveChat } from '@/lib/run/useHomeApproveChat'
 
 const router = useRouter()
 const { t } = useI18n()
-const stats = ref<DashboardStats | null>(null)
-const statsError = ref<string | null>(null)
-const statsLoading = ref(true)
-const storedProjectId = ref(readStoredProjectId())
-
-/** Last successful Token snapshot for stale-while-revalidate (never flash to 0). */
-const lastSuccessTokens = ref<TokenSnapshot | null>(null)
-const tokensRefreshing = ref(false)
-
-const hasProject = computed(() => !!storedProjectId.value)
-
-const { load, column, loading, hasLoaded, error: boardError } = useRunBoard({
-  mode: 'dashboard',
-  projectId: () => storedProjectId.value,
-})
-
-const selected = ref<Run | null>(null)
-const drawerOpen = ref(false)
-
-const kpis = computed(() => [
-  {
-    status: 'running',
-    label: t('pages.dashboard.kpi.running'),
-    value: stats.value?.running,
-    icon: 'runs',
-    cls: 'text-info',
-  },
-  {
-    status: 'waiting_human',
-    label: t('pages.dashboard.kpi.waitingHuman'),
-    value: stats.value?.waitingHuman,
-    icon: 'gate',
-    cls: 'text-warn',
-  },
-  {
-    status: 'failed',
-    label: t('pages.dashboard.kpi.failed'),
-    value: stats.value?.failed,
-    icon: 'alert',
-    cls: 'text-err',
-  },
-  {
-    status: 'completed',
-    label: t('pages.dashboard.kpi.completed'),
-    value: stats.value?.completed,
-    icon: 'check',
-    cls: 'text-ok',
-  },
-])
-
-const statsReady = computed(() => stats.value != null && !statsError.value)
-const showKpiSkeleton = computed(() => statsLoading.value && stats.value == null && !statsError.value)
-
-const displayTokens = computed<TokenSnapshot | null>(() => lastSuccessTokens.value)
-
-const tokenDisplayValue = computed(() =>
-  displayTokens.value ? displayTokens.value.totalTokens : undefined,
-)
-
-const tokenFoot = computed(() => {
-  if (tokensRefreshing.value && lastSuccessTokens.value) {
-    return t('pages.dashboard.kpi.totalTokensUpdating')
-  }
-  if (!lastSuccessTokens.value) {
-    return tokensRefreshing.value
-      ? t('pages.dashboard.kpi.totalTokensUpdating')
-      : t('pages.dashboard.kpi.totalTokensScope')
-  }
-  const total = lastSuccessTokens.value.totalTokens
-  if (total == null) return t('pages.dashboard.kpi.totalTokensUnreported')
-  if (total === 0) return t('pages.dashboard.kpi.totalTokensZero')
-  return t('pages.dashboard.kpi.totalTokensScope')
-})
-
-const tokenAria = computed(() => {
-  const total = tokenDisplayValue.value
-  if (total == null) return t('pages.dashboard.kpi.totalTokensAriaUnreported')
-  return t('pages.dashboard.kpi.totalTokensAria', {
-    count: fmtCompactTokenCount(total),
-  })
-})
-
-const showTokenTip = computed(() => tokenDisplayValue.value != null)
-
-const showInitialLoading = computed(() => hasProject.value && loading.value && !hasLoaded.value)
-const loadError = computed(() => {
-  if (statsError.value) return statsError.value
-  if (!hasProject.value) return null
-  if (boardError.value === 'missing_project') return null
-  return boardError.value
-})
-
-function openPreview(run: Run) {
-  selected.value = run
-  drawerOpen.value = true
-}
-
-function closePreview() {
-  drawerOpen.value = false
-  selected.value = null
-}
-
-function goKpiRuns(status: string) {
-  // Do not navigate as if count were 0 while stats are still loading/failed (plan g5.2).
-  if (!statsReady.value) return
-  void router.push({
-    path: '/runs',
-    query: { status: serializeStatusQuery([status]) },
-  })
-}
-
-function goFullBoard() {
-  const id = storedProjectId.value
-  if (id) {
-    void router.push({ path: `/projects/${id}`, query: { tab: 'board' } })
-    return
-  }
-  void router.push('/projects')
-}
+const {
+  projectId,
+  hasProject,
+  pipelines,
+  selected,
+  selectedId,
+  draft,
+  sending,
+  loading,
+  loadError,
+  launchOpen,
+  launchTarget,
+  launchTitle,
+  runFields,
+  runInputs,
+  runImages,
+  draftRestored,
+  load,
+  selectPipeline,
+  send,
+  closeLaunch,
+  onLaunchStarted,
+} = useHomeApproveChat()
 
 function goSelectProject() {
   void router.push('/projects')
 }
 
-function snapshotTokens(s: DashboardStats): TokenSnapshot {
-  return {
-    totalTokens: s.totalTokens ?? null,
-    workflowTokens: s.workflowTokens ?? null,
-    pmTokens: s.pmTokens ?? null,
+function goProject() {
+  const id = projectId.value
+  if (id) {
+    void router.push(`/projects/${id}`)
+    return
   }
+  goSelectProject()
 }
 
-async function refreshStats() {
-  const hadStats = stats.value != null
-  const hadSuccess = lastSuccessTokens.value != null
-  tokensRefreshing.value = true
-  statsLoading.value = true
-  try {
-    const next = await api.dashboard()
-    stats.value = next
-    statsError.value = null
-    lastSuccessTokens.value = snapshotTokens(next)
-  } catch (err) {
-    console.warn('[DashboardView] dashboard stats failed', err)
-    statsError.value = err instanceof Error ? err.message : String(err || 'stats failed')
-    // Keep last successful stats/tokens; never invent a fake 0 (plan g5).
-    if (!hadStats) stats.value = null
-    if (!hadSuccess) {
-      // First load failed: leave token snapshot null.
-    }
-  } finally {
-    tokensRefreshing.value = false
-    statsLoading.value = false
-  }
+function onPipelineChange(e: Event) {
+  const el = e.target as HTMLSelectElement | null
+  if (el) selectPipeline(el.value)
 }
 
-async function refreshBoard() {
-  storedProjectId.value = readStoredProjectId()
-  if (!storedProjectId.value) return
-  await load()
+function onComposerSubmit(e: Event) {
+  e.preventDefault()
+  void send()
 }
-
-async function refreshAll() {
-  await Promise.all([refreshStats(), refreshBoard()])
-}
-
-let timer: number | undefined
-function onVisible() {
-  if (document.visibilityState === 'visible') refreshAll()
-}
-
-onMounted(() => {
-  refreshAll()
-  timer = window.setInterval(refreshAll, 8000)
-  document.addEventListener('visibilitychange', onVisible)
-})
-
-onUnmounted(() => {
-  if (timer) window.clearInterval(timer)
-  document.removeEventListener('visibilitychange', onVisible)
-})
 </script>
 
 <template>
   <div data-testid="dashboard-view" class="flex flex-col md:h-full md:min-h-0">
-    <div class="mb-5 flex shrink-0 items-center justify-between">
-      <div>
-        <h2 class="text-lg font-semibold text-txt">{{ t('pages.dashboard.title') }}</h2>
-        <p class="text-sm text-txt3">{{ t('pages.dashboard.subtitle') }}</p>
-      </div>
-    </div>
+    <div class="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-4 py-10">
+      <p class="text-sm font-medium tracking-wide text-txt3" data-testid="home-brand">Approving</p>
+      <h2 class="mt-2 text-center text-2xl font-semibold text-txt" data-testid="home-title">
+        {{ t('pages.dashboard.title') }}
+      </h2>
+      <p class="mt-2 max-w-xl text-center text-sm text-txt3" data-testid="home-subtitle">
+        {{ t('pages.dashboard.subtitle') }}
+      </p>
 
-    <div
-      v-if="loadError"
-      class="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-2 border border-err/40 bg-err/10 px-3 py-2 text-[13px] text-err"
-      data-testid="dashboard-load-error"
-    >
-      <span>{{ t('pages.board.loadFailed') }}</span>
-      <button
-        type="button"
-        class="border border-err/40 px-2.5 py-1 text-xs text-err hover:bg-err/10"
-        data-testid="dashboard-retry"
-        @click="refreshAll()"
+      <form
+        class="mt-8 flex w-full items-center gap-2 rounded-full border border-line bg-surface px-2 py-1.5"
+        data-testid="home-composer"
+        @submit="onComposerSubmit"
       >
-        {{ t('pages.board.retry') }}
-      </button>
-    </div>
-
-    <!-- Desktop 5 / mid 3 / narrow 2; Token after status KPIs (plan g2.1) -->
-    <div
-      class="mb-6 grid shrink-0 grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5"
-      data-testid="dashboard-kpi-grid"
-      :aria-busy="statsLoading && !statsReady ? 'true' : 'false'"
-    >
-      <button
-        v-for="k in kpis"
-        :key="k.status"
-        type="button"
-        class="card w-full p-4 text-left transition focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/35"
-        :class="
-          statsReady
-            ? 'cursor-pointer hover:border-line-strong hover:bg-elevated'
-            : 'cursor-default opacity-90'
-        "
-        :data-testid="`dashboard-kpi-${k.status}`"
-        :aria-label="
-          statsReady
-            ? t('pages.dashboard.kpi.ariaNav', { label: k.label, count: k.value ?? 0 })
-            : k.label
-        "
-        :disabled="!statsReady"
-        @click="goKpiRuns(k.status)"
-      >
-        <div class="flex items-center justify-between">
-          <span class="text-[13px] text-txt2">{{ k.label }}</span>
-          <Icon :name="k.icon" :size="18" :class="k.cls" />
-        </div>
-        <div
-          v-if="showKpiSkeleton"
-          class="mt-2 h-9 w-16 bg-elevated animate-pulse"
-          data-testid="dashboard-kpi-value-skeleton"
-          aria-hidden="true"
-        />
-        <div
-          v-else-if="k.value == null"
-          class="mt-2 text-3xl font-semibold text-txt3"
-          data-testid="dashboard-kpi-value-pending"
+        <button
+          type="button"
+          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-txt3"
+          disabled
+          :title="t('pages.dashboard.attachSoon')"
+          data-testid="home-composer-plus"
         >
-          —
-        </div>
-        <div v-else class="mt-2 text-3xl font-semibold text-txt" data-testid="dashboard-kpi-value">
-          {{ k.value }}
-        </div>
-      </button>
+          <Icon name="plus" :size="16" />
+        </button>
+        <label class="sr-only" for="home-pipeline-select">{{ t('pages.dashboard.pickPipeline') }}</label>
+        <select
+          id="home-pipeline-select"
+          class="max-w-[10rem] shrink-0 cursor-pointer appearance-none rounded-full bg-accent/15 px-3 py-1 text-xs font-medium text-accent outline-none disabled:cursor-default disabled:bg-elevated disabled:text-txt3"
+          data-testid="home-pipeline-select"
+          :disabled="!pipelines.length || sending"
+          :value="selectedId"
+          @change="onPipelineChange"
+        >
+          <option v-if="!pipelines.length" value="">{{ t('pages.dashboard.noPipelineShort') }}</option>
+          <option v-for="p in pipelines" :key="p.id" :value="p.id">{{ p.name }}</option>
+        </select>
+        <input
+          v-model="draft"
+          class="min-w-0 flex-1 bg-transparent px-1 text-sm text-txt outline-none placeholder:text-txt3"
+          data-testid="home-composer-input"
+          :placeholder="t('pages.dashboard.placeholder')"
+          :disabled="sending"
+          autocomplete="off"
+        />
+        <button
+          type="submit"
+          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-txt text-base disabled:opacity-40"
+          data-testid="home-composer-send"
+          :disabled="sending"
+          :aria-label="t('pages.dashboard.send')"
+        >
+          <Icon name="arrow-up" :size="16" />
+        </button>
+      </form>
+      <p class="mt-2 text-center text-[12px] text-txt3" data-testid="home-filter-hint">
+        {{ t('pages.dashboard.filterHint') }}
+      </p>
 
       <div
-        class="group relative card w-full p-4 text-left transition"
-        :class="[
-          showTokenTip
-            ? 'cursor-help border-accent/45 bg-gradient-to-b from-accent-dim/80 to-surface hover:border-accent'
-            : 'border-accent/35 bg-gradient-to-b from-accent-dim/50 to-surface',
-          tokensRefreshing && lastSuccessTokens ? 'opacity-70' : '',
-        ]"
-        data-testid="dashboard-kpi-total-tokens"
-        role="group"
-        :aria-label="tokenAria"
-        :aria-describedby="showTokenTip ? 'dashboard-token-detail-tip' : undefined"
-        :tabindex="showTokenTip ? 0 : undefined"
-        @click.stop
+        v-if="loadError"
+        class="mt-6 flex w-full flex-wrap items-center justify-between gap-2 border border-err/40 bg-err/10 px-3 py-2 text-[13px] text-err"
+        data-testid="dashboard-load-error"
       >
-        <div class="flex items-center justify-between gap-2">
-          <span class="text-[13px] text-txt2">{{ t('pages.dashboard.kpi.totalTokens') }}</span>
-          <Icon name="sparkles" :size="18" class="text-accent-2" />
-        </div>
-        <div
-          class="mt-2 font-mono text-3xl font-semibold tabular-nums tracking-tight"
-          :class="tokenDisplayValue == null ? 'text-txt3' : 'text-txt'"
-          data-testid="dashboard-kpi-total-tokens-value"
-        >
-          {{ fmtCompactTokenCount(tokenDisplayValue) }}
-        </div>
-        <div
-          class="mt-1.5 text-[11px] text-txt3"
-          data-testid="dashboard-kpi-total-tokens-foot"
-        >
-          {{ tokenFoot }}
-        </div>
-        <TokenUsageHoverTip
-          v-if="showTokenTip && displayTokens"
-          tip-id="dashboard-token-detail-tip"
-          :total-tokens="displayTokens.totalTokens!"
-          :workflow-tokens="displayTokens.workflowTokens"
-          :pm-tokens="displayTokens.pmTokens"
-        />
-      </div>
-    </div>
-
-    <div
-      class="card"
-      :class="hasProject ? 'md:flex md:min-h-0 md:flex-1 md:flex-col md:overflow-hidden' : ''"
-    >
-      <div class="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">
-        <h3 class="text-sm font-semibold text-txt">{{ t('pages.dashboard.boardTitle') }}</h3>
+        <span>{{ t('pages.board.loadFailed') }}</span>
         <button
-          v-if="hasProject"
-          class="text-xs text-txt3 hover:text-txt"
-          data-testid="dashboard-view-full-board"
-          @click="goFullBoard"
+          type="button"
+          class="border border-err/40 px-2.5 py-1 text-xs text-err hover:bg-err/10"
+          data-testid="dashboard-retry"
+          @click="load()"
         >
-          {{ t('pages.dashboard.viewFullBoard') }}
+          {{ t('pages.board.retry') }}
         </button>
       </div>
-      <div
-        class="p-3.5"
-        :class="hasProject ? 'md:flex md:min-h-0 md:flex-1 md:flex-col' : ''"
-      >
-        <div
-          v-if="!hasProject"
-          class="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center"
-          data-testid="dashboard-board-empty"
+
+      <div v-else-if="!hasProject" class="mt-10 text-center" data-testid="home-no-project">
+        <p class="text-sm text-txt3">{{ t('pages.dashboard.noProject') }}</p>
+        <button
+          type="button"
+          class="mt-3 border border-line px-3 py-1.5 text-[13px] text-txt2 hover:bg-elevated"
+          data-testid="dashboard-select-project"
+          @click="goSelectProject"
         >
-          <p class="text-sm text-txt3">{{ t('pages.dashboard.noProjectBoard') }}</p>
-          <button
-            type="button"
-            class="border border-line bg-surface px-3 py-1.5 text-xs text-txt2 hover:border-line-strong hover:text-txt"
-            data-testid="dashboard-select-project"
-            @click="goSelectProject"
-          >
-            {{ t('pages.dashboard.selectProject') }}
-          </button>
-        </div>
-        <div
-          v-else
-          class="grid grid-cols-1 items-start gap-3.5 md:grid-cols-2 md:min-h-0 md:flex-1 md:items-stretch"
+          {{ t('pages.dashboard.selectProject') }}
+        </button>
+      </div>
+
+      <div v-else-if="loading" class="mt-10 text-sm text-txt3" data-testid="home-pipelines-loading">
+        {{ t('pages.board.loading') }}
+      </div>
+
+      <div v-else-if="!pipelines.length" class="mt-10 text-center" data-testid="home-pipelines-empty">
+        <p class="text-sm text-txt3">{{ t('pages.dashboard.noPipelines') }}</p>
+        <button
+          type="button"
+          class="mt-3 border border-line px-3 py-1.5 text-[13px] text-txt2 hover:bg-elevated"
+          data-testid="home-go-canvas"
+          @click="goProject"
         >
-          <RunBoardColumn
-            :title="t('pages.board.columns.active')"
-            :hint="t('pages.board.hints.active')"
-            accent="active"
-            :items="column('active').items"
-            :total="column('active').total"
-            :loading="showInitialLoading"
-            :loading-text="t('pages.board.loading')"
-            :empty-text="t('pages.board.empty.active')"
-            :fill="true"
-            @select="openPreview"
-          />
-          <RunBoardColumn
-            :title="t('pages.board.columns.completed')"
-            :hint="t('pages.board.hints.completedOnly')"
-            accent="done"
-            :items="column('completed').items"
-            :total="column('completed').total"
-            :loading="showInitialLoading"
-            :loading-text="t('pages.board.loading')"
-            :empty-text="t('pages.board.empty.completed')"
-            :fill="true"
-            @select="openPreview"
-          />
-        </div>
+          {{ t('pages.dashboard.goCanvas') }}
+        </button>
+      </div>
+
+      <div v-else class="mt-8 flex w-full gap-3 overflow-x-auto pb-2" data-testid="home-pipeline-cards">
+        <button
+          v-for="p in pipelines"
+          :key="p.id"
+          type="button"
+          class="card w-48 shrink-0 overflow-hidden p-0 text-left transition"
+          :class="p.id === selected?.id ? 'border-accent ring-1 ring-accent/40' : 'hover:border-line-strong'"
+          :data-testid="`home-pipeline-card-${p.id}`"
+          @click="selectPipeline(p.id)"
+        >
+          <div class="flex h-20 items-center justify-center bg-elevated">
+            <span class="flex items-center gap-1.5">
+              <span class="h-2 w-2 rounded-full bg-txt3" />
+              <span class="h-px w-6 bg-line-strong" />
+              <span class="h-2.5 w-2.5 rounded-full bg-accent" />
+              <span class="h-px w-6 bg-line-strong" />
+              <span class="h-2 w-2 rounded-full bg-txt3" />
+            </span>
+          </div>
+          <div class="px-3 py-2.5">
+            <div class="truncate text-[13px] font-medium text-txt">{{ p.name }}</div>
+            <div class="mt-0.5 line-clamp-2 text-[11px] text-txt3">
+              {{ p.description || t('pages.dashboard.cardFallback') }}
+            </div>
+          </div>
+        </button>
       </div>
     </div>
 
-    <RunBoardPreviewDrawer :open="drawerOpen" :run="selected" @close="closePreview" />
+    <RunLaunchModal
+      :open="launchOpen"
+      :workflow-id="launchTarget?.id || ''"
+      :project-id="projectId"
+      :workflow-name="launchTarget?.name || ''"
+      :fields="runFields"
+      :run-inputs="runInputs"
+      :run-images="runImages"
+      :draft-restored="draftRestored"
+      :run-title="launchTitle"
+      @close="closeLaunch()"
+      @stayed="closeLaunch()"
+      @started="onLaunchStarted($event)"
+    />
   </div>
 </template>

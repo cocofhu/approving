@@ -77,17 +77,17 @@ func projectDTO(p models.Project, workflowCount int64, tokens services.ProjectTo
 	policy := services.NormalizeProjectNotifyPolicy(p.NotifyPolicy)
 	return gin.H{
 		"id": p.ID, "name": p.Name, "description": p.Description,
-		"sandboxEnv":                services.MaskedSandboxEnv(p.SandboxEnv),
-		"variables":                 services.MaskedProjectVars(p.Variables),
-		"workflowCount":             workflowCount,
-		"totalTokens":               tokens.Total,
-		"workflowTokens":            tokens.Workflow,
-		"pmTokens":                  tokens.PM,
-		"pmLeaderEnabled":           p.PmLeaderEnabled,
-		"pmLeaderAgent":             p.PmLeaderAgent,
-		"unknownModelDisplayName":   p.UnknownModelDisplayName,
-		"notifyPolicy":              policy,
-		"createdAt":                 p.CreatedAt, "updatedAt": p.UpdatedAt,
+		"sandboxEnv":              services.MaskedSandboxEnv(p.SandboxEnv),
+		"variables":               services.MaskedProjectVars(p.Variables),
+		"workflowCount":           workflowCount,
+		"totalTokens":             tokens.Total,
+		"workflowTokens":          tokens.Workflow,
+		"pmTokens":                tokens.PM,
+		"pmLeaderEnabled":         p.PmLeaderEnabled,
+		"pmLeaderAgent":           p.PmLeaderAgent,
+		"unknownModelDisplayName": p.UnknownModelDisplayName,
+		"notifyPolicy":            policy,
+		"createdAt":               p.CreatedAt, "updatedAt": p.UpdatedAt,
 	}
 }
 
@@ -117,7 +117,7 @@ func artifactMetaDTO(a models.Artifact) gin.H {
 
 func reactConversationDTO(conv models.ReactConversation) gin.H {
 	out := gin.H{
-		"nodeId": conv.NodeID, "iteration": conv.Iteration, "turns": conv.Messages, "done": conv.Done,
+		"nodeId": conv.NodeID, "iteration": conv.Iteration, "turns": conv.Turns(), "done": conv.Done,
 	}
 	if name := strings.TrimSpace(conv.PreviewArtifact); name != "" {
 		out["previewArtifact"] = name

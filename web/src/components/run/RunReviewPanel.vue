@@ -105,7 +105,7 @@ defineExpose({
         :draft="draft"
         :attachments="attachments"
         :annotations="annotations"
-        :turns="clarify.turns"
+        :turns="clarify.turns ?? []"
         :done="clarify.done"
         :active="inputActive"
         :confirm-error="confirmError"

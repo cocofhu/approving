@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { useWorkflowAskInputs } from './useWorkflowAskInputs'
+import { isAskValueBlank, missingRequiredAskField, useWorkflowAskInputs } from './useWorkflowAskInputs'
 import type { Workflow } from '../shared/types'
 
 describe('useWorkflowAskInputs', () => {
@@ -30,5 +30,24 @@ describe('useWorkflowAskInputs', () => {
     expect(fields.value).toHaveLength(2)
     expect(fields.value[0]).toMatchObject({ key: 'title', type: 'text', default: 'hi' })
     expect(fields.value[1].default).toContain('url')
+  })
+
+  it('treats empty repos JSON as a missing required ask field', () => {
+    const wf = {
+      nodes: [
+        {
+          id: 'in',
+          type: 'input',
+          label: 'in',
+          position: { x: 0, y: 0 },
+          config: {
+            variables: [{ name: 'repos', ask: true, required: true, type: 'repos', value: [] }],
+          },
+        },
+      ],
+    } as unknown as Workflow
+    expect(missingRequiredAskField(wf)?.key).toBe('repos')
+    expect(isAskValueBlank('repos', '[]')).toBe(true)
+    expect(isAskValueBlank('text', 'hi')).toBe(false)
   })
 })

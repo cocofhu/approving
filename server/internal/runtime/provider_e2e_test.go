@@ -509,3 +509,160 @@ func TestReactPendingDuringEnsureStructuredReturnsQuestions(t *testing.T) {
 		t.Fatal("session must stay open after ensure* pending abort")
 	}
 }
+
+func approveSetup(t *testing.T, chatFor func(attempt int) chatFunc) (*acpProvider, *mcp.Host, *memStore, *fakeManager, NodeReq) {
+	t.Helper()
+	p, host, store, mgr, req := reactSetup(t, chatFor)
+	req.NodeType = "approve"
+	req.Config = map[string]any{"skill_profile": "react-agent"}
+	return p, host, store, mgr, req
+}
+
+func approveProduces() map[string]string {
+	return map[string]string{
+		mcp.ClarifiedRequirementArtifactName: mcp.MinimalValidClarifiedRequirementJSON,
+		mcp.PlanArtifactName:                 `{"goals":[{"id":"g1","title":"目标"}]}`,
+	}
+}
+
+func TestReactApproveOpenParksWithoutChat(t *testing.T) {
+	chatted := false
+	p, _, _, mgr, req := approveSetup(t, func(int) chatFunc {
+		return func(int) turnAction {
+			chatted = true
+			t.Error("approve ReactOpen must not streamChat")
+			return turnAction{}
+		}
+	})
+	open := p.ReactOpen(context.Background(), req)
+	if open.Done {
+		t.Fatal("approve open must park, not finish")
+	}
+	if open.Msg != "" || len(open.Questions) != 0 {
+		t.Fatalf("approve open must be empty idle, got msg=%q qs=%d", open.Msg, len(open.Questions))
+	}
+	if chatted {
+		t.Fatal("approve open must not chat")
+	}
+	if mgr.createCount() != 1 {
+		t.Errorf("create count = %d, want 1", mgr.createCount())
+	}
+	if mgr.bridge(0).promptAt(0) != "" {
+		t.Fatalf("open must not send a prompt, got %q", mgr.bridge(0).promptAt(0))
+	}
+	if !p.HasLiveSession(req.RunID, req.NodeID) {
+		t.Fatal("expected parked live session")
+	}
+}
+
+func TestReactApproveFirstReplyInjectsContract(t *testing.T) {
+	p, _, store, mgr, req := approveSetup(t, func(int) chatFunc {
+		return func(int) turnAction {
+			return turnAction{narration: "aligned", produces: approveProduces()}
+		}
+	})
+	req.Vars = map[string]any{"feature": "邮箱验证码登录"}
+	req.PromptImages = []models.PromptImage{{Data: "abc", MimeType: "image/png", Name: "shot.png"}}
+	open := p.ReactOpen(context.Background(), req)
+	if open.Done || len(open.Questions) != 0 {
+		t.Fatalf("expected idle park, got Done=%v qs=%d", open.Done, len(open.Questions))
+	}
+	hist := []models.ReactMessage{{Role: "human", Text: "做邮箱登录"}}
+	reply := p.ReactReply(context.Background(), req, hist, "做邮箱登录", nil, false)
+	if reply.Err != nil {
+		t.Fatalf("reply: %v", reply.Err)
+	}
+	prompt := mgr.bridge(0).promptAt(0)
+	for _, want := range []string{"做邮箱登录", "## 用户消息", "set_clarified_requirement", "邮箱验证码登录", "真实分歧"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("first reply prompt missing %q:\n%s", want, prompt)
+		}
+	}
+	if mgr.bridge(0).imageCountAt(0) != 1 {
+		t.Fatalf("first reply should attach run var images, got %d", mgr.bridge(0).imageCountAt(0))
+	}
+	if strings.Contains(prompt, "本轮输出契约") {
+		t.Fatal("opening approve turn must not append dual-write contract")
+	}
+	if _, ok := store.Get("run-r", mcp.ClarifiedRequirementArtifactName); !ok {
+		t.Error("clarified requirement not written")
+	}
+	if _, ok := store.Get("run-r", mcp.PlanArtifactName); !ok {
+		t.Error("plan not written")
+	}
+}
+
+func TestReactApproveRehydrateSkipsPrime(t *testing.T) {
+	p, _, _, mgr, req := approveSetup(t, func(int) chatFunc {
+		return func(int) turnAction {
+			return turnAction{narration: "aligned", produces: approveProduces()}
+		}
+	})
+	open := p.ReactOpen(context.Background(), req)
+	if open.Done {
+		t.Fatal("expected park")
+	}
+	key := reactKey(req)
+	p.mu.Lock()
+	sess := p.sessions[key]
+	p.mu.Unlock()
+	if sess == nil {
+		t.Fatal("expected live session")
+	}
+	sess.acp.Close()
+
+	hist := []models.ReactMessage{{Role: "human", Text: "做邮箱登录"}}
+	reply := p.ReactReply(context.Background(), req, hist, "做邮箱登录", nil, false)
+	if reply.Err != nil {
+		t.Fatalf("reply: %v", reply.Err)
+	}
+	if mgr.createCount() != 2 {
+		t.Errorf("create count = %d, want 2 (open + rehydrate)", mgr.createCount())
+	}
+	prime := mgr.bridge(1).promptAt(0)
+	if strings.Contains(prime, "会话恢复") {
+		t.Errorf("approve first-turn rehydrate must not prime with recovery chat: %q", prime)
+	}
+	for _, want := range []string{"做邮箱登录", "set_clarified_requirement", "真实分歧"} {
+		if !strings.Contains(prime, want) {
+			t.Errorf("rehydrated first reply missing %q: %q", want, prime)
+		}
+	}
+	if strings.Contains(prime, "本轮输出契约") {
+		t.Errorf("opening approve turn must not append dual-write contract: %q", prime)
+	}
+}
+
+func TestReactApproveRetryAfterFailedOpenStillInjects(t *testing.T) {
+	p, _, _, mgr, req := approveSetup(t, func(int) chatFunc {
+		return func(turn int) turnAction {
+			if turn == 0 {
+				return turnAction{sendError: "boom"}
+			}
+			return turnAction{narration: "aligned", produces: approveProduces()}
+		}
+	})
+	open := p.ReactOpen(context.Background(), req)
+	if open.Done {
+		t.Fatal("expected park")
+	}
+	first := p.ReactReply(context.Background(), req, []models.ReactMessage{{Role: "human", Text: "做登录"}}, "做登录", nil, false)
+	if first.Err == nil && !strings.Contains(first.Msg, "澄清回复失败") {
+		t.Fatalf("expected first reply to fail, got msg=%q err=%v", first.Msg, first.Err)
+	}
+	hist := []models.ReactMessage{
+		{Role: "human", Text: "做登录"},
+		{Role: "agent", Text: first.Msg},
+		{Role: "human", Text: "再试一次"},
+	}
+	reply := p.ReactReply(context.Background(), req, hist, "再试一次", nil, false)
+	if reply.Err != nil {
+		t.Fatalf("retry: %v", reply.Err)
+	}
+	prompt := mgr.bridge(0).promptAt(1)
+	for _, want := range []string{"再试一次", "set_clarified_requirement", "真实分歧"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("retry prompt missing %q:\n%s", want, prompt)
+		}
+	}
+}
