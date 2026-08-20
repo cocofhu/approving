@@ -61,7 +61,7 @@ const props = withDefaults(
     runId: string
     nodeId: string
     iteration: number
-    turns: ClarifyTurn[]
+    turns?: ClarifyTurn[] | null
     done: boolean
     active?: boolean
     reviewMode?: boolean
@@ -82,6 +82,7 @@ const props = withDefaults(
     hideFinish: false,
     confirmError: null,
     nodeType: '',
+    turns: () => [],
   },
 )
 

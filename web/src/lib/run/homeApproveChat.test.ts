@@ -36,13 +36,13 @@ describe('waitForApprovePark', () => {
         status: 'running',
         nodes: [{ id: 'ap', type: 'approve', label: '', position: { x: 0, y: 0 }, config: {} }],
         nodeRuns: {},
-      } as Run)
+      } as unknown as Run)
       .mockResolvedValueOnce({
         id: 'r1',
         status: 'waiting_human',
         nodes: [{ id: 'ap', type: 'approve', label: '', position: { x: 0, y: 0 }, config: {} }],
         nodeRuns: { ap: { nodeId: 'ap', status: 'waiting_human' } },
-      } as Run)
+      } as unknown as Run)
     const sleep = vi.fn(async () => undefined)
     const got = await waitForApprovePark('r1', { getRun, sleep, timeoutMs: 5_000, intervalMs: 1 })
     expect(got.nodeId).toBe('ap')
@@ -55,7 +55,7 @@ describe('waitForApprovePark', () => {
       status: 'running',
       nodes: [{ id: 'ap', type: 'approve', label: '', position: { x: 0, y: 0 }, config: {} }],
       nodeRuns: {},
-    } as Run)
+    } as unknown as Run)
     const sleep = vi.fn(async () => undefined)
     await expect(
       waitForApprovePark('r1', { getRun, sleep, timeoutMs: 0, intervalMs: 1 }),

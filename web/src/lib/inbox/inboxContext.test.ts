@@ -121,7 +121,7 @@ describe('adaptInboxContextToRun', () => {
       {
         type: 'clarify',
         status: 'waiting_human',
-        nodes: [{ id: 'predev', type: 'approve', label: 'Approve', position: { x: 0, y: 0 } }],
+        nodes: [{ id: 'predev', type: 'approve', label: 'Approve', position: { x: 0, y: 0 }, config: {} }],
         artifacts: [],
         nodeExecutions: {},
         clarify: {
