@@ -337,7 +337,7 @@ const latestQuestionAnswered = computed(() => {
   return !!readSessionChoice(qs)
 })
 
-const turns = computed<ClarifyTurn[]>(() => {
+const displayTurns = computed<ClarifyTurn[]>(() => {
   let list = persistedTurns.value
   // Session UX: live in-flight bubbles until persisted transcript catches up.
   // Dedupe against persisted turns so mid-stream softRefresh/loadRun human does not double-render.
@@ -723,8 +723,8 @@ function parseChoiceSummary(text: string): ChoiceRow[] | null {
 }
 
 function choiceRowsForAgentTurn(turnIndex: number): ChoiceRow[] | null {
-  for (let j = turnIndex + 1; j < turns.value.length; j++) {
-    const turn = turns.value[j]
+  for (let j = turnIndex + 1; j < displayTurns.value.length; j++) {
+    const turn = displayTurns.value[j]
     if (turn.role === 'human') {
       const parsed = parseChoiceSummary(turn.text)
       if (parsed) return parsed
@@ -1158,7 +1158,7 @@ defineExpose({
     >
       <div class="flex items-center gap-2 text-[11px] text-txt3">
         <Icon name="chat" :size="13" />
-        {{ translate('pages.clarify.header', { n: turns.length }) }}
+        {{ translate('pages.clarify.header', { n: displayTurns.length }) }}
       </div>
       <p
         v-if="showApproveEmptyHint"
@@ -1167,7 +1167,7 @@ defineExpose({
       >
         {{ translate('pages.clarify.approveEmptyHint') }}
       </p>
-      <div v-for="(t, i) in turns" :key="i" class="flex gap-2.5" :class="t.role === 'human' ? 'flex-row-reverse' : ''">
+      <div v-for="(t, i) in displayTurns" :key="i" class="flex gap-2.5" :class="t.role === 'human' ? 'flex-row-reverse' : ''">
         <div
           class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
           :class="t.role === 'agent' ? 'bg-n-clarify/15 text-n-clarify' : 'bg-accent-dim text-accent-2'"
