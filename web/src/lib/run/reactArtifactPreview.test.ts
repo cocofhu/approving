@@ -8,6 +8,8 @@ import {
   artifactFingerprint,
   canAnnotateStageArtifact,
   expandStageArtifacts,
+  filterStageGridArtifacts,
+  isKnownStageGridArtifact,
   historicalStageArtifactId,
   inboxStageRemoteKind,
   isSamePreviewVisualCopy,
@@ -28,6 +30,7 @@ import {
   previewTabId,
   resolveEffectivePreviewPin,
   resolveStageRemoteKind,
+  stageGridArtifactsWithPin,
 } from './reactArtifactPreview'
 
 function art(partial: Partial<Artifact> & Pick<Artifact, 'id' | 'name'>): Artifact {
@@ -315,5 +318,54 @@ describe('reactArtifactPreview helpers', () => {
       }),
     ).toBe('')
     expect(latestOwnNodeHtmlName([newer], '')).toBe('')
+  })
+
+  it('keeps known contract products on the pipeline grid and drops process artifacts', () => {
+    const run = {
+      nodes: [
+        { id: 'visual_bqc5', type: 'visual', label: '视觉', position: { x: 0, y: 0 }, config: {} },
+        { id: 'react_ymx0', type: 'react', label: '澄清', position: { x: 0, y: 0 }, config: {} },
+        { id: 'research', type: 'research', label: '调研', position: { x: 0, y: 0 }, config: {} },
+        { id: 'clarify', type: 'react', label: '需求', position: { x: 0, y: 0 }, config: {} },
+      ],
+    } as unknown as Run
+    const research = art({ id: 'r', name: 'research.json', kind: 'json', nodeId: 'research' })
+    const requirement = art({
+      id: 'c',
+      name: 'clarified_requirement.json',
+      kind: 'json',
+      nodeId: 'clarify',
+    })
+    const page = art({ id: 'p', name: 'page.html', kind: 'html', nodeId: 'visual_bqc5' })
+    const hist = art({
+      id: historicalStageArtifactId('visual_bqc5', 1),
+      name: 'page.html#iter-1',
+      kind: 'html',
+      nodeId: 'visual_bqc5',
+    })
+    const complete = art({ id: 'n', name: 'node_complete.json', kind: 'json', nodeId: 'visual_bqc5' })
+    const feedback = art({ id: 'f', name: 'feedback_index.json', kind: 'json', nodeId: 'react_ymx0' })
+    const copy = art({ id: 'v', name: visualNodePageName('visual_bqc5'), kind: 'html', nodeId: 'visual_bqc5' })
+    const demo = art({ id: 'd', name: 'brand-row-preview.html', kind: 'html', nodeId: 'react_ymx0' })
+    const reactPage = art({ id: 'rp', name: 'page.html', kind: 'html', nodeId: 'react_ymx0' })
+    const names = filterStageGridArtifacts(
+      [research, requirement, page, hist, complete, feedback, copy, demo, reactPage],
+      run,
+    ).map((a) => a.name)
+    expect(names).toEqual(['research.json', 'clarified_requirement.json', 'page.html', 'page.html#iter-1'])
+    expect(isKnownStageGridArtifact(complete, run)).toBe(false)
+    expect(isKnownStageGridArtifact(demo, run)).toBe(false)
+    expect(isKnownStageGridArtifact(page)).toBe(true)
+    expect(isKnownStageGridArtifact(reactPage, run)).toBe(false)
+    expect(
+      stageGridArtifactsWithPin(
+        [research, requirement, page, complete, feedback, copy, demo, reactPage],
+        run,
+        'brand-row-preview.html',
+      ).map((a) => a.name),
+    ).toEqual(['research.json', 'clarified_requirement.json', 'page.html', 'brand-row-preview.html'])
+    expect(
+      stageGridArtifactsWithPin([research, requirement, page, demo], run, 'page.html').map((a) => a.name),
+    ).toEqual(['research.json', 'clarified_requirement.json', 'page.html'])
   })
 })

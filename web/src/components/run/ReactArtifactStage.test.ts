@@ -72,19 +72,19 @@ describe('ReactArtifactStage', () => {
   it('defaults to the pipeline grid tab and opens a new preview tab on card click', async () => {
     const wrapper = mount(ReactArtifactStage, {
       props: {
-        artifacts: [art({ id: 'a1', name: 'note.md', kind: 'markdown' })],
+        artifacts: [art({ id: 'a1', name: 'research.json', kind: 'json' })],
         runId: 'run-1',
       },
       global: { plugins: [i18n()], stubs },
     })
     expect(wrapper.get('[data-testid="react-artifact-tab-grid"]').attributes('aria-selected')).toBe('true')
-    expect(wrapper.get('[data-testid="react-artifact-grid"]').text()).toContain('note.md')
-    expect(wrapper.find('[data-testid="react-artifact-tab-note.md"]').exists()).toBe(false)
-    await wrapper.get('[data-testid="react-artifact-card-note.md"]').trigger('click')
+    expect(wrapper.get('[data-testid="react-artifact-grid"]').text()).toContain('research.json')
+    expect(wrapper.find('[data-testid="react-artifact-tab-research.json"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="react-artifact-card-research.json"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="react-artifact-tab-grid"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="react-artifact-tab-note.md"]').attributes('aria-selected')).toBe('true')
-    expect(wrapper.get('[data-testid="artifact-preview"]').text()).toBe('note.md|off')
+    expect(wrapper.get('[data-testid="react-artifact-tab-research.json"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="artifact-preview"]').text()).toBe('research.json|off')
     wrapper.unmount()
   })
 
@@ -92,22 +92,22 @@ describe('ReactArtifactStage', () => {
     const wrapper = mount(ReactArtifactStage, {
       props: {
         artifacts: [
-          art({ id: 'a1', name: 'homepage-preview.html', kind: 'html' }),
-          art({ id: 'a2', name: 'copy-variants.md', kind: 'markdown' }),
+          art({ id: 'a1', name: 'research.json', kind: 'json' }),
+          art({ id: 'a2', name: 'plan.json', kind: 'json' }),
         ],
         runId: 'run-1',
       },
       global: { plugins: [i18n()], stubs },
     })
-    await wrapper.get('[data-testid="react-artifact-card-homepage-preview.html"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-card-research.json"]').trigger('click')
     await wrapper.get('[data-testid="react-artifact-tab-grid"]').trigger('click')
-    await wrapper.get('[data-testid="react-artifact-card-copy-variants.md"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-card-plan.json"]').trigger('click')
     await flushPromises()
-    expect(wrapper.find('[data-testid="react-artifact-tab-homepage-preview.html"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="react-artifact-tab-copy-variants.md"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-testid="react-artifact-tab-research.json"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="react-artifact-tab-plan.json"]').attributes('aria-selected')).toBe('true')
     expect(wrapper.get('[data-testid="react-artifact-tab-grid"]').attributes('aria-selected')).toBe('false')
     const previews = wrapper.findAll('[data-testid="artifact-preview"]')
-    expect(previews.map((n) => n.text())).toEqual(['homepage-preview.html|off', 'copy-variants.md|off'])
+    expect(previews.map((n) => n.text())).toEqual(['research.json|off', 'plan.json|off'])
     wrapper.unmount()
   })
 
@@ -115,8 +115,8 @@ describe('ReactArtifactStage', () => {
     const wrapper = mount(ReactArtifactStage, {
       props: {
         artifacts: [
-          art({ id: 'a1', name: 'homepage-preview.html', kind: 'html', nodeId: 'clarify' }),
-          art({ id: 'a2', name: 'copy-variants.md', kind: 'markdown', nodeId: 'clarify' }),
+          art({ id: 'a1', name: 'research.json', kind: 'json', nodeId: 'clarify' }),
+          art({ id: 'a2', name: 'plan.json', kind: 'json', nodeId: 'clarify' }),
         ],
         runId: 'run-1',
         nodeId: 'clarify',
@@ -124,18 +124,18 @@ describe('ReactArtifactStage', () => {
       },
       global: { plugins: [i18n()], stubs },
     })
-    await wrapper.get('[data-testid="react-artifact-card-homepage-preview.html"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-card-research.json"]').trigger('click')
     await wrapper.get('[data-testid="react-artifact-tab-grid"]').trigger('click')
-    await wrapper.get('[data-testid="react-artifact-card-copy-variants.md"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-card-plan.json"]').trigger('click')
     await flushPromises()
     const previews = wrapper.findAll('[data-testid="artifact-preview"]')
-    expect(previews.map((n) => n.text())).toEqual(['homepage-preview.html|on', 'copy-variants.md|on'])
+    expect(previews.map((n) => n.text())).toEqual(['research.json|on', 'plan.json|on'])
     wrapper.unmount()
   })
 
   it('pins a preview tab when previewArtifact is set without dropping other open tabs', async () => {
     const first = art({ id: 'a1', name: 'page.html', kind: 'html', revision: 1, updatedAt: 't1' })
-    const note = art({ id: 'a2', name: 'note.md', kind: 'markdown' })
+    const note = art({ id: 'a2', name: 'research.json', kind: 'json' })
     const wrapper = mount(ReactArtifactStage, {
       props: {
         artifacts: [first, note],
@@ -146,17 +146,17 @@ describe('ReactArtifactStage', () => {
     })
     await flushPromises()
     expect(wrapper.get('[data-testid="react-artifact-tab-page.html"]').attributes('aria-selected')).toBe('true')
-    await wrapper.get('[data-testid="react-artifact-card-note.md"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-card-research.json"]').trigger('click')
     await flushPromises()
-    expect(wrapper.find('[data-testid="react-artifact-tab-note.md"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="react-artifact-tab-note.md"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-testid="react-artifact-tab-research.json"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="react-artifact-tab-research.json"]').attributes('aria-selected')).toBe('true')
     await wrapper.setProps({
       artifacts: [{ ...first, revision: 2, updatedAt: 't2', sizeBytes: 99 }, note],
       previewArtifact: 'page.html',
     })
     await flushPromises()
     expect(wrapper.find('[data-testid="react-artifact-tab-page.html"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="react-artifact-tab-note.md"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="react-artifact-tab-research.json"]').attributes('aria-selected')).toBe('true')
     expect(wrapper.get('[data-testid="react-artifact-preview-page.html"]').text()).toContain('page.html')
     wrapper.unmount()
   })
@@ -180,7 +180,7 @@ describe('ReactArtifactStage', () => {
   })
 
   it('opens a pinned tab when the artifact arrives after previewArtifact while still on the grid', async () => {
-    const note = art({ id: 'a2', name: 'note.md', kind: 'markdown' })
+    const note = art({ id: 'a2', name: 'research.json', kind: 'json' })
     const page = art({ id: 'a1', name: 'page.html', kind: 'html', revision: 1 })
     const wrapper = mount(ReactArtifactStage, {
       props: {
@@ -200,7 +200,7 @@ describe('ReactArtifactStage', () => {
   })
 
   it('does not steal focus when a pinned artifact arrives after the user opened another tab', async () => {
-    const note = art({ id: 'a2', name: 'note.md', kind: 'markdown' })
+    const note = art({ id: 'a2', name: 'research.json', kind: 'json' })
     const page = art({ id: 'a1', name: 'page.html', kind: 'html', revision: 1 })
     const wrapper = mount(ReactArtifactStage, {
       props: {
@@ -210,20 +210,20 @@ describe('ReactArtifactStage', () => {
       },
       global: { plugins: [i18n()], stubs },
     })
-    await wrapper.get('[data-testid="react-artifact-card-note.md"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-card-research.json"]').trigger('click')
     await flushPromises()
-    expect(wrapper.get('[data-testid="react-artifact-tab-note.md"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="react-artifact-tab-research.json"]').attributes('aria-selected')).toBe('true')
     await wrapper.setProps({ artifacts: [note, page], previewArtifact: 'page.html' })
     await flushPromises()
     expect(wrapper.find('[data-testid="react-artifact-tab-page.html"]').exists()).toBe(false)
-    expect(wrapper.get('[data-testid="react-artifact-tab-note.md"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="react-artifact-tab-research.json"]').attributes('aria-selected')).toBe('true')
     wrapper.unmount()
   })
 
   it('does not steal focus when an unrelated artifact is added under the same pin', async () => {
     const page = art({ id: 'a1', name: 'page.html', kind: 'html' })
-    const note = art({ id: 'a2', name: 'note.md', kind: 'markdown' })
-    const extra = art({ id: 'a3', name: 'extra.md', kind: 'markdown' })
+    const note = art({ id: 'a2', name: 'research.json', kind: 'json' })
+    const extra = art({ id: 'a3', name: 'plan.json', kind: 'json' })
     const wrapper = mount(ReactArtifactStage, {
       props: {
         artifacts: [page, note],
@@ -235,10 +235,10 @@ describe('ReactArtifactStage', () => {
     await flushPromises()
     expect(wrapper.get('[data-testid="react-artifact-tab-page.html"]').attributes('aria-selected')).toBe('true')
     await wrapper.get('[data-testid="react-artifact-tab-grid"]').trigger('click')
-    await wrapper.get('[data-testid="react-artifact-card-note.md"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-card-research.json"]').trigger('click')
     await wrapper.setProps({ artifacts: [page, note, extra], previewArtifact: 'page.html' })
     await flushPromises()
-    expect(wrapper.get('[data-testid="react-artifact-tab-note.md"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="react-artifact-tab-research.json"]').attributes('aria-selected')).toBe('true')
     wrapper.unmount()
   })
 
@@ -246,27 +246,27 @@ describe('ReactArtifactStage', () => {
     const wrapper = mount(ReactArtifactStage, {
       props: {
         artifacts: [
-          art({ id: 'a1', name: 'a.html', kind: 'html' }),
-          art({ id: 'a2', name: 'b.md', kind: 'markdown' }),
+          art({ id: 'a1', name: 'research.json', kind: 'json' }),
+          art({ id: 'a2', name: 'plan.json', kind: 'json' }),
         ],
         runId: 'run-1',
       },
       global: { plugins: [i18n()], stubs },
     })
-    await wrapper.get('[data-testid="react-artifact-card-a.html"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-card-research.json"]').trigger('click')
     await wrapper.get('[data-testid="react-artifact-tab-grid"]').trigger('click')
-    await wrapper.get('[data-testid="react-artifact-card-b.md"]').trigger('click')
-    await wrapper.get('[data-testid="react-artifact-tab-close-b.md"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-card-plan.json"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-tab-close-plan.json"]').trigger('click')
     await flushPromises()
-    expect(wrapper.find('[data-testid="react-artifact-tab-b.md"]').exists()).toBe(false)
-    expect(wrapper.get('[data-testid="react-artifact-tab-a.html"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-testid="react-artifact-tab-plan.json"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="react-artifact-tab-research.json"]').attributes('aria-selected')).toBe('true')
     wrapper.unmount()
   })
 
   it('opens a noVNC tab from the pipeline card without replacing artifact tabs', async () => {
     const wrapper = mount(ReactArtifactStage, {
       props: {
-        artifacts: [art({ id: 'a1', name: 'note.md', kind: 'markdown' })],
+        artifacts: [art({ id: 'a1', name: 'research.json', kind: 'json' })],
         runId: 'run-1',
         nodeId: 'clarify',
         annotatable: true,
@@ -275,16 +275,16 @@ describe('ReactArtifactStage', () => {
     })
     await flushPromises()
     expect(wrapper.find('[data-testid="react-artifact-card-novnc"]').exists()).toBe(true)
-    await wrapper.get('[data-testid="react-artifact-card-note.md"]').trigger('click')
+    await wrapper.get('[data-testid="react-artifact-card-research.json"]').trigger('click')
     await wrapper.get('[data-testid="react-artifact-tab-grid"]').trigger('click')
     await wrapper.get('[data-testid="react-artifact-card-novnc"]').trigger('click')
     await flushPromises()
-    expect(wrapper.find('[data-testid="react-artifact-tab-note.md"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-artifact-tab-research.json"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="react-artifact-tab-novnc"]').attributes('aria-selected')).toBe('true')
     expect(wrapper.get('[data-testid="novnc-stub"]').attributes('data-inspectable')).toBe('1')
     await wrapper.get('[data-testid="react-artifact-tab-close-novnc"]').trigger('click')
     expect(wrapper.find('[data-testid="react-artifact-tab-novnc"]').exists()).toBe(false)
-    expect(wrapper.get('[data-testid="react-artifact-tab-note.md"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="react-artifact-tab-research.json"]').attributes('aria-selected')).toBe('true')
     wrapper.unmount()
   })
 
@@ -361,7 +361,8 @@ describe('ReactArtifactStage', () => {
       nodeId: 'visual_1',
       content: '<p>new</p>',
     })
-    const json = art({ id: 'json', name: 'node_complete.json', kind: 'json', nodeId: 'visual_1' })
+    const json = art({ id: 'json', name: 'research.json', kind: 'json', nodeId: 'research' })
+    const complete = art({ id: 'nc', name: 'node_complete.json', kind: 'json', nodeId: 'visual_1' })
     const other = art({
       id: 'other',
       name: 'visual_other.page.html',
@@ -371,7 +372,7 @@ describe('ReactArtifactStage', () => {
     })
     const wrapper = mount(ReactArtifactStage, {
       props: {
-        artifacts: [live, alias, json, other],
+        artifacts: [live, alias, json, complete, other],
         runId: 'run-1',
         run: {
           id: 'run-1',
@@ -396,8 +397,9 @@ describe('ReactArtifactStage', () => {
     expect(wrapper.find('[data-testid="react-artifact-card-page.html"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="react-artifact-card-visual_1.page.html"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="react-artifact-card-page.html#iter-1"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="react-artifact-card-node_complete.json"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="react-artifact-card-visual_other.page.html"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-artifact-card-research.json"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-artifact-card-node_complete.json"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="react-artifact-card-visual_other.page.html"]').exists()).toBe(false)
     expect(wrapper.findAll('[data-testid="react-artifact-card-page.html"]').length).toBe(1)
     expect(wrapper.get('[data-testid="react-artifact-version-chip-btn-page.html"]').text()).toContain('v2 · 最新')
     expect(wrapper.find('[data-testid="react-artifact-card-iteration"]').exists()).toBe(false)
@@ -419,10 +421,11 @@ describe('ReactArtifactStage', () => {
 
   it('hides the version chip for a single snapshot and still shows json cards', async () => {
     const live = art({ id: 'live', name: 'page.html', kind: 'html', nodeId: 'visual_1', content: '<p>only</p>' })
-    const json = art({ id: 'json', name: 'node_complete.json', kind: 'json', nodeId: 'visual_1' })
+    const json = art({ id: 'json', name: 'research.json', kind: 'json', nodeId: 'research' })
+    const complete = art({ id: 'nc', name: 'node_complete.json', kind: 'json', nodeId: 'visual_1' })
     const wrapper = mount(ReactArtifactStage, {
       props: {
-        artifacts: [live, json],
+        artifacts: [live, json, complete],
         runId: 'run-1',
         run: {
           id: 'run-1',
@@ -438,7 +441,8 @@ describe('ReactArtifactStage', () => {
     })
     await flushPromises()
     expect(wrapper.find('[data-testid="react-artifact-version-chip"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="react-artifact-card-node_complete.json"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-artifact-card-research.json"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-artifact-card-node_complete.json"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -480,7 +484,7 @@ describe('ReactArtifactStage', () => {
     wrapper.unmount()
   })
 
-  it('uses a footer chip on a standalone visual_*.page.html card when page.html is absent', async () => {
+  it('hides a standalone visual_*.page.html card from the known-product grid', async () => {
     const alias = art({
       id: 'alias',
       name: 'visual_1.page.html',
@@ -509,11 +513,8 @@ describe('ReactArtifactStage', () => {
     })
     await flushPromises()
     expect(wrapper.find('[data-testid="react-artifact-card-page.html"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="react-artifact-card-visual_1.page.html"]').exists()).toBe(true)
-    await wrapper.get('[data-testid="react-artifact-version-chip-btn-visual_1.page.html"]').trigger('click')
-    await wrapper.get('[data-testid="react-artifact-version-option-v1"]').trigger('click')
-    await flushPromises()
-    expect(wrapper.get('[data-testid="artifact-preview"]').text()).toBe('visual_1.page.html|off|<p>old</p>')
+    expect(wrapper.find('[data-testid="react-artifact-card-visual_1.page.html"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="react-artifact-grid-empty"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
@@ -579,6 +580,8 @@ describe('ReactArtifactStage', () => {
       'true',
     )
     expect(wrapper.find('[data-testid="react-artifact-tab-page.html"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="react-artifact-card-brand-row-preview.html"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-artifact-card-a.html"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -664,6 +667,91 @@ describe('ReactArtifactStage', () => {
     await flushPromises()
     expect(wrapper.get('[data-testid="react-artifact-tab-grid"]').attributes('aria-selected')).toBe('true')
     expect(wrapper.get('[data-testid="react-artifact-preview-page.html"]').text()).toContain('page.html')
+    wrapper.unmount()
+  })
+
+  it('shows only known products on the visual pipeline grid and pins page.html (s6)', async () => {
+    const research = art({ id: 'r', name: 'research.json', kind: 'json', nodeId: 'research' })
+    const requirement = art({
+      id: 'c',
+      name: 'clarified_requirement.json',
+      kind: 'json',
+      nodeId: 'react_ymx0',
+    })
+    const page = art({ id: 'p', name: 'page.html', kind: 'html', nodeId: 'visual_bqc5' })
+    const complete = art({ id: 'n', name: 'node_complete.json', kind: 'json', nodeId: 'visual_bqc5' })
+    const feedback = art({ id: 'f', name: 'feedback_index.json', kind: 'json', nodeId: 'react_ymx0' })
+    const copy = art({ id: 'v', name: 'visual_bqc5.page.html', kind: 'html', nodeId: 'visual_bqc5' })
+    const demo = art({ id: 'd', name: 'brand-row-preview.html', kind: 'html', nodeId: 'react_ymx0' })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [research, requirement, page, complete, feedback, copy, demo],
+        runId: 'run-1',
+        run: {
+          id: 'run-1',
+          nodes: [
+            { id: 'visual_bqc5', type: 'visual', label: '视觉', position: { x: 0, y: 0 }, config: {} },
+            { id: 'react_ymx0', type: 'react', label: '澄清', position: { x: 0, y: 0 }, config: {} },
+            { id: 'research', type: 'research', label: '调研', position: { x: 0, y: 0 }, config: {} },
+          ],
+        } as any,
+        nodeId: 'visual_bqc5',
+        nodeType: 'visual',
+        remoteKind: 'off',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="react-artifact-card-research.json"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-artifact-card-clarified_requirement.json"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-artifact-card-page.html"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-artifact-card-node_complete.json"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="react-artifact-card-feedback_index.json"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="react-artifact-card-visual_bqc5.page.html"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="react-artifact-card-brand-row-preview.html"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="react-artifact-tab-page.html"]').attributes('aria-selected')).toBe('true')
+    wrapper.unmount()
+  })
+
+  it('keeps the react auto-pin on the grid so closing the tab remains reopenable', async () => {
+    const requirement = art({
+      id: 'c',
+      name: 'clarified_requirement.json',
+      kind: 'json',
+      nodeId: 'react_ymx0',
+    })
+    const demo = art({ id: 'd', name: 'brand-row-preview.html', kind: 'html', nodeId: 'react_ymx0' })
+    const complete = art({ id: 'n', name: 'node_complete.json', kind: 'json', nodeId: 'react_ymx0' })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [requirement, demo, complete],
+        runId: 'run-1',
+        run: {
+          id: 'run-1',
+          nodes: [{ id: 'react_ymx0', type: 'react', label: '澄清', position: { x: 0, y: 0 }, config: {} }],
+        } as any,
+        nodeId: 'react_ymx0',
+        nodeType: 'react',
+        remoteKind: 'off',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tab-brand-row-preview.html"]').attributes('aria-selected')).toBe(
+      'true',
+    )
+    expect(wrapper.find('[data-testid="react-artifact-card-brand-row-preview.html"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-artifact-card-node_complete.json"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="react-artifact-tab-close-brand-row-preview.html"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="react-artifact-tab-brand-row-preview.html"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="react-artifact-tab-grid"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-testid="react-artifact-card-brand-row-preview.html"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="react-artifact-card-brand-row-preview.html"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tab-brand-row-preview.html"]').attributes('aria-selected')).toBe(
+      'true',
+    )
     wrapper.unmount()
   })
 })

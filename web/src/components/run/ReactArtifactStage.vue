@@ -37,6 +37,7 @@ import {
   resolveStageRemoteKind,
   resolveVisualPagePreviewArtifact,
   shouldActivatePinnedPreview,
+  stageGridArtifactsWithPin,
   type ReactStageRemoteKind,
   type VisualPageVersionChoice,
 } from '@/lib/run/reactArtifactPreview'
@@ -133,9 +134,20 @@ const resolvedRemoteKind = computed(() =>
 const stageNode = computed(() => props.run?.nodes?.find((n) => n.id === props.nodeId) || null)
 const resolvedNodeType = computed(() => String(props.nodeType || stageNode.value?.type || '').trim())
 const stageArtifacts = computed(() => expandStageArtifacts(props.artifacts, props.run, stageNode.value))
+const effectivePin = computed(() =>
+  resolveEffectivePreviewPin({
+    previewArtifact: props.previewArtifact,
+    artifacts: stageArtifacts.value,
+    nodeType: resolvedNodeType.value,
+    nodeId: props.nodeId,
+  }),
+)
+const gridArtifacts = computed(() =>
+  stageGridArtifactsWithPin(stageArtifacts.value, props.run, effectivePin.value),
+)
 const canOpenNovnc = computed(() => resolvedRemoteKind.value !== 'off')
 const showingNovnc = computed(() => activeTab.value === REACT_STAGE_TAB_NOVNC)
-const showGridCards = computed(() => stageArtifacts.value.length > 0 || canOpenNovnc.value)
+const showGridCards = computed(() => gridArtifacts.value.length > 0 || canOpenNovnc.value)
 const remoteCardTitle = computed(() =>
   resolvedRemoteKind.value === 'sandbox'
     ? t('pages.reactArtifactStage.novncCardTitle')
@@ -300,13 +312,7 @@ const activePreviewName = computed(() => previewTabName(activeTab.value))
 watch(
   () => {
     const arts = stageArtifacts.value
-    const pin = resolveEffectivePreviewPin({
-      previewArtifact: props.previewArtifact,
-      artifacts: arts,
-      nodeType: resolvedNodeType.value,
-      nodeId: props.nodeId,
-    })
-    return [pin, arts.map((a) => a.name)] as const
+    return [effectivePin.value, arts.map((a) => a.name)] as const
   },
   ([pin, names], prev) => {
     const nameSet = new Set(names)
@@ -335,7 +341,7 @@ watch(
 
 watch(
   () =>
-    stageArtifacts.value
+    gridArtifacts.value
       .filter((a) => a.kind === 'html')
       .map((a) => artifactFingerprint(a))
       .join('|'),
@@ -344,7 +350,7 @@ watch(
     htmlThumbAbort?.abort()
     const ac = new AbortController()
     htmlThumbAbort = ac
-    const htmlArts = stageArtifacts.value.filter((a) => a.kind === 'html')
+    const htmlArts = gridArtifacts.value.filter((a) => a.kind === 'html')
     const next: Record<string, string> = {}
     for (const a of htmlArts) {
       const fp = artifactFingerprint(a)
@@ -552,7 +558,7 @@ onBeforeUnmount(() => {
           </div>
         </button>
         <div
-          v-for="a in stageArtifacts"
+          v-for="a in gridArtifacts"
           :key="a.id"
           role="button"
           tabindex="0"

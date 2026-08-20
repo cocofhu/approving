@@ -1,5 +1,11 @@
 import type { Artifact, NodeRun, Run, WFNode } from '@/lib/shared/types'
 import { productArtifactName } from '@/lib/run/productNodeArtifacts'
+import { OUTPUT_KEY_TO_ARTIFACT } from '@/lib/run/structuredArtifacts'
+
+const KNOWN_STAGE_GRID_NAMES = new Set(Object.values(OUTPUT_KEY_TO_ARTIFACT))
+const NODE_COMPLETE_ARTIFACT = 'node_complete.json'
+const FEEDBACK_INDEX_NAME = 'feedback_index.json'
+const FEEDBACK_PREFIX = 'feedback.'
 
 export const REACT_STAGE_TAB_GRID = 'grid'
 export const REACT_STAGE_TAB_NOVNC = 'novnc'
@@ -160,6 +166,62 @@ export function expandStageArtifacts(
   if (!owner) return list
   const alias = visualNodePageName(owner)
   return list.filter((a) => a.name !== alias)
+}
+
+function gridArtifactBaseName(name: string): string {
+  return String(name || '').replace(/#iter-\d+$/, '')
+}
+
+function isFeedbackStageArtifactName(name: string): boolean {
+  return name === FEEDBACK_INDEX_NAME || name.startsWith(FEEDBACK_PREFIX)
+}
+
+function producerNodeType(run: Run | null | undefined, nodeId: string | null | undefined): string {
+  const id = String(nodeId || '').trim()
+  if (!id || !run?.nodes?.length) return ''
+  return String(run.nodes.find((n) => n.id === id)?.type || '').trim()
+}
+
+/** Known contract products for the pipeline grid (manifest names + visual page.html). */
+export function isKnownStageGridArtifact(
+  artifact: Pick<Artifact, 'name' | 'kind' | 'nodeId'> | null | undefined,
+  run?: Run | null,
+): boolean {
+  if (!artifact) return false
+  const name = String(artifact.name || '').trim()
+  if (!name || name === NODE_COMPLETE_ARTIFACT || isFeedbackStageArtifactName(name)) return false
+  const base = gridArtifactBaseName(name)
+  if (!KNOWN_STAGE_GRID_NAMES.has(base)) return false
+  if (base !== visualProductPageName()) return true
+  const type = producerNodeType(run, artifact.nodeId)
+  if (type) return type === 'visual'
+  // run present but producer unknown → deny; no run → allow (call sites without graph).
+  if (run?.nodes?.length) return false
+  return true
+}
+
+/** Pipeline-grid subset; preview tabs / pins still use the unfiltered stage list. */
+export function filterStageGridArtifacts(artifacts: Artifact[], run?: Run | null): Artifact[] {
+  return artifacts.filter((a) => isKnownStageGridArtifact(a, run))
+}
+
+/**
+ * Grid cards: known products, plus the effective pin so a closed auto-pin
+ * (e.g. react demo HTML) remains reopenable from the pipeline grid.
+ */
+export function stageGridArtifactsWithPin(
+  artifacts: Artifact[],
+  run?: Run | null,
+  pin?: string | null,
+): Artifact[] {
+  const filtered = filterStageGridArtifacts(artifacts, run)
+  const name = String(pin || '').trim()
+  if (!name || filtered.some((a) => a.name === name)) return filtered
+  const pinned = artifacts.find((a) => a.name === name)
+  if (!pinned) return filtered
+  const keepIds = new Set(filtered.map((a) => a.id))
+  keepIds.add(pinned.id)
+  return artifacts.filter((a) => keepIds.has(a.id))
 }
 
 export function resolveStageRemoteKind(opts: {
