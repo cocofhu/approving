@@ -481,6 +481,10 @@ describe('reactArtifactPreview helpers', () => {
       summary: '友好名 + 简单预览',
     })
     expect(extractVisualHtmlSummary('<html><body><div>x</div></body></html>')).toBeNull()
+    expect(extractVisualHtmlSummary('<title>A &amp;lt; B &amp; C</title>')).toEqual({
+      title: 'A &lt; B & C',
+      summary: '',
+    })
   })
 
   it('builds text thumbs for JSON/visual HTML and html thumbs for other HTML', () => {

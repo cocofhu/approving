@@ -16,7 +16,17 @@ const { mockAddClarifyAnnotation } = vi.hoisted(() => ({
 
 vi.mock('@/lib/api/api', () => ({
   api: {
-    artifactContent: vi.fn(async () => ({ content: '<html>thumb</html>' })),
+    artifactContent: vi.fn(async () => ({
+      id: 'thumb',
+      name: 'thumb.html',
+      kind: 'html',
+      nodeId: 'react',
+      runId: 'run-1',
+      workflowName: 'wf',
+      sizeBytes: 18,
+      createdAt: '2026-08-01T00:00:00Z',
+      content: '<html>thumb</html>',
+    })),
     getRunNodeSandbox: vi.fn(async () => ({ id: 42 })),
   },
 }))
@@ -74,7 +84,9 @@ describe('ReactArtifactStage', () => {
   beforeEach(() => {
     // Stage specs use runId values starting with "run-"; keep unrelated helper keys intact for parallel files.
     resetStageOpenStateForTests(':run-')
-    vi.mocked(api.artifactContent).mockImplementation(async () => ({ content: '<html>thumb</html>' }))
+    vi.mocked(api.artifactContent).mockImplementation(async () =>
+      art({ id: 'thumb', name: 'thumb.html', kind: 'html', content: '<html>thumb</html>' }),
+    )
   })
   afterEach(() => {
     resetStageOpenStateForTests(':run-')
@@ -887,10 +899,10 @@ describe('ReactArtifactStage', () => {
         '<html><head><title>Approving · Demo</title></head><body><div class="banner"><h1>主标题</h1><p>banner 摘要</p></div></body></html>',
     })
     vi.mocked(api.artifactContent).mockImplementation(async (id: string) => {
-      if (id === 'r') return { content: research.content as string }
-      if (id === 'e') return { content: empty.content as string }
-      if (id === 'p') return { content: page.content as string }
-      return { content: '' }
+      if (id === 'r') return research
+      if (id === 'e') return empty
+      if (id === 'p') return page
+      return art({ id, name: id, content: '' })
     })
     const wrapper = mount(ReactArtifactStage, {
       props: {
