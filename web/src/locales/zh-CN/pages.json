@@ -1003,8 +1003,8 @@
       }
     },
     "runList": {
-      "title": "运行",
-      "subtitle": "所有工作流的运行记录",
+      "title": "运行记录",
+      "subtitle": "按项目、流水线与状态筛选",
       "tagsLabel": "标签",
       "queued": "入队",
       "cancelConfirm": "仅停止这一次 Run；取消成功后列表将刷新该行状态。",
@@ -2421,6 +2421,8 @@
       "closed": "该运行已结束，交互已关闭",
       "addImage": "添加附件",
       "inputPlaceholder": "补充信息…",
+      "approveInputPlaceholder": "请先描述目标…",
+      "approveEmptyHint": "先说明本次要做的目标，Agent 会用工具对齐需求；只有真实分歧时才会提问。",
       "reviewInputPlaceholder": "补充批注或修改说明…",
       "finishEarly": "结束交互",
       "finishEarlyTitle": "信息已够,让 Agent 立即收尾并进入下一步",

@@ -510,7 +510,7 @@ func (h *Handlers) publicReviewExtras(lookup *gateshare.LookupResult, visualHTML
 		ex.ProductName = structName
 	}
 	if conv := h.publicConversation(runID, nodeID); conv != nil {
-		ex.Turns = conv.Messages
+		ex.Turns = conv.Turns()
 	}
 	ex.ReactSessionAlive = h.Eng != nil && h.Eng.HasLiveReviewSession(runID, nodeID)
 	if ex.ReactSessionAlive && h.Eng != nil {
@@ -554,7 +554,7 @@ func (h *Handlers) publicGateExtras(lookup *gateshare.LookupResult, visualHTML, 
 	}
 	if producerID != "" {
 		if conv := h.publicConversation(runID, producerID); conv != nil {
-			ex.Turns = conv.Messages
+			ex.Turns = conv.Turns()
 		}
 		if lookup.Run.Graph.FindNode(producerID) != nil && lookup.Run.Graph.FindNode(producerID).Type == "app_preview" {
 			ex.ProductKind = gateshare.ProductKindAppPreview

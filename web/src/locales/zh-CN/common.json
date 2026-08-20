@@ -131,6 +131,7 @@
     },
     "table": {
       "run": "运行",
+      "title": "标题",
       "workflow": "工作流",
       "trigger": "触发",
       "start": "开始",

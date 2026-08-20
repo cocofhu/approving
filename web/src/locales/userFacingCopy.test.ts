@@ -60,6 +60,22 @@ describe('user-facing copy remediation keys', () => {
     expect(zh.global.t('pages.projectDetail.pm.failUnknownDesc')).not.toMatch(/无法归入/)
   })
 
+  it('approve empty chat asks the user to state the goal first', () => {
+    expect(zh.global.t('pages.clarify.approveInputPlaceholder')).toBe('请先描述目标…')
+    expect(en.global.t('pages.clarify.approveInputPlaceholder')).toMatch(/goal first/i)
+    expect(zh.global.t('pages.clarify.approveEmptyHint')).toContain('先说明本次要做的目标')
+    expect(en.global.t('pages.clarify.approveEmptyHint')).toMatch(/goal first/i)
+  })
+
+  it('run list page title is 运行记录 not the terse 运行', () => {
+    expect(zh.global.t('pages.runList.title')).toBe('运行记录')
+    expect(en.global.t('pages.runList.title')).toBe('Run history')
+    expect(zh.global.t('pages.runList.subtitle')).toBe('按项目、流水线与状态筛选')
+    expect(zh.global.t('common.table.title')).toBe('标题')
+    expect(zhRoute.route.runs).toBe('运行记录')
+    expect(enRoute.route.runs).toBe('Run history')
+  })
+
   it('human gate canvas subtitle avoids unconditional ReAct promise', () => {
     expect(zh.global.t('pages.workflowEditor.canvas.humanGateSubtitle')).toBe('人工审批')
     expect(zh.global.t('pages.workflowEditor.canvas.appPreviewSubtitle')).toContain('等待人工确认')

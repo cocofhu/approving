@@ -115,4 +115,25 @@ describe('adaptInboxContextToRun', () => {
     expect(run.reactSessions?.react?.items?.[0]?.id).toBe('q2')
     expect(run.reactSessions?.react?.activeItem?.text).toBe('甲')
   })
+
+  it('normalizes null clarify turns to an empty array', () => {
+    const run = adaptInboxContextToRun(
+      {
+        type: 'clarify',
+        status: 'waiting_human',
+        nodes: [{ id: 'predev', type: 'approve', label: 'Approve', position: { x: 0, y: 0 } }],
+        artifacts: [],
+        nodeExecutions: {},
+        clarify: {
+          nodeId: 'predev',
+          iteration: 1,
+          turns: null as unknown as [],
+          done: false,
+          label: 'Approve',
+        },
+      },
+      'r-empty',
+    )
+    expect(run.clarifyByNode?.predev.turns).toEqual([])
+  })
 })

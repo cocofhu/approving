@@ -142,7 +142,8 @@ defineExpose({
         :iteration="clarify.iteration ?? 1"
         :draft="draft"
         :attachments="attachments"
-        :turns="clarify.turns"
+        :turns="clarify.turns ?? []"
+        :node-type="nodeType"
         :done="clarify.done"
         :active="inputActive"
         annotate-enabled

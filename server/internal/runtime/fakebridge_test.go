@@ -47,6 +47,7 @@ type fakeBridge struct {
 	mu      sync.Mutex
 	turns   int
 	prompts []string // every chat prompt received (for rehydrate-prime assertions)
+	images  []int    // image attachment count per chat turn
 }
 
 var fakeUpgrader = websocket.Upgrader{
@@ -79,6 +80,15 @@ func (b *fakeBridge) promptAt(i int) string {
 	return b.prompts[i]
 }
 
+func (b *fakeBridge) imageCountAt(i int) int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if i < 0 || i >= len(b.images) {
+		return -1
+	}
+	return b.images[i]
+}
+
 func (b *fakeBridge) serveWS(w http.ResponseWriter, r *http.Request) {
 	conn, err := fakeUpgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -104,7 +114,12 @@ func (b *fakeBridge) serveWS(w http.ResponseWriter, r *http.Request) {
 			turn := b.turns
 			b.turns++
 			content, _ := m["content"].(string)
+			nImg := 0
+			if imgs, ok := m["images"].([]any); ok {
+				nImg = len(imgs)
+			}
 			b.prompts = append(b.prompts, content)
+			b.images = append(b.images, nImg)
 			b.mu.Unlock()
 			if !b.applyTurn(conn, b.chat(turn)) {
 				return // dropConn: leave the read loop so the socket closes

@@ -5,6 +5,7 @@ import (
 
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/services"
 
 	"gorm.io/gorm"
 )
@@ -95,6 +96,35 @@ func TestApproveOptionalResearchLifted(t *testing.T) {
 	}
 	if _, ok := sr.Outputs["research"]; !ok {
 		t.Error("optional research should be lifted into outputs")
+	}
+}
+
+func TestApproveOpenParksEmptyTranscript(t *testing.T) {
+	eng, db, _ := setupEngineGraphP(t, approveOnlyGraph())
+	run, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "predev")
+	waitRunStatus(t, db, run.ID, "waiting_human")
+	var conv models.ReactConversation
+	if err := db.Where("run_id = ? AND node_id = ?", run.ID, "predev").First(&conv).Error; err != nil {
+		t.Fatalf("conv: %v", err)
+	}
+	if conv.Messages == nil {
+		t.Fatal("approve open must persist empty slice, not nil")
+	}
+	if len(conv.Messages) != 0 {
+		t.Fatalf("approve open must persist empty transcript, got %d", len(conv.Messages))
+	}
+	found := false
+	for _, it := range services.NewRunService(db).AllPendingInboxItems() {
+		if c, ok := it.(services.ClarifyInboxItem); ok && c.RunID == run.ID && c.NodeID == "predev" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("empty approve park must still appear in inbox")
 	}
 }
 

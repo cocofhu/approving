@@ -74,7 +74,7 @@ type Project struct {
 	// UnknownModelDisplayName is an optional project-level display alias for the
 	// 「未知/未分桶」token bucket. Empty means use the default label. Does not
 	// change persisted UsageByModel keys or merge with real model buckets.
-	UnknownModelDisplayName string `json:"unknownModelDisplayName,omitempty"`
+	UnknownModelDisplayName string    `json:"unknownModelDisplayName,omitempty"`
 	CreatedAt               time.Time `json:"createdAt"`
 	UpdatedAt               time.Time `json:"updatedAt"`
 }
@@ -371,6 +371,14 @@ type ReactConversation struct {
 	Messages  []ReactMessage `gorm:"serializer:json" json:"turns"`
 	// PreviewArtifact is the artifact name pinned by set_artifact_preview for the ReAct UI.
 	PreviewArtifact string `json:"previewArtifact,omitempty"`
+}
+
+// Turns returns the transcript as a non-nil slice so JSON clients always get [].
+func (c ReactConversation) Turns() []ReactMessage {
+	if c.Messages == nil {
+		return []ReactMessage{}
+	}
+	return c.Messages
 }
 
 // ReactMessage is one turn in a react conversation.

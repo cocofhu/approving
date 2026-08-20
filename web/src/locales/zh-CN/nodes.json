@@ -91,7 +91,7 @@
     },
     "approve": {
       "label": "Approve",
-      "desc": "一次 ReAct 对话完成开发前工作:无 Prompt 模板、不限轮次,开场必须提问;强制产出澄清需求与实施计划",
+      "desc": "一次 ReAct 对话完成开发前工作:无 Prompt 模板、不限轮次,用户先发目标后 Agent 用工具对齐;强制产出澄清需求与实施计划",
       "fields": {
         "skill_profile": {
           "label": "Agent(用户定义 · Agent 管理)"
@@ -129,7 +129,7 @@
           "desc": "完整对话记录"
         }
       },
-      "help": "### Approve\n\n一次多轮 ReAct 对话完成**开发前工作**。本节点只配置 Agent:**没有 Prompt 模板**、**不限制轮次**、也没有自动澄清 / 超时 / 条件注入。开场由平台注入运行输入,第一回合必须 `ask_question`,之后问到信息充分为止。\n\n**两份强制交付**(都写完才能结束,不是「唯一交付」):\n1. `set_clarified_requirement` → `clarified_requirement.json`(open_questions 必须为空)\n2. `set_plan` → `plan.json`(最多两级:大目标→小目标)\n\n**可选**(有则展示,缺不失败):`set_research`、`set_proposals`、`write_artifact` 写入 `page.html`。\n\n若角色包声明「唯一交付」或禁止上述工具,**以平台规则 `rules/approve.md` 为准**。不要写实现代码、不要改仓库。"
+      "help": "### Approve\n\n一次多轮 ReAct 对话完成**开发前工作**。本节点只配置 Agent:**没有 Prompt 模板**、**不限制轮次**、也没有自动澄清 / 超时 / 条件注入。开场由平台注入运行输入并等待用户先描述目标;Agent 用工具对齐需求,仅在真实分歧时 `ask_question`。\n\n**两份强制交付**(都写完才能结束,不是「唯一交付」):\n1. `set_clarified_requirement` → `clarified_requirement.json`(open_questions 必须为空)\n2. `set_plan` → `plan.json`(最多两级:大目标→小目标)\n\n**可选**(有则展示,缺不失败):`set_research`、`set_proposals`、`write_artifact` 写入 `page.html`。\n\n若角色包声明「唯一交付」或禁止上述工具,**以平台规则 `rules/approve.md` 为准**。不要写实现代码、不要改仓库。"
     },
     "agent": {
       "label": "通用",

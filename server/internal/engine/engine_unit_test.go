@@ -131,8 +131,15 @@ func TestComputeRunTitle(t *testing.T) {
 	}, "paragraph"); got != "1张图" {
 		t.Fatalf("images-only title: got %q", got)
 	}
-	if got := varValueToTitleString(map[string]any{"foo": "bar"}, "string"); got != "map[foo:bar]" {
-		t.Fatalf("non-composite map should fmt.Sprint: got %q", got)
+	if got := varValueToTitleString(map[string]any{"foo": "bar"}, "string"); got != "" {
+		t.Fatalf("non-composite map should not become a title: got %q", got)
+	}
+	reposJSON := `[{"branch":"","name":"approving","url":"https://git.example/approving.git"}]`
+	if got := varValueToTitleString(reposJSON, "repos"); got != "approving" {
+		t.Fatalf("repos json title: got %q", got)
+	}
+	if got := computeRunTitle(models.Graph{Variables: []models.Variable{{Name: "repos", Type: "repos", Ask: true}}}, []models.RunVariable{{Name: "repos", Type: "repos", Value: reposJSON}}); got != "approving" {
+		t.Fatalf("first ask repos: got %q", got)
 	}
 
 	gDefault := models.Graph{Variables: []models.Variable{{Name: "env", Type: "select", Ask: true, Value: "prod"}}}

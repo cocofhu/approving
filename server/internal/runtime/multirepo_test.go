@@ -253,7 +253,7 @@ func TestFirstRepoURL(t *testing.T) {
 }
 
 func TestNodeTouchesRepos(t *testing.T) {
-	for _, nt := range []string{"agent", "implement", "review", "test", "submit_mr", "research", "app_preview"} {
+	for _, nt := range []string{"agent", "implement", "review", "test", "submit_mr", "research", "app_preview", "approve"} {
 		if !nodeTouchesRepos(nt) {
 			t.Errorf("%q should touch repos", nt)
 		}

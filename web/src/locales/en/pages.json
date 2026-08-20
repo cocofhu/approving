@@ -1003,8 +1003,8 @@
       }
     },
     "runList": {
-      "title": "Runs",
-      "subtitle": "Run history for all workflows",
+      "title": "Run history",
+      "subtitle": "Filter by project, pipeline, and status",
       "tagsLabel": "Tags",
       "queued": "queued",
       "cancelConfirm": "Only this run is stopped; the list row status will refresh after success.",
@@ -2421,6 +2421,8 @@
       "closed": "Run ended — interaction closed",
       "addImage": "Add attachment",
       "inputPlaceholder": "Add details…",
+      "approveInputPlaceholder": "Describe the goal first…",
+      "approveEmptyHint": "State the goal first. The agent will use tools to align requirements and only ask when a real decision is needed.",
       "reviewInputPlaceholder": "Add annotations or change notes…",
       "finishEarly": "End interaction",
       "finishEarlyTitle": "Enough info — ask agent to wrap up now",
