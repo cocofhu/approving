@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+// @vitest-environment happy-dom
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import type { Artifact, Run } from '@/lib/shared/types'
 import {
   REACT_STAGE_TAB_GRID,
@@ -6,16 +7,26 @@ import {
   applyPreviewArtifactFromRun,
   applyPreviewArtifactName,
   artifactFingerprint,
+  artifactFriendlyNameKey,
+  artifactTechnicalDisplayName,
+  buildStageCardThumb,
   canAnnotateStageArtifact,
   expandStageArtifacts,
+  extractVisualHtmlSummary,
   filterStageGridArtifacts,
   isKnownStageGridArtifact,
   historicalStageArtifactId,
   inboxStageRemoteKind,
   isSamePreviewVisualCopy,
+  isVisualPreviewArtifactName,
   listVisualPageVersionChoices,
+  loadStageOpenState,
   pageHistoryEntries,
+  parseStructuredArtifactSummary,
   resolveVisualPagePreviewArtifact,
+  restoreStageOpenState,
+  resetStageOpenStateForTests,
+  saveStageOpenState,
   visualNodePageName,
   isHistoricalStageArtifact,
   shouldActivatePinnedPreview,
@@ -32,6 +43,8 @@ import {
   resolveEffectivePreviewPin,
   resolveStageRemoteKind,
   stageGridArtifactsWithPin,
+  stageOpenStateStorageKey,
+  wantsTextSummaryThumb,
 } from './reactArtifactPreview'
 
 function art(partial: Partial<Artifact> & Pick<Artifact, 'id' | 'name'>): Artifact {
@@ -415,5 +428,133 @@ describe('reactArtifactPreview helpers', () => {
     expect(
       stageGridArtifactsWithPin([research, requirement, page, demo], run, 'page.html').map((a) => a.name),
     ).toEqual(['research.json', 'clarified_requirement.json', 'page.html'])
+  })
+
+  it('maps the three friendly display-name keys and keeps other names technical', () => {
+    expect(artifactFriendlyNameKey('research.json')).toBe('pages.reactArtifactStage.friendlyResearch')
+    expect(artifactFriendlyNameKey('clarified_requirement.json')).toBe(
+      'pages.reactArtifactStage.friendlyClarified',
+    )
+    expect(artifactFriendlyNameKey('page.html')).toBe('pages.reactArtifactStage.friendlyVisual')
+    expect(artifactFriendlyNameKey(visualNodePageName('visual_bqc5'))).toBe(
+      'pages.reactArtifactStage.friendlyVisual',
+    )
+    expect(artifactFriendlyNameKey('proposals.json')).toBeNull()
+    expect(artifactTechnicalDisplayName('page.html#iter-2')).toBe('page.html')
+    expect(isVisualPreviewArtifactName('page.html')).toBe(true)
+    expect(isVisualPreviewArtifactName('visual_1.page.html')).toBe(true)
+    expect(isVisualPreviewArtifactName('research.json')).toBe(false)
+  })
+
+  it('parses structured JSON root title/summary and falls back when missing', () => {
+    expect(
+      parseStructuredArtifactSummary(
+        JSON.stringify({ title: '调研标题', summary: '一段摘要', extra: 1 }),
+      ),
+    ).toEqual({ title: '调研标题', summary: '一段摘要' })
+    expect(parseStructuredArtifactSummary(JSON.stringify({ title: '仅标题' }))).toEqual({
+      title: '仅标题',
+      summary: '',
+    })
+    expect(parseStructuredArtifactSummary(JSON.stringify({ summary: '仅摘要' }))).toEqual({
+      title: '',
+      summary: '仅摘要',
+    })
+    expect(parseStructuredArtifactSummary(JSON.stringify({ name: 'nope' }))).toBeNull()
+    expect(parseStructuredArtifactSummary('not-json')).toBeNull()
+    expect(parseStructuredArtifactSummary('')).toBeNull()
+  })
+
+  it('extracts visual HTML title/summary from title/h1 and meta/banner', () => {
+    const html =
+      '<!doctype html><html><head><title>Approving · Demo</title>' +
+      '<meta name="description" content="meta 摘要"/>' +
+      '</head><body><div class="banner"><h1>主标题</h1><p>banner 段落</p></div></body></html>'
+    expect(extractVisualHtmlSummary(html)).toEqual({
+      title: 'Approving · Demo',
+      summary: 'meta 摘要',
+    })
+    const noMeta =
+      '<html><body><div class="banner"><h1>流水线产物</h1><p>友好名 + 简单预览</p></div></body></html>'
+    expect(extractVisualHtmlSummary(noMeta)).toEqual({
+      title: '流水线产物',
+      summary: '友好名 + 简单预览',
+    })
+    expect(extractVisualHtmlSummary('<html><body><div>x</div></body></html>')).toBeNull()
+    expect(extractVisualHtmlSummary('<title>A &amp;lt; B &amp; C</title>')).toEqual({
+      title: 'A &lt; B & C',
+      summary: '',
+    })
+  })
+
+  it('builds text thumbs for JSON/visual HTML and html thumbs for other HTML', () => {
+    expect(wantsTextSummaryThumb({ kind: 'json', name: 'research.json' })).toBe(true)
+    expect(wantsTextSummaryThumb({ kind: 'html', name: 'page.html' })).toBe(true)
+    expect(wantsTextSummaryThumb({ kind: 'html', name: 'brand-row-preview.html' })).toBe(false)
+    expect(
+      buildStageCardThumb(
+        { kind: 'json', name: 'research.json' },
+        JSON.stringify({ title: 'T', summary: 'S' }),
+      ),
+    ).toEqual({ kind: 'text', title: 'T', summary: 'S' })
+    expect(
+      buildStageCardThumb(
+        { kind: 'html', name: 'page.html' },
+        '<html><head><title>视觉</title></head><body><p>摘要行</p></body></html>',
+      ),
+    ).toEqual({ kind: 'text', title: '视觉', summary: '摘要行' })
+    expect(
+      buildStageCardThumb({ kind: 'html', name: 'demo.html' }, '<html>thumb</html>'),
+    ).toEqual({ kind: 'html', html: '<html>thumb</html>' })
+    expect(buildStageCardThumb({ kind: 'json', name: 'research.json' }, '{}')).toBeNull()
+  })
+
+  describe('stage open-state sessionStorage', () => {
+    beforeEach(() => {
+      resetStageOpenStateForTests('ss-unit-run')
+    })
+    afterEach(() => {
+      resetStageOpenStateForTests('ss-unit-run')
+    })
+
+    it('persists and restores openNames + activeTab under runId+nodeId', () => {
+      expect(stageOpenStateStorageKey('ss-unit-run', 'node-b')).toBe('appr.reactStageOpen:ss-unit-run:node-b')
+      saveStageOpenState('ss-unit-run', 'node-b', {
+        openNames: ['page.html', 'research.json'],
+        activeTab: previewTabId('research.json'),
+        novncOpen: false,
+      })
+      expect(loadStageOpenState('ss-unit-run', 'node-b')).toEqual({
+        openNames: ['page.html', 'research.json'],
+        activeTab: previewTabId('research.json'),
+        novncOpen: false,
+      })
+      expect(loadStageOpenState('ss-unit-run', 'other')).toBeNull()
+      expect(loadStageOpenState('', 'node-b')).toBeNull()
+    })
+
+    it('skips gone artifacts and recalculates the active tab', () => {
+      const saved = {
+        openNames: ['page.html', 'gone.json', 'research.json'],
+        activeTab: previewTabId('gone.json'),
+        novncOpen: false,
+      }
+      expect(restoreStageOpenState(saved, ['page.html', 'research.json'])).toEqual({
+        openNames: ['page.html', 'research.json'],
+        activeTab: previewTabId('research.json'),
+        novncOpen: false,
+      })
+      expect(restoreStageOpenState(saved, [])).toEqual({
+        openNames: ['page.html', 'gone.json', 'research.json'],
+        activeTab: previewTabId('gone.json'),
+        novncOpen: false,
+      })
+      expect(
+        restoreStageOpenState(
+          { openNames: [], activeTab: REACT_STAGE_TAB_GRID, novncOpen: false },
+          ['page.html'],
+        ),
+      ).toBeNull()
+    })
   })
 })

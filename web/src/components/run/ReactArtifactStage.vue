@@ -19,7 +19,10 @@ import type { Artifact, ReactAnnotation, Run } from '@/lib/shared/types'
 import {
   REACT_STAGE_TAB_GRID,
   REACT_STAGE_TAB_NOVNC,
+  artifactFriendlyNameKey,
   artifactKindLabelKey,
+  artifactTechnicalDisplayName,
+  buildStageCardThumb,
   closeStagePreviewTab,
   findArtifactByName,
   nextTabAfterClose,
@@ -32,13 +35,18 @@ import {
   isHistoricalStageArtifact,
   isOwnNodeArtifact,
   listVisualPageVersionChoices,
+  loadStageOpenState,
   parseHistoricalStageArtifact,
   resolveEffectivePreviewPin,
   resolveStageRemoteKind,
   resolveVisualPagePreviewArtifact,
+  restoreStageOpenState,
+  saveStageOpenState,
   shouldActivatePinnedPreview,
   stageGridArtifactsWithPin,
+  wantsTextSummaryThumb,
   type ReactStageRemoteKind,
+  type StageCardThumb,
   type VisualPageVersionChoice,
 } from '@/lib/run/reactArtifactPreview'
 
@@ -109,17 +117,22 @@ provideReviewAnnotate({
   annotate: (ann) => stageAnnotation(ann),
 })
 
-const activeTab = ref(REACT_STAGE_TAB_GRID)
-/** True after the user picks a grid tab, card, preview tab, or noVNC — auto-open must not steal focus. */
-const userMoved = ref(false)
-const openNames = ref<string[]>([])
-const htmlThumbs = ref<Record<string, string>>({})
-const novncOpen = ref(false)
+const initialOpen = restoreStageOpenState(
+  loadStageOpenState(props.runId, props.nodeId),
+  (props.artifacts || []).map((a) => a.name),
+)
+const activeTab = ref(initialOpen?.activeTab || REACT_STAGE_TAB_GRID)
+/** True after the user picks a grid tab, card, preview tab, or noVNC — auto-open must not steal focus.
+ *  Also set when session open-state restore succeeds so pin auto-activate loses to refresh restore. */
+const userMoved = ref(!!initialOpen)
+const openNames = ref<string[]>(initialOpen?.openNames || [])
+const summaryThumbs = ref<Record<string, StageCardThumb>>({})
+const novncOpen = ref(!!initialOpen?.novncOpen)
 const sandboxId = ref<number | null>(null)
 const sandboxLoading = ref(false)
-let htmlThumbGen = 0
-let htmlThumbAbort: AbortController | null = null
-const htmlThumbFp: Record<string, string> = {}
+let summaryThumbGen = 0
+let summaryThumbAbort: AbortController | null = null
+const summaryThumbFp: Record<string, string> = {}
 const versionMenuFor = ref<string | null>(null)
 const selectedVersionIndex = ref<Record<string, number>>({})
 
@@ -174,6 +187,8 @@ function artifactReadonly(a: Artifact): boolean {
 
 function artifactTitle(a: Artifact | null | undefined): string {
   if (!a) return ''
+  const friendlyKey = artifactFriendlyNameKey(a.name)
+  if (friendlyKey) return t(friendlyKey)
   const hist = parseHistoricalStageArtifact(a)
   if (!hist) return a.name
   return a.name.replace(/#iter-\d+$/, '') || a.name
@@ -237,10 +252,39 @@ const kindIcon: Record<string, string> = {
 }
 
 function metaLine(a: Artifact): string {
-  return t('pages.reactArtifactStage.metaKindTime', {
+  return t('pages.reactArtifactStage.metaNameKindTime', {
+    name: artifactTechnicalDisplayName(a.name),
     kind: t(artifactKindLabelKey(a.kind)),
     time: relTime(a.updatedAt || a.createdAt),
   })
+}
+
+function textThumb(a: Artifact): { title: string; summary: string } | null {
+  const thumb = summaryThumbs.value[a.id]
+  return thumb?.kind === 'text' ? thumb : null
+}
+
+function htmlThumbContent(a: Artifact): string | null {
+  const thumb = summaryThumbs.value[a.id]
+  return thumb?.kind === 'html' ? thumb.html : null
+}
+
+function persistOpenState() {
+  saveStageOpenState(props.runId, props.nodeId, {
+    openNames: openNames.value,
+    activeTab: activeTab.value,
+    novncOpen: novncOpen.value,
+  })
+}
+
+function applyRestoredOpenState(runId: string, nodeId: string, names: string[]) {
+  const restored = restoreStageOpenState(loadStageOpenState(runId, nodeId), names)
+  if (!restored) return false
+  openNames.value = restored.openNames
+  activeTab.value = restored.activeTab
+  novncOpen.value = restored.novncOpen
+  userMoved.value = true
+  return true
 }
 
 function artifactByName(name: string): Artifact | null {
@@ -342,45 +386,87 @@ watch(
 watch(
   () =>
     gridArtifacts.value
-      .filter((a) => a.kind === 'html')
+      .filter((a) => a.kind === 'html' || a.kind === 'json' || wantsTextSummaryThumb(a))
       .map((a) => artifactFingerprint(a))
       .join('|'),
   async () => {
-    const gen = ++htmlThumbGen
-    htmlThumbAbort?.abort()
+    const gen = ++summaryThumbGen
+    summaryThumbAbort?.abort()
     const ac = new AbortController()
-    htmlThumbAbort = ac
-    const htmlArts = gridArtifacts.value.filter((a) => a.kind === 'html')
-    const next: Record<string, string> = {}
-    for (const a of htmlArts) {
+    summaryThumbAbort = ac
+    const thumbArts = gridArtifacts.value.filter(
+      (a) => a.kind === 'html' || a.kind === 'json' || wantsTextSummaryThumb(a),
+    )
+    const next: Record<string, StageCardThumb> = {}
+    for (const a of thumbArts) {
       const fp = artifactFingerprint(a)
+      let content: string | undefined
       if (typeof a.content === 'string') {
-        next[a.id] = a.content
-        htmlThumbFp[a.id] = fp
+        content = a.content
+        summaryThumbFp[a.id] = fp
+      } else if (props.inlineContent) {
         continue
-      }
-      if (props.inlineContent) continue
-      if (htmlThumbFp[a.id] === fp && htmlThumbs.value[a.id] !== undefined) {
-        next[a.id] = htmlThumbs.value[a.id]
+      } else if (summaryThumbFp[a.id] === fp && summaryThumbs.value[a.id] !== undefined) {
+        next[a.id] = summaryThumbs.value[a.id]
         continue
+      } else {
+        try {
+          const full = await api.artifactContent(a.id, { signal: ac.signal })
+          if (gen !== summaryThumbGen) return
+          content = full.content ?? ''
+          summaryThumbFp[a.id] = fp
+        } catch (e) {
+          if (isAbortError(e) || gen !== summaryThumbGen) return
+          if (summaryThumbs.value[a.id] !== undefined) next[a.id] = summaryThumbs.value[a.id]
+          continue
+        }
       }
-      try {
-        const full = await api.artifactContent(a.id, { signal: ac.signal })
-        if (gen !== htmlThumbGen) return
-        next[a.id] = full.content ?? ''
-        htmlThumbFp[a.id] = fp
-      } catch (e) {
-        if (isAbortError(e) || gen !== htmlThumbGen) return
-        if (htmlThumbs.value[a.id] !== undefined) next[a.id] = htmlThumbs.value[a.id]
-      }
+      const thumb = buildStageCardThumb(a, content)
+      if (thumb) next[a.id] = thumb
     }
-    if (gen !== htmlThumbGen) return
-    for (const id of Object.keys(htmlThumbFp)) {
-      if (!htmlArts.some((a) => a.id === id)) delete htmlThumbFp[id]
+    if (gen !== summaryThumbGen) return
+    for (const id of Object.keys(summaryThumbFp)) {
+      if (!thumbArts.some((a) => a.id === id)) delete summaryThumbFp[id]
     }
-    htmlThumbs.value = next
+    summaryThumbs.value = next
   },
   { immediate: true },
+)
+
+watch(
+  [openNames, activeTab, novncOpen, () => props.runId, () => props.nodeId],
+  () => {
+    persistOpenState()
+  },
+  { deep: true },
+)
+
+watch(
+  () => `${props.runId}|${props.nodeId}`,
+  (key, prev) => {
+    if (!prev || key === prev) return
+    const rid = String(props.runId || '').trim()
+    const nid = String(props.nodeId || '').trim()
+    if (!rid || !nid) {
+      openNames.value = []
+      activeTab.value = REACT_STAGE_TAB_GRID
+      novncOpen.value = false
+      userMoved.value = false
+      return
+    }
+    if (
+      !applyRestoredOpenState(
+        rid,
+        nid,
+        stageArtifacts.value.map((a) => a.name),
+      )
+    ) {
+      openNames.value = []
+      activeTab.value = REACT_STAGE_TAB_GRID
+      novncOpen.value = false
+      userMoved.value = false
+    }
+  },
 )
 
 watch(
@@ -435,8 +521,8 @@ watch(
 
 onMounted(() => document.addEventListener('click', onVersionMenuDocClick))
 onBeforeUnmount(() => {
-  htmlThumbGen++
-  htmlThumbAbort?.abort()
+  summaryThumbGen++
+  summaryThumbAbort?.abort()
   document.removeEventListener('click', onVersionMenuDocClick)
 })
 </script>
@@ -568,9 +654,23 @@ onBeforeUnmount(() => {
           @keydown.enter.prevent="openArtifact(a)"
         >
           <div class="relative h-[110px] overflow-hidden bg-elevated">
+            <div
+              v-if="textThumb(a)"
+              class="pointer-events-none h-full overflow-hidden border-b border-line px-3 py-2.5"
+              data-testid="react-artifact-card-summary"
+            >
+              <div
+                v-if="textThumb(a)?.title"
+                class="line-clamp-2 text-[12px] font-semibold leading-snug text-txt"
+              >{{ textThumb(a)?.title }}</div>
+              <div
+                v-if="textThumb(a)?.summary"
+                class="mt-1.5 line-clamp-4 text-[11px] leading-snug text-txt2"
+              >{{ textThumb(a)?.summary }}</div>
+            </div>
             <HtmlPreview
-              v-if="a.kind === 'html' && htmlThumbs[a.id]"
-              :html="htmlThumbs[a.id]"
+              v-else-if="htmlThumbContent(a)"
+              :html="htmlThumbContent(a) || ''"
               mode="demo"
               :enlargeable="false"
               class="pointer-events-none h-full w-full"

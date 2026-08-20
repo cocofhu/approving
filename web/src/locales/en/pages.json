@@ -2484,6 +2484,10 @@
       "revision": "v{n}",
       "meta": "{kind} · v{n} · {time}",
       "metaKindTime": "{kind} · {time}",
+      "metaNameKindTime": "{name} · {kind} · {time}",
+      "friendlyResearch": "Research findings",
+      "friendlyClarified": "Clarified requirements",
+      "friendlyVisual": "Visual preview",
       "versionChip": "v{n}",
       "versionChipLatest": "v{n} · latest",
       "versionMenu": "Choose version"

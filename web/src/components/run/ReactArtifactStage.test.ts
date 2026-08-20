@@ -2,11 +2,13 @@
 import { defineComponent } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { flushPromises, mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import type { Artifact } from '@/lib/shared/types'
+import { resetStageOpenStateForTests } from '@/lib/run/reactArtifactPreview'
 import ReactArtifactStage from './ReactArtifactStage.vue'
+import { api } from '@/lib/api/api'
 
 const { mockAddClarifyAnnotation } = vi.hoisted(() => ({
   mockAddClarifyAnnotation: vi.fn(() => 'added'),
@@ -14,7 +16,17 @@ const { mockAddClarifyAnnotation } = vi.hoisted(() => ({
 
 vi.mock('@/lib/api/api', () => ({
   api: {
-    artifactContent: vi.fn(async () => ({ content: '<html>thumb</html>' })),
+    artifactContent: vi.fn(async () => ({
+      id: 'thumb',
+      name: 'thumb.html',
+      kind: 'html',
+      nodeId: 'react',
+      runId: 'run-1',
+      workflowName: 'wf',
+      sizeBytes: 18,
+      createdAt: '2026-08-01T00:00:00Z',
+      content: '<html>thumb</html>',
+    })),
     getRunNodeSandbox: vi.fn(async () => ({ id: 42 })),
   },
 }))
@@ -69,6 +81,17 @@ const stubs = {
 }
 
 describe('ReactArtifactStage', () => {
+  beforeEach(() => {
+    // Stage specs use runId values starting with "run-"; keep unrelated helper keys intact for parallel files.
+    resetStageOpenStateForTests(':run-')
+    vi.mocked(api.artifactContent).mockImplementation(async () =>
+      art({ id: 'thumb', name: 'thumb.html', kind: 'html', content: '<html>thumb</html>' }),
+    )
+  })
+  afterEach(() => {
+    resetStageOpenStateForTests(':run-')
+  })
+
   it('defaults to the pipeline grid tab and opens a new preview tab on card click', async () => {
     const wrapper = mount(ReactArtifactStage, {
       props: {
@@ -791,5 +814,231 @@ describe('ReactArtifactStage', () => {
       'true',
     )
     wrapper.unmount()
+  })
+
+  it('shows friendly card/tab titles and meta with technical file name (g2)', async () => {
+    const research = art({
+      id: 'r',
+      name: 'research.json',
+      kind: 'json',
+      nodeId: 'research',
+      content: JSON.stringify({ title: '调研标题', summary: '调研摘要内容' }),
+    })
+    const clarified = art({
+      id: 'c',
+      name: 'clarified_requirement.json',
+      kind: 'json',
+      nodeId: 'clarify',
+      content: JSON.stringify({ title: '澄清标题', summary: '澄清摘要' }),
+    })
+    const page = art({
+      id: 'p',
+      name: 'page.html',
+      kind: 'html',
+      nodeId: 'visual_bqc5',
+      content: '<html><head><title>视觉 Demo</title></head><body><p>视觉摘要</p></body></html>',
+    })
+    const proposals = art({ id: 'pr', name: 'proposals.json', kind: 'json', nodeId: 'proposal' })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [research, clarified, page, proposals],
+        runId: 'run-friendly',
+        run: {
+          id: 'run-friendly',
+          nodes: [
+            { id: 'visual_bqc5', type: 'visual', label: '视觉', position: { x: 0, y: 0 }, config: {} },
+            { id: 'research', type: 'research', label: '调研', position: { x: 0, y: 0 }, config: {} },
+            { id: 'clarify', type: 'react', label: '澄清', position: { x: 0, y: 0 }, config: {} },
+            { id: 'proposal', type: 'proposal', label: '方案', position: { x: 0, y: 0 }, config: {} },
+          ],
+        } as any,
+        nodeId: 'visual_bqc5',
+        nodeType: 'visual',
+        remoteKind: 'off',
+        inlineContent: true,
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    const researchCard = wrapper.get('[data-testid="react-artifact-card-research.json"]')
+    expect(researchCard.text()).toContain('调研结论')
+    expect(researchCard.text()).toContain('research.json')
+    expect(researchCard.text()).toContain('JSON')
+    expect(wrapper.get('[data-testid="react-artifact-card-clarified_requirement.json"]').text()).toContain(
+      '需求澄清文件',
+    )
+    expect(wrapper.get('[data-testid="react-artifact-card-page.html"]').text()).toContain('视觉预览文件')
+    expect(wrapper.get('[data-testid="react-artifact-card-proposals.json"]').text()).toContain('proposals.json')
+    await wrapper.get('[data-testid="react-artifact-card-research.json"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tab-research.json"]').text()).toContain('调研结论')
+    wrapper.unmount()
+  })
+
+  it('renders JSON and visual HTML title+summary thumbs and keeps icon on parse failure (g1)', async () => {
+    const research = art({
+      id: 'r',
+      name: 'research.json',
+      kind: 'json',
+      nodeId: 'research',
+      content: JSON.stringify({ title: '流水线产物卡片「简单预览」技术调研', summary: '上游诉求对照截图。' }),
+    })
+    const empty = art({
+      id: 'e',
+      name: 'plan.json',
+      kind: 'json',
+      nodeId: 'plan',
+      content: JSON.stringify({ goals: [] }),
+    })
+    const page = art({
+      id: 'p',
+      name: 'page.html',
+      kind: 'html',
+      nodeId: 'visual_bqc5',
+      content:
+        '<html><head><title>Approving · Demo</title></head><body><div class="banner"><h1>主标题</h1><p>banner 摘要</p></div></body></html>',
+    })
+    vi.mocked(api.artifactContent).mockImplementation(async (id: string) => {
+      if (id === 'r') return research
+      if (id === 'e') return empty
+      if (id === 'p') return page
+      return art({ id, name: id, content: '' })
+    })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [
+          { ...research, content: undefined },
+          { ...empty, content: undefined },
+          { ...page, content: undefined },
+        ],
+        runId: 'run-summary',
+        run: {
+          id: 'run-summary',
+          nodes: [
+            { id: 'visual_bqc5', type: 'visual', label: '视觉', position: { x: 0, y: 0 }, config: {} },
+            { id: 'research', type: 'research', label: '调研', position: { x: 0, y: 0 }, config: {} },
+            { id: 'plan', type: 'plan', label: '计划', position: { x: 0, y: 0 }, config: {} },
+          ],
+        } as any,
+        nodeId: 'visual_bqc5',
+        nodeType: 'visual',
+        remoteKind: 'off',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    const researchSummary = wrapper.get(
+      '[data-testid="react-artifact-card-research.json"] [data-testid="react-artifact-card-summary"]',
+    )
+    expect(researchSummary.text()).toContain('流水线产物卡片「简单预览」技术调研')
+    expect(researchSummary.text()).toContain('上游诉求对照截图。')
+    expect(
+      wrapper.find('[data-testid="react-artifact-card-plan.json"] [data-testid="react-artifact-card-summary"]').exists(),
+    ).toBe(false)
+    const pageSummary = wrapper.get(
+      '[data-testid="react-artifact-card-page.html"] [data-testid="react-artifact-card-summary"]',
+    )
+    expect(pageSummary.text()).toContain('Approving · Demo')
+    expect(pageSummary.text()).toContain('banner 摘要')
+    wrapper.unmount()
+  })
+
+  it('restores open tabs from sessionStorage and prefers restore over pin (g3)', async () => {
+    resetStageOpenStateForTests()
+    const research = art({ id: 'r', name: 'research.json', kind: 'json', nodeId: 'research' })
+    const clarified = art({
+      id: 'c',
+      name: 'clarified_requirement.json',
+      kind: 'json',
+      nodeId: 'clarify',
+    })
+    const page = art({ id: 'p', name: 'page.html', kind: 'html', nodeId: 'visual_bqc5' })
+    const stageProps = {
+      artifacts: [research, clarified, page],
+      runId: 'run-restore',
+      run: {
+        id: 'run-restore',
+        nodes: [
+          { id: 'visual_bqc5', type: 'visual', label: '视觉', position: { x: 0, y: 0 }, config: {} },
+          { id: 'research', type: 'research', label: '调研', position: { x: 0, y: 0 }, config: {} },
+          { id: 'clarify', type: 'react', label: '澄清', position: { x: 0, y: 0 }, config: {} },
+        ],
+      } as any,
+      nodeId: 'visual_bqc5',
+      nodeType: 'visual',
+      remoteKind: 'off' as const,
+    }
+    const first = mount(ReactArtifactStage, {
+      props: stageProps,
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    // visual pin opens page.html; open clarified and activate it, then close page
+    await first.get('[data-testid="react-artifact-card-clarified_requirement.json"]').trigger('click')
+    await flushPromises()
+    if (first.find('[data-testid="react-artifact-tab-close-page.html"]').exists()) {
+      await first.get('[data-testid="react-artifact-tab-close-page.html"]').trigger('click')
+      await flushPromises()
+    }
+    expect(first.get('[data-testid="react-artifact-tab-clarified_requirement.json"]').attributes('aria-selected')).toBe(
+      'true',
+    )
+    expect(first.find('[data-testid="react-artifact-tab-page.html"]').exists()).toBe(false)
+    first.unmount()
+
+    const second = mount(ReactArtifactStage, {
+      props: stageProps,
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(second.find('[data-testid="react-artifact-tab-clarified_requirement.json"]').exists()).toBe(true)
+    expect(second.get('[data-testid="react-artifact-tab-clarified_requirement.json"]').attributes('aria-selected')).toBe(
+      'true',
+    )
+    // closed page.html must not be restored even though visual pin would otherwise open it
+    expect(second.find('[data-testid="react-artifact-tab-page.html"]').exists()).toBe(false)
+    expect(second.get('[data-testid="react-artifact-tab-clarified_requirement.json"]').text()).toContain(
+      '需求澄清文件',
+    )
+    second.unmount()
+    resetStageOpenStateForTests()
+  })
+
+  it('skips vanished artifacts when restoring open state (g3.3)', async () => {
+    resetStageOpenStateForTests()
+    sessionStorage.setItem(
+      'appr.reactStageOpen:run-gone:visual_bqc5',
+      JSON.stringify({
+        openNames: ['page.html', 'gone.json', 'research.json'],
+        activeTab: 'preview:gone.json',
+        novncOpen: false,
+      }),
+    )
+    const research = art({ id: 'r', name: 'research.json', kind: 'json', nodeId: 'research' })
+    const page = art({ id: 'p', name: 'page.html', kind: 'html', nodeId: 'visual_bqc5' })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [research, page],
+        runId: 'run-gone',
+        run: {
+          id: 'run-gone',
+          nodes: [
+            { id: 'visual_bqc5', type: 'visual', label: '视觉', position: { x: 0, y: 0 }, config: {} },
+            { id: 'research', type: 'research', label: '调研', position: { x: 0, y: 0 }, config: {} },
+          ],
+        } as any,
+        nodeId: 'visual_bqc5',
+        nodeType: 'visual',
+        remoteKind: 'off',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="react-artifact-tab-gone.json"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="react-artifact-tab-research.json"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-artifact-tab-page.html"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="react-artifact-tab-research.json"]').attributes('aria-selected')).toBe('true')
+    wrapper.unmount()
+    resetStageOpenStateForTests()
   })
 })
