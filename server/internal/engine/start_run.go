@@ -29,6 +29,13 @@ func (e *Engine) StartRun(workflowID string, inputs map[string]any, trigger stri
 // tags and env are optional (nil/empty = unchanged legacy behavior).
 // env is validated then snapshotted onto Run.SandboxEnv (immutable after start).
 func (e *Engine) StartRunWithPriority(workflowID string, inputs map[string]any, trigger, priorityLabel string, tags []string, env []models.EnvEntry) (*models.Run, error) {
+	return e.StartRunWithTitle(workflowID, inputs, trigger, priorityLabel, tags, env, "")
+}
+
+// StartRunWithTitle is StartRunWithPriority plus an optional title override.
+// Trimmed empty titles still fall back to computeRunTitle; non-empty titles
+// are clipped to 80 runes.
+func (e *Engine) StartRunWithTitle(workflowID string, inputs map[string]any, trigger, priorityLabel string, tags []string, env []models.EnvEntry, title string) (*models.Run, error) {
 	if e.IsHalted() {
 		return nil, fmt.Errorf("server is shutting down")
 	}
@@ -51,7 +58,7 @@ func (e *Engine) StartRunWithPriority(workflowID string, inputs map[string]any, 
 	// stale graph — the "改了之后历史流水线对不上" bug. def.Graph is always the
 	// graph the user just saved; for an unedited published head it equals the
 	// published snapshot anyway.
-	return e.startRun(def, def.Graph, inputs, trigger, pri, tags, env)
+	return e.startRun(def, def.Graph, inputs, trigger, pri, tags, env, title)
 }
 
 // StartRunFromPublished creates a run using the published WorkflowVersion
@@ -78,10 +85,10 @@ func (e *Engine) StartRunFromPublished(workflowID string, inputs map[string]any,
 	if err := e.db.Where("workflow_id = ? AND version = ?", def.ID, def.Version).First(&snap).Error; err != nil {
 		return nil, fmt.Errorf("published version not found: %w", err)
 	}
-	return e.startRun(def, snap.Graph, inputs, resolved, models.PriorityNormal, tags, env)
+	return e.startRun(def, snap.Graph, inputs, resolved, models.PriorityNormal, tags, env, "")
 }
 
-func (e *Engine) startRun(def models.WorkflowDef, graph models.Graph, inputs map[string]any, trigger string, priority int, tags []string, env []models.EnvEntry) (*models.Run, error) {
+func (e *Engine) startRun(def models.WorkflowDef, graph models.Graph, inputs map[string]any, trigger string, priority int, tags []string, env []models.EnvEntry, titleOverride string) (*models.Run, error) {
 
 	if err := graph.Validate(); err != nil {
 		return nil, err
@@ -121,7 +128,7 @@ func (e *Engine) startRun(def models.WorkflowDef, graph models.Graph, inputs map
 		}
 		seeded[i].Value = nv[seeded[i].Name]
 	}
-	title := computeRunTitle(graph, seeded)
+	title := applyRunTitleOverride(computeRunTitle(graph, seeded), titleOverride)
 
 	run := models.Run{
 		ID: runID, WorkflowID: def.ID, WorkflowName: def.Name, WorkflowVersion: def.Version,
@@ -245,6 +252,22 @@ func resolveStartVars(g models.Graph, submitted map[string]any, projectVars []mo
 		out = append(out, byName[name])
 	}
 	return out, nil
+}
+
+const maxRunTitleRunes = 80
+
+// applyRunTitleOverride returns the trimmed override (capped at 80 runes)
+// when non-empty; otherwise the computed title.
+func applyRunTitleOverride(computed, override string) string {
+	s := strings.TrimSpace(override)
+	if s == "" {
+		return computed
+	}
+	runes := []rune(s)
+	if len(runes) > maxRunTitleRunes {
+		return string(runes[:maxRunTitleRunes])
+	}
+	return s
 }
 
 // computeRunTitle returns the string title for a run: the coerced value of the

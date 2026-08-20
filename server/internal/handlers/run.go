@@ -16,7 +16,8 @@ type startRunBody struct {
 	Trigger  string            `json:"trigger"`
 	Priority string            `json:"priority"` // high|normal|low; empty → normal
 	Tags     []string          `json:"tags"`
-	Env      []models.EnvEntry `json:"env"` // optional run-scoped sandbox env snapshot
+	Env      []models.EnvEntry `json:"env"`   // optional run-scoped sandbox env snapshot
+	Title    string            `json:"title"` // optional; overrides computeRunTitle when non-blank
 }
 
 func (h *Handlers) StartRun(c *gin.Context) {
@@ -35,7 +36,7 @@ func (h *Handlers) StartRun(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	run, err := h.Eng.StartRunWithPriority(c.Param("id"), b.Inputs, trigger, b.Priority, tags, b.Env)
+	run, err := h.Eng.StartRunWithTitle(c.Param("id"), b.Inputs, trigger, b.Priority, tags, b.Env, b.Title)
 	if err != nil {
 		_ = c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

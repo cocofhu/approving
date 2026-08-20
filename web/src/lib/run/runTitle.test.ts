@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { displayRunTitle } from './runTitle'
+import { clipRunTitle, displayRunTitle } from './runTitle'
+
+describe('clipRunTitle', () => {
+  it('trims and caps at 80 code points', () => {
+    expect(clipRunTitle('  hello  ')).toBe('hello')
+    expect(clipRunTitle('啊'.repeat(90))).toBe('啊'.repeat(80))
+  })
+})
 
 describe('displayRunTitle', () => {
   it('keeps ordinary titles', () => {

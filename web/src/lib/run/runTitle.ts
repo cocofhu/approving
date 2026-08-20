@@ -1,3 +1,13 @@
+/** Matches engine maxRunTitleRunes (Unicode code points). */
+const RUN_TITLE_MAX = 80
+
+/** Trim and cap a launch title override. */
+export function clipRunTitle(raw: string, max = RUN_TITLE_MAX): string {
+  const s = String(raw ?? '').trim()
+  const chars = Array.from(s)
+  return chars.length > max ? chars.slice(0, max).join('') : s
+}
+
 /** Human-readable run title. Repo JSON dumps become repo names; other raw JSON is hidden. */
 export function displayRunTitle(raw: string | undefined | null): string {
   const s = String(raw ?? '').trim()

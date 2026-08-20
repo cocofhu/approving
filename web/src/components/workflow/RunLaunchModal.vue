@@ -42,6 +42,8 @@ const props = defineProps<{
   hintExtra?: string
   beforeStart?: () => Promise<void>
   draftRestored?: boolean
+  /** Optional run title override (home chat first message). */
+  runTitle?: string
 }>()
 
 const emit = defineEmits<{
@@ -348,6 +350,7 @@ async function startRun() {
     const res = await api.startRun(props.workflowId, inputs, 'manual', priority.value, tags.value, {
       signal: startAbort.signal,
       env: envEntries.length ? envEntries : undefined,
+      title: props.runTitle?.trim() || undefined,
     })
     if (gen !== startGen) return
     successRunId.value = res.id

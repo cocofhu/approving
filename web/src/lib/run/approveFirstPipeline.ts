@@ -1,0 +1,35 @@
+import type { WFEdge, WFNode, Workflow } from '@/lib/shared/types'
+
+type GraphLike = {
+  nodes?: WFNode[] | null
+  edges?: WFEdge[] | null
+}
+
+function isSuccessEdge(e: WFEdge): boolean {
+  return !e.kind || e.kind === 'success'
+}
+
+/** First success successor of the input node: unguarded edge, or the only success edge. */
+function inputSuccessTargetId(graph: GraphLike): string | null {
+  const nodes = graph.nodes || []
+  const edges = graph.edges || []
+  const start = nodes.find((n) => n.type === 'input')
+  if (!start) return null
+  const success = edges.filter((e) => e.source === start.id && isSuccessEdge(e))
+  if (success.length === 0) return null
+  const unguarded = success.filter((e) => !String(e.when || '').trim())
+  const picked = unguarded[0] ?? (success.length === 1 ? success[0] : undefined)
+  return picked?.target || null
+}
+
+/** True when the node after input (success path) is an Approve node. */
+export function isApproveFirstPipeline(graph: GraphLike): boolean {
+  const targetId = inputSuccessTargetId(graph)
+  if (!targetId) return false
+  const target = (graph.nodes || []).find((n) => n.id === targetId)
+  return target?.type === 'approve'
+}
+
+export function isPublishedApproveFirst(wf: Pick<Workflow, 'status'> & GraphLike): boolean {
+  return wf.status === 'published' && isApproveFirstPipeline(wf)
+}

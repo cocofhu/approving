@@ -1,6 +1,6 @@
 {
   "route": {
-    "dashboard": "Dashboard",
+    "dashboard": "Home",
     "board": "Board",
     "projects": "Projects",
     "projectDetail": "Project detail",

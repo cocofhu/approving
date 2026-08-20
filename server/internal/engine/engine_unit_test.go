@@ -156,6 +156,53 @@ func TestComputeRunTitle(t *testing.T) {
 	}
 }
 
+func TestApplyRunTitleOverride(t *testing.T) {
+	if got := applyRunTitleOverride("alpha", ""); got != "alpha" {
+		t.Fatalf("empty override: got %q", got)
+	}
+	if got := applyRunTitleOverride("alpha", "   "); got != "alpha" {
+		t.Fatalf("blank override: got %q", got)
+	}
+	if got := applyRunTitleOverride("alpha", "  用户第一句话  "); got != "用户第一句话" {
+		t.Fatalf("override: got %q", got)
+	}
+	long := strings.Repeat("啊", 90)
+	got := applyRunTitleOverride("alpha", long)
+	if n := len([]rune(got)); n != 80 {
+		t.Fatalf("rune cap: got %d runes %q", n, got)
+	}
+}
+
+func TestStartRunTitleOverrideBeatsReposAsk(t *testing.T) {
+	reposJSON := `[{"name":"approving","url":"https://git.example/approving.git"}]`
+	g := models.Graph{
+		Variables: []models.Variable{{Name: "repos", Type: "repos", Ask: true, Value: reposJSON}},
+		Nodes:     []models.Node{{ID: "in", Type: "input"}, {ID: "out", Type: "output"}},
+		Edges:     []models.Edge{{ID: "e1", Source: "in", Target: "out"}},
+	}
+	eng, db := setupEngineGraph(t, g)
+
+	run, err := eng.StartRunWithTitle("wf", nil, "test", "normal", nil, nil, "  从一句话开始  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got models.Run
+	if err := db.First(&got, "id = ?", run.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got.Title != "从一句话开始" {
+		t.Fatalf("override title=%q", got.Title)
+	}
+
+	fallback, err := eng.StartRunWithPriority("wf", nil, "test", "normal", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fallback.Title != "approving" {
+		t.Fatalf("fallback title=%q want approving", fallback.Title)
+	}
+}
+
 // TestFrameworkNodesPipeline drives research → test → review framework-card
 // nodes end to end, exercising execStructuredAgent / finalizeStructured and
 // each node's structured-contract enforcement + renderer. Reserved JSON is

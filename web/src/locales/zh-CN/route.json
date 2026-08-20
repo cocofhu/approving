@@ -1,6 +1,6 @@
 {
   "route": {
-    "dashboard": "概览",
+    "dashboard": "首页",
     "board": "看板",
     "projects": "项目",
     "projectDetail": "项目详情",

@@ -83,6 +83,51 @@ async function mockBoardApis(page: import('@playwright/test').Page) {
     await route.continue()
   })
 
+  await page.route('**/api/workflows**', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            id: 'wf-approve',
+            name: '自我迭代PRO',
+            description: '开发前澄清 + 计划',
+            status: 'published',
+            version: 1,
+            updatedAt: '2026-07-18T00:00:00Z',
+            needsRepo: false,
+            nodes: [
+              { id: 'in', type: 'input', label: '开始', position: { x: 0, y: 0 }, config: {} },
+              { id: 'ap', type: 'approve', label: '澄清', position: { x: 0, y: 0 }, config: {} },
+              { id: 'out', type: 'output', label: '结束', position: { x: 0, y: 0 }, config: {} },
+            ],
+            edges: [
+              { id: 'e1', source: 'in', target: 'ap' },
+              { id: 'e2', source: 'ap', target: 'out' },
+            ],
+          },
+          {
+            id: 'wf-react',
+            name: '实现流',
+            description: 'skip',
+            status: 'published',
+            version: 1,
+            updatedAt: '2026-07-18T00:00:00Z',
+            needsRepo: false,
+            nodes: [
+              { id: 'in', type: 'input', label: '开始', position: { x: 0, y: 0 }, config: {} },
+              { id: 'r', type: 'react', label: '实现', position: { x: 0, y: 0 }, config: {} },
+            ],
+            edges: [{ id: 'e1', source: 'in', target: 'r' }],
+          },
+        ]),
+      })
+      return
+    }
+    await route.continue()
+  })
+
   await page.route('**/api/runs**', async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue()
@@ -136,25 +181,20 @@ async function gotoBoardHarness(
 }
 
 test.describe('需求进度看板（项目级）', () => {
-  test('Dashboard 有项目记忆：迷你看板 + 完整看板进入项目级', async ({ page }) => {
+  test('Dashboard 有项目记忆：首页 Composer + Approve 流水线卡片', async ({ page }) => {
     await gotoBoardHarness(page, { width: 1280, start: 'dashboard', memory: '1', projectId: 'proj-1' })
     await expect(page.getByTestId('dashboard-view')).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByRole('heading', { name: '概览' })).toBeVisible()
-    await expect(page.getByText('需求进度看板')).toBeVisible()
-    await expect(page.getByTestId('dashboard-board-empty')).toHaveCount(0)
-    await expect(page.getByTestId('run-board-column')).toHaveCount(2)
-    await expect(page.getByText('看板需求-运行中')).toBeVisible()
-    await expect(page.getByText('看板需求-已完成')).toBeVisible()
-
-    await page.getByTestId('dashboard-view-full-board').click()
-    await expect(page.getByTestId('board-view')).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByTestId('run-board-column')).toHaveCount(3)
+    await expect(page.getByTestId('home-title')).toBeVisible()
+    await expect(page.getByTestId('home-composer')).toBeVisible()
+    await expect(page.getByTestId('home-pipeline-card-wf-approve')).toContainText('自我迭代PRO')
+    await expect(page.getByTestId('home-no-project')).toHaveCount(0)
+    await expect(page.getByTestId('run-board-column')).toHaveCount(0)
   })
 
   test('Dashboard 无项目记忆：空态引导至项目列表', async ({ page }) => {
     await gotoBoardHarness(page, { width: 1280, start: 'dashboard', memory: '0' })
     await expect(page.getByTestId('dashboard-view')).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByTestId('dashboard-board-empty')).toBeVisible()
+    await expect(page.getByTestId('home-no-project')).toBeVisible()
     await expect(page.getByTestId('dashboard-select-project')).toBeVisible()
     await expect(page.getByTestId('run-board-column')).toHaveCount(0)
     await page.getByTestId('dashboard-select-project').click()
@@ -585,10 +625,10 @@ test.describe('需求进度看板（项目级）', () => {
     await page.getByRole('button', { name: '继续浏览' }).click()
     await expect(page.getByText('运行摘要')).toHaveCount(0)
 
-    // Dashboard mini board: headers not activatable
+    // Home has no mini-board columns
     await gotoBoardHarness(page, { width: 1280, start: 'dashboard', memory: '1', projectId: 'proj-1' })
     await expect(page.getByTestId('dashboard-view')).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByTestId('run-board-column')).toHaveCount(2)
-    await expect(page.getByTestId('run-board-column-header')).toHaveCount(0)
+    await expect(page.getByTestId('home-composer')).toBeVisible()
+    await expect(page.getByTestId('run-board-column')).toHaveCount(0)
   })
 })
