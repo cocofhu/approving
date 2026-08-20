@@ -33,6 +33,19 @@ export function findInboxItemForHandoff<T extends Pick<InboxItem, 'runId' | 'nod
   return list.find((it) => it.runId === handoff.runId)
 }
 
+/** `?run=&node=` exact card, else the first card on that run (guessed node id may differ). */
+export function findInboxItemForQuery<T extends Pick<InboxItem, 'runId' | 'nodeId'>>(
+  list: T[],
+  run: unknown,
+  node: unknown,
+): T | undefined {
+  const exact = findInboxItemByKey(list, inboxQueryKey(run, node))
+  if (exact) return exact
+  const runId = String(run ?? '').trim()
+  if (!runId) return undefined
+  return list.find((it) => it.runId === runId)
+}
+
 /** Triple used for inbox-context fetch / processed short-circuit. */
 export function inboxTripleKey(
   it: Pick<InboxItem, 'runId' | 'nodeId' | 'iteration'>,

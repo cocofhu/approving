@@ -337,6 +337,7 @@ func (e *Engine) execute(runID, fromNodeID string) {
 				if e.finish(runID, "waiting_human") {
 
 					e.fireGateAutoInvoke(c, node)
+					e.fireApproveFirstMessage(c, node)
 					e.fireRunNotify(c, node, models.NotifyKindWaitingHuman)
 				}
 			}

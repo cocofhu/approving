@@ -53,11 +53,13 @@ describe('GatesInboxView review/clarify composer mode', () => {
   })
 
   it('selects by run/node query and seeds the first human bubble', () => {
-    expect(src).toMatch(/inboxQueryKey/)
-    expect(src).toMatch(/findInboxItemByKey/)
+    expect(src).toMatch(/findInboxItemForQuery/)
     expect(src).toMatch(/consumeHomeApproveHandoff/)
     expect(src).toMatch(/findInboxItemForHandoff/)
     expect(src).toMatch(/waitForQueryItem/)
+    expect(src).toMatch(/incomingGhost/)
+    expect(src).toMatch(/mergeIncomingGhost/)
+    expect(src).toMatch(/homeApproveHandoffMatchesRun/)
     const seedText = src.match(/:seed-human-text="activeHomeSeed\?\.text"/g) || []
     const seedImages = src.match(/:seed-human-images="activeHomeSeed\?\.images \?\? \[\]"/g) || []
     expect(seedText.length).toBe(2)

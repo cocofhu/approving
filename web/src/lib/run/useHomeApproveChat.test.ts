@@ -127,7 +127,7 @@ describe('useHomeApproveChat', () => {
     expect(chat.selected.value?.id).toBe('wf-ap')
   })
 
-  it('starts a run with the first message as title, replies, then opens inbox', async () => {
+  it('starts a run carrying the first message, then opens inbox', async () => {
     const chat = withSetup(() => useHomeApproveChat())
     await chat.load()
     chat.draft.value = '  把登录做清楚  '
@@ -135,12 +135,14 @@ describe('useHomeApproveChat', () => {
     await nextTick()
     expect(mocks.startRun).toHaveBeenCalledWith('wf-ap', {}, 'manual', 'normal', [], {
       title: '把登录做清楚',
+      firstMessage: { text: '把登录做清楚', images: [] },
     })
-    expect(mocks.reactReply).toHaveBeenCalledWith('run-1', 'ap', '把登录做清楚', [])
+    // The engine delivers the message once the approve node parks.
+    expect(mocks.reactReply).not.toHaveBeenCalled()
     expect(mocks.push).toHaveBeenCalledWith({ path: '/gates', query: { run: 'run-1', node: 'ap' } })
   })
 
-  it('passes attachments on reactReply and still navigates to inbox', async () => {
+  it('carries attachments on the first message and navigates to inbox', async () => {
     const chat = withSetup(() => useHomeApproveChat())
     await chat.load()
     chat.attachments.value = [{ data: 'abc', mimeType: 'image/png', name: 'shot.png' }]
@@ -148,14 +150,16 @@ describe('useHomeApproveChat', () => {
     await nextTick()
     expect(mocks.startRun).toHaveBeenCalledWith('wf-ap', {}, 'manual', 'normal', [], {
       title: 'shot.png',
+      firstMessage: {
+        text: '',
+        images: [{ data: 'abc', mimeType: 'image/png', name: 'shot.png' }],
+      },
     })
-    expect(mocks.reactReply).toHaveBeenCalledWith('run-1', 'ap', '', [
-      { data: 'abc', mimeType: 'image/png', name: 'shot.png' },
-    ])
+    expect(mocks.reactReply).not.toHaveBeenCalled()
     expect(mocks.push).toHaveBeenCalledWith({ path: '/gates', query: { run: 'run-1', node: 'ap' } })
   })
 
-  it('opens inbox immediately with attachments, before Approve finishes parking', async () => {
+  it('opens inbox immediately without polling for the Approve park', async () => {
     mocks.getRun.mockImplementation(() => new Promise(() => {}))
     const chat = withSetup(() => useHomeApproveChat())
     await chat.load()
@@ -164,10 +168,11 @@ describe('useHomeApproveChat', () => {
     void chat.send()
     await flushPromises()
     expect(mocks.push).toHaveBeenCalledWith({ path: '/gates', query: { run: 'run-1', node: 'ap' } })
+    expect(mocks.getRun).not.toHaveBeenCalled()
     expect(mocks.reactReply).not.toHaveBeenCalled()
   })
 
-  it('still replies after the home view unmounts', async () => {
+  it('navigates even when the home view unmounts mid-send', async () => {
     let result!: ReturnType<typeof useHomeApproveChat>
     const i18n = createI18n({
       legacy: false,
@@ -184,11 +189,14 @@ describe('useHomeApproveChat', () => {
     app.use(i18n)
     app.mount(document.createElement('div'))
     await result.load()
-    result.draft.value = '卸载后仍要回复'
+    result.draft.value = '卸载后仍要跳转'
     const sendPromise = result.send()
     app.unmount()
     await sendPromise
-    expect(mocks.reactReply).toHaveBeenCalledWith('run-1', 'ap', '卸载后仍要回复', [])
+    expect(mocks.startRun).toHaveBeenCalledWith('wf-ap', {}, 'manual', 'normal', [], {
+      title: '卸载后仍要跳转',
+      firstMessage: { text: '卸载后仍要跳转', images: [] },
+    })
     expect(mocks.push).toHaveBeenCalledWith({ path: '/gates', query: { run: 'run-1', node: 'ap' } })
   })
 

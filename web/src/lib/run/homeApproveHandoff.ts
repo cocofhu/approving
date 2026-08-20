@@ -32,28 +32,21 @@ export function peekHomeApproveHandoff(): HomeApproveHandoff | null {
   return current
 }
 
-/** Same run; empty parked node id still belongs to this run (StartRun before graph resolve). */
-function matchesHomeApproveHandoff(
-  got: Pick<HomeApproveHandoff, 'runId' | 'nodeId'>,
+/**
+ * Home chat always belongs to one new run. The published-graph node id may
+ * differ from the parked Approve id (`ap` vs `approve_7gl8`), so match run only.
+ */
+export function homeApproveHandoffMatchesRun(
+  got: Pick<HomeApproveHandoff, 'runId'>,
   runId: string,
-  nodeId: string,
 ): boolean {
-  if (got.runId !== runId) return false
-  if (got.nodeId && nodeId && got.nodeId !== nodeId) return false
-  return true
-}
-
-/** Fill in the parked node id after waitForApprovePark, if Inbox has not consumed yet. */
-export function updateHomeApproveHandoffNode(runId: string, nodeId: string): boolean {
-  if (!current || !nodeId || current.runId !== runId) return false
-  current = { ...current, nodeId }
-  return true
+  return !!got.runId && got.runId === runId
 }
 
 /** Consume only when the parked card matches; otherwise leave the slot intact. */
 export function consumeHomeApproveHandoff(runId: string, nodeId: string): HomeApproveHandoff | null {
   const got = current
-  if (!got || !matchesHomeApproveHandoff(got, runId, nodeId)) return null
+  if (!got || !homeApproveHandoffMatchesRun(got, runId)) return null
   current = null
-  return { ...got, nodeId: got.nodeId || nodeId }
+  return { ...got, nodeId: nodeId || got.nodeId }
 }

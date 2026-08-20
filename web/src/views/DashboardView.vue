@@ -24,6 +24,7 @@ const {
   launchOpen,
   launchTarget,
   launchTitle,
+  launchFirstMessage,
   runFields,
   runInputs,
   runImages,
@@ -268,6 +269,7 @@ function openFilePicker() {
       :run-images="runImages"
       :draft-restored="draftRestored"
       :run-title="launchTitle"
+      :first-message="launchFirstMessage"
       @close="closeLaunch()"
       @stayed="closeLaunch()"
       @started="onLaunchStarted($event)"

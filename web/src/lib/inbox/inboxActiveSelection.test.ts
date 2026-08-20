@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   findInboxItemByKey,
   findInboxItemForHandoff,
+  findInboxItemForQuery,
   inboxItemKey,
   inboxQueryKey,
   inboxTripleKey,
@@ -68,6 +69,15 @@ describe('inbox keys', () => {
     expect(findInboxItemForHandoff(list, { runId: 'run-b', nodeId: 'node-b' })?.label).toBe('b')
     expect(findInboxItemForHandoff(list, { runId: 'run-a', nodeId: '' })?.label).toBe('a')
     expect(findInboxItemForHandoff(list, { runId: 'missing', nodeId: '' })).toBeUndefined()
+  })
+
+  it('finds a query card by run+node, or by run when the node id does not match', () => {
+    const list = [item('a'), item('b')]
+    expect(findInboxItemForQuery(list, 'run-b', 'node-b')?.label).toBe('b')
+    expect(findInboxItemForQuery(list, 'run-a', 'guessed')?.label).toBe('a')
+    expect(findInboxItemForQuery(list, 'run-a', '')?.label).toBe('a')
+    expect(findInboxItemForQuery(list, '', 'node-a')).toBeUndefined()
+    expect(findInboxItemForQuery(list, 'missing', 'node-x')).toBeUndefined()
   })
 })
 

@@ -164,6 +164,16 @@ export function isPaginated<T>(data: T[] | PaginatedResponse<T>): data is Pagina
   return data != null && typeof data === 'object' && !Array.isArray(data) && 'items' in data
 }
 
+/** Body fragment for startRun's opening message; blank messages are omitted. */
+function startRunFirstMessage(
+  msg?: { text?: string; images?: ClarifyImage[] } | null,
+): { firstMessage: { text: string; images: ClarifyImage[] } } | null {
+  const text = String(msg?.text ?? '').trim()
+  const images = msg?.images ?? []
+  if (!text && !images.length) return null
+  return { firstMessage: { text, images } }
+}
+
 export interface MCPServer {
   name: string
   url?: string
@@ -826,7 +836,13 @@ export const api = {
     trigger = 'manual',
     priority = 'normal',
     tags: string[] = [],
-    opts?: { signal?: AbortSignal; env?: { key: string; value: string; secret?: boolean }[]; title?: string },
+    opts?: {
+      signal?: AbortSignal
+      env?: { key: string; value: string; secret?: boolean }[]
+      title?: string
+      /** Opening chat message; the engine delivers it once the approve node parks. */
+      firstMessage?: { text: string; images?: ClarifyImage[] }
+    },
   ) =>
     req<{ id: string; status: string; priority?: string }>(`/workflows/${workflowId}/runs`, {
       method: 'POST',
@@ -837,6 +853,7 @@ export const api = {
         tags,
         ...(opts?.env && opts.env.length ? { env: opts.env } : {}),
         ...(opts?.title && opts.title.trim() ? { title: opts.title.trim() } : {}),
+        ...(startRunFirstMessage(opts?.firstMessage) ?? {}),
       }),
       ...(opts?.signal ? { signal: opts.signal } : {}),
     }),

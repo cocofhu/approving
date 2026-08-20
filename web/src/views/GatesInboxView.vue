@@ -10,10 +10,12 @@ import TagFilter from '@/components/ui/TagFilter.vue'
 import GateApproval from '@/components/run/GateApproval.vue'
 import GateShareLinkPanel from '@/components/run/GateShareLinkPanel.vue'
 import InboxPendingCard from '@/components/inbox/InboxPendingCard.vue'
+import InboxStartFailedPane from '@/components/inbox/InboxStartFailedPane.vue'
 import ReviewShell from '@/components/run/ReviewShell.vue'
 import { REVIEW_SHELL_WIDTH_KEY_APPROVAL } from '@/lib/inbox/reviewLayoutBudget'
 import ReviewComposer from '@/components/run/ReviewComposer.vue'
 import ArtifactLoadingPane from '@/components/run/ArtifactLoadingPane.vue'
+import ClarifyBootLoader from '@/components/run/ClarifyBootLoader.vue'
 import ClarifyProductStage from '@/components/run/ClarifyProductStage.vue'
 import ReactArtifactStage from '@/components/run/ReactArtifactStage.vue'
 import RefreshStrip from '@/components/run/RefreshStrip.vue'
@@ -28,20 +30,25 @@ import { usePendingGates } from '@/lib/inbox/usePendingGates'
 import { addClarifyAnnotation, useClarifyDraft } from '@/lib/inbox/useClarifyDraft'
 import { previewPickLabel, type AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
 import { useBreakpoint } from '@/lib/composables/useBreakpoint'
-import { inboxSecondaryLine } from '@/lib/inbox/inboxDisplay'
+import { inboxSecondaryLine, isStartingInboxItem } from '@/lib/inbox/inboxDisplay'
 import {
   inboxComposerMode,
   pickInboxClarifySession,
   resolveInboxReviewState,
 } from '@/lib/inbox/inboxReviewMode'
 import {
-  findInboxItemByKey,
   findInboxItemForHandoff,
-  inboxQueryKey,
+  findInboxItemForQuery,
   inboxTripleKey,
   isInboxLeftPendingError,
   pickNextActiveAfterRemove,
 } from '@/lib/inbox/inboxActiveSelection'
+import {
+  isStartFailedRun,
+  makeIncomingGhost,
+  resolveIncomingApproval,
+  vanishedStartingRows,
+} from '@/lib/inbox/inboxStartingCards'
 import { isAbortError } from '@/lib/run/liveLogRehydrate'
 import { applyPreviewArtifactName, inboxStageRemoteKind } from '@/lib/run/reactArtifactPreview'
 import { createPendingAcpBuffer, pickAcpRails } from '@/lib/run/pendingAcpBuffer'
@@ -53,7 +60,12 @@ import {
 import { createWsReconnectController } from '@/lib/run/wsReconnect'
 import { useToast } from '@/lib/composables/useToast'
 import { inboxShareKind, isHumanGateInboxItem, isShareableInboxItem } from '@/lib/inbox/gateShareLink'
-import { consumeHomeApproveHandoff, peekHomeApproveHandoff, type HomeApproveHandoff } from '@/lib/run/homeApproveHandoff'
+import {
+  consumeHomeApproveHandoff,
+  homeApproveHandoffMatchesRun,
+  peekHomeApproveHandoff,
+  type HomeApproveHandoff,
+} from '@/lib/run/homeApproveHandoff'
 import type { AcpEvent, Gate, GateInboxItem, GateShareInboxStatus, InboxItem, Run } from '@/lib/shared/types'
 
 const router = useRouter()
@@ -89,11 +101,25 @@ let listLoadGeneration = 0
 const { isMobile } = useBreakpoint()
 const active = ref<InboxItem | null>(null)
 const homeSeed = ref<HomeApproveHandoff | null>(null)
+/** Optimistic card while listGates has not yet returned the just-started Approve. */
+const incomingGhost = ref<InboxItem | null>(null)
+/**
+ * A starting card that left the list before its sandbox ever parked (boot
+ * failed). Kept locally so the loading card does not silently vanish; the user
+ * dismisses it explicitly.
+ */
+const startFailedItem = ref<InboxItem | null>(null)
+/**
+ * One-shot arm for the incoming ghost: set on navigation, cleared the moment the
+ * server lists the run. Without it the ghost would be a permanent fixture, since
+ * `?run=` and the consumed handoff both outlive the approval itself.
+ */
+const incomingArmed = ref(true)
 const activeHomeSeed = computed(() => {
   const it = active.value
-  const s = homeSeed.value
-  if (!it || !s) return null
-  if (s.runId !== it.runId || s.nodeId !== it.nodeId) return null
+  if (!it) return null
+  const s = homeSeed.value || peekHomeApproveHandoff()
+  if (!s || !homeApproveHandoffMatchesRun(s, it.runId)) return null
   return s
 })
 const mobileView = ref<'list' | 'detail'>('list')
@@ -155,7 +181,10 @@ const showListSkeleton = computed(
 const showListError = computed(() => !!listLoadError.value && !listItems.value.length)
 /** Keep old rows + RefreshStrip/fade on user refresh or filter reload (plan g2.2). */
 const showListRefresh = computed(
-  () => (listLoading.value || manualRefreshing.value) && listItems.value.length > 0,
+  () =>
+    (listLoading.value || manualRefreshing.value) &&
+    listItems.value.length > 0 &&
+    !incomingGhost.value,
 )
 /** Includes silent peek ariaBusy — no RefreshStrip for silent poll (plan g2.3). */
 const listPanelBusy = computed(
@@ -266,8 +295,22 @@ function shouldFetchActiveInboxContext() {
   if (!it) return false
   if (isProcessedTriple(it)) return false
   if (!isActiveStillInList(it)) return false
+  // Locally retained failure card: the server no longer has this item.
+  if (startFailedActive.value) return false
   return true
 }
+
+/** The selected card is the retained boot-failure card. */
+const startFailedActive = computed(() => {
+  const failed = startFailedItem.value
+  if (!failed || !active.value) return false
+  return itemKey(active.value) === itemKey(failed)
+})
+
+/** The selected card's sandbox is still booting — show the boot loader. */
+const activeStarting = computed(
+  () => !startFailedActive.value && isStartingInboxItem(active.value),
+)
 
 /** Invalidate in-flight loadList writebacks (e.g. after local approve converge). */
 function invalidateListLoads() {
@@ -286,12 +329,147 @@ function removeListItemLocally(removedKey: string) {
   removeItemLocally(removedKey)
 }
 
-function queryInboxKey(): string {
-  return inboxQueryKey(route.query.run, route.query.node)
+function incomingTarget(): { runId: string; nodeId: string } | null {
+  if (!incomingArmed.value) return null
+  return resolveIncomingApproval(
+    route.query.run,
+    route.query.node,
+    peekHomeApproveHandoff() || homeSeed.value,
+  )
+}
+
+function mergeIncomingGhost(items: InboxItem[]): InboxItem[] {
+  const t = incomingTarget()
+  if (!t) {
+    incomingGhost.value = null
+    return items
+  }
+  if (items.some((it) => it.runId === t.runId)) {
+    // The server owns this run's rows from now on. Disarming here is what stops
+    // the ghost from being rebuilt on every later load that no longer lists the
+    // run — e.g. right after the approval is answered and leaves pending.
+    incomingArmed.value = false
+    incomingGhost.value = null
+    return items
+  }
+  const seed = peekHomeApproveHandoff() || homeSeed.value
+  const ghost = makeIncomingGhost(t, String(seed?.text || ''))
+  incomingGhost.value = ghost
+  return [ghost, ...items]
+}
+
+function seedIncomingIfNeeded() {
+  const ghostKey = incomingGhost.value ? itemKey(incomingGhost.value) : ''
+  const withoutGhost = ghostKey
+    ? listItems.value.filter((it) => itemKey(it) !== ghostKey)
+    : listItems.value
+  listItems.value = mergeIncomingGhost(withoutGhost)
+  if (!processingLock.value) ensureValidActive()
+}
+
+function isIncomingContextPending(target: InboxItem): boolean {
+  return !!incomingGhost.value && itemKey(incomingGhost.value) === itemKey(target)
+}
+
+/**
+ * Re-bind active to the freshly loaded row when its starting flag flipped: the
+ * sandbox parked, so the transcript now exists and the context must reload.
+ */
+function rebindActiveFromList(list: InboxItem[]) {
+  const cur = active.value
+  if (!cur) return
+  const fresh = list.find((it) => itemKey(it) === itemKey(cur))
+  if (!fresh || fresh === cur) return
+  if (isStartingInboxItem(fresh) !== isStartingInboxItem(cur)) active.value = fresh
+}
+
+/** Keep the retained failure card visible until it is dismissed or reappears. */
+function mergeFailedStarting(rows: InboxItem[]): InboxItem[] {
+  const failed = startFailedItem.value
+  if (!failed) return rows
+  const key = itemKey(failed)
+  if (rows.some((it) => itemKey(it) === key)) {
+    startFailedItem.value = null
+    return rows
+  }
+  return [failed, ...rows]
+}
+
+/**
+ * A starting card vanished from the list. Confirm against the run before
+ * showing a failure: a filter/page change can drop a live row too.
+ */
+async function confirmStartingVanished(it: InboxItem) {
+  try {
+    if (!isStartFailedRun(await api.getRun(it.runId), it.nodeId)) return
+  } catch {
+    return
+  }
+  if (startFailedItem.value && itemKey(startFailedItem.value) === itemKey(it)) return
+  startFailedItem.value = it
+  if (!listItems.value.some((row) => itemKey(row) === itemKey(it))) {
+    listItems.value = [it, ...listItems.value]
+  }
+  // The list drop may have cleared/moved selection while we were confirming.
+  if (!active.value || itemKey(active.value) !== itemKey(it)) {
+    closeActiveRunWs()
+    activeRun.value = null
+    activeRunLoadError.value = false
+    active.value = it
+  }
+}
+
+function detectStartingFailures(before: InboxItem[], rows: InboxItem[]) {
+  const ghostKey = incomingGhost.value ? itemKey(incomingGhost.value) : ''
+  for (const it of vanishedStartingRows(before, rows, itemKey, ghostKey)) {
+    void confirmStartingVanished(it)
+  }
+}
+
+/** Dismiss the retained failure card and move selection on. */
+function dismissStartFailure() {
+  const it = startFailedItem.value
+  startFailedItem.value = null
+  if (!it) return
+  const key = itemKey(it)
+  const prevList = listItems.value.slice()
+  markProcessed(it)
+  removeListItemLocally(key)
+  if (active.value && itemKey(active.value) === key) {
+    closeActiveRunWs()
+    activeRun.value = null
+    activeRunLoadError.value = false
+    selectActiveAfterRemove(prevList, key)
+  }
+}
+
+/**
+ * While a starting card is selected we are waiting for the sandbox to park. WS
+ * status frames drive that; this poll is the fallback and, once armed, the only
+ * loop that keeps reloading the list. Bounded so a node stuck in `running`
+ * cannot leave a tab polling forever — WS frames still refresh after that.
+ */
+const STARTING_POLL_MS = 2500
+const STARTING_POLL_MAX_TICKS = 240
+let startingPollTimer: number | undefined
+function stopStartingPoll() {
+  if (startingPollTimer) window.clearInterval(startingPollTimer)
+  startingPollTimer = undefined
+}
+function startStartingPoll() {
+  stopStartingPoll()
+  let ticks = 0
+  startingPollTimer = window.setInterval(() => {
+    if (!activeStarting.value || ++ticks > STARTING_POLL_MAX_TICKS) {
+      stopStartingPoll()
+      return
+    }
+    void loadList()
+  }, STARTING_POLL_MS)
 }
 
 function selectFromQuery(): boolean {
-  const hit = findInboxItemByKey(listItems.value, queryInboxKey())
+  const hit = findInboxItemForQuery(listItems.value, route.query.run, route.query.node)
   if (!hit) return false
   active.value = hit
   return true
@@ -317,14 +495,15 @@ function selectFromHandoff(): boolean {
 let queryWaitGen = 0
 async function waitForQueryItem() {
   const gen = ++queryWaitGen
-  if (!queryInboxKey() && !peekHomeApproveHandoff()) return
-  for (let i = 0; i < 8; i++) {
+  if (!incomingTarget()) return
+  seedIncomingIfNeeded()
+  for (let i = 0; i < 40; i++) {
     if (gen !== queryWaitGen) return
-    if (selectFromQuery()) {
-      applyHomeHandoff()
-      return
-    }
-    if (selectFromHandoff()) return
+    if (selectFromQuery()) applyHomeHandoff()
+    else selectFromHandoff()
+    // Done once the real row is selected, or once a starting card is up and the
+    // bounded starting poll owns the rest of the wait (no second loop).
+    if (active.value && (!incomingGhost.value || activeStarting.value)) return
     await new Promise((r) => setTimeout(r, 400))
     if (gen !== queryWaitGen) return
     await loadList()
@@ -410,13 +589,12 @@ async function loadList({ showLoading = false }: { showLoading?: boolean } = {})
     // Discard overdue snapshots so they cannot resurrect a just-removed gate.
     if (gen !== listLoadGeneration) return
     listSnapshotForNeighbor = listItems.value.slice()
-    if (isPaginated(data)) {
-      listItems.value = data.items
-      listTotal.value = data.total
-    } else {
-      listItems.value = data
-      listTotal.value = data.length
-    }
+    const rows = isPaginated(data) ? data.items : data
+    const total = isPaginated(data) ? data.total : data.length
+    detectStartingFailures(listItems.value, rows)
+    listItems.value = mergeFailedStarting(mergeIncomingGhost(rows))
+    listTotal.value = Math.max(total, listItems.value.length)
+    rebindActiveFromList(listItems.value)
     listLoadError.value = null
     reconcileProcessedWithList(listItems.value)
     // Independent loadList success path: repair invalid selection (no Run # - shell).
@@ -608,6 +786,15 @@ watch(isEditing, (editing) => {
 watch(isMobile, (mobile) => {
   if (!mobile) mobileView.value = 'list'
 })
+
+watch(
+  activeStarting,
+  (starting) => {
+    if (starting) startStartingPoll()
+    else stopStartingPoll()
+  },
+  { immediate: true },
+)
 
 function isActive(it: InboxItem) {
   return active.value !== null && itemKey(active.value) === itemKey(it)
@@ -972,6 +1159,13 @@ function connectActiveRunWs(runId: string, opts?: { fromReconnect?: boolean }) {
       // Ignore events for runs that no longer match the current pending active item.
       if (!active.value || active.value.runId !== runId) return
       if (isProcessedTriple(active.value) || !isActiveStillInList()) return
+      // Starting card: a run transition is exactly the signal we wait for — the
+      // approve node has parked, so the list row loses `state: starting` and the
+      // rebind reloads the context with the real transcript.
+      if (activeStarting.value && (m.type === 'status' || m.type === 'react')) {
+        void loadList()
+        return
+      }
       // status/trace are noisy (run transitions / appendTrace) and must not softRefresh
       // while reviewing — peek/list cover "left pending" awareness instead.
       if (m.type === 'status' || m.type === 'trace') return
@@ -1034,6 +1228,7 @@ async function softRefreshActiveRun() {
     // re-project live bubbles (would reset stream). Hard-load path restores below.
   } catch (e) {
     if (isAbortError(e) || signal.aborted) return
+    if (isIncomingContextPending(target)) return
     if (
       isInboxLeftPendingError(e) ||
       isProcessedTriple(target) ||
@@ -1086,6 +1281,10 @@ async function loadActiveRun(hard = true) {
     projectAfterLoad = hard && (target.type === 'clarify' || target.type === 'gate')
   } catch (e) {
     if (isAbortError(e) || signal.aborted) return
+    if (isIncomingContextPending(target)) {
+      if (hard) activeRunLoadError.value = false
+      return
+    }
     if (
       isInboxLeftPendingError(e) ||
       isProcessedTriple(target) ||
@@ -1100,7 +1299,7 @@ async function loadActiveRun(hard = true) {
     }
   } finally {
     releaseInboxContextSignal(triple, signal)
-    if (hard) activeRunLoading.value = false
+    if (hard && !isIncomingContextPending(target)) activeRunLoading.value = false
   }
   if (projectAfterLoad && activeRun.value) {
     await projectClarifySessionAfterLoad(activeRun.value)
@@ -1161,6 +1360,8 @@ const showClarifyReviewShell = computed(
   () =>
     !!active.value &&
     active.value.type === 'clarify' &&
+    !activeStarting.value &&
+    !startFailedActive.value &&
     (!!activeClarify.value || !!activeHomeSeed.value),
 )
 const clarifyComposerNodeId = computed(
@@ -1433,13 +1634,17 @@ function onVisible() {
 }
 
 watch(() => [route.query.run, route.query.node], () => {
+  // Fresh navigation intent: re-arm so the new target can show a loading card.
+  incomingArmed.value = true
   void waitForQueryItem()
 })
+
+seedIncomingIfNeeded()
 
 onMounted(() => {
   hydrateProject()
   loadList({ showLoading: true }).then(() => {
-    if (queryInboxKey() || peekHomeApproveHandoff()) {
+    if (incomingTarget()) {
       void waitForQueryItem()
       return
     }
@@ -1451,6 +1656,7 @@ onMounted(() => {
 })
 onUnmounted(() => {
   queryWaitGen++
+  stopStartingPoll()
   document.removeEventListener('visibilitychange', onVisible)
   window.removeEventListener('focus', onFocus)
   closeActiveRunWs()
@@ -1678,6 +1884,13 @@ function itemSecondary(it: InboxItem) {
           @react-revised="onReactRevised"
           @open-share="openSharePanel(active)"
         />
+        <InboxStartFailedPane v-else-if="startFailedActive" @dismiss="dismissStartFailure" />
+        <ClarifyBootLoader
+          v-else-if="activeStarting"
+          class="min-h-0 flex-1"
+          phase="starting"
+          data-testid="inbox-boot-loader"
+        />
         <ReviewShell
           v-else-if="showClarifyReviewShell"
           :key="active.runId + active.nodeId"
@@ -1787,6 +2000,13 @@ function itemSecondary(it: InboxItem) {
               @resolve="onResolve"
               @react-revised="onReactRevised"
               @open-share="openSharePanel(active)"
+            />
+            <InboxStartFailedPane v-else-if="startFailedActive" @dismiss="dismissStartFailure" />
+            <ClarifyBootLoader
+              v-else-if="activeStarting"
+              class="min-h-0 flex-1"
+              phase="starting"
+              data-testid="inbox-boot-loader"
             />
             <ReviewShell
               v-else-if="showClarifyReviewShell"

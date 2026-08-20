@@ -4,6 +4,7 @@ import {
   inboxBadgeTone,
   inboxRunLabel,
   inboxSecondaryLine,
+  isStartingInboxItem,
 } from './inboxDisplay'
 
 describe('inboxRunLabel', () => {
@@ -54,6 +55,21 @@ describe('inboxBadgeLabelKey', () => {
 
   it('falls back to clarifyType when kind omitted', () => {
     expect(inboxBadgeLabelKey({ type: 'clarify' })).toBe('pages.gatesInbox.clarifyType')
+  })
+
+  it('maps a booting sandbox to startingType regardless of kind', () => {
+    expect(inboxBadgeLabelKey({ type: 'clarify', kind: 'clarify', state: 'starting' })).toBe(
+      'pages.gatesInbox.startingType',
+    )
+  })
+})
+
+describe('isStartingInboxItem', () => {
+  it('is true only for clarify items whose sandbox is still booting', () => {
+    expect(isStartingInboxItem({ type: 'clarify', state: 'starting' })).toBe(true)
+    expect(isStartingInboxItem({ type: 'clarify' })).toBe(false)
+    expect(isStartingInboxItem({ type: 'gate', state: 'starting' })).toBe(false)
+    expect(isStartingInboxItem(null)).toBe(false)
   })
 })
 

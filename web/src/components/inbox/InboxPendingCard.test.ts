@@ -203,6 +203,26 @@ describe('InboxPendingCard share entry', () => {
     expect(w.emitted('open-share')).toBeFalsy()
   })
 
+  it('marks a booting sandbox with the starting badge, a spinner, and no share row', () => {
+    const w = mount(InboxPendingCard, {
+      props: {
+        item: clarify({
+          state: 'starting',
+          label: '把登录做清楚',
+          shareLink: { state: 'none', canCreate: true },
+        }),
+      },
+      global: { plugins: [i18n] },
+    })
+    const card = w.get('[data-testid="inbox-item-card"]')
+    expect(card.attributes('data-starting')).toBe('true')
+    expect(card.text()).toContain('启动中')
+    expect(card.text()).not.toContain('待澄清')
+    expect(w.find('[data-testid="gate-share-row"]').exists()).toBe(false)
+    expect(w.findComponent({ name: 'Icon' }).props('name')).toBe('spinner')
+    expect(w.findComponent({ name: 'Icon' }).classes()).toContain('animate-spin')
+  })
+
   it('shows remaining time for active links', () => {
     const w = mount(InboxPendingCard, {
       props: { item: gate({ shareLink: { state: 'active', remainingSec: 3600, canManage: true } }) },

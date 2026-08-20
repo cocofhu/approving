@@ -14,7 +14,6 @@
       "needText": "Describe the goal or attach a file first",
       "send": "Send",
       "missingRequired": "Fill required launch fields before starting",
-      "parkTimeout": "Run started, but Approve is not ready yet. Opening Inbox.",
       "cardFallback": "Approve pre-dev clarification"
     },
     "board": {
@@ -1127,6 +1126,10 @@
       "clarifyType": "Needs clarify",
       "reviewType": "Needs review",
       "previewType": "App Preview",
+      "startingType": "Starting",
+      "startFailedTitle": "Sandbox failed to start",
+      "startFailedDesc": "This approval's sandbox never came up and the run stopped. Open the run detail to see why.",
+      "startFailedDismiss": "Dismiss",
       "loadingRun": "Loading run details…",
       "listLoadingHint": "Select an item after the list loads",
       "detailPane": "Details",

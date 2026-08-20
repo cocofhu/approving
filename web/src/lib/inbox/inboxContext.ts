@@ -29,6 +29,8 @@ export type ClarifyInboxContext = {
     done: boolean
     label: string
     previewArtifact?: string
+    /** Approve sandbox still booting: empty transcript, replies not accepted yet. */
+    starting?: boolean
   }
 }
 

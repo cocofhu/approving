@@ -68,7 +68,6 @@
       "canvasPath.ts",
       "dialogueAcpDelivery.ts",
       "exportStructuredArtifact.ts",
-      "homeApproveChat.ts",
       "homeApproveHandoff.ts",
       "isVisualHtmlCard.ts",
       "liveLogBootPhase.ts",
@@ -128,6 +127,7 @@
       "inboxContext.ts",
       "inboxDisplay.ts",
       "inboxReviewMode.ts",
+      "inboxStartingCards.ts",
       "mergeClarifyLiveTurns.ts",
       "reviewAnnotate.ts",
       "reviewLayoutBudget.ts",
@@ -152,9 +152,9 @@
     "api": 1,
     "composables": 15,
     "shared": 35,
-    "run": 48,
+    "run": 47,
     "agent": 9,
-    "inbox": 16,
+    "inbox": 17,
     "pm": 4,
     "project": 2
   }
