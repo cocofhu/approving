@@ -11,9 +11,10 @@
       "goCanvas": "去画布把 Approve 接到开始节点后",
       "pickPipeline": "请先选择一条流水线",
       "noPipelineShort": "未选择流水线",
-      "needText": "请先描述目标",
+      "needText": "请先描述目标或添加附件",
       "send": "发送",
-      "attachSoon": "附件将在后续版本提供",
+      "addAttachment": "添加附件",
+      "attachStartTitle": "附件启动",
       "missingRequired": "启动前还需填写必填项",
       "parkTimeout": "已启动运行，但 Approve 尚未就绪，正在打开运行详情",
       "cardFallback": "Approve 开发前澄清"

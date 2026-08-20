@@ -3,6 +3,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { InputField } from '@/components/workflow/RunLaunchModal.vue'
 import { api } from '@/lib/api/api'
+import { useImageAttachments } from '@/lib/composables/useImageAttachments'
 import { useToast } from '@/lib/composables/useToast'
 import { readStoredProjectId } from '@/lib/composables/useProjectContext'
 import { isPublishedApproveFirst } from '@/lib/run/approveFirstPipeline'
@@ -15,6 +16,17 @@ export function useHomeApproveChat() {
   const router = useRouter()
   const toast = useToast()
   const { t } = useI18n()
+  const {
+    attachments,
+    fileInput,
+    notice: attachNotice,
+    onPickFiles,
+    onPaste,
+    removeAttachment,
+    clearAttachments,
+    blockSendIfOversized,
+    clearNotice,
+  } = useImageAttachments()
 
   const projectId = ref(readStoredProjectId())
   const workflows = ref<Workflow[]>([])
@@ -24,6 +36,7 @@ export function useHomeApproveChat() {
   const draft = ref('')
   const sending = ref(false)
   const pendingText = ref('')
+  const pendingImages = ref<ClarifyImage[]>([])
 
   const launchOpen = ref(false)
   const launchTarget = ref<Workflow | null>(null)
@@ -40,7 +53,14 @@ export function useHomeApproveChat() {
   const selected = computed(
     () => pipelines.value.find((w) => w.id === selectedId.value) || pipelines.value[0] || null,
   )
-  const launchTitle = computed(() => clipRunTitle(pendingText.value))
+  const launchTitle = computed(() => resolveRunTitle(pendingText.value, pendingImages.value.length > 0))
+
+  function resolveRunTitle(text: string, hasAttachments: boolean): string {
+    const fromText = clipRunTitle(text)
+    if (fromText) return fromText
+    if (hasAttachments) return t('pages.dashboard.attachStartTitle')
+    return ''
+  }
 
   watch(
     pipelines,
@@ -96,13 +116,13 @@ export function useHomeApproveChat() {
     launchOpen.value = false
   }
 
-  async function afterStart(runId: string, text: string) {
+  async function afterStart(runId: string, text: string, images: ClarifyImage[]) {
     parkAbort?.abort()
     const ac = new AbortController()
     parkAbort = ac
     try {
       const { nodeId } = await waitForApprovePark(runId, { signal: ac.signal })
-      await api.reactReply(runId, nodeId, text)
+      await api.reactReply(runId, nodeId, text, images)
       await router.push({ path: `/runs/${runId}`, query: { node: nodeId } })
     } catch (e: any) {
       if (ac.signal.aborted || e?.name === 'AbortError') return
@@ -116,20 +136,29 @@ export function useHomeApproveChat() {
     }
   }
 
+  function clearComposer() {
+    draft.value = ''
+    clearAttachments()
+    clearNotice()
+  }
+
   async function send() {
     const wf = selected.value
     const text = draft.value.trim()
+    const images = attachments.value.slice()
     if (!wf) {
       toast.warn(t('pages.dashboard.pickPipeline'))
       return
     }
-    if (!text) {
+    if (!text && !images.length) {
       toast.warn(t('pages.dashboard.needText'))
       return
     }
+    if (blockSendIfOversized(images)) return
     if (sending.value) return
     sending.value = true
     pendingText.value = text
+    pendingImages.value = images
     try {
       const missing = missingRequiredAskField(wf)
       if (missing) {
@@ -137,9 +166,10 @@ export function useHomeApproveChat() {
         seedLaunch(wf)
         return
       }
-      const res = await api.startRun(wf.id, {}, 'manual', 'normal', [], { title: clipRunTitle(text) })
-      draft.value = ''
-      await afterStart(res.id, text)
+      const title = resolveRunTitle(text, images.length > 0)
+      const res = await api.startRun(wf.id, {}, 'manual', 'normal', [], { title })
+      clearComposer()
+      await afterStart(res.id, text, images)
     } catch (e: any) {
       const msg = String(e?.message || e)
       if (msg.includes('缺少必填项')) {
@@ -156,10 +186,12 @@ export function useHomeApproveChat() {
   async function onLaunchStarted(runId: string) {
     launchOpen.value = false
     const text = pendingText.value
+    const images = pendingImages.value.slice()
     sending.value = true
     try {
-      draft.value = ''
-      await afterStart(runId, text)
+      clearComposer()
+      pendingImages.value = []
+      await afterStart(runId, text, images)
     } finally {
       sending.value = false
     }
@@ -190,6 +222,12 @@ export function useHomeApproveChat() {
     runInputs,
     runImages,
     draftRestored,
+    attachments,
+    fileInput,
+    attachNotice,
+    onPickFiles,
+    onPaste,
+    removeAttachment,
     load,
     selectPipeline,
     send,

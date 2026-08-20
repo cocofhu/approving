@@ -138,8 +138,20 @@ describe('DashboardView home composer', () => {
     expect(mocks.startRun).toHaveBeenCalledWith('wf-ap', {}, 'manual', 'normal', [], {
       title: '把登录做清楚',
     })
-    expect(mocks.reactReply).toHaveBeenCalledWith('run-9', 'ap', '把登录做清楚')
+    expect(mocks.reactReply).toHaveBeenCalledWith('run-9', 'ap', '把登录做清楚', [])
     expect(mocks.push).toHaveBeenCalledWith({ path: '/runs/run-9', query: { node: 'ap' } })
+    wrapper.unmount()
+  })
+
+  it('enables attach entry with multiple file input (no attachSoon)', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const plus = wrapper.get('[data-testid="home-composer-plus"]')
+    expect(plus.attributes('disabled')).toBeUndefined()
+    expect(plus.attributes('title')).toBe('添加附件')
+    const input = wrapper.get('[data-testid="home-attach-input"]')
+    expect(input.attributes('multiple')).toBeDefined()
+    expect(wrapper.html()).not.toContain('后续版本')
     wrapper.unmount()
   })
 })

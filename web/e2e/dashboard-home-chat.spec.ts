@@ -2,7 +2,7 @@
  * E2E: Home chat starts an Approve-first pipeline and opens run detail.
  * Harness: dashboard-home-chat.html (DashboardView + run-detail stub)
  */
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page, type Route } from '@playwright/test'
 
 function approveWorkflow() {
   return {
@@ -25,11 +25,15 @@ function approveWorkflow() {
   }
 }
 
-async function mockHomeApis(page: Page) {
-  await page.route('**/api/workflows**', async (route) => {
+type ReplyBody = { text?: string; images?: unknown[]; force?: boolean; annotations?: unknown[] }
+
+async function mockHomeApis(page: Page, capture?: { replies: ReplyBody[]; titles: string[] }) {
+  await page.route('**/api/workflows**', async (route: Route) => {
     const req = route.request()
     const url = req.url()
     if (req.method() === 'POST' && url.includes('/runs')) {
+      const body = req.postDataJSON() as { title?: string } | null
+      if (capture && body?.title) capture.titles.push(String(body.title))
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -48,10 +52,12 @@ async function mockHomeApis(page: Page) {
     await route.continue()
   })
 
-  await page.route('**/api/runs/**', async (route) => {
+  await page.route('**/api/runs/**', async (route: Route) => {
     const req = route.request()
     const url = req.url()
     if (req.method() === 'POST' && url.includes('/react/') && url.includes('/reply')) {
+      const body = (req.postDataJSON() || {}) as ReplyBody
+      capture?.replies.push(body)
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -112,5 +118,36 @@ test.describe('首页 Chat 启动 Approve 流水线', () => {
     await page.getByTestId('home-composer-send').click()
 
     await expect(page.getByTestId('run-detail-page')).toBeVisible({ timeout: 10_000 })
+  })
+
+  test('仅附件启动：默认标题附件启动并进入运行详情', async ({ page }) => {
+    const capture = { replies: [] as ReplyBody[], titles: [] as string[] }
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await mockHomeApis(page, capture)
+    await page.goto('/dashboard-home-chat.html?memory=1&projectId=proj-1')
+    await expect(page.getByTestId('dashboard-view')).toBeVisible({ timeout: 10_000 })
+
+    const plus = page.getByTestId('home-composer-plus')
+    await expect(plus).toBeEnabled()
+    await expect(plus).toHaveAttribute('title', '添加附件')
+
+    await page.getByTestId('home-attach-input').setInputFiles({
+      name: 'brief.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64',
+      ),
+    })
+    await expect(page.getByTestId('home-pending-attachments')).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByTestId('home-draft-image-thumb')).toBeVisible()
+
+    await page.getByTestId('home-composer-send').click()
+    await expect(page.getByTestId('run-detail-page')).toBeVisible({ timeout: 10_000 })
+    expect(capture.titles).toContain('附件启动')
+    expect(capture.replies.length).toBeGreaterThan(0)
+    const last = capture.replies[capture.replies.length - 1]
+    expect(last.text ?? '').toBe('')
+    expect(Array.isArray(last.images) && last.images.length).toBeTruthy()
   })
 })

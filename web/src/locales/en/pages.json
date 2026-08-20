@@ -11,9 +11,10 @@
       "goCanvas": "Open the canvas and connect Approve after start",
       "pickPipeline": "Select a pipeline first",
       "noPipelineShort": "No pipeline",
-      "needText": "Describe the goal first",
+      "needText": "Describe the goal or add an attachment",
       "send": "Send",
-      "attachSoon": "Attachments will come in a later version",
+      "addAttachment": "Add attachment",
+      "attachStartTitle": "Started with attachments",
       "missingRequired": "Fill required launch fields before starting",
       "parkTimeout": "Run started, but Approve is not ready yet. Opening run detail.",
       "cardFallback": "Approve pre-dev clarification"

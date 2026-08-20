@@ -4,7 +4,8 @@ import { createApp, defineComponent, nextTick } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
-import type { Workflow } from '@/lib/shared/types'
+import { SITE_ATTACH_MAX_BYTES } from '@/lib/shared/attachments'
+import type { ClarifyImage, Workflow } from '@/lib/shared/types'
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -94,6 +95,14 @@ function withSetup<T>(fn: () => T): T {
   return result
 }
 
+function tinyPng(): ClarifyImage {
+  return {
+    data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    mimeType: 'image/png',
+    name: 'shot.png',
+  }
+}
+
 describe('useHomeApproveChat', () => {
   beforeEach(() => {
     mocks.push.mockReset()
@@ -135,8 +144,89 @@ describe('useHomeApproveChat', () => {
     expect(mocks.startRun).toHaveBeenCalledWith('wf-ap', {}, 'manual', 'normal', [], {
       title: '把登录做清楚',
     })
-    expect(mocks.reactReply).toHaveBeenCalledWith('run-1', 'ap', '把登录做清楚')
+    expect(mocks.reactReply).toHaveBeenCalledWith('run-1', 'ap', '把登录做清楚', [])
     expect(mocks.push).toHaveBeenCalledWith({ path: '/runs/run-1', query: { node: 'ap' } })
+  })
+
+  it('sends text + attachments via reactReply and clears pending list', async () => {
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    const img = tinyPng()
+    chat.draft.value = '带图启动'
+    chat.attachments.value = [img]
+    await chat.send()
+    await nextTick()
+    expect(mocks.startRun).toHaveBeenCalledWith('wf-ap', {}, 'manual', 'normal', [], {
+      title: '带图启动',
+    })
+    expect(mocks.reactReply).toHaveBeenCalledWith('run-1', 'ap', '带图启动', [img])
+    expect(chat.attachments.value).toEqual([])
+    expect(chat.draft.value).toBe('')
+  })
+
+  it('allows attachment-only send with default title 附件启动', async () => {
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    const img = tinyPng()
+    chat.attachments.value = [img]
+    await chat.send()
+    await nextTick()
+    expect(mocks.startRun).toHaveBeenCalledWith('wf-ap', {}, 'manual', 'normal', [], {
+      title: '附件启动',
+    })
+    expect(mocks.reactReply).toHaveBeenCalledWith('run-1', 'ap', '', [img])
+    expect(chat.attachments.value).toEqual([])
+  })
+
+  it('blocks empty send when both text and attachments are missing', async () => {
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    await chat.send()
+    expect(mocks.startRun).not.toHaveBeenCalled()
+    expect(mocks.toastWarn).toHaveBeenCalled()
+  })
+
+  it('blocks send when an oversized attachment remains', async () => {
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    const overB64 = 'A'.repeat(Math.ceil(((SITE_ATTACH_MAX_BYTES + 1024) * 4) / 3))
+    chat.attachments.value = [{ data: overB64, mimeType: 'application/octet-stream', name: 'huge.bin' }]
+    await chat.send()
+    expect(mocks.startRun).not.toHaveBeenCalled()
+    expect(chat.attachNotice.value?.kind).toBe('error')
+    expect(chat.attachNotice.value?.text).toContain('发送已阻止')
+  })
+
+  it('keeps draft attachments when launch modal opens for missing required fields', async () => {
+    const missing = {
+      ...approveWf,
+      nodes: [
+        {
+          id: 'in',
+          type: 'input' as const,
+          label: '开始',
+          position: { x: 0, y: 0 },
+          config: {
+            variables: [{ name: 'repos', ask: true, required: true, type: 'repos', value: [] }],
+          },
+        },
+        approveWf.nodes[1],
+        approveWf.nodes[2],
+      ],
+    }
+    mocks.listWorkflows.mockResolvedValue([missing])
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    const img = tinyPng()
+    chat.draft.value = '先澄清目标'
+    chat.attachments.value = [img]
+    await chat.send()
+    expect(mocks.startRun).not.toHaveBeenCalled()
+    expect(chat.launchOpen.value).toBe(true)
+    expect(chat.draft.value).toBe('先澄清目标')
+    expect(chat.attachments.value).toEqual([img])
+    expect(chat.launchTitle.value).toBe('先澄清目标')
+    expect(mocks.toastWarn).toHaveBeenCalled()
   })
 
   it('opens the launch modal when required ask fields are empty', async () => {
