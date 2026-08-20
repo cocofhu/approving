@@ -35,12 +35,23 @@ func startApproveAndReply(t *testing.T, eng *Engine, db *gorm.DB) *models.Run {
 	if err := eng.ReactReply(run.ID, "predev", "确认", nil, nil, false); err != nil {
 		t.Fatalf("reply: %v", err)
 	}
-	waitApproveHumanTurn(t, db, run.ID, "predev")
-	waitRunStatus(t, db, run.ID, "waiting_human")
+	waitApproveReady(t, eng, db, run.ID, "predev")
 	if err := eng.ReactReply(run.ID, "predev", "确认并流转", nil, nil, true); err != nil {
 		t.Fatalf("force: %v", err)
 	}
 	return run
+}
+
+// waitApproveReady waits until the async !force turn has finished and the
+// session is idle. Force-finish rejects with "澄清进行中或待发送队列非空"
+// if we only wait for the human bubble to land.
+func waitApproveReady(t *testing.T, eng *Engine, db *gorm.DB, runID, nodeID string) {
+	t.Helper()
+	waitApproveHumanTurn(t, db, runID, nodeID)
+	waitRunStatus(t, db, runID, "waiting_human")
+	if err := eng.waitReviewReadyForTest(runID, nodeID, waitPollTimeout); err != nil {
+		t.Fatalf("approve session not idle: %v", err)
+	}
 }
 
 func waitApproveHumanTurn(t *testing.T, db *gorm.DB, runID, nodeID string) {
@@ -201,8 +212,7 @@ func TestApproveRejectsUpstreamPlanArtifact(t *testing.T) {
 	if err := eng.ReactReply(run.ID, "predev", "确认", nil, nil, false); err != nil {
 		t.Fatalf("reply: %v", err)
 	}
-	waitApproveHumanTurn(t, db, run.ID, "predev")
-	waitRunStatus(t, db, run.ID, "waiting_human")
+	waitApproveReady(t, eng, db, run.ID, "predev")
 	if err := eng.ReactReply(run.ID, "predev", "确认并流转", nil, nil, true); err != nil {
 		t.Fatalf("force: %v", err)
 	}
@@ -224,8 +234,7 @@ func TestApproveDoesNotLiftUpstreamOptionalResearch(t *testing.T) {
 	if err := eng.ReactReply(run.ID, "predev", "确认", nil, nil, false); err != nil {
 		t.Fatalf("reply: %v", err)
 	}
-	waitApproveHumanTurn(t, db, run.ID, "predev")
-	waitRunStatus(t, db, run.ID, "waiting_human")
+	waitApproveReady(t, eng, db, run.ID, "predev")
 	if err := eng.ReactReply(run.ID, "predev", "确认并流转", nil, nil, true); err != nil {
 		t.Fatalf("force: %v", err)
 	}
