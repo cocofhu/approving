@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/nodereg"
 	"github.com/cocofhu/approving/internal/sandbox"
@@ -52,7 +53,7 @@ func (c *acpProvider) ensureOutcome(ctx context.Context, req NodeReq, acp *sandb
 		}
 		absorbChat(usage, byModel, events, res)
 		qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
-		if len(qs) > 0 && req.NodeType == "react" {
+		if len(qs) > 0 && nodereg.ClarifyInteractive(req.NodeType) {
 			return qs, nil
 		}
 	}
@@ -60,18 +61,18 @@ func (c *acpProvider) ensureOutcome(ctx context.Context, req NodeReq, acp *sandb
 }
 
 // ensureStructured makes a framework node's reserved structured product exist
-// before the node completes: it checks the run store and, while absent,
-// re-prompts the agent (same session) to call the naming set_* tool, looping up
-// to producesRetry times. Intermediate turns are folded into events. Unlike the
-// old produces path there is no workspace harvest — structured products are
-// written only through MCP.
-// For react nodes, a pending ask_question raised during the re-prompt aborts
-// the StructuredRetry push and returns those questions. Non-react callers keep
-// discard-and-continue semantics.
+// before the node completes: it checks the run store and, while absent (or
+// only present as an upstream same-name write), re-prompts the agent (same
+// session) to call the naming set_* tool, looping up to producesRetry times.
+// Intermediate turns are folded into events. Unlike the old produces path
+// there is no workspace harvest — structured products are written only
+// through MCP.
+// For react/approve nodes, a pending ask_question raised during the re-prompt
+// aborts the StructuredRetry push and returns those questions. Other callers
+// keep discard-and-continue semantics.
 func (c *acpProvider) ensureStructured(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, name, tool string, events *[]models.AcpEvent, usage **models.TokenUsage, byModel *models.TokenUsageByModel) ([]models.ReactQuestion, error) {
 	satisfied := func() bool {
-		_, err := c.host.ReadArtifact(req.RunID, req.Token, name)
-		return err == nil
+		return artifactOwnedByNode(c.host, req.RunID, req.Token, req.NodeID, name)
 	}
 	for i := 0; i <= producesRetry; i++ {
 		if satisfied() {
@@ -95,7 +96,7 @@ func (c *acpProvider) ensureStructured(ctx context.Context, req NodeReq, acp *sa
 		}
 		absorbChat(usage, byModel, events, res)
 		qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
-		if len(qs) > 0 && req.NodeType == "react" {
+		if len(qs) > 0 && nodereg.ClarifyInteractive(req.NodeType) {
 			return qs, nil
 		}
 
@@ -103,10 +104,31 @@ func (c *acpProvider) ensureStructured(ctx context.Context, req NodeReq, acp *sa
 	return nil, nil
 }
 
-// structuredArtifactFor maps a framework node type to its reserved product
-// name and the set_* tool that writes it (see nodereg).
-func structuredArtifactFor(nodeType string) (name, tool string) {
-	return nodereg.StructuredProduct(nodeType)
+// artifactOwnedByNode reports whether name exists and its last writer is nodeID.
+// Aligns with engine.finalizeProducts so upstream leftovers do not skip re-prompt.
+func artifactOwnedByNode(host *mcp.Host, runID, token, nodeID, name string) bool {
+	infos, err := host.ListArtifacts(runID, token)
+	if err != nil {
+		return false
+	}
+	for _, info := range infos {
+		if info.Name == name {
+			return info.Node == nodeID
+		}
+	}
+	return false
+}
+
+// ensureRequiredProducts re-prompts until every RequiredProducts artifact is
+// owned by the current node (not merely present under the same name).
+func (c *acpProvider) ensureRequiredProducts(ctx context.Context, req NodeReq, acp *sandbox.ACPClient, events *[]models.AcpEvent, usage **models.TokenUsage, byModel *models.TokenUsageByModel) ([]models.ReactQuestion, error) {
+	for _, p := range nodereg.RequiredProducts(req.NodeType) {
+		qs, err := c.ensureStructured(ctx, req, acp, p.ArtifactName, p.SetTool, events, usage, byModel)
+		if len(qs) > 0 || err != nil {
+			return qs, err
+		}
+	}
+	return nil, nil
 }
 
 // ensurePlanComplete drives an implement node's run plan to completion. It
@@ -188,7 +210,7 @@ func (c *acpProvider) ensurePreviewRegistered(ctx context.Context, req NodeReq, 
 // nodeNeedsOutcome reports whether this node type must call node_complete.
 func nodeNeedsOutcome(nodeType string) bool {
 	switch nodeType {
-	case "agent", "plan", "implement", "react", "research", "proposal",
+	case "agent", "plan", "implement", "react", "approve", "research", "proposal",
 		"test", "review", "submit_mr", "visual":
 		return true
 

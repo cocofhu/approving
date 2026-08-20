@@ -1393,7 +1393,7 @@
       },
       "platformRulesCard": {
         "title": "平台规则",
-        "desc": "管理 skills_embed 下 9 个平台规则的全局默认，持久化到 data/platform-rules/。",
+        "desc": "管理 skills_embed 下 10 个平台规则的全局默认，持久化到 data/platform-rules/。",
         "readOnly": "当前账号无管理员权限，仅可查看。",
         "manage": "管理规则",
         "view": "查看规则"
@@ -1401,7 +1401,7 @@
     },
     "platformRules": {
       "title": "平台规则（全局默认）",
-      "subtitle": "9 个规则文件 · 仅管理员可写 · 存 data/platform-rules/",
+      "subtitle": "10 个规则文件 · 仅管理员可写 · 存 data/platform-rules/",
       "backToSettings": "返回设置",
       "backToList": "返回列表",
       "emptyList": "暂无平台规则文件",
@@ -1416,7 +1416,7 @@
       "saveFailed": "保存失败",
       "resetFailed": "恢复内置默认失败",
       "fileListTitle": "规则文件",
-      "fileListDesc": "skills_embed/rules 下全部 9 个 .md 文件",
+      "fileListDesc": "skills_embed/rules 下全部 10 个 .md 文件",
       "sourceGlobal": "全局默认",
       "sourceEmbed": "内置兜底",
       "priorityTitle": "运行时加载优先级",

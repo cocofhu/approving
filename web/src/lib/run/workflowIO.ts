@@ -78,7 +78,7 @@ export function downloadJson(filename: string, data: unknown) {
 /** Collect skill_profile references from agent-class nodes. */
 export function collectSkillProfiles(nodes: WFNode[]): string[] {
   const agentTypes = new Set([
-    'react', 'agent', 'plan', 'implement', 'research', 'test', 'review', 'proposal', 'submit_mr', 'visual', 'app_preview',
+    'react', 'approve', 'agent', 'plan', 'implement', 'research', 'test', 'review', 'proposal', 'submit_mr', 'visual', 'app_preview',
   ])
   const out = new Set<string>()
   for (const n of nodes) {

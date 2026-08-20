@@ -89,6 +89,48 @@
       },
       "help": "### Clarify (react)\n\nMulti-turn ReAct dialogue to turn vague requirements into a **structured requirement**.\n\n**Mandatory deliverable**: call `set_clarified_requirement` to write `clarified_requirement.json`. Node fails if missing.\n\n**Questions**: use `ask_question` with optional `recommended` options (at most one for single-select; one or more for multi-select). Unmarked falls back to the first option in auto mode.\n\n**Auto-clarify**: when auto variable is true, platform auto-selects recommended options each round until done or max rounds.\n\n**Auto artifact**: only the reserved JSON `clarified_requirement.json` is auto-written; it can be shown structurally and gated with `exists(\"clarified_requirement.json\")` / `json(\"clarified_requirement.json\").field`.\n\n**Conditional injection**: append extra prompt when a configured global variable exists (e.g. after gate backfill)."
     },
+    "approve": {
+      "label": "Approve",
+      "desc": "One ReAct dialogue for pre-dev work: no prompt template, unlimited rounds; opening turn must ask; mandatory clarified requirement + plan",
+      "fields": {
+        "skill_profile": {
+          "label": "Agent (user-defined · Agent Studio)"
+        }
+      },
+      "outputs": {
+        "clarified_requirement": {
+          "desc": "Structured clarified requirement (clarified_requirement.json render)"
+        },
+        "clarified_requirement_json": {
+          "desc": "Raw clarified requirement JSON"
+        },
+        "plan": {
+          "desc": "Structured plan (plan.json render)"
+        },
+        "plan_json": {
+          "desc": "Raw plan JSON"
+        },
+        "research": {
+          "desc": "Optional research (research.json render)"
+        },
+        "research_json": {
+          "desc": "Optional raw research JSON"
+        },
+        "proposals": {
+          "desc": "Optional proposals (proposals.json render)"
+        },
+        "proposals_json": {
+          "desc": "Optional raw proposals JSON"
+        },
+        "page": {
+          "desc": "Optional visual page (page.html)"
+        },
+        "transcript": {
+          "desc": "Full conversation transcript"
+        }
+      },
+      "help": "### Approve\n\nOne multi-turn ReAct dialogue for **pre-dev work**. This node only configures an Agent: **no prompt template**, **no round cap**, and no auto-clarify / timeout / conditional injection. The platform injects run inputs, the first turn must `ask_question`, then keep asking until information is sufficient.\n\n**Two mandatory deliverables** (both required to finish — not a single unique delivery):\n1. `set_clarified_requirement` → `clarified_requirement.json` (`open_questions` must be empty)\n2. `set_plan` → `plan.json` (at most two levels: goal → sub-goal)\n\n**Optional** (shown if present, missing does not fail): `set_research`, `set_proposals`, `write_artifact` for `page.html`.\n\nIf a skill pack says “unique delivery” or forbids those tools, **platform rule `rules/approve.md` wins**. Do not write implementation code or change the repo."
+    },
     "agent": {
       "label": "Generic",
       "desc": "Run a user-defined agent (design/code/review, etc.) in sandbox with artifacts",

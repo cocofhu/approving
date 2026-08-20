@@ -12,6 +12,7 @@ import (
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/models"
 	gatenode "github.com/cocofhu/approving/internal/models/nodereg"
+	"github.com/cocofhu/approving/internal/nodereg"
 	"github.com/cocofhu/approving/internal/runtime"
 	"github.com/cocofhu/approving/internal/services"
 
@@ -399,7 +400,7 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 				if !e.ReviewSessionReady(runID, nodeID) {
 					return errors.New("复审进行中或待发送队列非空,请先 Cancel 或等待完成后再确认")
 				}
-			} else if n.Type == "react" && !force {
+			} else if nodereg.ClarifyInteractive(n.Type) && !force {
 				// Classic clarify !force: same FIFO / WS / refresh-resume as review.
 				var convPeek models.ReactConversation
 				if err := e.db.Where("run_id = ? AND node_id = ?", runID, nodeID).
@@ -411,7 +412,7 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 				}
 				_, err := e.EnqueueClarifyTurn(runID, nodeID, humanText, images, annotations)
 				return err
-			} else if n.Type == "react" && force {
+			} else if nodereg.ClarifyInteractive(n.Type) && force {
 				// Clarify force finish: only when session idle (no in-flight / queue).
 				if !e.ReviewSessionReady(runID, nodeID) {
 					return errors.New("澄清进行中或待发送队列非空,请先 Cancel 或等待完成后再结束")
@@ -433,7 +434,7 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 		return err
 	}
 	node := c.graph.FindNode(nodeID)
-	if node == nil || (node.Type != "react" && !isReviewNode(node.Type)) {
+	if node == nil || (!nodereg.ClarifyInteractive(node.Type) && !isReviewNode(node.Type)) {
 		return errors.New("react node not found")
 	}
 	if err := e.checkSkillProfileProject(c, node); err != nil {
@@ -517,7 +518,7 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 
 	// Finalize: require node_complete, enforce produces, then optional RPC.
 	outcome := e.finishAgentOutcome(c, node, t.Result, func(r runtime.NodeResult) nodeOutcome {
-		return e.completeProduces(c, node, r)
+		return e.finalizeAgentProducts(c, node, r)
 	})
 	e.saveState(c, node, outcome)
 	e.appendTrace(c, models.TraceEntry{NodeID: nodeID, Event: "resume", Detail: "react 完成"})

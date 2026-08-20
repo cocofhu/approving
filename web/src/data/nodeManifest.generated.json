@@ -1,15 +1,46 @@
 {
   "products": [
     {
-      "type": "plan",
-      "label": "计划",
+      "type": "approve",
+      "label": "Approve",
       "category": "Agent",
-      "outputKey": "plan",
-      "artifactName": "plan.json",
-      "outputJsonKey": "plan_json",
-      "setTool": "set_plan",
-      "ruleFile": "rules/plan.md",
-      "reviewVar": "review"
+      "ruleFile": "rules/approve.md",
+      "artifacts": [
+        {
+          "artifactName": "clarified_requirement.json",
+          "outputKey": "clarified_requirement",
+          "outputJsonKey": "clarified_requirement_json",
+          "setTool": "set_clarified_requirement",
+          "required": true
+        },
+        {
+          "artifactName": "plan.json",
+          "outputKey": "plan",
+          "outputJsonKey": "plan_json",
+          "setTool": "set_plan",
+          "required": true
+        },
+        {
+          "artifactName": "research.json",
+          "outputKey": "research",
+          "outputJsonKey": "research_json",
+          "setTool": "set_research",
+          "required": false
+        },
+        {
+          "artifactName": "proposals.json",
+          "outputKey": "proposals",
+          "outputJsonKey": "proposals_json",
+          "setTool": "set_proposals",
+          "required": false
+        },
+        {
+          "artifactName": "page.html",
+          "outputKey": "page",
+          "setTool": "write_artifact",
+          "required": false
+        }
+      ]
     },
     {
       "type": "implement",
@@ -23,12 +54,34 @@
       "reviewVar": "review"
     },
     {
-      "type": "visual",
-      "label": "视觉网页",
+      "type": "plan",
+      "label": "计划",
       "category": "Agent",
-      "outputKey": "page",
-      "artifactName": "page.html",
+      "outputKey": "plan",
+      "artifactName": "plan.json",
+      "outputJsonKey": "plan_json",
+      "setTool": "set_plan",
+      "ruleFile": "rules/plan.md",
       "reviewVar": "review"
+    },
+    {
+      "type": "proposal",
+      "label": "方案",
+      "category": "Agent",
+      "outputKey": "proposals",
+      "artifactName": "proposals.json",
+      "outputJsonKey": "proposals_json",
+      "setTool": "set_proposals",
+      "ruleFile": "rules/proposal.md",
+      "reviewVar": "review"
+    },
+    {
+      "type": "proposal_select",
+      "label": "方案确认",
+      "category": "门禁",
+      "outputKey": "proposal",
+      "artifactName": "proposal.json",
+      "outputJsonKey": "proposal_json"
     },
     {
       "type": "react",
@@ -41,12 +94,15 @@
       "ruleFile": "rules/react.md"
     },
     {
-      "type": "proposal_select",
-      "label": "方案确认",
-      "category": "门禁",
-      "outputKey": "proposal",
-      "artifactName": "proposal.json",
-      "outputJsonKey": "proposal_json"
+      "type": "research",
+      "label": "调研",
+      "category": "Agent",
+      "outputKey": "research",
+      "artifactName": "research.json",
+      "outputJsonKey": "research_json",
+      "setTool": "set_research",
+      "ruleFile": "rules/research.md",
+      "reviewVar": "review"
     },
     {
       "type": "review",
@@ -61,17 +117,6 @@
       "reviewVar": "review"
     },
     {
-      "type": "research",
-      "label": "调研",
-      "category": "Agent",
-      "outputKey": "research",
-      "artifactName": "research.json",
-      "outputJsonKey": "research_json",
-      "setTool": "set_research",
-      "ruleFile": "rules/research.md",
-      "reviewVar": "review"
-    },
-    {
       "type": "test",
       "label": "测试",
       "category": "Agent",
@@ -83,14 +128,11 @@
       "gate": "test"
     },
     {
-      "type": "proposal",
-      "label": "方案",
+      "type": "visual",
+      "label": "视觉网页",
       "category": "Agent",
-      "outputKey": "proposals",
-      "artifactName": "proposals.json",
-      "outputJsonKey": "proposals_json",
-      "setTool": "set_proposals",
-      "ruleFile": "rules/proposal.md",
+      "outputKey": "page",
+      "artifactName": "page.html",
       "reviewVar": "review"
     }
   ],

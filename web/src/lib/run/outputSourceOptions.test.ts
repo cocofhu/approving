@@ -145,4 +145,31 @@ describe('outputSourceOptions', () => {
       true,
     )
   })
+
+  it('derives Approve multi-product options from the manifest', () => {
+    const graph = [
+      node('approve', 'approve', 'Approve'),
+      node('output', 'output', '输出'),
+    ]
+    const realEdges: WFEdge[] = [{ id: 'e1', source: 'approve', target: 'output', kind: 'success' }]
+    const opts = buildOutputSourceOptions(graph, realEdges, 'output', t)
+    for (const key of ['clarified_requirement', 'plan', 'research', 'proposals', 'page']) {
+      expect(opts.some((o) => o.value === `{{nodes.approve.outputs.${key}}}`)).toBe(true)
+    }
+  })
+
+  it('derives single-product options from manifest outputKey', () => {
+    const graph = [
+      node('plan', 'plan', '计划'),
+      node('proposal_select', 'proposal_select', '选方案'),
+      node('output', 'output', '输出'),
+    ]
+    const realEdges: WFEdge[] = [
+      { id: 'e1', source: 'plan', target: 'proposal_select' },
+      { id: 'e2', source: 'proposal_select', target: 'output' },
+    ]
+    const opts = buildOutputSourceOptions(graph, realEdges, 'output', t)
+    expect(opts.some((o) => o.value === '{{nodes.plan.outputs.plan}}')).toBe(true)
+    expect(opts.some((o) => o.value === '{{nodes.proposal_select.outputs.proposal}}')).toBe(true)
+  })
 })

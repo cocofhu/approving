@@ -37,6 +37,11 @@ type fakeProvider struct {
 	// the produces contract fails and routeFailure is exercised.
 	reactPending      int
 	reactSkipProduces bool
+	// approveSkipPlan writes clarified_requirement.json but not plan.json so
+	// the Approve two-product contract fails.
+	approveSkipPlan bool
+	// approveWriteOptional also writes research.json so optional lift is tested.
+	approveWriteOptional bool
 	// reactForceStayOpen: force=true still returns Done:false (pending ask_question).
 	reactForceStayOpen bool
 	// reactSetupErr, when set, makes ReactOpen fail with a sandbox setup error.
@@ -477,6 +482,26 @@ func (f *fakeProvider) ReactReply(ctx context.Context, req runtime.NodeReq, hist
 			Result: runtime.NodeResult{OutputMd: content, Outputs: map[string]any{}}}
 	}
 	out["artifact_id"] = id
+	if req.NodeType == "approve" {
+		f.mu.Lock()
+		skipPlan := f.approveSkipPlan
+		writeOpt := f.approveWriteOptional
+		f.mu.Unlock()
+		if !skipPlan {
+			_, planBody := fakeStructured("plan")
+			if _, err := f.host.WriteArtifact(req.RunID, req.Token, req.NodeID, mcp.PlanArtifactName, planBody, "json"); err != nil {
+				return runtime.ReactTurn{Msg: "完成(写计划失败:" + err.Error() + ")。", Done: true,
+					Result: runtime.NodeResult{OutputMd: content, Outputs: out}}
+			}
+		}
+		if writeOpt {
+			_, researchBody := fakeStructured("research")
+			if _, err := f.host.WriteArtifact(req.RunID, req.Token, req.NodeID, mcp.ResearchArtifactName, researchBody, "json"); err != nil {
+				return runtime.ReactTurn{Msg: "完成(写调研失败:" + err.Error() + ")。", Done: true,
+					Result: runtime.NodeResult{OutputMd: content, Outputs: out}}
+			}
+		}
+	}
 	f.emitOutcome(req, nil)
 	return runtime.ReactTurn{Msg: "信息已充分。", Done: true, Result: runtime.NodeResult{OutputMd: content, Outputs: out}}
 }

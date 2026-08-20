@@ -1,4 +1,5 @@
 import type { ClarifyTurn, InboxItem, Run } from '@/lib/shared/types'
+import { isClarifyInteractive } from '@/lib/shared/clarifyInteractive'
 
 export type InboxClarifySession = {
   nodeId: string
@@ -38,7 +39,7 @@ export function resolveInboxReviewState(
   if (!n) {
     return { reviewActive: false, nodeMissing: true }
   }
-  if (n.type === 'react') {
+  if (isClarifyInteractive(n.type)) {
     return { reviewActive: false, nodeMissing: false }
   }
   return { reviewActive: !!conv && !conv.done, nodeMissing: false }

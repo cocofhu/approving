@@ -10,6 +10,7 @@ import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import { NODE_DEFS } from '@/data/nodeRegistry'
 import { PRODUCT_NODE_TYPES } from '@/lib/run/productNodeArtifacts'
 import { resolveOutputFocusNodeId } from '@/lib/run/runOutputSelection'
+import { isClarifyInteractive } from '@/lib/shared/clarifyInteractive'
 import type { NodeRunStatus, Run, WFNode, Workflow } from '@/lib/shared/types'
 
 export function useRunDetailSelection(opts: {
@@ -36,7 +37,7 @@ export function useRunDetailSelection(opts: {
   // selected, even before the first turn has finished generating (the conversation
   // row is only created after ReactOpen returns). The panel then shows a loading
   // state until the dialogue is available.
-  const clarifyActive = computed(() => selNode.value?.type === 'react')
+  const clarifyActive = computed(() => isClarifyInteractive(selNode.value?.type))
   // The selected react node's own conversation (per-node), falling back to the
   // run's current clarify when it matches this node.
   const selClarify = computed(() => {
@@ -51,7 +52,7 @@ export function useRunDetailSelection(opts: {
   )
   // React node failed during sandbox setup — show error-box instead of chat/loader.
   const clarifySandboxFailed = computed(
-    () => selNode.value?.type === 'react' && selStatus.value === 'failed' && !!selRun.value?.error,
+    () => isClarifyInteractive(selNode.value?.type) && selStatus.value === 'failed' && !!selRun.value?.error,
   )
 
   // Every sandbox-backed node (all "Agent" category types: agent/react/plan/
@@ -72,7 +73,7 @@ export function useRunDetailSelection(opts: {
   // combined review tab shows the product view (annotatable) + the ReAct chat.
   const reviewActive = computed(() => {
     const n = selNode.value
-    if (!n || n.type === 'react') return false
+    if (!n || isClarifyInteractive(n.type)) return false
     const conv = selClarify.value
     return !!conv && !conv.done
   })

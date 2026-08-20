@@ -10,7 +10,7 @@ import HtmlPreview from '../ui/HtmlPreview.vue'
 import SelectionAddToChat from './SelectionAddToChat.vue'
 import UpstreamRequirementContext from './UpstreamRequirementContext.vue'
 import { ARTIFACT_TO_OUTPUT_JSON } from '@/lib/run/structuredArtifacts'
-import { productArtifactName } from '@/lib/run/productNodeArtifacts'
+import { productArtifactName, productArtifactsForType } from '@/lib/run/productNodeArtifacts'
 import { provideReviewAnnotate } from '@/lib/inbox/reviewAnnotate'
 import { addClarifyAnnotation } from '@/lib/inbox/useClarifyDraft'
 import { useToast } from '@/lib/composables/useToast'
@@ -62,8 +62,38 @@ function onQuoteAdd(ann: ReactAnnotation) {
 
 const { NODE_DEFS } = useNodeDefs()
 
+const productTabs = computed(() => {
+  const listed = productArtifactsForType(props.node.type)
+  if (listed.length <= 1) return listed
+  // Only this node's writes count — same-named upstream leftovers must not
+  // surface as Approve (or other multi-product) optional tabs.
+  const ownedNames = new Set(
+    (props.run.artifacts || []).filter((a) => a.nodeId === props.node.id).map((a) => a.name),
+  )
+  const outs = props.nodeRun.outputs || {}
+  return listed.filter((a) => {
+    if (a.required) return true
+    if (ownedNames.has(a.name)) return true
+    if (a.outputKey) {
+      const snap = outs[a.outputKey] ?? outs[`${a.outputKey}_json`]
+      if (typeof snap === 'string' && snap.trim()) return true
+    }
+    return false
+  })
+})
+const selectedArtifactName = ref('')
+watch(
+  () => productTabs.value.map((a) => a.name).join(','),
+  () => {
+    if (!productTabs.value.some((a) => a.name === selectedArtifactName.value)) {
+      selectedArtifactName.value = productTabs.value[0]?.name || ''
+    }
+  },
+  { immediate: true },
+)
+
 const spec = computed(() => {
-  const name = productArtifactName(props.node.type)
+  const name = selectedArtifactName.value || productArtifactName(props.node.type)
   return name ? { name } : undefined
 })
 const hex = computed(() => nodeColorHex(props.node.type))
@@ -71,12 +101,32 @@ const def = computed(() => NODE_DEFS.value[props.node.type])
 
 const artifact = computed(() => {
   if (!spec.value) return null
-  return props.run.artifacts.find((a) => a.name === spec.value!.name) || null
+  const name = spec.value.name
+  return (
+    props.run.artifacts.find((a) => a.name === name && a.nodeId === props.node.id) ||
+    // Single-product panels historically matched by name only; keep that
+    // fallback when this node has no owned copy yet (e.g. snapshot-only load).
+    (productArtifactsForType(props.node.type).length <= 1
+      ? props.run.artifacts.find((a) => a.name === name)
+      : undefined) ||
+    null
+  )
 })
 
 const doc = ref<any>(null)
 const rawHtml = ref('')
-const isVisual = computed(() => props.node.type === 'visual')
+const isVisual = computed(() => props.node.type === 'visual' || spec.value?.name === 'page.html')
+
+function artifactTabLabel(name: string): string {
+  const map: Record<string, string> = {
+    'clarified_requirement.json': t('common.gateBodyLabels.clarifiedRequirement'),
+    'plan.json': t('common.gateBodyLabels.plan'),
+    'research.json': t('common.gateBodyLabels.research'),
+    'proposals.json': t('common.gateBodyLabels.proposals'),
+    'page.html': t('common.gateBodyLabels.pagePreview'),
+  }
+  return map[name] || name
+}
 const loading = ref(false)
 const eligibleVersions = computed(() =>
   (props.run.nodeExecutions?.[props.node.id] || [])
@@ -282,6 +332,27 @@ const pending = computed(() => props.nodeRun.status === 'pending')
               第 {{ version.iteration }} 次{{ version.iteration === latestEligibleIteration ? ' · 最新' : '' }}
             </option>
           </select>
+        </div>
+        <div
+          v-if="productTabs.length > 1"
+          class="mt-1.5 flex flex-wrap gap-1"
+          data-testid="structured-product-tabs"
+        >
+          <button
+            v-for="tab in productTabs"
+            :key="tab.name"
+            type="button"
+            class="border px-2 py-0.5 text-[11px]"
+            :class="
+              selectedArtifactName === tab.name
+                ? 'border-accent bg-accent/10 text-accent-2'
+                : 'border-line bg-elevated text-txt3'
+            "
+            :data-testid="`structured-product-tab-${tab.name}`"
+            @click="selectedArtifactName = tab.name"
+          >
+            {{ artifactTabLabel(tab.name) }}
+          </button>
         </div>
         <div class="text-[11px] text-txt3" data-testid="structured-product-name">{{ spec?.name }}</div>
       </div>

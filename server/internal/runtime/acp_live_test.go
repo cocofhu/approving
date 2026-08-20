@@ -20,9 +20,15 @@ import (
 type memStore struct {
 	mu   sync.Mutex
 	data map[string]map[string]string // runID -> name -> content
+	node map[string]map[string]string // runID -> name -> nodeID
 }
 
-func newMemStore() *memStore { return &memStore{data: map[string]map[string]string{}} }
+func newMemStore() *memStore {
+	return &memStore{
+		data: map[string]map[string]string{},
+		node: map[string]map[string]string{},
+	}
+}
 
 func (s *memStore) Save(runID, nodeID, name, kind, content string) (string, error) {
 	s.mu.Lock()
@@ -30,7 +36,11 @@ func (s *memStore) Save(runID, nodeID, name, kind, content string) (string, erro
 	if s.data[runID] == nil {
 		s.data[runID] = map[string]string{}
 	}
+	if s.node[runID] == nil {
+		s.node[runID] = map[string]string{}
+	}
 	s.data[runID][name] = content
+	s.node[runID][name] = nodeID
 	return runID + "/" + name, nil
 }
 
@@ -46,7 +56,7 @@ func (s *memStore) List(runID string) []mcp.ArtifactInfo {
 	defer s.mu.Unlock()
 	var out []mcp.ArtifactInfo
 	for name, c := range s.data[runID] {
-		out = append(out, mcp.ArtifactInfo{Name: name, Size: len(c)})
+		out = append(out, mcp.ArtifactInfo{Name: name, Node: s.node[runID][name], Size: len(c)})
 	}
 	return out
 }

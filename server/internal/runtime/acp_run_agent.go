@@ -128,11 +128,9 @@ func (c *acpProvider) runAgentOnce(ctx context.Context, req NodeReq) (res NodeRe
 		}
 	}
 
-	if name, tool := structuredArtifactFor(req.NodeType); name != "" {
-		if _, serr := c.ensureStructured(ctx, req, acp, name, tool, &turnEvents, &usage, &usageByModel); serr != nil {
-			events := c.snapshotEvents(ctx, sb, turnEvents)
-			return NodeResult{OutputMd: chatRes.Narration, Outputs: out, Events: events, Usage: usage, UsageByModel: usageByModel}, serr
-		}
+	if _, serr := c.ensureRequiredProducts(ctx, req, acp, &turnEvents, &usage, &usageByModel); serr != nil {
+		events := c.snapshotEvents(ctx, sb, turnEvents)
+		return NodeResult{OutputMd: chatRes.Narration, Outputs: out, Events: events, Usage: usage, UsageByModel: usageByModel}, serr
 	}
 
 	events := c.snapshotEvents(ctx, sb, turnEvents)

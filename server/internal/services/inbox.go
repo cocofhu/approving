@@ -19,6 +19,9 @@ func reactAutoEnabled(node *models.Node, vars map[string]any) bool {
 	if node == nil {
 		return false
 	}
+	if node.Type == "approve" {
+		return false
+	}
 	autoVar := strings.TrimSpace(configStr(node.Config["auto_var"]))
 	if autoVar == "" {
 		return false
@@ -146,7 +149,7 @@ type ClarifyInboxItem struct {
 // Badge kind stays clarifyInboxKind: react → clarify, app_preview stays distinct,
 // and proposal_select (default "clarify" kind but not Type=react) stays excluded.
 func IsShareableReviewSession(node *models.Node) bool {
-	if node != nil && node.Type == "react" {
+	if node != nil && nodereg.ClarifyInteractive(node.Type) {
 		return true
 	}
 	k := clarifyInboxKind(node)
@@ -163,7 +166,7 @@ func clarifyInboxKind(node *models.Node) string {
 	if node.Type == "app_preview" {
 		return "app_preview"
 	}
-	if node.Type != "react" && nodereg.ReviewCapable(node.Type) {
+	if node.Type != "react" && node.Type != "approve" && nodereg.ReviewCapable(node.Type) {
 		return "review"
 	}
 	return "clarify"

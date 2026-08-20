@@ -347,7 +347,7 @@ func TestPlanAndImplementNodes(t *testing.T) {
 }
 
 // TestNoCompanionForReactAndProposal covers finalizeStructured via
-// completeProduces (react) and execStructuredAgent (proposal): reserved JSON
+// finalizeAgentProducts (react) and execStructuredAgent (proposal): reserved JSON
 // exists, clarified_requirement.md / proposals.md companions do not.
 func TestNoCompanionForReactAndProposal(t *testing.T) {
 	t.Run("react", func(t *testing.T) {

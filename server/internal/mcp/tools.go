@@ -52,8 +52,8 @@ func (h *Host) runTool(runID, token, name string, args map[string]any) (string, 
 		// autonomous agent runs (no human is watching) so a node cannot stall
 		// waiting for a choice that will never be surfaced. During a review the
 		// human IS present, so any review-phase node may raise follow-up choices.
-		if h.ActiveNodeType(runID) != "react" && !h.InReviewPhase(runID) {
-			return "ask_question 仅在澄清(react)节点或复审阶段可用,当前节点不支持;请直接给出结论。", true
+		if h.ActiveNodeType(runID) != "react" && h.ActiveNodeType(runID) != "approve" && !h.InReviewPhase(runID) {
+			return "ask_question 仅在澄清(react/approve)节点或复审阶段可用,当前节点不支持;请直接给出结论。", true
 		}
 		qs := parseQuestions(args["questions"])
 		if len(qs) == 0 {
@@ -66,8 +66,8 @@ func (h *Host) runTool(runID, token, name string, args map[string]any) (string, 
 			return "set_plan failed: " + ErrUnauthorized.Error(), true
 		}
 		// Plan-only: writing the plan is the plan node's sole capability.
-		if h.ActiveNodeType(runID) != "plan" {
-			return "set_plan 仅在计划(plan)节点可用,当前节点不支持。", true
+		if !toolAllowed(h.ActiveNodeType(runID), "set_plan") {
+			return "set_plan 仅在计划(plan)或 Approve 节点可用,当前节点不支持。", true
 		}
 		doc, err := parsePlan(args)
 		if err != nil {
@@ -220,8 +220,8 @@ func (h *Host) runTool(runID, token, name string, args map[string]any) (string, 
 		if !h.authorize(runID, token) {
 			return "set_artifact_preview failed: " + ErrUnauthorized.Error(), true
 		}
-		if h.ActiveNodeType(runID) != "react" {
-			return "set_artifact_preview 仅在澄清(react)节点可用,当前节点不支持。", true
+		if !toolAllowed(h.ActiveNodeType(runID), "set_artifact_preview") {
+			return "set_artifact_preview 仅在澄清(react)或 Approve 节点可用,当前节点不支持。", true
 		}
 		aname := strings.TrimSpace(asString(args["name"]))
 		if aname == "" {
@@ -308,8 +308,8 @@ func (h *Host) structuredSet(runID, token, tool, nodeType, name string, doc any,
 	if !h.authorize(runID, token) {
 		return tool + " failed: " + ErrUnauthorized.Error(), true
 	}
-	if h.ActiveNodeType(runID) != nodeType {
-		return fmt.Sprintf("%s 仅在 %s 节点可用,当前节点不支持。", tool, nodeType), true
+	if !toolAllowed(h.ActiveNodeType(runID), tool) {
+		return toolDeniedMsg(tool), true
 	}
 	if parseErr != nil {
 		return tool + " failed: " + parseErr.Error(), true
@@ -322,6 +322,45 @@ func (h *Host) structuredSet(runID, token, tool, nodeType, name string, doc any,
 		return tool + " failed: " + err.Error(), true
 	}
 	return okMsg, false
+}
+
+// toolAllowed is the sole gate for set_*/ask tools by active node type.
+// Kept in mcp (not nodereg) to avoid an import cycle: nodereg → mcp for
+// artifact names / renderers.
+func toolAllowed(active, tool string) bool {
+	switch tool {
+	case "ask_question", "set_artifact_preview", "set_clarified_requirement":
+		return active == "react" || active == "approve"
+	case "set_plan":
+		return active == "plan" || active == "approve"
+	case "set_research":
+		return active == "research" || active == "approve"
+	case "set_proposals":
+		return active == "proposal" || active == "approve"
+	case "set_test_result":
+		return active == "test"
+	case "set_review":
+		return active == "review"
+	case "set_implementation_result":
+		return active == "implement"
+	default:
+		return false
+	}
+}
+
+func toolDeniedMsg(tool string) string {
+	switch tool {
+	case "set_clarified_requirement":
+		return "set_clarified_requirement 仅在澄清(react)或 Approve 节点可用,当前节点不支持。"
+	case "set_plan":
+		return "set_plan 仅在计划(plan)或 Approve 节点可用,当前节点不支持。"
+	case "set_research":
+		return "set_research 仅在调研(research)或 Approve 节点可用,当前节点不支持。"
+	case "set_proposals":
+		return "set_proposals 仅在方案(proposal)或 Approve 节点可用,当前节点不支持。"
+	default:
+		return tool + " 当前节点不支持。"
+	}
 }
 
 // structuredGet is the shared handler for every get_<x> structured-product
@@ -530,7 +569,7 @@ func artifactTools() []map[string]any {
 		},
 		{
 			"name": "ask_question",
-			"description": "仅澄清(react)节点可用:向用户提出结构化的选择题(问题+候选选项),界面会渲染成单选/多选卡片让用户点选。" +
+			"description": "仅澄清(react)或 Approve 节点可用:向用户提出结构化的选择题(问题+候选选项),界面会渲染成单选/多选卡片让用户点选。" +
 				"当需要用户在有限选项中做决定时使用;调用后应结束本轮回复,等待用户完成选择。" +
 				"澄清是门禁:任何还不确定、需要用户拍板的点都必须用本工具让用户确认,不能留成未决问题就结束。" +
 				"只有当信息已充分、没有任何待确认问题时,才不要调用本工具,直接调用 set_clarified_requirement 收敛结论——届时视为澄清结束。",
@@ -569,8 +608,8 @@ func artifactTools() []map[string]any {
 		},
 		{
 			"name": "set_plan",
-			"description": "仅计划(plan)节点可用:写入本次运行的全局结构化计划。计划最多两级:大目标 goals[] → 小目标 subgoals[](小目标是叶子,其下不能再有子目标)。" +
-				"这是计划节点的唯一交付,调用成功即视为完成;不要再写代码、改仓库或写其它产物文件。",
+			"description": "仅计划(plan)或 Approve 节点可用:写入本次运行的全局结构化计划。计划最多两级:大目标 goals[] → 小目标 subgoals[](小目标是叶子,其下不能再有子目标)。" +
+				"在计划节点这是唯一交付;在 Approve 节点这是两份强制交付之一(另一份是 set_clarified_requirement)。不要写代码或改仓库。",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -623,8 +662,8 @@ func artifactTools() []map[string]any {
 		},
 		{
 			"name": "set_clarified_requirement",
-			"description": "仅澄清(react)节点可用:写入结构化需求规格(对齐 ISO/IEC/IEEE 29148 SRS 与 PRD 子集,澄清阶段产物)。" +
-				"这是澄清节点的唯一结构化交付,信息充分后调用它结束澄清。" +
+			"description": "仅澄清(react)或 Approve 节点可用:写入结构化需求规格(对齐 ISO/IEC/IEEE 29148 SRS 与 PRD 子集)。" +
+				"在澄清节点这是唯一结构化交付;在 Approve 节点这是两份强制交付之一(另一份是 set_plan)。信息充分后调用它。" +
 				"视觉/文案预览材料应 write_artifact 后立刻 set_artifact_preview,不要把需求规格写成普通产物文件。" +
 				"澄清是门禁:调用前所有不确定的点都应已通过 ask_question 让用户确认,open_questions 必须为空,否则平台会驳回并要求继续澄清。" +
 				"禁止写入排期/里程碑/交付日期,禁止写入技术选型、架构或详细 API/DB 设计(留给调研/方案节点)。",
@@ -698,8 +737,8 @@ func artifactTools() []map[string]any {
 		getTool("get_clarified_requirement", "读取本次运行的需求澄清结论(clarified_requirement.json)。"),
 		{
 			"name": "set_research",
-			"description": "仅调研(research)节点可用:写入结构化的技术调研结论(technical spike)。" +
-				"这是调研节点的唯一交付,调研完成后调用它结束,不要改仓库或写其它产物。",
+			"description": "仅调研(research)或 Approve 节点可用:写入结构化的技术调研结论(technical spike)。" +
+				"在调研节点这是唯一交付;在 Approve 节点为可选(有助于拍板,不是完成条件)。",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -723,8 +762,8 @@ func artifactTools() []map[string]any {
 		getTool("get_research", "读取本次运行的调研结论(research.json)。"),
 		{
 			"name": "set_proposals",
-			"description": "仅方案(proposal)节点可用:写入结构化的候选方案集(对齐 ADR/MADR 与设计文档),可含多个方案供后续确认。" +
-				"这是方案节点的唯一交付。",
+			"description": "仅方案(proposal)或 Approve 节点可用:写入结构化的候选方案集(对齐 ADR/MADR 与设计文档),可含多个方案供后续确认。" +
+				"在方案节点这是唯一交付;在 Approve 节点为可选(有助于拍板,不是完成条件)。",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -842,7 +881,7 @@ func artifactTools() []map[string]any {
 		},
 		{
 			"name": "set_artifact_preview",
-			"description": "仅澄清(react)节点可用:把已写入的产物钉到 ReAct 界面预览 Tab。" +
+			"description": "仅澄清(react)或 Approve 节点可用:把已写入的产物钉到 ReAct 界面预览 Tab。" +
 				"参数 name 为 list_artifacts / write_artifact 中的产物名,必须已存在。可多次调用切换预览;同名再次 write_artifact 后预览会热更新。" +
 				"与 ask_question.demoHtml 分工:选项级并排对比用 demoHtml;独立成稿、需热更新或取点标注用本工具。",
 			"inputSchema": map[string]any{

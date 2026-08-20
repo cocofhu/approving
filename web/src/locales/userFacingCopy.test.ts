@@ -279,6 +279,13 @@ describe('user-facing copy remediation keys', () => {
     expect(en.global.t('pages.appPreview.novnc.cancelInspect')).toBe('Cancel annotation')
     expect(zh.global.t('pages.appPreview.novnc.cancelInspect')).not.toMatch(/取消取点/)
 
+    expect(zh.global.t('pages.settings.platformRulesCard.desc')).toMatch(/10 个平台规则/)
+    expect(en.global.t('pages.settings.platformRulesCard.desc')).toMatch(/all 10 embedded/)
+    expect(zh.global.t('pages.platformRules.subtitle')).toMatch(/10 个规则文件/)
+    expect(en.global.t('pages.platformRules.subtitle')).toMatch(/10 rule files/)
+    expect(zh.global.t('pages.platformRules.fileListDesc')).toMatch(/全部 10 个/)
+    expect(en.global.t('pages.platformRules.fileListDesc')).toMatch(/All 10/)
+
     const tokenSourceNoPmKeys = [
       'pages.board.tokenStats.workflow',
       'pages.projectDetail.tokenTipWorkflow',

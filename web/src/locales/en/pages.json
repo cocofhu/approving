@@ -1393,7 +1393,7 @@
       },
       "platformRulesCard": {
         "title": "Platform rules",
-        "desc": "Manage global defaults for all 9 embedded platform rules under data/platform-rules/.",
+        "desc": "Manage global defaults for all 10 embedded platform rules under data/platform-rules/.",
         "readOnly": "Read-only for non-admin accounts.",
         "manage": "Manage rules",
         "view": "View rules"
@@ -1401,7 +1401,7 @@
     },
     "platformRules": {
       "title": "Platform rules (global defaults)",
-      "subtitle": "9 rule files · admin write only · stored in data/platform-rules/",
+      "subtitle": "10 rule files · admin write only · stored in data/platform-rules/",
       "backToSettings": "Back to settings",
       "backToList": "Back to list",
       "emptyList": "No platform rule files",
@@ -1416,7 +1416,7 @@
       "saveFailed": "Save failed",
       "resetFailed": "Restore failed",
       "fileListTitle": "Rule files",
-      "fileListDesc": "All 9 .md files under skills_embed/rules",
+      "fileListDesc": "All 10 .md files under skills_embed/rules",
       "sourceGlobal": "Global default",
       "sourceEmbed": "Embedded fallback",
       "priorityTitle": "Runtime load priority",

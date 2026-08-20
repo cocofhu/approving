@@ -15,6 +15,7 @@ import (
 
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/nodereg"
 	"github.com/cocofhu/approving/internal/sandbox"
 	"github.com/cocofhu/approving/internal/textutil"
 
@@ -90,14 +91,44 @@ func TestPureHelpers(t *testing.T) {
 	}
 }
 
-func TestStructuredArtifactFor(t *testing.T) {
+func TestStructuredProduct(t *testing.T) {
 	cases := map[string]string{"plan": mcp.PlanArtifactName, "implement": mcp.ImplementationResultArtifactName,
 		"research": mcp.ResearchArtifactName, "test": mcp.TestResultArtifactName, "review": mcp.ReviewArtifactName,
 		"proposal": mcp.ProposalsArtifactName, "agent": ""}
 	for nt, want := range cases {
-		if name, _ := structuredArtifactFor(nt); name != want {
-			t.Errorf("structuredArtifactFor(%q) = %q want %q", nt, name, want)
+		name, _ := nodereg.StructuredProduct(nt)
+		if name != want {
+			t.Errorf("StructuredProduct(%q) = %q want %q", nt, name, want)
 		}
+	}
+}
+
+func TestArtifactOwnedByNode(t *testing.T) {
+	store := newMemStore()
+	host := mcp.NewHost(store)
+	tok := host.RegisterRun("r")
+	t.Cleanup(func() { host.UnregisterRun("r") })
+
+	if artifactOwnedByNode(host, "r", tok, "n", mcp.PlanArtifactName) {
+		t.Fatal("missing artifact must not be owned")
+	}
+	if _, err := host.WriteArtifact("r", tok, "upstream", mcp.PlanArtifactName, `{"goals":[]}`, "json"); err != nil {
+		t.Fatal(err)
+	}
+	if artifactOwnedByNode(host, "r", tok, "n", mcp.PlanArtifactName) {
+		t.Fatal("upstream writer must not satisfy current node")
+	}
+	if !artifactOwnedByNode(host, "r", tok, "upstream", mcp.PlanArtifactName) {
+		t.Fatal("actual writer should own the artifact")
+	}
+	if _, err := host.WriteArtifact("r", tok, "n", mcp.PlanArtifactName, `{"goals":[{"title":"G"}]}`, "json"); err != nil {
+		t.Fatal(err)
+	}
+	if !artifactOwnedByNode(host, "r", tok, "n", mcp.PlanArtifactName) {
+		t.Fatal("rewrite by current node should own the artifact")
+	}
+	if artifactOwnedByNode(host, "r", "bad-token", "n", mcp.PlanArtifactName) {
+		t.Fatal("unauthorized token must not report ownership")
 	}
 }
 
@@ -113,6 +144,11 @@ func TestConditionalInjection(t *testing.T) {
 	req.Vars["flag"] = "false"
 	if got := conditionalInjection(req); got != "" {
 		t.Errorf("false => empty, got %q", got)
+	}
+	req.NodeType = "approve"
+	req.Vars["flag"] = "yes"
+	if got := conditionalInjection(req); got != "" {
+		t.Errorf("approve leftover conditional_prompt => empty, got %q", got)
 	}
 }
 
@@ -159,6 +195,39 @@ func TestBuildAgentPromptPerType(t *testing.T) {
 		if !strings.Contains(got, "up.md") {
 			t.Errorf("%s: upstream seed missing", nt)
 		}
+	}
+}
+
+func TestApprovePromptIgnoresTemplateAndInjectsVars(t *testing.T) {
+	host := mcp.NewHost(newMemStore())
+	p := newACPProvider(host, Options{}).(*acpProvider)
+	req := NodeReq{
+		NodeType: "approve",
+		Config:   map[string]any{"prompt": "UNIQUE_USER_PROMPT_XYZ"},
+		Vars:     map[string]any{"feature": "邮箱验证码登录", "empty": ""},
+	}
+	got := p.buildAgentPrompt(req, []string{"up.md"})
+	if strings.Contains(got, "UNIQUE_USER_PROMPT_XYZ") {
+		t.Fatal("approve must ignore inspector prompt template")
+	}
+	if !strings.Contains(got, "邮箱验证码登录") {
+		t.Fatalf("approve should inject feature var:\n%s", got)
+	}
+	if !strings.Contains(got, "ask_question") {
+		t.Fatalf("approve seed should start with ask_question:\n%s", got)
+	}
+	open := p.buildReactOpenPrompt(req, nil)
+	if !strings.Contains(open, "第一回合必须调用 ask_question") {
+		t.Fatalf("approve open suffix missing:\n%s", open)
+	}
+	leftover := req
+	leftover.Config = map[string]any{
+		"prompt": "UNIQUE_USER_PROMPT_XYZ",
+		"conditional_prompt": map[string]any{"when_var": "feature", "text": "CONDITIONAL_INJECT_XYZ"},
+	}
+	got = p.buildAgentPrompt(leftover, nil)
+	if strings.Contains(got, "CONDITIONAL_INJECT_XYZ") {
+		t.Fatal("approve must ignore leftover conditional_prompt")
 	}
 }
 

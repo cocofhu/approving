@@ -35,7 +35,7 @@ import {
   closeStagePreviewTab,
   findArtifactByName,
   isOwnNodeArtifact,
-  isReactGraphNode,
+  isClarifyInteractiveGraphNode,
   latestOwnNodeHtmlName,
   nextTabAfterClose,
   openStagePreviewTab,
@@ -78,12 +78,16 @@ describe('reactArtifactPreview helpers', () => {
     expect(artifactKindLabelKey('unknown')).toContain('kindFile')
   })
 
-  it('detects react graph nodes', () => {
+  it('detects clarify-interactive graph nodes', () => {
     const run = {
       nodes: [{ id: 'c1', type: 'react', label: '澄清', position: { x: 0, y: 0 }, config: {} }],
     } as Run
-    expect(isReactGraphNode(run, 'c1')).toBe(true)
-    expect(isReactGraphNode(run, 'other')).toBe(false)
+    expect(isClarifyInteractiveGraphNode(run, 'c1')).toBe(true)
+    expect(isClarifyInteractiveGraphNode(run, 'other')).toBe(false)
+    const approveRun = {
+      nodes: [{ id: 'a1', type: 'approve', label: 'Approve', position: { x: 0, y: 0 }, config: {} }],
+    } as Run
+    expect(isClarifyInteractiveGraphNode(approveRun, 'a1')).toBe(true)
   })
 
   it('treats foreign-node artifacts as read-only unless nodeId is empty', () => {

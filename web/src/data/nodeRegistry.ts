@@ -3,6 +3,7 @@
 // see web/src/lib/run/structuredArtifacts.ts and nodeManifest.generated.json.
 
 import type { NodeType, NodeTypeDef } from '@/lib/shared/types'
+import { productOutputDefs } from '@/lib/run/productNodeArtifacts'
 
 export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
   input: {
@@ -54,13 +55,27 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
       { key: 'timeout', label: 'nodes.react.fields.timeout.label', type: 'duration', optional: true },
       { key: 'conditional_prompt', label: 'nodes.react.fields.conditional_prompt.label', type: 'conditional', optional: true },
     ],
-    outputs: [
-      { key: 'clarified_requirement', desc: 'nodes.react.outputs.clarified_requirement.desc' },
-      { key: 'clarified_requirement_json', desc: 'nodes.react.outputs.clarified_requirement_json.desc' },
+    outputs: productOutputDefs('react', [
       { key: 'transcript', desc: 'nodes.react.outputs.transcript.desc' },
-    ],
+    ]),
     defaults: { max_rounds: 6, prompt: '针对以下需求提出澄清问题,直到信息充分,再调用 set_clarified_requirement 写入结构化需求:\n{{vars.feature}}' },
     help: 'nodes.react.help',
+  },
+  approve: {
+    type: 'approve',
+    label: 'nodes.approve.label',
+    desc: 'nodes.approve.desc',
+    icon: 'check',
+    color: 'text-n-clarify',
+    category: 'nodes.categories.agent',
+    fields: [
+      { key: 'skill_profile', label: 'nodes.approve.fields.skill_profile.label', type: 'select' },
+    ],
+    outputs: productOutputDefs('approve', [
+      { key: 'transcript', desc: 'nodes.approve.outputs.transcript.desc' },
+    ]),
+    defaults: {},
+    help: 'nodes.approve.help',
   },
   agent: {
     type: 'agent',
@@ -105,10 +120,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
       { key: 'conditional_prompt', label: 'nodes.plan.fields.conditional_prompt.label', type: 'conditional', optional: true },
       { key: 'review_var', label: 'nodes.shared.reviewVar.label', type: 'text', placeholder: 'nodes.shared.reviewVar.placeholder', optional: true },
     ],
-    outputs: [
-      { key: 'plan', desc: 'nodes.plan.outputs.plan.desc' },
-      { key: 'plan_json', desc: 'nodes.plan.outputs.plan_json.desc' },
-    ],
+    outputs: productOutputDefs('plan'),
     defaults: { prompt: '基于上游产物制定实施计划(最多两级:大目标→小目标),用 set_plan 写入' },
     help: 'nodes.plan.help',
   },
@@ -127,13 +139,11 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
       { key: 'conditional_prompt', label: 'nodes.implement.fields.conditional_prompt.label', type: 'conditional', optional: true },
       { key: 'review_var', label: 'nodes.shared.reviewVar.label', type: 'text', placeholder: 'nodes.shared.reviewVar.placeholder', optional: true },
     ],
-    outputs: [
-      { key: 'implementation_result', desc: 'nodes.implement.outputs.implementation_result.desc' },
-      { key: 'implementation_result_json', desc: 'nodes.implement.outputs.implementation_result_json.desc' },
+    outputs: productOutputDefs('implement', [
       { key: 'branches', desc: 'nodes.implement.outputs.branches.desc' },
       { key: 'pushed', desc: 'nodes.implement.outputs.pushed.desc' },
       { key: 'changed_files', desc: 'nodes.implement.outputs.changed_files.desc' },
-    ],
+    ]),
     defaults: {
       max_rounds: 3,
       prompt:
@@ -155,10 +165,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
       { key: 'conditional_prompt', label: 'nodes.research.fields.conditional_prompt.label', type: 'conditional', optional: true },
       { key: 'review_var', label: 'nodes.shared.reviewVar.label', type: 'text', placeholder: 'nodes.shared.reviewVar.placeholder', optional: true },
     ],
-    outputs: [
-      { key: 'research', desc: 'nodes.research.outputs.research.desc' },
-      { key: 'research_json', desc: 'nodes.research.outputs.research_json.desc' },
-    ],
+    outputs: productOutputDefs('research'),
     defaults: { prompt: '围绕上游需求做技术调研,给出问题结论与关键发现,用 set_research 写入' },
     help: 'nodes.research.help',
   },
@@ -178,10 +185,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
       { key: 'timeout', label: 'nodes.test.fields.timeout.label', type: 'duration', optional: true },
       { key: 'conditional_prompt', label: 'nodes.test.fields.conditional_prompt.label', type: 'conditional', optional: true },
     ],
-    outputs: [
-      { key: 'test_result', desc: 'nodes.test.outputs.test_result.desc' },
-      { key: 'test_result_json', desc: 'nodes.test.outputs.test_result_json.desc' },
-    ],
+    outputs: productOutputDefs('test'),
     defaults: { reason_var: 'reason', repoScope: 'all', block_on_skipped: false, exits: { pass: { goto: '' }, fail: { goto: '' } }, prompt: '对上游实现执行测试并如实记录结果,用 set_test_result 写入测试总结' },
     help: 'nodes.test.help',
   },
@@ -200,10 +204,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
       { key: 'conditional_prompt', label: 'nodes.review.fields.conditional_prompt.label', type: 'conditional', optional: true },
       { key: 'review_var', label: 'nodes.shared.reviewVar.label', type: 'text', placeholder: 'nodes.shared.reviewVar.placeholder', optional: true },
     ],
-    outputs: [
-      { key: 'review', desc: 'nodes.review.outputs.review.desc' },
-      { key: 'review_json', desc: 'nodes.review.outputs.review_json.desc' },
-    ],
+    outputs: productOutputDefs('review'),
     defaults: { reason_var: 'reason', exits: { pass: { goto: '' }, fail: { goto: '' } }, prompt: '评审上游实现/设计,给出结论与按严重度排列的意见,用 set_review 写入' },
     help: 'nodes.review.help',
   },
@@ -221,10 +222,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
       { key: 'conditional_prompt', label: 'nodes.proposal.fields.conditional_prompt.label', type: 'conditional', optional: true },
       { key: 'review_var', label: 'nodes.shared.reviewVar.label', type: 'text', placeholder: 'nodes.shared.reviewVar.placeholder', optional: true },
     ],
-    outputs: [
-      { key: 'proposals', desc: 'nodes.proposal.outputs.proposals.desc' },
-      { key: 'proposals_json', desc: 'nodes.proposal.outputs.proposals_json.desc' },
-    ],
+    outputs: productOutputDefs('proposal'),
     defaults: { prompt: '针对上游需求给出 1-3 个候选方案(含优缺点、权衡、工作量/风险),推荐其一,用 set_proposals 写入' },
     help: 'nodes.proposal.help',
   },
@@ -241,11 +239,9 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
       { key: 'auto_var', label: 'nodes.proposal_select.fields.auto_var.label', type: 'text', placeholder: 'nodes.proposal_select.fields.auto_var.placeholder', optional: true },
       { key: 'output_var', label: 'nodes.proposal_select.fields.output_var.label', type: 'text', placeholder: 'nodes.proposal_select.fields.output_var.placeholder', optional: true },
     ],
-    outputs: [
-      { key: 'proposal', desc: 'nodes.proposal_select.outputs.proposal.desc' },
-      { key: 'proposal_json', desc: 'nodes.proposal_select.outputs.proposal_json.desc' },
+    outputs: productOutputDefs('proposal_select', [
       { key: 'selected_proposal', desc: 'nodes.proposal_select.outputs.selected_proposal.desc' },
-    ],
+    ]),
     defaults: { title: '选择方案', from: 'proposals.json', auto_var: 'auto_confirm', output_var: 'selected_proposal' },
     help: 'nodes.proposal_select.help',
   },
@@ -290,10 +286,9 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
       { key: 'conditional_prompt', label: 'nodes.visual.fields.conditional_prompt.label', type: 'conditional', optional: true },
       { key: 'review_var', label: 'nodes.shared.reviewVar.label', type: 'text', placeholder: 'nodes.shared.reviewVar.placeholder', optional: true },
     ],
-    outputs: [
-      { key: 'page', desc: 'nodes.visual.outputs.page.desc' },
+    outputs: productOutputDefs('visual', [
       { key: 'artifact_id', desc: 'nodes.visual.outputs.artifact_id.desc' },
-    ],
+    ]),
     defaults: { prompt: '根据上游需求,做一个简洁美观的可视化网页 demo(原型)。' },
     help: 'nodes.visual.help',
   },
@@ -390,7 +385,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
 
 export const PALETTE_GROUPS: { title: string; types: NodeType[] }[] = [
   { title: 'nodes.palette.control', types: ['input', 'output', 'set_var', 'branch'] },
-  { title: 'nodes.palette.agent', types: ['react', 'research', 'proposal', 'plan', 'implement', 'app_preview', 'test', 'review', 'submit_mr', 'visual', 'agent'] },
+  { title: 'nodes.palette.agent', types: ['approve', 'react', 'research', 'proposal', 'plan', 'implement', 'app_preview', 'test', 'review', 'submit_mr', 'visual'] },
   { title: 'nodes.palette.collaboration', types: ['human_gate', 'proposal_select'] },
 ]
 
@@ -418,6 +413,7 @@ export function nodeColorHex(type: NodeType): string {
     input: '#94A3B8',
     output: '#34D399',
     react: '#22D3EE',
+    approve: '#10B981',
     agent: '#A78BFA',
     plan: '#818CF8',
     implement: '#8B5CF6',

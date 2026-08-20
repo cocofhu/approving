@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/nodereg"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -109,7 +110,7 @@ func (h *Handlers) handleRunWSControl(runID string, data []byte) {
 		}
 		clearQueue := true
 		if run, ok := h.Runs.Get(runID); ok {
-			if n := run.Graph.FindNode(nodeID); n != nil && n.Type == "react" {
+			if n := run.Graph.FindNode(nodeID); n != nil && nodereg.ClarifyInteractive(n.Type) {
 				clearQueue = false
 			}
 		}
@@ -136,7 +137,7 @@ func (h *Handlers) handleRunWSControl(runID string, data []byte) {
 		}
 		// Classic react → clarify FIFO; review-capable nodes → review FIFO.
 		if run, ok := h.Runs.Get(runID); ok {
-			if n := run.Graph.FindNode(nodeID); n != nil && n.Type == "react" {
+			if n := run.Graph.FindNode(nodeID); n != nil && nodereg.ClarifyInteractive(n.Type) {
 				if _, err := h.Eng.EnqueueClarifyTurn(runID, nodeID, m.Content, m.Images, m.Annotations); err != nil {
 					h.publishReviewWSError(runID, nodeID, err.Error())
 				}

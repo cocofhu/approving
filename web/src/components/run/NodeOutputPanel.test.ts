@@ -198,4 +198,54 @@ describe('NodeOutputPanel', () => {
     expect(wrapper.text()).not.toContain('该节点尚未执行')
     wrapper.unmount()
   })
+
+  it('renders AppPreviewPanel for app_preview (not the generic agent card)', async () => {
+    const node: WFNode = {
+      id: 'preview',
+      type: 'app_preview',
+      label: '预览',
+      position: { x: 0, y: 0 },
+      config: { skill_profile: 'previewer' },
+    }
+    const nodeRun: NodeRun = {
+      nodeId: 'preview',
+      iteration: 1,
+      status: 'waiting_human',
+      outputs: {},
+    }
+    const run = { id: 'run-1', artifacts: [] } as unknown as Run
+    const wrapper = mountPanel(node, nodeRun, run)
+    await flushPromises()
+    expect(wrapper.findComponent({ name: 'AppPreviewPanel' }).exists()).toBe(true)
+    expect(wrapper.text()).toContain('应用预览')
+    wrapper.unmount()
+  })
+
+  it('renders clarify interaction card for approve nodes', async () => {
+    const node: WFNode = {
+      id: 'approve',
+      type: 'approve',
+      label: 'Approve',
+      position: { x: 0, y: 0 },
+      config: { skill_profile: 'pm' },
+    }
+    const nodeRun: NodeRun = {
+      nodeId: 'approve',
+      iteration: 1,
+      status: 'completed',
+      outputs: { clarified_requirement: '结论正文' },
+    }
+    const run = {
+      id: 'run-1',
+      artifacts: [],
+      clarifyByNode: {
+        approve: { nodeId: 'approve', turns: [], done: true },
+      },
+    } as unknown as Run
+    const wrapper = mountPanel(node, nodeRun, run)
+    await flushPromises()
+    expect(wrapper.text()).toContain('pm')
+    expect(wrapper.text()).toContain('结论正文')
+    wrapper.unmount()
+  })
 })

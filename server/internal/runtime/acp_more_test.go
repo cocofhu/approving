@@ -69,6 +69,45 @@ func TestEnsureStructuredReprompt(t *testing.T) {
 	}
 }
 
+// TestEnsureStructuredIgnoresUpstreamOwner: a same-named artifact written by
+// another node must not satisfy ensureStructured — the agent is re-prompted
+// until this node rewrites it (aligns with engine.finalizeProducts).
+func TestEnsureStructuredIgnoresUpstreamOwner(t *testing.T) {
+	store := newMemStore()
+	host := mcp.NewHost(store)
+	tok := host.RegisterRun("r")
+	t.Cleanup(func() { host.UnregisterRun("r") })
+	if _, err := host.WriteArtifact("r", tok, "upstream", mcp.ResearchArtifactName,
+		`{"summary":"old","findings":[]}`, "json"); err != nil {
+		t.Fatal(err)
+	}
+	mgr := newFakeManager(t, host, "r", "n", tok, func(int) chatFunc {
+		return func(turn int) turnAction {
+			if turn == 0 {
+				return turnAction{narration: "see upstream leftover"}
+			}
+			return turnAction{narration: "rewrote", produces: map[string]string{
+				mcp.ResearchArtifactName: `{"summary":"new","findings":[{"id":"r1","title":"t"}]}`,
+			}}
+		}
+	})
+	p, _ := newTestProvider(t, host, testOpts(), mgr)
+	req := reqWithProfile(NodeReq{RunID: "r", NodeID: "n", NodeType: "research", Token: tok,
+		Config: map[string]any{"prompt": "research"}, Vars: map[string]any{}})
+	if _, err := p.RunAgent(context.Background(), req); err != nil {
+		t.Fatalf("RunAgent: %v", err)
+	}
+	infos, err := host.ListArtifacts("r", tok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, info := range infos {
+		if info.Name == mcp.ResearchArtifactName && info.Node != "n" {
+			t.Fatalf("expected rewrite owned by n, got owner %q", info.Node)
+		}
+	}
+}
+
 func implementProvider(t *testing.T, planJSON string, chat chatFunc) (*acpProvider, *memStore, string, NodeReq) {
 	restore := sandbox.SetExecHook(func(context.Context, string, int, string, io.Reader) ([]byte, error) {
 		return []byte(""), nil

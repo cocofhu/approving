@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/nodereg"
 	"github.com/cocofhu/approving/internal/runtime"
 	"github.com/rs/zerolog/log"
 )
@@ -344,7 +345,7 @@ func (e *Engine) execute(runID, fromNodeID string) {
 			log.Info().Str("run_id", runID).Str("node_id", node.ID).Str("err", outcome.err).Msg("node failed")
 			e.saveState(c, node, outcome)
 
-			if node.Type == "react" && outcome.sandboxSetup {
+			if nodereg.ClarifyInteractive(node.Type) && outcome.sandboxSetup {
 				if outcome.err != "" {
 					c.setVar("last_error", outcome.err)
 					e.persistVar(runID, "last_error", outcome.err)

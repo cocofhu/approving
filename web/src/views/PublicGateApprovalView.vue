@@ -31,6 +31,7 @@ import {
   type PublicGatePreviewKnown,
   type PublicGateQueueItem,
 } from '@/lib/inbox/gateShareLink'
+import { isClarifyInteractive } from '@/lib/shared/clarifyInteractive'
 import type { AcpEvent, Artifact, ClarifyImage, ClarifyTurn, ReactAnnotation } from '@/lib/shared/types'
 
 type PublicChatRef = {
@@ -108,7 +109,7 @@ function abortPreview() {
 }
 
 const isReview = computed(() => preview.value?.kind === 'review')
-const isClarify = computed(() => preview.value?.nodeType === 'react')
+const isClarify = computed(() => isClarifyInteractive(preview.value?.nodeType))
 const status = computed(() => preview.value?.status || (token.value ? 'invalid' : 'invalid'))
 const isActive = computed(() => status.value === 'active')
 const remainingLabel = ref('')

@@ -30,7 +30,7 @@ func (e *Engine) execAgent(c *execCtx, node *models.Node) nodeOutcome {
 		}
 	}
 	return e.withOutcome(c, node, res, func(r runtime.NodeResult) nodeOutcome {
-		return e.completeProduces(c, node, r)
+		return e.finalizeAgentProducts(c, node, r)
 	})
 }
 
@@ -155,6 +155,76 @@ func (e *Engine) finalizeStructured(c *execCtx, node *models.Node, res runtime.N
 	outputs[outKey+"_json"] = content
 	e.setRunBranch(c, res.Git)
 	return nodeOutcome{status: "completed", outputMd: res.OutputMd, outputs: outputs, events: res.Events}
+}
+
+// finalizeProducts enforces required reserved artifacts then lifts required and
+// any present optional products into node outputs. Only artifacts last written
+// by this node count — a same-named upstream product (e.g. plan.json from a
+// prior plan node) must not satisfy Approve's contract or be re-attributed.
+func (e *Engine) finalizeProducts(c *execCtx, node *models.Node, res runtime.NodeResult, required, optional []nodereg.ProductRef) nodeOutcome {
+	outputs := res.Outputs
+	if outputs == nil {
+		outputs = map[string]any{}
+	}
+	for _, p := range required {
+		content, ok := e.artifactOwnedByNode(c.run.ID, node.ID, p.ArtifactName)
+		if !ok {
+			return nodeOutcome{status: "failed", err: "结构化产物契约未满足:" + p.ArtifactName,
+				outputMd: "结构化产物契约未满足:未由本节点写入 " + p.ArtifactName, events: res.Events}
+		}
+		e.liftProduct(c, node, outputs, p, content)
+	}
+	for _, p := range optional {
+		content, ok := e.artifactOwnedByNode(c.run.ID, node.ID, p.ArtifactName)
+		if !ok {
+			continue
+		}
+		e.liftProduct(c, node, outputs, p, content)
+	}
+	e.setRunBranch(c, res.Git)
+	return nodeOutcome{status: "completed", outputMd: res.OutputMd, outputs: outputs, events: res.Events}
+}
+
+// artifactOwnedByNode returns content only when the named artifact exists and
+// its last writer (store List Node) is nodeID. Upstream leftovers are ignored.
+func (e *Engine) artifactOwnedByNode(runID, nodeID, name string) (string, bool) {
+	content, ok := e.store.Get(runID, name)
+	if !ok {
+		return "", false
+	}
+	owner := ""
+	found := false
+	for _, info := range e.store.List(runID) {
+		if info.Name != name {
+			continue
+		}
+		owner = info.Node
+		found = true
+		break
+	}
+	if !found || owner != nodeID {
+		return "", false
+	}
+	return content, true
+}
+
+func (e *Engine) liftProduct(c *execCtx, node *models.Node, outputs map[string]any, p nodereg.ProductRef, content string) {
+	if p.ArtifactName == visualPageName {
+		if _, serr := e.store.Save(c.run.ID, node.ID, visualPageName, "html", content); serr != nil {
+			log.Warn().Err(serr).Str("node", node.ID).Msg("approve visual page re-save failed")
+		}
+		if _, serr := e.store.Save(c.run.ID, node.ID, visualNodePageName(node.ID), "html", content); serr != nil {
+			log.Warn().Err(serr).Str("node", node.ID).Msg("approve visual node-scoped page save failed")
+		}
+		outputs[p.OutputKey] = content
+		return
+	}
+	if render := nodereg.Renderer(p.Render); render != nil {
+		outputs[p.OutputKey] = render(content)
+		outputs[p.OutputKey+"_json"] = content
+		return
+	}
+	outputs[p.OutputKey] = content
 }
 
 // applyStructuredGate turns a framework node into a quality gate driven by its
