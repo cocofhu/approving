@@ -614,6 +614,10 @@ func (s *Service) AttachInboxStatus(items []any) {
 			if v.Kind != "review" && v.Kind != "app_preview" && v.Kind != "clarify" {
 				continue
 			}
+			// Sandbox still booting: there is no session to share yet.
+			if v.State == "starting" {
+				continue
+			}
 			k := key{v.RunID, v.NodeID, v.Iteration}
 			if _, ok := seen[k]; ok {
 				continue
@@ -665,6 +669,9 @@ func (s *Service) AttachInboxStatus(items []any) {
 			items[i] = v
 		case services.ClarifyInboxItem:
 			if v.Kind != "review" && v.Kind != "app_preview" && v.Kind != "clarify" {
+				continue
+			}
+			if v.State == "starting" {
 				continue
 			}
 			k := key{v.RunID, v.NodeID, v.Iteration}

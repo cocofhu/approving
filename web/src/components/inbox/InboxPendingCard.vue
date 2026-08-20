@@ -9,6 +9,7 @@ import {
   inboxBadgeToneClass,
   inboxIconToneClass,
   inboxSecondaryLine,
+  isStartingInboxItem,
 } from '@/lib/inbox/inboxDisplay'
 import { isShareableInboxItem, shareStatusLabel } from '@/lib/inbox/gateShareLink'
 import type { GateShareInboxStatus, InboxItem } from '@/lib/shared/types'
@@ -32,7 +33,9 @@ const secondary = computed(() => inboxSecondaryLine(props.item))
 const timeLabel = computed(() =>
   props.item.type === 'gate' ? relTime(props.item.requestedAt) : relTime(props.item.updatedAt),
 )
+const starting = computed(() => isStartingInboxItem(props.item))
 const iconName = computed(() => {
+  if (starting.value) return 'spinner'
   if (props.item.type === 'gate') return 'gate'
   if (props.item.kind === 'app_preview') return 'monitor'
   return 'chat'
@@ -40,7 +43,8 @@ const iconName = computed(() => {
 const iconClass = computed(() => inboxIconToneClass(inboxBadgeTone(props.item)))
 const badgeClass = computed(() => inboxBadgeToneClass(inboxBadgeTone(props.item)))
 const badgeText = computed(() => t(inboxBadgeLabelKey(props.item)))
-const showShare = computed(() => isShareableInboxItem(props.item))
+// Nothing to share until the session exists.
+const showShare = computed(() => !starting.value && isShareableInboxItem(props.item))
 const itemShareLink = computed((): GateShareInboxStatus | undefined => {
   if (!showShare.value) return undefined
   return 'shareLink' in props.item ? props.item.shareLink : undefined
@@ -61,6 +65,7 @@ function onOpenShare() {
     class="flex w-full shrink-0 flex-col border p-3 transition"
     :class="active ? 'border-accent/50 bg-accent-dim/40' : 'border-line bg-surface hover:bg-elevated'"
     data-testid="inbox-item-card"
+    :data-starting="starting ? 'true' : undefined"
   >
     <button
       type="button"
@@ -73,7 +78,7 @@ function onOpenShare() {
         class="flex h-9 w-9 shrink-0 items-center justify-center"
         :class="iconClass"
       >
-        <Icon :name="iconName" :size="18" />
+        <Icon :name="iconName" :size="18" :class="starting ? 'animate-spin' : undefined" />
       </div>
       <div class="min-w-0 flex-1">
         <div class="truncate text-sm font-medium text-txt">{{ title }}</div>

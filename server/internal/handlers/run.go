@@ -18,6 +18,10 @@ type startRunBody struct {
 	Tags     []string          `json:"tags"`
 	Env      []models.EnvEntry `json:"env"`   // optional run-scoped sandbox env snapshot
 	Title    string            `json:"title"` // optional; overrides computeRunTitle when non-blank
+	// FirstMessage is the opening chat message (text + attachments) for an
+	// approve-first pipeline. The engine delivers it into the approve node's
+	// sandbox once that node parks, so the caller can navigate away at once.
+	FirstMessage *models.CompositeText `json:"firstMessage"`
 }
 
 func (h *Handlers) StartRun(c *gin.Context) {
@@ -36,7 +40,7 @@ func (h *Handlers) StartRun(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	run, err := h.Eng.StartRunWithTitle(c.Param("id"), b.Inputs, trigger, b.Priority, tags, b.Env, b.Title)
+	run, err := h.Eng.StartRunWithFirstMessage(c.Param("id"), b.Inputs, trigger, b.Priority, tags, b.Env, b.Title, b.FirstMessage)
 	if err != nil {
 		_ = c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

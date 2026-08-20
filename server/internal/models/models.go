@@ -134,12 +134,19 @@ type Run struct {
 	// StartRun (optional). Injected into this Run's pipeline node sandboxes
 	// after Agent env and before platform reserved/auth write-backs. Plaintext
 	// in DB for injection; GET/audit must mask Secret entries.
-	SandboxEnv []EnvEntry   `gorm:"serializer:json" json:"sandboxEnv,omitempty"`
-	Attempt    int          `json:"attempt"`
-	Progress   float64      `json:"progress"`
-	Branch     string       `json:"branch,omitempty"`
-	Title      string       `json:"title,omitempty"`
-	Trace      []TraceEntry `gorm:"serializer:json" json:"trace"`
+	SandboxEnv []EnvEntry `gorm:"serializer:json" json:"sandboxEnv,omitempty"`
+	// FirstMessage is the launcher's opening message (text + attachments) for an
+	// approve-first pipeline. The engine delivers it into the approve node's
+	// sandbox once the node parks, so the caller does not have to poll for the
+	// pause and re-send. FirstMessageDeliveredAt is the delivery latch: a
+	// conditional UPDATE on it guarantees exactly-once delivery.
+	FirstMessage            *CompositeText `gorm:"serializer:json" json:"-"`
+	FirstMessageDeliveredAt *time.Time     `json:"-"`
+	Attempt                 int            `json:"attempt"`
+	Progress                float64        `json:"progress"`
+	Branch                  string         `json:"branch,omitempty"`
+	Title                   string         `json:"title,omitempty"`
+	Trace                   []TraceEntry   `gorm:"serializer:json" json:"trace"`
 	// Checkpoints holds variable snapshots keyed by checkpoint node id, used
 	// to restore state on rollback.
 	Checkpoints map[string]map[string]any `gorm:"serializer:json" json:"-"`

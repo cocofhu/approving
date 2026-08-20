@@ -145,6 +145,33 @@ func TestRunInboxContextClarifyResearchReview(t *testing.T) {
 	}
 }
 
+// A booting approve node has no conversation row yet, but its loading card is
+// already listed, so the context must resolve with an empty starting transcript.
+func TestRunInboxContextStartingApprove(t *testing.T) {
+	h := newHarness(t)
+	now := time.Now()
+	h.db.Create(&models.Run{
+		ID: "ic-starting", Status: "running", StartedAt: now,
+		Graph: models.Graph{Nodes: []models.Node{{ID: "ap", Type: "approve", Label: "开发前澄清"}}},
+	})
+	h.db.Create(&models.StateRun{
+		RunID: "ic-starting", NodeID: "ap", NodeType: "approve", Iteration: 1, Status: "running",
+	})
+
+	w := h.do("GET", "/api/runs/ic-starting/inbox-context?nodeId=ap&iteration=1", nil)
+	if w.Code != 200 {
+		t.Fatalf("starting inbox-context: %d %s", w.Code, w.Body)
+	}
+	body := w.Body.String()
+	for _, want := range []string{
+		`"type":"clarify"`, `"starting":true`, `"turns":[]`, `"done":false`, "开发前澄清",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("starting response missing %q in %s", want, body)
+		}
+	}
+}
+
 func TestRunInboxContextNotFound(t *testing.T) {
 	h := newHarness(t)
 	h.db.Create(&models.Run{ID: "ic-none", Status: "waiting_human", StartedAt: time.Now(), Graph: models.Graph{}})

@@ -141,8 +141,10 @@ describe('DashboardView home composer', () => {
     await flushPromises()
     expect(mocks.startRun).toHaveBeenCalledWith('wf-ap', {}, 'manual', 'normal', [], {
       title: '把登录做清楚',
+      firstMessage: { text: '把登录做清楚', images: [] },
     })
-    expect(mocks.reactReply).toHaveBeenCalledWith('run-9', 'ap', '把登录做清楚', [])
+    // The engine delivers the opening message after the approve node parks.
+    expect(mocks.reactReply).not.toHaveBeenCalled()
     expect(mocks.push).toHaveBeenCalledWith({ path: '/gates', query: { run: 'run-9', node: 'ap' } })
     wrapper.unmount()
   })
@@ -214,13 +216,14 @@ describe('DashboardView home composer', () => {
     await flushPromises()
     expect(mocks.startRun).toHaveBeenCalledWith('wf-ap', {}, 'manual', 'normal', [], {
       title: 'brief.pdf',
+      firstMessage: {
+        text: '',
+        images: expect.arrayContaining([
+          expect.objectContaining({ name: 'brief.pdf', mimeType: 'application/pdf' }),
+        ]),
+      },
     })
-    expect(mocks.reactReply).toHaveBeenCalledWith(
-      'run-9',
-      'ap',
-      '',
-      expect.arrayContaining([expect.objectContaining({ name: 'brief.pdf', mimeType: 'application/pdf' })]),
-    )
+    expect(mocks.reactReply).not.toHaveBeenCalled()
     expect(mocks.push).toHaveBeenCalledWith({ path: '/gates', query: { run: 'run-9', node: 'ap' } })
     wrapper.unmount()
     vi.unstubAllGlobals()

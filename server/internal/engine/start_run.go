@@ -36,6 +36,14 @@ func (e *Engine) StartRunWithPriority(workflowID string, inputs map[string]any, 
 // Trimmed empty titles still fall back to computeRunTitle; non-empty titles
 // are clipped to 80 runes.
 func (e *Engine) StartRunWithTitle(workflowID string, inputs map[string]any, trigger, priorityLabel string, tags []string, env []models.EnvEntry, title string) (*models.Run, error) {
+	return e.StartRunWithFirstMessage(workflowID, inputs, trigger, priorityLabel, tags, env, title, nil)
+}
+
+// StartRunWithFirstMessage is StartRunWithTitle plus the launcher's opening
+// message (text + attachments). The engine delivers it into the first approve
+// node's sandbox as soon as that node parks, so the caller can navigate away
+// immediately instead of polling for the pause and sending the message itself.
+func (e *Engine) StartRunWithFirstMessage(workflowID string, inputs map[string]any, trigger, priorityLabel string, tags []string, env []models.EnvEntry, title string, firstMessage *models.CompositeText) (*models.Run, error) {
 	if e.IsHalted() {
 		return nil, fmt.Errorf("server is shutting down")
 	}
@@ -58,7 +66,7 @@ func (e *Engine) StartRunWithTitle(workflowID string, inputs map[string]any, tri
 	// stale graph — the "改了之后历史流水线对不上" bug. def.Graph is always the
 	// graph the user just saved; for an unedited published head it equals the
 	// published snapshot anyway.
-	return e.startRun(def, def.Graph, inputs, trigger, pri, tags, env, title)
+	return e.startRun(def, def.Graph, inputs, trigger, pri, tags, env, title, firstMessage)
 }
 
 // StartRunFromPublished creates a run using the published WorkflowVersion
@@ -85,10 +93,10 @@ func (e *Engine) StartRunFromPublished(workflowID string, inputs map[string]any,
 	if err := e.db.Where("workflow_id = ? AND version = ?", def.ID, def.Version).First(&snap).Error; err != nil {
 		return nil, fmt.Errorf("published version not found: %w", err)
 	}
-	return e.startRun(def, snap.Graph, inputs, resolved, models.PriorityNormal, tags, env, "")
+	return e.startRun(def, snap.Graph, inputs, resolved, models.PriorityNormal, tags, env, "", nil)
 }
 
-func (e *Engine) startRun(def models.WorkflowDef, graph models.Graph, inputs map[string]any, trigger string, priority int, tags []string, env []models.EnvEntry, titleOverride string) (*models.Run, error) {
+func (e *Engine) startRun(def models.WorkflowDef, graph models.Graph, inputs map[string]any, trigger string, priority int, tags []string, env []models.EnvEntry, titleOverride string, firstMessage *models.CompositeText) (*models.Run, error) {
 
 	if err := graph.Validate(); err != nil {
 		return nil, err
@@ -130,13 +138,21 @@ func (e *Engine) startRun(def models.WorkflowDef, graph models.Graph, inputs map
 	}
 	title := applyRunTitleOverride(computeRunTitle(graph, seeded), titleOverride)
 
+	// Externalize the opening message's images too: it is persisted on the run
+	// and replayed into the sandbox later, so inline base64 must not reach DB.
+	firstMessage, err = normalizeFirstMessage(context.Background(), e.blobs, firstMessage)
+	if err != nil {
+		return nil, fmt.Errorf("ingest first message attachments: %w", err)
+	}
+
 	run := models.Run{
 		ID: runID, WorkflowID: def.ID, WorkflowName: def.Name, WorkflowVersion: def.Version,
 		Status: "queued", Trigger: trigger, Inputs: inputs, Graph: graph, Title: title,
-		Tags:       append([]string{}, tags...),
-		Priority:   priority,
-		SandboxEnv: sandboxEnv,
-		Trace:      []models.TraceEntry{}, Checkpoints: map[string]map[string]any{},
+		FirstMessage: firstMessage,
+		Tags:         append([]string{}, tags...),
+		Priority:     priority,
+		SandboxEnv:   sandboxEnv,
+		Trace:        []models.TraceEntry{}, Checkpoints: map[string]map[string]any{},
 	}
 
 	tok := e.host.RegisterRun(runID)

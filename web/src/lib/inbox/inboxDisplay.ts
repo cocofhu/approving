@@ -18,15 +18,27 @@ export type InboxBadgeLabelKey =
   | 'pages.gatesInbox.clarifyType'
   | 'pages.gatesInbox.reviewType'
   | 'pages.gatesInbox.previewType'
+  | 'pages.gatesInbox.startingType'
 
 /** Visual tone for icon/badge chips (Demo: warn / preview-blue / review-green / clarify-cyan). */
 export type InboxBadgeTone = 'gate' | 'preview' | 'review' | 'clarify'
 
+/** True while the item's sandbox is still booting (no transcript, no reply yet). */
+export function isStartingInboxItem(
+  it: Pick<InboxItem, 'type'> & { state?: string } | null | undefined,
+): boolean {
+  return !!it && it.type === 'clarify' && it.state === 'starting'
+}
+
 /**
  * List badge copy key by inbox semantics.
- * gate → gateType; kind=app_preview → previewType; kind=review → reviewType; else clarifyType.
+ * state=starting → startingType; gate → gateType; kind=app_preview → previewType;
+ * kind=review → reviewType; else clarifyType.
  */
-export function inboxBadgeLabelKey(it: Pick<InboxItem, 'type'> & { kind?: string }): InboxBadgeLabelKey {
+export function inboxBadgeLabelKey(
+  it: Pick<InboxItem, 'type'> & { kind?: string; state?: string },
+): InboxBadgeLabelKey {
+  if (isStartingInboxItem(it)) return 'pages.gatesInbox.startingType'
   if (it.type === 'gate') return 'pages.gatesInbox.gateType'
   if (it.kind === 'app_preview') return 'pages.gatesInbox.previewType'
   if (it.kind === 'review') return 'pages.gatesInbox.reviewType'

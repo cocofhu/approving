@@ -1415,4 +1415,64 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     ])
     wrapper.unmount()
   })
+
+  it('shows a starting ghost card with the boot loader while listGates is still empty', async () => {
+    routeState.query = { run: 'run-home', node: 'ap' }
+    setHomeApproveHandoff({
+      runId: 'run-home',
+      nodeId: 'ap',
+      text: '把登录做清楚',
+      images: [{ data: 'abc', mimeType: 'image/png', name: 'shot.png' }],
+    })
+    mocks.listGates.mockResolvedValue(paged([]))
+    mocks.inboxContext.mockRejectedValue(new Error('no pending inbox item'))
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+    expect(wrapper.findComponent({ name: 'EmptyState' }).exists()).toBe(false)
+    expect(wrapper.find('[data-testid="inbox-item-card"]').attributes('data-starting')).toBe('true')
+    expect(wrapper.find('[data-testid="inbox-boot-loader"]').exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'ReviewComposer' }).exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('applies home handoff seed when the parked node id differs from the guess', async () => {
+    const item = {
+      ...clarifyItem('approve_7gl8'),
+      runId: 'run-home',
+      nodeId: 'approve_7gl8',
+      label: '开发前澄清',
+    }
+    routeState.query = { run: 'run-home', node: 'ap' }
+    setHomeApproveHandoff({
+      runId: 'run-home',
+      nodeId: 'ap',
+      text: '把登录做清楚',
+      images: [{ data: 'abc', mimeType: 'image/png', name: 'shot.png' }],
+    })
+    mocks.listGates.mockResolvedValue(paged([item]))
+    mocks.inboxContext.mockResolvedValue({
+      type: 'clarify',
+      status: 'waiting_human',
+      nodes: [{ id: 'approve_7gl8', type: 'approve', label: '澄清' }],
+      artifacts: [],
+      nodeExecutions: {},
+      clarify: { nodeId: 'approve_7gl8', iteration: 1, turns: [], done: false, label: '澄清' },
+    })
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="inbox-item-card"] button').attributes('aria-pressed')).toBe(
+      'true',
+    )
+    expect(wrapper.findComponent({ name: 'ReviewComposer' }).props('seedHumanText')).toBe(
+      '把登录做清楚',
+    )
+    expect(wrapper.findComponent({ name: 'ReviewComposer' }).props('seedHumanImages')).toEqual([
+      { data: 'abc', mimeType: 'image/png', name: 'shot.png' },
+    ])
+    wrapper.unmount()
+  })
 })

@@ -15,21 +15,62 @@ var clarifyNodeOutputRef = regexp.MustCompile(`nodes\.([^.}\s"']+)\.outputs\.`)
 // Matches artifact("name") / artifact('name') whether or not wrapped in {{ }}.
 var clarifyArtifactRef = regexp.MustCompile(`artifact\s*\(\s*["']([^"']+)["']\s*\)`)
 
-// InboxContextKind reports whether run+node+iteration is a pending gate or
-// clarify item. Gate takes priority when both could match. Returns ("", false)
-// when nothing is pending.
+// Inbox context kinds returned by InboxContextKind.
+const (
+	InboxKindGate = "gate"
+	// InboxKindClarify is a react/approve node parked on a live conversation.
+	InboxKindClarify = "clarify"
+	// InboxKindClarifyStarting is an approve node whose sandbox is still booting:
+	// listed in the inbox as a loading card, but with no conversation to serve.
+	InboxKindClarifyStarting = "clarify_starting"
+)
+
+// InboxContextKind reports whether run+node+iteration is a pending gate, a
+// parked clarify item, or a still-booting approve node. Gate takes priority when
+// both could match. Returns ("", false) when nothing is pending.
 func (s *RunService) InboxContextKind(runID, nodeID string, iteration int) (string, bool) {
 	var gate models.Gate
 	if err := s.db.Joins("JOIN runs ON runs.id = gates.run_id").
 		Where("gates.run_id = ? AND gates.node_id = ? AND gates.iteration = ? AND gates.resolved = ? AND runs.status NOT IN ?",
 			runID, nodeID, iteration, false, terminalRunStatuses).
 		First(&gate).Error; err == nil {
-		return "gate", true
+		return InboxKindGate, true
 	}
 	if s.isPendingClarification(runID, nodeID, iteration) {
-		return "clarify", true
+		return InboxKindClarify, true
+	}
+	// A booting approve node has no conversation yet, but its loading card is
+	// already listed in the inbox, so its context must resolve too. The distinct
+	// kind is what lets the handler serve the starting shell without re-deriving
+	// (and re-querying) the same verdict.
+	if s.IsStartingApprove(runID, nodeID, iteration) {
+		return InboxKindClarifyStarting, true
 	}
 	return "", false
+}
+
+// IsStartingApprove reports whether run+node+iteration is an approve node whose
+// sandbox is still booting: StateRun is running and no conversation exists yet.
+func (s *RunService) IsStartingApprove(runID, nodeID string, iteration int) bool {
+	var run models.Run
+	if err := s.db.Select("id", "status").First(&run, "id = ?", runID).Error; err != nil {
+		return false
+	}
+	if containsString(terminalRunStatuses, run.Status) {
+		return false
+	}
+	var n int64
+	s.db.Model(&models.ReactConversation{}).
+		Where("run_id = ? AND node_id = ? AND iteration = ?", runID, nodeID, iteration).Count(&n)
+	if n > 0 {
+		return false
+	}
+	var sr models.StateRun
+	if err := s.db.Where("run_id = ? AND node_id = ? AND iteration = ?", runID, nodeID, iteration).
+		Order("id desc").First(&sr).Error; err != nil {
+		return false
+	}
+	return sr.NodeType == "approve" && sr.Status == "running"
 }
 
 func (s *RunService) isPendingClarification(runID, nodeID string, iteration int) bool {

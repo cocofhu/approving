@@ -128,8 +128,12 @@ func gateInboxItem(g models.Gate, meta runInboxMeta) GateInboxItem {
 // Kind is the list-badge semantic: "clarify" (react), "review" (ReviewCapable),
 // or "app_preview" (application preview waiting for confirm & continue).
 type ClarifyInboxItem struct {
-	Type         string                `json:"type"`
-	Kind         string                `json:"kind"` // clarify | review | app_preview
+	Type string `json:"type"`
+	Kind string `json:"kind"` // clarify | review | app_preview
+	// State is "starting" while the node's sandbox is still booting (no
+	// conversation yet, so no transcript and no reply accepted). Empty means the
+	// item is parked at waiting_human and fully actionable.
+	State        string                `json:"state,omitempty"`
 	RunID        string                `json:"runId"`
 	NodeID       string                `json:"nodeId"`
 	Iteration    int                   `json:"iteration"`
@@ -209,6 +213,7 @@ func (s *RunService) PendingInboxItems(wf, projectID string, tags []string, offs
 func (s *RunService) pendingInboxEntries(wf, projectID string, tags []string) []inboxEntry {
 	gates := s.pendingGatesFiltered(wf, projectID, tags)
 	clarifies := s.pendingClarificationsFiltered(wf, projectID, tags)
+	clarifies = append(clarifies, s.startingApprovesFiltered(wf, projectID, tags)...)
 
 	runIDs := make([]string, 0, len(gates)+len(clarifies))
 	seen := map[string]bool{}
@@ -280,7 +285,14 @@ func (s *RunService) pendingGatesFiltered(wf, projectID string, tags []string) [
 }
 
 func (s *RunService) pendingClarificationsFiltered(wf, projectID string, tags []string) []ClarifyInboxItem {
-	clarifies := s.pendingClarifications(tags)
+	return s.filterClarifyByWorkflow(s.pendingClarifications(tags), wf, projectID)
+}
+
+func (s *RunService) startingApprovesFiltered(wf, projectID string, tags []string) []ClarifyInboxItem {
+	return s.filterClarifyByWorkflow(s.startingApproves(tags), wf, projectID)
+}
+
+func (s *RunService) filterClarifyByWorkflow(clarifies []ClarifyInboxItem, wf, projectID string) []ClarifyInboxItem {
 	if wf == "" && projectID == "" {
 		return clarifies
 	}
@@ -374,6 +386,73 @@ func (s *RunService) pendingClarifications(tags []string) []ClarifyInboxItem {
 			RunTitle: strings.TrimSpace(run.Title),
 			Label:    nodeLabel(run.Graph, conv.NodeID), Done: conv.Done, Tags: append([]string{}, run.Tags...),
 			RequestedAt: run.StartedAt, UpdatedAt: sortAt,
+		})
+	}
+	return out
+}
+
+// startingApproves lists approve nodes whose sandbox is still booting: the
+// StateRun row is already "running" (written the moment the FSM enters the node)
+// but no conversation exists yet, so pendingClarifications cannot see them. They
+// surface as loading cards so an approval appears in the inbox the instant the
+// run starts, on any tab and across refreshes.
+func (s *RunService) startingApproves(tags []string) []ClarifyInboxItem {
+	var states []models.StateRun
+	s.db.Model(&models.StateRun{}).
+		Joins("JOIN runs ON runs.id = state_runs.run_id").
+		Where("state_runs.node_type = ? AND state_runs.status = ? AND runs.status NOT IN ?",
+			"approve", "running", terminalRunStatuses).
+		Scopes(func(db *gorm.DB) *gorm.DB { return applyRunTagsFilter(db, "runs.tags", tags) }).
+		Order("state_runs.id asc").
+		Find(&states)
+	if len(states) == 0 {
+		return nil
+	}
+
+	runIDs := make([]string, 0, len(states))
+	seenRun := map[string]bool{}
+	for _, sr := range states {
+		if !seenRun[sr.RunID] {
+			seenRun[sr.RunID] = true
+			runIDs = append(runIDs, sr.RunID)
+		}
+	}
+
+	var runs []models.Run
+	s.db.Where("id IN ?", runIDs).Find(&runs)
+	runByID := make(map[string]models.Run, len(runs))
+	for _, r := range runs {
+		runByID[r.ID] = r
+	}
+
+	var convs []models.ReactConversation
+	s.db.Select("run_id", "node_id", "iteration").Where("run_id IN ?", runIDs).Find(&convs)
+	hasConv := make(map[string]bool, len(convs))
+	for _, c := range convs {
+		hasConv[fmt.Sprintf("%s:%s:%d", c.RunID, c.NodeID, c.Iteration)] = true
+	}
+
+	out := make([]ClarifyInboxItem, 0, len(states))
+	for _, sr := range states {
+		key := fmt.Sprintf("%s:%s:%d", sr.RunID, sr.NodeID, sr.Iteration)
+		if hasConv[key] {
+			continue
+		}
+		run, ok := runByID[sr.RunID]
+		if !ok {
+			continue
+		}
+		startedAt := run.StartedAt
+		if sr.StartedAt != nil {
+			startedAt = *sr.StartedAt
+		}
+		out = append(out, ClarifyInboxItem{
+			Type: "clarify", Kind: "clarify", State: "starting",
+			RunID: sr.RunID, NodeID: sr.NodeID, Iteration: sr.Iteration,
+			WorkflowID: run.WorkflowID, WorkflowName: run.WorkflowName,
+			RunTitle: strings.TrimSpace(run.Title),
+			Label:    nodeLabel(run.Graph, sr.NodeID), Tags: append([]string{}, run.Tags...),
+			RequestedAt: startedAt, UpdatedAt: startedAt,
 		})
 	}
 	return out

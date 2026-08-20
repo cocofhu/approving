@@ -7,8 +7,7 @@ import { useToast } from '@/lib/composables/useToast'
 import { useImageAttachments } from '@/lib/composables/useImageAttachments'
 import { readStoredProjectId } from '@/lib/composables/useProjectContext'
 import { approveFirstNodeId, isPublishedApproveFirst } from '@/lib/run/approveFirstPipeline'
-import { ApproveParkTimeout, waitForApprovePark } from '@/lib/run/homeApproveChat'
-import { setHomeApproveHandoff, updateHomeApproveHandoffNode } from '@/lib/run/homeApproveHandoff'
+import { setHomeApproveHandoff } from '@/lib/run/homeApproveHandoff'
 import { clipRunTitle } from '@/lib/run/runTitle'
 import { missingRequiredAskField, seedAskLaunchFields } from '@/lib/run/useWorkflowAskInputs'
 import { attachmentDisplayName } from '@/lib/shared/attachments'
@@ -45,7 +44,6 @@ export function useHomeApproveChat() {
   const draftRestored = ref(false)
 
   let loadAbort: AbortController | null = null
-  let parkAbort: AbortController | null = null
 
   const hasProject = computed(() => !!projectId.value)
   const pipelines = computed(() => workflows.value.filter(isPublishedApproveFirst))
@@ -53,6 +51,11 @@ export function useHomeApproveChat() {
     () => pipelines.value.find((w) => w.id === selectedId.value) || pipelines.value[0] || null,
   )
   const launchTitle = computed(() => titleFromDraft(pendingText.value, pendingImages.value))
+  /** Opening message carried through the launch modal's own startRun call. */
+  const launchFirstMessage = computed(() => ({
+    text: pendingText.value,
+    images: pendingImages.value,
+  }))
   const canSend = computed(() => !!draft.value.trim() || attach.attachments.value.length > 0)
 
   watch(
@@ -116,30 +119,16 @@ export function useHomeApproveChat() {
     })
   }
 
+  /**
+   * The message travels with startRun and is delivered into the sandbox by the
+   * engine once the approve node parks, so all we do here is hand the optimistic
+   * bubble to the inbox and navigate.
+   */
   async function afterStart(runId: string, text: string, images: ClarifyImage[]) {
     const wf = selected.value || launchTarget.value
     const knownNodeId = wf ? approveFirstNodeId(wf) || '' : ''
     setHomeApproveHandoff({ runId, nodeId: knownNodeId, text, images })
-    const nav = goGates(runId, knownNodeId || undefined)
-
-    parkAbort?.abort()
-    const ac = new AbortController()
-    parkAbort = ac
-    try {
-      await nav
-      const { nodeId } = await waitForApprovePark(runId, { signal: ac.signal })
-      if (ac.signal.aborted) return
-      if (nodeId !== knownNodeId) updateHomeApproveHandoffNode(runId, nodeId)
-      await api.reactReply(runId, nodeId, text, images)
-      if (nodeId !== knownNodeId) await goGates(runId, nodeId)
-    } catch (e: any) {
-      if (ac.signal.aborted || e?.name === 'AbortError') return
-      if (e instanceof ApproveParkTimeout) {
-        toast.warn(t('pages.dashboard.parkTimeout'))
-        return
-      }
-      toast.error(String(e?.message || e))
-    }
+    await goGates(runId, knownNodeId || undefined)
   }
 
   async function send() {
@@ -168,6 +157,7 @@ export function useHomeApproveChat() {
       }
       const res = await api.startRun(wf.id, {}, 'manual', 'normal', [], {
         title: titleFromDraft(text, images),
+        firstMessage: { text, images },
       })
       draft.value = ''
       attach.clearAttachments()
@@ -220,6 +210,7 @@ export function useHomeApproveChat() {
     launchOpen,
     launchTarget,
     launchTitle,
+    launchFirstMessage,
     runFields,
     runInputs,
     runImages,

@@ -14,7 +14,6 @@
       "needText": "请先描述目标或附加文件",
       "send": "发送",
       "missingRequired": "启动前还需填写必填项",
-      "parkTimeout": "已启动运行，但 Approve 尚未就绪，正在打开待审批",
       "cardFallback": "Approve 开发前澄清"
     },
     "board": {
@@ -1127,6 +1126,10 @@
       "clarifyType": "待澄清",
       "reviewType": "待复审",
       "previewType": "应用预览",
+      "startingType": "启动中",
+      "startFailedTitle": "沙箱启动失败",
+      "startFailedDesc": "该审批的沙箱没有启动成功，运行已中止。可在运行详情里查看失败原因。",
+      "startFailedDismiss": "移除此项",
       "loadingRun": "加载运行详情…",
       "listLoadingHint": "列表加载后可选择一项",
       "detailPane": "详情",

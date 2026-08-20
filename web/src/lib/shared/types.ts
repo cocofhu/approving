@@ -702,6 +702,12 @@ export interface ClarifyInboxItem {
    * Older backends may omit this; UI falls back to clarify.
    */
   kind?: 'clarify' | 'review' | 'app_preview'
+  /**
+   * `starting` = the node's sandbox is still booting: no transcript yet and no
+   * reply accepted, so the card renders as a loading row. Absent = parked at
+   * waiting_human and fully actionable.
+   */
+  state?: 'starting'
   runId: string
   nodeId: string
   iteration?: number

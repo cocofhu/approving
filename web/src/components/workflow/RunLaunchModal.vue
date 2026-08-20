@@ -44,6 +44,11 @@ const props = defineProps<{
   draftRestored?: boolean
   /** Optional run title override (home chat first message). */
   runTitle?: string
+  /**
+   * Opening chat message for an approve-first pipeline (home chat). The engine
+   * delivers it into the approve node's sandbox once that node parks.
+   */
+  firstMessage?: { text: string; images?: ClarifyImage[] } | null
 }>()
 
 const emit = defineEmits<{
@@ -351,6 +356,7 @@ async function startRun() {
       signal: startAbort.signal,
       env: envEntries.length ? envEntries : undefined,
       title: props.runTitle?.trim() || undefined,
+      firstMessage: props.firstMessage ?? undefined,
     })
     if (gen !== startGen) return
     successRunId.value = res.id

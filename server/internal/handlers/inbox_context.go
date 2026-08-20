@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/services"
 
 	"github.com/gin-gonic/gin"
@@ -25,7 +26,8 @@ func (h *Handlers) RunInboxContext(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "iteration must be a positive integer"})
 		return
 	}
-	if _, ok := h.Runs.Get(runID); !ok {
+	run, ok := h.Runs.Get(runID)
+	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
@@ -37,10 +39,12 @@ func (h *Handlers) RunInboxContext(c *gin.Context) {
 	}
 
 	switch kind {
-	case "gate":
+	case services.InboxKindGate:
 		h.inboxContextGate(c, runID, nodeID, iteration)
-	case "clarify":
+	case services.InboxKindClarify:
 		h.inboxContextClarify(c, runID, nodeID, iteration)
+	case services.InboxKindClarifyStarting:
+		h.inboxContextStarting(c, run, nodeID, iteration)
 	default:
 		c.JSON(http.StatusNotFound, gin.H{"error": "no pending inbox item"})
 	}
@@ -98,6 +102,27 @@ func (h *Handlers) inboxContextGate(c *gin.Context, runID, gateNodeID string, it
 		}
 	}
 	c.JSON(http.StatusOK, out)
+}
+
+// inboxContextStarting serves the clarify context of a booting approve node:
+// same shape as a normal clarify context but with an empty transcript and
+// starting=true, so the inbox detail pane can render the boot loader.
+func (h *Handlers) inboxContextStarting(c *gin.Context, run models.Run, nodeID string, iteration int) {
+	c.JSON(http.StatusOK, gin.H{
+		"type":           "clarify",
+		"status":         run.Status,
+		"nodes":          graphNodesDTO(run.Graph),
+		"artifacts":      []gin.H{},
+		"nodeExecutions": map[string][]map[string]any{},
+		"clarify": gin.H{
+			"nodeId":    nodeID,
+			"iteration": iteration,
+			"turns":     []models.ReactMessage{},
+			"done":      false,
+			"label":     services.ClarifyLabel(run.Graph, nodeID),
+			"starting":  true,
+		},
+	})
 }
 
 func (h *Handlers) inboxContextClarify(c *gin.Context, runID, nodeID string, iteration int) {
