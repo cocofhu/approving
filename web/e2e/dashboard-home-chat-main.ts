@@ -1,12 +1,13 @@
 import '../src/styles/global.css'
 import { createApp, h, defineComponent } from 'vue'
-import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
+import { createMemoryHistory, createRouter, RouterView, useRoute } from 'vue-router'
 import { i18n } from '../src/lib/shared/i18n'
 import { initLocale, setLocale } from '../src/lib/shared/locale'
 import { installIdleScrollbar } from '../src/lib/shared/idleScrollbar'
 import ToastHost from '../src/components/ui/ToastHost.vue'
 import DashboardView from '../src/views/DashboardView.vue'
 import { PROJECT_CONTEXT_STORAGE_KEY } from '../src/lib/composables/useProjectContext'
+import { takeHomeApproveHandoff } from '../src/lib/run/homeApproveHandoff'
 
 installIdleScrollbar()
 
@@ -25,6 +26,22 @@ async function bootstrap() {
     history: createMemoryHistory(),
     routes: [
       { path: '/dashboard', component: DashboardView },
+      {
+        path: '/gates',
+        component: defineComponent({
+          setup() {
+            const route = useRoute()
+            const seed = takeHomeApproveHandoff()
+            return () =>
+              h('div', { 'data-testid': 'gates-inbox-page' }, [
+                h('span', { 'data-testid': 'gates-query-run' }, String(route.query.run || '')),
+                h('span', { 'data-testid': 'gates-query-node' }, String(route.query.node || '')),
+                h('span', { 'data-testid': 'gates-handoff-text' }, seed?.text || ''),
+                h('span', { 'data-testid': 'gates-item-status' }, 'waiting_human'),
+              ])
+          },
+        }),
+      },
       {
         path: '/runs/:id',
         component: {

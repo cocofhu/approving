@@ -584,6 +584,9 @@ func TestReactApproveFirstReplyInjectsContract(t *testing.T) {
 	if strings.Contains(prompt, "本轮输出契约") {
 		t.Fatal("opening approve turn must not append dual-write contract")
 	}
+	if reply.Done {
+		t.Fatal("ordinary approve reply must not finish")
+	}
 	if _, ok := store.Get("run-r", mcp.ClarifiedRequirementArtifactName); !ok {
 		t.Error("clarified requirement not written")
 	}

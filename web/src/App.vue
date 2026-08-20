@@ -7,7 +7,7 @@ import AppSkeleton from './components/ui/AppSkeleton.vue'
 import { locale, updateDocumentTitle } from '@/lib/shared/locale'
 import { useAuth } from '@/lib/composables/useAuth'
 import { useDelayedBusy } from '@/lib/composables/useDelayedBusy'
-import { useRoutePending } from '@/lib/shared/routePending'
+import { routeViewTransition, useRoutePending } from '@/lib/shared/routePending'
 import { useLoadingAnnouncer } from '@/lib/shared/loadingAnnouncer'
 
 const route = useRoute()
@@ -44,7 +44,11 @@ watch(locale, () => {
 <template>
   <AppShell v-if="!bareLayout">
     <AppSkeleton v-if="showShellSkeleton" />
-    <router-view v-else-if="canShowProtected" />
+    <router-view v-else-if="canShowProtected" v-slot="{ Component }">
+      <transition :name="routeViewTransition || undefined">
+        <component :is="Component" :key="String(route.name || route.path)" />
+      </transition>
+    </router-view>
   </AppShell>
   <router-view v-else />
   <ToastHost />

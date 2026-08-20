@@ -2,6 +2,7 @@ package engine
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/models"
@@ -34,7 +35,29 @@ func startApproveAndReply(t *testing.T, eng *Engine, db *gorm.DB) *models.Run {
 	if err := eng.ReactReply(run.ID, "predev", "确认", nil, nil, false); err != nil {
 		t.Fatalf("reply: %v", err)
 	}
+	waitApproveHumanTurn(t, db, run.ID, "predev")
+	waitRunStatus(t, db, run.ID, "waiting_human")
+	if err := eng.ReactReply(run.ID, "predev", "确认并流转", nil, nil, true); err != nil {
+		t.Fatalf("force: %v", err)
+	}
 	return run
+}
+
+func waitApproveHumanTurn(t *testing.T, db *gorm.DB, runID, nodeID string) {
+	t.Helper()
+	deadline := time.Now().Add(waitPollTimeout)
+	for time.Now().Before(deadline) {
+		var conv models.ReactConversation
+		if err := db.Where("run_id = ? AND node_id = ?", runID, nodeID).First(&conv).Error; err == nil {
+			for _, m := range conv.Messages {
+				if m.Role == "human" {
+					return
+				}
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("approve human turn not persisted")
 }
 
 func TestApproveCompletesWithClarifiedAndPlan(t *testing.T) {
@@ -128,6 +151,27 @@ func TestApproveOpenParksEmptyTranscript(t *testing.T) {
 	}
 }
 
+func TestApproveReplyStaysWaitingUntilForce(t *testing.T) {
+	eng, db, _ := setupEngineGraphP(t, approveOnlyGraph())
+	run, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "predev")
+	if err := eng.ReactReply(run.ID, "predev", "做登录", nil, nil, false); err != nil {
+		t.Fatalf("reply: %v", err)
+	}
+	waitApproveHumanTurn(t, db, run.ID, "predev")
+	waitRunStatus(t, db, run.ID, "waiting_human")
+	var conv models.ReactConversation
+	if err := db.Where("run_id = ? AND node_id = ?", run.ID, "predev").First(&conv).Error; err != nil {
+		t.Fatalf("conv: %v", err)
+	}
+	if conv.Done {
+		t.Fatal("ordinary approve reply must not finish the conversation")
+	}
+}
+
 func TestApproveIgnoresLeftoverAutoVar(t *testing.T) {
 	g := approveOnlyGraph()
 	g.Variables = []models.Variable{{Name: "auto_clarify", Type: "bool", Value: true}}
@@ -157,6 +201,11 @@ func TestApproveRejectsUpstreamPlanArtifact(t *testing.T) {
 	if err := eng.ReactReply(run.ID, "predev", "确认", nil, nil, false); err != nil {
 		t.Fatalf("reply: %v", err)
 	}
+	waitApproveHumanTurn(t, db, run.ID, "predev")
+	waitRunStatus(t, db, run.ID, "waiting_human")
+	if err := eng.ReactReply(run.ID, "predev", "确认并流转", nil, nil, true); err != nil {
+		t.Fatalf("force: %v", err)
+	}
 	waitRunStatus(t, db, run.ID, "failed")
 }
 
@@ -174,6 +223,11 @@ func TestApproveDoesNotLiftUpstreamOptionalResearch(t *testing.T) {
 	}
 	if err := eng.ReactReply(run.ID, "predev", "确认", nil, nil, false); err != nil {
 		t.Fatalf("reply: %v", err)
+	}
+	waitApproveHumanTurn(t, db, run.ID, "predev")
+	waitRunStatus(t, db, run.ID, "waiting_human")
+	if err := eng.ReactReply(run.ID, "predev", "确认并流转", nil, nil, true); err != nil {
+		t.Fatalf("force: %v", err)
 	}
 	waitRunStatus(t, db, run.ID, "completed")
 	var sr models.StateRun

@@ -5,6 +5,22 @@ export function inboxItemKey(it: Pick<InboxItem, 'runId' | 'nodeId'>): string {
   return `${it.runId}:${it.nodeId}`
 }
 
+/** `?run=&node=` → membership key. Missing either side → empty (no selection). */
+export function inboxQueryKey(run: unknown, node: unknown): string {
+  const r = String(run ?? '').trim()
+  const n = String(node ?? '').trim()
+  if (!r || !n) return ''
+  return `${r}:${n}`
+}
+
+export function findInboxItemByKey<T extends Pick<InboxItem, 'runId' | 'nodeId'>>(
+  list: T[],
+  key: string,
+): T | undefined {
+  if (!key) return undefined
+  return list.find((it) => inboxItemKey(it) === key)
+}
+
 /** Triple used for inbox-context fetch / processed short-circuit. */
 export function inboxTripleKey(
   it: Pick<InboxItem, 'runId' | 'nodeId' | 'iteration'>,

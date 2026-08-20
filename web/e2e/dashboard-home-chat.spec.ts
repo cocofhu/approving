@@ -1,6 +1,6 @@
 /**
- * E2E: Home chat starts an Approve-first pipeline and opens run detail.
- * Harness: dashboard-home-chat.html (DashboardView + run-detail stub)
+ * E2E: Home chat starts an Approve-first pipeline and opens the inbox.
+ * Harness: dashboard-home-chat.html (DashboardView + gates stub)
  */
 import { expect, test, type Page } from '@playwright/test'
 
@@ -101,7 +101,7 @@ test.describe('首页 Chat 启动 Approve 流水线', () => {
     await expect(page.getByTestId('projects-page')).toBeVisible({ timeout: 5_000 })
   })
 
-  test('发送第一句话：StartRun + ReactReply 后进入运行详情', async ({ page }) => {
+  test('发送第一句话：StartRun + ReactReply 后进入待审批并带上原文', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 })
     await mockHomeApis(page)
     await page.goto('/dashboard-home-chat.html?memory=1&projectId=proj-1')
@@ -111,6 +111,11 @@ test.describe('首页 Chat 启动 Approve 流水线', () => {
     await page.getByTestId('home-composer-input').fill('把登录做清楚')
     await page.getByTestId('home-composer-send').click()
 
-    await expect(page.getByTestId('run-detail-page')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('gates-inbox-page')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('gates-query-run')).toHaveText('run-home')
+    await expect(page.getByTestId('gates-query-node')).toHaveText('ap')
+    await expect(page.getByTestId('gates-handoff-text')).toHaveText('把登录做清楚')
+    await expect(page.getByTestId('gates-item-status')).toHaveText('waiting_human')
+    await expect(page.getByTestId('run-detail-page')).toHaveCount(0)
   })
 })

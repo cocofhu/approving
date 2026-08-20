@@ -1,5 +1,5 @@
 {
-  "principle": "Align with components/{run,agent,inbox,pm}; api/ whole-file clients; composables/ cross-domain use*; shared/ types/regionPolicy/loading*/i18n/format/theme and other cross-cutting utils",
+  "principle": "Align with components/{run,agent,inbox,pm,project}; api/ whole-file clients; composables/ cross-domain use*; shared/ types/regionPolicy/loading*/i18n/format/theme and other cross-cutting utils",
   "domains": {
     "api": [
       "api.ts"
@@ -10,8 +10,11 @@
       "useChatImagePreview.ts",
       "useDelayedBusy.ts",
       "useImageAttachments.ts",
+      "useNotificationsPageEntry.ts",
       "usePipelineFilter.ts",
+      "usePlatformStatusMetrics.ts",
       "useProjectContext.ts",
+      "useServiceCommit.ts",
       "useShutdownState.ts",
       "useStatusFilter.ts",
       "useTagFilter.ts",
@@ -23,9 +26,12 @@
       "auditNodeLabel.ts",
       "auditPayload.ts",
       "authGuard.ts",
+      "blobMissingCache.ts",
+      "clarifyInteractive.ts",
       "compositeText.ts",
       "copyToClipboard.ts",
       "demoScrollbar.ts",
+      "directPreviewPick.ts",
       "format.ts",
       "frontmatter.ts",
       "highlightJson.ts",
@@ -46,6 +52,8 @@
       "refreshChrome.ts",
       "regionPolicy.ts",
       "routePending.ts",
+      "serviceCommit.ts",
+      "sidebarHidden.ts",
       "streamMarkdownPreview.ts",
       "theme.ts",
       "types.ts"
@@ -61,6 +69,8 @@
       "dialogueAcpDelivery.ts",
       "exportStructuredArtifact.ts",
       "homeApproveChat.ts",
+      "homeApproveHandoff.ts",
+      "isVisualHtmlCard.ts",
       "liveLogBootPhase.ts",
       "liveLogRehydrate.ts",
       "liveLogSnapshotCache.ts",
@@ -68,12 +78,13 @@
       "outputSourceOptions.ts",
       "pendingAcpBuffer.ts",
       "productNodeArtifacts.ts",
+      "reactArtifactPreview.ts",
       "resolveNodeDisplayLabel.ts",
       "runBoard.ts",
       "runDraft.ts",
       "runNotifyTemplate.ts",
       "runOutputSelection.ts",
-      "reactArtifactPreview.ts",
+      "runSandboxEnv.ts",
       "runStats.ts",
       "runTags.ts",
       "runTitle.ts",
@@ -89,6 +100,7 @@
       "useRunDetailWs.ts",
       "useRunTerminalNotifications.ts",
       "useWorkflowAskInputs.ts",
+      "useWorkflowFavorites.ts",
       "useWorkflowImport.ts",
       "useWorkflowRunLaunch.ts",
       "workflowCanvasFlow.ts",
@@ -121,6 +133,7 @@
       "reviewLayoutBudget.ts",
       "reviewQuote.ts",
       "useClarifyDraft.ts",
+      "useCommentPins.ts",
       "usePendingGates.ts",
       "useReviewTextSelection.ts"
     ],
@@ -129,15 +142,20 @@
       "onboardingWizard.ts",
       "pmCitationShape.ts",
       "pmTurnState.ts"
+    ],
+    "project": [
+      "requirementDraftMarkdown.ts",
+      "requirementDraftSchedule.ts"
     ]
   },
   "totals": {
     "api": 1,
-    "composables": 12,
-    "shared": 30,
-    "run": 39,
+    "composables": 15,
+    "shared": 35,
+    "run": 48,
     "agent": 9,
-    "inbox": 15,
-    "pm": 4
+    "inbox": 16,
+    "pm": 4,
+    "project": 2
   }
 }

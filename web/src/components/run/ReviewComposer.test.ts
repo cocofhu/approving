@@ -37,7 +37,7 @@ function mountGate(opts: {
 }
 
 /** Clarify mode with real ClarifyChat — for pass-through applyAcpEvents contract. */
-function mountClarify() {
+function mountClarify(extra: Record<string, unknown> = {}) {
   const i18n = createI18n({
     legacy: false,
     locale: 'zh-CN',
@@ -52,6 +52,7 @@ function mountClarify() {
       turns: [],
       done: false,
       active: true,
+      ...extra,
     },
     global: {
       plugins: [i18n],
@@ -325,5 +326,18 @@ describe('ReviewComposer share panel entry removed', () => {
     expect(wrapper.find('[data-testid="review-composer-share-panel"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="review-composer-open-share"]').exists()).toBe(false)
     wrapper.unmount()
+  })
+
+  it('classic clarify hides 确认并流转; Approve shows it', async () => {
+    const classic = mountClarify({ nodeType: 'react' })
+    await flushPromises()
+    expect(classic.find('[data-testid="clarify-confirm-flow"]').exists()).toBe(false)
+    classic.unmount()
+
+    const approve = mountClarify({ nodeType: 'approve', nodeId: 'ap' })
+    await flushPromises()
+    expect(approve.find('[data-testid="clarify-confirm-flow"]').exists()).toBe(true)
+    expect(approve.find('[data-testid="clarify-confirm-flow"]').text()).toContain('确认并流转')
+    approve.unmount()
   })
 })

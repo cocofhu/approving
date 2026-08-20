@@ -73,6 +73,9 @@ const props = withDefaults(
     confirmError?: string | null
     /** Graph node type; Approve uses a first-speaker empty state. */
     nodeType?: string
+    /** Optimistic first human bubble (home chat → inbox). */
+    seedHumanText?: string
+    seedHumanImages?: ClarifyImage[]
   }>(),
   {
     active: true,
@@ -83,6 +86,8 @@ const props = withDefaults(
     confirmError: null,
     nodeType: '',
     turns: () => [],
+    seedHumanText: '',
+    seedHumanImages: () => [],
   },
 )
 
@@ -120,7 +125,11 @@ const showApproveEmptyHint = computed(
     !props.reviewMode &&
     props.nodeType === 'approve' &&
     persistedTurns.value.length === 0 &&
-    liveTurns.value.length === 0,
+    liveTurns.value.length === 0 &&
+    queued.value.length === 0,
+)
+const useConfirmFlowAction = computed(
+  () => props.reviewMode || props.nodeType === 'approve',
 )
 const liveAgentIdx = ref(-1)
 /** Coalesced markdown HTML for the live streaming agent bubble. */
@@ -534,6 +543,17 @@ function onPaste(e: ClipboardEvent) {
 }
 
 watch(draft, () => nextTick(autoGrow), { immediate: true })
+watch(
+  () => [props.seedHumanText, props.seedHumanImages] as const,
+  () => {
+    if (persistedTurns.value.length > 0 || liveTurns.value.length > 0) return
+    const text = String(props.seedHumanText || '').trim()
+    const images = props.seedHumanImages || []
+    if (!text && images.length === 0) return
+    liveTurns.value = [{ role: 'human', text, images, at: new Date().toISOString() }]
+  },
+  { immediate: true },
+)
 onMounted(() => {
   nextTick(autoGrow)
   // Mount with historical turns: force enter stick (parent v-if remounts on leave/re-enter).
@@ -1679,7 +1699,7 @@ defineExpose({
         </p>
         <span v-else class="flex-1" />
         <button
-          v-if="reviewMode"
+          v-if="useConfirmFlowAction"
           class="inline-flex shrink-0 items-center gap-1 rounded-md bg-ok px-3 py-1.5 text-xs font-semibold text-white hover:bg-ok/90 disabled:opacity-50"
           data-testid="clarify-confirm-flow"
           :disabled="confirmDisabled"

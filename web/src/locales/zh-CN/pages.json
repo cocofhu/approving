@@ -3,7 +3,7 @@
     "dashboard": {
       "title": "从一句话开始一次开发前澄清",
       "subtitle": "选择 Approve 流水线，第一句话会成为 Run 标题",
-      "placeholder": "请先描述目标…",
+      "placeholder": "描述目标，或粘贴/附加图片与文件…",
       "filterHint": "仅显示开始后是 Approve 的已发布流水线",
       "selectProject": "选择项目",
       "noProject": "尚未选择项目。选择一个项目后可从首页启动 Approve 流水线。",
@@ -11,11 +11,10 @@
       "goCanvas": "去画布把 Approve 接到开始节点后",
       "pickPipeline": "请先选择一条流水线",
       "noPipelineShort": "未选择流水线",
-      "needText": "请先描述目标",
+      "needText": "请先描述目标或附加文件",
       "send": "发送",
-      "attachSoon": "附件将在后续版本提供",
       "missingRequired": "启动前还需填写必填项",
-      "parkTimeout": "已启动运行，但 Approve 尚未就绪，正在打开运行详情",
+      "parkTimeout": "已启动运行，但 Approve 尚未就绪，正在打开待审批",
       "cardFallback": "Approve 开发前澄清"
     },
     "board": {

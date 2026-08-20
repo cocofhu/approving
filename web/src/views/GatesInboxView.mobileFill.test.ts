@@ -52,6 +52,17 @@ describe('GatesInboxView review/clarify composer mode', () => {
     expect(finishBindings.length).toBe(2)
   })
 
+  it('selects by run/node query and seeds the first human bubble', () => {
+    expect(src).toMatch(/inboxQueryKey/)
+    expect(src).toMatch(/findInboxItemByKey/)
+    expect(src).toMatch(/consumeHomeApproveHandoff/)
+    expect(src).toMatch(/waitForQueryItem/)
+    const seedText = src.match(/:seed-human-text="activeHomeSeed\?\.text"/g) || []
+    const seedImages = src.match(/:seed-human-images="activeHomeSeed\?\.images"/g) || []
+    expect(seedText.length).toBe(2)
+    expect(seedImages.length).toBe(2)
+  })
+
   it('finish uses confirmFlowPrompt with force=true and success/error toasts', () => {
     expect(src).toMatch(/function onClarifyFinish/)
     expect(src).toMatch(/pages\.clarify\.confirmFlowPrompt/)
