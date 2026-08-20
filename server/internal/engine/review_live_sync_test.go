@@ -163,11 +163,30 @@ func TestWriteArtifactSyncsOutputsAndPendingBodyMd(t *testing.T) {
 	if got, _ := sr.Outputs["page"].(string); got != newHTML {
 		t.Fatalf("outputs.page not synced: %q", got)
 	}
+	hist := pageHistorySlice(sr.Outputs[pageHistoryOutputKey])
+	if len(hist) != 1 || hist[0] != oldHTML {
+		t.Fatalf("page_history after first overwrite=%v", sr.Outputs[pageHistoryOutputKey])
+	}
+
+	newerHTML := "<!doctype html><html><body>newer-live</body></html>"
+	if _, err := eng.host.WriteArtifact(runID, tok, "page", visualPageName, newerHTML, "html"); err != nil {
+		t.Fatalf("WriteArtifact second: %v", err)
+	}
+	if err := db.Where("run_id = ? AND node_id = ?", runID, "page").First(&sr).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := sr.Outputs["page"].(string); got != newerHTML {
+		t.Fatalf("outputs.page after second write: %q", got)
+	}
+	hist = pageHistorySlice(sr.Outputs[pageHistoryOutputKey])
+	if len(hist) != 2 || hist[0] != oldHTML || hist[1] != newHTML {
+		t.Fatalf("page_history after second overwrite=%v", sr.Outputs[pageHistoryOutputKey])
+	}
 	var gate models.Gate
 	if err := db.Where("run_id = ? AND node_id = ?", runID, "gate").First(&gate).Error; err != nil {
 		t.Fatal(err)
 	}
-	if gate.BodyMd != newHTML {
+	if gate.BodyMd != newerHTML {
 		t.Fatalf("BodyMd not refreshed: %q", gate.BodyMd)
 	}
 }

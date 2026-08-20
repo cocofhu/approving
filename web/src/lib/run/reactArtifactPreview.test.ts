@@ -21,6 +21,7 @@ import {
   isVisualPreviewArtifactName,
   listVisualPageVersionChoices,
   loadStageOpenState,
+  pageHistoryEntries,
   parseStructuredArtifactSummary,
   resolveVisualPagePreviewArtifact,
   restoreStageOpenState,
@@ -154,6 +155,53 @@ describe('reactArtifactPreview helpers', () => {
     const latest = resolveVisualPagePreviewArtifact(live, choices[2])
     expect(latest).toBe(live)
     expect(listVisualPageVersionChoices(run, art({ id: 'j', name: 'node_complete.json', kind: 'json', nodeId: 'visual_1' }))).toEqual([])
+  })
+
+  it('expands page_history from a single visual execution into version choices', () => {
+    const live = art({ id: 'live', name: 'page.html', nodeId: 'visual_1', content: '<p>v3</p>' })
+    const run = {
+      nodeExecutions: {
+        visual_1: [
+          {
+            nodeId: 'visual_1',
+            iteration: 1,
+            status: 'waiting_human',
+            outputs: { page: '<p>v3</p>', page_history: ['<p>v1</p>', '<p>v2</p>'] },
+          },
+        ],
+      },
+    } as unknown as Run
+    expect(pageHistoryEntries({ page_history: ['<p>v1</p>', 1, ''] })).toEqual(['<p>v1</p>'])
+    const choices = listVisualPageVersionChoices(run, live)
+    expect(choices).toHaveLength(3)
+    expect(choices[0]).toMatchObject({ index: 1, latest: false, available: true, html: '<p>v1</p>' })
+    expect(choices[1]).toMatchObject({ index: 2, latest: false, available: true, html: '<p>v2</p>' })
+    expect(choices[2]).toMatchObject({ index: 3, latest: true, available: true, html: '' })
+    expect(resolveVisualPagePreviewArtifact(live, choices[0]).content).toBe('<p>v1</p>')
+    expect(resolveVisualPagePreviewArtifact(live, choices[2])).toBe(live)
+  })
+
+  it('keeps prior visual iterations and appends page_history on the latest run', () => {
+    const live = art({ id: 'live', name: 'page.html', nodeId: 'visual_1', content: '<p>new</p>' })
+    const run = {
+      nodeExecutions: {
+        visual_1: [
+          { nodeId: 'visual_1', iteration: 1, status: 'completed', outputs: { page: '<p>old</p>' } },
+          {
+            nodeId: 'visual_1',
+            iteration: 2,
+            status: 'waiting_human',
+            outputs: { page: '<p>new</p>', page_history: ['<p>mid</p>'] },
+          },
+        ],
+      },
+    } as unknown as Run
+    const choices = listVisualPageVersionChoices(run, live)
+    expect(choices.map((c) => ({ index: c.index, latest: c.latest, html: c.html }))).toEqual([
+      { index: 1, latest: false, html: '<p>old</p>' },
+      { index: 2, latest: false, html: '<p>mid</p>' },
+      { index: 3, latest: true, html: '' },
+    ])
   })
 
   it('uses sandbox remote only for ReAct inbox nodes', () => {

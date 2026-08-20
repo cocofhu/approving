@@ -457,6 +457,44 @@ describe('ReactArtifactStage', () => {
     wrapper.unmount()
   })
 
+  it('shows the version chip when one visual execution has page_history from review edits', async () => {
+    const live = art({ id: 'live', name: 'page.html', kind: 'html', nodeId: 'visual_1', content: '<p>v2</p>' })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [live],
+        runId: 'run-1',
+        run: {
+          id: 'run-1',
+          nodes: [{ id: 'visual_1', type: 'visual', label: '视觉', position: { x: 0, y: 0 }, config: {} }],
+          nodeExecutions: {
+            visual_1: [
+              {
+                nodeId: 'visual_1',
+                iteration: 1,
+                status: 'waiting_human',
+                outputs: { page: '<p>v2</p>', page_history: ['<p>v1</p>'] },
+              },
+            ],
+          },
+        } as any,
+        nodeId: 'visual_1',
+        annotatable: true,
+        remoteKind: 'off',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid="react-artifact-card-page.html"]').length).toBe(1)
+    expect(wrapper.get('[data-testid="react-artifact-version-chip-btn-page.html"]').text()).toContain('v2 · 最新')
+    await wrapper.get('[data-testid="react-artifact-version-chip-btn-page.html"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-version-option-v1"]').text()).toBe('v1')
+    await wrapper.get('[data-testid="react-artifact-version-option-v1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="artifact-preview"]').text()).toBe('page.html|off|<p>v1</p>')
+    wrapper.unmount()
+  })
+
   it('disables a missing snapshot menu item instead of previewing latest html', async () => {
     const live = art({ id: 'live', name: 'page.html', kind: 'html', nodeId: 'visual_1', content: '<p>new</p>' })
     const wrapper = mount(ReactArtifactStage, {

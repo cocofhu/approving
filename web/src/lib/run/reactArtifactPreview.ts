@@ -111,7 +111,13 @@ export type VisualPageVersionChoice = {
   html: string
 }
 
-/** User-visible v1..vN mapped to visual nodeExecutions; latest follows live artifact bytes. */
+export function pageHistoryEntries(outputs: Record<string, unknown> | null | undefined): string[] {
+  const raw = outputs?.page_history
+  if (!Array.isArray(raw)) return []
+  return raw.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+}
+
+/** User-visible v1..vN: prior visual iterations, plus each page.html overwrite on the latest run. */
 export function listVisualPageVersionChoices(
   run: Run | null | undefined,
   artifact: Pick<Artifact, 'name' | 'nodeId' | 'kind'> | null | undefined,
@@ -122,18 +128,26 @@ export function listVisualPageVersionChoices(
   if (!nodeId) return []
   const runs = listVisualNodeRuns(run, nodeId)
   if (!runs.length) return []
-  return runs.map((nodeRun, i) => {
-    const latest = i === runs.length - 1
-    const html = String(nodeRun.outputs?.page || '')
-    const available = latest || html.trim().length > 0
-    return {
-      index: i + 1,
-      iteration: nodeRun.iteration ?? i + 1,
-      latest,
-      available,
-      html: latest ? '' : html,
+  const raw: Omit<VisualPageVersionChoice, 'index'>[] = []
+  runs.forEach((nodeRun, i) => {
+    const latestRun = i === runs.length - 1
+    const iteration = nodeRun.iteration ?? i + 1
+    for (const html of pageHistoryEntries(nodeRun.outputs)) {
+      raw.push({ iteration, latest: false, available: true, html })
     }
+    const page = String(nodeRun.outputs?.page || '')
+    if (latestRun) {
+      raw.push({ iteration, latest: true, available: true, html: '' })
+      return
+    }
+    raw.push({
+      iteration,
+      latest: false,
+      available: page.trim().length > 0,
+      html: page,
+    })
   })
+  return raw.map((choice, i) => ({ ...choice, index: i + 1 }))
 }
 
 export function resolveVisualPagePreviewArtifact(
@@ -144,7 +158,7 @@ export function resolveVisualPagePreviewArtifact(
   const nodeId = visualPageOwnerNodeId(artifact)
   return {
     ...artifact,
-    id: historicalStageArtifactId(nodeId || artifact.nodeId, choice.iteration),
+    id: historicalStageArtifactId(nodeId || artifact.nodeId, choice.index),
     content: choice.html,
     sizeBytes: choice.html.length,
   }
