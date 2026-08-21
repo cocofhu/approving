@@ -184,26 +184,24 @@ func (s *RunService) Variables(runID string) []models.RunVariable {
 // (completed / failed / cancelled) never surface a pending gate: once a run ends
 // any dangling gate is not actionable, so a stale row must not appear as an open
 // approval on the run detail (the engine also supersedes such gates on finish).
+// Gates whose node has already left waiting_human are also excluded.
 func (s *RunService) PendingGate(runID string) (models.Gate, bool) {
 	var g models.Gate
-	if err := s.db.Joins("JOIN runs ON runs.id = gates.run_id").
-		Where("gates.run_id = ? AND gates.resolved = ? AND runs.status NOT IN ?",
-			runID, false, []string{"completed", "failed", "cancelled"}).
+	if err := pendingGateScope(s.db).
+		Where("gates.run_id = ?", runID).
 		Order("gates.iteration desc, gates.id desc").First(&g).Error; err != nil {
 		return models.Gate{}, false
 	}
 	return g, true
 }
 
-// AllPendingGates returns every unresolved gate whose run is still alive (gates
-// inbox). Gates on terminal runs (completed / failed / cancelled) are excluded:
-// once a run ends its dangling gate is no longer actionable and must not linger
-// in the approvals inbox.
+// AllPendingGates returns every unresolved gate whose run is still alive and
+// whose node is still waiting_human (gates inbox). Gates on terminal runs
+// (completed / failed / cancelled) are excluded: once a run ends its dangling
+// gate is no longer actionable and must not linger in the approvals inbox.
 func (s *RunService) AllPendingGates() []models.Gate {
 	var gates []models.Gate
-	s.db.Joins("JOIN runs ON runs.id = gates.run_id").
-		Where("gates.resolved = ? AND runs.status NOT IN ?", false, []string{"completed", "failed", "cancelled"}).
-		Order("gates.requested_at desc").Find(&gates)
+	pendingGateScope(s.db).Order("gates.requested_at desc").Find(&gates)
 	return gates
 }
 

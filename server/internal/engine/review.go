@@ -261,12 +261,15 @@ func (e *Engine) reviewReply(c *execCtx, node *models.Node, conv *models.ReactCo
 		return errors.New("internal: review non-force must use EnqueueReviewTurn")
 	}
 
-	// Force finish: optional git wrap-up (agent decides commits), then retire
-	// the parked session, finalize from the store snapshot, run afterDefaultChecks,
-	// then Done only on success.
+	// Force finish: leave the pending inbox immediately (same as clarify force /
+	// ResumeGate), then optional git wrap-up, retire session, finalize, and
+	// roll back Done on validation failure so the item re-enters the inbox.
 	// Must not call ReactReply / finishAgentOutcome / TakeOutcome / routeFailure.
 	// Human turn is already persisted by ReactReply.
 	// Ready-gate is enforced by ReactReply before taking the lock.
+	conv.Done = true
+	logDB(e.db.Save(conv), runID, "confirm leave pending (review force)")
+
 	if rp, ok := e.provider.(runtime.ReviewProvider); ok {
 		t := rp.OfferCommitOnConfirm(context.Background(), req)
 		if strings.TrimSpace(t.Msg) != "" {
@@ -284,6 +287,8 @@ func (e *Engine) reviewReply(c *execCtx, node *models.Node, conv *models.ReactCo
 	outcome = e.afterDefaultChecks(c, node, outcome)
 	if outcome.status == "failed" {
 		// Keep paused/waiting_human so the reviewer can fix and retry.
+		conv.Done = false
+		logDB(e.db.Save(conv), runID, "reopen review after force validation failure")
 		e.host.SetActiveReview(runID, true)
 		e.broker.Publish(runID, jsonMsg("react", runID, nodeID))
 		errMsg := strings.TrimSpace(outcome.err)
@@ -308,13 +313,14 @@ func (e *Engine) reviewReply(c *execCtx, node *models.Node, conv *models.ReactCo
 		e.persistVar(runID, outVar, "pass")
 		e.forceClearPreviewIssueVars(c, runID)
 		if lifeErr := e.markPreviewIssuesResolvedByNode(runID, nodeID); lifeErr != nil {
+			conv.Done = false
+			logDB(e.db.Save(conv), runID, "reopen review after preview-issue lifecycle failure")
 			e.host.SetActiveReview(runID, true)
 			e.broker.Publish(runID, jsonMsg("react", runID, nodeID))
 			return lifeErr
 		}
 	}
 
-	conv.Done = true
 	logDB(e.db.Save(conv), runID, "finish review conversation")
 	if e.shareRevoker != nil {
 		e.shareRevoker.RevokeUnusedForGate(runID, nodeID, conv.Iteration)

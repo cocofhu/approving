@@ -104,6 +104,9 @@ func TestFilterAndEnrichCitationsFailClosedAndSnippet(t *testing.T) {
 		RunID: runID, NodeID: "human_gate", WorkflowID: wfID, WorkflowName: wf.Name,
 		Title: "请审批", Resolved: false, RequestedAt: time.Now(),
 	})
+	db.Create(&models.StateRun{
+		RunID: runID, NodeID: "human_gate", Iteration: 0, Status: "waiting_human",
+	})
 
 	pm := NewPmService(db, nil)
 	thr, err := pm.CreateThread(p.ID, "u1", "t", "pm", "chat")

@@ -17,6 +17,7 @@ func TestEscapeLikeAndInboxHelpers(t *testing.T) {
 	db.Create(&models.Run{ID: "run-ctx", Status: "waiting_human", Graph: g})
 	db.Create(&models.ReactConversation{RunID: "run-ctx", NodeID: "r1", Iteration: 1})
 	db.Create(&models.Gate{RunID: "run-ctx", NodeID: "r1", Iteration: 1, Title: "g", Resolved: false})
+	db.Create(&models.StateRun{RunID: "run-ctx", NodeID: "r1", Iteration: 1, Status: "waiting_human"})
 
 	if _, _, ok := s.ClarifyContext("run-ctx", "r1", 1); !ok {
 		t.Fatal("ClarifyContext")

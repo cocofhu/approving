@@ -20,6 +20,9 @@ func TestInboxContextKind(t *testing.T) {
 		RunID: "run-gate", NodeID: "gate-proposal", Iteration: 2,
 		Resolved: false, RequestedAt: now,
 	})
+	db.Create(&models.StateRun{
+		RunID: "run-gate", NodeID: "gate-proposal", Iteration: 2, Status: "waiting_human",
+	})
 
 	kind, ok := s.InboxContextKind("run-gate", "gate-proposal", 2)
 	if !ok || kind != "gate" {

@@ -45,6 +45,9 @@ func seedHumanGate(t *testing.T, h *harness, runID, nodeID string, actions []mod
 		Actions: actions, Form: []models.GateField{{Key: "comment", Label: "意见"}},
 		RequestedAt: now,
 	})
+	h.db.Create(&models.StateRun{
+		RunID: runID, NodeID: nodeID, Iteration: 1, Status: "waiting_human",
+	})
 	h.h.Arts.Save(runID, "visual", "page.html", "html", `<html><body><a href="/api/blobs/abc">x</a><p>ok</p></body></html>`)
 	h.h.Arts.Save(runID, "visual", "clarified_requirement.json", "json", `{"title":"外部一次审批","goals":["g1"],"runId":"should-hide","projectId":"p"}`)
 }

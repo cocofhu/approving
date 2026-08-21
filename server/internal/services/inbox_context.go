@@ -30,9 +30,9 @@ const (
 // both could match. Returns ("", false) when nothing is pending.
 func (s *RunService) InboxContextKind(runID, nodeID string, iteration int) (string, bool) {
 	var gate models.Gate
-	if err := s.db.Joins("JOIN runs ON runs.id = gates.run_id").
-		Where("gates.run_id = ? AND gates.node_id = ? AND gates.iteration = ? AND gates.resolved = ? AND runs.status NOT IN ?",
-			runID, nodeID, iteration, false, terminalRunStatuses).
+	if err := pendingGateScope(s.db).
+		Where("gates.run_id = ? AND gates.node_id = ? AND gates.iteration = ?",
+			runID, nodeID, iteration).
 		First(&gate).Error; err == nil {
 		return InboxKindGate, true
 	}
@@ -260,12 +260,13 @@ func (s *RunService) ClarifyContext(runID, nodeID string, iteration int) (models
 	return conv, run, true
 }
 
-// PendingGateAt returns the unresolved gate for an exact run/node/iteration.
+// PendingGateAt returns the unresolved gate for an exact run/node/iteration
+// that is still waiting_human (same inbox eligibility as PendingInboxItems).
 func (s *RunService) PendingGateAt(runID, nodeID string, iteration int) (models.Gate, bool) {
 	var g models.Gate
-	if err := s.db.Joins("JOIN runs ON runs.id = gates.run_id").
-		Where("gates.run_id = ? AND gates.node_id = ? AND gates.iteration = ? AND gates.resolved = ? AND runs.status NOT IN ?",
-			runID, nodeID, iteration, false, terminalRunStatuses).
+	if err := pendingGateScope(s.db).
+		Where("gates.run_id = ? AND gates.node_id = ? AND gates.iteration = ?",
+			runID, nodeID, iteration).
 		First(&g).Error; err != nil {
 		return models.Gate{}, false
 	}
