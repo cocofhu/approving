@@ -246,7 +246,7 @@ defineExpose({
             class="absolute inline-flex items-center justify-center font-bold leading-none text-white"
             :class="[
               layout === 'sidebar'
-                ? 'right-[3px] top-[3px] h-3.5 min-w-3.5 rounded-full px-[3px] text-[9px] shadow-[0_0_0_1.5px_rgb(var(--c-surface))]'
+                ? 'force-radius-full right-[3px] top-[3px] h-3.5 min-w-3.5 rounded-full px-[3px] text-[9px] shadow-[0_0_0_1.5px_rgb(var(--c-surface))]'
                 : 'right-0.5 top-0.5 h-4 min-w-4 px-1 text-[10px]',
               hasUnreadFailed ? 'bg-err' : 'bg-accent',
             ]"

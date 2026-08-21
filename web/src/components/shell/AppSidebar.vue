@@ -71,7 +71,7 @@ async function onHideNav() {
         <ShellChromeControls layout="sidebar" />
         <div class="flex items-center gap-2 px-0.5">
           <div
-            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-dim text-[11px] font-semibold text-accent-2"
+            class="force-radius-full flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-dim text-[11px] font-semibold text-accent-2"
             data-testid="sidebar-user-avatar"
           >{{ initials }}</div>
           <div class="min-w-0 flex-1 truncate leading-tight">

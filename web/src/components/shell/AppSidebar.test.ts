@@ -93,6 +93,8 @@ describe('AppSidebar', () => {
     const wrapper = mountSidebar()
     const avatar = wrapper.find('[data-testid="sidebar-user-avatar"]')
     expect(avatar.exists()).toBe(true)
+    // force-radius-full pierces global.css border-radius:0 !important (g3.1)
+    expect(avatar.classes()).toContain('force-radius-full')
     expect(avatar.classes()).toContain('rounded-full')
     expect(avatar.classes()).toContain('bg-accent-dim')
     expect(avatar.classes()).toContain('h-7')
