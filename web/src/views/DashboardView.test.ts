@@ -72,6 +72,22 @@ function mountDashboard() {
   })
 }
 
+function stubReducedMotion(matches: boolean) {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn((query: string) => ({
+      matches: query.includes('prefers-reduced-motion') ? matches : false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  )
+}
+
 describe('DashboardView home composer', () => {
   beforeEach(() => {
     mocks.push.mockReset()
@@ -89,9 +105,12 @@ describe('DashboardView home composer', () => {
       nodeRuns: { ap: { nodeId: 'ap', status: 'waiting_human' } },
     })
     mocks.reactReply.mockResolvedValue({ status: 'ok' })
+    stubReducedMotion(false)
+    vi.useFakeTimers()
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
   })
 
@@ -104,14 +123,63 @@ describe('DashboardView home composer', () => {
     wrapper.unmount()
   })
 
-  // plan g1.1/g1.2 — stage atmosphere + brand anchor remain in the live tree
-  it('renders stage background and dominant Approving brand', async () => {
+  // plan g1.1 — no full-bleed purple stage layer
+  it('does not render full-screen purple stage atmosphere', async () => {
     const wrapper = mountDashboard()
     await flushPromises()
-    expect(wrapper.find('[data-testid="home-stage-bg"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="home-brand"]').text()).toBe('Approving')
-    expect(wrapper.get('[data-testid="home-brand"]').classes()).toContain('home-stage__brand')
-    expect(wrapper.get('[data-testid="home-composer"]').classes()).toContain('home-stage__composer')
+    expect(wrapper.find('[data-testid="home-stage-bg"]').exists()).toBe(false)
+    expect(wrapper.find('.home-stage__wash').exists()).toBe(false)
+    expect(wrapper.find('.home-stage__glow').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  // plan g1.2 / g1.3 — Approving mono brand + Chinese hint
+  it('renders monospace Approving brand and Chinese hint', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-brand"]').classes()).toContain('home-brand')
+    expect(wrapper.get('[data-testid="home-title"]').text()).toBe('从一句话开始一次开发前澄清')
+    expect(wrapper.get('[data-testid="home-filter-hint"]').text()).toContain('Approve')
+    wrapper.unmount()
+  })
+
+  // plan g1.3 — one-shot typewriter then settle
+  it('types Approving once then settles without looping', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('')
+    await vi.advanceTimersByTimeAsync(120 + 72 * 9 + 50)
+    expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Approving')
+    expect(wrapper.find('[data-testid="home-brand-cursor"]').exists()).toBe(true)
+    await vi.advanceTimersByTimeAsync(420 + 380 * 6 + 50)
+    expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Approving')
+    expect(wrapper.find('[data-testid="home-brand-cursor"]').exists()).toBe(false)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Approving')
+    expect(wrapper.find('[data-testid="home-brand-cursor"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  // plan g3.3 — reduced-motion shows static brand
+  it('shows full Approving immediately under reduced-motion', async () => {
+    stubReducedMotion(true)
+    const wrapper = mountDashboard()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Approving')
+    expect(wrapper.find('[data-testid="home-brand-cursor"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  // plan g2.1 — placeholder typewriter when idle/empty
+  it('shows placeholder typewriter when empty and unfocused', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-composer-placeholder"]').exists()).toBe(true)
+    await vi.advanceTimersByTimeAsync(80 + 64 * 9 + 50)
+    expect(wrapper.get('[data-testid="home-composer-placeholder"]').text()).toContain('快速开启你的迭代')
+    await wrapper.get('[data-testid="home-composer-input"]').trigger('focus')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-composer-placeholder"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -154,9 +222,23 @@ describe('DashboardView home composer', () => {
       title: '把登录做清楚',
       firstMessage: { text: '把登录做清楚', images: [] },
     })
-    // The engine delivers the opening message after the approve node parks.
     expect(mocks.reactReply).not.toHaveBeenCalled()
     expect(mocks.push).toHaveBeenCalledWith({ path: '/gates', query: { run: 'run-9', node: 'ap' } })
+    wrapper.unmount()
+  })
+
+  // plan g2.3 — Enter submits; Shift+Enter does not
+  it('Enter submits and Shift+Enter keeps the draft for a new line', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const input = wrapper.get('[data-testid="home-composer-input"]')
+    await input.setValue('一行需求')
+    await input.trigger('keydown', { key: 'Enter', shiftKey: true })
+    await flushPromises()
+    expect(mocks.startRun).not.toHaveBeenCalled()
+    await input.trigger('keydown', { key: 'Enter', shiftKey: false })
+    await flushPromises()
+    expect(mocks.startRun).toHaveBeenCalled()
     wrapper.unmount()
   })
 
