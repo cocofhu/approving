@@ -801,6 +801,135 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     wrapper.unmount()
   })
 
+  it('plan g2.1/f1: neighbor force confirm proceeds while first reactReply pending', async () => {
+    const a = clarifyItem('a')
+    const b = clarifyItem('b')
+    let list: InboxItem[] = [a, b]
+    mocks.listGates.mockImplementation(async () => paged(list))
+
+    const replyResolvers: Array<(v: unknown) => void> = []
+    mocks.reactReply.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          replyResolvers.push(resolve)
+        }),
+    )
+
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+
+    const finishA = wrapper.get('[data-testid="clarify-send"]').trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    // A left; B selected while A's reactReply still hangs.
+    expect(wrapper.text()).not.toContain('Clarify a')
+    expect(wrapper.text()).toContain('Clarify b')
+    expect(mocks.reactReply).toHaveBeenCalledTimes(1)
+    expect(mocks.reactReply).toHaveBeenNthCalledWith(
+      1,
+      'run-a',
+      'clarify-a',
+      'hi',
+      [],
+      true,
+      [],
+    )
+
+    // Neighbor confirm must actually call reactReply — not silent-return on global lock.
+    const finishB = wrapper.get('[data-testid="clarify-send"]').trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    expect(mocks.reactReply).toHaveBeenCalledTimes(2)
+    expect(mocks.reactReply).toHaveBeenNthCalledWith(
+      2,
+      'run-b',
+      'clarify-b',
+      'hi',
+      [],
+      true,
+      [],
+    )
+    expect(wrapper.text()).not.toContain('Clarify b')
+
+    list = []
+    replyResolvers[0]!({ status: 'ok' })
+    replyResolvers[1]!({ status: 'ok' })
+    await finishA
+    await finishB
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    expect(mocks.toastSuccess).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('plan g2.1/s2: first force fails after neighbor selected; page confirm stays usable', async () => {
+    const a = clarifyItem('a')
+    const b = clarifyItem('b')
+    let list: InboxItem[] = [a, b]
+    mocks.listGates.mockImplementation(async () => paged(list))
+
+    let rejectA!: (e: unknown) => void
+    mocks.reactReply.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectA = reject
+        }),
+    )
+
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+
+    const finishA = wrapper.get('[data-testid="clarify-send"]').trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.text()).toContain('Clarify b')
+    expect(wrapper.text()).not.toContain('Clarify a')
+
+    // A fails while B was briefly selected — restore A for retry and unlock the page.
+    rejectA(new Error('confirm blew up'))
+    await finishA.catch(() => {})
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Clarify a')
+    expect(wrapper.text()).toContain('Clarify b')
+    expect(wrapper.find('[data-testid="clarify-send"]').exists()).toBe(true)
+
+    // Neighbor B remains confirmable after failure unlock (no whole-page lock residue).
+    const buttonsB = wrapper.findAll('button').filter((btn) => btn.text().includes('Clarify b'))
+    expect(buttonsB.length).toBeGreaterThan(0)
+    await buttonsB[0]!.trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    mocks.reactReply.mockResolvedValueOnce({ status: 'ok' })
+    list = [a]
+    await wrapper.get('[data-testid="clarify-send"]').trigger('click')
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    expect(mocks.reactReply).toHaveBeenCalledWith(
+      'run-b',
+      'clarify-b',
+      'hi',
+      [],
+      true,
+      [],
+    )
+    expect(wrapper.text()).not.toContain('Clarify b')
+    expect(wrapper.text()).toContain('Clarify a')
+    wrapper.unmount()
+  })
+
   it('plan g1.3: force-finish failure restores row and allows retry', async () => {
     const a = clarifyItem('a')
     const b = clarifyItem('b')

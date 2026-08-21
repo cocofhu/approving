@@ -20,6 +20,8 @@ type State = {
   resumeFail: boolean
   replyResolved: boolean
   resumeResolved: boolean
+  /** Count of force reactReply calls (consecutive-approve coverage). */
+  forceReplyCount: number
 }
 
 function approveItem(): InboxItem {
@@ -32,6 +34,24 @@ function approveItem(): InboxItem {
     workflowId: 'wf-ap',
     workflowName: '审批工作流',
     runTitle: '确认后应离开待办',
+    label: 'Approve',
+    done: false,
+    requestedAt: NOW,
+    updatedAt: NOW,
+    tags: [],
+  }
+}
+
+function approveItemNeighbor(): InboxItem {
+  return {
+    type: 'clarify',
+    kind: 'approve',
+    runId: 'run-approve-b',
+    nodeId: 'approve_7gl7',
+    iteration: 1,
+    workflowId: 'wf-ap',
+    workflowName: '审批工作流',
+    runTitle: '第二个待确认',
     label: 'Approve',
     done: false,
     requestedAt: NOW,
@@ -97,14 +117,15 @@ async function mockApis(page: Page, state: State) {
     if (method === 'GET' && path.match(/\/api\/runs\/[^/]+\/inbox-context/)) {
       const runId = path.split('/')[3]
       const nodeId = url.searchParams.get('nodeId') || ''
-      if (runId === 'run-approve') {
+      if (runId === 'run-approve' || runId === 'run-approve-b') {
+        const nid = runId === 'run-approve-b' ? 'approve_7gl7' : 'approve_7gl6'
         await route.fulfill({
           json: {
             type: 'clarify',
             status: 'waiting_human',
             nodes: [
               {
-                id: 'approve_7gl6',
+                id: nid,
                 type: 'approve',
                 label: 'Approve',
                 position: { x: 0, y: 0 },
@@ -121,9 +142,9 @@ async function mockApis(page: Page, state: State) {
               { id: 'art-2', name: 'plan.json', sizeBytes: 32, createdAt: NOW },
             ],
             nodeExecutions: {
-              approve_7gl6: [
+              [nid]: [
                 {
-                  nodeId: 'approve_7gl6',
+                  nodeId: nid,
                   iteration: 1,
                   status: 'waiting_human',
                   outputs: {},
@@ -131,7 +152,7 @@ async function mockApis(page: Page, state: State) {
               ],
             },
             clarify: {
-              nodeId: 'approve_7gl6',
+              nodeId: nid,
               iteration: 1,
               turns: [
                 {
@@ -179,6 +200,8 @@ async function mockApis(page: Page, state: State) {
     }
 
     if (method === 'POST' && path.match(/\/api\/runs\/[^/]+\/react\/[^/]+\/reply\/?$/)) {
+      const parts = path.split('/')
+      const runId = parts[3]
       const body = (req.postDataJSON() as { force?: boolean } | null) || {}
       if (state.replyDelayMs > 0) {
         await new Promise((r) => setTimeout(r, state.replyDelayMs))
@@ -189,8 +212,9 @@ async function mockApis(page: Page, state: State) {
         return
       }
       if (body.force) {
+        state.forceReplyCount += 1
         state.inbox = {
-          items: state.inbox.items.filter((it) => it.runId !== 'run-approve'),
+          items: state.inbox.items.filter((it) => it.runId !== runId),
           total: Math.max(0, state.inbox.total - 1),
         }
       }
@@ -266,6 +290,7 @@ test.describe('Inbox 确认发起即离开待办', () => {
       resumeFail: false,
       replyResolved: false,
       resumeResolved: false,
+      forceReplyCount: 0,
     }
     await openGates(page, state)
 
@@ -291,6 +316,43 @@ test.describe('Inbox 确认发起即离开待办', () => {
     await page.screenshot({ path: `${SHOT}/03-after-reply-ok.png`, fullPage: true })
   })
 
+  test('plan g2.2: 连续两个 Approve，首条 reply 未返回即可确认邻居', async ({ page }) => {
+    const state: State = {
+      inbox: { items: [approveItem(), approveItemNeighbor()], total: 2 },
+      replyDelayMs: 2500,
+      replyFail: false,
+      resumeDelayMs: 0,
+      resumeFail: false,
+      replyResolved: false,
+      resumeResolved: false,
+      forceReplyCount: 0,
+    }
+    await openGates(page, state)
+
+    await approveRow(page).first().click()
+    const confirm = page.getByTestId('clarify-confirm-flow').or(page.getByRole('button', { name: '确认并流转' }))
+    await expect(confirm.first()).toBeVisible({ timeout: 15_000 })
+    await confirm.first().click()
+
+    // First left; second auto-selected while first reply still pending.
+    await expect(approveRow(page)).toHaveCount(0, { timeout: 1500 })
+    expect(state.forceReplyCount).toBe(0)
+    await expect(page.getByText('第二个待确认')).toBeVisible({ timeout: 5000 })
+
+    const confirmB = page.getByTestId('clarify-confirm-flow').or(page.getByRole('button', { name: '确认并流转' }))
+    await expect(confirmB.first()).toBeVisible({ timeout: 10_000 })
+    await expect(confirmB.first()).toBeEnabled()
+    await page.screenshot({ path: `${SHOT}/08-neighbor-ready-while-first-pending.png`, fullPage: true })
+    await confirmB.first().click()
+
+    // Second must also leave before either delayed reply resolves (no global lock swallow).
+    await expect(page.getByText('第二个待确认')).toHaveCount(0, { timeout: 1500 })
+    expect(state.forceReplyCount).toBeLessThan(2)
+
+    await expect.poll(() => state.forceReplyCount, { timeout: 8000 }).toBe(2)
+    await page.screenshot({ path: `${SHOT}/09-both-confirmed.png`, fullPage: true })
+  })
+
   test('Approve 确认失败：条目回显且可再点确认', async ({ page }) => {
     const state: State = {
       inbox: { items: [approveItem()], total: 1 },
@@ -300,6 +362,7 @@ test.describe('Inbox 确认发起即离开待办', () => {
       resumeFail: false,
       replyResolved: false,
       resumeResolved: false,
+      forceReplyCount: 0,
     }
     await openGates(page, state)
 
@@ -335,6 +398,7 @@ test.describe('Inbox 确认发起即离开待办', () => {
       resumeFail: false,
       replyResolved: false,
       resumeResolved: false,
+      forceReplyCount: 0,
     }
     await openGates(page, state)
 
