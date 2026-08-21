@@ -669,3 +669,110 @@ func TestReactApproveRetryAfterFailedOpenStillInjects(t *testing.T) {
 		}
 	}
 }
+
+// TestReactApproveClearsPrematureOutcome locks g1.1: !force must ClearOutcome and
+// stay Done=false even when the agent called node_complete during the turn.
+func TestReactApproveClearsPrematureOutcome(t *testing.T) {
+	p, host, _, _, req := approveSetup(t, func(int) chatFunc {
+		return func(int) turnAction {
+			return turnAction{narration: "aligned", produces: approveProduces(), outcome: true}
+		}
+	})
+	open := p.ReactOpen(context.Background(), req)
+	if open.Done {
+		t.Fatal("expected park")
+	}
+	hist := []models.ReactMessage{{Role: "human", Text: "做登录"}}
+	reply := p.ReactReply(context.Background(), req, hist, "做登录", nil, false)
+	if reply.Err != nil {
+		t.Fatalf("reply: %v", reply.Err)
+	}
+	if reply.Done {
+		t.Fatal("ordinary approve reply must not finish even after premature node_complete")
+	}
+	if host.HasOutcome(req.RunID, req.NodeID) {
+		t.Fatal("premature node_complete must be cleared on !force approve")
+	}
+	if _, st := host.PeekOutcomeArtifact(req.RunID); st != mcp.OutcomeArtifactAbsent {
+		t.Fatalf("audit node_complete.json must be cleared, state=%v", st)
+	}
+}
+
+// TestReactApproveForceCompletesWithOutcome locks g1.2: force runs
+// ensureRequiredProducts + ensureOutcome; products + node_complete → Done.
+func TestReactApproveForceCompletesWithOutcome(t *testing.T) {
+	p, host, store, mgr, req := approveSetup(t, func(int) chatFunc {
+		return func(turn int) turnAction {
+			// turn 0: ordinary align; turn 1: force confirm with products+outcome
+			if turn == 0 {
+				return turnAction{narration: "aligned", produces: approveProduces()}
+			}
+			return turnAction{narration: "finishing", produces: approveProduces(), outcome: true}
+		}
+	})
+	_ = p.ReactOpen(context.Background(), req)
+	hist := []models.ReactMessage{{Role: "human", Text: "做登录"}}
+	idle := p.ReactReply(context.Background(), req, hist, "做登录", nil, false)
+	if idle.Done {
+		t.Fatal("pre-confirm reply must stay open")
+	}
+	hist = append(hist,
+		models.ReactMessage{Role: "agent", Text: idle.Msg},
+		models.ReactMessage{Role: "human", Text: "确认并流转"},
+	)
+	force := p.ReactReply(context.Background(), req, hist, "确认并流转", nil, true)
+	if force.Err != nil {
+		t.Fatalf("force: %v", force.Err)
+	}
+	if !force.Done {
+		t.Fatalf("force with products+outcome must complete, got %+v", force)
+	}
+	if !host.HasOutcome(req.RunID, req.NodeID) {
+		t.Fatal("force path must keep node_complete mark")
+	}
+	for _, name := range []string{mcp.ClarifiedRequirementArtifactName, mcp.PlanArtifactName} {
+		if _, ok := store.Get("run-r", name); !ok {
+			t.Errorf("missing %s after force", name)
+		}
+	}
+	prompt := mgr.bridge(0).promptAt(1)
+	for _, want := range []string{"确认流转", "node_complete", "set_clarified_requirement", "set_plan"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("force prompt missing %q:\n%s", want, prompt)
+		}
+	}
+}
+
+// TestReactApproveForceNudgesMissingOutcome locks g1.2: force without
+// node_complete injects OutcomeRetry via ensureOutcome.
+func TestReactApproveForceNudgesMissingOutcome(t *testing.T) {
+	p, host, _, mgr, req := approveSetup(t, func(int) chatFunc {
+		return func(turn int) turnAction {
+			if turn == 0 {
+				return turnAction{narration: "aligned", produces: approveProduces()}
+			}
+			// Force turn + ensureOutcome retries: products only, never outcome.
+			return turnAction{narration: "still no mark", produces: approveProduces()}
+		}
+	})
+	_ = p.ReactOpen(context.Background(), req)
+	hist := []models.ReactMessage{{Role: "human", Text: "做登录"}}
+	idle := p.ReactReply(context.Background(), req, hist, "做登录", nil, false)
+	hist = append(hist,
+		models.ReactMessage{Role: "agent", Text: idle.Msg},
+		models.ReactMessage{Role: "human", Text: "确认并流转"},
+	)
+	force := p.ReactReply(context.Background(), req, hist, "确认并流转", nil, true)
+	if force.Err != nil {
+		t.Fatalf("force: %v", force.Err)
+	}
+	if !force.Done {
+		t.Fatal("ensureOutcome fail-closed still returns Done so engine can reject missing mark")
+	}
+	if host.HasOutcome(req.RunID, req.NodeID) {
+		t.Fatal("outcome must remain absent when agent never calls node_complete")
+	}
+	if !promptsContainOutcomeRetry(mgr) {
+		t.Fatal("force without node_complete must inject OutcomeRetry")
+	}
+}

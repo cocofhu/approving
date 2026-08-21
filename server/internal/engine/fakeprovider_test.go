@@ -465,6 +465,7 @@ func (f *fakeProvider) ReactReply(ctx context.Context, req runtime.NodeReq, hist
 	content := "## 结论\n\n" + human
 	if skip {
 		if req.NodeType == "approve" && !force {
+			f.host.ClearOutcome(req.RunID, req.NodeID)
 			return runtime.ReactTurn{Msg: "完成(缺产物)。", Done: false,
 				Result: runtime.NodeResult{OutputMd: content, Outputs: map[string]any{}}}
 		}
@@ -510,6 +511,9 @@ func (f *fakeProvider) ReactReply(ctx context.Context, req runtime.NodeReq, hist
 		}
 	}
 	if req.NodeType == "approve" && !force {
+		// Mirror real acpProvider: discard premature node_complete so !force
+		// cannot complete the node (ClearOutcome + Done=false).
+		f.host.ClearOutcome(req.RunID, req.NodeID)
 		return runtime.ReactTurn{Msg: "信息已充分。", Done: false, Result: runtime.NodeResult{OutputMd: content, Outputs: out}}
 	}
 	f.emitOutcome(req, nil)
