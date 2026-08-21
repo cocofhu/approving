@@ -2971,6 +2971,18 @@
     },
     "plan": {
       "defaultTitle": "实施计划",
+      "designTitle": "设计区",
+      "goalsTitle": "任务",
+      "notApplicable": "不涉及",
+      "sections": {
+        "architecture": "Architecture",
+        "dataDesign": "Data design",
+        "interfaces": "Interfaces",
+        "components": "Components",
+        "interaction": "Interaction",
+        "testDesign": "Test design"
+      },
+      "diagramFallback": "图渲染失败,显示源码",
       "status": {
         "done": "完成",
         "in_progress": "进行中",

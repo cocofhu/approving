@@ -59,7 +59,7 @@ const isFeedback = computed(() => isFeedbackArtifactName(props.name))
 
 <template>
   <ClarifiedRequirementView v-if="name === 'clarified_requirement.json'" :doc="doc" :accent="accent" />
-  <PlanView v-else-if="name === 'plan.json'" :doc="doc" :accent="accent" />
+  <PlanView v-else-if="name === 'plan.json'" :doc="doc" :accent="accent" :artifacts="artifacts" />
   <ImplementationResultView v-else-if="name === 'implementation_result.json'" :doc="doc" :accent="accent" />
   <ResearchView v-else-if="name === 'research.json'" :doc="doc" :accent="accent" />
   <TestResultView
