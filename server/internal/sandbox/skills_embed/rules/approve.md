@@ -20,7 +20,7 @@ alwaysApply: false
 1. 调用 `set_clarified_requirement` 写入完整需求规格(`open_questions` 必须为空);
 2. 调用 `set_plan` 写入最多两级(大目标→小目标)的结构化计划。
 
-建议顺序:先澄清(可穿插提问与可选调研/视觉/方案),再 `set_plan`,然后等待用户确认并流转。禁止自行 `node_complete`。缺任一份即判失败。
+建议顺序:先澄清(可穿插提问与可选调研/视觉/方案),再 `set_plan`,然后等待用户确认并流转。未点「确认并流转」前禁止 `node_complete`。缺任一份即判失败。
 
 ## 结构化提问(优先)
 
@@ -83,4 +83,10 @@ demoHtml 运行于 Gates HtmlPreview 的 sandbox iframe(sandbox="allow-scripts a
 
 ## 结束条件
 
-两份强制产物都已写入、且没有待确认问题时,**等待用户确认并流转**;禁止自行调用 `node_complete`。用户确认时平台会结束本节点:请基于当前已知信息立刻补齐两份强制产物,不要再提问。
+### 确认前
+
+两份强制产物都已写入、且没有待确认问题时,**等待用户确认并流转**;禁止调用 `node_complete`(误调会被引擎清除,节点继续等待)。
+
+### 确认后
+
+用户点击「确认并流转」后:基于当前已知信息立刻补齐两份强制产物(`open_questions` 为空),再调用 `node_complete`;不要再提问。缺任一份或未标记即判失败。

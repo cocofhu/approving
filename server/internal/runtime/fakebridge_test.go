@@ -24,6 +24,7 @@ type turnAction struct {
 	narration string            // agent_message_chunk text, streamed before prompt_done
 	produces  map[string]string // artifact name -> content, written via the in-process MCP host
 	questions []models.ReactQuestion
+	outcome   bool   // call node_complete via ServeRPC during the turn
 	dropConn  bool   // close the WS mid-turn without prompt_done -> ErrConnClosed
 	stall     bool   // send nothing and never prompt_done -> ErrChatIdle (with a small idle timeout)
 	sendError string // emit {op:error} -> a non-retryable agent error
@@ -146,6 +147,11 @@ func (b *fakeBridge) applyTurn(conn *websocket.Conn, act turnAction) bool {
 	}
 	for name, content := range act.produces {
 		_, _ = b.host.WriteArtifact(b.runID, b.token, b.nodeID, name, content, kindForName(name))
+	}
+	if act.outcome {
+		b.host.SetActiveNode(b.runID, b.nodeID, "approve")
+		_, _ = b.host.ServeRPC(b.runID, b.token, []byte(
+			`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"node_complete","arguments":{"status":"success","summary":"turn outcome"}}}`))
 	}
 	if len(act.questions) > 0 {
 		b.host.SetPendingQuestions(b.runID, b.nodeID, act.questions)

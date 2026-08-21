@@ -159,6 +159,12 @@ func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []mod
 		// Opening goal is not review feedback — skip the dual-write contract.
 		prompt = c.buildReactOpenPrompt(req, c.upstreamArtifacts(req)) + "\n\n## 用户消息\n" + strings.TrimRight(human, "\n")
 		chatImages = mergePromptImages(req.PromptImages, images)
+		if force {
+			prompt = models.DefaultApproveConfirmSuffix + "\n\n" + prompt
+		}
+	} else if force && req.NodeType == "approve" {
+		// Human confirmed: require fill products then node_complete (phased contract).
+		prompt = models.DefaultApproveConfirmSuffix + "\n\n" + withDualWriteContract(human)
 	}
 	// Clarify feedback turns dual-write agentSummary alongside narration.
 	res, err := c.streamChat(chatCtx, sess.acp, req, prompt, chatImages)

@@ -44,10 +44,14 @@ func TestAgentPromptsRemainingContracts(t *testing.T) {
 	for _, want := range []string{
 		"两份强制交付", "set_clarified_requirement", "set_plan", "不是「唯一交付」", "用户先说明目标",
 		"至少两个方向不同", "禁止调用", "伪选择",
+		"结束时序", "确认前", "确认后", "node_complete",
 	} {
 		if !strings.Contains(gotApprove, want) {
 			t.Fatalf("DefaultApproveContract missing %q\n%s", want, gotApprove)
 		}
+	}
+	if strings.Contains(gotApprove, "可跳过确认自行") || strings.Contains(gotApprove, "平台会结束本节点") {
+		t.Fatal("DefaultApproveContract must not imply skip-confirm or platform-ends-without-node_complete")
 	}
 	if !strings.Contains(DefaultApproveOpenSuffix, "真实分歧") {
 		t.Fatal("DefaultApproveOpenSuffix")
@@ -60,6 +64,14 @@ func TestAgentPromptsRemainingContracts(t *testing.T) {
 	}
 	if !strings.Contains(DefaultApproveOpenSuffix, "确认并流转") {
 		t.Fatal("DefaultApproveOpenSuffix must wait for human confirm")
+	}
+	if !strings.Contains(DefaultApproveOpenSuffix, "未点「确认并流转」前禁止 node_complete") {
+		t.Fatal("DefaultApproveOpenSuffix must forbid node_complete before confirm")
+	}
+	for _, want := range []string{"确认流转", "set_clarified_requirement", "set_plan", "node_complete", "不要再提问"} {
+		if !strings.Contains(DefaultApproveConfirmSuffix, want) {
+			t.Fatalf("DefaultApproveConfirmSuffix missing %q\n%s", want, DefaultApproveConfirmSuffix)
+		}
 	}
 	if nilP.OutcomeContractText() == "" || nilP.OutcomeRetryText() == "" {
 		t.Fatal("nil outcome")

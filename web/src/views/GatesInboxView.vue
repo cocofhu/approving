@@ -80,6 +80,7 @@ const {
   peek,
   applyPending,
   removeItemLocally,
+  restoreItemLocally,
   hasPendingUpdate,
   pendingMeta,
   lastPeekAt,
@@ -327,6 +328,17 @@ function removeListItemLocally(removedKey: string) {
   if (removed > 0) listTotal.value = Math.max(0, listTotal.value - removed)
   // Keep sidebar badge / singleton in lockstep with the page list.
   removeItemLocally(removedKey)
+}
+
+/**
+ * Confirm/resume failed after optimistic leave — put the row back so the user can retry.
+ * `prevList` is the snapshot taken at confirm initiation (preserves card order).
+ */
+function restoreListItemLocally(it: InboxItem, prevList: InboxItem[]) {
+  invalidateListLoads()
+  listItems.value = prevList.slice()
+  listTotal.value = Math.max(listTotal.value, prevList.length)
+  restoreItemLocally(it)
 }
 
 function incomingTarget(): { runId: string; nodeId: string } | null {
@@ -592,11 +604,13 @@ async function loadList({ showLoading = false }: { showLoading?: boolean } = {})
     const rows = isPaginated(data) ? data.items : data
     const total = isPaginated(data) ? data.total : data.length
     detectStartingFailures(listItems.value, rows)
-    listItems.value = mergeFailedStarting(mergeIncomingGhost(rows))
-    listTotal.value = Math.max(total, listItems.value.length)
+    // Hide locally-confirmed rows even if the server list still lags (f4 ghost guard).
+    const visible = rows.filter((it) => !isProcessedTriple(it))
+    listItems.value = mergeFailedStarting(mergeIncomingGhost(visible))
+    listTotal.value = Math.max(total - (rows.length - visible.length), listItems.value.length)
     rebindActiveFromList(listItems.value)
     listLoadError.value = null
-    reconcileProcessedWithList(listItems.value)
+    reconcileProcessedWithList(rows)
     // Independent loadList success path: repair invalid selection (no Run # - shell).
     if (!processingLock.value) ensureValidActive()
   } catch (err) {
@@ -1463,25 +1477,35 @@ async function onResolve(action: string, form: Record<string, any> = {}) {
   // Intent moment: short-circuit before await resume so WS cannot race.
   beginProcessingIntent(g)
   showProcessedBanner.value = false
+  const submittedKey = itemKey(g)
+  const submittedItem = g
+  const prevList = listItems.value.slice()
+  // Leave pending at confirm initiation — do not wait for resume/network (plan g1.2).
+  removeListItemLocally(submittedKey)
+  selectActiveAfterRemove(prevList, submittedKey)
+  if (!active.value) {
+    activeRun.value = null
+    activeRunLoadError.value = false
+  }
   try {
     await api.resumeGate(g.runId, g.nodeId, action, form)
   } catch {
-    rollbackProcessingIntent(g)
+    restoreListItemLocally(submittedItem, prevList)
+    rollbackProcessingIntent(submittedItem)
+    active.value = submittedItem
     return
   }
-  const submittedKey = itemKey(g)
-  const prevList = listItems.value.slice()
   try {
     await refresh({ source: 'submit', mode: 'force' })
     await loadList()
   } catch {
     /* refresh/loadList already soft-fail in most paths; still converge below */
   } finally {
-    // Gate left pending even if list lag still returns the row — drop ghost and pick neighbor.
-    // Always unlock even when refresh/loadList throws so the inbox cannot soft-lock.
+    // Re-drop lagging list rows; unlock even when refresh throws.
     removeListItemLocally(submittedKey)
-    selectActiveAfterRemove(prevList, submittedKey)
-    // watch(active) owns the single loadActiveRun entry; avoid a second fetch here.
+    if (active.value && itemKey(active.value) === submittedKey) {
+      selectActiveAfterRemove(listItems.value, submittedKey)
+    }
     if (!active.value) {
       activeRun.value = null
       activeRunLoadError.value = false
@@ -1542,8 +1566,19 @@ async function onClarifySend(
   if (force && processingLock.value) return
   // Force-finish leaves pending — short-circuit at intent moment (symmetric with gate).
   // Ordinary turn replies stay pending and must not markProcessed.
+  const submittedKey = itemKey(it)
+  const submittedItem = it
+  const prevList = force ? listItems.value.slice() : null
   if (force) {
     beginProcessingIntent(it)
+    // Leave pending as soon as confirm is initiated (收尾人话 / confirming mid-state).
+    // Do not wait for reactReply — Approve wrap-up can take far longer than ~3s.
+    removeListItemLocally(submittedKey)
+    selectActiveAfterRemove(prevList!, submittedKey)
+    if (!active.value) {
+      activeRun.value = null
+      activeRunLoadError.value = false
+    }
   }
   const mergedAnnotations =
     inboxAppPreviewActive.value && !force ? mergeStagedAppPreviewPick(annotations) : annotations
@@ -1560,7 +1595,9 @@ async function onClarifySend(
     if (force) {
       // Align with RunDetail: bottom status bar, not toast.
       clarifyConfirmError.value = msg
-      rollbackProcessingIntent(it)
+      restoreListItemLocally(submittedItem, prevList!)
+      rollbackProcessingIntent(submittedItem)
+      active.value = submittedItem
       return
     }
     // Non-force enqueue failed: roll back optimistic queue + surface error.
@@ -1569,10 +1606,8 @@ async function onClarifySend(
   }
   const finished = force && ok
 
-  // Force-finish: mirror onResolve — local converge + unlock in finally even if refresh throws.
+  // Force-finish: already left locally; sync counts and re-drop lagging ghosts.
   if (force) {
-    const submittedKey = itemKey(it)
-    const prevList = listItems.value.slice()
     let stillThere = true
     try {
       showProcessedBanner.value = false
@@ -1580,10 +1615,12 @@ async function onClarifySend(
       await loadList()
       stillThere = listItems.value.some((k) => itemKey(k) === submittedKey)
     } catch {
-      /* refresh/loadList already soft-fail in most paths; still converge below */
+      /* refresh/loadList already soft-fail in most paths; still unlock below */
     } finally {
       removeListItemLocally(submittedKey)
-      selectActiveAfterRemove(prevList, submittedKey)
+      if (active.value && itemKey(active.value) === submittedKey) {
+        selectActiveAfterRemove(listItems.value, submittedKey)
+      }
       if (!active.value) {
         activeRun.value = null
         activeRunLoadError.value = false
