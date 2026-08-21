@@ -978,13 +978,58 @@ func TestReactHistoryHasDialogue(t *testing.T) {
 }
 
 func TestMergePromptImages(t *testing.T) {
-	a := []models.PromptImage{{Name: "a.png"}}
-	b := []models.PromptImage{{Name: "b.png"}}
-	got := mergePromptImages(a, b)
-	if len(got) != 2 || got[0].Name != "a.png" || got[1].Name != "b.png" {
-		t.Fatalf("merge = %+v", got)
-	}
-	if mergePromptImages(nil, b)[0].Name != "b.png" {
-		t.Fatal("nil a")
-	}
+	a := []models.PromptImage{{Name: "a.png"}, {Name: "a2.png"}}
+	b := []models.PromptImage{{Name: "b.png"}, {Name: "b2.png"}}
+
+	t.Run("both_nonempty_order_and_len", func(t *testing.T) {
+		got := mergePromptImages(a, b)
+		if len(got) != 4 {
+			t.Fatalf("len = %d, want 4", len(got))
+		}
+		want := []string{"a.png", "a2.png", "b.png", "b2.png"}
+		for i, name := range want {
+			if got[i].Name != name {
+				t.Fatalf("got[%d].Name = %q, want %q", i, got[i].Name, name)
+			}
+		}
+	})
+
+	t.Run("nil_a_returns_b", func(t *testing.T) {
+		got := mergePromptImages(nil, b)
+		if len(got) != 2 || got[0].Name != "b.png" || got[1].Name != "b2.png" {
+			t.Fatalf("nil a = %+v", got)
+		}
+	})
+
+	t.Run("empty_a_returns_b", func(t *testing.T) {
+		got := mergePromptImages([]models.PromptImage{}, b)
+		if len(got) != 2 || got[0].Name != "b.png" {
+			t.Fatalf("empty a = %+v", got)
+		}
+	})
+
+	t.Run("nil_b_returns_a", func(t *testing.T) {
+		got := mergePromptImages(a, nil)
+		if len(got) != 2 || got[0].Name != "a.png" || got[1].Name != "a2.png" {
+			t.Fatalf("nil b = %+v", got)
+		}
+	})
+
+	t.Run("empty_b_returns_a", func(t *testing.T) {
+		got := mergePromptImages(a, []models.PromptImage{})
+		if len(got) != 2 || got[0].Name != "a.png" {
+			t.Fatalf("empty b = %+v", got)
+		}
+	})
+
+	t.Run("both_empty", func(t *testing.T) {
+		got := mergePromptImages(nil, nil)
+		if len(got) != 0 {
+			t.Fatalf("both nil = %+v", got)
+		}
+		got = mergePromptImages([]models.PromptImage{}, []models.PromptImage{})
+		if len(got) != 0 {
+			t.Fatalf("both empty = %+v", got)
+		}
+	})
 }

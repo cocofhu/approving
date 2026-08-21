@@ -560,7 +560,8 @@ func mergePromptImages(a, b []models.PromptImage) []models.PromptImage {
 	if len(b) == 0 {
 		return a
 	}
-	out := make([]models.PromptImage, 0, len(a)+len(b))
+	// Preallocate from one side only — avoid len(a)+len(b) (CodeQL go/allocation-size-overflow).
+	out := make([]models.PromptImage, 0, len(a))
 	out = append(out, a...)
 	out = append(out, b...)
 	return out
