@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/lib/api/api'
 import type { Artifact } from '@/lib/shared/types'
+import { mermaidThemeName, themeVars } from './mermaidTheme'
 
 export type PlanDiagram = {
   format?: string
@@ -22,6 +23,7 @@ const host = ref<HTMLElement | null>(null)
 const failed = ref(false)
 const rendering = ref(false)
 let renderGen = 0
+let themeObserver: MutationObserver | null = null
 
 const format = computed(() => (props.diagram.format || 'mermaid').trim().toLowerCase() || 'mermaid')
 const source = computed(() => (props.diagram.source || '').trim())
@@ -33,20 +35,6 @@ const fallbackUrl = computed(() => {
   const hit = props.artifacts.find((a) => a.name === name)
   return hit?.id ? api.artifactDownloadUrl(hit.id) : ''
 })
-
-function themeVars(): Record<string, string> {
-  const cs = getComputedStyle(document.documentElement)
-  const pick = (name: string, fb: string) => (cs.getPropertyValue(name).trim() || fb)
-  return {
-    background: pick('--color-base', '#0d1117'),
-    primaryColor: pick('--color-elevated', '#161b22'),
-    primaryTextColor: pick('--color-txt', '#e6edf3'),
-    primaryBorderColor: pick('--color-line', '#30363d'),
-    lineColor: pick('--color-line-strong', '#8b949e'),
-    secondaryColor: pick('--color-elevated', '#161b22'),
-    tertiaryColor: pick('--color-base', '#0d1117'),
-  }
-}
 
 async function render() {
   const gen = ++renderGen
@@ -67,7 +55,7 @@ async function render() {
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: 'strict',
-      theme: 'dark',
+      theme: mermaidThemeName(),
       themeVariables: themeVars(),
     })
     const id = `plan-mmd-${Date.now()}-${gen}`
@@ -93,8 +81,17 @@ watch(
   { immediate: true },
 )
 
+onMounted(() => {
+  themeObserver = new MutationObserver(() => {
+    void render()
+  })
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+})
+
 onBeforeUnmount(() => {
   renderGen++
+  themeObserver?.disconnect()
+  themeObserver = null
 })
 </script>
 
