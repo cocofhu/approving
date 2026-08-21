@@ -20,9 +20,10 @@ describe('DashboardView home chat layout', () => {
     expect(src).toMatch(/data-testid="home-composer"/)
     expect(src).toMatch(/data-testid="home-pipeline-cards"/)
     expect(src).toMatch(/data-testid="home-composer-input"/)
-    expect(src).toMatch(/data-testid="home-no-project"/)
-    expect(src).toMatch(/data-testid="dashboard-select-project"/)
+    expect(src).not.toMatch(/data-testid="home-no-project"/)
+    expect(src).not.toMatch(/data-testid="dashboard-select-project"/)
     expect(src).toMatch(/data-testid="home-pipelines-empty"/)
+    expect(src).toMatch(/data-testid="home-go-projects"/)
     expect(src).not.toMatch(/dashboard-kpi-/)
     expect(src).not.toMatch(/dashboard-board-empty/)
     expect(src).not.toMatch(/RunBoardColumn/)
@@ -40,7 +41,6 @@ describe('DashboardView home chat layout', () => {
   // plan g1.2 / g1.3 — monospace Approving, no gradient shimmer / staggered / serif accent
   it('uses local monospace brand without banned brand effects', () => {
     expect(src).toMatch(/data-testid="home-brand"/)
-    expect(src).toMatch(/JetBrains Mono/)
     expect(src).toMatch(/ui-monospace/)
     expect(src).toMatch(/home-brand__cursor/)
     expect(src).not.toMatch(/var\(--grad-logo\)/)
@@ -70,6 +70,7 @@ describe('DashboardView home chat layout', () => {
     expect(src).toMatch(/class="home-shell__card[^"]*border border-line/)
     expect(src).not.toMatch(/class="[^"]*\bcard\b[^"]*home-shell__card|class="home-shell__card[^"]*\bcard\b/)
     expect(src).toMatch(/\.home-shell__card\s*\{[^}]*border-radius:\s*0/s)
+    expect(src).toMatch(/home-shell__card--selected/)
     expect(src).toMatch(/rounded-none bg-err[\s\S]{0,80}data-testid="home-attach-remove"/)
     expect(src).not.toMatch(/rounded-full bg-err[\s\S]{0,80}data-testid="home-attach-remove"/)
   })

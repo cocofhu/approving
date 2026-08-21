@@ -13,11 +13,36 @@ import { missingRequiredAskField, seedAskLaunchFields } from '@/lib/run/useWorkf
 import { attachmentDisplayName } from '@/lib/shared/attachments'
 import type { ClarifyImage, Workflow } from '@/lib/shared/types'
 
+/** Remember last selected home pipeline across visits (plan g2.3). */
+export const HOME_PIPELINE_MEMORY_KEY = 'approving.home.lastPipelineId'
+
 function titleFromDraft(text: string, images: ClarifyImage[]): string {
   const clipped = clipRunTitle(text)
   if (clipped) return clipped
   const name = images[0] ? attachmentDisplayName(images[0], 0) : ''
   return clipRunTitle(name)
+}
+
+function readLastPipelineId(): string {
+  try {
+    return localStorage.getItem(HOME_PIPELINE_MEMORY_KEY)?.trim() || ''
+  } catch {
+    return ''
+  }
+}
+
+function writeLastPipelineId(id: string) {
+  try {
+    if (id) localStorage.setItem(HOME_PIPELINE_MEMORY_KEY, id)
+    else localStorage.removeItem(HOME_PIPELINE_MEMORY_KEY)
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function pickDefaultPipelineId(list: Workflow[], preferred: string): string {
+  if (preferred && list.some((w) => w.id === preferred)) return preferred
+  return list[0]?.id || ''
 }
 
 export function useHomeApproveChat() {
@@ -26,7 +51,6 @@ export function useHomeApproveChat() {
   const { t } = useI18n()
   const attach = useImageAttachments()
 
-  const projectId = ref(readStoredProjectId())
   const workflows = ref<Workflow[]>([])
   const loading = ref(false)
   const loadError = ref<string | null>(null)
@@ -45,10 +69,13 @@ export function useHomeApproveChat() {
 
   let loadAbort: AbortController | null = null
 
-  const hasProject = computed(() => !!projectId.value)
   const pipelines = computed(() => workflows.value.filter(isPublishedApproveFirst))
   const selected = computed(
     () => pipelines.value.find((w) => w.id === selectedId.value) || pipelines.value[0] || null,
+  )
+  /** Project context from the selected pipeline (not a home project gate). */
+  const projectId = computed(
+    () => selected.value?.projectId || launchTarget.value?.projectId || readStoredProjectId() || '',
   )
   const launchTitle = computed(() => titleFromDraft(pendingText.value, pendingImages.value))
   /** Opening message carried through the launch modal's own startRun call. */
@@ -61,28 +88,22 @@ export function useHomeApproveChat() {
   watch(
     pipelines,
     (list) => {
-      if (!list.some((w) => w.id === selectedId.value)) {
-        selectedId.value = list[0]?.id || ''
-      }
+      const next = pickDefaultPipelineId(list, selectedId.value || readLastPipelineId())
+      if (next !== selectedId.value) selectedId.value = next
+      if (next) writeLastPipelineId(next)
     },
     { immediate: true },
   )
 
   async function load() {
     loadAbort?.abort()
-    projectId.value = readStoredProjectId()
-    if (!projectId.value) {
-      workflows.value = []
-      loadError.value = null
-      loading.value = false
-      return
-    }
     const ac = new AbortController()
     loadAbort = ac
     loading.value = true
     loadError.value = null
     try {
-      const list = await api.listWorkflows({ projectId: projectId.value, signal: ac.signal })
+      // Cross-project: omit projectId so the API returns all visible workflows.
+      const list = await api.listWorkflows({ signal: ac.signal })
       if (ac.signal.aborted) return
       workflows.value = Array.isArray(list) ? list : []
     } catch (e: any) {
@@ -95,7 +116,9 @@ export function useHomeApproveChat() {
   }
 
   function selectPipeline(id: string) {
+    if (!id) return
     selectedId.value = id
+    writeLastPipelineId(id)
   }
 
   function seedLaunch(wf: Workflow) {
@@ -148,6 +171,7 @@ export function useHomeApproveChat() {
     sending.value = true
     pendingText.value = text
     pendingImages.value = images
+    writeLastPipelineId(wf.id)
     try {
       const missing = missingRequiredAskField(wf)
       if (missing) {
@@ -198,7 +222,6 @@ export function useHomeApproveChat() {
 
   return {
     projectId,
-    hasProject,
     pipelines,
     selected,
     selectedId,
