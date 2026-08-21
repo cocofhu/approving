@@ -171,7 +171,6 @@ describe('DashboardView home composer', () => {
     await vi.advanceTimersByTimeAsync(220 + 78 * 9 + 50)
     expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Approving')
     const caret = wrapper.get('[data-testid="home-brand-cursor"]')
-    expect(caret.exists()).toBe(true)
     expect(caret.classes()).not.toContain('home-brand__cursor--gone')
     await vi.advanceTimersByTimeAsync(850 * 3 + 50)
     expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Approving')
