@@ -468,7 +468,7 @@ describe('NovncPreviewPanel', () => {
     await flushPromises()
 
     expect(rfb!.scaleViewportSets.length).toBeGreaterThan(setsBefore)
-    expect(rfb!.scaleViewportSets.at(-1)).toBe(true)
+    expect(rfb!.scaleViewportSets[rfb!.scaleViewportSets.length - 1]).toBe(true)
     // Must not teardown/reconnect on a live session.
     expect(MockWebSocket.instances.length).toBe(1)
     expect(wrapper.find('[data-testid="novnc-inspect-toggle"]').exists()).toBe(true)
@@ -516,7 +516,7 @@ describe('NovncPreviewPanel', () => {
     await flushPromises()
 
     expect(rfb.scaleViewportSets.length).toBeGreaterThan(setsBefore)
-    expect(rfb.scaleViewportSets.at(-1)).toBe(true)
+    expect(rfb.scaleViewportSets[rfb.scaleViewportSets.length - 1]).toBe(true)
     expect(MockWebSocket.instances.length).toBe(1)
     wrapper.unmount()
   })
