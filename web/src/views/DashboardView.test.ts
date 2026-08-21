@@ -133,13 +133,25 @@ describe('DashboardView home composer', () => {
     wrapper.unmount()
   })
 
-  // plan g1.2 / g1.3 — Approving mono brand + Chinese hint
+  // plan g1.2 / g1.3 — Approving mono brand + Chinese hint（无 subtitle，对齐第 5 轮）
   it('renders monospace Approving brand and Chinese hint', async () => {
     const wrapper = mountDashboard()
     await flushPromises()
     expect(wrapper.get('[data-testid="home-brand"]').classes()).toContain('home-brand')
     expect(wrapper.get('[data-testid="home-title"]').text()).toBe('从一句话开始一次开发前澄清')
+    expect(wrapper.find('[data-testid="home-subtitle"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="home-filter-hint"]').text()).toContain('Approve')
+    wrapper.unmount()
+  })
+
+  // plan g1.4 — pipeline cards are square (override global .card rounded-lg)
+  it('renders right-angle pipeline cards', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const card = wrapper.get('[data-testid="home-pipeline-card-wf-ap"]')
+    expect(card.classes()).toContain('home-shell__card')
+    expect(card.classes()).toContain('rounded-none')
+    expect(card.classes()).not.toContain('rounded-lg')
     wrapper.unmount()
   })
 

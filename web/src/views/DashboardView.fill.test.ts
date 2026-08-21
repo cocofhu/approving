@@ -64,6 +64,13 @@ describe('DashboardView home chat layout', () => {
     expect(src).toMatch(/<textarea/)
   })
 
+  // review v1/v2 — 无 subtitle；流水线卡片直角覆盖全局 .card
+  it('omits home-subtitle and forces square pipeline cards', () => {
+    expect(src).not.toMatch(/data-testid="home-subtitle"/)
+    expect(src).toMatch(/home-shell__card[^"]*rounded-none|rounded-none[^"]*home-shell__card/)
+    expect(src).toMatch(/\.home-shell__card\s*\{[^}]*border-radius:\s*0/s)
+  })
+
   // plan g2.1 / g2.2 / g2.3
   it('keeps filter hint, placeholder typewriter hook, and multiline textarea', () => {
     expect(src).toMatch(/data-testid="home-filter-hint"/)

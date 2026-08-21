@@ -245,9 +245,6 @@ onBeforeUnmount(() => {
       <p class="home-hint mt-4 text-center" data-testid="home-title">
         {{ t('pages.dashboard.title') }}
       </p>
-      <p class="mt-2 max-w-xl text-center text-[13px] text-txt2" data-testid="home-subtitle">
-        {{ t('pages.dashboard.subtitle') }}
-      </p>
 
       <div class="mt-8 w-full">
         <p
@@ -268,7 +265,7 @@ onBeforeUnmount(() => {
               v-if="isImageAttachment(im)"
               mode="locked"
               size="sm"
-              thumb-class="rounded-md"
+              thumb-class="rounded-none"
               :src="imgSrc(im)"
               :label="attachmentDisplayName(im, ii)"
               :alt="attachmentDisplayName(im, ii)"
@@ -429,7 +426,7 @@ onBeforeUnmount(() => {
           v-for="p in pipelines"
           :key="p.id"
           type="button"
-          class="card home-shell__card w-48 shrink-0 overflow-hidden p-0 text-left transition"
+          class="card home-shell__card rounded-none w-48 shrink-0 overflow-hidden p-0 text-left transition"
           :class="p.id === selected?.id ? 'border-accent ring-1 ring-accent/40' : 'hover:border-line-strong'"
           :data-testid="`home-pipeline-card-${p.id}`"
           @click="selectPipeline(p.id)"
@@ -581,6 +578,7 @@ onBeforeUnmount(() => {
 
 .home-shell__card {
   background: rgb(var(--c-surface));
+  border-radius: 0;
 }
 
 :global(html.light) .home-shell__card {
