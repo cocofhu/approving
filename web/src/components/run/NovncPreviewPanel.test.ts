@@ -31,21 +31,71 @@ class MockWebSocket {
   close() {}
 }
 
+const rfbMocks = vi.hoisted(() => {
+  const instances: Array<{
+    scaleViewport: boolean
+    scaleViewportSets: boolean[]
+    disconnect: () => void
+  }> = []
+  return {
+    instances,
+    reset() {
+      instances.length = 0
+    },
+    last() {
+      return instances[instances.length - 1] ?? null
+    },
+  }
+})
+
 vi.mock('@novnc/novnc/lib/rfb.js', () => ({
   default: class MockRFB {
-    scaleViewport = false
+    _scaleViewport = false
+    scaleViewportSets: boolean[] = []
     resizeSession = false
     viewOnly = false
     focusOnClick = false
     showDotCursor = false
     background = ''
-    constructor(_host: HTMLElement, _channel: unknown) {}
+    constructor(_host: HTMLElement, _channel: unknown) {
+      rfbMocks.instances.push(this)
+    }
+    get scaleViewport() {
+      return this._scaleViewport
+    }
+    set scaleViewport(v: boolean) {
+      this._scaleViewport = v
+      this.scaleViewportSets.push(v)
+    }
     addEventListener(event: string, cb: () => void) {
       if (event === 'connect') queueMicrotask(cb)
     }
     disconnect() {}
   },
 }))
+
+/** Capture ResizeObserver callbacks so tests can simulate hide→show. */
+const resizeObserverMocks = vi.hoisted(() => {
+  const callbacks: ResizeObserverCallback[] = []
+  class MockResizeObserver {
+    constructor(cb: ResizeObserverCallback) {
+      callbacks.push(cb)
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  return {
+    callbacks,
+    MockResizeObserver,
+    reset() {
+      callbacks.length = 0
+    },
+    trigger() {
+      for (const cb of callbacks) cb([], {} as ResizeObserver)
+    },
+  }
+})
 
 const apiMocks = vi.hoisted(() => ({
   previewVncWsUrl: vi.fn(() => 'ws://localhost/preview-vnc/run-1/node-1/5173/ws'),
@@ -105,15 +155,24 @@ function lastInspectCtrl(): { type: string; on: boolean } | null {
 describe('NovncPreviewPanel', () => {
   beforeEach(() => {
     MockWebSocket.reset()
+    rfbMocks.reset()
+    resizeObserverMocks.reset()
     apiMocks.previewVncWsUrl.mockClear()
     apiMocks.sandboxVncWsUrl.mockClear()
     vi.stubGlobal('WebSocket', MockWebSocket)
+    vi.stubGlobal('ResizeObserver', resizeObserverMocks.MockResizeObserver)
   })
 
   afterEach(() => {
     document.body.innerHTML = ''
     vi.unstubAllGlobals()
   })
+
+  function setCanvasHostSize(wrapper: ReturnType<typeof mountNovnc>, w: number, h: number) {
+    const host = wrapper.find('.novnc-canvas-host').element as HTMLElement
+    Object.defineProperty(host, 'clientWidth', { configurable: true, get: () => w })
+    Object.defineProperty(host, 'clientHeight', { configurable: true, get: () => h })
+  }
 
   it('sets aria-busy while connecting', async () => {
     const wrapper = mountNovnc()
@@ -386,6 +445,79 @@ describe('NovncPreviewPanel', () => {
     await flushPromises()
     expect(inspectButton(wrapper).attributes('aria-pressed')).toBe('false')
     expect(wrapper.find('[data-testid="novnc-inline-tip"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('restoreViewport reasserts scaleViewport after host size 0→positive (g2.1/g2.2 hide→show)', async () => {
+    const wrapper = mountNovnc()
+    await flushPromises()
+    const rfb = rfbMocks.last()
+    expect(rfb).toBeTruthy()
+    expect(resizeObserverMocks.callbacks.length).toBeGreaterThan(0)
+
+    // Simulate v-show hide: host collapses to 0×0 (noVNC would autoscale to 0).
+    setCanvasHostSize(wrapper, 0, 0)
+    resizeObserverMocks.trigger()
+    await flushPromises()
+
+    const setsBefore = rfb!.scaleViewportSets.length
+
+    // Simulate tab return: host lays out again → restore must reassert scaleViewport.
+    setCanvasHostSize(wrapper, 800, 600)
+    resizeObserverMocks.trigger()
+    await flushPromises()
+
+    expect(rfb!.scaleViewportSets.length).toBeGreaterThan(setsBefore)
+    expect(rfb!.scaleViewportSets[rfb!.scaleViewportSets.length - 1]).toBe(true)
+    // Must not teardown/reconnect on a live session.
+    expect(MockWebSocket.instances.length).toBe(1)
+    expect(wrapper.find('[data-testid="novnc-inspect-toggle"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('dead socket after hide surfaces closed/reconnect UI instead of silent black (g2.2)', async () => {
+    const wrapper = mountNovnc()
+    await flushPromises()
+    const ws = MockWebSocket.instances[0]!
+    expect(wrapper.text()).toMatch(/已连接|连接中/)
+
+    setCanvasHostSize(wrapper, 0, 0)
+    resizeObserverMocks.trigger()
+    await flushPromises()
+
+    // Session dies while hidden (WS closed); readyState no longer OPEN.
+    ws.readyState = 3 // CLOSED
+    setCanvasHostSize(wrapper, 800, 600)
+    resizeObserverMocks.trigger()
+    await flushPromises()
+
+    expect(wrapper.text()).toMatch(/已断开|重新连接|closed|reconnect/i)
+    const reconnectBtn = wrapper.findAll('button').find((b) =>
+      /重新连接|reconnect/i.test(b.text()),
+    )
+    expect(reconnectBtn).toBeTruthy()
+    // Toolbar controls remain usable (g2.3).
+    expect(inspectButton(wrapper).exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('document visibility restore reasserts scaleViewport without reconnect (g2.2)', async () => {
+    const wrapper = mountNovnc()
+    await flushPromises()
+    const rfb = rfbMocks.last()!
+    setCanvasHostSize(wrapper, 640, 480)
+    const setsBefore = rfb.scaleViewportSets.length
+
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+
+    expect(rfb.scaleViewportSets.length).toBeGreaterThan(setsBefore)
+    expect(rfb.scaleViewportSets[rfb.scaleViewportSets.length - 1]).toBe(true)
+    expect(MockWebSocket.instances.length).toBe(1)
     wrapper.unmount()
   })
 })

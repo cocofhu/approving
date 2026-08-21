@@ -71,11 +71,90 @@ let disposed = false
 let connectTimer: ReturnType<typeof setTimeout> | null = null
 const CONSOLE_CONNECT_TIMEOUT_MS = 20_000
 
+/**
+ * Tab hide (v-show → display:none) collapses the canvas host to 0×0. With
+ * scaleViewport, noVNC autoscales the canvas to 0px and may not recover when
+ * the tab returns. Mirror SandboxConsole's "size > 0 then fit" pattern.
+ */
+let hostResizeObserver: ResizeObserver | null = null
+let hostWasZeroSize = true
+let restoreRafAttempts = 0
+const MAX_RESTORE_RAF_ATTEMPTS = 5
+
 function clearConnectTimer() {
   if (connectTimer != null) {
     clearTimeout(connectTimer)
     connectTimer = null
   }
+}
+
+function hostHasPositiveSize(): boolean {
+  const el = canvasHost.value
+  return !!el && el.clientWidth > 0 && el.clientHeight > 0
+}
+
+/** True when the demux socket is still open (session may still be recoverable). */
+function sessionSocketAlive(): boolean {
+  return !!channel && channel.readyState === WebSocket.OPEN
+}
+
+/**
+ * Force noVNC to recompute scale after the host becomes visible again.
+ * Prefer in-place refresh; if the socket is already gone, leave error/closed UI
+ * (existing reconnect button) rather than a silent black canvas.
+ */
+function restoreViewport(_reason: string) {
+  if (disposed) return
+  if (!hostHasPositiveSize()) {
+    if (restoreRafAttempts < MAX_RESTORE_RAF_ATTEMPTS) {
+      restoreRafAttempts++
+      requestAnimationFrame(() => restoreViewport(_reason))
+    }
+    return
+  }
+  restoreRafAttempts = 0
+
+  if (status.value === 'error' || status.value === 'closed') return
+  if (!rfb || !sessionSocketAlive()) {
+    // Socket died while hidden — surface closed UI instead of black canvas.
+    if (status.value === 'live') status.value = 'closed'
+    return
+  }
+
+  try {
+    // Setter always invokes _updateScale even when already true.
+    rfb.scaleViewport = true
+  } catch {
+    /* ignore */
+  }
+}
+
+function onHostResize() {
+  const positive = hostHasPositiveSize()
+  if (positive && hostWasZeroSize) {
+    restoreViewport('resize-from-zero')
+  }
+  hostWasZeroSize = !positive
+}
+
+function onDocumentVisibility() {
+  if (document.visibilityState === 'visible') {
+    restoreViewport('document-visible')
+  }
+}
+
+function setupHostResizeObserver() {
+  if (typeof ResizeObserver === 'undefined') return
+  const el = canvasHost.value
+  if (!el || hostResizeObserver) return
+  hostWasZeroSize = !hostHasPositiveSize()
+  hostResizeObserver = new ResizeObserver(() => onHostResize())
+  hostResizeObserver.observe(el)
+}
+
+function teardownHostResizeObserver() {
+  hostResizeObserver?.disconnect()
+  hostResizeObserver = null
 }
 
 function clearPreviewWarnTimer() {
@@ -421,13 +500,18 @@ watch(
 
 onMounted(() => {
   document.addEventListener('fullscreenchange', onFsChange)
+  document.addEventListener('visibilitychange', onDocumentVisibility)
   window.addEventListener('keydown', onKeydown)
   connect()
+  // Observe after connect so canvasHost is in the DOM; keep across reconnects.
+  setupHostResizeObserver()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('fullscreenchange', onFsChange)
+  document.removeEventListener('visibilitychange', onDocumentVisibility)
   window.removeEventListener('keydown', onKeydown)
+  teardownHostResizeObserver()
   teardown()
 })
 </script>
