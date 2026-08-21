@@ -214,9 +214,9 @@ func itoa(i int) string {
 }
 
 // TestSetTestResultValidatesScreenshotArtifacts verifies the CLI-upload flow: a
-// screenshot uploaded via write_artifact is referenced by name in
-// set_test_result, and the stored test_result.json keeps the artifact ref
-// (no inline data). Missing artifact refs reject the whole write.
+// screenshot already in the store (as artifact-upload would leave it) is
+// referenced by name in set_test_result, and the stored test_result.json keeps
+// the artifact ref (no inline data). Missing artifact refs reject the whole write.
 func TestSetTestResultValidatesScreenshotArtifacts(t *testing.T) {
 	store := &memStore{}
 	h := NewHost(store)
@@ -224,7 +224,11 @@ func TestSetTestResultValidatesScreenshotArtifacts(t *testing.T) {
 	tok := h.RegisterRun(runID)
 	h.SetActiveNode(runID, "tst", "test")
 
-	call(t, h, runID, tok, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"write_artifact","arguments":{"name":"shot-1.png","content":"PNGDATA","kind":"image"}}}`)
+	// Seed like artifact-upload → store.Save(kind=image); write_artifact must not
+	// be used for images (see TestWriteArtifactKindValidation).
+	if _, err := store.Save(runID, "tst", "shot-1.png", "image", "PNGDATA"); err != nil {
+		t.Fatalf("seed screenshot: %v", err)
+	}
 
 	// Missing artifact must fail the entire write.
 	failResp := call(t, h, runID, tok, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"set_test_result","arguments":{"summary":"s","cases":[{"name":"c1","status":"passed"}],"screenshots":[{"artifact":"shot-1.png","caption":"home"},{"artifact":"missing.png"}]}}}`)

@@ -15,7 +15,6 @@ const router = useRouter()
 const { t } = useI18n()
 const {
   projectId,
-  hasProject,
   pipelines,
   selected,
   selectedId,
@@ -47,6 +46,7 @@ const {
 
 const brandVisible = ref('')
 const brandCursor = ref(false)
+const brandCursorBlink = ref(false)
 const brandTimers: ReturnType<typeof setTimeout>[] = []
 const composerFocused = ref(false)
 const composing = ref(false)
@@ -55,7 +55,7 @@ const overflowScroll = ref(false)
 const phVisible = ref('')
 const phCursor = ref(false)
 let phTimer: ReturnType<typeof setTimeout> | null = null
-let phLoopTimer: ReturnType<typeof setTimeout> | null = null
+let phHoldTimer: ReturnType<typeof setTimeout> | null = null
 
 const placeholderFull = computed(() => t('pages.dashboard.placeholder'))
 const showPhTypewriter = computed(() => !draft.value.trim() && !composerFocused.value)
@@ -76,8 +76,10 @@ function scheduleBrand(fn: () => void, ms: number) {
   brandTimers.push(setTimeout(fn, ms))
 }
 
+/** g1.1 — monospace brand: type once, soft blink caret, then settle. */
 function runBrandTypewriter() {
   clearBrandTimers()
+  brandCursorBlink.value = false
   if (prefersReducedMotion()) {
     brandVisible.value = BRAND_TEXT
     brandCursor.value = false
@@ -90,23 +92,16 @@ function runBrandTypewriter() {
     if (i < BRAND_TEXT.length) {
       i += 1
       brandVisible.value = BRAND_TEXT.slice(0, i)
-      scheduleBrand(typeNext, 72)
+      scheduleBrand(typeNext, 78)
       return
     }
-    // Soft blink a few times, then hide the caret permanently.
-    let blinks = 0
-    const blink = () => {
-      brandCursor.value = !brandCursor.value
-      blinks += 1
-      if (blinks < 6) {
-        scheduleBrand(blink, 380)
-        return
-      }
+    brandCursorBlink.value = true
+    scheduleBrand(() => {
+      brandCursorBlink.value = false
       brandCursor.value = false
-    }
-    scheduleBrand(blink, 420)
+    }, 850 * 3)
   }
-  scheduleBrand(typeNext, 120)
+  scheduleBrand(typeNext, 220)
 }
 
 function clearPhTimers() {
@@ -114,12 +109,13 @@ function clearPhTimers() {
     clearTimeout(phTimer)
     phTimer = null
   }
-  if (phLoopTimer != null) {
-    clearTimeout(phLoopTimer)
-    phLoopTimer = null
+  if (phHoldTimer != null) {
+    clearTimeout(phHoldTimer)
+    phHoldTimer = null
   }
 }
 
+/** g1.2 — idle placeholder typewriter (type → hold → delete → repeat). */
 function runPlaceholderTypewriter() {
   clearPhTimers()
   const full = placeholderFull.value
@@ -130,37 +126,45 @@ function runPlaceholderTypewriter() {
   }
   if (prefersReducedMotion()) {
     phVisible.value = full
-    phCursor.value = false
+    phCursor.value = true
     return
   }
   phVisible.value = ''
   phCursor.value = true
   let i = 0
-  const typeNext = () => {
+  let deleting = false
+  const tick = () => {
     if (!showPhTypewriter.value) return
-    if (i < full.length) {
+    if (!deleting) {
       i += 1
       phVisible.value = full.slice(0, i)
-      phTimer = setTimeout(typeNext, 64)
+      if (i >= full.length) {
+        phHoldTimer = setTimeout(() => {
+          deleting = true
+          tick()
+        }, 1800)
+        return
+      }
+      phTimer = setTimeout(tick, 70)
       return
     }
-    // Hold, then briefly blink caret and restart once idle.
-    phLoopTimer = setTimeout(() => {
-      if (!showPhTypewriter.value) return
-      phCursor.value = false
-      phLoopTimer = setTimeout(() => {
-        if (showPhTypewriter.value) runPlaceholderTypewriter()
-      }, 900)
-    }, 2200)
+    i -= 1
+    phVisible.value = full.slice(0, Math.max(0, i))
+    if (i <= 0) {
+      deleting = false
+      phTimer = setTimeout(tick, 400)
+      return
+    }
+    phTimer = setTimeout(tick, 32)
   }
-  phTimer = setTimeout(typeNext, 80)
+  phTimer = setTimeout(tick, 80)
 }
 
 function autoGrow() {
   const el = textareaRef.value
   if (!el) return
   el.style.height = 'auto'
-  const h = Math.min(Math.max(el.scrollHeight, 56), 200)
+  const h = Math.min(Math.max(el.scrollHeight, 88), 200)
   el.style.height = `${h}px`
   overflowScroll.value = el.scrollHeight > 200
 }
@@ -184,17 +188,8 @@ function onComposerBlur() {
   composerFocused.value = false
 }
 
-function goSelectProject() {
+function goProjects() {
   void router.push('/projects')
-}
-
-function goProject() {
-  const id = projectId.value
-  if (id) {
-    void router.push(`/projects/${id}`)
-    return
-  }
-  goSelectProject()
 }
 
 function onPipelineChange(e: Event) {
@@ -238,15 +233,16 @@ onBeforeUnmount(() => {
         <span
           v-if="brandCursor"
           class="home-brand__cursor"
+          :class="{ 'home-brand__cursor--blink': brandCursorBlink }"
           data-testid="home-brand-cursor"
           aria-hidden="true"
-        >▌</span>
+        />
       </h1>
-      <p class="home-hint mt-4 text-center" data-testid="home-title">
+      <p class="home-hint mt-[18px] text-center" data-testid="home-title">
         {{ t('pages.dashboard.title') }}
       </p>
 
-      <div class="mt-8 w-full">
+      <div class="mt-[30px] w-full">
         <p
           v-if="attachNotice"
           class="mb-2 border border-err/40 bg-err/10 px-3 py-1.5 text-[12px] text-err"
@@ -257,7 +253,7 @@ onBeforeUnmount(() => {
         </p>
         <div
           v-if="attachments.length"
-          class="mb-2 flex flex-wrap gap-1.5"
+          class="mb-2 flex flex-wrap gap-2"
           data-testid="home-attach-chips"
         >
           <div v-for="(im, ii) in attachments" :key="ii" class="relative">
@@ -273,11 +269,11 @@ onBeforeUnmount(() => {
             />
             <div
               v-else
-              class="flex h-14 max-w-[160px] items-center gap-1.5 border border-line bg-elevated px-2"
+              class="flex h-9 max-w-[160px] items-center gap-1.5 border border-line bg-elevated px-2.5"
               :title="attachmentDisplayName(im, ii)"
               data-testid="home-pending-file-chip"
             >
-              <span class="shrink-0 text-[9px] font-medium uppercase text-info">DOC</span>
+              <span class="shrink-0 text-[9px] font-semibold uppercase text-info">DOC</span>
               <span class="min-w-0 truncate text-[11px] text-txt2">{{
                 attachmentDisplayName(im, ii)
               }}</span>
@@ -305,16 +301,16 @@ onBeforeUnmount(() => {
             data-testid="home-composer-file"
             @change="onPickFiles"
           />
-          <div class="home-composer__field relative px-3 pt-3">
+          <div class="home-composer__field relative px-4 pb-3 pt-4">
             <label class="sr-only" for="home-composer-input">{{ t('pages.dashboard.placeholder') }}</label>
             <textarea
               id="home-composer-input"
               ref="textareaRef"
               v-model="draft"
-              class="home-composer__input w-full min-w-0 resize-none bg-transparent text-sm text-txt outline-none"
+              class="home-composer__input w-full min-w-0 resize-none bg-transparent text-[15px] text-txt outline-none"
               :class="overflowScroll ? 'scroll-area max-h-[200px] overflow-y-auto' : 'overflow-y-hidden'"
               data-testid="home-composer-input"
-              rows="2"
+              rows="3"
               :disabled="sending"
               autocomplete="off"
               @input="onTextInput"
@@ -327,7 +323,7 @@ onBeforeUnmount(() => {
             />
             <span
               v-if="showPhTypewriter"
-              class="home-composer__ph pointer-events-none absolute left-3 top-3 text-sm text-txt3"
+              class="home-composer__ph pointer-events-none absolute left-4 top-4 text-[15px] text-txt3"
               data-testid="home-composer-placeholder"
               aria-hidden="true"
             >
@@ -335,13 +331,13 @@ onBeforeUnmount(() => {
                 v-if="phCursor"
                 class="home-composer__ph-cursor"
                 data-testid="home-composer-ph-cursor"
-              >▌</span>
+              />
             </span>
           </div>
-          <div class="home-composer__toolbar flex items-center gap-2 border-t px-2 py-2">
+          <div class="home-composer__toolbar flex items-center gap-2 border-t px-3 py-2.5">
             <button
               type="button"
-              class="home-composer__plus flex h-9 w-9 shrink-0 items-center justify-center border text-txt2 hover:text-txt disabled:opacity-40"
+              class="home-composer__plus flex h-8 w-8 shrink-0 items-center justify-center border text-txt2 hover:text-txt disabled:opacity-40"
               :disabled="sending"
               :title="t('pages.clarify.addImage')"
               data-testid="home-composer-plus"
@@ -352,7 +348,7 @@ onBeforeUnmount(() => {
             <label class="sr-only" for="home-pipeline-select">{{ t('pages.dashboard.pickPipeline') }}</label>
             <select
               id="home-pipeline-select"
-              class="home-composer__pipeline max-w-[12rem] min-w-0 flex-1 cursor-pointer appearance-none border bg-transparent px-2.5 py-1.5 text-xs font-medium text-txt outline-none disabled:cursor-default disabled:text-txt3"
+              class="home-composer__pipeline max-w-[12rem] min-w-0 cursor-pointer appearance-none border bg-transparent px-2.5 py-1.5 text-xs font-medium outline-none disabled:cursor-default disabled:text-txt3"
               data-testid="home-pipeline-select"
               :disabled="!pipelines.length || sending"
               :value="selectedId"
@@ -361,9 +357,10 @@ onBeforeUnmount(() => {
               <option v-if="!pipelines.length" value="">{{ t('pages.dashboard.noPipelineShort') }}</option>
               <option v-for="p in pipelines" :key="p.id" :value="p.id">{{ p.name }}</option>
             </select>
+            <div class="flex-1" />
             <button
               type="submit"
-              class="home-composer__send flex h-9 w-9 shrink-0 items-center justify-center text-base disabled:opacity-40"
+              class="home-composer__send flex h-8 w-8 shrink-0 items-center justify-center text-base disabled:opacity-[0.28]"
               data-testid="home-composer-send"
               :disabled="sending || !canSend"
               :aria-label="t('pages.dashboard.send')"
@@ -393,18 +390,6 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <div v-else-if="!hasProject" class="mt-10 text-center" data-testid="home-no-project">
-        <p class="text-sm text-txt3">{{ t('pages.dashboard.noProject') }}</p>
-        <button
-          type="button"
-          class="mt-3 border border-line px-3 py-1.5 text-[13px] text-txt2 hover:bg-elevated"
-          data-testid="dashboard-select-project"
-          @click="goSelectProject"
-        >
-          {{ t('pages.dashboard.selectProject') }}
-        </button>
-      </div>
-
       <div v-else-if="loading" class="mt-10 text-sm text-txt3" data-testid="home-pipelines-loading">
         {{ t('pages.board.loading') }}
       </div>
@@ -414,24 +399,28 @@ onBeforeUnmount(() => {
         <button
           type="button"
           class="mt-3 border border-line px-3 py-1.5 text-[13px] text-txt2 hover:bg-elevated"
-          data-testid="home-go-canvas"
-          @click="goProject"
+          data-testid="home-go-projects"
+          @click="goProjects"
         >
-          {{ t('pages.dashboard.goCanvas') }}
+          {{ t('pages.dashboard.goProjects') }}
         </button>
       </div>
 
-      <div v-else class="mt-8 flex w-full gap-3 overflow-x-auto pb-2" data-testid="home-pipeline-cards">
+      <div
+        v-else
+        class="mt-[22px] flex w-full justify-center gap-3 overflow-x-auto pb-1"
+        data-testid="home-pipeline-cards"
+      >
         <button
           v-for="p in pipelines"
           :key="p.id"
           type="button"
-          class="home-shell__card w-48 shrink-0 overflow-hidden border border-line p-0 text-left transition"
-          :class="p.id === selected?.id ? 'border-accent ring-1 ring-accent/40' : 'hover:border-line-strong'"
+          class="home-shell__card w-48 shrink-0 overflow-hidden border border-line p-0 text-left"
+          :class="p.id === selected?.id ? 'home-shell__card--selected' : 'hover:border-line-strong'"
           :data-testid="`home-pipeline-card-${p.id}`"
           @click="selectPipeline(p.id)"
         >
-          <div class="flex h-20 items-center justify-center bg-elevated/80">
+          <div class="home-shell__card-top flex h-20 items-center justify-center">
             <span class="flex items-center gap-1.5">
               <span class="h-2 w-2 bg-txt3" />
               <span class="h-px w-6 bg-line-strong" />
@@ -469,75 +458,95 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* g1 — clean shell, no full-bleed purple stage */
+/* g1 — clean shell aligned to page.html design tokens */
 .home-shell {
   isolation: isolate;
 }
 
-/* g1.3 — monospace brand; solid color (no gradient flash / purple haze) */
+/* g1.1 — monospace brand; solid color; letter-spacing matches design */
 .home-brand {
   display: inline-flex;
   align-items: baseline;
   margin: 0;
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: clamp(2.5rem, 8vw, 4.75rem);
+  min-height: 1.1em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: clamp(2.5rem, 8.5vw, 4.25rem);
   font-weight: 600;
-  letter-spacing: -0.045em;
-  line-height: 0.95;
+  letter-spacing: 0.04em;
+  line-height: 1.05;
   color: rgb(var(--c-txt));
 }
 
-:global(html.light) .home-brand {
-  color: rgb(var(--c-txt));
+.home-brand__text {
+  white-space: pre;
 }
 
 .home-brand__cursor {
   display: inline-block;
+  width: 0.08em;
+  height: 0.92em;
   margin-left: 0.06em;
-  font-weight: 400;
-  color: rgb(var(--c-accent-2));
-  animation: home-brand-caret 0.76s step-end infinite;
+  vertical-align: -0.06em;
+  background: rgb(var(--c-accent));
+}
+
+.home-brand__cursor--blink {
+  animation: home-brand-caret 0.85s steps(1) 3;
 }
 
 .home-hint {
-  font-size: clamp(0.95rem, 2.4vw, 1.125rem);
+  font-size: 14px;
   font-weight: 500;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.01em;
   color: rgb(var(--c-txt2));
+  opacity: 0;
+  animation: home-hint-in 0.45s ease-out 0.15s forwards;
 }
 
-/* g1.4 / g2.4 — right-angle Open Design composer */
+@keyframes home-hint-in {
+  to {
+    opacity: 1;
+  }
+}
+
+/* g1.2 — right-angle composer (input + toolbar) */
 .home-composer {
-  border-color: rgb(var(--c-line-strong));
+  border-color: rgb(var(--c-line));
   background: rgb(var(--c-surface));
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
 }
 
 :global(html.light) .home-composer {
   border-color: rgb(var(--c-line));
   background: rgb(var(--c-elevated));
-  box-shadow: 0 10px 28px rgba(16, 24, 40, 0.06);
 }
 
 .home-composer__toolbar {
-  border-color: rgb(var(--c-line));
-  background: rgb(var(--c-elevated) / 0.55);
-}
-
-:global(html.light) .home-composer__toolbar {
-  background: rgb(var(--c-base) / 0.45);
+  border-color: rgb(var(--c-line) / 0.55);
 }
 
 .home-composer__input {
-  min-height: 56px;
-  line-height: 1.5;
+  min-height: 88px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.home-composer__ph {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.55;
 }
 
 .home-composer__ph-cursor {
   display: inline-block;
+  width: 1.5px;
+  height: 1.05em;
   margin-left: 1px;
-  color: rgb(var(--c-txt3));
-  animation: home-brand-caret 0.76s step-end infinite;
+  vertical-align: -2px;
+  background: rgb(var(--c-accent));
+  animation: home-ph-caret 1s steps(1) infinite;
 }
 
 .home-composer__plus {
@@ -548,35 +557,37 @@ onBeforeUnmount(() => {
 
 .home-composer__plus:hover:not(:disabled) {
   border-color: rgb(var(--c-line-strong));
-  background: rgb(var(--c-elevated));
+  color: rgb(var(--c-txt));
+  background: rgb(var(--c-accent) / 0.12);
 }
 
 .home-composer__pipeline {
   border-color: rgb(var(--c-line));
-  color: rgb(var(--c-txt));
+  color: rgb(var(--c-accent-2));
+  height: 32px;
+  background-image: linear-gradient(45deg, transparent 50%, rgb(var(--c-txt3)) 50%),
+    linear-gradient(135deg, rgb(var(--c-txt3)) 50%, transparent 50%);
+  background-position: calc(100% - 12px) 12px, calc(100% - 7px) 12px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 26px;
 }
 
 .home-composer__pipeline:focus {
-  border-color: rgb(var(--c-accent-2));
+  border-color: rgb(var(--c-line-strong));
 }
 
 .home-composer__send {
   background: rgb(var(--c-txt));
   color: rgb(var(--c-base));
-  transition: opacity 0.15s ease, background-color 0.15s ease;
 }
 
-.home-composer__send:hover:not(:disabled) {
-  background: rgb(var(--c-accent-2));
+:global(html.light) .home-composer__send {
+  background: rgb(var(--c-txt));
   color: #fff;
 }
 
-:global(html.light) .home-composer__send:hover:not(:disabled) {
-  background: rgb(var(--c-txt));
-  color: rgb(var(--c-base));
-}
-
-/* 不复用全局 .card（含 rounded-lg）；局部直角卡片 */
+/* g1.2 — square cards; selected = accent inset border */
 .home-shell__card {
   background: rgb(var(--c-surface));
   border-radius: 0;
@@ -587,14 +598,53 @@ onBeforeUnmount(() => {
   background: rgb(var(--c-elevated));
 }
 
+.home-shell__card--selected {
+  border-color: rgb(var(--c-accent));
+  box-shadow: inset 0 0 0 1px rgb(var(--c-accent));
+}
+
+.home-shell__card-top {
+  background: rgb(var(--c-elevated));
+  border-bottom: 1px solid rgb(var(--c-line) / 0.55);
+}
+
+:global(html.light) .home-shell__card-top {
+  background: rgb(244 244 245);
+}
+
 @keyframes home-brand-caret {
-  50% {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
     opacity: 0;
   }
 }
 
+@keyframes home-ph-caret {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* g1.3 — prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {
-  .home-brand__cursor,
+  .home-hint {
+    animation: none !important;
+    opacity: 1;
+  }
+
+  .home-brand__cursor {
+    display: none !important;
+  }
+
   .home-composer__ph-cursor {
     animation: none;
     opacity: 1;

@@ -428,13 +428,19 @@ func (h *Host) authorize(runID, token string) bool {
 
 // WriteArtifact persists content under the run namespace. nodeID records
 // which state produced it. Returns the artifact id.
+//
+// Before Save: empty kind is inferred (reserved name → expected kind, else
+// extension); kind=image is always rejected (use artifact-upload); an explicit
+// kind that disagrees with a reserved/contract name fails without writing.
 func (h *Host) WriteArtifact(runID, token, nodeID, name, content, kind string) (string, error) {
 	if !h.authorize(runID, token) {
 		return "", ErrUnauthorized
 	}
-	if kind == "" {
-		kind = "markdown"
+	resolved, err := ResolveWriteArtifactKind(name, kind)
+	if err != nil {
+		return "", err
 	}
+	kind = resolved
 	id, err := h.store.Save(runID, nodeID, name, kind, content)
 	if err != nil {
 		return "", err

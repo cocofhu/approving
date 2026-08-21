@@ -51,6 +51,7 @@ const approveWf: Workflow = {
   version: 1,
   updatedAt: '',
   needsRepo: false,
+  projectId: 'proj-1',
   nodes: [
     { id: 'in', type: 'input', label: '开始', position: { x: 0, y: 0 }, config: {} },
     { id: 'ap', type: 'approve', label: '澄清', position: { x: 0, y: 0 }, config: {} },
@@ -114,12 +115,17 @@ describe('DashboardView home composer', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders composer and approve-first cards when a project is selected', async () => {
+  it('renders composer and approve-first cards without a project gate', async () => {
+    mocks.readStoredProjectId.mockReturnValue('')
     const wrapper = mountDashboard()
     await flushPromises()
     expect(wrapper.get('[data-testid="home-title"]').text()).toContain('从一句话开始一次开发前澄清')
     expect(wrapper.find('[data-testid="home-composer"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="home-no-project"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="home-pipeline-card-wf-ap"]').text()).toContain('自我迭代PRO')
+    expect(mocks.listWorkflows).toHaveBeenCalledWith(expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    const call = mocks.listWorkflows.mock.calls[0]?.[0] || {}
+    expect(call).not.toHaveProperty('projectId')
     wrapper.unmount()
   })
 
@@ -156,15 +162,15 @@ describe('DashboardView home composer', () => {
     wrapper.unmount()
   })
 
-  // plan g1.3 — one-shot typewriter then settle
+  // plan g1.1 — one-shot typewriter then settle
   it('types Approving once then settles without looping', async () => {
     const wrapper = mountDashboard()
     await flushPromises()
     expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('')
-    await vi.advanceTimersByTimeAsync(120 + 72 * 9 + 50)
+    await vi.advanceTimersByTimeAsync(220 + 78 * 9 + 50)
     expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Approving')
     expect(wrapper.find('[data-testid="home-brand-cursor"]').exists()).toBe(true)
-    await vi.advanceTimersByTimeAsync(420 + 380 * 6 + 50)
+    await vi.advanceTimersByTimeAsync(850 * 3 + 50)
     expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Approving')
     expect(wrapper.find('[data-testid="home-brand-cursor"]').exists()).toBe(false)
     await vi.advanceTimersByTimeAsync(5000)
@@ -183,12 +189,12 @@ describe('DashboardView home composer', () => {
     wrapper.unmount()
   })
 
-  // plan g2.1 — placeholder typewriter when idle/empty
+  // plan g1.2 — placeholder typewriter when idle/empty
   it('shows placeholder typewriter when empty and unfocused', async () => {
     const wrapper = mountDashboard()
     await flushPromises()
     expect(wrapper.find('[data-testid="home-composer-placeholder"]').exists()).toBe(true)
-    await vi.advanceTimersByTimeAsync(80 + 64 * 9 + 50)
+    await vi.advanceTimersByTimeAsync(80 + 70 * 9 + 50)
     expect(wrapper.get('[data-testid="home-composer-placeholder"]').text()).toContain('快速开启你的迭代')
     await wrapper.get('[data-testid="home-composer-input"]').trigger('focus')
     await flushPromises()
@@ -196,13 +202,44 @@ describe('DashboardView home composer', () => {
     wrapper.unmount()
   })
 
-  it('shows project empty state when no project is stored', async () => {
+  // plan g2.1 — no project gate; still loads cross-project pipelines
+  it('loads pipelines without a stored project and does not show project empty state', async () => {
     mocks.readStoredProjectId.mockReturnValue('')
     const wrapper = mountDashboard()
     await flushPromises()
-    expect(wrapper.find('[data-testid="home-no-project"]').exists()).toBe(true)
-    await wrapper.get('[data-testid="dashboard-select-project"]').trigger('click')
-    expect(mocks.push).toHaveBeenCalledWith('/projects')
+    expect(wrapper.find('[data-testid="home-no-project"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="home-pipeline-cards"]').exists()).toBe(true)
+    expect(mocks.listWorkflows).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  // plan g2.2 — dropdown and card selection stay in sync
+  it('keeps pipeline select and card selection in sync', async () => {
+    const second: Workflow = {
+      ...approveWf,
+      id: 'wf-lite',
+      name: '快速澄清 Lite',
+      description: '轻量 Approve 入口',
+    }
+    mocks.listWorkflows.mockResolvedValue([approveWf, second])
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const select = wrapper.get('[data-testid="home-pipeline-select"]')
+    expect((select.element as HTMLSelectElement).value).toBe('wf-ap')
+    expect(wrapper.get('[data-testid="home-pipeline-card-wf-ap"]').classes()).toContain(
+      'home-shell__card--selected',
+    )
+    await wrapper.get('[data-testid="home-pipeline-card-wf-lite"]').trigger('click')
+    await flushPromises()
+    expect((select.element as HTMLSelectElement).value).toBe('wf-lite')
+    expect(wrapper.get('[data-testid="home-pipeline-card-wf-lite"]').classes()).toContain(
+      'home-shell__card--selected',
+    )
+    await select.setValue('wf-ap')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-pipeline-card-wf-ap"]').classes()).toContain(
+      'home-shell__card--selected',
+    )
     wrapper.unmount()
   })
 
@@ -222,6 +259,9 @@ describe('DashboardView home composer', () => {
     const wrapper = mountDashboard()
     await flushPromises()
     expect(wrapper.find('[data-testid="home-pipelines-empty"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="home-pipelines-empty"]').text()).not.toContain('选择项目')
+    await wrapper.get('[data-testid="home-go-projects"]').trigger('click')
+    expect(mocks.push).toHaveBeenCalledWith('/projects')
     wrapper.unmount()
   })
 

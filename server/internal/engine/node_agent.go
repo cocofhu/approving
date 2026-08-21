@@ -41,7 +41,8 @@ const visualPageName = "page.html"
 // self-contained HTML page (page.html) via the artifact-store MCP only (never a
 // workspace file, so the repo stays clean). It enforces the artifact's
 // existence and re-saves it with kind "html" so the run UI previews it in an
-// iframe (a page written via write_artifact would default to markdown).
+// iframe (empty kind on write_artifact now infers html for page.html; re-save
+// still normalizes kind for older / mismatched writes).
 func (e *Engine) execVisual(c *execCtx, node *models.Node) nodeOutcome {
 	req := e.nodeReq(c, node)
 	res, err := e.provider.RunAgent(context.Background(), req)

@@ -10,6 +10,7 @@ import (
 // memStore is a minimal in-memory Store for testing the MCP dispatcher.
 type memStore struct {
 	data map[string]string // runID|name -> content
+	kind map[string]string // runID|name -> kind
 	node map[string]string // runID|name -> nodeID
 	n    int
 }
@@ -18,14 +19,25 @@ func (m *memStore) Save(runID, nodeID, name, kind, content string) (string, erro
 	if m.data == nil {
 		m.data = map[string]string{}
 	}
+	if m.kind == nil {
+		m.kind = map[string]string{}
+	}
 	if m.node == nil {
 		m.node = map[string]string{}
 	}
 	key := runID + "|" + name
 	m.data[key] = content
+	m.kind[key] = kind
 	m.node[key] = nodeID
 	m.n++
 	return "art-test", nil
+}
+
+func (m *memStore) kindOf(runID, name string) string {
+	if m.kind == nil {
+		return ""
+	}
+	return m.kind[runID+"|"+name]
 }
 func (m *memStore) Get(runID, name string) (string, bool) {
 	c, ok := m.data[runID+"|"+name]

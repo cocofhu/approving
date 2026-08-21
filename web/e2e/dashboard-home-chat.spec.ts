@@ -91,14 +91,16 @@ async function mockHomeApis(page: Page) {
 }
 
 test.describe('首页 Chat 启动 Approve 流水线', () => {
-  test('无项目记忆：空态引导至项目列表', async ({ page }) => {
+  test('无项目记忆：仍跨项目加载流水线并可发送', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 })
     await mockHomeApis(page)
     await page.goto('/dashboard-home-chat.html')
     await expect(page.getByTestId('dashboard-view')).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByTestId('home-no-project')).toBeVisible()
-    await page.getByTestId('dashboard-select-project').click()
-    await expect(page.getByTestId('projects-page')).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByTestId('home-no-project')).toHaveCount(0)
+    await expect(page.getByTestId('home-pipeline-card-wf-approve')).toContainText('自我迭代PRO')
+    await page.getByTestId('home-composer-input').fill('不先选项目也能开跑')
+    await page.getByTestId('home-composer-send').click()
+    await expect(page.getByTestId('gates-inbox-page')).toBeVisible({ timeout: 10_000 })
   })
 
   test('发送第一句话：StartRun + ReactReply 后进入待审批并带上原文', async ({ page }) => {
