@@ -203,10 +203,31 @@ const confirmedAbsentTriples = new Set<string>()
 const inboxContextAborts = new Map<string, AbortController>()
 /** Single-flight: one softRefresh/loadActiveRun at a time for the selected triple. */
 let inboxContextInFlight: string | null = null
-/** Processing intent lock — blocks list reselection until converge finishes. */
-const processingLock = ref(false)
-/** Snapshot used to reopen Active WS if resume/finish rolls back. */
-let processingIntentTriple: string | null = null
+/**
+ * In-flight confirm intents (triple keys). Non-empty ⇒ list reselection / refresh
+ * stay gated (race with lagging list). Force confirm is gated per-item only so a
+ * neighbor can confirm while an earlier reactReply/resume is still pending.
+ */
+const processingIntentKeys = ref(new Set<string>())
+const processingLock = computed(() => processingIntentKeys.value.size > 0)
+
+function addProcessingIntent(triple: string) {
+  const next = new Set(processingIntentKeys.value)
+  next.add(triple)
+  processingIntentKeys.value = next
+}
+
+function removeProcessingIntent(triple: string) {
+  if (!processingIntentKeys.value.has(triple)) return
+  const next = new Set(processingIntentKeys.value)
+  next.delete(triple)
+  processingIntentKeys.value = next
+}
+
+function isProcessingIntent(it: Pick<InboxItem, 'runId' | 'nodeId' | 'iteration'> | null | undefined) {
+  if (!it) return false
+  return processingIntentKeys.value.has(inboxTripleKey(it))
+}
 
 function markProcessed(it: Pick<InboxItem, 'runId' | 'nodeId' | 'iteration'>) {
   processedTriples.add(inboxTripleKey(it))
@@ -253,23 +274,22 @@ function releaseInboxContextSignal(triple: string, signal: AbortSignal) {
 
 /**
  * User clicked approve / force-finish clarify: short-circuit immediately so the
- * resume/finish window cannot emit more inbox-context traffic.
+ * resume/finish window cannot emit more inbox-context traffic for this triple.
+ * Multiple intents may be in flight (consecutive neighbor confirms).
  */
 function beginProcessingIntent(it: Pick<InboxItem, 'runId' | 'nodeId' | 'iteration'>) {
   const triple = inboxTripleKey(it)
-  processingIntentTriple = triple
-  processingLock.value = true
+  addProcessingIntent(triple)
   markProcessed(it)
   abortInboxContext(triple)
   closeActiveRunWs()
 }
 
-/** resumeGate / reactReply(force) failed — restore fetchability and unlock. */
+/** resumeGate / reactReply(force) failed — restore fetchability and drop this intent. */
 function rollbackProcessingIntent(it: Pick<InboxItem, 'runId' | 'nodeId' | 'iteration'>) {
   const triple = inboxTripleKey(it)
-  if (processingIntentTriple === triple) processingIntentTriple = null
   unmarkProcessed(it)
-  processingLock.value = false
+  removeProcessingIntent(triple)
   // Reopen Active WS only if this item is still the selected pending row.
   if (
     active.value &&
@@ -281,9 +301,9 @@ function rollbackProcessingIntent(it: Pick<InboxItem, 'runId' | 'nodeId' | 'iter
   }
 }
 
-function endProcessingIntent() {
-  processingIntentTriple = null
-  processingLock.value = false
+/** Converge finished for one intent — other in-flight neighbors keep the list lock. */
+function endProcessingIntent(it: Pick<InboxItem, 'runId' | 'nodeId' | 'iteration'>) {
+  removeProcessingIntent(inboxTripleKey(it))
 }
 
 function isActiveStillInList(it: InboxItem | null | undefined = active.value) {
@@ -334,11 +354,19 @@ function removeListItemLocally(removedKey: string) {
 /**
  * Confirm/resume failed after optimistic leave — put the row back so the user can retry.
  * `prevList` is the snapshot taken at confirm initiation (preserves card order).
+ * Re-inserts only this row into the current list so a concurrent neighbor leave is kept.
  */
 function restoreListItemLocally(it: InboxItem, prevList: InboxItem[]) {
   invalidateListLoads()
-  listItems.value = prevList.slice()
-  listTotal.value = Math.max(listTotal.value, prevList.length)
+  const key = itemKey(it)
+  if (!listItems.value.some((row) => itemKey(row) === key)) {
+    const idx = prevList.findIndex((row) => itemKey(row) === key)
+    const next = listItems.value.slice()
+    const insertAt = idx < 0 ? 0 : Math.min(idx, next.length)
+    next.splice(insertAt, 0, it)
+    listItems.value = next
+    listTotal.value = Math.max(listTotal.value, next.length)
+  }
   restoreItemLocally(it)
 }
 
@@ -1532,7 +1560,8 @@ async function onReactRevised() {
 async function onResolve(action: string, form: Record<string, any> = {}) {
   const g = active.value
   if (!g || g.type !== 'gate') return
-  if (processingLock.value) return
+  // Per-item only: another in-flight confirm must not block this neighbor.
+  if (isProcessedTriple(g) || isProcessingIntent(g)) return
   // Intent moment: short-circuit before await resume so WS cannot race.
   beginProcessingIntent(g)
   showProcessedBanner.value = false
@@ -1551,7 +1580,10 @@ async function onResolve(action: string, form: Record<string, any> = {}) {
   } catch {
     restoreListItemLocally(submittedItem, prevList)
     rollbackProcessingIntent(submittedItem)
-    active.value = submittedItem
+    // Reclaim for retry unless a newer neighbor confirm already owns the selection.
+    if (!isProcessingIntent(active.value)) {
+      active.value = submittedItem
+    }
     return
   }
   try {
@@ -1569,7 +1601,7 @@ async function onResolve(action: string, form: Record<string, any> = {}) {
       activeRun.value = null
       activeRunLoadError.value = false
     }
-    endProcessingIntent()
+    endProcessingIntent(submittedItem)
   }
 }
 
@@ -1622,7 +1654,9 @@ async function onClarifySend(
 ) {
   const it = active.value
   if (!it || it.type !== 'clarify' || it.done) return
-  if (force && processingLock.value) return
+  // Suppress duplicate force on the same triple only — neighbor confirm must proceed
+  // while an earlier reactReply(force) is still in flight (plan g1.2 / f1).
+  if (force && (isProcessedTriple(it) || isProcessingIntent(it))) return
   // Force-finish leaves pending — short-circuit at intent moment (symmetric with gate).
   // Ordinary turn replies stay pending and must not markProcessed.
   const submittedKey = itemKey(it)
@@ -1656,7 +1690,10 @@ async function onClarifySend(
       clarifyConfirmError.value = msg
       restoreListItemLocally(submittedItem, prevList!)
       rollbackProcessingIntent(submittedItem)
-      active.value = submittedItem
+      // Reclaim for retry unless a newer neighbor confirm already owns the selection.
+      if (!isProcessingIntent(active.value)) {
+        active.value = submittedItem
+      }
       return
     }
     // Non-force enqueue failed: roll back optimistic queue + surface error.
@@ -1684,7 +1721,7 @@ async function onClarifySend(
         activeRun.value = null
         activeRunLoadError.value = false
       }
-      endProcessingIntent()
+      endProcessingIntent(submittedItem)
       if (finished) {
         clarifyConfirmError.value = null
         toast.success(
