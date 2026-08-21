@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import AppModal from '../ui/AppModal.vue'
@@ -13,7 +13,13 @@ import SelectionAddToChat from './SelectionAddToChat.vue'
 import { useReviewAnnotate } from '@/lib/inbox/reviewAnnotate'
 import type { ReactAnnotation } from '@/lib/shared/types'
 import { isImagePreviewArtifact, resolveArtifactPreviewBranch } from './artifactPreviewBranch'
-import { artifactFingerprint } from '@/lib/run/reactArtifactPreview'
+import {
+  artifactFingerprint,
+  isHistoricalStageArtifact,
+  listVisualPageVersionChoices,
+  resolveVisualPagePreviewArtifact,
+  type VisualPageVersionChoice,
+} from '@/lib/run/reactArtifactPreview'
 import { renderMarkdown } from '@/lib/shared/markdown'
 import { isJsonArtifact, parseJsonState } from '@/lib/shared/highlightJson'
 import { fmtTime } from '@/lib/shared/format'
@@ -24,7 +30,7 @@ import {
   exportStructuredArtifact,
   type StructuredExportFormat,
 } from '@/lib/run/exportStructuredArtifact'
-import type { Artifact } from '@/lib/shared/types'
+import type { Artifact, Run } from '@/lib/shared/types'
 
 const props = withDefaults(
   defineProps<{
@@ -33,6 +39,8 @@ const props = withDefaults(
     emptyHint?: string
     artifacts?: Artifact[]
     runId?: string
+    /** Run detail for page.html version choices (ArtifactsView). */
+    run?: Run | null
     /** Hide delete control (e.g. run-output notification modal). */
     hideDelete?: boolean
     /** Hide copy control. */
@@ -48,6 +56,7 @@ const props = withDefaults(
     scope: 'run',
     emptyHint: '',
     artifacts: () => [],
+    run: null,
     hideDelete: false,
     hideCopy: false,
     hideZoom: false,
@@ -91,9 +100,75 @@ const structuredExportRootInline = ref<HTMLElement | null>(null)
 const structuredExportRootZoom = ref<HTMLElement | null>(null)
 const exporting = ref(false)
 
-const activeContent = computed(() => (props.artifact ? contentCache.value[props.artifact.id] ?? '' : ''))
-const activeIsHtml = computed(() => props.artifact?.kind === 'html')
-const activeIsJson = computed(() => isJsonArtifact(props.artifact))
+/** page.html version chip (g2.1): aligned with ReactArtifactStage. */
+const versionMenuOpen = ref(false)
+const selectedVersionIndex = ref<number | null>(null)
+
+const versionChoices = computed(() =>
+  listVisualPageVersionChoices(props.run, props.artifact),
+)
+const showVersionChip = computed(() => versionChoices.value.length >= 2)
+
+const selectedChoice = computed((): VisualPageVersionChoice | null => {
+  const choices = versionChoices.value
+  if (!choices.length) return null
+  const picked = selectedVersionIndex.value
+  return choices.find((c) => c.index === picked) || choices[choices.length - 1]
+})
+
+/** Live list row vs historical snapshot resolved for preview (g2.1 / g2.2). */
+const displayArtifact = computed(() => {
+  if (!props.artifact) return null
+  return resolveVisualPagePreviewArtifact(props.artifact, selectedChoice.value)
+})
+
+const viewingHistorical = computed(() => isHistoricalStageArtifact(displayArtifact.value))
+
+function versionChipLabel(choice: VisualPageVersionChoice): string {
+  if (choice.latest) return t('pages.reactArtifactStage.versionChipLatest', { n: choice.index })
+  return t('pages.reactArtifactStage.versionChip', { n: choice.index })
+}
+
+const currentChipLabel = computed(() => {
+  const sel = selectedChoice.value
+  return sel ? versionChipLabel(sel) : ''
+})
+
+function selectVersion(choice: VisualPageVersionChoice) {
+  if (!choice.available) return
+  selectedVersionIndex.value = choice.index
+  versionMenuOpen.value = false
+}
+
+function toggleVersionMenu() {
+  versionMenuOpen.value = !versionMenuOpen.value
+}
+
+function onVersionMenuDocClick(e: MouseEvent) {
+  if (!versionMenuOpen.value) return
+  const el = e.target as HTMLElement | null
+  if (el?.closest?.('[data-testid="artifact-preview-version-chip"]')) return
+  versionMenuOpen.value = false
+}
+
+watch(
+  () =>
+    `${props.artifact?.id || ''}|${versionChoices.value.map((c) => `${c.index}:${c.available ? '1' : '0'}`).join(',')}`,
+  () => {
+    selectedVersionIndex.value = null
+    versionMenuOpen.value = false
+    const choices = versionChoices.value
+    if (choices.length < 2) return
+    const latest = choices[choices.length - 1]
+    if (latest?.available) selectedVersionIndex.value = latest.index
+  },
+)
+
+const activeContent = computed(() =>
+  displayArtifact.value ? contentCache.value[displayArtifact.value.id] ?? '' : '',
+)
+const activeIsHtml = computed(() => displayArtifact.value?.kind === 'html')
+const activeIsJson = computed(() => isJsonArtifact(displayArtifact.value))
 
 const jsonState = computed(() => {
   if (!activeIsJson.value || !activeContent.value) return null
@@ -102,7 +177,7 @@ const jsonState = computed(() => {
 
 /** Reserved structured JSON (any scope). Shared by inline preview and zoom modal. */
 const previewBranch = computed(() => {
-  const a = props.artifact
+  const a = displayArtifact.value
   if (!a) return { kind: 'empty' as const }
   return resolveArtifactPreviewBranch({
     name: a.name,
@@ -130,11 +205,15 @@ const structuredDoc = computed(() =>
 
 const isImageBranch = computed(() => previewBranch.value.kind === 'image')
 
-const canAnnotate = computed(() => !!props.annotatable && !!annotateChannel?.enabled)
+/** Historical snapshots are always view-only (g2.2). */
+const canAnnotate = computed(
+  () => !!props.annotatable && !!annotateChannel?.enabled && !viewingHistorical.value,
+)
 const quoteAnnotate = computed(
   () => canAnnotate.value && !isImageBranch.value && previewBranch.value.kind !== 'html',
 )
 const blockZoomGesture = computed(() => props.hideZoom || canAnnotate.value)
+const showDelete = computed(() => !props.hideDelete && !viewingHistorical.value)
 
 function stageAnnotation(ann: ReactAnnotation) {
   if (!canAnnotate.value) return
@@ -159,7 +238,7 @@ const exportDisabled = computed(
     loading.value ||
     !!loadErr.value ||
     !isStructuredPreview.value ||
-    !props.artifact,
+    !displayArtifact.value,
 )
 
 function revokeImageBlob() {
@@ -200,7 +279,7 @@ async function loadImageDownload(a: Artifact) {
 }
 
 function retryImageDownload() {
-  if (props.artifact) void loadImageDownload(props.artifact)
+  if (displayArtifact.value) void loadImageDownload(displayArtifact.value)
 }
 
 function handleImageLoadError() {
@@ -251,7 +330,20 @@ async function copyContent() {
 }
 
 function download() {
-  if (props.artifact) window.open(api.artifactDownloadUrl(props.artifact.id), '_blank')
+  const a = displayArtifact.value
+  if (!a) return
+  // Historical snapshots only exist in-memory; download from cached content (g2.2 read-only).
+  if (isHistoricalStageArtifact(a) && typeof contentCache.value[a.id] === 'string') {
+    const blob = new Blob([contentCache.value[a.id]], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = a.name.replace(/#iter-\d+$/, '') || 'page.html'
+    link.click()
+    URL.revokeObjectURL(url)
+    return
+  }
+  window.open(api.artifactDownloadUrl(a.id), '_blank')
 }
 
 function resolveExportRoot(): HTMLElement | null {
@@ -260,7 +352,7 @@ function resolveExportRoot(): HTMLElement | null {
 }
 
 async function runStructuredExport(format: StructuredExportFormat) {
-  if (exportDisabled.value || !props.artifact) return
+  if (exportDisabled.value || !displayArtifact.value) return
   const root = resolveExportRoot()
   if (!root) {
     toast.error(t('pages.artifactPreview.exportFailed'))
@@ -268,7 +360,7 @@ async function runStructuredExport(format: StructuredExportFormat) {
   }
   exporting.value = true
   try {
-    const result = await exportStructuredArtifact(root, props.artifact.name, format)
+    const result = await exportStructuredArtifact(root, displayArtifact.value.name, format)
     if (result.incomplete) {
       toast.warn(t('pages.artifactPreview.exportIncomplete', { filename: result.filename }))
     } else {
@@ -290,6 +382,7 @@ function downloadPdf() {
 }
 
 function openDeleteConfirm() {
+  if (viewingHistorical.value) return
   deleteError.value = ''
   showDeleteConfirm.value = true
 }
@@ -309,8 +402,9 @@ function mapDeleteError(e: unknown): string {
 }
 
 async function confirmDelete() {
+  // Always delete the live list artifact, never a synthetic historical id (g2.2).
   const a = props.artifact
-  if (!a || deleting.value) return
+  if (!a || deleting.value || viewingHistorical.value) return
   deleting.value = true
   deleteError.value = ''
   try {
@@ -329,23 +423,23 @@ async function confirmDelete() {
 
 watch(
   () => {
-    const a = props.artifact
+    const a = displayArtifact.value
     if (!a) return ''
     return artifactFingerprint(a)
   },
   (fp, prev) => {
-    const id = props.artifact?.id
+    const id = displayArtifact.value?.id
     const sameId = !!prev && !!fp && prev.split(':')[0] === fp.split(':')[0]
     if (!sameId) {
       // Do not remember raw across products — always default structured UI.
       structuredMode.value = 'structured'
       resetImageDownloadState()
     }
-    if (props.artifact) {
-      if (sameId) delete contentCache.value[props.artifact.id]
-      void loadContent(props.artifact, { force: sameId })
-      if (isImagePreviewArtifact(props.artifact.name, props.artifact.kind)) {
-        void loadImageDownload(props.artifact)
+    if (displayArtifact.value) {
+      if (sameId) delete contentCache.value[displayArtifact.value.id]
+      void loadContent(displayArtifact.value, { force: sameId })
+      if (isImagePreviewArtifact(displayArtifact.value.name, displayArtifact.value.kind)) {
+        void loadImageDownload(displayArtifact.value)
       }
     } else {
       loading.value = false
@@ -359,20 +453,72 @@ watch(
   { immediate: true },
 )
 
+onMounted(() => document.addEventListener('click', onVersionMenuDocClick))
 onBeforeUnmount(() => {
   contentLoadAbort?.abort()
   contentLoadAbort = null
   contentLoadGen++
   imageLoadGen++
   revokeImageBlob()
+  document.removeEventListener('click', onVersionMenuDocClick)
 })
 </script>
 
 <template>
   <div class="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-    <div v-if="artifact" class="flex items-center gap-2 border-b border-line px-4 py-2.5">
-      <span class="chip border-n-artifact/30 text-n-artifact">{{ artifact.kind }}</span>
-      <span class="flex-1 truncate text-xs font-medium text-txt">{{ artifact.name }}</span>
+    <div v-if="displayArtifact" class="flex items-center gap-2 border-b border-line px-4 py-2.5">
+      <span class="chip border-n-artifact/30 text-n-artifact">{{ displayArtifact.kind }}</span>
+      <span class="flex-1 truncate text-xs font-medium text-txt">{{ displayArtifact.name }}</span>
+      <div
+        v-if="showVersionChip"
+        class="relative shrink-0"
+        data-testid="artifact-preview-version-chip"
+      >
+        <button
+          type="button"
+          class="inline-flex items-center gap-0.5 border border-line bg-elevated px-1.5 py-px text-[10px] text-txt2 hover:border-line-strong hover:text-txt"
+          :class="{ 'border-accent/60 text-txt': versionMenuOpen }"
+          :aria-expanded="versionMenuOpen ? 'true' : 'false'"
+          aria-haspopup="listbox"
+          :aria-label="t('pages.reactArtifactStage.versionMenu')"
+          data-testid="artifact-preview-version-chip-btn"
+          @click.stop="toggleVersionMenu"
+        >
+          <span>{{ currentChipLabel }}</span>
+        </button>
+        <div
+          v-if="versionMenuOpen"
+          role="listbox"
+          class="absolute right-0 top-full z-20 mt-1 min-w-[7.5rem] border border-line bg-surface py-0.5"
+          data-testid="artifact-preview-version-menu"
+        >
+          <button
+            v-for="choice in versionChoices"
+            :key="choice.index"
+            type="button"
+            role="option"
+            class="flex w-full items-center px-2.5 py-1.5 text-left text-[11px] transition"
+            :class="
+              !choice.available
+                ? 'cursor-not-allowed text-txt3 opacity-45'
+                : selectedChoice?.index === choice.index
+                  ? 'bg-accent-dim text-txt'
+                  : 'text-txt2 hover:bg-elevated'
+            "
+            :aria-selected="selectedChoice?.index === choice.index ? 'true' : 'false'"
+            :disabled="!choice.available"
+            :data-testid="'artifact-preview-version-option-v' + choice.index"
+            @click.stop="selectVersion(choice)"
+          >
+            {{ versionChipLabel(choice) }}
+          </button>
+        </div>
+      </div>
+      <span
+        v-if="viewingHistorical"
+        class="shrink-0 border border-line px-1 py-px text-[10px] text-txt3"
+        data-testid="artifact-preview-historical-readonly"
+      >{{ t('pages.reactArtifactStage.readonlyBadge') }}</span>
       <div
         v-if="isStructuredPreview"
         class="inline-flex shrink-0 border border-line"
@@ -449,7 +595,7 @@ onBeforeUnmount(() => {
         {{ exporting ? t('pages.artifactPreview.exporting') : t('pages.artifactPreview.downloadPdf') }}
       </button>
       <button
-        v-if="!hideDelete"
+        v-if="showDelete"
         class="text-txt3 hover:text-err"
         :title="t('pages.artifactPreview.delete')"
         data-testid="artifact-preview-delete"
@@ -464,7 +610,7 @@ onBeforeUnmount(() => {
       data-review-annotate-stage
       :class="activeIsHtml && activeContent && !loading && !loadErr ? 'flex min-h-0 flex-col' : 'scroll-area overflow-y-auto p-4'"
     >
-      <template v-if="artifact && isImageBranch">
+      <template v-if="displayArtifact && isImageBranch">
         <div v-if="loadErr" class="flex h-full items-center justify-center text-center text-[12px] text-err" role="alert">
           {{ t('pages.artifactPreview.loadFailed') }}
         </div>
@@ -492,20 +638,20 @@ onBeforeUnmount(() => {
         >
           <img
             :src="imageSrc!"
-            :alt="artifact.name"
+            :alt="displayArtifact.name"
             class="max-h-full max-w-full object-contain"
             @error="handleImageLoadError"
           />
         </div>
       </template>
-      <template v-else-if="artifact">
+      <template v-else-if="displayArtifact">
         <RefreshStrip v-if="loading && activeContent" />
         <HardLoadLayer
           v-else-if="loading && !activeContent && !loadErr"
           :overlay="false"
           :stuck-after-ms="10_000"
           :stage="t('pages.artifactPreview.loading')"
-          @retry="artifact && loadContent(artifact, { force: true })"
+          @retry="displayArtifact && loadContent(displayArtifact, { force: true })"
         />
         <div
           v-if="loadErr"
@@ -517,7 +663,7 @@ onBeforeUnmount(() => {
           <button
             type="button"
             class="inline-flex min-h-11 items-center border border-line px-3 text-[12px] text-txt"
-            @click="artifact && loadContent(artifact, { force: true })"
+            @click="displayArtifact && loadContent(displayArtifact, { force: true })"
           >
             {{ t('pages.artifactPreview.retry') }}
           </button>
@@ -537,10 +683,10 @@ onBeforeUnmount(() => {
           class="structured-artifact-export-root"
         >
           <StructuredArtifactView
-            :name="artifact.name"
+            :name="displayArtifact.name"
             :doc="structuredDoc"
             :artifacts="artifacts"
-            :run-id="runId || artifact.runId"
+            :run-id="runId || displayArtifact.runId"
           />
         </div>
         <div
@@ -580,22 +726,22 @@ onBeforeUnmount(() => {
     @add="onQuoteAdd"
   />
 
-  <AppModal :open="zoom" :title="artifact?.name" :width="960" @close="zoom = false">
+  <AppModal :open="zoom" :title="displayArtifact?.name" :width="960" @close="zoom = false">
     <div
-      v-if="artifact && showStructuredUi"
+      v-if="displayArtifact && showStructuredUi"
       ref="structuredExportRootZoom"
       data-testid="structured-artifact-export-root-zoom"
       class="structured-artifact-export-root"
     >
       <StructuredArtifactView
-        :name="artifact.name"
+        :name="displayArtifact.name"
         :doc="structuredDoc"
         :artifacts="artifacts"
-        :run-id="runId || artifact.runId"
+        :run-id="runId || displayArtifact.runId"
       />
     </div>
     <div
-      v-else-if="artifact && showRawJson"
+      v-else-if="displayArtifact && showRawJson"
       class="json-code-view json-code-view--modal scroll-area -m-5 min-h-[280px] p-5"
       data-testid="artifact-preview-zoom-raw-json"
     >
@@ -608,7 +754,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
     <div
-      v-else-if="artifact && previewBranch.kind === 'image'"
+      v-else-if="displayArtifact && previewBranch.kind === 'image'"
       class="flex min-h-[280px] items-center justify-center"
       data-testid="artifact-preview-zoom-image"
     >
@@ -633,17 +779,17 @@ onBeforeUnmount(() => {
       <div v-else class="flex h-full min-h-[360px] w-full items-center justify-center p-3">
         <img
           :src="imageSrc!"
-          :alt="artifact.name"
+          :alt="displayArtifact.name"
           class="max-h-[70vh] max-w-full object-contain"
           @error="handleImageLoadError"
         />
       </div>
     </div>
-    <div v-else-if="artifact" class="md mx-auto max-w-3xl" v-html="renderMarkdown(activeContent)" />
+    <div v-else-if="displayArtifact" class="md mx-auto max-w-3xl" v-html="renderMarkdown(activeContent)" />
     <template #footer>
       <span class="mr-auto text-[11px] text-txt3">
-        <template v-if="scope === 'platform' && artifact?.workflowName">{{ artifact.workflowName }} · </template>
-        {{ artifact?.nodeId }} · {{ artifact ? fmtTime(artifact.createdAt) : '' }} · {{ t('pages.artifactPreview.platformStorage') }}
+        <template v-if="scope === 'platform' && displayArtifact?.workflowName">{{ displayArtifact.workflowName }} · </template>
+        {{ displayArtifact?.nodeId }} · {{ displayArtifact ? fmtTime(displayArtifact.createdAt) : '' }} · {{ t('pages.artifactPreview.platformStorage') }}
       </span>
       <button
         v-if="!hideCopy"

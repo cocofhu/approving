@@ -14,7 +14,7 @@ import { usePipelineFilter } from '@/lib/composables/usePipelineFilter'
 import { useProjectContext } from '@/lib/composables/useProjectContext'
 import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import ProjectFilter from '@/components/ui/ProjectFilter.vue'
-import type { Artifact, Workflow } from '@/lib/shared/types'
+import type { Artifact, Run, Workflow } from '@/lib/shared/types'
 
 type MobileStep = 'groups' | 'list' | 'preview'
 
@@ -50,6 +50,8 @@ const {
 
 const activeArtifact = ref<Artifact | null>(null)
 const previewArtifacts = ref<Artifact[]>([])
+/** Full Run for page.html version choices; null when load fails (degrade: no chip). */
+const previewRun = ref<Run | null>(null)
 const wfFilter = ref('')
 const artSearch = ref('')
 const searchQ = ref('')
@@ -201,12 +203,17 @@ watch(
   () => activeArtifact.value?.runId,
   async (runId) => {
     previewArtifacts.value = []
+    previewRun.value = null
     if (!runId) return
     try {
       const run = await api.getRun(runId)
       previewArtifacts.value = Array.isArray(run.artifacts) ? run.artifacts : []
+      // Keep full Run so ArtifactPreview can listVisualPageVersionChoices (g1.1 / g1.2).
+      previewRun.value = run
     } catch {
+      // Run detail unavailable: still preview list content, no version chip (f3).
       previewArtifacts.value = pageArtifacts.value.filter((a) => a.runId === runId)
+      previewRun.value = null
     }
   },
   { immediate: true },
@@ -448,6 +455,7 @@ onMounted(async () => {
             :artifact="activeArtifact"
             scope="platform"
             :artifacts="previewArtifacts"
+            :run="previewRun"
             :run-id="activeArtifact?.runId"
             @deleted="onArtifactDeleted"
           />
