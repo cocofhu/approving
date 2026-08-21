@@ -139,14 +139,15 @@ describe('DashboardView home composer', () => {
     wrapper.unmount()
   })
 
-  // plan g1.2 / g1.3 — Approving mono brand + Chinese hint（无 subtitle，对齐第 5 轮）
+  // plan g2 — Approving mono brand + Chinese hint；无筛选说明句
   it('renders monospace Approving brand and Chinese hint', async () => {
     const wrapper = mountDashboard()
     await flushPromises()
     expect(wrapper.get('[data-testid="home-brand"]').classes()).toContain('home-brand')
     expect(wrapper.get('[data-testid="home-title"]').text()).toBe('从一句话开始一次开发前澄清')
     expect(wrapper.find('[data-testid="home-subtitle"]').exists()).toBe(false)
-    expect(wrapper.get('[data-testid="home-filter-hint"]').text()).toContain('Approve')
+    expect(wrapper.find('[data-testid="home-filter-hint"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('仅显示开始后是 Approve 的已发布流水线')
     wrapper.unmount()
   })
 
@@ -162,30 +163,32 @@ describe('DashboardView home composer', () => {
     wrapper.unmount()
   })
 
-  // plan g1.1 — one-shot typewriter then settle
+  // plan g3 — one-shot typewriter then opacity-hide caret (keep layout box)
   it('types Approving once then settles without looping', async () => {
     const wrapper = mountDashboard()
     await flushPromises()
     expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('')
     await vi.advanceTimersByTimeAsync(220 + 78 * 9 + 50)
     expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Approving')
-    expect(wrapper.find('[data-testid="home-brand-cursor"]').exists()).toBe(true)
+    const caret = wrapper.get('[data-testid="home-brand-cursor"]')
+    expect(caret.classes()).not.toContain('home-brand__cursor--gone')
     await vi.advanceTimersByTimeAsync(850 * 3 + 50)
     expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Approving')
-    expect(wrapper.find('[data-testid="home-brand-cursor"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="home-brand-cursor"]').classes()).toContain('home-brand__cursor--gone')
+    expect(wrapper.get('[data-testid="home-brand-cursor"]').classes()).not.toContain('home-brand__cursor--blink')
     await vi.advanceTimersByTimeAsync(5000)
     expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Approving')
-    expect(wrapper.find('[data-testid="home-brand-cursor"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="home-brand-cursor"]').classes()).toContain('home-brand__cursor--gone')
     wrapper.unmount()
   })
 
-  // plan g3.3 — reduced-motion shows static brand
+  // plan g3 — reduced-motion shows static brand; caret stays in layout but gone
   it('shows full Approving immediately under reduced-motion', async () => {
     stubReducedMotion(true)
     const wrapper = mountDashboard()
     await flushPromises()
     expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Approving')
-    expect(wrapper.find('[data-testid="home-brand-cursor"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="home-brand-cursor"]').classes()).toContain('home-brand__cursor--gone')
     wrapper.unmount()
   })
 
