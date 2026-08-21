@@ -226,6 +226,20 @@ describe('usePendingGates', () => {
     expect(pg.displayedItems.value[0].nodeId).toBe('node-2')
   })
 
+  it('restoreItemLocally reinserts after removeItemLocally', async () => {
+    vi.mocked(api.listGates).mockResolvedValueOnce(paged([gate('1'), gate('2')], 2))
+    const pg = usePendingGates()
+    await pg.refresh({ mode: 'force' })
+    const removed = pg.displayedItems.value.find((it) => it.nodeId === 'node-1')!
+    pg.removeItemLocally('run-1:node-1')
+    expect(pg.totalCount.value).toBe(1)
+
+    pg.restoreItemLocally(removed)
+    expect(pg.displayedItems.value.some((it) => it.nodeId === 'node-1')).toBe(true)
+    expect(pg.remoteItems.value.some((it) => it.nodeId === 'node-1')).toBe(true)
+    expect(pg.totalCount.value).toBe(2)
+  })
+
   it('peek does not trigger refresh chrome or live announce', async () => {
     const { resetRefreshChrome, useRefreshChrome } = await import('@/lib/shared/refreshChrome')
     const { resetLoadingAnnouncer, useLoadingAnnouncer } = await import('@/lib/shared/loadingAnnouncer')

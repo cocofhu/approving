@@ -52,6 +52,17 @@ describe('GatesInboxView review/clarify composer mode', () => {
     expect(finishBindings.length).toBe(2)
   })
 
+  it('plan g2.2: desktop and mobile share the same confirm leave path', () => {
+    const finishBindings = src.match(/@finish="onClarifyFinish"/g) || []
+    const resolveBindings = src.match(/@resolve="onResolve"/g) || []
+    expect(finishBindings.length).toBe(2)
+    expect(resolveBindings.length).toBe(2)
+    // Intent-moment leave (before await) — both gate resume and clarify force.
+    expect(src).toMatch(/Leave pending at confirm initiation/)
+    expect(src).toMatch(/Leave pending as soon as confirm is initiated/)
+    expect(src).toMatch(/restoreListItemLocally/)
+  })
+
   it('selects by run/node query and seeds the first human bubble', () => {
     expect(src).toMatch(/findInboxItemForQuery/)
     expect(src).toMatch(/consumeHomeApproveHandoff/)
