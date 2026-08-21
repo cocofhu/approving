@@ -128,7 +128,12 @@ describe('StatusMetrics', () => {
     await flushPromises()
     expect(w.find('[data-testid="status-metrics-compact"]').exists()).toBe(true)
     expect(w.find('[data-testid="status-metrics-tokens"]').exists()).toBe(false)
-    const text = w.find('[data-testid="status-metrics-compact"]').text()
+    const compact = w.find('[data-testid="status-metrics-compact"]')
+    // g1.1: elevated strip + semibold values for sidebar readability
+    expect(compact.classes()).toContain('bg-elevated')
+    expect(compact.classes()).toContain('sm-compact')
+    expect(compact.find('.sm-val').classes()).toContain('font-semibold')
+    const text = compact.text()
     expect(text).toMatch(/1\.24M/)
     expect(text).toMatch(/3/)
     expect(text).toMatch(/5/)

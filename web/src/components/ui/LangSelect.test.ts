@@ -34,4 +34,22 @@ describe('LangSelect', () => {
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['en'])
     wrapper.unmount()
   })
+
+  it('ghost variant removes border for sidebar chrome (g2.1)', () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common } },
+    })
+    const wrapper = mount(LangSelect, {
+      props: { modelValue: 'zh-CN', variant: 'ghost' },
+      global: { plugins: [i18n], stubs: { Icon: true } },
+    })
+    expect(wrapper.find('[data-variant="ghost"]').exists()).toBe(true)
+    const trigger = wrapper.find('[data-testid="lang-select-trigger"]')
+    expect(trigger.classes()).toContain('border-0')
+    expect(trigger.classes()).toContain('h-8')
+    expect(trigger.classes()).not.toContain('border-line')
+    wrapper.unmount()
+  })
 })

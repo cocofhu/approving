@@ -11,7 +11,14 @@ const LOCALE_LABELS: Record<AppLocale, string> = {
 
 const LANG_OPTIONS: AppLocale[] = ['en', 'zh-CN']
 
-const props = defineProps<{ modelValue: AppLocale }>()
+const props = withDefaults(
+  defineProps<{
+    modelValue: AppLocale
+    /** default = bordered trigger; ghost = borderless compact (sidebar chrome) */
+    variant?: 'default' | 'ghost'
+  }>(),
+  { variant: 'default' },
+)
 const emit = defineEmits<{
   (e: 'update:modelValue', v: AppLocale): void
 }>()
@@ -40,19 +47,24 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 </script>
 
 <template>
-  <div ref="root" class="relative">
+  <div ref="root" class="relative" :data-variant="variant">
     <button
       type="button"
-      class="flex items-center gap-2 border border-line bg-surface px-3 py-1.5 text-sm text-txt2 transition hover:bg-elevated"
-      :class="{ 'border-accent/60 text-txt': open }"
+      class="flex items-center text-txt2 transition hover:bg-elevated hover:text-txt"
+      :class="
+        variant === 'ghost'
+          ? ['h-8 gap-1.5 border-0 bg-transparent px-2 text-xs', open ? 'bg-elevated text-txt' : '']
+          : ['gap-2 border border-line bg-surface px-3 py-1.5 text-sm', open ? 'border-accent/60 text-txt' : '']
+      "
       :aria-label="t('shell.langSelect')"
       aria-haspopup="listbox"
       :aria-expanded="open"
+      data-testid="lang-select-trigger"
       @click.stop="toggle"
     >
-      <Icon name="globe" :size="15" class="text-txt3" />
+      <Icon name="globe" :size="variant === 'ghost' ? 16 : 15" class="text-txt3" />
       <span>{{ currentLabel }}</span>
-      <Icon name="chevron-down" :size="14" class="text-txt3" />
+      <Icon name="chevron-down" :size="variant === 'ghost' ? 12 : 14" class="text-txt3" />
     </button>
 
     <div v-if="open" role="listbox" class="card absolute right-0 z-30 mt-1.5 w-40 overflow-hidden">

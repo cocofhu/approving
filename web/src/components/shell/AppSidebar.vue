@@ -67,16 +67,20 @@ async function onHideNav() {
 
       <AppSidebarNav />
 
-      <div class="mt-auto border-t border-line p-3">
+      <div class="mt-auto flex flex-col gap-2.5 border-t border-line p-3">
         <ShellChromeControls layout="sidebar" />
-        <div class="mt-2 flex items-center gap-2.5 px-2 py-1.5">
-          <div class="flex h-8 w-8 items-center justify-center rounded-full bg-elevated text-xs font-semibold text-accent-2">{{ initials }}</div>
-          <div class="flex-1 truncate leading-tight">
-            <div class="truncate text-[13px] font-medium text-txt">{{ user?.username || '—' }}</div>
+        <div class="flex items-center gap-2 px-0.5">
+          <div
+            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-dim text-[11px] font-semibold text-accent-2"
+            data-testid="sidebar-user-avatar"
+          >{{ initials }}</div>
+          <div class="min-w-0 flex-1 truncate leading-tight">
+            <div class="truncate text-[13px] font-medium text-txt" data-testid="sidebar-user-name">{{ user?.username || '—' }}</div>
           </div>
           <button
             type="button"
-            class="shrink-0 border border-line px-2 py-1 text-[11px] text-txt3 transition hover:border-err/40 hover:bg-err/10 hover:text-err"
+            class="shrink-0 border-0 bg-transparent px-2 py-1.5 text-xs text-txt3 transition hover:bg-err/10 hover:text-err"
+            data-testid="sidebar-logout"
             @click="logout"
           >
             {{ t('shell.logout') }}

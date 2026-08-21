@@ -134,10 +134,13 @@ describe('ShellChromeControls notifications (g1.2)', () => {
     const wrapper = mountChrome()
     await flushPromises()
     expect(wrapper.find('[data-testid="shell-chrome-controls"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="shell-chrome-controls"]').attributes('data-layout')).toBe('sidebar')
     expect(wrapper.find('[data-testid="lang"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="shell-theme-toggle"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="shell-theme-toggle"]').classes()).toContain('h-8')
     const bell = wrapper.find('[data-testid="run-notifications-bell"]')
     expect(bell.exists()).toBe(true)
+    expect(bell.classes()).toContain('h-8')
     expect(bell.attributes('aria-label')).toBe('通知')
     expect(bell.attributes('aria-haspopup')).toBe('true')
     expect(bell.attributes('aria-expanded')).toBe('false')
@@ -177,6 +180,9 @@ describe('ShellChromeControls notifications (g1.2)', () => {
     expect(badge.exists()).toBe(true)
     expect(badge.text()).toBe('12')
     expect(badge.classes().join(' ')).toMatch(/bg-err/)
+    // g2.3: sidebar unread badge is a small circular pill
+    expect(badge.classes()).toContain('rounded-full')
+    expect(badge.classes()).toContain('h-3.5')
 
     await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
     await nextTick()

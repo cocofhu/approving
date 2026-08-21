@@ -190,7 +190,7 @@ defineExpose({
     :class="
       layout === 'bar'
         ? 'flex items-center gap-3'
-        : 'flex flex-col gap-2'
+        : 'flex flex-col gap-2.5'
     "
   >
     <StatusMetrics :variant="metricsVariant" />
@@ -199,7 +199,7 @@ defineExpose({
       :class="
         layout === 'bar'
           ? 'flex items-center gap-3'
-          : 'flex flex-wrap items-center gap-1.5'
+          : 'flex items-center gap-0.5'
       "
     >
       <span
@@ -210,32 +210,46 @@ defineExpose({
         <span class="inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-warn" />
         {{ t('shell.shutdown.draining') }}
       </span>
-      <LangSelect :model-value="locale" @update:model-value="onLocaleSelect" />
+      <LangSelect
+        :model-value="locale"
+        :variant="layout === 'sidebar' ? 'ghost' : 'default'"
+        @update:model-value="onLocaleSelect"
+      />
+      <span v-if="layout === 'sidebar'" class="min-w-0 flex-1" aria-hidden="true" />
       <button
         type="button"
-        class="flex h-9 w-9 items-center justify-center text-txt2 hover:bg-elevated hover:text-txt"
+        class="flex items-center justify-center text-txt2 hover:bg-elevated hover:text-txt"
+        :class="layout === 'sidebar' ? 'h-8 w-8' : 'h-9 w-9'"
         :title="themeTitle"
         data-testid="shell-theme-toggle"
         @click="toggleTheme"
       >
-        <Icon :name="theme === 'dark' ? 'sun' : 'moon'" :size="18" />
+        <Icon :name="theme === 'dark' ? 'sun' : 'moon'" :size="layout === 'sidebar' ? 16 : 18" />
       </button>
       <div ref="bellWrapEl" class="relative">
         <button
           type="button"
-          class="relative flex h-9 w-9 items-center justify-center text-txt2 hover:bg-elevated hover:text-txt"
-          :class="panelOpen ? 'bg-elevated text-txt' : ''"
+          class="relative flex items-center justify-center text-txt2 hover:bg-elevated hover:text-txt"
+          :class="[
+            layout === 'sidebar' ? 'h-8 w-8' : 'h-9 w-9',
+            panelOpen ? 'bg-elevated text-txt' : '',
+          ]"
           data-testid="run-notifications-bell"
           :aria-label="t('shell.runNotifications.title')"
           aria-haspopup="true"
           :aria-expanded="panelOpen ? 'true' : 'false'"
           @click.stop="togglePanel"
         >
-          <Icon name="bell" :size="18" />
+          <Icon name="bell" :size="layout === 'sidebar' ? 16 : 18" />
           <span
             v-if="badgeLabel"
-            class="absolute right-0.5 top-0.5 inline-flex h-4 min-w-4 items-center justify-center px-1 text-[10px] font-bold leading-none text-white"
-            :class="hasUnreadFailed ? 'bg-err' : 'bg-accent'"
+            class="absolute inline-flex items-center justify-center font-bold leading-none text-white"
+            :class="[
+              layout === 'sidebar'
+                ? 'right-[3px] top-[3px] h-3.5 min-w-3.5 rounded-full px-[3px] text-[9px] shadow-[0_0_0_1.5px_rgb(var(--c-surface))]'
+                : 'right-0.5 top-0.5 h-4 min-w-4 px-1 text-[10px]',
+              hasUnreadFailed ? 'bg-err' : 'bg-accent',
+            ]"
             data-testid="run-notifications-badge"
           >{{ badgeLabel }}</span>
         </button>

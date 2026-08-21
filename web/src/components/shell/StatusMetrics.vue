@@ -182,32 +182,32 @@ function onBlurTip(id: string) {
     <button
       v-else
       type="button"
-      class="sm-item relative inline-flex items-center gap-1 border-0 bg-transparent px-1.5 py-1 text-inherit hover:bg-elevated hover:text-txt focus-visible:bg-elevated focus-visible:text-txt focus-visible:outline-none"
-      :class="tipOpen === 'compact' ? 'bg-elevated text-txt tip-open' : ''"
+      class="sm-item sm-compact relative inline-flex w-full items-center gap-2 border-0 bg-elevated px-2 py-1.5 text-[11px] text-inherit hover:bg-elevated hover:text-txt focus-visible:bg-elevated focus-visible:text-txt focus-visible:outline-none"
+      :class="tipOpen === 'compact' ? 'text-txt tip-open' : ''"
       data-testid="status-metrics-compact"
       :aria-label="t('shell.statusMetrics.compactAria')"
       @click="toggleTip('compact', $event)"
       @blur="onBlurTip('compact')"
     >
-      <span class="inline-flex items-center gap-1">
-        <svg class="sm-ico block h-3.5 w-3.5 shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+      <span class="inline-flex items-center gap-1.5">
+        <svg class="sm-ico block h-[13px] w-[13px] shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
           <circle cx="12" cy="12" r="8" />
           <path d="M12 8v8M9.5 10.2c.6-.7 1.5-1.1 2.5-1.1 1.7 0 3 1 3 2.4s-1.3 2.4-3 2.4h-1.2c-1.7 0-3 1-3 2.4 0 1.4 1.4 2.3 3.2 2.3 1.1 0 2-.4 2.6-1.1" />
         </svg>
-        <span class="sm-val text-xs leading-none text-txt">{{ fmtCompactTokenCount(cumulative) }}</span>
+        <span class="sm-val text-[11px] font-semibold leading-none text-txt">{{ fmtCompactTokenCount(cumulative) }}</span>
       </span>
-      <span class="mx-1.5 h-3.5 w-px shrink-0 bg-line-strong" aria-hidden="true" />
-      <span class="inline-flex items-center gap-1">
-        <svg class="sm-ico block h-3.5 w-3.5 shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+      <span class="h-3 w-px shrink-0 bg-line-strong opacity-90" aria-hidden="true" />
+      <span class="inline-flex items-center gap-1.5">
+        <svg class="sm-ico block h-[13px] w-[13px] shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
           <circle cx="12" cy="12" r="8" />
           <path d="M10 9.2l5.2 2.8L10 14.8V9.2z" fill="currentColor" stroke="none" />
         </svg>
-        <span class="sm-val text-xs leading-none text-txt">{{ running }}</span>
+        <span class="sm-val text-[11px] font-semibold leading-none text-txt">{{ running }}</span>
         <span class="text-txt3">/</span>
-        <svg class="sm-ico block h-3.5 w-3.5 shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+        <svg class="sm-ico block h-[13px] w-[13px] shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
           <path d="M5 7h14M5 12h14M5 17h10" />
         </svg>
-        <span class="sm-val text-xs leading-none text-txt">{{ queued }}</span>
+        <span class="sm-val text-[11px] font-semibold leading-none text-txt">{{ queued }}</span>
       </span>
       <span
         class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden min-w-[180px] -translate-x-1/2 border border-line-strong bg-overlay px-2.5 py-2 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
