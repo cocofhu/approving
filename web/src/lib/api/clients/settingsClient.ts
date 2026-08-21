@@ -1,5 +1,5 @@
-import type { InboxItem } from '../shared/types'
-import { req, rootWsUrl } from './httpCore'
+import type { InboxItem } from '../../shared/types'
+import { req, rootWsUrl } from '../httpCore'
 import type {
   ChannelConfig,
   ChannelConfigInput,
@@ -12,7 +12,7 @@ import type {
   PlatformRuleMeta,
   PlatformStatusMetrics,
   SettingItem,
-} from './apiTypes'
+} from '../apiTypes'
 
 export const settingsClient = {
   health: () => req<HealthResponse>(`/health`),

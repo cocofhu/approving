@@ -7,9 +7,9 @@ import type {
   ProgressCitation,
   AttachedContext,
   ClarifyImage,
-} from '../shared/types'
-import { req, wsUrl } from './httpCore'
-import type { SandboxView } from './apiTypes'
+} from '../../shared/types'
+import { req, wsUrl } from '../httpCore'
+import type { SandboxView } from '../apiTypes'
 
 export const pmClient = {
   // PM Leader

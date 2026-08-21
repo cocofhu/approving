@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import path from 'node:path'
+import { routeApi } from './helpers/apiRoute'
 import { dismissOnboardingIfOpen, seedOnboardingDismissed } from './helpers/onboarding'
 
 function stubRun(partial: {
@@ -120,7 +121,8 @@ const EMPTY_STATS = {
 }
 
 async function mockBoardShell(page: import('@playwright/test').Page) {
-  await page.route('**/api/stats/dashboard', async (route) => {
+  // routeApi: pathname must start with /api/ so Vite /src/lib/api/** modules are not mocked.
+  await routeApi(page, '**/api/stats/dashboard', async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({
         status: 200,
@@ -132,7 +134,7 @@ async function mockBoardShell(page: import('@playwright/test').Page) {
     await route.continue()
   })
 
-  await page.route('**/api/runs**', async (route) => {
+  await routeApi(page, '**/api/runs**', async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue()
       return
@@ -168,7 +170,7 @@ test.describe('看板 Token 统计图', () => {
 
     let failNext = false
     const seenWindows: string[] = []
-    await page.route('**/api/projects/*/token-stats**', async (route) => {
+    await routeApi(page, '**/api/projects/*/token-stats**', async (route) => {
       if (route.request().method() !== 'GET') {
         await route.continue()
         return
@@ -272,7 +274,7 @@ test.describe('看板 Token 统计图', () => {
     await testInfo.attach('token-stats-ready', { path: readyShot, contentType: 'image/png' })
 
     // Switch window: loading clears charts
-    await page.route('**/api/projects/*/token-stats**', async (route) => {
+    await routeApi(page, '**/api/projects/*/token-stats**', async (route) => {
       const url = new URL(route.request().url())
       const w = url.searchParams.get('window') || '30d'
       seenWindows.push(`delayed-${w}`)
@@ -299,7 +301,7 @@ test.describe('看板 Token 统计图', () => {
 
     // Failure + retry
     failNext = true
-    await page.route('**/api/projects/*/token-stats**', async (route) => {
+    await routeApi(page, '**/api/projects/*/token-stats**', async (route) => {
       const url = new URL(route.request().url())
       const w = url.searchParams.get('window') || '30d'
       if (failNext) {
@@ -330,7 +332,7 @@ test.describe('看板 Token 统计图', () => {
   test('空数据：整区空状态且不画伪造全 0 图', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1280, height: 900 })
     await mockBoardShell(page)
-    await page.route('**/api/projects/*/token-stats**', async (route) => {
+    await routeApi(page, '**/api/projects/*/token-stats**', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -358,7 +360,7 @@ test.describe('看板 Token 统计图', () => {
   test('窄屏下方两图可堆叠且统计区仍在 Run 列上方', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await mockBoardShell(page)
-    await page.route('**/api/projects/*/token-stats**', async (route) => {
+    await routeApi(page, '**/api/projects/*/token-stats**', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -382,7 +384,7 @@ test.describe('看板 Token 统计图', () => {
     await page.setViewportSize({ width: 1280, height: 900 })
     // Empty workflows stub would otherwise auto-open onboarding and intercept clicks.
     await seedOnboardingDismissed(page, 'proj-1')
-    await page.route('**/api/projects/proj-1', async (route) => {
+    await routeApi(page, '**/api/projects/proj-1', async (route) => {
       if (route.request().method() === 'GET') {
         await route.fulfill({
           status: 200,
@@ -405,11 +407,11 @@ test.describe('看板 Token 统计图', () => {
       }
       await route.continue()
     })
-    await page.route('**/api/workflows**', async (route) => {
+    await routeApi(page, '**/api/workflows**', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
     })
     // Non-empty agents also keep shouldAutoOpenOnboarding false if dismiss seed fails.
-    await page.route('**/api/agents**', async (route) => {
+    await routeApi(page, '**/api/agents**', async (route) => {
       if (route.request().method() === 'GET') {
         await route.fulfill({
           status: 200,
@@ -420,24 +422,24 @@ test.describe('看板 Token 统计图', () => {
       }
       await route.continue()
     })
-    await page.route('**/api/runs**', async (route) => {
+    await routeApi(page, '**/api/runs**', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20, hasMore: false }),
       })
     })
-    await page.route('**/api/projects/proj-1/pm-leader', async (route) => {
+    await routeApi(page, '**/api/projects/proj-1/pm-leader', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({ enabled: false }),
       })
     })
-    await page.route('**/api/projects/proj-1/cron-jobs', async (route) => {
+    await routeApi(page, '**/api/projects/proj-1/cron-jobs', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
     })
-    await page.route('**/api/projects/*/token-stats**', async (route) => {
+    await routeApi(page, '**/api/projects/*/token-stats**', async (route) => {
       const url = new URL(route.request().url())
       const w = url.searchParams.get('window') || '30d'
       await route.fulfill({
@@ -477,7 +479,7 @@ test.describe('看板 Token 统计图', () => {
   test('近 30 天左端 0 值点 hover：文案完整、盒子不裁切、离开隐藏、窄屏仍可见 (g4.5)', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1280, height: 900 })
     await mockBoardShell(page)
-    await page.route('**/api/projects/*/token-stats**', async (route) => {
+    await routeApi(page, '**/api/projects/*/token-stats**', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',

@@ -1,5 +1,5 @@
-import { origin, req, wsUrl } from './httpCore'
-import type { CreateAgentTestPayload, SandboxView } from './apiTypes'
+import { origin, req, wsUrl } from '../httpCore'
+import type { CreateAgentTestPayload, SandboxView } from '../apiTypes'
 
 export const sandboxesClient = {
   // sandboxes (interactive Agent chat-test containers)

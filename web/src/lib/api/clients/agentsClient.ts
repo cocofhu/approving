@@ -3,15 +3,15 @@ import type {
   ChatThread,
   ChatMessage,
   ProjectMemoryItem,
-} from '../shared/types'
-import { BASE, req } from './httpCore'
+} from '../../shared/types'
+import { BASE, req } from '../httpCore'
 import type {
   Agent,
   AgentOrg,
   OrgFolderImportResult,
   TeamBootstrapRequest,
   TeamBootstrapSession,
-} from './apiTypes'
+} from '../apiTypes'
 
 function filenameFromContentDisposition(header: string | null, fallback: string): string {
   if (!header) return fallback

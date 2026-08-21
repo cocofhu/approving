@@ -5,16 +5,16 @@ import type {
   AcpEvent,
   ClarifyImage,
   ReactAnnotation,
-} from '../shared/types'
-import type { InboxContextResponse } from '../inbox/inboxContext'
-import { apiState, BASE, origin, req, wsUrl } from './httpCore'
+} from '../../shared/types'
+import type { InboxContextResponse } from '../../inbox/inboxContext'
+import { apiState, BASE, origin, req, wsUrl } from '../httpCore'
 import type {
   EventPaginatedResponse,
   PaginatedResponse,
   PreviewIssue,
   PreviewPort,
   SandboxView,
-} from './apiTypes'
+} from '../apiTypes'
 
 /** Body fragment for startRun's opening message; blank messages are omitted. */
 function startRunFirstMessage(

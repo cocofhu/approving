@@ -33,7 +33,7 @@ describe('service commit badge f1–f5 checklist (g3.3)', () => {
 
   it('f3: data source is GET /api/health commit, not VITE_GIT_COMMIT or dashboard stats', () => {
     const apiTypes = readFileSync(join(dir, '../../lib/api/apiTypes.ts'), 'utf8')
-    const settingsClient = readFileSync(join(dir, '../../lib/api/settingsClient.ts'), 'utf8')
+    const settingsClient = readFileSync(join(dir, '../../lib/api/clients/settingsClient.ts'), 'utf8')
     expect(apiTypes).toMatch(/export type HealthResponse/)
     expect(apiTypes).toMatch(/commit\?: string/)
     expect(settingsClient).toMatch(/health: \(\) => req<HealthResponse>\(`\/health`\)/)

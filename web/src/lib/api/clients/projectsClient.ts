@@ -8,9 +8,9 @@ import type {
   RequirementDraft,
   RequirementDraftCreateBody,
   RequirementDraftSchedulePatch,
-} from '../shared/types'
-import { origin, req } from './httpCore'
-import type { PaginatedResponse } from './apiTypes'
+} from '../../shared/types'
+import { origin, req } from '../httpCore'
+import type { PaginatedResponse } from '../apiTypes'
 
 export const projectsClient = {
   // projects

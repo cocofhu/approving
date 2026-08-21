@@ -1,13 +1,13 @@
-import type { Artifact, InboxItem } from '../shared/types'
-import { i18n } from '../shared/i18n'
+import type { Artifact, InboxItem } from '../../shared/types'
+import { i18n } from '../../shared/i18n'
 import {
   isDraining,
   mutationsBlocked,
   showDrainToast,
   shutdownState,
-} from '../composables/useShutdownState'
-import { apiState, BASE, blobContentUrl, origin, redirectToLogin, req } from './httpCore'
-import type { PaginatedResponse } from './apiTypes'
+} from '../../composables/useShutdownState'
+import { apiState, BASE, blobContentUrl, origin, redirectToLogin, req } from '../httpCore'
+import type { PaginatedResponse } from '../apiTypes'
 
 export const artifactsClient = {
   listArtifacts: (params?: {

@@ -1,5 +1,5 @@
-import type { Workflow, WorkflowVersion, WorkflowNotifyPolicy, WorkflowGraph } from '../shared/types'
-import { req } from './httpCore'
+import type { Workflow, WorkflowVersion, WorkflowNotifyPolicy, WorkflowGraph } from '../../shared/types'
+import { req } from '../httpCore'
 
 export const workflowsClient = {
   // workflows

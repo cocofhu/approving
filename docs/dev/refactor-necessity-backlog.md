@@ -90,7 +90,7 @@
 
 | 后续改动轴 | 落点 |
 |------------|------|
-| HTTP 客户端 | `web/src/lib/api/` 域 client；`api.ts` 仅聚合 |
+| HTTP 客户端 | `web/src/lib/api/` 域 client（`clients/*Client.ts`）+ `api.ts` 仅聚合 |
 | 收件箱 / 门禁 / 澄清 | `web/src/lib/inbox/`（必要时邻近 `lib/run`） |
 | 项目 / 草稿 | `web/src/lib/project/` |
 | PM 会话 / 通道 | `web/src/lib/pm/`；server `pm_*.go` |
@@ -113,7 +113,7 @@
 
 | 域 | 结构移动证据 |
 |----|--------------|
-| api | `web/src/lib/api/{httpCore,apiTypes,*Client}.ts` + 聚合 `api.ts`；`api.test.ts` 绿 |
+| api | `web/src/lib/api/{httpCore,apiTypes}.ts` + `clients/*Client.ts`（避开 E2E `**/api/{agents,runs,workflows}**` 路径碰撞）+ 聚合 `api.ts`；`api.test.ts` 绿 |
 | Inbox/Gate/Clarify | `useGatesInbox` / `useGateApproval` / `useClarifyChat`；SFC 变壳 |
 | Project/PM/草稿 | `useProjectDetail` / `useRequirementDrafts` / `usePmLeaderChat` / `usePmChannelMulti` |
 | Agent | `useAgentStudio` / `useAgentFilesPanel` / `useAgentCreateWizard` |
