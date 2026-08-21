@@ -52,7 +52,12 @@ vi.mock('@/lib/composables/useProjectContext', () => ({
 
 import ProjectDetailView from './ProjectDetailView.vue'
 
-const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'ProjectDetailView.vue'), 'utf8')
+const vueSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'ProjectDetailView.vue'), 'utf8')
+const logicSrc = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), '../lib/project/useProjectDetail.ts'),
+  'utf8',
+)
+const src = `${vueSrc}\n${logicSrc}`
 
 const PROJ_A = {
   id: 'proj-a',

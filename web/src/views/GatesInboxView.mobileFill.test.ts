@@ -4,7 +4,9 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'GatesInboxView.vue'), 'utf8')
+const vueSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'GatesInboxView.vue'), 'utf8')
+const logicSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../lib/inbox/useGatesInbox.ts'), 'utf8')
+const src = `${vueSrc}\n${logicSrc}`
 
 describe('GatesInboxView GateApproval isolation', () => {
   it('keeps fill-preview but does not enable mobile-fill-remaining', () => {

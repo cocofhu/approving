@@ -2070,7 +2070,12 @@ describe('AgentStudioView loading / four-state', () => {
 
 describe('AgentStudioView entry assembly (g3 / Demo main path)', () => {
   it('assembles Demo tabs via independent panels and keeps route/tab wiring', () => {
-    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'AgentStudioView.vue'), 'utf8')
+    const viewSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'AgentStudioView.vue'), 'utf8')
+    const orchestrationSrc = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../lib/agent/useAgentStudio.ts'),
+      'utf8',
+    )
+    const src = viewSrc + '\n' + orchestrationSrc
     for (const panel of [
       'AgentOrgSidebar',
       'AgentFilesPanel',
@@ -2082,7 +2087,7 @@ describe('AgentStudioView entry assembly (g3 / Demo main path)', () => {
       'AgentChatTester',
       'AgentMetaPanel',
     ]) {
-      expect(src).toContain(panel)
+      expect(viewSrc).toContain(panel)
     }
     expect(src).toMatch(/STUDIO_TABS/)
     expect(src).toMatch(/requestStudioTab/)

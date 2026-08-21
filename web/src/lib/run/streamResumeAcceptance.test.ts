@@ -47,7 +47,8 @@ describe('stream resume acceptance (g5.2 three surfaces × four scenarios)', () 
   })
 
   it('g2.1: Inbox/Run restore order is queue_state → seed → flush', () => {
-    const inbox = readSrc('views/GatesInboxView.vue')
+    // Inbox restore orchestration lives in useGatesInbox after structure sink.
+    const inbox = readSrc('lib/inbox/useGatesInbox.ts')
     // Run detail: seed/flush live in useRunDetailWs (entry only assembles the composable).
     const runWs = readSrc('lib/run/useRunDetailWs.ts')
     const runEntry = readSrc('views/RunDetailView.vue')
@@ -62,15 +63,15 @@ describe('stream resume acceptance (g5.2 three surfaces × four scenarios)', () 
     expect(inboxIdx.every((i) => i >= 0)).toBe(true)
     expect(inboxIdx[0]).toBeLessThan(inboxIdx[1]!)
     expect(inboxIdx[1]).toBeLessThan(inboxIdx[2]!)
-    expect(runEntry).toMatch(/useRunDetailWs/)
+    expect(runEntry).toMatch(/useRunDetailWs|useRunDetail/)
     expect(runWs).toMatch(/seedDialogueNodeOnce/)
     expect(runWs.indexOf('seedDialogueAcpAfterRestore')).toBeGreaterThan(-1)
     expect(runWs.indexOf('flushPendingDialogueAcp')).toBeGreaterThan(-1)
   })
 
   it('g2.3: soft refresh path and thinkingBusy copy untouched', () => {
-    const inbox = readSrc('views/GatesInboxView.vue')
-    const clarify = readSrc('components/run/ClarifyChat.vue')
+    const inbox = readSrc('lib/inbox/useGatesInbox.ts')
+    const clarify = [readSrc('components/run/ClarifyChat.vue'), readSrc('lib/inbox/useClarifyChat.ts')].join('\n')
     const gatePanel = readSrc('components/run/GateReactStreamPanel.vue')
     expect(inbox).toMatch(/isClarifySoftRefreshBlocked/)
     expect(inbox).toMatch(/Soft-refresh semantics unchanged/)
@@ -120,9 +121,9 @@ describe('stream resume acceptance (g5.2 three surfaces × four scenarios)', () 
   })
 
   it('Inbox + Run wire busySeedRetry and wsReconnect (g3/g4)', () => {
-    const inbox = readSrc('views/GatesInboxView.vue')
+    const inbox = readSrc('lib/inbox/useGatesInbox.ts')
     const runWs = readSrc('lib/run/useRunDetailWs.ts')
-    const runEntry = readSrc('views/RunDetailView.vue')
+    const runEntry = [readSrc('views/RunDetailView.vue'), readSrc('lib/run/useRunDetail.ts')].join('\n')
     for (const src of [inbox, runWs]) {
       expect(src).toMatch(/createBusySeedRetryController/)
       expect(src).toMatch(/createWsReconnectController/)
