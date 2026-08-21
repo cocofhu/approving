@@ -54,8 +54,7 @@ import {
   RUN_TERMINAL_PANEL_LIMIT,
   RUN_TERMINAL_POOL_SIZE,
 } from '@/lib/run/useRunTerminalNotifications'
-import { __resetSidebarHiddenForTests, setSidebarHidden } from '@/lib/shared/sidebarHidden'
-import AppTopbar from './AppTopbar.vue'
+import ShellChromeControls from './ShellChromeControls.vue'
 
 function run(partial: Partial<Run> & Pick<Run, 'id' | 'status'>): Run {
   return {
@@ -80,13 +79,14 @@ function seedBaseline(enabledAt = '2020-01-01T00:00:00Z', readIds: string[] = []
   localStorage.setItem(prefsKeyForUser('tester'), JSON.stringify({ enabledAt, readIds }))
 }
 
-function mountTopbar() {
+function mountChrome(layout: 'bar' | 'sidebar' = 'sidebar') {
   const i18n = createI18n({
     legacy: false,
     locale: 'zh-CN',
     messages: { 'zh-CN': { ...common, ...pages, ...shell } },
   })
-  return mount(AppTopbar, {
+  return mount(ShellChromeControls, {
+    props: { layout },
     global: {
       plugins: [i18n],
       stubs: {
@@ -94,16 +94,16 @@ function mountTopbar() {
         LangSelect: { template: '<div data-testid="lang" />' },
         StatusMetrics: { template: '<div data-testid="status-metrics" />' },
         Transition: false,
+        Teleport: true,
       },
     },
     attachTo: document.body,
   })
 }
 
-describe('AppTopbar notifications', () => {
+describe('ShellChromeControls notifications (g1.2)', () => {
   beforeEach(() => {
     localStorage.clear()
-    __resetSidebarHiddenForTests()
     __resetRunTerminalNotificationsForTests()
     __resetNotificationsPageEntryForTests()
     push.mockReset()
@@ -128,14 +128,14 @@ describe('AppTopbar notifications', () => {
   afterEach(() => {
     __resetRunTerminalNotificationsForTests()
     __resetNotificationsPageEntryForTests()
-    __resetSidebarHiddenForTests()
   })
 
-  it('renders header with theme toggle and bell aria titled 通知', async () => {
-    const wrapper = mountTopbar()
+  it('renders chrome with theme toggle and bell aria titled 通知', async () => {
+    const wrapper = mountChrome()
     await flushPromises()
-    expect(wrapper.find('header').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="shell-chrome-controls"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="lang"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="shell-theme-toggle"]').exists()).toBe(true)
     const bell = wrapper.find('[data-testid="run-notifications-bell"]')
     expect(bell.exists()).toBe(true)
     expect(bell.attributes('aria-label')).toBe('通知')
@@ -145,37 +145,8 @@ describe('AppTopbar notifications', () => {
     wrapper.unmount()
   })
 
-  it('emits toggle-menu from mobile menu button (g3.2)', async () => {
-    const wrapper = mountTopbar()
-    await flushPromises()
-    await wrapper.find('[data-testid="mobile-nav-toggle"]').trigger('click')
-    expect(wrapper.emitted('toggle-menu')).toHaveLength(1)
-    expect(wrapper.find('[data-testid="desktop-nav-open"]').exists()).toBe(false)
-    wrapper.unmount()
-  })
-
-  it('desktop open hamburger does not emit toggle-menu (g3.1)', async () => {
-    setSidebarHidden(true)
-    const wrapper = mountTopbar()
-    await flushPromises()
-    expect(wrapper.find('[data-testid="desktop-nav-open"]').exists()).toBe(true)
-    await wrapper.find('[data-testid="desktop-nav-open"]').trigger('click')
-    expect(wrapper.emitted('toggle-menu')).toBeUndefined()
-    expect(wrapper.find('[data-testid="desktop-nav-open"]').exists()).toBe(false)
-    wrapper.unmount()
-  })
-
-  it('mobile toggle still emits when desktop nav is hidden (g3.2)', async () => {
-    setSidebarHidden(true)
-    const wrapper = mountTopbar()
-    await flushPromises()
-    await wrapper.find('[data-testid="mobile-nav-toggle"]').trigger('click')
-    expect(wrapper.emitted('toggle-menu')).toHaveLength(1)
-    wrapper.unmount()
-  })
-
   it('shows panel empty state without a clickable runs escape', async () => {
-    const wrapper = mountTopbar()
+    const wrapper = mountChrome()
     await flushPromises()
     await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
     await nextTick()
@@ -199,7 +170,7 @@ describe('AppTopbar notifications', () => {
       }),
     )
     vi.mocked(api.listRuns).mockResolvedValue(paged(items, 12))
-    const wrapper = mountTopbar()
+    const wrapper = mountChrome()
     await flushPromises()
 
     const badge = wrapper.find('[data-testid="run-notifications-badge"]')
@@ -229,11 +200,10 @@ describe('AppTopbar notifications', () => {
   })
 
   it('shows before-baseline label on history items without counting them unread', async () => {
-    // First-enable baseline ≈ now; past fixtures → beforeBaseline, unread=false.
     vi.mocked(api.listRuns).mockResolvedValue(
       paged([run({ id: 'hist', status: 'completed', startedAt: '2026-08-01T12:00:00Z' })]),
     )
-    const wrapper = mountTopbar()
+    const wrapper = mountChrome()
     await flushPromises()
     expect(wrapper.find('[data-testid="run-notifications-badge"]').exists()).toBe(false)
     await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
@@ -245,12 +215,12 @@ describe('AppTopbar notifications', () => {
     wrapper.unmount()
   })
 
-  it('clicking a preview item enters /notifications page 1 without locating (g3.2)', async () => {
+  it('clicking a preview item enters /notifications page 1 without locating', async () => {
     seedBaseline()
     vi.mocked(api.listRuns).mockResolvedValue(
       paged([run({ id: 'fail-1', status: 'failed', title: 'boom' })]),
     )
-    const wrapper = mountTopbar()
+    const wrapper = mountChrome()
     await flushPromises()
     expect(wrapper.find('[data-testid="run-notifications-badge"]').text()).toBe('1')
     await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
@@ -260,49 +230,23 @@ describe('AppTopbar notifications', () => {
     expect(push).toHaveBeenCalledWith({ path: '/notifications' })
     expect(push).not.toHaveBeenCalledWith('/runs/fail-1')
     expect(wrapper.find('[data-testid="run-notifications-badge"]').text()).toBe('1')
-    expect(wrapper.find('[data-testid="run-output-empty"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('clicking completed preview also goes to /notifications and does not open output modal (g3.2)', async () => {
+  it('clicking completed preview also goes to /notifications', async () => {
     seedBaseline()
     vi.mocked(api.listRuns).mockResolvedValue(
       paged([run({ id: 'ok-1', status: 'completed', title: 'done' })]),
     )
-    vi.mocked(api.getRun).mockResolvedValue(
-      run({
-        id: 'ok-1',
-        status: 'completed',
-        artifacts: [
-          {
-            id: 'a-nc',
-            name: 'node_complete.json',
-            kind: 'json',
-            nodeId: 'agent',
-            runId: 'ok-1',
-            workflowName: 'demo-wf',
-            sizeBytes: 32,
-            createdAt: '2026-08-10T12:00:00Z',
-          },
-        ],
-        nodes: [{ id: 'out-1', type: 'output', label: '输出', position: { x: 0, y: 0 }, config: {} }],
-        nodeRuns: {
-          'out-1': { nodeId: 'out-1', status: 'completed', outputs: { outputCards: [] } },
-        },
-      }),
-    )
-    const wrapper = mountTopbar()
+    const wrapper = mountChrome()
     await flushPromises()
     await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
     await nextTick()
-    expect(wrapper.find('[data-testid="run-notifications-badge"]').text()).toBe('1')
     await wrapper.find('[data-testid="run-notifications-item"]').trigger('click')
     await flushPromises()
     await nextTick()
     expect(push).toHaveBeenCalledWith({ path: '/notifications' })
     expect(api.getRun).not.toHaveBeenCalled()
-    expect(wrapper.find('[data-testid="run-output-empty"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="run-notifications-badge"]').text()).toBe('1')
     wrapper.unmount()
   })
 
@@ -318,7 +262,7 @@ describe('AppTopbar notifications', () => {
         }),
       ]),
     )
-    const wrapper = mountTopbar()
+    const wrapper = mountChrome()
     await flushPromises()
     await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
     await nextTick()

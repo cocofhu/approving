@@ -20,7 +20,7 @@ const toast = useToast()
 
 // Shared singleton source so approving a gate elsewhere updates the badge immediately.
 const { count: gateCount, peek, refresh } = usePendingGates()
-// Same unreadCount singleton as topbar bell — keep sidebar /notifications badge in sync.
+        // Same unreadCount singleton as shell chrome bell — keep sidebar /notifications badge in sync.
 const { unreadCount } = useRunTerminalNotifications()
 const { displayItems, hydrateDisplay, unfavorite, getFavoriteWorkflow, reorderFavorites } = useWorkflowFavorites()
 const { openLaunch } = useWorkflowRunLaunch()

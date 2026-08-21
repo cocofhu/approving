@@ -349,7 +349,7 @@ export interface DashboardStats {
   pmTokens?: number | null
 }
 
-/** GET /stats/platform-status — AppTopbar StatusMetrics snapshot. */
+/** GET /stats/platform-status — StatusMetrics snapshot (shell chrome). */
 export interface PlatformStatusMetrics {
   /** Platform cumulative tokens; null = never reported (UI "—"). */
   cumulativeTokens: number | null

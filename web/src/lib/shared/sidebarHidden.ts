@@ -40,12 +40,7 @@ export function showDesktopSidebar() {
 
 export async function focusDesktopNavControl(kind: 'hide' | 'show') {
   await nextTick()
-  const testid =
-    kind === 'hide'
-      ? 'desktop-nav-hide'
-      : document.querySelector('[data-testid="desktop-nav-edge-open"]')
-        ? 'desktop-nav-edge-open'
-        : 'desktop-nav-open'
+  const testid = kind === 'hide' ? 'desktop-nav-hide' : 'floating-nav-ball'
   const el = document.querySelector(`[data-testid="${testid}"]`) as HTMLElement | null
   el?.focus()
 }

@@ -1,18 +1,23 @@
 // @vitest-environment happy-dom
-import { defineComponent, nextTick, reactive } from 'vue'
+import { defineComponent, nextTick, ref } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import shell from '@/locales/zh-CN/shell.json'
-import { __resetSidebarHiddenForTests, setSidebarHidden } from '@/lib/shared/sidebarHidden'
+import { __resetSidebarHiddenForTests, setSidebarHidden, sidebarHidden } from '@/lib/shared/sidebarHidden'
 
-const routeState = reactive({ path: '/', meta: {} as Record<string, unknown> })
+const routeState = { path: '/', meta: {} as Record<string, unknown> }
+const isMobileRef = ref(false)
 
 vi.mock('vue-router', () => ({
   useRoute: () => routeState,
   useRouter: () => ({ push: vi.fn() }),
+}))
+
+vi.mock('@/lib/composables/useBreakpoint', () => ({
+  useBreakpoint: () => ({ isMobile: isMobileRef }),
 }))
 
 vi.mock('@/lib/composables/useShutdownState', () => ({
@@ -48,7 +53,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import AppShell from './AppShell.vue'
 
-function mountShell(opts?: { stubSidebar?: boolean; stubTopbar?: boolean }) {
+function mountShell(opts?: { stubSidebar?: boolean }) {
   const i18n = createI18n({
     legacy: false,
     locale: 'zh-CN',
@@ -65,86 +70,104 @@ function mountShell(opts?: { stubSidebar?: boolean; stubTopbar?: boolean }) {
               template:
                 '<aside data-testid="sidebar" class="w-[232px] shrink-0" />',
             }),
-        AppTopbar: opts?.stubTopbar === false
-          ? false
-          : defineComponent({
-              template: '<header data-testid="topbar" />',
-              emits: ['toggle-menu'],
-            }),
         AppSidebarNav: { template: '<nav data-testid="shell-nav" />' },
         BrandLogo: true,
         Icon: true,
         RunLaunchModal: true,
         ServiceCommitBadge: true,
+        ShellChromeControls: {
+          template: '<div data-testid="shell-chrome-controls" />',
+        },
+        Teleport: true,
+        Transition: false,
       },
     },
   })
 }
 
-describe('AppShell', () => {
+describe('AppShell (no topbar + floating ball)', () => {
   beforeEach(() => {
     __resetSidebarHiddenForTests()
+    isMobileRef.value = false
     routeState.path = '/'
     routeState.meta = {}
+    vi.useFakeTimers()
   })
   afterEach(() => {
     __resetSidebarHiddenForTests()
+    vi.useRealTimers()
   })
 
-  it('renders sidebar and topbar with default slot', () => {
+  it('renders sidebar without AppTopbar (g1.1)', () => {
     const wrapper = mountShell()
     expect(wrapper.find('[data-testid="sidebar"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="topbar"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="topbar"]').exists()).toBe(false)
+    expect(wrapper.find('header').exists()).toBe(false)
     expect(wrapper.find('[data-testid="main"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="app-refresh-bar"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="floating-nav-ball"]').exists()).toBe(true)
     expect(wrapper.find('[aria-live="polite"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
-  it('does not show edge open on pages with topbar (g3.1 / g4.1)', () => {
+  it('does not render desktop-nav-open or edge-open (g1.1 / g2.1)', () => {
     setSidebarHidden(true)
     const wrapper = mountShell()
+    expect(wrapper.find('[data-testid="desktop-nav-open"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="desktop-nav-edge-open"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="topbar"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="floating-nav-ball-wrap"]').attributes('data-exiting')).toBe(
+      'false',
+    )
     wrapper.unmount()
   })
 
-  it('shows 44px edge open and pl-11 on full pages when hidden (g4.1 / g4.2)', () => {
+  it('full pages no longer use edge-open or pl-11 (g2.1)', () => {
     routeState.meta = { full: true }
     setSidebarHidden(true)
     const wrapper = mountShell()
-    expect(wrapper.find('[data-testid="topbar"]').exists()).toBe(false)
-    const edge = wrapper.find('[data-testid="desktop-nav-edge-open"]')
-    expect(edge.exists()).toBe(true)
-    expect(edge.classes()).toContain('h-11')
-    expect(edge.classes()).toContain('w-11')
-    expect(edge.classes()).toContain('z-20')
-    expect(wrapper.find('[data-testid="app-full-main"]').classes()).toContain('pl-11')
+    expect(wrapper.find('[data-testid="desktop-nav-edge-open"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="app-full-main"]').classes()).not.toContain('pl-11')
+    expect(wrapper.find('[data-testid="floating-nav-ball"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
-  it('drops the edge button when leaving a full page while still hidden (g4.1)', async () => {
-    routeState.meta = { full: true }
+  it('click floating ball pins sidebar with exit animation (g2.2 / g2.3)', async () => {
     setSidebarHidden(true)
     const wrapper = mountShell()
-    expect(wrapper.find('[data-testid="desktop-nav-edge-open"]').exists()).toBe(true)
-    routeState.meta = {}
+    const ball = wrapper.find('[data-testid="floating-nav-ball"]')
+    expect(ball.attributes('aria-label')).toBe('打开导航')
+    await ball.trigger('click')
+    expect(wrapper.find('[data-testid="floating-nav-ball-wrap"]').attributes('data-exiting')).toBe(
+      'true',
+    )
+    expect(sidebarHidden.value).toBe(true)
+    await vi.advanceTimersByTimeAsync(320)
     await nextTick()
-    expect(wrapper.find('[data-testid="desktop-nav-edge-open"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="topbar"]').exists()).toBe(true)
+    expect(sidebarHidden.value).toBe(false)
+    expect(wrapper.find('[data-testid="floating-nav-ball-wrap"]').attributes('data-exiting')).toBe(
+      'false',
+    )
     wrapper.unmount()
   })
 
-  it('keeps hidden preference across route changes (g1.2 / g5.2)', async () => {
+  it('hover on floating ball does not expand sidebar (g2.2)', async () => {
     setSidebarHidden(true)
     const wrapper = mountShell()
-    routeState.path = '/projects'
+    await wrapper.find('[data-testid="floating-nav-ball"]').trigger('mouseenter')
     await nextTick()
-    expect(wrapper.find('[data-testid="desktop-nav-edge-open"]').exists()).toBe(false)
-    routeState.meta = { full: true }
-    routeState.path = '/runs/abc'
+    expect(sidebarHidden.value).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('mobile click opens drawer instead of pinning (g2.4)', async () => {
+    isMobileRef.value = true
+    setSidebarHidden(true)
+    const wrapper = mountShell()
+    expect(wrapper.find('[data-testid="mobile-nav-drawer"]').exists()).toBe(false)
+    await wrapper.find('[data-testid="floating-nav-ball"]').trigger('click')
     await nextTick()
-    expect(wrapper.find('[data-testid="desktop-nav-edge-open"]').exists()).toBe(true)
+    expect(sidebarHidden.value).toBe(true)
+    expect(wrapper.find('[data-testid="mobile-nav-drawer"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="shell-chrome-controls"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
@@ -164,6 +187,7 @@ describe('AppShell', () => {
     )
     expect(src).toMatch(/bg-black\/50 md:hidden/)
     expect(src).toMatch(/shadow-drawer md:hidden/)
+    expect(src).not.toMatch(/<AppTopbar/)
   })
 
   it('desktop hide uses width 0 not a mobile drawer (g2.2 / g3.2)', async () => {
