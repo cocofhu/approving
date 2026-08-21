@@ -44,7 +44,8 @@ func (c *acpProvider) ReactOpen(ctx context.Context, req NodeReq) ReactTurn {
 					return ReactTurn{Msg: res.Narration, Questions: qs, Events: events, Usage: usage, UsageByModel: usageByModel}
 				}
 
-				return c.finishReact(ctx, req, reactKey(req), sess, res.Narration, nil, events, usage, usageByModel)
+				// No human dialogue happened yet, so there is nothing to induce.
+				return c.finishReact(ctx, req, reactKey(req), sess, res.Narration, nil, events, usage, usageByModel, false)
 			}
 
 			if isRetryableSandboxErr(err) {
@@ -153,20 +154,24 @@ func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []mod
 
 	chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
 	defer cancel()
-	prompt := withDualWriteContract(human)
+	prompt := human
 	chatImages := images
 	if approveInjectOpenPrompt(req, history) {
-		// Opening goal is not review feedback — skip the dual-write contract.
 		prompt = c.buildReactOpenPrompt(req, c.upstreamArtifacts(req)) + "\n\n## 用户消息\n" + strings.TrimRight(human, "\n")
 		chatImages = mergePromptImages(req.PromptImages, images)
 		if force {
 			prompt = models.DefaultApproveConfirmSuffix + "\n\n" + prompt
 		}
-	} else if force && req.NodeType == "approve" {
-		// Human confirmed: require fill products then node_complete (phased contract).
-		prompt = models.DefaultApproveConfirmSuffix + "\n\n" + withDualWriteContract(human)
+	} else if force {
+		// Human confirmed: reconcile products against the transcript before the
+		// node wraps up. Approve additionally names its two products and demands
+		// node_complete (phased contract).
+		confirm := models.DefaultReactConfirmSuffix
+		if req.NodeType == "approve" {
+			confirm = models.DefaultApproveConfirmSuffix
+		}
+		prompt = confirm + "\n\n" + strings.TrimRight(human, "\n")
 	}
-	// Clarify feedback turns dual-write agentSummary alongside narration.
 	res, err := c.streamChat(chatCtx, sess.acp, req, prompt, chatImages)
 	if err != nil {
 		log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
@@ -182,13 +187,12 @@ func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []mod
 	var usageByModel models.TokenUsageByModel
 	var events []models.AcpEvent
 	absorbChat(&usage, &usageByModel, &events, res)
-	narration, agentSummary := applyDualWrite(res.Narration)
-	logDualWriteMiss(req, res.Narration, agentSummary)
+	narration := res.Narration
 
 	qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
 
 	if len(qs) > 0 {
-		return ReactTurn{Msg: narration, AgentSummary: agentSummary, Questions: qs, Events: events, Usage: usage, UsageByModel: usageByModel}
+		return ReactTurn{Msg: narration, Questions: qs, Events: events, Usage: usage, UsageByModel: usageByModel}
 	}
 
 	if !force && !reactCapReached(req, history) {
@@ -199,7 +203,7 @@ func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []mod
 			if strings.TrimSpace(msg) == "" {
 				msg = narration
 			}
-			return ReactTurn{Msg: msg, AgentSummary: agentSummary, Questions: gq, Events: events, Usage: usage, UsageByModel: usageByModel}
+			return ReactTurn{Msg: msg, Questions: gq, Events: events, Usage: usage, UsageByModel: usageByModel}
 		} else if gu != nil || gum != nil {
 			events = append(events, ge...)
 			usage = models.AddTokenUsage(usage, gu)
@@ -209,11 +213,11 @@ func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []mod
 	if !force && req.NodeType == "approve" {
 		c.host.ClearOutcome(req.RunID, req.NodeID)
 		events = c.snapshotEvents(ctx, sess.sb, events)
-		return ReactTurn{Msg: narration, AgentSummary: agentSummary, Done: false, Events: events, Usage: usage, UsageByModel: usageByModel}
+		return ReactTurn{Msg: narration, Done: false, Events: events, Usage: usage, UsageByModel: usageByModel}
 	}
-	turn := c.finishReact(ctx, req, key, sess, narration, history, events, usage, usageByModel)
-	turn.AgentSummary = agentSummary
-	return turn
+	// The reconcile turn above closed the human dialogue, so the wrap-up may end
+	// with the hidden turn that induces the transcript into the ledger summary.
+	return c.finishReact(ctx, req, key, sess, narration, history, events, usage, usageByModel, true)
 }
 
 // ReviseInPlace sends one review turn to the parked session and keeps it alive.
@@ -248,8 +252,7 @@ func (c *acpProvider) ReviseInPlace(ctx context.Context, req NodeReq, history []
 		}
 	}
 	chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
-	// Review feedback turns dual-write agentSummary alongside narration.
-	res, err := c.streamChat(chatCtx, sess.acp, req, withDualWriteContract(human), images)
+	res, err := c.streamChat(chatCtx, sess.acp, req, human, images)
 	cancel()
 	if err != nil {
 		log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).Msg("review revise chat failed")
@@ -260,8 +263,6 @@ func (c *acpProvider) ReviseInPlace(ctx context.Context, req NodeReq, history []
 	var usageByModel models.TokenUsageByModel
 	var events []models.AcpEvent
 	absorbChat(&usage, &usageByModel, &events, res)
-	narration, agentSummary := applyDualWrite(res.Narration)
-	logDualWriteMiss(req, res.Narration, agentSummary)
 
 	c.host.TakePendingQuestions(req.RunID, req.NodeID)
 
@@ -269,7 +270,7 @@ func (c *acpProvider) ReviseInPlace(ctx context.Context, req NodeReq, history []
 		log.Warn().Err(serr).Str("node", req.NodeID).Msg("review revise ensure product failed")
 	}
 	events = c.snapshotEvents(ctx, sess.sb, events)
-	return ReactTurn{Msg: narration, AgentSummary: agentSummary, Done: false, Events: events, Usage: usage, UsageByModel: usageByModel}
+	return ReactTurn{Msg: res.Narration, Done: false, Events: events, Usage: usage, UsageByModel: usageByModel}
 }
 
 // HasLiveSession reports whether a parked review session is held for the node.
@@ -297,15 +298,79 @@ func (c *acpProvider) CancelSessionTurn(runID, nodeID string) {
 	}
 }
 
-// logDualWriteMiss records a parse miss without logging the agent response,
-// which can contain user feedback. It gives operators a denominator for the
-// non-empty agentSummary rate on review and clarify human turns.
-func logDualWriteMiss(req NodeReq, raw, agentSummary string) {
-	if strings.TrimSpace(raw) == "" || strings.TrimSpace(agentSummary) != "" {
-		return
+// ReconcileOnConfirm runs the confirm-time pair against a review producer's
+// parked session: one visible turn reconciling the structured products with the
+// whole transcript, then the hidden summary turn. Approve/clarify nodes get the
+// same pair inside ReactReply(force=true) instead, because their reconcile
+// prompt must also require node_complete.
+//
+// Best-effort like OfferCommitOnConfirm: a dead session or a failed chat only
+// yields an empty turn, never a failed confirm.
+func (c *acpProvider) ReconcileOnConfirm(ctx context.Context, req NodeReq) ReactTurn {
+	c.mu.Lock()
+	sess := c.sessions[reactKey(req)]
+	c.mu.Unlock()
+	if sess == nil || sess.acp == nil || !sess.acp.IsConnected() {
+		log.Warn().Str("run", req.RunID).Str("node", req.NodeID).
+			Msg("confirm reconcile skipped: no live session")
+		return ReactTurn{}
 	}
-	log.Debug().Str("run", req.RunID).Str("node", req.NodeID).Str("node_type", req.NodeType).
-		Msg("dual-write agentSummary missing or unparseable")
+
+	var usage *models.TokenUsage
+	var usageByModel models.TokenUsageByModel
+	var events []models.AcpEvent
+
+	prompt := c.agentPrompts(str2(req.Config["skill_profile"])).ReviewConfirmReconcileText()
+	chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
+	res, err := c.streamChat(chatCtx, sess.acp, req, prompt, nil)
+	cancel()
+	if err != nil {
+		log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
+			Msg("confirm reconcile chat failed")
+		return ReactTurn{}
+	}
+	absorbChat(&usage, &usageByModel, &events, res)
+	c.host.TakePendingQuestions(req.RunID, req.NodeID)
+
+	agentSummary := c.confirmSummaryTurn(ctx, req, sess, &events, &usage, &usageByModel)
+	events = c.snapshotEvents(ctx, sess.sb, events)
+	return ReactTurn{Msg: res.Narration, AgentSummary: agentSummary, Done: false,
+		Events: events, Usage: usage, UsageByModel: usageByModel}
+}
+
+// confirmSummaryTurn sends the hidden induction turn and returns the parsed
+// agentSummary. Its narration never reaches the transcript — only the ACP
+// events land on the timeline — so an unparseable answer yields "" instead of
+// promoting prose the agent did not mean as a summary.
+//
+// Best-effort throughout: this runs after the human already confirmed, so a
+// failure must cost the ledger a summary rather than block the transition.
+func (c *acpProvider) confirmSummaryTurn(ctx context.Context, req NodeReq, sess *reactSession,
+	events *[]models.AcpEvent, usage **models.TokenUsage, usageByModel *models.TokenUsageByModel) string {
+	if sess == nil || sess.acp == nil || !sess.acp.IsConnected() {
+		return ""
+	}
+	prompt := c.agentPrompts(str2(req.Config["skill_profile"])).ConfirmSummaryContractText()
+	chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
+	res, err := c.streamChat(chatCtx, sess.acp, req, prompt, nil)
+	cancel()
+	if err != nil {
+		log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
+			Msg("confirm summary chat failed")
+		return ""
+	}
+	absorbChat(usage, usageByModel, events, res)
+	// The summary turn must not resurrect the dialogue: a stray ask_question
+	// here would otherwise leak into the next node's pending questions.
+	c.host.TakePendingQuestions(req.RunID, req.NodeID)
+
+	agentSummary := parseAgentSummary(res.Narration)
+	if agentSummary == "" {
+		// The response can quote user feedback, so only the miss is recorded.
+		log.Debug().Str("run", req.RunID).Str("node", req.NodeID).Str("node_type", req.NodeType).
+			Msg("confirm summary missing or unparseable")
+	}
+	return agentSummary
 }
 
 // enforceOpenQuestionsGate implements the clarification gate: when the agent
@@ -359,7 +424,11 @@ func (c *acpProvider) enforceOpenQuestionsGate(ctx context.Context, req NodeReq,
 // return a Done ReactTurn. If the agent raises ask_question during ensure*,
 // the session stays open and Questions are returned (Done=false) so the
 // engine can auto_clarify or wait for a human — never OutcomeRetry-mis-fail.
-func (c *acpProvider) finishReact(ctx context.Context, req NodeReq, key string, sess *reactSession, narration string, history []models.ReactMessage, events []models.AcpEvent, usage *models.TokenUsage, usageByModel models.TokenUsageByModel) ReactTurn {
+// wantSummary asks for the hidden confirm-time induction turn. It deliberately
+// runs at the very end — after products and node_complete are confirmed present
+// — so it can neither delay nor derail a confirm that is about to be rejected,
+// and cannot come between the reconcile turn and the outcome gate.
+func (c *acpProvider) finishReact(ctx context.Context, req NodeReq, key string, sess *reactSession, narration string, history []models.ReactMessage, events []models.AcpEvent, usage *models.TokenUsage, usageByModel models.TokenUsageByModel, wantSummary bool) ReactTurn {
 
 	if qs, err := c.ensureRequiredProducts(ctx, req, sess.acp, &events, &usage, &usageByModel); len(qs) > 0 {
 		msg := narration
@@ -380,11 +449,17 @@ func (c *acpProvider) finishReact(ctx context.Context, req NodeReq, key string, 
 		return ReactTurn{Done: true, Err: err, Msg: err.Error(), Events: events, Usage: usage,
 			Result: NodeResult{Events: events, Usage: usage, UsageByModel: usageByModel}}
 	}
+	// The node is definitely finishing from here on, so the induction turn can
+	// no longer influence the outcome — only the ledger summary.
+	var agentSummary string
+	if wantSummary {
+		agentSummary = c.confirmSummaryTurn(ctx, req, sess, &events, &usage, &usageByModel)
+	}
 	events = c.snapshotEvents(ctx, sess.sb, events)
 	out := map[string]any{"clarified_requirement": narration, "content": narration, "transcript": renderTranscript(history)}
 	git := c.captureChanges(ctx, sess.sb, req, out)
 	c.closeSession(key)
-	return ReactTurn{Msg: narration, Done: true, Events: events, Usage: usage,
+	return ReactTurn{Msg: narration, Done: true, AgentSummary: agentSummary, Events: events, Usage: usage,
 		Result: NodeResult{OutputMd: narration, Outputs: out, Events: events, Git: git, Usage: usage, UsageByModel: usageByModel}}
 }
 

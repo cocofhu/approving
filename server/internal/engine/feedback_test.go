@@ -25,6 +25,19 @@ func feedbackArtifacts(db *gorm.DB, runID string) []models.Artifact {
 	return out
 }
 
+// feedbackArtifactsOfKind narrows the ledger to one kind. Reaching a gate goes
+// through a clarify「确认并流转」, which is itself a recorded round now, so a test
+// about gate or review products must not assert over the whole ledger.
+func feedbackArtifactsOfKind(db *gorm.DB, runID, kind string) []models.Artifact {
+	out := make([]models.Artifact, 0)
+	for _, a := range feedbackArtifacts(db, runID) {
+		if strings.HasPrefix(a.Name, services.FeedbackArtifactPrefix+kind+".") {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
 func decodeIndex(t *testing.T, db *gorm.DB, runID string) map[string]any {
 	t.Helper()
 	a, ok := arts(db, runID, services.FeedbackIndexArtifactName)
@@ -36,6 +49,17 @@ func decodeIndex(t *testing.T, db *gorm.DB, runID string) map[string]any {
 		t.Fatalf("index is not valid JSON: %v", err)
 	}
 	return doc
+}
+
+func indexRounds(t *testing.T, db *gorm.DB, runID string) []map[string]any {
+	t.Helper()
+	list, _ := decodeIndex(t, db, runID)["rounds"].([]any)
+	out := make([]map[string]any, 0, len(list))
+	for _, r := range list {
+		m, _ := r.(map[string]any)
+		out = append(out, m)
+	}
+	return out
 }
 
 // Three push-backs on one execution must converge on one cumulative product.
@@ -113,16 +137,21 @@ func TestEmptyGateApprovalWritesNoFeedbackProduct(t *testing.T) {
 	}
 	waitRunStatus(t, db, run.ID, "completed")
 
-	if got := feedbackArtifacts(db, run.ID); len(got) != 0 {
+	if got := feedbackArtifactsOfKind(db, run.ID, "gate"); len(got) != 0 {
 		t.Fatalf("empty approval must not produce feedback files, got %+v", got)
 	}
-	if _, ok := arts(db, run.ID, services.FeedbackIndexArtifactName); ok {
-		t.Fatal("no index should exist when nothing was recorded")
-	}
 	var n int64
-	db.Model(&models.FeedbackEvent{}).Where("run_id = ?", run.ID).Count(&n)
+	db.Model(&models.FeedbackEvent{}).
+		Where("run_id = ? AND kind = ?", run.ID, models.FeedbackKindGate).Count(&n)
 	if n != 0 {
 		t.Fatalf("no row should be written either, got %d", n)
+	}
+	// The index exists because the clarify confirm round is real feedback, but
+	// the empty approval must be absent from it.
+	for _, r := range indexRounds(t, db, run.ID) {
+		if r["kind"] == models.FeedbackKindGate {
+			t.Fatalf("empty approval must not be indexed: %+v", r)
+		}
 	}
 }
 
@@ -138,7 +167,7 @@ func TestGateApprovalWithCommentRecordsOneRound(t *testing.T) {
 	}
 	waitRunStatus(t, db, run.ID, "completed")
 
-	rounds := feedbackArtifacts(db, run.ID)
+	rounds := feedbackArtifactsOfKind(db, run.ID, "gate")
 	if len(rounds) != 1 {
 		t.Fatalf("want exactly one gate round, got %d: %+v", len(rounds), rounds)
 	}
@@ -161,8 +190,9 @@ func TestGateApprovalWithCommentRecordsOneRound(t *testing.T) {
 		t.Fatalf("non-text form values must not enter the opinion body: %q", doc.Feedback.Text)
 	}
 
+	// The clarify「确认并流转」round precedes this approval in the same run.
 	idx := decodeIndex(t, db, run.ID)
-	if got := idx["totalRounds"]; got != float64(1) {
+	if got := idx["totalRounds"]; got != float64(2) {
 		t.Fatalf("index totalRounds = %v", got)
 	}
 }
@@ -201,7 +231,7 @@ func TestFeedbackAttachmentsStayReferences(t *testing.T) {
 			Images: []models.PromptImage{{Ref: "blob:abc123", Data: payload}}}},
 	})
 
-	rounds := feedbackArtifacts(db, run.ID)
+	rounds := feedbackArtifactsOfKind(db, run.ID, "review")
 	if len(rounds) != 1 {
 		t.Fatalf("want one round, got %d", len(rounds))
 	}
@@ -214,7 +244,8 @@ func TestFeedbackAttachmentsStayReferences(t *testing.T) {
 	}
 
 	var row models.FeedbackEvent
-	if err := db.Where("run_id = ?", run.ID).First(&row).Error; err != nil {
+	if err := db.Where("run_id = ? AND kind = ?", run.ID, models.FeedbackKindReview).
+		First(&row).Error; err != nil {
 		t.Fatalf("load row: %v", err)
 	}
 	if row.Attachments[0].Data != "" || row.Turns[0].Images[0].Data != "" {
@@ -233,7 +264,7 @@ func TestFeedbackProductsAreNotGateEditable(t *testing.T) {
 		RunID: run.ID, Kind: models.FeedbackKindGate, NodeID: "approve",
 		Iteration: 1, Actor: "alice", Action: "revise", Text: "补上压测数据",
 	})
-	rounds := feedbackArtifacts(db, run.ID)
+	rounds := feedbackArtifactsOfKind(db, run.ID, "gate")
 	if len(rounds) != 1 {
 		t.Fatalf("want one round, got %d", len(rounds))
 	}

@@ -17,10 +17,10 @@ import (
 // ReAct review/clarify products are rewritten as a single cumulative conclusion
 // for the node execution; the feedback index remains the append-only timeline.
 //
-// It writes nothing at all when the event carries no human input — no opinion,
-// no annotation, no attachment, no ReAct turn. A gate approval clicked through
-// with an empty form is exactly that case, and flooding a run with empty shells
-// would make the ledger useless.
+// It writes nothing at all when the event carries no substance — no opinion,
+// no annotation, no attachment, no ReAct turn, no AgentSummary. A gate approval
+// clicked through with an empty form is exactly that case, and flooding a run
+// with empty shells would make the ledger useless.
 //
 // Best-effort, like persistRunErrorArtifact: every failure is logged and
 // swallowed, because losing a feedback product must never stall the FSM.
@@ -199,6 +199,46 @@ func (e *Engine) clarifyFeedbackEvent(s *reviewSession, item *reviewQueueItem, i
 	return ev
 }
 
+// confirmRoundFeedbackEvent assembles the「确认并流转」round, the only round that
+// carries an AgentSummary: ordinary ReAct turns are pure narration, and the
+// induction of the whole dialogue is produced once, by the hidden summary turn
+// that runs after the human confirmed.
+//
+// Unlike clarifyFeedbackEvent / reviewFeedbackEvent this takes no
+// *reviewSession, because both confirm paths (clarify force in ReactReply,
+// review force in reviewReply) run synchronously outside the FIFO pump.
+func (e *Engine) confirmRoundFeedbackEvent(runID, nodeID, kind string, iteration int,
+	human, agent models.ReactMessage, agentSummary string) models.FeedbackEvent {
+	// A silent confirm is a click, not feedback. Without written input and
+	// without a summary the round would carry nothing but the agent's own
+	// narration — exactly the empty shell recordFeedback exists to refuse — so
+	// the zero value is returned for it to skip.
+	if strings.TrimSpace(human.Text) == "" && len(human.Annotations) == 0 &&
+		len(human.Images) == 0 && strings.TrimSpace(agentSummary) == "" {
+		return models.FeedbackEvent{}
+	}
+	action := "answer"
+	if kind == models.FeedbackKindReview {
+		action = "revise"
+	}
+	return models.FeedbackEvent{
+		RunID:          runID,
+		Kind:           kind,
+		NodeID:         nodeID,
+		Iteration:      iteration,
+		CallerKind:     models.CallerKindPM,
+		Unattributable: true,
+		Action:         action,
+		Text:           human.Text,
+		AgentSummary:   strings.TrimSpace(agentSummary),
+		Annotations:    human.Annotations,
+		Attachments:    human.Images,
+		Turns:          []models.ReactMessage{human, agent},
+		Detail:         map[string]any{"confirm": true},
+		OccurredAt:     time.Now(),
+	}
+}
+
 // recordAutoClarifyRound logs a platform auto-answered clarify round.
 //
 // It is index-only: the round shaped the requirement and later rounds need that
@@ -217,6 +257,18 @@ func (e *Engine) recordAutoClarifyRound(runID, nodeID string, iteration int, hum
 		IndexOnly:  true,
 		OccurredAt: time.Now(),
 	})
+}
+
+// lastHumanMessage returns the most recent human turn, i.e. the text the
+// reviewer submitted alongside「确认并流转」. Zero value when the dialogue holds
+// none (a gate-seeded review conversation confirmed without any push-back).
+func lastHumanMessage(msgs []models.ReactMessage) models.ReactMessage {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == "human" {
+			return msgs[i]
+		}
+	}
+	return models.ReactMessage{}
 }
 
 // lastAgentQuestions returns the structured questions from the most recent

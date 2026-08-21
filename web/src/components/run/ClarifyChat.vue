@@ -511,11 +511,15 @@ watch(
     }
   },
 )
-// Parent surfaces review confirm failure → leave validating so the user can retry.
+// A rejected「确认并流转」must hand control back: both spinners are local state
+// the server can no longer clear (the dialogue stays open, so props.done never
+// flips), and leaving either on strands the user with a permanent placeholder.
 watch(
   () => props.confirmError,
   (err) => {
-    if (err) validating.value = false
+    if (!err) return
+    validating.value = false
+    if (queued.value.length === 0 && liveAgentIdx.value < 0) thinking.value = false
   },
 )
 
@@ -1742,7 +1746,7 @@ defineExpose({
       </div>
     </div>
     <div
-      v-if="reviewMode && confirmError && !done"
+      v-if="confirmError && !done"
       class="flex items-center gap-1.5 border-t border-err/30 bg-err/10 px-3 py-2 text-[12px] text-err"
       data-testid="clarify-confirm-error"
       role="alert"

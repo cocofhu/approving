@@ -181,4 +181,11 @@ func TestProviderRegistryReviewProviderForwarding(t *testing.T) {
 	if wrap.Done {
 		t.Fatal("OfferCommitOnConfirm must not mark Done")
 	}
+
+	// Without a parked session the confirm-time reconcile is a best-effort
+	// no-op: the human already confirmed, so it must not fail the transition.
+	rec := reg.ReconcileOnConfirm(context.Background(), NodeReq{RunID: "r", NodeID: "n"})
+	if rec.Done || rec.Msg != "" || rec.AgentSummary != "" || rec.Err != nil {
+		t.Fatalf("ReconcileOnConfirm without a session must be an empty turn, got %+v", rec)
+	}
 }

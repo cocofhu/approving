@@ -471,8 +471,9 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 
 	now := time.Now().Format(time.RFC3339)
 	effective := renderReviewHuman(humanText, annotations)
-	conv.Messages = append(conv.Messages, models.ReactMessage{Role: "human", Text: humanText, At: now,
-		Images: images, Annotations: annotations})
+	humanMsg := models.ReactMessage{Role: "human", Text: humanText, At: now,
+		Images: images, Annotations: annotations}
+	conv.Messages = append(conv.Messages, humanMsg)
 	logDB(e.db.Save(&conv), runID, "save react human turn")
 
 	// Leave the pending inbox immediately (mirrors ResumeGate resolving before
@@ -483,8 +484,9 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 
 	req := e.nodeReq(c, node)
 	t := e.provider.ReactReply(context.Background(), req, conv.Messages, effective, images, force)
-	conv.Messages = append(conv.Messages, models.ReactMessage{Role: "agent", Text: t.Msg,
-		At: time.Now().Format(time.RFC3339), Questions: t.Questions})
+	agentMsg := models.ReactMessage{Role: "agent", Text: t.Msg,
+		At: time.Now().Format(time.RFC3339), Questions: t.Questions}
+	conv.Messages = append(conv.Messages, agentMsg)
 
 	// Auto-clarify: if this node runs in auto mode and the agent asked more
 	// questions, keep answering with the recommended option set (all recommended
@@ -507,6 +509,12 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 	}
 
 	logDB(e.db.Save(&conv), runID, "finish react conversation")
+
+	// The confirm round is the one that carries the dialogue's AgentSummary,
+	// and it is recorded here rather than in the FIFO pump because force
+	// wrap-up stays on this synchronous path.
+	e.recordFeedback(e.confirmRoundFeedbackEvent(runID, nodeID, models.FeedbackKindClarify,
+		conv.Iteration, humanMsg, agentMsg, t.AgentSummary))
 
 	if t.Err != nil {
 		outcome := nodeOutcome{status: "failed", err: t.Err.Error(), outputMd: t.Msg,

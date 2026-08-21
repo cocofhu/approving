@@ -3111,7 +3111,7 @@
         "transcript": "本轮对话",
         "priorRounds": "此前各轮",
         "agentSummary": "Agent 总结",
-        "agentSummaryTag": "对反馈的总结",
+        "agentSummaryTag": "流转前对聊天记录的归纳",
         "fullText": "全文",
         "roleHuman": "人工",
         "roleAgent": "Agent",

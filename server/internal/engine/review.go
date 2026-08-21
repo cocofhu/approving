@@ -270,7 +270,22 @@ func (e *Engine) reviewReply(c *execCtx, node *models.Node, conv *models.ReactCo
 	conv.Done = true
 	logDB(e.db.Save(conv), runID, "confirm leave pending (review force)")
 
+	humanMsg := lastHumanMessage(conv.Messages)
+
 	if rp, ok := e.provider.(runtime.ReviewProvider); ok {
+		// Reconcile the products against the whole transcript (plus the hidden
+		// summary turn) before the git wrap-up retires the session.
+		rec := rp.ReconcileOnConfirm(context.Background(), req)
+		agentMsg := models.ReactMessage{Role: "agent", Text: rec.Msg, At: time.Now().Format(time.RFC3339)}
+		if strings.TrimSpace(rec.Msg) != "" {
+			conv.Messages = append(conv.Messages, agentMsg)
+			logDB(e.db.Save(conv), runID, "save review confirm reconcile")
+		}
+		e.flushMcpCalls(runID, nodeID)
+		e.flushTokenUsage(runID, nodeID, rec.Usage, rec.UsageByModel)
+		e.recordFeedback(e.confirmRoundFeedbackEvent(runID, nodeID, models.FeedbackKindReview,
+			conv.Iteration, humanMsg, agentMsg, rec.AgentSummary))
+
 		t := rp.OfferCommitOnConfirm(context.Background(), req)
 		if strings.TrimSpace(t.Msg) != "" {
 			conv.Messages = append(conv.Messages, models.ReactMessage{

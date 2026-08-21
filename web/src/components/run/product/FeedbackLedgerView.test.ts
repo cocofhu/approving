@@ -172,6 +172,28 @@ describe('FeedbackLedgerView', () => {
     w.unmount()
   })
 
+  // The ReAct ledger product is cumulative: `summary` lists every round's gist
+  // while `agentSummary` is the single induction produced at「确认并流转」.
+  it('renders the confirm-time summary on a cumulative ReAct product', () => {
+    const cumulative = {
+      runId: 'run-1',
+      kind: 'clarify',
+      node: { id: 'approve-1', label: '需求对齐', type: 'approve' },
+      iteration: 1,
+      roundCount: 3,
+      latestRound: 3,
+      at: '2026-08-13T15:20:00+08:00',
+      summary: '截至第3轮的归纳结论：第1轮：视觉跟截图；第2轮：去掉下拉；第3轮：就这样',
+      agentSummary: '用户确认按截图保留视觉，去掉下拉与紫色选中，卡片只读。',
+      index: 'feedback_index.json',
+    }
+    const w = mountLedger('feedback.clarify.approve-1.i1.json', cumulative)
+    const summary = w.get('[data-testid="feedback-agent-summary"]')
+    expect(summary.text()).toContain('用户确认按截图保留视觉，去掉下拉与紫色选中，卡片只读。')
+    expect(w.get('[data-testid="feedback-round-body"]').text()).toContain('第2轮：去掉下拉')
+    w.unmount()
+  })
+
   it('shows an empty ledger without rows', () => {
     const w = mountLedger('feedback_index.json', { runId: 'run-1', totalRounds: 0, rounds: [] })
     expect(w.text()).toContain(pages.pages.product.feedback.empty)

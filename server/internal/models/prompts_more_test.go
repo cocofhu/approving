@@ -68,7 +68,8 @@ func TestAgentPromptsRemainingContracts(t *testing.T) {
 	if !strings.Contains(DefaultApproveOpenSuffix, "未点「确认并流转」前禁止 node_complete") {
 		t.Fatal("DefaultApproveOpenSuffix must forbid node_complete before confirm")
 	}
-	for _, want := range []string{"确认流转", "set_clarified_requirement", "set_plan", "node_complete", "不要再提问"} {
+	for _, want := range []string{"确认流转", "set_clarified_requirement", "set_plan", "node_complete",
+		"不要再提问", "完整聊天记录", "补充或修正"} {
 		if !strings.Contains(DefaultApproveConfirmSuffix, want) {
 			t.Fatalf("DefaultApproveConfirmSuffix missing %q\n%s", want, DefaultApproveConfirmSuffix)
 		}
@@ -92,6 +93,66 @@ func TestAgentPromptsRemainingContracts(t *testing.T) {
 	for _, want := range []string{"禁止 `git add -A`", "tmp.log", "临时文件", "git status"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("DefaultReviewCommitWrapUp missing %q\n%s", want, got)
+		}
+	}
+}
+
+// The confirm-time pair replaced the old per-turn dual-write contract: nothing
+// asks for a summary until the human clicked「确认并流转」, and then it is two
+// separate prompts — reconcile the products, then induce the dialogue.
+func TestConfirmTimePromptsSplitReconcileFromSummary(t *testing.T) {
+	var nilP *AgentPrompts
+	if nilP.ReviewConfirmReconcileText() != DefaultReviewConfirmReconcile {
+		t.Fatal("nil review reconcile must fall back to the default")
+	}
+	if nilP.ConfirmSummaryContractText() != DefaultConfirmSummaryContract {
+		t.Fatal("nil summary contract must fall back to the default")
+	}
+	p := &AgentPrompts{ReviewConfirmReconcile: "R", ConfirmSummaryContract: "S"}
+	if p.ReviewConfirmReconcileText() != "R" || p.ConfirmSummaryContractText() != "S" {
+		t.Fatal("confirm-time overrides")
+	}
+	// Blank overrides are the same as absent.
+	blank := &AgentPrompts{ReviewConfirmReconcile: "  ", ConfirmSummaryContract: "\n"}
+	if blank.ReviewConfirmReconcileText() != DefaultReviewConfirmReconcile ||
+		blank.ConfirmSummaryContractText() != DefaultConfirmSummaryContract {
+		t.Fatal("whitespace override must fall back to the default")
+	}
+
+	reconcile := (&AgentPrompts{}).ReviewConfirmReconcileText()
+	for _, want := range []string{"确认并流转", "完整聊天记录", "补充或修正", "不要提问"} {
+		if !strings.Contains(reconcile, want) {
+			t.Fatalf("DefaultReviewConfirmReconcile missing %q\n%s", want, reconcile)
+		}
+	}
+	// A review producer already marked its outcome in the production phase, so a
+	// stray node_complete here would leak into the next node's outcome read.
+	if !strings.Contains(reconcile, "不要调用 `node_complete`") {
+		t.Fatalf("DefaultReviewConfirmReconcile must forbid node_complete\n%s", reconcile)
+	}
+
+	summary := (&AgentPrompts{}).ConfirmSummaryContractText()
+	for _, want := range []string{"agentSummary", "完整聊天记录", "只输出一个 fenced JSON",
+		"不要调用任何工具", "不要输出 JSON 之外"} {
+		if !strings.Contains(summary, want) {
+			t.Fatalf("DefaultConfirmSummaryContract missing %q\n%s", want, summary)
+		}
+	}
+
+	// The react counterpart names no set_* tool (a react node's deliverable comes
+	// from its own contract) but must still reconcile and wrap up.
+	for _, want := range []string{"确认流转", "完整聊天记录", "补充或修正", "不要再提问"} {
+		if !strings.Contains(DefaultReactConfirmSuffix, want) {
+			t.Fatalf("DefaultReactConfirmSuffix missing %q\n%s", want, DefaultReactConfirmSuffix)
+		}
+	}
+	if strings.Contains(DefaultReactConfirmSuffix, "set_plan") {
+		t.Fatal("DefaultReactConfirmSuffix must not demand a plan a react node never writes")
+	}
+	// The retired per-turn contract must not creep back into any confirm prompt.
+	for _, p := range []string{DefaultApproveConfirmSuffix, DefaultReactConfirmSuffix, reconcile} {
+		if strings.Contains(p, "agentSummary") {
+			t.Fatalf("reconcile prompts must not carry the summary contract\n%s", p)
 		}
 	}
 }
