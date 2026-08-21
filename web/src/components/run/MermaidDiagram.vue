@@ -99,8 +99,11 @@ onBeforeUnmount(() => {
   <div class="mt-2 space-y-1.5" data-testid="plan-diagram">
     <div v-show="!failed" ref="host" class="overflow-x-auto text-txt [&_svg]:max-w-full" />
     <div v-if="failed" class="space-y-2" data-testid="plan-diagram-fallback">
-      <div class="text-[11px] text-txt3">{{ t('pages.plan.diagramFallback') }}</div>
-      <pre class="overflow-x-auto border border-line bg-base p-2 font-mono text-[11px] leading-relaxed text-txt2 whitespace-pre-wrap">{{ source }}</pre>
+      <div class="text-[11px] text-txt2" data-testid="plan-diagram-fallback-hint">{{ t('pages.plan.diagramFallback') }}</div>
+      <pre
+        class="overflow-x-auto border border-line bg-base p-2 font-mono text-[11px] leading-relaxed text-txt2 whitespace-pre-wrap"
+        data-testid="plan-diagram-fallback-source"
+      >{{ source }}</pre>
       <img
         v-if="fallbackUrl"
         :src="fallbackUrl"
