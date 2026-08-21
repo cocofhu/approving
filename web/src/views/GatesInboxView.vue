@@ -44,6 +44,7 @@ import {
   pickNextActiveAfterRemove,
 } from '@/lib/inbox/inboxActiveSelection'
 import {
+  isApproveStillStarting,
   isStartFailedRun,
   makeIncomingGhost,
   resolveIncomingApproval,
@@ -364,10 +365,68 @@ function mergeIncomingGhost(items: InboxItem[]): InboxItem[] {
     incomingGhost.value = null
     return items
   }
+  // Cold refresh / reopen with ?run= after the approval already left pending:
+  // confirm against the run before keeping a "启动中" ghost forever.
+  void confirmIncomingGhostStillNeeded(t)
   const seed = peekHomeApproveHandoff() || homeSeed.value
   const ghost = makeIncomingGhost(t, String(seed?.text || ''))
   incomingGhost.value = ghost
   return [ghost, ...items]
+}
+
+/**
+ * Drop (or fail) a client-only starting ghost when the run is no longer booting.
+ * Without this, a stale `?run=&node=` after successful flow keeps rebuilding
+ * an empty "启动中" card on every loadList.
+ */
+let incomingGhostConfirmInFlight = ''
+async function confirmIncomingGhostStillNeeded(target: { runId: string; nodeId: string }) {
+  const nodeId = target.nodeId || 'approve'
+  const key = `${target.runId}:${nodeId}`
+  // loadList / starting-poll can call this every few seconds for the same deep
+  // link; one in-flight check is enough.
+  if (incomingGhostConfirmInFlight === key) return
+  incomingGhostConfirmInFlight = key
+  try {
+    const run = await api.getRun(target.runId)
+    // A newer navigation may have re-armed a different target while we awaited.
+    const cur = incomingTarget()
+    if (!cur || `${cur.runId}:${cur.nodeId || 'approve'}` !== key) return
+    if (isStartFailedRun(run, nodeId)) {
+      const ghost =
+        incomingGhost.value && itemKey(incomingGhost.value) === key
+          ? incomingGhost.value
+          : makeIncomingGhost(target, String((peekHomeApproveHandoff() || homeSeed.value)?.text || ''))
+      incomingArmed.value = false
+      incomingGhost.value = null
+      queryWaitGen++
+      await confirmStartingVanished(ghost)
+      return
+    }
+    if (isApproveStillStarting(run, nodeId)) return
+    incomingArmed.value = false
+    incomingGhost.value = null
+    queryWaitGen++ // stop waitForQueryItem from polling a dead deep link
+    if (listItems.value.some((it) => itemKey(it) === key)) {
+      const prevList = listItems.value.slice()
+      listItems.value = listItems.value.filter((it) => itemKey(it) !== key)
+      if (active.value && itemKey(active.value) === key) {
+        closeActiveRunWs()
+        activeRun.value = null
+        activeRunLoadError.value = false
+        selectActiveAfterRemove(prevList, key)
+      }
+    } else if (active.value && itemKey(active.value) === key) {
+      closeActiveRunWs()
+      activeRun.value = null
+      activeRunLoadError.value = false
+      active.value = listItems.value[0] || null
+    }
+  } catch {
+    // Transient getRun failure: keep the ghost; the starting poll / next load retries.
+  } finally {
+    if (incomingGhostConfirmInFlight === key) incomingGhostConfirmInFlight = ''
+  }
 }
 
 function seedIncomingIfNeeded() {

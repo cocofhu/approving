@@ -218,6 +218,7 @@ beforeEach(async () => {
   if (filterState.pipelineSelected) filterState.pipelineSelected.value = ''
   if (filterState.projectSelected) filterState.projectSelected.value = ''
   mocks.listGates.mockResolvedValue(paged([]))
+  mocks.getRun.mockResolvedValue({ id: 'run-unknown', status: 'running' })
   await usePendingGates().refresh({ mode: 'force' })
 })
 
@@ -325,6 +326,12 @@ describe('GatesInboxView starting approvals', () => {
     setHomeApproveHandoff({ runId: 'run-boot', nodeId: 'ap', text: '把登录做清楚', images: [] })
     mocks.listGates.mockResolvedValue(paged([parkedItem()]))
     mocks.inboxContext.mockResolvedValue(parkedContext)
+    // Still-booting getRun must not fight the parked row; completed comes after leave.
+    mocks.getRun.mockResolvedValue({
+      id: 'run-boot',
+      status: 'waiting_human',
+      nodeRuns: { ap: { nodeId: 'ap', status: 'waiting_human' } },
+    })
     const wrapper = mountInbox()
     await flushPromises()
     await nextTick()
@@ -335,14 +342,92 @@ describe('GatesInboxView starting approvals', () => {
     // still point at it, but that must not resurrect a "starting" ghost.
     mocks.listGates.mockResolvedValue(paged([]))
     mocks.inboxContext.mockRejectedValue(new Error('no pending inbox item'))
-    mocks.getRun.mockResolvedValue({ id: 'run-boot', status: 'completed' })
+    mocks.getRun.mockResolvedValue({
+      id: 'run-boot',
+      status: 'completed',
+      nodeRuns: { ap: { nodeId: 'ap', status: 'completed' } },
+    })
     filterState.projectSelected!.value = 'proj-x'
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+    await vi.waitFor(() => {
+      expect(wrapper.find('[data-testid="inbox-item-card"]').exists()).toBe(false)
+    })
+    expect(wrapper.find('[data-testid="inbox-boot-loader"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('drops a cold-open ghost when ?run= points at an approval that already moved on', async () => {
+    // Reopen / refresh with the deep link after approve already completed and
+    // implement is running: pending list is empty, but that must not leave a
+    // permanent "…" / 启动中 ghost.
+    routeState.query = { run: 'run-f66f29e4', node: 'approve_7gl6' }
+    mocks.listGates.mockResolvedValue(paged([]))
+    mocks.getRun.mockResolvedValue({
+      id: 'run-f66f29e4',
+      status: 'running',
+      nodes: [
+        { id: 'in', type: 'input' },
+        { id: 'approve_7gl6', type: 'approve' },
+        { id: 'implement_qnlc', type: 'implement' },
+      ],
+      nodeRuns: {
+        approve_7gl6: { nodeId: 'approve_7gl6', status: 'completed' },
+        implement_qnlc: { nodeId: 'implement_qnlc', status: 'running' },
+      },
+    })
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    expect(mocks.getRun).toHaveBeenCalledWith('run-f66f29e4')
+    expect(wrapper.find('[data-testid="inbox-item-card"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="inbox-boot-loader"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('drops a cold-open ghost when the query node id is the published hint, not the runtime id', async () => {
+    routeState.query = { run: 'run-f66f29e4', node: 'ap' }
+    mocks.listGates.mockResolvedValue(paged([]))
+    mocks.getRun.mockResolvedValue({
+      id: 'run-f66f29e4',
+      status: 'running',
+      nodes: [
+        { id: 'in', type: 'input' },
+        { id: 'approve_7gl6', type: 'approve' },
+        { id: 'implement_qnlc', type: 'implement' },
+      ],
+      nodeRuns: {
+        approve_7gl6: { nodeId: 'approve_7gl6', status: 'completed' },
+        implement_qnlc: { nodeId: 'implement_qnlc', status: 'running' },
+      },
+    })
+    const wrapper = mountInbox()
     await flushPromises()
     await nextTick()
     await flushPromises()
 
     expect(wrapper.find('[data-testid="inbox-item-card"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="inbox-boot-loader"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('keeps a cold-open ghost while getRun still says the approve node is booting', async () => {
+    routeState.query = { run: 'run-boot', node: 'ap' }
+    mocks.listGates.mockResolvedValue(paged([]))
+    mocks.getRun.mockResolvedValue({
+      id: 'run-boot',
+      status: 'running',
+      nodeRuns: { ap: { nodeId: 'ap', status: 'running' } },
+    })
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="inbox-item-card"]').attributes('data-starting')).toBe('true')
+    expect(wrapper.find('[data-testid="inbox-boot-loader"]').exists()).toBe(true)
     wrapper.unmount()
   })
 

@@ -48,16 +48,80 @@ export function makeIncomingGhost(
  * A clarify/approve sandbox-setup failure records the failure on the node
  * execution and stops the run *without* marking the run terminal, so run status
  * alone would miss exactly the case this has to detect. A whole-run failure or
- * cancel still counts, and an unknown node id falls back to run status so a
- * guessed id cannot invent a failure.
+ * cancel still counts. When the hinted node id misses, fall back to Approve
+ * nodes on `run.nodes` so `ap` vs `approve_7gl6` cannot hide a setup failure.
  */
 export function isStartFailedRun(
-  run: Pick<Run, 'status'> & { nodeRuns?: Run['nodeRuns'] },
+  run: Pick<Run, 'status'> & { nodeRuns?: Run['nodeRuns']; nodes?: Run['nodes'] },
   nodeId: string,
 ): boolean {
   if (run.status === 'failed' || run.status === 'cancelled') return true
   const nodeStatus = nodeId ? run.nodeRuns?.[nodeId]?.status : undefined
-  return nodeStatus === 'failed' || nodeStatus === 'cancelled'
+  if (nodeStatus === 'failed' || nodeStatus === 'cancelled') return true
+  if (nodeStatus !== undefined) return false
+
+  const approveIds = (run.nodes || []).filter((n) => n.type === 'approve').map((n) => n.id)
+  for (const id of approveIds) {
+    const st = run.nodeRuns?.[id]?.status
+    if (st === 'failed' || st === 'cancelled') return true
+  }
+  return false
+}
+
+const leftBootStatuses = new Set(['waiting_human', 'completed', 'failed', 'cancelled'])
+
+function nodeRunStatus(
+  run: { nodeRuns?: Run['nodeRuns'] },
+  nodeId: string,
+): string | undefined {
+  return nodeId ? run.nodeRuns?.[nodeId]?.status : undefined
+}
+
+/**
+ * Whether an incoming ghost may still represent a live sandbox boot.
+ *
+ * Used when `?run=&node=` (or a home handoff) would rebuild a starting card
+ * even though the run is absent from the pending list — e.g. cold refresh after
+ * the approval already parked, completed, or moved on.
+ *
+ * `nodeId` is only a hint (`ap` vs `approve_7gl6` may differ). Prefer that
+ * node's status when present; otherwise consult approve nodes from `run.nodes`
+ * so a completed input + still-booting approve is not mistaken for "already
+ * moved on", and a completed approve + running implement still drops the ghost.
+ */
+export function isApproveStillStarting(
+  run: Pick<Run, 'status'> & { nodeRuns?: Run['nodeRuns']; nodes?: Run['nodes'] },
+  nodeId: string,
+): boolean {
+  if (run.status === 'failed' || run.status === 'cancelled' || run.status === 'completed') {
+    return false
+  }
+
+  const hinted = nodeRunStatus(run, nodeId)
+  if (hinted) {
+    if (leftBootStatuses.has(hinted)) return false
+    if (hinted === 'running') return true
+  }
+
+  const approveIds = (run.nodes || []).filter((n) => n.type === 'approve').map((n) => n.id)
+  if (approveIds.length > 0) {
+    let sawApprove = false
+    for (const id of approveIds) {
+      const st = nodeRunStatus(run, id)
+      if (!st) continue
+      sawApprove = true
+      if (st === 'running') return true
+      if (leftBootStatuses.has(st)) return false
+    }
+    // Graph has Approve, but no StateRun yet — still launching.
+    if (!sawApprove) return run.status === 'queued' || run.status === 'running'
+    return false
+  }
+
+  // No graph: only keep the ghost before any node has parked or finished.
+  const runs = Object.values(run.nodeRuns || {})
+  if (runs.some((n) => n?.status && leftBootStatuses.has(n.status))) return false
+  return run.status === 'queued' || run.status === 'running'
 }
 
 /**
