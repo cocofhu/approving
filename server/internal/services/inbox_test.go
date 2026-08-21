@@ -36,6 +36,9 @@ func TestAllPendingInboxItems(t *testing.T) {
 		RunID: "run-gate", NodeID: "gate-proposal", WorkflowID: "wf1", WorkflowName: "API 重构",
 		Title: "方案评审门禁", Resolved: false, RequestedAt: gateAt,
 	})
+	db.Create(&models.StateRun{
+		RunID: "run-gate", NodeID: "gate-proposal", Iteration: 0, Status: "waiting_human",
+	})
 
 	db.Create(&models.Run{
 		ID: "run-clarify", WorkflowID: "wf2", WorkflowName: "功能迭代工作流",
@@ -118,10 +121,12 @@ func TestPendingInboxItemsIncludesGateNodeType(t *testing.T) {
 		RunID: "run-nt", NodeID: "hg1", WorkflowID: "wf-nt", WorkflowName: "NT",
 		Title: "人审", Resolved: false, RequestedAt: now.Add(-time.Minute),
 	})
+	db.Create(&models.StateRun{RunID: "run-nt", NodeID: "hg1", Iteration: 0, Status: "waiting_human"})
 	db.Create(&models.Gate{
 		RunID: "run-nt", NodeID: "ps1", WorkflowID: "wf-nt", WorkflowName: "NT",
 		Title: "方案选择", Resolved: false, RequestedAt: now,
 	})
+	db.Create(&models.StateRun{RunID: "run-nt", NodeID: "ps1", Iteration: 0, Status: "waiting_human"})
 	items := s.AllPendingInboxItems()
 	if len(items) != 2 {
 		t.Fatalf("expected 2 gates, got %d", len(items))
@@ -151,6 +156,9 @@ func TestPendingInboxItemsOmitsEmptyRunTitle(t *testing.T) {
 	db.Create(&models.Gate{
 		RunID: "run-empty-title", NodeID: "gate-proposal", WorkflowID: "wf1", WorkflowName: "API 重构",
 		Title: "方案评审门禁", Resolved: false, RequestedAt: now,
+	})
+	db.Create(&models.StateRun{
+		RunID: "run-empty-title", NodeID: "gate-proposal", Iteration: 0, Status: "waiting_human",
 	})
 
 	items := s.AllPendingInboxItems()
@@ -271,6 +279,7 @@ func TestPendingInboxItemsFilterByTags(t *testing.T) {
 		RunID: "run-gate-both", NodeID: "gate", WorkflowID: "wf1", WorkflowName: "API 重构",
 		Title: "评审", Resolved: false, RequestedAt: now,
 	})
+	db.Create(&models.StateRun{RunID: "run-gate-both", NodeID: "gate", Iteration: 0, Status: "waiting_human"})
 	db.Create(&models.Run{
 		ID: "run-gate-one", WorkflowID: "wf1", WorkflowName: "API 重构",
 		Title: "单标签", Status: "waiting_human", StartedAt: now.Add(-time.Minute), Graph: validGraph(), Tags: []string{"bugfix"},
@@ -279,6 +288,7 @@ func TestPendingInboxItemsFilterByTags(t *testing.T) {
 		RunID: "run-gate-one", NodeID: "gate", WorkflowID: "wf1", WorkflowName: "API 重构",
 		Title: "评审", Resolved: false, RequestedAt: now.Add(-time.Minute),
 	})
+	db.Create(&models.StateRun{RunID: "run-gate-one", NodeID: "gate", Iteration: 0, Status: "waiting_human"})
 
 	items, total := s.PendingInboxItems("", "", []string{"bugfix", "spike"}, 0, 0)
 	if total != 1 || len(items) != 1 {
@@ -394,6 +404,9 @@ func TestPendingInboxIncludesAppPreview(t *testing.T) {
 		RunID: "run-gate", NodeID: "gate-proposal", WorkflowID: "wf1", WorkflowName: "门禁工作流",
 		Title: "方案评审门禁", Resolved: false, RequestedAt: gateAt,
 	})
+	db.Create(&models.StateRun{
+		RunID: "run-gate", NodeID: "gate-proposal", Iteration: 0, Status: "waiting_human",
+	})
 
 	items = s.AllPendingInboxItems()
 	if len(items) != 2 {
@@ -434,6 +447,137 @@ func TestPendingInboxIncludesAppPreview(t *testing.T) {
 		if c, ok := it.(ClarifyInboxItem); ok && c.Kind == "app_preview" {
 			t.Fatalf("done app_preview must leave inbox, got %#v", c)
 		}
+	}
+}
+
+// TestPendingInboxExcludesTransferred covers g1.2/g1.3/g2.1/g2.2: after a node
+// leaves waiting_human (or conversation is Done), refresh/reopen must not see
+// the item; total matches the filtered list; still-pending peers remain.
+func TestPendingInboxExcludesTransferred(t *testing.T) {
+	db := newTestDB(t)
+	s := NewRunService(db)
+	now := time.Now()
+
+	// Still-pending gate (must remain).
+	db.Create(&models.Run{
+		ID: "run-gate-live", WorkflowID: "wf1", WorkflowName: "W",
+		Title: "仍待门禁", Status: "waiting_human", StartedAt: now.Add(-time.Hour), Graph: validGraph(),
+	})
+	db.Create(&models.Gate{
+		RunID: "run-gate-live", NodeID: "gate-proposal", WorkflowID: "wf1", WorkflowName: "W",
+		Title: "方案评审门禁", Resolved: false, RequestedAt: now.Add(-30 * time.Minute),
+	})
+	db.Create(&models.StateRun{
+		RunID: "run-gate-live", NodeID: "gate-proposal", Iteration: 0, Status: "waiting_human",
+	})
+
+	// Dangling unresolved gate: node already left waiting_human (transferred).
+	db.Create(&models.Run{
+		ID: "run-gate-gone", WorkflowID: "wf1", WorkflowName: "W",
+		Title: "已流转门禁", Status: "running", StartedAt: now.Add(-2 * time.Hour), Graph: validGraph(),
+	})
+	db.Create(&models.Gate{
+		RunID: "run-gate-gone", NodeID: "gate-proposal", WorkflowID: "wf1", WorkflowName: "W",
+		Title: "残留门禁", Resolved: false, RequestedAt: now.Add(-90 * time.Minute),
+	})
+	db.Create(&models.StateRun{
+		RunID: "run-gate-gone", NodeID: "gate-proposal", Iteration: 0, Status: "completed",
+	})
+
+	// Still-pending clarify (must remain).
+	db.Create(&models.Run{
+		ID: "run-clarify-live", WorkflowID: "wf2", WorkflowName: "C",
+		Title: "仍待澄清", Status: "waiting_human", StartedAt: now.Add(-20 * time.Minute), Graph: reactGraph(""),
+	})
+	db.Create(&models.ReactConversation{
+		RunID: "run-clarify-live", NodeID: "react", Iteration: 1, Done: false,
+		Messages: []models.ReactMessage{{Role: "agent", Text: "q", At: now.Add(-5 * time.Minute).Format(time.RFC3339)}},
+	})
+	db.Create(&models.StateRun{
+		RunID: "run-clarify-live", NodeID: "react", Iteration: 1, Status: "waiting_human",
+	})
+
+	// Approve transferred: Done=true after confirm (refresh must not resurface).
+	db.Create(&models.Run{
+		ID: "run-approve-gone", WorkflowID: "wf3", WorkflowName: "A",
+		Title: "已流转 Approve", Status: "running", StartedAt: now.Add(-40 * time.Minute),
+		Graph: reviewCapableGraph("approve", "Approve"),
+	})
+	db.Create(&models.ReactConversation{
+		RunID: "run-approve-gone", NodeID: "approve", Iteration: 1, Done: true,
+		Messages: []models.ReactMessage{{Role: "agent", Text: "done", At: now.Add(-10 * time.Minute).Format(time.RFC3339)}},
+	})
+	db.Create(&models.StateRun{
+		RunID: "run-approve-gone", NodeID: "approve", Iteration: 1, Status: "running",
+	})
+
+	// App preview transferred via Done.
+	db.Create(&models.Run{
+		ID: "run-preview-gone", WorkflowID: "wf4", WorkflowName: "P",
+		Title: "已流转预览", Status: "running", StartedAt: now.Add(-50 * time.Minute),
+		Graph: reviewCapableGraph("app_preview", "应用预览"),
+	})
+	db.Create(&models.ReactConversation{
+		RunID: "run-preview-gone", NodeID: "app_preview", Iteration: 1, Done: true,
+		Messages: []models.ReactMessage{{Role: "agent", Text: "ok", At: now.Add(-8 * time.Minute).Format(time.RFC3339)}},
+	})
+	db.Create(&models.StateRun{
+		RunID: "run-preview-gone", NodeID: "app_preview", Iteration: 1, Status: "completed",
+	})
+
+	// Review-kind transferred: conversation Done but stale waiting_human row.
+	db.Create(&models.Run{
+		ID: "run-review-gone", WorkflowID: "wf5", WorkflowName: "R",
+		Title: "已流转评审", Status: "waiting_human", StartedAt: now.Add(-15 * time.Minute),
+		Graph: reviewCapableGraph("research", "调研"),
+	})
+	db.Create(&models.ReactConversation{
+		RunID: "run-review-gone", NodeID: "research", Iteration: 1, Done: true,
+		Messages: []models.ReactMessage{{Role: "agent", Text: "shipped", At: now.Add(-3 * time.Minute).Format(time.RFC3339)}},
+	})
+	db.Create(&models.StateRun{
+		RunID: "run-review-gone", NodeID: "research", Iteration: 1, Status: "waiting_human",
+	})
+
+	items, total := s.PendingInboxItems("", "", nil, 0, 0)
+	if total != 2 || len(items) != 2 {
+		t.Fatalf("expected 2 live items (gate+clarify), total=%d len=%d items=%#v", total, len(items), items)
+	}
+	if total != len(items) {
+		t.Fatalf("count/list mismatch: total=%d len=%d", total, len(items))
+	}
+
+	seen := map[string]bool{}
+	for _, it := range items {
+		switch v := it.(type) {
+		case GateInboxItem:
+			seen[v.RunID] = true
+			if v.RunID == "run-gate-gone" {
+				t.Fatalf("transferred gate must not appear: %#v", v)
+			}
+		case ClarifyInboxItem:
+			seen[v.RunID] = true
+			switch v.RunID {
+			case "run-approve-gone", "run-preview-gone", "run-review-gone":
+				t.Fatalf("transferred %s must not appear: %#v", v.Kind, v)
+			}
+		default:
+			t.Fatalf("unexpected item type %T", it)
+		}
+	}
+	if !seen["run-gate-live"] || !seen["run-clarify-live"] {
+		t.Fatalf("live pending peers missing: %#v", seen)
+	}
+
+	// Context helpers must agree with list eligibility (reopen path).
+	if kind, ok := s.InboxContextKind("run-gate-gone", "gate-proposal", 0); ok {
+		t.Fatalf("transferred gate context must be empty, got %q", kind)
+	}
+	if _, ok := s.PendingGateAt("run-gate-gone", "gate-proposal", 0); ok {
+		t.Fatal("PendingGateAt must exclude transferred gate")
+	}
+	if kind, ok := s.InboxContextKind("run-gate-live", "gate-proposal", 0); !ok || kind != "gate" {
+		t.Fatalf("live gate context: %q %v", kind, ok)
 	}
 }
 

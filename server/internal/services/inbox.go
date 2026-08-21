@@ -13,6 +13,16 @@ import (
 
 var terminalRunStatuses = []string{"completed", "failed", "cancelled"}
 
+// pendingGateScope restricts to unresolved gates whose node is still
+// waiting_human on a non-terminal run. Dangling unresolved rows after the node
+// left waiting must not re-enter the approvals inbox or context.
+func pendingGateScope(db *gorm.DB) *gorm.DB {
+	return db.Joins("JOIN runs ON runs.id = gates.run_id").
+		Joins("JOIN state_runs ON state_runs.run_id = gates.run_id AND state_runs.node_id = gates.node_id AND state_runs.iteration = gates.iteration").
+		Where("gates.resolved = ? AND state_runs.status = ? AND runs.status NOT IN ?",
+			false, "waiting_human", terminalRunStatuses)
+}
+
 // reactAutoEnabled reports whether a react node should self-answer without
 // waiting for a human (mirrors engine.autoReactEnabled).
 func reactAutoEnabled(node *models.Node, vars map[string]any) bool {
@@ -271,8 +281,7 @@ func (s *RunService) runMetaByIDs(runIDs []string) map[string]runInboxMeta {
 }
 
 func (s *RunService) pendingGatesFiltered(wf, projectID string, tags []string) []models.Gate {
-	q := s.db.Joins("JOIN runs ON runs.id = gates.run_id").
-		Where("gates.resolved = ? AND runs.status NOT IN ?", false, terminalRunStatuses)
+	q := pendingGateScope(s.db)
 	if wf != "" {
 		q = q.Where("runs.workflow_id = ?", wf)
 	} else if projectID != "" {

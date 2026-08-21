@@ -475,6 +475,12 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 		Images: images, Annotations: annotations})
 	logDB(e.db.Save(&conv), runID, "save react human turn")
 
+	// Leave the pending inbox immediately (mirrors ResumeGate resolving before
+	// slow work): refresh/reopen must not resurface this item while wrap-up runs.
+	// Roll back Done when the agent stays open (questions / unfinished).
+	conv.Done = true
+	logDB(e.db.Save(&conv), runID, "confirm leave pending (force)")
+
 	req := e.nodeReq(c, node)
 	t := e.provider.ReactReply(context.Background(), req, conv.Messages, effective, images, force)
 	conv.Messages = append(conv.Messages, models.ReactMessage{Role: "agent", Text: t.Msg,
@@ -489,17 +495,17 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 	}
 
 	if !t.Done {
-		logDB(e.db.Save(&conv), runID, "save react conversation")
+		conv.Done = false
+		logDB(e.db.Save(&conv), runID, "reopen react after force stay-open")
 		// Persist this turn's MCP tool calls now (the node stays paused without a
 		// saveState) so the timeline reflects every react round, not just the
 		// opening one.
 		e.flushMcpCalls(runID, nodeID)
 		e.flushTokenUsage(runID, nodeID, t.Usage, t.UsageByModel)
 		e.broker.Publish(runID, jsonMsg("react", runID, nodeID))
-		return nil
+		return errors.New("仍有待确认问题或收尾未完成，无法确认并流转")
 	}
 
-	conv.Done = true
 	logDB(e.db.Save(&conv), runID, "finish react conversation")
 
 	if t.Err != nil {

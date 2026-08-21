@@ -434,7 +434,10 @@ func TestRunService(t *testing.T) {
 
 	// Gates.
 	db.Create(&models.Gate{RunID: "r1", NodeID: "g1", Resolved: false, RequestedAt: now})
+	db.Create(&models.StateRun{RunID: "r1", NodeID: "g1", Iteration: 0, Status: "waiting_human"})
 	db.Create(&models.Gate{RunID: "r2", NodeID: "g2", Resolved: false, RequestedAt: now.Add(time.Second)})
+	// r2 is completed — dangling unresolved gate must not enter the inbox even
+	// if a stale waiting_human StateRun were present; terminal run excludes it.
 	if g, ok := s.PendingGate("r1"); !ok || g.NodeID != "g1" {
 		t.Fatalf("pending gate: %+v %v", g, ok)
 	}
@@ -445,6 +448,16 @@ func TestRunService(t *testing.T) {
 	// excluded from the inbox.
 	if len(s.AllPendingGates()) != 1 {
 		t.Fatal("all pending gates")
+	}
+	// Live run with unresolved gate but node already left waiting_human.
+	db.Create(&models.Run{ID: "r3", Status: "running", StartedAt: now, CreatedAt: now})
+	db.Create(&models.Gate{RunID: "r3", NodeID: "g3", Resolved: false, RequestedAt: now.Add(2 * time.Second)})
+	db.Create(&models.StateRun{RunID: "r3", NodeID: "g3", Iteration: 0, Status: "completed"})
+	if _, ok := s.PendingGate("r3"); ok {
+		t.Fatal("transferred node gate must not be pending")
+	}
+	if len(s.AllPendingGates()) != 1 {
+		t.Fatal("transferred gate must stay out of AllPendingGates")
 	}
 
 	// Conversations: active (done=false) preferred.
