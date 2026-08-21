@@ -149,10 +149,10 @@ type ReactTurn struct {
 	Done      bool
 	Result    NodeResult        // populated when Done (outputs/git)
 	Events    []models.AcpEvent // this turn's event log (live/persisted timeline)
-	// AgentSummary is an optional induction of this round's human feedback,
-	// parsed from the dual-write turn output. Distinct from Msg (transcript
-	// narration). Empty means the model omitted it — callers must not fall
-	// back to FeedbackSummary / first line / bubble text.
+	// AgentSummary is the induction of the whole human dialogue, produced by
+	// the hidden summary turn that only runs on「确认并流转」. Distinct from Msg
+	// (transcript narration) and empty on every ordinary ReAct turn — callers
+	// must not fall back to FeedbackSummary / first line / bubble text.
 	AgentSummary string
 	// Usage is this provider call's token delta (open/reply/finish chats).
 	// Engine adds it onto the StateRun so mid-turn pauses still surface usage.
@@ -199,6 +199,14 @@ type ReviewProvider interface {
 	// committed working branches. Best-effort: never fails the confirm.
 	// Msg is non-empty only when the agent was actually asked to decide.
 	OfferCommitOnConfirm(ctx context.Context, req NodeReq) ReactTurn
+	// ReconcileOnConfirm runs the confirm-time pair on the parked session: one
+	// visible turn asking the agent to reconcile its structured products with
+	// the whole transcript, then a hidden turn inducing that transcript into
+	// AgentSummary for the feedback ledger. Msg is the reconcile narration.
+	// Best-effort: a dead session or failed chat returns an empty turn rather
+	// than failing the confirm. Approve/clarify get the same pair inside
+	// ReactReply(force=true).
+	ReconcileOnConfirm(ctx context.Context, req NodeReq) ReactTurn
 	// HasLiveSession reports whether a parked session is currently held for
 	// (runID, nodeID) — used to decide whether an approval gate can offer the
 	// ReAct reject entry (upstream session still alive).

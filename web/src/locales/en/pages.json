@@ -3112,7 +3112,7 @@
         "transcript": "Dialogue this round",
         "priorRounds": "Earlier rounds",
         "agentSummary": "Agent summary",
-        "agentSummaryTag": "Summary of feedback",
+        "agentSummaryTag": "Induced from the dialogue at hand-off",
         "fullText": "Full text",
         "roleHuman": "Human",
         "roleAgent": "Agent",

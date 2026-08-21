@@ -107,6 +107,23 @@ func TestOfferCommitOnConfirmNoSessionOrNonRepoNode(t *testing.T) {
 	}
 }
 
+func TestReconcileOnConfirmWithoutSessionIsNoOp(t *testing.T) {
+	host := mcp.NewHost(newMemStore())
+	p := newACPProvider(host, Options{}).(*acpProvider)
+	req := NodeReq{RunID: "r", NodeID: "n", NodeType: "proposal"}
+	if turn := p.ReconcileOnConfirm(context.Background(), req); turn.Msg != "" || turn.AgentSummary != "" {
+		t.Fatalf("no session: %+v", turn)
+	}
+	// A parked session whose ACP died must not chat either.
+	p.sessions[reactKey(req)] = &reactSession{sb: &sandbox.Sandbox{Name: "sb"}}
+	if turn := p.ReconcileOnConfirm(context.Background(), req); turn.Msg != "" {
+		t.Fatalf("disconnected ACP: %+v", turn)
+	}
+	if got := p.confirmSummaryTurn(context.Background(), req, nil, nil, nil, nil); got != "" {
+		t.Fatalf("nil session must yield no summary, got %q", got)
+	}
+}
+
 func dirtyGitReport() string {
 	return strings.Join([]string{
 		"VCS\tgit",

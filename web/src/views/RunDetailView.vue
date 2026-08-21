@@ -1702,6 +1702,7 @@ function selectExecution(nodeId: string, idx: number) {
               v-model:attachments="clarifyAttachments"
               v-model:annotations="clarifyAnnotations"
               :input-active="clarifyInputActive"
+              :confirm-error="clarifyConfirmError"
               :sel-status="selStatus"
               @send="onClarifySend"
               @finish="onClarifyFinish"

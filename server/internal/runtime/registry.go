@@ -113,6 +113,17 @@ func (r *ProviderRegistry) OfferCommitOnConfirm(ctx context.Context, req NodeReq
 	return rp.OfferCommitOnConfirm(ctx, req)
 }
 
+// ReconcileOnConfirm forwards the confirm-time reconcile + summary pair to the
+// backend that owns the parked session (same routing as OfferCommitOnConfirm).
+func (r *ProviderRegistry) ReconcileOnConfirm(ctx context.Context, req NodeReq) ReactTurn {
+	p := r.providerFor(req)
+	rp, ok := p.(ReviewProvider)
+	if !ok {
+		return ReactTurn{}
+	}
+	return rp.ReconcileOnConfirm(ctx, req)
+}
+
 // HasLiveSession reports whether any backend holds a parked review session for
 // (runID, nodeID). Sessions are parked on the backend that ran the producer, so
 // we fan out like LiveNodeEvents.

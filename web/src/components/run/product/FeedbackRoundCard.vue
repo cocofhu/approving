@@ -47,7 +47,11 @@ export type FeedbackRoundDoc = {
   summary?: string
   roundCount?: number
   latestRound?: number
-  /** Agent-authored induction for this round; absent on legacy / no-summary rounds. */
+  /**
+   * Agent-authored induction of the whole dialogue, produced once at
+   * 「确认并流转」. Absent on legacy rounds and whenever the summary turn was
+   * skipped or unparseable.
+   */
   agentSummary?: string
   feedback?: {
     text?: string

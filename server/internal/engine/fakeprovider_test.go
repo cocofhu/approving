@@ -115,9 +115,19 @@ type fakeProvider struct {
 	wrapUpCalls       map[string]int
 	wrapUpAfterRetire bool
 	wrapUpMsg         string
+	// reconcileCalls counts ReconcileOnConfirm per node id; wrapUpBeforeReconcile
+	// is set if the git wrap-up ran first (ordering bug: reconcile must land the
+	// product edits before anything is committed).
+	reconcileCalls        map[string]int
+	wrapUpBeforeReconcile bool
+	reconcileMsg          string
+	reconcileSummary      string
 	// reactReplyCalls counts ReactReply invocations per node id (assert review
 	// force no longer routes through Agent wrap-up).
 	reactReplyCalls map[string]int
+	// reactConfirmSummary (test-only): the AgentSummary a force ReactReply
+	// returns, standing in for the real provider's hidden summary turn.
+	reactConfirmSummary string
 	// reviseErr (test-only): when set, ReviseInPlace returns this error (and
 	// optionally skips writing products when reviseSkipWrite is true).
 	reviseErr       error
@@ -517,7 +527,15 @@ func (f *fakeProvider) ReactReply(ctx context.Context, req runtime.NodeReq, hist
 		return runtime.ReactTurn{Msg: "信息已充分。", Done: false, Result: runtime.NodeResult{OutputMd: content, Outputs: out}}
 	}
 	f.emitOutcome(req, nil)
-	return runtime.ReactTurn{Msg: "信息已充分。", Done: true, Result: runtime.NodeResult{OutputMd: content, Outputs: out}}
+	turn := runtime.ReactTurn{Msg: "信息已充分。", Done: true,
+		Result: runtime.NodeResult{OutputMd: content, Outputs: out}}
+	if force {
+		// Only the confirm turn runs the hidden summary turn.
+		f.mu.Lock()
+		turn.AgentSummary = f.reactConfirmSummary
+		f.mu.Unlock()
+	}
+	return turn
 }
 
 // --- runtime.ReviewProvider (post-run ReAct review phase) --------------------
@@ -577,11 +595,32 @@ func (f *fakeProvider) OfferCommitOnConfirm(ctx context.Context, req runtime.Nod
 	if f.retired[f.parkKey(req.RunID, req.NodeID)] {
 		f.wrapUpAfterRetire = true
 	}
+	if f.reconcileCalls[req.NodeID] == 0 {
+		f.wrapUpBeforeReconcile = true
+	}
 	if f.wrapUpCalls == nil {
 		f.wrapUpCalls = map[string]int{}
 	}
 	f.wrapUpCalls[req.NodeID]++
 	return runtime.ReactTurn{Msg: f.wrapUpMsg}
+}
+
+// ReconcileOnConfirm mirrors the real provider's confirm-time pair: it reports a
+// narration for the transcript plus the AgentSummary the hidden summary turn
+// produced, and (like the real reconcile) may rewrite the structured product.
+func (f *fakeProvider) ReconcileOnConfirm(ctx context.Context, req runtime.NodeReq) runtime.ReactTurn {
+	f.mu.Lock()
+	if f.reconcileCalls == nil {
+		f.reconcileCalls = map[string]int{}
+	}
+	f.reconcileCalls[req.NodeID]++
+	msg, summary := f.reconcileMsg, f.reconcileSummary
+	f.mu.Unlock()
+	if msg == "" {
+		msg = "已按聊天记录核对产物。"
+	}
+	return runtime.ReactTurn{Msg: msg, AgentSummary: summary,
+		Events: []models.AcpEvent{{Kind: "message", Text: "confirm-reconcile"}}}
 }
 
 func (f *fakeProvider) HasLiveSession(runID, nodeID string) bool {

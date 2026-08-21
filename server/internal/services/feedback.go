@@ -249,6 +249,12 @@ func MarshalFeedbackSummaryJSON(events []models.FeedbackEvent, runID string, nod
 		"index":       FeedbackIndexArtifactName,
 		"summary":     "截至第" + fmt.Sprint(latest.Round) + "轮的归纳结论：" + strings.Join(conclusions, "；"),
 	}
+	// The confirm round is the only one that carries an AgentSummary, and it is
+	// the last event of the execution — so the latest non-empty one is the
+	// induction of the whole dialogue, shown as the card's「Agent 总结」.
+	if s := latestAgentSummary(events); s != "" {
+		payload["agentSummary"] = s
+	}
 	if latest.Interrupted {
 		payload["interrupted"] = true
 	}
@@ -267,6 +273,18 @@ func MarshalFeedbackSummaryJSON(events []models.FeedbackEvent, runID string, nod
 		return "", err
 	}
 	return string(b), nil
+}
+
+// latestAgentSummary returns the newest Agent-authored induction in the chain.
+// It scans backwards rather than reading only the last event so an interrupted
+// or index-only round appended after the confirm turn cannot hide the summary.
+func latestAgentSummary(events []models.FeedbackEvent) string {
+	for i := len(events) - 1; i >= 0; i-- {
+		if s := strings.TrimSpace(events[i].AgentSummary); s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 // NodeRef carries the display metadata for the node a round belongs to.

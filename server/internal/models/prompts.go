@@ -85,6 +85,13 @@ type AgentPrompts struct {
 	// ReviewCommitWrapUp is sent on ReAct「确认并流转」when the parked sandbox
 	// still has uncommitted working-tree changes. Supports `{files}`.
 	ReviewCommitWrapUp string `json:"reviewCommitWrapUp,omitempty"`
+	// ReviewConfirmReconcile is sent to a review-capable producer on
+	// 「确认并流转」: reconcile the structured products against the transcript
+	// before the node advances. Approve uses ApproveConfirmSuffix instead.
+	ReviewConfirmReconcile string `json:"reviewConfirmReconcile,omitempty"`
+	// ConfirmSummaryContract is the hidden summary turn sent right after the
+	// reconcile turn: induce the whole dialogue into one JSON agentSummary.
+	ConfirmSummaryContract string `json:"confirmSummaryContract,omitempty"`
 }
 
 // Built-in default prompt fragments. These are the exact strings the platform
@@ -95,9 +102,15 @@ const (
 	DefaultProducesContract        = "\n## 产物契约(强制)\n完成前必须在工作目录(/root/workspace)写出文件 `{name}`,这是本节点的强制产物;未写出将判定为失败。\n"
 	DefaultReactOpenSuffix         = "\n\n这是一次多轮澄清对话:先提出需要澄清的关键问题,等待我的回复后再继续,不要一次性给出最终结论。"
 	DefaultApproveOpenSuffix       = "\n\n这是一次多轮 ReAct 对话:用户已发出目标,请用手上的工具阅读仓库/产物、对齐需求并写入澄清与计划。只有存在真实分歧、需要用户拍板时才调用 ask_question;禁止编造空泛开场选择题(例如「修缺陷/新功能/重构」这类为问而问)。信息充分时写入 set_* 产物并等待用户确认并流转;未点「确认并流转」前禁止 node_complete。"
+	// DefaultReactConfirmSuffix is injected on classic react clarify force
+	// (「确认并流转」/「结束澄清」) turns. It names no specific set_* tool because a
+	// react node's deliverable comes from its own contract; the shared clause is
+	// reconciling products against the transcript before wrapping up.
+	DefaultReactConfirmSuffix = "【确认流转】用户已点击确认,澄清到此结束。请按顺序做两件事:\n1. 通读本节点的完整聊天记录,据此补充或修正你已写入的产物:把历次已确认的结论落进产物,清掉与对话相矛盾的旧内容。\n2. **在本回合内**按本节点契约完成收尾并调用 `node_complete`——这一步不能省略,也不能留到下一回合。\n\n禁止提问:不要再提问、不要调用 ask_question;信息不足就按对话中已有的结论定稿。"
 	// DefaultApproveConfirmSuffix is injected on Approve force(「确认并流转」) turns:
-	// after human confirm, fill required products then call node_complete.
-	DefaultApproveConfirmSuffix = "【确认流转】用户已点击「确认并流转」。请基于当前已知信息立刻补齐 `set_clarified_requirement` 与 `set_plan`(`open_questions` 必须为空),然后调用 `node_complete` 结束本节点;不要再提问、不要调用 ask_question。"
+	// after human confirm, reconcile the required products against the whole
+	// transcript, then call node_complete.
+	DefaultApproveConfirmSuffix = "【确认流转】用户已点击「确认并流转」,审批到此结束。请按顺序做两件事:\n1. 通读本节点的完整聊天记录,据此补充或修正 `set_clarified_requirement` 与 `set_plan`(`open_questions` 必须为空):把历次已确认的结论落进产物,清掉与对话相矛盾的旧内容。\n2. **在本回合内**调用 `node_complete` 结束本节点——这一步不能省略,也不能留到下一回合。\n\n禁止提问:不要再提问、不要调用 ask_question;信息不足就按对话中已有的结论定稿。"
 	DefaultProducesRetry           = "【必须完成】本节点尚未写入声明的产物 `{name}`,这是唯一未完成的强制要求。现在立即调用 write_artifact 工具写入 `{name}`(内容为本次澄清得到的结论),不要再提问、不要输出其它内容、不要给出解释——只需完成这次写入。"
 	DefaultPlanContract            = "\n\n## 计划契约(强制)\n你是计划节点,唯一交付是调用 `set_plan` 工具写入一份最多两级(大目标→小目标)的结构化计划;不要写代码、改仓库或写其它产物文件。\n\n**goals(强制)**:`goals[]` 大目标,每个可含 `subgoals[]` 小目标(叶子,不可再嵌套);每项 `title`(可选 `detail`);状态由平台初始化为 pending。\n\n**设计区(写入时完整性约定)**:可选字段 `architecture` / `data_design` / `interfaces` / `components` / `interaction` / `test_design`。一旦写入设计区,六节应齐全;某节无实质内容时显式写「不涉及」(summary/test_design 字符串,或 interfaces/components 用 `[{name:\"不涉及\",…}]`),禁止静默省略导致实现猜测。`architecture`/`data_design`/`interaction` 可挂 `diagram{format?,source,fallback_artifact?,caption?}`(format 缺省 mermaid;有 diagram 对象则 source 必填)。纯 goals-only 旧计划仍合法,不必强行带六节键。set_plan 调用成功即完成本节点。\n"
 	DefaultImplementContract       = "\n\n## 实现契约(强制)\n你是实现节点:先用 `get_plan` 读取计划,按大目标→小目标逐项落地。**进度标记是硬性要求**:每开始一项先调用 `update_plan_status(id, \"in_progress\")`,该项做完立即调用 `update_plan_status(id, \"done\")`。平台仅凭这些状态判断完成度——只把代码写好却不标记,会被判为未完成并反复催促。结束前必须让所有叶子项都为 `done`。\n"
@@ -120,7 +133,16 @@ const (
 	DefaultApproveContract              = "\n\n## Approve 契约(强制)\n你是 Approve 节点:用多轮 ReAct 对话完成开发前工作。**两份强制交付**(都要写入,不是「唯一交付」;完成标记见下方结束时序):\n1. `set_clarified_requirement` 写入完整需求规格(`open_questions` 必须为空);\n2. `set_plan` 写入最多两级(大目标→小目标)的结构化计划。\n\n若 `skill_profile` 角色包声明「唯一交付」或禁止 `set_plan`/`set_clarified_requirement`,以本平台契约为准:本节点允许并要求同时写澄清与计划。\n\n用户先说明目标后再行动。建议顺序:用工具对齐需求(可穿插提问与可选调研/视觉/方案),再 `set_plan`,然后等待用户确认并流转。不要在用户发言前编造空泛选择题。不要写实现代码、不要改仓库。\n\n### 澄清(强制)\n**必填字段**:`title`、`summary`、`background`、`goals[]`(≥1)、`in_scope[]`(≥1)、`out_of_scope[]`(≥1)、`functional_requirements[]`(≥1;每条含 `title`+`detail`+≥1 `acceptance_criteria`;`priority` 取 must|should|could,缺省 must)、`assumptions[]`/`dependencies[]`/`constraints[]`(各≥1;无实质内容时写明确「无额外…(已与用户确认)」,禁止省略键)。\n**可选字段**(有则写):`success_metrics`、`personas`、`user_scenarios`、`non_functional_requirements`、`external_interfaces`、`data_entities`、`business_rules`、`edge_cases`、`limitations`、`risks`、`glossary`。\n**禁止**:排期/里程碑/交付日期。需求规格只能用 `set_clarified_requirement`。\n**澄清是门禁**:任何还不确定、需要用户拍板的点,都必须通过 `ask_question` 让用户做选择,不能把疑问塞进 `open_questions` 就结束。选项可标 `recommended`(单选每题最多 1 个;多选应标记 1 个或多个)。调用 `set_clarified_requirement` 时 `open_questions` 必须为空。\n\n### 计划(强制)\n调用 `set_plan`:`goals[]` 大目标,每个可含 `subgoals[]` 小目标(叶子,不可再嵌套);每项 `title`(可选 `detail`);状态由平台初始化为 pending。\n\n**设计区完整性**:若写入设计区,须带齐六节 `architecture`/`data_design`/`interfaces`/`components`/`interaction`/`test_design`;无内容显式「不涉及」,可在 architecture/data_design/interaction 挂 Mermaid `diagram`(source 必填)。纯 goals 亦可,不必强行加六节键。进度与 plan_coverage 只计 goals 叶子,设计节不计。\n\n### 可选工具(有助于拍板,不是完成条件)\n- `set_research` 写入调研结论;\n- `set_proposals`:**仅当存在至少两个方向不同、取舍有意义的候选且需要用户择一时才调用**;写入 ≥2 个候选。方向已唯一、用户已拍板、或澄清/计划足以推进时**禁止调用**(尤其禁止写入仅 1 条且标推荐/已选定的「伪选择」)。独立 proposal 节点仍须强制交付;本约束仅针对 Approve 可选路径。与 `ask_question`「禁止为问而问」同理。\n- `write_artifact` 写入 `page.html`(kind=`html`,单文件自包含,禁止外链与 Web Storage),立刻 `set_artifact_preview` 钉到预览 Tab。\n给人看的预览材料也可用 `write_artifact` + `set_artifact_preview`;选项级并排对比用 `ask_question.demoHtml`(sandbox iframe,无 allow-same-origin)。\n\n### 结束时序(强制)\n- **确认前**(用户未点「确认并流转」):可写澄清与计划,但**禁止**调用 `node_complete`;即使误调,引擎也会清除标记并继续等待确认。\n- **确认后**(用户已点「确认并流转」):基于已知信息立刻补齐两份强制产物(`open_questions` 为空),再调用 `node_complete`;缺产物或未标记则无法完成流转。\n下文「完成标记契约」仅在确认后阶段生效;确认前不要用 `node_complete` 自行结束。\n"
 	DefaultOutcomeContract              = "\n\n## 完成标记契约(强制)\n结束本节点前**必须**调用 `node_complete` 标记结果:`status` 取 `success` 或 `failed`;可选 `summary` / `error` / `outputs` / `checks`。写完产物(`set_*` / `write_artifact`)后再调用。未标记将被判定为节点失败。平台先做默认校验(产物/门禁等),通过后才可能做业务 RPC 校验。若需启动长期服务(web / dsh / Harness / 被测应用等),必须用 `setsid`/`nohup` 放入独立会话并重定向日志,禁止前台或未脱钩的命令占住 Agent 回合;不要为收尾杀掉这些进程。\n"
 	DefaultOutcomeRetry                 = "【必须完成】你尚未调用 `node_complete` 标记本节点完成结果,这是强制要求。现在立即调用 `node_complete(status=\"success\"|\"failed\", summary?, error?, outputs?)`,不要再提问或输出其它内容——只需完成这次调用。\n"
-	DefaultReviewCommitWrapUp           = "【流转收尾】用户已确认本节点,即将进入下一步。工作区仍有未提交改动:\n{files}\n\n以上列表可能含已相对基线提交的文件,请以各仓 `git status` 为准,只处理未暂存/未提交的内容。\n\n请你自行决定要不要提交:\n- 有意义的源码/配置改动:按仓 `cd` 进 `/root/workspace/<name>/`,用 `git add` **点名文件**(禁止 `git add -A` / `git add .`),再 `git commit`(写清 why)并 `git push` 当前工作分支。下游节点在全新克隆里工作,不推送就拿不到这些改动。\n- 临时文件、日志、缓存、构建产物、本地密钥、调试垃圾:**不要提交**,保持未跟踪即可。\n- 若全部都是临时文件:什么都不要做,不要空提交。\n- 禁止在 main/master/develop/release-* 上提交或推送。\n- 不要提问、不要改产物、不要调用 node_complete。做完后用一两句话说明提交了什么、跳过了什么即可。\n"
+	// DefaultReviewConfirmReconcile is the review-side counterpart of
+	// DefaultApproveConfirmSuffix: a review producer's node_complete already
+	// happened in its production phase, so the confirm turn only reconciles
+	// products against the transcript.
+	DefaultReviewConfirmReconcile = "【确认流转】用户已点击「确认并流转」,复审到此结束。请通读本节点的完整聊天记录,据此补充或修正你已写入的结构化产物:用对应的 `set_*` / `write_artifact` 工具重新写入完整内容,把历次人工反馈已确认的结论落进产物,清掉与对话相矛盾的旧内容。\n- 不要提问、不要调用 ask_question。\n- 不要调用 `node_complete`(本节点的完成由平台在流转时处理)。\n- 若核对后确认无需修改,回一句说明即可,不要空写产物。"
+	// DefaultConfirmSummaryContract is the hidden turn that follows the
+	// reconcile turn. Its output never reaches the transcript, so it asks for
+	// the JSON payload alone.
+	DefaultConfirmSummaryContract = "【流转摘要】产物已核对完毕,现在只做最后一件事:通读本节点的完整聊天记录(每一轮人工反馈以及你的处理),归纳出一段面向反馈账本的「Agent 总结」。\n\n**只输出一个 fenced JSON 代码块**,格式严格为:\n" + "```json\n" + `{"agentSummary":"对整段对话中人工反馈意图与要点的归纳"}` + "\n```" + "\n规则:\n- 不要输出 JSON 之外的任何叙述、解释、前缀或后缀。\n- agentSummary 归纳用户在本节点提出的意图、要点及其落点,不要复述你的叙述回复,也不要照抄某一轮反馈原文。\n- 不要调用任何工具,不要提问,不要调用 `node_complete`。\n- 确实无法归纳时输出 `{\"agentSummary\":\"\"}`;禁止模板占位或空泛套话。"
+	DefaultReviewCommitWrapUp = "【流转收尾】用户已确认本节点,即将进入下一步。工作区仍有未提交改动:\n{files}\n\n以上列表可能含已相对基线提交的文件,请以各仓 `git status` 为准,只处理未暂存/未提交的内容。\n\n请你自行决定要不要提交:\n- 有意义的源码/配置改动:按仓 `cd` 进 `/root/workspace/<name>/`,用 `git add` **点名文件**(禁止 `git add -A` / `git add .`),再 `git commit`(写清 why)并 `git push` 当前工作分支。下游节点在全新克隆里工作,不推送就拿不到这些改动。\n- 临时文件、日志、缓存、构建产物、本地密钥、调试垃圾:**不要提交**,保持未跟踪即可。\n- 若全部都是临时文件:什么都不要做,不要空提交。\n- 禁止在 main/master/develop/release-* 上提交或推送。\n- 不要提问、不要改产物、不要调用 node_complete。做完后用一两句话说明提交了什么、跳过了什么即可。\n"
 
 	// DefaultFeedbackHeader is injected only when this node actually has human
 	// feedback in scope. Storing feedback that no agent ever reads is the same
@@ -361,4 +383,22 @@ func (p *AgentPrompts) ReviewCommitWrapUpFor(files string) string {
 		files = "(工作区 git status 为 dirty,未能列出文件)"
 	}
 	return strings.ReplaceAll(tmpl, "{files}", files)
+}
+
+// ReviewConfirmReconcileText returns the review-side confirm-time reconcile
+// prompt or the default. Nil-safe.
+func (p *AgentPrompts) ReviewConfirmReconcileText() string {
+	if p != nil && strings.TrimSpace(p.ReviewConfirmReconcile) != "" {
+		return p.ReviewConfirmReconcile
+	}
+	return DefaultReviewConfirmReconcile
+}
+
+// ConfirmSummaryContractText returns the hidden confirm-time summary contract
+// or the default. Nil-safe.
+func (p *AgentPrompts) ConfirmSummaryContractText() string {
+	if p != nil && strings.TrimSpace(p.ConfirmSummaryContract) != "" {
+		return p.ConfirmSummaryContract
+	}
+	return DefaultConfirmSummaryContract
 }

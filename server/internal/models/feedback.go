@@ -93,14 +93,21 @@ type FeedbackTarget struct {
 // WantsArtifact reports whether this event participates in a product file.
 func (e FeedbackEvent) WantsArtifact() bool { return !e.IndexOnly }
 
-// HasSubstance reports whether the event carries actual human input worth
-// persisting: an opinion, an annotation, an attachment, or a ReAct turn.
+// HasSubstance reports whether the event carries content worth persisting: an
+// opinion, an annotation, an attachment, a ReAct turn, or an AgentSummary.
+//
+// AgentSummary alone qualifies because「确认并流转」may produce an induction of
+// the dialogue with no new human prose and an empty reconcile narration — that
+// summary still has nowhere else to live in the ledger.
 //
 // This is the single gate on the whole feature. A gate approval clicked through
-// with an empty form has none of the four and must not produce a row or a
+// with an empty form has none of the above and must not produce a row or a
 // product — otherwise bulk sign-off floods the run with empty shells.
 func (e FeedbackEvent) HasSubstance() bool {
 	if strings.TrimSpace(e.Text) != "" {
+		return true
+	}
+	if strings.TrimSpace(e.AgentSummary) != "" {
 		return true
 	}
 	if len(e.Annotations) > 0 || len(e.Attachments) > 0 {

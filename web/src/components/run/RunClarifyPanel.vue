@@ -44,6 +44,8 @@ const props = defineProps<{
   attachments: ClarifyImage[]
   inputActive: boolean
   selStatus?: NodeRunStatus | string | null
+  /** Rejected「确认并流转」reason, surfaced so the chat can release its spinner. */
+  confirmError?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -146,6 +148,7 @@ defineExpose({
         :node-type="nodeType"
         :done="clarify.done"
         :active="inputActive"
+        :confirm-error="confirmError"
         annotate-enabled
         v-model:annotations="annotations"
         @update:draft="emit('update:draft', $event)"
