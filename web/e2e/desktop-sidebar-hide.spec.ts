@@ -67,7 +67,7 @@ async function expectSidebarCollapsed(page: Page) {
 }
 
 test.describe('desktop sidebar hide', () => {
-  test('hide from brand, open from topbar, persist, no toast', async ({ page }) => {
+  test('hide from brand, open from floating ball, persist, no toast', async ({ page }) => {
     await openGates(page)
     const aside = sidebar(page)
     await expect(aside).toBeVisible()
@@ -84,7 +84,9 @@ test.describe('desktop sidebar hide', () => {
 
     await hide.click()
     await expectSidebarCollapsed(page)
-    await expect(page.getByTestId('desktop-nav-open')).toBeVisible()
+    const ball = page.getByTestId('floating-nav-ball')
+    await expect(ball).toBeVisible()
+    await expect(page.getByTestId('desktop-nav-open')).toHaveCount(0)
     await expect(page.getByTestId('desktop-nav-edge-open')).toHaveCount(0)
     const hiddenWidth = await page.locator('main').evaluate((el) => el.getBoundingClientRect().width)
     expect(hiddenWidth).toBeGreaterThan(expandedWidth + 200)
@@ -92,25 +94,27 @@ test.describe('desktop sidebar hide', () => {
     const toast = page.locator('[class*="toast"], [data-testid*="toast"]')
     await expect(toast).toHaveCount(0)
 
-    await page.screenshot({ path: path.join(shotDir, '02-desktop-hidden-topbar.png') })
+    await page.screenshot({ path: path.join(shotDir, '02-desktop-hidden-floating-ball.png') })
 
-    const openBtn = page.getByTestId('desktop-nav-open')
-    const openBox = await openBtn.boundingBox()
-    expect(openBox?.width).toBeGreaterThanOrEqual(44)
-    await expect(openBtn).toHaveAttribute('aria-label', '打开导航')
-    await openBtn.click()
-    await expect(aside).toBeVisible()
-    await expect(page.getByTestId('desktop-nav-open')).toHaveCount(0)
+    const ballBox = await ball.boundingBox()
+    expect(ballBox?.width).toBeGreaterThanOrEqual(44)
+    expect(ballBox?.height).toBeGreaterThanOrEqual(44)
+    expect(ballBox?.x ?? 99).toBeLessThan(40)
+    expect((ballBox?.y ?? 0) + (ballBox?.height ?? 0)).toBeGreaterThan(700)
+    await expect(ball).toHaveAttribute('aria-label', '打开导航')
+    await ball.click()
+    await expect(aside).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByTestId('floating-nav-ball')).toBeHidden()
 
     await hide.click()
     expect(await page.evaluate(() => localStorage.getItem('approving-sidebar-hidden'))).toBe('true')
     await page.reload()
     await expect(page.getByTestId('page-gates')).toBeVisible({ timeout: 15_000 })
     await expectSidebarCollapsed(page)
-    await expect(page.getByTestId('desktop-nav-open')).toBeVisible()
+    await expect(page.getByTestId('floating-nav-ball')).toBeVisible()
   })
 
-  test('full pages use 44px edge open and pl-11; leaving full drops edge', async ({ page }) => {
+  test('full pages also use bottom-left floating ball (no edge-open)', async ({ page }) => {
     await mockApi(page)
     await page.setViewportSize({ width: 1280, height: 800 })
     await page.goto('/desktop-sidebar-hide.html?start=/runs/r1')
@@ -118,56 +122,63 @@ test.describe('desktop sidebar hide', () => {
     await expect(page.getByTestId('desktop-nav-hide')).toBeVisible()
     await page.getByTestId('desktop-nav-hide').click()
     await expectSidebarCollapsed(page)
-    const edge = page.getByTestId('desktop-nav-edge-open')
-    await expect(edge).toBeVisible()
-    const box = await edge.boundingBox()
+    const ball = page.getByTestId('floating-nav-ball')
+    await expect(ball).toBeVisible()
+    const box = await ball.boundingBox()
     expect(box?.width).toBeGreaterThanOrEqual(44)
     expect(box?.height).toBeGreaterThanOrEqual(44)
-    expect(box?.x ?? 99).toBeLessThan(8)
-    await expect(page.getByTestId('app-full-main')).toHaveClass(/pl-11/)
-    await expect(page.getByTestId('desktop-nav-open')).toHaveCount(0)
-    await page.screenshot({ path: path.join(shotDir, '03-full-run-hidden-edge.png') })
+    expect(box?.x ?? 99).toBeLessThan(40)
+    await expect(page.getByTestId('desktop-nav-edge-open')).toHaveCount(0)
+    await expect(page.getByTestId('app-full-main')).not.toHaveClass(/pl-11/)
+    await page.screenshot({ path: path.join(shotDir, '03-full-run-hidden-ball.png') })
 
-    await edge.click()
-    await expect(sidebar(page)).toBeVisible()
-    await expect(edge).toHaveCount(0)
+    await ball.click()
+    await expect(sidebar(page)).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByTestId('floating-nav-ball')).toBeHidden()
 
     await page.getByTestId('desktop-nav-hide').click()
     await page.goto('/desktop-sidebar-hide.html?start=/workflows/wf-1/edit')
     await expect(page.getByTestId('page-editor')).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByTestId('desktop-nav-edge-open')).toBeVisible()
-    await page.screenshot({ path: path.join(shotDir, '04-full-editor-hidden-edge.png') })
+    await expect(page.getByTestId('floating-nav-ball')).toBeVisible()
+    await expect(page.getByTestId('desktop-nav-edge-open')).toHaveCount(0)
+    await page.screenshot({ path: path.join(shotDir, '04-full-editor-hidden-ball.png') })
 
     await page.goto('/desktop-sidebar-hide.html?start=/sandboxes/42/console')
     await expect(page.getByTestId('page-console')).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByTestId('desktop-nav-edge-open')).toBeVisible()
-    await page.screenshot({ path: path.join(shotDir, '05-full-console-hidden-edge.png') })
+    await expect(page.getByTestId('floating-nav-ball')).toBeVisible()
+    await page.screenshot({ path: path.join(shotDir, '05-full-console-hidden-ball.png') })
 
     await page.goto('/desktop-sidebar-hide.html?start=/gates')
     await expect(page.getByTestId('page-gates')).toBeVisible({ timeout: 15_000 })
     await expect(page.getByTestId('desktop-nav-edge-open')).toHaveCount(0)
-    await expect(page.getByTestId('desktop-nav-open')).toBeVisible()
-    await page.screenshot({ path: path.join(shotDir, '06-back-to-topbar-no-edge.png') })
+    await expect(page.getByTestId('floating-nav-ball')).toBeVisible()
+    await page.screenshot({ path: path.join(shotDir, '06-back-to-gates-floating-ball.png') })
   })
 
-  test('mobile drawer is independent; returning to desktop keeps remembered hide', async ({ page }) => {
+  test('mobile floating ball opens drawer; returning to desktop keeps remembered hide', async ({
+    page,
+  }) => {
     await openGates(page)
     await page.getByTestId('desktop-nav-hide').click()
     await expectSidebarCollapsed(page)
 
     await page.setViewportSize({ width: 390, height: 844 })
-    await expect(page.getByTestId('mobile-nav-toggle')).toBeVisible()
-    await expect(page.getByTestId('desktop-nav-open')).toBeHidden()
+    await expect(page.getByTestId('floating-nav-ball')).toBeVisible()
+    await expect(page.getByTestId('mobile-nav-toggle')).toHaveCount(0)
     await expect(page.locator('.bg-black\\/50')).toHaveCount(0)
     await page.screenshot({ path: path.join(shotDir, '07-mobile-after-desktop-hide.png') })
 
-    await page.getByTestId('mobile-nav-toggle').click()
+    await page.getByTestId('floating-nav-ball').click()
     await expect(page.locator('.bg-black\\/50')).toBeVisible()
+    const drawer = page.getByTestId('mobile-nav-drawer')
+    await expect(drawer).toBeVisible()
+    // Desktop sidebar remains in DOM (md:hidden); scope chrome controls to the open drawer.
+    await expect(drawer.getByTestId('shell-chrome-controls')).toBeVisible()
     await page.screenshot({ path: path.join(shotDir, '08-mobile-drawer-open.png') })
 
     await page.setViewportSize({ width: 1280, height: 800 })
     await expectSidebarCollapsed(page)
-    await expect(page.getByTestId('desktop-nav-open')).toBeVisible()
+    await expect(page.getByTestId('floating-nav-ball')).toBeVisible()
     await expect(page.locator('.bg-black\\/50')).not.toBeVisible()
     await page.screenshot({ path: path.join(shotDir, '09-desktop-still-hidden.png') })
   })

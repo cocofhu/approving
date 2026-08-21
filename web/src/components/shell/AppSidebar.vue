@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppSidebarNav from './AppSidebarNav.vue'
 import BrandLogo from './BrandLogo.vue'
+import ShellChromeControls from './ShellChromeControls.vue'
 import Icon from '../ui/Icon.vue'
 import { authApi } from '@/lib/api/api'
 import { useAuth } from '@/lib/composables/useAuth'
@@ -66,8 +67,9 @@ async function onHideNav() {
 
       <AppSidebarNav />
 
-      <div class="border-t border-line p-3">
-        <div class="flex items-center gap-2.5 rounded-md px-2 py-1.5">
+      <div class="mt-auto border-t border-line p-3">
+        <ShellChromeControls layout="sidebar" />
+        <div class="mt-2 flex items-center gap-2.5 px-2 py-1.5">
           <div class="flex h-8 w-8 items-center justify-center rounded-full bg-elevated text-xs font-semibold text-accent-2">{{ initials }}</div>
           <div class="flex-1 truncate leading-tight">
             <div class="truncate text-[13px] font-medium text-txt">{{ user?.username || '—' }}</div>

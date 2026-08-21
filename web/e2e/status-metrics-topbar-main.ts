@@ -1,5 +1,5 @@
 import '../src/styles/global.css'
-import { createApp, defineComponent, h, ref } from 'vue'
+import { createApp, defineComponent, h } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { i18n } from '../src/lib/shared/i18n'
 import { initLocale, setLocale } from '../src/lib/shared/locale'
@@ -101,10 +101,9 @@ async function bootstrap() {
 
   const Root = defineComponent({
     setup() {
-      const menu = ref(false)
       return () =>
         h('div', { class: 'min-h-screen bg-base text-txt' }, [
-          h(AppTopbar, { onToggleMenu: () => (menu.value = !menu.value) }),
+          h(AppTopbar),
           h('main', { class: 'p-6 text-sm text-txt2', 'data-testid': 'page-body' }, [
             'StatusMetrics E2E harness · scene=',
             scene,

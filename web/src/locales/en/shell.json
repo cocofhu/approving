@@ -23,7 +23,8 @@
       "showNav": "Show navigation",
       "navHidden": "Navigation hidden",
       "navShown": "Navigation shown",
-      "backToList": "Back to list"
+      "backToList": "Back to list",
+      "floatingBall": "Expand sidebar"
     },
     "runNotifications": {
       "title": "Notifications",

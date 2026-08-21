@@ -3,9 +3,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppSidebar from './AppSidebar.vue'
-import AppTopbar from './AppTopbar.vue'
 import AppSidebarNav from './AppSidebarNav.vue'
 import BrandLogo from './BrandLogo.vue'
+import FloatingNavBall from './FloatingNavBall.vue'
+import ShellChromeControls from './ShellChromeControls.vue'
 import Icon from '../ui/Icon.vue'
 import RunLaunchModal from '@/components/workflow/RunLaunchModal.vue'
 import {
@@ -22,11 +23,7 @@ import { useRefreshChrome } from '@/lib/shared/refreshChrome'
 import { useRoutePending } from '@/lib/shared/routePending'
 import { useWorkflowRunLaunch } from '@/lib/run/useWorkflowRunLaunch'
 import ServiceCommitBadge from './ServiceCommitBadge.vue'
-import {
-  focusDesktopNavControl,
-  showDesktopSidebar,
-  sidebarHidden,
-} from '@/lib/shared/sidebarHidden'
+import { sidebarHidden } from '@/lib/shared/sidebarHidden'
 
 const route = useRoute()
 const router = useRouter()
@@ -71,13 +68,8 @@ function closeDrawer() {
   drawerOpen.value = false
 }
 
-function toggleDrawer() {
-  drawerOpen.value = !drawerOpen.value
-}
-
-async function openDesktopNavFromEdge() {
-  showDesktopSidebar()
-  await focusDesktopNavControl('hide')
+function openDrawer() {
+  drawerOpen.value = true
 }
 
 function onShellViewRun(runId: string) {
@@ -96,6 +88,7 @@ onUnmounted(() => stopShutdownPolling())
       <div
         v-if="draining && !full"
         class="flex shrink-0 items-center gap-3 border-b border-warn/35 bg-warn/10 px-6 py-2 text-sm text-warn"
+        data-testid="shell-draining-banner"
       >
         <span class="inline-flex h-2 w-2 animate-pulse rounded-full bg-warn" />
         <strong class="font-semibold text-txt">{{ t('common.shutdown.shuttingDown') }}</strong>
@@ -105,7 +98,7 @@ onUnmounted(() => stopShutdownPolling())
         </span>
       </div>
 
-      <AppTopbar v-if="!full" @toggle-menu="toggleDrawer" />
+      <!-- No AppTopbar: chrome lives in sidebar / drawer; floating ball restores nav -->
       <div
         v-if="!full && showRefreshBar"
         class="app-refresh-track"
@@ -121,19 +114,6 @@ onUnmounted(() => stopShutdownPolling())
         <span class="sr-only" aria-live="polite">{{
           sidebarHidden ? t('shell.aria.navHidden') : t('shell.aria.navShown')
         }}</span>
-        <button
-          v-if="full && sidebarHidden"
-          type="button"
-          class="absolute left-0 top-3 z-20 flex h-11 w-11 items-center justify-center rounded-md border border-line bg-surface text-txt2 hover:bg-elevated hover:text-txt"
-          data-testid="desktop-nav-edge-open"
-          :aria-label="t('shell.aria.showNav')"
-          :title="t('shell.aria.showNav')"
-          aria-expanded="false"
-          aria-controls="app-desktop-sidebar"
-          @click="openDesktopNavFromEdge"
-        >
-          <Icon name="menu" :size="20" />
-        </button>
         <div
           v-if="full && showRefreshBar"
           class="app-refresh-track"
@@ -146,7 +126,7 @@ onUnmounted(() => stopShutdownPolling())
           v-if="full"
           class="h-full"
           data-testid="app-full-main"
-          :class="{ 'app-refresh-dim': dimContent, 'pl-11': sidebarHidden }"
+          :class="{ 'app-refresh-dim': dimContent }"
         >
           <slot />
         </div>
@@ -174,6 +154,8 @@ onUnmounted(() => stopShutdownPolling())
       </main>
     </div>
 
+    <FloatingNavBall :drawer-open="drawerOpen" @open-drawer="openDrawer" />
+
     <div
       v-if="drainToast.visible"
       class="pointer-events-none fixed bottom-6 right-6 z-50 max-w-sm border border-err/40 bg-elevated px-4 py-3 text-sm text-txt2 shadow-card"
@@ -195,18 +177,23 @@ onUnmounted(() => stopShutdownPolling())
         <aside
           v-if="drawerOpen"
           class="fixed inset-y-0 left-0 z-50 flex w-[min(280px,85vw)] flex-col border-r border-line bg-surface shadow-drawer md:hidden"
+          data-testid="mobile-nav-drawer"
         >
           <div class="safe-area-top flex h-14 items-center justify-between gap-2 px-4">
             <BrandLogo />
             <button
-              class="flex h-11 w-11 items-center justify-center rounded-md text-txt2 hover:bg-elevated hover:text-txt"
+              class="flex h-11 w-11 items-center justify-center text-txt2 hover:bg-elevated hover:text-txt"
               :aria-label="t('shell.aria.closeNav')"
+              data-testid="mobile-nav-close"
               @click="closeDrawer"
             >
               <Icon name="close" :size="18" />
             </button>
           </div>
           <AppSidebarNav @navigate="closeDrawer" />
+          <div class="mt-auto border-t border-line p-3">
+            <ShellChromeControls layout="sidebar" />
+          </div>
         </aside>
       </Transition>
     </Teleport>

@@ -34,6 +34,7 @@ function mountSidebar() {
       stubs: {
         BrandLogo: { template: '<div data-testid="brand" />' },
         AppSidebarNav: { template: '<nav data-testid="nav" />' },
+        ShellChromeControls: { template: '<div data-testid="shell-chrome-controls" />' },
         Icon: true,
       },
     },
@@ -48,10 +49,11 @@ describe('AppSidebar', () => {
     __resetSidebarHiddenForTests()
   })
 
-  it('renders brand and nav stubs', () => {
+  it('renders brand, nav stubs, and chrome controls (g1.2)', () => {
     const wrapper = mountSidebar()
     expect(wrapper.find('[data-testid="brand"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="nav"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="shell-chrome-controls"]').exists()).toBe(true)
     wrapper.unmount()
   })
 

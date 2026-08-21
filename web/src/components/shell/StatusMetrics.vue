@@ -5,9 +5,23 @@ import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import { usePlatformStatusMetrics } from '@/lib/composables/usePlatformStatusMetrics'
 import { fmtCompactTokenCount } from '@/lib/run/tokenUsage'
 
+const props = withDefaults(
+  defineProps<{
+    /** auto = breakpoint; compact forces narrow strip (sidebar/drawer). */
+    variant?: 'auto' | 'full' | 'compact'
+  }>(),
+  { variant: 'auto' },
+)
+
 const { t } = useI18n()
 const { isMobile } = useBreakpoint()
 const { metrics, stale } = usePlatformStatusMetrics()
+
+const useCompact = computed(() => {
+  if (props.variant === 'compact') return true
+  if (props.variant === 'full') return false
+  return isMobile.value
+})
 
 /** Which tip is pinned via click/touch (Demo tip-open). */
 const tipOpen = ref<string | null>(null)
@@ -49,8 +63,8 @@ function onBlurTip(id: string) {
     :aria-label="t('shell.statusMetrics.aria')"
     :data-stale="stale ? 'true' : 'false'"
   >
-    <!-- Desktop ≥md: five icon+value items -->
-    <template v-if="!isMobile">
+    <!-- Desktop ≥md (or variant=full): five icon+value items -->
+    <template v-if="!useCompact">
       <button
         type="button"
         class="sm-item relative inline-flex items-center gap-1.5 border-0 bg-transparent px-1.5 py-1 text-inherit hover:bg-elevated hover:text-txt focus-visible:bg-elevated focus-visible:text-txt focus-visible:outline-none"
