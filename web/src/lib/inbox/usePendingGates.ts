@@ -122,9 +122,9 @@ function syncAriaBusy() {
 }
 
 /**
- * Optimistic local removal after approve/reject/clarify-force succeeds.
- * Keeps sidebar totalCount/displayedItems aligned even when force refresh fails
- * or a stale peek would otherwise linger.
+ * Optimistic local removal after approve/reject/clarify-force is initiated
+ * (or after a successful converge). Keeps sidebar totalCount/displayedItems
+ * aligned even when force refresh fails or a stale peek would otherwise linger.
  */
 function removeItemLocally(key: string): void {
   const inDisplayed = displayedItems.value.some((it) => itemKey(it) === key)
@@ -135,6 +135,26 @@ function removeItemLocally(key: string): void {
   remoteItems.value = remoteItems.value.filter((it) => itemKey(it) !== key)
   if (inDisplayed || inRemote) {
     totalCount.value = Math.max(0, totalCount.value - 1)
+  }
+  syncPendingMetaFromDiff()
+}
+
+/**
+ * Roll back removeItemLocally when confirm/resume fails so the row is retryable.
+ * Inserts at the front of displayed/remote when the snapshot position is unknown.
+ */
+function restoreItemLocally(item: InboxItem): void {
+  const key = itemKey(item)
+  const hadDisplayed = displayedItems.value.some((it) => itemKey(it) === key)
+  const hadRemote = remoteItems.value.some((it) => itemKey(it) === key)
+  if (!hadDisplayed) {
+    displayedItems.value = [item, ...displayedItems.value]
+  }
+  if (!hadRemote) {
+    remoteItems.value = [item, ...remoteItems.value]
+  }
+  if (!hadDisplayed || !hadRemote) {
+    totalCount.value = Math.max(totalCount.value, displayedItems.value.length)
   }
   syncPendingMetaFromDiff()
 }
@@ -250,6 +270,7 @@ export function usePendingGates() {
     peek,
     applyPending,
     removeItemLocally,
+    restoreItemLocally,
     itemKey,
   }
 }

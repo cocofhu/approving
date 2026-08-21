@@ -710,10 +710,11 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     wrapper.unmount()
   })
 
-  it('processing lock: list reselection ignored until resolve converges', async () => {
+  it('processing lock: confirm leaves immediately; list reselection ignored until unlock', async () => {
     const a = gateItem('a')
     const b = gateItem('b')
-    let list = [a, b]
+    const c = gateItem('c')
+    let list = [a, b, c]
     mocks.listGates.mockImplementation(async () => paged(list))
 
     let releaseResume!: (v: unknown) => void
@@ -731,16 +732,23 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     const resolveClick = wrapper.get('[data-testid="resolve-btn"]').trigger('click')
     await flushPromises()
 
-    const buttons = wrapper.findAll('button').filter((btn) => btn.text().includes('Gate b'))
-    expect(buttons.length).toBeGreaterThan(0)
-    await buttons[0].trigger('click')
+    // Intent leave: a gone before resume returns; neighbor b selected/fetched.
+    expect(wrapper.text()).not.toContain('Gate a')
+    expect(wrapper.text()).toContain('Gate b')
+    expect(inboxCallsFor('run-b', 'gate-b', 1).length).toBeGreaterThan(0)
+
+    const buttonsC = wrapper.findAll('button').filter((btn) => btn.text().includes('Gate c'))
+    expect(buttonsC.length).toBeGreaterThan(0)
+    const bCallsBefore = inboxCallsFor('run-b', 'gate-b', 1).length
+    await buttonsC[0].trigger('click')
     await flushPromises()
 
-    // Still locked on a — must not start fetching b yet.
-    expect(inboxCallsFor('run-b', 'gate-b', 1).length).toBe(0)
-    expect(wrapper.find('[data-testid="resolve-btn"]').exists()).toBe(true)
+    // Still locked — must not switch to c yet.
+    expect(inboxCallsFor('run-c', 'gate-c', 1).length).toBe(0)
+    expect(wrapper.text()).toContain('Gate b')
+    expect(inboxCallsFor('run-b', 'gate-b', 1).length).toBe(bCallsBefore)
 
-    list = [b]
+    list = [b, c]
     releaseResume({ status: 'ok' })
     await resolveClick
     await flushPromises()
@@ -748,7 +756,79 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Gate b')
-    expect(inboxCallsFor('run-b', 'gate-b', 1).length).toBeGreaterThan(0)
+    expect(wrapper.text()).not.toContain('Gate a')
+    wrapper.unmount()
+  })
+
+  it('plan g1.2: clarify force leaves pending before reactReply resolves', async () => {
+    const a = clarifyItem('a')
+    const b = clarifyItem('b')
+    let list: InboxItem[] = [a, b]
+    mocks.listGates.mockImplementation(async () => paged(list))
+
+    let releaseReply!: (v: unknown) => void
+    mocks.reactReply.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseReply = resolve
+        }),
+    )
+
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+
+    const finishClick = wrapper.get('[data-testid="clarify-send"]').trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    // Leave at confirm initiation — list drops a; neighbor b is selected (its composer may mount).
+    expect(wrapper.text()).not.toContain('Clarify a')
+    expect(wrapper.text()).toContain('Clarify b')
+    expect(wrapper.text()).toContain('Run #b')
+    expect(wrapper.text()).not.toContain('Run #a')
+
+    list = [b]
+    releaseReply({ status: 'ok' })
+    await finishClick
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Clarify b')
+    expect(wrapper.text()).not.toContain('Clarify a')
+    expect(mocks.toastSuccess).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('plan g1.3: force-finish failure restores row and allows retry', async () => {
+    const a = clarifyItem('a')
+    const b = clarifyItem('b')
+    mocks.listGates.mockResolvedValue(paged([a, b]))
+    mocks.reactReply.mockRejectedValueOnce(new Error('confirm blew up'))
+
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+
+    await wrapper.get('[data-testid="clarify-send"]').trigger('click')
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    // Restored for retry — a is back and selectable.
+    expect(wrapper.text()).toContain('Clarify a')
+    expect(wrapper.find('[data-testid="clarify-send"]').exists()).toBe(true)
+
+    mocks.reactReply.mockResolvedValueOnce({ status: 'ok' })
+    mocks.listGates.mockResolvedValue(paged([b]))
+    await wrapper.get('[data-testid="clarify-send"]').trigger('click')
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Clarify a')
+    expect(wrapper.text()).toContain('Clarify b')
     wrapper.unmount()
   })
 
@@ -971,6 +1051,10 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     const resolveClick = wrapper.get('[data-testid="resolve-btn"]').trigger('click')
     await flushPromises()
 
+    // Intent leave already selected neighbor; refresh stays disabled while locked.
+    expect(wrapper.text()).not.toContain('Gate a')
+    expect(wrapper.text()).toContain('Gate b')
+
     const refreshBtn = wrapper.findAll('button').find((btn) => btn.text().includes('刷新'))
     expect(refreshBtn).toBeTruthy()
     expect(refreshBtn!.attributes('disabled')).toBeDefined()
@@ -980,10 +1064,6 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     await refreshBtn!.trigger('click')
     await flushPromises()
     expect(mocks.listGates.mock.calls.length).toBe(listCallsBefore)
-
-    // Selection must stay on a while locked.
-    expect(wrapper.find('[data-testid="resolve-btn"]').exists()).toBe(true)
-    expect(inboxCallsFor('run-b', 'gate-b', 1).length).toBe(0)
 
     list = [b]
     releaseResume({ status: 'ok' })
