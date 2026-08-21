@@ -41,7 +41,11 @@ func TestAgentPromptsRemainingContracts(t *testing.T) {
 		t.Fatal("approve override")
 	}
 	gotApprove := (&AgentPrompts{}).ApproveContractText()
-	for _, want := range []string{"两份强制交付", "set_clarified_requirement", "set_plan", "不是「唯一交付」", "用户先说明目标", "结束时序", "确认前", "确认后", "node_complete"} {
+	for _, want := range []string{
+		"两份强制交付", "set_clarified_requirement", "set_plan", "不是「唯一交付」", "用户先说明目标",
+		"至少两个方向不同", "禁止调用", "伪选择",
+		"结束时序", "确认前", "确认后", "node_complete",
+	} {
 		if !strings.Contains(gotApprove, want) {
 			t.Fatalf("DefaultApproveContract missing %q\n%s", want, gotApprove)
 		}

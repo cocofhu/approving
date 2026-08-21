@@ -26,6 +26,18 @@ const emit = defineEmits<{ (e: 'select', id: string): void }>()
 
 const { t } = useI18n()
 const proposals = computed(() => props.doc.proposals || [])
+// Selection is only meaningful with ≥2 candidates; n<2 is read-only info
+// (matches Approve “no pseudo-choice” and proposal_select single-candidate auto-adopt).
+const needsChoice = computed(() => proposals.value.length >= 2)
+const headerTitle = computed(() =>
+  needsChoice.value ? t('pages.proposalSelect.title') : t('pages.proposalSelect.titleReadonly'),
+)
+const headerSubtitle = computed(() => {
+  const n = proposals.value.length
+  if (n >= 2) return t('pages.proposalSelect.subtitle', { n })
+  if (n === 1) return t('pages.proposalSelect.subtitleSingle')
+  return t('pages.proposalSelect.subtitleEmpty')
+})
 
 // One proposal per window; `current` is the visible index and `dir` drives the
 // slide direction of the switch animation. Seed the view on the resolved choice
@@ -87,7 +99,7 @@ function level(v?: string) {
 }
 
 function pick() {
-  if (!cur.value || props.disabled || props.resolvedId) return
+  if (!cur.value || props.disabled || props.resolvedId || !needsChoice.value) return
   emit('select', curId.value)
 }
 </script>
@@ -99,8 +111,8 @@ function pick() {
         <Icon name="gate" :size="15" />
       </div>
       <div class="min-w-0 flex-1">
-        <div class="text-sm font-semibold text-txt">{{ t('pages.proposalSelect.title') }}</div>
-        <div class="text-[11px] text-txt3">{{ t('pages.proposalSelect.subtitle', { n: proposals.length }) }}</div>
+        <div class="text-sm font-semibold text-txt">{{ headerTitle }}</div>
+        <div class="text-[11px] text-txt3">{{ headerSubtitle }}</div>
       </div>
     </div>
 
@@ -205,7 +217,7 @@ function pick() {
             <span class="font-medium text-txt2">{{ t('pages.proposalSelect.tradeoffs') }}</span>{{ cur.tradeoffs }}
           </div>
 
-          <div v-if="!resolvedId && !readonly" class="mt-3 flex justify-end max-md:justify-stretch">
+          <div v-if="!resolvedId && !readonly && needsChoice" class="mt-3 flex justify-end max-md:justify-stretch">
             <button
               class="inline-flex items-center justify-center gap-1.5 rounded-md px-3.5 text-sm font-medium transition md:py-2 max-md:min-h-[44px] max-md:w-full"
               :class="cur.recommended ? 'bg-accent text-white hover:opacity-90' : 'bg-ok/15 text-ok hover:bg-ok/25'"

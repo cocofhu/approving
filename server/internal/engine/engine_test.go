@@ -285,6 +285,40 @@ func TestProposalSelectManual(t *testing.T) {
 	}
 }
 
+// TestProposalSelectManualSingleCandidate: auto_confirm=false but only one
+// valid candidate — finalize without pausing (no pseudo-choice wait).
+func TestProposalSelectManualSingleCandidate(t *testing.T) {
+	g := proposalGraph()
+	g.Variables[0].Value = false
+	eng, db, provider := setupEngineGraphP(t, g)
+	provider.structuredBodies = map[string]string{
+		"propose": `{"context":"方向已明确","proposals":[{"id":"p1","title":"唯一方案","recommended":true}]}`,
+	}
+	run, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitRunStatus(t, db, run.ID, "completed")
+
+	var gates []models.Gate
+	db.Where("run_id = ? AND node_id = ?", run.ID, "select").Find(&gates)
+	if len(gates) != 0 {
+		t.Fatalf("single-candidate manual mode must not create a pending gate, got %d", len(gates))
+	}
+	var arts []models.Artifact
+	db.Where("run_id = ? AND name = ?", run.ID, "proposal.json").Find(&arts)
+	if len(arts) == 0 {
+		t.Fatalf("proposal.json not written")
+	}
+	var v models.RunVariable
+	if err := db.Where("run_id = ? AND name = ?", run.ID, "selected_proposal").First(&v).Error; err != nil {
+		t.Fatalf("selected_proposal var missing: %v", err)
+	}
+	if v.Value != "p1" {
+		t.Fatalf("expected sole candidate p1, got %v", v.Value)
+	}
+}
+
 // TestGateActionGoto: a human_gate action with a goto routes directly to that
 // node, bypassing edge guards, and assigns the action to the global var.
 func TestGateActionGoto(t *testing.T) {

@@ -2979,7 +2979,10 @@
     },
     "proposalSelect": {
       "title": "Select proposal",
+      "titleReadonly": "Proposal details",
       "subtitle": "{n} candidates · pick one as the final proposal",
+      "subtitleSingle": "Single candidate · no selection needed",
+      "subtitleEmpty": "No candidates",
       "context": "Context",
       "prev": "Previous",
       "next": "Next",

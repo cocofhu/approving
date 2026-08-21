@@ -129,7 +129,7 @@
           "desc": "完整对话记录"
         }
       },
-      "help": "### Approve\n\n一次多轮 ReAct 对话完成**开发前工作**。本节点只配置 Agent:**没有 Prompt 模板**、**不限制轮次**、也没有自动澄清 / 超时 / 条件注入。开场由平台注入运行输入并等待用户先描述目标;Agent 用工具对齐需求,仅在真实分歧时 `ask_question`。\n\n**两份强制交付**(都写完才能结束,不是「唯一交付」):\n1. `set_clarified_requirement` → `clarified_requirement.json`(open_questions 必须为空)\n2. `set_plan` → `plan.json`(最多两级:大目标→小目标)\n\n**可选**(有则展示,缺不失败):`set_research`、`set_proposals`、`write_artifact` 写入 `page.html`。\n\n若角色包声明「唯一交付」或禁止上述工具,**以平台规则 `rules/approve.md` 为准**。不要写实现代码、不要改仓库。"
+      "help": "### Approve\n\n一次多轮 ReAct 对话完成**开发前工作**。本节点只配置 Agent:**没有 Prompt 模板**、**不限制轮次**、也没有自动澄清 / 超时 / 条件注入。开场由平台注入运行输入并等待用户先描述目标;Agent 用工具对齐需求,仅在真实分歧时 `ask_question`。\n\n**两份强制交付**(都写完才能结束,不是「唯一交付」):\n1. `set_clarified_requirement` → `clarified_requirement.json`(open_questions 必须为空)\n2. `set_plan` → `plan.json`(最多两级:大目标→小目标)\n\n**可选**(有则展示,缺不失败):`set_research`;`set_proposals`(**仅当 ≥2 个可区分候选需用户择一时才写**;禁止单候选伪选择);`write_artifact` 写入 `page.html`。\n\n若角色包声明「唯一交付」或禁止上述工具,**以平台规则 `rules/approve.md` 为准**。不要写实现代码、不要改仓库。"
     },
     "agent": {
       "label": "通用",
@@ -385,7 +385,7 @@
     },
     "proposal_select": {
       "label": "方案确认",
-      "desc": "从上游候选方案中确认最终方案:auto_var 为真时自动选推荐方案,否则人工选择;输出 proposal.json",
+      "desc": "从上游候选方案中确认最终方案:auto_var 为真或仅 1 候选时自动采纳,否则人工选择;输出 proposal.json",
       "fields": {
         "title": {
           "label": "标题",
@@ -415,7 +415,7 @@
           "desc": "所选方案 id"
         }
       },
-      "help": "### 方案确认(proposal_select)\n\n从上游候选方案(`proposals.json`)中确认**唯一最终方案**。\n\n**自动模式**:当「自动确认变量」为真时,自动选择推荐方案(无推荐则取第一个)并继续。\n\n**人工模式**:否则挂起为人工选择,把各候选方案作为动作按钮展示,由人选定。\n\n**产出**:所选方案写入 `proposal.json`,其 id 赋值给「输出变量」(默认 `selected_proposal`)。"
+      "help": "### 方案确认(proposal_select)\n\n从上游候选方案(`proposals.json`)中确认**唯一最终方案**。\n\n**自动模式**:当「自动确认变量」为真时,自动选择推荐方案(无推荐则取第一个)并继续。\n\n**人工模式**:候选 ≥2 时挂起供人点选;若仅 1 个有效候选则**自动采纳**该候选并继续,不进入「等待人工选择方案」。\n\n**产出**:所选方案写入 `proposal.json`,其 id 赋值给「输出变量」(默认 `selected_proposal`)。"
     },
     "submit_mr": {
       "label": "提交 MR",

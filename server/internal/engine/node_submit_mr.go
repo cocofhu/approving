@@ -167,8 +167,10 @@ func (e *Engine) runSubmitMROnceWithGit(c *execCtx, node *models.Node, repo, sou
 
 // execProposalSelect resolves a single final proposal from the upstream
 // proposals.json. When the configured auto var is truthy it auto-selects the
-// recommended option and continues; otherwise it pauses on a human_gate whose
-// actions are the proposals, and ResumeGate finalizes the choice.
+// recommended option and continues; when only one valid candidate exists it
+// auto-adopts that candidate even in manual mode (no pseudo-choice pause);
+// otherwise it pauses on a human_gate whose actions are the proposals, and
+// ResumeGate finalizes the choice.
 func (e *Engine) execProposalSelect(c *execCtx, node *models.Node) nodeOutcome {
 	from := firstNonEmptyStr(str(node.Config["from"]), mcp.ProposalsArtifactName)
 	content, ok := e.store.Get(c.run.ID, from)
@@ -185,6 +187,27 @@ func (e *Engine) execProposalSelect(c *execCtx, node *models.Node) nodeOutcome {
 		}
 		oc := e.finalizeProposal(c, node, final, id, outVar)
 
+		if oc.status == "completed" {
+			e.retireGateUpstreamSession(c, node)
+		}
+		return oc
+	}
+
+	// Manual mode: a single valid candidate needs no human pick — adopt it
+	// immediately so one-item proposals.json never hangs on “等待人工选择方案”.
+	if choices := mcp.ProposalChoices(content); len(choices) == 1 {
+		final, id, ok := mcp.SelectProposal(content, choices[0].ID)
+		if !ok {
+			return nodeOutcome{status: "failed", err: "方案解析失败", outputMd: "方案确认失败:方案解析失败"}
+		}
+		iter := c.iter[node.ID]
+		var pending models.Gate
+		if err := e.db.Where("run_id = ? AND node_id = ? AND iteration = ?", c.run.ID, node.ID, iter).
+			First(&pending).Error; err == nil && !pending.Resolved {
+			pending.Resolved = true
+			logDB(e.db.Save(&pending), c.run.ID, "auto-resolve single-candidate proposal_select gate")
+		}
+		oc := e.finalizeProposal(c, node, final, id, outVar)
 		if oc.status == "completed" {
 			e.retireGateUpstreamSession(c, node)
 		}
