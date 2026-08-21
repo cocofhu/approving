@@ -336,7 +336,7 @@ function fileStatusClass(s: string): string {
 
     <!-- plan.json: structured two-level plan visualization (plan/implement nodes) -->
     <div v-if="planDoc" class="card mb-3 p-3">
-      <PlanView :doc="planDoc" :accent="hex" />
+      <PlanView :doc="planDoc" :accent="hex" :artifacts="run.artifacts" />
     </div>
 
     <!-- structured framework-card product: rendered markdown of the reserved

@@ -506,6 +506,19 @@ func artifactTools() []map[string]any {
 		return map[string]any{"name": name, "description": desc,
 			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}}
 	}
+	planDiagramSchema := func() map[string]any {
+		return map[string]any{
+			"type":        "object",
+			"description": "可选图:format 缺省 mermaid;出现对象则 source 必填非空;可选 fallback_artifact/caption",
+			"properties": map[string]any{
+				"format":            strProp("缺省 mermaid;其它值可保留但不保证原生渲染"),
+				"source":            strProp("图源文本(对象存在时必填)"),
+				"fallback_artifact": strProp("可选:同 run 图片产物名,渲染失败时降级"),
+				"caption":           strProp("可选:图注"),
+			},
+			"required": []string{"source"},
+		}
+	}
 	return []map[string]any{
 		{
 			"name": "write_artifact",
@@ -609,11 +622,80 @@ func artifactTools() []map[string]any {
 		{
 			"name": "set_plan",
 			"description": "仅计划(plan)或 Approve 节点可用:写入本次运行的全局结构化计划。计划最多两级:大目标 goals[] → 小目标 subgoals[](小目标是叶子,其下不能再有子目标)。" +
-				"在计划节点这是唯一交付;在 Approve 节点这是两份强制交付之一(另一份是 set_clarified_requirement)。不要写代码或改仓库。",
+				"可选 SDD 设计区(architecture/data_design/interfaces/components/interaction/test_design);写入设计区时应六节齐全,无内容用「不涉及」占位,可在 architecture/data_design/interaction 挂 Mermaid diagram。" +
+				"存量仅 goals 的计划仍合法。在计划节点这是唯一交付;在 Approve 节点这是两份强制交付之一(另一份是 set_clarified_requirement)。不要写代码或改仓库。",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"title": strProp("可选:计划标题"),
+					"architecture": map[string]any{
+						"type":        "object",
+						"description": "架构设计;summary 可为「不涉及」;可选 diagram(架构 flowchart)",
+						"properties": map[string]any{
+							"summary": strProp("架构摘要,可为「不涉及」"),
+							"diagram": planDiagramSchema(),
+						},
+					},
+					"data_design": map[string]any{
+						"type":        "object",
+						"description": "数据设计;summary 可为「不涉及」;可选 entities 与 ER diagram",
+						"properties": map[string]any{
+							"summary": strProp("数据设计摘要,可为「不涉及」"),
+							"entities": map[string]any{
+								"type": "array",
+								"items": map[string]any{
+									"type": "object",
+									"properties": map[string]any{
+										"name":          strProp("实体名"),
+										"attributes":    strList("可选:属性列表"),
+										"description":   strProp("可选:说明"),
+										"relationships": strList("可选:关系说明"),
+									},
+									"required": []string{"name"},
+								},
+							},
+							"relationships": strList("可选:顶层关系说明"),
+							"diagram":       planDiagramSchema(),
+						},
+					},
+					"interfaces": map[string]any{
+						"type":        "array",
+						"description": "接口列表;不涉及时用 [{name:\"不涉及\",summary:\"…\"}]",
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"name":      strProp("接口名"),
+								"kind":      strProp("可选:software|user|…"),
+								"direction": strProp("可选:in|out|inout"),
+								"summary":   strProp("可选:摘要"),
+								"detail":    strProp("可选:细节"),
+							},
+							"required": []string{"name"},
+						},
+					},
+					"components": map[string]any{
+						"type":        "array",
+						"description": "组件列表;不涉及时用 [{name:\"不涉及\"}]",
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"name":           strProp("组件/文件名"),
+								"responsibility": strProp("可选:职责"),
+								"dependencies":   strList("可选:依赖"),
+								"detail":         strProp("可选:细节"),
+							},
+							"required": []string{"name"},
+						},
+					},
+					"interaction": map[string]any{
+						"type":        "object",
+						"description": "交互设计;summary 可为「不涉及」;可选时序 diagram",
+						"properties": map[string]any{
+							"summary": strProp("交互摘要,可为「不涉及」"),
+							"diagram": planDiagramSchema(),
+						},
+					},
+					"test_design": strProp("测试设计说明,可为「不涉及」"),
 					"goals": map[string]any{
 						"type":        "array",
 						"description": "大目标列表(每个含 title 与可选 subgoals 小目标)",

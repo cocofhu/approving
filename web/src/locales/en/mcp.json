@@ -48,8 +48,8 @@
           "desc": "Clarify (react) nodes only: ask structured multiple-choice questions (options may be marked recommended; at most one for single-select, one or more for multi-select)"
         },
         "set_plan": {
-          "signature": "set_plan(goals)",
-          "desc": "Plan node only: write a two-level structured plan to plan.json"
+          "signature": "set_plan(goals, architecture?, data_design?, interfaces?, components?, interaction?, test_design?)",
+          "desc": "Plan/Approve: write a two-level plan; optional six SDD sections (use 不涉及 when N/A) + Mermaid diagrams"
         },
         "get_plan": {
           "signature": "get_plan() -> plan.json",

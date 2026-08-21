@@ -129,7 +129,7 @@
           "desc": "完整对话记录"
         }
       },
-      "help": "### Approve\n\n一次多轮 ReAct 对话完成**开发前工作**。本节点只配置 Agent:**没有 Prompt 模板**、**不限制轮次**、也没有自动澄清 / 超时 / 条件注入。开场由平台注入运行输入并等待用户先描述目标;Agent 用工具对齐需求,仅在真实分歧时 `ask_question`。\n\n**两份强制交付**(都写完才能结束,不是「唯一交付」):\n1. `set_clarified_requirement` → `clarified_requirement.json`(open_questions 必须为空)\n2. `set_plan` → `plan.json`(最多两级:大目标→小目标)\n\n**可选**(有则展示,缺不失败):`set_research`;`set_proposals`(**仅当 ≥2 个可区分候选需用户择一时才写**;禁止单候选伪选择);`write_artifact` 写入 `page.html`。\n\n若角色包声明「唯一交付」或禁止上述工具,**以平台规则 `rules/approve.md` 为准**。不要写实现代码、不要改仓库。"
+      "help": "### Approve\n\n一次多轮 ReAct 对话完成**开发前工作**。本节点只配置 Agent:**没有 Prompt 模板**、**不限制轮次**、也没有自动澄清 / 超时 / 条件注入。开场由平台注入运行输入并等待用户先描述目标;Agent 用工具对齐需求,仅在真实分歧时 `ask_question`。\n\n**两份强制交付**(都写完才能结束,不是「唯一交付」):\n1. `set_clarified_requirement` → `clarified_requirement.json`(open_questions 必须为空)\n2. `set_plan` → `plan.json`(最多两级:大目标→小目标;写入设计区时六节齐全,无内容显式「不涉及」,可挂 Mermaid diagram)\n\n**可选**(有则展示,缺不失败):`set_research`;`set_proposals`(**仅当 ≥2 个可区分候选需用户择一时才写**;禁止单候选伪选择);`write_artifact` 写入 `page.html`。\n\n若角色包声明「唯一交付」或禁止上述工具,**以平台规则 `rules/approve.md` 为准**。不要写实现代码、不要改仓库。"
     },
     "agent": {
       "label": "通用",
@@ -189,14 +189,14 @@
     },
     "plan": {
       "label": "计划",
-      "desc": "制定结构化计划(大目标→小目标),经 set_plan 写入全局计划;唯一交付,不写代码/产物",
+      "desc": "制定结构化计划(大目标→小目标,可选六节设计区),经 set_plan 写入全局计划;唯一交付,不写代码/产物",
       "fields": {
         "skill_profile": {
           "label": "Agent(用户定义 · Agent 管理)"
         },
         "prompt": {
           "label": "Prompt 模板",
-          "placeholder": "基于上游产物制定实施计划(最多两级:大目标→小目标),用 set_plan 写入"
+          "placeholder": "基于上游产物制定实施计划(最多两级:大目标→小目标;写入设计区时六节齐全可用「不涉及」),用 set_plan 写入"
         },
         "timeout": {
           "label": "超时(分钟)"
@@ -213,7 +213,7 @@
           "desc": "计划原始 JSON"
         }
       },
-      "help": "### 计划(plan)\n\n把上游产物拆解为**结构化计划**(最多两级:大目标→小目标),供后续「实现」节点逐项消费。\n\n**唯一交付(强制)**:调用 `set_plan` 写入 `plan.json`(每项含 status)。未写入则节点失败。不写代码、不产出其它文件。\n\n**自动产物**:仅自动生成保留 JSON `plan.json`,可直接结构化展示并用于分支判断。\n\n**下游**:实现节点用 `get_plan` 读取、`update_plan_status` 标记进度。"
+      "help": "### 计划(plan)\n\n把上游产物拆解为**结构化计划**(最多两级:大目标→小目标),供后续「实现」节点逐项消费。\n\n**唯一交付(强制)**:调用 `set_plan` 写入 `plan.json`(每项含 status)。可附带 SDD 设计区六节(`architecture`/`data_design`/`interfaces`/`components`/`interaction`/`test_design`);写入设计区时应齐全,无内容显式「不涉及」,可在 architecture/data_design/interaction 挂 Mermaid diagram。纯 goals 仍合法。未写入则节点失败。不写代码、不产出其它文件。\n\n**自动产物**:仅自动生成保留 JSON `plan.json`,可直接结构化展示并用于分支判断。进度与 plan_coverage 只计 goals 叶子。\n\n**下游**:实现节点用 `get_plan` 读取、`update_plan_status` 标记进度。"
     },
     "implement": {
       "label": "实现",

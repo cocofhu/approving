@@ -3,15 +3,54 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import AnnotateBtn from './product/AnnotateBtn.vue'
+import MermaidDiagram, { type PlanDiagram } from './MermaidDiagram.vue'
+import type { Artifact } from '@/lib/shared/types'
 
 export type PlanSub = { id?: string; title?: string; detail?: string; status?: string }
 export type PlanGoal = { id?: string; title?: string; detail?: string; status?: string; subgoals?: PlanSub[] }
-export type PlanDoc = { title?: string; goals?: PlanGoal[] }
+export type PlanEntity = {
+  name?: string
+  attributes?: string[]
+  description?: string
+  relationships?: string[]
+}
+export type PlanInterfaceItem = {
+  name?: string
+  kind?: string
+  direction?: string
+  summary?: string
+  detail?: string
+}
+export type PlanComponentItem = {
+  name?: string
+  responsibility?: string
+  dependencies?: string[]
+  detail?: string
+}
+export type PlanArchitecture = { summary?: string; diagram?: PlanDiagram }
+export type PlanDataDesign = {
+  summary?: string
+  entities?: PlanEntity[]
+  relationships?: string[]
+  diagram?: PlanDiagram
+}
+export type PlanInteraction = { summary?: string; diagram?: PlanDiagram }
+export type PlanDoc = {
+  title?: string
+  architecture?: PlanArchitecture
+  data_design?: PlanDataDesign
+  interfaces?: PlanInterfaceItem[]
+  components?: PlanComponentItem[]
+  interaction?: PlanInteraction
+  test_design?: string
+  goals?: PlanGoal[]
+}
 
-const props = defineProps<{ doc: PlanDoc; accent?: string }>()
+const props = defineProps<{ doc: PlanDoc; accent?: string; artifacts?: Artifact[] }>()
 
 const { t } = useI18n()
 const hex = computed(() => props.accent || '#818CF8')
+const NA = computed(() => t('pages.plan.notApplicable'))
 
 const progress = computed(() => {
   const goals = props.doc.goals || []
@@ -23,6 +62,26 @@ const progress = computed(() => {
   const done = leaves.filter((l) => l.status === 'done').length
   return { done, total: leaves.length, pct: leaves.length ? Math.round((done / leaves.length) * 100) : 0 }
 })
+
+const hasDesign = computed(
+  () =>
+    props.doc.architecture != null ||
+    props.doc.data_design != null ||
+    (props.doc.interfaces?.length ?? 0) > 0 ||
+    (props.doc.components?.length ?? 0) > 0 ||
+    props.doc.interaction != null ||
+    !!(props.doc.test_design && props.doc.test_design.trim()),
+)
+
+function isNA(text?: string) {
+  const s = (text || '').trim()
+  return s === '不涉及' || s === 'N/A' || s === NA.value
+}
+
+function displaySummary(text?: string) {
+  const s = (text || '').trim()
+  return s || NA.value
+}
 
 const STATUS: Record<string, { labelKey: string; cls: string; dot: string }> = {
   done: { labelKey: 'pages.plan.status.done', cls: 'bg-ok/15 text-ok', dot: 'bg-ok' },
@@ -56,6 +115,117 @@ function st(s?: string) {
     <!-- overall progress bar -->
     <div class="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-base">
       <div class="h-full rounded-full transition-all" :style="{ width: progress.pct + '%', background: hex }" />
+    </div>
+
+    <div v-if="hasDesign" class="mb-4 space-y-3" data-testid="plan-design">
+      <div class="text-[11px] font-semibold uppercase tracking-wide text-txt3">{{ t('pages.plan.designTitle') }}</div>
+
+      <section v-if="doc.architecture" class="border border-line bg-base/40 p-3" data-testid="plan-sec-architecture">
+        <div class="group flex items-center gap-2">
+          <div class="text-[13px] font-semibold text-txt">{{ t('pages.plan.sections.architecture') }}</div>
+          <AnnotateBtn json-path="architecture" :label="t('pages.plan.sections.architecture')" />
+        </div>
+        <div
+          class="mt-1 text-[12px] leading-relaxed"
+          :class="isNA(doc.architecture.summary) ? 'text-warn' : 'text-txt3'"
+        >
+          {{ displaySummary(doc.architecture.summary) }}
+        </div>
+        <MermaidDiagram
+          v-if="doc.architecture.diagram?.source"
+          :diagram="doc.architecture.diagram"
+          json-path="architecture.diagram"
+          :artifacts="artifacts"
+        />
+      </section>
+
+      <section v-if="doc.data_design" class="border border-line bg-base/40 p-3" data-testid="plan-sec-data">
+        <div class="group flex items-center gap-2">
+          <div class="text-[13px] font-semibold text-txt">{{ t('pages.plan.sections.dataDesign') }}</div>
+          <AnnotateBtn json-path="data_design" :label="t('pages.plan.sections.dataDesign')" />
+        </div>
+        <div
+          class="mt-1 text-[12px] leading-relaxed"
+          :class="isNA(doc.data_design.summary) ? 'text-warn' : 'text-txt3'"
+        >
+          {{ displaySummary(doc.data_design.summary) }}
+        </div>
+        <ul v-if="doc.data_design.entities?.length" class="mt-2 space-y-1">
+          <li v-for="(e, ei) in doc.data_design.entities" :key="e.name || ei" class="text-[12px] text-txt2">
+            <code class="font-mono text-[11px] text-txt3">{{ e.name }}</code>
+            <span v-if="e.description"> — {{ e.description }}</span>
+            <AnnotateBtn :json-path="`data_design.entities[${ei}]`" :label="e.name || `entity ${ei + 1}`" />
+          </li>
+        </ul>
+        <MermaidDiagram
+          v-if="doc.data_design.diagram?.source"
+          :diagram="doc.data_design.diagram"
+          json-path="data_design.diagram"
+          :artifacts="artifacts"
+        />
+      </section>
+
+      <section v-if="doc.interfaces?.length" class="border border-line bg-base/40 p-3" data-testid="plan-sec-interfaces">
+        <div class="text-[13px] font-semibold text-txt">{{ t('pages.plan.sections.interfaces') }}</div>
+        <ul class="mt-2 space-y-1.5">
+          <li v-for="(it, ii) in doc.interfaces" :key="it.name || ii" class="text-[12px] text-txt2">
+            <div class="group flex flex-wrap items-center gap-2">
+              <code class="font-mono text-[11px] text-txt3">{{ it.name }}</code>
+              <span v-if="it.summary" :class="isNA(it.name) || isNA(it.summary) ? 'text-warn' : 'text-txt3'">{{ it.summary }}</span>
+              <AnnotateBtn :json-path="`interfaces[${ii}]`" :label="it.name || `iface ${ii + 1}`" />
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <section v-if="doc.components?.length" class="border border-line bg-base/40 p-3" data-testid="plan-sec-components">
+        <div class="text-[13px] font-semibold text-txt">{{ t('pages.plan.sections.components') }}</div>
+        <ul class="mt-2 space-y-1.5">
+          <li v-for="(c, ci) in doc.components" :key="c.name || ci" class="text-[12px] text-txt2">
+            <div class="group flex flex-wrap items-center gap-2">
+              <code class="font-mono text-[11px] text-txt3">{{ c.name }}</code>
+              <span v-if="c.responsibility" :class="isNA(c.name) ? 'text-warn' : 'text-txt3'">{{ c.responsibility }}</span>
+              <AnnotateBtn :json-path="`components[${ci}]`" :label="c.name || `comp ${ci + 1}`" />
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <section v-if="doc.interaction" class="border border-line bg-base/40 p-3" data-testid="plan-sec-interaction">
+        <div class="group flex items-center gap-2">
+          <div class="text-[13px] font-semibold text-txt">{{ t('pages.plan.sections.interaction') }}</div>
+          <AnnotateBtn json-path="interaction" :label="t('pages.plan.sections.interaction')" />
+        </div>
+        <div
+          class="mt-1 text-[12px] leading-relaxed"
+          :class="isNA(doc.interaction.summary) ? 'text-warn' : 'text-txt3'"
+        >
+          {{ displaySummary(doc.interaction.summary) }}
+        </div>
+        <MermaidDiagram
+          v-if="doc.interaction.diagram?.source"
+          :diagram="doc.interaction.diagram"
+          json-path="interaction.diagram"
+          :artifacts="artifacts"
+        />
+      </section>
+
+      <section v-if="doc.test_design?.trim()" class="border border-line bg-base/40 p-3" data-testid="plan-sec-test">
+        <div class="group flex items-center gap-2">
+          <div class="text-[13px] font-semibold text-txt">{{ t('pages.plan.sections.testDesign') }}</div>
+          <AnnotateBtn json-path="test_design" :label="t('pages.plan.sections.testDesign')" />
+        </div>
+        <div
+          class="mt-1 text-[12px] leading-relaxed whitespace-pre-wrap"
+          :class="isNA(doc.test_design) ? 'text-warn' : 'text-txt3'"
+        >
+          {{ displaySummary(doc.test_design) }}
+        </div>
+      </section>
+    </div>
+
+    <div v-if="hasDesign" class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-txt3">
+      {{ t('pages.plan.goalsTitle') }}
     </div>
 
     <div class="space-y-2.5">

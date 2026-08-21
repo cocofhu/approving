@@ -373,7 +373,7 @@ const {
               :run-status="run?.status"
             />
           </template>
-          <PlanView v-else-if="planDoc" :doc="planDoc" />
+          <PlanView v-else-if="planDoc" :doc="planDoc" :artifacts="run?.artifacts" />
           <div v-else class="md max-md:text-[13px] max-md:leading-relaxed" v-html="renderMarkdown(gate.bodyMd)" />
         </div>
       </div>

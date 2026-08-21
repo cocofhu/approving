@@ -129,7 +129,7 @@
           "desc": "Full conversation transcript"
         }
       },
-      "help": "### Approve\n\nOne multi-turn ReAct dialogue for **pre-dev work**. This node only configures an Agent: **no prompt template**, **no round cap**, and no auto-clarify / timeout / conditional injection. The platform injects run inputs and waits for the user to state the goal first; the agent then uses tools to align requirements and only `ask_question` when there is a real decision.\n\n**Two mandatory deliverables** (both required to finish — not a single unique delivery):\n1. `set_clarified_requirement` → `clarified_requirement.json` (`open_questions` must be empty)\n2. `set_plan` → `plan.json` (at most two levels: goal → sub-goal)\n\n**Optional** (shown if present, missing does not fail): `set_research`; `set_proposals` (**only when ≥2 distinct alternatives need a user pick**; no single-candidate pseudo-choice); `write_artifact` for `page.html`.\n\nIf a skill pack says “unique delivery” or forbids those tools, **platform rule `rules/approve.md` wins**. Do not write implementation code or change the repo."
+      "help": "### Approve\n\nOne multi-turn ReAct dialogue for **pre-dev work**. This node only configures an Agent: **no prompt template**, **no round cap**, and no auto-clarify / timeout / conditional injection. The platform injects run inputs and waits for the user to state the goal first; the agent then uses tools to align requirements and only `ask_question` when there is a real decision.\n\n**Two mandatory deliverables** (both required to finish — not a single unique delivery):\n1. `set_clarified_requirement` → `clarified_requirement.json` (`open_questions` must be empty)\n2. `set_plan` → `plan.json` (at most two levels: goal → sub-goal; when writing the design zone, include all six sections or explicit 不涉及, optional Mermaid diagrams)\n\n**Optional** (shown if present, missing does not fail): `set_research`; `set_proposals` (**only when ≥2 distinct alternatives need a user pick**; no single-candidate pseudo-choice); `write_artifact` for `page.html`.\n\nIf a skill pack says “unique delivery” or forbids those tools, **platform rule `rules/approve.md` wins**. Do not write implementation code or change the repo."
     },
     "agent": {
       "label": "Generic",
@@ -189,14 +189,14 @@
     },
     "plan": {
       "label": "Plan",
-      "desc": "Structured plan (goals→subgoals) via set_plan; deliverable only, no code/files",
+      "desc": "Structured plan (goals→subgoals, optional six SDD sections) via set_plan; deliverable only, no code/files",
       "fields": {
         "skill_profile": {
           "label": "Agent (user-defined · Agent Studio)"
         },
         "prompt": {
           "label": "Prompt template",
-          "placeholder": "Create implementation plan (max two levels) with set_plan from upstream artifacts"
+          "placeholder": "Create implementation plan (max two levels; six design sections or 不涉及 when writing design) with set_plan from upstream artifacts"
         },
         "timeout": {
           "label": "Timeout (minutes)"
@@ -213,7 +213,7 @@
           "desc": "Raw plan JSON"
         }
       },
-      "help": "### Plan (plan)\n\nBreak upstream artifacts into a **structured plan** (max two levels) for implement node.\n\n**Mandatory**: `set_plan` → `plan.json` with status per item. No code/files.\n\n**Auto artifact**: only the reserved JSON `plan.json` is auto-written; it can be shown structurally and used for branching.\n\n**Downstream**: implement uses `get_plan` / `update_plan_status`."
+      "help": "### Plan (plan)\n\nBreak upstream artifacts into a **structured plan** (max two levels) for implement node.\n\n**Mandatory**: `set_plan` → `plan.json` with status per item. Optional SDD design zone (`architecture`/`data_design`/`interfaces`/`components`/`interaction`/`test_design`); when writing design, include all six or explicit 不涉及, with optional Mermaid diagrams. Goals-only remains valid. No code/files.\n\n**Auto artifact**: only the reserved JSON `plan.json` is auto-written; it can be shown structurally and used for branching. Progress / plan_coverage count goals leaves only.\n\n**Downstream**: implement uses `get_plan` / `update_plan_status`."
     },
     "implement": {
       "label": "Implement",

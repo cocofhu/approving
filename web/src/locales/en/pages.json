@@ -2971,6 +2971,18 @@
     },
     "plan": {
       "defaultTitle": "Implementation plan",
+      "designTitle": "Design",
+      "goalsTitle": "Goals",
+      "notApplicable": "N/A",
+      "sections": {
+        "architecture": "Architecture",
+        "dataDesign": "Data design",
+        "interfaces": "Interfaces",
+        "components": "Components",
+        "interaction": "Interaction",
+        "testDesign": "Test design"
+      },
+      "diagramFallback": "Diagram render failed; showing source",
       "status": {
         "done": "Done",
         "in_progress": "In progress",
