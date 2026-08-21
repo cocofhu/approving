@@ -71,13 +71,21 @@ function openFilePicker() {
 </script>
 
 <template>
-  <div data-testid="dashboard-view" class="flex flex-col md:h-full md:min-h-0">
-    <div class="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-4 py-10">
-      <p class="text-sm font-medium tracking-wide text-txt3" data-testid="home-brand">Approving</p>
-      <h2 class="mt-2 text-center text-2xl font-semibold text-txt" data-testid="home-title">
+  <div data-testid="dashboard-view" class="home-stage relative flex flex-col md:h-full md:min-h-0">
+    <div class="home-stage__bg" aria-hidden="true" data-testid="home-stage-bg">
+      <div class="home-stage__wash" />
+      <div class="home-stage__grid" />
+      <div class="home-stage__glow" />
+    </div>
+
+    <div
+      class="home-stage__content relative z-[1] mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-4 py-10"
+    >
+      <p class="home-stage__brand" data-testid="home-brand">Approving</p>
+      <h2 class="home-stage__headline mt-5 text-center" data-testid="home-title">
         {{ t('pages.dashboard.title') }}
       </h2>
-      <p class="mt-2 max-w-xl text-center text-sm text-txt3" data-testid="home-subtitle">
+      <p class="mt-2.5 max-w-xl text-center text-[13px] text-txt2" data-testid="home-subtitle">
         {{ t('pages.dashboard.subtitle') }}
       </p>
 
@@ -128,7 +136,7 @@ function openFilePicker() {
           </div>
         </div>
         <form
-          class="flex w-full items-center gap-2 rounded-full border border-line bg-surface px-2 py-1.5"
+          class="home-stage__composer flex w-full items-center gap-2 border px-3 py-2"
           data-testid="home-composer"
           @submit="onComposerSubmit"
         >
@@ -142,7 +150,7 @@ function openFilePicker() {
           />
           <button
             type="button"
-            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-txt3 hover:text-txt disabled:opacity-40"
+            class="flex h-8 w-8 shrink-0 items-center justify-center text-txt3 hover:text-txt disabled:opacity-40"
             :disabled="sending"
             :title="t('pages.clarify.addImage')"
             data-testid="home-composer-plus"
@@ -153,7 +161,7 @@ function openFilePicker() {
           <label class="sr-only" for="home-pipeline-select">{{ t('pages.dashboard.pickPipeline') }}</label>
           <select
             id="home-pipeline-select"
-            class="max-w-[10rem] shrink-0 cursor-pointer appearance-none rounded-full bg-accent/15 px-3 py-1 text-xs font-medium text-accent outline-none disabled:cursor-default disabled:bg-elevated disabled:text-txt3"
+            class="home-stage__pipeline max-w-[10rem] shrink-0 cursor-pointer appearance-none border bg-accent/15 px-3 py-1.5 text-xs font-medium text-accent outline-none disabled:cursor-default disabled:bg-elevated disabled:text-txt3"
             data-testid="home-pipeline-select"
             :disabled="!pipelines.length || sending"
             :value="selectedId"
@@ -164,7 +172,7 @@ function openFilePicker() {
           </select>
           <input
             v-model="draft"
-            class="min-w-0 flex-1 bg-transparent px-1 text-sm text-txt outline-none placeholder:text-txt3"
+            class="home-stage__input min-w-0 flex-1 bg-transparent px-1 text-sm text-txt outline-none placeholder:text-txt3"
             data-testid="home-composer-input"
             :placeholder="t('pages.dashboard.placeholder')"
             :disabled="sending"
@@ -173,7 +181,7 @@ function openFilePicker() {
           />
           <button
             type="submit"
-            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-txt text-base disabled:opacity-40"
+            class="home-stage__send flex h-8 w-8 shrink-0 items-center justify-center text-base disabled:opacity-40"
             data-testid="home-composer-send"
             :disabled="sending || !canSend"
             :aria-label="t('pages.dashboard.send')"
@@ -182,7 +190,7 @@ function openFilePicker() {
           </button>
         </form>
       </div>
-      <p class="mt-2 text-center text-[12px] text-txt3" data-testid="home-filter-hint">
+      <p class="mt-3 text-center text-[11px] text-txt3" data-testid="home-filter-hint">
         {{ t('pages.dashboard.filterHint') }}
       </p>
 
@@ -235,12 +243,12 @@ function openFilePicker() {
           v-for="p in pipelines"
           :key="p.id"
           type="button"
-          class="card w-48 shrink-0 overflow-hidden p-0 text-left transition"
+          class="card home-stage__card w-48 shrink-0 overflow-hidden p-0 text-left transition"
           :class="p.id === selected?.id ? 'border-accent ring-1 ring-accent/40' : 'hover:border-line-strong'"
           :data-testid="`home-pipeline-card-${p.id}`"
           @click="selectPipeline(p.id)"
         >
-          <div class="flex h-20 items-center justify-center bg-elevated">
+          <div class="flex h-20 items-center justify-center bg-elevated/80">
             <span class="flex items-center gap-1.5">
               <span class="h-2 w-2 rounded-full bg-txt3" />
               <span class="h-px w-6 bg-line-strong" />
@@ -276,3 +284,191 @@ function openFilePicker() {
     />
   </div>
 </template>
+
+<style scoped>
+/* g1.1 — edge-to-edge stage wash / grid / glow (dark + light readable) */
+.home-stage {
+  isolation: isolate;
+}
+
+.home-stage__bg {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.home-stage__wash {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 90% 55% at 50% 8%, rgba(91, 66, 180, 0.48) 0%, transparent 58%),
+    radial-gradient(ellipse 60% 40% at 80% 70%, rgba(49, 46, 129, 0.28) 0%, transparent 55%),
+    linear-gradient(180deg, rgba(10, 10, 11, 0.12) 0%, rgba(10, 10, 11, 0.55) 55%, rgb(var(--c-base)) 100%),
+    linear-gradient(135deg, rgb(17 24 39) 0%, rgb(var(--c-base)) 42%, rgb(30 27 75) 100%);
+}
+
+:global(html.light) .home-stage__wash {
+  background:
+    radial-gradient(ellipse 90% 55% at 50% 8%, rgba(123, 97, 255, 0.22) 0%, transparent 58%),
+    radial-gradient(ellipse 55% 38% at 82% 72%, rgba(99, 102, 241, 0.14) 0%, transparent 55%),
+    linear-gradient(180deg, rgba(250, 250, 251, 0.35) 0%, rgba(250, 250, 251, 0.82) 55%, rgb(var(--c-base)) 100%),
+    linear-gradient(135deg, #eef0ff 0%, rgb(var(--c-base)) 45%, #e8e7f8 100%);
+}
+
+.home-stage__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(circle at 50% 28%, #000 18%, transparent 72%);
+  -webkit-mask-image: radial-gradient(circle at 50% 28%, #000 18%, transparent 72%);
+  animation: home-stage-drift 18s linear infinite;
+}
+
+:global(html.light) .home-stage__grid {
+  background-image:
+    linear-gradient(rgba(99, 102, 241, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.08) 1px, transparent 1px);
+}
+
+.home-stage__glow {
+  position: absolute;
+  top: 10%;
+  left: 50%;
+  width: min(720px, 90vw);
+  height: 220px;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse at center, rgba(167, 139, 250, 0.28), transparent 70%);
+  filter: blur(8px);
+  animation: home-stage-pulse 5.5s ease-in-out infinite;
+}
+
+:global(html.light) .home-stage__glow {
+  background: radial-gradient(ellipse at center, rgba(123, 97, 255, 0.18), transparent 70%);
+}
+
+/* g1.2 — brand as first visual anchor */
+.home-stage__brand {
+  font-size: clamp(2.75rem, 9vw, 5.5rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 0.92;
+  color: rgb(var(--c-accent-2));
+  background: var(--grad-logo);
+  background-size: var(--grad-logo-size);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: home-stage-brand-in 0.9s ease-out both, shimmer 3.5s ease-in-out 0.9s infinite;
+}
+
+.home-stage__headline {
+  font-size: clamp(1.25rem, 3.2vw, 1.75rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: rgb(var(--c-txt));
+}
+
+/* g1.3 — floating composer on stage plane */
+.home-stage__composer {
+  border-color: rgba(196, 181, 253, 0.35);
+  background: rgba(10, 10, 11, 0.58);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+:global(html.light) .home-stage__composer {
+  border-color: rgba(123, 97, 255, 0.28);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow:
+    0 18px 40px rgba(16, 24, 40, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.home-stage__pipeline {
+  border-color: rgba(196, 181, 253, 0.45);
+}
+
+:global(html.light) .home-stage__pipeline {
+  border-color: rgba(123, 97, 255, 0.35);
+}
+
+.home-stage__send {
+  background: rgb(237 233 254);
+  color: #111;
+}
+
+:global(html.light) .home-stage__send {
+  background: rgb(var(--c-txt));
+  color: rgb(var(--c-base));
+}
+
+.home-stage__card {
+  background: rgba(20, 20, 23, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+:global(html.light) .home-stage__card {
+  background: rgba(255, 255, 255, 0.82);
+}
+
+@keyframes home-stage-drift {
+  from {
+    transform: translateY(0);
+    opacity: 0.9;
+  }
+  to {
+    transform: translateY(24px);
+    opacity: 0.75;
+  }
+}
+
+@keyframes home-stage-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes home-stage-brand-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+/* g2.3 — narrow screens keep brand anchor + operable composer */
+@media (max-width: 520px) {
+  .home-stage__content {
+    padding-top: 2rem;
+    padding-bottom: 2.5rem;
+    justify-content: flex-start;
+  }
+
+  .home-stage__composer {
+    flex-wrap: wrap;
+  }
+
+  .home-stage__input {
+    min-width: 100%;
+    order: 3;
+  }
+}
+</style>

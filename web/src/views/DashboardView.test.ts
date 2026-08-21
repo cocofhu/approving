@@ -104,6 +104,17 @@ describe('DashboardView home composer', () => {
     wrapper.unmount()
   })
 
+  // plan g1.1/g1.2 — stage atmosphere + brand anchor remain in the live tree
+  it('renders stage background and dominant Approving brand', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-stage-bg"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="home-brand"]').text()).toBe('Approving')
+    expect(wrapper.get('[data-testid="home-brand"]').classes()).toContain('home-stage__brand')
+    expect(wrapper.get('[data-testid="home-composer"]').classes()).toContain('home-stage__composer')
+    wrapper.unmount()
+  })
+
   it('shows project empty state when no project is stored', async () => {
     mocks.readStoredProjectId.mockReturnValue('')
     const wrapper = mountDashboard()
