@@ -284,7 +284,7 @@ onBeforeUnmount(() => {
             </div>
             <button
               type="button"
-              class="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-err text-white"
+              class="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-none bg-err text-white"
               data-testid="home-attach-remove"
               @click.stop="removeAttachment(ii)"
             >
@@ -426,7 +426,7 @@ onBeforeUnmount(() => {
           v-for="p in pipelines"
           :key="p.id"
           type="button"
-          class="card home-shell__card rounded-none w-48 shrink-0 overflow-hidden p-0 text-left transition"
+          class="home-shell__card w-48 shrink-0 overflow-hidden border border-line p-0 text-left transition"
           :class="p.id === selected?.id ? 'border-accent ring-1 ring-accent/40' : 'hover:border-line-strong'"
           :data-testid="`home-pipeline-card-${p.id}`"
           @click="selectPipeline(p.id)"
@@ -576,9 +576,11 @@ onBeforeUnmount(() => {
   color: rgb(var(--c-base));
 }
 
+/* 不复用全局 .card（含 rounded-lg）；局部直角卡片 */
 .home-shell__card {
   background: rgb(var(--c-surface));
   border-radius: 0;
+  box-shadow: none;
 }
 
 :global(html.light) .home-shell__card {
