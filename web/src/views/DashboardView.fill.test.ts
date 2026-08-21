@@ -75,9 +75,11 @@ describe('DashboardView home chat layout', () => {
     expect(src).not.toMatch(/rounded-full bg-err[\s\S]{0,80}data-testid="home-attach-remove"/)
   })
 
-  // plan g2.1 / g2.2 / g2.3
-  it('keeps filter hint, placeholder typewriter hook, and multiline textarea', () => {
-    expect(src).toMatch(/data-testid="home-filter-hint"/)
+  // plan g2 / g3 — no filter hint; caret opacity settle; placeholder typewriter
+  it('omits filter hint and keeps caret settle + placeholder typewriter', () => {
+    expect(src).not.toMatch(/data-testid="home-filter-hint"/)
+    expect(src).not.toMatch(/filterHint/)
+    expect(src).toMatch(/home-brand__cursor--gone/)
     expect(src).toMatch(/data-testid="home-composer-placeholder"/)
     expect(src).toMatch(/shiftKey/)
     expect(src).toMatch(/prefers-reduced-motion/)

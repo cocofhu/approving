@@ -4,7 +4,6 @@
       "title": "Start a pre-dev clarification in one sentence",
       "subtitle": "Pick an Approve pipeline; the first message becomes the Run title",
       "placeholder": "Start your next iteration quickly",
-      "filterHint": "Only published pipelines whose first node after start is Approve (across projects)",
       "selectProject": "Select a project",
       "noProject": "No project selected. Pick a project to start an Approve pipeline from Home.",
       "noPipelines": "No published pipeline whose first node after start is Approve is available on this account.",

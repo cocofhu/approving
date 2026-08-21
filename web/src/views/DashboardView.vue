@@ -45,7 +45,8 @@ const {
 } = useHomeApproveChat()
 
 const brandVisible = ref('')
-const brandCursor = ref(false)
+/** Keep caret in layout; hide with opacity so settle does not shift the centered brand. */
+const brandCursorGone = ref(false)
 const brandCursorBlink = ref(false)
 const brandTimers: ReturnType<typeof setTimeout>[] = []
 const composerFocused = ref(false)
@@ -76,17 +77,17 @@ function scheduleBrand(fn: () => void, ms: number) {
   brandTimers.push(setTimeout(fn, ms))
 }
 
-/** g1.1 — monospace brand: type once, soft blink caret, then settle. */
+/** Monospace brand: type once, soft blink caret, then opacity-hide caret (keep box). */
 function runBrandTypewriter() {
   clearBrandTimers()
   brandCursorBlink.value = false
+  brandCursorGone.value = false
   if (prefersReducedMotion()) {
     brandVisible.value = BRAND_TEXT
-    brandCursor.value = false
+    brandCursorGone.value = true
     return
   }
   brandVisible.value = ''
-  brandCursor.value = true
   let i = 0
   const typeNext = () => {
     if (i < BRAND_TEXT.length) {
@@ -98,7 +99,7 @@ function runBrandTypewriter() {
     brandCursorBlink.value = true
     scheduleBrand(() => {
       brandCursorBlink.value = false
-      brandCursor.value = false
+      brandCursorGone.value = true
     }, 850 * 3)
   }
   scheduleBrand(typeNext, 220)
@@ -231,9 +232,11 @@ onBeforeUnmount(() => {
       <h1 class="home-brand" data-testid="home-brand" aria-label="Approving">
         <span class="home-brand__text" data-testid="home-brand-text">{{ brandVisible }}</span>
         <span
-          v-if="brandCursor"
           class="home-brand__cursor"
-          :class="{ 'home-brand__cursor--blink': brandCursorBlink }"
+          :class="{
+            'home-brand__cursor--blink': brandCursorBlink,
+            'home-brand__cursor--gone': brandCursorGone,
+          }"
           data-testid="home-brand-cursor"
           aria-hidden="true"
         />
@@ -370,9 +373,6 @@ onBeforeUnmount(() => {
           </div>
         </form>
       </div>
-      <p class="mt-3 text-center text-[11px] text-txt3" data-testid="home-filter-hint">
-        {{ t('pages.dashboard.filterHint') }}
-      </p>
 
       <div
         v-if="loadError"
@@ -408,7 +408,7 @@ onBeforeUnmount(() => {
 
       <div
         v-else
-        class="mt-[22px] flex w-full justify-center gap-3 overflow-x-auto pb-1"
+        class="mt-10 flex w-full justify-center gap-3 overflow-x-auto pb-1"
         data-testid="home-pipeline-cards"
       >
         <button
@@ -487,11 +487,18 @@ onBeforeUnmount(() => {
   height: 0.92em;
   margin-left: 0.06em;
   vertical-align: -0.06em;
+  flex-shrink: 0;
   background: rgb(var(--c-accent));
+  opacity: 1;
+  transition: opacity 0.2s ease;
 }
 
 .home-brand__cursor--blink {
   animation: home-brand-caret 0.85s steps(1) 3;
+}
+
+.home-brand__cursor--gone {
+  opacity: 0;
 }
 
 .home-hint {
@@ -642,7 +649,8 @@ onBeforeUnmount(() => {
   }
 
   .home-brand__cursor {
-    display: none !important;
+    opacity: 0 !important;
+    animation: none !important;
   }
 
   .home-composer__ph-cursor {
