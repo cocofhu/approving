@@ -187,4 +187,66 @@ describe('PlanView', () => {
     expect(wrapper.text()).toContain('G')
     wrapper.unmount()
   })
+
+  it('uses readable body text classes (text-txt2) for design and goal details (g1.1/g1.2/g1.3)', async () => {
+    const doc: PlanDoc = {
+      title: '对比度计划',
+      architecture: { summary: '架构摘要可读' },
+      data_design: { summary: '数据摘要可读' },
+      interfaces: [{ name: 'iface', summary: '接口说明可读' }],
+      components: [{ name: 'comp', responsibility: '组件职责可读' }],
+      interaction: { summary: '交互摘要可读' },
+      test_design: '测试设计可读',
+      goals: [
+        {
+          id: 'g1',
+          title: '大目标',
+          detail: '目标说明可读',
+          status: 'pending',
+          subgoals: [{ id: 'g1.1', title: '小目标', detail: '小目标说明可读', status: 'pending' }],
+        },
+      ],
+    }
+    const wrapper = mountPlan(doc)
+    await flushPromises()
+
+    const bodySelectors = [
+      '[data-testid="plan-body-architecture"]',
+      '[data-testid="plan-body-data"]',
+      '[data-testid="plan-body-interface"]',
+      '[data-testid="plan-body-component"]',
+      '[data-testid="plan-body-interaction"]',
+      '[data-testid="plan-body-test"]',
+      '[data-testid="plan-body-goal-detail"]',
+      '[data-testid="plan-body-subgoal-detail"]',
+    ]
+    for (const sel of bodySelectors) {
+      const el = wrapper.find(sel)
+      expect(el.exists(), sel).toBe(true)
+      expect(el.classes(), sel).toContain('text-txt2')
+      expect(el.classes(), sel).not.toContain('text-txt3')
+    }
+
+    // Meta layers stay weaker: section uppercase label + goal id badge
+    const designLabel = wrapper.find('[data-testid="plan-design"] > .text-txt3')
+    expect(designLabel.exists()).toBe(true)
+    expect(wrapper.find('code.text-txt3').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('keeps NA warn styling distinct from readable body text', () => {
+    const doc: PlanDoc = {
+      architecture: { summary: '不涉及' },
+      data_design: { summary: '不涉及' },
+      interaction: { summary: '不涉及' },
+      test_design: '不涉及',
+      goals: [{ id: 'g1', title: 'G', status: 'pending' }],
+    }
+    const wrapper = mountPlan(doc)
+    expect(wrapper.find('[data-testid="plan-body-architecture"]').classes()).toContain('text-warn')
+    expect(wrapper.find('[data-testid="plan-body-data"]').classes()).toContain('text-warn')
+    expect(wrapper.find('[data-testid="plan-body-interaction"]').classes()).toContain('text-warn')
+    expect(wrapper.find('[data-testid="plan-body-test"]').classes()).toContain('text-warn')
+    wrapper.unmount()
+  })
 })

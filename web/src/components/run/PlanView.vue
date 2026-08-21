@@ -127,7 +127,8 @@ function st(s?: string) {
         </div>
         <div
           class="mt-1 text-[12px] leading-relaxed"
-          :class="isNA(doc.architecture.summary) ? 'text-warn' : 'text-txt3'"
+          :class="isNA(doc.architecture.summary) ? 'text-warn' : 'text-txt2'"
+          data-testid="plan-body-architecture"
         >
           {{ displaySummary(doc.architecture.summary) }}
         </div>
@@ -146,7 +147,8 @@ function st(s?: string) {
         </div>
         <div
           class="mt-1 text-[12px] leading-relaxed"
-          :class="isNA(doc.data_design.summary) ? 'text-warn' : 'text-txt3'"
+          :class="isNA(doc.data_design.summary) ? 'text-warn' : 'text-txt2'"
+          data-testid="plan-body-data"
         >
           {{ displaySummary(doc.data_design.summary) }}
         </div>
@@ -171,7 +173,11 @@ function st(s?: string) {
           <li v-for="(it, ii) in doc.interfaces" :key="it.name || ii" class="text-[12px] text-txt2">
             <div class="group flex flex-wrap items-center gap-2">
               <code class="font-mono text-[11px] text-txt3">{{ it.name }}</code>
-              <span v-if="it.summary" :class="isNA(it.name) || isNA(it.summary) ? 'text-warn' : 'text-txt3'">{{ it.summary }}</span>
+              <span
+                v-if="it.summary"
+                :class="isNA(it.name) || isNA(it.summary) ? 'text-warn' : 'text-txt2'"
+                data-testid="plan-body-interface"
+              >{{ it.summary }}</span>
               <AnnotateBtn :json-path="`interfaces[${ii}]`" :label="it.name || `iface ${ii + 1}`" />
             </div>
           </li>
@@ -184,7 +190,11 @@ function st(s?: string) {
           <li v-for="(c, ci) in doc.components" :key="c.name || ci" class="text-[12px] text-txt2">
             <div class="group flex flex-wrap items-center gap-2">
               <code class="font-mono text-[11px] text-txt3">{{ c.name }}</code>
-              <span v-if="c.responsibility" :class="isNA(c.name) ? 'text-warn' : 'text-txt3'">{{ c.responsibility }}</span>
+              <span
+                v-if="c.responsibility"
+                :class="isNA(c.name) ? 'text-warn' : 'text-txt2'"
+                data-testid="plan-body-component"
+              >{{ c.responsibility }}</span>
               <AnnotateBtn :json-path="`components[${ci}]`" :label="c.name || `comp ${ci + 1}`" />
             </div>
           </li>
@@ -198,7 +208,8 @@ function st(s?: string) {
         </div>
         <div
           class="mt-1 text-[12px] leading-relaxed"
-          :class="isNA(doc.interaction.summary) ? 'text-warn' : 'text-txt3'"
+          :class="isNA(doc.interaction.summary) ? 'text-warn' : 'text-txt2'"
+          data-testid="plan-body-interaction"
         >
           {{ displaySummary(doc.interaction.summary) }}
         </div>
@@ -217,7 +228,8 @@ function st(s?: string) {
         </div>
         <div
           class="mt-1 text-[12px] leading-relaxed whitespace-pre-wrap"
-          :class="isNA(doc.test_design) ? 'text-warn' : 'text-txt3'"
+          :class="isNA(doc.test_design) ? 'text-warn' : 'text-txt2'"
+          data-testid="plan-body-test"
         >
           {{ displaySummary(doc.test_design) }}
         </div>
@@ -239,7 +251,7 @@ function st(s?: string) {
               <AnnotateBtn :json-path="`goals[${g.id || gi}]`" :label="g.title || `目标 ${gi + 1}`" />
               <span class="ml-auto shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium" :class="st(g.status).cls">{{ st(g.status).label }}</span>
             </div>
-            <div v-if="g.detail" class="mt-1 text-[12px] leading-relaxed text-txt3">{{ g.detail }}</div>
+            <div v-if="g.detail" class="mt-1 text-[12px] leading-relaxed text-txt2" data-testid="plan-body-goal-detail">{{ g.detail }}</div>
           </div>
         </div>
 
@@ -253,7 +265,7 @@ function st(s?: string) {
                 <AnnotateBtn :json-path="`goals[${g.id || gi}].subgoals[${s.id || si}]`" :label="s.title || `小目标 ${si + 1}`" />
                 <span class="ml-auto shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium" :class="st(s.status).cls">{{ st(s.status).label }}</span>
               </div>
-              <div v-if="s.detail" class="mt-1 text-[11px] leading-relaxed text-txt3">{{ s.detail }}</div>
+              <div v-if="s.detail" class="mt-1 text-[11px] leading-relaxed text-txt2" data-testid="plan-body-subgoal-detail">{{ s.detail }}</div>
             </div>
           </div>
         </div>
