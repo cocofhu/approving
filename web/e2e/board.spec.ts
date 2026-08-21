@@ -191,14 +191,13 @@ test.describe('需求进度看板（项目级）', () => {
     await expect(page.getByTestId('run-board-column')).toHaveCount(0)
   })
 
-  test('Dashboard 无项目记忆：空态引导至项目列表', async ({ page }) => {
+  test('Dashboard 无项目记忆：跨项目展示流水线，无先选项目门槛', async ({ page }) => {
     await gotoBoardHarness(page, { width: 1280, start: 'dashboard', memory: '0' })
     await expect(page.getByTestId('dashboard-view')).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByTestId('home-no-project')).toBeVisible()
-    await expect(page.getByTestId('dashboard-select-project')).toBeVisible()
+    await expect(page.getByTestId('home-no-project')).toHaveCount(0)
+    await expect(page.getByTestId('home-composer')).toBeVisible()
+    await expect(page.getByTestId('home-pipeline-card-wf-approve')).toContainText('自我迭代PRO')
     await expect(page.getByTestId('run-board-column')).toHaveCount(0)
-    await page.getByTestId('dashboard-select-project').click()
-    await expect(page.getByTestId('projects-page')).toBeVisible({ timeout: 5_000 })
   })
 
   test('/board 有记忆重定向到项目看板', async ({ page }) => {
