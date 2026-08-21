@@ -170,8 +170,10 @@ test.describe('desktop sidebar hide', () => {
 
     await page.getByTestId('floating-nav-ball').click()
     await expect(page.locator('.bg-black\\/50')).toBeVisible()
-    await expect(page.getByTestId('mobile-nav-drawer')).toBeVisible()
-    await expect(page.getByTestId('shell-chrome-controls')).toBeVisible()
+    const drawer = page.getByTestId('mobile-nav-drawer')
+    await expect(drawer).toBeVisible()
+    // Desktop sidebar remains in DOM (md:hidden); scope chrome controls to the open drawer.
+    await expect(drawer.getByTestId('shell-chrome-controls')).toBeVisible()
     await page.screenshot({ path: path.join(shotDir, '08-mobile-drawer-open.png') })
 
     await page.setViewportSize({ width: 1280, height: 800 })

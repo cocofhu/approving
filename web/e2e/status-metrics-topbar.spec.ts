@@ -22,11 +22,11 @@ test.describe('StatusMetrics topbar E2E', () => {
     expect(visibleVals.join(' ')).not.toMatch(/\bTOK\b|\b5M\b|\bPEAK\b/)
     await expect(page.getByTestId('status-metrics-compact')).toHaveCount(0)
 
-    // StatusMetrics sits before LangSelect in the topbar DOM order.
+    // StatusMetrics sits before LangSelect inside ShellChromeControls (bar layout).
     const order = await page.evaluate(() => {
-      const header = document.querySelector('header')
-      if (!header) return []
-      return Array.from(header.children).map((el) => {
+      const root = document.querySelector('[data-testid="shell-chrome-controls"]')
+      if (!root) return []
+      return Array.from(root.children).map((el) => {
         if ((el as HTMLElement).dataset?.testid === 'status-metrics') return 'status-metrics'
         if (el.querySelector?.('[data-testid="status-metrics"]')) return 'status-metrics'
         if (el.tagName === 'SELECT' || el.querySelector?.('select') || el.textContent?.includes('中文'))
