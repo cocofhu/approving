@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isApproveStillStarting,
   isStartFailedRun,
   makeIncomingGhost,
   resolveIncomingApproval,
@@ -101,6 +102,97 @@ describe('isStartFailedRun', () => {
     } as unknown as Run
     expect(isStartFailedRun(run, 'ap')).toBe(false)
     expect(isStartFailedRun(run, '')).toBe(false)
+  })
+
+  it('detects approve setup failure via graph when the hinted id misses', () => {
+    const run = {
+      status: 'running',
+      nodes: [
+        { id: 'in', type: 'input' },
+        { id: 'approve_7gl6', type: 'approve' },
+      ],
+      nodeRuns: {
+        approve_7gl6: { nodeId: 'approve_7gl6', status: 'failed', error: 'sandbox setup failed' },
+      },
+    } as unknown as Run
+    expect(isStartFailedRun(run, 'ap')).toBe(true)
+    expect(isStartFailedRun(run, '')).toBe(true)
+  })
+})
+
+describe('isApproveStillStarting', () => {
+  it('is true only while the approve node (or whole run) looks like a fresh boot', () => {
+    expect(
+      isApproveStillStarting(
+        {
+          status: 'running',
+          nodeRuns: { ap: { nodeId: 'ap', status: 'running' } },
+        } as unknown as Run,
+        'ap',
+      ),
+    ).toBe(true)
+    expect(isApproveStillStarting({ status: 'queued' } as Run, 'ap')).toBe(true)
+    expect(isApproveStillStarting({ status: 'running' } as Run, '')).toBe(true)
+  })
+
+  it('is false once the approval parked, completed, or the run left the boot window', () => {
+    expect(
+      isApproveStillStarting(
+        {
+          status: 'waiting_human',
+          nodeRuns: { ap: { nodeId: 'ap', status: 'waiting_human' } },
+        } as unknown as Run,
+        'ap',
+      ),
+    ).toBe(false)
+    expect(
+      isApproveStillStarting(
+        {
+          status: 'running',
+          nodeRuns: {
+            ap: { nodeId: 'ap', status: 'completed' },
+            implement: { nodeId: 'implement', status: 'running' },
+          },
+        } as unknown as Run,
+        'ap',
+      ),
+    ).toBe(false)
+    expect(isApproveStillStarting({ status: 'completed' } as Run, 'ap')).toBe(false)
+    expect(isApproveStillStarting({ status: 'failed' } as Run, 'ap')).toBe(false)
+  })
+
+  it('uses graph approve nodes when the hinted id misses (ap vs approve_7gl6)', () => {
+    const run = {
+      status: 'running',
+      nodes: [
+        { id: 'in', type: 'input' },
+        { id: 'approve_7gl6', type: 'approve' },
+        { id: 'implement_qnlc', type: 'implement' },
+      ],
+      nodeRuns: {
+        in: { nodeId: 'in', status: 'completed' },
+        approve_7gl6: { nodeId: 'approve_7gl6', status: 'completed' },
+        implement_qnlc: { nodeId: 'implement_qnlc', status: 'running' },
+      },
+    } as unknown as Run
+    expect(isApproveStillStarting(run, 'ap')).toBe(false)
+    expect(isApproveStillStarting(run, '')).toBe(false)
+  })
+
+  it('keeps the ghost while approve is still booting after input completed', () => {
+    const run = {
+      status: 'running',
+      nodes: [
+        { id: 'in', type: 'input' },
+        { id: 'approve_7gl6', type: 'approve' },
+      ],
+      nodeRuns: {
+        in: { nodeId: 'in', status: 'completed' },
+        approve_7gl6: { nodeId: 'approve_7gl6', status: 'running' },
+      },
+    } as unknown as Run
+    expect(isApproveStillStarting(run, 'ap')).toBe(true)
+    expect(isApproveStillStarting(run, '')).toBe(true)
   })
 })
 
