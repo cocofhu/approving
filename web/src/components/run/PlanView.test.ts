@@ -50,15 +50,18 @@ const designDoc: PlanDoc = {
 }
 
 function mountPlan(doc: PlanDoc, accent?: string, locale: 'zh-CN' | 'en' = 'zh-CN') {
-  const messages =
+  const i18n =
     locale === 'zh-CN'
-      ? { 'zh-CN': { ...commonZh, ...pagesZh } }
-      : { en: { ...commonEn, ...pagesEn } }
-  const i18n = createI18n({
-    legacy: false,
-    locale,
-    messages,
-  })
+      ? createI18n({
+          legacy: false,
+          locale: 'zh-CN',
+          messages: { 'zh-CN': { ...commonZh, ...pagesZh } },
+        })
+      : createI18n({
+          legacy: false,
+          locale: 'en',
+          messages: { en: { ...commonEn, ...pagesEn } },
+        })
   return mount(PlanView, {
     props: { doc, accent },
     global: { plugins: [i18n], stubs: { Icon: true, AnnotateBtn: true } },

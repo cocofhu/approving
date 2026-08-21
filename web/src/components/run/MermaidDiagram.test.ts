@@ -92,7 +92,8 @@ describe('MermaidDiagram theme helpers (g2.1/g2.3)', () => {
     const wrapper = mountDiagram()
     await flushPromises()
     expect(mermaidInitialize).toHaveBeenCalled()
-    const cfg = mermaidInitialize.mock.calls.at(-1)?.[0] as {
+    const lightCalls = mermaidInitialize.mock.calls
+    const cfg = lightCalls[lightCalls.length - 1]?.[0] as {
       theme: string
       themeVariables: Record<string, string>
     }
@@ -110,7 +111,8 @@ describe('MermaidDiagram theme helpers (g2.1/g2.3)', () => {
     document.documentElement.style.setProperty('--c-line-strong', '54 54 62')
     const wrapper = mountDiagram()
     await flushPromises()
-    const cfg = mermaidInitialize.mock.calls.at(-1)?.[0] as { theme: string }
+    const darkCalls = mermaidInitialize.mock.calls
+    const cfg = darkCalls[darkCalls.length - 1]?.[0] as { theme: string }
     expect(cfg.theme).toBe('dark')
     wrapper.unmount()
   })
@@ -125,7 +127,8 @@ describe('MermaidDiagram theme helpers (g2.1/g2.3)', () => {
     await new Promise((r) => setTimeout(r, 0))
     await flushPromises()
     expect(mermaidInitialize.mock.calls.length).toBeGreaterThan(callsBefore)
-    const cfg = mermaidInitialize.mock.calls.at(-1)?.[0] as { theme: string }
+    const toggleCalls = mermaidInitialize.mock.calls
+    const cfg = toggleCalls[toggleCalls.length - 1]?.[0] as { theme: string }
     expect(cfg.theme).toBe('base')
     wrapper.unmount()
   })
