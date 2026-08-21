@@ -506,6 +506,7 @@ func TestGateAndArtifactEndpoints(t *testing.T) {
 		},
 	})
 	h.db.Create(&models.Gate{RunID: "r1", NodeID: "g", Resolved: false, RequestedAt: now})
+	h.db.Create(&models.StateRun{RunID: "r1", NodeID: "g", Iteration: 0, Status: "waiting_human"})
 	h.db.Create(&models.ReactConversation{
 		RunID: "r1", NodeID: "react", Iteration: 1, Done: false,
 		Messages: []models.ReactMessage{{Role: "agent", Text: "hi", At: now.Format(time.RFC3339)}},
@@ -1731,8 +1732,10 @@ func TestListGatesPagination(t *testing.T) {
 	now := time.Now()
 	h.db.Create(&models.Run{ID: "run-g1", Status: "waiting_human", WorkflowID: "wf-1", StartedAt: now})
 	h.db.Create(&models.Gate{RunID: "run-g1", NodeID: "gate1", Title: "G1", RequestedAt: now})
+	h.db.Create(&models.StateRun{RunID: "run-g1", NodeID: "gate1", Iteration: 0, Status: "waiting_human"})
 	h.db.Create(&models.Run{ID: "run-g2", Status: "waiting_human", WorkflowID: "wf-1", StartedAt: now})
 	h.db.Create(&models.Gate{RunID: "run-g2", NodeID: "gate2", Title: "G2", RequestedAt: now.Add(time.Second)})
+	h.db.Create(&models.StateRun{RunID: "run-g2", NodeID: "gate2", Iteration: 0, Status: "waiting_human"})
 
 	w := h.do("GET", "/api/gates?page=1&pageSize=1", nil)
 	if w.Code != 200 {

@@ -21,6 +21,9 @@ func TestRunInboxContextGate(t *testing.T) {
 	}})
 	h.db.Create(&models.Gate{RunID: "ic-gate", NodeID: "gate", Iteration: 1, Resolved: false, RequestedAt: now})
 	h.db.Create(&models.StateRun{
+		RunID: "ic-gate", NodeID: "gate", Iteration: 1, Status: "waiting_human",
+	})
+	h.db.Create(&models.StateRun{
 		RunID: "ic-gate", NodeID: "visual", Iteration: 1, Status: "completed",
 		Outputs: map[string]any{"page": "<html>v1</html>"},
 		Events:  []models.AcpEvent{{Kind: "message", Text: "should-not-appear"}},
