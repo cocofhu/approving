@@ -2979,7 +2979,10 @@
     },
     "proposalSelect": {
       "title": "选择方案",
+      "titleReadonly": "方案信息",
       "subtitle": "共 {n} 个候选 · 选择一个作为最终方案",
+      "subtitleSingle": "唯一候选 · 无需点选",
+      "subtitleEmpty": "暂无候选方案",
       "context": "背景",
       "prev": "上一个",
       "next": "下一个",

@@ -77,7 +77,7 @@
         },
         "set_proposals": {
           "signature": "set_proposals(context, proposals)",
-          "desc": "仅方案(proposal)节点:写入候选方案集 proposals.json"
+          "desc": "方案节点强制交付;Approve 仅在真实多方案分歧(≥2)时可选写入,禁止单候选伪选择"
         },
         "get_proposals": {
           "signature": "get_proposals() -> proposals.json",

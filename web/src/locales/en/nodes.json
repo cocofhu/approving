@@ -129,7 +129,7 @@
           "desc": "Full conversation transcript"
         }
       },
-      "help": "### Approve\n\nOne multi-turn ReAct dialogue for **pre-dev work**. This node only configures an Agent: **no prompt template**, **no round cap**, and no auto-clarify / timeout / conditional injection. The platform injects run inputs and waits for the user to state the goal first; the agent then uses tools to align requirements and only `ask_question` when there is a real decision.\n\n**Two mandatory deliverables** (both required to finish — not a single unique delivery):\n1. `set_clarified_requirement` → `clarified_requirement.json` (`open_questions` must be empty)\n2. `set_plan` → `plan.json` (at most two levels: goal → sub-goal)\n\n**Optional** (shown if present, missing does not fail): `set_research`, `set_proposals`, `write_artifact` for `page.html`.\n\nIf a skill pack says “unique delivery” or forbids those tools, **platform rule `rules/approve.md` wins**. Do not write implementation code or change the repo."
+      "help": "### Approve\n\nOne multi-turn ReAct dialogue for **pre-dev work**. This node only configures an Agent: **no prompt template**, **no round cap**, and no auto-clarify / timeout / conditional injection. The platform injects run inputs and waits for the user to state the goal first; the agent then uses tools to align requirements and only `ask_question` when there is a real decision.\n\n**Two mandatory deliverables** (both required to finish — not a single unique delivery):\n1. `set_clarified_requirement` → `clarified_requirement.json` (`open_questions` must be empty)\n2. `set_plan` → `plan.json` (at most two levels: goal → sub-goal)\n\n**Optional** (shown if present, missing does not fail): `set_research`; `set_proposals` (**only when ≥2 distinct alternatives need a user pick**; no single-candidate pseudo-choice); `write_artifact` for `page.html`.\n\nIf a skill pack says “unique delivery” or forbids those tools, **platform rule `rules/approve.md` wins**. Do not write implementation code or change the repo."
     },
     "agent": {
       "label": "Generic",
@@ -385,7 +385,7 @@
     },
     "proposal_select": {
       "label": "Select proposal",
-      "desc": "Confirm one proposal; auto_var picks recommended when true",
+      "desc": "Confirm one proposal; auto when auto_var is true or only one candidate, else manual pick",
       "fields": {
         "title": {
           "label": "Title",
@@ -415,7 +415,7 @@
           "desc": "Selected proposal id"
         }
       },
-      "help": "### Proposal select (proposal_select)\n\nConfirm **one** proposal from `proposals.json`.\n\n**Auto**: when auto variable true, pick recommended (or first).\n\n**Manual**: human picks from actions.\n\n**Output**: `proposal.json` + output variable (default `selected_proposal`)."
+      "help": "### Proposal select (proposal_select)\n\nConfirm **one** proposal from `proposals.json`.\n\n**Auto**: when auto variable true, pick recommended (or first).\n\n**Manual**: pause for a human pick when ≥2 candidates; with exactly 1 valid candidate, **auto-adopt** it and continue (no “waiting for human selection”).\n\n**Output**: `proposal.json` + output variable (default `selected_proposal`)."
     },
     "submit_mr": {
       "label": "Submit MR",

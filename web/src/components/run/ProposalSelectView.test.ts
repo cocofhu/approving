@@ -53,6 +53,8 @@ describe('ProposalSelectView', () => {
     expect(wrapper.text()).toContain('需要选择架构方案')
     expect(wrapper.text()).toContain('方案 A')
     expect(wrapper.text()).toContain('1 / 2')
+    expect(wrapper.text()).toContain('选择方案')
+    expect(wrapper.text()).toContain('共 2 个候选')
     wrapper.unmount()
   })
 
@@ -87,5 +89,20 @@ describe('ProposalSelectView', () => {
     if (btn2) await btn2.trigger('click')
     expect(resolved.emitted('select')).toBeFalsy()
     resolved.unmount()
+  })
+
+  it('renders single candidate as readonly info without pick CTA', () => {
+    const single: ProposalsDoc = {
+      context: '方向已明确',
+      proposals: [{ id: 'p1', title: '唯一方案', recommended: true }],
+    }
+    const wrapper = mountView(single)
+    expect(wrapper.text()).toContain('方案信息')
+    expect(wrapper.text()).toContain('唯一候选 · 无需点选')
+    expect(wrapper.text()).not.toContain('共 1 个候选')
+    expect(wrapper.text()).not.toContain('选择一个作为最终方案')
+    const pick = wrapper.findAll('button').find((b) => b.text().includes('选择此方案'))
+    expect(pick).toBeFalsy()
+    wrapper.unmount()
   })
 })

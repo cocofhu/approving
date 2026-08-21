@@ -77,7 +77,7 @@
         },
         "set_proposals": {
           "signature": "set_proposals(context, proposals)",
-          "desc": "Proposal node only: write candidate proposals to proposals.json"
+          "desc": "Mandatory on proposal nodes; on Approve only when ≥2 real alternatives (no single-candidate pseudo-choice)"
         },
         "get_proposals": {
           "signature": "get_proposals() -> proposals.json",

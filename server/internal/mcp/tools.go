@@ -763,7 +763,8 @@ func artifactTools() []map[string]any {
 		{
 			"name": "set_proposals",
 			"description": "仅方案(proposal)或 Approve 节点可用:写入结构化的候选方案集(对齐 ADR/MADR 与设计文档),可含多个方案供后续确认。" +
-				"在方案节点这是唯一交付;在 Approve 节点为可选(有助于拍板,不是完成条件)。",
+				"在方案节点这是唯一交付(至少 1 个候选即可)。" +
+				"在 Approve 节点为可选且**非凑产物**:仅当存在至少两个方向不同、取舍有意义的候选且需要用户择一时才调用(写入 ≥2 个);无真实分歧则不要调用,禁止单候选「伪选择」。",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
