@@ -95,9 +95,55 @@ func TestApproveCompletesWithClarifiedAndPlan(t *testing.T) {
 	if _, ok := sr.Outputs["plan"]; !ok {
 		t.Error("missing outputs.plan")
 	}
+	// force path must have consumed node_complete (audit json may be cleared by later nodes).
+	if got, _ := sr.Outputs["outcome_status"].(string); got != "success" {
+		t.Errorf("outcome_status=%q want success (force requires node_complete)", got)
+	}
 	if _, ok := sr.Outputs["research"]; ok {
 		t.Error("optional research should be absent when not written")
 	}
+}
+
+// TestApproveClearsPrematureNodeComplete locks g1.1 via fake provider:
+// !force clears a pre-seeded node_complete mark and keeps waiting_human.
+func TestApproveClearsPrematureNodeComplete(t *testing.T) {
+	eng, db, _ := setupEngineGraphP(t, approveOnlyGraph())
+	run, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "predev")
+	eng.host.SetActiveNode(run.ID, "predev", "approve")
+	st, resp := eng.host.ServeRPC(run.ID, run.McpToken, []byte(
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"node_complete","arguments":{"status":"success","summary":"premature"}}}`))
+	if st != 200 {
+		t.Fatalf("seed outcome: status=%d resp=%s", st, resp)
+	}
+	if !eng.host.HasOutcome(run.ID, "predev") {
+		t.Fatal("expected premature mark before !force reply")
+	}
+	if err := eng.ReactReply(run.ID, "predev", "做登录", nil, nil, false); err != nil {
+		t.Fatalf("reply: %v", err)
+	}
+	waitApproveReady(t, eng, db, run.ID, "predev")
+	if eng.host.HasOutcome(run.ID, "predev") {
+		t.Fatal("!force approve must ClearOutcome")
+	}
+	waitRunStatus(t, db, run.ID, "waiting_human")
+	var conv models.ReactConversation
+	if err := db.Where("run_id = ? AND node_id = ?", run.ID, "predev").First(&conv).Error; err != nil {
+		t.Fatalf("conv: %v", err)
+	}
+	if conv.Done {
+		t.Fatal("premature node_complete must not finish approve")
+	}
+}
+
+func TestApproveFailsWithoutNodeComplete(t *testing.T) {
+	eng, db, p := setupEngineGraphP(t, approveOnlyGraph())
+	p.skipOutcome = true
+	run := startApproveAndReply(t, eng, db)
+	waitRunStatus(t, db, run.ID, "failed")
 }
 
 func TestApproveFailsWithoutPlan(t *testing.T) {

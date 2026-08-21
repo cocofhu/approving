@@ -51,6 +51,18 @@ func (s *memStore) Get(runID, name string) (string, bool) {
 	return c, ok
 }
 
+func (s *memStore) Delete(runID, name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.data[runID] != nil {
+		delete(s.data[runID], name)
+	}
+	if s.node[runID] != nil {
+		delete(s.node[runID], name)
+	}
+	return nil
+}
+
 func (s *memStore) List(runID string) []mcp.ArtifactInfo {
 	s.mu.Lock()
 	defer s.mu.Unlock()
