@@ -581,7 +581,7 @@ func TestReactApproveFirstReplyInjectsContract(t *testing.T) {
 	if mgr.bridge(0).imageCountAt(0) != 1 {
 		t.Fatalf("first reply should attach run var images, got %d", mgr.bridge(0).imageCountAt(0))
 	}
-	if strings.Contains(prompt, "本轮输出契约") {
+	if strings.Contains(prompt, "本轮输出契约") || strings.Contains(prompt, "统一总结契约") {
 		t.Fatal("opening approve turn must not append dual-write contract")
 	}
 	if reply.Done {
@@ -631,7 +631,7 @@ func TestReactApproveRehydrateSkipsPrime(t *testing.T) {
 			t.Errorf("rehydrated first reply missing %q: %q", want, prime)
 		}
 	}
-	if strings.Contains(prime, "本轮输出契约") {
+	if strings.Contains(prime, "本轮输出契约") || strings.Contains(prime, "统一总结契约") {
 		t.Errorf("opening approve turn must not append dual-write contract: %q", prime)
 	}
 }
@@ -736,10 +736,13 @@ func TestReactApproveForceCompletesWithOutcome(t *testing.T) {
 		}
 	}
 	prompt := mgr.bridge(0).promptAt(1)
-	for _, want := range []string{"确认流转", "node_complete", "set_clarified_requirement", "set_plan"} {
+	for _, want := range []string{"确认流转", "node_complete", "set_clarified_requirement", "set_plan", "统一总结契约", "全部人工反馈"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("force prompt missing %q:\n%s", want, prompt)
 		}
+	}
+	if strings.Contains(prompt, "本轮输出契约") || strings.Contains(prompt, "对本轮反馈要点的归纳") {
+		t.Fatal("force prompt must use unified summary semantics, not per-turn dual-write")
 	}
 }
 
@@ -774,5 +777,130 @@ func TestReactApproveForceNudgesMissingOutcome(t *testing.T) {
 	}
 	if !promptsContainOutcomeRetry(mgr) {
 		t.Fatal("force without node_complete must inject OutcomeRetry")
+	}
+}
+
+// TestReactMiddleTurnsOmitDualWriteContract locks g1.1/g2.2: Clarify / Approve
+// intermediate replies must not inject the unified-summary contract, and any
+// spontaneous agentSummary fence is stripped from the bubble without persisting.
+func TestReactMiddleTurnsOmitDualWriteContract(t *testing.T) {
+	fence := "已按反馈调整。\n\n```json\n{\"agentSummary\":\"中间轮不应落库\"}\n```"
+	p, _, _, mgr, req := reactSetup(t, func(int) chatFunc {
+		return func(turn int) turnAction {
+			if turn == 0 {
+				return turnAction{narration: "need info", questions: []models.ReactQuestion{{ID: "q1", Prompt: "?", Options: []models.ReactOption{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}}}}}
+			}
+			return turnAction{narration: fence, produces: clarified()}
+		}
+	})
+	open := p.ReactOpen(context.Background(), req)
+	if len(open.Questions) == 0 {
+		t.Fatal("expected opening question")
+	}
+	hist := []models.ReactMessage{{Role: "agent", Text: open.Msg}, {Role: "human", Text: "请改标题"}}
+	reply := p.ReactReply(context.Background(), req, hist, "请改标题", nil, false)
+	prompt := mgr.bridge(0).promptAt(1)
+	if strings.Contains(prompt, "统一总结契约") || strings.Contains(prompt, "本轮输出契约") || strings.Contains(prompt, "agentSummary") {
+		t.Fatalf("middle clarify turn must not inject dual-write contract:\n%s", prompt)
+	}
+	if reply.AgentSummary != "" {
+		t.Fatalf("middle turn AgentSummary must be empty, got %q", reply.AgentSummary)
+	}
+	if strings.Contains(reply.Msg, "```") || strings.Contains(reply.Msg, "agentSummary") {
+		t.Fatalf("middle turn bubble must strip JSON fence, got %q", reply.Msg)
+	}
+	if reply.Msg != "已按反馈调整。" {
+		t.Fatalf("narration after strip = %q", reply.Msg)
+	}
+
+	ap, _, _, amgr, areq := approveSetup(t, func(int) chatFunc {
+		return func(turn int) turnAction {
+			if turn == 0 {
+				return turnAction{narration: fence, produces: approveProduces()}
+			}
+			return turnAction{narration: fence, produces: approveProduces()}
+		}
+	})
+	_ = ap.ReactOpen(context.Background(), areq)
+	ahist := []models.ReactMessage{{Role: "human", Text: "做登录"}}
+	_ = ap.ReactReply(context.Background(), areq, ahist, "做登录", nil, false)
+	mid := ap.ReactReply(context.Background(), areq, append(ahist,
+		models.ReactMessage{Role: "agent", Text: "ok"},
+		models.ReactMessage{Role: "human", Text: "再改一版"},
+	), "再改一版", nil, false)
+	midPrompt := amgr.bridge(0).promptAt(1)
+	if strings.Contains(midPrompt, "统一总结契约") || strings.Contains(midPrompt, "本轮输出契约") {
+		t.Fatalf("middle approve turn must not inject dual-write:\n%s", midPrompt)
+	}
+	if mid.AgentSummary != "" {
+		t.Fatalf("middle approve AgentSummary must be empty, got %q", mid.AgentSummary)
+	}
+}
+
+// TestReactForceConfirmPersistsUnifiedSummary locks g2.1: confirm turn injects
+// unified contract and keeps a non-empty agentSummary from applyDualWrite.
+func TestReactForceConfirmPersistsUnifiedSummary(t *testing.T) {
+	sum := "用户确认邮箱登录并要求补齐竞品对比。"
+	raw := "已收束澄清与计划。\n\n```json\n{\"agentSummary\":\"" + sum + "\"}\n```"
+	p, _, _, mgr, req := reactSetup(t, func(int) chatFunc {
+		return func(turn int) turnAction {
+			if turn == 0 {
+				return turnAction{narration: "need info", questions: []models.ReactQuestion{{ID: "q1", Prompt: "?", Options: []models.ReactOption{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}}}}}
+			}
+			return turnAction{narration: raw, produces: clarified(), outcome: true}
+		}
+	})
+	open := p.ReactOpen(context.Background(), req)
+	hist := []models.ReactMessage{{Role: "agent", Text: open.Msg}, {Role: "human", Text: "确认并流转"}}
+	force := p.ReactReply(context.Background(), req, hist, "确认并流转", nil, true)
+	prompt := mgr.bridge(0).promptAt(1)
+	for _, want := range []string{"统一总结契约", "全部人工反馈", "确认并流转"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("force clarify prompt missing %q:\n%s", want, prompt)
+		}
+	}
+	if force.AgentSummary != sum {
+		t.Fatalf("force AgentSummary = %q, want %q", force.AgentSummary, sum)
+	}
+	if force.Msg != "已收束澄清与计划。" {
+		t.Fatalf("force narration = %q", force.Msg)
+	}
+}
+
+// TestReviseInPlaceOmitsDualWrite locks g1.2: review middle turns never inject
+// the contract and never surface AgentSummary.
+func TestReviseInPlaceOmitsDualWrite(t *testing.T) {
+	fence := "已按标注改了摘要。\n\n```json\n{\"agentSummary\":\"复审中间轮不应落库\"}\n```"
+	p, _, _, mgr, req := reactSetup(t, func(int) chatFunc {
+		return func(turn int) turnAction {
+			if turn == 0 {
+				return turnAction{narration: "need info", questions: []models.ReactQuestion{{ID: "q1", Prompt: "?", Options: []models.ReactOption{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}}}}}
+			}
+			return turnAction{narration: fence, produces: clarified()}
+		}
+	})
+	open := p.ReactOpen(context.Background(), req)
+	if len(open.Questions) == 0 {
+		t.Fatal("expected parked session with questions")
+	}
+	turn := p.ReviseInPlace(context.Background(), req, []models.ReactMessage{
+		{Role: "agent", Text: open.Msg},
+		{Role: "human", Text: "按标注改"},
+	}, "按标注改", nil)
+	if turn.Err != nil {
+		t.Fatalf("revise: %v msg=%q", turn.Err, turn.Msg)
+	}
+	prompt := mgr.bridge(0).promptAt(1)
+	if strings.Contains(prompt, "统一总结契约") || strings.Contains(prompt, "本轮输出契约") || strings.Contains(prompt, "agentSummary") {
+		t.Fatalf("ReviseInPlace must not inject dual-write:\n%s", prompt)
+	}
+	if turn.AgentSummary != "" {
+		t.Fatalf("ReviseInPlace AgentSummary must be empty, got %q", turn.AgentSummary)
+	}
+	if turn.Msg != "已按标注改了摘要。" {
+		t.Fatalf("ReviseInPlace must strip fence from bubble, got %q", turn.Msg)
+	}
+	if turn.Done {
+		t.Fatal("ReviseInPlace must stay Done=false")
 	}
 }

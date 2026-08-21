@@ -56,6 +56,17 @@ function art(partial: Partial<Artifact> & Pick<Artifact, 'id' | 'name'>): Artifa
   }
 }
 
+/** Version menu is Teleported to body to escape card overflow:clip. */
+function versionMenuEl(): HTMLElement | null {
+  return document.body.querySelector('[data-testid="react-artifact-version-menu"]')
+}
+
+function versionOption(n: number): HTMLElement {
+  const el = document.body.querySelector(`[data-testid="react-artifact-version-option-v${n}"]`)
+  if (!el) throw new Error(`missing version option v${n}`)
+  return el as HTMLElement
+}
+
 const stubs = {
   Icon: true,
   HtmlPreview: true,
@@ -428,15 +439,20 @@ describe('ReactArtifactStage', () => {
     expect(wrapper.find('[data-testid="react-artifact-card-iteration"]').exists()).toBe(false)
     await wrapper.get('[data-testid="react-artifact-version-chip-btn-page.html"]').trigger('click')
     await flushPromises()
-    expect(wrapper.get('[data-testid="react-artifact-version-option-v1"]').text()).toBe('v1')
-    expect(wrapper.get('[data-testid="react-artifact-version-option-v2"]').text()).toContain('v2 · 最新')
-    await wrapper.get('[data-testid="react-artifact-version-option-v1"]').trigger('click')
+    const menu = versionMenuEl()
+    expect(menu).toBeTruthy()
+    expect(menu?.style.position).toBe('fixed')
+    expect(wrapper.find('[data-testid="react-artifact-card-page.html"] [data-testid="react-artifact-version-menu"]').exists()).toBe(false)
+    expect(versionOption(1).textContent?.trim()).toBe('v1')
+    expect(versionOption(2).textContent?.trim()).toContain('v2 · 最新')
+    versionOption(1).click()
     await flushPromises()
     expect(wrapper.findAll('[data-testid="react-artifact-card-page.html"]').length).toBe(1)
     expect(wrapper.get('[data-testid="artifact-preview"]').text()).toBe('page.html|off|<p>old</p>')
     await wrapper.get('[data-testid="react-artifact-tab-grid"]').trigger('click')
     await wrapper.get('[data-testid="react-artifact-version-chip-btn-page.html"]').trigger('click')
-    await wrapper.get('[data-testid="react-artifact-version-option-v2"]').trigger('click')
+    await flushPromises()
+    versionOption(2).click()
     await flushPromises()
     expect(wrapper.get('[data-testid="artifact-preview"]').text()).toBe('page.html|on|<p>new</p>')
     wrapper.unmount()
@@ -500,8 +516,8 @@ describe('ReactArtifactStage', () => {
     expect(wrapper.get('[data-testid="react-artifact-version-chip-btn-page.html"]').text()).toContain('v2 · 最新')
     await wrapper.get('[data-testid="react-artifact-version-chip-btn-page.html"]').trigger('click')
     await flushPromises()
-    expect(wrapper.get('[data-testid="react-artifact-version-option-v1"]').text()).toBe('v1')
-    await wrapper.get('[data-testid="react-artifact-version-option-v1"]').trigger('click')
+    expect(versionOption(1).textContent?.trim()).toBe('v1')
+    versionOption(1).click()
     await flushPromises()
     expect(wrapper.get('[data-testid="artifact-preview"]').text()).toBe('page.html|off|<p>v1</p>')
     wrapper.unmount()
@@ -531,15 +547,16 @@ describe('ReactArtifactStage', () => {
     })
     await flushPromises()
     await wrapper.get('[data-testid="react-artifact-version-chip-btn-page.html"]').trigger('click')
-    const missing = wrapper.get('[data-testid="react-artifact-version-option-v1"]')
-    expect(missing.attributes('disabled')).toBeDefined()
+    await flushPromises()
+    const missing = versionOption(1)
+    expect(missing.getAttribute('disabled')).not.toBeNull()
     // default-open may already show latest page.html; close it first so we only
     // assert the disabled option cannot open a preview on its own.
     if (wrapper.find('[data-testid="react-artifact-tab-close-page.html"]').exists()) {
       await wrapper.get('[data-testid="react-artifact-tab-close-page.html"]').trigger('click')
       await flushPromises()
     }
-    await missing.trigger('click')
+    missing.click()
     await flushPromises()
     expect(wrapper.find('[data-testid="artifact-preview"]').exists()).toBe(false)
     wrapper.unmount()

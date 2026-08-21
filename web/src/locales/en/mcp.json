@@ -113,7 +113,7 @@
         },
         "set_artifact_preview": {
           "signature": "set_artifact_preview(name)",
-          "desc": "react clarify only: pin an existing artifact to the preview tab (use demoHtml for option-by-option compare)"
+          "desc": "react/Approve: pin artifact to preview tab; for UI changes call proactively (do not wait for the user to ask); use demoHtml for option compare"
         },
         "node_complete": {
           "signature": "node_complete(status, summary?, error?, outputs?, checks?)",

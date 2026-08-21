@@ -664,7 +664,7 @@ func artifactTools() []map[string]any {
 			"name": "set_clarified_requirement",
 			"description": "仅澄清(react)或 Approve 节点可用:写入结构化需求规格(对齐 ISO/IEC/IEEE 29148 SRS 与 PRD 子集)。" +
 				"在澄清节点这是唯一结构化交付;在 Approve 节点这是两份强制交付之一(另一份是 set_plan)。信息充分后调用它。" +
-				"视觉/文案预览材料应 write_artifact 后立刻 set_artifact_preview,不要把需求规格写成普通产物文件。" +
+				"含 UI/交互/布局等视觉改动时须主动 write_artifact(page.html)+set_artifact_preview,不要等用户催促;非 UI 不强制。不要把需求规格写成普通产物文件。" +
 				"澄清是门禁:调用前所有不确定的点都应已通过 ask_question 让用户确认,open_questions 必须为空,否则平台会驳回并要求继续澄清。" +
 				"禁止写入排期/里程碑/交付日期,禁止写入技术选型、架构或详细 API/DB 设计(留给调研/方案节点)。",
 			"inputSchema": map[string]any{
@@ -883,6 +883,7 @@ func artifactTools() []map[string]any {
 		{
 			"name": "set_artifact_preview",
 			"description": "仅澄清(react)或 Approve 节点可用:把已写入的产物钉到 ReAct 界面预览 Tab。" +
+				"含 UI/交互/布局等视觉改动时须主动 write_artifact 后调用本工具,不要等用户再说「出个 UI」;非 UI 不强制。" +
 				"参数 name 为 list_artifacts / write_artifact 中的产物名,必须已存在。可多次调用切换预览;同名再次 write_artifact 后预览会热更新。" +
 				"与 ask_question.demoHtml 分工:选项级并排对比用 demoHtml;独立成稿、需热更新或取点标注用本工具。",
 			"inputSchema": map[string]any{

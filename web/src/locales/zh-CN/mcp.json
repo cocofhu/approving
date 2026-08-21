@@ -113,7 +113,7 @@
         },
         "set_artifact_preview": {
           "signature": "set_artifact_preview(name)",
-          "desc": "仅澄清(react)节点:把已写入的产物钉到预览 Tab;选项对比用 demoHtml,独立成稿用本工具"
+          "desc": "澄清/Approve:钉产物到预览 Tab;含 UI 改动须主动调用,勿等用户催促;选项对比用 demoHtml"
         },
         "node_complete": {
           "signature": "node_complete(status, summary?, error?, outputs?, checks?)",

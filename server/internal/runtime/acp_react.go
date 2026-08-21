@@ -153,20 +153,22 @@ func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []mod
 
 	chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
 	defer cancel()
-	prompt := withDualWriteContract(human)
+	// Middle turns: narration only — do not inject dual-write. Confirm
+	// (force) turns inject the unified-summary contract covering all feedback.
+	prompt := strings.TrimRight(human, "\n")
 	chatImages := images
 	if approveInjectOpenPrompt(req, history) {
-		// Opening goal is not review feedback — skip the dual-write contract.
-		prompt = c.buildReactOpenPrompt(req, c.upstreamArtifacts(req)) + "\n\n## 用户消息\n" + strings.TrimRight(human, "\n")
+		prompt = c.buildReactOpenPrompt(req, c.upstreamArtifacts(req)) + "\n\n## 用户消息\n" + prompt
 		chatImages = mergePromptImages(req.PromptImages, images)
-		if force {
-			prompt = models.DefaultApproveConfirmSuffix + "\n\n" + prompt
-		}
-	} else if force && req.NodeType == "approve" {
-		// Human confirmed: require fill products then node_complete (phased contract).
-		prompt = models.DefaultApproveConfirmSuffix + "\n\n" + withDualWriteContract(human)
 	}
-	// Clarify feedback turns dual-write agentSummary alongside narration.
+	if force {
+		if req.NodeType == "approve" {
+			// Human confirmed: fill products then node_complete, plus unified summary.
+			prompt = models.DefaultApproveConfirmSuffix + "\n\n" + withDualWriteContract(prompt)
+		} else {
+			prompt = withDualWriteContract(prompt)
+		}
+	}
 	res, err := c.streamChat(chatCtx, sess.acp, req, prompt, chatImages)
 	if err != nil {
 		log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).
@@ -183,6 +185,10 @@ func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []mod
 	var events []models.AcpEvent
 	absorbChat(&usage, &usageByModel, &events, res)
 	narration, agentSummary := applyDualWrite(res.Narration)
+	if !force {
+		// Defensive strip of any spontaneous JSON fence; never persist summary mid-turn.
+		agentSummary = ""
+	}
 	logDualWriteMiss(req, res.Narration, agentSummary)
 
 	qs := c.host.TakePendingQuestions(req.RunID, req.NodeID)
@@ -248,8 +254,9 @@ func (c *acpProvider) ReviseInPlace(ctx context.Context, req NodeReq, history []
 		}
 	}
 	chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
-	// Review feedback turns dual-write agentSummary alongside narration.
-	res, err := c.streamChat(chatCtx, sess.acp, req, withDualWriteContract(human), images)
+	// ReviseInPlace is a middle turn: no dual-write contract; strip any
+	// spontaneous agentSummary fence from the bubble and leave summary empty.
+	res, err := c.streamChat(chatCtx, sess.acp, req, human, images)
 	cancel()
 	if err != nil {
 		log.Warn().Err(err).Str("run", req.RunID).Str("node", req.NodeID).Msg("review revise chat failed")
@@ -260,8 +267,7 @@ func (c *acpProvider) ReviseInPlace(ctx context.Context, req NodeReq, history []
 	var usageByModel models.TokenUsageByModel
 	var events []models.AcpEvent
 	absorbChat(&usage, &usageByModel, &events, res)
-	narration, agentSummary := applyDualWrite(res.Narration)
-	logDualWriteMiss(req, res.Narration, agentSummary)
+	narration, _ := applyDualWrite(res.Narration)
 
 	c.host.TakePendingQuestions(req.RunID, req.NodeID)
 
@@ -269,7 +275,7 @@ func (c *acpProvider) ReviseInPlace(ctx context.Context, req NodeReq, history []
 		log.Warn().Err(serr).Str("node", req.NodeID).Msg("review revise ensure product failed")
 	}
 	events = c.snapshotEvents(ctx, sess.sb, events)
-	return ReactTurn{Msg: narration, AgentSummary: agentSummary, Done: false, Events: events, Usage: usage, UsageByModel: usageByModel}
+	return ReactTurn{Msg: narration, AgentSummary: "", Done: false, Events: events, Usage: usage, UsageByModel: usageByModel}
 }
 
 // HasLiveSession reports whether a parked review session is held for the node.

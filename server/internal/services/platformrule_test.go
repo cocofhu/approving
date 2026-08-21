@@ -3,6 +3,7 @@ package services
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -31,6 +32,25 @@ func TestPlatformRuleServiceSeedAndPriority(t *testing.T) {
 	}
 	if !foundApprove {
 		t.Fatal("expected approve.md in platform rule files")
+	}
+	approveEmbed, err := svc.ReadEmbedDefault("approve.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"产物舞台预览(UI 改动强制主动)", "不要等用户再说「出个 UI」", "非 UI"} {
+		if !strings.Contains(approveEmbed.Content, want) {
+			t.Fatalf("approve.md embed missing %q", want)
+		}
+	}
+	if strings.Contains(approveEmbed.Content, "产物舞台预览(可选)") {
+		t.Fatal("approve.md must not keep optional-only stage preview heading")
+	}
+	reactEmbed, err := svc.ReadEmbedDefault("react.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(reactEmbed.Content, "产物舞台预览(UI 改动强制主动)") {
+		t.Fatal("react.md embed must require proactive UI stage preview")
 	}
 	for _, f := range files {
 		if _, err := os.Stat(filepath.Join(global, f)); err != nil {

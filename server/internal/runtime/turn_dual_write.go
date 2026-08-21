@@ -6,22 +6,24 @@ import (
 	"strings"
 )
 
-// Dual-write turn contract: review/clarify human turns ask the agent to append
-// a trailing ```json fence with {"agentSummary":"..."} after the user-facing
-// narration. The summary is persisted on the feedback round product; Msg keeps
-// only the narration for the transcript bubble.
+// Dual-write turn contract: only 「确认并流转」(force) turns ask the agent to
+// append a trailing ```json fence with {"agentSummary":"..."} after the
+// user-facing narration. The summary covers all human feedback in this node
+// execution (unified), and is persisted on the confirm-round product; Msg keeps
+// only the narration for the transcript bubble. Middle turns must not inject
+// this contract.
 const dualWriteTurnContract = `
 
-## 本轮输出契约(强制)
-处理本轮人工反馈时,请同时产出两段内容:
-1. **叙述回复**(正文):面向对话气泡,说明你如何理解/处理本轮反馈。
+## 统一总结契约(强制)
+处理「确认并流转」时,请同时产出两段内容:
+1. **叙述回复**(正文):面向对话气泡,说明你如何收束并完成流转。
 2. **文末 JSON 代码块**(机器可读):在叙述之后追加且仅追加一个 fenced JSON,格式严格为:
-` + "```json\n" + `{"agentSummary":"对本轮反馈要点的归纳"}
+` + "```json\n" + `{"agentSummary":"对本节点本次执行全部人工反馈要点的统一归纳"}
 ` + "```" + `
 规则:
-- agentSummary 是供反馈账本卡片最前展示的「Agent 总结」,须归纳本轮反馈意图/要点,与叙述分离。
+- agentSummary 是供反馈账本确认轮卡片最前展示的「Agent 总结」,须覆盖本节点本次执行收到的全部人工反馈要点(多轮合并为一份统一总结),与叙述分离。
 - 禁止把索引规则 gist、正文首行或对话气泡原文原样当作 agentSummary。
-- 除非确实无法归纳,请始终产出一段非空的 agentSummary；它应确认用户本轮反馈意图,而非复述叙述回复。
+- 除非确实无法归纳,请始终产出一段非空的 agentSummary；它应归纳全部反馈意图,而非复述叙述回复或仅复述最后一轮。
 - 仅在确实无法归纳时才省略整个 JSON 代码块(平台将隐藏总结区);禁止输出空键、空字符串或模板占位。
 - JSON 只出现在文末代码块中,不要把 JSON 写进叙述正文。
 `
@@ -35,8 +37,8 @@ type dualWritePayload struct {
 	Narration    string `json:"narration"`
 }
 
-// withDualWriteContract appends the dual-write output contract to a human
-// prompt sent on review/clarify feedback turns.
+// withDualWriteContract appends the unified-summary output contract to a
+// confirm-and-advance (force) prompt.
 func withDualWriteContract(human string) string {
 	return strings.TrimRight(human, "\n") + dualWriteTurnContract
 }
@@ -135,6 +137,8 @@ func parseDualWriteJSON(body string) (summary, narration string, ok bool) {
 }
 
 // applyDualWrite parses raw agent narration into ReactTurn Msg + AgentSummary.
+// Callers on middle (!force) turns should keep the stripped narration but
+// discard AgentSummary so spontaneous fences never land on intermediate cards.
 func applyDualWrite(raw string) (msg, agentSummary string) {
 	return splitTurnDualWrite(raw)
 }

@@ -43,11 +43,13 @@ demoHtml 运行于 Gates HtmlPreview 的 sandbox iframe(sandbox="allow-scripts a
 
 需要完整 SPA、持久化或真实浏览器能力时,改走 app_preview(noVNC),不要在 srcdoc 中硬做,也不得引导恢复 allow-same-origin。
 
-## 产物舞台预览(可选)
+## 产物舞台预览(UI 改动强制主动)
 
-- 当需要在提问卡片之外给人看一份完整页面、文案稿或示意图时:先 `write_artifact(name, content, kind)`,再立刻 `set_artifact_preview(name)` 钉到 ReAct 预览 Tab。
+- **触发条件**:当澄清/`in_scope`/功能需求包含界面展示、交互控件、布局/层叠/裁切等**视觉可感知**改动时,**必须主动** `write_artifact(name, content, kind)` 写出可预览稿(通常 `page.html`),并立刻 `set_artifact_preview(name)` 钉到 ReAct 预览 Tab——**不要等用户再说「出个 UI」**。
 - 与 `ask_question.demoHtml` 的分工:**选项级并排对比**用 `demoHtml`;**独立成稿、需要热更新或取点标注**用产物舞台。
+- **非 UI** 需求(纯文案/后端/契约逻辑等)**不强制**凑 `page.html`;确需给人看完整页面/文案稿时仍可按需预览。
 - 可多次调用 `set_artifact_preview` 切换预览;同名再次 `write_artifact` 后预览会热更新。
+- UI 与非 UI 同批时仍须出预览,预览聚焦 UI 部分;用户已给截图时仍须出修复后提案预览(可含前后对照)。
 - 不要改仓库。需求规格本身仍只能用 `set_clarified_requirement`,不要把它写成普通产物文件。
 
 ## 强制交付 1:set_clarified_requirement

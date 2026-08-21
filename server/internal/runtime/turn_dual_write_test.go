@@ -108,9 +108,15 @@ func TestSplitTurnDualWriteBaselineFixtures(t *testing.T) {
 
 func TestWithDualWriteContractAppends(t *testing.T) {
 	got := withDualWriteContract("请改标题")
-	for _, part := range []string{"请改标题", "agentSummary", "本轮输出契约", "始终产出", "空字符串"} {
+	for _, part := range []string{"请改标题", "agentSummary", "统一总结契约", "确认并流转", "全部人工反馈", "空字符串"} {
 		if !strings.Contains(got, part) {
 			t.Fatalf("contract missing %q in: %s", part, got)
 		}
+	}
+	if strings.Contains(got, "本轮输出契约") {
+		t.Fatal("unified contract must not use per-turn dual-write wording")
+	}
+	if strings.Contains(got, "对本轮反馈要点的归纳") {
+		t.Fatal("unified contract must summarize all feedback, not only this turn")
 	}
 }

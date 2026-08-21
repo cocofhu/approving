@@ -45,6 +45,7 @@ func TestAgentPromptsRemainingContracts(t *testing.T) {
 		"两份强制交付", "set_clarified_requirement", "set_plan", "不是「唯一交付」", "用户先说明目标",
 		"至少两个方向不同", "禁止调用", "伪选择",
 		"结束时序", "确认前", "确认后", "node_complete",
+		"产物舞台预览", "UI 改动强制主动", "不要等用户再说「出个 UI」", "非 UI 不强制",
 	} {
 		if !strings.Contains(gotApprove, want) {
 			t.Fatalf("DefaultApproveContract missing %q\n%s", want, gotApprove)
@@ -52,6 +53,15 @@ func TestAgentPromptsRemainingContracts(t *testing.T) {
 	}
 	if strings.Contains(gotApprove, "可跳过确认自行") || strings.Contains(gotApprove, "平台会结束本节点") {
 		t.Fatal("DefaultApproveContract must not imply skip-confirm or platform-ends-without-node_complete")
+	}
+	gotClarify := DefaultClarifiedRequirementContract
+	for _, want := range []string{"产物舞台预览", "UI 改动强制主动", "不要等用户再说「出个 UI」", "非 UI 需求不强制"} {
+		if !strings.Contains(gotClarify, want) {
+			t.Fatalf("DefaultClarifiedRequirementContract missing %q\n%s", want, gotClarify)
+		}
+	}
+	if strings.Contains(gotClarify, "产物舞台预览(可选)") {
+		t.Fatal("clarified contract must not keep optional-only stage preview wording")
 	}
 	if !strings.Contains(DefaultApproveOpenSuffix, "真实分歧") {
 		t.Fatal("DefaultApproveOpenSuffix")

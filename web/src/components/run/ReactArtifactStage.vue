@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import HtmlPreview from '@/components/ui/HtmlPreview.vue'
@@ -134,6 +134,8 @@ let summaryThumbGen = 0
 let summaryThumbAbort: AbortController | null = null
 const summaryThumbFp: Record<string, string> = {}
 const versionMenuFor = ref<string | null>(null)
+const versionMenuStyle = ref<Record<string, string>>({})
+const versionChipEls = ref<Record<string, HTMLElement | null>>({})
 const selectedVersionIndex = ref<Record<string, number>>({})
 
 const resolvedRemoteKind = computed(() =>
@@ -231,16 +233,64 @@ function selectVersion(a: Artifact, choice: VisualPageVersionChoice) {
   activatePreview(a.name)
 }
 
-function toggleVersionMenu(name: string) {
-  versionMenuFor.value = versionMenuFor.value === name ? null : name
+function placeVersionMenu(name: string) {
+  const chip = versionChipEls.value[name]
+  if (!chip) return
+  const r = chip.getBoundingClientRect()
+  const menuWidth = 120
+  const art = findArtifactByName(stageArtifacts.value, name)
+  const choiceCount = art ? versionChoices(art).length : 2
+  const approxH = Math.min(280, Math.max(80, choiceCount * 28 + 8))
+  let left = Math.round(r.right - menuWidth)
+  left = Math.max(8, Math.min(left, window.innerWidth - menuWidth - 8))
+  const top =
+    r.top >= approxH + 12 ? Math.round(r.top - approxH - 4) : Math.round(r.bottom + 4)
+  versionMenuStyle.value = {
+    position: 'fixed',
+    left: `${left}px`,
+    top: `${top}px`,
+    zIndex: '40',
+    minWidth: `${menuWidth}px`,
+  }
+}
+
+async function toggleVersionMenu(name: string) {
+  if (versionMenuFor.value === name) {
+    versionMenuFor.value = null
+    return
+  }
+  versionMenuFor.value = name
+  await nextTick()
+  placeVersionMenu(name)
 }
 
 function onVersionMenuDocClick(e: MouseEvent) {
   if (!versionMenuFor.value) return
   const el = e.target as HTMLElement | null
   if (el?.closest?.('[data-testid="react-artifact-version-chip"]')) return
+  if (el?.closest?.('[data-testid="react-artifact-version-menu"]')) return
   versionMenuFor.value = null
 }
+
+function onVersionMenuReposition() {
+  if (!versionMenuFor.value) return
+  placeVersionMenu(versionMenuFor.value)
+}
+
+function setVersionChipEl(name: string, el: unknown) {
+  versionChipEls.value[name] = (el as HTMLElement | null) || null
+}
+
+const versionMenuArtifact = computed(() => {
+  const name = versionMenuFor.value
+  if (!name) return null
+  return findArtifactByName(stageArtifacts.value, name)
+})
+
+const versionMenuChoices = computed(() => {
+  const a = versionMenuArtifact.value
+  return a ? versionChoices(a) : []
+})
 
 const kindIcon: Record<string, string> = {
   html: 'dashboard',
@@ -519,11 +569,17 @@ watch(
   },
 )
 
-onMounted(() => document.addEventListener('click', onVersionMenuDocClick))
+onMounted(() => {
+  document.addEventListener('click', onVersionMenuDocClick)
+  window.addEventListener('resize', onVersionMenuReposition)
+  window.addEventListener('scroll', onVersionMenuReposition, true)
+})
 onBeforeUnmount(() => {
   summaryThumbGen++
   summaryThumbAbort?.abort()
   document.removeEventListener('click', onVersionMenuDocClick)
+  window.removeEventListener('resize', onVersionMenuReposition)
+  window.removeEventListener('scroll', onVersionMenuReposition, true)
 })
 </script>
 
@@ -697,6 +753,7 @@ onBeforeUnmount(() => {
                 @click.stop
               >
                 <button
+                  :ref="(el) => setVersionChipEl(a.name, el)"
                   type="button"
                   class="inline-flex items-center gap-0.5 border border-line bg-elevated px-1.5 py-px text-[10px] text-txt2 hover:border-line-strong hover:text-txt"
                   :class="{ 'border-accent/60 text-txt': versionMenuFor === a.name }"
@@ -708,39 +765,44 @@ onBeforeUnmount(() => {
                 >
                   <span>{{ currentChipLabel(a) }}</span>
                 </button>
-                <div
-                  v-if="versionMenuFor === a.name"
-                  role="listbox"
-                  class="absolute right-0 bottom-full z-20 mb-1 min-w-[7.5rem] border border-line bg-surface py-0.5"
-                  data-testid="react-artifact-version-menu"
-                >
-                  <button
-                    v-for="choice in versionChoices(a)"
-                    :key="choice.index"
-                    type="button"
-                    role="option"
-                    class="flex w-full items-center px-2.5 py-1.5 text-left text-[11px] transition"
-                    :class="
-                      !choice.available
-                        ? 'cursor-not-allowed text-txt3 opacity-45'
-                        : selectedVersion(a)?.index === choice.index
-                          ? 'bg-accent-dim text-txt'
-                          : 'text-txt2 hover:bg-elevated'
-                    "
-                    :aria-selected="selectedVersion(a)?.index === choice.index ? 'true' : 'false'"
-                    :disabled="!choice.available"
-                    :data-testid="'react-artifact-version-option-v' + choice.index"
-                    @click.stop="selectVersion(a, choice)"
-                  >
-                    {{ versionChipLabel(choice) }}
-                  </button>
-                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="versionMenuArtifact"
+        role="listbox"
+        class="border border-line bg-surface py-0.5 shadow-card"
+        data-testid="react-artifact-version-menu"
+        :style="versionMenuStyle"
+        @click.stop
+      >
+        <button
+          v-for="choice in versionMenuChoices"
+          :key="choice.index"
+          type="button"
+          role="option"
+          class="flex w-full items-center px-2.5 py-1.5 text-left text-[11px] transition"
+          :class="
+            !choice.available
+              ? 'cursor-not-allowed text-txt3 opacity-45'
+              : selectedVersion(versionMenuArtifact)?.index === choice.index
+                ? 'bg-accent-dim text-txt'
+                : 'text-txt2 hover:bg-elevated'
+          "
+          :aria-selected="selectedVersion(versionMenuArtifact)?.index === choice.index ? 'true' : 'false'"
+          :disabled="!choice.available"
+          :data-testid="'react-artifact-version-option-v' + choice.index"
+          @click.stop="selectVersion(versionMenuArtifact, choice)"
+        >
+          {{ versionChipLabel(choice) }}
+        </button>
+      </div>
+    </Teleport>
 
     <div
       v-for="name in openNames"
