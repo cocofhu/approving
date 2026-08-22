@@ -87,6 +87,29 @@ func TestMCPSpaProxyPath(t *testing.T) {
 	}
 }
 
+// TestRepoScriptMatchesEmbeddedArtifactUpload keeps server/scripts/artifact-upload
+// in sync with the embedded seed helper so agents can bootstrap from the cloned
+// workspace when seedHelpers did not run (old control plane).
+func TestRepoScriptMatchesEmbeddedArtifactUpload(t *testing.T) {
+	t.Parallel()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
+	scriptPath := filepath.Join(repoRoot, "server", "scripts", "artifact-upload")
+	raw, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", scriptPath, err)
+	}
+	got := string(raw)
+	if got != artifactUploadScript {
+		t.Fatalf("server/scripts/artifact-upload diverged from embedded seedhelpers copy\n"+
+			"script len=%d embed len=%d — copy seedhelpers/artifact-upload → server/scripts/",
+			len(got), len(artifactUploadScript))
+	}
+}
+
 // TestRepoScriptMatchesEmbeddedProxy keeps server/scripts/… in sync with the
 // embedded seed helper so agents can bootstrap from the cloned workspace when
 // seedHelpers did not run (old control plane).

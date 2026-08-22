@@ -58,7 +58,8 @@ alwaysApply: false
 - **执行 E2E**:优先跑项目自带的 E2E(如 `npx playwright test`);项目没有现成用例时,可临时写一个最小 Playwright 无头脚本验证目标行为,跑完把结果如实汇总进 `set_test_result` 的 `cases`。
 - **附上截图(只能用 CLI 上传,不支持内联 base64)**:做了浏览器/UI 测试时,把关键页面截图(最多 10 张)提交到测试结果,便于查看。流程:
   1. 用 Playwright 等把页面截成 PNG 文件(建议视口截图而非超大整页);
-  2. 对每张图运行沙箱内置命令 `artifact-upload <文件> --caption "说明"`,它会把图片上传到产物存储并在 stdout 打印一个产物名(如 `screenshot-1750000000-ab12cd34.png`);
-  3. 把这些产物名填进 `set_test_result` 的 `screenshots`,每张为 `{artifact: "<上一步打印的产物名>", caption: "说明"}`。平台只保留 artifact 引用(及 caption/mimeType),**不再写时回填**内联图片数据;展示侧按引用懒加载。
+  2. **若 `/usr/local/bin/artifact-upload` 仍调用 `write_artifact(kind=image)`(控制面未升级)**,先在仓库 `server/` 目录执行 `scripts/install-artifact-upload.sh` 同步 CLI,再上传;
+  3. 对每张图运行沙箱内置命令 `artifact-upload <文件> --caption "说明"`,它会把图片上传到产物存储并在 stdout 打印一个产物名(如 `screenshot-1750000000-ab12cd34.png`);
+  4. 把这些产物名填进 `set_test_result` 的 `screenshots`,每张为 `{artifact: "<上一步打印的产物名>", caption: "说明"}`。平台只保留 artifact 引用(及 caption/mimeType),**不再写时回填**内联图片数据;展示侧按引用懒加载。
   - `screenshots` **只接受 `artifact` 引用**;不要(也无法)直接内联 base64 图片数据。若误带 `data` 会被剥离,元数据仍保留。
 - **禁止「缺环境式」跳过**:**不得**仅以「没有完整 Web 应用/没有后端/没有浏览器/无法做手工或 Playwright 验收」为由把浏览器 E2E 标为 `skipped`——这些环境本节点都已具备,应当自起被测应用后据实执行。只有确有**具体技术原因**(例如该用例依赖真实第三方凭据、依赖无法在沙箱内提供的外部系统)才可 `skipped`,且必须在该用例 `detail` 写清真实原因,而非笼统跳过。
