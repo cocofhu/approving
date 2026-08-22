@@ -70,11 +70,12 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
     category: 'nodes.categories.agent',
     fields: [
       { key: 'skill_profile', label: 'nodes.approve.fields.skill_profile.label', type: 'select' },
+      { key: 'timeout', label: 'nodes.approve.fields.timeout.label', type: 'duration', optional: true },
     ],
     outputs: productOutputDefs('approve', [
       { key: 'transcript', desc: 'nodes.approve.outputs.transcript.desc' },
     ]),
-    defaults: {},
+    defaults: { timeout: 30 },
     help: 'nodes.approve.help',
   },
   agent: {
