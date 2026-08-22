@@ -68,7 +68,8 @@ func (m *Manager) seedHelpers(ctx context.Context, sb *Sandbox) {
 	} else {
 		log.Debug().Str("id", sb.ID).Msg("seed helpers: skip legacy artifact-upload embed; use image or workspace heal")
 	}
-	// Upgrade from cloned workspace when image/seed is stale (startup.sh heal).
+	// Upgrade from image bundle or cloned workspace when seed is stale (startup.sh heal).
+	healArtifactUploadFromImageBundle(ctx, creds, sb.ID)
 	healArtifactUploadFromWorkspace(ctx, creds, sb.ID)
 	// Best-effort: profile.d hook for interactive shells (login/profile).
 	// Container create env is authoritative for ACP; this only helps SSH/login
@@ -95,6 +96,26 @@ func (m *Manager) seedHelpers(ctx context.Context, sb *Sandbox) {
 
 func seedExecutable(ctx context.Context, creds sshCreds, path, content string) error {
 	return seedFileMode(ctx, creds, path, content, "+x")
+}
+
+// healArtifactUploadFromImageBundle installs the image-bundled canonical CLI when
+// /usr/local/bin still calls write_artifact(kind=image). Best-effort; never fatal.
+func healArtifactUploadFromImageBundle(ctx context.Context, creds sshCreds, sandboxID string) {
+	script := `if [ -f /usr/local/bin/artifact-upload ] && grep -q upload_image_artifact /usr/local/bin/artifact-upload 2>/dev/null; then
+  exit 0
+fi
+if [ -f /usr/local/share/approving/artifact-upload ] && grep -q upload_image_artifact /usr/local/share/approving/artifact-upload 2>/dev/null; then
+  install -m 755 /usr/local/share/approving/artifact-upload /usr/local/bin/artifact-upload
+fi
+exit 0`
+	cmd, err := newSafeCmd("sh", "-c", script)
+	if err != nil {
+		return
+	}
+	if out, err := creds.run(ctx, 15*time.Second, cmd); err != nil {
+		log.Debug().Str("id", sandboxID).Err(err).Str("out", strings.TrimSpace(string(out))).
+			Msg("seed helpers: image-bundle artifact-upload heal skipped")
+	}
 }
 
 // healArtifactUploadFromWorkspace runs install-artifact-upload.sh from a cloned

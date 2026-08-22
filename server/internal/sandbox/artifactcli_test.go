@@ -133,6 +133,30 @@ func TestRepoScriptMatchesEmbeddedArtifactUpload(t *testing.T) {
 	}
 }
 
+// TestSandboxArtifactUploadVendoredCopyMatchesServer keeps the sandbox image
+// vendored script aligned with server/scripts/artifact-upload.
+func TestSandboxArtifactUploadVendoredCopyMatchesServer(t *testing.T) {
+	t.Parallel()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
+	serverPath := filepath.Join(repoRoot, "server", "scripts", "artifact-upload")
+	sandboxPath := filepath.Join(repoRoot, "sandbox-gateway", "sandbox", "scripts", "artifact-upload")
+	serverRaw, err := os.ReadFile(serverPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", serverPath, err)
+	}
+	sandboxRaw, err := os.ReadFile(sandboxPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", sandboxPath, err)
+	}
+	if string(serverRaw) != string(sandboxRaw) {
+		t.Fatalf("sandbox-gateway/sandbox/scripts/artifact-upload diverged from server/scripts/artifact-upload")
+	}
+}
+
 // TestRepoScriptMatchesEmbeddedProxy keeps server/scripts/… in sync with the
 // embedded seed helper so agents can bootstrap from the cloned workspace when
 // seedHelpers did not run (old control plane).

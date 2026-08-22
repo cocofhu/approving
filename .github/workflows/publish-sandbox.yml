@@ -40,8 +40,6 @@ jobs:
           context: ./sandbox-gateway/sandbox
           file: ./sandbox-gateway/sandbox/Dockerfile
           push: true
-          build-contexts: |
-            server=./server
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |

@@ -54,9 +54,46 @@ fi
 PASSWORD=${ROOT_PASSWORD:-toor}
 echo "root:${PASSWORD}" | chpasswd
 
+# Refresh /usr/local/bin when control plane or image still ships write_artifact CLI.
+heal_stale_artifact_upload_cli() {
+    if [ -f /usr/local/bin/artifact-upload ] && grep -q upload_image_artifact /usr/local/bin/artifact-upload 2>/dev/null; then
+        return 0
+    fi
+    if [ -f /usr/local/share/approving/artifact-upload ] && grep -q upload_image_artifact /usr/local/share/approving/artifact-upload 2>/dev/null; then
+        echo "startup.sh: installing artifact-upload from image bundle"
+        install -m 755 /usr/local/share/approving/artifact-upload /usr/local/bin/artifact-upload
+        return 0
+    fi
+    local _healed=0
+    for _inst in "$WORKSPACE_DIR"/*/server/scripts/install-artifact-upload.sh; do
+        if [ -x "$_inst" ]; then
+            echo "startup.sh: refreshing artifact-upload via $_inst"
+            "$_inst" && _healed=1 && break
+        fi
+    done
+    if [ "$_healed" = 0 ]; then
+        for _src in "$WORKSPACE_DIR"/*/server/scripts/artifact-upload; do
+            if [ -f "$_src" ] && grep -q upload_image_artifact "$_src" 2>/dev/null; then
+                echo "startup.sh: installing artifact-upload from $_src"
+                install -m 755 "$_src" /usr/local/bin/artifact-upload && _healed=1 && break
+            fi
+        done
+    fi
+    if [ "$_healed" = 0 ] && [ -f "$WORKSPACE_DIR/server/scripts/artifact-upload" ]; then
+        if grep -q upload_image_artifact "$WORKSPACE_DIR/server/scripts/artifact-upload" 2>/dev/null; then
+            echo "startup.sh: installing artifact-upload from $WORKSPACE_DIR/server/scripts/artifact-upload"
+            install -m 755 "$WORKSPACE_DIR/server/scripts/artifact-upload" /usr/local/bin/artifact-upload
+        fi
+    fi
+    unset _healed _inst _src
+}
+
 # 默认工作目录 / code-server 端口
 WORKSPACE_DIR=${WORKSPACE_DIR:-/root/workspace}
 CODE_SERVER_PORT=${CODE_SERVER_PORT:-8744}
+
+# 在 git clone 前自愈 artifact-upload（镜像内置副本或已持久化的 workspace）。
+heal_stale_artifact_upload_cli
 
 # 提前解析 agent provider 与配置根：契约注入（默认落到 CONFIG_ROOT）与 backend 都要用。
 # 选型优先级：AGENT_PROVIDER > 旧变量 ACP_BACKEND > 构建期固定值（镜像已按 AGENT_PROVIDER 装 CLI）。
@@ -250,35 +287,6 @@ repo_name_from_url() {
     local u="${1%/}"
     u="${u##*[:/]}"
     printf '%s' "${u%.git}"
-}
-
-# Refresh /usr/local/bin when control plane or image still ships write_artifact CLI.
-heal_stale_artifact_upload_cli() {
-    if [ -f /usr/local/bin/artifact-upload ] && grep -q upload_image_artifact /usr/local/bin/artifact-upload 2>/dev/null; then
-        return 0
-    fi
-    local _healed=0
-    for _inst in "$WORKSPACE_DIR"/*/server/scripts/install-artifact-upload.sh; do
-        if [ -x "$_inst" ]; then
-            echo "startup.sh: refreshing artifact-upload via $_inst"
-            "$_inst" && _healed=1 && break
-        fi
-    done
-    if [ "$_healed" = 0 ]; then
-        for _src in "$WORKSPACE_DIR"/*/server/scripts/artifact-upload; do
-            if [ -f "$_src" ] && grep -q upload_image_artifact "$_src" 2>/dev/null; then
-                echo "startup.sh: installing artifact-upload from $_src"
-                install -m 755 "$_src" /usr/local/bin/artifact-upload && _healed=1 && break
-            fi
-        done
-    fi
-    if [ "$_healed" = 0 ] && [ -f "$WORKSPACE_DIR/server/scripts/artifact-upload" ]; then
-        if grep -q upload_image_artifact "$WORKSPACE_DIR/server/scripts/artifact-upload" 2>/dev/null; then
-            echo "startup.sh: installing artifact-upload from $WORKSPACE_DIR/server/scripts/artifact-upload"
-            install -m 755 "$WORKSPACE_DIR/server/scripts/artifact-upload" /usr/local/bin/artifact-upload
-        fi
-    fi
-    unset _healed _inst _src
 }
 
 # --- 凭据配置（clone 前）----------------------------------------------------

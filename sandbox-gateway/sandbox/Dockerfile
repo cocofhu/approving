@@ -321,9 +321,11 @@ RUN chmod +x /startup.sh
 
 # Pre-install artifact-upload (upload_image_artifact channel). Sandboxes must not
 # depend on a lagging control-plane embed or git clone to get a working CLI.
-# Build with: docker build --build-context server=../../server ...
-COPY --from=server scripts/artifact-upload /usr/local/bin/artifact-upload
-RUN chmod +x /usr/local/bin/artifact-upload && \
+# scripts/artifact-upload is vendored from server/scripts/ (kept in sync by CI).
+# Canonical copy under share/ lets startup.sh heal /usr/local/bin without git clone.
+RUN mkdir -p /usr/local/share/approving
+COPY scripts/artifact-upload /usr/local/share/approving/artifact-upload
+RUN install -m 755 /usr/local/share/approving/artifact-upload /usr/local/bin/artifact-upload && \
     grep -q upload_image_artifact /usr/local/bin/artifact-upload
 
 # ── Agent 安装层（每 agent 薄镜像的唯一差异层）───────────────────────────────

@@ -9,6 +9,7 @@ on:
       - "sandbox-gateway/sandbox/**"
       - "sandbox-gateway/scripts/**"
       - "server/scripts/artifact-upload"
+      - "sandbox-gateway/sandbox/scripts/artifact-upload"
       - ".github/workflows/ci-sandbox.yml"
       - ".github/scripts/coverage-badge-color.sh"
       - ".github/scripts/publish-coverage-badge.sh"
@@ -18,6 +19,7 @@ on:
       - "sandbox-gateway/sandbox/**"
       - "sandbox-gateway/scripts/**"
       - "server/scripts/artifact-upload"
+      - "sandbox-gateway/sandbox/scripts/artifact-upload"
       - ".github/workflows/ci-sandbox.yml"
       - ".github/scripts/coverage-badge-color.sh"
       - ".github/scripts/publish-coverage-badge.sh"
@@ -42,6 +44,10 @@ jobs:
           bash -n scripts/cover-check-sandbox.sh
           bash -n ../.github/scripts/coverage-badge-color.sh
           bash -n ../.github/scripts/publish-coverage-badge.sh
+      - name: artifact-upload vendored copy matches server
+        run: |
+          diff -u ../server/scripts/artifact-upload sandbox/scripts/artifact-upload
+          grep -q upload_image_artifact sandbox/scripts/artifact-upload
       - name: SANDBOX_INJECT smoke
         run: ./scripts/test-inject.sh
       - name: Git auth (gh/glab) smoke
@@ -115,8 +121,6 @@ jobs:
           file: ./sandbox-gateway/sandbox/Dockerfile
           target: cli-tools
           load: true
-          build-contexts: |
-            server=./server
           tags: universal-sandbox-cli-tools:ci
           build-args: |
             BASE_IMAGE=ubuntu:22.04
@@ -147,8 +151,6 @@ jobs:
           context: ./sandbox-gateway/sandbox
           file: ./sandbox-gateway/sandbox/Dockerfile
           push: false
-          build-contexts: |
-            server=./server
           tags: universal-sandbox-${{ matrix.provider }}:ci
           build-args: |
             AGENT_PROVIDER=${{ matrix.provider }}
@@ -156,3 +158,9 @@ jobs:
             USE_CN_MIRROR=false
           cache-from: type=gha,scope=sandbox-image-${{ matrix.provider }}
           cache-to: type=gha,mode=max,scope=sandbox-image-${{ matrix.provider }}
+      - name: Verify artifact-upload in sandbox image
+        run: |
+          docker run --rm --entrypoint bash universal-sandbox-${{ matrix.provider }}:ci -lc \
+            'grep -q upload_image_artifact /usr/local/bin/artifact-upload && \
+             grep -q upload_image_artifact /usr/local/share/approving/artifact-upload && \
+             ! grep -q "\"name\": \"write_artifact\"" /usr/local/bin/artifact-upload'
