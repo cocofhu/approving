@@ -349,6 +349,76 @@ export type OrgTreeRow =
       collapsed: boolean
     }
 
+/** All virtual-group ids plus UNGROUPED_ID — default collapsed set for a fresh org tree. */
+export function allGroupCollapseIds(org: AgentOrg): Set<string> {
+  const ids = new Set<string>()
+  for (const g of org.groups || []) ids.add(g.id)
+  ids.add(UNGROUPED_ID)
+  return ids
+}
+
+/**
+ * Ancestor group ids (including direct memberships) that must be expanded
+ * for an agent row to appear in the org tree.
+ */
+export function ancestorGroupIdsForAgent(org: AgentOrg, agentName: string): Set<string> {
+  const byId = groupById(org)
+  const out = new Set<string>()
+  const gids = groupIdsOf(org, agentName)
+  if (!gids.length) {
+    out.add(UNGROUPED_ID)
+    return out
+  }
+  for (const start of gids) {
+    let cur: string | undefined = start
+    const seen = new Set<string>()
+    while (cur && byId.has(cur) && !seen.has(cur)) {
+      seen.add(cur)
+      out.add(cur)
+      cur = byId.get(cur)!.parentGroupId || undefined
+    }
+  }
+  return out
+}
+
+/** Session-default collapsed set: all groups folded; optional agents' paths expanded. */
+export function buildDefaultCollapsedSet(org: AgentOrg, expandAgentNames?: string[]): Set<string> {
+  const collapsed = allGroupCollapseIds(org)
+  if (!expandAgentNames?.length) return collapsed
+  for (const name of expandAgentNames) {
+    if (!name) continue
+    for (const id of ancestorGroupIdsForAgent(org, name)) collapsed.delete(id)
+  }
+  return collapsed
+}
+
+/**
+ * After org structure changes: new ids default collapsed; known ids keep user toggle;
+ * optional agents' ancestor paths stay expanded.
+ */
+export function mergeCollapsedWithOrgChange(
+  org: AgentOrg,
+  prevCollapsed: Set<string>,
+  prevKnownIds: Set<string>,
+  expandAgentNames?: string[],
+): Set<string> {
+  const next = new Set<string>()
+  for (const id of allGroupCollapseIds(org)) {
+    if (prevKnownIds.has(id)) {
+      if (prevCollapsed.has(id)) next.add(id)
+    } else {
+      next.add(id)
+    }
+  }
+  if (expandAgentNames?.length) {
+    for (const name of expandAgentNames) {
+      if (!name) continue
+      for (const id of ancestorGroupIdsForAgent(org, name)) next.delete(id)
+    }
+  }
+  return next
+}
+
 export function buildOrgTreeRows(
   org: AgentOrg,
   agentNames: string[],

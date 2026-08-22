@@ -14,6 +14,8 @@ import {
   applyRemoveAgentFromGroup, wouldCreateGroupCycle, buildOrgTreeRows,
   recursiveMemberNames, classifyAssignTargets, assignNeedsDraftConfirm,
   shouldSyncDraftAfterAssign, isAgentInGroupSubtree, UNGROUPED_ID,
+  allGroupCollapseIds, ancestorGroupIdsForAgent, buildDefaultCollapsedSet,
+  mergeCollapsedWithOrgChange,
 } from '@/lib/agent/agentOrg'
 import { downloadZip, validateAgentName, normalizeAgentName } from '@/lib/agent/agentIO'
 import { AGENT_SETTINGS_PATH } from '@/lib/agent/agentCreateWizard'
@@ -105,6 +107,30 @@ function closeMobileChromeOverlays() {
 /** Narrow-screen agent org tree bottom sheet (≈70vh). */
 const showOrgSheet = ref(false)
 const orgSheetCollapsed = ref<Set<string>>(new Set())
+const orgSheetKnownIds = ref<Set<string>>(new Set())
+
+function expandAgentsForOrgSheet(names: string[]): string[] {
+  const out = names.filter(Boolean)
+  if (manageFocusAgent.value && !out.includes(manageFocusAgent.value)) {
+    out.push(manageFocusAgent.value)
+  }
+  return out
+}
+
+function syncOrgSheetCollapsedFromOrg(expandNames?: string[]) {
+  const names = expandAgentsForOrgSheet(expandNames || [activeName.value])
+  if (orgSheetKnownIds.value.size === 0) {
+    orgSheetCollapsed.value = buildDefaultCollapsedSet(org.value, names)
+  } else {
+    orgSheetCollapsed.value = mergeCollapsedWithOrgChange(
+      org.value,
+      orgSheetCollapsed.value,
+      orgSheetKnownIds.value,
+      names,
+    )
+  }
+  orgSheetKnownIds.value = new Set([...allGroupCollapseIds(org.value)])
+}
 
 type LeaveConfirmCfg = {
   title: string
@@ -562,6 +588,7 @@ async function reloadOrg() {
     if (!o.groups) o.groups = []
     org.value = o
     orgBaseline.value = orgSnapshot(o)
+    syncOrgSheetCollapsedFromOrg()
   } catch (e: any) {
     error.value = String(e?.message || e)
   }
@@ -795,6 +822,7 @@ async function load() {
     if (!org.value.agents) org.value.agents = {}
     if (!org.value.groups) org.value.groups = []
     orgBaseline.value = orgSnapshot(org.value)
+    syncOrgSheetCollapsedFromOrg()
     applyingStudioQuery = true
     try {
       const qAgent = typeof route.query.agent === 'string' ? route.query.agent.trim() : ''
@@ -1275,6 +1303,19 @@ function onChromeKeydown(e: KeyboardEvent) {
 watch(activeName, () => {
   closeFullNameTip()
   nextTick(measureAgentNameTruncation)
+})
+
+watch(
+  () => (org.value.groups || []).map((g) => g.id).join(','),
+  () => syncOrgSheetCollapsedFromOrg(),
+)
+
+watch([activeName, manageFocusAgent], () => {
+  const next = new Set(orgSheetCollapsed.value)
+  for (const name of expandAgentsForOrgSheet([activeName.value])) {
+    for (const id of ancestorGroupIdsForAgent(org.value, name)) next.delete(id)
+  }
+  orgSheetCollapsed.value = next
 })
 
 watch(tabStripEl, () => {

@@ -1115,6 +1115,13 @@ describe('AgentStudio mobile core path', () => {
     expect(sheet!.textContent).toContain('工程部')
     expect(sheet!.textContent).toContain('未分组')
     expect(sheet!.textContent).toContain('alpha')
+    expect(sheet!.textContent).not.toContain('beta')
+
+    const ugBtn = sheet!.querySelector(
+      '[data-org-kind="ungrouped-header"] button',
+    ) as HTMLElement | null
+    ugBtn?.click()
+    await flushPromises()
     expect(sheet!.textContent).toContain('beta')
 
     // Agent 叶子名称主文字色契约（选中/未选中均 text-txt，非灰）

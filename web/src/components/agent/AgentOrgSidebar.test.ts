@@ -31,7 +31,11 @@ const agentNames = ['alice', 'bob', ...Array.from({ length: 10 }, (_, i) => `qa$
 function mountSidebar(
   org: AgentOrg = sampleOrg,
   teleport = false,
-  extra: { agents?: { name: string; projectId?: string }[]; projects?: { id: string; name: string }[] } = {},
+  extra: {
+    agents?: { name: string; projectId?: string }[]
+    projects?: { id: string; name: string }[]
+    activeName?: string
+  } = {},
 ) {
   const i18n = createI18n({
     legacy: false,
@@ -42,7 +46,7 @@ function mountSidebar(
     props: {
       org,
       agentNames,
-      activeName: '',
+      activeName: extra.activeName ?? '',
       collapsed: false,
       agents: extra.agents,
       projects: extra.projects,
@@ -109,8 +113,10 @@ describe('AgentOrgSidebar two-column right-edge count layout', () => {
     wrapper.unmount()
   })
 
-  it('depth 缩进只作用在左侧 main，count 列不受 paddingLeft', () => {
+  it('depth 缩进只作用在左侧 main，count 列不受 paddingLeft', async () => {
     const wrapper = mountSidebar()
+    const dev = wrapper.findAll('[data-org-kind="group"]').find((r) => r.text().includes('开发部门'))!
+    await dev.find('[data-org-toggle]').trigger('click')
     const nested = wrapper
       .findAll('[data-org-kind="group"]')
       .find((r) => r.attributes('data-org-depth') === '1')
@@ -123,7 +129,7 @@ describe('AgentOrgSidebar two-column right-edge count layout', () => {
     expect((nested!.element as HTMLElement).getAttribute('style') || '').not.toMatch(/padding-left/)
   })
 
-  it('根组、嵌套子组与未分组计数右齐且支持三位数左扩', () => {
+  it('根组、嵌套子组与未分组计数右齐且支持三位数左扩', async () => {
     const orgWithTriple: AgentOrg = {
       ...sampleOrg,
       agents: {
@@ -146,7 +152,7 @@ describe('AgentOrgSidebar two-column right-edge count layout', () => {
       props: {
         org: orgWithTriple,
         agentNames: names,
-        activeName: '',
+        activeName: 'bob',
         collapsed: false,
       },
       global: {
@@ -190,18 +196,21 @@ describe('AgentOrgSidebar two-column right-edge count layout', () => {
 
   it('折叠入口仍可用，且无 hover 操作按钮', async () => {
     const wrapper = mountSidebar()
-    const group = wrapper.findAll('[data-org-kind="group"]')[0]
+    const group = wrapper
+      .findAll('[data-org-kind="group"]')
+      .find((r) => r.text().includes('开发部门'))!
     expect(group.find('[data-org-actions]').exists()).toBe(false)
     expect(group.findAll('button').filter((b) => b.attributes('data-org-toggle') !== undefined).length).toBe(1)
 
+    expect(wrapper.findAll('[data-org-kind="group"]').some((r) => r.text().includes('前端组'))).toBe(false)
     await group.find('[data-org-toggle]').trigger('click')
-    expect(wrapper.findAll('[data-org-kind="group"]').some((r) => r.text().includes('前端组'))).toBe(
-      false,
-    )
+    expect(wrapper.findAll('[data-org-kind="group"]').some((r) => r.text().includes('前端组'))).toBe(true)
+    await group.find('[data-org-toggle]').trigger('click')
+    expect(wrapper.findAll('[data-org-kind="group"]').some((r) => r.text().includes('前端组'))).toBe(false)
   })
 
   it('叶子行无计数徽章、无 hover 操作，仍可选中/拖拽', async () => {
-    const wrapper = mountSidebar()
+    const wrapper = mountSidebar(sampleOrg, false, { activeName: 'bob' })
     const leaf = wrapper.find('[data-org-kind="agent"]')
     expect(leaf.exists()).toBe(true)
     expect(leaf.find('[data-org-count]').exists()).toBe(false)
@@ -215,7 +224,7 @@ describe('AgentOrgSidebar two-column right-edge count layout', () => {
   })
 
   it('拖拽 agent 到未分组头可发出 move-agent', async () => {
-    const wrapper = mountSidebar()
+    const wrapper = mountSidebar(sampleOrg, false, { activeName: 'bob' })
     const leaf = wrapper.find('[data-org-kind="agent"]')
     const dragBtn = leaf.find('button[draggable="true"]')
     await dragBtn.trigger('dragstart', {
@@ -278,7 +287,7 @@ describe('AgentOrgSidebar context menus', () => {
   })
 
   it('叶子行与未分组头不出现指定项目', async () => {
-    const wrapper = mountSidebar(sampleOrg, true)
+    const wrapper = mountSidebar(sampleOrg, true, { activeName: 'bob' })
     const leaf = findAgentRow(wrapper, 'bob')!
     expect(leaf).toBeTruthy()
     await leaf.trigger('contextmenu', { clientX: 20, clientY: 30 })
@@ -298,7 +307,7 @@ describe('AgentOrgSidebar context menus', () => {
   })
 
   it('已分组 Agent 菜单含重命名直达管理与移出本组', async () => {
-    const wrapper = mountSidebar(sampleOrg, true)
+    const wrapper = mountSidebar(sampleOrg, true, { activeName: 'bob' })
     const leaf = findAgentRow(wrapper, 'bob')!
     await leaf.trigger('contextmenu', { clientX: 20, clientY: 30 })
 
@@ -320,7 +329,7 @@ describe('AgentOrgSidebar context menus', () => {
   })
 
   it('未分组 Agent 菜单仅重命名（前往管理）', async () => {
-    const wrapper = mountSidebar(sampleOrg, true)
+    const wrapper = mountSidebar(sampleOrg, true, { activeName: 'orphan' })
     const leaf = findAgentRow(wrapper, 'orphan')!
     expect(leaf).toBeTruthy()
     await leaf.trigger('contextmenu', { clientX: 20, clientY: 30 })
@@ -334,7 +343,7 @@ describe('AgentOrgSidebar context menus', () => {
   })
 
   it('移出本组发出 remove-from-group', async () => {
-    const wrapper = mountSidebar(sampleOrg, true)
+    const wrapper = mountSidebar(sampleOrg, true, { activeName: 'alice' })
     const leaf = findAgentRow(wrapper, 'alice')!
     await leaf.trigger('contextmenu', { clientX: 20, clientY: 30 })
     const removeBtn = document.querySelector(
@@ -455,7 +464,7 @@ describe('AgentOrgSidebar agent name text color', () => {
   })
 
   it('分组名保持 text-txt2，有 parentAgent 时树内不渲染 reportsTo', () => {
-    const wrapper = mountSidebar()
+    const wrapper = mountSidebar(sampleOrg, false, { activeName: 'bob' })
 
     const group = wrapper
       .findAll('[data-org-kind="group"]')
@@ -483,8 +492,9 @@ describe('AgentOrgSidebar agent name text color', () => {
 })
 
 describe('AgentOrgSidebar project bracket', () => {
-  it('递归成员同项目时双 span 显示括号，徽章仍为直接成员数', () => {
+  it('递归成员同项目时双 span 显示括号，徽章仍为直接成员数', async () => {
     const wrapper = mountSidebar(sampleOrg, false, {
+      activeName: 'bob',
       agents: [
         { name: 'alice', projectId: 'github' },
         { name: 'bob', projectId: 'github' },
@@ -523,7 +533,7 @@ describe('AgentOrgSidebar project bracket', () => {
     expect(wrapper.find('[data-org-kind="agent"] [data-org-project]').exists()).toBe(false)
   })
 
-  it('空组/全未绑/混合不显示括号也不显示空括号', () => {
+  it('空组/全未绑/混合不显示括号也不显示空括号', async () => {
     const org: AgentOrg = {
       revision: 1,
       groups: [
@@ -538,6 +548,7 @@ describe('AgentOrgSidebar project bracket', () => {
       },
     }
     const wrapper = mountSidebar(org, false, {
+      activeName: 'alice',
       agents: [
         { name: 'scout', projectId: '' },
         { name: 'alice', projectId: 'github' },
@@ -553,5 +564,40 @@ describe('AgentOrgSidebar project bracket', () => {
       expect(row.find('[data-org-project]').exists()).toBe(false)
       expect(row.text()).not.toMatch(/\(\)/)
     }
+  })
+})
+
+describe('AgentOrgSidebar default collapsed', () => {
+  it('无选中时默认仅展示分组行与未分组头，不渲染 Agent 子行', () => {
+    const wrapper = mountSidebar()
+    expect(wrapper.findAll('[data-org-kind="group"]').length).toBeGreaterThan(0)
+    expect(wrapper.find('[data-org-kind="ungrouped-header"]').exists()).toBe(true)
+    expect(wrapper.findAll('[data-org-kind="agent"]').length).toBe(0)
+  })
+
+  it('选中 Agent 时展开祖先路径并高亮，其它分支仍折叠', () => {
+    const wrapper = mountSidebar(sampleOrg, false, { activeName: 'bob' })
+    expect(findAgentRow(wrapper, 'bob')).toBeTruthy()
+    expect(wrapper.findAll('[data-org-kind="group"]').some((r) => r.text().includes('测试部门'))).toBe(true)
+    expect(findAgentRow(wrapper, 'qa0')).toBeFalsy()
+    const bobRow = findAgentRow(wrapper, 'bob')!
+    expect(bobRow.classes()).toContain('bg-accent-dim')
+  })
+
+  it('组织新增分组时默认折叠且保留已展开节点', async () => {
+    const wrapper = mountSidebar()
+    const dev = wrapper.findAll('[data-org-kind="group"]').find((r) => r.text().includes('开发部门'))!
+    await dev.find('[data-org-toggle]').trigger('click')
+    expect(wrapper.findAll('[data-org-kind="group"]').some((r) => r.text().includes('前端组'))).toBe(true)
+
+    const nextOrg: AgentOrg = {
+      ...sampleOrg,
+      groups: [...sampleOrg.groups!, { id: 'g_new', name: '新项目组' }],
+    }
+    await wrapper.setProps({ org: nextOrg })
+    expect(wrapper.findAll('[data-org-kind="group"]').some((r) => r.text().includes('新项目组'))).toBe(true)
+    expect(wrapper.findAll('[data-org-kind="group"]').some((r) => r.text().includes('前端组'))).toBe(true)
+    expect(findAgentRow(wrapper, 'alice')).toBeTruthy()
+    expect(findAgentRow(wrapper, 'bob')).toBeFalsy()
   })
 })
