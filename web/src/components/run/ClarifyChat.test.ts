@@ -1249,7 +1249,7 @@ describe('ClarifyChat', () => {
       wrapper.unmount()
     })
 
-    it('agent history thumbs and composer drafts do not open preview (g4.2)', async () => {
+    it('agent history thumbs stay locked; composer drafts open preview (g2.2 / g2.3)', async () => {
       const wrapper = mountChat({
         turns: [
           {
@@ -1259,7 +1259,7 @@ describe('ClarifyChat', () => {
             images: [{ data: PNG_A, mimeType: 'image/png' }],
           },
         ],
-        attachments: [{ data: PNG_B, mimeType: 'image/png' }],
+        attachments: [{ data: PNG_B, mimeType: 'image/png', name: '草稿图.png' }],
       })
       expect(wrapper.find('[data-testid="clarify-history-image-thumb"]').exists()).toBe(false)
       const agentThumb = wrapper.find('[data-testid="clarify-agent-image-thumb"]')
@@ -1272,11 +1272,19 @@ describe('ClarifyChat', () => {
 
       const draftThumb = wrapper.find('[data-testid="clarify-draft-image-thumb"]')
       expect(draftThumb.exists()).toBe(true)
-      expect(draftThumb.text()).toContain('不可预览')
-      expect(draftThumb.text()).not.toContain('点击放大')
+      expect(draftThumb.text()).toContain('点击放大')
+      expect(draftThumb.text()).not.toContain('不可预览')
       await draftThumb.trigger('click')
       await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-image-preview-modal"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="clarify-image-preview-title"]').text()).toBe('图片预览 · 草稿图.png')
+      expect(wrapper.find('[data-testid="clarify-image-preview-img"]').attributes('src')).toBe(
+        `data:image/png;base64,${PNG_B}`,
+      )
+      await wrapper.find('[data-testid="clarify-image-preview-close"]').trigger('click')
+      await flushPromises()
       expect(wrapper.find('[data-testid="clarify-image-preview-modal"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="clarify-draft-image-thumb"]').exists()).toBe(true)
       wrapper.unmount()
     })
 

@@ -637,13 +637,14 @@ const {
         <div v-for="(im, ii) in attachments" :key="ii" class="relative">
           <ChatImageThumb
             v-if="isImageAttachment(im)"
-            mode="locked"
+            mode="previewable"
             size="sm"
             thumb-class="rounded-md"
             :src="imgSrc(im)"
             :label="attachmentDisplayName(im, ii)"
             :alt="attachmentDisplayName(im, ii)"
             test-id="clarify-draft-image-thumb"
+            @preview="openImagePreview(attachments, ii)"
           />
           <div
             v-else
