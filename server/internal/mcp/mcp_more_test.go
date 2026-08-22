@@ -241,9 +241,9 @@ func TestSetTestResultValidatesScreenshotArtifacts(t *testing.T) {
 	tok := h.RegisterRun(runID)
 	h.SetActiveNode(runID, "tst", "test")
 
-	// Seed like artifact-upload → store.Save(kind=image); write_artifact must not
-	// be used for images (see TestWriteArtifactKindValidation).
-	if _, err := store.Save(runID, "tst", "shot-1.png", "image", "PNGDATA"); err != nil {
+	// Seed via upload_image_artifact (artifact-upload CLI path); write_artifact
+	// must not be used for images (see TestWriteArtifactKindValidation).
+	if _, err := h.UploadImageArtifact(runID, tok, "tst", "shot-1.png", "PNGDATA"); err != nil {
 		t.Fatalf("seed screenshot: %v", err)
 	}
 

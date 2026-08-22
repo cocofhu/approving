@@ -197,3 +197,84 @@ func TestWriteArtifactKindValidation(t *testing.T) {
 		"note.md", "markdown",
 	)
 }
+
+func TestValidateImageArtifactUpload(t *testing.T) {
+	if err := ValidateImageArtifactUpload("shot.png"); err != nil {
+		t.Fatalf("shot.png: %v", err)
+	}
+	if err := ValidateImageArtifactUpload(""); err == nil {
+		t.Fatal("empty name should fail")
+	}
+	if err := ValidateImageArtifactUpload(PlanArtifactName); err == nil {
+		t.Fatal("reserved name should fail")
+	}
+	if err := ValidateImageArtifactUpload("page.html"); err == nil {
+		t.Fatal("page.html should fail")
+	}
+}
+
+// TestUploadImageArtifactChannel exercises the CLI-only image upload path (g3.1):
+// upload_image_artifact stores kind=image; set_test_result can reference it;
+// write_artifact still rejects image; upload tool is hidden from tools/list.
+func TestUploadImageArtifactChannel(t *testing.T) {
+	store := &memStore{}
+	h := NewHost(store)
+	runID := "upload-run"
+	tok := h.RegisterRun(runID)
+	h.SetActiveNode(runID, "tst", "test")
+
+	// Hidden from agent tool list (g2.2: agents should use artifact-upload CLI).
+	list := call(t, h, runID, tok, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+	tools, _ := list["result"].(map[string]any)["tools"].([]any)
+	for _, tool := range tools {
+		m, _ := tool.(map[string]any)
+		if m["name"] == "upload_image_artifact" {
+			t.Fatal("upload_image_artifact must not appear in tools/list")
+		}
+	}
+
+	// write_artifact kind=image still rejected (g2.1).
+	failResp := call(t, h, runID, tok, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"write_artifact","arguments":{"name":"shot.png","content":"PNG","kind":"image"}}}`)
+	if failResp["result"].(map[string]any)["isError"] != true {
+		t.Fatalf("write_artifact image should fail: %v", failResp)
+	}
+
+	// upload_image_artifact succeeds (simulates artifact-upload CLI).
+	okResp := call(t, h, runID, tok, `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"upload_image_artifact","arguments":{"name":"shot-e2e.png","content":"BASE64PNG"}}}`)
+	if okResp["result"].(map[string]any)["isError"] == true {
+		t.Fatalf("upload_image_artifact failed: %v", okResp)
+	}
+	if got := store.kindOf(runID, "shot-e2e.png"); got != "image" {
+		t.Fatalf("stored kind = %q, want image", got)
+	}
+
+	// set_test_result references uploaded artifact (g3.1).
+	call(t, h, runID, tok, `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"set_test_result","arguments":{"summary":"s","cases":[{"name":"c1","status":"passed"}],"screenshots":[{"artifact":"shot-e2e.png","caption":"e2e","mimeType":"image/png"}]}}}`)
+	content, ok := store.Get(runID, TestResultArtifactName)
+	if !ok {
+		t.Fatal("test_result.json not written")
+	}
+	if !strings.Contains(content, "shot-e2e.png") {
+		t.Fatalf("test_result missing artifact ref: %s", content)
+	}
+	if strings.Contains(content, "BASE64PNG") {
+		t.Fatal("test_result should not inline image data")
+	}
+
+	// Reserved name rejected on upload channel.
+	reserved := call(t, h, runID, tok, `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"upload_image_artifact","arguments":{"name":"plan.json","content":"x"}}}`)
+	if reserved["result"].(map[string]any)["isError"] != true {
+		t.Fatalf("reserved name upload should fail: %v", reserved)
+	}
+
+	// Empty content rejected.
+	empty := call(t, h, runID, tok, `{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"upload_image_artifact","arguments":{"name":"empty.png","content":""}}}`)
+	if empty["result"].(map[string]any)["isError"] != true {
+		t.Fatalf("empty content upload should fail: %v", empty)
+	}
+
+	// Wrong token rejected.
+	if _, err := h.UploadImageArtifact(runID, "wrong-token", "tst", "nope.png", "PNG"); err == nil {
+		t.Fatal("unauthorized upload should fail")
+	}
+}
