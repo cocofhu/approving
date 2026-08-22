@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -291,5 +292,113 @@ func TestApproveDoesNotLiftUpstreamOptionalResearch(t *testing.T) {
 	}
 	if _, ok := sr.Outputs["research"]; ok {
 		t.Error("upstream research must not be lifted into approve outputs")
+	}
+}
+
+// TestApproveDoneShortcutFailsWithoutPlan locks g2.1: re-entering a Done
+// conversation must run finalize gates, not silently complete without plan.
+func TestApproveDoneShortcutFailsWithoutPlan(t *testing.T) {
+	eng, db, _ := setupEngineGraphP(t, approveOnlyGraph())
+	run, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "predev")
+
+	clarBody := `{
+		"title":"需求","summary":"s","background":"b",
+		"goals":["g"],"in_scope":["i"],"out_of_scope":["o"],
+		"functional_requirements":[{"id":"f1","title":"t","detail":"d","priority":"must","acceptance_criteria":["a"]}],
+		"assumptions":["a"],"dependencies":["d"],"constraints":["c"]
+	}`
+	if _, err := eng.host.WriteArtifact(run.ID, run.McpToken, "predev", mcp.ClarifiedRequirementArtifactName, clarBody, "json"); err != nil {
+		t.Fatalf("write clarified: %v", err)
+	}
+	st, resp := eng.host.ServeRPC(run.ID, run.McpToken, []byte(
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"node_complete","arguments":{"status":"success","summary":"ok"}}}`))
+	if st != 200 {
+		t.Fatalf("seed outcome: status=%d resp=%s", st, resp)
+	}
+
+	var conv models.ReactConversation
+	if err := db.Where("run_id = ? AND node_id = ?", run.ID, "predev").First(&conv).Error; err != nil {
+		t.Fatalf("conv: %v", err)
+	}
+	conv.Done = true
+	conv.Messages = []models.ReactMessage{
+		{Role: "human", Text: "确认并流转"},
+		{Role: "agent", Text: "完成"},
+	}
+	if err := db.Save(&conv).Error; err != nil {
+		t.Fatalf("save conv: %v", err)
+	}
+
+	c, err := eng.loadCtx(run.ID)
+	if err != nil {
+		t.Fatalf("loadCtx: %v", err)
+	}
+	node := c.graph.FindNode("predev")
+	oc := eng.executeNode(c, node)
+	if oc.status != "failed" {
+		t.Fatalf("Done shortcut without plan must fail-closed, got status=%q output=%q", oc.status, oc.outputMd)
+	}
+	if !strings.Contains(oc.err, mcp.PlanArtifactName) && !strings.Contains(oc.outputMd, "plan") {
+		t.Errorf("expected plan contract failure, err=%q output=%q", oc.err, oc.outputMd)
+	}
+}
+
+// TestApproveDoneShortcutCompletesWithBothProducts verifies Done re-entry succeeds
+// when both required artifacts are owned by this node.
+func TestApproveDoneShortcutCompletesWithBothProducts(t *testing.T) {
+	eng, db, _ := setupEngineGraphP(t, approveOnlyGraph())
+	run, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "predev")
+
+	clarBody := `{
+		"title":"需求","summary":"s","background":"b",
+		"goals":["g"],"in_scope":["i"],"out_of_scope":["o"],
+		"functional_requirements":[{"id":"f1","title":"t","detail":"d","priority":"must","acceptance_criteria":["a"]}],
+		"assumptions":["a"],"dependencies":["d"],"constraints":["c"]
+	}`
+	if _, err := eng.host.WriteArtifact(run.ID, run.McpToken, "predev", mcp.ClarifiedRequirementArtifactName, clarBody, "json"); err != nil {
+		t.Fatalf("write clarified: %v", err)
+	}
+	_, planBody := fakeStructured("plan")
+	if _, err := eng.host.WriteArtifact(run.ID, run.McpToken, "predev", mcp.PlanArtifactName, planBody, "json"); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+	st, resp := eng.host.ServeRPC(run.ID, run.McpToken, []byte(
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"node_complete","arguments":{"status":"success","summary":"ok"}}}`))
+	if st != 200 {
+		t.Fatalf("seed outcome: status=%d resp=%s", st, resp)
+	}
+
+	var conv models.ReactConversation
+	if err := db.Where("run_id = ? AND node_id = ?", run.ID, "predev").First(&conv).Error; err != nil {
+		t.Fatalf("conv: %v", err)
+	}
+	conv.Done = true
+	conv.Messages = []models.ReactMessage{
+		{Role: "human", Text: "确认并流转"},
+		{Role: "agent", Text: "完成"},
+	}
+	if err := db.Save(&conv).Error; err != nil {
+		t.Fatalf("save conv: %v", err)
+	}
+
+	c, err := eng.loadCtx(run.ID)
+	if err != nil {
+		t.Fatalf("loadCtx: %v", err)
+	}
+	node := c.graph.FindNode("predev")
+	oc := eng.executeNode(c, node)
+	if oc.status != "completed" {
+		t.Fatalf("Done shortcut with both products must complete, got status=%q err=%q", oc.status, oc.err)
+	}
+	if _, ok := oc.outputs["plan"]; !ok {
+		t.Error("missing outputs.plan after Done re-entry")
 	}
 }

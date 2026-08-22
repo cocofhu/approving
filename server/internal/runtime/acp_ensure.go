@@ -83,7 +83,7 @@ func (c *acpProvider) ensureStructured(ctx context.Context, req NodeReq, acp *sa
 				Str("artifact", name).Str("tool", tool).
 				Int("retries", producesRetry).
 				Msg("structured product still missing after re-prompt; engine will fail closed")
-			return nil, nil
+			return nil, fmt.Errorf("结构化产物契约未满足:未由本节点写入 %s", name)
 		}
 		prompt := c.agentPrompts(str2(req.Config["skill_profile"])).StructuredRetryFor(name, tool)
 		chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))

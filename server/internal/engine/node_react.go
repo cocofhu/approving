@@ -17,7 +17,10 @@ func (e *Engine) execReactEnter(c *execCtx, node *models.Node) nodeOutcome {
 	var conv models.ReactConversation
 	err := e.db.Where("run_id = ? AND node_id = ? AND iteration = ?", c.run.ID, node.ID, iter).First(&conv).Error
 	if err == nil && conv.Done {
-		return nodeOutcome{status: "completed", outputMd: "澄清已完成"}
+		// Re-entry after confirm marked Done (e.g. crash before finalize): must
+		// run the same product + node_complete gates as the force wrap-up path,
+		// not silently complete with missing deliverables.
+		return e.finalizeDoneReact(c, node, conv)
 	}
 	if err != nil {
 
@@ -61,6 +64,34 @@ func (e *Engine) execReactEnter(c *execCtx, node *models.Node) nodeOutcome {
 		return nodeOutcome{status: "paused", outputMd: "等待人工回复(ReAct 澄清)…", events: t.Events, usage: t.Usage, usageByModel: t.UsageByModel}
 	}
 	return nodeOutcome{status: "paused", outputMd: "等待人工回复(ReAct 澄清)…"}
+}
+
+// finalizeDoneReact completes a react/approve conversation that was already
+// marked Done but whose node outcome was not persisted (crash / resume). It
+// mirrors the force wrap-up finalize path: node_complete + required products.
+func (e *Engine) finalizeDoneReact(c *execCtx, node *models.Node, conv models.ReactConversation) nodeOutcome {
+	narration := reactLastAgentText(conv.Messages)
+	res := runtime.NodeResult{
+		OutputMd: narration,
+		Outputs: map[string]any{
+			"clarified_requirement": narration,
+			"content":               narration,
+		},
+	}
+	return e.finishAgentOutcome(c, node, res, func(r runtime.NodeResult) nodeOutcome {
+		return e.finalizeAgentProducts(c, node, r)
+	})
+}
+
+func reactLastAgentText(msgs []models.ReactMessage) string {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == "agent" {
+			if t := strings.TrimSpace(msgs[i].Text); t != "" {
+				return t
+			}
+		}
+	}
+	return ""
 }
 
 // autoReactEnabled reports whether this react node should self-answer without

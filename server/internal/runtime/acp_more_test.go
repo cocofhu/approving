@@ -279,6 +279,30 @@ func TestEnsureStructuredRepromptTransportError(t *testing.T) {
 	}
 }
 
+// TestEnsureStructuredExhaustedFailsClosed: after producesRetry re-prompts the
+// agent still never writes the product, finishReact must surface a contract error.
+func TestEnsureStructuredExhaustedFailsClosed(t *testing.T) {
+	store := newMemStore()
+	host := mcp.NewHost(store)
+	tok := host.RegisterRun("r")
+	t.Cleanup(func() { host.UnregisterRun("r") })
+	mgr := newFakeManager(t, host, "r", "n", tok, func(int) chatFunc {
+		return func(int) turnAction {
+			return turnAction{narration: "still no product"}
+		}
+	})
+	p, _ := newTestProvider(t, host, testOpts(), mgr)
+	req := reqWithProfile(NodeReq{RunID: "r", NodeID: "n", NodeType: "research", Token: tok,
+		Config: map[string]any{"prompt": "research"}, Vars: map[string]any{}})
+	_, err := p.RunAgent(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected contract failure after structured retries exhausted")
+	}
+	if !strings.Contains(err.Error(), mcp.ResearchArtifactName) {
+		t.Fatalf("expected research artifact in error, got %v", err)
+	}
+}
+
 // TestRunAgentChatFailurePersistsEvents best-effort snapshots ACP events when
 // streamChat fails; the NodeResult must carry an Events slice (possibly empty
 // when the sandbox produced none) instead of a zero-value NodeResult{}.
